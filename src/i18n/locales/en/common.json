@@ -1,0 +1,24 @@
+{
+  "app": { "name": "MUZERO", "tagline": "AI DJ · local-first" },
+  "nav": { "now": "Now", "queue": "Queue", "sessions": "Sets", "settings": "Settings" },
+  "dj": {
+    "writing": "DJ is writing the next track…",
+    "generating": "Generating audio…",
+    "standby": "DJ is on standby",
+    "extend": "Extend set"
+  },
+  "sessions": {
+    "startTitle": "Start a new set",
+    "start": "Start DJ set",
+    "yourSets": "Your sets",
+    "seedPlaceholder": "Describe the vibe…"
+  },
+  "settings": {
+    "djTitle": "AI DJ (LLM)",
+    "musicTitle": "Music generation",
+    "provider": "Provider",
+    "model": "Model",
+    "save": "Save settings",
+    "test": "Test connection"
+  }
+}

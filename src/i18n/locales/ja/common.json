@@ -1,0 +1,24 @@
+{
+  "app": { "name": "MUZERO", "tagline": "AI DJ · ローカル優先" },
+  "nav": { "now": "再生中", "queue": "キュー", "sessions": "セット", "settings": "設定" },
+  "dj": {
+    "writing": "DJ が次の曲を作成中…",
+    "generating": "音声を生成中…",
+    "standby": "DJ は待機中",
+    "extend": "セットを延長"
+  },
+  "sessions": {
+    "startTitle": "新しいセットを開始",
+    "start": "DJ セットを開始",
+    "yourSets": "あなたのセット",
+    "seedPlaceholder": "雰囲気を入力…"
+  },
+  "settings": {
+    "djTitle": "AI DJ（LLM）",
+    "musicTitle": "音楽生成",
+    "provider": "プロバイダー",
+    "model": "モデル",
+    "save": "設定を保存",
+    "test": "接続をテスト"
+  }
+}

@@ -1,0 +1,24 @@
+# Local commit gate. MUZERO has no CI (local-first, solo dev across Claude Code /
+# Codex / manual commits) — a git-level hook is the only tool-agnostic net.
+# Mirrors the doodlekuma.com convention: biome (staged) + tsc (whole project) at
+# commit, full typecheck + tests at push.
+
+pre-commit:
+  parallel: true
+  commands:
+    biome:
+      glob: "src/**/*.{ts,tsx,js,jsx,json,jsonc}"
+      # Staged files only — fix-as-you-touch, don't block on pre-existing debt.
+      run: pnpm exec biome check --no-errors-on-unmatched {staged_files}
+    typecheck:
+      glob: "src/**/*.{ts,tsx}"
+      # tsc is whole-project (types span files); cheap with incremental cache.
+      run: pnpm run typecheck
+
+pre-push:
+  parallel: true
+  commands:
+    typecheck:
+      run: pnpm run typecheck
+    test:
+      run: pnpm run test

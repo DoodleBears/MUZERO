@@ -1,0 +1,24 @@
+{
+  "app": { "name": "MUZERO", "tagline": "AI DJ · 本地优先" },
+  "nav": { "now": "正在播放", "queue": "队列", "sessions": "歌单", "settings": "设置" },
+  "dj": {
+    "writing": "DJ 正在创作下一首…",
+    "generating": "正在生成音频…",
+    "standby": "DJ 待命中",
+    "extend": "续上歌单"
+  },
+  "sessions": {
+    "startTitle": "开启新歌单",
+    "start": "开始 DJ 歌单",
+    "yourSets": "你的歌单",
+    "seedPlaceholder": "描述氛围…"
+  },
+  "settings": {
+    "djTitle": "AI DJ（大模型）",
+    "musicTitle": "音乐生成",
+    "provider": "提供方",
+    "model": "模型",
+    "save": "保存设置",
+    "test": "测试连接"
+  }
+}
