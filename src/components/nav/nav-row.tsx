@@ -56,7 +56,9 @@ export function NavRow({ value, onChange }: { value: Tab; onChange: (tab: Tab) =
   useNavShortcuts(onChange);
 
   return (
-    <TooltipProvider>
+    // Short open delay — these tooltips exist to surface the shortcut on a
+    // deliberate hover; Base UI's default delay feels like the tip never shows.
+    <TooltipProvider delay={200} closeDelay={0}>
       <nav className="flex items-center justify-around gap-1">
         {NAV_ITEMS.map(({ id, labelKey, icon: Icon }, index) => {
           const active = value === id;
