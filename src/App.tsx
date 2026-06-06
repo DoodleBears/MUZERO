@@ -1,8 +1,8 @@
 import { MotionConfig } from "motion/react";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { DockNav, type Tab } from "@/components/nav/dock-nav";
-import { PlayerBar } from "@/components/player/player-bar";
+import type { Tab } from "@/components/nav/dock-nav";
+import { PlayerDock } from "@/components/shell/player-dock";
 import { getSettings } from "@/db/repositories";
 import { NowPlayingPage } from "@/pages/now-playing-page";
 import { QueuePage } from "@/pages/queue-page";
@@ -16,7 +16,6 @@ export default function App() {
   const [tab, setTab] = useState<Tab>("sessions");
   const init = usePlayerStore((s) => s.init);
   const setActiveSession = usePlayerStore((s) => s.setActiveSession);
-  const activeSessionId = usePlayerStore((s) => s.activeSessionId);
 
   // Boot: wire the media engine and resume the last set if there was one.
   useEffect(() => {
@@ -49,9 +48,7 @@ export default function App() {
           {tab === "settings" && <SettingsPage />}
         </main>
 
-        {activeSessionId && <PlayerBar />}
-
-        <DockNav value={tab} onChange={setTab} />
+        <PlayerDock tab={tab} onTabChange={setTab} onOpenNowPlaying={() => setTab("now")} />
       </div>
     </MotionConfig>
   );

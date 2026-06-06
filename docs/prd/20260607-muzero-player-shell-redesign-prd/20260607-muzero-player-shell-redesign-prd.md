@@ -12,7 +12,7 @@
 | Phase | Name | Status | Link |
 |-------|------|--------|------|
 | 0 | 过渡基础设施（view-transition helper + reduced-motion + 选择器隔离） | ✅ Completed | [Phase 0 Checklist](#phase-0-checklist) |
-| 1 | PlayerDock 容器：3 行结构（信息+播放 / 进度 / 导航）合并 PlayerBar+DockNav | 🔲 Pending | [Phase 1 Checklist](#phase-1-checklist) |
+| 1 | PlayerDock 容器：3 行结构（信息+播放 / 进度 / 导航）合并 PlayerBar+DockNav | ✅ Completed | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | 导航行：扁平集成 nav row（取代 Magic UI 放大 Dock） | 🔲 Pending | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | 页面切换 View Transition（tab → tab 丝滑过渡） | 🔲 Pending | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | 移动端：mini ↔ 全屏 Now Playing sheet（共享封面 + 完整 transport） | 🔲 Pending | [Phase 4 Checklist](#phase-4-checklist) |
@@ -363,16 +363,18 @@ export function startViewTransition(update: () => void): void
 **Goal:** 把 PlayerBar 拆成行1/行2，套进 PlayerDock 容器（行3 先放占位或临时复用 DockNav）。
 
 **Tasks:**
-- [ ] 新建 [`player-dock.tsx`](../../../src/components/shell/player-dock.tsx)（容器/`fixed`/安全区/响应式）。
-- [ ] 新建 `track-identity-row.tsx`（封面 + 标题/作者 + 播放暂停）；点击行为接 §4.2（桌面切 now / 移动开 sheet）。
-- [ ] 新建 `progress-scrubber.tsx`（整宽进度 + 时间 + 状态文案 leaf）。
-- [ ] 改 [`App.tsx`](../../../src/App.tsx)：`<PlayerDock>` 取代 `<PlayerBar/>`；`main` 底部留 padding。
+- [x] 新建 [`player-dock.tsx`](../../../src/components/shell/player-dock.tsx)（单一 rounded 容器，3 行；normal-flow `shrink-0`，body 已有 `env(safe-area-inset-*)`）。
+- [x] 新建 [`track-identity-row.tsx`](../../../src/components/player/track-identity-row.tsx)（封面 + 标题/作者 + 单一播放/暂停钮）；点击封面/文案 → `onOpen`（Phase 1 桌面切 now；移动 sheet 在 Phase 4 接）。
+- [x] 新建 [`progress-scrubber.tsx`](../../../src/components/player/progress-scrubber.tsx)（整宽进度 + 时间）+ [`player-status-line.tsx`](../../../src/components/player/player-status-line.tsx)（状态文案独立 leaf）。
+- [x] TDD：抽纯逻辑到 [`transport.ts`](../../../src/player/transport.ts)（`progressPercent` / `resolveStatusLine`），[`transport.test.ts`](../../../src/player/transport.test.ts) 7 例。
+- [x] 改 [`App.tsx`](../../../src/App.tsx)：`<PlayerDock>` 取代 `<PlayerBar/>` + `<DockNav/>`；删除 `player-bar.tsx`（内容已迁移）。
 
 #### Phase 1 Checklist
-- [ ] 各行独立重渲染（seek 时只 ProgressScrubber 重渲染，DevTools/计数验证）。
-- [ ] 切歌封面/标题更新；无 active set 优雅占位。
-- [ ] i18n 复用 `player.*`，新文案先进 en。
-- [ ] `make check` 通过。
+- [x] 各行独立重渲染（按 selector 设计：per-tick `positionSec` 仅触发 `ProgressScrubber`；`TrackIdentityRow` 订 `queue/currentIndex/isPlaying`，`PlayerStatusLine` 订状态，互不影响）。
+- [x] 切歌封面/标题更新；无 active set 优雅占位（preview 验证：显 `MUZERO` + `点击播放…` + Disc 占位）。
+- [x] i18n 复用既有 key（`player.play/pause`、`nav.now`、`app.pressPlay`、`sessions.importing`、`dj.generating`），**零新增 key**（避开他人 WIP 的 `common.json`）。
+- [x] `make check` 通过：typecheck 干净、95 tests 全绿、Biome（本期文件）0 fix；preview 无 Vite error overlay、无运行时报错。
+- [→] 行3 暂复用 `DockNav`（嵌套 dock 视觉），**Phase 2 替换为扁平 nav-row**。
 
 ### Phase 2: 扁平导航行
 
