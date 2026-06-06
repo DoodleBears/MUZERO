@@ -5,10 +5,13 @@
 @custom-variant dark (&:is(.dark *));
 
 /*
- * MUZERO theme. Neutral dark base compatible with shadcn / COSS UI variables.
- * Running `pnpm dlx shadcn@latest init @coss/style` (or `add @coss/style`) will
- * overwrite / extend these tokens with the official COSS neutral system — this
- * file is the seed so the app renders before the registry is pulled.
+ * MUZERO theme. Neutral light/dark palettes compatible with shadcn / COSS UI
+ * variables: `:root` is the light scheme, `.dark` overrides it for dark. The
+ * theme is switched globally by toggling `.dark` on <html> (see src/theme/theme.ts;
+ * Settings → Appearance picks light / dark / system). Running
+ * `pnpm dlx shadcn@latest init @coss/style` (or `add @coss/style`) will overwrite /
+ * extend these tokens with the official COSS neutral system — this file is the
+ * seed so the app renders before the registry is pulled.
  */
 
 @variant dark (&:where(.dark, .dark *));
@@ -16,23 +19,23 @@
 :root {
   --radius: 0.625rem;
 
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.145 0 0);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.145 0 0);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.145 0 0);
   --primary: oklch(0.72 0.18 305);
   --primary-foreground: oklch(0.98 0.01 305);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
+  --secondary: oklch(0.97 0 0);
+  --secondary-foreground: oklch(0.205 0 0);
+  --muted: oklch(0.97 0 0);
+  --muted-foreground: oklch(0.556 0 0);
+  --accent: oklch(0.97 0 0);
+  --accent-foreground: oklch(0.205 0 0);
+  --destructive: oklch(0.577 0.245 27.325);
+  --border: oklch(0.922 0 0);
+  --input: oklch(0.922 0 0);
   --ring: oklch(0.72 0.18 305);
   --destructive-foreground: var(--color-red-700);
 }
@@ -102,5 +105,23 @@
  */
 
 .dark {
+  --background: oklch(0.145 0 0);
+  --foreground: oklch(0.985 0 0);
+  --card: oklch(0.205 0 0);
+  --card-foreground: oklch(0.985 0 0);
+  --popover: oklch(0.205 0 0);
+  --popover-foreground: oklch(0.985 0 0);
+  --primary: oklch(0.72 0.18 305);
+  --primary-foreground: oklch(0.98 0.01 305);
+  --secondary: oklch(0.269 0 0);
+  --secondary-foreground: oklch(0.985 0 0);
+  --muted: oklch(0.269 0 0);
+  --muted-foreground: oklch(0.708 0 0);
+  --accent: oklch(0.269 0 0);
+  --accent-foreground: oklch(0.985 0 0);
+  --destructive: oklch(0.704 0.191 22.216);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.72 0.18 305);
   --destructive-foreground: var(--color-red-400);
 }

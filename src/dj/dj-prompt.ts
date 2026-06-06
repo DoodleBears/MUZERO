@@ -5,6 +5,9 @@ import type { TrackBrief } from "./dj-brief-schema";
 export interface RecentTrack {
   title: string;
   caption: string;
+  /** Listener annotations — "music carries memories" — steer the DJ's choices. */
+  tags?: string[];
+  note?: string;
 }
 
 export interface DjContext {
@@ -36,9 +39,14 @@ export function buildDjUserPrompt(ctx: DjContext): string {
     lines.push("");
     lines.push("Recently played (oldest → newest):");
     for (const t of ctx.recent.slice(-8)) {
-      lines.push(`- "${t.title}" — ${t.caption}`);
+      const tags = t.tags && t.tags.length > 0 ? `  [tags: ${t.tags.join(", ")}]` : "";
+      const note = t.note ? `  (listener note: ${t.note})` : "";
+      lines.push(`- "${t.title}" — ${t.caption}${tags}${note}`);
     }
     lines.push("");
+    lines.push(
+      "Let the listener's tags and notes guide the mood — they capture what these songs mean to them.",
+    );
     lines.push(
       `Now write ${ctx.count} brief(s) for the NEXT song(s) that segue from the most recent track.`,
     );

@@ -8,13 +8,14 @@ import {
   type DjConfig,
   type DjSession,
   type MediaBlob,
+  type SetDisplayMode,
   type Track,
+  type TrackKind,
 } from "./types";
 
 /**
  * Thin repository functions over Dexie. Every function takes the DB instance
  * (defaulting to the singleton) so unit tests can pass an isolated `MuzeroDB`.
- * No business logic lives here — just persistence + invariants.
  */
 
 // ---------------------------------------------------------------- settings ----
@@ -37,7 +38,12 @@ export async function saveSettings(
 // ---------------------------------------------------------------- sessions ----
 
 export async function createSession(
-  input: { name?: string; seedPrompt: string; config?: Partial<DjConfig> },
+  input: {
+    name?: string;
+    seedPrompt: string;
+    config?: Partial<DjConfig>;
+    displayMode?: SetDisplayMode;
+  },
   db: MuzeroDB = defaultDb,
 ): Promise<DjSession> {
   const now = Date.now();
@@ -48,6 +54,7 @@ export async function createSession(
     trackIds: [],
     status: "idle",
     config: { ...DEFAULT_DJ_CONFIG, ...input.config },
+    displayMode: input.displayMode ?? "video",
     createdAt: now,
     updatedAt: now,
   };
@@ -75,6 +82,14 @@ export async function updateSession(
   db: MuzeroDB = defaultDb,
 ): Promise<void> {
   await db.sessions.update(id, { ...patch, updatedAt: Date.now() });
+}
+
+export async function setSessionDisplayMode(
+  id: string,
+  displayMode: SetDisplayMode,
+  db: MuzeroDB = defaultDb,
+): Promise<void> {
+  await db.sessions.update(id, { displayMode, updatedAt: Date.now() });
 }
 
 export async function appendTrackIds(
@@ -115,6 +130,8 @@ export async function createPendingTrack(
     id: newId("trk"),
     sessionId: input.sessionId,
     title: input.brief.title,
+    kind: "audio",
+    origin: "generated",
     brief: input.brief,
     provider: input.provider,
     status: "pending",
@@ -122,8 +139,52 @@ export async function createPendingTrack(
     createdAt: Date.now(),
     playCount: 0,
     liked: false,
+    tags: [],
   };
   await db.tracks.put(track);
+  return track;
+}
+
+/** Create a user-uploaded track (audio or video) plus its media blob. */
+export async function createUploadedTrack(
+  input: {
+    sessionId: string;
+    title: string;
+    kind: TrackKind;
+    blob: Blob;
+    mime: string;
+    durationSec: number;
+  },
+  db: MuzeroDB = defaultDb,
+): Promise<Track> {
+  const track: Track = {
+    id: newId("trk"),
+    sessionId: input.sessionId,
+    title: input.title,
+    kind: input.kind,
+    origin: "uploaded",
+    provider: "upload",
+    status: "ready",
+    durationSec: input.durationSec,
+    createdAt: Date.now(),
+    generatedAt: Date.now(),
+    playCount: 0,
+    liked: false,
+    tags: [],
+  };
+  const media: MediaBlob = {
+    id: newId("blb"),
+    trackId: track.id,
+    role: "media",
+    mime: input.mime,
+    bytes: input.blob.size,
+    blob: input.blob,
+  };
+  track.blobId = media.id;
+  await db.transaction("rw", db.tracks, db.mediaBlobs, async () => {
+    await db.mediaBlobs.put(media);
+    await db.tracks.put(track);
+  });
   return track;
 }
 
@@ -138,6 +199,7 @@ export async function markTrackReady(
   const media: MediaBlob = {
     id: newId("blb"),
     trackId: input.trackId,
+    role: "media",
     mime: input.mime,
     bytes: input.blob.size,
     blob: input.blob,
@@ -175,12 +237,24 @@ export async function getTracksByIds(ids: string[], db: MuzeroDB = defaultDb): P
   return out;
 }
 
+export function listAllTracks(db: MuzeroDB = defaultDb): Promise<Track[]> {
+  return db.tracks.toArray();
+}
+
 export async function getTrackBlob(
   track: Track,
   db: MuzeroDB = defaultDb,
 ): Promise<MediaBlob | undefined> {
   if (!track.blobId) return undefined;
   return db.mediaBlobs.get(track.blobId);
+}
+
+export async function getTrackCover(
+  track: Track,
+  db: MuzeroDB = defaultDb,
+): Promise<MediaBlob | undefined> {
+  if (!track.coverBlobId) return undefined;
+  return db.mediaBlobs.get(track.coverBlobId);
 }
 
 export async function incrementPlayCount(id: string, db: MuzeroDB = defaultDb): Promise<void> {
@@ -198,7 +272,64 @@ export async function setTrackLiked(
   await db.tracks.update(id, { liked });
 }
 
-/** Delete a track plus its audio blob and unlink it from its session. */
+// ------------------------------------------------------------- annotations ----
+
+export async function setTrackTags(
+  id: string,
+  tags: string[],
+  db: MuzeroDB = defaultDb,
+): Promise<void> {
+  // Normalize: trim, drop empties, de-dupe, lowercase for stable matching.
+  const clean = Array.from(new Set(tags.map((t) => t.trim().toLowerCase()).filter(Boolean)));
+  await db.tracks.update(id, { tags: clean });
+}
+
+export async function setTrackNote(
+  id: string,
+  note: string,
+  db: MuzeroDB = defaultDb,
+): Promise<void> {
+  await db.tracks.update(id, { note: note.trim() || undefined });
+}
+
+/** Attach (or replace) a cover image for a track. */
+export async function setTrackCover(
+  input: { trackId: string; blob: Blob; mime: string },
+  db: MuzeroDB = defaultDb,
+): Promise<void> {
+  await db.transaction("rw", db.tracks, db.mediaBlobs, async () => {
+    const track = await db.tracks.get(input.trackId);
+    if (!track) return;
+    if (track.coverBlobId) await db.mediaBlobs.delete(track.coverBlobId);
+    const cover: MediaBlob = {
+      id: newId("blb"),
+      trackId: input.trackId,
+      role: "cover",
+      mime: input.mime,
+      bytes: input.blob.size,
+      blob: input.blob,
+    };
+    await db.mediaBlobs.put(cover);
+    await db.tracks.update(input.trackId, { coverBlobId: cover.id });
+  });
+}
+
+/** Distinct tags across all tracks, with usage counts (desc). */
+export async function getAllTags(
+  db: MuzeroDB = defaultDb,
+): Promise<{ tag: string; count: number }[]> {
+  const counts = new Map<string, number>();
+  await db.tracks.each((t) => {
+    for (const tag of t.tags ?? []) counts.set(tag, (counts.get(tag) ?? 0) + 1);
+  });
+  return [...counts.entries()]
+    .map(([tag, count]) => ({ tag, count }))
+    .sort((a, b) => b.count - a.count);
+}
+
+// ------------------------------------------------------------------ delete ----
+
+/** Delete a track plus its blobs (media + cover) and unlink it from its set. */
 export async function deleteTrack(id: string, db: MuzeroDB = defaultDb): Promise<void> {
   await db.transaction("rw", db.tracks, db.mediaBlobs, db.sessions, async () => {
     const track = await db.tracks.get(id);

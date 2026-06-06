@@ -1,6 +1,8 @@
 import { Pause, Play, Repeat, Repeat1, SkipBack, SkipForward, Volume2 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
+import { trackSubtitle } from "@/lib/track-display";
 import { formatDuration } from "@/lib/utils";
 import type { RepeatMode } from "@/player/queue";
 import { usePlayerStore } from "@/stores/player-store";
@@ -9,6 +11,7 @@ const REPEAT_CYCLE: Record<RepeatMode, RepeatMode> = { off: "all", all: "one", o
 
 /** Persistent bottom transport bar. */
 export function PlayerBar() {
+  const { t } = useTranslation();
   const queue = usePlayerStore((s) => s.queue);
   const currentIndex = usePlayerStore((s) => s.currentIndex);
   const isPlaying = usePlayerStore((s) => s.isPlaying);
@@ -33,23 +36,37 @@ export function PlayerBar() {
           <div className="min-w-0 flex-1">
             <div className="truncate text-sm font-medium">{current?.title ?? "MUZERO"}</div>
             <div className="truncate text-xs text-muted-foreground">
-              {current?.brief.caption ?? "Press play — the AI DJ takes it from here"}
+              {current ? trackSubtitle(current) : t("app.pressPlay")}
             </div>
           </div>
-          <Button variant="ghost" size="icon" onClick={() => void prev()} aria-label="Previous">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => void prev()}
+            aria-label={t("player.previous")}
+          >
             <SkipBack />
           </Button>
-          <Button size="icon-lg" onClick={togglePlay} aria-label={isPlaying ? "Pause" : "Play"}>
+          <Button
+            size="icon-lg"
+            onClick={togglePlay}
+            aria-label={isPlaying ? t("player.pause") : t("player.play")}
+          >
             {isPlaying ? <Pause /> : <Play />}
           </Button>
-          <Button variant="ghost" size="icon" onClick={() => void next()} aria-label="Next">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => void next()}
+            aria-label={t("player.next")}
+          >
             <SkipForward />
           </Button>
           <Button
             variant="ghost"
             size="icon"
             onClick={() => setRepeat(REPEAT_CYCLE[repeat])}
-            aria-label={`Repeat: ${repeat}`}
+            aria-label={t("player.repeat", { mode: repeat })}
             className={repeat !== "off" ? "text-primary" : undefined}
           >
             {repeat === "one" ? <Repeat1 /> : <Repeat />}
@@ -73,7 +90,7 @@ export function PlayerBar() {
             value={volume * 100}
             onValueChange={(v) => setVolume(v / 100)}
             className="hidden w-20 sm:block"
-            aria-label="Volume"
+            aria-label={t("player.volume")}
           />
         </div>
       </div>

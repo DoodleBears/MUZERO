@@ -4,6 +4,7 @@
     "useDefineForClassFields": true,
     "lib": ["ES2023", "DOM", "DOM.Iterable"],
     "module": "ESNext",
+    "resolveJsonModule": true,
     "skipLibCheck": true,
 
     "moduleResolution": "bundler",
@@ -22,7 +23,6 @@
 
     "types": ["node", "vite/client", "@testing-library/jest-dom"],
 
-    "baseUrl": ".",
     "paths": {
       "@/*": ["./src/*"]
     }

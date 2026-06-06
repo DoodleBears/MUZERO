@@ -3,12 +3,13 @@ import type { TrackBrief } from "@/dj/dj-brief-schema";
 /**
  * MusicGenProvider — the pluggable boundary between the AI DJ and whatever
  * actually renders audio. MUZERO ships:
- *  - `mock`          — synthesizes a tone locally (dev + tests, no model)
- *  - `acestep-local` — POSTs the brief to a local ACE-Step (acestep.cpp) server
+ *  - `mock`  — synthesizes a tone locally (dev + tests, no model, no network)
+ *  - `cloud` — BYOK cloud API (Replicate / ElevenLabs Music / Suno-style / …),
+ *              async submit→poll→download; see `cloud-provider.ts`
  *
- * Add hosted/BYOK providers (Replicate, ElevenLabs Music, Suno, …) by
- * implementing this interface and registering it. The DJ never knows which one
- * it's talking to — it only writes a provider-agnostic TrackBrief.
+ * Add more providers by implementing this interface and registering it. The DJ
+ * never knows which one it's talking to — it only writes a provider-agnostic
+ * TrackBrief.
  */
 
 export interface MusicGenRequest {

@@ -7,9 +7,10 @@ import { z } from "zod";
  *  - music-gen providers map it onto their request (ACE-Step caption/lyrics/...)
  *  - the DB stores it on each Track row
  *
- * Fields mirror ACE-Step 1.5 (`acestep-local/examples/request.json`): a free-text
- * `caption` (genre/instrumentation/mood prompt) plus optional musical params and
- * `lyrics`. Keep it provider-agnostic — adapters translate, they don't leak.
+ * Shape is provider-agnostic and maps cleanly onto common music-gen APIs: a
+ * free-text `caption` (genre/instrumentation/mood prompt) plus optional musical
+ * params and `lyrics`. Adapters translate it to each vendor — they don't leak
+ * vendor concepts back into the brief.
  */
 export const trackBriefSchema = z.object({
   /** Human-facing song title the DJ invents. */

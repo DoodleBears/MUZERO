@@ -3,8 +3,8 @@
  *
  * In a Tauri WebView we route LLM and music-generation HTTP through the Tauri
  * `http` plugin, which makes requests from the Rust side and bypasses browser
- * CORS / mixed-content rules (e.g. calling http://localhost:8085 from a https
- * mobile WebView). In a plain browser (vite dev, vitest) we fall back to the
+ * CORS / mixed-content rules (e.g. calling a BYOK cloud API that doesn't send
+ * CORS headers). In a plain browser (vite dev, vitest) we fall back to the
  * global `fetch`. Providers in the AI SDK and our music-gen adapters accept this
  * shim so the same code path works everywhere.
  */

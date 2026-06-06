@@ -2,36 +2,46 @@ import { liveQuery, type Subscription } from "dexie";
 import { create } from "zustand";
 import { db } from "@/db/muzero-db";
 import {
+  appendTrackIds,
+  createUploadedTrack,
   getSession,
   getSettings,
   getTrackBlob,
   getTracksByIds,
   incrementPlayCount,
   saveSettings,
+  setSessionDisplayMode,
 } from "@/db/repositories";
-import type { Track } from "@/db/types";
+import type { SetDisplayMode, Track } from "@/db/types";
 import { createAiDjBrain } from "@/dj/dj-brain-ai";
 import { createDjEngine, type DjEngine } from "@/dj/dj-engine";
 import { log } from "@/lib/logger";
+import { probeMediaFile } from "@/lib/media-probe";
 import { resolveMusicGenProvider } from "@/musicgen/registry";
-import { AudioEngine } from "@/player/audio-engine";
+import { MediaEngine } from "@/player/media-engine";
 import { clampIndex, nextIndex, prevIndex, type RepeatMode } from "@/player/queue";
 
 interface PlayerState {
   activeSessionId: string | null;
-  /** Reactive snapshot of the active session's tracks, in queue order. */
+  /** Reactive snapshot of the active set's tracks, in queue order. */
   queue: Track[];
   currentIndex: number;
   isPlaying: boolean;
-  /** Whether the user intends playback (so we autoplay once the track is ready). */
   wantPlay: boolean;
   positionSec: number;
   durationSec: number;
   volume: number;
   repeat: RepeatMode;
-  /** DJ status flags for the console UI. */
+  /** Stage rendering for the active set (video-first → cover → title). */
+  displayMode: SetDisplayMode;
+  /** Force audio-only: play a video's audio without showing the video. */
+  audioOnly: boolean;
+  /** Whether the active set lets the DJ auto-generate more tracks. */
+  djEnabled: boolean;
+  // DJ status flags for the console UI.
   isDrafting: boolean;
   isGenerating: boolean;
+  isUploading: boolean;
   djError: string | null;
 
   init: () => void;
@@ -41,21 +51,27 @@ interface PlayerState {
   pause: () => void;
   togglePlay: () => void;
   playIndex: (index: number) => Promise<void>;
+  /** Play a specific track, switching sets if needed (search/library result). */
+  playTrack: (track: Track) => Promise<void>;
   next: () => Promise<void>;
   prev: () => Promise<void>;
   seek: (sec: number) => void;
   setVolume: (v: number) => void;
   setRepeat: (mode: RepeatMode) => void;
+  setDisplayMode: (mode: SetDisplayMode) => Promise<void>;
+  setAudioOnly: (audioOnly: boolean) => void;
+  /** Import uploaded audio/video files into the active set. */
+  addUploads: (files: FileList | File[]) => Promise<void>;
   /** Manually ask the DJ to draft more now. */
   draftNow: () => Promise<void>;
 }
 
 // Non-reactive singletons (never selected by components → no rerenders).
-let audioEngine: AudioEngine | null = null;
+let mediaEngine: MediaEngine | null = null;
 
-/** Access the shared audio engine (e.g. for the visualizer's analyser node). */
-export function getAudioEngine(): AudioEngine | null {
-  return audioEngine;
+/** Access the shared media engine (for the stage to mount + the visualizer). */
+export function getMediaEngine(): MediaEngine | null {
+  return mediaEngine;
 }
 
 let queueSub: Subscription | null = null;
@@ -73,19 +89,23 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   durationSec: 0,
   volume: 0.9,
   repeat: "off",
+  displayMode: "video",
+  audioOnly: false,
+  djEnabled: true,
   isDrafting: false,
   isGenerating: false,
+  isUploading: false,
   djError: null,
 
   init() {
-    if (audioEngine) return;
-    audioEngine = new AudioEngine({
+    if (mediaEngine) return;
+    mediaEngine = new MediaEngine({
       onEnded: () => void get().next(),
       onTimeUpdate: (positionSec, durationSec) => set({ positionSec, durationSec }),
       onPlayStateChange: (isPlaying) => set({ isPlaying }),
       onError: (msg) => set({ djError: msg }),
     });
-    audioEngine.setVolume(get().volume);
+    mediaEngine.setVolume(get().volume);
   },
 
   async rebuildEngine() {
@@ -99,14 +119,25 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     get().init();
     await get().rebuildEngine();
     queueSub?.unsubscribe();
-    set({ activeSessionId: sessionId, currentIndex: -1, wantPlay: false });
+
+    const session = await getSession(sessionId);
+    const initialQueue = session ? await getTracksByIds(session.trackIds) : [];
+    loadedTrackId = null;
+    set({
+      activeSessionId: sessionId,
+      queue: initialQueue,
+      currentIndex: -1,
+      wantPlay: false,
+      displayMode: session?.displayMode ?? "video",
+      djEnabled: session?.config.autoExtend ?? false,
+    });
     await saveSettings({ lastSessionId: sessionId });
 
-    // Subscribe to the session's queue so generation progress streams into state.
+    // Stream generation progress into state as it lands.
     queueSub = liveQuery(async () => {
-      const session = await getSession(sessionId);
-      if (!session) return [] as Track[];
-      return getTracksByIds(session.trackIds);
+      const s = await getSession(sessionId);
+      if (!s) return [] as Track[];
+      return getTracksByIds(s.trackIds);
     }).subscribe({
       next: (queue) => {
         set({ queue });
@@ -115,9 +146,8 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       error: (err) => log.error("player", "queue subscription error", err),
     });
 
-    // Seed an empty session with a first batch.
-    const session = await getSession(sessionId);
-    if (session && session.trackIds.length === 0) void get().draftNow();
+    // Seed an empty DJ set with a first batch.
+    if (session?.config.autoExtend && session.trackIds.length === 0) void get().draftNow();
   },
 
   async play() {
@@ -132,7 +162,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
 
   pause() {
     set({ wantPlay: false });
-    audioEngine?.pause();
+    mediaEngine?.pause();
   },
 
   togglePlay() {
@@ -145,8 +175,15 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     const clamped = clampIndex(queue.length, index);
     set({ currentIndex: clamped, wantPlay: true });
     await ensureLoadedAndPlay(set, get);
-    // Advancing may have drained the queue — let the DJ keep it going.
     void maybeRefill(set, get);
+  },
+
+  async playTrack(track) {
+    if (get().activeSessionId !== track.sessionId) {
+      await get().setActiveSession(track.sessionId);
+    }
+    const idx = get().queue.findIndex((t) => t.id === track.id);
+    if (idx >= 0) await get().playIndex(idx);
   },
 
   async next() {
@@ -163,7 +200,6 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
 
   async prev() {
     const { queue, currentIndex, repeat, positionSec } = get();
-    // Restart the current track if we're more than 3s in (familiar UX).
     if (positionSec > 3) {
       get().seek(0);
       return;
@@ -174,17 +210,58 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   },
 
   seek(sec) {
-    audioEngine?.seek(sec);
+    mediaEngine?.seek(sec);
     set({ positionSec: sec });
   },
 
   setVolume(v) {
-    audioEngine?.setVolume(v);
+    mediaEngine?.setVolume(v);
     set({ volume: v });
   },
 
   setRepeat(mode) {
     set({ repeat: mode });
+  },
+
+  async setDisplayMode(mode) {
+    const { activeSessionId } = get();
+    set({ displayMode: mode });
+    if (activeSessionId) await setSessionDisplayMode(activeSessionId, mode);
+  },
+
+  setAudioOnly(audioOnly) {
+    set({ audioOnly });
+  },
+
+  async addUploads(files) {
+    const { activeSessionId } = get();
+    if (!activeSessionId) return;
+    const list = Array.from(files);
+    if (list.length === 0) return;
+    set({ isUploading: true });
+    try {
+      const ids: string[] = [];
+      for (const file of list) {
+        const probed = await probeMediaFile(file);
+        const track = await createUploadedTrack({
+          sessionId: activeSessionId,
+          title: probed.title,
+          kind: probed.kind,
+          blob: file,
+          mime: probed.mime,
+          durationSec: probed.durationSec,
+        });
+        ids.push(track.id);
+      }
+      await appendTrackIds(activeSessionId, ids);
+      log.info("player", `uploaded ${ids.length} file(s)`);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      set({ djError: msg });
+      log.error("player", "upload failed", msg);
+    } finally {
+      set({ isUploading: false });
+    }
   },
 
   async draftNow() {
@@ -206,7 +283,6 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
 
 // --------------------------------------------------------------- internals ----
 
-/** Load the current track's blob (if ready) and play if the user wants playback. */
 async function ensureLoadedAndPlay(
   set: (p: Partial<PlayerState>) => void,
   get: () => PlayerState,
@@ -214,23 +290,21 @@ async function ensureLoadedAndPlay(
   const { queue, currentIndex, wantPlay } = get();
   if (currentIndex < 0 || currentIndex >= queue.length) return;
   const track = queue[currentIndex];
-  if (!audioEngine) return;
+  if (!mediaEngine) return;
   if (track.status !== "ready" || !track.blobId) {
-    // Not generated yet — kick the pump; afterQueueUpdate will autoplay later.
     void pump(set, get);
     return;
   }
   if (loadedTrackId !== track.id) {
     const media = await getTrackBlob(track);
     if (!media) return;
-    await audioEngine.loadBlob(media.blob);
+    await mediaEngine.loadBlob(media.blob);
     loadedTrackId = track.id;
     void incrementPlayCount(track.id);
   }
-  if (wantPlay) await audioEngine.play();
+  if (wantPlay) await mediaEngine.play();
 }
 
-/** React to queue changes: autoplay a freshly-ready current track, keep pumping. */
 async function afterQueueUpdate(
   set: (p: Partial<PlayerState>) => void,
   get: () => PlayerState,
@@ -245,7 +319,7 @@ async function afterQueueUpdate(
   void pump(set, get);
 }
 
-/** Generate audio for pending tracks, one at a time (local models are single-batch). */
+/** Generate audio for pending tracks, one at a time. */
 async function pump(set: (p: Partial<PlayerState>) => void, get: () => PlayerState): Promise<void> {
   if (pumping || !djEngine) return;
   const { activeSessionId } = get();
@@ -253,7 +327,6 @@ async function pump(set: (p: Partial<PlayerState>) => void, get: () => PlayerSta
   pumping = true;
   set({ isGenerating: true });
   try {
-    // Materialize until nothing is pending. liveQuery updates `queue` between iters.
     while (true) {
       const produced = await djEngine.materializeNext(activeSessionId);
       if (!produced) break;
@@ -266,13 +339,13 @@ async function pump(set: (p: Partial<PlayerState>) => void, get: () => PlayerSta
   }
 }
 
-/** Ask the DJ to extend the queue when it has run low (续上歌单). */
+/** Ask the DJ to extend the set when it has run low (续上歌单) — DJ sets only. */
 async function maybeRefill(
   set: (p: Partial<PlayerState>) => void,
   get: () => PlayerState,
 ): Promise<void> {
-  const { activeSessionId, currentIndex, isDrafting } = get();
-  if (!activeSessionId || !djEngine || isDrafting) return;
+  const { activeSessionId, currentIndex, isDrafting, djEnabled } = get();
+  if (!activeSessionId || !djEngine || isDrafting || !djEnabled) return;
   set({ isDrafting: true });
   try {
     const refilled = await djEngine.refillIfNeeded(activeSessionId, currentIndex);

@@ -47,7 +47,12 @@ export function createDjEngine(deps: {
     const recent: RecentTrack[] = tracks
       .filter((t) => t.status === "ready")
       .slice(-8)
-      .map((t) => ({ title: t.title, caption: t.brief.caption }));
+      .map((t) => ({
+        title: t.title,
+        caption: t.brief?.caption ?? (t.origin === "uploaded" ? `uploaded ${t.kind}` : t.title),
+        tags: t.tags,
+        note: t.note,
+      }));
     return { seedPrompt: session.seedPrompt, config: session.config, recent, count };
   }
 
@@ -89,12 +94,16 @@ export function createDjEngine(deps: {
     const session = await getSession(sessionId, db);
     if (!session) return null;
     const tracks = await getTracksByIds(session.trackIds, db);
-    const target = tracks.find((t) => t.status === "pending" || t.status === "generating");
-    if (!target) return null;
+    // Only generated tracks have a brief to materialize; uploads are born ready.
+    const target = tracks.find(
+      (t) => (t.status === "pending" || t.status === "generating") && t.brief,
+    );
+    if (!target?.brief) return null;
+    const brief = target.brief;
 
     await markTrackGenerating(target.id, db);
     try {
-      const result = await provider.generate({ brief: target.brief, signal });
+      const result = await provider.generate({ brief, signal });
       await markTrackReady(
         {
           trackId: target.id,
@@ -118,6 +127,8 @@ export function createDjEngine(deps: {
   async function refillIfNeeded(sessionId: string, currentIndex: number): Promise<Track[] | null> {
     const session = await getSession(sessionId, db);
     if (!session) return null;
+    // Only DJ-enabled sets auto-generate; pure upload/curated sets never refill.
+    if (!session.config.autoExtend) return null;
     if (!shouldAutoExtend(session.trackIds.length, currentIndex, session.config.refillThreshold)) {
       return null;
     }

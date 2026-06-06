@@ -79,7 +79,7 @@ describe("DjEngine.draft", () => {
     const engine = createDjEngine({ db, brain, provider: createMockMusicGenProvider() });
 
     const [track] = await engine.draft(session.id);
-    expect(track.brief.lyrics).toBe("[instrumental]");
+    expect(track.brief?.lyrics).toBe("[instrumental]");
   });
 });
 
@@ -171,5 +171,17 @@ describe("DjEngine.refillIfNeeded (续上歌单)", () => {
     const reloaded = await getSession(session.id, db);
     expect(reloaded?.trackIds).toHaveLength(3);
     expect(brain.lastRecentTitles).toEqual(["A", "B"]);
+  });
+
+  it("never refills a non-DJ (upload/curated) set", async () => {
+    const session = await createSession(
+      { seedPrompt: "", config: { autoExtend: false, refillThreshold: 5 } },
+      db,
+    );
+    const brain = scriptedBrain([[brief("Nope")]]);
+    const engine = createDjEngine({ db, brain, provider: createMockMusicGenProvider() });
+    // Even with an empty queue (well below threshold), autoExtend off ⇒ no draft.
+    expect(await engine.refillIfNeeded(session.id, -1)).toBeNull();
+    expect(brain.calls).toBe(0);
   });
 });

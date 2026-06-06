@@ -21,9 +21,11 @@ your vibe ──▶ 🤖 AI DJ (LLM) writes a TrackBrief ──▶ 🎵 music-ge
 ```
 
 - **AI DJ loop** — the LLM drafts coherent, evolving track briefs that segue from what just played, and auto-extends the set when the queue runs low.
-- **Pluggable music generation** — ships with an offline mock synth (zero setup) and an adapter for a **local [ACE-Step](../acestep-local)** server (`:8085`). Add Replicate/Suno/etc. by implementing one interface.
-- **Local-first** — tracks, audio blobs, sessions, and settings persist in IndexedDB (Dexie). No accounts, no telemetry, no servers.
-- **BYOK** — your LLM API key is stored on-device and sent only to the provider you choose.
+- **Your own media too** — like YouTube Music, upload audio/video (MVs, voice memos) into a mixed set. Per-set display mode falls back **video → cover → title**, with an audio-only toggle.
+- **Memories** — tag any track, write a note, attach a cover photo. All searchable, and fed back into the DJ so it picks up the mood of what those songs mean to you.
+- **Pluggable music generation** — ships with an offline mock synth (zero setup) and a generic **cloud API (BYOK)** provider with an async submit→poll→download flow. Wire your chosen vendor (Replicate / ElevenLabs Music / Suno-style / …) by editing three mapping functions.
+- **Local-first** — tracks, audio/video blobs, sets, annotations, and settings persist in IndexedDB (Dexie). No accounts, no telemetry, no servers.
+- **BYOK** — your LLM/music API keys are stored on-device and sent only to the provider you choose.
 - **Cross-platform** — one codebase → macOS / Windows / Linux / iOS / Android via Tauri 2.
 
 ## Stack
@@ -33,23 +35,25 @@ TanStack Query + Virtual · Dexie (IndexedDB) · Zustand · Vercel AI SDK · Zod
 
 ## Quick start
 
+`make` (or `make help`) lists everything; the essentials:
+
 ```bash
-pnpm install
-pnpm dev            # browser dev at http://localhost:1420
-pnpm test           # vitest
-pnpm desktop:dev    # run as a Tauri desktop app (needs the Rust toolchain)
+make install        # deps + git hooks
+make dev            # browser dev at http://localhost:1420 (fastest loop)
+make desktop        # Tauri desktop app with hot reload (Vite HMR + Rust shell)
+make check          # full local gate: typecheck + lint + test
 ```
 
 The app works out of the box with the **offline mock** music provider — start a set and the DJ
-fills it immediately. To generate real music, run the sibling [`acestep-local`](../acestep-local)
-project (`make serve`), then in **Settings** switch the music provider to *ACE-Step (local)* and
-add your LLM API key.
+fills it immediately. To generate real music, add your LLM API key in **Settings**, switch the
+music provider to *Cloud API (BYOK)*, and point it at your provider's endpoint + key. The
+request/response mapping for your vendor lives in [`src/musicgen/cloud-provider.ts`](src/musicgen/cloud-provider.ts).
 
 ### Mobile
 
 ```bash
-pnpm ios:init && pnpm ios:dev          # needs Xcode
-pnpm android:init && pnpm android:dev  # needs Android SDK + NDK
+make ios-init && make ios          # needs Xcode
+make android-init && make android  # needs Android SDK + NDK
 ```
 
 ## Project layout
@@ -59,7 +63,7 @@ See [`CLAUDE.md`](CLAUDE.md) for the full architecture, hard rules, and navigati
 | Area | Where |
 |------|-------|
 | AI DJ engine (draft → generate → enqueue → refill) | [`src/dj/`](src/dj/) |
-| Music-gen providers (mock, ACE-Step, interface) | [`src/musicgen/`](src/musicgen/) |
+| Music-gen providers (mock, cloud BYOK, interface) | [`src/musicgen/`](src/musicgen/) |
 | Track brief contract (Zod, single source of truth) | [`src/dj/dj-brief-schema.ts`](src/dj/dj-brief-schema.ts) |
 | Local storage (Dexie schema + repositories) | [`src/db/`](src/db/) |
 | Player transport + DJ orchestration | [`src/stores/player-store.ts`](src/stores/player-store.ts) |

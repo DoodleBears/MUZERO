@@ -1,6 +1,8 @@
-import { Heart, Loader2, Music2, Trash2, TriangleAlert } from "lucide-react";
+import { Heart, Loader2, Trash2, TriangleAlert, Video } from "lucide-react";
 import { memo } from "react";
+import { useTranslation } from "react-i18next";
 import type { Track } from "@/db/types";
+import { trackSubtitle } from "@/lib/track-display";
 import { cn, formatDuration } from "@/lib/utils";
 
 interface TrackRowProps {
@@ -12,8 +14,8 @@ interface TrackRowProps {
   onDelete: () => void;
 }
 
+/** Shown in the index slot while a track is still pending/generating/failed. */
 function StatusBadge({ status }: { status: Track["status"] }) {
-  if (status === "ready") return <Music2 className="size-4 text-muted-foreground" />;
   if (status === "failed") return <TriangleAlert className="size-4 text-destructive" />;
   return <Loader2 className="size-4 animate-spin text-primary" />;
 }
@@ -26,6 +28,7 @@ export const TrackRow = memo(function TrackRow({
   onToggleLike,
   onDelete,
 }: TrackRowProps) {
+  const { t } = useTranslation();
   const disabled = track.status !== "ready";
   return (
     <div
@@ -44,12 +47,32 @@ export const TrackRow = memo(function TrackRow({
           {track.status === "ready" ? index + 1 : <StatusBadge status={track.status} />}
         </div>
         <div className="min-w-0 flex-1">
-          <div className={cn("truncate text-sm font-medium", isCurrent && "text-primary")}>
-            {track.title}
+          <div
+            className={cn(
+              "flex items-center gap-1.5 truncate text-sm font-medium",
+              isCurrent && "text-primary",
+            )}
+          >
+            <span className="truncate">{track.title}</span>
+            {track.kind === "video" && <Video className="size-3 shrink-0 text-muted-foreground" />}
           </div>
           <div className="truncate text-xs text-muted-foreground">
-            {track.status === "failed" ? (track.error ?? "Generation failed") : track.brief.caption}
+            {track.status === "failed"
+              ? (track.error ?? t("track.generationFailed"))
+              : trackSubtitle(track)}
           </div>
+          {track.tags.length > 0 && (
+            <div className="mt-0.5 flex flex-wrap gap-1">
+              {track.tags.slice(0, 4).map((tag) => (
+                <span
+                  key={tag}
+                  className="rounded-full bg-secondary/70 px-1.5 text-[10px] text-muted-foreground"
+                >
+                  #{tag}
+                </span>
+              ))}
+            </div>
+          )}
         </div>
       </button>
       <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
@@ -59,7 +82,7 @@ export const TrackRow = memo(function TrackRow({
         type="button"
         onClick={onToggleLike}
         className="shrink-0 rounded p-1 opacity-0 transition-opacity group-hover:opacity-100"
-        aria-label="Like"
+        aria-label={t("track.like")}
       >
         <Heart
           className={cn(
@@ -72,7 +95,7 @@ export const TrackRow = memo(function TrackRow({
         type="button"
         onClick={onDelete}
         className="shrink-0 rounded p-1 opacity-0 transition-opacity group-hover:opacity-100"
-        aria-label="Delete"
+        aria-label={t("track.delete")}
       >
         <Trash2 className="size-4 text-muted-foreground hover:text-destructive" />
       </button>

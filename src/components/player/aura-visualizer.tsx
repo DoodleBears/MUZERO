@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import { cn } from "@/lib/utils";
-import { getAudioEngine } from "@/stores/player-store";
+import { getMediaEngine } from "@/stores/player-store";
 
 /**
  * Aura-style audio visualizer — a radial frequency bloom driven by the player's
@@ -28,7 +28,7 @@ export function AuraVisualizer({ className, active }: { className?: string; acti
 
     const render = () => {
       raf = requestAnimationFrame(render);
-      const analyser = getAudioEngine()?.getAnalyser();
+      const analyser = getMediaEngine()?.getAnalyser();
       const dpr = window.devicePixelRatio || 1;
       const w = canvas.clientWidth;
       const h = canvas.clientHeight;

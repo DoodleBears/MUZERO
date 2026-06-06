@@ -1,6 +1,6 @@
 # MUZERO
 
-**本地优先的 AI DJ 音乐播放器。** 一个 LLM 充当 DJ，不断编写 prompt（`TrackBrief`）调用音乐生成 API 生成歌曲，以「续上歌单」的方式无限延展播放列表。无后端、无云服务——所有数据（歌曲、音频、会话、设置）都存在设备本地的 IndexedDB。通过 Tauri 2 分发到桌面端（macOS / Windows / Linux）和移动端（iOS / Android）。
+**本地优先的 AI DJ 音乐 / 视频播放器。** 一个 LLM 充当 DJ，不断编写 prompt（`TrackBrief`）调用音乐生成 API 生成歌曲，以「续上歌单」的方式无限延展播放列表。**也是一个像 YouTube Music 的播放器**：用户可上传自己的音频 / 视频（MV）做混合「歌单 / 视频单」，每首歌可加 tag + 备注 + 封面（"音乐承载回忆"），可搜索、可喂给 DJ。无后端、无云服务——所有数据都存在设备本地的 IndexedDB。通过 Tauri 2 分发到桌面端（macOS / Windows / Linux）和移动端（iOS / Android）。
 
 > 本仓库的工作流命令复用 doodlekuma.com 的 `.cursor/commands/`（`commit` / `implement` / `prd-create` / `pr-create` / `issue-create` / `switch-branch`），PRD 模板见 [`docs/prd/prd-template.md`](docs/prd/prd-template.md)。
 
@@ -16,7 +16,7 @@
 - **虚拟化**：TanStack Virtual（无限歌单/队列只挂载可见行）
 - **持久化**：Dexie 4（IndexedDB），DB 名 `muzero-db`
 - **AI**：Vercel AI SDK（`ai` v6 + `@ai-sdk/openai` / `@ai-sdk/anthropic`），BYOK
-- **音乐生成**：可插拔 `MusicGenProvider`（默认离线 `mock`；`acestep-local` 接 [`../acestep-local`](../acestep-local) 的 ACE-Step 本地服务）
+- **音乐生成**：可插拔 `MusicGenProvider`（默认离线 `mock`；`cloud` 是 BYOK 云 API——submit→poll→download 异步任务流，vendor 未定，mapping 隔离在 `cloud-provider.ts` 三个纯函数里）
 - **测试**：Vitest 4 + Testing Library + `fake-indexeddb`
 - **Lint/format**：Biome 2 + lefthook 提交门禁
 - **校验**：Zod 4（`TrackBrief` schema 是 DJ↔musicgen↔DB 的唯一契约）
@@ -30,8 +30,8 @@ seed/vibe ──▶ DjBrain (LLM, generateObject)
            DjEngine.draft ──▶ 创建 pending Track，追加进 session.trackIds（队列）
                    │
                    ▼
-           DjEngine.materializeNext ──▶ MusicGenProvider.generate ──▶ WAV Blob
-                   │                         (ACE-Step :8085 / mock)
+           DjEngine.materializeNext ──▶ MusicGenProvider.generate ──▶ 音频 Blob
+                   │                         (cloud BYOK API / mock)
                    ▼
            markTrackReady：Blob 存入 mediaBlobs，Track→ready
                    │
@@ -48,7 +48,7 @@ seed/vibe ──▶ DjBrain (LLM, generateObject)
 
 ### 1. 本地优先，无后端，无云
 
-所有持久化都在 IndexedDB `muzero-db`。没有服务器、没有遥测上报、没有账号系统。新功能默认不引入网络依赖；唯一的出站请求是 (a) 用户配置的 LLM API（BYOK）和 (b) 用户配置的音乐生成 endpoint（默认 localhost ACE-Step）。
+**本地优先 = 存储层无后端无云**：所有持久化都在 IndexedDB `muzero-db`，没有 MUZERO 服务器、没有遥测上报、没有账号系统。但**音乐生成和 LLM DJ 是 BYOK 云 API 调用**——这不违反本地优先，因为 (a) key 和 endpoint 由用户配置、只存设备本地，(b) MUZERO 自己不持有任何服务端。唯一的出站请求就是这两个用户配置的第三方 API。新功能默认不引入 MUZERO 自有后端。
 
 ### 2. BYOK / 密钥纪律
 
@@ -60,14 +60,15 @@ LLM 与托管 provider 的 API key 只存在 IndexedDB 的 `settings` 行（设�
 
 ### 4. Brand / codename 分层
 
-只重命名品牌层（UI 文案、产品名）。**codename 层保持稳定**：IndexedDB 名 `muzero-db`、表名、id 前缀（`trk_` / `ses_` / `blb_`）、`TrackBrief` 字段名、provider id（`acestep-local` / `mock`）跨品牌 pivot 不变——否则用户本地数据读不出来。
+只重命名品牌层（UI 文案、产品名）。**codename 层保持稳定**：IndexedDB 名 `muzero-db`、表名、id 前缀（`trk_` / `ses_` / `blb_`）、`TrackBrief` 字段名、provider id（`cloud` / `mock`）跨品牌 pivot 不变——否则用户本地数据读不出来。
 
 ### 5. MusicGenProvider 边界
 
-- 新增音乐源（Replicate / ElevenLabs Music / Suno / 自建）= 实现 [`MusicGenProvider`](src/musicgen/provider.ts) 接口 + 在 [`src/musicgen/registry.ts`](src/musicgen/registry.ts) 注册 + 在 `AppSettings.musicGenProvider` union 加 id。**不要**在 DJ/store/UI 里 `if (provider === "acestep")` 散落分支。
+- **当前方向是 cloud BYOK API**（vendor 待定，可能 Replicate / ElevenLabs Music / Suno-style / …）。**本地 ACE-Step 已下线**（不再用本地模型）。
+- 接入具体云 vendor = 只改 [`src/musicgen/cloud-provider.ts`](src/musicgen/cloud-provider.ts) 的三个纯函数 `mapBriefToBody` / `parseCreate` / `parseStatus`（vendor-specific 请求/响应映射）；submit→poll→download 流程、abort、DB 写入都不动。异步轮询引擎在 [`cloud-job.ts`](src/musicgen/cloud-job.ts)（注入 `now`/`sleep`，可确定性单测）。
+- 若要再加一个独立 provider = 实现 [`MusicGenProvider`](src/musicgen/provider.ts) 接口 + 在 [`registry.ts`](src/musicgen/registry.ts) 注册 + 在 `AppSettings.musicGenProvider` union 加 id。**不要**在 DJ/store/UI 里 `if (provider === "cloud")` 散落分支。
 - provider 必须返回 `{ blob, mime, durationSec }`；音频字节进 `mediaBlobs` 表，**永远不进** `tracks` 行（保持列表查询轻量，虚拟化才有意义）。
-- provider 实现里凡是 HTTP 都走 [`getAppFetch()`](src/lib/platform.ts)（Tauri 内绕过 CORS），不要直接 `window.fetch` 调外部/localhost。
-- 实现 ACE-Step adapter 前先看 [`../acestep-local/README.md`](../acestep-local/README.md) 和 `examples/request.json`——请求字段（`caption` / `lyrics` / `duration` / `bpm` / `keyscale` / `inference_steps` …）凭记忆几乎必错。
+- provider 实现里凡是 HTTP 都走 [`getAppFetch()`](src/lib/platform.ts)（Tauri 内绕过 CORS / mixed-content，云 https 同样适用），不要直接 `window.fetch` 调外部 API。
 
 ### 6. Zustand selector 纪律
 
@@ -83,31 +84,36 @@ DJ 续歌是这个 App 的命脉。必须有 integration test 覆盖：draft→p
 
 `src/**` 不直连 `console.*`，一律走 [`src/lib/logger.ts`](src/lib/logger.ts)（`debug`/`info` 在 prod 静默，`warn`/`error` 保留）。Biome 已 warn `noConsole`。
 
-### 9. 移动端约束
+### 9. 桌面优先 + 响应式
 
-- 布局移动优先（底部 tab + 安全区 inset，见 `styles.css` 的 `env(safe-area-inset-*)`）。
+- **当前优先级：先把桌面端做好，再调移动端**——但布局从一开始就按 responsive design 写，不要堆砌只在某一端成立的写法。
+- **导航 = 底部 Magic UI Dock**（[`dock-nav.tsx`](src/components/nav/dock-nav.tsx) + [`ui/dock.tsx`](src/components/ui/dock.tsx)，基于 `motion`）：一个居中浮动的 macOS 风 dock，全尺寸通用——桌面 hover 放大、触摸是舒适 tap 区。**不要**再加回 sidebar / 底部 tab bar。要换官方组件：`pnpm dlx shadcn@latest add @magicui/dock`（当前是手动 copy 版）。
+- **断点纪律**：`md` 是内容布局的桌面/移动分界。页面内容用响应式容器（表单 `mx-auto max-w-2xl`、Now Playing 在 `lg+` 变双栏 + 常驻队列），不要在桌面宽窗里把内容拉满或留大片空白。Tauri 默认窗口是桌面尺寸（1180×780，见 `tauri.conf.json`）。
+- 移动端细节（已埋好，后续打磨）：安全区 inset（`styles.css` 的 `env(safe-area-inset-*)`）、触摸友好控件、后台音频。
 - 音频用单个 `HTMLAudioElement`（[`AudioEngine`](src/player/audio-engine.ts)），object-URL revoke-before-replace，不泄漏 Blob URL；WebAudio graph 在首次 play（用户手势）时懒建。
-- 出站 HTTP 走 Tauri `http` 插件，避免移动 WebView 的 CORS / mixed-content。
+- 出站 HTTP 走 Tauri `http` 插件，避免 WebView 的 CORS / mixed-content。
 
 ## 项目结构
 
 ```
 MUZERO/
 ├── src/
-│   ├── main.tsx / App.tsx / styles.css     # 入口 + 壳 + Tailwind v4 主题
-│   ├── pages/                              # now-playing / queue / sessions / settings
+│   ├── main.tsx / App.tsx / styles.css     # 入口 + 壳（顶 header + main + player-bar + Dock 导航）+ Tailwind v4
+│   ├── pages/                              # now-playing / queue / search / sessions / settings
 │   ├── components/
-│   │   ├── player/                         # player-bar, aura-visualizer
+│   │   ├── nav/                            # dock-nav（Magic UI macOS Dock，全尺寸唯一导航）
+│   │   ├── player/                         # player-bar, media-stage（video→cover→title）, aura-visualizer
 │   │   ├── dj/                             # dj-console
+│   │   ├── track/                          # annotation-editor（tags + note + cover）
 │   │   ├── library/                        # track-row, virtual-track-list（TanStack Virtual）
-│   │   └── ui/                             # 本地 COSS/shadcn 兼容 primitives
-│   ├── db/                                 # Dexie：muzero-db, types, repositories
+│   │   └── ui/                             # 本地 COSS/shadcn 兼容 primitives + dock（Magic UI, motion）
+│   ├── db/                                 # Dexie：muzero-db(v2), types, repositories
 │   ├── dj/                                 # DJ 引擎：brief-schema, prompt, engine, brain-ai
-│   ├── musicgen/                           # provider 接口 + acestep-local + mock + wav
-│   ├── player/                             # queue（纯数学）+ audio-engine
-│   ├── stores/                             # player-store（Zustand，编排循环）
+│   ├── musicgen/                           # provider 接口 + cloud(BYOK) + cloud-job(轮询) + mock + wav
+│   ├── player/                             # queue（纯数学）+ media-engine（<video>，音视频通吃）
+│   ├── stores/                             # player-store（Zustand，编排循环 + 上传 + 显示模式）
 │   ├── ai/                                 # Vercel AI SDK model 解析（BYOK）
-│   ├── hooks/ lib/                         # useLiveQuery 包装 / utils / logger / platform
+│   ├── hooks/ lib/                         # use-media / track-search / track-display / media-probe / ...
 │   └── i18n/locales/{en,zh,ja,ko}/         # 文案 catalog（en 默认）
 ├── src-tauri/                              # Tauri 2 壳（desktop + mobile）
 │   ├── Cargo.toml / tauri.conf.json / build.rs
@@ -115,36 +121,51 @@ MUZERO/
 │   └── capabilities/default.json           # http/os/fs/dialog 权限
 ├── docs/prd/                               # PRD（命名 YYYYMMDD-<topic>-prd/）
 ├── .cursor/commands/                       # 复用自 doodlekuma 的工作流命令
-├── components.json                         # shadcn/COSS registry（@coss, @livekit）
+├── components.json                         # shadcn/COSS registry（@coss, @agents-ui）
+├── Makefile                                # 快捷命令入口（make help）
 ├── biome.json / lefthook.yml / vitest.config.ts / vite.config.ts
 ```
 
 **导航口径**：
 - 「DJ 怎么决定下一首」→ [`src/dj/dj-engine.ts`](src/dj/dj-engine.ts) + [`src/dj/dj-prompt.ts`](src/dj/dj-prompt.ts)
-- 「续歌何时触发」→ [`src/player/queue.ts`](src/player/queue.ts) `shouldAutoExtend` + store `maybeRefill`
+- 「续歌何时触发」→ [`src/player/queue.ts`](src/player/queue.ts) `shouldAutoExtend` + store `maybeRefill`（仅 `config.autoExtend` 的 DJ 集）
 - 「歌曲数据形状 / brief 字段」→ [`src/dj/dj-brief-schema.ts`](src/dj/dj-brief-schema.ts) + [`src/db/types.ts`](src/db/types.ts)
-- 「音频怎么生成」→ [`src/musicgen/`](src/musicgen/)（`acestep-local.ts` 是参考 adapter）
-- 「播放 transport / 队列编排」→ [`src/stores/player-store.ts`](src/stores/player-store.ts)
-- 「可视化」→ [`src/components/player/aura-visualizer.tsx`](src/components/player/aura-visualizer.tsx)（接 `AudioEngine.getAnalyser()`）
+- 「音频怎么生成」→ [`src/musicgen/`](src/musicgen/)（`cloud-provider.ts` 是 BYOK 云 adapter，vendor mapping 在三个纯函数里）
+- 「播放 transport / 队列编排 / 上传」→ [`src/stores/player-store.ts`](src/stores/player-store.ts)
+- 「stage 显示什么（video→cover→title 回退）」→ [`src/lib/track-display.ts`](src/lib/track-display.ts) `resolveStageContent` + [`media-stage.tsx`](src/components/player/media-stage.tsx)
+- 「上传的视频/音频怎么进库」→ store `addUploads` + [`src/lib/media-probe.ts`](src/lib/media-probe.ts) + repo `createUploadedTrack`
+- 「tag/备注/封面（注释）」→ [`src/components/track/annotation-editor.tsx`](src/components/track/annotation-editor.tsx) + repo `setTrackTags/Note/Cover`
+- 「搜索」→ [`src/lib/track-search.ts`](src/lib/track-search.ts)（纯函数）+ [`src/pages/search-page.tsx`](src/pages/search-page.tsx)
+- 「单个媒体元素 / 可视化」→ [`media-engine.ts`](src/player/media-engine.ts)（持久 `<video>`，`getMediaEngine().getAnalyser()`）
+
+## 数据模型（v2）与混合集 / 注释 / 视频规则
+
+- **Track 现在有 `kind`（audio/video）+ `origin`（generated/uploaded）**。生成的有 `brief`，上传的没有（`brief?` 可选——读 caption 一律走 [`trackSubtitle`](src/lib/track-display.ts)，别 `track.brief.caption` 裸读）。音频/视频/封面字节都进 `mediaBlobs`（`role: "media" | "cover"`），**永不进** `tracks` 行。
+- **集（DjSession）是混合的**：一个集里可同时有 AI 生成音频 + 用户上传的音视频。是否让 DJ 自动续歌由 `config.autoExtend` 决定（带 seed 创建的 DJ 集为 true；上传集为 false）。**禁止**用 `if (kind === ...)` 散落判断 DJ 行为，统一看 `autoExtend`。
+- **显示模式 per-set**：`displayMode: "video" | "cover" | "title"`，回退链 **video → cover → title**（[`resolveStageContent`](src/lib/track-display.ts) 是唯一裁决，已穷举单测）。`audioOnly` 是播放期临时开关（看视频集时只想听声音），强制不显示 video。
+- **音视频用同一个持久 `<video>` 元素**（[`MediaEngine`](src/player/media-engine.ts)）：它常驻 app 生命周期，Now Playing stage 用 `mount()/unmount()` 收养/释放，切 tab 不打断播放（detach 不停播）。`audioOnly` 只是隐藏画面，不抽离音轨——**mediabunny 音轨抽取是后续增强**（做独立音频/波形时再上），当前原生 `<video>` 直接出声即可。
+- **注释 = tag + note + cover**（"音乐承载回忆"）：tag 规范化（trim/lowercase/去重），note 自由文本，cover 是 memory 照片。三者都可搜（[`track-search.ts`](src/lib/track-search.ts) 的 `matchesQuery`，支持 `#tag`），且会喂进 DJ 上下文（`RecentTrack.tags/note`）影响生成。
+- **Schema 迁移**：[`muzero-db.ts`](src/db/muzero-db.ts) v1→v2 有 `.upgrade()` 回填（kind/origin/tags、blob role、displayMode/autoExtend）。改数据形状必须 bump version + 写 upgrade，不要原地改 v2 stores。
+- **下一阶段（未做）**：tag→歌单的「关联」用 Vercel AI SDK 的 **对话式助手 + tool calls**（search / create / curate / propose / generate）。本期先把它依赖的注释 + 搜索 + 混合集 + 视频 地基做好；chat 助手是下一个独立 phase。
 
 ## 常用命令
 
-```bash
-pnpm install              # 安装依赖
-pnpm dev                  # Vite 浏览器开发（localhost:1420）
-pnpm test                 # Vitest 全量
-pnpm test:watch           # Vitest watch
-pnpm typecheck            # tsc --noEmit
-pnpm lint                 # Biome
-pnpm build                # tsc + vite build → dist/
+入口是根目录 [`Makefile`](Makefile)（沿用 doodlekuma 约定，`make` / `make help` 看全部）。底层都是 pnpm script，可直接调。
 
-pnpm desktop:dev          # Tauri 桌面开发（需要 Rust 工具链）
-pnpm desktop:build        # 打桌面安装包
-pnpm ios:init / ios:dev   # iOS（需 Xcode）
-pnpm android:init / android:dev   # Android（需 Android SDK/NDK）
+```bash
+make install              # 安装依赖 + git hooks
+make dev                  # Web 浏览器开发，最快迭代（localhost:1420，配 mock provider 即可跑）
+make desktop              # Tauri 桌面端 hot reload（Vite HMR + Rust 壳，主力桌面开发命令）
+make ios / make android   # 移动端（先 make ios-init / android-init 一次；需 Xcode / Android SDK）
+
+make check                # 本地完整门禁：typecheck + lint + test
+make test / test-watch    # Vitest
+make build                # tsc + vite build → dist/
+make desktop-build        # 打当前 OS 桌面安装包；make mac / win / linux 指定平台
+make ui C=button          # 拉一个 COSS 组件；make ui-coss 全量；make icons 重生成图标
 ```
 
-> 本地开发时用户通常已经 `pnpm dev` 在跑，HMR 实时构建——开发中**不要**重复 `pnpm dev` / `pnpm build`，直接改代码即可。
+> **桌面优先**：日常用 `make desktop`（桌面 hot reload）或 `make dev`（纯浏览器，最快）。用户通常已经在跑 dev server，HMR 实时构建——开发中**不要**重复起 `make dev` / `make build`，直接改代码即可。
 
 ## UI 库接入（COSS UI + LiveKit visualizer）
 
@@ -166,4 +187,8 @@ COSS UI 文档：https://coss.com/ui/llms.txt
 
 ## i18n
 
-四语言 en（默认）/ zh / ja / ko，catalog 在 `src/i18n/locales/{locale}/common.json`。**当前 UI 字符串仍内联在组件里**（v0.1 scaffold 状态）——后续把它们迁进 catalog 并接 `react-i18next`，禁止在组件里新增按 locale 分支的大对象。
+四语言 en（默认）/ zh / ja / ko，用 **i18next + react-i18next**（沿用 doodlekuma 约定）。catalog 在 `src/i18n/locales/{locale}/common.json`，init 在 [`src/i18n/i18n.ts`](src/i18n/i18n.ts)（`main.tsx` 副作用导入），语言/检测/持久化在 [`config.ts`](src/i18n/config.ts)，类型增强在 `i18next.d.ts`（`t()` key 全量类型安全）。
+
+- **所有 UI 文案走 `useTranslation()` 的 `t("ns.key")`**，禁止在组件里内联用户可见字符串或写按 locale 分支的大对象。新字符串先加进 **en** catalog（类型源），再补 zh/ja/ko。
+- 复数用 i18next 后缀（en 有 `_one`/`_other`，CJK 只需 `_other`）；插值用 `{{var}}`。纯逻辑/lib 不持有文案——空态等 fallback 文案在调用点本地化（见 `trackSubtitle`）。
+- 语言切换在 Settings「外观」：`i18n.changeLanguage` + `persistLocale`（写 `muzero-locale` localStorage + `<html lang>`）+ 镜像到 `AppSettings.locale`。启动 locale = localStorage → 浏览器语言 → en。

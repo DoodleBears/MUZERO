@@ -12,7 +12,7 @@
 | Phase | Name | Status | Link |
 |-------|------|--------|------|
 | 1 | Scaffold + core loop (mock provider) | ✅ Completed | this doc |
-| 2 | ACE-Step local integration | 🔄 In Progress | §6 |
+| 2 | Cloud music API (BYOK) integration | 🔲 Pending | §6 |
 | 3 | LLM DJ polish (continuity, taste) | 🔲 Pending | §6 |
 | 4 | Mobile builds (iOS / Android) | 🔲 Pending | §6 |
 | 5 | Library, likes, export, i18n wiring | 🔲 Pending | §6 |
@@ -35,7 +35,7 @@ with no backend and no cloud dependency beyond the user's own BYOK model endpoin
 | Role | Description |
 |------|-------------|
 | **Listener** | Wants an endless, vibe-driven, generative radio station they control. |
-| **Tinkerer** | Runs a local ACE-Step model and wants a great front-end to drive it. |
+| **Tinkerer** | Brings their own cloud music + LLM API keys and wants a great front-end to drive them. |
 
 ### 1.3 Core Value
 
@@ -89,7 +89,7 @@ See [`CLAUDE.md`](../../../CLAUDE.md) §项目结构.
 - **tracks** `id, sessionId, status, createdAt, liked` — one row per generated song; audio excluded.
 - **mediaBlobs** `id, trackId` — the WAV bytes, kept out of the hot `tracks` table so list queries stay light.
 - **sessions** `id, status, updatedAt` — a DJ run: `seedPrompt`, ordered `trackIds` (the queue), `config`.
-- **settings** `id` — singleton: LLM provider/model/keys (BYOK), music provider + ACE-Step URL, locale, resume point.
+- **settings** `id` — singleton: LLM provider/model/keys (BYOK), music provider + cloud API url/key/model (BYOK), locale, resume point.
 
 **Invariants:** audio bytes never live on `tracks`; `TrackBrief` shape changes go through the Zod schema only; codename layer (`muzero-db`, table names, id prefixes, provider ids) is stable across brand changes.
 
@@ -99,7 +99,7 @@ See [`CLAUDE.md`](../../../CLAUDE.md) §项目结构.
 
 - **`TrackBrief`** ([`src/dj/dj-brief-schema.ts`](../../../src/dj/dj-brief-schema.ts)) — title, caption (style), lyrics, duration, bpm, key, time-sig, vocal language, djNote.
 - **`DjBrain`** ([`src/dj/dj-engine.ts`](../../../src/dj/dj-engine.ts)) — `draftBriefs(ctx) → TrackBrief[]`. Real impl wraps the LLM; tests inject a canned brain.
-- **`MusicGenProvider`** ([`src/musicgen/provider.ts`](../../../src/musicgen/provider.ts)) — `generate({ brief }) → { blob, mime, durationSec }`. Impls: `mock`, `acestep-local`.
+- **`MusicGenProvider`** ([`src/musicgen/provider.ts`](../../../src/musicgen/provider.ts)) — `generate({ brief }) → { blob, mime, durationSec }`. Impls: `mock` (offline), `cloud` (BYOK cloud API, async submit→poll→download).
 
 ---
 
@@ -112,7 +112,7 @@ See [`CLAUDE.md`](../../../CLAUDE.md) §项目结构.
 
 ## 6. Roadmap (next phases)
 
-- **Phase 2 — ACE-Step**: verify `acestep.cpp` server route against [`../acestep-local`](../../../../acestep-local); confirm WAV streaming + duration parsing; surface generation progress; handle long generations + cancellation.
+- **Phase 2 — Cloud music API (BYOK)**: pick the vendor, fill in `mapBriefToBody` / `parseCreate` / `parseStatus` in `cloud-provider.ts`; surface generation progress + cancellation; handle rate limits, long jobs, and audio-format variance (mp3/wav/ogg).
 - **Phase 3 — DJ taste**: stronger continuity (key/tempo segue rules), de-dup memory across a long set, per-session "energy arc", optional user steering mid-set.
 - **Phase 4 — Mobile**: `ios:init` / `android:init`, safe-area + transport-in-notification, background audio entitlements, on-device storage quotas.
 - **Phase 5 — Library/UX**: cross-session library, likes/export (download WAV), i18n wiring (en/zh/ja/ko catalogs already seeded), full COSS UI adoption.
@@ -120,4 +120,4 @@ See [`CLAUDE.md`](../../../CLAUDE.md) §项目结构.
 ## 7. Non-goals (v0.1)
 
 - No cloud sync / accounts / server. No telemetry. No hidden runtime flags (rollback = `git revert`).
-- No hosted music provider yet (interface is ready; ACE-Step local is the reference adapter).
+- No specific cloud vendor wired yet (interface + generic submit→poll→download flow are ready; mapping functions are the single edit point). Local/on-device models are out of scope.

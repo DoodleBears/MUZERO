@@ -1,4 +1,5 @@
 import { Loader2, Sparkles, TriangleAlert, Wand2 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { usePlayerStore } from "@/stores/player-store";
 
@@ -8,6 +9,7 @@ import { usePlayerStore } from "@/stores/player-store";
  * lets the user nudge it.
  */
 export function DjConsole() {
+  const { t } = useTranslation();
   const isDrafting = usePlayerStore((s) => s.isDrafting);
   const isGenerating = usePlayerStore((s) => s.isGenerating);
   const djError = usePlayerStore((s) => s.djError);
@@ -21,17 +23,17 @@ export function DjConsole() {
           {isDrafting ? (
             <>
               <Sparkles className="size-4 animate-pulse text-primary" />
-              DJ is writing the next track…
+              {t("dj.writing")}
             </>
           ) : isGenerating ? (
             <>
               <Loader2 className="size-4 animate-spin text-primary" />
-              Generating audio…
+              {t("dj.generating")}
             </>
           ) : (
             <>
               <Wand2 className="size-4" />
-              DJ is on standby
+              {t("dj.standby")}
             </>
           )}
         </div>
@@ -41,7 +43,7 @@ export function DjConsole() {
           disabled={!activeSessionId || isDrafting}
           onClick={() => void draftNow()}
         >
-          Extend set
+          {t("dj.extend")}
         </Button>
       </div>
       {djError && (

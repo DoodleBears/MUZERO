@@ -1,6 +1,4 @@
 import { describe, expect, it } from "vitest";
-import type { TrackBrief } from "@/dj/dj-brief-schema";
-import { toAceStepPayload } from "./acestep-local";
 import { createMockMusicGenProvider } from "./mock-provider";
 import { encodeWav, synthTone } from "./wav";
 
@@ -31,36 +29,6 @@ describe("synthTone", () => {
     const c = synthTone("seed-two", 0.1);
     expect(Array.from(a.samples)).not.toEqual(Array.from(c.samples));
     for (const s of a.samples) expect(Math.abs(s)).toBeLessThanOrEqual(1);
-  });
-});
-
-describe("toAceStepPayload", () => {
-  it("maps a brief onto ACE-Step's request shape", () => {
-    const brief: TrackBrief = {
-      title: "Neon Rain",
-      caption: "lofi hip hop, mellow piano",
-      lyrics: "[verse]\nNeon rain",
-      durationSec: 45,
-      bpm: 82,
-      keyscale: "A minor",
-      timeSignature: "4",
-      vocalLanguage: "en",
-    };
-    const payload = toAceStepPayload(brief, { baseUrl: "http://localhost:8085" });
-    expect(payload).toMatchObject({
-      caption: "lofi hip hop, mellow piano",
-      duration: 45,
-      bpm: 82,
-      keyscale: "A minor",
-      timesignature: "4",
-      vocal_language: "en",
-      inference_steps: 8,
-    });
-  });
-  it("falls back to [instrumental] when lyrics are empty", () => {
-    const brief: TrackBrief = { title: "Drift", caption: "ambient", lyrics: "", durationSec: 60 };
-    const payload = toAceStepPayload(brief, { baseUrl: "http://x" });
-    expect(payload.lyrics).toBe("[instrumental]");
   });
 });
 

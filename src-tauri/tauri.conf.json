@@ -13,9 +13,9 @@
     "windows": [
       {
         "title": "MUZERO",
-        "width": 420,
-        "height": 820,
-        "minWidth": 360,
+        "width": 1180,
+        "height": 780,
+        "minWidth": 380,
         "minHeight": 600,
         "resizable": true
       }
