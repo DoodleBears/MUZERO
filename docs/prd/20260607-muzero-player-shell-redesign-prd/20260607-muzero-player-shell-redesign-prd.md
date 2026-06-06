@@ -13,7 +13,7 @@
 |-------|------|--------|------|
 | 0 | 过渡基础设施（view-transition helper + reduced-motion + 选择器隔离） | ✅ Completed | [Phase 0 Checklist](#phase-0-checklist) |
 | 1 | PlayerDock 容器：3 行结构（信息+播放 / 进度 / 导航）合并 PlayerBar+DockNav | ✅ Completed | [Phase 1 Checklist](#phase-1-checklist) |
-| 2 | 导航行：扁平集成 nav row（取代 Magic UI 放大 Dock） | 🔲 Pending | [Phase 2 Checklist](#phase-2-checklist) |
+| 2 | 导航行：扁平集成 nav row（取代 Magic UI 放大 Dock） | ✅ Completed | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | 页面切换 View Transition（tab → tab 丝滑过渡） | 🔲 Pending | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | 移动端：mini ↔ 全屏 Now Playing sheet（共享封面 + 完整 transport） | 🔲 Pending | [Phase 4 Checklist](#phase-4-checklist) |
 | 5 | 打磨：i18n / a11y / 安全区 / 文档对齐（含 CLAUDE.md #9 改写） | 🔲 Pending | [Phase 5 Checklist](#phase-5-checklist) |
@@ -381,15 +381,15 @@ export function startViewTransition(update: () => void): void
 **Goal:** 行3 扁平等距 nav row 取代放大 Dock 为主形态。
 
 **Tasks:**
-- [ ] 新建 `nav-row.tsx`（扁平等距，激活高亮，aria）。
-- [ ] tab 集合（已定 Q1）：**queue / search / sets / settings 四项**，去掉「now」；点行1播放区进 Now Playing。
-- [ ] 桌面可选接 hover 微放大（复用 [`dock.tsx`](../../../src/components/ui/dock.tsx)）；移动禁用。
-- [ ] 删除/降级 [`dock-nav.tsx`](../../../src/components/nav/dock-nav.tsx) 独立浮层用法。
+- [x] 新建 [`nav-row.tsx`](../../../src/components/nav/nav-row.tsx)（扁平等距 `justify-around`，激活 `text-primary` + `aria-current`，每项 `aria-label`/`title`）。
+- [x] tab 集合（已定 Q1）：**queue / search / sets / settings 四项**，去掉「now」；点行1播放区进 Now Playing。TDD [`nav-row.test.ts`](../../../src/components/nav/nav-row.test.ts) 3 例锁定「四项 + 永不含 now」。
+- [x] 桌面 hover 微放大：CSS `hover:scale-110` + `motion-reduce:hover:scale-100`（触摸无 hover 不触发；reduced-motion 不动）。未引 `dock.tsx` 的 follow-cursor 放大，保持轻量。
+- [→] [`dock-nav.tsx`](../../../src/components/nav/dock-nav.tsx) 降级保留：仍作 `Tab` 类型源；`DockNav` 组件已无人渲染（不删，以**避免改动正被他人并发编辑的 `App.tsx`**）。`dock.tsx` 随之闲置（Q4 仍开放）。
 
 #### Phase 2 Checklist
-- [ ] 桌面：容器居中、3 行不遮挡 main 末项；列表可滚到底。
-- [ ] 移动：等距 nav、tap 区 ≥44px、`env(safe-area-inset-bottom)` 不被 home indicator 遮挡。
-- [ ] `make check` 通过。
+- [x] 桌面：容器 `mx-auto max-w-2xl` 居中、normal-flow `shrink-0`、`main` `flex-1 overflow-hidden` 在其上滚动，不遮挡末项。
+- [x] 移动：等距 nav、tap 区 `size-11`=44px、`env(safe-area-inset-*)`（body）不被 home indicator 遮挡。
+- [x] `make check` 通过：typecheck 干净、98 tests 全绿、Biome 本期文件 0 fix；preview 验证 4 项导航点击切页（搜索→SearchPage）正常、无嵌套 dock 边框。
 
 ### Phase 3: 页面切换 View Transition
 

@@ -1,4 +1,5 @@
-import { DockNav, type Tab } from "@/components/nav/dock-nav";
+import type { Tab } from "@/components/nav/dock-nav";
+import { NavRow } from "@/components/nav/nav-row";
 import { PlayerStatusLine } from "@/components/player/player-status-line";
 import { ProgressScrubber } from "@/components/player/progress-scrubber";
 import { TrackIdentityRow } from "@/components/player/track-identity-row";
@@ -6,9 +7,7 @@ import { TrackIdentityRow } from "@/components/player/track-identity-row";
 /**
  * The unified bottom player-dock — one rounded container with three rows
  * (identity + play · progress + status · navigation), replacing the old separate
- * PlayerBar + floating DockNav. Player-first, Poweramp-style.
- *
- * Phase 1 keeps the existing DockNav in row 3; Phase 2 swaps it for a flat,
+ * PlayerBar + floating DockNav. Player-first, Poweramp-style: row 3 is a flat,
  * evenly-spaced nav row integrated into the card.
  */
 export function PlayerDock({
@@ -28,7 +27,7 @@ export function PlayerDock({
           <PlayerStatusLine />
           <ProgressScrubber />
         </div>
-        <DockNav value={tab} onChange={onTabChange} />
+        <NavRow value={tab} onChange={onTabChange} />
       </div>
     </div>
   );
