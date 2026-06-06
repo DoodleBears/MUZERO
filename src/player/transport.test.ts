@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { progressPercent, resolveStatusLine } from "./transport";
+import { nextRepeatMode, progressPercent, resolveStatusLine } from "./transport";
+
+describe("nextRepeatMode", () => {
+  it("cycles off → all → one → off", () => {
+    expect(nextRepeatMode("off")).toBe("all");
+    expect(nextRepeatMode("all")).toBe("one");
+    expect(nextRepeatMode("one")).toBe("off");
+  });
+});
 
 describe("progressPercent", () => {
   it("maps position/duration to 0–100", () => {

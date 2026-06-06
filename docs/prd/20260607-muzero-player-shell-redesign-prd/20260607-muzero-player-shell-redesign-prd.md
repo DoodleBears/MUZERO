@@ -15,7 +15,7 @@
 | 1 | PlayerDock 容器：3 行结构（信息+播放 / 进度 / 导航）合并 PlayerBar+DockNav | ✅ Completed | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | 导航行：扁平集成 nav row（取代 Magic UI 放大 Dock） | ✅ Completed | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | 页面切换 View Transition（tab → tab 丝滑过渡） | ✅ Completed | [Phase 3 Checklist](#phase-3-checklist) |
-| 4 | 移动端：mini ↔ 全屏 Now Playing sheet（共享封面 + 完整 transport） | 🔲 Pending | [Phase 4 Checklist](#phase-4-checklist) |
+| 4 | 移动端：mini ↔ 全屏 Now Playing sheet（共享封面 + 完整 transport） | ✅ Completed | [Phase 4 Checklist](#phase-4-checklist) |
 | 5 | 打磨：i18n / a11y / 安全区 / 文档对齐（含 CLAUDE.md #9 改写） | 🔲 Pending | [Phase 5 Checklist](#phase-5-checklist) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
@@ -410,16 +410,19 @@ export function startViewTransition(update: () => void): void
 **Goal:** 行1 tap 展开全屏 Now Playing（完整 transport），封面共享元素。
 
 **Tasks:**
-- [ ] player-store 加 `isSheetOpen` / `openSheet` / `closeSheet`（ephemeral）。
-- [ ] 新建 [`now-playing-sheet.tsx`](../../../src/components/player/now-playing-sheet.tsx)：完整 transport（⏮⏭/repeat/音量/上传/续写）+ 复用 `MediaStage` + 显示模式 + `AnnotationEditor`。
-- [ ] 行1封面与 sheet 大封面共享 `layoutId="now-cover"`；`AnimatePresence` 进出。
-- [ ] 焦点管理 + `Esc`/下滑关闭 + `role=dialog`。
+- [x] sheet 开合状态放**新建 [`ui-store.ts`](../../../src/stores/ui-store.ts)**（`isSheetOpen`/`openSheet`/`closeSheet`，ephemeral）——**不进 `player-store.ts`**（其正被他人并发编辑）。TDD [`ui-store.test.ts`](../../../src/stores/ui-store.test.ts) 2 例。
+- [x] 新建 [`now-playing-sheet.tsx`](../../../src/components/player/now-playing-sheet.tsx)：完整 transport（⏮⏯⏭/repeat/音量）+ 大封面/可视化 + `AnnotationEditor`（有 current 时）。`repeat` 循环抽纯函数 `nextRepeatMode`（[`transport.ts`](../../../src/player/transport.ts)）+ 单测。
+- [x] 行1封面与 sheet 大封面共享 `layoutId="now-cover"`（[`track-identity-row.tsx`](../../../src/components/player/track-identity-row.tsx) `motion.span` ↔ sheet `motion.div`）；`AnimatePresence` 进出 + 背景淡入。
+- [x] 焦点/关闭：`role="dialog"` + `aria-modal` + `Esc` 关闭 + chevron-down 关闭钮；移动 `matchMedia(min-width:48rem)` 分叉（preview 实测 375px → mobile 分支 true）。
+- [→] **偏离 PRD 原案（已记录）**：sheet **不挂 `MediaStage`/`<video>`**——`MediaEngine` 是单元素，二次 `mount()` 会从桌面 stage 抢走它；改显封面/`AuraVisualizer`。**sheet 内看视频画面 = 后续增强**。显示模式切换不进 sheet（无 video 时无意义）。
+- [→] close 钮 aria-label 暂复用 `t("nav.now")`；专用 `player.collapse` 文案留 Phase 5（避免改动并发编辑中的 `common.json`，否则会把他人 i18n 串裹进本提交）。
 
 #### Phase 4 Checklist
-- [ ] 封面展开/折叠连续（无跳变、无双封面闪烁）。
-- [ ] sheet 与行1 共享同一 store 状态（无重复播放器）。
-- [ ] reduced-motion：即时显隐。
-- [ ] 桌面不渲染 sheet（点封面走 page VT 到 `now` tab）。
+- [x] 共享封面：`layoutId="now-cover"` 在行1缩略图 ↔ sheet 大封面间 morph；sheet 全屏不透明覆盖 dock，无双封面叠现。
+- [x] sheet 与行1 共享同一 `usePlayerStore` 播放状态（无重复播放器实例；transport 调既有 actions）。
+- [x] reduced-motion：`MotionConfig reducedMotion="user"`（Phase 0）统一降级 layout/opacity 动画。
+- [x] 桌面不开 sheet（`matchMedia` 桌面分支 → `transitionState(setTab("now"))` 走 page VT）。
+- [x] 验证：render 测试 [`now-playing-sheet.test.tsx`](../../../src/components/player/now-playing-sheet.test.tsx) 确认收起态不渲染 dialog、展开态渲染 dialog + 完整 transport（Play/Previous/Next/Volume）；119 tests 全绿、Biome 0 fix。**交互式 preview 验证受他人并发编辑触发的 HMR reload 干扰（active session 被反复重置），故以确定性 render 测试为准。**
 
 ### Phase 5: 打磨 + 文档对齐
 

@@ -3,6 +3,15 @@
  * thin presentational shell. Sibling to `queue.ts` (pure queue math).
  */
 
+import type { RepeatMode } from "./queue";
+
+const REPEAT_CYCLE: Record<RepeatMode, RepeatMode> = { off: "all", all: "one", one: "off" };
+
+/** The next repeat mode when the repeat button is pressed: off → all → one → off. */
+export function nextRepeatMode(mode: RepeatMode): RepeatMode {
+  return REPEAT_CYCLE[mode];
+}
+
 /** Map a playback position to a 0–100 progress percentage, clamped and divide-safe. */
 export function progressPercent(positionSec: number, durationSec: number): number {
   if (!(durationSec > 0)) return 0;
