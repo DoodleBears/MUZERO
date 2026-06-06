@@ -14,7 +14,7 @@
 | Phase | Name | Status | Link |
 |-------|------|--------|------|
 | 1 | Preset infra（auth scheme + 预设注册 + 选型 settings） | ✅ Completed | §6 |
-| 2 | ACE-Step (fal.ai) 预设 — 默认 provider | 🔲 Pending | §6 |
+| 2 | ACE-Step (fal.ai) 预设 — 默认 provider | ✅ Completed | §6 |
 | 3 | Mureka 预设 — 质量/多语种档 | 🔲 Pending | §6 |
 | 4 | Settings UI + 成本提示 + i18n | 🔲 Pending | §6 |
 
@@ -171,8 +171,8 @@ interface CloudPreset {
 | `durationSec` | `duration` | 秒；按生成秒数计费 |
 | `bpm/keyscale/...` | （ACE-Step 不直接吃，可揉进 `tags` 文本）| DJ 可在 caption 内体现 |
 
-- **Endpoint**：`https://queue.fal.run/fal-ai/ace-step`（submit）→ `.../requests/{id}/status` → `.../requests/{id}`（result，含 `audio.url`）。**以 fal.ai 官方文档为准复核**。
-- **Auth**：`Authorization: Key <FAL_KEY>`。
+- **Endpoint（已实现：sync）**：`POST https://fal.run/fal-ai/ace-step`，**同步**端点——POST 阻塞至渲染完成、直接回 `{ audio: { url } }`，完美契合 generic create→download 流、**不动 `cloud-job.ts`**，可确定性注入测试。`parseStatus` 仍兜底 fal queue 态（`IN_QUEUE/IN_PROGRESS/COMPLETED/FAILED`）以备改用 `queue.fal.run` 两段式。
+- **Auth**：`Authorization: Key <FAL_KEY>`（`authScheme: "key"`）。
 - **Output**：WAV。
 
 ### 4.3 Mureka 映射要点
@@ -247,13 +247,15 @@ interface CloudPreset {
 **Goal:** 默认可用的真实出歌路径。
 
 **Tasks:**
-- [ ] `presets/ace-step.ts`：三个纯函数 + fal 两段式 status→result + `authScheme: "key"`。
-- [ ] 单测：`mapBriefToBody`（caption→tags、空 lyrics→`[inst]`、结构标签保留）、`parseStatus`（fal `IN_QUEUE/IN_PROGRESS/COMPLETED` + result 取 `audio.url`）。
-- [ ] 集成测：注入 fake fetch，跑通 submit→poll→download→WAV blob 落 `mediaBlobs`（硬规则 #7）。
+- [x] `presets/ace-step.ts`：三个纯函数 + **fal sync 端点**（`https://fal.run/fal-ai/ace-step`，create 直接回 `audio.url`，避开 queue 两段式、不动 `cloud-job.ts`）+ `authScheme: "key"`。
+- [x] 单测：`mapBriefToBody`（caption→tags、空/空白 lyrics→`[inst]`、结构标签保留）、`parseCreate`（sync `audio.url` / queue `request_id`）、`parseStatus`（`IN_QUEUE/IN_PROGRESS/COMPLETED/FAILED`）。
+- [x] 集成测：注入 fake fetch，跑通 submit→download→WAV blob（auth `Key`、body `{tags,lyrics,duration}`、返回 `{blob,mime,durationSec}`）。
+- [x] 注册 ace-step 并设为 `DEFAULT_SETTINGS.musicCloudPreset`。`pnpm test src/musicgen` 28 绿。
 
 ### Phase 2 Checklist
-- [ ] 用真实 fal.ai key 端到端出一首带歌词的歌 + 一首 `[inst]` 器乐，落库可播。
-- [ ] 复核实时计费确为 `$0.0002/秒`（fal 文档有第三方 gist 报过 25× 高价，须以 live 页为准）。
+- [x] 代码/测试：8 ace-step tests 绿；typecheck + biome 清。
+- [ ] **（待真实 key 手动验证）** 用真实 fal.ai key 端到端出一首带歌词的歌 + 一首 `[inst]` 器乐，落库可播。
+- [ ] **（待真实 key 手动验证）** 复核实时计费 `$0.0002/秒`、sync 端点对 ~240s 长曲是否超时（超时则切 `queue.fal.run` 两段式）。
 
 ### Phase 3: Mureka 预设 — 质量/多语种档
 
@@ -346,6 +348,7 @@ interface CloudPreset {
 | 2026-06-07 | MUZERO | 补 Mureka V9 深挖：确认 `api.mureka.ai` 端点/字段/model enum、V9 改 zh/ja/ko 发音但未上独立榜；Studio 编辑能力记为未来杠杆 |
 | 2026-06-07 | MUZERO | **更正定价**：官方 API 是预充值余额(TRIAL $30 起、12mo、含 V9)+按次扣费，**非 $1000/月门槛**（useapi.net 误导）。Song Gen V8/V9 **$0.045/首**、V7.6 $0.03，**在 < $0.05 红线内** → Mureka 稳作 tier-2。补空歌词→BGM 端点分叉、`n` 变体、Studio 明码标价 |
 | 2026-06-07 | MUZERO | **Phase 1 完成**（TDD）：`cloud-provider` 加 `buildAuthHeaders`(bearer/key)+注入式 `CloudMappers`+`fetchImpl`；`presets/index.ts` 注册表(custom)；`AppSettings.musicCloudPreset`；`registry` 按 preset 注入。20 tests 绿，`cloud-job.ts` 未动 |
+| 2026-06-07 | MUZERO | **Phase 2 完成**（TDD）：`presets/ace-step.ts`（fal sync 端点、`Key` auth、caption→tags / 空歌词→`[inst]`）；注册为默认 preset。8 ace-step tests（含注入 fetch 端到端），musicgen 28 绿。sync 端点对长曲超时风险留作真实 key 验证 |
 
 ---
 

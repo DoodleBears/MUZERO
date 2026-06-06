@@ -127,5 +127,6 @@ export const DEFAULT_SETTINGS: AppSettings = {
   llmProvider: "openai",
   llmModel: "gpt-4o-mini",
   musicGenProvider: "mock",
+  musicCloudPreset: "ace-step",
   locale: "en",
 };
