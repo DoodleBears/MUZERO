@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { SHORTCUT_TABS } from "@/lib/shortcuts";
 import { NAV_ITEMS } from "./nav-row";
 
 // Locks the Q1 decision: the integrated nav row drops "now" (reached by tapping
@@ -14,5 +15,9 @@ describe("NavRow items", () => {
 
   it("maps each tab to an existing nav.* label key", () => {
     expect(NAV_ITEMS.map((i) => i.labelKey)).toEqual(["queue", "search", "sets", "settings"]);
+  });
+
+  it("order matches the keyboard-shortcut tabs (Cmd/Ctrl+1..4)", () => {
+    expect(NAV_ITEMS.map((i) => i.id)).toEqual([...SHORTCUT_TABS]);
   });
 });

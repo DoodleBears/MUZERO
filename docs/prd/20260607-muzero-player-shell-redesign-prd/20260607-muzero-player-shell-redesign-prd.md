@@ -17,6 +17,7 @@
 | 3 | 页面切换 View Transition（tab → tab 丝滑过渡） | ✅ Completed | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | 移动端：mini ↔ 全屏 Now Playing sheet（共享封面 + 完整 transport） | ✅ Completed | [Phase 4 Checklist](#phase-4-checklist) |
 | 5 | 打磨：i18n / a11y / 安全区 / 文档对齐（含 CLAUDE.md #9 改写） | ✅ Completed | [Phase 5 Checklist](#phase-5-checklist) |
+| 6 | 导航持久化（zustand persist）+ Cmd/Ctrl+1–4 快捷键 + Kbd tooltip 提示 | ✅ Completed | [Phase 6 Checklist](#phase-6-checklist) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
 
@@ -439,6 +440,22 @@ export function startViewTransition(update: () => void): void
 - [x] CLAUDE.md 与代码一致（#9 + 项目结构同步）。
 - [x] `make check` 通过：typecheck 干净、Biome 0 fix、**119 tests / 19 files 全绿**；dev preview（`make dev`）验证 Phase 0–3 交互 + Phase 4 render 测试。
 
+### Phase 6: 导航持久化 + 键盘快捷键 + Kbd 提示
+
+**Goal:** 记住用户停留的页面(下次打开恢复);Cmd/Ctrl+1–4 切 tab;hover tooltip 用 shadcn `Kbd` 在 label 右侧显示快捷键。
+
+**Tasks:**
+- [x] **持久化**:新建 [`nav-store.ts`](../../../src/stores/nav-store.ts) —— zustand `persist`(localStorage `muzero-nav`,沿用 `muzero-locale`/`muzero-theme` 的 UI-pref 先例)持有 `tab` + `setTab`;与 `ui-store`(sheet ephemeral)分离,只持久化 tab。TDD [`nav-store.test.ts`](../../../src/stores/nav-store.test.ts) 2 例(默认 + 写入 localStorage)。
+- [x] **快捷键**:[`shortcuts.ts`](../../../src/lib/shortcuts.ts) 纯逻辑(`SHORTCUT_TABS` / `tabForShortcutKey` / `modifierSymbol` / `isMac`)+ TDD [`shortcuts.test.ts`](../../../src/lib/shortcuts.test.ts) 3 组;[`nav-row.tsx`](../../../src/components/nav/nav-row.tsx) `useNavShortcuts` 监听 `metaKey||ctrlKey` + 1–4 → `transitionState(onChange(tab))`(走同一 view transition)。
+- [x] **Kbd**:新建 [`ui/kbd.tsx`](../../../src/components/ui/kbd.tsx)(手动 shadcn `Kbd`/`KbdGroup`,匹配项目 seed primitive 约定)+ render 测试;NavRow 每项用 `Tooltip` 显示 `label` + 右侧 `<KbdGroup><Kbd>⌘/Ctrl</Kbd><Kbd>N</Kbd></KbdGroup>`(取代原 `title`)。
+- [→] **App.tsx 接线**(`tab` 改读 `useNavStore` + 移除 boot 强制 `setTab("now")`,让持久化 tab 取胜):该文件正被你并发编辑(immersive/背景/拖放),**已在工作树改好并由你整合进 App.tsx**,故不由我单独 commit。
+
+#### Phase 6 Checklist
+- [x] 持久化:preview 实测点 tab → `localStorage["muzero-nav"]` = `{"state":{"tab":"search"}}`,页面随之切换(App 读 store)。
+- [x] 快捷键:preview 实测 `Ctrl+3` → 切到 sets(歌单)tab、激活高亮 + 持久化(`tab:"sessions"`);任一 `meta`/`ctrl` 修饰键 + 1–4 均生效,`preventDefault` 避免浏览器默认。
+- [x] Kbd tooltip:NavRow 每项 hover tooltip 显示 label + Kbd 快捷键(Base UI Tooltip,与原 dock-nav 同款已验证的模式;预览工具无法合成 hover,故 Kbd 渲染以 render 测试 + 模式复用为准)。`isMac()` 决定 ⌘ / Ctrl。
+- [x] `make check`:typecheck 干净、Biome 0 fix、**128 tests / 22 files 全绿**。
+
 ---
 
 ## 7. Out of Scope
@@ -497,3 +514,4 @@ export function startViewTransition(update: () => void): void
 | 2026-06-07 | DoodleBear | v2：按 Poweramp 参考改为**单一圆角容器 3 行结构**（信息+播放 / 进度 / 导航）；明确覆盖 CLAUDE.md #9（导航改集成扁平 nav row）；行1 transport 极简为单一播放钮，完整 transport 进展开态 |
 | 2026-06-07 | DoodleBear | v3：锁定 Q1（NavRow = queue/search/sets/settings 四项，去「now」，点播放区进 Now Playing）、Q2（行1 仅播放/暂停）、Q3（原生 VT + motion 兜底） |
 | 2026-06-07 | DoodleBear | v4：TDD 落地 Phase 0–5 全部完成（6 个原子化 commit）；Status → Completed。期间为隔离他人并发编辑（App.tsx / player-store.ts / common.json），过渡接线改在 NavRow/TrackIdentityRow、sheet 状态改用新 ui-store、i18n 零新增 key（player.collapse 延后） |
+| 2026-06-07 | DoodleBear | v5：新增 Phase 6 —— 导航持久化（zustand persist `muzero-nav`）+ Cmd/Ctrl+1–4 快捷键 + shadcn `Kbd` tooltip 提示。App.tsx 接线由用户并发整合（未单独 commit）；其余文件 TDD + 原子化 commit，128 tests 全绿 |
