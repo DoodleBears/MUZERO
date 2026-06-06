@@ -237,7 +237,7 @@ interface ChatUiState {
 | `session_list` / `session_get` | `muzero.session.list` / `.get` | 读 | `listSessions` / `getSession` |
 | `session_create` | `muzero.session.create` | **写** | `createSession`（带 seed/config） |
 | `set_curate` | `muzero.set.curate` | **写** | `appendTrackIds` / `removeTrackFromSession`（加/删/重排） |
-| `track_annotate` | `muzero.track.annotate` | **写** | `setTrackTags/Note/Cover` |
+| `track_annotate` | `muzero.track.annotate` | **写** | `setTrackTags/Note/Cover`；**now-playing 感知**：默认作用于「正在播放的 track」，让用户**听歌时对话加 tag/note**（"给这首加个 #雨天、记一句…"）。生成时也自动附一条 Note（见 musicgen PRD Q5）|
 | `dj_propose_briefs` | `muzero.dj.propose_briefs` | 读（产出待确认）| 返回 `TrackBrief[]` + `describeBrief` chips，等用户确认 |
 | `dj_generate_tracks` | `muzero.dj.generate_tracks` | **写** | 校验 `trackBriefSchema` → `createPendingTrack` + `appendTrackIds`（物化由 store `pump` 自动）|
 | `suggest_next_prompts` | （UI-only） | 读 | 非 mutating、无审批、返回 `{accepted,count}`（空态/续问建议）|
@@ -426,7 +426,7 @@ interface ChatUiState {
 - **contentEditable chips composer**（@mention/slash 富输入）= 后续增强；v1 用 textarea。
 - **超长对话 RAM 窗口化**（archived prefix / Dexie-only head 分页）= 后续优化。
 - **drag-resize 的 Dock**（v1 固定 1∕3）、**语音输入**、**附件/多模态图片**（ClipCombo 有，MUZERO 暂不需要）。
-- **桌面端外部链接走系统浏览器**沿用 musicgen PRD 的 Open Question（Tauri opener 插件）。
+- **桌面端外部链接走系统浏览器 = 要做**（用户要求「必须走系统浏览器」）：加 `@tauri-apps/plugin-opener` + `openExternalUrl()` 包装（见 musicgen PRD Q9）。chat 里的 docs/key 链接也复用它。
 
 ## 9. Security / Privacy
 
@@ -455,8 +455,8 @@ interface ChatUiState {
 | 1 | 活跃 session id 存哪？ | **Resolved** | `AppSettings.lastChatSessionId?`（best practice）——MUZERO 无 project 概念，不需 ClipCombo 的 per-project chatPrefs 行；与既有 `lastSessionId`/`lastTrackIndex` 同级，不为一字段开新表。`mode/dockSide` 留 chat-store localStorage |
 | 2 | `bar` 形态收到回复怎么显示？ | **Resolved** | **顶部 Notification toast**（§5.2.1，仿 anysoul `MessageToast`：spring 下滑、一行预览、自动消失、点击展开到 dock）。折叠态(bar/fab)显示、dock 态不显示。轻量不占信息 |
 | 3 | per-session 模型 vs 全局模型默认？ | **Resolved** | **两者都要**（best practice，抄 ClipCombo）：新建 session 继承全局默认（`AppSettings.defaultLlm*`），combobox 可覆盖到 `ChatSession.llmProviderPresetId`/`llmModel`（不存 key）。Phase 5 落地 |
-| 4 | `dj_generate_tracks` 与现有自动续歌（`maybeRefill`）的关系？ | Open | 工具是「显式生成」，autoExtend 是「自动续」；二者都写同一队列、由 store pump 统一物化，避免双循环打架。Phase 3 明确 |
-| 5 | streamdown bundle 体积？ | Open | Phase 1 测 `pnpm build` 增量（目标 <100KB gz）；超则 dynamic import |
+| 4 | `dj_generate_tracks` 与现有自动续歌（`maybeRefill`）的关系？ | **Resolved**（best practice）| 工具是「显式生成」、autoExtend 是「自动续」；**二者都写同一队列、由 store `pump` 统一物化，不开第二个生成循环**（避免双循环打架）。Phase 3 落地 |
+| 5 | streamdown bundle 体积？ | **Resolved** | 用户接受 streamdown bundle 增量；Phase 1 仍跑 `pnpm build` 记录实际增量备查 |
 | 6 | 是否需要 contentEditable chips（@/）v1？ | Resolved | 否，v1 textarea，chips 列后续增强 |
 
 ## 12. Document Change Log
@@ -466,6 +466,7 @@ interface ChatUiState {
 | 2026-06-07 | MUZERO | Initial draft —— 调研 ClipCombo agent 面板（5 路并行 deep-read：UI/形态、session/持久化、AI SDK/streaming/模型、PRD 簇蒸馏、MUZERO 集成点），落成 6-phase 复刻 PRD：多 session + 可搜历史 + 每步本地持久化 + branch/regenerate + 多 provider combobox + streamdown 流式，外加 MUZERO 三形态（FAB / 底部输入条 / Dock 1∕3→移动全屏）|
 | 2026-06-07 | MUZERO | 定 Open Q2：折叠态（bar/fab）DJ 回复 = **顶部 Notification toast**（§5.2.1，仿 anysoul `MessageToast`/`NotificationStack` 的 `motion/react` 模式：spring 下滑、一行预览、自动消失、点击展开到 dock）。加 `chat-reply-notification.tsx` 到结构 + Phase 2 |
 | 2026-06-07 | MUZERO | 定 Open Q1 + Q3（best practice）：active session id → `AppSettings.lastChatSessionId?`（无 project 概念，免单独 chatPrefs 行）；模型 = 全局默认 + per-session combobox 覆盖（key 不进 session 行）。同步 §3.2/§3.3/§3.4/§6 |
+| 2026-06-07 | MUZERO | 收口 Q4/Q5：generate 工具与 autoExtend 都写同一队列、store pump 统一物化（不开第二循环）；接受 streamdown bundle 增量。`track_annotate` 加 **now-playing 感知**（听歌时对话加 tag/note，链 musicgen Q5 的生成自动 Note）。系统浏览器外链改为「要做」（`@tauri-apps/plugin-opener`）|
 
 ---
 
