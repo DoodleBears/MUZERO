@@ -84,6 +84,10 @@
   "settings": {
     "language": "言語",
     "appearance": "外観",
+    "theme": "テーマ",
+    "themeLight": "ライト",
+    "themeDark": "ダーク",
+    "themeSystem": "システムに従う",
     "djTitle": "AI DJ（LLM）",
     "provider": "プロバイダー",
     "model": "モデル",
@@ -106,6 +110,7 @@
     "presetMureka": "Mureka · 高品質 · 多言語",
     "presetCustom": "カスタムエンドポイント (BYOK)",
     "costHint": "≈ 1曲あたり {{song}} · 連続生成 ≈ {{hourly}}/時（約3分に1曲）",
-    "costUnknown": "料金は利用するプロバイダーの価格設定によります。"
+    "costUnknown": "料金は利用するプロバイダーの価格設定によります。",
+    "getApiKey": "API キーを取得"
   }
 }

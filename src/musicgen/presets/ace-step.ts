@@ -76,6 +76,7 @@ export const aceStepPreset: CloudPreset = {
   authScheme: "key",
   fixedEndpoint: true,
   estCostPerSongUsd: 0.012,
+  apiKeyUrl: "https://fal.ai/dashboard/keys",
   defaults: { baseUrl: FAL_ACE_STEP_SYNC_URL, createPath: "", statusPath: "" },
   mappers,
 };

@@ -43,3 +43,11 @@ describe("preset cost metadata", () => {
     expect(continuousHourlyUsd(0.045)).toBeCloseTo(0.9, 2);
   });
 });
+
+describe("preset api-key links", () => {
+  it("priced presets deep-link to their key page; custom has none", () => {
+    expect(resolveCloudPreset("ace-step").apiKeyUrl).toContain("fal.ai");
+    expect(resolveCloudPreset("mureka").apiKeyUrl).toContain("mureka.ai");
+    expect(resolveCloudPreset("custom").apiKeyUrl).toBeUndefined();
+  });
+});

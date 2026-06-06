@@ -93,6 +93,7 @@ export const murekaPreset: CloudPreset = {
   authScheme: "bearer",
   fixedEndpoint: true,
   estCostPerSongUsd: 0.045,
+  apiKeyUrl: "https://platform.mureka.ai/apiKeys",
   defaults: {
     baseUrl: MUREKA_BASE_URL,
     createPath: "/v1/song/generate",

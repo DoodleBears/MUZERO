@@ -210,6 +210,7 @@ interface CloudPreset {
   - 选预设 → 预填 `musicCloudUrl` + 默认 `model`，只需填 API key。
   - `Custom` → 暴露 url/createPath/statusPath/model 全量字段（即现有通用行为）。
 - **成本提示**：每个预设旁显示 ~$/首 与「续歌成本」，并在切到 Mureka 时提示 `autoExtend` 会产生明显费用（成本红线 < $0.05/首）。
+- **获取 key 直达**：API key 字段下一个「获取 API key ↗」链接，按预设 `apiKeyUrl` 直跳 vendor 的 key 页（ace-step→`fal.ai/dashboard/keys`、mureka→`platform.mureka.ai/apiKeys`；custom 无则不显示）。当前用 `<a target="_blank" rel="noreferrer">`（`make dev` 浏览器即用）；打包桌面端若要强制走系统浏览器需 Tauri opener 插件（见 Open Questions）。
 - **健康检查**：复用 `provider.health()` + TanStack Query 显示连通状态。
 - key 仅存 IndexedDB `settings` 行（硬规则 #2），不写日志/bundle/URL。
 
@@ -281,7 +282,8 @@ interface CloudPreset {
 **Tasks:**
 - [x] Settings 预设下拉（`CLOUD_PRESET_IDS` 渲染）+ 按 `fixedEndpoint` 条件显示 URL + 按 `authScheme` 切 key 占位符 + model 占位用 preset 默认 + 健康检查（按 preset）。
 - [x] 成本提示：`CloudPreset.estCostPerSongUsd`（通用字段，非 id 分支）+ 纯 helper `continuousHourlyUsd` → UI 显示「≈ $X/首 · 续歌 ≈ $Y/小时」；custom 显示未知。
-- [x] 文案进 i18n catalog（en/zh/ja/ko 全量：`preset`/`presetAceStep`/`presetMureka`/`presetCustom`/`costHint`/`costUnknown`），强类型 key 校验通过。
+- [x] 文案进 i18n catalog（en/zh/ja/ko 全量：`preset`/`presetAceStep`/`presetMureka`/`presetCustom`/`costHint`/`costUnknown`/`getApiKey`），强类型 key 校验通过。
+- [x] 「获取 API key ↗」直达链接（preset `apiKeyUrl` 数据驱动；浏览器 preview 验证三态：ace-step→fal、mureka→mureka apiKeys、custom→无链接 + 显示 URL 字段；成本/占位随预设更新；零 console 报错）。
 - [~] Mureka 续歌默认关：改以**成本提示**实现（两 provider 均 < $0.05 红线，硬关 `autoExtend` 理由减弱，且会引入 `if(preset===mureka)` 分支违反硬规则 #5）→ 用户可在 DJ console 自行 toggle。
 
 ### Phase 4 Checklist
@@ -344,6 +346,7 @@ interface CloudPreset {
 | 6 | ACE-Step 实际 60–120s 延迟 / 采样率 / 立体声 / 最大时长？ | Open | Phase 2 实测补全（成本+歌词控制已确认） |
 | 7 | Mureka 一次返 2 变体：`n=1` / 落队第一首 / 都入队？ | Open | Phase 3 决定；续歌默认 `n=1`=$0.045/首，或保 2 都入队摊薄 |
 | 8 | Mureka `$0.045/song` 单位确认（按产出首数还是按调用）？ | Open | Phase 3 实测：页面标 "/song" + 默认 2 首/次，须确认 `n=1` 是否=$0.045 |
+| 9 | 「获取 API key」在打包桌面端是否需 Tauri opener 插件走系统浏览器？ | Open | 当前 `<a target="_blank">` 在 `make dev` 浏览器即用；桌面端可后续加 `@tauri-apps/plugin-opener`（碰 Cargo/capability，故未在本期做） |
 
 ---
 
@@ -358,6 +361,7 @@ interface CloudPreset {
 | 2026-06-07 | MUZERO | **Phase 2 完成**（TDD）：`presets/ace-step.ts`（fal sync 端点、`Key` auth、caption→tags / 空歌词→`[inst]`）；注册为默认 preset。8 ace-step tests（含注入 fetch 端到端），musicgen 28 绿。sync 端点对长曲超时风险留作真实 key 验证 |
 | 2026-06-07 | MUZERO | **Phase 3 完成**（TDD）：`presets/mureka.ts`（异步 `/v1/song/generate`+`/song/query/{id}` 轮询、Bearer、caption→prompt、多变体取第一首）；注册档。mureka tests（含注入 fetch submit→poll→download），musicgen 36 绿。autoExtend-默认关移至 Phase 4 |
 | 2026-06-07 | MUZERO | **Phase 4 完成**：Settings 预设下拉 + 条件 URL + 成本提示（`estCostPerSongUsd`/`continuousHourlyUsd` 通用字段，非 id 分支）+ 健康检查；i18n 4 语 ×6 key。`make check` 全绿（typecheck/lint 70/test 76）。**4 phase 代码全部完成** |
+| 2026-06-07 | MUZERO | **+ 获取 API key 直达按钮**：preset 加 `apiKeyUrl`（ace→fal.ai/dashboard/keys、mureka→platform.mureka.ai/apiKeys），Settings 渲染「获取 API key ↗」链接 + i18n ×4。浏览器 preview 三态验证通过、零报错 |
 
 ---
 

@@ -38,6 +38,8 @@ export interface CloudPreset {
   fixedEndpoint: boolean;
   /** Approximate USD per generated song, for the Settings cost hint. Omit if unknown (custom). */
   estCostPerSongUsd?: number;
+  /** Deep link to the vendor's API-key page, so Settings can offer a "Get key" button. */
+  apiKeyUrl?: string;
   defaults: CloudPresetDefaults;
   mappers: CloudMappers;
 }

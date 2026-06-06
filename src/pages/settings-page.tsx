@@ -1,4 +1,4 @@
-import { CheckCircle2, XCircle } from "lucide-react";
+import { CheckCircle2, ExternalLink, XCircle } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
@@ -16,6 +16,7 @@ import {
 } from "@/musicgen/presets";
 import { type MusicGenProviderId, resolveMusicGenProvider } from "@/musicgen/registry";
 import { usePlayerStore } from "@/stores/player-store";
+import { DEFAULT_THEME, persistTheme, type Theme, themes } from "@/theme/theme";
 
 /** Maps a preset id to its i18n option label (ids carry hyphens; keys don't). */
 const PRESET_LABEL_KEY = {
@@ -47,6 +48,11 @@ export function SettingsPage() {
     await saveSettings({ locale });
   }
 
+  async function changeTheme(theme: Theme) {
+    persistTheme(theme);
+    await saveSettings({ theme });
+  }
+
   async function save() {
     await saveSettings(draft);
     await rebuildEngine();
@@ -75,7 +81,20 @@ export function SettingsPage() {
         <CardHeader>
           <CardTitle>{t("settings.appearance")}</CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="flex flex-col gap-3">
+          <Field label={t("settings.theme")}>
+            <select
+              value={settings.theme ?? DEFAULT_THEME}
+              onChange={(e) => void changeTheme(e.target.value as Theme)}
+              className="h-10 rounded-md border border-input bg-transparent px-3 text-sm"
+            >
+              {themes.map(({ value, labelKey }) => (
+                <option key={value} value={value}>
+                  {t(labelKey)}
+                </option>
+              ))}
+            </select>
+          </Field>
           <Field label={t("settings.language")}>
             <select
               value={i18n.language}
@@ -183,6 +202,17 @@ export function SettingsPage() {
                   placeholder={cloudPreset.authScheme === "key" ? "fal_…" : "sk-…"}
                 />
               </Field>
+              {cloudPreset.apiKeyUrl && (
+                <a
+                  href={cloudPreset.apiKeyUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex w-fit items-center gap-1 text-xs text-primary hover:underline"
+                >
+                  {t("settings.getApiKey")}
+                  <ExternalLink className="size-3" />
+                </a>
+              )}
               <Field label={t("settings.modelOptional")}>
                 <Input
                   value={draft.musicCloudModel ?? ""}
