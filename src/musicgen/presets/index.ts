@@ -53,10 +53,14 @@ const customPreset: CloudPreset = {
   mappers: { mapBriefToBody, parseCreate, parseStatus },
 };
 
-/** Registered presets. ace-step is the default; mureka is added in a later phase. */
+/**
+ * Registered presets. Order = Settings dropdown order. Mureka is the default
+ * (quality-first, #2 vocal arena, still < $0.05/song); ACE-Step is the cheapest
+ * fallback; custom is the BYOK-endpoint escape hatch.
+ */
 export const CLOUD_PRESETS: Partial<Record<CloudPresetId, CloudPreset>> = {
-  "ace-step": aceStepPreset,
   mureka: murekaPreset,
+  "ace-step": aceStepPreset,
   custom: customPreset,
 };
 

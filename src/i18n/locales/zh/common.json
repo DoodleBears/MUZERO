@@ -107,7 +107,7 @@
     "localNote": "MUZERO 本地优先：曲目、音频和这些设置都存在本设备浏览器的 IndexedDB 里。API 密钥仅保存在本地，只发送给你选择的服务商 —— 永远不会发给我们。",
     "preset": "云预设",
     "presetAceStep": "ACE-Step (fal.ai) · 最便宜",
-    "presetMureka": "Mureka · 高质量 · 多语种",
+    "presetMureka": "Mureka · 推荐 · 高质量",
     "presetCustom": "自定义端点 (BYOK)",
     "costHint": "≈ 每首 {{song}} · 连续续歌 ≈ {{hourly}}/小时（约每 3 分钟一首）",
     "costUnknown": "费用取决于你所选服务商的定价。",

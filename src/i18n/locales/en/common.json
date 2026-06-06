@@ -109,7 +109,7 @@
     "localNote": "MUZERO is local-first: tracks, audio, and these settings live in your browser's IndexedDB on this device. API keys are stored locally and sent only to the provider you choose — never to us.",
     "preset": "Cloud preset",
     "presetAceStep": "ACE-Step (fal.ai) · cheapest",
-    "presetMureka": "Mureka · high-quality · multilingual",
+    "presetMureka": "Mureka · recommended · high-quality",
     "presetCustom": "Custom endpoint (BYOK)",
     "costHint": "≈ {{song}} per song · continuous ≈ {{hourly}}/hr (one song every ~3 min)",
     "costUnknown": "Cost depends on your provider's pricing.",

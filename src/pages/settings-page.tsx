@@ -174,7 +174,7 @@ export function SettingsPage() {
             <>
               <Field label={t("settings.preset")}>
                 <select
-                  value={draft.musicCloudPreset ?? "ace-step"}
+                  value={draft.musicCloudPreset ?? "mureka"}
                   onChange={(e) => patch({ musicCloudPreset: e.target.value as CloudPresetId })}
                   className="h-10 rounded-md border border-input bg-transparent px-3 text-sm"
                 >

@@ -89,7 +89,7 @@ const mappers: CloudMappers = { mapBriefToBody, parseCreate, parseStatus };
 
 export const murekaPreset: CloudPreset = {
   id: "mureka",
-  label: "Mureka · high-quality · multilingual",
+  label: "Mureka · recommended · high-quality",
   authScheme: "bearer",
   fixedEndpoint: true,
   estCostPerSongUsd: 0.045,

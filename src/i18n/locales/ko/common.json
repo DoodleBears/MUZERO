@@ -107,7 +107,7 @@
     "localNote": "MUZERO는 로컬 우선입니다: 곡, 오디오, 이 설정은 이 기기 브라우저의 IndexedDB에 저장됩니다. API 키는 로컬에만 저장되어 선택한 제공자에게만 전송되며 —— 저희에게는 절대 전송되지 않습니다.",
     "preset": "클라우드 프리셋",
     "presetAceStep": "ACE-Step (fal.ai) · 최저가",
-    "presetMureka": "Mureka · 고품질 · 다국어",
+    "presetMureka": "Mureka · 추천 · 고품질",
     "presetCustom": "사용자 지정 엔드포인트 (BYOK)",
     "costHint": "≈ 곡당 {{song}} · 연속 생성 ≈ {{hourly}}/시간 (약 3분에 한 곡)",
     "costUnknown": "비용은 선택한 제공업체의 가격에 따라 다릅니다.",

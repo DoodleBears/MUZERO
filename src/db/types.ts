@@ -117,6 +117,8 @@ export interface AppSettings {
   musicCloudModel?: string;
   // UI
   locale: "en" | "zh" | "ja" | "ko";
+  /** Global color scheme. Mirrors localStorage `muzero-theme`; defaults to system. */
+  theme?: "light" | "dark" | "system";
   /** Persisted resume point: last active session + index. */
   lastSessionId?: string;
   lastTrackIndex?: number;
@@ -127,6 +129,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   llmProvider: "openai",
   llmModel: "gpt-4o-mini",
   musicGenProvider: "mock",
-  musicCloudPreset: "ace-step",
+  musicCloudPreset: "mureka",
   locale: "en",
+  theme: "system",
 };

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { DEFAULT_SETTINGS } from "@/db/types";
 import type { TrackBrief } from "@/dj/dj-brief-schema";
 import {
   CLOUD_PRESET_IDS,
@@ -28,6 +29,11 @@ describe("cloud presets registry", () => {
 
   it("lists registered preset ids including custom", () => {
     expect(CLOUD_PRESET_IDS).toContain("custom");
+  });
+
+  it("defaults to mureka (quality-first) and lists it first in the dropdown", () => {
+    expect(DEFAULT_SETTINGS.musicCloudPreset).toBe("mureka");
+    expect(CLOUD_PRESET_IDS[0]).toBe("mureka");
   });
 });
 
