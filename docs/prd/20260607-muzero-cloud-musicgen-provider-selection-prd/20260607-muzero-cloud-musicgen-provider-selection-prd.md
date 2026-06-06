@@ -1,0 +1,350 @@
+# PRD: MUZERO — Cloud Music-Gen Provider Selection (ACE-Step default + Mureka tier)
+
+**Status:** Draft
+**Created:** 2026-06-07
+**Author:** MUZERO
+**Module:** Music generation — cloud BYOK vendor selection & preset adapters
+
+> 这是 [Foundation PRD](../20260606-muzero-ai-dj-foundation-prd/20260606-muzero-ai-dj-foundation-prd.md) **Phase 2（Cloud music API BYOK）** 的落地选型文档。Foundation 阶段已把 `MusicGenProvider` 接口、`cloud` 的 submit→poll→download 流程、`cloud-job.ts` 轮询引擎和 mock provider 备好了；本 PRD 决定**接哪个云 vendor、怎么接**。
+
+---
+
+## 📋 Phase Progress Overview
+
+| Phase | Name | Status | Link |
+|-------|------|--------|------|
+| 1 | Preset infra（auth scheme + 预设注册 + 选型 settings） | 🔲 Pending | §6 |
+| 2 | ACE-Step (fal.ai) 预设 — 默认 provider | 🔲 Pending | §6 |
+| 3 | Mureka 预设 — 质量/多语种档 | 🔲 Pending | §6 |
+| 4 | Settings UI + 成本提示 + i18n | 🔲 Pending | §6 |
+
+> Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
+
+---
+
+## 1. Overview
+
+### 1.1 Background
+
+MUZERO 的核心循环是「LLM DJ 写 `TrackBrief` → 音乐生成 API 出歌 → 续上歌单」。Foundation 阶段只有离线 `mock` provider（合成纯音），无法产出真正的歌。要让产品成立，必须接一个**能按歌词生成整曲人声**的云 API。
+
+本 PRD 基于 2026-06 的横向调研（见 §9 调研报告），从 Suno / Udio / ElevenLabs Music / Mureka / ACE-Step / Stable Audio / Google Lyria / 各 royalty-free API 中做选型。结论：
+
+- **默认接 ACE-Step（fal.ai 托管）**：开源权重模型的官方托管 API，输入 `tags`（风格）+ `lyrics`（带 `[verse]/[chorus]/[bridge]`，`[inst]` 转纯器乐），几乎 1:1 映射现有 `TrackBrief`；**$0.0002/秒生成音频 → 60s ≈ $0.012/首**，是唯一稳定低于 < $0.05/首 成本红线、能放着无限续歌的方案。
+- **再接 Mureka 作为「质量/多语种」可切换档**：Artificial Analysis 音乐盲测榜 **第 2**（V8，Elo 1144，仅次于 Suno；最新 **V9** 厂商宣称更强但尚无独立 benchmark），有官方异步 API（`api.mureka.ai` submit + 轮询）、付费带商用授权、**中日韩语种友好**（V9 重点改了 zh/ja/ko 发音）。官方 API 是**预充值余额 + 按次扣费**模型：入门 **TRIAL $30**（12 个月有效、Full Model Access 含 V9、1 并发），**Song Generation V8/V9 = $0.045/首、V7.6 = $0.03/首**（设 `n=1`）——**就在 < $0.05/首 红线之内**。比 ACE-Step（$0.012）贵 ~4×、且有 $30 预充门槛，故仍**作可切换质量档**、续歌默认不常开。
+- **明确避开 Suno / Udio**：Suno 盲测榜第 1 但**无官方 API**（市面全是逆向 wrapper，违反 ToS、封号风险）；Udio 被 UMG 起诉后和解、转做授权平台，无可用公开 BYOK API。
+- **ElevenLabs Music 留作未来 premium 档**（官方 API + 明确商用授权 + composition plan，但 ~$0.13–0.50/首太贵），本期 **out of scope**（§7）。
+
+### 1.2 Target Users
+
+| Role | Description |
+|------|-------------|
+| **Listener（默认路径）** | 填一个 fal.ai key 就能让 DJ 无限续歌、成本可忽略（~$0.24/小时唯一新歌）。 |
+| **Tinkerer / 进阶用户** | 想要更好的人声/多语种，主动切到 Mureka，或用 `custom` 预设接任意兼容的 submit→poll→download 云 API。 |
+
+### 1.3 Core Value
+
+1. **成本可放养** — 默认 ACE-Step < $0.05/首，续歌默认常开也不心疼（红线由用户决策锁定）。
+2. **质量可升级** — 一个下拉切到 Mureka 拿到榜单第 2 的人声质量与多语种，无需改 DJ/DB。
+3. **架构不破** — 两个 vendor 共用同一套 `cloud` provider + `cloud-job.ts` 轮询引擎，差异只落在每个预设的纯函数里；`musicGenProvider` codename union 保持 `"mock" | "cloud"` 不变（硬规则 #4）。
+
+---
+
+## 2. System Architecture
+
+### 2.1 选型对比（2026-06，BYOK 视角）
+
+| 提供方 | 官方 API | 人声+自定义歌词 | $/首(60s) | 速度 | 盲测榜 | 授权 | 本期决策 |
+|---|---|---|---|---|---|---|---|
+| **ACE-Step (fal.ai)** | ✅ 文档化 | ✅ `tags`+`lyrics`+`[verse]/[chorus]`/`[inst]` | **~$0.012** | 快 | 开源模型(未上榜) | 开源权重，商用宽松 | **✅ 默认 provider** |
+| **Mureka** | ✅ `api.mureka.ai` 异步轮询 | ✅(`lyrics`+`desc`/`prompt`) | **$0.045 (V8/V9) / $0.03 (V7.6)** | ~45–60s, 1 并发@$30 | **#2**(V8 Elo 1144;V9 未上榜) | 付费 API 全商用 | **✅ 可切换档** |
+| ElevenLabs Music | ✅ `POST /v1/music` | ✅ composition plan | ~$0.13–0.50 | 异步 | 高 | 付费广义商用 | ⏸️ 未来 premium (§7) |
+| Suno | ❌ 仅逆向 wrapper | ✅ | (订阅) | — | **#1**(V5.5) | 免费禁商用 | ❌ 避开(无官方 API) |
+| Udio | ❌ 无公开 BYOK | ✅ | — | — | 上榜 | 诉讼后转授权平台 | ❌ 避开 |
+| Stable Audio 2.5 | ✅ | ❌ 纯器乐 | 低 | **<2s** | 器乐榜靠前 | 企业向 | ⏸️ 仅器乐回退(未来) |
+| Google Lyria 2/3 | ✅(Vertex) | 人声弱 | — | — | 器乐 #4 | — | ❌ 不主推 |
+| Mubert/Loudly/Beatoven/Soundraw | ✅ | ❌ 无歌词/人声 | — | — | royalty-free 背景乐 | 商用 | ❌ 非整曲 |
+
+> 单价口径：ACE-Step `$0.0002/秒生成音频`（[fal.ai 官方页](https://fal.ai/models/fal-ai/ace-step/api)）；Mureka 5 credits/首、API 充值 $48/1600cr（[murekav9 pricing](https://murekav9.com/pricing)、[platform.mureka.ai](https://platform.mureka.ai/pricing)）；ElevenLabs 各源冲突、随档位浮动（[help.elevenlabs.io](https://help.elevenlabs.io/hc/en-us/articles/37821528996497-How-much-does-Eleven-Music-cost)）。盲测榜见 [Artificial Analysis Music Arena](https://artificialanalysis.ai/music/leaderboard/vocals)。
+
+### 2.2 续歌成本测算（决策关键）
+
+按「每 ~3 分钟一首新歌 = 20 首/小时」算**唯一新生成歌曲**成本（已缓存歌重播免费）：
+
+| Provider | $/首(60s) | $/小时 | 8 小时 | 续歌默认 |
+|---|---|---|---|---|
+| **ACE-Step** | $0.012 | **~$0.24** | ~$1.9 | **默认常开** ✅ |
+| Mureka V8/V9 | $0.045 (n=1) | ~$0.90 | ~$7 | 可常开但默认关 / 提示成本 ⚠️ |
+| Mureka V7.6 | $0.03 | ~$0.60 | ~$5 | 同上 |
+
+> 成本红线（用户决策）：**< $0.05/首**。ACE-Step 60s=$0.012、240s=$0.048 均达标；**Mureka V8/V9 $0.045、V7.6 $0.03 也在红线内**。两者都可达标，但 ACE-Step 单价最低 + 纯按量无预充门槛 → 仍作默认续歌；Mureka 有 $30 预充门槛、单价 4× → 作可切换质量档，`DjConfig.autoExtend` 默认不开并在 UI 提示成本。
+
+### 2.3 适配点（既有架构如何承载两个 vendor）
+
+两个 vendor 都是「POST 提交 → 轮询 task → 下载音频」，**完全复用** [`cloud-job.ts`](../../../src/musicgen/cloud-job.ts) 的 `pollUntilComplete` 与 [`cloud-provider.ts`](../../../src/musicgen/cloud-provider.ts) 的 `generate` 主流程。差异只有三处纯函数 + 两个连接细节：
+
+```
+                     ┌─ ace-step preset ─┐
+TrackBrief ─▶ cloud  │ mapBriefToBody    │ ─▶ submit→poll→download ─▶ {blob,mime,durationSec}
+              provider│ parseCreate       │      (cloud-job.ts 不变)
+   (id 仍是 "cloud")  │ parseStatus       │
+                     │ authScheme/paths  │
+                     └─ mureka preset ───┘
+```
+
+**两个已知连接细节（必须处理，属各预设的 vendor mapping）：**
+
+1. **Auth header scheme 不统一**：现 `cloud-provider.ts` 硬编 `authorization: Bearer <key>`。fal.ai 用的是 `Authorization: Key <FAL_KEY>`；Mureka 用 `Bearer`。→ 把 auth 头做成**每预设可配**（`"bearer" | "key"`，或自定义 header builder）。
+2. **fal.ai 是两段式（status → result）**：`.../requests/{id}/status` 只回状态，完成后要 `GET .../requests/{id}` 取 `audio.url`。→ 由 ace-step 预设的 `statusPath`/`parseStatus` 吸收这个差异（让轮询端点直接打 result 端点、未完成时回 pending），**不改 `cloud-job.ts`**。Mureka 的 query-task 端点同时返回状态+音频 URL，走现有形状。
+
+### 2.4 Technology Stack（新增部分）
+
+| Component | Technology | Rationale |
+|-----------|------------|-----------|
+| 默认音乐生成 | ACE-Step @ fal.ai（queue API） | 开源权重官方托管、$0.012/首、`tags`/`lyrics` 直映 brief |
+| 质量档音乐生成 | Mureka API（V8） | 盲测榜 #2、官方异步 API、付费商用、中日韩友好 |
+| 出站 HTTP | Tauri `http` 插件 via [`getAppFetch()`](../../../src/lib/platform.ts) | 绕过 WebView CORS / mixed-content（硬规则 #5） |
+
+---
+
+## 3. Data Model Design
+
+`muzero-db` schema **零破坏性变更**，只在 `settings` 单例上追加可选字段。
+
+### 3.1 `AppSettings` 变更（[`src/db/types.ts`](../../../src/db/types.ts)）
+
+- **保持不变（硬规则 #4 codename 稳定）**：`musicGenProvider: "mock" | "cloud"` union 不动；`Track.provider` 仍写 `"cloud"`。
+- **新增字段**：
+  - `musicCloudPreset?: "ace-step" | "mureka" | "custom"` — 选哪个 vendor 预设；`provider === "cloud"` 时生效，默认 `"ace-step"`。
+  - 复用现有 `musicCloudUrl / musicCloudApiKey / musicCloudModel`：预设会**预填** url/model 默认值，`custom` 时由用户全填。
+- **`DEFAULT_SETTINGS`**：建议把默认 `musicGenProvider` 仍保持 `"mock"`（离线即用），但当用户在引导里填了 fal.ai key 即切到 `cloud` + `ace-step`。
+- **provenance（可选，建议）**：在生成的 `Track` 上记录所用预设/模型（写进 `Track.brief` 的伴生字段或新增可选 `Track.providerPreset?`），服务于「music carries memories」与未来按 vendor 过滤。**默认安全**：缺省即视为历史 `cloud`。
+
+### 3.2 Migration
+
+- Dexie schema 版本**无需 bump**（新增的是 `settings` 行内可选字段，非索引/表结构变更）。
+- 老用户：`musicCloudPreset` 缺省 → `resolveMusicGenProvider` 回退到 `"ace-step"`（或 `custom` 若已填过自定义 url）。
+- Rollback = `git revert` 注册表/预设条目（硬规则 #3，不藏 runtime flag）。
+
+---
+
+## 4. API / Adapter Design
+
+### 4.1 预设注册表（新增，隔离 vendor 映射）
+
+⚠️ 遵循 PRD「不新增源代码文件除非引入新 parser / lib bridge」与硬规则 #5——这里每个 vendor 是一组 vendor-specific 纯函数，属「新 adapter 源」，允许 append 新文件；**禁止**在 DJ/store/UI 散落 `if (preset === ...)`。
+
+新增（建议）：
+
+```
+src/musicgen/
+├── cloud-provider.ts        # 改：auth scheme 可配 + 接受注入的三个纯函数
+├── cloud-job.ts             # 不动
+├── presets/
+│   ├── index.ts             # CLOUD_PRESETS 注册表：id → {defaults, mappers}
+│   ├── ace-step.ts          # mapBriefToBody/parseCreate/parseStatus + fal 两段式
+│   └── mureka.ts            # mapBriefToBody/parseCreate/parseStatus
+└── registry.ts              # 改：resolveMusicGenProvider 按 preset 取 mappers 注入
+```
+
+每个预设导出：
+
+```typescript
+interface CloudPreset {
+  id: "ace-step" | "mureka";
+  label: string;
+  defaults: { baseUrl: string; createPath: string; statusPath: string; model?: string };
+  authScheme: "bearer" | "key";              // fal=key, mureka=bearer
+  mapBriefToBody(brief: TrackBrief, cfg): Record<string, unknown>;
+  parseCreate(json: unknown): { jobId?: string; audioUrl?: string };
+  parseStatus(json: unknown): JobStatus;
+}
+```
+
+### 4.2 ACE-Step (fal.ai) 映射要点
+
+| brief 字段 | fal `ace-step` 入参 | 备注 |
+|---|---|---|
+| `caption` | `tags` | 风格/流派/情绪，逗号分隔 |
+| `lyrics`（空）| `lyrics = "[inst]"` | 空歌词 → 纯器乐 |
+| `lyrics`（有）| `lyrics`（保留 `[verse]/[chorus]/[bridge]`）| 结构标签直传 |
+| `durationSec` | `duration` | 秒；按生成秒数计费 |
+| `bpm/keyscale/...` | （ACE-Step 不直接吃，可揉进 `tags` 文本）| DJ 可在 caption 内体现 |
+
+- **Endpoint**：`https://queue.fal.run/fal-ai/ace-step`（submit）→ `.../requests/{id}/status` → `.../requests/{id}`（result，含 `audio.url`）。**以 fal.ai 官方文档为准复核**。
+- **Auth**：`Authorization: Key <FAL_KEY>`。
+- **Output**：WAV。
+
+### 4.3 Mureka 映射要点
+
+| brief 字段 | Mureka 入参 | 备注 |
+|---|---|---|
+| `caption` | `desc`（或 `prompt`）| 逗号分隔的 genres/moods/vocals，如 "r&b, slow, passionate, male vocal" |
+| `lyrics`（有）| `lyrics`（≤5000 字符，保留结构标签）| **空歌词 ≠ 器乐**：Mureka song 端点默认**自动写词**；纯器乐改走 BGM 端点（见下）|
+| `vocalLanguage` | （随歌词语言）| 多语种是 Mureka 强项，V9 改进 zh/ja/ko 发音 |
+| `model` | **V9 / V8 / V7.6**（API 各档均 Full Model Access）| 默认 V8（榜单第 2、benchmarked）或 V9（更新、自报更强）；V7.6 最便宜($0.03)。O2 仅器乐/高质长耗时。V7/O1/V6/V5.5 已退役→重定向 V7.6 |
+| `n`(变体数) | **1**（默认 2，可 1–3）| 续歌设 `n=1` → $0.045/首；要省可保 2 都入队 |
+| `title` / `vocal_gender` / `ref_id` | 可选 | DJ 未来可在 brief 加 hint |
+
+- **Base URL**：`https://api.mureka.ai`。**Auth**：`Authorization: Bearer <key>`。
+- **计费模型**：**预充值余额 + 按操作扣费**（非月订阅）。入门 **TRIAL $30**（12 个月有效、1 并发、Full Model+API Access **含 V9**）；并发按每笔购买计（$1000=5 并发，连买不累加）。Song Generation **V8/V9 $0.045/首、V7.6 $0.03/首**（`n=1`）。
+- **歌曲 Endpoint**：`POST /v1/song/generate` → `{id, status, model, trace_id}` → 轮询 `GET /v1/song/query/{task_id}`（完成回状态 + 音频 URL）。**用轮询不用 webhook**（`replyUrl` 回调需服务器，与 no-backend 冲突）。
+- **器乐 Endpoint**：`brief.lyrics` 为空 / `allowVocals=false` 时改打 **BGM 生成**（V8/V9 $0.045/BGM，≤4m30s）——这是 ace-step（`[inst]`）与 mureka 的**关键映射分叉**，预设据 `allowVocals`/空歌词二选一端点。
+- **2 变体**：默认返回 2 首数组；`parseStatus` 取第一首落队、第二首作 alternate（或都入队摊薄成本）——ACE-Step 没有的形状，预设需处理多结果。
+- **Output**：mp3，≤5m30s（brief 上限 240s 在内）。~45–60s/次。
+
+### 4.4 Error Handling
+
+- 复用现有 `MusicGenError`（带 provider id）与 `JobTimeoutError`/`JobFailedError`。
+- 新增可识别错误：401/403（key 无效 → Settings 引导）、429（限流 → 退避；DJ 续歌降速）、配额耗尽。
+- **日志纪律（硬规则 #8）**：全程走 [`logger.ts`](../../../src/lib/logger.ts)；**绝不**打印 key、歌词全文、音频 bytes（隐私白名单：provider id / preset id / status / durationSec / 错误码）。
+
+---
+
+## 5. Frontend Design
+
+### 5.1 Settings — 音乐生成区块（[`src/pages/settings-page.tsx`](../../../src/pages/settings-page.tsx)）
+
+- **Provider 选择**：`mock`（离线）/ `cloud`（BYOK）。
+- 选 `cloud` 后出现 **Preset 下拉**：`ACE-Step (fal.ai) · 便宜推荐` / `Mureka · 高质量·多语种` / `Custom`。
+  - 选预设 → 预填 `musicCloudUrl` + 默认 `model`，只需填 API key。
+  - `Custom` → 暴露 url/createPath/statusPath/model 全量字段（即现有通用行为）。
+- **成本提示**：每个预设旁显示 ~$/首 与「续歌成本」，并在切到 Mureka 时提示 `autoExtend` 会产生明显费用（成本红线 < $0.05/首）。
+- **健康检查**：复用 `provider.health()` + TanStack Query 显示连通状态。
+- key 仅存 IndexedDB `settings` 行（硬规则 #2），不写日志/bundle/URL。
+
+### 5.2 DJ Config 联动（[`src/db/types.ts`](../../../src/db/types.ts) `DjConfig`）
+
+- 选 ACE-Step：`autoExtend` 默认 `true`（沿用 `DEFAULT_DJ_CONFIG`）。
+- 选 Mureka：新建 session 时 `autoExtend` 默认 `false`，或保留 true 但弹一次成本确认。
+
+### 5.3 State Management
+
+- provider/preset 解析仍是非响应式单例路径（`resolveMusicGenProvider`），**不进 Zustand state**（硬规则 #6）。
+- Settings 表单本地 state；落库后由 `useLiveQuery` 驱动 UI。
+
+---
+
+## 6. Implementation Plan
+
+### Phase 1: Preset 基础设施
+
+**Goal:** 让 `cloud` provider 支持「可配 auth scheme + 注入式纯函数」，并把 preset 选择落进 settings —— 基础设施先于具体 vendor（避免后续 vendor PR 反复 rebase）。
+
+**Tasks:**
+- [ ] `cloud-provider.ts`：auth header 改为按 `authScheme`（`bearer`/`key`）构造；`createCloudMusicGenProvider` 接受注入的 `mapBriefToBody/parseCreate/parseStatus`（保留现内置实现作 `custom` 默认）。
+- [ ] `AppSettings` 加 `musicCloudPreset?`；`resolveMusicGenProvider` 按 preset 从注册表取 mappers + defaults 注入。
+- [ ] `presets/index.ts` 注册表骨架。
+
+### Phase 1 Checklist
+- [ ] `cloud-job.ts` 完全未改（diff 为 0）。
+- [ ] `musicGenProvider` union 仍是 `"mock" | "cloud"`（codename 未动）。
+- [ ] 现有 `cloud-provider` 测试（含 `cloud-job.test.ts`）仍绿。
+
+### Phase 2: ACE-Step (fal.ai) 预设 — 默认
+
+**Goal:** 默认可用的真实出歌路径。
+
+**Tasks:**
+- [ ] `presets/ace-step.ts`：三个纯函数 + fal 两段式 status→result + `authScheme: "key"`。
+- [ ] 单测：`mapBriefToBody`（caption→tags、空 lyrics→`[inst]`、结构标签保留）、`parseStatus`（fal `IN_QUEUE/IN_PROGRESS/COMPLETED` + result 取 `audio.url`）。
+- [ ] 集成测：注入 fake fetch，跑通 submit→poll→download→WAV blob 落 `mediaBlobs`（硬规则 #7）。
+
+### Phase 2 Checklist
+- [ ] 用真实 fal.ai key 端到端出一首带歌词的歌 + 一首 `[inst]` 器乐，落库可播。
+- [ ] 复核实时计费确为 `$0.0002/秒`（fal 文档有第三方 gist 报过 25× 高价，须以 live 页为准）。
+
+### Phase 3: Mureka 预设 — 质量/多语种档
+
+**Goal:** 一个下拉切到榜单第 2 的人声质量。
+
+**Tasks:**
+- [ ] `presets/mureka.ts`：三个纯函数 + `authScheme: "bearer"`；以 platform.mureka.ai 官方文档复核确切端点/字段。
+- [ ] 单测 + 集成测（注入 fake fetch）。
+- [ ] 选 Mureka 时 `autoExtend` 默认关 / 成本确认。
+
+### Phase 3 Checklist
+- [ ] 用真实 Mureka key 出一首中文 + 一首日文/韩文歌，落库可播。
+- [ ] 确认付费 API 输出带商用授权（[Mureka FAQ](https://platform.mureka.ai/docs/en/faq.html)）。
+
+### Phase 4: Settings UI + 成本提示 + i18n
+
+**Goal:** 用户能看懂地选 provider 与成本。
+
+**Tasks:**
+- [ ] Settings 预设下拉 + 预填 + 健康检查 + 成本/续歌提示。
+- [ ] 文案进 i18n catalog（en/zh/ja/ko，硬规则 i18n 全量），不在组件硬编。
+
+### Phase 4 Checklist
+- [ ] 四语种文案齐全（缺则标 pending translation + 开 followup）。
+- [ ] `make check`（typecheck+lint+test）全绿。
+
+---
+
+## 7. Out of Scope
+
+- **ElevenLabs Music**（留作未来 premium 档）：官方 API + composition plan + 明确商用授权很强，但 ~$0.13–0.50/首超出本期成本红线；其 $/首 在调研中三个定价声明均未通过对抗校验，需后续单独核价。
+- **Suno / Udio**：无官方 BYOK API，永久排除（除非官方放出 API）。
+- **Stable Audio 2.5 / Google Lyria 等纯器乐**：可作未来「器乐 session」可选回退，本期不接（DJ brief 以人声+歌词为中心）。
+- **royalty-free 背景乐 API（Mubert/Loudly/Beatoven/Soundraw）**：无歌词/人声控制，不符合整曲生成定位。
+- 不引入 MUZERO 自有后端 / 账号 / 遥测（硬规则 #1）。
+- 不本地跑模型（ACE-Step 本地已下线，仅走云托管）。
+- **Mureka Studio 能力（本期不接，记为未来杠杆，官方已明码标价）**：均为编辑/后期类，核心续歌循环用不到，但未来可映射 MUZERO 方向——
+  - **Describe Song $0.10**（自动识别乐器/流派、生成 tags+描述）→ **自动给上传曲打 tag**，直接喂注释/搜索（[`track-search.ts`](../../../src/lib/track-search.ts)）。
+  - **Export Stem V2 $0.70**（12 轨 + MIDI）/ V1 $0.06（5 轨）→ 可视化/波形增强（替代当前原生 `<video>` 取声）。
+  - **Region Editing $0.10** / **Remix $0.20** → 中途「重 roll 某段 / 换风格保旋律」的 DJ steering。
+  - **Single Track Gen $0.09** → 给用户上传曲加 AI 伴奏/人声（混合集增强）。
+  - **Soundtrack $0.10**（图/视频→音乐）→ 给上传 MV / 视频单配乐。
+  - **Extend Song**（append/prepend，V7.6 $0.036 / V8 $0.10）、**Lyric 生成 $0.009**、**Lyrics Video $0.10**、**Vocal Cloning $5**。
+  - 需要时各自开 PRD。
+
+---
+
+## 8. Security Considerations
+
+- **BYOK 密钥纪律（硬规则 #2）**：fal.ai / Mureka 的 key 只存 IndexedDB `settings` 行，用户自填；不写 bundle / `.env`（committed）/ URL / 日志 / 遥测。`.env.example` 只放非密默认（如示例 baseUrl）。
+- **出站面**：仅两个用户配置的第三方 API（音乐 + LLM DJ），经 Tauri `http` 插件。
+- **隐私白名单**：日志只记 provider/preset id、status、durationSec、错误码；绝不记 key / 歌词 / 音频 bytes / prompt。
+- **授权合规**：Mureka 仅**付费** API 输出带商用授权；ACE-Step 为开源权重，UI 可注明生成物使用边界。
+
+---
+
+## 9. Related Documents
+
+| Document | Description |
+|----------|-------------|
+| [Foundation PRD](../20260606-muzero-ai-dj-foundation-prd/20260606-muzero-ai-dj-foundation-prd.md) | 本 PRD 是其 Phase 2 落地 |
+| [CLAUDE.md](../../../CLAUDE.md) | 硬规则 #1–#9（本地优先 / BYOK / provider 边界 / codename 稳定） |
+| [`cloud-provider.ts`](../../../src/musicgen/cloud-provider.ts) · [`cloud-job.ts`](../../../src/musicgen/cloud-job.ts) · [`registry.ts`](../../../src/musicgen/registry.ts) | 改动落点 |
+| [fal.ai ACE-Step API](https://fal.ai/models/fal-ai/ace-step/api) | 默认 provider 官方文档 |
+| [Mureka API FAQ](https://platform.mureka.ai/docs/en/faq.html) · [pricing](https://platform.mureka.ai/pricing) | 质量档官方文档 |
+| [Artificial Analysis Music Arena](https://artificialanalysis.ai/music/leaderboard/vocals) | 盲测质量榜 |
+
+---
+
+## 10. Open Questions
+
+| # | Question | Status | Decision |
+|---|----------|--------|----------|
+| 1 | 接哪些 vendor？ | Resolved | ACE-Step (fal.ai) 默认 + Mureka 可切换档 |
+| 2 | 单首成本红线？ | Resolved | < $0.05/首；ACE-Step 续歌默认常开，Mureka 默认不常开 |
+| 3 | fal.ai ACE-Step 实时计费确为 $0.0002/秒？ | Open | Phase 2 用 live 页 + 实测复核（曾见第三方 gist 报 25× 高价） |
+| 4 | Mureka 默认用 V8（benchmarked #2）还是 V9（更新、未上榜）？ | Open | Phase 3 实测对比 zh/ja/ko 质量再定；V9 在 API 各档均可用（Full Model Access），非申请制 |
+| 5 | `Track.provider` 是否记录 preset 以保留 provenance？ | Open | 建议加可选 `providerPreset`，缺省安全 |
+| 6 | ACE-Step 实际 60–120s 延迟 / 采样率 / 立体声 / 最大时长？ | Open | Phase 2 实测补全（成本+歌词控制已确认） |
+| 7 | Mureka 一次返 2 变体：`n=1` / 落队第一首 / 都入队？ | Open | Phase 3 决定；续歌默认 `n=1`=$0.045/首，或保 2 都入队摊薄 |
+| 8 | Mureka `$0.045/song` 单位确认（按产出首数还是按调用）？ | Open | Phase 3 实测：页面标 "/song" + 默认 2 首/次，须确认 `n=1` 是否=$0.045 |
+
+---
+
+## 11. Document Change Log
+
+| Date | Author | Changes |
+|------|--------|---------|
+| 2026-06-07 | MUZERO | Initial draft — 选型定为 ACE-Step (fal.ai) 默认 + Mureka 档，基于 2026-06 横向调研 |
+| 2026-06-07 | MUZERO | 补 Mureka V9 深挖：确认 `api.mureka.ai` 端点/字段/model enum、V9 改 zh/ja/ko 发音但未上独立榜；Studio 编辑能力记为未来杠杆 |
+| 2026-06-07 | MUZERO | **更正定价**：官方 API 是预充值余额(TRIAL $30 起、12mo、含 V9)+按次扣费，**非 $1000/月门槛**（useapi.net 误导）。Song Gen V8/V9 **$0.045/首**、V7.6 $0.03，**在 < $0.05 红线内** → Mureka 稳作 tier-2。补空歌词→BGM 端点分叉、`n` 变体、Studio 明码标价 |
+
+---
+
+> **Note:** 本 PRD 强调**改既有代码**而非新建结构：复用 `cloud-job.ts` 轮询引擎与 `cloud-provider.ts` 主流程，新增的只有 vendor-specific 预设纯函数（属允许 append 的新 adapter 源）。`musicGenProvider` codename union 与 `muzero-db` schema 保持稳定。
