@@ -1,24 +1,36 @@
 import type { AppSettings } from "@/db/types";
-import { createAceStepProvider } from "./acestep-local";
+import { createCloudMusicGenProvider } from "./cloud-provider";
 import { createMockMusicGenProvider } from "./mock-provider";
+import { resolveCloudPreset } from "./presets";
 import type { MusicGenProvider } from "./provider";
 
-export type MusicGenProviderId = "mock" | "acestep-local";
+export type MusicGenProviderId = "mock" | "cloud";
 
-export const MUSICGEN_PROVIDER_IDS: MusicGenProviderId[] = ["mock", "acestep-local"];
+export const MUSICGEN_PROVIDER_IDS: MusicGenProviderId[] = ["mock", "cloud"];
 
 /**
  * Resolve the active music-gen provider from on-device settings. Defaults to the
- * offline mock so the app is fully functional before the user wires up ACE-Step.
+ * offline mock so the app is fully functional before the user wires up a cloud
+ * API key. The cloud provider is BYOK — its endpoint/key live only in IndexedDB.
  */
 export function resolveMusicGenProvider(settings: AppSettings): MusicGenProvider {
   switch (settings.musicGenProvider) {
-    case "acestep-local":
-      return createAceStepProvider({
-        baseUrl: settings.aceStepUrl || "http://localhost:8085",
-        synthModel: settings.aceStepSynthModel,
-        lmModel: settings.aceStepLmModel,
-      });
+    case "cloud": {
+      // A preset bakes in the vendor endpoint/auth/mappers; "custom" lets the
+      // user supply the URL. We never branch on vendor outside this resolution.
+      const preset = resolveCloudPreset(settings.musicCloudPreset);
+      return createCloudMusicGenProvider(
+        {
+          baseUrl: preset.fixedEndpoint ? preset.defaults.baseUrl : (settings.musicCloudUrl ?? ""),
+          apiKey: settings.musicCloudApiKey,
+          model: settings.musicCloudModel ?? preset.defaults.model,
+          createPath: preset.defaults.createPath,
+          statusPath: preset.defaults.statusPath,
+          authScheme: preset.authScheme,
+        },
+        preset.mappers,
+      );
+    }
     default:
       return createMockMusicGenProvider();
   }

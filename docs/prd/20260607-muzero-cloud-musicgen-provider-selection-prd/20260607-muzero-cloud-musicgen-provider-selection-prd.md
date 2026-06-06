@@ -13,7 +13,7 @@
 
 | Phase | Name | Status | Link |
 |-------|------|--------|------|
-| 1 | Preset infra（auth scheme + 预设注册 + 选型 settings） | 🔲 Pending | §6 |
+| 1 | Preset infra（auth scheme + 预设注册 + 选型 settings） | ✅ Completed | §6 |
 | 2 | ACE-Step (fal.ai) 预设 — 默认 provider | 🔲 Pending | §6 |
 | 3 | Mureka 预设 — 质量/多语种档 | 🔲 Pending | §6 |
 | 4 | Settings UI + 成本提示 + i18n | 🔲 Pending | §6 |
@@ -232,14 +232,15 @@ interface CloudPreset {
 **Goal:** 让 `cloud` provider 支持「可配 auth scheme + 注入式纯函数」，并把 preset 选择落进 settings —— 基础设施先于具体 vendor（避免后续 vendor PR 反复 rebase）。
 
 **Tasks:**
-- [ ] `cloud-provider.ts`：auth header 改为按 `authScheme`（`bearer`/`key`）构造；`createCloudMusicGenProvider` 接受注入的 `mapBriefToBody/parseCreate/parseStatus`（保留现内置实现作 `custom` 默认）。
-- [ ] `AppSettings` 加 `musicCloudPreset?`；`resolveMusicGenProvider` 按 preset 从注册表取 mappers + defaults 注入。
-- [ ] `presets/index.ts` 注册表骨架。
+- [x] `cloud-provider.ts`：auth header 改为按 `authScheme`（`bearer`/`key`）构造（导出纯函数 `buildAuthHeaders`）；`createCloudMusicGenProvider(cfg, mappers?)` 接受注入的 `mapBriefToBody/parseCreate/parseStatus`（保留 `GENERIC_MAPPERS` 作 `custom` 默认）；加 `fetchImpl` 注入便于测试。
+- [x] `AppSettings` 加 `musicCloudPreset?: CloudPresetId`；`resolveMusicGenProvider` 按 preset 从注册表取 mappers + defaults + authScheme 注入（`fixedEndpoint` 决定 URL 来自 preset 还是用户）。
+- [x] `presets/index.ts` 注册表（Phase 1 仅 `custom`，`resolveCloudPreset` 回退 custom）。
 
 ### Phase 1 Checklist
-- [ ] `cloud-job.ts` 完全未改（diff 为 0）。
-- [ ] `musicGenProvider` union 仍是 `"mock" | "cloud"`（codename 未动）。
-- [ ] 现有 `cloud-provider` 测试（含 `cloud-job.test.ts`）仍绿。
+- [x] `cloud-job.ts` 完全未改（diff 为 0）。
+- [x] `musicGenProvider` union 仍是 `"mock" | "cloud"`（codename 未动）。
+- [x] 现有 `cloud-provider` 测试（含 `cloud-job.test.ts`）仍绿。
+- [x] 新增 TDD 测试：`buildAuthHeaders`（bearer/key/无 key）、注入 fetch 的 auth+body、preset 注册表回退 → `pnpm test src/musicgen` 20 绿、typecheck/biome 清。
 
 ### Phase 2: ACE-Step (fal.ai) 预设 — 默认
 
@@ -344,6 +345,7 @@ interface CloudPreset {
 | 2026-06-07 | MUZERO | Initial draft — 选型定为 ACE-Step (fal.ai) 默认 + Mureka 档，基于 2026-06 横向调研 |
 | 2026-06-07 | MUZERO | 补 Mureka V9 深挖：确认 `api.mureka.ai` 端点/字段/model enum、V9 改 zh/ja/ko 发音但未上独立榜；Studio 编辑能力记为未来杠杆 |
 | 2026-06-07 | MUZERO | **更正定价**：官方 API 是预充值余额(TRIAL $30 起、12mo、含 V9)+按次扣费，**非 $1000/月门槛**（useapi.net 误导）。Song Gen V8/V9 **$0.045/首**、V7.6 $0.03，**在 < $0.05 红线内** → Mureka 稳作 tier-2。补空歌词→BGM 端点分叉、`n` 变体、Studio 明码标价 |
+| 2026-06-07 | MUZERO | **Phase 1 完成**（TDD）：`cloud-provider` 加 `buildAuthHeaders`(bearer/key)+注入式 `CloudMappers`+`fetchImpl`；`presets/index.ts` 注册表(custom)；`AppSettings.musicCloudPreset`；`registry` 按 preset 注入。20 tests 绿，`cloud-job.ts` 未动 |
 
 ---
 
