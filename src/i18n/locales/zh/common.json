@@ -1,24 +1,111 @@
 {
-  "app": { "name": "MUZERO", "tagline": "AI DJ · 本地优先" },
-  "nav": { "now": "正在播放", "queue": "队列", "sessions": "歌单", "settings": "设置" },
+  "app": {
+    "tagline": "AI DJ · 本地优先",
+    "endlessSet": "你的无限 AI DJ 歌单",
+    "pressPlay": "点击播放 —— 接下来交给 AI DJ"
+  },
+  "nav": {
+    "now": "正在播放",
+    "queue": "队列",
+    "search": "搜索",
+    "sets": "歌单",
+    "settings": "设置"
+  },
+  "sessions": {
+    "startDjTitle": "开启一个 AI DJ 歌单",
+    "vibePlaceholder": "描述氛围…… 例如「深夜 lo-fi 专注编码」",
+    "startDjSet": "开始 DJ 歌单",
+    "uploadTitle": "创建视频 / 上传歌单",
+    "uploadDesc": "添加你自己的音频或视频文件（MV、语音备忘录，什么都行）。默认视频优先播放，每首都可加记忆备注和标签。",
+    "uploadCta": "上传文件并创建歌单",
+    "importing": "导入中……",
+    "yourSets": "你的歌单",
+    "uploadSet": "上传歌单",
+    "seedIdeas": [
+      "深夜 lo-fi 专注编码",
+      "日出感 synthwave 公路旅行",
+      "雨天爵士 neo-soul",
+      "高能 drum & bass 健身"
+    ]
+  },
+  "queue": {
+    "title": "队列",
+    "ready": "已就绪 {{ready}}/{{total}}",
+    "addFiles": "添加文件",
+    "empty": "空歌单 —— 添加文件，或让 DJ 来填充。"
+  },
+  "search": {
+    "placeholder": "搜索标题、备注、标签…（例如 #公路旅行 或「2019 夏天」）",
+    "results_other": "{{count}} 条结果",
+    "tracks_other": "{{count}} 首",
+    "empty": "没有匹配。试试某个标签，或备注里的一个词。"
+  },
+  "player": {
+    "previous": "上一首",
+    "next": "下一首",
+    "play": "播放",
+    "pause": "暂停",
+    "repeat": "循环：{{mode}}",
+    "volume": "音量"
+  },
   "dj": {
-    "writing": "DJ 正在创作下一首…",
-    "generating": "正在生成音频…",
+    "writing": "DJ 正在编写下一首……",
+    "generating": "正在生成音频……",
     "standby": "DJ 待命中",
     "extend": "续上歌单"
   },
-  "sessions": {
-    "startTitle": "开启新歌单",
-    "start": "开始 DJ 歌单",
-    "yourSets": "你的歌单",
-    "seedPlaceholder": "描述氛围…"
+  "nowPlaying": {
+    "upNext": "即将播放",
+    "audioOnly": "仅音频",
+    "audioOnlyHint": "只听音频（隐藏视频）",
+    "modeTitle": "{{mode}}模式"
+  },
+  "displayMode": {
+    "video": "视频",
+    "cover": "封面",
+    "title": "标题"
+  },
+  "track": {
+    "generationFailed": "生成失败",
+    "like": "喜欢",
+    "delete": "删除",
+    "empty": "还没有内容 —— 开启一个歌单，DJ 会来填充。",
+    "uploadedAudio": "上传的音频",
+    "uploadedVideo": "上传的视频"
+  },
+  "annotation": {
+    "memory": "记忆",
+    "addCover": "添加封面",
+    "changeCover": "更换封面",
+    "addTag": "添加标签…",
+    "removeTag": "移除 {{tag}}",
+    "notePlaceholder": "这首歌对你意味着什么？（可被搜索）"
   },
   "settings": {
-    "djTitle": "AI DJ（大模型）",
-    "musicTitle": "音乐生成",
-    "provider": "提供方",
+    "language": "语言",
+    "appearance": "外观",
+    "djTitle": "AI DJ（大语言模型）",
+    "provider": "服务商",
     "model": "模型",
+    "openaiKey": "OpenAI API 密钥",
+    "anthropicKey": "Anthropic API 密钥",
+    "musicTitle": "音乐生成",
+    "providerMock": "本地合成（离线，无需模型）",
+    "providerCloud": "云端 API（自带密钥）",
+    "apiBaseUrl": "API 基础地址",
+    "apiKey": "API 密钥",
+    "modelOptional": "模型（可选）",
+    "testConnection": "测试连接",
+    "checking": "检查中……",
+    "cloudNote": "MUZERO 的存储始终本地优先；只有音乐渲染会用你的密钥调用此云端 API。请求/响应的映射写在 src/musicgen/cloud-provider.ts —— 按你选择的服务商调整即可。",
     "save": "保存设置",
-    "test": "测试连接"
+    "saved": "已保存 ✓",
+    "localNote": "MUZERO 本地优先：曲目、音频和这些设置都存在本设备浏览器的 IndexedDB 里。API 密钥仅保存在本地，只发送给你选择的服务商 —— 永远不会发给我们。",
+    "preset": "云预设",
+    "presetAceStep": "ACE-Step (fal.ai) · 最便宜",
+    "presetMureka": "Mureka · 高质量 · 多语种",
+    "presetCustom": "自定义端点 (BYOK)",
+    "costHint": "≈ 每首 {{song}} · 连续续歌 ≈ {{hourly}}/小时（约每 3 分钟一首）",
+    "costUnknown": "费用取决于你所选服务商的定价。"
   }
 }

@@ -1,24 +1,113 @@
 {
-  "app": { "name": "MUZERO", "tagline": "AI DJ · local-first" },
-  "nav": { "now": "Now", "queue": "Queue", "sessions": "Sets", "settings": "Settings" },
+  "app": {
+    "tagline": "AI DJ · local-first",
+    "endlessSet": "Your endless AI DJ set",
+    "pressPlay": "Press play — the AI DJ takes it from here"
+  },
+  "nav": {
+    "now": "Now Playing",
+    "queue": "Queue",
+    "search": "Search",
+    "sets": "Sets",
+    "settings": "Settings"
+  },
+  "sessions": {
+    "startDjTitle": "Start an AI DJ set",
+    "vibePlaceholder": "Describe the vibe… e.g. ‘late-night lo-fi for deep focus’",
+    "startDjSet": "Start DJ set",
+    "uploadTitle": "Make a video / upload set",
+    "uploadDesc": "Add your own audio or video files (MVs, voice memos, anything). Plays video-first, with a memory note + tags on each.",
+    "uploadCta": "Upload files & create set",
+    "importing": "Importing…",
+    "yourSets": "Your sets",
+    "uploadSet": "Upload set",
+    "seedIdeas": [
+      "late-night lo-fi for deep focus coding",
+      "sunrise synthwave road trip",
+      "rainy-day jazzy neo-soul",
+      "high-energy drum & bass workout"
+    ]
+  },
+  "queue": {
+    "title": "Queue",
+    "ready": "{{ready}}/{{total}} ready",
+    "addFiles": "Add files",
+    "empty": "Empty set — add files or let the DJ go."
+  },
+  "search": {
+    "placeholder": "Search titles, notes, tags… (e.g. #roadtrip or ‘summer 2019’)",
+    "results_one": "{{count}} result",
+    "results_other": "{{count}} results",
+    "tracks_one": "{{count}} track",
+    "tracks_other": "{{count}} tracks",
+    "empty": "No matches. Try a tag or a word from a note."
+  },
+  "player": {
+    "previous": "Previous",
+    "next": "Next",
+    "play": "Play",
+    "pause": "Pause",
+    "repeat": "Repeat: {{mode}}",
+    "volume": "Volume"
+  },
   "dj": {
     "writing": "DJ is writing the next track…",
     "generating": "Generating audio…",
     "standby": "DJ is on standby",
     "extend": "Extend set"
   },
-  "sessions": {
-    "startTitle": "Start a new set",
-    "start": "Start DJ set",
-    "yourSets": "Your sets",
-    "seedPlaceholder": "Describe the vibe…"
+  "nowPlaying": {
+    "upNext": "Up next",
+    "audioOnly": "Audio only",
+    "audioOnlyHint": "Play audio only (hide video)",
+    "modeTitle": "{{mode}} mode"
+  },
+  "displayMode": {
+    "video": "Video",
+    "cover": "Cover",
+    "title": "Title"
+  },
+  "track": {
+    "generationFailed": "Generation failed",
+    "like": "Like",
+    "delete": "Delete",
+    "empty": "Nothing here yet — start a set and the DJ will fill it.",
+    "uploadedAudio": "uploaded audio",
+    "uploadedVideo": "uploaded video"
+  },
+  "annotation": {
+    "memory": "Memory",
+    "addCover": "Add cover",
+    "changeCover": "Change cover",
+    "addTag": "add tag…",
+    "removeTag": "Remove {{tag}}",
+    "notePlaceholder": "What does this one mean to you? (searchable)"
   },
   "settings": {
+    "language": "Language",
+    "appearance": "Appearance",
     "djTitle": "AI DJ (LLM)",
-    "musicTitle": "Music generation",
     "provider": "Provider",
     "model": "Model",
+    "openaiKey": "OpenAI API key",
+    "anthropicKey": "Anthropic API key",
+    "musicTitle": "Music generation",
+    "providerMock": "Mock synth (offline, no model)",
+    "providerCloud": "Cloud API (BYOK)",
+    "apiBaseUrl": "API base URL",
+    "apiKey": "API key",
+    "modelOptional": "Model (optional)",
+    "testConnection": "Test connection",
+    "checking": "checking…",
+    "cloudNote": "MUZERO stays local-first for storage; only music rendering calls this cloud API, with your key. The request/response mapping lives in src/musicgen/cloud-provider.ts — adjust it for your chosen provider.",
     "save": "Save settings",
-    "test": "Test connection"
+    "saved": "Saved ✓",
+    "localNote": "MUZERO is local-first: tracks, audio, and these settings live in your browser's IndexedDB on this device. API keys are stored locally and sent only to the provider you choose — never to us.",
+    "preset": "Cloud preset",
+    "presetAceStep": "ACE-Step (fal.ai) · cheapest",
+    "presetMureka": "Mureka · high-quality · multilingual",
+    "presetCustom": "Custom endpoint (BYOK)",
+    "costHint": "≈ {{song}} per song · continuous ≈ {{hourly}}/hr (one song every ~3 min)",
+    "costUnknown": "Cost depends on your provider's pricing."
   }
 }

@@ -92,6 +92,7 @@ export const murekaPreset: CloudPreset = {
   label: "Mureka · high-quality · multilingual",
   authScheme: "bearer",
   fixedEndpoint: true,
+  estCostPerSongUsd: 0.045,
   defaults: {
     baseUrl: MUREKA_BASE_URL,
     createPath: "/v1/song/generate",

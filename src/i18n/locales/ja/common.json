@@ -1,24 +1,111 @@
 {
-  "app": { "name": "MUZERO", "tagline": "AI DJ · ローカル優先" },
-  "nav": { "now": "再生中", "queue": "キュー", "sessions": "セット", "settings": "設定" },
+  "app": {
+    "tagline": "AI DJ · ローカルファースト",
+    "endlessSet": "あなたの無限 AI DJ セット",
+    "pressPlay": "再生を押して —— あとは AI DJ におまかせ"
+  },
+  "nav": {
+    "now": "再生中",
+    "queue": "キュー",
+    "search": "検索",
+    "sets": "セット",
+    "settings": "設定"
+  },
+  "sessions": {
+    "startDjTitle": "AI DJ セットを始める",
+    "vibePlaceholder": "雰囲気を入力… 例：「深夜の lo-fi で集中コーディング」",
+    "startDjSet": "DJ セットを開始",
+    "uploadTitle": "動画 / アップロードセットを作成",
+    "uploadDesc": "自分の音声や動画ファイル（MV、ボイスメモ、何でも）を追加。動画優先で再生し、各曲にメモとタグを付けられます。",
+    "uploadCta": "ファイルをアップロードしてセット作成",
+    "importing": "取り込み中…",
+    "yourSets": "あなたのセット",
+    "uploadSet": "アップロードセット",
+    "seedIdeas": [
+      "深夜の lo-fi で集中コーディング",
+      "夜明けの synthwave ロードトリップ",
+      "雨の日のジャジーな neo-soul",
+      "ハイテンションな drum & bass で運動"
+    ]
+  },
+  "queue": {
+    "title": "キュー",
+    "ready": "{{ready}}/{{total}} 準備完了",
+    "addFiles": "ファイルを追加",
+    "empty": "空のセット —— ファイルを追加するか、DJ にまかせましょう。"
+  },
+  "search": {
+    "placeholder": "タイトル・メモ・タグを検索…（例：#ロードトリップ や「2019年の夏」）",
+    "results_other": "{{count}} 件",
+    "tracks_other": "{{count}} 曲",
+    "empty": "一致なし。タグやメモの言葉で試してみて。"
+  },
+  "player": {
+    "previous": "前へ",
+    "next": "次へ",
+    "play": "再生",
+    "pause": "一時停止",
+    "repeat": "リピート：{{mode}}",
+    "volume": "音量"
+  },
   "dj": {
-    "writing": "DJ が次の曲を作成中…",
+    "writing": "DJ が次の曲を書いています…",
     "generating": "音声を生成中…",
     "standby": "DJ は待機中",
     "extend": "セットを延長"
   },
-  "sessions": {
-    "startTitle": "新しいセットを開始",
-    "start": "DJ セットを開始",
-    "yourSets": "あなたのセット",
-    "seedPlaceholder": "雰囲気を入力…"
+  "nowPlaying": {
+    "upNext": "次に再生",
+    "audioOnly": "音声のみ",
+    "audioOnlyHint": "音声のみ再生（動画を隠す）",
+    "modeTitle": "{{mode}}モード"
+  },
+  "displayMode": {
+    "video": "動画",
+    "cover": "カバー",
+    "title": "タイトル"
+  },
+  "track": {
+    "generationFailed": "生成に失敗",
+    "like": "お気に入り",
+    "delete": "削除",
+    "empty": "まだ何もありません —— セットを始めれば DJ が埋めてくれます。",
+    "uploadedAudio": "アップロード音声",
+    "uploadedVideo": "アップロード動画"
+  },
+  "annotation": {
+    "memory": "メモリー",
+    "addCover": "カバーを追加",
+    "changeCover": "カバーを変更",
+    "addTag": "タグを追加…",
+    "removeTag": "{{tag}} を削除",
+    "notePlaceholder": "この曲はあなたにとって何ですか？（検索可能）"
   },
   "settings": {
+    "language": "言語",
+    "appearance": "外観",
     "djTitle": "AI DJ（LLM）",
-    "musicTitle": "音楽生成",
     "provider": "プロバイダー",
     "model": "モデル",
+    "openaiKey": "OpenAI API キー",
+    "anthropicKey": "Anthropic API キー",
+    "musicTitle": "音楽生成",
+    "providerMock": "ローカル合成（オフライン・モデル不要）",
+    "providerCloud": "クラウド API（自前のキー）",
+    "apiBaseUrl": "API ベース URL",
+    "apiKey": "API キー",
+    "modelOptional": "モデル（任意）",
+    "testConnection": "接続をテスト",
+    "checking": "確認中…",
+    "cloudNote": "MUZERO のストレージは常にローカルファースト。音楽の生成だけが、あなたのキーでこのクラウド API を呼び出します。リクエスト/レスポンスの対応付けは src/musicgen/cloud-provider.ts にあり、選んだプロバイダーに合わせて調整してください。",
     "save": "設定を保存",
-    "test": "接続をテスト"
+    "saved": "保存しました ✓",
+    "localNote": "MUZERO はローカルファースト：曲・音声・これらの設定はこの端末のブラウザの IndexedDB に保存されます。API キーはローカルに保存され、選んだプロバイダーにのみ送信されます —— 私たちには決して送られません。",
+    "preset": "クラウドプリセット",
+    "presetAceStep": "ACE-Step (fal.ai) · 最安",
+    "presetMureka": "Mureka · 高品質 · 多言語",
+    "presetCustom": "カスタムエンドポイント (BYOK)",
+    "costHint": "≈ 1曲あたり {{song}} · 連続生成 ≈ {{hourly}}/時（約3分に1曲）",
+    "costUnknown": "料金は利用するプロバイダーの価格設定によります。"
   }
 }

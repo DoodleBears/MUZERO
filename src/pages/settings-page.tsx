@@ -1,16 +1,32 @@
 import { CheckCircle2, XCircle } from "lucide-react";
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { saveSettings } from "@/db/repositories";
 import type { AppSettings, LlmProviderId } from "@/db/types";
 import { useSettings } from "@/hooks/use-app-data";
+import { type Locale, locales, persistLocale } from "@/i18n/config";
+import {
+  CLOUD_PRESET_IDS,
+  type CloudPresetId,
+  continuousHourlyUsd,
+  resolveCloudPreset,
+} from "@/musicgen/presets";
 import { type MusicGenProviderId, resolveMusicGenProvider } from "@/musicgen/registry";
 import { usePlayerStore } from "@/stores/player-store";
 
+/** Maps a preset id to its i18n option label (ids carry hyphens; keys don't). */
+const PRESET_LABEL_KEY = {
+  "ace-step": "settings.presetAceStep",
+  mureka: "settings.presetMureka",
+  custom: "settings.presetCustom",
+} as const satisfies Record<CloudPresetId, string>;
+
 /** On-device, BYOK settings. Nothing here is ever sent anywhere but the model/API you point it at. */
 export function SettingsPage() {
+  const { t, i18n } = useTranslation();
   const settings = useSettings();
   const rebuildEngine = usePlayerStore((s) => s.rebuildEngine);
   const [draft, setDraft] = useState<AppSettings>(settings);
@@ -25,27 +41,63 @@ export function SettingsPage() {
     setSaved(false);
   }
 
+  async function changeLanguage(locale: Locale) {
+    await i18n.changeLanguage(locale);
+    persistLocale(locale);
+    await saveSettings({ locale });
+  }
+
   async function save() {
     await saveSettings(draft);
     await rebuildEngine();
     setSaved(true);
   }
 
-  async function checkAceStep() {
+  async function checkCloud() {
     setHealth("checking");
-    const provider = resolveMusicGenProvider({ ...draft, musicGenProvider: "acestep-local" });
+    const provider = resolveMusicGenProvider({ ...draft, musicGenProvider: "cloud" });
     const ok = (await provider.health?.()) ?? false;
     setHealth(ok ? "ok" : "down");
   }
 
+  const cloudPreset = resolveCloudPreset(draft.musicCloudPreset);
+  const costText =
+    cloudPreset.estCostPerSongUsd == null
+      ? t("settings.costUnknown")
+      : t("settings.costHint", {
+          song: `$${cloudPreset.estCostPerSongUsd.toFixed(3)}`,
+          hourly: `$${continuousHourlyUsd(cloudPreset.estCostPerSongUsd).toFixed(2)}`,
+        });
+
   return (
-    <div className="flex h-full flex-col gap-4 overflow-y-auto p-4">
+    <div className="mx-auto flex h-full w-full max-w-2xl flex-col gap-4 overflow-y-auto p-4 lg:p-6">
       <Card>
         <CardHeader>
-          <CardTitle>AI DJ (LLM)</CardTitle>
+          <CardTitle>{t("settings.appearance")}</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <Field label={t("settings.language")}>
+            <select
+              value={i18n.language}
+              onChange={(e) => void changeLanguage(e.target.value as Locale)}
+              className="h-10 rounded-md border border-input bg-transparent px-3 text-sm"
+            >
+              {locales.map(({ code, label }) => (
+                <option key={code} value={code}>
+                  {label}
+                </option>
+              ))}
+            </select>
+          </Field>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>{t("settings.djTitle")}</CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col gap-3">
-          <Field label="Provider">
+          <Field label={t("settings.provider")}>
             <select
               value={draft.llmProvider}
               onChange={(e) => patch({ llmProvider: e.target.value as LlmProviderId })}
@@ -55,7 +107,7 @@ export function SettingsPage() {
               <option value="anthropic">Anthropic</option>
             </select>
           </Field>
-          <Field label="Model">
+          <Field label={t("settings.model")}>
             <Input
               value={draft.llmModel}
               onChange={(e) => patch({ llmModel: e.target.value })}
@@ -63,7 +115,7 @@ export function SettingsPage() {
             />
           </Field>
           {draft.llmProvider === "openai" ? (
-            <Field label="OpenAI API key">
+            <Field label={t("settings.openaiKey")}>
               <Input
                 type="password"
                 value={draft.openaiApiKey ?? ""}
@@ -72,7 +124,7 @@ export function SettingsPage() {
               />
             </Field>
           ) : (
-            <Field label="Anthropic API key">
+            <Field label={t("settings.anthropicKey")}>
               <Input
                 type="password"
                 value={draft.anthropicApiKey ?? ""}
@@ -86,57 +138,80 @@ export function SettingsPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Music generation</CardTitle>
+          <CardTitle>{t("settings.musicTitle")}</CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col gap-3">
-          <Field label="Provider">
+          <Field label={t("settings.provider")}>
             <select
               value={draft.musicGenProvider}
               onChange={(e) => patch({ musicGenProvider: e.target.value as MusicGenProviderId })}
               className="h-10 rounded-md border border-input bg-transparent px-3 text-sm"
             >
-              <option value="mock">Mock synth (offline, no model)</option>
-              <option value="acestep-local">ACE-Step (local server)</option>
+              <option value="mock">{t("settings.providerMock")}</option>
+              <option value="cloud">{t("settings.providerCloud")}</option>
             </select>
           </Field>
-          {draft.musicGenProvider === "acestep-local" && (
+          {draft.musicGenProvider === "cloud" && (
             <>
-              <Field label="ACE-Step server URL">
+              <Field label={t("settings.preset")}>
+                <select
+                  value={draft.musicCloudPreset ?? "ace-step"}
+                  onChange={(e) => patch({ musicCloudPreset: e.target.value as CloudPresetId })}
+                  className="h-10 rounded-md border border-input bg-transparent px-3 text-sm"
+                >
+                  {CLOUD_PRESET_IDS.map((id) => (
+                    <option key={id} value={id}>
+                      {t(PRESET_LABEL_KEY[id])}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+              {!cloudPreset.fixedEndpoint && (
+                <Field label={t("settings.apiBaseUrl")}>
+                  <Input
+                    value={draft.musicCloudUrl ?? ""}
+                    onChange={(e) => patch({ musicCloudUrl: e.target.value })}
+                    placeholder="https://api.your-music-provider.com/v1"
+                  />
+                </Field>
+              )}
+              <Field label={t("settings.apiKey")}>
                 <Input
-                  value={draft.aceStepUrl}
-                  onChange={(e) => patch({ aceStepUrl: e.target.value })}
-                  placeholder="http://localhost:8085"
+                  type="password"
+                  value={draft.musicCloudApiKey ?? ""}
+                  onChange={(e) => patch({ musicCloudApiKey: e.target.value })}
+                  placeholder={cloudPreset.authScheme === "key" ? "fal_…" : "sk-…"}
                 />
               </Field>
+              <Field label={t("settings.modelOptional")}>
+                <Input
+                  value={draft.musicCloudModel ?? ""}
+                  onChange={(e) => patch({ musicCloudModel: e.target.value })}
+                  placeholder={cloudPreset.defaults.model ?? "provider-specific model id"}
+                />
+              </Field>
+              <p className="text-xs text-muted-foreground">{costText}</p>
               <div className="flex items-center gap-2">
-                <Button variant="outline" size="sm" onClick={() => void checkAceStep()}>
-                  Test connection
+                <Button variant="outline" size="sm" onClick={() => void checkCloud()}>
+                  {t("settings.testConnection")}
                 </Button>
                 {health === "ok" && <CheckCircle2 className="size-4 text-primary" />}
                 {health === "down" && <XCircle className="size-4 text-destructive" />}
                 {health === "checking" && (
-                  <span className="text-xs text-muted-foreground">checking…</span>
-                )}
-                {health === "down" && (
-                  <span className="text-xs text-muted-foreground">
-                    Run `make serve` in acestep-local.
-                  </span>
+                  <span className="text-xs text-muted-foreground">{t("settings.checking")}</span>
                 )}
               </div>
+              <p className="text-xs text-muted-foreground">{t("settings.cloudNote")}</p>
             </>
           )}
         </CardContent>
       </Card>
 
       <div className="flex items-center gap-3">
-        <Button onClick={() => void save()}>Save settings</Button>
-        {saved && <span className="text-sm text-muted-foreground">Saved ✓</span>}
+        <Button onClick={() => void save()}>{t("settings.save")}</Button>
+        {saved && <span className="text-sm text-muted-foreground">{t("settings.saved")}</span>}
       </div>
-      <p className="pb-4 text-xs text-muted-foreground">
-        MUZERO is local-first: tracks, audio, and these settings live in your browser's IndexedDB on
-        this device. API keys are stored locally and sent only to the provider you choose — never to
-        us.
-      </p>
+      <p className="pb-4 text-xs text-muted-foreground">{t("settings.localNote")}</p>
     </div>
   );
 }

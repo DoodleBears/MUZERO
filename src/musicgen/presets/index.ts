@@ -36,6 +36,8 @@ export interface CloudPreset {
    * supplied by the user. "custom" is the only user-supplied-endpoint preset.
    */
   fixedEndpoint: boolean;
+  /** Approximate USD per generated song, for the Settings cost hint. Omit if unknown (custom). */
+  estCostPerSongUsd?: number;
   defaults: CloudPresetDefaults;
   mappers: CloudMappers;
 }
@@ -62,4 +64,9 @@ export const CLOUD_PRESET_IDS = Object.keys(CLOUD_PRESETS) as CloudPresetId[];
 /** Resolve a preset, falling back to "custom" for undefined / unknown ids. */
 export function resolveCloudPreset(id: CloudPresetId | undefined): CloudPreset {
   return (id && CLOUD_PRESETS[id]) || customPreset;
+}
+
+/** Rough continuous-generation cost: one new song roughly every 3 min ⇒ 20/hr. */
+export function continuousHourlyUsd(perSongUsd: number, songsPerHour = 20): number {
+  return perSongUsd * songsPerHour;
 }

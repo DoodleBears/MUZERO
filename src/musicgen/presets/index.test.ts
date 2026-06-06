@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type { TrackBrief } from "@/dj/dj-brief-schema";
-import { CLOUD_PRESET_IDS, type CloudPresetId, resolveCloudPreset } from "./index";
+import {
+  CLOUD_PRESET_IDS,
+  type CloudPresetId,
+  continuousHourlyUsd,
+  resolveCloudPreset,
+} from "./index";
 
 describe("cloud presets registry", () => {
   it("resolves the custom preset by id", () => {
@@ -23,5 +28,18 @@ describe("cloud presets registry", () => {
 
   it("lists registered preset ids including custom", () => {
     expect(CLOUD_PRESET_IDS).toContain("custom");
+  });
+});
+
+describe("preset cost metadata", () => {
+  it("carries an estimated $/song for the priced presets", () => {
+    expect(resolveCloudPreset("ace-step").estCostPerSongUsd).toBeCloseTo(0.012, 3);
+    expect(resolveCloudPreset("mureka").estCostPerSongUsd).toBeCloseTo(0.045, 3);
+    expect(resolveCloudPreset("custom").estCostPerSongUsd).toBeUndefined();
+  });
+
+  it("derives a continuous hourly estimate (20 songs/hr)", () => {
+    expect(continuousHourlyUsd(0.012)).toBeCloseTo(0.24, 2);
+    expect(continuousHourlyUsd(0.045)).toBeCloseTo(0.9, 2);
   });
 });

@@ -1,6 +1,6 @@
 # PRD: MUZERO — Cloud Music-Gen Provider Selection (ACE-Step default + Mureka tier)
 
-**Status:** Draft
+**Status:** Completed（4 phase 代码全实现，76 tests 绿；真实 key 端到端验证待手动）
 **Created:** 2026-06-07
 **Author:** MUZERO
 **Module:** Music generation — cloud BYOK vendor selection & preset adapters
@@ -16,7 +16,7 @@
 | 1 | Preset infra（auth scheme + 预设注册 + 选型 settings） | ✅ Completed | §6 |
 | 2 | ACE-Step (fal.ai) 预设 — 默认 provider | ✅ Completed | §6 |
 | 3 | Mureka 预设 — 质量/多语种档 | ✅ Completed | §6 |
-| 4 | Settings UI + 成本提示 + i18n | 🔲 Pending | §6 |
+| 4 | Settings UI + 成本提示 + i18n | ✅ Completed | §6 |
 
 > Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
 
@@ -279,12 +279,15 @@ interface CloudPreset {
 **Goal:** 用户能看懂地选 provider 与成本。
 
 **Tasks:**
-- [ ] Settings 预设下拉 + 预填 + 健康检查 + 成本/续歌提示。
-- [ ] 文案进 i18n catalog（en/zh/ja/ko，硬规则 i18n 全量），不在组件硬编。
+- [x] Settings 预设下拉（`CLOUD_PRESET_IDS` 渲染）+ 按 `fixedEndpoint` 条件显示 URL + 按 `authScheme` 切 key 占位符 + model 占位用 preset 默认 + 健康检查（按 preset）。
+- [x] 成本提示：`CloudPreset.estCostPerSongUsd`（通用字段，非 id 分支）+ 纯 helper `continuousHourlyUsd` → UI 显示「≈ $X/首 · 续歌 ≈ $Y/小时」；custom 显示未知。
+- [x] 文案进 i18n catalog（en/zh/ja/ko 全量：`preset`/`presetAceStep`/`presetMureka`/`presetCustom`/`costHint`/`costUnknown`），强类型 key 校验通过。
+- [~] Mureka 续歌默认关：改以**成本提示**实现（两 provider 均 < $0.05 红线，硬关 `autoExtend` 理由减弱，且会引入 `if(preset===mureka)` 分支违反硬规则 #5）→ 用户可在 DJ console 自行 toggle。
 
 ### Phase 4 Checklist
-- [ ] 四语种文案齐全（缺则标 pending translation + 开 followup）。
-- [ ] `make check`（typecheck+lint+test）全绿。
+- [x] 四语种文案齐全（en/zh/ja/ko 各 +6 key）。
+- [x] `make check`（typecheck + lint 70 files + test 76）全绿。
+- [ ] **（待真实 key 手动验证）** 截图/实机确认 Settings 预设切换、成本提示、健康检查显示正常。
 
 ---
 
@@ -354,6 +357,7 @@ interface CloudPreset {
 | 2026-06-07 | MUZERO | **Phase 1 完成**（TDD）：`cloud-provider` 加 `buildAuthHeaders`(bearer/key)+注入式 `CloudMappers`+`fetchImpl`；`presets/index.ts` 注册表(custom)；`AppSettings.musicCloudPreset`；`registry` 按 preset 注入。20 tests 绿，`cloud-job.ts` 未动 |
 | 2026-06-07 | MUZERO | **Phase 2 完成**（TDD）：`presets/ace-step.ts`（fal sync 端点、`Key` auth、caption→tags / 空歌词→`[inst]`）；注册为默认 preset。8 ace-step tests（含注入 fetch 端到端），musicgen 28 绿。sync 端点对长曲超时风险留作真实 key 验证 |
 | 2026-06-07 | MUZERO | **Phase 3 完成**（TDD）：`presets/mureka.ts`（异步 `/v1/song/generate`+`/song/query/{id}` 轮询、Bearer、caption→prompt、多变体取第一首）；注册档。mureka tests（含注入 fetch submit→poll→download），musicgen 36 绿。autoExtend-默认关移至 Phase 4 |
+| 2026-06-07 | MUZERO | **Phase 4 完成**：Settings 预设下拉 + 条件 URL + 成本提示（`estCostPerSongUsd`/`continuousHourlyUsd` 通用字段，非 id 分支）+ 健康检查；i18n 4 语 ×6 key。`make check` 全绿（typecheck/lint 70/test 76）。**4 phase 代码全部完成** |
 
 ---
 
