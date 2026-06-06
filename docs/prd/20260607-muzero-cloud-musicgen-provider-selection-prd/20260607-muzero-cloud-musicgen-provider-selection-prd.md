@@ -15,7 +15,7 @@
 |-------|------|--------|------|
 | 1 | Preset infra（auth scheme + 预设注册 + 选型 settings） | ✅ Completed | §6 |
 | 2 | ACE-Step (fal.ai) 预设 — 默认 provider | ✅ Completed | §6 |
-| 3 | Mureka 预设 — 质量/多语种档 | 🔲 Pending | §6 |
+| 3 | Mureka 预设 — 质量/多语种档 | ✅ Completed | §6 |
 | 4 | Settings UI + 成本提示 + i18n | 🔲 Pending | §6 |
 
 > Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
@@ -262,13 +262,17 @@ interface CloudPreset {
 **Goal:** 一个下拉切到榜单第 2 的人声质量。
 
 **Tasks:**
-- [ ] `presets/mureka.ts`：三个纯函数 + `authScheme: "bearer"`；以 platform.mureka.ai 官方文档复核确切端点/字段。
-- [ ] 单测 + 集成测（注入 fake fetch）。
-- [ ] 选 Mureka 时 `autoExtend` 默认关 / 成本确认。
+- [x] `presets/mureka.ts`：三个纯函数 + `authScheme: "bearer"` + 异步 `/v1/song/generate` → `/v1/song/query/{id}`；`firstAudioUrl` 兜底 `choices/songs/data[]` 多变体（取第一首）+ 多种 url 字段。
+- [x] 单测 + 集成测（注入 fake fetch，submit→poll(running→succeeded)→download mp3、Bearer auth）。
+- [~] 选 Mureka 时 `autoExtend` 默认关 / 成本确认 → 移至 **Phase 4**（属 Settings/建集行为，非 preset 层）。
+- [x] 注册到 `CLOUD_PRESETS`。`pnpm test src/musicgen` 36 绿。
 
 ### Phase 3 Checklist
-- [ ] 用真实 Mureka key 出一首中文 + 一首日文/韩文歌，落库可播。
-- [ ] 确认付费 API 输出带商用授权（[Mureka FAQ](https://platform.mureka.ai/docs/en/faq.html)）。
+- [x] 代码/测试：mureka tests 绿；typecheck + biome 清；不动 `cloud-job.ts`。
+- [ ] **（待真实 key 手动验证）** 用真实 Mureka key 出一首中文 + 一首日文/韩文歌，落库可播；确认确切端点/字段/model 字符串（Q4）与 `n` 单位（Q8）。
+- [ ] **（待真实 key 手动验证）** 确认付费 API 输出带商用授权（[Mureka FAQ](https://platform.mureka.ai/docs/en/faq.html)）。
+
+> v1 限制：Mureka 预设仅 vocal 歌（`/v1/song/generate`）。空歌词/器乐 → 用默认 ACE-Step `[inst]`；Mureka BGM 端点路由因 generic 流用静态 createPath 而延后（见 Out of Scope / Open Questions）。
 
 ### Phase 4: Settings UI + 成本提示 + i18n
 
@@ -349,6 +353,7 @@ interface CloudPreset {
 | 2026-06-07 | MUZERO | **更正定价**：官方 API 是预充值余额(TRIAL $30 起、12mo、含 V9)+按次扣费，**非 $1000/月门槛**（useapi.net 误导）。Song Gen V8/V9 **$0.045/首**、V7.6 $0.03，**在 < $0.05 红线内** → Mureka 稳作 tier-2。补空歌词→BGM 端点分叉、`n` 变体、Studio 明码标价 |
 | 2026-06-07 | MUZERO | **Phase 1 完成**（TDD）：`cloud-provider` 加 `buildAuthHeaders`(bearer/key)+注入式 `CloudMappers`+`fetchImpl`；`presets/index.ts` 注册表(custom)；`AppSettings.musicCloudPreset`；`registry` 按 preset 注入。20 tests 绿，`cloud-job.ts` 未动 |
 | 2026-06-07 | MUZERO | **Phase 2 完成**（TDD）：`presets/ace-step.ts`（fal sync 端点、`Key` auth、caption→tags / 空歌词→`[inst]`）；注册为默认 preset。8 ace-step tests（含注入 fetch 端到端），musicgen 28 绿。sync 端点对长曲超时风险留作真实 key 验证 |
+| 2026-06-07 | MUZERO | **Phase 3 完成**（TDD）：`presets/mureka.ts`（异步 `/v1/song/generate`+`/song/query/{id}` 轮询、Bearer、caption→prompt、多变体取第一首）；注册档。mureka tests（含注入 fetch submit→poll→download），musicgen 36 绿。autoExtend-默认关移至 Phase 4 |
 
 ---
 

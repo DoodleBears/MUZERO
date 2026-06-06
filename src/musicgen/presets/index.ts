@@ -12,6 +12,7 @@
 
 import { type CloudMappers, mapBriefToBody, parseCreate, parseStatus } from "../cloud-provider";
 import { aceStepPreset } from "./ace-step";
+import { murekaPreset } from "./mureka";
 
 export type CloudPresetId = "ace-step" | "mureka" | "custom";
 
@@ -51,6 +52,7 @@ const customPreset: CloudPreset = {
 /** Registered presets. ace-step is the default; mureka is added in a later phase. */
 export const CLOUD_PRESETS: Partial<Record<CloudPresetId, CloudPreset>> = {
   "ace-step": aceStepPreset,
+  mureka: murekaPreset,
   custom: customPreset,
 };
 
