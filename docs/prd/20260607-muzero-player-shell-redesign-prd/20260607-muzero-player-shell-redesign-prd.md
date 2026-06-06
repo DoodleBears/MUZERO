@@ -11,7 +11,7 @@
 
 | Phase | Name | Status | Link |
 |-------|------|--------|------|
-| 0 | 过渡基础设施（view-transition helper + reduced-motion + 选择器隔离） | 🔲 Pending | [Phase 0 Checklist](#phase-0-checklist) |
+| 0 | 过渡基础设施（view-transition helper + reduced-motion + 选择器隔离） | ✅ Completed | [Phase 0 Checklist](#phase-0-checklist) |
 | 1 | PlayerDock 容器：3 行结构（信息+播放 / 进度 / 导航）合并 PlayerBar+DockNav | 🔲 Pending | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | 导航行：扁平集成 nav row（取代 Magic UI 放大 Dock） | 🔲 Pending | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | 页面切换 View Transition（tab → tab 丝滑过渡） | 🔲 Pending | [Phase 3 Checklist](#phase-3-checklist) |
@@ -348,15 +348,15 @@ export function startViewTransition(update: () => void): void
 **Goal:** 先把「能丝滑、能降级、不抖动」的地基铺好。
 
 **Tasks:**
-- [ ] 新建 [`view-transition.ts`](../../../src/lib/view-transition.ts)：`canViewTransition()` + `startViewTransition()`（原生检测 + reduced-motion + 直接执行兜底）。
-- [ ] App 顶层包 `motion` 的 `MotionConfig reducedMotion="user"`。
-- [ ] `styles.css` 加 `::view-transition-*(root)` cross-fade（受 reduced-motion 关闭）。
-- [ ] 按 §3.3 把进度/标题/transport selector 拆 leaf（先隔离重渲染热点）。
+- [x] 新建 [`view-transition.ts`](../../../src/lib/view-transition.ts)：`canViewTransition()` / `prefersReducedMotion()` / `startViewTransition()`（原生检测 + reduced-motion + 直接执行兜底）。TDD：[`view-transition.test.ts`](../../../src/lib/view-transition.test.ts) 8 例覆盖三态分支。
+- [x] App 顶层包 `motion` 的 `MotionConfig reducedMotion="user"`（放 [`App.tsx`](../../../src/App.tsx)，避开他人 WIP 的 `main.tsx`）。
+- [x] `styles.css` 加 `::view-transition-*(root)` cross-fade（`prefers-reduced-motion: reduce` 分支置 `animation: none`）。
+- [→] 进度/标题/transport selector 拆 leaf：**改在 Phase 1 随新组件落地**（现 `PlayerBar` 即将被替换，先拆旧组件是浪费）。
 
 #### Phase 0 Checklist
-- [ ] `make check`（typecheck + lint + test）通过。
-- [ ] 不支持原生 VT（或 stub）下 `setTab` 仍即时切换、无报错。
-- [ ] 开「减少动态效果」后无位移/缩放动画。
+- [x] `make check`（typecheck + lint + test）通过：88 tests / 12 files 全绿，Biome 0 fix。
+- [x] 不支持原生 VT（或 stub）下 `startViewTransition` 同步执行 update 一次（单测覆盖）；`setTab` 实际接线在 Phase 3。
+- [x] 开「减少动态效果」时：helper 跳过原生 VT、`MotionConfig reducedMotion="user"`、CSS reduce 分支三重兜底（helper 单测覆盖 reduced-motion 分支）。
 
 ### Phase 1: PlayerDock 3 行容器
 

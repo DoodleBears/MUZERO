@@ -1,3 +1,4 @@
+import { MotionConfig } from "motion/react";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { DockNav, type Tab } from "@/components/nav/dock-nav";
@@ -29,25 +30,29 @@ export default function App() {
     })();
   }, [init, setActiveSession]);
 
+  // `reducedMotion="user"` makes every motion animation honor the OS
+  // "reduce motion" setting app-wide, matching the view-transition helper.
   return (
-    <div className="flex h-screen flex-col bg-background text-foreground">
-      <header className="flex shrink-0 items-center gap-2 border-b border-border px-4 py-3">
-        <img src="/muzero.svg" alt="" className="size-6" />
-        <span className="font-semibold tracking-tight">MUZERO</span>
-        <span className="ml-auto text-xs text-muted-foreground">{t("app.tagline")}</span>
-      </header>
+    <MotionConfig reducedMotion="user">
+      <div className="flex h-screen flex-col bg-background text-foreground">
+        <header className="flex shrink-0 items-center gap-2 border-b border-border px-4 py-3">
+          <img src="/muzero.svg" alt="" className="size-6" />
+          <span className="font-semibold tracking-tight">MUZERO</span>
+          <span className="ml-auto text-xs text-muted-foreground">{t("app.tagline")}</span>
+        </header>
 
-      <main className="min-h-0 flex-1 overflow-hidden">
-        {tab === "now" && <NowPlayingPage />}
-        {tab === "queue" && <QueuePage />}
-        {tab === "search" && <SearchPage />}
-        {tab === "sessions" && <SessionsPage onStarted={() => setTab("now")} />}
-        {tab === "settings" && <SettingsPage />}
-      </main>
+        <main className="min-h-0 flex-1 overflow-hidden">
+          {tab === "now" && <NowPlayingPage />}
+          {tab === "queue" && <QueuePage />}
+          {tab === "search" && <SearchPage />}
+          {tab === "sessions" && <SessionsPage onStarted={() => setTab("now")} />}
+          {tab === "settings" && <SettingsPage />}
+        </main>
 
-      {activeSessionId && <PlayerBar />}
+        {activeSessionId && <PlayerBar />}
 
-      <DockNav value={tab} onChange={setTab} />
-    </div>
+        <DockNav value={tab} onChange={setTab} />
+      </div>
+    </MotionConfig>
   );
 }

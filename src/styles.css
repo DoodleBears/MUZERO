@@ -125,3 +125,25 @@
   --ring: oklch(0.72 0.18 305);
   --destructive-foreground: var(--color-red-400);
 }
+
+/*
+ * View Transitions — whole-page tab → tab cross-fade (progressive enhancement).
+ * Only browsers that support the native API ever run these; the JS helper
+ * (`src/lib/view-transition.ts`) also gates on `prefers-reduced-motion`, and the
+ * reduce branch below is a belt-and-suspenders kill switch for any opted-in
+ * element. Shared-element transitions are handled by motion `layoutId`, not here.
+ */
+@media (prefers-reduced-motion: no-preference) {
+  ::view-transition-old(root),
+  ::view-transition-new(root) {
+    animation-duration: 200ms;
+    animation-timing-function: ease;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-old(root),
+  ::view-transition-new(root) {
+    animation: none;
+  }
+}
