@@ -114,6 +114,7 @@ src/
 │   ├── chat-panel.tsx                     # mode-agnostic panel body（header + turns + composer）
 │   ├── chat-launcher-fab.tsx             # FAB 形态
 │   ├── chat-input-bar.tsx                 # 底部输入条形态（只一个 composer）
+│   ├── chat-reply-notification.tsx        # 折叠态回复 = 顶部 Notification toast（motion，仿 anysoul MessageToast）
 │   ├── chat-dock.tsx                      # Dock 形态（桌面 1∕3 侧栏 / 移动全屏）宿主
 │   ├── chat-composer.tsx                 # 输入（textarea + 3 态按钮 + @/ 菜单 + 队列）
 │   ├── chat-turns.tsx                     # 消息 turn 列表（streamdown + 工具折叠）
@@ -272,8 +273,28 @@ interface ChatUiState {
 
 ### 5.2 形态 2：底部输入条（bar，**默认**）
 
-- 屏幕底部（player-dock 之上）只渲染 **`chat-composer`** 单行输入 + 3 态按钮，不显示历史。回车即把需求发给 DJ；有回复时**就地冒一个轻量 toast/一行流式预览**或自动升到 `dock`（见 Open Q2）。
+- 屏幕底部（player-dock 之上）只渲染 **`chat-composer`** 单行输入 + 3 态按钮，不显示历史。回车即把需求发给 DJ。
 - 这是「大多数时候只想跟 DJ 说一句」的主路径。composer 是独立组件，可单独挂载。
+- **回复显示 = 顶部 Notification toast**（见 §5.2.1，决议自 Open Q2）：折叠态（bar / fab）下，DJ 的回复不在原地铺开，而是顶部冒一条轻量通知，点击才展开到 `dock`。
+
+### 5.2.1 DJ 回复通知（`chat-reply-notification.tsx`，折叠态回复显示）
+
+> **决议（Open Q2）**：bar/fab 折叠时收到 DJ 回复 → **顶部居中单条 Notification toast**，仿 anysoul 的 [`MessageToast`](../../../../anysoul/packages/web/src/components/hud/MessageToast.tsx)。不占信息、不打扰；点击展开到 `dock`。多条/错误并发时用堆叠版（仿 anysoul [`NotificationStack`](../../../../anysoul/packages/web/src/components/hud/NotificationStack.tsx)），v1 先单条。
+
+**何时显示**：`mode ∈ {bar, fab}` 且当前 session 有新 assistant 输出（streaming 或 finish）。`mode === dock/fullscreen`（面板已展开可见）时**不显示**（避免重复）。
+
+**框架与动效**（`motion`，MUZERO 已有，用 `import { AnimatePresence, motion } from "motion/react"`，无需新依赖）：
+- 容器：`fixed inset-x-0 top-0 z-[100] flex flex-col items-center px-4 pointer-events-none`，`paddingTop: calc(env(safe-area-inset-top,0px) + 12px)`（移动端安全区）。
+- `<AnimatePresence mode="wait">` 包单条 `motion.div`（`key=notificationId`）：
+  - `initial={{ opacity:0, y:-40, scale:0.95 }}` → `animate={{ opacity:1, y:0, scale:1 }}` → `exit={{ opacity:0, y:-20, scale:0.97 }}`
+  - `transition={{ type:"spring", stiffness:380, damping:28, opacity:{duration:0.18} }}`
+- 卡片：`pointer-events-auto w-full max-w-md`，圆角 + `bg-card/95 backdrop-blur-xl ring-1 ring-border/30 shadow-lg`，`active:scale-[0.98]`。内容一行：DJ 图标（`Sparkles`/`Bot`）+ 标题（"DJ"）+ **一行预览**（assistant 文本截 ~80 字，`truncate`）。
+- **streaming**：预览实时更新（订阅 runtime actor 的最新 assistant 文本），尾部小 pulse/`Loader2`；**finish 后才启动自动消失计时**（~4–6s，参 `DISPLAY_MS`）。期间用户输入新一句则替换当前通知（`mode="wait"` 自然过渡）。
+- **点击**：`dismiss()` + 切 `mode = "dock"`（桌面）/ `"fullscreen"`（移动）+ 打开该 session（`activeSessionId`）——等价 anysoul 的 `handleTap`（展开面板 + 定位 thread）。
+- **错误**：DJ 出错也走这条通知（destructive 配色），点击展开看详情。
+- 纯通知、`pointer-events-none` 包裹不挡操作；无障碍：`role="status"` + 可聚焦点击区。
+
+> 实现参考可逐行对照 anysoul `MessageToast.tsx`（顶部单条、spring、自动消失、tap-to-expand）与 `NotificationStack.tsx`（`mode="popLayout"` + `layout="position"` 堆叠、`@/lib/animations` 的 `springDefault`/`layoutSpring`，留给 v2 多条场景）。
 
 ### 5.3 形态 3：Dock（桌面 1∕3 侧栏 / 移动全屏）
 
@@ -346,11 +367,13 @@ interface ChatUiState {
 **Tasks:**
 - [ ] `chat-store` 的 `mode`/`dockSide` + persist；`matchMedia` 断点 hook。
 - [ ] `chat-launcher-fab.tsx`（FAB + motion 展开）、`chat-input-bar.tsx`（底部 composer-only）、`chat-dock.tsx`（桌面 1∕3 flex sibling / 移动全屏 overlay）。
+- [ ] `chat-reply-notification.tsx`（§5.2.1）：折叠态（bar/fab）DJ 回复走顶部 Notification toast（`motion/react`，spring 下滑、一行预览、finish 后 ~4–6s 自动消失、点击展开到 dock）；dock/fullscreen 时不显示。
 - [ ] 挂进 [`App.tsx`](../../../src/App.tsx) 外壳（与 `GlobalDropZone` 同级 overlay + Dock 让位 main）；NavRow/player-dock 不重排成 sidebar（硬规则 #9）。
 
 **Phase 2 Checklist:**
 - [ ] 三形态切换正确、偏好持久化；桌面 Dock 占 1∕3、移动全屏；reduced-motion 尊重。
-- [ ] 浏览器 preview 实测三形态 + 暗色 + 响应式，零 console 报错。
+- [ ] 折叠态收到回复 → 顶部通知出现/streaming 实时预览/finish 自动消失/点击展开到 dock 并定位 session；dock 态不重复弹。
+- [ ] 浏览器 preview 实测三形态 + 通知 + 暗色 + 响应式，零 console 报错。
 
 ### Phase 3: DJ 工具调用
 **Tasks:**
@@ -427,7 +450,7 @@ interface ChatUiState {
 | # | Question | Status | Decision |
 |---|----------|--------|----------|
 | 1 | 活跃 session id 存哪？ | Open | 倾向 `AppSettings.lastChatSessionId?`（复用 settings 单例，免新表）vs 单独 `chatPrefs` 行 |
-| 2 | `bar` 形态收到回复怎么显示？ | Open | 候选：就地一行流式预览 + 「展开」/ 自动升 `dock` / 轻 toast。Phase 2 实测体验再定 |
+| 2 | `bar` 形态收到回复怎么显示？ | **Resolved** | **顶部 Notification toast**（§5.2.1，仿 anysoul `MessageToast`：spring 下滑、一行预览、自动消失、点击展开到 dock）。折叠态(bar/fab)显示、dock 态不显示。轻量不占信息 |
 | 3 | per-session 模型 vs 全局模型默认？ | Open | 抄 ClipCombo：全局默认 + per-session 覆盖；Phase 5 落地 |
 | 4 | `dj_generate_tracks` 与现有自动续歌（`maybeRefill`）的关系？ | Open | 工具是「显式生成」，autoExtend 是「自动续」；二者都写同一队列、由 store pump 统一物化，避免双循环打架。Phase 3 明确 |
 | 5 | streamdown bundle 体积？ | Open | Phase 1 测 `pnpm build` 增量（目标 <100KB gz）；超则 dynamic import |
@@ -438,6 +461,7 @@ interface ChatUiState {
 | Date | Author | Changes |
 |------|--------|---------|
 | 2026-06-07 | MUZERO | Initial draft —— 调研 ClipCombo agent 面板（5 路并行 deep-read：UI/形态、session/持久化、AI SDK/streaming/模型、PRD 簇蒸馏、MUZERO 集成点），落成 6-phase 复刻 PRD：多 session + 可搜历史 + 每步本地持久化 + branch/regenerate + 多 provider combobox + streamdown 流式，外加 MUZERO 三形态（FAB / 底部输入条 / Dock 1∕3→移动全屏）|
+| 2026-06-07 | MUZERO | 定 Open Q2：折叠态（bar/fab）DJ 回复 = **顶部 Notification toast**（§5.2.1，仿 anysoul `MessageToast`/`NotificationStack` 的 `motion/react` 模式：spring 下滑、一行预览、自动消失、点击展开到 dock）。加 `chat-reply-notification.tsx` 到结构 + Phase 2 |
 
 ---
 
