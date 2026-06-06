@@ -27,6 +27,8 @@ export function PlayerStatusLine() {
 
   return (
     <div
+      role="status"
+      aria-live="polite"
       className={cn(
         "truncate text-center text-[11px]",
         status.kind === "error" ? "text-destructive" : "text-muted-foreground",

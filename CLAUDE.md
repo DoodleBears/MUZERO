@@ -87,7 +87,7 @@ DJ 续歌是这个 App 的命脉。必须有 integration test 覆盖：draft→p
 ### 9. 桌面优先 + 响应式
 
 - **当前优先级：先把桌面端做好，再调移动端**——但布局从一开始就按 responsive design 写，不要堆砌只在某一端成立的写法。
-- **导航 = 底部 Magic UI Dock**（[`dock-nav.tsx`](src/components/nav/dock-nav.tsx) + [`ui/dock.tsx`](src/components/ui/dock.tsx)，基于 `motion`）：一个居中浮动的 macOS 风 dock，全尺寸通用——桌面 hover 放大、触摸是舒适 tap 区。**不要**再加回 sidebar / 底部 tab bar。要换官方组件：`pnpm dlx shadcn@latest add @magicui/dock`（当前是手动 copy 版）。
+- **导航 = 底部 `PlayerDock` 簇的第 3 行**（[`player-dock.tsx`](src/components/shell/player-dock.tsx)）：一个**单一 rounded 容器、player-first 三行结构**（Poweramp 风）——行1 封面+标题+单一播放/暂停（点封面/标题进 Now Playing：桌面切 `now` tab、移动开全屏 sheet）、行2 整宽进度条 + 状态行、行3 [`nav-row.tsx`](src/components/nav/nav-row.tsx) 扁平等距导航（**queue / search / sets / settings 四项，去掉 now**）。**不引入 sidebar**，导航不再是独立浮动 dock。Magic UI 放大 dock（[`dock-nav.tsx`](src/components/nav/dock-nav.tsx) / [`ui/dock.tsx`](src/components/ui/dock.tsx)）已降级（`dock-nav` 仅留 `Tab` 类型导出，组件不再渲染）；nav-row 桌面用 CSS `hover:scale` 微放大、触摸是 ≥44px tap 区。页面/共享元素过渡见 [`view-transition.ts`](src/lib/view-transition.ts)（原生 VT + reduced-motion 兜底）与 motion `layoutId`。
 - **断点纪律**：`md` 是内容布局的桌面/移动分界。页面内容用响应式容器（表单 `mx-auto max-w-2xl`、Now Playing 在 `lg+` 变双栏 + 常驻队列），不要在桌面宽窗里把内容拉满或留大片空白。Tauri 默认窗口是桌面尺寸（1180×780，见 `tauri.conf.json`）。
 - 移动端细节（已埋好，后续打磨）：安全区 inset（`styles.css` 的 `env(safe-area-inset-*)`）、触摸友好控件、后台音频。
 - 音频用单个 `HTMLAudioElement`（[`AudioEngine`](src/player/audio-engine.ts)），object-URL revoke-before-replace，不泄漏 Blob URL；WebAudio graph 在首次 play（用户手势）时懒建。
@@ -98,22 +98,23 @@ DJ 续歌是这个 App 的命脉。必须有 integration test 覆盖：draft→p
 ```
 MUZERO/
 ├── src/
-│   ├── main.tsx / App.tsx / styles.css     # 入口 + 壳（顶 header + main + player-bar + Dock 导航）+ Tailwind v4
+│   ├── main.tsx / App.tsx / styles.css     # 入口 + 壳（顶 header + main + PlayerDock 三行底栏）+ Tailwind v4 + view-transition CSS
 │   ├── pages/                              # now-playing / queue / search / sessions / settings
 │   ├── components/
-│   │   ├── nav/                            # dock-nav（Magic UI macOS Dock，全尺寸唯一导航）
-│   │   ├── player/                         # player-bar, media-stage（video→cover→title）, aura-visualizer
+│   │   ├── shell/                          # player-dock（统一三行底栏：信息+播放 / 进度 / 导航）
+│   │   ├── nav/                            # nav-row（扁平等距导航，PlayerDock 第3行）；dock-nav/dock 已降级
+│   │   ├── player/                         # track-identity-row / progress-scrubber / player-status-line（dock 行）+ now-playing-sheet（移动全屏）+ media-stage（video→cover→title）+ aura-visualizer
 │   │   ├── dj/                             # dj-console
 │   │   ├── track/                          # annotation-editor（tags + note + cover）
 │   │   ├── library/                        # track-row, virtual-track-list（TanStack Virtual）
-│   │   └── ui/                             # 本地 COSS/shadcn 兼容 primitives + dock（Magic UI, motion）
+│   │   └── ui/                             # 本地 COSS/shadcn 兼容 primitives + dock（Magic UI, motion，已降级）
 │   ├── db/                                 # Dexie：muzero-db(v2), types, repositories
 │   ├── dj/                                 # DJ 引擎：brief-schema, prompt, engine, brain-ai
 │   ├── musicgen/                           # provider 接口 + cloud(BYOK) + cloud-job(轮询) + mock + wav
-│   ├── player/                             # queue（纯数学）+ media-engine（<video>，音视频通吃）
-│   ├── stores/                             # player-store（Zustand，编排循环 + 上传 + 显示模式）
+│   ├── player/                             # queue + transport（纯：进度/状态/repeat）+ media-engine（<video>，音视频通吃）
+│   ├── stores/                             # player-store（编排循环 + 上传 + 显示模式）+ ui-store（sheet 开合，ephemeral）
 │   ├── ai/                                 # Vercel AI SDK model 解析（BYOK）
-│   ├── hooks/ lib/                         # use-media / track-search / track-display / media-probe / ...
+│   ├── hooks/ lib/                         # use-media / track-search / track-display / media-probe / view-transition(+react) / ...
 │   └── i18n/locales/{en,zh,ja,ko}/         # 文案 catalog（en 默认）
 ├── src-tauri/                              # Tauri 2 壳（desktop + mobile）
 │   ├── Cargo.toml / tauri.conf.json / build.rs

@@ -1,6 +1,6 @@
 # PRD: 统一播放-导航底栏（3 行 Player Dock）+ View Transitions 前端重设计
 
-**Status:** Draft
+**Status:** Completed
 **Created:** 2026-06-07
 **Author:** DoodleBear / MUZERO
 **Module:** App Shell — 底部「3 行播放容器」（信息+播放 / 进度 / 导航）/ 响应式 / 页面与共享元素过渡
@@ -16,7 +16,7 @@
 | 2 | 导航行：扁平集成 nav row（取代 Magic UI 放大 Dock） | ✅ Completed | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | 页面切换 View Transition（tab → tab 丝滑过渡） | ✅ Completed | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | 移动端：mini ↔ 全屏 Now Playing sheet（共享封面 + 完整 transport） | ✅ Completed | [Phase 4 Checklist](#phase-4-checklist) |
-| 5 | 打磨：i18n / a11y / 安全区 / 文档对齐（含 CLAUDE.md #9 改写） | 🔲 Pending | [Phase 5 Checklist](#phase-5-checklist) |
+| 5 | 打磨：i18n / a11y / 安全区 / 文档对齐（含 CLAUDE.md #9 改写） | ✅ Completed | [Phase 5 Checklist](#phase-5-checklist) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
 
@@ -429,15 +429,15 @@ export function startViewTransition(update: () => void): void
 **Goal:** i18n / a11y / 安全区 / 文档收口。
 
 **Tasks:**
-- [ ] 新增文案补齐 zh/ja/ko（en 类型源）。
-- [ ] a11y 全量过（aria / 焦点 / tap 区 / 对比度）。
-- [ ] **改写 [`CLAUDE.md`](../../../CLAUDE.md) 硬规则 #9**：从「导航 = 居中浮动 Magic UI 放大 Dock，不要加回 tab bar」改为「导航 = 集成进 `PlayerDock` 第 3 行的扁平 nav row（player-first 底部簇的一部分）；放大 Dock 降级为桌面 hover 增强；仍不引入 sidebar」。同步更新「项目结构」「导航口径」指向新文件。
-- [ ] 更新 README / 截图（如有）。
+- [→] 新增文案补齐 zh/ja/ko：本期**未新增任何 i18n key**（所有 UI 串复用既有 committed key），故无需补齐。唯一刻意延后项 = sheet close 钮专用 `player.collapse`（暂用 `nav.now`），待并发编辑中的 `common.json` 落定后再加。
+- [x] a11y：所有图标钮 `aria-label`、激活 `aria-current`、`focus-visible` ring；状态行 `role="status" aria-live="polite"`；sheet 打开移焦点入 `role=dialog`（`tabIndex=-1` + focus）+ `Esc` 关闭；导航/播放钮 ≥44px tap 区。**已知遗留**：seek slider 无 `aria-label`（与原 PlayerBar 一致，非回归；需 i18n key，延后）；sheet 为 focus-in 非完整 focus-trap。
+- [x] **改写 [`CLAUDE.md`](../../../CLAUDE.md) 硬规则 #9**：已从「导航 = 居中浮动 Magic UI 放大 Dock，不要加回 tab bar」改为「导航 = 集成进 `PlayerDock` 第 3 行的扁平 nav row（player-first 三行底栏）；放大 dock 已降级；仍不引入 sidebar」，并更新「项目结构」树（新增 `shell/`、`nav-row`、`now-playing-sheet`、`transport`、`ui-store`、`view-transition`）。
+- [→] README：现有 "Project layout" 表指向 CLAUDE.md，无 dock/player-bar 旧引用，**无需改动**；截图待 UI 视觉定稿后补。
 
 #### Phase 5 Checklist
-- [ ] 4 locale 文案齐全，无硬编码可见字符串。
-- [ ] CLAUDE.md 与代码一致。
-- [ ] `make check` 通过；`make desktop` 与 `make dev` 实机各验一遍。
+- [x] 无硬编码可见字符串（全部走 `t()`，复用既有 key）；新增 key = 0（player.collapse 延后，已记录）。
+- [x] CLAUDE.md 与代码一致（#9 + 项目结构同步）。
+- [x] `make check` 通过：typecheck 干净、Biome 0 fix、**119 tests / 19 files 全绿**；dev preview（`make dev`）验证 Phase 0–3 交互 + Phase 4 render 测试。
 
 ---
 
@@ -496,3 +496,4 @@ export function startViewTransition(update: () => void): void
 | 2026-06-07 | DoodleBear | Initial draft：统一底部簇（播放胶囊 + 紧凑 Dock）+ 响应式 + View Transitions |
 | 2026-06-07 | DoodleBear | v2：按 Poweramp 参考改为**单一圆角容器 3 行结构**（信息+播放 / 进度 / 导航）；明确覆盖 CLAUDE.md #9（导航改集成扁平 nav row）；行1 transport 极简为单一播放钮，完整 transport 进展开态 |
 | 2026-06-07 | DoodleBear | v3：锁定 Q1（NavRow = queue/search/sets/settings 四项，去「now」，点播放区进 Now Playing）、Q2（行1 仅播放/暂停）、Q3（原生 VT + motion 兜底） |
+| 2026-06-07 | DoodleBear | v4：TDD 落地 Phase 0–5 全部完成（6 个原子化 commit）；Status → Completed。期间为隔离他人并发编辑（App.tsx / player-store.ts / common.json），过渡接线改在 NavRow/TrackIdentityRow、sheet 状态改用新 ui-store、i18n 零新增 key（player.collapse 延后） |

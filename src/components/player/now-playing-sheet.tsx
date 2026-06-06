@@ -9,7 +9,7 @@ import {
   Volume2,
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { AuraVisualizer } from "@/components/player/aura-visualizer";
 import { ProgressScrubber } from "@/components/player/progress-scrubber";
@@ -51,9 +51,11 @@ function SheetBody() {
 
   const current = currentIndex >= 0 ? queue[currentIndex] : undefined;
   const coverUrl = useTrackCoverUrl(current);
+  const dialogRef = useRef<HTMLDivElement>(null);
 
-  // Close on Escape.
+  // Close on Escape, and move focus into the dialog when it opens (a11y).
   useEffect(() => {
+    dialogRef.current?.focus();
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") closeSheet();
     };
@@ -63,10 +65,12 @@ function SheetBody() {
 
   return (
     <motion.div
+      ref={dialogRef}
       role="dialog"
       aria-modal="true"
       aria-label={t("nav.now")}
-      className="fixed inset-0 z-50 flex flex-col bg-background"
+      tabIndex={-1}
+      className="fixed inset-0 z-50 flex flex-col bg-background outline-none"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
