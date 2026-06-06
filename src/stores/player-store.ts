@@ -3,12 +3,16 @@ import { create } from "zustand";
 import { db } from "@/db/muzero-db";
 import {
   appendTrackIds,
+  createSession,
   createUploadedTrack,
+  getPlayQueue,
   getSession,
   getSettings,
   getTrackBlob,
   getTracksByIds,
   incrementPlayCount,
+  playQueueAppend,
+  playQueueSet,
   saveSettings,
   setSessionDisplayMode,
 } from "@/db/repositories";
@@ -62,6 +66,12 @@ interface PlayerState {
   setAudioOnly: (audioOnly: boolean) => void;
   /** Import uploaded audio/video files into the active set. */
   addUploads: (files: FileList | File[]) => Promise<void>;
+  /**
+   * Drop-to-upload: import media into the active set, creating an upload set
+   * first when nothing is active. Returns whether a new set was created (so the
+   * UI can surface it). `newSetName` is supplied by the caller (i18n lives in UI).
+   */
+  ingestDroppedMedia: (files: File[], newSetName: string) => Promise<{ createdSet: boolean }>;
   /** Manually ask the DJ to draft more now. */
   draftNow: () => Promise<void>;
 }
@@ -74,7 +84,12 @@ export function getMediaEngine(): MediaEngine | null {
   return mediaEngine;
 }
 
-let queueSub: Subscription | null = null;
+// The 播放列表 subscription (in init) drives `queue` for the app lifetime —
+// fire-and-forget, never torn down. `setSub` watches the active 歌单 and appends
+// its newly-added tracks (DJ / upload) onto the queue by high-water mark, so
+// generation flows in without re-adding tracks the user removed.
+let setSub: Subscription | null = null;
+let consumedSetCount = 0;
 let djEngine: DjEngine | null = null;
 let pumping = false;
 let loadedTrackId: string | null = null;
@@ -106,6 +121,20 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       onError: (msg) => set({ djError: msg }),
     });
     mediaEngine.setVolume(get().volume);
+
+    // The player consumes the persistent 播放列表 (Play Queue), not a 歌单 directly.
+    // This single subscription keeps `queue` in sync as the queue is loaded /
+    // extended / edited.
+    liveQuery(async () => {
+      const pq = await getPlayQueue();
+      return getTracksByIds(pq.entries.map((e) => e.trackId));
+    }).subscribe({
+      next: (queue) => {
+        set({ queue });
+        void afterQueueUpdate(set, get);
+      },
+      error: (err) => log.error("player", "play-queue subscription error", err),
+    });
   },
 
   async rebuildEngine() {
@@ -118,14 +147,20 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   async setActiveSession(sessionId) {
     get().init();
     await get().rebuildEngine();
-    queueSub?.unsubscribe();
+    setSub?.unsubscribe();
 
     const session = await getSession(sessionId);
-    const initialQueue = session ? await getTracksByIds(session.trackIds) : [];
+    const trackIds = session?.trackIds ?? [];
     loadedTrackId = null;
+
+    // Load this 歌单 into the 播放列表 (replace) and mark how many of its tracks the
+    // queue has consumed (high-water). Also seed `queue` synchronously so callers
+    // that read it right after (e.g. playTrack) don't race the liveQuery.
+    await playQueueSet(trackIds, { contextSetId: sessionId });
+    consumedSetCount = trackIds.length;
     set({
       activeSessionId: sessionId,
-      queue: initialQueue,
+      queue: await getTracksByIds(trackIds),
       currentIndex: -1,
       wantPlay: false,
       displayMode: session?.displayMode ?? "video",
@@ -133,21 +168,20 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     });
     await saveSettings({ lastSessionId: sessionId });
 
-    // Stream generation progress into state as it lands.
-    queueSub = liveQuery(async () => {
-      const s = await getSession(sessionId);
-      if (!s) return [] as Track[];
-      return getTracksByIds(s.trackIds);
-    }).subscribe({
-      next: (queue) => {
-        set({ queue });
-        void afterQueueUpdate(set, get);
+    // Watch the active 歌单: append its newly-added tracks (DJ refill / uploads)
+    // onto the queue, by high-water mark so user-removed tracks don't come back.
+    setSub = liveQuery(() => getSession(sessionId)).subscribe({
+      next: (s) => {
+        if (!s || s.trackIds.length <= consumedSetCount) return;
+        const tail = s.trackIds.slice(consumedSetCount);
+        consumedSetCount = s.trackIds.length;
+        void playQueueAppend(tail);
       },
-      error: (err) => log.error("player", "queue subscription error", err),
+      error: (err) => log.error("player", "set subscription error", err),
     });
 
     // Seed an empty DJ set with a first batch.
-    if (session?.config.autoExtend && session.trackIds.length === 0) void get().draftNow();
+    if (session?.config.autoExtend && trackIds.length === 0) void get().draftNow();
   },
 
   async play() {
@@ -262,6 +296,23 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     } finally {
       set({ isUploading: false });
     }
+  },
+
+  async ingestDroppedMedia(files, newSetName) {
+    if (files.length === 0) return { createdSet: false };
+    let createdSet = false;
+    if (!get().activeSessionId) {
+      const session = await createSession({
+        name: newSetName,
+        seedPrompt: "",
+        config: { autoExtend: false },
+        displayMode: "video",
+      });
+      await get().setActiveSession(session.id);
+      createdSet = true;
+    }
+    await get().addUploads(files);
+    return { createdSet };
   },
 
   async draftNow() {

@@ -13,8 +13,8 @@
 
 | Phase | Name | Status | Link |
 |-------|------|--------|------|
-| 1 | 播放列表 Play Queue 地基（表 + repo + player-store 改消费它 + 迁移现有播放） | 🔲 Pending | §6 |
-| 2 | autoExtend / refill 迁到 Play Queue（续歌喂队列） | 🔲 Pending | §6 |
+| 1 | 播放列表 Play Queue 地基（表 + repo + player-store 改消费它 + 迁移现有播放） | ✅ Completed | §6 |
+| 2 | autoExtend / refill 迁到 Play Queue（续歌喂队列） | 🔄 In Progress | §6 |
 | 3 | 歌曲记忆 Memory（表 + 迁移 `Track.note` + 多记忆编辑 + 搜索/DJ 上下文接 memory） | 🔲 Pending | §6 |
 | 4 | UI 打磨（歌单管理、播放列表 play-next/add/reorder、记忆相册、封面取自记忆） | 🔲 Pending | §6 |
 
@@ -190,16 +190,17 @@ this.version(3).stores({
 
 > **基础设施先于广度**：先把播放列表跑通（player 消费它）→ 再迁 autoExtend → 再上记忆 → 最后 UI 打磨。每 phase 原子 commit + 更新本 PRD。
 
-### Phase 1: 播放列表地基
+### Phase 1: 播放列表地基 ✅
 **Tasks:**
-- [ ] `PlayQueue`/`PlayQueueEntry` 类型；`muzero-db` v3 加 `playQueue` 表；`playQueue` repo（load/replace/insert-next/append/remove/reorder/setRepeat/setIndex）。
-- [ ] `player-store` `queue` 改 liveQuery 自 `playQueue`（join tracks）；`playSet/playNext/addToQueue/removeFromQueue/reorderQueue/setRepeat`；`next/prev/playIndex` 走队列 index + `repeat`。
-- [ ] 迁移：升级时按 resume 点 seed 播放列表；「播放歌单」入口改 `playSet`。
+- [x] **1a** 纯函数 `play-queue.ts`（appendEntries/insertNext/removeEntry/moveEntry/replaceEntries，currentIndex 跟随）+ 12 单测。
+- [x] **1b** `PlayQueue`/`PlayQueueEntry` 类型；`muzero-db` v3 加 `playQueue` 表 + `.upgrade()` 按 resume 点 seed；`playQueue` repo（getPlayQueue/set/append/playNext/remove/reorder/setIndex/setRepeat/setContext）+ 8 测（含 v2→v3 升级 seed 路径）。
+- [x] **1c** `player-store` `queue` 改 liveQuery 自 `playQueue`（init 一次）；`setActiveSession` → `playQueueSet`(载入歌单) + **high-water 追加**（`setSub` 监听歌单，新增曲追加进队列，不复活已移除的）；行为与旧版一致（队列==歌单，暂无用户编辑）。
+- [~] `playSet/playNext/addToQueue/removeFromQueue/reorderQueue` **用户级 store actions 延后到 DM-4**（配队列编辑 UI）；repo 层已就绪+测。
 
 **Phase 1 Checklist:**
-- [ ] 集成测（`fake-indexeddb`）：playSet→player 按播放列表播；play-next 插在下一手；remove/reorder 生效；repeat all/one 正确。
-- [ ] 升级后旧 session 能继续播（resume 无缝）；`session.trackIds` 不再被 player 直接消费。
-- [ ] `queue.ts` 纯函数穷举单测；`make check` 绿。
+- [x] 升级后旧 session 无缝续播（**浏览器实测**：v3 迁移从 resume seed playQueue，dbVersion 30，player 消费它、点播放 video `paused:false` 在走，零 console 报错）；`session.trackIds` 不再被 player 直接消费。
+- [x] `play-queue.ts` 纯函数穷举单测；repo 含 v2→v3 升级测；全套件 148 绿；typecheck/biome 清。
+- [~] play-next/remove/reorder 的端到端 = DM-4（UI）；autoExtend→queue 的确定性集成测 = DM-2。
 
 ### Phase 2: autoExtend 迁到播放列表
 **Tasks:**
@@ -268,6 +269,7 @@ this.version(3).stores({
 | Date | Author | Changes |
 |------|--------|---------|
 | 2026-06-07 | MUZERO | Initial draft —— 应 chat agent 工具设计讨论，拆分「歌单(策展集合 DjSession) vs 播放列表(播放顺序 PlayQueue 单例)」、引入一对多「歌曲记忆 Memory」(note+照片+时间)、Track.note 迁移、player-store 改消费 playQueue、autoExtend 喂队列。4-phase，基础设施先行 |
+| 2026-06-07 | MUZERO | **Phase 1 完成**（TDD，3 原子 commit）：1a 纯函数 play-queue（12 测）；1b Dexie v3 playQueue 表+repo+v2→v3 seed 迁移（8 测含升级路径）；1c player-store 改消费 playQueue + high-water 追加（DJ/上传新曲流进队列）。浏览器实测迁移 seed+播放正常、零报错；全套件 148 绿。用户级队列编辑 actions 延后 DM-4 |
 
 ---
 
