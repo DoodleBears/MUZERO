@@ -33,6 +33,8 @@ export interface Track {
   blobId?: string;
   /** Optional cover image (memory photo / artwork) — FK into `mediaBlobs`. */
   coverBlobId?: string;
+  /** Non-destructive square crop for the cover, in the original image's pixels. */
+  coverCrop?: CropRect;
   error?: string;
   createdAt: number;
   generatedAt?: number;
@@ -43,15 +45,59 @@ export interface Track {
   note?: string;
 }
 
-/** Audio, video, or cover-image bytes, kept out of the hot `tracks` table. */
+/**
+ * Audio, video, or image bytes, kept out of the hot `tracks` table.
+ *  - `media`   — the audio/video itself
+ *  - `cover`   — a single cover image per track
+ *  - `background` — per-track slideshow background images (many per track)
+ *  - `gallery` — global slideshow images, stored under the sentinel
+ *    `trackId === GLOBAL_GALLERY_ID` (not bound to any track)
+ * New roles are additive: existing rows keep their role, so no schema bump.
+ */
 export interface MediaBlob {
   id: string;
   trackId: string;
-  /** What the bytes are, so we don't confuse a cover with the media. */
-  role: "media" | "cover";
+  role: "media" | "cover" | "background" | "gallery";
   mime: string;
   bytes: number;
   blob: Blob;
+}
+
+/**
+ * 播放列表 Play Queue — the actual playback order the player consumes, DECOUPLED
+ * from any 歌单(Set/`DjSession`). You load a set's tracks into it, push tracks
+ * ("play next" / "add to queue"), remove, reorder; it loops. One global singleton.
+ * Entries carry their own id so the same track can appear more than once and
+ * reorder has stable keys.
+ */
+export interface PlayQueueEntry {
+  id: string; // newId("pqe")
+  trackId: string;
+}
+
+export interface PlayQueue {
+  id: "main"; // singleton
+  entries: PlayQueueEntry[];
+  currentIndex: number;
+  repeat: "off" | "one" | "all";
+  /** Which 歌单 we're "playing from" — drives autoExtend continuation + UI. */
+  contextSetId?: string;
+  updatedAt: number;
+}
+
+/** Where the Now-Playing ambient background pulls its image(s) from. */
+export type BackgroundMode = "cover" | "slideshow";
+
+/**
+ * A square crop region in the original image's pixels. Stored non-destructively
+ * (Poweramp-style): the full image stays in `mediaBlobs`; this only records what
+ * to show, and a setting decides whether covers render cropped or full.
+ */
+export interface CropRect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
 }
 
 /** How a set renders the "stage" while playing. */
@@ -117,6 +163,16 @@ export interface AppSettings {
   musicCloudModel?: string;
   // UI
   locale: "en" | "zh" | "ja" | "ko";
+  /** Now-Playing ambient background source. Defaults to "cover". */
+  backgroundMode?: BackgroundMode;
+  /** Auto-hide the header + dock on Now Playing after idle (immersive). Default true. */
+  immersiveIdle?: boolean;
+  /** Render covers using their stored crop (vs the full image). Default true. */
+  coverCropped?: boolean;
+  /** Now-Playing background blur radius in px. Default 40. */
+  backgroundBlur?: number;
+  /** Now-Playing background dim/mask opacity, 0–100. Default 70. */
+  backgroundMaskOpacity?: number;
   /** Global color scheme. Mirrors localStorage `muzero-theme`; defaults to system. */
   theme?: "light" | "dark" | "system";
   /** Primary/accent color (hex) for light mode. Mirrors localStorage `muzero-primary-light`. */
@@ -136,4 +192,9 @@ export const DEFAULT_SETTINGS: AppSettings = {
   musicCloudPreset: "mureka",
   locale: "en",
   theme: "system",
+  backgroundMode: "cover",
+  immersiveIdle: true,
+  coverCropped: true,
+  backgroundBlur: 40,
+  backgroundMaskOpacity: 70,
 };

@@ -1,13 +1,25 @@
 import type { TrackBrief } from "@/dj/dj-brief-schema";
 import { newId } from "@/lib/id";
+import {
+  appendEntries,
+  insertNext,
+  moveEntry,
+  type PlayQueueState,
+  removeEntry,
+  replaceEntries,
+} from "@/player/play-queue";
+import { clampIndex } from "@/player/queue";
 import { db as defaultDb, type MuzeroDB } from "./muzero-db";
 import {
   type AppSettings,
+  type CropRect,
   DEFAULT_DJ_CONFIG,
   DEFAULT_SETTINGS,
   type DjConfig,
   type DjSession,
   type MediaBlob,
+  type PlayQueue,
+  type PlayQueueEntry,
   type SetDisplayMode,
   type Track,
   type TrackKind,
@@ -292,9 +304,13 @@ export async function setTrackNote(
   await db.tracks.update(id, { note: note.trim() || undefined });
 }
 
-/** Attach (or replace) a cover image for a track. */
+/**
+ * Attach (or replace) a cover image for a track. The full image is stored; an
+ * optional `crop` records the square region to show (non-destructive). Passing
+ * no crop clears any previous one.
+ */
 export async function setTrackCover(
-  input: { trackId: string; blob: Blob; mime: string },
+  input: { trackId: string; blob: Blob; mime: string; crop?: CropRect },
   db: MuzeroDB = defaultDb,
 ): Promise<void> {
   await db.transaction("rw", db.tracks, db.mediaBlobs, async () => {
@@ -310,8 +326,78 @@ export async function setTrackCover(
       blob: input.blob,
     };
     await db.mediaBlobs.put(cover);
-    await db.tracks.update(input.trackId, { coverBlobId: cover.id });
+    await db.tracks.update(input.trackId, { coverBlobId: cover.id, coverCrop: input.crop });
   });
+}
+
+/** Update just the cover crop (re-crop without re-uploading). Undefined clears it. */
+export async function setTrackCoverCrop(
+  id: string,
+  crop: CropRect | undefined,
+  db: MuzeroDB = defaultDb,
+): Promise<void> {
+  await db.tracks.update(id, { coverCrop: crop });
+}
+
+// -------------------------------------------------------------- backgrounds ----
+
+/** Sentinel `trackId` for global gallery images (not bound to any track). */
+export const GLOBAL_GALLERY_ID = "global";
+
+/** Append a slideshow background image to a track (many allowed per track). */
+export async function addTrackBackground(
+  input: { trackId: string; blob: Blob; mime: string },
+  db: MuzeroDB = defaultDb,
+): Promise<MediaBlob> {
+  const bg: MediaBlob = {
+    id: newId("blb"),
+    trackId: input.trackId,
+    role: "background",
+    mime: input.mime,
+    bytes: input.blob.size,
+    blob: input.blob,
+  };
+  await db.mediaBlobs.put(bg);
+  return bg;
+}
+
+/** A track's bound slideshow backgrounds, oldest first. */
+export function listTrackBackgrounds(
+  trackId: string,
+  db: MuzeroDB = defaultDb,
+): Promise<MediaBlob[]> {
+  return db.mediaBlobs
+    .where("trackId")
+    .equals(trackId)
+    .filter((b) => b.role === "background")
+    .toArray();
+}
+
+/** Add an image to the global slideshow gallery. */
+export async function addGalleryImage(
+  input: { blob: Blob; mime: string },
+  db: MuzeroDB = defaultDb,
+): Promise<MediaBlob> {
+  const img: MediaBlob = {
+    id: newId("blb"),
+    trackId: GLOBAL_GALLERY_ID,
+    role: "gallery",
+    mime: input.mime,
+    bytes: input.blob.size,
+    blob: input.blob,
+  };
+  await db.mediaBlobs.put(img);
+  return img;
+}
+
+/** All global gallery images. */
+export function listGalleryImages(db: MuzeroDB = defaultDb): Promise<MediaBlob[]> {
+  return db.mediaBlobs.where("trackId").equals(GLOBAL_GALLERY_ID).toArray();
+}
+
+/** Delete a single background or gallery image blob by id. */
+export async function deleteImageBlob(id: string, db: MuzeroDB = defaultDb): Promise<void> {
+  await db.mediaBlobs.delete(id);
 }
 
 /** Distinct tags across all tracks, with usage counts (desc). */
@@ -342,4 +428,123 @@ export async function deleteTrack(id: string, db: MuzeroDB = defaultDb): Promise
       await db.sessions.put(session);
     }
   });
+}
+
+// -------------------------------------------------------------- play queue ----
+
+/**
+ * 播放列表(Play Queue) — the singleton ordered list the player consumes, decoupled
+ * from 歌单(Set). These wrap the pure ops in `@/player/play-queue` (load → apply →
+ * persist). `playQueueSet` loads a set into the queue; the rest push / edit it.
+ */
+
+const PLAY_QUEUE_ID = "main" as const;
+
+export async function getPlayQueue(db: MuzeroDB = defaultDb): Promise<PlayQueue> {
+  const row = await db.playQueue.get(PLAY_QUEUE_ID);
+  return (
+    row ?? {
+      id: PLAY_QUEUE_ID,
+      entries: [],
+      currentIndex: -1,
+      repeat: "off",
+      updatedAt: Date.now(),
+    }
+  );
+}
+
+function entriesFor(trackIds: string[]): PlayQueueEntry[] {
+  return trackIds.map((trackId) => ({ id: newId("pqe"), trackId }));
+}
+
+async function writePlayQueue(pq: PlayQueue, db: MuzeroDB): Promise<PlayQueue> {
+  const updated: PlayQueue = { ...pq, updatedAt: Date.now() };
+  await db.playQueue.put(updated);
+  return updated;
+}
+
+/** Apply a pure entries/index transform to the persisted queue. */
+async function mutatePlayQueue(
+  fn: (state: PlayQueueState) => PlayQueueState,
+  db: MuzeroDB,
+): Promise<PlayQueue> {
+  const pq = await getPlayQueue(db);
+  const next = fn({ entries: pq.entries, currentIndex: pq.currentIndex });
+  return writePlayQueue({ ...pq, entries: next.entries, currentIndex: next.currentIndex }, db);
+}
+
+/** Load a set's tracks into the queue (replace), optionally pinning index + context. */
+export async function playQueueSet(
+  trackIds: string[],
+  opts: { currentIndex?: number; contextSetId?: string } = {},
+  db: MuzeroDB = defaultDb,
+): Promise<PlayQueue> {
+  const pq = await getPlayQueue(db);
+  const next = replaceEntries(
+    entriesFor(trackIds),
+    opts.currentIndex ?? (trackIds.length ? 0 : -1),
+  );
+  return writePlayQueue(
+    {
+      ...pq,
+      entries: next.entries,
+      currentIndex: next.currentIndex,
+      contextSetId: opts.contextSetId,
+    },
+    db,
+  );
+}
+
+/** Append tracks to the end of the queue. */
+export function playQueueAppend(trackIds: string[], db: MuzeroDB = defaultDb): Promise<PlayQueue> {
+  return mutatePlayQueue((s) => appendEntries(s, entriesFor(trackIds)), db);
+}
+
+/** Insert tracks right after the current one ("play next"). */
+export function playQueuePlayNext(
+  trackIds: string[],
+  db: MuzeroDB = defaultDb,
+): Promise<PlayQueue> {
+  return mutatePlayQueue((s) => insertNext(s, entriesFor(trackIds)), db);
+}
+
+/** Remove a queue entry by its entry id. */
+export function playQueueRemove(entryId: string, db: MuzeroDB = defaultDb): Promise<PlayQueue> {
+  return mutatePlayQueue((s) => removeEntry(s, entryId), db);
+}
+
+/** Move a queue entry from one position to another. */
+export function playQueueReorder(
+  from: number,
+  to: number,
+  db: MuzeroDB = defaultDb,
+): Promise<PlayQueue> {
+  return mutatePlayQueue((s) => moveEntry(s, from, to), db);
+}
+
+/** Set the current play position (clamped). */
+export async function playQueueSetIndex(
+  index: number,
+  db: MuzeroDB = defaultDb,
+): Promise<PlayQueue> {
+  const pq = await getPlayQueue(db);
+  return writePlayQueue({ ...pq, currentIndex: clampIndex(pq.entries.length, index) }, db);
+}
+
+/** Set the loop mode. */
+export async function playQueueSetRepeat(
+  repeat: PlayQueue["repeat"],
+  db: MuzeroDB = defaultDb,
+): Promise<PlayQueue> {
+  const pq = await getPlayQueue(db);
+  return writePlayQueue({ ...pq, repeat }, db);
+}
+
+/** Set which 歌单 the queue is "playing from" (drives autoExtend continuation). */
+export async function playQueueSetContext(
+  contextSetId: string | undefined,
+  db: MuzeroDB = defaultDb,
+): Promise<PlayQueue> {
+  const pq = await getPlayQueue(db);
+  return writePlayQueue({ ...pq, contextSetId }, db);
 }

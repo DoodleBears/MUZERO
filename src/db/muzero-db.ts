@@ -1,5 +1,6 @@
 import Dexie, { type EntityTable } from "dexie";
-import type { AppSettings, DjSession, MediaBlob, Track } from "./types";
+import { newId } from "@/lib/id";
+import type { AppSettings, DjSession, MediaBlob, PlayQueue, PlayQueueEntry, Track } from "./types";
 
 /**
  * MUZERO's on-device store. Everything lives here — tracks, media blobs (audio /
@@ -11,6 +12,7 @@ export class MuzeroDB extends Dexie {
   mediaBlobs!: EntityTable<MediaBlob, "id">;
   sessions!: EntityTable<DjSession, "id">;
   settings!: EntityTable<AppSettings, "id">;
+  playQueue!: EntityTable<PlayQueue, "id">;
 
   constructor(name = "muzero-db") {
     super(name);
@@ -54,6 +56,39 @@ export class MuzeroDB extends Dexie {
             s.displayMode ??= "video";
             if (s.config) s.config.autoExtend ??= true;
           });
+      });
+
+    // v3 — split 播放列表(Play Queue) from 歌单(Set). New `playQueue` singleton the
+    // player consumes; seed it from the persisted resume point so playback
+    // continues seamlessly after the decoupling. (Memory table arrives in a later
+    // version.) Only the new table is declared — Dexie inherits the rest.
+    this.version(3)
+      .stores({ playQueue: "id" })
+      .upgrade(async (tx) => {
+        const settings = (await tx.table("settings").get("app")) as
+          | Partial<AppSettings>
+          | undefined;
+        let entries: PlayQueueEntry[] = [];
+        let currentIndex = -1;
+        let contextSetId: string | undefined;
+        if (settings?.lastSessionId) {
+          const session = (await tx.table("sessions").get(settings.lastSessionId)) as
+            | DjSession
+            | undefined;
+          if (session && session.trackIds.length > 0) {
+            entries = session.trackIds.map((trackId) => ({ id: newId("pqe"), trackId }));
+            currentIndex = Math.min(Math.max(0, settings.lastTrackIndex ?? 0), entries.length - 1);
+            contextSetId = session.id;
+          }
+        }
+        await tx.table("playQueue").put({
+          id: "main",
+          entries,
+          currentIndex,
+          repeat: "off",
+          contextSetId,
+          updatedAt: Date.now(),
+        } satisfies PlayQueue);
       });
   }
 }
