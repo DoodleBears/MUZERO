@@ -228,33 +228,41 @@ interface ChatUiState {
 - **Transport**（[`dj-chat-agent.ts`](../../../src/chat/dj-chat-agent.ts)）：自定义 `ChatTransport`，`sendMessages()` → `validateUIMessages` + `convertToModelMessages` → `agent.stream({prompt, abortSignal})` → `result.toUIMessageStream({messageMetadata})`（从 `finish`/`finish-step` 取 usage 填 `turnTelemetry`）。agent 每次 send **懒解析**（`getAgent()`），settings 变了重建 agent、transport 不变。
 - **Agent**：`new ToolLoopAgent({ model: await resolveDjModel(settings), tools, stopWhen: stepCountIs(12), instructions: DJ_CHAT_SYSTEM_PROMPT, temperature, maxOutputTokens })`。
 
-### 4.2 工具契约（two-tier 命名，仿 ClipCombo）
+### 4.2 工具契约（two-tier 命名，仿 ClipCombo；落在[数据模型 PRD](../20260607-muzero-set-playqueue-memory-data-model-prd/20260607-muzero-set-playqueue-memory-data-model-prd.md) 的歌单/播放列表/记忆概念上）
 
-| Chat-facing（snake_case，domain 前缀） | Runtime canonical（dotted，product root） | 读/写 | 落点 |
+> **前置依赖**：本工具集建在「歌单 Set / 播放列表 Play Queue / 歌曲 Track / 记忆 Memory」四概念上 → **数据模型 PRD 先落地**。审批策略 = **成本驱动**（只有花钱的 `dj_generate_tracks` 必审批；改歌单/队列/记忆都免费可撤 → 不审批）。**不含 playback transport**（播/停/切由用户手动；agent 只管歌单/队列内容 + 切换 + play-next）。
+
+| Chat-facing | Runtime canonical | 读/写 | 落点 |
 |---|---|---|---|
-| `library_search_tracks` | `muzero.library.search_tracks` | 读 | [`track-search.ts`](../../../src/lib/track-search.ts) `searchTracks/matchesQuery` over `listAllTracks` |
+| `library_search_tracks` | `muzero.library.search_tracks` | 读 | [`track-search.ts`](../../../src/lib/track-search.ts)（搜 tags + 各曲 memory.note）over `listAllTracks` |
 | `library_list_tags` | `muzero.library.list_tags` | 读 | `getAllTags` |
-| `session_list` / `session_get` | `muzero.session.list` / `.get` | 读 | `listSessions` / `getSession` |
-| `session_create` | `muzero.session.create` | **写** | `createSession`（带 seed/config） |
-| `set_curate` | `muzero.set.curate` | **写** | `appendTrackIds` / `removeTrackFromSession`（加/删/重排） |
-| `track_annotate` | `muzero.track.annotate` | **写** | `setTrackTags/Note/Cover`；**now-playing 感知**：默认作用于「正在播放的 track」，让用户**听歌时对话加 tag/note**（"给这首加个 #雨天、记一句…"）。生成时也自动附一条 Note（见 musicgen PRD Q5）|
-| `dj_propose_briefs` | `muzero.dj.propose_briefs` | 读（产出待确认）| 返回 `TrackBrief[]` + `describeBrief` chips，等用户确认 |
-| `dj_generate_tracks` | `muzero.dj.generate_tracks` | **写** | 校验 `trackBriefSchema` → `createPendingTrack` + `appendTrackIds`（物化由 store `pump` 自动）|
-| `suggest_next_prompts` | （UI-only） | 读 | 非 mutating、无审批、返回 `{accepted,count}`（空态/续问建议）|
+| `now_playing_get` | `muzero.player.now_playing` | 读 | player-store：当前曲 + 队列摘要 + 活跃歌单（**也每轮注入 system**，见下）|
+| `set_list` / `set_get` | `muzero.set.list` / `.get` | 读 | `listSessions` / `getSession`（歌单=`DjSession`）|
+| `set_create` | `muzero.set.create` | 写·免费 | `createSession`（seed/config）|
+| `set_update` | `muzero.set.update` | 写·免费 | 改名/config；歌单成员加删重排（`appendTrackIds`/`removeTrackFromSession`，union op）|
+| `set_delete` | `muzero.set.delete` | 写·免费 | 删歌单 |
+| `set_switch` | `muzero.set.switch` | 写·免费 | `playSet(setId)`：把歌单灌进播放列表 |
+| `queue_add` | `muzero.queue.add` | 写·免费 | `playNext` / `addToQueue`（曲或整张歌单加入播放列表，含「下一手」）|
+| `queue_edit` | `muzero.queue.edit` | 写·免费 | `removeFromQueue` / `reorderQueue` / `setRepeat`（union op）|
+| `add_memory` | `muzero.memory.add` | 写·免费 | `addMemory(trackId,{note,photo?})`；**now-playing 感知**：默认作用于「正在播放的曲」，让你**听歌时对话加记忆**（"给这首记一句『写代码神器』、加 #雨天"）。一曲多条（见数据模型 PRD）|
+| `dj_propose_briefs` | `muzero.dj.propose_briefs` | 读（产出待确认）| 借对话上下文起草 `TrackBrief[]` + `describeBrief` chips，**等确认**（C 方案）|
+| `dj_generate_tracks` | `muzero.dj.generate_tracks` | **写·花钱 ✅审批** | 校验 `trackBriefSchema` → `createPendingTrack` + 写当前歌单 + **`playNext` 续在下一手**；物化由 store `pump` 自动 |
+| `suggest_next_prompts` | （UI-only） | 读 | 非 mutating、无审批、返回 `{accepted,count}` |
 
-**约定（硬性，抄 ClipCombo）**：
-- **domain-first 命名**；每个 description 写清名词边界（"搜索曲库 track，不含 session 元数据"），加测试在用错 domain 名词时失败。
-- **读不审批、写 `needsApproval:true`**；所有写走现有仓库 mutation（人类同款路径）。
-- **写工具统一返回 `AgentWriteResult`**：`{ status: "applied"|"preview"; commandId; summary; diff; warnings: string[] }`（审批后 `applied`，仅 `dryRun` 时 `preview`）。
-- **Zod 校验 + 越界 clamp 到合法区间**（`durationSec∈[10,240]`、`bpm∈[40,220]`），**越界报错而非静默截断**；DJ engine 已对 brief 做 `safeParse` 丢非法项，工具层同样不信任模型。
-- **能力 gate（与 [musicgen PRD §4.5](../20260607-muzero-cloud-musicgen-provider-selection-prd/20260607-muzero-cloud-musicgen-provider-selection-prd.md) 联动）**：`dj_generate_tracks` 是否能出器乐/续写等，取决于当前 music provider preset 的能力位；不支持的优雅降级（提示切 provider）。**不在 tool 里 `if(vendor===)`**。
-- **单一 fetch 核心**：工具内任何 HTTP 走 `getAppFetch()`，license/成本 gate 只活在一个函数里。
+**约定（硬性）**：
+- **C 方案 propose→确认→generate**：`dj_propose_briefs` 出提案 → 用户确认 → `dj_generate_tracks` 花钱生成。提供**「无审批模式」开关**（auto-accept，不用每次点 suggest，自动 accept）——即 HITL 的 `auto`（§4.3）。
+- **审批 = 成本驱动**：只有 `dj_generate_tracks`（Mureka $0.045/首）`needsApproval:true`；`set_*`/`queue_*`/`add_memory` 免费可撤 → 不审批，体验顺。
+- **now-playing 每轮注入 system**：当前曲（title/brief/tags + 该曲已有记忆摘要）+ 播放列表 upcoming 摘要 + 活跃歌单 → 注入 system，让「这首」「下一首」有所指；`now_playing_get` 作补充读工具。
+- **domain-first 命名** + 每个 description 写清名词边界（"歌单 Set ≠ 播放列表 Queue ≠ 记忆 Memory"），测试在用错 domain 名词时失败。
+- **写工具统一返回 `AgentWriteResult`** `{status,commandId,summary,diff,warnings}`；走现有仓库 mutation（人类同款、可撤）。
+- **Zod 校验 + 越界报错而非静默截断**；DJ engine 已 `safeParse` 丢非法 brief，工具层同样不信任模型。
+- **能力 gate**（接 [musicgen §4.5](../20260607-muzero-cloud-musicgen-provider-selection-prd/20260607-muzero-cloud-musicgen-provider-selection-prd.md)）：`dj_generate_tracks` 能否器乐/续写看当前 music provider 能力位，**不在 tool 里 `if(vendor===)`**；HTTP 走 `getAppFetch()`。
 
 ### 4.3 HITL 审批
 
-- `ask`（默认）/ `auto` 是**人类设置**（composer 工具栏 `ShieldQuestion`/`ShieldCheck`，存 chat 偏好）。模型永远不选审批模式。
-- `ask`：SDK 弹 `approval-requested` → 用户 Accept → 执行器以「审批已授予」提交（idempotent，一个 approvalId 只批一次）。Reject = 负向审批响应，对话继续、零写入。
-- pending 审批**暂停队列派发**（审批权威）。
+- `ask`（默认）/ `auto`（**无审批模式**，用户主动开）是**人类设置**（composer 工具栏 `ShieldQuestion`/`ShieldCheck`，存 chat 偏好）。模型永远不选审批模式。
+- 因审批=成本驱动，`ask` 下**只有** `dj_generate_tracks` 会弹 `approval-requested`；`auto` 下自动 accept（连生成也不弹）。
+- `ask`：用户 Accept → 执行器以「审批已授予」提交（idempotent，一个 approvalId 只批一次）。Reject = 负向响应，对话继续、零写入。pending 审批**暂停队列派发**。
 
 ### 4.4 流式渲染
 
@@ -439,6 +447,7 @@ interface ChatUiState {
 
 | Document | Description |
 |----------|-------------|
+| **[数据模型 PRD（歌单/播放列表/记忆）](../20260607-muzero-set-playqueue-memory-data-model-prd/20260607-muzero-set-playqueue-memory-data-model-prd.md)** | **前置依赖**：本 PRD 的 `set_*`/`queue_*`/`add_memory` 工具落在它的概念上，建议先落地 |
 | [musicgen provider PRD](../20260607-muzero-cloud-musicgen-provider-selection-prd/20260607-muzero-cloud-musicgen-provider-selection-prd.md) | §4.5 已定 agent tool 的能力 gate / provider-agnostic 意图，本 PRD 承接 |
 | ClipCombo `agent-multi-session-panel-prd` | Runtime Actor、Dexie 持久态/Zustand 实时态、并发 session |
 | ClipCombo `subtitle-chat-panel-vercel-ai-prd` | 浏览器直连 provider、HITL、自定义 ChatTransport |
@@ -467,6 +476,7 @@ interface ChatUiState {
 | 2026-06-07 | MUZERO | 定 Open Q2：折叠态（bar/fab）DJ 回复 = **顶部 Notification toast**（§5.2.1，仿 anysoul `MessageToast`/`NotificationStack` 的 `motion/react` 模式：spring 下滑、一行预览、自动消失、点击展开到 dock）。加 `chat-reply-notification.tsx` 到结构 + Phase 2 |
 | 2026-06-07 | MUZERO | 定 Open Q1 + Q3（best practice）：active session id → `AppSettings.lastChatSessionId?`（无 project 概念，免单独 chatPrefs 行）；模型 = 全局默认 + per-session combobox 覆盖（key 不进 session 行）。同步 §3.2/§3.3/§3.4/§6 |
 | 2026-06-07 | MUZERO | 收口 Q4/Q5：generate 工具与 autoExtend 都写同一队列、store pump 统一物化（不开第二循环）；接受 streamdown bundle 增量。`track_annotate` 加 **now-playing 感知**（听歌时对话加 tag/note，链 musicgen Q5 的生成自动 Note）。系统浏览器外链改为「要做」（`@tauri-apps/plugin-opener`）|
+| 2026-06-07 | MUZERO | **工具集对齐新数据模型**：§4.2 重写——`set_*`(歌单 CRUD+切换)/`queue_*`(加入播放列表/play-next/重排)/`add_memory`(一曲多记忆)/`now_playing_get`；**无 playback transport**；C 方案 propose→确认→generate + 无审批模式开关；**审批=成本驱动**(只 `dj_generate_tracks` 审批)；now-playing 每轮注入 system。**前置依赖**[数据模型 PRD](../20260607-muzero-set-playqueue-memory-data-model-prd/20260607-muzero-set-playqueue-memory-data-model-prd.md)先落地 |
 
 ---
 
