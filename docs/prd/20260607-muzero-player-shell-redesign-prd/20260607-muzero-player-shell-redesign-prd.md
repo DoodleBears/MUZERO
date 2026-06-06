@@ -14,7 +14,7 @@
 | 0 | 过渡基础设施（view-transition helper + reduced-motion + 选择器隔离） | ✅ Completed | [Phase 0 Checklist](#phase-0-checklist) |
 | 1 | PlayerDock 容器：3 行结构（信息+播放 / 进度 / 导航）合并 PlayerBar+DockNav | ✅ Completed | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | 导航行：扁平集成 nav row（取代 Magic UI 放大 Dock） | ✅ Completed | [Phase 2 Checklist](#phase-2-checklist) |
-| 3 | 页面切换 View Transition（tab → tab 丝滑过渡） | 🔲 Pending | [Phase 3 Checklist](#phase-3-checklist) |
+| 3 | 页面切换 View Transition（tab → tab 丝滑过渡） | ✅ Completed | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | 移动端：mini ↔ 全屏 Now Playing sheet（共享封面 + 完整 transport） | 🔲 Pending | [Phase 4 Checklist](#phase-4-checklist) |
 | 5 | 打磨：i18n / a11y / 安全区 / 文档对齐（含 CLAUDE.md #9 改写） | 🔲 Pending | [Phase 5 Checklist](#phase-5-checklist) |
 
@@ -396,14 +396,14 @@ export function startViewTransition(update: () => void): void
 **Goal:** tab→tab 丝滑过渡。
 
 **Tasks:**
-- [ ] `App.tsx` 的 `setTab` 包 `startViewTransition`。
-- [ ] `main` 套过渡容器；必要时给 page root 赋 `view-transition-name`。
-- [ ] 验证支持/不支持/reduced-motion 三态。
+- [x] 把 tab 切换 + 行1→Now Playing 包进 view transition——在 [`nav-row.tsx`](../../../src/components/nav/nav-row.tsx) 的 `onChange` 与 [`track-identity-row.tsx`](../../../src/components/player/track-identity-row.tsx) 的 `onOpen` 调用 `transitionState`。**避开正被他人并发编辑的 `App.tsx`**（不改 App）。
+- [x] TDD：新建 [`view-transition-react.ts`](../../../src/lib/view-transition-react.ts) `transitionState = startViewTransition(() => flushSync(update))`（flushSync 让原生 API 快照到更新后的 DOM）；[`view-transition-react.test.ts`](../../../src/lib/view-transition-react.test.ts) 2 例（mock flushSync，覆盖支持/不支持）。
+- [→] 未给 page root 赋 `view-transition-name`：默认 `::view-transition(root)` 已 cross-fade 整页；dock 持久化（命名以免随页 fade）作为可选 polish 留 Phase 5。
 
 #### Phase 3 Checklist
-- [ ] 支持环境：tab 切换 cross-fade 顺滑、无闪烁、无布局抖动。
-- [ ] 不支持 / reduced-motion：即时切换、零回归。
-- [ ] 播放不中断（切 tab 时 `<video>` 持续出声）。
+- [x] 支持环境：preview 实测 `document.startViewTransition` 存在（true），tab 切换走原生 VT、切页正常、无 console 警告/报错、无布局抖动。
+- [x] 不支持 / reduced-motion：`transitionState` 经 `startViewTransition` 同步执行 `flushSync(update)`，即时切换、零回归（Phase 0 + 本期单测覆盖三态）。
+- [x] 播放不中断：`transitionState` 只切 tab state，不触碰 `mediaEngine`/持久 `<video>`（切 tab 持续出声）。
 
 ### Phase 4: 移动端 mini ↔ 全屏 sheet
 

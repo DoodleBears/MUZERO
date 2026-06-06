@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { useTrackCoverUrl } from "@/hooks/use-media";
 import { trackSubtitle } from "@/lib/track-display";
+import { transitionState } from "@/lib/view-transition-react";
 import { usePlayerStore } from "@/stores/player-store";
 
 /**
@@ -25,7 +26,7 @@ export function TrackIdentityRow({ onOpen }: { onOpen?: () => void }) {
     <div className="flex items-center gap-3">
       <button
         type="button"
-        onClick={onOpen}
+        onClick={() => onOpen && transitionState(onOpen)}
         disabled={!current}
         aria-label={t("nav.now")}
         className="flex min-w-0 flex-1 items-center gap-3 rounded-2xl text-left outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-default"

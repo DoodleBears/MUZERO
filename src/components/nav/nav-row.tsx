@@ -6,6 +6,7 @@ import { SearchIcon } from "@/components/ui/search";
 import { SettingsIcon } from "@/components/ui/settings";
 import { SparklesIcon } from "@/components/ui/sparkles";
 import { cn } from "@/lib/utils";
+import { transitionState } from "@/lib/view-transition-react";
 
 // lucide-animated icons (animate on hover); inherit color via currentColor.
 type AnimatedIcon = ComponentType<{ size?: number; className?: string }>;
@@ -42,7 +43,7 @@ export function NavRow({ value, onChange }: { value: Tab; onChange: (tab: Tab) =
           <button
             key={id}
             type="button"
-            onClick={() => onChange(id)}
+            onClick={() => transitionState(() => onChange(id))}
             aria-label={label}
             aria-current={active ? "page" : undefined}
             title={label}
