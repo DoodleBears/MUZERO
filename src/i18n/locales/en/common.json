@@ -90,6 +90,10 @@
     "themeLight": "Light",
     "themeDark": "Dark",
     "themeSystem": "System",
+    "primaryColor": "Accent color",
+    "primaryColorLight": "Accent color (light mode)",
+    "primaryColorDark": "Accent color (dark mode)",
+    "resetColors": "Reset",
     "djTitle": "AI DJ (LLM)",
     "provider": "Provider",
     "model": "Model",
@@ -113,6 +117,8 @@
     "presetCustom": "Custom endpoint (BYOK)",
     "costHint": "≈ {{song}} per song · continuous ≈ {{hourly}}/hr (one song every ~3 min)",
     "costUnknown": "Cost depends on your provider's pricing.",
-    "getApiKey": "Get an API key"
+    "getApiKey": "Get an API key",
+    "apiDocs": "API docs",
+    "modelHint": "auto = latest model; or enter a specific version id."
   }
 }

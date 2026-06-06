@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { ColorPicker } from "@/components/ui/color-picker";
 import { Input } from "@/components/ui/input";
 import { saveSettings } from "@/db/repositories";
 import type { AppSettings, LlmProviderId } from "@/db/types";
@@ -16,6 +17,7 @@ import {
 } from "@/musicgen/presets";
 import { type MusicGenProviderId, resolveMusicGenProvider } from "@/musicgen/registry";
 import { usePlayerStore } from "@/stores/player-store";
+import { DEFAULT_PRIMARY, type PrimaryColors, persistPrimary } from "@/theme/primary";
 import { DEFAULT_THEME, persistTheme, type Theme, themes } from "@/theme/theme";
 
 /** Maps a preset id to its i18n option label (ids carry hyphens; keys don't). */
@@ -53,6 +55,11 @@ export function SettingsPage() {
     await saveSettings({ theme });
   }
 
+  async function changePrimary(next: PrimaryColors) {
+    persistPrimary(next);
+    await saveSettings({ primaryLight: next.light, primaryDark: next.dark });
+  }
+
   async function save() {
     await saveSettings(draft);
     await rebuildEngine();
@@ -65,6 +72,11 @@ export function SettingsPage() {
     const ok = (await provider.health?.()) ?? false;
     setHealth(ok ? "ok" : "down");
   }
+
+  const primary: PrimaryColors = {
+    light: settings.primaryLight ?? DEFAULT_PRIMARY.light,
+    dark: settings.primaryDark ?? DEFAULT_PRIMARY.dark,
+  };
 
   const cloudPreset = resolveCloudPreset(draft.musicCloudPreset);
   const costText =
@@ -108,6 +120,37 @@ export function SettingsPage() {
               ))}
             </select>
           </Field>
+          <div className="flex flex-col gap-2">
+            <span className="text-xs font-medium text-muted-foreground">
+              {t("settings.primaryColor")}
+            </span>
+            <div className="flex flex-wrap items-end gap-3">
+              <div className="flex flex-col gap-1.5">
+                <span className="text-xs text-muted-foreground">{t("settings.themeLight")}</span>
+                <ColorPicker
+                  label={t("settings.primaryColorLight")}
+                  value={primary.light}
+                  onChange={(hex) => void changePrimary({ ...primary, light: hex })}
+                />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <span className="text-xs text-muted-foreground">{t("settings.themeDark")}</span>
+                <ColorPicker
+                  label={t("settings.primaryColorDark")}
+                  value={primary.dark}
+                  onChange={(hex) => void changePrimary({ ...primary, dark: hex })}
+                />
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="ms-auto"
+                onClick={() => void changePrimary(DEFAULT_PRIMARY)}
+              >
+                {t("settings.resetColors")}
+              </Button>
+            </div>
+          </div>
         </CardContent>
       </Card>
 
@@ -213,14 +256,30 @@ export function SettingsPage() {
                   <ExternalLink className="size-3" />
                 </a>
               )}
-              <Field label={t("settings.modelOptional")}>
-                <Input
-                  value={draft.musicCloudModel ?? ""}
-                  onChange={(e) => patch({ musicCloudModel: e.target.value })}
-                  placeholder={cloudPreset.defaults.model ?? "provider-specific model id"}
-                />
-              </Field>
+              {cloudPreset.usesModel && (
+                <Field label={t("settings.modelOptional")}>
+                  <Input
+                    value={draft.musicCloudModel ?? ""}
+                    onChange={(e) => patch({ musicCloudModel: e.target.value })}
+                    placeholder={cloudPreset.defaults.model ?? "provider-specific model id"}
+                  />
+                </Field>
+              )}
+              {cloudPreset.usesModel && (
+                <p className="text-xs text-muted-foreground">{t("settings.modelHint")}</p>
+              )}
               <p className="text-xs text-muted-foreground">{costText}</p>
+              {cloudPreset.docsUrl && (
+                <a
+                  href={cloudPreset.docsUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex w-fit items-center gap-1 text-xs text-primary hover:underline"
+                >
+                  {t("settings.apiDocs")}
+                  <ExternalLink className="size-3" />
+                </a>
+              )}
               <div className="flex items-center gap-2">
                 <Button variant="outline" size="sm" onClick={() => void checkCloud()}>
                   {t("settings.testConnection")}

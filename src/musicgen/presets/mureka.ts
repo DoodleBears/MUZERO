@@ -10,11 +10,16 @@
  * V8/V9 ~$0.045/song — so this is an opt-in tier, not the default (ACE-Step is
  * cheaper at ~$0.012 with no prepay). Bearer auth.
  *
- * v1 scope: vocal songs via `/v1/song/generate` only. Instrumental on Mureka
- * (the separate BGM endpoint) is deferred — use ACE-Step `[inst]` for that, since
- * the shared flow uses one static create path. Mureka also returns up to 2-3
- * variants per call; we take the first. Variant-count (`n`) and the exact model
- * string are pending live-API verification (see PRD Open Questions).
+ * Schema confirmed against the official Skywork Mureka MCP (api.py): request is
+ * `{ lyrics, model:"auto", prompt }`; the query response is `{ status, choices:[{ url }] }`
+ * with status ∈ succeeded/failed/cancelled/timeouted/(else pending).
+ *
+ * v1 scope: vocal songs via `/v1/song/generate` only. Instrumental on Mureka has
+ * its OWN endpoint `POST /v1/instrumental/generate` ({ model, prompt }, no lyrics)
+ * + `GET /v1/instrumental/query/{id}` — deferred here (the shared flow uses one
+ * static create path); use ACE-Step `[inst]` for instrumental today. Mureka also
+ * returns up to 2-3 variants per call; we take the first. Variant-count (`n`) and
+ * exact V8/V9 model strings are pending live-API verification (auto = latest).
  */
 
 import type { TrackBrief } from "@/dj/dj-brief-schema";
@@ -94,6 +99,8 @@ export const murekaPreset: CloudPreset = {
   fixedEndpoint: true,
   estCostPerSongUsd: 0.045,
   apiKeyUrl: "https://platform.mureka.ai/apiKeys",
+  usesModel: true,
+  docsUrl: "https://platform.mureka.ai/docs/api/operations/post-v1-song-generate.html",
   defaults: {
     baseUrl: MUREKA_BASE_URL,
     createPath: "/v1/song/generate",

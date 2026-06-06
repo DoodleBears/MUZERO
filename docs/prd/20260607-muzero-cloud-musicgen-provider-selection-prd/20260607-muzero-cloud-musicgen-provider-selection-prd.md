@@ -202,6 +202,30 @@ interface CloudPreset {
 - 新增可识别错误：401/403（key 无效 → Settings 引导）、429（限流 → 退避；DJ 续歌降速）、配额耗尽。
 - **日志纪律（硬规则 #8）**：全程走 [`logger.ts`](../../../src/lib/logger.ts)；**绝不**打印 key、歌词全文、音频 bytes（隐私白名单：provider id / preset id / status / durationSec / 错误码）。
 
+### 4.5 Mureka API 全貌（官方 MCP 源码核实）与对 Agent tool-call 的影响
+
+> 依据：官方 [Skywork Mureka-MCP](https://github.com/SkyworkAI/Mureka-mcp) `mureka_mcp/api.py` 源码 + [platform.mureka.ai 文档](https://platform.mureka.ai/docs/api/operations/post-v1-song-generate.html)。这是真实请求体的权威来源，**印证了我们 `mureka.ts` 的映射**（`{lyrics,model,prompt}` → `{status,choices:[{url}]}`，状态 `succeeded/failed/cancelled/timeouted`）。
+
+**Mureka 端点 → 能力 → 未来 Agent tool 映射**：
+
+| Mureka 端点 | 请求体（核实） | 能力 | 未来 agent tool（provider-agnostic 意图）| 当前适配 |
+|---|---|---|---|---|
+| `POST /v1/song/generate` | `{lyrics, model:"auto", prompt}` | 带词整曲 | `generate_track`（写 brief）| ✅ 已接 |
+| `POST /v1/instrumental/generate` | `{model, prompt}`（**无 lyrics**）→ `/v1/instrumental/query/{id}` | 纯器乐/BGM | `generate_track`（`allowVocals=false`）| ⏸️ 延后（器乐今用 ACE-Step `[inst]`）|
+| `POST /v1/lyrics/generate` | `{prompt}` → `{lyrics,title}` | 仅出歌词 | `draft_lyrics`（喂回 brief）| ⏸️ DJ 自己写词，未来可调 |
+| `POST /v1/song/extend` | `{ ... }`（prepend/append）| 续写/延长 | `extend_track` | ⏸️ Mureka-only |
+| `POST /v1/soundtrack/generate` | `{prompt, image/video}` | 图/视频→配乐 | `score_media`（给上传 MV 配乐）| ⏸️ Mureka-only |
+| Stem / Region-edit / Remix（§7 杠杆）| — | 后期编辑 | `extract_stems` / `edit_region` / `remix_track` | ⏸️ Mureka-only |
+| `GET /v1/{song,instrumental}/query/{id}` | — | 轮询 | （内部，非 tool）| ✅ 已接 |
+
+**对 Agent tool-call 设计的硬性结论**（下一 phase「对话式助手」要遵守）：
+
+1. **Agent tool 仍 provider-agnostic**：和 DJ 一样，助手写 `TrackBrief` / 发 provider-agnostic 意图（`generate_track` / `extend_track` / `score_media`），由当前 preset 的 adapter 翻译——**禁止**在 tool 实现里 `if (vendor==="mureka")`（沿用硬规则 #5）。
+2. **能力按 provider gate**：不同 vendor 能做的事不同（ACE-Step：带词曲 + `[inst]` 器乐；Mureka：带词曲 + 器乐 + extend + soundtrack + stems + remix）。助手要能查询「当前 provider 支持哪些 tool」→ 建议给 `CloudPreset` 加 `supports: { instrumental, extend, soundtrack, stems, remix }` 能力位，agent 只暴露当前 provider 支持的 tool，不支持的优雅降级（如 `score_media` 仅 Mureka 可用；用户在 ACE-Step 下问就提示切换或回退）。
+3. **vendor-only 高级能力 = 单独 capability tool**：soundtrack / stems / region-edit / remix 是 Mureka 独有，不强行抽象成所有 provider 的通用接口；它们是「按能力位点亮」的可选 tool，对应 §7 的未来杠杆。
+4. **成本/确认**：每个 tool 调用都花钱（MCP 源码每个 tool 都带 "⚠️ COST WARNING"）——agent tool 必须在 UI 上对**有成本的写操作**做一次确认 + 显示预估 $（复用 `estCostPerSongUsd` 等成本元数据）。
+5. **本期只落地基**：本 PRD 不实现 agent tools（chat 助手是独立 phase），但已把「能力位 + provider-agnostic 意图 + 成本元数据」的地基对齐好。
+
 ---
 
 ## 5. Frontend Design
@@ -214,6 +238,10 @@ interface CloudPreset {
   - `Custom` → 暴露 url/createPath/statusPath/model 全量字段（即现有通用行为）。
 - **成本提示**：每个预设旁显示 ~$/首 与「续歌成本」，并在切到 Mureka 时提示 `autoExtend` 会产生明显费用（成本红线 < $0.05/首）。
 - **获取 key 直达**：API key 字段下一个「获取 API key ↗」链接，按预设 `apiKeyUrl` 直跳 vendor 的 key 页（ace-step→`fal.ai/dashboard/keys`、mureka→`platform.mureka.ai/apiKeys`；custom 无则不显示）。当前用 `<a target="_blank" rel="noreferrer">`（`make dev` 浏览器即用）；打包桌面端若要强制走系统浏览器需 Tauri opener 插件（见 Open Questions）。
+- **按 vendor 具体化（2026-06-07）**：
+  - **`model` 字段按 `CloudPreset.usesModel` 显隐**——ACE-Step 的 fal 端点 IS the model（无 `model` 参数）→ **隐藏 model 字段**；Mureka/custom 显示。
+  - Mureka model 占位 `auto` + 说明「auto = 最新模型（V9）；或填具体版本 id」（i18n `modelHint`）。
+  - **「API 文档 ↗」链接**（`CloudPreset.docsUrl`）：ace→fal ace-step api、mureka→`/v1/song/generate` 文档；custom 无。
 - **健康检查**：复用 `provider.health()` + TanStack Query 显示连通状态。
 - key 仅存 IndexedDB `settings` 行（硬规则 #2），不写日志/bundle/URL。
 
@@ -344,7 +372,8 @@ interface CloudPreset {
 | 1 | 接哪些 vendor？默认谁？ | Resolved | Mureka + ACE-Step + custom；**2026-06-07 默认改为 Mureka（质量优先）**，ACE-Step 作便宜/器乐档 |
 | 2 | 单首成本红线？ | Resolved | < $0.05/首；Mureka($0.045)/ACE-Step($0.012) 均达标，续歌可放养 |
 | 3 | fal.ai ACE-Step 实时计费确为 $0.0002/秒？ | Open | Phase 2 用 live 页 + 实测复核（曾见第三方 gist 报 25× 高价） |
-| 4 | Mureka 默认用 V8（benchmarked #2）还是 V9（更新、未上榜）？ | Open | Phase 3 实测对比 zh/ja/ko 质量再定；V9 在 API 各档均可用（Full Model Access），非申请制 |
+| 4 | Mureka 默认用哪个 model？ | Resolved（partial）| **官方 MCP 确认 `model:"auto"`=选最新（=V9）→ 默认 auto**（质量优先正好）；exact `V8`/`V9` API 字符串仍需 live key 实测，但 auto 安全且最优 |
+| 4b | Mureka 器乐/BGM 端点形状？ | Resolved | **官方 MCP 确认 `POST /v1/instrumental/generate {model,prompt}`(无 lyrics) → `/v1/instrumental/query/{id}` → `{status,choices:[{url}]}`**；本期仍用 ACE-Step `[inst]` 出器乐，Mureka 器乐路由作未来增强（§4.5）|
 | 5 | `Track.provider` 是否记录 preset 以保留 provenance？ | Open | 建议加可选 `providerPreset`，缺省安全 |
 | 6 | ACE-Step 实际 60–120s 延迟 / 采样率 / 立体声 / 最大时长？ | Open | Phase 2 实测补全（成本+歌词控制已确认） |
 | 7 | Mureka 一次返 2 变体：`n=1` / 落队第一首 / 都入队？ | Open | Phase 3 决定；续歌默认 `n=1`=$0.045/首，或保 2 都入队摊薄 |
@@ -366,6 +395,7 @@ interface CloudPreset {
 | 2026-06-07 | MUZERO | **Phase 4 完成**：Settings 预设下拉 + 条件 URL + 成本提示（`estCostPerSongUsd`/`continuousHourlyUsd` 通用字段，非 id 分支）+ 健康检查；i18n 4 语 ×6 key。`make check` 全绿（typecheck/lint 70/test 76）。**4 phase 代码全部完成** |
 | 2026-06-07 | MUZERO | **+ 获取 API key 直达按钮**：preset 加 `apiKeyUrl`（ace→fal.ai/dashboard/keys、mureka→platform.mureka.ai/apiKeys），Settings 渲染「获取 API key ↗」链接 + i18n ×4。浏览器 preview 三态验证通过、零报错 |
 | 2026-06-07 | MUZERO | **默认改为 Mureka（质量优先）**：`DEFAULT_SETTINGS.musicCloudPreset` ace-step→mureka，下拉 Mureka 排第一 + 标「推荐」，i18n ×4。ACE-Step 降为便宜/器乐档。单测锁定默认；浏览器清 IndexedDB 旧行后实机确认默认=mureka、链接/成本随之更新 |
+| 2026-06-07 | MUZERO | **API 核实 + Settings 具体化 + Agent 设计**：用官方 Mureka MCP 源码核实 schema（印证 `mureka.ts`），挖出器乐端点 `/v1/instrumental/generate`。preset 加 `usesModel`/`docsUrl`；Settings 隐藏 ACE-Step 的 model 字段、加 Mureka model 说明 + 「API 文档↗」链接（i18n ×4）。新增 §4.5「Agent tool-call 设计」（端点→provider-agnostic 能力映射、能力位 gate、成本确认）。浏览器三态验证、零报错；42 musicgen tests 绿 |
 
 ---
 

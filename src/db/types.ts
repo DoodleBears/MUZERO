@@ -110,7 +110,7 @@ export interface AppSettings {
   anthropicApiKey?: string;
   // Music generation (BYOK cloud API; "mock" needs no config)
   musicGenProvider: MusicGenProviderId;
-  /** Which cloud vendor preset drives the "cloud" provider. Defaults to ace-step. */
+  /** Which cloud vendor preset drives the "cloud" provider. Defaults to mureka. */
   musicCloudPreset?: CloudPresetId;
   musicCloudUrl?: string;
   musicCloudApiKey?: string;
@@ -119,6 +119,10 @@ export interface AppSettings {
   locale: "en" | "zh" | "ja" | "ko";
   /** Global color scheme. Mirrors localStorage `muzero-theme`; defaults to system. */
   theme?: "light" | "dark" | "system";
+  /** Primary/accent color (hex) for light mode. Mirrors localStorage `muzero-primary-light`. */
+  primaryLight?: string;
+  /** Primary/accent color (hex) for dark mode. Mirrors localStorage `muzero-primary-dark`. */
+  primaryDark?: string;
   /** Persisted resume point: last active session + index. */
   lastSessionId?: string;
   lastTrackIndex?: number;

@@ -40,6 +40,13 @@ export interface CloudPreset {
   estCostPerSongUsd?: number;
   /** Deep link to the vendor's API-key page, so Settings can offer a "Get key" button. */
   apiKeyUrl?: string;
+  /**
+   * Whether the vendor takes a `model` request param. fal's ACE-Step endpoint
+   * IS the model (no param) ⇒ false, so Settings hides the model field for it.
+   */
+  usesModel: boolean;
+  /** Deep link to the vendor's API docs (model values, fields), shown in Settings. */
+  docsUrl?: string;
   defaults: CloudPresetDefaults;
   mappers: CloudMappers;
 }
@@ -49,6 +56,7 @@ const customPreset: CloudPreset = {
   label: "Custom (BYOK endpoint)",
   authScheme: "bearer",
   fixedEndpoint: false,
+  usesModel: true,
   defaults: { baseUrl: "", createPath: "/music", statusPath: "/music/{id}" },
   mappers: { mapBriefToBody, parseCreate, parseStatus },
 };

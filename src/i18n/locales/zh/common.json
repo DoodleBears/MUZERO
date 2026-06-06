@@ -88,6 +88,10 @@
     "themeLight": "浅色",
     "themeDark": "深色",
     "themeSystem": "跟随系统",
+    "primaryColor": "主题色",
+    "primaryColorLight": "主题色（浅色模式）",
+    "primaryColorDark": "主题色（深色模式）",
+    "resetColors": "重置",
     "djTitle": "AI DJ（大语言模型）",
     "provider": "服务商",
     "model": "模型",
@@ -111,6 +115,8 @@
     "presetCustom": "自定义端点 (BYOK)",
     "costHint": "≈ 每首 {{song}} · 连续续歌 ≈ {{hourly}}/小时（约每 3 分钟一首）",
     "costUnknown": "费用取决于你所选服务商的定价。",
-    "getApiKey": "获取 API key"
+    "getApiKey": "获取 API key",
+    "apiDocs": "API 文档",
+    "modelHint": "auto = 最新模型；也可填具体版本 id。"
   }
 }

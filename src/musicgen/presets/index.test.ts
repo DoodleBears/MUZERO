@@ -57,3 +57,18 @@ describe("preset api-key links", () => {
     expect(resolveCloudPreset("custom").apiKeyUrl).toBeUndefined();
   });
 });
+
+describe("preset capability metadata (Settings concreteness)", () => {
+  it("flags whether the vendor takes a model param", () => {
+    // fal's ace-step endpoint IS the model — no model param, so Settings hides it.
+    expect(resolveCloudPreset("ace-step").usesModel).toBe(false);
+    expect(resolveCloudPreset("mureka").usesModel).toBe(true);
+    expect(resolveCloudPreset("custom").usesModel).toBe(true);
+  });
+
+  it("links priced presets to their API docs", () => {
+    expect(resolveCloudPreset("ace-step").docsUrl).toContain("fal.ai");
+    expect(resolveCloudPreset("mureka").docsUrl).toContain("platform.mureka.ai");
+    expect(resolveCloudPreset("custom").docsUrl).toBeUndefined();
+  });
+});

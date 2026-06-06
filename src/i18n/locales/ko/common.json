@@ -88,6 +88,10 @@
     "themeLight": "라이트",
     "themeDark": "다크",
     "themeSystem": "시스템 설정",
+    "primaryColor": "강조 색상",
+    "primaryColorLight": "강조 색상 (라이트)",
+    "primaryColorDark": "강조 색상 (다크)",
+    "resetColors": "초기화",
     "djTitle": "AI DJ (LLM)",
     "provider": "제공자",
     "model": "모델",
@@ -111,6 +115,8 @@
     "presetCustom": "사용자 지정 엔드포인트 (BYOK)",
     "costHint": "≈ 곡당 {{song}} · 연속 생성 ≈ {{hourly}}/시간 (약 3분에 한 곡)",
     "costUnknown": "비용은 선택한 제공업체의 가격에 따라 다릅니다.",
-    "getApiKey": "API 키 발급받기"
+    "getApiKey": "API 키 발급받기",
+    "apiDocs": "API 문서",
+    "modelHint": "auto = 최신 모델. 특정 버전 id 입력 가능."
   }
 }

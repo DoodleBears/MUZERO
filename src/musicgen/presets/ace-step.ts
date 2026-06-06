@@ -77,6 +77,9 @@ export const aceStepPreset: CloudPreset = {
   fixedEndpoint: true,
   estCostPerSongUsd: 0.012,
   apiKeyUrl: "https://fal.ai/dashboard/keys",
+  // The fal endpoint IS the model — no `model` param, so Settings hides that field.
+  usesModel: false,
+  docsUrl: "https://fal.ai/models/fal-ai/ace-step/api",
   defaults: { baseUrl: FAL_ACE_STEP_SYNC_URL, createPath: "", statusPath: "" },
   mappers,
 };
