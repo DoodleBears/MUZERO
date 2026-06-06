@@ -155,8 +155,8 @@ export interface ChatSession {
   updatedAt: number;              // 列表排序键（desc）
   messagesJson: string;           // JSON.stringify(DjChatUIMessage[]) —— 整段对话
   composerDraftRaw?: string;      // 未发送的输入，重载后恢复
-  // per-session 模型选择（Phase 5；不存 key）
-  llmProviderPresetId?: string;
+  // per-session 模型选择（Phase 5；决议 Q3：全局默认 + 本 session 覆盖；**不存 key**）
+  llmProviderPresetId?: string;   // 缺省 = 继承全局默认；combobox 覆盖后写这里
   llmModel?: string;
   // branch 溯源（Phase 4）
   parentSessionId?: string;       // 从哪个 session fork
@@ -166,8 +166,10 @@ export interface ChatSession {
   contextStartIndex?: number;     // 压缩指针（Phase 6）：此前消息仍可见但不进 context 估算
 }
 
-/** 活跃 session id 单例（MUZERO 无 project 概念 → 单例，不像 ClipCombo 按 projectId 分）。 */
-// 复用 AppSettings.lastChatSessionId?（追加可选字段）或一个 chatPrefs 单例行；二选一，见 Open Q1。
+/** 活跃 session id（resume 指针）→ AppSettings.lastChatSessionId?（决议 Open Q1）。
+ *  MUZERO 无 project 概念，不像 ClipCombo 需要 per-project 的 chatPrefs 行；复用单例
+ *  AppSettings（与既有播放恢复点 lastSessionId/lastTrackIndex 同级），不为一个字段开新表。
+ *  纯 UI 的 mode/dockSide 留在 chat-store 的 localStorage（instant boot，无需 Dexie）。 */
 ```
 
 **消息形状**：直接用 AI SDK 的 `UIMessage`，扩 metadata（不自建 message 表/类型）——
@@ -206,12 +208,13 @@ interface ChatUiState {
 }
 ```
 
-> 这是**纯 UI 偏好**，放 localStorage 合规（不是行为门控 flag，硬规则 #3 针对的是隐藏后端开关；可见的形态切换控件 + 偏好持久化是 OK 的）。
+> 这是**纯 UI 偏好**，放 localStorage 合规（不是行为门控 flag，硬规则 #3 针对的是隐藏后端开关；可见的形态切换控件 + 偏好持久化是 OK 的，与 theme/locale/primary 同模式）。
+> **`activeSessionId`**：chat-store 持 live 值；持久 resume 指针镜像到 `AppSettings.lastChatSessionId?`（决议 Q1），boot 回填——与 ClipCombo「nav store(live)+Dexie(durable)」双写、MUZERO 既有 theme/primary「localStorage+AppSettings」镜像同构。`mode/dockSide` 不入 Dexie。
 
 ### 3.4 Migration
 
 - `muzero-db` **bump 到 v3**，只 `version(3).stores({ chatSessions: "id, updatedAt" })`，**不写 `.upgrade()`**（新表，旧行不动；硬规则 #7：改既有表才需 upgrade）。
-- `AppSettings` 若追加 `lastChatSessionId?` / Phase 5 的 provider 字段 = settings 行内可选字段，无需 bump（沿用 musicgen preset 的做法）。
+- `AppSettings` 追加 `lastChatSessionId?`（Q1 决议，Phase 1）+ Phase 5 的 `defaultLlmProviderPresetId?`/`defaultLlmModel?`/`apiKeysByPresetId?` = settings 行内可选字段，**无需 bump**（沿用 musicgen preset 的做法）。
 - Rollback = `git revert` 注册表/组件（硬规则 #3）；删除的 tool id 走 `unsupported[]` 通道，老对话仍能加载。
 
 ---
@@ -340,8 +343,8 @@ interface ChatUiState {
 - **`src/ai/llm-providers.ts`（新）**：`LlmProviderPreset[]`，每个 `{ id, label, provider:"openai-compatible"|"anthropic", baseUrl, apiKeyUrl, models: {id,label,contextLimit?,inputCost?,outputCost?}[] }`。内置：**openrouter / openai / claude / gemini / groq / deepseek / custom**（非 Anthropic 全走 OpenAI-compatible adapter + per-provider `baseURL`，Anthropic 单独 `createAnthropic`+浏览器直连 header）。外加用户自定义 `custom:*` OpenAI-compatible endpoint（存 Dexie）。
 - **`resolveDjModel` 扩展**：按 preset 解析到 AI SDK model 实例，仍注入 `getAppFetch()`。
 - **Key 存储**：**进 IndexedDB `settings` 行**（`apiKeysByPresetId`，硬规则 #2），不像 ClipCombo 放 localStorage。per-provider 记 key + model，切 provider 恢复上次选择。
-- **Settings UI**：provider 列表（启用/排序/各自 key）+ **per-session 模型 combobox**（需补 `command`/`combobox` 原语）。provider「有 key 且启用」才进 session 模型选择器。
-- **per-session 选择**：`ChatSession.llmProviderPresetId` + `llmModel`（**不存 key**，防陈旧密钥进历史）。
+- **Settings UI**：provider 列表（启用/排序/各自 key）+ **全局默认 provider/model** + **per-session 模型 combobox**（需补 `command`/`combobox` 原语）。provider「有 key 且启用」才进 session 模型选择器。
+- **全局默认 + per-session 覆盖（决议 Q3）**：新建 session **继承全局默认**（存在 `AppSettings` 的 `defaultLlmProviderPresetId`/`defaultLlmModel`，或复用现有 `llmProvider`/`llmModel` 迁移）；用户用 combobox 覆盖时写 `ChatSession.llmProviderPresetId`+`llmModel`（**不存 key**，防陈旧密钥进历史）。解析时 `ChatSession` 有覆盖用覆盖、否则用全局默认。改 settings 即重建 agent、transport 不变。
 - **上下文限制检测**：多级回退（model 元数据 → 静态已知表 → 保守默认 128k，标「估算」），短 TTL 缓存，与 Settings 模型拉取共享。
 
 ---
@@ -449,9 +452,9 @@ interface ChatUiState {
 
 | # | Question | Status | Decision |
 |---|----------|--------|----------|
-| 1 | 活跃 session id 存哪？ | Open | 倾向 `AppSettings.lastChatSessionId?`（复用 settings 单例，免新表）vs 单独 `chatPrefs` 行 |
+| 1 | 活跃 session id 存哪？ | **Resolved** | `AppSettings.lastChatSessionId?`（best practice）——MUZERO 无 project 概念，不需 ClipCombo 的 per-project chatPrefs 行；与既有 `lastSessionId`/`lastTrackIndex` 同级，不为一字段开新表。`mode/dockSide` 留 chat-store localStorage |
 | 2 | `bar` 形态收到回复怎么显示？ | **Resolved** | **顶部 Notification toast**（§5.2.1，仿 anysoul `MessageToast`：spring 下滑、一行预览、自动消失、点击展开到 dock）。折叠态(bar/fab)显示、dock 态不显示。轻量不占信息 |
-| 3 | per-session 模型 vs 全局模型默认？ | Open | 抄 ClipCombo：全局默认 + per-session 覆盖；Phase 5 落地 |
+| 3 | per-session 模型 vs 全局模型默认？ | **Resolved** | **两者都要**（best practice，抄 ClipCombo）：新建 session 继承全局默认（`AppSettings.defaultLlm*`），combobox 可覆盖到 `ChatSession.llmProviderPresetId`/`llmModel`（不存 key）。Phase 5 落地 |
 | 4 | `dj_generate_tracks` 与现有自动续歌（`maybeRefill`）的关系？ | Open | 工具是「显式生成」，autoExtend 是「自动续」；二者都写同一队列、由 store pump 统一物化，避免双循环打架。Phase 3 明确 |
 | 5 | streamdown bundle 体积？ | Open | Phase 1 测 `pnpm build` 增量（目标 <100KB gz）；超则 dynamic import |
 | 6 | 是否需要 contentEditable chips（@/）v1？ | Resolved | 否，v1 textarea，chips 列后续增强 |
@@ -462,6 +465,7 @@ interface ChatUiState {
 |------|--------|---------|
 | 2026-06-07 | MUZERO | Initial draft —— 调研 ClipCombo agent 面板（5 路并行 deep-read：UI/形态、session/持久化、AI SDK/streaming/模型、PRD 簇蒸馏、MUZERO 集成点），落成 6-phase 复刻 PRD：多 session + 可搜历史 + 每步本地持久化 + branch/regenerate + 多 provider combobox + streamdown 流式，外加 MUZERO 三形态（FAB / 底部输入条 / Dock 1∕3→移动全屏）|
 | 2026-06-07 | MUZERO | 定 Open Q2：折叠态（bar/fab）DJ 回复 = **顶部 Notification toast**（§5.2.1，仿 anysoul `MessageToast`/`NotificationStack` 的 `motion/react` 模式：spring 下滑、一行预览、自动消失、点击展开到 dock）。加 `chat-reply-notification.tsx` 到结构 + Phase 2 |
+| 2026-06-07 | MUZERO | 定 Open Q1 + Q3（best practice）：active session id → `AppSettings.lastChatSessionId?`（无 project 概念，免单独 chatPrefs 行）；模型 = 全局默认 + per-session combobox 覆盖（key 不进 session 行）。同步 §3.2/§3.3/§3.4/§6 |
 
 ---
 
