@@ -93,6 +93,15 @@ let consumedSetCount = 0;
 let djEngine: DjEngine | null = null;
 let pumping = false;
 let loadedTrackId: string | null = null;
+// Signature of the last `queue` we published, so a playQueue-row write that
+// doesn't change the rendered list (e.g. a future currentIndex / repeat persist)
+// doesn't churn the `queue` array and re-render every list consumer.
+let lastQueueSig = "";
+
+/** Cheap signature of what the queue list renders (ids + generation status). */
+function queueSig(tracks: Track[]): string {
+  return tracks.map((t) => `${t.id}:${t.status}:${t.blobId ?? ""}`).join("|");
+}
 
 export const usePlayerStore = create<PlayerState>((set, get) => ({
   activeSessionId: null,
@@ -130,6 +139,9 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       return getTracksByIds(pq.entries.map((e) => e.trackId));
     }).subscribe({
       next: (queue) => {
+        const sig = queueSig(queue);
+        if (sig === lastQueueSig) return; // list unchanged → don't churn subscribers
+        lastQueueSig = sig;
         set({ queue });
         void afterQueueUpdate(set, get);
       },
@@ -158,9 +170,11 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     // that read it right after (e.g. playTrack) don't race the liveQuery.
     await playQueueSet(trackIds, { contextSetId: sessionId });
     consumedSetCount = trackIds.length;
+    const initialQueue = await getTracksByIds(trackIds);
+    lastQueueSig = queueSig(initialQueue); // keep the guard in sync with the optimistic seed
     set({
       activeSessionId: sessionId,
-      queue: await getTracksByIds(trackIds),
+      queue: initialQueue,
       currentIndex: -1,
       wantPlay: false,
       displayMode: session?.displayMode ?? "video",
