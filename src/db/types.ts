@@ -304,6 +304,8 @@ export interface AppSettings {
   backgroundSlideshowIntervalSec?: number;
   /** Slideshow advances in random order vs sequential. Default true (random). */
   backgroundSlideshowShuffle?: boolean;
+  /** Collapse the desktop Now-Playing right rail. Mobile queue overlay ignores this. Default false. */
+  nowPlayingRightRailCollapsed?: boolean;
   /** Now-Playing visualizer style. Defaults to "bars". */
   visualizerStyle?: VisualizerStyleId;
   /** Overlay the visualizer on the full Now-Playing background image/slideshow. Default false. */
@@ -395,6 +397,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   backgroundMaskOpacity: 25,
   backgroundSlideshowIntervalSec: 300,
   backgroundSlideshowShuffle: true,
+  nowPlayingRightRailCollapsed: false,
   visualizerStyle: "bars",
   visualizerAsBackground: true,
   visualizerBackgroundDim: 0,

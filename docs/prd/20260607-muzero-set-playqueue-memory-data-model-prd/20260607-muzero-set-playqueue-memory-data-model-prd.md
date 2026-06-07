@@ -243,6 +243,7 @@ this.version(3).stores({
 **Tasks:**
 - [x] 当前歌曲/封面 context menu：新增 shadcn-style `ContextMenu` primitive（Base UI 实现），MediaStage 与底部歌曲行支持右键/长按打开；菜单内可切换 display mode（video/cover/title）、audio-only，并可添加/更换当前歌曲封面（走既有 crop dialog + `setTrackCover`）。
 - [x] 从记忆照片设为封面：每条带照片 Memory 的便签提供「设为封面」动作，repo 将 memory photo 复制成独立 `role:"cover"` blob，保留原 memory photo，不把封面指针直接复用到 memory blob。
+- [x] 宽屏 Now Playing 右侧播放列表 rail：提供折叠按钮，折叠偏好写入 `AppSettings.nowPlayingRightRailCollapsed`；刷新后保持；折叠态用 `motion` 收成底部 compact header，移动端队列 overlay 不受该偏好影响。
 - [ ] 歌单管理（CRUD + 播放/加入队列/切换）；播放列表视图（play-next/add/remove/reorder/loop 控件）；记忆相册；封面取自记忆。
 - [ ] i18n 4 语全量（歌单/播放列表/记忆 文案）。
 
@@ -304,6 +305,7 @@ this.version(3).stores({
 | 2026-06-08 | Codex | 升级 Memory 便签瀑布流：引入 `@chenglou/pretext` 预计算 note 文本高度，按最短列做动态 masonry；保留第一格虚线创建卡与第一张记忆卡 top-align，并为无 canvas/jsdom 环境提供 fallback；补纯布局 + 展示层测试。目标测试通过（3 files / 13 tests）；`make check` 曾通过（71 files / 431 tests），之后最新重跑被并行 `visualizer` WIP 的 typecheck 挡住。 |
 | 2026-06-08 | Codex | 打磨 Memory composer：支持直接粘贴图片作为记忆照片，`Enter` 提交，`Shift+Enter` 保留多行输入；补 composer 键盘/粘贴测试；`make check` 通过（71 files / 434 tests）。 |
 | 2026-06-08 | Codex | 打磨 Memory 照片显示：便签内照片从固定 4:3 框改为响应式 `w-full h-auto`，按图片自然高宽比重算 masonry 高度，完整显示且不裁切；补 pure layout + waterfall load 测试；`make check` 通过（71 files / 436 tests）。 |
+| 2026-06-08 | Codex | 推进 Phase 4 Now Playing rail：新增 `AppSettings.nowPlayingRightRailCollapsed`，宽屏右侧播放列表支持持久化折叠，折叠态用 `motion` 保留底部 compact header；补 `NowPlayingPanel` 折叠测试；`make check` 通过（72 files / 439 tests）。 |
 
 ---
 

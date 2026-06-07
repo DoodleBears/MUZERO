@@ -112,7 +112,10 @@ export function PlayerDock({
                 >
                   <X />
                 </Button>
-                <NowPlayingPanel className="rounded-b-3xl [&>div:first-child]:pr-11" />
+                <NowPlayingPanel
+                  className="rounded-b-3xl [&>div:first-child]:pr-11"
+                  collapsible={false}
+                />
               </div>
             </motion.div>
           </motion.div>
