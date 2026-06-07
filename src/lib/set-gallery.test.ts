@@ -3,6 +3,7 @@ import { DEFAULT_DJ_CONFIG, type DjSession } from "@/db/types";
 import { filterSets, type SetGalleryItem, sortSets } from "./set-gallery";
 
 function makeItem(opts: {
+  matchesQuery?: (query: string) => boolean;
   name: string;
   seed?: string;
   trackCount?: number;
@@ -25,6 +26,7 @@ function makeItem(opts: {
     trackCount: opts.trackCount ?? 0,
     likedCount: opts.likedCount ?? 0,
     lastActivityAt: opts.lastActivityAt ?? 0,
+    matchesQuery: opts.matchesQuery,
   };
 }
 
@@ -47,6 +49,20 @@ describe("filterSets", () => {
 
   it("matches the seed prompt", () => {
     expect(names(filterSets(items, "road", "all"))).toEqual(["Sunrise synthwave"]);
+  });
+
+  it("can delegate query matching to track and memory search", () => {
+    const memoryMatched = makeItem({
+      name: "Uploaded memories",
+      matchesQuery: (query) => query === "osaka" || query === "#gym",
+    });
+
+    expect(names(filterSets([...items, memoryMatched], "osaka", "all"))).toEqual([
+      "Uploaded memories",
+    ]);
+    expect(names(filterSets([...items, memoryMatched], "#gym", "all"))).toEqual([
+      "Uploaded memories",
+    ]);
   });
 
   it("filter=liked keeps only sets with liked tracks", () => {

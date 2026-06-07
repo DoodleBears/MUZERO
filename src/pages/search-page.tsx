@@ -21,6 +21,7 @@ import {
   getSession,
   listAllTracks,
   listSessions,
+  memoryNotesByTrack,
   setSessionCover,
   updateSession,
 } from "@/db/repositories";
@@ -34,12 +35,14 @@ import {
   type SetSort,
   sortSets,
 } from "@/lib/set-gallery";
+import { searchTracks } from "@/lib/track-search";
 import { cn } from "@/lib/utils";
 import { usePlayerStore } from "@/stores/player-store";
 import { useUploadTargetStore } from "@/stores/upload-target-store";
 
 type GalleryView = "list" | "grid";
 const VIEW_KEY = "muzero-gallery-view";
+const EMPTY_MEMORY_NOTES = new Map<string, string[]>();
 
 function normalizeDescription(value: string): string {
   return value
@@ -72,6 +75,17 @@ export function SearchPage() {
 
   const sessions = useLiveQuery(() => listSessions(db), [], []);
   const allTracks = useLiveQuery(() => listAllTracks(db), [], []);
+  const memoryNotes = useLiveQuery(
+    () =>
+      allTracks.length > 0
+        ? memoryNotesByTrack(
+            allTracks.map((track) => track.id),
+            db,
+          )
+        : Promise.resolve(EMPTY_MEMORY_NOTES),
+    [allTracks],
+    EMPTY_MEMORY_NOTES,
+  );
   const setActiveSession = usePlayerStore((s) => s.setActiveSession);
   const play = usePlayerStore((s) => s.play);
   const setUploadTarget = useUploadTargetStore((s) => s.setTarget);
@@ -98,9 +112,10 @@ export function SearchPage() {
           likedCount: setTracks.filter((tr) => tr.liked).length,
           lastActivityAt: s.updatedAt,
           coverTrackId: cover?.id ?? s.trackIds[0],
+          matchesQuery: (trackQuery) => searchTracks(setTracks, trackQuery, memoryNotes).length > 0,
         };
       }),
-    [sessions, trackById],
+    [memoryNotes, sessions, trackById],
   );
 
   const shown = useMemo(

@@ -15,7 +15,7 @@
 |-------|------|--------|------|
 | 1 | 播放列表 Play Queue 地基（表 + repo + player-store 改消费它 + 迁移现有播放） | ✅ Completed | §6 |
 | 2 | autoExtend / refill 迁到 Play Queue（续歌喂队列） | ✅ Completed | §6 |
-| 3 | 歌曲记忆 Memory（表 + 迁移 `Track.note` + 多记忆编辑 + 搜索/DJ 上下文接 memory） | 🔄 3a 数据层✅（表/迁移/repo/搜索/DJ）；3b annotation 便签 UI✅，search 接线待做 | §6 |
+| 3 | 歌曲记忆 Memory（表 + 迁移 `Track.note` + 多记忆编辑 + 搜索/DJ 上下文接 memory） | ✅ Completed（数据层 + annotation 便签 UI + search/DJ/provenance；浏览器全流程预览并入 Phase 4） | §6 |
 | 4 | UI 打磨（歌单管理、播放列表 play-next/add/reorder、记忆相册、封面取自记忆） | 🔲 Pending | §6 |
 
 > Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
@@ -229,13 +229,14 @@ this.version(3).stores({
 - [x] `track-memory-notes-panel.tsx` 容器层：`useLiveQuery(listMemories)` + `addMemory`/`updateMemoryNote`/`deleteMemory` 接 composer/waterfall；后续 `annotation-editor` 可直接嵌入。
 - [x] `annotation-editor` 改记忆列表：嵌入 `TrackMemoryNotesPanel`，旧单 note textarea 退场，新增/编辑/删除/照片/时间戳由便签 UI 承接。
   - **UIUX 决议（2026-06-08）**：记忆不是一个长 textarea；每条 Memory 以「便签」卡片呈现，整体为响应式瀑布流/masonry（移动单列、桌面多列）。卡片需像贴在唱片旁的私密便签：轻微纸感背景、可读的大段 note、时间戳、可选照片缩略图、编辑/删除操作；不同卡片可有轻微色调变化但不喧宾夺主。新增/编辑表单可在瀑布流上方或卡片内展开，保存后立即进入瀑布流。
-- [ ] `search-page` 用 `memoryNotesByTrack` join 记忆进搜索（`useLiveQuery` memories）。
+- [x] `search-page` 用 `memoryNotesByTrack` join 记忆进搜索：gallery set filtering 委托 `searchTracks`，因此 set 可因 track title/tag/memory note 命中。
 - [x] providerPreset 生成时落 `Track` + 自动加一条 provenance Memory（musicgen Q5；mock 仅字段不写 Memory，避免测试/本地占位污染 DJ 记忆）。
 - [x] `MemoryNotesWaterfall` 展示层测试：新到旧排序、便签 masonry class、照片 alt、edit/delete 回调、空态。
 - [x] `MemoryNoteComposer` 展示层测试：trim submit、blank guard、edit cancel、photo select/remove 回调。
 - [x] `TrackMemoryNotesPanel` 容器测试：渲染已有 memories、composer 新增、waterfall 编辑/删除，并通过 Dexie liveQuery 更新 UI。
 - [x] `AnnotationEditor` 接线测试：渲染 `TrackMemoryNotesPanel`，不再显示 deprecated single note textarea；annotation labels 走 i18n 4 语。
-- [ ] 验收：一首歌可加多条记忆（含照片）；搜索命中记忆文字；DJ 上下文带记忆；生成曲自动带 provenance Note。（数据层与便签展示层已就绪，仅差 annotation/search UI 接线）
+- [x] 搜索验收：`filterSets` 可委托 track/memory-aware matcher；`SearchPage` 为每个 set 注入 `memoryNotesByTrack + searchTracks`。
+- [x] 验收：一首歌可加多条记忆（含照片）；搜索命中记忆文字；DJ 上下文带记忆；生成曲自动带 provenance Note。（浏览器全流程 + 响应式/暗色视觉验收并入 Phase 4）
 
 ### Phase 4: UI 打磨
 **Tasks:**
@@ -292,6 +293,7 @@ this.version(3).stores({
 | 2026-06-08 | Codex | 推进 Phase 3b UI foundation：新增无 DB/i18n 状态的 `MemoryNoteComposer` 展示层，承接新增/编辑便签输入、照片选择/移除、保存/取消回调；补组件测试；`make check` 通过（65 files / 410 tests）。 |
 | 2026-06-08 | Codex | 推进 Phase 3b UI foundation：新增 `TrackMemoryNotesPanel` 容器层，用 Dexie liveQuery 读取 memories 并接入 add/update/delete 到 composer + waterfall，后续 annotation-editor 只需嵌入；补 fake-indexeddb 组件测试；`make check` 通过（66 files / 412 tests）。 |
 | 2026-06-08 | Codex | 推进 Phase 3b annotation 接线：`annotation-editor` 接入 `TrackMemoryNotesPanel`，移除 deprecated 单 note textarea 写入，新增 Memory labels 四语 i18n；补接线测试；`make check` 通过（67 files / 413 tests）。 |
+| 2026-06-08 | Codex | 完成 Phase 3b search 接线：`SearchPage` liveQuery memories 并把 `memoryNotesByTrack + searchTracks` 注入 gallery set filter，搜索可命中 track memories 与 `#tag`；补 `set-gallery` 委托 matcher 测试；`make check` 通过（67 files / 414 tests）。 |
 
 ---
 

@@ -15,6 +15,8 @@ export interface SetGalleryItem {
   lastActivityAt: number;
   /** First track of the set → its cover is the album-grid tile. */
   coverTrackId?: string;
+  /** Optional domain matcher for tracks/tags/memories inside the set. */
+  matchesQuery?: (query: string) => boolean;
 }
 
 export type SetSort = "recent" | "name" | "size";
@@ -31,7 +33,9 @@ export function filterSets(
     if (filter === "liked" && it.likedCount <= 0) return false;
     if (!q) return true;
     return (
-      it.session.name.toLowerCase().includes(q) || it.session.seedPrompt.toLowerCase().includes(q)
+      it.session.name.toLowerCase().includes(q) ||
+      it.session.seedPrompt.toLowerCase().includes(q) ||
+      Boolean(it.matchesQuery?.(query))
     );
   });
 }
