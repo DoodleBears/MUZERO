@@ -27,10 +27,11 @@ const memories: MemoryNoteView[] = [
 ];
 
 describe("MemoryNotesWaterfall", () => {
-  it("renders memory notes newest-first as sticky-note masonry cards", () => {
+  it("renders a leading create note before newest-first memory cards", () => {
     render(
       <MemoryNotesWaterfall
         formatCreatedAt={(createdAt) => `time-${createdAt}`}
+        leadingItem={<button type="button">Create memory</button>}
         labels={labels}
         memories={memories}
       />,
@@ -39,13 +40,12 @@ describe("MemoryNotesWaterfall", () => {
     const list = screen.getByRole("list", { name: "No memories yet" });
     expect(list).toHaveClass("columns-1");
     const cards = screen.getAllByRole("listitem");
-    expect(cards.map((card) => within(card).getByTestId("memory-note-text").textContent)).toEqual([
-      "rainy train ride",
-      "late coding loop",
-      "first listen",
-    ]);
-    expect(cards[0]).toHaveClass("break-inside-avoid");
-    expect(cards[0]).toHaveTextContent("time-30");
+    expect(cards[0]).toHaveTextContent("Create memory");
+    expect(
+      cards.slice(1).map((card) => within(card).getByTestId("memory-note-text").textContent),
+    ).toEqual(["rainy train ride", "late coding loop", "first listen"]);
+    expect(cards[1]).toHaveClass("break-inside-avoid", "bg-card");
+    expect(cards[1]).toHaveTextContent("time-30");
   });
 
   it("renders attached photos with caller-provided alt text", () => {

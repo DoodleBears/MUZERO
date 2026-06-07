@@ -17,6 +17,7 @@ const labels: TrackMemoryNotesPanelLabels = {
     removePhoto: (name) => `Remove ${name}`,
     save: "Save memory",
   },
+  createMemory: "Create memory",
   waterfall: {
     deleteMemory: (memory) => `Delete ${memory.note}`,
     editMemory: (memory) => `Edit ${memory.note}`,
@@ -56,6 +57,8 @@ describe("TrackMemoryNotesPanel", () => {
 
     expect(await screen.findByText("first train ride")).toBeInTheDocument();
 
+    fireEvent.click(screen.getByRole("button", { name: "Create memory" }));
+    expect(screen.getByPlaceholderText("Write a memory")).toHaveFocus();
     fireEvent.change(screen.getByPlaceholderText("Write a memory"), {
       target: { value: "  rainy coding loop  " },
     });
@@ -82,6 +85,7 @@ describe("TrackMemoryNotesPanel", () => {
     );
 
     expect(await screen.findByText("old note")).toBeInTheDocument();
+    expect(screen.queryByPlaceholderText("Write a memory")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Edit old note" }));
     await waitFor(() =>
       expect(screen.getByPlaceholderText("Write a memory")).toHaveValue("old note"),
@@ -96,6 +100,7 @@ describe("TrackMemoryNotesPanel", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Delete updated note" }));
     await waitFor(() => expect(screen.queryByText("updated note")).not.toBeInTheDocument());
-    expect(screen.getByText("No memories yet")).toBeInTheDocument();
+    expect(screen.getByRole("list", { name: "No memories yet" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Create memory" })).toBeInTheDocument();
   });
 });

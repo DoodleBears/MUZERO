@@ -38,6 +38,12 @@ describe("MemoryNoteComposer", () => {
     expect(onSubmit).not.toHaveBeenCalled();
   });
 
+  it("can focus the note field when opened from the create tile", () => {
+    render(<MemoryNoteComposer autoFocus labels={labels} onSubmit={() => undefined} />);
+
+    expect(screen.getByPlaceholderText("Write a memory")).toHaveFocus();
+  });
+
   it("supports edit mode with cancel", () => {
     const onCancel = vi.fn();
     const onSubmit = vi.fn();

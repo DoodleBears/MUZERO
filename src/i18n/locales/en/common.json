@@ -184,6 +184,7 @@
     "removeTag": "Remove {{tag}}",
     "notePlaceholder": "What does this one mean to you? (searchable)",
     "memoryEmpty": "No memories yet",
+    "createMemory": "Create memory",
     "saveMemory": "Save memory",
     "cancelMemoryEdit": "Cancel",
     "addMemoryPhoto": "Add photo",

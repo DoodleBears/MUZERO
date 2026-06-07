@@ -177,6 +177,7 @@
     "removeTag": "移除 {{tag}}",
     "notePlaceholder": "这首歌对你意味着什么？（可被搜索）",
     "memoryEmpty": "还没有记忆",
+    "createMemory": "创建记忆",
     "saveMemory": "保存记忆",
     "cancelMemoryEdit": "取消",
     "addMemoryPhoto": "添加照片",

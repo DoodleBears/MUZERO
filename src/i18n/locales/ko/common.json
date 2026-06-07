@@ -177,6 +177,7 @@
     "removeTag": "{{tag}} 제거",
     "notePlaceholder": "이 곡은 당신에게 어떤 의미인가요? (검색 가능)",
     "memoryEmpty": "아직 추억이 없습니다",
+    "createMemory": "추억 만들기",
     "saveMemory": "추억 저장",
     "cancelMemoryEdit": "취소",
     "addMemoryPhoto": "사진 추가",

@@ -18,6 +18,7 @@ export interface MemoryNoteComposerLabels {
 }
 
 interface MemoryNoteComposerProps {
+  autoFocus?: boolean;
   className?: string;
   initialNote?: string;
   isSubmitting?: boolean;
@@ -30,6 +31,7 @@ interface MemoryNoteComposerProps {
 }
 
 export function MemoryNoteComposer({
+  autoFocus = false,
   className,
   initialNote = "",
   isSubmitting = false,
@@ -61,12 +63,13 @@ export function MemoryNoteComposer({
   return (
     <div
       className={cn(
-        "rounded-lg border border-amber-200/80 bg-amber-50/80 p-3 shadow-sm dark:border-amber-300/20 dark:bg-amber-300/10",
+        "rounded-lg border border-border bg-card p-3 text-card-foreground shadow-sm",
         className,
       )}
     >
       <Textarea
-        className="min-h-24 resize-none border-amber-200/80 bg-white/55 text-sm shadow-inner dark:border-amber-300/20 dark:bg-background/45"
+        autoFocus={autoFocus}
+        className="min-h-24 resize-none bg-background text-sm shadow-inner"
         disabled={isSubmitting}
         onChange={(event) => setDraft(event.target.value)}
         placeholder={labels.notePlaceholder}

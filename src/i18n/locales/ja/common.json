@@ -177,6 +177,7 @@
     "removeTag": "{{tag}} を削除",
     "notePlaceholder": "この曲はあなたにとって何ですか？（検索可能）",
     "memoryEmpty": "まだメモリーはありません",
+    "createMemory": "メモリーを作成",
     "saveMemory": "メモリーを保存",
     "cancelMemoryEdit": "キャンセル",
     "addMemoryPhoto": "写真を追加",

@@ -8,7 +8,7 @@ import type { CropRect, Track } from "@/db/types";
 import { IMAGE_ACCEPT } from "@/lib/file-drop";
 
 /**
- * Per-track annotations: tags, a freeform memory note, and an optional cover
+ * Per-track annotations: tags, memory notes, and an optional cover
  * photo. "Music carries memories" — these are searchable and steer the DJ.
  * `track` is reactive (Dexie useLiveQuery upstream), so tag edits reflect live.
  */
@@ -51,51 +51,59 @@ export function AnnotationEditor({ track }: { track: Track }) {
 
   return (
     <>
-      <div className="flex flex-col gap-2 rounded-xl border border-border bg-card/80 p-3">
-        <div className="flex items-center justify-between">
-          <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-            {t("annotation.memory")}
-          </span>
-          <button
-            type="button"
-            onClick={() => fileRef.current?.click()}
-            className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
-          >
-            <ImagePlus className="size-3.5" />
-            {track.coverBlobId ? t("annotation.changeCover") : t("annotation.addCover")}
-          </button>
-          <input ref={fileRef} type="file" accept={IMAGE_ACCEPT} hidden onChange={onCoverPicked} />
-        </div>
-
-        <div className="flex flex-wrap items-center gap-1.5">
-          {track.tags.map((tag) => (
-            <span
-              key={tag}
-              className="flex items-center gap-1 rounded-full bg-secondary px-2 py-0.5 text-xs"
-            >
-              #{tag}
-              <button
-                type="button"
-                onClick={() => removeTag(tag)}
-                aria-label={t("annotation.removeTag", { tag })}
-              >
-                <X className="size-3 text-muted-foreground hover:text-foreground" />
-              </button>
+      <div className="mx-auto flex w-full max-w-2xl flex-col gap-3">
+        <div className="flex flex-col gap-2 rounded-xl border border-border bg-card/80 p-3">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              {t("annotation.memory")}
             </span>
-          ))}
-          <input
-            value={tagInput}
-            onChange={(e) => setTagInput(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" || e.key === ",") {
-                e.preventDefault();
-                addTag();
-              }
-            }}
-            onBlur={addTag}
-            placeholder={t("annotation.addTag")}
-            className="min-w-20 flex-1 bg-transparent px-1 text-xs outline-none placeholder:text-muted-foreground"
-          />
+            <button
+              type="button"
+              onClick={() => fileRef.current?.click()}
+              className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+            >
+              <ImagePlus className="size-3.5" />
+              {track.coverBlobId ? t("annotation.changeCover") : t("annotation.addCover")}
+            </button>
+            <input
+              ref={fileRef}
+              type="file"
+              accept={IMAGE_ACCEPT}
+              hidden
+              onChange={onCoverPicked}
+            />
+          </div>
+
+          <div className="flex flex-wrap items-center gap-1.5">
+            {track.tags.map((tag) => (
+              <span
+                key={tag}
+                className="flex items-center gap-1 rounded-full bg-secondary px-2 py-0.5 text-xs"
+              >
+                #{tag}
+                <button
+                  type="button"
+                  onClick={() => removeTag(tag)}
+                  aria-label={t("annotation.removeTag", { tag })}
+                >
+                  <X className="size-3 text-muted-foreground hover:text-foreground" />
+                </button>
+              </span>
+            ))}
+            <input
+              value={tagInput}
+              onChange={(e) => setTagInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === ",") {
+                  e.preventDefault();
+                  addTag();
+                }
+              }}
+              onBlur={addTag}
+              placeholder={t("annotation.addTag")}
+              className="min-w-20 flex-1 bg-transparent px-1 text-xs outline-none placeholder:text-muted-foreground"
+            />
+          </div>
         </div>
 
         <TrackMemoryNotesPanel
@@ -115,6 +123,7 @@ export function AnnotationEditor({ track }: { track: Track }) {
               removePhoto: (name) => t("annotation.removeMemoryPhoto", { name }),
               save: t("annotation.saveMemory"),
             },
+            createMemory: t("annotation.createMemory"),
             waterfall: {
               deleteMemory: () => t("annotation.deleteMemory"),
               editMemory: () => t("annotation.editMemory"),

@@ -1,6 +1,7 @@
 "use client";
 
 import { useLiveQuery } from "dexie-react-hooks";
+import { Plus } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { db as defaultDb, type MuzeroDB } from "@/db/muzero-db";
 import {
@@ -11,7 +12,6 @@ import {
   updateMemoryNote,
 } from "@/db/repositories";
 import type { Memory } from "@/db/types";
-import { cn } from "@/lib/utils";
 import { MemoryNoteComposer, type MemoryNoteComposerLabels } from "./memory-note-composer";
 import {
   MemoryNotesWaterfall,
@@ -21,6 +21,7 @@ import {
 
 export interface TrackMemoryNotesPanelLabels {
   composer: MemoryNoteComposerLabels;
+  createMemory: string;
   waterfall: MemoryNotesWaterfallLabels;
 }
 
@@ -42,8 +43,10 @@ export function TrackMemoryNotesPanel({
   const memories = useLiveQuery(() => listMemories(trackId, db), [db, trackId], []);
   const memoryViews = useMemoryNoteViews(memories, db);
   const [editingMemory, setEditingMemory] = useState<MemoryNoteView | undefined>();
+  const [isCreating, setIsCreating] = useState(false);
   const [photoFile, setPhotoFile] = useState<File | undefined>();
   const composerKey = editingMemory?.id ?? "new-memory";
+  const showComposer = isCreating || Boolean(editingMemory);
 
   async function submitMemory(note: string) {
     if (editingMemory) {
@@ -61,6 +64,7 @@ export function TrackMemoryNotesPanel({
       db,
     );
     setPhotoFile(undefined);
+    setIsCreating(false);
   }
 
   async function removeMemory(memory: MemoryNoteView) {
@@ -69,30 +73,50 @@ export function TrackMemoryNotesPanel({
   }
 
   function editMemory(memory: MemoryNoteView) {
+    setIsCreating(false);
     setPhotoFile(undefined);
     setEditingMemory(memory);
   }
 
+  function cancelCompose() {
+    setEditingMemory(undefined);
+    setIsCreating(false);
+    setPhotoFile(undefined);
+  }
+
+  const leadingItem = showComposer ? (
+    <MemoryNoteComposer
+      autoFocus
+      initialNote={editingMemory?.note}
+      key={composerKey}
+      labels={labels.composer}
+      onCancel={cancelCompose}
+      onPhotoRemove={() => setPhotoFile(undefined)}
+      onPhotoSelect={editingMemory ? undefined : setPhotoFile}
+      onSubmit={submitMemory}
+      selectedPhotoName={photoFile?.name}
+    />
+  ) : (
+    <button
+      className="flex min-h-32 w-full flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-border bg-background p-4 text-muted-foreground text-sm transition-colors hover:bg-card hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      onClick={() => setIsCreating(true)}
+      type="button"
+    >
+      <Plus aria-hidden="true" className="size-5" />
+      <span>{labels.createMemory}</span>
+    </button>
+  );
+
   return (
-    <section className={cn("flex flex-col gap-3", className)}>
-      <MemoryNoteComposer
-        initialNote={editingMemory?.note}
-        key={composerKey}
-        labels={labels.composer}
-        onCancel={editingMemory ? () => setEditingMemory(undefined) : undefined}
-        onPhotoRemove={() => setPhotoFile(undefined)}
-        onPhotoSelect={editingMemory ? undefined : setPhotoFile}
-        onSubmit={submitMemory}
-        selectedPhotoName={photoFile?.name}
-      />
-      <MemoryNotesWaterfall
-        formatCreatedAt={formatCreatedAt}
-        labels={labels.waterfall}
-        memories={memoryViews}
-        onDeleteMemory={removeMemory}
-        onEditMemory={editMemory}
-      />
-    </section>
+    <MemoryNotesWaterfall
+      className={className}
+      formatCreatedAt={formatCreatedAt}
+      leadingItem={leadingItem}
+      labels={labels.waterfall}
+      memories={memoryViews}
+      onDeleteMemory={removeMemory}
+      onEditMemory={editMemory}
+    />
   );
 }
 

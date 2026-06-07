@@ -19,22 +19,17 @@ export interface MemoryNotesWaterfallLabels {
 interface MemoryNotesWaterfallProps {
   className?: string;
   formatCreatedAt: (createdAt: number) => ReactNode;
+  leadingItem?: ReactNode;
   labels: MemoryNotesWaterfallLabels;
   memories: MemoryNoteView[];
   onDeleteMemory?: (memory: MemoryNoteView) => void;
   onEditMemory?: (memory: MemoryNoteView) => void;
 }
 
-const noteToneClasses = [
-  "border-amber-200/80 bg-amber-50/90 text-amber-950 dark:border-amber-300/20 dark:bg-amber-300/12 dark:text-amber-50",
-  "border-sky-200/80 bg-sky-50/90 text-sky-950 dark:border-sky-300/20 dark:bg-sky-300/12 dark:text-sky-50",
-  "border-rose-200/80 bg-rose-50/90 text-rose-950 dark:border-rose-300/20 dark:bg-rose-300/12 dark:text-rose-50",
-  "border-emerald-200/80 bg-emerald-50/90 text-emerald-950 dark:border-emerald-300/20 dark:bg-emerald-300/12 dark:text-emerald-50",
-];
-
 export function MemoryNotesWaterfall({
   className,
   formatCreatedAt,
+  leadingItem,
   labels,
   memories,
   onDeleteMemory,
@@ -42,7 +37,7 @@ export function MemoryNotesWaterfall({
 }: MemoryNotesWaterfallProps) {
   const sortedMemories = sortMemoriesForWaterfall(memories);
 
-  if (sortedMemories.length === 0) {
+  if (sortedMemories.length === 0 && !leadingItem) {
     return (
       <div
         className={cn(
@@ -60,12 +55,10 @@ export function MemoryNotesWaterfall({
       aria-label={typeof labels.empty === "string" ? labels.empty : undefined}
       className={cn("columns-1 gap-3 sm:columns-2 xl:columns-3", className)}
     >
-      {sortedMemories.map((memory, index) => (
+      {leadingItem && <li className="mb-3 break-inside-avoid">{leadingItem}</li>}
+      {sortedMemories.map((memory) => (
         <li
-          className={cn(
-            "mb-3 break-inside-avoid rounded-lg border p-3 shadow-sm ring-1 ring-black/5 transition-shadow hover:shadow-md",
-            noteToneClasses[index % noteToneClasses.length],
-          )}
+          className="mb-3 break-inside-avoid rounded-lg border border-border bg-card p-3 text-card-foreground shadow-sm ring-1 ring-black/5 transition-shadow hover:shadow-md"
           key={memory.id}
         >
           {memory.photoUrl && (

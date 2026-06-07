@@ -15,11 +15,12 @@ vi.mock("@/components/track/track-memory-notes-panel", () => ({
     labels,
     trackId,
   }: {
-    labels: { composer: { notePlaceholder: string } };
+    labels: { composer: { notePlaceholder: string }; createMemory: string };
     trackId: string;
   }) => (
     <div data-testid="memory-panel" data-track-id={trackId}>
       {labels.composer.notePlaceholder}
+      {labels.createMemory}
     </div>
   ),
 }));
@@ -45,6 +46,16 @@ describe("AnnotationEditor", () => {
 
     expect(screen.getByTestId("memory-panel")).toHaveAttribute("data-track-id", "trk_memory");
     expect(screen.getByTestId("memory-panel")).toHaveTextContent("annotation.notePlaceholder");
+    expect(screen.getByTestId("memory-panel")).toHaveTextContent("annotation.createMemory");
     expect(screen.queryByPlaceholderText("annotation.notePlaceholder")).not.toBeInTheDocument();
+  });
+
+  it("keeps the memory notes panel out of the tag and cover chrome", () => {
+    render(<AnnotationEditor track={track} />);
+
+    const memoryPanelParentClass =
+      screen.getByTestId("memory-panel").parentElement?.className ?? "";
+
+    expect(memoryPanelParentClass).not.toContain("bg-card/80");
   });
 });
