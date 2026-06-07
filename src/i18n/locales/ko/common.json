@@ -9,7 +9,8 @@
     "queue": "대기열",
     "search": "검색",
     "sets": "세트",
-    "settings": "설정"
+    "settings": "설정",
+    "menu": "메뉴"
   },
   "sessions": {
     "startDjTitle": "AI DJ 세트 시작하기",

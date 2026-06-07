@@ -15,7 +15,7 @@
 |-------|------|--------|------|
 | 1 | 歌单 Gallery 纯逻辑（filter / sort，纯函数 TDD） | ✅ Completed | §6 |
 | 2 | 歌单 Gallery 页面（search-page 改造：搜索框 + filter/sort chips + list/album-grid） | ✅ Completed | §6 |
-| 3 | 导航极简化（first=播放页；移除 AI tab；合并为可折叠 nav FAB 置于播放信息右侧） | 🔲 Pending（碰并行文件，需协调）| §6 |
+| 3 | 导航极简化（first=播放页；移除 AI tab；合并为可折叠 nav FAB 置于播放信息右侧） | ✅ Completed | §6 |
 | 4 | 可拖拽 AI FAB（悬浮、自由拖拽，承接 chat PRD 的 `fab` 形态） | 🔲 Pending | §6 |
 
 > Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
@@ -133,9 +133,10 @@ export function sortSets(items: SetGalleryItem[], sort: SetSort): SetGalleryItem
 - [x] `search-page.tsx` 改造为画廊：`useLiveQuery(sessions+tracks)` 组装 `SetGalleryItem`（trackCount/likedCount/首封面）→ 搜索框 + filter(全部/红心) + sort(最近/名称/曲数) chips + list/grid view 切换(localStorage 持久)；封面 `useTrackCoverUrl` 取首张有封面的曲；点击歌单 → `setActiveSession`+`play`。`gallery` i18n 4 语 ×11 key。
 - [x] 验收：浏览器 preview 实测——搜索框/过滤/排序/列表+封面网格 全渲染、album 卡（封面+♡红心标+「N 首」）、零 console 报错。`SetCard` 用独立组件调 `useTrackCoverUrl`（每张封面独立、不互相重渲染）。
 
-### Phase 3: 导航极简化（碰并行文件，先协调）
-- [ ] `nav-row.tsx` → collapse/expand nav FAB；`player-dock.tsx` 放到播放信息右侧；移除 AI tab；first=播放页。
-- 验收：四目标项可达、动画顺、移动端 tap 友好；切 tab 不打断播放（与播放持久化协调）。
+### Phase 3: 导航极简化 ✅
+- [x] 新 `nav-fab.tsx`（collapse/expand FAB）取代 `nav-row.tsx`（已删）：**3 项 = 播放(now,⌘1) / 歌单(search,⌘2) / 设置(settings,⌘3)**（用户定的最简 3 项）；折叠态显当前页图标、展开 motion 弹出 3 个 pill（icon+label），当前项高亮、click-away 收起；`SHORTCUT_TABS` 同步为 `[now,search,settings]`。
+- [x] `player-dock.tsx`：播放信息（identity+status+progress）左列 flex-1，NavFab 钉右侧（去掉第三行 nav）。`nav.menu` i18n ×4。
+- [x] 验收：浏览器实测——FAB 折叠/展开、3 pill（正在播放/歌单/设置）、当前高亮、⌘1/2/3 跳转、零报错；nav 7 tests + typecheck + biome 绿。AI 不在 nav（→ Phase 4 拖拽 FAB）。
 
 ### Phase 4: 可拖拽 AI FAB
 - [ ] `chat-launcher-fab.tsx`：悬浮可拖拽 + 位置持久化 + 点击开 chat。

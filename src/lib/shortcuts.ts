@@ -5,15 +5,10 @@ import type { Tab } from "@/components/nav/dock-nav";
  * mapping is unit-tested and the NavRow component stays thin.
  */
 
-/** Tabs addressable by Cmd/Ctrl+1..4, in NavRow order (no "now" — that's the player area). */
-export const SHORTCUT_TABS = [
-  "queue",
-  "search",
-  "sessions",
-  "settings",
-] as const satisfies readonly Tab[];
+/** Tabs addressable by Cmd/Ctrl+1..3, in nav-FAB order: playback · gallery · settings. */
+export const SHORTCUT_TABS = ["now", "search", "settings"] as const satisfies readonly Tab[];
 
-/** Map a top-row digit ("1".."4") to its tab, or null for anything else. */
+/** Map a top-row digit ("1".."3") to its tab, or null for anything else. */
 export function tabForShortcutKey(key: string): Tab | null {
   const index = Number(key) - 1;
   return Number.isInteger(index) && index >= 0 && index < SHORTCUT_TABS.length

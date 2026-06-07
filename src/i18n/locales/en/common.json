@@ -9,7 +9,8 @@
     "queue": "Queue",
     "search": "Search",
     "sets": "Sets",
-    "settings": "Settings"
+    "settings": "Settings",
+    "menu": "Menu"
   },
   "sessions": {
     "startDjTitle": "Start an AI DJ set",

@@ -9,7 +9,8 @@
     "queue": "队列",
     "search": "搜索",
     "sets": "歌单",
-    "settings": "设置"
+    "settings": "设置",
+    "menu": "菜单"
   },
   "sessions": {
     "startDjTitle": "开启一个 AI DJ 歌单",
