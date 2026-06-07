@@ -1,6 +1,6 @@
 # PRD: MUZERO — 播放快捷键 + Dock 音量/循环控件 + Kbd 提示
 
-**Status:** Draft
+**Status:** Completed（3 phase 全实现，294 tests 绿；浏览器实测音量 hover 滑块 + 循环 cycle + dock 控件，dark/mobile 响应式 OK）
 **Created:** 2026-06-07
 **Author:** MUZERO
 **Module:** 播放器 —— 全局键盘快捷键、Dock 音量 hover 滑块 + 循环控件、transport 控件 hover(label + Kbd)
@@ -15,7 +15,7 @@
 |-------|------|--------|------|
 | 1 | 纯快捷键解析 `resolvePlayerShortcut`（key→action，TDD） | ✅ Completed | §5 |
 | 2 | 全局键盘处理 + dispatch（接 player-store，让快捷键真正生效） | ✅ Completed | §5 |
-| 3 | Dock 音量控件（hover 竖向滑块）+ 循环控件 + transport tooltip(label+Kbd) | 🔲 Pending | §5 |
+| 3 | Dock 音量控件（hover 竖向滑块）+ 循环控件 + transport tooltip(label+Kbd) | ✅ Completed | §5 |
 
 > Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
 
@@ -71,17 +71,20 @@
 
 ## 5. Implementation Plan
 
-### Phase 1: 纯快捷键解析
-- [ ] `player-shortcuts.ts`：`PlayerShortcut` 枚举 + `resolvePlayerShortcut`（Space/⌘P→toggle、←/A→prev、→/D→next、Shift+←/A→seek-back、Shift+→/D→seek-forward、↑/↓→volume、⌘R→cycle-repeat、R→restart；alt 或 mod+其它→null）。
-- [ ] 穷举单测（含平台无关、shift 组合、mod 组合、空格、大小写、null 情形）。
+### Phase 1: 纯快捷键解析 ✅
+- [x] `player-shortcuts.ts`：`PlayerShortcut` 枚举 + `resolvePlayerShortcut`（Space/⌘P→toggle、←/A→prev、→/D→next、Shift+←/A→seek-back、Shift+→/D→seek-forward、↑/↓→volume、⌘R→cycle-repeat、R→restart；alt 或 mod+其它→null）。
+- [x] 穷举单测（含平台无关、shift 组合、mod 组合、空格、大小写、null 情形）。
 
 ### Phase 2: 全局键盘 + dispatch ✅
 - [x] `use-player-shortcuts.ts`：keydown 守卫（form field;Space/Enter 在 button/a 不重复触发）+ `resolvePlayerShortcut` + 命令式 `getState()` dispatch（seek ±5、volume ±0.05、restart seek 0、`nextRepeatMode` cycle）。`App.tsx` 调一次。
 - [x] 浏览器实测：Space 切换(播放↔暂停)、a 上一首(dropped→memory)、↑↓ 音量(±0.05 精确)、R 从头(0.6→0)、Shift+← 后退5s(1→0)、输入框内 Space 不触发、⌘1/2 仍导航不冲突。
 
-### Phase 3: Dock 控件 + tooltip
-- [ ] 音量按钮 + hover 竖向滑块（设计图）；循环控件在 Dock；transport tooltip(label+Kbd) 按平台。
-- [ ] i18n 4 语；浏览器实测 hover 滑块/↑↓/循环/⌘R + 暗色 + 响应式。
+### Phase 3: Dock 控件 + tooltip ✅
+- [x] **纯助手（TDD）**：`player-hints.ts` —— `playerShortcutHint(action,mac)`(play/prev/next/repeat/volume→keycap tokens；repeat 出平台 ⌘/Ctrl+R chord；volume 出 ↑↓) + `volumeFromPointerY(clientY,top,height)`(竖向滑块取值，top=loud、clamp 0–1、零高除零安全、反转)。9 例穷举单测（shuffle 无实际绑定故不出 Kbd，已从 hint 去掉）。
+- [x] **`VolumeControl`**：音量按钮 hover/focus 弹**竖向滑块** popover（圆角 track + `--primary` fill + 圆点 thumb + `%` + ↑↓ Kbd，即「自带 label+Kbd」不另开 tooltip 避免双弹层）；level-aware 图标(VolumeX/1/2)；点击切静音；窄 selector 只订 `volume`。
+- [x] **`DockControls`**（repeat + volume 簇）入 player-dock（play 与 NavFab 之间，`hidden sm:flex`——移动端走 Now Playing transport 行不挤）；repeat 用 `ControlTooltip`(label `repeatLabel`+⌘R)。
+- [x] **`ControlTooltip`**：Base UI `render`-prop 把 Tooltip 贴到子 `Button`(经 `useRender` 组合)，无额外节点；复用 nav 同款 `Tooltip`+`Kbd`/`KbdGroup`。Now Playing `TransportControls` 每个键(shuffle/prev/play/next/repeat)加 tooltip + 末尾追加 `VolumeControl`，整行包 `TooltipProvider` 共享延时。
+- [x] i18n `player.repeatLabel` 4 语；**浏览器实测**(独立 1440 preview)：音量 hover 滑块渲染达设计(track+fill+thumb+90%+↑↓)、循环 cycle off→all→one 变主色换图标、dock 控件就位、mobile 正确隐藏、dark 模式 OK、零 console error。**全套件 294 绿、typecheck/biome 清**。
 
 ---
 

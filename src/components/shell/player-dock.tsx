@@ -1,5 +1,6 @@
 import type { Tab } from "@/components/nav/dock-nav";
 import { NavFab } from "@/components/nav/nav-fab";
+import { DockControls } from "@/components/player/dock-controls";
 import { NowPlayingSheet } from "@/components/player/now-playing-sheet";
 import { PlayerStatusLine } from "@/components/player/player-status-line";
 import { ProgressScrubber } from "@/components/player/progress-scrubber";
@@ -39,6 +40,7 @@ export function PlayerDock({
               <ProgressScrubber />
             </div>
           </div>
+          <DockControls className="hidden sm:flex" />
           <NavFab value={tab} onChange={onTabChange} />
         </div>
       </div>
