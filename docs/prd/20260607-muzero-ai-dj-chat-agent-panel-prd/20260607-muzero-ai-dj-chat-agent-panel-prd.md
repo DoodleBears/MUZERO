@@ -443,7 +443,8 @@ interface ChatUiState {
 
 ### Phase 6: 队列/打断 + onboarding + 压缩
 **Tasks:**
-- [ ] `chat-queue-tray.tsx`（DnD 重排、立即发送、auto-dispatch Switch、reload 后默认关）；Stop≠Interrupt + 打断标记。
+- [x] `chat-queue-tray.tsx` 展示层（DnD 重排、可访问按钮重排、立即发送/删除回调、auto-dispatch Switch 默认关、无内置文案）。
+- [ ] ChatPanel/App 挂接 `chat-queue-tray.tsx` 到 runtime actor（send/delete/reorder/auto-dispatch）+ i18n labels；待并行 App/i18n WIP 落地后补。
 - [x] 队列 runtime 核心：`ChatSession.queuedPromptsJson` 解析/入队/重排/删除；actor 重建只恢复队列计数、不自动派发；手动派发移除 queued prompt 后发送；actor 重排/删除不触发发送；interrupt 立即发送并带一次性 marker。
 - [ ] 空态：预设 chips（插入不发）+ 空库/无 seed 引导（指向上传/输入 vibe）。
 - [x] `dj-chat-context-budget.ts` + `dj-chat-tokens.ts`：预算 gate + 滑动 `contextStartIndex` 压缩（block-and-explain，不静默截断）。
@@ -453,6 +454,7 @@ interface ChatUiState {
 - [x] pending 审批暂停派发；`sendQueuedPrompt` 保留 queued prompt 且返回 false。
 - [x] 重载恢复队列但不自动发；手动派发 queued prompt 后从 session 队列移除；interrupt 不入队并带 `interruptionMarker`。
 - [x] Runtime actor 支持 queued prompt reorder/delete，持久化顺序/数量且不 dispatch。
+- [x] Queue tray 展示层支持 DnD drop、上/下移按钮、send/delete、auto-dispatch 切换；组件只把 prompt id 顺序/动作回调给上层。
 - [x] 超预算时纯函数返回 block（调用点负责解释）；压缩指针计算保留最新 user turn，不静默截断。
 - [x] 压缩指针 actor/repo 持久化、旧消息仍可见。
 - [ ] 上下文预算 UI 接线与 block-and-explain 文案（待 i18n/App 挂载解锁）。
@@ -530,6 +532,7 @@ interface ChatUiState {
 | 2026-06-07 | Codex | 推进 Phase 3d：`DjChatRuntimeActor.respondToToolApproval` 桥接 AI SDK `addToolApprovalResponse`，approval response 写入消息后自动续 tool loop；补 runtime 测试；`make check` 通过（52 files / 376 tests）。 |
 | 2026-06-07 | Codex | 推进 Phase 3e：新增无内置文案的 `ChatToolCollapsible` presentational 组件，labels 由调用方传入以便后续 i18n 接线；覆盖 approval actions、output、error 渲染；`make check` 通过（53 files / 378 tests）。 |
 | 2026-06-07 | Codex | 推进 Phase 3f：`ChatTurns` 在传入 labels 时渲染 tool collapsible，`ChatPanel` 透传 runtime approve/reject callbacks；补 opt-in 组件测试；`make check` 通过（52 files / 375 tests）。 |
+| 2026-06-07 | Codex | 推进 Phase 6g：新增无内置文案的 `ChatQueueTray` 展示层，支持空态、DnD drop/可访问按钮重排、立即发送/删除回调与默认关闭的 auto-dispatch switch；补组件测试；`make check` 通过（53 files / 379 tests）。 |
 
 ---
 
