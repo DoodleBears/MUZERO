@@ -47,6 +47,7 @@
     "play": "재생",
     "pause": "일시정지",
     "repeat": "반복: {{mode}}",
+    "repeatLabel": "반복",
     "volume": "볼륨",
     "shuffle": "셔플",
     "autoplay": "자동 재생",
@@ -139,7 +140,10 @@
     "styleSceneLiquid": "리퀴드(씬)",
     "styleSceneAurora": "오로라(씬)",
     "asBackground": "재생 화면 배경으로 사용",
-    "asBackgroundHint": "이미지 슬라이드쇼를 실시간 비주얼라이저로 대체합니다(전력 소모 증가)."
+    "asBackgroundHint": "이미지 슬라이드쇼를 실시간 비주얼라이저로 대체합니다(전력 소모 증가).",
+    "backgroundDim": "배경 어둡게: {{pct}}%",
+    "inCoverArea": "커버 영역에 비주얼라이저 표시",
+    "inCoverAreaHint": "커버가 없는 곡에 사용. 끄면 곡별 그라데이션을 표시해 중복 표시를 방지합니다."
   },
   "crop": {
     "title": "커버 자르기 (정사각형)",

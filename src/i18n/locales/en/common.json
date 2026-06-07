@@ -49,6 +49,7 @@
     "play": "Play",
     "pause": "Pause",
     "repeat": "Repeat: {{mode}}",
+    "repeatLabel": "Repeat",
     "volume": "Volume",
     "shuffle": "Shuffle",
     "autoplay": "Autoplay",
@@ -146,7 +147,10 @@
     "styleSceneLiquid": "Liquid (scene)",
     "styleSceneAurora": "Aurora (scene)",
     "asBackground": "Use as Now Playing background",
-    "asBackgroundHint": "Replaces the image slideshow with the live visualizer (uses more power)."
+    "asBackgroundHint": "Replaces the image slideshow with the live visualizer (uses more power).",
+    "backgroundDim": "Background dim: {{pct}}%",
+    "inCoverArea": "Show visualizer in cover art area",
+    "inCoverAreaHint": "For songs with no cover; otherwise a per-song gradient is shown. Off avoids drawing the visualizer twice."
   },
   "crop": {
     "title": "Crop cover (square)",

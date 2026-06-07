@@ -191,6 +191,11 @@ export interface AppSettings {
   visualizerStyle?: VisualizerStyleId;
   /** Use the visualizer as the full Now-Playing background (vs the image slideshow). Default false. */
   visualizerAsBackground?: boolean;
+  /** Dim/darken over the visualizer background, 0–100 (foreground legibility). Default 30. */
+  visualizerBackgroundDim?: number;
+  /** When the visualizer is the background, also show it in a no-cover song's cover
+   *  area (vs a per-song hash gradient placeholder). Default false. */
+  visualizerInCoverArea?: boolean;
   /** Global color scheme. Mirrors localStorage `muzero-theme`; defaults to system. */
   theme?: "light" | "dark" | "system";
   /** Primary/accent color (hex) for light mode. Mirrors localStorage `muzero-primary-light`. */
@@ -222,4 +227,6 @@ export const DEFAULT_SETTINGS: AppSettings = {
   backgroundSlideshowShuffle: true,
   visualizerStyle: "aura",
   visualizerAsBackground: false,
+  visualizerBackgroundDim: 30,
+  visualizerInCoverArea: false,
 };

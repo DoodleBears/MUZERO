@@ -47,6 +47,7 @@
     "play": "播放",
     "pause": "暂停",
     "repeat": "循环：{{mode}}",
+    "repeatLabel": "循环",
     "volume": "音量",
     "shuffle": "随机播放",
     "autoplay": "自动播放",
@@ -139,7 +140,10 @@
     "styleSceneLiquid": "液态（场景）",
     "styleSceneAurora": "极光（场景）",
     "asBackground": "用作播放页背景",
-    "asBackgroundHint": "用实时可视化替代图片幻灯片背景（更耗电）。"
+    "asBackgroundHint": "用实时可视化替代图片幻灯片背景（更耗电）。",
+    "backgroundDim": "背景压暗：{{pct}}%",
+    "inCoverArea": "在封面区域显示可视化",
+    "inCoverAreaHint": "用于没有封面的歌曲；关闭时改用每首歌的渐变色占位，避免可视化重复显示两次。"
   },
   "crop": {
     "title": "裁切封面（正方形）",

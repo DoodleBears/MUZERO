@@ -37,6 +37,7 @@ export function NowPlayingBackground({
   // layer, with the image/cover on top fading out on idle to reveal it.
   const showViz =
     (settings.visualizerAsBackground ?? false) && (settings.visualizerStyle ?? "aura") !== "off";
+  const vizDim = (settings.visualizerBackgroundDim ?? 30) / 100;
   const isPlaying = usePlayerStore((s) => s.isPlaying);
   const mode = settings.backgroundMode ?? "cover";
   const galleryFallback = settings.backgroundGalleryFallback ?? true;
@@ -169,8 +170,16 @@ export function NowPlayingBackground({
       className={cn("pointer-events-none absolute inset-0 overflow-hidden", className)}
       aria-hidden="true"
     >
-      {/* Bottom layer: the live visualizer (when "use as background" is on). */}
-      {showViz ? <VisualizerHost active={isPlaying} className="absolute inset-0" /> : null}
+      {/* Bottom layer: the live visualizer (when "use as background" is on), with a
+          configurable dim over it for foreground legibility. */}
+      {showViz ? (
+        <>
+          <VisualizerHost active={isPlaying} className="absolute inset-0" />
+          {vizDim > 0 ? (
+            <div className="absolute inset-0 bg-background" style={{ opacity: vizDim }} />
+          ) : null}
+        </>
+      ) : null}
 
       {/* Image slideshow + dim, layered on top. When the visualizer is the
           background, this fades out on idle to reveal it underneath. */}

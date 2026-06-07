@@ -47,6 +47,7 @@
     "play": "再生",
     "pause": "一時停止",
     "repeat": "リピート：{{mode}}",
+    "repeatLabel": "リピート",
     "volume": "音量",
     "shuffle": "シャッフル",
     "autoplay": "自動再生",
@@ -139,7 +140,10 @@
     "styleSceneLiquid": "リキッド（シーン）",
     "styleSceneAurora": "オーロラ（シーン）",
     "asBackground": "再生画面の背景として使用",
-    "asBackgroundHint": "画像スライドショーをライブビジュアライザーに置き換えます（電力消費が増えます）。"
+    "asBackgroundHint": "画像スライドショーをライブビジュアライザーに置き換えます（電力消費が増えます）。",
+    "backgroundDim": "背景の暗さ：{{pct}}%",
+    "inCoverArea": "カバー領域にビジュアライザーを表示",
+    "inCoverAreaHint": "カバーのない曲向け。オフのときは曲ごとのグラデーションを表示し、二重表示を防ぎます。"
   },
   "crop": {
     "title": "カバーを切り抜き（正方形）",
