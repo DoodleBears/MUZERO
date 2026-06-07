@@ -5,7 +5,9 @@ import {
   type KeyboardEvent,
   type PointerEvent,
   type ReactNode,
+  useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -203,31 +205,11 @@ export function MemoryTimelineRail({
             data-transition="crossfade"
           >
             <AnimatePresence initial={false}>
-              <motion.article
-                animate={{ filter: "blur(0px)", opacity: 1, scale: 1, y: 0 }}
-                className="col-start-1 row-start-1 flex h-full max-h-full flex-col overflow-hidden rounded-xl border border-border/70 bg-background/80 p-5 text-center shadow-sm backdrop-blur-sm md:p-6"
-                exit={{ filter: "blur(6px)", opacity: 0, scale: 0.985, y: -10 }}
-                initial={{ filter: "blur(6px)", opacity: 0, scale: 0.97, y: 12 }}
+              <MemoryCarouselSlide
+                formatCreatedAt={formatCreatedAt}
                 key={activeMemory.id}
-                style={{ willChange: "opacity, transform, filter" }}
-                transition={{ duration: 0.42, ease: [0.22, 1, 0.36, 1] }}
-              >
-                <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-primary" />
-                {activeMemory.photoUrl && (
-                  <img
-                    alt=""
-                    className="mb-4 max-h-[min(52vh,24rem)] w-full rounded-lg object-contain"
-                    data-testid="memory-carousel-image"
-                    src={activeMemory.photoUrl}
-                  />
-                )}
-                <MemoryCarouselNote note={activeMemory.note} />
-                <div className="mt-4 space-y-1 text-muted-foreground text-xs">
-                  <time dateTime={new Date(activeMemory.createdAt).toISOString()}>
-                    {formatCreatedAt(activeMemory.createdAt)}
-                  </time>
-                </div>
-              </motion.article>
+                memory={activeMemory}
+              />
             </AnimatePresence>
           </div>
         </div>
@@ -299,11 +281,56 @@ export function MemoryTimelineRail({
   );
 }
 
-function MemoryCarouselNote({ note }: { note: string }) {
+function MemoryCarouselSlide({
+  formatCreatedAt,
+  memory,
+}: {
+  formatCreatedAt: (createdAt: number) => ReactNode;
+  memory: MemoryTimelineRailItem;
+}) {
+  const [layoutReady, setLayoutReady] = useState(false);
+  const markLayoutReady = useCallback(() => setLayoutReady(true), []);
+
+  return (
+    <motion.article
+      animate={
+        layoutReady
+          ? { filter: "blur(0px)", opacity: 1, scale: 1, y: 0 }
+          : { filter: "blur(6px)", opacity: 0, scale: 0.985, y: 8 }
+      }
+      className="col-start-1 row-start-1 flex h-full max-h-full flex-col overflow-hidden rounded-xl border border-border/70 bg-background/80 p-5 text-center shadow-sm backdrop-blur-sm md:p-6"
+      data-fade-in="after-fit-layout"
+      data-layout-ready={layoutReady ? "true" : "false"}
+      data-testid="memory-carousel-slide"
+      exit={{ filter: "blur(6px)", opacity: 0, scale: 0.985, y: -10 }}
+      initial={{ filter: "blur(6px)", opacity: 0, scale: 0.97, y: 12 }}
+      style={{ willChange: "opacity, transform, filter" }}
+      transition={{ duration: 0.42, ease: [0.22, 1, 0.36, 1] }}
+    >
+      <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-primary" />
+      {memory.photoUrl && (
+        <img
+          alt=""
+          className="mb-4 max-h-[min(52vh,24rem)] w-full rounded-lg object-contain"
+          data-testid="memory-carousel-image"
+          src={memory.photoUrl}
+        />
+      )}
+      <MemoryCarouselNote note={memory.note} onFitLayout={markLayoutReady} />
+      <div className="mt-4 space-y-1 text-muted-foreground text-xs">
+        <time dateTime={new Date(memory.createdAt).toISOString()}>
+          {formatCreatedAt(memory.createdAt)}
+        </time>
+      </div>
+    </motion.article>
+  );
+}
+
+function MemoryCarouselNote({ note, onFitLayout }: { note: string; onFitLayout: () => void }) {
   const boxRef = useRef<HTMLDivElement | null>(null);
   const [fitText, setFitText] = useState(() => resolveMemoryFitText(note, { height: 0, width: 0 }));
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const element = boxRef.current;
     if (!element) return;
     const target: HTMLDivElement = element;
@@ -320,6 +347,7 @@ function MemoryCarouselNote({ note }: { note: string }) {
           width,
         }),
       );
+      onFitLayout();
     }
 
     updateFitText();
@@ -332,7 +360,7 @@ function MemoryCarouselNote({ note }: { note: string }) {
 
     window.addEventListener("resize", updateFitText);
     return () => window.removeEventListener("resize", updateFitText);
-  }, [note]);
+  }, [note, onFitLayout]);
 
   return (
     <div

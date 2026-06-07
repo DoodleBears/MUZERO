@@ -53,6 +53,14 @@ describe("MemoryTimelineRail", () => {
       "data-transition",
       "crossfade",
     );
+    expect(screen.getByTestId("memory-carousel-slide")).toHaveAttribute(
+      "data-layout-ready",
+      "true",
+    );
+    expect(screen.getByTestId("memory-carousel-slide")).toHaveAttribute(
+      "data-fade-in",
+      "after-fit-layout",
+    );
     expect(screen.getByTestId("memory-carousel-card")).toHaveClass("grid");
     expect(screen.getByTestId("memory-carousel-image")).toHaveClass("object-contain");
     expect(screen.getByTestId("memory-carousel-image")).toHaveClass("max-h-[min(52vh,24rem)]");
