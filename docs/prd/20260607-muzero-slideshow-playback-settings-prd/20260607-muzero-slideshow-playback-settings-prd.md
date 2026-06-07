@@ -11,7 +11,7 @@
 
 | Phase | Name | Status | Link |
 |-------|------|--------|------|
-| 1 | `nextSlideIndex` 纯函数（顺序 / 随机不连续重复，TDD） | 🔲 Pending | [§4](#phase-1-nextslideindex-纯函数tdd) |
+| 1 | `nextSlideIndex` 纯函数（顺序 / 随机不连续重复，TDD） | ✅ Completed | [§4](#phase-1-nextslideindex-纯函数tdd) |
 | 2 | 设置字段 + 轮播接线 + UI + 文案 | 🔲 Pending | [§4](#phase-2-设置字段--轮播接线--ui--文案) |
 
 > Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
@@ -76,11 +76,11 @@ nextSlideIndex(current: number, length: number, shuffle: boolean, rand = Math.ra
 ### Phase 1: `nextSlideIndex` 纯函数（TDD）
 
 **Tasks:**
-- [ ] 新建 `src/lib/slideshow.ts` `nextSlideIndex(current, length, shuffle, rand)`。
-- [ ] `slideshow.test.ts` 穷举：顺序前进 + wrap；随机**永不返回当前**、注入 rand 覆盖边界（0 与 ~1）；`length<=1`→0；`current` 越界归一。
+- [x] 新建 `src/lib/slideshow.ts` `nextSlideIndex(current, length, shuffle, rand)`。
+- [x] `slideshow.test.ts` 穷举：顺序前进 + wrap；随机**永不返回当前**（rand 扫 [0,1)）+ 均匀映射（0 与 ~1 边界）；`length<=1`→0；`current` 越界/负数归一。
 
 **Checklist:**
-- [ ] `slideshow.test.ts` 全绿；biome / `tsc` 清。
+- [x] `slideshow.test.ts` 5 例全绿；biome 清、无 NUL。
 
 ### Phase 2: 设置字段 + 轮播接线 + UI + 文案
 
