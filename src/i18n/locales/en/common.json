@@ -51,7 +51,8 @@
     "repeat": "Repeat: {{mode}}",
     "volume": "Volume",
     "shuffle": "Shuffle",
-    "autoplay": "Autoplay"
+    "autoplay": "Autoplay",
+    "playbackError": "Playback error"
   },
   "dj": {
     "writing": "DJ is writing the next track…",
@@ -177,6 +178,13 @@
     "primaryPresetTeal": "Teal",
     "primaryPresetRose": "Rose",
     "primaryPresetSunset": "Sunset",
+    "font": "Font",
+    "fontSystem": "System",
+    "fontSerif": "Serif",
+    "fontRounded": "Rounded",
+    "fontMono": "Mono",
+    "fontCustom": "Custom font",
+    "fontCustomPlaceholder": "e.g. Inter, Avenir Next",
     "djTitle": "AI DJ (LLM)",
     "provider": "Provider",
     "model": "Model",
@@ -221,6 +229,48 @@
     "playAll": "Play all",
     "setName": "Set name",
     "setDescription": "Add a description…",
-    "coverHint": "Drop / paste / click to set the cover"
+    "coverHint": "Drop / paste / click to set the cover",
+    "newSet": "New set",
+    "addTracks": "Add tracks",
+    "newSetName": "New set"
+  },
+  "notification": {
+    "copy": "Copy",
+    "copySuccess": "Copied to clipboard",
+    "copyFail": "Couldn't copy — try again",
+    "dismiss": "Dismiss"
+  },
+  "errorPage": {
+    "kicker": "Crash report",
+    "title": "Something went wrong",
+    "description": "The app hit an unexpected error. Copy the details below for debugging, then retry or reload.",
+    "errorLabel": "Error",
+    "stackLabel": "Stack trace",
+    "stackTraceLabel": "Stack",
+    "componentStackLabel": "Component stack",
+    "causeLabel": "Cause",
+    "appLabel": "App",
+    "deviceLabel": "Device",
+    "runtimeField": "Runtime",
+    "urlField": "URL",
+    "localeField": "Locale",
+    "timeField": "Time",
+    "viewportField": "Viewport",
+    "screenField": "Screen",
+    "platformField": "Platform",
+    "languageField": "Languages",
+    "touchField": "Touch",
+    "coresField": "CPU cores",
+    "memoryField": "Device memory",
+    "onlineField": "Online",
+    "userAgentField": "User agent",
+    "yesValue": "Yes",
+    "noValue": "No",
+    "unavailableValue": "Unavailable",
+    "unknownMessage": "Unknown error",
+    "copyDetails": "Copy error details",
+    "copied": "Copied",
+    "retry": "Try again",
+    "reload": "Reload app"
   }
 }

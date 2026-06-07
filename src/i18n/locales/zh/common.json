@@ -49,7 +49,8 @@
     "repeat": "循环：{{mode}}",
     "volume": "音量",
     "shuffle": "随机播放",
-    "autoplay": "自动播放"
+    "autoplay": "自动播放",
+    "playbackError": "播放出错"
   },
   "dj": {
     "writing": "DJ 正在编写下一首……",
@@ -171,6 +172,13 @@
     "primaryPresetTeal": "青色",
     "primaryPresetRose": "玫瑰",
     "primaryPresetSunset": "日落",
+    "font": "字体",
+    "fontSystem": "系统",
+    "fontSerif": "衬线",
+    "fontRounded": "圆体",
+    "fontMono": "等宽",
+    "fontCustom": "自定义字体",
+    "fontCustomPlaceholder": "例如 PingFang SC、思源黑体",
     "djTitle": "AI DJ（大语言模型）",
     "provider": "服务商",
     "model": "模型",
@@ -214,6 +222,48 @@
     "playAll": "播放全部",
     "setName": "歌单名称",
     "setDescription": "添加描述…",
-    "coverHint": "拖拽 / 粘贴 / 点击设置封面"
+    "coverHint": "拖拽 / 粘贴 / 点击设置封面",
+    "newSet": "新建歌单",
+    "addTracks": "添加歌曲",
+    "newSetName": "新歌单"
+  },
+  "notification": {
+    "copy": "复制",
+    "copySuccess": "已复制到剪贴板",
+    "copyFail": "复制失败 —— 请重试",
+    "dismiss": "关闭"
+  },
+  "errorPage": {
+    "kicker": "崩溃报告",
+    "title": "出了点问题",
+    "description": "应用遇到意外错误。复制下面的详情用于排查，然后重试或重新加载。",
+    "errorLabel": "错误",
+    "stackLabel": "堆栈跟踪",
+    "stackTraceLabel": "堆栈",
+    "componentStackLabel": "组件堆栈",
+    "causeLabel": "原因",
+    "appLabel": "应用",
+    "deviceLabel": "设备",
+    "runtimeField": "运行环境",
+    "urlField": "URL",
+    "localeField": "语言环境",
+    "timeField": "时间",
+    "viewportField": "视口",
+    "screenField": "屏幕",
+    "platformField": "平台",
+    "languageField": "浏览器语言",
+    "touchField": "触摸",
+    "coresField": "CPU 核心",
+    "memoryField": "设备内存",
+    "onlineField": "在线",
+    "userAgentField": "User Agent",
+    "yesValue": "是",
+    "noValue": "否",
+    "unavailableValue": "不可用",
+    "unknownMessage": "未知错误",
+    "copyDetails": "复制错误详情",
+    "copied": "已复制",
+    "retry": "重试",
+    "reload": "重新加载应用"
   }
 }

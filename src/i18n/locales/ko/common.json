@@ -49,7 +49,8 @@
     "repeat": "반복: {{mode}}",
     "volume": "볼륨",
     "shuffle": "셔플",
-    "autoplay": "자동 재생"
+    "autoplay": "자동 재생",
+    "playbackError": "재생 오류"
   },
   "dj": {
     "writing": "DJ가 다음 곡을 쓰는 중…",
@@ -171,6 +172,13 @@
     "primaryPresetTeal": "청록",
     "primaryPresetRose": "로즈",
     "primaryPresetSunset": "노을",
+    "font": "글꼴",
+    "fontSystem": "시스템",
+    "fontSerif": "세리프",
+    "fontRounded": "둥근",
+    "fontMono": "고정폭",
+    "fontCustom": "사용자 지정 글꼴",
+    "fontCustomPlaceholder": "예: Inter, 본고딕",
     "djTitle": "AI DJ (LLM)",
     "provider": "제공자",
     "model": "모델",
@@ -214,6 +222,48 @@
     "playAll": "전체 재생",
     "setName": "세트 이름",
     "setDescription": "설명 추가…",
-    "coverHint": "드롭 / 붙여넣기 / 클릭으로 커버 설정"
+    "coverHint": "드롭 / 붙여넣기 / 클릭으로 커버 설정",
+    "newSet": "새 세트",
+    "addTracks": "곡 추가",
+    "newSetName": "새 세트"
+  },
+  "notification": {
+    "copy": "복사",
+    "copySuccess": "클립보드에 복사했습니다",
+    "copyFail": "복사하지 못했습니다 —— 다시 시도해 주세요",
+    "dismiss": "닫기"
+  },
+  "errorPage": {
+    "kicker": "크래시 리포트",
+    "title": "문제가 발생했어요",
+    "description": "앱에서 예기치 않은 오류가 발생했어요. 아래 세부 정보를 복사해 디버깅에 사용한 뒤 다시 시도하거나 새로고침하세요.",
+    "errorLabel": "오류",
+    "stackLabel": "스택 트레이스",
+    "stackTraceLabel": "스택",
+    "componentStackLabel": "컴포넌트 스택",
+    "causeLabel": "원인",
+    "appLabel": "앱",
+    "deviceLabel": "기기",
+    "runtimeField": "런타임",
+    "urlField": "URL",
+    "localeField": "로캘",
+    "timeField": "시간",
+    "viewportField": "뷰포트",
+    "screenField": "화면",
+    "platformField": "플랫폼",
+    "languageField": "언어 목록",
+    "touchField": "터치",
+    "coresField": "CPU 코어",
+    "memoryField": "기기 메모리",
+    "onlineField": "온라인",
+    "userAgentField": "사용자 에이전트",
+    "yesValue": "예",
+    "noValue": "아니요",
+    "unavailableValue": "사용 불가",
+    "unknownMessage": "알 수 없는 오류",
+    "copyDetails": "오류 정보 복사",
+    "copied": "복사됨",
+    "retry": "다시 시도",
+    "reload": "앱 새로고침"
   }
 }

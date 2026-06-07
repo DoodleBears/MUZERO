@@ -49,7 +49,8 @@
     "repeat": "リピート：{{mode}}",
     "volume": "音量",
     "shuffle": "シャッフル",
-    "autoplay": "自動再生"
+    "autoplay": "自動再生",
+    "playbackError": "再生エラー"
   },
   "dj": {
     "writing": "DJ が次の曲を書いています…",
@@ -171,6 +172,13 @@
     "primaryPresetTeal": "ティール",
     "primaryPresetRose": "ローズ",
     "primaryPresetSunset": "サンセット",
+    "font": "フォント",
+    "fontSystem": "システム",
+    "fontSerif": "セリフ",
+    "fontRounded": "丸ゴシック",
+    "fontMono": "等幅",
+    "fontCustom": "カスタムフォント",
+    "fontCustomPlaceholder": "例: Inter、ヒラギノ角ゴ",
     "djTitle": "AI DJ（LLM）",
     "provider": "プロバイダー",
     "model": "モデル",
@@ -214,6 +222,48 @@
     "playAll": "すべて再生",
     "setName": "セット名",
     "setDescription": "説明を追加…",
-    "coverHint": "ドロップ / ペースト / クリックでカバーを設定"
+    "coverHint": "ドロップ / ペースト / クリックでカバーを設定",
+    "newSet": "新規セット",
+    "addTracks": "曲を追加",
+    "newSetName": "新しいセット"
+  },
+  "notification": {
+    "copy": "コピー",
+    "copySuccess": "クリップボードにコピーしました",
+    "copyFail": "コピーできませんでした —— もう一度お試しください",
+    "dismiss": "閉じる"
+  },
+  "errorPage": {
+    "kicker": "クラッシュレポート",
+    "title": "問題が発生しました",
+    "description": "アプリで予期しないエラーが発生しました。下の詳細をコピーしてデバッグに使い、再試行または再読み込みしてください。",
+    "errorLabel": "エラー",
+    "stackLabel": "スタックトレース",
+    "stackTraceLabel": "スタック",
+    "componentStackLabel": "コンポーネントスタック",
+    "causeLabel": "原因",
+    "appLabel": "アプリ",
+    "deviceLabel": "デバイス",
+    "runtimeField": "ランタイム",
+    "urlField": "URL",
+    "localeField": "ロケール",
+    "timeField": "時刻",
+    "viewportField": "ビューポート",
+    "screenField": "画面",
+    "platformField": "プラットフォーム",
+    "languageField": "言語",
+    "touchField": "タッチ",
+    "coresField": "CPU コア",
+    "memoryField": "デバイスメモリ",
+    "onlineField": "オンライン",
+    "userAgentField": "ユーザーエージェント",
+    "yesValue": "はい",
+    "noValue": "いいえ",
+    "unavailableValue": "利用不可",
+    "unknownMessage": "不明なエラー",
+    "copyDetails": "エラー詳細をコピー",
+    "copied": "コピーしました",
+    "retry": "再試行",
+    "reload": "アプリを再読み込み"
   }
 }

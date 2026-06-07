@@ -15,7 +15,7 @@
 |-------|------|--------|------|
 | 1 | 数据模型：`DjSession.description`/`coverBlobId` + **新增 prepend 到顶部** + 歌单封面 repo + high-water id-diff | ✅ Completed | §5 |
 | 2 | 歌单详情页（曲目列表 + 名称/描述编辑 + 封面拖拽/粘贴 + 「播放全部」）+ gallery 卡片改「点进详情 / 小播放键」+ 路由 | ✅ Completed | §5 |
-| 3 | 创建新歌单 + 上传到歌单 + 粘贴/拖拽**目标歌单选择**（gallery 无上下文时弹选择器；详情页直接进该歌单） | 🔲 Pending | §5 |
+| 3 | 创建新歌单 + 上传到歌单 + 粘贴/拖拽**目标歌单选择** | 🔄 部分（创建+上传到歌单✅；粘贴/拖拽目标选择器待做） | §5 |
 
 > Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
 
@@ -87,8 +87,9 @@ coverBlobId?: string;   // 歌单级封面，FK → mediaBlobs；缺省时 UI �
 - [x] **详情头编辑（建在 Phase 1 字段上）**：名称行内编辑(`updateSession` on blur/Enter)、描述行内 textarea、**封面拖拽/粘贴/点击**(`filesFromTransfer`+`setSessionCover`，document paste 监听)；封面默认取「首个有封面的曲」(`useSetCoverUrl` 共享 hook，gallery 卡 + 详情头一致、set 封面覆盖)。i18n 4 语(setName/setDescription/coverHint)。浏览器实测：封面图显示、名称预填可编辑、描述/拖拽区就绪。
 
 ### Phase 3: 创建 + 上传 + 粘贴目标选择
-- [ ] gallery「新建歌单」；详情页「添加歌曲」；`GlobalDropZone` 无上下文时弹目标歌单选择器（含新建）；详情页直接进该集。
-- [ ] i18n 4 语；浏览器实测全流程。
+- [x] **gallery「+新建歌单」**：搜索行旁按钮 → `createSession`(空 seed、autoExtend off) → 进详情页（可立即行内改名/封面）。
+- [x] **详情页「+添加歌曲」**：文件选择(`MEDIA_ACCEPT` multiple) → 新 store action **`addUploadsToSet(setId, files)`**（抽自 `addUploads`，probe+createUploadedTrack+prepend 复用）→ 进该歌单顶部。i18n `newSet`/`addTracks`/`newSetName` 4 语。typecheck/biome 清。
+- [ ] **粘贴/拖拽**媒体到 gallery（无上下文）**弹目标歌单选择器（含新建）= 待做**；详情页封面图 paste/drop 已在 Phase 2 做。
 
 ---
 

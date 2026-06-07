@@ -1,5 +1,15 @@
 import { useLiveQuery } from "dexie-react-hooks";
-import { ArrowLeft, Disc3, Heart, ImagePlus, LayoutGrid, List, Play, Search } from "lucide-react";
+import {
+  ArrowLeft,
+  Disc3,
+  Heart,
+  ImagePlus,
+  LayoutGrid,
+  List,
+  Play,
+  Plus,
+  Search,
+} from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { VirtualTrackList } from "@/components/library/virtual-track-list";
@@ -7,6 +17,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { db } from "@/db/muzero-db";
 import {
+  createSession,
   getSession,
   listAllTracks,
   listSessions,
@@ -15,7 +26,7 @@ import {
 } from "@/db/repositories";
 import type { Track } from "@/db/types";
 import { useObjectUrl, useTrackCoverUrl } from "@/hooks/use-media";
-import { dragHasFiles, filesFromTransfer, IMAGE_ACCEPT } from "@/lib/file-drop";
+import { dragHasFiles, filesFromTransfer, IMAGE_ACCEPT, MEDIA_ACCEPT } from "@/lib/file-drop";
 import {
   filterSets,
   type SetFilter,
@@ -87,6 +98,15 @@ export function SearchPage() {
     void play();
   }
 
+  async function createNewSet() {
+    const s = await createSession({
+      name: t("gallery.newSetName"),
+      seedPrompt: "",
+      config: { autoExtend: false },
+    });
+    setSelectedSetId(s.id);
+  }
+
   // Level 2: a set's track list.
   if (selectedSetId) {
     return (
@@ -99,17 +119,29 @@ export function SearchPage() {
     );
   }
 
-  // Level 1: the album wall.
+  // Level 1: the album wall. One full-height scroll surface — search + filters
+  // scroll with the wall and the whole thing dissolves under the floating chrome
+  // (`chrome-fade`), top and bottom, just like Now Playing.
   return (
-    <div className="mx-auto flex h-full w-full max-w-4xl flex-col px-4 pt-chrome-top lg:px-6">
-      <div className="relative mb-3">
-        <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-        <Input
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder={t("gallery.search")}
-          className="pl-9"
-        />
+    <div className="chrome-fade no-scrollbar mx-auto h-full w-full max-w-4xl overflow-y-auto px-4 pt-chrome-top pb-chrome-bottom lg:px-6">
+      <div className="mb-3 flex items-center gap-2">
+        <div className="relative flex-1">
+          <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder={t("gallery.search")}
+            className="pl-9"
+          />
+        </div>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => void createNewSet()}
+          className="shrink-0"
+        >
+          <Plus className="size-4" /> {t("gallery.newSet")}
+        </Button>
       </div>
 
       <div className="mb-3 flex flex-wrap items-center gap-1.5">
@@ -147,7 +179,7 @@ export function SearchPage() {
         </div>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto pb-chrome-bottom">
+      <div>
         {shown.length === 0 ? (
           <p className="mt-12 text-center text-sm text-muted-foreground">{t("gallery.empty")}</p>
         ) : view === "grid" ? (
@@ -197,7 +229,9 @@ function SetDetailView({
   const { t } = useTranslation();
   const session = useLiveQuery(() => getSession(setId), [setId]);
   const playTrack = usePlayerStore((s) => s.playTrack);
+  const addUploadsToSet = usePlayerStore((s) => s.addUploadsToSet);
   const fileRef = useRef<HTMLInputElement>(null);
+  const addFileRef = useRef<HTMLInputElement>(null);
   const [name, setName] = useState("");
   const [desc, setDesc] = useState("");
   const [dragOver, setDragOver] = useState(false);
@@ -253,7 +287,7 @@ function SetDetailView({
   }, [setId]);
 
   return (
-    <div className="mx-auto flex h-full w-full max-w-4xl flex-col px-4 pt-chrome-top lg:px-6">
+    <div className="mx-auto flex h-full w-full max-w-4xl flex-col px-4 pt-14 lg:px-6">
       <button
         type="button"
         onClick={onBack}
@@ -332,16 +366,33 @@ function SetDetailView({
           </p>
         </div>
 
-        <Button size="sm" onClick={onPlayAll} disabled={tracks.length === 0} className="shrink-0">
-          <Play className="size-4" /> {t("gallery.playAll")}
-        </Button>
+        <div className="flex shrink-0 flex-col gap-2">
+          <Button size="sm" onClick={onPlayAll} disabled={tracks.length === 0}>
+            <Play className="size-4" /> {t("gallery.playAll")}
+          </Button>
+          <Button size="sm" variant="outline" onClick={() => addFileRef.current?.click()}>
+            <Plus className="size-4" /> {t("gallery.addTracks")}
+          </Button>
+          <input
+            ref={addFileRef}
+            type="file"
+            accept={MEDIA_ACCEPT}
+            multiple
+            className="hidden"
+            onChange={(e) => {
+              if (e.target.files) void addUploadsToSet(setId, e.target.files);
+              e.target.value = "";
+            }}
+          />
+        </div>
       </div>
 
-      <div className="min-h-0 flex-1 pb-chrome-bottom">
+      <div className="min-h-0 flex-1">
         <VirtualTrackList
           tracks={tracks}
           onPlay={(track) => void playTrack(track)}
           emptyHint={t("gallery.empty")}
+          className="chrome-fade no-scrollbar pt-5 pb-chrome-bottom [--chrome-fade-top:1.25rem]"
         />
       </div>
     </div>

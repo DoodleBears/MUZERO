@@ -19,6 +19,7 @@ import {
 import type { SetDisplayMode, Track } from "@/db/types";
 import { createAiDjBrain } from "@/dj/dj-brain-ai";
 import { createDjEngine, type DjEngine } from "@/dj/dj-engine";
+import i18n from "@/i18n/i18n";
 import { log } from "@/lib/logger";
 import { probeMediaFile } from "@/lib/media-probe";
 import { resolveMusicGenProvider } from "@/musicgen/registry";
@@ -33,6 +34,7 @@ import {
   shuffleNext,
   shufflePrev,
 } from "@/player/queue";
+import { notify } from "@/stores/notification-store";
 
 interface PlayerState {
   activeSessionId: string | null;
@@ -84,6 +86,8 @@ interface PlayerState {
   setAudioOnly: (audioOnly: boolean) => void;
   /** Import uploaded audio/video files into the active set. */
   addUploads: (files: FileList | File[]) => Promise<void>;
+  /** Import uploaded files into a SPECIFIC set (e.g. the gallery detail page). */
+  addUploadsToSet: (setId: string, files: FileList | File[]) => Promise<void>;
   /**
    * Drop-to-upload: import media into the active set, creating an upload set
    * first when nothing is active. Returns whether a new set was created (so the
@@ -154,7 +158,15 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       },
       onTimeUpdate: (positionSec, durationSec) => set({ positionSec, durationSec }),
       onPlayStateChange: (isPlaying) => set({ isPlaying }),
-      onError: (msg) => set({ djError: msg }),
+      onError: (error) => {
+        // A playback failure is a notification, not dock chrome — keep it out
+        // of the status line (djError stays reserved for DJ/upload errors).
+        notify.error(i18n.t("player.playbackError"), {
+          detail: describePlaybackError(error),
+          error,
+        });
+        log.warn("player", "playback error", error);
+      },
     });
     mediaEngine.setVolume(get().volume);
 
@@ -353,7 +365,10 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
 
   async addUploads(files) {
     const { activeSessionId } = get();
-    if (!activeSessionId) return;
+    if (activeSessionId) await get().addUploadsToSet(activeSessionId, files);
+  },
+
+  async addUploadsToSet(setId, files) {
     const list = Array.from(files);
     if (list.length === 0) return;
     set({ isUploading: true });
@@ -362,7 +377,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       for (const file of list) {
         const probed = await probeMediaFile(file);
         const track = await createUploadedTrack({
-          sessionId: activeSessionId,
+          sessionId: setId,
           title: probed.title,
           kind: probed.kind,
           blob: file,
@@ -371,8 +386,9 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
         });
         ids.push(track.id);
       }
-      await prependTrackIds(activeSessionId, ids);
-      log.info("player", `uploaded ${ids.length} file(s)`);
+      // Newest on top (prepend) — the first added track becomes the set's cover.
+      await prependTrackIds(setId, ids);
+      log.info("player", `uploaded ${ids.length} file(s) to ${setId}`);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       set({ djError: msg });
@@ -417,6 +433,28 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
 }));
 
 // --------------------------------------------------------------- internals ----
+
+// HTMLMediaElement.error.code → a short, non-localized technical label. This is
+// debug detail (shown in the toast + copy payload), not user-facing copy, so it
+// stays in English alongside the code.
+const MEDIA_ERROR_LABELS: Record<number, string> = {
+  1: "MEDIA_ERR_ABORTED",
+  2: "MEDIA_ERR_NETWORK",
+  3: "MEDIA_ERR_DECODE",
+  4: "MEDIA_ERR_SRC_NOT_SUPPORTED",
+};
+
+/** Compact technical descriptor for a playback failure (MediaError or Error). */
+function describePlaybackError(error: unknown): string {
+  if (error && typeof error === "object" && "code" in error) {
+    const code = Number((error as MediaError).code);
+    const label = MEDIA_ERROR_LABELS[code] ?? `code ${code}`;
+    const message = (error as MediaError).message?.trim();
+    return message ? `${label}: ${message}` : label;
+  }
+  if (error instanceof Error) return error.message;
+  return error ? String(error) : "unknown";
+}
 
 async function ensureLoadedAndPlay(
   set: (p: Partial<PlayerState>) => void,
