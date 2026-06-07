@@ -1,5 +1,5 @@
 import { useLiveQuery } from "dexie-react-hooks";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { db } from "@/db/muzero-db";
 import type { Track } from "@/db/types";
 import { useSettings } from "@/hooks/use-app-data";
@@ -11,17 +11,33 @@ import { getCroppedBlob } from "@/lib/image-crop";
  * never leak Blob URLs (matches the doodlekuma rule).
  */
 export function useObjectUrl(blob: Blob | null | undefined): string | null {
-  const [url, setUrl] = useState<string | null>(null);
+  return useKeyedObjectUrl(blob, blob);
+}
+
+function useKeyedObjectUrl(blob: Blob | null | undefined, key: unknown): string | null {
+  const [entry, setEntry] = useState<{ blob: Blob; key: unknown; url: string } | null>(null);
   useEffect(() => {
-    if (!blob) {
-      setUrl(null);
+    if (!blob || key == null) {
+      setEntry(null);
       return;
     }
     const next = URL.createObjectURL(blob);
-    setUrl(next);
+    setEntry({ blob, key, url: next });
     return () => URL.revokeObjectURL(next);
-  }, [blob]);
-  return url;
+  }, [blob, key]);
+  return entry && entry.blob === blob && entry.key === key ? entry.url : null;
+}
+
+const blobIds = new WeakMap<Blob, number>();
+let nextBlobId = 1;
+
+function blobIdentityKey(blob: Blob): number {
+  const existing = blobIds.get(blob);
+  if (existing) return existing;
+  const id = nextBlobId;
+  nextBlobId += 1;
+  blobIds.set(blob, id);
+  return id;
 }
 
 /**
@@ -29,16 +45,18 @@ export function useObjectUrl(blob: Blob | null | undefined): string | null {
  * blobs' identity drives the effect, so a stable list won't re-create URLs.
  */
 export function useObjectUrls(blobs: Blob[]): string[] {
+  const blobsRef = useRef(blobs);
+  blobsRef.current = blobs;
+  const key = blobs.map(blobIdentityKey).join("|");
   const [urls, setUrls] = useState<string[]>([]);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `key` represents the Blob identity sequence; `blobsRef` lets fresh arrays with the same blobs avoid URL churn.
   useEffect(() => {
-    const next = blobs.map((b) => URL.createObjectURL(b));
+    const next = blobsRef.current.map((b) => URL.createObjectURL(b));
     setUrls(next);
     return () => {
       for (const url of next) URL.revokeObjectURL(url);
     };
-    // Re-run when the blob set changes (length is a cheap, stable-enough proxy
-    // since blobs are appended/removed, never mutated in place).
-  }, [blobs]);
+  }, [key]);
   return urls;
 }
 
@@ -69,12 +87,14 @@ export function useTrackCoverUrl(
       coverCropped && cc ? { x: cc.x, y: cc.y, width: cc.width, height: cc.height } : undefined,
     [coverCropped, cc?.x, cc?.y, cc?.width, cc?.height],
   );
+  const cropKey =
+    coverBlobId && crop ? `${coverBlobId}:${crop.x},${crop.y},${crop.width},${crop.height}` : null;
 
   // Cropped render (canvas → object URL). Only runs when a crop applies.
-  const [croppedUrl, setCroppedUrl] = useState<string | null>(null);
+  const [croppedEntry, setCroppedEntry] = useState<{ key: string; url: string } | null>(null);
   useEffect(() => {
-    if (!blob || !crop) {
-      setCroppedUrl(null);
+    if (!blob || !crop || !cropKey) {
+      setCroppedEntry(null);
       return;
     }
     let alive = true;
@@ -82,15 +102,26 @@ export function useTrackCoverUrl(
     void getCroppedBlob(blob, crop, blob.type || "image/jpeg").then((out) => {
       if (!alive) return;
       url = URL.createObjectURL(out);
-      setCroppedUrl(url);
+      setCroppedEntry({ key: cropKey, url });
     });
     return () => {
       alive = false;
       if (url) URL.revokeObjectURL(url);
     };
-  }, [blob, crop]);
+  }, [blob, crop, cropKey]);
 
   // Original URL only when no crop applies (avoids a redundant object URL).
-  const originalUrl = useObjectUrl(crop ? null : blob);
-  return crop ? croppedUrl : originalUrl;
+  const originalUrl = useKeyedObjectUrl(crop ? null : blob, crop ? null : coverBlobId);
+  return crop ? (croppedEntry?.key === cropKey ? croppedEntry.url : null) : originalUrl;
+}
+
+/** Reactive object URL for a track's primary audio/video media bytes. */
+export function useTrackMediaUrl(track: Pick<Track, "blobId"> | undefined): string | null {
+  const blobId = track?.blobId;
+  const blob = useLiveQuery(
+    async () => (blobId ? (await db.mediaBlobs.get(blobId))?.blob : undefined),
+    [blobId],
+    undefined,
+  );
+  return useKeyedObjectUrl(blob, blobId);
 }

@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import type { Track } from "@/db/types";
 import { useSettings } from "@/hooks/use-app-data";
 import { useTrackCoverUrl } from "@/hooks/use-media";
-import { resolveStageContent, trackSubtitle } from "@/lib/track-display";
+import { resolveStageContent } from "@/lib/track-display";
 import { cn } from "@/lib/utils";
 import { getMediaEngine, usePlayerStore } from "@/stores/player-store";
 import { CoverImage } from "./cover-image";
+import { StageTitleFallback } from "./stage-title-fallback";
 import { CurrentTrackContextMenu } from "./track-context-menu";
 
 const DEFAULT_VIDEO_ASPECT = 16 / 9;
@@ -32,7 +32,6 @@ export function MediaStage({ className }: { className?: string }) {
   const coverUrl = useTrackCoverUrl(current);
   const [videoError, setVideoError] = useState(false);
   const [videoAspect, setVideoAspect] = useState<number | null>(null);
-  const [coverAspect, setCoverAspect] = useState<number | null>(null);
   const content = resolveStageContent({
     track: current,
     displayMode,
@@ -58,7 +57,6 @@ export function MediaStage({ className }: { className?: string }) {
   useEffect(() => {
     setVideoError(false);
     setVideoAspect(null);
-    setCoverAspect(null);
   }, [current?.id]);
   useEffect(() => {
     const el = getMediaEngine()?.element;
@@ -95,14 +93,11 @@ export function MediaStage({ className }: { className?: string }) {
 
   const showCover = content === "cover";
   const showGeneratedBackdrop = content === "title" || videoError;
-  // Video and cover both fill the width at their *own* aspect ratio — a 1:1
-  // cropped cover shows as a 1:1 square, a wide cover stays wide (no distortion,
-  // no bars). Title/visualizer fall back to a centered square.
-  const aspect = showVideo
-    ? (videoAspect ?? DEFAULT_VIDEO_ASPECT)
-    : showCover
-      ? (coverAspect ?? 1)
-      : null;
+
+  // Video keeps its intrinsic ratio. Covers and title cards stay square like
+  // album artwork, which keeps direct switches and swipe handoffs on one stable
+  // geometry instead of jumping when an uploaded cover is wide/tall.
+  const aspect = showVideo ? (videoAspect ?? DEFAULT_VIDEO_ASPECT) : showCover ? 1 : null;
 
   return (
     <CurrentTrackContextMenu>
@@ -114,19 +109,19 @@ export function MediaStage({ className }: { className?: string }) {
           showVideo
             ? "w-full overflow-hidden rounded-lg bg-black shadow-md"
             : showCover
-              ? "mx-auto w-full overflow-hidden rounded-lg shadow-md"
+              ? "mx-auto w-full overflow-hidden rounded-lg bg-muted shadow-md"
               : "mx-auto aspect-square w-full bg-muted rounded-lg overflow-hidden",
           className,
         )}
       >
-        {showGeneratedBackdrop && <StageTitleCard track={current} dim={asBgActive} />}
+        {showGeneratedBackdrop && <StageTitleFallback track={current} dim={asBgActive} />}
         {/* Crossfades to the next cover only once it has decoded (no flash of the
           previous track's cover), and reports its aspect for the box ratio. */}
         {content === "cover" && (
           <CoverImage
             url={coverUrl}
             hasCover={!!current?.coverBlobId}
-            onAspect={setCoverAspect}
+            fallback={<StageTitleFallback track={current} dim={asBgActive} />}
             className="z-10 rounded-lg"
           />
         )}
@@ -137,30 +132,5 @@ export function MediaStage({ className }: { className?: string }) {
         )}
       </div>
     </CurrentTrackContextMenu>
-  );
-}
-
-function StageTitleCard({ track, dim }: { track: Track | undefined; dim: boolean }) {
-  const subtitle = trackSubtitle(track);
-  const showSubtitle = subtitle && subtitle !== track?.title;
-
-  return (
-    <div
-      className={cn(
-        "absolute inset-0 grid place-items-center bg-muted p-7 text-center",
-        dim && "bg-muted/92",
-      )}
-    >
-      <div className="max-w-[82%] space-y-2">
-        <div className="line-clamp-3 text-balance font-semibold text-foreground text-2xl sm:text-3xl">
-          {track?.title ?? "MUZERO"}
-        </div>
-        {showSubtitle && (
-          <div className="line-clamp-2 text-balance font-medium text-muted-foreground text-sm sm:text-base">
-            {subtitle}
-          </div>
-        )}
-      </div>
-    </div>
   );
 }
