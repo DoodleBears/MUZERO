@@ -117,13 +117,13 @@ export function MemoryTimelineRail({
     onOffsetChange?.(nextOffset);
   }
 
-  function onPointerDown(event: PointerEvent<HTMLDivElement>) {
+  function onPointerDown(event: PointerEvent<HTMLElement>) {
     showTimeline();
     dragRef.current = { startOffset: timelineOffset, startY: event.clientY };
     event.currentTarget.setPointerCapture?.(event.pointerId);
   }
 
-  function onPointerMove(event: PointerEvent<HTMLDivElement>) {
+  function onPointerMove(event: PointerEvent<HTMLElement>) {
     if (!(event.buttons & 1) || !dragRef.current) return;
     // Drag the timeline, not the playhead: moving it up advances to later memories.
     setTimelineOffsetFromDrag(
@@ -131,7 +131,7 @@ export function MemoryTimelineRail({
     );
   }
 
-  function onPointerUp(event: PointerEvent<HTMLDivElement>) {
+  function onPointerUp(event: PointerEvent<HTMLElement>) {
     dragRef.current = null;
     if (event.currentTarget.hasPointerCapture?.(event.pointerId)) {
       event.currentTarget.releasePointerCapture(event.pointerId);
@@ -188,14 +188,17 @@ export function MemoryTimelineRail({
       data-testid="memory-timeline-rail"
       layout
       onFocusCapture={showTimeline}
-      onPointerDown={showTimeline}
+      onPointerCancel={onPointerUp}
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={onPointerUp}
       onWheel={showTimeline}
     >
       {mode === "idle" && activeMemory ? (
         <div className="grid h-full place-items-center p-3" data-testid="memory-carousel-stage">
           <motion.article
             animate={{ opacity: 1, scale: 1, y: 0 }}
-            className="flex max-h-full w-full max-w-72 flex-col rounded-xl border border-border/70 bg-background/80 p-4 text-center shadow-sm backdrop-blur-sm"
+            className="flex max-h-full w-4/5 max-w-none flex-col rounded-xl border border-border/70 bg-background/80 p-5 text-center shadow-sm backdrop-blur-sm md:p-6"
             data-testid="memory-carousel-card"
             initial={{ opacity: 0.72, scale: 0.96, y: 8 }}
             key={activeMemory.id}
@@ -205,12 +208,12 @@ export function MemoryTimelineRail({
             {activeMemory.photoUrl && (
               <img
                 alt=""
-                className="mb-3 max-h-44 w-full rounded-lg object-contain"
+                className="mb-4 max-h-[min(52vh,24rem)] w-full rounded-lg object-contain"
                 data-testid="memory-carousel-image"
                 src={activeMemory.photoUrl}
               />
             )}
-            <p className="line-clamp-7 whitespace-pre-wrap text-sm leading-6">
+            <p className="line-clamp-9 whitespace-pre-wrap text-base leading-7">
               {activeMemory.note}
             </p>
             <div className="mt-4 space-y-1 text-muted-foreground text-xs">
@@ -229,40 +232,9 @@ export function MemoryTimelineRail({
           className="relative h-full cursor-grab touch-none select-none overflow-hidden outline-none active:cursor-grabbing focus-visible:ring-2 focus-visible:ring-ring"
           data-testid="memory-timeline-scrubber"
           onKeyDown={onKeyDown}
-          onPointerCancel={onPointerUp}
-          onPointerDown={onPointerDown}
-          onPointerMove={onPointerMove}
-          onPointerUp={onPointerUp}
           role="slider"
           tabIndex={0}
         >
-          {activeMemory && (
-            <article
-              className="-translate-x-1/2 -translate-y-1/2 pointer-events-none absolute top-1/2 left-1/2 z-10 w-[min(18rem,82%)] rounded-xl border border-primary/35 bg-background/85 p-3 text-center shadow-sm backdrop-blur-sm"
-              data-testid="memory-playhead-card"
-            >
-              {activeMemory.photoUrl && (
-                <img
-                  alt=""
-                  className="mb-2 max-h-28 w-full rounded-md object-contain"
-                  src={activeMemory.photoUrl}
-                />
-              )}
-              <p className="line-clamp-4 whitespace-pre-wrap text-sm leading-5">
-                {activeMemory.note}
-              </p>
-              <time
-                className="mt-2 block text-muted-foreground text-xs"
-                dateTime={new Date(activeMemory.createdAt).toISOString()}
-              >
-                {formatCreatedAt(activeMemory.createdAt)}
-              </time>
-            </article>
-          )}
-          <div
-            className="-translate-y-1/2 pointer-events-none absolute inset-x-6 top-1/2 z-20 h-0.5 rounded-full bg-primary/90 shadow-[0_0_18px_color-mix(in_srgb,var(--primary)_70%,transparent)]"
-            data-testid="memory-timeline-playhead"
-          />
           <ol
             className="absolute top-0 inset-x-4 flex flex-col items-stretch transition-transform duration-200 ease-out will-change-transform motion-reduce:transition-none"
             data-testid="memory-timeline-list"

@@ -42,7 +42,9 @@ describe("MemoryTimelineRail", () => {
 
     expect(screen.getByTestId("memory-carousel-card")).toHaveTextContent("Second kitchen loop");
     expect(screen.getByTestId("memory-carousel-card")).not.toHaveTextContent("Kitchen Song");
+    expect(screen.getByTestId("memory-carousel-card")).toHaveClass("w-4/5");
     expect(screen.getByTestId("memory-carousel-image")).toHaveClass("object-contain");
+    expect(screen.getByTestId("memory-carousel-image")).toHaveClass("max-h-[min(52vh,24rem)]");
     expect(screen.getByTestId("memory-timeline-rail")).not.toHaveClass("bg-card/55");
     expect(screen.getByTestId("memory-carousel-stage")).toHaveClass("place-items-center");
 
@@ -55,9 +57,10 @@ describe("MemoryTimelineRail", () => {
     const onOffsetChange = vi.fn();
     renderRail({ onOffsetChange });
 
-    fireEvent.wheel(screen.getByTestId("memory-timeline-rail"));
-    expect(screen.getByTestId("memory-timeline-playhead")).toBeInTheDocument();
-    expect(screen.getByTestId("memory-timeline-playhead")).toHaveClass("h-0.5");
+    const rail = screen.getByTestId("memory-timeline-rail");
+    fireEvent.wheel(rail);
+    expect(screen.queryByTestId("memory-playhead-card")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("memory-timeline-playhead")).not.toBeInTheDocument();
     expect(screen.getByTestId("memory-timeline-list")).toBeInTheDocument();
     expect(screen.getByTestId("memory-timeline-list")).toHaveClass("flex-col");
     expect(screen.getByTestId("memory-timeline-image-mem_second")).toHaveClass("object-contain");
@@ -78,6 +81,25 @@ describe("MemoryTimelineRail", () => {
 
     act(() => vi.advanceTimersByTime(1));
     expect(screen.getByTestId("memory-carousel-card")).toHaveTextContent("Third late walk");
+  });
+
+  it("starts dragging on the same pointer gesture that leaves the idle carousel", () => {
+    const onOffsetChange = vi.fn();
+    renderRail({ onOffsetChange });
+
+    const rail = screen.getByTestId("memory-timeline-rail");
+    fireEvent.pointerDown(rail, { clientY: 240, pointerId: 1 });
+    expect(rail).toHaveAttribute("data-mode", "timeline");
+    expect(screen.queryByTestId("memory-carousel-card")).not.toBeInTheDocument();
+
+    fireEvent.pointerMove(rail, { buttons: 1, clientY: 40, pointerId: 1 });
+    fireEvent.pointerUp(rail, { pointerId: 1 });
+
+    expect(onOffsetChange).toHaveBeenLastCalledWith(200);
+    expect(screen.getByTestId("memory-timeline-item-mem_third")).toHaveAttribute(
+      "data-active",
+      "true",
+    );
   });
 
   it("renders an empty state when there are no memories", () => {
