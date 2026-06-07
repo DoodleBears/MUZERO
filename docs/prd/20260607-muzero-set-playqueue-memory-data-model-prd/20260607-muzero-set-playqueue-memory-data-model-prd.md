@@ -15,7 +15,7 @@
 |-------|------|--------|------|
 | 1 | 播放列表 Play Queue 地基（表 + repo + player-store 改消费它 + 迁移现有播放） | ✅ Completed | §6 |
 | 2 | autoExtend / refill 迁到 Play Queue（续歌喂队列） | ✅ Completed | §6 |
-| 3 | 歌曲记忆 Memory（表 + 迁移 `Track.note` + 多记忆编辑 + 搜索/DJ 上下文接 memory） | 🔄 3a 数据层✅（表/迁移/repo/搜索/DJ）；3b UI 待 Now Playing 重设计落地 | §6 |
+| 3 | 歌曲记忆 Memory（表 + 迁移 `Track.note` + 多记忆编辑 + 搜索/DJ 上下文接 memory） | 🔄 3a 数据层✅（表/迁移/repo/搜索/DJ）；3b 便签瀑布流展示层✅，annotation/search 接线待 Now Playing 重设计落地 | §6 |
 | 4 | UI 打磨（歌单管理、播放列表 play-next/add/reorder、记忆相册、封面取自记忆） | 🔲 Pending | §6 |
 
 > Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
@@ -224,10 +224,13 @@ this.version(3).stores({
 - [x] **测试**：repo 5 例（多记忆时间线序/照片 role/编辑/删连带照片/按曲聚合）+ v3→v4 迁移（note→Memory、空白跳过、保留时间戳）+ track-search 记忆命中 4 例 + dj-engine 记忆入 context。**全套件 317 绿、typecheck/biome 清**。
 
 **Phase 3b — UI + provenance（待并行 Now Playing 重设计提交后接力）🔲:**
+- [x] `memory-notes-waterfall.tsx` 展示层：每条 Memory 以便签卡片呈现，响应式 masonry/waterfall，支持照片、时间戳、编辑/删除回调；不持有 DB/i18n 状态，便于后续接 `annotation-editor`。
 - [ ] `annotation-editor` 改记忆列表（加/编辑/删/照片/时间线）——文件在 WIP，待其落地。
+  - **UIUX 决议（2026-06-08）**：记忆不是一个长 textarea；每条 Memory 以「便签」卡片呈现，整体为响应式瀑布流/masonry（移动单列、桌面多列）。卡片需像贴在唱片旁的私密便签：轻微纸感背景、可读的大段 note、时间戳、可选照片缩略图、编辑/删除操作；不同卡片可有轻微色调变化但不喧宾夺主。新增/编辑表单可在瀑布流上方或卡片内展开，保存后立即进入瀑布流。
 - [ ] `search-page` 用 `memoryNotesByTrack` join 记忆进搜索（`useLiveQuery` memories）。
 - [x] providerPreset 生成时落 `Track` + 自动加一条 provenance Memory（musicgen Q5；mock 仅字段不写 Memory，避免测试/本地占位污染 DJ 记忆）。
-- [ ] 验收：一首歌可加多条记忆（含照片）；搜索命中记忆文字；DJ 上下文带记忆；生成曲自动带 provenance Note。（数据层已就绪，仅差 UI 接线）
+- [x] `MemoryNotesWaterfall` 展示层测试：新到旧排序、便签 masonry class、照片 alt、edit/delete 回调、空态。
+- [ ] 验收：一首歌可加多条记忆（含照片）；搜索命中记忆文字；DJ 上下文带记忆；生成曲自动带 provenance Note。（数据层与便签展示层已就绪，仅差 annotation/search UI 接线）
 
 ### Phase 4: UI 打磨
 **Tasks:**
@@ -280,6 +283,7 @@ this.version(3).stores({
 | 2026-06-07 | MUZERO | **Phase 1 完成**（TDD，3 原子 commit）：1a 纯函数 play-queue（12 测）；1b Dexie v3 playQueue 表+repo+v2→v3 seed 迁移（8 测含升级路径）；1c player-store 改消费 playQueue + high-water 追加（DJ/上传新曲流进队列）。浏览器实测迁移 seed+播放正常、零报错；全套件 148 绿。用户级队列编辑 actions 延后 DM-4 |
 | 2026-06-07 | MUZERO | **Phase 2 完成**：`refillIfNeeded` 阈值改测播放列表 upcoming（`(sessionId,queueLength,currentIndex)`），编辑队列后续歌仍准；`maybeRefill` 传 `queue.length`。续歌喂队列由 DM-1c high-water 承担。dj-engine 9 测更新、全套件 148 绿 |
 | 2026-06-07 | Codex | 推进 PROVENANCE runtime：`createPendingTrack` 接 `providerPreset` + provenance Memory；chat generate 工具从 Settings 写 cloud preset/model（如 `mureka:mureka-6`）；DJ engine 从 `MusicGenProvider.providerPreset` 写入。补 repo/chat/DJ/musicgen 测试；`make check` 通过（50 files / 361 tests）。 |
+| 2026-06-08 | Codex | 推进 Phase 3b UI foundation：记录 Memory UIUX 为「便签瀑布流」；新增无 DB/i18n 状态的 `MemoryNotesWaterfall` 展示层，支持 responsive masonry、照片、时间戳、edit/delete 回调和空态。补组件/排序测试；`make check` 通过（64 files / 406 tests）。 |
 
 ---
 
