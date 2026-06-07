@@ -1,10 +1,12 @@
 import { useLiveQuery } from "dexie-react-hooks";
-import { Disc3, Heart, LayoutGrid, List, Search } from "lucide-react";
+import { ArrowLeft, Disc3, Heart, LayoutGrid, List, Play, Search } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { VirtualTrackList } from "@/components/library/virtual-track-list";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { db } from "@/db/muzero-db";
-import { listAllTracks, listSessions } from "@/db/repositories";
+import { getSession, listAllTracks, listSessions } from "@/db/repositories";
 import type { Track } from "@/db/types";
 import { useTrackCoverUrl } from "@/hooks/use-media";
 import {
@@ -21,12 +23,14 @@ type GalleryView = "list" | "grid";
 const VIEW_KEY = "muzero-gallery-view";
 
 /**
- * 歌单 Gallery — browse every set like an album wall. Search by name/seed, filter
- * (all / liked), sort (recent / name / size), and switch between a list and an
- * album-grid (each set's first cover is the tile). Tapping a set plays it.
+ * 歌单 Gallery — a two-level surface. Level 1 browses every set like an album wall
+ * (search / filter / sort / list⇄album-grid). Tapping a set opens level 2: that
+ * set's virtualized track list, with a back button + "play all". A small play
+ * button on each card plays the set directly without entering it.
  */
 export function SearchPage() {
   const { t } = useTranslation();
+  const [selectedSetId, setSelectedSetId] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<SetFilter>("all");
   const [sort, setSort] = useState<SetSort>("recent");
@@ -71,14 +75,26 @@ export function SearchPage() {
     if (typeof localStorage !== "undefined") localStorage.setItem(VIEW_KEY, next);
   }
 
-  async function open(item: SetGalleryItem) {
-    await setActiveSession(item.session.id);
+  async function playSet(setId: string) {
+    await setActiveSession(setId);
     void play();
   }
 
+  // Level 2: a set's track list.
+  if (selectedSetId) {
+    return (
+      <SetDetailView
+        setId={selectedSetId}
+        trackById={trackById}
+        onBack={() => setSelectedSetId(null)}
+        onPlayAll={() => void playSet(selectedSetId)}
+      />
+    );
+  }
+
+  // Level 1: the album wall.
   return (
-    <div className="mx-auto flex h-full w-full max-w-4xl flex-col p-4 lg:p-6">
-      {/* Search */}
+    <div className="mx-auto flex h-full w-full max-w-4xl flex-col px-4 pt-chrome-top lg:px-6">
       <div className="relative mb-3">
         <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
         <Input
@@ -89,7 +105,6 @@ export function SearchPage() {
         />
       </div>
 
-      {/* Filters + sort + view toggle */}
       <div className="mb-3 flex flex-wrap items-center gap-1.5">
         <Chip active={filter === "all"} onClick={() => setFilter("all")}>
           {t("gallery.filterAll")}
@@ -125,8 +140,7 @@ export function SearchPage() {
         </div>
       </div>
 
-      {/* Body */}
-      <div className="min-h-0 flex-1 overflow-y-auto">
+      <div className="min-h-0 flex-1 overflow-y-auto pb-chrome-bottom">
         {shown.length === 0 ? (
           <p className="mt-12 text-center text-sm text-muted-foreground">{t("gallery.empty")}</p>
         ) : view === "grid" ? (
@@ -137,7 +151,8 @@ export function SearchPage() {
                 item={item}
                 coverTrack={item.coverTrackId ? trackById.get(item.coverTrackId) : undefined}
                 view="grid"
-                onOpen={() => void open(item)}
+                onEnter={() => setSelectedSetId(item.session.id)}
+                onPlay={() => void playSet(item.session.id)}
               />
             ))}
           </div>
@@ -149,11 +164,65 @@ export function SearchPage() {
                 item={item}
                 coverTrack={item.coverTrackId ? trackById.get(item.coverTrackId) : undefined}
                 view="list"
-                onOpen={() => void open(item)}
+                onEnter={() => setSelectedSetId(item.session.id)}
+                onPlay={() => void playSet(item.session.id)}
               />
             ))}
           </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+/** Level 2 — one set's virtualized track list. */
+function SetDetailView({
+  setId,
+  trackById,
+  onBack,
+  onPlayAll,
+}: {
+  setId: string;
+  trackById: Map<string, Track>;
+  onBack: () => void;
+  onPlayAll: () => void;
+}) {
+  const { t } = useTranslation();
+  const session = useLiveQuery(() => getSession(setId), [setId]);
+  const playTrack = usePlayerStore((s) => s.playTrack);
+  const tracks = useMemo(
+    () =>
+      (session?.trackIds ?? []).map((id) => trackById.get(id)).filter((tr): tr is Track => !!tr),
+    [session, trackById],
+  );
+
+  return (
+    <div className="mx-auto flex h-full w-full max-w-4xl flex-col px-4 pt-chrome-top lg:px-6">
+      <div className="mb-3 flex items-center gap-2">
+        <button
+          type="button"
+          onClick={onBack}
+          aria-label={t("gallery.back")}
+          className="grid size-9 shrink-0 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-accent/50 hover:text-foreground"
+        >
+          <ArrowLeft className="size-5" />
+        </button>
+        <div className="min-w-0 flex-1">
+          <h2 className="truncate text-base font-semibold">{session?.name ?? ""}</h2>
+          <p className="text-xs text-muted-foreground">
+            {t("gallery.count", { count: tracks.length })}
+          </p>
+        </div>
+        <Button size="sm" onClick={onPlayAll} disabled={tracks.length === 0} className="shrink-0">
+          <Play className="size-4" /> {t("gallery.playAll")}
+        </Button>
+      </div>
+      <div className="min-h-0 flex-1 pb-chrome-bottom">
+        <VirtualTrackList
+          tracks={tracks}
+          onPlay={(track) => void playTrack(track)}
+          emptyHint={t("gallery.empty")}
+        />
       </div>
     </div>
   );
@@ -215,60 +284,90 @@ function SetCard({
   item,
   coverTrack,
   view,
-  onOpen,
+  onEnter,
+  onPlay,
 }: {
   item: SetGalleryItem;
   coverTrack: Track | undefined;
   view: GalleryView;
-  onOpen: () => void;
+  onEnter: () => void;
+  onPlay: () => void;
 }) {
   const { t } = useTranslation();
   const coverUrl = useTrackCoverUrl(coverTrack);
   const count = t("gallery.count", { count: item.trackCount });
 
+  // The play button overlays the card (sibling, not nested) so a button doesn't
+  // nest in a button: tapping it plays the set, tapping elsewhere enters it.
+  const playBtn = (
+    <button
+      type="button"
+      onClick={(e) => {
+        e.stopPropagation();
+        onPlay();
+      }}
+      aria-label={t("player.play")}
+      className={cn(
+        "absolute grid place-items-center rounded-full bg-primary text-primary-foreground shadow-md transition-opacity",
+        "opacity-0 focus-visible:opacity-100 group-hover:opacity-100",
+        view === "grid" ? "bottom-3 right-3 size-9" : "right-2 top-1/2 size-8 -translate-y-1/2",
+      )}
+    >
+      <Play className="size-4" />
+    </button>
+  );
+
   if (view === "grid") {
     return (
-      <button
-        type="button"
-        onClick={onOpen}
-        className="group flex flex-col gap-2 rounded-xl p-2 text-left outline-none transition-colors hover:bg-accent/40 focus-visible:ring-2 focus-visible:ring-ring"
-      >
-        <span className="relative grid aspect-square w-full place-items-center overflow-hidden rounded-lg bg-secondary">
-          {coverUrl ? (
-            <img src={coverUrl} alt="" className="size-full object-cover" />
-          ) : (
-            <Disc3 className="size-8 text-muted-foreground" />
-          )}
-          {item.likedCount > 0 && (
-            <Heart className="absolute right-2 top-2 size-4 fill-primary text-primary" />
-          )}
-        </span>
-        <span className="min-w-0">
-          <span className="block truncate text-sm font-medium">{item.session.name}</span>
-          <span className="block text-xs text-muted-foreground">{count}</span>
-        </span>
-      </button>
+      <div className="group relative">
+        <button
+          type="button"
+          onClick={onEnter}
+          className="flex w-full flex-col gap-2 rounded-xl p-2 text-left outline-none transition-colors hover:bg-accent/40 focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          <span className="relative grid aspect-square w-full place-items-center overflow-hidden rounded-lg bg-secondary">
+            {coverUrl ? (
+              <img src={coverUrl} alt="" className="size-full object-cover" />
+            ) : (
+              <Disc3 className="size-8 text-muted-foreground" />
+            )}
+            {item.likedCount > 0 && (
+              <Heart className="absolute right-2 top-2 size-4 fill-primary text-primary" />
+            )}
+          </span>
+          <span className="min-w-0">
+            <span className="block truncate text-sm font-medium">{item.session.name}</span>
+            <span className="block text-xs text-muted-foreground">{count}</span>
+          </span>
+        </button>
+        {playBtn}
+      </div>
     );
   }
 
   return (
-    <button
-      type="button"
-      onClick={onOpen}
-      className="flex items-center gap-3 rounded-xl p-2 text-left outline-none transition-colors hover:bg-accent/40 focus-visible:ring-2 focus-visible:ring-ring"
-    >
-      <span className="grid size-12 shrink-0 place-items-center overflow-hidden rounded-lg bg-secondary">
-        {coverUrl ? (
-          <img src={coverUrl} alt="" className="size-full object-cover" />
-        ) : (
-          <Disc3 className="size-5 text-muted-foreground" />
+    <div className="group relative">
+      <button
+        type="button"
+        onClick={onEnter}
+        className="flex w-full items-center gap-3 rounded-xl p-2 pe-12 text-left outline-none transition-colors hover:bg-accent/40 focus-visible:ring-2 focus-visible:ring-ring"
+      >
+        <span className="grid size-12 shrink-0 place-items-center overflow-hidden rounded-lg bg-secondary">
+          {coverUrl ? (
+            <img src={coverUrl} alt="" className="size-full object-cover" />
+          ) : (
+            <Disc3 className="size-5 text-muted-foreground" />
+          )}
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-sm font-medium">{item.session.name}</span>
+          <span className="block truncate text-xs text-muted-foreground">{count}</span>
+        </span>
+        {item.likedCount > 0 && (
+          <Heart className="me-8 size-4 shrink-0 fill-primary text-primary" />
         )}
-      </span>
-      <span className="min-w-0 flex-1">
-        <span className="block truncate text-sm font-medium">{item.session.name}</span>
-        <span className="block truncate text-xs text-muted-foreground">{count}</span>
-      </span>
-      {item.likedCount > 0 && <Heart className="size-4 shrink-0 fill-primary text-primary" />}
-    </button>
+      </button>
+      {playBtn}
+    </div>
   );
 }

@@ -104,9 +104,11 @@
   "background": {
     "title": "背景",
     "mode": "再生中の背景",
-    "modeCover": "カバーを背景にする",
-    "modeSlideshow": "スライドショーを背景にする",
+    "modeCover": "カバーを優先",
+    "modeSlideshow": "スライドショーを優先",
     "slideshowHint": "スライドショーは曲に紐づく背景を優先し、なければ下のグローバルギャラリーを使います。",
+    "galleryFallback": "グローバルギャラリーにフォールバック",
+    "galleryFallbackHint": "曲に専用のスライドショーやカバーがない場合、下のグローバルギャラリーを使います。",
     "gallery": "グローバルギャラリー",
     "galleryDesc": "スライドショー背景用の画像。全曲で共有されます（曲ごとの背景が優先）。",
     "addImages": "画像を追加",
@@ -117,7 +119,17 @@
     "coverCropped": "切り抜いたカバーを表示",
     "coverCroppedHint": "カバーは切り抜いた正方形で表示されます。オフにすると元画像全体を表示します。元画像は常に保持されます。",
     "blur": "背景のぼかし：{{px}}px",
-    "mask": "背景の暗さ：{{pct}}%"
+    "mask": "背景の暗さ：{{pct}}%",
+    "effect": "背景エフェクト",
+    "effectNone": "なし",
+    "effectDither": "ディザ（アニメーション）",
+    "effectHint": "フィルターのように背景に重ね、アクセントカラーで色づけします。",
+    "blend": "ブレンドモード",
+    "blendScreen": "スクリーン（発光）",
+    "blendOverlay": "オーバーレイ",
+    "blendSoftLight": "ソフトライト",
+    "blendNormal": "通常",
+    "effectOpacity": "エフェクトの不透明度：{{pct}}%"
   },
   "crop": {
     "title": "カバーを切り抜き（正方形）",
@@ -189,6 +201,8 @@
     "viewList": "リスト",
     "viewGrid": "グリッド",
     "count_other": "{{count}} 曲",
-    "empty": "セットがまだありません — DJ セットを開始するかメディアをアップロードしてください。"
+    "empty": "セットがまだありません — DJ セットを開始するかメディアをアップロードしてください。",
+    "back": "戻る",
+    "playAll": "すべて再生"
   }
 }

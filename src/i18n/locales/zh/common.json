@@ -104,9 +104,11 @@
   "background": {
     "title": "背景",
     "mode": "Now Playing 背景",
-    "modeCover": "以封面作为背景",
-    "modeSlideshow": "以幻灯片轮播作为背景",
+    "modeCover": "优先封面",
+    "modeSlideshow": "优先幻灯片",
     "slideshowHint": "幻灯片优先用歌曲绑定的背景图，没有时回退到下面的全局图库。",
+    "galleryFallback": "回退到全局图库",
+    "galleryFallbackHint": "当歌曲没有自己的幻灯片或封面时，使用下方的全局图库作为背景。",
     "gallery": "全局图库",
     "galleryDesc": "用于幻灯片背景的图片，所有歌曲共享（歌曲自带的背景图优先）。",
     "addImages": "添加图片",
@@ -117,7 +119,17 @@
     "coverCropped": "显示裁切后的封面",
     "coverCroppedHint": "封面按你裁切的正方形显示；关闭则显示完整原图。原图始终保留。",
     "blur": "背景模糊：{{px}}px",
-    "mask": "背景压暗：{{pct}}%"
+    "mask": "背景压暗：{{pct}}%",
+    "effect": "背景特效",
+    "effectNone": "无",
+    "effectDither": "抖动波纹（动态）",
+    "effectHint": "像滤镜一样叠加在背景之上，并采用你的强调色着色。",
+    "blend": "混合模式",
+    "blendScreen": "滤色（发光）",
+    "blendOverlay": "叠加",
+    "blendSoftLight": "柔光",
+    "blendNormal": "正常",
+    "effectOpacity": "特效不透明度：{{pct}}%"
   },
   "crop": {
     "title": "裁切封面（正方形）",
@@ -189,6 +201,8 @@
     "viewList": "列表",
     "viewGrid": "封面",
     "count_other": "{{count}} 首",
-    "empty": "还没有歌单——开始一个 DJ 歌单或上传媒体。"
+    "empty": "还没有歌单——开始一个 DJ 歌单或上传媒体。",
+    "back": "返回",
+    "playAll": "播放全部"
   }
 }

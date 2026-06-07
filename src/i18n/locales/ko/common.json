@@ -104,9 +104,11 @@
   "background": {
     "title": "배경",
     "mode": "재생 화면 배경",
-    "modeCover": "커버를 배경으로",
-    "modeSlideshow": "슬라이드쇼를 배경으로",
+    "modeCover": "커버 우선",
+    "modeSlideshow": "슬라이드쇼 우선",
     "slideshowHint": "슬라이드쇼는 곡에 연결된 배경을 우선 사용하고, 없으면 아래 전역 갤러리를 사용합니다.",
+    "galleryFallback": "전역 갤러리로 폴백",
+    "galleryFallbackHint": "곡에 자체 슬라이드쇼나 커버가 없을 때 아래 전역 갤러리를 사용합니다.",
     "gallery": "전역 갤러리",
     "galleryDesc": "슬라이드쇼 배경용 이미지로 모든 곡이 공유합니다(곡 자체 배경이 우선).",
     "addImages": "이미지 추가",
@@ -117,7 +119,17 @@
     "coverCropped": "잘라낸 커버 표시",
     "coverCroppedHint": "커버는 잘라낸 정사각형으로 표시됩니다. 끄면 원본 전체를 표시합니다. 원본은 항상 보관됩니다.",
     "blur": "배경 흐림: {{px}}px",
-    "mask": "배경 어둡게: {{pct}}%"
+    "mask": "배경 어둡게: {{pct}}%",
+    "effect": "배경 효과",
+    "effectNone": "없음",
+    "effectDither": "디더 (애니메이션)",
+    "effectHint": "필터처럼 배경 위에 겹쳐지고 강조 색으로 물듭니다.",
+    "blend": "블렌드 모드",
+    "blendScreen": "스크린 (글로우)",
+    "blendOverlay": "오버레이",
+    "blendSoftLight": "소프트 라이트",
+    "blendNormal": "보통",
+    "effectOpacity": "효과 불투명도: {{pct}}%"
   },
   "crop": {
     "title": "커버 자르기 (정사각형)",
@@ -189,6 +201,8 @@
     "viewList": "리스트",
     "viewGrid": "그리드",
     "count_other": "{{count}}곡",
-    "empty": "아직 세트가 없습니다 — DJ 세트를 시작하거나 미디어를 업로드하세요."
+    "empty": "아직 세트가 없습니다 — DJ 세트를 시작하거나 미디어를 업로드하세요.",
+    "back": "뒤로",
+    "playAll": "전체 재생"
   }
 }

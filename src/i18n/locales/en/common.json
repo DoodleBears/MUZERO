@@ -108,9 +108,11 @@
   "background": {
     "title": "Background",
     "mode": "Now Playing background",
-    "modeCover": "Use cover as background",
-    "modeSlideshow": "Use slideshow as background",
+    "modeCover": "Prefer cover",
+    "modeSlideshow": "Prefer slideshow",
     "slideshowHint": "The slideshow prefers a song's bound backgrounds, falling back to the global gallery below.",
+    "galleryFallback": "Fall back to global gallery",
+    "galleryFallbackHint": "When a track has no slideshow or cover of its own, use the global gallery below.",
     "gallery": "Global gallery",
     "galleryDesc": "Images for the slideshow background, shared across songs (a song's own backgrounds take priority).",
     "addImages": "Add images",
@@ -121,7 +123,17 @@
     "coverCropped": "Show cropped cover",
     "coverCroppedHint": "Covers display the square you cropped; turn off to show the full image. The original is always kept.",
     "blur": "Background blur: {{px}}px",
-    "mask": "Background dim: {{pct}}%"
+    "mask": "Background dim: {{pct}}%",
+    "effect": "Background effect",
+    "effectNone": "None",
+    "effectDither": "Dither (animated)",
+    "effectHint": "Layered over the background like a filter, tinted with your accent color.",
+    "blend": "Blend mode",
+    "blendScreen": "Screen (glow)",
+    "blendOverlay": "Overlay",
+    "blendSoftLight": "Soft light",
+    "blendNormal": "Normal",
+    "effectOpacity": "Effect opacity: {{pct}}%"
   },
   "crop": {
     "title": "Crop cover (square)",
@@ -194,6 +206,8 @@
     "viewGrid": "Grid",
     "count_one": "{{count}} track",
     "count_other": "{{count}} tracks",
-    "empty": "No sets yet — start a DJ set or upload some media."
+    "empty": "No sets yet — start a DJ set or upload some media.",
+    "back": "Back",
+    "playAll": "Play all"
   }
 }
