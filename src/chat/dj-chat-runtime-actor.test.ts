@@ -42,6 +42,58 @@ class FakeStreamingTransport implements ChatTransport<DjChatUIMessage> {
   }
 }
 
+class FakeApprovalTransport implements ChatTransport<DjChatUIMessage> {
+  sentMessages: DjChatUIMessage[][] = [];
+
+  async sendMessages(
+    options: Parameters<ChatTransport<DjChatUIMessage>["sendMessages"]>[0],
+  ): Promise<ReadableStream<UIMessageChunk>> {
+    this.sentMessages.push([...(options.messages as DjChatUIMessage[])]);
+    const chunks: UIMessageChunk[] = [
+      { type: "start", messageId: "asst_approval" },
+      {
+        type: "tool-input-available",
+        toolCallId: "call_generate",
+        toolName: "dj_generate_tracks",
+        input: { sessionId: "ses_target", briefs: [] },
+      },
+      {
+        type: "tool-approval-request",
+        toolCallId: "call_generate",
+        approvalId: "approval_generate",
+      },
+      { type: "finish", finishReason: "stop" },
+    ];
+    return new ReadableStream({
+      start(controller) {
+        for (const chunk of chunks) controller.enqueue(chunk);
+        controller.close();
+      },
+    });
+  }
+
+  async reconnectToStream(): Promise<ReadableStream<UIMessageChunk> | null> {
+    return null;
+  }
+}
+
+class FailingTransport implements ChatTransport<DjChatUIMessage> {
+  sentMessages: DjChatUIMessage[][] = [];
+
+  constructor(private readonly message: string) {}
+
+  async sendMessages(
+    options: Parameters<ChatTransport<DjChatUIMessage>["sendMessages"]>[0],
+  ): Promise<ReadableStream<UIMessageChunk>> {
+    this.sentMessages.push([...(options.messages as DjChatUIMessage[])]);
+    throw new Error(this.message);
+  }
+
+  async reconnectToStream(): Promise<ReadableStream<UIMessageChunk> | null> {
+    return null;
+  }
+}
+
 let db: MuzeroDB;
 let dbName: string;
 
@@ -162,6 +214,71 @@ describe("DjChatRuntimeActor", () => {
       "assistant",
     ]);
     expect(savedGym.map((message: DjChatUIMessage) => message.role)).toEqual(["user", "assistant"]);
+  });
+
+  it("isolates concurrent approval and error states across session actors", async () => {
+    const approval = await createChatSession({ firstUserText: "approval" }, db);
+    const failure = await createChatSession({ firstUserText: "failure" }, db);
+    await db.chatSessions.update(approval.id, {
+      llmProviderPresetId: "openai",
+      llmModel: "gpt-4.1-mini",
+    });
+    await db.chatSessions.update(failure.id, {
+      llmProviderPresetId: "claude",
+      llmModel: "claude-sonnet-4-5-20250929",
+    });
+    const approvalTransport = new FakeApprovalTransport();
+    const failingTransport = new FailingTransport("claude model unavailable");
+    const approvalActor = getOrCreateDjChatRuntimeActor(approval.id, {
+      db,
+      transport: approvalTransport,
+    });
+    const failingActor = getOrCreateDjChatRuntimeActor(failure.id, {
+      db,
+      transport: failingTransport,
+    });
+    await Promise.all([approvalActor.ready, failingActor.ready]);
+
+    await Promise.all([
+      approvalActor.sendMessage("generate two tracks"),
+      failingActor.sendMessage("this model will fail"),
+    ]);
+
+    expect(approvalActor.getSnapshot().meta).toMatchObject({
+      status: "awaiting-approval",
+      pendingApprovalCount: 1,
+      errorMessage: undefined,
+    });
+    expect(failingActor.getSnapshot().meta).toMatchObject({
+      status: "error",
+      pendingApprovalCount: 0,
+      errorMessage: "claude model unavailable",
+    });
+    expect(approvalTransport.sentMessages[0].at(-1)).toMatchObject({
+      role: "user",
+      parts: [{ type: "text", text: "generate two tracks" }],
+    });
+    expect(failingTransport.sentMessages[0].at(-1)).toMatchObject({
+      role: "user",
+      parts: [{ type: "text", text: "this model will fail" }],
+    });
+
+    const savedApproval = JSON.parse(
+      (await getChatSession(approval.id, db))?.messagesJson ?? "[]",
+    ) as DjChatUIMessage[];
+    const savedFailure = JSON.parse(
+      (await getChatSession(failure.id, db))?.messagesJson ?? "[]",
+    ) as DjChatUIMessage[];
+    expect(savedApproval.map((message) => message.role)).toEqual(["user", "assistant"]);
+    expect(savedApproval[1].parts).toContainEqual({
+      type: "tool-dj_generate_tracks",
+      toolCallId: "call_generate",
+      state: "approval-requested",
+      input: { sessionId: "ses_target", briefs: [] },
+      approval: { id: "approval_generate" },
+    });
+    expect(savedFailure.map((message) => message.role)).toEqual(["user"]);
+    expect(savedFailure[0].parts).toEqual([{ type: "text", text: "this model will fail" }]);
   });
 
   it("persists context compression pointers while keeping old messages visible", async () => {
