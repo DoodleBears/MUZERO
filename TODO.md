@@ -49,7 +49,7 @@ PRD: [`20260607-muzero-ai-dj-chat-agent-panel-prd`](docs/prd/20260607-muzero-ai-
   - 验收：工具核心写入/拒绝前 schema 校验/读工具无审批已测；propose→generate 的非花钱/花钱边界已测；`chat-tool-collapsible` 审批 UI、pump 物化 E2E 待后续提交。
 - [ ] **CHAT-4 多 session + 历史 + branch/regenerate** 🟡 — session home 列表 + 子串搜索 + 自动标题；多 actor 并发（切走仍流）；regenerate(edit-resend) + branch(截断深拷贝)。已完成 Phase 4a：session 搜索（标题 + user 文本，不搜 assistant）、branch 深拷贝截断、actor edit-resend regenerate。已完成 Phase 4b：两个 session runtime actor 并发发送/持久化隔离测试。
 - [ ] **CHAT-5 多 provider 模型选型** 🟡 — `ai/llm-providers.ts` preset 化（openrouter/openai/claude/gemini/groq/deepseek/custom）+ `resolveDjModel` 扩展 + key 入 Dexie；补 `command`/`combobox`/`dialog`/`popover` 原语；全局默认 + per-session combobox 覆盖。已完成 Phase 5a：preset registry、settings 字段、legacy openai/anthropic bridge、per-preset key selection、OpenAI-compatible/Anthropic model resolve。
-- [ ] **CHAT-6 队列/打断 + onboarding + 压缩** 🟡 — 队列托盘（DnD、Stop≠Interrupt、reload 后默认关）；冷启动 chips + 空态引导；上下文预算/压缩（block-and-explain）。已完成 Phase 6a：token 估算、context budget ok/warn/block、压缩起点纯函数。已完成 Phase 6b：session-scoped queued prompts 持久化、actor rebuild 不自动派发、手动派发与 interrupt marker。已完成 Phase 6c：`contextStartIndex` actor/repo 持久化，旧消息仍保留可见。
+- [ ] **CHAT-6 队列/打断 + onboarding + 压缩** 🟡 — 队列托盘（DnD、Stop≠Interrupt、reload 后默认关）；冷启动 chips + 空态引导；上下文预算/压缩（block-and-explain）。已完成 Phase 6a：token 估算、context budget ok/warn/block、压缩起点纯函数。已完成 Phase 6b：session-scoped queued prompts 持久化、actor rebuild 不自动派发、手动派发与 interrupt marker。已完成 Phase 6c：`contextStartIndex` actor/repo 持久化，旧消息仍保留可见。已完成 Phase 6d：composer 键盘矩阵 Enter/Shift+Enter/Cmd/Ctrl+Enter，running+draft 入队/interrupt。
 
 ---
 

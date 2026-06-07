@@ -29,6 +29,10 @@ export function ChatPanel({ sessionId, db }: ChatPanelProps) {
       <ChatTurns messages={snapshot?.messages ?? []} />
       <ChatComposer
         isRunning={isRunning}
+        onInterrupt={(text) => actor.interruptWithMessage(text)}
+        onQueue={async (text) => {
+          await actor.queuePrompt(text);
+        }}
         onSend={(text) => actor.sendMessage(text)}
         onStop={() => actor.stop()}
       />
