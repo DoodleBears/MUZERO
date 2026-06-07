@@ -1,13 +1,15 @@
 /**
  * Shared color helpers for the visualizer renderers. Extracted from the original
  * aura visualizer so every spectrum style derives its palette from the live
- * `--primary` accent (see src/theme/primary.ts) the same way.
+ * `--primary` accent (see src/theme/primary.ts) the same way. Specific
+ * VisualizerHost instances can shadow it with a scoped cover color.
  */
 
 export type Rgb = { r: number; g: number; b: number };
 
 /** Brand purple #bf83fe — fallback when `--primary` can't be resolved. */
 export const FALLBACK_RGB: Rgb = { r: 191, g: 131, b: 254 };
+export const DYNAMIC_PRIMARY_CSS_VAR = "--muzero-visualizer-primary";
 
 const clamp01 = (n: number) => Math.min(1, Math.max(0, n));
 
@@ -59,11 +61,16 @@ export function colorToRgb(raw: string): Rgb | null {
 }
 
 /**
- * Read the live `--primary` token (the accent the user picks in Settings) as RGB,
- * so visualizers track it regardless of color space. Falls back to brand purple.
+ * Read the live visualizer accent as RGB. A scoped cover color can shadow the
+ * user's theme primary for a specific visualizer host; otherwise visualizers
+ * track `--primary` regardless of color space. Falls back to brand purple.
  */
-export function readPrimaryRgb(): Rgb {
+export function readPrimaryRgb(scope?: Element | null): Rgb {
   if (typeof document === "undefined") return FALLBACK_RGB;
-  const raw = getComputedStyle(document.documentElement).getPropertyValue("--primary").trim();
+  const dynamic = scope
+    ? getComputedStyle(scope).getPropertyValue(DYNAMIC_PRIMARY_CSS_VAR).trim()
+    : "";
+  const raw =
+    dynamic || getComputedStyle(document.documentElement).getPropertyValue("--primary").trim();
   return (raw && colorToRgb(raw)) || FALLBACK_RGB;
 }

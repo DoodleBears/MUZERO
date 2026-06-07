@@ -6,6 +6,7 @@ import { Card } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/input";
 import { createSession } from "@/db/repositories";
 import { useSessions } from "@/hooks/use-app-data";
+import { MEDIA_ACCEPT } from "@/lib/file-drop";
 import { cn, formatDuration } from "@/lib/utils";
 import { usePlayerStore } from "@/stores/player-store";
 
@@ -44,7 +45,7 @@ export function SessionsPage({ onStarted }: { onStarted: () => void }) {
   }
 
   return (
-    <div className="mx-auto flex h-full w-full max-w-2xl flex-col gap-4 overflow-y-auto p-4 lg:p-6">
+    <div className="mx-auto flex h-full w-full max-w-2xl flex-col gap-4 overflow-y-auto px-4 pt-chrome-top pb-chrome-bottom lg:px-6">
       <Card className="p-4">
         <h2 className="mb-2 text-sm font-semibold">{t("sessions.startDjTitle")}</h2>
         <Textarea
@@ -84,7 +85,7 @@ export function SessionsPage({ onStarted }: { onStarted: () => void }) {
         <input
           ref={uploadRef}
           type="file"
-          accept="audio/*,video/*"
+          accept={MEDIA_ACCEPT}
           multiple
           hidden
           onChange={(e) => {

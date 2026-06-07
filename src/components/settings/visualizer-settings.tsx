@@ -15,8 +15,9 @@ export function VisualizerSettings() {
   const { t } = useTranslation();
   const settings = useSettings();
   const style = resolveVisualizerStyle(settings.visualizerStyle);
-  const asBackground = settings.visualizerAsBackground ?? false;
-  const dim = settings.visualizerBackgroundDim ?? 30;
+  const asBackground = settings.visualizerAsBackground ?? true;
+  const dim = settings.visualizerBackgroundDim ?? 0;
+  const opacity = settings.visualizerBackgroundOpacity ?? 30;
 
   return (
     <Card>
@@ -44,7 +45,18 @@ export function VisualizerSettings() {
         <label className="mt-1 flex items-center gap-2 text-sm">
           <input
             type="checkbox"
-            checked={settings.visualizerAsBackground ?? false}
+            checked={settings.visualizerUseCoverColor ?? true}
+            onChange={(e) => void saveSettings({ visualizerUseCoverColor: e.target.checked })}
+            className="size-4 accent-[var(--color-primary)]"
+          />
+          {t("visualizer.useCoverColor")}
+        </label>
+        <p className="-mt-1 text-xs text-muted-foreground">{t("visualizer.useCoverColorHint")}</p>
+
+        <label className="mt-1 flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={settings.visualizerAsBackground ?? true}
             onChange={(e) => void saveSettings({ visualizerAsBackground: e.target.checked })}
             className="size-4 accent-[var(--color-primary)]"
           />
@@ -65,6 +77,20 @@ export function VisualizerSettings() {
                 value={dim}
                 onValueChange={(v) => void saveSettings({ visualizerBackgroundDim: v })}
                 aria-label={t("visualizer.backgroundDim", { pct: dim })}
+              />
+            </div>
+
+            <div className="mt-1 flex flex-col gap-1.5">
+              <span className="text-xs font-medium text-muted-foreground">
+                {t("visualizer.backgroundOpacity", { pct: opacity })}
+              </span>
+              <Slider
+                min={0}
+                max={100}
+                step={1}
+                value={opacity}
+                onValueChange={(v) => void saveSettings({ visualizerBackgroundOpacity: v })}
+                aria-label={t("visualizer.backgroundOpacity", { pct: opacity })}
               />
             </div>
 

@@ -117,6 +117,15 @@ export interface PlayQueue {
 
 /** Where the Now-Playing ambient background pulls its image(s) from. */
 export type BackgroundMode = "cover" | "slideshow";
+export type BackgroundRenderer =
+  | "image"
+  | "blur"
+  | "pixel"
+  | "ascii"
+  | "cross-hatch"
+  | "crt"
+  | "dot"
+  | "noise";
 
 /**
  * A square crop region in the original image's pixels. Stored non-destructively
@@ -241,13 +250,17 @@ export interface AppSettings {
   locale: "en" | "zh" | "ja" | "ko";
   /** Now-Playing background *priority*: prefer the track's own cover or its bound slideshow. Defaults to "cover". */
   backgroundMode?: BackgroundMode;
+  /** How the resolved Now-Playing background image is rendered. Defaults to the plain image renderer. */
+  backgroundRenderer?: BackgroundRenderer;
+  /** Pixel block size for the pixel background renderer. Default 12. */
+  backgroundPixelSize?: number;
   /** When a track has neither its own slideshow nor a cover, fall back to the global gallery slideshow. Default true. */
   backgroundGalleryFallback?: boolean;
   /** Auto-hide the header + dock on Now Playing after idle (immersive). Default true. */
   immersiveIdle?: boolean;
   /** Render covers using their stored crop (vs the full image). Default true. */
   coverCropped?: boolean;
-  /** Now-Playing background blur radius in px. Default 12. */
+  /** Now-Playing background blur radius in px. Default 64. */
   backgroundBlur?: number;
   /** Now-Playing background dim/mask opacity, 0–100. Default 25. */
   backgroundMaskOpacity?: number;
@@ -257,13 +270,17 @@ export interface AppSettings {
   backgroundSlideshowShuffle?: boolean;
   /** Now-Playing visualizer style. Defaults to "aura" (the original bloom). */
   visualizerStyle?: VisualizerStyleId;
-  /** Use the visualizer as the full Now-Playing background (vs the image slideshow). Default false. */
+  /** Overlay the visualizer on the full Now-Playing background image/slideshow. Default false. */
   visualizerAsBackground?: boolean;
-  /** Dim/darken over the visualizer background, 0–100 (foreground legibility). Default 30. */
+  /** Dim/darken over the background visualizer, 0–100 (foreground legibility). Default 0. */
   visualizerBackgroundDim?: number;
+  /** Opacity of the background visualizer layer, 0–100. Default 30. */
+  visualizerBackgroundOpacity?: number;
   /** When the visualizer is the background, also show it in a no-cover song's cover
    *  area (vs a per-song hash gradient placeholder). Default false. */
   visualizerInCoverArea?: boolean;
+  /** Prefer the current cover's extracted dominant color for visualizers. Default true. */
+  visualizerUseCoverColor?: boolean;
   /** Global color scheme. Mirrors localStorage `muzero-theme`; defaults to system. */
   theme?: "light" | "dark" | "system";
   /** Primary/accent color (hex) for light mode. Mirrors localStorage `muzero-primary-light`. */
@@ -293,15 +310,19 @@ export const DEFAULT_SETTINGS: AppSettings = {
   locale: "en",
   theme: "system",
   backgroundMode: "cover",
+  backgroundRenderer: "image",
+  backgroundPixelSize: 12,
   backgroundGalleryFallback: true,
   immersiveIdle: true,
   coverCropped: true,
-  backgroundBlur: 12,
-  backgroundMaskOpacity: 25,
+  backgroundBlur: 64,
+  backgroundMaskOpacity: 50,
   backgroundSlideshowIntervalSec: 300,
   backgroundSlideshowShuffle: true,
   visualizerStyle: "bars",
-  visualizerAsBackground: false,
-  visualizerBackgroundDim: 70,
+  visualizerAsBackground: true,
+  visualizerBackgroundDim: 0,
+  visualizerBackgroundOpacity: 30,
   visualizerInCoverArea: true,
+  visualizerUseCoverColor: true,
 };

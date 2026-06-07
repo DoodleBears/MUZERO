@@ -16,6 +16,51 @@
 
 @variant dark (&:where(.dark, .dark *));
 
+/* Hide the scrollbar while keeping the element scrollable (immersive surfaces). */
+@utility no-scrollbar {
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+/*
+ * Always-on edge fade for the immersive scroll surfaces. ONE lightweight gradient
+ * mask — vs Tailwind's `mask-*` utilities, which compile to a 6-layer
+ * `mask-composite: intersect` stack that janks over a playing <video>.
+ *
+ * It MUST go on the scroll container itself (the element with `overflow-y-auto`),
+ * never an ancestor. With the mask on an ancestor, the scrolling descendants —
+ * the <canvas> visualizer, a playing <video>, backdrop-blur cards — intermittently
+ * composite *outside* the ancestor's masked buffer, so the fade flickers on and
+ * off mid-scroll (the reported bug; translateZ on the ancestor does NOT cure it,
+ * because the descendants are their own layers). On the scroller, translateZ +
+ * isolation pin its own backing layer so its content composites *into* the masked
+ * buffer and the fade is rock-steady — pure GPU compositing, not state, not
+ * z-index. The fade is always present (CSS only); it's just invisible until
+ * content scrolls into the edge zone — there's nothing to fade before then.
+ * Lengths default to the chrome heights; override per-use with
+ * `[--chrome-fade-top:…]` / `[--chrome-fade-bottom:…]`.
+ */
+@utility chrome-fade {
+  transform: translateZ(0);
+  isolation: isolate;
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    transparent,
+    #000 var(--chrome-fade-top, var(--spacing-chrome-top)),
+    #000 calc(100% - var(--chrome-fade-bottom, var(--spacing-chrome-bottom))),
+    transparent
+  );
+  mask-image: linear-gradient(
+    to bottom,
+    transparent,
+    #000 var(--chrome-fade-top, var(--spacing-chrome-top)),
+    #000 calc(100% - var(--chrome-fade-bottom, var(--spacing-chrome-bottom))),
+    transparent
+  );
+}
+
 :root {
   --radius: 0.625rem;
 
@@ -67,6 +112,18 @@
   --color-destructive-foreground: var(--destructive-foreground);
 }
 
+@theme {
+  /*
+   * Floating-chrome insets. The fixed top header and the bottom player-dock are
+   * overlays (z-30) that float over the full-bleed content; `main` reserves no
+   * band for them. Instead, each page's own scroll region pads itself by these
+   * heights, so content fills the whole viewport and scrolls *under* the bars
+   * rather than being boxed between them. Tuned to the rendered header / dock.
+   */
+  --spacing-chrome-top: 4rem;
+  --spacing-chrome-bottom: 11.5rem;
+}
+
 @layer base {
   * {
     border-color: var(--color-border);
@@ -82,7 +139,17 @@
     margin: 0;
     background-color: var(--color-background);
     color: var(--color-foreground);
-    font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    /* `--app-font` is set by src/theme/font.ts (Settings → Appearance); this
+       fallback is the default system UI sans when no font has been chosen. */
+    font-family: var(
+      --app-font,
+      ui-sans-serif,
+      system-ui,
+      -apple-system,
+      "Segoe UI",
+      Roboto,
+      sans-serif
+    );
     -webkit-font-smoothing: antialiased;
     /* Respect mobile safe areas (notch / home indicator). */
     padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom)

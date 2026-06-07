@@ -32,9 +32,9 @@ export default function App() {
   // Global transport shortcuts: Space/⌘P · ←→/AD · Shift±5s · ↑↓ volume · ⌘R · R.
   usePlayerShortcuts();
 
-  // Boot: wire the media engine, resume the last set, and cue the last-played
-  // track (loaded + paused; autoplay is blocked without a gesture). The persisted
-  // tab wins, so we no longer force "now" here on resume.
+  // Boot: wire the media engine, resume the last set, and cue one track without
+  // autoplay. WebKit needs the media src prepared before the later click gesture;
+  // the heavy Now Playing image/waveform work is kept out of boot elsewhere.
   useEffect(() => {
     init();
     if (bootResumed) return;
@@ -43,13 +43,11 @@ export default function App() {
       const s = await getSettings();
       if (!s.lastSessionId) return;
       await setActiveSession(s.lastSessionId);
-      const idx = s.lastTrackIndex;
-      if (typeof idx === "number" && idx >= 0) {
-        const store = usePlayerStore.getState();
-        // Cue (load + show, paused) rather than play→pause: a no-gesture play()
-        // is blocked by the autoplay policy and needlessly creates the AudioContext.
-        if (idx < store.queue.length) await store.cueIndex(idx);
-      }
+      const store = usePlayerStore.getState();
+      if (store.queue.length === 0) return;
+      const idx =
+        typeof s.lastTrackIndex === "number" && s.lastTrackIndex >= 0 ? s.lastTrackIndex : 0;
+      if (idx < store.queue.length) await store.cueIndex(idx);
     })();
   }, [init, setActiveSession]);
 
@@ -67,8 +65,7 @@ export default function App() {
   // Now Playing is the immersive surface: the slideshow fills the whole viewport
   // (behind header + dock), and after a few idle seconds the chrome fades away.
   const immersive = tab === "now";
-  // One idle signal. Chrome-hiding is gated by the immersiveIdle setting; the
-  // visualizer-as-background reveal (NowPlayingBackground) keys off idle directly.
+  // One idle signal. Chrome-hiding is gated by the immersiveIdle setting.
   const idle = useIdle(immersive);
   const chromeHidden = idle && (settings.immersiveIdle ?? true);
 
@@ -82,16 +79,21 @@ export default function App() {
           itself by the chrome heights (--spacing-chrome-*), so content fills the
           screen and scrolls *under* the bars instead of being boxed between them. */}
       <div className="relative h-screen overflow-hidden bg-background text-foreground">
-        {immersive && <NowPlayingBackground idle={idle} className="fixed inset-0 z-0" />}
+        <NowPlayingBackground
+          className={cn(
+            "fixed inset-0 z-0 transition-opacity duration-500",
+            immersive ? "opacity-100" : "opacity-0",
+          )}
+        />
 
         <header
           // Draggable on desktop (Tauri overlay titlebar); transparent while
-          // immersive, frosted elsewhere. The wordmark is centered, so it clears
+          // immersive, translucent elsewhere. The wordmark is centered, so it clears
           // the macOS traffic lights without needing a left inset.
           data-tauri-drag-region
           className={cn(
             "fixed inset-x-0 top-0 z-30 flex items-center justify-center px-4 py-3 transition-opacity duration-500",
-            immersive ? "" : "bg-background/80 backdrop-blur",
+            immersive ? "" : "bg-background/80",
             chromeHidden && "pointer-events-none opacity-0",
           )}
         >

@@ -71,3 +71,44 @@ export function buildShuffleOrder(
   }
   return order;
 }
+
+/**
+ * Step forward through a shuffled order. Returns the next queue index (or null to
+ * stop) plus the order to keep (it reshuffles when a cycle wraps under "all", and
+ * rebuilds if it's stale vs `length`). Pure + injectable rng for tests.
+ */
+export function shuffleNext(
+  order: number[],
+  length: number,
+  currentIndex: number,
+  repeat: RepeatMode,
+  rng: () => number = Math.random,
+): { index: number | null; order: number[] } {
+  if (length <= 0) return { index: null, order: [] };
+  let ord = order.length === length ? order : buildShuffleOrder(length, currentIndex, rng);
+  if (repeat === "one") return { index: currentIndex, order: ord };
+  const pos = ord.indexOf(currentIndex);
+  if (pos + 1 < ord.length) return { index: ord[pos + 1], order: ord };
+  // Reached the end of this shuffle cycle.
+  if (repeat === "all") {
+    ord = buildShuffleOrder(length, -1, rng);
+    return { index: ord[0], order: ord };
+  }
+  return { index: null, order: ord };
+}
+
+/** Step backward through a shuffled order. Symmetric with {@link shuffleNext}. */
+export function shufflePrev(
+  order: number[],
+  length: number,
+  currentIndex: number,
+  repeat: RepeatMode,
+  rng: () => number = Math.random,
+): { index: number | null; order: number[] } {
+  if (length <= 0) return { index: null, order: [] };
+  const ord = order.length === length ? order : buildShuffleOrder(length, currentIndex, rng);
+  const pos = ord.indexOf(currentIndex);
+  if (pos - 1 >= 0) return { index: ord[pos - 1], order: ord };
+  if (repeat === "all") return { index: ord[ord.length - 1], order: ord };
+  return { index: currentIndex, order: ord };
+}

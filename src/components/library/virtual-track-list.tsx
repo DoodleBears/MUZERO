@@ -3,6 +3,7 @@ import { useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { deleteTrack as deleteTrackRepo, setTrackLiked } from "@/db/repositories";
 import type { Track } from "@/db/types";
+import { cn } from "@/lib/utils";
 import { usePlayerStore } from "@/stores/player-store";
 import { TrackRow } from "./track-row";
 
@@ -15,10 +16,13 @@ export function VirtualTrackList({
   tracks,
   onPlay,
   emptyHint,
+  className,
 }: {
   tracks: Track[];
   onPlay?: (track: Track, index: number) => void;
   emptyHint?: string;
+  /** Extra classes for the scroll element — e.g. `pb-chrome-bottom` to clear the dock. */
+  className?: string;
 }) {
   const { t } = useTranslation();
   const parentRef = useRef<HTMLDivElement | null>(null);
@@ -45,7 +49,7 @@ export function VirtualTrackList({
   }
 
   return (
-    <div ref={parentRef} className="h-full overflow-y-auto">
+    <div ref={parentRef} className={cn("h-full overflow-y-auto", className)}>
       <div className="relative w-full" style={{ height: `${rowVirtualizer.getTotalSize()}px` }}>
         {rowVirtualizer.getVirtualItems().map((virtualRow) => {
           const track = tracks[virtualRow.index];
@@ -60,7 +64,6 @@ export function VirtualTrackList({
             >
               <TrackRow
                 track={track}
-                index={virtualRow.index}
                 isCurrent={track.id === currentTrackId}
                 onPlay={() => handlePlay(track, virtualRow.index)}
                 onToggleLike={() => void setTrackLiked(track.id, !track.liked)}

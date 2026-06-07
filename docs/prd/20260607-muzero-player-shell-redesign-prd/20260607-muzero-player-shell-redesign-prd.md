@@ -481,6 +481,21 @@ export function startViewTransition(update: () => void): void
 - **媒体连续性（#9 媒体部分）**：共享元素只对封面图，不搬运持久 `<video>`；`mount/unmount` 时机不变。
 - **Console（#8）**：新代码走 [`logger`](../../../src/lib/logger.ts)，不直连 `console.*`。
 
+### 8.1 Desktop WebKit Now Playing 性能护栏
+
+2026-06-08 桌面端排查确认：`make desktop` 在 macOS Tauri/WKWebView 中，如果 IndexedDB 已持久化媒体与大图 gallery，切入 Now Playing 时可能出现白闪、重绘重启感，甚至打断播放。清空 IndexedDB 能消失，是因为旧库同时清掉了 media resume 状态、global gallery 大图与相关 settings；这不表示 DB schema 损坏。
+
+关键隔离结论：
+- 歌单列表中直接开始播放可正常出声，说明核心播放队列、Blob 存储与 `MediaEngine` 不是主因。
+- 切到 Now Playing 才闪烁；硬隔离 `NowPlayingBackground` 与 `PlaybackSpectrum` 后现象消失。
+- 可疑高风险路径是：全屏 blurred background 读取/解码 IndexedDB 大图（尤其 global gallery、多张大图、progressive JPEG）以及全曲 spectrum 在渲染路径读取媒体 Blob / canvas 绘制。
+
+产品/实现约束：
+- Now Playing background 与 spectrum 必须分开回归验证：先恢复 background，确认稳定后再恢复 spectrum。
+- 背景层不能在首屏一次性读取/处理整组 gallery blobs；只处理当前需要显示的一张，且有当前 track cover / track background 时不查询 global gallery。
+- Spectrum 不应在页面挂载时读取整首音频 Blob 并 `decodeAudioData()`；如要真实 waveform，应改为离线/缓存的低成本 peaks 数据，不能阻塞切页或播放手势。
+- WebKit 播放需要在后续点击前 cue 好 media src；播放手势内再异步从 IndexedDB 取 Blob 可能导致 `play()` 被拒。
+
 ---
 
 ## 9. Related Documents
@@ -515,3 +530,4 @@ export function startViewTransition(update: () => void): void
 | 2026-06-07 | DoodleBear | v3：锁定 Q1（NavRow = queue/search/sets/settings 四项，去「now」，点播放区进 Now Playing）、Q2（行1 仅播放/暂停）、Q3（原生 VT + motion 兜底） |
 | 2026-06-07 | DoodleBear | v4：TDD 落地 Phase 0–5 全部完成（6 个原子化 commit）；Status → Completed。期间为隔离他人并发编辑（App.tsx / player-store.ts / common.json），过渡接线改在 NavRow/TrackIdentityRow、sheet 状态改用新 ui-store、i18n 零新增 key（player.collapse 延后） |
 | 2026-06-07 | DoodleBear | v5：新增 Phase 6 —— 导航持久化（zustand persist `muzero-nav`）+ Cmd/Ctrl+1–4 快捷键 + shadcn `Kbd` tooltip 提示。App.tsx 接线由用户并发整合（未单独 commit）；其余文件 TDD + 原子化 commit，128 tests 全绿 |
+| 2026-06-08 | Codex | 记录桌面端 `make desktop` 闪烁排查：Now Playing 重视觉层（background / spectrum）在 macOS Tauri WebKit + IndexedDB 大媒体/大图数据下会触发白闪/播放打断；新增 §8.1 性能护栏与分步回归策略。 |

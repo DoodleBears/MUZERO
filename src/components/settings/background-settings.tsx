@@ -11,7 +11,7 @@ import {
   listGalleryImages,
   saveSettings,
 } from "@/db/repositories";
-import type { BackgroundMode } from "@/db/types";
+import type { BackgroundMode, BackgroundRenderer } from "@/db/types";
 import { useSettings } from "@/hooks/use-app-data";
 import { useObjectUrls } from "@/hooks/use-media";
 import { classifyDrop, filesFromTransfer, IMAGE_ACCEPT } from "@/lib/file-drop";
@@ -28,14 +28,16 @@ export function BackgroundSettings() {
   const { t } = useTranslation();
   const settings = useSettings();
   const mode = settings.backgroundMode ?? "cover";
+  const renderer = settings.backgroundRenderer ?? "image";
   const gallery = useLiveQuery(() => listGalleryImages(), [], []);
   const blobs = useMemo(() => gallery.map((g) => g.blob), [gallery]);
   const urls = useObjectUrls(blobs);
   const inputRef = useRef<HTMLInputElement | null>(null);
 
   const addImages = useCallback(async (files: File[]) => {
-    for (const file of files) {
-      if (file.type.startsWith("image/")) await addGalleryImage({ blob: file, mime: file.type });
+    const { images } = classifyDrop(files);
+    for (const file of images) {
+      await addGalleryImage({ blob: file, mime: file.type || "image/jpeg" });
     }
   }, []);
 
@@ -79,6 +81,60 @@ export function BackgroundSettings() {
             <option value="slideshow">{t("background.modeSlideshow")}</option>
           </select>
         </label>
+
+        <label className="flex flex-col gap-1.5">
+          <span className="text-xs font-medium text-muted-foreground">
+            {t("background.renderer")}
+          </span>
+          <select
+            value={renderer}
+            onChange={(e) =>
+              void saveSettings({ backgroundRenderer: e.target.value as BackgroundRenderer })
+            }
+            className="h-10 rounded-md border border-input bg-transparent px-3 text-sm"
+          >
+            <option value="image">{t("background.rendererImage")}</option>
+            <option value="blur">{t("background.rendererBlur")}</option>
+            <option value="pixel">{t("background.rendererPixel")}</option>
+            <option value="ascii">{t("background.rendererAscii")}</option>
+            <option value="cross-hatch">{t("background.rendererCrossHatch")}</option>
+            <option value="crt">{t("background.rendererCrt")}</option>
+            <option value="dot">{t("background.rendererDot")}</option>
+            <option value="noise">{t("background.rendererNoise")}</option>
+          </select>
+        </label>
+
+        {renderer === "blur" ? (
+          <div className="mt-1 flex flex-col gap-1.5">
+            <span className="text-xs font-medium text-muted-foreground">
+              {t("background.blur", { px: settings.backgroundBlur ?? 64 })}
+            </span>
+            <Slider
+              min={0}
+              max={80}
+              step={1}
+              value={settings.backgroundBlur ?? 64}
+              onValueChange={(v) => void saveSettings({ backgroundBlur: v })}
+              aria-label={t("background.blur", { px: settings.backgroundBlur ?? 64 })}
+            />
+          </div>
+        ) : null}
+
+        {["pixel", "ascii", "dot"].includes(renderer) ? (
+          <div className="mt-1 flex flex-col gap-1.5">
+            <span className="text-xs font-medium text-muted-foreground">
+              {t("background.pixelSize", { px: settings.backgroundPixelSize ?? 12 })}
+            </span>
+            <Slider
+              min={4}
+              max={32}
+              step={1}
+              value={settings.backgroundPixelSize ?? 12}
+              onValueChange={(v) => void saveSettings({ backgroundPixelSize: v })}
+              aria-label={t("background.pixelSize", { px: settings.backgroundPixelSize ?? 12 })}
+            />
+          </div>
+        ) : null}
 
         <label className="flex flex-col gap-1.5">
           <span className="text-xs font-medium text-muted-foreground">
@@ -132,30 +188,17 @@ export function BackgroundSettings() {
         </label>
         <p className="-mt-1 text-xs text-muted-foreground">{t("background.coverCroppedHint")}</p>
 
-        <div className="mt-1 flex flex-col gap-1.5">
-          <span className="text-xs font-medium text-muted-foreground">
-            {t("background.blur", { px: settings.backgroundBlur ?? 12 })}
-          </span>
-          <Slider
-            min={0}
-            max={80}
-            step={1}
-            value={settings.backgroundBlur ?? 12}
-            onValueChange={(v) => void saveSettings({ backgroundBlur: v })}
-            aria-label={t("background.blur", { px: settings.backgroundBlur ?? 12 })}
-          />
-        </div>
         <div className="flex flex-col gap-1.5">
           <span className="text-xs font-medium text-muted-foreground">
-            {t("background.mask", { pct: settings.backgroundMaskOpacity ?? 25 })}
+            {t("background.mask", { pct: settings.backgroundMaskOpacity ?? 50 })}
           </span>
           <Slider
             min={0}
             max={100}
             step={1}
-            value={settings.backgroundMaskOpacity ?? 25}
+            value={settings.backgroundMaskOpacity ?? 50}
             onValueChange={(v) => void saveSettings({ backgroundMaskOpacity: v })}
-            aria-label={t("background.mask", { pct: settings.backgroundMaskOpacity ?? 25 })}
+            aria-label={t("background.mask", { pct: settings.backgroundMaskOpacity ?? 50 })}
           />
         </div>
 

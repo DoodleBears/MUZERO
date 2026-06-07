@@ -68,8 +68,12 @@ export function moveEntry(state: PlayQueueState, from: number, to: number): Play
   return { entries, currentIndex: reindex(entries, keepId, state.currentIndex) };
 }
 
-/** Replace the whole queue, setting the cursor to `currentIndex` (clamped). */
+/** Replace the whole queue, setting the cursor to `currentIndex` (clamped).
+ * Pass -1 to keep the queue loaded but idle. */
 export function replaceEntries(newEntries: PlayQueueEntry[], currentIndex = 0): PlayQueueState {
+  if (newEntries.length === 0 || currentIndex < 0) {
+    return { entries: [...newEntries], currentIndex: -1 };
+  }
   return { entries: [...newEntries], currentIndex: reindex(newEntries, undefined, currentIndex) };
 }
 

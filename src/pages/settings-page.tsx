@@ -1,11 +1,12 @@
 import { CheckCircle2, ExternalLink, XCircle } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { BackgroundSettings } from "@/components/settings/background-settings";
 import { VisualizerSettings } from "@/components/settings/visualizer-settings";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ColorPicker } from "@/components/ui/color-picker";
+import { Combobox, type ComboboxItem } from "@/components/ui/combobox";
 import { Input } from "@/components/ui/input";
 import { saveSettings } from "@/db/repositories";
 import type { AppSettings, LlmProviderId } from "@/db/types";
@@ -20,12 +21,20 @@ import {
 import { type MusicGenProviderId, resolveMusicGenProvider } from "@/musicgen/registry";
 import { usePlayerStore } from "@/stores/player-store";
 import {
+  customFontStack,
+  DEFAULT_FONT_STACK,
+  FONTS,
+  persistFont,
+  primaryFamily,
+} from "@/theme/font";
+import {
   DEFAULT_PRIMARY,
   PRIMARY_PRESETS,
   type PrimaryColors,
   type PrimaryPresetId,
   persistPrimary,
 } from "@/theme/primary";
+import { loadSystemFonts } from "@/theme/system-fonts";
 import { DEFAULT_THEME, persistTheme, type Theme, themes } from "@/theme/theme";
 
 /** Maps a preset id to its i18n option label (ids carry hyphens; keys don't). */
@@ -55,9 +64,24 @@ export function SettingsPage() {
   const [draft, setDraft] = useState<AppSettings>(settings);
   const [saved, setSaved] = useState(false);
   const [health, setHealth] = useState<"unknown" | "ok" | "down" | "checking">("unknown");
+  // Font picker: the combobox input text, plus lazily-loaded system fonts.
+  const [fontInput, setFontInput] = useState("");
+  const [systemFontItems, setSystemFontItems] = useState<ComboboxItem[]>([]);
+  const [loadingFonts, setLoadingFonts] = useState(false);
+  const fontsLoadedRef = useRef(false);
 
   // Keep the local draft in sync once the persisted settings load.
   useEffect(() => setDraft(settings), [settings]);
+
+  // The font stack currently in effect (stored preference → system default).
+  const currentFont = settings.fontFamily ?? DEFAULT_FONT_STACK;
+  // Mirror the active font's display name into the combobox input (preset label,
+  // else the leading family). Independent of loaded fonts so a load mid-edit
+  // never clobbers what the user is typing.
+  useEffect(() => {
+    const preset = FONTS.find((f) => f.stack === currentFont);
+    setFontInput(preset ? t(preset.labelKey) : primaryFamily(currentFont));
+  }, [currentFont, t]);
 
   function patch(p: Partial<AppSettings>) {
     setDraft((d) => ({ ...d, ...p }));
@@ -78,6 +102,55 @@ export function SettingsPage() {
   async function changePrimary(next: PrimaryColors) {
     persistPrimary(next);
     await saveSettings({ primaryLight: next.light, primaryDark: next.dark });
+  }
+
+  async function changeFont(stack: string) {
+    persistFont(stack);
+    await saveSettings({ fontFamily: stack });
+  }
+
+  // Combobox options: preset stacks first, then any loaded system fonts. Each
+  // row previews itself in its own face. Preset rows recompute on locale change.
+  const presetFontItems = useMemo<ComboboxItem[]>(
+    () => FONTS.map((f) => ({ id: f.stack, label: t(f.labelKey), style: { fontFamily: f.stack } })),
+    [t],
+  );
+  const fontItems = useMemo(
+    () => [...presetFontItems, ...systemFontItems],
+    [presetFontItems, systemFontItems],
+  );
+  // Highlight the active font in the list only when it's actually a row.
+  const selectedFontKey = fontItems.some((i) => i.id === currentFont) ? currentFont : null;
+
+  // Load installed fonts once, on first open (the gesture that lets the Local
+  // Font Access API prompt); falls back to probing. Cached for the session.
+  async function loadFontsOnce(isOpen: boolean) {
+    if (!isOpen || fontsLoadedRef.current || loadingFonts) return;
+    setLoadingFonts(true);
+    try {
+      const names = await loadSystemFonts();
+      setSystemFontItems(
+        names.map((n) => ({
+          id: customFontStack(n),
+          label: n,
+          style: { fontFamily: `"${n}", sans-serif` },
+        })),
+      );
+      fontsLoadedRef.current = true;
+    } finally {
+      setLoadingFonts(false);
+    }
+  }
+
+  // A list pick gives the row id (a stack); a custom commit gives null, so fall
+  // back to the typed text. Empty text (cleared field) changes nothing.
+  function selectFont(id: string | null) {
+    if (id != null) {
+      void changeFont(id);
+      return;
+    }
+    const text = fontInput.trim();
+    if (text) void changeFont(customFontStack(text));
   }
 
   async function save() {
@@ -199,6 +272,43 @@ export function SettingsPage() {
                 {t("settings.resetColors")}
               </Button>
             </div>
+          </div>
+          <div className="flex flex-col gap-2">
+            <span className="text-xs font-medium text-muted-foreground">{t("settings.font")}</span>
+            <div className="flex flex-wrap gap-2">
+              {FONTS.map((font) => {
+                const active = currentFont === font.stack;
+                return (
+                  <button
+                    key={font.id}
+                    type="button"
+                    aria-pressed={active}
+                    onClick={() => void changeFont(font.stack)}
+                    style={{ fontFamily: font.stack }}
+                    className={`rounded-full border px-3 py-1 text-sm transition-colors ${
+                      active ? "border-primary bg-accent/50" : "border-input hover:bg-accent/50"
+                    }`}
+                  >
+                    {t(font.labelKey)}
+                  </button>
+                );
+              })}
+            </div>
+            <Combobox
+              label={t("settings.fontCustom")}
+              items={fontItems}
+              selectedKey={selectedFontKey}
+              inputValue={fontInput}
+              onInputChange={setFontInput}
+              onSelectionChange={selectFont}
+              onOpenChange={loadFontsOnce}
+              allowsCustomValue
+              placeholder={t("settings.fontSearchPlaceholder")}
+              loadingText={t("settings.fontLoading")}
+              emptyText={t("settings.fontNoResults")}
+              isLoading={loadingFonts}
+              inputStyle={fontInput.trim() ? { fontFamily: customFontStack(fontInput) } : undefined}
+            />
           </div>
         </CardContent>
       </Card>

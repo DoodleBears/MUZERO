@@ -43,7 +43,7 @@ export function createRadialVisualizer(): Visualizer {
     render(w, h) {
       if (!c) return;
       const ctx = c.ctx;
-      if (frame++ % 30 === 0) primary = c.primary();
+      if (frame++ % (c.smoothPrimary?.() ? 1 : 6) === 0) primary = c.primary();
       const analyser = c.getAnalyser();
       const active = c.active();
       if (analyser && (bands.length === 0 || data.length !== analyser.frequencyBinCount)) {

@@ -21,7 +21,7 @@ import { createAiDjBrain } from "@/dj/dj-brain-ai";
 import { createDjEngine, type DjEngine } from "@/dj/dj-engine";
 import i18n from "@/i18n/i18n";
 import { log } from "@/lib/logger";
-import { probeMediaFile } from "@/lib/media-probe";
+import { isUnsupportedMediaError, probeMediaFile } from "@/lib/media-probe";
 import { resolveMusicGenProvider } from "@/musicgen/registry";
 import { MediaEngine } from "@/player/media-engine";
 import { reconcileCurrentIndex, unconsumedTrackIds } from "@/player/play-queue";
@@ -124,9 +124,18 @@ let shuffleOrder: number[] = [];
 // doesn't churn the `queue` array and re-render every list consumer.
 let lastQueueSig = "";
 
-/** Cheap signature of what the queue list renders (ids + generation status). */
+/** Cheap signature of what the queue list renders (ids + generation status +
+ * cover identity). `coverBlobId`/`coverCrop` are included so a cover edit on the
+ * current track republishes `queue` and the now-playing stage reacts live —
+ * without them, a cover-only change keeps the same sig and gets swallowed. */
 function queueSig(tracks: Track[]): string {
-  return tracks.map((t) => `${t.id}:${t.status}:${t.blobId ?? ""}`).join("|");
+  return tracks
+    .map((t) => {
+      const c = t.coverCrop;
+      const crop = c ? `${c.x},${c.y},${c.width},${c.height}` : "";
+      return `${t.id}:${t.status}:${t.blobId ?? ""}:${t.coverBlobId ?? ""}:${crop}`;
+    })
+    .join("|");
 }
 
 export const usePlayerStore = create<PlayerState>((set, get) => ({
@@ -216,7 +225,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     // Load this 歌单 into the 播放列表 (replace) and mark how many of its tracks the
     // queue has consumed (high-water). Also seed `queue` synchronously so callers
     // that read it right after (e.g. playTrack) don't race the liveQuery.
-    await playQueueSet(trackIds, { contextSetId: sessionId });
+    await playQueueSet(trackIds, { contextSetId: sessionId, currentIndex: -1 });
     consumedTrackIds = new Set(trackIds);
     const initialQueue = await getTracksByIds(trackIds);
     lastQueueSig = queueSig(initialQueue); // keep the guard in sync with the optimistic seed
@@ -374,8 +383,20 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     set({ isUploading: true });
     try {
       const ids: string[] = [];
+      const unsupported: string[] = [];
       for (const file of list) {
-        const probed = await probeMediaFile(file);
+        const probed = await probeMediaFile(file).catch((err: unknown) => {
+          if (!isUnsupportedMediaError(err)) throw err;
+          unsupported.push(err.fileName);
+          log.warn("player", "skipped unsupported upload", {
+            fileName: err.fileName,
+            mime: err.mime,
+            kind: err.kind,
+            mediaErrorCode: err.mediaErrorCode,
+          });
+          return null;
+        });
+        if (!probed) continue;
         const track = await createUploadedTrack({
           sessionId: setId,
           title: probed.title,
@@ -387,7 +408,12 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
         ids.push(track.id);
       }
       // Newest on top (prepend) — the first added track becomes the set's cover.
-      await prependTrackIds(setId, ids);
+      if (ids.length > 0) await prependTrackIds(setId, ids);
+      if (unsupported.length > 0) {
+        notify.warning(i18n.t("drop.skipped", { count: unsupported.length }), {
+          detail: `${unsupported.join(", ")} — ${i18n.t("nowPlaying.videoUnsupported")}`,
+        });
+      }
       log.info("player", `uploaded ${ids.length} file(s) to ${setId}`);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -461,21 +487,39 @@ async function ensureLoadedAndPlay(
   get: () => PlayerState,
 ): Promise<void> {
   const { queue, currentIndex, wantPlay } = get();
+  log.debug("player", "ensureLoadedAndPlay", { currentIndex, queueLength: queue.length, wantPlay });
   if (currentIndex < 0 || currentIndex >= queue.length) return;
   const track = queue[currentIndex];
   if (!mediaEngine) return;
   if (track.status !== "ready" || !track.blobId) {
+    log.debug("player", "track is not playable yet", {
+      trackId: track.id,
+      status: track.status,
+      hasBlob: !!track.blobId,
+    });
     void pump(set, get);
     return;
   }
   if (loadedTrackId !== track.id) {
     const media = await getTrackBlob(track);
-    if (!media) return;
+    if (!media) {
+      log.warn("player", "missing media blob", { trackId: track.id, blobId: track.blobId });
+      return;
+    }
+    log.debug("player", "loading media blob", {
+      trackId: track.id,
+      kind: track.kind,
+      mime: media.mime,
+      bytes: media.bytes,
+    });
     await mediaEngine.loadBlob(media.blob, track.kind);
     loadedTrackId = track.id;
     void incrementPlayCount(track.id);
   }
-  if (wantPlay) await mediaEngine.play();
+  if (wantPlay) {
+    log.debug("player", "playing media", { trackId: track.id });
+    await mediaEngine.play();
+  }
 }
 
 async function afterQueueUpdate(

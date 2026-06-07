@@ -3,6 +3,7 @@ import { useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { VirtualTrackList } from "@/components/library/virtual-track-list";
 import { Button } from "@/components/ui/button";
+import { MEDIA_ACCEPT } from "@/lib/file-drop";
 import { usePlayerStore } from "@/stores/player-store";
 
 /** The active set: every track (generated + uploaded), in order. */
@@ -16,7 +17,7 @@ export function QueuePage() {
   const uploadRef = useRef<HTMLInputElement | null>(null);
 
   return (
-    <div className="mx-auto flex h-full w-full max-w-3xl flex-col">
+    <div className="mx-auto flex h-full w-full max-w-3xl flex-col pt-chrome-top">
       <div className="flex items-center justify-between gap-2 px-4 py-3">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
           {t("queue.title")}
@@ -37,7 +38,7 @@ export function QueuePage() {
           <input
             ref={uploadRef}
             type="file"
-            accept="audio/*,video/*"
+            accept={MEDIA_ACCEPT}
             multiple
             hidden
             onChange={(e) => {
@@ -50,7 +51,11 @@ export function QueuePage() {
         </div>
       </div>
       <div className="min-h-0 flex-1 px-2 pb-2">
-        <VirtualTrackList tracks={queue} emptyHint={t("queue.empty")} />
+        <VirtualTrackList
+          tracks={queue}
+          emptyHint={t("queue.empty")}
+          className="pb-chrome-bottom"
+        />
       </div>
     </div>
   );

@@ -53,6 +53,15 @@ describe("classifyDrop", () => {
     expect(result.skipped.map((f) => f.name)).toEqual(["d.txt"]);
   });
 
+  it("keeps multi-selected image files when the picker omits MIME types", () => {
+    const result = classifyDrop([
+      file("one.JPG", "", 1),
+      file("two.heic", "", 2),
+      file("three.avif", "", 3),
+    ]);
+    expect(result.images.map((f) => f.name)).toEqual(["one.JPG", "two.heic", "three.avif"]);
+  });
+
   it("handles an empty drop", () => {
     expect(classifyDrop([])).toEqual({ media: [], images: [], skipped: [] });
   });

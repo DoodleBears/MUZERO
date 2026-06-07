@@ -6,8 +6,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <meta name="theme-color" content="#09090b" />
     <title>MUZERO — AI DJ</title>
-    <!-- Apply the saved theme before first paint to avoid a light/dark flash.
-         Mirrors src/theme/theme.ts; localStorage `muzero-theme` is the source of truth. -->
+    <!-- Apply the saved theme + UI font before first paint to avoid a flash.
+         Mirrors src/theme/theme.ts + src/theme/font.ts; localStorage is the source of truth. -->
     <script>
       (function () {
         try {
@@ -16,6 +16,8 @@
             t === "dark" ||
             (t === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches);
           document.documentElement.classList.toggle("dark", dark);
+          var f = localStorage.getItem("muzero-font");
+          if (f) document.documentElement.style.setProperty("--app-font", f);
         } catch (e) {}
       })();
     </script>

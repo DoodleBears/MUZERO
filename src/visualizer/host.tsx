@@ -1,10 +1,12 @@
-import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { type CSSProperties, lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { useVisualizerCoverColorCss } from "@/components/player/visualizer-dynamic-color";
 import { useSettings } from "@/hooks/use-app-data";
 import { cn } from "@/lib/utils";
-import { readPrimaryRgb } from "@/lib/visualizer-color";
+import { DYNAMIC_PRIMARY_CSS_VAR, readPrimaryRgb } from "@/lib/visualizer-color";
 import { getMediaEngine } from "@/stores/player-store";
+import { getVisualizerCoverColorRgb } from "@/stores/visualizer-color-store";
 import { createVisualizer, getVisualizerMeta, resolveVisualizerStyle } from "./registry";
-import type { VisualizerStyleId } from "./types";
+import type { VisualizerPlacement, VisualizerStyleId } from "./types";
 
 const ReactiveScene = lazy(() => import("./scene/reactive-scene"));
 
@@ -60,10 +62,14 @@ function SpectrumCanvas({
   styleId,
   active,
   className,
+  coverColor = false,
+  placement = "surface",
 }: {
   styleId: VisualizerStyleId;
   active: boolean;
   className?: string;
+  coverColor?: boolean;
+  placement?: VisualizerPlacement;
 }) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const activeRef = useRef(active);
@@ -83,9 +89,14 @@ function SpectrumCanvas({
       canvas,
       ctx,
       getAnalyser: () => getMediaEngine()?.getAnalyser() ?? null,
-      primary: readPrimaryRgb,
+      primary: () =>
+        coverColor
+          ? (getVisualizerCoverColorRgb() ?? readPrimaryRgb(canvas))
+          : readPrimaryRgb(canvas),
+      smoothPrimary: () => coverColor,
       active: () => activeRef.current,
       reducedMotion: prefersReducedMotion,
+      placement,
     });
 
     let raf = 0;
@@ -173,7 +184,7 @@ function SpectrumCanvas({
       mq?.removeEventListener?.("change", onMq);
       viz.destroy();
     };
-  }, [styleId]);
+  }, [styleId, coverColor, placement]);
 
   return <canvas ref={canvasRef} className={cn("h-full w-full", className)} aria-hidden />;
 }
@@ -234,18 +245,43 @@ function SceneHost({
  */
 export function VisualizerHost({
   active,
+  coverColor = false,
   className,
+  placement = "surface",
+  style: hostStyle,
   styleId,
 }: {
   active: boolean;
+  coverColor?: boolean;
   className?: string;
+  placement?: VisualizerPlacement;
+  style?: CSSProperties;
   styleId?: VisualizerStyleId;
 }) {
   const settings = useSettings();
-  const style = resolveVisualizerStyle(styleId ?? settings.visualizerStyle);
-  if (style === "off") return null;
-  if (getVisualizerMeta(style).kind === "scene") {
-    return <SceneHost styleId={style} active={active} className={className} />;
+  const coverColorCss = useVisualizerCoverColorCss(coverColor);
+  const resolvedStyle = resolveVisualizerStyle(styleId ?? settings.visualizerStyle);
+  if (resolvedStyle === "off") return null;
+  const scopedColorStyle = coverColorCss
+    ? ({ [DYNAMIC_PRIMARY_CSS_VAR]: coverColorCss } as CSSProperties)
+    : undefined;
+  const wrapperStyle = scopedColorStyle ? { ...hostStyle, ...scopedColorStyle } : hostStyle;
+  const hostClassName = cn("h-full w-full", className);
+  if (getVisualizerMeta(resolvedStyle).kind === "scene") {
+    return (
+      <div className={hostClassName} style={wrapperStyle}>
+        <SceneHost styleId={resolvedStyle} active={active} />
+      </div>
+    );
   }
-  return <SpectrumCanvas styleId={style} active={active} className={className} />;
+  return (
+    <div className={hostClassName} style={wrapperStyle}>
+      <SpectrumCanvas
+        styleId={resolvedStyle}
+        active={active}
+        coverColor={coverColor}
+        placement={placement}
+      />
+    </div>
+  );
 }

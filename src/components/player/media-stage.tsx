@@ -31,7 +31,7 @@ export function MediaStage({ className }: { className?: string }) {
   // song's cover area (avoids a double visualizer) — show a per-song gradient
   // placeholder instead, unless the user opts in.
   const asBgActive =
-    (settings.visualizerAsBackground ?? false) && (settings.visualizerStyle ?? "aura") !== "off";
+    (settings.visualizerAsBackground ?? true) && (settings.visualizerStyle ?? "aura") !== "off";
   const showStageViz = !asBgActive || (settings.visualizerInCoverArea ?? false);
 
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -101,6 +101,7 @@ export function MediaStage({ className }: { className?: string }) {
   }, [showVideo, videoError]);
 
   const showCover = content === "cover";
+  const showGeneratedBackdrop = content === "title" || videoError;
   // Video and cover both fill the width at their *own* aspect ratio — a 1:1
   // cropped cover shows as a 1:1 square, a wide cover stays wide (no distortion,
   // no bars). Title/visualizer fall back to a centered square.
@@ -115,12 +116,7 @@ export function MediaStage({ className }: { className?: string }) {
       ref={containerRef}
       style={aspect != null ? { aspectRatio: String(aspect) } : undefined}
       className={cn(
-        // `transform-gpu` + `isolate` flatten the stage (video / cover <img> /
-        // canvas) into ONE backing layer. Otherwise the <video> and the cross-
-        // fading cover are their own compositor layers that escape the section's
-        // fade mask (it's an ancestor) — they'd render crisp over the fade while
-        // the canvas visualizer, which has no layer of its own, fades correctly.
-        "relative shrink-0 transform-gpu isolate overflow-hidden rounded-2xl",
+        "relative shrink-0 overflow-hidden rounded-2xl",
         showVideo
           ? "w-full bg-black"
           : showCover
@@ -129,7 +125,7 @@ export function MediaStage({ className }: { className?: string }) {
         className,
       )}
     >
-      {(content !== "video" || videoError) &&
+      {showGeneratedBackdrop &&
         (showStageViz ? (
           <AuraVisualizer active={isPlaying} className="absolute inset-0" />
         ) : (

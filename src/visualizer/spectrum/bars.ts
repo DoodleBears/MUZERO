@@ -42,7 +42,7 @@ export function createBarsVisualizer(): Visualizer {
     render(w, h) {
       if (!c) return;
       const ctx = c.ctx;
-      if (frame++ % 30 === 0) primary = c.primary();
+      if (frame++ % (c.smoothPrimary?.() ? 1 : 6) === 0) primary = c.primary();
       const analyser = c.getAnalyser();
       const active = c.active();
       if (analyser && (bands.length === 0 || data.length !== analyser.frequencyBinCount)) {
@@ -64,11 +64,13 @@ export function createBarsVisualizer(): Visualizer {
       const gap = Math.max(1, w * 0.004);
       const bw = Math.max(1, (w - gap * (n - 1)) / n);
       const tip = lighten(primary, 0.4);
+      const background = c.placement === "background";
       for (let i = 0; i < levels.length; i++) {
-        const bh = Math.max(1, levels[i] * h * 0.92);
+        const level = Math.min(1, Math.max(0, levels[i] ?? 0));
+        const bh = background ? Math.max(h * 0.08, level * h) : Math.max(1, level * h * 0.92);
         const x = i * (bw + gap);
-        const y = h - bh;
-        const g = ctx.createLinearGradient(0, h, 0, y);
+        const y = background ? (h - bh) / 2 : h - bh;
+        const g = ctx.createLinearGradient(0, background ? y + bh : h, 0, y);
         g.addColorStop(0, rgba(primary, 0.85));
         g.addColorStop(1, rgba(tip, 0.98));
         ctx.fillStyle = g;

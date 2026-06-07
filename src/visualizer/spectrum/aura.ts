@@ -32,8 +32,8 @@ export function createAuraVisualizer(): Visualizer {
       if (!c) return;
       const ctx = c.ctx;
       // Re-read --primary periodically (getComputedStyle forces a style recalc),
-      // so a Settings color change is reflected within ~0.5s.
-      if (frame++ % 30 === 0) refreshPalette();
+      // so Settings changes and cover-color tweens are reflected smoothly.
+      if (frame++ % (c.smoothPrimary?.() ? 1 : 6) === 0) refreshPalette();
 
       const analyser = c.getAnalyser();
       const active = c.active();

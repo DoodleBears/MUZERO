@@ -6,8 +6,7 @@ import type { Tab } from "@/components/nav/dock-nav";
  * The active navigation tab, persisted so the app reopens where you left off.
  * Uses zustand `persist` (localStorage `muzero-nav`) — the same tiny-UI-pref
  * pattern as the locale (`muzero-locale`) and theme (`muzero-theme`); core data
- * still lives in IndexedDB. Kept separate from `ui-store` (which stays ephemeral
- * for the sheet's open state) so only the tab is persisted.
+ * still lives in IndexedDB.
  */
 interface NavState {
   tab: Tab;

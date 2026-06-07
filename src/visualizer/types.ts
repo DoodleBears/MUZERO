@@ -19,6 +19,7 @@ export type VisualizerStyleId =
 
 export type VisualizerKind = "spectrum" | "scene" | "milkdrop";
 export type VisualizerBackend = "canvas2d" | "webgl" | "webgl2";
+export type VisualizerPlacement = "surface" | "background";
 
 /** What the host hands a canvas-2D renderer. The host owns the canvas, the rAF
  *  loop, dpr scaling, clearing, and the shared analyser's configuration. */
@@ -29,10 +30,14 @@ export interface VisualizerContext {
   getAnalyser: () => AnalyserNode | null;
   /** The live `--primary` accent as RGB (re-read so it tracks theme/user changes). */
   primary: () => Rgb;
+  /** True while a scoped/dynamic color source is driving the visualizer. */
+  smoothPrimary?: () => boolean;
   /** Whether audio is currently playing (idle visuals when false). */
   active: () => boolean;
   /** OS reduced-motion preference (renderers may calm their motion). */
   reducedMotion: () => boolean;
+  /** Where this visualizer is rendered. Background renderers may fill more space. */
+  placement?: VisualizerPlacement;
 }
 
 /** A canvas-2D spectrum renderer. Scene/milkdrop kinds are React components

@@ -127,9 +127,9 @@ export function NavFab({ value, onChange }: { value: Tab; onChange: (tab: Tab) =
         aria-label={t("nav.menu")}
         aria-expanded={expanded}
         className={cn(
-          "relative z-50 grid size-11 place-items-center rounded-full outline-none transition-colors",
+          "relative z-50 grid size-11 place-items-center rounded-full bg-card/90 shadow-lg ring-1 ring-border/40 outline-none backdrop-blur-md transition-colors",
           "focus-visible:ring-2 focus-visible:ring-ring",
-          expanded ? "bg-accent text-foreground" : "text-primary hover:bg-accent/50",
+          expanded ? "bg-accent text-foreground" : "text-primary hover:bg-card",
         )}
       >
         {expanded ? <X size={20} /> : <CurrentIcon size={20} />}

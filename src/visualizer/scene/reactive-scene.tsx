@@ -137,7 +137,7 @@ export default function ReactiveScene({
         treble = a.treble;
         energy = a.energy;
       }
-      const p = readPrimaryRgb();
+      const p = readPrimaryRgb(canvasRef.current);
 
       // biome-ignore lint/correctness/useHookAtTopLevel: gl.useProgram is a WebGL call, not a React hook
       gl.useProgram(programInfo.program);

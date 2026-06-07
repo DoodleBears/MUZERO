@@ -41,6 +41,17 @@ import { useUploadTargetStore } from "@/stores/upload-target-store";
 type GalleryView = "list" | "grid";
 const VIEW_KEY = "muzero-gallery-view";
 
+function normalizeDescription(value: string): string {
+  return value
+    .replace(/[\r\n]+/g, " ")
+    .replace(/[ \t\f\v]+/g, " ")
+    .trim();
+}
+
+function stripDescriptionNewlines(value: string): string {
+  return value.replace(/[\r\n]+/g, " ");
+}
+
 /**
  * 歌单 Gallery — a two-level surface. Level 1 browses every set like an album wall
  * (search / filter / sort / list⇄album-grid). Tapping a set opens level 2: that
@@ -241,6 +252,7 @@ function SetDetailView({
   const addUploadsToSet = usePlayerStore((s) => s.addUploadsToSet);
   const fileRef = useRef<HTMLInputElement>(null);
   const addFileRef = useRef<HTMLInputElement>(null);
+  const descRef = useRef<HTMLTextAreaElement>(null);
   const [name, setName] = useState("");
   const [desc, setDesc] = useState("");
   const [dragOver, setDragOver] = useState(false);
@@ -257,9 +269,17 @@ function SetDetailView({
   useEffect(() => {
     if (session) {
       setName(session.name);
-      setDesc(session.description ?? "");
+      setDesc(stripDescriptionNewlines(session.description ?? ""));
     }
   }, [session?.id]);
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: resize the textarea whenever its controlled text changes
+  useEffect(() => {
+    const el = descRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  }, [desc]);
 
   // Cover: the set's own cover, else the topmost track that has one.
   const coverTrack = useMemo(() => {
@@ -277,8 +297,9 @@ function SetDetailView({
     const v = name.trim();
     if (session && v && v !== session.name) void updateSession(setId, { name: v });
   }
-  function commitDesc() {
-    const v = desc.trim();
+  function commitDesc(nextDesc = desc) {
+    const v = normalizeDescription(nextDesc);
+    setDesc(v);
     if (session && (session.description ?? "") !== v) void updateSession(setId, { description: v });
   }
 
@@ -363,12 +384,19 @@ function SetDetailView({
             className="-mx-1 w-full truncate rounded-md border border-transparent bg-transparent px-1 text-lg font-semibold outline-none hover:border-input focus:border-input"
           />
           <textarea
+            ref={descRef}
             value={desc}
-            onChange={(e) => setDesc(e.target.value)}
-            onBlur={commitDesc}
+            onChange={(e) => setDesc(stripDescriptionNewlines(e.target.value))}
+            onBlur={(e) => commitDesc(e.currentTarget.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.nativeEvent.isComposing) {
+                e.preventDefault();
+                e.currentTarget.blur();
+              }
+            }}
             placeholder={t("gallery.setDescription")}
             rows={1}
-            className="-mx-1 mt-0.5 w-full resize-none rounded-md border border-transparent bg-transparent px-1 text-xs text-muted-foreground outline-none hover:border-input focus:border-input"
+            className="-mx-1 mt-0.5 w-full resize-none overflow-hidden rounded-md border border-transparent bg-transparent px-1 text-xs leading-5 text-muted-foreground outline-none hover:border-input focus:border-input"
           />
           <p className="px-1 pt-0.5 text-xs text-muted-foreground">
             {t("gallery.count", { count: tracks.length })}

@@ -105,8 +105,12 @@ export function filesFromTransfer(dt: DataTransfer | null | undefined): File[] {
 export const MEDIA_ACCEPT =
   "audio/*,video/*,.mp4,.m4v,.mov,.webm,.mkv,.avi,.mp3,.m4a,.aac,.flac,.ogg,.opus,.wav";
 
-/** `accept` for image inputs (covers HEIC/AVIF that `image/*` can miss). */
-export const IMAGE_ACCEPT = "image/*,.heic,.heif,.avif";
+/**
+ * `accept` for image inputs. MIME wildcards alone can miss files whose OS picker
+ * does not expose a MIME type, so keep the extension list aligned with
+ * `IMAGE_EXT` above.
+ */
+export const IMAGE_ACCEPT = "image/*,.png,.jpg,.jpeg,.gif,.webp,.avif,.bmp,.heic,.heif";
 
 /**
  * Summarize the dragged items for the live overlay. `dataTransfer.items[].type`

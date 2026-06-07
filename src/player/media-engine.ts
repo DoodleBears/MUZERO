@@ -17,7 +17,8 @@ export interface MediaEngineCallbacks {
   onEnded?: () => void;
   onTimeUpdate?: (positionSec: number, durationSec: number) => void;
   onPlayStateChange?: (playing: boolean) => void;
-  onError?: (message: string) => void;
+  /** Fired with the element's `MediaError` (or null) — the store localizes copy. */
+  onError?: (error: unknown) => void;
 }
 
 /** How far the muted video may drift from the audio driver before we resync. */
@@ -63,8 +64,10 @@ export class MediaEngine {
       this.callbacks.onPlayStateChange?.(false);
       if (this.hasVideo) this.videoEl.pause();
     });
-    this.audioEl.addEventListener("error", () => this.callbacks.onError?.("Playback error"));
-    this.videoEl.addEventListener("error", () => this.callbacks.onError?.("Playback error"));
+    // Surface the raw MediaError; the store turns it into a localized
+    // notification (it no longer lands in the dock as a status line).
+    this.audioEl.addEventListener("error", () => this.callbacks.onError?.(this.audioEl.error));
+    this.videoEl.addEventListener("error", () => this.callbacks.onError?.(this.videoEl.error));
 
     const host = document.createElement("div");
     host.dataset.muzeroMediaHost = "";
@@ -108,6 +111,7 @@ export class MediaEngine {
   }
 
   async loadBlob(blob: Blob, kind: "audio" | "video" = "audio"): Promise<void> {
+    log.debug("media", "loadBlob", { kind, type: blob.type, size: blob.size });
     this.revoke();
     this.objectUrl = URL.createObjectURL(blob);
     // The audio element is always the driver (it plays a video file's audio too).
@@ -124,9 +128,18 @@ export class MediaEngine {
   }
 
   async play(): Promise<void> {
+    log.debug("media", "play requested", {
+      readyState: this.audioEl.readyState,
+      networkState: this.audioEl.networkState,
+      src: !!this.audioEl.currentSrc,
+    });
     this.ensureGraph();
     try {
       await this.audioEl.play();
+      log.debug("media", "play resolved", {
+        readyState: this.audioEl.readyState,
+        duration: this.audioEl.duration,
+      });
     } catch (err) {
       log.warn("media", "play() rejected", err);
     }
@@ -140,6 +153,14 @@ export class MediaEngine {
     if (!Number.isFinite(positionSec)) return;
     this.audioEl.currentTime = positionSec;
     if (this.hasVideo) this.videoEl.currentTime = positionSec;
+  }
+
+  getCurrentTime(): number {
+    return this.audioEl.currentTime || 0;
+  }
+
+  getDuration(): number {
+    return this.audioEl.duration || 0;
   }
 
   setVolume(volume: number): void {

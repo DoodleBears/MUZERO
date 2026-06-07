@@ -98,6 +98,12 @@ describe("replaceEntries", () => {
     expect(replaceEntries([e("x")], 5).currentIndex).toBe(0);
     expect(replaceEntries([], 0).currentIndex).toBe(-1);
   });
+
+  it("keeps an explicit idle cursor", () => {
+    const s = replaceEntries([e("x"), e("y")], -1);
+    expect(ids(s)).toEqual(["x", "y"]);
+    expect(s.currentIndex).toBe(-1);
+  });
 });
 
 describe("reconcileCurrentIndex (pin the cursor to the playing track by id)", () => {

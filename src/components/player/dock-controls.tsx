@@ -1,47 +1,62 @@
-import { Repeat, Repeat1 } from "lucide-react";
+import { ListMusic, Shuffle } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { ControlTooltip } from "@/components/player/control-tooltip";
+import { FavoriteControlButton } from "@/components/player/favorite-control-button";
 import { VolumeControl } from "@/components/player/volume-control";
 import { Button } from "@/components/ui/button";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { playerShortcutHint } from "@/lib/player-hints";
-import { isMac } from "@/lib/shortcuts";
 import { cn } from "@/lib/utils";
-import { nextRepeatMode } from "@/player/transport";
 import { usePlayerStore } from "@/stores/player-store";
 
 /**
- * The dock's secondary controls: repeat (off→all→one, ⌘R) + volume (hover
- * slider). Each subscribes narrowly so cycling repeat never re-renders the
- * volume control, and neither reacts to playback-progress ticks. Mounted to the
- * right of the player info, before the nav FAB. Hidden on the narrowest widths
- * (mobile reaches these via the full Now Playing transport row).
+ * The dock's secondary controls. Each leaf subscribes narrowly so
+ * transport/progress ticks don't repaint the whole dock. Mounted in row 1 to
+ * the left of play/pause.
  */
-export function DockControls({ className }: { className?: string }) {
+export function DockControls({
+  className,
+  onOpenQueue,
+}: {
+  className?: string;
+  onOpenQueue?: () => void;
+}) {
   const { t } = useTranslation();
-  const repeat = usePlayerStore((s) => s.repeat);
-  const setRepeat = usePlayerStore((s) => s.setRepeat);
-  const mac = isMac();
+  const shuffle = usePlayerStore((s) => s.shuffle);
+  const setShuffle = usePlayerStore((s) => s.setShuffle);
 
   return (
     <TooltipProvider>
       <div className={cn("flex items-center gap-0.5", className)}>
-        <ControlTooltip label={t("player.repeatLabel")} keys={playerShortcutHint("repeat", mac)}>
+        {onOpenQueue && (
+          <ControlTooltip label={t("nowPlaying.upNext")}>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={onOpenQueue}
+              aria-label={t("nowPlaying.upNext")}
+              className="size-8 rounded-full text-muted-foreground transition-colors hover:text-foreground sm:size-9 xl:hidden"
+            >
+              <ListMusic />
+            </Button>
+          </ControlTooltip>
+        )}
+        <ControlTooltip label={t("player.shuffle")}>
           <Button
             variant="ghost"
             size="icon"
-            onClick={() => setRepeat(nextRepeatMode(repeat))}
-            aria-label={t("player.repeat", { mode: repeat })}
-            aria-pressed={repeat !== "off"}
+            onClick={() => setShuffle(!shuffle)}
+            aria-label={t("player.shuffle")}
+            aria-pressed={shuffle}
             className={cn(
-              "rounded-full",
-              repeat !== "off" ? "text-primary" : "text-muted-foreground hover:text-foreground",
+              "size-8 rounded-full sm:size-9",
+              shuffle ? "text-primary" : "text-muted-foreground hover:text-foreground",
             )}
           >
-            {repeat === "one" ? <Repeat1 /> : <Repeat />}
+            <Shuffle />
           </Button>
         </ControlTooltip>
-        <VolumeControl />
+        <VolumeControl className="max-[420px]:hidden" />
+        <FavoriteControlButton className="size-8 sm:size-9" />
       </div>
     </TooltipProvider>
   );
