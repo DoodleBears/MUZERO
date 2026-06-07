@@ -175,7 +175,17 @@
     "changeCover": "カバーを変更",
     "addTag": "タグを追加…",
     "removeTag": "{{tag}} を削除",
-    "notePlaceholder": "この曲はあなたにとって何ですか？（検索可能）"
+    "notePlaceholder": "この曲はあなたにとって何ですか？（検索可能）",
+    "memoryEmpty": "まだメモリーはありません",
+    "saveMemory": "メモリーを保存",
+    "cancelMemoryEdit": "キャンセル",
+    "addMemoryPhoto": "写真を追加",
+    "changeMemoryPhoto": "写真を変更",
+    "memoryPhotoInput": "メモリー写真",
+    "removeMemoryPhoto": "{{name}} を削除",
+    "editMemory": "メモリーを編集",
+    "deleteMemory": "メモリーを削除",
+    "memoryPhotoAlt": "メモリー写真"
   },
   "settings": {
     "language": "言語",

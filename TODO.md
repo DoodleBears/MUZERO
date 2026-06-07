@@ -30,7 +30,7 @@ PRD: [`20260607-muzero-set-playqueue-memory-data-model-prd`](docs/prd/20260607-m
 
 - [x] **DM-1 播放列表 Play Queue 地基** ✅ — 纯函数 play-queue(12测) + Dexie v3 playQueue 表 + repo + v2→v3 seed 迁移(8测) + player-store 改消费 playQueue + high-water 追加。浏览器验证迁移 seed+播放、零报错；全套件绿。（用户级编辑 actions 延后 DM-4）
 - [x] **DM-2 autoExtend → 播放列表** ✅ — `refillIfNeeded(sessionId,queueLength,currentIndex)` 阈值改测播放列表 upcoming；`maybeRefill` 传 queue.length；续歌喂队列由 DM-1c high-water 承担。dj-engine 9 测更新、全套件 148 绿。
-- [ ] **DM-3 歌曲记忆 Memory** — `Memory` 类型 + `memories` 表 + `mediaBlobs` `role:"memory"` + repo；迁移 `Track.note`→首条 Memory；`annotation-editor` 改记忆列表（加/编辑/删/照片/时间）；`track-search` 搜 memory.note；`RecentTrack` 喂记忆给 DJ。已完成数据层 + provenance runtime + 便签瀑布流 `MemoryNotesWaterfall` 展示层 + `MemoryNoteComposer` 新增/编辑展示层 + `TrackMemoryNotesPanel` liveQuery/CRUD 容器；`annotation-editor`/`search-page` 接线待并行 WIP 落地。**（解锁 musicgen provenance 自动 Note）**
+- [ ] **DM-3 歌曲记忆 Memory** — `Memory` 类型 + `memories` 表 + `mediaBlobs` `role:"memory"` + repo；迁移 `Track.note`→首条 Memory；`annotation-editor` 改记忆列表（加/编辑/删/照片/时间）；`track-search` 搜 memory.note；`RecentTrack` 喂记忆给 DJ。已完成数据层 + provenance runtime + 便签瀑布流 `MemoryNotesWaterfall` 展示层 + `MemoryNoteComposer` 新增/编辑展示层 + `TrackMemoryNotesPanel` liveQuery/CRUD 容器 + `annotation-editor` 便签 UI 接线；`search-page` 接线待做。**（解锁 musicgen provenance 自动 Note）**
   - 验收：一曲多记忆（含照片）；搜索命中记忆文字；旧 note 变首条记忆；DJ 上下文带记忆。
 - [ ] **DM-4 UI 打磨** — 歌单管理（CRUD+播放/加入队列/切换）；播放列表视图（play-next/add/remove/reorder/loop）；记忆相册；封面取自记忆；i18n 4 语。
   - 验收：浏览器 preview 全流程 + 暗色 + 响应式 + 零报错；四语种齐全。

@@ -1,9 +1,9 @@
 import { ImagePlus, X } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { CoverCropDialog } from "@/components/track/cover-crop-dialog";
-import { Textarea } from "@/components/ui/input";
-import { setTrackCover, setTrackNote, setTrackTags } from "@/db/repositories";
+import { TrackMemoryNotesPanel } from "@/components/track/track-memory-notes-panel";
+import { setTrackCover, setTrackTags } from "@/db/repositories";
 import type { CropRect, Track } from "@/db/types";
 import { IMAGE_ACCEPT } from "@/lib/file-drop";
 
@@ -14,14 +14,9 @@ import { IMAGE_ACCEPT } from "@/lib/file-drop";
  */
 export function AnnotationEditor({ track }: { track: Track }) {
   const { t } = useTranslation();
-  const [note, setNote] = useState(track.note ?? "");
   const [tagInput, setTagInput] = useState("");
   const [cropFile, setCropFile] = useState<File | null>(null);
   const fileRef = useRef<HTMLInputElement | null>(null);
-
-  // Re-sync the local note when the saved note changes. The parent remounts this
-  // component per track (key={track.id}), so switching tracks resets cleanly too.
-  useEffect(() => setNote(track.note ?? ""), [track.note]);
 
   function addTag() {
     const value = tagInput.trim().toLowerCase();
@@ -103,12 +98,31 @@ export function AnnotationEditor({ track }: { track: Track }) {
           />
         </div>
 
-        <Textarea
-          value={note}
-          onChange={(e) => setNote(e.target.value)}
-          onBlur={() => void setTrackNote(track.id, note)}
-          placeholder={t("annotation.notePlaceholder")}
-          className="min-h-16 text-sm"
+        <TrackMemoryNotesPanel
+          formatCreatedAt={(createdAt) =>
+            new Intl.DateTimeFormat(undefined, {
+              dateStyle: "medium",
+              timeStyle: "short",
+            }).format(createdAt)
+          }
+          labels={{
+            composer: {
+              addPhoto: t("annotation.addMemoryPhoto"),
+              cancel: t("annotation.cancelMemoryEdit"),
+              changePhoto: t("annotation.changeMemoryPhoto"),
+              notePlaceholder: t("annotation.notePlaceholder"),
+              photoInput: t("annotation.memoryPhotoInput"),
+              removePhoto: (name) => t("annotation.removeMemoryPhoto", { name }),
+              save: t("annotation.saveMemory"),
+            },
+            waterfall: {
+              deleteMemory: () => t("annotation.deleteMemory"),
+              editMemory: () => t("annotation.editMemory"),
+              empty: t("annotation.memoryEmpty"),
+              photoAlt: () => t("annotation.memoryPhotoAlt"),
+            },
+          }}
+          trackId={track.id}
         />
       </div>
       {cropFile && (

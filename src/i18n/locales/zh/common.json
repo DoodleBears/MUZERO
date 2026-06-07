@@ -175,7 +175,17 @@
     "changeCover": "更换封面",
     "addTag": "添加标签…",
     "removeTag": "移除 {{tag}}",
-    "notePlaceholder": "这首歌对你意味着什么？（可被搜索）"
+    "notePlaceholder": "这首歌对你意味着什么？（可被搜索）",
+    "memoryEmpty": "还没有记忆",
+    "saveMemory": "保存记忆",
+    "cancelMemoryEdit": "取消",
+    "addMemoryPhoto": "添加照片",
+    "changeMemoryPhoto": "更换照片",
+    "memoryPhotoInput": "记忆照片",
+    "removeMemoryPhoto": "移除 {{name}}",
+    "editMemory": "编辑记忆",
+    "deleteMemory": "删除记忆",
+    "memoryPhotoAlt": "记忆照片"
   },
   "settings": {
     "language": "语言",
