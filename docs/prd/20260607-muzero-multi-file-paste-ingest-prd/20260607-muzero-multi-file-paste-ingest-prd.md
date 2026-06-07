@@ -127,3 +127,4 @@ if (dt.files && dt.files.length > 0) return Array.from(dt.files); // ← 多文�
 | Date | Author | Changes |
 |------|--------|---------|
 | 2026-06-07 | MUZERO | Initial draft —— 修复「复制多个音频文件、粘贴只进一个」：`filesFromTransfer` 合并 `.items ∪ .files` 并去重；drop 回归守 `N` 不变 `2N` |
+| 2026-06-07 | MUZERO | Phase 1 实现：6 例新测（多文件粘贴红→绿 + 去重/容器/截图/字符串/null）全绿。dedup key 用 `JSON.stringify([name,size,lastModified,type])`——可打印且抗冲突（初版误用 `\0` 分隔符，git 把源文件当二进制，已修正为文本） |
