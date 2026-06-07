@@ -61,6 +61,7 @@ export class DjChatRuntimeActor {
     this.snapshot = {
       messages: [],
       meta: emptyMeta(sessionId),
+      queuedPrompts: [],
     };
     this.ready = this.initialize();
   }
@@ -288,6 +289,7 @@ export class DjChatRuntimeActor {
     this.snapshot = {
       messages: [...messages],
       meta,
+      queuedPrompts: [...this.queuedPrompts],
     };
     for (const listener of this.listeners) listener();
   }

@@ -396,6 +396,7 @@ describe("DjChatRuntimeActor", () => {
     const queued = await actor.queuePrompt("generate a late-night bridge");
     if (!queued) throw new Error("Expected prompt to enqueue");
     expect(actor.getSnapshot().meta.queuedPromptCount).toBe(1);
+    expect(actor.getSnapshot().queuedPrompts).toEqual([queued]);
     expect(transport.sentMessages).toHaveLength(0);
 
     clearDjChatRuntimeActors();
@@ -404,6 +405,7 @@ describe("DjChatRuntimeActor", () => {
     await rebuilt.ready;
 
     expect(rebuilt.getSnapshot().meta.queuedPromptCount).toBe(1);
+    expect(rebuilt.getSnapshot().queuedPrompts).toEqual([queued]);
     expect(rebuiltTransport.sentMessages).toHaveLength(0);
 
     await rebuilt.sendQueuedPrompt(queued.id);

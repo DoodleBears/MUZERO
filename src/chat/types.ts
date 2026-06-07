@@ -29,4 +29,5 @@ export interface DjChatRuntimeMeta {
 export interface DjChatRuntimeSnapshot {
   messages: DjChatUIMessage[];
   meta: DjChatRuntimeMeta;
+  queuedPrompts: DjChatQueuedPrompt[];
 }
