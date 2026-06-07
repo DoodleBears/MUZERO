@@ -21,7 +21,8 @@ import {
   updateSession,
 } from "@/db/repositories";
 import type { PlayQueue, Track } from "@/db/types";
-import { trackBriefSchema } from "@/dj/dj-brief-schema";
+import { describeBrief, type TrackBrief, trackBriefSchema } from "@/dj/dj-brief-schema";
+import { newId } from "@/lib/id";
 import { searchTracks } from "@/lib/track-search";
 
 export const agentWriteResultSchema = z.object({
@@ -46,6 +47,14 @@ export const generateTracksInputSchema = z.object({
 });
 
 export type GenerateTracksInput = z.input<typeof generateTracksInputSchema>;
+
+export const proposeBriefsInputSchema = z.object({
+  sessionId: z.string().min(1).optional(),
+  rationale: z.string().max(1000).optional(),
+  briefs: z.array(trackBriefSchema).min(1).max(4),
+});
+
+export type ProposeBriefsInput = z.input<typeof proposeBriefsInputSchema>;
 
 export interface DjChatToolDeps {
   db?: MuzeroDB;
@@ -118,6 +127,23 @@ export async function executeGenerateTracks(
       queued: input.playNext ? "next" : "append",
     },
     warnings: [],
+  };
+}
+
+export function executeProposeBriefs(rawInput: ProposeBriefsInput): {
+  proposalId: string;
+  sessionId?: string;
+  briefs: TrackBrief[];
+  summaries: string[];
+  rationale?: string;
+} {
+  const input = proposeBriefsInputSchema.parse(rawInput);
+  return {
+    proposalId: newId("prp"),
+    sessionId: input.sessionId,
+    briefs: input.briefs,
+    summaries: input.briefs.map((brief) => `${brief.title}: ${describeBrief(brief)}`),
+    rationale: input.rationale?.trim() || undefined,
   };
 }
 
@@ -211,6 +237,12 @@ export function createDjChatTools(deps: DjChatToolDeps = {}): ToolSet {
       description: "Attach a Memory note to a local track.",
       inputSchema: z.object({ trackId: z.string().min(1), note: z.string().min(1).max(2000) }),
       execute: ({ trackId, note }) => addMemory({ trackId, note }, db),
+    }),
+    dj_propose_briefs: tool({
+      description:
+        "Validate and summarize proposed TrackBriefs for user confirmation. This does not create tracks or spend provider credits.",
+      inputSchema: proposeBriefsInputSchema,
+      execute: executeProposeBriefs,
     }),
     dj_generate_tracks: tool({
       description:

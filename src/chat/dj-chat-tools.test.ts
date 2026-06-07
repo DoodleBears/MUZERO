@@ -5,8 +5,10 @@ import { trackBriefSchema } from "@/dj/dj-brief-schema";
 import {
   createDjChatTools,
   executeGenerateTracks,
+  executeProposeBriefs,
   executeSearchTracks,
   generateTracksInputSchema,
+  proposeBriefsInputSchema,
 } from "./dj-chat-tools";
 
 let db: MuzeroDB;
@@ -29,6 +31,7 @@ describe("DJ chat tools", () => {
   it("marks only dj_generate_tracks as approval-gated", () => {
     const tools = createDjChatTools({ db });
     expect(tools.dj_generate_tracks.needsApproval).toBe(true);
+    expect(tools.dj_propose_briefs.needsApproval).toBeUndefined();
     expect(tools.library_search_tracks.needsApproval).toBeUndefined();
     expect(tools.set_create.needsApproval).toBeUndefined();
   });
@@ -76,6 +79,35 @@ describe("DJ chat tools", () => {
     expect((await getPlayQueue(db)).entries.map((entry) => entry.trackId)).toEqual(
       result.diff.createdTrackIds,
     );
+  });
+
+  it("proposes validated briefs without writing pending tracks", async () => {
+    const session = await createSession({ seedPrompt: "rain" }, db);
+    const input = proposeBriefsInputSchema.parse({
+      sessionId: session.id,
+      rationale: "Keep the set rainy but add more pulse.",
+      briefs: [
+        {
+          title: "Umbrella Relay",
+          caption: "rainy garage pulse, soft sub bass, glassy keys",
+          lyrics: "",
+          durationSec: 70,
+          bpm: 132,
+          keyscale: "D minor",
+        },
+      ],
+    });
+
+    const result = await executeProposeBriefs(input);
+
+    expect(result.proposalId).toMatch(/^prp_/);
+    expect(result.sessionId).toBe(session.id);
+    expect(result.summaries).toEqual([
+      "Umbrella Relay: rainy garage pulse, soft sub bass, glassy keys · 132bpm · D minor",
+    ]);
+    expect(result.rationale).toBe("Keep the set rainy but add more pulse.");
+    expect(await db.tracks.count()).toBe(0);
+    expect((await getSession(session.id, db))?.trackIds).toEqual([]);
   });
 
   it("searches tracks with memory-aware matching", async () => {

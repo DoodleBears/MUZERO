@@ -402,10 +402,12 @@ interface ChatUiState {
 - [x] `dj-chat-tools.ts`（§4.2 工具集，Zod schema，读/写 + `needsApproval`，`AgentWriteResult`）；`dj-chat-prompt.ts`。
 - [ ] `chat-tool-collapsible.tsx`（审批/结果/错误）；HITL `ask`/`auto` 偏好。
 - [x] 工具落 repos；`dj_generate_tracks` 走 `createPendingTrack`+`prependTrackIds` + play-next queue（物化由 store pump 自动）；provider id 从 settings 注入，保持 provider-agnostic。
+- [x] `dj_propose_briefs`：校验候选 `TrackBrief[]` 并返回 proposal id + summaries，不写 DB、不花钱、不审批；确认后才走 `dj_generate_tracks`。
 
 **Phase 3 Checklist:**
 - [ ] 集成测：「做个 lofi set」→ propose→审批→generate→pending 落库→pump 物化→可播（canned model + mock music provider）。
 - [x] 写工具 schema 拒绝时零写入；读工具无审批；`dj_generate_tracks` 才 `needsApproval:true`。
+- [x] `dj_propose_briefs` 无审批且零写入，生成摘要给确认 UI 使用。
 - [x] `library_search_tracks` 使用 memory-aware search；`dj_generate_tracks` 写 pending track + set + play-next queue。
 
 ### Phase 4: 多 Session + 历史 + branch/regenerate
@@ -501,6 +503,7 @@ interface ChatUiState {
 | 2026-06-07 | Codex | 推进 Phase 5a：新增 LLM provider preset registry（openrouter/openai/claude/gemini/groq/deepseek/custom）、settings 字段 `defaultLlmProviderPresetId`/`defaultLlmModel`/`apiKeysByPresetId`、legacy openai/anthropic bridge、enabled provider selection；`resolveDjModel` 支持 Anthropic 与 OpenAI-compatible `baseURL`，仍注入 `getAppFetch()`。补 preset selection 测试；`make check` 通过（47 files / 343 tests）。 |
 | 2026-06-07 | Codex | 推进 Phase 6a：新增 `dj-chat-tokens.ts` 与 `dj-chat-context-budget.ts`，提供保守 token 估算、ok/warn/block budget gate、压缩起点计算（保留最新 user turn，不静默截断）。补纯函数测试；`make check` 通过（48 files / 346 tests）。 |
 | 2026-06-07 | Codex | 推进 Phase 6b：新增 session-scoped queued prompt runtime 核心（`queuedPromptsJson` parse/enqueue/reorder/remove、runtime meta 计数、actor rebuild 不自动派发、手动派发后移除、interrupt 即发并打 `interruptionMarker`）。补仓库/actor 测试；`make check` 通过（48 files / 349 tests）。 |
+| 2026-06-07 | Codex | 推进 Phase 3b：补 `dj_propose_briefs` 非花钱提案工具，复用 `trackBriefSchema` 校验并返回 proposal id + `describeBrief` summaries；无审批、零 DB 写入，确认后再走 `dj_generate_tracks`。补工具测试；`make check` 通过（48 files / 350 tests）。 |
 
 ---
 
