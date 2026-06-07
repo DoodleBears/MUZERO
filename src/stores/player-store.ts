@@ -23,7 +23,7 @@ import { log } from "@/lib/logger";
 import { probeMediaFile } from "@/lib/media-probe";
 import { resolveMusicGenProvider } from "@/musicgen/registry";
 import { MediaEngine } from "@/player/media-engine";
-import { unconsumedTrackIds } from "@/player/play-queue";
+import { reconcileCurrentIndex, unconsumedTrackIds } from "@/player/play-queue";
 import {
   buildShuffleOrder,
   clampIndex,
@@ -169,7 +169,16 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
         const sig = queueSig(queue);
         if (sig === lastQueueSig) return; // list unchanged → don't churn subscribers
         lastQueueSig = sig;
-        set({ queue });
+        // Pin the cursor to the PLAYING track by id: deleting other tracks shifts
+        // positions but must not change what's playing (and keeps next/prev/repeat
+        // correct). Without this, currentIndex (a position) would point at a
+        // different track after a removal and afterQueueUpdate would reload it.
+        const currentIndex = reconcileCurrentIndex(
+          queue.map((tr) => tr.id),
+          loadedTrackId,
+          get().currentIndex,
+        );
+        set({ queue, currentIndex });
         void afterQueueUpdate(set, get);
       },
       error: (err) => log.error("player", "play-queue subscription error", err),

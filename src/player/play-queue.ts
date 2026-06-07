@@ -82,3 +82,23 @@ export function replaceEntries(newEntries: PlayQueueEntry[], currentIndex = 0): 
 export function unconsumedTrackIds(setTrackIds: string[], consumed: Set<string>): string[] {
   return setTrackIds.filter((id) => !consumed.has(id));
 }
+
+/**
+ * Re-derive the player's currentIndex after the queue's track list changes —
+ * pinned to the PLAYING track by id, not by position. Deleting other tracks
+ * shifts positions but must never change what's playing (and keeps next/prev/
+ * repeat correct). If the playing track itself was removed, the cursor stays on
+ * the slot it held (now the following track); idle (-1) and empty stay idle.
+ */
+export function reconcileCurrentIndex(
+  trackIds: string[],
+  currentTrackId: string | null,
+  fallbackIndex: number,
+): number {
+  if (currentTrackId) {
+    const i = trackIds.indexOf(currentTrackId);
+    if (i >= 0) return i;
+  }
+  if (trackIds.length === 0 || fallbackIndex < 0) return -1;
+  return Math.min(fallbackIndex, trackIds.length - 1);
+}

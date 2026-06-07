@@ -5,6 +5,7 @@ import {
   insertNext,
   moveEntry,
   type PlayQueueState,
+  reconcileCurrentIndex,
   removeEntry,
   replaceEntries,
   unconsumedTrackIds,
@@ -96,6 +97,36 @@ describe("replaceEntries", () => {
   it("clamps an out-of-range index", () => {
     expect(replaceEntries([e("x")], 5).currentIndex).toBe(0);
     expect(replaceEntries([], 0).currentIndex).toBe(-1);
+  });
+});
+
+describe("reconcileCurrentIndex (pin the cursor to the playing track by id)", () => {
+  it("follows the playing track when other tracks are removed", () => {
+    // [a,b,c] playing c (idx 2); remove a → [b,c]; c is now at idx 1.
+    expect(reconcileCurrentIndex(["b", "c"], "c", 2)).toBe(1);
+  });
+
+  it("stays on the playing track when a later track is removed", () => {
+    // [a,b,c] playing a (idx 0); remove c → [a,b]; a stays at 0.
+    expect(reconcileCurrentIndex(["a", "b"], "a", 0)).toBe(0);
+  });
+
+  it("moves to the track now at the slot when the CURRENT track is removed", () => {
+    // [a,b,c] playing b (idx 1); remove b → [a,c]; slot 1 now holds c.
+    expect(reconcileCurrentIndex(["a", "c"], "b", 1)).toBe(1);
+  });
+
+  it("stays idle (-1) when nothing is playing", () => {
+    expect(reconcileCurrentIndex(["a", "b"], null, -1)).toBe(-1);
+  });
+
+  it("returns -1 for an empty queue", () => {
+    expect(reconcileCurrentIndex([], "a", 0)).toBe(-1);
+  });
+
+  it("clamps a removed-current at the end", () => {
+    // playing c (idx 2); remove c → [a,b]; clamp old idx 2 → 1.
+    expect(reconcileCurrentIndex(["a", "b"], "c", 2)).toBe(1);
   });
 });
 
