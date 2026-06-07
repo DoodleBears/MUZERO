@@ -15,7 +15,8 @@ import {
   getChatSession,
   parseChatMessages,
   parseQueuedPrompts,
-  removeQueuedPrompt,
+  removeQueuedPrompt as removeSessionQueuedPrompt,
+  reorderQueuedPrompts as reorderSessionQueuedPrompts,
   saveChatSessionSnapshot,
   setChatContextStartIndex,
 } from "./dj-chat-sessions";
@@ -103,7 +104,10 @@ export class DjChatRuntimeActor {
   async sendQueuedPrompt(promptId: string): Promise<boolean> {
     await this.ready;
     if (this.snapshot.meta.pendingApprovalCount > 0) return false;
-    const queued = await removeQueuedPrompt({ sessionId: this.sessionId, promptId }, this.db);
+    const queued = await removeSessionQueuedPrompt(
+      { sessionId: this.sessionId, promptId },
+      this.db,
+    );
     if (!queued) return false;
     this.queuedPrompts = this.queuedPrompts.filter((prompt) => prompt.id !== promptId);
     this.setSnapshot(
@@ -115,6 +119,40 @@ export class DjChatRuntimeActor {
     );
     await this.sendMessage(queued.composerRaw);
     return true;
+  }
+
+  async reorderQueuedPrompts(promptIds: string[]): Promise<DjChatQueuedPrompt[]> {
+    await this.ready;
+    this.queuedPrompts = await reorderSessionQueuedPrompts(
+      { sessionId: this.sessionId, promptIds },
+      this.db,
+    );
+    this.setSnapshot(
+      this.snapshot.messages,
+      withRuntimePointers(this.snapshot.meta, {
+        queuedPromptCount: this.queuedPrompts.length,
+        contextStartIndex: this.contextStartIndex,
+      }),
+    );
+    return this.queuedPrompts;
+  }
+
+  async deleteQueuedPrompt(promptId: string): Promise<DjChatQueuedPrompt | undefined> {
+    await this.ready;
+    const removed = await removeSessionQueuedPrompt(
+      { sessionId: this.sessionId, promptId },
+      this.db,
+    );
+    if (!removed) return undefined;
+    this.queuedPrompts = this.queuedPrompts.filter((prompt) => prompt.id !== promptId);
+    this.setSnapshot(
+      this.snapshot.messages,
+      withRuntimePointers(this.snapshot.meta, {
+        queuedPromptCount: this.queuedPrompts.length,
+        contextStartIndex: this.contextStartIndex,
+      }),
+    );
+    return removed;
   }
 
   async interruptWithMessage(text: string): Promise<void> {

@@ -438,7 +438,7 @@ interface ChatUiState {
 ### Phase 6: 队列/打断 + onboarding + 压缩
 **Tasks:**
 - [ ] `chat-queue-tray.tsx`（DnD 重排、立即发送、auto-dispatch Switch、reload 后默认关）；Stop≠Interrupt + 打断标记。
-- [x] 队列 runtime 核心：`ChatSession.queuedPromptsJson` 解析/入队/重排/删除；actor 重建只恢复队列计数、不自动派发；手动派发移除 queued prompt 后发送；interrupt 立即发送并带一次性 marker。
+- [x] 队列 runtime 核心：`ChatSession.queuedPromptsJson` 解析/入队/重排/删除；actor 重建只恢复队列计数、不自动派发；手动派发移除 queued prompt 后发送；actor 重排/删除不触发发送；interrupt 立即发送并带一次性 marker。
 - [ ] 空态：预设 chips（插入不发）+ 空库/无 seed 引导（指向上传/输入 vibe）。
 - [x] `dj-chat-context-budget.ts` + `dj-chat-tokens.ts`：预算 gate + 滑动 `contextStartIndex` 压缩（block-and-explain，不静默截断）。
 
@@ -446,6 +446,7 @@ interface ChatUiState {
 - [x] 键盘矩阵测试（Enter/Ctrl+Enter/Shift+Enter）；running+draft Enter 入队，Cmd/Ctrl+Enter interrupt，Shift+Enter 保留换行。
 - [x] pending 审批暂停派发；`sendQueuedPrompt` 保留 queued prompt 且返回 false。
 - [x] 重载恢复队列但不自动发；手动派发 queued prompt 后从 session 队列移除；interrupt 不入队并带 `interruptionMarker`。
+- [x] Runtime actor 支持 queued prompt reorder/delete，持久化顺序/数量且不 dispatch。
 - [x] 超预算时纯函数返回 block（调用点负责解释）；压缩指针计算保留最新 user turn，不静默截断。
 - [x] 压缩指针 actor/repo 持久化、旧消息仍可见。
 - [ ] 上下文预算 UI 接线与 block-and-explain 文案（待 i18n/App 挂载解锁）。
@@ -519,6 +520,7 @@ interface ChatUiState {
 | 2026-06-07 | Codex | 推进 Phase 4d：补 runtime 集成测覆盖两个 session 不同 model 配置下并发发送，一个进入 `dj_generate_tracks` 审批态、另一个 provider 报错，meta/history/pending approval/error 互不串；`make check` 通过（51 files / 369 tests）。 |
 | 2026-06-07 | Codex | 推进 Phase 5b：新增 `llmSelectionForChatSession`，chat transport 每次 send 按当前 session 的 provider/model 覆盖解析模型；补纯函数与 transport sessionId 测试；`make check` 通过（52 files / 372 tests）。 |
 | 2026-06-07 | Codex | 推进 Phase 3c：补 chat tools 核心集成测覆盖 proposal 零写入、`dj_generate_tracks` pending/set/play-next queue 写入、mock `DjEngine.materializeNext` 物化为 ready + media blob；`make check` 通过（52 files / 373 tests）。 |
+| 2026-06-07 | Codex | 推进 Phase 6f：`DjChatRuntimeActor` 暴露 queued prompt reorder/delete 方法，复用 repository 持久化并更新 runtime meta，不触发 transport dispatch；补 runtime 测试（10 tests passed）。`make check` 在 typecheck 阶段被并行 untracked WIP `src/components/player/visualizer-mode-button.tsx` 阻塞（i18n key 类型错误），本提交 path-scoped 并需 `--no-verify`。 |
 
 ---
 

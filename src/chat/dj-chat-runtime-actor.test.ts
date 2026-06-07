@@ -350,6 +350,48 @@ describe("DjChatRuntimeActor", () => {
     ).toHaveLength(0);
   });
 
+  it("reorders queued prompts without dispatching them", async () => {
+    const session = await createChatSession({ firstUserText: "queue-order" }, db);
+    const transport = new FakeStreamingTransport("unused");
+    const actor = getOrCreateDjChatRuntimeActor(session.id, { db, transport });
+    await actor.ready;
+    const first = await actor.queuePrompt("first");
+    const second = await actor.queuePrompt("second");
+    const third = await actor.queuePrompt("third");
+    if (!first || !second || !third) throw new Error("Expected queued prompts");
+
+    const reordered = await actor.reorderQueuedPrompts([third.id, first.id]);
+
+    expect(reordered.map((prompt) => prompt.id)).toEqual([third.id, first.id, second.id]);
+    expect(actor.getSnapshot().meta.queuedPromptCount).toBe(3);
+    expect(transport.sentMessages).toHaveLength(0);
+    expect(
+      parseQueuedPrompts((await getChatSession(session.id, db))?.queuedPromptsJson).map(
+        (prompt) => prompt.id,
+      ),
+    ).toEqual([third.id, first.id, second.id]);
+  });
+
+  it("deletes a queued prompt without sending it", async () => {
+    const session = await createChatSession({ firstUserText: "queue-delete" }, db);
+    const transport = new FakeStreamingTransport("unused");
+    const actor = getOrCreateDjChatRuntimeActor(session.id, { db, transport });
+    await actor.ready;
+    const keep = await actor.queuePrompt("keep me");
+    const remove = await actor.queuePrompt("drop me");
+    if (!keep || !remove) throw new Error("Expected queued prompts");
+
+    await expect(actor.deleteQueuedPrompt(remove.id)).resolves.toMatchObject({
+      composerRaw: "drop me",
+    });
+
+    expect(actor.getSnapshot().meta.queuedPromptCount).toBe(1);
+    expect(transport.sentMessages).toHaveLength(0);
+    expect(parseQueuedPrompts((await getChatSession(session.id, db))?.queuedPromptsJson)).toEqual([
+      keep,
+    ]);
+  });
+
   it("pauses queued prompt dispatch while a tool approval is pending", async () => {
     const session = await createChatSession(
       {
