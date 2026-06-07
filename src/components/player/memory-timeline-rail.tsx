@@ -14,7 +14,7 @@ import type { Memory } from "@/db/types";
 import {
   MEMORY_TIMELINE_CAROUSEL_INTERVAL_MS,
   MEMORY_TIMELINE_IDLE_DELAY_MS,
-  MEMORY_TIMELINE_ITEM_WIDTH,
+  MEMORY_TIMELINE_ITEM_HEIGHT,
   memoryTimelineIndexFromOffset,
   memoryTimelineOffsetForIndex,
   nextIdleMemoryIndex,
@@ -38,12 +38,12 @@ interface MemoryTimelineRailProps {
   };
   memories: MemoryTimelineRailItem[];
   onOffsetChange?: (offsetPx: number) => void;
-  timelineItemWidth?: number;
+  timelineItemHeight?: number;
 }
 
 type DragState = {
   startOffset: number;
-  startX: number;
+  startY: number;
 };
 
 export function MemoryTimelineRail({
@@ -55,13 +55,13 @@ export function MemoryTimelineRail({
   labels,
   memories,
   onOffsetChange,
-  timelineItemWidth = MEMORY_TIMELINE_ITEM_WIDTH,
+  timelineItemHeight = MEMORY_TIMELINE_ITEM_HEIGHT,
 }: MemoryTimelineRailProps) {
   const sortedMemories = useMemo(() => sortMemoryTimelineItems(memories), [memories]);
   const [mode, setMode] = useState<"idle" | "timeline">("idle");
   const [timelineOffset, setTimelineOffset] = useState(Math.max(0, initialOffset));
   const [activeIndex, setActiveIndex] = useState(() =>
-    memoryTimelineIndexFromOffset(initialOffset, timelineItemWidth, sortedMemories.length),
+    memoryTimelineIndexFromOffset(initialOffset, timelineItemHeight, sortedMemories.length),
   );
   const idleTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const dragRef = useRef<DragState | null>(null);
@@ -71,9 +71,9 @@ export function MemoryTimelineRail({
     const nextOffset = Math.max(0, initialOffset);
     setTimelineOffset(nextOffset);
     setActiveIndex(
-      memoryTimelineIndexFromOffset(nextOffset, timelineItemWidth, sortedMemories.length),
+      memoryTimelineIndexFromOffset(nextOffset, timelineItemHeight, sortedMemories.length),
     );
-  }, [initialOffset, sortedMemories.length, timelineItemWidth]);
+  }, [initialOffset, sortedMemories.length, timelineItemHeight]);
 
   useEffect(
     () => () => {
@@ -88,13 +88,13 @@ export function MemoryTimelineRail({
       setActiveIndex((current) => {
         const next = nextIdleMemoryIndex(current, sortedMemories.length);
         setTimelineOffset(
-          memoryTimelineOffsetForIndex(next, timelineItemWidth, sortedMemories.length),
+          memoryTimelineOffsetForIndex(next, timelineItemHeight, sortedMemories.length),
         );
         return next;
       });
     }, carouselIntervalMs);
     return () => clearInterval(interval);
-  }, [carouselIntervalMs, mode, sortedMemories.length, timelineItemWidth]);
+  }, [carouselIntervalMs, mode, sortedMemories.length, timelineItemHeight]);
 
   function showTimeline() {
     if (sortedMemories.length === 0) return;
@@ -106,28 +106,28 @@ export function MemoryTimelineRail({
   function setTimelineOffsetFromDrag(offsetPx: number) {
     const maxOffset = memoryTimelineOffsetForIndex(
       sortedMemories.length - 1,
-      timelineItemWidth,
+      timelineItemHeight,
       sortedMemories.length,
     );
     const nextOffset = Math.min(maxOffset, Math.max(0, Math.round(offsetPx)));
     setTimelineOffset(nextOffset);
     setActiveIndex(
-      memoryTimelineIndexFromOffset(nextOffset, timelineItemWidth, sortedMemories.length),
+      memoryTimelineIndexFromOffset(nextOffset, timelineItemHeight, sortedMemories.length),
     );
     onOffsetChange?.(nextOffset);
   }
 
   function onPointerDown(event: PointerEvent<HTMLDivElement>) {
     showTimeline();
-    dragRef.current = { startOffset: timelineOffset, startX: event.clientX };
+    dragRef.current = { startOffset: timelineOffset, startY: event.clientY };
     event.currentTarget.setPointerCapture?.(event.pointerId);
   }
 
   function onPointerMove(event: PointerEvent<HTMLDivElement>) {
     if (!(event.buttons & 1) || !dragRef.current) return;
-    // Drag the timeline, not the playhead: moving it left advances to later memories.
+    // Drag the timeline, not the playhead: moving it up advances to later memories.
     setTimelineOffsetFromDrag(
-      dragRef.current.startOffset - (event.clientX - dragRef.current.startX),
+      dragRef.current.startOffset - (event.clientY - dragRef.current.startY),
     );
   }
 
@@ -141,13 +141,13 @@ export function MemoryTimelineRail({
 
   function onKeyDown(event: KeyboardEvent<HTMLDivElement>) {
     if (sortedMemories.length === 0) return;
-    if (event.key === "ArrowLeft" || event.key === "ArrowDown") {
+    if (event.key === "ArrowLeft" || event.key === "ArrowUp") {
       event.preventDefault();
-      setTimelineOffsetFromDrag(timelineOffset - timelineItemWidth);
+      setTimelineOffsetFromDrag(timelineOffset - timelineItemHeight);
       showTimeline();
-    } else if (event.key === "ArrowRight" || event.key === "ArrowUp") {
+    } else if (event.key === "ArrowRight" || event.key === "ArrowDown") {
       event.preventDefault();
-      setTimelineOffsetFromDrag(timelineOffset + timelineItemWidth);
+      setTimelineOffsetFromDrag(timelineOffset + timelineItemHeight);
       showTimeline();
     } else if (event.key === "Home") {
       event.preventDefault();
@@ -158,7 +158,7 @@ export function MemoryTimelineRail({
       setTimelineOffsetFromDrag(
         memoryTimelineOffsetForIndex(
           sortedMemories.length - 1,
-          timelineItemWidth,
+          timelineItemHeight,
           sortedMemories.length,
         ),
       );
@@ -235,7 +235,7 @@ export function MemoryTimelineRail({
         >
           {activeMemory && (
             <article
-              className="-translate-x-1/2 -translate-y-1/2 pointer-events-none absolute top-[42%] left-1/2 w-[min(18rem,82%)] rounded-xl border border-primary/35 bg-background/85 p-3 text-center shadow-sm backdrop-blur-sm"
+              className="-translate-x-1/2 -translate-y-1/2 pointer-events-none absolute top-1/2 left-1/2 z-10 w-[min(18rem,82%)] rounded-xl border border-primary/35 bg-background/85 p-3 text-center shadow-sm backdrop-blur-sm"
               data-testid="memory-playhead-card"
             >
               <p className="line-clamp-4 whitespace-pre-wrap text-sm leading-5">
@@ -250,39 +250,39 @@ export function MemoryTimelineRail({
             </article>
           )}
           <div
-            className="pointer-events-none absolute top-[34%] bottom-4 left-1/2 z-10 w-0.5 -translate-x-1/2 rounded-full bg-primary/90 shadow-[0_0_18px_color-mix(in_srgb,var(--primary)_70%,transparent)]"
+            className="-translate-y-1/2 pointer-events-none absolute inset-x-6 top-1/2 z-20 h-0.5 rounded-full bg-primary/90 shadow-[0_0_18px_color-mix(in_srgb,var(--primary)_70%,transparent)]"
             data-testid="memory-timeline-playhead"
           />
           <ol
-            className="absolute bottom-4 left-0 flex items-end gap-0 transition-transform duration-200 ease-out will-change-transform motion-reduce:transition-none"
+            className="absolute top-0 inset-x-4 flex flex-col items-stretch transition-transform duration-200 ease-out will-change-transform motion-reduce:transition-none"
             data-testid="memory-timeline-list"
-            style={{ transform: `translateX(calc(50% - ${timelineOffset}px))` }}
+            style={{ transform: `translateY(calc(50% - ${timelineOffset}px))` }}
           >
             {sortedMemories.map((memory, index) => {
               const active = index === activeIndex;
               return (
                 <li
-                  className="relative flex shrink-0 flex-col items-center"
+                  className="relative flex shrink-0 items-center gap-3"
                   data-active={active ? "true" : "false"}
                   data-testid={`memory-timeline-item-${memory.id}`}
                   key={memory.id}
-                  style={{ width: timelineItemWidth }}
+                  style={{ height: timelineItemHeight }}
                 >
                   <span
                     className={cn(
-                      "mb-2 size-2.5 rounded-full border bg-background shadow-sm transition-colors",
+                      "size-2.5 rounded-full border bg-background shadow-sm transition-colors",
                       active ? "border-primary bg-primary" : "border-muted-foreground/45",
                     )}
                   />
                   <article
                     className={cn(
-                      "w-[calc(100%-0.75rem)] rounded-xl border p-2 text-center transition-colors",
+                      "min-w-0 flex-1 rounded-xl border p-3 text-left transition-colors",
                       active
                         ? "border-primary/45 bg-background/85"
                         : "border-border/70 bg-background/55",
                     )}
                   >
-                    <p className="line-clamp-2 whitespace-pre-wrap text-xs leading-4">
+                    <p className="line-clamp-2 whitespace-pre-wrap text-sm leading-5">
                       {memory.note}
                     </p>
                     <div className="mt-1 space-y-0.5 text-muted-foreground text-[11px]">

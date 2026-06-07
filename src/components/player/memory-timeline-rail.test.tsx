@@ -22,7 +22,7 @@ function renderRail(props: Partial<React.ComponentProps<typeof MemoryTimelineRai
       idleDelayMs={500}
       labels={{ empty: "No memories yet", memory: "Memory" }}
       memories={memories}
-      timelineItemWidth={100}
+      timelineItemHeight={100}
       {...props}
     />,
   );
@@ -50,17 +50,19 @@ describe("MemoryTimelineRail", () => {
     expect(screen.getByTestId("memory-carousel-card")).toHaveTextContent("Third late walk");
   });
 
-  it("shows a playhead timeline on interaction, stores drag offset, then resumes idle from that node", () => {
+  it("shows a lyrics-style vertical timeline on interaction, stores drag offset, then resumes idle from that node", () => {
     const onOffsetChange = vi.fn();
     renderRail({ onOffsetChange });
 
     fireEvent.wheel(screen.getByTestId("memory-timeline-rail"));
     expect(screen.getByTestId("memory-timeline-playhead")).toBeInTheDocument();
+    expect(screen.getByTestId("memory-timeline-playhead")).toHaveClass("h-0.5");
     expect(screen.getByTestId("memory-timeline-list")).toBeInTheDocument();
+    expect(screen.getByTestId("memory-timeline-list")).toHaveClass("flex-col");
 
     const scrubber = screen.getByTestId("memory-timeline-scrubber");
-    fireEvent.pointerDown(scrubber, { clientX: 240, pointerId: 1 });
-    fireEvent.pointerMove(scrubber, { buttons: 1, clientX: 40, pointerId: 1 });
+    fireEvent.pointerDown(scrubber, { clientY: 240, pointerId: 1 });
+    fireEvent.pointerMove(scrubber, { buttons: 1, clientY: 40, pointerId: 1 });
     fireEvent.pointerUp(scrubber, { pointerId: 1 });
 
     expect(onOffsetChange).toHaveBeenLastCalledWith(200);

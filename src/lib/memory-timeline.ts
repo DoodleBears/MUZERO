@@ -1,6 +1,6 @@
 export const MEMORY_TIMELINE_IDLE_DELAY_MS = 4000;
 export const MEMORY_TIMELINE_CAROUSEL_INTERVAL_MS = 5000;
-export const MEMORY_TIMELINE_ITEM_WIDTH = 112;
+export const MEMORY_TIMELINE_ITEM_HEIGHT = 112;
 
 export function sortMemoryTimelineItems<T extends { createdAt: number }>(items: readonly T[]): T[] {
   return items

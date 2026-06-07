@@ -244,7 +244,7 @@ this.version(3).stores({
 - [x] 当前歌曲/封面 context menu：新增 shadcn-style `ContextMenu` primitive（Base UI 实现），MediaStage 与底部歌曲行支持右键/长按打开；菜单内可切换 display mode（video/cover/title）、audio-only，并可添加/更换当前歌曲封面（走既有 crop dialog + `setTrackCover`）。
 - [x] 从记忆照片设为封面：每条带照片 Memory 的便签提供「设为封面」动作，repo 将 memory photo 复制成独立 `role:"cover"` blob，保留原 memory photo，不把封面指针直接复用到 memory blob。
 - [x] 宽屏 Now Playing 右侧播放列表 rail：提供折叠按钮，折叠偏好写入 `AppSettings.nowPlayingRightRailCollapsed`；刷新后保持；折叠态用 `motion` 收成底部 compact header，移动端队列 overlay 不受该偏好影响。
-- [x] 折叠态 Memory rail：折叠后右侧主体只显示**当前歌曲**关联的 memories，不混入 queue 其他歌曲。Idle 默认透明外壳、水平/垂直居中展示 card carousel，并从 `AppSettings.nowPlayingMemoryRailScrollTop` 对应的锚点开始轮播；用户 pointer/wheel/focus 操作时切换成类似播放 scrubber 的固定中线 playhead + 下层水平 timeline，拖动 timeline 本身（左拖前进、右拖后退）来切换节点并写回持久化锚点；idle 一段时间后从当前节点继续轮播；底部 compact header 继续 align bottom。
+- [x] 折叠态 Memory rail：折叠后右侧主体只显示**当前歌曲**关联的 memories，不混入 queue 其他歌曲。Idle 默认透明外壳、水平/垂直居中展示 card carousel，并从 `AppSettings.nowPlayingMemoryRailScrollTop` 对应的锚点开始轮播；用户 pointer/wheel/focus 操作时切换成类似歌词播放/手机相册的纵向 timeline list：历史 note memories 上下滚动，固定 playhead 是横向中线，拖动 list 本身（上拖前进、下拖后退）来切换节点并写回持久化锚点；idle 一段时间后从当前节点继续轮播；底部 compact header 继续 align bottom。
 - [x] 折叠 rail 视觉方向：折叠按钮用 `PanelBottomClose`，折叠态展开 affordance 用 `PanelBottomOpen`；compact header 保持 `rounded-b-none`，底部贴 dock/窗口时不出现圆角。
 - [ ] 歌单管理（CRUD + 播放/加入队列/切换）；播放列表视图（play-next/add/remove/reorder/loop 控件）；记忆相册；封面取自记忆。
 - [ ] i18n 4 语全量（歌单/播放列表/记忆 文案）。
@@ -311,6 +311,7 @@ this.version(3).stores({
 | 2026-06-08 | Codex | 推进 Phase 4 折叠态 Memory rail：新增 `memory-timeline` 纯逻辑与 `MemoryTimelineRail`，折叠后读取当前 queue 的 memories，idle card carousel 从持久化 scroll 锚点轮播，交互时切 timeline 并写回 `AppSettings.nowPlayingMemoryRailScrollTop`。本次 touched 文件 Biome 通过；相关测试通过（3 files / 9 tests）；`make check` 被并行 Now Playing WIP 挡住（`now-playing-background.tsx` typecheck、`src/lib/background.ts` format）。 |
 | 2026-06-08 | Codex | 收口折叠态 Memory rail UX：数据源收窄为当前歌曲 memories；idle 轮播去掉外层背景并居中；交互态改为固定 playhead + 可拖动水平 timeline scrubber（复用播放 peak scrubber 的“拖动内容而不是 playhead”手感）。补当前歌曲查询与拖拽锚点测试；相关测试通过（3 files / 11 tests），本次 touched 文件 Biome 通过；`make check` 被并行 displayMode/audioOnly WIP 挡住。 |
 | 2026-06-08 | Codex | 修正折叠 rail affordance：折叠/展开图标改为 bottom panel 方向，折叠态 compact header 改为 `rounded-t-2xl rounded-b-none`，底部不再圆角。补 `NowPlayingPanel` 图标/圆角测试；`make check` 通过（74 files / 448 tests）。 |
+| 2026-06-08 | Codex | 调整折叠态 Memory timeline 为歌词式纵向 list：历史 note memories 上下滚动，playhead 改为横向中线；拖动 Y 轴移动 list（上拖前进、下拖回退）并沿用持久化锚点。补 timeline 方向/拖拽测试；`make check` 通过（74 files / 448 tests）。 |
 
 ---
 

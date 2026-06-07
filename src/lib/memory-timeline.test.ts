@@ -23,7 +23,7 @@ describe("memory timeline logic", () => {
     ]);
   });
 
-  it("anchors a persisted timeline offset to the nearest item under the playhead", () => {
+  it("anchors a persisted vertical timeline offset to the nearest item under the playhead", () => {
     expect(memoryTimelineIndexFromOffset(0, 96, 4)).toBe(0);
     expect(memoryTimelineIndexFromOffset(95, 96, 4)).toBe(1);
     expect(memoryTimelineIndexFromOffset(240, 96, 4)).toBe(3);
@@ -33,7 +33,7 @@ describe("memory timeline logic", () => {
     expect(memoryTimelineIndexFromOffset(120, 96, 0)).toBe(0);
   });
 
-  it("maps an item index back to a draggable timeline offset", () => {
+  it("maps an item index back to a draggable vertical timeline offset", () => {
     expect(memoryTimelineOffsetForIndex(0, 96, 4)).toBe(0);
     expect(memoryTimelineOffsetForIndex(2, 96, 4)).toBe(192);
     expect(memoryTimelineOffsetForIndex(99, 96, 4)).toBe(288);
