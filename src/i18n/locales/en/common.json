@@ -114,7 +114,7 @@
     "galleryFallback": "Fall back to global gallery",
     "galleryFallbackHint": "When a track has no slideshow or cover of its own, use the global gallery below.",
     "gallery": "Global gallery",
-    "galleryDesc": "Images for the slideshow background, shared across songs (a song's own backgrounds take priority).",
+    "galleryDesc": "Images for the slideshow background, shared across songs (a song's own backgrounds take priority). Upload or paste several at once.",
     "addImages": "Add images",
     "empty": "No images yet.",
     "removeImage": "Remove image",

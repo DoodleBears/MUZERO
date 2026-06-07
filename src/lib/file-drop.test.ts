@@ -161,4 +161,13 @@ describe("multi-file paste → classify ingest seam", () => {
     expect(images.map((f) => f.name)).toEqual(["cover.png"]);
     expect(skipped.map((f) => f.name)).toEqual(["note.txt"]);
   });
+
+  it("extracts every image from an all-images paste (Settings slideshow gallery case)", () => {
+    const a = file("a.png", "image/png", 1);
+    const b = file("b.jpg", "image/jpeg", 2);
+    const c = file("c.webp", "image/webp", 3);
+    const dt = transfer({ files: [a], items: [fileItem(a), fileItem(b), fileItem(c)] });
+    const { images } = classifyDrop(filesFromTransfer(dt));
+    expect(images.map((f) => f.name)).toEqual(["a.png", "b.jpg", "c.webp"]);
+  });
 });

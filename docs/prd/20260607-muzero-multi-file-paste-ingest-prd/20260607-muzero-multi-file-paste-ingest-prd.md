@@ -11,8 +11,9 @@
 
 | Phase | Name | Status | Link |
 |-------|------|--------|------|
-| 1 | `filesFromTransfer` 多源合并去重（纯函数 TDD） | ✅ Completed | [§6](#phase-1-filesfromtransfer-多源合并去重tdd-纯函数) |
-| 2 | 端到端 ingest 接缝回归 + 文案核对 | ✅ Completed | [§6](#phase-2-端到端-ingest-接缝回归--文案核对) |
+| 1 | `filesFromTransfer` 多源合并去重（纯函数 TDD） | ✅ Completed | [§4](#phase-1-filesfromtransfer-多源合并去重tdd-纯函数) |
+| 2 | 端到端 ingest 接缝回归 + 文案核对 | ✅ Completed | [§4](#phase-2-端到端-ingest-接缝回归--文案核对) |
+| 3 | 设置·全局幻灯片：多图粘贴入库（Open Q1 的 Settings 切面） | ✅ Completed | [§4](#phase-3-设置全局幻灯片多图粘贴入库) |
 
 > Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
 
@@ -102,13 +103,26 @@ if (dt.files && dt.files.length > 0) return Array.from(dt.files); // ← 多文�
 - [x] 接缝回归测试绿（`file-drop.test.ts` 共 16 例）。
 - [x] 全量 `vitest run` 178 例全绿；whole-project `tsc --noEmit` 清；biome（staged）清。
 
+### Phase 3: 设置·全局幻灯片，多图粘贴入库
+
+**Goal:** Settings 背景/幻灯片区，**粘贴多张图片一次全部进全局图库（gallery）**，和「上传多选」对齐（呼应用户「类似地支持复制粘贴和上传」）。
+
+**Tasks:**
+- [x] [`background-settings.tsx`](../../../src/components/settings/background-settings.tsx)：mount 期注册 **window capture 期** `paste` 监听（此组件仅 Settings tab 挂载 → mount 即「在设置页」）；`classifyDrop(filesFromTransfer(cd)).images` 取**全部**图片 → `addImages` 批量入库；`stopImmediatePropagation()` 阻止 app 级 [`GlobalDropZone`](../../../src/components/upload/global-drop-zone.tsx) 的单图 cover/background modal 抢这次 paste；输入框内 paste 照常放行。
+- [x] 文案：`background.galleryDesc` 追加「可一次上传或粘贴多张」en/zh/ja/ko。
+- [x] 测试：file-drop 接缝补 all-images 粘贴用例（3 图 → 3）。
+- 「上传多选」本就可用（`<input multiple>` + `addImages` 循环），无需改。
+
+**Phase 3 Checklist:**
+- [x] `file-drop.test.ts` 17 例、全量 `vitest run` 258 例全绿；biome（changed）清；改动文件 `tsc` 无错（仅并行未跟踪的 R3F WIP 报类型错，与本改动无关）。
+
 ---
 
 ## 5. Open Questions
 
 | # | Question | Status | Decision |
 |---|----------|--------|----------|
-| 1 | 多张图片一次粘贴/拖放是否批量处理？ | Open | 倾向：多图全部入**画廊**（gallery），cover/background 仍单图走 modal；本期 out of scope |
+| 1 | 多张图片一次粘贴/拖放是否批量处理？ | ✅ Resolved（Settings 切面，Phase 3） | **Settings 幻灯片区**：多图粘贴全部入 gallery（Phase 3 已实现）。Settings 之外（`GlobalDropZone` 全局 paste/drop）多图仍走单图 cover/background/gallery modal——那里语义有歧义，暂不改。 |
 
 ---
 
@@ -129,4 +143,5 @@ if (dt.files && dt.files.length > 0) return Array.from(dt.files); // ← 多文�
 | 2026-06-07 | MUZERO | Initial draft —— 修复「复制多个音频文件、粘贴只进一个」：`filesFromTransfer` 合并 `.items ∪ .files` 并去重；drop 回归守 `N` 不变 `2N` |
 | 2026-06-07 | MUZERO | Phase 1 实现：6 例新测（多文件粘贴红→绿 + 去重/容器/截图/字符串/null）全绿。dedup key 用 `JSON.stringify([name,size,lastModified,type])`——可打印且抗冲突（初版误用 `\0` 分隔符，git 把源文件当二进制，已修正为文本） |
 | 2026-06-07 | MUZERO | Phase 2 完成：新增 2 例「paste→classify 接缝」回归（纯 media + 混合）；`file-drop` 共 16 例、全量 178 例全绿；`drop.uploaded` 复数文案核对无缺。**两 phase 完成，多文件粘贴 bug 闭环。** |
+| 2026-06-07 | MUZERO | Phase 3：Settings 全局幻灯片支持**多图粘贴**入库（window capture paste + `stopImmediatePropagation` 越过 `GlobalDropZone` 单图 modal；上传多选本就可用）。`galleryDesc` 加粘贴提示 4 语；`file-drop` 17 例 / 全量 258 例全绿。resolve Open Q1（Settings 切面）。 |
 | 2026-06-07 | MUZERO | **真机实测确认（Chromium / `make dev`，`isTauri=false`）**：临时给 `onPaste` 加诊断 dump，复制 4 个 mp3 粘贴 → `clipboardData` 在 `.files`（length=4）与 `.items`（4×`file:audio/mpeg`）**均暴露全部 4 个** → `filesFromTransfer` 返回 4 → 全部入库，浏览器端多文件粘贴**可用**。早前「只进一个」判定为 dev server 热更新未应用修复的过期模块所致。诊断代码用毕即删（仅落在未跟踪的 `global-drop-zone.tsx`，从未提交）。 |

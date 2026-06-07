@@ -110,7 +110,7 @@
     "galleryFallback": "回退到全局图库",
     "galleryFallbackHint": "当歌曲没有自己的幻灯片或封面时，使用下方的全局图库作为背景。",
     "gallery": "全局图库",
-    "galleryDesc": "用于幻灯片背景的图片，所有歌曲共享（歌曲自带的背景图优先）。",
+    "galleryDesc": "用于幻灯片背景的图片，所有歌曲共享（歌曲自带的背景图优先）。可一次上传或粘贴多张。",
     "addImages": "添加图片",
     "empty": "还没有图片。",
     "removeImage": "移除图片",
