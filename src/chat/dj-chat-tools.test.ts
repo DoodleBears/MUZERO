@@ -4,10 +4,14 @@ import {
   createSession,
   getPlayQueue,
   getSession,
+  getTrack,
+  getTrackBlob,
   memoryNotesByTrack,
   saveSettings,
 } from "@/db/repositories";
 import { trackBriefSchema } from "@/dj/dj-brief-schema";
+import { createDjEngine } from "@/dj/dj-engine";
+import { createMockMusicGenProvider } from "@/musicgen/mock-provider";
 import {
   createDjChatTools,
   executeGenerateTracks,
@@ -153,6 +157,65 @@ describe("DJ chat tools", () => {
     expect(result.rationale).toBe("Keep the set rainy but add more pulse.");
     expect(await db.tracks.count()).toBe(0);
     expect((await getSession(session.id, db))?.trackIds).toEqual([]);
+  });
+
+  it("runs the core propose to generate to materialize flow with the mock provider", async () => {
+    const session = await createSession({ seedPrompt: "lofi" }, db);
+    const brief = trackBriefSchema.parse({
+      title: "Cassette Garden",
+      caption: "warm lofi beat with tape hiss and soft keys",
+      lyrics: "",
+      durationSec: 45,
+      bpm: 86,
+    });
+
+    const proposal = await executeProposeBriefs({
+      sessionId: session.id,
+      rationale: "Keep it warm and playable.",
+      briefs: [brief],
+    });
+
+    expect(proposal.summaries).toEqual([
+      "Cassette Garden: warm lofi beat with tape hiss and soft keys · 86bpm",
+    ]);
+    expect(await db.tracks.count()).toBe(0);
+
+    const generated = await executeGenerateTracks(
+      {
+        sessionId: session.id,
+        briefs: proposal.briefs,
+        playNext: true,
+      },
+      { db, providerId: "mock" },
+    );
+    const [trackId] = generated.diff.createdTrackIds;
+    expect(trackId).toBeTruthy();
+    expect((await getSession(session.id, db))?.trackIds).toEqual([trackId]);
+    expect((await getPlayQueue(db)).entries.map((entry) => entry.trackId)).toEqual([trackId]);
+    expect(await getTrack(trackId, db)).toMatchObject({
+      provider: "mock",
+      providerPreset: "mock",
+      status: "pending",
+      title: "Cassette Garden",
+    });
+
+    const engine = createDjEngine({
+      db,
+      brain: { draftBriefs: async () => [] },
+      provider: createMockMusicGenProvider({ seconds: 1 }),
+    });
+    const ready = await engine.materializeNext(session.id);
+
+    expect(ready).toMatchObject({ id: trackId, status: "ready" });
+    const reloaded = await getTrack(trackId, db);
+    expect(reloaded).toMatchObject({ status: "ready", durationSec: 1 });
+    const media = await getTrackBlob(reloaded!, db);
+    expect(media).toMatchObject({
+      role: "media",
+      mime: "audio/wav",
+      trackId,
+    });
+    expect(media?.bytes).toBeGreaterThan(44);
   });
 
   it("searches tracks with memory-aware matching", async () => {

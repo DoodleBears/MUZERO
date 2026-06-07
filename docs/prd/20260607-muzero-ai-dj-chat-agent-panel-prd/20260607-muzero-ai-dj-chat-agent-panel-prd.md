@@ -405,7 +405,8 @@ interface ChatUiState {
 - [x] `dj_propose_briefs`：校验候选 `TrackBrief[]` 并返回 proposal id + summaries，不写 DB、不花钱、不审批；确认后才走 `dj_generate_tracks`。
 
 **Phase 3 Checklist:**
-- [ ] 集成测：「做个 lofi set」→ propose→审批→generate→pending 落库→pump 物化→可播（canned model + mock music provider）。
+- [x] Core 集成测：propose→generate→pending 落库→mock provider materialize→ready + media blob（不经 UI/store pump）。
+- [ ] Store pump E2E：「做个 lofi set」→ propose→审批→generate→pending 落库→pump 物化→可播（canned model + mock music provider）。**Blocked:** `src/stores/player-store.ts` 当前属于并行 Now Playing WIP。
 - [x] 写工具 schema 拒绝时零写入；读工具无审批；`dj_generate_tracks` 才 `needsApproval:true`。
 - [x] `dj_propose_briefs` 无审批且零写入，生成摘要给确认 UI 使用。
 - [x] `library_search_tracks` 使用 memory-aware search；`dj_generate_tracks` 写 pending track + set + play-next queue。
@@ -517,6 +518,7 @@ interface ChatUiState {
 | 2026-06-07 | Codex | 推进 Phase 4c：`saveChatSessionSnapshot` 在默认标题 session 首次持久化 user 消息时派生自动标题，不覆盖手工命名；补 repository/runtime 持久化竞态测试；`make check` 通过（51 files / 368 tests）。 |
 | 2026-06-07 | Codex | 推进 Phase 4d：补 runtime 集成测覆盖两个 session 不同 model 配置下并发发送，一个进入 `dj_generate_tracks` 审批态、另一个 provider 报错，meta/history/pending approval/error 互不串；`make check` 通过（51 files / 369 tests）。 |
 | 2026-06-07 | Codex | 推进 Phase 5b：新增 `llmSelectionForChatSession`，chat transport 每次 send 按当前 session 的 provider/model 覆盖解析模型；补纯函数与 transport sessionId 测试；`make check` 通过（52 files / 372 tests）。 |
+| 2026-06-07 | Codex | 推进 Phase 3c：补 chat tools 核心集成测覆盖 proposal 零写入、`dj_generate_tracks` pending/set/play-next queue 写入、mock `DjEngine.materializeNext` 物化为 ready + media blob；`make check` 通过（52 files / 373 tests）。 |
 
 ---
 
