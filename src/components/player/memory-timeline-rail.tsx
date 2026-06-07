@@ -1,13 +1,22 @@
 "use client";
 
 import { motion } from "motion/react";
-import { type ReactNode, type UIEvent, useEffect, useMemo, useRef, useState } from "react";
+import {
+  type KeyboardEvent,
+  type PointerEvent,
+  type ReactNode,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import type { Memory } from "@/db/types";
 import {
   MEMORY_TIMELINE_CAROUSEL_INTERVAL_MS,
   MEMORY_TIMELINE_IDLE_DELAY_MS,
-  MEMORY_TIMELINE_ITEM_HEIGHT,
-  memoryTimelineIndexFromScroll,
+  MEMORY_TIMELINE_ITEM_WIDTH,
+  memoryTimelineIndexFromOffset,
+  memoryTimelineOffsetForIndex,
   nextIdleMemoryIndex,
   sortMemoryTimelineItems,
 } from "@/lib/memory-timeline";
@@ -22,49 +31,49 @@ interface MemoryTimelineRailProps {
   className?: string;
   formatCreatedAt: (createdAt: number) => ReactNode;
   idleDelayMs?: number;
-  initialScrollTop?: number;
+  initialOffset?: number;
   labels: {
     empty: ReactNode;
     memory: string;
   };
   memories: MemoryTimelineRailItem[];
-  onScrollTopChange?: (scrollTop: number) => void;
-  timelineItemHeight?: number;
+  onOffsetChange?: (offsetPx: number) => void;
+  timelineItemWidth?: number;
 }
+
+type DragState = {
+  startOffset: number;
+  startX: number;
+};
 
 export function MemoryTimelineRail({
   carouselIntervalMs = MEMORY_TIMELINE_CAROUSEL_INTERVAL_MS,
   className,
   formatCreatedAt,
   idleDelayMs = MEMORY_TIMELINE_IDLE_DELAY_MS,
-  initialScrollTop = 0,
+  initialOffset = 0,
   labels,
   memories,
-  onScrollTopChange,
-  timelineItemHeight = MEMORY_TIMELINE_ITEM_HEIGHT,
+  onOffsetChange,
+  timelineItemWidth = MEMORY_TIMELINE_ITEM_WIDTH,
 }: MemoryTimelineRailProps) {
   const sortedMemories = useMemo(() => sortMemoryTimelineItems(memories), [memories]);
   const [mode, setMode] = useState<"idle" | "timeline">("idle");
-  const [scrollTop, setScrollTop] = useState(Math.max(0, initialScrollTop));
+  const [timelineOffset, setTimelineOffset] = useState(Math.max(0, initialOffset));
   const [activeIndex, setActiveIndex] = useState(() =>
-    memoryTimelineIndexFromScroll(initialScrollTop, timelineItemHeight, sortedMemories.length),
+    memoryTimelineIndexFromOffset(initialOffset, timelineItemWidth, sortedMemories.length),
   );
   const idleTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  const scrollerRef = useRef<HTMLDivElement | null>(null);
+  const dragRef = useRef<DragState | null>(null);
   const activeMemory = sortedMemories[activeIndex] ?? sortedMemories[0];
 
   useEffect(() => {
-    const nextScrollTop = Math.max(0, initialScrollTop);
-    setScrollTop(nextScrollTop);
+    const nextOffset = Math.max(0, initialOffset);
+    setTimelineOffset(nextOffset);
     setActiveIndex(
-      memoryTimelineIndexFromScroll(nextScrollTop, timelineItemHeight, sortedMemories.length),
+      memoryTimelineIndexFromOffset(nextOffset, timelineItemWidth, sortedMemories.length),
     );
-  }, [initialScrollTop, sortedMemories.length, timelineItemHeight]);
-
-  useEffect(() => {
-    if (mode !== "timeline" || !scrollerRef.current) return;
-    scrollerRef.current.scrollTop = scrollTop;
-  }, [mode, scrollTop]);
+  }, [initialOffset, sortedMemories.length, timelineItemWidth]);
 
   useEffect(
     () => () => {
@@ -76,10 +85,16 @@ export function MemoryTimelineRail({
   useEffect(() => {
     if (mode !== "idle" || sortedMemories.length <= 1) return;
     const interval = setInterval(() => {
-      setActiveIndex((current) => nextIdleMemoryIndex(current, sortedMemories.length));
+      setActiveIndex((current) => {
+        const next = nextIdleMemoryIndex(current, sortedMemories.length);
+        setTimelineOffset(
+          memoryTimelineOffsetForIndex(next, timelineItemWidth, sortedMemories.length),
+        );
+        return next;
+      });
     }, carouselIntervalMs);
     return () => clearInterval(interval);
-  }, [carouselIntervalMs, mode, sortedMemories.length]);
+  }, [carouselIntervalMs, mode, sortedMemories.length, timelineItemWidth]);
 
   function showTimeline() {
     if (sortedMemories.length === 0) return;
@@ -88,21 +103,74 @@ export function MemoryTimelineRail({
     idleTimerRef.current = setTimeout(() => setMode("idle"), idleDelayMs);
   }
 
-  function handleScroll(event: UIEvent<HTMLDivElement>) {
-    const nextScrollTop = Math.max(0, Math.round(event.currentTarget.scrollTop));
-    setScrollTop(nextScrollTop);
-    setActiveIndex(
-      memoryTimelineIndexFromScroll(nextScrollTop, timelineItemHeight, sortedMemories.length),
+  function setTimelineOffsetFromDrag(offsetPx: number) {
+    const maxOffset = memoryTimelineOffsetForIndex(
+      sortedMemories.length - 1,
+      timelineItemWidth,
+      sortedMemories.length,
     );
-    onScrollTopChange?.(nextScrollTop);
+    const nextOffset = Math.min(maxOffset, Math.max(0, Math.round(offsetPx)));
+    setTimelineOffset(nextOffset);
+    setActiveIndex(
+      memoryTimelineIndexFromOffset(nextOffset, timelineItemWidth, sortedMemories.length),
+    );
+    onOffsetChange?.(nextOffset);
+  }
+
+  function onPointerDown(event: PointerEvent<HTMLDivElement>) {
     showTimeline();
+    dragRef.current = { startOffset: timelineOffset, startX: event.clientX };
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+  }
+
+  function onPointerMove(event: PointerEvent<HTMLDivElement>) {
+    if (!(event.buttons & 1) || !dragRef.current) return;
+    // Drag the timeline, not the playhead: moving it left advances to later memories.
+    setTimelineOffsetFromDrag(
+      dragRef.current.startOffset - (event.clientX - dragRef.current.startX),
+    );
+  }
+
+  function onPointerUp(event: PointerEvent<HTMLDivElement>) {
+    dragRef.current = null;
+    if (event.currentTarget.hasPointerCapture?.(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+    showTimeline();
+  }
+
+  function onKeyDown(event: KeyboardEvent<HTMLDivElement>) {
+    if (sortedMemories.length === 0) return;
+    if (event.key === "ArrowLeft" || event.key === "ArrowDown") {
+      event.preventDefault();
+      setTimelineOffsetFromDrag(timelineOffset - timelineItemWidth);
+      showTimeline();
+    } else if (event.key === "ArrowRight" || event.key === "ArrowUp") {
+      event.preventDefault();
+      setTimelineOffsetFromDrag(timelineOffset + timelineItemWidth);
+      showTimeline();
+    } else if (event.key === "Home") {
+      event.preventDefault();
+      setTimelineOffsetFromDrag(0);
+      showTimeline();
+    } else if (event.key === "End") {
+      event.preventDefault();
+      setTimelineOffsetFromDrag(
+        memoryTimelineOffsetForIndex(
+          sortedMemories.length - 1,
+          timelineItemWidth,
+          sortedMemories.length,
+        ),
+      );
+      showTimeline();
+    }
   }
 
   if (sortedMemories.length === 0) {
     return (
       <div
         className={cn(
-          "flex min-h-0 flex-1 items-center justify-center rounded-2xl border border-dashed border-border/60 bg-card/60 p-4 text-center text-muted-foreground text-sm backdrop-blur-sm",
+          "flex min-h-0 flex-1 items-center justify-center rounded-2xl border border-dashed border-border/60 p-4 text-center text-muted-foreground text-sm",
           className,
         )}
         data-testid="memory-timeline-rail"
@@ -115,78 +183,109 @@ export function MemoryTimelineRail({
   return (
     <motion.section
       aria-label={labels.memory}
-      className={cn(
-        "min-h-0 flex-1 overflow-hidden rounded-2xl bg-card/55 p-3 shadow-sm backdrop-blur-sm dark:bg-card/70",
-        className,
-      )}
+      className={cn("min-h-0 flex-1 overflow-hidden rounded-2xl", className)}
       data-mode={mode}
       data-testid="memory-timeline-rail"
       layout
       onFocusCapture={showTimeline}
-      onPointerMove={showTimeline}
+      onPointerDown={showTimeline}
       onWheel={showTimeline}
     >
       {mode === "idle" && activeMemory ? (
-        <motion.article
-          animate={{ opacity: 1, y: 0 }}
-          className="flex h-full min-h-0 flex-col justify-end rounded-xl border border-border/70 bg-background/75 p-4 shadow-sm"
-          data-testid="memory-carousel-card"
-          initial={{ opacity: 0.72, y: 8 }}
-          key={activeMemory.id}
-          transition={{ duration: 0.28 }}
-        >
-          <div className="mb-3 h-1 w-10 rounded-full bg-primary" />
-          <p className="line-clamp-6 whitespace-pre-wrap text-sm leading-6">{activeMemory.note}</p>
-          <div className="mt-4 space-y-1 text-muted-foreground text-xs">
-            {activeMemory.trackTitle && (
-              <div className="truncate font-medium text-foreground/80">
-                {activeMemory.trackTitle}
-              </div>
-            )}
-            <time dateTime={new Date(activeMemory.createdAt).toISOString()}>
-              {formatCreatedAt(activeMemory.createdAt)}
-            </time>
-          </div>
-        </motion.article>
+        <div className="grid h-full place-items-center p-3" data-testid="memory-carousel-stage">
+          <motion.article
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            className="flex max-h-full w-full max-w-72 flex-col rounded-xl border border-border/70 bg-background/80 p-4 text-center shadow-sm backdrop-blur-sm"
+            data-testid="memory-carousel-card"
+            initial={{ opacity: 0.72, scale: 0.96, y: 8 }}
+            key={activeMemory.id}
+            transition={{ duration: 0.28 }}
+          >
+            <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-primary" />
+            <p className="line-clamp-7 whitespace-pre-wrap text-sm leading-6">
+              {activeMemory.note}
+            </p>
+            <div className="mt-4 space-y-1 text-muted-foreground text-xs">
+              {activeMemory.trackTitle && (
+                <div className="truncate font-medium text-foreground/80">
+                  {activeMemory.trackTitle}
+                </div>
+              )}
+              <time dateTime={new Date(activeMemory.createdAt).toISOString()}>
+                {formatCreatedAt(activeMemory.createdAt)}
+              </time>
+            </div>
+          </motion.article>
+        </div>
       ) : (
         <div
-          className="h-full overflow-y-auto pr-1"
-          data-testid="memory-timeline-scroll"
-          onScroll={handleScroll}
-          ref={scrollerRef}
+          aria-label={labels.memory}
+          aria-valuemax={sortedMemories.length}
+          aria-valuemin={1}
+          aria-valuenow={activeIndex + 1}
+          className="relative h-full cursor-grab touch-none select-none overflow-hidden outline-none active:cursor-grabbing focus-visible:ring-2 focus-visible:ring-ring"
+          data-testid="memory-timeline-scrubber"
+          onKeyDown={onKeyDown}
+          onPointerCancel={onPointerUp}
+          onPointerDown={onPointerDown}
+          onPointerMove={onPointerMove}
+          onPointerUp={onPointerUp}
+          role="slider"
+          tabIndex={0}
         >
+          {activeMemory && (
+            <article
+              className="-translate-x-1/2 -translate-y-1/2 pointer-events-none absolute top-[42%] left-1/2 w-[min(18rem,82%)] rounded-xl border border-primary/35 bg-background/85 p-3 text-center shadow-sm backdrop-blur-sm"
+              data-testid="memory-playhead-card"
+            >
+              <p className="line-clamp-4 whitespace-pre-wrap text-sm leading-5">
+                {activeMemory.note}
+              </p>
+              <time
+                className="mt-2 block text-muted-foreground text-xs"
+                dateTime={new Date(activeMemory.createdAt).toISOString()}
+              >
+                {formatCreatedAt(activeMemory.createdAt)}
+              </time>
+            </article>
+          )}
+          <div
+            className="pointer-events-none absolute top-[34%] bottom-4 left-1/2 z-10 w-0.5 -translate-x-1/2 rounded-full bg-primary/90 shadow-[0_0_18px_color-mix(in_srgb,var(--primary)_70%,transparent)]"
+            data-testid="memory-timeline-playhead"
+          />
           <ol
-            className="relative ml-2 min-h-full border-muted-foreground/25 border-l pb-4"
+            className="absolute bottom-4 left-0 flex items-end gap-0 transition-transform duration-200 ease-out will-change-transform motion-reduce:transition-none"
             data-testid="memory-timeline-list"
+            style={{ transform: `translateX(calc(50% - ${timelineOffset}px))` }}
           >
             {sortedMemories.map((memory, index) => {
               const active = index === activeIndex;
               return (
                 <li
-                  className="relative pl-5"
+                  className="relative flex shrink-0 flex-col items-center"
                   data-active={active ? "true" : "false"}
                   data-testid={`memory-timeline-item-${memory.id}`}
                   key={memory.id}
-                  style={{ minHeight: timelineItemHeight }}
+                  style={{ width: timelineItemWidth }}
                 >
                   <span
                     className={cn(
-                      "-left-[5px] absolute top-1 size-2.5 rounded-full border bg-card",
+                      "mb-2 size-2.5 rounded-full border bg-background shadow-sm transition-colors",
                       active ? "border-primary bg-primary" : "border-muted-foreground/45",
                     )}
                   />
                   <article
                     className={cn(
-                      "rounded-xl border p-3 transition-colors",
+                      "w-[calc(100%-0.75rem)] rounded-xl border p-2 text-center transition-colors",
                       active
                         ? "border-primary/45 bg-background/85"
                         : "border-border/70 bg-background/55",
                     )}
                   >
-                    <p className="line-clamp-3 whitespace-pre-wrap text-sm leading-5">
+                    <p className="line-clamp-2 whitespace-pre-wrap text-xs leading-4">
                       {memory.note}
                     </p>
-                    <div className="mt-2 space-y-0.5 text-muted-foreground text-xs">
+                    <div className="mt-1 space-y-0.5 text-muted-foreground text-[11px]">
                       {memory.trackTitle && (
                         <div className="truncate font-medium text-foreground/75">
                           {memory.trackTitle}

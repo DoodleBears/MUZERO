@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
-  memoryTimelineIndexFromScroll,
+  memoryTimelineIndexFromOffset,
+  memoryTimelineOffsetForIndex,
   nextIdleMemoryIndex,
   sortMemoryTimelineItems,
 } from "./memory-timeline";
@@ -22,14 +23,23 @@ describe("memory timeline logic", () => {
     ]);
   });
 
-  it("anchors a persisted scrollTop to the nearest timeline item", () => {
-    expect(memoryTimelineIndexFromScroll(0, 96, 4)).toBe(0);
-    expect(memoryTimelineIndexFromScroll(95, 96, 4)).toBe(1);
-    expect(memoryTimelineIndexFromScroll(240, 96, 4)).toBe(3);
-    expect(memoryTimelineIndexFromScroll(999, 96, 4)).toBe(3);
-    expect(memoryTimelineIndexFromScroll(-10, 96, 4)).toBe(0);
-    expect(memoryTimelineIndexFromScroll(120, 0, 4)).toBe(0);
-    expect(memoryTimelineIndexFromScroll(120, 96, 0)).toBe(0);
+  it("anchors a persisted timeline offset to the nearest item under the playhead", () => {
+    expect(memoryTimelineIndexFromOffset(0, 96, 4)).toBe(0);
+    expect(memoryTimelineIndexFromOffset(95, 96, 4)).toBe(1);
+    expect(memoryTimelineIndexFromOffset(240, 96, 4)).toBe(3);
+    expect(memoryTimelineIndexFromOffset(999, 96, 4)).toBe(3);
+    expect(memoryTimelineIndexFromOffset(-10, 96, 4)).toBe(0);
+    expect(memoryTimelineIndexFromOffset(120, 0, 4)).toBe(0);
+    expect(memoryTimelineIndexFromOffset(120, 96, 0)).toBe(0);
+  });
+
+  it("maps an item index back to a draggable timeline offset", () => {
+    expect(memoryTimelineOffsetForIndex(0, 96, 4)).toBe(0);
+    expect(memoryTimelineOffsetForIndex(2, 96, 4)).toBe(192);
+    expect(memoryTimelineOffsetForIndex(99, 96, 4)).toBe(288);
+    expect(memoryTimelineOffsetForIndex(-2, 96, 4)).toBe(0);
+    expect(memoryTimelineOffsetForIndex(1, 0, 4)).toBe(0);
+    expect(memoryTimelineOffsetForIndex(1, 96, 0)).toBe(0);
   });
 
   it("wraps idle carousel indices from the current anchor", () => {

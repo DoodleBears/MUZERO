@@ -1,12 +1,18 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { Track } from "@/db/types";
+import { usePlayerStore } from "@/stores/player-store";
 import { NowPlayingPanel } from "./now-playing-panel";
 
 const mocks = vi.hoisted(() => ({
+  anyOf: vi.fn(),
   collapsed: false,
+  equals: vi.fn(),
   memories: [] as { createdAt: number; id: string; note: string; trackId: string }[],
   memoryScrollTop: 0,
   saveSettings: vi.fn(),
+  sortBy: vi.fn(),
+  where: vi.fn(),
 }));
 
 vi.mock("react-i18next", () => ({
@@ -29,7 +35,18 @@ vi.mock("react-i18next", () => ({
 }));
 
 vi.mock("dexie-react-hooks", () => ({
-  useLiveQuery: () => mocks.memories,
+  useLiveQuery: (query: () => unknown) => {
+    query();
+    return mocks.memories;
+  },
+}));
+
+vi.mock("@/db/muzero-db", () => ({
+  db: {
+    memories: {
+      where: mocks.where,
+    },
+  },
 }));
 
 vi.mock("@/hooks/use-app-data", () => ({
@@ -50,19 +67,19 @@ vi.mock("@/components/library/virtual-track-list", () => ({
 
 vi.mock("@/components/player/memory-timeline-rail", () => ({
   MemoryTimelineRail: ({
-    initialScrollTop,
+    initialOffset,
     memories,
-    onScrollTopChange,
+    onOffsetChange,
   }: {
-    initialScrollTop?: number;
+    initialOffset?: number;
     memories: unknown[];
-    onScrollTopChange?: (scrollTop: number) => void;
+    onOffsetChange?: (offsetPx: number) => void;
   }) => (
     <button
       data-count={memories.length}
-      data-scroll-top={initialScrollTop}
+      data-offset={initialOffset}
       data-testid="memory-timeline-rail"
-      onClick={() => onScrollTopChange?.(160)}
+      onClick={() => onOffsetChange?.(160)}
       type="button"
     />
   ),
@@ -70,10 +87,27 @@ vi.mock("@/components/player/memory-timeline-rail", () => ({
 
 describe("NowPlayingPanel collapse", () => {
   beforeEach(() => {
+    mocks.anyOf.mockReset();
     mocks.collapsed = false;
+    mocks.equals.mockReset();
     mocks.memories = [];
     mocks.memoryScrollTop = 0;
     mocks.saveSettings.mockReset();
+    mocks.sortBy.mockReset();
+    mocks.where.mockReset();
+    mocks.where.mockReturnValue({ anyOf: mocks.anyOf, equals: mocks.equals });
+    mocks.anyOf.mockReturnValue({ sortBy: mocks.sortBy });
+    mocks.equals.mockReturnValue({ sortBy: mocks.sortBy });
+    mocks.sortBy.mockResolvedValue(mocks.memories);
+    usePlayerStore.setState({
+      activeSessionId: "ses_1",
+      currentIndex: 1,
+      queue: [
+        makeTrack("trk_previous", "Previous"),
+        makeTrack("trk_current", "Current Song"),
+        makeTrack("trk_next", "Next"),
+      ],
+    });
   });
 
   it("persists collapse requests from the desktop right rail", () => {
@@ -101,16 +135,43 @@ describe("NowPlayingPanel collapse", () => {
   it("feeds the collapsed memory rail from settings and persists its scroll position", () => {
     mocks.collapsed = true;
     mocks.memoryScrollTop = 200;
-    mocks.memories = [{ createdAt: 1, id: "mem_1", note: "late bus", trackId: "trk_1" }];
+    mocks.memories = [{ createdAt: 1, id: "mem_1", note: "late bus", trackId: "trk_current" }];
 
     render(<NowPlayingPanel collapsible />);
 
     const rail = screen.getByTestId("memory-timeline-rail");
     expect(rail).toHaveAttribute("data-count", "1");
-    expect(rail).toHaveAttribute("data-scroll-top", "200");
+    expect(rail).toHaveAttribute("data-offset", "200");
 
     fireEvent.click(rail);
 
     expect(mocks.saveSettings).toHaveBeenCalledWith({ nowPlayingMemoryRailScrollTop: 160 });
   });
+
+  it("loads collapsed memory rail items for the current track only", () => {
+    mocks.collapsed = true;
+
+    render(<NowPlayingPanel collapsible />);
+
+    expect(mocks.where).toHaveBeenCalledWith("trackId");
+    expect(mocks.equals).toHaveBeenCalledWith("trk_current");
+    expect(mocks.anyOf).not.toHaveBeenCalled();
+  });
 });
+
+function makeTrack(id: string, title: string): Track {
+  return {
+    createdAt: 1,
+    durationSec: 30,
+    id,
+    kind: "audio",
+    liked: false,
+    origin: "uploaded",
+    playCount: 0,
+    provider: "upload",
+    sessionId: "ses_1",
+    status: "ready",
+    tags: [],
+    title,
+  };
+}

@@ -22,7 +22,7 @@ function renderRail(props: Partial<React.ComponentProps<typeof MemoryTimelineRai
       idleDelayMs={500}
       labels={{ empty: "No memories yet", memory: "Memory" }}
       memories={memories}
-      timelineItemHeight={100}
+      timelineItemWidth={100}
       {...props}
     />,
   );
@@ -38,28 +38,32 @@ describe("MemoryTimelineRail", () => {
   });
 
   it("starts the idle carousel from the persisted scroll position", () => {
-    renderRail({ initialScrollTop: 100 });
+    renderRail({ initialOffset: 100 });
 
     expect(screen.getByTestId("memory-carousel-card")).toHaveTextContent("Second kitchen loop");
     expect(screen.getByTestId("memory-carousel-card")).toHaveTextContent("Kitchen Song");
+    expect(screen.getByTestId("memory-timeline-rail")).not.toHaveClass("bg-card/55");
+    expect(screen.getByTestId("memory-carousel-stage")).toHaveClass("place-items-center");
 
     act(() => vi.advanceTimersByTime(1000));
 
     expect(screen.getByTestId("memory-carousel-card")).toHaveTextContent("Third late walk");
   });
 
-  it("shows a timeline on interaction, stores scrollTop, then resumes idle from that node", () => {
-    const onScrollTopChange = vi.fn();
-    renderRail({ onScrollTopChange });
+  it("shows a playhead timeline on interaction, stores drag offset, then resumes idle from that node", () => {
+    const onOffsetChange = vi.fn();
+    renderRail({ onOffsetChange });
 
     fireEvent.wheel(screen.getByTestId("memory-timeline-rail"));
+    expect(screen.getByTestId("memory-timeline-playhead")).toBeInTheDocument();
     expect(screen.getByTestId("memory-timeline-list")).toBeInTheDocument();
 
-    fireEvent.scroll(screen.getByTestId("memory-timeline-scroll"), {
-      target: { scrollTop: 200 },
-    });
+    const scrubber = screen.getByTestId("memory-timeline-scrubber");
+    fireEvent.pointerDown(scrubber, { clientX: 240, pointerId: 1 });
+    fireEvent.pointerMove(scrubber, { buttons: 1, clientX: 40, pointerId: 1 });
+    fireEvent.pointerUp(scrubber, { pointerId: 1 });
 
-    expect(onScrollTopChange).toHaveBeenLastCalledWith(200);
+    expect(onOffsetChange).toHaveBeenLastCalledWith(200);
     expect(screen.getByTestId("memory-timeline-item-mem_third")).toHaveAttribute(
       "data-active",
       "true",

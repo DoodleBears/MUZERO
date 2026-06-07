@@ -37,27 +37,23 @@ export function NowPlayingPanel({
   const current = currentIndex >= 0 ? queue[currentIndex] : undefined;
   const [tab, setTab] = useState<PanelTab>("queue");
   const collapsed = collapsible && Boolean(settings.nowPlayingRightRailCollapsed);
-  const queueTrackIds = useMemo(() => Array.from(new Set(queue.map((track) => track.id))), [queue]);
-  const queueTrackIdsKey = queueTrackIds.join("\u0000");
-  const queueTrackTitleById = useMemo(
-    () => new Map(queue.map((track) => [track.id, track.title])),
-    [queue],
-  );
+  const currentTrackId = current?.id;
+  const currentTrackTitle = current?.title;
   const railMemories = useLiveQuery(
     (): Promise<Memory[]> =>
-      collapsed && queueTrackIds.length > 0
-        ? db.memories.where("trackId").anyOf(queueTrackIds).sortBy("createdAt")
+      collapsed && currentTrackId
+        ? db.memories.where("trackId").equals(currentTrackId).sortBy("createdAt")
         : Promise.resolve([] as Memory[]),
-    [collapsed, queueTrackIdsKey],
+    [collapsed, currentTrackId],
     [] as Memory[],
   );
   const memoryTimelineItems = useMemo<MemoryTimelineRailItem[]>(
     () =>
       railMemories.map((memory) => ({
         ...memory,
-        trackTitle: queueTrackTitleById.get(memory.trackId),
+        trackTitle: currentTrackTitle,
       })),
-    [queueTrackTitleById, railMemories],
+    [currentTrackTitle, railMemories],
   );
   const memoryDateFormatter = useMemo(
     () =>
@@ -96,13 +92,13 @@ export function NowPlayingPanel({
         <MemoryTimelineRail
           className="min-h-0 flex-1"
           formatCreatedAt={(createdAt) => memoryDateFormatter.format(createdAt)}
-          initialScrollTop={settings.nowPlayingMemoryRailScrollTop ?? 0}
+          initialOffset={settings.nowPlayingMemoryRailScrollTop ?? 0}
           labels={{
             empty: t("annotation.memoryEmpty"),
             memory: t("annotation.memory"),
           }}
           memories={memoryTimelineItems}
-          onScrollTopChange={setMemoryRailScrollTop}
+          onOffsetChange={setMemoryRailScrollTop}
         />
         <motion.div
           className="shrink-0 rounded-2xl bg-muted/50 p-2 shadow-sm backdrop-blur-sm dark:bg-card/85"

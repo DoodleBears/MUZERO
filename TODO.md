@@ -36,7 +36,7 @@ PRD: [`20260607-muzero-set-playqueue-memory-data-model-prd`](docs/prd/20260607-m
   - [x] 当前歌曲/封面右键菜单：MediaStage 与底部歌曲行可打开 context menu，切换 video/cover/title、audio-only，并添加/更换当前歌曲封面。
   - [x] 从记忆照片设为封面：带照片的记忆便签可一键复制为独立歌曲封面，原记忆照片保留。
   - [x] 宽屏右侧播放列表 rail 可折叠，折叠偏好持久化到 settings，折叠态用 motion 保留底部 compact header；移动端队列 overlay 不受影响。
-  - [x] 折叠后的右侧 rail 显示记忆时间线/idle 轮播：idle 时从持久化 scroll 锚点开始循环记忆，用户滚动/交互时切为竖线节点 timeline，并把 scrollTop 写回 settings。
+  - [x] 折叠后的右侧 rail 显示当前歌曲记忆时间线/idle 轮播：idle 时透明外壳、居中轮播当前歌曲 memories；用户操作时切为固定 playhead + 下层水平 timeline scrubber，拖动 timeline 更新持久化锚点。
   - 验收：浏览器 preview 全流程 + 暗色 + 响应式 + 零报错；四语种齐全。
 
 ---
