@@ -111,7 +111,7 @@ export function MemoryNotesWaterfall({
               {memory.photoUrl && (
                 <img
                   alt={labels.photoAlt(memory)}
-                  className="mb-3 aspect-[4/3] w-full rounded-md object-cover shadow-inner"
+                  className="mb-3 aspect-[4/3] w-full rounded-md bg-background object-contain shadow-inner"
                   src={memory.photoUrl}
                 />
               )}

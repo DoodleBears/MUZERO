@@ -69,6 +69,12 @@ describe("MemoryNotesWaterfall", () => {
       "src",
       "blob:rain",
     );
+    expect(screen.getByRole("img", { name: "Photo for rainy train ride" })).toHaveClass(
+      "object-contain",
+    );
+    expect(screen.getByRole("img", { name: "Photo for rainy train ride" })).not.toHaveClass(
+      "object-cover",
+    );
   });
 
   it("reports edit and delete actions without owning persistence", () => {
