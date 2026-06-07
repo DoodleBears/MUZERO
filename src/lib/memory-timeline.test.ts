@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  memoryTimelineCarouselIntervalMs,
   memoryTimelineIndexFromOffset,
   memoryTimelineOffsetForIndex,
   nextIdleMemoryIndex,
@@ -47,5 +48,18 @@ describe("memory timeline logic", () => {
     expect(nextIdleMemoryIndex(2, 3)).toBe(0);
     expect(nextIdleMemoryIndex(10, 3)).toBe(0);
     expect(nextIdleMemoryIndex(0, 0)).toBe(0);
+  });
+
+  it("extends idle carousel dwell time for longer memory notes with a cap", () => {
+    const options = {
+      baseMs: 1000,
+      extraStartCharCount: 10,
+      maxMs: 3600,
+      msPerCharacter: 100,
+    };
+
+    expect(memoryTimelineCarouselIntervalMs("short", options)).toBe(1000);
+    expect(memoryTimelineCarouselIntervalMs("x".repeat(20), options)).toBe(2000);
+    expect(memoryTimelineCarouselIntervalMs("x".repeat(100), options)).toBe(3600);
   });
 });

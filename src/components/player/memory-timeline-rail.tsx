@@ -1,6 +1,6 @@
 "use client";
 
-import { motion } from "motion/react";
+import { AnimatePresence, motion } from "motion/react";
 import {
   type KeyboardEvent,
   type PointerEvent,
@@ -16,6 +16,7 @@ import {
   MEMORY_TIMELINE_CAROUSEL_INTERVAL_MS,
   MEMORY_TIMELINE_IDLE_DELAY_MS,
   MEMORY_TIMELINE_ITEM_HEIGHT,
+  memoryTimelineCarouselIntervalMs,
   memoryTimelineIndexFromOffset,
   memoryTimelineOffsetForIndex,
   nextIdleMemoryIndex,
@@ -85,17 +86,20 @@ export function MemoryTimelineRail({
 
   useEffect(() => {
     if (mode !== "idle" || sortedMemories.length <= 1) return;
-    const interval = setInterval(() => {
-      setActiveIndex((current) => {
-        const next = nextIdleMemoryIndex(current, sortedMemories.length);
-        setTimelineOffset(
-          memoryTimelineOffsetForIndex(next, timelineItemHeight, sortedMemories.length),
-        );
-        return next;
-      });
-    }, carouselIntervalMs);
-    return () => clearInterval(interval);
-  }, [carouselIntervalMs, mode, sortedMemories.length, timelineItemHeight]);
+    const timeout = setTimeout(
+      () => {
+        setActiveIndex((current) => {
+          const next = nextIdleMemoryIndex(current, sortedMemories.length);
+          setTimelineOffset(
+            memoryTimelineOffsetForIndex(next, timelineItemHeight, sortedMemories.length),
+          );
+          return next;
+        });
+      },
+      memoryTimelineCarouselIntervalMs(activeMemory?.note ?? "", { baseMs: carouselIntervalMs }),
+    );
+    return () => clearTimeout(timeout);
+  }, [activeMemory, carouselIntervalMs, mode, sortedMemories.length, timelineItemHeight]);
 
   function showTimeline() {
     if (sortedMemories.length === 0) return;
@@ -193,30 +197,39 @@ export function MemoryTimelineRail({
     >
       {mode === "idle" && activeMemory ? (
         <div className="grid h-full place-items-center p-3" data-testid="memory-carousel-stage">
-          <motion.article
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            className="flex h-4/5 max-h-full w-4/5 max-w-none flex-col overflow-hidden rounded-xl border border-border/70 bg-background/80 p-5 text-center shadow-sm backdrop-blur-sm md:p-6"
+          <div
+            className="grid h-4/5 max-h-full w-4/5 max-w-none"
             data-testid="memory-carousel-card"
-            initial={{ opacity: 0.72, scale: 0.96, y: 8 }}
-            key={activeMemory.id}
-            transition={{ duration: 0.28 }}
+            data-transition="crossfade"
           >
-            <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-primary" />
-            {activeMemory.photoUrl && (
-              <img
-                alt=""
-                className="mb-4 max-h-[min(52vh,24rem)] w-full rounded-lg object-contain"
-                data-testid="memory-carousel-image"
-                src={activeMemory.photoUrl}
-              />
-            )}
-            <MemoryCarouselNote note={activeMemory.note} />
-            <div className="mt-4 space-y-1 text-muted-foreground text-xs">
-              <time dateTime={new Date(activeMemory.createdAt).toISOString()}>
-                {formatCreatedAt(activeMemory.createdAt)}
-              </time>
-            </div>
-          </motion.article>
+            <AnimatePresence initial={false}>
+              <motion.article
+                animate={{ filter: "blur(0px)", opacity: 1, scale: 1, y: 0 }}
+                className="col-start-1 row-start-1 flex h-full max-h-full flex-col overflow-hidden rounded-xl border border-border/70 bg-background/80 p-5 text-center shadow-sm backdrop-blur-sm md:p-6"
+                exit={{ filter: "blur(6px)", opacity: 0, scale: 0.985, y: -10 }}
+                initial={{ filter: "blur(6px)", opacity: 0, scale: 0.97, y: 12 }}
+                key={activeMemory.id}
+                style={{ willChange: "opacity, transform, filter" }}
+                transition={{ duration: 0.42, ease: [0.22, 1, 0.36, 1] }}
+              >
+                <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-primary" />
+                {activeMemory.photoUrl && (
+                  <img
+                    alt=""
+                    className="mb-4 max-h-[min(52vh,24rem)] w-full rounded-lg object-contain"
+                    data-testid="memory-carousel-image"
+                    src={activeMemory.photoUrl}
+                  />
+                )}
+                <MemoryCarouselNote note={activeMemory.note} />
+                <div className="mt-4 space-y-1 text-muted-foreground text-xs">
+                  <time dateTime={new Date(activeMemory.createdAt).toISOString()}>
+                    {formatCreatedAt(activeMemory.createdAt)}
+                  </time>
+                </div>
+              </motion.article>
+            </AnimatePresence>
+          </div>
         </div>
       ) : (
         <div

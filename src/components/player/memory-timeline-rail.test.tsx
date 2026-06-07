@@ -1,5 +1,6 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { memoryTimelineCarouselIntervalMs } from "@/lib/memory-timeline";
 import { MemoryTimelineRail, type MemoryTimelineRailItem } from "./memory-timeline-rail";
 
 const memories: MemoryTimelineRailItem[] = [
@@ -48,6 +49,11 @@ describe("MemoryTimelineRail", () => {
       lineHeight: "72px",
     });
     expect(screen.getByTestId("memory-carousel-note")).not.toHaveClass("line-clamp-9");
+    expect(screen.getByTestId("memory-carousel-card")).toHaveAttribute(
+      "data-transition",
+      "crossfade",
+    );
+    expect(screen.getByTestId("memory-carousel-card")).toHaveClass("grid");
     expect(screen.getByTestId("memory-carousel-image")).toHaveClass("object-contain");
     expect(screen.getByTestId("memory-carousel-image")).toHaveClass("max-h-[min(52vh,24rem)]");
     expect(screen.getByTestId("memory-timeline-rail")).not.toHaveClass("bg-card/55");
@@ -56,6 +62,24 @@ describe("MemoryTimelineRail", () => {
     act(() => vi.advanceTimersByTime(1000));
 
     expect(screen.getByTestId("memory-carousel-card")).toHaveTextContent("Third late walk");
+  });
+
+  it("keeps longer memory notes on screen for a longer capped dwell time", () => {
+    const longNote = "x".repeat(70);
+    const dwellMs = memoryTimelineCarouselIntervalMs(longNote, { baseMs: 1000 });
+    renderRail({
+      carouselIntervalMs: 1000,
+      memories: [
+        { id: "mem_long", trackId: "trk_a", note: longNote, createdAt: 10 },
+        { id: "mem_next", trackId: "trk_a", note: "next memory", createdAt: 20 },
+      ],
+    });
+
+    act(() => vi.advanceTimersByTime(999));
+    expect(screen.getByTestId("memory-carousel-card")).toHaveTextContent(longNote);
+
+    act(() => vi.advanceTimersByTime(dwellMs - 999));
+    expect(screen.getByTestId("memory-carousel-card")).toHaveTextContent("next memory");
   });
 
   it("shows a lyrics-style vertical timeline on interaction, stores drag offset, then resumes idle from that node", () => {
