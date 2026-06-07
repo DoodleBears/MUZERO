@@ -45,8 +45,8 @@ PRD: [`20260607-muzero-ai-dj-chat-agent-panel-prd`](docs/prd/20260607-muzero-ai-
   - 验收：send→stream→快照落库→重建 actor 恢复（fake-indexeddb）；runtime 全模块作用域；`make check` 绿。
 - [ ] **CHAT-2 三形态外壳** 🟡 — `mode: fab|bar|dock|fullscreen` + FAB + 底部输入条 + Dock(桌面 1∕3 / 移动全屏) + **顶部 Notification toast 折叠态回复**（`motion/react`，仿 anysoul MessageToast）。已完成可独立落地的 shell 组件 + store/hook 测试；`App.tsx` 挂载仍等并行 Now Playing WIP 落地后补 CHAT-2b。
   - 验收：三形态切换+偏好持久化；折叠态回复弹通知/点击展开已单测覆盖；preview/App 挂载待 CHAT-2b。
-- [ ] **CHAT-3 DJ 工具** — `set_*`/`queue_*`/`add_memory`/`now_playing_get`/`dj_propose_briefs`→`dj_generate_tracks`（Zod，**审批=成本驱动**只 generate 审批，C 方案 propose→确认，无审批模式开关）；落 DjEngine/repos/数据模型；now-playing 注入 system；能力 gate 接 musicgen §4.5。
-  - 验收：「做个 lofi set」→propose→审批→generate→进歌单+播放列表下一手→可播；写拒绝零写入；听歌时 `add_memory`。
+- [ ] **CHAT-3 DJ 工具** 🟡 — `set_*`/`queue_*`/`add_memory`/`now_playing_get`/`dj_propose_briefs`→`dj_generate_tracks`（Zod，**审批=成本驱动**只 generate 审批，C 方案 propose→确认，无审批模式开关）；落 DjEngine/repos/数据模型；now-playing 注入 system；能力 gate 接 musicgen §4.5。已完成 Phase 3a：工具核心、`dj_generate_tracks` 审批标记、pending track + set + play-next 队列写入、memory-aware search 测试。
+  - 验收：工具核心写入/拒绝前 schema 校验/读工具无审批已测；`chat-tool-collapsible` 审批 UI、propose 工具、pump 物化 E2E 待后续提交。
 - [ ] **CHAT-4 多 session + 历史 + branch/regenerate** — session home 列表 + 子串搜索 + 自动标题；多 actor 并发（切走仍流）；regenerate(edit-resend) + branch(截断深拷贝)。
 - [ ] **CHAT-5 多 provider 模型选型** — `ai/llm-providers.ts` preset 化（openrouter/openai/claude/gemini/groq/deepseek/custom）+ `resolveDjModel` 扩展 + key 入 Dexie；补 `command`/`combobox`/`dialog`/`popover` 原语；全局默认 + per-session combobox 覆盖。
 - [ ] **CHAT-6 队列/打断 + onboarding + 压缩** — 队列托盘（DnD、Stop≠Interrupt、reload 后默认关）；冷启动 chips + 空态引导；上下文预算/压缩（block-and-explain）。

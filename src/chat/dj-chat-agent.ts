@@ -9,6 +9,7 @@ import { resolveDjModel } from "@/ai/model";
 import type { MuzeroDB } from "@/db/muzero-db";
 import { getSettings } from "@/db/repositories";
 import { DJ_CHAT_SYSTEM_PROMPT } from "./dj-chat-prompt";
+import { createDjChatTools } from "./dj-chat-tools";
 import type { DjChatUIMessage } from "./types";
 
 export type DjChatModelResolver = (db: MuzeroDB) => Promise<LanguageModel>;
@@ -18,8 +19,6 @@ export interface CreateDjChatTransportOptions {
   resolveModel?: DjChatModelResolver;
 }
 
-const noTools = {};
-
 export function createDjChatTransport({
   db,
   resolveModel = defaultResolveModel,
@@ -27,20 +26,16 @@ export function createDjChatTransport({
   return {
     async sendMessages(options) {
       const model = await resolveModel(db);
+      const tools = createDjChatTools({ db });
       const agent = new ToolLoopAgent({
         model,
-        tools: noTools,
+        tools,
         instructions: DJ_CHAT_SYSTEM_PROMPT,
         stopWhen: stepCountIs(12),
         temperature: 0.7,
         maxOutputTokens: 1200,
       });
-      const transport = new DirectChatTransport<
-        never,
-        Record<string, never>,
-        never,
-        DjChatUIMessage
-      >({ agent });
+      const transport = new DirectChatTransport({ agent });
       return transport.sendMessages(options);
     },
     async reconnectToStream() {

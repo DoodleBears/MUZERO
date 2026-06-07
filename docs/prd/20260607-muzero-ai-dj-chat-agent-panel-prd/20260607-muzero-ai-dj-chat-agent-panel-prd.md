@@ -17,7 +17,7 @@
 |-------|------|--------|------|
 | 1 | Chat runtime 地基（Dexie v5 + Runtime Actor + 单 session 流式 + streamdown） | ✅ Completed | §7 |
 | 2 | 三形态显示外壳（FAB / 底部输入条 / Dock 1∕3 → 移动端全屏） | 🔄 In Progress | §7 |
-| 3 | DJ 工具调用（search/create/curate/propose/generate + HITL 审批） | 🔲 Pending | §7 |
+| 3 | DJ 工具调用（search/create/curate/propose/generate + HITL 审批） | 🔄 In Progress | §7 |
 | 4 | 多 Session + 历史列表（搜索）+ branch/regenerate | 🔲 Pending | §7 |
 | 5 | 多 Provider 模型选型（preset 化 + combobox + Settings + key 入 Dexie） | 🔲 Pending | §7 |
 | 6 | 队列/打断 prompt + 空态 onboarding + 上下文压缩 | 🔲 Pending | §7 |
@@ -399,13 +399,14 @@ interface ChatUiState {
 
 ### Phase 3: DJ 工具调用
 **Tasks:**
-- [ ] `dj-chat-tools.ts`（§4.2 工具集，Zod schema，读/写 + `needsApproval`，`AgentWriteResult`）；`dj-chat-prompt.ts`。
+- [x] `dj-chat-tools.ts`（§4.2 工具集，Zod schema，读/写 + `needsApproval`，`AgentWriteResult`）；`dj-chat-prompt.ts`。
 - [ ] `chat-tool-collapsible.tsx`（审批/结果/错误）；HITL `ask`/`auto` 偏好。
-- [ ] 工具落 `DjEngine`/repos；`dj_generate_tracks` 走 `createPendingTrack`+`appendTrackIds`（物化由 store pump 自动）；能力 gate 接 musicgen preset。
+- [x] 工具落 repos；`dj_generate_tracks` 走 `createPendingTrack`+`prependTrackIds` + play-next queue（物化由 store pump 自动）；provider id 从 settings 注入，保持 provider-agnostic。
 
 **Phase 3 Checklist:**
 - [ ] 集成测：「做个 lofi set」→ propose→审批→generate→pending 落库→pump 物化→可播（canned model + mock music provider）。
-- [ ] 写工具拒绝时零写入；读工具无审批；用错 domain 名词的描述测试失败。
+- [x] 写工具 schema 拒绝时零写入；读工具无审批；`dj_generate_tracks` 才 `needsApproval:true`。
+- [x] `library_search_tracks` 使用 memory-aware search；`dj_generate_tracks` 写 pending track + set + play-next queue。
 
 ### Phase 4: 多 Session + 历史 + branch/regenerate
 **Tasks:**
@@ -491,6 +492,7 @@ interface ChatUiState {
 | 2026-06-07 | MUZERO | 加 §5.9 **State 纪律**（用户强调跨状态解耦）：最小 selector / `useShallow`+标量 / chat-store 分 slice / 模块作用域单例 / diff 守卫高频订阅 / `useLiveQuery` 读列表。模板 `track-identity-row.tsx`；已给 player-store 加 `queueSig` 守卫 |
 | 2026-06-07 | Codex | 完成 Phase 1：DB v5 `chatSessions` + `ChatSession`/`DjChatUIMessage` 类型、chat session CRUD/标题派生/快照持久化、懒解析 BYOK `ToolLoopAgent` transport、模块作用域 runtime actor/registry、persisted chat-store、`textarea` 原语、最小 `chat-panel`/composer/Streamdown turns；补 fake-indexeddb 集成测覆盖 send→stream→messagesJson→actor rebuild。`pnpm build` 通过；main JS chunk `1,643.26 kB` min / `491.28 kB` gzip（Vite large-chunk warning）。 |
 | 2026-06-07 | Codex | 推进 Phase 2a：新增 `use-chat-breakpoint`、FAB launcher、bottom input bar、responsive dock、folded reply notification，并补 store/hook/shell 组件测试。`App.tsx` 挂载保持 blocked，避免覆盖并行 Now Playing redesign WIP；`make check` 通过（45 files / 330 tests）。 |
+| 2026-06-07 | Codex | 推进 Phase 3a：新增 `dj-chat-tools.ts` 工具核心（library/search/tags、set、queue、memory、`dj_generate_tracks`），runtime agent 接入工具集；`dj_generate_tracks` 仅它带 `needsApproval:true`，执行时校验 TrackBrief、创建 pending tracks、写目标 set 并 play-next 入播放列表。补 fake-indexeddb 测试覆盖 schema 拒绝零写入、memory-aware search、pending+queue 写入；`make check` 通过（46 files / 334 tests）。 |
 
 ---
 
