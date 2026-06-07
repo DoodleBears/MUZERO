@@ -14,7 +14,7 @@
 | Phase | Name | Status | Link |
 |-------|------|--------|------|
 | 1 | 歌单 Gallery 纯逻辑（filter / sort，纯函数 TDD） | ✅ Completed | §6 |
-| 2 | 歌单 Gallery 页面（search-page 改造：搜索框 + filter/sort chips + list/album-grid） | 🔲 Pending | §6 |
+| 2 | 歌单 Gallery 页面（search-page 改造：搜索框 + filter/sort chips + list/album-grid） | ✅ Completed | §6 |
 | 3 | 导航极简化（first=播放页；移除 AI tab；合并为可折叠 nav FAB 置于播放信息右侧） | 🔲 Pending（碰并行文件，需协调）| §6 |
 | 4 | 可拖拽 AI FAB（悬浮、自由拖拽，承接 chat PRD 的 `fab` 形态） | 🔲 Pending | §6 |
 
@@ -129,9 +129,9 @@ export function sortSets(items: SetGalleryItem[], sort: SetSort): SetGalleryItem
 - [x] `src/lib/set-gallery.ts`（`SetGalleryItem`/`SetSort`/`SetFilter`/`filterSets`/`sortSets`）+ 9 单测（query 子串名+seed、liked 过滤、query×filter 组合、recent/name/size 三种 sort、不可变）。
 - 验收：纯函数全绿、typecheck/biome 清；新文件零并行冲突。
 
-### Phase 2: 歌单 Gallery 页面
-- [ ] `search-page.tsx` 改造为画廊：`useLiveQuery` 组装 items → filter/sort chips + 搜索框 + list/grid view 切换；封面用第一首歌；点击歌单 → `playSet`/打开。i18n 4 语。
-- 验收：浏览器 preview 实测 list/grid/搜索/过滤排序 + 暗色 + 响应式 + 零报错。
+### Phase 2: 歌单 Gallery 页面 ✅
+- [x] `search-page.tsx` 改造为画廊：`useLiveQuery(sessions+tracks)` 组装 `SetGalleryItem`（trackCount/likedCount/首封面）→ 搜索框 + filter(全部/红心) + sort(最近/名称/曲数) chips + list/grid view 切换(localStorage 持久)；封面 `useTrackCoverUrl` 取首张有封面的曲；点击歌单 → `setActiveSession`+`play`。`gallery` i18n 4 语 ×11 key。
+- [x] 验收：浏览器 preview 实测——搜索框/过滤/排序/列表+封面网格 全渲染、album 卡（封面+♡红心标+「N 首」）、零 console 报错。`SetCard` 用独立组件调 `useTrackCoverUrl`（每张封面独立、不互相重渲染）。
 
 ### Phase 3: 导航极简化（碰并行文件，先协调）
 - [ ] `nav-row.tsx` → collapse/expand nav FAB；`player-dock.tsx` 放到播放信息右侧；移除 AI tab；first=播放页。

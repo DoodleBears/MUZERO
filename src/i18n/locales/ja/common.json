@@ -46,7 +46,9 @@
     "play": "再生",
     "pause": "一時停止",
     "repeat": "リピート：{{mode}}",
-    "volume": "音量"
+    "volume": "音量",
+    "shuffle": "シャッフル",
+    "autoplay": "自動再生"
   },
   "dj": {
     "writing": "DJ が次の曲を書いています…",
@@ -58,7 +60,11 @@
     "upNext": "次に再生",
     "audioOnly": "音声のみ",
     "audioOnlyHint": "音声のみ再生（動画を隠す）",
-    "modeTitle": "{{mode}}モード"
+    "modeTitle": "{{mode}}モード",
+    "videoUnsupported": "この動画形式はこの端末で再生できません（MKV など）。MP4 / WebM をお試しください。",
+    "lyrics": "歌詞",
+    "playingFrom": "再生元",
+    "noLyrics": "この曲には歌詞がありません。"
   },
   "displayMode": {
     "video": "動画",
@@ -72,6 +78,50 @@
     "empty": "まだ何もありません —— セットを始めれば DJ が埋めてくれます。",
     "uploadedAudio": "アップロード音声",
     "uploadedVideo": "アップロード動画"
+  },
+  "drop": {
+    "addTitle": "ドロップしてセットに追加",
+    "addTitleMultiple": "{{count}} 件のファイルをドロップして追加",
+    "addSubtitle": "音声・動画はトラックになります —— 画面のどこでも OK",
+    "imageDragTitle": "画像をドロップ",
+    "imageDragSubtitle": "離すとカバーか背景に設定できます",
+    "imageModalTitle": "この画像を…",
+    "imageModalBody": "「{{title}}」のカバーにする、またはその背景スライドショーに追加します。",
+    "galleryModalTitle": "グローバルギャラリーに追加？",
+    "galleryModalBody": "再生中の曲がありません —— グローバル背景スライドショーのギャラリーに追加します。",
+    "asCover": "カバーに設定",
+    "asBackground": "背景に追加",
+    "toGallery": "ギャラリーに追加",
+    "cancel": "キャンセル",
+    "close": "閉じる",
+    "uploaded_other": "{{count}} 件のファイルを追加しました",
+    "coverApplied": "カバーを更新しました",
+    "bgApplied": "背景に追加しました",
+    "galleryApplied": "ギャラリーに追加しました",
+    "skipped_other": "未対応のファイル {{count}} 件をスキップしました"
+  },
+  "background": {
+    "title": "背景",
+    "mode": "再生中の背景",
+    "modeCover": "カバーを背景にする",
+    "modeSlideshow": "スライドショーを背景にする",
+    "slideshowHint": "スライドショーは曲に紐づく背景を優先し、なければ下のグローバルギャラリーを使います。",
+    "gallery": "グローバルギャラリー",
+    "galleryDesc": "スライドショー背景用の画像。全曲で共有されます（曲ごとの背景が優先）。",
+    "addImages": "画像を追加",
+    "empty": "まだ画像がありません。",
+    "removeImage": "画像を削除",
+    "immersiveIdle": "操作がないとバーを隠す（没入）",
+    "immersiveIdleHint": "再生中の画面で、数秒操作がないとヘッダーとドックをフェードアウトします。マウスを動かすと再表示されます。",
+    "coverCropped": "切り抜いたカバーを表示",
+    "coverCroppedHint": "カバーは切り抜いた正方形で表示されます。オフにすると元画像全体を表示します。元画像は常に保持されます。",
+    "blur": "背景のぼかし：{{px}}px",
+    "mask": "背景の暗さ：{{pct}}%"
+  },
+  "crop": {
+    "title": "カバーを切り抜き（正方形）",
+    "zoom": "ズーム",
+    "apply": "完了"
   },
   "annotation": {
     "memory": "メモリー",
@@ -92,6 +142,14 @@
     "primaryColorLight": "アクセントカラー（ライト）",
     "primaryColorDark": "アクセントカラー（ダーク）",
     "resetColors": "リセット",
+    "primaryPresetSynthwave": "シンセウェイブ",
+    "primaryPresetNebula": "ネビュラ",
+    "primaryPresetOcean": "オーシャン",
+    "primaryPresetNeon": "ネオン",
+    "primaryPresetMatcha": "抹茶",
+    "primaryPresetTeal": "ティール",
+    "primaryPresetRose": "ローズ",
+    "primaryPresetSunset": "サンセット",
     "djTitle": "AI DJ（LLM）",
     "provider": "プロバイダー",
     "model": "モデル",
@@ -118,5 +176,18 @@
     "getApiKey": "API キーを取得",
     "apiDocs": "API ドキュメント",
     "modelHint": "auto = 最新モデル。特定バージョン ID も入力可。"
+  },
+  "gallery": {
+    "title": "セット",
+    "search": "セットを検索…",
+    "filterAll": "すべて",
+    "filterLiked": "お気に入り",
+    "sortRecent": "最近",
+    "sortName": "名前",
+    "sortSize": "曲数",
+    "viewList": "リスト",
+    "viewGrid": "グリッド",
+    "count_other": "{{count}} 曲",
+    "empty": "セットがまだありません — DJ セットを開始するかメディアをアップロードしてください。"
   }
 }

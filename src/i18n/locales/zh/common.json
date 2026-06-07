@@ -46,7 +46,9 @@
     "play": "播放",
     "pause": "暂停",
     "repeat": "循环：{{mode}}",
-    "volume": "音量"
+    "volume": "音量",
+    "shuffle": "随机播放",
+    "autoplay": "自动播放"
   },
   "dj": {
     "writing": "DJ 正在编写下一首……",
@@ -58,7 +60,11 @@
     "upNext": "即将播放",
     "audioOnly": "仅音频",
     "audioOnlyHint": "只听音频（隐藏视频）",
-    "modeTitle": "{{mode}}模式"
+    "modeTitle": "{{mode}}模式",
+    "videoUnsupported": "此视频格式无法在此设备播放（如 MKV）。请改用 MP4 / WebM。",
+    "lyrics": "歌词",
+    "playingFrom": "播放的音乐来自",
+    "noLyrics": "这首曲子暂无歌词。"
   },
   "displayMode": {
     "video": "视频",
@@ -72,6 +78,50 @@
     "empty": "还没有内容 —— 开启一个歌单，DJ 会来填充。",
     "uploadedAudio": "上传的音频",
     "uploadedVideo": "上传的视频"
+  },
+  "drop": {
+    "addTitle": "拖放即可加入歌单",
+    "addTitleMultiple": "拖放 {{count}} 个文件加入",
+    "addSubtitle": "音频和视频会变成曲目 —— 屏幕任意位置都能放",
+    "imageDragTitle": "拖放图片",
+    "imageDragSubtitle": "松手后可设为封面或背景轮播",
+    "imageModalTitle": "用这张图…",
+    "imageModalBody": "设为「{{title}}」的封面，或加入它的背景轮播。",
+    "galleryModalTitle": "加入全局图库？",
+    "galleryModalBody": "没有正在播放的曲目 —— 把它加入全局背景轮播图库。",
+    "asCover": "设为封面",
+    "asBackground": "加为背景",
+    "toGallery": "加入图库",
+    "cancel": "取消",
+    "close": "关闭",
+    "uploaded_other": "已添加 {{count}} 个文件",
+    "coverApplied": "封面已更新",
+    "bgApplied": "已加为背景",
+    "galleryApplied": "已加入图库",
+    "skipped_other": "跳过 {{count}} 个不支持的文件"
+  },
+  "background": {
+    "title": "背景",
+    "mode": "Now Playing 背景",
+    "modeCover": "以封面作为背景",
+    "modeSlideshow": "以幻灯片轮播作为背景",
+    "slideshowHint": "幻灯片优先用歌曲绑定的背景图，没有时回退到下面的全局图库。",
+    "gallery": "全局图库",
+    "galleryDesc": "用于幻灯片背景的图片，所有歌曲共享（歌曲自带的背景图优先）。",
+    "addImages": "添加图片",
+    "empty": "还没有图片。",
+    "removeImage": "移除图片",
+    "immersiveIdle": "空闲时隐藏栏（沉浸模式）",
+    "immersiveIdleHint": "在「正在播放」页，几秒无操作后淡出顶栏和底部 Dock；移动鼠标即可重新显示。",
+    "coverCropped": "显示裁切后的封面",
+    "coverCroppedHint": "封面按你裁切的正方形显示；关闭则显示完整原图。原图始终保留。",
+    "blur": "背景模糊：{{px}}px",
+    "mask": "背景压暗：{{pct}}%"
+  },
+  "crop": {
+    "title": "裁切封面（正方形）",
+    "zoom": "缩放",
+    "apply": "完成"
   },
   "annotation": {
     "memory": "记忆",
@@ -92,6 +142,14 @@
     "primaryColorLight": "主题色（浅色模式）",
     "primaryColorDark": "主题色（深色模式）",
     "resetColors": "重置",
+    "primaryPresetSynthwave": "合成波",
+    "primaryPresetNebula": "星云",
+    "primaryPresetOcean": "海洋",
+    "primaryPresetNeon": "霓虹",
+    "primaryPresetMatcha": "抹茶",
+    "primaryPresetTeal": "青色",
+    "primaryPresetRose": "玫瑰",
+    "primaryPresetSunset": "日落",
     "djTitle": "AI DJ（大语言模型）",
     "provider": "服务商",
     "model": "模型",
@@ -118,5 +176,18 @@
     "getApiKey": "获取 API key",
     "apiDocs": "API 文档",
     "modelHint": "auto = 最新模型；也可填具体版本 id。"
+  },
+  "gallery": {
+    "title": "歌单",
+    "search": "搜索歌单…",
+    "filterAll": "全部",
+    "filterLiked": "红心",
+    "sortRecent": "最近",
+    "sortName": "名称",
+    "sortSize": "曲数",
+    "viewList": "列表",
+    "viewGrid": "封面",
+    "count_other": "{{count}} 首",
+    "empty": "还没有歌单——开始一个 DJ 歌单或上传媒体。"
   }
 }

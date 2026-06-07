@@ -48,7 +48,9 @@
     "play": "Play",
     "pause": "Pause",
     "repeat": "Repeat: {{mode}}",
-    "volume": "Volume"
+    "volume": "Volume",
+    "shuffle": "Shuffle",
+    "autoplay": "Autoplay"
   },
   "dj": {
     "writing": "DJ is writing the next track…",
@@ -60,7 +62,11 @@
     "upNext": "Up next",
     "audioOnly": "Audio only",
     "audioOnlyHint": "Play audio only (hide video)",
-    "modeTitle": "{{mode}} mode"
+    "modeTitle": "{{mode}} mode",
+    "videoUnsupported": "This video format can't play on this device (e.g. MKV). Try MP4 or WebM.",
+    "lyrics": "Lyrics",
+    "playingFrom": "Playing from",
+    "noLyrics": "No lyrics for this track."
   },
   "displayMode": {
     "video": "Video",
@@ -74,6 +80,52 @@
     "empty": "Nothing here yet — start a set and the DJ will fill it.",
     "uploadedAudio": "uploaded audio",
     "uploadedVideo": "uploaded video"
+  },
+  "drop": {
+    "addTitle": "Drop to add to your set",
+    "addTitleMultiple": "Drop {{count}} files to add",
+    "addSubtitle": "Audio & video become tracks — drop anywhere on screen",
+    "imageDragTitle": "Drop an image",
+    "imageDragSubtitle": "Release to set it as a cover or background",
+    "imageModalTitle": "Use this image…",
+    "imageModalBody": "As the cover for “{{title}}”, or add it to its background slideshow.",
+    "galleryModalTitle": "Add to global gallery?",
+    "galleryModalBody": "Nothing is playing — add it to the global background slideshow gallery.",
+    "asCover": "Set as cover",
+    "asBackground": "Add as background",
+    "toGallery": "Add to gallery",
+    "cancel": "Cancel",
+    "close": "Close",
+    "uploaded_one": "Added {{count}} file",
+    "uploaded_other": "Added {{count}} files",
+    "coverApplied": "Cover updated",
+    "bgApplied": "Background added",
+    "galleryApplied": "Added to gallery",
+    "skipped_one": "{{count}} unsupported file skipped",
+    "skipped_other": "{{count}} unsupported files skipped"
+  },
+  "background": {
+    "title": "Background",
+    "mode": "Now Playing background",
+    "modeCover": "Use cover as background",
+    "modeSlideshow": "Use slideshow as background",
+    "slideshowHint": "The slideshow prefers a song's bound backgrounds, falling back to the global gallery below.",
+    "gallery": "Global gallery",
+    "galleryDesc": "Images for the slideshow background, shared across songs (a song's own backgrounds take priority).",
+    "addImages": "Add images",
+    "empty": "No images yet.",
+    "removeImage": "Remove image",
+    "immersiveIdle": "Hide bars when idle (immersive)",
+    "immersiveIdleHint": "On Now Playing, fade out the header and dock after a few idle seconds. Move the mouse to bring them back.",
+    "coverCropped": "Show cropped cover",
+    "coverCroppedHint": "Covers display the square you cropped; turn off to show the full image. The original is always kept.",
+    "blur": "Background blur: {{px}}px",
+    "mask": "Background dim: {{pct}}%"
+  },
+  "crop": {
+    "title": "Crop cover (square)",
+    "zoom": "Zoom",
+    "apply": "Done"
   },
   "annotation": {
     "memory": "Memory",
@@ -94,6 +146,14 @@
     "primaryColorLight": "Accent color (light mode)",
     "primaryColorDark": "Accent color (dark mode)",
     "resetColors": "Reset",
+    "primaryPresetSynthwave": "Synthwave",
+    "primaryPresetNebula": "Nebula",
+    "primaryPresetOcean": "Ocean",
+    "primaryPresetNeon": "Neon",
+    "primaryPresetMatcha": "Matcha",
+    "primaryPresetTeal": "Teal",
+    "primaryPresetRose": "Rose",
+    "primaryPresetSunset": "Sunset",
     "djTitle": "AI DJ (LLM)",
     "provider": "Provider",
     "model": "Model",
@@ -120,5 +180,19 @@
     "getApiKey": "Get an API key",
     "apiDocs": "API docs",
     "modelHint": "auto = latest model; or enter a specific version id."
+  },
+  "gallery": {
+    "title": "Sets",
+    "search": "Search sets…",
+    "filterAll": "All",
+    "filterLiked": "Liked",
+    "sortRecent": "Recent",
+    "sortName": "Name",
+    "sortSize": "Size",
+    "viewList": "List",
+    "viewGrid": "Grid",
+    "count_one": "{{count}} track",
+    "count_other": "{{count}} tracks",
+    "empty": "No sets yet — start a DJ set or upload some media."
   }
 }
