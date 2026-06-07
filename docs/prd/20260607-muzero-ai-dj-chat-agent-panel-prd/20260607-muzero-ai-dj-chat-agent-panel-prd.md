@@ -418,6 +418,7 @@ interface ChatUiState {
 **Phase 4 Checklist:**
 - [ ] 集成测：两 session 不同 model 同时跑、一个审批一个错误互不串；切 home 不清流式 session 的 live 消息。
 - [x] Runtime 基座：两个 session actor 可并发发送、分别 stream/persist，preview 与 messagesJson 不串线。
+- [x] 空 session 首次持久化 user 消息时自动派生标题，不覆盖手工标题。
 - [x] 搜索命中标题与用户消息（不搜 assistant-only 文本）；branch 后父子独立。
 - [x] edit-resend regenerate 复用 user `messageId`，截断后续并重流。
 
@@ -511,6 +512,7 @@ interface ChatUiState {
 | 2026-06-07 | Codex | 推进 Phase 6c：补 `contextStartIndex` repository/actor 持久化，actor 用 `nextContextStartIndex` 保留最新 user turn 作为安全起点；runtime meta 暴露压缩指针，重建后旧消息仍完整可见。补 fake-indexeddb/runtime 测试；`make check` 通过（48 files / 353 tests）。 |
 | 2026-06-07 | Codex | 推进 Phase 6d：补 `ChatComposer` 键盘矩阵，idle Enter 发送，running+draft Enter 入队，Cmd/Ctrl+Enter interrupt，Shift+Enter 保留换行；`ChatPanel` 接 runtime `queuePrompt`/`interruptWithMessage`。补组件测试；`make check` 通过（51 files / 365 tests）。 |
 | 2026-06-07 | Codex | 推进 Phase 6e：`DjChatRuntimeActor.sendQueuedPrompt` 在 pending tool approval 时暂停派发，保留 queued prompt、返回 false、不触发 transport；补 runtime 测试；`make check` 通过（51 files / 366 tests）。 |
+| 2026-06-07 | Codex | 推进 Phase 4c：`saveChatSessionSnapshot` 在默认标题 session 首次持久化 user 消息时派生自动标题，不覆盖手工命名；补 repository/runtime 持久化竞态测试；`make check` 通过（51 files / 368 tests）。 |
 
 ---
 

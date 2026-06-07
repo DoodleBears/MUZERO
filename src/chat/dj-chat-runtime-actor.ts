@@ -43,6 +43,7 @@ export class DjChatRuntimeActor {
   private unsubscribers: Array<() => void> = [];
   private persistTimer: number | undefined;
   private lastPersistSig = "";
+  private pendingPersist: Promise<void> | undefined;
   private composerDraftRaw: string | undefined;
   private queuedPrompts: DjChatQueuedPrompt[] = [];
   private contextStartIndex = 0;
@@ -175,7 +176,9 @@ export class DjChatRuntimeActor {
     this.persistTimer = undefined;
     for (const unsubscribe of this.unsubscribers) unsubscribe();
     this.unsubscribers = [];
-    void this.persistNow();
+    void this.persistNow().catch((error: Error) => {
+      log.warn("chat-runtime", "chat snapshot persist failed", error.name);
+    });
   }
 
   private async initialize(): Promise<void> {
@@ -196,7 +199,9 @@ export class DjChatRuntimeActor {
         log.warn("chat-runtime", "chat stream failed", error.name);
       },
       onFinish: () => {
-        void this.flush();
+        void this.flush().catch((error: Error) => {
+          log.warn("chat-runtime", "chat snapshot persist failed", error.name);
+        });
       },
     });
     this.unsubscribers = [
@@ -242,7 +247,9 @@ export class DjChatRuntimeActor {
     if (this.persistTimer !== undefined) return;
     this.persistTimer = window.setTimeout(() => {
       this.persistTimer = undefined;
-      void this.persistNow();
+      void this.persistNow().catch((error: Error) => {
+        log.warn("chat-runtime", "chat snapshot persist failed", error.name);
+      });
     }, SNAPSHOT_THROTTLE_MS);
   }
 
@@ -253,9 +260,12 @@ export class DjChatRuntimeActor {
       queuedPrompts: this.queuedPrompts,
       contextStartIndex: this.contextStartIndex,
     });
-    if (sig === this.lastPersistSig) return;
+    if (sig === this.lastPersistSig) {
+      await this.pendingPersist;
+      return;
+    }
     this.lastPersistSig = sig;
-    await saveChatSessionSnapshot(
+    const write = saveChatSessionSnapshot(
       {
         sessionId: this.sessionId,
         messages: this.snapshot.messages,
@@ -265,6 +275,12 @@ export class DjChatRuntimeActor {
       },
       this.db,
     );
+    this.pendingPersist = write;
+    try {
+      await write;
+    } finally {
+      if (this.pendingPersist === write) this.pendingPersist = undefined;
+    }
   }
 }
 

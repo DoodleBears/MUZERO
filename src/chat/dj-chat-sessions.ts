@@ -133,8 +133,11 @@ export async function saveChatSessionSnapshot(
   },
   db: MuzeroDB = defaultDb,
 ): Promise<void> {
+  const current = await getChatSession(input.sessionId, db);
+  const currentMessages = parseChatMessages(current?.messagesJson);
+  const shouldKeepExistingMessages = input.messages.length === 0 && currentMessages.length > 0;
   const patch: Partial<ChatSession> = {
-    messagesJson: JSON.stringify(input.messages),
+    messagesJson: JSON.stringify(shouldKeepExistingMessages ? currentMessages : input.messages),
     composerDraftRaw: input.composerDraftRaw?.trim() || undefined,
     updatedAt: Date.now(),
   };
@@ -143,6 +146,11 @@ export async function saveChatSessionSnapshot(
   }
   if (input.contextStartIndex !== undefined) {
     patch.contextStartIndex = sanitizeContextStartIndex(input.contextStartIndex);
+  }
+  if (current?.title === UNTITLED_CHAT) {
+    patch.title = deriveChatTitle(
+      firstUserText(shouldKeepExistingMessages ? currentMessages : input.messages),
+    );
   }
   await db.chatSessions.update(input.sessionId, patch);
 }
@@ -227,6 +235,19 @@ async function saveQueuedPrompts(
 function sanitizeContextStartIndex(contextStartIndex: number): number {
   if (!Number.isFinite(contextStartIndex)) return 0;
   return Math.max(0, Math.floor(contextStartIndex));
+}
+
+function firstUserText(messages: DjChatUIMessage[]): string | undefined {
+  for (const message of messages) {
+    if (message.role !== "user") continue;
+    const text = message.parts
+      .filter((part) => part.type === "text")
+      .map((part) => part.text)
+      .join(" ")
+      .trim();
+    if (text) return text;
+  }
+  return undefined;
 }
 
 export async function renameChatSession(

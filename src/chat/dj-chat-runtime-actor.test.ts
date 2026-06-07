@@ -69,6 +69,7 @@ describe("DjChatRuntimeActor", () => {
 
     await actor.ready;
     await actor.sendMessage("rainy focus");
+    expect(actor.getSnapshot().messages).toHaveLength(2);
 
     const saved = await getChatSession(session.id, db);
     const persisted = JSON.parse(saved?.messagesJson ?? "[]") as DjChatUIMessage[];

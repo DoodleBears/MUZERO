@@ -72,6 +72,41 @@ describe("chat session repository", () => {
     expect(rows[0].title).toBe("renamed");
   });
 
+  it("derives an automatic title from the first persisted user message for empty sessions", async () => {
+    const session = await createChatSession({}, db);
+
+    await saveChatSessionSnapshot(
+      {
+        sessionId: session.id,
+        messages: [
+          {
+            id: "u1",
+            role: "user",
+            parts: [{ type: "text", text: "make a foggy drum and bass set" }],
+          },
+          { id: "a1", role: "assistant", parts: [{ type: "text", text: "on it" }] },
+        ],
+      },
+      db,
+    );
+
+    expect((await getChatSession(session.id, db))?.title).toBe("make a foggy drum and bass set");
+  });
+
+  it("keeps manual titles and existing messages when saving an empty stale snapshot", async () => {
+    const messages: DjChatUIMessage[] = [
+      { id: "u1", role: "user", parts: [{ type: "text", text: "keep this turn" }] },
+      { id: "a1", role: "assistant", parts: [{ type: "text", text: "kept" }] },
+    ];
+    const session = await createChatSession({ title: "Manual title", messages }, db);
+
+    await saveChatSessionSnapshot({ sessionId: session.id, messages: [] }, db);
+
+    const reloaded = await getChatSession(session.id, db);
+    expect(reloaded?.title).toBe("Manual title");
+    expect(JSON.parse(reloaded?.messagesJson ?? "null")).toEqual(messages);
+  });
+
   it("searches titles and user messages, not assistant-only text", async () => {
     await createChatSession(
       {
