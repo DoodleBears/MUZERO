@@ -54,6 +54,52 @@ export function listChatSessions(db: MuzeroDB = defaultDb): Promise<ChatSession[
   return db.chatSessions.orderBy("updatedAt").reverse().toArray();
 }
 
+export async function searchChatSessions(
+  query: string,
+  db: MuzeroDB = defaultDb,
+): Promise<ChatSession[]> {
+  const needle = query.trim().toLowerCase();
+  if (!needle) return listChatSessions(db);
+  const sessions = await listChatSessions(db);
+  return sessions.filter((session) => {
+    if (session.title.toLowerCase().includes(needle)) return true;
+    return parseChatMessages(session.messagesJson).some(
+      (message) =>
+        message.role === "user" &&
+        message.parts.some(
+          (part) => part.type === "text" && part.text.toLowerCase().includes(needle),
+        ),
+    );
+  });
+}
+
+export async function branchChatSession(
+  input: { parentSessionId: string; forkedFromIndex: number; title?: string },
+  db: MuzeroDB = defaultDb,
+): Promise<ChatSession> {
+  const parent = await getChatSession(input.parentSessionId, db);
+  if (!parent) throw new Error(`Chat session ${input.parentSessionId} not found`);
+  const parentMessages = parseChatMessages(parent.messagesJson);
+  const forkedFromIndex = Math.min(
+    Math.max(0, input.forkedFromIndex),
+    Math.max(0, parentMessages.length - 1),
+  );
+  const messages = structuredClone(parentMessages.slice(0, forkedFromIndex + 1));
+  const now = Date.now();
+  const branch: ChatSession = {
+    id: newId("cht"),
+    title: input.title?.trim() || `${parent.title} fork`,
+    createdAt: now,
+    updatedAt: now,
+    messagesJson: JSON.stringify(messages),
+    parentSessionId: parent.id,
+    forkedFromIndex,
+  };
+  await db.chatSessions.put(branch);
+  await saveSettings({ lastChatSessionId: branch.id }, db);
+  return branch;
+}
+
 export async function saveChatSessionSnapshot(
   input: {
     sessionId: string;

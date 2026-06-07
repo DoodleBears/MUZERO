@@ -18,7 +18,7 @@
 | 1 | Chat runtime 地基（Dexie v5 + Runtime Actor + 单 session 流式 + streamdown） | ✅ Completed | §7 |
 | 2 | 三形态显示外壳（FAB / 底部输入条 / Dock 1∕3 → 移动端全屏） | 🔄 In Progress | §7 |
 | 3 | DJ 工具调用（search/create/curate/propose/generate + HITL 审批） | 🔄 In Progress | §7 |
-| 4 | 多 Session + 历史列表（搜索）+ branch/regenerate | 🔲 Pending | §7 |
+| 4 | 多 Session + 历史列表（搜索）+ branch/regenerate | 🔄 In Progress | §7 |
 | 5 | 多 Provider 模型选型（preset 化 + combobox + Settings + key 入 Dexie） | 🔲 Pending | §7 |
 | 6 | 队列/打断 prompt + 空态 onboarding + 上下文压缩 | 🔲 Pending | §7 |
 
@@ -410,12 +410,13 @@ interface ChatUiState {
 
 ### Phase 4: 多 Session + 历史 + branch/regenerate
 **Tasks:**
-- [ ] `chat-session-home.tsx`（列表 + 子串搜索 + 自动标题 + 重命名/删除）；多 actor 并发（切走仍流）。
-- [ ] regenerate（edit-resend 复用 messageId）；branch（截断深拷贝 messagesJson → 新 session）。
+- [ ] `chat-session-home.tsx`（列表 + 子串搜索 + 自动标题 + 重命名/删除）；多 actor 并发（切走仍流）。Core repository search 已完成；UI 待后续提交。
+- [x] regenerate（edit-resend 复用 messageId）；branch（截断深拷贝 messagesJson → 新 session）。
 
 **Phase 4 Checklist:**
 - [ ] 集成测：两 session 不同 model 同时跑、一个审批一个错误互不串；切 home 不清流式 session 的 live 消息。
-- [ ] 搜索命中标题与用户消息；branch 后父子独立。
+- [x] 搜索命中标题与用户消息（不搜 assistant-only 文本）；branch 后父子独立。
+- [x] edit-resend regenerate 复用 user `messageId`，截断后续并重流。
 
 ### Phase 5: 多 Provider 模型选型
 **Tasks:**
@@ -493,6 +494,7 @@ interface ChatUiState {
 | 2026-06-07 | Codex | 完成 Phase 1：DB v5 `chatSessions` + `ChatSession`/`DjChatUIMessage` 类型、chat session CRUD/标题派生/快照持久化、懒解析 BYOK `ToolLoopAgent` transport、模块作用域 runtime actor/registry、persisted chat-store、`textarea` 原语、最小 `chat-panel`/composer/Streamdown turns；补 fake-indexeddb 集成测覆盖 send→stream→messagesJson→actor rebuild。`pnpm build` 通过；main JS chunk `1,643.26 kB` min / `491.28 kB` gzip（Vite large-chunk warning）。 |
 | 2026-06-07 | Codex | 推进 Phase 2a：新增 `use-chat-breakpoint`、FAB launcher、bottom input bar、responsive dock、folded reply notification，并补 store/hook/shell 组件测试。`App.tsx` 挂载保持 blocked，避免覆盖并行 Now Playing redesign WIP；`make check` 通过（45 files / 330 tests）。 |
 | 2026-06-07 | Codex | 推进 Phase 3a：新增 `dj-chat-tools.ts` 工具核心（library/search/tags、set、queue、memory、`dj_generate_tracks`），runtime agent 接入工具集；`dj_generate_tracks` 仅它带 `needsApproval:true`，执行时校验 TrackBrief、创建 pending tracks、写目标 set 并 play-next 入播放列表。补 fake-indexeddb 测试覆盖 schema 拒绝零写入、memory-aware search、pending+queue 写入；`make check` 通过（46 files / 334 tests）。 |
+| 2026-06-07 | Codex | 推进 Phase 4a：扩展 chat session repository，支持历史子串搜索（title + user messages only）和 branch（截断 deep-copy messagesJson，记录 parent/fork index）；runtime actor 增加 edit-resend regenerate（复用 user messageId、截断后续并重流）。补 fake-indexeddb/runtime 测试；`make check` 通过（46 files / 337 tests）。 |
 
 ---
 

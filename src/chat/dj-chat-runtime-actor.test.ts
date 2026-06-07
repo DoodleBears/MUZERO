@@ -9,14 +9,18 @@ import { createChatSession, getChatSession } from "./dj-chat-sessions";
 import type { DjChatUIMessage } from "./types";
 
 class FakeStreamingTransport implements ChatTransport<DjChatUIMessage> {
-  constructor(private readonly reply: string) {}
+  private calls = 0;
+
+  constructor(private readonly reply: string | string[]) {}
 
   async sendMessages(): Promise<ReadableStream<UIMessageChunk>> {
+    const reply = Array.isArray(this.reply) ? this.reply[this.calls] : this.reply;
+    this.calls += 1;
     const chunks: UIMessageChunk[] = [
       { type: "start", messageId: "asst_fake" },
       { type: "text-start", id: "txt_fake" },
-      { type: "text-delta", id: "txt_fake", delta: this.reply.slice(0, 8) },
-      { type: "text-delta", id: "txt_fake", delta: this.reply.slice(8) },
+      { type: "text-delta", id: "txt_fake", delta: reply.slice(0, 8) },
+      { type: "text-delta", id: "txt_fake", delta: reply.slice(8) },
       { type: "text-end", id: "txt_fake" },
       { type: "finish", finishReason: "stop" },
     ];
@@ -86,5 +90,32 @@ describe("DjChatRuntimeActor", () => {
     expect(rebuilt.getSnapshot().meta.lastAssistantPreview).toBe(
       "A rainy focus set is queued in spirit.",
     );
+  });
+
+  it("edits a user turn, truncates later messages, and streams a regenerated reply", async () => {
+    const session = await createChatSession({ firstUserText: "first" }, db);
+    const actor = getOrCreateDjChatRuntimeActor(session.id, {
+      db,
+      transport: new FakeStreamingTransport(["old reply", "new reply"]),
+    });
+    await actor.ready;
+    await actor.sendMessage("first");
+    const userId = actor.getSnapshot().messages[0].id;
+
+    await actor.regenerateUserMessage(userId, "second");
+
+    const messages = actor.getSnapshot().messages;
+    expect(messages).toHaveLength(2);
+    expect(messages[0]).toMatchObject({
+      id: userId,
+      role: "user",
+      parts: [{ type: "text", text: "second" }],
+      metadata: { composerRaw: "second" },
+    });
+    expect(messages[1].parts).toContainEqual({
+      type: "text",
+      text: "new reply",
+      state: "done",
+    });
   });
 });

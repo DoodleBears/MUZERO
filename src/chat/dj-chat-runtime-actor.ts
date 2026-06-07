@@ -79,6 +79,18 @@ export class DjChatRuntimeActor {
     await this.flush();
   }
 
+  async regenerateUserMessage(messageId: string, text: string): Promise<void> {
+    await this.ready;
+    const clean = text.trim();
+    if (!clean || !this.chat) return;
+    await this.chat.sendMessage({
+      text: clean,
+      messageId,
+      metadata: { composerRaw: text },
+    });
+    await this.flush();
+  }
+
   async flush(): Promise<void> {
     if (this.persistTimer !== undefined) {
       clearTimeout(this.persistTimer);

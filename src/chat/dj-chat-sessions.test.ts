@@ -3,11 +3,14 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { MuzeroDB } from "@/db/muzero-db";
 import type { AppSettings, ChatSession } from "@/db/types";
 import {
+  branchChatSession,
   createChatSession,
   getChatSession,
   listChatSessions,
+  parseChatMessages,
   renameChatSession,
   saveChatSessionSnapshot,
+  searchChatSessions,
 } from "./dj-chat-sessions";
 import type { DjChatUIMessage } from "./types";
 
@@ -63,6 +66,56 @@ describe("chat session repository", () => {
     const rows = await listChatSessions(db);
     expect(rows.map((row) => row.id)).toEqual([newer.id, older.id]);
     expect(rows[0].title).toBe("renamed");
+  });
+
+  it("searches titles and user messages, not assistant-only text", async () => {
+    await createChatSession(
+      {
+        title: "Rain set",
+        messages: [
+          { id: "u1", role: "user", parts: [{ type: "text", text: "make it jazzy" }] },
+          { id: "a1", role: "assistant", parts: [{ type: "text", text: "secret synthwave" }] },
+        ],
+      },
+      db,
+    );
+    await createChatSession({ title: "Workout", firstUserText: "gym drums" }, db);
+
+    expect((await searchChatSessions("rain", db)).map((row) => row.title)).toEqual(["Rain set"]);
+    expect((await searchChatSessions("jazzy", db)).map((row) => row.title)).toEqual(["Rain set"]);
+    expect(await searchChatSessions("synthwave", db)).toEqual([]);
+  });
+
+  it("branches a session by deep-copying messages through the fork index", async () => {
+    const parent = await createChatSession(
+      {
+        title: "Parent",
+        messages: [
+          { id: "u1", role: "user", parts: [{ type: "text", text: "one" }] },
+          { id: "a1", role: "assistant", parts: [{ type: "text", text: "two" }] },
+          { id: "u2", role: "user", parts: [{ type: "text", text: "three" }] },
+        ],
+      },
+      db,
+    );
+
+    const branch = await branchChatSession({ parentSessionId: parent.id, forkedFromIndex: 1 }, db);
+    expect(branch.id).not.toBe(parent.id);
+    expect(branch.parentSessionId).toBe(parent.id);
+    expect(branch.forkedFromIndex).toBe(1);
+    expect(JSON.parse(branch.messagesJson)).toEqual([
+      { id: "u1", role: "user", parts: [{ type: "text", text: "one" }] },
+      { id: "a1", role: "assistant", parts: [{ type: "text", text: "two" }] },
+    ]);
+
+    await saveChatSessionSnapshot(
+      {
+        sessionId: branch.id,
+        messages: [{ id: "branch-only", role: "user", parts: [{ type: "text", text: "fork" }] }],
+      },
+      db,
+    );
+    expect(parseChatMessages((await getChatSession(parent.id, db))?.messagesJson)).toHaveLength(3);
   });
 });
 
