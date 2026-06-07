@@ -17,7 +17,7 @@ export function VisualizerSettings() {
   const style = resolveVisualizerStyle(settings.visualizerStyle);
   const asBackground = settings.visualizerAsBackground ?? true;
   const dim = settings.visualizerBackgroundDim ?? 0;
-  const opacity = settings.visualizerBackgroundOpacity ?? 30;
+  const opacity = settings.visualizerBackgroundOpacity ?? 100;
 
   return (
     <Card>

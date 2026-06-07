@@ -10,91 +10,119 @@ export function CanvasBlurBackground({
   className?: string;
   src: string;
 }) {
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const [ready, setReady] = useState(false);
+  const hostRef = useRef<HTMLDivElement | null>(null);
+  const canvasARef = useRef<HTMLCanvasElement | null>(null);
+  const canvasBRef = useRef<HTMLCanvasElement | null>(null);
+  const activeIndexRef = useRef(0);
+  const frameRef = useRef<{ blurPx: number; image: HTMLImageElement } | null>(null);
+  const hasFrameRef = useRef(false);
+  const [activeIndex, setActiveIndex] = useState(0);
+  const [hasFrame, setHasFrame] = useState(false);
 
   useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
     let cancelled = false;
-    let cleanupResize: (() => void) | undefined;
-    setReady(false);
 
     const image = new Image();
     image.decoding = "async";
     image.onload = () => {
       if (cancelled) return;
-
-      const draw = () => {
-        const rect = canvas.getBoundingClientRect();
-        const cssW = Math.max(1, Math.round(rect.width));
-        const cssH = Math.max(1, Math.round(rect.height));
-        const dpr = Math.min(window.devicePixelRatio || 1, 2);
-        const w = Math.max(1, Math.round(cssW * dpr));
-        const h = Math.max(1, Math.round(cssH * dpr));
-        if (canvas.width !== w || canvas.height !== h) {
-          canvas.width = w;
-          canvas.height = h;
-        }
-
-        const ctx = canvas.getContext("2d");
-        if (!ctx) return;
-        ctx.clearRect(0, 0, w, h);
-        ctx.imageSmoothingEnabled = true;
-        ctx.imageSmoothingQuality = "high";
-
-        const softness = Math.max(2, Math.min(18, blurPx * 0.45));
-        const sampleW = Math.max(32, Math.round(w / softness));
-        const sampleH = Math.max(32, Math.round(h / softness));
-        const low = document.createElement("canvas");
-        low.width = sampleW;
-        low.height = sampleH;
-        const lowCtx = low.getContext("2d");
-        if (!lowCtx) return;
-
-        lowCtx.imageSmoothingEnabled = true;
-        lowCtx.imageSmoothingQuality = "high";
-        drawImageCover(lowCtx, image, sampleW, sampleH);
-        ctx.drawImage(low, 0, 0, sampleW, sampleH, 0, 0, w, h);
-        if (!cancelled) setReady(true);
-      };
-
-      draw();
-      const ro = new ResizeObserver(draw);
-      ro.observe(canvas);
-      cleanupResize = () => ro.disconnect();
+      const nextIndex = hasFrameRef.current ? 1 - activeIndexRef.current : activeIndexRef.current;
+      const nextCanvas = nextIndex === 0 ? canvasARef.current : canvasBRef.current;
+      if (!nextCanvas) return;
+      drawBlurFrame(nextCanvas, image, blurPx);
+      frameRef.current = { blurPx, image };
+      hasFrameRef.current = true;
+      activeIndexRef.current = nextIndex;
+      setHasFrame(true);
+      setActiveIndex(nextIndex);
     };
     image.onerror = () => {
-      if (!cancelled) setReady(false);
+      if (!cancelled && !hasFrameRef.current) setHasFrame(false);
     };
     image.src = src;
 
     return () => {
       cancelled = true;
-      cleanupResize?.();
     };
   }, [src, blurPx]);
 
+  useEffect(() => {
+    const host = hostRef.current;
+    if (!host) return;
+    const redraw = () => {
+      const frame = frameRef.current;
+      const canvas = activeIndexRef.current === 0 ? canvasARef.current : canvasBRef.current;
+      if (frame && canvas) drawBlurFrame(canvas, frame.image, frame.blurPx);
+    };
+    const ro = new ResizeObserver(redraw);
+    ro.observe(host);
+    return () => ro.disconnect();
+  }, []);
+
   return (
-    <div className={cn("absolute inset-0 overflow-hidden", className)} aria-hidden="true">
+    <div
+      ref={hostRef}
+      className={cn("absolute inset-0 overflow-hidden", className)}
+      aria-hidden="true"
+    >
       <img
         src={src}
         alt=""
         decoding="async"
         className={cn(
           "absolute inset-0 h-full w-full object-cover transition-opacity duration-300",
-          ready ? "opacity-0" : "opacity-90",
+          hasFrame ? "opacity-0" : "opacity-90",
         )}
       />
       <canvas
-        ref={canvasRef}
+        ref={canvasARef}
         className={cn(
           "absolute inset-0 h-full w-full transition-opacity duration-300",
-          ready ? "opacity-90" : "opacity-0",
+          hasFrame && activeIndex === 0 ? "opacity-90" : "opacity-0",
+        )}
+      />
+      <canvas
+        ref={canvasBRef}
+        className={cn(
+          "absolute inset-0 h-full w-full transition-opacity duration-300",
+          hasFrame && activeIndex === 1 ? "opacity-90" : "opacity-0",
         )}
       />
     </div>
   );
+}
+
+function drawBlurFrame(canvas: HTMLCanvasElement, image: HTMLImageElement, blurPx: number) {
+  const rect = canvas.getBoundingClientRect();
+  const cssW = Math.max(1, Math.round(rect.width));
+  const cssH = Math.max(1, Math.round(rect.height));
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const w = Math.max(1, Math.round(cssW * dpr));
+  const h = Math.max(1, Math.round(cssH * dpr));
+  if (canvas.width !== w || canvas.height !== h) {
+    canvas.width = w;
+    canvas.height = h;
+  }
+
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return;
+  ctx.clearRect(0, 0, w, h);
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = "high";
+
+  const softness = Math.max(2, Math.min(18, blurPx * 0.45));
+  const sampleW = Math.max(32, Math.round(w / softness));
+  const sampleH = Math.max(32, Math.round(h / softness));
+  const low = document.createElement("canvas");
+  low.width = sampleW;
+  low.height = sampleH;
+  const lowCtx = low.getContext("2d");
+  if (!lowCtx) return;
+
+  lowCtx.imageSmoothingEnabled = true;
+  lowCtx.imageSmoothingQuality = "high";
+  drawImageCover(lowCtx, image, sampleW, sampleH);
+  ctx.drawImage(low, 0, 0, sampleW, sampleH, 0, 0, w, h);
 }
 
 function drawImageCover(

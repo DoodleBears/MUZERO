@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { useSettings } from "@/hooks/use-app-data";
 import { useTrackCoverUrl } from "@/hooks/use-media";
 import { cn } from "@/lib/utils";
@@ -21,7 +22,7 @@ export function NowPlayingBackground({
   idle?: boolean;
 }) {
   const settings = useSettings();
-  const imageMaskOpacity = (settings.backgroundMaskOpacity ?? 50) / 100;
+  const imageMaskOpacity = (settings.backgroundMaskOpacity ?? 25) / 100;
   const queue = usePlayerStore((s) => s.queue);
   const currentIndex = usePlayerStore((s) => s.currentIndex);
   const isPlaying = usePlayerStore((s) => s.isPlaying);
@@ -29,14 +30,56 @@ export function NowPlayingBackground({
   const showViz =
     !!current &&
     (settings.visualizerAsBackground ?? true) &&
-    (settings.visualizerStyle ?? "aura") !== "off";
+    (settings.visualizerStyle ?? "bars") !== "off";
   const visualizerDim = (settings.visualizerBackgroundDim ?? 0) / 100;
-  const visualizerOpacity = (settings.visualizerBackgroundOpacity ?? 30) / 100;
+  const visualizerOpacity = (settings.visualizerBackgroundOpacity ?? 100) / 100;
   const coverUrl = useTrackCoverUrl(current);
-  const renderer = settings.backgroundRenderer ?? "image";
+  const renderer = settings.backgroundRenderer ?? "noise";
   const blurPx = settings.backgroundBlur ?? 64;
   const pixelSize = settings.backgroundPixelSize ?? 12;
   const pixiEffect = isPixiEffect(renderer) ? renderer : null;
+  const effectSettings = useMemo(
+    () => ({
+      backgroundAsciiColor: settings.backgroundAsciiColor,
+      backgroundAsciiReplaceColor: settings.backgroundAsciiReplaceColor,
+      backgroundCrtCurvature: settings.backgroundCrtCurvature,
+      backgroundCrtLineContrast: settings.backgroundCrtLineContrast,
+      backgroundCrtLineWidth: settings.backgroundCrtLineWidth,
+      backgroundCrtNoise: settings.backgroundCrtNoise,
+      backgroundCrtNoiseSize: settings.backgroundCrtNoiseSize,
+      backgroundCrtSeed: settings.backgroundCrtSeed,
+      backgroundCrtTime: settings.backgroundCrtTime,
+      backgroundCrtVerticalLine: settings.backgroundCrtVerticalLine,
+      backgroundCrtVignetting: settings.backgroundCrtVignetting,
+      backgroundCrtVignettingAlpha: settings.backgroundCrtVignettingAlpha,
+      backgroundCrtVignettingBlur: settings.backgroundCrtVignettingBlur,
+      backgroundDotAngle: settings.backgroundDotAngle,
+      backgroundDotGrayscale: settings.backgroundDotGrayscale,
+      backgroundDotScale: settings.backgroundDotScale,
+      backgroundNoiseAmount: settings.backgroundNoiseAmount,
+      backgroundNoiseSeed: settings.backgroundNoiseSeed,
+    }),
+    [
+      settings.backgroundAsciiColor,
+      settings.backgroundAsciiReplaceColor,
+      settings.backgroundCrtCurvature,
+      settings.backgroundCrtLineContrast,
+      settings.backgroundCrtLineWidth,
+      settings.backgroundCrtNoise,
+      settings.backgroundCrtNoiseSize,
+      settings.backgroundCrtSeed,
+      settings.backgroundCrtTime,
+      settings.backgroundCrtVerticalLine,
+      settings.backgroundCrtVignetting,
+      settings.backgroundCrtVignettingAlpha,
+      settings.backgroundCrtVignettingBlur,
+      settings.backgroundDotAngle,
+      settings.backgroundDotGrayscale,
+      settings.backgroundDotScale,
+      settings.backgroundNoiseAmount,
+      settings.backgroundNoiseSeed,
+    ],
+  );
 
   return (
     <div
@@ -47,12 +90,12 @@ export function NowPlayingBackground({
       aria-hidden="true"
     >
       {coverUrl && renderer === "blur" ? (
-        <CanvasBlurBackground key={coverUrl} blurPx={blurPx} src={coverUrl} />
+        <CanvasBlurBackground blurPx={blurPx} src={coverUrl} />
       ) : coverUrl && pixiEffect ? (
         <PixiPixelBackground
-          key={coverUrl}
           className="opacity-90"
           effect={pixiEffect}
+          effectSettings={effectSettings}
           pixelSize={pixelSize}
           src={coverUrl}
         />

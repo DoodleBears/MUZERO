@@ -254,6 +254,42 @@ export interface AppSettings {
   backgroundRenderer?: BackgroundRenderer;
   /** Pixel block size for the pixel background renderer. Default 12. */
   backgroundPixelSize?: number;
+  /** ASCII renderer character color, used when replaceColor is on. Default #ffffff. */
+  backgroundAsciiColor?: string;
+  /** ASCII renderer replaces source colors with backgroundAsciiColor. Default false. */
+  backgroundAsciiReplaceColor?: boolean;
+  /** CRT renderer curvature. Default 0.35. */
+  backgroundCrtCurvature?: number;
+  /** CRT renderer scanline width. Default 1.25. */
+  backgroundCrtLineWidth?: number;
+  /** CRT renderer scanline contrast. Default 0.22. */
+  backgroundCrtLineContrast?: number;
+  /** CRT renderer line orientation. Default false (horizontal). */
+  backgroundCrtVerticalLine?: boolean;
+  /** CRT renderer scanline animation phase. Default 0. */
+  backgroundCrtTime?: number;
+  /** CRT renderer noise intensity, 0–1. Default 0.12. */
+  backgroundCrtNoise?: number;
+  /** CRT renderer noise particle size. Default 1. */
+  backgroundCrtNoiseSize?: number;
+  /** CRT renderer noise seed. Default 0.42. */
+  backgroundCrtSeed?: number;
+  /** CRT renderer vignette radius. Default 0.22. */
+  backgroundCrtVignetting?: number;
+  /** CRT renderer vignette opacity. Default 0.45. */
+  backgroundCrtVignettingAlpha?: number;
+  /** CRT renderer vignette blur. Default 0.25. */
+  backgroundCrtVignettingBlur?: number;
+  /** Dot renderer scale. Defaults to a value derived from backgroundPixelSize. */
+  backgroundDotScale?: number;
+  /** Dot renderer angle. Default 5. */
+  backgroundDotAngle?: number;
+  /** Dot renderer grayscale mode. Default false. */
+  backgroundDotGrayscale?: boolean;
+  /** Noise renderer amount, 0–1. Default 0.28. */
+  backgroundNoiseAmount?: number;
+  /** Noise renderer seed. Default 0.37. */
+  backgroundNoiseSeed?: number;
   /** When a track has neither its own slideshow nor a cover, fall back to the global gallery slideshow. Default true. */
   backgroundGalleryFallback?: boolean;
   /** Auto-hide the header + dock on Now Playing after idle (immersive). Default true. */
@@ -268,13 +304,13 @@ export interface AppSettings {
   backgroundSlideshowIntervalSec?: number;
   /** Slideshow advances in random order vs sequential. Default true (random). */
   backgroundSlideshowShuffle?: boolean;
-  /** Now-Playing visualizer style. Defaults to "aura" (the original bloom). */
+  /** Now-Playing visualizer style. Defaults to "bars". */
   visualizerStyle?: VisualizerStyleId;
   /** Overlay the visualizer on the full Now-Playing background image/slideshow. Default false. */
   visualizerAsBackground?: boolean;
   /** Dim/darken over the background visualizer, 0–100 (foreground legibility). Default 0. */
   visualizerBackgroundDim?: number;
-  /** Opacity of the background visualizer layer, 0–100. Default 30. */
+  /** Opacity of the background visualizer layer, 0–100. Default 100. */
   visualizerBackgroundOpacity?: number;
   /** When the visualizer is the background, also show it in a no-cover song's cover
    *  area (vs a per-song hash gradient placeholder). Default false. */
@@ -292,6 +328,9 @@ export interface AppSettings {
   /** Persisted resume point: last active session + index. */
   lastSessionId?: string;
   lastTrackIndex?: number;
+  /** Persisted global transport toggles. */
+  playerRepeatMode?: "off" | "one" | "all";
+  playerShuffle?: boolean;
   /** Persisted resume pointer for the AI DJ chat runtime. */
   lastChatSessionId?: string;
   /** Global default chat/DJ model preset. Keys stay in apiKeysByPresetId. */
@@ -310,19 +349,38 @@ export const DEFAULT_SETTINGS: AppSettings = {
   locale: "en",
   theme: "system",
   backgroundMode: "cover",
-  backgroundRenderer: "image",
+  backgroundRenderer: "noise",
   backgroundPixelSize: 12,
+  backgroundAsciiColor: "#ffffff",
+  backgroundAsciiReplaceColor: false,
+  backgroundCrtCurvature: 0.35,
+  backgroundCrtLineWidth: 1.25,
+  backgroundCrtLineContrast: 0.22,
+  backgroundCrtVerticalLine: false,
+  backgroundCrtTime: 0,
+  backgroundCrtNoise: 0.12,
+  backgroundCrtNoiseSize: 1,
+  backgroundCrtSeed: 0.42,
+  backgroundCrtVignetting: 0.22,
+  backgroundCrtVignettingAlpha: 0.45,
+  backgroundCrtVignettingBlur: 0.25,
+  backgroundDotAngle: 5,
+  backgroundDotGrayscale: false,
+  backgroundNoiseAmount: 0.28,
+  backgroundNoiseSeed: 0.37,
   backgroundGalleryFallback: true,
   immersiveIdle: true,
   coverCropped: true,
   backgroundBlur: 64,
-  backgroundMaskOpacity: 50,
+  backgroundMaskOpacity: 25,
   backgroundSlideshowIntervalSec: 300,
   backgroundSlideshowShuffle: true,
   visualizerStyle: "bars",
   visualizerAsBackground: true,
   visualizerBackgroundDim: 0,
-  visualizerBackgroundOpacity: 30,
+  visualizerBackgroundOpacity: 100,
   visualizerInCoverArea: true,
   visualizerUseCoverColor: true,
+  playerRepeatMode: "off",
+  playerShuffle: false,
 };

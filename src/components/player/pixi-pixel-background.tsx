@@ -1,4 +1,8 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  type BackgroundEffectSettings,
+  resolvePixiBackgroundEffectOptions,
+} from "@/lib/background-effect-settings";
 import { log } from "@/lib/logger";
 import { cn } from "@/lib/utils";
 
@@ -7,26 +11,30 @@ export type PixiBackgroundEffect = "pixel" | "ascii" | "cross-hatch" | "crt" | "
 export function PixiPixelBackground({
   className,
   effect = "pixel",
+  effectSettings,
   pixelSize,
   src,
 }: {
   className?: string;
   effect?: PixiBackgroundEffect;
+  effectSettings: BackgroundEffectSettings;
   pixelSize: number;
   src: string;
 }) {
   const hostRef = useRef<HTMLDivElement | null>(null);
-  const [ready, setReady] = useState(false);
+  const currentLayerRef = useRef<PixiLayer | null>(null);
+  const [hasLayer, setHasLayer] = useState(false);
+  const effectOptions = useMemo(
+    () => resolvePixiBackgroundEffectOptions(effectSettings, pixelSize),
+    [effectSettings, pixelSize],
+  );
 
   useEffect(() => {
     const host = hostRef.current;
     if (!host) return;
 
     let disposed = false;
-    let resizeObserver: ResizeObserver | null = null;
-    let app: import("pixi.js").Application | null = null;
-
-    setReady(false);
+    let pendingLayer: PixiLayer | null = null;
 
     void (async () => {
       try {
@@ -34,7 +42,6 @@ export function PixiPixelBackground({
         if (disposed || !hostRef.current) return;
 
         const nextApp = new Pixi.Application();
-        app = nextApp;
         await nextApp.init({
           antialias: false,
           autoDensity: false,
@@ -56,7 +63,8 @@ export function PixiPixelBackground({
         canvas.style.width = "100%";
         canvas.style.height = "100%";
         canvas.style.imageRendering = effect === "pixel" ? "pixelated" : "auto";
-        hostRef.current.appendChild(canvas);
+        canvas.style.opacity = "0";
+        canvas.style.transition = "opacity 300ms ease";
 
         const image = await loadImage(src);
         if (disposed || !hostRef.current) {
@@ -70,7 +78,14 @@ export function PixiPixelBackground({
         const texture = Pixi.Texture.from(image, true);
         texture.source.scaleMode = "nearest";
         const sprite = new Pixi.Sprite(texture);
-        const filter = await createPixiFilter(effect, pixelSize);
+        const filter = await createPixiFilter(effect, effectOptions);
+        if (disposed || !hostRef.current) {
+          nextApp.destroy(
+            { removeView: true },
+            { children: true, context: true, texture: true, textureSource: true },
+          );
+          return;
+        }
         if (filter) sprite.filters = [filter];
         nextApp.stage.addChild(sprite);
 
@@ -91,25 +106,45 @@ export function PixiPixelBackground({
         };
 
         resize();
-        resizeObserver = new ResizeObserver(resize);
+        const resizeObserver = new ResizeObserver(resize);
         resizeObserver.observe(hostRef.current);
-        setReady(true);
+        pendingLayer = { app: nextApp, canvas, resizeObserver };
+        const previousLayer = currentLayerRef.current;
+        currentLayerRef.current = pendingLayer;
+        hostRef.current.appendChild(canvas);
+        requestAnimationFrame(() => {
+          if (disposed) return;
+          canvas.style.opacity = "1";
+        });
+        window.setTimeout(() => {
+          if (previousLayer && currentLayerRef.current !== previousLayer) {
+            destroyPixiLayer(previousLayer);
+          }
+        }, 350);
+        setHasLayer(true);
       } catch (err) {
         log.warn("background", "Pixi pixel background failed; falling back to image", err);
-        setReady(false);
+        if (!currentLayerRef.current) setHasLayer(false);
       }
     })();
 
     return () => {
       disposed = true;
-      resizeObserver?.disconnect();
-      app?.destroy(
-        { removeView: true },
-        { children: true, context: true, texture: true, textureSource: true },
-      );
-      app = null;
+      if (pendingLayer && currentLayerRef.current !== pendingLayer) {
+        destroyPixiLayer(pendingLayer);
+      }
     };
-  }, [src, pixelSize, effect]);
+  }, [src, pixelSize, effect, effectOptions]);
+
+  useEffect(
+    () => () => {
+      if (currentLayerRef.current) {
+        destroyPixiLayer(currentLayerRef.current);
+        currentLayerRef.current = null;
+      }
+    },
+    [],
+  );
 
   return (
     <div
@@ -123,22 +158,35 @@ export function PixiPixelBackground({
         decoding="async"
         className={cn(
           "absolute inset-0 h-full w-full object-cover transition-opacity duration-300",
-          ready ? "opacity-0" : "opacity-90",
+          hasLayer ? "opacity-0" : "opacity-90",
         )}
       />
     </div>
   );
 }
 
+type PixiLayer = {
+  app: import("pixi.js").Application;
+  canvas: HTMLCanvasElement;
+  resizeObserver: ResizeObserver;
+};
+
+function destroyPixiLayer(layer: PixiLayer) {
+  layer.resizeObserver.disconnect();
+  layer.app.destroy(
+    { removeView: true },
+    { children: true, context: true, texture: true, textureSource: true },
+  );
+}
+
 async function createPixiFilter(
   effect: PixiBackgroundEffect,
-  pixelSize: number,
+  options: ReturnType<typeof resolvePixiBackgroundEffectOptions>,
 ): Promise<import("pixi.js").Filter | null> {
-  const size = Math.max(4, Math.min(40, Math.round(pixelSize)));
   switch (effect) {
     case "ascii": {
       const { AsciiFilter } = await import("pixi-filters/ascii");
-      return new AsciiFilter({ replaceColor: false, size });
+      return new AsciiFilter(options.ascii);
     }
     case "cross-hatch": {
       const { CrossHatchFilter } = await import("pixi-filters/cross-hatch");
@@ -146,25 +194,15 @@ async function createPixiFilter(
     }
     case "crt": {
       const { CRTFilter } = await import("pixi-filters/crt");
-      return new CRTFilter({
-        curvature: 0.35,
-        lineContrast: 0.22,
-        lineWidth: 1.25,
-        noise: 0.12,
-        noiseSize: 1,
-        seed: 0.42,
-        vignetting: 0.22,
-        vignettingAlpha: 0.45,
-        vignettingBlur: 0.25,
-      });
+      return new CRTFilter(options.crt);
     }
     case "dot": {
       const { DotFilter } = await import("pixi-filters/dot");
-      return new DotFilter({ angle: 5, grayscale: false, scale: Math.max(0.6, size / 10) });
+      return new DotFilter(options.dot);
     }
     case "noise": {
       const { NoiseFilter } = await import("pixi.js");
-      return new NoiseFilter({ noise: 0.28, seed: 0.37 });
+      return new NoiseFilter(options.noise);
     }
     default:
       return null;

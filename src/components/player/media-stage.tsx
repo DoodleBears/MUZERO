@@ -32,7 +32,7 @@ export function MediaStage({ className }: { className?: string }) {
   // song's cover area (avoids a double visualizer) — show a per-song gradient
   // placeholder instead, unless the user opts in.
   const asBgActive =
-    (settings.visualizerAsBackground ?? true) && (settings.visualizerStyle ?? "aura") !== "off";
+    (settings.visualizerAsBackground ?? true) && (settings.visualizerStyle ?? "bars") !== "off";
   const showStageViz = !asBgActive || (settings.visualizerInCoverArea ?? false);
 
   const containerRef = useRef<HTMLDivElement | null>(null);
