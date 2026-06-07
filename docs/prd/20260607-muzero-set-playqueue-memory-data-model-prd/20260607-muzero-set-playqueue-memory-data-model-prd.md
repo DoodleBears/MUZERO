@@ -15,7 +15,7 @@
 |-------|------|--------|------|
 | 1 | 播放列表 Play Queue 地基（表 + repo + player-store 改消费它 + 迁移现有播放） | ✅ Completed | §6 |
 | 2 | autoExtend / refill 迁到 Play Queue（续歌喂队列） | ✅ Completed | §6 |
-| 3 | 歌曲记忆 Memory（表 + 迁移 `Track.note` + 多记忆编辑 + 搜索/DJ 上下文接 memory） | 🔄 3a 数据层✅（表/迁移/repo/搜索/DJ）；3b 便签瀑布流 + composer 展示层✅，annotation/search 接线待 Now Playing 重设计落地 | §6 |
+| 3 | 歌曲记忆 Memory（表 + 迁移 `Track.note` + 多记忆编辑 + 搜索/DJ 上下文接 memory） | 🔄 3a 数据层✅（表/迁移/repo/搜索/DJ）；3b 便签瀑布流/composer/panel 容器✅，annotation/search 接线待 Now Playing 重设计落地 | §6 |
 | 4 | UI 打磨（歌单管理、播放列表 play-next/add/reorder、记忆相册、封面取自记忆） | 🔲 Pending | §6 |
 
 > Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
@@ -226,12 +226,14 @@ this.version(3).stores({
 **Phase 3b — UI + provenance（待并行 Now Playing 重设计提交后接力）🔲:**
 - [x] `memory-notes-waterfall.tsx` 展示层：每条 Memory 以便签卡片呈现，响应式 masonry/waterfall，支持照片、时间戳、编辑/删除回调；不持有 DB/i18n 状态，便于后续接 `annotation-editor`。
 - [x] `memory-note-composer.tsx` 展示层：新增/编辑 Memory 的便签输入面板，支持 note 草稿、保存/取消、照片选择/移除回调；不持有 DB/i18n 状态。
+- [x] `track-memory-notes-panel.tsx` 容器层：`useLiveQuery(listMemories)` + `addMemory`/`updateMemoryNote`/`deleteMemory` 接 composer/waterfall；后续 `annotation-editor` 可直接嵌入。
 - [ ] `annotation-editor` 改记忆列表（加/编辑/删/照片/时间线）——文件在 WIP，待其落地。
   - **UIUX 决议（2026-06-08）**：记忆不是一个长 textarea；每条 Memory 以「便签」卡片呈现，整体为响应式瀑布流/masonry（移动单列、桌面多列）。卡片需像贴在唱片旁的私密便签：轻微纸感背景、可读的大段 note、时间戳、可选照片缩略图、编辑/删除操作；不同卡片可有轻微色调变化但不喧宾夺主。新增/编辑表单可在瀑布流上方或卡片内展开，保存后立即进入瀑布流。
 - [ ] `search-page` 用 `memoryNotesByTrack` join 记忆进搜索（`useLiveQuery` memories）。
 - [x] providerPreset 生成时落 `Track` + 自动加一条 provenance Memory（musicgen Q5；mock 仅字段不写 Memory，避免测试/本地占位污染 DJ 记忆）。
 - [x] `MemoryNotesWaterfall` 展示层测试：新到旧排序、便签 masonry class、照片 alt、edit/delete 回调、空态。
 - [x] `MemoryNoteComposer` 展示层测试：trim submit、blank guard、edit cancel、photo select/remove 回调。
+- [x] `TrackMemoryNotesPanel` 容器测试：渲染已有 memories、composer 新增、waterfall 编辑/删除，并通过 Dexie liveQuery 更新 UI。
 - [ ] 验收：一首歌可加多条记忆（含照片）；搜索命中记忆文字；DJ 上下文带记忆；生成曲自动带 provenance Note。（数据层与便签展示层已就绪，仅差 annotation/search UI 接线）
 
 ### Phase 4: UI 打磨
@@ -287,6 +289,7 @@ this.version(3).stores({
 | 2026-06-07 | Codex | 推进 PROVENANCE runtime：`createPendingTrack` 接 `providerPreset` + provenance Memory；chat generate 工具从 Settings 写 cloud preset/model（如 `mureka:mureka-6`）；DJ engine 从 `MusicGenProvider.providerPreset` 写入。补 repo/chat/DJ/musicgen 测试；`make check` 通过（50 files / 361 tests）。 |
 | 2026-06-08 | Codex | 推进 Phase 3b UI foundation：记录 Memory UIUX 为「便签瀑布流」；新增无 DB/i18n 状态的 `MemoryNotesWaterfall` 展示层，支持 responsive masonry、照片、时间戳、edit/delete 回调和空态。补组件/排序测试；`make check` 通过（64 files / 406 tests）。 |
 | 2026-06-08 | Codex | 推进 Phase 3b UI foundation：新增无 DB/i18n 状态的 `MemoryNoteComposer` 展示层，承接新增/编辑便签输入、照片选择/移除、保存/取消回调；补组件测试；`make check` 通过（65 files / 410 tests）。 |
+| 2026-06-08 | Codex | 推进 Phase 3b UI foundation：新增 `TrackMemoryNotesPanel` 容器层，用 Dexie liveQuery 读取 memories 并接入 add/update/delete 到 composer + waterfall，后续 annotation-editor 只需嵌入；补 fake-indexeddb 组件测试；`make check` 通过（66 files / 412 tests）。 |
 
 ---
 

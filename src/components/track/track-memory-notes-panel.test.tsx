@@ -83,6 +83,9 @@ describe("TrackMemoryNotesPanel", () => {
 
     expect(await screen.findByText("old note")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Edit old note" }));
+    await waitFor(() =>
+      expect(screen.getByPlaceholderText("Write a memory")).toHaveValue("old note"),
+    );
     fireEvent.change(screen.getByPlaceholderText("Write a memory"), {
       target: { value: "updated note" },
     });
