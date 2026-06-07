@@ -137,6 +137,7 @@ export function sortSets(items: SetGalleryItem[], sort: SetSort): SetGalleryItem
 - [x] 新 `nav-fab.tsx`（collapse/expand FAB）取代 `nav-row.tsx`（已删）：**3 项 = 播放(now,⌘1) / 歌单(search,⌘2) / 设置(settings,⌘3)**（用户定的最简 3 项）；折叠态显当前页图标、展开 motion 弹出 3 个 pill（icon+label），当前项高亮、click-away 收起；`SHORTCUT_TABS` 同步为 `[now,search,settings]`。
 - [x] `player-dock.tsx`：播放信息（identity+status+progress）左列 flex-1，NavFab 钉右侧（去掉第三行 nav）。`nav.menu` i18n ×4。
 - [x] 验收：浏览器实测——FAB 折叠/展开、3 pill（正在播放/歌单/设置）、当前高亮、⌘1/2/3 跳转、零报错；nav 7 tests + typecheck + biome 绿。AI 不在 nav（→ Phase 4 拖拽 FAB）。
+- [x] **改进（用户反馈）**：FAB **hover 即展开**（hover-intent：mouseenter 开、mouseleave 140ms 延时关，跨间隙不误关；保留 click toggle 作触摸兜底）；pill **加大**（py-2.5 px-4、icon 20、text-15px）。浏览器实测 mouseover→展开+3 pill。
 
 ### Phase 4: 可拖拽 AI FAB
 - [ ] `chat-launcher-fab.tsx`：悬浮可拖拽 + 位置持久化 + 点击开 chat。
