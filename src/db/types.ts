@@ -1,6 +1,7 @@
 import type { TrackBrief } from "@/dj/dj-brief-schema";
 import type { CloudPresetId } from "@/musicgen/presets";
 import type { MusicGenProviderId } from "@/musicgen/registry";
+import type { VisualizerStyleId } from "@/visualizer/types";
 
 /** Lifecycle of a single track. Uploaded tracks are born "ready". */
 export type TrackStatus = "pending" | "generating" | "ready" | "failed";
@@ -87,16 +88,6 @@ export interface PlayQueue {
 
 /** Where the Now-Playing ambient background pulls its image(s) from. */
 export type BackgroundMode = "cover" | "slideshow";
-
-/**
- * An optional animated effect layered *over* the image/slideshow background like
- * a filter (orthogonal to {@link BackgroundMode}). "none" = image only. Add new
- * effects to this union + render them in `now-playing-background`.
- */
-export type BackgroundEffect = "none" | "dither";
-
-/** How the effect layer composites onto the image below it (CSS mix-blend-mode). */
-export type BackgroundBlend = "normal" | "screen" | "overlay" | "soft-light";
 
 /**
  * A square crop region in the original image's pixels. Stored non-destructively
@@ -192,12 +183,10 @@ export interface AppSettings {
   backgroundBlur?: number;
   /** Now-Playing background dim/mask opacity, 0–100. Default 70. */
   backgroundMaskOpacity?: number;
-  /** Animated effect layered over the background like a filter. Default "none". */
-  backgroundEffect?: BackgroundEffect;
-  /** Effect layer opacity, 0–100 (how strongly the filter shows). Default 60. */
-  backgroundEffectOpacity?: number;
-  /** How the effect blends onto the image below. Default "screen". */
-  backgroundEffectBlend?: BackgroundBlend;
+  /** Now-Playing visualizer style. Defaults to "aura" (the original bloom). */
+  visualizerStyle?: VisualizerStyleId;
+  /** Use the visualizer as the full Now-Playing background (vs the image slideshow). Default false. */
+  visualizerAsBackground?: boolean;
   /** Global color scheme. Mirrors localStorage `muzero-theme`; defaults to system. */
   theme?: "light" | "dark" | "system";
   /** Primary/accent color (hex) for light mode. Mirrors localStorage `muzero-primary-light`. */
@@ -223,7 +212,6 @@ export const DEFAULT_SETTINGS: AppSettings = {
   coverCropped: true,
   backgroundBlur: 40,
   backgroundMaskOpacity: 70,
-  backgroundEffect: "none",
-  backgroundEffectOpacity: 60,
-  backgroundEffectBlend: "screen",
+  visualizerStyle: "aura",
+  visualizerAsBackground: false,
 };

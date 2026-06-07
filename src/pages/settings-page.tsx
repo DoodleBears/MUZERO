@@ -1,6 +1,8 @@
 import { CheckCircle2, ExternalLink, XCircle } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { BackgroundSettings } from "@/components/settings/background-settings";
+import { VisualizerSettings } from "@/components/settings/visualizer-settings";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ColorPicker } from "@/components/ui/color-picker";
@@ -17,7 +19,13 @@ import {
 } from "@/musicgen/presets";
 import { type MusicGenProviderId, resolveMusicGenProvider } from "@/musicgen/registry";
 import { usePlayerStore } from "@/stores/player-store";
-import { DEFAULT_PRIMARY, type PrimaryColors, persistPrimary } from "@/theme/primary";
+import {
+  DEFAULT_PRIMARY,
+  PRIMARY_PRESETS,
+  type PrimaryColors,
+  type PrimaryPresetId,
+  persistPrimary,
+} from "@/theme/primary";
 import { DEFAULT_THEME, persistTheme, type Theme, themes } from "@/theme/theme";
 
 /** Maps a preset id to its i18n option label (ids carry hyphens; keys don't). */
@@ -26,6 +34,18 @@ const PRESET_LABEL_KEY = {
   mureka: "settings.presetMureka",
   custom: "settings.presetCustom",
 } as const satisfies Record<CloudPresetId, string>;
+
+/** i18n name for each named primary-color preset. */
+const PRIMARY_PRESET_NAME_KEY = {
+  ocean: "settings.primaryPresetOcean",
+  teal: "settings.primaryPresetTeal",
+  matcha: "settings.primaryPresetMatcha",
+  neon: "settings.primaryPresetNeon",
+  synthwave: "settings.primaryPresetSynthwave",
+  nebula: "settings.primaryPresetNebula",
+  rose: "settings.primaryPresetRose",
+  sunset: "settings.primaryPresetSunset",
+} as const satisfies Record<PrimaryPresetId, string>;
 
 /** On-device, BYOK settings. Nothing here is ever sent anywhere but the model/API you point it at. */
 export function SettingsPage() {
@@ -88,7 +108,7 @@ export function SettingsPage() {
         });
 
   return (
-    <div className="mx-auto flex h-full w-full max-w-2xl flex-col gap-4 overflow-y-auto p-4 lg:p-6">
+    <div className="mx-auto flex h-full w-full max-w-2xl flex-col gap-4 overflow-y-auto px-4 pt-chrome-top pb-chrome-bottom lg:px-6">
       <Card>
         <CardHeader>
           <CardTitle>{t("settings.appearance")}</CardTitle>
@@ -124,6 +144,35 @@ export function SettingsPage() {
             <span className="text-xs font-medium text-muted-foreground">
               {t("settings.primaryColor")}
             </span>
+            <div className="flex flex-wrap gap-2">
+              {PRIMARY_PRESETS.map((preset) => {
+                const active =
+                  primary.light === preset.colors.light && primary.dark === preset.colors.dark;
+                return (
+                  <button
+                    key={preset.id}
+                    type="button"
+                    aria-pressed={active}
+                    onClick={() => void changePrimary(preset.colors)}
+                    className={`flex items-center gap-2 rounded-full border py-1 pe-3 ps-1 text-xs transition-colors ${
+                      active ? "border-primary bg-accent/50" : "border-input hover:bg-accent/50"
+                    }`}
+                  >
+                    <span className="flex size-5 overflow-hidden rounded-full border border-border">
+                      <span
+                        className="h-full w-1/2"
+                        style={{ backgroundColor: preset.colors.light }}
+                      />
+                      <span
+                        className="h-full w-1/2"
+                        style={{ backgroundColor: preset.colors.dark }}
+                      />
+                    </span>
+                    {t(PRIMARY_PRESET_NAME_KEY[preset.id])}
+                  </button>
+                );
+              })}
+            </div>
             <div className="flex flex-wrap items-end gap-3">
               <div className="flex flex-col gap-1.5">
                 <span className="text-xs text-muted-foreground">{t("settings.themeLight")}</span>
@@ -153,6 +202,10 @@ export function SettingsPage() {
           </div>
         </CardContent>
       </Card>
+
+      <BackgroundSettings />
+
+      <VisualizerSettings />
 
       <Card>
         <CardHeader>

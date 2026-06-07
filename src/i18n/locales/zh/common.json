@@ -119,17 +119,15 @@
     "coverCropped": "显示裁切后的封面",
     "coverCroppedHint": "封面按你裁切的正方形显示；关闭则显示完整原图。原图始终保留。",
     "blur": "背景模糊：{{px}}px",
-    "mask": "背景压暗：{{pct}}%",
-    "effect": "背景特效",
-    "effectNone": "无",
-    "effectDither": "抖动波纹（动态）",
-    "effectHint": "像滤镜一样叠加在背景之上，并采用你的强调色着色。",
-    "blend": "混合模式",
-    "blendScreen": "滤色（发光）",
-    "blendOverlay": "叠加",
-    "blendSoftLight": "柔光",
-    "blendNormal": "正常",
-    "effectOpacity": "特效不透明度：{{pct}}%"
+    "mask": "背景压暗：{{pct}}%"
+  },
+  "visualizer": {
+    "title": "可视化",
+    "style": "样式",
+    "styleOff": "关闭",
+    "styleAura": "光晕",
+    "asBackground": "用作播放页背景",
+    "asBackgroundHint": "用实时可视化替代图片幻灯片背景（更耗电）。"
   },
   "crop": {
     "title": "裁切封面（正方形）",

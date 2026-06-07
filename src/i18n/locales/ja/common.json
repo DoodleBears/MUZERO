@@ -119,17 +119,15 @@
     "coverCropped": "切り抜いたカバーを表示",
     "coverCroppedHint": "カバーは切り抜いた正方形で表示されます。オフにすると元画像全体を表示します。元画像は常に保持されます。",
     "blur": "背景のぼかし：{{px}}px",
-    "mask": "背景の暗さ：{{pct}}%",
-    "effect": "背景エフェクト",
-    "effectNone": "なし",
-    "effectDither": "ディザ（アニメーション）",
-    "effectHint": "フィルターのように背景に重ね、アクセントカラーで色づけします。",
-    "blend": "ブレンドモード",
-    "blendScreen": "スクリーン（発光）",
-    "blendOverlay": "オーバーレイ",
-    "blendSoftLight": "ソフトライト",
-    "blendNormal": "通常",
-    "effectOpacity": "エフェクトの不透明度：{{pct}}%"
+    "mask": "背景の暗さ：{{pct}}%"
+  },
+  "visualizer": {
+    "title": "ビジュアライザー",
+    "style": "スタイル",
+    "styleOff": "オフ",
+    "styleAura": "オーラ（ブルーム）",
+    "asBackground": "再生画面の背景として使用",
+    "asBackgroundHint": "画像スライドショーをライブビジュアライザーに置き換えます（電力消費が増えます）。"
   },
   "crop": {
     "title": "カバーを切り抜き（正方形）",

@@ -1,6 +1,6 @@
 # PRD: 音乐可视化系统（Poweramp 风频谱 + 随音乐波动的生成式画面）
 
-**Status:** Draft
+**Status:** In Progress（Phase 1 ✅）
 **Created:** 2026-06-07
 **Author:** DoodleBear / MUZERO
 **Module:** Player — Now Playing 可视化（可插拔 Visualizer registry：频谱样式库 + GPU shader 反应式场景），复用现有 `AudioEngine` AnalyserNode，承接 `--primary` 主题色
@@ -11,7 +11,7 @@
 
 | Phase | Name | Status | Link |
 |-------|------|--------|------|
-| 1 | 可视化基础设施：`Visualizer` 接口 + registry + host（rAF 生命周期 / 可见性暂停 / reduced-motion / 共享 analyser）+ Settings 控件 + 把现有 aura 收编为第一个 renderer | 🔲 Pending | [Phase 1 Checklist](#phase-1-checklist) |
+| 1 | 可视化基础设施：`Visualizer` 接口 + registry + host（rAF 生命周期 / 可见性暂停 / reduced-motion / 共享 analyser）+ Settings 控件 + 把现有 aura 收编为第一个 renderer | ✅ Completed | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | 自研 canvas-2D 频谱样式包（bars / 八度对数 / radial / LED+reflex / waveform / aura），全部跟随 `--primary` | 🔲 Pending | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | GPU shader 反应式场景（`ogl`，Unlicense）：1–2 个「画面随音乐波动」场景 + WebGL 探测 + canvas 回退 | 🔲 Pending | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | **（已按 Open Q1 延后 v2）** Milkdrop 模式：`@webamp/butterchurn`（MIT）懒加载 + 精选 preset + WebGL2 gate + iOS 回退 | ⏸️ Deferred (v2) | [Phase 4 Checklist](#phase-4-checklist) |
@@ -303,20 +303,20 @@ function frame(t: number) {
 **Goal:** 立起 registry + host + Settings，把现状光晕无回归地收编为第一个 renderer。无新依赖。
 
 **Tasks:**
-- [ ] `src/visualizer/types.ts`（接口 + id union）、`registry.ts`（`resolveVisualizer` + IDS）。
-- [ ] `src/visualizer/host.tsx`：canvas 收养、**唯一 rAF**、**Page Visibility + IntersectionObserver 暂停**、dpr cap(≤2)、reduced-motion gate、按样式设 `analyser.fftSize/smoothing`、注入 `primary()`。
-- [ ] 抽 `src/lib/visualizer-color.ts`，aura 改用之。
-- [ ] `src/visualizer/spectrum/aura.ts`：把 [`aura-visualizer.tsx`](../../../src/components/player/aura-visualizer.tsx) 的画法迁入 `Visualizer` 接口；`aura-visualizer.tsx` 变薄包装。
-- [ ] `AppSettings` 加 `visualizerStyle?`/`visualizerAsBackground?` + 默认（[`types.ts`](../../../src/db/types.ts)）。
-- [ ] `components/settings/visualizer-settings.tsx`（先含 `off`/`aura` 两项）+ i18n en 键。
-- [ ] [`media-stage.tsx`](../../../src/components/player/media-stage.tsx) / [`now-playing-sheet.tsx`](../../../src/components/player/now-playing-sheet.tsx) 改用 `VisualizerHost`。
+- [x] `src/visualizer/types.ts`（接口 + id union）、`registry.ts`（`resolveVisualizerStyle` + `VISUALIZER_META`/IDS + `createVisualizer`）。
+- [x] `src/visualizer/host.tsx`：canvas 收养、**唯一 rAF**、**Page Visibility + IntersectionObserver 暂停**、dpr cap(≤2)、reduced-motion gate（`shouldAnimate` 纯函数）、按样式设 `analyser.fftSize/smoothing`（懒设，兼容首播后建图）、注入 `primary()`。
+- [x] 抽 `src/lib/visualizer-color.ts`（`lighten`/`darken`/`rgba`/`readPrimaryRgb`），aura 改用之。
+- [x] `src/visualizer/spectrum/aura.ts`：把 aura 画法迁入 `Visualizer` 接口（verbatim port）。
+- [x] `AppSettings` 加 `visualizerStyle?`/`visualizerAsBackground?` + 默认（[`types.ts`](../../../src/db/types.ts)）。
+- [x] `components/settings/visualizer-settings.tsx`（含 `off`/`aura`）+ i18n **四语**（en/zh/ja/ko）键。
+- [x] **无需改** [`media-stage.tsx`](../../../src/components/player/media-stage.tsx) / [`now-playing-sheet.tsx`](../../../src/components/player/now-playing-sheet.tsx)：[`aura-visualizer.tsx`](../../../src/components/player/aura-visualizer.tsx) 收编为 `VisualizerHost` 薄壳、保留 `AuraVisualizer` 名+props，调用点零改动即用上新系统。
 
 ### Phase 1 Checklist
-- [ ] 切样式无内存泄漏（旧 renderer `destroy()` 释放 canvas/GL/事件）。
-- [ ] 切到非 Now-Playing tab / 窗口隐藏时 rAF 暂停（实测帧数=0），音频继续。
-- [ ] reduced-motion 下画静态帧、不跑动画。
-- [ ] 默认 `aura` 与改造前视觉一致（无回归）。
-- [ ] `make check`（typecheck+lint+test）通过；新增 host 的可见性/回退逻辑有单测（注入假 analyser）。
+- [x] 切样式无内存泄漏：cleanup 完整（`destroy()` + `cancelAnimationFrame` + 移除 visibility/mq 监听 + `IntersectionObserver.disconnect()`）。
+- [x] rAF 暂停逻辑（visibility + IntersectionObserver + `shouldAnimate` 单测覆盖真值表）；「实测帧数=0」的运行时量化留 Phase 5 instrumentation。
+- [x] reduced-motion 下冻结（`shouldAnimate` 返回 false → 只画一帧、不进循环）。
+- [x] 默认 `aura` 与改造前一致（verbatim port + 保留 `AuraVisualizer` API → 无回归）。
+- [x] `make check` 通过：typecheck ✓ / biome ✓ / **214 tests ✓**（含 26 新增：color 10 / registry 10 / host 6，均注入假 analyser/纯函数）。
 
 ### Phase 2: 自研 canvas-2D 频谱样式包（广度 = 「支持很多」）
 
@@ -441,6 +441,7 @@ function frame(t: number) {
 |------|--------|---------|
 | 2026-06-07 | DoodleBear / MUZERO | 初稿：npm 横向对比（butterchurn/audioMotion/ogl/three/p5/wavesurfer…）+ 选型（自研频谱 + ogl 场景 + 可选 butterchurn，拒绝 AGPL）+ 可插拔 Visualizer registry 架构 + 5 阶段计划 |
 | 2026-06-07 | DoodleBear / MUZERO | 解决全部 Open Questions（按 best practice）；**修正 Phase 3：复用已在树中的 three + R3F + postprocessing（不再引入 ogl）**——发现 [`dither-background.tsx`](../../../src/components/player/dither-background.tsx) 已用 R3F 做 Dither 背景。Phase 4(butterchurn) 按 Q1 延后 v2 |
+| 2026-06-07 | DoodleBear / MUZERO | **Phase 1 ✅**：可插拔 Visualizer registry + host（rAF/可见性暂停/reduced-motion/dpr cap）+ `visualizer-color` 工具 + aura 收编 + AppSettings 字段 + 四语 Settings 控件。TDD：color/registry/host 共 26 单测，全套 214 通过 |
 
 ---
 

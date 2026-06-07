@@ -1,0 +1,54 @@
+import { useTranslation } from "react-i18next";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { saveSettings } from "@/db/repositories";
+import { useSettings } from "@/hooks/use-app-data";
+import { resolveVisualizerStyle, VISUALIZER_META } from "@/visualizer/registry";
+import type { VisualizerStyleId } from "@/visualizer/types";
+
+/**
+ * Now-Playing visualizer settings: pick the reactive style and (optionally) use
+ * it as the full background. Saves immediately (appearance-style), like the
+ * theme/primary controls. Style list comes from the registry — no hardcoding.
+ */
+export function VisualizerSettings() {
+  const { t } = useTranslation();
+  const settings = useSettings();
+  const style = resolveVisualizerStyle(settings.visualizerStyle);
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>{t("visualizer.title")}</CardTitle>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-3">
+        <label className="flex flex-col gap-1.5">
+          <span className="text-xs font-medium text-muted-foreground">{t("visualizer.style")}</span>
+          <select
+            value={style}
+            onChange={(e) =>
+              void saveSettings({ visualizerStyle: e.target.value as VisualizerStyleId })
+            }
+            className="h-10 rounded-md border border-input bg-transparent px-3 text-sm"
+          >
+            {VISUALIZER_META.map((m) => (
+              <option key={m.id} value={m.id}>
+                {t(m.labelKey)}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className="mt-1 flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={settings.visualizerAsBackground ?? false}
+            onChange={(e) => void saveSettings({ visualizerAsBackground: e.target.checked })}
+            className="size-4 accent-[var(--color-primary)]"
+          />
+          {t("visualizer.asBackground")}
+        </label>
+        <p className="-mt-1 text-xs text-muted-foreground">{t("visualizer.asBackgroundHint")}</p>
+      </CardContent>
+    </Card>
+  );
+}

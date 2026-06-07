@@ -123,17 +123,15 @@
     "coverCropped": "Show cropped cover",
     "coverCroppedHint": "Covers display the square you cropped; turn off to show the full image. The original is always kept.",
     "blur": "Background blur: {{px}}px",
-    "mask": "Background dim: {{pct}}%",
-    "effect": "Background effect",
-    "effectNone": "None",
-    "effectDither": "Dither (animated)",
-    "effectHint": "Layered over the background like a filter, tinted with your accent color.",
-    "blend": "Blend mode",
-    "blendScreen": "Screen (glow)",
-    "blendOverlay": "Overlay",
-    "blendSoftLight": "Soft light",
-    "blendNormal": "Normal",
-    "effectOpacity": "Effect opacity: {{pct}}%"
+    "mask": "Background dim: {{pct}}%"
+  },
+  "visualizer": {
+    "title": "Visualizer",
+    "style": "Style",
+    "styleOff": "Off",
+    "styleAura": "Aura (bloom)",
+    "asBackground": "Use as Now Playing background",
+    "asBackgroundHint": "Replaces the image slideshow with the live visualizer (uses more power)."
   },
   "crop": {
     "title": "Crop cover (square)",
