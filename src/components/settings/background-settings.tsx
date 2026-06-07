@@ -16,6 +16,9 @@ import { useSettings } from "@/hooks/use-app-data";
 import { useObjectUrls } from "@/hooks/use-media";
 import { classifyDrop, filesFromTransfer, IMAGE_ACCEPT } from "@/lib/file-drop";
 
+/** Slideshow auto-advance presets, in seconds (5s … 10min). */
+const SLIDE_INTERVAL_PRESETS = [5, 10, 15, 30, 60, 120, 180, 300, 600];
+
 /**
  * Now-Playing background settings: pick the source (cover vs slideshow) and
  * manage the global image gallery the slideshow falls back to. Per-song
@@ -76,6 +79,37 @@ export function BackgroundSettings() {
             <option value="slideshow">{t("background.modeSlideshow")}</option>
           </select>
         </label>
+
+        <label className="flex flex-col gap-1.5">
+          <span className="text-xs font-medium text-muted-foreground">
+            {t("background.slideshowInterval")}
+          </span>
+          <select
+            value={settings.backgroundSlideshowIntervalSec ?? 10}
+            onChange={(e) =>
+              void saveSettings({ backgroundSlideshowIntervalSec: Number(e.target.value) })
+            }
+            className="h-10 rounded-md border border-input bg-transparent px-3 text-sm"
+          >
+            {SLIDE_INTERVAL_PRESETS.map((sec) => (
+              <option key={sec} value={sec}>
+                {sec < 60
+                  ? t("background.everySeconds", { count: sec })
+                  : t("background.everyMinutes", { count: sec / 60 })}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={settings.backgroundSlideshowShuffle ?? false}
+            onChange={(e) => void saveSettings({ backgroundSlideshowShuffle: e.target.checked })}
+            className="size-4 accent-[var(--color-primary)]"
+          />
+          {t("background.slideshowShuffle")}
+        </label>
+
         <label className="mt-1 flex items-center gap-2 text-sm">
           <input
             type="checkbox"

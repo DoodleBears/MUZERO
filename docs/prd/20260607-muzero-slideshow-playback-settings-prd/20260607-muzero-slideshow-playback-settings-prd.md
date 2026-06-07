@@ -12,7 +12,7 @@
 | Phase | Name | Status | Link |
 |-------|------|--------|------|
 | 1 | `nextSlideIndex` 纯函数（顺序 / 随机不连续重复，TDD） | ✅ Completed | [§4](#phase-1-nextslideindex-纯函数tdd) |
-| 2 | 设置字段 + 轮播接线 + UI + 文案 | 🔲 Pending | [§4](#phase-2-设置字段--轮播接线--ui--文案) |
+| 2 | 设置字段 + 轮播接线 + UI + 文案 | ✅ Completed | [§4](#phase-2-设置字段--轮播接线--ui--文案) |
 
 > Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
 
@@ -85,14 +85,14 @@ nextSlideIndex(current: number, length: number, shuffle: boolean, rand = Math.ra
 ### Phase 2: 设置字段 + 轮播接线 + UI + 文案
 
 **Tasks:**
-- [ ] `db/types.ts`：加两字段 + `DEFAULT_SETTINGS`。
-- [ ] `now-playing-background.tsx`：interval/shuffle 读 settings，advance 用 `nextSlideIndex`，移除 `SLIDE_INTERVAL_MS` 常量。
-- [ ] `background-settings.tsx`：间隔预设 select +「随机切换」复选框。
-- [ ] i18n 四语：`slideshowInterval`/`slideshowShuffle`/`everySeconds`/`everyMinutes`。
+- [x] `db/types.ts`：加 `backgroundSlideshowIntervalSec`(默认10) + `backgroundSlideshowShuffle`(默认false) + `DEFAULT_SETTINGS`。
+- [x] `now-playing-background.tsx`：interval/shuffle 读 settings，timer 用 `intervalSec*1000`，advance 用 `nextSlideIndex(i,len,shuffle)`，effect deps 加 `intervalSec`/`shuffle`，移除 `SLIDE_INTERVAL_MS` 常量。
+- [x] `background-settings.tsx`：间隔预设 select（5s/10s/15s/30s/1m/2m/3m/5m/10m）+「随机切换」复选框。
+- [x] i18n 四语：`slideshowInterval`/`slideshowShuffle`/`everySeconds`(en 复数)/`everyMinutes`(en 复数)。
 
 **Checklist:**
-- [ ] 全量 `vitest run` 全绿；biome 清；改动文件 `tsc` 无错。
-- [ ] preview：Settings 改间隔/随机即时生效（背景按新节奏/顺序切换）。
+- [x] 全量 `vitest run` 263 例全绿；biome 清；whole-project `tsc` 无错。
+- [x] UI 控件接入 Settings；轮播行为由 `nextSlideIndex` 单测锁定 + 用户 HMR 实测（preview server 未运行，未自动截图）。
 
 ---
 
@@ -101,3 +101,4 @@ nextSlideIndex(current: number, length: number, shuffle: boolean, rand = Math.ra
 | Date | Author | Changes |
 |------|--------|---------|
 | 2026-06-07 | MUZERO | Initial draft —— 幻灯片切换间隔 + 顺序/随机可配；纯函数 `nextSlideIndex`（注入 rand、随机不连续重复）置于新 `slideshow.ts` 隔离并行编辑的 `background.ts` |
+| 2026-06-07 | MUZERO | Phase 1+2 完成：`nextSlideIndex`(5 例) + 设置字段(间隔默认 10s / 随机) + `now-playing-background` 接线 + Settings 预设 select /「随机切换」复选框 + 四语文案。全量 263 例全绿、`tsc`/biome 清。**幻灯片切换间隔与顺序/随机现可配。** |

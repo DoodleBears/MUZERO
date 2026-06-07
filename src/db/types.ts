@@ -179,10 +179,14 @@ export interface AppSettings {
   immersiveIdle?: boolean;
   /** Render covers using their stored crop (vs the full image). Default true. */
   coverCropped?: boolean;
-  /** Now-Playing background blur radius in px. Default 40. */
+  /** Now-Playing background blur radius in px. Default 12. */
   backgroundBlur?: number;
-  /** Now-Playing background dim/mask opacity, 0–100. Default 70. */
+  /** Now-Playing background dim/mask opacity, 0–100. Default 25. */
   backgroundMaskOpacity?: number;
+  /** Slideshow auto-advance interval in seconds. Default 10. */
+  backgroundSlideshowIntervalSec?: number;
+  /** Slideshow advances in random order vs sequential. Default false (sequential). */
+  backgroundSlideshowShuffle?: boolean;
   /** Now-Playing visualizer style. Defaults to "aura" (the original bloom). */
   visualizerStyle?: VisualizerStyleId;
   /** Use the visualizer as the full Now-Playing background (vs the image slideshow). Default false. */
@@ -193,6 +197,8 @@ export interface AppSettings {
   primaryLight?: string;
   /** Primary/accent color (hex) for dark mode. Mirrors localStorage `muzero-primary-dark`. */
   primaryDark?: string;
+  /** UI font-family stack. Mirrors localStorage `muzero-font`; unset = system default. */
+  fontFamily?: string;
   /** Persisted resume point: last active session + index. */
   lastSessionId?: string;
   lastTrackIndex?: number;
@@ -210,8 +216,10 @@ export const DEFAULT_SETTINGS: AppSettings = {
   backgroundGalleryFallback: true,
   immersiveIdle: true,
   coverCropped: true,
-  backgroundBlur: 40,
-  backgroundMaskOpacity: 70,
+  backgroundBlur: 12,
+  backgroundMaskOpacity: 25,
+  backgroundSlideshowIntervalSec: 10,
+  backgroundSlideshowShuffle: false,
   visualizerStyle: "aura",
   visualizerAsBackground: false,
 };
