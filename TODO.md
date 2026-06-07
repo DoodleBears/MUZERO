@@ -36,8 +36,9 @@ PRD: [`20260607-muzero-set-playqueue-memory-data-model-prd`](docs/prd/20260607-m
   - [x] 当前歌曲/封面右键菜单：MediaStage 与底部歌曲行可打开 context menu，切换 video/cover/title、audio-only，并添加/更换当前歌曲封面。
   - [x] 从记忆照片设为封面：带照片的记忆便签可一键复制为独立歌曲封面，原记忆照片保留。
   - [x] 宽屏右侧播放列表 rail 可折叠，折叠偏好持久化到 settings，折叠态用 motion 保留底部 compact header；移动端队列 overlay 不受影响。
+  - [x] 播放列表视图使用虚拟化动态行高：Now Playing 右侧 rail / Queue / Search 共用 `VirtualTrackList`，由 TanStack Virtual 测量实际 row 高度，支持长标题、状态行和响应式内容高度。
   - [x] 折叠后的右侧 rail 显示当前歌曲记忆时间线/idle 轮播：idle 时透明外壳、居中轮播当前歌曲 memories；用户操作时中心便签淡出并切为歌词式纵向 timeline list（不显示实体 playhead/中心卡），第一下拖拽即建立捕获，上下拖动/滚动 list 更新持久化锚点。
-  - [x] 折叠态记忆卡不重复显示当前歌曲名；无当前歌曲记忆时不显示任何空态文案；带照片的记忆在 idle 大卡（约占 rail 4/5）和 timeline list 中以 `object-contain` 完整显示；idle 大卡的记忆正文用 Pretext 测量自动 fit text，默认尽可能使用 64px 上限，内容过长时降字号避免溢出画面；切歌/切 memory 时先完成 fit layout 再 fade-in，避免看到 Pretext 重排抖动；轮播停留时长按正文长度增加并封顶，前后切换用 motion crossfade 淡入淡出。
+  - [x] 折叠态记忆卡不重复显示当前歌曲名；无当前歌曲记忆时不显示任何空态文案；带照片的记忆在 idle 大卡（约占 rail 4/5）和 timeline list 中以 `object-contain` 完整显示；timeline list 用 Pretext 测量文本并按单列响应式高度排布，不固定卡片高度；idle 大卡的记忆正文用 Pretext 测量自动 fit text，默认尽可能使用 64px 上限，内容过长时降字号避免溢出画面；切歌/切 memory 时旧卡先 fade-out，新歌第一张卡等待图片 load/error、Pretext fit layout 与短暂 settle 后再 fade-in，避免看到 Pretext/图片重排抖动；轮播停留时长按正文长度增加并封顶，前后切换用 motion crossfade 淡入淡出。
   - [x] 记忆快捷创建：`T` / `N` 在当前记忆面板挂载时打开创建 Memory modal，直接聚焦 composer；支持粘贴图片、Enter 提交、Shift+Enter 换行。
   - [x] 折叠 rail 方向/边角修正：折叠/展开按钮使用 bottom panel 图标；折叠后 compact header 保持 `rounded-b-none`，底部无圆角。
   - 验收：浏览器 preview 全流程 + 暗色 + 响应式 + 零报错；四语种齐全。

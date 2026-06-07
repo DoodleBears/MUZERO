@@ -1,7 +1,12 @@
+import { type MeasureMemoryTextHeight, measureMemoryTextHeight } from "./memory-masonry";
+
 export const MEMORY_TIMELINE_IDLE_DELAY_MS = 4000;
 export const MEMORY_TIMELINE_CAROUSEL_INTERVAL_MS = 5000;
 export const MEMORY_TIMELINE_CAROUSEL_MAX_INTERVAL_MS = 14000;
 export const MEMORY_TIMELINE_ITEM_HEIGHT = 112;
+
+const DEFAULT_FONT_FAMILY =
+  'ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
 
 const MEMORY_TIMELINE_CAROUSEL_EXTRA_START_CHAR_COUNT = 48;
 const MEMORY_TIMELINE_CAROUSEL_MS_PER_CHARACTER = 80;
@@ -11,6 +16,36 @@ interface MemoryTimelineCarouselIntervalOptions {
   extraStartCharCount?: number;
   maxMs?: number;
   msPerCharacter?: number;
+}
+
+export interface MemoryTimelineLayoutInput {
+  hasPhoto?: boolean;
+  id: string;
+  note: string;
+}
+
+export interface MemoryTimelineLayoutOptions {
+  baseItemHeight?: number;
+  cardPaddingX?: number;
+  cardPaddingY?: number;
+  footerHeight?: number;
+  gap?: number;
+  noteFont?: string;
+  noteLineHeight?: number;
+  photoGap?: number;
+  photoHeight?: number;
+  width: number;
+}
+
+export interface MemoryTimelineLayoutItem {
+  height: number;
+  id: string;
+  y: number;
+}
+
+export interface MemoryTimelineLayout {
+  containerHeight: number;
+  items: MemoryTimelineLayoutItem[];
 }
 
 export function sortMemoryTimelineItems<T extends { createdAt: number }>(items: readonly T[]): T[] {
@@ -57,4 +92,69 @@ export function memoryTimelineCarouselIntervalMs(
   const readableLength = Array.from(note.replace(/\s+/g, "")).length;
   const extraCharacters = Math.max(0, readableLength - extraStartCharCount);
   return Math.min(maxMs, Math.max(baseMs, Math.round(baseMs + extraCharacters * msPerCharacter)));
+}
+
+export function layoutMemoryTimelineItems(
+  items: readonly MemoryTimelineLayoutInput[],
+  {
+    baseItemHeight = MEMORY_TIMELINE_ITEM_HEIGHT,
+    cardPaddingX = 12,
+    cardPaddingY = 12,
+    footerHeight = 24,
+    gap = 16,
+    noteFont = `14px ${DEFAULT_FONT_FAMILY}`,
+    noteLineHeight = 22,
+    photoGap = 8,
+    photoHeight = 128,
+    width,
+  }: MemoryTimelineLayoutOptions,
+  measureTextHeight: MeasureMemoryTextHeight = measureMemoryTextHeight,
+): MemoryTimelineLayout {
+  const textWidth = Math.max(1, width - cardPaddingX * 2);
+  let y = 0;
+  const layoutItems = items.map((item) => {
+    const noteHeight = measureTextHeight(item.note, textWidth, noteFont, noteLineHeight);
+    const imageHeight = item.hasPhoto ? photoHeight + photoGap : 0;
+    const height = Math.max(
+      baseItemHeight,
+      Math.ceil(cardPaddingY * 2 + imageHeight + noteHeight + footerHeight),
+    );
+    const layoutItem = { height, id: item.id, y };
+    y += height + gap;
+    return layoutItem;
+  });
+
+  return {
+    containerHeight:
+      layoutItems.length > 0
+        ? layoutItems[layoutItems.length - 1].y + layoutItems[layoutItems.length - 1].height
+        : 0,
+    items: layoutItems,
+  };
+}
+
+export function memoryTimelineIndexFromLayoutOffset(
+  offsetPx: number,
+  items: readonly MemoryTimelineLayoutItem[],
+): number {
+  if (items.length === 0) return 0;
+  const offset = Math.max(0, offsetPx);
+  let closestIndex = 0;
+  let closestDistance = Math.abs(offset - items[0].y);
+  for (let index = 1; index < items.length; index += 1) {
+    const distance = Math.abs(offset - items[index].y);
+    if (distance < closestDistance) {
+      closestDistance = distance;
+      closestIndex = index;
+    }
+  }
+  return closestIndex;
+}
+
+export function memoryTimelineOffsetForLayoutIndex(
+  index: number,
+  items: readonly MemoryTimelineLayoutItem[],
+): number {
+  if (items.length === 0) return 0;
+  return items[Math.min(items.length - 1, Math.max(0, index))].y;
 }

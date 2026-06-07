@@ -15,16 +15,20 @@ import {
 import type { Memory } from "@/db/types";
 import { resolveMemoryFitText } from "@/lib/memory-fit-text";
 import {
+  layoutMemoryTimelineItems,
   MEMORY_TIMELINE_CAROUSEL_INTERVAL_MS,
   MEMORY_TIMELINE_IDLE_DELAY_MS,
   MEMORY_TIMELINE_ITEM_HEIGHT,
   memoryTimelineCarouselIntervalMs,
+  memoryTimelineIndexFromLayoutOffset,
   memoryTimelineIndexFromOffset,
-  memoryTimelineOffsetForIndex,
+  memoryTimelineOffsetForLayoutIndex,
   nextIdleMemoryIndex,
   sortMemoryTimelineItems,
 } from "@/lib/memory-timeline";
 import { cn } from "@/lib/utils";
+
+const MEMORY_CAROUSEL_LAYOUT_SETTLE_MS = 460;
 
 export interface MemoryTimelineRailItem extends Memory {
   photoUrl?: string;
@@ -64,20 +68,48 @@ export function MemoryTimelineRail({
   const sortedMemories = useMemo(() => sortMemoryTimelineItems(memories), [memories]);
   const [mode, setMode] = useState<"idle" | "timeline">("idle");
   const [timelineOffset, setTimelineOffset] = useState(Math.max(0, initialOffset));
+  const [timelineWidth, setTimelineWidth] = useState(0);
   const [activeIndex, setActiveIndex] = useState(() =>
     memoryTimelineIndexFromOffset(initialOffset, timelineItemHeight, sortedMemories.length),
   );
   const idleTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const dragRef = useRef<DragState | null>(null);
-  const activeMemory = sortedMemories[activeIndex] ?? sortedMemories[0];
+  const timelineScrubberRef = useRef<HTMLDivElement | null>(null);
+  const timelineLayout = useMemo(
+    () =>
+      layoutMemoryTimelineItems(
+        sortedMemories.map((memory) => ({
+          hasPhoto: Boolean(memory.photoUrl),
+          id: memory.id,
+          note: memory.note,
+        })),
+        {
+          baseItemHeight: timelineItemHeight,
+          width: timelineWidth || 360,
+        },
+      ),
+    [sortedMemories, timelineItemHeight, timelineWidth],
+  );
+  const memoryCollectionKey = useMemo(
+    () => sortedMemories.map((memory) => `${memory.trackId}:${memory.id}`).join("\u001f"),
+    [sortedMemories],
+  );
+  const activeCollectionKeyRef = useRef(memoryCollectionKey);
+  const initialLayoutIndex = useMemo(
+    () => memoryTimelineIndexFromLayoutOffset(Math.max(0, initialOffset), timelineLayout.items),
+    [initialOffset, timelineLayout.items],
+  );
+  const visibleActiveIndex =
+    activeCollectionKeyRef.current === memoryCollectionKey ? activeIndex : initialLayoutIndex;
+  const activeMemory = sortedMemories[visibleActiveIndex] ?? sortedMemories[0];
 
   useEffect(() => {
     const nextOffset = Math.max(0, initialOffset);
+    activeCollectionKeyRef.current = memoryCollectionKey;
     setTimelineOffset(nextOffset);
-    setActiveIndex(
-      memoryTimelineIndexFromOffset(nextOffset, timelineItemHeight, sortedMemories.length),
-    );
-  }, [initialOffset, sortedMemories.length, timelineItemHeight]);
+    setActiveIndex(initialLayoutIndex);
+    setMode("idle");
+  }, [initialLayoutIndex, initialOffset, memoryCollectionKey]);
 
   useEffect(
     () => () => {
@@ -92,16 +124,35 @@ export function MemoryTimelineRail({
       () => {
         setActiveIndex((current) => {
           const next = nextIdleMemoryIndex(current, sortedMemories.length);
-          setTimelineOffset(
-            memoryTimelineOffsetForIndex(next, timelineItemHeight, sortedMemories.length),
-          );
+          setTimelineOffset(memoryTimelineOffsetForLayoutIndex(next, timelineLayout.items));
           return next;
         });
       },
       memoryTimelineCarouselIntervalMs(activeMemory?.note ?? "", { baseMs: carouselIntervalMs }),
     );
     return () => clearTimeout(timeout);
-  }, [activeMemory, carouselIntervalMs, mode, sortedMemories.length, timelineItemHeight]);
+  }, [activeMemory, carouselIntervalMs, mode, sortedMemories.length, timelineLayout.items]);
+
+  useLayoutEffect(() => {
+    const element = timelineScrubberRef.current;
+    if (!element) return;
+    const target: HTMLDivElement = element;
+
+    function updateWidth() {
+      setTimelineWidth(target.clientWidth);
+    }
+
+    updateWidth();
+
+    if (typeof ResizeObserver !== "undefined") {
+      const observer = new ResizeObserver(updateWidth);
+      observer.observe(target);
+      return () => observer.disconnect();
+    }
+
+    window.addEventListener("resize", updateWidth);
+    return () => window.removeEventListener("resize", updateWidth);
+  }, []);
 
   function showTimeline() {
     if (sortedMemories.length === 0) return;
@@ -111,16 +162,13 @@ export function MemoryTimelineRail({
   }
 
   function setTimelineOffsetFromDrag(offsetPx: number) {
-    const maxOffset = memoryTimelineOffsetForIndex(
+    const maxOffset = memoryTimelineOffsetForLayoutIndex(
       sortedMemories.length - 1,
-      timelineItemHeight,
-      sortedMemories.length,
+      timelineLayout.items,
     );
     const nextOffset = Math.min(maxOffset, Math.max(0, Math.round(offsetPx)));
     setTimelineOffset(nextOffset);
-    setActiveIndex(
-      memoryTimelineIndexFromOffset(nextOffset, timelineItemHeight, sortedMemories.length),
-    );
+    setActiveIndex(memoryTimelineIndexFromLayoutOffset(nextOffset, timelineLayout.items));
     onOffsetChange?.(nextOffset);
   }
 
@@ -150,11 +198,15 @@ export function MemoryTimelineRail({
     if (sortedMemories.length === 0) return;
     if (event.key === "ArrowLeft" || event.key === "ArrowUp") {
       event.preventDefault();
-      setTimelineOffsetFromDrag(timelineOffset - timelineItemHeight);
+      setTimelineOffsetFromDrag(
+        memoryTimelineOffsetForLayoutIndex(activeIndex - 1, timelineLayout.items),
+      );
       showTimeline();
     } else if (event.key === "ArrowRight" || event.key === "ArrowDown") {
       event.preventDefault();
-      setTimelineOffsetFromDrag(timelineOffset + timelineItemHeight);
+      setTimelineOffsetFromDrag(
+        memoryTimelineOffsetForLayoutIndex(activeIndex + 1, timelineLayout.items),
+      );
       showTimeline();
     } else if (event.key === "Home") {
       event.preventDefault();
@@ -163,11 +215,7 @@ export function MemoryTimelineRail({
     } else if (event.key === "End") {
       event.preventDefault();
       setTimelineOffsetFromDrag(
-        memoryTimelineOffsetForIndex(
-          sortedMemories.length - 1,
-          timelineItemHeight,
-          sortedMemories.length,
-        ),
+        memoryTimelineOffsetForLayoutIndex(sortedMemories.length - 1, timelineLayout.items),
       );
       showTimeline();
     }
@@ -202,7 +250,7 @@ export function MemoryTimelineRail({
           <div
             className="grid h-4/5 max-h-full w-4/5 max-w-none"
             data-testid="memory-carousel-card"
-            data-transition="crossfade"
+            data-transition="exit-wait-layout-ready"
           >
             <AnimatePresence initial={false}>
               <MemoryCarouselSlide
@@ -218,31 +266,43 @@ export function MemoryTimelineRail({
           aria-label={labels.memory}
           aria-valuemax={sortedMemories.length}
           aria-valuemin={1}
-          aria-valuenow={activeIndex + 1}
+          aria-valuenow={visibleActiveIndex + 1}
           className="relative h-full cursor-grab touch-none select-none overflow-hidden outline-none active:cursor-grabbing focus-visible:ring-2 focus-visible:ring-ring"
           data-testid="memory-timeline-scrubber"
           onKeyDown={onKeyDown}
+          ref={timelineScrubberRef}
           role="slider"
           tabIndex={0}
         >
           <ol
-            className="absolute top-0 inset-x-4 flex flex-col items-stretch transition-transform duration-200 ease-out will-change-transform motion-reduce:transition-none"
+            className="absolute top-0 inset-x-4 transition-transform duration-200 ease-out will-change-transform motion-reduce:transition-none"
+            data-layout="single-column-responsive"
             data-testid="memory-timeline-list"
-            style={{ transform: `translateY(calc(50% - ${timelineOffset}px))` }}
+            style={{
+              height: timelineLayout.containerHeight,
+              transform: `translateY(calc(50% - ${timelineOffset}px))`,
+            }}
           >
             {sortedMemories.map((memory, index) => {
-              const active = index === activeIndex;
+              const active = index === visibleActiveIndex;
+              const layoutItem = timelineLayout.items[index] ?? {
+                height: timelineItemHeight,
+                y: index * timelineItemHeight,
+              };
               return (
                 <li
-                  className="relative flex shrink-0 items-center gap-3"
+                  className="absolute top-0 left-0 flex w-full shrink-0 items-start gap-3"
                   data-active={active ? "true" : "false"}
                   data-testid={`memory-timeline-item-${memory.id}`}
                   key={memory.id}
-                  style={{ height: timelineItemHeight }}
+                  style={{
+                    height: layoutItem.height,
+                    transform: `translateY(${layoutItem.y}px)`,
+                  }}
                 >
                   <span
                     className={cn(
-                      "size-2.5 rounded-full border bg-background shadow-sm transition-colors",
+                      "mt-5 size-2.5 rounded-full border bg-background shadow-sm transition-colors",
                       active ? "border-primary bg-primary" : "border-muted-foreground/45",
                     )}
                   />
@@ -257,12 +317,15 @@ export function MemoryTimelineRail({
                     {memory.photoUrl && (
                       <img
                         alt=""
-                        className="mb-2 max-h-20 w-full rounded-md object-contain"
+                        className="mb-2 max-h-[min(28vh,14rem)] w-full rounded-md object-contain"
                         data-testid={`memory-timeline-image-${memory.id}`}
                         src={memory.photoUrl}
                       />
                     )}
-                    <p className="line-clamp-2 whitespace-pre-wrap text-sm leading-5">
+                    <p
+                      className="whitespace-pre-wrap break-words text-sm leading-5"
+                      data-testid={`memory-timeline-note-${memory.id}`}
+                    >
                       {memory.note}
                     </p>
                     <div className="mt-1 space-y-0.5 text-muted-foreground text-[11px]">
@@ -288,19 +351,36 @@ function MemoryCarouselSlide({
   formatCreatedAt: (createdAt: number) => ReactNode;
   memory: MemoryTimelineRailItem;
 }) {
-  const [layoutReady, setLayoutReady] = useState(false);
-  const markLayoutReady = useCallback(() => setLayoutReady(true), []);
+  const [mediaReady, setMediaReady] = useState(!memory.photoUrl);
+  const [fitReady, setFitReady] = useState(false);
+  const [enterReady, setEnterReady] = useState(false);
+  const markFitReady = useCallback(() => setFitReady(true), []);
+  const markMediaReady = useCallback(() => setMediaReady(true), []);
+  const slideReady = mediaReady && fitReady;
+
+  useEffect(() => {
+    if (!slideReady) {
+      setEnterReady(false);
+      return;
+    }
+
+    const timeout = setTimeout(() => setEnterReady(true), MEMORY_CAROUSEL_LAYOUT_SETTLE_MS);
+    return () => clearTimeout(timeout);
+  }, [slideReady]);
 
   return (
     <motion.article
       animate={
-        layoutReady
+        enterReady
           ? { filter: "blur(0px)", opacity: 1, scale: 1, y: 0 }
           : { filter: "blur(6px)", opacity: 0, scale: 0.985, y: 8 }
       }
       className="col-start-1 row-start-1 flex h-full max-h-full flex-col overflow-hidden rounded-xl border border-border/70 bg-background/80 p-5 text-center shadow-sm backdrop-blur-sm md:p-6"
       data-fade-in="after-fit-layout"
-      data-layout-ready={layoutReady ? "true" : "false"}
+      data-enter-ready={enterReady ? "true" : "false"}
+      data-fit-ready={fitReady ? "true" : "false"}
+      data-layout-ready={slideReady ? "true" : "false"}
+      data-media-ready={mediaReady ? "true" : "false"}
       data-testid="memory-carousel-slide"
       exit={{ filter: "blur(6px)", opacity: 0, scale: 0.985, y: -10 }}
       initial={{ filter: "blur(6px)", opacity: 0, scale: 0.97, y: 12 }}
@@ -313,10 +393,12 @@ function MemoryCarouselSlide({
           alt=""
           className="mb-4 max-h-[min(52vh,24rem)] w-full rounded-lg object-contain"
           data-testid="memory-carousel-image"
+          onError={markMediaReady}
+          onLoad={markMediaReady}
           src={memory.photoUrl}
         />
       )}
-      <MemoryCarouselNote note={memory.note} onFitLayout={markLayoutReady} />
+      <MemoryCarouselNote enabled={mediaReady} note={memory.note} onFitLayout={markFitReady} />
       <div className="mt-4 space-y-1 text-muted-foreground text-xs">
         <time dateTime={new Date(memory.createdAt).toISOString()}>
           {formatCreatedAt(memory.createdAt)}
@@ -326,11 +408,20 @@ function MemoryCarouselSlide({
   );
 }
 
-function MemoryCarouselNote({ note, onFitLayout }: { note: string; onFitLayout: () => void }) {
+function MemoryCarouselNote({
+  enabled,
+  note,
+  onFitLayout,
+}: {
+  enabled: boolean;
+  note: string;
+  onFitLayout: () => void;
+}) {
   const boxRef = useRef<HTMLDivElement | null>(null);
   const [fitText, setFitText] = useState(() => resolveMemoryFitText(note, { height: 0, width: 0 }));
 
   useLayoutEffect(() => {
+    if (!enabled) return;
     const element = boxRef.current;
     if (!element) return;
     const target: HTMLDivElement = element;
@@ -360,7 +451,7 @@ function MemoryCarouselNote({ note, onFitLayout }: { note: string; onFitLayout: 
 
     window.addEventListener("resize", updateFitText);
     return () => window.removeEventListener("resize", updateFitText);
-  }, [note, onFitLayout]);
+  }, [enabled, note, onFitLayout]);
 
   return (
     <div

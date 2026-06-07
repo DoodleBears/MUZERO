@@ -38,11 +38,17 @@ describe("MemoryTimelineRail", () => {
     vi.useRealTimers();
   });
 
-  it("starts the idle carousel from the persisted scroll position", () => {
+  it("starts the idle carousel from the persisted scroll position", async () => {
     renderRail({ initialOffset: 100 });
+    await act(async () => {});
 
     expect(screen.getByTestId("memory-carousel-card")).toHaveTextContent("Second kitchen loop");
     expect(screen.getByTestId("memory-carousel-card")).not.toHaveTextContent("Kitchen Song");
+    await act(async () => {
+      fireEvent.load(screen.getByTestId("memory-carousel-image"));
+    });
+    await act(async () => {});
+
     expect(screen.getByTestId("memory-carousel-card")).toHaveClass("w-4/5");
     expect(screen.getByTestId("memory-carousel-note")).toHaveStyle({
       fontSize: "64px",
@@ -51,7 +57,7 @@ describe("MemoryTimelineRail", () => {
     expect(screen.getByTestId("memory-carousel-note")).not.toHaveClass("line-clamp-9");
     expect(screen.getByTestId("memory-carousel-card")).toHaveAttribute(
       "data-transition",
-      "crossfade",
+      "exit-wait-layout-ready",
     );
     expect(screen.getByTestId("memory-carousel-slide")).toHaveAttribute(
       "data-layout-ready",
@@ -72,7 +78,7 @@ describe("MemoryTimelineRail", () => {
     expect(screen.getByTestId("memory-carousel-card")).toHaveTextContent("Third late walk");
   });
 
-  it("keeps longer memory notes on screen for a longer capped dwell time", () => {
+  it("keeps longer memory notes on screen for a longer capped dwell time", async () => {
     const longNote = "x".repeat(70);
     const dwellMs = memoryTimelineCarouselIntervalMs(longNote, { baseMs: 1000 });
     renderRail({
@@ -82,6 +88,7 @@ describe("MemoryTimelineRail", () => {
         { id: "mem_next", trackId: "trk_a", note: "next memory", createdAt: 20 },
       ],
     });
+    await act(async () => {});
 
     act(() => vi.advanceTimersByTime(999));
     expect(screen.getByTestId("memory-carousel-card")).toHaveTextContent(longNote);
@@ -99,7 +106,10 @@ describe("MemoryTimelineRail", () => {
     expect(screen.queryByTestId("memory-playhead-card")).not.toBeInTheDocument();
     expect(screen.queryByTestId("memory-timeline-playhead")).not.toBeInTheDocument();
     expect(screen.getByTestId("memory-timeline-list")).toBeInTheDocument();
-    expect(screen.getByTestId("memory-timeline-list")).toHaveClass("flex-col");
+    expect(screen.getByTestId("memory-timeline-list")).toHaveAttribute(
+      "data-layout",
+      "single-column-responsive",
+    );
     expect(screen.getByTestId("memory-timeline-image-mem_second")).toHaveClass("object-contain");
 
     const scrubber = screen.getByTestId("memory-timeline-scrubber");
@@ -108,7 +118,7 @@ describe("MemoryTimelineRail", () => {
     fireEvent.pointerUp(scrubber, { pointerId: 1 });
 
     expect(onOffsetChange).toHaveBeenLastCalledWith(200);
-    expect(screen.getByTestId("memory-timeline-item-mem_third")).toHaveAttribute(
+    expect(screen.getByTestId("memory-timeline-item-mem_second")).toHaveAttribute(
       "data-active",
       "true",
     );
@@ -117,7 +127,28 @@ describe("MemoryTimelineRail", () => {
     expect(screen.getByTestId("memory-timeline-list")).toBeInTheDocument();
 
     act(() => vi.advanceTimersByTime(1));
-    expect(screen.getByTestId("memory-carousel-card")).toHaveTextContent("Third late walk");
+    expect(screen.getByTestId("memory-carousel-card")).toHaveTextContent("Second kitchen loop");
+  });
+
+  it("renders timeline notes as a single responsive-height column", () => {
+    const longNote = "responsive masonry timeline ".repeat(12);
+    renderRail({
+      memories: [
+        { id: "mem_short", trackId: "trk_a", note: "short", createdAt: 10 },
+        { id: "mem_long", trackId: "trk_a", note: longNote, createdAt: 20 },
+      ],
+    });
+
+    fireEvent.wheel(screen.getByTestId("memory-timeline-rail"));
+
+    expect(screen.getByTestId("memory-timeline-list")).toHaveAttribute(
+      "data-layout",
+      "single-column-responsive",
+    );
+    expect(screen.getByTestId("memory-timeline-note-mem_long")).not.toHaveClass("line-clamp-2");
+    expect(
+      Number.parseFloat(screen.getByTestId("memory-timeline-item-mem_long").style.height),
+    ).toBeGreaterThan(100);
   });
 
   it("starts dragging on the same pointer gesture that leaves the idle carousel", () => {
@@ -133,7 +164,7 @@ describe("MemoryTimelineRail", () => {
     fireEvent.pointerUp(rail, { pointerId: 1 });
 
     expect(onOffsetChange).toHaveBeenLastCalledWith(200);
-    expect(screen.getByTestId("memory-timeline-item-mem_third")).toHaveAttribute(
+    expect(screen.getByTestId("memory-timeline-item-mem_second")).toHaveAttribute(
       "data-active",
       "true",
     );

@@ -35,8 +35,10 @@ export function VirtualTrackList({
 
   const rowVirtualizer = useVirtualizer({
     count: tracks.length,
+    estimateSize: () => 76,
+    getItemKey: (index) => tracks[index]?.id ?? index,
     getScrollElement: () => parentRef.current,
-    estimateSize: () => 64,
+    measureElement: (element) => element.getBoundingClientRect().height,
     overscan: 8,
   });
 
@@ -49,16 +51,23 @@ export function VirtualTrackList({
   }
 
   return (
-    <div ref={parentRef} className={cn("h-full overflow-y-auto", className)}>
+    <div
+      className={cn("h-full overflow-y-auto", className)}
+      data-testid="virtual-track-list"
+      data-virtualized="dynamic-size"
+      ref={parentRef}
+    >
       <div className="relative w-full" style={{ height: `${rowVirtualizer.getTotalSize()}px` }}>
         {rowVirtualizer.getVirtualItems().map((virtualRow) => {
           const track = tracks[virtualRow.index];
           return (
             <div
-              key={track.id}
               className="absolute left-0 top-0 w-full"
+              data-index={virtualRow.index}
+              data-testid={`virtual-track-row-${track.id}`}
+              key={track.id}
+              ref={rowVirtualizer.measureElement}
               style={{
-                height: `${virtualRow.size}px`,
                 transform: `translateY(${virtualRow.start}px)`,
               }}
             >
