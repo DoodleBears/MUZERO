@@ -1,46 +1,99 @@
 import { MotionConfig } from "motion/react";
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
-import type { Tab } from "@/components/nav/dock-nav";
+import { NowPlayingBackground } from "@/components/player/now-playing-background";
 import { PlayerDock } from "@/components/shell/player-dock";
-import { getSettings } from "@/db/repositories";
+import { GlobalDropZone } from "@/components/upload/global-drop-zone";
+import { getSettings, saveSettings } from "@/db/repositories";
+import { useSettings } from "@/hooks/use-app-data";
+import { useIdle } from "@/hooks/use-idle";
+import { usePlayerShortcuts } from "@/hooks/use-player-shortcuts";
+import { isTauri } from "@/lib/platform";
+import { cn } from "@/lib/utils";
 import { NowPlayingPage } from "@/pages/now-playing-page";
 import { QueuePage } from "@/pages/queue-page";
 import { SearchPage } from "@/pages/search-page";
 import { SessionsPage } from "@/pages/sessions-page";
 import { SettingsPage } from "@/pages/settings-page";
+import { useNavStore } from "@/stores/nav-store";
 import { usePlayerStore } from "@/stores/player-store";
 
 export default function App() {
   const { t } = useTranslation();
-  const [tab, setTab] = useState<Tab>("sessions");
+  // Active tab is persisted (nav-store) so the app reopens on the last page.
+  const tab = useNavStore((s) => s.tab);
+  const setTab = useNavStore((s) => s.setTab);
   const init = usePlayerStore((s) => s.init);
   const setActiveSession = usePlayerStore((s) => s.setActiveSession);
+  const settings = useSettings();
+  // Global transport shortcuts: Space/⌘P · ←→/AD · Shift±5s · ↑↓ volume · ⌘R · R.
+  usePlayerShortcuts();
 
-  // Boot: wire the media engine and resume the last set if there was one.
+  // Boot: wire the media engine, resume the last set, and cue the last-played
+  // track (loaded + paused; autoplay is blocked without a gesture). The persisted
+  // tab wins, so we no longer force "now" here on resume.
   useEffect(() => {
     init();
     void (async () => {
-      const settings = await getSettings();
-      if (settings.lastSessionId) {
-        await setActiveSession(settings.lastSessionId);
-        setTab("now");
+      const s = await getSettings();
+      if (!s.lastSessionId) return;
+      await setActiveSession(s.lastSessionId);
+      const idx = s.lastTrackIndex;
+      if (typeof idx === "number" && idx >= 0) {
+        const store = usePlayerStore.getState();
+        if (idx < store.queue.length) {
+          await store.playIndex(idx);
+          store.pause();
+        }
       }
     })();
   }, [init, setActiveSession]);
+
+  // Remember the last-played track so the next launch resumes it.
+  useEffect(
+    () =>
+      usePlayerStore.subscribe((state, prev) => {
+        if (state.currentIndex !== prev.currentIndex && state.currentIndex >= 0) {
+          void saveSettings({ lastTrackIndex: state.currentIndex });
+        }
+      }),
+    [],
+  );
+
+  // Now Playing is the immersive surface: the slideshow fills the whole viewport
+  // (behind header + dock), and after a few idle seconds the chrome fades away.
+  const immersive = tab === "now";
+  const chromeHidden = useIdle(immersive && (settings.immersiveIdle ?? true));
 
   // `reducedMotion="user"` makes every motion animation honor the OS
   // "reduce motion" setting app-wide, matching the view-transition helper.
   return (
     <MotionConfig reducedMotion="user">
-      <div className="flex h-screen flex-col bg-background text-foreground">
-        <header className="flex shrink-0 items-center gap-2 border-b border-border px-4 py-3">
+      {/* The header + dock are fixed overlays (z-30) that truly float over the
+          full-bleed content (and the Now Playing slideshow). `main` fills the
+          whole viewport and reserves no band; each page's own scroll region pads
+          itself by the chrome heights (--spacing-chrome-*), so content fills the
+          screen and scrolls *under* the bars instead of being boxed between them. */}
+      <div className="relative h-screen overflow-hidden bg-background text-foreground">
+        {immersive && <NowPlayingBackground className="fixed inset-0 z-0" />}
+
+        <header
+          // Draggable on desktop (Tauri overlay titlebar); transparent while
+          // immersive (clears the macOS traffic lights), frosted elsewhere.
+          data-tauri-drag-region
+          className={cn(
+            "fixed inset-x-0 top-0 z-30 flex items-center gap-2 px-4 py-3 transition-opacity duration-500",
+            immersive ? "" : "bg-background/80 backdrop-blur",
+            immersive && isTauri() && "ps-20",
+            chromeHidden && "pointer-events-none opacity-0",
+          )}
+        >
           <img src="/muzero.svg" alt="" className="size-6" />
           <span className="font-semibold tracking-tight">MUZERO</span>
           <span className="ml-auto text-xs text-muted-foreground">{t("app.tagline")}</span>
         </header>
 
-        <main className="min-h-0 flex-1 overflow-hidden">
+        <main className="absolute inset-0 z-10 overflow-hidden">
           {tab === "now" && <NowPlayingPage />}
           {tab === "queue" && <QueuePage />}
           {tab === "search" && <SearchPage />}
@@ -48,7 +101,15 @@ export default function App() {
           {tab === "settings" && <SettingsPage />}
         </main>
 
-        <PlayerDock tab={tab} onTabChange={setTab} onOpenNowPlaying={() => setTab("now")} />
+        <PlayerDock
+          tab={tab}
+          onTabChange={setTab}
+          onOpenNowPlaying={() => setTab("now")}
+          hidden={chromeHidden}
+        />
+
+        {/* App-wide drag-and-drop + paste: media → import; image → cover/background/gallery. */}
+        <GlobalDropZone onMediaUploaded={(createdSet) => createdSet && setTab("queue")} />
       </div>
     </MotionConfig>
   );

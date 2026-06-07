@@ -14,7 +14,7 @@
 | Phase | Name | Status | Link |
 |-------|------|--------|------|
 | 1 | 纯快捷键解析 `resolvePlayerShortcut`（key→action，TDD） | ✅ Completed | §5 |
-| 2 | 全局键盘处理 + dispatch（接 player-store，让快捷键真正生效） | 🔲 Pending | §5 |
+| 2 | 全局键盘处理 + dispatch（接 player-store，让快捷键真正生效） | ✅ Completed | §5 |
 | 3 | Dock 音量控件（hover 竖向滑块）+ 循环控件 + transport tooltip(label+Kbd) | 🔲 Pending | §5 |
 
 > Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
@@ -75,9 +75,9 @@
 - [ ] `player-shortcuts.ts`：`PlayerShortcut` 枚举 + `resolvePlayerShortcut`（Space/⌘P→toggle、←/A→prev、→/D→next、Shift+←/A→seek-back、Shift+→/D→seek-forward、↑/↓→volume、⌘R→cycle-repeat、R→restart；alt 或 mod+其它→null）。
 - [ ] 穷举单测（含平台无关、shift 组合、mod 组合、空格、大小写、null 情形）。
 
-### Phase 2: 全局键盘 + dispatch
-- [ ] `use-player-shortcuts.ts`：keydown 守卫（form field / Space 在 button）+ `resolvePlayerShortcut` + dispatch（seek ±5、volume ±0.05、restart seek 0、repeat cycle）。
-- [ ] `App.tsx` 调用；浏览器实测每个快捷键生效、不与 ⌘1/2/3 冲突、输入框内不触发。
+### Phase 2: 全局键盘 + dispatch ✅
+- [x] `use-player-shortcuts.ts`：keydown 守卫（form field;Space/Enter 在 button/a 不重复触发）+ `resolvePlayerShortcut` + 命令式 `getState()` dispatch（seek ±5、volume ±0.05、restart seek 0、`nextRepeatMode` cycle）。`App.tsx` 调一次。
+- [x] 浏览器实测：Space 切换(播放↔暂停)、a 上一首(dropped→memory)、↑↓ 音量(±0.05 精确)、R 从头(0.6→0)、Shift+← 后退5s(1→0)、输入框内 Space 不触发、⌘1/2 仍导航不冲突。
 
 ### Phase 3: Dock 控件 + tooltip
 - [ ] 音量按钮 + hover 竖向滑块（设计图）；循环控件在 Dock；transport tooltip(label+Kbd) 按平台。
