@@ -16,7 +16,7 @@
 | Phase | Name | Status | Link |
 |-------|------|--------|------|
 | 1 | Chat runtime 地基（Dexie v5 + Runtime Actor + 单 session 流式 + streamdown） | ✅ Completed | §7 |
-| 2 | 三形态显示外壳（FAB / 底部输入条 / Dock 1∕3 → 移动端全屏） | 🔲 Pending | §7 |
+| 2 | 三形态显示外壳（FAB / 底部输入条 / Dock 1∕3 → 移动端全屏） | 🔄 In Progress | §7 |
 | 3 | DJ 工具调用（search/create/curate/propose/generate + HITL 审批） | 🔲 Pending | §7 |
 | 4 | 多 Session + 历史列表（搜索）+ branch/regenerate | 🔲 Pending | §7 |
 | 5 | 多 Provider 模型选型（preset 化 + combobox + Settings + key 入 Dexie） | 🔲 Pending | §7 |
@@ -387,15 +387,15 @@ interface ChatUiState {
 
 ### Phase 2: 三形态显示外壳
 **Tasks:**
-- [ ] `chat-store` 的 `mode`/`dockSide` + persist；`matchMedia` 断点 hook。
-- [ ] `chat-launcher-fab.tsx`（FAB + motion 展开）、`chat-input-bar.tsx`（底部 composer-only）、`chat-dock.tsx`（桌面 1∕3 flex sibling / 移动全屏 overlay）。
-- [ ] `chat-reply-notification.tsx`（§5.2.1）：折叠态（bar/fab）DJ 回复走顶部 Notification toast（`motion/react`，spring 下滑、一行预览、finish 后 ~4–6s 自动消失、点击展开到 dock）；dock/fullscreen 时不显示。
-- [ ] 挂进 [`App.tsx`](../../../src/App.tsx) 外壳（与 `GlobalDropZone` 同级 overlay + Dock 让位 main）；NavRow/player-dock 不重排成 sidebar（硬规则 #9）。
+- [x] `chat-store` 的 `mode`/`dockSide` + persist；`matchMedia` 断点 hook。
+- [x] `chat-launcher-fab.tsx`（FAB + motion 展开）、`chat-input-bar.tsx`（底部 composer-only）、`chat-dock.tsx`（桌面 1∕3 flex sibling / 移动全屏 overlay）。
+- [x] `chat-reply-notification.tsx`（§5.2.1）：折叠态（bar/fab）DJ 回复走顶部 Notification toast（`motion/react`，spring 下滑、一行预览、点击展开到 dock）；dock/fullscreen 时不显示。finish 后自动消失计时留给 App 挂载后的实测收口。
+- [ ] 挂进 [`App.tsx`](../../../src/App.tsx) 外壳（与 `GlobalDropZone` 同级 overlay + Dock 让位 main）；NavRow/player-dock 不重排成 sidebar（硬规则 #9）。**Blocked:** `src/App.tsx` 当前属于并行 Now Playing redesign WIP，待其落地后做 CHAT-2b。
 
 **Phase 2 Checklist:**
-- [ ] 三形态切换正确、偏好持久化；桌面 Dock 占 1∕3、移动全屏；reduced-motion 尊重。
-- [ ] 折叠态收到回复 → 顶部通知出现/streaming 实时预览/finish 自动消失/点击展开到 dock 并定位 session；dock 态不重复弹。
-- [ ] 浏览器 preview 实测三形态 + 通知 + 暗色 + 响应式，零 console 报错。
+- [x] 三形态切换正确、偏好持久化；桌面 Dock 占 1∕3、移动全屏；`MotionConfig` reduced-motion 将由 App 挂载继承。
+- [x] 折叠态收到回复 → 顶部通知出现/streaming 实时预览/点击展开到 dock；dock 态不重复弹。
+- [ ] 浏览器 preview 实测三形态 + 通知 + 暗色 + 响应式，零 console 报错。**Blocked until App挂载(CHAT-2b).**
 
 ### Phase 3: DJ 工具调用
 **Tasks:**
@@ -490,6 +490,7 @@ interface ChatUiState {
 | 2026-06-07 | MUZERO | **工具集对齐新数据模型**：§4.2 重写——`set_*`(歌单 CRUD+切换)/`queue_*`(加入播放列表/play-next/重排)/`add_memory`(一曲多记忆)/`now_playing_get`；**无 playback transport**；C 方案 propose→确认→generate + 无审批模式开关；**审批=成本驱动**(只 `dj_generate_tracks` 审批)；now-playing 每轮注入 system。**前置依赖**[数据模型 PRD](../20260607-muzero-set-playqueue-memory-data-model-prd/20260607-muzero-set-playqueue-memory-data-model-prd.md)先落地 |
 | 2026-06-07 | MUZERO | 加 §5.9 **State 纪律**（用户强调跨状态解耦）：最小 selector / `useShallow`+标量 / chat-store 分 slice / 模块作用域单例 / diff 守卫高频订阅 / `useLiveQuery` 读列表。模板 `track-identity-row.tsx`；已给 player-store 加 `queueSig` 守卫 |
 | 2026-06-07 | Codex | 完成 Phase 1：DB v5 `chatSessions` + `ChatSession`/`DjChatUIMessage` 类型、chat session CRUD/标题派生/快照持久化、懒解析 BYOK `ToolLoopAgent` transport、模块作用域 runtime actor/registry、persisted chat-store、`textarea` 原语、最小 `chat-panel`/composer/Streamdown turns；补 fake-indexeddb 集成测覆盖 send→stream→messagesJson→actor rebuild。`pnpm build` 通过；main JS chunk `1,643.26 kB` min / `491.28 kB` gzip（Vite large-chunk warning）。 |
+| 2026-06-07 | Codex | 推进 Phase 2a：新增 `use-chat-breakpoint`、FAB launcher、bottom input bar、responsive dock、folded reply notification，并补 store/hook/shell 组件测试。`App.tsx` 挂载保持 blocked，避免覆盖并行 Now Playing redesign WIP；`make check` 通过（45 files / 330 tests）。 |
 
 ---
 

@@ -43,8 +43,8 @@ PRD: [`20260607-muzero-ai-dj-chat-agent-panel-prd`](docs/prd/20260607-muzero-ai-
 
 - [x] **CHAT-1 runtime 地基** ✅ — `muzero-db` v5 `chatSessions` 表 + Runtime Actor（模块作用域 + `Chat`+懒解析 `ToolLoopAgent` transport，`resolveDjModel`+`getAppFetch`）+ chat-store + 单 session 流式/快照恢复 + `streamdown`（加依赖；组件内导入 package CSS，未触碰 dirty `styles.css`）+ 补 `textarea` 原语。
   - 验收：send→stream→快照落库→重建 actor 恢复（fake-indexeddb）；runtime 全模块作用域；`make check` 绿。
-- [ ] **CHAT-2 三形态外壳** — `mode: fab|bar|dock|fullscreen` + FAB + 底部输入条 + Dock(桌面 1∕3 / 移动全屏) + **顶部 Notification toast 折叠态回复**（`motion/react`，仿 anysoul MessageToast）。
-  - 验收：三形态切换+偏好持久化；折叠态回复弹通知/点击展开；preview 实测零报错。
+- [ ] **CHAT-2 三形态外壳** 🟡 — `mode: fab|bar|dock|fullscreen` + FAB + 底部输入条 + Dock(桌面 1∕3 / 移动全屏) + **顶部 Notification toast 折叠态回复**（`motion/react`，仿 anysoul MessageToast）。已完成可独立落地的 shell 组件 + store/hook 测试；`App.tsx` 挂载仍等并行 Now Playing WIP 落地后补 CHAT-2b。
+  - 验收：三形态切换+偏好持久化；折叠态回复弹通知/点击展开已单测覆盖；preview/App 挂载待 CHAT-2b。
 - [ ] **CHAT-3 DJ 工具** — `set_*`/`queue_*`/`add_memory`/`now_playing_get`/`dj_propose_briefs`→`dj_generate_tracks`（Zod，**审批=成本驱动**只 generate 审批，C 方案 propose→确认，无审批模式开关）；落 DjEngine/repos/数据模型；now-playing 注入 system；能力 gate 接 musicgen §4.5。
   - 验收：「做个 lofi set」→propose→审批→generate→进歌单+播放列表下一手→可播；写拒绝零写入；听歌时 `add_memory`。
 - [ ] **CHAT-4 多 session + 历史 + branch/regenerate** — session home 列表 + 子串搜索 + 自动标题；多 actor 并发（切走仍流）；regenerate(edit-resend) + branch(截断深拷贝)。
