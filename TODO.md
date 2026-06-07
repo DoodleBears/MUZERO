@@ -28,10 +28,8 @@ P2 独立小项（Tauri opener / providerPreset 字段）可随时插入
 
 PRD: [`20260607-muzero-set-playqueue-memory-data-model-prd`](docs/prd/20260607-muzero-set-playqueue-memory-data-model-prd/20260607-muzero-set-playqueue-memory-data-model-prd.md)
 
-- [ ] **DM-1 播放列表 Play Queue 地基** — `PlayQueue` 类型 + `muzero-db` v3 `playQueue` 表 + repo（load/replace/insert-next/append/remove/reorder/setRepeat/setIndex）；**`player-store.queue` 改 liveQuery 自 `playQueue`**（不再读 `session.trackIds`）+ `playSet/playNext/addToQueue/removeFromQueue/reorderQueue/setRepeat`；按 resume 点 seed 迁移。
-  - 验收：playSet→按播放列表播；play-next 插下一手；remove/reorder/repeat 正确；升级后旧 session 无缝续播；`queue.ts` 纯函数穷举单测；`make check` 绿。
-- [ ] **DM-2 autoExtend → 播放列表** — `shouldAutoExtend` 改看播放列表 upcoming + `contextSetId`；`maybeRefill` 续歌→写歌单 trackIds + append 播放列表（单一 `pump` 物化）。
-  - 验收：集成测 DJ 集自动续→新曲进歌单+播放列表顺序正确；ad-hoc 队列不误续。
+- [x] **DM-1 播放列表 Play Queue 地基** ✅ — 纯函数 play-queue(12测) + Dexie v3 playQueue 表 + repo + v2→v3 seed 迁移(8测) + player-store 改消费 playQueue + high-water 追加。浏览器验证迁移 seed+播放、零报错；全套件绿。（用户级编辑 actions 延后 DM-4）
+- [x] **DM-2 autoExtend → 播放列表** ✅ — `refillIfNeeded(sessionId,queueLength,currentIndex)` 阈值改测播放列表 upcoming；`maybeRefill` 传 queue.length；续歌喂队列由 DM-1c high-water 承担。dj-engine 9 测更新、全套件 148 绿。
 - [ ] **DM-3 歌曲记忆 Memory** — `Memory` 类型 + `memories` 表 + `mediaBlobs` `role:"memory"` + repo；迁移 `Track.note`→首条 Memory；`annotation-editor` 改记忆列表（加/编辑/删/照片/时间）；`track-search` 搜 memory.note；`RecentTrack` 喂记忆给 DJ。**（解锁 musicgen provenance 自动 Note）**
   - 验收：一曲多记忆（含照片）；搜索命中记忆文字；旧 note 变首条记忆；DJ 上下文带记忆。
 - [ ] **DM-4 UI 打磨** — 歌单管理（CRUD+播放/加入队列/切换）；播放列表视图（play-next/add/remove/reorder/loop）；记忆相册；封面取自记忆；i18n 4 语。
