@@ -1,6 +1,6 @@
 # PRD: MUZERO — 歌单详情页 + 封面/描述 + 创建/上传/粘贴目标
 
-**Status:** Draft
+**Status:** Completed（3 phase 全实现，277 tests 绿；真实环境拖放/上传待你手动验证）
 **Created:** 2026-06-07
 **Author:** MUZERO
 **Module:** 歌单（DjSession）—— 二级详情页、歌单级封面/描述、新增 prepend 到顶部、创建歌单、上传/粘贴/拖拽目标选择
@@ -15,7 +15,7 @@
 |-------|------|--------|------|
 | 1 | 数据模型：`DjSession.description`/`coverBlobId` + **新增 prepend 到顶部** + 歌单封面 repo + high-water id-diff | ✅ Completed | §5 |
 | 2 | 歌单详情页（曲目列表 + 名称/描述编辑 + 封面拖拽/粘贴 + 「播放全部」）+ gallery 卡片改「点进详情 / 小播放键」+ 路由 | ✅ Completed | §5 |
-| 3 | 创建新歌单 + 上传到歌单 + 粘贴/拖拽**目标歌单选择** | 🔄 部分（创建+上传到歌单✅；粘贴/拖拽目标选择器待做） | §5 |
+| 3 | 创建新歌单 + 上传到歌单 + 粘贴/拖拽**目标歌单选择** | ✅ Completed | §5 |
 
 > Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
 
@@ -89,7 +89,7 @@ coverBlobId?: string;   // 歌单级封面，FK → mediaBlobs；缺省时 UI �
 ### Phase 3: 创建 + 上传 + 粘贴目标选择
 - [x] **gallery「+新建歌单」**：搜索行旁按钮 → `createSession`(空 seed、autoExtend off) → 进详情页（可立即行内改名/封面）。
 - [x] **详情页「+添加歌曲」**：文件选择(`MEDIA_ACCEPT` multiple) → 新 store action **`addUploadsToSet(setId, files)`**（抽自 `addUploads`，probe+createUploadedTrack+prepend 复用）→ 进该歌单顶部。i18n `newSet`/`addTracks`/`newSetName` 4 语。typecheck/biome 清。
-- [ ] **粘贴/拖拽**媒体到 gallery（无上下文）**弹目标歌单选择器（含新建）= 待做**；详情页封面图 paste/drop 已在 Phase 2 做。
+- [x] **粘贴/拖拽媒体目标路由**：新 `upload-target-store`（`active`/`set`/`pick`），SearchPage 据 selectedSetId 设目标（gallery→pick、详情→该 set、离开→active）；`GlobalDropZone`(window 级) media 分支据 target 路由——`set`→`addUploadsToSet`、`pick`→弹 **`SetPickerDialog`**（列歌单+新建→选定后上传）、`active`→原行为。避免 window 监听打架。i18n `drop.pickSetTitle` 4 语。**全套件 277 绿、typecheck/biome 清、无回归**（非 gallery 视图保持原拖放行为）。
 
 ---
 

@@ -36,6 +36,7 @@ import {
 } from "@/lib/set-gallery";
 import { cn } from "@/lib/utils";
 import { usePlayerStore } from "@/stores/player-store";
+import { useUploadTargetStore } from "@/stores/upload-target-store";
 
 type GalleryView = "list" | "grid";
 const VIEW_KEY = "muzero-gallery-view";
@@ -62,6 +63,14 @@ export function SearchPage() {
   const allTracks = useLiveQuery(() => listAllTracks(db), [], []);
   const setActiveSession = usePlayerStore((s) => s.setActiveSession);
   const play = usePlayerStore((s) => s.play);
+  const setUploadTarget = useUploadTargetStore((s) => s.setTarget);
+
+  // Route app-wide dropped/pasted media: a set detail → that set; the album wall →
+  // a target-set picker. Reset to the default behavior when leaving the gallery.
+  useEffect(() => {
+    setUploadTarget(selectedSetId ? { kind: "set", setId: selectedSetId } : { kind: "pick" });
+    return () => setUploadTarget({ kind: "active" });
+  }, [selectedSetId, setUploadTarget]);
 
   const trackById = useMemo(() => new Map(allTracks.map((tr) => [tr.id, tr])), [allTracks]);
 

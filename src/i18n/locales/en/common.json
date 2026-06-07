@@ -104,7 +104,9 @@
     "bgApplied": "Background added",
     "galleryApplied": "Added to gallery",
     "skipped_one": "{{count}} unsupported file skipped",
-    "skipped_other": "{{count}} unsupported files skipped"
+    "skipped_other": "{{count}} unsupported files skipped",
+    "pickSetTitle_one": "Add {{count}} file to which set?",
+    "pickSetTitle_other": "Add {{count}} files to which set?"
   },
   "background": {
     "title": "Background",

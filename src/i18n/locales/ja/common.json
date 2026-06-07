@@ -100,7 +100,8 @@
     "coverApplied": "カバーを更新しました",
     "bgApplied": "背景に追加しました",
     "galleryApplied": "ギャラリーに追加しました",
-    "skipped_other": "未対応のファイル {{count}} 件をスキップしました"
+    "skipped_other": "未対応のファイル {{count}} 件をスキップしました",
+    "pickSetTitle_other": "{{count}} 件のファイルをどのセットに追加しますか？"
   },
   "background": {
     "title": "背景",

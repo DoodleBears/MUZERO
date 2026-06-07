@@ -100,7 +100,8 @@
     "coverApplied": "封面已更新",
     "bgApplied": "已加为背景",
     "galleryApplied": "已加入图库",
-    "skipped_other": "跳过 {{count}} 个不支持的文件"
+    "skipped_other": "跳过 {{count}} 个不支持的文件",
+    "pickSetTitle_other": "把 {{count}} 个文件加到哪个歌单？"
   },
   "background": {
     "title": "背景",
