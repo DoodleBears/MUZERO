@@ -52,16 +52,24 @@ export default function ReactiveScene({
     });
     if (!gl) return;
 
-    const build = (): GLState => {
-      const programInfo = twgl.createProgramInfo(gl, [SCENE_VERT, frag]);
-      const bufferInfo = twgl.primitives.createXYQuadBufferInfo(gl);
-      return {
-        gl,
-        programInfo,
-        bufferInfo,
-        data: new Uint8Array(Math.floor(fftSize / 2)),
-        start: 0,
-      };
+    const build = (): GLState | null => {
+      if (gl.isContextLost()) return null;
+      try {
+        const programInfo = twgl.createProgramInfo(gl, [SCENE_VERT, frag]);
+        if (!programInfo?.program) return null;
+        const bufferInfo = twgl.primitives.createXYQuadBufferInfo(gl);
+        return {
+          gl,
+          programInfo,
+          bufferInfo,
+          data: new Uint8Array(Math.floor(fftSize / 2)),
+          start: 0,
+        };
+      } catch {
+        // Shader/program failure → no scene (canvas stays transparent, the
+        // stage's cover/title shows through) instead of crashing the React tree.
+        return null;
+      }
     };
 
     gl.enable(gl.BLEND);
@@ -83,7 +91,11 @@ export default function ReactiveScene({
     return () => {
       canvas.removeEventListener("webglcontextlost", onLost);
       canvas.removeEventListener("webglcontextrestored", onRestored);
-      gl.getExtension("WEBGL_lose_context")?.loseContext();
+      // Do NOT loseContext() here: React StrictMode double-invokes effects
+      // (mount→cleanup→mount) reusing the SAME canvas, and a context killed via
+      // loseContext can't be recovered through getContext — the re-mount would
+      // build its program on a dead context (link fails → crash). The context is
+      // released by GC when the canvas element unmounts.
       stateRef.current = null;
     };
   }, [frag, fftSize]);
