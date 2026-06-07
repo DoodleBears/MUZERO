@@ -34,6 +34,15 @@ vi.mock("react-i18next", () => ({
   }),
 }));
 
+vi.mock("lucide-react", () => ({
+  PanelBottomClose: ({ className }: { className?: string }) => (
+    <svg className={className} data-testid="panel-bottom-close-icon" />
+  ),
+  PanelBottomOpen: ({ className }: { className?: string }) => (
+    <svg className={className} data-testid="panel-bottom-open-icon" />
+  ),
+}));
+
 vi.mock("dexie-react-hooks", () => ({
   useLiveQuery: (query: () => unknown) => {
     query();
@@ -115,7 +124,9 @@ describe("NowPlayingPanel collapse", () => {
 
     expect(screen.getByTestId("now-playing-panel")).toHaveAttribute("data-state", "expanded");
     expect(screen.getByTestId("queue-list")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Close queue" }));
+    const collapseButton = screen.getByRole("button", { name: "Close queue" });
+    expect(collapseButton).toContainElement(screen.getByTestId("panel-bottom-close-icon"));
+    fireEvent.click(collapseButton);
 
     expect(mocks.saveSettings).toHaveBeenCalledWith({ nowPlayingRightRailCollapsed: true });
   });
@@ -126,6 +137,10 @@ describe("NowPlayingPanel collapse", () => {
     render(<NowPlayingPanel collapsible />);
 
     expect(screen.getByTestId("now-playing-panel")).toHaveAttribute("data-state", "collapsed");
+    expect(screen.getByTestId("now-playing-panel-compact-header")).toHaveClass("rounded-b-none");
+    expect(screen.getByRole("button", { name: "Up next" })).toContainElement(
+      screen.getByTestId("panel-bottom-open-icon"),
+    );
     expect(screen.queryByTestId("queue-list")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Up next" }));
 

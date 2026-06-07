@@ -1,5 +1,5 @@
 import { useLiveQuery } from "dexie-react-hooks";
-import { PanelRightClose, PanelRightOpen } from "lucide-react";
+import { PanelBottomClose, PanelBottomOpen } from "lucide-react";
 import { motion } from "motion/react";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -101,7 +101,8 @@ export function NowPlayingPanel({
           onOffsetChange={setMemoryRailScrollTop}
         />
         <motion.div
-          className="shrink-0 rounded-2xl bg-muted/50 p-2 shadow-sm backdrop-blur-sm dark:bg-card/85"
+          className="shrink-0 rounded-t-2xl rounded-b-none bg-muted/50 p-2 shadow-sm backdrop-blur-sm dark:bg-card/85"
+          data-testid="now-playing-panel-compact-header"
           layout
           transition={{ type: "spring", stiffness: 360, damping: 34, mass: 0.8 }}
         >
@@ -118,7 +119,7 @@ export function NowPlayingPanel({
                 <span className="block truncate text-muted-foreground text-xs">{session.name}</span>
               )}
             </span>
-            <PanelRightOpen aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />
+            <PanelBottomOpen aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />
           </button>
         </motion.div>
       </motion.div>
@@ -160,7 +161,7 @@ export function NowPlayingPanel({
             onClick={() => setCollapsed(true)}
             type="button"
           >
-            <PanelRightClose aria-hidden="true" className="size-4" />
+            <PanelBottomClose aria-hidden="true" className="size-4" />
           </button>
         )}
       </div>
