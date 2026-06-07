@@ -225,14 +225,14 @@ this.version(3).stores({
 
 **Phase 3b — UI + provenance（待并行 Now Playing 重设计提交后接力）🔲:**
 - [x] `memory-notes-waterfall.tsx` 展示层：每条 Memory 以便签卡片呈现，Pretext 动态测量文本高度并做响应式 masonry/waterfall，支持照片、时间戳、编辑/删除回调；不持有 DB/i18n 状态，便于后续接 `annotation-editor`。
-- [x] `memory-note-composer.tsx` 展示层：新增/编辑 Memory 的便签输入面板，支持 note 草稿、保存/取消、照片选择/移除回调；不持有 DB/i18n 状态。
+- [x] `memory-note-composer.tsx` 展示层：新增/编辑 Memory 的便签输入面板，支持 note 草稿、保存/取消、照片选择/移除/粘贴回调；不持有 DB/i18n 状态。
 - [x] `track-memory-notes-panel.tsx` 容器层：`useLiveQuery(listMemories)` + `addMemory`/`updateMemoryNote`/`deleteMemory` 接 composer/waterfall；后续 `annotation-editor` 可直接嵌入。
 - [x] `annotation-editor` 改记忆列表：嵌入 `TrackMemoryNotesPanel`，旧单 note textarea 退场，新增/编辑/删除/照片/时间戳由便签 UI 承接。
-  - **UIUX 决议（2026-06-08）**：记忆不是一个长 textarea；每条 Memory 以「便签」卡片呈现，整体为响应式便签瀑布流（移动单列、桌面多列）。布局使用 `@chenglou/pretext` 预计算 note 文本高度，再按当前最短列放置卡片；无 canvas/jsdom 环境走确定性 fallback，测试不依赖浏览器测量。第一行必须 **top-align**：第一个位置固定是一个虚线边框的「新建记忆」便签，右侧/后续列的第一张记忆卡与它顶部对齐；避免 CSS columns 的自动列平衡造成错位。点击新建便签后该位置原地变为聚焦输入框。卡片使用默认 `card/background` 色系，不做彩色便签，避免压过 Now Playing 主视觉。普通记忆卡片包含可读的大段 note、时间戳、可选照片缩略图、编辑/删除操作；保存后立即进入瀑布流。
+  - **UIUX 决议（2026-06-08）**：记忆不是一个长 textarea；每条 Memory 以「便签」卡片呈现，整体为响应式便签瀑布流（移动单列、桌面多列）。布局使用 `@chenglou/pretext` 预计算 note 文本高度，再按当前最短列放置卡片；无 canvas/jsdom 环境走确定性 fallback，测试不依赖浏览器测量。第一行必须 **top-align**：第一个位置固定是一个虚线边框的「新建记忆」便签，右侧/后续列的第一张记忆卡与它顶部对齐；避免 CSS columns 的自动列平衡造成错位。点击新建便签后该位置原地变为聚焦输入框。输入体验：可直接把图片粘贴进 composer，`Enter` 提交，`Shift+Enter` 保留换行。卡片使用默认 `card/background` 色系，不做彩色便签，避免压过 Now Playing 主视觉。普通记忆卡片包含可读的大段 note、时间戳、可选照片缩略图、编辑/删除操作；保存后立即进入瀑布流。
 - [x] `search-page` 用 `memoryNotesByTrack` join 记忆进搜索：gallery set filtering 委托 `searchTracks`，因此 set 可因 track title/tag/memory note 命中。
 - [x] providerPreset 生成时落 `Track` + 自动加一条 provenance Memory（musicgen Q5；mock 仅字段不写 Memory，避免测试/本地占位污染 DJ 记忆）。
 - [x] `MemoryNotesWaterfall` 展示层测试：新到旧排序、Pretext masonry top-align、照片 alt、edit/delete 回调、空态。
-- [x] `MemoryNoteComposer` 展示层测试：trim submit、blank guard、edit cancel、photo select/remove 回调。
+- [x] `MemoryNoteComposer` 展示层测试：trim submit、blank guard、edit cancel、photo select/remove/paste 回调、Enter 提交、Shift+Enter 换行。
 - [x] `TrackMemoryNotesPanel` 容器测试：渲染已有 memories、composer 新增、waterfall 编辑/删除，并通过 Dexie liveQuery 更新 UI。
 - [x] `AnnotationEditor` 接线测试：渲染 `TrackMemoryNotesPanel`，不再显示 deprecated single note textarea；annotation labels 走 i18n 4 语。
 - [x] 便签创建入口：瀑布流第一格为虚线「新建记忆」卡片，点击后原地切为 auto-focused composer；第一行 top-align，右侧第一张记忆卡与虚线创建卡顶部对齐；底部记忆区域直接展示便签，不再包外层 card；卡片使用默认 `card/background` 色系。
@@ -302,6 +302,7 @@ this.version(3).stores({
 | 2026-06-08 | Codex | 推进 Phase 4 Memory→cover：新增 `setTrackCoverFromMemory`，将记忆照片复制为独立 cover blob；带照片便签可一键设为歌曲封面；补 repo/waterfall/panel 测试；`make check` 通过（70 files / 428 tests）。 |
 | 2026-06-08 | Codex | 修正 Memory 便签布局：从 CSS columns 切到 top-aligned responsive grid，确保虚线创建卡与右侧第一张记忆卡顶部对齐；补展示层测试；`make check` 通过（70 files / 428 tests）。 |
 | 2026-06-08 | Codex | 升级 Memory 便签瀑布流：引入 `@chenglou/pretext` 预计算 note 文本高度，按最短列做动态 masonry；保留第一格虚线创建卡与第一张记忆卡 top-align，并为无 canvas/jsdom 环境提供 fallback；补纯布局 + 展示层测试。目标测试通过（3 files / 13 tests）；`make check` 曾通过（71 files / 431 tests），之后最新重跑被并行 `visualizer` WIP 的 typecheck 挡住。 |
+| 2026-06-08 | Codex | 打磨 Memory composer：支持直接粘贴图片作为记忆照片，`Enter` 提交，`Shift+Enter` 保留多行输入；补 composer 键盘/粘贴测试；`make check` 通过（71 files / 434 tests）。 |
 
 ---
 

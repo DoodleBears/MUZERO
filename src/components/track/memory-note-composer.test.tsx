@@ -82,4 +82,46 @@ describe("MemoryNoteComposer", () => {
     expect(onPhotoSelect).toHaveBeenCalledWith(file);
     expect(onPhotoRemove).toHaveBeenCalledOnce();
   });
+
+  it("accepts pasted image files as the selected photo", () => {
+    const onPhotoSelect = vi.fn();
+    render(
+      <MemoryNoteComposer
+        labels={labels}
+        onPhotoSelect={onPhotoSelect}
+        onSubmit={() => undefined}
+      />,
+    );
+
+    const file = new File(["img"], "pasted.png", { type: "image/png" });
+    const textFile = new File(["txt"], "note.txt", { type: "text/plain" });
+    fireEvent.paste(screen.getByPlaceholderText("Write a memory"), {
+      clipboardData: {
+        files: [textFile, file],
+        items: [],
+      },
+    });
+
+    expect(onPhotoSelect).toHaveBeenCalledWith(file);
+  });
+
+  it("submits with Enter and keeps Shift+Enter for new lines", () => {
+    const onSubmit = vi.fn();
+    render(<MemoryNoteComposer labels={labels} onSubmit={onSubmit} />);
+
+    const textarea = screen.getByPlaceholderText("Write a memory");
+    fireEvent.change(textarea, { target: { value: "first line" } });
+    fireEvent.keyDown(textarea, { key: "Enter", shiftKey: true });
+    expect(onSubmit).not.toHaveBeenCalled();
+
+    const enterEvent = new KeyboardEvent("keydown", {
+      bubbles: true,
+      cancelable: true,
+      key: "Enter",
+    });
+    textarea.dispatchEvent(enterEvent);
+
+    expect(enterEvent.defaultPrevented).toBe(true);
+    expect(onSubmit).toHaveBeenCalledWith("first line");
+  });
 });

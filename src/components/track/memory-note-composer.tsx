@@ -60,6 +60,17 @@ export function MemoryNoteComposer({
     if (file) onPhotoSelect?.(file);
   }
 
+  function pastePhoto(event: React.ClipboardEvent<HTMLTextAreaElement>) {
+    const file = firstImageFile(Array.from(event.clipboardData.files));
+    if (file) onPhotoSelect?.(file);
+  }
+
+  function handleKeyDown(event: React.KeyboardEvent<HTMLTextAreaElement>) {
+    if (event.key !== "Enter" || event.shiftKey) return;
+    event.preventDefault();
+    submit();
+  }
+
   return (
     <div
       className={cn(
@@ -72,6 +83,8 @@ export function MemoryNoteComposer({
         className="min-h-24 resize-none bg-background text-sm shadow-inner"
         disabled={isSubmitting}
         onChange={(event) => setDraft(event.target.value)}
+        onKeyDown={handleKeyDown}
+        onPaste={pastePhoto}
         placeholder={labels.notePlaceholder}
         value={draft}
       />
@@ -124,4 +137,8 @@ export function MemoryNoteComposer({
       </div>
     </div>
   );
+}
+
+function firstImageFile(files: readonly File[]): File | undefined {
+  return files.find((file) => file.type.startsWith("image/"));
 }
