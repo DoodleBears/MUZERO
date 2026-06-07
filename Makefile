@@ -17,7 +17,13 @@ export
 endif
 
 PM ?= pnpm
-DEV_URL ?= http://localhost:1420
+# Dev-server ports. The browser loop (make dev) and the Tauri desktop shell
+# (make desktop) use different ports so they can run side by side. Override like
+# `make desktop DESKTOP_PORT=1440`. Vite reads MUZERO_DEV_PORT; Tauri's devUrl is
+# overridden to match via --config (mobile HMR already uses 1421, so desktop=1430).
+WEB_PORT ?= 1420
+DESKTOP_PORT ?= 1430
+DEV_URL ?= http://localhost:$(WEB_PORT)
 BUNDLE_DIR := src-tauri/target/release/bundle
 UNAME := $(shell uname)
 
@@ -33,7 +39,7 @@ help:
 	@echo ""
 	@echo "Develop:"
 	@echo "  make dev          - Web dev in the browser, fastest loop ($(DEV_URL))"
-	@echo "  make desktop      - Tauri DESKTOP with hot reload (Vite HMR + Rust shell)"
+	@echo "  make desktop      - Tauri DESKTOP hot reload — runs alongside 'make dev' (port $(DESKTOP_PORT))"
 	@echo "  make ios          - Run on iOS simulator/device (needs Xcode; run ios-init once)"
 	@echo "  make ios-init     - Generate the iOS project (one-time)"
 	@echo "  make android      - Run on Android emulator/device (needs SDK/NDK; run android-init once)"
@@ -82,12 +88,14 @@ update:
 
 # Fast browser loop (no Rust). Works with the offline mock music provider.
 dev web:
-	$(PM) dev
+	MUZERO_DEV_PORT=$(WEB_PORT) $(PM) dev
 
 # Desktop app with hot reload: Vite HMR drives the WebView, and the Rust shell
-# rebuilds on src-tauri changes. This is the main desktop dev command.
+# rebuilds on src-tauri changes. This is the main desktop dev command. Runs its
+# own Vite on DESKTOP_PORT (default 1430) with a matching --config devUrl, so it
+# can run at the same time as `make dev` (port 1420).
 desktop tauri:
-	$(PM) tauri dev
+	MUZERO_DEV_PORT=$(DESKTOP_PORT) $(PM) exec tauri dev --config '{"build":{"devUrl":"http://localhost:$(DESKTOP_PORT)"}}'
 
 ios-init:
 	$(PM) tauri ios init

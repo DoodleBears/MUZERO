@@ -6,6 +6,12 @@ import tailwindcss from "@tailwindcss/vite";
 // @tauri-apps/cli injects TAURI_ENV_* during `tauri dev` / `tauri build`.
 const host = process.env.TAURI_DEV_HOST;
 
+// Dev-server port — configurable so the browser loop (`make dev`, 1420) and the
+// Tauri desktop shell (`make desktop`, 1430) can run at the same time on separate
+// ports. `make desktop` sets MUZERO_DEV_PORT and passes a matching `--config`
+// devUrl to Tauri (see Makefile). Defaults to 1420 so plain `pnpm dev` is unchanged.
+const devPort = Number(process.env.MUZERO_DEV_PORT) || 1420;
+
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react(), tailwindcss()],
@@ -19,7 +25,7 @@ export default defineConfig({
   // Tauri expects a fixed port and fails if it's not available.
   clearScreen: false,
   server: {
-    port: 1420,
+    port: devPort,
     strictPort: true,
     host: host || false,
     hmr: host
