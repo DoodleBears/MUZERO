@@ -6,6 +6,7 @@ import {
   markTrackFailed,
   markTrackGenerating,
   markTrackReady,
+  memoryNotesByTrack,
   prependTrackIds,
 } from "@/db/repositories";
 import type { Track } from "@/db/types";
@@ -52,15 +53,23 @@ export function createDjEngine(deps: {
     const session = await getSession(sessionId, db);
     if (!session) return null;
     const tracks = await getTracksByIds(session.trackIds, db);
-    const recent: RecentTrack[] = tracks
-      .filter((t) => t.status === "ready")
-      .slice(-8)
-      .map((t) => ({
+    const readyRecent = tracks.filter((t) => t.status === "ready").slice(-8);
+    // "Music carries memories" — fold each track's memories into the listener
+    // note so the DJ keeps generating in the spirit of what these songs mean.
+    const notesByTrack = await memoryNotesByTrack(
+      readyRecent.map((t) => t.id),
+      db,
+    );
+    const recent: RecentTrack[] = readyRecent.map((t) => {
+      const memories = notesByTrack.get(t.id) ?? [];
+      const note = memories.length > 0 ? memories.join(" · ") : t.note;
+      return {
         title: t.title,
         caption: t.brief?.caption ?? (t.origin === "uploaded" ? `uploaded ${t.kind}` : t.title),
         tags: t.tags,
-        note: t.note,
-      }));
+        note,
+      };
+    });
     return { seedPrompt: session.seedPrompt, config: session.config, recent, count };
   }
 

@@ -41,9 +41,35 @@ export interface Track {
   generatedAt?: number;
   playCount: number;
   liked: boolean;
-  // Annotations — "music carries memories": user labels + a freeform note.
+  // Annotations — "music carries memories": user labels + memories (see `Memory`).
   tags: string[];
+  /**
+   * @deprecated Superseded by the one-to-many {@link Memory} table (v4 migrates
+   * any existing note into a first Memory). Kept nullable for defense; new code
+   * reads/writes memories, never this. Still indexed by search if present.
+   */
   note?: string;
+  /**
+   * Which cloud vendor/model preset generated this track (provenance, musicgen
+   * Q5). Undefined for uploaded/mock tracks. Display-only; safe when missing.
+   */
+  providerPreset?: string;
+}
+
+/**
+ * 歌曲记忆 — one memory attached to a track ("music carries memories"). A track
+ * has MANY: each a freeform note + an optional photo + a timestamp, shown as a
+ * timeline. The photo bytes live in `mediaBlobs` (role "memory"), never inline.
+ */
+export interface Memory {
+  id: string; // newId("mem")
+  /** Which track this memory belongs to (one-to-many). */
+  trackId: string;
+  /** The memory text (searchable, fed to the DJ as listener context). */
+  note: string;
+  /** Optional photo — FK into `mediaBlobs` (role "memory"). */
+  photoBlobId?: string;
+  createdAt: number;
 }
 
 /**
@@ -53,12 +79,13 @@ export interface Track {
  *  - `background` — per-track slideshow background images (many per track)
  *  - `gallery` — global slideshow images, stored under the sentinel
  *    `trackId === GLOBAL_GALLERY_ID` (not bound to any track)
+ *  - `memory`  — a photo attached to a {@link Memory} (`trackId` = the song)
  * New roles are additive: existing rows keep their role, so no schema bump.
  */
 export interface MediaBlob {
   id: string;
   trackId: string;
-  role: "media" | "cover" | "background" | "gallery";
+  role: "media" | "cover" | "background" | "gallery" | "memory";
   mime: string;
   bytes: number;
   blob: Blob;
@@ -225,8 +252,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   backgroundMaskOpacity: 25,
   backgroundSlideshowIntervalSec: 300,
   backgroundSlideshowShuffle: true,
-  visualizerStyle: "aura",
+  visualizerStyle: "bars",
   visualizerAsBackground: false,
-  visualizerBackgroundDim: 30,
-  visualizerInCoverArea: false,
+  visualizerBackgroundDim: 70,
+  visualizerInCoverArea: true,
 };

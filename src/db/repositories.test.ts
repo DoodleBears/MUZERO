@@ -1,17 +1,24 @@
+import Dexie from "dexie";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { MuzeroDB } from "./muzero-db";
 import {
+  addMemory,
   createSession,
   createUploadedTrack,
+  deleteMemory,
   getAllTags,
+  getMemoryPhoto,
   getSession,
   getSessionCover,
   getTrack,
   listAllTracks,
+  listMemories,
+  memoryNotesByTrack,
   prependTrackIds,
   setSessionCover,
   setTrackNote,
   setTrackTags,
+  updateMemoryNote,
 } from "./repositories";
 
 let db: MuzeroDB;
@@ -132,5 +139,108 @@ describe("annotations", () => {
     expect(tags[0]).toEqual({ tag: "chill", count: 2 });
     expect(tags.find((t) => t.tag === "focus")?.count).toBe(1);
     expect(await listAllTracks(db)).toHaveLength(2);
+  });
+});
+
+describe("memories (one-to-many)", () => {
+  it("adds multiple memories to a track, listed oldest → newest", async () => {
+    const a = await addMemory({ trackId: "trk_1", note: "first listen", createdAt: 1 }, db);
+    const b = await addMemory({ trackId: "trk_1", note: "  on the train  ", createdAt: 2 }, db);
+    await addMemory({ trackId: "trk_2", note: "someone else's song", createdAt: 1 }, db);
+
+    const list = await listMemories("trk_1", db);
+    expect(list.map((m) => m.id)).toEqual([a.id, b.id]); // createdAt order
+    expect(list.map((m) => m.note)).toEqual(["first listen", "on the train"]); // trimmed
+    expect(await listMemories("trk_2", db)).toHaveLength(1);
+  });
+
+  it("stores a photo in mediaBlobs with role 'memory' and resolves it", async () => {
+    const photo = new Blob([new Uint8Array([7, 7, 7])], { type: "image/jpeg" });
+    const mem = await addMemory(
+      { trackId: "trk_p", note: "beach", photo: { blob: photo, mime: "image/jpeg" } },
+      db,
+    );
+    expect(mem.photoBlobId).toBeTruthy();
+    const row = await db.mediaBlobs.get(mem.photoBlobId ?? "");
+    expect(row?.role).toBe("memory");
+    expect(row?.trackId).toBe("trk_p");
+    expect(row?.mime).toBe("image/jpeg");
+    expect(await getMemoryPhoto(mem, db)).toBeTruthy();
+    // a note-only memory has no photo
+    const noteOnly = await addMemory({ trackId: "trk_p", note: "plain" }, db);
+    expect(noteOnly.photoBlobId).toBeUndefined();
+    expect(await getMemoryPhoto(noteOnly, db)).toBeUndefined();
+  });
+
+  it("edits a memory note in place", async () => {
+    const mem = await addMemory({ trackId: "trk_e", note: "typo" }, db);
+    await updateMemoryNote(mem.id, "  fixed  ", db);
+    const [reloaded] = await listMemories("trk_e", db);
+    expect(reloaded.note).toBe("fixed");
+  });
+
+  it("deletes a memory and its photo blob", async () => {
+    const photo = new Blob([new Uint8Array([1])], { type: "image/png" });
+    const mem = await addMemory(
+      { trackId: "trk_d", note: "x", photo: { blob: photo, mime: "image/png" } },
+      db,
+    );
+    const photoId = mem.photoBlobId ?? "";
+    await deleteMemory(mem.id, db);
+    expect(await listMemories("trk_d", db)).toHaveLength(0);
+    expect(await db.mediaBlobs.get(photoId)).toBeUndefined();
+  });
+
+  it("maps memory notes by trackId (for search joins + DJ context)", async () => {
+    await addMemory({ trackId: "trk_a", note: "one", createdAt: 1 }, db);
+    await addMemory({ trackId: "trk_a", note: "two", createdAt: 2 }, db);
+    await addMemory({ trackId: "trk_b", note: "solo", createdAt: 1 }, db);
+    const map = await memoryNotesByTrack(["trk_a", "trk_b", "trk_none"], db);
+    expect(map.get("trk_a")).toEqual(["one", "two"]);
+    expect(map.get("trk_b")).toEqual(["solo"]);
+    expect(map.has("trk_none")).toBe(false);
+  });
+});
+
+describe("v3 → v4 migration moves Track.note into a first Memory", () => {
+  it("backfills each noted track with one memory, skipping empty notes", async () => {
+    const name = `muzero-mig4-${Math.random().toString(36).slice(2)}`;
+    // Build a v3-era database (no memories table) with two tracks: one noted, one not.
+    const v3 = new Dexie(name);
+    v3.version(1).stores({
+      tracks: "id, sessionId, status, createdAt, liked",
+      mediaBlobs: "id, trackId",
+      sessions: "id, status, updatedAt",
+      settings: "id",
+    });
+    v3.version(2).stores({
+      tracks: "id, sessionId, status, createdAt, liked, *tags, kind",
+      mediaBlobs: "id, trackId, role",
+    });
+    v3.version(3).stores({ playQueue: "id" });
+    await v3.open();
+    await v3.table("tracks").bulkPut([
+      { id: "noted", sessionId: "s", status: "ready", createdAt: 100, note: "our wedding song" },
+      { id: "blank", sessionId: "s", status: "ready", createdAt: 200, note: "   " },
+      { id: "none", sessionId: "s", status: "ready", createdAt: 300 },
+    ]);
+    v3.close();
+
+    // Reopening as MuzeroDB (v4) runs the upgrade → note becomes a Memory.
+    const mz = new MuzeroDB(name);
+    try {
+      const noted = await listMemories("noted", mz);
+      expect(noted).toHaveLength(1);
+      expect(noted[0].note).toBe("our wedding song");
+      expect(noted[0].createdAt).toBe(100); // preserves the track's timestamp
+      expect(await listMemories("blank", mz)).toHaveLength(0); // whitespace-only skipped
+      expect(await listMemories("none", mz)).toHaveLength(0);
+    } finally {
+      mz.close();
+      await new Promise<void>((resolve) => {
+        const req = indexedDB.deleteDatabase(name);
+        req.onsuccess = req.onerror = () => resolve();
+      });
+    }
   });
 });

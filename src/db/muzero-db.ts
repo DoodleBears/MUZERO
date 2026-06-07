@@ -1,6 +1,14 @@
 import Dexie, { type EntityTable } from "dexie";
 import { newId } from "@/lib/id";
-import type { AppSettings, DjSession, MediaBlob, PlayQueue, PlayQueueEntry, Track } from "./types";
+import type {
+  AppSettings,
+  DjSession,
+  MediaBlob,
+  Memory,
+  PlayQueue,
+  PlayQueueEntry,
+  Track,
+} from "./types";
 
 /**
  * MUZERO's on-device store. Everything lives here — tracks, media blobs (audio /
@@ -13,6 +21,7 @@ export class MuzeroDB extends Dexie {
   sessions!: EntityTable<DjSession, "id">;
   settings!: EntityTable<AppSettings, "id">;
   playQueue!: EntityTable<PlayQueue, "id">;
+  memories!: EntityTable<Memory, "id">;
 
   constructor(name = "muzero-db") {
     super(name);
@@ -89,6 +98,28 @@ export class MuzeroDB extends Dexie {
           contextSetId,
           updatedAt: Date.now(),
         } satisfies PlayQueue);
+      });
+
+    // v4 — 歌曲记忆 Memory (one-to-many). New `memories` table; photos reuse
+    // `mediaBlobs` with the additive role "memory" (no blob-index change needed).
+    // Backfill: each track's single deprecated `note` becomes its first Memory,
+    // preserving the recollection. The `Track.note` field stays (nullable,
+    // deprecated) for defense; new annotations write memories instead.
+    this.version(4)
+      .stores({ memories: "id, trackId, createdAt, [trackId+createdAt]" })
+      .upgrade(async (tx) => {
+        const tracks = (await tx.table("tracks").toArray()) as Track[];
+        for (const t of tracks) {
+          const note = t.note?.trim();
+          if (note) {
+            await tx.table("memories").add({
+              id: newId("mem"),
+              trackId: t.id,
+              note,
+              createdAt: t.createdAt,
+            } satisfies Memory);
+          }
+        }
       });
   }
 }

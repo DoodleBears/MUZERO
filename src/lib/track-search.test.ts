@@ -61,11 +61,40 @@ describe("matchesQuery", () => {
   });
 });
 
+describe("matchesQuery with memories", () => {
+  // After the v4 migration, recollections live in the memories table — passed in
+  // as notes rather than read off `track.note`.
+  const song = track({ id: "c", title: "Drift", note: undefined, tags: ["chill"] });
+
+  it("matches text found in a passed-in memory note", () => {
+    expect(matchesQuery(song, "okinawa")).toBe(false); // not in any track field
+    expect(matchesQuery(song, "okinawa", ["beach day in okinawa"])).toBe(true);
+  });
+
+  it("ANDs tokens across track fields and memory notes", () => {
+    expect(matchesQuery(song, "drift okinawa", ["beach day in okinawa"])).toBe(true);
+    expect(matchesQuery(song, "drift tokyo", ["beach day in okinawa"])).toBe(false);
+  });
+
+  it("still scopes #tag to tags, never memory notes", () => {
+    expect(matchesQuery(song, "#beach", ["beach day in okinawa"])).toBe(false);
+    expect(matchesQuery(song, "#chill", ["beach day in okinawa"])).toBe(true);
+  });
+});
+
 describe("searchTracks", () => {
   it("filters the list by query", () => {
     const all = [neonRain, workout];
     expect(searchTracks(all, "road").map((t) => t.id)).toEqual(["a"]);
     expect(searchTracks(all, "").length).toBe(2);
+  });
+
+  it("joins per-track memory notes from the map when filtering", () => {
+    const all = [neonRain, workout];
+    const memories = new Map<string, string[]>([["b", ["leg day PR in osaka"]]]);
+    expect(searchTracks(all, "osaka", memories).map((t) => t.id)).toEqual(["b"]);
+    // without the memory map, "osaka" matches nothing
+    expect(searchTracks(all, "osaka").length).toBe(0);
   });
 });
 

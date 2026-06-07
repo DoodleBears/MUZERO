@@ -2,26 +2,36 @@ import type { Track } from "@/db/types";
 
 /**
  * Pure track search over annotations + metadata. "Music carries memories", so
- * the note and tags are first-class search surfaces alongside title/caption.
- * All query tokens must match somewhere (AND); each token is a case-insensitive
- * substring match against any field. A `#tag` token matches tags only.
+ * the track's memories and tags are first-class search surfaces alongside
+ * title/caption. All query tokens must match somewhere (AND); each token is a
+ * case-insensitive substring match against any field. A `#tag` token matches
+ * tags only.
+ *
+ * Memories live in their own table, so callers pass the track's memory notes in
+ * (e.g. from `memoryNotesByTrack`); the legacy `track.note` is still folded in
+ * for any not-yet-migrated row.
  */
-export function trackSearchText(track: Track): string {
+export function trackSearchText(track: Track, memoryNotes: readonly string[] = []): string {
   return [
     track.title,
     track.brief?.caption ?? "",
     track.note ?? "",
     track.tags.join(" "),
     track.provider,
+    memoryNotes.join(" "),
   ]
     .join(" ")
     .toLowerCase();
 }
 
-export function matchesQuery(track: Track, query: string): boolean {
+export function matchesQuery(
+  track: Track,
+  query: string,
+  memoryNotes: readonly string[] = [],
+): boolean {
   const tokens = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
   if (tokens.length === 0) return true;
-  const haystack = trackSearchText(track);
+  const haystack = trackSearchText(track, memoryNotes);
   return tokens.every((token) => {
     if (token.startsWith("#") && token.length > 1) {
       const tag = token.slice(1);
@@ -31,9 +41,13 @@ export function matchesQuery(track: Track, query: string): boolean {
   });
 }
 
-export function searchTracks(tracks: Track[], query: string): Track[] {
+export function searchTracks(
+  tracks: Track[],
+  query: string,
+  memoryNotesByTrackId?: ReadonlyMap<string, readonly string[]>,
+): Track[] {
   if (!query.trim()) return tracks;
-  return tracks.filter((t) => matchesQuery(t, query));
+  return tracks.filter((t) => matchesQuery(t, query, memoryNotesByTrackId?.get(t.id) ?? []));
 }
 
 /** Tracks carrying a given tag (exact, case-insensitive). */

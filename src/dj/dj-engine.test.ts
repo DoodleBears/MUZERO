@@ -1,19 +1,23 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { MuzeroDB } from "@/db/muzero-db";
-import { createSession, getSession, getTrack, getTrackBlob } from "@/db/repositories";
+import { addMemory, createSession, getSession, getTrack, getTrackBlob } from "@/db/repositories";
 import { createMockMusicGenProvider } from "@/musicgen/mock-provider";
 import type { TrackBrief } from "./dj-brief-schema";
 import { createDjEngine, type DjBrain } from "./dj-engine";
 
 /** A canned brain that yields scripted briefs and records the context it saw. */
-function scriptedBrain(
-  scripts: TrackBrief[][],
-): DjBrain & { calls: number; lastRecentTitles: string[] } {
+function scriptedBrain(scripts: TrackBrief[][]): DjBrain & {
+  calls: number;
+  lastRecentTitles: string[];
+  lastRecentNotes: (string | undefined)[];
+} {
   const state = {
     calls: 0,
     lastRecentTitles: [] as string[],
-    async draftBriefs(ctx: { recent: { title: string }[] }) {
+    lastRecentNotes: [] as (string | undefined)[],
+    async draftBriefs(ctx: { recent: { title: string; note?: string }[] }) {
       state.lastRecentTitles = ctx.recent.map((r) => r.title);
+      state.lastRecentNotes = ctx.recent.map((r) => r.note);
       const batch = scripts[Math.min(state.calls, scripts.length - 1)];
       state.calls += 1;
       return batch;
@@ -171,6 +175,26 @@ describe("DjEngine.refillIfNeeded (续上歌单)", () => {
     const reloaded = await getSession(session.id, db);
     expect(reloaded?.trackIds).toHaveLength(3);
     expect(brain.lastRecentTitles).toEqual(["A", "B"]);
+  });
+
+  it("feeds a track's memories into the DJ context (music carries memories)", async () => {
+    const session = await createSession(
+      { seedPrompt: "x", config: { refillThreshold: 1, batchSize: 1 } },
+      db,
+    );
+    const brain = scriptedBrain([[brief("A")], [brief("B")]]);
+    const engine = createDjEngine({ db, brain, provider: createMockMusicGenProvider() });
+    await engine.draft(session.id); // queue: A
+    await engine.materializeNext(session.id); // A → ready
+    const [trackA] = (await getSession(session.id, db))!.trackIds;
+    await addMemory({ trackId: trackA, note: "danced to this in osaka", createdAt: 1 }, db);
+    await addMemory({ trackId: trackA, note: "rainy window", createdAt: 2 }, db);
+
+    await engine.refillIfNeeded(session.id, 1, 0); // 0 upcoming ≤ threshold → draft B
+
+    expect(brain.lastRecentTitles).toEqual(["A"]);
+    // both memories joined into the listener note, newest after oldest
+    expect(brain.lastRecentNotes).toEqual(["danced to this in osaka · rainy window"]);
   });
 
   it("never refills a non-DJ (upload/curated) set", async () => {

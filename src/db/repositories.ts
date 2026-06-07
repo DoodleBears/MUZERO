@@ -18,6 +18,7 @@ import {
   type DjConfig,
   type DjSession,
   type MediaBlob,
+  type Memory,
   type PlayQueue,
   type PlayQueueEntry,
   type SetDisplayMode,
@@ -34,7 +35,9 @@ import {
 
 export async function getSettings(db: MuzeroDB = defaultDb): Promise<AppSettings> {
   const row = await db.settings.get("app");
-  return row ?? DEFAULT_SETTINGS;
+  // Merge over defaults so settings added later (e.g. new visualizer options) get
+  // their default even for rows written before the field existed.
+  return row ? { ...DEFAULT_SETTINGS, ...row } : DEFAULT_SETTINGS;
 }
 
 export async function saveSettings(
@@ -382,6 +385,97 @@ export async function setTrackCoverCrop(
   db: MuzeroDB = defaultDb,
 ): Promise<void> {
   await db.tracks.update(id, { coverCrop: crop });
+}
+
+// ----------------------------------------------------------------- memories ----
+
+/**
+ * Add a memory to a track ("music carries memories") — a note plus an optional
+ * photo. The photo (if any) goes into `mediaBlobs` with role "memory"; the
+ * Memory row only references it. One track has many memories.
+ */
+export async function addMemory(
+  input: {
+    trackId: string;
+    note: string;
+    photo?: { blob: Blob; mime: string };
+    /** Timeline timestamp; defaults to now. Pass when importing/backfilling. */
+    createdAt?: number;
+  },
+  db: MuzeroDB = defaultDb,
+): Promise<Memory> {
+  return db.transaction("rw", db.memories, db.mediaBlobs, async () => {
+    let photoBlobId: string | undefined;
+    if (input.photo) {
+      const photo: MediaBlob = {
+        id: newId("blb"),
+        trackId: input.trackId,
+        role: "memory",
+        mime: input.photo.mime,
+        bytes: input.photo.blob.size,
+        blob: input.photo.blob,
+      };
+      await db.mediaBlobs.put(photo);
+      photoBlobId = photo.id;
+    }
+    const memory: Memory = {
+      id: newId("mem"),
+      trackId: input.trackId,
+      note: input.note.trim(),
+      photoBlobId,
+      createdAt: input.createdAt ?? Date.now(),
+    };
+    await db.memories.put(memory);
+    return memory;
+  });
+}
+
+/** A track's memories, oldest → newest (timeline order). */
+export function listMemories(trackId: string, db: MuzeroDB = defaultDb): Promise<Memory[]> {
+  return db.memories.where("trackId").equals(trackId).sortBy("createdAt");
+}
+
+/** Edit a memory's note text in place. */
+export async function updateMemoryNote(
+  id: string,
+  note: string,
+  db: MuzeroDB = defaultDb,
+): Promise<void> {
+  await db.memories.update(id, { note: note.trim() });
+}
+
+/** Delete a memory and its photo blob (if any). */
+export async function deleteMemory(id: string, db: MuzeroDB = defaultDb): Promise<void> {
+  await db.transaction("rw", db.memories, db.mediaBlobs, async () => {
+    const memory = await db.memories.get(id);
+    if (memory?.photoBlobId) await db.mediaBlobs.delete(memory.photoBlobId);
+    await db.memories.delete(id);
+  });
+}
+
+/** Resolve a memory's photo blob, or undefined when it has none. */
+export async function getMemoryPhoto(
+  memory: Memory,
+  db: MuzeroDB = defaultDb,
+): Promise<Blob | undefined> {
+  if (!memory.photoBlobId) return undefined;
+  const row = await db.mediaBlobs.get(memory.photoBlobId);
+  return row?.blob;
+}
+
+/** All memory notes for a set of tracks, keyed by trackId — for search joins + DJ context. */
+export async function memoryNotesByTrack(
+  trackIds: string[],
+  db: MuzeroDB = defaultDb,
+): Promise<Map<string, string[]>> {
+  const rows = await db.memories.where("trackId").anyOf(trackIds).toArray();
+  const map = new Map<string, string[]>();
+  for (const m of rows.sort((a, b) => a.createdAt - b.createdAt)) {
+    const list = map.get(m.trackId);
+    if (list) list.push(m.note);
+    else map.set(m.trackId, [m.note]);
+  }
+  return map;
 }
 
 // -------------------------------------------------------------- backgrounds ----

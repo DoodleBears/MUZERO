@@ -15,7 +15,7 @@
 |-------|------|--------|------|
 | 1 | 播放列表 Play Queue 地基（表 + repo + player-store 改消费它 + 迁移现有播放） | ✅ Completed | §6 |
 | 2 | autoExtend / refill 迁到 Play Queue（续歌喂队列） | ✅ Completed | §6 |
-| 3 | 歌曲记忆 Memory（表 + 迁移 `Track.note` + 多记忆编辑 + 搜索/DJ 上下文接 memory） | 🔲 Pending | §6 |
+| 3 | 歌曲记忆 Memory（表 + 迁移 `Track.note` + 多记忆编辑 + 搜索/DJ 上下文接 memory） | 🔄 3a 数据层✅（表/迁移/repo/搜索/DJ）；3b UI 待 Now Playing 重设计落地 | §6 |
 | 4 | UI 打磨（歌单管理、播放列表 play-next/add/reorder、记忆相册、封面取自记忆） | 🔲 Pending | §6 |
 
 > Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
@@ -213,14 +213,21 @@ this.version(3).stores({
 - [~] DJ 集自动续→新曲进播放列表的端到端 = DM-1c high-water 已实现并浏览器验证迁移+播放；完整 fake-indexeddb 驱动 player-store 的端到端测（含 MediaEngine）成本高，留 DM-4 配队列 UI 一起补。
 
 ### Phase 3: 歌曲记忆 Memory
-**Tasks:**
-- [ ] `Memory` 类型；v3 加 `memories` 表 + `mediaBlobs` `role:"memory"`；`memories` repo。
-- [ ] 迁移 `Track.note` → 一条 Memory；`annotation-editor` 改记忆列表（加/编辑/删/照片/时间）。
-- [ ] `track-search.matchesQuery` 搜 memory.note；`RecentTrack` 喂 memory 给 DJ；providerPreset 落 Track + 生成时自动加一条 Memory（musicgen Q5）。
+> 拆 **3a 数据层（已完成）** + **3b UI（待 Now Playing 重设计落地）**——3b 改的 `annotation-editor.tsx` / `search-page` 当前在并行的 Now Playing 重设计 WIP 里（未提交），避免冲突先做无冲突的 3a。
 
-**Phase 3 Checklist:**
-- [ ] 一首歌可加多条记忆（含照片）；搜索命中记忆文字；升级后旧 note 变首条记忆。
-- [ ] DJ 上下文带记忆；生成的曲自动带 provenance Note。
+**Phase 3a — 数据层（无 UI，全 clean 文件）✅:**
+- [x] `Memory` 类型（`id`/`trackId`/`note`/`photoBlobId?`/`createdAt`，前缀 `mem_`）；`MediaBlob.role += "memory"`；`Track.providerPreset?` + `Track.note` 标 `@deprecated`（保留 nullable 防御）。
+- [x] **v4 迁移**（v3 已被 DM-1 playQueue 占用，按下一可用版本落）：`memories: "id, trackId, createdAt, [trackId+createdAt]"` + `.upgrade()` 把每条 `Track.note`→首条 Memory（保留 `createdAt`，空白跳过；幂等）。
+- [x] `memories` repo：`addMemory`(照片进 mediaBlobs role"memory"；可选 `createdAt` 便于导入/确定性测) / `listMemories`(时间线序) / `updateMemoryNote` / `deleteMemory`(连带删照片) / `getMemoryPhoto` / `memoryNotesByTrack`(按曲聚合，供搜索 join + DJ)。
+- [x] `track-search.matchesQuery/searchTracks` 接受 memory notes（可选参数，`#tag` 仍只配 tag；旧调用点不变）。
+- [x] `dj-engine` `buildContext` 把每曲 memories join 进 `RecentTrack.note` 喂 DJ。
+- [x] **测试**：repo 5 例（多记忆时间线序/照片 role/编辑/删连带照片/按曲聚合）+ v3→v4 迁移（note→Memory、空白跳过、保留时间戳）+ track-search 记忆命中 4 例 + dj-engine 记忆入 context。**全套件 317 绿、typecheck/biome 清**。
+
+**Phase 3b — UI + provenance（待并行 Now Playing 重设计提交后接力）🔲:**
+- [ ] `annotation-editor` 改记忆列表（加/编辑/删/照片/时间线）——文件在 WIP，待其落地。
+- [ ] `search-page` 用 `memoryNotesByTrack` join 记忆进搜索（`useLiveQuery` memories）。
+- [ ] providerPreset 生成时落 `Track` + 自动加一条 provenance Memory（musicgen Q5；接 PROVENANCE 字段）。
+- [ ] 验收：一首歌可加多条记忆（含照片）；搜索命中记忆文字；DJ 上下文带记忆；生成曲自动带 provenance Note。（数据层已就绪，仅差 UI 接线）
 
 ### Phase 4: UI 打磨
 **Tasks:**
