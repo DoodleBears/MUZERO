@@ -342,6 +342,17 @@ interface ChatUiState {
 - 队列只存 `composerRaw` + 紧凑 contextSnapshot；**派发时**才重建展开 prompt（不存展开/密钥/媒体）。
 - 重载/actor 重建后 `autoDispatchEnabled=false`（reason `reload`），托盘里可见 Switch + 每项「立即发送」。**Stop ≠ Interrupt**：Stop 中止当前 turn 并暂停自动派发；Interrupt 中止并插队即发 + 一次性「被新指令打断」标记。DnD 重排（抄 export-drawer 模式）。session 作用域，不跨 session 泄漏。
 
+### 5.9 State 纪律（Zustand slice / selector / 防无关重渲染）—— 硬性
+
+> chat 是多 slice、高 re-render 风险区（消息流、runtime status、三形态、队列、模型选择各自变化频率不同）。**状态跨组件解耦做到位，state 更新不得波及无关组件**（硬规则 #6）。沿用 MUZERO 现有范式（[`track-identity-row.tsx`](../../../src/components/player/track-identity-row.tsx) 是模板：`useShallow` + 只取当前曲*标量*，别的歌变动重建数组也不重渲染它）。
+
+- **最小 selector，永不整 store 订阅**：组件订阅它真正用到的最小切片；选对象/数组用 `useShallow`（`zustand/react/shallow`）+ **提取标量字段**（如 `{title, coverBlobId}`），别订阅整个 `messages`/`queue` 对象引用。
+- **chat-store 分 slice**：`uiSlice`（mode/dockSide）、`navSlice`（activeSessionId）、`runtimeMetaSlice`（per-session status/preview/pendingApprovalCount）。各 slice 独立更新，互不牵连。high-frequency 的流式 token **不进 store**——走 runtime actor 的 `useSyncExternalStore` 快照，只让挂载的消息视图重渲染。
+- **非响应式单例进模块作用域**：`DjChatRuntimeActor` 注册表、`AbortController`、transport 等**不进 store state**（同 `DjEngine`/`MediaEngine`）。
+- **派生用 selector，不冗余存**：`pendingApprovalCount`、`currentTrack` 等是 selector over tool parts / queue，不另立可能与真相分叉的 state。
+- **diff 守卫高频订阅**：liveQuery / 外部订阅推数据前比签名，内容没变不 `set`（参 player-store 的 `queueSig` 守卫），避免数组引用 churn 触发列表全量重渲染。
+- **列表用 `useLiveQuery` 读 Dexie**，不塞进 Zustand（硬规则 #6）。
+
 ---
 
 ## 6. 多 Provider 模型选型（Phase 5）
@@ -477,6 +488,7 @@ interface ChatUiState {
 | 2026-06-07 | MUZERO | 定 Open Q1 + Q3（best practice）：active session id → `AppSettings.lastChatSessionId?`（无 project 概念，免单独 chatPrefs 行）；模型 = 全局默认 + per-session combobox 覆盖（key 不进 session 行）。同步 §3.2/§3.3/§3.4/§6 |
 | 2026-06-07 | MUZERO | 收口 Q4/Q5：generate 工具与 autoExtend 都写同一队列、store pump 统一物化（不开第二循环）；接受 streamdown bundle 增量。`track_annotate` 加 **now-playing 感知**（听歌时对话加 tag/note，链 musicgen Q5 的生成自动 Note）。系统浏览器外链改为「要做」（`@tauri-apps/plugin-opener`）|
 | 2026-06-07 | MUZERO | **工具集对齐新数据模型**：§4.2 重写——`set_*`(歌单 CRUD+切换)/`queue_*`(加入播放列表/play-next/重排)/`add_memory`(一曲多记忆)/`now_playing_get`；**无 playback transport**；C 方案 propose→确认→generate + 无审批模式开关；**审批=成本驱动**(只 `dj_generate_tracks` 审批)；now-playing 每轮注入 system。**前置依赖**[数据模型 PRD](../20260607-muzero-set-playqueue-memory-data-model-prd/20260607-muzero-set-playqueue-memory-data-model-prd.md)先落地 |
+| 2026-06-07 | MUZERO | 加 §5.9 **State 纪律**（用户强调跨状态解耦）：最小 selector / `useShallow`+标量 / chat-store 分 slice / 模块作用域单例 / diff 守卫高频订阅 / `useLiveQuery` 读列表。模板 `track-identity-row.tsx`；已给 player-store 加 `queueSig` 守卫 |
 
 ---
 
