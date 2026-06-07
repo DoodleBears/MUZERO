@@ -241,6 +241,7 @@ this.version(3).stores({
 
 ### Phase 4: UI 打磨
 **Tasks:**
+- [x] 当前歌曲/封面 context menu：新增 shadcn-style `ContextMenu` primitive（Base UI 实现），MediaStage 与底部歌曲行支持右键/长按打开；菜单内可切换 display mode（video/cover/title）、audio-only，并可添加/更换当前歌曲封面（走既有 crop dialog + `setTrackCover`）。
 - [ ] 歌单管理（CRUD + 播放/加入队列/切换）；播放列表视图（play-next/add/remove/reorder/loop 控件）；记忆相册；封面取自记忆。
 - [ ] i18n 4 语全量（歌单/播放列表/记忆 文案）。
 
@@ -296,6 +297,7 @@ this.version(3).stores({
 | 2026-06-08 | Codex | 推进 Phase 3b annotation 接线：`annotation-editor` 接入 `TrackMemoryNotesPanel`，移除 deprecated 单 note textarea 写入，新增 Memory labels 四语 i18n；补接线测试；`make check` 通过（67 files / 413 tests）。 |
 | 2026-06-08 | Codex | 完成 Phase 3b search 接线：`SearchPage` liveQuery memories 并把 `memoryNotesByTrack + searchTracks` 注入 gallery set filter，搜索可命中 track memories 与 `#tag`；补 `set-gallery` 委托 matcher 测试；`make check` 通过（67 files / 414 tests）。 |
 | 2026-06-08 | Codex | 收口 Memory UIUX：瀑布流第一格改为虚线 create-memory 便签（Plus icon + label），点击原地切 auto-focused composer；annotation 底部直接展示便签瀑布流，卡片回到默认 `card/background` 色系；补组件/容器/i18n 接线测试；`make check` 通过（67 files / 420 tests）。 |
+| 2026-06-08 | Codex | 推进 Phase 4 player UI：新增 shadcn-style context menu primitive，并接入当前歌曲/封面右键菜单，可切 display mode、audio-only、添加/更换封面；补 primitive + track menu 测试；`make check` 通过（69 files / 424 tests）。 |
 
 ---
 

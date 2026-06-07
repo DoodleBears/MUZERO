@@ -10,6 +10,7 @@ import { useTrackCoverUrl } from "@/hooks/use-media";
 import { trackSubtitle } from "@/lib/track-display";
 import { transitionState } from "@/lib/view-transition-react";
 import { usePlayerStore } from "@/stores/player-store";
+import { CurrentTrackContextMenu } from "./track-context-menu";
 
 /**
  * Row 1 of the player-dock: cover + title/artist + the single play/pause button.
@@ -76,45 +77,47 @@ export function TrackIdentityRow({
 
   return (
     <div className="flex items-center gap-2 sm:gap-3">
-      <button
-        type="button"
-        onClick={handleOpen}
-        disabled={!track}
-        aria-label={t("nav.now")}
-        className="flex min-w-0 flex-1 items-center gap-2.5 rounded-2xl text-left outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-default sm:gap-3"
-      >
-        <motion.span
-          layoutId="now-cover"
-          className="relative grid size-10 shrink-0 place-items-center overflow-hidden rounded-xl bg-secondary"
+      <CurrentTrackContextMenu className="min-w-0 flex-1">
+        <button
+          type="button"
+          onClick={handleOpen}
+          disabled={!track}
+          aria-label={t("nav.now")}
+          className="flex w-full min-w-0 items-center gap-2.5 rounded-2xl text-left outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-default sm:gap-3"
         >
-          {/* Crossfades to the next cover only once it has decoded (no flash). */}
-          <CoverImage
-            url={coverUrl}
-            hasCover={!!track?.coverBlobId}
-            fallback={<Disc3 className="size-5 text-muted-foreground" />}
-          />
-        </motion.span>
-        <span className="relative min-w-0 flex-1">
-          {/* Slide + fade the title/artist on track change. */}
-          <AnimatePresence mode="wait" initial={false}>
-            <motion.span
-              key={track?.id ?? "none"}
-              initial={{ opacity: 0, y: 6 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -6 }}
-              transition={{ duration: 0.2 }}
-              className="block min-w-0"
-            >
-              <span className="block truncate text-sm font-semibold">
-                {track?.title ?? "MUZERO"}
-              </span>
-              <span className="block truncate text-xs text-muted-foreground">
-                {track ? track.subtitle : t("app.pressPlay")}
-              </span>
-            </motion.span>
-          </AnimatePresence>
-        </span>
-      </button>
+          <motion.span
+            layoutId="now-cover"
+            className="relative grid size-10 shrink-0 place-items-center overflow-hidden rounded-xl bg-secondary"
+          >
+            {/* Crossfades to the next cover only once it has decoded (no flash). */}
+            <CoverImage
+              url={coverUrl}
+              hasCover={!!track?.coverBlobId}
+              fallback={<Disc3 className="size-5 text-muted-foreground" />}
+            />
+          </motion.span>
+          <span className="relative min-w-0 flex-1">
+            {/* Slide + fade the title/artist on track change. */}
+            <AnimatePresence mode="wait" initial={false}>
+              <motion.span
+                key={track?.id ?? "none"}
+                initial={{ opacity: 0, y: 6 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -6 }}
+                transition={{ duration: 0.2 }}
+                className="block min-w-0"
+              >
+                <span className="block truncate text-sm font-semibold">
+                  {track?.title ?? "MUZERO"}
+                </span>
+                <span className="block truncate text-xs text-muted-foreground">
+                  {track ? track.subtitle : t("app.pressPlay")}
+                </span>
+              </motion.span>
+            </AnimatePresence>
+          </span>
+        </button>
+      </CurrentTrackContextMenu>
       {controls && <div className="shrink-0">{controls}</div>}
       <Button
         size="icon-lg"
