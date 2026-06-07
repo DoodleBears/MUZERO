@@ -1,6 +1,6 @@
 # PRD: 音乐可视化系统（Poweramp 风频谱 + 随音乐波动的生成式画面）
 
-**Status:** In Progress（Phase 1–2 ✅）
+**Status:** In Progress（Phase 1–3 ✅ · Phase 5 轻量收尾 ✅；Phase 4 延后 v2）
 **Created:** 2026-06-07
 **Author:** DoodleBear / MUZERO
 **Module:** Player — Now Playing 可视化（可插拔 Visualizer registry：频谱样式库 + GPU shader 反应式场景），复用现有 `AudioEngine` AnalyserNode，承接 `--primary` 主题色
@@ -13,9 +13,9 @@
 |-------|------|--------|------|
 | 1 | 可视化基础设施：`Visualizer` 接口 + registry + host（rAF 生命周期 / 可见性暂停 / reduced-motion / 共享 analyser）+ Settings 控件 + 把现有 aura 收编为第一个 renderer | ✅ Completed | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | 自研 canvas-2D 频谱样式包（bars / 八度对数 / radial / LED+reflex / waveform / aura），全部跟随 `--primary` | ✅ Completed | [Phase 2 Checklist](#phase-2-checklist) |
-| 3 | GPU shader 反应式场景（`ogl`，Unlicense）：1–2 个「画面随音乐波动」场景 + WebGL 探测 + canvas 回退 | 🔲 Pending | [Phase 3 Checklist](#phase-3-checklist) |
+| 3 | GPU shader 反应式场景（`twgl.js`，MIT）：液态 / 极光「画面随音乐波动」+ WebGL 探测 + canvas 回退 | ✅ Completed | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | **（已按 Open Q1 延后 v2）** Milkdrop 模式：`@webamp/butterchurn`（MIT）懒加载 + 精选 preset + WebGL2 gate + iOS 回退 | ⏸️ Deferred (v2) | [Phase 4 Checklist](#phase-4-checklist) |
-| 5 | 打磨：性能测量方法学（帧节奏 + longtask）/ bundle 预算 / i18n 四语 / a11y / 移动端降频 / 文档对齐 | 🔲 Pending | [Phase 5 Checklist](#phase-5-checklist) |
+| 5 | 打磨：i18n / a11y / 文档对齐 ✅（轻量收尾）；性能埋点 / bundle 预算 / 移动 30fps 延后 | 🔄 轻量收尾 | [Phase 5 Checklist](#phase-5-checklist) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
 
@@ -80,7 +80,7 @@
 | 维度 | 决策 | Rationale |
 |------|------|-----------|
 | **频谱样式库（广度）** | **自研 canvas-2D**（零依赖，clean-room 借鉴 audioMotion 的*技术*） | 「支持很多种」靠的是样式数量，不是某个库；自研零 bundle、零 license 风险、完全可跟随 `--primary`、可复用现有 aura 代码路径 |
-| **反应式生成画面（深度）** | **复用既有 `three` + `@react-three/fiber` + `@react-three/postprocessing`**（已是依赖，见 [`dither-background.tsx`](../../../src/components/player/dither-background.tsx)） | 「画面随音乐波动」需要 GPU shader；本仓库**已为 Dither 背景特效引入 three + R3F + postprocessing**，复用它**零新增 bundle**、与既有 shader 管线一致——胜过再引入第二套 WebGL 运行时（`ogl`）而违反「不引入新 runtime owner」 |
+| **反应式生成画面（深度）** | **`twgl.js`**（MIT, ~22KB, 懒加载） | 「画面随音乐波动」= 全屏 fragment shader。原计划复用 three+R3F,但**用户中途移除了 three（去依赖）**;遂二次横向对比（ogl/twgl/regl/raw/shadertoy-runner）→ 选 `twgl.js`（MIT 薄 helper,`setUniforms` 顺手,内置全屏 quad）;懒加载不进主 bundle。详见 §2.3a |
 | **Milkdrop「炸裂」模式（可选）** | **`@webamp/butterchurn`**（MIT）懒加载 + 精选 preset | Poweramp 的「milk」可视化本质就是 Milkdrop；butterchurn 是它的 web 实现，audio 模型完美兼容（见 §2.3）。但 WebGL2 必需 + preset 体积 + iOS 风险，**门控/可延后** |
 | **音频输入** | 复用 `getMediaEngine().getAnalyser()`；host 按当前样式设置 `analyser.fftSize` / `smoothingTimeConstant` | 单 analyser 足够（同时只有一个样式在渲染）；fftSize 运行时可改，无需多 tap |
 | **调色** | 自研 renderer 从 `--primary` 派生（抽出 [`aura-visualizer.tsx`](../../../src/components/player/aura-visualizer.tsx) 的 `readPrimaryRgb`/`lighten` 到共享 util） | 与刚落地的主题色系统连续；scene/butterchurn 可选 tint |
@@ -105,8 +105,27 @@
 
 **三句话结论：**
 1. 「支持很多炫酷频谱」**不需要库**——自研 canvas-2D 样式包零成本、零风险、可跟随主题色；技术借鉴 audioMotion（八度对数分带 + 感知加权）但**不引入 AGPL 依赖**。
-2. 「画面随音乐波动」**复用本仓库已有的 three + R3F + postprocessing**（为 Dither 背景引入，见 [`dither-background.tsx`](../../../src/components/player/dither-background.tsx)）写音频反应式 shader 场景，把 analyser 喂进 uniform——**零新增依赖**，与既有 shader 管线一致。
+2. 「画面随音乐波动」用全屏 fragment shader，把 analyser 喂进 uniform。原拟复用本仓库的 three+R3F，但**用户中途移除了 three**；二次横向对比后选 **`twgl.js`**（MIT, ~22KB, 懒加载）——见下方「§2.3a WebGL 库二次对比」。
 3. 真要「Milkdrop 炸裂」就上 **`@webamp/butterchurn`**（MIT，音频模型完美兼容），但**懒加载 + 精选 preset + WebGL2 门控 + iOS 回退**，且因它是「新 runtime owner」需先过依赖清单审查（见 §7 / §10），可延后到 v2。
+
+### 2.3a WebGL 库二次横向对比（three 被移除后，2026-06）
+
+用户在实现中途移除了 `three` / `@react-three/fiber`，故针对**「跑一个全屏音频反应式 fragment shader + 几个 uniform」**重新横向对比轻量 WebGL 方案：
+
+| 库 | License | 体积(gz) | 维护 | 本用例适配 |
+|----|---------|---------|------|-----------|
+| **twgl.js ✅选用** | MIT | ~22KB | 活跃 v7(2025-07) | `setUniforms(对象)` 最顺手 + 内置全屏 quad + 0 deps + TS;薄 helper 不挟带 scene model |
+| ogl | Unlicense | ~8–12KB(tree-shake) | 活跃 368k/wk | 内置 `Triangle` + `webgl:1`;ergonomics/KB 最佳(亚军) |
+| regl | MIT | ~37KB | npm 停滞 | 声明式、最重、不 tree-shake;单 shader 过重 |
+| raw WebGL | 0 依赖 | 0KB | 自研 | ~150 LOC,唯一难点 context-loss;契合自研传统(季军) |
+| shadertoy-react | MIT | 6KB | **2021 弃坑** | API 正合用但已死=vendor 死代码 |
+| gl-react | MIT | 重(7 依赖) | 活跃 | 唯一活跃 React 专用,但 compositor + 依赖多 |
+| shader-web-background | **GPL-3.0** 🚫 | — | 活跃 | 闭源分发硬阻断 + 不在 npm |
+| shader-doodle | MIT | — | 活跃 | **不支持自定义 uniform** → 做不了音频反应 |
+| picogl / phenomenon / two.js / glslCanvas | 杂 | 杂 | 多 stale | stale / 形状不对(粒子/2D) |
+| lygia(shader 片段库) | **Prosperity 非商用** 🚫 | — | 活跃 | 不可打包(可手抄函数) |
+
+**结论**：drop-in shader runner 全军覆没（死 / 重 / GPL / 缺 uniform）；真正的决赛是 raw WebGL vs ogl vs twgl。用户选 **`twgl.js`**（MIT、`setUniforms` 顺手、内置全屏 quad、活跃维护），懒加载 → 不进主 bundle。
 
 ### 2.4 架构总览（可插拔 Visualizer registry，复刻 MusicGenProvider 模式）
 
@@ -336,21 +355,22 @@ function frame(t: number) {
 
 ### Phase 3: GPU shader 反应式场景（深度 = 「画面随音乐波动」）
 
-**Goal:** 1–2 个生成式 shader 背景（液态 / 极光），振幅/频段驱动。**零新增依赖**——复用本仓库已有的 `three` + `@react-three/fiber` + `@react-three/postprocessing`（为 Dither 背景引入，见 [`dither-background.tsx`](../../../src/components/player/dither-background.tsx)）；WebGL 探测 + canvas 回退。
+**Goal:** 液态 / 极光两个生成式 shader 背景，振幅/频段驱动。**选型变更**：原计划复用 three+R3F，但用户中途移除了 three（去依赖）；经二次横向对比（ogl/twgl/regl/raw/shadertoy-runner）→ 选 **`twgl.js`（MIT, ~22KB, 懒加载）** 写 WebGL1 全屏 fragment shader；WebGL 探测 + canvas(`aura`) 回退。
 
 **Tasks:**
-- [ ] `scene/reactive-scene.tsx`：R3F `<Canvas>` + 全屏 plane + fragment shader，**镜像 [`dither-background.tsx`](../../../src/components/player/dither-background.tsx) 的管线**（reduced-motion 冻结、bounded 到 Now Playing）。
-- [ ] `scene/liquid.frag`、`scene/aurora.frag`：**统一 uniform 命名 prelude**（`uTime`/`uResolution`/`uAudio`(整体能量)/`uBass`/`uMid`/`uTreble`/`uPrimary`）；移植 Shadertoy 片段时文件头保留原作者/许可注释。
-- [ ] `scene/audio-uniforms.ts`（纯函数）：把 analyser `getByteFrequencyData` 汇总成 bass/mid/treble/energy 标量（**可穷举单测**）。
-- [ ] host 能力探测：无 WebGL → 回退 `aura`；`webglcontextlost` 处理（复用 R3F 的 context 管理）。
-- [ ] **动态 import** scene 模块（R3F `<Canvas>` 懒加载，仅启用 scene 样式时拉起）。
+- [x] `scene/scene-shaders.ts`：统一 uniform prelude（`uTime`/`uResolution`/`uAudio`/`uBass`/`uMid`/`uTreble`/`uPrimary`）+ `SCENE_VERT`(twgl attribute) + `LIQUID_FRAG`/`AURORA_FRAG`（自研，MIT (MUZERO)）。
+- [x] `scene/reactive-scene.tsx`：twgl 全屏 quad + program；rAF 喂 uniform；`paused` 冻结单帧（off-screen / reduced-motion）；`webglcontextlost/restored` 重建。
+- [x] `scene/audio-uniforms.ts`（纯函数）：analyser → bass/mid/treble/energy（穷举单测 6）。
+- [x] host：`SceneHost` 能力探测（`hasWebGL`）→ 无 WebGL 回退 `aura`；IntersectionObserver + reduced-motion → `paused`；**动态 import**（twgl 不进主 bundle）。
+- [x] registry 注册 scene-liquid/scene-aurora（kind=scene；`createVisualizer` 返回 null，host 走 `SceneHost`）+ i18n 四语。
 
 ### Phase 3 Checklist
-- [ ] **未新增任何依赖**（three/R3F/postprocessing 已在树中）。
-- [ ] WebGL 不可用设备自动回退、Settings 标注。
-- [ ] context-lost 不白屏、能恢复；reduced-motion 冻结。
-- [ ] scene 模块独立懒加载（非 scene 样式时不挂 R3F `<Canvas>`）。
-- [ ] 移动端发热/帧率达标（dpr≤2、低内部分辨率 + CSS 放大、30fps）。
+- [x] **新增 1 个依赖 `twgl.js`(MIT, ~22KB)**——懒加载，仅选 scene 样式时拉起，不进主 bundle。（原「零依赖」前提随 three 被移除而失效）
+- [x] WebGL 不可用自动回退 `aura`（jsdom 无 WebGL 的 host 测试已覆盖）；Settings 仍可选（回退透明）。
+- [x] `webglcontextlost/restored` 重建 program；reduced-motion / off-screen → 冻结单帧。
+- [x] scene 模块独立懒加载（非 scene 样式不加载 twgl）。
+- [ ] 真机视觉确认（WebGL 在 jsdom 跑不了）+ 移动端帧率 → 留 **Phase 5 / 真机验证**。
+- [ ] `visualizerAsBackground` 全屏背景接线 → **延后**（需改用户正在编辑的 [`now-playing-background.tsx`](../../../src/components/player/now-playing-background.tsx)，避免纠缠）；scene 现已在 stage 背景渲染。
 
 ### Phase 4: （可选 / 依赖审查门控）Milkdrop 模式
 
@@ -371,18 +391,20 @@ function frame(t: number) {
 
 ### Phase 5: 打磨（观测 / 预算 / i18n / a11y / 移动 / 文档）
 
+> **本轮按用户选择「只轻量收尾」**：完成 i18n / a11y / 文档；性能埋点（frame cadence + longtask）/ bundle 预算 / 移动端显式 30fps 限频 **延后**（核心已交付，低风险打磨可后续单做）。
+
 **Tasks:**
-- [ ] **性能观测**（模板 §4）：host 内埋 `frame interval`（rAF cadence p99/max）+ `PerformanceObserver(longtask)`；prod build（`make build` + serve）下采，第二轮复测（首轮 warmup 不算）。
-- [ ] **bundle 预算**：`pnpm build` 量化每 cluster gz 增量 < 100KB；WebGL tier 必须 dynamic import。
-- [ ] **i18n 四语**：所有样式名/描述/Settings 文案进 en→zh/ja/ko（[`i18n/locales`](../../../src/i18n/locales)）；缺语种 PR 里标 pending。
-- [ ] **a11y**：canvas `aria-hidden`；样式选择器键盘可达；reduced-motion 实时订阅（matchMedia change）。
-- [ ] **移动/电量**：30fps + 后台暂停 + dpr cap 收尾验证。
-- [ ] **文档**：更新 [`CLAUDE.md`](../../../CLAUDE.md)「项目结构 / 单个媒体元素 / 可视化」段，记录 registry + license 决策。
+- [ ] **性能观测**（模板 §4）：host 内埋 `frame interval` + `PerformanceObserver(longtask)` —— **延后**。
+- [ ] **bundle 预算**：`pnpm build` 量化增量 —— **延后**（twgl 已懒加载不进主 bundle；spectrum 零依赖）。
+- [x] **i18n 四语**：样式名 / Settings 文案 en→zh/ja/ko 全量（[`i18n/locales`](../../../src/i18n/locales)）。
+- [x] **a11y**：canvas `aria-hidden`；样式选择器原生 `<select>` 键盘可达；reduced-motion 实时订阅（matchMedia change）+ 冻结。
+- [~] **移动/电量**：dpr cap≤2 ✅、Page Visibility + IntersectionObserver 暂停 ✅；显式 30fps 限频 **延后**。
+- [x] **文档**：更新 [`CLAUDE.md`](../../../CLAUDE.md)（项目结构 + 导航口径「可视化」+ UI 库接入段），记录 registry + twgl + `--primary` 决策。
 
 ### Phase 5 Checklist
-- [ ] 验收含 `frame p99` / `frame max` / `longtask max`，非仅渲染耗时。
-- [ ] 每 cluster bundle 增量在预算内（超出则拆 phase / 子路径 import）。
-- [ ] 四语齐全；reduced-motion / a11y 通过。
+- [x] 四语齐全；a11y（aria-hidden / 键盘 / reduced-motion）通过。
+- [x] 文档对齐 CLAUDE.md。
+- [ ] 性能 `frame p99` / `longtask` 量化 + bundle 预算 + 移动 30fps —— **延后（非核心打磨）**。
 
 ---
 
@@ -404,7 +426,7 @@ function frame(t: number) {
 
 - **数据边界**：可视化只读设备本地 `AnalyserNode` 的频率数据；**零出站请求、零遥测**（硬规则 #1/#8）。新功能不引入 MUZERO 自有后端。
 - **无 hidden flag**：开关全在可见 Settings；回退 = `git revert` + 重新发版，不是 runtime kill switch（硬规则 #3）。
-- **License 第一公民**（模板 §3）：Phase 1–3 复用已在树中的 `three`/`@react-three/fiber`/`@react-three/postprocessing`(MIT)——**零新增依赖**；唯一潜在新依赖 `butterchurn`(MIT，延后 v2)；**拒绝 AGPL(audioMotion) / LGPL(p5)**。bundled shader/preset 维护 `THIRD-PARTY-LICENSES.md`；自研标 `MIT (MUZERO)`。
+- **License 第一公民**（模板 §3）：Phase 1–2 零依赖（自研 canvas）；Phase 3 新增 **`twgl.js`(MIT, ~22KB, 懒加载)**（用户移除 three 后二次选型）；唯一潜在新依赖 `butterchurn`(MIT，延后 v2)；**拒绝 AGPL(audioMotion) / LGPL(p5) / 非商用 Prosperity(lygia)**。自研 shader 标 `MIT (MUZERO)`。
 - **不引入新 runtime owner**：自研 + `ogl` 薄桥优先；butterchurn 作为唯一「重」依赖需先过依赖清单审查。
 - **codename 稳定**：不动 `muzero-db` / 表名 / id 前缀 / provider id（硬规则 #4）。
 
@@ -443,6 +465,8 @@ function frame(t: number) {
 | 2026-06-07 | DoodleBear / MUZERO | 解决全部 Open Questions（按 best practice）；**修正 Phase 3：复用已在树中的 three + R3F + postprocessing（不再引入 ogl）**——发现 [`dither-background.tsx`](../../../src/components/player/dither-background.tsx) 已用 R3F 做 Dither 背景。Phase 4(butterchurn) 按 Q1 延后 v2 |
 | 2026-06-07 | DoodleBear / MUZERO | **Phase 1 ✅**：可插拔 Visualizer registry + host（rAF/可见性暂停/reduced-motion/dpr cap）+ `visualizer-color` 工具 + aura 收编 + AppSettings 字段 + 四语 Settings 控件。TDD：color/registry/host 共 26 单测，全套 214 通过 |
 | 2026-06-07 | DoodleBear / MUZERO | **Phase 2 ✅**：自研频谱样式包 bands(纯) + bars/radial/led-reflex/waveform（全 `--primary`）+ dB 窗口 + 四语。TDD：bands(15) + renderer 烟雾(10)，全套 **249 通过** |
+| 2026-06-07 | DoodleBear / MUZERO | **Phase 3 ✅**：GPU shader 反应式场景（液态/极光）。**用户中途移除 three → 二次横向对比 WebGL 库（ogl/twgl/regl/raw/shadertoy-runner）→ 选 `twgl.js`(MIT, 懒加载)**。audio-uniforms(纯) + reactive-scene(twgl, context-loss 重建) + host `SceneHost`(WebGL 探测 + 回退 aura)。TDD：audio-uniforms(6)，全套 **258 通过** |
+| 2026-06-07 | DoodleBear / MUZERO | **Phase 5 轻量收尾 ✅**（按用户选择）：CLAUDE.md 文档对齐（registry + twgl + `--primary`）+ i18n 四语 + a11y 复核。性能埋点 / bundle 预算 / 移动 30fps 延后。Phase 4(butterchurn) 延后 v2 |
 
 ---
 

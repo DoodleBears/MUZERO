@@ -29,4 +29,10 @@ describe("VisualizerHost", () => {
     const { container } = render(<VisualizerHost active={false} styleId="off" />);
     expect(container.querySelector("canvas")).toBeNull();
   });
+
+  it("falls back to a canvas when a scene is selected but WebGL is unavailable", () => {
+    // jsdom has no WebGL, so SceneHost degrades to the aura spectrum canvas.
+    const { container } = render(<VisualizerHost active={false} styleId="scene-liquid" />);
+    expect(container.querySelector("canvas")).not.toBeNull();
+  });
 });

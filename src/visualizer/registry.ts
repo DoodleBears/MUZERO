@@ -18,7 +18,9 @@ export type VisualizerLabelKey =
   | "visualizer.styleBars"
   | "visualizer.styleRadial"
   | "visualizer.styleLed"
-  | "visualizer.styleWaveform";
+  | "visualizer.styleWaveform"
+  | "visualizer.styleSceneLiquid"
+  | "visualizer.styleSceneAurora";
 
 export interface VisualizerMeta {
   id: VisualizerStyleId;
@@ -96,6 +98,22 @@ export const VISUALIZER_META: VisualizerMeta[] = [
     minDecibels: -90,
     maxDecibels: -10,
   },
+  {
+    id: "scene-liquid",
+    kind: "scene",
+    backend: "webgl",
+    labelKey: "visualizer.styleSceneLiquid",
+    fftSize: 1024,
+    smoothing: 0.85,
+  },
+  {
+    id: "scene-aurora",
+    kind: "scene",
+    backend: "webgl",
+    labelKey: "visualizer.styleSceneAurora",
+    fftSize: 1024,
+    smoothing: 0.85,
+  },
 ];
 
 export const VISUALIZER_STYLE_IDS: VisualizerStyleId[] = VISUALIZER_META.map((m) => m.id);
@@ -136,9 +154,14 @@ export function createVisualizer(id: VisualizerStyleId): Visualizer | null {
       return createLedReflexVisualizer();
     case "waveform":
       return createWaveformVisualizer();
+    case "scene-liquid":
+    case "scene-aurora":
+      // GPU scenes are React components (rendered by SceneHost), not canvas-2D
+      // renderers — they have no Visualizer instance.
+      return null;
     default:
-      // Not yet implemented (scene-*/milkdrop) — fall back to aura so a stored
-      // future id still renders something.
+      // Not yet implemented (milkdrop) — fall back to aura so a stored future id
+      // still renders something.
       return createAuraVisualizer();
   }
 }

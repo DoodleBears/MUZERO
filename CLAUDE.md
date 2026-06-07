@@ -103,7 +103,7 @@ MUZERO/
 │   ├── components/
 │   │   ├── shell/                          # player-dock（统一三行底栏：信息+播放 / 进度 / 导航）
 │   │   ├── nav/                            # nav-row（扁平等距导航，PlayerDock 第3行）；dock-nav/dock 已降级
-│   │   ├── player/                         # track-identity-row / progress-scrubber / player-status-line（dock 行）+ now-playing-sheet（移动全屏）+ media-stage（video→cover→title）+ aura-visualizer
+│   │   ├── player/                         # track-identity-row / progress-scrubber / player-status-line（dock 行）+ now-playing-sheet（移动全屏）+ media-stage（video→cover→title）+ aura-visualizer（VisualizerHost 薄壳）
 │   │   ├── dj/                             # dj-console
 │   │   ├── track/                          # annotation-editor（tags + note + cover）
 │   │   ├── library/                        # track-row, virtual-track-list（TanStack Virtual）
@@ -111,6 +111,7 @@ MUZERO/
 │   ├── db/                                 # Dexie：muzero-db(v2), types, repositories
 │   ├── dj/                                 # DJ 引擎：brief-schema, prompt, engine, brain-ai
 │   ├── musicgen/                           # provider 接口 + cloud(BYOK) + cloud-job(轮询) + mock + wav
+│   ├── visualizer/                         # 可视化 registry（复刻 musicgen）：types/registry/host + spectrum(自研 canvas) + scene(twgl shader, 懒加载)
 │   ├── player/                             # queue + transport（纯：进度/状态/repeat）+ media-engine（<video>，音视频通吃）
 │   ├── stores/                             # player-store（编排循环 + 上传 + 显示模式）+ ui-store（sheet 开合，ephemeral）
 │   ├── ai/                                 # Vercel AI SDK model 解析（BYOK）
@@ -137,7 +138,8 @@ MUZERO/
 - 「上传的视频/音频怎么进库」→ store `addUploads` + [`src/lib/media-probe.ts`](src/lib/media-probe.ts) + repo `createUploadedTrack`
 - 「tag/备注/封面（注释）」→ [`src/components/track/annotation-editor.tsx`](src/components/track/annotation-editor.tsx) + repo `setTrackTags/Note/Cover`
 - 「搜索」→ [`src/lib/track-search.ts`](src/lib/track-search.ts)（纯函数）+ [`src/pages/search-page.tsx`](src/pages/search-page.tsx)
-- 「单个媒体元素 / 可视化」→ [`media-engine.ts`](src/player/media-engine.ts)（持久 `<video>`，`getMediaEngine().getAnalyser()`）
+- 「单个媒体元素」→ [`media-engine.ts`](src/player/media-engine.ts)（持久 `<video>`，`getMediaEngine().getAnalyser()`）
+- 「可视化样式（频谱 / shader 场景）」→ [`src/visualizer/`](src/visualizer/)：可插拔 registry（复刻 musicgen），`VisualizerHost` 按 `AppSettings.visualizerStyle` 选样式 + 单 rAF + 可见性暂停 + reduced-motion；spectrum 自研 canvas（[`spectrum/bands.ts`](src/visualizer/spectrum/bands.ts) 八度对数分带，跟随 `--primary`），scene 用 [twgl.js](src/visualizer/scene/reactive-scene.tsx) WebGL shader（懒加载、无 WebGL 回退 aura）。改样式只动 registry，**别在 UI/store 散落 `if (style===…)`**
 
 ## 数据模型（v2）与混合集 / 注释 / 视频规则
 
@@ -178,7 +180,7 @@ pnpm dlx shadcn@latest add @coss/ui            # 仅组件
 pnpm dlx shadcn@latest add @coss/<component>   # 单个组件，API 不变，调用处无需改
 ```
 
-音频可视化目前用自研的 [`aura-visualizer.tsx`](src/components/player/aura-visualizer.tsx)（canvas + WebAudio AnalyserNode，直接 tap 正在播放的本地音频）。这是**刻意选择**：LiveKit 官方 Aura 组件是 shader-based、为 LiveKit WebRTC *agent audio track* 设计的，需要 LiveKit room + `livekit-client`，与 MUZERO「本地生成 WAV、无云」的架构不匹配。registry 已在 `components.json` 配好（`@agents-ui` → `https://livekit.com/ui/r/{name}.json`），未来若引入 LiveKit 音频源可直接：
+音频可视化是**自研的可插拔 registry**（[`src/visualizer/`](src/visualizer/)）：`VisualizerHost` 按 `AppSettings.visualizerStyle` 选样式——spectrum（aura / bars / radial / led-reflex / waveform）是自研 canvas（八度对数分带 + 感知 tilt + 跟随 `--primary`），scene（liquid / aurora）是 **twgl.js**(MIT) 的 WebGL fragment shader（懒加载、WebGL 探测失败回退 aura）。[`aura-visualizer.tsx`](src/components/player/aura-visualizer.tsx) 现为 host 薄壳。**不引入 LiveKit Aura** 是刻意选择：它 shader-based、为 LiveKit WebRTC *agent audio track* 设计，需要 LiveKit room + `livekit-client`，与 MUZERO「本地优先、无云」不匹配。registry 已在 `components.json` 配好（`@agents-ui` → `https://livekit.com/ui/r/{name}.json`），未来若引入 LiveKit 音频源可直接：
 
 ```bash
 pnpm dlx shadcn@latest add @agents-ui/agent-audio-visualizer-aura

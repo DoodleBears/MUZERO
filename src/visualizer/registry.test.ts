@@ -49,7 +49,7 @@ describe("resolveVisualizerStyle (fallback)", () => {
   it("falls back to aura for undefined / unknown / not-yet-implemented", () => {
     expect(resolveVisualizerStyle(undefined)).toBe("aura");
     expect(resolveVisualizerStyle("garbage")).toBe("aura");
-    expect(resolveVisualizerStyle("scene-liquid")).toBe("aura"); // Phase 3, not registered yet
+    expect(resolveVisualizerStyle("milkdrop")).toBe("aura"); // deferred to v2, not registered
   });
 });
 
@@ -76,6 +76,14 @@ describe("createVisualizer", () => {
       expect(isRegisteredVisualizerStyle(id)).toBe(true);
       expect(resolveVisualizerStyle(id)).toBe(id);
       expect(createVisualizer(id)?.id).toBe(id);
+    }
+  });
+  it("registers scene styles as kind=scene with no canvas renderer", () => {
+    for (const id of ["scene-liquid", "scene-aurora"] as const) {
+      expect(isRegisteredVisualizerStyle(id)).toBe(true);
+      expect(resolveVisualizerStyle(id)).toBe(id);
+      expect(getVisualizerMeta(id).kind).toBe("scene");
+      expect(createVisualizer(id)).toBeNull(); // React component, not a canvas renderer
     }
   });
 });
