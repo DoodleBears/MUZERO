@@ -55,6 +55,7 @@ describe("chat shell components", () => {
           messageCount: 2,
           pendingApprovalCount: 0,
           queuedPromptCount: 0,
+          contextStartIndex: 0,
           lastAssistantPreview: "Rainy focus is ready.",
         },
       },

@@ -163,6 +163,45 @@ describe("DjChatRuntimeActor", () => {
     expect(savedGym.map((message: DjChatUIMessage) => message.role)).toEqual(["user", "assistant"]);
   });
 
+  it("persists context compression pointers while keeping old messages visible", async () => {
+    const session = await createChatSession(
+      {
+        messages: [
+          { id: "u1", role: "user", parts: [{ type: "text", text: "one" }] },
+          { id: "a1", role: "assistant", parts: [{ type: "text", text: "two" }] },
+          { id: "u2", role: "user", parts: [{ type: "text", text: "three" }] },
+          { id: "a2", role: "assistant", parts: [{ type: "text", text: "four" }] },
+        ],
+      },
+      db,
+    );
+    const actor = getOrCreateDjChatRuntimeActor(session.id, {
+      db,
+      transport: new FakeStreamingTransport("unused"),
+    });
+    await actor.ready;
+
+    await actor.setContextStartIndex(3);
+
+    expect(actor.getSnapshot().meta.contextStartIndex).toBe(2);
+    expect(actor.getSnapshot().messages).toHaveLength(4);
+    expect((await getChatSession(session.id, db))?.contextStartIndex).toBe(2);
+
+    clearDjChatRuntimeActors();
+    const rebuilt = getOrCreateDjChatRuntimeActor(session.id, {
+      db,
+      transport: new FakeStreamingTransport("unused"),
+    });
+    await rebuilt.ready;
+    expect(rebuilt.getSnapshot().meta.contextStartIndex).toBe(2);
+    expect(rebuilt.getSnapshot().messages.map((message) => message.id)).toEqual([
+      "u1",
+      "a1",
+      "u2",
+      "a2",
+    ]);
+  });
+
   it("keeps queued prompts across actor rebuilds without auto-dispatching them", async () => {
     const session = await createChatSession({ firstUserText: "queue" }, db);
     const transport = new FakeStreamingTransport("queued reply");

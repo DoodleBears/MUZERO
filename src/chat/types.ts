@@ -22,6 +22,7 @@ export interface DjChatRuntimeMeta {
   lastAssistantPreview?: string;
   pendingApprovalCount: number;
   queuedPromptCount: number;
+  contextStartIndex: number;
   errorMessage?: string;
 }
 

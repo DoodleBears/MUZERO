@@ -27,6 +27,7 @@ describe("chat-store — persisted shell state", () => {
       messageCount: 2,
       pendingApprovalCount: 0,
       queuedPromptCount: 0,
+      contextStartIndex: 0,
       lastAssistantPreview: "hello",
     });
 

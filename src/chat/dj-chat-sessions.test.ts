@@ -14,6 +14,7 @@ import {
   reorderQueuedPrompts,
   saveChatSessionSnapshot,
   searchChatSessions,
+  setChatContextStartIndex,
 } from "./dj-chat-sessions";
 import type { DjChatUIMessage } from "./types";
 
@@ -148,6 +149,25 @@ describe("chat session repository", () => {
         (prompt) => prompt.id,
       ),
     ).toEqual([second.id, first.id]);
+  });
+
+  it("persists a context start index without trimming visible messages", async () => {
+    const session = await createChatSession(
+      {
+        messages: [
+          { id: "u1", role: "user", parts: [{ type: "text", text: "one" }] },
+          { id: "a1", role: "assistant", parts: [{ type: "text", text: "two" }] },
+          { id: "u2", role: "user", parts: [{ type: "text", text: "three" }] },
+        ],
+      },
+      db,
+    );
+
+    await setChatContextStartIndex({ sessionId: session.id, contextStartIndex: 2 }, db);
+
+    const saved = await getChatSession(session.id, db);
+    expect(saved?.contextStartIndex).toBe(2);
+    expect(parseChatMessages(saved?.messagesJson)).toHaveLength(3);
   });
 });
 

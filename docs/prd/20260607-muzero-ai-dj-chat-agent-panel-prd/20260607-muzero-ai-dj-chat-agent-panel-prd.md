@@ -442,7 +442,8 @@ interface ChatUiState {
 - [ ] 键盘矩阵测试（Enter/Ctrl+Enter/Shift+Enter）；pending 审批暂停派发。
 - [x] 重载恢复队列但不自动发；手动派发 queued prompt 后从 session 队列移除；interrupt 不入队并带 `interruptionMarker`。
 - [x] 超预算时纯函数返回 block（调用点负责解释）；压缩指针计算保留最新 user turn，不静默截断。
-- [ ] 压缩指针持久化、旧消息仍可见（UI/actor 接线待后续提交）。
+- [x] 压缩指针 actor/repo 持久化、旧消息仍可见。
+- [ ] 上下文预算 UI 接线与 block-and-explain 文案（待 i18n/App 挂载解锁）。
 
 ---
 
@@ -506,6 +507,7 @@ interface ChatUiState {
 | 2026-06-07 | Codex | 推进 Phase 6b：新增 session-scoped queued prompt runtime 核心（`queuedPromptsJson` parse/enqueue/reorder/remove、runtime meta 计数、actor rebuild 不自动派发、手动派发后移除、interrupt 即发并打 `interruptionMarker`）。补仓库/actor 测试；`make check` 通过（48 files / 349 tests）。 |
 | 2026-06-07 | Codex | 推进 Phase 3b：补 `dj_propose_briefs` 非花钱提案工具，复用 `trackBriefSchema` 校验并返回 proposal id + `describeBrief` summaries；无审批、零 DB 写入，确认后再走 `dj_generate_tracks`。补工具测试；`make check` 通过（48 files / 350 tests）。 |
 | 2026-06-07 | Codex | 推进 Phase 4b：补多 session runtime actor 隔离测试，覆盖两个 session 并发发送时各自 transport、assistant preview、Dexie `messagesJson` 独立持久化；`make check` 通过（48 files / 351 tests）。 |
+| 2026-06-07 | Codex | 推进 Phase 6c：补 `contextStartIndex` repository/actor 持久化，actor 用 `nextContextStartIndex` 保留最新 user turn 作为安全起点；runtime meta 暴露压缩指针，重建后旧消息仍完整可见。补 fake-indexeddb/runtime 测试；`make check` 通过（48 files / 353 tests）。 |
 
 ---
 

@@ -9,6 +9,7 @@ import {
 import { db as defaultDb, type MuzeroDB } from "@/db/muzero-db";
 import { log } from "@/lib/logger";
 import { createDjChatTransport } from "./dj-chat-agent";
+import { nextContextStartIndex } from "./dj-chat-context-budget";
 import {
   enqueueChatPrompt,
   getChatSession,
@@ -16,6 +17,7 @@ import {
   parseQueuedPrompts,
   removeQueuedPrompt,
   saveChatSessionSnapshot,
+  setChatContextStartIndex,
 } from "./dj-chat-sessions";
 import type {
   DjChatQueuedPrompt,
@@ -43,6 +45,7 @@ export class DjChatRuntimeActor {
   private lastPersistSig = "";
   private composerDraftRaw: string | undefined;
   private queuedPrompts: DjChatQueuedPrompt[] = [];
+  private contextStartIndex = 0;
   private disposed = false;
   private db: MuzeroDB;
   private transport: ChatTransport<DjChatUIMessage>;
@@ -88,7 +91,10 @@ export class DjChatRuntimeActor {
     this.queuedPrompts = [...this.queuedPrompts, queued];
     this.setSnapshot(
       this.snapshot.messages,
-      withQueuedPromptCount(this.snapshot.meta, this.queuedPrompts.length),
+      withRuntimePointers(this.snapshot.meta, {
+        queuedPromptCount: this.queuedPrompts.length,
+        contextStartIndex: this.contextStartIndex,
+      }),
     );
     return queued;
   }
@@ -100,7 +106,10 @@ export class DjChatRuntimeActor {
     this.queuedPrompts = this.queuedPrompts.filter((prompt) => prompt.id !== promptId);
     this.setSnapshot(
       this.snapshot.messages,
-      withQueuedPromptCount(this.snapshot.meta, this.queuedPrompts.length),
+      withRuntimePointers(this.snapshot.meta, {
+        queuedPromptCount: this.queuedPrompts.length,
+        contextStartIndex: this.contextStartIndex,
+      }),
     );
     await this.sendMessage(queued.composerRaw);
   }
@@ -113,6 +122,23 @@ export class DjChatRuntimeActor {
     this.composerDraftRaw = undefined;
     await this.sendText(clean, { composerRaw: text, interruptionMarker: true });
     await this.flush();
+  }
+
+  async setContextStartIndex(desiredStartIndex: number): Promise<number> {
+    await this.ready;
+    this.contextStartIndex = nextContextStartIndex(this.snapshot.messages, desiredStartIndex);
+    await setChatContextStartIndex(
+      { sessionId: this.sessionId, contextStartIndex: this.contextStartIndex },
+      this.db,
+    );
+    this.setSnapshot(
+      this.snapshot.messages,
+      withRuntimePointers(this.snapshot.meta, {
+        queuedPromptCount: this.queuedPrompts.length,
+        contextStartIndex: this.contextStartIndex,
+      }),
+    );
+    return this.contextStartIndex;
   }
 
   async stop(): Promise<void> {
@@ -155,6 +181,7 @@ export class DjChatRuntimeActor {
     if (!session) throw new Error(`Chat session ${this.sessionId} not found`);
     const messages = parseChatMessages(session.messagesJson);
     this.queuedPrompts = parseQueuedPrompts(session.queuedPromptsJson);
+    this.contextStartIndex = nextContextStartIndex(messages, session.contextStartIndex ?? 0);
     this.composerDraftRaw = session.composerDraftRaw;
     this.chat = new Chat<DjChatUIMessage>({
       id: this.sessionId,
@@ -187,6 +214,7 @@ export class DjChatRuntimeActor {
       this.chat.status,
       this.chat.error,
       this.queuedPrompts.length,
+      this.contextStartIndex,
     );
     this.setSnapshot(messages, meta);
     this.schedulePersist();
@@ -221,6 +249,7 @@ export class DjChatRuntimeActor {
       messages: this.snapshot.messages,
       draft: this.composerDraftRaw,
       queuedPrompts: this.queuedPrompts,
+      contextStartIndex: this.contextStartIndex,
     });
     if (sig === this.lastPersistSig) return;
     this.lastPersistSig = sig;
@@ -230,6 +259,7 @@ export class DjChatRuntimeActor {
         messages: this.snapshot.messages,
         composerDraftRaw: this.composerDraftRaw,
         queuedPrompts: this.queuedPrompts,
+        contextStartIndex: this.contextStartIndex,
       },
       this.db,
     );
@@ -243,6 +273,7 @@ function emptyMeta(sessionId: string): DjChatRuntimeMeta {
     messageCount: 0,
     pendingApprovalCount: 0,
     queuedPromptCount: 0,
+    contextStartIndex: 0,
   };
 }
 
@@ -252,6 +283,7 @@ function runtimeMeta(
   status: ChatStatus,
   error: Error | undefined,
   queuedPromptCount: number,
+  contextStartIndex: number,
 ): DjChatRuntimeMeta {
   const pendingApprovalCount = countPendingApprovals(messages);
   return {
@@ -261,15 +293,16 @@ function runtimeMeta(
     lastAssistantPreview: lastAssistantText(messages),
     pendingApprovalCount,
     queuedPromptCount,
+    contextStartIndex,
     errorMessage: error?.message,
   };
 }
 
-function withQueuedPromptCount(
+function withRuntimePointers(
   meta: DjChatRuntimeMeta,
-  queuedPromptCount: number,
+  input: { queuedPromptCount: number; contextStartIndex: number },
 ): DjChatRuntimeMeta {
-  return { ...meta, queuedPromptCount };
+  return { ...meta, ...input };
 }
 
 function mapStatus(status: ChatStatus): DjChatRuntimeStatus {

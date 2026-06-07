@@ -129,6 +129,7 @@ export async function saveChatSessionSnapshot(
     messages: DjChatUIMessage[];
     composerDraftRaw?: string;
     queuedPrompts?: DjChatQueuedPrompt[];
+    contextStartIndex?: number;
   },
   db: MuzeroDB = defaultDb,
 ): Promise<void> {
@@ -139,6 +140,9 @@ export async function saveChatSessionSnapshot(
   };
   if (input.queuedPrompts) {
     patch.queuedPromptsJson = JSON.stringify(input.queuedPrompts);
+  }
+  if (input.contextStartIndex !== undefined) {
+    patch.contextStartIndex = sanitizeContextStartIndex(input.contextStartIndex);
   }
   await db.chatSessions.update(input.sessionId, patch);
 }
@@ -197,6 +201,18 @@ export async function reorderQueuedPrompts(
   return next;
 }
 
+export async function setChatContextStartIndex(
+  input: { sessionId: string; contextStartIndex: number },
+  db: MuzeroDB = defaultDb,
+): Promise<number> {
+  const contextStartIndex = sanitizeContextStartIndex(input.contextStartIndex);
+  await db.chatSessions.update(input.sessionId, {
+    contextStartIndex,
+    updatedAt: Date.now(),
+  } satisfies Partial<ChatSession>);
+  return contextStartIndex;
+}
+
 async function saveQueuedPrompts(
   sessionId: string,
   queuedPrompts: DjChatQueuedPrompt[],
@@ -206,6 +222,11 @@ async function saveQueuedPrompts(
     queuedPromptsJson: JSON.stringify(queuedPrompts),
     updatedAt: Date.now(),
   } satisfies Partial<ChatSession>);
+}
+
+function sanitizeContextStartIndex(contextStartIndex: number): number {
+  if (!Number.isFinite(contextStartIndex)) return 0;
+  return Math.max(0, Math.floor(contextStartIndex));
 }
 
 export async function renameChatSession(
