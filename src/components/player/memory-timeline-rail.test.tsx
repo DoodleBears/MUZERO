@@ -9,7 +9,7 @@ const memories: MemoryTimelineRailItem[] = [
     trackId: "trk_b",
     note: "Second kitchen loop",
     createdAt: 20,
-    trackTitle: "Kitchen Song",
+    photoUrl: "blob:memory-second",
   },
   { id: "mem_third", trackId: "trk_c", note: "Third late walk", createdAt: 30 },
 ];
@@ -41,7 +41,8 @@ describe("MemoryTimelineRail", () => {
     renderRail({ initialOffset: 100 });
 
     expect(screen.getByTestId("memory-carousel-card")).toHaveTextContent("Second kitchen loop");
-    expect(screen.getByTestId("memory-carousel-card")).toHaveTextContent("Kitchen Song");
+    expect(screen.getByTestId("memory-carousel-card")).not.toHaveTextContent("Kitchen Song");
+    expect(screen.getByTestId("memory-carousel-image")).toHaveClass("object-contain");
     expect(screen.getByTestId("memory-timeline-rail")).not.toHaveClass("bg-card/55");
     expect(screen.getByTestId("memory-carousel-stage")).toHaveClass("place-items-center");
 
@@ -59,6 +60,7 @@ describe("MemoryTimelineRail", () => {
     expect(screen.getByTestId("memory-timeline-playhead")).toHaveClass("h-0.5");
     expect(screen.getByTestId("memory-timeline-list")).toBeInTheDocument();
     expect(screen.getByTestId("memory-timeline-list")).toHaveClass("flex-col");
+    expect(screen.getByTestId("memory-timeline-image-mem_second")).toHaveClass("object-contain");
 
     const scrubber = screen.getByTestId("memory-timeline-scrubber");
     fireEvent.pointerDown(scrubber, { clientY: 240, pointerId: 1 });

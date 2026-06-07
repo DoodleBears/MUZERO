@@ -1,7 +1,7 @@
 import { useLiveQuery } from "dexie-react-hooks";
 import { PanelBottomClose, PanelBottomOpen } from "lucide-react";
 import { motion } from "motion/react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { VirtualTrackList } from "@/components/library/virtual-track-list";
 import {
@@ -9,7 +9,7 @@ import {
   type MemoryTimelineRailItem,
 } from "@/components/player/memory-timeline-rail";
 import { db } from "@/db/muzero-db";
-import { saveSettings } from "@/db/repositories";
+import { getMemoryPhoto, saveSettings } from "@/db/repositories";
 import type { Memory } from "@/db/types";
 import { useSession, useSettings } from "@/hooks/use-app-data";
 import { cn } from "@/lib/utils";
@@ -38,7 +38,6 @@ export function NowPlayingPanel({
   const [tab, setTab] = useState<PanelTab>("queue");
   const collapsed = collapsible && Boolean(settings.nowPlayingRightRailCollapsed);
   const currentTrackId = current?.id;
-  const currentTrackTitle = current?.title;
   const railMemories = useLiveQuery(
     (): Promise<Memory[]> =>
       collapsed && currentTrackId
@@ -47,13 +46,14 @@ export function NowPlayingPanel({
     [collapsed, currentTrackId],
     [] as Memory[],
   );
+  const [memoryPhotoUrls, setMemoryPhotoUrls] = useState<Record<string, string>>({});
   const memoryTimelineItems = useMemo<MemoryTimelineRailItem[]>(
     () =>
       railMemories.map((memory) => ({
         ...memory,
-        trackTitle: currentTrackTitle,
+        photoUrl: memoryPhotoUrls[memory.id],
       })),
-    [currentTrackTitle, railMemories],
+    [memoryPhotoUrls, railMemories],
   );
   const memoryDateFormatter = useMemo(
     () =>
@@ -80,6 +80,36 @@ export function NowPlayingPanel({
     if (scrollTop === (settings.nowPlayingMemoryRailScrollTop ?? 0)) return;
     void saveSettings({ nowPlayingMemoryRailScrollTop: scrollTop });
   }
+
+  useEffect(() => {
+    let cancelled = false;
+    const urls: string[] = [];
+
+    async function loadPhotoUrls() {
+      if (typeof URL.createObjectURL !== "function") {
+        setMemoryPhotoUrls({});
+        return;
+      }
+
+      const next: Record<string, string> = {};
+      for (const memory of railMemories) {
+        if (!memory.photoBlobId) continue;
+        const blob = await getMemoryPhoto(memory, db);
+        if (!blob || cancelled) continue;
+        const url = URL.createObjectURL(blob);
+        urls.push(url);
+        next[memory.id] = url;
+      }
+      if (!cancelled) setMemoryPhotoUrls(next);
+    }
+
+    void loadPhotoUrls();
+
+    return () => {
+      cancelled = true;
+      for (const url of urls) URL.revokeObjectURL(url);
+    };
+  }, [railMemories]);
 
   if (collapsed) {
     return (

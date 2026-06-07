@@ -8,10 +8,12 @@ const mocks = vi.hoisted(() => ({
   anyOf: vi.fn(),
   collapsed: false,
   equals: vi.fn(),
+  getMemoryPhoto: vi.fn(),
   memories: [] as { createdAt: number; id: string; note: string; trackId: string }[],
   memoryScrollTop: 0,
   saveSettings: vi.fn(),
   sortBy: vi.fn(),
+  timelineMemories: [] as unknown[],
   where: vi.fn(),
 }));
 
@@ -67,6 +69,7 @@ vi.mock("@/hooks/use-app-data", () => ({
 }));
 
 vi.mock("@/db/repositories", () => ({
+  getMemoryPhoto: mocks.getMemoryPhoto,
   saveSettings: mocks.saveSettings,
 }));
 
@@ -83,15 +86,19 @@ vi.mock("@/components/player/memory-timeline-rail", () => ({
     initialOffset?: number;
     memories: unknown[];
     onOffsetChange?: (offsetPx: number) => void;
-  }) => (
-    <button
-      data-count={memories.length}
-      data-offset={initialOffset}
-      data-testid="memory-timeline-rail"
-      onClick={() => onOffsetChange?.(160)}
-      type="button"
-    />
-  ),
+  }) =>
+    (() => {
+      mocks.timelineMemories = memories;
+      return (
+        <button
+          data-count={memories.length}
+          data-offset={initialOffset}
+          data-testid="memory-timeline-rail"
+          onClick={() => onOffsetChange?.(160)}
+          type="button"
+        />
+      );
+    })(),
 }));
 
 describe("NowPlayingPanel collapse", () => {
@@ -99,10 +106,12 @@ describe("NowPlayingPanel collapse", () => {
     mocks.anyOf.mockReset();
     mocks.collapsed = false;
     mocks.equals.mockReset();
+    mocks.getMemoryPhoto.mockReset();
     mocks.memories = [];
     mocks.memoryScrollTop = 0;
     mocks.saveSettings.mockReset();
     mocks.sortBy.mockReset();
+    mocks.timelineMemories = [];
     mocks.where.mockReset();
     mocks.where.mockReturnValue({ anyOf: mocks.anyOf, equals: mocks.equals });
     mocks.anyOf.mockReturnValue({ sortBy: mocks.sortBy });
@@ -157,6 +166,9 @@ describe("NowPlayingPanel collapse", () => {
     const rail = screen.getByTestId("memory-timeline-rail");
     expect(rail).toHaveAttribute("data-count", "1");
     expect(rail).toHaveAttribute("data-offset", "200");
+    expect(mocks.timelineMemories).toEqual([
+      expect.not.objectContaining({ trackTitle: expect.any(String) }),
+    ]);
 
     fireEvent.click(rail);
 

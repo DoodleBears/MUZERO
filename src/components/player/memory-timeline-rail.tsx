@@ -23,7 +23,7 @@ import {
 import { cn } from "@/lib/utils";
 
 export interface MemoryTimelineRailItem extends Memory {
-  trackTitle?: string;
+  photoUrl?: string;
 }
 
 interface MemoryTimelineRailProps {
@@ -202,15 +202,18 @@ export function MemoryTimelineRail({
             transition={{ duration: 0.28 }}
           >
             <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-primary" />
+            {activeMemory.photoUrl && (
+              <img
+                alt=""
+                className="mb-3 max-h-44 w-full rounded-lg object-contain"
+                data-testid="memory-carousel-image"
+                src={activeMemory.photoUrl}
+              />
+            )}
             <p className="line-clamp-7 whitespace-pre-wrap text-sm leading-6">
               {activeMemory.note}
             </p>
             <div className="mt-4 space-y-1 text-muted-foreground text-xs">
-              {activeMemory.trackTitle && (
-                <div className="truncate font-medium text-foreground/80">
-                  {activeMemory.trackTitle}
-                </div>
-              )}
               <time dateTime={new Date(activeMemory.createdAt).toISOString()}>
                 {formatCreatedAt(activeMemory.createdAt)}
               </time>
@@ -238,6 +241,13 @@ export function MemoryTimelineRail({
               className="-translate-x-1/2 -translate-y-1/2 pointer-events-none absolute top-1/2 left-1/2 z-10 w-[min(18rem,82%)] rounded-xl border border-primary/35 bg-background/85 p-3 text-center shadow-sm backdrop-blur-sm"
               data-testid="memory-playhead-card"
             >
+              {activeMemory.photoUrl && (
+                <img
+                  alt=""
+                  className="mb-2 max-h-28 w-full rounded-md object-contain"
+                  src={activeMemory.photoUrl}
+                />
+              )}
               <p className="line-clamp-4 whitespace-pre-wrap text-sm leading-5">
                 {activeMemory.note}
               </p>
@@ -282,15 +292,18 @@ export function MemoryTimelineRail({
                         : "border-border/70 bg-background/55",
                     )}
                   >
+                    {memory.photoUrl && (
+                      <img
+                        alt=""
+                        className="mb-2 max-h-20 w-full rounded-md object-contain"
+                        data-testid={`memory-timeline-image-${memory.id}`}
+                        src={memory.photoUrl}
+                      />
+                    )}
                     <p className="line-clamp-2 whitespace-pre-wrap text-sm leading-5">
                       {memory.note}
                     </p>
                     <div className="mt-1 space-y-0.5 text-muted-foreground text-[11px]">
-                      {memory.trackTitle && (
-                        <div className="truncate font-medium text-foreground/75">
-                          {memory.trackTitle}
-                        </div>
-                      )}
                       <time dateTime={new Date(memory.createdAt).toISOString()}>
                         {formatCreatedAt(memory.createdAt)}
                       </time>
