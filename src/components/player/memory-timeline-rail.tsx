@@ -1,10 +1,12 @@
 "use client";
 
+import { useVirtualizer } from "@tanstack/react-virtual";
 import { AnimatePresence, motion } from "motion/react";
 import {
   type KeyboardEvent,
   type PointerEvent,
   type ReactNode,
+  type UIEvent,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -54,6 +56,12 @@ type DragState = {
   startY: number;
 };
 
+type TimelineVirtualItem = {
+  index: number;
+  size: number;
+  start: number;
+};
+
 export function MemoryTimelineRail({
   carouselIntervalMs = MEMORY_TIMELINE_CAROUSEL_INTERVAL_MS,
   className,
@@ -99,6 +107,26 @@ export function MemoryTimelineRail({
     () => memoryTimelineIndexFromLayoutOffset(Math.max(0, initialOffset), timelineLayout.items),
     [initialOffset, timelineLayout.items],
   );
+  const timelineVirtualizer = useVirtualizer({
+    count: sortedMemories.length,
+    estimateSize: (index) => timelineLayout.items[index]?.height ?? timelineItemHeight,
+    getItemKey: (index) => sortedMemories[index]?.id ?? index,
+    getScrollElement: () => timelineScrubberRef.current,
+    measureElement: (element) => element.getBoundingClientRect().height,
+    overscan: 4,
+  });
+  const timelineVirtualItems: TimelineVirtualItem[] =
+    timelineVirtualizer.getVirtualItems().length > 0
+      ? timelineVirtualizer.getVirtualItems()
+      : timelineLayout.items.map((item, index) => ({
+          index,
+          size: item.height,
+          start: item.y,
+        }));
+  const timelineTotalSize = Math.max(
+    timelineVirtualizer.getTotalSize(),
+    timelineLayout.containerHeight,
+  );
   const visibleActiveIndex =
     activeCollectionKeyRef.current === memoryCollectionKey ? activeIndex : initialLayoutIndex;
   const activeMemory = sortedMemories[visibleActiveIndex] ?? sortedMemories[0];
@@ -134,6 +162,7 @@ export function MemoryTimelineRail({
   }, [activeMemory, carouselIntervalMs, mode, sortedMemories.length, timelineLayout.items]);
 
   useLayoutEffect(() => {
+    if (mode !== "timeline") return;
     const element = timelineScrubberRef.current;
     if (!element) return;
     const target: HTMLDivElement = element;
@@ -152,7 +181,16 @@ export function MemoryTimelineRail({
 
     window.addEventListener("resize", updateWidth);
     return () => window.removeEventListener("resize", updateWidth);
-  }, []);
+  }, [mode]);
+
+  useLayoutEffect(() => {
+    if (mode !== "timeline") return;
+    const element = timelineScrubberRef.current;
+    if (!element) return;
+    if (Math.abs(element.scrollTop - timelineOffset) > 1) {
+      element.scrollTop = timelineOffset;
+    }
+  }, [mode, timelineOffset]);
 
   function showTimeline() {
     if (sortedMemories.length === 0) return;
@@ -167,6 +205,17 @@ export function MemoryTimelineRail({
       timelineLayout.items,
     );
     const nextOffset = Math.min(maxOffset, Math.max(0, Math.round(offsetPx)));
+    setTimelineOffset(nextOffset);
+    setActiveIndex(memoryTimelineIndexFromLayoutOffset(nextOffset, timelineLayout.items));
+    const element = timelineScrubberRef.current;
+    if (element && Math.abs(element.scrollTop - nextOffset) > 1) {
+      element.scrollTop = nextOffset;
+    }
+    onOffsetChange?.(nextOffset);
+  }
+
+  function onTimelineScroll(event: UIEvent<HTMLDivElement>) {
+    const nextOffset = Math.round(event.currentTarget.scrollTop);
     setTimelineOffset(nextOffset);
     setActiveIndex(memoryTimelineIndexFromLayoutOffset(nextOffset, timelineLayout.items));
     onOffsetChange?.(nextOffset);
@@ -267,23 +316,28 @@ export function MemoryTimelineRail({
           aria-valuemax={sortedMemories.length}
           aria-valuemin={1}
           aria-valuenow={visibleActiveIndex + 1}
-          className="relative h-full cursor-grab touch-none select-none overflow-hidden outline-none active:cursor-grabbing focus-visible:ring-2 focus-visible:ring-ring"
+          className="relative h-full cursor-grab touch-none select-none overflow-y-auto overscroll-contain outline-none active:cursor-grabbing focus-visible:ring-2 focus-visible:ring-ring"
+          data-offset={timelineOffset}
           data-testid="memory-timeline-scrubber"
           onKeyDown={onKeyDown}
+          onScroll={onTimelineScroll}
           ref={timelineScrubberRef}
           role="slider"
           tabIndex={0}
         >
           <ol
-            className="absolute top-0 inset-x-4 transition-transform duration-200 ease-out will-change-transform motion-reduce:transition-none"
+            className="relative mx-4"
             data-layout="single-column-responsive"
             data-testid="memory-timeline-list"
+            data-virtualized="dynamic-size"
             style={{
-              height: timelineLayout.containerHeight,
-              transform: `translateY(calc(50% - ${timelineOffset}px))`,
+              height: timelineTotalSize,
             }}
           >
-            {sortedMemories.map((memory, index) => {
+            {timelineVirtualItems.map((virtualRow) => {
+              const index = virtualRow.index;
+              const memory = sortedMemories[index];
+              if (!memory) return null;
               const active = index === visibleActiveIndex;
               const layoutItem = timelineLayout.items[index] ?? {
                 height: timelineItemHeight,
@@ -293,11 +347,13 @@ export function MemoryTimelineRail({
                 <li
                   className="absolute top-0 left-0 flex w-full shrink-0 items-start gap-3"
                   data-active={active ? "true" : "false"}
+                  data-virtual-index={index}
                   data-testid={`memory-timeline-item-${memory.id}`}
                   key={memory.id}
+                  ref={timelineVirtualizer.measureElement}
                   style={{
-                    height: layoutItem.height,
-                    transform: `translateY(${layoutItem.y}px)`,
+                    height: Math.max(layoutItem.height, virtualRow.size),
+                    transform: `translateY(${virtualRow.start}px)`,
                   }}
                 >
                   <span

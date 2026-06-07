@@ -110,6 +110,11 @@ describe("MemoryTimelineRail", () => {
       "data-layout",
       "single-column-responsive",
     );
+    expect(screen.getByTestId("memory-timeline-list")).toHaveAttribute(
+      "data-virtualized",
+      "dynamic-size",
+    );
+    expect(screen.getByTestId("memory-timeline-list").style.transform).toBe("");
     expect(screen.getByTestId("memory-timeline-image-mem_second")).toHaveClass("object-contain");
 
     const scrubber = screen.getByTestId("memory-timeline-scrubber");
@@ -118,6 +123,8 @@ describe("MemoryTimelineRail", () => {
     fireEvent.pointerUp(scrubber, { pointerId: 1 });
 
     expect(onOffsetChange).toHaveBeenLastCalledWith(200);
+    expect(screen.getByTestId("memory-timeline-scrubber")).toHaveAttribute("data-offset", "200");
+    expect(screen.getByTestId("memory-timeline-list")).toBeInTheDocument();
     expect(screen.getByTestId("memory-timeline-item-mem_second")).toHaveAttribute(
       "data-active",
       "true",
@@ -144,6 +151,10 @@ describe("MemoryTimelineRail", () => {
     expect(screen.getByTestId("memory-timeline-list")).toHaveAttribute(
       "data-layout",
       "single-column-responsive",
+    );
+    expect(screen.getByTestId("memory-timeline-list")).toHaveAttribute(
+      "data-virtualized",
+      "dynamic-size",
     );
     expect(screen.getByTestId("memory-timeline-note-mem_long")).not.toHaveClass("line-clamp-2");
     expect(
