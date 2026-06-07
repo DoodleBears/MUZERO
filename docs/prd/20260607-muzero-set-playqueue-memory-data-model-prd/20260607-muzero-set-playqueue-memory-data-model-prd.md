@@ -321,8 +321,8 @@ this.version(3).stores({
 | 2026-06-08 | Codex | 打磨折叠态 Memory 正文字号：新增 Pretext-backed `resolveMemoryFitText`，idle 大卡正文默认上限 64px，并根据文本区域宽高自动降字号；移除正文 line-clamp，改为完整 note fit 展示。补 fit text 纯函数与 rail 样式测试；`make check` 通过（76 files / 455 tests）。 |
 | 2026-06-08 | Codex | 打磨折叠态 Memory 轮播节奏：新增正文长度驱动的 dwell time（默认 5s 起、14s 封顶），长记忆停留更久；idle 卡切换改用 `AnimatePresence` crossfade，保持卡片容器稳定、内容自然淡入淡出。补 dwell 纯函数和 rail 轮播/transition 测试；`make check` 通过（77 files / 460 tests）。 |
 | 2026-06-08 | Codex | 修正折叠态 Memory 切换抖动：抽出 `MemoryCarouselSlide`，slide 初始保持透明/blur，`MemoryCarouselNote` 在 `useLayoutEffect` 中完成 Pretext fit 后标记 layout ready，再触发 fade-in，避免切歌/切 memory 时看到字号重排。补 layout-ready fade-in contract 测试；`make check` 通过（77 files / 460 tests）。 |
-| 2026-06-08 | Codex | 继续修正切歌时 Memory 抖动：carousel 切换改为旧 slide 先 fade-out，再挂载新 slide；带照片记忆等待 image load/error 后才触发 Pretext fit，并在 layout ready 后追加短暂 settle gate 再 fade-in。补图片加载 + exit-before-enter contract 测试；目标测试通过（1 file / 2 tests）。 |
-| 2026-06-08 | Codex | 打磨 Memory timeline 与播放列表响应式高度：折叠态 timeline list 改用 Pretext 计算单列 `y/height`，长 note 与照片条目按内容自适应高度、不再 line-clamp；`VirtualTrackList` 改为 TanStack Virtual 动态测量 row 高度并使用稳定 track key，Now Playing 右侧 rail / Queue / Search 共用收益。目标测试通过（4 files / 16 tests，含 layout-ready/exit-wait 合约）；`pnpm typecheck` 通过；本次 touched 文件 Biome 通过；完整 `make check` 被并行未跟踪 WIP `src/components/player/swipeable-media-stage.tsx` 的格式问题挡住。 |
+| 2026-06-08 | Codex | 继续修正切歌时 Memory 抖动：carousel 切换改为旧 slide 先 fade-out，再挂载新 slide；带照片记忆等待 image load/error 后才触发 Pretext fit，并在 layout ready 后追加短暂 settle gate 再 fade-in。补图片加载 + exit-before-enter contract 测试；`make check` 通过（79 files / 466 tests）。 |
+| 2026-06-08 | Codex | 打磨 Memory timeline 与播放列表响应式高度：折叠态 timeline list 改用 Pretext 计算单列 `y/height`，长 note 与照片条目按内容自适应高度、不再 line-clamp；`VirtualTrackList` 改为 TanStack Virtual 动态测量 row 高度并使用稳定 track key，Now Playing 右侧 rail / Queue / Search 共用收益。目标测试通过（4 files / 16 tests，含 layout-ready/exit-wait 合约）；`pnpm typecheck` 通过；本次 touched 文件 Biome 通过；后续全量 `make check` 通过（79 files / 466 tests）。 |
 
 ---
 
