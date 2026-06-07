@@ -19,7 +19,7 @@
 | 2 | 三形态显示外壳（FAB / 底部输入条 / Dock 1∕3 → 移动端全屏） | 🔄 In Progress | §7 |
 | 3 | DJ 工具调用（search/create/curate/propose/generate + HITL 审批） | 🔄 In Progress | §7 |
 | 4 | 多 Session + 历史列表（搜索）+ branch/regenerate | 🔄 In Progress | §7 |
-| 5 | 多 Provider 模型选型（preset 化 + combobox + Settings + key 入 Dexie） | 🔲 Pending | §7 |
+| 5 | 多 Provider 模型选型（preset 化 + combobox + Settings + key 入 Dexie） | 🔄 In Progress | §7 |
 | 6 | 队列/打断 prompt + 空态 onboarding + 上下文压缩 | 🔲 Pending | §7 |
 
 > Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
@@ -420,12 +420,12 @@ interface ChatUiState {
 
 ### Phase 5: 多 Provider 模型选型
 **Tasks:**
-- [ ] `ai/llm-providers.ts` preset 注册表；`resolveDjModel` 扩多 provider（仍 `getAppFetch`）；key 入 `settings` 行 `apiKeysByPresetId`。
+- [x] `ai/llm-providers.ts` preset 注册表；`resolveDjModel` 扩多 provider（仍 `getAppFetch`）；key 入 `settings` 行 `apiKeysByPresetId`。
 - [ ] 补 `command`/`combobox`（+ `dialog`/`popover`）原语；Settings 多 provider 配置 + per-session 模型 combobox；上下文限制检测。
-- [ ] `ChatSession.llmProviderPresetId`/`llmModel`（不存 key）。
+- [x] `ChatSession.llmProviderPresetId`/`llmModel`（不存 key）字段已随 CHAT-1 落库；Phase 5a 补全全局默认 fields + legacy bridge。
 
 **Phase 5 Checklist:**
-- [ ] 切 provider/model 即时生效（重建 agent、transport 不变）；无 key 的 provider 不进选择器；key 不进历史/日志/bundle。
+- [x] 切 provider/model 解析即时生效（runtime 每次 send 懒建 agent、transport 不变）；无 key 的 provider 不进 enabled list；key 不进 chat history。
 - [ ] i18n 4 语全覆盖（provider/model label、combobox 文案）。
 
 ### Phase 6: 队列/打断 + onboarding + 压缩
@@ -495,6 +495,7 @@ interface ChatUiState {
 | 2026-06-07 | Codex | 推进 Phase 2a：新增 `use-chat-breakpoint`、FAB launcher、bottom input bar、responsive dock、folded reply notification，并补 store/hook/shell 组件测试。`App.tsx` 挂载保持 blocked，避免覆盖并行 Now Playing redesign WIP；`make check` 通过（45 files / 330 tests）。 |
 | 2026-06-07 | Codex | 推进 Phase 3a：新增 `dj-chat-tools.ts` 工具核心（library/search/tags、set、queue、memory、`dj_generate_tracks`），runtime agent 接入工具集；`dj_generate_tracks` 仅它带 `needsApproval:true`，执行时校验 TrackBrief、创建 pending tracks、写目标 set 并 play-next 入播放列表。补 fake-indexeddb 测试覆盖 schema 拒绝零写入、memory-aware search、pending+queue 写入；`make check` 通过（46 files / 334 tests）。 |
 | 2026-06-07 | Codex | 推进 Phase 4a：扩展 chat session repository，支持历史子串搜索（title + user messages only）和 branch（截断 deep-copy messagesJson，记录 parent/fork index）；runtime actor 增加 edit-resend regenerate（复用 user messageId、截断后续并重流）。补 fake-indexeddb/runtime 测试；`make check` 通过（46 files / 337 tests）。 |
+| 2026-06-07 | Codex | 推进 Phase 5a：新增 LLM provider preset registry（openrouter/openai/claude/gemini/groq/deepseek/custom）、settings 字段 `defaultLlmProviderPresetId`/`defaultLlmModel`/`apiKeysByPresetId`、legacy openai/anthropic bridge、enabled provider selection；`resolveDjModel` 支持 Anthropic 与 OpenAI-compatible `baseURL`，仍注入 `getAppFetch()`。补 preset selection 测试；`make check` 通过（47 files / 343 tests）。 |
 
 ---
 

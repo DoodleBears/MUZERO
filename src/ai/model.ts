@@ -3,6 +3,7 @@ import { createOpenAI } from "@ai-sdk/openai";
 import type { LanguageModel } from "ai";
 import type { AppSettings } from "@/db/types";
 import { getAppFetch } from "@/lib/platform";
+import { llmSelectionFromSettings, resolveLlmProviderPreset } from "./llm-providers";
 
 export class MissingApiKeyError extends Error {
   constructor(readonly provider: string) {
@@ -19,16 +20,25 @@ export class MissingApiKeyError extends Error {
  */
 export async function resolveDjModel(settings: AppSettings): Promise<LanguageModel> {
   const fetch = await getAppFetch();
-  switch (settings.llmProvider) {
+  const selection = llmSelectionFromSettings(settings);
+  const preset = resolveLlmProviderPreset(selection.presetId);
+  if (!selection.apiKey) throw new MissingApiKeyError(selection.presetId);
+  switch (preset.provider) {
     case "anthropic": {
-      if (!settings.anthropicApiKey) throw new MissingApiKeyError("anthropic");
-      const anthropic = createAnthropic({ apiKey: settings.anthropicApiKey, fetch });
-      return anthropic(settings.llmModel || "claude-haiku-4-5-20251001");
+      const anthropic = createAnthropic({
+        apiKey: selection.apiKey,
+        baseURL: preset.baseURL,
+        fetch,
+      });
+      return anthropic(selection.model);
     }
     default: {
-      if (!settings.openaiApiKey) throw new MissingApiKeyError("openai");
-      const openai = createOpenAI({ apiKey: settings.openaiApiKey, fetch });
-      return openai(settings.llmModel || "gpt-4o-mini");
+      const openai = createOpenAI({
+        apiKey: selection.apiKey,
+        baseURL: preset.baseURL,
+        fetch,
+      });
+      return openai(selection.model);
     }
   }
 }

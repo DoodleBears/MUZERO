@@ -1,4 +1,5 @@
 import type { UIMessage } from "ai";
+import type { LlmProviderPresetId } from "@/ai/llm-providers";
 import type { TrackBrief } from "@/dj/dj-brief-schema";
 import type { CloudPresetId } from "@/musicgen/presets";
 import type { MusicGenProviderId } from "@/musicgen/registry";
@@ -269,6 +270,11 @@ export interface AppSettings {
   lastTrackIndex?: number;
   /** Persisted resume pointer for the AI DJ chat runtime. */
   lastChatSessionId?: string;
+  /** Global default chat/DJ model preset. Keys stay in apiKeysByPresetId. */
+  defaultLlmProviderPresetId?: LlmProviderPresetId;
+  defaultLlmModel?: string;
+  /** BYOK keys by visible provider preset id. Device-local only. */
+  apiKeysByPresetId?: Partial<Record<LlmProviderPresetId, string>>;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
