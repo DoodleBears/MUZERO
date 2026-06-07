@@ -11,6 +11,16 @@ function file(name: string, type = "", lastModified = 0): File {
   return new File([new Uint8Array(1)], name, { type, lastModified });
 }
 
+const fileItem = (f: File | null): DataTransferItem =>
+  ({ kind: "file", getAsFile: () => f }) as unknown as DataTransferItem;
+const stringItem = (): DataTransferItem =>
+  ({ kind: "string", getAsFile: () => null }) as unknown as DataTransferItem;
+const transfer = (parts: { files?: File[]; items?: DataTransferItem[] }): DataTransfer =>
+  ({
+    files: (parts.files ?? []) as unknown as FileList,
+    items: parts.items as unknown as DataTransferItemList,
+  }) as DataTransfer;
+
 describe("classifyFile", () => {
   it("classifies by MIME type first", () => {
     expect(classifyFile({ name: "x", type: "video/mp4" })).toBe("video");
@@ -80,16 +90,6 @@ describe("summarizeDragItems", () => {
 });
 
 describe("filesFromTransfer", () => {
-  const fileItem = (f: File | null): DataTransferItem =>
-    ({ kind: "file", getAsFile: () => f }) as unknown as DataTransferItem;
-  const stringItem = (): DataTransferItem =>
-    ({ kind: "string", getAsFile: () => null }) as unknown as DataTransferItem;
-  const transfer = (parts: { files?: File[]; items?: DataTransferItem[] }): DataTransfer =>
-    ({
-      files: (parts.files ?? []) as unknown as FileList,
-      items: parts.items as unknown as DataTransferItemList,
-    }) as DataTransfer;
-
   it("returns [] for a null/undefined transfer", () => {
     expect(filesFromTransfer(null)).toEqual([]);
     expect(filesFromTransfer(undefined)).toEqual([]);
@@ -130,5 +130,35 @@ describe("filesFromTransfer", () => {
     const mkv = file("clip.mkv", "", 5);
     const dt = transfer({ files: [mkv], items: [fileItem(null)] });
     expect(filesFromTransfer(dt).map((f) => f.name)).toEqual(["clip.mkv"]);
+  });
+});
+
+describe("multi-file paste → classify ingest seam", () => {
+  // Mirrors GlobalDropZone's paste path — filesFromTransfer(clipboardData) feeds
+  // classifyDrop, which routes media into the active set. Guards the exact seam
+  // the bug lived at: a paste exposing only the first file via .files.
+  it("routes every pasted media file to the set, not just the first", () => {
+    const a = file("a.mp3", "audio/mpeg", 1);
+    const b = file("b.wav", "audio/wav", 2);
+    const c = file("c.mp4", "video/mp4", 3);
+    const dt = transfer({ files: [a], items: [fileItem(a), fileItem(b), fileItem(c)] });
+    const { media } = classifyDrop(filesFromTransfer(dt));
+    expect(media.map((f) => f.name)).toEqual(["a.mp3", "b.wav", "c.mp4"]);
+  });
+
+  it("splits a mixed multi-file paste into media / images / skipped", () => {
+    const song = file("song.flac", "audio/flac", 1);
+    const clip = file("clip.mov", "video/quicktime", 2);
+    const cover = file("cover.png", "image/png", 3);
+    const note = file("note.txt", "text/plain", 4);
+    // .files holds only the first; .items carries them all.
+    const dt = transfer({
+      files: [song],
+      items: [fileItem(song), fileItem(clip), fileItem(cover), fileItem(note)],
+    });
+    const { media, images, skipped } = classifyDrop(filesFromTransfer(dt));
+    expect(media.map((f) => f.name)).toEqual(["song.flac", "clip.mov"]);
+    expect(images.map((f) => f.name)).toEqual(["cover.png"]);
+    expect(skipped.map((f) => f.name)).toEqual(["note.txt"]);
   });
 });
