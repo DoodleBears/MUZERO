@@ -7,6 +7,7 @@ import { resolveBackgroundSource } from "@/lib/background";
 import { nextSlideIndex } from "@/lib/slideshow";
 import { cn } from "@/lib/utils";
 import { usePlayerStore } from "@/stores/player-store";
+import { VisualizerHost } from "@/visualizer/host";
 
 const EMPTY: Blob[] = [];
 
@@ -24,8 +25,19 @@ const EMPTY: Blob[] = [];
  * <img>s are ever mounted (keyed by slot, never by URL), so layers never pile
  * up no matter how often the source changes.
  */
-export function NowPlayingBackground({ className }: { className?: string }) {
+export function NowPlayingBackground({
+  className,
+  idle = false,
+}: {
+  className?: string;
+  idle?: boolean;
+}) {
   const settings = useSettings();
+  // "Use as Now Playing background": render the live visualizer as the bottom
+  // layer, with the image/cover on top fading out on idle to reveal it.
+  const showViz =
+    (settings.visualizerAsBackground ?? false) && (settings.visualizerStyle ?? "aura") !== "off";
+  const isPlaying = usePlayerStore((s) => s.isPlaying);
   const mode = settings.backgroundMode ?? "cover";
   const galleryFallback = settings.backgroundGalleryFallback ?? true;
   const blurPx = settings.backgroundBlur ?? 12;
@@ -132,7 +144,7 @@ export function NowPlayingBackground({ className }: { className?: string }) {
     };
   }, [targetUrl]);
 
-  if (!buffers[0] && !buffers[1]) return null;
+  if (!showViz && !buffers[0] && !buffers[1]) return null;
 
   // Shared blur + overscan for every layer (see bleedMargin above). Explicit
   // width/height push the blur's transparent fringe off-screen; `max-w-none`
@@ -157,27 +169,41 @@ export function NowPlayingBackground({ className }: { className?: string }) {
       className={cn("pointer-events-none absolute inset-0 overflow-hidden", className)}
       aria-hidden="true"
     >
-      {backplate ? (
-        <img
-          src={backplate}
-          alt=""
-          style={layerStyle}
-          className="absolute max-w-none object-cover"
-        />
-      ) : null}
-      {([0, 1] as const).map((i) =>
-        buffers[i] ? (
+      {/* Bottom layer: the live visualizer (when "use as background" is on). */}
+      {showViz ? <VisualizerHost active={isPlaying} className="absolute inset-0" /> : null}
+
+      {/* Image slideshow + dim, layered on top. When the visualizer is the
+          background, this fades out on idle to reveal it underneath. */}
+      <div
+        className={cn(
+          "absolute inset-0 transition-opacity duration-1000",
+          showViz && idle && "opacity-0",
+        )}
+      >
+        {backplate ? (
           <img
-            key={i}
-            src={buffers[i] as string}
+            src={backplate}
             alt=""
-            style={{ ...layerStyle, opacity: front === i ? 1 : 0 }}
-            className="absolute max-w-none object-cover transition-opacity duration-1000"
+            style={layerStyle}
+            className="absolute max-w-none object-cover"
           />
-        ) : null,
-      )}
-      {/* Dim for legibility (ambient backdrop, not the focus) — opacity is configurable. */}
-      <div className="absolute inset-0 bg-background" style={{ opacity: maskOpacity }} />
+        ) : null}
+        {([0, 1] as const).map((i) =>
+          buffers[i] ? (
+            <img
+              key={i}
+              src={buffers[i] as string}
+              alt=""
+              style={{ ...layerStyle, opacity: front === i ? 1 : 0 }}
+              className="absolute max-w-none object-cover transition-opacity duration-1000"
+            />
+          ) : null,
+        )}
+        {/* Dim for legibility — only when there's an image (don't dim a bare visualizer). */}
+        {backplate ? (
+          <div className="absolute inset-0 bg-background" style={{ opacity: maskOpacity }} />
+        ) : null}
+      </div>
     </div>
   );
 }
