@@ -77,6 +77,59 @@ class FakeApprovalTransport implements ChatTransport<DjChatUIMessage> {
   }
 }
 
+class FakeApprovalThenReplyTransport implements ChatTransport<DjChatUIMessage> {
+  sentMessages: DjChatUIMessage[][] = [];
+
+  async sendMessages(
+    options: Parameters<ChatTransport<DjChatUIMessage>["sendMessages"]>[0],
+  ): Promise<ReadableStream<UIMessageChunk>> {
+    this.sentMessages.push([...(options.messages as DjChatUIMessage[])]);
+    if (this.sentMessages.length > 2) throw new Error("unexpected repeated approval send");
+    const chunks: UIMessageChunk[] =
+      this.sentMessages.length === 1
+        ? [
+            { type: "start", messageId: "asst_approval" },
+            { type: "start-step" },
+            {
+              type: "tool-input-available",
+              toolCallId: "call_generate",
+              toolName: "dj_generate_tracks",
+              input: { sessionId: "ses_target", briefs: [] },
+            },
+            {
+              type: "tool-approval-request",
+              toolCallId: "call_generate",
+              approvalId: "approval_generate",
+            },
+            { type: "finish-step" },
+            { type: "finish", finishReason: "stop" },
+          ]
+        : [
+            { type: "start", messageId: "asst_after_approval" },
+            { type: "start-step" },
+            { type: "text-start", id: "txt_after_approval" },
+            {
+              type: "text-delta",
+              id: "txt_after_approval",
+              delta: "approved generation is queued",
+            },
+            { type: "text-end", id: "txt_after_approval" },
+            { type: "finish-step" },
+            { type: "finish", finishReason: "stop" },
+          ];
+    return new ReadableStream({
+      start(controller) {
+        for (const chunk of chunks) controller.enqueue(chunk);
+        controller.close();
+      },
+    });
+  }
+
+  async reconnectToStream(): Promise<ReadableStream<UIMessageChunk> | null> {
+    return null;
+  }
+}
+
 class FailingTransport implements ChatTransport<DjChatUIMessage> {
   sentMessages: DjChatUIMessage[][] = [];
 
@@ -110,6 +163,20 @@ afterEach(async () => {
     req.onsuccess = req.onerror = () => resolve();
   });
 });
+
+async function waitForCondition(assertion: () => void | Promise<void>): Promise<void> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt < 50; attempt += 1) {
+    try {
+      await assertion();
+      return;
+    } catch (error) {
+      lastError = error;
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    }
+  }
+  throw lastError;
+}
 
 describe("DjChatRuntimeActor", () => {
   it("streams a single-session reply, persists messagesJson, and restores history in a rebuilt actor", async () => {
@@ -428,6 +495,30 @@ describe("DjChatRuntimeActor", () => {
     expect(
       parseQueuedPrompts((await getChatSession(session.id, db))?.queuedPromptsJson),
     ).toHaveLength(1);
+  });
+
+  it("responds to a pending tool approval and lets the tool loop continue", async () => {
+    const session = await createChatSession({ firstUserText: "approval-loop" }, db);
+    const transport = new FakeApprovalThenReplyTransport();
+    const actor = getOrCreateDjChatRuntimeActor(session.id, { db, transport });
+    await actor.ready;
+    await actor.sendMessage("generate something");
+    expect(actor.getSnapshot().meta.pendingApprovalCount).toBe(1);
+
+    await actor.respondToToolApproval("approval_generate", true, "looks good");
+
+    await waitForCondition(() => {
+      expect(transport.sentMessages).toHaveLength(2);
+      expect(actor.getSnapshot().meta.pendingApprovalCount).toBe(0);
+      expect(actor.getSnapshot().meta.lastAssistantPreview).toBe("approved generation is queued");
+    });
+    expect(transport.sentMessages[1].at(-1)?.parts).toContainEqual({
+      type: "tool-dj_generate_tracks",
+      toolCallId: "call_generate",
+      state: "approval-responded",
+      input: { sessionId: "ses_target", briefs: [] },
+      approval: { id: "approval_generate", approved: true, reason: "looks good" },
+    });
   });
 
   it("interrupts with an immediate marked message instead of adding to the queued prompts", async () => {

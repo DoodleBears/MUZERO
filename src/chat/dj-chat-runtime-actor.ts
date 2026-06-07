@@ -155,6 +155,17 @@ export class DjChatRuntimeActor {
     return removed;
   }
 
+  async respondToToolApproval(
+    approvalId: string,
+    approved: boolean,
+    reason?: string,
+  ): Promise<void> {
+    await this.ready;
+    if (!this.chat) return;
+    await this.chat.addToolApprovalResponse({ id: approvalId, approved, reason });
+    await this.flush();
+  }
+
   async interruptWithMessage(text: string): Promise<void> {
     await this.ready;
     const clean = text.trim();
