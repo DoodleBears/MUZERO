@@ -52,10 +52,11 @@ track ─▶│ load(blob)  play/pause/seek/volume   → analyser → 可视化 
 
 ## 4. Implementation Plan
 
-### Phase 1: 双元素 MediaEngine（TDD 可测部分 + 浏览器验证）
-- [ ] `media-engine.ts` 双元素 + 按 kind 路由 + audio 驱动 + video 镜像同步 + analyser 接 audioEl；事件只从 active 源回调（避免 idle 元素 pause 事件干扰）。
-- [ ] `player-store.loadBlob(blob, kind)`。
-- [ ] **浏览器验证（硬要求）**：① 音频曲播放 → 切设置/歌单/队列 → **声音继续、t 前进**；② 视频 MV 播放 → 切界面 → **声音继续**（画面消失可接受）→ 回 now-playing → 画面同步恢复；③ 切回播放/暂停/seek/音量都正常；④ 可视化在音频曲仍动。
+### Phase 1: 双元素 MediaEngine ✅（代码完成；连续性验证待真实环境）
+- [x] `media-engine.ts` 双元素：`<audio>` 驱动（含视频文件音轨）+ 静音 `<video>` 视觉层（mount 收养/unmount 释放回 host）；audio 'play'/'pause' 镜像 video、'timeupdate' 漂移 >0.3s 纠偏、mount 时按 audio 时间 resync；回调全从 audio 源出；analyser 接 audioEl；persistent host 常驻 body。
+- [x] `player-store.loadBlob(blob, track.kind)`。
+- [x] 结构单测（audio+video 在 host、`element`=video、mount/unmount）；全套件 **217 绿**、typecheck/biome 清。
+- [ ] **⚠️ 连续性验证只能在真实环境做**：Claude Preview 是 **hidden tab**（实测 `document.hidden:true`，audio 不切 nav 也会在 ~2s 后被环境暂停），**无法验证「跨界面不停」**。真实前台 tab / Tauri 里 `<audio>` 隐藏不暂停——需 `make desktop` 或前台浏览器手动验证：播放 → 切设置/歌单 → 音乐继续。
 
 ### Phase 2（可选增强）
 - [ ] video 隐藏暂停后回可见的 resync 打磨；drift 纠偏阈值调优；mediabunny 抽音轨（CLAUDE.md 提到的后续）。

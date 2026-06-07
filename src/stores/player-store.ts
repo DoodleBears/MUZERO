@@ -68,6 +68,9 @@ interface PlayerState {
   pause: () => void;
   togglePlay: () => void;
   playIndex: (index: number) => Promise<void>;
+  /** Load + show a track WITHOUT playing it (boot resume) — no gesture-blocked
+   * play() / AudioContext. Playback waits for a real user gesture. */
+  cueIndex: (index: number) => Promise<void>;
   /** Play a specific track, switching sets if needed (search/library result). */
   playTrack: (track: Track) => Promise<void>;
   next: () => Promise<void>;
@@ -251,6 +254,16 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     void maybeRefill(set, get);
   },
 
+  async cueIndex(index) {
+    const { queue } = get();
+    const clamped = clampIndex(queue.length, index);
+    // wantPlay:false makes ensureLoadedAndPlay load + show the track but skip
+    // play() — so a fresh launch never fires a gesture-blocked play() / spins up
+    // the AudioContext before the user has interacted.
+    set({ currentIndex: clamped, wantPlay: false });
+    await ensureLoadedAndPlay(set, get);
+  },
+
   async playTrack(track) {
     if (get().activeSessionId !== track.sessionId) {
       await get().setActiveSession(track.sessionId);
@@ -411,7 +424,7 @@ async function ensureLoadedAndPlay(
   if (loadedTrackId !== track.id) {
     const media = await getTrackBlob(track);
     if (!media) return;
-    await mediaEngine.loadBlob(media.blob);
+    await mediaEngine.loadBlob(media.blob, track.kind);
     loadedTrackId = track.id;
     void incrementPlayCount(track.id);
   }
