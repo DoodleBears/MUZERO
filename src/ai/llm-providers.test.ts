@@ -3,6 +3,7 @@ import type { AppSettings } from "@/db/types";
 import {
   defaultModelForPreset,
   enabledLlmPresetIds,
+  llmSelectionForChatSession,
   llmSelectionFromSettings,
   resolveLlmProviderPreset,
 } from "./llm-providers";
@@ -58,6 +59,43 @@ describe("LLM provider presets", () => {
       presetId: "claude",
       model: "claude-haiku-4-5-20251001",
       apiKey: "anthropic-key",
+    });
+  });
+
+  it("applies per-session provider and model overrides without copying API keys", () => {
+    expect(
+      llmSelectionForChatSession(
+        {
+          ...baseSettings,
+          defaultLlmProviderPresetId: "openrouter",
+          defaultLlmModel: "openai/gpt-4.1-mini",
+          apiKeysByPresetId: { claude: "claude-key", openrouter: "router-key" },
+        },
+        {
+          llmProviderPresetId: "claude",
+          llmModel: "claude-sonnet-4-5-20250929",
+        },
+      ),
+    ).toEqual({
+      presetId: "claude",
+      model: "claude-sonnet-4-5-20250929",
+      apiKey: "claude-key",
+    });
+  });
+
+  it("uses the preset default model when a session only overrides provider", () => {
+    expect(
+      llmSelectionForChatSession(
+        {
+          ...baseSettings,
+          apiKeysByPresetId: { deepseek: "deepseek-key" },
+        },
+        { llmProviderPresetId: "deepseek" },
+      ),
+    ).toEqual({
+      presetId: "deepseek",
+      model: "deepseek-chat",
+      apiKey: "deepseek-key",
     });
   });
 

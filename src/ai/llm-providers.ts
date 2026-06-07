@@ -33,6 +33,11 @@ export interface LlmSelection {
   apiKey?: string;
 }
 
+export interface LlmSessionSelectionOverride {
+  llmProviderPresetId?: string;
+  llmModel?: string;
+}
+
 export const LLM_PROVIDER_PRESETS: Record<LlmProviderPresetId, LlmProviderPreset> = {
   openrouter: {
     id: "openrouter",
@@ -123,6 +128,23 @@ export function legacyPresetFor(provider: LlmProviderId): LlmProviderPresetId {
 export function llmSelectionFromSettings(settings: AppSettings): LlmSelection {
   const presetId = settings.defaultLlmProviderPresetId ?? legacyPresetFor(settings.llmProvider);
   const model = settings.defaultLlmModel ?? (settings.llmModel || defaultModelForPreset(presetId));
+  return {
+    presetId,
+    model,
+    apiKey: apiKeyForPreset(settings, presetId),
+  };
+}
+
+export function llmSelectionForChatSession(
+  settings: AppSettings,
+  session: LlmSessionSelectionOverride | undefined,
+): LlmSelection {
+  const base = llmSelectionFromSettings(settings);
+  const presetId =
+    (session?.llmProviderPresetId as LlmProviderPresetId | undefined) ?? base.presetId;
+  const model =
+    session?.llmModel?.trim() ||
+    (presetId === base.presetId ? base.model : defaultModelForPreset(presetId));
   return {
     presetId,
     model,

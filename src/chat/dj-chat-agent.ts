@@ -5,14 +5,19 @@ import {
   stepCountIs,
   ToolLoopAgent,
 } from "ai";
+import { llmSelectionForChatSession } from "@/ai/llm-providers";
 import { resolveDjModel } from "@/ai/model";
 import type { MuzeroDB } from "@/db/muzero-db";
 import { getSettings } from "@/db/repositories";
 import { DJ_CHAT_SYSTEM_PROMPT } from "./dj-chat-prompt";
+import { getChatSession } from "./dj-chat-sessions";
 import { createDjChatTools } from "./dj-chat-tools";
 import type { DjChatUIMessage } from "./types";
 
-export type DjChatModelResolver = (db: MuzeroDB) => Promise<LanguageModel>;
+export type DjChatModelResolver = (input: {
+  db: MuzeroDB;
+  sessionId: string;
+}) => Promise<LanguageModel>;
 
 export interface CreateDjChatTransportOptions {
   db: MuzeroDB;
@@ -25,7 +30,7 @@ export function createDjChatTransport({
 }: CreateDjChatTransportOptions): ChatTransport<DjChatUIMessage> {
   return {
     async sendMessages(options) {
-      const model = await resolveModel(db);
+      const model = await resolveModel({ db, sessionId: options.chatId });
       const tools = createDjChatTools({ db });
       const agent = new ToolLoopAgent({
         model,
@@ -44,7 +49,14 @@ export function createDjChatTransport({
   };
 }
 
-async function defaultResolveModel(db: MuzeroDB): Promise<LanguageModel> {
+async function defaultResolveModel({
+  db,
+  sessionId,
+}: {
+  db: MuzeroDB;
+  sessionId: string;
+}): Promise<LanguageModel> {
   const settings = await getSettings(db);
-  return resolveDjModel(settings);
+  const session = await getChatSession(sessionId, db);
+  return resolveDjModel(settings, llmSelectionForChatSession(settings, session));
 }

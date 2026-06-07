@@ -3,7 +3,11 @@ import { createOpenAI } from "@ai-sdk/openai";
 import type { LanguageModel } from "ai";
 import type { AppSettings } from "@/db/types";
 import { getAppFetch } from "@/lib/platform";
-import { llmSelectionFromSettings, resolveLlmProviderPreset } from "./llm-providers";
+import {
+  type LlmSelection,
+  llmSelectionFromSettings,
+  resolveLlmProviderPreset,
+} from "./llm-providers";
 
 export class MissingApiKeyError extends Error {
   constructor(readonly provider: string) {
@@ -18,9 +22,11 @@ export class MissingApiKeyError extends Error {
  * bundled or sent anywhere but the model API. We hand the provider our
  * CORS-safe fetch so the same call works from a Tauri mobile WebView.
  */
-export async function resolveDjModel(settings: AppSettings): Promise<LanguageModel> {
+export async function resolveDjModel(
+  settings: AppSettings,
+  selection: LlmSelection = llmSelectionFromSettings(settings),
+): Promise<LanguageModel> {
   const fetch = await getAppFetch();
-  const selection = llmSelectionFromSettings(settings);
   const preset = resolveLlmProviderPreset(selection.presetId);
   if (!selection.apiKey) throw new MissingApiKeyError(selection.presetId);
   switch (preset.provider) {

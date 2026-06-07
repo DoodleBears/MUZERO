@@ -431,6 +431,7 @@ interface ChatUiState {
 
 **Phase 5 Checklist:**
 - [x] 切 provider/model 解析即时生效（runtime 每次 send 懒建 agent、transport 不变）；无 key 的 provider 不进 enabled list；key 不进 chat history。
+- [x] Runtime 按 `ChatSession.llmProviderPresetId/llmModel` 覆盖全局默认模型，API key 仍只从 settings 读取。
 - [ ] i18n 4 语全覆盖（provider/model label、combobox 文案）。
 
 ### Phase 6: 队列/打断 + onboarding + 压缩
@@ -515,6 +516,7 @@ interface ChatUiState {
 | 2026-06-07 | Codex | 推进 Phase 6e：`DjChatRuntimeActor.sendQueuedPrompt` 在 pending tool approval 时暂停派发，保留 queued prompt、返回 false、不触发 transport；补 runtime 测试；`make check` 通过（51 files / 366 tests）。 |
 | 2026-06-07 | Codex | 推进 Phase 4c：`saveChatSessionSnapshot` 在默认标题 session 首次持久化 user 消息时派生自动标题，不覆盖手工命名；补 repository/runtime 持久化竞态测试；`make check` 通过（51 files / 368 tests）。 |
 | 2026-06-07 | Codex | 推进 Phase 4d：补 runtime 集成测覆盖两个 session 不同 model 配置下并发发送，一个进入 `dj_generate_tracks` 审批态、另一个 provider 报错，meta/history/pending approval/error 互不串；`make check` 通过（51 files / 369 tests）。 |
+| 2026-06-07 | Codex | 推进 Phase 5b：新增 `llmSelectionForChatSession`，chat transport 每次 send 按当前 session 的 provider/model 覆盖解析模型；补纯函数与 transport sessionId 测试；`make check` 通过（52 files / 372 tests）。 |
 
 ---
 
