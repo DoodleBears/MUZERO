@@ -58,6 +58,7 @@ export function CoverImage({
             key={loaded}
             src={loaded}
             alt=""
+            draggable={false}
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}

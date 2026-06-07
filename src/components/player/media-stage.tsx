@@ -1,12 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import type { Track } from "@/db/types";
 import { useSettings } from "@/hooks/use-app-data";
 import { useTrackCoverUrl } from "@/hooks/use-media";
-import { resolveStageContent } from "@/lib/track-display";
-import { trackGradient } from "@/lib/track-gradient";
+import { resolveStageContent, trackSubtitle } from "@/lib/track-display";
 import { cn } from "@/lib/utils";
 import { getMediaEngine, usePlayerStore } from "@/stores/player-store";
-import { AuraVisualizer } from "./aura-visualizer";
 import { CoverImage } from "./cover-image";
 import { CurrentTrackContextMenu } from "./track-context-menu";
 
@@ -24,16 +23,10 @@ export function MediaStage({ className }: { className?: string }) {
   const queue = usePlayerStore((s) => s.queue);
   const currentIndex = usePlayerStore((s) => s.currentIndex);
   const displayMode = usePlayerStore((s) => s.displayMode);
-  const audioOnly = usePlayerStore((s) => s.audioOnly);
-  const isPlaying = usePlayerStore((s) => s.isPlaying);
   const current = currentIndex >= 0 ? queue[currentIndex] : undefined;
   const settings = useSettings();
-  // When the visualizer is the page background, don't also draw it in a no-cover
-  // song's cover area (avoids a double visualizer) — show a per-song gradient
-  // placeholder instead, unless the user opts in.
   const asBgActive =
     (settings.visualizerAsBackground ?? true) && (settings.visualizerStyle ?? "bars") !== "off";
-  const showStageViz = !asBgActive || (settings.visualizerInCoverArea ?? false);
 
   const containerRef = useRef<HTMLDivElement | null>(null);
   const coverUrl = useTrackCoverUrl(current);
@@ -43,7 +36,6 @@ export function MediaStage({ className }: { className?: string }) {
   const content = resolveStageContent({
     track: current,
     displayMode,
-    audioOnly,
     // Whether a cover *exists* (sync) — not whether its URL has resolved yet — so
     // the stage doesn't flip to the visualizer during a track change.
     hasCover: !!current?.coverBlobId,
@@ -118,25 +110,16 @@ export function MediaStage({ className }: { className?: string }) {
         ref={containerRef}
         style={aspect != null ? { aspectRatio: String(aspect) } : undefined}
         className={cn(
-          "relative shrink-0 overflow-hidden rounded-2xl",
+          "relative shrink-0",
           showVideo
-            ? "w-full bg-black"
+            ? "w-full overflow-hidden rounded-lg bg-black shadow-md"
             : showCover
-              ? "mx-auto w-full max-w-2xl bg-card/40"
-              : "mx-auto aspect-square w-full max-w-md bg-card/40",
+              ? "mx-auto w-full overflow-hidden rounded-lg shadow-md"
+              : "mx-auto aspect-square w-full bg-muted rounded-lg overflow-hidden",
           className,
         )}
       >
-        {showGeneratedBackdrop &&
-          (showStageViz ? (
-            <AuraVisualizer active={isPlaying} className="absolute inset-0" />
-          ) : (
-            // Visualizer is the page background → use a per-song gradient here instead.
-            <div
-              className="absolute inset-0"
-              style={{ background: trackGradient(current?.id ?? "muzero") }}
-            />
-          ))}
+        {showGeneratedBackdrop && <StageTitleCard track={current} dim={asBgActive} />}
         {/* Crossfades to the next cover only once it has decoded (no flash of the
           previous track's cover), and reports its aspect for the box ratio. */}
         {content === "cover" && (
@@ -144,7 +127,7 @@ export function MediaStage({ className }: { className?: string }) {
             url={coverUrl}
             hasCover={!!current?.coverBlobId}
             onAspect={setCoverAspect}
-            className="z-10"
+            className="z-10 rounded-lg"
           />
         )}
         {videoBroke && (
@@ -154,5 +137,30 @@ export function MediaStage({ className }: { className?: string }) {
         )}
       </div>
     </CurrentTrackContextMenu>
+  );
+}
+
+function StageTitleCard({ track, dim }: { track: Track | undefined; dim: boolean }) {
+  const subtitle = trackSubtitle(track);
+  const showSubtitle = subtitle && subtitle !== track?.title;
+
+  return (
+    <div
+      className={cn(
+        "absolute inset-0 grid place-items-center bg-muted p-7 text-center",
+        dim && "bg-muted/92",
+      )}
+    >
+      <div className="max-w-[82%] space-y-2">
+        <div className="line-clamp-3 text-balance font-semibold text-foreground text-2xl sm:text-3xl">
+          {track?.title ?? "MUZERO"}
+        </div>
+        {showSubtitle && (
+          <div className="line-clamp-2 text-balance font-medium text-muted-foreground text-sm sm:text-base">
+            {subtitle}
+          </div>
+        )}
+      </div>
+    </div>
   );
 }

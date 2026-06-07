@@ -28,10 +28,10 @@ import { reconcileCurrentIndex, unconsumedTrackIds } from "@/player/play-queue";
 import {
   buildShuffleOrder,
   clampIndex,
-  nextIndex,
+  manualNextIndex,
   prevIndex,
   type RepeatMode,
-  shuffleNext,
+  shuffleManualNext,
   shufflePrev,
 } from "@/player/queue";
 import { notify } from "@/stores/notification-store";
@@ -49,12 +49,8 @@ interface PlayerState {
   repeat: RepeatMode;
   /** Play tracks in a shuffled order. */
   shuffle: boolean;
-  /** Auto-advance to the next track when one ends (manual next/prev always work). */
-  autoplay: boolean;
   /** Stage rendering for the active set (video-first → cover → title). */
   displayMode: SetDisplayMode;
-  /** Force audio-only: play a video's audio without showing the video. */
-  audioOnly: boolean;
   /** Whether the active set lets the DJ auto-generate more tracks. */
   djEnabled: boolean;
   // DJ status flags for the console UI.
@@ -76,14 +72,16 @@ interface PlayerState {
   /** Play a specific track, switching sets if needed (search/library result). */
   playTrack: (track: Track) => Promise<void>;
   next: () => Promise<void>;
+  /** Previous track without the transport-button "restart current after 3s" rule. */
+  skipPrev: () => Promise<void>;
   prev: () => Promise<void>;
+  /** Read the track that a manual next/previous action would move to. */
+  peekTrack: (direction: "next" | "prev") => Track | undefined;
   seek: (sec: number) => void;
   setVolume: (v: number) => void;
   setRepeat: (mode: RepeatMode) => void;
   setShuffle: (on: boolean) => void;
-  setAutoplay: (on: boolean) => void;
   setDisplayMode: (mode: SetDisplayMode) => Promise<void>;
-  setAudioOnly: (audioOnly: boolean) => void;
   /** Import uploaded audio/video files into the active set. */
   addUploads: (files: FileList | File[]) => Promise<void>;
   /** Import uploaded files into a SPECIFIC set (e.g. the gallery detail page). */
@@ -116,6 +114,7 @@ let consumedTrackIds = new Set<string>();
 let djEngine: DjEngine | null = null;
 let pumping = false;
 let loadedTrackId: string | null = null;
+let playbackSettingsLoaded = false;
 // The active shuffled play order (queue indices). Non-reactive: next/prev read it,
 // setShuffle rebuilds it, and it self-heals when stale vs the queue length.
 let shuffleOrder: number[] = [];
@@ -149,9 +148,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   volume: 0.9,
   repeat: "off",
   shuffle: false,
-  autoplay: true,
   displayMode: "video",
-  audioOnly: false,
   djEnabled: true,
   isDrafting: false,
   isGenerating: false,
@@ -161,9 +158,15 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   init() {
     if (mediaEngine) return;
     mediaEngine = new MediaEngine({
-      // Auto-advance only when autoplay is on; "repeat one" always re-loops.
+      // Repeat-one is an ended-track behavior only; manual next still advances.
       onEnded: () => {
-        if (get().autoplay || get().repeat === "one") void get().next();
+        const state = get();
+        if (state.repeat === "one" && state.currentIndex >= 0) {
+          state.seek(0);
+          void state.playIndex(state.currentIndex);
+          return;
+        }
+        void state.next();
       },
       onTimeUpdate: (positionSec, durationSec) => set({ positionSec, durationSec }),
       onPlayStateChange: (isPlaying) => set({ isPlaying }),
@@ -178,6 +181,9 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       },
     });
     mediaEngine.setVolume(get().volume);
+    void hydratePlaybackSettings(set, get).catch((err: unknown) =>
+      log.warn("player", "failed to hydrate playback settings", err),
+    );
 
     // The player consumes the persistent 播放列表 (Play Queue), not a 歌单 directly.
     // This single subscription keeps `queue` in sync as the queue is loaded /
@@ -306,11 +312,11 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     const { queue, currentIndex, repeat, shuffle } = get();
     let ni: number | null;
     if (shuffle) {
-      const r = shuffleNext(shuffleOrder, queue.length, currentIndex, repeat);
+      const r = shuffleManualNext(shuffleOrder, queue.length, currentIndex, repeat);
       shuffleOrder = r.order;
       ni = r.index;
     } else {
-      ni = nextIndex(queue.length, currentIndex, repeat);
+      ni = manualNextIndex(queue.length, currentIndex, repeat);
     }
     if (ni === null) {
       get().pause();
@@ -321,12 +327,8 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     await get().playIndex(ni);
   },
 
-  async prev() {
-    const { queue, currentIndex, repeat, positionSec, shuffle } = get();
-    if (positionSec > 3) {
-      get().seek(0);
-      return;
-    }
+  async skipPrev() {
+    const { queue, currentIndex, repeat, shuffle } = get();
     let pi: number | null;
     if (shuffle) {
       const r = shufflePrev(shuffleOrder, queue.length, currentIndex, repeat);
@@ -335,8 +337,40 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     } else {
       pi = prevIndex(queue.length, currentIndex, repeat);
     }
-    if (pi === null) return;
+    if (pi === null || pi === currentIndex) return;
     await get().playIndex(pi);
+  },
+
+  async prev() {
+    const { positionSec } = get();
+    if (positionSec > 3) {
+      get().seek(0);
+      return;
+    }
+    await get().skipPrev();
+  },
+
+  peekTrack(direction) {
+    const { queue, currentIndex, repeat, shuffle } = get();
+    if (queue.length === 0 || currentIndex < 0) return undefined;
+    let index: number | null;
+    if (direction === "next") {
+      if (shuffle) {
+        if (shuffleOrder.length !== queue.length) return undefined;
+        const r = shuffleManualNext(shuffleOrder, queue.length, currentIndex, repeat);
+        index = r.index;
+      } else {
+        index = manualNextIndex(queue.length, currentIndex, repeat);
+      }
+    } else if (shuffle) {
+      if (shuffleOrder.length !== queue.length) return undefined;
+      const r = shufflePrev(shuffleOrder, queue.length, currentIndex, repeat);
+      index = r.index;
+    } else {
+      index = prevIndex(queue.length, currentIndex, repeat);
+    }
+    if (index === null || index === currentIndex) return undefined;
+    return queue[index];
   },
 
   seek(sec) {
@@ -351,25 +385,23 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
 
   setRepeat(mode) {
     set({ repeat: mode });
+    void saveSettings({ playerRepeatMode: mode }).catch((err: unknown) =>
+      log.warn("player", "failed to persist repeat mode", err),
+    );
   },
 
   setShuffle(on) {
     set({ shuffle: on });
     shuffleOrder = on ? buildShuffleOrder(get().queue.length, get().currentIndex) : [];
-  },
-
-  setAutoplay(on) {
-    set({ autoplay: on });
+    void saveSettings({ playerShuffle: on }).catch((err: unknown) =>
+      log.warn("player", "failed to persist shuffle mode", err),
+    );
   },
 
   async setDisplayMode(mode) {
     const { activeSessionId } = get();
     set({ displayMode: mode });
     if (activeSessionId) await setSessionDisplayMode(activeSessionId, mode);
-  },
-
-  setAudioOnly(audioOnly) {
-    set({ audioOnly });
   },
 
   async addUploads(files) {
@@ -480,6 +512,19 @@ function describePlaybackError(error: unknown): string {
   }
   if (error instanceof Error) return error.message;
   return error ? String(error) : "unknown";
+}
+
+async function hydratePlaybackSettings(
+  set: (p: Partial<PlayerState>) => void,
+  get: () => PlayerState,
+): Promise<void> {
+  if (playbackSettingsLoaded) return;
+  playbackSettingsLoaded = true;
+  const settings = await getSettings();
+  const repeat = settings.playerRepeatMode ?? "off";
+  const shuffle = settings.playerShuffle ?? false;
+  set({ repeat, shuffle });
+  shuffleOrder = shuffle ? buildShuffleOrder(get().queue.length, get().currentIndex) : [];
 }
 
 async function ensureLoadedAndPlay(
