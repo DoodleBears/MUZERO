@@ -5,15 +5,19 @@ import {
   clearDjChatRuntimeActors,
   getOrCreateDjChatRuntimeActor,
 } from "./dj-chat-runtime-registry";
-import { createChatSession, getChatSession } from "./dj-chat-sessions";
+import { createChatSession, getChatSession, parseQueuedPrompts } from "./dj-chat-sessions";
 import type { DjChatUIMessage } from "./types";
 
 class FakeStreamingTransport implements ChatTransport<DjChatUIMessage> {
   private calls = 0;
+  sentMessages: DjChatUIMessage[][] = [];
 
   constructor(private readonly reply: string | string[]) {}
 
-  async sendMessages(): Promise<ReadableStream<UIMessageChunk>> {
+  async sendMessages(
+    options: Parameters<ChatTransport<DjChatUIMessage>["sendMessages"]>[0],
+  ): Promise<ReadableStream<UIMessageChunk>> {
+    this.sentMessages.push([...(options.messages as DjChatUIMessage[])]);
     const reply = Array.isArray(this.reply) ? this.reply[this.calls] : this.reply;
     this.calls += 1;
     const chunks: UIMessageChunk[] = [
@@ -117,5 +121,58 @@ describe("DjChatRuntimeActor", () => {
       text: "new reply",
       state: "done",
     });
+  });
+
+  it("keeps queued prompts across actor rebuilds without auto-dispatching them", async () => {
+    const session = await createChatSession({ firstUserText: "queue" }, db);
+    const transport = new FakeStreamingTransport("queued reply");
+    const actor = getOrCreateDjChatRuntimeActor(session.id, { db, transport });
+    await actor.ready;
+
+    const queued = await actor.queuePrompt("generate a late-night bridge");
+    if (!queued) throw new Error("Expected prompt to enqueue");
+    expect(actor.getSnapshot().meta.queuedPromptCount).toBe(1);
+    expect(transport.sentMessages).toHaveLength(0);
+
+    clearDjChatRuntimeActors();
+    const rebuiltTransport = new FakeStreamingTransport("rebuilt reply");
+    const rebuilt = getOrCreateDjChatRuntimeActor(session.id, { db, transport: rebuiltTransport });
+    await rebuilt.ready;
+
+    expect(rebuilt.getSnapshot().meta.queuedPromptCount).toBe(1);
+    expect(rebuiltTransport.sentMessages).toHaveLength(0);
+
+    await rebuilt.sendQueuedPrompt(queued.id);
+    expect(rebuiltTransport.sentMessages).toHaveLength(1);
+    expect(rebuiltTransport.sentMessages[0].at(-1)).toMatchObject({
+      role: "user",
+      metadata: { composerRaw: "generate a late-night bridge" },
+    });
+    expect(
+      parseQueuedPrompts((await getChatSession(session.id, db))?.queuedPromptsJson),
+    ).toHaveLength(0);
+  });
+
+  it("interrupts with an immediate marked message instead of adding to the queued prompts", async () => {
+    const session = await createChatSession({ firstUserText: "interrupt" }, db);
+    const transport = new FakeStreamingTransport("interrupt reply");
+    const actor = getOrCreateDjChatRuntimeActor(session.id, { db, transport });
+    await actor.ready;
+
+    await actor.queuePrompt("later please");
+    await actor.interruptWithMessage("actually switch to broken beat");
+
+    const messages = actor.getSnapshot().messages;
+    expect(messages[0]).toMatchObject({
+      role: "user",
+      metadata: {
+        composerRaw: "actually switch to broken beat",
+        interruptionMarker: true,
+      },
+    });
+    expect(actor.getSnapshot().meta.queuedPromptCount).toBe(1);
+    expect(
+      parseQueuedPrompts((await getChatSession(session.id, db))?.queuedPromptsJson),
+    ).toHaveLength(1);
   });
 });

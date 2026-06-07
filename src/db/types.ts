@@ -175,6 +175,13 @@ export interface DjChatMessageMetadata {
 
 export type DjChatUIMessage = UIMessage<DjChatMessageMetadata, never, Record<string, never>>;
 
+/** One queued prompt waiting for explicit dispatch in a chat session. */
+export interface DjChatQueuedPrompt {
+  id: string; // newId("cqp")
+  composerRaw: string;
+  createdAt: number;
+}
+
 /** One local AI DJ chat session; messages are stored as a JSON snapshot. */
 export interface ChatSession {
   id: string; // newId("cht")

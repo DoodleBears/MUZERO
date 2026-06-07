@@ -9,8 +9,16 @@ import {
 import { db as defaultDb, type MuzeroDB } from "@/db/muzero-db";
 import { log } from "@/lib/logger";
 import { createDjChatTransport } from "./dj-chat-agent";
-import { getChatSession, parseChatMessages, saveChatSessionSnapshot } from "./dj-chat-sessions";
+import {
+  enqueueChatPrompt,
+  getChatSession,
+  parseChatMessages,
+  parseQueuedPrompts,
+  removeQueuedPrompt,
+  saveChatSessionSnapshot,
+} from "./dj-chat-sessions";
 import type {
+  DjChatQueuedPrompt,
   DjChatRuntimeMeta,
   DjChatRuntimeSnapshot,
   DjChatRuntimeStatus,
@@ -34,6 +42,7 @@ export class DjChatRuntimeActor {
   private persistTimer: number | undefined;
   private lastPersistSig = "";
   private composerDraftRaw: string | undefined;
+  private queuedPrompts: DjChatQueuedPrompt[] = [];
   private disposed = false;
   private db: MuzeroDB;
   private transport: ChatTransport<DjChatUIMessage>;
@@ -63,9 +72,46 @@ export class DjChatRuntimeActor {
   async sendMessage(text: string): Promise<void> {
     await this.ready;
     const clean = text.trim();
-    if (!clean || !this.chat) return;
+    if (!clean) return;
     this.composerDraftRaw = undefined;
-    await this.chat.sendMessage({ text: clean, metadata: { composerRaw: text } });
+    await this.sendText(clean, { composerRaw: text });
+    await this.flush();
+  }
+
+  async queuePrompt(text: string): Promise<DjChatQueuedPrompt | undefined> {
+    await this.ready;
+    const queued = await enqueueChatPrompt(
+      { sessionId: this.sessionId, composerRaw: text },
+      this.db,
+    );
+    if (!queued) return undefined;
+    this.queuedPrompts = [...this.queuedPrompts, queued];
+    this.setSnapshot(
+      this.snapshot.messages,
+      withQueuedPromptCount(this.snapshot.meta, this.queuedPrompts.length),
+    );
+    return queued;
+  }
+
+  async sendQueuedPrompt(promptId: string): Promise<void> {
+    await this.ready;
+    const queued = await removeQueuedPrompt({ sessionId: this.sessionId, promptId }, this.db);
+    if (!queued) return;
+    this.queuedPrompts = this.queuedPrompts.filter((prompt) => prompt.id !== promptId);
+    this.setSnapshot(
+      this.snapshot.messages,
+      withQueuedPromptCount(this.snapshot.meta, this.queuedPrompts.length),
+    );
+    await this.sendMessage(queued.composerRaw);
+  }
+
+  async interruptWithMessage(text: string): Promise<void> {
+    await this.ready;
+    const clean = text.trim();
+    if (!clean) return;
+    await this.chat?.stop();
+    this.composerDraftRaw = undefined;
+    await this.sendText(clean, { composerRaw: text, interruptionMarker: true });
     await this.flush();
   }
 
@@ -83,11 +129,7 @@ export class DjChatRuntimeActor {
     await this.ready;
     const clean = text.trim();
     if (!clean || !this.chat) return;
-    await this.chat.sendMessage({
-      text: clean,
-      messageId,
-      metadata: { composerRaw: text },
-    });
+    await this.chat.sendMessage({ text: clean, messageId, metadata: { composerRaw: text } });
     await this.flush();
   }
 
@@ -112,6 +154,7 @@ export class DjChatRuntimeActor {
     const session = await getChatSession(this.sessionId, this.db);
     if (!session) throw new Error(`Chat session ${this.sessionId} not found`);
     const messages = parseChatMessages(session.messagesJson);
+    this.queuedPrompts = parseQueuedPrompts(session.queuedPromptsJson);
     this.composerDraftRaw = session.composerDraftRaw;
     this.chat = new Chat<DjChatUIMessage>({
       id: this.sessionId,
@@ -138,9 +181,23 @@ export class DjChatRuntimeActor {
   private handleChatChanged(): void {
     if (!this.chat || this.disposed) return;
     const messages = this.chat.messages;
-    const meta = runtimeMeta(this.sessionId, messages, this.chat.status, this.chat.error);
+    const meta = runtimeMeta(
+      this.sessionId,
+      messages,
+      this.chat.status,
+      this.chat.error,
+      this.queuedPrompts.length,
+    );
     this.setSnapshot(messages, meta);
     this.schedulePersist();
+  }
+
+  private async sendText(
+    text: string,
+    metadata: NonNullable<DjChatUIMessage["metadata"]>,
+  ): Promise<void> {
+    if (!this.chat) return;
+    await this.chat.sendMessage({ text, metadata });
   }
 
   private setSnapshot(messages: DjChatUIMessage[], meta: DjChatRuntimeMeta): void {
@@ -163,6 +220,7 @@ export class DjChatRuntimeActor {
     const sig = JSON.stringify({
       messages: this.snapshot.messages,
       draft: this.composerDraftRaw,
+      queuedPrompts: this.queuedPrompts,
     });
     if (sig === this.lastPersistSig) return;
     this.lastPersistSig = sig;
@@ -171,6 +229,7 @@ export class DjChatRuntimeActor {
         sessionId: this.sessionId,
         messages: this.snapshot.messages,
         composerDraftRaw: this.composerDraftRaw,
+        queuedPrompts: this.queuedPrompts,
       },
       this.db,
     );
@@ -183,6 +242,7 @@ function emptyMeta(sessionId: string): DjChatRuntimeMeta {
     status: "idle",
     messageCount: 0,
     pendingApprovalCount: 0,
+    queuedPromptCount: 0,
   };
 }
 
@@ -191,6 +251,7 @@ function runtimeMeta(
   messages: DjChatUIMessage[],
   status: ChatStatus,
   error: Error | undefined,
+  queuedPromptCount: number,
 ): DjChatRuntimeMeta {
   const pendingApprovalCount = countPendingApprovals(messages);
   return {
@@ -199,8 +260,16 @@ function runtimeMeta(
     messageCount: messages.length,
     lastAssistantPreview: lastAssistantText(messages),
     pendingApprovalCount,
+    queuedPromptCount,
     errorMessage: error?.message,
   };
+}
+
+function withQueuedPromptCount(
+  meta: DjChatRuntimeMeta,
+  queuedPromptCount: number,
+): DjChatRuntimeMeta {
+  return { ...meta, queuedPromptCount };
 }
 
 function mapStatus(status: ChatStatus): DjChatRuntimeStatus {

@@ -5,10 +5,13 @@ import type { AppSettings, ChatSession } from "@/db/types";
 import {
   branchChatSession,
   createChatSession,
+  enqueueChatPrompt,
   getChatSession,
   listChatSessions,
   parseChatMessages,
+  parseQueuedPrompts,
   renameChatSession,
+  reorderQueuedPrompts,
   saveChatSessionSnapshot,
   searchChatSessions,
 } from "./dj-chat-sessions";
@@ -116,6 +119,35 @@ describe("chat session repository", () => {
       db,
     );
     expect(parseChatMessages((await getChatSession(parent.id, db))?.messagesJson)).toHaveLength(3);
+  });
+
+  it("persists queued prompts as session-scoped durable drafts and supports reorder", async () => {
+    const session = await createChatSession({ firstUserText: "queue ideas" }, db);
+
+    const first = await enqueueChatPrompt(
+      { sessionId: session.id, composerRaw: "make it darker", now: () => 10 },
+      db,
+    );
+    const second = await enqueueChatPrompt(
+      { sessionId: session.id, composerRaw: "then add hand drums", now: () => 20 },
+      db,
+    );
+    await enqueueChatPrompt({ sessionId: session.id, composerRaw: "   " }, db);
+    if (!first || !second) throw new Error("Expected non-empty prompts to enqueue");
+
+    const saved = await getChatSession(session.id, db);
+    expect(
+      parseQueuedPrompts(saved?.queuedPromptsJson).map((prompt) => prompt.composerRaw),
+    ).toEqual(["make it darker", "then add hand drums"]);
+    expect(first.id).toMatch(/^cqp_/);
+    expect(second.createdAt).toBe(20);
+
+    await reorderQueuedPrompts({ sessionId: session.id, promptIds: [second.id, first.id] }, db);
+    expect(
+      parseQueuedPrompts((await getChatSession(session.id, db))?.queuedPromptsJson).map(
+        (prompt) => prompt.id,
+      ),
+    ).toEqual([second.id, first.id]);
   });
 });
 

@@ -1,6 +1,11 @@
-import type { ChatSession, DjChatMessageMetadata, DjChatUIMessage } from "@/db/types";
+import type {
+  ChatSession,
+  DjChatMessageMetadata,
+  DjChatQueuedPrompt,
+  DjChatUIMessage,
+} from "@/db/types";
 
-export type { ChatSession, DjChatMessageMetadata, DjChatUIMessage };
+export type { ChatSession, DjChatMessageMetadata, DjChatQueuedPrompt, DjChatUIMessage };
 
 export type DjChatRuntimeStatus =
   | "idle"
@@ -16,6 +21,7 @@ export interface DjChatRuntimeMeta {
   messageCount: number;
   lastAssistantPreview?: string;
   pendingApprovalCount: number;
+  queuedPromptCount: number;
   errorMessage?: string;
 }
 

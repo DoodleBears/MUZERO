@@ -431,11 +431,13 @@ interface ChatUiState {
 ### Phase 6: 队列/打断 + onboarding + 压缩
 **Tasks:**
 - [ ] `chat-queue-tray.tsx`（DnD 重排、立即发送、auto-dispatch Switch、reload 后默认关）；Stop≠Interrupt + 打断标记。
+- [x] 队列 runtime 核心：`ChatSession.queuedPromptsJson` 解析/入队/重排/删除；actor 重建只恢复队列计数、不自动派发；手动派发移除 queued prompt 后发送；interrupt 立即发送并带一次性 marker。
 - [ ] 空态：预设 chips（插入不发）+ 空库/无 seed 引导（指向上传/输入 vibe）。
 - [x] `dj-chat-context-budget.ts` + `dj-chat-tokens.ts`：预算 gate + 滑动 `contextStartIndex` 压缩（block-and-explain，不静默截断）。
 
 **Phase 6 Checklist:**
-- [ ] 键盘矩阵测试（Enter/Ctrl+Enter/Shift+Enter）；pending 审批暂停派发；重载恢复队列但不自动发。
+- [ ] 键盘矩阵测试（Enter/Ctrl+Enter/Shift+Enter）；pending 审批暂停派发。
+- [x] 重载恢复队列但不自动发；手动派发 queued prompt 后从 session 队列移除；interrupt 不入队并带 `interruptionMarker`。
 - [x] 超预算时纯函数返回 block（调用点负责解释）；压缩指针计算保留最新 user turn，不静默截断。
 - [ ] 压缩指针持久化、旧消息仍可见（UI/actor 接线待后续提交）。
 
@@ -498,6 +500,7 @@ interface ChatUiState {
 | 2026-06-07 | Codex | 推进 Phase 4a：扩展 chat session repository，支持历史子串搜索（title + user messages only）和 branch（截断 deep-copy messagesJson，记录 parent/fork index）；runtime actor 增加 edit-resend regenerate（复用 user messageId、截断后续并重流）。补 fake-indexeddb/runtime 测试；`make check` 通过（46 files / 337 tests）。 |
 | 2026-06-07 | Codex | 推进 Phase 5a：新增 LLM provider preset registry（openrouter/openai/claude/gemini/groq/deepseek/custom）、settings 字段 `defaultLlmProviderPresetId`/`defaultLlmModel`/`apiKeysByPresetId`、legacy openai/anthropic bridge、enabled provider selection；`resolveDjModel` 支持 Anthropic 与 OpenAI-compatible `baseURL`，仍注入 `getAppFetch()`。补 preset selection 测试；`make check` 通过（47 files / 343 tests）。 |
 | 2026-06-07 | Codex | 推进 Phase 6a：新增 `dj-chat-tokens.ts` 与 `dj-chat-context-budget.ts`，提供保守 token 估算、ok/warn/block budget gate、压缩起点计算（保留最新 user turn，不静默截断）。补纯函数测试；`make check` 通过（48 files / 346 tests）。 |
+| 2026-06-07 | Codex | 推进 Phase 6b：新增 session-scoped queued prompt runtime 核心（`queuedPromptsJson` parse/enqueue/reorder/remove、runtime meta 计数、actor rebuild 不自动派发、手动派发后移除、interrupt 即发并打 `interruptionMarker`）。补仓库/actor 测试；`make check` 通过（48 files / 349 tests）。 |
 
 ---
 

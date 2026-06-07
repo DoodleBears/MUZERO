@@ -54,6 +54,7 @@ describe("chat shell components", () => {
           status: "streaming",
           messageCount: 2,
           pendingApprovalCount: 0,
+          queuedPromptCount: 0,
           lastAssistantPreview: "Rainy focus is ready.",
         },
       },
