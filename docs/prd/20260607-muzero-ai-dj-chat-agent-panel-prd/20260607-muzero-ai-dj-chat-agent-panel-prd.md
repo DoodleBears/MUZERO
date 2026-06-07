@@ -419,7 +419,8 @@ interface ChatUiState {
 
 ### Phase 4: 多 Session + 历史 + branch/regenerate
 **Tasks:**
-- [ ] `chat-session-home.tsx`（列表 + 子串搜索 + 自动标题 + 重命名/删除）；多 actor 并发（切走仍流）。Core repository search 已完成；UI 待后续提交。
+- [x] `chat-session-home.tsx` 展示层（列表 + 子串搜索标题/user 文本 + 自动标题显示 + 重命名/删除/打开回调，无内置文案）。
+- [ ] Session home App/ChatPanel 切换接线；多 actor 并发（切走仍流）最终 UI 验收待 App WIP 落地后补。
 - [x] regenerate（edit-resend 复用 messageId）；branch（截断深拷贝 messagesJson → 新 session）。
 
 **Phase 4 Checklist:**
@@ -428,6 +429,7 @@ interface ChatUiState {
 - [x] Runtime 基座：两个 session actor 可并发发送、分别 stream/persist，preview 与 messagesJson 不串线。
 - [x] 空 session 首次持久化 user 消息时自动派生标题，不覆盖手工标题。
 - [x] 搜索命中标题与用户消息（不搜 assistant-only 文本）；branch 后父子独立。
+- [x] `ChatSessionHome` 展示层搜索复用同一口径：标题 + user 文本，assistant-only 不命中；open/rename/delete 只回调给上层。
 - [x] edit-resend regenerate 复用 user `messageId`，截断后续并重流。
 
 ### Phase 5: 多 Provider 模型选型
@@ -536,6 +538,7 @@ interface ChatUiState {
 | 2026-06-07 | Codex | 推进 Phase 3f：`ChatTurns` 在传入 labels 时渲染 tool collapsible，`ChatPanel` 透传 runtime approve/reject callbacks；补 opt-in 组件测试；`make check` 通过（52 files / 375 tests）。 |
 | 2026-06-07 | Codex | 推进 Phase 6g：新增无内置文案的 `ChatQueueTray` 展示层，支持空态、DnD drop/可访问按钮重排、立即发送/删除回调与默认关闭的 auto-dispatch switch；补组件测试；`make check` 通过（53 files / 379 tests）。 |
 | 2026-06-07 | Codex | 推进 Phase 6h：runtime snapshot 暴露 queued prompt 详情，`ChatPanel` 传入 `queueLabels` 时渲染 `ChatQueueTray` 并把 send/delete/reorder 回调转给 actor；补 panel/runtime 测试；`make check` 通过（54 files / 380 tests）。 |
+| 2026-06-07 | Codex | 推进 Phase 4e：新增无内置文案的 `ChatSessionHome` 展示层，支持 session 列表、标题/user 文本本地搜索、打开、重命名、删除回调；补组件测试；`make check` 通过（55 files / 382 tests）。 |
 
 ---
 
