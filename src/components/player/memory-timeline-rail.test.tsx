@@ -43,6 +43,11 @@ describe("MemoryTimelineRail", () => {
     expect(screen.getByTestId("memory-carousel-card")).toHaveTextContent("Second kitchen loop");
     expect(screen.getByTestId("memory-carousel-card")).not.toHaveTextContent("Kitchen Song");
     expect(screen.getByTestId("memory-carousel-card")).toHaveClass("w-4/5");
+    expect(screen.getByTestId("memory-carousel-note")).toHaveStyle({
+      fontSize: "64px",
+      lineHeight: "72px",
+    });
+    expect(screen.getByTestId("memory-carousel-note")).not.toHaveClass("line-clamp-9");
     expect(screen.getByTestId("memory-carousel-image")).toHaveClass("object-contain");
     expect(screen.getByTestId("memory-carousel-image")).toHaveClass("max-h-[min(52vh,24rem)]");
     expect(screen.getByTestId("memory-timeline-rail")).not.toHaveClass("bg-card/55");

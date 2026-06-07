@@ -245,7 +245,7 @@ this.version(3).stores({
 - [x] 从记忆照片设为封面：每条带照片 Memory 的便签提供「设为封面」动作，repo 将 memory photo 复制成独立 `role:"cover"` blob，保留原 memory photo，不把封面指针直接复用到 memory blob。
 - [x] 宽屏 Now Playing 右侧播放列表 rail：提供折叠按钮，折叠偏好写入 `AppSettings.nowPlayingRightRailCollapsed`；刷新后保持；折叠态用 `motion` 收成底部 compact header，移动端队列 overlay 不受该偏好影响。
 - [x] 折叠态 Memory rail：折叠后右侧主体只显示**当前歌曲**关联的 memories，不混入 queue 其他歌曲。Idle 默认透明外壳、水平/垂直居中展示大 card carousel（约占 rail 4/5），并从 `AppSettings.nowPlayingMemoryRailScrollTop` 对应的锚点开始轮播；用户 pointer/wheel/focus 操作时中心便签淡出，切换成类似歌词播放/手机相册的纵向 timeline list：历史 note memories 上下滚动，不显示实体 playhead/中心卡；第一下 pointer down 即建立拖拽捕获，拖动 list 本身（上拖前进、下拖后退）来切换节点并写回持久化锚点；idle 一段时间后从当前节点继续轮播；底部 compact header 继续 align bottom。
-- [x] 折叠态 Memory 内容：因为 rail 已经限定为当前歌曲，不重复显示歌曲名；无当前歌曲 memories 时不显示任何空态文案；若 memory 有照片，idle 大卡和 timeline list 都使用完整图片显示（`object-contain`，不裁切）。
+- [x] 折叠态 Memory 内容：因为 rail 已经限定为当前歌曲，不重复显示歌曲名；无当前歌曲 memories 时不显示任何空态文案；若 memory 有照片，idle 大卡和 timeline list 都使用完整图片显示（`object-contain`，不裁切）。Idle 大卡的记忆正文使用 Pretext 测量 fit text：默认尽可能用 64px 上限展示，文本区域 resize/内容切换时重新计算，内容过长则自动降字号避免溢出画面。
 - [x] 记忆快捷创建：`T` / `N` 在当前记忆面板挂载时打开创建 Memory modal，直接聚焦 composer；modal 复用 `MemoryNoteComposer`，支持粘贴图片、Enter 提交、Shift+Enter 换行，并写入当前 track 的 Memory。
 - [x] 折叠 rail 视觉方向：折叠按钮用 `PanelBottomClose`，折叠态展开 affordance 用 `PanelBottomOpen`；compact header 保持 `rounded-b-none`，底部贴 dock/窗口时不出现圆角。
 - [ ] 歌单管理（CRUD + 播放/加入队列/切换）；播放列表视图（play-next/add/remove/reorder/loop 控件）；记忆相册；封面取自记忆。
@@ -317,6 +317,7 @@ this.version(3).stores({
 | 2026-06-08 | Codex | 打磨折叠态 Memory 内容：移除当前歌曲名重复展示；`NowPlayingPanel` 解析 memory photo object URL 并在 timeline rail 以 `object-contain` 完整显示照片。补 rail 图片/无歌曲名测试；`make check` 通过（74 files / 448 tests）。 |
 | 2026-06-08 | Codex | 打磨折叠态 Memory rail 拖拽体验：timeline 模式移除中心便签与实体 playhead 横线；idle 大卡扩到 rail 约 4/5，照片更大；pointer down 从 idle 切 timeline 的同一手势立即捕获并开始拖动，避免首帧卡住。补 rail 拖拽/尺寸/无 playhead 测试；`make check` 通过（74 files / 449 tests）。 |
 | 2026-06-08 | Codex | 推进 Memory 快捷创建：折叠态 rail 无 memories 时不显示空态文案；新增 `resolveMemoryShortcut` 与当前记忆面板的 `T`/`N` 创建 modal，复用 composer 支持粘贴图片与 Enter 提交。补空态、快捷键解析、modal+photo 持久化测试；`make check` 通过（75 files / 452 tests）。 |
+| 2026-06-08 | Codex | 打磨折叠态 Memory 正文字号：新增 Pretext-backed `resolveMemoryFitText`，idle 大卡正文默认上限 64px，并根据文本区域宽高自动降字号；移除正文 line-clamp，改为完整 note fit 展示。补 fit text 纯函数与 rail 样式测试；`make check` 通过（76 files / 455 tests）。 |
 
 ---
 

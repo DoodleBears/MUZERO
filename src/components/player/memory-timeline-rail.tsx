@@ -11,6 +11,7 @@ import {
   useState,
 } from "react";
 import type { Memory } from "@/db/types";
+import { resolveMemoryFitText } from "@/lib/memory-fit-text";
 import {
   MEMORY_TIMELINE_CAROUSEL_INTERVAL_MS,
   MEMORY_TIMELINE_IDLE_DELAY_MS,
@@ -194,7 +195,7 @@ export function MemoryTimelineRail({
         <div className="grid h-full place-items-center p-3" data-testid="memory-carousel-stage">
           <motion.article
             animate={{ opacity: 1, scale: 1, y: 0 }}
-            className="flex max-h-full w-4/5 max-w-none flex-col rounded-xl border border-border/70 bg-background/80 p-5 text-center shadow-sm backdrop-blur-sm md:p-6"
+            className="flex h-4/5 max-h-full w-4/5 max-w-none flex-col overflow-hidden rounded-xl border border-border/70 bg-background/80 p-5 text-center shadow-sm backdrop-blur-sm md:p-6"
             data-testid="memory-carousel-card"
             initial={{ opacity: 0.72, scale: 0.96, y: 8 }}
             key={activeMemory.id}
@@ -209,9 +210,7 @@ export function MemoryTimelineRail({
                 src={activeMemory.photoUrl}
               />
             )}
-            <p className="line-clamp-9 whitespace-pre-wrap text-base leading-7">
-              {activeMemory.note}
-            </p>
+            <MemoryCarouselNote note={activeMemory.note} />
             <div className="mt-4 space-y-1 text-muted-foreground text-xs">
               <time dateTime={new Date(activeMemory.createdAt).toISOString()}>
                 {formatCreatedAt(activeMemory.createdAt)}
@@ -284,5 +283,60 @@ export function MemoryTimelineRail({
         </div>
       )}
     </motion.section>
+  );
+}
+
+function MemoryCarouselNote({ note }: { note: string }) {
+  const boxRef = useRef<HTMLDivElement | null>(null);
+  const [fitText, setFitText] = useState(() => resolveMemoryFitText(note, { height: 0, width: 0 }));
+
+  useEffect(() => {
+    const element = boxRef.current;
+    if (!element) return;
+    const target: HTMLDivElement = element;
+
+    function updateFitText() {
+      const width = target.clientWidth;
+      const height = target.clientHeight;
+      const computedStyle =
+        typeof window !== "undefined" ? window.getComputedStyle(target) : undefined;
+      setFitText(
+        resolveMemoryFitText(note, {
+          fontFamily: computedStyle?.fontFamily,
+          height,
+          width,
+        }),
+      );
+    }
+
+    updateFitText();
+
+    if (typeof ResizeObserver !== "undefined") {
+      const observer = new ResizeObserver(updateFitText);
+      observer.observe(target);
+      return () => observer.disconnect();
+    }
+
+    window.addEventListener("resize", updateFitText);
+    return () => window.removeEventListener("resize", updateFitText);
+  }, [note]);
+
+  return (
+    <div
+      className="flex min-h-0 flex-1 items-center justify-center overflow-hidden"
+      data-testid="memory-carousel-note-box"
+      ref={boxRef}
+    >
+      <p
+        className="max-w-full whitespace-pre-wrap break-words text-center font-semibold tracking-normal"
+        data-testid="memory-carousel-note"
+        style={{
+          fontSize: `${fitText.fontSize}px`,
+          lineHeight: `${fitText.lineHeight}px`,
+        }}
+      >
+        {note}
+      </p>
+    </div>
   );
 }
