@@ -1,7 +1,13 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { MuzeroDB } from "@/db/muzero-db";
-import { addMemory, listMemories } from "@/db/repositories";
+import {
+  addMemory,
+  createSession,
+  createUploadedTrack,
+  getTrack,
+  listMemories,
+} from "@/db/repositories";
 import {
   TrackMemoryNotesPanel,
   type TrackMemoryNotesPanelLabels,
@@ -23,6 +29,7 @@ const labels: TrackMemoryNotesPanelLabels = {
     editMemory: (memory) => `Edit ${memory.note}`,
     empty: "No memories yet",
     photoAlt: (memory) => `Photo for ${memory.note}`,
+    setCoverFromMemory: (memory) => `Use ${memory.note} as cover`,
   },
 };
 
@@ -95,12 +102,52 @@ describe("TrackMemoryNotesPanel", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "Save memory" }));
 
-    expect(await screen.findByText("updated note")).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText("updated note")).toBeInTheDocument());
     await waitFor(() => expect(screen.queryByText("old note")).not.toBeInTheDocument());
 
     fireEvent.click(screen.getByRole("button", { name: "Delete updated note" }));
     await waitFor(() => expect(screen.queryByText("updated note")).not.toBeInTheDocument());
     expect(screen.getByRole("list", { name: "No memories yet" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Create memory" })).toBeInTheDocument();
+  });
+
+  it("sets a memory photo as the track cover", async () => {
+    const session = await createSession({ seedPrompt: "", config: { autoExtend: false } }, db);
+    const track = await createUploadedTrack(
+      {
+        blob: new Blob([new Uint8Array([1])], { type: "audio/wav" }),
+        durationSec: 12,
+        kind: "audio",
+        mime: "audio/wav",
+        sessionId: session.id,
+        title: "Rain Loop",
+      },
+      db,
+    );
+    const memory = await addMemory(
+      {
+        note: "rain window",
+        photo: { blob: new Blob([new Uint8Array([7])], { type: "image/png" }), mime: "image/png" },
+        trackId: track.id,
+      },
+      db,
+    );
+
+    render(
+      <TrackMemoryNotesPanel
+        db={db}
+        formatCreatedAt={(createdAt) => `time-${createdAt}`}
+        labels={labels}
+        trackId={track.id}
+      />,
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: "Use rain window as cover" }));
+
+    await waitFor(async () => {
+      const updated = await getTrack(track.id, db);
+      expect(updated?.coverBlobId).toBeTruthy();
+      expect(updated?.coverBlobId).not.toBe(memory.photoBlobId);
+    });
   });
 });

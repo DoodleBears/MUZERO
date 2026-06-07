@@ -188,6 +188,7 @@
     "removeMemoryPhoto": "{{name}} 제거",
     "editMemory": "추억 편집",
     "deleteMemory": "추억 삭제",
+    "setMemoryPhotoAsCover": "커버로 사용",
     "memoryPhotoAlt": "추억 사진"
   },
   "settings": {

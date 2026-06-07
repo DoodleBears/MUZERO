@@ -195,6 +195,7 @@
     "removeMemoryPhoto": "Remove {{name}}",
     "editMemory": "Edit memory",
     "deleteMemory": "Delete memory",
+    "setMemoryPhotoAsCover": "Use photo as cover",
     "memoryPhotoAlt": "Memory photo"
   },
   "settings": {

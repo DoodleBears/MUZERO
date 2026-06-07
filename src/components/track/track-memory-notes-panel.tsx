@@ -9,6 +9,7 @@ import {
   deleteMemory,
   getMemoryPhoto,
   listMemories,
+  setTrackCoverFromMemory,
   updateMemoryNote,
 } from "@/db/repositories";
 import type { Memory } from "@/db/types";
@@ -72,6 +73,10 @@ export function TrackMemoryNotesPanel({
     if (editingMemory?.id === memory.id) setEditingMemory(undefined);
   }
 
+  async function useMemoryPhotoAsCover(memory: MemoryNoteView) {
+    await setTrackCoverFromMemory(memory.id, db);
+  }
+
   function editMemory(memory: MemoryNoteView) {
     setIsCreating(false);
     setPhotoFile(undefined);
@@ -116,6 +121,7 @@ export function TrackMemoryNotesPanel({
       memories={memoryViews}
       onDeleteMemory={removeMemory}
       onEditMemory={editMemory}
+      onSetCoverFromMemory={useMemoryPhotoAsCover}
     />
   );
 }
@@ -135,6 +141,7 @@ function useMemoryNoteViews(memories: Memory[], db: MuzeroDB): MemoryNoteView[] 
       const next: Record<string, string> = {};
       for (const memory of memories) {
         const blob = await getMemoryPhoto(memory, db);
+        if (blob && !(blob instanceof Blob)) continue;
         if (!blob || cancelled) continue;
         const url = URL.createObjectURL(blob);
         urls.push(url);

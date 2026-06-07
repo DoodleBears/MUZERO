@@ -34,6 +34,7 @@ PRD: [`20260607-muzero-set-playqueue-memory-data-model-prd`](docs/prd/20260607-m
   - 验收：一曲多记忆（含照片）；搜索命中记忆文字；旧 note 变首条记忆；DJ 上下文带记忆。
 - [ ] **DM-4 UI 打磨** — 歌单管理（CRUD+播放/加入队列/切换）；播放列表视图（play-next/add/remove/reorder/loop）；记忆相册；封面取自记忆；i18n 4 语。
   - [x] 当前歌曲/封面右键菜单：MediaStage 与底部歌曲行可打开 context menu，切换 video/cover/title、audio-only，并添加/更换当前歌曲封面。
+  - [x] 从记忆照片设为封面：带照片的记忆便签可一键复制为独立歌曲封面，原记忆照片保留。
   - 验收：浏览器 preview 全流程 + 暗色 + 响应式 + 零报错；四语种齐全。
 
 ---

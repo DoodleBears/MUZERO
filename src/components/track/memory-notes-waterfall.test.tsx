@@ -12,6 +12,7 @@ const labels: MemoryNotesWaterfallLabels = {
   editMemory: (memory) => `Edit ${memory.note}`,
   empty: "No memories yet",
   photoAlt: (memory) => `Photo for ${memory.note}`,
+  setCoverFromMemory: (memory) => `Use ${memory.note} as cover`,
 };
 
 const memories: MemoryNoteView[] = [
@@ -21,6 +22,7 @@ const memories: MemoryNoteView[] = [
     trackId: "trk_1",
     note: "rainy train ride",
     createdAt: 30,
+    photoBlobId: "blb_memory",
     photoUrl: "blob:rain",
   },
   { id: "mem_mid", trackId: "trk_1", note: "late coding loop", createdAt: 20 },
@@ -81,6 +83,23 @@ describe("MemoryNotesWaterfall", () => {
 
     expect(onEdit).toHaveBeenCalledWith(expect.objectContaining({ id: "mem_photo" }));
     expect(onDelete).toHaveBeenCalledWith(expect.objectContaining({ id: "mem_photo" }));
+  });
+
+  it("reports set-cover actions for memories that have photos", () => {
+    const onSetCover = vi.fn();
+    render(
+      <MemoryNotesWaterfall
+        formatCreatedAt={(createdAt) => String(createdAt)}
+        labels={labels}
+        memories={memories}
+        onSetCoverFromMemory={onSetCover}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Use rainy train ride as cover" }));
+
+    expect(onSetCover).toHaveBeenCalledWith(expect.objectContaining({ id: "mem_photo" }));
+    expect(screen.queryByRole("button", { name: "Use late coding loop as cover" })).toBeNull();
   });
 
   it("renders the empty state when there are no memories", () => {

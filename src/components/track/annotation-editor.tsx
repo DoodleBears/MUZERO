@@ -129,6 +129,7 @@ export function AnnotationEditor({ track }: { track: Track }) {
               editMemory: () => t("annotation.editMemory"),
               empty: t("annotation.memoryEmpty"),
               photoAlt: () => t("annotation.memoryPhotoAlt"),
+              setCoverFromMemory: () => t("annotation.setMemoryPhotoAsCover"),
             },
           }}
           trackId={track.id}

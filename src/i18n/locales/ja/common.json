@@ -188,6 +188,7 @@
     "removeMemoryPhoto": "{{name}} を削除",
     "editMemory": "メモリーを編集",
     "deleteMemory": "メモリーを削除",
+    "setMemoryPhotoAsCover": "カバーに設定",
     "memoryPhotoAlt": "メモリー写真"
   },
   "settings": {

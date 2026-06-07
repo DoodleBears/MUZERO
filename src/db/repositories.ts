@@ -396,6 +396,41 @@ export async function setTrackCover(
   });
 }
 
+/**
+ * Use a memory photo as the track cover by copying it into a dedicated cover
+ * blob. The original memory photo remains attached to the memory.
+ */
+export async function setTrackCoverFromMemory(
+  memoryId: string,
+  db: MuzeroDB = defaultDb,
+): Promise<boolean> {
+  return db.transaction("rw", db.tracks, db.memories, db.mediaBlobs, async () => {
+    const memory = await db.memories.get(memoryId);
+    if (!memory?.photoBlobId) return false;
+    const photo = await db.mediaBlobs.get(memory.photoBlobId);
+    if (!photo?.blob) return false;
+    const track = await db.tracks.get(memory.trackId);
+    if (!track) return false;
+
+    if (track.coverBlobId) {
+      const previous = await db.mediaBlobs.get(track.coverBlobId);
+      if (previous?.role === "cover") await db.mediaBlobs.delete(track.coverBlobId);
+    }
+
+    const cover: MediaBlob = {
+      id: newId("blb"),
+      trackId: memory.trackId,
+      role: "cover",
+      mime: photo.mime,
+      bytes: photo.bytes,
+      blob: photo.blob,
+    };
+    await db.mediaBlobs.put(cover);
+    await db.tracks.update(memory.trackId, { coverBlobId: cover.id, coverCrop: undefined });
+    return true;
+  });
+}
+
 /** Update just the cover crop (re-crop without re-uploading). Undefined clears it. */
 export async function setTrackCoverCrop(
   id: string,

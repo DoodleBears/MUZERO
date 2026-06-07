@@ -1,6 +1,6 @@
 "use client";
 
-import { Pencil, Trash2 } from "lucide-react";
+import { Image as ImageIcon, Pencil, Trash2 } from "lucide-react";
 import type { ReactNode } from "react";
 import type { Memory } from "@/db/types";
 import { cn } from "@/lib/utils";
@@ -14,6 +14,7 @@ export interface MemoryNotesWaterfallLabels {
   editMemory: (memory: MemoryNoteView) => string;
   empty: ReactNode;
   photoAlt: (memory: MemoryNoteView) => string;
+  setCoverFromMemory?: (memory: MemoryNoteView) => string;
 }
 
 interface MemoryNotesWaterfallProps {
@@ -24,6 +25,7 @@ interface MemoryNotesWaterfallProps {
   memories: MemoryNoteView[];
   onDeleteMemory?: (memory: MemoryNoteView) => void;
   onEditMemory?: (memory: MemoryNoteView) => void;
+  onSetCoverFromMemory?: (memory: MemoryNoteView) => void;
 }
 
 export function MemoryNotesWaterfall({
@@ -34,6 +36,7 @@ export function MemoryNotesWaterfall({
   memories,
   onDeleteMemory,
   onEditMemory,
+  onSetCoverFromMemory,
 }: MemoryNotesWaterfallProps) {
   const sortedMemories = sortMemoriesForWaterfall(memories);
 
@@ -75,8 +78,20 @@ export function MemoryNotesWaterfall({
             <time dateTime={new Date(memory.createdAt).toISOString()}>
               {formatCreatedAt(memory.createdAt)}
             </time>
-            {(onEditMemory || onDeleteMemory) && (
+            {((memory.photoBlobId && onSetCoverFromMemory && labels.setCoverFromMemory) ||
+              onEditMemory ||
+              onDeleteMemory) && (
               <div className="flex items-center gap-1">
+                {memory.photoBlobId && onSetCoverFromMemory && labels.setCoverFromMemory && (
+                  <button
+                    aria-label={labels.setCoverFromMemory(memory)}
+                    className="grid size-7 place-items-center rounded-md hover:bg-black/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    onClick={() => onSetCoverFromMemory(memory)}
+                    type="button"
+                  >
+                    <ImageIcon aria-hidden="true" className="size-3.5" />
+                  </button>
+                )}
                 {onEditMemory && (
                   <button
                     aria-label={labels.editMemory(memory)}

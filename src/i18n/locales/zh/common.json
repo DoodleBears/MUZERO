@@ -188,6 +188,7 @@
     "removeMemoryPhoto": "移除 {{name}}",
     "editMemory": "编辑记忆",
     "deleteMemory": "删除记忆",
+    "setMemoryPhotoAsCover": "设为封面",
     "memoryPhotoAlt": "记忆照片"
   },
   "settings": {
