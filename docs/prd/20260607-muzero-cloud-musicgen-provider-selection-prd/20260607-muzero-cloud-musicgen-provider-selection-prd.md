@@ -378,7 +378,7 @@ interface CloudPreset {
 | 6 | ACE-Step 实际延迟 / 采样率 / 立体声 / 最大时长？ | **Resolved（搁置）** | ACE-Step 音质差不主推，相关验证搁置；只主推 Mureka |
 | 7 | Mureka 一次返 2 变体：`n=1` / 落队第一首 / 都入队？ | **Resolved** | **默认 `n=1`**（$0.045/首达标红线）；用户主动「再来个变体」时才 2 |
 | 8 | Mureka `$0.045/song` 单位确认（按产出首数还是按调用）？ | **Resolved（人工）** | **用户人工用 Mureka key 测**（已只主推 Mureka）；页面标 "/song" + 默认 2 首/次，确认 `n=1` 是否=$0.045 |
-| 9 | 「获取 API key」打包桌面端走系统浏览器？ | **Resolved** | **必须走系统浏览器（用户要求）→ 加 `@tauri-apps/plugin-opener`**：JS dep + `lib.rs` 注册 + capability `opener:allow-open-url` + `openExternalUrl()` 包装（Tauri 用 opener、浏览器回退 `window.open`）。待实现 |
+| 9 | 「获取 API key」打包桌面端走系统浏览器？ | **Resolved** | **必须走系统浏览器（用户要求）→ 加 `@tauri-apps/plugin-opener`**：JS dep + `lib.rs` 注册 + capability `opener:allow-open-url` + `openExternalUrl()` 包装（Tauri 用 opener、浏览器回退 `window.open`）已完成；Settings/Get-key 接线待并行 UI WIP 落地后补。 |
 
 ---
 
@@ -397,6 +397,7 @@ interface CloudPreset {
 | 2026-06-07 | MUZERO | **默认改为 Mureka（质量优先）**：`DEFAULT_SETTINGS.musicCloudPreset` ace-step→mureka，下拉 Mureka 排第一 + 标「推荐」，i18n ×4。ACE-Step 降为便宜/器乐档。单测锁定默认；浏览器清 IndexedDB 旧行后实机确认默认=mureka、链接/成本随之更新 |
 | 2026-06-07 | MUZERO | **API 核实 + Settings 具体化 + Agent 设计**：用官方 Mureka MCP 源码核实 schema（印证 `mureka.ts`），挖出器乐端点 `/v1/instrumental/generate`。preset 加 `usesModel`/`docsUrl`；Settings 隐藏 ACE-Step 的 model 字段、加 Mureka model 说明 + 「API 文档↗」链接（i18n ×4）。新增 §4.5「Agent tool-call 设计」（端点→provider-agnostic 能力映射、能力位 gate、成本确认）。浏览器三态验证、零报错；42 musicgen tests 绿 |
 | 2026-06-07 | MUZERO | **战略转向 + Open Q 收口**：用户实听 **ACE-Step 音质太差 → 只主推 Mureka**（ACE-Step 保留为可选便宜档但不再验证，Q3/Q6 搁置）；器乐改以 **Mureka BGM 端点**为正式路径（Q4b）。Q5=要 provenance(`Track.providerPreset`)+生成自动 Note+Agent 听歌对话加 note；Q7=默认 `n=1`；Q8=用户人工 Mureka key 测；**Q9=必须走系统浏览器 → 加 `@tauri-apps/plugin-opener`（待实现）** |
+| 2026-06-07 | Codex | 推进 OPENER infra：新增 `@tauri-apps/plugin-opener` / `tauri-plugin-opener`，Rust 注册 opener plugin，capability 加 `opener:allow-open-url`，新增 `openExternalUrl()`（Tauri 系统浏览器 + browser fallback + http(s) 协议校验）。补 Vitest；`make check` 通过（49 files / 356 tests），`cargo check` 通过。 |
 
 ---
 

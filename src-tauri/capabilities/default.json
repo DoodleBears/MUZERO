@@ -8,6 +8,7 @@
     "os:default",
     "dialog:default",
     "fs:default",
+    "opener:allow-open-url",
     {
       "identifier": "http:default",
       "comment": "BYOK: LLM DJ + cloud music API are user-configured, so allow any https host. localhost kept for dev.",
