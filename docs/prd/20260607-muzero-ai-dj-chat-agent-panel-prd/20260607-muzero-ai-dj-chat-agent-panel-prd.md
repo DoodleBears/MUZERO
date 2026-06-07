@@ -463,7 +463,8 @@ interface ChatUiState {
 - [x] 空态 preset chips 只走 insert 回调，不触发 send；上传库/输入 vibe 引导只回调给上层。
 - [x] 超预算时纯函数返回 block（调用点负责解释）；压缩指针计算保留最新 user turn，不静默截断。
 - [x] 压缩指针 actor/repo 持久化、旧消息仍可见。
-- [ ] 上下文预算 UI 接线与 block-and-explain 文案（待 i18n/App 挂载解锁）。
+- [x] `chat-context-budget-notice.tsx` 展示层：ok 默认隐藏、warn=`status`、block=`alert`，压缩动作只回调给上层，无内置文案。
+- [ ] 上下文预算 ChatPanel/App/composer 发送拦截与 block-and-explain 文案（待 i18n/App 挂载解锁）。
 
 ---
 
@@ -542,6 +543,7 @@ interface ChatUiState {
 | 2026-06-07 | Codex | 推进 Phase 6h：runtime snapshot 暴露 queued prompt 详情，`ChatPanel` 传入 `queueLabels` 时渲染 `ChatQueueTray` 并把 send/delete/reorder 回调转给 actor；补 panel/runtime 测试；`make check` 通过（54 files / 380 tests）。 |
 | 2026-06-07 | Codex | 推进 Phase 4e：新增无内置文案的 `ChatSessionHome` 展示层，支持 session 列表、标题/user 文本本地搜索、打开、重命名、删除回调；补组件测试；`make check` 通过（55 files / 382 tests）。 |
 | 2026-06-07 | Codex | 推进 Phase 6i：新增无内置文案的 `ChatEmptyState` 展示层，preset chips 仅触发 insert 回调不发送，上传库/输入 vibe 引导动作只回调给上层；补组件测试；`make check` 通过（56 files / 384 tests）。 |
+| 2026-06-07 | Codex | 推进 Phase 6j：新增无内置文案的 `ChatContextBudgetNotice` 展示层，ok 默认隐藏，warn 用 `status`、block 用 `alert`，压缩动作只回调给上层；补组件测试；`make check` 通过（57 files / 387 tests）。 |
 
 ---
 
