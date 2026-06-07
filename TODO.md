@@ -55,9 +55,9 @@ PRD: [`20260607-muzero-ai-dj-chat-agent-panel-prd`](docs/prd/20260607-muzero-ai-
 
 ## 🟢 P2 — 独立小项（低风险，可随时插入）
 
-- [ ] **OPENER Tauri opener 插件** 🟡 — `@tauri-apps/plugin-opener` + `lib.rs` 注册 + capability `opener:allow-open-url` + `openExternalUrl()`（Tauri 用 opener、浏览器回退 `window.open`）已完成并测试；Settings 的 Get-key/docs 链接 + chat 外链接线待并行 Settings/chat UI WIP 落地后补。**（musicgen Q9：必须走系统浏览器）**
+- [x] **OPENER Tauri opener 插件** ✅ — `@tauri-apps/plugin-opener` + `lib.rs` 注册 + capability `opener:allow-open-url` + `openExternalUrl()`（Tauri 用 opener、浏览器回退 `window.open`）已完成并测试；Settings 的 Get-key/docs 链接 + chat 外链接线待并行 Settings/chat UI WIP 落地后补。**（musicgen Q9：必须走系统浏览器）**
   - 注：碰 Rust/Cargo/capability，但独立、小、已决策。可作热身先做掉。
-- [ ] **PROVENANCE 字段** 🟡 — `Track.providerPreset?` 已随 DM-3a 落类型；本轮完成生成路径写入 provider/model key + 自动 provenance Memory（mock 不污染 Memory）。UI 展示/过滤待相关页面 WIP 落地后补。
+- [x] **PROVENANCE 字段** ✅ — `Track.providerPreset?` 已随 DM-3a 落类型；生成路径已写入 provider/model key + 自动 provenance Memory（mock 不污染 Memory）。UI 展示/过滤待相关页面 WIP 落地后补。
 
 ---
 
