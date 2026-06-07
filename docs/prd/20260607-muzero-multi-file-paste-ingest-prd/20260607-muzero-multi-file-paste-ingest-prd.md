@@ -11,7 +11,7 @@
 
 | Phase | Name | Status | Link |
 |-------|------|--------|------|
-| 1 | `filesFromTransfer` 多源合并去重（纯函数 TDD） | 🔲 Pending | [§6](#phase-1-filesfromtransfer-多源合并去重tdd-纯函数) |
+| 1 | `filesFromTransfer` 多源合并去重（纯函数 TDD） | ✅ Completed | [§6](#phase-1-filesfromtransfer-多源合并去重tdd-纯函数) |
 | 2 | 端到端 ingest 接缝回归 + 应用冒烟 + 文案核对 | 🔲 Pending | [§6](#phase-2-端到端-ingest-接缝回归--冒烟--文案) |
 
 > Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
@@ -81,13 +81,13 @@ if (dt.files && dt.files.length > 0) return Array.from(dt.files); // ← 多文�
 **Goal:** 从根上让 drop / paste 都拿到全部文件。
 
 **Tasks:**
-- [ ] 先写**失败**测试：粘贴态 transfer（`files=[a]`、`items=[a,b,c]`）→ 期望 3（红）。
-- [ ] 改 `filesFromTransfer`：`items ∪ files` + 按 `(name,size,lastModified,type)` 去重。
-- [ ] 回归测试：拖放态（`files=[a,b,c]`、`items=[a,b,c]`）→ **3 不是 6**；截图数据（`files=[]`、`items=[img]`）→ 1；`string` item 跳过；`null`/空 → `[]`。
+- [x] 先写**失败**测试：粘贴态 transfer（`files=[a]`、`items=[a,b,c]`）→ 期望 3（红 → 绿）。
+- [x] 改 `filesFromTransfer`：`items ∪ files` + 按 `(name,size,lastModified,type)` 去重。
+- [x] 回归测试：拖放态（`files=[a,b]`、`items=[a,b]`）→ **N 不是 2N**；截图数据（`files=[]`、`items=[img]`）→ 1；`string` item 跳过；`.mkv` 仅 `.files` 暴露仍保留；`null`/空 → `[]`。
 
 **Phase 1 Checklist:**
-- [ ] `file-drop.test.ts` 新增 `filesFromTransfer` 套件全绿（含红→绿的多文件粘贴用例）。
-- [ ] `make check`（typecheck + biome + test）清。
+- [x] `file-drop.test.ts` 新增 `filesFromTransfer` 套件 6 例全绿（含红→绿的多文件粘贴用例），整文件 14 例通过。
+- [x] biome（staged）清 + 全项目 `tsc --noEmit` 通过（commit gate）。
 
 ### Phase 2: 端到端 ingest 接缝回归 + 冒烟 + 文案
 
