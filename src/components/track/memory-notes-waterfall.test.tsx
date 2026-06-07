@@ -40,14 +40,19 @@ describe("MemoryNotesWaterfall", () => {
     );
 
     const list = screen.getByRole("list", { name: "No memories yet" });
-    expect(list).toHaveClass("grid", "items-start", "sm:grid-cols-2");
+    expect(list).toHaveClass("relative", "w-full");
+    expect(list).not.toHaveClass("grid");
     expect(list).not.toHaveClass("columns-1");
     const cards = screen.getAllByRole("listitem");
     expect(cards[0]).toHaveTextContent("Create memory");
+    expect(cards[0]).toHaveAttribute("data-column", "0");
+    expect(cards[0]).toHaveAttribute("data-y", "0");
+    expect(cards[1]).toHaveAttribute("data-column", "1");
+    expect(cards[1]).toHaveAttribute("data-y", "0");
     expect(
       cards.slice(1).map((card) => within(card).getByTestId("memory-note-text").textContent),
     ).toEqual(["rainy train ride", "late coding loop", "first listen"]);
-    expect(cards[1]).toHaveClass("bg-card");
+    expect(cards[1]?.querySelector("article")).toHaveClass("bg-card");
     expect(cards[1]).toHaveTextContent("time-30");
   });
 

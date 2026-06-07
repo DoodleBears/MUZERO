@@ -13,6 +13,7 @@ import {
   updateMemoryNote,
 } from "@/db/repositories";
 import type { Memory } from "@/db/types";
+import { memoryMasonryDefaults } from "@/lib/memory-masonry";
 import { MemoryNoteComposer, type MemoryNoteComposerLabels } from "./memory-note-composer";
 import {
   MemoryNotesWaterfall,
@@ -117,6 +118,11 @@ export function TrackMemoryNotesPanel({
       className={className}
       formatCreatedAt={formatCreatedAt}
       leadingItem={leadingItem}
+      leadingItemEstimatedHeight={
+        showComposer
+          ? memoryMasonryDefaults.leadingComposerHeight
+          : memoryMasonryDefaults.leadingCreateHeight
+      }
       labels={labels.waterfall}
       memories={memoryViews}
       onDeleteMemory={removeMemory}
