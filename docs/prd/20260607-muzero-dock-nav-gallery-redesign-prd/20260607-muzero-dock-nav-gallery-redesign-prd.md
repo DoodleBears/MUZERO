@@ -13,7 +13,7 @@
 
 | Phase | Name | Status | Link |
 |-------|------|--------|------|
-| 1 | 歌单 Gallery 纯逻辑（filter / sort，纯函数 TDD） | 🔲 Pending | §6 |
+| 1 | 歌单 Gallery 纯逻辑（filter / sort，纯函数 TDD） | ✅ Completed | §6 |
 | 2 | 歌单 Gallery 页面（search-page 改造：搜索框 + filter/sort chips + list/album-grid） | 🔲 Pending | §6 |
 | 3 | 导航极简化（first=播放页；移除 AI tab；合并为可折叠 nav FAB 置于播放信息右侧） | 🔲 Pending（碰并行文件，需协调）| §6 |
 | 4 | 可拖拽 AI FAB（悬浮、自由拖拽，承接 chat PRD 的 `fab` 形态） | 🔲 Pending | §6 |
@@ -125,9 +125,9 @@ export function sortSets(items: SetGalleryItem[], sort: SetSort): SetGalleryItem
 
 > **冲突风险排序**：先做落在干净文件的（Gallery 纯逻辑 + 页面），再做碰并行文件的（nav/FAB）。每 phase TDD + 原子 commit + 浏览器验证 + 更新本 PRD。
 
-### Phase 1: 歌单 Gallery 纯逻辑
-- [ ] `src/lib/set-gallery.ts`（`SetGalleryItem`/`filterSets`/`sortSets`）+ 穷举单测（query 子串、liked 过滤、三种 sort、稳定性、空态）。
-- 验收：纯函数全测绿；零并行冲突（新文件）。
+### Phase 1: 歌单 Gallery 纯逻辑 ✅
+- [x] `src/lib/set-gallery.ts`（`SetGalleryItem`/`SetSort`/`SetFilter`/`filterSets`/`sortSets`）+ 9 单测（query 子串名+seed、liked 过滤、query×filter 组合、recent/name/size 三种 sort、不可变）。
+- 验收：纯函数全绿、typecheck/biome 清；新文件零并行冲突。
 
 ### Phase 2: 歌单 Gallery 页面
 - [ ] `search-page.tsx` 改造为画廊：`useLiveQuery` 组装 items → filter/sort chips + 搜索框 + list/grid view 切换；封面用第一首歌；点击歌单 → `playSet`/打开。i18n 4 语。
