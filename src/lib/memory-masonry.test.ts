@@ -49,6 +49,24 @@ describe("memory masonry layout", () => {
     expect(layout.items[2]).toMatchObject({ column: 1, id: "mem_next" });
   });
 
+  it("uses each photo natural height ratio when estimating card height", () => {
+    const layout = layoutMemoryMasonry(
+      [{ hasPhoto: true, id: "mem_portrait", note: "portrait", photoHeightRatio: 2 }],
+      {
+        ...memoryMasonryDefaults,
+        containerWidth: 300,
+        maxColumnCount: 1,
+      },
+      () => 24,
+    );
+
+    expect(layout.items[0]).toMatchObject({
+      height: 652,
+      id: "mem_portrait",
+      width: 300,
+    });
+  });
+
   it("resolves responsive column counts from available width", () => {
     expect(resolveMemoryMasonryColumnCount(260, 280, 3, 12)).toBe(1);
     expect(resolveMemoryMasonryColumnCount(612, 280, 3, 12)).toBe(2);

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import {
   MemoryNotesWaterfall,
@@ -72,9 +72,36 @@ describe("MemoryNotesWaterfall", () => {
     expect(screen.getByRole("img", { name: "Photo for rainy train ride" })).toHaveClass(
       "object-contain",
     );
+    expect(screen.getByRole("img", { name: "Photo for rainy train ride" })).toHaveClass("h-auto");
+    expect(screen.getByRole("img", { name: "Photo for rainy train ride" })).not.toHaveClass(
+      "aspect-[4/3]",
+    );
     expect(screen.getByRole("img", { name: "Photo for rainy train ride" })).not.toHaveClass(
       "object-cover",
     );
+  });
+
+  it("resizes the masonry item to the loaded image aspect ratio", async () => {
+    render(
+      <MemoryNotesWaterfall
+        formatCreatedAt={(createdAt) => String(createdAt)}
+        labels={labels}
+        memories={memories}
+      />,
+    );
+
+    const image = screen.getByRole("img", { name: "Photo for rainy train ride" });
+    const item = image.closest("li");
+    expect(item).not.toBeNull();
+    const initialHeight = Number.parseFloat(item?.style.height ?? "0");
+    Object.defineProperty(image, "naturalWidth", { configurable: true, value: 100 });
+    Object.defineProperty(image, "naturalHeight", { configurable: true, value: 200 });
+
+    fireEvent.load(image);
+
+    await waitFor(() => {
+      expect(Number.parseFloat(item?.style.height ?? "0")).toBeGreaterThan(initialHeight);
+    });
   });
 
   it("reports edit and delete actions without owning persistence", () => {

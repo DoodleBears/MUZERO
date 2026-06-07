@@ -14,6 +14,7 @@ export interface MemoryMasonryCardInput {
   hasPhoto?: boolean;
   id: string;
   note?: string;
+  photoHeightRatio?: number;
 }
 
 export interface MemoryMasonryOptions {
@@ -92,7 +93,10 @@ export function layoutMemoryMasonry(
         card.note ?? "",
         Boolean(card.hasPhoto),
         columnWidth,
-        options,
+        {
+          ...options,
+          photoHeightRatio: card.photoHeightRatio ?? options.photoHeightRatio,
+        },
         measureTextHeight,
       );
     const y = columnHeights[column] ?? 0;

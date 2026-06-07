@@ -47,6 +47,7 @@ export function MemoryNotesWaterfall({
 }: MemoryNotesWaterfallProps) {
   const containerRef = useRef<HTMLUListElement>(null);
   const containerWidth = useElementWidth(containerRef, 672);
+  const [photoHeightRatios, setPhotoHeightRatios] = useState<Record<string, number>>({});
   const sortedMemories = sortMemoriesForWaterfall(memories);
   const masonryLayout = useMemo(
     () =>
@@ -59,6 +60,7 @@ export function MemoryNotesWaterfall({
             hasPhoto: Boolean(memory.photoUrl),
             id: memory.id,
             note: memory.note,
+            photoHeightRatio: photoHeightRatios[memory.id],
           })),
         ],
         {
@@ -67,12 +69,19 @@ export function MemoryNotesWaterfall({
           noteFont: resolveMemoryNoteFont(),
         },
       ),
-    [containerWidth, leadingItem, leadingItemEstimatedHeight, sortedMemories],
+    [containerWidth, leadingItem, leadingItemEstimatedHeight, photoHeightRatios, sortedMemories],
   );
   const positions = useMemo(
     () => new Map(masonryLayout.items.map((item) => [item.id, item])),
     [masonryLayout.items],
   );
+
+  function setPhotoHeightRatio(memoryId: string, ratio: number) {
+    setPhotoHeightRatios((current) => {
+      if (current[memoryId] === ratio) return current;
+      return { ...current, [memoryId]: ratio };
+    });
+  }
 
   if (sortedMemories.length === 0 && !leadingItem) {
     return (
@@ -111,7 +120,13 @@ export function MemoryNotesWaterfall({
               {memory.photoUrl && (
                 <img
                   alt={labels.photoAlt(memory)}
-                  className="mb-3 aspect-[4/3] w-full rounded-md bg-background object-contain shadow-inner"
+                  className="mb-3 h-auto w-full rounded-md bg-background object-contain shadow-inner"
+                  onLoad={(event) => {
+                    const { naturalHeight, naturalWidth } = event.currentTarget;
+                    if (naturalWidth > 0 && naturalHeight > 0) {
+                      setPhotoHeightRatio(memory.id, naturalHeight / naturalWidth);
+                    }
+                  }}
                   src={memory.photoUrl}
                 />
               )}
