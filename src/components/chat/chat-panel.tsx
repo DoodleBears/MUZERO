@@ -6,14 +6,16 @@ import {
 import type { MuzeroDB } from "@/db/muzero-db";
 import { useChatStore } from "@/stores/chat-store";
 import { ChatComposer } from "./chat-composer";
+import type { ChatToolLabels } from "./chat-tool-collapsible";
 import { ChatTurns } from "./chat-turns";
 
 interface ChatPanelProps {
   sessionId: string;
   db?: MuzeroDB;
+  toolLabels?: ChatToolLabels;
 }
 
-export function ChatPanel({ sessionId, db }: ChatPanelProps) {
+export function ChatPanel({ sessionId, db, toolLabels }: ChatPanelProps) {
   const snapshot = useDjChatRuntimeSnapshot(sessionId, db);
   const setRuntimeMeta = useChatStore((state) => state.setRuntimeMeta);
 
@@ -26,7 +28,12 @@ export function ChatPanel({ sessionId, db }: ChatPanelProps) {
 
   return (
     <section className="flex min-h-0 flex-1 flex-col overflow-hidden bg-background">
-      <ChatTurns messages={snapshot?.messages ?? []} />
+      <ChatTurns
+        messages={snapshot?.messages ?? []}
+        onApproveTool={(approvalId) => actor.respondToToolApproval(approvalId, true)}
+        onRejectTool={(approvalId) => actor.respondToToolApproval(approvalId, false)}
+        toolLabels={toolLabels}
+      />
       <ChatComposer
         isRunning={isRunning}
         onInterrupt={(text) => actor.interruptWithMessage(text)}

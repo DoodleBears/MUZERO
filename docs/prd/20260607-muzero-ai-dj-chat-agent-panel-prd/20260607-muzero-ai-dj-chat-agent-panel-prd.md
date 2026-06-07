@@ -401,7 +401,8 @@ interface ChatUiState {
 **Tasks:**
 - [x] `dj-chat-tools.ts`（§4.2 工具集，Zod schema，读/写 + `needsApproval`，`AgentWriteResult`）；`dj-chat-prompt.ts`。
 - [x] `chat-tool-collapsible.tsx` presentational 组件（审批/结果/错误；labels 由调用方传入，避免内置文案）。
-- [ ] HITL `ask`/`auto` 偏好 + 将 `chat-tool-collapsible` 接入 `ChatTurns`/runtime approval。
+- [x] `ChatTurns`/`ChatPanel` 可选接入 `chat-tool-collapsible` + runtime approval callbacks。
+- [ ] HITL `ask`/`auto` 偏好 + App/i18n labels 接线。
 - [x] Runtime approval bridge：actor 可响应 tool approval，并让 AI SDK tool loop 继续。
 - [x] 工具落 repos；`dj_generate_tracks` 走 `createPendingTrack`+`prependTrackIds` + play-next queue（物化由 store pump 自动）；provider id 从 settings 注入，保持 provider-agnostic。
 - [x] `dj_propose_briefs`：校验候选 `TrackBrief[]` 并返回 proposal id + summaries，不写 DB、不花钱、不审批；确认后才走 `dj_generate_tracks`。
@@ -411,6 +412,7 @@ interface ChatUiState {
 - [ ] Store pump E2E：「做个 lofi set」→ propose→审批→generate→pending 落库→pump 物化→可播（canned model + mock music provider）。**Blocked:** `src/stores/player-store.ts` 当前属于并行 Now Playing WIP。
 - [x] Runtime approval response 测试：pending approval→approve/reject response 写入消息→tool loop 自动续轮。
 - [x] `chat-tool-collapsible` 组件测试：approval actions、output、error 三态渲染。
+- [x] `ChatTurns` opt-in tool UI 测试：带 labels 时渲染 collapsible 并透传 approve/reject。
 - [x] 写工具 schema 拒绝时零写入；读工具无审批；`dj_generate_tracks` 才 `needsApproval:true`。
 - [x] `dj_propose_briefs` 无审批且零写入，生成摘要给确认 UI 使用。
 - [x] `library_search_tracks` 使用 memory-aware search；`dj_generate_tracks` 写 pending track + set + play-next queue。
@@ -527,6 +529,7 @@ interface ChatUiState {
 | 2026-06-07 | Codex | 推进 Phase 6f：`DjChatRuntimeActor` 暴露 queued prompt reorder/delete 方法，复用 repository 持久化并更新 runtime meta，不触发 transport dispatch；补 runtime 测试（10 tests passed）。`make check` 在 typecheck 阶段被并行 untracked WIP `src/components/player/visualizer-mode-button.tsx` 阻塞（i18n key 类型错误），本提交 path-scoped 并需 `--no-verify`。 |
 | 2026-06-07 | Codex | 推进 Phase 3d：`DjChatRuntimeActor.respondToToolApproval` 桥接 AI SDK `addToolApprovalResponse`，approval response 写入消息后自动续 tool loop；补 runtime 测试；`make check` 通过（52 files / 376 tests）。 |
 | 2026-06-07 | Codex | 推进 Phase 3e：新增无内置文案的 `ChatToolCollapsible` presentational 组件，labels 由调用方传入以便后续 i18n 接线；覆盖 approval actions、output、error 渲染；`make check` 通过（53 files / 378 tests）。 |
+| 2026-06-07 | Codex | 推进 Phase 3f：`ChatTurns` 在传入 labels 时渲染 tool collapsible，`ChatPanel` 透传 runtime approve/reject callbacks；补 opt-in 组件测试；`make check` 通过（52 files / 375 tests）。 |
 
 ---
 
