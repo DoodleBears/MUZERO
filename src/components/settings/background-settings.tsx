@@ -85,7 +85,7 @@ export function BackgroundSettings() {
             {t("background.slideshowInterval")}
           </span>
           <select
-            value={settings.backgroundSlideshowIntervalSec ?? 10}
+            value={settings.backgroundSlideshowIntervalSec ?? 300}
             onChange={(e) =>
               void saveSettings({ backgroundSlideshowIntervalSec: Number(e.target.value) })
             }
@@ -103,7 +103,7 @@ export function BackgroundSettings() {
         <label className="flex items-center gap-2 text-sm">
           <input
             type="checkbox"
-            checked={settings.backgroundSlideshowShuffle ?? false}
+            checked={settings.backgroundSlideshowShuffle ?? true}
             onChange={(e) => void saveSettings({ backgroundSlideshowShuffle: e.target.checked })}
             className="size-4 accent-[var(--color-primary)]"
           />

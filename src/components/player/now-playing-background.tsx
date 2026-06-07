@@ -30,8 +30,8 @@ export function NowPlayingBackground({ className }: { className?: string }) {
   const galleryFallback = settings.backgroundGalleryFallback ?? true;
   const blurPx = settings.backgroundBlur ?? 12;
   const maskOpacity = (settings.backgroundMaskOpacity ?? 25) / 100;
-  const intervalSec = settings.backgroundSlideshowIntervalSec ?? 10;
-  const shuffle = settings.backgroundSlideshowShuffle ?? false;
+  const intervalSec = settings.backgroundSlideshowIntervalSec ?? 300;
+  const shuffle = settings.backgroundSlideshowShuffle ?? true;
   // `filter: blur()` samples transparent pixels beyond the image box, so its
   // edges fade out and reveal the app background (a washed-out border). Extend
   // the image past the viewport by ~3× the blur radius so that fringe falls

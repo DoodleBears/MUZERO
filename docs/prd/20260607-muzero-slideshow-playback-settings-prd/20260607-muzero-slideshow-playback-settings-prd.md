@@ -38,10 +38,10 @@
 
 | 字段 | 类型 | 默认 | 含义 |
 |---|---|---|---|
-| `backgroundSlideshowIntervalSec` | `number` | `10` | 切换间隔（秒）。预设 5/10/15/30/60/120/180/300/600 |
-| `backgroundSlideshowShuffle` | `boolean` | `false` | true=随机、false=顺序 |
+| `backgroundSlideshowIntervalSec` | `number` | `300` | 切换间隔（秒）。预设 5/10/15/30/60/120/180/300/600（**默认 5 分钟**）|
+| `backgroundSlideshowShuffle` | `boolean` | `true` | true=随机、false=顺序（**默认随机**）|
 
-> 旧默认 7s → 10s（贴近最近预设，纯默认变化，旧用户无感）。
+> 默认 **5 分钟切换 + 随机**（用户指定）。旧硬编码为 7s 顺序。
 
 ### 2.2 纯函数 [`slideshow.ts`](../../../src/lib/slideshow.ts) `nextSlideIndex`
 
@@ -85,7 +85,7 @@ nextSlideIndex(current: number, length: number, shuffle: boolean, rand = Math.ra
 ### Phase 2: 设置字段 + 轮播接线 + UI + 文案
 
 **Tasks:**
-- [x] `db/types.ts`：加 `backgroundSlideshowIntervalSec`(默认10) + `backgroundSlideshowShuffle`(默认false) + `DEFAULT_SETTINGS`。
+- [x] `db/types.ts`：加 `backgroundSlideshowIntervalSec`(默认 300=5min) + `backgroundSlideshowShuffle`(默认 true=随机) + `DEFAULT_SETTINGS`。
 - [x] `now-playing-background.tsx`：interval/shuffle 读 settings，timer 用 `intervalSec*1000`，advance 用 `nextSlideIndex(i,len,shuffle)`，effect deps 加 `intervalSec`/`shuffle`，移除 `SLIDE_INTERVAL_MS` 常量。
 - [x] `background-settings.tsx`：间隔预设 select（5s/10s/15s/30s/1m/2m/3m/5m/10m）+「随机切换」复选框。
 - [x] i18n 四语：`slideshowInterval`/`slideshowShuffle`/`everySeconds`(en 复数)/`everyMinutes`(en 复数)。
@@ -102,3 +102,4 @@ nextSlideIndex(current: number, length: number, shuffle: boolean, rand = Math.ra
 |------|--------|---------|
 | 2026-06-07 | MUZERO | Initial draft —— 幻灯片切换间隔 + 顺序/随机可配；纯函数 `nextSlideIndex`（注入 rand、随机不连续重复）置于新 `slideshow.ts` 隔离并行编辑的 `background.ts` |
 | 2026-06-07 | MUZERO | Phase 1+2 完成：`nextSlideIndex`(5 例) + 设置字段(间隔默认 10s / 随机) + `now-playing-background` 接线 + Settings 预设 select /「随机切换」复选框 + 四语文案。全量 263 例全绿、`tsc`/biome 清。**幻灯片切换间隔与顺序/随机现可配。** |
+| 2026-06-07 | MUZERO | 默认值改为 **5 分钟切换 + 随机**（用户指定）：`DEFAULT_SETTINGS` + 三处 `??` fallback + 类型注释统一为 `300` / `true`。 |

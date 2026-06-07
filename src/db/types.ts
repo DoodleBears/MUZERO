@@ -183,9 +183,9 @@ export interface AppSettings {
   backgroundBlur?: number;
   /** Now-Playing background dim/mask opacity, 0–100. Default 25. */
   backgroundMaskOpacity?: number;
-  /** Slideshow auto-advance interval in seconds. Default 10. */
+  /** Slideshow auto-advance interval in seconds. Default 300 (5 min). */
   backgroundSlideshowIntervalSec?: number;
-  /** Slideshow advances in random order vs sequential. Default false (sequential). */
+  /** Slideshow advances in random order vs sequential. Default true (random). */
   backgroundSlideshowShuffle?: boolean;
   /** Now-Playing visualizer style. Defaults to "aura" (the original bloom). */
   visualizerStyle?: VisualizerStyleId;
@@ -218,8 +218,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   coverCropped: true,
   backgroundBlur: 12,
   backgroundMaskOpacity: 25,
-  backgroundSlideshowIntervalSec: 10,
-  backgroundSlideshowShuffle: false,
+  backgroundSlideshowIntervalSec: 300,
+  backgroundSlideshowShuffle: true,
   visualizerStyle: "aura",
   visualizerAsBackground: false,
 };
