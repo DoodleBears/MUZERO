@@ -20,7 +20,7 @@
 | 3 | DJ 工具调用（search/create/curate/propose/generate + HITL 审批） | 🔄 In Progress | §7 |
 | 4 | 多 Session + 历史列表（搜索）+ branch/regenerate | 🔄 In Progress | §7 |
 | 5 | 多 Provider 模型选型（preset 化 + combobox + Settings + key 入 Dexie） | 🔄 In Progress | §7 |
-| 6 | 队列/打断 prompt + 空态 onboarding + 上下文压缩 | 🔲 Pending | §7 |
+| 6 | 队列/打断 prompt + 空态 onboarding + 上下文压缩 | 🔄 In Progress | §7 |
 
 > Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
 
@@ -432,11 +432,12 @@ interface ChatUiState {
 **Tasks:**
 - [ ] `chat-queue-tray.tsx`（DnD 重排、立即发送、auto-dispatch Switch、reload 后默认关）；Stop≠Interrupt + 打断标记。
 - [ ] 空态：预设 chips（插入不发）+ 空库/无 seed 引导（指向上传/输入 vibe）。
-- [ ] `dj-chat-context-budget.ts` + `dj-chat-tokens.ts`：预算 gate + 滑动 `contextStartIndex` 压缩（block-and-explain，不静默截断）。
+- [x] `dj-chat-context-budget.ts` + `dj-chat-tokens.ts`：预算 gate + 滑动 `contextStartIndex` 压缩（block-and-explain，不静默截断）。
 
 **Phase 6 Checklist:**
 - [ ] 键盘矩阵测试（Enter/Ctrl+Enter/Shift+Enter）；pending 审批暂停派发；重载恢复队列但不自动发。
-- [ ] 超预算时阻塞并解释；压缩指针持久化、旧消息仍可见。
+- [x] 超预算时纯函数返回 block（调用点负责解释）；压缩指针计算保留最新 user turn，不静默截断。
+- [ ] 压缩指针持久化、旧消息仍可见（UI/actor 接线待后续提交）。
 
 ---
 
@@ -496,6 +497,7 @@ interface ChatUiState {
 | 2026-06-07 | Codex | 推进 Phase 3a：新增 `dj-chat-tools.ts` 工具核心（library/search/tags、set、queue、memory、`dj_generate_tracks`），runtime agent 接入工具集；`dj_generate_tracks` 仅它带 `needsApproval:true`，执行时校验 TrackBrief、创建 pending tracks、写目标 set 并 play-next 入播放列表。补 fake-indexeddb 测试覆盖 schema 拒绝零写入、memory-aware search、pending+queue 写入；`make check` 通过（46 files / 334 tests）。 |
 | 2026-06-07 | Codex | 推进 Phase 4a：扩展 chat session repository，支持历史子串搜索（title + user messages only）和 branch（截断 deep-copy messagesJson，记录 parent/fork index）；runtime actor 增加 edit-resend regenerate（复用 user messageId、截断后续并重流）。补 fake-indexeddb/runtime 测试；`make check` 通过（46 files / 337 tests）。 |
 | 2026-06-07 | Codex | 推进 Phase 5a：新增 LLM provider preset registry（openrouter/openai/claude/gemini/groq/deepseek/custom）、settings 字段 `defaultLlmProviderPresetId`/`defaultLlmModel`/`apiKeysByPresetId`、legacy openai/anthropic bridge、enabled provider selection；`resolveDjModel` 支持 Anthropic 与 OpenAI-compatible `baseURL`，仍注入 `getAppFetch()`。补 preset selection 测试；`make check` 通过（47 files / 343 tests）。 |
+| 2026-06-07 | Codex | 推进 Phase 6a：新增 `dj-chat-tokens.ts` 与 `dj-chat-context-budget.ts`，提供保守 token 估算、ok/warn/block budget gate、压缩起点计算（保留最新 user turn，不静默截断）。补纯函数测试；`make check` 通过（48 files / 346 tests）。 |
 
 ---
 
