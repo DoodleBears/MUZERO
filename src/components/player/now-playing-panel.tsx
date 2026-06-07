@@ -1,9 +1,16 @@
+import { useLiveQuery } from "dexie-react-hooks";
 import { PanelRightClose, PanelRightOpen } from "lucide-react";
 import { motion } from "motion/react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { VirtualTrackList } from "@/components/library/virtual-track-list";
+import {
+  MemoryTimelineRail,
+  type MemoryTimelineRailItem,
+} from "@/components/player/memory-timeline-rail";
+import { db } from "@/db/muzero-db";
 import { saveSettings } from "@/db/repositories";
+import type { Memory } from "@/db/types";
 import { useSession, useSettings } from "@/hooks/use-app-data";
 import { cn } from "@/lib/utils";
 import { usePlayerStore } from "@/stores/player-store";
@@ -30,6 +37,38 @@ export function NowPlayingPanel({
   const current = currentIndex >= 0 ? queue[currentIndex] : undefined;
   const [tab, setTab] = useState<PanelTab>("queue");
   const collapsed = collapsible && Boolean(settings.nowPlayingRightRailCollapsed);
+  const queueTrackIds = useMemo(() => Array.from(new Set(queue.map((track) => track.id))), [queue]);
+  const queueTrackIdsKey = queueTrackIds.join("\u0000");
+  const queueTrackTitleById = useMemo(
+    () => new Map(queue.map((track) => [track.id, track.title])),
+    [queue],
+  );
+  const railMemories = useLiveQuery(
+    (): Promise<Memory[]> =>
+      collapsed && queueTrackIds.length > 0
+        ? db.memories.where("trackId").anyOf(queueTrackIds).sortBy("createdAt")
+        : Promise.resolve([] as Memory[]),
+    [collapsed, queueTrackIdsKey],
+    [] as Memory[],
+  );
+  const memoryTimelineItems = useMemo<MemoryTimelineRailItem[]>(
+    () =>
+      railMemories.map((memory) => ({
+        ...memory,
+        trackTitle: queueTrackTitleById.get(memory.trackId),
+      })),
+    [queueTrackTitleById, railMemories],
+  );
+  const memoryDateFormatter = useMemo(
+    () =>
+      new Intl.DateTimeFormat(undefined, {
+        day: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+        month: "short",
+      }),
+    [],
+  );
 
   const tabs: { id: PanelTab; label: string }[] = [
     { id: "queue", label: t("nowPlaying.upNext") },
@@ -40,16 +79,33 @@ export function NowPlayingPanel({
     void saveSettings({ nowPlayingRightRailCollapsed: next });
   }
 
+  function setMemoryRailScrollTop(nextScrollTop: number) {
+    const scrollTop = Math.max(0, Math.round(nextScrollTop));
+    if (scrollTop === (settings.nowPlayingMemoryRailScrollTop ?? 0)) return;
+    void saveSettings({ nowPlayingMemoryRailScrollTop: scrollTop });
+  }
+
   if (collapsed) {
     return (
       <motion.div
-        className={cn("flex h-full min-h-0 flex-col justify-end", className)}
+        className={cn("flex h-full min-h-0 flex-col justify-end gap-3", className)}
         data-state="collapsed"
         data-testid="now-playing-panel"
         layout
       >
+        <MemoryTimelineRail
+          className="min-h-0 flex-1"
+          formatCreatedAt={(createdAt) => memoryDateFormatter.format(createdAt)}
+          initialScrollTop={settings.nowPlayingMemoryRailScrollTop ?? 0}
+          labels={{
+            empty: t("annotation.memoryEmpty"),
+            memory: t("annotation.memory"),
+          }}
+          memories={memoryTimelineItems}
+          onScrollTopChange={setMemoryRailScrollTop}
+        />
         <motion.div
-          className="rounded-2xl bg-muted/50 p-2 shadow-sm backdrop-blur-sm dark:bg-card/85"
+          className="shrink-0 rounded-2xl bg-muted/50 p-2 shadow-sm backdrop-blur-sm dark:bg-card/85"
           layout
           transition={{ type: "spring", stiffness: 360, damping: 34, mass: 0.8 }}
         >

@@ -306,6 +306,8 @@ export interface AppSettings {
   backgroundSlideshowShuffle?: boolean;
   /** Collapse the desktop Now-Playing right rail. Mobile queue overlay ignores this. Default false. */
   nowPlayingRightRailCollapsed?: boolean;
+  /** Persisted scroll anchor for the collapsed Now-Playing memory timeline rail. Default 0. */
+  nowPlayingMemoryRailScrollTop?: number;
   /** Now-Playing visualizer style. Defaults to "bars". */
   visualizerStyle?: VisualizerStyleId;
   /** Overlay the visualizer on the full Now-Playing background image/slideshow. Default false. */
@@ -398,6 +400,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   backgroundSlideshowIntervalSec: 300,
   backgroundSlideshowShuffle: true,
   nowPlayingRightRailCollapsed: false,
+  nowPlayingMemoryRailScrollTop: 0,
   visualizerStyle: "bars",
   visualizerAsBackground: true,
   visualizerBackgroundDim: 0,

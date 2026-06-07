@@ -4,6 +4,8 @@ import { NowPlayingPanel } from "./now-playing-panel";
 
 const mocks = vi.hoisted(() => ({
   collapsed: false,
+  memories: [] as { createdAt: number; id: string; note: string; trackId: string }[],
+  memoryScrollTop: 0,
   saveSettings: vi.fn(),
 }));
 
@@ -19,14 +21,23 @@ vi.mock("react-i18next", () => ({
         "nowPlaying.lyrics": "Lyrics",
         "nowPlaying.playingFrom": "Playing from",
         "nowPlaying.upNext": "Up next",
+        "annotation.memory": "Memory",
+        "annotation.memoryEmpty": "No memories yet",
         "queue.empty": "Queue empty",
       })[key] ?? key,
   }),
 }));
 
+vi.mock("dexie-react-hooks", () => ({
+  useLiveQuery: () => mocks.memories,
+}));
+
 vi.mock("@/hooks/use-app-data", () => ({
   useSession: () => ({ name: "Late Set" }),
-  useSettings: () => ({ nowPlayingRightRailCollapsed: mocks.collapsed }),
+  useSettings: () => ({
+    nowPlayingMemoryRailScrollTop: mocks.memoryScrollTop,
+    nowPlayingRightRailCollapsed: mocks.collapsed,
+  }),
 }));
 
 vi.mock("@/db/repositories", () => ({
@@ -37,9 +48,31 @@ vi.mock("@/components/library/virtual-track-list", () => ({
   VirtualTrackList: () => <div data-testid="queue-list" />,
 }));
 
+vi.mock("@/components/player/memory-timeline-rail", () => ({
+  MemoryTimelineRail: ({
+    initialScrollTop,
+    memories,
+    onScrollTopChange,
+  }: {
+    initialScrollTop?: number;
+    memories: unknown[];
+    onScrollTopChange?: (scrollTop: number) => void;
+  }) => (
+    <button
+      data-count={memories.length}
+      data-scroll-top={initialScrollTop}
+      data-testid="memory-timeline-rail"
+      onClick={() => onScrollTopChange?.(160)}
+      type="button"
+    />
+  ),
+}));
+
 describe("NowPlayingPanel collapse", () => {
   beforeEach(() => {
     mocks.collapsed = false;
+    mocks.memories = [];
+    mocks.memoryScrollTop = 0;
     mocks.saveSettings.mockReset();
   });
 
@@ -63,5 +96,21 @@ describe("NowPlayingPanel collapse", () => {
     fireEvent.click(screen.getByRole("button", { name: "Up next" }));
 
     expect(mocks.saveSettings).toHaveBeenCalledWith({ nowPlayingRightRailCollapsed: false });
+  });
+
+  it("feeds the collapsed memory rail from settings and persists its scroll position", () => {
+    mocks.collapsed = true;
+    mocks.memoryScrollTop = 200;
+    mocks.memories = [{ createdAt: 1, id: "mem_1", note: "late bus", trackId: "trk_1" }];
+
+    render(<NowPlayingPanel collapsible />);
+
+    const rail = screen.getByTestId("memory-timeline-rail");
+    expect(rail).toHaveAttribute("data-count", "1");
+    expect(rail).toHaveAttribute("data-scroll-top", "200");
+
+    fireEvent.click(rail);
+
+    expect(mocks.saveSettings).toHaveBeenCalledWith({ nowPlayingMemoryRailScrollTop: 160 });
   });
 });
