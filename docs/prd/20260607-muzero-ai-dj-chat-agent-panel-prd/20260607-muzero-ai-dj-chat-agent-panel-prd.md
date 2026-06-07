@@ -439,7 +439,8 @@ interface ChatUiState {
 - [x] 补 `popover` primitive（Base UI wrapper：trigger/content/title/description/close/positioner，COSS/shadcn-style classes）。
 - [x] 补 `scroll-area` primitive（Base UI wrapper：root/viewport/content/scrollbar/thumb/corner，默认 keepMounted scrollbar）。
 - [x] 补 `command` primitive（无内置文案：items/placeholder/empty 由调用方传入；label+keywords 搜索过滤；select 回调）。
-- [ ] `combobox` 当前在并行 WIP，待落地后接 Settings/per-session 模型 combobox；上下文限制检测。
+- [x] `chat-model-picker.tsx` 展示层（无内置文案，Popover+Command 选择 enabled provider/model，回调 `{presetId, model}`）。
+- [ ] Settings/App/i18n/DB 接线待并行 WIP 落地后补：provider key 管理、全局默认、per-session 覆盖持久化；上下文限制检测。
 - [x] `ChatSession.llmProviderPresetId`/`llmModel`（不存 key）字段已随 CHAT-1 落库；Phase 5a 补全全局默认 fields + legacy bridge。
 
 **Phase 5 Checklist:**
@@ -449,6 +450,7 @@ interface ChatUiState {
 - [x] Popover primitive 具备 trigger/open、positioned content、title、close/onOpenChange 测试覆盖。
 - [x] ScrollArea primitive 具备 root/viewport/content/scrollbar/thumb 稳定结构测试覆盖。
 - [x] Command primitive 具备 label/keyword 过滤、empty state、select id 回调测试覆盖。
+- [x] ChatModelPicker 展示层具备选中模型展示、provider/model 搜索过滤、空态与 select 回调测试覆盖。
 - [ ] i18n 4 语全覆盖（provider/model label、combobox 文案）。
 
 ### Phase 6: 队列/打断 + onboarding + 压缩
@@ -556,6 +558,7 @@ interface ChatUiState {
 | 2026-06-07 | Codex | 推进 Phase 5d：新增 Base UI `popover` primitive（trigger/content/title/description/close/positioner），覆盖打开、定位内容、关闭与 `onOpenChange`；`make check` 通过（59 files / 391 tests）。 |
 | 2026-06-07 | Codex | 推进 Phase 5e：新增 Base UI `scroll-area` primitive（root/viewport/content/scrollbar/thumb/corner），默认 keepMounted scrollbar 便于稳定布局与测试；`make check` 通过（60 files / 392 tests）。 |
 | 2026-06-07 | Codex | 推进 Phase 5f：新增无内置文案的 `Command` primitive（items/placeholder/empty 由调用方传入，支持 label+keywords 搜索过滤与 select 回调）；`make check` 通过（61 files / 395 tests）。 |
+| 2026-06-07 | Codex | 推进 Phase 5g：新增无内置文案的 `ChatModelPicker` 展示层，基于 Popover+Command 展示 enabled presets/models，支持选中态、搜索过滤、空态与 `{presetId, model}` 选择回调；Settings/App/i18n/DB 接线继续等待并行 WIP 落地。`make check` 通过（62 files / 398 tests）。 |
 
 ---
 
