@@ -3,6 +3,11 @@ import { useVisualizerCoverColorCss } from "@/components/player/visualizer-dynam
 import { useSettings } from "@/hooks/use-app-data";
 import { cn } from "@/lib/utils";
 import { DYNAMIC_PRIMARY_CSS_VAR, readPrimaryRgb } from "@/lib/visualizer-color";
+import {
+  resolveVisualizerAnalyserOptions,
+  resolveVisualizerRenderOptions,
+  type VisualizerEffectSettings,
+} from "@/lib/visualizer-effect-settings";
 import { getMediaEngine } from "@/stores/player-store";
 import { getVisualizerCoverColorRgb } from "@/stores/visualizer-color-store";
 import { createVisualizer, getVisualizerMeta, resolveVisualizerStyle } from "./registry";
@@ -63,12 +68,14 @@ function SpectrumCanvas({
   active,
   className,
   coverColor = false,
+  effectSettings,
   placement = "surface",
 }: {
   styleId: VisualizerStyleId;
   active: boolean;
   className?: string;
   coverColor?: boolean;
+  effectSettings: VisualizerEffectSettings;
   placement?: VisualizerPlacement;
 }) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -82,6 +89,8 @@ function SpectrumCanvas({
     if (!ctx) return; // no 2D support (e.g. jsdom)
 
     const meta = getVisualizerMeta(styleId);
+    const analyserOptions = resolveVisualizerAnalyserOptions(meta, effectSettings);
+    const renderOptions = resolveVisualizerRenderOptions(effectSettings);
     const viz = createVisualizer(styleId);
     if (!viz) return;
 
@@ -97,6 +106,7 @@ function SpectrumCanvas({
       active: () => activeRef.current,
       reducedMotion: prefersReducedMotion,
       placement,
+      options: renderOptions,
     });
 
     let raf = 0;
@@ -108,10 +118,10 @@ function SpectrumCanvas({
     const drawOne = (t: number) => {
       const a = getMediaEngine()?.getAnalyser();
       if (a && !configured) {
-        a.fftSize = meta.fftSize;
-        a.smoothingTimeConstant = meta.smoothing;
-        a.minDecibels = meta.minDecibels ?? -100;
-        a.maxDecibels = meta.maxDecibels ?? -30;
+        a.fftSize = analyserOptions.fftSize;
+        a.smoothingTimeConstant = analyserOptions.smoothing;
+        a.minDecibels = analyserOptions.minDecibels;
+        a.maxDecibels = analyserOptions.maxDecibels;
         configured = true;
       }
       const dpr = Math.min(window.devicePixelRatio || 1, 2);
@@ -184,7 +194,7 @@ function SpectrumCanvas({
       mq?.removeEventListener?.("change", onMq);
       viz.destroy();
     };
-  }, [styleId, coverColor, placement]);
+  }, [styleId, coverColor, placement, effectSettings]);
 
   return <canvas ref={canvasRef} className={cn("h-full w-full", className)} aria-hidden />;
 }
@@ -198,10 +208,12 @@ function SceneHost({
   styleId,
   active,
   className,
+  effectSettings,
 }: {
   styleId: VisualizerStyleId;
   active: boolean;
   className?: string;
+  effectSettings: VisualizerEffectSettings;
 }) {
   const ok = useMemo(() => hasWebGL(), []);
   const ref = useRef<HTMLDivElement | null>(null);
@@ -219,9 +231,20 @@ function SceneHost({
     return () => io.disconnect();
   }, []);
 
-  if (!ok) return <SpectrumCanvas styleId="aura" active={active} className={className} />;
+  if (!ok) {
+    return (
+      <SpectrumCanvas
+        styleId="aura"
+        active={active}
+        className={className}
+        effectSettings={effectSettings}
+      />
+    );
+  }
 
   const meta = getVisualizerMeta(styleId);
+  const analyserOptions = resolveVisualizerAnalyserOptions(meta, effectSettings);
+  const renderOptions = resolveVisualizerRenderOptions(effectSettings);
   const paused = !onscreen || reduce;
   return (
     <div ref={ref} className={cn("h-full w-full", className)} aria-hidden>
@@ -230,8 +253,9 @@ function SceneHost({
           styleId={styleId}
           active={active}
           paused={paused}
-          fftSize={meta.fftSize}
-          smoothing={meta.smoothing}
+          fftSize={analyserOptions.fftSize}
+          smoothing={analyserOptions.smoothing}
+          options={renderOptions}
         />
       </Suspense>
     </div>
@@ -261,6 +285,32 @@ export function VisualizerHost({
   const settings = useSettings();
   const coverColorCss = useVisualizerCoverColorCss(coverColor);
   const resolvedStyle = resolveVisualizerStyle(styleId ?? settings.visualizerStyle);
+  const effectSettings = useMemo(
+    () => ({
+      visualizerDetail: settings.visualizerDetail,
+      visualizerFftSize: settings.visualizerFftSize,
+      visualizerGlow: settings.visualizerGlow,
+      visualizerIntensity: settings.visualizerIntensity,
+      visualizerMaxDecibels: settings.visualizerMaxDecibels,
+      visualizerMinDecibels: settings.visualizerMinDecibels,
+      visualizerMirror: settings.visualizerMirror,
+      visualizerMotion: settings.visualizerMotion,
+      visualizerSmoothing: settings.visualizerSmoothing,
+      visualizerSpread: settings.visualizerSpread,
+    }),
+    [
+      settings.visualizerDetail,
+      settings.visualizerFftSize,
+      settings.visualizerGlow,
+      settings.visualizerIntensity,
+      settings.visualizerMaxDecibels,
+      settings.visualizerMinDecibels,
+      settings.visualizerMirror,
+      settings.visualizerMotion,
+      settings.visualizerSmoothing,
+      settings.visualizerSpread,
+    ],
+  );
   if (resolvedStyle === "off") return null;
   const scopedColorStyle = coverColorCss
     ? ({ [DYNAMIC_PRIMARY_CSS_VAR]: coverColorCss } as CSSProperties)
@@ -270,7 +320,7 @@ export function VisualizerHost({
   if (getVisualizerMeta(resolvedStyle).kind === "scene") {
     return (
       <div className={hostClassName} style={wrapperStyle}>
-        <SceneHost styleId={resolvedStyle} active={active} />
+        <SceneHost styleId={resolvedStyle} active={active} effectSettings={effectSettings} />
       </div>
     );
   }
@@ -280,6 +330,7 @@ export function VisualizerHost({
         styleId={resolvedStyle}
         active={active}
         coverColor={coverColor}
+        effectSettings={effectSettings}
         placement={placement}
       />
     </div>

@@ -43,6 +43,7 @@ export function createRadialVisualizer(): Visualizer {
     render(w, h) {
       if (!c) return;
       const ctx = c.ctx;
+      const options = c.options;
       if (frame++ % (c.smoothPrimary?.() ? 1 : 6) === 0) primary = c.primary();
       const analyser = c.getAnalyser();
       const active = c.active();
@@ -59,20 +60,23 @@ export function createRadialVisualizer(): Visualizer {
         const n = Math.max(bands.length, 32);
         target = Array.from({ length: n }, (_, i) => 0.05 + 0.04 * Math.abs(Math.sin(t + i * 0.4)));
       }
-      levels = smoothBands(levels, target, 0.5);
-      spin += 0.0015;
+      levels = smoothBands(levels, target, Math.max(0.15, Math.min(0.9, 0.5 * options.motion)));
+      spin += 0.0015 * options.motion;
 
       const cx = w / 2;
       const cy = h / 2;
-      const inner = Math.min(w, h) * 0.16;
-      const reach = Math.min(w, h) * 0.32;
+      const inner = Math.min(w, h) * 0.16 * options.spread;
+      const reach = Math.min(w, h) * 0.32 * options.intensity;
       const energy = levels.reduce((s, v) => s + v, 0) / (levels.length || 1);
       const tip = lighten(primary, 0.4);
 
       // Soft pulsing core.
       const coreR = inner * (0.7 + energy * 0.6);
       const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, coreR);
-      grad.addColorStop(0, rgba(lighten(primary, 0.5), 0.5 + energy * 0.4));
+      grad.addColorStop(
+        0,
+        rgba(lighten(primary, 0.5), Math.min(1, (0.5 + energy * 0.4) * options.glow)),
+      );
       grad.addColorStop(1, rgba(primary, 0));
       ctx.fillStyle = grad;
       ctx.beginPath();
@@ -90,7 +94,7 @@ export function createRadialVisualizer(): Visualizer {
         const angle = (k / total) * Math.PI * 2 + spin;
         const r0 = inner;
         const r1 = inner + v * reach;
-        ctx.strokeStyle = rgba(tip, 0.35 + v * 0.6);
+        ctx.strokeStyle = rgba(tip, Math.min(1, (0.35 + v * 0.6) * options.glow));
         ctx.beginPath();
         ctx.moveTo(cx + Math.cos(angle) * r0, cy + Math.sin(angle) * r0);
         ctx.lineTo(cx + Math.cos(angle) * r1, cy + Math.sin(angle) * r1);

@@ -42,15 +42,19 @@ uniform float uAudio;
 uniform float uBass;
 uniform float uMid;
 uniform float uTreble;
+uniform float uGlow;
+uniform float uIntensity;
+uniform float uSpread;
 uniform vec3 uPrimary;
 ${NOISE}
 void main() {
   vec2 uv = vUv;
-  float t = uTime * 0.08 + uBass * 1.5;
-  vec2 q = uv * 3.0;
-  q += vec2(fbm(q + t), fbm(q - t)) * (0.6 + uBass * 1.2);
+  float t = uTime * 0.08 + uBass * uIntensity * 1.5;
+  vec2 q = uv * (3.0 / max(0.35, uSpread));
+  q += vec2(fbm(q + t), fbm(q - t)) * (0.6 + uBass * uIntensity * 1.2);
   float n = fbm(q + uTime * 0.05);
-  float glow = smoothstep(0.2, 0.9, n) * (0.5 + uAudio * 0.9) + uTreble * 0.2;
+  float glow = smoothstep(0.2, 0.9, n) * (0.5 + uAudio * uIntensity * 0.9) + uTreble * uIntensity * 0.2;
+  glow *= uGlow;
   vec3 col = mix(uPrimary * 0.06, uPrimary, clamp(glow, 0.0, 1.0));
   float alpha = clamp(glow * 0.9 + 0.12, 0.0, 1.0);
   gl_FragColor = vec4(col, alpha);
@@ -67,6 +71,9 @@ uniform float uAudio;
 uniform float uBass;
 uniform float uMid;
 uniform float uTreble;
+uniform float uGlow;
+uniform float uIntensity;
+uniform float uSpread;
 uniform vec3 uPrimary;
 ${NOISE}
 void main() {
@@ -77,11 +84,11 @@ void main() {
     float fi = float(i);
     float x = uv.x + 0.12 * sin(uv.y * 3.0 + t + fi * 2.0) + noise(vec2(uv.y * 2.0, t * 0.5 + fi)) * 0.1;
     float center = 0.3 + 0.2 * fi + 0.05 * sin(t + fi);
-    float w = 0.06 + uMid * 0.06;
+    float w = (0.06 + uMid * uIntensity * 0.06) * uSpread;
     band += smoothstep(w, 0.0, abs(x - center));
   }
   float vert = smoothstep(0.0, 0.6, uv.y);
-  float intensity = band * vert * (0.4 + uAudio * 1.1) + uTreble * 0.1;
+  float intensity = (band * vert * (0.4 + uAudio * uIntensity * 1.1) + uTreble * uIntensity * 0.1) * uGlow;
   vec3 col = uPrimary * intensity;
   float alpha = clamp(intensity * 0.85 + 0.1, 0.0, 1.0);
   gl_FragColor = vec4(col, alpha);

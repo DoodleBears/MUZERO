@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import * as twgl from "twgl.js";
 import { readPrimaryRgb } from "@/lib/visualizer-color";
+import type { VisualizerRenderOptions } from "@/lib/visualizer-effect-settings";
 import { getMediaEngine } from "@/stores/player-store";
 import { computeAudioUniforms } from "./audio-uniforms";
 import { AURORA_FRAG, LIQUID_FRAG, SCENE_VERT } from "./scene-shaders";
@@ -25,12 +26,14 @@ export default function ReactiveScene({
   active,
   paused,
   fftSize,
+  options,
   smoothing,
 }: {
   styleId: string;
   active: boolean;
   paused: boolean;
   fftSize: number;
+  options: VisualizerRenderOptions;
   smoothing: number;
 }) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -143,13 +146,16 @@ export default function ReactiveScene({
       gl.useProgram(programInfo.program);
       twgl.setBuffersAndAttributes(gl, programInfo, bufferInfo);
       twgl.setUniforms(programInfo, {
-        uTime: (tMs - s.start) / 1000,
+        uTime: ((tMs - s.start) / 1000) * options.motion,
         uResolution: [gl.canvas.width, gl.canvas.height],
         uAudio: energy,
         uBass: bass,
         uMid: mid,
         uTreble: treble,
+        uGlow: options.glow,
+        uIntensity: options.intensity,
         uPrimary: [p.r / 255, p.g / 255, p.b / 255],
+        uSpread: options.spread,
       });
       twgl.drawBufferInfo(gl, bufferInfo);
     };
@@ -165,7 +171,7 @@ export default function ReactiveScene({
     };
     raf = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(raf);
-  }, [paused, fftSize, smoothing]);
+  }, [paused, fftSize, smoothing, options]);
 
   return <canvas ref={canvasRef} className="block h-full w-full" />;
 }

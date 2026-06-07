@@ -42,6 +42,7 @@ export function createLedReflexVisualizer(): Visualizer {
     render(w, h) {
       if (!c) return;
       const ctx = c.ctx;
+      const options = c.options;
       if (frame++ % (c.smoothPrimary?.() ? 1 : 6) === 0) primary = c.primary();
       const analyser = c.getAnalyser();
       const active = c.active();
@@ -61,34 +62,34 @@ export function createLedReflexVisualizer(): Visualizer {
           (_, i) => 0.05 + 0.04 * Math.abs(Math.sin(t + i * 0.35)),
         );
       }
-      levels = smoothBands(levels, target, 0.5);
+      levels = smoothBands(levels, target, Math.max(0.15, Math.min(0.9, 0.5 * options.motion)));
 
       const n = levels.length || 1;
       const baseline = h * 0.66;
       const upMax = baseline * 0.96;
       const downMax = (h - baseline) * 0.9;
-      const gap = Math.max(1, w * 0.004);
+      const gap = Math.max(1, w * 0.004 * options.spread);
       const bw = Math.max(1, (w - gap * (n - 1)) / n);
-      const segH = Math.max(3, h * 0.022);
+      const segH = Math.max(3, h * 0.022 * options.detail);
       const segGap = Math.max(1, segH * 0.4);
       const step = segH + segGap;
       const tip = lighten(primary, 0.45);
 
       for (let i = 0; i < levels.length; i++) {
-        const v = levels[i];
+        const v = Math.min(1, (levels[i] ?? 0) * options.intensity);
         const x = i * (bw + gap);
         const litUp = Math.floor((v * upMax) / step);
         for (let s = 0; s <= litUp; s++) {
           const y = baseline - (s + 1) * step + segGap;
           const f = s / Math.max(1, upMax / step); // 0 base → 1 top
-          ctx.fillStyle = rgba(lighten(primary, 0.45 * f), 0.92);
+          ctx.fillStyle = rgba(lighten(primary, 0.45 * f), Math.min(1, 0.92 * options.glow));
           ctx.fillRect(x, y, bw, segH);
         }
         // Reflection (dimmer, shorter).
         const litDown = Math.floor((v * downMax) / step);
         for (let s = 0; s <= litDown; s++) {
           const y = baseline + s * step + segGap;
-          const fade = 0.35 * (1 - s / Math.max(1, downMax / step));
+          const fade = 0.35 * options.mirror * (1 - s / Math.max(1, downMax / step));
           ctx.fillStyle = rgba(tip, Math.max(0, fade));
           ctx.fillRect(x, y, bw, segH);
         }

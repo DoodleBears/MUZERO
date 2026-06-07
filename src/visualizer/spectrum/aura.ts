@@ -37,6 +37,7 @@ export function createAuraVisualizer(): Visualizer {
 
       const analyser = c.getAnalyser();
       const active = c.active();
+      const options = c.options;
 
       let level = 0;
       if (analyser && active) {
@@ -53,11 +54,11 @@ export function createAuraVisualizer(): Visualizer {
 
       const cx = w / 2;
       const cy = h / 2;
-      const base = Math.min(w, h) * 0.28;
-      const radius = base * (1 + level * 1.4);
+      const base = Math.min(w, h) * 0.28 * options.spread;
+      const radius = base * (1 + level * 1.4 * options.intensity);
       const grad = ctx.createRadialGradient(cx, cy, radius * 0.2, cx, cy, radius);
-      grad.addColorStop(0, rgba(bright, 0.55 + level * 0.4));
-      grad.addColorStop(0.6, rgba(tint, 0.25 + level * 0.3));
+      grad.addColorStop(0, rgba(bright, Math.min(1, (0.55 + level * 0.4) * options.glow)));
+      grad.addColorStop(0.6, rgba(tint, Math.min(1, (0.25 + level * 0.3) * options.glow)));
       grad.addColorStop(1, rgba(tint, 0));
       ctx.fillStyle = grad;
       ctx.beginPath();
@@ -66,14 +67,14 @@ export function createAuraVisualizer(): Visualizer {
 
       // Frequency ring.
       if (analyser && active) {
-        const bars = 64;
+        const bars = Math.max(16, Math.min(128, Math.round(64 * options.detail)));
         ctx.lineWidth = 2;
         for (let i = 0; i < bars; i++) {
           const v = data[Math.floor((i / bars) * data.length)] / 255;
           const angle = (i / bars) * Math.PI * 2;
           const r0 = base * 1.05;
-          const r1 = r0 + v * base * 0.8;
-          ctx.strokeStyle = rgba(bright, 0.3 + v * 0.7);
+          const r1 = r0 + v * base * 0.8 * options.intensity;
+          ctx.strokeStyle = rgba(bright, Math.min(1, (0.3 + v * 0.7) * options.glow));
           ctx.beginPath();
           ctx.moveTo(cx + Math.cos(angle) * r0, cy + Math.sin(angle) * r0);
           ctx.lineTo(cx + Math.cos(angle) * r1, cy + Math.sin(angle) * r1);

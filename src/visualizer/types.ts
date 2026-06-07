@@ -1,4 +1,5 @@
 import type { Rgb } from "@/lib/visualizer-color";
+import type { VisualizerRenderOptions } from "@/lib/visualizer-effect-settings";
 
 /**
  * All visualizer style ids (forward-compatible union — some are implemented in
@@ -38,6 +39,8 @@ export interface VisualizerContext {
   reducedMotion: () => boolean;
   /** Where this visualizer is rendered. Background renderers may fill more space. */
   placement?: VisualizerPlacement;
+  /** User-tunable visual parameters resolved from Settings. */
+  options: VisualizerRenderOptions;
 }
 
 /** A canvas-2D spectrum renderer. Scene/milkdrop kinds are React components

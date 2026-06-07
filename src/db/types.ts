@@ -317,6 +317,26 @@ export interface AppSettings {
   visualizerInCoverArea?: boolean;
   /** Prefer the current cover's extracted dominant color for visualizers. Default true. */
   visualizerUseCoverColor?: boolean;
+  /** Override analyser FFT size for the active visualizer. Defaults to style metadata. */
+  visualizerFftSize?: 256 | 512 | 1024 | 2048;
+  /** Override analyser smoothing, 0–0.99. Defaults to style metadata. */
+  visualizerSmoothing?: number;
+  /** Override analyser min decibels. Defaults to style metadata. */
+  visualizerMinDecibels?: number;
+  /** Override analyser max decibels. Defaults to style metadata. */
+  visualizerMaxDecibels?: number;
+  /** Visualizer amplitude/audio response multiplier. Default 1. */
+  visualizerIntensity?: number;
+  /** Visualizer motion/speed multiplier. Default 1. */
+  visualizerMotion?: number;
+  /** Visualizer detail/count/segment multiplier. Default 1. */
+  visualizerDetail?: number;
+  /** Visualizer radius/gap/spread multiplier. Default 1. */
+  visualizerSpread?: number;
+  /** Visualizer glow/brightness multiplier. Default 1. */
+  visualizerGlow?: number;
+  /** Visualizer mirror/reflection multiplier. Default 1. */
+  visualizerMirror?: number;
   /** Global color scheme. Mirrors localStorage `muzero-theme`; defaults to system. */
   theme?: "light" | "dark" | "system";
   /** Primary/accent color (hex) for light mode. Mirrors localStorage `muzero-primary-light`. */
@@ -381,6 +401,12 @@ export const DEFAULT_SETTINGS: AppSettings = {
   visualizerBackgroundOpacity: 100,
   visualizerInCoverArea: true,
   visualizerUseCoverColor: true,
+  visualizerIntensity: 1,
+  visualizerMotion: 1,
+  visualizerDetail: 1,
+  visualizerSpread: 1,
+  visualizerGlow: 1,
+  visualizerMirror: 1,
   playerRepeatMode: "off",
   playerShuffle: false,
 };

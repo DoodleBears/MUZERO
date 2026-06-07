@@ -23,14 +23,15 @@ export function createWaveformVisualizer(): Visualizer {
     render(w, h) {
       if (!c) return;
       const ctx = c.ctx;
+      const options = c.options;
       if (frame++ % (c.smoothPrimary?.() ? 1 : 6) === 0) primary = c.primary();
       const analyser = c.getAnalyser();
       const active = c.active();
       const mid = h / 2;
-      const amp = h * 0.4;
+      const amp = h * 0.4 * options.intensity;
 
       // Sample the waveform into [-1, 1] across the width.
-      const N = 96;
+      const N = Math.max(32, Math.min(192, Math.round(96 * options.detail)));
       const pts: number[] = new Array(N);
       if (analyser && active) {
         if (data.length !== analyser.fftSize) data = new Uint8Array(analyser.fftSize);
@@ -40,7 +41,7 @@ export function createWaveformVisualizer(): Visualizer {
           pts[i] = (data[idx] - 128) / 128;
         }
       } else {
-        const t = Date.now() / 500;
+        const t = (Date.now() / 500) * options.motion;
         for (let i = 0; i < N; i++) {
           const x = i / (N - 1);
           pts[i] = 0.06 * Math.sin(x * Math.PI * 4 + t) * Math.sin(x * Math.PI);
@@ -62,10 +63,10 @@ export function createWaveformVisualizer(): Visualizer {
       ctx.lineWidth = Math.max(1.5, h * 0.006);
       ctx.lineJoin = "round";
       ctx.lineCap = "round";
-      ctx.shadowBlur = h * 0.03;
-      ctx.shadowColor = rgba(lighten(primary, 0.2), 0.6);
-      drawLine(1, 0.95, lighten(primary, 0.3));
-      drawLine(-1, 0.4, primary); // mirrored, dimmer
+      ctx.shadowBlur = h * 0.03 * options.glow;
+      ctx.shadowColor = rgba(lighten(primary, 0.2), Math.min(1, 0.6 * options.glow));
+      drawLine(1, Math.min(1, 0.95 * options.glow), lighten(primary, 0.3));
+      drawLine(-1, Math.min(1, 0.4 * options.mirror * options.glow), primary);
       ctx.shadowBlur = 0;
     },
     destroy() {
