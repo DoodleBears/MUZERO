@@ -129,3 +129,4 @@ if (dt.files && dt.files.length > 0) return Array.from(dt.files); // ← 多文�
 | 2026-06-07 | MUZERO | Initial draft —— 修复「复制多个音频文件、粘贴只进一个」：`filesFromTransfer` 合并 `.items ∪ .files` 并去重；drop 回归守 `N` 不变 `2N` |
 | 2026-06-07 | MUZERO | Phase 1 实现：6 例新测（多文件粘贴红→绿 + 去重/容器/截图/字符串/null）全绿。dedup key 用 `JSON.stringify([name,size,lastModified,type])`——可打印且抗冲突（初版误用 `\0` 分隔符，git 把源文件当二进制，已修正为文本） |
 | 2026-06-07 | MUZERO | Phase 2 完成：新增 2 例「paste→classify 接缝」回归（纯 media + 混合）；`file-drop` 共 16 例、全量 178 例全绿；`drop.uploaded` 复数文案核对无缺。**两 phase 完成，多文件粘贴 bug 闭环。** |
+| 2026-06-07 | MUZERO | **真机实测确认（Chromium / `make dev`，`isTauri=false`）**：临时给 `onPaste` 加诊断 dump，复制 4 个 mp3 粘贴 → `clipboardData` 在 `.files`（length=4）与 `.items`（4×`file:audio/mpeg`）**均暴露全部 4 个** → `filesFromTransfer` 返回 4 → 全部入库，浏览器端多文件粘贴**可用**。早前「只进一个」判定为 dev server 热更新未应用修复的过期模块所致。诊断代码用毕即删（仅落在未跟踪的 `global-drop-zone.tsx`，从未提交）。 |
