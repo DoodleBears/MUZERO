@@ -437,7 +437,8 @@ interface ChatUiState {
 - [x] `ai/llm-providers.ts` preset 注册表；`resolveDjModel` 扩多 provider（仍 `getAppFetch`）；key 入 `settings` 行 `apiKeysByPresetId`。
 - [x] 补 `dialog` primitive（Base UI wrapper：trigger/content/title/description/close，COSS/shadcn-style classes）。
 - [x] 补 `popover` primitive（Base UI wrapper：trigger/content/title/description/close/positioner，COSS/shadcn-style classes）。
-- [ ] 补 `command`/`scroll-area` 原语；`combobox` 当前在并行 WIP，待落地后接 Settings/per-session 模型 combobox；上下文限制检测。
+- [x] 补 `scroll-area` primitive（Base UI wrapper：root/viewport/content/scrollbar/thumb/corner，默认 keepMounted scrollbar）。
+- [ ] 补 `command` 原语；`combobox` 当前在并行 WIP，待落地后接 Settings/per-session 模型 combobox；上下文限制检测。
 - [x] `ChatSession.llmProviderPresetId`/`llmModel`（不存 key）字段已随 CHAT-1 落库；Phase 5a 补全全局默认 fields + legacy bridge。
 
 **Phase 5 Checklist:**
@@ -445,6 +446,7 @@ interface ChatUiState {
 - [x] Runtime 按 `ChatSession.llmProviderPresetId/llmModel` 覆盖全局默认模型，API key 仍只从 settings 读取。
 - [x] Dialog primitive 具备 trigger/open、title/description a11y、close/onOpenChange 测试覆盖。
 - [x] Popover primitive 具备 trigger/open、positioned content、title、close/onOpenChange 测试覆盖。
+- [x] ScrollArea primitive 具备 root/viewport/content/scrollbar/thumb 稳定结构测试覆盖。
 - [ ] i18n 4 语全覆盖（provider/model label、combobox 文案）。
 
 ### Phase 6: 队列/打断 + onboarding + 压缩
@@ -550,6 +552,7 @@ interface ChatUiState {
 | 2026-06-07 | Codex | 推进 Phase 6j：新增无内置文案的 `ChatContextBudgetNotice` 展示层，ok 默认隐藏，warn 用 `status`、block 用 `alert`，压缩动作只回调给上层；补组件测试；`make check` 通过（57 files / 387 tests）。 |
 | 2026-06-07 | Codex | 推进 Phase 5c：新增 Base UI `dialog` primitive（trigger/content/title/description/close），覆盖打开、a11y title/description、关闭与 `onOpenChange`；`make check` 通过（58 files / 389 tests）。 |
 | 2026-06-07 | Codex | 推进 Phase 5d：新增 Base UI `popover` primitive（trigger/content/title/description/close/positioner），覆盖打开、定位内容、关闭与 `onOpenChange`；`make check` 通过（59 files / 391 tests）。 |
+| 2026-06-07 | Codex | 推进 Phase 5e：新增 Base UI `scroll-area` primitive（root/viewport/content/scrollbar/thumb/corner），默认 keepMounted scrollbar 便于稳定布局与测试；`make check` 通过（60 files / 392 tests）。 |
 
 ---
 
