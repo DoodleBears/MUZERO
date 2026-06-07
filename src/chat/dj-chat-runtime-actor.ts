@@ -99,10 +99,11 @@ export class DjChatRuntimeActor {
     return queued;
   }
 
-  async sendQueuedPrompt(promptId: string): Promise<void> {
+  async sendQueuedPrompt(promptId: string): Promise<boolean> {
     await this.ready;
+    if (this.snapshot.meta.pendingApprovalCount > 0) return false;
     const queued = await removeQueuedPrompt({ sessionId: this.sessionId, promptId }, this.db);
-    if (!queued) return;
+    if (!queued) return false;
     this.queuedPrompts = this.queuedPrompts.filter((prompt) => prompt.id !== promptId);
     this.setSnapshot(
       this.snapshot.messages,
@@ -112,6 +113,7 @@ export class DjChatRuntimeActor {
       }),
     );
     await this.sendMessage(queued.composerRaw);
+    return true;
   }
 
   async interruptWithMessage(text: string): Promise<void> {

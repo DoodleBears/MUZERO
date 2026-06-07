@@ -232,6 +232,44 @@ describe("DjChatRuntimeActor", () => {
     ).toHaveLength(0);
   });
 
+  it("pauses queued prompt dispatch while a tool approval is pending", async () => {
+    const session = await createChatSession(
+      {
+        firstUserText: "approval",
+        messages: [
+          {
+            id: "asst_pending",
+            role: "assistant",
+            parts: [
+              {
+                type: "tool-dj_generate_tracks",
+                toolCallId: "call_1",
+                state: "approval-requested",
+                input: { sessionId: "ses_1", briefs: [] },
+                approval: { id: "approval_1" },
+              },
+            ],
+          } as unknown as DjChatUIMessage,
+        ],
+      },
+      db,
+    );
+    const transport = new FakeStreamingTransport("queued reply");
+    const actor = getOrCreateDjChatRuntimeActor(session.id, { db, transport });
+    await actor.ready;
+    const queued = await actor.queuePrompt("wait until approved");
+    if (!queued) throw new Error("Expected prompt to enqueue");
+
+    await expect(actor.sendQueuedPrompt(queued.id)).resolves.toBe(false);
+
+    expect(transport.sentMessages).toHaveLength(0);
+    expect(actor.getSnapshot().meta.pendingApprovalCount).toBe(1);
+    expect(actor.getSnapshot().meta.queuedPromptCount).toBe(1);
+    expect(
+      parseQueuedPrompts((await getChatSession(session.id, db))?.queuedPromptsJson),
+    ).toHaveLength(1);
+  });
+
   it("interrupts with an immediate marked message instead of adding to the queued prompts", async () => {
     const session = await createChatSession({ firstUserText: "interrupt" }, db);
     const transport = new FakeStreamingTransport("interrupt reply");

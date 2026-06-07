@@ -440,7 +440,7 @@ interface ChatUiState {
 
 **Phase 6 Checklist:**
 - [x] 键盘矩阵测试（Enter/Ctrl+Enter/Shift+Enter）；running+draft Enter 入队，Cmd/Ctrl+Enter interrupt，Shift+Enter 保留换行。
-- [ ] pending 审批暂停派发。
+- [x] pending 审批暂停派发；`sendQueuedPrompt` 保留 queued prompt 且返回 false。
 - [x] 重载恢复队列但不自动发；手动派发 queued prompt 后从 session 队列移除；interrupt 不入队并带 `interruptionMarker`。
 - [x] 超预算时纯函数返回 block（调用点负责解释）；压缩指针计算保留最新 user turn，不静默截断。
 - [x] 压缩指针 actor/repo 持久化、旧消息仍可见。
@@ -510,6 +510,7 @@ interface ChatUiState {
 | 2026-06-07 | Codex | 推进 Phase 4b：补多 session runtime actor 隔离测试，覆盖两个 session 并发发送时各自 transport、assistant preview、Dexie `messagesJson` 独立持久化；`make check` 通过（48 files / 351 tests）。 |
 | 2026-06-07 | Codex | 推进 Phase 6c：补 `contextStartIndex` repository/actor 持久化，actor 用 `nextContextStartIndex` 保留最新 user turn 作为安全起点；runtime meta 暴露压缩指针，重建后旧消息仍完整可见。补 fake-indexeddb/runtime 测试；`make check` 通过（48 files / 353 tests）。 |
 | 2026-06-07 | Codex | 推进 Phase 6d：补 `ChatComposer` 键盘矩阵，idle Enter 发送，running+draft Enter 入队，Cmd/Ctrl+Enter interrupt，Shift+Enter 保留换行；`ChatPanel` 接 runtime `queuePrompt`/`interruptWithMessage`。补组件测试；`make check` 通过（51 files / 365 tests）。 |
+| 2026-06-07 | Codex | 推进 Phase 6e：`DjChatRuntimeActor.sendQueuedPrompt` 在 pending tool approval 时暂停派发，保留 queued prompt、返回 false、不触发 transport；补 runtime 测试；`make check` 通过（51 files / 366 tests）。 |
 
 ---
 
