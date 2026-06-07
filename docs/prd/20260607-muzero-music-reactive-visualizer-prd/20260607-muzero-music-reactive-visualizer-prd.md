@@ -1,6 +1,6 @@
 # PRD: 音乐可视化系统（Poweramp 风频谱 + 随音乐波动的生成式画面）
 
-**Status:** In Progress（Phase 1 ✅）
+**Status:** In Progress（Phase 1–2 ✅）
 **Created:** 2026-06-07
 **Author:** DoodleBear / MUZERO
 **Module:** Player — Now Playing 可视化（可插拔 Visualizer registry：频谱样式库 + GPU shader 反应式场景），复用现有 `AudioEngine` AnalyserNode，承接 `--primary` 主题色
@@ -12,7 +12,7 @@
 | Phase | Name | Status | Link |
 |-------|------|--------|------|
 | 1 | 可视化基础设施：`Visualizer` 接口 + registry + host（rAF 生命周期 / 可见性暂停 / reduced-motion / 共享 analyser）+ Settings 控件 + 把现有 aura 收编为第一个 renderer | ✅ Completed | [Phase 1 Checklist](#phase-1-checklist) |
-| 2 | 自研 canvas-2D 频谱样式包（bars / 八度对数 / radial / LED+reflex / waveform / aura），全部跟随 `--primary` | 🔲 Pending | [Phase 2 Checklist](#phase-2-checklist) |
+| 2 | 自研 canvas-2D 频谱样式包（bars / 八度对数 / radial / LED+reflex / waveform / aura），全部跟随 `--primary` | ✅ Completed | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | GPU shader 反应式场景（`ogl`，Unlicense）：1–2 个「画面随音乐波动」场景 + WebGL 探测 + canvas 回退 | 🔲 Pending | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | **（已按 Open Q1 延后 v2）** Milkdrop 模式：`@webamp/butterchurn`（MIT）懒加载 + 精选 preset + WebGL2 gate + iOS 回退 | ⏸️ Deferred (v2) | [Phase 4 Checklist](#phase-4-checklist) |
 | 5 | 打磨：性能测量方法学（帧节奏 + longtask）/ bundle 预算 / i18n 四语 / a11y / 移动端降频 / 文档对齐 | 🔲 Pending | [Phase 5 Checklist](#phase-5-checklist) |
@@ -323,16 +323,16 @@ function frame(t: number) {
 **Goal:** 一组炫酷频谱样式，全部跟随 `--primary`，clean-room 借鉴 audioMotion 技术（不引入 AGPL 依赖）。
 
 **Tasks:**
-- [ ] `spectrum/bands.ts`：FFT bin → **八度对数分带** + **dB 幅度** + **感知加权(A-weighting tilt)** + 每带取 max + EMA 平滑（解决线性 FFT「左挤右空」的通病）。
-- [ ] `spectrum/bars.ts`（八度条形）、`radial.ts`（环形频谱，可旋转）、`led-reflex.ts`（LED 段 + 倒影）、`waveform.ts`（时域波形/镜像）。
-- [ ] 每个样式声明 `fftSize`（bars/radial 用 256–512；waveform 用时域）+ 调色走 `visualizer-color.ts`。
-- [ ] Settings 样式网格补齐这些项 + i18n。
+- [x] `spectrum/bands.ts`（纯函数）：FFT bin → **八度对数分带**(`octaveBands`) + **感知 tilt**(`tiltWeights`/`applyTilt`) + 每带取 max(`aggregateBands`) + EMA 平滑(`smoothBands`)；dB 幅度由 analyser byte 输出 + dB 窗口承担。解决线性 FFT「左挤右空」。
+- [x] `spectrum/bars.ts`（八度条形）、`radial.ts`（环形频谱 + 旋转 + 镜像）、`led-reflex.ts`（LED 段 + 倒影）、`waveform.ts`（时域示波 + 镜像 + 辉光）——全部 `--primary` 派生。
+- [x] 每个样式声明 `fftSize`（频谱/waveform 均 1024）+ **dB 窗口**（`minDecibels`/`maxDecibels`，host 应用、回退 -100/-30）；调色走 `visualizer-color.ts`。
+- [x] Settings 样式下拉补齐 6 项（off/aura/bars/radial/led-reflex/waveform）+ i18n **四语**；UI 由 registry `VISUALIZER_META` 自动驱动（无硬编码）。
 
 ### Phase 2 Checklist
-- [ ] 每个样式在静音/小音量/大动态下都好看（dB 窗口 `minDecibels≈-85`、`maxDecibels≈-22`）。
-- [ ] 改主题色后所有样式实时跟随。
-- [ ] 桌面 60fps、移动 30fps 不掉帧（见 §6 性能验收）。
-- [ ] 纯函数 `bands.ts`（bin→band 映射、加权）穷举单测。
+- [x] dB 窗口收紧（频谱 -85/-22、waveform -90/-10）让静音/小音量/大动态都可见；host 按样式应用、回退默认。
+- [x] 改主题色后所有样式实时跟随（每 30 帧重读 `--primary`，复用 Phase 1 机制）。
+- [ ] 桌面 60fps / 移动 30fps 不掉帧 → **运行时量化留 Phase 5 instrumentation**（逻辑上单 rAF + 预分配 buffer + dpr cap≤2 + EMA 已就位）。
+- [x] 纯函数 `bands.ts` 穷举单测（15）+ 5 个 renderer 的 init/render 烟雾测试（10，stub ctx/analyser）；全套 **249 通过**。
 
 ### Phase 3: GPU shader 反应式场景（深度 = 「画面随音乐波动」）
 
@@ -442,6 +442,7 @@ function frame(t: number) {
 | 2026-06-07 | DoodleBear / MUZERO | 初稿：npm 横向对比（butterchurn/audioMotion/ogl/three/p5/wavesurfer…）+ 选型（自研频谱 + ogl 场景 + 可选 butterchurn，拒绝 AGPL）+ 可插拔 Visualizer registry 架构 + 5 阶段计划 |
 | 2026-06-07 | DoodleBear / MUZERO | 解决全部 Open Questions（按 best practice）；**修正 Phase 3：复用已在树中的 three + R3F + postprocessing（不再引入 ogl）**——发现 [`dither-background.tsx`](../../../src/components/player/dither-background.tsx) 已用 R3F 做 Dither 背景。Phase 4(butterchurn) 按 Q1 延后 v2 |
 | 2026-06-07 | DoodleBear / MUZERO | **Phase 1 ✅**：可插拔 Visualizer registry + host（rAF/可见性暂停/reduced-motion/dpr cap）+ `visualizer-color` 工具 + aura 收编 + AppSettings 字段 + 四语 Settings 控件。TDD：color/registry/host 共 26 单测，全套 214 通过 |
+| 2026-06-07 | DoodleBear / MUZERO | **Phase 2 ✅**：自研频谱样式包 bands(纯) + bars/radial/led-reflex/waveform（全 `--primary`）+ dB 窗口 + 四语。TDD：bands(15) + renderer 烟雾(10)，全套 **249 通过** |
 
 ---
 

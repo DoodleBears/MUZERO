@@ -34,7 +34,7 @@ describe("isRegisteredVisualizerStyle", () => {
     expect(isRegisteredVisualizerStyle("off")).toBe(true);
   });
   it("rejects unimplemented union ids and garbage", () => {
-    expect(isRegisteredVisualizerStyle("bars")).toBe(false); // in union, not yet registered
+    expect(isRegisteredVisualizerStyle("milkdrop")).toBe(false); // in union, deferred to v2
     expect(isRegisteredVisualizerStyle("nope")).toBe(false);
     expect(isRegisteredVisualizerStyle(undefined)).toBe(false);
     expect(isRegisteredVisualizerStyle(42)).toBe(false);
@@ -70,5 +70,12 @@ describe("createVisualizer", () => {
     expect(typeof v?.init).toBe("function");
     expect(typeof v?.render).toBe("function");
     expect(typeof v?.destroy).toBe("function");
+  });
+  it("registers + builds the Phase 2 spectrum styles", () => {
+    for (const id of ["bars", "radial", "led-reflex", "waveform"] as const) {
+      expect(isRegisteredVisualizerStyle(id)).toBe(true);
+      expect(resolveVisualizerStyle(id)).toBe(id);
+      expect(createVisualizer(id)?.id).toBe(id);
+    }
   });
 });

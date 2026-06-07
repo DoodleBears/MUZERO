@@ -71,14 +71,18 @@ export function VisualizerHost({
     let running = false;
     let last = 0;
     let onscreen = true;
+    let configured = false;
 
     const drawOne = (t: number) => {
       // Configure the shared analyser lazily — it may be built only on first play,
       // after init. Set once; subsequent frames already match.
       const a = getMediaEngine()?.getAnalyser();
-      if (a && a.fftSize !== meta.fftSize) {
+      if (a && !configured) {
         a.fftSize = meta.fftSize;
         a.smoothingTimeConstant = meta.smoothing;
+        a.minDecibels = meta.minDecibels ?? -100;
+        a.maxDecibels = meta.maxDecibels ?? -30;
+        configured = true;
       }
       const dpr = Math.min(window.devicePixelRatio || 1, 2);
       const w = canvas.clientWidth;

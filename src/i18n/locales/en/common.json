@@ -130,6 +130,10 @@
     "style": "Style",
     "styleOff": "Off",
     "styleAura": "Aura (bloom)",
+    "styleBars": "Bars",
+    "styleRadial": "Radial",
+    "styleLed": "LED + reflection",
+    "styleWaveform": "Waveform",
     "asBackground": "Use as Now Playing background",
     "asBackgroundHint": "Replaces the image slideshow with the live visualizer (uses more power)."
   },

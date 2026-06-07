@@ -1,4 +1,8 @@
 import { createAuraVisualizer } from "./spectrum/aura";
+import { createBarsVisualizer } from "./spectrum/bars";
+import { createLedReflexVisualizer } from "./spectrum/led-reflex";
+import { createRadialVisualizer } from "./spectrum/radial";
+import { createWaveformVisualizer } from "./spectrum/waveform";
 import type { Visualizer, VisualizerBackend, VisualizerKind, VisualizerStyleId } from "./types";
 
 /**
@@ -8,7 +12,13 @@ import type { Visualizer, VisualizerBackend, VisualizerKind, VisualizerStyleId }
  * append a META entry + a factory case; nothing else changes.
  */
 /** i18n keys for style display names — extend per phase as styles + en keys land. */
-export type VisualizerLabelKey = "visualizer.styleOff" | "visualizer.styleAura";
+export type VisualizerLabelKey =
+  | "visualizer.styleOff"
+  | "visualizer.styleAura"
+  | "visualizer.styleBars"
+  | "visualizer.styleRadial"
+  | "visualizer.styleLed"
+  | "visualizer.styleWaveform";
 
 export interface VisualizerMeta {
   id: VisualizerStyleId;
@@ -19,6 +29,9 @@ export interface VisualizerMeta {
   /** AnalyserNode config the host applies while this style is active. */
   fftSize: number;
   smoothing: number;
+  /** dB window for getByteFrequencyData (tightens dynamic range). Host defaults -100/-30. */
+  minDecibels?: number;
+  maxDecibels?: number;
 }
 
 /**
@@ -42,6 +55,46 @@ export const VISUALIZER_META: VisualizerMeta[] = [
     labelKey: "visualizer.styleAura",
     fftSize: 256,
     smoothing: 0.8,
+  },
+  {
+    id: "bars",
+    kind: "spectrum",
+    backend: "canvas2d",
+    labelKey: "visualizer.styleBars",
+    fftSize: 1024,
+    smoothing: 0.82,
+    minDecibels: -85,
+    maxDecibels: -22,
+  },
+  {
+    id: "radial",
+    kind: "spectrum",
+    backend: "canvas2d",
+    labelKey: "visualizer.styleRadial",
+    fftSize: 1024,
+    smoothing: 0.82,
+    minDecibels: -85,
+    maxDecibels: -22,
+  },
+  {
+    id: "led-reflex",
+    kind: "spectrum",
+    backend: "canvas2d",
+    labelKey: "visualizer.styleLed",
+    fftSize: 1024,
+    smoothing: 0.82,
+    minDecibels: -85,
+    maxDecibels: -22,
+  },
+  {
+    id: "waveform",
+    kind: "spectrum",
+    backend: "canvas2d",
+    labelKey: "visualizer.styleWaveform",
+    fftSize: 1024,
+    smoothing: 0.8,
+    minDecibels: -90,
+    maxDecibels: -10,
   },
 ];
 
@@ -75,8 +128,17 @@ export function createVisualizer(id: VisualizerStyleId): Visualizer | null {
       return null;
     case "aura":
       return createAuraVisualizer();
+    case "bars":
+      return createBarsVisualizer();
+    case "radial":
+      return createRadialVisualizer();
+    case "led-reflex":
+      return createLedReflexVisualizer();
+    case "waveform":
+      return createWaveformVisualizer();
     default:
-      // Not yet implemented — fall back to aura so a stored future id still renders.
+      // Not yet implemented (scene-*/milkdrop) — fall back to aura so a stored
+      // future id still renders something.
       return createAuraVisualizer();
   }
 }

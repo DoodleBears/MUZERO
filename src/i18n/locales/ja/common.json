@@ -126,6 +126,10 @@
     "style": "スタイル",
     "styleOff": "オフ",
     "styleAura": "オーラ（ブルーム）",
+    "styleBars": "バー",
+    "styleRadial": "放射状",
+    "styleLed": "LED + 反射",
+    "styleWaveform": "波形",
     "asBackground": "再生画面の背景として使用",
     "asBackgroundHint": "画像スライドショーをライブビジュアライザーに置き換えます（電力消費が増えます）。"
   },

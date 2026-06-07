@@ -126,6 +126,10 @@
     "style": "样式",
     "styleOff": "关闭",
     "styleAura": "光晕",
+    "styleBars": "条形",
+    "styleRadial": "环形",
+    "styleLed": "LED + 倒影",
+    "styleWaveform": "波形",
     "asBackground": "用作播放页背景",
     "asBackgroundHint": "用实时可视化替代图片幻灯片背景（更耗电）。"
   },
