@@ -72,3 +72,13 @@ export function moveEntry(state: PlayQueueState, from: number, to: number): Play
 export function replaceEntries(newEntries: PlayQueueEntry[], currentIndex = 0): PlayQueueState {
   return { entries: [...newEntries], currentIndex: reindex(newEntries, undefined, currentIndex) };
 }
+
+/**
+ * The 歌单(Set) tracks not yet fed into the play queue — matched by id, so it's
+ * robust to the set's order changing (new tracks are PREPENDED to the top now, no
+ * longer appended). Returns them in the set's current order. The store keeps a
+ * high-water Set of consumed ids and pushes the unconsumed ones onto the queue.
+ */
+export function unconsumedTrackIds(setTrackIds: string[], consumed: Set<string>): string[] {
+  return setTrackIds.filter((id) => !consumed.has(id));
+}

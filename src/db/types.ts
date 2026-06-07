@@ -89,6 +89,16 @@ export interface PlayQueue {
 export type BackgroundMode = "cover" | "slideshow";
 
 /**
+ * An optional animated effect layered *over* the image/slideshow background like
+ * a filter (orthogonal to {@link BackgroundMode}). "none" = image only. Add new
+ * effects to this union + render them in `now-playing-background`.
+ */
+export type BackgroundEffect = "none" | "dither";
+
+/** How the effect layer composites onto the image below it (CSS mix-blend-mode). */
+export type BackgroundBlend = "normal" | "screen" | "overlay" | "soft-light";
+
+/**
  * A square crop region in the original image's pixels. Stored non-destructively
  * (Poweramp-style): the full image stays in `mediaBlobs`; this only records what
  * to show, and a setting decides whether covers render cropped or full.
@@ -110,9 +120,16 @@ export type SetDisplayMode = "video" | "cover" | "title";
 export interface DjSession {
   id: string;
   name: string;
+  /** Free-text description shown on the set detail page. */
+  description?: string;
   /** The DJ vibe/seed. Empty for a pure upload set. */
   seedPrompt: string;
-  /** Ordered track ids = the playable queue. */
+  /**
+   * Set-level cover — FK into `mediaBlobs` (role "cover", `trackId` = this set id).
+   * When unset, the UI falls back to the topmost (newest) track's cover.
+   */
+  coverBlobId?: string;
+  /** Ordered, curated members. Newest is PREPENDED to the front (= the cover). */
   trackIds: string[];
   status: "idle" | "running";
   config: DjConfig;
@@ -163,8 +180,10 @@ export interface AppSettings {
   musicCloudModel?: string;
   // UI
   locale: "en" | "zh" | "ja" | "ko";
-  /** Now-Playing ambient background source. Defaults to "cover". */
+  /** Now-Playing background *priority*: prefer the track's own cover or its bound slideshow. Defaults to "cover". */
   backgroundMode?: BackgroundMode;
+  /** When a track has neither its own slideshow nor a cover, fall back to the global gallery slideshow. Default true. */
+  backgroundGalleryFallback?: boolean;
   /** Auto-hide the header + dock on Now Playing after idle (immersive). Default true. */
   immersiveIdle?: boolean;
   /** Render covers using their stored crop (vs the full image). Default true. */
@@ -173,6 +192,12 @@ export interface AppSettings {
   backgroundBlur?: number;
   /** Now-Playing background dim/mask opacity, 0–100. Default 70. */
   backgroundMaskOpacity?: number;
+  /** Animated effect layered over the background like a filter. Default "none". */
+  backgroundEffect?: BackgroundEffect;
+  /** Effect layer opacity, 0–100 (how strongly the filter shows). Default 60. */
+  backgroundEffectOpacity?: number;
+  /** How the effect blends onto the image below. Default "screen". */
+  backgroundEffectBlend?: BackgroundBlend;
   /** Global color scheme. Mirrors localStorage `muzero-theme`; defaults to system. */
   theme?: "light" | "dark" | "system";
   /** Primary/accent color (hex) for light mode. Mirrors localStorage `muzero-primary-light`. */
@@ -193,8 +218,12 @@ export const DEFAULT_SETTINGS: AppSettings = {
   locale: "en",
   theme: "system",
   backgroundMode: "cover",
+  backgroundGalleryFallback: true,
   immersiveIdle: true,
   coverCropped: true,
   backgroundBlur: 40,
   backgroundMaskOpacity: 70,
+  backgroundEffect: "none",
+  backgroundEffectOpacity: 60,
+  backgroundEffectBlend: "screen",
 };

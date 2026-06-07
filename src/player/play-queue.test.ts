@@ -7,6 +7,7 @@ import {
   type PlayQueueState,
   removeEntry,
   replaceEntries,
+  unconsumedTrackIds,
 } from "./play-queue";
 
 /** Deterministic entry for tests: id derived from trackId. */
@@ -95,5 +96,24 @@ describe("replaceEntries", () => {
   it("clamps an out-of-range index", () => {
     expect(replaceEntries([e("x")], 5).currentIndex).toBe(0);
     expect(replaceEntries([], 0).currentIndex).toBe(-1);
+  });
+});
+
+describe("unconsumedTrackIds (high-water by id, prepend-safe)", () => {
+  it("finds newly-PREPENDED tracks (new ids at the front)", () => {
+    expect(unconsumedTrackIds(["c", "b", "a"], new Set(["a", "b"]))).toEqual(["c"]);
+  });
+
+  it("finds newly-APPENDED tracks (new ids at the end)", () => {
+    expect(unconsumedTrackIds(["a", "b", "c"], new Set(["a", "b"]))).toEqual(["c"]);
+  });
+
+  it("returns a prepended batch in set order", () => {
+    expect(unconsumedTrackIds(["d", "c", "b", "a"], new Set(["a", "b"]))).toEqual(["d", "c"]);
+  });
+
+  it("returns nothing when all are consumed, everything when none are", () => {
+    expect(unconsumedTrackIds(["a", "b"], new Set(["a", "b"]))).toEqual([]);
+    expect(unconsumedTrackIds(["a", "b"], new Set())).toEqual(["a", "b"]);
   });
 });

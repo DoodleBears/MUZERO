@@ -13,7 +13,7 @@
 
 | Phase | Name | Status | Link |
 |-------|------|--------|------|
-| 1 | 数据模型：`DjSession.description`/`coverBlobId` + **新增 prepend 到顶部** + 歌单封面 repo + 迁移 | 🔲 Pending | §5 |
+| 1 | 数据模型：`DjSession.description`/`coverBlobId` + **新增 prepend 到顶部** + 歌单封面 repo + high-water id-diff | ✅ Completed | §5 |
 | 2 | 歌单详情页（曲目列表 + 名称/描述编辑 + 封面拖拽/粘贴 + 「播放全部」）+ gallery 卡片改「点进详情 / 小播放键」+ 路由 | 🔄 部分（两级导航+曲目列表✅；名称/描述/封面编辑待 Phase 1） | §5 |
 | 3 | 创建新歌单 + 上传到歌单 + 粘贴/拖拽**目标歌单选择**（gallery 无上下文时弹选择器；详情页直接进该歌单） | 🔲 Pending | §5 |
 
@@ -77,10 +77,10 @@ coverBlobId?: string;   // 歌单级封面，FK → mediaBlobs；缺省时 UI �
 
 ## 5. Implementation Plan
 
-### Phase 1: 数据模型（TDD，**含 high-water 同步修复**）
-- [ ] `DjSession.description?`/`coverBlobId?`；`appendTrackIds`→prepend（或 `addTrackIdsTop`）；`setSessionCover`/`getSessionCover` repo；歌单封面默认取 `trackIds[0]` 的纯函数。
-- [ ] **同步修 DM-1c high-water**：改为按 id 集合 diff 检测歌单新增曲（不依赖末尾/计数），prepend 后续歌入队仍正确。
-- [ ] 集成测（fake-indexeddb）：prepend 顺序、封面默认、DJ 续歌 prepend + 队列正确、上传 prepend。
+### Phase 1: 数据模型（TDD，**含 high-water 同步修复**）✅
+- [x] `DjSession.description?`/`coverBlobId?`；`appendTrackIds`→**`prependTrackIds`**（prepend，2 调用点 uploads+DJ 全更新）；`setSessionCover`/`getSessionCover` repo（封面进 mediaBlobs role"cover" key=setId）。
+- [x] **同步修 high-water**：`consumedSetCount`(计数)→`consumedTrackIds`(Set) + 纯函数 **`unconsumedTrackIds`**（按 id diff，prepend-safe）；player-store `setSub` 改用它。
+- [x] 测试：`unconsumedTrackIds` 4 例（prepend/append/批量/全消费）；repo `prependTrackIds`(顺序=新在前)、`setSessionCover`(row role/key/mime)。**全套件 191 绿、typecheck/biome 清、浏览器无报错**。（fake-indexeddb 不保 Blob 字节 → 封面测试断 row 字段而非 blob 内容）
 
 ### Phase 2: 歌单详情页 + 路由 + 卡片改造
 - [x] **两级结构（在 gallery 内，决策 Q4=`selectedSetId` 局部态，无路由库）**：点歌单卡 → 就地渲染该歌单**虚拟化曲目列表**（`VirtualTrackList`）+ 返回键 + 「播放全部」(`playSet`)；卡片改 div+overlay（点卡=进详情、hover 小播放键 `stopPropagation` 直接播）。浏览器实测：进详情/曲目列表/返回/小播放键 全 OK，零报错。

@@ -4,8 +4,12 @@ import {
   createSession,
   createUploadedTrack,
   getAllTags,
+  getSession,
+  getSessionCover,
   getTrack,
   listAllTracks,
+  prependTrackIds,
+  setSessionCover,
   setTrackNote,
   setTrackTags,
 } from "./repositories";
@@ -23,6 +27,34 @@ afterEach(async () => {
   await new Promise<void>((resolve) => {
     const req = indexedDB.deleteDatabase(dbName);
     req.onsuccess = req.onerror = () => resolve();
+  });
+});
+
+describe("prependTrackIds", () => {
+  it("adds new tracks to the FRONT (newest on top)", async () => {
+    const s = await createSession({ seedPrompt: "", config: { autoExtend: false } }, db);
+    await prependTrackIds(s.id, ["a", "b"], db);
+    await prependTrackIds(s.id, ["c"], db);
+    const got = await getSession(s.id, db);
+    expect(got?.trackIds).toEqual(["c", "a", "b"]);
+  });
+});
+
+describe("setSessionCover / getSessionCover", () => {
+  it("stores a set-level cover and reads it back", async () => {
+    const s = await createSession({ seedPrompt: "", config: { autoExtend: false } }, db);
+    const blob = new Blob([new Uint8Array([9, 9, 9])], { type: "image/png" });
+    await setSessionCover(s.id, blob, "image/png", db);
+    const got = await getSession(s.id, db);
+    expect(got?.coverBlobId).toBeTruthy();
+    // The cover row is created correctly (role/key/mime — string fields survive
+    // fake-indexeddb; it doesn't preserve Blob bytes, but real IndexedDB does).
+    const row = await db.mediaBlobs.get(got?.coverBlobId ?? "");
+    expect(row?.role).toBe("cover");
+    expect(row?.trackId).toBe(s.id);
+    expect(row?.mime).toBe("image/png");
+    // getSessionCover resolves the stored blob via coverBlobId.
+    expect(await getSessionCover(s.id, db)).toBeTruthy();
   });
 });
 

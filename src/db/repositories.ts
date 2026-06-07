@@ -104,7 +104,13 @@ export async function setSessionDisplayMode(
   await db.sessions.update(id, { displayMode, updatedAt: Date.now() });
 }
 
-export async function appendTrackIds(
+/**
+ * Add tracks to a 歌单 at the FRONT (newest on top — the topmost track is the
+ * set's default cover). All adds (uploads + DJ continuation) prepend; the play
+ * queue is fed separately by an id-diff high-water mark, so prepend order here
+ * doesn't disturb playback order.
+ */
+export async function prependTrackIds(
   sessionId: string,
   ids: string[],
   db: MuzeroDB = defaultDb,
@@ -112,10 +118,49 @@ export async function appendTrackIds(
   await db.transaction("rw", db.sessions, async () => {
     const session = await db.sessions.get(sessionId);
     if (!session) return;
-    session.trackIds = [...session.trackIds, ...ids];
+    session.trackIds = [...ids, ...session.trackIds];
     session.updatedAt = Date.now();
     await db.sessions.put(session);
   });
+}
+
+/**
+ * Set a 歌单-level cover image: store the bytes in `mediaBlobs` (role "cover",
+ * keyed by the set id) and point `coverBlobId` at it. Replaces any prior cover.
+ */
+export async function setSessionCover(
+  sessionId: string,
+  blob: Blob,
+  mime: string,
+  db: MuzeroDB = defaultDb,
+): Promise<void> {
+  await db.transaction("rw", db.sessions, db.mediaBlobs, async () => {
+    const session = await db.sessions.get(sessionId);
+    if (!session) return;
+    if (session.coverBlobId) await db.mediaBlobs.delete(session.coverBlobId);
+    const id = newId("blb");
+    await db.mediaBlobs.add({
+      id,
+      trackId: sessionId,
+      role: "cover",
+      mime,
+      bytes: blob.size,
+      blob,
+    });
+    session.coverBlobId = id;
+    session.updatedAt = Date.now();
+    await db.sessions.put(session);
+  });
+}
+
+/** Read a 歌单's cover blob (the set-level cover only — not a track cover). */
+export async function getSessionCover(
+  sessionId: string,
+  db: MuzeroDB = defaultDb,
+): Promise<Blob | undefined> {
+  const session = await db.sessions.get(sessionId);
+  if (!session?.coverBlobId) return undefined;
+  return (await db.mediaBlobs.get(session.coverBlobId))?.blob;
 }
 
 export async function removeTrackFromSession(

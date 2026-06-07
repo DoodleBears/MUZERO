@@ -1,12 +1,12 @@
 import type { MuzeroDB } from "@/db/muzero-db";
 import {
-  appendTrackIds,
   createPendingTrack,
   getSession,
   getTracksByIds,
   markTrackFailed,
   markTrackGenerating,
   markTrackReady,
+  prependTrackIds,
 } from "@/db/repositories";
 import type { Track } from "@/db/types";
 import { log } from "@/lib/logger";
@@ -89,7 +89,7 @@ export function createDjEngine(deps: {
       const track = await createPendingTrack({ sessionId, brief, provider: provider.id }, db);
       created.push(track);
     }
-    await appendTrackIds(
+    await prependTrackIds(
       sessionId,
       created.map((t) => t.id),
       db,
