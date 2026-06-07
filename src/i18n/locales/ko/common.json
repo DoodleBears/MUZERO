@@ -130,6 +130,8 @@
     "styleRadial": "방사형",
     "styleLed": "LED + 반사",
     "styleWaveform": "파형",
+    "styleSceneLiquid": "리퀴드(씬)",
+    "styleSceneAurora": "오로라(씬)",
     "asBackground": "재생 화면 배경으로 사용",
     "asBackgroundHint": "이미지 슬라이드쇼를 실시간 비주얼라이저로 대체합니다(전력 소모 증가)."
   },
@@ -205,6 +207,9 @@
     "count_other": "{{count}}곡",
     "empty": "아직 세트가 없습니다 — DJ 세트를 시작하거나 미디어를 업로드하세요.",
     "back": "뒤로",
-    "playAll": "전체 재생"
+    "playAll": "전체 재생",
+    "setName": "세트 이름",
+    "setDescription": "설명 추가…",
+    "coverHint": "드롭 / 붙여넣기 / 클릭으로 커버 설정"
   }
 }

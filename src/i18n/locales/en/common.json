@@ -134,6 +134,8 @@
     "styleRadial": "Radial",
     "styleLed": "LED + reflection",
     "styleWaveform": "Waveform",
+    "styleSceneLiquid": "Liquid (scene)",
+    "styleSceneAurora": "Aurora (scene)",
     "asBackground": "Use as Now Playing background",
     "asBackgroundHint": "Replaces the image slideshow with the live visualizer (uses more power)."
   },
@@ -210,6 +212,9 @@
     "count_other": "{{count}} tracks",
     "empty": "No sets yet — start a DJ set or upload some media.",
     "back": "Back",
-    "playAll": "Play all"
+    "playAll": "Play all",
+    "setName": "Set name",
+    "setDescription": "Add a description…",
+    "coverHint": "Drop / paste / click to set the cover"
   }
 }

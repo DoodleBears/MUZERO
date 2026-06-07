@@ -1,14 +1,21 @@
 import { useLiveQuery } from "dexie-react-hooks";
-import { ArrowLeft, Disc3, Heart, LayoutGrid, List, Play, Search } from "lucide-react";
-import { useMemo, useState } from "react";
+import { ArrowLeft, Disc3, Heart, ImagePlus, LayoutGrid, List, Play, Search } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { VirtualTrackList } from "@/components/library/virtual-track-list";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { db } from "@/db/muzero-db";
-import { getSession, listAllTracks, listSessions } from "@/db/repositories";
+import {
+  getSession,
+  listAllTracks,
+  listSessions,
+  setSessionCover,
+  updateSession,
+} from "@/db/repositories";
 import type { Track } from "@/db/types";
-import { useTrackCoverUrl } from "@/hooks/use-media";
+import { useObjectUrl, useTrackCoverUrl } from "@/hooks/use-media";
+import { dragHasFiles, filesFromTransfer, IMAGE_ACCEPT } from "@/lib/file-drop";
 import {
   filterSets,
   type SetFilter,
@@ -190,33 +197,146 @@ function SetDetailView({
   const { t } = useTranslation();
   const session = useLiveQuery(() => getSession(setId), [setId]);
   const playTrack = usePlayerStore((s) => s.playTrack);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [name, setName] = useState("");
+  const [desc, setDesc] = useState("");
+  const [dragOver, setDragOver] = useState(false);
+
   const tracks = useMemo(
     () =>
       (session?.trackIds ?? []).map((id) => trackById.get(id)).filter((tr): tr is Track => !!tr),
     [session, trackById],
   );
 
+  // Initialize the editable fields once the set loads (and only on identity
+  // change, so later updates / typing don't reset the inputs).
+  // biome-ignore lint/correctness/useExhaustiveDependencies: sync on set id, not on every field change
+  useEffect(() => {
+    if (session) {
+      setName(session.name);
+      setDesc(session.description ?? "");
+    }
+  }, [session?.id]);
+
+  // Cover: the set's own cover, else the topmost track that has one.
+  const coverTrack = useMemo(() => {
+    const ids = session?.trackIds ?? [];
+    const id = ids.find((tid) => trackById.get(tid)?.coverBlobId) ?? ids[0];
+    return id ? trackById.get(id) : undefined;
+  }, [session, trackById]);
+  const coverUrl = useSetCoverUrl(session?.coverBlobId, coverTrack);
+
+  function applyCover(files: File[]) {
+    const img = files.find((f) => f.type.startsWith("image/"));
+    if (img) void setSessionCover(setId, img, img.type || "image/jpeg");
+  }
+  function commitName() {
+    const v = name.trim();
+    if (session && v && v !== session.name) void updateSession(setId, { name: v });
+  }
+  function commitDesc() {
+    const v = desc.trim();
+    if (session && (session.description ?? "") !== v) void updateSession(setId, { description: v });
+  }
+
+  // Paste an image while on this set's detail page → set its cover.
+  useEffect(() => {
+    const onPaste = (e: ClipboardEvent) => {
+      const img = filesFromTransfer(e.clipboardData).find((f) => f.type.startsWith("image/"));
+      if (img) {
+        e.preventDefault();
+        void setSessionCover(setId, img, img.type || "image/jpeg");
+      }
+    };
+    document.addEventListener("paste", onPaste);
+    return () => document.removeEventListener("paste", onPaste);
+  }, [setId]);
+
   return (
     <div className="mx-auto flex h-full w-full max-w-4xl flex-col px-4 pt-chrome-top lg:px-6">
-      <div className="mb-3 flex items-center gap-2">
+      <button
+        type="button"
+        onClick={onBack}
+        aria-label={t("gallery.back")}
+        className="mb-2 grid size-9 shrink-0 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-accent/50 hover:text-foreground"
+      >
+        <ArrowLeft className="size-5" />
+      </button>
+
+      <div className="mb-3 flex items-start gap-3">
+        {/* Cover — drop / paste / click to set */}
         <button
           type="button"
-          onClick={onBack}
-          aria-label={t("gallery.back")}
-          className="grid size-9 shrink-0 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-accent/50 hover:text-foreground"
+          onClick={() => fileRef.current?.click()}
+          aria-label={t("gallery.coverHint")}
+          title={t("gallery.coverHint")}
+          onDragOver={(e) => {
+            if (dragHasFiles(e.dataTransfer?.types)) {
+              e.preventDefault();
+              setDragOver(true);
+            }
+          }}
+          onDragLeave={() => setDragOver(false)}
+          onDrop={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            setDragOver(false);
+            applyCover(filesFromTransfer(e.dataTransfer));
+          }}
+          className={cn(
+            "group relative grid size-20 shrink-0 place-items-center overflow-hidden rounded-xl bg-secondary outline-none transition-shadow focus-visible:ring-2 focus-visible:ring-ring",
+            dragOver && "ring-2 ring-primary",
+          )}
         >
-          <ArrowLeft className="size-5" />
+          {coverUrl ? (
+            <img src={coverUrl} alt="" className="size-full object-cover" />
+          ) : (
+            <Disc3 className="size-7 text-muted-foreground" />
+          )}
+          <span className="absolute inset-0 grid place-items-center bg-black/40 opacity-0 transition-opacity group-hover:opacity-100">
+            <ImagePlus className="size-5 text-white" />
+          </span>
         </button>
+        <input
+          ref={fileRef}
+          type="file"
+          accept={IMAGE_ACCEPT}
+          className="hidden"
+          onChange={(e) => {
+            if (e.target.files) applyCover(Array.from(e.target.files));
+            e.target.value = "";
+          }}
+        />
+
         <div className="min-w-0 flex-1">
-          <h2 className="truncate text-base font-semibold">{session?.name ?? ""}</h2>
-          <p className="text-xs text-muted-foreground">
+          <input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            onBlur={commitName}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") e.currentTarget.blur();
+            }}
+            placeholder={t("gallery.setName")}
+            className="-mx-1 w-full truncate rounded-md border border-transparent bg-transparent px-1 text-lg font-semibold outline-none hover:border-input focus:border-input"
+          />
+          <textarea
+            value={desc}
+            onChange={(e) => setDesc(e.target.value)}
+            onBlur={commitDesc}
+            placeholder={t("gallery.setDescription")}
+            rows={1}
+            className="-mx-1 mt-0.5 w-full resize-none rounded-md border border-transparent bg-transparent px-1 text-xs text-muted-foreground outline-none hover:border-input focus:border-input"
+          />
+          <p className="px-1 pt-0.5 text-xs text-muted-foreground">
             {t("gallery.count", { count: tracks.length })}
           </p>
         </div>
+
         <Button size="sm" onClick={onPlayAll} disabled={tracks.length === 0} className="shrink-0">
           <Play className="size-4" /> {t("gallery.playAll")}
         </Button>
       </div>
+
       <div className="min-h-0 flex-1 pb-chrome-bottom">
         <VirtualTrackList
           tracks={tracks}
@@ -226,6 +346,25 @@ function SetDetailView({
       </div>
     </div>
   );
+}
+
+/**
+ * Cover URL for a set: its own cover (`coverBlobId`) when set, else the given
+ * fallback track's cover. Shared by the gallery tiles and the detail header so
+ * setting a cover reflects everywhere.
+ */
+function useSetCoverUrl(
+  coverBlobId: string | undefined,
+  fallbackTrack: Track | undefined,
+): string | null {
+  const setBlob = useLiveQuery(
+    () => (coverBlobId ? db.mediaBlobs.get(coverBlobId).then((r) => r?.blob ?? null) : null),
+    [coverBlobId],
+    null,
+  );
+  const setUrl = useObjectUrl(setBlob);
+  const trackUrl = useTrackCoverUrl(fallbackTrack);
+  return coverBlobId ? setUrl : trackUrl;
 }
 
 function Chip({
@@ -294,7 +433,7 @@ function SetCard({
   onPlay: () => void;
 }) {
   const { t } = useTranslation();
-  const coverUrl = useTrackCoverUrl(coverTrack);
+  const coverUrl = useSetCoverUrl(item.session.coverBlobId, coverTrack);
   const count = t("gallery.count", { count: item.trackCount });
 
   // The play button overlays the card (sibling, not nested) so a button doesn't

@@ -130,6 +130,8 @@
     "styleRadial": "放射状",
     "styleLed": "LED + 反射",
     "styleWaveform": "波形",
+    "styleSceneLiquid": "リキッド（シーン）",
+    "styleSceneAurora": "オーロラ（シーン）",
     "asBackground": "再生画面の背景として使用",
     "asBackgroundHint": "画像スライドショーをライブビジュアライザーに置き換えます（電力消費が増えます）。"
   },
@@ -205,6 +207,9 @@
     "count_other": "{{count}} 曲",
     "empty": "セットがまだありません — DJ セットを開始するかメディアをアップロードしてください。",
     "back": "戻る",
-    "playAll": "すべて再生"
+    "playAll": "すべて再生",
+    "setName": "セット名",
+    "setDescription": "説明を追加…",
+    "coverHint": "ドロップ / ペースト / クリックでカバーを設定"
   }
 }

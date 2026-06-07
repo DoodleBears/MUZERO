@@ -130,6 +130,8 @@
     "styleRadial": "环形",
     "styleLed": "LED + 倒影",
     "styleWaveform": "波形",
+    "styleSceneLiquid": "液态（场景）",
+    "styleSceneAurora": "极光（场景）",
     "asBackground": "用作播放页背景",
     "asBackgroundHint": "用实时可视化替代图片幻灯片背景（更耗电）。"
   },
@@ -205,6 +207,9 @@
     "count_other": "{{count}} 首",
     "empty": "还没有歌单——开始一个 DJ 歌单或上传媒体。",
     "back": "返回",
-    "playAll": "播放全部"
+    "playAll": "播放全部",
+    "setName": "歌单名称",
+    "setDescription": "添加描述…",
+    "coverHint": "拖拽 / 粘贴 / 点击设置封面"
   }
 }
