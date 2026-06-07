@@ -168,15 +168,11 @@ export function MemoryTimelineRail({
 
   if (sortedMemories.length === 0) {
     return (
-      <div
-        className={cn(
-          "flex min-h-0 flex-1 items-center justify-center rounded-2xl border border-dashed border-border/60 p-4 text-center text-muted-foreground text-sm",
-          className,
-        )}
+      <section
+        aria-label={labels.memory}
+        className={cn("min-h-0 flex-1 rounded-2xl", className)}
         data-testid="memory-timeline-rail"
-      >
-        {labels.empty}
-      </div>
+      />
     );
   }
 

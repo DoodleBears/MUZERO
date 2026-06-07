@@ -3,6 +3,7 @@
 import { useLiveQuery } from "dexie-react-hooks";
 import { Plus } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { db as defaultDb, type MuzeroDB } from "@/db/muzero-db";
 import {
   addMemory,
@@ -14,6 +15,7 @@ import {
 } from "@/db/repositories";
 import type { Memory } from "@/db/types";
 import { memoryMasonryDefaults } from "@/lib/memory-masonry";
+import { resolveMemoryShortcut } from "@/lib/memory-shortcuts";
 import { MemoryNoteComposer, type MemoryNoteComposerLabels } from "./memory-note-composer";
 import {
   MemoryNotesWaterfall,
@@ -47,8 +49,23 @@ export function TrackMemoryNotesPanel({
   const [editingMemory, setEditingMemory] = useState<MemoryNoteView | undefined>();
   const [isCreating, setIsCreating] = useState(false);
   const [photoFile, setPhotoFile] = useState<File | undefined>();
+  const [quickCreateOpen, setQuickCreateOpen] = useState(false);
+  const [quickPhotoFile, setQuickPhotoFile] = useState<File | undefined>();
   const composerKey = editingMemory?.id ?? "new-memory";
   const showComposer = isCreating || Boolean(editingMemory);
+
+  useEffect(() => {
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.defaultPrevented || isTypingTarget(event.target)) return;
+      const shortcut = resolveMemoryShortcut(event);
+      if (shortcut !== "create-memory") return;
+      event.preventDefault();
+      setQuickCreateOpen(true);
+    }
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
 
   async function submitMemory(note: string) {
     if (editingMemory) {
@@ -67,6 +84,21 @@ export function TrackMemoryNotesPanel({
     );
     setPhotoFile(undefined);
     setIsCreating(false);
+  }
+
+  async function submitQuickMemory(note: string) {
+    await addMemory(
+      {
+        trackId,
+        note,
+        photo: quickPhotoFile
+          ? { blob: quickPhotoFile, mime: quickPhotoFile.type || "image/jpeg" }
+          : undefined,
+      },
+      db,
+    );
+    setQuickPhotoFile(undefined);
+    setQuickCreateOpen(false);
   }
 
   async function removeMemory(memory: MemoryNoteView) {
@@ -88,6 +120,11 @@ export function TrackMemoryNotesPanel({
     setEditingMemory(undefined);
     setIsCreating(false);
     setPhotoFile(undefined);
+  }
+
+  function setQuickDialogOpen(open: boolean) {
+    setQuickCreateOpen(open);
+    if (!open) setQuickPhotoFile(undefined);
   }
 
   const leadingItem = showComposer ? (
@@ -114,21 +151,48 @@ export function TrackMemoryNotesPanel({
   );
 
   return (
-    <MemoryNotesWaterfall
-      className={className}
-      formatCreatedAt={formatCreatedAt}
-      leadingItem={leadingItem}
-      leadingItemEstimatedHeight={
-        showComposer
-          ? memoryMasonryDefaults.leadingComposerHeight
-          : memoryMasonryDefaults.leadingCreateHeight
-      }
-      labels={labels.waterfall}
-      memories={memoryViews}
-      onDeleteMemory={removeMemory}
-      onEditMemory={editMemory}
-      onSetCoverFromMemory={useMemoryPhotoAsCover}
-    />
+    <>
+      <MemoryNotesWaterfall
+        className={className}
+        formatCreatedAt={formatCreatedAt}
+        leadingItem={leadingItem}
+        leadingItemEstimatedHeight={
+          showComposer
+            ? memoryMasonryDefaults.leadingComposerHeight
+            : memoryMasonryDefaults.leadingCreateHeight
+        }
+        labels={labels.waterfall}
+        memories={memoryViews}
+        onDeleteMemory={removeMemory}
+        onEditMemory={editMemory}
+        onSetCoverFromMemory={useMemoryPhotoAsCover}
+      />
+      <Dialog onOpenChange={setQuickDialogOpen} open={quickCreateOpen}>
+        <DialogContent>
+          <DialogTitle>{labels.createMemory}</DialogTitle>
+          <MemoryNoteComposer
+            autoFocus
+            labels={labels.composer}
+            onCancel={() => setQuickDialogOpen(false)}
+            onPhotoRemove={() => setQuickPhotoFile(undefined)}
+            onPhotoSelect={setQuickPhotoFile}
+            onSubmit={submitQuickMemory}
+            selectedPhotoName={quickPhotoFile?.name}
+          />
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
+function isTypingTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+  const tagName = target.tagName;
+  return (
+    tagName === "INPUT" ||
+    tagName === "TEXTAREA" ||
+    tagName === "SELECT" ||
+    target.isContentEditable
   );
 }
 

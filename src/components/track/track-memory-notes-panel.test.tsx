@@ -150,4 +150,46 @@ describe("TrackMemoryNotesPanel", () => {
       expect(updated?.coverBlobId).not.toBe(memory.photoBlobId);
     });
   });
+
+  it("opens a quick-create memory modal from T/N and saves pasted photos", async () => {
+    render(
+      <TrackMemoryNotesPanel
+        db={db}
+        formatCreatedAt={(createdAt) => `time-${createdAt}`}
+        labels={labels}
+        trackId="trk_shortcut"
+      />,
+    );
+
+    fireEvent.keyDown(window, { key: "T", shiftKey: true });
+
+    const dialog = await screen.findByRole("dialog", { name: "Create memory" });
+    expect(dialog).toBeInTheDocument();
+    expect(screen.getByPlaceholderText("Write a memory")).toHaveFocus();
+
+    const photo = new File(["img"], "shortcut.png", { type: "image/png" });
+    fireEvent.paste(screen.getByPlaceholderText("Write a memory"), {
+      clipboardData: {
+        files: [photo],
+        items: [],
+      },
+    });
+    expect(screen.getByText("shortcut.png")).toBeInTheDocument();
+
+    const textarea = screen.getByPlaceholderText("Write a memory");
+    fireEvent.change(textarea, { target: { value: "shortcut memory" } });
+    fireEvent.keyDown(textarea, { key: "Enter" });
+
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(await screen.findByText("shortcut memory")).toBeInTheDocument();
+
+    const [memory] = await listMemories("trk_shortcut", db);
+    expect(memory.photoBlobId).toBeTruthy();
+    const blobRow = memory.photoBlobId ? await db.mediaBlobs.get(memory.photoBlobId) : undefined;
+    expect(blobRow).toMatchObject({
+      mime: "image/png",
+      role: "memory",
+      trackId: "trk_shortcut",
+    });
+  });
 });

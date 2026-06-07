@@ -105,7 +105,8 @@ describe("MemoryTimelineRail", () => {
   it("renders an empty state when there are no memories", () => {
     renderRail({ memories: [] });
 
-    expect(screen.getByText("No memories yet")).toBeInTheDocument();
+    expect(screen.queryByText("No memories yet")).not.toBeInTheDocument();
+    expect(screen.getByTestId("memory-timeline-rail")).toBeEmptyDOMElement();
     expect(screen.queryByTestId("memory-carousel-card")).not.toBeInTheDocument();
   });
 });
