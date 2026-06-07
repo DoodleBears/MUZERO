@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { MuzeroDB } from "@/db/muzero-db";
 import {
   clearDjChatRuntimeActors,
+  getDjChatRuntimeActor,
   getOrCreateDjChatRuntimeActor,
 } from "./dj-chat-runtime-registry";
 import { createChatSession, getChatSession, parseQueuedPrompts } from "./dj-chat-sessions";
@@ -121,6 +122,45 @@ describe("DjChatRuntimeActor", () => {
       text: "new reply",
       state: "done",
     });
+  });
+
+  it("keeps concurrent session actors isolated while both stream", async () => {
+    const rain = await createChatSession({ firstUserText: "rain" }, db);
+    const gym = await createChatSession({ firstUserText: "gym" }, db);
+    const rainTransport = new FakeStreamingTransport("rain reply");
+    const gymTransport = new FakeStreamingTransport("gym reply");
+    const rainActor = getOrCreateDjChatRuntimeActor(rain.id, {
+      db,
+      transport: rainTransport,
+    });
+    const gymActor = getOrCreateDjChatRuntimeActor(gym.id, {
+      db,
+      transport: gymTransport,
+    });
+    await Promise.all([rainActor.ready, gymActor.ready]);
+
+    await Promise.all([rainActor.sendMessage("rain"), gymActor.sendMessage("gym")]);
+
+    expect(getDjChatRuntimeActor(rain.id)).toBe(rainActor);
+    expect(getDjChatRuntimeActor(gym.id)).toBe(gymActor);
+    expect(rainActor.getSnapshot().meta.lastAssistantPreview).toBe("rain reply");
+    expect(gymActor.getSnapshot().meta.lastAssistantPreview).toBe("gym reply");
+    expect(rainTransport.sentMessages[0].at(-1)).toMatchObject({
+      role: "user",
+      parts: [{ type: "text", text: "rain" }],
+    });
+    expect(gymTransport.sentMessages[0].at(-1)).toMatchObject({
+      role: "user",
+      parts: [{ type: "text", text: "gym" }],
+    });
+
+    const savedRain = JSON.parse((await getChatSession(rain.id, db))?.messagesJson ?? "[]");
+    const savedGym = JSON.parse((await getChatSession(gym.id, db))?.messagesJson ?? "[]");
+    expect(savedRain.map((message: DjChatUIMessage) => message.role)).toEqual([
+      "user",
+      "assistant",
+    ]);
+    expect(savedGym.map((message: DjChatUIMessage) => message.role)).toEqual(["user", "assistant"]);
   });
 
   it("keeps queued prompts across actor rebuilds without auto-dispatching them", async () => {

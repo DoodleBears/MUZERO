@@ -417,6 +417,7 @@ interface ChatUiState {
 
 **Phase 4 Checklist:**
 - [ ] 集成测：两 session 不同 model 同时跑、一个审批一个错误互不串；切 home 不清流式 session 的 live 消息。
+- [x] Runtime 基座：两个 session actor 可并发发送、分别 stream/persist，preview 与 messagesJson 不串线。
 - [x] 搜索命中标题与用户消息（不搜 assistant-only 文本）；branch 后父子独立。
 - [x] edit-resend regenerate 复用 user `messageId`，截断后续并重流。
 
@@ -504,6 +505,7 @@ interface ChatUiState {
 | 2026-06-07 | Codex | 推进 Phase 6a：新增 `dj-chat-tokens.ts` 与 `dj-chat-context-budget.ts`，提供保守 token 估算、ok/warn/block budget gate、压缩起点计算（保留最新 user turn，不静默截断）。补纯函数测试；`make check` 通过（48 files / 346 tests）。 |
 | 2026-06-07 | Codex | 推进 Phase 6b：新增 session-scoped queued prompt runtime 核心（`queuedPromptsJson` parse/enqueue/reorder/remove、runtime meta 计数、actor rebuild 不自动派发、手动派发后移除、interrupt 即发并打 `interruptionMarker`）。补仓库/actor 测试；`make check` 通过（48 files / 349 tests）。 |
 | 2026-06-07 | Codex | 推进 Phase 3b：补 `dj_propose_briefs` 非花钱提案工具，复用 `trackBriefSchema` 校验并返回 proposal id + `describeBrief` summaries；无审批、零 DB 写入，确认后再走 `dj_generate_tracks`。补工具测试；`make check` 通过（48 files / 350 tests）。 |
+| 2026-06-07 | Codex | 推进 Phase 4b：补多 session runtime actor 隔离测试，覆盖两个 session 并发发送时各自 transport、assistant preview、Dexie `messagesJson` 独立持久化；`make check` 通过（48 files / 351 tests）。 |
 
 ---
 
