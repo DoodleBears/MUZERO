@@ -228,14 +228,14 @@ this.version(3).stores({
 - [x] `memory-note-composer.tsx` 展示层：新增/编辑 Memory 的便签输入面板，支持 note 草稿、保存/取消、照片选择/移除回调；不持有 DB/i18n 状态。
 - [x] `track-memory-notes-panel.tsx` 容器层：`useLiveQuery(listMemories)` + `addMemory`/`updateMemoryNote`/`deleteMemory` 接 composer/waterfall；后续 `annotation-editor` 可直接嵌入。
 - [x] `annotation-editor` 改记忆列表：嵌入 `TrackMemoryNotesPanel`，旧单 note textarea 退场，新增/编辑/删除/照片/时间戳由便签 UI 承接。
-  - **UIUX 决议（2026-06-08）**：记忆不是一个长 textarea；每条 Memory 以「便签」卡片呈现，整体为响应式瀑布流/masonry（移动单列、桌面多列）。瀑布流第一个位置固定是一个虚线边框的「新建记忆」便签，带 icon + label 提示可点击创建；点击后该位置原地变为聚焦输入框。卡片使用默认 `card/background` 色系，不做彩色便签，避免压过 Now Playing 主视觉。普通记忆卡片包含可读的大段 note、时间戳、可选照片缩略图、编辑/删除操作；保存后立即进入瀑布流。
+  - **UIUX 决议（2026-06-08）**：记忆不是一个长 textarea；每条 Memory 以「便签」卡片呈现，整体为响应式便签网格（移动单列、桌面多列）。第一行必须 **top-align**：第一个位置固定是一个虚线边框的「新建记忆」便签，右侧/后续列的第一张记忆卡与它顶部对齐；避免 CSS columns 的自动列平衡造成错位。点击新建便签后该位置原地变为聚焦输入框。卡片使用默认 `card/background` 色系，不做彩色便签，避免压过 Now Playing 主视觉。普通记忆卡片包含可读的大段 note、时间戳、可选照片缩略图、编辑/删除操作；保存后立即进入网格。
 - [x] `search-page` 用 `memoryNotesByTrack` join 记忆进搜索：gallery set filtering 委托 `searchTracks`，因此 set 可因 track title/tag/memory note 命中。
 - [x] providerPreset 生成时落 `Track` + 自动加一条 provenance Memory（musicgen Q5；mock 仅字段不写 Memory，避免测试/本地占位污染 DJ 记忆）。
 - [x] `MemoryNotesWaterfall` 展示层测试：新到旧排序、便签 masonry class、照片 alt、edit/delete 回调、空态。
 - [x] `MemoryNoteComposer` 展示层测试：trim submit、blank guard、edit cancel、photo select/remove 回调。
 - [x] `TrackMemoryNotesPanel` 容器测试：渲染已有 memories、composer 新增、waterfall 编辑/删除，并通过 Dexie liveQuery 更新 UI。
 - [x] `AnnotationEditor` 接线测试：渲染 `TrackMemoryNotesPanel`，不再显示 deprecated single note textarea；annotation labels 走 i18n 4 语。
-- [x] 便签创建入口：瀑布流第一格为虚线「新建记忆」卡片，点击后原地切为 auto-focused composer；底部记忆区域直接展示便签，不再包外层 card；卡片使用默认 `card/background` 色系。
+- [x] 便签创建入口：便签网格第一格为虚线「新建记忆」卡片，点击后原地切为 auto-focused composer；第一行 top-align，右侧第一张记忆卡与虚线创建卡顶部对齐；底部记忆区域直接展示便签，不再包外层 card；卡片使用默认 `card/background` 色系。
 - [x] 搜索验收：`filterSets` 可委托 track/memory-aware matcher；`SearchPage` 为每个 set 注入 `memoryNotesByTrack + searchTracks`。
 - [x] 验收：一首歌可加多条记忆（含照片）；搜索命中记忆文字；DJ 上下文带记忆；生成曲自动带 provenance Note。（浏览器全流程 + 响应式/暗色视觉验收并入 Phase 4）
 
@@ -300,6 +300,7 @@ this.version(3).stores({
 | 2026-06-08 | Codex | 收口 Memory UIUX：瀑布流第一格改为虚线 create-memory 便签（Plus icon + label），点击原地切 auto-focused composer；annotation 底部直接展示便签瀑布流，卡片回到默认 `card/background` 色系；补组件/容器/i18n 接线测试；`make check` 通过（67 files / 420 tests）。 |
 | 2026-06-08 | Codex | 推进 Phase 4 player UI：新增 shadcn-style context menu primitive，并接入当前歌曲/封面右键菜单，可切 display mode、audio-only、添加/更换封面；补 primitive + track menu 测试；`make check` 通过（69 files / 424 tests）。 |
 | 2026-06-08 | Codex | 推进 Phase 4 Memory→cover：新增 `setTrackCoverFromMemory`，将记忆照片复制为独立 cover blob；带照片便签可一键设为歌曲封面；补 repo/waterfall/panel 测试；`make check` 通过（70 files / 428 tests）。 |
+| 2026-06-08 | Codex | 修正 Memory 便签布局：从 CSS columns 切到 top-aligned responsive grid，确保虚线创建卡与右侧第一张记忆卡顶部对齐；补展示层测试；`make check` 通过（70 files / 428 tests）。 |
 
 ---
 

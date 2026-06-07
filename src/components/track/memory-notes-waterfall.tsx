@@ -56,12 +56,12 @@ export function MemoryNotesWaterfall({
   return (
     <ul
       aria-label={typeof labels.empty === "string" ? labels.empty : undefined}
-      className={cn("columns-1 gap-3 sm:columns-2 xl:columns-3", className)}
+      className={cn("grid grid-cols-1 items-start gap-3 sm:grid-cols-2 xl:grid-cols-3", className)}
     >
-      {leadingItem && <li className="mb-3 break-inside-avoid">{leadingItem}</li>}
+      {leadingItem && <li>{leadingItem}</li>}
       {sortedMemories.map((memory) => (
         <li
-          className="mb-3 break-inside-avoid rounded-lg border border-border bg-card p-3 text-card-foreground shadow-sm ring-1 ring-black/5 transition-shadow hover:shadow-md"
+          className="rounded-lg border border-border bg-card p-3 text-card-foreground shadow-sm ring-1 ring-black/5 transition-shadow hover:shadow-md"
           key={memory.id}
         >
           {memory.photoUrl && (
