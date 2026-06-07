@@ -29,8 +29,16 @@ export interface DjEngine {
   draft(sessionId: string): Promise<Track[]>;
   /** Generate audio for the first not-yet-ready track in the queue; null if none. */
   materializeNext(sessionId: string, signal?: AbortSignal): Promise<Track | null>;
-  /** Draft only if the queue has run low relative to `currentIndex`. */
-  refillIfNeeded(sessionId: string, currentIndex: number): Promise<Track[] | null>;
+  /**
+   * Draft more for this 歌单 if the 播放列表(Play Queue) has run low. The threshold
+   * is measured on the QUEUE (`queueLength`/`currentIndex`), not the set's member
+   * count, so it stays correct after the user edits the queue.
+   */
+  refillIfNeeded(
+    sessionId: string,
+    queueLength: number,
+    currentIndex: number,
+  ): Promise<Track[] | null>;
 }
 
 export function createDjEngine(deps: {
@@ -124,12 +132,17 @@ export function createDjEngine(deps: {
     }
   }
 
-  async function refillIfNeeded(sessionId: string, currentIndex: number): Promise<Track[] | null> {
+  async function refillIfNeeded(
+    sessionId: string,
+    queueLength: number,
+    currentIndex: number,
+  ): Promise<Track[] | null> {
     const session = await getSession(sessionId, db);
     if (!session) return null;
     // Only DJ-enabled sets auto-generate; pure upload/curated sets never refill.
     if (!session.config.autoExtend) return null;
-    if (!shouldAutoExtend(session.trackIds.length, currentIndex, session.config.refillThreshold)) {
+    // Measured on the play queue (what's actually left to play), not the set count.
+    if (!shouldAutoExtend(queueLength, currentIndex, session.config.refillThreshold)) {
       return null;
     }
     return draft(sessionId);

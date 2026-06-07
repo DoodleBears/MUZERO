@@ -395,11 +395,12 @@ async function maybeRefill(
   set: (p: Partial<PlayerState>) => void,
   get: () => PlayerState,
 ): Promise<void> {
-  const { activeSessionId, currentIndex, isDrafting, djEnabled } = get();
+  const { activeSessionId, currentIndex, isDrafting, djEnabled, queue } = get();
   if (!activeSessionId || !djEngine || isDrafting || !djEnabled) return;
   set({ isDrafting: true });
   try {
-    const refilled = await djEngine.refillIfNeeded(activeSessionId, currentIndex);
+    // Refill is measured on the play queue (what's left to play), not set count.
+    const refilled = await djEngine.refillIfNeeded(activeSessionId, queue.length, currentIndex);
     if (refilled && refilled.length > 0)
       log.info("player", `DJ extended the set by ${refilled.length}`);
   } catch (err) {

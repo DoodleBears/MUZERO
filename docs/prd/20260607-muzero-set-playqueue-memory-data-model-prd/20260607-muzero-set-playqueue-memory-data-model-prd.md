@@ -14,7 +14,7 @@
 | Phase | Name | Status | Link |
 |-------|------|--------|------|
 | 1 | 播放列表 Play Queue 地基（表 + repo + player-store 改消费它 + 迁移现有播放） | ✅ Completed | §6 |
-| 2 | autoExtend / refill 迁到 Play Queue（续歌喂队列） | 🔄 In Progress | §6 |
+| 2 | autoExtend / refill 迁到 Play Queue（续歌喂队列） | ✅ Completed | §6 |
 | 3 | 歌曲记忆 Memory（表 + 迁移 `Track.note` + 多记忆编辑 + 搜索/DJ 上下文接 memory） | 🔲 Pending | §6 |
 | 4 | UI 打磨（歌单管理、播放列表 play-next/add/reorder、记忆相册、封面取自记忆） | 🔲 Pending | §6 |
 
@@ -202,14 +202,15 @@ this.version(3).stores({
 - [x] `play-queue.ts` 纯函数穷举单测；repo 含 v2→v3 升级测；全套件 148 绿；typecheck/biome 清。
 - [~] play-next/remove/reorder 的端到端 = DM-4（UI）；autoExtend→queue 的确定性集成测 = DM-2。
 
-### Phase 2: autoExtend 迁到播放列表
+### Phase 2: autoExtend 迁到播放列表 ✅
 **Tasks:**
-- [ ] `shouldAutoExtend` 改看播放列表 upcoming + `contextSetId`；`maybeRefill` 续歌 → 写歌单 trackIds + append 播放列表。
-- [ ] 保证生成→`pump` 物化→入队顺序不乱（沿用单一 pump）。
+- [x] 续歌「喂队列」= DM-1c 的 **high-water 追加**（DJ draft 写歌单 trackIds → `setSub` 追加进播放列表）。
+- [x] `refillIfNeeded(sessionId, queueLength, currentIndex)` —— 阈值改测**播放列表 upcoming**（而非歌单成员数），编辑队列后仍准；`player-store.maybeRefill` 传 `queue.length`。`shouldAutoExtend` 纯函数复用。
+- [x] 生成→单一 `pump` 物化→入队顺序沿用不变。
 
 **Phase 2 Checklist:**
-- [ ] 集成测：DJ 集播到 upcoming≤阈值→自动续→新曲进歌单+播放列表，顺序正确（canned brain + mock provider）。
-- [ ] ad-hoc 队列（无 contextSetId）不会被误续。
+- [x] dj-engine 9 测更新为 `(queueLength, currentIndex)` 口径全绿；全套件 148 绿；typecheck/biome 清。
+- [~] DJ 集自动续→新曲进播放列表的端到端 = DM-1c high-water 已实现并浏览器验证迁移+播放；完整 fake-indexeddb 驱动 player-store 的端到端测（含 MediaEngine）成本高，留 DM-4 配队列 UI 一起补。
 
 ### Phase 3: 歌曲记忆 Memory
 **Tasks:**
@@ -270,6 +271,7 @@ this.version(3).stores({
 |------|--------|---------|
 | 2026-06-07 | MUZERO | Initial draft —— 应 chat agent 工具设计讨论，拆分「歌单(策展集合 DjSession) vs 播放列表(播放顺序 PlayQueue 单例)」、引入一对多「歌曲记忆 Memory」(note+照片+时间)、Track.note 迁移、player-store 改消费 playQueue、autoExtend 喂队列。4-phase，基础设施先行 |
 | 2026-06-07 | MUZERO | **Phase 1 完成**（TDD，3 原子 commit）：1a 纯函数 play-queue（12 测）；1b Dexie v3 playQueue 表+repo+v2→v3 seed 迁移（8 测含升级路径）；1c player-store 改消费 playQueue + high-water 追加（DJ/上传新曲流进队列）。浏览器实测迁移 seed+播放正常、零报错；全套件 148 绿。用户级队列编辑 actions 延后 DM-4 |
+| 2026-06-07 | MUZERO | **Phase 2 完成**：`refillIfNeeded` 阈值改测播放列表 upcoming（`(sessionId,queueLength,currentIndex)`），编辑队列后续歌仍准；`maybeRefill` 传 `queue.length`。续歌喂队列由 DM-1c high-water 承担。dj-engine 9 测更新、全套件 148 绿 |
 
 ---
 

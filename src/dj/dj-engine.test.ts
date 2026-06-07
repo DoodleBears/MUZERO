@@ -146,8 +146,8 @@ describe("DjEngine.refillIfNeeded (续上歌单)", () => {
     const engine = createDjEngine({ db, brain, provider: createMockMusicGenProvider() });
     await engine.draft(session.id); // queue: A B C
 
-    // currentIndex 0 → 2 upcoming > threshold 1 → no refill
-    expect(await engine.refillIfNeeded(session.id, 0)).toBeNull();
+    // queueLength 3, currentIndex 0 → 2 upcoming > threshold 1 → no refill
+    expect(await engine.refillIfNeeded(session.id, 3, 0)).toBeNull();
   });
 
   it("refills and feeds recent titles back to the brain for continuity", async () => {
@@ -162,8 +162,8 @@ describe("DjEngine.refillIfNeeded (续上歌单)", () => {
     await engine.materializeNext(session.id);
     await engine.materializeNext(session.id);
 
-    // currentIndex 1 → 0 upcoming ≤ threshold 1 → refill
-    const refill = await engine.refillIfNeeded(session.id, 1);
+    // queueLength 2, currentIndex 1 → 0 upcoming ≤ threshold 1 → refill
+    const refill = await engine.refillIfNeeded(session.id, 2, 1);
     expect(refill).not.toBeNull();
     expect(refill).toHaveLength(1);
     expect(refill![0].title).toBe("C");
@@ -181,7 +181,7 @@ describe("DjEngine.refillIfNeeded (续上歌单)", () => {
     const brain = scriptedBrain([[brief("Nope")]]);
     const engine = createDjEngine({ db, brain, provider: createMockMusicGenProvider() });
     // Even with an empty queue (well below threshold), autoExtend off ⇒ no draft.
-    expect(await engine.refillIfNeeded(session.id, -1)).toBeNull();
+    expect(await engine.refillIfNeeded(session.id, 0, -1)).toBeNull();
     expect(brain.calls).toBe(0);
   });
 });
