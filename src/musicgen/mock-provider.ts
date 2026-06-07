@@ -16,6 +16,7 @@ export function createMockMusicGenProvider(opts?: {
   return {
     id: "mock",
     label: "Mock synth (offline)",
+    providerPreset: "mock",
     requiresConfig: false,
 
     async generate({ brief, signal, onProgress }: MusicGenRequest): Promise<MusicGenResult> {

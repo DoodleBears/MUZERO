@@ -2,6 +2,7 @@ import type { AppSettings } from "@/db/types";
 import { createCloudMusicGenProvider } from "./cloud-provider";
 import { createMockMusicGenProvider } from "./mock-provider";
 import { resolveCloudPreset } from "./presets";
+import { musicGenProviderPresetKey } from "./provenance";
 import type { MusicGenProvider } from "./provider";
 
 export type MusicGenProviderId = "mock" | "cloud";
@@ -27,6 +28,11 @@ export function resolveMusicGenProvider(settings: AppSettings): MusicGenProvider
           createPath: preset.defaults.createPath,
           statusPath: preset.defaults.statusPath,
           authScheme: preset.authScheme,
+          providerPreset: musicGenProviderPresetKey({
+            provider: "cloud",
+            cloudPreset: preset.id,
+            model: settings.musicCloudModel ?? preset.defaults.model,
+          }),
         },
         preset.mappers,
       );

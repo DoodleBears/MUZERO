@@ -34,6 +34,8 @@ export interface MusicGenResult {
 export interface MusicGenProvider {
   readonly id: string;
   readonly label: string;
+  /** Display/provenance key for the concrete vendor/model used by this provider. */
+  readonly providerPreset?: string;
   /** Whether this provider needs the user to configure an endpoint / API key. */
   readonly requiresConfig: boolean;
   generate(req: MusicGenRequest): Promise<MusicGenResult>;

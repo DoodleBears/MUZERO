@@ -226,7 +226,7 @@ this.version(3).stores({
 **Phase 3b — UI + provenance（待并行 Now Playing 重设计提交后接力）🔲:**
 - [ ] `annotation-editor` 改记忆列表（加/编辑/删/照片/时间线）——文件在 WIP，待其落地。
 - [ ] `search-page` 用 `memoryNotesByTrack` join 记忆进搜索（`useLiveQuery` memories）。
-- [ ] providerPreset 生成时落 `Track` + 自动加一条 provenance Memory（musicgen Q5；接 PROVENANCE 字段）。
+- [x] providerPreset 生成时落 `Track` + 自动加一条 provenance Memory（musicgen Q5；mock 仅字段不写 Memory，避免测试/本地占位污染 DJ 记忆）。
 - [ ] 验收：一首歌可加多条记忆（含照片）；搜索命中记忆文字；DJ 上下文带记忆；生成曲自动带 provenance Note。（数据层已就绪，仅差 UI 接线）
 
 ### Phase 4: UI 打磨
@@ -279,6 +279,7 @@ this.version(3).stores({
 | 2026-06-07 | MUZERO | Initial draft —— 应 chat agent 工具设计讨论，拆分「歌单(策展集合 DjSession) vs 播放列表(播放顺序 PlayQueue 单例)」、引入一对多「歌曲记忆 Memory」(note+照片+时间)、Track.note 迁移、player-store 改消费 playQueue、autoExtend 喂队列。4-phase，基础设施先行 |
 | 2026-06-07 | MUZERO | **Phase 1 完成**（TDD，3 原子 commit）：1a 纯函数 play-queue（12 测）；1b Dexie v3 playQueue 表+repo+v2→v3 seed 迁移（8 测含升级路径）；1c player-store 改消费 playQueue + high-water 追加（DJ/上传新曲流进队列）。浏览器实测迁移 seed+播放正常、零报错；全套件 148 绿。用户级队列编辑 actions 延后 DM-4 |
 | 2026-06-07 | MUZERO | **Phase 2 完成**：`refillIfNeeded` 阈值改测播放列表 upcoming（`(sessionId,queueLength,currentIndex)`），编辑队列后续歌仍准；`maybeRefill` 传 `queue.length`。续歌喂队列由 DM-1c high-water 承担。dj-engine 9 测更新、全套件 148 绿 |
+| 2026-06-07 | Codex | 推进 PROVENANCE runtime：`createPendingTrack` 接 `providerPreset` + provenance Memory；chat generate 工具从 Settings 写 cloud preset/model（如 `mureka:mureka-6`）；DJ engine 从 `MusicGenProvider.providerPreset` 写入。补 repo/chat/DJ/musicgen 测试；`make check` 通过（50 files / 361 tests）。 |
 
 ---
 

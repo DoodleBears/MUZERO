@@ -11,6 +11,10 @@ import {
 } from "@/db/repositories";
 import type { Track } from "@/db/types";
 import { log } from "@/lib/logger";
+import {
+  generatedTrackMemoryNote,
+  musicGenProviderPresetKeyFromProvider,
+} from "@/musicgen/provenance";
 import type { MusicGenProvider } from "@/musicgen/provider";
 import { shouldAutoExtend } from "@/player/queue";
 import { type TrackBrief, trackBriefSchema } from "./dj-brief-schema";
@@ -94,8 +98,22 @@ export function createDjEngine(deps: {
     if (briefs.length === 0) return [];
 
     const created: Track[] = [];
+    const providerPreset = musicGenProviderPresetKeyFromProvider(provider);
     for (const brief of briefs) {
-      const track = await createPendingTrack({ sessionId, brief, provider: provider.id }, db);
+      const track = await createPendingTrack(
+        {
+          sessionId,
+          brief,
+          provider: provider.id,
+          providerPreset,
+          provenanceMemoryNote: generatedTrackMemoryNote({
+            seedPrompt: session.seedPrompt,
+            providerPreset,
+            brief,
+          }),
+        },
+        db,
+      );
       created.push(track);
     }
     await prependTrackIds(

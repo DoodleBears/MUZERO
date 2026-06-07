@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { MuzeroDB } from "./muzero-db";
 import {
   addMemory,
+  createPendingTrack,
   createSession,
   createUploadedTrack,
   deleteMemory,
@@ -89,6 +90,36 @@ describe("createUploadedTrack", () => {
     const media = await db.mediaBlobs.get(track.blobId!);
     expect(media?.role).toBe("media");
     expect(media?.bytes).toBe(4);
+  });
+});
+
+describe("createPendingTrack provenance", () => {
+  it("stores provider preset provenance and creates a first memory note", async () => {
+    const session = await createSession({ seedPrompt: "late rain" }, db);
+
+    const track = await createPendingTrack(
+      {
+        sessionId: session.id,
+        provider: "cloud",
+        providerPreset: "mureka:mureka-6",
+        provenanceMemoryNote: "DJ generated for late rain · mureka:mureka-6 · soft handoff",
+        brief: {
+          title: "Rain Relay",
+          caption: "rainy garage",
+          lyrics: "",
+          durationSec: 60,
+          djNote: "soft handoff",
+        },
+      },
+      db,
+    );
+
+    expect(track.providerPreset).toBe("mureka:mureka-6");
+    const reloaded = await getTrack(track.id, db);
+    expect(reloaded?.providerPreset).toBe("mureka:mureka-6");
+    expect(await memoryNotesByTrack([track.id], db)).toEqual(
+      new Map([[track.id, ["DJ generated for late rain · mureka:mureka-6 · soft handoff"]]]),
+    );
   });
 });
 

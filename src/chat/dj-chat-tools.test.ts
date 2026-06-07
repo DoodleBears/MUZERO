@@ -1,6 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { MuzeroDB } from "@/db/muzero-db";
-import { createSession, getPlayQueue, getSession } from "@/db/repositories";
+import {
+  createSession,
+  getPlayQueue,
+  getSession,
+  memoryNotesByTrack,
+  saveSettings,
+} from "@/db/repositories";
 import { trackBriefSchema } from "@/dj/dj-brief-schema";
 import {
   createDjChatTools,
@@ -78,6 +84,45 @@ describe("DJ chat tools", () => {
     expect((await getSession(session.id, db))?.trackIds).toEqual(result.diff.createdTrackIds);
     expect((await getPlayQueue(db)).entries.map((entry) => entry.trackId)).toEqual(
       result.diff.createdTrackIds,
+    );
+  });
+
+  it("records cloud preset provenance and a generated memory note", async () => {
+    await saveSettings(
+      {
+        musicGenProvider: "cloud",
+        musicCloudPreset: "mureka",
+        musicCloudModel: "mureka-6",
+      },
+      db,
+    );
+    const session = await createSession({ seedPrompt: "rain city" }, db);
+    const brief = trackBriefSchema.parse({
+      title: "Rain Memory",
+      caption: "rainy city pop",
+      lyrics: "",
+      durationSec: 60,
+      djNote: "keeps the walk moving",
+    });
+
+    const result = await executeGenerateTracks(
+      {
+        sessionId: session.id,
+        briefs: [brief],
+        playNext: false,
+      },
+      { db },
+    );
+
+    const track = await db.tracks.get(result.diff.createdTrackIds[0]);
+    expect(track?.providerPreset).toBe("mureka:mureka-6");
+    expect(await memoryNotesByTrack(result.diff.createdTrackIds, db)).toEqual(
+      new Map([
+        [
+          result.diff.createdTrackIds[0],
+          ["DJ generated for rain city · mureka:mureka-6 · keeps the walk moving"],
+        ],
+      ]),
     );
   });
 

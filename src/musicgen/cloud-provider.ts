@@ -27,6 +27,8 @@ export interface CloudMusicGenConfig {
   apiKey?: string;
   /** Optional model id the vendor expects. */
   model?: string;
+  /** Display/provenance key for the concrete preset/model. */
+  providerPreset?: string;
   /** Path appended to baseUrl to create a generation job. Default "/music". */
   createPath?: string;
   /** Path template to poll a job; "{id}" is replaced. Default "/music/{id}". */
@@ -163,6 +165,7 @@ export function createCloudMusicGenProvider(
   return {
     id: "cloud",
     label: "Cloud API (BYOK)",
+    providerPreset: cfg.providerPreset,
     requiresConfig: true,
 
     async generate({ brief, signal, onProgress }: MusicGenRequest): Promise<MusicGenResult> {

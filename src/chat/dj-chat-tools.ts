@@ -24,6 +24,11 @@ import type { PlayQueue, Track } from "@/db/types";
 import { describeBrief, type TrackBrief, trackBriefSchema } from "@/dj/dj-brief-schema";
 import { newId } from "@/lib/id";
 import { searchTracks } from "@/lib/track-search";
+import {
+  generatedTrackMemoryNote,
+  musicGenProviderPresetKey,
+  musicGenProviderPresetKeyFromSettings,
+} from "@/musicgen/provenance";
 
 export const agentWriteResultSchema = z.object({
   status: z.enum(["ok", "error"]),
@@ -108,9 +113,27 @@ export async function executeGenerateTracks(
 
   const settings = deps.providerId ? undefined : await getSettings(db);
   const provider = deps.providerId ?? settings?.musicGenProvider ?? "mock";
+  const providerPreset = settings
+    ? musicGenProviderPresetKeyFromSettings(settings)
+    : musicGenProviderPresetKey({ provider });
   const created: Track[] = [];
   for (const brief of input.briefs) {
-    created.push(await createPendingTrack({ sessionId: session.id, brief, provider }, db));
+    created.push(
+      await createPendingTrack(
+        {
+          sessionId: session.id,
+          brief,
+          provider,
+          providerPreset,
+          provenanceMemoryNote: generatedTrackMemoryNote({
+            seedPrompt: session.seedPrompt,
+            providerPreset,
+            brief,
+          }),
+        },
+        db,
+      ),
+    );
   }
   const ids = created.map((track) => track.id);
   await prependTrackIds(session.id, ids, db);

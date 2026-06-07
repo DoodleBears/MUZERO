@@ -183,7 +183,13 @@ export async function removeTrackFromSession(
 // ------------------------------------------------------------------ tracks ----
 
 export async function createPendingTrack(
-  input: { sessionId: string; brief: TrackBrief; provider: string },
+  input: {
+    sessionId: string;
+    brief: TrackBrief;
+    provider: string;
+    providerPreset?: string;
+    provenanceMemoryNote?: string;
+  },
   db: MuzeroDB = defaultDb,
 ): Promise<Track> {
   const track: Track = {
@@ -194,6 +200,7 @@ export async function createPendingTrack(
     origin: "generated",
     brief: input.brief,
     provider: input.provider,
+    providerPreset: input.providerPreset,
     status: "pending",
     durationSec: input.brief.durationSec,
     createdAt: Date.now(),
@@ -201,7 +208,18 @@ export async function createPendingTrack(
     liked: false,
     tags: [],
   };
-  await db.tracks.put(track);
+  await db.transaction("rw", db.tracks, db.memories, async () => {
+    await db.tracks.put(track);
+    const note = input.provenanceMemoryNote?.trim();
+    if (note) {
+      await db.memories.add({
+        id: newId("mem"),
+        trackId: track.id,
+        note,
+        createdAt: track.createdAt,
+      });
+    }
+  });
   return track;
 }
 
