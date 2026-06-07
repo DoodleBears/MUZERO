@@ -41,7 +41,7 @@ PRD: [`20260607-muzero-set-playqueue-memory-data-model-prd`](docs/prd/20260607-m
 
 PRD: [`20260607-muzero-ai-dj-chat-agent-panel-prd`](docs/prd/20260607-muzero-ai-dj-chat-agent-panel-prd/20260607-muzero-ai-dj-chat-agent-panel-prd.md)
 
-- [ ] **CHAT-1 runtime 地基** — `muzero-db` chatSessions 表 + Runtime Actor（模块作用域 + `Chat`+自定义 `ChatTransport`+`ToolLoopAgent`，`resolveDjModel`+`getAppFetch`）+ chat-store + 单 session 流式 + `streamdown`（加依赖 + Tailwind `@source`）+ 补 `textarea` 原语。
+- [x] **CHAT-1 runtime 地基** ✅ — `muzero-db` v5 `chatSessions` 表 + Runtime Actor（模块作用域 + `Chat`+懒解析 `ToolLoopAgent` transport，`resolveDjModel`+`getAppFetch`）+ chat-store + 单 session 流式/快照恢复 + `streamdown`（加依赖；组件内导入 package CSS，未触碰 dirty `styles.css`）+ 补 `textarea` 原语。
   - 验收：send→stream→快照落库→重建 actor 恢复（fake-indexeddb）；runtime 全模块作用域；`make check` 绿。
 - [ ] **CHAT-2 三形态外壳** — `mode: fab|bar|dock|fullscreen` + FAB + 底部输入条 + Dock(桌面 1∕3 / 移动全屏) + **顶部 Notification toast 折叠态回复**（`motion/react`，仿 anysoul MessageToast）。
   - 验收：三形态切换+偏好持久化；折叠态回复弹通知/点击展开；preview 实测零报错。

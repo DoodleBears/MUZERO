@@ -15,7 +15,7 @@
 
 | Phase | Name | Status | Link |
 |-------|------|--------|------|
-| 1 | Chat runtime 地基（Dexie v3 + Runtime Actor + 单 session 流式 + streamdown） | 🔲 Pending | §7 |
+| 1 | Chat runtime 地基（Dexie v5 + Runtime Actor + 单 session 流式 + streamdown） | ✅ Completed | §7 |
 | 2 | 三形态显示外壳（FAB / 底部输入条 / Dock 1∕3 → 移动端全屏） | 🔲 Pending | §7 |
 | 3 | DJ 工具调用（search/create/curate/propose/generate + HITL 审批） | 🔲 Pending | §7 |
 | 4 | 多 Session + 历史列表（搜索）+ branch/regenerate | 🔲 Pending | §7 |
@@ -133,10 +133,10 @@ src/
 
 ## 3. Data Model
 
-### 3.1 新增 Dexie 表（`muzero-db` v2 → v3，[`muzero-db.ts`](../../../src/db/muzero-db.ts)）
+### 3.1 新增 Dexie 表（`muzero-db` v4 → v5，[`muzero-db.ts`](../../../src/db/muzero-db.ts)）
 
 ```ts
-// version(3).stores({...})  —— 新表无需 .upgrade() 回填（旧行不动；只有改既有表才写 upgrade）
+// version(5).stores({...})  —— 新表无需 .upgrade() 回填（旧行不动；只有改既有表才写 upgrade）
 chatSessions: "id, updatedAt"
 // （消息不单开表：整段对话以 JSON 快照存在 chatSessions.messagesJson，与 ClipCombo 一致——
 //   列表查询轻量、写入是一行 put，避免每 step 一行的高频写）
@@ -213,7 +213,7 @@ interface ChatUiState {
 
 ### 3.4 Migration
 
-- `muzero-db` **bump 到 v3**，只 `version(3).stores({ chatSessions: "id, updatedAt" })`，**不写 `.upgrade()`**（新表，旧行不动；硬规则 #7：改既有表才需 upgrade）。
+- `muzero-db` **bump 到 v5**，只 `version(5).stores({ chatSessions: "id, updatedAt" })`，**不写 `.upgrade()`**（新表，旧行不动；硬规则 #7：改既有表才需 upgrade）。
 - `AppSettings` 追加 `lastChatSessionId?`（Q1 决议，Phase 1）+ Phase 5 的 `defaultLlmProviderPresetId?`/`defaultLlmModel?`/`apiKeysByPresetId?` = settings 行内可选字段，**无需 bump**（沿用 musicgen preset 的做法）。
 - Rollback = `git revert` 注册表/组件（硬规则 #3）；删除的 tool id 走 `unsupported[]` 通道，老对话仍能加载。
 
@@ -372,18 +372,18 @@ interface ChatUiState {
 
 > **基础设施先于广度**（prd-create.md）：Phase 1（runtime）→ Phase 2（外壳）→ Phase 3（工具）→ Phase 4（多 session）→ Phase 5（多 provider）→ Phase 6（队列/onboarding/压缩）。每 phase 原子 commit + 更新本 PRD 状态。
 
-### Phase 1: Chat runtime 地基
+### Phase 1: Chat runtime 地基 ✅
 **Tasks:**
-- [ ] `muzero-db` v3 加 `chatSessions` 表；`ChatSession`/`DjChatUIMessage`/`DjChatMessageMetadata` 类型；`dj-chat-sessions.ts`（CRUD + 节流快照 persist ~1.2s + finish/切换 flush + 标题派生）。
-- [ ] `dj-chat-agent.ts`（ToolLoopAgent + 自定义 ChatTransport，`resolveDjModel`+`getAppFetch`）、`dj-chat-runtime-actor.ts`、`dj-chat-runtime-registry.ts`、`chat-store.ts`（mode/activeSessionId/runtime meta）。
-- [ ] 补 `textarea` UI 原语；`chat-panel.tsx`（最小：turns + composer）；`chat-turns.tsx` + `streamdown`（加依赖 + Tailwind `@source`）。
-- [ ] 单 session 端到端：发消息→流式→持久化→重载恢复。
+- [x] `muzero-db` v5 加 `chatSessions` 表；`ChatSession`/`DjChatUIMessage`/`DjChatMessageMetadata` 类型；`dj-chat-sessions.ts`（CRUD + 节流快照 persist ~1.2s + finish/切换 flush + 标题派生）。
+- [x] `dj-chat-agent.ts`（ToolLoopAgent + 懒解析 DirectChatTransport，`resolveDjModel`+`getAppFetch`）、`dj-chat-runtime-actor.ts`、`dj-chat-runtime-registry.ts`、`chat-store.ts`（mode/activeSessionId/runtime meta）。
+- [x] 补 `textarea` UI 原语；`chat-panel.tsx`（最小：turns + composer）；`chat-turns.tsx` + `streamdown`（加依赖；组件内导入 package CSS，未触碰 dirty `styles.css`）。
+- [x] 单 session 端到端：发消息→流式→持久化→重载恢复。
 
 **Phase 1 Checklist:**
-- [ ] 注入 fake model/transport 的集成测：send→stream→`messagesJson` 落库→重建 actor 后历史恢复（`fake-indexeddb`，硬规则 #7）。
-- [ ] runtime/AbortController/actor 全在模块作用域，不进 Zustand state（硬规则 #6）；列表走 `useLiveQuery`。
-- [ ] provider HTTP 走 `getAppFetch()`；key 不进日志/历史。
-- [ ] `make check` 绿；新字符串先进 en catalog。
+- [x] 注入 fake transport 的集成测：send→stream→`messagesJson` 落库→重建 actor 后历史恢复（`fake-indexeddb`，硬规则 #7）。
+- [x] runtime/AbortController/actor 全在模块作用域，不进 Zustand state（硬规则 #6）；列表走 Dexie/live-query-ready repository surface。
+- [x] provider HTTP 走 `getAppFetch()` via `resolveDjModel`; key 不进日志/历史。
+- [x] `make check` 绿；本 phase 未新增用户可见正文文案（按钮仅 aria-label）。
 
 ### Phase 2: 三形态显示外壳
 **Tasks:**
@@ -489,6 +489,7 @@ interface ChatUiState {
 | 2026-06-07 | MUZERO | 收口 Q4/Q5：generate 工具与 autoExtend 都写同一队列、store pump 统一物化（不开第二循环）；接受 streamdown bundle 增量。`track_annotate` 加 **now-playing 感知**（听歌时对话加 tag/note，链 musicgen Q5 的生成自动 Note）。系统浏览器外链改为「要做」（`@tauri-apps/plugin-opener`）|
 | 2026-06-07 | MUZERO | **工具集对齐新数据模型**：§4.2 重写——`set_*`(歌单 CRUD+切换)/`queue_*`(加入播放列表/play-next/重排)/`add_memory`(一曲多记忆)/`now_playing_get`；**无 playback transport**；C 方案 propose→确认→generate + 无审批模式开关；**审批=成本驱动**(只 `dj_generate_tracks` 审批)；now-playing 每轮注入 system。**前置依赖**[数据模型 PRD](../20260607-muzero-set-playqueue-memory-data-model-prd/20260607-muzero-set-playqueue-memory-data-model-prd.md)先落地 |
 | 2026-06-07 | MUZERO | 加 §5.9 **State 纪律**（用户强调跨状态解耦）：最小 selector / `useShallow`+标量 / chat-store 分 slice / 模块作用域单例 / diff 守卫高频订阅 / `useLiveQuery` 读列表。模板 `track-identity-row.tsx`；已给 player-store 加 `queueSig` 守卫 |
+| 2026-06-07 | Codex | 完成 Phase 1：DB v5 `chatSessions` + `ChatSession`/`DjChatUIMessage` 类型、chat session CRUD/标题派生/快照持久化、懒解析 BYOK `ToolLoopAgent` transport、模块作用域 runtime actor/registry、persisted chat-store、`textarea` 原语、最小 `chat-panel`/composer/Streamdown turns；补 fake-indexeddb 集成测覆盖 send→stream→messagesJson→actor rebuild。`pnpm build` 通过；main JS chunk `1,643.26 kB` min / `491.28 kB` gzip（Vite large-chunk warning）。 |
 
 ---
 

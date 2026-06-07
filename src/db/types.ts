@@ -1,3 +1,4 @@
+import type { UIMessage } from "ai";
 import type { TrackBrief } from "@/dj/dj-brief-schema";
 import type { CloudPresetId } from "@/musicgen/presets";
 import type { MusicGenProviderId } from "@/musicgen/registry";
@@ -157,6 +158,38 @@ export interface DjSession {
   updatedAt: number;
 }
 
+export interface DjChatMessageMetadata {
+  /** Original composer text, before future chips/@mentions expand for the model. */
+  composerRaw?: string;
+  /** Marker used by future interrupt flows to show a turn was superseded. */
+  interruptionMarker?: boolean;
+  /** Local-only usage/cost hints; never telemetry. */
+  turnTelemetry?: {
+    inputTokens?: number;
+    outputTokens?: number;
+    costUsd?: number;
+    wallMs?: number;
+  };
+}
+
+export type DjChatUIMessage = UIMessage<DjChatMessageMetadata, never, Record<string, never>>;
+
+/** One local AI DJ chat session; messages are stored as a JSON snapshot. */
+export interface ChatSession {
+  id: string; // newId("cht")
+  title: string;
+  createdAt: number;
+  updatedAt: number;
+  messagesJson: string; // JSON.stringify(DjChatUIMessage[])
+  composerDraftRaw?: string;
+  llmProviderPresetId?: string;
+  llmModel?: string;
+  parentSessionId?: string;
+  forkedFromIndex?: number;
+  queuedPromptsJson?: string;
+  contextStartIndex?: number;
+}
+
 /** Per-set DJ behavior. */
 export interface DjConfig {
   /** Whether the DJ keeps generating audio to fill this set. */
@@ -234,6 +267,8 @@ export interface AppSettings {
   /** Persisted resume point: last active session + index. */
   lastSessionId?: string;
   lastTrackIndex?: number;
+  /** Persisted resume pointer for the AI DJ chat runtime. */
+  lastChatSessionId?: string;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {

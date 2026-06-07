@@ -2,6 +2,7 @@ import Dexie, { type EntityTable } from "dexie";
 import { newId } from "@/lib/id";
 import type {
   AppSettings,
+  ChatSession,
   DjSession,
   MediaBlob,
   Memory,
@@ -22,6 +23,7 @@ export class MuzeroDB extends Dexie {
   settings!: EntityTable<AppSettings, "id">;
   playQueue!: EntityTable<PlayQueue, "id">;
   memories!: EntityTable<Memory, "id">;
+  chatSessions!: EntityTable<ChatSession, "id">;
 
   constructor(name = "muzero-db") {
     super(name);
@@ -121,6 +123,10 @@ export class MuzeroDB extends Dexie {
           }
         }
       });
+
+    // v5 — AI DJ chat sessions. Messages are stored as one JSON snapshot per
+    // session so streaming persistence remains local and simple.
+    this.version(5).stores({ chatSessions: "id, updatedAt" });
   }
 }
 
