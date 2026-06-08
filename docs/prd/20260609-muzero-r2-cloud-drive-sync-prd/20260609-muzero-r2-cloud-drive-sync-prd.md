@@ -1658,7 +1658,7 @@ For a large shared playlist with many trusted devices, the UI should:
 - [ ] Tauri/Electron use the same manifest import path.
 - [x] No R2 write credential is required for subscription.
 - [x] Command/Ctrl+F can search synced remote catalog rows locally.
-- [ ] Invalid manifests do not mutate local IndexedDB.
+- [x] Invalid manifests do not mutate local IndexedDB.
 
 ### Phase 2: R2 Setup Wizard + Connection Validation
 
@@ -1966,3 +1966,4 @@ Do not record secrets, full signed URLs, or media content.
 | 2026-06-09 | MUZERO | Phase 4 pull dry-run/apply flow added: remote set pulls now produce a non-mutating preview, can recreate missing sets as stream-only local rows without downloading media bytes, record pull `syncRuns`, and refuse blocked/conflicted diffs before mutating IndexedDB. |
 | 2026-06-09 | MUZERO | Phase 6 presence foundation started with `muzero-r2-presence-v1` schema, per-device object key helper, TTL-based active filtering, one-minute heartbeat throttling, owner/trusted write-policy checks, and `presenceEnabled: false` default settings. |
 | 2026-06-09 | MUZERO | Phase 6 Settings toggle added for optional Listening Now presence, with en/zh/ja/ko copy explaining trusted writable-drive scope and one-minute heartbeat cost/operations limits. |
+| 2026-06-09 | MUZERO | Phase 1 shared-link registration hardened: public manifest links now register local read-only drive/share rows only after manifest validation succeeds, and invalid/fetch-failed manifests are covered by IndexedDB non-mutation tests. |

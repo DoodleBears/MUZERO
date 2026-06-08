@@ -39,7 +39,7 @@ import {
 } from "@/musicgen/presets";
 import { type MusicGenProviderId, resolveMusicGenProvider } from "@/musicgen/registry";
 import { usePlayerStore } from "@/stores/player-store";
-import { listCloudDrives, upsertCloudDrive, upsertCloudShare } from "@/sync/cloud-drive-repo";
+import { listCloudDrives, upsertCloudDrive } from "@/sync/cloud-drive-repo";
 import { buildOwnedR2Drive, saveR2CredentialsForDrive } from "@/sync/cloud-drive-settings";
 import {
   buildRecommendedR2Cors,
@@ -48,6 +48,7 @@ import {
   maskSecret,
 } from "@/sync/r2-healthcheck";
 import { importRemoteSetStream } from "@/sync/r2-import-stream";
+import { connectReadOnlyManifest } from "@/sync/r2-shared-link";
 import {
   loadRemoteSetIndex,
   type RemoteLibraryPreview,
@@ -250,39 +251,8 @@ export function SettingsPage() {
     setCloudStatus("previewing");
     setCloudError(null);
     try {
-      const result = await checkR2PublicRead(url);
-      if (!result.ok || !result.preview) {
-        throw new Error(
-          result.hint ?? result.checks.at(-1)?.message ?? "Manifest validation failed",
-        );
-      }
-      const preview = result.preview;
-      setCloudPreview(preview);
-      const driveId = localDriveId("drv", preview.libraryId);
-      await upsertCloudDrive({
-        id: driveId,
-        label: preview.title,
-        kind: "shared",
-        provider: "r2",
-        publicBaseUrl: preview.baseUrl,
-        manifestUrl: preview.manifestUrl,
-        capabilities: {
-          read: true,
-          write: false,
-          manageInvites: false,
-          writeStats: false,
-          writePresence: false,
-        },
-      });
-      await upsertCloudShare({
-        id: localDriveId("shr", preview.libraryId),
-        driveId,
-        remoteShareId: preview.libraryId,
-        label: preview.title,
-        manifestUrl: preview.manifestUrl,
-        access: "read-only",
-        lastSyncedAt: Date.now(),
-      });
+      const connection = await connectReadOnlyManifest(url);
+      setCloudPreview(connection.preview);
       setCloudStatus("idle");
     } catch (error) {
       setCloudPreview(null);
@@ -1052,10 +1022,6 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 
 function browserOrigin(): string {
   return globalThis.location?.origin ?? "http://localhost:1420";
-}
-
-function localDriveId(prefix: "drv" | "shr", remoteId: string): string {
-  return `${prefix}_${remoteId.replace(/[^a-zA-Z0-9_-]/g, "_")}`;
 }
 
 function sourceHost(url: string): string {
