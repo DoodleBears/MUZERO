@@ -27,6 +27,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { db } from "@/db/muzero-db";
 import { saveSettings } from "@/db/repositories";
 import type { AppSettings, CloudDrive, LlmProviderId, R2LocalCredentials } from "@/db/types";
 import { useSettings } from "@/hooks/use-app-data";
@@ -61,6 +62,11 @@ import {
   type RemoteLibraryPreview,
   type RemoteSetPreview,
 } from "@/sync/r2-subscription";
+import {
+  type SyncProgressPhase,
+  type SyncProgressSummary,
+  summarizeSyncRunProgress,
+} from "@/sync/sync-progress-summary";
 import {
   customFontStack,
   DEFAULT_FONT_STACK,
@@ -118,11 +124,21 @@ const CLOUD_DRIVE_KIND_LABEL_KEY = {
   "local-only": "settings.cloudDriveKind.local-only",
 } as const satisfies Record<CloudDrive["kind"], string>;
 
+const SYNC_PROGRESS_PHASE_LABEL_KEY = {
+  preparing: "settings.cloudSyncPhasePreparing",
+  uploading: "settings.cloudSyncPhaseUploading",
+  downloading: "settings.cloudSyncPhaseDownloading",
+  completed: "settings.cloudSyncPhaseCompleted",
+  failed: "settings.cloudSyncPhaseFailed",
+  cancelled: "settings.cloudSyncPhaseCancelled",
+} as const satisfies Record<SyncProgressPhase, string>;
+
 /** On-device, BYOK settings. Nothing here is ever sent anywhere but the model/API you point it at. */
 export function SettingsPage() {
   const { t, i18n } = useTranslation();
   const settings = useSettings();
   const cloudDrives = useLiveQuery(() => listCloudDrives(), [], []);
+  const latestSyncRun = useLiveQuery(() => db.syncRuns.orderBy("startedAt").last(), [], undefined);
   const localDevice = useLiveQuery(() => getLocalDevice(), [], undefined);
   const rebuildEngine = usePlayerStore((s) => s.rebuildEngine);
   const setActiveSession = usePlayerStore((s) => s.setActiveSession);
@@ -379,6 +395,7 @@ export function SettingsPage() {
   );
 
   const cloudPreset = resolveCloudPreset(draft.musicCloudPreset);
+  const syncProgress = latestSyncRun ? summarizeSyncRunProgress(latestSyncRun) : undefined;
   const costText =
     cloudPreset.estCostPerSongUsd == null
       ? t("settings.costUnknown")
@@ -849,6 +866,8 @@ export function SettingsPage() {
               </div>
             )}
 
+            {syncProgress && <CloudSyncProgress progress={syncProgress} />}
+
             <Field label={t("settings.cloudManifestUrl")}>
               <Input
                 value={cloudUrl}
@@ -1135,6 +1154,46 @@ function CloudDriveRow({ drive, defaultDriveId }: { drive: CloudDrive; defaultDr
           <Cloud className="size-4" />
         )}
       </div>
+    </div>
+  );
+}
+
+function CloudSyncProgress({ progress }: { progress: SyncProgressSummary }) {
+  const { t } = useTranslation();
+  const percent = Math.round(progress.byteRatio * 100);
+  return (
+    <div className="rounded-md border border-border bg-muted/25 p-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <p className="font-medium text-sm">{t("settings.cloudSyncProgressTitle")}</p>
+          <p className="text-muted-foreground text-xs">
+            {t(SYNC_PROGRESS_PHASE_LABEL_KEY[progress.currentPhase])}
+          </p>
+        </div>
+        <span className="font-medium text-muted-foreground text-xs">{percent}%</span>
+      </div>
+      <div className="mt-3 h-2 overflow-hidden rounded-full bg-background">
+        <div
+          className="h-full rounded-full bg-primary transition-[width]"
+          style={{ width: `${percent}%` }}
+        />
+      </div>
+      <div className="mt-3 grid gap-2 text-muted-foreground text-xs sm:grid-cols-3">
+        <span>
+          {t("settings.cloudSyncObjects", {
+            done: progress.objectsDone,
+            total: progress.objectCount,
+          })}
+        </span>
+        <span>
+          {t("settings.cloudSyncBytes", {
+            done: formatBytes(progress.bytesDone),
+            total: formatBytes(progress.totalBytes),
+          })}
+        </span>
+        <span>{t("settings.cloudSyncFailures", { count: progress.failed })}</span>
+      </div>
+      {progress.error && <p className="mt-2 text-destructive text-xs">{progress.error}</p>}
     </div>
   );
 }

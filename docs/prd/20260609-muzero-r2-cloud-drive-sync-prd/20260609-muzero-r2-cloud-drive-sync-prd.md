@@ -1732,7 +1732,7 @@ For a large shared playlist with many trusted devices, the UI should:
 - [x] Memory photos sync to R2.
 - [ ] Device avatar/profile syncs to R2 only where write permission exists.
 - [x] Set metadata, `TrackBrief`, and normalized `Track.mediaMetadata` sync to R2 set indexes.
-- [ ] Progress shows object count, byte count, current phase, and failures.
+- [x] Progress shows object count, byte count, current phase, and failures.
 - [x] Readers never see a manifest that references not-yet-uploaded objects.
 
 ### Phase 4: Cloud-to-Local Pull Sync + Conflict Handling
@@ -2010,6 +2010,7 @@ Do not record secrets, full signed URLs, or media content.
 | 2026-06-09 | MUZERO | Phase 5 aggregate summary helper added: UI/query layers can merge matching stats across anonymous devices while preserving per-device rows, and can filter `track-in-set` aggregates so the same track has separate counts in different sets. |
 | 2026-06-09 | MUZERO | Phase 3 media object sync coverage completed for export planning: audio, video, track covers, and memory photos are emitted as content-addressed R2 objects, with video set indexes preserving `kind: "video"` and `video/mp4` media metadata. |
 | 2026-06-09 | MUZERO | Phase 3 publish-order safety covered: R2 publish aborts before `manifest.json` when an earlier referenced object such as a set index fails, so readers do not see manifests pointing at missing objects. |
+| 2026-06-09 | MUZERO | Phase 3 sync progress visibility added: Settings now summarizes the latest sync run with current phase, object count, byte count/progress ratio, failure count, and error text backed by a tested progress summary helper. |
 | 2026-06-09 | MUZERO | Phase 5 playback checkpoint export added: event segment publish plans now include `stats/devices/<devicePublicId>/checkpoint.json` with the latest event watermark and immutable segment key. |
 | 2026-06-09 | MUZERO | Phase 5 optional `stats/index.json` discovery completed for stats sync: device entries can point to aggregate cache, checkpoint, and latest immutable event segment without making the index the write-hot source of truth. |
 | 2026-06-09 | MUZERO | Phase 5 stats/profile write policy added: only owner/trusted drives with local R2 credentials may receive stats or opted-in device profiles, keeping read-only shared-link listener data local by default. |
