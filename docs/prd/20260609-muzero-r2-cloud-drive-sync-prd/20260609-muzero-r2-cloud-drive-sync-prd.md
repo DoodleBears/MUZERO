@@ -1691,14 +1691,14 @@ For a large shared playlist with many trusted devices, the UI should:
 
 - [x] Implement local export plan from `sessions`, `tracks`, `memories`, and `mediaBlobs`.
 - [x] Compute object keys for media/video/cover/memory photos.
-- [ ] Upload missing/changed media first.
-- [ ] Upload per-set `index.json`.
+- [x] Upload missing/changed media first.
+- [x] Upload per-set `index.json`.
 - [ ] Upload the current device `DevicePublicProfile` when profile publishing is enabled.
 - [ ] Upload per-device stats objects only for the current device or explicitly granted trusted devices.
 - [ ] Rebuild optional `devices/index.json`, `stats/index.json`, and `presence/index.json` as owner-maintained discovery indexes.
-- [ ] Upload root `manifest.json` last.
+- [x] Upload root `manifest.json` last.
 - [ ] Persist `syncObjects` mapping and `syncRuns`.
-- [ ] Add cancel support between objects.
+- [x] Add cancel support between objects.
 
 ### Phase 3 Checklist
 
@@ -1955,3 +1955,4 @@ Do not record secrets, full signed URLs, or media content.
 | 2026-06-09 | MUZERO | Phase 2 R2 healthcheck core added for public manifest read validation, S3-compatible write probes, secret masking, and recommended CORS JSON generation. |
 | 2026-06-09 | MUZERO | Phase 2 Settings Cloud Drive wizard completed with setup checklist, shared-link registry, owner validation, local-only R2 credentials, copyable CORS JSON, connected-drive list, and en/zh/ja/ko strings. |
 | 2026-06-09 | MUZERO | Phase 3 implementation started: local export plan now collects set/track/memory/media rows, computes content-addressed R2 keys for media/cover/memory photos, emits per-set index writes, and keeps root manifest last. |
+| 2026-06-09 | MUZERO | Phase 3 R2 publish executor added with shared S3 signing, HEAD-based skips for content-addressed binary objects, ordered PUT uploads for indexes/manifests, progress events, and between-object cancellation. |

@@ -1,16 +1,11 @@
+import type { R2LocalCredentials } from "@/db/types";
 import { getAppFetch } from "@/lib/platform";
+import { r2SignedFetch } from "./r2-s3";
 import type { RemoteLibraryPreview, SyncFetch } from "./r2-subscription";
 import { subscribeManifest } from "./r2-subscription";
 import { normalizeManifestUrl } from "./r2-url";
 
-export interface R2WriteCredentials {
-  accountId: string;
-  bucket: string;
-  accessKeyId: string;
-  secretAccessKey: string;
-  prefix?: string;
-  endpointUrl?: string;
-}
+export type R2WriteCredentials = R2LocalCredentials;
 
 export type R2CheckStatus = "passed" | "failed" | "skipped";
 
@@ -38,7 +33,6 @@ export interface R2HealthcheckOptions {
   now?: () => Date;
 }
 
-const EMPTY_SHA256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
 const CORS_HINT =
   "Check the R2 bucket CORS policy. Browser mode needs GET/HEAD for public read and PUT/DELETE with Authorization headers for owner sync.";
 
@@ -102,14 +96,20 @@ export async function checkR2WriteAccess(
   }
 
   const fetcher = options.fetcher ?? (await getAppFetch());
-  const objectUrl = buildR2ObjectUrl(credentials, ".muzero-healthcheck.json");
   const body = JSON.stringify({
     schema: "muzero-r2-healthcheck-v1",
     checkedAt: (options.now?.() ?? new Date()).toISOString(),
   });
 
   const checks: R2ConnectionCheck[] = [];
-  const put = await signedFetch(fetcher, credentials, "PUT", objectUrl, body, options.now);
+  const put = await signedFetch(
+    fetcher,
+    credentials,
+    "PUT",
+    ".muzero-healthcheck.json",
+    body,
+    options.now,
+  );
   if (!put.ok) {
     return {
       ok: false,
@@ -125,7 +125,14 @@ export async function checkR2WriteAccess(
   }
   checks.push({ id: "write-put", status: "passed", message: "Probe object uploaded." });
 
-  const head = await signedFetch(fetcher, credentials, "HEAD", objectUrl, undefined, options.now);
+  const head = await signedFetch(
+    fetcher,
+    credentials,
+    "HEAD",
+    ".muzero-healthcheck.json",
+    undefined,
+    options.now,
+  );
   if (!head.ok) {
     return {
       ok: false,
@@ -146,7 +153,7 @@ export async function checkR2WriteAccess(
     fetcher,
     credentials,
     "DELETE",
-    objectUrl,
+    ".muzero-healthcheck.json",
     undefined,
     options.now,
   );
@@ -194,35 +201,23 @@ function validateR2WriteCredentials(credentials: R2WriteCredentials): string | n
   return null;
 }
 
-function buildR2ObjectUrl(credentials: R2WriteCredentials, objectName: string): string {
-  const endpoint =
-    credentials.endpointUrl?.replace(/\/+$/, "") ??
-    `https://${credentials.accountId}.r2.cloudflarestorage.com`;
-  const parts = [credentials.bucket, trimSlashes(credentials.prefix), objectName].filter(Boolean);
-  return `${endpoint}/${parts.map(encodePathSegment).join("/")}`;
-}
-
 async function signedFetch(
   fetcher: SyncFetch,
   credentials: R2WriteCredentials,
   method: "PUT" | "HEAD" | "DELETE",
-  url: string,
+  key: string,
   body?: string,
   now?: () => Date,
 ): Promise<{ ok: true } | { ok: false; message: string; hint?: string }> {
   try {
-    const headers = await signS3Request({
+    const response = await r2SignedFetch({
+      fetcher,
+      credentials,
       method,
-      url,
+      key,
       body,
-      accessKeyId: credentials.accessKeyId,
-      secretAccessKey: credentials.secretAccessKey,
-      now: now?.() ?? new Date(),
-    });
-    const response = await fetcher(url, {
-      method,
-      headers,
-      body,
+      contentType: "application/json",
+      now,
     });
     if (!response.ok) {
       return { ok: false, message: `R2 ${method} failed with HTTP ${response.status}` };
@@ -235,102 +230,6 @@ async function signedFetch(
       hint: isLikelyCorsError(error) ? CORS_HINT : undefined,
     };
   }
-}
-
-async function signS3Request(input: {
-  method: string;
-  url: string;
-  body?: string;
-  accessKeyId: string;
-  secretAccessKey: string;
-  now: Date;
-}): Promise<Record<string, string>> {
-  const url = new URL(input.url);
-  const amzDate = toAmzDate(input.now);
-  const date = amzDate.slice(0, 8);
-  const payloadHash = input.body == null ? EMPTY_SHA256 : await sha256Hex(input.body);
-  const headers: Record<string, string> = {
-    "content-type": "application/json",
-    host: url.host,
-    "x-amz-content-sha256": payloadHash,
-    "x-amz-date": amzDate,
-  };
-  const signedHeaders = Object.keys(headers).sort().join(";");
-  const canonicalHeaders = Object.keys(headers)
-    .sort()
-    .map((key) => `${key}:${headers[key]?.trim()}\n`)
-    .join("");
-  const canonicalRequest = [
-    input.method,
-    canonicalUri(url.pathname),
-    url.searchParams.toString(),
-    canonicalHeaders,
-    signedHeaders,
-    payloadHash,
-  ].join("\n");
-  const scope = `${date}/auto/s3/aws4_request`;
-  const stringToSign = ["AWS4-HMAC-SHA256", amzDate, scope, await sha256Hex(canonicalRequest)].join(
-    "\n",
-  );
-  const signingKey = await deriveSigningKey(input.secretAccessKey, date);
-  const signature = await hmacHex(signingKey, stringToSign);
-  return {
-    ...headers,
-    authorization: `AWS4-HMAC-SHA256 Credential=${input.accessKeyId}/${scope}, SignedHeaders=${signedHeaders}, Signature=${signature}`,
-  };
-}
-
-async function deriveSigningKey(secret: string, date: string): Promise<ArrayBuffer> {
-  const kDate = await hmacRaw(`AWS4${secret}`, date);
-  const kRegion = await hmacRaw(kDate, "auto");
-  const kService = await hmacRaw(kRegion, "s3");
-  return hmacRaw(kService, "aws4_request");
-}
-
-async function sha256Hex(value: string): Promise<string> {
-  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
-  return toHex(digest);
-}
-
-async function hmacRaw(key: string | ArrayBuffer, value: string): Promise<ArrayBuffer> {
-  const cryptoKey = await crypto.subtle.importKey(
-    "raw",
-    typeof key === "string" ? new TextEncoder().encode(key) : key,
-    { name: "HMAC", hash: "SHA-256" },
-    false,
-    ["sign"],
-  );
-  return crypto.subtle.sign("HMAC", cryptoKey, new TextEncoder().encode(value));
-}
-
-async function hmacHex(key: ArrayBuffer, value: string): Promise<string> {
-  return toHex(await hmacRaw(key, value));
-}
-
-function toHex(buffer: ArrayBuffer): string {
-  return [...new Uint8Array(buffer)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
-}
-
-function toAmzDate(date: Date): string {
-  return date.toISOString().replace(/[:-]|\.\d{3}/g, "");
-}
-
-function canonicalUri(pathname: string): string {
-  return pathname
-    .split("/")
-    .map((segment) => encodePathSegment(decodeURIComponent(segment)))
-    .join("/");
-}
-
-function encodePathSegment(segment: string): string {
-  return encodeURIComponent(segment).replace(
-    /[!'()*]/g,
-    (char) => `%${char.charCodeAt(0).toString(16).toUpperCase()}`,
-  );
-}
-
-function trimSlashes(value?: string): string {
-  return value?.trim().replace(/^\/+|\/+$/g, "") ?? "";
 }
 
 function isLikelyCorsError(error: unknown): boolean {
