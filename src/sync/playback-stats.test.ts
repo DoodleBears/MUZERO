@@ -4,6 +4,7 @@ import type { Track } from "@/db/types";
 import {
   derivePlaybackAggregatesFromEvents,
   rebuildPlaybackAggregatesFromEvents,
+  reconcileTrackPlayCountsFromStats,
   recordPlaybackListen,
   shouldCountAsPlay,
 } from "./playback-stats";
@@ -341,6 +342,46 @@ describe("rebuildPlaybackAggregatesFromEvents", () => {
       "dvc_1:track-in-share:shr_tokyo:remote_trk_1",
       "dvc_1:track:trk_local",
     ]);
+  });
+});
+
+describe("reconcileTrackPlayCountsFromStats", () => {
+  it("rebuilds Track.playCount from per-device track stats", async () => {
+    await db.tracks.update("trk_1", { playCount: 99 });
+    await db.tracks.put(track("trk_2"));
+    await db.trackPlaybackStats.bulkPut([
+      {
+        id: "dvc_a:trk_1",
+        devicePublicId: "dvc_a",
+        trackId: "trk_1",
+        playCount: 2,
+        listenedSec: 120,
+        updatedAt: 1000,
+      },
+      {
+        id: "dvc_b:trk_1",
+        devicePublicId: "dvc_b",
+        trackId: "trk_1",
+        playCount: 3,
+        listenedSec: 180,
+        updatedAt: 2000,
+      },
+    ]);
+
+    const result = await reconcileTrackPlayCountsFromStats(db);
+
+    expect(result).toEqual({ checked: 2, updated: 1 });
+    expect((await db.tracks.get("trk_1"))?.playCount).toBe(5);
+    expect((await db.tracks.get("trk_2"))?.playCount).toBe(0);
+  });
+
+  it("can preserve legacy playCount when no per-device stats exist", async () => {
+    await db.tracks.update("trk_1", { playCount: 7 });
+
+    const result = await reconcileTrackPlayCountsFromStats(db, { zeroMissingStats: false });
+
+    expect(result).toEqual({ checked: 1, updated: 0 });
+    expect((await db.tracks.get("trk_1"))?.playCount).toBe(7);
   });
 });
 

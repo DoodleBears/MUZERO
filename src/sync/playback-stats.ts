@@ -31,6 +31,15 @@ export interface RecordPlaybackListenInput {
   context: PlaybackEvent["context"];
 }
 
+export interface ReconcileTrackPlayCountsOptions {
+  zeroMissingStats?: boolean;
+}
+
+export interface ReconcileTrackPlayCountsResult {
+  checked: number;
+  updated: number;
+}
+
 export function shouldCountAsPlay(input: PlayThresholdInput): boolean {
   const listenedSec = Math.max(0, input.listenedSec);
   const durationSec = Math.max(0, input.durationSec);
@@ -125,6 +134,27 @@ export async function rebuildPlaybackAggregatesFromEvents(
     if (aggregates.length > 0) await db.playbackAggregates.bulkPut(aggregates);
   });
   return aggregates;
+}
+
+export async function reconcileTrackPlayCountsFromStats(
+  db: MuzeroDB = defaultDb,
+  options: ReconcileTrackPlayCountsOptions = {},
+): Promise<ReconcileTrackPlayCountsResult> {
+  const zeroMissingStats = options.zeroMissingStats ?? true;
+  let updated = 0;
+  const tracks = await db.tracks.toArray();
+  await db.transaction("rw", db.tracks, db.trackPlaybackStats, async () => {
+    for (const track of tracks) {
+      const stats = await db.trackPlaybackStats.where("trackId").equals(track.id).toArray();
+      if (stats.length === 0 && !zeroMissingStats) continue;
+      const nextPlayCount = stats.reduce((sum, row) => sum + row.playCount, 0);
+      if (track.playCount !== nextPlayCount) {
+        await db.tracks.update(track.id, { playCount: nextPlayCount });
+        updated += 1;
+      }
+    }
+  });
+  return { checked: tracks.length, updated };
 }
 
 async function upsertTrackStats(

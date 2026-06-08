@@ -840,6 +840,17 @@ Track search page:
       "origin": "uploaded",
       "durationSec": 214,
       "tags": ["night", "drive"],
+      "mediaMetadata": {
+        "title": "Blue Highway",
+        "artists": ["Deidian"],
+        "album": "Moonstone Beach",
+        "genres": ["soluna"],
+        "year": 2026,
+        "originalFileName": "04-blue-highway.mp3",
+        "originalMime": "audio/mpeg",
+        "parser": "music-metadata",
+        "parsedAt": 1780944000000
+      },
       "memoryText": "friends sea night",
       "briefCaption": null,
       "artistLike": null,
@@ -877,6 +888,7 @@ export interface RemoteSearchTrack {
   setIds: string[];
   shareIds: string[];
   tags: string[];
+  mediaMetadata?: TrackMediaMetadata;
   kind: TrackKind;
   origin: TrackOrigin;
   durationSec: number;
@@ -919,6 +931,7 @@ Search behavior:
 - Catalog sync is incremental by `updatedAt`, page ETag, and page hash.
 - Search text should be normalized locally: lowercase, trim, tag tokens, optional CJK-friendly substring matching.
 - Memories and notes are included only if the owner/share projection allows them.
+- `mediaMetadata` is optional and additive. It carries normalized, user-visible fields such as title, artists, album, genre, year, and original import identity when the owner/share projection allows them. It must not include raw native tag frames or embedded cover bytes; cover bytes remain separate media objects.
 
 Performance targets:
 
@@ -959,6 +972,17 @@ Per-set index object:
       "generatedAt": null,
       "liked": true,
       "tags": ["night", "drive"],
+      "mediaMetadata": {
+        "title": "Blue Highway",
+        "artists": ["Deidian"],
+        "album": "Moonstone Beach",
+        "genres": ["soluna"],
+        "year": 2026,
+        "originalFileName": "04-blue-highway.mp3",
+        "originalMime": "audio/mpeg",
+        "parser": "music-metadata",
+        "parsedAt": 1780944000000
+      },
       "brief": null,
       "providerPreset": null,
       "media": {
@@ -1707,7 +1731,7 @@ For a large shared playlist with many trusted devices, the UI should:
 - [ ] Track covers sync to R2.
 - [ ] Memory photos sync to R2.
 - [ ] Device avatar/profile syncs to R2 only where write permission exists.
-- [ ] Set metadata and `TrackBrief` metadata sync to R2.
+- [x] Set metadata, `TrackBrief`, and normalized `Track.mediaMetadata` sync to R2 set indexes.
 - [ ] Progress shows object count, byte count, current phase, and failures.
 - [ ] Readers never see a manifest that references not-yet-uploaded objects.
 
@@ -1776,7 +1800,7 @@ For a large shared playlist with many trusted devices, the UI should:
 - [x] Add optional `stats/index.json` for discovery, but do not make it the write-hot source of truth.
 - [x] Keep public read-only listener stats local when no R2 write credentials are configured.
 - [x] Keep read-only shared-link device profile/avatar local unless the user also has a writable Owner R2 target.
-- [ ] Reconcile existing `Track.playCount` with per-device stats.
+- [x] Reconcile existing `Track.playCount` with per-device stats.
 - [ ] Add tests around play threshold, pause/resume, seek, track change, and app close.
 
 ### Phase 5 Checklist
@@ -1865,7 +1889,7 @@ For a large shared playlist with many trusted devices, the UI should:
 - Secrets never sync to R2.
 - Secrets never appear in manifest/index/stats.
 - Display name and avatar are public within any readable R2 share that references the profile. The UI must label this before publishing profile sync.
-- Manifest may include user-visible titles, tags, notes, and generated lyrics/briefs. The publish UI must warn that public buckets make these readable by anyone with the link.
+- Manifest may include user-visible titles, artists, albums, genres, tags, notes, original import filenames, and generated lyrics/briefs. The publish UI must warn that public buckets make these readable by anyone with the link.
 - Private memories/photos should not be published unless the user chooses that set for sync.
 
 ### 8.4 Browser Risk
@@ -1976,6 +2000,7 @@ Do not record secrets, full signed URLs, or media content.
 | 2026-06-09 | MUZERO | Phase 5 playback event segment export added: R2 publish plans now include immutable per-device `stats/events/<devicePublicId>/...json` segment objects for local `PlaybackEvent` rows while checkpoint/retry policy remains a later slice. |
 | 2026-06-09 | MUZERO | Phase 5 playback aggregate scopes completed: meaningful listens now derive global track, track-in-set, track-in-share, set, share, and drive aggregate rows, preserving remote track ids and media hashes for shared-library stats. |
 | 2026-06-09 | MUZERO | Phase 5 aggregate rebuild helper added: playback event segments can be replayed into deterministic per-device aggregate rows without duplicating or losing play counts. |
+| 2026-06-09 | MUZERO | Phase 5 play-count reconciliation added: local `Track.playCount` can be rebuilt from per-device `TrackPlaybackStats`, with an option to preserve legacy counts for tracks that have no stats rows yet. |
 | 2026-06-09 | MUZERO | Phase 5 playback stats persistence verified with a Dexie reload test covering playback events, per-track stats, and aggregate rows. |
 | 2026-06-09 | MUZERO | Phase 5 remote-only shared listening stats added: playback events can now be recorded with only a remote track reference, deriving local aggregate rows without importing the track or creating local per-track stats. |
 | 2026-06-09 | MUZERO | Phase 5 playback event segment flush policy added: automatic flush thresholds are clamped to 25-100 events or 5-15 minutes, and manual sync may flush a small pending segment. |
