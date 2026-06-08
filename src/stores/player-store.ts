@@ -9,7 +9,6 @@ import {
   getSettings,
   getTrackBlob,
   getTracksByIds,
-  incrementPlayCount,
   playQueueAppend,
   playQueuePlayNext,
   playQueueSet,
@@ -37,6 +36,12 @@ import {
   shufflePrev,
 } from "@/player/queue";
 import { notify } from "@/stores/notification-store";
+import { getOrCreateLocalDevice } from "@/sync/device-repo";
+import {
+  createPlaybackListenTracker,
+  type PlaybackListenFlush,
+} from "@/sync/playback-listen-session";
+import { recordPlaybackListen } from "@/sync/playback-stats";
 
 interface PlayerState {
   activeSessionId: string | null;
@@ -123,6 +128,7 @@ let playbackSettingsLoaded = false;
 // The active shuffled play order (queue indices). Non-reactive: next/prev read it,
 // setShuffle rebuilds it, and it self-heals when stale vs the queue length.
 let shuffleOrder: number[] = [];
+const playbackListenTracker = createPlaybackListenTracker();
 // Signature of the last `queue` we published, so a playQueue-row write that
 // doesn't change the rendered list (e.g. a future currentIndex / repeat persist)
 // doesn't churn the `queue` array and re-render every list consumer.
@@ -165,6 +171,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     mediaEngine = new MediaEngine({
       // Repeat-one is an ended-track behavior only; manual next still advances.
       onEnded: () => {
+        flushPlaybackListen(Date.now());
         const state = get();
         if (state.repeat === "one" && state.currentIndex >= 0) {
           state.seek(0);
@@ -173,8 +180,14 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
         }
         void state.next();
       },
-      onTimeUpdate: (positionSec, durationSec) => set({ positionSec, durationSec }),
-      onPlayStateChange: (isPlaying) => set({ isPlaying }),
+      onTimeUpdate: (positionSec, durationSec) => {
+        set({ positionSec, durationSec });
+        observePlaybackListen(get(), positionSec, durationSec);
+      },
+      onPlayStateChange: (isPlaying) => {
+        if (!isPlaying) flushPlaybackListen(Date.now());
+        set({ isPlaying });
+      },
       onError: (error) => {
         // A playback failure is a notification, not dock chrome — keep it out
         // of the status line (djError stays reserved for DJ/upload errors).
@@ -631,6 +644,7 @@ async function ensureLoadedAndPlay(
     return;
   }
   if (loadedTrackId !== track.id) {
+    flushPlaybackListen(Date.now());
     if (track.blobId) {
       const media = await getTrackBlob(track);
       if (!media) {
@@ -652,12 +666,49 @@ async function ensureLoadedAndPlay(
       await mediaEngine.loadUrl(track.remoteMediaUrl, track.kind);
     }
     loadedTrackId = track.id;
-    void incrementPlayCount(track.id);
   }
   if (wantPlay) {
     log.debug("player", "playing media", { trackId: track.id });
     await mediaEngine.play();
   }
+}
+
+function observePlaybackListen(state: PlayerState, positionSec: number, durationSec: number): void {
+  const track = state.queue[state.currentIndex];
+  if (!track) return;
+  const flushed = playbackListenTracker.update({
+    trackId: track.id,
+    positionSec,
+    durationSec: durationSec || track.durationSec,
+    now: Date.now(),
+    context: {
+      source: track.remoteMediaUrl ? "shared-drive" : "local",
+      setId: state.activeSessionId ?? undefined,
+    },
+  });
+  if (flushed) persistPlaybackListen(flushed);
+}
+
+function flushPlaybackListen(now: number): void {
+  const flushed = playbackListenTracker.flush(now);
+  if (flushed) persistPlaybackListen(flushed);
+}
+
+function persistPlaybackListen(flush: PlaybackListenFlush): void {
+  if (flush.listenedSec <= 0) return;
+  void getOrCreateLocalDevice()
+    .then((device) =>
+      recordPlaybackListen({
+        devicePublicId: device.publicId,
+        trackId: flush.trackId,
+        durationSec: flush.durationSec,
+        listenedSec: flush.listenedSec,
+        startedAt: flush.startedAt,
+        endedAt: flush.endedAt,
+        context: flush.context,
+      }),
+    )
+    .catch((error: unknown) => log.warn("player", "failed to record playback stats", error));
 }
 
 async function afterQueueUpdate(

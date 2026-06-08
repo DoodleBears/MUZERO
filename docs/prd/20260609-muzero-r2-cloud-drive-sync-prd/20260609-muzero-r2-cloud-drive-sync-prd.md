@@ -1763,7 +1763,7 @@ For a large shared playlist with many trusted devices, the UI should:
 - [ ] Add profile `revision` and ETag/hash checks so two offline edits cannot silently overwrite each other.
 - [ ] Add `Memory.author?: MemoryAuthorRef` and backfill existing rows as unknown/local.
 - [ ] Show memory author on memory cards.
-- [ ] Track listened seconds while a track is actively playing.
+- [x] Track listened seconds while a track is actively playing.
 - [x] Increment play count once per meaningful listen, not on every seek/replay glitch.
 - [x] Persist `PlaybackEvent` with drive/share/set/queue context for every meaningful listen.
 - [ ] Derive `PlaybackAggregate` rows for track, track-in-set, track-in-share, set, share, and drive scopes.
@@ -1781,7 +1781,7 @@ For a large shared playlist with many trusted devices, the UI should:
 
 ### Phase 5 Checklist
 
-- [ ] Listening to a track records listened seconds.
+- [x] Listening to a track records listened seconds.
 - [x] Listening to a track records play count according to the defined threshold.
 - [ ] Device display name appears in owner/publisher UI where no account exists.
 - [ ] Device avatar appears anywhere device attribution appears, with generated-avatar fallback.
@@ -1959,3 +1959,4 @@ Do not record secrets, full signed URLs, or media content.
 | 2026-06-09 | MUZERO | Phase 3 sync bookkeeping added with Dexie v13 `syncRuns` and `syncObjects`, plus a publish-sync wrapper that records completed/failed runs and object provenance without clobbering old mappings on failure. |
 | 2026-06-09 | MUZERO | Phase 5 device foundation started with Dexie v14 device/playback-stat tables, anonymous per-profile `DeviceRecord.publicId`, profile revision fields, avatar seed support, and local device repository tests. |
 | 2026-06-09 | MUZERO | Phase 5 playback stats repository added with meaningful-listen threshold tests, `PlaybackEvent` persistence, per-device `TrackPlaybackStats`, track/set aggregates, and existing `Track.playCount` reconciliation for counted listens. |
+| 2026-06-09 | MUZERO | Phase 5 playback listener integration added: MediaEngine time updates now feed a seek-aware listen tracker, pause/ended/track-change flushes persist per-device listened seconds, and eager load-time play-count increments were removed. |
