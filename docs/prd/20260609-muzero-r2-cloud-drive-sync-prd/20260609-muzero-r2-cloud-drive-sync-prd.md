@@ -1768,7 +1768,7 @@ For a large shared playlist with many trusted devices, the UI should:
 - [x] Persist `PlaybackEvent` with drive/share/set/queue context for every meaningful listen.
 - [ ] Derive `PlaybackAggregate` rows for track, track-in-set, track-in-share, set, share, and drive scopes.
 - [x] Persist per-device `TrackPlaybackStats`.
-- [ ] Export/import immutable playback event segments under `stats/events/<devicePublicId>/`.
+- [x] Export/import immutable playback event segments under `stats/events/<devicePublicId>/`.
 - [ ] Flush playback event segments when either the event-count threshold or time threshold is reached.
 - [ ] Retry failed segment uploads without duplicating remote play counts.
 - [ ] Export/import rebuildable per-device aggregate cache under `stats/devices/<devicePublicId>/aggregate.json`.
@@ -1973,3 +1973,4 @@ Do not record secrets, full signed URLs, or media content.
 | 2026-06-09 | MUZERO | Phase 6 R2 presence writer added: owner/trusted writable drives with local credentials can PUT signed per-device presence objects to `presence/devices/<devicePublicId>.json`; disabled, shared, or credential-less drives fail before any network write. |
 | 2026-06-09 | MUZERO | Phase 5 memory author data layer added: `addMemory` can persist sanitized `MemoryAuthorRef` snapshots and Dexie v16 backfills existing unattributed local memories as unknown local authors. |
 | 2026-06-09 | MUZERO | Phase 5 memory attribution now round-trips through R2 set indexes: exported memories include author snapshots and read-only stream imports preserve remote memory authors locally. |
+| 2026-06-09 | MUZERO | Phase 5 playback event segment export added: R2 publish plans now include immutable per-device `stats/events/<devicePublicId>/...json` segment objects for local `PlaybackEvent` rows while checkpoint/retry policy remains a later slice. |

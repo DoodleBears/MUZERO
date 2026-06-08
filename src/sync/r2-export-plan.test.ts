@@ -141,6 +141,63 @@ describe("buildR2ExportPlan", () => {
       "stats/devices/dvc_1/aggregate.json",
     );
   });
+
+  it("exports immutable per-device playback event segments", async () => {
+    await seedSet();
+    await db.devices.put({
+      id: "dev_local",
+      publicId: "dvc_1",
+      name: "Mac desktop",
+      platform: "browser",
+      appVersion: "0.1.0",
+      publishProfile: false,
+      profileRevision: 1,
+      createdAt: 100,
+      lastSeenAt: 200,
+    });
+    await db.playbackEvents.bulkPut([
+      {
+        id: "ple_1",
+        devicePublicId: "dvc_1",
+        trackId: "trk_1",
+        context: { source: "local", setId: "ses_1" },
+        startedAt: 1000,
+        endedAt: 31_000,
+        listenedSec: 31,
+        countedAsPlay: true,
+      },
+      {
+        id: "ple_2",
+        devicePublicId: "dvc_1",
+        trackId: "trk_1",
+        context: { source: "local", setId: "ses_1" },
+        startedAt: 40_000,
+        endedAt: 45_000,
+        listenedSec: 5,
+        countedAsPlay: false,
+      },
+    ]);
+
+    const plan = await buildR2ExportPlan({
+      driveId: "drv_1",
+      libraryId: "lib_1",
+      baseUrl: "https://music.example.com/muzero/",
+      setIds: ["ses_1"],
+      db,
+    });
+
+    const segment = plan.objects.find((object) => object.kind === "stats-events-segment");
+    expect(segment?.key).toMatch(/^stats\/events\/dvc_1\/1000-40000-[a-f0-9]{16}\.json$/);
+    const body = JSON.parse(String(segment?.body));
+    expect(body).toMatchObject({
+      schema: "muzero-r2-playback-events-segment-v1",
+      devicePublicId: "dvc_1",
+      startedAt: 1000,
+      endedAt: 40_000,
+      eventCount: 2,
+    });
+    expect(body.events.map((event: { id: string }) => event.id)).toEqual(["ple_1", "ple_2"]);
+  });
 });
 
 async function seedSet(options: { remoteOnly?: boolean } = {}) {

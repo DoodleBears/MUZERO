@@ -7,6 +7,7 @@ import type {
   MediaBlob,
   Memory,
   PlaybackAggregate,
+  PlaybackEvent,
   Track,
 } from "@/db/types";
 import type { R2Manifest, R2SetIndex } from "./r2-manifest-schema";
@@ -20,6 +21,7 @@ export type R2ExportObjectKind =
   | "set-index"
   | "device-profile"
   | "devices-index"
+  | "stats-events-segment"
   | "stats-aggregate"
   | "stats-index"
   | "manifest";
@@ -284,6 +286,21 @@ async function createDeviceObjects(db: MuzeroDB): Promise<R2ExportObject[]> {
     );
   }
 
+  const events = await db.playbackEvents
+    .where("devicePublicId")
+    .equals(device.publicId)
+    .sortBy("startedAt");
+  if (events.length > 0) {
+    const segment = toPlaybackEventsSegment(device.publicId, events);
+    objects.push(
+      createJsonObject(
+        "stats-events-segment",
+        await playbackEventsSegmentKey(device.publicId, segment),
+        segment,
+      ),
+    );
+  }
+
   if (device.publishProfile) {
     objects.push(
       createJsonObject("devices-index", "devices/index.json", {
@@ -355,6 +372,37 @@ function toStatsAggregateObject(devicePublicId: string, aggregates: PlaybackAggr
   };
 }
 
+function toPlaybackEventsSegment(devicePublicId: string, events: PlaybackEvent[]) {
+  return {
+    schema: "muzero-r2-playback-events-segment-v1",
+    devicePublicId,
+    startedAt: events[0]?.startedAt ?? 0,
+    endedAt: events.at(-1)?.startedAt ?? 0,
+    eventCount: events.length,
+    events: events.map((event) => ({
+      id: event.id,
+      trackId: event.trackId,
+      remoteTrackRef: event.remoteTrackRef,
+      context: event.context,
+      startedAt: event.startedAt,
+      endedAt: event.endedAt,
+      listenedSec: event.listenedSec,
+      countedAsPlay: event.countedAsPlay,
+    })),
+  };
+}
+
+async function playbackEventsSegmentKey(
+  devicePublicId: string,
+  segment: ReturnType<typeof toPlaybackEventsSegment>,
+): Promise<string> {
+  const hash = await sha256Text(JSON.stringify(segment));
+  return `stats/events/${devicePublicId}/${segment.startedAt}-${segment.endedAt}-${hash.slice(
+    0,
+    16,
+  )}.json`;
+}
+
 async function sha256Blob(blob: MediaBlob): Promise<string> {
   const value = blob.blob as Blob & { arrayBuffer?: () => Promise<ArrayBuffer> };
   const bytes =
@@ -362,6 +410,11 @@ async function sha256Blob(blob: MediaBlob): Promise<string> {
       ? await value.arrayBuffer()
       : new TextEncoder().encode(`${blob.id}:${blob.mime}:${blob.bytes}`).buffer;
   const digest = await crypto.subtle.digest("SHA-256", bytes);
+  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+async function sha256Text(value: string): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
   return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
