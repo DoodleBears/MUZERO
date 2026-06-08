@@ -117,6 +117,40 @@ describe("createTrackExportBlob", () => {
     );
   });
 
+  it("writes M4A ilst metadata and cover art when the atom layout is safe", async () => {
+    const exported = await createTrackExportBlob({
+      cover: {
+        id: "blb_cover",
+        trackId: "trk_1",
+        role: "cover",
+        mime: "image/jpeg",
+        bytes: 4,
+        blob: new Blob([new Uint8Array([0xff, 0xd8, 0xff, 0xd9])], { type: "image/jpeg" }),
+      },
+      media: {
+        ...mediaBlob("audio/mp4"),
+        blob: new Blob([minimalM4aBytes()], { type: "audio/mp4" }),
+      },
+      mode: "withMetadata",
+      track: track({ mediaMetadata: { ...track().mediaMetadata!, originalExtension: "m4a" } }),
+    });
+
+    const parsed = await parseUploadedMediaMetadata(
+      new File([await exported.arrayBuffer()], "moonstone-beach.m4a", { type: "audio/mp4" }),
+    );
+    expect(parsed.mediaMetadata).toMatchObject({
+      album: "Soluna Music",
+      artists: ["Deidian"],
+      genres: ["Organic House"],
+      title: "Moonstone Beach",
+      year: 2026,
+    });
+    expect(parsed.embeddedCover?.mime).toBe("image/jpeg");
+    await expect(parsed.embeddedCover?.blob.arrayBuffer()).resolves.toEqual(
+      new Uint8Array([0xff, 0xd8, 0xff, 0xd9]).buffer,
+    );
+  });
+
   it("rejects unsupported containers explicitly", async () => {
     await expect(
       createTrackExportBlob({
@@ -133,6 +167,21 @@ function minimalFlacBytes(): ArrayBuffer {
   return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
 }
 
+function minimalM4aBytes(): ArrayBuffer {
+  const bytes = concatBytes([
+    atom(
+      "ftyp",
+      concatBytes([asciiBytes("M4A "), uint32be(0), asciiBytes("M4A "), asciiBytes("isom")]),
+    ),
+    atom("moov", new Uint8Array()),
+  ]);
+  return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
+}
+
+function atom(type: string, payload: Uint8Array): Uint8Array {
+  return concatBytes([uint32be(payload.byteLength + 8), asciiBytes(type), payload]);
+}
+
 function flacMetadataBlock(type: number, payload: Uint8Array, isLast = false): Uint8Array {
   return concatBytes([
     new Uint8Array([(isLast ? 0x80 : 0) | type]),
@@ -142,6 +191,15 @@ function flacMetadataBlock(type: number, payload: Uint8Array, isLast = false): U
       payload.byteLength & 0xff,
     ]),
     payload,
+  ]);
+}
+
+function uint32be(value: number): Uint8Array<ArrayBuffer> {
+  return new Uint8Array([
+    (value >>> 24) & 0xff,
+    (value >>> 16) & 0xff,
+    (value >>> 8) & 0xff,
+    value & 0xff,
   ]);
 }
 

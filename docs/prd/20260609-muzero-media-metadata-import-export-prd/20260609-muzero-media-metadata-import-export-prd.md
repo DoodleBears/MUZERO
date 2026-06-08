@@ -316,18 +316,18 @@ No new page. The feature touches existing upload, list rows, Now Playing, and se
 - [ ] Add Tauri Rust command using `lofty` or an equivalent audited writer.
 - [ ] Implement container mapping:
   - [x] MP3: ID3v2.3 frames (`TIT2`, `TPE1`, `TALB`, `TRCK`, `TCON`, `TYER`, `COMM`, `APIC`).
-  - M4A/MP4: iTunes-style `ilst` atoms.
+  - [x] M4A/MP4: iTunes-style `ilst` atoms for safe `moov` layouts; unsafe layouts fail explicitly.
   - [x] FLAC: Vorbis comments + picture block.
   - Ogg/Opus: Vorbis comments where supported.
   - WAV/AIFF: RIFF/ID3 path only if writer support is reliable; otherwise original-only.
 - [ ] Generated tracks export with `TrackBrief.title`, caption/lyrics where supported, and MUZERO cover.
-- [ ] Add validation tests: export then re-parse with parser and compare expected fields.
+- [x] Add validation tests: export then re-parse with parser and compare expected fields.
 
 ### Phase 3 Checklist
 
 - [x] "Download original" byte size/hash matches stored `mediaBlobs` bytes.
 - [x] "Export with metadata" round-trips title/artist/album/cover for MP3.
-- [ ] "Export with metadata" round-trips title/artist/album/cover for M4A/MP4.
+- [x] "Export with metadata" round-trips title/artist/album/cover for M4A/MP4.
 - [x] "Export with metadata" round-trips title/artist/album/cover for FLAC.
 - [x] Unsupported container fallback is explicit and non-destructive.
 
@@ -388,3 +388,4 @@ No new page. The feature touches existing upload, list rows, Now Playing, and se
 | 2026-06-09 | MUZERO | Phase 3A started: original export is byte-identical, MP3 `withMetadata` writes ID3v2.3 tags and cover art, and unsupported containers fail explicitly. |
 | 2026-06-09 | MUZERO | Phase 3B completed FLAC `withMetadata` export with Vorbis comments and picture-block cover round-trip tests. |
 | 2026-06-09 | MUZERO | Phase 3 UI entry added: the row download action now offers original download and metadata export choices. |
+| 2026-06-09 | MUZERO | Phase 3C completed conservative M4A/MP4 `ilst` metadata export for safe atom layouts, with parser round-trip tests. |

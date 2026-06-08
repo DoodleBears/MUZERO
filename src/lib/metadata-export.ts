@@ -33,6 +33,11 @@ export async function createTrackExportBlob(input: {
       type: media.mime || "audio/flac",
     });
   }
+  if (isM4aMedia(media, track)) {
+    return new Blob([toArrayBuffer(buildM4aWithMetadata(mediaBytes, track, coverPayload))], {
+      type: media.mime || "audio/mp4",
+    });
+  }
   throw new UnsupportedMetadataExportError(media.mime);
 }
 
@@ -46,6 +51,15 @@ function isMp3Media(media: MediaBlob, track: Track): boolean {
 
 function isFlacMedia(media: MediaBlob, track: Track): boolean {
   return media.mime === "audio/flac" || track.mediaMetadata?.originalExtension === "flac";
+}
+
+function isM4aMedia(media: MediaBlob, track: Track): boolean {
+  return (
+    media.mime === "audio/mp4" ||
+    media.mime === "audio/m4a" ||
+    track.mediaMetadata?.originalExtension === "m4a" ||
+    track.mediaMetadata?.originalExtension === "mp4"
+  );
 }
 
 function buildId3v23Tag(track: Track, cover?: { bytes: Uint8Array; mime: string }): Uint8Array {
@@ -166,6 +180,132 @@ function flacMetadataBlock(type: number, payload: Uint8Array, isLast = false): U
     ]),
     payload,
   ]);
+}
+
+function buildM4aWithMetadata(
+  bytes: Uint8Array,
+  track: Track,
+  cover?: { bytes: Uint8Array; mime: string },
+): Uint8Array {
+  const atoms = parseMp4Atoms(bytes);
+  const moovIndex = atoms.findIndex((atom) => atom.type === "moov");
+  if (moovIndex < 0) throw new UnsupportedMetadataExportError("audio/mp4");
+  if (atoms.some((atom, index) => index > moovIndex && atom.type === "mdat")) {
+    throw new UnsupportedMetadataExportError("audio/mp4");
+  }
+
+  const moov = atoms[moovIndex];
+  const moovChildren = parseMp4Atoms(moov.payload).filter((atom) => atom.type !== "udta");
+  const rebuiltMoov = mp4Atom(
+    "moov",
+    concatBytes([...moovChildren.map((atom) => atom.raw), m4aMetadataUdta(track, cover)]),
+  );
+  return concatBytes(atoms.map((atom, index) => (index === moovIndex ? rebuiltMoov : atom.raw)));
+}
+
+function m4aMetadataUdta(track: Track, cover?: { bytes: Uint8Array; mime: string }): Uint8Array {
+  return mp4Atom(
+    "udta",
+    mp4Atom(
+      "meta",
+      concatBytes([
+        new Uint8Array([0, 0, 0, 0]),
+        m4aHandlerAtom(),
+        mp4Atom(
+          "ilst",
+          concatBytes(
+            [
+              m4aTextAtom(
+                new Uint8Array([0xa9, 0x6e, 0x61, 0x6d]),
+                track.mediaMetadata?.title || track.title,
+              ),
+              m4aTextAtom(
+                new Uint8Array([0xa9, 0x41, 0x52, 0x54]),
+                track.mediaMetadata?.artists?.join("; "),
+              ),
+              m4aTextAtom(new Uint8Array([0xa9, 0x61, 0x6c, 0x62]), track.mediaMetadata?.album),
+              m4aTextAtom(
+                new Uint8Array([0xa9, 0x67, 0x65, 0x6e]),
+                track.mediaMetadata?.genres?.join("; ") || track.tags.join("; "),
+              ),
+              m4aTextAtom(
+                new Uint8Array([0xa9, 0x64, 0x61, 0x79]),
+                track.mediaMetadata?.year
+                  ? String(track.mediaMetadata.year)
+                  : track.mediaMetadata?.date,
+              ),
+              cover ? m4aCoverAtom(cover.mime, cover.bytes) : undefined,
+            ].filter((atom): atom is Uint8Array => !!atom),
+          ),
+        ),
+      ]),
+    ),
+  );
+}
+
+function m4aHandlerAtom(): Uint8Array {
+  return mp4Atom(
+    "hdlr",
+    concatBytes([
+      new Uint8Array([0, 0, 0, 0]),
+      uint32be(0),
+      asciiBytes("mdir"),
+      asciiBytes("appl"),
+      uint32be(0),
+      uint32be(0),
+      new Uint8Array([0]),
+    ]),
+  );
+}
+
+function m4aTextAtom(type: Uint8Array, value: string | undefined): Uint8Array | undefined {
+  const clean = value?.trim();
+  if (!clean) return undefined;
+  return mp4AtomBytes(
+    type,
+    mp4Atom("data", concatBytes([uint32be(1), uint32be(0), asciiBytes(clean)])),
+  );
+}
+
+function m4aCoverAtom(mime: string, data: Uint8Array): Uint8Array | undefined {
+  if (data.byteLength === 0) return undefined;
+  const dataType = mime === "image/png" ? 14 : 13;
+  return mp4Atom("covr", mp4Atom("data", concatBytes([uint32be(dataType), uint32be(0), data])));
+}
+
+function parseMp4Atoms(bytes: Uint8Array): {
+  payload: Uint8Array;
+  raw: Uint8Array;
+  type: string;
+}[] {
+  const atoms: { payload: Uint8Array; raw: Uint8Array; type: string }[] = [];
+  let offset = 0;
+  while (offset + 8 <= bytes.byteLength) {
+    const size =
+      (bytes[offset] << 24) |
+      (bytes[offset + 1] << 16) |
+      (bytes[offset + 2] << 8) |
+      bytes[offset + 3];
+    if (size < 8 || offset + size > bytes.byteLength) {
+      throw new UnsupportedMetadataExportError("audio/mp4");
+    }
+    atoms.push({
+      payload: bytes.slice(offset + 8, offset + size),
+      raw: bytes.slice(offset, offset + size),
+      type: new TextDecoder("latin1").decode(bytes.slice(offset + 4, offset + 8)),
+    });
+    offset += size;
+  }
+  if (offset !== bytes.byteLength) throw new UnsupportedMetadataExportError("audio/mp4");
+  return atoms;
+}
+
+function mp4Atom(type: string, payload: Uint8Array): Uint8Array {
+  return mp4AtomBytes(asciiBytes(type), payload);
+}
+
+function mp4AtomBytes(type: Uint8Array, payload: Uint8Array): Uint8Array {
+  return concatBytes([uint32be(payload.byteLength + 8), type, payload]);
 }
 
 function textFrame(id: string, value: string | undefined): Uint8Array | undefined {
