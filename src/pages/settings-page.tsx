@@ -1,9 +1,11 @@
+import { useLiveQuery } from "dexie-react-hooks";
 import {
   CheckCircle2,
   ClipboardCopy,
   Cloud,
   Download,
   ExternalLink,
+  ShieldCheck,
   Trash2,
   XCircle,
 } from "lucide-react";
@@ -24,9 +26,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { saveSettings } from "@/db/repositories";
-import type { AppSettings, LlmProviderId } from "@/db/types";
+import type { AppSettings, CloudDrive, LlmProviderId, R2LocalCredentials } from "@/db/types";
 import { useSettings } from "@/hooks/use-app-data";
 import { type Locale, locales, persistLocale } from "@/i18n/config";
+import { newId } from "@/lib/id";
 import { clearTrace, formatTraceEntries, useTraceEntries } from "@/lib/trace";
 import {
   CLOUD_PRESET_IDS,
@@ -36,12 +39,19 @@ import {
 } from "@/musicgen/presets";
 import { type MusicGenProviderId, resolveMusicGenProvider } from "@/musicgen/registry";
 import { usePlayerStore } from "@/stores/player-store";
+import { listCloudDrives, upsertCloudDrive, upsertCloudShare } from "@/sync/cloud-drive-repo";
+import { buildOwnedR2Drive, saveR2CredentialsForDrive } from "@/sync/cloud-drive-settings";
+import {
+  buildRecommendedR2Cors,
+  checkR2PublicRead,
+  checkR2WriteAccess,
+  maskSecret,
+} from "@/sync/r2-healthcheck";
 import { importRemoteSetStream } from "@/sync/r2-import-stream";
 import {
   loadRemoteSetIndex,
   type RemoteLibraryPreview,
   type RemoteSetPreview,
-  subscribeManifest,
 } from "@/sync/r2-subscription";
 import {
   customFontStack,
@@ -59,6 +69,12 @@ import {
 } from "@/theme/primary";
 import { loadSystemFonts } from "@/theme/system-fonts";
 import { DEFAULT_THEME, persistTheme, type Theme, themes } from "@/theme/theme";
+
+type OwnerR2Draft = R2LocalCredentials & {
+  label: string;
+  manifestUrl: string;
+  publicBaseUrl: string;
+};
 
 /** Maps a preset id to its i18n option label (ids carry hyphens; keys don't). */
 const PRESET_LABEL_KEY = {
@@ -79,10 +95,26 @@ const PRIMARY_PRESET_NAME_KEY = {
   sunset: "settings.primaryPresetSunset",
 } as const satisfies Record<PrimaryPresetId, string>;
 
+const CLOUD_SETUP_KEYS = [
+  "settings.cloudSetupAccount",
+  "settings.cloudSetupBucket",
+  "settings.cloudSetupPublicUrl",
+  "settings.cloudSetupCors",
+  "settings.cloudSetupCredentials",
+] as const;
+
+const CLOUD_DRIVE_KIND_LABEL_KEY = {
+  owned: "settings.cloudDriveKind.owned",
+  trusted: "settings.cloudDriveKind.trusted",
+  shared: "settings.cloudDriveKind.shared",
+  "local-only": "settings.cloudDriveKind.local-only",
+} as const satisfies Record<CloudDrive["kind"], string>;
+
 /** On-device, BYOK settings. Nothing here is ever sent anywhere but the model/API you point it at. */
 export function SettingsPage() {
   const { t, i18n } = useTranslation();
   const settings = useSettings();
+  const cloudDrives = useLiveQuery(() => listCloudDrives(), [], []);
   const rebuildEngine = usePlayerStore((s) => s.rebuildEngine);
   const setActiveSession = usePlayerStore((s) => s.setActiveSession);
   const [draft, setDraft] = useState<AppSettings>(settings);
@@ -95,6 +127,21 @@ export function SettingsPage() {
   >("idle");
   const [cloudError, setCloudError] = useState<string | null>(null);
   const [importingSetId, setImportingSetId] = useState<string | null>(null);
+  const [ownerDriveId] = useState(() => newId("drv"));
+  const [ownerDraft, setOwnerDraft] = useState<OwnerR2Draft>({
+    label: "",
+    manifestUrl: "",
+    publicBaseUrl: "",
+    accountId: "",
+    bucket: "",
+    accessKeyId: "",
+    secretAccessKey: "",
+    prefix: "",
+    endpointUrl: "",
+  });
+  const [ownerStatus, setOwnerStatus] = useState<"idle" | "checking" | "done" | "error">("idle");
+  const [ownerMessage, setOwnerMessage] = useState<string | null>(null);
+  const [corsCopied, setCorsCopied] = useState(false);
   // Font picker: the combobox input text, plus lazily-loaded system fonts.
   const [fontInput, setFontInput] = useState("");
   const [systemFontItems, setSystemFontItems] = useState<ComboboxItem[]>([]);
@@ -203,7 +250,39 @@ export function SettingsPage() {
     setCloudStatus("previewing");
     setCloudError(null);
     try {
-      setCloudPreview(await subscribeManifest(url));
+      const result = await checkR2PublicRead(url);
+      if (!result.ok || !result.preview) {
+        throw new Error(
+          result.hint ?? result.checks.at(-1)?.message ?? "Manifest validation failed",
+        );
+      }
+      const preview = result.preview;
+      setCloudPreview(preview);
+      const driveId = localDriveId("drv", preview.libraryId);
+      await upsertCloudDrive({
+        id: driveId,
+        label: preview.title,
+        kind: "shared",
+        provider: "r2",
+        publicBaseUrl: preview.baseUrl,
+        manifestUrl: preview.manifestUrl,
+        capabilities: {
+          read: true,
+          write: false,
+          manageInvites: false,
+          writeStats: false,
+          writePresence: false,
+        },
+      });
+      await upsertCloudShare({
+        id: localDriveId("shr", preview.libraryId),
+        driveId,
+        remoteShareId: preview.libraryId,
+        label: preview.title,
+        manifestUrl: preview.manifestUrl,
+        access: "read-only",
+        lastSyncedAt: Date.now(),
+      });
       setCloudStatus("idle");
     } catch (error) {
       setCloudPreview(null);
@@ -233,10 +312,63 @@ export function SettingsPage() {
     }
   }
 
+  function patchOwner(patch: Partial<OwnerR2Draft>) {
+    setOwnerDraft((current) => ({ ...current, ...patch }));
+    setOwnerStatus("idle");
+    setOwnerMessage(null);
+  }
+
+  async function validateOwnerDrive() {
+    setOwnerStatus("checking");
+    setOwnerMessage(null);
+    try {
+      const readResult = await checkR2PublicRead(ownerDraft.manifestUrl);
+      if (!readResult.ok || !readResult.preview) {
+        throw new Error(
+          readResult.hint ?? readResult.checks.at(-1)?.message ?? "Read check failed",
+        );
+      }
+
+      const writeResult = await checkR2WriteAccess(ownerDraft);
+      if (!writeResult.ok) {
+        throw new Error(
+          writeResult.hint ?? writeResult.checks.at(-1)?.message ?? "Write check failed",
+        );
+      }
+
+      const preview = readResult.preview;
+      const drive = buildOwnedR2Drive({
+        id: ownerDriveId,
+        label: ownerDraft.label || preview.title,
+        manifestUrl: preview.manifestUrl,
+        publicBaseUrl: ownerDraft.publicBaseUrl || preview.baseUrl,
+      });
+      await upsertCloudDrive(drive);
+      await saveSettings(saveR2CredentialsForDrive(settings, drive.id, ownerDraft));
+      setOwnerStatus("done");
+      setOwnerMessage(t("settings.cloudOwnerValidated"));
+    } catch (error) {
+      setOwnerStatus("error");
+      setOwnerMessage(error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  async function copyCorsJson() {
+    if (!navigator.clipboard) return;
+    await navigator.clipboard.writeText(corsJson);
+    setCorsCopied(true);
+    window.setTimeout(() => setCorsCopied(false), 1600);
+  }
+
   const primary: PrimaryColors = {
     light: settings.primaryLight ?? DEFAULT_PRIMARY.light,
     dark: settings.primaryDark ?? DEFAULT_PRIMARY.dark,
   };
+
+  const corsJson = useMemo(
+    () => JSON.stringify(buildRecommendedR2Cors(browserOrigin()), null, 2),
+    [],
+  );
 
   const cloudPreset = resolveCloudPreset(draft.musicCloudPreset);
   const costText =
@@ -585,7 +717,32 @@ export function SettingsPage() {
           <CardHeader>
             <CardTitle>{t("settings.cloudDriveTitle")}</CardTitle>
           </CardHeader>
-          <CardContent className="flex flex-col gap-3">
+          <CardContent className="flex flex-col gap-4">
+            <div className="rounded-md border border-border bg-muted/25 p-3">
+              <p className="font-medium text-sm">{t("settings.cloudSetupTitle")}</p>
+              <div className="mt-2 grid gap-2 text-muted-foreground text-xs sm:grid-cols-2">
+                {CLOUD_SETUP_KEYS.map((key) => (
+                  <div key={key} className="flex items-center gap-2">
+                    <CheckCircle2 className="size-3.5 text-primary" />
+                    <span>{t(key)}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {cloudDrives.length > 0 && (
+              <div className="flex flex-col gap-2">
+                <p className="font-medium text-sm">{t("settings.cloudConnectedDrives")}</p>
+                {cloudDrives.map((drive) => (
+                  <CloudDriveRow
+                    key={drive.id}
+                    drive={drive}
+                    defaultDriveId={settings.defaultCloudDriveId}
+                  />
+                ))}
+              </div>
+            )}
+
             <Field label={t("settings.cloudManifestUrl")}>
               <Input
                 value={cloudUrl}
@@ -660,6 +817,117 @@ export function SettingsPage() {
               </div>
             )}
             <p className="text-xs text-muted-foreground">{t("settings.cloudReadOnlyNote")}</p>
+
+            <div className="rounded-md border border-border p-3">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <p className="font-medium text-sm">{t("settings.cloudCorsTitle")}</p>
+                  <p className="text-muted-foreground text-xs">{t("settings.cloudCorsHint")}</p>
+                </div>
+                <Button variant="outline" size="sm" onClick={() => void copyCorsJson()}>
+                  <ClipboardCopy />
+                  {corsCopied ? t("settings.cloudCorsCopied") : t("settings.cloudCorsCopy")}
+                </Button>
+              </div>
+              <pre className="mt-3 max-h-44 overflow-auto rounded-md bg-muted p-3 text-[11px] leading-5 text-muted-foreground">
+                {corsJson}
+              </pre>
+            </div>
+
+            <div className="rounded-md border border-border p-3">
+              <div className="mb-3 flex items-center gap-2">
+                <ShieldCheck className="size-4 text-primary" />
+                <p className="font-medium text-sm">{t("settings.cloudOwnerTitle")}</p>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <Field label={t("settings.cloudDriveLabel")}>
+                  <Input
+                    value={ownerDraft.label}
+                    onChange={(event) => patchOwner({ label: event.target.value })}
+                    placeholder={t("settings.cloudDriveLabelPlaceholder")}
+                  />
+                </Field>
+                <Field label={t("settings.cloudOwnerManifestUrl")}>
+                  <Input
+                    value={ownerDraft.manifestUrl}
+                    onChange={(event) => patchOwner({ manifestUrl: event.target.value })}
+                    placeholder="https://music.example.com/muzero/manifest.json"
+                  />
+                </Field>
+                <Field label={t("settings.cloudOwnerAccountId")}>
+                  <Input
+                    value={ownerDraft.accountId}
+                    onChange={(event) => patchOwner({ accountId: event.target.value })}
+                    placeholder="00000000000000000000000000000000"
+                  />
+                </Field>
+                <Field label={t("settings.cloudOwnerBucket")}>
+                  <Input
+                    value={ownerDraft.bucket}
+                    onChange={(event) => patchOwner({ bucket: event.target.value })}
+                    placeholder="muzero"
+                  />
+                </Field>
+                <Field label={t("settings.cloudOwnerPrefix")}>
+                  <Input
+                    value={ownerDraft.prefix}
+                    onChange={(event) => patchOwner({ prefix: event.target.value })}
+                    placeholder="muzero"
+                  />
+                </Field>
+                <Field label={t("settings.cloudOwnerEndpoint")}>
+                  <Input
+                    value={ownerDraft.endpointUrl}
+                    onChange={(event) => patchOwner({ endpointUrl: event.target.value })}
+                    placeholder="https://<account>.r2.cloudflarestorage.com"
+                  />
+                </Field>
+                <Field label={t("settings.cloudOwnerAccessKey")}>
+                  <Input
+                    value={ownerDraft.accessKeyId}
+                    onChange={(event) => patchOwner({ accessKeyId: event.target.value })}
+                  />
+                </Field>
+                <Field label={t("settings.cloudOwnerSecretKey")}>
+                  <Input
+                    type="password"
+                    value={ownerDraft.secretAccessKey}
+                    onChange={(event) => patchOwner({ secretAccessKey: event.target.value })}
+                  />
+                </Field>
+              </div>
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={ownerStatus === "checking" || !ownerDraft.manifestUrl.trim()}
+                  onClick={() => void validateOwnerDrive()}
+                >
+                  <ShieldCheck />
+                  {ownerStatus === "checking"
+                    ? t("settings.cloudOwnerChecking")
+                    : t("settings.cloudOwnerValidate")}
+                </Button>
+                {ownerDraft.secretAccessKey && (
+                  <span className="text-muted-foreground text-xs">
+                    {t("settings.cloudSecretStoredAs", {
+                      value: maskSecret(ownerDraft.secretAccessKey),
+                    })}
+                  </span>
+                )}
+              </div>
+              {ownerMessage && (
+                <p
+                  className={
+                    ownerStatus === "error"
+                      ? "mt-2 text-destructive text-xs"
+                      : "mt-2 text-muted-foreground text-xs"
+                  }
+                >
+                  {ownerMessage}
+                </p>
+              )}
+            </div>
           </CardContent>
         </Card>
 
@@ -720,6 +988,31 @@ function TraceDiagnostics() {
   );
 }
 
+function CloudDriveRow({ drive, defaultDriveId }: { drive: CloudDrive; defaultDriveId?: string }) {
+  const { t } = useTranslation();
+  return (
+    <div className="flex items-center justify-between gap-3 rounded-md border border-border bg-background/80 px-3 py-2">
+      <div className="min-w-0">
+        <p className="truncate text-sm">{drive.label}</p>
+        <p className="text-muted-foreground text-xs">
+          {t("settings.cloudDriveMeta", {
+            kind: t(CLOUD_DRIVE_KIND_LABEL_KEY[drive.kind]),
+            host: drive.manifestUrl ? sourceHost(drive.manifestUrl) : drive.provider,
+          })}
+        </p>
+      </div>
+      <div className="flex shrink-0 items-center gap-1.5 text-muted-foreground text-xs">
+        {drive.id === defaultDriveId && <span>{t("settings.cloudDefaultDrive")}</span>}
+        {drive.capabilities.write ? (
+          <ShieldCheck className="size-4" />
+        ) : (
+          <Cloud className="size-4" />
+        )}
+      </div>
+    </div>
+  );
+}
+
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     // The control is passed in via `children` and nested inside the label, which
@@ -730,6 +1023,14 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
       {children}
     </label>
   );
+}
+
+function browserOrigin(): string {
+  return globalThis.location?.origin ?? "http://localhost:1420";
+}
+
+function localDriveId(prefix: "drv" | "shr", remoteId: string): string {
+  return `${prefix}_${remoteId.replace(/[^a-zA-Z0-9_-]/g, "_")}`;
 }
 
 function sourceHost(url: string): string {

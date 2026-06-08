@@ -369,6 +369,8 @@ export interface AppSettings {
   apiKeysByPresetId?: Partial<Record<LlmProviderPresetId, string>>;
   /** Default selected cloud drive. R2 credentials remain device-local settings, never synced. */
   defaultCloudDriveId?: string;
+  /** R2 write credentials by local drive id. Device-local only; never exported to manifests. */
+  r2CredentialsByDriveId?: Record<string, R2LocalCredentials>;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -475,6 +477,15 @@ export interface CloudDriveCapabilities {
   manageInvites: boolean;
   writeStats: boolean;
   writePresence: boolean;
+}
+
+export interface R2LocalCredentials {
+  accountId: string;
+  bucket: string;
+  accessKeyId: string;
+  secretAccessKey: string;
+  prefix?: string;
+  endpointUrl?: string;
 }
 
 export interface CloudDrive {

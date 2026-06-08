@@ -14,7 +14,7 @@
 | Phase | Name | Status | Link |
 |-------|------|--------|------|
 | 1 | Manifest protocol + read-only subscription | 🔄 In Progress | [Phase 1 Checklist](#phase-1-checklist) |
-| 2 | R2 Setup Wizard + connection validation | 🔄 In Progress | [Phase 2 Checklist](#phase-2-checklist) |
+| 2 | R2 Setup Wizard + connection validation | ✅ Done | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | Local-to-cloud publish sync with visible progress | 🔲 Pending | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | Cloud-to-local pull sync + conflict handling | 🔲 Pending | [Phase 4 Checklist](#phase-4-checklist) |
 | 5 | Anonymous device registry + playback stats sync | 🔲 Pending | [Phase 5 Checklist](#phase-5-checklist) |
@@ -1668,20 +1668,20 @@ For a large shared playlist with many trusted devices, the UI should:
 
 - [x] Add `cloudDrive` settings fields and repository helpers.
 - [x] Add multi-drive local model: owned drives, trusted drives, shared links.
-- [ ] Build Settings Cloud Drive section.
-- [ ] Add setup checklist for Cloudflare account, bucket, public URL, CORS, and R2 credentials.
+- [x] Build Settings Cloud Drive section.
+- [x] Add setup checklist for Cloudflare account, bucket, public URL, CORS, and R2 credentials.
 - [x] Add healthcheck validation for public read and S3 write.
-- [ ] Add copyable recommended CORS JSON.
-- [ ] Store credentials only in local IndexedDB settings.
-- [ ] Add i18n keys for en/zh/ja/ko.
+- [x] Add copyable recommended CORS JSON.
+- [x] Store credentials only in local IndexedDB settings.
+- [x] Add i18n keys for en/zh/ja/ko.
 
 ### Phase 2 Checklist
 
-- [ ] A fresh user can configure read-only mode with only a manifest URL.
-- [ ] An owner can validate bidirectional mode with R2 credentials.
-- [ ] A user can add multiple R2 drives and multiple shared links.
-- [ ] Secret values are masked in UI and never logged.
-- [ ] Failed CORS validation gives an actionable fix.
+- [x] A fresh user can configure read-only mode with only a manifest URL.
+- [x] An owner can validate bidirectional mode with R2 credentials.
+- [x] A user can add multiple R2 drives and multiple shared links.
+- [x] Secret values are masked in UI and never logged.
+- [x] Failed CORS validation gives an actionable fix.
 
 ### Phase 3: Local-to-Cloud Publish Sync
 
@@ -1953,3 +1953,4 @@ Do not record secrets, full signed URLs, or media content.
 | 2026-06-09 | MUZERO | Phase 1 edge-case tests added for invalid schemas, relative URLs, missing remote media, and duplicate imports. |
 | 2026-06-09 | MUZERO | Phase 2 local cloud drive/share registry added with Dexie v12 tables and repository helpers. |
 | 2026-06-09 | MUZERO | Phase 2 R2 healthcheck core added for public manifest read validation, S3-compatible write probes, secret masking, and recommended CORS JSON generation. |
+| 2026-06-09 | MUZERO | Phase 2 Settings Cloud Drive wizard completed with setup checklist, shared-link registry, owner validation, local-only R2 credentials, copyable CORS JSON, connected-drive list, and en/zh/ja/ko strings. |
