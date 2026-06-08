@@ -108,4 +108,22 @@ describe("publishR2ExportPlan", () => {
 
     expect(seen).toEqual(["HEAD", "PUT"]);
   });
+
+  it("does not publish the root manifest when an earlier referenced object fails", async () => {
+    const seen: string[] = [];
+
+    await expect(
+      publishR2ExportPlan(plan, credentials, {
+        fetcher: async (url, init) => {
+          seen.push(`${init?.method ?? "GET"} ${String(url)}`);
+          if (String(url).endsWith("/sets/ses_1/index.json")) {
+            return new Response(null, { status: 500 });
+          }
+          return new Response(null, { status: init?.method === "HEAD" ? 404 : 204 });
+        },
+      }),
+    ).rejects.toThrow("Failed to upload sets/ses_1/index.json");
+
+    expect(seen.some((request) => request.endsWith("/manifest.json"))).toBe(false);
+  });
 });
