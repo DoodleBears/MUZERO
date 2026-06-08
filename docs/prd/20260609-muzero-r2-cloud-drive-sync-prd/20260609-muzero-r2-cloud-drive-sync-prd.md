@@ -1786,7 +1786,7 @@ For a large shared playlist with many trusted devices, the UI should:
 - [ ] Publish `DevicePublicProfile` to owner/trusted drives when enabled and write permission exists.
 - [ ] Add profile `revision` and ETag/hash checks so two offline edits cannot silently overwrite each other.
 - [x] Add `Memory.author?: MemoryAuthorRef` and backfill existing rows as unknown/local.
-- [ ] Show memory author on memory cards.
+- [x] Show memory author on memory cards.
 - [x] Track listened seconds while a track is actively playing.
 - [x] Increment play count once per meaningful listen, not on every seek/replay glitch.
 - [x] Persist `PlaybackEvent` with drive/share/set/queue context for every meaningful listen.
@@ -1810,7 +1810,7 @@ For a large shared playlist with many trusted devices, the UI should:
 - [ ] Device display name appears in owner/publisher UI where no account exists.
 - [ ] Device avatar appears anywhere device attribution appears, with generated-avatar fallback.
 - [ ] Device profile updates sync only to writable targets and do not rewrite historical memories.
-- [ ] Memory cards show author attribution when available.
+- [x] Memory cards show author attribution when available.
 - [x] Stats survive reload.
 - [x] Stats merge correctly from two devices.
 - [x] Rebuilding aggregates from event segments does not lose play counts.
@@ -2011,6 +2011,7 @@ Do not record secrets, full signed URLs, or media content.
 | 2026-06-09 | MUZERO | Phase 3 media object sync coverage completed for export planning: audio, video, track covers, and memory photos are emitted as content-addressed R2 objects, with video set indexes preserving `kind: "video"` and `video/mp4` media metadata. |
 | 2026-06-09 | MUZERO | Phase 3 publish-order safety covered: R2 publish aborts before `manifest.json` when an earlier referenced object such as a set index fails, so readers do not see manifests pointing at missing objects. |
 | 2026-06-09 | MUZERO | Phase 3 sync progress visibility added: Settings now summarizes the latest sync run with current phase, object count, byte count/progress ratio, failure count, and error text backed by a tested progress summary helper. |
+| 2026-06-09 | MUZERO | Phase 5 memory author attribution added to memory cards: each memory with an author snapshot now shows the device display name or public id plus a generated avatar fallback seeded by `avatarSeed`/device id. |
 | 2026-06-09 | MUZERO | Phase 5 playback checkpoint export added: event segment publish plans now include `stats/devices/<devicePublicId>/checkpoint.json` with the latest event watermark and immutable segment key. |
 | 2026-06-09 | MUZERO | Phase 5 optional `stats/index.json` discovery completed for stats sync: device entries can point to aggregate cache, checkpoint, and latest immutable event segment without making the index the write-hot source of truth. |
 | 2026-06-09 | MUZERO | Phase 5 stats/profile write policy added: only owner/trusted drives with local R2 credentials may receive stats or opted-in device profiles, keeping read-only shared-link listener data local by default. |

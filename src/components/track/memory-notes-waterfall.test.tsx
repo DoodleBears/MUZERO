@@ -81,6 +81,31 @@ describe("MemoryNotesWaterfall", () => {
     );
   });
 
+  it("shows memory author attribution with a generated avatar fallback", () => {
+    render(
+      <MemoryNotesWaterfall
+        formatCreatedAt={(createdAt) => String(createdAt)}
+        labels={labels}
+        memories={[
+          {
+            id: "mem_author",
+            trackId: "trk_1",
+            note: "from the phone",
+            createdAt: 40,
+            author: {
+              avatarSeed: "green",
+              devicePublicId: "dvc_phone",
+              displayName: "Phone",
+            },
+          },
+        ]}
+      />,
+    );
+
+    expect(screen.getByText("Phone")).toBeInTheDocument();
+    expect(screen.getByLabelText("Phone")).toHaveAttribute("data-avatar-seed", "green");
+  });
+
   it("resizes the masonry item to the loaded image aspect ratio", async () => {
     render(
       <MemoryNotesWaterfall

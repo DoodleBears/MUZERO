@@ -1,7 +1,15 @@
 "use client";
 
 import { Image as ImageIcon, Pencil, Trash2 } from "lucide-react";
-import { type ReactNode, type RefObject, useEffect, useMemo, useRef, useState } from "react";
+import {
+  type CSSProperties,
+  type ReactNode,
+  type RefObject,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import type { Memory } from "@/db/types";
 import {
   layoutMemoryMasonry,
@@ -134,9 +142,12 @@ export function MemoryNotesWaterfall({
                 {memory.note}
               </p>
               <div className="mt-auto flex items-center justify-between gap-2 pt-3 text-xs opacity-70">
-                <time dateTime={new Date(memory.createdAt).toISOString()}>
-                  {formatCreatedAt(memory.createdAt)}
-                </time>
+                <div className="flex min-w-0 flex-col gap-1">
+                  {memory.author && <MemoryAuthorAttribution memory={memory} />}
+                  <time dateTime={new Date(memory.createdAt).toISOString()}>
+                    {formatCreatedAt(memory.createdAt)}
+                  </time>
+                </div>
                 {((memory.photoBlobId && onSetCoverFromMemory && labels.setCoverFromMemory) ||
                   onEditMemory ||
                   onDeleteMemory) && (
@@ -179,6 +190,24 @@ export function MemoryNotesWaterfall({
         );
       })}
     </ul>
+  );
+}
+
+function MemoryAuthorAttribution({ memory }: { memory: MemoryNoteView }) {
+  if (!memory.author) return null;
+  const label = memory.author.displayName?.trim() || memory.author.devicePublicId;
+  const seed = memory.author.avatarSeed || memory.author.devicePublicId;
+  return (
+    <span className="flex min-w-0 items-center gap-1.5">
+      <span
+        aria-label={label}
+        className="size-4 shrink-0 rounded-full"
+        data-avatar-seed={seed}
+        role="img"
+        style={avatarStyle(seed)}
+      />
+      <span className="truncate">{label}</span>
+    </span>
   );
 }
 
@@ -255,4 +284,20 @@ function resolveMemoryNoteFont(): string {
 
   const fontFamily = window.getComputedStyle(document.body).fontFamily;
   return fontFamily ? `14px ${fontFamily}` : memoryMasonryDefaults.noteFont;
+}
+
+function avatarStyle(seed: string): CSSProperties {
+  const hash = hashString(seed || "muzero");
+  const hue = hash % 360;
+  return {
+    background: `linear-gradient(135deg, hsl(${hue} 72% 48%), hsl(${(hue + 78) % 360} 74% 42%))`,
+  };
+}
+
+function hashString(value: string): number {
+  let hash = 0;
+  for (let i = 0; i < value.length; i += 1) {
+    hash = (hash * 31 + value.charCodeAt(i)) >>> 0;
+  }
+  return hash;
 }
