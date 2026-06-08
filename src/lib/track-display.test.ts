@@ -83,10 +83,23 @@ describe("resolveStageContent — video-first fallback", () => {
 });
 
 describe("trackSubtitle", () => {
-  it("prefers caption, then note, then the title; empty for no track", () => {
+  it("prefers caption, then media metadata, then note, then the title; empty for no track", () => {
     expect(
       trackSubtitle(track({ brief: { title: "x", caption: "lofi", lyrics: "", durationSec: 30 } })),
     ).toBe("lofi");
+    expect(
+      trackSubtitle(
+        track({
+          brief: undefined,
+          mediaMetadata: {
+            album: "Moonlight Archive",
+            artists: ["Yumi"],
+            parser: "music-metadata",
+            parsedAt: 1,
+          },
+        }),
+      ),
+    ).toBe("Yumi - Moonlight Archive");
     expect(trackSubtitle(track({ brief: undefined, note: "gym day" }))).toBe("gym day");
     // No caption/note → falls back to the title (uploads always have one). The
     // empty-track fallback copy is localized at the call site, so undefined → "".

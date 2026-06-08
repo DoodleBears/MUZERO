@@ -272,6 +272,29 @@ export class MuzeroDB extends Dexie {
           };
         });
     });
+
+    // v17 — normalized media metadata for uploaded/generated tracks. This is
+    // optional, small JSON on Track; media bytes and covers still live in
+    // `mediaBlobs`, so no indexes or hot-list query shape change.
+    this.version(17).upgrade(async (tx) => {
+      const blobs = (await tx.table("mediaBlobs").toArray()) as MediaBlob[];
+      const mediaByTrackId = new Map(
+        blobs.filter((blob) => blob.role === "media").map((blob) => [blob.trackId, blob]),
+      );
+      await tx
+        .table("tracks")
+        .toCollection()
+        .modify((track: Partial<Track>) => {
+          if (track.mediaMetadata) return;
+          const media = track.id ? mediaByTrackId.get(track.id) : undefined;
+          track.mediaMetadata = {
+            title: track.title,
+            originalMime: media?.mime,
+            parser: track.origin === "generated" ? "track-brief" : "manual",
+            parsedAt: track.createdAt ?? Date.now(),
+          };
+        });
+    });
   }
 }
 

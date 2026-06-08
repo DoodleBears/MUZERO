@@ -22,6 +22,7 @@ import { createAiDjBrain } from "@/dj/dj-brain-ai";
 import { createDjEngine, type DjEngine } from "@/dj/dj-engine";
 import i18n from "@/i18n/i18n";
 import { log } from "@/lib/logger";
+import { fallbackUploadMediaMetadata, parseUploadedMediaMetadata } from "@/lib/media-metadata";
 import { isUnsupportedMediaError, probeMediaFile } from "@/lib/media-probe";
 import { resolveMusicGenProvider } from "@/musicgen/registry";
 import { MediaEngine } from "@/player/media-engine";
@@ -493,13 +494,27 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
           return null;
         });
         if (!probed) continue;
+        const parsedMetadata = await parseUploadedMediaMetadata(file).catch((err: unknown) => {
+          log.warn("player", "media metadata parse failed; falling back to filename metadata", {
+            error: err instanceof Error ? err.name : typeof err,
+            mime: file.type || probed.mime,
+            size: file.size,
+          });
+          return {
+            embeddedCover: undefined,
+            mediaMetadata: fallbackUploadMediaMetadata(file, probed.title),
+            title: undefined,
+          };
+        });
         const track = await createUploadedTrack({
           sessionId: setId,
-          title: probed.title,
+          title: parsedMetadata.title ?? probed.title,
           kind: probed.kind,
           blob: file,
           mime: probed.mime,
           durationSec: probed.durationSec,
+          mediaMetadata: parsedMetadata.mediaMetadata,
+          embeddedCover: parsedMetadata.embeddedCover,
         });
         ids.push(track.id);
       }

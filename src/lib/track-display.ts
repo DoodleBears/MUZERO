@@ -30,5 +30,12 @@ export function resolveStageContent(opts: {
  */
 export function trackSubtitle(track: Track | undefined): string {
   if (!track) return "";
-  return track.brief?.caption ?? track.note ?? track.title;
+  if (track.brief?.caption) return track.brief.caption;
+  const metadata = track.mediaMetadata;
+  const artist = metadata?.artists?.join(", ");
+  const album = metadata?.album;
+  if (artist && album) return `${artist} - ${album}`;
+  if (artist) return artist;
+  if (album) return album;
+  return track.note ?? track.title;
 }

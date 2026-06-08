@@ -25,6 +25,7 @@ import {
   type SetDisplayMode,
   type Track,
   type TrackKind,
+  type TrackMediaMetadata,
 } from "./types";
 
 /**
@@ -214,6 +215,13 @@ export async function createPendingTrack(
     playCount: 0,
     liked: false,
     tags: [],
+    mediaMetadata: {
+      title: input.brief.title,
+      bpm: input.brief.bpm,
+      key: input.brief.keyscale,
+      parser: "track-brief",
+      parsedAt: Date.now(),
+    },
   };
   await db.transaction("rw", db.tracks, db.memories, async () => {
     await db.tracks.put(track);
@@ -239,6 +247,11 @@ export async function createUploadedTrack(
     blob: Blob;
     mime: string;
     durationSec: number;
+    mediaMetadata?: TrackMediaMetadata;
+    embeddedCover?: {
+      blob: Blob;
+      mime: string;
+    };
   },
   db: MuzeroDB = defaultDb,
 ): Promise<Track> {
@@ -256,6 +269,7 @@ export async function createUploadedTrack(
     playCount: 0,
     liked: false,
     tags: [],
+    mediaMetadata: input.mediaMetadata,
   };
   const media: MediaBlob = {
     id: newId("blb"),
@@ -266,8 +280,20 @@ export async function createUploadedTrack(
     blob: input.blob,
   };
   track.blobId = media.id;
+  const cover: MediaBlob | undefined = input.embeddedCover
+    ? {
+        id: newId("blb"),
+        trackId: track.id,
+        role: "cover",
+        mime: input.embeddedCover.mime,
+        bytes: input.embeddedCover.blob.size,
+        blob: input.embeddedCover.blob,
+      }
+    : undefined;
+  if (cover) track.coverBlobId = cover.id;
   await db.transaction("rw", db.tracks, db.mediaBlobs, async () => {
     await db.mediaBlobs.put(media);
+    if (cover) await db.mediaBlobs.put(cover);
     await db.tracks.put(track);
   });
   return track;

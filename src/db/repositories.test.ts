@@ -112,6 +112,48 @@ describe("createUploadedTrack", () => {
     expect(media?.role).toBe("media");
     expect(media?.bytes).toBe(4);
   });
+
+  it("stores imported media metadata and embedded cover art out of the track row", async () => {
+    const session = await createSession({ seedPrompt: "", config: { autoExtend: false } }, db);
+    const blob = new Blob([new Uint8Array([1, 2, 3])], { type: "audio/mpeg" });
+    const cover = new Blob([new Uint8Array([9, 8, 7])], { type: "image/jpeg" });
+    const track = await createUploadedTrack(
+      {
+        sessionId: session.id,
+        title: "Moonstone Beach",
+        kind: "audio",
+        blob,
+        mime: "audio/mpeg",
+        durationSec: 180,
+        mediaMetadata: {
+          album: "Soluna",
+          artists: ["Deidian"],
+          originalFileName: "04 Moonstone Beach.mp3",
+          originalMime: "audio/mpeg",
+          parser: "music-metadata",
+          parsedAt: 1,
+          title: "Moonstone Beach",
+          year: 2026,
+        },
+        embeddedCover: { blob: cover, mime: "image/jpeg" },
+      },
+      db,
+    );
+
+    expect(track.mediaMetadata).toMatchObject({
+      album: "Soluna",
+      artists: ["Deidian"],
+      originalFileName: "04 Moonstone Beach.mp3",
+    });
+    expect(track.coverBlobId).toBeTruthy();
+    const coverRow = await db.mediaBlobs.get(track.coverBlobId!);
+    expect(coverRow).toMatchObject({
+      bytes: 3,
+      mime: "image/jpeg",
+      role: "cover",
+      trackId: track.id,
+    });
+  });
 });
 
 describe("createPendingTrack provenance", () => {

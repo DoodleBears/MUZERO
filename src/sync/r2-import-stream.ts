@@ -65,6 +65,7 @@ export async function importRemoteSetStream(
     playCount: 0,
     liked: remoteTrack.source.liked,
     tags: remoteTrack.source.tags,
+    mediaMetadata: remoteTrack.source.mediaMetadata,
   }));
 
   const memories: Memory[] = remoteSet.tracks.flatMap((remoteTrack) => {

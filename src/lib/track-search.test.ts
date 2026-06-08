@@ -44,6 +44,25 @@ describe("matchesQuery", () => {
     expect(matchesQuery(neonRain, "techno")).toBe(false);
   });
 
+  it("matches imported media metadata", () => {
+    const imported = track({
+      brief: undefined,
+      mediaMetadata: {
+        album: "Moonstone Beach",
+        artists: ["Deidian"],
+        genres: ["soluna"],
+        parser: "music-metadata",
+        parsedAt: 1,
+        year: 2026,
+      },
+      origin: "uploaded",
+      title: "Track 04",
+    });
+    expect(matchesQuery(imported, "deidian")).toBe(true);
+    expect(matchesQuery(imported, "moonstone 2026")).toBe(true);
+    expect(matchesQuery(imported, "soluna")).toBe(true);
+  });
+
   it("requires every token to match (AND)", () => {
     expect(matchesQuery(neonRain, "summer mom")).toBe(true);
     expect(matchesQuery(neonRain, "summer techno")).toBe(false);

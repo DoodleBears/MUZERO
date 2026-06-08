@@ -14,6 +14,38 @@ export type TrackKind = "audio" | "video";
 /** Where the track came from. */
 export type TrackOrigin = "generated" | "uploaded";
 
+export interface TrackMediaMetadata {
+  title?: string;
+  artists?: string[];
+  album?: string;
+  albumArtists?: string[];
+  genres?: string[];
+  year?: number;
+  date?: string;
+  trackNo?: number;
+  trackOf?: number;
+  diskNo?: number;
+  diskOf?: number;
+  composer?: string[];
+  bpm?: number;
+  key?: string;
+  isrc?: string[];
+  musicBrainzRecordingId?: string;
+  musicBrainzTrackId?: string;
+  musicBrainzAlbumId?: string;
+  musicBrainzArtistIds?: string[];
+  originalFileName?: string;
+  originalMime?: string;
+  originalExtension?: string;
+  container?: string;
+  codec?: string;
+  bitrate?: number;
+  sampleRate?: number;
+  numberOfChannels?: number;
+  parser: "music-metadata" | "track-brief" | "manual";
+  parsedAt: number;
+}
+
 /**
  * A track in a set — either an AI-generated song or a user-uploaded audio/video
  * (YouTube-Music-style MV). The audio/video bytes and any cover image live in
@@ -49,6 +81,8 @@ export interface Track {
   liked: boolean;
   // Annotations — "music carries memories": user labels + memories (see `Memory`).
   tags: string[];
+  /** Normalized embedded/generated media metadata. Raw native tag frames stay out of DB. */
+  mediaMetadata?: TrackMediaMetadata;
   /**
    * @deprecated Superseded by the one-to-many {@link Memory} table (v4 migrates
    * any existing note into a first Memory). Kept nullable for defense; new code
@@ -456,6 +490,7 @@ export interface RemoteSearchTrack {
   setIds: string[];
   shareIds: string[];
   tags: string[];
+  mediaMetadata?: TrackMediaMetadata;
   kind: TrackKind;
   origin: TrackOrigin;
   durationSec: number;

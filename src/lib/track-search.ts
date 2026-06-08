@@ -12,8 +12,20 @@ import type { Track } from "@/db/types";
  * for any not-yet-migrated row.
  */
 export function trackSearchText(track: Track, memoryNotes: readonly string[] = []): string {
+  const metadata = track.mediaMetadata;
   return [
     track.title,
+    metadata?.title,
+    metadata?.artists?.join(" "),
+    metadata?.albumArtists?.join(" "),
+    metadata?.album,
+    metadata?.genres?.join(" "),
+    metadata?.year?.toString(),
+    metadata?.date,
+    metadata?.composer?.join(" "),
+    metadata?.isrc?.join(" "),
+    metadata?.musicBrainzRecordingId,
+    metadata?.musicBrainzTrackId,
     track.brief?.caption ?? "",
     track.note ?? "",
     track.tags.join(" "),

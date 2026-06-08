@@ -44,6 +44,15 @@ describe("r2 search catalog schemas", () => {
           origin: "uploaded",
           durationSec: 214,
           tags: ["night", "drive"],
+          mediaMetadata: {
+            album: "Moonstone Beach",
+            artists: ["Deidian"],
+            genres: ["soluna"],
+            parser: "music-metadata",
+            parsedAt: 1780944000000,
+            title: "Blue Highway",
+            year: 2026,
+          },
           memoryText: "friends sea night",
           briefCaption: null,
           artistLike: null,
@@ -68,6 +77,15 @@ describe("remote search row normalization", () => {
     origin: "uploaded" as const,
     durationSec: 214,
     tags: ["night", "drive"],
+    mediaMetadata: {
+      album: "Moonstone Beach",
+      artists: ["Deidian"],
+      genres: ["soluna"],
+      parser: "music-metadata" as const,
+      parsedAt: 1780944000000,
+      title: "Blue Highway",
+      year: 2026,
+    },
     memoryText: "朋友 sea night",
     briefCaption: "lofi city pop",
     artistLike: null,
@@ -86,6 +104,8 @@ describe("remote search row normalization", () => {
     expect(row.id).toBe("drv_a:lib_abc:trk_blue");
     expect(row.normalizedText).toContain("blue highway");
     expect(row.normalizedText).toContain("lofi city pop");
+    expect(row.normalizedText).toContain("deidian");
+    expect(row.normalizedText).toContain("moonstone beach");
   });
 
   it("matches normal text and tag-only queries", () => {
@@ -96,6 +116,7 @@ describe("remote search row normalization", () => {
     });
 
     expect(matchesRemoteSearchTrack(row, "blue sea")).toBe(true);
+    expect(matchesRemoteSearchTrack(row, "deidian soluna")).toBe(true);
     expect(matchesRemoteSearchTrack(row, "朋友")).toBe(true);
     expect(matchesRemoteSearchTrack(row, "#drive")).toBe(true);
     expect(matchesRemoteSearchTrack(row, "#sea")).toBe(false);

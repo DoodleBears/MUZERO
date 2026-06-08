@@ -50,6 +50,15 @@ const remoteSet: RemoteSetIndexResult = {
         createdAt: 1780944000000,
         liked: true,
         tags: ["night"],
+        mediaMetadata: {
+          album: "Moonstone Beach",
+          artists: ["Deidian"],
+          originalFileName: "blue-highway.mp3",
+          originalMime: "audio/mpeg",
+          parser: "music-metadata",
+          parsedAt: 1780944000000,
+          title: "Blue Highway",
+        },
         media: {
           key: "objects/media/sha256-blue.mp3",
           url: "objects/media/sha256-blue.mp3",
@@ -99,6 +108,15 @@ const remoteSet: RemoteSetIndexResult = {
         createdAt: 1780944000000,
         liked: true,
         tags: ["night"],
+        mediaMetadata: {
+          album: "Moonstone Beach",
+          artists: ["Deidian"],
+          originalFileName: "blue-highway.mp3",
+          originalMime: "audio/mpeg",
+          parser: "music-metadata",
+          parsedAt: 1780944000000,
+          title: "Blue Highway",
+        },
         media: {
           key: "objects/media/sha256-blue.mp3",
           url: "objects/media/sha256-blue.mp3",
@@ -148,6 +166,10 @@ describe("importRemoteSetStream", () => {
     const track = await db.tracks.get(result.trackIds[0]!);
     expect(track).toMatchObject({
       title: "Blue Highway",
+      mediaMetadata: {
+        album: "Moonstone Beach",
+        artists: ["Deidian"],
+      },
       remoteMediaUrl: "https://music.example.com/muzero/objects/media/sha256-blue.mp3",
       remoteCoverUrl: "https://music.example.com/muzero/objects/covers/blue.jpg",
     });

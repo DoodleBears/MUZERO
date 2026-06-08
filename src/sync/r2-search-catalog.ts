@@ -1,5 +1,6 @@
 import { z } from "zod";
-import type { TrackKind, TrackOrigin } from "@/db/types";
+import type { TrackKind, TrackMediaMetadata, TrackOrigin } from "@/db/types";
+import { r2TrackMediaMetadataSchema } from "./r2-manifest-schema";
 
 const remotePathSchema = z.string().min(1);
 const remotePageRefSchema = z.union([
@@ -40,6 +41,7 @@ export const r2TrackSearchRecordSchema = z.object({
   origin: z.enum(["generated", "uploaded"]),
   durationSec: z.number().nonnegative(),
   tags: z.array(z.string()),
+  mediaMetadata: r2TrackMediaMetadataSchema.optional(),
   memoryText: z.string().nullable(),
   briefCaption: z.string().nullable(),
   artistLike: z.string().nullable(),
@@ -89,6 +91,7 @@ export interface RemoteSearchTrackRow {
   setIds: string[];
   shareIds: string[];
   tags: string[];
+  mediaMetadata?: TrackMediaMetadata;
   kind: TrackKind;
   origin: TrackOrigin;
   durationSec: number;
@@ -147,10 +150,17 @@ export function remoteSearchTrackToRow(input: RemoteSearchTrackToRowInput): Remo
       track.memoryText,
       track.briefCaption,
       track.artistLike,
+      track.mediaMetadata?.title,
+      track.mediaMetadata?.artists?.join(" "),
+      track.mediaMetadata?.albumArtists?.join(" "),
+      track.mediaMetadata?.album,
+      track.mediaMetadata?.genres?.join(" "),
+      track.mediaMetadata?.year?.toString(),
     ]),
     setIds: track.setIds,
     shareIds: track.shareIds,
     tags: track.tags.map((tag) => tag.toLowerCase()),
+    mediaMetadata: track.mediaMetadata,
     kind: track.kind,
     origin: track.origin,
     durationSec: track.durationSec,
