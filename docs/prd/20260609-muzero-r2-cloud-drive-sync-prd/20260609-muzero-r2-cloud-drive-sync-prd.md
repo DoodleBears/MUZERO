@@ -1623,6 +1623,8 @@ For a large shared playlist with many trusted devices, the UI should:
 - [ ] Add read-only import flow: manifest → set indexes → tracks/memories/media refs.
 - [ ] Support stream mode: keep remote media URLs without downloading blobs.
 - [ ] Support cache mode: download selected media into `mediaBlobs`.
+- [x] Add remote search catalog and paged track/set search schemas.
+- [x] Add remote search track row normalization and query matcher.
 - [ ] Add optional remote search catalog import: `catalog/library.json` + paged set/track indexes.
 - [ ] Store remote-only searchable set/track rows in IndexedDB without downloading media.
 - [ ] Show preview before import: set count, track count, media size, source domain.
@@ -1916,3 +1918,4 @@ Do not record secrets, full signed URLs, or media content.
 | 2026-06-09 | MUZERO | Architecture review pass: clarified V1/V3 boundary, profile/avatar sync, per-device object ownership, and multi-writer conflict rules. |
 | 2026-06-09 | MUZERO | Phase 1 implementation started: manifest/set/share/stats schemas and R2 URL normalization/resolution added with tests. |
 | 2026-06-09 | MUZERO | Phase 1 read-only subscription service added: public manifest preview and remote set index loading with resolved media URLs. |
+| 2026-06-09 | MUZERO | Phase 1 remote search catalog schemas and local remote-search row normalization added with tests. |
