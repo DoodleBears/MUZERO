@@ -223,6 +223,68 @@ describe("buildR2ExportPlan", () => {
       ],
     });
   });
+
+  it("does not export playback event segments during auto sync before policy thresholds", async () => {
+    await seedSet();
+    await seedDeviceWithPlaybackEvents(10, 1_000);
+
+    const plan = await buildR2ExportPlan({
+      driveId: "drv_1",
+      libraryId: "lib_1",
+      baseUrl: "https://music.example.com/muzero/",
+      setIds: ["ses_1"],
+      db,
+      playbackEventFlush: {
+        mode: "auto",
+        now: 2_000,
+      },
+    });
+
+    expect(plan.objects.some((object) => object.kind === "stats-events-segment")).toBe(false);
+    expect(plan.objects.some((object) => object.kind === "stats-checkpoint")).toBe(false);
+  });
+
+  it("exports playback event segments during auto sync when count threshold is reached", async () => {
+    await seedSet();
+    await seedDeviceWithPlaybackEvents(25, 1_000);
+
+    const plan = await buildR2ExportPlan({
+      driveId: "drv_1",
+      libraryId: "lib_1",
+      baseUrl: "https://music.example.com/muzero/",
+      setIds: ["ses_1"],
+      db,
+      playbackEventFlush: {
+        eventThreshold: 25,
+        mode: "auto",
+        now: 2_000,
+      },
+    });
+
+    expect(plan.objects.some((object) => object.kind === "stats-events-segment")).toBe(true);
+    expect(plan.objects.some((object) => object.kind === "stats-checkpoint")).toBe(true);
+  });
+
+  it("exports playback event segments during auto sync when age threshold is reached", async () => {
+    await seedSet();
+    await seedDeviceWithPlaybackEvents(1, 1_000);
+
+    const plan = await buildR2ExportPlan({
+      driveId: "drv_1",
+      libraryId: "lib_1",
+      baseUrl: "https://music.example.com/muzero/",
+      setIds: ["ses_1"],
+      db,
+      playbackEventFlush: {
+        maxAgeMs: 5 * 60_000,
+        mode: "auto",
+        now: 301_000,
+      },
+    });
+
+    expect(plan.objects.some((object) => object.kind === "stats-events-segment")).toBe(true);
+    expect(plan.objects.some((object) => object.kind === "stats-checkpoint")).toBe(true);
+  });
 });
 
 async function seedSet(options: { remoteOnly?: boolean } = {}) {
@@ -314,4 +376,33 @@ async function seedSet(options: { remoteOnly?: boolean } = {}) {
   await db.tracks.put(track);
   await db.memories.put(memory);
   await db.mediaBlobs.bulkPut(blobs);
+}
+
+async function seedDeviceWithPlaybackEvents(count: number, firstStartedAt: number) {
+  await db.devices.put({
+    id: "dev_local",
+    publicId: "dvc_1",
+    name: "Mac desktop",
+    platform: "browser",
+    appVersion: "0.1.0",
+    publishProfile: false,
+    profileRevision: 1,
+    createdAt: 100,
+    lastSeenAt: 200,
+  });
+  await db.playbackEvents.bulkPut(
+    Array.from({ length: count }, (_, index) => {
+      const startedAt = firstStartedAt + index * 1_000;
+      return {
+        id: `ple_${index}`,
+        devicePublicId: "dvc_1",
+        trackId: "trk_1",
+        context: { source: "local", setId: "ses_1" },
+        startedAt,
+        endedAt: startedAt + 31_000,
+        listenedSec: 31,
+        countedAsPlay: true,
+      };
+    }),
+  );
 }
