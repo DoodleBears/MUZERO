@@ -1766,7 +1766,7 @@ For a large shared playlist with many trusted devices, the UI should:
 - [x] Track listened seconds while a track is actively playing.
 - [x] Increment play count once per meaningful listen, not on every seek/replay glitch.
 - [x] Persist `PlaybackEvent` with drive/share/set/queue context for every meaningful listen.
-- [ ] Derive `PlaybackAggregate` rows for track, track-in-set, track-in-share, set, share, and drive scopes.
+- [x] Derive `PlaybackAggregate` rows for track, track-in-set, track-in-share, set, share, and drive scopes.
 - [x] Persist per-device `TrackPlaybackStats`.
 - [x] Export/import immutable playback event segments under `stats/events/<devicePublicId>/`.
 - [ ] Flush playback event segments when either the event-count threshold or time threshold is reached.
@@ -1974,3 +1974,4 @@ Do not record secrets, full signed URLs, or media content.
 | 2026-06-09 | MUZERO | Phase 5 memory author data layer added: `addMemory` can persist sanitized `MemoryAuthorRef` snapshots and Dexie v16 backfills existing unattributed local memories as unknown local authors. |
 | 2026-06-09 | MUZERO | Phase 5 memory attribution now round-trips through R2 set indexes: exported memories include author snapshots and read-only stream imports preserve remote memory authors locally. |
 | 2026-06-09 | MUZERO | Phase 5 playback event segment export added: R2 publish plans now include immutable per-device `stats/events/<devicePublicId>/...json` segment objects for local `PlaybackEvent` rows while checkpoint/retry policy remains a later slice. |
+| 2026-06-09 | MUZERO | Phase 5 playback aggregate scopes completed: meaningful listens now derive global track, track-in-set, track-in-share, set, share, and drive aggregate rows, preserving remote track ids and media hashes for shared-library stats. |

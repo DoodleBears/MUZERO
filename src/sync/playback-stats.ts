@@ -10,6 +10,7 @@ export interface PlayThresholdInput {
 export interface RecordPlaybackListenInput {
   devicePublicId: string;
   trackId: string;
+  remoteTrackRef?: PlaybackEvent["remoteTrackRef"];
   durationSec: number;
   listenedSec: number;
   startedAt: number;
@@ -38,6 +39,7 @@ export async function recordPlaybackListen(
     id: newId("ple"),
     devicePublicId: input.devicePublicId,
     trackId: input.trackId,
+    remoteTrackRef: input.remoteTrackRef,
     context: input.context,
     startedAt: input.startedAt,
     endedAt: input.endedAt,
@@ -70,9 +72,50 @@ export async function recordPlaybackListen(
         db,
       );
       if (input.context.setId) {
+        await upsertTrackInSetAggregate(
+          input.devicePublicId,
+          input.trackId,
+          input.context.setId,
+          input.remoteTrackRef,
+          listenedSec,
+          countedAsPlay,
+          updatedAt,
+          db,
+        );
         await upsertSetAggregate(
           input.devicePublicId,
           input.context.setId,
+          listenedSec,
+          countedAsPlay,
+          updatedAt,
+          db,
+        );
+      }
+      if (input.context.shareId) {
+        await upsertTrackInShareAggregate(
+          input.devicePublicId,
+          input.trackId,
+          input.context.shareId,
+          input.context.setId,
+          input.remoteTrackRef,
+          listenedSec,
+          countedAsPlay,
+          updatedAt,
+          db,
+        );
+        await upsertShareAggregate(
+          input.devicePublicId,
+          input.context.shareId,
+          listenedSec,
+          countedAsPlay,
+          updatedAt,
+          db,
+        );
+      }
+      if (input.context.driveId) {
+        await upsertDriveAggregate(
+          input.devicePublicId,
+          input.context.driveId,
           listenedSec,
           countedAsPlay,
           updatedAt,
@@ -133,6 +176,63 @@ async function upsertTrackAggregate(
   );
 }
 
+async function upsertTrackInSetAggregate(
+  devicePublicId: string,
+  trackId: string,
+  setId: string,
+  remoteTrackRef: PlaybackEvent["remoteTrackRef"],
+  listenedSec: number,
+  countedAsPlay: boolean,
+  updatedAt: number,
+  db: MuzeroDB,
+) {
+  await upsertAggregate(
+    {
+      id: `${devicePublicId}:track-in-set:${setId}:${trackId}`,
+      devicePublicId,
+      scope: "track-in-set",
+      setId,
+      trackId,
+      remoteTrackId: remoteTrackRef?.trackId,
+      mediaSha256: remoteTrackRef?.mediaSha256,
+    },
+    listenedSec,
+    countedAsPlay,
+    updatedAt,
+    db,
+  );
+}
+
+async function upsertTrackInShareAggregate(
+  devicePublicId: string,
+  trackId: string,
+  shareId: string,
+  setId: string | undefined,
+  remoteTrackRef: PlaybackEvent["remoteTrackRef"],
+  listenedSec: number,
+  countedAsPlay: boolean,
+  updatedAt: number,
+  db: MuzeroDB,
+) {
+  const aggregateTrackId = remoteTrackRef?.trackId ?? trackId;
+  await upsertAggregate(
+    {
+      id: `${devicePublicId}:track-in-share:${shareId}:${aggregateTrackId}`,
+      devicePublicId,
+      scope: "track-in-share",
+      shareId,
+      setId,
+      trackId,
+      remoteTrackId: remoteTrackRef?.trackId,
+      mediaSha256: remoteTrackRef?.mediaSha256,
+    },
+    listenedSec,
+    countedAsPlay,
+    updatedAt,
+    db,
+  );
+}
+
 async function upsertSetAggregate(
   devicePublicId: string,
   setId: string,
@@ -155,8 +255,63 @@ async function upsertSetAggregate(
   );
 }
 
+async function upsertShareAggregate(
+  devicePublicId: string,
+  shareId: string,
+  listenedSec: number,
+  countedAsPlay: boolean,
+  updatedAt: number,
+  db: MuzeroDB,
+) {
+  await upsertAggregate(
+    {
+      id: `${devicePublicId}:share:${shareId}`,
+      devicePublicId,
+      scope: "share",
+      shareId,
+    },
+    listenedSec,
+    countedAsPlay,
+    updatedAt,
+    db,
+  );
+}
+
+async function upsertDriveAggregate(
+  devicePublicId: string,
+  driveId: string,
+  listenedSec: number,
+  countedAsPlay: boolean,
+  updatedAt: number,
+  db: MuzeroDB,
+) {
+  await upsertAggregate(
+    {
+      id: `${devicePublicId}:drive:${driveId}`,
+      devicePublicId,
+      scope: "drive",
+      driveId,
+    },
+    listenedSec,
+    countedAsPlay,
+    updatedAt,
+    db,
+  );
+}
+
 async function upsertAggregate(
-  base: Pick<PlaybackAggregate, "id" | "devicePublicId" | "scope" | "trackId" | "setId">,
+  base: Pick<
+    PlaybackAggregate,
+    | "id"
+    | "devicePublicId"
+    | "scope"
+    | "driveId"
+    | "shareId"
+    | "setId"
+    | "trackId"
+    | "remoteTrackId"
+    | "mediaSha256"
+  >,
   listenedSec: number,
   countedAsPlay: boolean,
   updatedAt: number,

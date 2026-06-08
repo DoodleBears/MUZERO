@@ -78,6 +78,106 @@ describe("recordPlaybackListen", () => {
     });
     expect((await db.tracks.get("trk_1"))?.playCount).toBe(0);
   });
+
+  it("derives track-in-set aggregates separately from global track aggregates", async () => {
+    await recordPlaybackListen(
+      {
+        devicePublicId: "dvc_1",
+        trackId: "trk_1",
+        durationSec: 180,
+        listenedSec: 31,
+        startedAt: 1000,
+        endedAt: 31_000,
+        context: { source: "local", setId: "ses_a" },
+      },
+      db,
+    );
+    await recordPlaybackListen(
+      {
+        devicePublicId: "dvc_1",
+        trackId: "trk_1",
+        durationSec: 180,
+        listenedSec: 5,
+        startedAt: 40_000,
+        endedAt: 45_000,
+        context: { source: "local", setId: "ses_b" },
+      },
+      db,
+    );
+
+    expect(await db.playbackAggregates.get("dvc_1:track:trk_1")).toMatchObject({
+      scope: "track",
+      playCount: 1,
+      listenedSec: 36,
+    });
+    expect(await db.playbackAggregates.get("dvc_1:track-in-set:ses_a:trk_1")).toMatchObject({
+      scope: "track-in-set",
+      setId: "ses_a",
+      trackId: "trk_1",
+      playCount: 1,
+      listenedSec: 31,
+    });
+    expect(await db.playbackAggregates.get("dvc_1:track-in-set:ses_b:trk_1")).toMatchObject({
+      scope: "track-in-set",
+      setId: "ses_b",
+      trackId: "trk_1",
+      playCount: 0,
+      listenedSec: 5,
+    });
+  });
+
+  it("derives track-in-share, share, and drive aggregates for shared remote listens", async () => {
+    const event = await recordPlaybackListen(
+      {
+        devicePublicId: "dvc_1",
+        trackId: "trk_1",
+        remoteTrackRef: {
+          driveId: "drv_friend",
+          shareId: "shr_tokyo",
+          setId: "ses_tokyo",
+          trackId: "remote_trk_1",
+          mediaSha256: "sha256-blue",
+        },
+        durationSec: 180,
+        listenedSec: 31,
+        startedAt: 1000,
+        endedAt: 31_000,
+        context: {
+          source: "shared-drive",
+          driveId: "drv_friend",
+          shareId: "shr_tokyo",
+          setId: "ses_tokyo",
+        },
+      },
+      db,
+    );
+
+    expect(event.remoteTrackRef).toMatchObject({ trackId: "remote_trk_1" });
+    expect(
+      await db.playbackAggregates.get("dvc_1:track-in-share:shr_tokyo:remote_trk_1"),
+    ).toMatchObject({
+      scope: "track-in-share",
+      shareId: "shr_tokyo",
+      setId: "ses_tokyo",
+      trackId: "trk_1",
+      remoteTrackId: "remote_trk_1",
+      mediaSha256: "sha256-blue",
+      playCount: 1,
+      listenedSec: 31,
+    });
+    expect(await db.playbackAggregates.get("dvc_1:share:shr_tokyo")).toMatchObject({
+      scope: "share",
+      shareId: "shr_tokyo",
+      playCount: 1,
+      listenedSec: 31,
+    });
+    expect(await db.playbackAggregates.get("dvc_1:drive:drv_friend")).toMatchObject({
+      scope: "drive",
+      driveId: "drv_friend",
+      playCount: 1,
+      listenedSec: 31,
+    });
+  });
 });
 
 function track(id: string): Track {
