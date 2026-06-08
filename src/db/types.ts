@@ -77,6 +77,8 @@ export interface Memory {
   photoBlobId?: string;
   /** Streamable remote memory photo URL for read-only cloud shares. */
   remotePhotoUrl?: string;
+  /** Snapshot of the device/person who wrote this memory. */
+  author?: MemoryAuthorRef;
   createdAt: number;
 }
 
@@ -88,12 +90,13 @@ export interface Memory {
  *  - `gallery` — global slideshow images, stored under the sentinel
  *    `trackId === GLOBAL_GALLERY_ID` (not bound to any track)
  *  - `memory`  — a photo attached to a {@link Memory} (`trackId` = the song)
+ *  - `avatar`  — a local device profile avatar (`trackId` = device record id)
  * New roles are additive: existing rows keep their role, so no schema bump.
  */
 export interface MediaBlob {
   id: string;
   trackId: string;
-  role: "media" | "cover" | "background" | "gallery" | "memory";
+  role: "media" | "cover" | "background" | "gallery" | "memory" | "avatar";
   mime: string;
   bytes: number;
   blob: Blob;
@@ -547,5 +550,95 @@ export interface SyncObject {
   lastUploadedAt?: number;
   lastUploadedRunId?: string;
   lastSeenAt?: number;
+  updatedAt: number;
+}
+
+export interface DeviceRecord {
+  id: string;
+  publicId: string;
+  name: string;
+  avatarSeed?: string;
+  avatarBlobId?: string;
+  platform: "browser" | "tauri" | "electron";
+  userAgent?: string;
+  os?: string;
+  appVersion: string;
+  localSigningSecret?: string;
+  publishProfile: boolean;
+  profileRevision: number;
+  createdAt: number;
+  lastSeenAt: number;
+}
+
+export interface DevicePublicProfile {
+  schema: "muzero-r2-device-profile-v1";
+  devicePublicId: string;
+  displayName: string;
+  avatarSeed?: string;
+  avatar?: {
+    url: string;
+    mime: string;
+    bytes: number;
+    sha256?: string;
+  };
+  appVersion?: string;
+  revision: number;
+  updatedAt: number;
+}
+
+export interface MemoryAuthorRef {
+  devicePublicId: string;
+  displayName?: string;
+  avatarSeed?: string;
+  avatarUrl?: string;
+}
+
+export interface TrackPlaybackStats {
+  id: string;
+  devicePublicId: string;
+  trackId: string;
+  playCount: number;
+  listenedSec: number;
+  lastPlayedAt?: number;
+  updatedAt: number;
+}
+
+export interface PlaybackEvent {
+  id: string;
+  devicePublicId: string;
+  trackId?: string;
+  remoteTrackRef?: {
+    driveId: string;
+    shareId?: string;
+    setId?: string;
+    trackId: string;
+    mediaSha256?: string;
+  };
+  context: {
+    source: "local" | "owned-drive" | "shared-drive" | "share";
+    driveId?: string;
+    shareId?: string;
+    setId?: string;
+    queueEntryId?: string;
+  };
+  startedAt: number;
+  endedAt?: number;
+  listenedSec: number;
+  countedAsPlay: boolean;
+}
+
+export interface PlaybackAggregate {
+  id: string;
+  devicePublicId: string;
+  scope: "track" | "track-in-set" | "track-in-share" | "set" | "share" | "drive";
+  driveId?: string;
+  shareId?: string;
+  setId?: string;
+  trackId?: string;
+  remoteTrackId?: string;
+  mediaSha256?: string;
+  playCount: number;
+  listenedSec: number;
+  lastPlayedAt?: number;
   updatedAt: number;
 }

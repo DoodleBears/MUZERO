@@ -17,7 +17,7 @@
 | 2 | R2 Setup Wizard + connection validation | ✅ Done | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | Local-to-cloud publish sync with visible progress | 🔄 In Progress | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | Cloud-to-local pull sync + conflict handling | 🔲 Pending | [Phase 4 Checklist](#phase-4-checklist) |
-| 5 | Anonymous device registry + playback stats sync | 🔲 Pending | [Phase 5 Checklist](#phase-5-checklist) |
+| 5 | Anonymous device registry + playback stats sync | 🔄 In Progress | [Phase 5 Checklist](#phase-5-checklist) |
 | 6 | Optional low-frequency currently-playing presence | 🔲 Pending | [Phase 6 Checklist](#phase-6-checklist) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
@@ -1755,9 +1755,9 @@ For a large shared playlist with many trusted devices, the UI should:
 
 **Tasks:**
 
-- [ ] Generate one anonymous random `DeviceRecord.publicId` per app profile.
+- [x] Generate one anonymous random `DeviceRecord.publicId` per app profile.
 - [ ] Add UI to rename device.
-- [ ] Add optional device avatar/color seed for attribution chips.
+- [x] Add optional device avatar/color seed for attribution chips.
 - [ ] Add optional uploaded avatar image with local storage and remote profile object reference.
 - [ ] Publish `DevicePublicProfile` to owner/trusted drives when enabled and write permission exists.
 - [ ] Add profile `revision` and ETag/hash checks so two offline edits cannot silently overwrite each other.
@@ -1957,3 +1957,4 @@ Do not record secrets, full signed URLs, or media content.
 | 2026-06-09 | MUZERO | Phase 3 implementation started: local export plan now collects set/track/memory/media rows, computes content-addressed R2 keys for media/cover/memory photos, emits per-set index writes, and keeps root manifest last. |
 | 2026-06-09 | MUZERO | Phase 3 R2 publish executor added with shared S3 signing, HEAD-based skips for content-addressed binary objects, ordered PUT uploads for indexes/manifests, progress events, and between-object cancellation. |
 | 2026-06-09 | MUZERO | Phase 3 sync bookkeeping added with Dexie v13 `syncRuns` and `syncObjects`, plus a publish-sync wrapper that records completed/failed runs and object provenance without clobbering old mappings on failure. |
+| 2026-06-09 | MUZERO | Phase 5 device foundation started with Dexie v14 device/playback-stat tables, anonymous per-profile `DeviceRecord.publicId`, profile revision fields, avatar seed support, and local device repository tests. |

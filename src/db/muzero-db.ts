@@ -5,9 +5,12 @@ import type {
   ChatSession,
   CloudDrive,
   CloudShare,
+  DeviceRecord,
   DjSession,
   MediaBlob,
   Memory,
+  PlaybackAggregate,
+  PlaybackEvent,
   PlayQueue,
   PlayQueueEntry,
   RemoteSearchCatalog,
@@ -16,6 +19,7 @@ import type {
   SyncObject,
   SyncRun,
   Track,
+  TrackPlaybackStats,
 } from "./types";
 
 /**
@@ -38,6 +42,10 @@ export class MuzeroDB extends Dexie {
   cloudShares!: EntityTable<CloudShare, "id">;
   syncRuns!: EntityTable<SyncRun, "id">;
   syncObjects!: EntityTable<SyncObject, "id">;
+  devices!: EntityTable<DeviceRecord, "id">;
+  trackPlaybackStats!: EntityTable<TrackPlaybackStats, "id">;
+  playbackEvents!: EntityTable<PlaybackEvent, "id">;
+  playbackAggregates!: EntityTable<PlaybackAggregate, "id">;
 
   constructor(name = "muzero-db") {
     super(name);
@@ -232,6 +240,14 @@ export class MuzeroDB extends Dexie {
     this.version(13).stores({
       syncRuns: "id, driveId, direction, status, startedAt",
       syncObjects: "id, driveId, key, kind, sourceSetId, sourceTrackId, updatedAt, lastUploadedAt",
+    });
+
+    // v14 — anonymous local device identity and per-device playback stats.
+    this.version(14).stores({
+      devices: "id, publicId, lastSeenAt",
+      trackPlaybackStats: "id, trackId, devicePublicId, updatedAt, [trackId+devicePublicId]",
+      playbackEvents: "id, devicePublicId, startedAt, trackId, [devicePublicId+startedAt]",
+      playbackAggregates: "id, devicePublicId, scope, driveId, shareId, setId, trackId, updatedAt",
     });
   }
 }
