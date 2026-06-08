@@ -1726,10 +1726,10 @@ For a large shared playlist with many trusted devices, the UI should:
 
 ### Phase 3 Checklist
 
-- [ ] Audio media syncs to R2.
-- [ ] Video media syncs to R2.
-- [ ] Track covers sync to R2.
-- [ ] Memory photos sync to R2.
+- [x] Audio media syncs to R2.
+- [x] Video media syncs to R2.
+- [x] Track covers sync to R2.
+- [x] Memory photos sync to R2.
 - [ ] Device avatar/profile syncs to R2 only where write permission exists.
 - [x] Set metadata, `TrackBrief`, and normalized `Track.mediaMetadata` sync to R2 set indexes.
 - [ ] Progress shows object count, byte count, current phase, and failures.
@@ -2008,6 +2008,7 @@ Do not record secrets, full signed URLs, or media content.
 | 2026-06-09 | MUZERO | Phase 5 playback event segment retry made idempotent: immutable `stats/events/<devicePublicId>/...json` objects are HEAD-checked on retry and skipped when already present, so a failed checkpoint upload can be retried without re-uploading the event segment. |
 | 2026-06-09 | MUZERO | Phase 5 rebuildable aggregate cache import added: `stats/devices/<devicePublicId>/aggregate.json` validates schema/counts and bulk-upserts per-device `PlaybackAggregate` rows while preserving device separation. |
 | 2026-06-09 | MUZERO | Phase 5 aggregate summary helper added: UI/query layers can merge matching stats across anonymous devices while preserving per-device rows, and can filter `track-in-set` aggregates so the same track has separate counts in different sets. |
+| 2026-06-09 | MUZERO | Phase 3 media object sync coverage completed for export planning: audio, video, track covers, and memory photos are emitted as content-addressed R2 objects, with video set indexes preserving `kind: "video"` and `video/mp4` media metadata. |
 | 2026-06-09 | MUZERO | Phase 5 playback checkpoint export added: event segment publish plans now include `stats/devices/<devicePublicId>/checkpoint.json` with the latest event watermark and immutable segment key. |
 | 2026-06-09 | MUZERO | Phase 5 optional `stats/index.json` discovery completed for stats sync: device entries can point to aggregate cache, checkpoint, and latest immutable event segment without making the index the write-hot source of truth. |
 | 2026-06-09 | MUZERO | Phase 5 stats/profile write policy added: only owner/trusted drives with local R2 credentials may receive stats or opted-in device profiles, keeping read-only shared-link listener data local by default. |
