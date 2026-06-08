@@ -1764,10 +1764,10 @@ For a large shared playlist with many trusted devices, the UI should:
 - [ ] Add `Memory.author?: MemoryAuthorRef` and backfill existing rows as unknown/local.
 - [ ] Show memory author on memory cards.
 - [ ] Track listened seconds while a track is actively playing.
-- [ ] Increment play count once per meaningful listen, not on every seek/replay glitch.
-- [ ] Persist `PlaybackEvent` with drive/share/set/queue context for every meaningful listen.
+- [x] Increment play count once per meaningful listen, not on every seek/replay glitch.
+- [x] Persist `PlaybackEvent` with drive/share/set/queue context for every meaningful listen.
 - [ ] Derive `PlaybackAggregate` rows for track, track-in-set, track-in-share, set, share, and drive scopes.
-- [ ] Persist per-device `TrackPlaybackStats`.
+- [x] Persist per-device `TrackPlaybackStats`.
 - [ ] Export/import immutable playback event segments under `stats/events/<devicePublicId>/`.
 - [ ] Flush playback event segments when either the event-count threshold or time threshold is reached.
 - [ ] Retry failed segment uploads without duplicating remote play counts.
@@ -1782,7 +1782,7 @@ For a large shared playlist with many trusted devices, the UI should:
 ### Phase 5 Checklist
 
 - [ ] Listening to a track records listened seconds.
-- [ ] Listening to a track records play count according to the defined threshold.
+- [x] Listening to a track records play count according to the defined threshold.
 - [ ] Device display name appears in owner/publisher UI where no account exists.
 - [ ] Device avatar appears anywhere device attribution appears, with generated-avatar fallback.
 - [ ] Device profile updates sync only to writable targets and do not rewrite historical memories.
@@ -1958,3 +1958,4 @@ Do not record secrets, full signed URLs, or media content.
 | 2026-06-09 | MUZERO | Phase 3 R2 publish executor added with shared S3 signing, HEAD-based skips for content-addressed binary objects, ordered PUT uploads for indexes/manifests, progress events, and between-object cancellation. |
 | 2026-06-09 | MUZERO | Phase 3 sync bookkeeping added with Dexie v13 `syncRuns` and `syncObjects`, plus a publish-sync wrapper that records completed/failed runs and object provenance without clobbering old mappings on failure. |
 | 2026-06-09 | MUZERO | Phase 5 device foundation started with Dexie v14 device/playback-stat tables, anonymous per-profile `DeviceRecord.publicId`, profile revision fields, avatar seed support, and local device repository tests. |
+| 2026-06-09 | MUZERO | Phase 5 playback stats repository added with meaningful-listen threshold tests, `PlaybackEvent` persistence, per-device `TrackPlaybackStats`, track/set aggregates, and existing `Track.playCount` reconciliation for counted listens. |
