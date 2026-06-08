@@ -10,14 +10,38 @@ function scriptedBrain(scripts: TrackBrief[][]): DjBrain & {
   calls: number;
   lastRecentTitles: string[];
   lastRecentNotes: (string | undefined)[];
+  lastRecentMetadata: {
+    artists?: string[];
+    album?: string;
+    genres?: string[];
+    year?: number;
+  }[];
 } {
   const state = {
     calls: 0,
     lastRecentTitles: [] as string[],
     lastRecentNotes: [] as (string | undefined)[],
-    async draftBriefs(ctx: { recent: { title: string; note?: string }[] }) {
+    lastRecentMetadata: [] as {
+      artists?: string[];
+      album?: string;
+      genres?: string[];
+      year?: number;
+    }[],
+    async draftBriefs(ctx: {
+      recent: {
+        title: string;
+        note?: string;
+        metadata?: {
+          artists?: string[];
+          album?: string;
+          genres?: string[];
+          year?: number;
+        };
+      }[];
+    }) {
       state.lastRecentTitles = ctx.recent.map((r) => r.title);
       state.lastRecentNotes = ctx.recent.map((r) => r.note);
+      state.lastRecentMetadata = ctx.recent.map((r) => r.metadata ?? {});
       const batch = scripts[Math.min(state.calls, scripts.length - 1)];
       state.calls += 1;
       return batch;
@@ -195,6 +219,40 @@ describe("DjEngine.refillIfNeeded (续上歌单)", () => {
     expect(brain.lastRecentTitles).toEqual(["A"]);
     // both memories joined into the listener note, newest after oldest
     expect(brain.lastRecentNotes).toEqual(["danced to this in osaka · rainy window"]);
+  });
+
+  it("feeds imported artist, album, and genre metadata into the DJ context", async () => {
+    const session = await createSession(
+      { seedPrompt: "x", config: { refillThreshold: 1, batchSize: 1 } },
+      db,
+    );
+    const brain = scriptedBrain([[brief("A")], [brief("B")]]);
+    const engine = createDjEngine({ db, brain, provider: createMockMusicGenProvider() });
+    await engine.draft(session.id);
+    await engine.materializeNext(session.id);
+    const [trackId] = (await getSession(session.id, db))!.trackIds;
+    await db.tracks.update(trackId, {
+      mediaMetadata: {
+        title: "A",
+        artists: ["Deidian"],
+        album: "Soluna",
+        genres: ["organic house", "chill"],
+        year: 2026,
+        parser: "music-metadata",
+        parsedAt: 1,
+      },
+    });
+
+    await engine.refillIfNeeded(session.id, 1, 0);
+
+    expect(brain.lastRecentMetadata).toEqual([
+      {
+        artists: ["Deidian"],
+        album: "Soluna",
+        genres: ["organic house", "chill"],
+        year: 2026,
+      },
+    ]);
   });
 
   it("never refills a non-DJ (upload/curated) set", async () => {

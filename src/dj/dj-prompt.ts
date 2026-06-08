@@ -5,6 +5,13 @@ import type { TrackBrief } from "./dj-brief-schema";
 export interface RecentTrack {
   title: string;
   caption: string;
+  /** Imported/generation-neutral music identity used for better DJ continuity. */
+  metadata?: {
+    artists?: string[];
+    album?: string;
+    genres?: string[];
+    year?: number;
+  };
   /** Listener annotations — "music carries memories" — steer the DJ's choices. */
   tags?: string[];
   note?: string;
@@ -39,9 +46,10 @@ export function buildDjUserPrompt(ctx: DjContext): string {
     lines.push("");
     lines.push("Recently played (oldest → newest):");
     for (const t of ctx.recent.slice(-8)) {
+      const metadata = recentTrackMetadataSummary(t);
       const tags = t.tags && t.tags.length > 0 ? `  [tags: ${t.tags.join(", ")}]` : "";
       const note = t.note ? `  (listener note: ${t.note})` : "";
-      lines.push(`- "${t.title}" — ${t.caption}${tags}${note}`);
+      lines.push(`- "${t.title}" — ${t.caption}${metadata}${tags}${note}`);
     }
     lines.push("");
     lines.push(
@@ -60,6 +68,18 @@ export function buildDjUserPrompt(ctx: DjContext): string {
     lines.push('Set "lyrics" to "[instrumental]" for every track.');
   }
   return lines.join("\n");
+}
+
+function recentTrackMetadataSummary(track: RecentTrack): string {
+  const metadata = track.metadata;
+  if (!metadata) return "";
+  const parts = [
+    metadata.artists?.length ? `artist: ${metadata.artists.join(", ")}` : undefined,
+    metadata.album ? `album: ${metadata.album}` : undefined,
+    metadata.genres?.length ? `genres: ${metadata.genres.join(", ")}` : undefined,
+    metadata.year ? `year: ${metadata.year}` : undefined,
+  ].filter((part): part is string => !!part);
+  return parts.length > 0 ? `  [metadata: ${parts.join("; ")}]` : "";
 }
 
 /** Post-process a model draft to honor hard config constraints. */

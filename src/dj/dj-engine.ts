@@ -70,6 +70,7 @@ export function createDjEngine(deps: {
       return {
         title: t.title,
         caption: t.brief?.caption ?? (t.origin === "uploaded" ? `uploaded ${t.kind}` : t.title),
+        metadata: recentTrackMetadata(t),
         tags: t.tags,
         note,
       };
@@ -176,4 +177,15 @@ export function createDjEngine(deps: {
   }
 
   return { draft, materializeNext, refillIfNeeded };
+}
+
+function recentTrackMetadata(track: Track): RecentTrack["metadata"] | undefined {
+  const metadata = track.mediaMetadata;
+  if (!metadata) return undefined;
+  const result: NonNullable<RecentTrack["metadata"]> = {};
+  if (metadata.artists?.length) result.artists = metadata.artists;
+  if (metadata.album) result.album = metadata.album;
+  if (metadata.genres?.length) result.genres = metadata.genres;
+  if (metadata.year) result.year = metadata.year;
+  return Object.keys(result).length > 0 ? result : undefined;
 }
