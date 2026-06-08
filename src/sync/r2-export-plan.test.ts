@@ -51,6 +51,10 @@ describe("buildR2ExportPlan", () => {
       displayName: "Studio laptop",
       avatarSeed: "blue",
     });
+    expect(setIndex.tracks[0].mediaMetadata).toMatchObject({
+      album: "Blue City",
+      artists: ["Doodle Bear"],
+    });
     expect(plan.totalBytes).toBe(plan.objects.reduce((sum, object) => sum + object.bytes, 0));
   });
 
@@ -197,6 +201,16 @@ describe("buildR2ExportPlan", () => {
       eventCount: 2,
     });
     expect(body.events.map((event: { id: string }) => event.id)).toEqual(["ple_1", "ple_2"]);
+    const checkpoint = plan.objects.find((object) => object.kind === "stats-checkpoint");
+    expect(checkpoint?.key).toBe("stats/devices/dvc_1/checkpoint.json");
+    expect(JSON.parse(String(checkpoint?.body))).toMatchObject({
+      schema: "muzero-r2-playback-checkpoint-v1",
+      devicePublicId: "dvc_1",
+      lastEventId: "ple_2",
+      lastStartedAt: 40_000,
+      eventCount: 2,
+      segment: segment?.key,
+    });
   });
 });
 
@@ -234,6 +248,15 @@ async function seedSet(options: { remoteOnly?: boolean } = {}) {
     playCount: 0,
     liked: false,
     tags: ["city"],
+    mediaMetadata: {
+      album: "Blue City",
+      artists: ["Doodle Bear"],
+      originalFileName: "blue-avenue.mp3",
+      originalMime: "audio/mpeg",
+      parser: "music-metadata",
+      parsedAt: 100,
+      title: "Blue Avenue",
+    },
   };
   const memory: Memory = {
     id: "mem_1",

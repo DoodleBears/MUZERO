@@ -22,6 +22,7 @@ export type R2ExportObjectKind =
   | "device-profile"
   | "devices-index"
   | "stats-events-segment"
+  | "stats-checkpoint"
   | "stats-aggregate"
   | "stats-index"
   | "manifest";
@@ -114,6 +115,7 @@ export async function buildR2ExportPlan(input: R2ExportPlanInput): Promise<R2Exp
         generatedAt: track.generatedAt,
         liked: track.liked,
         tags: track.tags,
+        mediaMetadata: track.mediaMetadata,
         brief: track.brief ?? null,
         providerPreset: track.providerPreset ?? null,
         media: media.remote,
@@ -292,11 +294,13 @@ async function createDeviceObjects(db: MuzeroDB): Promise<R2ExportObject[]> {
     .sortBy("startedAt");
   if (events.length > 0) {
     const segment = toPlaybackEventsSegment(device.publicId, events);
+    const segmentKey = await playbackEventsSegmentKey(device.publicId, segment);
     objects.push(
+      createJsonObject("stats-events-segment", segmentKey, segment),
       createJsonObject(
-        "stats-events-segment",
-        await playbackEventsSegmentKey(device.publicId, segment),
-        segment,
+        "stats-checkpoint",
+        `stats/devices/${device.publicId}/checkpoint.json`,
+        toPlaybackEventsCheckpoint(device.publicId, events, segmentKey),
       ),
     );
   }
@@ -389,6 +393,23 @@ function toPlaybackEventsSegment(devicePublicId: string, events: PlaybackEvent[]
       listenedSec: event.listenedSec,
       countedAsPlay: event.countedAsPlay,
     })),
+  };
+}
+
+function toPlaybackEventsCheckpoint(
+  devicePublicId: string,
+  events: PlaybackEvent[],
+  segmentKey: string,
+) {
+  const last = events.at(-1);
+  return {
+    schema: "muzero-r2-playback-checkpoint-v1",
+    devicePublicId,
+    updatedAt: last?.endedAt ?? last?.startedAt ?? 0,
+    lastEventId: last?.id,
+    lastStartedAt: last?.startedAt ?? 0,
+    eventCount: events.length,
+    segment: segmentKey,
   };
 }
 
