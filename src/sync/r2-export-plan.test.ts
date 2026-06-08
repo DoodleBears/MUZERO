@@ -81,6 +81,58 @@ describe("buildR2ExportPlan", () => {
 
     expect(plan.objects.map((object) => object.kind)).toEqual(["set-index", "manifest"]);
   });
+
+  it("adds current-device profile, stats aggregate, and owner-maintained indexes", async () => {
+    await seedSet();
+    await db.devices.put({
+      id: "dev_local",
+      publicId: "dvc_1",
+      name: "Mac desktop",
+      avatarSeed: "ocean-blue",
+      platform: "browser",
+      appVersion: "0.1.0",
+      publishProfile: true,
+      profileRevision: 2,
+      createdAt: 100,
+      lastSeenAt: 200,
+    });
+    await db.playbackAggregates.put({
+      id: "dvc_1:track:trk_1",
+      devicePublicId: "dvc_1",
+      scope: "track",
+      trackId: "trk_1",
+      playCount: 2,
+      listenedSec: 62,
+      lastPlayedAt: 300,
+      updatedAt: 300,
+    });
+
+    const plan = await buildR2ExportPlan({
+      driveId: "drv_1",
+      libraryId: "lib_1",
+      baseUrl: "https://music.example.com/muzero/",
+      setIds: ["ses_1"],
+      db,
+    });
+
+    expect(plan.objects.map((object) => object.kind)).toEqual([
+      "media",
+      "cover",
+      "memory-photo",
+      "set-index",
+      "device-profile",
+      "stats-aggregate",
+      "devices-index",
+      "stats-index",
+      "manifest",
+    ]);
+    expect(plan.objects.find((object) => object.kind === "device-profile")?.key).toBe(
+      "profiles/devices/dvc_1/profile.json",
+    );
+    expect(plan.objects.find((object) => object.kind === "stats-aggregate")?.key).toBe(
+      "stats/devices/dvc_1/aggregate.json",
+    );
+  });
 });
 
 async function seedSet(options: { remoteOnly?: boolean } = {}) {

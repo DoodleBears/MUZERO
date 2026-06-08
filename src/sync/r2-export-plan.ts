@@ -1,11 +1,28 @@
 import type { MuzeroDB } from "@/db/muzero-db";
 import { db as defaultDb } from "@/db/muzero-db";
-import type { DjSession, MediaBlob, Memory, Track } from "@/db/types";
+import type {
+  DevicePublicProfile,
+  DeviceRecord,
+  DjSession,
+  MediaBlob,
+  Memory,
+  PlaybackAggregate,
+  Track,
+} from "@/db/types";
 import type { R2Manifest, R2SetIndex } from "./r2-manifest-schema";
 
 type R2RemoteObject = R2SetIndex["tracks"][number]["media"];
 
-export type R2ExportObjectKind = "media" | "cover" | "memory-photo" | "set-index" | "manifest";
+export type R2ExportObjectKind =
+  | "media"
+  | "cover"
+  | "memory-photo"
+  | "set-index"
+  | "device-profile"
+  | "devices-index"
+  | "stats-aggregate"
+  | "stats-index"
+  | "manifest";
 
 export interface R2ExportObject {
   kind: R2ExportObjectKind;
@@ -125,9 +142,11 @@ export async function buildR2ExportPlan(input: R2ExportPlanInput): Promise<R2Exp
   }
 
   const manifest = createManifest(input, setIndexes);
+  const deviceObjects = await createDeviceObjects(db);
   const objects = [
     ...binaryObjects,
     ...setIndexes.map(({ object }) => object),
+    ...deviceObjects,
     createJsonObject("manifest", "manifest.json", manifest),
   ];
 
@@ -196,7 +215,7 @@ function toRemoteMemory(
 }
 
 function createJsonObject(
-  kind: "set-index" | "manifest",
+  kind: Exclude<R2ExportObjectKind, "media" | "cover" | "memory-photo">,
   key: string,
   value: unknown,
   refs: Pick<R2ExportObject, "setId"> = {},
@@ -231,6 +250,106 @@ function createManifest(
       updatedAt: new Date(session.updatedAt).toISOString(),
       trackCount: session.trackIds.length,
       bytes: object.bytes,
+    })),
+  };
+}
+
+async function createDeviceObjects(db: MuzeroDB): Promise<R2ExportObject[]> {
+  const device = await db.devices.get("dev_local");
+  if (!device) return [];
+
+  const objects: R2ExportObject[] = [];
+  if (device.publishProfile) {
+    objects.push(
+      createJsonObject(
+        "device-profile",
+        `profiles/devices/${device.publicId}/profile.json`,
+        toDevicePublicProfile(device),
+      ),
+    );
+  }
+
+  const aggregates = await db.playbackAggregates
+    .where("devicePublicId")
+    .equals(device.publicId)
+    .toArray();
+  if (aggregates.length > 0) {
+    objects.push(
+      createJsonObject(
+        "stats-aggregate",
+        `stats/devices/${device.publicId}/aggregate.json`,
+        toStatsAggregateObject(device.publicId, aggregates),
+      ),
+    );
+  }
+
+  if (device.publishProfile) {
+    objects.push(
+      createJsonObject("devices-index", "devices/index.json", {
+        schema: "muzero-r2-devices-v1",
+        updatedAt: device.lastSeenAt,
+        devices: [
+          {
+            publicId: device.publicId,
+            profile: `profiles/devices/${device.publicId}/profile.json`,
+            stats: `stats/devices/${device.publicId}/aggregate.json`,
+            lastSeenAt: device.lastSeenAt,
+            profileUpdatedAt: device.lastSeenAt,
+          },
+        ],
+      }),
+    );
+  }
+
+  if (aggregates.length > 0) {
+    objects.push(
+      createJsonObject("stats-index", "stats/index.json", {
+        schema: "muzero-r2-stats-index-v1",
+        updatedAt: Math.max(...aggregates.map((aggregate) => aggregate.updatedAt)),
+        devices: [
+          {
+            devicePublicId: device.publicId,
+            aggregate: `stats/devices/${device.publicId}/aggregate.json`,
+            updatedAt: Math.max(...aggregates.map((aggregate) => aggregate.updatedAt)),
+          },
+        ],
+      }),
+    );
+  }
+
+  return objects;
+}
+
+function toDevicePublicProfile(device: DeviceRecord): DevicePublicProfile {
+  return {
+    schema: "muzero-r2-device-profile-v1",
+    devicePublicId: device.publicId,
+    displayName: device.name,
+    avatarSeed: device.avatarSeed,
+    appVersion: device.appVersion,
+    revision: device.profileRevision,
+    updatedAt: device.lastSeenAt,
+  };
+}
+
+function toStatsAggregateObject(devicePublicId: string, aggregates: PlaybackAggregate[]) {
+  return {
+    schema: "muzero-r2-playback-aggregate-v1",
+    devicePublicId,
+    updatedAt: Math.max(...aggregates.map((aggregate) => aggregate.updatedAt)),
+    aggregates: aggregates.map((aggregate) => ({
+      id: aggregate.id,
+      scope: aggregate.scope,
+      driveId: aggregate.driveId,
+      shareId: aggregate.shareId,
+      setId: aggregate.setId,
+      trackId: aggregate.trackId,
+      remoteTrackId: aggregate.remoteTrackId,
+      mediaSha256: aggregate.mediaSha256,
+      playCount: aggregate.playCount,
+      listenedSec: aggregate.listenedSec,
+      lastPlayedAt: aggregate.lastPlayedAt,
+      updatedAt: aggregate.updatedAt,
     })),
   };
 }

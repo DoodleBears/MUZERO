@@ -1693,8 +1693,8 @@ For a large shared playlist with many trusted devices, the UI should:
 - [x] Compute object keys for media/video/cover/memory photos.
 - [x] Upload missing/changed media first.
 - [x] Upload per-set `index.json`.
-- [ ] Upload the current device `DevicePublicProfile` when profile publishing is enabled.
-- [ ] Upload per-device stats objects only for the current device or explicitly granted trusted devices.
+- [x] Upload the current device `DevicePublicProfile` when profile publishing is enabled.
+- [x] Upload per-device stats objects only for the current device or explicitly granted trusted devices.
 - [ ] Rebuild optional `devices/index.json`, `stats/index.json`, and `presence/index.json` as owner-maintained discovery indexes.
 - [x] Upload root `manifest.json` last.
 - [x] Persist `syncObjects` mapping and `syncRuns`.
@@ -1960,3 +1960,4 @@ Do not record secrets, full signed URLs, or media content.
 | 2026-06-09 | MUZERO | Phase 5 device foundation started with Dexie v14 device/playback-stat tables, anonymous per-profile `DeviceRecord.publicId`, profile revision fields, avatar seed support, and local device repository tests. |
 | 2026-06-09 | MUZERO | Phase 5 playback stats repository added with meaningful-listen threshold tests, `PlaybackEvent` persistence, per-device `TrackPlaybackStats`, track/set aggregates, and existing `Track.playCount` reconciliation for counted listens. |
 | 2026-06-09 | MUZERO | Phase 5 playback listener integration added: MediaEngine time updates now feed a seek-aware listen tracker, pause/ended/track-change flushes persist per-device listened seconds, and eager load-time play-count increments were removed. |
+| 2026-06-09 | MUZERO | Phase 3 device/stat export added to publish plans: profile publishing emits `profiles/devices/<devicePublicId>/profile.json`, current-device aggregates emit `stats/devices/<devicePublicId>/aggregate.json`, and owner-maintained devices/stats indexes are generated when data exists. |
