@@ -1774,8 +1774,8 @@ For a large shared playlist with many trusted devices, the UI should:
 - [ ] Export/import rebuildable per-device aggregate cache under `stats/devices/<devicePublicId>/aggregate.json`.
 - [x] Track uploaded event watermarks under `stats/devices/<devicePublicId>/checkpoint.json`.
 - [x] Add optional `stats/index.json` for discovery, but do not make it the write-hot source of truth.
-- [ ] Keep public read-only listener stats local when no R2 write credentials are configured.
-- [ ] Keep read-only shared-link device profile/avatar local unless the user also has a writable Owner R2 target.
+- [x] Keep public read-only listener stats local when no R2 write credentials are configured.
+- [x] Keep read-only shared-link device profile/avatar local unless the user also has a writable Owner R2 target.
 - [ ] Reconcile existing `Track.playCount` with per-device stats.
 - [ ] Add tests around play threshold, pause/resume, seek, track change, and app close.
 
@@ -1981,3 +1981,4 @@ Do not record secrets, full signed URLs, or media content.
 | 2026-06-09 | MUZERO | Phase 5 playback event segment flush policy added: automatic flush thresholds are clamped to 25-100 events or 5-15 minutes, and manual sync may flush a small pending segment. |
 | 2026-06-09 | MUZERO | Phase 5 playback checkpoint export added: event segment publish plans now include `stats/devices/<devicePublicId>/checkpoint.json` with the latest event watermark and immutable segment key. |
 | 2026-06-09 | MUZERO | Phase 5 optional `stats/index.json` discovery completed for stats sync: device entries can point to aggregate cache, checkpoint, and latest immutable event segment without making the index the write-hot source of truth. |
+| 2026-06-09 | MUZERO | Phase 5 stats/profile write policy added: only owner/trusted drives with local R2 credentials may receive stats or opted-in device profiles, keeping read-only shared-link listener data local by default. |
