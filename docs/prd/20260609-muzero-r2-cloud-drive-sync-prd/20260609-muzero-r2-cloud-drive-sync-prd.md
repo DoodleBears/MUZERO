@@ -14,7 +14,7 @@
 | Phase | Name | Status | Link |
 |-------|------|--------|------|
 | 1 | Manifest protocol + read-only subscription | 🔄 In Progress | [Phase 1 Checklist](#phase-1-checklist) |
-| 2 | R2 Setup Wizard + connection validation | 🔲 Pending | [Phase 2 Checklist](#phase-2-checklist) |
+| 2 | R2 Setup Wizard + connection validation | 🔄 In Progress | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | Local-to-cloud publish sync with visible progress | 🔲 Pending | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | Cloud-to-local pull sync + conflict handling | 🔲 Pending | [Phase 4 Checklist](#phase-4-checklist) |
 | 5 | Anonymous device registry + playback stats sync | 🔲 Pending | [Phase 5 Checklist](#phase-5-checklist) |
@@ -1234,6 +1234,17 @@ Rules:
 - `aggregate.json` is a per-device cache for fast UI. It can be rebuilt from event segments, so if it conflicts, the app should prefer the newest valid checkpoint or rebuild rather than losing events.
 - Shared/public listener writeback still requires write permission. Read-only listeners keep the same local event model but do not upload segments.
 
+Default stats flush policy:
+
+- Flush to R2 when either threshold is reached:
+  - **Event count threshold:** 25 pending listen events minimum, with a hard flush by 100 pending listen events.
+  - **Time threshold:** 5 minutes minimum since last flush while active, with a hard flush by 15 minutes if events are still pending.
+- Also attempt a best-effort flush on app background, app close, network regain, and manual Sync.
+- If fewer than 25 events exist but the user manually runs Sync, upload the small segment anyway.
+- If upload fails, keep the segment pending locally and retry with the same event ids; never generate duplicate remote play counts from a retry.
+- After segment upload succeeds, update `checkpoint.json`, then rebuild/upload `aggregate.json` opportunistically. Aggregate upload may lag behind event segment upload.
+- Settings should expose these as advanced defaults later, but V1 should not add hidden flags.
+
 ### 3.9 Currently-Playing Presence Format
 
 Presence is optional and weakly consistent. It is intended to show "recently active trusted devices and what they are listening to", not hard real-time online status. Public read-only listeners cannot publish presence to the owner's R2 bucket under the R2-only model.
@@ -1578,6 +1589,16 @@ Stats sync UI should distinguish:
 
 Play count should update locally immediately. Remote aggregate totals may lag until the next sync; UI should show "synced just now / pending N listens" rather than pretending the shared count is realtime.
 
+When pending playback events exist, Settings and track detail can show:
+
+```text
+Listening stats
+23 pending listens
+Next cloud sync: at 25 listens or in 3 min
+Last segment upload: 8 min ago
+Aggregate: pending refresh
+```
+
 ### 5.5 Currently-Playing Presence UX
 
 When presence is enabled on owner/trusted devices, a shared set can show a small "Listening now" surface:
@@ -1645,8 +1666,8 @@ For a large shared playlist with many trusted devices, the UI should:
 
 **Tasks:**
 
-- [ ] Add `cloudDrive` settings fields and repository helpers.
-- [ ] Add multi-drive local model: owned drives, trusted drives, shared links.
+- [x] Add `cloudDrive` settings fields and repository helpers.
+- [x] Add multi-drive local model: owned drives, trusted drives, shared links.
 - [ ] Build Settings Cloud Drive section.
 - [ ] Add setup checklist for Cloudflare account, bucket, public URL, CORS, and R2 credentials.
 - [ ] Add healthcheck validation for public read and S3 write.
@@ -1748,6 +1769,8 @@ For a large shared playlist with many trusted devices, the UI should:
 - [ ] Derive `PlaybackAggregate` rows for track, track-in-set, track-in-share, set, share, and drive scopes.
 - [ ] Persist per-device `TrackPlaybackStats`.
 - [ ] Export/import immutable playback event segments under `stats/events/<devicePublicId>/`.
+- [ ] Flush playback event segments when either the event-count threshold or time threshold is reached.
+- [ ] Retry failed segment uploads without duplicating remote play counts.
 - [ ] Export/import rebuildable per-device aggregate cache under `stats/devices/<devicePublicId>/aggregate.json`.
 - [ ] Track uploaded event watermarks under `stats/devices/<devicePublicId>/checkpoint.json`.
 - [ ] Add optional `stats/index.json` for discovery, but do not make it the write-hot source of truth.
@@ -1768,6 +1791,8 @@ For a large shared playlist with many trusted devices, the UI should:
 - [ ] Stats merge correctly from two devices.
 - [ ] Rebuilding aggregates from event segments does not lose play counts.
 - [ ] Sync UI shows pending local listens separately from uploaded/aggregated listens.
+- [ ] Pending listening stats flush at 25-100 events or 5-15 minutes, whichever threshold is reached first.
+- [ ] Manual Sync can flush a small pending stats segment below the normal event-count threshold.
 - [ ] A large shared playlist can keep local stats separated across many anonymous devices.
 - [ ] The same track in two sets can show separate track-in-set play counts.
 - [ ] A track played from someone else's shared set can be recorded locally without importing the track.
@@ -1926,3 +1951,4 @@ Do not record secrets, full signed URLs, or media content.
 | 2026-06-09 | MUZERO | Phase 1 cache-mode media download added: selected remote track media can be saved into `mediaBlobs`. |
 | 2026-06-09 | MUZERO | Phase 1 Settings UI added for public manifest preview and read-only set import. |
 | 2026-06-09 | MUZERO | Phase 1 edge-case tests added for invalid schemas, relative URLs, missing remote media, and duplicate imports. |
+| 2026-06-09 | MUZERO | Phase 2 local cloud drive/share registry added with Dexie v12 tables and repository helpers. |
