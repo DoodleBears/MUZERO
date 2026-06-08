@@ -360,6 +360,11 @@ export function SettingsPage() {
     window.setTimeout(() => setCorsCopied(false), 1600);
   }
 
+  async function changePresenceEnabled(enabled: boolean) {
+    patch({ presenceEnabled: enabled });
+    await saveSettings({ presenceEnabled: enabled });
+  }
+
   const primary: PrimaryColors = {
     light: settings.primaryLight ?? DEFAULT_PRIMARY.light,
     dark: settings.primaryDark ?? DEFAULT_PRIMARY.dark,
@@ -832,6 +837,26 @@ export function SettingsPage() {
               <pre className="mt-3 max-h-44 overflow-auto rounded-md bg-muted p-3 text-[11px] leading-5 text-muted-foreground">
                 {corsJson}
               </pre>
+            </div>
+
+            <div className="rounded-md border border-border p-3">
+              <label className="flex items-start gap-3">
+                <input
+                  type="checkbox"
+                  checked={draft.presenceEnabled ?? false}
+                  onChange={(event) => void changePresenceEnabled(event.currentTarget.checked)}
+                  className="mt-1 size-4 accent-primary"
+                />
+                <span className="flex flex-col gap-1">
+                  <span className="font-medium text-sm">{t("settings.cloudPresenceTitle")}</span>
+                  <span className="text-muted-foreground text-xs">
+                    {t("settings.cloudPresenceHint")}
+                  </span>
+                  <span className="text-muted-foreground text-xs">
+                    {t("settings.cloudPresenceCost")}
+                  </span>
+                </span>
+              </label>
             </div>
 
             <div className="rounded-md border border-border p-3">

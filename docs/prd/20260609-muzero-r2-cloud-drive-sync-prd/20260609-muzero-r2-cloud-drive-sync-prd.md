@@ -1807,14 +1807,14 @@ For a large shared playlist with many trusted devices, the UI should:
 **Tasks:**
 
 - [x] Add `NowPlayingPresence` schema.
-- [ ] Add visible Settings toggle, default off.
+- [x] Add visible Settings toggle, default off.
 - [ ] Enable remote presence writes only when owner/trusted R2 write credentials are configured.
 - [ ] Write presence on track start, pause, resume, stop, and track change.
 - [x] Add throttled heartbeat while playing, at most once per 60 seconds.
 - [ ] Write presence to `presence/devices/<devicePublicId>.json`.
 - [ ] Read presence only while the "Listening now" UI is visible, at a low polling interval.
 - [x] Ignore expired presence records based on `expiresAt`.
-- [ ] Add cost/operations warning in Settings for public shared libraries.
+- [x] Add cost/operations warning in Settings for public shared libraries.
 
 ### Phase 6 Checklist
 
@@ -1965,3 +1965,4 @@ Do not record secrets, full signed URLs, or media content.
 | 2026-06-09 | MUZERO | Phase 4 implementation started with Dexie v15 `syncMutations`, mutation repository helpers, and a remote set diff planner that identifies create/unchanged/apply-remote/keep-local/conflict/blocked states, including set-level local-vs-remote conflict detection and remote index hash mismatch blocking. |
 | 2026-06-09 | MUZERO | Phase 4 pull dry-run/apply flow added: remote set pulls now produce a non-mutating preview, can recreate missing sets as stream-only local rows without downloading media bytes, record pull `syncRuns`, and refuse blocked/conflicted diffs before mutating IndexedDB. |
 | 2026-06-09 | MUZERO | Phase 6 presence foundation started with `muzero-r2-presence-v1` schema, per-device object key helper, TTL-based active filtering, one-minute heartbeat throttling, owner/trusted write-policy checks, and `presenceEnabled: false` default settings. |
+| 2026-06-09 | MUZERO | Phase 6 Settings toggle added for optional Listening Now presence, with en/zh/ja/ko copy explaining trusted writable-drive scope and one-minute heartbeat cost/operations limits. |
