@@ -145,6 +145,36 @@ describe("parseUploadedMediaMetadata", () => {
       new Uint8Array([0xff, 0xd8, 0xff, 0xd9]).buffer,
     );
   });
+
+  it("imports M4A title, artist, album, genre, year, and cover art", async () => {
+    const parsed = await parseUploadedMediaMetadata(
+      m4aFile({
+        album: "Soluna Music",
+        artist: "Imperrs",
+        cover: new Uint8Array([0xff, 0xd8, 0xff, 0xd9]),
+        genre: "Downtempo",
+        title: "Colored Shores",
+        year: "2026",
+      }),
+    );
+
+    expect(parsed.title).toBe("Colored Shores");
+    expect(parsed.mediaMetadata).toMatchObject({
+      album: "Soluna Music",
+      artists: ["Imperrs"],
+      genres: ["Downtempo"],
+      originalExtension: "m4a",
+      originalFileName: "colored-shores.m4a",
+      originalMime: "audio/mp4",
+      parser: "music-metadata",
+      title: "Colored Shores",
+      year: 2026,
+    });
+    expect(parsed.embeddedCover?.mime).toBe("image/jpeg");
+    await expect(parsed.embeddedCover?.blob.arrayBuffer()).resolves.toEqual(
+      new Uint8Array([0xff, 0xd8, 0xff, 0xd9]).buffer,
+    );
+  });
 });
 
 function id3v23File(input: {
@@ -204,6 +234,82 @@ function flacFile(input: {
     bytes.byteOffset + bytes.byteLength,
   ) as ArrayBuffer;
   return new File([buffer], "amicable.flac", { type: "audio/flac" });
+}
+
+function m4aFile(input: {
+  album: string;
+  artist: string;
+  cover: Uint8Array;
+  genre: string;
+  title: string;
+  year: string;
+}): File {
+  const bytes = concatBytes([
+    atom(
+      "ftyp",
+      concatBytes([asciiBytes("M4A "), uint32be(0), asciiBytes("M4A "), asciiBytes("isom")]),
+    ),
+    atom(
+      "moov",
+      atom(
+        "udta",
+        atom(
+          "meta",
+          concatBytes([
+            new Uint8Array([0, 0, 0, 0]),
+            handlerAtom(),
+            atom(
+              "ilst",
+              concatBytes([
+                ilstTextAtom(new Uint8Array([0xa9, 0x6e, 0x61, 0x6d]), input.title),
+                ilstTextAtom(new Uint8Array([0xa9, 0x41, 0x52, 0x54]), input.artist),
+                ilstTextAtom(new Uint8Array([0xa9, 0x61, 0x6c, 0x62]), input.album),
+                ilstTextAtom(new Uint8Array([0xa9, 0x67, 0x65, 0x6e]), input.genre),
+                ilstTextAtom(new Uint8Array([0xa9, 0x64, 0x61, 0x79]), input.year),
+                ilstCoverAtom(input.cover),
+              ]),
+            ),
+          ]),
+        ),
+      ),
+    ),
+  ]);
+  const buffer = bytes.buffer.slice(
+    bytes.byteOffset,
+    bytes.byteOffset + bytes.byteLength,
+  ) as ArrayBuffer;
+  return new File([buffer], "colored-shores.m4a", { type: "audio/mp4" });
+}
+
+function handlerAtom(): Uint8Array {
+  return atom(
+    "hdlr",
+    concatBytes([
+      new Uint8Array([0, 0, 0, 0]),
+      uint32be(0),
+      asciiBytes("mdir"),
+      asciiBytes("appl"),
+      uint32be(0),
+      uint32be(0),
+      new Uint8Array([0]),
+    ]),
+  );
+}
+
+function ilstTextAtom(type: Uint8Array, value: string): Uint8Array {
+  return atomBytes(type, atom("data", concatBytes([uint32be(1), uint32be(0), asciiBytes(value)])));
+}
+
+function ilstCoverAtom(data: Uint8Array): Uint8Array {
+  return atom("covr", atom("data", concatBytes([uint32be(13), uint32be(0), data])));
+}
+
+function atom(type: string, payload: Uint8Array): Uint8Array {
+  return atomBytes(asciiBytes(type), payload);
+}
+
+function atomBytes(type: Uint8Array, payload: Uint8Array): Uint8Array {
+  return concatBytes([uint32be(payload.byteLength + 8), type, payload]);
 }
 
 function vorbisCommentBlock(comments: [string, string][]): Uint8Array {

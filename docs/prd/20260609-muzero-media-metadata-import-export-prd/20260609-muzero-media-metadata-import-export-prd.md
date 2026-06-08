@@ -12,7 +12,7 @@
 | Phase | Name | Status | Link |
 |-------|------|--------|------|
 | 0 | Raw Media Download Button | ✅ Completed | [Phase 0 Checklist](#phase-0-checklist) |
-| 1 | Import-Time Metadata Parser | 🔄 In Progress | [Phase 1 Checklist](#phase-1-checklist) |
+| 1 | Import-Time Metadata Parser | ✅ Completed | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | Library Metadata Surface Area | 🔄 In Progress | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | Metadata-Correct Export Pipeline | 🔲 Pending | [Phase 3 Checklist](#phase-3-checklist) |
 
@@ -275,15 +275,15 @@ No new page. The feature touches existing upload, list rows, Now Playing, and se
 - [x] Extract first suitable embedded cover image into `mediaBlobs(role:"cover")`.
 - [x] Update `createUploadedTrack` input to accept `mediaMetadata` and optional cover blob.
 - [x] Keep filename-derived title fallback.
-- [ ] Add parser fixture coverage for MP3/M4A/FLAC imports.
+- [x] Add parser fixture coverage for MP3/M4A/FLAC imports.
 
 ### Phase 1 Checklist
 
 - [x] MP3 ID3 title/artist/album/cover import correctly.
-- [ ] M4A/MP4 title/artist/album/cover import correctly.
+- [x] M4A/MP4 title/artist/album/cover import correctly.
 - [x] FLAC Vorbis title/artist/album/cover import correctly.
 - [x] Unsupported/corrupt tags do not block playable file import.
-- [ ] No raw tag values are logged.
+- [x] No raw tag values are logged.
 
 ### Phase 2: Library Metadata Surface Area
 
@@ -382,3 +382,4 @@ No new page. The feature touches existing upload, list rows, Now Playing, and se
 | 2026-06-09 | MUZERO | Phase 2 Media Session completed: platform playback metadata now uses imported title/artist/album and local or remote artwork. |
 | 2026-06-09 | MUZERO | Phase 1 MP3 fixture coverage added: ID3 title/artist/album/genre/year and APIC cover art now round-trip through the import parser test. |
 | 2026-06-09 | MUZERO | Phase 1 FLAC fixture coverage added: Vorbis comments and picture blocks now round-trip through the import parser test. |
+| 2026-06-09 | MUZERO | Phase 1 completed with M4A/MP4 fixture coverage for Apple-style metadata atoms and cover art. |
