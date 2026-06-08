@@ -1789,7 +1789,7 @@ For a large shared playlist with many trusted devices, the UI should:
 - [ ] Memory cards show author attribution when available.
 - [ ] Stats survive reload.
 - [ ] Stats merge correctly from two devices.
-- [ ] Rebuilding aggregates from event segments does not lose play counts.
+- [x] Rebuilding aggregates from event segments does not lose play counts.
 - [ ] Sync UI shows pending local listens separately from uploaded/aggregated listens.
 - [ ] Pending listening stats flush at 25-100 events or 5-15 minutes, whichever threshold is reached first.
 - [ ] Manual Sync can flush a small pending stats segment below the normal event-count threshold.
@@ -1975,3 +1975,4 @@ Do not record secrets, full signed URLs, or media content.
 | 2026-06-09 | MUZERO | Phase 5 memory attribution now round-trips through R2 set indexes: exported memories include author snapshots and read-only stream imports preserve remote memory authors locally. |
 | 2026-06-09 | MUZERO | Phase 5 playback event segment export added: R2 publish plans now include immutable per-device `stats/events/<devicePublicId>/...json` segment objects for local `PlaybackEvent` rows while checkpoint/retry policy remains a later slice. |
 | 2026-06-09 | MUZERO | Phase 5 playback aggregate scopes completed: meaningful listens now derive global track, track-in-set, track-in-share, set, share, and drive aggregate rows, preserving remote track ids and media hashes for shared-library stats. |
+| 2026-06-09 | MUZERO | Phase 5 aggregate rebuild helper added: playback event segments can be replayed into deterministic per-device aggregate rows without duplicating or losing play counts. |

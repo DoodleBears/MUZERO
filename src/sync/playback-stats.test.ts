@@ -1,7 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { MuzeroDB } from "@/db/muzero-db";
 import type { Track } from "@/db/types";
-import { recordPlaybackListen, shouldCountAsPlay } from "./playback-stats";
+import {
+  derivePlaybackAggregatesFromEvents,
+  rebuildPlaybackAggregatesFromEvents,
+  recordPlaybackListen,
+  shouldCountAsPlay,
+} from "./playback-stats";
 
 let db: MuzeroDB;
 let dbName: string;
@@ -177,6 +182,93 @@ describe("recordPlaybackListen", () => {
       playCount: 1,
       listenedSec: 31,
     });
+  });
+});
+
+describe("rebuildPlaybackAggregatesFromEvents", () => {
+  it("rebuilds aggregate rows from event segments without duplicating play counts", async () => {
+    const events = [
+      {
+        id: "ple_1",
+        devicePublicId: "dvc_1",
+        trackId: "trk_1",
+        context: { source: "local" as const, setId: "ses_1" },
+        startedAt: 1000,
+        endedAt: 31_000,
+        listenedSec: 31,
+        countedAsPlay: true,
+      },
+      {
+        id: "ple_2",
+        devicePublicId: "dvc_1",
+        trackId: "trk_1",
+        context: { source: "local" as const, setId: "ses_1" },
+        startedAt: 40_000,
+        endedAt: 45_000,
+        listenedSec: 5,
+        countedAsPlay: false,
+      },
+    ];
+    await db.playbackAggregates.put({
+      id: "dvc_1:track:trk_1",
+      devicePublicId: "dvc_1",
+      scope: "track",
+      trackId: "trk_1",
+      playCount: 99,
+      listenedSec: 999,
+      updatedAt: 1,
+    });
+
+    await rebuildPlaybackAggregatesFromEvents("dvc_1", events, db);
+    await rebuildPlaybackAggregatesFromEvents("dvc_1", events, db);
+
+    expect(await db.playbackAggregates.get("dvc_1:track:trk_1")).toMatchObject({
+      playCount: 1,
+      listenedSec: 36,
+      lastPlayedAt: 31_000,
+      updatedAt: 45_000,
+    });
+    expect(await db.playbackAggregates.get("dvc_1:track-in-set:ses_1:trk_1")).toMatchObject({
+      scope: "track-in-set",
+      playCount: 1,
+      listenedSec: 36,
+    });
+  });
+
+  it("derives shared-drive aggregate scopes from remote event refs", () => {
+    const aggregates = derivePlaybackAggregatesFromEvents([
+      {
+        id: "ple_remote",
+        devicePublicId: "dvc_1",
+        trackId: "trk_local",
+        remoteTrackRef: {
+          driveId: "drv_friend",
+          shareId: "shr_tokyo",
+          setId: "ses_tokyo",
+          trackId: "remote_trk_1",
+          mediaSha256: "sha256-blue",
+        },
+        context: {
+          source: "shared-drive",
+          driveId: "drv_friend",
+          shareId: "shr_tokyo",
+          setId: "ses_tokyo",
+        },
+        startedAt: 1000,
+        endedAt: 31_000,
+        listenedSec: 31,
+        countedAsPlay: true,
+      },
+    ]);
+
+    expect(aggregates.map((aggregate) => aggregate.id).sort()).toEqual([
+      "dvc_1:drive:drv_friend",
+      "dvc_1:set:ses_tokyo",
+      "dvc_1:share:shr_tokyo",
+      "dvc_1:track-in-set:ses_tokyo:trk_local",
+      "dvc_1:track-in-share:shr_tokyo:remote_trk_1",
+      "dvc_1:track:trk_local",
+    ]);
   });
 });
 

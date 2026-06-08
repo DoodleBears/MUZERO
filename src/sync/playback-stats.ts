@@ -2,6 +2,19 @@ import { db as defaultDb, type MuzeroDB } from "@/db/muzero-db";
 import type { PlaybackAggregate, PlaybackEvent, TrackPlaybackStats } from "@/db/types";
 import { newId } from "@/lib/id";
 
+type AggregateBase = Pick<
+  PlaybackAggregate,
+  | "id"
+  | "devicePublicId"
+  | "scope"
+  | "driveId"
+  | "shareId"
+  | "setId"
+  | "trackId"
+  | "remoteTrackId"
+  | "mediaSha256"
+>;
+
 export interface PlayThresholdInput {
   listenedSec: number;
   durationSec: number;
@@ -130,6 +143,42 @@ export async function recordPlaybackListen(
   );
 
   return event;
+}
+
+export function derivePlaybackAggregatesFromEvents(events: PlaybackEvent[]): PlaybackAggregate[] {
+  const rows = new Map<string, PlaybackAggregate>();
+  for (const event of events) {
+    const listenedSec = Math.max(0, Math.round(event.listenedSec));
+    const updatedAt = event.endedAt ?? event.startedAt;
+    for (const base of aggregateBasesForEvent(event)) {
+      const current = rows.get(base.id);
+      rows.set(base.id, {
+        ...base,
+        playCount: (current?.playCount ?? 0) + (event.countedAsPlay ? 1 : 0),
+        listenedSec: (current?.listenedSec ?? 0) + listenedSec,
+        lastPlayedAt: event.countedAsPlay
+          ? Math.max(current?.lastPlayedAt ?? 0, updatedAt)
+          : current?.lastPlayedAt,
+        updatedAt: Math.max(current?.updatedAt ?? 0, updatedAt),
+      });
+    }
+  }
+  return [...rows.values()].sort((a, b) => a.id.localeCompare(b.id));
+}
+
+export async function rebuildPlaybackAggregatesFromEvents(
+  devicePublicId: string,
+  events: PlaybackEvent[],
+  db: MuzeroDB = defaultDb,
+): Promise<PlaybackAggregate[]> {
+  const aggregates = derivePlaybackAggregatesFromEvents(
+    events.filter((event) => event.devicePublicId === devicePublicId),
+  );
+  await db.transaction("rw", db.playbackAggregates, async () => {
+    await db.playbackAggregates.where("devicePublicId").equals(devicePublicId).delete();
+    if (aggregates.length > 0) await db.playbackAggregates.bulkPut(aggregates);
+  });
+  return aggregates;
 }
 
 async function upsertTrackStats(
@@ -300,18 +349,7 @@ async function upsertDriveAggregate(
 }
 
 async function upsertAggregate(
-  base: Pick<
-    PlaybackAggregate,
-    | "id"
-    | "devicePublicId"
-    | "scope"
-    | "driveId"
-    | "shareId"
-    | "setId"
-    | "trackId"
-    | "remoteTrackId"
-    | "mediaSha256"
-  >,
+  base: AggregateBase,
   listenedSec: number,
   countedAsPlay: boolean,
   updatedAt: number,
@@ -326,4 +364,68 @@ async function upsertAggregate(
     updatedAt,
   };
   await db.playbackAggregates.put(next);
+}
+
+function aggregateBasesForEvent(event: PlaybackEvent): AggregateBase[] {
+  const bases: AggregateBase[] = [];
+  const trackKey = event.trackId ?? event.remoteTrackRef?.trackId;
+  if (trackKey) {
+    bases.push({
+      id: `${event.devicePublicId}:track:${trackKey}`,
+      devicePublicId: event.devicePublicId,
+      scope: "track",
+      trackId: event.trackId,
+      remoteTrackId: event.remoteTrackRef?.trackId,
+      mediaSha256: event.remoteTrackRef?.mediaSha256,
+    });
+  }
+  if (event.context.setId) {
+    if (trackKey) {
+      bases.push({
+        id: `${event.devicePublicId}:track-in-set:${event.context.setId}:${trackKey}`,
+        devicePublicId: event.devicePublicId,
+        scope: "track-in-set",
+        setId: event.context.setId,
+        trackId: event.trackId,
+        remoteTrackId: event.remoteTrackRef?.trackId,
+        mediaSha256: event.remoteTrackRef?.mediaSha256,
+      });
+    }
+    bases.push({
+      id: `${event.devicePublicId}:set:${event.context.setId}`,
+      devicePublicId: event.devicePublicId,
+      scope: "set",
+      setId: event.context.setId,
+    });
+  }
+  if (event.context.shareId) {
+    if (trackKey) {
+      const shareTrackKey = event.remoteTrackRef?.trackId ?? trackKey;
+      bases.push({
+        id: `${event.devicePublicId}:track-in-share:${event.context.shareId}:${shareTrackKey}`,
+        devicePublicId: event.devicePublicId,
+        scope: "track-in-share",
+        shareId: event.context.shareId,
+        setId: event.context.setId,
+        trackId: event.trackId,
+        remoteTrackId: event.remoteTrackRef?.trackId,
+        mediaSha256: event.remoteTrackRef?.mediaSha256,
+      });
+    }
+    bases.push({
+      id: `${event.devicePublicId}:share:${event.context.shareId}`,
+      devicePublicId: event.devicePublicId,
+      scope: "share",
+      shareId: event.context.shareId,
+    });
+  }
+  if (event.context.driveId) {
+    bases.push({
+      id: `${event.devicePublicId}:drive:${event.context.driveId}`,
+      devicePublicId: event.devicePublicId,
+      scope: "drive",
+      driveId: event.context.driveId,
+    });
+  }
+  return bases;
 }
