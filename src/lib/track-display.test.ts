@@ -29,7 +29,6 @@ describe("resolveStageContent — video-first fallback", () => {
       resolveStageContent({
         track: videoTrack,
         displayMode: "video",
-        audioOnly: false,
         hasCover: false,
       }),
     ).toBe("video");
@@ -41,7 +40,6 @@ describe("resolveStageContent — video-first fallback", () => {
       resolveStageContent({
         track: audioTrack,
         displayMode: "video",
-        audioOnly: false,
         hasCover: true,
       }),
     ).toBe("cover");
@@ -50,37 +48,16 @@ describe("resolveStageContent — video-first fallback", () => {
       resolveStageContent({
         track: audioTrack,
         displayMode: "video",
-        audioOnly: false,
         hasCover: false,
       }),
     ).toBe("title");
   });
 
-  it("audio-only suppresses video and falls to cover/title", () => {
-    expect(
-      resolveStageContent({
-        track: videoTrack,
-        displayMode: "video",
-        audioOnly: true,
-        hasCover: true,
-      }),
-    ).toBe("cover");
-    expect(
-      resolveStageContent({
-        track: videoTrack,
-        displayMode: "video",
-        audioOnly: true,
-        hasCover: false,
-      }),
-    ).toBe("title");
-  });
-
-  it("cover mode never shows video; title mode is always title", () => {
+  it("cover mode never shows video and falls back to title when no cover exists", () => {
     expect(
       resolveStageContent({
         track: videoTrack,
         displayMode: "cover",
-        audioOnly: false,
         hasCover: true,
       }),
     ).toBe("cover");
@@ -88,16 +65,7 @@ describe("resolveStageContent — video-first fallback", () => {
       resolveStageContent({
         track: videoTrack,
         displayMode: "cover",
-        audioOnly: false,
         hasCover: false,
-      }),
-    ).toBe("title");
-    expect(
-      resolveStageContent({
-        track: videoTrack,
-        displayMode: "title",
-        audioOnly: false,
-        hasCover: true,
       }),
     ).toBe("title");
   });
@@ -108,7 +76,6 @@ describe("resolveStageContent — video-first fallback", () => {
       resolveStageContent({
         track: pending,
         displayMode: "video",
-        audioOnly: false,
         hasCover: false,
       }),
     ).toBe("title");

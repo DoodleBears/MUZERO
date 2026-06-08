@@ -5,6 +5,8 @@ import { FavoriteControlButton } from "@/components/player/favorite-control-butt
 import { VolumeControl } from "@/components/player/volume-control";
 import { Button } from "@/components/ui/button";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { playerShortcutHint } from "@/lib/player-hints";
+import { isMac } from "@/lib/shortcuts";
 import { cn } from "@/lib/utils";
 import { usePlayerStore } from "@/stores/player-store";
 
@@ -23,6 +25,7 @@ export function DockControls({
   const { t } = useTranslation();
   const shuffle = usePlayerStore((s) => s.shuffle);
   const setShuffle = usePlayerStore((s) => s.setShuffle);
+  const mac = isMac();
 
   return (
     <TooltipProvider>
@@ -40,7 +43,7 @@ export function DockControls({
             </Button>
           </ControlTooltip>
         )}
-        <ControlTooltip label={t("player.shuffle")}>
+        <ControlTooltip label={t("player.shuffle")} keys={playerShortcutHint("shuffle", mac)}>
           <Button
             variant="ghost"
             size="icon"

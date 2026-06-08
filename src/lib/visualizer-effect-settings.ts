@@ -46,13 +46,16 @@ export const VISUALIZER_EFFECT_DEFAULTS: VisualizerRenderOptions = {
   spread: 1,
 };
 
+export const VISUALIZER_BANDS_PER_OCTAVE_DEFAULT = 3;
+export const VISUALIZER_BANDS_PER_OCTAVE_MIN = 1;
+export const VISUALIZER_BANDS_PER_OCTAVE_MAX = 24;
 export const VISUALIZER_FFT_SIZE_OPTIONS = [256, 512, 1024, 2048] as const;
 
 export function resolveVisualizerRenderOptions(
   settings: VisualizerEffectSettings,
 ): VisualizerRenderOptions {
   return {
-    detail: clamp(settings.visualizerDetail ?? VISUALIZER_EFFECT_DEFAULTS.detail, 0.35, 2),
+    detail: clamp(settings.visualizerDetail ?? VISUALIZER_EFFECT_DEFAULTS.detail, 0.125, 8),
     glow: clamp(settings.visualizerGlow ?? VISUALIZER_EFFECT_DEFAULTS.glow, 0, 2),
     intensity: clamp(settings.visualizerIntensity ?? VISUALIZER_EFFECT_DEFAULTS.intensity, 0, 2),
     mirror: clamp(settings.visualizerMirror ?? VISUALIZER_EFFECT_DEFAULTS.mirror, 0, 2),
@@ -73,6 +76,29 @@ export function resolveVisualizerAnalyserOptions(
     minDecibels: Math.min(max - 1, Math.max(-120, min)),
     smoothing: clamp(settings.visualizerSmoothing ?? meta.smoothing, 0, 0.99),
   };
+}
+
+export function visualizerBandsPerOctave(detail: number): number {
+  return clamp(
+    Math.round(detail * VISUALIZER_BANDS_PER_OCTAVE_DEFAULT),
+    VISUALIZER_BANDS_PER_OCTAVE_MIN,
+    VISUALIZER_BANDS_PER_OCTAVE_MAX,
+  );
+}
+
+export function visualizerDetailFromBandsPerOctave(count: number): number {
+  return (
+    clamp(Math.round(count), VISUALIZER_BANDS_PER_OCTAVE_MIN, VISUALIZER_BANDS_PER_OCTAVE_MAX) /
+    VISUALIZER_BANDS_PER_OCTAVE_DEFAULT
+  );
+}
+
+export function visualizerAuraRayCount(detail: number): number {
+  return clamp(Math.round(64 * detail), 8, 512);
+}
+
+export function visualizerWaveformPointCount(detail: number): number {
+  return clamp(Math.round(96 * detail), 16, 768);
 }
 
 function normalizeFftSize(value: number) {

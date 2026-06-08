@@ -41,6 +41,14 @@
     "tracks_other": "{{count}} 曲",
     "empty": "一致なし。タグやメモの言葉で試してみて。"
   },
+  "globalSearch": {
+    "title": "曲を検索",
+    "placeholder": "すべての曲を検索…",
+    "empty": "再生できる一致曲はありません。",
+    "count_other": "{{count}} 件",
+    "playHint": "再生",
+    "playNextHint": "次に再生"
+  },
   "player": {
     "previous": "前へ",
     "next": "次へ",
@@ -51,7 +59,6 @@
     "repeatLabel": "リピート",
     "volume": "音量",
     "shuffle": "シャッフル",
-    "autoplay": "自動再生",
     "playbackError": "再生エラー"
   },
   "dj": {
@@ -63,8 +70,6 @@
   "nowPlaying": {
     "upNext": "次に再生",
     "closeQueue": "キューを閉じる",
-    "audioOnly": "音声のみ",
-    "audioOnlyHint": "音声のみ再生（動画を隠す）",
     "displayMode": "表示",
     "modeTitle": "{{mode}}モード",
     "trackMenu": "曲のオプション",
@@ -75,8 +80,7 @@
   },
   "displayMode": {
     "video": "動画",
-    "cover": "カバー",
-    "title": "タイトル"
+    "cover": "カバー"
   },
   "track": {
     "generationFailed": "生成に失敗",
@@ -98,6 +102,8 @@
     "galleryModalBody": "再生中の曲がありません —— グローバル背景スライドショーのギャラリーに追加します。",
     "asCover": "カバーに設定",
     "asBackground": "背景に追加",
+    "dropAsCover": "ドロップしてこの曲のカバーに設定",
+    "dropAsTrackBackground": "カバー外にドロップしてこの曲の背景に追加",
     "toGallery": "ギャラリーに追加",
     "cancel": "キャンセル",
     "close": "閉じる",
@@ -153,6 +159,11 @@
     "addImages": "画像を追加",
     "empty": "まだ画像がありません。",
     "removeImage": "画像を削除",
+    "trackSlideshow": "曲の背景",
+    "trackSlideshowDesc": "この曲だけに紐づく背景画像です。スライドショーモードでは再生画面の余白／背景エリアに表示されます。",
+    "trackSlideshowEmpty": "この曲の背景はまだありません。カバー外の余白に画像をドロップするか、ここから追加してください。",
+    "addTrackImages": "背景を追加",
+    "removeTrackImage": "曲の背景を削除",
     "immersiveIdle": "操作がないとバーを隠す（没入）",
     "immersiveIdleHint": "再生中の画面で、数秒操作がないとヘッダーとドックをフェードアウトします。マウスを動かすと再表示されます。",
     "coverCropped": "切り抜いたカバーを表示",
@@ -174,7 +185,15 @@
     "toggleMode": "ビジュアライザー：{{mode}}",
     "modeOff": "オフ",
     "modeBackground": "背景",
-    "modeBoth": "背景 + カバー領域",
+    "modeIdleOnly": "アイドル表示",
+    "panelTitle": "エフェクトコントロール",
+    "closePanel": "エフェクトコントロールを閉じる",
+    "rightClickSettings": "右クリックで設定を開く",
+    "previewOnly": "調整中はプレイヤー UI を隠す",
+    "previewOnlyHint": "カバー、操作、キュー、ドックを一時的に隠し、全画面のエフェクトを確認しやすくします。",
+    "hideBackgroundVisualizer": "背景ビジュアライザーを隠す",
+    "backgroundPreviewHint": "これらのプレビュー切り替えはパネルを閉じるとリセットされ、通常のレイヤーに戻ります。",
+    "idleOnlyShort": "アイドル時",
     "useCoverColor": "ビジュアライザーにカバー色を優先",
     "useCoverColorHint": "再生中の曲にカバーがある場合、その主要色をテーマのアクセント色より優先します。",
     "asBackground": "再生画面の背景として使用",
@@ -184,6 +203,9 @@
     "smoothing": "スムージング：{{value}}",
     "minDecibels": "最小 dB：{{value}}",
     "maxDecibels": "最大 dB：{{value}}",
+    "densityBands": "密度：1オクターブあたり {{count}} 本",
+    "densityRays": "密度：{{count}} 本のレイ",
+    "densityPoints": "密度：{{count}} 点",
     "intensity": "強度：{{value}}",
     "motion": "動き：{{value}}",
     "detail": "ディテール：{{value}}",
@@ -192,8 +214,8 @@
     "mirror": "ミラー / 反射：{{value}}",
     "backgroundDim": "ビジュアライザーの暗さ：{{pct}}%",
     "backgroundOpacity": "ビジュアライザーの透明度：{{pct}}%",
-    "inCoverArea": "カバー領域にビジュアライザーを表示",
-    "inCoverAreaHint": "カバーのない曲向け。オフのときは曲ごとのグラデーションを表示し、二重表示を防ぎます。"
+    "idleOnly": "操作がないとプレイヤー UI を隠す",
+    "idleOnlyHint": "再生中の画面で数秒操作がないと、カバー、操作、キュー、ヘッダー、ドックをフェードアウトし、背景とビジュアライザーだけを残します。"
   },
   "crop": {
     "title": "カバーを切り抜き（正方形）",
@@ -273,11 +295,22 @@
     "costUnknown": "料金は利用するプロバイダーの価格設定によります。",
     "getApiKey": "API キーを取得",
     "apiDocs": "API ドキュメント",
-    "modelHint": "auto = 最新モデル。特定バージョン ID も入力可。"
+    "modelHint": "auto = 最新モデル。特定バージョン ID も入力可。",
+    "traceTitle": "Trace",
+    "traceHint": "現在のアプリセッションのローカル再生診断です。問題を再現してからコピーしてください。",
+    "traceCopy": "Trace をコピー",
+    "traceCopied": "コピーしました",
+    "traceClear": "クリア",
+    "traceEmpty": "Trace イベントはまだありません。"
   },
   "gallery": {
     "title": "セット",
     "search": "セットを検索…",
+    "modeSets": "セット",
+    "modeTracks": "すべての曲",
+    "toggleModeHint": "表示を切り替え",
+    "searchSets": "セットを検索…",
+    "searchTracks": "すべての曲を検索…",
     "filterAll": "すべて",
     "filterLiked": "お気に入り",
     "sortRecent": "最近",
@@ -287,6 +320,7 @@
     "viewGrid": "グリッド",
     "count_other": "{{count}} 曲",
     "empty": "セットがまだありません — DJ セットを開始するかメディアをアップロードしてください。",
+    "tracksEmpty": "曲がまだありません — メディアをアップロードするか DJ セットを開始してください。",
     "back": "戻る",
     "playAll": "すべて再生",
     "setName": "セット名",

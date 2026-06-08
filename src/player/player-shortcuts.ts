@@ -14,7 +14,8 @@ export type PlayerShortcut =
   | "volume-up"
   | "volume-down"
   | "cycle-repeat"
-  | "restart";
+  | "toggle-shuffle"
+  | "toggle-fullscreen";
 
 export interface ShortcutKeyEvent {
   key: string;
@@ -26,18 +27,22 @@ export interface ShortcutKeyEvent {
 
 /** Map a key chord to a transport intent, or null when it isn't a player shortcut. */
 export function resolvePlayerShortcut(e: ShortcutKeyEvent): PlayerShortcut | null {
-  if (e.altKey) return null;
   const k = e.key.toLowerCase();
   const mod = !!(e.metaKey || e.ctrlKey);
 
+  if (e.altKey) {
+    if (!mod && !e.shiftKey && k === "r") return "toggle-shuffle";
+    return null;
+  }
+
   if (mod) {
-    // Only Cmd/Ctrl+P and +R are player shortcuts; leave Cmd+1/2/3 to nav, etc.
+    // Only Cmd/Ctrl+P is a player shortcut; leave Cmd+R to reload and Cmd+1/2/3 to nav.
     if (k === "p") return "toggle-play";
-    if (k === "r") return "cycle-repeat";
     return null;
   }
 
   if (k === " ") return "toggle-play";
+  if (!e.shiftKey && k === "f") return "toggle-fullscreen";
 
   if (e.shiftKey) {
     if (k === "arrowleft" || k === "a") return "seek-back";
@@ -49,6 +54,6 @@ export function resolvePlayerShortcut(e: ShortcutKeyEvent): PlayerShortcut | nul
   if (k === "arrowright" || k === "d") return "next";
   if (k === "arrowup") return "volume-up";
   if (k === "arrowdown") return "volume-down";
-  if (k === "r") return "restart";
+  if (k === "r") return "cycle-repeat";
   return null;
 }

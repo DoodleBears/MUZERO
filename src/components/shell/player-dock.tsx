@@ -57,12 +57,17 @@ export function PlayerDock({
       <div
         ref={dockRef}
         className={cn(
-          "fixed inset-x-0 bottom-0 z-30 px-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] transition-opacity duration-500",
+          "pointer-events-none fixed bottom-0 left-1/2 z-30 w-fit max-w-[calc(100vw-1.5rem)] -translate-x-1/2 pb-[calc(0.75rem+env(safe-area-inset-bottom))] transition-opacity duration-500",
           hidden && "pointer-events-none opacity-0",
         )}
       >
-        <div className="mx-auto flex max-w-2xl flex-col items-end gap-2 md:flex-row md:items-center">
-          <div className="flex w-full min-w-0 flex-col gap-2.5 rounded-3xl bg-card/90 p-3 shadow-lg md:flex-1">
+        <div
+          className={cn(
+            "mx-auto flex w-[min(calc(100vw-1.5rem),42rem)] flex-col items-end gap-2 md:flex-row md:items-center",
+            !hidden && "pointer-events-auto",
+          )}
+        >
+          <div className="flex w-full min-w-0 flex-col gap-2.5 rounded-3xl bg-card/93 backdrop-blur-md p-3 shadow-lg md:flex-1">
             <TrackIdentityRow
               onOpen={onOpenNowPlaying}
               controls={<DockControls className="flex" onOpenQueue={() => setQueueOpen(true)} />}

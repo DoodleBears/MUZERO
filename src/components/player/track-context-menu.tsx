@@ -1,13 +1,12 @@
 "use client";
 
-import { Headphones, Image as ImageIcon, ImagePlus, Type, Video } from "lucide-react";
+import { Image as ImageIcon, ImagePlus, Video } from "lucide-react";
 import { type ReactNode, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useShallow } from "zustand/react/shallow";
 import { CoverCropDialog } from "@/components/track/cover-crop-dialog";
 import {
   ContextMenu,
-  ContextMenuCheckboxItem,
   ContextMenuContent,
   ContextMenuItem,
   ContextMenuLabel,
@@ -25,11 +24,9 @@ import { usePlayerStore } from "@/stores/player-store";
 const DISPLAY_MODE_OPTIONS: { id: SetDisplayMode; icon: typeof Video }[] = [
   { id: "video", icon: Video },
   { id: "cover", icon: ImageIcon },
-  { id: "title", icon: Type },
 ];
 
 export interface TrackContextMenuLabels {
-  audioOnly: string;
   coverInput: string;
   displayMode: string;
   displayModes: Record<SetDisplayMode, string>;
@@ -44,24 +41,20 @@ interface TrackContextMenuTrack {
 }
 
 interface TrackContextMenuProps {
-  audioOnly?: boolean;
   children: ReactNode;
   className?: string;
   displayMode?: SetDisplayMode;
   labels: TrackContextMenuLabels;
-  onAudioOnlyChange?: (enabled: boolean) => void;
   onCoverFileSelect?: (file: File) => void;
   onDisplayModeChange?: (mode: SetDisplayMode) => void;
   track?: TrackContextMenuTrack;
 }
 
 export function TrackContextMenu({
-  audioOnly = false,
   children,
   className,
   displayMode = "video",
   labels,
-  onAudioOnlyChange,
   onCoverFileSelect,
   onDisplayModeChange,
   track,
@@ -94,13 +87,6 @@ export function TrackContextMenu({
             ))}
           </ContextMenuRadioGroup>
           <ContextMenuSeparator />
-          <ContextMenuCheckboxItem
-            checked={audioOnly}
-            onCheckedChange={(checked) => onAudioOnlyChange?.(checked)}
-          >
-            <Headphones aria-hidden="true" />
-            {labels.audioOnly}
-          </ContextMenuCheckboxItem>
           <ContextMenuItem disabled={!onCoverFileSelect} onClick={() => fileRef.current?.click()}>
             <ImagePlus aria-hidden="true" />
             {labels.pickCover}
@@ -136,9 +122,7 @@ export function CurrentTrackContextMenu({
     }),
   );
   const displayMode = usePlayerStore((s) => s.displayMode);
-  const audioOnly = usePlayerStore((s) => s.audioOnly);
   const setDisplayMode = usePlayerStore((s) => s.setDisplayMode);
-  const setAudioOnly = usePlayerStore((s) => s.setAudioOnly);
   const [pendingCover, setPendingCover] = useState<{ file: File; trackId: string } | null>(null);
 
   function saveCover(crop: CropRect) {
@@ -155,22 +139,18 @@ export function CurrentTrackContextMenu({
   return (
     <>
       <TrackContextMenu
-        audioOnly={audioOnly}
         className={className}
         displayMode={displayMode}
         labels={{
-          audioOnly: t("nowPlaying.audioOnly"),
           coverInput: t("annotation.addCover"),
           displayMode: t("nowPlaying.displayMode"),
           displayModes: {
             cover: t("displayMode.cover"),
-            title: t("displayMode.title"),
             video: t("displayMode.video"),
           },
           menu: t("nowPlaying.trackMenu"),
           pickCover: current?.coverBlobId ? t("annotation.changeCover") : t("annotation.addCover"),
         }}
-        onAudioOnlyChange={setAudioOnly}
         onCoverFileSelect={(file) => {
           if (current) setPendingCover({ file, trackId: current.id });
         }}

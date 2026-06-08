@@ -127,6 +127,75 @@ export class MuzeroDB extends Dexie {
     // v5 — AI DJ chat sessions. Messages are stored as one JSON snapshot per
     // session so streaming persistence remains local and simple.
     this.version(5).stores({ chatSessions: "id, updatedAt" });
+
+    // v6 — stage display mode is now only video-or-cover. Older rows that used
+    // the title-only mode should behave like cover mode and still fall back to
+    // the title/visualizer when no cover exists.
+    this.version(6).upgrade(async (tx) => {
+      await tx
+        .table("sessions")
+        .toCollection()
+        .modify((s: Partial<DjSession>) => {
+          const legacy = s as Record<string, unknown>;
+          if (legacy.displayMode === "title") legacy.displayMode = "cover";
+        });
+    });
+
+    // v7 — the previous default Now-Playing background renderer was the Pixi/WebGL
+    // noise effect. Because `saveSettings()` persists a fully merged settings row,
+    // many users got `backgroundRenderer: "noise"` without explicitly choosing it.
+    // WKWebView can flash while restoring that full-screen WebGL layer at launch,
+    // so existing rows are moved back to the stable image renderer once.
+    this.version(7).upgrade(async (tx) => {
+      await tx
+        .table("settings")
+        .toCollection()
+        .modify((s: Partial<AppSettings>) => {
+          if (s.backgroundRenderer === "noise") s.backgroundRenderer = "image";
+        });
+    });
+
+    // v8 — full-screen background visualizers are still available as a visible
+    // setting, but they should not be inherited as the launch default. Existing
+    // settings rows that only got `true` from the previous default are moved to
+    // the stable image/slideshow background path.
+    this.version(8).upgrade(async (tx) => {
+      await tx
+        .table("settings")
+        .toCollection()
+        .modify((s: Partial<AppSettings>) => {
+          if (s.visualizerAsBackground === true) {
+            s.visualizerAsBackground = false;
+            s.visualizerIdleOnly = false;
+          }
+        });
+    });
+
+    // v9 — keep the selected visualizer style, but disable its full-screen
+    // background placement for existing settings rows. This keeps launch on the
+    // stable image/slideshow path unless the user opts in again.
+    this.version(9).upgrade(async (tx) => {
+      await tx
+        .table("settings")
+        .toCollection()
+        .modify((s: Partial<AppSettings>) => {
+          s.visualizerAsBackground = false;
+          s.visualizerIdleOnly = false;
+        });
+    });
+
+    // v10 — stop carrying legacy boot-resume pointers forward. The app no longer
+    // auto-cues previous media during WKWebView startup because that path can make
+    // the Now Playing background flicker for existing local databases.
+    this.version(10).upgrade(async (tx) => {
+      await tx
+        .table("settings")
+        .toCollection()
+        .modify((s: Partial<AppSettings>) => {
+          delete s.lastSessionId;
+          delete s.lastTrackIndex;
+        });
+    });
   }
 }
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { SHORTCUT_TABS } from "@/lib/shortcuts";
-import { NAV_ITEMS } from "./nav-fab";
+import { NAV_ITEMS } from "./nav-fab-items";
 
 // The redesigned nav: the few buttons merge into one collapse/expand FAB. Only
 // three destinations — playback (now) · 歌单 gallery (search) · settings. Queue is

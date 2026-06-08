@@ -37,6 +37,14 @@ export function nextIndex(length: number, index: number, repeat: RepeatMode): nu
   return repeat === "all" ? 0 : null;
 }
 
+/**
+ * Manual next is an explicit user action: repeat-one only affects what happens
+ * when media ends, so the next button still walks forward through the queue.
+ */
+export function manualNextIndex(length: number, index: number, repeat: RepeatMode): number | null {
+  return nextIndex(length, index, repeat === "one" ? "off" : repeat);
+}
+
 /** Index of the previous track. Symmetric with {@link nextIndex}. */
 export function prevIndex(length: number, index: number, repeat: RepeatMode): number | null {
   if (length <= 0) return null;
@@ -95,6 +103,17 @@ export function shuffleNext(
     return { index: ord[0], order: ord };
   }
   return { index: null, order: ord };
+}
+
+/** Shuffled manual next, with the same repeat-one semantics as manualNextIndex. */
+export function shuffleManualNext(
+  order: number[],
+  length: number,
+  currentIndex: number,
+  repeat: RepeatMode,
+  rng: () => number = Math.random,
+): { index: number | null; order: number[] } {
+  return shuffleNext(order, length, currentIndex, repeat === "one" ? "off" : repeat, rng);
 }
 
 /** Step backward through a shuffled order. Symmetric with {@link shuffleNext}. */

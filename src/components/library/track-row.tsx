@@ -9,6 +9,7 @@ import { cn, formatDuration } from "@/lib/utils";
 interface TrackRowProps {
   track: Track;
   isCurrent: boolean;
+  listIndex?: number;
   onPlay: () => void;
   onToggleLike: () => void;
   onDelete: () => void;
@@ -44,9 +45,27 @@ function TrackThumb({ track }: { track: Track }) {
   );
 }
 
+function TrackTags({ tags }: { tags: string[] }) {
+  if (tags.length === 0) return null;
+
+  return (
+    <div className="hidden max-w-52 flex-wrap justify-end gap-1 lg:flex">
+      {tags.slice(0, 4).map((tag) => (
+        <span
+          key={tag}
+          className="rounded-full bg-secondary/70 px-1.5 text-[10px] text-muted-foreground"
+        >
+          #{tag}
+        </span>
+      ))}
+    </div>
+  );
+}
+
 export const TrackRow = memo(function TrackRow({
   track,
   isCurrent,
+  listIndex,
   onPlay,
   onToggleLike,
   onDelete,
@@ -56,7 +75,7 @@ export const TrackRow = memo(function TrackRow({
   return (
     <div
       className={cn(
-        "group flex items-center gap-3 rounded-lg px-3 py-2 transition-colors",
+        "group flex w-full items-center gap-3 rounded-lg px-3 py-2 transition-colors",
         isCurrent ? "bg-accent" : "hover:bg-accent/50",
       )}
     >
@@ -65,6 +84,8 @@ export const TrackRow = memo(function TrackRow({
         onClick={onPlay}
         disabled={disabled}
         className="flex min-w-0 flex-1 items-center gap-3 text-left disabled:cursor-default"
+        data-muzero-track-row-button
+        data-track-index={listIndex}
       >
         <TrackThumb track={track} />
         <div className="min-w-0 flex-1">
@@ -82,21 +103,10 @@ export const TrackRow = memo(function TrackRow({
               ? (track.error ?? t("track.generationFailed"))
               : trackSubtitle(track)}
           </div>
-          {track.tags.length > 0 && (
-            <div className="mt-0.5 flex flex-wrap gap-1">
-              {track.tags.slice(0, 4).map((tag) => (
-                <span
-                  key={tag}
-                  className="rounded-full bg-secondary/70 px-1.5 text-[10px] text-muted-foreground"
-                >
-                  #{tag}
-                </span>
-              ))}
-            </div>
-          )}
         </div>
       </button>
       <div className="ml-auto flex shrink-0 items-center gap-3">
+        <TrackTags tags={track.tags} />
         <div className="flex shrink-0 items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
           <button
             type="button"

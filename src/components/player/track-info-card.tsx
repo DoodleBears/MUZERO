@@ -11,14 +11,14 @@ export function TrackInfoCard({ track }: { track: Track }) {
   const hasChips = !!track.brief?.bpm || !!track.brief?.keyscale || !!track.brief;
 
   return (
-    <div className="mx-auto flex w-full max-w-2xl flex-col gap-2 px-1 sm:px-2">
+    <div className="-mt-1 mx-auto flex w-full flex-col gap-2 ">
       <div className="flex min-w-0 flex-col items-start gap-1.5">
-        <div className="max-w-full rounded-xl border border-white/10 bg-black/35 px-3.5 py-1.5 shadow-lg backdrop-blur-md">
-          <div className="truncate text-2xl font-bold tracking-normal text-white sm:text-3xl">
+        <div className="max-w-full rounded-full border border-white/10 bg-black/35 px-4 py-1.5 shadow-lg backdrop-blur-md">
+          <div className="truncate text-2xl font-bold tracking-normal text-white sm:text-2xl">
             {track.title}
           </div>
         </div>
-        <div className="max-w-full rounded-xl border border-white/10 bg-black/30 px-3 py-1 shadow-md backdrop-blur-md">
+        <div className="max-w-full rounded-full border border-white/10 bg-black/30 px-3 py-1 shadow-md backdrop-blur-md">
           <div className="truncate text-base font-semibold text-white/85">
             {trackSubtitle(track)}
           </div>

@@ -11,7 +11,9 @@ import {
   getTracksByIds,
   incrementPlayCount,
   playQueueAppend,
+  playQueuePlayNext,
   playQueueSet,
+  playQueueSetIndex,
   prependTrackIds,
   saveSettings,
   setSessionDisplayMode,
@@ -71,6 +73,8 @@ interface PlayerState {
   cueIndex: (index: number) => Promise<void>;
   /** Play a specific track, switching sets if needed (search/library result). */
   playTrack: (track: Track) => Promise<void>;
+  /** Insert a specific track right after the current play position. */
+  playNextTrack: (track: Track) => Promise<void>;
   next: () => Promise<void>;
   /** Previous track without the transport-button "restart current after 3s" rule. */
   skipPrev: () => Promise<void>;
@@ -110,6 +114,7 @@ export function getMediaEngine(): MediaEngine | null {
 // so it's correct now that new tracks PREPEND to the set — and so user-removed
 // tracks don't come back.
 let setSub: Subscription | null = null;
+let setSubSessionId: string | null = null;
 let consumedTrackIds = new Set<string>();
 let djEngine: DjEngine | null = null;
 let pumping = false;
@@ -184,28 +189,56 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     void hydratePlaybackSettings(set, get).catch((err: unknown) =>
       log.warn("player", "failed to hydrate playback settings", err),
     );
+    void get()
+      .rebuildEngine()
+      .catch((err: unknown) => log.warn("player", "failed to build DJ engine", err));
 
     // The player consumes the persistent 播放列表 (Play Queue), not a 歌单 directly.
     // This single subscription keeps `queue` in sync as the queue is loaded /
     // extended / edited.
     liveQuery(async () => {
       const pq = await getPlayQueue();
-      return getTracksByIds(pq.entries.map((e) => e.trackId));
+      const queue = await getTracksByIds(pq.entries.map((e) => e.trackId));
+      const session = pq.contextSetId ? await getSession(pq.contextSetId) : undefined;
+      return { pq, queue, session };
     }).subscribe({
-      next: (queue) => {
-        const sig = queueSig(queue);
-        if (sig === lastQueueSig) return; // list unchanged → don't churn subscribers
-        lastQueueSig = sig;
-        // Pin the cursor to the PLAYING track by id: deleting other tracks shifts
-        // positions but must not change what's playing (and keeps next/prev/repeat
-        // correct). Without this, currentIndex (a position) would point at a
-        // different track after a removal and afterQueueUpdate would reload it.
-        const currentIndex = reconcileCurrentIndex(
-          queue.map((tr) => tr.id),
-          loadedTrackId,
-          get().currentIndex,
+      next: ({ pq, queue, session }) => {
+        const contextSetId = pq.contextSetId ?? null;
+        watchSetForAppend(
+          contextSetId,
+          pq.entries.map((e) => e.trackId),
         );
-        set({ queue, currentIndex });
+
+        const sig = queueSig(queue);
+        const listChanged = sig !== lastQueueSig;
+        lastQueueSig = sig;
+        const persistedIndex = clampIndex(queue.length, pq.currentIndex);
+        // Pin the cursor to the PLAYING track by id only when the queue list
+        // itself changed. Pure currentIndex writes (same list) should follow the
+        // persisted queue cursor so refresh/other writers restore the right song.
+        const currentIndex = listChanged
+          ? reconcileCurrentIndex(
+              queue.map((tr) => tr.id),
+              loadedTrackId,
+              persistedIndex,
+            )
+          : persistedIndex;
+        const state = get();
+        const patch: Partial<PlayerState> = {
+          activeSessionId: contextSetId,
+          currentIndex,
+          displayMode: session?.displayMode ?? state.displayMode,
+          djEnabled: session?.config.autoExtend ?? false,
+        };
+        if (listChanged) patch.queue = queue;
+        const changed =
+          listChanged ||
+          state.activeSessionId !== patch.activeSessionId ||
+          state.currentIndex !== patch.currentIndex ||
+          state.displayMode !== patch.displayMode ||
+          state.djEnabled !== patch.djEnabled;
+        if (!changed) return;
+        set(patch);
         void afterQueueUpdate(set, get);
       },
       error: (err) => log.error("player", "play-queue subscription error", err),
@@ -220,9 +253,10 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   },
 
   async setActiveSession(sessionId) {
+    log.debug("player", "setActiveSession start", { sessionId });
     get().init();
     await get().rebuildEngine();
-    setSub?.unsubscribe();
+    watchSetForAppend(null, [], true);
 
     const session = await getSession(sessionId);
     const trackIds = session?.trackIds ?? [];
@@ -243,20 +277,13 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       displayMode: session?.displayMode ?? "video",
       djEnabled: session?.config.autoExtend ?? false,
     });
-    await saveSettings({ lastSessionId: sessionId });
-
-    // Watch the active 歌单: append its newly-added tracks (DJ refill / uploads)
-    // onto the queue, by high-water mark so user-removed tracks don't come back.
-    setSub = liveQuery(() => getSession(sessionId)).subscribe({
-      next: (s) => {
-        if (!s) return;
-        const fresh = unconsumedTrackIds(s.trackIds, consumedTrackIds);
-        if (fresh.length === 0) return;
-        for (const id of fresh) consumedTrackIds.add(id);
-        void playQueueAppend(fresh);
-      },
-      error: (err) => log.error("player", "set subscription error", err),
+    log.debug("player", "setActiveSession seeded queue", {
+      sessionId,
+      queueLength: initialQueue.length,
+      currentIndex: -1,
     });
+    await saveSettings({ lastSessionId: sessionId });
+    watchSetForAppend(sessionId, trackIds, true);
 
     // Seed an empty DJ set with a first batch.
     if (session?.config.autoExtend && trackIds.length === 0) void get().draftNow();
@@ -285,7 +312,14 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   async playIndex(index) {
     const { queue } = get();
     const clamped = clampIndex(queue.length, index);
+    log.debug("player", "playIndex", {
+      requestedIndex: index,
+      clamped,
+      queueLength: queue.length,
+      trackId: clamped >= 0 ? queue[clamped]?.id : null,
+    });
     set({ currentIndex: clamped, wantPlay: true });
+    persistQueueIndex(clamped);
     await ensureLoadedAndPlay(set, get);
     void maybeRefill(set, get);
   },
@@ -297,15 +331,32 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     // play() — so a fresh launch never fires a gesture-blocked play() / spins up
     // the AudioContext before the user has interacted.
     set({ currentIndex: clamped, wantPlay: false });
+    persistQueueIndex(clamped);
     await ensureLoadedAndPlay(set, get);
   },
 
   async playTrack(track) {
+    log.debug("player", "playTrack start", {
+      trackId: track.id,
+      sessionId: track.sessionId,
+      activeSessionId: get().activeSessionId,
+      queueLength: get().queue.length,
+    });
     if (get().activeSessionId !== track.sessionId) {
       await get().setActiveSession(track.sessionId);
     }
     const idx = get().queue.findIndex((t) => t.id === track.id);
+    log.debug("player", "playTrack resolved index", {
+      trackId: track.id,
+      index: idx,
+      queueLength: get().queue.length,
+    });
     if (idx >= 0) await get().playIndex(idx);
+  },
+
+  async playNextTrack(track) {
+    log.debug("player", "playNextTrack", { trackId: track.id });
+    await playQueuePlayNext([track.id]);
   },
 
   async next() {
@@ -512,6 +563,38 @@ function describePlaybackError(error: unknown): string {
   }
   if (error instanceof Error) return error.message;
   return error ? String(error) : "unknown";
+}
+
+function persistQueueIndex(index: number): void {
+  void playQueueSetIndex(index).catch((err: unknown) =>
+    log.warn("player", "failed to persist queue index", err),
+  );
+}
+
+function watchSetForAppend(
+  sessionId: string | null,
+  seedConsumedTrackIds: Iterable<string>,
+  force = false,
+): void {
+  if (!force && setSubSessionId === sessionId) return;
+  setSub?.unsubscribe();
+  setSub = null;
+  setSubSessionId = sessionId;
+  consumedTrackIds = new Set(seedConsumedTrackIds);
+  if (!sessionId) return;
+
+  // Watch the active 歌单: append its newly-added tracks (DJ refill / uploads)
+  // onto the queue, by high-water mark so user-removed tracks don't come back.
+  setSub = liveQuery(() => getSession(sessionId)).subscribe({
+    next: (s) => {
+      if (!s) return;
+      const fresh = unconsumedTrackIds(s.trackIds, consumedTrackIds);
+      if (fresh.length === 0) return;
+      for (const id of fresh) consumedTrackIds.add(id);
+      void playQueueAppend(fresh);
+    },
+    error: (err) => log.error("player", "set subscription error", err),
+  });
 }
 
 async function hydratePlaybackSettings(

@@ -13,11 +13,13 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
  */
 export function ControlTooltip({
   label,
+  hint,
   keys,
   side = "top",
   children,
 }: {
   label: string;
+  hint?: string;
   keys?: string[];
   side?: "top" | "bottom" | "left" | "right";
   children: ReactElement;
@@ -26,15 +28,18 @@ export function ControlTooltip({
     <Tooltip>
       <TooltipTrigger render={children} />
       <TooltipContent side={side}>
-        <span className="flex items-center gap-2">
-          <span>{label}</span>
-          {keys && keys.length > 0 && (
-            <KbdGroup>
-              {keys.map((k) => (
-                <Kbd key={k}>{k}</Kbd>
-              ))}
-            </KbdGroup>
-          )}
+        <span className="flex flex-col gap-1">
+          <span className="flex items-center gap-2">
+            <span>{label}</span>
+            {keys && keys.length > 0 && (
+              <KbdGroup>
+                {keys.map((k) => (
+                  <Kbd key={k}>{k}</Kbd>
+                ))}
+              </KbdGroup>
+            )}
+          </span>
+          {hint ? <span className="text-muted-foreground text-xs">{hint}</span> : null}
         </span>
       </TooltipContent>
     </Tooltip>

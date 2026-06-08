@@ -41,6 +41,14 @@
     "tracks_other": "{{count}}곡",
     "empty": "일치하는 결과가 없어요. 태그나 메모 속 단어로 시도해 보세요."
   },
+  "globalSearch": {
+    "title": "곡 검색",
+    "placeholder": "모든 곡 검색…",
+    "empty": "재생 가능한 일치 곡이 없어요.",
+    "count_other": "결과 {{count}}개",
+    "playHint": "재생",
+    "playNextHint": "다음에 재생"
+  },
   "player": {
     "previous": "이전",
     "next": "다음",
@@ -51,7 +59,6 @@
     "repeatLabel": "반복",
     "volume": "볼륨",
     "shuffle": "셔플",
-    "autoplay": "자동 재생",
     "playbackError": "재생 오류"
   },
   "dj": {
@@ -63,8 +70,6 @@
   "nowPlaying": {
     "upNext": "다음 곡",
     "closeQueue": "대기열 닫기",
-    "audioOnly": "오디오만",
-    "audioOnlyHint": "오디오만 재생(비디오 숨김)",
     "displayMode": "표시",
     "modeTitle": "{{mode}} 모드",
     "trackMenu": "곡 옵션",
@@ -75,8 +80,7 @@
   },
   "displayMode": {
     "video": "비디오",
-    "cover": "커버",
-    "title": "제목"
+    "cover": "커버"
   },
   "track": {
     "generationFailed": "생성 실패",
@@ -98,6 +102,8 @@
     "galleryModalBody": "재생 중인 곡이 없어요 —— 전역 배경 슬라이드쇼 갤러리에 추가합니다.",
     "asCover": "커버로 설정",
     "asBackground": "배경으로 추가",
+    "dropAsCover": "놓으면 이 곡의 커버로 설정",
+    "dropAsTrackBackground": "커버 밖에 놓으면 이 곡의 배경으로 추가",
     "toGallery": "갤러리에 추가",
     "cancel": "취소",
     "close": "닫기",
@@ -153,6 +159,11 @@
     "addImages": "이미지 추가",
     "empty": "아직 이미지가 없어요.",
     "removeImage": "이미지 제거",
+    "trackSlideshow": "곡 배경",
+    "trackSlideshowDesc": "이 곡에만 연결된 배경 이미지입니다. 슬라이드쇼 모드에서는 재생 화면의 빈 공간/배경 영역에 표시됩니다.",
+    "trackSlideshowEmpty": "이 곡의 배경이 아직 없어요. 커버 밖 빈 영역에 이미지를 놓거나 여기에서 추가하세요.",
+    "addTrackImages": "배경 추가",
+    "removeTrackImage": "곡 배경 제거",
     "immersiveIdle": "유휴 시 바 숨기기 (몰입)",
     "immersiveIdleHint": "재생 화면에서 몇 초간 입력이 없으면 헤더와 독을 페이드아웃합니다. 마우스를 움직이면 다시 나타납니다.",
     "coverCropped": "잘라낸 커버 표시",
@@ -174,7 +185,15 @@
     "toggleMode": "비주얼라이저: {{mode}}",
     "modeOff": "끄기",
     "modeBackground": "배경",
-    "modeBoth": "배경 + 커버 영역",
+    "modeIdleOnly": "유휴 비주얼라이저",
+    "panelTitle": "효과 컨트롤",
+    "closePanel": "효과 컨트롤 닫기",
+    "rightClickSettings": "우클릭하여 설정 열기",
+    "previewOnly": "조정 중 플레이어 UI 숨기기",
+    "previewOnlyHint": "커버, 컨트롤, 큐, 독을 잠시 숨겨 전체 화면 효과를 확인하기 쉽게 합니다.",
+    "hideBackgroundVisualizer": "배경 비주얼라이저 숨기기",
+    "backgroundPreviewHint": "이 미리보기 토글은 패널을 닫으면 자동으로 초기화되어 일반 레이어로 돌아갑니다.",
+    "idleOnlyShort": "유휴 숨김",
     "useCoverColor": "비주얼라이저에 커버 색 우선 사용",
     "useCoverColorHint": "현재 곡에 커버가 있으면 테마 강조색보다 커버의 대표 색을 먼저 사용합니다.",
     "asBackground": "재생 화면 배경으로 사용",
@@ -184,6 +203,9 @@
     "smoothing": "스무딩: {{value}}",
     "minDecibels": "최소 dB: {{value}}",
     "maxDecibels": "최대 dB: {{value}}",
+    "densityBands": "밀도: 옥타브당 {{count}}개",
+    "densityRays": "밀도: 광선 {{count}}개",
+    "densityPoints": "밀도: 포인트 {{count}}개",
     "intensity": "강도: {{value}}",
     "motion": "움직임: {{value}}",
     "detail": "디테일: {{value}}",
@@ -192,8 +214,8 @@
     "mirror": "미러 / 반사: {{value}}",
     "backgroundDim": "비주얼라이저 어둡게: {{pct}}%",
     "backgroundOpacity": "비주얼라이저 투명도: {{pct}}%",
-    "inCoverArea": "커버 영역에 비주얼라이저 표시",
-    "inCoverAreaHint": "커버가 없는 곡에 사용. 끄면 곡별 그라데이션을 표시해 중복 표시를 방지합니다."
+    "idleOnly": "유휴 시 플레이어 UI 숨기기",
+    "idleOnlyHint": "재생 화면에서 몇 초간 입력이 없으면 커버, 컨트롤, 큐, 헤더, 독을 페이드아웃하고 배경과 비주얼라이저만 남깁니다."
   },
   "crop": {
     "title": "커버 자르기 (정사각형)",
@@ -273,11 +295,22 @@
     "costUnknown": "비용은 선택한 제공업체의 가격에 따라 다릅니다.",
     "getApiKey": "API 키 발급받기",
     "apiDocs": "API 문서",
-    "modelHint": "auto = 최신 모델. 특정 버전 id 입력 가능."
+    "modelHint": "auto = 최신 모델. 특정 버전 id 입력 가능.",
+    "traceTitle": "Trace",
+    "traceHint": "현재 앱 세션의 로컬 재생 진단입니다. 문제를 재현한 뒤 복사하세요.",
+    "traceCopy": "Trace 복사",
+    "traceCopied": "복사됨",
+    "traceClear": "지우기",
+    "traceEmpty": "아직 trace 이벤트가 없습니다."
   },
   "gallery": {
     "title": "세트",
     "search": "세트 검색…",
+    "modeSets": "세트",
+    "modeTracks": "전체 곡",
+    "toggleModeHint": "보기 전환",
+    "searchSets": "세트 검색…",
+    "searchTracks": "전체 곡 검색…",
     "filterAll": "전체",
     "filterLiked": "좋아요",
     "sortRecent": "최근",
@@ -287,6 +320,7 @@
     "viewGrid": "그리드",
     "count_other": "{{count}}곡",
     "empty": "아직 세트가 없습니다 — DJ 세트를 시작하거나 미디어를 업로드하세요.",
+    "tracksEmpty": "아직 곡이 없습니다 — 미디어를 업로드하거나 DJ 세트를 시작하세요.",
     "back": "뒤로",
     "playAll": "전체 재생",
     "setName": "세트 이름",

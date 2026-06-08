@@ -129,6 +129,7 @@ export function TrackMemoryNotesPanel({
 
   const leadingItem = showComposer ? (
     <MemoryNoteComposer
+      className="p-2"
       autoFocus
       initialNote={editingMemory?.note}
       key={composerKey}
@@ -141,7 +142,7 @@ export function TrackMemoryNotesPanel({
     />
   ) : (
     <button
-      className="flex min-h-32 w-full flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-border bg-background p-4 text-muted-foreground text-sm transition-colors hover:bg-card hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      className="flex min-h-32 w-full flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-foreground/70 bg-card/45 p-4 text-foreground/70 text-sm transition-colors hover:bg-card/45 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       onClick={() => setIsCreating(true)}
       type="button"
     >

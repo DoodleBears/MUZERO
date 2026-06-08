@@ -1,4 +1,5 @@
 import { lighten, type Rgb, rgba } from "@/lib/visualizer-color";
+import { visualizerWaveformPointCount } from "@/lib/visualizer-effect-settings";
 import type { Visualizer, VisualizerContext } from "../types";
 
 /**
@@ -31,7 +32,7 @@ export function createWaveformVisualizer(): Visualizer {
       const amp = h * 0.4 * options.intensity;
 
       // Sample the waveform into [-1, 1] across the width.
-      const N = Math.max(32, Math.min(192, Math.round(96 * options.detail)));
+      const N = visualizerWaveformPointCount(options.detail);
       const pts: number[] = new Array(N);
       if (analyser && active) {
         if (data.length !== analyser.fftSize) data = new Uint8Array(analyser.fftSize);

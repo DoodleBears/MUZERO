@@ -37,7 +37,13 @@ export async function getSettings(db: MuzeroDB = defaultDb): Promise<AppSettings
   const row = await db.settings.get("app");
   // Merge over defaults so settings added later (e.g. new visualizer options) get
   // their default even for rows written before the field existed.
-  return row ? { ...DEFAULT_SETTINGS, ...row } : DEFAULT_SETTINGS;
+  if (!row) return DEFAULT_SETTINGS;
+  const legacy = row as AppSettings & { visualizerInCoverArea?: boolean };
+  return {
+    ...DEFAULT_SETTINGS,
+    ...row,
+    visualizerIdleOnly: row.visualizerIdleOnly ?? legacy.visualizerInCoverArea ?? false,
+  };
 }
 
 export async function saveSettings(

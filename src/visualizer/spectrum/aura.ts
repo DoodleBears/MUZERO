@@ -1,4 +1,5 @@
 import { lighten, type Rgb, rgba } from "@/lib/visualizer-color";
+import { visualizerAuraRayCount } from "@/lib/visualizer-effect-settings";
 import type { Visualizer, VisualizerContext } from "../types";
 
 /**
@@ -67,7 +68,7 @@ export function createAuraVisualizer(): Visualizer {
 
       // Frequency ring.
       if (analyser && active) {
-        const bars = Math.max(16, Math.min(128, Math.round(64 * options.detail)));
+        const bars = visualizerAuraRayCount(options.detail);
         ctx.lineWidth = 2;
         for (let i = 0; i < bars; i++) {
           const v = data[Math.floor((i / bars) * data.length)] / 255;

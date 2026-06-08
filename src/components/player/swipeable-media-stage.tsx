@@ -1,5 +1,6 @@
 import { animate, motion, useMotionValue, useReducedMotion, useTransform } from "motion/react";
 import { type ComponentProps, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { db } from "@/db/muzero-db";
 import type { Track } from "@/db/types";
@@ -43,6 +44,7 @@ export function SwipeableMediaStage({ className }: { className?: string }) {
   const [stack, setStack] = useState<SwipeStack | null>(null);
   const [settleTarget, setSettleTarget] = useState<VisualTrack | null>(null);
   const [readyTrackIds, setReadyTrackIds] = useState<Record<string, true>>({});
+  const [overlayRect, setOverlayRect] = useState<StageOverlayRect | null>(null);
 
   const next = usePlayerStore((s) => s.next);
   const skipPrev = usePlayerStore((s) => s.skipPrev);
@@ -82,7 +84,7 @@ export function SwipeableMediaStage({ className }: { className?: string }) {
   const visualX = useTransform(x, (value) => value * DRAG_GAIN);
   const effectTravel = Math.max(120, Math.min(travel * EFFECT_TRAVEL_FRACTION, 330));
   const exitTravel = Math.max(300, Math.min(travel * EXIT_TRAVEL_FRACTION, 760));
-  const sideOffset = Math.min(travel * 0.68, 620);
+  const sideOffset = Math.min(travel * 0.86, 780);
   const rotateY = useTransform(
     visualX,
     [-effectTravel, 0, effectTravel],
@@ -113,6 +115,31 @@ export function SwipeableMediaStage({ className }: { className?: string }) {
     return () => ro.disconnect();
   }, []);
 
+  const updateOverlayRect = useCallback(() => {
+    const rect = containerRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    setOverlayRect({
+      height: rect.height,
+      left: rect.left,
+      top: rect.top,
+      width: rect.width,
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!stackVisible) {
+      setOverlayRect(null);
+      return;
+    }
+    updateOverlayRect();
+    window.addEventListener("resize", updateOverlayRect);
+    window.addEventListener("scroll", updateOverlayRect, true);
+    return () => {
+      window.removeEventListener("resize", updateOverlayRect);
+      window.removeEventListener("scroll", updateOverlayRect, true);
+    };
+  }, [stackVisible, updateOverlayRect]);
+
   useEffect(() => {
     return () => {
       activeAnimation.current?.stop();
@@ -139,6 +166,7 @@ export function SwipeableMediaStage({ className }: { className?: string }) {
     setHandoffFading(false);
     setSettleTarget(null);
     setReadyTrackIds({});
+    setOverlayRect(null);
     setStack(null);
   }, [x]);
 
@@ -164,12 +192,13 @@ export function SwipeableMediaStage({ className }: { className?: string }) {
     setHandoffFading(false);
     setSettleTarget(null);
     setReadyTrackIds({});
+    updateOverlayRect();
     setStack({
       current: currentVisual,
       next: nextVisual,
       prev: prevVisual,
     });
-  }, [currentVisual, nextVisual, prevVisual, x]);
+  }, [currentVisual, nextVisual, prevVisual, updateOverlayRect, x]);
 
   const snapBack = useCallback(() => {
     activeAnimation.current?.stop();
@@ -181,9 +210,15 @@ export function SwipeableMediaStage({ className }: { className?: string }) {
       if (animationToken.current !== token) return;
       activeAnimation.current = null;
       setDragDirection(null);
+      setOverlayRect(null);
       setStack(null);
     });
   }, [x]);
+
+  useEffect(() => {
+    if (!settleTarget || current?.id === settleTarget.track.id) return;
+    clearStack();
+  }, [clearStack, current?.id, settleTarget]);
 
   const commit = useCallback(
     (direction: Exclude<SwipeDirection, null>) => {
@@ -252,6 +287,7 @@ export function SwipeableMediaStage({ className }: { className?: string }) {
         setStack(null);
         setSettleTarget(null);
         setHandoffFading(false);
+        setOverlayRect(null);
         clearTimer.current = null;
       }, HANDOFF_DURATION_SEC * 1000);
       handoffTimer.current = null;
@@ -264,57 +300,15 @@ export function SwipeableMediaStage({ className }: { className?: string }) {
     };
   }, [current?.id, handoffFading, preloadedCoverUrls, readyTrackIds, settleTarget, stageCoverUrl]);
 
-  return (
-    <div className={cn("overflow-visible rounded-lg shadow-md", className)}>
-      <div
-        ref={containerRef}
-        className="relative isolate mx-auto w-full touch-pan-y select-none overflow-visible [perspective:1200px] [transform-style:preserve-3d] [&_*]:select-none [&_img]:pointer-events-none"
-      >
-        <motion.div
-          drag="x"
-          dragConstraints={{ left: 0, right: 0 }}
-          dragElastic={0.24}
-          dragMomentum={false}
-          onPointerDown={beginGesture}
-          onPointerUp={() => {
-            if (!dragDirection && !committing && stackVisible) clearStack();
-          }}
-          onDrag={(_, info) => {
-            if (info.offset.x < -8 && dragDirection !== "next") setDragDirection("next");
-            if (info.offset.x > 8 && dragDirection !== "prev") setDragDirection("prev");
-          }}
-          onDragEnd={(_, info) => {
-            const distance = Math.min(
-              MAX_COMMIT_DISTANCE,
-              Math.max(MIN_COMMIT_DISTANCE, width * COMMIT_FRACTION),
-            );
-            const wantsNext = info.offset.x < -distance || info.velocity.x < -COMMIT_VELOCITY;
-            const wantsPrev = info.offset.x > distance || info.velocity.x > COMMIT_VELOCITY;
-            if (wantsNext) {
-              commit("next");
-            } else if (wantsPrev) {
-              commit("prev");
-            } else {
-              snapBack();
-            }
-          }}
-          aria-label={`${t("player.previous")} / ${t("player.next")}`}
-          className="relative z-10 w-full cursor-grab active:cursor-grabbing"
-          style={{
-            x,
-            opacity: stackActive && !handoffFading ? 0 : 1,
-            willChange: "transform",
-          }}
-        >
-          <MediaStage className="shadow-none" />
-        </motion.div>
-
-        {stackActive && (
+  const stackOverlay =
+    stackActive && overlayRect && typeof document !== "undefined"
+      ? createPortal(
           <motion.div
             aria-hidden
             animate={{ opacity: handoffFading ? 0 : 1 }}
-            className="pointer-events-none absolute inset-0 z-20 overflow-visible [perspective:1200px] [transform-style:preserve-3d]"
+            className="pointer-events-none fixed z-20 overflow-visible [perspective:1200px] [transform-style:preserve-3d]"
             initial={false}
+            style={overlayRect}
             transition={{ duration: HANDOFF_DURATION_SEC, ease: "easeOut" }}
           >
             <SideCard
@@ -374,14 +368,65 @@ export function SwipeableMediaStage({ className }: { className?: string }) {
                 />
               </motion.div>
             )}
+          </motion.div>,
+          document.body,
+        )
+      : null;
+
+  return (
+    <>
+      <div className={cn("overflow-visible rounded-lg shadow-md", className)}>
+        <div
+          ref={containerRef}
+          className="relative isolate mx-auto w-full touch-pan-y select-none overflow-visible [perspective:1200px] [transform-style:preserve-3d] [&_*]:select-none [&_img]:pointer-events-none"
+        >
+          <motion.div
+            drag="x"
+            dragConstraints={{ left: 0, right: 0 }}
+            dragElastic={0.24}
+            dragMomentum={false}
+            onPointerDown={beginGesture}
+            onPointerUp={() => {
+              if (!dragDirection && !committing && stackVisible) clearStack();
+            }}
+            onDrag={(_, info) => {
+              if (info.offset.x < -8 && dragDirection !== "next") setDragDirection("next");
+              if (info.offset.x > 8 && dragDirection !== "prev") setDragDirection("prev");
+            }}
+            onDragEnd={(_, info) => {
+              const distance = Math.min(
+                MAX_COMMIT_DISTANCE,
+                Math.max(MIN_COMMIT_DISTANCE, width * COMMIT_FRACTION),
+              );
+              const wantsNext = info.offset.x < -distance || info.velocity.x < -COMMIT_VELOCITY;
+              const wantsPrev = info.offset.x > distance || info.velocity.x > COMMIT_VELOCITY;
+              if (wantsNext) {
+                commit("next");
+              } else if (wantsPrev) {
+                commit("prev");
+              } else {
+                snapBack();
+              }
+            }}
+            aria-label={`${t("player.previous")} / ${t("player.next")}`}
+            className="relative z-10 w-full cursor-grab active:cursor-grabbing"
+            style={{
+              x,
+              opacity: stackActive && !handoffFading ? 0 : 1,
+              willChange: "transform",
+            }}
+          >
+            <MediaStage className="shadow-none" />
           </motion.div>
-        )}
+        </div>
       </div>
-    </div>
+      {stackOverlay}
+    </>
   );
 }
 
 type SwipeDirection = "next" | "prev" | null;
+type StageOverlayRect = { height: number; left: number; top: number; width: number };
 type VisualTrack = { initialCoverUrl: string | null; track: Track };
 type SwipeStack = {
   current: VisualTrack | null;

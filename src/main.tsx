@@ -4,6 +4,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { GlobalErrorBoundary } from "@/components/shell/global-error-boundary";
 import { NotificationStack } from "@/components/shell/notification-stack";
+import { TraceRecorder } from "@/components/shell/trace-recorder";
 import App from "./App";
 // Side-effect import: initializes i18next (en/zh/ja/ko) before the app renders.
 import "./i18n/i18n";
@@ -36,6 +37,7 @@ createRoot(root).render(
       {/* NotificationStack is a *sibling* of the boundary so its copy toast
           still renders if the whole App subtree crashes. */}
       <GlobalErrorBoundary>
+        <TraceRecorder />
         <App />
       </GlobalErrorBoundary>
       {/* App has its own MotionConfig; the stack lives outside it, so honor the

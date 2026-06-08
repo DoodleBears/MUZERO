@@ -31,17 +31,25 @@ describe("resolvePlayerShortcut — seek ±5s", () => {
   });
 });
 
-describe("resolvePlayerShortcut — volume / repeat / restart", () => {
+describe("resolvePlayerShortcut — volume / repeat / shuffle", () => {
   it("ArrowUp / ArrowDown → volume", () => {
     expect(resolvePlayerShortcut(k("ArrowUp"))).toBe("volume-up");
     expect(resolvePlayerShortcut(k("ArrowDown"))).toBe("volume-down");
   });
-  it("Cmd/Ctrl+R → cycle repeat", () => {
-    expect(resolvePlayerShortcut(k("r", { metaKey: true }))).toBe("cycle-repeat");
-    expect(resolvePlayerShortcut(k("R", { ctrlKey: true }))).toBe("cycle-repeat");
+  it("plain R → cycle repeat", () => {
+    expect(resolvePlayerShortcut(k("r"))).toBe("cycle-repeat");
+    expect(resolvePlayerShortcut(k("R"))).toBe("cycle-repeat");
   });
-  it("plain R → restart from the beginning", () => {
-    expect(resolvePlayerShortcut(k("r"))).toBe("restart");
+  it("Alt+R → toggle shuffle", () => {
+    expect(resolvePlayerShortcut(k("r", { altKey: true }))).toBe("toggle-shuffle");
+    expect(resolvePlayerShortcut(k("R", { altKey: true }))).toBe("toggle-shuffle");
+  });
+});
+
+describe("resolvePlayerShortcut — fullscreen", () => {
+  it("plain F toggles webpage fullscreen", () => {
+    expect(resolvePlayerShortcut(k("f"))).toBe("toggle-fullscreen");
+    expect(resolvePlayerShortcut(k("F"))).toBe("toggle-fullscreen");
   });
 });
 
@@ -51,8 +59,17 @@ describe("resolvePlayerShortcut — no-ops", () => {
     expect(resolvePlayerShortcut(k("x"))).toBeNull();
     expect(resolvePlayerShortcut(k("Enter"))).toBeNull();
   });
-  it("Alt disables shortcuts", () => {
+  it("Cmd/Ctrl+R is not a player shortcut", () => {
+    expect(resolvePlayerShortcut(k("r", { metaKey: true }))).toBeNull();
+    expect(resolvePlayerShortcut(k("R", { ctrlKey: true }))).toBeNull();
+  });
+  it("Cmd/Ctrl+F stays available for browser find", () => {
+    expect(resolvePlayerShortcut(k("f", { metaKey: true }))).toBeNull();
+    expect(resolvePlayerShortcut(k("F", { ctrlKey: true }))).toBeNull();
+  });
+  it("Alt disables shortcuts except Alt+R shuffle", () => {
     expect(resolvePlayerShortcut(k("ArrowLeft", { altKey: true }))).toBeNull();
     expect(resolvePlayerShortcut(k(" ", { altKey: true }))).toBeNull();
+    expect(resolvePlayerShortcut(k("f", { altKey: true }))).toBeNull();
   });
 });

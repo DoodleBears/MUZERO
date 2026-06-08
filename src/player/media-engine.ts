@@ -1,4 +1,5 @@
 import { log } from "@/lib/logger";
+import { traceEvent } from "@/lib/trace";
 
 /**
  * Owns playback through a persistent `<audio>` element (the driver) plus a muted
@@ -23,6 +24,23 @@ export interface MediaEngineCallbacks {
 
 /** How far the muted video may drift from the audio driver before we resync. */
 const SYNC_DRIFT_SEC = 0.3;
+const PLAY_PENDING_MS = 1500;
+const MEDIA_TRACE_EVENTS = [
+  "loadstart",
+  "loadedmetadata",
+  "loadeddata",
+  "canplay",
+  "canplaythrough",
+  "play",
+  "playing",
+  "pause",
+  "waiting",
+  "stalled",
+  "suspend",
+  "emptied",
+  "abort",
+  "error",
+] as const;
 
 export class MediaEngine {
   private readonly audioEl: HTMLAudioElement;
@@ -68,6 +86,14 @@ export class MediaEngine {
     // notification (it no longer lands in the dock as a status line).
     this.audioEl.addEventListener("error", () => this.callbacks.onError?.(this.audioEl.error));
     this.videoEl.addEventListener("error", () => this.callbacks.onError?.(this.videoEl.error));
+    for (const event of MEDIA_TRACE_EVENTS) {
+      this.audioEl.addEventListener(event, () =>
+        traceEvent("debug", "media.audio", event, describeMediaElement(this.audioEl)),
+      );
+      this.videoEl.addEventListener(event, () =>
+        traceEvent("debug", "media.video", event, describeMediaElement(this.videoEl)),
+      );
+    }
 
     const host = document.createElement("div");
     host.dataset.muzeroMediaHost = "";
@@ -117,10 +143,12 @@ export class MediaEngine {
     // The audio element is always the driver (it plays a video file's audio too).
     this.audioEl.src = this.objectUrl;
     this.audioEl.load();
+    traceEvent("debug", "media", "audio source loaded", describeMediaElement(this.audioEl));
     this.hasVideo = kind === "video";
     if (this.hasVideo) {
       this.videoEl.src = this.objectUrl;
       this.videoEl.load();
+      traceEvent("debug", "media", "video source loaded", describeMediaElement(this.videoEl));
     } else {
       this.videoEl.removeAttribute("src");
       this.videoEl.load();
@@ -131,17 +159,32 @@ export class MediaEngine {
     log.debug("media", "play requested", {
       readyState: this.audioEl.readyState,
       networkState: this.audioEl.networkState,
-      src: !!this.audioEl.currentSrc,
+      src: !!this.audioEl.src,
+      currentSrc: !!this.audioEl.currentSrc,
     });
     this.ensureGraph();
+    let settled = false;
     try {
-      await this.audioEl.play();
-      log.debug("media", "play resolved", {
-        readyState: this.audioEl.readyState,
-        duration: this.audioEl.duration,
-      });
+      const playPromise = this.audioEl.play();
+      playPromise
+        .then(() => {
+          settled = true;
+          log.debug("media", "play resolved", describeMediaElement(this.audioEl));
+        })
+        .catch((err: unknown) => {
+          settled = true;
+          log.warn("media", "play() rejected", err, describeMediaElement(this.audioEl));
+        });
+      await Promise.race([
+        playPromise.then(() => undefined).catch(() => undefined),
+        delay(PLAY_PENDING_MS).then(() => {
+          if (!settled) {
+            log.warn("media", "play() still pending", describeMediaElement(this.audioEl));
+          }
+        }),
+      ]);
     } catch (err) {
-      log.warn("media", "play() rejected", err);
+      log.warn("media", "play() threw synchronously", err, describeMediaElement(this.audioEl));
     }
   }
 
@@ -210,4 +253,34 @@ export class MediaEngine {
       this.objectUrl = null;
     }
   }
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+
+function describeMediaElement(el: HTMLMediaElement) {
+  return {
+    src: !!el.src,
+    currentSrc: !!el.currentSrc,
+    readyState: el.readyState,
+    networkState: el.networkState,
+    paused: el.paused,
+    ended: el.ended,
+    currentTime: finiteOrNull(el.currentTime),
+    duration: finiteOrNull(el.duration),
+    error: describeMediaError(el.error),
+  };
+}
+
+function describeMediaError(error: MediaError | null) {
+  if (!error) return null;
+  return {
+    code: error.code,
+    message: error.message,
+  };
+}
+
+function finiteOrNull(value: number): number | null {
+  return Number.isFinite(value) ? value : null;
 }

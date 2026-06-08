@@ -1,10 +1,8 @@
 "use client";
 
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { AnimatePresence, motion } from "motion/react";
+import { AnimatePresence, motion, useMotionValue, useSpring } from "motion/react";
 import {
-  type KeyboardEvent,
-  type PointerEvent,
   type ReactNode,
   type UIEvent,
   useCallback,
@@ -17,20 +15,27 @@ import {
 import type { Memory } from "@/db/types";
 import { resolveMemoryFitText } from "@/lib/memory-fit-text";
 import {
-  layoutMemoryTimelineItems,
   MEMORY_TIMELINE_CAROUSEL_INTERVAL_MS,
   MEMORY_TIMELINE_IDLE_DELAY_MS,
   MEMORY_TIMELINE_ITEM_HEIGHT,
   memoryTimelineCarouselIntervalMs,
-  memoryTimelineIndexFromLayoutOffset,
   memoryTimelineIndexFromOffset,
-  memoryTimelineOffsetForLayoutIndex,
   nextIdleMemoryIndex,
   sortMemoryTimelineItems,
 } from "@/lib/memory-timeline";
 import { cn } from "@/lib/utils";
 
 const MEMORY_CAROUSEL_LAYOUT_SETTLE_MS = 460;
+const MEMORY_TIMELINE_BOUNDARY_PULL_THRESHOLD = 96;
+const MEMORY_TIMELINE_EDGE_PULL_MAX = 56;
+const MEMORY_TIMELINE_EDGE_PULL_ARM_MS = 80;
+const MEMORY_TIMELINE_EDGE_PULL_RESET_MS = 180;
+const MEMORY_TIMELINE_EDGE_PULL_TRANSITION = {
+  damping: 30,
+  mass: 0.7,
+  stiffness: 420,
+  type: "spring",
+} as const;
 
 export interface MemoryTimelineRailItem extends Memory {
   photoUrl?: string;
@@ -48,13 +53,10 @@ interface MemoryTimelineRailProps {
   };
   memories: MemoryTimelineRailItem[];
   onOffsetChange?: (offsetPx: number) => void;
+  onPullPastEnd?: () => void;
+  onPullPastStart?: () => void;
   timelineItemHeight?: number;
 }
-
-type DragState = {
-  startOffset: number;
-  startY: number;
-};
 
 type TimelineVirtualItem = {
   index: number;
@@ -71,202 +73,183 @@ export function MemoryTimelineRail({
   labels,
   memories,
   onOffsetChange,
+  onPullPastEnd,
+  onPullPastStart,
   timelineItemHeight = MEMORY_TIMELINE_ITEM_HEIGHT,
 }: MemoryTimelineRailProps) {
   const sortedMemories = useMemo(() => sortMemoryTimelineItems(memories), [memories]);
-  const [mode, setMode] = useState<"idle" | "timeline">("idle");
-  const [timelineOffset, setTimelineOffset] = useState(Math.max(0, initialOffset));
-  const [timelineWidth, setTimelineWidth] = useState(0);
+  const parentRef = useRef<HTMLDivElement | null>(null);
+  const edgePullContentRef = useRef<HTMLDivElement | null>(null);
   const [activeIndex, setActiveIndex] = useState(() =>
     memoryTimelineIndexFromOffset(initialOffset, timelineItemHeight, sortedMemories.length),
   );
+  const [mode, setMode] = useState<"carousel" | "list">("carousel");
+  const [scrollOffset, setScrollOffset] = useState(() => Math.max(0, initialOffset));
+  const edgePullRaw = useMotionValue(0);
+  const edgePull = useSpring(edgePullRaw, MEMORY_TIMELINE_EDGE_PULL_TRANSITION);
   const idleTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  const dragRef = useRef<DragState | null>(null);
-  const timelineScrubberRef = useRef<HTMLDivElement | null>(null);
-  const timelineLayout = useMemo(
+  const boundaryPullArmTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const boundaryPullResetTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const boundaryPullRef = useRef(0);
+  const boundaryPullReadyRef = useRef({ bottom: true, top: true });
+  const initialMemoryIndex = useMemo(
     () =>
-      layoutMemoryTimelineItems(
-        sortedMemories.map((memory) => ({
-          hasPhoto: Boolean(memory.photoUrl),
-          id: memory.id,
-          note: memory.note,
-        })),
-        {
-          baseItemHeight: timelineItemHeight,
-          width: timelineWidth || 360,
-        },
+      memoryTimelineIndexFromOffset(
+        Math.max(0, initialOffset),
+        timelineItemHeight,
+        sortedMemories.length,
       ),
-    [sortedMemories, timelineItemHeight, timelineWidth],
+    [initialOffset, sortedMemories.length, timelineItemHeight],
   );
-  const memoryCollectionKey = useMemo(
-    () => sortedMemories.map((memory) => `${memory.trackId}:${memory.id}`).join("\u001f"),
-    [sortedMemories],
-  );
-  const activeCollectionKeyRef = useRef(memoryCollectionKey);
-  const initialLayoutIndex = useMemo(
-    () => memoryTimelineIndexFromLayoutOffset(Math.max(0, initialOffset), timelineLayout.items),
-    [initialOffset, timelineLayout.items],
-  );
-  const timelineVirtualizer = useVirtualizer({
+  const activeMemory = sortedMemories[activeIndex] ?? sortedMemories[0];
+
+  const rowVirtualizer = useVirtualizer({
     count: sortedMemories.length,
-    estimateSize: (index) => timelineLayout.items[index]?.height ?? timelineItemHeight,
+    estimateSize: () => timelineItemHeight,
     getItemKey: (index) => sortedMemories[index]?.id ?? index,
-    getScrollElement: () => timelineScrubberRef.current,
-    measureElement: (element) => element.getBoundingClientRect().height,
-    overscan: 4,
+    getScrollElement: () => parentRef.current,
+    overscan: 8,
   });
-  const timelineVirtualItems: TimelineVirtualItem[] =
-    timelineVirtualizer.getVirtualItems().length > 0
-      ? timelineVirtualizer.getVirtualItems()
-      : timelineLayout.items.map((item, index) => ({
+  const measuredVirtualItems = rowVirtualizer.getVirtualItems();
+  const virtualItems: TimelineVirtualItem[] =
+    measuredVirtualItems.length > 0
+      ? measuredVirtualItems
+      : sortedMemories.map((_, index) => ({
           index,
-          size: item.height,
-          start: item.y,
+          size: timelineItemHeight,
+          start: index * timelineItemHeight,
         }));
-  const timelineTotalSize = Math.max(
-    timelineVirtualizer.getTotalSize(),
-    timelineLayout.containerHeight,
+  const totalSize = Math.max(
+    rowVirtualizer.getTotalSize(),
+    sortedMemories.length * timelineItemHeight,
   );
-  const visibleActiveIndex =
-    activeCollectionKeyRef.current === memoryCollectionKey ? activeIndex : initialLayoutIndex;
-  const activeMemory = sortedMemories[visibleActiveIndex] ?? sortedMemories[0];
 
   useEffect(() => {
-    const nextOffset = Math.max(0, initialOffset);
-    activeCollectionKeyRef.current = memoryCollectionKey;
-    setTimelineOffset(nextOffset);
-    setActiveIndex(initialLayoutIndex);
-    setMode("idle");
-  }, [initialLayoutIndex, initialOffset, memoryCollectionKey]);
+    setActiveIndex(initialMemoryIndex);
+    setScrollOffset(Math.max(0, initialOffset));
+  }, [initialMemoryIndex, initialOffset]);
+
+  useEffect(() => {
+    if (mode !== "carousel" || sortedMemories.length <= 1) return;
+    const timeout = setTimeout(
+      () => setActiveIndex((current) => nextIdleMemoryIndex(current, sortedMemories.length)),
+      memoryTimelineCarouselIntervalMs(activeMemory?.note ?? "", { baseMs: carouselIntervalMs }),
+    );
+    return () => clearTimeout(timeout);
+  }, [activeMemory, carouselIntervalMs, mode, sortedMemories.length]);
 
   useEffect(
     () => () => {
       if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
+      if (boundaryPullArmTimerRef.current) clearTimeout(boundaryPullArmTimerRef.current);
+      if (boundaryPullResetTimerRef.current) clearTimeout(boundaryPullResetTimerRef.current);
     },
     [],
   );
 
-  useEffect(() => {
-    if (mode !== "idle" || sortedMemories.length <= 1) return;
-    const timeout = setTimeout(
-      () => {
-        setActiveIndex((current) => {
-          const next = nextIdleMemoryIndex(current, sortedMemories.length);
-          setTimelineOffset(memoryTimelineOffsetForLayoutIndex(next, timelineLayout.items));
-          return next;
-        });
-      },
-      memoryTimelineCarouselIntervalMs(activeMemory?.note ?? "", { baseMs: carouselIntervalMs }),
-    );
-    return () => clearTimeout(timeout);
-  }, [activeMemory, carouselIntervalMs, mode, sortedMemories.length, timelineLayout.items]);
-
   useLayoutEffect(() => {
-    if (mode !== "timeline") return;
-    const element = timelineScrubberRef.current;
-    if (!element) return;
-    const target: HTMLDivElement = element;
-
-    function updateWidth() {
-      setTimelineWidth(target.clientWidth);
+    if (mode !== "list") return;
+    const element = parentRef.current;
+    if (element && Math.abs(element.scrollTop - scrollOffset) > 1) {
+      element.scrollTop = scrollOffset;
     }
+  }, [mode, scrollOffset]);
 
-    updateWidth();
-
-    if (typeof ResizeObserver !== "undefined") {
-      const observer = new ResizeObserver(updateWidth);
-      observer.observe(target);
-      return () => observer.disconnect();
-    }
-
-    window.addEventListener("resize", updateWidth);
-    return () => window.removeEventListener("resize", updateWidth);
-  }, [mode]);
-
-  useLayoutEffect(() => {
-    if (mode !== "timeline") return;
-    const element = timelineScrubberRef.current;
-    if (!element) return;
-    if (Math.abs(element.scrollTop - timelineOffset) > 1) {
-      element.scrollTop = timelineOffset;
-    }
-  }, [mode, timelineOffset]);
-
-  function showTimeline() {
+  function showList() {
     if (sortedMemories.length === 0) return;
-    setMode("timeline");
+    setMode("list");
     if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
-    idleTimerRef.current = setTimeout(() => setMode("idle"), idleDelayMs);
+    idleTimerRef.current = setTimeout(() => setMode("carousel"), idleDelayMs);
   }
 
-  function setTimelineOffsetFromDrag(offsetPx: number) {
-    const maxOffset = memoryTimelineOffsetForLayoutIndex(
-      sortedMemories.length - 1,
-      timelineLayout.items,
-    );
-    const nextOffset = Math.min(maxOffset, Math.max(0, Math.round(offsetPx)));
-    setTimelineOffset(nextOffset);
-    setActiveIndex(memoryTimelineIndexFromLayoutOffset(nextOffset, timelineLayout.items));
-    const element = timelineScrubberRef.current;
-    if (element && Math.abs(element.scrollTop - nextOffset) > 1) {
-      element.scrollTop = nextOffset;
+  function onScroll(event: UIEvent<HTMLDivElement>) {
+    const element = event.currentTarget;
+    const nextOffset = Math.max(0, Math.round(element.scrollTop));
+    const maxScrollTop = Math.max(0, element.scrollHeight - element.clientHeight);
+    boundaryPullRef.current = 0;
+    setEdgePullValue(0);
+    if (boundaryPullArmTimerRef.current) clearTimeout(boundaryPullArmTimerRef.current);
+    boundaryPullReadyRef.current = { bottom: false, top: false };
+    if (element.scrollTop <= 0) {
+      boundaryPullArmTimerRef.current = setTimeout(() => {
+        boundaryPullReadyRef.current.top = true;
+      }, MEMORY_TIMELINE_EDGE_PULL_ARM_MS);
+    } else if (element.scrollTop >= maxScrollTop - 1) {
+      boundaryPullArmTimerRef.current = setTimeout(() => {
+        boundaryPullReadyRef.current.bottom = true;
+      }, MEMORY_TIMELINE_EDGE_PULL_ARM_MS);
     }
+    setScrollOffset(nextOffset);
+    setActiveIndex(
+      memoryTimelineIndexFromOffset(nextOffset, timelineItemHeight, sortedMemories.length),
+    );
+    showList();
     onOffsetChange?.(nextOffset);
   }
 
-  function onTimelineScroll(event: UIEvent<HTMLDivElement>) {
-    const nextOffset = Math.round(event.currentTarget.scrollTop);
-    setTimelineOffset(nextOffset);
-    setActiveIndex(memoryTimelineIndexFromLayoutOffset(nextOffset, timelineLayout.items));
-    onOffsetChange?.(nextOffset);
-  }
+  useEffect(() => {
+    if (mode !== "list") return;
+    const element = parentRef.current;
+    if (!element) return;
+    const target = element;
 
-  function onPointerDown(event: PointerEvent<HTMLElement>) {
-    showTimeline();
-    dragRef.current = { startOffset: timelineOffset, startY: event.clientY };
-    event.currentTarget.setPointerCapture?.(event.pointerId);
-  }
-
-  function onPointerMove(event: PointerEvent<HTMLElement>) {
-    if (!(event.buttons & 1) || !dragRef.current) return;
-    // Drag the timeline, not the playhead: moving it up advances to later memories.
-    setTimelineOffsetFromDrag(
-      dragRef.current.startOffset - (event.clientY - dragRef.current.startY),
-    );
-  }
-
-  function onPointerUp(event: PointerEvent<HTMLElement>) {
-    dragRef.current = null;
-    if (event.currentTarget.hasPointerCapture?.(event.pointerId)) {
-      event.currentTarget.releasePointerCapture(event.pointerId);
+    function onWheel(event: WheelEvent) {
+      handleListWheel(target, event);
     }
-    showTimeline();
+
+    target.addEventListener("wheel", onWheel, { capture: true, passive: false });
+    return () => target.removeEventListener("wheel", onWheel, { capture: true });
+  });
+
+  function handleListWheel(element: HTMLDivElement, event: WheelEvent) {
+    showList();
+
+    const maxScrollTop = Math.max(0, element.scrollHeight - element.clientHeight);
+    const canScroll = maxScrollTop > 1;
+    const atTop = element.scrollTop <= 0;
+    const atBottom = element.scrollTop >= maxScrollTop - 1;
+    const pullingPastTop = canScroll && event.deltaY < 0 && atTop;
+    const pullingPastBottom = canScroll && event.deltaY > 0 && atBottom;
+
+    event.stopPropagation();
+
+    if (!pullingPastTop && !pullingPastBottom) {
+      boundaryPullRef.current = 0;
+      setEdgePullValue(0);
+      return;
+    }
+
+    event.preventDefault();
+
+    const ready = pullingPastTop
+      ? boundaryPullReadyRef.current.top
+      : boundaryPullReadyRef.current.bottom;
+    if (!ready) return;
+
+    const direction = pullingPastTop ? 1 : -1;
+    boundaryPullRef.current += Math.abs(event.deltaY);
+    setEdgePullValue(direction * easeMemoryEdgePull(boundaryPullRef.current));
+    resetBoundaryPullSoon();
+
+    if (boundaryPullRef.current < MEMORY_TIMELINE_BOUNDARY_PULL_THRESHOLD) return;
+    boundaryPullRef.current = 0;
+    setEdgePullValue(0);
+    if (pullingPastTop) onPullPastStart?.();
+    if (pullingPastBottom) onPullPastEnd?.();
   }
 
-  function onKeyDown(event: KeyboardEvent<HTMLDivElement>) {
-    if (sortedMemories.length === 0) return;
-    if (event.key === "ArrowLeft" || event.key === "ArrowUp") {
-      event.preventDefault();
-      setTimelineOffsetFromDrag(
-        memoryTimelineOffsetForLayoutIndex(activeIndex - 1, timelineLayout.items),
-      );
-      showTimeline();
-    } else if (event.key === "ArrowRight" || event.key === "ArrowDown") {
-      event.preventDefault();
-      setTimelineOffsetFromDrag(
-        memoryTimelineOffsetForLayoutIndex(activeIndex + 1, timelineLayout.items),
-      );
-      showTimeline();
-    } else if (event.key === "Home") {
-      event.preventDefault();
-      setTimelineOffsetFromDrag(0);
-      showTimeline();
-    } else if (event.key === "End") {
-      event.preventDefault();
-      setTimelineOffsetFromDrag(
-        memoryTimelineOffsetForLayoutIndex(sortedMemories.length - 1, timelineLayout.items),
-      );
-      showTimeline();
+  function resetBoundaryPullSoon() {
+    if (boundaryPullResetTimerRef.current) clearTimeout(boundaryPullResetTimerRef.current);
+    boundaryPullResetTimerRef.current = setTimeout(() => {
+      boundaryPullRef.current = 0;
+      setEdgePullValue(0);
+    }, MEMORY_TIMELINE_EDGE_PULL_RESET_MS);
+  }
+
+  function setEdgePullValue(value: number) {
+    edgePullRaw.set(value);
+    if (edgePullContentRef.current) {
+      edgePullContentRef.current.dataset.edgePull = `${Math.round(value)}`;
     }
   }
 
@@ -287,117 +270,93 @@ export function MemoryTimelineRail({
       data-mode={mode}
       data-testid="memory-timeline-rail"
       layout
-      onFocusCapture={showTimeline}
-      onPointerCancel={onPointerUp}
-      onPointerDown={onPointerDown}
-      onPointerMove={onPointerMove}
-      onPointerUp={onPointerUp}
-      onWheel={showTimeline}
+      onWheel={showList}
     >
-      {mode === "idle" && activeMemory ? (
+      {mode === "carousel" ? (
         <div className="grid h-full place-items-center p-3" data-testid="memory-carousel-stage">
           <div
-            className="grid h-4/5 max-h-full w-4/5 max-w-none"
+            className="grid h-5/6 max-h-full w-5/6 max-w-none"
             data-testid="memory-carousel-card"
             data-transition="exit-wait-layout-ready"
           >
             <AnimatePresence initial={false}>
-              <MemoryCarouselSlide
-                formatCreatedAt={formatCreatedAt}
-                key={activeMemory.id}
-                memory={activeMemory}
-              />
+              {activeMemory && (
+                <MemoryCarouselSlide
+                  formatCreatedAt={formatCreatedAt}
+                  key={activeMemory.id}
+                  memory={activeMemory}
+                />
+              )}
             </AnimatePresence>
           </div>
         </div>
       ) : (
         <div
-          aria-label={labels.memory}
-          aria-valuemax={sortedMemories.length}
-          aria-valuemin={1}
-          aria-valuenow={visibleActiveIndex + 1}
-          className="relative h-full cursor-grab touch-none select-none overflow-y-auto overscroll-contain outline-none active:cursor-grabbing focus-visible:ring-2 focus-visible:ring-ring"
-          data-offset={timelineOffset}
-          data-testid="memory-timeline-scrubber"
-          onKeyDown={onKeyDown}
-          onScroll={onTimelineScroll}
-          ref={timelineScrubberRef}
-          role="slider"
-          tabIndex={0}
+          className="no-scrollbar h-full overflow-y-auto overscroll-none pt-12 pb-32"
+          data-offset={scrollOffset}
+          data-testid="memory-timeline-list"
+          data-virtualized="fixed-size"
+          onScroll={onScroll}
+          ref={parentRef}
         >
-          <ol
-            className="relative mx-4"
-            data-layout="single-column-responsive"
-            data-testid="memory-timeline-list"
-            data-virtualized="dynamic-size"
-            style={{
-              height: timelineTotalSize,
-            }}
+          <motion.div
+            className="relative min-h-full"
+            data-edge-pull="0"
+            ref={edgePullContentRef}
+            style={{ height: `${totalSize}px`, y: edgePull }}
           >
-            {timelineVirtualItems.map((virtualRow) => {
-              const index = virtualRow.index;
-              const memory = sortedMemories[index];
+            {virtualItems.map((virtualRow) => {
+              const memory = sortedMemories[virtualRow.index];
               if (!memory) return null;
-              const active = index === visibleActiveIndex;
-              const layoutItem = timelineLayout.items[index] ?? {
-                height: timelineItemHeight,
-                y: index * timelineItemHeight,
-              };
+
               return (
-                <li
-                  className="absolute top-0 left-0 flex w-full shrink-0 items-start gap-3"
-                  data-active={active ? "true" : "false"}
-                  data-virtual-index={index}
+                <div
+                  className="absolute top-0 left-0 flex w-full items-stretch"
+                  data-index={virtualRow.index}
                   data-testid={`memory-timeline-item-${memory.id}`}
                   key={memory.id}
-                  ref={timelineVirtualizer.measureElement}
                   style={{
-                    height: Math.max(layoutItem.height, virtualRow.size),
+                    height: `${virtualRow.size}px`,
                     transform: `translateY(${virtualRow.start}px)`,
                   }}
                 >
-                  <span
-                    className={cn(
-                      "mt-5 size-2.5 rounded-full border bg-background shadow-sm transition-colors",
-                      active ? "border-primary bg-primary" : "border-muted-foreground/45",
-                    )}
-                  />
-                  <article
-                    className={cn(
-                      "min-w-0 flex-1 rounded-xl border p-3 text-left transition-colors",
-                      active
-                        ? "border-primary/45 bg-background/85"
-                        : "border-border/70 bg-background/55",
-                    )}
-                  >
+                  <article className="flex h-full min-w-0 flex-1 items-center gap-3 rounded-xl border border-border/70 bg-background/55 px-3 py-2 text-left transition-colors">
                     {memory.photoUrl && (
-                      <img
-                        alt=""
-                        className="mb-2 max-h-[min(28vh,14rem)] w-full rounded-md object-contain"
-                        data-testid={`memory-timeline-image-${memory.id}`}
-                        src={memory.photoUrl}
-                      />
+                      <div className="size-16 shrink-0 overflow-hidden rounded-md bg-secondary/50">
+                        <img
+                          alt=""
+                          className="size-full object-contain"
+                          data-testid={`memory-timeline-image-${memory.id}`}
+                          src={memory.photoUrl}
+                        />
+                      </div>
                     )}
-                    <p
-                      className="whitespace-pre-wrap break-words text-sm leading-5"
-                      data-testid={`memory-timeline-note-${memory.id}`}
-                    >
-                      {memory.note}
-                    </p>
-                    <div className="mt-1 space-y-0.5 text-muted-foreground text-[11px]">
-                      <time dateTime={new Date(memory.createdAt).toISOString()}>
-                        {formatCreatedAt(memory.createdAt)}
-                      </time>
+                    <div className="min-w-0 flex-1">
+                      <p
+                        className="line-clamp-2 whitespace-pre-wrap break-words text-sm leading-5"
+                        data-testid={`memory-timeline-note-${memory.id}`}
+                      >
+                        {memory.note}
+                      </p>
+                      <div className="mt-1 text-muted-foreground text-[11px]">
+                        <time dateTime={new Date(memory.createdAt).toISOString()}>
+                          {formatCreatedAt(memory.createdAt)}
+                        </time>
+                      </div>
                     </div>
                   </article>
-                </li>
+                </div>
               );
             })}
-          </ol>
+          </motion.div>
         </div>
       )}
     </motion.section>
   );
+}
+
+function easeMemoryEdgePull(distance: number) {
+  return Math.min(MEMORY_TIMELINE_EDGE_PULL_MAX, distance * 0.45);
 }
 
 function MemoryCarouselSlide({
@@ -432,8 +391,8 @@ function MemoryCarouselSlide({
           : { filter: "blur(6px)", opacity: 0, scale: 0.985, y: 8 }
       }
       className="col-start-1 row-start-1 flex h-full max-h-full flex-col overflow-hidden rounded-xl border border-border/70 bg-background/80 p-5 text-center shadow-sm backdrop-blur-sm md:p-6"
-      data-fade-in="after-fit-layout"
       data-enter-ready={enterReady ? "true" : "false"}
+      data-fade-in="after-fit-layout"
       data-fit-ready={fitReady ? "true" : "false"}
       data-layout-ready={slideReady ? "true" : "false"}
       data-media-ready={mediaReady ? "true" : "false"}

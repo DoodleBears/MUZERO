@@ -1,4 +1,5 @@
 import { lighten, type Rgb, rgba } from "@/lib/visualizer-color";
+import { visualizerBandsPerOctave } from "@/lib/visualizer-effect-settings";
 import type { Visualizer, VisualizerContext } from "../types";
 import {
   aggregateBands,
@@ -22,9 +23,15 @@ export function createBarsVisualizer(): Visualizer {
   let levels: number[] = [];
   let primary: Rgb = { r: 191, g: 131, b: 254 };
   let frame = 0;
+  let bandsPerOctave = 0;
 
-  const rebuild = (analyser: AnalyserNode) => {
-    bands = octaveBands({ fftSize: analyser.fftSize, sampleRate: analyser.context.sampleRate });
+  const rebuild = (analyser: AnalyserNode, detail: number) => {
+    bandsPerOctave = visualizerBandsPerOctave(detail);
+    bands = octaveBands({
+      bandsPerOctave,
+      fftSize: analyser.fftSize,
+      sampleRate: analyser.context.sampleRate,
+    });
     weights = tiltWeights(bands.length);
     levels = new Array(bands.length).fill(0);
     if (data.length !== analyser.frequencyBinCount)
@@ -37,7 +44,7 @@ export function createBarsVisualizer(): Visualizer {
       c = ctx;
       primary = ctx.primary();
       const a = ctx.getAnalyser();
-      if (a) rebuild(a);
+      if (a) rebuild(a, ctx.options.detail);
     },
     render(w, h) {
       if (!c) return;
@@ -46,8 +53,14 @@ export function createBarsVisualizer(): Visualizer {
       if (frame++ % (c.smoothPrimary?.() ? 1 : 6) === 0) primary = c.primary();
       const analyser = c.getAnalyser();
       const active = c.active();
-      if (analyser && (bands.length === 0 || data.length !== analyser.frequencyBinCount)) {
-        rebuild(analyser);
+      const nextBandsPerOctave = visualizerBandsPerOctave(options.detail);
+      if (
+        analyser &&
+        (bands.length === 0 ||
+          data.length !== analyser.frequencyBinCount ||
+          bandsPerOctave !== nextBandsPerOctave)
+      ) {
+        rebuild(analyser, options.detail);
       }
 
       let target: number[];

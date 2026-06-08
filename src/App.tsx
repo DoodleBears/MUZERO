@@ -1,9 +1,11 @@
 import { MotionConfig } from "motion/react";
-import { useEffect } from "react";
+import type { ReactNode } from "react";
+import { useEffect, useRef, useState } from "react";
 import { NowPlayingBackground } from "@/components/player/now-playing-background";
+import { VisualizerTuningPanel } from "@/components/player/visualizer-tuning-panel";
+import { GlobalTrackSearch } from "@/components/search/global-track-search";
 import { PlayerDock } from "@/components/shell/player-dock";
 import { GlobalDropZone } from "@/components/upload/global-drop-zone";
-import { getSettings, saveSettings } from "@/db/repositories";
 import { useSettings } from "@/hooks/use-app-data";
 import { useIdle } from "@/hooks/use-idle";
 import { usePlayerShortcuts } from "@/hooks/use-player-shortcuts";
@@ -15,59 +17,104 @@ import { SessionsPage } from "@/pages/sessions-page";
 import { SettingsPage } from "@/pages/settings-page";
 import { useNavStore } from "@/stores/nav-store";
 import { usePlayerStore } from "@/stores/player-store";
+import { useVisualizerPanelStore } from "@/stores/visualizer-panel-store";
+import { resolveVisualizerStyle } from "@/visualizer/registry";
 
-// Resume the last session at most once per page load. React StrictMode mounts
-// the app twice in dev, so two resume passes interleave and race (the second
-// setActiveSession clears the queue mid-flight, dropping the cue and leaving the
-// dock empty). A module flag survives the StrictMode remount (a ref wouldn't).
-let bootResumed = false;
+function isTypingTarget(el: EventTarget | null): boolean {
+  if (!(el instanceof HTMLElement)) return false;
+  const tag = el.tagName;
+  return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || el.isContentEditable;
+}
+
+function isGlobalSearchShortcut(e: KeyboardEvent): boolean {
+  const key = e.key.toLowerCase();
+  if ((e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey && key === "f") return true;
+  return key === "/" && !e.metaKey && !e.ctrlKey && !e.altKey && !isTypingTarget(e.target);
+}
+
+function hasModalDialogOpen(): boolean {
+  return !!document.querySelector('[role="dialog"][aria-modal="true"]');
+}
 
 export default function App() {
   // Active tab is persisted (nav-store) so the app reopens on the last page.
   const tab = useNavStore((s) => s.tab);
   const setTab = useNavStore((s) => s.setTab);
   const init = usePlayerStore((s) => s.init);
-  const setActiveSession = usePlayerStore((s) => s.setActiveSession);
+  const hasAmbientTrack = usePlayerStore(
+    (s) => s.currentIndex >= 0 && Boolean(s.queue[s.currentIndex]),
+  );
+  const [trackSearchOpen, setTrackSearchOpen] = useState(false);
+  const fullscreenRestoreRef = useRef<{ element: HTMLElement; until: number } | null>(null);
   const settings = useSettings();
-  // Global transport shortcuts: Space/⌘P · ←→/AD · Shift±5s · ↑↓ volume · ⌘R · R.
+  // Global transport shortcuts: Space/⌘P · ←→/AD · Shift±5s · ↑↓ volume · R · Option/Alt+R.
   usePlayerShortcuts();
 
-  // Boot: wire the media engine, resume the last set, and cue one track without
-  // autoplay. WebKit needs the media src prepared before the later click gesture;
-  // the heavy Now Playing image/waveform work is kept out of boot elsewhere.
+  // Boot only wires the media engine. Auto-cueing the previous track during
+  // WKWebView startup can make the full-screen media/background path flicker.
   useEffect(() => {
     init();
-    if (bootResumed) return;
-    bootResumed = true;
-    void (async () => {
-      const s = await getSettings();
-      if (!s.lastSessionId) return;
-      await setActiveSession(s.lastSessionId);
-      const store = usePlayerStore.getState();
-      if (store.queue.length === 0) return;
-      const idx =
-        typeof s.lastTrackIndex === "number" && s.lastTrackIndex >= 0 ? s.lastTrackIndex : 0;
-      if (idx < store.queue.length) await store.cueIndex(idx);
-    })();
-  }, [init, setActiveSession]);
+  }, [init]);
 
-  // Remember the last-played track so the next launch resumes it.
-  useEffect(
-    () =>
-      usePlayerStore.subscribe((state, prev) => {
-        if (state.currentIndex !== prev.currentIndex && state.currentIndex >= 0) {
-          void saveSettings({ lastTrackIndex: state.currentIndex });
-        }
-      }),
-    [],
-  );
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (!isGlobalSearchShortcut(e)) return;
+      e.preventDefault();
+      setTrackSearchOpen(true);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
 
-  // Now Playing is the immersive surface: the slideshow fills the whole viewport
-  // (behind header + dock), and after a few idle seconds the chrome fades away.
-  const immersive = tab === "now";
+  useEffect(() => {
+    const onKeyDownCapture = (e: KeyboardEvent) => {
+      if (e.key !== "Escape" || !hasModalDialogOpen()) return;
+      const fullscreenElement = document.fullscreenElement;
+      if (fullscreenElement instanceof HTMLElement) {
+        fullscreenRestoreRef.current = {
+          element: fullscreenElement,
+          until: performance.now() + 1200,
+        };
+      }
+      e.preventDefault();
+      if (trackSearchOpen) {
+        e.stopImmediatePropagation();
+        setTrackSearchOpen(false);
+      }
+    };
+    window.addEventListener("keydown", onKeyDownCapture, { capture: true });
+    return () => window.removeEventListener("keydown", onKeyDownCapture, { capture: true });
+  }, [trackSearchOpen]);
+
+  useEffect(() => {
+    const onFullscreenChange = () => {
+      const pending = fullscreenRestoreRef.current;
+      if (document.fullscreenElement || !pending) return;
+      fullscreenRestoreRef.current = null;
+      if (performance.now() > pending.until) return;
+      void pending.element.requestFullscreen().catch(() => undefined);
+    };
+    document.addEventListener("fullscreenchange", onFullscreenChange);
+    return () => document.removeEventListener("fullscreenchange", onFullscreenChange);
+  }, []);
+
+  // The current-track ambience is the app's stage, not a page-local decoration:
+  // non-Now tabs float their content above the same background instead of
+  // tearing it down on every navigation change.
+  const isNowTab = tab === "now";
+  const ambientActive = isNowTab || hasAmbientTrack;
   // One idle signal. Chrome-hiding is gated by the immersiveIdle setting.
-  const idle = useIdle(immersive);
-  const chromeHidden = idle && (settings.immersiveIdle ?? true);
+  const idle = useIdle(isNowTab);
+  const visualizerBackgroundActive =
+    ambientActive &&
+    (settings.visualizerAsBackground ?? false) &&
+    resolveVisualizerStyle(settings.visualizerStyle) !== "off";
+  const visualizerIdleOnly =
+    idle && visualizerBackgroundActive && (settings.visualizerIdleOnly ?? false);
+  const chromeHidden = idle && ((settings.immersiveIdle ?? true) || visualizerIdleOnly);
+  const visualizerPreviewOnly = useVisualizerPanelStore((s) => s.previewOnly);
+  const visualizerHidden = useVisualizerPanelStore((s) => s.visualizerHidden);
+  const foregroundHidden = visualizerPreviewOnly || visualizerIdleOnly;
 
   // `reducedMotion="user"` makes every motion animation honor the OS
   // "reduce motion" setting app-wide, matching the view-transition helper.
@@ -80,44 +127,80 @@ export default function App() {
           screen and scrolls *under* the bars instead of being boxed between them. */}
       <div className="relative h-screen overflow-hidden bg-background text-foreground">
         <NowPlayingBackground
+          active={ambientActive}
+          hideVisualizer={visualizerHidden}
           className={cn(
             "fixed inset-0 z-0 transition-opacity duration-500",
-            immersive ? "opacity-100" : "opacity-0",
+            ambientActive ? "opacity-100" : "opacity-0",
           )}
         />
 
         <header
-          // Draggable on desktop (Tauri overlay titlebar); transparent while
-          // immersive, translucent elsewhere. The wordmark is centered, so it clears
-          // the macOS traffic lights without needing a left inset.
+          // Draggable on desktop (Tauri overlay titlebar); transparent over the
+          // ambient playback stage, translucent only on the plain app background.
+          // The wordmark is centered, so it clears the macOS traffic lights
+          // without needing a left inset.
           data-tauri-drag-region
           className={cn(
             "fixed inset-x-0 top-0 z-30 flex items-center justify-center px-4 py-3 transition-opacity duration-500",
-            immersive ? "" : "bg-background/80",
-            chromeHidden && "pointer-events-none opacity-0",
+            ambientActive ? "" : "bg-background/80",
+            (chromeHidden || foregroundHidden) && "pointer-events-none opacity-0",
           )}
         >
           <span className="font-semibold tracking-tight">MUZERO</span>
         </header>
 
-        <main className="absolute inset-0 z-10 overflow-hidden">
-          {tab === "now" && <NowPlayingPage />}
-          {tab === "queue" && <QueuePage />}
-          {tab === "search" && <SearchPage />}
-          {tab === "sessions" && <SessionsPage onStarted={() => setTab("now")} />}
-          {tab === "settings" && <SettingsPage />}
+        <main className="chrome-fade absolute inset-0 z-10 overflow-hidden [--chrome-fade-bottom:calc(var(--spacing-chrome-bottom)/2)] [--chrome-fade-top:3rem]">
+          {tab === "now" && <NowPlayingPage foregroundHidden={foregroundHidden} />}
+          {tab === "queue" && (
+            <AmbientPageOverlay active={ambientActive}>
+              <QueuePage />
+            </AmbientPageOverlay>
+          )}
+          {tab === "search" && (
+            <AmbientPageOverlay active={ambientActive}>
+              <SearchPage />
+            </AmbientPageOverlay>
+          )}
+          {tab === "sessions" && (
+            <AmbientPageOverlay active={ambientActive}>
+              <SessionsPage onStarted={() => setTab("now")} />
+            </AmbientPageOverlay>
+          )}
+          {tab === "settings" && (
+            <AmbientPageOverlay active={ambientActive}>
+              <SettingsPage />
+            </AmbientPageOverlay>
+          )}
         </main>
 
         <PlayerDock
           tab={tab}
           onTabChange={setTab}
           onOpenNowPlaying={() => setTab("now")}
-          hidden={chromeHidden}
+          hidden={chromeHidden || foregroundHidden}
         />
+
+        <VisualizerTuningPanel />
+
+        <GlobalTrackSearch open={trackSearchOpen} onOpenChange={setTrackSearchOpen} />
 
         {/* App-wide drag-and-drop + paste: media → import; image → cover/background/gallery. */}
         <GlobalDropZone onMediaUploaded={(createdSet) => createdSet && setTab("queue")} />
       </div>
     </MotionConfig>
+  );
+}
+
+function AmbientPageOverlay({ active, children }: { active: boolean; children: ReactNode }) {
+  return (
+    <div
+      className={cn(
+        "h-full transition-colors duration-500",
+        active && "bg-background/45 backdrop-blur-[2px]",
+      )}
+    >
+      {children}
+    </div>
   );
 }

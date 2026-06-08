@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { log } from "@/lib/logger";
 import { resolvePlayerShortcut } from "@/player/player-shortcuts";
 import { nextRepeatMode } from "@/player/transport";
 import { usePlayerStore } from "@/stores/player-store";
@@ -13,9 +14,22 @@ function isTypingTarget(el: EventTarget | null): boolean {
   return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || el.isContentEditable;
 }
 
+async function toggleDocumentFullscreen(): Promise<void> {
+  if (!document.fullscreenEnabled) return;
+  try {
+    if (document.fullscreenElement) {
+      await document.exitFullscreen();
+      return;
+    }
+    await document.documentElement.requestFullscreen();
+  } catch (error) {
+    log.warn("shortcuts.fullscreen", "Unable to toggle document fullscreen", error);
+  }
+}
+
 /**
- * Global player keyboard shortcuts (Space/⌘P, ←→/AD, Shift±5s, ↑↓ volume, ⌘R
- * repeat, R restart). Wired once from App. Reads the store imperatively per
+ * Global player keyboard shortcuts (Space/⌘P, ←→/AD, Shift±5s, ↑↓ volume, R
+ * repeat, Option/Alt+R shuffle, F fullscreen). Wired once from App. Reads the store imperatively per
  * keypress (no re-subscription), and never fires while typing or when Space/Enter
  * would activate a focused button. The pure mapping lives in `player-shortcuts`.
  */
@@ -60,8 +74,11 @@ export function usePlayerShortcuts(): void {
         case "cycle-repeat":
           s.setRepeat(nextRepeatMode(s.repeat));
           break;
-        case "restart":
-          s.seek(0);
+        case "toggle-shuffle":
+          s.setShuffle(!s.shuffle);
+          break;
+        case "toggle-fullscreen":
+          void toggleDocumentFullscreen();
           break;
       }
     };

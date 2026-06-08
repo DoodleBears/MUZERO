@@ -6,24 +6,20 @@ export type StageContent = "video" | "cover" | "title";
 /**
  * Resolve what to show on the now-playing stage, honoring the set's display mode
  * with the fallback the product wants: video-first → cover → title.
- *  - "video" mode: play the video (unless audio-only or it's an audio track),
- *    else a cover image if present, else the title card.
+ *  - "video" mode: play the video when available, else a cover image if present,
+ *    else the title card.
  *  - "cover" mode: cover image if present, else title.
- *  - "title" mode: always the title card (+ visualizer).
- * `audioOnly` forces "don't show video" (play a video's audio without watching).
  */
 export function resolveStageContent(opts: {
   track?: Track;
   displayMode: SetDisplayMode;
-  audioOnly: boolean;
   hasCover: boolean;
 }): StageContent {
-  const { track, displayMode, audioOnly, hasCover } = opts;
+  const { track, displayMode, hasCover } = opts;
   if (!track) return "title";
-  if (displayMode === "title") return "title";
   if (displayMode === "cover") return hasCover ? "cover" : "title";
   // displayMode === "video"
-  if (track.kind === "video" && track.status === "ready" && !audioOnly) return "video";
+  if (track.kind === "video" && track.status === "ready") return "video";
   if (hasCover) return "cover";
   return "title";
 }

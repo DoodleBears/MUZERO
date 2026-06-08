@@ -1,5 +1,5 @@
 .PHONY: help install update
-.PHONY: dev web desktop tauri ios ios-init android android-init mobile-info tauri-info
+.PHONY: dev web desktop tauri electron-dev electron-preview ios ios-init android android-init mobile-info tauri-info
 .PHONY: build preview desktop-build desktop-debug mac win linux ios-build android-build desktop-locate
 .PHONY: test test-watch typecheck lint format check
 .PHONY: icons ui ui-coss ui-theme clean clean-dist
@@ -40,6 +40,7 @@ help:
 	@echo "Develop:"
 	@echo "  make dev          - Web dev in the browser, fastest loop ($(DEV_URL))"
 	@echo "  make desktop      - Tauri DESKTOP hot reload — runs alongside 'make dev' (port $(DESKTOP_PORT))"
+	@echo "  make electron-dev - Electron probe against existing Vite dev URL ($(DEV_URL))"
 	@echo "  make ios          - Run on iOS simulator/device (needs Xcode; run ios-init once)"
 	@echo "  make ios-init     - Generate the iOS project (one-time)"
 	@echo "  make android      - Run on Android emulator/device (needs SDK/NDK; run android-init once)"
@@ -49,6 +50,7 @@ help:
 	@echo "Build & package:"
 	@echo "  make build        - Build the web frontend → dist/ (tsc + vite)"
 	@echo "  make preview      - Preview the production web build locally"
+	@echo "  make electron-preview - Build web frontend, then open it in Electron (Chromium)"
 	@echo "  make desktop-build- Package the desktop app for THIS OS (release)"
 	@echo "  make desktop-debug- Package the desktop app for THIS OS (debug, faster)"
 	@echo "  make mac          - Build macOS .app + .dmg (Mac only)"
@@ -96,6 +98,14 @@ dev web:
 # can run at the same time as `make dev` (port 1420).
 desktop tauri:
 	MUZERO_DEV_PORT=$(DESKTOP_PORT) $(PM) exec tauri dev --config '{"build":{"devUrl":"http://localhost:$(DESKTOP_PORT)"}}'
+
+# Chromium shell probe. This is only for A/B testing WKWebView-vs-Chromium
+# behavior; Tauri remains the shipping shell.
+electron-dev:
+	MUZERO_ELECTRON_URL=$(DEV_URL) $(PM) exec electron electron/main.cjs
+
+electron-preview: build
+	$(PM) exec electron electron/main.cjs
 
 ios-init:
 	$(PM) tauri ios init

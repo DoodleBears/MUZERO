@@ -21,7 +21,7 @@ describe("transitionState", () => {
     expect(update).toHaveBeenCalledTimes(1);
   });
 
-  it("drives the update through the native API when supported", () => {
+  it("bypasses the native API when present and still flushes the update", () => {
     const startVT = vi.fn((cb: () => void) => {
       cb();
       return { finished: Promise.resolve() };
@@ -33,7 +33,7 @@ describe("transitionState", () => {
     );
     const update = vi.fn();
     transitionState(update);
-    expect(startVT).toHaveBeenCalledTimes(1);
+    expect(startVT).not.toHaveBeenCalled();
     expect(update).toHaveBeenCalledTimes(1);
   });
 });

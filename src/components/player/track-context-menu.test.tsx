@@ -4,12 +4,10 @@ import type { TrackContextMenuLabels } from "./track-context-menu";
 import { TrackContextMenu } from "./track-context-menu";
 
 const labels: TrackContextMenuLabels = {
-  audioOnly: "Audio only",
   coverInput: "Cover file",
   displayMode: "Display",
   displayModes: {
     cover: "Cover",
-    title: "Title",
     video: "Video",
   },
   menu: "Track options",
@@ -18,14 +16,11 @@ const labels: TrackContextMenuLabels = {
 
 describe("TrackContextMenu", () => {
   it("opens on the song/cover target and updates display settings", async () => {
-    const onAudioOnlyChange = vi.fn();
     const onDisplayModeChange = vi.fn();
     render(
       <TrackContextMenu
-        audioOnly={false}
         displayMode="video"
         labels={labels}
-        onAudioOnlyChange={onAudioOnlyChange}
         onDisplayModeChange={onDisplayModeChange}
         track={{ coverBlobId: undefined, id: "trk_1", title: "Rain Loop" }}
       >
@@ -37,17 +32,15 @@ describe("TrackContextMenu", () => {
 
     expect(await screen.findByRole("menu", { name: "Track options" })).toHaveTextContent("Display");
     fireEvent.click(screen.getByRole("menuitemradio", { name: "Cover" }));
-    fireEvent.click(screen.getByRole("menuitemcheckbox", { name: "Audio only" }));
 
     expect(onDisplayModeChange).toHaveBeenCalledWith("cover");
-    expect(onAudioOnlyChange).toHaveBeenCalledWith(true);
+    expect(screen.queryByRole("menuitemcheckbox", { name: "Audio only" })).not.toBeInTheDocument();
   });
 
   it("routes cover files through the hidden input", async () => {
     const onCoverFileSelect = vi.fn();
     render(
       <TrackContextMenu
-        audioOnly
         displayMode="cover"
         labels={{ ...labels, pickCover: "Change cover" }}
         onCoverFileSelect={onCoverFileSelect}

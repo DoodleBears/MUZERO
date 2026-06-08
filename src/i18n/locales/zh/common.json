@@ -41,6 +41,14 @@
     "tracks_other": "{{count}} 首",
     "empty": "没有匹配。试试某个标签，或备注里的一个词。"
   },
+  "globalSearch": {
+    "title": "搜索歌曲",
+    "placeholder": "搜索全部歌曲…",
+    "empty": "没有匹配的可播放歌曲。",
+    "count_other": "{{count}} 条结果",
+    "playHint": "播放",
+    "playNextHint": "下一首播放"
+  },
   "player": {
     "previous": "上一首",
     "next": "下一首",
@@ -51,7 +59,6 @@
     "repeatLabel": "循环",
     "volume": "音量",
     "shuffle": "随机播放",
-    "autoplay": "自动播放",
     "playbackError": "播放出错"
   },
   "dj": {
@@ -63,8 +70,6 @@
   "nowPlaying": {
     "upNext": "即将播放",
     "closeQueue": "关闭播放列表",
-    "audioOnly": "仅音频",
-    "audioOnlyHint": "只听音频（隐藏视频）",
     "displayMode": "显示方式",
     "modeTitle": "{{mode}}模式",
     "trackMenu": "歌曲选项",
@@ -75,8 +80,7 @@
   },
   "displayMode": {
     "video": "视频",
-    "cover": "封面",
-    "title": "标题"
+    "cover": "封面"
   },
   "track": {
     "generationFailed": "生成失败",
@@ -98,6 +102,8 @@
     "galleryModalBody": "没有正在播放的曲目 —— 把它加入全局背景轮播图库。",
     "asCover": "设为封面",
     "asBackground": "加为背景",
+    "dropAsCover": "松手设为这首歌的封面",
+    "dropAsTrackBackground": "拖到封面外，添加为这首歌的背景",
     "toGallery": "加入图库",
     "cancel": "取消",
     "close": "关闭",
@@ -153,6 +159,11 @@
     "addImages": "添加图片",
     "empty": "还没有图片。",
     "removeImage": "移除图片",
+    "trackSlideshow": "歌曲背景",
+    "trackSlideshowDesc": "只绑定到这首歌的背景图。开启幻灯片模式后，会显示在正在播放页的空白/背景区域。",
+    "trackSlideshowEmpty": "这首歌还没有背景图。把图片拖到封面外的空白区域，或在这里添加。",
+    "addTrackImages": "添加背景",
+    "removeTrackImage": "移除歌曲背景",
     "immersiveIdle": "空闲时隐藏栏（沉浸模式）",
     "immersiveIdleHint": "在「正在播放」页，几秒无操作后淡出顶栏和底部 Dock；移动鼠标即可重新显示。",
     "coverCropped": "显示裁切后的封面",
@@ -174,7 +185,15 @@
     "toggleMode": "可视化：{{mode}}",
     "modeOff": "关闭",
     "modeBackground": "背景",
-    "modeBoth": "背景 + 封面区",
+    "modeIdleOnly": "空闲沉浸",
+    "panelTitle": "效果控制",
+    "closePanel": "关闭效果控制",
+    "rightClickSettings": "右键打开设置",
+    "previewOnly": "调参时隐藏播放器 UI",
+    "previewOnlyHint": "临时隐藏封面、控制器、队列和 Dock，方便全屏观察效果。",
+    "hideBackgroundVisualizer": "隐藏背景频谱",
+    "backgroundPreviewHint": "这些预览开关会在关闭面板后自动恢复，播放器会回到正常层级。",
+    "idleOnlyShort": "空闲隐藏",
     "useCoverColor": "频谱优先使用封面主色",
     "useCoverColorHint": "当前歌曲有封面时，提取封面主色作为动态 primary；没有封面时回退到主题主色。",
     "asBackground": "用作播放页背景",
@@ -184,6 +203,9 @@
     "smoothing": "平滑：{{value}}",
     "minDecibels": "最小 dB：{{value}}",
     "maxDecibels": "最大 dB：{{value}}",
+    "densityBands": "密度：每倍频程 {{count}} 根",
+    "densityRays": "密度：{{count}} 根光束",
+    "densityPoints": "密度：{{count}} 个采样点",
     "intensity": "强度：{{value}}",
     "motion": "运动速度：{{value}}",
     "detail": "细节：{{value}}",
@@ -192,8 +214,8 @@
     "mirror": "镜像 / 倒影：{{value}}",
     "backgroundDim": "可视化压暗：{{pct}}%",
     "backgroundOpacity": "可视化透明度：{{pct}}%",
-    "inCoverArea": "在封面区域显示可视化",
-    "inCoverAreaHint": "用于没有封面的歌曲；关闭时改用每首歌的渐变色占位，避免可视化重复显示两次。"
+    "idleOnly": "空闲时隐藏播放器 UI",
+    "idleOnlyHint": "在「正在播放」页，几秒无操作后淡出封面、控制器、队列、顶栏和 Dock，只保留背景与频谱。"
   },
   "crop": {
     "title": "裁切封面（正方形）",
@@ -273,11 +295,22 @@
     "costUnknown": "费用取决于你所选服务商的定价。",
     "getApiKey": "获取 API key",
     "apiDocs": "API 文档",
-    "modelHint": "auto = 最新模型；也可填具体版本 id。"
+    "modelHint": "auto = 最新模型；也可填具体版本 id。",
+    "traceTitle": "Trace 诊断",
+    "traceHint": "当前 app 会话的本地播放诊断。复现问题后复制这段日志。",
+    "traceCopy": "复制 trace",
+    "traceCopied": "已复制",
+    "traceClear": "清空",
+    "traceEmpty": "还没有 trace 事件。"
   },
   "gallery": {
     "title": "歌单",
     "search": "搜索歌单…",
+    "modeSets": "歌单",
+    "modeTracks": "全部歌曲",
+    "toggleModeHint": "切换视图",
+    "searchSets": "搜索歌单…",
+    "searchTracks": "搜索全部歌曲…",
     "filterAll": "全部",
     "filterLiked": "红心",
     "sortRecent": "最近",
@@ -287,6 +320,7 @@
     "viewGrid": "封面",
     "count_other": "{{count}} 首",
     "empty": "还没有歌单——开始一个 DJ 歌单或上传媒体。",
+    "tracksEmpty": "还没有歌曲——上传媒体或开始一个 DJ 歌单。",
     "back": "返回",
     "playAll": "播放全部",
     "setName": "歌单名称",

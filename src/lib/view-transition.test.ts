@@ -38,10 +38,10 @@ describe("canViewTransition", () => {
     expect(canViewTransition()).toBe(false);
   });
 
-  it("is true when the native API exists and motion is allowed", () => {
+  it("stays false when the native API exists and motion is allowed", () => {
     stubStartViewTransition();
     stubReducedMotion(false);
-    expect(canViewTransition()).toBe(true);
+    expect(canViewTransition()).toBe(false);
   });
 
   it("is false when the user prefers reduced motion, even if the API exists", () => {
@@ -58,12 +58,12 @@ describe("startViewTransition", () => {
     expect(update).toHaveBeenCalledTimes(1);
   });
 
-  it("delegates to document.startViewTransition when supported", () => {
+  it("bypasses document.startViewTransition even when supported", () => {
     stubStartViewTransition((cb) => cb());
     stubReducedMotion(false);
     const update = vi.fn();
     startViewTransition(update);
-    expect(doc.startViewTransition).toHaveBeenCalledTimes(1);
+    expect(doc.startViewTransition).not.toHaveBeenCalled();
     expect(update).toHaveBeenCalledTimes(1);
   });
 

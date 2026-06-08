@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { resolveBackgroundSource } from "./background";
+import {
+  type BackgroundRenderTarget,
+  resolveBackgroundSource,
+  resolvePixiBackgroundMedia,
+  settleBackgroundTarget,
+} from "./background";
 
 describe("resolveBackgroundSource", () => {
   it("cover priority: the cover wins when present", () => {
@@ -113,5 +118,66 @@ describe("resolveBackgroundSource", () => {
         galleryCount: 5,
       }),
     ).toBe("cover");
+  });
+});
+
+describe("resolvePixiBackgroundMedia", () => {
+  it("uses the current ready video track as the Pixi source", () => {
+    expect(
+      resolvePixiBackgroundMedia({
+        imageSource: "cover",
+        trackKind: "video",
+        trackStatus: "ready",
+        hasTrackMedia: true,
+      }),
+    ).toEqual({ source: "track-video", mediaType: "video" });
+  });
+
+  it("keeps image sources for audio, pending video, or missing media", () => {
+    expect(
+      resolvePixiBackgroundMedia({
+        imageSource: "track-slideshow",
+        trackKind: "audio",
+        trackStatus: "ready",
+        hasTrackMedia: true,
+      }),
+    ).toEqual({ source: "track-slideshow", mediaType: "image" });
+    expect(
+      resolvePixiBackgroundMedia({
+        imageSource: "cover",
+        trackKind: "video",
+        trackStatus: "generating",
+        hasTrackMedia: true,
+      }),
+    ).toEqual({ source: "cover", mediaType: "image" });
+    expect(
+      resolvePixiBackgroundMedia({
+        imageSource: "gallery-slideshow",
+        trackKind: "video",
+        trackStatus: "ready",
+        hasTrackMedia: false,
+      }),
+    ).toEqual({ source: "gallery-slideshow", mediaType: "image" });
+  });
+});
+
+describe("settleBackgroundTarget", () => {
+  it("keeps the painted background while the next source is resolving", () => {
+    const current = { mediaType: "image", src: "blob:cover-a" } as const;
+
+    expect(settleBackgroundTarget(current, null, true)).toBe(current);
+  });
+
+  it("switches to the next target once its URL is ready", () => {
+    const current: BackgroundRenderTarget = { mediaType: "image", src: "blob:cover-a" };
+    const next: BackgroundRenderTarget = { mediaType: "image", src: "blob:cover-b" };
+
+    expect(settleBackgroundTarget(current, next, true)).toBe(next);
+  });
+
+  it("clears the painted background when there is no pending source", () => {
+    const current = { mediaType: "image", src: "blob:cover-a" } as const;
+
+    expect(settleBackgroundTarget(current, null, false)).toBeNull();
   });
 });

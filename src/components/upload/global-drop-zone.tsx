@@ -10,6 +10,7 @@ import {
   addTrackBackground,
   createSession,
   listSessions,
+  saveSettings,
   setTrackCover,
 } from "@/db/repositories";
 import type { CropRect, Track } from "@/db/types";
@@ -360,9 +361,12 @@ function ImageDropModal({
   async function run(action: "background" | "gallery") {
     if (saving) return;
     setSaving(true);
-    if (action === "background" && track)
-      await addTrackBackground({ trackId: track.id, blob: file, mime });
-    else await addGalleryImage({ blob: file, mime });
+    if (action === "background" && track) {
+      await Promise.all([
+        addTrackBackground({ trackId: track.id, blob: file, mime }),
+        saveSettings({ backgroundMode: "slideshow" }),
+      ]);
+    } else await addGalleryImage({ blob: file, mime });
     onDone(action);
     onClose();
   }

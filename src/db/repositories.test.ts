@@ -3,19 +3,24 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { MuzeroDB } from "./muzero-db";
 import {
   addMemory,
+  addTrackBackground,
   createPendingTrack,
   createSession,
   createUploadedTrack,
+  deleteImageBlob,
   deleteMemory,
   getAllTags,
   getMemoryPhoto,
   getSession,
   getSessionCover,
+  getSettings,
   getTrack,
   listAllTracks,
   listMemories,
+  listTrackBackgrounds,
   memoryNotesByTrack,
   prependTrackIds,
+  saveSettings,
   setSessionCover,
   setTrackNote,
   setTrackTags,
@@ -35,6 +40,22 @@ afterEach(async () => {
   await new Promise<void>((resolve) => {
     const req = indexedDB.deleteDatabase(dbName);
     req.onsuccess = req.onerror = () => resolve();
+  });
+});
+
+describe("settings", () => {
+  it("defaults and persists player repeat/shuffle toggles", async () => {
+    expect(await getSettings(db)).toMatchObject({
+      playerRepeatMode: "off",
+      playerShuffle: false,
+    });
+
+    await saveSettings({ playerRepeatMode: "one", playerShuffle: true }, db);
+
+    expect(await getSettings(db)).toMatchObject({
+      playerRepeatMode: "one",
+      playerShuffle: true,
+    });
   });
 });
 
@@ -173,6 +194,60 @@ describe("annotations", () => {
   });
 });
 
+describe("track backgrounds", () => {
+  it("lists per-track slideshow images and deletes only the selected one", async () => {
+    const session = await createSession({ seedPrompt: "", config: { autoExtend: false } }, db);
+    const makeTrack = (title: string) =>
+      createUploadedTrack(
+        {
+          sessionId: session.id,
+          title,
+          kind: "audio",
+          blob: new Blob([new Uint8Array([0])], { type: "audio/mpeg" }),
+          mime: "audio/mpeg",
+          durationSec: 1,
+        },
+        db,
+      );
+    const first = await makeTrack("first");
+    const second = await makeTrack("second");
+
+    const a = await addTrackBackground(
+      {
+        trackId: first.id,
+        blob: new Blob([new Uint8Array([1])], { type: "image/png" }),
+        mime: "image/png",
+      },
+      db,
+    );
+    const b = await addTrackBackground(
+      {
+        trackId: first.id,
+        blob: new Blob([new Uint8Array([2])], { type: "image/jpeg" }),
+        mime: "image/jpeg",
+      },
+      db,
+    );
+    await addTrackBackground(
+      {
+        trackId: second.id,
+        blob: new Blob([new Uint8Array([3])], { type: "image/webp" }),
+        mime: "image/webp",
+      },
+      db,
+    );
+
+    expect((await listTrackBackgrounds(first.id, db)).map((bg) => bg.id).sort()).toEqual(
+      [a.id, b.id].sort(),
+    );
+
+    await deleteImageBlob(a.id, db);
+
+    expect((await listTrackBackgrounds(first.id, db)).map((bg) => bg.id)).toEqual([b.id]);
+    expect(await listTrackBackgrounds(second.id, db)).toHaveLength(1);
+  });
+});
+
 describe("memories (one-to-many)", () => {
   it("adds multiple memories to a track, listed oldest → newest", async () => {
     const a = await addMemory({ trackId: "trk_1", note: "first listen", createdAt: 1 }, db);
@@ -266,6 +341,127 @@ describe("v3 → v4 migration moves Track.note into a first Memory", () => {
       expect(noted[0].createdAt).toBe(100); // preserves the track's timestamp
       expect(await listMemories("blank", mz)).toHaveLength(0); // whitespace-only skipped
       expect(await listMemories("none", mz)).toHaveLength(0);
+    } finally {
+      mz.close();
+      await new Promise<void>((resolve) => {
+        const req = indexedDB.deleteDatabase(name);
+        req.onsuccess = req.onerror = () => resolve();
+      });
+    }
+  });
+});
+
+describe("v6 → v7 migration downgrades inherited Pixi background defaults", () => {
+  it("moves previously persisted noise backgrounds back to the stable image renderer", async () => {
+    const name = `muzero-mig7-${Math.random().toString(36).slice(2)}`;
+    const v6 = new Dexie(name);
+    v6.version(1).stores({
+      tracks: "id, sessionId, status, createdAt, liked",
+      mediaBlobs: "id, trackId",
+      sessions: "id, status, updatedAt",
+      settings: "id",
+    });
+    v6.version(2).stores({
+      tracks: "id, sessionId, status, createdAt, liked, *tags, kind",
+      mediaBlobs: "id, trackId, role",
+    });
+    v6.version(3).stores({ playQueue: "id" });
+    v6.version(4).stores({ memories: "id, trackId, createdAt, [trackId+createdAt]" });
+    v6.version(5).stores({ chatSessions: "id, updatedAt" });
+    v6.version(6).stores({});
+    await v6.open();
+    await v6.table("settings").put({ id: "app", backgroundRenderer: "noise" });
+    v6.close();
+
+    const mz = new MuzeroDB(name);
+    try {
+      expect((await getSettings(mz)).backgroundRenderer).toBe("image");
+    } finally {
+      mz.close();
+      await new Promise<void>((resolve) => {
+        const req = indexedDB.deleteDatabase(name);
+        req.onsuccess = req.onerror = () => resolve();
+      });
+    }
+  });
+});
+
+describe("v7 → v8 migration disables inherited background visualizer defaults", () => {
+  it("moves previously persisted background visualizers back to off", async () => {
+    const name = `muzero-mig8-${Math.random().toString(36).slice(2)}`;
+    const v7 = new Dexie(name);
+    v7.version(1).stores({
+      tracks: "id, sessionId, status, createdAt, liked",
+      mediaBlobs: "id, trackId",
+      sessions: "id, status, updatedAt",
+      settings: "id",
+    });
+    v7.version(2).stores({
+      tracks: "id, sessionId, status, createdAt, liked, *tags, kind",
+      mediaBlobs: "id, trackId, role",
+    });
+    v7.version(3).stores({ playQueue: "id" });
+    v7.version(4).stores({ memories: "id, trackId, createdAt, [trackId+createdAt]" });
+    v7.version(5).stores({ chatSessions: "id, updatedAt" });
+    v7.version(6).stores({});
+    v7.version(7).stores({});
+    await v7.open();
+    await v7.table("settings").put({
+      id: "app",
+      visualizerAsBackground: true,
+      visualizerIdleOnly: true,
+    });
+    v7.close();
+
+    const mz = new MuzeroDB(name);
+    try {
+      const settings = await getSettings(mz);
+      expect(settings.visualizerAsBackground).toBe(false);
+      expect(settings.visualizerIdleOnly).toBe(false);
+    } finally {
+      mz.close();
+      await new Promise<void>((resolve) => {
+        const req = indexedDB.deleteDatabase(name);
+        req.onsuccess = req.onerror = () => resolve();
+      });
+    }
+  });
+});
+
+describe("v9 → v10 migration removes legacy boot-resume pointers", () => {
+  it("clears the saved session and track index that used to auto-cue media on launch", async () => {
+    const name = `muzero-mig10-${Math.random().toString(36).slice(2)}`;
+    const v9 = new Dexie(name);
+    v9.version(1).stores({
+      tracks: "id, sessionId, status, createdAt, liked",
+      mediaBlobs: "id, trackId",
+      sessions: "id, status, updatedAt",
+      settings: "id",
+    });
+    v9.version(2).stores({
+      tracks: "id, sessionId, status, createdAt, liked, *tags, kind",
+      mediaBlobs: "id, trackId, role",
+    });
+    v9.version(3).stores({ playQueue: "id" });
+    v9.version(4).stores({ memories: "id, trackId, createdAt, [trackId+createdAt]" });
+    v9.version(5).stores({ chatSessions: "id, updatedAt" });
+    v9.version(6).stores({});
+    v9.version(7).stores({});
+    v9.version(8).stores({});
+    v9.version(9).stores({});
+    await v9.open();
+    await v9.table("settings").put({
+      id: "app",
+      lastSessionId: "ses_previous",
+      lastTrackIndex: 2,
+    });
+    v9.close();
+
+    const mz = new MuzeroDB(name);
+    try {
+      const settings = await getSettings(mz);
+      expect(settings.lastSessionId).toBeUndefined();
+      expect(settings.lastTrackIndex).toBeUndefined();
     } finally {
       mz.close();
       await new Promise<void>((resolve) => {

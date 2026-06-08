@@ -72,12 +72,7 @@ export function MemoryNoteComposer({
   }
 
   return (
-    <div
-      className={cn(
-        "rounded-lg border border-border bg-card p-3 text-card-foreground shadow-sm",
-        className,
-      )}
-    >
+    <div className={cn(className)}>
       <Textarea
         autoFocus={autoFocus}
         className="min-h-24 resize-none bg-background text-sm shadow-inner"

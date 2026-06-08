@@ -1,5 +1,3 @@
-import { modifierSymbol } from "@/lib/shortcuts";
-
 /**
  * Display-only keyboard hints for the transport controls' tooltips. Pure (no
  * React/DOM) so the mapping is unit-tested and the control components stay thin.
@@ -7,7 +5,7 @@ import { modifierSymbol } from "@/lib/shortcuts";
  * representative key per action (alternatives like `A`/`D` are omitted to keep
  * the `Kbd` caps readable — multiple caps read as a chord).
  */
-export type HintAction = "play" | "prev" | "next" | "repeat" | "volume";
+export type HintAction = "play" | "prev" | "next" | "repeat" | "shuffle" | "volume";
 
 export function playerShortcutHint(action: HintAction, mac: boolean): string[] {
   switch (action) {
@@ -18,7 +16,9 @@ export function playerShortcutHint(action: HintAction, mac: boolean): string[] {
     case "next":
       return ["→"];
     case "repeat":
-      return [modifierSymbol(mac), "R"];
+      return ["R"];
+    case "shuffle":
+      return [mac ? "Option" : "Alt", "R"];
     case "volume":
       // Up/down adjust by ±5%; both arrows shown side by side, not a chord.
       return ["↑", "↓"];

@@ -8,9 +8,11 @@ describe("playerShortcutHint", () => {
     expect(playerShortcutHint("next", true)).toEqual(["→"]);
   });
 
-  it("returns the platform modifier chord for repeat", () => {
-    expect(playerShortcutHint("repeat", true)).toEqual(["⌘", "R"]);
-    expect(playerShortcutHint("repeat", false)).toEqual(["Ctrl", "R"]);
+  it("returns shortcuts for repeat and shuffle", () => {
+    expect(playerShortcutHint("repeat", true)).toEqual(["R"]);
+    expect(playerShortcutHint("repeat", false)).toEqual(["R"]);
+    expect(playerShortcutHint("shuffle", true)).toEqual(["Option", "R"]);
+    expect(playerShortcutHint("shuffle", false)).toEqual(["Alt", "R"]);
   });
 
   it("returns both arrow keys for volume (up/down)", () => {

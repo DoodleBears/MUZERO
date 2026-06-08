@@ -26,7 +26,7 @@ export function MediaStage({ className }: { className?: string }) {
   const current = currentIndex >= 0 ? queue[currentIndex] : undefined;
   const settings = useSettings();
   const asBgActive =
-    (settings.visualizerAsBackground ?? true) && (settings.visualizerStyle ?? "bars") !== "off";
+    (settings.visualizerAsBackground ?? false) && (settings.visualizerStyle ?? "bars") !== "off";
 
   const containerRef = useRef<HTMLDivElement | null>(null);
   const coverUrl = useTrackCoverUrl(current);

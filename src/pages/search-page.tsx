@@ -15,6 +15,8 @@ import { useTranslation } from "react-i18next";
 import { VirtualTrackList } from "@/components/library/virtual-track-list";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Kbd, KbdGroup } from "@/components/ui/kbd";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { db } from "@/db/muzero-db";
 import {
   createSession,
@@ -41,8 +43,17 @@ import { usePlayerStore } from "@/stores/player-store";
 import { useUploadTargetStore } from "@/stores/upload-target-store";
 
 type GalleryView = "list" | "grid";
+type GalleryMode = "sets" | "tracks";
+const MODE_KEY = "muzero-gallery-mode";
 const VIEW_KEY = "muzero-gallery-view";
 const EMPTY_MEMORY_NOTES = new Map<string, string[]>();
+const TRACK_ROW_BUTTON_SELECTOR = "[data-muzero-track-row-button]";
+const GALLERY_MODE_TOGGLE_KEYS = new Set(["`", "~", "·", "｀"]);
+
+function savedGalleryMode(): GalleryMode {
+  if (typeof localStorage === "undefined") return "sets";
+  return localStorage.getItem(MODE_KEY) === "tracks" ? "tracks" : "sets";
+}
 
 function normalizeDescription(value: string): string {
   return value
@@ -55,6 +66,11 @@ function stripDescriptionNewlines(value: string): string {
   return value.replace(/[\r\n]+/g, " ");
 }
 
+function isGalleryModeToggle(event: KeyboardEvent): boolean {
+  if (event.metaKey || event.ctrlKey || event.altKey || event.isComposing) return false;
+  return event.code === "Backquote" || GALLERY_MODE_TOGGLE_KEYS.has(event.key);
+}
+
 /**
  * 歌单 Gallery — a two-level surface. Level 1 browses every set like an album wall
  * (search / filter / sort / list⇄album-grid). Tapping a set opens level 2: that
@@ -64,7 +80,9 @@ function stripDescriptionNewlines(value: string): string {
 export function SearchPage() {
   const { t } = useTranslation();
   const [selectedSetId, setSelectedSetId] = useState<string | null>(null);
-  const [query, setQuery] = useState("");
+  const [mode, setMode] = useState<GalleryMode>(savedGalleryMode);
+  const [setQuery, setSetQuery] = useState("");
+  const [trackQuery, setTrackQuery] = useState("");
   const [filter, setFilter] = useState<SetFilter>("all");
   const [sort, setSort] = useState<SetSort>("recent");
   const [view, setView] = useState<GalleryView>(() =>
@@ -88,6 +106,7 @@ export function SearchPage() {
   );
   const setActiveSession = usePlayerStore((s) => s.setActiveSession);
   const play = usePlayerStore((s) => s.play);
+  const playTrack = usePlayerStore((s) => s.playTrack);
   const setUploadTarget = useUploadTargetStore((s) => s.setTarget);
 
   // Route app-wide dropped/pasted media: a set detail → that set; the album wall →
@@ -96,6 +115,21 @@ export function SearchPage() {
     setUploadTarget(selectedSetId ? { kind: "set", setId: selectedSetId } : { kind: "pick" });
     return () => setUploadTarget({ kind: "active" });
   }, [selectedSetId, setUploadTarget]);
+
+  useEffect(() => {
+    if (selectedSetId) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (!isGalleryModeToggle(event)) return;
+      const target = event.target instanceof HTMLElement ? event.target : null;
+      if (target?.closest('[role="dialog"][aria-modal="true"]')) return;
+      event.preventDefault();
+      const next = mode === "sets" ? "tracks" : "sets";
+      setMode(next);
+      if (typeof localStorage !== "undefined") localStorage.setItem(MODE_KEY, next);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [mode, selectedSetId]);
 
   const trackById = useMemo(() => new Map(allTracks.map((tr) => [tr.id, tr])), [allTracks]);
 
@@ -119,13 +153,23 @@ export function SearchPage() {
   );
 
   const shown = useMemo(
-    () => sortSets(filterSets(items, query, filter), sort),
-    [items, query, filter, sort],
+    () => sortSets(filterSets(items, setQuery, filter), sort),
+    [items, setQuery, filter, sort],
   );
+  const shownTracks = useMemo(() => {
+    const sortedTracks = [...allTracks].sort((a, b) => b.createdAt - a.createdAt);
+    return searchTracks(sortedTracks, trackQuery, memoryNotes);
+  }, [allTracks, memoryNotes, trackQuery]);
+  const query = mode === "sets" ? setQuery : trackQuery;
 
   function setViewPref(next: GalleryView) {
     setView(next);
     if (typeof localStorage !== "undefined") localStorage.setItem(VIEW_KEY, next);
+  }
+
+  function setModePref(next: GalleryMode) {
+    setMode(next);
+    if (typeof localStorage !== "undefined") localStorage.setItem(MODE_KEY, next);
   }
 
   async function playSet(setId: string) {
@@ -140,6 +184,29 @@ export function SearchPage() {
       config: { autoExtend: false },
     });
     setSelectedSetId(s.id);
+  }
+
+  function focusTrackSearchResult(direction: "first" | "last") {
+    if (mode !== "tracks" || shownTracks.length === 0) return;
+    const list = document.querySelector<HTMLElement>('[data-testid="virtual-track-list"]');
+    if (list) list.scrollTop = direction === "first" ? 0 : list.scrollHeight;
+    const index = direction === "first" ? 0 : shownTracks.length - 1;
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
+        document
+          .querySelector<HTMLButtonElement>(
+            `${TRACK_ROW_BUTTON_SELECTOR}[data-track-index="${index}"]`,
+          )
+          ?.focus();
+      });
+    });
+  }
+
+  function onSearchKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
+    if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
+    if (mode !== "tracks" || shownTracks.length === 0) return;
+    event.preventDefault();
+    focusTrackSearchResult(event.key === "ArrowDown" ? "first" : "last");
   }
 
   // Level 2: a set's track list.
@@ -158,93 +225,136 @@ export function SearchPage() {
   // scroll with the wall and the whole thing dissolves under the floating chrome
   // (`chrome-fade`), top and bottom, just like Now Playing.
   return (
-    <div className="chrome-fade no-scrollbar mx-auto h-full w-full max-w-4xl overflow-y-auto px-4 pt-chrome-top pb-chrome-bottom lg:px-6">
+    <div
+      className={cn(
+        "chrome-fade no-scrollbar mx-auto flex h-full w-full max-w-4xl flex-col overflow-y-auto px-4 pt-chrome-top lg:px-6",
+        mode === "tracks" ? "pb-0" : "pb-chrome-bottom",
+      )}
+    >
+      <TooltipProvider>
+        <div className="mb-3 inline-flex rounded-lg border border-border bg-background/40 p-1">
+          <ModeTab active={mode === "sets"} onClick={() => setModePref("sets")}>
+            {t("gallery.modeSets")}
+          </ModeTab>
+          <ModeTab active={mode === "tracks"} onClick={() => setModePref("tracks")}>
+            {t("gallery.modeTracks")}
+          </ModeTab>
+        </div>
+      </TooltipProvider>
+
       <div className="mb-3 flex items-center gap-2">
         <div className="relative flex-1">
           <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder={t("gallery.search")}
+            onChange={(e) =>
+              mode === "sets" ? setSetQuery(e.target.value) : setTrackQuery(e.target.value)
+            }
+            placeholder={mode === "sets" ? t("gallery.searchSets") : t("gallery.searchTracks")}
             className="pl-9"
+            data-muzero-search-input
+            onKeyDown={onSearchKeyDown}
           />
         </div>
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={() => void createNewSet()}
-          className="shrink-0"
-        >
-          <Plus className="size-4" /> {t("gallery.newSet")}
-        </Button>
-      </div>
-
-      <div className="mb-3 flex flex-wrap items-center gap-1.5">
-        <Chip active={filter === "all"} onClick={() => setFilter("all")}>
-          {t("gallery.filterAll")}
-        </Chip>
-        <Chip active={filter === "liked"} onClick={() => setFilter("liked")}>
-          <Heart className="size-3" /> {t("gallery.filterLiked")}
-        </Chip>
-        <span className="mx-1 h-4 w-px bg-border" />
-        <Chip active={sort === "recent"} onClick={() => setSort("recent")}>
-          {t("gallery.sortRecent")}
-        </Chip>
-        <Chip active={sort === "name"} onClick={() => setSort("name")}>
-          {t("gallery.sortName")}
-        </Chip>
-        <Chip active={sort === "size"} onClick={() => setSort("size")}>
-          {t("gallery.sortSize")}
-        </Chip>
-        <div className="ms-auto flex items-center gap-1">
-          <IconToggle
-            active={view === "list"}
-            onClick={() => setViewPref("list")}
-            label={t("gallery.viewList")}
+        {mode === "sets" && (
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => void createNewSet()}
+            className="shrink-0"
           >
-            <List className="size-4" />
-          </IconToggle>
-          <IconToggle
-            active={view === "grid"}
-            onClick={() => setViewPref("grid")}
-            label={t("gallery.viewGrid")}
-          >
-            <LayoutGrid className="size-4" />
-          </IconToggle>
-        </div>
-      </div>
-
-      <div>
-        {shown.length === 0 ? (
-          <p className="mt-12 text-center text-sm text-muted-foreground">{t("gallery.empty")}</p>
-        ) : view === "grid" ? (
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-            {shown.map((item) => (
-              <SetCard
-                key={item.session.id}
-                item={item}
-                coverTrack={item.coverTrackId ? trackById.get(item.coverTrackId) : undefined}
-                view="grid"
-                onEnter={() => setSelectedSetId(item.session.id)}
-                onPlay={() => void playSet(item.session.id)}
-              />
-            ))}
-          </div>
-        ) : (
-          <div className="flex flex-col gap-1">
-            {shown.map((item) => (
-              <SetCard
-                key={item.session.id}
-                item={item}
-                coverTrack={item.coverTrackId ? trackById.get(item.coverTrackId) : undefined}
-                view="list"
-                onEnter={() => setSelectedSetId(item.session.id)}
-                onPlay={() => void playSet(item.session.id)}
-              />
-            ))}
-          </div>
+            <Plus className="size-4" /> {t("gallery.newSet")}
+          </Button>
         )}
       </div>
+
+      {mode === "sets" ? (
+        <>
+          <div className="mb-3 flex flex-wrap items-center gap-1.5">
+            <Chip active={filter === "all"} onClick={() => setFilter("all")}>
+              {t("gallery.filterAll")}
+            </Chip>
+            <Chip active={filter === "liked"} onClick={() => setFilter("liked")}>
+              <Heart className="size-3" /> {t("gallery.filterLiked")}
+            </Chip>
+            <span className="mx-1 h-4 w-px bg-border" />
+            <Chip active={sort === "recent"} onClick={() => setSort("recent")}>
+              {t("gallery.sortRecent")}
+            </Chip>
+            <Chip active={sort === "name"} onClick={() => setSort("name")}>
+              {t("gallery.sortName")}
+            </Chip>
+            <Chip active={sort === "size"} onClick={() => setSort("size")}>
+              {t("gallery.sortSize")}
+            </Chip>
+            <div className="ms-auto flex items-center gap-1">
+              <IconToggle
+                active={view === "list"}
+                onClick={() => setViewPref("list")}
+                label={t("gallery.viewList")}
+              >
+                <List className="size-4" />
+              </IconToggle>
+              <IconToggle
+                active={view === "grid"}
+                onClick={() => setViewPref("grid")}
+                label={t("gallery.viewGrid")}
+              >
+                <LayoutGrid className="size-4" />
+              </IconToggle>
+            </div>
+          </div>
+
+          <div>
+            {shown.length === 0 ? (
+              <p className="mt-12 text-center text-sm text-muted-foreground">
+                {t("gallery.empty")}
+              </p>
+            ) : view === "grid" ? (
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+                {shown.map((item) => (
+                  <SetCard
+                    key={item.session.id}
+                    item={item}
+                    coverTrack={item.coverTrackId ? trackById.get(item.coverTrackId) : undefined}
+                    view="grid"
+                    onEnter={() => setSelectedSetId(item.session.id)}
+                    onPlay={() => void playSet(item.session.id)}
+                  />
+                ))}
+              </div>
+            ) : (
+              <div className="flex flex-col gap-1">
+                {shown.map((item) => (
+                  <SetCard
+                    key={item.session.id}
+                    item={item}
+                    coverTrack={item.coverTrackId ? trackById.get(item.coverTrackId) : undefined}
+                    view="list"
+                    onEnter={() => setSelectedSetId(item.session.id)}
+                    onPlay={() => void playSet(item.session.id)}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+        </>
+      ) : (
+        <div className="min-h-0 flex-1">
+          {shownTracks.length === 0 ? (
+            <p className="mt-12 text-center text-sm text-muted-foreground">
+              {t("gallery.tracksEmpty")}
+            </p>
+          ) : (
+            <VirtualTrackList
+              tracks={shownTracks}
+              onPlay={(track) => void playTrack(track)}
+              emptyHint={t("gallery.tracksEmpty")}
+              className="no-scrollbar pb-chrome-bottom"
+            />
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -492,6 +602,41 @@ function Chip({
     >
       {children}
     </button>
+  );
+}
+
+function ModeTab({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  const { t } = useTranslation();
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        type="button"
+        onClick={onClick}
+        aria-pressed={active}
+        className={cn(
+          "rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
+          active ? "bg-accent text-foreground" : "text-muted-foreground hover:text-foreground",
+        )}
+      >
+        {children}
+      </TooltipTrigger>
+      <TooltipContent side="bottom">
+        <span className="flex items-center gap-2">
+          <span>{t("gallery.toggleModeHint")}</span>
+          <KbdGroup>
+            <Kbd>~</Kbd>
+          </KbdGroup>
+        </span>
+      </TooltipContent>
+    </Tooltip>
   );
 }
 

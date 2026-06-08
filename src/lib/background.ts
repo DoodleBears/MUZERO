@@ -1,15 +1,21 @@
-import type { BackgroundMode } from "@/db/types";
+import type { BackgroundMode, TrackKind, TrackStatus } from "@/db/types";
 
 /**
  * What the Now-Playing ambient background should pull from. Pure decision so the
  * priority rules are unit-tested without the DB. `mode` is the *priority* between
- * the track's two own assets, then the global gallery is an optional last resort:
+ * the track's two own image assets, then the global gallery is an optional last resort:
  *  - "cover"     → the track's cover first, then its bound slideshow.
  *  - "slideshow" → the track's bound slideshow first, then its cover.
  * When the track has neither, fall back to the shared global gallery only if
  * `galleryFallback` is on; otherwise nothing.
  */
 export type BackgroundSource = "track-slideshow" | "gallery-slideshow" | "cover" | "none";
+export type BackgroundMediaSource = BackgroundSource | "track-video";
+export type BackgroundMediaType = "image" | "video";
+export type BackgroundRenderTarget = {
+  mediaType: BackgroundMediaType;
+  src: string;
+};
 
 export function resolveBackgroundSource(opts: {
   mode: BackgroundMode | undefined;
@@ -35,4 +41,36 @@ export function resolveBackgroundSource(opts: {
   // The track has neither — optionally borrow the shared global gallery.
   if (galleryFallback && galleryCount > 0) return "gallery-slideshow";
   return "none";
+}
+
+/**
+ * Pixi renderers can texture from the current uploaded MV itself. Keep that
+ * choice separate from the image priority above so blur/plain image renderers
+ * continue to use cover/slideshow sources only.
+ */
+export function resolvePixiBackgroundMedia(opts: {
+  imageSource: BackgroundSource;
+  trackKind?: TrackKind;
+  trackStatus?: TrackStatus;
+  hasTrackMedia: boolean;
+}): { source: BackgroundMediaSource; mediaType: BackgroundMediaType } {
+  if (opts.trackKind === "video" && opts.trackStatus === "ready" && opts.hasTrackMedia) {
+    return { source: "track-video", mediaType: "video" };
+  }
+  return { source: opts.imageSource, mediaType: "image" };
+}
+
+/**
+ * Keep the currently painted background while the next known source is still
+ * resolving its object URL. Without this, song changes briefly render the base
+ * app background before the next cover/slideshow frame can crossfade in.
+ */
+export function settleBackgroundTarget<T extends BackgroundRenderTarget>(
+  current: T | null,
+  next: T | null,
+  hasPendingSource: boolean,
+): T | null {
+  if (next) return next;
+  if (hasPendingSource) return current;
+  return null;
 }

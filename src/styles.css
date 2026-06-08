@@ -120,7 +120,7 @@
    * heights, so content fills the whole viewport and scrolls *under* the bars
    * rather than being boxed between them. Tuned to the rendered header / dock.
    */
-  --spacing-chrome-top: 4rem;
+  --spacing-chrome-top: 3rem;
   --spacing-chrome-bottom: 11.5rem;
 }
 

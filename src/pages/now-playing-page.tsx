@@ -20,7 +20,6 @@ import { isMac } from "@/lib/shortcuts";
 import { cn } from "@/lib/utils";
 import { nextRepeatMode } from "@/player/transport";
 import { usePlayerStore } from "@/stores/player-store";
-import { useVisualizerPanelStore } from "@/stores/visualizer-panel-store";
 
 const DISPLAY_MODES: { id: SetDisplayMode; icon: typeof Video }[] = [
   { id: "video", icon: Video },
@@ -38,11 +37,10 @@ const GLASS_CONTROL_IDLE =
  * for audio art) with a track-info card below, and a tabbed queue/lyrics rail on
  * the right (desktop). The ambient slideshow background lives at the app root.
  */
-export function NowPlayingPage() {
+export function NowPlayingPage({ foregroundHidden = false }: { foregroundHidden?: boolean }) {
   const queue = usePlayerStore((s) => s.queue);
   const currentIndex = usePlayerStore((s) => s.currentIndex);
   const djEnabled = usePlayerStore((s) => s.djEnabled);
-  const visualizerPreviewOnly = useVisualizerPanelStore((s) => s.previewOnly);
   const current = currentIndex >= 0 ? queue[currentIndex] : undefined;
 
   // Reset the scroll to the top when the track changes (the new media/info
@@ -63,12 +61,12 @@ export function NowPlayingPage() {
       <div
         className={cn(
           "sm:mx-8 lg:mx-12 grid h-full gap-6 px-4 transition-opacity duration-200 lg:px-6 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]",
-          visualizerPreviewOnly && "pointer-events-none opacity-0",
+          foregroundHidden && "pointer-events-none opacity-0",
         )}
       >
         <section
           ref={sectionRef}
-          className="no-scrollbar flex min-h-0 flex-col gap-3 overflow-y-auto pt-chrome-top pb-chrome-bottom"
+          className="no-scrollbar flex min-h-0 flex-col gap-3 overflow-y-auto overflow-x-visible pt-chrome-top pb-chrome-bottom"
         >
           {/* Video fills the width at its own aspect ratio; audio shows a square. */}
           <div ref={stageRef}>
@@ -79,7 +77,7 @@ export function NowPlayingPage() {
 
           <NowPlayingActionRow />
 
-          <div className="relative mx-auto w-full py-0">
+          <div className="relative mx-auto w-full pb-4">
             <PlaybackSpectrum className="-translate-y-1/2 absolute inset-x-0 top-1/2" />
             <TransportControls className="relative z-10 py-4 " />
           </div>
@@ -89,7 +87,7 @@ export function NowPlayingPage() {
           {djEnabled && <DjConsole />}
         </section>
 
-        <aside className="hidden min-h-0 pt-chrome-top md:block">
+        <aside className="hidden min-h-0 md:block">
           <NowPlayingPanel collapsible />
         </aside>
       </div>

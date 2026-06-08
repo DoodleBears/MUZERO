@@ -49,11 +49,6 @@ describe("MemoryTimelineRail layout-ready fade", () => {
       "false",
     );
 
-    expect(screen.getByTestId("memory-carousel-image").closest("article")).toHaveAttribute(
-      "data-enter-ready",
-      "false",
-    );
-
     await waitFor(() => {
       expect(screen.getByTestId("memory-carousel-slide")).toHaveAttribute(
         "data-enter-ready",

@@ -1,26 +1,12 @@
 /**
- * Progressive-enhancement wrapper around the native View Transitions API.
+ * Page-transition shim.
  *
- * The app ships in platform WebViews (WKWebView / WebView2 / WebKitGTK) whose
- * support for `document.startViewTransition` varies by OS version, so this
- * helper feature-detects and falls back to running the update synchronously —
- * the DOM change always happens, animated or not. Everything is gated on
- * `prefers-reduced-motion` so users who opt out of motion get instant swaps.
- *
- * Shared-element transitions (the now-playing cover ↔ full sheet) are handled by
- * `motion`'s `layoutId` instead, which is consistent across every WebView. This
- * helper is for whole-page tab → tab cross-fades only.
+ * Native `document.startViewTransition` is intentionally disabled for now:
+ * WKWebView can flicker or interrupt media when it snapshots full-screen
+ * compositor layers (video, canvas visualizers, blurred backgrounds). Shared
+ * element and local control animations still use Motion; tab changes run as a
+ * plain synchronous state update.
  */
-
-type StartViewTransition = (callback: () => void) => unknown;
-
-/** The bound native `startViewTransition`, or null when unsupported. */
-function getStartViewTransition(): StartViewTransition | null {
-  if (typeof document === "undefined") return null;
-  const fn = (document as Document & { startViewTransition?: StartViewTransition })
-    .startViewTransition;
-  return typeof fn === "function" ? fn.bind(document) : null;
-}
 
 /** True when the user has asked the OS to reduce motion. */
 export function prefersReducedMotion(): boolean {
@@ -28,9 +14,9 @@ export function prefersReducedMotion(): boolean {
   return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 }
 
-/** Native view transitions are usable AND the user hasn't opted out of motion. */
+/** Native page view transitions are currently disabled app-wide. */
 export function canViewTransition(): boolean {
-  return getStartViewTransition() !== null && !prefersReducedMotion();
+  return false;
 }
 
 /**
@@ -41,7 +27,5 @@ export function canViewTransition(): boolean {
  * transition snapshots it.
  */
 export function startViewTransition(update: () => void): void {
-  const start = getStartViewTransition();
-  if (start && !prefersReducedMotion()) start(update);
-  else update();
+  update();
 }

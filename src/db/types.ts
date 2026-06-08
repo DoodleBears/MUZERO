@@ -140,7 +140,7 @@ export interface CropRect {
 }
 
 /** How a set renders the "stage" while playing. */
-export type SetDisplayMode = "video" | "cover" | "title";
+export type SetDisplayMode = "video" | "cover";
 
 /**
  * A set: an ordered, mixed list of tracks. The DJ can keep it growing
@@ -250,7 +250,7 @@ export interface AppSettings {
   locale: "en" | "zh" | "ja" | "ko";
   /** Now-Playing background *priority*: prefer the track's own cover or its bound slideshow. Defaults to "cover". */
   backgroundMode?: BackgroundMode;
-  /** How the resolved Now-Playing background image is rendered. Defaults to the plain image renderer. */
+  /** How the resolved Now-Playing background image is rendered. Defaults to the noise renderer. */
   backgroundRenderer?: BackgroundRenderer;
   /** Pixel block size for the pixel background renderer. Default 12. */
   backgroundPixelSize?: number;
@@ -258,27 +258,27 @@ export interface AppSettings {
   backgroundAsciiColor?: string;
   /** ASCII renderer replaces source colors with backgroundAsciiColor. Default false. */
   backgroundAsciiReplaceColor?: boolean;
-  /** CRT renderer curvature. Default 0.35. */
+  /** CRT renderer curvature. Default 0.54. */
   backgroundCrtCurvature?: number;
-  /** CRT renderer scanline width. Default 1.25. */
+  /** CRT renderer scanline width. Default 4. */
   backgroundCrtLineWidth?: number;
-  /** CRT renderer scanline contrast. Default 0.22. */
+  /** CRT renderer scanline contrast. Default 1. */
   backgroundCrtLineContrast?: number;
   /** CRT renderer line orientation. Default false (horizontal). */
   backgroundCrtVerticalLine?: boolean;
   /** CRT renderer scanline animation phase. Default 0. */
   backgroundCrtTime?: number;
-  /** CRT renderer noise intensity, 0–1. Default 0.12. */
+  /** CRT renderer noise intensity, 0–1. Default 0.44. */
   backgroundCrtNoise?: number;
   /** CRT renderer noise particle size. Default 1. */
   backgroundCrtNoiseSize?: number;
   /** CRT renderer noise seed. Default 0.42. */
   backgroundCrtSeed?: number;
-  /** CRT renderer vignette radius. Default 0.22. */
+  /** CRT renderer vignette radius. Default 0.27. */
   backgroundCrtVignetting?: number;
-  /** CRT renderer vignette opacity. Default 0.45. */
+  /** CRT renderer vignette opacity. Default 0.91. */
   backgroundCrtVignettingAlpha?: number;
-  /** CRT renderer vignette blur. Default 0.25. */
+  /** CRT renderer vignette blur. Default 0.62. */
   backgroundCrtVignettingBlur?: number;
   /** Dot renderer scale. Defaults to a value derived from backgroundPixelSize. */
   backgroundDotScale?: number;
@@ -286,7 +286,7 @@ export interface AppSettings {
   backgroundDotAngle?: number;
   /** Dot renderer grayscale mode. Default false. */
   backgroundDotGrayscale?: boolean;
-  /** Noise renderer amount, 0–1. Default 0.28. */
+  /** Noise renderer amount, 0–1. Default 0.4. */
   backgroundNoiseAmount?: number;
   /** Noise renderer seed. Default 0.37. */
   backgroundNoiseSeed?: number;
@@ -316,9 +316,8 @@ export interface AppSettings {
   visualizerBackgroundDim?: number;
   /** Opacity of the background visualizer layer, 0–100. Default 100. */
   visualizerBackgroundOpacity?: number;
-  /** When the visualizer is the background, also show it in a no-cover song's cover
-   *  area (vs a per-song hash gradient placeholder). Default false. */
-  visualizerInCoverArea?: boolean;
+  /** Hide all Now-Playing foreground UI after idle, leaving only background + visualizer. Default false. */
+  visualizerIdleOnly?: boolean;
   /** Prefer the current cover's extracted dominant color for visualizers. Default true. */
   visualizerUseCoverColor?: boolean;
   /** Override analyser FFT size for the active visualizer. Defaults to style metadata. */
@@ -377,20 +376,20 @@ export const DEFAULT_SETTINGS: AppSettings = {
   backgroundPixelSize: 12,
   backgroundAsciiColor: "#ffffff",
   backgroundAsciiReplaceColor: false,
-  backgroundCrtCurvature: 0.35,
-  backgroundCrtLineWidth: 1.25,
-  backgroundCrtLineContrast: 0.22,
+  backgroundCrtCurvature: 0.54,
+  backgroundCrtLineWidth: 4,
+  backgroundCrtLineContrast: 1,
   backgroundCrtVerticalLine: false,
   backgroundCrtTime: 0,
-  backgroundCrtNoise: 0.12,
+  backgroundCrtNoise: 0.44,
   backgroundCrtNoiseSize: 1,
   backgroundCrtSeed: 0.42,
-  backgroundCrtVignetting: 0.22,
-  backgroundCrtVignettingAlpha: 0.45,
-  backgroundCrtVignettingBlur: 0.25,
+  backgroundCrtVignetting: 0.27,
+  backgroundCrtVignettingAlpha: 0.91,
+  backgroundCrtVignettingBlur: 0.62,
   backgroundDotAngle: 5,
   backgroundDotGrayscale: false,
-  backgroundNoiseAmount: 0.28,
+  backgroundNoiseAmount: 0.4,
   backgroundNoiseSeed: 0.37,
   backgroundGalleryFallback: true,
   immersiveIdle: true,
@@ -402,10 +401,10 @@ export const DEFAULT_SETTINGS: AppSettings = {
   nowPlayingRightRailCollapsed: false,
   nowPlayingMemoryRailScrollTop: 0,
   visualizerStyle: "bars",
-  visualizerAsBackground: true,
+  visualizerAsBackground: false,
   visualizerBackgroundDim: 0,
   visualizerBackgroundOpacity: 100,
-  visualizerInCoverArea: true,
+  visualizerIdleOnly: false,
   visualizerUseCoverColor: true,
   visualizerIntensity: 1,
   visualizerMotion: 1,

@@ -43,6 +43,15 @@
     "tracks_other": "{{count}} tracks",
     "empty": "No matches. Try a tag or a word from a note."
   },
+  "globalSearch": {
+    "title": "Search songs",
+    "placeholder": "Search every song…",
+    "empty": "No playable songs match.",
+    "count_one": "{{count}} result",
+    "count_other": "{{count}} results",
+    "playHint": "Play",
+    "playNextHint": "Play next"
+  },
   "player": {
     "previous": "Previous",
     "next": "Next",
@@ -53,7 +62,6 @@
     "repeatLabel": "Repeat",
     "volume": "Volume",
     "shuffle": "Shuffle",
-    "autoplay": "Autoplay",
     "playbackError": "Playback error"
   },
   "dj": {
@@ -65,8 +73,6 @@
   "nowPlaying": {
     "upNext": "Up next",
     "closeQueue": "Close queue",
-    "audioOnly": "Audio only",
-    "audioOnlyHint": "Play audio only (hide video)",
     "displayMode": "Display",
     "modeTitle": "{{mode}} mode",
     "trackMenu": "Track options",
@@ -77,8 +83,7 @@
   },
   "displayMode": {
     "video": "Video",
-    "cover": "Cover",
-    "title": "Title"
+    "cover": "Cover"
   },
   "track": {
     "generationFailed": "Generation failed",
@@ -100,6 +105,8 @@
     "galleryModalBody": "Nothing is playing — add it to the global background slideshow gallery.",
     "asCover": "Set as cover",
     "asBackground": "Add as background",
+    "dropAsCover": "Drop to set this song's cover",
+    "dropAsTrackBackground": "Drop outside the cover to add this song's background",
     "toGallery": "Add to gallery",
     "cancel": "Cancel",
     "close": "Close",
@@ -160,6 +167,11 @@
     "addImages": "Add images",
     "empty": "No images yet.",
     "removeImage": "Remove image",
+    "trackSlideshow": "Track backgrounds",
+    "trackSlideshowDesc": "Images bound only to this song. They appear in the Now Playing blank/background area when slideshow mode is on.",
+    "trackSlideshowEmpty": "No backgrounds for this track yet. Drop an image outside the cover area, or add one here.",
+    "addTrackImages": "Add backgrounds",
+    "removeTrackImage": "Remove track background",
     "immersiveIdle": "Hide bars when idle (immersive)",
     "immersiveIdleHint": "On Now Playing, fade out the header and dock after a few idle seconds. Move the mouse to bring them back.",
     "coverCropped": "Show cropped cover",
@@ -181,7 +193,15 @@
     "toggleMode": "Visualizer: {{mode}}",
     "modeOff": "Off",
     "modeBackground": "Background",
-    "modeBoth": "Background + cover",
+    "modeIdleOnly": "Idle visualizer",
+    "panelTitle": "Effect controls",
+    "closePanel": "Close effect controls",
+    "rightClickSettings": "Right-click to open settings",
+    "previewOnly": "Hide player UI while tuning",
+    "previewOnlyHint": "Temporarily hides the cover, controls, queue, and dock so full-screen effects are easier to judge.",
+    "hideBackgroundVisualizer": "Hide background visualizer",
+    "backgroundPreviewHint": "These preview toggles reset when the panel closes, so the player returns to its normal layers.",
+    "idleOnlyShort": "Idle-only",
     "useCoverColor": "Use cover color for visualizers",
     "useCoverColorHint": "When the current track has cover art, its dominant color takes priority over the theme accent.",
     "asBackground": "Use as Now Playing background",
@@ -191,6 +211,9 @@
     "smoothing": "Smoothing: {{value}}",
     "minDecibels": "Min dB: {{value}}",
     "maxDecibels": "Max dB: {{value}}",
+    "densityBands": "Density: {{count}} bands/octave",
+    "densityRays": "Density: {{count}} rays",
+    "densityPoints": "Density: {{count}} points",
     "intensity": "Intensity: {{value}}",
     "motion": "Motion: {{value}}",
     "detail": "Detail: {{value}}",
@@ -199,8 +222,8 @@
     "mirror": "Mirror / reflection: {{value}}",
     "backgroundDim": "Visualizer dim: {{pct}}%",
     "backgroundOpacity": "Visualizer opacity: {{pct}}%",
-    "inCoverArea": "Show visualizer in cover art area",
-    "inCoverAreaHint": "For songs with no cover; otherwise a per-song gradient is shown. Off avoids drawing the visualizer twice."
+    "idleOnly": "Hide player UI when idle",
+    "idleOnlyHint": "On Now Playing, fade out the cover, controls, queue, header, and dock after a few idle seconds so only the background visualizer remains."
   },
   "crop": {
     "title": "Crop cover (square)",
@@ -280,11 +303,22 @@
     "costUnknown": "Cost depends on your provider's pricing.",
     "getApiKey": "Get an API key",
     "apiDocs": "API docs",
-    "modelHint": "auto = latest model; or enter a specific version id."
+    "modelHint": "auto = latest model; or enter a specific version id.",
+    "traceTitle": "Trace",
+    "traceHint": "Local playback diagnostics for the current app session. Reproduce the issue, then copy this log.",
+    "traceCopy": "Copy trace",
+    "traceCopied": "Copied",
+    "traceClear": "Clear",
+    "traceEmpty": "No trace events yet."
   },
   "gallery": {
     "title": "Sets",
     "search": "Search sets…",
+    "modeSets": "Sets",
+    "modeTracks": "All songs",
+    "toggleModeHint": "Switch view",
+    "searchSets": "Search sets…",
+    "searchTracks": "Search all songs…",
     "filterAll": "All",
     "filterLiked": "Liked",
     "sortRecent": "Recent",
@@ -295,6 +329,7 @@
     "count_one": "{{count}} track",
     "count_other": "{{count}} tracks",
     "empty": "No sets yet — start a DJ set or upload some media.",
+    "tracksEmpty": "No songs yet — upload media or start a DJ set.",
     "back": "Back",
     "playAll": "Play all",
     "setName": "Set name",

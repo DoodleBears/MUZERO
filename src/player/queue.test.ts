@@ -2,9 +2,11 @@ import { describe, expect, it } from "vitest";
 import {
   buildShuffleOrder,
   clampIndex,
+  manualNextIndex,
   nextIndex,
   prevIndex,
   shouldAutoExtend,
+  shuffleManualNext,
   shuffleNext,
   shufflePrev,
   upcomingCount,
@@ -56,6 +58,16 @@ describe("nextIndex", () => {
   });
 });
 
+describe("manualNextIndex", () => {
+  it("ignores repeat-one so the next button still advances", () => {
+    expect(manualNextIndex(3, 1, "one")).toBe(2);
+  });
+
+  it("keeps repeat-all wrapping for explicit next", () => {
+    expect(manualNextIndex(3, 2, "all")).toBe(0);
+  });
+});
+
 describe("prevIndex", () => {
   it("steps back and clamps at the start", () => {
     expect(prevIndex(3, 2, "off")).toBe(1);
@@ -95,6 +107,10 @@ describe("shuffleNext / shufflePrev", () => {
 
   it("repeat:one stays on the current track", () => {
     expect(shuffleNext(order, 4, 0, "one").index).toBe(0);
+  });
+
+  it("manual shuffled next ignores repeat:one", () => {
+    expect(shuffleManualNext(order, 4, 0, "one").index).toBe(3);
   });
 
   it("repeat:all reshuffles and continues at the wrap", () => {

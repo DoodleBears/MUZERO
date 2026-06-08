@@ -1,10 +1,27 @@
-import { ImagePlus, X } from "lucide-react";
-import { useRef, useState } from "react";
+import { useLiveQuery } from "dexie-react-hooks";
+import { ImagePlus, Images, Tag, X } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { CoverCropDialog } from "@/components/track/cover-crop-dialog";
 import { TrackMemoryNotesPanel } from "@/components/track/track-memory-notes-panel";
-import { setTrackCover, setTrackTags } from "@/db/repositories";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  addTrackBackground,
+  deleteImageBlob,
+  listTrackBackgrounds,
+  saveSettings,
+  setTrackCover,
+  setTrackTags,
+} from "@/db/repositories";
 import type { CropRect, Track } from "@/db/types";
+import { useObjectUrls } from "@/hooks/use-media";
 import { IMAGE_ACCEPT } from "@/lib/file-drop";
 
 /**
@@ -15,21 +32,33 @@ import { IMAGE_ACCEPT } from "@/lib/file-drop";
 export function AnnotationEditor({ track }: { track: Track }) {
   const { t } = useTranslation();
   const [tagInput, setTagInput] = useState("");
+  const [tagInputOpen, setTagInputOpen] = useState(false);
+  const [visibleTags, setVisibleTags] = useState(track.tags);
   const [cropFile, setCropFile] = useState<File | null>(null);
   const fileRef = useRef<HTMLInputElement | null>(null);
+  const tagInputRef = useRef<HTMLInputElement | null>(null);
 
-  function addTag() {
-    const value = tagInput.trim().toLowerCase();
-    if (!value) return;
-    void setTrackTags(track.id, [...track.tags, value]);
+  useEffect(() => {
+    setVisibleTags(track.tags);
+  }, [track.tags]);
+
+  useEffect(() => {
+    if (tagInputOpen) tagInputRef.current?.focus();
+  }, [tagInputOpen]);
+
+  function addTag(value = tagInput) {
+    const tag = value.trim().toLowerCase();
+    if (!tag) return;
+    const next = Array.from(new Set([...visibleTags, tag]));
+    setVisibleTags(next);
+    void setTrackTags(track.id, next);
     setTagInput("");
   }
 
   function removeTag(tag: string) {
-    void setTrackTags(
-      track.id,
-      track.tags.filter((t) => t !== tag),
-    );
+    const next = visibleTags.filter((t) => t !== tag);
+    setVisibleTags(next);
+    void setTrackTags(track.id, next);
   }
 
   function onCoverPicked(e: React.ChangeEvent<HTMLInputElement>) {
@@ -51,46 +80,37 @@ export function AnnotationEditor({ track }: { track: Track }) {
 
   return (
     <>
-      <div className="mx-auto flex w-full max-w-2xl flex-col gap-3">
-        <div className="flex flex-col gap-2 rounded-xl border border-border bg-card/80 p-3">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              {t("annotation.memory")}
-            </span>
-            <button
-              type="button"
-              onClick={() => fileRef.current?.click()}
-              className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
-            >
-              <ImagePlus className="size-3.5" />
-              {track.coverBlobId ? t("annotation.changeCover") : t("annotation.addCover")}
-            </button>
-            <input
-              ref={fileRef}
-              type="file"
-              accept={IMAGE_ACCEPT}
-              hidden
-              onChange={onCoverPicked}
-            />
-          </div>
+      <div className="mx-auto flex w-full flex-col gap-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            type="button"
+            size="icon-sm"
+            variant={tagInputOpen ? "secondary" : "outline"}
+            onClick={() => setTagInputOpen(true)}
+            aria-label={t("annotation.addTag")}
+          >
+            <Tag className="size-3.5" />
+          </Button>
 
-          <div className="flex flex-wrap items-center gap-1.5">
-            {track.tags.map((tag) => (
-              <span
-                key={tag}
-                className="flex items-center gap-1 rounded-full bg-secondary px-2 py-0.5 text-xs"
+          {visibleTags.map((tag) => (
+            <span
+              key={tag}
+              className="flex h-8 items-center gap-1 rounded-full border border-border bg-card/55 px-2.5 text-xs"
+            >
+              #{tag}
+              <button
+                type="button"
+                onClick={() => removeTag(tag)}
+                aria-label={t("annotation.removeTag", { tag })}
               >
-                #{tag}
-                <button
-                  type="button"
-                  onClick={() => removeTag(tag)}
-                  aria-label={t("annotation.removeTag", { tag })}
-                >
-                  <X className="size-3 text-muted-foreground hover:text-foreground" />
-                </button>
-              </span>
-            ))}
+                <X className="size-3 text-muted-foreground hover:text-foreground" />
+              </button>
+            </span>
+          ))}
+
+          {tagInputOpen && (
             <input
+              ref={tagInputRef}
               value={tagInput}
               onChange={(e) => setTagInput(e.target.value)}
               onKeyDown={(e) => {
@@ -98,10 +118,38 @@ export function AnnotationEditor({ track }: { track: Track }) {
                   e.preventDefault();
                   addTag();
                 }
+                if (e.key === "Escape") {
+                  setTagInput("");
+                  setTagInputOpen(false);
+                }
               }}
-              onBlur={addTag}
+              onBlur={() => {
+                addTag();
+                if (!tagInput.trim()) setTagInputOpen(false);
+              }}
               placeholder={t("annotation.addTag")}
-              className="min-w-20 flex-1 bg-transparent px-1 text-xs outline-none placeholder:text-muted-foreground"
+              className="h-8 min-w-28 rounded-full border border-border bg-card/55 px-3 text-xs outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring"
+            />
+          )}
+
+          <div className="ml-auto flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => fileRef.current?.click()}
+              className="grid size-8 place-items-center rounded-md border border-border bg-card/55 text-muted-foreground transition-colors hover:bg-card hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              aria-label={
+                track.coverBlobId ? t("annotation.changeCover") : t("annotation.addCover")
+              }
+            >
+              <ImagePlus className="size-3.5" />
+            </button>
+            <TrackBackgroundManager trackId={track.id} />
+            <input
+              ref={fileRef}
+              type="file"
+              accept={IMAGE_ACCEPT}
+              hidden
+              onChange={onCoverPicked}
             />
           </div>
         </div>
@@ -139,5 +187,98 @@ export function AnnotationEditor({ track }: { track: Track }) {
         <CoverCropDialog file={cropFile} onConfirm={saveCover} onCancel={() => setCropFile(null)} />
       )}
     </>
+  );
+}
+
+function TrackBackgroundManager({ trackId }: { trackId: string }) {
+  const { t } = useTranslation();
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const [open, setOpen] = useState(false);
+  const backgrounds = useLiveQuery(() => listTrackBackgrounds(trackId), [trackId], []);
+  const blobs = useMemo(() => backgrounds.map((bg) => bg.blob), [backgrounds]);
+  const urls = useObjectUrls(blobs);
+
+  async function addImages(files: File[]) {
+    for (const file of files) {
+      await addTrackBackground({
+        trackId,
+        blob: file,
+        mime: file.type || "image/jpeg",
+      });
+    }
+    if (files.length) await saveSettings({ backgroundMode: "slideshow" });
+  }
+
+  return (
+    <Dialog onOpenChange={setOpen} open={open}>
+      <button
+        type="button"
+        className="relative grid size-8 place-items-center rounded-md border border-border bg-card/55 text-muted-foreground transition-colors hover:bg-card hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        onClick={() => setOpen(true)}
+        aria-label={t("background.trackSlideshow")}
+      >
+        <Images className="size-3.5" />
+      </button>
+      <DialogContent className="max-h-[min(36rem,calc(100vh-2rem))] overflow-y-auto">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <DialogTitle>{t("background.trackSlideshow")}</DialogTitle>
+            <DialogDescription className="mt-2">
+              {t("background.trackSlideshowDesc")}
+            </DialogDescription>
+          </div>
+          <DialogClose
+            aria-label={t("drop.close")}
+            className="grid size-8 shrink-0 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <X className="size-4" />
+          </DialogClose>
+        </div>
+
+        <div className="flex justify-end">
+          <Button size="sm" variant="outline" onClick={() => inputRef.current?.click()}>
+            <ImagePlus className="size-3.5" />
+            {t("background.addTrackImages")}
+          </Button>
+        </div>
+        <input
+          ref={inputRef}
+          type="file"
+          accept={IMAGE_ACCEPT}
+          multiple
+          hidden
+          onChange={(e) => {
+            const files = e.target.files ? Array.from(e.target.files) : [];
+            e.target.value = "";
+            if (files.length) void addImages(files);
+          }}
+        />
+
+        {backgrounds.length === 0 ? (
+          <p className="rounded-lg border border-dashed border-border px-3 py-8 text-center text-xs text-muted-foreground">
+            {t("background.trackSlideshowEmpty")}
+          </p>
+        ) : (
+          <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+            {backgrounds.map((bg, i) => (
+              <div
+                key={bg.id}
+                className="group relative aspect-square overflow-hidden rounded-lg border border-border"
+              >
+                <img src={urls[i]} alt="" className="size-full object-cover" />
+                <button
+                  type="button"
+                  onClick={() => void deleteImageBlob(bg.id)}
+                  aria-label={t("background.removeTrackImage")}
+                  className="absolute right-1 top-1 rounded-full bg-background/85 p-1 opacity-100 shadow-sm transition-opacity sm:opacity-0 sm:group-hover:opacity-100"
+                >
+                  <X className="size-3.5 text-foreground" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
   );
 }
