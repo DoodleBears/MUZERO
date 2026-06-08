@@ -1808,10 +1808,10 @@ For a large shared playlist with many trusted devices, the UI should:
 
 - [x] Add `NowPlayingPresence` schema.
 - [x] Add visible Settings toggle, default off.
-- [ ] Enable remote presence writes only when owner/trusted R2 write credentials are configured.
+- [x] Enable remote presence writes only when owner/trusted R2 write credentials are configured.
 - [ ] Write presence on track start, pause, resume, stop, and track change.
 - [x] Add throttled heartbeat while playing, at most once per 60 seconds.
-- [ ] Write presence to `presence/devices/<devicePublicId>.json`.
+- [x] Write presence to `presence/devices/<devicePublicId>.json`.
 - [ ] Read presence only while the "Listening now" UI is visible, at a low polling interval.
 - [x] Ignore expired presence records based on `expiresAt`.
 - [x] Add cost/operations warning in Settings for public shared libraries.
@@ -1970,3 +1970,4 @@ Do not record secrets, full signed URLs, or media content.
 | 2026-06-09 | MUZERO | Phase 5 device profile UI added in Settings: users can rename the anonymous local device, rotate a generated avatar seed, and opt into profile publishing for future writable-drive sync while uploaded avatar images remain a later task. |
 | 2026-06-09 | MUZERO | Phase 4 remote media cache now verifies imported blob roles before writing: audio tracks require `audio/*`, video tracks require `video/*`, and mismatched remote objects leave local IndexedDB untouched. |
 | 2026-06-09 | MUZERO | Phase 4 remote search catalog refresh made incremental: catalog pages may now publish `updatedAt`/ETag/hash metadata, MUZERO stores per-page versions, and unchanged pages are skipped while legacy string page refs still full-refresh. |
+| 2026-06-09 | MUZERO | Phase 6 R2 presence writer added: owner/trusted writable drives with local credentials can PUT signed per-device presence objects to `presence/devices/<devicePublicId>.json`; disabled, shared, or credential-less drives fail before any network write. |
