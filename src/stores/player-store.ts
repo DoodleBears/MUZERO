@@ -8,6 +8,7 @@ import {
   getSession,
   getSettings,
   getTrackBlob,
+  getTrackCover,
   getTracksByIds,
   playQueueAppend,
   playQueuePlayNext,
@@ -24,6 +25,10 @@ import i18n from "@/i18n/i18n";
 import { log } from "@/lib/logger";
 import { fallbackUploadMediaMetadata, parseUploadedMediaMetadata } from "@/lib/media-metadata";
 import { isUnsupportedMediaError, probeMediaFile } from "@/lib/media-probe";
+import {
+  canSetPlatformMediaSessionMetadata,
+  setPlatformMediaSessionMetadata,
+} from "@/lib/media-session";
 import { resolveMusicGenProvider } from "@/musicgen/registry";
 import { MediaEngine } from "@/player/media-engine";
 import { reconcileCurrentIndex, unconsumedTrackIds } from "@/player/play-queue";
@@ -108,6 +113,7 @@ interface PlayerState {
 
 // Non-reactive singletons (never selected by components → no rerenders).
 let mediaEngine: MediaEngine | null = null;
+let mediaSessionArtworkObjectUrl: string | null = null;
 
 /** Access the shared media engine (for the stage to mount + the visualizer). */
 export function getMediaEngine(): MediaEngine | null {
@@ -681,11 +687,53 @@ async function ensureLoadedAndPlay(
       await mediaEngine.loadUrl(track.remoteMediaUrl, track.kind);
     }
     loadedTrackId = track.id;
+    await updateMediaSessionMetadata(track);
   }
   if (wantPlay) {
     log.debug("player", "playing media", { trackId: track.id });
     await mediaEngine.play();
   }
+}
+
+async function updateMediaSessionMetadata(track: Track): Promise<void> {
+  if (!canSetPlatformMediaSessionMetadata()) {
+    revokeMediaSessionArtworkObjectUrl();
+    return;
+  }
+
+  let nextArtworkObjectUrl: string | null = null;
+  let artwork:
+    | {
+        src: string;
+        mime?: string;
+      }
+    | undefined;
+  if (track.remoteCoverUrl) {
+    artwork = { src: track.remoteCoverUrl };
+  } else if (track.coverBlobId) {
+    const cover = await getTrackCover(track);
+    if (cover?.blob) {
+      nextArtworkObjectUrl = URL.createObjectURL(cover.blob);
+      artwork = { src: nextArtworkObjectUrl, mime: cover.mime };
+    }
+  }
+
+  if (loadedTrackId !== track.id) {
+    if (nextArtworkObjectUrl) URL.revokeObjectURL(nextArtworkObjectUrl);
+    return;
+  }
+
+  setPlatformMediaSessionMetadata(track, artwork);
+  if (mediaSessionArtworkObjectUrl && mediaSessionArtworkObjectUrl !== nextArtworkObjectUrl) {
+    URL.revokeObjectURL(mediaSessionArtworkObjectUrl);
+  }
+  mediaSessionArtworkObjectUrl = nextArtworkObjectUrl;
+}
+
+function revokeMediaSessionArtworkObjectUrl(): void {
+  if (!mediaSessionArtworkObjectUrl) return;
+  URL.revokeObjectURL(mediaSessionArtworkObjectUrl);
+  mediaSessionArtworkObjectUrl = null;
 }
 
 function observePlaybackListen(state: PlayerState, positionSec: number, durationSec: number): void {

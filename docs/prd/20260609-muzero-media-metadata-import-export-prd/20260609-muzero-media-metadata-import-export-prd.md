@@ -293,7 +293,7 @@ No new page. The feature touches existing upload, list rows, Now Playing, and se
 - [x] Update `trackSubtitle` to prefer artist/album for uploaded tracks.
 - [x] Update search to include artist, album, albumArtist, genre, year.
 - [x] Feed recent track artist/album/genre into DJ context without provider leakage.
-- [ ] Set `navigator.mediaSession.metadata` when available using title/artist/album/artwork.
+- [x] Set `navigator.mediaSession.metadata` when available using title/artist/album/artwork.
 - [ ] Add metadata fields to annotation editor only if users need manual correction.
 - [x] Round-trip normalized `Track.mediaMetadata` through R2 set indexes and remote search catalog rows.
 
@@ -301,7 +301,7 @@ No new page. The feature touches existing upload, list rows, Now Playing, and se
 
 - [x] Imported track with `artist` shows artist in dock/list subtitle.
 - [x] Search by artist/album/genre returns expected tracks.
-- [ ] Platform media controls show title/artist/album/artwork where supported.
+- [x] Platform media controls show title/artist/album/artwork where supported.
 - [x] DJ context tests cover imported metadata.
 
 ### Phase 3: Metadata-Correct Export Pipeline
@@ -379,3 +379,4 @@ No new page. The feature touches existing upload, list rows, Now Playing, and se
 | 2026-06-09 | MUZERO | Initial draft from hover download + metadata import/export architecture review. |
 | 2026-06-09 | MUZERO | Phase 1 implementation started: `music-metadata` parser bridge, `Track.mediaMetadata`, embedded-cover import, subtitle/search use, and R2 metadata round-trip added. |
 | 2026-06-09 | MUZERO | Phase 2 DJ context completed: recent imported artist/album/genre/year metadata is passed into DJ prompts without provider leakage. |
+| 2026-06-09 | MUZERO | Phase 2 Media Session completed: platform playback metadata now uses imported title/artist/album and local or remote artwork. |
