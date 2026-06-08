@@ -1627,7 +1627,7 @@ For a large shared playlist with many trusted devices, the UI should:
 - [x] Add remote search track row normalization and query matcher.
 - [x] Add optional remote search catalog import: `catalog/library.json` + paged set/track indexes.
 - [x] Store remote-only searchable set/track rows in IndexedDB without downloading media.
-- [ ] Show preview before import: set count, track count, media size, source domain.
+- [x] Show preview before import: set count, track count, media size, source domain.
 - [ ] Add tests for invalid schema, relative URLs, missing media, and duplicate ids.
 
 ### Phase 1 Checklist
@@ -1924,3 +1924,4 @@ Do not record secrets, full signed URLs, or media content.
 | 2026-06-09 | MUZERO | Phase 1 stream-mode playback foundation added: tracks can carry remote media/cover URLs without local blobs. |
 | 2026-06-09 | MUZERO | Phase 1 read-only stream import added: remote set indexes create playable local session/track/memory rows without media downloads. |
 | 2026-06-09 | MUZERO | Phase 1 cache-mode media download added: selected remote track media can be saved into `mediaBlobs`. |
+| 2026-06-09 | MUZERO | Phase 1 Settings UI added for public manifest preview and read-only set import. |
