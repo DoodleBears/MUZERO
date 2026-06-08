@@ -3,6 +3,8 @@ import { newId } from "@/lib/id";
 import type {
   AppSettings,
   ChatSession,
+  CloudDrive,
+  CloudShare,
   DjSession,
   MediaBlob,
   Memory,
@@ -30,6 +32,8 @@ export class MuzeroDB extends Dexie {
   remoteSearchCatalogs!: EntityTable<RemoteSearchCatalog, "id">;
   remoteSearchTracks!: EntityTable<RemoteSearchTrack, "id">;
   remoteSearchSets!: EntityTable<RemoteSearchSet, "id">;
+  cloudDrives!: EntityTable<CloudDrive, "id">;
+  cloudShares!: EntityTable<CloudShare, "id">;
 
   constructor(name = "muzero-db") {
     super(name);
@@ -210,6 +214,13 @@ export class MuzeroDB extends Dexie {
       remoteSearchCatalogs: "id, scope, syncedAt, updatedAt",
       remoteSearchTracks: "id, catalogId, trackId, *setIds, *shareIds, *tags, updatedAt",
       remoteSearchSets: "id, catalogId, setId, updatedAt",
+    });
+
+    // v12 — local cloud drive/share registry. This stores public metadata and
+    // capability flags; raw R2 write credentials stay in local settings only.
+    this.version(12).stores({
+      cloudDrives: "id, kind, provider, updatedAt, lastSyncedAt",
+      cloudShares: "id, driveId, remoteShareId, access, lastSyncedAt",
     });
   }
 }

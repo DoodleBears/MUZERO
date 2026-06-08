@@ -367,6 +367,8 @@ export interface AppSettings {
   defaultLlmModel?: string;
   /** BYOK keys by visible provider preset id. Device-local only. */
   apiKeysByPresetId?: Partial<Record<LlmProviderPresetId, string>>;
+  /** Default selected cloud drive. R2 credentials remain device-local settings, never synced. */
+  defaultCloudDriveId?: string;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -465,4 +467,38 @@ export interface RemoteSearchSet {
   trackCount: number;
   coverUrl?: string;
   updatedAt: number;
+}
+
+export interface CloudDriveCapabilities {
+  read: boolean;
+  write: boolean;
+  manageInvites: boolean;
+  writeStats: boolean;
+  writePresence: boolean;
+}
+
+export interface CloudDrive {
+  id: string;
+  label: string;
+  kind: "owned" | "trusted" | "shared" | "local-only";
+  provider: "r2" | "mu0";
+  publicBaseUrl?: string;
+  manifestUrl?: string;
+  apiBaseUrl?: string;
+  capabilities: CloudDriveCapabilities;
+  createdAt: number;
+  updatedAt: number;
+  lastSyncedAt?: number;
+}
+
+export interface CloudShare {
+  id: string;
+  driveId: string;
+  remoteShareId: string;
+  label: string;
+  sourceOwnerName?: string;
+  manifestUrl: string;
+  access: "read-only" | "stats" | "presence" | "collaborator" | "owner";
+  addedAt: number;
+  lastSyncedAt?: number;
 }
