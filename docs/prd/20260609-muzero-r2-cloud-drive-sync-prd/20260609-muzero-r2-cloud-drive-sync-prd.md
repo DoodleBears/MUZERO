@@ -1628,14 +1628,14 @@ For a large shared playlist with many trusted devices, the UI should:
 - [x] Add optional remote search catalog import: `catalog/library.json` + paged set/track indexes.
 - [x] Store remote-only searchable set/track rows in IndexedDB without downloading media.
 - [x] Show preview before import: set count, track count, media size, source domain.
-- [ ] Add tests for invalid schema, relative URLs, missing media, and duplicate ids.
+- [x] Add tests for invalid schema, relative URLs, missing media, and duplicate ids.
 
 ### Phase 1 Checklist
 
 - [ ] Browser can subscribe to a public manifest link and play an audio track.
 - [ ] Browser can subscribe to a public manifest link and play a video track.
 - [ ] Tauri/Electron use the same manifest import path.
-- [ ] No R2 write credential is required for subscription.
+- [x] No R2 write credential is required for subscription.
 - [ ] Command/Ctrl+F can search synced remote catalog rows locally.
 - [ ] Invalid manifests do not mutate local IndexedDB.
 
@@ -1925,3 +1925,4 @@ Do not record secrets, full signed URLs, or media content.
 | 2026-06-09 | MUZERO | Phase 1 read-only stream import added: remote set indexes create playable local session/track/memory rows without media downloads. |
 | 2026-06-09 | MUZERO | Phase 1 cache-mode media download added: selected remote track media can be saved into `mediaBlobs`. |
 | 2026-06-09 | MUZERO | Phase 1 Settings UI added for public manifest preview and read-only set import. |
+| 2026-06-09 | MUZERO | Phase 1 edge-case tests added for invalid schemas, relative URLs, missing remote media, and duplicate imports. |

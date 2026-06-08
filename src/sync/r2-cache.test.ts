@@ -65,4 +65,14 @@ describe("cacheRemoteTrackMedia", () => {
 
     await expect(cacheRemoteTrackMedia("trk_remote", {}, db)).rejects.toThrow(/remote media/i);
   });
+
+  it("does not mutate IndexedDB when remote media is missing", async () => {
+    await db.tracks.put(remoteTrack());
+    const fetcher: SyncCacheFetch = async () => new Response("missing", { status: 404 });
+
+    await expect(cacheRemoteTrackMedia("trk_remote", { fetcher }, db)).rejects.toThrow(/404/);
+
+    expect((await db.tracks.get("trk_remote"))?.blobId).toBeUndefined();
+    expect(await db.mediaBlobs.count()).toBe(0);
+  });
 });

@@ -150,4 +150,13 @@ describe("importRemoteSetStream", () => {
     });
     expect(await db.mediaBlobs.count()).toBe(0);
   });
+
+  it("is idempotent for duplicate remote set imports", async () => {
+    await importRemoteSetStream({ driveId: "drv_a", remoteSet }, db);
+    await importRemoteSetStream({ driveId: "drv_a", remoteSet }, db);
+
+    expect(await db.sessions.count()).toBe(1);
+    expect(await db.tracks.count()).toBe(1);
+    expect(await db.memories.count()).toBe(1);
+  });
 });
