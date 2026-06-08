@@ -1812,13 +1812,13 @@ For a large shared playlist with many trusted devices, the UI should:
 - [ ] Device profile updates sync only to writable targets and do not rewrite historical memories.
 - [ ] Memory cards show author attribution when available.
 - [x] Stats survive reload.
-- [ ] Stats merge correctly from two devices.
+- [x] Stats merge correctly from two devices.
 - [x] Rebuilding aggregates from event segments does not lose play counts.
 - [ ] Sync UI shows pending local listens separately from uploaded/aggregated listens.
 - [x] Pending listening stats flush at 25-100 events or 5-15 minutes, whichever threshold is reached first.
 - [x] Manual Sync can flush a small pending stats segment below the normal event-count threshold.
 - [ ] A large shared playlist can keep local stats separated across many anonymous devices.
-- [ ] The same track in two sets can show separate track-in-set play counts.
+- [x] The same track in two sets can show separate track-in-set play counts.
 - [x] A track played from someone else's shared set can be recorded locally without importing the track.
 - [ ] A user can sync their own listening history about shared tracks to their own Owner R2.
 - [ ] Trusted devices with write credentials can sync separated stats to the shared R2 bucket.
@@ -2007,6 +2007,7 @@ Do not record secrets, full signed URLs, or media content.
 | 2026-06-09 | MUZERO | Phase 5 auto playback event segment flush added to R2 export planning: manual sync still flushes small pending batches, while auto sync emits segment/checkpoint objects only after the event-count or oldest-event age threshold is reached. |
 | 2026-06-09 | MUZERO | Phase 5 playback event segment retry made idempotent: immutable `stats/events/<devicePublicId>/...json` objects are HEAD-checked on retry and skipped when already present, so a failed checkpoint upload can be retried without re-uploading the event segment. |
 | 2026-06-09 | MUZERO | Phase 5 rebuildable aggregate cache import added: `stats/devices/<devicePublicId>/aggregate.json` validates schema/counts and bulk-upserts per-device `PlaybackAggregate` rows while preserving device separation. |
+| 2026-06-09 | MUZERO | Phase 5 aggregate summary helper added: UI/query layers can merge matching stats across anonymous devices while preserving per-device rows, and can filter `track-in-set` aggregates so the same track has separate counts in different sets. |
 | 2026-06-09 | MUZERO | Phase 5 playback checkpoint export added: event segment publish plans now include `stats/devices/<devicePublicId>/checkpoint.json` with the latest event watermark and immutable segment key. |
 | 2026-06-09 | MUZERO | Phase 5 optional `stats/index.json` discovery completed for stats sync: device entries can point to aggregate cache, checkpoint, and latest immutable event segment without making the index the write-hot source of truth. |
 | 2026-06-09 | MUZERO | Phase 5 stats/profile write policy added: only owner/trusted drives with local R2 credentials may receive stats or opted-in device profiles, keeping read-only shared-link listener data local by default. |
