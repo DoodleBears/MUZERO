@@ -371,6 +371,8 @@
     "viewGrid": "Grid",
     "count_one": "{{count}} track",
     "count_other": "{{count}} tracks",
+    "remoteResults_one": "{{count}} remote result",
+    "remoteResults_other": "{{count}} remote results",
     "empty": "No sets yet — start a DJ set or upload some media.",
     "tracksEmpty": "No songs yet — upload media or start a DJ set.",
     "back": "Back",

@@ -41,6 +41,7 @@ import { searchTracks } from "@/lib/track-search";
 import { cn } from "@/lib/utils";
 import { usePlayerStore } from "@/stores/player-store";
 import { useUploadTargetStore } from "@/stores/upload-target-store";
+import { matchesRemoteSearchTrack } from "@/sync/r2-search-catalog";
 
 type GalleryView = "list" | "grid";
 type GalleryMode = "sets" | "tracks";
@@ -93,6 +94,7 @@ export function SearchPage() {
 
   const sessions = useLiveQuery(() => listSessions(db), [], []);
   const allTracks = useLiveQuery(() => listAllTracks(db), [], []);
+  const remoteTracks = useLiveQuery(() => db.remoteSearchTracks.toArray(), [], []);
   const memoryNotes = useLiveQuery(
     () =>
       allTracks.length > 0
@@ -160,6 +162,15 @@ export function SearchPage() {
     const sortedTracks = [...allTracks].sort((a, b) => b.createdAt - a.createdAt);
     return searchTracks(sortedTracks, trackQuery, memoryNotes);
   }, [allTracks, memoryNotes, trackQuery]);
+  const shownRemoteTracks = useMemo(
+    () =>
+      trackQuery.trim()
+        ? remoteTracks
+            .filter((track) => matchesRemoteSearchTrack(track, trackQuery))
+            .sort((a, b) => b.updatedAt - a.updatedAt)
+        : [],
+    [remoteTracks, trackQuery],
+  );
   const query = mode === "sets" ? setQuery : trackQuery;
 
   function setViewPref(next: GalleryView) {
@@ -341,17 +352,39 @@ export function SearchPage() {
         </>
       ) : (
         <div className="min-h-0 flex-1">
-          {shownTracks.length === 0 ? (
+          {shownTracks.length === 0 && shownRemoteTracks.length === 0 ? (
             <p className="mt-12 text-center text-sm text-muted-foreground">
               {t("gallery.tracksEmpty")}
             </p>
           ) : (
-            <VirtualTrackList
-              tracks={shownTracks}
-              onPlay={(track) => void playTrack(track)}
-              emptyHint={t("gallery.tracksEmpty")}
-              className="no-scrollbar pb-chrome-bottom"
-            />
+            <div className="flex min-h-0 flex-1 flex-col gap-4">
+              {shownTracks.length > 0 && (
+                <VirtualTrackList
+                  tracks={shownTracks}
+                  onPlay={(track) => void playTrack(track)}
+                  emptyHint={t("gallery.tracksEmpty")}
+                  className="no-scrollbar pb-2"
+                />
+              )}
+              {shownRemoteTracks.length > 0 && (
+                <div className="flex flex-col gap-1 pb-chrome-bottom">
+                  <p className="px-1 text-muted-foreground text-xs">
+                    {t("gallery.remoteResults", { count: shownRemoteTracks.length })}
+                  </p>
+                  {shownRemoteTracks.slice(0, 50).map((track) => (
+                    <div
+                      key={track.id}
+                      className="rounded-md border border-border bg-background/70 px-3 py-2"
+                    >
+                      <p className="truncate text-sm">{track.title}</p>
+                      <p className="truncate text-muted-foreground text-xs">
+                        {track.tags.map((tag) => `#${tag}`).join(" ")}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           )}
         </div>
       )}

@@ -362,6 +362,7 @@
     "viewList": "リスト",
     "viewGrid": "グリッド",
     "count_other": "{{count}} 曲",
+    "remoteResults_other": "{{count}} 件のリモート結果",
     "empty": "セットがまだありません — DJ セットを開始するかメディアをアップロードしてください。",
     "tracksEmpty": "曲がまだありません — メディアをアップロードするか DJ セットを開始してください。",
     "back": "戻る",

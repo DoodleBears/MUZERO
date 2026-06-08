@@ -1657,7 +1657,7 @@ For a large shared playlist with many trusted devices, the UI should:
 - [ ] Browser can subscribe to a public manifest link and play a video track.
 - [ ] Tauri/Electron use the same manifest import path.
 - [x] No R2 write credential is required for subscription.
-- [ ] Command/Ctrl+F can search synced remote catalog rows locally.
+- [x] Command/Ctrl+F can search synced remote catalog rows locally.
 - [ ] Invalid manifests do not mutate local IndexedDB.
 
 ### Phase 2: R2 Setup Wizard + Connection Validation
@@ -1961,3 +1961,4 @@ Do not record secrets, full signed URLs, or media content.
 | 2026-06-09 | MUZERO | Phase 5 playback stats repository added with meaningful-listen threshold tests, `PlaybackEvent` persistence, per-device `TrackPlaybackStats`, track/set aggregates, and existing `Track.playCount` reconciliation for counted listens. |
 | 2026-06-09 | MUZERO | Phase 5 playback listener integration added: MediaEngine time updates now feed a seek-aware listen tracker, pause/ended/track-change flushes persist per-device listened seconds, and eager load-time play-count increments were removed. |
 | 2026-06-09 | MUZERO | Phase 3 device/stat export added to publish plans: profile publishing emits `profiles/devices/<devicePublicId>/profile.json`, current-device aggregates emit `stats/devices/<devicePublicId>/aggregate.json`, and owner-maintained devices/stats indexes are generated when data exists. |
+| 2026-06-09 | MUZERO | Phase 1 remote search UI wired into the Search/Gallery track mode: synced remote catalog rows are queried from IndexedDB and displayed alongside local track results without downloading media bytes. |

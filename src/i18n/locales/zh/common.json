@@ -362,6 +362,7 @@
     "viewList": "列表",
     "viewGrid": "封面",
     "count_other": "{{count}} 首",
+    "remoteResults_other": "{{count}} 个远端结果",
     "empty": "还没有歌单——开始一个 DJ 歌单或上传媒体。",
     "tracksEmpty": "还没有歌曲——上传媒体或开始一个 DJ 歌单。",
     "back": "返回",
