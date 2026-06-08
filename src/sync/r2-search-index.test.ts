@@ -247,4 +247,87 @@ describe("remote search index", () => {
     ]);
     expect(await db.remoteSearchSets.count()).toBe(1);
   });
+
+  it("skips unchanged catalog pages when page metadata is stable", async () => {
+    const seen: string[] = [];
+    const fetcher: SyncCatalogFetch = async (input) => {
+      const url = String(input);
+      seen.push(url);
+      return fetchMap({
+        "https://music.example.com/muzero/catalog/library.json": {
+          schema: "muzero-r2-search-catalog-v1",
+          libraryId: "lib_abc",
+          updatedAt: "2026-06-09T00:00:00.000Z",
+          locale: "en",
+          pages: {
+            sets: [{ path: "catalog/sets-page-0001.json", updatedAt: "same-set-page" }],
+            tracks: [{ path: "catalog/tracks-page-0001.json", updatedAt: "same-track-page" }],
+            shares: [],
+          },
+          counts: {
+            sets: 1,
+            tracks: 1,
+            shares: 0,
+          },
+        },
+        "https://music.example.com/muzero/catalog/tracks-page-0001.json": {
+          schema: "muzero-r2-track-search-page-v1",
+          page: 1,
+          updatedAt: "2026-06-09T00:00:00.000Z",
+          tracks: [
+            {
+              id: "trk_blue",
+              title: "Blue Highway",
+              setIds: ["ses_tokyo"],
+              shareIds: [],
+              kind: "audio",
+              origin: "uploaded",
+              durationSec: 214,
+              tags: ["night"],
+              memoryText: "friends sea night",
+              briefCaption: null,
+              artistLike: null,
+              updatedAt: 1780944000000,
+              mediaAvailable: true,
+            },
+          ],
+        },
+        "https://music.example.com/muzero/catalog/sets-page-0001.json": {
+          schema: "muzero-r2-set-search-page-v1",
+          page: 1,
+          updatedAt: "2026-06-09T00:00:00.000Z",
+          sets: [
+            {
+              id: "ses_tokyo",
+              name: "Tokyo Night Drive",
+              trackCount: 1,
+              updatedAt: 1780944000000,
+            },
+          ],
+        },
+      })(input);
+    };
+    const input = {
+      catalogId: "drv_a:lib_abc",
+      driveId: "drv_a",
+      scope: "library" as const,
+      baseUrl: "https://music.example.com/muzero/",
+      catalogUrl: "https://music.example.com/muzero/catalog/library.json",
+      fetcher,
+    };
+
+    await importRemoteSearchCatalog(input, db);
+    seen.length = 0;
+    await importRemoteSearchCatalog(input, db);
+
+    expect(seen).toEqual(["https://music.example.com/muzero/catalog/library.json"]);
+    expect(await db.remoteSearchTracks.count()).toBe(1);
+    expect(await db.remoteSearchSets.count()).toBe(1);
+    expect(await db.remoteSearchCatalogs.get("drv_a:lib_abc")).toMatchObject({
+      pageVersions: {
+        "set:https://music.example.com/muzero/catalog/sets-page-0001.json": "same-set-page",
+        "track:https://music.example.com/muzero/catalog/tracks-page-0001.json": "same-track-page",
+      },
+    });
+  });
 });

@@ -2,6 +2,15 @@ import { z } from "zod";
 import type { TrackKind, TrackOrigin } from "@/db/types";
 
 const remotePathSchema = z.string().min(1);
+const remotePageRefSchema = z.union([
+  remotePathSchema,
+  z.object({
+    path: remotePathSchema,
+    updatedAt: z.string().min(1).optional(),
+    etag: z.string().min(1).optional(),
+    sha256: z.string().min(1).optional(),
+  }),
+]);
 const timestampStringSchema = z.string().min(1);
 const millisSchema = z.number().int().nonnegative();
 
@@ -11,9 +20,9 @@ export const r2SearchCatalogSchema = z.object({
   updatedAt: timestampStringSchema,
   locale: z.string().min(1),
   pages: z.object({
-    sets: z.array(remotePathSchema),
-    tracks: z.array(remotePathSchema),
-    shares: z.array(remotePathSchema),
+    sets: z.array(remotePageRefSchema),
+    tracks: z.array(remotePageRefSchema),
+    shares: z.array(remotePageRefSchema),
   }),
   counts: z.object({
     sets: z.number().int().nonnegative(),
@@ -63,6 +72,7 @@ export const r2SetSearchPageSchema = z.object({
 });
 
 export type R2SearchCatalog = z.infer<typeof r2SearchCatalogSchema>;
+export type R2SearchPageRef = z.infer<typeof remotePageRefSchema>;
 export type R2TrackSearchRecord = z.infer<typeof r2TrackSearchRecordSchema>;
 export type R2TrackSearchPage = z.infer<typeof r2TrackSearchPageSchema>;
 export type R2SetSearchRecord = z.infer<typeof r2SetSearchRecordSchema>;

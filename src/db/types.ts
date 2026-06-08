@@ -442,6 +442,7 @@ export interface RemoteSearchCatalog {
   syncedAt: number;
   setCount: number;
   trackCount: number;
+  pageVersions?: Record<string, string>;
 }
 
 export interface RemoteSearchTrack {

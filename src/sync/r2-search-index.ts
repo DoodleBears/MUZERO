@@ -3,6 +3,7 @@ import type { RemoteSearchCatalog, RemoteSearchTrack } from "@/db/types";
 import { getAppFetch } from "@/lib/platform";
 import {
   matchesRemoteSearchTrack,
+  type R2SearchPageRef,
   type R2SetSearchPage,
   type R2TrackSearchPage,
   r2SearchCatalogSchema,
@@ -90,6 +91,8 @@ export async function importRemoteSearchCatalog(
   const fetcher = await resolveFetcher(input.fetcher);
   const rawCatalog = await fetchJson(input.catalogUrl, "search catalog", fetcher);
   const catalog = r2SearchCatalogSchema.parse(rawCatalog);
+  const existing = await db.remoteSearchCatalogs.get(input.catalogId);
+  const pageVersions: Record<string, string> = {};
 
   await db.remoteSearchCatalogs.put({
     id: input.catalogId,
@@ -101,10 +104,15 @@ export async function importRemoteSearchCatalog(
     syncedAt: Date.now(),
     setCount: catalog.counts.sets,
     trackCount: catalog.counts.tracks,
+    pageVersions,
   });
 
   for (const pageRef of catalog.pages.tracks) {
-    const pageUrl = resolveRemoteObjectUrl(input.baseUrl, pageRef);
+    const pageUrl = resolveRemoteObjectUrl(input.baseUrl, pageRefPath(pageRef));
+    const version = pageRefVersion(pageRef);
+    const versionKey = pageVersionKey("track", pageUrl);
+    if (version) pageVersions[versionKey] = version;
+    if (version && existing?.pageVersions?.[versionKey] === version) continue;
     const rawPage = await fetchJson(pageUrl, "track search page", fetcher);
     await importRemoteTrackSearchPage(
       {
@@ -118,7 +126,11 @@ export async function importRemoteSearchCatalog(
   }
 
   for (const pageRef of catalog.pages.sets) {
-    const pageUrl = resolveRemoteObjectUrl(input.baseUrl, pageRef);
+    const pageUrl = resolveRemoteObjectUrl(input.baseUrl, pageRefPath(pageRef));
+    const version = pageRefVersion(pageRef);
+    const versionKey = pageVersionKey("set", pageUrl);
+    if (version) pageVersions[versionKey] = version;
+    if (version && existing?.pageVersions?.[versionKey] === version) continue;
     const rawPage = await fetchJson(pageUrl, "set search page", fetcher);
     await importRemoteSetSearchPage(
       {
@@ -130,6 +142,11 @@ export async function importRemoteSearchCatalog(
       db,
     );
   }
+
+  await db.remoteSearchCatalogs.update(input.catalogId, {
+    pageVersions,
+    syncedAt: Date.now(),
+  });
 }
 
 export async function searchRemoteTracks(
@@ -138,4 +155,17 @@ export async function searchRemoteTracks(
 ): Promise<RemoteSearchTrack[]> {
   const rows = await db.remoteSearchTracks.toArray();
   return rows.filter((row) => matchesRemoteSearchTrack(row, query));
+}
+
+function pageRefPath(ref: R2SearchPageRef): string {
+  return typeof ref === "string" ? ref : ref.path;
+}
+
+function pageRefVersion(ref: R2SearchPageRef): string | undefined {
+  if (typeof ref === "string") return undefined;
+  return ref.sha256 ?? ref.etag ?? ref.updatedAt;
+}
+
+function pageVersionKey(kind: "set" | "track", pageUrl: string): string {
+  return `${kind}:${pageUrl}`;
 }
