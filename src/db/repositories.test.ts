@@ -278,6 +278,46 @@ describe("memories (one-to-many)", () => {
     expect(await getMemoryPhoto(noteOnly, db)).toBeUndefined();
   });
 
+  it("stores a memory author snapshot when provided", async () => {
+    const mem = await addMemory(
+      {
+        trackId: "trk_author",
+        note: "listened together",
+        author: {
+          devicePublicId: "dvc_studio",
+          displayName: "Studio laptop",
+          avatarSeed: "blue",
+        },
+      },
+      db,
+    );
+
+    expect(mem.author).toEqual({
+      devicePublicId: "dvc_studio",
+      displayName: "Studio laptop",
+      avatarSeed: "blue",
+    });
+    expect((await listMemories("trk_author", db))[0]?.author?.displayName).toBe("Studio laptop");
+  });
+
+  it("trims empty author snapshot fields while preserving the device id", async () => {
+    const mem = await addMemory(
+      {
+        trackId: "trk_author",
+        note: "late train",
+        author: {
+          devicePublicId: " dvc_phone ",
+          displayName: "   ",
+          avatarSeed: "",
+          avatarUrl: "  ",
+        },
+      },
+      db,
+    );
+
+    expect(mem.author).toEqual({ devicePublicId: "dvc_phone" });
+  });
+
   it("edits a memory note in place", async () => {
     const mem = await addMemory({ trackId: "trk_e", note: "typo" }, db);
     await updateMemoryNote(mem.id, "  fixed  ", db);
@@ -341,6 +381,81 @@ describe("v3 → v4 migration moves Track.note into a first Memory", () => {
       expect(noted[0].createdAt).toBe(100); // preserves the track's timestamp
       expect(await listMemories("blank", mz)).toHaveLength(0); // whitespace-only skipped
       expect(await listMemories("none", mz)).toHaveLength(0);
+    } finally {
+      mz.close();
+      await new Promise<void>((resolve) => {
+        const req = indexedDB.deleteDatabase(name);
+        req.onsuccess = req.onerror = () => resolve();
+      });
+    }
+  });
+});
+
+describe("v15 → v16 migration backfills memory authors", () => {
+  it("marks existing local memories as unknown local authors", async () => {
+    const name = `muzero-mig16-${Math.random().toString(36).slice(2)}`;
+    const v15 = new Dexie(name);
+    v15.version(1).stores({
+      tracks: "id, sessionId, status, createdAt, liked",
+      mediaBlobs: "id, trackId",
+      sessions: "id, status, updatedAt",
+      settings: "id",
+    });
+    v15.version(2).stores({
+      tracks: "id, sessionId, status, createdAt, liked, *tags, kind",
+      mediaBlobs: "id, trackId, role",
+      sessions: "id, status, updatedAt",
+      settings: "id",
+    });
+    v15.version(3).stores({ playQueue: "id" });
+    v15.version(4).stores({ memories: "id, trackId, createdAt, [trackId+createdAt]" });
+    v15.version(5).stores({ chatSessions: "id, updatedAt" });
+    v15.version(11).stores({
+      remoteSearchCatalogs: "id, scope, syncedAt, updatedAt",
+      remoteSearchTracks: "id, catalogId, trackId, *setIds, *shareIds, *tags, updatedAt",
+      remoteSearchSets: "id, catalogId, setId, updatedAt",
+    });
+    v15.version(12).stores({
+      cloudDrives: "id, kind, provider, updatedAt, lastSyncedAt",
+      cloudShares: "id, driveId, remoteShareId, access, lastSyncedAt",
+    });
+    v15.version(13).stores({
+      syncRuns: "id, driveId, direction, status, startedAt",
+      syncObjects: "id, driveId, key, kind, sourceSetId, sourceTrackId, updatedAt, lastUploadedAt",
+    });
+    v15.version(14).stores({
+      devices: "id, publicId, lastSeenAt",
+      trackPlaybackStats: "id, trackId, devicePublicId, updatedAt, [trackId+devicePublicId]",
+      playbackEvents: "id, devicePublicId, startedAt, trackId, [devicePublicId+startedAt]",
+      playbackAggregates: "id, devicePublicId, scope, driveId, shareId, setId, trackId, updatedAt",
+    });
+    v15.version(15).stores({
+      syncMutations: "id, driveId, devicePublicId, scope, entityId, createdAt, syncedAt",
+    });
+    await v15.open();
+    await v15.table("memories").bulkPut([
+      { id: "mem_1", trackId: "trk_1", note: "old", createdAt: 1 },
+      {
+        id: "mem_2",
+        trackId: "trk_1",
+        note: "already attributed",
+        author: { devicePublicId: "dvc_existing", displayName: "Existing" },
+        createdAt: 2,
+      },
+    ]);
+    v15.close();
+
+    const mz = new MuzeroDB(name);
+    try {
+      const memories = await listMemories("trk_1", mz);
+      expect(memories[0]?.author).toEqual({
+        devicePublicId: "unknown-local",
+        displayName: "Unknown local device",
+      });
+      expect(memories[1]?.author).toEqual({
+        devicePublicId: "dvc_existing",
+        displayName: "Existing",
+      });
     } finally {
       mz.close();
       await new Promise<void>((resolve) => {

@@ -19,6 +19,7 @@ import {
   type DjSession,
   type MediaBlob,
   type Memory,
+  type MemoryAuthorRef,
   type PlayQueue,
   type PlayQueueEntry,
   type SetDisplayMode,
@@ -457,6 +458,7 @@ export async function addMemory(
   input: {
     trackId: string;
     note: string;
+    author?: MemoryAuthorRef;
     photo?: { blob: Blob; mime: string };
     /** Timeline timestamp; defaults to now. Pass when importing/backfilling. */
     createdAt?: number;
@@ -482,11 +484,26 @@ export async function addMemory(
       trackId: input.trackId,
       note: input.note.trim(),
       photoBlobId,
+      author: sanitizeMemoryAuthor(input.author),
       createdAt: input.createdAt ?? Date.now(),
     };
     await db.memories.put(memory);
     return memory;
   });
+}
+
+function sanitizeMemoryAuthor(author?: MemoryAuthorRef): MemoryAuthorRef | undefined {
+  const devicePublicId = author?.devicePublicId.trim();
+  if (!devicePublicId) return undefined;
+  const displayName = author?.displayName?.trim();
+  const avatarSeed = author?.avatarSeed?.trim();
+  const avatarUrl = author?.avatarUrl?.trim();
+  return {
+    devicePublicId,
+    displayName: displayName || undefined,
+    avatarSeed: avatarSeed || undefined,
+    avatarUrl: avatarUrl || undefined,
+  };
 }
 
 /** A track's memories, oldest → newest (timeline order). */

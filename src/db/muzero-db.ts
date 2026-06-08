@@ -257,6 +257,21 @@ export class MuzeroDB extends Dexie {
     this.version(15).stores({
       syncMutations: "id, driveId, devicePublicId, scope, entityId, createdAt, syncedAt",
     });
+
+    // v16 — memory author snapshots. Existing local memories predate anonymous
+    // device attribution, so mark them as unknown local snapshots instead of
+    // guessing which device/person wrote them.
+    this.version(16).upgrade(async (tx) => {
+      await tx
+        .table("memories")
+        .toCollection()
+        .modify((memory: Partial<Memory>) => {
+          memory.author ??= {
+            devicePublicId: "unknown-local",
+            displayName: "Unknown local device",
+          };
+        });
+    });
   }
 }
 

@@ -1761,7 +1761,7 @@ For a large shared playlist with many trusted devices, the UI should:
 - [ ] Add optional uploaded avatar image with local storage and remote profile object reference.
 - [ ] Publish `DevicePublicProfile` to owner/trusted drives when enabled and write permission exists.
 - [ ] Add profile `revision` and ETag/hash checks so two offline edits cannot silently overwrite each other.
-- [ ] Add `Memory.author?: MemoryAuthorRef` and backfill existing rows as unknown/local.
+- [x] Add `Memory.author?: MemoryAuthorRef` and backfill existing rows as unknown/local.
 - [ ] Show memory author on memory cards.
 - [x] Track listened seconds while a track is actively playing.
 - [x] Increment play count once per meaningful listen, not on every seek/replay glitch.
@@ -1971,3 +1971,4 @@ Do not record secrets, full signed URLs, or media content.
 | 2026-06-09 | MUZERO | Phase 4 remote media cache now verifies imported blob roles before writing: audio tracks require `audio/*`, video tracks require `video/*`, and mismatched remote objects leave local IndexedDB untouched. |
 | 2026-06-09 | MUZERO | Phase 4 remote search catalog refresh made incremental: catalog pages may now publish `updatedAt`/ETag/hash metadata, MUZERO stores per-page versions, and unchanged pages are skipped while legacy string page refs still full-refresh. |
 | 2026-06-09 | MUZERO | Phase 6 R2 presence writer added: owner/trusted writable drives with local credentials can PUT signed per-device presence objects to `presence/devices/<devicePublicId>.json`; disabled, shared, or credential-less drives fail before any network write. |
+| 2026-06-09 | MUZERO | Phase 5 memory author data layer added: `addMemory` can persist sanitized `MemoryAuthorRef` snapshots and Dexie v16 backfills existing unattributed local memories as unknown local authors. |
