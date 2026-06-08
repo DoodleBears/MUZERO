@@ -1732,16 +1732,16 @@ For a large shared playlist with many trusted devices, the UI should:
   - [ ] per-device profile conflicts use `revision` first, then explicit user choice
 - [ ] Add conflict UI with "keep local", "use remote", "duplicate both".
 - [ ] Add set-level indicators for local changes, remote changed, auto-merged, and needs review.
-- [ ] Add dry-run preview before applying large pulls.
+- [x] Add dry-run preview before applying large pulls.
 - [ ] Verify imported Blob roles match expected object roles.
 - [ ] Incrementally refresh remote search catalog pages by `updatedAt`/ETag/hash.
 - [ ] Lazy-load specific set/share indexes when a search result is opened.
 
 ### Phase 4 Checklist
 
-- [ ] Pull sync can recreate a set on a new device.
+- [x] Pull sync can recreate a set on a new device.
 - [ ] Pull sync can download media for offline playback.
-- [ ] Pull sync can stream without downloading.
+- [x] Pull sync can stream without downloading.
 - [ ] Pull sync can update a large remote search catalog without downloading media bytes.
 - [ ] Conflicts are visible and never silently overwrite media.
 - [ ] Two devices adding different tracks to the same set can auto-merge.
@@ -1963,3 +1963,4 @@ Do not record secrets, full signed URLs, or media content.
 | 2026-06-09 | MUZERO | Phase 3 device/stat export added to publish plans: profile publishing emits `profiles/devices/<devicePublicId>/profile.json`, current-device aggregates emit `stats/devices/<devicePublicId>/aggregate.json`, and owner-maintained devices/stats indexes are generated when data exists. |
 | 2026-06-09 | MUZERO | Phase 1 remote search UI wired into the Search/Gallery track mode: synced remote catalog rows are queried from IndexedDB and displayed alongside local track results without downloading media bytes. |
 | 2026-06-09 | MUZERO | Phase 4 implementation started with Dexie v15 `syncMutations`, mutation repository helpers, and a remote set diff planner that identifies create/unchanged/apply-remote/keep-local/conflict/blocked states, including set-level local-vs-remote conflict detection and remote index hash mismatch blocking. |
+| 2026-06-09 | MUZERO | Phase 4 pull dry-run/apply flow added: remote set pulls now produce a non-mutating preview, can recreate missing sets as stream-only local rows without downloading media bytes, record pull `syncRuns`, and refuse blocked/conflicted diffs before mutating IndexedDB. |
