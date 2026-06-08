@@ -211,6 +211,17 @@ describe("buildR2ExportPlan", () => {
       eventCount: 2,
       segment: segment?.key,
     });
+    const statsIndex = plan.objects.find((object) => object.kind === "stats-index");
+    expect(JSON.parse(String(statsIndex?.body))).toMatchObject({
+      schema: "muzero-r2-stats-index-v1",
+      devices: [
+        {
+          devicePublicId: "dvc_1",
+          checkpoint: "stats/devices/dvc_1/checkpoint.json",
+          latestSegment: segment?.key,
+        },
+      ],
+    });
   });
 });
 

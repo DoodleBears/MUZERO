@@ -1773,7 +1773,7 @@ For a large shared playlist with many trusted devices, the UI should:
 - [ ] Retry failed segment uploads without duplicating remote play counts.
 - [ ] Export/import rebuildable per-device aggregate cache under `stats/devices/<devicePublicId>/aggregate.json`.
 - [x] Track uploaded event watermarks under `stats/devices/<devicePublicId>/checkpoint.json`.
-- [ ] Add optional `stats/index.json` for discovery, but do not make it the write-hot source of truth.
+- [x] Add optional `stats/index.json` for discovery, but do not make it the write-hot source of truth.
 - [ ] Keep public read-only listener stats local when no R2 write credentials are configured.
 - [ ] Keep read-only shared-link device profile/avatar local unless the user also has a writable Owner R2 target.
 - [ ] Reconcile existing `Track.playCount` with per-device stats.
@@ -1980,3 +1980,4 @@ Do not record secrets, full signed URLs, or media content.
 | 2026-06-09 | MUZERO | Phase 5 remote-only shared listening stats added: playback events can now be recorded with only a remote track reference, deriving local aggregate rows without importing the track or creating local per-track stats. |
 | 2026-06-09 | MUZERO | Phase 5 playback event segment flush policy added: automatic flush thresholds are clamped to 25-100 events or 5-15 minutes, and manual sync may flush a small pending segment. |
 | 2026-06-09 | MUZERO | Phase 5 playback checkpoint export added: event segment publish plans now include `stats/devices/<devicePublicId>/checkpoint.json` with the latest event watermark and immutable segment key. |
+| 2026-06-09 | MUZERO | Phase 5 optional `stats/index.json` discovery completed for stats sync: device entries can point to aggregate cache, checkpoint, and latest immutable event segment without making the index the write-hot source of truth. |

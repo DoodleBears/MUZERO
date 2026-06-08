@@ -264,6 +264,9 @@ async function createDeviceObjects(db: MuzeroDB): Promise<R2ExportObject[]> {
   if (!device) return [];
 
   const objects: R2ExportObject[] = [];
+  let checkpointKey: string | undefined;
+  let latestSegmentKey: string | undefined;
+  let statsUpdatedAt = 0;
   if (device.publishProfile) {
     objects.push(
       createJsonObject(
@@ -279,6 +282,10 @@ async function createDeviceObjects(db: MuzeroDB): Promise<R2ExportObject[]> {
     .equals(device.publicId)
     .toArray();
   if (aggregates.length > 0) {
+    statsUpdatedAt = Math.max(
+      statsUpdatedAt,
+      ...aggregates.map((aggregate) => aggregate.updatedAt),
+    );
     objects.push(
       createJsonObject(
         "stats-aggregate",
@@ -295,11 +302,14 @@ async function createDeviceObjects(db: MuzeroDB): Promise<R2ExportObject[]> {
   if (events.length > 0) {
     const segment = toPlaybackEventsSegment(device.publicId, events);
     const segmentKey = await playbackEventsSegmentKey(device.publicId, segment);
+    latestSegmentKey = segmentKey;
+    checkpointKey = `stats/devices/${device.publicId}/checkpoint.json`;
+    statsUpdatedAt = Math.max(statsUpdatedAt, segment.updatedAt);
     objects.push(
       createJsonObject("stats-events-segment", segmentKey, segment),
       createJsonObject(
         "stats-checkpoint",
-        `stats/devices/${device.publicId}/checkpoint.json`,
+        checkpointKey,
         toPlaybackEventsCheckpoint(device.publicId, events, segmentKey),
       ),
     );
@@ -323,16 +333,19 @@ async function createDeviceObjects(db: MuzeroDB): Promise<R2ExportObject[]> {
     );
   }
 
-  if (aggregates.length > 0) {
+  if (aggregates.length > 0 || checkpointKey || latestSegmentKey) {
     objects.push(
       createJsonObject("stats-index", "stats/index.json", {
         schema: "muzero-r2-stats-index-v1",
-        updatedAt: Math.max(...aggregates.map((aggregate) => aggregate.updatedAt)),
+        updatedAt: statsUpdatedAt,
         devices: [
           {
             devicePublicId: device.publicId,
-            aggregate: `stats/devices/${device.publicId}/aggregate.json`,
-            updatedAt: Math.max(...aggregates.map((aggregate) => aggregate.updatedAt)),
+            aggregate:
+              aggregates.length > 0 ? `stats/devices/${device.publicId}/aggregate.json` : undefined,
+            checkpoint: checkpointKey,
+            latestSegment: latestSegmentKey,
+            updatedAt: statsUpdatedAt,
           },
         ],
       }),
@@ -382,6 +395,7 @@ function toPlaybackEventsSegment(devicePublicId: string, events: PlaybackEvent[]
     devicePublicId,
     startedAt: events[0]?.startedAt ?? 0,
     endedAt: events.at(-1)?.startedAt ?? 0,
+    updatedAt: Math.max(...events.map((event) => event.endedAt ?? event.startedAt)),
     eventCount: events.length,
     events: events.map((event) => ({
       id: event.id,
