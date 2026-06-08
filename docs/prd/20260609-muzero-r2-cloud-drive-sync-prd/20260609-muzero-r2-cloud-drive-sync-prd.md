@@ -13,7 +13,7 @@
 
 | Phase | Name | Status | Link |
 |-------|------|--------|------|
-| 1 | Manifest protocol + read-only subscription | 🔲 Pending | [Phase 1 Checklist](#phase-1-checklist) |
+| 1 | Manifest protocol + read-only subscription | 🔄 In Progress | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | R2 Setup Wizard + connection validation | 🔲 Pending | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | Local-to-cloud publish sync with visible progress | 🔲 Pending | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | Cloud-to-local pull sync + conflict handling | 🔲 Pending | [Phase 4 Checklist](#phase-4-checklist) |
@@ -1616,8 +1616,8 @@ For a large shared playlist with many trusted devices, the UI should:
 
 **Tasks:**
 
-- [ ] Add Zod schemas for `muzero-r2-manifest-v1`, `muzero-r2-set-index-v1`, devices, stats.
-- [ ] Add URL normalization and relative URL resolution.
+- [x] Add Zod schemas for `muzero-r2-manifest-v1`, `muzero-r2-set-index-v1`, devices, stats.
+- [x] Add URL normalization and relative URL resolution.
 - [ ] Add read-only import flow: manifest → set indexes → tracks/memories/media refs.
 - [ ] Support stream mode: keep remote media URLs without downloading blobs.
 - [ ] Support cache mode: download selected media into `mediaBlobs`.
@@ -1912,3 +1912,4 @@ Do not record secrets, full signed URLs, or media content.
 |------|--------|---------|
 | 2026-06-09 | MUZERO | Initial draft for R2-only user-owned cloud drive sync. |
 | 2026-06-09 | MUZERO | Architecture review pass: clarified V1/V3 boundary, profile/avatar sync, per-device object ownership, and multi-writer conflict rules. |
+| 2026-06-09 | MUZERO | Phase 1 implementation started: manifest/set/share/stats schemas and R2 URL normalization/resolution added with tests. |
