@@ -513,3 +513,39 @@ export interface CloudShare {
   addedAt: number;
   lastSyncedAt?: number;
 }
+
+export type SyncDirection = "push" | "pull";
+export type SyncRunStatus = "running" | "completed" | "failed" | "cancelled";
+
+export interface SyncRun {
+  id: string;
+  driveId: string;
+  direction: SyncDirection;
+  status: SyncRunStatus;
+  startedAt: number;
+  finishedAt?: number;
+  totalBytes: number;
+  bytesDone: number;
+  objectCount: number;
+  uploaded: number;
+  skipped: number;
+  failed: number;
+  error?: string;
+}
+
+export interface SyncObject {
+  id: string;
+  driveId: string;
+  key: string;
+  kind: string;
+  contentType: string;
+  bytes: number;
+  sha256?: string;
+  sourceSetId?: string;
+  sourceTrackId?: string;
+  sourceMemoryId?: string;
+  lastUploadedAt?: number;
+  lastUploadedRunId?: string;
+  lastSeenAt?: number;
+  updatedAt: number;
+}

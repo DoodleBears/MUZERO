@@ -1697,7 +1697,7 @@ For a large shared playlist with many trusted devices, the UI should:
 - [ ] Upload per-device stats objects only for the current device or explicitly granted trusted devices.
 - [ ] Rebuild optional `devices/index.json`, `stats/index.json`, and `presence/index.json` as owner-maintained discovery indexes.
 - [x] Upload root `manifest.json` last.
-- [ ] Persist `syncObjects` mapping and `syncRuns`.
+- [x] Persist `syncObjects` mapping and `syncRuns`.
 - [x] Add cancel support between objects.
 
 ### Phase 3 Checklist
@@ -1956,3 +1956,4 @@ Do not record secrets, full signed URLs, or media content.
 | 2026-06-09 | MUZERO | Phase 2 Settings Cloud Drive wizard completed with setup checklist, shared-link registry, owner validation, local-only R2 credentials, copyable CORS JSON, connected-drive list, and en/zh/ja/ko strings. |
 | 2026-06-09 | MUZERO | Phase 3 implementation started: local export plan now collects set/track/memory/media rows, computes content-addressed R2 keys for media/cover/memory photos, emits per-set index writes, and keeps root manifest last. |
 | 2026-06-09 | MUZERO | Phase 3 R2 publish executor added with shared S3 signing, HEAD-based skips for content-addressed binary objects, ordered PUT uploads for indexes/manifests, progress events, and between-object cancellation. |
+| 2026-06-09 | MUZERO | Phase 3 sync bookkeeping added with Dexie v13 `syncRuns` and `syncObjects`, plus a publish-sync wrapper that records completed/failed runs and object provenance without clobbering old mappings on failure. |

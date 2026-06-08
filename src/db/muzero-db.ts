@@ -13,6 +13,8 @@ import type {
   RemoteSearchCatalog,
   RemoteSearchSet,
   RemoteSearchTrack,
+  SyncObject,
+  SyncRun,
   Track,
 } from "./types";
 
@@ -34,6 +36,8 @@ export class MuzeroDB extends Dexie {
   remoteSearchSets!: EntityTable<RemoteSearchSet, "id">;
   cloudDrives!: EntityTable<CloudDrive, "id">;
   cloudShares!: EntityTable<CloudShare, "id">;
+  syncRuns!: EntityTable<SyncRun, "id">;
+  syncObjects!: EntityTable<SyncObject, "id">;
 
   constructor(name = "muzero-db") {
     super(name);
@@ -221,6 +225,13 @@ export class MuzeroDB extends Dexie {
     this.version(12).stores({
       cloudDrives: "id, kind, provider, updatedAt, lastSyncedAt",
       cloudShares: "id, driveId, remoteShareId, access, lastSyncedAt",
+    });
+
+    // v13 — sync bookkeeping for visible progress, resumability, and object
+    // provenance. The object id is `${driveId}:${key}`.
+    this.version(13).stores({
+      syncRuns: "id, driveId, direction, status, startedAt",
+      syncObjects: "id, driveId, key, kind, sourceSetId, sourceTrackId, updatedAt, lastUploadedAt",
     });
   }
 }
