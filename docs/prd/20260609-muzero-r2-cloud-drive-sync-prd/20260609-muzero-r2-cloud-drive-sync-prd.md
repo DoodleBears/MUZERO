@@ -1670,7 +1670,7 @@ For a large shared playlist with many trusted devices, the UI should:
 - [x] Add multi-drive local model: owned drives, trusted drives, shared links.
 - [ ] Build Settings Cloud Drive section.
 - [ ] Add setup checklist for Cloudflare account, bucket, public URL, CORS, and R2 credentials.
-- [ ] Add healthcheck validation for public read and S3 write.
+- [x] Add healthcheck validation for public read and S3 write.
 - [ ] Add copyable recommended CORS JSON.
 - [ ] Store credentials only in local IndexedDB settings.
 - [ ] Add i18n keys for en/zh/ja/ko.
@@ -1952,3 +1952,4 @@ Do not record secrets, full signed URLs, or media content.
 | 2026-06-09 | MUZERO | Phase 1 Settings UI added for public manifest preview and read-only set import. |
 | 2026-06-09 | MUZERO | Phase 1 edge-case tests added for invalid schemas, relative URLs, missing remote media, and duplicate imports. |
 | 2026-06-09 | MUZERO | Phase 2 local cloud drive/share registry added with Dexie v12 tables and repository helpers. |
+| 2026-06-09 | MUZERO | Phase 2 R2 healthcheck core added for public manifest read validation, S3-compatible write probes, secret masking, and recommended CORS JSON generation. |
