@@ -637,6 +637,37 @@ export interface SyncRun {
   startedAt: number;
   finishedAt?: number;
 }
+
+export interface SyncMutation {
+  id: string; // newId("mut")
+  driveId: string;
+  devicePublicId: string;
+  scope: "set" | "track" | "memory" | "profile" | "stats";
+  entityId: string;
+  action:
+    | "set-metadata-updated"
+    | "track-added-to-set"
+    | "track-removed-from-set"
+    | "track-metadata-updated"
+    | "memory-added"
+    | "memory-updated"
+    | "memory-removed"
+    | "profile-updated"
+    | "stats-segment-published";
+  /**
+   * Remote object version observed before this mutation was planned.
+   * Used for three-way merge and stale-write detection.
+   */
+  base?: {
+    remoteKey: string;
+    etag?: string;
+    revision?: number;
+    updatedAt?: number;
+  };
+  payload: unknown;
+  createdAt: number;
+  syncedAt?: number;
+}
 ```
 
 Dexie stores:
@@ -646,6 +677,7 @@ devices: "id, lastSeenAt"
 trackPlaybackStats: "id, trackId, devicePublicId, updatedAt, [trackId+devicePublicId]"
 playbackEvents: "id, devicePublicId, startedAt, trackId, [devicePublicId+startedAt]"
 playbackAggregates: "id, devicePublicId, scope, driveId, shareId, setId, trackId, updatedAt"
+syncMutations: "id, driveId, devicePublicId, scope, entityId, createdAt, syncedAt"
 syncObjects: "id, localBlobId, remoteKey, sha256"
 syncRuns: "id, status, startedAt"
 ```
@@ -1185,6 +1217,23 @@ This avoids mixing:
 - "How many times did I hear the same track inside Set B?"
 - "How many times did all granted listeners hear this shared projection?"
 
+Remote stats storage should separate **event truth** from **aggregate cache**:
+
+```text
+stats/events/<devicePublicId>/<yyyy-mm>/<segmentId>.json
+stats/devices/<devicePublicId>/aggregate.json
+stats/devices/<devicePublicId>/checkpoint.json
+```
+
+Rules:
+
+- The local `PlaybackEvent` table is the user's full personal listening log.
+- Remote event segments are immutable once uploaded. A segment contains a small batch of events, for example 25-100 listens or a time window such as 5-15 minutes.
+- `segmentId` includes a device-local monotonically increasing sequence range or a random sync-run id, so two uploads never target the same key.
+- One JSON file per listen is the simplest conflict-free model, but it creates many small objects and Class A writes. Use it only for debug/export mode. The default should be immutable batched segments.
+- `aggregate.json` is a per-device cache for fast UI. It can be rebuilt from event segments, so if it conflicts, the app should prefer the newest valid checkpoint or rebuild rather than losing events.
+- Shared/public listener writeback still requires write permission. Read-only listeners keep the same local event model but do not upload segments.
+
 ### 3.9 Currently-Playing Presence Format
 
 Presence is optional and weakly consistent. It is intended to show "recently active trusted devices and what they are listening to", not hard real-time online status. Public read-only listeners cannot publish presence to the owner's R2 bucket under the R2-only model.
@@ -1239,12 +1288,15 @@ Object ownership table:
 | Remote object family | Writer in V1 | Merge strategy | Conflict risk |
 |----------------------|--------------|----------------|---------------|
 | `manifest.json` | Owner/trusted publish sync only | Last successful owner publish wins after local diff review | High if many devices publish blindly |
-| `sets/<setId>/index.json` | Owner/trusted publish sync only | Field-level conflict UI for set/track/memory metadata | High |
+| `sets/<setId>/index.json` | Owner/trusted publish sync only | Published snapshot generated from local DB + accepted mutations | High |
+| `sets/<setId>/mutations/<devicePublicId>/*.json` | The matching device only | Append-only mutation log; owner/trusted publish sync folds into next snapshot | Low |
 | `shares/<shareId>/index.json` | Owner/trusted publish sync only | Projection regenerated from local source of truth | Medium |
 | `objects/media/*` | Any writer with upload permission, content-addressed | Immutable by hash; skip when hash matches | Low |
 | `objects/covers/*`, `memories/*`, `profiles/*/avatar.*` | Writer uploads new revision/hash | Immutable or revisioned; profile points to latest object | Low |
 | `profiles/devices/<devicePublicId>/profile.json` | The matching device only | Last-writer-wins within the same device, guarded by revision/ETag | Low unless identity duplicated |
-| `stats/devices/<devicePublicId>.json` | The matching device only | Additive aggregates; optionally reconcile from event watermarks | Low |
+| `stats/events/<devicePublicId>/**/*.json` | The matching device only | Immutable event segments; never overwritten | Low |
+| `stats/devices/<devicePublicId>/aggregate.json` | The matching device only | Rebuildable per-device aggregate cache | Low |
+| `stats/devices/<devicePublicId>/checkpoint.json` | The matching device only | Tracks uploaded event watermarks | Low |
 | `presence/devices/<devicePublicId>.json` | The matching device only | Replace current status; TTL expiry handles stale data | Low |
 | `devices/index.json`, `stats/index.json`, `presence/index.json` | Owner/trusted publish sync only | Derived discovery indexes, rebuildable | Medium |
 
@@ -1252,13 +1304,65 @@ Implementation rules:
 
 - Never require a non-owner public listener to update a shared index object.
 - Do not make `devices/index.json`, `stats/index.json`, or `presence/index.json` mandatory for correctness. They are cache/discovery artifacts; per-device objects remain authoritative.
-- Use remote ETag or a stored object hash before overwriting mutable JSON. If the remote ETag changed since planning, stop and re-plan or show a conflict.
+- Use remote ETag or a stored object hash before overwriting mutable JSON. If the remote ETag changed since planning, stop, pull the latest remote object, and either auto-merge or show a conflict.
+- For R2 S3 writes, prefer conditional operations such as `If-Match`/ETag where supported so stale writes fail instead of overwriting remote changes.
 - Use monotonically increasing `revision` for device profile and stats objects. `updatedAt` is for display and fallback only; it is not a reliable conflict clock across devices.
 - Treat media/photo/avatar objects as immutable once written. Updates create a new key or content hash and then update the small JSON pointer.
 - For metadata conflicts on sets/tracks/memories, prefer explicit user choice over silent last-writer-wins.
-- For stats, prefer event/aggregate merge instead of replacing the whole library aggregate. If two versions of the same device stats diverge, merge by event ids or aggregate watermarks; if that is impossible, preserve both as conflict copies.
+- For stats, immutable event segments are the source of truth. Aggregates are caches; if two aggregate versions diverge, rebuild from event segments rather than choosing one and losing listens.
 - For presence, never surface conflicts. Newer valid presence replaces older presence for the same device; expired records are ignored.
 - Remote deletes do not delete local media automatically in V1. They create a visible conflict or "remote missing" state.
+
+Set mutation log format:
+
+```json
+{
+  "schema": "muzero-r2-set-mutation-v1",
+  "mutationId": "mut_9fL2",
+  "devicePublicId": "dvc_7Qx5Kq9vS3JmA2pL",
+  "setId": "ses_tokyo",
+  "base": {
+    "indexKey": "sets/ses_tokyo/index.json",
+    "etag": "\"a1b2c3\"",
+    "revision": 12
+  },
+  "ops": [
+    {
+      "op": "track-added-to-set",
+      "trackId": "trk_new",
+      "afterTrackId": "trk_blue",
+      "mediaKey": "objects/media/sha256-...",
+      "createdAt": 1780947600000
+    }
+  ],
+  "createdAt": 1780947600000
+}
+```
+
+Set sync protocol:
+
+1. Local edit records a `SyncMutation` with the remote snapshot version that the user edited from.
+2. Media/covers/memory photos upload first as immutable objects.
+3. The device uploads mutation files under `sets/<setId>/mutations/<devicePublicId>/...`.
+4. Owner/trusted publish sync reads the current set snapshot plus pending mutation files.
+5. Non-overlapping operations are folded automatically into a new `sets/<setId>/index.json` revision.
+6. If two mutations edit the same user-authored field or incompatible track order position, MUZERO marks a conflict and keeps both local pending until the user resolves it.
+7. The new `index.json` is written with an ETag/conditional guard. If the remote changed meanwhile, the publish run stops and re-plans.
+
+This means adding songs is usually conflict-free: the uploaded media object is immutable, and the set membership change is a per-device mutation. Directly overwriting `sets/<setId>/index.json` from two devices is the fallback path only for owner snapshot publishing, not the normal edit transport.
+
+Auto-merge examples:
+
+- Two devices add different tracks to the same set.
+- One device adds a cover photo while another adds a memory to a different track.
+- Two devices update their own stats/profile/presence objects.
+
+Conflict examples:
+
+- Two devices rename the same set differently from the same base revision.
+- Two devices edit the same memory note.
+- Two devices reorder the same adjacent track range in incompatible ways.
+- A device removes a track while another edits that track's set-specific metadata.
 
 Profile/avatar propagation:
 
@@ -1426,6 +1530,27 @@ Current: sets/ses_tokyo/media/trk_blue-1d8f.mp3
 [Cancel] [Run in background]
 ```
 
+Conflict/sync indicators:
+
+| Indicator | Meaning | User action |
+|-----------|---------|-------------|
+| `Local changes` | Local mutations exist but have not been uploaded. | Sync now / keep local. |
+| `Uploading files` | Immutable media/photo/avatar objects are being uploaded. | Wait/cancel. |
+| `Publishing playlist` | MUZERO is folding accepted mutations into a new set snapshot. | Wait. |
+| `Remote changed` | Remote ETag changed since planning; sync must pull/re-plan. | Review incoming changes. |
+| `Auto-merged` | Non-overlapping mutations were folded successfully. | No action; show brief history. |
+| `Needs review` | Same user-authored field/order range changed on both sides. | Keep local / use remote / edit manually / duplicate. |
+| `Read-only` | This drive/share has no write credentials or grant. | Save locally / add owner credentials. |
+| `Stats local only` | Playback stats are recorded locally but cannot be uploaded to this share. | Optional: sync to own Owner R2. |
+
+Set-level indicator placement:
+
+- Settings > Cloud Drive shows drive-wide sync state and last error.
+- Set header shows the set's own mutation/conflict state.
+- Track rows with pending media upload show a small pending/cloud icon.
+- Conflict drawer groups issues by set, then track/memory/profile/stat object.
+- The player should never block playback because a set has sync conflicts; it should block only destructive remote publish actions until conflicts are resolved.
+
 ### 5.4 Playback Stats UX
 
 Track detail / Now Playing should expose:
@@ -1443,6 +1568,15 @@ Settings should expose:
 - "Forget this device" local action
 - "Stop syncing playback stats" visible toggle, default on once cloud sync is enabled
 - "Share currently playing status" visible toggle, default off
+
+Stats sync UI should distinguish:
+
+- **Recorded locally**: event exists in IndexedDB.
+- **Queued for cloud**: event is waiting for the next immutable segment upload.
+- **Uploaded**: event is included in a remote segment and checkpoint.
+- **Aggregated**: `aggregate.json` or local aggregate cache has been rebuilt.
+
+Play count should update locally immediately. Remote aggregate totals may lag until the next sync; UI should show "synced just now / pending N listens" rather than pretending the shared count is realtime.
 
 ### 5.5 Currently-Playing Presence UX
 
@@ -1559,8 +1693,11 @@ For a large shared playlist with many trusted devices, the UI should:
 **Tasks:**
 
 - [ ] Implement remote diff against local DB.
+- [ ] Add `SyncMutation` rows for local set/track/memory edits.
+- [ ] Upload per-device set mutation files under `sets/<setId>/mutations/<devicePublicId>/`.
+- [ ] Fold non-overlapping set mutations into the next owner-published `index.json` snapshot.
 - [ ] Add conflict detection for set/track/memory edits changed on both sides.
-- [ ] Add ETag/hash guard before overwriting mutable remote JSON objects.
+- [ ] Add ETag/hash/conditional-write guard before overwriting mutable remote JSON objects.
 - [ ] Default merge rule:
   - [ ] additive stats merge
   - [ ] add new tracks/memories
@@ -1569,6 +1706,7 @@ For a large shared playlist with many trusted devices, the UI should:
   - [ ] user-authored set/track/memory fields use explicit conflict UI when both sides changed
   - [ ] per-device profile conflicts use `revision` first, then explicit user choice
 - [ ] Add conflict UI with "keep local", "use remote", "duplicate both".
+- [ ] Add set-level indicators for local changes, remote changed, auto-merged, and needs review.
 - [ ] Add dry-run preview before applying large pulls.
 - [ ] Verify imported Blob roles match expected object roles.
 - [ ] Incrementally refresh remote search catalog pages by `updatedAt`/ETag/hash.
@@ -1581,6 +1719,9 @@ For a large shared playlist with many trusted devices, the UI should:
 - [ ] Pull sync can stream without downloading.
 - [ ] Pull sync can update a large remote search catalog without downloading media bytes.
 - [ ] Conflicts are visible and never silently overwrite media.
+- [ ] Two devices adding different tracks to the same set can auto-merge.
+- [ ] Two devices renaming the same set differently produce a reviewable conflict.
+- [ ] Stale set snapshot publish fails/replans instead of overwriting remote changes.
 - [ ] Hash mismatch blocks import for that object.
 
 ### Phase 5: Anonymous Device Registry + Playback Stats Sync
@@ -1602,7 +1743,9 @@ For a large shared playlist with many trusted devices, the UI should:
 - [ ] Persist `PlaybackEvent` with drive/share/set/queue context for every meaningful listen.
 - [ ] Derive `PlaybackAggregate` rows for track, track-in-set, track-in-share, set, share, and drive scopes.
 - [ ] Persist per-device `TrackPlaybackStats`.
-- [ ] Export/import stats through per-device objects under `stats/devices/<devicePublicId>.json`.
+- [ ] Export/import immutable playback event segments under `stats/events/<devicePublicId>/`.
+- [ ] Export/import rebuildable per-device aggregate cache under `stats/devices/<devicePublicId>/aggregate.json`.
+- [ ] Track uploaded event watermarks under `stats/devices/<devicePublicId>/checkpoint.json`.
 - [ ] Add optional `stats/index.json` for discovery, but do not make it the write-hot source of truth.
 - [ ] Keep public read-only listener stats local when no R2 write credentials are configured.
 - [ ] Keep read-only shared-link device profile/avatar local unless the user also has a writable Owner R2 target.
@@ -1619,6 +1762,8 @@ For a large shared playlist with many trusted devices, the UI should:
 - [ ] Memory cards show author attribution when available.
 - [ ] Stats survive reload.
 - [ ] Stats merge correctly from two devices.
+- [ ] Rebuilding aggregates from event segments does not lose play counts.
+- [ ] Sync UI shows pending local listens separately from uploaded/aggregated listens.
 - [ ] A large shared playlist can keep local stats separated across many anonymous devices.
 - [ ] The same track in two sets can show separate track-in-set play counts.
 - [ ] A track played from someone else's shared set can be recorded locally without importing the track.
