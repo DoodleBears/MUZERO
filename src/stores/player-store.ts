@@ -137,7 +137,7 @@ function queueSig(tracks: Track[]): string {
     .map((t) => {
       const c = t.coverCrop;
       const crop = c ? `${c.x},${c.y},${c.width},${c.height}` : "";
-      return `${t.id}:${t.status}:${t.blobId ?? ""}:${t.coverBlobId ?? ""}:${crop}`;
+      return `${t.id}:${t.status}:${t.blobId ?? ""}:${t.remoteMediaUrl ?? ""}:${t.coverBlobId ?? ""}:${t.remoteCoverUrl ?? ""}:${crop}`;
     })
     .join("|");
 }
@@ -619,28 +619,38 @@ async function ensureLoadedAndPlay(
   if (currentIndex < 0 || currentIndex >= queue.length) return;
   const track = queue[currentIndex];
   if (!mediaEngine) return;
-  if (track.status !== "ready" || !track.blobId) {
+  const hasPlayableMedia = !!track.blobId || !!track.remoteMediaUrl;
+  if (track.status !== "ready" || !hasPlayableMedia) {
     log.debug("player", "track is not playable yet", {
       trackId: track.id,
       status: track.status,
       hasBlob: !!track.blobId,
+      hasRemoteMedia: !!track.remoteMediaUrl,
     });
     void pump(set, get);
     return;
   }
   if (loadedTrackId !== track.id) {
-    const media = await getTrackBlob(track);
-    if (!media) {
-      log.warn("player", "missing media blob", { trackId: track.id, blobId: track.blobId });
-      return;
+    if (track.blobId) {
+      const media = await getTrackBlob(track);
+      if (!media) {
+        log.warn("player", "missing media blob", { trackId: track.id, blobId: track.blobId });
+        return;
+      }
+      log.debug("player", "loading media blob", {
+        trackId: track.id,
+        kind: track.kind,
+        mime: media.mime,
+        bytes: media.bytes,
+      });
+      await mediaEngine.loadBlob(media.blob, track.kind);
+    } else if (track.remoteMediaUrl) {
+      log.debug("player", "loading remote media url", {
+        trackId: track.id,
+        kind: track.kind,
+      });
+      await mediaEngine.loadUrl(track.remoteMediaUrl, track.kind);
     }
-    log.debug("player", "loading media blob", {
-      trackId: track.id,
-      kind: track.kind,
-      mime: media.mime,
-      bytes: media.bytes,
-    });
-    await mediaEngine.loadBlob(media.blob, track.kind);
     loadedTrackId = track.id;
     void incrementPlayCount(track.id);
   }

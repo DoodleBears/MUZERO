@@ -34,8 +34,12 @@ export interface Track {
   durationSec: number;
   /** FK into `mediaBlobs` for the audio/video bytes. */
   blobId?: string;
+  /** Streamable remote audio/video URL for read-only cloud shares. */
+  remoteMediaUrl?: string;
   /** Optional cover image (memory photo / artwork) — FK into `mediaBlobs`. */
   coverBlobId?: string;
+  /** Streamable remote cover URL for read-only cloud shares. */
+  remoteCoverUrl?: string;
   /** Non-destructive square crop for the cover, in the original image's pixels. */
   coverCrop?: CropRect;
   error?: string;

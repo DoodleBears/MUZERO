@@ -1621,7 +1621,7 @@ For a large shared playlist with many trusted devices, the UI should:
 - [x] Add read-only manifest preview service with injected fetch.
 - [x] Add remote set index loader that resolves streamable media/cover/memory URLs.
 - [ ] Add read-only import flow: manifest → set indexes → tracks/memories/media refs.
-- [ ] Support stream mode: keep remote media URLs without downloading blobs.
+- [x] Support stream mode: keep remote media URLs without downloading blobs.
 - [ ] Support cache mode: download selected media into `mediaBlobs`.
 - [x] Add remote search catalog and paged track/set search schemas.
 - [x] Add remote search track row normalization and query matcher.
@@ -1921,3 +1921,4 @@ Do not record secrets, full signed URLs, or media content.
 | 2026-06-09 | MUZERO | Phase 1 remote search catalog schemas and local remote-search row normalization added with tests. |
 | 2026-06-09 | MUZERO | Phase 1 Dexie v11 remote search cache added for remote set/track rows without media downloads. |
 | 2026-06-09 | MUZERO | Phase 1 remote search catalog importer added for `catalog/library.json` plus paged set/track rows. |
+| 2026-06-09 | MUZERO | Phase 1 stream-mode playback foundation added: tracks can carry remote media/cover URLs without local blobs. |

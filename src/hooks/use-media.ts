@@ -66,10 +66,11 @@ export function useObjectUrls(blobs: Blob[]): string[] {
  * rendered via canvas at display time, so the original blob is never modified.
  */
 export function useTrackCoverUrl(
-  track: Pick<Track, "coverBlobId" | "coverCrop"> | undefined,
+  track: Pick<Track, "coverBlobId" | "coverCrop" | "remoteCoverUrl"> | undefined,
 ): string | null {
   const settings = useSettings();
   const coverBlobId = track?.coverBlobId;
+  const remoteCoverUrl = track?.remoteCoverUrl;
   const blob = useLiveQuery(
     async () => (coverBlobId ? (await db.mediaBlobs.get(coverBlobId))?.blob : undefined),
     [coverBlobId],
@@ -112,16 +113,20 @@ export function useTrackCoverUrl(
 
   // Original URL only when no crop applies (avoids a redundant object URL).
   const originalUrl = useKeyedObjectUrl(crop ? null : blob, crop ? null : coverBlobId);
-  return crop ? (croppedEntry?.key === cropKey ? croppedEntry.url : null) : originalUrl;
+  if (crop) return croppedEntry?.key === cropKey ? croppedEntry.url : null;
+  return originalUrl ?? remoteCoverUrl ?? null;
 }
 
 /** Reactive object URL for a track's primary audio/video media bytes. */
-export function useTrackMediaUrl(track: Pick<Track, "blobId"> | undefined): string | null {
+export function useTrackMediaUrl(
+  track: Pick<Track, "blobId" | "remoteMediaUrl"> | undefined,
+): string | null {
   const blobId = track?.blobId;
+  const remoteMediaUrl = track?.remoteMediaUrl;
   const blob = useLiveQuery(
     async () => (blobId ? (await db.mediaBlobs.get(blobId))?.blob : undefined),
     [blobId],
     undefined,
   );
-  return useKeyedObjectUrl(blob, blobId);
+  return useKeyedObjectUrl(blob, blobId) ?? remoteMediaUrl ?? null;
 }

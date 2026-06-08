@@ -37,7 +37,7 @@ export function MediaStage({ className }: { className?: string }) {
     displayMode,
     // Whether a cover *exists* (sync) — not whether its URL has resolved yet — so
     // the stage doesn't flip to the visualizer during a track change.
-    hasCover: !!current?.coverBlobId,
+    hasCover: !!current?.coverBlobId || !!current?.remoteCoverUrl,
   });
   const showVideo = content === "video";
   // A video track the WebView accepted as "video" but failed to decode.
@@ -120,7 +120,7 @@ export function MediaStage({ className }: { className?: string }) {
         {content === "cover" && (
           <CoverImage
             url={coverUrl}
-            hasCover={!!current?.coverBlobId}
+            hasCover={!!current?.coverBlobId || !!current?.remoteCoverUrl}
             fallback={<StageTitleFallback track={current} dim={asBgActive} />}
             className="z-10 rounded-lg"
           />

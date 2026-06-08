@@ -140,13 +140,23 @@ export class MediaEngine {
     log.debug("media", "loadBlob", { kind, type: blob.type, size: blob.size });
     this.revoke();
     this.objectUrl = URL.createObjectURL(blob);
+    this.loadSource(this.objectUrl, kind);
+  }
+
+  async loadUrl(url: string, kind: "audio" | "video" = "audio"): Promise<void> {
+    log.debug("media", "loadUrl", { kind });
+    this.revoke();
+    this.loadSource(url, kind);
+  }
+
+  private loadSource(src: string, kind: "audio" | "video"): void {
     // The audio element is always the driver (it plays a video file's audio too).
-    this.audioEl.src = this.objectUrl;
+    this.audioEl.src = src;
     this.audioEl.load();
     traceEvent("debug", "media", "audio source loaded", describeMediaElement(this.audioEl));
     this.hasVideo = kind === "video";
     if (this.hasVideo) {
-      this.videoEl.src = this.objectUrl;
+      this.videoEl.src = src;
       this.videoEl.load();
       traceEvent("debug", "media", "video source loaded", describeMediaElement(this.videoEl));
     } else {

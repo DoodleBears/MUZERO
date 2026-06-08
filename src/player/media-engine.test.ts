@@ -34,4 +34,11 @@ describe("MediaEngine — audio driver stays in the document, video is the visua
     expect(engine.element.isConnected).toBe(true);
     expect(engine.element.parentElement).not.toBe(container);
   });
+
+  it("loads a remote video URL into the visual element without requiring a Blob", async () => {
+    const engine = new MediaEngine();
+    await engine.loadUrl("https://music.example.com/muzero/objects/video.mp4", "video");
+
+    expect(engine.element.src).toBe("https://music.example.com/muzero/objects/video.mp4");
+  });
 });
