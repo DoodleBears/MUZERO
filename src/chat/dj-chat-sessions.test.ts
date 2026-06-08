@@ -206,8 +206,8 @@ describe("chat session repository", () => {
   });
 });
 
-describe("v4 → v5 migration adds chatSessions without disturbing existing settings", () => {
-  it("opens a v4 database with the new chat table and preserves settings rows", async () => {
+describe("v4 → current migration adds chatSessions without disturbing existing settings", () => {
+  it("opens a v4 database with the new chat table and preserves non-resume settings rows", async () => {
     const name = `muzero-mig5-${Math.random().toString(36).slice(2)}`;
     const v4 = new Dexie(name);
     v4.version(1).stores({
@@ -245,8 +245,11 @@ describe("v4 → v5 migration adds chatSessions without disturbing existing sett
         updatedAt: 1,
         messagesJson: "[]",
       } satisfies ChatSession);
+      const settings = await mz.settings.get("app");
       expect(await mz.chatSessions.count()).toBe(1);
-      expect((await mz.settings.get("app"))?.lastSessionId).toBe("ses_previous");
+      expect(settings?.llmProvider).toBe("openai");
+      expect(settings?.musicGenProvider).toBe("mock");
+      expect(settings?.lastSessionId).toBeUndefined();
     } finally {
       mz.close();
       await new Promise<void>((resolve) => {
