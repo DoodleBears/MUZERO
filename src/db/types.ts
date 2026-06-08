@@ -553,6 +553,33 @@ export interface SyncObject {
   updatedAt: number;
 }
 
+export interface SyncMutation {
+  id: string;
+  driveId: string;
+  devicePublicId: string;
+  scope: "set" | "track" | "memory" | "profile" | "stats";
+  entityId: string;
+  action:
+    | "set-metadata-updated"
+    | "track-added-to-set"
+    | "track-removed-from-set"
+    | "track-metadata-updated"
+    | "memory-added"
+    | "memory-updated"
+    | "memory-removed"
+    | "profile-updated"
+    | "stats-segment-published";
+  base?: {
+    remoteKey: string;
+    etag?: string;
+    revision?: number;
+    updatedAt?: number;
+  };
+  payload: unknown;
+  createdAt: number;
+  syncedAt?: number;
+}
+
 export interface DeviceRecord {
   id: string;
   publicId: string;

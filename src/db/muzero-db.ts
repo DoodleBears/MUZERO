@@ -16,6 +16,7 @@ import type {
   RemoteSearchCatalog,
   RemoteSearchSet,
   RemoteSearchTrack,
+  SyncMutation,
   SyncObject,
   SyncRun,
   Track,
@@ -42,6 +43,7 @@ export class MuzeroDB extends Dexie {
   cloudShares!: EntityTable<CloudShare, "id">;
   syncRuns!: EntityTable<SyncRun, "id">;
   syncObjects!: EntityTable<SyncObject, "id">;
+  syncMutations!: EntityTable<SyncMutation, "id">;
   devices!: EntityTable<DeviceRecord, "id">;
   trackPlaybackStats!: EntityTable<TrackPlaybackStats, "id">;
   playbackEvents!: EntityTable<PlaybackEvent, "id">;
@@ -248,6 +250,12 @@ export class MuzeroDB extends Dexie {
       trackPlaybackStats: "id, trackId, devicePublicId, updatedAt, [trackId+devicePublicId]",
       playbackEvents: "id, devicePublicId, startedAt, trackId, [devicePublicId+startedAt]",
       playbackAggregates: "id, devicePublicId, scope, driveId, shareId, setId, trackId, updatedAt",
+    });
+
+    // v15 — local edit mutation log for remote diff, auto-merge, and conflict
+    // detection. Unsynced rows are scoped per drive and anonymous device id.
+    this.version(15).stores({
+      syncMutations: "id, driveId, devicePublicId, scope, entityId, createdAt, syncedAt",
     });
   }
 }

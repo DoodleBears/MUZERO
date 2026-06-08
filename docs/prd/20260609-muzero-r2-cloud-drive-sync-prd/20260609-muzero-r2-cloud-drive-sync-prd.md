@@ -16,7 +16,7 @@
 | 1 | Manifest protocol + read-only subscription | 🔄 In Progress | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | R2 Setup Wizard + connection validation | ✅ Done | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | Local-to-cloud publish sync with visible progress | 🔄 In Progress | [Phase 3 Checklist](#phase-3-checklist) |
-| 4 | Cloud-to-local pull sync + conflict handling | 🔲 Pending | [Phase 4 Checklist](#phase-4-checklist) |
+| 4 | Cloud-to-local pull sync + conflict handling | 🔄 In Progress | [Phase 4 Checklist](#phase-4-checklist) |
 | 5 | Anonymous device registry + playback stats sync | 🔄 In Progress | [Phase 5 Checklist](#phase-5-checklist) |
 | 6 | Optional low-frequency currently-playing presence | 🔲 Pending | [Phase 6 Checklist](#phase-6-checklist) |
 
@@ -1717,8 +1717,8 @@ For a large shared playlist with many trusted devices, the UI should:
 
 **Tasks:**
 
-- [ ] Implement remote diff against local DB.
-- [ ] Add `SyncMutation` rows for local set/track/memory edits.
+- [x] Implement remote diff against local DB.
+- [x] Add `SyncMutation` rows for local set/track/memory edits.
 - [ ] Upload per-device set mutation files under `sets/<setId>/mutations/<devicePublicId>/`.
 - [ ] Fold non-overlapping set mutations into the next owner-published `index.json` snapshot.
 - [ ] Add conflict detection for set/track/memory edits changed on both sides.
@@ -1747,7 +1747,7 @@ For a large shared playlist with many trusted devices, the UI should:
 - [ ] Two devices adding different tracks to the same set can auto-merge.
 - [ ] Two devices renaming the same set differently produce a reviewable conflict.
 - [ ] Stale set snapshot publish fails/replans instead of overwriting remote changes.
-- [ ] Hash mismatch blocks import for that object.
+- [x] Hash mismatch blocks import for that object.
 
 ### Phase 5: Anonymous Device Registry + Playback Stats Sync
 
@@ -1962,3 +1962,4 @@ Do not record secrets, full signed URLs, or media content.
 | 2026-06-09 | MUZERO | Phase 5 playback listener integration added: MediaEngine time updates now feed a seek-aware listen tracker, pause/ended/track-change flushes persist per-device listened seconds, and eager load-time play-count increments were removed. |
 | 2026-06-09 | MUZERO | Phase 3 device/stat export added to publish plans: profile publishing emits `profiles/devices/<devicePublicId>/profile.json`, current-device aggregates emit `stats/devices/<devicePublicId>/aggregate.json`, and owner-maintained devices/stats indexes are generated when data exists. |
 | 2026-06-09 | MUZERO | Phase 1 remote search UI wired into the Search/Gallery track mode: synced remote catalog rows are queried from IndexedDB and displayed alongside local track results without downloading media bytes. |
+| 2026-06-09 | MUZERO | Phase 4 implementation started with Dexie v15 `syncMutations`, mutation repository helpers, and a remote set diff planner that identifies create/unchanged/apply-remote/keep-local/conflict/blocked states, including set-level local-vs-remote conflict detection and remote index hash mismatch blocking. |
