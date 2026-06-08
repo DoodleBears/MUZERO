@@ -1791,8 +1791,8 @@ For a large shared playlist with many trusted devices, the UI should:
 - [ ] Stats merge correctly from two devices.
 - [x] Rebuilding aggregates from event segments does not lose play counts.
 - [ ] Sync UI shows pending local listens separately from uploaded/aggregated listens.
-- [ ] Pending listening stats flush at 25-100 events or 5-15 minutes, whichever threshold is reached first.
-- [ ] Manual Sync can flush a small pending stats segment below the normal event-count threshold.
+- [x] Pending listening stats flush at 25-100 events or 5-15 minutes, whichever threshold is reached first.
+- [x] Manual Sync can flush a small pending stats segment below the normal event-count threshold.
 - [ ] A large shared playlist can keep local stats separated across many anonymous devices.
 - [ ] The same track in two sets can show separate track-in-set play counts.
 - [x] A track played from someone else's shared set can be recorded locally without importing the track.
@@ -1978,3 +1978,4 @@ Do not record secrets, full signed URLs, or media content.
 | 2026-06-09 | MUZERO | Phase 5 aggregate rebuild helper added: playback event segments can be replayed into deterministic per-device aggregate rows without duplicating or losing play counts. |
 | 2026-06-09 | MUZERO | Phase 5 playback stats persistence verified with a Dexie reload test covering playback events, per-track stats, and aggregate rows. |
 | 2026-06-09 | MUZERO | Phase 5 remote-only shared listening stats added: playback events can now be recorded with only a remote track reference, deriving local aggregate rows without importing the track or creating local per-track stats. |
+| 2026-06-09 | MUZERO | Phase 5 playback event segment flush policy added: automatic flush thresholds are clamped to 25-100 events or 5-15 minutes, and manual sync may flush a small pending segment. |
