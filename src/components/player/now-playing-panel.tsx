@@ -44,10 +44,10 @@ export function NowPlayingPanel({
   const boundaryTransitionLockUntilRef = useRef(0);
   const railMemories = useLiveQuery(
     (): Promise<Memory[]> =>
-      collapsed && currentTrackId
+      currentTrackId
         ? db.memories.where("trackId").equals(currentTrackId).sortBy("createdAt")
         : Promise.resolve([] as Memory[]),
-    [collapsed, currentTrackId],
+    [currentTrackId],
     [] as Memory[],
   );
   const [memoryPhotoUrls, setMemoryPhotoUrls] = useState<Record<string, string>>({});
@@ -80,6 +80,7 @@ export function NowPlayingPanel({
   }
 
   function setCollapsedFromBoundaryPull(next: boolean) {
+    if (next && memoryTimelineItems.length === 0) return;
     const now = Date.now();
     if (now < boundaryTransitionLockUntilRef.current) return;
     boundaryTransitionLockUntilRef.current = now + PANEL_BOUNDARY_TRANSITION_LOCK_MS;
@@ -97,7 +98,7 @@ export function NowPlayingPanel({
     const urls: string[] = [];
 
     async function loadPhotoUrls() {
-      if (typeof URL.createObjectURL !== "function") {
+      if (!collapsed || typeof URL.createObjectURL !== "function") {
         setMemoryPhotoUrls({});
         return;
       }
@@ -120,7 +121,7 @@ export function NowPlayingPanel({
       cancelled = true;
       for (const url of urls) URL.revokeObjectURL(url);
     };
-  }, [railMemories]);
+  }, [collapsed, railMemories]);
 
   return (
     <div

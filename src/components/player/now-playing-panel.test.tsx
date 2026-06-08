@@ -47,7 +47,8 @@ vi.mock("lucide-react", () => ({
 
 vi.mock("dexie-react-hooks", () => ({
   useLiveQuery: (query: () => unknown) => {
-    query();
+    const result = query();
+    if (Array.isArray(result)) return result;
     return mocks.memories;
   },
 }));
@@ -206,6 +207,7 @@ describe("NowPlayingPanel collapse", () => {
   });
 
   it("collapses the expanded queue when the queue list pulls past the top", () => {
+    mocks.memories = [{ createdAt: 1, id: "mem_1", note: "late bus", trackId: "trk_current" }];
     render(<NowPlayingPanel collapsible />);
 
     fireEvent.wheel(screen.getByTestId("queue-list"), { deltaY: -120 });
@@ -213,7 +215,16 @@ describe("NowPlayingPanel collapse", () => {
     expect(mocks.saveSettings).toHaveBeenCalledWith({ nowPlayingRightRailCollapsed: true });
   });
 
+  it("does not collapse from queue pull when the current track has no memories", () => {
+    render(<NowPlayingPanel collapsible />);
+
+    fireEvent.wheel(screen.getByTestId("queue-list"), { deltaY: -120 });
+
+    expect(mocks.saveSettings).not.toHaveBeenCalled();
+  });
+
   it("ignores repeated boundary pulls during the same wheel gesture", () => {
+    mocks.memories = [{ createdAt: 1, id: "mem_1", note: "late bus", trackId: "trk_current" }];
     render(<NowPlayingPanel collapsible />);
 
     fireEvent.wheel(screen.getByTestId("queue-list"), { deltaY: -120 });
