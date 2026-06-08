@@ -227,7 +227,7 @@ No new page. The feature touches existing upload, list rows, Now Playing, and se
 - **Track hover actions** (`src/components/library/track-row.tsx`):
   - Keep absolute hover action layer.
   - Show download action.
-  - Phase 3 may convert the download icon into a small menu:
+  - Phase 3 converts the download icon into a small menu:
     - "Download original"
     - "Export with metadata"
 - **Upload flow** (`src/stores/player-store.ts`):
@@ -387,3 +387,4 @@ No new page. The feature touches existing upload, list rows, Now Playing, and se
 | 2026-06-09 | MUZERO | Phase 1 completed with M4A/MP4 fixture coverage for Apple-style metadata atoms and cover art. |
 | 2026-06-09 | MUZERO | Phase 3A started: original export is byte-identical, MP3 `withMetadata` writes ID3v2.3 tags and cover art, and unsupported containers fail explicitly. |
 | 2026-06-09 | MUZERO | Phase 3B completed FLAC `withMetadata` export with Vorbis comments and picture-block cover round-trip tests. |
+| 2026-06-09 | MUZERO | Phase 3 UI entry added: the row download action now offers original download and metadata export choices. |

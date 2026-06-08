@@ -90,6 +90,8 @@
     "like": "Like",
     "delete": "Delete",
     "download": "Download",
+    "downloadOriginal": "Download original",
+    "exportWithMetadata": "Export with metadata",
     "downloadFailed": "Couldn't download track",
     "addToSet": "Add to set",
     "noOtherSets": "No other sets",

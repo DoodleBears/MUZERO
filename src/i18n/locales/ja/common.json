@@ -87,6 +87,8 @@
     "like": "お気に入り",
     "delete": "削除",
     "download": "ダウンロード",
+    "downloadOriginal": "元ファイルをダウンロード",
+    "exportWithMetadata": "メタデータ付きで書き出し",
     "downloadFailed": "曲をダウンロードできませんでした",
     "addToSet": "他のセットに追加",
     "noOtherSets": "他のセットがありません",

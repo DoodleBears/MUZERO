@@ -87,6 +87,8 @@
     "like": "喜欢",
     "delete": "删除",
     "download": "下载",
+    "downloadOriginal": "下载原文件",
+    "exportWithMetadata": "导出含元数据",
     "downloadFailed": "下载失败",
     "addToSet": "添加到其他歌单",
     "noOtherSets": "没有其他歌单",

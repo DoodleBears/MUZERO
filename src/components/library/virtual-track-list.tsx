@@ -239,8 +239,13 @@ export function VirtualTrackList({
                 onPlay={() => handlePlay(track, virtualRow.index)}
                 onToggleLike={() => void setTrackLiked(track.id, !track.liked)}
                 onDelete={() => void deleteTrackRepo(track.id)}
-                onDownload={() => {
-                  void downloadTrackMedia(track).catch((error: unknown) =>
+                onDownloadOriginal={() => {
+                  void downloadTrackMedia(track, "original").catch((error: unknown) =>
+                    notify.error(t("track.downloadFailed"), { error, source: "track-download" }),
+                  );
+                }}
+                onExportWithMetadata={() => {
+                  void downloadTrackMedia(track, "withMetadata").catch((error: unknown) =>
                     notify.error(t("track.downloadFailed"), { error, source: "track-download" }),
                   );
                 }}

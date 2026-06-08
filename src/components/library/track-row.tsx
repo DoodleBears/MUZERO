@@ -30,7 +30,8 @@ interface TrackRowProps {
   onPlay: () => void;
   onToggleLike: () => void;
   onDelete: () => void;
-  onDownload: () => void;
+  onDownloadOriginal: () => void;
+  onExportWithMetadata: () => void;
   onAddToSession: (sessionId: string) => void;
 }
 
@@ -89,7 +90,8 @@ export const TrackRow = memo(function TrackRow({
   onPlay,
   onToggleLike,
   onDelete,
-  onDownload,
+  onDownloadOriginal,
+  onExportWithMetadata,
   onAddToSession,
 }: TrackRowProps) {
   const { t } = useTranslation();
@@ -161,15 +163,11 @@ export const TrackRow = memo(function TrackRow({
         >
           <Trash2 className="size-4" />
         </button>
-        <button
-          type="button"
-          onClick={onDownload}
+        <DownloadPopover
           disabled={track.status !== "ready" || (!track.blobId && !track.remoteMediaUrl)}
-          className="grid size-7 place-items-center rounded text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:pointer-events-none disabled:opacity-40"
-          aria-label={t("track.download")}
-        >
-          <Download className="size-4" />
-        </button>
+          onDownloadOriginal={onDownloadOriginal}
+          onExportWithMetadata={onExportWithMetadata}
+        />
         <AddToSetPopover
           disabled={addTargets.length === 0}
           sessions={addTargets}
@@ -179,6 +177,58 @@ export const TrackRow = memo(function TrackRow({
     </div>
   );
 });
+
+function DownloadPopover({
+  disabled,
+  onDownloadOriginal,
+  onExportWithMetadata,
+}: {
+  disabled: boolean;
+  onDownloadOriginal: () => void;
+  onExportWithMetadata: () => void;
+}) {
+  const { t } = useTranslation();
+  const [open, setOpen] = useState(false);
+  const itemClass =
+    "w-full rounded px-2 py-1.5 text-left text-xs text-foreground transition-colors hover:bg-accent";
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger
+        type="button"
+        disabled={disabled}
+        className="grid size-7 place-items-center rounded text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:pointer-events-none disabled:opacity-40"
+        aria-label={t("track.download")}
+      >
+        <Download className="size-4" />
+      </PopoverTrigger>
+      <PopoverContent className="w-44 p-1" side="left" sideOffset={10}>
+        <PopoverTitle className="sr-only">{t("track.download")}</PopoverTitle>
+        <PopoverDescription className="sr-only">{t("track.download")}</PopoverDescription>
+        <button
+          type="button"
+          className={itemClass}
+          onClick={() => {
+            onDownloadOriginal();
+            setOpen(false);
+          }}
+        >
+          {t("track.downloadOriginal")}
+        </button>
+        <button
+          type="button"
+          className={itemClass}
+          onClick={() => {
+            onExportWithMetadata();
+            setOpen(false);
+          }}
+        >
+          {t("track.exportWithMetadata")}
+        </button>
+      </PopoverContent>
+    </Popover>
+  );
+}
 
 function AddToSetPopover({
   disabled,

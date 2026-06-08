@@ -87,6 +87,8 @@
     "like": "좋아요",
     "delete": "삭제",
     "download": "다운로드",
+    "downloadOriginal": "원본 다운로드",
+    "exportWithMetadata": "메타데이터 포함 내보내기",
     "downloadFailed": "트랙을 다운로드할 수 없어요",
     "addToSet": "다른 세트에 추가",
     "noOtherSets": "다른 세트가 없어요",
