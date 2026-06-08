@@ -1794,7 +1794,7 @@ For a large shared playlist with many trusted devices, the UI should:
 - [x] Persist per-device `TrackPlaybackStats`.
 - [x] Export/import immutable playback event segments under `stats/events/<devicePublicId>/`.
 - [x] Flush playback event segments when either the event-count threshold or time threshold is reached.
-- [ ] Retry failed segment uploads without duplicating remote play counts.
+- [x] Retry failed segment uploads without duplicating remote play counts.
 - [ ] Export/import rebuildable per-device aggregate cache under `stats/devices/<devicePublicId>/aggregate.json`.
 - [x] Track uploaded event watermarks under `stats/devices/<devicePublicId>/checkpoint.json`.
 - [x] Add optional `stats/index.json` for discovery, but do not make it the write-hot source of truth.
@@ -2005,6 +2005,7 @@ Do not record secrets, full signed URLs, or media content.
 | 2026-06-09 | MUZERO | Phase 5 remote-only shared listening stats added: playback events can now be recorded with only a remote track reference, deriving local aggregate rows without importing the track or creating local per-track stats. |
 | 2026-06-09 | MUZERO | Phase 5 playback event segment flush policy added: automatic flush thresholds are clamped to 25-100 events or 5-15 minutes, and manual sync may flush a small pending segment. |
 | 2026-06-09 | MUZERO | Phase 5 auto playback event segment flush added to R2 export planning: manual sync still flushes small pending batches, while auto sync emits segment/checkpoint objects only after the event-count or oldest-event age threshold is reached. |
+| 2026-06-09 | MUZERO | Phase 5 playback event segment retry made idempotent: immutable `stats/events/<devicePublicId>/...json` objects are HEAD-checked on retry and skipped when already present, so a failed checkpoint upload can be retried without re-uploading the event segment. |
 | 2026-06-09 | MUZERO | Phase 5 playback checkpoint export added: event segment publish plans now include `stats/devices/<devicePublicId>/checkpoint.json` with the latest event watermark and immutable segment key. |
 | 2026-06-09 | MUZERO | Phase 5 optional `stats/index.json` discovery completed for stats sync: device entries can point to aggregate cache, checkpoint, and latest immutable event segment without making the index the write-hot source of truth. |
 | 2026-06-09 | MUZERO | Phase 5 stats/profile write policy added: only owner/trusted drives with local R2 credentials may receive stats or opted-in device profiles, keeping read-only shared-link listener data local by default. |

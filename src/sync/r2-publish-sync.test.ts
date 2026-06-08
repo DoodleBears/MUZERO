@@ -100,4 +100,59 @@ describe("runR2PublishSync", () => {
     expect(runs[0]).toMatchObject({ status: "failed", failed: 1 });
     expect(object?.lastUploadedRunId).toBe("run_old");
   });
+
+  it("retries a failed playback segment sync by skipping an already uploaded immutable segment", async () => {
+    const retryPlan: R2ExportPlan = {
+      driveId: "drv_1",
+      libraryId: "lib_1",
+      baseUrl: "https://music.example.com/muzero/",
+      totalBytes: 20,
+      objects: [
+        {
+          kind: "stats-events-segment",
+          key: "stats/events/dvc_1/1000-1000-abcdef0123456789.json",
+          contentType: "application/json",
+          bytes: 12,
+          body: '{"events":[]}\n',
+        },
+        {
+          kind: "stats-checkpoint",
+          key: "stats/devices/dvc_1/checkpoint.json",
+          contentType: "application/json",
+          bytes: 8,
+          body: '{"ok":1}\n',
+        },
+      ],
+    };
+
+    await expect(
+      runR2PublishSync(retryPlan, credentials, {
+        db,
+        fetcher: async (url, init) => {
+          if (init?.method === "PUT" && String(url).includes("checkpoint.json")) {
+            return new Response(null, { status: 500 });
+          }
+          return new Response(null, { status: 204 });
+        },
+      }),
+    ).rejects.toThrow("Failed to upload stats/devices/dvc_1/checkpoint.json");
+
+    const calls: Array<{ method?: string; url: string }> = [];
+    const result = await runR2PublishSync(retryPlan, credentials, {
+      db,
+      fetcher: async (url, init) => {
+        calls.push({ method: init?.method, url: String(url) });
+        return new Response(null, { status: 204 });
+      },
+    });
+
+    const run = await db.syncRuns.get(result.runId);
+    const segmentCalls = calls.filter((call) => call.url.includes("/stats/events/"));
+    expect(segmentCalls.map((call) => call.method)).toEqual(["HEAD"]);
+    expect(run).toMatchObject({
+      status: "completed",
+      uploaded: 1,
+      skipped: 1,
+    });
+  });
 });

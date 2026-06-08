@@ -80,7 +80,7 @@ async function shouldSkipObject(
   fetcher: SyncFetch,
   options: Pick<R2PublishOptions, "now">,
 ): Promise<boolean> {
-  if (!object.sha256) return false;
+  if (!isSkippableObject(object)) return false;
   const response = await r2SignedFetch({
     fetcher,
     credentials,
@@ -90,6 +90,10 @@ async function shouldSkipObject(
     now: options.now,
   });
   return response.ok;
+}
+
+function isSkippableObject(object: R2ExportObject): boolean {
+  return Boolean(object.sha256) || object.kind === "stats-events-segment";
 }
 
 function throwIfAborted(signal?: AbortSignal): void {
