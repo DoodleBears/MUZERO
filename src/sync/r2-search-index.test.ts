@@ -1,8 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { MuzeroDB } from "@/db/muzero-db";
 import {
+  importRemoteSearchCatalog,
   importRemoteSetSearchPage,
   importRemoteTrackSearchPage,
+  type SyncCatalogFetch,
   searchRemoteTracks,
 } from "./r2-search-index";
 
@@ -21,6 +23,21 @@ afterEach(async () => {
     req.onsuccess = req.onerror = () => resolve();
   });
 });
+
+function jsonResponse(body: unknown): Response {
+  return new Response(JSON.stringify(body), {
+    status: 200,
+    headers: { "content-type": "application/json" },
+  });
+}
+
+function fetchMap(entries: Record<string, unknown>): SyncCatalogFetch {
+  return async (input) => {
+    const hit = entries[String(input)];
+    if (!hit) return new Response("missing", { status: 404 });
+    return jsonResponse(hit);
+  };
+}
 
 describe("remote search index", () => {
   it("imports remote track search rows into IndexedDB", async () => {
@@ -152,5 +169,82 @@ describe("remote search index", () => {
       name: "Tokyo Night Drive",
       trackCount: 24,
     });
+  });
+
+  it("fetches a remote catalog and imports paged set/track rows", async () => {
+    await importRemoteSearchCatalog(
+      {
+        catalogId: "drv_a:lib_abc",
+        driveId: "drv_a",
+        scope: "library",
+        baseUrl: "https://music.example.com/muzero/",
+        catalogUrl: "https://music.example.com/muzero/catalog/library.json",
+        fetcher: fetchMap({
+          "https://music.example.com/muzero/catalog/library.json": {
+            schema: "muzero-r2-search-catalog-v1",
+            libraryId: "lib_abc",
+            updatedAt: "2026-06-09T00:00:00.000Z",
+            locale: "en",
+            pages: {
+              sets: ["catalog/sets-page-0001.json"],
+              tracks: ["catalog/tracks-page-0001.json"],
+              shares: [],
+            },
+            counts: {
+              sets: 1,
+              tracks: 1,
+              shares: 0,
+            },
+          },
+          "https://music.example.com/muzero/catalog/tracks-page-0001.json": {
+            schema: "muzero-r2-track-search-page-v1",
+            page: 1,
+            updatedAt: "2026-06-09T00:00:00.000Z",
+            tracks: [
+              {
+                id: "trk_blue",
+                title: "Blue Highway",
+                setIds: ["ses_tokyo"],
+                shareIds: [],
+                kind: "audio",
+                origin: "uploaded",
+                durationSec: 214,
+                tags: ["night"],
+                memoryText: "friends sea night",
+                briefCaption: null,
+                artistLike: null,
+                updatedAt: 1780944000000,
+                mediaAvailable: true,
+              },
+            ],
+          },
+          "https://music.example.com/muzero/catalog/sets-page-0001.json": {
+            schema: "muzero-r2-set-search-page-v1",
+            page: 1,
+            updatedAt: "2026-06-09T00:00:00.000Z",
+            sets: [
+              {
+                id: "ses_tokyo",
+                name: "Tokyo Night Drive",
+                trackCount: 1,
+                updatedAt: 1780944000000,
+              },
+            ],
+          },
+        }),
+      },
+      db,
+    );
+
+    expect(await db.remoteSearchCatalogs.get("drv_a:lib_abc")).toMatchObject({
+      driveId: "drv_a",
+      scope: "library",
+      trackCount: 1,
+      setCount: 1,
+    });
+    expect((await searchRemoteTracks("blue sea", db)).map((row) => row.trackId)).toEqual([
+      "trk_blue",
+    ]);
+    expect(await db.remoteSearchSets.count()).toBe(1);
   });
 });

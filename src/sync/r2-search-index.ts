@@ -1,12 +1,19 @@
 import { db as defaultDb, type MuzeroDB } from "@/db/muzero-db";
-import type { RemoteSearchTrack } from "@/db/types";
+import type { RemoteSearchCatalog, RemoteSearchTrack } from "@/db/types";
+import { getAppFetch } from "@/lib/platform";
 import {
   matchesRemoteSearchTrack,
   type R2SetSearchPage,
   type R2TrackSearchPage,
+  r2SearchCatalogSchema,
+  r2SetSearchPageSchema,
+  r2TrackSearchPageSchema,
   remoteSearchSetToRow,
   remoteSearchTrackToRow,
 } from "./r2-search-catalog";
+import { resolveRemoteObjectUrl } from "./r2-url";
+
+export type SyncCatalogFetch = typeof globalThis.fetch;
 
 export interface ImportRemoteTrackSearchPageInput {
   catalogId: string;
@@ -20,6 +27,30 @@ export interface ImportRemoteSetSearchPageInput {
   driveId: string;
   shareId?: string;
   page: R2SetSearchPage;
+}
+
+export interface ImportRemoteSearchCatalogInput {
+  catalogId: string;
+  driveId: string;
+  shareId?: string;
+  scope: RemoteSearchCatalog["scope"];
+  baseUrl: string;
+  catalogUrl: string;
+  fetcher?: SyncCatalogFetch;
+}
+
+async function resolveFetcher(fetcher?: SyncCatalogFetch): Promise<SyncCatalogFetch> {
+  return fetcher ?? getAppFetch();
+}
+
+async function fetchJson(url: string, label: string, fetcher: SyncCatalogFetch): Promise<unknown> {
+  const response = await fetcher(url);
+  if (!response.ok) throw new Error(`Failed to fetch ${label}: HTTP ${response.status}`);
+  try {
+    return await response.json();
+  } catch (error) {
+    throw new Error(`Failed to parse ${label} JSON`, { cause: error });
+  }
 }
 
 export async function importRemoteTrackSearchPage(
@@ -50,6 +81,55 @@ export async function importRemoteSetSearchPage(
     }),
   );
   await db.remoteSearchSets.bulkPut(rows);
+}
+
+export async function importRemoteSearchCatalog(
+  input: ImportRemoteSearchCatalogInput,
+  db: MuzeroDB = defaultDb,
+): Promise<void> {
+  const fetcher = await resolveFetcher(input.fetcher);
+  const rawCatalog = await fetchJson(input.catalogUrl, "search catalog", fetcher);
+  const catalog = r2SearchCatalogSchema.parse(rawCatalog);
+
+  await db.remoteSearchCatalogs.put({
+    id: input.catalogId,
+    driveId: input.driveId,
+    shareId: input.shareId,
+    scope: input.scope,
+    sourceUrl: input.catalogUrl,
+    updatedAt: Date.parse(catalog.updatedAt),
+    syncedAt: Date.now(),
+    setCount: catalog.counts.sets,
+    trackCount: catalog.counts.tracks,
+  });
+
+  for (const pageRef of catalog.pages.tracks) {
+    const pageUrl = resolveRemoteObjectUrl(input.baseUrl, pageRef);
+    const rawPage = await fetchJson(pageUrl, "track search page", fetcher);
+    await importRemoteTrackSearchPage(
+      {
+        catalogId: input.catalogId,
+        driveId: input.driveId,
+        shareId: input.shareId,
+        page: r2TrackSearchPageSchema.parse(rawPage),
+      },
+      db,
+    );
+  }
+
+  for (const pageRef of catalog.pages.sets) {
+    const pageUrl = resolveRemoteObjectUrl(input.baseUrl, pageRef);
+    const rawPage = await fetchJson(pageUrl, "set search page", fetcher);
+    await importRemoteSetSearchPage(
+      {
+        catalogId: input.catalogId,
+        driveId: input.driveId,
+        shareId: input.shareId,
+        page: r2SetSearchPageSchema.parse(rawPage),
+      },
+      db,
+    );
+  }
 }
 
 export async function searchRemoteTracks(
