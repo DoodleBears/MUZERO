@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { MuzeroDB } from "@/db/muzero-db";
-import { getOrCreateLocalDevice, updateLocalDeviceProfile } from "./device-repo";
+import { getLocalDevice, getOrCreateLocalDevice, updateLocalDeviceProfile } from "./device-repo";
 
 let db: MuzeroDB;
 let dbName: string;
@@ -72,6 +72,43 @@ describe("device repository", () => {
       avatarSeed: "ocean-blue",
       profileRevision: 2,
       lastSeenAt: 2000,
+    });
+  });
+
+  it("reads the local device without touching lastSeenAt", async () => {
+    await getOrCreateLocalDevice(
+      {
+        now: 1000,
+        publicIdFactory: () => "dvc_test",
+        platform: "browser",
+      },
+      db,
+    );
+
+    expect(await getLocalDevice(db)).toMatchObject({
+      publicId: "dvc_test",
+      lastSeenAt: 1000,
+    });
+  });
+
+  it("keeps the previous display name when the profile form submits a blank value", async () => {
+    await getOrCreateLocalDevice(
+      {
+        now: 1000,
+        publicIdFactory: () => "dvc_test",
+        platform: "browser",
+      },
+      db,
+    );
+    await updateLocalDeviceProfile({ name: "Studio laptop", avatarSeed: "violet", now: 2000 }, db);
+
+    const updated = await updateLocalDeviceProfile({ name: "   ", avatarSeed: "", now: 3000 }, db);
+
+    expect(updated).toMatchObject({
+      name: "Studio laptop",
+      avatarSeed: "violet",
+      profileRevision: 3,
+      lastSeenAt: 3000,
     });
   });
 });

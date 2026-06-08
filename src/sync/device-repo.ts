@@ -21,6 +21,10 @@ export interface UpdateLocalDeviceProfileInput {
 
 const LOCAL_DEVICE_ID = "dev_local";
 
+export function getLocalDevice(db: MuzeroDB = defaultDb): Promise<DeviceRecord | undefined> {
+  return db.devices.get(LOCAL_DEVICE_ID);
+}
+
 export async function getOrCreateLocalDevice(
   options: LocalDeviceOptions = {},
   db: MuzeroDB = defaultDb,

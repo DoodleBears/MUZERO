@@ -1756,7 +1756,7 @@ For a large shared playlist with many trusted devices, the UI should:
 **Tasks:**
 
 - [x] Generate one anonymous random `DeviceRecord.publicId` per app profile.
-- [ ] Add UI to rename device.
+- [x] Add UI to rename device.
 - [x] Add optional device avatar/color seed for attribution chips.
 - [ ] Add optional uploaded avatar image with local storage and remote profile object reference.
 - [ ] Publish `DevicePublicProfile` to owner/trusted drives when enabled and write permission exists.
@@ -1967,3 +1967,4 @@ Do not record secrets, full signed URLs, or media content.
 | 2026-06-09 | MUZERO | Phase 6 presence foundation started with `muzero-r2-presence-v1` schema, per-device object key helper, TTL-based active filtering, one-minute heartbeat throttling, owner/trusted write-policy checks, and `presenceEnabled: false` default settings. |
 | 2026-06-09 | MUZERO | Phase 6 Settings toggle added for optional Listening Now presence, with en/zh/ja/ko copy explaining trusted writable-drive scope and one-minute heartbeat cost/operations limits. |
 | 2026-06-09 | MUZERO | Phase 1 shared-link registration hardened: public manifest links now register local read-only drive/share rows only after manifest validation succeeds, and invalid/fetch-failed manifests are covered by IndexedDB non-mutation tests. |
+| 2026-06-09 | MUZERO | Phase 5 device profile UI added in Settings: users can rename the anonymous local device, rotate a generated avatar seed, and opt into profile publishing for future writable-drive sync while uploaded avatar images remain a later task. |

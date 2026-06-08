@@ -5,11 +5,13 @@ import {
   Cloud,
   Download,
   ExternalLink,
+  RefreshCw,
   ShieldCheck,
   Trash2,
+  UserRound,
   XCircle,
 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { type CSSProperties, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { BackgroundSettings } from "@/components/settings/background-settings";
 import { VisualizerSettings } from "@/components/settings/visualizer-settings";
@@ -41,6 +43,11 @@ import { type MusicGenProviderId, resolveMusicGenProvider } from "@/musicgen/reg
 import { usePlayerStore } from "@/stores/player-store";
 import { listCloudDrives, upsertCloudDrive } from "@/sync/cloud-drive-repo";
 import { buildOwnedR2Drive, saveR2CredentialsForDrive } from "@/sync/cloud-drive-settings";
+import {
+  getLocalDevice,
+  getOrCreateLocalDevice,
+  updateLocalDeviceProfile,
+} from "@/sync/device-repo";
 import {
   buildRecommendedR2Cors,
   checkR2PublicRead,
@@ -116,6 +123,7 @@ export function SettingsPage() {
   const { t, i18n } = useTranslation();
   const settings = useSettings();
   const cloudDrives = useLiveQuery(() => listCloudDrives(), [], []);
+  const localDevice = useLiveQuery(() => getLocalDevice(), [], undefined);
   const rebuildEngine = usePlayerStore((s) => s.rebuildEngine);
   const setActiveSession = usePlayerStore((s) => s.setActiveSession);
   const [draft, setDraft] = useState<AppSettings>(settings);
@@ -148,9 +156,22 @@ export function SettingsPage() {
   const [systemFontItems, setSystemFontItems] = useState<ComboboxItem[]>([]);
   const [loadingFonts, setLoadingFonts] = useState(false);
   const fontsLoadedRef = useRef(false);
+  const [deviceName, setDeviceName] = useState("");
+  const [deviceAvatarSeed, setDeviceAvatarSeed] = useState("");
+  const [devicePublishProfile, setDevicePublishProfile] = useState(false);
+  const [deviceSaved, setDeviceSaved] = useState(false);
 
   // Keep the local draft in sync once the persisted settings load.
   useEffect(() => setDraft(settings), [settings]);
+  useEffect(() => {
+    void getOrCreateLocalDevice();
+  }, []);
+  useEffect(() => {
+    if (!localDevice) return;
+    setDeviceName(localDevice.name);
+    setDeviceAvatarSeed(localDevice.avatarSeed ?? localDevice.publicId);
+    setDevicePublishProfile(localDevice.publishProfile);
+  }, [localDevice]);
 
   // The font stack currently in effect (stored preference → system default).
   const currentFont = settings.fontFamily ?? DEFAULT_FONT_STACK;
@@ -236,6 +257,18 @@ export function SettingsPage() {
     await saveSettings(draft);
     await rebuildEngine();
     setSaved(true);
+  }
+
+  async function saveDeviceProfile() {
+    const updated = await updateLocalDeviceProfile({
+      name: deviceName,
+      avatarSeed: deviceAvatarSeed,
+      publishProfile: devicePublishProfile,
+    });
+    setDeviceName(updated.name);
+    setDeviceAvatarSeed(updated.avatarSeed ?? updated.publicId);
+    setDevicePublishProfile(updated.publishProfile);
+    setDeviceSaved(true);
   }
 
   async function checkCloud() {
@@ -514,6 +547,104 @@ export function SettingsPage() {
         <VisualizerSettings />
 
         <TraceDiagnostics />
+
+        <Card>
+          <CardHeader>
+            <CardTitle>{t("settings.deviceTitle")}</CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-4">
+            <div className="flex items-center gap-3">
+              <div
+                className="grid size-14 shrink-0 place-items-center rounded-md text-white shadow-sm"
+                style={deviceAvatarStyle(deviceAvatarSeed || localDevice?.publicId)}
+              >
+                <UserRound className="size-7" />
+              </div>
+              <div className="min-w-0">
+                <p className="truncate font-medium text-sm">
+                  {localDevice?.name ?? t("settings.devicePending")}
+                </p>
+                <p className="text-muted-foreground text-xs">
+                  {t("settings.deviceMeta", {
+                    publicId: localDevice?.publicId ?? "pending",
+                    revision: localDevice?.profileRevision ?? 0,
+                  })}
+                </p>
+              </div>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Field label={t("settings.deviceName")}>
+                <Input
+                  value={deviceName}
+                  onChange={(event) => {
+                    setDeviceName(event.target.value);
+                    setDeviceSaved(false);
+                  }}
+                  placeholder={t("settings.deviceNamePlaceholder")}
+                />
+              </Field>
+              <Field label={t("settings.deviceAvatarSeed")}>
+                <div className="flex gap-2">
+                  <Input
+                    value={deviceAvatarSeed}
+                    onChange={(event) => {
+                      setDeviceAvatarSeed(event.target.value);
+                      setDeviceSaved(false);
+                    }}
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    aria-label={t("settings.deviceAvatarRandomize")}
+                    onClick={() => {
+                      setDeviceAvatarSeed(randomAvatarSeed());
+                      setDeviceSaved(false);
+                    }}
+                  >
+                    <RefreshCw />
+                  </Button>
+                </div>
+              </Field>
+            </div>
+
+            <label className="flex items-start gap-3 rounded-md border border-border p-3">
+              <input
+                type="checkbox"
+                checked={devicePublishProfile}
+                onChange={(event) => {
+                  setDevicePublishProfile(event.currentTarget.checked);
+                  setDeviceSaved(false);
+                }}
+                className="mt-1 size-4 accent-primary"
+              />
+              <span className="flex flex-col gap-1">
+                <span className="font-medium text-sm">{t("settings.deviceProfilePublish")}</span>
+                <span className="text-muted-foreground text-xs">
+                  {t("settings.deviceProfilePublishHint")}
+                </span>
+              </span>
+            </label>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                type="button"
+                size="sm"
+                disabled={!localDevice || !deviceName.trim()}
+                onClick={() => void saveDeviceProfile()}
+              >
+                <UserRound />
+                {t("settings.deviceProfileSave")}
+              </Button>
+              {deviceSaved && (
+                <span className="text-muted-foreground text-xs">
+                  {t("settings.deviceProfileSaved")}
+                </span>
+              )}
+            </div>
+          </CardContent>
+        </Card>
 
         <Card>
           <CardHeader>
@@ -1022,6 +1153,28 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 
 function browserOrigin(): string {
   return globalThis.location?.origin ?? "http://localhost:1420";
+}
+
+function deviceAvatarStyle(seed?: string): CSSProperties {
+  const hash = hashString(seed || "muzero");
+  const hue = hash % 360;
+  return {
+    background: `linear-gradient(135deg, hsl(${hue} 72% 48%), hsl(${(hue + 78) % 360} 74% 42%))`,
+  };
+}
+
+function randomAvatarSeed(): string {
+  const bytes = new Uint8Array(8);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+function hashString(value: string): number {
+  let hash = 0;
+  for (let i = 0; i < value.length; i += 1) {
+    hash = (hash * 31 + value.charCodeAt(i)) >>> 0;
+  }
+  return hash;
 }
 
 function sourceHost(url: string): string {
