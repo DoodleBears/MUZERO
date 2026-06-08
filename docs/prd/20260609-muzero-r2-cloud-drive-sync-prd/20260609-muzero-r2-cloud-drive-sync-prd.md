@@ -15,7 +15,7 @@
 |-------|------|--------|------|
 | 1 | Manifest protocol + read-only subscription | 🔄 In Progress | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | R2 Setup Wizard + connection validation | ✅ Done | [Phase 2 Checklist](#phase-2-checklist) |
-| 3 | Local-to-cloud publish sync with visible progress | 🔲 Pending | [Phase 3 Checklist](#phase-3-checklist) |
+| 3 | Local-to-cloud publish sync with visible progress | 🔄 In Progress | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | Cloud-to-local pull sync + conflict handling | 🔲 Pending | [Phase 4 Checklist](#phase-4-checklist) |
 | 5 | Anonymous device registry + playback stats sync | 🔲 Pending | [Phase 5 Checklist](#phase-5-checklist) |
 | 6 | Optional low-frequency currently-playing presence | 🔲 Pending | [Phase 6 Checklist](#phase-6-checklist) |
@@ -1689,8 +1689,8 @@ For a large shared playlist with many trusted devices, the UI should:
 
 **Tasks:**
 
-- [ ] Implement local export plan from `sessions`, `tracks`, `memories`, and `mediaBlobs`.
-- [ ] Compute object keys for media/video/cover/memory photos.
+- [x] Implement local export plan from `sessions`, `tracks`, `memories`, and `mediaBlobs`.
+- [x] Compute object keys for media/video/cover/memory photos.
 - [ ] Upload missing/changed media first.
 - [ ] Upload per-set `index.json`.
 - [ ] Upload the current device `DevicePublicProfile` when profile publishing is enabled.
@@ -1954,3 +1954,4 @@ Do not record secrets, full signed URLs, or media content.
 | 2026-06-09 | MUZERO | Phase 2 local cloud drive/share registry added with Dexie v12 tables and repository helpers. |
 | 2026-06-09 | MUZERO | Phase 2 R2 healthcheck core added for public manifest read validation, S3-compatible write probes, secret masking, and recommended CORS JSON generation. |
 | 2026-06-09 | MUZERO | Phase 2 Settings Cloud Drive wizard completed with setup checklist, shared-link registry, owner validation, local-only R2 credentials, copyable CORS JSON, connected-drive list, and en/zh/ja/ko strings. |
+| 2026-06-09 | MUZERO | Phase 3 implementation started: local export plan now collects set/track/memory/media rows, computes content-addressed R2 keys for media/cover/memory photos, emits per-set index writes, and keeps root manifest last. |
