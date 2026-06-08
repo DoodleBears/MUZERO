@@ -49,6 +49,50 @@ describe("playback listen tracker", () => {
     expect(tracker.flush(2000)?.listenedSec).toBe(0);
   });
 
+  it("does not bridge paused time when playback resumes", () => {
+    const tracker = createPlaybackListenTracker({ maxDeltaSec: 30 });
+
+    tracker.update({
+      trackId: "trk_1",
+      positionSec: 0,
+      durationSec: 180,
+      now: 1000,
+      context: { source: "local" },
+    });
+    tracker.update({
+      trackId: "trk_1",
+      positionSec: 10,
+      durationSec: 180,
+      now: 11_000,
+      context: { source: "local" },
+    });
+    expect(tracker.flush(11_000)).toMatchObject({
+      listenedSec: 10,
+      trackId: "trk_1",
+    });
+
+    tracker.update({
+      trackId: "trk_1",
+      positionSec: 10,
+      durationSec: 180,
+      now: 71_000,
+      context: { source: "local" },
+    });
+    tracker.update({
+      trackId: "trk_1",
+      positionSec: 15,
+      durationSec: 180,
+      now: 76_000,
+      context: { source: "local" },
+    });
+
+    expect(tracker.flush(76_000)).toMatchObject({
+      listenedSec: 5,
+      startedAt: 71_000,
+      trackId: "trk_1",
+    });
+  });
+
   it("flushes the previous track when the active track changes", () => {
     const tracker = createPlaybackListenTracker();
 
@@ -69,5 +113,32 @@ describe("playback listen tracker", () => {
 
     expect(flushed).toMatchObject({ trackId: "trk_1", listenedSec: 0, endedAt: 6000 });
     expect(tracker.flush(7000)).toMatchObject({ trackId: "trk_2" });
+  });
+
+  it("flushes the active listening window on app close", () => {
+    const tracker = createPlaybackListenTracker({ maxDeltaSec: 30 });
+
+    tracker.update({
+      trackId: "trk_1",
+      positionSec: 0,
+      durationSec: 180,
+      now: 1000,
+      context: { source: "local" },
+    });
+    tracker.update({
+      trackId: "trk_1",
+      positionSec: 12,
+      durationSec: 180,
+      now: 13_000,
+      context: { source: "local" },
+    });
+
+    expect(tracker.flush(20_000)).toMatchObject({
+      endedAt: 20_000,
+      listenedSec: 12,
+      startedAt: 1000,
+      trackId: "trk_1",
+    });
+    expect(tracker.flush(21_000)).toBeNull();
   });
 });

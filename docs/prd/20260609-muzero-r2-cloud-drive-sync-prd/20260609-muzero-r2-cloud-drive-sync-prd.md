@@ -1801,7 +1801,7 @@ For a large shared playlist with many trusted devices, the UI should:
 - [x] Keep public read-only listener stats local when no R2 write credentials are configured.
 - [x] Keep read-only shared-link device profile/avatar local unless the user also has a writable Owner R2 target.
 - [x] Reconcile existing `Track.playCount` with per-device stats.
-- [ ] Add tests around play threshold, pause/resume, seek, track change, and app close.
+- [x] Add tests around play threshold, pause/resume, seek, track change, and app close.
 
 ### Phase 5 Checklist
 
@@ -2012,6 +2012,7 @@ Do not record secrets, full signed URLs, or media content.
 | 2026-06-09 | MUZERO | Phase 3 publish-order safety covered: R2 publish aborts before `manifest.json` when an earlier referenced object such as a set index fails, so readers do not see manifests pointing at missing objects. |
 | 2026-06-09 | MUZERO | Phase 3 sync progress visibility added: Settings now summarizes the latest sync run with current phase, object count, byte count/progress ratio, failure count, and error text backed by a tested progress summary helper. |
 | 2026-06-09 | MUZERO | Phase 5 memory author attribution added to memory cards: each memory with an author snapshot now shows the device display name or public id plus a generated avatar fallback seeded by `avatarSeed`/device id. |
+| 2026-06-09 | MUZERO | Phase 5 playback stats edge-case tests completed: threshold, seek jump filtering, pause/resume boundaries, track-change flushing, and app-close flushing are covered across the listen tracker and stats persistence suites. |
 | 2026-06-09 | MUZERO | Phase 5 playback checkpoint export added: event segment publish plans now include `stats/devices/<devicePublicId>/checkpoint.json` with the latest event watermark and immutable segment key. |
 | 2026-06-09 | MUZERO | Phase 5 optional `stats/index.json` discovery completed for stats sync: device entries can point to aggregate cache, checkpoint, and latest immutable event segment without making the index the write-hot source of truth. |
 | 2026-06-09 | MUZERO | Phase 5 stats/profile write policy added: only owner/trusted drives with local R2 credentials may receive stats or opted-in device profiles, keeping read-only shared-link listener data local by default. |
