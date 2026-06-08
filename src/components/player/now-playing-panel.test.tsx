@@ -37,9 +37,6 @@ vi.mock("react-i18next", () => ({
 }));
 
 vi.mock("lucide-react", () => ({
-  PanelBottomClose: ({ className }: { className?: string }) => (
-    <svg className={className} data-testid="panel-bottom-close-icon" />
-  ),
   PanelBottomOpen: ({ className }: { className?: string }) => (
     <svg className={className} data-testid="panel-bottom-open-icon" />
   ),
@@ -75,21 +72,8 @@ vi.mock("@/db/repositories", () => ({
 }));
 
 vi.mock("@/components/library/virtual-track-list", () => ({
-  VirtualTrackList: ({
-    className,
-    edgePullFeedback,
-    onPullPastStart,
-  }: {
-    className?: string;
-    edgePullFeedback?: boolean;
-    onPullPastStart?: () => void;
-  }) => (
-    <div
-      className={className}
-      data-edge-pull-feedback={edgePullFeedback ? "true" : "false"}
-      data-testid="queue-list"
-      onWheel={() => onPullPastStart?.()}
-    />
+  VirtualTrackList: ({ className }: { className?: string }) => (
+    <div className={className} data-testid="queue-list" />
   ),
 }));
 
@@ -98,14 +82,10 @@ vi.mock("@/components/player/memory-timeline-rail", () => ({
     initialOffset,
     memories,
     onOffsetChange,
-    onPullPastEnd,
-    onPullPastStart,
   }: {
     initialOffset?: number;
     memories: unknown[];
     onOffsetChange?: (offsetPx: number) => void;
-    onPullPastEnd?: () => void;
-    onPullPastStart?: () => void;
   }) =>
     (() => {
       mocks.timelineMemories = memories;
@@ -115,10 +95,6 @@ vi.mock("@/components/player/memory-timeline-rail", () => ({
           data-offset={initialOffset}
           data-testid="memory-timeline-rail"
           onClick={() => onOffsetChange?.(160)}
-          onWheel={(event) => {
-            if (event.deltaY < 0) onPullPastStart?.();
-            else onPullPastEnd?.();
-          }}
           type="button"
         />
       );
@@ -156,28 +132,27 @@ describe("NowPlayingPanel collapse", () => {
     vi.useRealTimers();
   });
 
-  it("persists collapse requests from the desktop right rail", () => {
+  it("switches from queue to memory with the floating toggle", () => {
+    mocks.memories = [{ createdAt: 1, id: "mem_1", note: "late bus", trackId: "trk_current" }];
     render(<NowPlayingPanel collapsible />);
 
     expect(screen.getByTestId("now-playing-panel")).toHaveAttribute("data-state", "expanded");
     expect(screen.getByTestId("queue-list").closest(".mt-chrome-top")).toBeInTheDocument();
-    expect(screen.getByTestId("queue-list")).toHaveAttribute("data-edge-pull-feedback", "false");
     expect(screen.getByTestId("queue-list")).not.toHaveClass("pt-12");
-    const collapseButton = screen.getByRole("button", { name: "Close queue" });
-    expect(collapseButton).toHaveClass("flex-1");
-    expect(collapseButton).toContainElement(screen.getByTestId("panel-bottom-close-icon"));
-    fireEvent.click(collapseButton);
+    const toggle = screen.getByRole("button", { name: "Memory" });
+    expect(toggle).toHaveAttribute("data-testid", "now-playing-panel-floating-toggle");
+    fireEvent.click(toggle);
 
     expect(mocks.saveSettings).toHaveBeenCalledWith({ nowPlayingRightRailCollapsed: true });
   });
 
-  it("keeps only the compact header when collapsed and can expand again", () => {
+  it("switches from memory to queue with the floating toggle", () => {
     mocks.collapsed = true;
+    mocks.memories = [{ createdAt: 1, id: "mem_1", note: "late bus", trackId: "trk_current" }];
 
     render(<NowPlayingPanel collapsible />);
 
     expect(screen.getByTestId("now-playing-panel")).toHaveAttribute("data-state", "collapsed");
-    expect(screen.getByTestId("now-playing-panel-compact-header")).toHaveClass("rounded-b-none");
     expect(screen.getByRole("button", { name: "Up next" })).toContainElement(
       screen.getByTestId("panel-bottom-open-icon"),
     );
@@ -187,51 +162,11 @@ describe("NowPlayingPanel collapse", () => {
     expect(mocks.saveSettings).toHaveBeenCalledWith({ nowPlayingRightRailCollapsed: false });
   });
 
-  it("expands the collapsed queue when the memory rail pulls past either edge", () => {
-    vi.useFakeTimers();
-    mocks.collapsed = true;
-
+  it("does not show the memory toggle when the current track has no memories", () => {
     render(<NowPlayingPanel collapsible />);
 
-    fireEvent.wheel(screen.getByTestId("memory-timeline-rail"), { deltaY: 120 });
-    vi.advanceTimersByTime(651);
-    fireEvent.wheel(screen.getByTestId("memory-timeline-rail"), { deltaY: -120 });
-
-    expect(mocks.saveSettings).toHaveBeenCalledTimes(2);
-    expect(mocks.saveSettings).toHaveBeenNthCalledWith(1, {
-      nowPlayingRightRailCollapsed: false,
-    });
-    expect(mocks.saveSettings).toHaveBeenNthCalledWith(2, {
-      nowPlayingRightRailCollapsed: false,
-    });
-  });
-
-  it("collapses the expanded queue when the queue list pulls past the top", () => {
-    mocks.memories = [{ createdAt: 1, id: "mem_1", note: "late bus", trackId: "trk_current" }];
-    render(<NowPlayingPanel collapsible />);
-
-    fireEvent.wheel(screen.getByTestId("queue-list"), { deltaY: -120 });
-
-    expect(mocks.saveSettings).toHaveBeenCalledWith({ nowPlayingRightRailCollapsed: true });
-  });
-
-  it("does not collapse from queue pull when the current track has no memories", () => {
-    render(<NowPlayingPanel collapsible />);
-
-    fireEvent.wheel(screen.getByTestId("queue-list"), { deltaY: -120 });
-
+    expect(screen.queryByRole("button", { name: "Memory" })).not.toBeInTheDocument();
     expect(mocks.saveSettings).not.toHaveBeenCalled();
-  });
-
-  it("ignores repeated boundary pulls during the same wheel gesture", () => {
-    mocks.memories = [{ createdAt: 1, id: "mem_1", note: "late bus", trackId: "trk_current" }];
-    render(<NowPlayingPanel collapsible />);
-
-    fireEvent.wheel(screen.getByTestId("queue-list"), { deltaY: -120 });
-    fireEvent.wheel(screen.getByTestId("queue-list"), { deltaY: -120 });
-
-    expect(mocks.saveSettings).toHaveBeenCalledTimes(1);
-    expect(mocks.saveSettings).toHaveBeenCalledWith({ nowPlayingRightRailCollapsed: true });
   });
 
   it("feeds the collapsed memory rail from settings and persists its scroll position", () => {

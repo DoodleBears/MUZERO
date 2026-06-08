@@ -1,7 +1,6 @@
 "use client";
 
-import { useVirtualizer } from "@tanstack/react-virtual";
-import { AnimatePresence, motion, useMotionValue, useSpring } from "motion/react";
+import { AnimatePresence, motion } from "motion/react";
 import {
   type ReactNode,
   type UIEvent,
@@ -12,6 +11,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { MemoryNotesWaterfall } from "@/components/track/memory-notes-waterfall";
 import type { Memory } from "@/db/types";
 import { resolveMemoryFitText } from "@/lib/memory-fit-text";
 import {
@@ -26,16 +26,6 @@ import {
 import { cn } from "@/lib/utils";
 
 const MEMORY_CAROUSEL_LAYOUT_SETTLE_MS = 460;
-const MEMORY_TIMELINE_BOUNDARY_PULL_THRESHOLD = 96;
-const MEMORY_TIMELINE_EDGE_PULL_MAX = 56;
-const MEMORY_TIMELINE_EDGE_PULL_ARM_MS = 80;
-const MEMORY_TIMELINE_EDGE_PULL_RESET_MS = 180;
-const MEMORY_TIMELINE_EDGE_PULL_TRANSITION = {
-  damping: 30,
-  mass: 0.7,
-  stiffness: 420,
-  type: "spring",
-} as const;
 
 export interface MemoryTimelineRailItem extends Memory {
   photoUrl?: string;
@@ -53,16 +43,8 @@ interface MemoryTimelineRailProps {
   };
   memories: MemoryTimelineRailItem[];
   onOffsetChange?: (offsetPx: number) => void;
-  onPullPastEnd?: () => void;
-  onPullPastStart?: () => void;
   timelineItemHeight?: number;
 }
-
-type TimelineVirtualItem = {
-  index: number;
-  size: number;
-  start: number;
-};
 
 export function MemoryTimelineRail({
   carouselIntervalMs = MEMORY_TIMELINE_CAROUSEL_INTERVAL_MS,
@@ -73,25 +55,16 @@ export function MemoryTimelineRail({
   labels,
   memories,
   onOffsetChange,
-  onPullPastEnd,
-  onPullPastStart,
   timelineItemHeight = MEMORY_TIMELINE_ITEM_HEIGHT,
 }: MemoryTimelineRailProps) {
   const sortedMemories = useMemo(() => sortMemoryTimelineItems(memories), [memories]);
   const parentRef = useRef<HTMLDivElement | null>(null);
-  const edgePullContentRef = useRef<HTMLDivElement | null>(null);
   const [activeIndex, setActiveIndex] = useState(() =>
     memoryTimelineIndexFromOffset(initialOffset, timelineItemHeight, sortedMemories.length),
   );
   const [mode, setMode] = useState<"carousel" | "list">("carousel");
   const [scrollOffset, setScrollOffset] = useState(() => Math.max(0, initialOffset));
-  const edgePullRaw = useMotionValue(0);
-  const edgePull = useSpring(edgePullRaw, MEMORY_TIMELINE_EDGE_PULL_TRANSITION);
   const idleTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  const boundaryPullArmTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  const boundaryPullResetTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  const boundaryPullRef = useRef(0);
-  const boundaryPullReadyRef = useRef({ bottom: true, top: true });
   const initialMemoryIndex = useMemo(
     () =>
       memoryTimelineIndexFromOffset(
@@ -102,27 +75,6 @@ export function MemoryTimelineRail({
     [initialOffset, sortedMemories.length, timelineItemHeight],
   );
   const activeMemory = sortedMemories[activeIndex] ?? sortedMemories[0];
-
-  const rowVirtualizer = useVirtualizer({
-    count: sortedMemories.length,
-    estimateSize: () => timelineItemHeight,
-    getItemKey: (index) => sortedMemories[index]?.id ?? index,
-    getScrollElement: () => parentRef.current,
-    overscan: 8,
-  });
-  const measuredVirtualItems = rowVirtualizer.getVirtualItems();
-  const virtualItems: TimelineVirtualItem[] =
-    measuredVirtualItems.length > 0
-      ? measuredVirtualItems
-      : sortedMemories.map((_, index) => ({
-          index,
-          size: timelineItemHeight,
-          start: index * timelineItemHeight,
-        }));
-  const totalSize = Math.max(
-    rowVirtualizer.getTotalSize(),
-    sortedMemories.length * timelineItemHeight,
-  );
 
   useEffect(() => {
     setActiveIndex(initialMemoryIndex);
@@ -141,8 +93,6 @@ export function MemoryTimelineRail({
   useEffect(
     () => () => {
       if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
-      if (boundaryPullArmTimerRef.current) clearTimeout(boundaryPullArmTimerRef.current);
-      if (boundaryPullResetTimerRef.current) clearTimeout(boundaryPullResetTimerRef.current);
     },
     [],
   );
@@ -165,92 +115,12 @@ export function MemoryTimelineRail({
   function onScroll(event: UIEvent<HTMLDivElement>) {
     const element = event.currentTarget;
     const nextOffset = Math.max(0, Math.round(element.scrollTop));
-    const maxScrollTop = Math.max(0, element.scrollHeight - element.clientHeight);
-    boundaryPullRef.current = 0;
-    setEdgePullValue(0);
-    if (boundaryPullArmTimerRef.current) clearTimeout(boundaryPullArmTimerRef.current);
-    boundaryPullReadyRef.current = { bottom: false, top: false };
-    if (element.scrollTop <= 0) {
-      boundaryPullArmTimerRef.current = setTimeout(() => {
-        boundaryPullReadyRef.current.top = true;
-      }, MEMORY_TIMELINE_EDGE_PULL_ARM_MS);
-    } else if (element.scrollTop >= maxScrollTop - 1) {
-      boundaryPullArmTimerRef.current = setTimeout(() => {
-        boundaryPullReadyRef.current.bottom = true;
-      }, MEMORY_TIMELINE_EDGE_PULL_ARM_MS);
-    }
     setScrollOffset(nextOffset);
     setActiveIndex(
       memoryTimelineIndexFromOffset(nextOffset, timelineItemHeight, sortedMemories.length),
     );
     showList();
     onOffsetChange?.(nextOffset);
-  }
-
-  useEffect(() => {
-    if (mode !== "list") return;
-    const element = parentRef.current;
-    if (!element) return;
-    const target = element;
-
-    function onWheel(event: WheelEvent) {
-      handleListWheel(target, event);
-    }
-
-    target.addEventListener("wheel", onWheel, { capture: true, passive: false });
-    return () => target.removeEventListener("wheel", onWheel, { capture: true });
-  });
-
-  function handleListWheel(element: HTMLDivElement, event: WheelEvent) {
-    showList();
-
-    const maxScrollTop = Math.max(0, element.scrollHeight - element.clientHeight);
-    const canScroll = maxScrollTop > 1;
-    const atTop = element.scrollTop <= 0;
-    const atBottom = element.scrollTop >= maxScrollTop - 1;
-    const pullingPastTop = canScroll && event.deltaY < 0 && atTop;
-    const pullingPastBottom = canScroll && event.deltaY > 0 && atBottom;
-
-    event.stopPropagation();
-
-    if (!pullingPastTop && !pullingPastBottom) {
-      boundaryPullRef.current = 0;
-      setEdgePullValue(0);
-      return;
-    }
-
-    event.preventDefault();
-
-    const ready = pullingPastTop
-      ? boundaryPullReadyRef.current.top
-      : boundaryPullReadyRef.current.bottom;
-    if (!ready) return;
-
-    const direction = pullingPastTop ? 1 : -1;
-    boundaryPullRef.current += Math.abs(event.deltaY);
-    setEdgePullValue(direction * easeMemoryEdgePull(boundaryPullRef.current));
-    resetBoundaryPullSoon();
-
-    if (boundaryPullRef.current < MEMORY_TIMELINE_BOUNDARY_PULL_THRESHOLD) return;
-    boundaryPullRef.current = 0;
-    setEdgePullValue(0);
-    if (pullingPastTop) onPullPastStart?.();
-    if (pullingPastBottom) onPullPastEnd?.();
-  }
-
-  function resetBoundaryPullSoon() {
-    if (boundaryPullResetTimerRef.current) clearTimeout(boundaryPullResetTimerRef.current);
-    boundaryPullResetTimerRef.current = setTimeout(() => {
-      boundaryPullRef.current = 0;
-      setEdgePullValue(0);
-    }, MEMORY_TIMELINE_EDGE_PULL_RESET_MS);
-  }
-
-  function setEdgePullValue(value: number) {
-    edgePullRaw.set(value);
-    if (edgePullContentRef.current) {
-      edgePullContentRef.current.dataset.edgePull = `${Math.round(value)}`;
-    }
   }
 
   if (sortedMemories.length === 0) {
@@ -266,97 +136,64 @@ export function MemoryTimelineRail({
   return (
     <motion.section
       aria-label={labels.memory}
-      className={cn("min-h-0 flex-1 overflow-hidden rounded-2xl", className)}
+      className={cn("relative min-h-0 flex-1 overflow-hidden rounded-2xl", className)}
       data-mode={mode}
       data-testid="memory-timeline-rail"
       layout
       onWheel={showList}
     >
-      {mode === "carousel" ? (
-        <div className="grid h-full place-items-center p-3" data-testid="memory-carousel-stage">
-          <div
-            className="grid h-5/6 max-h-full w-5/6 max-w-none"
-            data-testid="memory-carousel-card"
-            data-transition="exit-wait-layout-ready"
-          >
-            <AnimatePresence initial={false}>
-              {activeMemory && (
-                <MemoryCarouselSlide
-                  formatCreatedAt={formatCreatedAt}
-                  key={activeMemory.id}
-                  memory={activeMemory}
-                />
-              )}
-            </AnimatePresence>
-          </div>
-        </div>
-      ) : (
+      <div
+        aria-hidden={mode !== "carousel"}
+        className={cn(
+          "absolute inset-0 grid h-full place-items-center p-3 transition-opacity duration-300 ease-out motion-reduce:transition-none",
+          mode === "carousel" ? "opacity-100" : "pointer-events-none opacity-0",
+        )}
+        data-testid="memory-carousel-stage"
+        data-visible={mode === "carousel" ? "true" : "false"}
+      >
         <div
-          className="no-scrollbar h-full overflow-y-auto overscroll-none pt-12 pb-32"
-          data-offset={scrollOffset}
-          data-testid="memory-timeline-list"
-          data-virtualized="fixed-size"
-          onScroll={onScroll}
-          ref={parentRef}
+          className="grid h-5/6 max-h-full w-5/6 max-w-none"
+          data-testid="memory-carousel-card"
+          data-transition="exit-wait-layout-ready"
         >
-          <motion.div
-            className="relative min-h-full"
-            data-edge-pull="0"
-            ref={edgePullContentRef}
-            style={{ height: `${totalSize}px`, y: edgePull }}
-          >
-            {virtualItems.map((virtualRow) => {
-              const memory = sortedMemories[virtualRow.index];
-              if (!memory) return null;
-
-              return (
-                <div
-                  className="absolute top-0 left-0 flex w-full items-stretch"
-                  data-index={virtualRow.index}
-                  data-testid={`memory-timeline-item-${memory.id}`}
-                  key={memory.id}
-                  style={{
-                    height: `${virtualRow.size}px`,
-                    transform: `translateY(${virtualRow.start}px)`,
-                  }}
-                >
-                  <article className="flex h-full min-w-0 flex-1 items-center gap-3 rounded-xl border border-border/70 bg-background/55 px-3 py-2 text-left transition-colors">
-                    {memory.photoUrl && (
-                      <div className="size-16 shrink-0 overflow-hidden rounded-md bg-secondary/50">
-                        <img
-                          alt=""
-                          className="size-full object-contain"
-                          data-testid={`memory-timeline-image-${memory.id}`}
-                          src={memory.photoUrl}
-                        />
-                      </div>
-                    )}
-                    <div className="min-w-0 flex-1">
-                      <p
-                        className="line-clamp-2 whitespace-pre-wrap break-words text-sm leading-5"
-                        data-testid={`memory-timeline-note-${memory.id}`}
-                      >
-                        {memory.note}
-                      </p>
-                      <div className="mt-1 text-muted-foreground text-[11px]">
-                        <time dateTime={new Date(memory.createdAt).toISOString()}>
-                          {formatCreatedAt(memory.createdAt)}
-                        </time>
-                      </div>
-                    </div>
-                  </article>
-                </div>
-              );
-            })}
-          </motion.div>
+          <AnimatePresence initial={false}>
+            {activeMemory && (
+              <MemoryCarouselSlide
+                formatCreatedAt={formatCreatedAt}
+                key={activeMemory.id}
+                memory={activeMemory}
+              />
+            )}
+          </AnimatePresence>
         </div>
-      )}
+      </div>
+      <div
+        aria-hidden={mode !== "list"}
+        className={cn(
+          "no-scrollbar absolute inset-0 h-full overflow-y-auto overscroll-none pt-12 pb-32 transition-opacity duration-300 ease-out motion-reduce:transition-none",
+          mode === "list" ? "opacity-100" : "pointer-events-none opacity-0",
+        )}
+        data-layout="masonry"
+        data-offset={scrollOffset}
+        data-testid="memory-timeline-list"
+        data-visible={mode === "list" ? "true" : "false"}
+        onScroll={onScroll}
+        ref={parentRef}
+      >
+        <MemoryNotesWaterfall
+          className="min-h-full"
+          formatCreatedAt={formatCreatedAt}
+          labels={{
+            deleteMemory: (memory) => memory.note,
+            editMemory: (memory) => memory.note,
+            empty: labels.empty,
+            photoAlt: () => labels.memory,
+          }}
+          memories={sortedMemories}
+        />
+      </div>
     </motion.section>
   );
-}
-
-function easeMemoryEdgePull(distance: number) {
-  return Math.min(MEMORY_TIMELINE_EDGE_PULL_MAX, distance * 0.45);
 }
 
 function MemoryCarouselSlide({
