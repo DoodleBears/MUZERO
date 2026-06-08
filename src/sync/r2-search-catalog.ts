@@ -94,6 +94,27 @@ export interface RemoteSearchTrackToRowInput {
   track: R2TrackSearchRecord;
 }
 
+export interface RemoteSearchSetRow {
+  id: string;
+  catalogId: string;
+  driveId: string;
+  shareId?: string;
+  setId: string;
+  name: string;
+  description?: string;
+  normalizedText: string;
+  trackCount: number;
+  coverUrl?: string;
+  updatedAt: number;
+}
+
+export interface RemoteSearchSetToRowInput {
+  catalogId: string;
+  driveId: string;
+  shareId?: string;
+  set: R2SetSearchRecord;
+}
+
 function normalizeSearchText(parts: Array<string | null | undefined>): string {
   return parts
     .filter((part): part is string => Boolean(part?.trim()))
@@ -126,6 +147,23 @@ export function remoteSearchTrackToRow(input: RemoteSearchTrackToRowInput): Remo
     coverUrl: track.coverUrl,
     mediaAvailable: track.mediaAvailable,
     updatedAt: track.updatedAt,
+  };
+}
+
+export function remoteSearchSetToRow(input: RemoteSearchSetToRowInput): RemoteSearchSetRow {
+  const { catalogId, driveId, shareId, set } = input;
+  return {
+    id: `${catalogId}:${set.id}`,
+    catalogId,
+    driveId,
+    shareId,
+    setId: set.id,
+    name: set.name,
+    description: set.description,
+    normalizedText: normalizeSearchText([set.name, set.description]),
+    trackCount: set.trackCount,
+    coverUrl: set.coverUrl,
+    updatedAt: set.updatedAt,
   };
 }
 

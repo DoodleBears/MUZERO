@@ -8,6 +8,9 @@ import type {
   Memory,
   PlayQueue,
   PlayQueueEntry,
+  RemoteSearchCatalog,
+  RemoteSearchSet,
+  RemoteSearchTrack,
   Track,
 } from "./types";
 
@@ -24,6 +27,9 @@ export class MuzeroDB extends Dexie {
   playQueue!: EntityTable<PlayQueue, "id">;
   memories!: EntityTable<Memory, "id">;
   chatSessions!: EntityTable<ChatSession, "id">;
+  remoteSearchCatalogs!: EntityTable<RemoteSearchCatalog, "id">;
+  remoteSearchTracks!: EntityTable<RemoteSearchTrack, "id">;
+  remoteSearchSets!: EntityTable<RemoteSearchSet, "id">;
 
   constructor(name = "muzero-db") {
     super(name);
@@ -195,6 +201,15 @@ export class MuzeroDB extends Dexie {
           delete s.lastSessionId;
           delete s.lastTrackIndex;
         });
+    });
+
+    // v11 — remote R2 search catalog cache. These rows are metadata-only and
+    // point at streamable remote objects; media bytes still stay out of IndexedDB
+    // unless a later cache/offline action downloads them into `mediaBlobs`.
+    this.version(11).stores({
+      remoteSearchCatalogs: "id, scope, syncedAt, updatedAt",
+      remoteSearchTracks: "id, catalogId, trackId, *setIds, *shareIds, *tags, updatedAt",
+      remoteSearchSets: "id, catalogId, setId, updatedAt",
     });
   }
 }

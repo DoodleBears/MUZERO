@@ -415,3 +415,48 @@ export const DEFAULT_SETTINGS: AppSettings = {
   playerRepeatMode: "off",
   playerShuffle: false,
 };
+
+export interface RemoteSearchCatalog {
+  id: string;
+  driveId: string;
+  shareId?: string;
+  scope: "library" | "share";
+  sourceUrl: string;
+  updatedAt: number;
+  syncedAt: number;
+  setCount: number;
+  trackCount: number;
+}
+
+export interface RemoteSearchTrack {
+  id: string;
+  catalogId: string;
+  driveId: string;
+  shareId?: string;
+  trackId: string;
+  title: string;
+  normalizedText: string;
+  setIds: string[];
+  shareIds: string[];
+  tags: string[];
+  kind: TrackKind;
+  origin: TrackOrigin;
+  durationSec: number;
+  coverUrl?: string;
+  mediaAvailable: boolean;
+  updatedAt: number;
+}
+
+export interface RemoteSearchSet {
+  id: string;
+  catalogId: string;
+  driveId: string;
+  shareId?: string;
+  setId: string;
+  name: string;
+  description?: string;
+  normalizedText: string;
+  trackCount: number;
+  coverUrl?: string;
+  updatedAt: number;
+}

@@ -3,6 +3,7 @@ import {
   matchesRemoteSearchTrack,
   r2SearchCatalogSchema,
   r2TrackSearchPageSchema,
+  remoteSearchSetToRow,
   remoteSearchTrackToRow,
 } from "./r2-search-catalog";
 
@@ -98,5 +99,24 @@ describe("remote search row normalization", () => {
     expect(matchesRemoteSearchTrack(row, "朋友")).toBe(true);
     expect(matchesRemoteSearchTrack(row, "#drive")).toBe(true);
     expect(matchesRemoteSearchTrack(row, "#sea")).toBe(false);
+  });
+
+  it("builds searchable set rows", () => {
+    const row = remoteSearchSetToRow({
+      catalogId: "drv_a:lib_abc",
+      driveId: "drv_a",
+      set: {
+        id: "ses_tokyo",
+        name: "Tokyo Night Drive",
+        description: "Rainy city pop",
+        trackCount: 24,
+        updatedAt: 1780944000000,
+        coverUrl: "objects/covers/set.jpg",
+      },
+    });
+
+    expect(row.id).toBe("drv_a:lib_abc:ses_tokyo");
+    expect(row.normalizedText).toContain("tokyo night drive");
+    expect(row.normalizedText).toContain("rainy city pop");
   });
 });
