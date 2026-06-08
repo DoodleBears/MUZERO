@@ -60,6 +60,11 @@ const remoteSet: RemoteSetIndexResult = {
           {
             id: "mem_1",
             note: "sea night",
+            author: {
+              devicePublicId: "dvc_friend",
+              displayName: "Friend phone",
+              avatarSeed: "green",
+            },
             createdAt: 1780944000000,
             photo: {
               key: "objects/memories/mem_1.jpg",
@@ -104,6 +109,11 @@ const remoteSet: RemoteSetIndexResult = {
           {
             id: "mem_1",
             note: "sea night",
+            author: {
+              devicePublicId: "dvc_friend",
+              displayName: "Friend phone",
+              avatarSeed: "green",
+            },
             createdAt: 1780944000000,
             photo: {
               key: "objects/memories/mem_1.jpg",
@@ -147,6 +157,11 @@ describe("importRemoteSetStream", () => {
     expect(memories[0]).toMatchObject({
       note: "sea night",
       remotePhotoUrl: "https://music.example.com/muzero/objects/memories/mem_1.jpg",
+      author: {
+        devicePublicId: "dvc_friend",
+        displayName: "Friend phone",
+        avatarSeed: "green",
+      },
     });
     expect(await db.mediaBlobs.count()).toBe(0);
   });

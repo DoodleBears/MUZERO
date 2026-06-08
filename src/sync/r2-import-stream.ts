@@ -73,6 +73,7 @@ export async function importRemoteSetStream(
       id: remoteLocalId("mem", driveId, memory.id),
       trackId,
       note: memory.note,
+      author: memory.author,
       remotePhotoUrl: remoteTrack.memoryPhotoUrls.find((photo) => photo.memoryId === memory.id)
         ?.url,
       createdAt: memory.createdAt,

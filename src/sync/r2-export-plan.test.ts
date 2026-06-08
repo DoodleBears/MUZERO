@@ -43,6 +43,14 @@ describe("buildR2ExportPlan", () => {
       key: "manifest.json",
       contentType: "application/json",
     });
+    const setIndex = JSON.parse(
+      String(plan.objects.find((object) => object.kind === "set-index")?.body),
+    );
+    expect(setIndex.tracks[0].memories[0].author).toEqual({
+      devicePublicId: "dvc_studio",
+      displayName: "Studio laptop",
+      avatarSeed: "blue",
+    });
     expect(plan.totalBytes).toBe(plan.objects.reduce((sum, object) => sum + object.bytes, 0));
   });
 
@@ -175,6 +183,11 @@ async function seedSet(options: { remoteOnly?: boolean } = {}) {
     trackId: "trk_1",
     note: "First listen in Shibuya.",
     photoBlobId: options.remoteOnly ? undefined : "blb_memory",
+    author: {
+      devicePublicId: "dvc_studio",
+      displayName: "Studio laptop",
+      avatarSeed: "blue",
+    },
     createdAt: 150,
   };
   const blobs: MediaBlob[] = options.remoteOnly

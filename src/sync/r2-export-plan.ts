@@ -209,6 +209,7 @@ function toRemoteMemory(
   return {
     id: memory.id,
     note: memory.note,
+    author: memory.author,
     createdAt: memory.createdAt,
     photo,
   };
