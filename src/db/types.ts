@@ -374,6 +374,8 @@ export interface AppSettings {
   defaultCloudDriveId?: string;
   /** R2 write credentials by local drive id. Device-local only; never exported to manifests. */
   r2CredentialsByDriveId?: Record<string, R2LocalCredentials>;
+  /** Optional low-frequency trusted-device presence. Off by default. */
+  presenceEnabled?: boolean;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -427,6 +429,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   visualizerMirror: 1,
   playerRepeatMode: "off",
   playerShuffle: false,
+  presenceEnabled: false,
 };
 
 export interface RemoteSearchCatalog {

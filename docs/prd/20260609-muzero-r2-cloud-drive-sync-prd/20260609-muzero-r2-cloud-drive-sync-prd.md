@@ -18,7 +18,7 @@
 | 3 | Local-to-cloud publish sync with visible progress | 🔄 In Progress | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | Cloud-to-local pull sync + conflict handling | 🔄 In Progress | [Phase 4 Checklist](#phase-4-checklist) |
 | 5 | Anonymous device registry + playback stats sync | 🔄 In Progress | [Phase 5 Checklist](#phase-5-checklist) |
-| 6 | Optional low-frequency currently-playing presence | 🔲 Pending | [Phase 6 Checklist](#phase-6-checklist) |
+| 6 | Optional low-frequency currently-playing presence | 🔄 In Progress | [Phase 6 Checklist](#phase-6-checklist) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
 
@@ -1806,24 +1806,24 @@ For a large shared playlist with many trusted devices, the UI should:
 
 **Tasks:**
 
-- [ ] Add `NowPlayingPresence` schema.
+- [x] Add `NowPlayingPresence` schema.
 - [ ] Add visible Settings toggle, default off.
 - [ ] Enable remote presence writes only when owner/trusted R2 write credentials are configured.
 - [ ] Write presence on track start, pause, resume, stop, and track change.
-- [ ] Add throttled heartbeat while playing, at most once per 60 seconds.
+- [x] Add throttled heartbeat while playing, at most once per 60 seconds.
 - [ ] Write presence to `presence/devices/<devicePublicId>.json`.
 - [ ] Read presence only while the "Listening now" UI is visible, at a low polling interval.
-- [ ] Ignore expired presence records based on `expiresAt`.
+- [x] Ignore expired presence records based on `expiresAt`.
 - [ ] Add cost/operations warning in Settings for public shared libraries.
 
 ### Phase 6 Checklist
 
 - [ ] Presence can show which trusted anonymous device is listening to which track.
-- [ ] Read-only public listeners do not attempt remote presence writes.
-- [ ] Expired devices disappear without requiring deletes.
-- [ ] Presence writes are throttled and do not happen every second.
+- [x] Read-only public listeners do not attempt remote presence writes.
+- [x] Expired devices disappear without requiring deletes.
+- [x] Presence writes are throttled and do not happen every second.
 - [ ] Presence reads are scoped to the visible UI and stop when hidden/backgrounded.
-- [ ] The feature remains optional and off by default.
+- [x] The feature remains optional and off by default.
 
 ---
 
@@ -1964,3 +1964,4 @@ Do not record secrets, full signed URLs, or media content.
 | 2026-06-09 | MUZERO | Phase 1 remote search UI wired into the Search/Gallery track mode: synced remote catalog rows are queried from IndexedDB and displayed alongside local track results without downloading media bytes. |
 | 2026-06-09 | MUZERO | Phase 4 implementation started with Dexie v15 `syncMutations`, mutation repository helpers, and a remote set diff planner that identifies create/unchanged/apply-remote/keep-local/conflict/blocked states, including set-level local-vs-remote conflict detection and remote index hash mismatch blocking. |
 | 2026-06-09 | MUZERO | Phase 4 pull dry-run/apply flow added: remote set pulls now produce a non-mutating preview, can recreate missing sets as stream-only local rows without downloading media bytes, record pull `syncRuns`, and refuse blocked/conflicted diffs before mutating IndexedDB. |
+| 2026-06-09 | MUZERO | Phase 6 presence foundation started with `muzero-r2-presence-v1` schema, per-device object key helper, TTL-based active filtering, one-minute heartbeat throttling, owner/trusted write-policy checks, and `presenceEnabled: false` default settings. |
