@@ -1618,6 +1618,8 @@ For a large shared playlist with many trusted devices, the UI should:
 
 - [x] Add Zod schemas for `muzero-r2-manifest-v1`, `muzero-r2-set-index-v1`, devices, stats.
 - [x] Add URL normalization and relative URL resolution.
+- [x] Add read-only manifest preview service with injected fetch.
+- [x] Add remote set index loader that resolves streamable media/cover/memory URLs.
 - [ ] Add read-only import flow: manifest → set indexes → tracks/memories/media refs.
 - [ ] Support stream mode: keep remote media URLs without downloading blobs.
 - [ ] Support cache mode: download selected media into `mediaBlobs`.
@@ -1913,3 +1915,4 @@ Do not record secrets, full signed URLs, or media content.
 | 2026-06-09 | MUZERO | Initial draft for R2-only user-owned cloud drive sync. |
 | 2026-06-09 | MUZERO | Architecture review pass: clarified V1/V3 boundary, profile/avatar sync, per-device object ownership, and multi-writer conflict rules. |
 | 2026-06-09 | MUZERO | Phase 1 implementation started: manifest/set/share/stats schemas and R2 URL normalization/resolution added with tests. |
+| 2026-06-09 | MUZERO | Phase 1 read-only subscription service added: public manifest preview and remote set index loading with resolved media URLs. |
