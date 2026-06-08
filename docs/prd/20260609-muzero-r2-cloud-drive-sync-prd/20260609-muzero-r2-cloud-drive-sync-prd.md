@@ -1787,7 +1787,7 @@ For a large shared playlist with many trusted devices, the UI should:
 - [ ] Device avatar appears anywhere device attribution appears, with generated-avatar fallback.
 - [ ] Device profile updates sync only to writable targets and do not rewrite historical memories.
 - [ ] Memory cards show author attribution when available.
-- [ ] Stats survive reload.
+- [x] Stats survive reload.
 - [ ] Stats merge correctly from two devices.
 - [x] Rebuilding aggregates from event segments does not lose play counts.
 - [ ] Sync UI shows pending local listens separately from uploaded/aggregated listens.
@@ -1976,3 +1976,4 @@ Do not record secrets, full signed URLs, or media content.
 | 2026-06-09 | MUZERO | Phase 5 playback event segment export added: R2 publish plans now include immutable per-device `stats/events/<devicePublicId>/...json` segment objects for local `PlaybackEvent` rows while checkpoint/retry policy remains a later slice. |
 | 2026-06-09 | MUZERO | Phase 5 playback aggregate scopes completed: meaningful listens now derive global track, track-in-set, track-in-share, set, share, and drive aggregate rows, preserving remote track ids and media hashes for shared-library stats. |
 | 2026-06-09 | MUZERO | Phase 5 aggregate rebuild helper added: playback event segments can be replayed into deterministic per-device aggregate rows without duplicating or losing play counts. |
+| 2026-06-09 | MUZERO | Phase 5 playback stats persistence verified with a Dexie reload test covering playback events, per-track stats, and aggregate rows. |

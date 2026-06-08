@@ -183,6 +183,34 @@ describe("recordPlaybackListen", () => {
       listenedSec: 31,
     });
   });
+
+  it("persists playback stats across database reloads", async () => {
+    await recordPlaybackListen(
+      {
+        devicePublicId: "dvc_1",
+        trackId: "trk_1",
+        durationSec: 180,
+        listenedSec: 31,
+        startedAt: 1000,
+        endedAt: 31_000,
+        context: { source: "local", setId: "ses_1" },
+      },
+      db,
+    );
+
+    db.close();
+    db = new MuzeroDB(dbName);
+
+    expect(await db.playbackEvents.count()).toBe(1);
+    expect(await db.trackPlaybackStats.get("dvc_1:trk_1")).toMatchObject({
+      playCount: 1,
+      listenedSec: 31,
+    });
+    expect(await db.playbackAggregates.get("dvc_1:track:trk_1")).toMatchObject({
+      playCount: 1,
+      listenedSec: 31,
+    });
+  });
 });
 
 describe("rebuildPlaybackAggregatesFromEvents", () => {
