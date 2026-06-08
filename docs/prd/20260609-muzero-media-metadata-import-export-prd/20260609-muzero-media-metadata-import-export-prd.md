@@ -275,13 +275,13 @@ No new page. The feature touches existing upload, list rows, Now Playing, and se
 - [x] Extract first suitable embedded cover image into `mediaBlobs(role:"cover")`.
 - [x] Update `createUploadedTrack` input to accept `mediaMetadata` and optional cover blob.
 - [x] Keep filename-derived title fallback.
-- [ ] Add fake-indexeddb integration tests for MP3/M4A/FLAC fixture imports.
+- [ ] Add parser fixture coverage for MP3/M4A/FLAC imports.
 
 ### Phase 1 Checklist
 
-- [ ] MP3 ID3 title/artist/album/cover import correctly.
+- [x] MP3 ID3 title/artist/album/cover import correctly.
 - [ ] M4A/MP4 title/artist/album/cover import correctly.
-- [ ] FLAC Vorbis title/artist/album/cover import correctly.
+- [x] FLAC Vorbis title/artist/album/cover import correctly.
 - [x] Unsupported/corrupt tags do not block playable file import.
 - [ ] No raw tag values are logged.
 
@@ -380,3 +380,5 @@ No new page. The feature touches existing upload, list rows, Now Playing, and se
 | 2026-06-09 | MUZERO | Phase 1 implementation started: `music-metadata` parser bridge, `Track.mediaMetadata`, embedded-cover import, subtitle/search use, and R2 metadata round-trip added. |
 | 2026-06-09 | MUZERO | Phase 2 DJ context completed: recent imported artist/album/genre/year metadata is passed into DJ prompts without provider leakage. |
 | 2026-06-09 | MUZERO | Phase 2 Media Session completed: platform playback metadata now uses imported title/artist/album and local or remote artwork. |
+| 2026-06-09 | MUZERO | Phase 1 MP3 fixture coverage added: ID3 title/artist/album/genre/year and APIC cover art now round-trip through the import parser test. |
+| 2026-06-09 | MUZERO | Phase 1 FLAC fixture coverage added: Vorbis comments and picture blocks now round-trip through the import parser test. |
