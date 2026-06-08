@@ -14,7 +14,7 @@
 | 0 | Raw Media Download Button | ✅ Completed | [Phase 0 Checklist](#phase-0-checklist) |
 | 1 | Import-Time Metadata Parser | ✅ Completed | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | Library Metadata Surface Area | 🔄 In Progress | [Phase 2 Checklist](#phase-2-checklist) |
-| 3 | Metadata-Correct Export Pipeline | 🔲 Pending | [Phase 3 Checklist](#phase-3-checklist) |
+| 3 | Metadata-Correct Export Pipeline | 🔄 In Progress | [Phase 3 Checklist](#phase-3-checklist) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
 
@@ -85,6 +85,7 @@ Download / Export
 | **Import parser** | `music-metadata` `parseBlob(file)` | Browser-compatible, normalized common tags, cover extraction, broad read support. |
 | **Playback duration probe** | Existing `<video preload="metadata">` path | Keep as codec/playability check and fallback duration source. |
 | **Metadata writer** | Tauri Rust command using `lofty` | Safer for binary tag writing across desktop platforms; avoids fragile hand-written JS byte surgery. |
+| **MP3 export bridge** | TypeScript ID3v2.3 writer | Phase 3A covers local MP3 exports immediately; Rust/lofty remains the full cross-container writer direction. |
 | **Browser fallback export** | Raw Blob download only | Browser can reliably export original bytes; full tag rewriting is deferred to desktop path unless a WASM writer is approved. |
 | **Persistence** | Dexie `muzero-db` | Local-first; metadata remains device-local with media bytes. |
 
@@ -309,25 +310,26 @@ No new page. The feature touches existing upload, list rows, Now Playing, and se
 **Goal:** Users can choose between byte-perfect original download and metadata-correct export.
 
 **Tasks:**
-- [ ] Define export modes:
+- [x] Define export modes:
   - `original`: raw stored Blob bytes, unchanged.
   - `withMetadata`: write current MUZERO title/artist/album/cover/tags into the media container.
 - [ ] Add Tauri Rust command using `lofty` or an equivalent audited writer.
 - [ ] Implement container mapping:
-  - MP3: ID3v2.3/2.4 frames (`TIT2`, `TPE1`, `TALB`, `TRCK`, `TCON`, `APIC`).
+  - [x] MP3: ID3v2.3 frames (`TIT2`, `TPE1`, `TALB`, `TRCK`, `TCON`, `TYER`, `COMM`, `APIC`).
   - M4A/MP4: iTunes-style `ilst` atoms.
-  - FLAC/Ogg/Opus: Vorbis comments + picture block where supported.
+  - [x] FLAC: Vorbis comments + picture block.
+  - Ogg/Opus: Vorbis comments where supported.
   - WAV/AIFF: RIFF/ID3 path only if writer support is reliable; otherwise original-only.
 - [ ] Generated tracks export with `TrackBrief.title`, caption/lyrics where supported, and MUZERO cover.
 - [ ] Add validation tests: export then re-parse with parser and compare expected fields.
 
 ### Phase 3 Checklist
 
-- [ ] "Download original" byte size/hash matches stored `mediaBlobs` bytes.
-- [ ] "Export with metadata" round-trips title/artist/album/cover for MP3.
+- [x] "Download original" byte size/hash matches stored `mediaBlobs` bytes.
+- [x] "Export with metadata" round-trips title/artist/album/cover for MP3.
 - [ ] "Export with metadata" round-trips title/artist/album/cover for M4A/MP4.
-- [ ] "Export with metadata" round-trips title/artist/album/cover for FLAC.
-- [ ] Unsupported container fallback is explicit and non-destructive.
+- [x] "Export with metadata" round-trips title/artist/album/cover for FLAC.
+- [x] Unsupported container fallback is explicit and non-destructive.
 
 ---
 
@@ -383,3 +385,5 @@ No new page. The feature touches existing upload, list rows, Now Playing, and se
 | 2026-06-09 | MUZERO | Phase 1 MP3 fixture coverage added: ID3 title/artist/album/genre/year and APIC cover art now round-trip through the import parser test. |
 | 2026-06-09 | MUZERO | Phase 1 FLAC fixture coverage added: Vorbis comments and picture blocks now round-trip through the import parser test. |
 | 2026-06-09 | MUZERO | Phase 1 completed with M4A/MP4 fixture coverage for Apple-style metadata atoms and cover art. |
+| 2026-06-09 | MUZERO | Phase 3A started: original export is byte-identical, MP3 `withMetadata` writes ID3v2.3 tags and cover art, and unsupported containers fail explicitly. |
+| 2026-06-09 | MUZERO | Phase 3B completed FLAC `withMetadata` export with Vorbis comments and picture-block cover round-trip tests. |

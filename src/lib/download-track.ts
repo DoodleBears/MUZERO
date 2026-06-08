@@ -1,5 +1,6 @@
-import { getTrackBlob } from "@/db/repositories";
+import { getTrackBlob, getTrackCover } from "@/db/repositories";
 import type { Track } from "@/db/types";
+import { createTrackExportBlob, type TrackExportMode } from "@/lib/metadata-export";
 import { getAppFetch, isTauri } from "@/lib/platform";
 
 const MIME_EXTENSIONS: Record<string, string> = {
@@ -19,8 +20,11 @@ const MIME_EXTENSIONS: Record<string, string> = {
   "video/x-matroska": "mkv",
 };
 
-export async function downloadTrackMedia(track: Track): Promise<void> {
-  const media = await resolveTrackDownloadMedia(track);
+export async function downloadTrackMedia(
+  track: Track,
+  mode: TrackExportMode = "original",
+): Promise<void> {
+  const media = await resolveTrackDownloadMedia(track, mode);
   const fileName = downloadFileName(track, media.mime);
 
   if (isTauri()) {
@@ -31,11 +35,27 @@ export async function downloadTrackMedia(track: Track): Promise<void> {
   saveWithBrowser(fileName, media.blob);
 }
 
-async function resolveTrackDownloadMedia(track: Track): Promise<{ blob: Blob; mime: string }> {
+async function resolveTrackDownloadMedia(
+  track: Track,
+  mode: TrackExportMode,
+): Promise<{ blob: Blob; mime: string }> {
   const local = await getTrackBlob(track);
-  if (local) return { blob: local.blob, mime: local.mime };
+  if (local) {
+    return {
+      blob: await createTrackExportBlob({
+        cover: await getTrackCover(track),
+        media: local,
+        mode,
+        track,
+      }),
+      mime: local.mime,
+    };
+  }
 
   if (track.remoteMediaUrl) {
+    if (mode === "withMetadata") {
+      throw new Error("Metadata export is only available for locally stored media");
+    }
     const fetch = await getAppFetch();
     const response = await fetch(track.remoteMediaUrl);
     if (!response.ok) throw new Error(`Download failed: HTTP ${response.status}`);
