@@ -60,6 +60,60 @@ describe("cacheRemoteTrackMedia", () => {
     });
   });
 
+  it("accepts video MIME when caching a remote video track", async () => {
+    await db.tracks.put(
+      remoteTrack({
+        kind: "video",
+        remoteMediaUrl: "https://music.example.com/muzero/objects/video.mp4",
+      }),
+    );
+    const fetcher: SyncCacheFetch = async () =>
+      new Response(new Uint8Array([1, 2, 3, 4]), {
+        status: 200,
+        headers: { "content-type": "video/mp4" },
+      });
+
+    const result = await cacheRemoteTrackMedia("trk_remote", { fetcher }, db);
+
+    expect(await db.mediaBlobs.get(result.blobId)).toMatchObject({
+      role: "media",
+      mime: "video/mp4",
+      bytes: 4,
+    });
+  });
+
+  it("does not mutate IndexedDB when a remote audio track returns an image object", async () => {
+    await db.tracks.put(remoteTrack());
+    const fetcher: SyncCacheFetch = async () =>
+      new Response(new Uint8Array([1, 2, 3]), {
+        status: 200,
+        headers: { "content-type": "image/jpeg" },
+      });
+
+    await expect(cacheRemoteTrackMedia("trk_remote", { fetcher }, db)).rejects.toThrow(
+      /expected audio/i,
+    );
+
+    expect((await db.tracks.get("trk_remote"))?.blobId).toBeUndefined();
+    expect(await db.mediaBlobs.count()).toBe(0);
+  });
+
+  it("does not mutate IndexedDB when a remote video track returns an audio object", async () => {
+    await db.tracks.put(remoteTrack({ kind: "video" }));
+    const fetcher: SyncCacheFetch = async () =>
+      new Response(new Uint8Array([1, 2, 3]), {
+        status: 200,
+        headers: { "content-type": "audio/mpeg" },
+      });
+
+    await expect(cacheRemoteTrackMedia("trk_remote", { fetcher }, db)).rejects.toThrow(
+      /expected video/i,
+    );
+
+    expect((await db.tracks.get("trk_remote"))?.blobId).toBeUndefined();
+    expect(await db.mediaBlobs.count()).toBe(0);
+  });
+
   it("rejects local-only tracks without a remote media URL", async () => {
     await db.tracks.put(remoteTrack({ remoteMediaUrl: undefined }));
 

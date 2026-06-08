@@ -34,6 +34,7 @@ export async function cacheRemoteTrackMedia(
 
   const blob = await response.blob();
   const mime = response.headers.get("content-type") ?? blob.type ?? "application/octet-stream";
+  assertRemoteMediaMatchesTrackKind(track.kind, mime);
   const media: MediaBlob = {
     id: newId("blb"),
     trackId,
@@ -49,4 +50,14 @@ export async function cacheRemoteTrackMedia(
   });
 
   return { blobId: media.id, bytes: media.bytes, mime: media.mime };
+}
+
+function assertRemoteMediaMatchesTrackKind(kind: "audio" | "video", mime: string): void {
+  const normalized = mime.toLowerCase();
+  if (kind === "audio" && !normalized.startsWith("audio/")) {
+    throw new Error(`Remote media role mismatch: expected audio/* for audio track, got ${mime}`);
+  }
+  if (kind === "video" && !normalized.startsWith("video/")) {
+    throw new Error(`Remote media role mismatch: expected video/* for video track, got ${mime}`);
+  }
 }

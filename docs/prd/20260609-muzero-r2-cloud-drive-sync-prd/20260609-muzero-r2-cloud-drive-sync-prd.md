@@ -1733,7 +1733,7 @@ For a large shared playlist with many trusted devices, the UI should:
 - [ ] Add conflict UI with "keep local", "use remote", "duplicate both".
 - [ ] Add set-level indicators for local changes, remote changed, auto-merged, and needs review.
 - [x] Add dry-run preview before applying large pulls.
-- [ ] Verify imported Blob roles match expected object roles.
+- [x] Verify imported Blob roles match expected object roles.
 - [ ] Incrementally refresh remote search catalog pages by `updatedAt`/ETag/hash.
 - [ ] Lazy-load specific set/share indexes when a search result is opened.
 
@@ -1968,3 +1968,4 @@ Do not record secrets, full signed URLs, or media content.
 | 2026-06-09 | MUZERO | Phase 6 Settings toggle added for optional Listening Now presence, with en/zh/ja/ko copy explaining trusted writable-drive scope and one-minute heartbeat cost/operations limits. |
 | 2026-06-09 | MUZERO | Phase 1 shared-link registration hardened: public manifest links now register local read-only drive/share rows only after manifest validation succeeds, and invalid/fetch-failed manifests are covered by IndexedDB non-mutation tests. |
 | 2026-06-09 | MUZERO | Phase 5 device profile UI added in Settings: users can rename the anonymous local device, rotate a generated avatar seed, and opt into profile publishing for future writable-drive sync while uploaded avatar images remain a later task. |
+| 2026-06-09 | MUZERO | Phase 4 remote media cache now verifies imported blob roles before writing: audio tracks require `audio/*`, video tracks require `video/*`, and mismatched remote objects leave local IndexedDB untouched. |
