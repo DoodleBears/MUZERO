@@ -1795,7 +1795,7 @@ For a large shared playlist with many trusted devices, the UI should:
 - [ ] Manual Sync can flush a small pending stats segment below the normal event-count threshold.
 - [ ] A large shared playlist can keep local stats separated across many anonymous devices.
 - [ ] The same track in two sets can show separate track-in-set play counts.
-- [ ] A track played from someone else's shared set can be recorded locally without importing the track.
+- [x] A track played from someone else's shared set can be recorded locally without importing the track.
 - [ ] A user can sync their own listening history about shared tracks to their own Owner R2.
 - [ ] Trusted devices with write credentials can sync separated stats to the shared R2 bucket.
 - [ ] UI can show total plays and listened time.
@@ -1977,3 +1977,4 @@ Do not record secrets, full signed URLs, or media content.
 | 2026-06-09 | MUZERO | Phase 5 playback aggregate scopes completed: meaningful listens now derive global track, track-in-set, track-in-share, set, share, and drive aggregate rows, preserving remote track ids and media hashes for shared-library stats. |
 | 2026-06-09 | MUZERO | Phase 5 aggregate rebuild helper added: playback event segments can be replayed into deterministic per-device aggregate rows without duplicating or losing play counts. |
 | 2026-06-09 | MUZERO | Phase 5 playback stats persistence verified with a Dexie reload test covering playback events, per-track stats, and aggregate rows. |
+| 2026-06-09 | MUZERO | Phase 5 remote-only shared listening stats added: playback events can now be recorded with only a remote track reference, deriving local aggregate rows without importing the track or creating local per-track stats. |

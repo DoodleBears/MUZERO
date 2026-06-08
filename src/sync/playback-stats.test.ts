@@ -184,6 +184,50 @@ describe("recordPlaybackListen", () => {
     });
   });
 
+  it("records stats for a shared remote track without importing it locally", async () => {
+    const event = await recordPlaybackListen(
+      {
+        devicePublicId: "dvc_1",
+        remoteTrackRef: {
+          driveId: "drv_friend",
+          shareId: "shr_tokyo",
+          setId: "ses_tokyo",
+          trackId: "remote_trk_1",
+          mediaSha256: "sha256-blue",
+        },
+        durationSec: 180,
+        listenedSec: 31,
+        startedAt: 1000,
+        endedAt: 31_000,
+        context: {
+          source: "shared-drive",
+          driveId: "drv_friend",
+          shareId: "shr_tokyo",
+          setId: "ses_tokyo",
+        },
+      },
+      db,
+    );
+
+    expect(event.trackId).toBeUndefined();
+    expect(event.remoteTrackRef?.trackId).toBe("remote_trk_1");
+    expect(await db.trackPlaybackStats.count()).toBe(0);
+    expect(await db.playbackAggregates.get("dvc_1:track:remote_trk_1")).toMatchObject({
+      scope: "track",
+      remoteTrackId: "remote_trk_1",
+      mediaSha256: "sha256-blue",
+      playCount: 1,
+      listenedSec: 31,
+    });
+    expect(
+      await db.playbackAggregates.get("dvc_1:track-in-share:shr_tokyo:remote_trk_1"),
+    ).toMatchObject({
+      scope: "track-in-share",
+      shareId: "shr_tokyo",
+      remoteTrackId: "remote_trk_1",
+    });
+  });
+
   it("persists playback stats across database reloads", async () => {
     await recordPlaybackListen(
       {
