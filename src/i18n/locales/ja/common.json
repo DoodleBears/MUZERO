@@ -86,6 +86,10 @@
     "generationFailed": "生成に失敗",
     "like": "お気に入り",
     "delete": "削除",
+    "download": "ダウンロード",
+    "downloadFailed": "曲をダウンロードできませんでした",
+    "addToSet": "他のセットに追加",
+    "noOtherSets": "他のセットがありません",
     "empty": "まだ何もありません —— セットを始めれば DJ が埋めてくれます。",
     "uploadedAudio": "アップロード音声",
     "uploadedVideo": "アップロード動画"

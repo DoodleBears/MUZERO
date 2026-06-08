@@ -3,9 +3,12 @@ import { motion, useMotionValue, useSpring } from "motion/react";
 import type { KeyboardEvent } from "react";
 import { useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
-import { deleteTrack as deleteTrackRepo, setTrackLiked } from "@/db/repositories";
+import { deleteTrack as deleteTrackRepo, prependTrackIds, setTrackLiked } from "@/db/repositories";
 import type { Track } from "@/db/types";
+import { useSessions } from "@/hooks/use-app-data";
+import { downloadTrackMedia } from "@/lib/download-track";
 import { cn } from "@/lib/utils";
+import { notify } from "@/stores/notification-store";
 import { usePlayerStore } from "@/stores/player-store";
 import { TrackRow } from "./track-row";
 
@@ -57,6 +60,7 @@ export function VirtualTrackList({
   const currentIndex = usePlayerStore((s) => s.currentIndex);
   const queue = usePlayerStore((s) => s.queue);
   const playIndex = usePlayerStore((s) => s.playIndex);
+  const sessions = useSessions();
 
   const currentTrackId = currentIndex >= 0 ? queue[currentIndex]?.id : undefined;
   const handlePlay = onPlay ?? ((_track: Track, index: number) => void playIndex(index));
@@ -231,9 +235,16 @@ export function VirtualTrackList({
                 track={track}
                 isCurrent={track.id === currentTrackId}
                 listIndex={virtualRow.index}
+                sessions={sessions}
                 onPlay={() => handlePlay(track, virtualRow.index)}
                 onToggleLike={() => void setTrackLiked(track.id, !track.liked)}
                 onDelete={() => void deleteTrackRepo(track.id)}
+                onDownload={() => {
+                  void downloadTrackMedia(track).catch((error: unknown) =>
+                    notify.error(t("track.downloadFailed"), { error, source: "track-download" }),
+                  );
+                }}
+                onAddToSession={(sessionId) => void prependTrackIds(sessionId, [track.id])}
               />
             </div>
           );

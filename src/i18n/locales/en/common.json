@@ -89,6 +89,10 @@
     "generationFailed": "Generation failed",
     "like": "Like",
     "delete": "Delete",
+    "download": "Download",
+    "downloadFailed": "Couldn't download track",
+    "addToSet": "Add to set",
+    "noOtherSets": "No other sets",
     "empty": "Nothing here yet — start a set and the DJ will fill it.",
     "uploadedAudio": "uploaded audio",
     "uploadedVideo": "uploaded video"

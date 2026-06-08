@@ -1,7 +1,23 @@
-import { Disc3, Heart, Loader2, Trash2, TriangleAlert, Video } from "lucide-react";
-import { memo } from "react";
+import {
+  Disc3,
+  Download,
+  Heart,
+  ListPlus,
+  Loader2,
+  Trash2,
+  TriangleAlert,
+  Video,
+} from "lucide-react";
+import { memo, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import type { Track } from "@/db/types";
+import {
+  Popover,
+  PopoverContent,
+  PopoverDescription,
+  PopoverTitle,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import type { DjSession, Track } from "@/db/types";
 import { useTrackCoverUrl } from "@/hooks/use-media";
 import { trackSubtitle } from "@/lib/track-display";
 import { cn, formatDuration } from "@/lib/utils";
@@ -10,9 +26,12 @@ interface TrackRowProps {
   track: Track;
   isCurrent: boolean;
   listIndex?: number;
+  sessions: DjSession[];
   onPlay: () => void;
   onToggleLike: () => void;
   onDelete: () => void;
+  onDownload: () => void;
+  onAddToSession: (sessionId: string) => void;
 }
 
 /** Shown in the thumbnail slot while a track is still pending/generating/failed. */
@@ -66,16 +85,24 @@ export const TrackRow = memo(function TrackRow({
   track,
   isCurrent,
   listIndex,
+  sessions,
   onPlay,
   onToggleLike,
   onDelete,
+  onDownload,
+  onAddToSession,
 }: TrackRowProps) {
   const { t } = useTranslation();
   const disabled = track.status !== "ready";
+  const addTargets = useMemo(
+    () => sessions.filter((session) => !session.trackIds.includes(track.id)),
+    [sessions, track.id],
+  );
+
   return (
     <div
       className={cn(
-        "group flex w-full items-center gap-3 rounded-lg px-3 py-2 transition-colors",
+        "group relative flex w-full items-center gap-3 rounded-lg px-3 py-2 transition-colors",
         isCurrent ? "bg-accent" : "hover:bg-accent/50",
       )}
     >
@@ -107,33 +134,100 @@ export const TrackRow = memo(function TrackRow({
       </button>
       <div className="ml-auto flex shrink-0 items-center gap-3">
         <TrackTags tags={track.tags} />
-        <div className="flex shrink-0 items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
-          <button
-            type="button"
-            onClick={onToggleLike}
-            className="rounded p-1"
-            aria-label={t("track.like")}
-          >
-            <Heart
-              className={cn(
-                "size-4",
-                track.liked ? "fill-primary text-primary" : "text-muted-foreground",
-              )}
-            />
-          </button>
-          <button
-            type="button"
-            onClick={onDelete}
-            className="rounded p-1"
-            aria-label={t("track.delete")}
-          >
-            <Trash2 className="size-4 text-muted-foreground hover:text-destructive" />
-          </button>
-        </div>
         <span className="w-10 shrink-0 text-right text-xs tabular-nums text-muted-foreground">
           {track.status === "ready" ? formatDuration(track.durationSec) : "—"}
         </span>
       </div>
+      <div
+        className={cn(
+          "invisible absolute right-3 top-1/2 z-10 flex -translate-y-1/2 items-center gap-0.5 rounded-md border border-border bg-background/95 p-0.5 opacity-0 shadow-sm backdrop-blur transition-opacity",
+          "group-hover:visible group-hover:opacity-100 focus-within:visible focus-within:opacity-100",
+        )}
+      >
+        <button
+          type="button"
+          onClick={onToggleLike}
+          className="grid size-7 place-items-center rounded text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+          aria-label={t("track.like")}
+          aria-pressed={track.liked}
+        >
+          <Heart className={cn("size-4", track.liked && "fill-primary text-primary")} />
+        </button>
+        <button
+          type="button"
+          onClick={onDelete}
+          className="grid size-7 place-items-center rounded text-muted-foreground transition-colors hover:bg-accent hover:text-destructive"
+          aria-label={t("track.delete")}
+        >
+          <Trash2 className="size-4" />
+        </button>
+        <button
+          type="button"
+          onClick={onDownload}
+          disabled={track.status !== "ready" || (!track.blobId && !track.remoteMediaUrl)}
+          className="grid size-7 place-items-center rounded text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:pointer-events-none disabled:opacity-40"
+          aria-label={t("track.download")}
+        >
+          <Download className="size-4" />
+        </button>
+        <AddToSetPopover
+          disabled={addTargets.length === 0}
+          sessions={addTargets}
+          onAddToSession={onAddToSession}
+        />
+      </div>
     </div>
   );
 });
+
+function AddToSetPopover({
+  disabled,
+  sessions,
+  onAddToSession,
+}: {
+  disabled: boolean;
+  sessions: DjSession[];
+  onAddToSession: (sessionId: string) => void;
+}) {
+  const { t } = useTranslation();
+  const [open, setOpen] = useState(false);
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger
+        type="button"
+        disabled={disabled}
+        className="grid size-7 place-items-center rounded text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:pointer-events-none disabled:opacity-40"
+        aria-label={t("track.addToSet")}
+        title={disabled ? t("track.noOtherSets") : t("track.addToSet")}
+      >
+        <ListPlus className="size-4" />
+      </PopoverTrigger>
+      <PopoverContent className="w-56 p-2" side="left" sideOffset={10}>
+        <PopoverTitle className="px-2 py-1.5">{t("track.addToSet")}</PopoverTitle>
+        {sessions.length === 0 ? (
+          <PopoverDescription className="px-2 py-1.5 text-xs">
+            {t("track.noOtherSets")}
+          </PopoverDescription>
+        ) : (
+          <div className="max-h-64 overflow-y-auto">
+            {sessions.map((session) => (
+              <button
+                key={session.id}
+                type="button"
+                onClick={() => {
+                  onAddToSession(session.id);
+                  setOpen(false);
+                }}
+                className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm outline-none transition-colors hover:bg-accent focus-visible:bg-accent"
+              >
+                <Disc3 className="size-4 shrink-0 text-muted-foreground" />
+                <span className="min-w-0 flex-1 truncate">{session.name}</span>
+              </button>
+            ))}
+          </div>
+        )}
+      </PopoverContent>
+    </Popover>
+  );
+}
