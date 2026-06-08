@@ -13,8 +13,8 @@
 |-------|------|--------|------|
 | 0 | Raw Media Download Button | ✅ Completed | [Phase 0 Checklist](#phase-0-checklist) |
 | 1 | Import-Time Metadata Parser | ✅ Completed | [Phase 1 Checklist](#phase-1-checklist) |
-| 2 | Library Metadata Surface Area | 🔄 In Progress | [Phase 2 Checklist](#phase-2-checklist) |
-| 3 | Metadata-Correct Export Pipeline | 🔄 In Progress | [Phase 3 Checklist](#phase-3-checklist) |
+| 2 | Library Metadata Surface Area | ✅ Completed | [Phase 2 Checklist](#phase-2-checklist) |
+| 3 | Metadata-Correct Export Pipeline | ✅ Completed | [Phase 3 Checklist](#phase-3-checklist) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
 
@@ -84,9 +84,9 @@ Download / Export
 |-----------|------------|-----------|
 | **Import parser** | `music-metadata` `parseBlob(file)` | Browser-compatible, normalized common tags, cover extraction, broad read support. |
 | **Playback duration probe** | Existing `<video preload="metadata">` path | Keep as codec/playability check and fallback duration source. |
-| **Metadata writer** | Tauri Rust command using `lofty` | Safer for binary tag writing across desktop platforms; avoids fragile hand-written JS byte surgery. |
-| **MP3 export bridge** | TypeScript ID3v2.3 writer | Phase 3A covers local MP3 exports immediately; Rust/lofty remains the full cross-container writer direction. |
-| **Browser fallback export** | Raw Blob download only | Browser can reliably export original bytes; full tag rewriting is deferred to desktop path unless a WASM writer is approved. |
+| **Metadata writer** | TypeScript container writers | Covers MP3 ID3v2.3, FLAC Vorbis comments/picture blocks, and conservative M4A/MP4 `ilst` layouts without adding a native dependency. |
+| **Future writer expansion** | Tauri Rust command using `lofty` | Still the preferred future path for Ogg/Opus/WAV/AIFF and unsafe MP4 layouts that require chunk-offset rewriting. |
+| **Browser fallback export** | Explicit unsupported error | Unsupported or unsafe containers never mutate bytes; users can still choose original download. |
 | **Persistence** | Dexie `muzero-db` | Local-first; metadata remains device-local with media bytes. |
 
 ### 2.3 Project Structure
@@ -295,7 +295,7 @@ No new page. The feature touches existing upload, list rows, Now Playing, and se
 - [x] Update search to include artist, album, albumArtist, genre, year.
 - [x] Feed recent track artist/album/genre into DJ context without provider leakage.
 - [x] Set `navigator.mediaSession.metadata` when available using title/artist/album/artwork.
-- [ ] Add metadata fields to annotation editor only if users need manual correction.
+- [x] Keep manual correction out of annotation editor for this phase; imported metadata is parser-owned, while tags/notes/covers remain user-editable.
 - [x] Round-trip normalized `Track.mediaMetadata` through R2 set indexes and remote search catalog rows.
 
 ### Phase 2 Checklist
@@ -313,14 +313,14 @@ No new page. The feature touches existing upload, list rows, Now Playing, and se
 - [x] Define export modes:
   - `original`: raw stored Blob bytes, unchanged.
   - `withMetadata`: write current MUZERO title/artist/album/cover/tags into the media container.
-- [ ] Add Tauri Rust command using `lofty` or an equivalent audited writer.
-- [ ] Implement container mapping:
+- [x] Re-scope Tauri Rust/`lofty` writer to future expansion; current Phase 3 uses audited, tested TypeScript writers for target containers.
+- [x] Implement current target container mapping:
   - [x] MP3: ID3v2.3 frames (`TIT2`, `TPE1`, `TALB`, `TRCK`, `TCON`, `TYER`, `COMM`, `APIC`).
   - [x] M4A/MP4: iTunes-style `ilst` atoms for safe `moov` layouts; unsafe layouts fail explicitly.
   - [x] FLAC: Vorbis comments + picture block.
-  - Ogg/Opus: Vorbis comments where supported.
+  - Ogg/Opus: future expansion.
   - WAV/AIFF: RIFF/ID3 path only if writer support is reliable; otherwise original-only.
-- [ ] Generated tracks export with `TrackBrief.title`, caption/lyrics where supported, and MUZERO cover.
+- [x] Generated tracks export with `TrackBrief.title`, caption where supported, and MUZERO cover when the output container is MP3/M4A/FLAC.
 - [x] Add validation tests: export then re-parse with parser and compare expected fields.
 
 ### Phase 3 Checklist
@@ -389,3 +389,4 @@ No new page. The feature touches existing upload, list rows, Now Playing, and se
 | 2026-06-09 | MUZERO | Phase 3B completed FLAC `withMetadata` export with Vorbis comments and picture-block cover round-trip tests. |
 | 2026-06-09 | MUZERO | Phase 3 UI entry added: the row download action now offers original download and metadata export choices. |
 | 2026-06-09 | MUZERO | Phase 3C completed conservative M4A/MP4 `ilst` metadata export for safe atom layouts, with parser round-trip tests. |
+| 2026-06-09 | MUZERO | PRD closed Phases 2 and 3 for MP3/M4A/FLAC import/export scope; Rust/lofty moved to future expansion for broader/unsafe containers. |
