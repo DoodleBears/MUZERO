@@ -75,6 +75,8 @@ export interface Memory {
   note: string;
   /** Optional photo — FK into `mediaBlobs` (role "memory"). */
   photoBlobId?: string;
+  /** Streamable remote memory photo URL for read-only cloud shares. */
+  remotePhotoUrl?: string;
   createdAt: number;
 }
 
