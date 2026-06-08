@@ -80,6 +80,37 @@ describe("buildR2ExportPlan", () => {
     );
   });
 
+  it("exports uploaded video media as content-addressed mp4 objects", async () => {
+    await seedSet();
+    await db.tracks.update("trk_1", { kind: "video" });
+    await db.mediaBlobs.update("blb_media", {
+      mime: "video/mp4",
+      blob: new Blob(["mp4"], { type: "video/mp4" }),
+    });
+
+    const plan = await buildR2ExportPlan({
+      driveId: "drv_1",
+      libraryId: "lib_1",
+      baseUrl: "https://music.example.com/muzero/",
+      setIds: ["ses_1"],
+      db,
+    });
+
+    expect(plan.objects.find((object) => object.kind === "media")).toMatchObject({
+      contentType: "video/mp4",
+      key: expect.stringMatching(/^objects\/media\/sha256-[a-f0-9]{64}\.mp4$/),
+    });
+    const setIndex = JSON.parse(
+      String(plan.objects.find((object) => object.kind === "set-index")?.body),
+    );
+    expect(setIndex.tracks[0]).toMatchObject({
+      kind: "video",
+      media: {
+        mime: "video/mp4",
+      },
+    });
+  });
+
   it("skips remote-only tracks because they have no local bytes to publish", async () => {
     await seedSet({ remoteOnly: true });
 
