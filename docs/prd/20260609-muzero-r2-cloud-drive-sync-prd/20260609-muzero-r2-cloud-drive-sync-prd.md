@@ -1719,7 +1719,7 @@ For a large shared playlist with many trusted devices, the UI should:
 - [x] Upload per-set `index.json`.
 - [x] Upload the current device `DevicePublicProfile` when profile publishing is enabled.
 - [x] Upload per-device stats objects only for the current device or explicitly granted trusted devices.
-- [ ] Rebuild optional `devices/index.json`, `stats/index.json`, and `presence/index.json` as owner-maintained discovery indexes.
+- [x] Rebuild optional `devices/index.json`, `stats/index.json`, and `presence/index.json` as owner-maintained discovery indexes.
 - [x] Upload root `manifest.json` last.
 - [x] Persist `syncObjects` mapping and `syncRuns`.
 - [x] Add cancel support between objects.
@@ -2041,3 +2041,4 @@ Do not record secrets, full signed URLs, or media content.
 | 2026-06-09 | MUZERO | Phase 4 large remote-search catalog regression added: catalog pull now has coverage for 250 remote tracks proving only catalog/set/track JSON pages are fetched, while media and cover object bytes remain untouched. |
 | 2026-06-09 | MUZERO | Phase 4 pull offline-cache option added: `applyRemoteSetPull` remains stream-only by default but can now cache imported remote media into `mediaBlobs` for offline playback, reusing MIME/role validation before linking `Track.blobId`. |
 | 2026-06-09 | MUZERO | Phase 3 device avatar/profile write-policy checklist reconciled: `buildR2ExportPlanForDrive` is already covered by policy tests proving profiles and avatar objects publish only to owner/trusted writable drives with local R2 credentials. |
+| 2026-06-09 | MUZERO | Phase 3 owner-maintained discovery indexes completed: export plans now build `devices/index.json`, `stats/index.json`, and optional `presence/index.json`, and root `manifest.json` references whichever discovery indexes are present. |

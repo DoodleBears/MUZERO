@@ -93,6 +93,53 @@ describe("buildR2ExportPlanForDrive", () => {
       precondition: { ifMatch: '"profile-etag-1"' },
     });
   });
+
+  it("publishes owner-maintained discovery indexes and references them from manifest", async () => {
+    await seedDevice();
+    await db.playbackAggregates.put({
+      id: "dvc_1:track:trk_1",
+      devicePublicId: "dvc_1",
+      scope: "track",
+      trackId: "trk_1",
+      playCount: 1,
+      listenedSec: 45,
+      updatedAt: 45_000,
+    });
+
+    const plan = await buildR2ExportPlanForDrive({
+      drive: ownedDrive,
+      settings: { ...settingsWithCredentials, presenceEnabled: true },
+      libraryId: "lib_1",
+      baseUrl: "https://music.example.com/muzero/",
+      setIds: [],
+      db,
+    });
+    const manifest = JSON.parse(
+      String(plan.objects.find((object) => object.kind === "manifest")?.body),
+    );
+    const presenceIndex = JSON.parse(
+      String(plan.objects.find((object) => object.kind === "presence-index")?.body),
+    );
+
+    expect(plan.objects.map((object) => object.kind)).toEqual([
+      "device-avatar",
+      "device-profile",
+      "stats-aggregate",
+      "devices-index",
+      "stats-index",
+      "presence-index",
+      "manifest",
+    ]);
+    expect(manifest).toMatchObject({
+      devicesIndex: "devices/index.json",
+      statsIndex: "stats/index.json",
+      presenceIndex: "presence/index.json",
+    });
+    expect(presenceIndex.devices[0]).toMatchObject({
+      devicePublicId: "dvc_1",
+      presence: "presence/devices/dvc_1.json",
+    });
+  });
 });
 
 async function seedDevice() {

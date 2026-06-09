@@ -24,6 +24,7 @@ import {
   r2MemorySchema,
   r2SetTrackSchema,
 } from "./r2-manifest-schema";
+import { canWritePresenceToDrive } from "./r2-presence";
 import { canPublishDeviceProfileToDrive, canWriteStatsToDrive } from "./r2-stats-policy";
 
 type R2RemoteObject = R2SetIndex["tracks"][number]["media"];
@@ -37,6 +38,7 @@ export type R2ExportObjectKind =
   | "set-mutation"
   | "device-profile"
   | "devices-index"
+  | "presence-index"
   | "stats-events-segment"
   | "stats-checkpoint"
   | "stats-aggregate"
@@ -98,6 +100,7 @@ export interface R2PlaybackEventFlushOptions extends Partial<PlaybackEventFlushP
 export interface R2DeviceExportOptions {
   publishProfile?: boolean;
   publishStats?: boolean;
+  publishPresence?: boolean;
   profilePrecondition?: R2ObjectWritePrecondition;
 }
 
@@ -124,6 +127,7 @@ export async function buildR2ExportPlanForDrive(
     ? canPublishDeviceProfileToDrive(device, input.settings, input.drive)
     : false;
   const publishStats = canWriteStatsToDrive(input.settings, input.drive);
+  const publishPresence = canWritePresenceToDrive(input.settings, input.drive);
 
   return buildR2ExportPlan({
     driveId: input.drive.id,
@@ -135,6 +139,7 @@ export async function buildR2ExportPlanForDrive(
     deviceExport: {
       publishProfile,
       publishStats,
+      publishPresence,
       profilePrecondition: input.deviceProfileBase?.etag
         ? { ifMatch: input.deviceProfileBase.etag }
         : undefined,
@@ -234,9 +239,9 @@ export async function buildR2ExportPlan(input: R2ExportPlanInput): Promise<R2Exp
     });
   }
 
-  const manifest = createManifest(input, setIndexes);
   const mutationObjects = await createSetMutationObjects(input.driveId, db);
   const deviceObjects = await createDeviceObjects(db, input.playbackEventFlush, input.deviceExport);
+  const manifest = createManifest(input, setIndexes, deviceObjects);
   const objects = [
     ...binaryObjects,
     ...setIndexes.map(({ object }) => object),
@@ -532,8 +537,12 @@ function setMutationKey(mutation: SyncMutation): string {
 function createManifest(
   input: R2ExportPlanInput,
   setIndexes: Array<{ session: DjSession; object: R2ExportObject }>,
+  indexObjects: R2ExportObject[] = [],
 ): R2Manifest {
   const now = new Date().toISOString();
+  const devicesIndex = indexObjects.find((object) => object.kind === "devices-index")?.key;
+  const statsIndex = indexObjects.find((object) => object.kind === "stats-index")?.key;
+  const presenceIndex = indexObjects.find((object) => object.kind === "presence-index")?.key;
   return {
     schema: "muzero-r2-manifest-v1",
     libraryId: input.libraryId,
@@ -541,6 +550,9 @@ function createManifest(
     createdAt: now,
     updatedAt: now,
     baseUrl: input.baseUrl,
+    devicesIndex,
+    statsIndex,
+    presenceIndex,
     sets: setIndexes.map(({ session, object }) => ({
       id: session.id,
       title: session.name,
@@ -566,6 +578,7 @@ async function createDeviceObjects(
   let statsUpdatedAt = 0;
   const shouldPublishProfile = (deviceExport.publishProfile ?? true) && device.publishProfile;
   const shouldPublishStats = deviceExport.publishStats ?? true;
+  const shouldPublishPresence = deviceExport.publishPresence ?? false;
   const avatar =
     shouldPublishProfile && device.avatarBlobId
       ? await loadOptionalBinaryObject("device-avatar", device.avatarBlobId, db, {})
@@ -654,6 +667,22 @@ async function createDeviceObjects(
             checkpoint: checkpointKey,
             latestSegment: latestSegmentKey,
             updatedAt: statsUpdatedAt,
+          },
+        ],
+      }),
+    );
+  }
+
+  if (shouldPublishPresence) {
+    objects.push(
+      createJsonObject("presence-index", "presence/index.json", {
+        schema: "muzero-r2-presence-index-v1",
+        updatedAt: device.lastSeenAt,
+        devices: [
+          {
+            devicePublicId: device.publicId,
+            presence: `presence/devices/${device.publicId}.json`,
+            updatedAt: device.lastSeenAt,
           },
         ],
       }),
