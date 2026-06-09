@@ -11,7 +11,7 @@
 
 | Phase | Name | Status | Link |
 |-------|------|--------|------|
-| 1 | Derived Artist/Album Index (pure lib) | 🔲 Pending | [Phase 1 Checklist](#phase-1-checklist) |
+| 1 | Derived Artist/Album Index (pure lib) | ✅ Completed | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | Library Browse Tabs: 专辑 / 歌手 | 🔲 Pending | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | Artist & Album Detail Views + Click-Through | 🔲 Pending | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | Faceted Search (title / artist / album) | 🔲 Pending | [Phase 4 Checklist](#phase-4-checklist) |
@@ -280,16 +280,17 @@ Routing reuses the existing level-1 ⇄ level-2 pattern (`selectedSetId` → `Se
 **Goal:** A pure, exhaustively-tested projection from `Track[]` to artist/album entities + the shared read helpers.
 
 **Tasks:**
-- [ ] Add `normalizeArtistName`, `trackArtists`, `trackAlbum` to `src/lib/track-display.ts`.
-- [ ] Create `src/lib/library-index.ts` with `buildArtistIndex` / `buildAlbumIndex` (+ `ArtistEntry`/`AlbumEntry` types).
-- [ ] Create `src/lib/library-index.test.ts`: multi-artist split, casing→modal display, album namespacing by albumArtist, trackNo ordering, empty-metadata exclusion, generated-track exclusion, cover fallback.
+- [x] Add `normalizeArtistName`, `trackArtists`, `trackAlbum` to [`src/lib/track-display.ts`](../../../src/lib/track-display.ts).
+- [x] Create [`src/lib/library-index.ts`](../../../src/lib/library-index.ts) with `buildArtistIndex` / `buildAlbumIndex` (+ `ArtistEntry`/`AlbumEntry` types), two-pass compilation-aware album grouping.
+- [x] Create [`src/lib/library-index.test.ts`](../../../src/lib/library-index.test.ts): multi-artist split, casing→modal display, album namespacing by albumArtist, trackNo ordering, Unknown/Generated buckets, compilation grouping, generated-track exclusion, cover fallback (18 cases).
 
 #### Phase 1 Checklist
-- [ ] Same artist in 3 casings collapses to one entry with modal display name.
-- [ ] `A feat. B` track appears under both A and B.
-- [ ] Two same-named albums by different artists stay separate.
-- [ ] Album track order follows `(diskNo, trackNo, title)`.
-- [ ] `make check` green.
+- [x] Same artist in 3 casings collapses to one entry with modal display name.
+- [x] `A feat. B` track appears under both A and B.
+- [x] Two same-named albums by different artists stay separate.
+- [x] Album track order follows `(diskNo, trackNo, title)`.
+- [x] Compilation (differing artists, no album artist) groups under one Various-Artists album.
+- [x] `make check` green (typecheck + biome + the 18 new cases).
 
 ### Phase 2: Library Browse Tabs (专辑 / 歌手)
 
@@ -407,6 +408,7 @@ Routing reuses the existing level-1 ⇄ level-2 pattern (`selectedSetId` → `Se
 |------|--------|---------|
 | 2026-06-10 | MUZERO | Initial draft. Investigated import metadata handling (already parses tags into `Track.mediaMetadata`); scoped artist/album as derived entities + per-artist/album stats. |
 | 2026-06-10 | MUZERO | Resolved all 5 open questions (long-term-optimal): (1) artist/album = derived current-truth analytics dimension over the event log, cross-drive via synced `RemoteSearchTrack.mediaMetadata`, never a synced `PlaybackAggregate` scope; (2) show "Unknown Artist/Album" buckets; (3) "AI Generated" pseudo-artist; (4) album identity = album + albumArtist (MusicBrainz convention) with Various-Artists handling, year excluded; (5) grouped facets **and** scoped `artist:`/`album:` tokens. Propagated into §3.1/§3.2/§3.4/§4/§6/§7. |
+| 2026-06-10 | MUZERO | **Phase 1 completed (TDD).** Added `normalizeArtistName`/`trackArtists`/`trackAlbum` to `track-display.ts` and the pure `library-index.ts` (`buildArtistIndex`/`buildAlbumIndex`, two-pass compilation-aware grouping, Unknown/Generated/Various-Artists buckets). 18 unit cases, typecheck + biome clean. |
 
 ---
 
