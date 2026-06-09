@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { MuzeroDB } from "@/db/muzero-db";
+import type { DjSession, MediaBlob, Track } from "@/db/types";
 import { applyRemoteSetPull, dryRunRemoteSetPull } from "./r2-pull-sync";
 import type { RemoteSetIndexResult } from "./r2-subscription";
 
@@ -121,7 +122,98 @@ describe("R2 pull sync", () => {
 
     expect(await db.tracks.count()).toBe(0);
   });
+
+  it("surfaces conflicts and never overwrites local media during a pull", async () => {
+    await seedLocalImportedSet({ updatedAt: 1500 });
+    await db.syncMutations.put({
+      id: "mut_track_title",
+      driveId: "drv_1",
+      devicePublicId: "dvc_1",
+      scope: "track",
+      entityId: "trk_remote_drv_1_trk_blue",
+      action: "track-metadata-updated",
+      base: { remoteKey: "sets/ses_tokyo/index.json", updatedAt: 1000 },
+      payload: { title: "Local Blue" },
+      createdAt: 1600,
+    });
+
+    const preview = await dryRunRemoteSetPull(
+      { driveId: "drv_1", remoteSet: remoteSet({ updatedAt: 2000 }) },
+      db,
+    );
+
+    expect(preview).toMatchObject({
+      action: "conflict",
+      willMutate: false,
+      conflict: {
+        entityType: "track",
+        entityId: "trk_blue",
+        localMutationIds: ["mut_track_title"],
+      },
+    });
+    await expect(
+      applyRemoteSetPull({ driveId: "drv_1", remoteSet: remoteSet({ updatedAt: 2000 }) }, db),
+    ).rejects.toThrow(/conflict/i);
+    await expect(db.tracks.get("trk_remote_drv_1_trk_blue")).resolves.toMatchObject({
+      title: "Local Blue",
+      blobId: "blb_local_media",
+    });
+    await expect(db.mediaBlobs.toArray()).resolves.toMatchObject([
+      {
+        id: "blb_local_media",
+        role: "media",
+        bytes: 5,
+      },
+    ]);
+  });
 });
+
+async function seedLocalImportedSet(input: { updatedAt: number }) {
+  const session: DjSession = {
+    id: "ses_remote_drv_1_ses_tokyo",
+    name: "Tokyo",
+    seedPrompt: "",
+    trackIds: ["trk_remote_drv_1_trk_blue"],
+    status: "idle",
+    config: {
+      autoExtend: false,
+      refillThreshold: 2,
+      batchSize: 1,
+      targetDurationSec: 180,
+      allowVocals: true,
+    },
+    displayMode: "cover",
+    createdAt: 1000,
+    updatedAt: input.updatedAt,
+  };
+  const track: Track = {
+    id: "trk_remote_drv_1_trk_blue",
+    sessionId: session.id,
+    title: "Local Blue",
+    kind: "audio",
+    origin: "uploaded",
+    provider: "upload",
+    status: "ready",
+    durationSec: 180,
+    blobId: "blb_local_media",
+    remoteMediaUrl: "https://music.example.com/muzero/objects/media/blue.mp3",
+    createdAt: 1000,
+    playCount: 0,
+    liked: false,
+    tags: [],
+  };
+  const media: MediaBlob = {
+    id: "blb_local_media",
+    trackId: track.id,
+    role: "media",
+    mime: "audio/mpeg",
+    bytes: 5,
+    blob: new Blob(["local"], { type: "audio/mpeg" }),
+  };
+  await db.sessions.put(session);
+  await db.tracks.put(track);
+  await db.mediaBlobs.put(media);
+}
 
 function remoteSet(input: { updatedAt?: number } = {}): RemoteSetIndexResult {
   const updatedAt = input.updatedAt ?? 1000;

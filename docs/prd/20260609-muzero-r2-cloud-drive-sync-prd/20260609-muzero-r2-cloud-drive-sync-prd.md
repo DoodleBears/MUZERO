@@ -1767,7 +1767,7 @@ For a large shared playlist with many trusted devices, the UI should:
 - [x] Pull sync can download media for offline playback.
 - [x] Pull sync can stream without downloading.
 - [x] Pull sync can update a large remote search catalog without downloading media bytes.
-- [ ] Conflicts are visible and never silently overwrite media.
+- [x] Conflicts are visible and never silently overwrite media.
 - [x] Two devices adding different tracks to the same set can auto-merge.
 - [x] Two devices renaming the same set differently produce a reviewable conflict.
 - [x] Stale set snapshot publish fails/replans instead of overwriting remote changes.
@@ -2044,3 +2044,4 @@ Do not record secrets, full signed URLs, or media content.
 | 2026-06-09 | MUZERO | Phase 3 owner-maintained discovery indexes completed: export plans now build `devices/index.json`, `stats/index.json`, and optional `presence/index.json`, and root `manifest.json` references whichever discovery indexes are present. |
 | 2026-06-09 | MUZERO | Phase 4 set-level sync indicator contract added: sync previews can now expose stable `local-changes`, `remote-changed`, `auto-merged`, and `needs-review` flags plus conflict metadata for later UI rendering. |
 | 2026-06-09 | MUZERO | Phase 4 additive stats merge verified: importing multiple per-device R2 aggregate caches preserves device-separated rows and query summaries add play counts/listened seconds without using a shared mutable counter. |
+| 2026-06-09 | MUZERO | Phase 4 conflict media safety verified: pull dry-run exposes track conflicts with mutation ids, and apply blocks conflicted pulls without replacing existing local `Track.blobId` or `mediaBlobs` rows. |
