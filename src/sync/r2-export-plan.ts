@@ -81,12 +81,16 @@ export interface R2PlaybackEventFlushOptions extends Partial<PlaybackEventFlushP
 export interface R2DeviceExportOptions {
   publishProfile?: boolean;
   publishStats?: boolean;
+  profilePrecondition?: R2ObjectWritePrecondition;
 }
 
 export interface R2ExportPlanForDriveInput
   extends Omit<R2ExportPlanInput, "driveId" | "deviceExport"> {
   drive: CloudDrive;
   settings: AppSettings;
+  deviceProfileBase?: {
+    etag?: string;
+  };
 }
 
 interface BinaryObjectResult {
@@ -114,6 +118,9 @@ export async function buildR2ExportPlanForDrive(
     deviceExport: {
       publishProfile,
       publishStats,
+      profilePrecondition: input.deviceProfileBase?.etag
+        ? { ifMatch: input.deviceProfileBase.etag }
+        : undefined,
     },
   });
 }
@@ -283,7 +290,7 @@ function createJsonObject(
   kind: Exclude<R2ExportObjectKind, "media" | "cover" | "memory-photo" | "device-avatar">,
   key: string,
   value: unknown,
-  refs: Pick<R2ExportObject, "setId"> = {},
+  refs: Pick<R2ExportObject, "setId" | "precondition"> = {},
 ): R2ExportObject {
   const body = `${JSON.stringify(value, null, 2)}\n`;
   return {
@@ -369,6 +376,7 @@ async function createDeviceObjects(
         "device-profile",
         `profiles/devices/${device.publicId}/profile.json`,
         toDevicePublicProfile(device, avatar?.remote),
+        { precondition: deviceExport.profilePrecondition },
       ),
     );
   }

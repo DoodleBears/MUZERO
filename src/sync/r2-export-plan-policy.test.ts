@@ -73,6 +73,26 @@ describe("buildR2ExportPlanForDrive", () => {
 
     expect(plan.objects.map((object) => object.kind)).toEqual(["manifest"]);
   });
+
+  it("attaches an observed profile ETag precondition before overwriting the remote profile", async () => {
+    await seedDevice();
+
+    const plan = await buildR2ExportPlanForDrive({
+      drive: ownedDrive,
+      settings: settingsWithCredentials,
+      libraryId: "lib_1",
+      baseUrl: "https://music.example.com/muzero/",
+      setIds: [],
+      db,
+      deviceProfileBase: {
+        etag: '"profile-etag-1"',
+      },
+    });
+
+    expect(plan.objects.find((object) => object.kind === "device-profile")).toMatchObject({
+      precondition: { ifMatch: '"profile-etag-1"' },
+    });
+  });
 });
 
 async function seedDevice() {
