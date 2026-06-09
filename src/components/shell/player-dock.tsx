@@ -68,19 +68,27 @@ export function PlayerDock({
           hidden && "pointer-events-none opacity-0",
         )}
       >
-        <div
-          className={cn(
-            "mx-auto flex w-[min(calc(100vw-1.5rem),46rem)] min-w-0 flex-col gap-2",
-            !hidden && "pointer-events-auto",
-          )}
-        >
-          <div className="flex min-w-0 items-center justify-end gap-2 px-4">
+        <div className="mx-auto flex w-[min(calc(100vw-1.5rem),46rem)] min-w-0 flex-col gap-2">
+          <div
+            className={cn(
+              // w-fit + self-end: hug the controls on the right so the empty left
+              // of this band stays click-through (pointer-events live on content,
+              // not on the full-width wrapper above).
+              "flex w-fit min-w-0 items-center justify-end gap-2 self-end px-4",
+              !hidden && "pointer-events-auto",
+            )}
+          >
             <DockMemoryToggle className="hidden md:flex" visible={tab === "now"} />
             <div className="shrink-0">
               <NavFab value={tab} onChange={onTabChange} />
             </div>
           </div>
-          <div className="flex w-full min-w-0 flex-col gap-2.5 rounded-3xl bg-card/93 p-3 shadow-lg backdrop-blur-md">
+          <div
+            className={cn(
+              "flex w-full min-w-0 flex-col gap-2.5 rounded-3xl bg-card/93 p-3 shadow-lg backdrop-blur-md",
+              !hidden && "pointer-events-auto",
+            )}
+          >
             <div className="flex min-w-0 items-center gap-2">
               <TrackIdentityRow
                 className="min-w-0 flex-1"
