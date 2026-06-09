@@ -1,8 +1,12 @@
 import { useLiveQuery } from "dexie-react-hooks";
+import type { TFunction } from "i18next";
 import { ArrowLeft, Heart, ImagePlus, LayoutGrid, List, Play, Plus, Search } from "lucide-react";
 import { motion } from "motion/react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { EntityDetailView } from "@/components/library/entity-detail";
+import { EntityGrid, type LibraryEntityItem } from "@/components/library/entity-grid";
+import { TrackListMenu } from "@/components/library/track-list-menu";
 import { VirtualTrackList } from "@/components/library/virtual-track-list";
 import { TrackInspectorPanel } from "@/components/track/track-inspector-panel";
 import { Button } from "@/components/ui/button";
@@ -24,6 +28,12 @@ import type { Track } from "@/db/types";
 import { useObjectUrl, useTrackCoverUrl } from "@/hooks/use-media";
 import { dragHasFiles, filesFromTransfer, IMAGE_ACCEPT, MEDIA_ACCEPT } from "@/lib/file-drop";
 import {
+  type AlbumEntry,
+  type ArtistEntry,
+  buildAlbumIndex,
+  buildArtistIndex,
+} from "@/lib/library-index";
+import {
   filterSets,
   type SetFilter,
   type SetGalleryItem,
@@ -38,7 +48,14 @@ import { useUploadTargetStore } from "@/stores/upload-target-store";
 import { matchesRemoteSearchTrack } from "@/sync/r2-search-catalog";
 
 type GalleryView = "list" | "grid";
-type GalleryMode = "sets" | "tracks";
+type GalleryMode = "sets" | "tracks" | "albums" | "artists";
+const GALLERY_MODES: GalleryMode[] = ["sets", "tracks", "albums", "artists"];
+const SEARCH_PLACEHOLDER_KEY = {
+  sets: "gallery.searchSets",
+  tracks: "gallery.searchTracks",
+  albums: "gallery.searchAlbums",
+  artists: "gallery.searchArtists",
+} as const satisfies Record<GalleryMode, string>;
 const MODE_KEY = "muzero-gallery-mode";
 const VIEW_KEY = "muzero-gallery-view";
 const EMPTY_MEMORY_NOTES = new Map<string, string[]>();
@@ -47,7 +64,8 @@ const GALLERY_MODE_TOGGLE_KEYS = new Set(["`", "~", "·", "｀"]);
 
 function savedGalleryMode(): GalleryMode {
   if (typeof localStorage === "undefined") return "sets";
-  return localStorage.getItem(MODE_KEY) === "tracks" ? "tracks" : "sets";
+  const saved = localStorage.getItem(MODE_KEY);
+  return GALLERY_MODES.includes(saved as GalleryMode) ? (saved as GalleryMode) : "sets";
 }
 
 function normalizeDescription(value: string): string {
@@ -78,9 +96,13 @@ export function SearchPage() {
   const [mode, setMode] = useState<GalleryMode>(savedGalleryMode);
   const [setQuery, setSetQuery] = useState("");
   const [trackQuery, setTrackQuery] = useState("");
+  const [albumQuery, setAlbumQuery] = useState("");
+  const [artistQuery, setArtistQuery] = useState("");
   const [filter, setFilter] = useState<SetFilter>("all");
   const [sort, setSort] = useState<SetSort>("recent");
   const [selectedLibraryTrackId, setSelectedLibraryTrackId] = useState<string | null>(null);
+  const [selectedArtistKey, setSelectedArtistKey] = useState<string | null>(null);
+  const [selectedAlbumKey, setSelectedAlbumKey] = useState<string | null>(null);
   const [view, setView] = useState<GalleryView>(() =>
     (typeof localStorage !== "undefined" && localStorage.getItem(VIEW_KEY)) === "grid"
       ? "grid"
@@ -120,7 +142,7 @@ export function SearchPage() {
       const target = event.target instanceof HTMLElement ? event.target : null;
       if (target?.closest('[role="dialog"][aria-modal="true"]')) return;
       event.preventDefault();
-      const next = mode === "sets" ? "tracks" : "sets";
+      const next = GALLERY_MODES[(GALLERY_MODES.indexOf(mode) + 1) % GALLERY_MODES.length];
       setMode(next);
       if (typeof localStorage !== "undefined") localStorage.setItem(MODE_KEY, next);
     };
@@ -129,6 +151,44 @@ export function SearchPage() {
   }, [mode, selectedSetId]);
 
   const trackById = useMemo(() => new Map(allTracks.map((tr) => [tr.id, tr])), [allTracks]);
+
+  // Derived artist/album entities — pure projections over the imported metadata
+  // (no stored table); re-project whenever the track liveQuery emits.
+  const artistIndex = useMemo(() => buildArtistIndex(allTracks), [allTracks]);
+  const albumIndex = useMemo(() => buildAlbumIndex(allTracks), [allTracks]);
+  const artistItems = useMemo<LibraryEntityItem[]>(() => {
+    const q = artistQuery.trim().toLowerCase();
+    return artistIndex
+      .map((entry) => ({
+        key: entry.key,
+        label: artistDisplayLabel(entry, t),
+        sublabel: t("gallery.count", { count: entry.trackIds.length }),
+        coverTrackId: entry.coverTrackId,
+      }))
+      .filter((item) => !q || item.label.toLowerCase().includes(q));
+  }, [artistIndex, artistQuery, t]);
+  const albumItems = useMemo<LibraryEntityItem[]>(() => {
+    const q = albumQuery.trim().toLowerCase();
+    return albumIndex
+      .map((entry) => ({
+        key: entry.key,
+        label: albumDisplayLabel(entry, t),
+        sublabel:
+          entry.bucket === "unknown"
+            ? t("gallery.count", { count: entry.trackIds.length })
+            : albumArtistDisplayLabel(entry, t),
+        coverTrackId: entry.coverTrackId,
+      }))
+      .filter((item) => !q || item.label.toLowerCase().includes(q));
+  }, [albumIndex, albumQuery, t]);
+  const selectedArtist = useMemo(
+    () => artistIndex.find((entry) => entry.key === selectedArtistKey),
+    [artistIndex, selectedArtistKey],
+  );
+  const selectedAlbum = useMemo(
+    () => albumIndex.find((entry) => entry.key === selectedAlbumKey),
+    [albumIndex, selectedAlbumKey],
+  );
 
   const items = useMemo<SetGalleryItem[]>(
     () =>
@@ -170,7 +230,20 @@ export function SearchPage() {
         : [],
     [remoteTracks, trackQuery],
   );
-  const query = mode === "sets" ? setQuery : trackQuery;
+  const query =
+    mode === "sets"
+      ? setQuery
+      : mode === "tracks"
+        ? trackQuery
+        : mode === "albums"
+          ? albumQuery
+          : artistQuery;
+  const setQueryForMode = (value: string) => {
+    if (mode === "sets") setSetQuery(value);
+    else if (mode === "tracks") setTrackQuery(value);
+    else if (mode === "albums") setAlbumQuery(value);
+    else setArtistQuery(value);
+  };
 
   useEffect(() => {
     if (mode !== "tracks") return;
@@ -243,6 +316,44 @@ export function SearchPage() {
     );
   }
 
+  // Level 2: a derived artist's or album's track list.
+  if (selectedArtist) {
+    const tracks = selectedArtist.trackIds
+      .map((id) => trackById.get(id))
+      .filter((tr): tr is Track => !!tr);
+    return (
+      <EntityDetailView
+        kind="artist"
+        title={artistDisplayLabel(selectedArtist, t)}
+        subtitle={t("gallery.albumCount", { count: selectedArtist.albumKeys.length })}
+        coverTrack={
+          selectedArtist.coverTrackId ? trackById.get(selectedArtist.coverTrackId) : undefined
+        }
+        tracks={tracks}
+        onBack={() => transitionState(() => setSelectedArtistKey(null))}
+      />
+    );
+  }
+  if (selectedAlbum) {
+    const tracks = selectedAlbum.trackIds
+      .map((id) => trackById.get(id))
+      .filter((tr): tr is Track => !!tr);
+    return (
+      <EntityDetailView
+        kind="album"
+        title={albumDisplayLabel(selectedAlbum, t)}
+        subtitle={
+          selectedAlbum.bucket === "unknown" ? "" : albumArtistDisplayLabel(selectedAlbum, t)
+        }
+        coverTrack={
+          selectedAlbum.coverTrackId ? trackById.get(selectedAlbum.coverTrackId) : undefined
+        }
+        tracks={tracks}
+        onBack={() => transitionState(() => setSelectedAlbumKey(null))}
+      />
+    );
+  }
+
   // Level 1: the album wall. One full-height scroll surface — search + filters
   // scroll with the wall and the whole thing dissolves under the floating chrome
   // (`chrome-fade`), top and bottom, just like Now Playing.
@@ -255,12 +366,18 @@ export function SearchPage() {
       )}
     >
       <TooltipProvider>
-        <div className="mb-3 inline-flex rounded-lg border border-border bg-background/40 p-1">
+        <div className="mb-3 inline-flex rounded-lg border border-border bg-background/10 w-fit p-1">
           <ModeTab active={mode === "sets"} onClick={() => setModePref("sets")}>
             {t("gallery.modeSets")}
           </ModeTab>
           <ModeTab active={mode === "tracks"} onClick={() => setModePref("tracks")}>
             {t("gallery.modeTracks")}
+          </ModeTab>
+          <ModeTab active={mode === "albums"} onClick={() => setModePref("albums")}>
+            {t("gallery.modeAlbums")}
+          </ModeTab>
+          <ModeTab active={mode === "artists"} onClick={() => setModePref("artists")}>
+            {t("gallery.modeArtists")}
           </ModeTab>
         </div>
       </TooltipProvider>
@@ -270,10 +387,8 @@ export function SearchPage() {
           <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             value={query}
-            onChange={(e) =>
-              mode === "sets" ? setSetQuery(e.target.value) : setTrackQuery(e.target.value)
-            }
-            placeholder={mode === "sets" ? t("gallery.searchSets") : t("gallery.searchTracks")}
+            onChange={(e) => setQueryForMode(e.target.value)}
+            placeholder={t(SEARCH_PLACEHOLDER_KEY[mode])}
             className="pl-9"
             data-muzero-search-input
             onKeyDown={onSearchKeyDown}
@@ -291,7 +406,7 @@ export function SearchPage() {
         )}
       </div>
 
-      {mode === "sets" ? (
+      {mode === "sets" && (
         <>
           <div className="mb-3 flex flex-wrap items-center gap-1.5">
             <Chip active={filter === "all"} onClick={() => setFilter("all")}>
@@ -362,7 +477,9 @@ export function SearchPage() {
             )}
           </div>
         </>
-      ) : (
+      )}
+
+      {mode === "tracks" && (
         <div className="min-h-0 flex-1">
           {shownTracks.length === 0 && shownRemoteTracks.length === 0 ? (
             <p className="mt-12 text-center text-sm text-muted-foreground">
@@ -372,14 +489,16 @@ export function SearchPage() {
             <div className="grid min-h-0 flex-1 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(280px,360px)]">
               <div className="flex min-h-0 flex-1 flex-col gap-4">
                 {shownTracks.length > 0 && (
-                  <VirtualTrackList
-                    tracks={shownTracks}
-                    selectedTrackId={selectedLibraryTrack?.id}
-                    onView={(track) => transitionState(() => setSelectedLibraryTrackId(track.id))}
-                    onPlay={(track) => void playTrack(track)}
-                    emptyHint={t("gallery.tracksEmpty")}
-                    className="no-scrollbar pb-chrome-bottom"
-                  />
+                  <TrackListMenu className="min-h-0 flex-1">
+                    <VirtualTrackList
+                      tracks={shownTracks}
+                      selectedTrackId={selectedLibraryTrack?.id}
+                      onView={(track) => transitionState(() => setSelectedLibraryTrackId(track.id))}
+                      onPlay={(track) => void playTrack(track)}
+                      emptyHint={t("gallery.tracksEmpty")}
+                      className="no-scrollbar pb-chrome-bottom"
+                    />
+                  </TrackListMenu>
                 )}
                 {shownRemoteTracks.length > 0 && (
                   <div className="flex flex-col gap-1 pb-chrome-bottom">
@@ -404,6 +523,38 @@ export function SearchPage() {
             </div>
           )}
         </div>
+      )}
+
+      {mode === "albums" && (
+        <>
+          <div className="mb-3 flex items-center justify-end">
+            <ViewToggleGroup view={view} onChange={setViewPref} />
+          </div>
+          <EntityGrid
+            items={albumItems}
+            kind="album"
+            view={view}
+            trackById={trackById}
+            onOpen={(key) => transitionState(() => setSelectedAlbumKey(key))}
+            emptyHint={t("gallery.albumsEmpty")}
+          />
+        </>
+      )}
+
+      {mode === "artists" && (
+        <>
+          <div className="mb-3 flex items-center justify-end">
+            <ViewToggleGroup view={view} onChange={setViewPref} />
+          </div>
+          <EntityGrid
+            items={artistItems}
+            kind="artist"
+            view={view}
+            trackById={trackById}
+            onOpen={(key) => transitionState(() => setSelectedArtistKey(key))}
+            emptyHint={t("gallery.artistsEmpty")}
+          />
+        </>
       )}
     </div>
   );
@@ -620,7 +771,7 @@ function SetDetailView({
       </div>
 
       <div className="grid min-h-0 flex-1 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(280px,360px)]">
-        <div className="min-h-0">
+        <TrackListMenu setId={setId} className="min-h-0">
           <VirtualTrackList
             tracks={tracks}
             selectedTrackId={selectedTrack?.id}
@@ -629,7 +780,7 @@ function SetDetailView({
             emptyHint={t("gallery.empty")}
             className="chrome-fade no-scrollbar pt-5 pb-chrome-bottom [--chrome-fade-top:1.25rem]"
           />
-        </div>
+        </TrackListMenu>
         <TrackInspectorPanel track={selectedTrack} />
       </div>
     </motion.div>
@@ -653,6 +804,52 @@ function useSetCoverUrl(
   const setUrl = useObjectUrl(setBlob);
   const trackUrl = useTrackCoverUrl(fallbackTrack);
   return coverBlobId ? setUrl : trackUrl;
+}
+
+/** Localize a derived artist's label — pseudo-buckets resolve to UI copy. */
+function artistDisplayLabel(entry: ArtistEntry, t: TFunction): string {
+  if (entry.bucket === "generated") return t("gallery.aiGenerated");
+  if (entry.bucket === "unknown") return t("gallery.unknownArtist");
+  return entry.name;
+}
+
+/** Localize a derived album's title — the unknown bucket resolves to UI copy. */
+function albumDisplayLabel(entry: AlbumEntry, t: TFunction): string {
+  return entry.bucket === "unknown" ? t("gallery.unknownAlbum") : entry.name;
+}
+
+/** Localize a derived album's artist line — compilations resolve to "Various Artists". */
+function albumArtistDisplayLabel(entry: AlbumEntry, t: TFunction): string {
+  if (entry.isCompilation) return t("gallery.variousArtists");
+  return entry.artistName ?? t("gallery.unknownArtist");
+}
+
+function ViewToggleGroup({
+  view,
+  onChange,
+}: {
+  view: GalleryView;
+  onChange: (next: GalleryView) => void;
+}) {
+  const { t } = useTranslation();
+  return (
+    <div className="flex items-center gap-1">
+      <IconToggle
+        active={view === "list"}
+        onClick={() => onChange("list")}
+        label={t("gallery.viewList")}
+      >
+        <List className="size-4" />
+      </IconToggle>
+      <IconToggle
+        active={view === "grid"}
+        onClick={() => onChange("grid")}
+        label={t("gallery.viewGrid")}
+      >
+        <LayoutGrid className="size-4" />
+      </IconToggle>
+    </div>
+  );
 }
 
 function Chip({

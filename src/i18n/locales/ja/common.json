@@ -456,7 +456,19 @@
     "trackGenre": "ジャンル",
     "trackYear": "年",
     "trackDuration": "長さ",
-    "noTrackSelected": "曲を選択"
+    "noTrackSelected": "曲を選択",
+    "modeAlbums": "アルバム",
+    "modeArtists": "アーティスト",
+    "searchAlbums": "アルバムを検索…",
+    "searchArtists": "アーティストを検索…",
+    "albumsEmpty": "アルバムはまだありません — タグ付き音楽をインポートしてください。",
+    "artistsEmpty": "アーティストはまだいません — タグ付き音楽をインポートしてください。",
+    "unknownArtist": "不明なアーティスト",
+    "unknownAlbum": "不明なアルバム",
+    "variousArtists": "オムニバス",
+    "aiGenerated": "AI 生成",
+    "albumCount_other": "{{count}} 枚のアルバム",
+    "openEntity": "{{name}} を開く"
   },
   "notification": {
     "copy": "コピー",

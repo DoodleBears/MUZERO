@@ -466,7 +466,20 @@
     "trackGenre": "Genre",
     "trackYear": "Year",
     "trackDuration": "Duration",
-    "noTrackSelected": "Select a song"
+    "noTrackSelected": "Select a song",
+    "modeAlbums": "Albums",
+    "modeArtists": "Artists",
+    "searchAlbums": "Search albums…",
+    "searchArtists": "Search artists…",
+    "albumsEmpty": "No albums yet — import tagged music.",
+    "artistsEmpty": "No artists yet — import tagged music.",
+    "unknownArtist": "Unknown Artist",
+    "unknownAlbum": "Unknown Album",
+    "variousArtists": "Various Artists",
+    "aiGenerated": "AI Generated",
+    "albumCount_one": "{{count}} album",
+    "albumCount_other": "{{count}} albums",
+    "openEntity": "Open {{name}}"
   },
   "notification": {
     "copy": "Copy",

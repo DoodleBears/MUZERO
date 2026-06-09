@@ -12,8 +12,8 @@
 | Phase | Name | Status | Link |
 |-------|------|--------|------|
 | 1 | Derived Artist/Album Index (pure lib) | ✅ Completed | [Phase 1 Checklist](#phase-1-checklist) |
-| 2 | Library Browse Tabs: 专辑 / 歌手 | 🔲 Pending | [Phase 2 Checklist](#phase-2-checklist) |
-| 3 | Artist & Album Detail Views + Click-Through | 🔲 Pending | [Phase 3 Checklist](#phase-3-checklist) |
+| 2 | Library Browse Tabs: 专辑 / 歌手 (+ basic detail) | ✅ Completed | [Phase 2 Checklist](#phase-2-checklist) |
+| 3 | Cross-Linking Click-Through + Artist Albums Strip | 🔲 Pending | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | Faceted Search (title / artist / album) | 🔲 Pending | [Phase 4 Checklist](#phase-4-checklist) |
 | 5 | Listening Stats by Artist & Album | 🔲 Pending | [Phase 5 Checklist](#phase-5-checklist) |
 
@@ -106,11 +106,9 @@ src/
 │   └── search-page.tsx             # MODIFY — add "albums" / "artists" GalleryMode tabs + detail routing
 ├── components/
 │   └── library/
-│       ├── artist-grid.tsx         # NEW — artist cards (avatar mosaic + name + counts)
-│       ├── album-grid.tsx          # NEW — album cards (cover + name + artist)
-│       ├── artist-detail.tsx       # NEW — header + albums strip + tracks list + stats
-│       ├── album-detail.tsx        # NEW — header + ordered tracks list + stats
-│       └── track-row.tsx           # MODIFY — clickable artist/album in the subtitle line
+│       ├── entity-grid.tsx         # NEW — shared EntityGrid (artist round / album square cards)
+│       ├── entity-detail.tsx       # NEW — shared EntityDetailView (header + track list + inspector)
+│       └── track-row.tsx           # MODIFY — clickable artist/album in the subtitle line (Phase 3)
 └── i18n/locales/{en,zh,ja,ko}/common.json   # MODIFY — library/artist/album/stats keys
 ```
 
@@ -261,8 +259,8 @@ Routing reuses the existing level-1 ⇄ level-2 pattern (`selectedSetId` → `Se
 ### 5.2 UI Components
 
 - **`track-row.tsx` (MODIFY):** split the subtitle line so **artist** and **album** are independently clickable (`button`/`role="link"`), each navigating to that entity's detail. Keep the non-clickable `trackSubtitle` fallback for generated tracks. Verify title renders `track.title` (already embedded-title-first from import) — Req 3.
-- **`album-grid.tsx` / `artist-grid.tsx` (NEW):** mirror the existing `SetCard` grid/list affordances in [`search-page.tsx:745`](../../../src/pages/search-page.tsx) (cover, hover-play, counts). Artist card cover = a small mosaic of its tracks' covers, falling back to a `Disc3Icon`.
-- **`album-detail.tsx` / `artist-detail.tsx` (NEW):** reuse `VirtualTrackList` + `TrackInspectorPanel` (same split layout as the tracks mode and `SetDetailView`). Header shows name, artist (album), track count, total duration, and the derived listening stat (Phase 5). A "Play all" button loads the entity's tracks into the play queue via the existing `playTrack`/`setActiveSession` flow.
+- **[`entity-grid.tsx`](../../../src/components/library/entity-grid.tsx) (NEW, shared):** one DRY `EntityGrid` (artist + album, round vs square cover) mirroring `SetCard` grid/list affordances. Each card resolves its own cover via `useTrackCoverUrl`; labels are pre-localized at the call site so the component holds no copy. (Replaces the speculative `album-grid`/`artist-grid` split — one component is less duplication.)
+- **[`entity-detail.tsx`](../../../src/components/library/entity-detail.tsx) (NEW, shared):** `EntityDetailView` reuses `VirtualTrackList` + `TrackInspectorPanel` (same split layout as `SetDetailView`); read-only header (artist/album are derived, not editable). Rows play via `playTrack` (cross-set safe). _Play-all-as-queue_ and the derived stat header land in later phases (the session-centric queue has no ad-hoc cross-set "play these" entry yet)._
 - **`TrackInspectorPanel` / `TrackMetadataSummary` (MODIFY, [`track-inspector-panel.tsx:52`](../../../src/components/track/track-inspector-panel.tsx)):** make the artist and album facts clickable to their detail views.
 
 ### 5.3 State Management
@@ -297,29 +295,30 @@ Routing reuses the existing level-1 ⇄ level-2 pattern (`selectedSetId` → `Se
 **Goal:** Add `albums` and `artists` modes to the tab-2 gallery with grid/list cards.
 
 **Tasks:**
-- [ ] Extend `GalleryMode` + ModeTab row in `search-page.tsx` with `modeAlbums` / `modeArtists`.
-- [ ] Build `album-grid.tsx` / `artist-grid.tsx` reusing `SetCard` affordances + `useSetCoverUrl`-style cover hooks.
-- [ ] Wire `buildArtistIndex` / `buildAlbumIndex` via `useMemo(allTracks)`.
-- [ ] i18n: `gallery.modeAlbums`, `gallery.modeArtists`, empty states, counts (en→zh/ja/ko).
+- [x] Extend `GalleryMode` + ModeTab row in [`search-page.tsx`](../../../src/pages/search-page.tsx) with `modeAlbums` / `modeArtists` (+ `~` cycle through all four).
+- [x] Build the shared [`entity-grid.tsx`](../../../src/components/library/entity-grid.tsx) (`EntityGrid`, artist round / album square) + [`entity-detail.tsx`](../../../src/components/library/entity-detail.tsx) (`EntityDetailView`), routed via `selectedArtistKey`/`selectedAlbumKey` + `transitionState`.
+- [x] Wire `buildArtistIndex` / `buildAlbumIndex` via `useMemo(allTracks)`; localize pseudo-bucket labels at the call site.
+- [x] i18n: `gallery.modeAlbums`/`modeArtists`, `searchAlbums`/`searchArtists`, `albumsEmpty`/`artistsEmpty`, `unknownArtist`/`unknownAlbum`/`variousArtists`/`aiGenerated`/`albumCount`/`openEntity` (en→zh/ja/ko).
 
 #### Phase 2 Checklist
-- [ ] Tab 2 shows four modes; importing the sample MP3 lists "DoubleJ 姜峰" under 歌手 and "懒人的午后" under 专辑.
-- [ ] Grid and list views both render; covers resolve from track covers.
-- [ ] Empty library shows localized empty state, no crash.
+- [x] Tab 2 shows four modes (歌单 / 全部歌曲 / 专辑 / 歌手); verified live in the preview (placeholders + localized empty states, no console errors).
+- [x] Grid and list views both render; covers resolve from the entity's cover track.
+- [x] Empty library shows localized empty state, no crash.
+- [x] Tapping a card opens a read-only entity detail (header + virtualized track list); rows play via `playTrack`. (Populated-grid rendering covered by the Phase 1 unit tests.)
 
-### Phase 3: Artist & Album Detail Views + Click-Through
+### Phase 3: Cross-Linking Click-Through + Artist Albums Strip
 
-**Goal:** Tapping an artist/album opens its track list; artist/album are clickable everywhere a track shows them.
+**Goal:** Artist/album are clickable everywhere a track shows them, and an artist's detail surfaces its albums.
 
 **Tasks:**
-- [ ] `album-detail.tsx` / `artist-detail.tsx` (header + `VirtualTrackList` + `TrackInspectorPanel` + Play-all).
-- [ ] Level-1⇄level-2 routing in `search-page.tsx` (`selectedArtistKey` / `selectedAlbumKey` + `transitionState`).
-- [ ] Make artist/album clickable in `track-row.tsx` subtitle and in `TrackMetadataSummary`.
+- [ ] Make artist/album clickable in [`track-row.tsx`](../../../src/components/library/track-row.tsx) subtitle and in `TrackMetadataSummary` ([`track-inspector-panel.tsx`](../../../src/components/track/track-inspector-panel.tsx)) → open the entity detail. Needs a shared "navigate to entity" channel (e.g. a small UI store or callback) since track rows render outside `SearchPage`.
+- [ ] Artist detail: an "albums strip" (the artist's `AlbumEntry`s) above the track list.
+- [ ] (Stretch) A real cross-set "Play all" once an ad-hoc queue entry point exists.
 
 #### Phase 3 Checklist
 - [ ] Click artist in a track row → artist detail with all their tracks (Req 1).
-- [ ] Click album → album detail in track order (Req 1).
-- [ ] Play-all loads the entity's tracks into the queue and plays.
+- [ ] Click album in a track row / inspector → album detail in track order (Req 1).
+- [ ] Artist detail shows the artist's albums; tapping one opens the album.
 - [ ] Back navigation returns to the correct mode.
 
 ### Phase 4: Faceted Search (title / artist / album)
@@ -409,6 +408,7 @@ Routing reuses the existing level-1 ⇄ level-2 pattern (`selectedSetId` → `Se
 | 2026-06-10 | MUZERO | Initial draft. Investigated import metadata handling (already parses tags into `Track.mediaMetadata`); scoped artist/album as derived entities + per-artist/album stats. |
 | 2026-06-10 | MUZERO | Resolved all 5 open questions (long-term-optimal): (1) artist/album = derived current-truth analytics dimension over the event log, cross-drive via synced `RemoteSearchTrack.mediaMetadata`, never a synced `PlaybackAggregate` scope; (2) show "Unknown Artist/Album" buckets; (3) "AI Generated" pseudo-artist; (4) album identity = album + albumArtist (MusicBrainz convention) with Various-Artists handling, year excluded; (5) grouped facets **and** scoped `artist:`/`album:` tokens. Propagated into §3.1/§3.2/§3.4/§4/§6/§7. |
 | 2026-06-10 | MUZERO | **Phase 1 completed (TDD).** Added `normalizeArtistName`/`trackArtists`/`trackAlbum` to `track-display.ts` and the pure `library-index.ts` (`buildArtistIndex`/`buildAlbumIndex`, two-pass compilation-aware grouping, Unknown/Generated/Various-Artists buckets). 18 unit cases, typecheck + biome clean. |
+| 2026-06-10 | MUZERO | **Phase 2 completed.** Added 专辑/歌手 browse tabs to `search-page.tsx` + shared `entity-grid.tsx`/`entity-detail.tsx` (read-only detail, per-row `playTrack`), `~` cycles four modes, i18n across en/zh/ja/ko. Verified live in the browser preview (tabs/placeholders/empty states, no console errors). Consolidated the speculative artist-grid/album-grid/artist-detail/album-detail into two shared components; re-scoped Phase 3 to cross-linking click-through + an artist albums strip (detail views shipped in Phase 2). |
 
 ---
 

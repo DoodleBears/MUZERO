@@ -456,7 +456,19 @@
     "trackGenre": "流派",
     "trackYear": "年份",
     "trackDuration": "时长",
-    "noTrackSelected": "选择一首歌"
+    "noTrackSelected": "选择一首歌",
+    "modeAlbums": "专辑",
+    "modeArtists": "歌手",
+    "searchAlbums": "搜索专辑…",
+    "searchArtists": "搜索歌手…",
+    "albumsEmpty": "还没有专辑 — 导入带标签的音乐。",
+    "artistsEmpty": "还没有歌手 — 导入带标签的音乐。",
+    "unknownArtist": "未知歌手",
+    "unknownAlbum": "未知专辑",
+    "variousArtists": "群星",
+    "aiGenerated": "AI 生成",
+    "albumCount_other": "{{count}} 张专辑",
+    "openEntity": "打开 {{name}}"
   },
   "notification": {
     "copy": "复制",
