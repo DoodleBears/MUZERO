@@ -166,7 +166,20 @@ export const r2StatsSchema = z.object({
   aggregates: z.array(r2PlaybackAggregateSchema),
 });
 
+export const r2PresenceIndexSchema = z.object({
+  schema: z.literal("muzero-r2-presence-index-v1"),
+  updatedAt: millisSchema,
+  devices: z.array(
+    z.object({
+      devicePublicId: z.string().min(1),
+      presence: remotePathSchema,
+      updatedAt: millisSchema,
+    }),
+  ),
+});
+
 export type R2Manifest = z.infer<typeof r2ManifestSchema>;
 export type R2SetIndex = z.infer<typeof r2SetIndexSchema>;
 export type R2ShareManifest = z.infer<typeof r2ShareManifestSchema>;
 export type R2Stats = z.infer<typeof r2StatsSchema>;
+export type R2PresenceIndex = z.infer<typeof r2PresenceIndexSchema>;
