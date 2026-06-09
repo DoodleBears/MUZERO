@@ -336,6 +336,8 @@ async function createDeviceObjects(
         devices: [
           {
             publicId: device.publicId,
+            displayName: device.name,
+            avatarSeed: device.avatarSeed,
             profile: `profiles/devices/${device.publicId}/profile.json`,
             stats: `stats/devices/${device.publicId}/aggregate.json`,
             lastSeenAt: device.lastSeenAt,

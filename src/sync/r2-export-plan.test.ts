@@ -172,6 +172,14 @@ describe("buildR2ExportPlan", () => {
     expect(plan.objects.find((object) => object.kind === "device-profile")?.key).toBe(
       "profiles/devices/dvc_1/profile.json",
     );
+    const devicesIndex = JSON.parse(
+      String(plan.objects.find((object) => object.kind === "devices-index")?.body),
+    );
+    expect(devicesIndex.devices[0]).toMatchObject({
+      publicId: "dvc_1",
+      displayName: "Mac desktop",
+      avatarSeed: "ocean-blue",
+    });
     expect(plan.objects.find((object) => object.kind === "stats-aggregate")?.key).toBe(
       "stats/devices/dvc_1/aggregate.json",
     );
