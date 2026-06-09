@@ -1,0 +1,165 @@
+import { describe, expect, it, vi } from "vitest";
+import type { AppSettings, CloudDrive, R2LocalCredentials } from "@/db/types";
+import type { R2ExportPlan } from "./r2-export-plan";
+import type { R2PublishProgressEvent } from "./r2-publish";
+import {
+  createSyncOrchestrator,
+  type PublishDriveContext,
+  type SyncProgress,
+} from "./sync-orchestrator";
+
+function makePlan(overrides: Partial<R2ExportPlan> = {}): R2ExportPlan {
+  return {
+    driveId: "drv_owned",
+    libraryId: "lib_1",
+    baseUrl: "https://music.example.com/muzero/",
+    objects: [
+      {
+        kind: "media",
+        key: "objects/media/a.mp3",
+        contentType: "audio/mpeg",
+        bytes: 100,
+        body: "a",
+      },
+      {
+        kind: "set-index",
+        key: "sets/s/index.json",
+        contentType: "application/json",
+        bytes: 20,
+        body: "{}",
+      },
+    ],
+    totalBytes: 120,
+    ...overrides,
+  };
+}
+
+const credentials: R2LocalCredentials = {
+  accountId: "acct",
+  bucket: "bucket",
+  accessKeyId: "key",
+  secretAccessKey: "secret",
+};
+
+const ctx: PublishDriveContext = {
+  drive: { id: "drv_owned" } as CloudDrive,
+  settings: {} as AppSettings,
+  credentials,
+  libraryId: "lib_1",
+  baseUrl: "https://music.example.com/muzero/",
+  setIds: ["s"],
+};
+
+function progressEvent(over: Partial<R2PublishProgressEvent>): R2PublishProgressEvent {
+  return {
+    object: { kind: "media", key: "x", contentType: "audio/mpeg", bytes: 0, body: "" },
+    status: "uploaded",
+    uploaded: 0,
+    skipped: 0,
+    bytesDone: 0,
+    bytesTotal: 120,
+    ...over,
+  };
+}
+
+describe("createSyncOrchestrator.publish", () => {
+  it("plans then publishes, emitting planning -> uploading -> completed with progress", async () => {
+    const events: SyncProgress[] = [];
+    const buildPlan = vi.fn(async () => makePlan());
+    const runPublish = vi.fn(async (_plan, _creds, options) => {
+      options.onProgress?.(
+        progressEvent({ object: makePlan().objects[0]!, uploaded: 1, bytesDone: 100 }),
+      );
+      options.onProgress?.(
+        progressEvent({ object: makePlan().objects[1]!, uploaded: 2, bytesDone: 120 }),
+      );
+      return { runId: "run_1" };
+    });
+    const orchestrator = createSyncOrchestrator({ buildPlan, runPublish });
+
+    const result = await orchestrator.publish(ctx, { onProgress: (p) => events.push(p) });
+
+    expect(result).toEqual({ status: "completed", runId: "run_1" });
+    expect(buildPlan).toHaveBeenCalledWith(
+      expect.objectContaining({ libraryId: "lib_1", setIds: ["s"], drive: ctx.drive }),
+    );
+    expect(events.map((e) => e.phase)).toEqual([
+      "planning",
+      "uploading",
+      "uploading",
+      "uploading",
+      "completed",
+    ]);
+    const last = events.at(-1)!;
+    expect(last).toMatchObject({
+      driveId: "drv_owned",
+      direction: "push",
+      objectsDone: 2,
+      objectsTotal: 2,
+      bytesDone: 120,
+      bytesTotal: 120,
+      runId: "run_1",
+    });
+    const midUpload = events[2]!;
+    expect(midUpload).toMatchObject({
+      objectsDone: 1,
+      bytesDone: 100,
+      currentKey: "objects/media/a.mp3",
+    });
+  });
+
+  it("does not publish when the plan has conflicts; reports needs-review", async () => {
+    const events: SyncProgress[] = [];
+    const conflicts = [
+      {
+        setId: "s",
+        entityType: "set" as const,
+        entityId: "s",
+        reason: "overlapping-mutations" as const,
+        mutationIds: ["m1", "m2"],
+      },
+    ];
+    const buildPlan = vi.fn(async () => makePlan({ conflicts }));
+    const runPublish = vi.fn();
+    const orchestrator = createSyncOrchestrator({ buildPlan, runPublish });
+
+    const result = await orchestrator.publish(ctx, { onProgress: (p) => events.push(p) });
+
+    expect(result).toEqual({ status: "needs-review", conflicts });
+    expect(runPublish).not.toHaveBeenCalled();
+    expect(events.at(-1)).toMatchObject({ phase: "needs-review", conflicts });
+  });
+
+  it("reports cancelled (without throwing) when the signal is aborted", async () => {
+    const events: SyncProgress[] = [];
+    const controller = new AbortController();
+    controller.abort();
+    const buildPlan = vi.fn(async () => makePlan());
+    const runPublish = vi.fn(async () => {
+      throw new Error("interrupted between objects");
+    });
+    const orchestrator = createSyncOrchestrator({ buildPlan, runPublish });
+
+    const result = await orchestrator.publish(ctx, {
+      signal: controller.signal,
+      onProgress: (p) => events.push(p),
+    });
+
+    expect(result).toEqual({ status: "cancelled" });
+    expect(events.at(-1)?.phase).toBe("cancelled");
+  });
+
+  it("rethrows and emits a failed phase on a publish error", async () => {
+    const events: SyncProgress[] = [];
+    const buildPlan = vi.fn(async () => makePlan());
+    const runPublish = vi.fn(async () => {
+      throw new Error("network down");
+    });
+    const orchestrator = createSyncOrchestrator({ buildPlan, runPublish });
+
+    await expect(orchestrator.publish(ctx, { onProgress: (p) => events.push(p) })).rejects.toThrow(
+      /network down/,
+    );
+    expect(events.at(-1)).toMatchObject({ phase: "failed", error: "network down" });
+  });
+});
