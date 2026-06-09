@@ -1814,7 +1814,7 @@ For a large shared playlist with many trusted devices, the UI should:
 - [x] Stats survive reload.
 - [x] Stats merge correctly from two devices.
 - [x] Rebuilding aggregates from event segments does not lose play counts.
-- [ ] Sync UI shows pending local listens separately from uploaded/aggregated listens.
+- [x] Sync UI shows pending local listens separately from uploaded/aggregated listens.
 - [x] Pending listening stats flush at 25-100 events or 5-15 minutes, whichever threshold is reached first.
 - [x] Manual Sync can flush a small pending stats segment below the normal event-count threshold.
 - [ ] A large shared playlist can keep local stats separated across many anonymous devices.
@@ -1822,7 +1822,7 @@ For a large shared playlist with many trusted devices, the UI should:
 - [x] A track played from someone else's shared set can be recorded locally without importing the track.
 - [ ] A user can sync their own listening history about shared tracks to their own Owner R2.
 - [ ] Trusted devices with write credentials can sync separated stats to the shared R2 bucket.
-- [ ] UI can show total plays and listened time.
+- [x] UI can show total plays and listened time.
 
 ### Phase 6: Optional Low-Frequency Currently-Playing Presence
 
@@ -2013,6 +2013,8 @@ Do not record secrets, full signed URLs, or media content.
 | 2026-06-09 | MUZERO | Phase 3 sync progress visibility added: Settings now summarizes the latest sync run with current phase, object count, byte count/progress ratio, failure count, and error text backed by a tested progress summary helper. |
 | 2026-06-09 | MUZERO | Phase 5 memory author attribution added to memory cards: each memory with an author snapshot now shows the device display name or public id plus a generated avatar fallback seeded by `avatarSeed`/device id. |
 | 2026-06-09 | MUZERO | Phase 5 playback stats edge-case tests completed: threshold, seek jump filtering, pause/resume boundaries, track-change flushing, and app-close flushing are covered across the listen tracker and stats persistence suites. |
+| 2026-06-09 | MUZERO | Phase 5 playback stats UI summary added: the Settings device card now shows total plays and listened time from `PlaybackAggregate` track-scope rows via the aggregate summary helper. |
+| 2026-06-09 | MUZERO | Phase 5 pending-listen sync UI added: Settings now separates local playback events pending upload from uploaded stats segments and aggregated listening totals using a tested playback sync summary helper. |
 | 2026-06-09 | MUZERO | Phase 5 playback checkpoint export added: event segment publish plans now include `stats/devices/<devicePublicId>/checkpoint.json` with the latest event watermark and immutable segment key. |
 | 2026-06-09 | MUZERO | Phase 5 optional `stats/index.json` discovery completed for stats sync: device entries can point to aggregate cache, checkpoint, and latest immutable event segment without making the index the write-hot source of truth. |
 | 2026-06-09 | MUZERO | Phase 5 stats/profile write policy added: only owner/trusted drives with local R2 credentials may receive stats or opted-in device profiles, keeping read-only shared-link listener data local by default. |

@@ -34,6 +34,7 @@ import { useSettings } from "@/hooks/use-app-data";
 import { type Locale, locales, persistLocale } from "@/i18n/config";
 import { newId } from "@/lib/id";
 import { clearTrace, formatTraceEntries, useTraceEntries } from "@/lib/trace";
+import { formatDuration } from "@/lib/utils";
 import {
   CLOUD_PRESET_IDS,
   type CloudPresetId,
@@ -49,6 +50,8 @@ import {
   getOrCreateLocalDevice,
   updateLocalDeviceProfile,
 } from "@/sync/device-repo";
+import { summarizePlaybackAggregates } from "@/sync/playback-aggregate-summary";
+import { summarizePlaybackSyncState } from "@/sync/playback-sync-summary";
 import {
   buildRecommendedR2Cors,
   checkR2PublicRead,
@@ -140,6 +143,24 @@ export function SettingsPage() {
   const cloudDrives = useLiveQuery(() => listCloudDrives(), [], []);
   const latestSyncRun = useLiveQuery(() => db.syncRuns.orderBy("startedAt").last(), [], undefined);
   const localDevice = useLiveQuery(() => getLocalDevice(), [], undefined);
+  const playbackAggregateRows = useLiveQuery(
+    () => db.playbackAggregates.where("scope").equals("track").toArray(),
+    [],
+    [],
+  );
+  const playbackEventRows = useLiveQuery(
+    () =>
+      localDevice
+        ? db.playbackEvents.where("devicePublicId").equals(localDevice.publicId).toArray()
+        : [],
+    [localDevice?.publicId],
+    [],
+  );
+  const statsSyncObjects = useLiveQuery(
+    () => db.syncObjects.where("kind").anyOf("stats-events-segment", "stats-checkpoint").toArray(),
+    [],
+    [],
+  );
   const rebuildEngine = usePlayerStore((s) => s.rebuildEngine);
   const setActiveSession = usePlayerStore((s) => s.setActiveSession);
   const [draft, setDraft] = useState<AppSettings>(settings);
@@ -396,6 +417,20 @@ export function SettingsPage() {
 
   const cloudPreset = resolveCloudPreset(draft.musicCloudPreset);
   const syncProgress = latestSyncRun ? summarizeSyncRunProgress(latestSyncRun) : undefined;
+  const playbackSummary = useMemo(
+    () => summarizePlaybackAggregates(playbackAggregateRows ?? [], { scope: "track" }),
+    [playbackAggregateRows],
+  );
+  const playbackSyncSummary = useMemo(
+    () =>
+      summarizePlaybackSyncState({
+        devicePublicId: localDevice?.publicId,
+        events: playbackEventRows ?? [],
+        aggregates: playbackAggregateRows ?? [],
+        syncObjects: statsSyncObjects ?? [],
+      }),
+    [localDevice?.publicId, playbackAggregateRows, playbackEventRows, statsSyncObjects],
+  );
   const costText =
     cloudPreset.estCostPerSongUsd == null
       ? t("settings.costUnknown")
@@ -587,6 +622,28 @@ export function SettingsPage() {
                     revision: localDevice?.profileRevision ?? 0,
                   })}
                 </p>
+              </div>
+            </div>
+
+            <div className="grid gap-2 rounded-md border border-border bg-muted/25 p-3 text-xs sm:grid-cols-2">
+              <div>
+                <p className="text-muted-foreground">{t("settings.deviceTotalPlays")}</p>
+                <p className="font-medium text-sm">{playbackSummary.playCount}</p>
+              </div>
+              <div>
+                <p className="text-muted-foreground">{t("settings.deviceListenedTime")}</p>
+                <p className="font-medium text-sm">{formatDuration(playbackSummary.listenedSec)}</p>
+              </div>
+              <div>
+                <p className="text-muted-foreground">{t("settings.devicePendingListens")}</p>
+                <p className="font-medium text-sm">
+                  {playbackSyncSummary.pendingEventCount} ·{" "}
+                  {formatDuration(playbackSyncSummary.pendingListenedSec)}
+                </p>
+              </div>
+              <div>
+                <p className="text-muted-foreground">{t("settings.deviceUploadedSegments")}</p>
+                <p className="font-medium text-sm">{playbackSyncSummary.uploadedSegmentCount}</p>
               </div>
             </div>
 
