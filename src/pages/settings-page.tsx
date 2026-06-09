@@ -15,6 +15,7 @@ import { type CSSProperties, useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next";
 import { AddDriveDialog } from "@/components/settings/add-drive-dialog";
 import { BackgroundSettings } from "@/components/settings/background-settings";
+import { CloudDriveSets } from "@/components/settings/cloud-drive-sets";
 import { resolveActiveSettingsItem } from "@/components/settings/settings-nav";
 import { SettingsSidebar } from "@/components/settings/settings-sidebar";
 import { VisualizerSettings } from "@/components/settings/visualizer-settings";
@@ -1191,6 +1192,7 @@ function CloudDriveRow({ drive, defaultDriveId }: { drive: CloudDrive; defaultDr
         </div>
       </div>
       {progress && <CloudDriveLiveProgress progress={progress} />}
+      <CloudDriveSets drive={drive} />
     </div>
   );
 }
