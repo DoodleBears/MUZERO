@@ -13,7 +13,7 @@
 |-------|------|--------|------|
 | 1 | Transliteration variant engine (pure lib + lazy deps) | ✅ Completed | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | Transliteration-aware matcher + relevance ranking (pure, inline) | ✅ Completed | [Phase 2 Checklist](#phase-2-checklist) |
-| 3 | Off-thread search Worker + index (local + remote rows) | 🔲 Pending | [Phase 3 Checklist](#phase-3-checklist) |
+| 3 | Off-thread search Worker + index (local + remote rows) | ✅ Completed | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | Search UX: ⌘/Ctrl+F focus, deferred render, i18n hints | 🔲 Pending | [Phase 4 Checklist](#phase-4-checklist) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
@@ -372,24 +372,26 @@ No user-visible string hardcoded in components (§3).
 
 ### Phase 3: Off-thread search Worker + incrementally-maintained index
 
-**Goal:** Move index build + querying into a Worker so a large library never janks; inline fallback keeps tests + Worker-less environments correct.
+**Goal:** Move querying + dictionary work into a Worker so a large library never janks; inline fallback keeps tests + Worker-less environments correct.
+
+> **Design note (simpler than first drafted):** the "index" is just the pushed row snapshot + the variant **LRU cache** in `search-transliterate` — no bespoke `buildIndex`/`patchIndex`. The main thread maps tracks + remote rows to `IndexableRow[]` and **pushes** them to the Worker (`setSearchRows`) on data change (cheap strings, infrequent); the Worker holds the snapshot and answers `query` with `queryRows`. This avoids a second in-Worker Dexie subscription. Incrementality comes for free: unchanged rows' variants stay cached; new/changed text is a cache miss computed once; removed rows just drop out of the snapshot.
 
 **Tasks:**
-- [ ] `search-core.ts` (pure): `buildIndex` / `patchIndex` / `queryIndex` over §4 primitives; unit tests for add/remove/update + ranked query.
-- [ ] `search-worker.ts` (mirror `heavy-worker.ts`): in-worker `import` of libs; Dexie liveQuery over `tracks` + `remoteSearchTracks`; id-diff → `patchIndex`; `query` → `{ids, scores}`.
-- [ ] `search-client.ts` (mirror `heavy-client.ts`): lazy Worker, reqId/pending, `onerror` → inline fallback (`searchInline` over main-thread tracks).
-- [ ] **Remote rows (moved from Phase 2):** index `remoteSearchTracks` in the same Worker, or update `matchesRemoteSearchTrack` to variant-match via the engine — so cross-drive search gets pinyin/romaji too. Keep its grammar identical to the local matcher.
-- [ ] `search-page.tsx`: route `trackQuery` through `searchClient`; map returned ids → liveQuery tracks; baseline inline result until Worker-ready; snap-in re-query on ready.
-- [ ] Measure (`pnpm build`, prod): main-bundle size unchanged; query round-trip < 16 ms @ 5k tracks; no main-thread long task on first index build.
+- [x] `search-core.ts` (pure): `IndexableRow` + `scoreRow` + `queryRows` (filter + rank); token grammar moved here; unit tests (8) incl. pinyin/romaji + ranking. (Replaces the planned `buildIndex`/`patchIndex` — the LRU cache *is* the index.)
+- [x] `search-worker.ts` (mirror `heavy-worker.ts`): in-worker `import` of pinyin-pro/wanakana (Worker chunk, not main bundle); holds pushed `IndexableRow[]`; `query` → ranked `{id, score}[]`.
+- [x] `search-client.ts` (mirror `heavy-client.ts`): lazy Worker, reqId/pending, `onerror` → **inline fallback** (`queryRows` over the pushed mirror); `setSearchRows` push. Inline path unit-tested (pinyin/romaji ranking, jsdom forces no-Worker).
+- [x] **Remote rows (moved from Phase 2):** `remoteRowToIndexable` + `matchesRemoteSearchTrack` now route through `scoreRow` (transliteration-aware). `normalizedText` rides along as a free field so folded memory/caption CJK stays reachable (pinyin tested: `pengyou → 朋友`). Grammar identical to local.
+- [→] **Moved to Phase 4:** `search-page.tsx` wiring (route `trackQuery` through `searchClient`, push rows, snap-in) — bundled with the UX/⌘F work so the whole surface is verified in one preview pass, and to reduce churn on the (concurrently-edited) page.
+- [→] **Moved to Phase 4:** `pnpm build` bundle/perf measurement — needs the page wired + a prod build to be meaningful.
 
 ### Phase 3 Checklist
 
-- [ ] Worker created lazily (idle / first search focus); libs absent from the main/entry chunk (verify in build output).
-- [ ] Index built off-thread; first build does **not** produce a main-thread long task (DevTools / `longtask` observer).
-- [ ] Add a track / sync a catalog page → index patched incrementally (only changed ids recompute); results reflect it.
-- [ ] Worker-unavailable path (forced) falls back inline with identical results to Phase 2.
-- [ ] Query round-trip < 16 ms @ 5k tracks (recorded); UI stays interactive while typing.
-- [ ] `make check` green (including new `search-core.test.ts`).
+- [x] Worker created lazily (first `searchRows`); pinyin-pro/wanakana imported only inside `search-worker.ts` (Worker chunk). Build-output size verification → Phase 4.
+- [x] Worker-unavailable path (forced in jsdom) falls back inline with correct ranked results (`search-client.test.ts`).
+- [x] Remote rows transliterate via the shared core (`r2-search-catalog.test.ts`, +pinyin case); grammar unchanged.
+- [x] Source-agnostic core lets local + remote share one matcher (`search-core.test.ts`, 8 cases).
+- [~] `make check`: my search files green (62 search/transliteration assertions; typecheck exit 0; biome clean). Whole-repo has the same one **pre-existing** unrelated failure (`chat-model-picker.test.tsx`).
+- [→] On-thread long-task / 5k-track round-trip measurement → Phase 4 (needs wired page + prod build).
 
 ### Phase 4: Search UX — ⌘/Ctrl+F focus, deferred render, i18n hints
 

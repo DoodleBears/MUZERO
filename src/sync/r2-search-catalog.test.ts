@@ -1,4 +1,5 @@
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
+import { ensureTransliterationLoaded } from "@/lib/search-transliterate";
 import {
   matchesRemoteSearchTrack,
   r2SearchCatalogSchema,
@@ -6,6 +7,12 @@ import {
   remoteSearchSetToRow,
   remoteSearchTrackToRow,
 } from "./r2-search-catalog";
+
+// Remote matching shares the transliteration engine; warm it so pinyin/romaji
+// assertions resolve (substring behavior holds before load — no regression).
+beforeAll(async () => {
+  await ensureTransliterationLoaded();
+});
 
 describe("r2 search catalog schemas", () => {
   it("parses a catalog page manifest", () => {
@@ -118,8 +125,10 @@ describe("remote search row normalization", () => {
     expect(matchesRemoteSearchTrack(row, "blue sea")).toBe(true);
     expect(matchesRemoteSearchTrack(row, "deidian soluna")).toBe(true);
     expect(matchesRemoteSearchTrack(row, "朋友")).toBe(true);
+    expect(matchesRemoteSearchTrack(row, "pengyou")).toBe(true); // 朋友 via pinyin (folded memory text)
     expect(matchesRemoteSearchTrack(row, "#drive")).toBe(true);
-    expect(matchesRemoteSearchTrack(row, "#sea")).toBe(false);
+    expect(matchesRemoteSearchTrack(row, "#sea")).toBe(false); // tag scope: "sea" isn't a tag
+    expect(matchesRemoteSearchTrack(row, "artist:nobody")).toBe(false); // artist scope, no match
   });
 
   it("builds searchable set rows", () => {

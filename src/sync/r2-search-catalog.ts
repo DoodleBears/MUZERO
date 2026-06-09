@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { TrackKind, TrackMediaMetadata, TrackOrigin } from "@/db/types";
-import { isEmptyTokens, parseSearchTokens } from "@/lib/track-search";
+import { type IndexableRow, isEmptyTokens, parseSearchTokens, scoreRow } from "@/lib/search-core";
+import { NO_MATCH_SCORE } from "@/lib/search-transliterate";
 import { r2TrackMediaMetadataSchema } from "./r2-manifest-schema";
 
 const remotePathSchema = z.string().min(1);
@@ -188,22 +189,37 @@ export function remoteSearchSetToRow(input: RemoteSearchSetToRowInput): RemoteSe
   };
 }
 
+/**
+ * Map a synced remote row to the source-agnostic searchable shape, so cross-drive
+ * search shares the local matcher (incl. pinyin/romaji). `normalizedText` (which
+ * folds memory/caption/artist-like text) rides along as a free field so its CJK
+ * content is reachable phonetically too; the structured fields are kept separate
+ * for clean per-field transliteration.
+ */
+export function remoteRowToIndexable(row: RemoteSearchTrackRow): IndexableRow {
+  const m = row.mediaMetadata;
+  const artistText = [...(m?.artists ?? []), ...(m?.albumArtists ?? [])].join(" ");
+  return {
+    id: row.id,
+    free: [
+      row.normalizedText,
+      row.title,
+      m?.title ?? "",
+      artistText,
+      m?.album ?? "",
+      m?.genres?.join(" ") ?? "",
+      ...row.tags,
+    ].filter((s) => s.length > 0),
+    artist: [artistText].filter((s) => s.length > 0),
+    album: [m?.album ?? ""].filter((s) => s.length > 0),
+    tags: row.tags,
+  };
+}
+
 export function matchesRemoteSearchTrack(row: RemoteSearchTrackRow, query: string): boolean {
-  // Mirror the local scoped-token grammar (artist:/album:/#tag + free text) so
-  // cross-drive search behaves identically to the local library.
+  // Same scoped grammar (artist:/album:/#tag + free) and transliteration as the
+  // local matcher, so cross-drive search behaves identically.
   const tokens = parseSearchTokens(query);
   if (isEmptyTokens(tokens)) return true;
-  const artistHay = [
-    ...(row.mediaMetadata?.artists ?? []),
-    ...(row.mediaMetadata?.albumArtists ?? []),
-  ]
-    .join(" ")
-    .toLowerCase();
-  const albumHay = (row.mediaMetadata?.album ?? "").toLowerCase();
-  return (
-    tokens.free.every((token) => row.normalizedText.includes(token)) &&
-    tokens.tags.every((tag) => row.tags.some((candidate) => candidate.includes(tag))) &&
-    tokens.artist.every((token) => artistHay.includes(token)) &&
-    tokens.album.every((token) => albumHay.includes(token))
-  );
+  return scoreRow(remoteRowToIndexable(row), tokens) < NO_MATCH_SCORE;
 }
