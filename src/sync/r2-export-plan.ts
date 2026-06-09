@@ -42,9 +42,15 @@ export interface R2ExportObject {
   bytes: number;
   body: Blob | string;
   sha256?: string;
+  precondition?: R2ObjectWritePrecondition;
   setId?: string;
   trackId?: string;
   memoryId?: string;
+}
+
+export interface R2ObjectWritePrecondition {
+  ifMatch?: string;
+  ifNoneMatch?: string;
 }
 
 export interface R2ExportPlan {

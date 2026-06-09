@@ -60,6 +60,7 @@ export async function publishR2ExportPlan(
       key: object.key,
       body: object.body,
       contentType: object.contentType,
+      headers: preconditionHeaders(object),
       now: options.now,
     });
     if (!response.ok) {
@@ -90,6 +91,16 @@ async function shouldSkipObject(
     now: options.now,
   });
   return response.ok;
+}
+
+function preconditionHeaders(object: R2ExportObject): Record<string, string> | undefined {
+  if (!object.precondition) return undefined;
+  return {
+    ...(object.precondition.ifMatch ? { "if-match": object.precondition.ifMatch } : {}),
+    ...(object.precondition.ifNoneMatch
+      ? { "if-none-match": object.precondition.ifNoneMatch }
+      : {}),
+  };
 }
 
 function isSkippableObject(object: R2ExportObject): boolean {

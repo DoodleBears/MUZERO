@@ -10,6 +10,7 @@ export interface R2SignedFetchOptions {
   key: string;
   body?: BodyInit;
   contentType?: string;
+  headers?: Record<string, string>;
   now?: () => Date;
 }
 
@@ -34,6 +35,7 @@ export async function r2SignedFetch(options: R2SignedFetchOptions): Promise<Resp
     url,
     body: options.body,
     contentType: options.contentType,
+    headers: options.headers,
     accessKeyId: options.credentials.accessKeyId,
     secretAccessKey: options.credentials.secretAccessKey,
     now: options.now?.() ?? new Date(),
@@ -50,6 +52,7 @@ export async function signR2S3Request(input: {
   url: string;
   body?: BodyInit;
   contentType?: string;
+  headers?: Record<string, string>;
   accessKeyId: string;
   secretAccessKey: string;
   now: Date;
@@ -61,6 +64,7 @@ export async function signR2S3Request(input: {
     input.body == null ? EMPTY_SHA256 : await sha256Hex(await bodyBytes(input.body));
   const headers: Record<string, string> = {
     "content-type": input.contentType ?? "application/octet-stream",
+    ...normalizeExtraHeaders(input.headers),
     host: url.host,
     "x-amz-content-sha256": payloadHash,
     "x-amz-date": amzDate,
@@ -158,6 +162,15 @@ function trimSlashes(value?: string): string {
 
 function pathSegments(value?: string): string[] {
   return trimSlashes(value).split("/").filter(Boolean);
+}
+
+function normalizeExtraHeaders(
+  headers: Record<string, string> | undefined,
+): Record<string, string> {
+  if (!headers) return {};
+  return Object.fromEntries(
+    Object.entries(headers).map(([key, value]) => [key.toLowerCase(), value.trim()]),
+  );
 }
 
 function copyBytes(bytes: Uint8Array): Uint8Array<ArrayBuffer> {

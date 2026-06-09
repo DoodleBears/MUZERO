@@ -126,4 +126,38 @@ describe("publishR2ExportPlan", () => {
 
     expect(seen.some((request) => request.endsWith("/manifest.json"))).toBe(false);
   });
+
+  it("sends conditional write headers for mutable JSON objects", async () => {
+    const guardedPlan: R2ExportPlan = {
+      ...plan,
+      objects: [
+        {
+          kind: "set-index",
+          key: "sets/ses_1/index.json",
+          contentType: "application/json",
+          bytes: 6,
+          body: "{}\n",
+          setId: "ses_1",
+          precondition: { ifMatch: '"etag-1"' },
+        },
+      ],
+      totalBytes: 6,
+    };
+    const seen: Array<{ ifMatch: string | null; authorization: string | null }> = [];
+
+    await publishR2ExportPlan(guardedPlan, credentials, {
+      fetcher: async (_url, init) => {
+        const headers = new Headers(init?.headers);
+        seen.push({
+          ifMatch: headers.get("if-match"),
+          authorization: headers.get("authorization"),
+        });
+        return new Response(null, { status: 204 });
+      },
+      now: () => new Date("2026-06-09T01:02:03.000Z"),
+    });
+
+    expect(seen[0]).toMatchObject({ ifMatch: '"etag-1"' });
+    expect(seen[0]?.authorization).toContain("if-match");
+  });
 });
