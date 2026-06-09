@@ -1,44 +1,49 @@
 import type { Track } from "@/db/types";
 import type { AlbumEntry, ArtistEntry } from "@/lib/library-index";
+import { NO_MATCH_SCORE, scoreVariants, searchVariants } from "@/lib/search-transliterate";
 
 /**
  * Pure track search over annotations + metadata. "Music carries memories", so
  * the track's memories and tags are first-class search surfaces alongside
  * title/caption. All query tokens must match (AND).
  *
+ * Matching runs through the transliteration engine ([`search-transliterate`]),
+ * so CJK fields are reachable by phonetic input — Chinese pinyin (full + 首字母
+ * initials) and Japanese kana↔romaji — and results are ranked by a tiered score
+ * (exact < prefix < substring < subsequence). Until the dictionaries load it
+ * degrades to substring matching, so behavior never regresses.
+ *
  * Tokens are field-scoped, extending the original `#tag` convention:
  *   - `#tag`     → matches tags only
  *   - `artist:x` → matches the artist / album-artist fields only
  *   - `album:x`  → matches the album field only
- *   - bare       → case-insensitive substring against any field
+ *   - bare       → matched against any field
  *
  * Memories live in their own table, so callers pass the track's memory notes in
  * (e.g. from `memoryNotesByTrack`); the legacy `track.note` is still folded in
  * for any not-yet-migrated row.
  */
-export function trackSearchText(track: Track, memoryNotes: readonly string[] = []): string {
-  const metadata = track.mediaMetadata;
+export function trackSearchFields(track: Track, memoryNotes: readonly string[] = []): string[] {
+  const m = track.mediaMetadata;
   return [
     track.title,
-    metadata?.title,
-    metadata?.artists?.join(" "),
-    metadata?.albumArtists?.join(" "),
-    metadata?.album,
-    metadata?.genres?.join(" "),
-    metadata?.year?.toString(),
-    metadata?.date,
-    metadata?.composer?.join(" "),
-    metadata?.isrc?.join(" "),
-    metadata?.musicBrainzRecordingId,
-    metadata?.musicBrainzTrackId,
-    track.brief?.caption ?? "",
-    track.note ?? "",
-    track.tags.join(" "),
+    m?.title,
+    m?.artists?.join(" "),
+    m?.albumArtists?.join(" "),
+    m?.album,
+    m?.genres?.join(" "),
+    m?.year?.toString(),
+    m?.date,
+    m?.composer?.join(" "),
+    m?.isrc?.join(" "),
+    m?.musicBrainzRecordingId,
+    m?.musicBrainzTrackId,
+    track.brief?.caption,
+    track.note,
+    ...track.tags,
     track.provider,
-    memoryNotes.join(" "),
-  ]
-    .join(" ")
-    .toLowerCase();
+    ...memoryNotes,
+  ].filter((s): s is string => typeof s === "string" && s.length > 0);
 }
 
 /** Field-scoped query tokens, all lowercased. */
@@ -76,12 +81,62 @@ export function isEmptyTokens(tokens: SearchTokens): boolean {
 }
 
 function trackArtistText(track: Track): string {
-  const metadata = track.mediaMetadata;
-  return [...(metadata?.artists ?? []), ...(metadata?.albumArtists ?? [])].join(" ").toLowerCase();
+  const m = track.mediaMetadata;
+  return [...(m?.artists ?? []), ...(m?.albumArtists ?? [])].join(" ");
 }
 
 function trackAlbumText(track: Track): string {
-  return (track.mediaMetadata?.album ?? "").toLowerCase();
+  return track.mediaMetadata?.album ?? "";
+}
+
+/** Best (lowest) score for one query token across a set of candidate fields. */
+function bestTokenScore(token: string, fields: readonly string[]): number {
+  const queryVariants = searchVariants(token);
+  let best = NO_MATCH_SCORE;
+  for (const field of fields) {
+    if (!field) continue;
+    const score = scoreVariants(queryVariants, searchVariants(field));
+    if (score < best) best = score;
+    if (best === 0) break; // can't beat exact
+  }
+  return best;
+}
+
+/** Sum of per-token best scores, or `NO_MATCH_SCORE` if any token is unmatched. */
+function scopeScore(tokens: readonly string[], fields: readonly string[]): number {
+  let total = 0;
+  for (const token of tokens) {
+    const best = bestTokenScore(token, fields);
+    if (best >= NO_MATCH_SCORE) return NO_MATCH_SCORE;
+    total += best;
+  }
+  return total;
+}
+
+/**
+ * Relevance score for a track against a query (lower = better). Returns 0 for an
+ * empty query, `NO_MATCH_SCORE` when any token's scope has no match, otherwise
+ * the summed best score (capped just below the sentinel so matches always sort
+ * ahead of non-matches).
+ */
+export function trackSearchScore(
+  track: Track,
+  query: string,
+  memoryNotes: readonly string[] = [],
+): number {
+  const tokens = parseSearchTokens(query);
+  if (isEmptyTokens(tokens)) return 0;
+
+  const free = scopeScore(tokens.free, trackSearchFields(track, memoryNotes));
+  if (free >= NO_MATCH_SCORE) return NO_MATCH_SCORE;
+  const artist = scopeScore(tokens.artist, [trackArtistText(track)]);
+  if (artist >= NO_MATCH_SCORE) return NO_MATCH_SCORE;
+  const album = scopeScore(tokens.album, [trackAlbumText(track)]);
+  if (album >= NO_MATCH_SCORE) return NO_MATCH_SCORE;
+  const tags = scopeScore(tokens.tags, track.tags);
+  if (tags >= NO_MATCH_SCORE) return NO_MATCH_SCORE;
+
+  return Math.min(free + artist + album + tags, NO_MATCH_SCORE - 1);
 }
 
 export function matchesQuery(
@@ -89,26 +144,25 @@ export function matchesQuery(
   query: string,
   memoryNotes: readonly string[] = [],
 ): boolean {
-  const tokens = parseSearchTokens(query);
-  if (isEmptyTokens(tokens)) return true;
-  const haystack = trackSearchText(track, memoryNotes);
-  const artistHay = trackArtistText(track);
-  const albumHay = trackAlbumText(track);
-  return (
-    tokens.free.every((token) => haystack.includes(token)) &&
-    tokens.tags.every((tag) => track.tags.some((t) => t.includes(tag))) &&
-    tokens.artist.every((token) => artistHay.includes(token)) &&
-    tokens.album.every((token) => albumHay.includes(token))
-  );
+  return trackSearchScore(track, query, memoryNotes) < NO_MATCH_SCORE;
 }
 
+/** Filter + rank tracks by query relevance (best match first; stable for ties). */
 export function searchTracks(
   tracks: Track[],
   query: string,
   memoryNotesByTrackId?: ReadonlyMap<string, readonly string[]>,
 ): Track[] {
   if (!query.trim()) return tracks;
-  return tracks.filter((t) => matchesQuery(t, query, memoryNotesByTrackId?.get(t.id) ?? []));
+  return tracks
+    .map((track, index) => ({
+      track,
+      index,
+      score: trackSearchScore(track, query, memoryNotesByTrackId?.get(track.id) ?? []),
+    }))
+    .filter((entry) => entry.score < NO_MATCH_SCORE)
+    .sort((a, b) => a.score - b.score || a.index - b.index)
+    .map((entry) => entry.track);
 }
 
 /** Tracks carrying a given tag (exact, case-insensitive). */
@@ -122,13 +176,21 @@ export interface EntityFacets {
   albums: AlbumEntry[];
 }
 
+/** Every scope token matches `name` (via the transliteration variant sets). */
+function entityMatches(name: string, tokens: readonly string[]): boolean {
+  const fieldVariants = searchVariants(name);
+  return tokens.every(
+    (token) => scoreVariants(searchVariants(token), fieldVariants) < NO_MATCH_SCORE,
+  );
+}
+
 /**
  * Match derived artist/album entities for the faceted search surface. An artist
- * matches when every artist-relevant token (free + `artist:`) is a substring of
- * its display name; an album matches when every album-relevant token (free +
- * `album:`) is a substring of "album · artist". A facet stays empty when no
- * relevant token is present (so e.g. `album:foo` surfaces only albums). Pseudo
- * buckets never appear as search hits.
+ * matches when every artist-relevant token (free + `artist:`) matches its
+ * display name; an album matches when every album-relevant token (free +
+ * `album:`) matches "album · artist". A facet stays empty when no relevant token
+ * is present (so e.g. `album:foo` surfaces only albums). Pseudo buckets never
+ * appear as search hits. Matching is transliteration-aware (pinyin/romaji).
  */
 export function searchEntityFacets(
   artists: ArtistEntry[],
@@ -141,18 +203,13 @@ export function searchEntityFacets(
   const matchedArtists =
     artistTokens.length === 0
       ? []
-      : artists.filter(
-          (entry) =>
-            !entry.bucket &&
-            artistTokens.every((token) => entry.name.toLowerCase().includes(token)),
-        );
+      : artists.filter((entry) => !entry.bucket && entityMatches(entry.name, artistTokens));
   const matchedAlbums =
     albumTokens.length === 0
       ? []
-      : albums.filter((entry) => {
-          if (entry.bucket) return false;
-          const hay = `${entry.name} ${entry.artistName ?? ""}`.toLowerCase();
-          return albumTokens.every((token) => hay.includes(token));
-        });
+      : albums.filter(
+          (entry) =>
+            !entry.bucket && entityMatches(`${entry.name} ${entry.artistName ?? ""}`, albumTokens),
+        );
   return { artists: matchedArtists, albums: matchedAlbums };
 }

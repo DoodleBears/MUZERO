@@ -1,13 +1,22 @@
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 import type { Track, TrackMediaMetadata } from "@/db/types";
 import { buildAlbumIndex, buildArtistIndex } from "./library-index";
+import { ensureTransliterationLoaded } from "./search-transliterate";
 import {
   matchesQuery,
   parseSearchTokens,
   searchEntityFacets,
   searchTracks,
+  trackSearchScore,
   tracksWithTag,
 } from "./track-search";
+
+// Matching routes through the transliteration engine; warm the pinyin/kana libs
+// once so pinyin/romaji assertions resolve synchronously (substring-only
+// behavior holds before load, which the pre-transliteration tests rely on).
+beforeAll(async () => {
+  await ensureTransliterationLoaded();
+});
 
 function track(partial: Partial<Track>): Track {
   return {
@@ -203,5 +212,92 @@ describe("searchEntityFacets", () => {
 
   it("empty query yields no facet hits", () => {
     expect(searchEntityFacets(artists, albums, "")).toEqual({ artists: [], albums: [] });
+  });
+});
+
+describe("matchesQuery — transliteration (pinyin / kana / romaji)", () => {
+  const cnTrack = track({ id: "cn", title: "北京欢迎你", brief: undefined, tags: ["旅行"] });
+  const jpTrack = track({
+    id: "jp",
+    title: "ナルト",
+    brief: undefined,
+    origin: "uploaded",
+    mediaMetadata: md({ artists: ["周杰伦"], album: "范特西" }),
+  });
+
+  it("matches Chinese titles by full pinyin and initials", () => {
+    expect(matchesQuery(cnTrack, "beijing")).toBe(true); // full pinyin prefix
+    expect(matchesQuery(cnTrack, "bjhyn")).toBe(true); // 首字母 initials
+    expect(matchesQuery(cnTrack, "北京")).toBe(true); // original substring still works
+    expect(matchesQuery(cnTrack, "shanghai")).toBe(false);
+  });
+
+  it("matches Chinese tags by pinyin (#lvxing / #lx → #旅行)", () => {
+    expect(matchesQuery(cnTrack, "#lvxing")).toBe(true);
+    expect(matchesQuery(cnTrack, "#lx")).toBe(true);
+    expect(matchesQuery(cnTrack, "#旅行")).toBe(true);
+    expect(matchesQuery(cnTrack, "#workout")).toBe(false);
+  });
+
+  it("matches Japanese titles by romaji", () => {
+    expect(matchesQuery(jpTrack, "naruto")).toBe(true);
+  });
+
+  it("matches scoped artist/album by pinyin", () => {
+    expect(matchesQuery(jpTrack, "artist:zhoujielun")).toBe(true);
+    expect(matchesQuery(jpTrack, "artist:zjl")).toBe(true);
+    expect(matchesQuery(jpTrack, "album:fantexi")).toBe(true);
+    expect(matchesQuery(jpTrack, "artist:nobody")).toBe(false);
+  });
+});
+
+describe("trackSearchScore + ranked searchTracks", () => {
+  const exact = track({ id: "x", title: "Drive", brief: undefined });
+  const buried = track({
+    id: "y",
+    title: "Long Distance",
+    brief: undefined,
+    note: "a long drive home",
+  });
+
+  it("scores a closer match lower (better) than a buried one", () => {
+    expect(trackSearchScore(exact, "drive")).toBeLessThan(trackSearchScore(buried, "drive"));
+  });
+
+  it("ranks exact/prefix title matches above buried matches", () => {
+    const ranked = searchTracks([buried, exact], "drive"); // input order puts buried first
+    expect(ranked.map((t) => t.id)).toEqual(["x", "y"]); // exact floats up, both kept
+  });
+
+  it("returns 0 for an empty query and preserves input order", () => {
+    expect(trackSearchScore(exact, "   ")).toBe(0);
+    expect(searchTracks([buried, exact], "").map((t) => t.id)).toEqual(["y", "x"]);
+  });
+});
+
+describe("searchEntityFacets — transliteration", () => {
+  const cnTracks = [
+    track({
+      id: "1",
+      origin: "uploaded",
+      mediaMetadata: md({ artists: ["周杰伦"], album: "范特西" }),
+    }),
+  ];
+  const cnArtists = buildArtistIndex(cnTracks);
+  const cnAlbums = buildAlbumIndex(cnTracks);
+
+  it("surfaces a Chinese artist by full pinyin and initials", () => {
+    expect(
+      searchEntityFacets(cnArtists, cnAlbums, "zhoujielun").artists.map((a) => a.name),
+    ).toEqual(["周杰伦"]);
+    expect(searchEntityFacets(cnArtists, cnAlbums, "zjl").artists.map((a) => a.name)).toEqual([
+      "周杰伦",
+    ]);
+  });
+
+  it("surfaces a Chinese album by pinyin", () => {
+    expect(
+      searchEntityFacets(cnArtists, cnAlbums, "album:fantexi").albums.map((a) => a.name),
+    ).toEqual(["范特西"]);
   });
 });

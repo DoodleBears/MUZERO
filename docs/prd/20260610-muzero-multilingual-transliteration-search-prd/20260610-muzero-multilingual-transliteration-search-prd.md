@@ -12,8 +12,8 @@
 | Phase | Name | Status | Link |
 |-------|------|--------|------|
 | 1 | Transliteration variant engine (pure lib + lazy deps) | ✅ Completed | [Phase 1 Checklist](#phase-1-checklist) |
-| 2 | Transliteration-aware matcher + relevance ranking (pure, inline) | 🔲 Pending | [Phase 2 Checklist](#phase-2-checklist) |
-| 3 | Off-thread search Worker + incrementally-maintained index | 🔲 Pending | [Phase 3 Checklist](#phase-3-checklist) |
+| 2 | Transliteration-aware matcher + relevance ranking (pure, inline) | ✅ Completed | [Phase 2 Checklist](#phase-2-checklist) |
+| 3 | Off-thread search Worker + index (local + remote rows) | 🔲 Pending | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | Search UX: ⌘/Ctrl+F focus, deferred render, i18n hints | 🔲 Pending | [Phase 4 Checklist](#phase-4-checklist) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
@@ -353,22 +353,22 @@ No user-visible string hardcoded in components (§3).
 **Goal:** Route the existing matcher through the variant engine, preserve the scoped grammar, rank by score, and enrich remote `normalizedText` — all running inline (main thread) for now. Correct, fully tested, ship-able on its own.
 
 **Tasks:**
-- [ ] `trackSearchText` → `trackSearchFields(track, notes): string[]` (per-field, original casing).
-- [ ] Rewrite `matchesQuery` to variant-match per scope; keep `#tag`/`artist:`/`album:`; tags via variants.
-- [ ] Add `trackSearchScore`; `searchTracks` sorts ascending (stable ties).
-- [ ] Update `searchEntityFacets` to the variant matcher (歌手/专辑 reachable by pinyin/romaji).
-- [ ] `r2-search-catalog.ts`: bake variant tokens into `normalizedText` in `remoteSearchTrackToRow` (client-side, at sync write); keep `matchesRemoteSearchTrack` grammar identical to local.
-- [ ] Extend `track-search.test.ts` (Checklist). Tests `await ensureTransliterationLoaded()` once.
+- [x] `trackSearchText` → `trackSearchFields(track, notes): string[]` (per-field array, original casing; no external importers, clean replace).
+- [x] Rewrite `matchesQuery` to variant-match per scope (delegates to `trackSearchScore < NO_MATCH_SCORE`); `#tag`/`artist:`/`album:` grammar unchanged; tags + scoped fields via variants.
+- [x] Add `trackSearchScore` (summed per-token best, capped below sentinel); `searchTracks` filters + sorts ascending, stable for ties (`score || index`).
+- [x] Update `searchEntityFacets` to the variant matcher (歌手/专辑 reachable by pinyin/romaji).
+- [~] **Moved to Phase 3:** remote `r2-search-catalog.ts` transliteration — the Worker indexes `tracks` + `remoteSearchTracks` uniformly, so remote variant handling belongs with the Worker index, not the inline matcher. Until then remote search stays substring-only (graceful, no regression).
+- [x] Extend `track-search.test.ts` — +9 cases, `await ensureTransliterationLoaded()` once.
 
 ### Phase 2 Checklist
 
-- [ ] `matchesQuery(track{title:"北京欢迎你"}, "bjhyn")` / `"beijing"` / `"北京"` → true; `#旅行` reachable via `#lvxing` / `#lx`.
-- [ ] Japanese: `matchesQuery(track{title:"君の名は"}, "kimi")` → true (kana path); romaji↔kana bidirectional.
-- [ ] Scoped grammar intact: `artist:zhoujielun`, `album:fantezi`, mixed `周杰伦 album:范特西 #华语` AND-compose.
-- [ ] `searchTracks` returns **relevance-sorted** results (exact title before fuzzy note hit); ties stable.
-- [ ] `searchEntityFacets` surfaces 周杰伦 from `zhoujielun`; album from its pinyin.
-- [ ] Remote: a re-synced row matches pinyin/romaji; a stale row degrades to substring without error.
-- [ ] All existing track-search tests still pass; empty query matches all.
+- [x] `matchesQuery(title:"北京欢迎你", "bjhyn")` / `"beijing"` / `"北京"` → true, `"shanghai"` → false; `#旅行` reachable via `#lvxing` / `#lx`.
+- [x] Japanese: `matchesQuery(title:"ナルト", "naruto")` → true (kana→romaji). (Mixed kanji+kana like 「君の名は」 only romanize the kana — the documented kanji limit, §7 — so romaji of the *kanji* reading isn't matchable; tested at the engine level in Phase 1.)
+- [x] Scoped grammar intact: `artist:zhoujielun` / `artist:zjl`, `album:fantexi`, `artist:nobody`→false — all AND-compose.
+- [x] `searchTracks` returns **relevance-sorted** results (exact title `Drive` before a buried `…drive…` note hit); ties stable (empty query preserves input order).
+- [x] `searchEntityFacets` surfaces 周杰伦 from `zhoujielun` / `zjl`; 范特西 album from `album:fantexi`.
+- [x] All existing track-search tests still pass (18 pre-transliteration + 9 new = 27); empty query matches all.
+- [→] Remote row pinyin/romaji: deferred to Phase 3 (Worker index over `remoteSearchTracks`).
 
 ### Phase 3: Off-thread search Worker + incrementally-maintained index
 
@@ -378,6 +378,7 @@ No user-visible string hardcoded in components (§3).
 - [ ] `search-core.ts` (pure): `buildIndex` / `patchIndex` / `queryIndex` over §4 primitives; unit tests for add/remove/update + ranked query.
 - [ ] `search-worker.ts` (mirror `heavy-worker.ts`): in-worker `import` of libs; Dexie liveQuery over `tracks` + `remoteSearchTracks`; id-diff → `patchIndex`; `query` → `{ids, scores}`.
 - [ ] `search-client.ts` (mirror `heavy-client.ts`): lazy Worker, reqId/pending, `onerror` → inline fallback (`searchInline` over main-thread tracks).
+- [ ] **Remote rows (moved from Phase 2):** index `remoteSearchTracks` in the same Worker, or update `matchesRemoteSearchTrack` to variant-match via the engine — so cross-drive search gets pinyin/romaji too. Keep its grammar identical to the local matcher.
 - [ ] `search-page.tsx`: route `trackQuery` through `searchClient`; map returned ids → liveQuery tracks; baseline inline result until Worker-ready; snap-in re-query on ready.
 - [ ] Measure (`pnpm build`, prod): main-bundle size unchanged; query round-trip < 16 ms @ 5k tracks; no main-thread long task on first index build.
 
