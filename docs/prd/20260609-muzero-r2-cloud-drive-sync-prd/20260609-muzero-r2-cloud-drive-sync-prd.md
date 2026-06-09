@@ -1764,7 +1764,7 @@ For a large shared playlist with many trusted devices, the UI should:
 ### Phase 4 Checklist
 
 - [x] Pull sync can recreate a set on a new device.
-- [ ] Pull sync can download media for offline playback.
+- [x] Pull sync can download media for offline playback.
 - [x] Pull sync can stream without downloading.
 - [x] Pull sync can update a large remote search catalog without downloading media bytes.
 - [ ] Conflicts are visible and never silently overwrite media.
@@ -2039,3 +2039,4 @@ Do not record secrets, full signed URLs, or media content.
 | 2026-06-09 | MUZERO | Phase 4 stale set snapshot guard added: set index export planning can attach observed remote ETags as `If-Match` preconditions, using the existing signed conditional PUT path so stale `sets/<setId>/index.json` publishes fail instead of overwriting newer remote snapshots. |
 | 2026-06-09 | MUZERO | Phase 4 remote-search lazy-load added: opening a remote search result can now fetch only the referenced set indexes plus matching share manifest/index pairs, without fetching unrelated sets or media bytes. |
 | 2026-06-09 | MUZERO | Phase 4 large remote-search catalog regression added: catalog pull now has coverage for 250 remote tracks proving only catalog/set/track JSON pages are fetched, while media and cover object bytes remain untouched. |
+| 2026-06-09 | MUZERO | Phase 4 pull offline-cache option added: `applyRemoteSetPull` remains stream-only by default but can now cache imported remote media into `mediaBlobs` for offline playback, reusing MIME/role validation before linking `Track.blobId`. |

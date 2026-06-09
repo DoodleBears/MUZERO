@@ -1,6 +1,7 @@
 import { db as defaultDb, type MuzeroDB } from "@/db/muzero-db";
 import type { SyncRun } from "@/db/types";
 import { newId } from "@/lib/id";
+import { cacheRemoteTrackMedia, type SyncCacheFetch } from "./r2-cache";
 import { importRemoteSetStream } from "./r2-import-stream";
 import { type DiffRemoteSetInput, diffRemoteSet, type RemoteSetDiff } from "./r2-pull-diff";
 
@@ -14,6 +15,13 @@ export interface ApplyRemoteSetPullResult extends RemoteSetPullPreview {
   runId: string;
   sessionId?: string;
   trackIds: string[];
+  cachedMedia: number;
+}
+
+export interface ApplyRemoteSetPullInput extends DiffRemoteSetInput {
+  cacheMedia?: {
+    fetcher?: SyncCacheFetch;
+  };
 }
 
 export async function dryRunRemoteSetPull(
@@ -30,7 +38,7 @@ export async function dryRunRemoteSetPull(
 }
 
 export async function applyRemoteSetPull(
-  input: DiffRemoteSetInput,
+  input: ApplyRemoteSetPullInput,
   db: MuzeroDB = defaultDb,
 ): Promise<ApplyRemoteSetPullResult> {
   const preview = await dryRunRemoteSetPull(input, db);
@@ -46,7 +54,7 @@ export async function applyRemoteSetPull(
   }
   if (!preview.willMutate) {
     await completePullRun(run, 0, 0, db);
-    return { ...preview, runId: run.id, trackIds: [] };
+    return { ...preview, runId: run.id, trackIds: [], cachedMedia: 0 };
   }
 
   try {
@@ -57,17 +65,33 @@ export async function applyRemoteSetPull(
       },
       db,
     );
+    const cachedMedia = await cacheImportedMedia(input, imported.trackIds, db);
     await completePullRun(run, preview.bytes, input.remoteSet.tracks.length, db);
     return {
       ...preview,
       runId: run.id,
       sessionId: imported.sessionId,
       trackIds: imported.trackIds,
+      cachedMedia,
     };
   } catch (error) {
     await failPullRun(run, error instanceof Error ? error.message : String(error), db);
     throw error;
   }
+}
+
+async function cacheImportedMedia(
+  input: ApplyRemoteSetPullInput,
+  trackIds: string[],
+  db: MuzeroDB,
+): Promise<number> {
+  if (!input.cacheMedia) return 0;
+  let cached = 0;
+  for (const trackId of trackIds) {
+    await cacheRemoteTrackMedia(trackId, { fetcher: input.cacheMedia.fetcher }, db);
+    cached += 1;
+  }
+  return cached;
 }
 
 async function createPullRun(

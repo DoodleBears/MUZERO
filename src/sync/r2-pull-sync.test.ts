@@ -51,6 +51,34 @@ describe("R2 pull sync", () => {
     expect(await db.syncRuns.toArray()).toMatchObject([{ direction: "pull", status: "completed" }]);
   });
 
+  it("can download pulled remote media for offline playback", async () => {
+    const fetcher = async () =>
+      new Response(new Uint8Array([1, 2, 3]), {
+        status: 200,
+        headers: { "content-type": "audio/mpeg" },
+      });
+
+    const result = await applyRemoteSetPull(
+      {
+        driveId: "drv_1",
+        remoteSet: remoteSet(),
+        cacheMedia: {
+          fetcher,
+        },
+      },
+      db,
+    );
+    const track = await db.tracks.get(result.trackIds[0]!);
+
+    expect(result.cachedMedia).toBe(1);
+    expect(track?.blobId).toBeDefined();
+    expect(await db.mediaBlobs.get(track?.blobId ?? "")).toMatchObject({
+      role: "media",
+      mime: "audio/mpeg",
+      bytes: 3,
+    });
+  });
+
   it("does not mutate when the diff is blocked", async () => {
     await db.sessions.put({
       id: "ses_remote_drv_1_ses_tokyo",
