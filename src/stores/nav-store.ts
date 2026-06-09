@@ -11,6 +11,9 @@ import type { Tab } from "@/components/nav/dock-nav";
 interface NavState {
   tab: Tab;
   setTab: (tab: Tab) => void;
+  /** Active item in the two-column Settings page (sidebar → detail). */
+  settingsItem: string;
+  setSettingsItem: (item: string) => void;
 }
 
 export const useNavStore = create<NavState>()(
@@ -18,6 +21,8 @@ export const useNavStore = create<NavState>()(
     (set) => ({
       tab: "sessions",
       setTab: (tab) => set({ tab }),
+      settingsItem: "appearance",
+      setSettingsItem: (settingsItem) => set({ settingsItem }),
     }),
     { name: "muzero-nav" },
   ),
