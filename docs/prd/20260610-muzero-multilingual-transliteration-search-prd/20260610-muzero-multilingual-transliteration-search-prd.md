@@ -1,6 +1,6 @@
 # PRD: MUZERO Multilingual Transliteration Search (拼音 / 假名 / 罗马音 快速匹配)
 
-**Status:** Draft
+**Status:** In Progress
 **Created:** 2026-06-10
 **Author:** MUZERO
 **Module:** Search — make the library find-able by phonetic input (Chinese pinyin + initials, Japanese kana ↔ romaji), porting ClipCombo's command-palette transliteration matcher, hosted off-thread in a search Worker
@@ -11,7 +11,7 @@
 
 | Phase | Name | Status | Link |
 |-------|------|--------|------|
-| 1 | Transliteration variant engine (pure lib + lazy deps) | 🔲 Pending | [Phase 1 Checklist](#phase-1-checklist) |
+| 1 | Transliteration variant engine (pure lib + lazy deps) | ✅ Completed | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | Transliteration-aware matcher + relevance ranking (pure, inline) | 🔲 Pending | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | Off-thread search Worker + incrementally-maintained index | 🔲 Pending | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | Search UX: ⌘/Ctrl+F focus, deferred render, i18n hints | 🔲 Pending | [Phase 4 Checklist](#phase-4-checklist) |
@@ -329,22 +329,24 @@ No user-visible string hardcoded in components (§3).
 **Goal:** Standalone, exhaustively-tested `search-transliterate.ts` that turns any string into normalized + pinyin + kana/romaji variants, with dynamic-imported libs and an LRU cache. No app behavior change.
 
 **Tasks:**
-- [ ] `pnpm add pinyin-pro wanakana`; confirm both MIT; add `THIRD-PARTY-LICENSES.md` entry (or PR note).
-- [ ] Create `search-transliterate.ts`: `normalizeSearchText`, `searchVariants`, `scoreVariants`, `NO_MATCH_SCORE`, `ensureTransliterationLoaded`, LRU (~4000); ClipCombo's `HAN_RE`/`KANA_RE`/`COMPACT_RE` verbatim; **kana-first** detection.
-- [ ] Dynamic `import()` of both libs in `ensureTransliterationLoaded`; baseline-only variants until resolved; try/catch fallback (transliteration only widens).
-- [ ] pinyin opts (全拼 + 首字母, space + compact forms); wanakana hira/kata/romaji with `passRomaji`.
-- [ ] Unit tests (Checklist).
+- [x] `pnpm add pinyin-pro wanakana` (3.28.1 / 5.3.1, both MIT — isolated deps commit `ccb9587`).
+- [x] Create `search-transliterate.ts`: `normalizeSearchText`, `searchVariants`, `scoreVariants`, `NO_MATCH_SCORE`, `ensureTransliterationLoaded`, `isTransliterationReady`, LRU (4000); ClipCombo's `HAN_RE`/`KANA_RE`/`COMPACT_RE` verbatim; **kana-first** detection.
+- [x] Dynamic `import()` of both libs in `ensureTransliterationLoaded` (idempotent, clears cache on load); normalize-only variants until resolved; try/catch fallback (transliteration only widens).
+- [x] pinyin opts (全拼 + 首字母, space + compact forms; `v:true`, `toneType:"none"`, default — **not** `traditional`, simplified-friendly); wanakana hira/kata/romaji with `passRomaji`.
+- [x] Unit tests — 15 cases (Checklist).
+
+> **Notes:** (1) Omitted ClipCombo's `traditional:true` — MUZERO's core users have simplified libraries and the unified dict still reads traditional chars; locked by a 北京欢迎你 test. (2) `onTransliterationReady` subscription deferred to Phase 4 (UI snap-in); Phase 1 exposes the sync `isTransliterationReady()`.
 
 ### Phase 1 Checklist
 
-- [ ] `searchVariants("北京欢迎你")` ⊇ `{ "beijinghuanyingni", "bei jing huan ying ni", "bjhyn", "b j h y n" }`.
-- [ ] `searchVariants("じどう ジマク")` ⊇ `{ "じどうじまく", "ジドウ ジマク", "jidou jimaku", "jidoujimaku" }` (mirrors ClipCombo test).
-- [ ] `searchVariants("君の名は")` → kana/romaji for the kana portion; **no pinyin** emitted (kana-first); kanji limit noted in test comment.
-- [ ] `scoreVariants` tiers: exact `0` < prefix `<100` < substring `<520` < subsequence `<NO_MATCH`.
-- [ ] Subsequence guarded: query `<2` chars → no fuzzy; field `>96` chars → no fuzzy.
-- [ ] Latin / mixed (`iPhone 手机`) + empty/whitespace handled; NFKC folds full-width; `ü`/`v` (`lv`/`lü`) both reach `#旅行`.
-- [ ] Baseline variants returned before `ensureTransliterationLoaded()`; richer after.
-- [ ] `make check` green.
+- [x] `searchVariants("北京欢迎你")` ⊇ `{ "beijinghuanyingni", "bei jing huan ying ni", "bjhyn", "b j h y n" }`.
+- [x] `searchVariants("じどう ジマク")` ⊇ `{ "じどうじまく", "ジドウ ジマク", "jidou jimaku", "jidoujimaku" }` (mirrors ClipCombo test).
+- [x] `searchVariants("君の名は")` → kana/romaji for the kana portion; **no pinyin** emitted (kana-first); kanji limit noted in test comment. Also `ナルト → naruto`.
+- [x] `scoreVariants` tiers: exact `0` < prefix `<100` < substring `<520` < subsequence `<NO_MATCH`.
+- [x] Subsequence guarded: query `<2` chars → no fuzzy; field `>96` chars → no fuzzy (both tested: long-gapped 103-char field returns no-match, short-gapped matches).
+- [x] Latin / mixed (`iPhone 手机`→`shouji`) + empty/whitespace handled; NFKC folds full-width (`ＨＥＬＬＯ→hello`); `v:true` so `lvxing`/`lx` reach `旅行`.
+- [x] normalize-only variants before `ensureTransliterationLoaded()` (pinyin/kana no-op until libs set; cache cleared on load); richer after.
+- [~] `make check`: my files green (15/15 tests, biome clean, typecheck exit 0). Whole-repo `make check` has **pre-existing** failures from unrelated player-dock WIP (`chat-model-picker.test.tsx`, biome debt in `search-page.tsx`/`shortcuts/*`) — out of scope; lefthook gates staged files only.
 
 ### Phase 2: Transliteration-aware matcher + relevance ranking (pure, inline)
 
