@@ -21,6 +21,7 @@ import {
   type R2Manifest,
   type R2SetIndex,
   r2DjConfigSchema,
+  r2MemorySchema,
   r2SetTrackSchema,
 } from "./r2-manifest-schema";
 import { canPublishDeviceProfileToDrive, canWriteStatsToDrive } from "./r2-stats-policy";
@@ -340,8 +341,8 @@ async function foldSetMutationsIntoIndex(
     .filter(
       (mutation) =>
         mutation.syncedAt == null &&
-        mutation.scope === "set" &&
-        mutation.entityId === index.set.id &&
+        (mutation.scope === "set" || mutation.scope === "memory") &&
+        (mutation.scope === "memory" || mutation.entityId === index.set.id) &&
         mutation.base?.remoteKey === `sets/${index.set.id}/index.json`,
     )
     .sort((a, b) => a.createdAt - b.createdAt);
@@ -388,6 +389,11 @@ function mutationTouchedKeys(mutation: SyncMutation): string[] {
     return trackId ? [`track:${trackId}`] : [];
   }
 
+  if (mutation.action === "memory-added") {
+    const memory = memoryPayload(mutation.payload);
+    return memory ? [`memory:${memory.id}`] : [];
+  }
+
   return [];
 }
 
@@ -425,6 +431,16 @@ function applySetMutation(index: R2SetIndex, mutation: SyncMutation): boolean {
     return true;
   }
 
+  if (mutation.action === "memory-added") {
+    const trackId = trackIdPayload(mutation.payload);
+    const memory = memoryPayload(mutation.payload);
+    if (!trackId || !memory) return false;
+    const track = index.tracks.find((candidate) => candidate.id === trackId);
+    if (!track || track.memories.some((existing) => existing.id === memory.id)) return false;
+    track.memories = [...track.memories, memory].sort((a, b) => a.createdAt - b.createdAt);
+    return true;
+  }
+
   return false;
 }
 
@@ -436,6 +452,14 @@ function trackPayload(payload: unknown): R2SetIndex["tracks"][number] | undefine
 
 function trackIdPayload(payload: unknown): string | undefined {
   return isRecord(payload) && typeof payload.trackId === "string" ? payload.trackId : undefined;
+}
+
+function memoryPayload(
+  payload: unknown,
+): R2SetIndex["tracks"][number]["memories"][number] | undefined {
+  if (!isRecord(payload)) return undefined;
+  const result = r2MemorySchema.safeParse(payload.memory);
+  return result.success ? result.data : undefined;
 }
 
 function trackPositionPayload(payload: unknown): number | undefined {

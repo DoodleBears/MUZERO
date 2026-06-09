@@ -1749,7 +1749,7 @@ For a large shared playlist with many trusted devices, the UI should:
 - [x] Add ETag/hash/conditional-write guard before overwriting mutable remote JSON objects.
 - [ ] Default merge rule:
   - [ ] additive stats merge
-  - [ ] add new tracks/memories
+  - [x] add new tracks/memories
   - [ ] preserve local-only tracks unless user chooses delete
   - [ ] latest `updatedAt` wins only for non-user-authored cache metadata
   - [ ] user-authored set/track/memory fields use explicit conflict UI when both sides changed
@@ -1768,7 +1768,7 @@ For a large shared playlist with many trusted devices, the UI should:
 - [x] Pull sync can stream without downloading.
 - [ ] Pull sync can update a large remote search catalog without downloading media bytes.
 - [ ] Conflicts are visible and never silently overwrite media.
-- [ ] Two devices adding different tracks to the same set can auto-merge.
+- [x] Two devices adding different tracks to the same set can auto-merge.
 - [ ] Two devices renaming the same set differently produce a reviewable conflict.
 - [ ] Stale set snapshot publish fails/replans instead of overwriting remote changes.
 - [x] Hash mismatch blocks import for that object.
@@ -2034,3 +2034,4 @@ Do not record secrets, full signed URLs, or media content.
 | 2026-06-09 | MUZERO | Phase 5 stats/profile write policy added: only owner/trusted drives with local R2 credentials may receive stats or opted-in device profiles, keeping read-only shared-link listener data local by default. |
 | 2026-06-09 | MUZERO | Phase 4 set/track/memory conflict detection completed: pull diff now maps unsynced local mutations back to remote set, track, and memory ids so double-edited user-authored fields become reviewable conflicts instead of being silently overwritten by remote updates. |
 | 2026-06-09 | MUZERO | Phase 4 owner set mutation folding added: export planning now applies non-overlapping set metadata, track add, and track remove mutations into the next owner-published `sets/<setId>/index.json` snapshot while leaving overlapping or invalid mutation payloads for later review. |
+| 2026-06-09 | MUZERO | Phase 4 additive set merge rule added: owner export folding now auto-merges different trusted devices adding distinct tracks plus new memories into the same set index, preserving per-object ids instead of coalescing writers into one mutable file. |

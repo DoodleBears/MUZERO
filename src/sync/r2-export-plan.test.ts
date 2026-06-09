@@ -391,6 +391,74 @@ describe("buildR2ExportPlan", () => {
     ]);
   });
 
+  it("auto-merges different devices adding tracks and memories to the same set", async () => {
+    await seedSet();
+    await db.syncMutations.bulkPut([
+      {
+        id: "mut_add_track_a",
+        driveId: "drv_1",
+        devicePublicId: "dvc_1",
+        scope: "set",
+        entityId: "ses_1",
+        action: "track-added-to-set",
+        base: { remoteKey: "sets/ses_1/index.json", revision: 1, updatedAt: 200 },
+        payload: { position: 1, track: remoteTrack("trk_remote_a", "Remote A") },
+        createdAt: 300,
+      },
+      {
+        id: "mut_add_track_b",
+        driveId: "drv_1",
+        devicePublicId: "dvc_2",
+        scope: "set",
+        entityId: "ses_1",
+        action: "track-added-to-set",
+        base: { remoteKey: "sets/ses_1/index.json", revision: 1, updatedAt: 200 },
+        payload: { position: 2, track: remoteTrack("trk_remote_b", "Remote B") },
+        createdAt: 310,
+      },
+      {
+        id: "mut_add_memory",
+        driveId: "drv_1",
+        devicePublicId: "dvc_3",
+        scope: "memory",
+        entityId: "mem_remote_extra",
+        action: "memory-added",
+        base: { remoteKey: "sets/ses_1/index.json", revision: 1, updatedAt: 200 },
+        payload: {
+          trackId: "trk_1",
+          memory: {
+            id: "mem_remote_extra",
+            note: "Shared memory",
+            author: { devicePublicId: "dvc_3", displayName: "Phone" },
+            createdAt: 330,
+          },
+        },
+        createdAt: 330,
+      },
+    ]);
+
+    const plan = await buildR2ExportPlan({
+      driveId: "drv_1",
+      libraryId: "lib_1",
+      baseUrl: "https://music.example.com/muzero/",
+      setIds: ["ses_1"],
+      db,
+    });
+    const setIndex = JSON.parse(
+      String(plan.objects.find((object) => object.kind === "set-index")?.body),
+    );
+
+    expect(setIndex.tracks.map((track: { id: string }) => track.id)).toEqual([
+      "trk_1",
+      "trk_remote_a",
+      "trk_remote_b",
+    ]);
+    expect(setIndex.tracks[0].memories.map((memory: { id: string }) => memory.id)).toEqual([
+      "mem_1",
+      "mem_remote_extra",
+    ]);
+  });
+
   it("exports immutable per-device playback event segments", async () => {
     await seedSet();
     await db.devices.put({
@@ -746,6 +814,27 @@ async function seedSet(options: { remoteOnly?: boolean } = {}) {
   await db.tracks.put(track);
   await db.memories.put(memory);
   await db.mediaBlobs.bulkPut(blobs);
+}
+
+function remoteTrack(id: string, title: string) {
+  return {
+    id,
+    title,
+    kind: "audio",
+    origin: "uploaded",
+    provider: "upload",
+    durationSec: 160,
+    createdAt: 250,
+    liked: false,
+    tags: ["shared"],
+    media: {
+      url: `objects/media/${id}.mp3`,
+      mime: "audio/mpeg",
+      bytes: 9,
+      sha256: `${id}-sha`,
+    },
+    memories: [],
+  };
 }
 
 async function seedDeviceWithPlaybackEvents(count: number, firstStartedAt: number) {
