@@ -1836,7 +1836,7 @@ For a large shared playlist with many trusted devices, the UI should:
 - [x] Write presence on track start, pause, resume, stop, and track change.
 - [x] Add throttled heartbeat while playing, at most once per 60 seconds.
 - [x] Write presence to `presence/devices/<devicePublicId>.json`.
-- [ ] Read presence only while the "Listening now" UI is visible, at a low polling interval.
+- [x] Read presence only while the "Listening now" UI is visible, at a low polling interval.
 - [x] Ignore expired presence records based on `expiresAt`.
 - [x] Add cost/operations warning in Settings for public shared libraries.
 
@@ -1846,7 +1846,7 @@ For a large shared playlist with many trusted devices, the UI should:
 - [x] Read-only public listeners do not attempt remote presence writes.
 - [x] Expired devices disappear without requiring deletes.
 - [x] Presence writes are throttled and do not happen every second.
-- [ ] Presence reads are scoped to the visible UI and stop when hidden/backgrounded.
+- [x] Presence reads are scoped to the visible UI and stop when hidden/backgrounded.
 - [x] The feature remains optional and off by default.
 
 ---
@@ -2023,5 +2023,6 @@ Do not record secrets, full signed URLs, or media content.
 | 2026-06-09 | MUZERO | Phase 5 owner-drive shared-track history sync verified: local listening history for remote shared tracks exports to the user's owner R2 as stats aggregate/event segment objects with remote track references and without uploading shared media bytes. |
 | 2026-06-09 | MUZERO | Phase 5 trusted-device separated stats verified: trusted writers export aggregate stats under `stats/devices/<devicePublicId>/aggregate.json`, and `stats/index.json` points at that per-device object instead of coalescing anonymous devices into one mutable counter. |
 | 2026-06-09 | MUZERO | Phase 6 presence write coordinator added: playback start, pause, resume, stop, and track-change events now publish low-frequency per-device presence through the player store when presence is enabled and an owner/trusted R2 target has write credentials. |
+| 2026-06-09 | MUZERO | Phase 6 presence visible-scope polling added: the R2 presence poller reads immediately when the Listening Now UI becomes visible, clamps polling to at least 60 seconds, stops when hidden, and drops in-flight results after visibility changes. |
 | 2026-06-09 | MUZERO | Phase 5 optional `stats/index.json` discovery completed for stats sync: device entries can point to aggregate cache, checkpoint, and latest immutable event segment without making the index the write-hot source of truth. |
 | 2026-06-09 | MUZERO | Phase 5 stats/profile write policy added: only owner/trusted drives with local R2 credentials may receive stats or opted-in device profiles, keeping read-only shared-link listener data local by default. |
