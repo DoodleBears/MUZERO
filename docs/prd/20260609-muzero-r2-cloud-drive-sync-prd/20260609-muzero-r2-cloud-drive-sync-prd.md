@@ -17,8 +17,8 @@
 | 2 | R2 Setup Wizard + connection validation | ✅ Done | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | Local-to-cloud publish sync with visible progress | ✅ Done | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | Cloud-to-local pull sync + conflict handling | ✅ Done | [Phase 4 Checklist](#phase-4-checklist) |
-| 5 | Anonymous device registry + playback stats sync | 🔄 In Progress | [Phase 5 Checklist](#phase-5-checklist) |
-| 6 | Optional low-frequency currently-playing presence | 🔄 In Progress | [Phase 6 Checklist](#phase-6-checklist) |
+| 5 | Anonymous device registry + playback stats sync | ✅ Done | [Phase 5 Checklist](#phase-5-checklist) |
+| 6 | Optional low-frequency currently-playing presence | ✅ Done | [Phase 6 Checklist](#phase-6-checklist) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
 
@@ -2057,3 +2057,4 @@ Do not record secrets, full signed URLs, or media content.
 | 2026-06-09 | MUZERO | Phase 3/4 sync orchestration store added (PRD §5.6): `useSyncStore` resolves a writable drive's publish context from IndexedDB (R2 credentials, public base URL, and local-origin set ids — remote-imported `ses_remote_` sets excluded), runs the orchestrator with a per-drive `AbortController` for cancel, blocks before start with an actionable reason when a drive is read-only/credential-less/URL-less, and keeps only ephemeral per-drive progress in Zustand (durable history stays in `syncRuns`, localized copy stays in the UI). |
 | 2026-06-09 | MUZERO | Phases 3 & 4 completed: Settings → Cloud Drive now wires a per-drive **Sync now** / **Cancel** control on each writable connected drive, with a compact live phase/object/percent/error line backed by `useSyncStore`, plus en/zh/ja/ko strings. Verified end-to-end in the preview: clicking Sync now resolves the publish context, builds the export plan, runs the publisher, and surfaces live + durable failure progress — closing the last integration gap between the tested publish/pull logic and a user-triggerable action. |
 | 2026-06-09 | MUZERO | Phase 6 presence read fetcher added: `readRemotePresence` reads the owner-maintained `presence/index.json` (new `muzero-r2-presence-index-v1` schema) and resolves each referenced per-device `presence/devices/<id>.json`, skipping a missing index or malformed device object rather than throwing and defaulting its fetch to the shared `getAppFetch()` path — the read side the `R2PresencePoller` previously lacked. |
+| 2026-06-09 | MUZERO | Phases 5 & 6 completed: the `useRemotePresence` hook resolves the active remote set's source drive by `ses_remote_<driveId>_` id prefix and polls `readRemotePresence` only while the new **Listening now** section is mounted on Now Playing (visible-scope, ≥60s interval), rendering trusted devices' current track via `ListeningNowList` (+ en/zh/ja/ko label); Phase 5's plays/listened-time stats UI was already wired into Settings. Now Playing render verified crash-free in the preview, with the section correctly hidden for local sets. All six phases are now ✅ Done. |

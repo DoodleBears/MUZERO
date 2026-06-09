@@ -69,6 +69,7 @@
   },
   "nowPlaying": {
     "upNext": "次に再生",
+    "listeningNow": "再生中のユーザー",
     "closeQueue": "キューを閉じる",
     "displayMode": "表示",
     "modeTitle": "{{mode}}モード",

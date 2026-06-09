@@ -69,6 +69,7 @@
   },
   "nowPlaying": {
     "upNext": "即将播放",
+    "listeningNow": "正在收听",
     "closeQueue": "关闭播放列表",
     "displayMode": "显示方式",
     "modeTitle": "{{mode}}模式",

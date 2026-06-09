@@ -72,6 +72,7 @@
   },
   "nowPlaying": {
     "upNext": "Up next",
+    "listeningNow": "Listening now",
     "closeQueue": "Close queue",
     "displayMode": "Display",
     "modeTitle": "{{mode}} mode",

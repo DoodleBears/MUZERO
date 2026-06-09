@@ -69,6 +69,7 @@
   },
   "nowPlaying": {
     "upNext": "다음 곡",
+    "listeningNow": "지금 듣는 중",
     "closeQueue": "대기열 닫기",
     "displayMode": "표시",
     "modeTitle": "{{mode}} 모드",

@@ -3,6 +3,7 @@ import { type CSSProperties, type RefObject, useEffect, useRef, useState } from 
 import { useTranslation } from "react-i18next";
 import { DjConsole } from "@/components/dj/dj-console";
 import { ControlTooltip } from "@/components/player/control-tooltip";
+import { ListeningNowSection } from "@/components/player/listening-now-section";
 import { NowPlayingPanel } from "@/components/player/now-playing-panel";
 import { PlaybackSpectrum } from "@/components/player/playback-spectrum";
 import { SwipeableMediaStage } from "@/components/player/swipeable-media-stage";
@@ -85,6 +86,8 @@ export function NowPlayingPage({ foregroundHidden = false }: { foregroundHidden?
           {current && <AnnotationEditor key={current.id} track={current} />}
 
           {djEnabled && <DjConsole />}
+
+          <ListeningNowSection />
         </section>
 
         <aside className="hidden min-h-0 md:block">
