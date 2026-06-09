@@ -12,6 +12,10 @@
     "settings": "設定",
     "menu": "メニュー"
   },
+  "dock": {
+    "memory": "メモリー",
+    "playlist": "プレイリスト"
+  },
   "sessions": {
     "startDjTitle": "AI DJ セットを始める",
     "vibePlaceholder": "雰囲気を入力… 例：「深夜の lo-fi で集中コーディング」",
@@ -93,6 +97,8 @@
     "downloadFailed": "曲をダウンロードできませんでした",
     "addToSet": "他のセットに追加",
     "noOtherSets": "他のセットがありません",
+    "searchSets": "セットを検索",
+    "noMatchingSets": "一致するセットがありません",
     "empty": "まだ何もありません —— セットを始めれば DJ が埋めてくれます。",
     "uploadedAudio": "アップロード音声",
     "uploadedVideo": "アップロード動画"
@@ -411,7 +417,13 @@
     "coverHint": "ドロップ / ペースト / クリックでカバーを設定",
     "newSet": "新規セット",
     "addTracks": "曲を追加",
-    "newSetName": "新しいセット"
+    "newSetName": "新しいセット",
+    "trackArtist": "アーティスト",
+    "trackAlbum": "アルバム",
+    "trackGenre": "ジャンル",
+    "trackYear": "年",
+    "trackDuration": "長さ",
+    "noTrackSelected": "曲を選択"
   },
   "notification": {
     "copy": "コピー",

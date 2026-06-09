@@ -13,7 +13,7 @@ import { usePlayerStore } from "@/stores/player-store";
 import { TrackRow } from "./track-row";
 
 const TRACK_ROW_HEIGHT = 60;
-const TRACK_ROW_BUTTON_SELECTOR = "[data-muzero-track-row-button]";
+const TRACK_ROW_SELECTOR = "[data-muzero-track-row]";
 const TRACK_LIST_EDGE_PULL_THRESHOLD = 96;
 const TRACK_LIST_EDGE_PULL_MAX = 56;
 const TRACK_LIST_EDGE_PULL_ARM_MS = 80;
@@ -33,17 +33,21 @@ const TRACK_LIST_EDGE_PULL_TRANSITION = {
 export function VirtualTrackList({
   tracks,
   onPlay,
+  onView,
   emptyHint,
   className,
+  selectedTrackId,
   edgePullFeedback = false,
   onPullPastStart,
   onPullPastEnd,
 }: {
   tracks: Track[];
   onPlay?: (track: Track, index: number) => void;
+  onView?: (track: Track, index: number) => void;
   emptyHint?: string;
   /** Extra classes for the scroll element — e.g. `pb-chrome-bottom` to clear the dock. */
   className?: string;
+  selectedTrackId?: string;
   edgePullFeedback?: boolean;
   onPullPastStart?: () => void;
   onPullPastEnd?: () => void;
@@ -64,6 +68,7 @@ export function VirtualTrackList({
 
   const currentTrackId = currentIndex >= 0 ? queue[currentIndex]?.id : undefined;
   const handlePlay = onPlay ?? ((_track: Track, index: number) => void playIndex(index));
+  const handleView = onView ?? handlePlay;
 
   const rowVirtualizer = useVirtualizer({
     count: tracks.length,
@@ -86,9 +91,7 @@ export function VirtualTrackList({
     window.requestAnimationFrame(() => {
       window.requestAnimationFrame(() => {
         parentRef.current
-          ?.querySelector<HTMLButtonElement>(
-            `${TRACK_ROW_BUTTON_SELECTOR}[data-track-index="${index}"]`,
-          )
+          ?.querySelector<HTMLElement>(`${TRACK_ROW_SELECTOR}[data-track-index="${index}"]`)
           ?.focus();
       });
     });
@@ -97,13 +100,17 @@ export function VirtualTrackList({
   function onKeyDown(event: KeyboardEvent<HTMLDivElement>) {
     if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
     const target = event.target instanceof HTMLElement ? event.target : null;
-    const button = target?.closest<HTMLButtonElement>(TRACK_ROW_BUTTON_SELECTOR);
-    if (!button) return;
-    const current = Number(button.dataset.trackIndex);
+    const active = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const row =
+      target?.closest<HTMLElement>(TRACK_ROW_SELECTOR) ??
+      active?.closest<HTMLElement>(TRACK_ROW_SELECTOR);
+    if (!row) return;
+    const current = Number(row.dataset.trackIndex);
     if (!Number.isFinite(current)) return;
     const next = event.key === "ArrowDown" ? current + 1 : current - 1;
     if (next < 0 || next >= tracks.length) return;
     event.preventDefault();
+    handleView(tracks[next], next);
     focusTrackAt(next);
   }
 
@@ -234,9 +241,11 @@ export function VirtualTrackList({
               <TrackRow
                 track={track}
                 isCurrent={track.id === currentTrackId}
+                isSelected={track.id === selectedTrackId}
                 listIndex={virtualRow.index}
                 sessions={sessions}
                 onPlay={() => handlePlay(track, virtualRow.index)}
+                onView={() => handleView(track, virtualRow.index)}
                 onToggleLike={() => void setTrackLiked(track.id, !track.liked)}
                 onDelete={() => void deleteTrackRepo(track.id)}
                 onDownloadOriginal={() => {

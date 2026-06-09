@@ -1,8 +1,9 @@
-import { Disc3, FileVideo, Plus, Upload } from "lucide-react";
+import { FileVideo, Plus, Upload } from "lucide-react";
 import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Disc3Icon } from "@/components/ui/disc-3";
 import { Textarea } from "@/components/ui/input";
 import { createSession } from "@/db/repositories";
 import { useSessions } from "@/hooks/use-app-data";
@@ -116,11 +117,9 @@ export function SessionsPage({ onStarted }: { onStarted: () => void }) {
                 )}
               >
                 {isDj ? (
-                  <Disc3
-                    className={cn(
-                      "size-5 shrink-0",
-                      session.id === activeSessionId && "text-primary",
-                    )}
+                  <Disc3Icon
+                    size={20}
+                    className={cn("shrink-0", session.id === activeSessionId && "text-primary")}
                   />
                 ) : (
                   <FileVideo

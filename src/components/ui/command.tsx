@@ -1,7 +1,7 @@
 "use client";
 
 import { Search } from "lucide-react";
-import { type ReactNode, useMemo, useState } from "react";
+import { type ReactNode, useId, useMemo, useState } from "react";
 import { cn } from "@/lib/utils";
 
 export interface CommandItem {
@@ -34,6 +34,7 @@ export function Command({
   placeholder,
   selectedId,
 }: CommandProps) {
+  const listboxId = useId();
   const [uncontrolledInput, setUncontrolledInput] = useState("");
   const query = inputValue ?? uncontrolledInput;
   const filteredItems = useMemo(
@@ -52,14 +53,18 @@ export function Command({
         <Search className="size-4 shrink-0 text-muted-foreground" />
         <input
           aria-label={placeholder}
+          aria-autocomplete="list"
+          aria-controls={listboxId}
+          aria-expanded="true"
           className="h-10 min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
           onChange={(event) => setQuery(event.target.value)}
           placeholder={placeholder}
+          role="combobox"
           type="search"
           value={query}
         />
       </div>
-      <div className="max-h-72 overflow-y-auto p-1" role="listbox">
+      <div className="max-h-72 overflow-y-auto p-1" id={listboxId} role="listbox">
         {filteredItems.length === 0 ? (
           <div className="px-3 py-2 text-muted-foreground text-sm">{empty}</div>
         ) : (

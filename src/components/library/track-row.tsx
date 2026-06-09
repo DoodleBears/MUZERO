@@ -1,15 +1,17 @@
 import {
-  Disc3,
   Download,
   Heart,
   ListPlus,
   Loader2,
+  Play,
   Trash2,
   TriangleAlert,
   Video,
 } from "lucide-react";
-import { memo, useMemo, useState } from "react";
+import { type KeyboardEvent, type MouseEvent, memo, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { Command, type CommandItem } from "@/components/ui/command";
+import { Disc3Icon } from "@/components/ui/disc-3";
 import {
   Popover,
   PopoverContent,
@@ -25,9 +27,11 @@ import { cn, formatDuration } from "@/lib/utils";
 interface TrackRowProps {
   track: Track;
   isCurrent: boolean;
+  isSelected?: boolean;
   listIndex?: number;
   sessions: DjSession[];
   onPlay: () => void;
+  onView: () => void;
   onToggleLike: () => void;
   onDelete: () => void;
   onDownloadOriginal: () => void;
@@ -60,7 +64,7 @@ function TrackThumb({ track }: { track: Track }) {
   }
   return (
     <div className="grid size-10 shrink-0 place-items-center rounded-md bg-secondary text-muted-foreground">
-      {track.kind === "video" ? <Video className="size-4" /> : <Disc3 className="size-4" />}
+      {track.kind === "video" ? <Video className="size-4" /> : <Disc3Icon size={16} />}
     </div>
   );
 }
@@ -85,9 +89,11 @@ function TrackTags({ tags }: { tags: string[] }) {
 export const TrackRow = memo(function TrackRow({
   track,
   isCurrent,
+  isSelected,
   listIndex,
   sessions,
   onPlay,
+  onView,
   onToggleLike,
   onDelete,
   onDownloadOriginal,
@@ -101,22 +107,69 @@ export const TrackRow = memo(function TrackRow({
     [sessions, track.id],
   );
 
+  function handleRowKeyDown(event: KeyboardEvent<HTMLDivElement>) {
+    if (event.target !== event.currentTarget) return;
+    if (event.key !== "Enter" && event.key !== " ") return;
+    event.preventDefault();
+    event.stopPropagation();
+    onView();
+  }
+
+  function eventStartedInActions(event: MouseEvent<HTMLDivElement>) {
+    return (
+      event.target instanceof HTMLElement && !!event.target.closest("[data-muzero-row-actions]")
+    );
+  }
+
+  function handleRowClick(event: MouseEvent<HTMLDivElement>) {
+    if (eventStartedInActions(event)) return;
+    onView();
+  }
+
+  function handleRowDoubleClick(event: MouseEvent<HTMLDivElement>) {
+    if (eventStartedInActions(event)) return;
+    if (disabled || isSelected) return;
+    event.preventDefault();
+    onPlay();
+  }
+
   return (
     <div
+      aria-selected={isSelected || undefined}
       className={cn(
-        "group relative flex w-full items-center gap-3 rounded-lg px-3 py-2 transition-colors",
-        isCurrent ? "bg-accent" : "hover:bg-accent/50",
+        "group relative flex w-full items-center gap-3 rounded-lg px-3 py-2 transition-colors outline-none",
+        isCurrent ? "bg-accent" : isSelected ? "bg-accent/60" : "hover:bg-accent/50",
       )}
+      data-muzero-track-row
+      data-track-index={listIndex}
+      onClick={handleRowClick}
+      onDoubleClick={handleRowDoubleClick}
+      onKeyDown={handleRowKeyDown}
+      role="option"
+      tabIndex={0}
     >
-      <button
-        type="button"
-        onClick={onPlay}
-        disabled={disabled}
-        className="flex min-w-0 flex-1 items-center gap-3 text-left disabled:cursor-default"
-        data-muzero-track-row-button
-        data-track-index={listIndex}
-      >
-        <TrackThumb track={track} />
+      <div className="group/thumb relative size-10 shrink-0">
+        <div className="grid size-10 place-items-center rounded-md">
+          <TrackThumb track={track} />
+        </div>
+        {track.status === "ready" && (
+          <button
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation();
+              onPlay();
+            }}
+            onDoubleClick={(event) => event.stopPropagation()}
+            className="pointer-events-none absolute inset-0 grid place-items-center rounded-md bg-black/45 text-foreground opacity-0 outline-none transition-opacity group-hover/thumb:pointer-events-auto group-hover/thumb:opacity-100 focus-visible:pointer-events-auto focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring"
+            aria-label={t("player.play")}
+          >
+            <span className="grid size-7 place-items-center rounded-full bg-background shadow-sm">
+              <Play className="ms-0.5 size-3.5 fill-current" />
+            </span>
+          </button>
+        )}
+      </div>
+      <div className="flex min-w-0 flex-1 items-center gap-3 text-left">
         <div className="min-w-0 flex-1">
           <div
             className={cn(
@@ -133,7 +186,7 @@ export const TrackRow = memo(function TrackRow({
               : trackSubtitle(track)}
           </div>
         </div>
-      </button>
+      </div>
       <div className="ml-auto flex shrink-0 items-center gap-3">
         <TrackTags tags={track.tags} />
         <span className="w-10 shrink-0 text-right text-xs tabular-nums text-muted-foreground">
@@ -145,6 +198,7 @@ export const TrackRow = memo(function TrackRow({
           "invisible absolute right-3 top-1/2 z-10 flex -translate-y-1/2 items-center gap-0.5 rounded-md border border-border bg-background/95 p-0.5 opacity-0 shadow-sm backdrop-blur transition-opacity",
           "group-hover:visible group-hover:opacity-100 focus-within:visible focus-within:opacity-100",
         )}
+        data-muzero-row-actions
       >
         <button
           type="button"
@@ -241,9 +295,31 @@ function AddToSetPopover({
 }) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const items = useMemo<CommandItem[]>(
+    () =>
+      sessions.map((session) => ({
+        id: session.id,
+        keywords: [session.name, session.description ?? ""],
+        label: session.name,
+      })),
+    [sessions],
+  );
+
+  function selectSession(sessionId: string) {
+    onAddToSession(sessionId);
+    setQuery("");
+    setOpen(false);
+  }
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover
+      open={open}
+      onOpenChange={(nextOpen) => {
+        setOpen(nextOpen);
+        if (!nextOpen) setQuery("");
+      }}
+    >
       <PopoverTrigger
         type="button"
         disabled={disabled}
@@ -260,22 +336,15 @@ function AddToSetPopover({
             {t("track.noOtherSets")}
           </PopoverDescription>
         ) : (
-          <div className="max-h-64 overflow-y-auto">
-            {sessions.map((session) => (
-              <button
-                key={session.id}
-                type="button"
-                onClick={() => {
-                  onAddToSession(session.id);
-                  setOpen(false);
-                }}
-                className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm outline-none transition-colors hover:bg-accent focus-visible:bg-accent"
-              >
-                <Disc3 className="size-4 shrink-0 text-muted-foreground" />
-                <span className="min-w-0 flex-1 truncate">{session.name}</span>
-              </button>
-            ))}
-          </div>
+          <Command
+            className="border-0"
+            empty={t("track.noMatchingSets")}
+            inputValue={query}
+            items={items}
+            onInputChange={setQuery}
+            onSelect={selectSession}
+            placeholder={t("track.searchSets")}
+          />
         )}
       </PopoverContent>
     </Popover>

@@ -1,8 +1,9 @@
 import { useLiveQuery } from "dexie-react-hooks";
-import { CornerDownLeft, Disc3, ListPlus, Search } from "lucide-react";
+import { CornerDownLeft, ListPlus, Search } from "lucide-react";
 import type { KeyboardEvent } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { Disc3Icon } from "@/components/ui/disc-3";
 import { Kbd, KbdGroup } from "@/components/ui/kbd";
 import { db } from "@/db/muzero-db";
 import { listAllTracks, memoryNotesByTrack } from "@/db/repositories";
@@ -222,7 +223,7 @@ function GlobalTrackSearchRow({
           {coverUrl ? (
             <img src={coverUrl} alt="" className="size-full object-cover" />
           ) : (
-            <Disc3 className="size-4" />
+            <Disc3Icon size={16} />
           )}
         </div>
         <div className="min-w-0 flex-1">

@@ -19,7 +19,7 @@ describe("Command primitive", () => {
       />,
     );
 
-    fireEvent.change(screen.getByRole("searchbox", { name: "Search models" }), {
+    fireEvent.change(screen.getByRole("combobox", { name: "Search models" }), {
       target: { value: "anthropic" },
     });
 
@@ -37,7 +37,7 @@ describe("Command primitive", () => {
       />,
     );
 
-    fireEvent.change(screen.getByRole("searchbox", { name: "Search models" }), {
+    fireEvent.change(screen.getByRole("combobox", { name: "Search models" }), {
       target: { value: "zzzz" },
     });
 

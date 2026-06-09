@@ -1,8 +1,8 @@
 import type { ForwardRefExoticComponent, HTMLAttributes, RefAttributes } from "react";
 import type { Tab } from "@/components/nav/dock-nav";
 import { AudioLinesIcon } from "@/components/ui/audio-lines";
+import { Disc3Icon } from "@/components/ui/disc-3";
 import { SettingsIcon } from "@/components/ui/settings";
-import { SparklesIcon } from "@/components/ui/sparkles";
 
 export interface AnimatedNavIconHandle {
   startAnimation: () => void;
@@ -26,6 +26,6 @@ export interface NavFabItem {
  */
 export const NAV_ITEMS: NavFabItem[] = [
   { id: "now", labelKey: "now", icon: AudioLinesIcon },
-  { id: "search", labelKey: "sets", icon: SparklesIcon },
+  { id: "search", labelKey: "sets", icon: Disc3Icon },
   { id: "settings", labelKey: "settings", icon: SettingsIcon },
 ];

@@ -31,14 +31,22 @@ vi.mock("react-i18next", () => ({
         "nowPlaying.upNext": "Up next",
         "annotation.memory": "Memory",
         "annotation.memoryEmpty": "No memories yet",
+        "dock.memory": "Memory",
+        "dock.playlist": "Playlist",
         "queue.empty": "Queue empty",
       })[key] ?? key,
   }),
 }));
 
-vi.mock("lucide-react", () => ({
-  PanelBottomOpen: ({ className }: { className?: string }) => (
-    <svg className={className} data-testid="panel-bottom-open-icon" />
+vi.mock("@/components/ui/disc-3", () => ({
+  Disc3Icon: ({ className }: { className?: string }) => (
+    <span className={className} data-testid="disc-3-icon" />
+  ),
+}));
+
+vi.mock("@/components/ui/message-circle-more", () => ({
+  MessageCircleMoreIcon: ({ className }: { className?: string }) => (
+    <span className={className} data-testid="message-circle-more-icon" />
   ),
 }));
 
@@ -153,11 +161,11 @@ describe("NowPlayingPanel collapse", () => {
     render(<NowPlayingPanel collapsible />);
 
     expect(screen.getByTestId("now-playing-panel")).toHaveAttribute("data-state", "collapsed");
-    expect(screen.getByRole("button", { name: "Up next" })).toContainElement(
-      screen.getByTestId("panel-bottom-open-icon"),
+    expect(screen.getByRole("button", { name: "Playlist" })).toContainElement(
+      screen.getByTestId("disc-3-icon"),
     );
     expect(screen.queryByTestId("queue-list")).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Up next" }));
+    fireEvent.click(screen.getByRole("button", { name: "Playlist" }));
 
     expect(mocks.saveSettings).toHaveBeenCalledWith({ nowPlayingRightRailCollapsed: false });
   });

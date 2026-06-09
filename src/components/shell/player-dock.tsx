@@ -1,3 +1,4 @@
+import { useLiveQuery } from "dexie-react-hooks";
 import { X } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useRef, useState } from "react";
@@ -9,12 +10,18 @@ import { NowPlayingPanel } from "@/components/player/now-playing-panel";
 import { ProgressScrubber } from "@/components/player/progress-scrubber";
 import { TrackIdentityRow } from "@/components/player/track-identity-row";
 import { Button } from "@/components/ui/button";
+import { Disc3Icon } from "@/components/ui/disc-3";
+import { MessageCircleMoreIcon } from "@/components/ui/message-circle-more";
+import { db } from "@/db/muzero-db";
+import { saveSettings } from "@/db/repositories";
+import { useSettings } from "@/hooks/use-app-data";
 import { cn } from "@/lib/utils";
+import { usePlayerStore } from "@/stores/player-store";
 
 /**
- * The unified bottom player-dock: row 1 is track identity + controls/play,
- * row 2 is the full-width scrubber. Page navigation lives as a separate FAB:
- * above the dock on small screens, to the right on desktop.
+ * The unified bottom player-dock: a slim tool row floats above the dock card
+ * for context/navigation; the card itself keeps track identity + transport and
+ * the full-width scrubber.
  */
 export function PlayerDock({
   tab,
@@ -63,21 +70,27 @@ export function PlayerDock({
       >
         <div
           className={cn(
-            "mx-auto flex w-[min(calc(100vw-1.5rem),42rem)] flex-col items-end gap-2 md:flex-row md:items-center",
+            "mx-auto flex w-[min(calc(100vw-1.5rem),46rem)] min-w-0 flex-col gap-2",
             !hidden && "pointer-events-auto",
           )}
         >
-          <div className="flex w-full min-w-0 flex-col gap-2.5 rounded-3xl bg-card/93 backdrop-blur-md p-3 shadow-lg md:flex-1">
-            <TrackIdentityRow
-              onOpen={onOpenNowPlaying}
-              controls={<DockControls className="flex" onOpenQueue={() => setQueueOpen(true)} />}
-            />
+          <div className="flex min-w-0 items-center justify-end gap-2 px-4">
+            <DockMemoryToggle className="hidden md:flex" visible={tab === "now"} />
+            <div className="shrink-0">
+              <NavFab value={tab} onChange={onTabChange} />
+            </div>
+          </div>
+          <div className="flex w-full min-w-0 flex-col gap-2.5 rounded-3xl bg-card/93 p-3 shadow-lg backdrop-blur-md">
+            <div className="flex min-w-0 items-center gap-2">
+              <TrackIdentityRow
+                className="min-w-0 flex-1"
+                onOpen={onOpenNowPlaying}
+                controls={<DockControls className="flex" onOpenQueue={() => setQueueOpen(true)} />}
+              />
+            </div>
             <div className="px-0.5">
               <ProgressScrubber />
             </div>
-          </div>
-          <div className="order-first shrink-0 md:order-none">
-            <NavFab value={tab} onChange={onTabChange} />
           </div>
         </div>
       </div>
@@ -127,5 +140,43 @@ export function PlayerDock({
         )}
       </AnimatePresence>
     </>
+  );
+}
+
+function DockMemoryToggle({ className, visible }: { className?: string; visible: boolean }) {
+  const { t } = useTranslation();
+  const settings = useSettings();
+  const currentTrackId = usePlayerStore((s) =>
+    s.currentIndex >= 0 ? s.queue[s.currentIndex]?.id : undefined,
+  );
+  const memoryCount = useLiveQuery(
+    (): Promise<number> =>
+      currentTrackId
+        ? db.memories.where("trackId").equals(currentTrackId).count()
+        : Promise.resolve(0),
+    [currentTrackId],
+    0,
+  );
+  const collapsed = Boolean(settings.nowPlayingRightRailCollapsed);
+  const canShowMemoryRail = (memoryCount ?? 0) > 0;
+  const label = collapsed ? t("dock.playlist") : t("dock.memory");
+  const Icon = collapsed ? Disc3Icon : MessageCircleMoreIcon;
+
+  if (!visible || (!collapsed && !canShowMemoryRail)) return null;
+
+  return (
+    <button
+      aria-label={label}
+      className={cn(
+        "h-11 w-fit shrink-0 items-center justify-start gap-2 rounded-full bg-card/90 px-4 text-primary shadow-lg ring-1 ring-border/40 outline-none backdrop-blur-md transition-colors hover:bg-card focus-visible:ring-2 focus-visible:ring-ring",
+        className,
+      )}
+      data-testid="dock-memory-toggle"
+      onClick={() => void saveSettings({ nowPlayingRightRailCollapsed: !collapsed })}
+      type="button"
+    >
+      <Icon aria-hidden="true" size={20} />
+      <span className="max-[380px]:hidden whitespace-nowrap text-[15px] font-medium">{label}</span>
+    </button>
   );
 }

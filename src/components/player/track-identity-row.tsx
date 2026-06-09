@@ -1,13 +1,15 @@
-import { Disc3, Pause, Play } from "lucide-react";
+import { Pause, Play } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { type ReactNode, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { useShallow } from "zustand/react/shallow";
 import { CoverImage } from "@/components/player/cover-image";
 import { Button } from "@/components/ui/button";
+import { Disc3Icon } from "@/components/ui/disc-3";
 import type { Track } from "@/db/types";
 import { useTrackCoverUrl } from "@/hooks/use-media";
 import { trackSubtitle } from "@/lib/track-display";
+import { cn } from "@/lib/utils";
 import { transitionState } from "@/lib/view-transition-react";
 import { usePlayerStore } from "@/stores/player-store";
 import { CurrentTrackContextMenu } from "./track-context-menu";
@@ -20,9 +22,11 @@ import { CurrentTrackContextMenu } from "./track-context-menu";
  * shared `now-cover` layout animation.
  */
 export function TrackIdentityRow({
+  className,
   onOpen,
   controls,
 }: {
+  className?: string;
   onOpen?: () => void;
   controls?: ReactNode;
 }) {
@@ -76,7 +80,7 @@ export function TrackIdentityRow({
   }
 
   return (
-    <div className="flex items-center gap-2 sm:gap-3">
+    <div className={cn("flex items-center gap-2 sm:gap-3", className)}>
       <CurrentTrackContextMenu className="min-w-0 flex-1">
         <button
           type="button"
@@ -93,7 +97,7 @@ export function TrackIdentityRow({
             <CoverImage
               url={coverUrl}
               hasCover={!!track?.coverBlobId}
-              fallback={<Disc3 className="size-5 text-muted-foreground" />}
+              fallback={<Disc3Icon className="text-muted-foreground" size={20} />}
             />
           </motion.span>
           <span className="relative min-w-0 flex-1">

@@ -91,7 +91,7 @@ export function NowPlayingPage({ foregroundHidden = false }: { foregroundHidden?
         </section>
 
         <aside className="hidden min-h-0 md:block">
-          <NowPlayingPanel collapsible />
+          <NowPlayingPanel collapsible showFloatingToggle={false} />
         </aside>
       </div>
     </div>

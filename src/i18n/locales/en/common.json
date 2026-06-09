@@ -12,6 +12,10 @@
     "settings": "Settings",
     "menu": "Menu"
   },
+  "dock": {
+    "memory": "Memory",
+    "playlist": "Playlist"
+  },
   "sessions": {
     "startDjTitle": "Start an AI DJ set",
     "vibePlaceholder": "Describe the vibe… e.g. ‘late-night lo-fi for deep focus’",
@@ -96,6 +100,8 @@
     "downloadFailed": "Couldn't download track",
     "addToSet": "Add to set",
     "noOtherSets": "No other sets",
+    "searchSets": "Search sets",
+    "noMatchingSets": "No matching sets",
     "empty": "Nothing here yet — start a set and the DJ will fill it.",
     "uploadedAudio": "uploaded audio",
     "uploadedVideo": "uploaded video"
@@ -421,7 +427,13 @@
     "coverHint": "Drop / paste / click to set the cover",
     "newSet": "New set",
     "addTracks": "Add tracks",
-    "newSetName": "New set"
+    "newSetName": "New set",
+    "trackArtist": "Artist",
+    "trackAlbum": "Album",
+    "trackGenre": "Genre",
+    "trackYear": "Year",
+    "trackDuration": "Duration",
+    "noTrackSelected": "Select a song"
   },
   "notification": {
     "copy": "Copy",

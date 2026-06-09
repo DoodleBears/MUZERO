@@ -12,6 +12,10 @@
     "settings": "设置",
     "menu": "菜单"
   },
+  "dock": {
+    "memory": "记忆",
+    "playlist": "播放列表"
+  },
   "sessions": {
     "startDjTitle": "开启一个 AI DJ 歌单",
     "vibePlaceholder": "描述氛围…… 例如「深夜 lo-fi 专注编码」",
@@ -93,6 +97,8 @@
     "downloadFailed": "下载失败",
     "addToSet": "添加到其他歌单",
     "noOtherSets": "没有其他歌单",
+    "searchSets": "搜索歌单",
+    "noMatchingSets": "没有匹配的歌单",
     "empty": "还没有内容 —— 开启一个歌单，DJ 会来填充。",
     "uploadedAudio": "上传的音频",
     "uploadedVideo": "上传的视频"
@@ -411,7 +417,13 @@
     "coverHint": "拖拽 / 粘贴 / 点击设置封面",
     "newSet": "新建歌单",
     "addTracks": "添加歌曲",
-    "newSetName": "新歌单"
+    "newSetName": "新歌单",
+    "trackArtist": "歌手",
+    "trackAlbum": "专辑",
+    "trackGenre": "流派",
+    "trackYear": "年份",
+    "trackDuration": "时长",
+    "noTrackSelected": "选择一首歌"
   },
   "notification": {
     "copy": "复制",

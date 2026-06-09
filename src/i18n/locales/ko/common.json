@@ -12,6 +12,10 @@
     "settings": "설정",
     "menu": "메뉴"
   },
+  "dock": {
+    "memory": "추억",
+    "playlist": "재생목록"
+  },
   "sessions": {
     "startDjTitle": "AI DJ 세트 시작하기",
     "vibePlaceholder": "분위기를 입력하세요… 예: ‘심야 lo-fi 집중 코딩’",
@@ -93,6 +97,8 @@
     "downloadFailed": "트랙을 다운로드할 수 없어요",
     "addToSet": "다른 세트에 추가",
     "noOtherSets": "다른 세트가 없어요",
+    "searchSets": "세트 검색",
+    "noMatchingSets": "일치하는 세트가 없어요",
     "empty": "아직 아무것도 없어요 —— 세트를 시작하면 DJ가 채워줍니다.",
     "uploadedAudio": "업로드한 오디오",
     "uploadedVideo": "업로드한 비디오"
@@ -411,7 +417,13 @@
     "coverHint": "드롭 / 붙여넣기 / 클릭으로 커버 설정",
     "newSet": "새 세트",
     "addTracks": "곡 추가",
-    "newSetName": "새 세트"
+    "newSetName": "새 세트",
+    "trackArtist": "아티스트",
+    "trackAlbum": "앨범",
+    "trackGenre": "장르",
+    "trackYear": "연도",
+    "trackDuration": "길이",
+    "noTrackSelected": "곡 선택"
   },
   "notification": {
     "copy": "복사",

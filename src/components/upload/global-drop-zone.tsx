@@ -1,9 +1,10 @@
 import { useLiveQuery } from "dexie-react-hooks";
-import { Disc3, ImagePlus, Images, Loader2, Plus, UploadCloud, X } from "lucide-react";
+import { ImagePlus, Images, Loader2, Plus, UploadCloud, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { CoverCropDialog } from "@/components/track/cover-crop-dialog";
 import { Button } from "@/components/ui/button";
+import { Disc3Icon } from "@/components/ui/disc-3";
 import { db } from "@/db/muzero-db";
 import {
   addGalleryImage,
@@ -312,7 +313,7 @@ function SetPickerDialog({
               className="flex items-center gap-3 rounded-xl p-2 text-left transition-colors hover:bg-accent/40"
             >
               <span className="grid size-10 shrink-0 place-items-center rounded-lg bg-secondary">
-                <Disc3 className="size-5 text-muted-foreground" />
+                <Disc3Icon className="text-muted-foreground" size={20} />
               </span>
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-sm font-medium">{s.name}</span>

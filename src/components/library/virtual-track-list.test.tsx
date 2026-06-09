@@ -23,8 +23,33 @@ vi.mock("@/stores/player-store", () => ({
 }));
 
 vi.mock("./track-row", () => ({
-  TrackRow: ({ track }: { track: Track }) => (
-    <div data-testid={`track-row-${track.id}`}>{track.title}</div>
+  TrackRow: ({
+    listIndex,
+    onPlay,
+    onView,
+    track,
+  }: {
+    listIndex: number;
+    onPlay: () => void;
+    onView: () => void;
+    track: Track;
+  }) => (
+    <div
+      data-muzero-track-row
+      data-testid={`track-row-${track.id}`}
+      data-track-index={listIndex}
+      onClick={onView}
+      onDoubleClick={onPlay}
+      onKeyDown={(event) => {
+        if (event.key !== "Enter" && event.key !== " ") return;
+        event.preventDefault();
+        onView();
+      }}
+      role="option"
+      tabIndex={0}
+    >
+      {track.title}
+    </div>
   ),
 }));
 
@@ -75,6 +100,49 @@ describe("VirtualTrackList", () => {
     expect(screen.getByTestId("virtual-track-row-trk_1")).toHaveAttribute("data-index", "0");
     expect(screen.getByTestId("virtual-track-row-trk_1").style.height).toBe("64px");
     expect(screen.getByTestId("track-row-trk_2")).toHaveTextContent("Second");
+  });
+
+  it("uses single click for view and double click for play when a view handler is provided", () => {
+    useVirtualizerMock.mockReturnValue({
+      getTotalSize: () => 60,
+      getVirtualItems: () => [{ index: 0, key: "trk_1", size: 60, start: 0 }],
+    });
+    const onView = vi.fn();
+    const onPlay = vi.fn();
+
+    render(<VirtualTrackList tracks={[track("trk_1", "First")]} onView={onView} onPlay={onPlay} />);
+
+    fireEvent.click(screen.getByTestId("track-row-trk_1"));
+    expect(onView).toHaveBeenCalledWith(expect.objectContaining({ id: "trk_1" }), 0);
+    expect(onPlay).not.toHaveBeenCalled();
+
+    fireEvent.doubleClick(screen.getByTestId("track-row-trk_1"));
+    expect(onPlay).toHaveBeenCalledWith(expect.objectContaining({ id: "trk_1" }), 0);
+  });
+
+  it("moves focus with arrow keys and views the focused track", () => {
+    vi.useFakeTimers();
+    useVirtualizerMock.mockReturnValue({
+      getTotalSize: () => 120,
+      getVirtualItems: () => [
+        { index: 0, key: "trk_1", size: 60, start: 0 },
+        { index: 1, key: "trk_2", size: 60, start: 60 },
+      ],
+      scrollToIndex: vi.fn(),
+    });
+    const onView = vi.fn();
+
+    render(
+      <VirtualTrackList
+        tracks={[track("trk_1", "First"), track("trk_2", "Second")]}
+        onView={onView}
+      />,
+    );
+
+    screen.getByTestId("track-row-trk_1").focus();
+    fireEvent.keyDown(screen.getByTestId("virtual-track-list"), { key: "ArrowDown" });
+
+    expect(onView).toHaveBeenCalledWith(expect.objectContaining({ id: "trk_2" }), 1);
   });
 
   it("adds edge elasticity and calls the pull-start callback after the threshold", () => {

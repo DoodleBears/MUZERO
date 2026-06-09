@@ -1,19 +1,12 @@
 import { useLiveQuery } from "dexie-react-hooks";
-import {
-  ArrowLeft,
-  Disc3,
-  Heart,
-  ImagePlus,
-  LayoutGrid,
-  List,
-  Play,
-  Plus,
-  Search,
-} from "lucide-react";
+import { ArrowLeft, Heart, ImagePlus, LayoutGrid, List, Play, Plus, Search } from "lucide-react";
+import { motion } from "motion/react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { VirtualTrackList } from "@/components/library/virtual-track-list";
+import { TrackInspectorPanel } from "@/components/track/track-inspector-panel";
 import { Button } from "@/components/ui/button";
+import { Disc3Icon } from "@/components/ui/disc-3";
 import { Input } from "@/components/ui/input";
 import { Kbd, KbdGroup } from "@/components/ui/kbd";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -39,6 +32,7 @@ import {
 } from "@/lib/set-gallery";
 import { searchTracks } from "@/lib/track-search";
 import { cn } from "@/lib/utils";
+import { transitionState } from "@/lib/view-transition-react";
 import { usePlayerStore } from "@/stores/player-store";
 import { useUploadTargetStore } from "@/stores/upload-target-store";
 import { matchesRemoteSearchTrack } from "@/sync/r2-search-catalog";
@@ -48,7 +42,7 @@ type GalleryMode = "sets" | "tracks";
 const MODE_KEY = "muzero-gallery-mode";
 const VIEW_KEY = "muzero-gallery-view";
 const EMPTY_MEMORY_NOTES = new Map<string, string[]>();
-const TRACK_ROW_BUTTON_SELECTOR = "[data-muzero-track-row-button]";
+const TRACK_ROW_SELECTOR = "[data-muzero-track-row]";
 const GALLERY_MODE_TOGGLE_KEYS = new Set(["`", "~", "·", "｀"]);
 
 function savedGalleryMode(): GalleryMode {
@@ -86,6 +80,7 @@ export function SearchPage() {
   const [trackQuery, setTrackQuery] = useState("");
   const [filter, setFilter] = useState<SetFilter>("all");
   const [sort, setSort] = useState<SetSort>("recent");
+  const [selectedLibraryTrackId, setSelectedLibraryTrackId] = useState<string | null>(null);
   const [view, setView] = useState<GalleryView>(() =>
     (typeof localStorage !== "undefined" && localStorage.getItem(VIEW_KEY)) === "grid"
       ? "grid"
@@ -162,6 +157,10 @@ export function SearchPage() {
     const sortedTracks = [...allTracks].sort((a, b) => b.createdAt - a.createdAt);
     return searchTracks(sortedTracks, trackQuery, memoryNotes);
   }, [allTracks, memoryNotes, trackQuery]);
+  const selectedLibraryTrack = useMemo(
+    () => shownTracks.find((track) => track.id === selectedLibraryTrackId) ?? shownTracks[0],
+    [selectedLibraryTrackId, shownTracks],
+  );
   const shownRemoteTracks = useMemo(
     () =>
       trackQuery.trim()
@@ -172,6 +171,20 @@ export function SearchPage() {
     [remoteTracks, trackQuery],
   );
   const query = mode === "sets" ? setQuery : trackQuery;
+
+  useEffect(() => {
+    if (mode !== "tracks") return;
+    if (shownTracks.length === 0) {
+      setSelectedLibraryTrackId(null);
+      return;
+    }
+    if (
+      !selectedLibraryTrackId ||
+      !shownTracks.some((track) => track.id === selectedLibraryTrackId)
+    ) {
+      setSelectedLibraryTrackId(shownTracks[0].id);
+    }
+  }, [mode, selectedLibraryTrackId, shownTracks]);
 
   function setViewPref(next: GalleryView) {
     setView(next);
@@ -194,7 +207,7 @@ export function SearchPage() {
       seedPrompt: "",
       config: { autoExtend: false },
     });
-    setSelectedSetId(s.id);
+    transitionState(() => setSelectedSetId(s.id));
   }
 
   function focusTrackSearchResult(direction: "first" | "last") {
@@ -205,9 +218,7 @@ export function SearchPage() {
     window.requestAnimationFrame(() => {
       window.requestAnimationFrame(() => {
         document
-          .querySelector<HTMLButtonElement>(
-            `${TRACK_ROW_BUTTON_SELECTOR}[data-track-index="${index}"]`,
-          )
+          .querySelector<HTMLElement>(`${TRACK_ROW_SELECTOR}[data-track-index="${index}"]`)
           ?.focus();
       });
     });
@@ -226,7 +237,7 @@ export function SearchPage() {
       <SetDetailView
         setId={selectedSetId}
         trackById={trackById}
-        onBack={() => setSelectedSetId(null)}
+        onBack={() => transitionState(() => setSelectedSetId(null))}
         onPlayAll={() => void playSet(selectedSetId)}
       />
     );
@@ -238,7 +249,8 @@ export function SearchPage() {
   return (
     <div
       className={cn(
-        "chrome-fade no-scrollbar mx-auto flex h-full w-full max-w-4xl flex-col overflow-y-auto px-4 pt-chrome-top lg:px-6",
+        "chrome-fade no-scrollbar mx-auto flex h-full w-full flex-col overflow-y-auto px-4 pt-chrome-top lg:px-6",
+        mode === "tracks" ? "max-w-6xl" : "max-w-4xl",
         mode === "tracks" ? "pb-0" : "pb-chrome-bottom",
       )}
     >
@@ -329,7 +341,7 @@ export function SearchPage() {
                     item={item}
                     coverTrack={item.coverTrackId ? trackById.get(item.coverTrackId) : undefined}
                     view="grid"
-                    onEnter={() => setSelectedSetId(item.session.id)}
+                    onEnter={() => transitionState(() => setSelectedSetId(item.session.id))}
                     onPlay={() => void playSet(item.session.id)}
                   />
                 ))}
@@ -342,7 +354,7 @@ export function SearchPage() {
                     item={item}
                     coverTrack={item.coverTrackId ? trackById.get(item.coverTrackId) : undefined}
                     view="list"
-                    onEnter={() => setSelectedSetId(item.session.id)}
+                    onEnter={() => transitionState(() => setSelectedSetId(item.session.id))}
                     onPlay={() => void playSet(item.session.id)}
                   />
                 ))}
@@ -357,33 +369,38 @@ export function SearchPage() {
               {t("gallery.tracksEmpty")}
             </p>
           ) : (
-            <div className="flex min-h-0 flex-1 flex-col gap-4">
-              {shownTracks.length > 0 && (
-                <VirtualTrackList
-                  tracks={shownTracks}
-                  onPlay={(track) => void playTrack(track)}
-                  emptyHint={t("gallery.tracksEmpty")}
-                  className="no-scrollbar pb-2"
-                />
-              )}
-              {shownRemoteTracks.length > 0 && (
-                <div className="flex flex-col gap-1 pb-chrome-bottom">
-                  <p className="px-1 text-muted-foreground text-xs">
-                    {t("gallery.remoteResults", { count: shownRemoteTracks.length })}
-                  </p>
-                  {shownRemoteTracks.slice(0, 50).map((track) => (
-                    <div
-                      key={track.id}
-                      className="rounded-md border border-border bg-background/70 px-3 py-2"
-                    >
-                      <p className="truncate text-sm">{track.title}</p>
-                      <p className="truncate text-muted-foreground text-xs">
-                        {track.tags.map((tag) => `#${tag}`).join(" ")}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-              )}
+            <div className="grid min-h-0 flex-1 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(280px,360px)]">
+              <div className="flex min-h-0 flex-1 flex-col gap-4">
+                {shownTracks.length > 0 && (
+                  <VirtualTrackList
+                    tracks={shownTracks}
+                    selectedTrackId={selectedLibraryTrack?.id}
+                    onView={(track) => transitionState(() => setSelectedLibraryTrackId(track.id))}
+                    onPlay={(track) => void playTrack(track)}
+                    emptyHint={t("gallery.tracksEmpty")}
+                    className="no-scrollbar pb-chrome-bottom"
+                  />
+                )}
+                {shownRemoteTracks.length > 0 && (
+                  <div className="flex flex-col gap-1 pb-chrome-bottom">
+                    <p className="px-1 text-muted-foreground text-xs">
+                      {t("gallery.remoteResults", { count: shownRemoteTracks.length })}
+                    </p>
+                    {shownRemoteTracks.slice(0, 50).map((track) => (
+                      <div
+                        key={track.id}
+                        className="rounded-md border border-border bg-background/70 px-3 py-2"
+                      >
+                        <p className="truncate text-sm">{track.title}</p>
+                        <p className="truncate text-muted-foreground text-xs">
+                          {track.tags.map((tag) => `#${tag}`).join(" ")}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <TrackInspectorPanel track={selectedLibraryTrack} />
             </div>
           )}
         </div>
@@ -414,12 +431,27 @@ function SetDetailView({
   const [name, setName] = useState("");
   const [desc, setDesc] = useState("");
   const [dragOver, setDragOver] = useState(false);
+  const [selectedTrackId, setSelectedTrackId] = useState<string | null>(null);
 
   const tracks = useMemo(
     () =>
       (session?.trackIds ?? []).map((id) => trackById.get(id)).filter((tr): tr is Track => !!tr),
     [session, trackById],
   );
+  const selectedTrack = useMemo(
+    () => tracks.find((track) => track.id === selectedTrackId) ?? tracks[0],
+    [selectedTrackId, tracks],
+  );
+
+  useEffect(() => {
+    if (tracks.length === 0) {
+      setSelectedTrackId(null);
+      return;
+    }
+    if (!selectedTrackId || !tracks.some((track) => track.id === selectedTrackId)) {
+      setSelectedTrackId(tracks[0].id);
+    }
+  }, [selectedTrackId, tracks]);
 
   // Initialize the editable fields once the set loads (and only on identity
   // change, so later updates / typing don't reset the inputs).
@@ -475,7 +507,12 @@ function SetDetailView({
   }, [setId]);
 
   return (
-    <div className="mx-auto flex h-full w-full max-w-4xl flex-col px-4 pt-14 lg:px-6">
+    <motion.div
+      initial={{ opacity: 0, x: 24 }}
+      animate={{ opacity: 1, x: 0 }}
+      transition={{ duration: 0.2, ease: "easeOut" }}
+      className="mx-auto flex h-full w-full max-w-6xl flex-col px-4 pt-14 lg:px-6"
+    >
       <button
         type="button"
         onClick={onBack}
@@ -513,7 +550,7 @@ function SetDetailView({
           {coverUrl ? (
             <img src={coverUrl} alt="" className="size-full object-cover" />
           ) : (
-            <Disc3 className="size-7 text-muted-foreground" />
+            <Disc3Icon className="text-muted-foreground" size={28} />
           )}
           <span className="absolute inset-0 grid place-items-center bg-black/40 opacity-0 transition-opacity group-hover:opacity-100">
             <ImagePlus className="size-5 text-white" />
@@ -582,15 +619,20 @@ function SetDetailView({
         </div>
       </div>
 
-      <div className="min-h-0 flex-1">
-        <VirtualTrackList
-          tracks={tracks}
-          onPlay={(track) => void playTrack(track)}
-          emptyHint={t("gallery.empty")}
-          className="chrome-fade no-scrollbar pt-5 pb-chrome-bottom [--chrome-fade-top:1.25rem]"
-        />
+      <div className="grid min-h-0 flex-1 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(280px,360px)]">
+        <div className="min-h-0">
+          <VirtualTrackList
+            tracks={tracks}
+            selectedTrackId={selectedTrack?.id}
+            onView={(track) => transitionState(() => setSelectedTrackId(track.id))}
+            onPlay={(track) => void playTrack(track)}
+            emptyHint={t("gallery.empty")}
+            className="chrome-fade no-scrollbar pt-5 pb-chrome-bottom [--chrome-fade-top:1.25rem]"
+          />
+        </div>
+        <TrackInspectorPanel track={selectedTrack} />
       </div>
-    </div>
+    </motion.div>
   );
 }
 
@@ -749,7 +791,7 @@ function SetCard({
             {coverUrl ? (
               <img src={coverUrl} alt="" className="size-full object-cover" />
             ) : (
-              <Disc3 className="size-8 text-muted-foreground" />
+              <Disc3Icon className="text-muted-foreground" size={32} />
             )}
             {item.likedCount > 0 && (
               <Heart className="absolute right-2 top-2 size-4 fill-primary text-primary" />
@@ -776,7 +818,7 @@ function SetCard({
           {coverUrl ? (
             <img src={coverUrl} alt="" className="size-full object-cover" />
           ) : (
-            <Disc3 className="size-5 text-muted-foreground" />
+            <Disc3Icon className="text-muted-foreground" size={20} />
           )}
         </span>
         <span className="min-w-0 flex-1">

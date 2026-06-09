@@ -1,5 +1,4 @@
 import { useLiveQuery } from "dexie-react-hooks";
-import { PanelBottomOpen } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -8,6 +7,8 @@ import {
   MemoryTimelineRail,
   type MemoryTimelineRailItem,
 } from "@/components/player/memory-timeline-rail";
+import { Disc3Icon } from "@/components/ui/disc-3";
+import { MessageCircleMoreIcon } from "@/components/ui/message-circle-more";
 import { db } from "@/db/muzero-db";
 import { getMemoryPhoto, saveSettings } from "@/db/repositories";
 import type { Memory } from "@/db/types";
@@ -26,9 +27,11 @@ const PANEL_CONTENT_TRANSITION = { duration: 0.18, ease: [0.22, 1, 0.36, 1] } as
 export function NowPlayingPanel({
   className,
   collapsible = true,
+  showFloatingToggle = true,
 }: {
   className?: string;
   collapsible?: boolean;
+  showFloatingToggle?: boolean;
 } = {}) {
   const { t } = useTranslation();
   const settings = useSettings();
@@ -73,6 +76,8 @@ export function NowPlayingPanel({
     { id: "lyrics", label: t("nowPlaying.lyrics") },
   ];
   const canShowMemoryRail = memoryTimelineItems.length > 0;
+  const toggleLabel = collapsed ? t("dock.playlist") : t("dock.memory");
+  const ToggleIcon = collapsed ? Disc3Icon : MessageCircleMoreIcon;
 
   function setCollapsed(next: boolean) {
     void saveSettings({ nowPlayingRightRailCollapsed: next });
@@ -207,16 +212,16 @@ export function NowPlayingPanel({
           </motion.div>
         )}
       </AnimatePresence>
-      {collapsible && (collapsed || canShowMemoryRail) && (
+      {showFloatingToggle && collapsible && (collapsed || canShowMemoryRail) && (
         <button
-          aria-label={collapsed ? t("nowPlaying.upNext") : t("annotation.memory")}
+          aria-label={toggleLabel}
           className="absolute right-4 bottom-[calc(var(--spacing-chrome-bottom)+1rem)] z-20 flex items-center gap-2 rounded-full border border-border/70 bg-background/80 px-4 py-2 font-medium text-sm shadow-lg backdrop-blur-md transition-colors hover:bg-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           data-testid="now-playing-panel-floating-toggle"
           onClick={() => setCollapsed(!collapsed)}
           type="button"
         >
-          <PanelBottomOpen aria-hidden="true" className="size-4 text-muted-foreground" />
-          <span>{collapsed ? t("nowPlaying.upNext") : t("annotation.memory")}</span>
+          <ToggleIcon aria-hidden="true" className="text-muted-foreground" size={16} />
+          <span>{toggleLabel}</span>
         </button>
       )}
     </div>
