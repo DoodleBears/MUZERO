@@ -57,7 +57,7 @@
   },
   "globalSearch": {
     "title": "搜索歌曲",
-    "placeholder": "搜索全部歌曲…",
+    "placeholder": "搜索全部歌曲 —— 支持拼音 / 首字母（bjhyn）…",
     "empty": "没有匹配的可播放歌曲。",
     "count_other": "{{count}} 条结果",
     "playHint": "播放",
@@ -453,7 +453,7 @@
     "modeTracks": "全部歌曲",
     "toggleModeHint": "切换视图",
     "searchSets": "搜索歌单…",
-    "searchTracks": "搜索全部歌曲…",
+    "searchTracks": "搜索全部歌曲 —— 拼音 / 罗马音…",
     "filterAll": "全部",
     "filterLiked": "红心",
     "sortRecent": "最近",

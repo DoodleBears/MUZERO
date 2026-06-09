@@ -9,8 +9,8 @@ import { db } from "@/db/muzero-db";
 import { listAllTracks, memoryNotesByTrack } from "@/db/repositories";
 import type { Track } from "@/db/types";
 import { useTrackCoverUrl } from "@/hooks/use-media";
+import { useWorkerTrackSearch } from "@/hooks/use-worker-track-search";
 import { trackSubtitle } from "@/lib/track-display";
-import { searchTracks } from "@/lib/track-search";
 import { cn, formatDuration } from "@/lib/utils";
 import { usePlayerStore } from "@/stores/player-store";
 
@@ -44,12 +44,16 @@ export function GlobalTrackSearch({
   const playTrack = usePlayerStore((s) => s.playTrack);
   const playNextTrack = usePlayerStore((s) => s.playNextTrack);
 
-  const results = useMemo(() => {
-    const playable = allTracks
-      .filter((track) => track.status === "ready")
-      .sort((a, b) => b.createdAt - a.createdAt);
-    return searchTracks(playable, query, memoryNotes).slice(0, MAX_RESULTS);
-  }, [allTracks, memoryNotes, query]);
+  const playable = useMemo(
+    () =>
+      allTracks
+        .filter((track) => track.status === "ready")
+        .sort((a, b) => b.createdAt - a.createdAt),
+    [allTracks],
+  );
+  // Off-thread, transliteration-aware search (pinyin / kana / romaji), ranked.
+  const ranked = useWorkerTrackSearch(playable, query, memoryNotes);
+  const results = useMemo(() => ranked.slice(0, MAX_RESULTS), [ranked]);
 
   useEffect(() => {
     if (!open) return;

@@ -57,7 +57,7 @@
   },
   "globalSearch": {
     "title": "곡 검색",
-    "placeholder": "모든 곡 검색…",
+    "placeholder": "모든 곡 검색 — 핀인 / 로마자…",
     "empty": "재생 가능한 일치 곡이 없어요.",
     "count_other": "결과 {{count}}개",
     "playHint": "재생",
@@ -453,7 +453,7 @@
     "modeTracks": "전체 곡",
     "toggleModeHint": "보기 전환",
     "searchSets": "세트 검색…",
-    "searchTracks": "전체 곡 검색…",
+    "searchTracks": "전체 곡 검색 — 핀인 / 로마자…",
     "filterAll": "전체",
     "filterLiked": "좋아요",
     "sortRecent": "최근",

@@ -47,6 +47,7 @@ import {
 import type { CropRect, DjSession, Track } from "@/db/types";
 import { useBackGesture } from "@/hooks/use-back-gesture";
 import { useTrackCoverUrl } from "@/hooks/use-media";
+import { useTransliterationReady } from "@/hooks/use-transliteration-ready";
 import { hasModalDialogOpen, isTypingTarget } from "@/lib/dom-keys";
 import { dragHasFiles, filesFromTransfer, IMAGE_ACCEPT, MEDIA_ACCEPT } from "@/lib/file-drop";
 import {
@@ -292,11 +293,17 @@ export function SearchPage() {
     consumeLibraryEntity();
   }, [pendingEntity, artistIndex, albumIndex, consumeLibraryEntity]);
 
+  // Lazily load the transliteration dictionaries (pinyin / kana / romaji) on the
+  // main thread; the flag re-runs the inline matchers below once ready so search
+  // "snaps in" without retyping. (The ⌘F overlay scans off-thread via its Worker.)
+  const transliterationReady = useTransliterationReady();
+
   // Faceted search: matching artists/albums surfaced above the song list in the
   // tracks ("全部歌曲") mode (honors scoped artist:/album: tokens).
+  // biome-ignore lint/correctness/useExhaustiveDependencies: transliterationReady re-runs once dictionaries load
   const trackFacets = useMemo(
     () => searchEntityFacets(artistIndex, albumIndex, trackQuery),
-    [artistIndex, albumIndex, trackQuery],
+    [artistIndex, albumIndex, trackQuery, transliterationReady],
   );
   const facetArtistItems = useMemo<LibraryEntityItem[]>(
     () =>
@@ -342,14 +349,16 @@ export function SearchPage() {
     () => sortSets(filterSets(items, setQuery, filter), sort),
     [items, setQuery, filter, sort],
   );
+  // biome-ignore lint/correctness/useExhaustiveDependencies: transliterationReady re-runs once dictionaries load
   const shownTracks = useMemo(() => {
     const sortedTracks = [...allTracks].sort((a, b) => b.createdAt - a.createdAt);
     return searchTracks(sortedTracks, trackQuery, memoryNotes);
-  }, [allTracks, memoryNotes, trackQuery]);
+  }, [allTracks, memoryNotes, trackQuery, transliterationReady]);
   const selectedLibraryTrack = useMemo(
     () => shownTracks.find((track) => track.id === selectedLibraryTrackId) ?? shownTracks[0],
     [selectedLibraryTrackId, shownTracks],
   );
+  // biome-ignore lint/correctness/useExhaustiveDependencies: transliterationReady re-runs once dictionaries load
   const shownRemoteTracks = useMemo(
     () =>
       trackQuery.trim()
@@ -357,7 +366,7 @@ export function SearchPage() {
             .filter((track) => matchesRemoteSearchTrack(track, trackQuery))
             .sort((a, b) => b.updatedAt - a.updatedAt)
         : [],
-    [remoteTracks, trackQuery],
+    [remoteTracks, trackQuery, transliterationReady],
   );
   const query =
     mode === "sets"
@@ -466,7 +475,7 @@ export function SearchPage() {
       if (!root) return;
       const cards = Array.from(root.querySelectorAll<HTMLElement>(GALLERY_CARD_SELECTOR));
       if (cards.length === 0) return;
-      const activeIndex = cards.findIndex((card) => card === document.activeElement);
+      const activeIndex = cards.indexOf(document.activeElement as HTMLElement);
       if (intent === "open") {
         if (event.key.toLowerCase() === "enter") return; // focused button clicks natively
         event.preventDefault();

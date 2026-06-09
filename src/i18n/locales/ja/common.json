@@ -57,7 +57,7 @@
   },
   "globalSearch": {
     "title": "曲を検索",
-    "placeholder": "すべての曲を検索…",
+    "placeholder": "すべての曲を検索 — ローマ字（kimi）/ かな…",
     "empty": "再生できる一致曲はありません。",
     "count_other": "{{count}} 件",
     "playHint": "再生",
@@ -453,7 +453,7 @@
     "modeTracks": "すべての曲",
     "toggleModeHint": "表示を切り替え",
     "searchSets": "セットを検索…",
-    "searchTracks": "すべての曲を検索…",
+    "searchTracks": "すべての曲を検索 — ローマ字 / かな…",
     "filterAll": "すべて",
     "filterLiked": "お気に入り",
     "sortRecent": "最近",

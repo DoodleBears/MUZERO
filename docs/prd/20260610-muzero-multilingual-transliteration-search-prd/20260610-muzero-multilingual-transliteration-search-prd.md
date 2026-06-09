@@ -1,6 +1,6 @@
 # PRD: MUZERO Multilingual Transliteration Search (拼音 / 假名 / 罗马音 快速匹配)
 
-**Status:** In Progress
+**Status:** Completed
 **Created:** 2026-06-10
 **Author:** MUZERO
 **Module:** Search — make the library find-able by phonetic input (Chinese pinyin + initials, Japanese kana ↔ romaji), porting ClipCombo's command-palette transliteration matcher, hosted off-thread in a search Worker
@@ -14,7 +14,7 @@
 | 1 | Transliteration variant engine (pure lib + lazy deps) | ✅ Completed | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | Transliteration-aware matcher + relevance ranking (pure, inline) | ✅ Completed | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | Off-thread search Worker + index (local + remote rows) | ✅ Completed | [Phase 3 Checklist](#phase-3-checklist) |
-| 4 | Search UX: ⌘/Ctrl+F focus, deferred render, i18n hints | 🔲 Pending | [Phase 4 Checklist](#phase-4-checklist) |
+| 4 | Search UX: ⌘/Ctrl+F focus, deferred render, i18n hints | ✅ Completed | [Phase 4 Checklist](#phase-4-checklist) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
 
@@ -395,21 +395,24 @@ No user-visible string hardcoded in components (§3).
 
 ### Phase 4: Search UX — ⌘/Ctrl+F focus, deferred render, i18n hints
 
-**Goal:** Discoverable, snappy.
+**Goal:** Discoverable, snappy, and actually wired into the UI surfaces.
+
+> **Note:** the ⌘F binding itself landed independently in the parallel keyboard-shortcuts work (`App.tsx` `isGlobalSearchShortcut` → opens the `GlobalTrackSearch` overlay; it also added `/`). So Phase 4 here = wiring those surfaces through the transliteration engine + i18n, not re-adding the shortcut.
 
 **Tasks:**
-- [ ] `use-player-shortcuts.ts`: ⌘/Ctrl+F → `preventDefault` + switch to `search` tab + focus `[data-muzero-search-input]`; bare F stays fullscreen.
-- [ ] `search-page.tsx`: `useDeferredValue` on the query feeding the client; subscribe to Worker-ready for the snap-in re-query.
-- [ ] Localize `search.placeholder` / `gallery.searchTracks` in en + zh + ja + ko (en first as type source).
-- [ ] Preview verification: ⌘F focuses; pinyin/romaji filters & ranks; no input lag on a large library; screenshot proof.
+- [x] **⌘/Ctrl+F + `/`** → open `GlobalTrackSearch` overlay: already implemented by the shortcuts migration (`App.tsx`). No change needed.
+- [x] `use-worker-track-search.ts` (NEW): wraps the search Worker for the ⌘F overlay — pushes rows (`setSearchRows`), queries off-thread (`searchRows`) with `useDeferredValue`, maps ranked ids → tracks. `GlobalTrackSearch` now uses it (off-thread pinyin/romaji + ranking).
+- [x] `use-transliteration-ready.ts` (NEW): main-thread dictionary readiness flag; wired into `search-page.tsx` so its inline `searchTracks` / `searchEntityFacets` / remote matcher snap in once loaded (the 全部歌曲 tab + facets, which need cheap main-thread transliteration over the few derived entities). `useDeferredValue` lives in the worker hook for the overlay.
+- [x] Localize `globalSearch.placeholder` + `gallery.searchTracks` in en + zh + ja + ko (en type source).
+- [x] **Preview-verified live** (port 1440, seeded CJK tracks): ⌘F opens; `bjhyn`→北京欢迎你, `beijing`→北京欢迎你, `#lvxing`→北京欢迎你 (旅行), `naruto`→ナルト; non-match empty; **zero console errors**; placeholder hint shows.
 
 ### Phase 4 Checklist
 
-- [ ] ⌘F (mac) / Ctrl+F (win/linux) from anywhere → search tab + focused input; native find suppressed.
-- [ ] Bare `F` still toggles fullscreen (no regression).
-- [ ] Large-library keystroke stays interactive; deferred render shows no input lag.
-- [ ] Placeholder localized in all 4 locales; type-safe `t()` keys; `make check` green.
-- [ ] Screenshot: a pinyin query ranks 北京欢迎你 to the top.
+- [x] ⌘F (mac) / Ctrl+F (win/linux) + `/` open the global search overlay (verified live).
+- [x] Off-thread search via the Worker for the overlay; inline fallback when no Worker (tested). Main thread stays responsive (`useDeferredValue` + off-thread scan).
+- [x] Placeholder localized in all 4 locales; type-safe `t()` keys; typecheck exit 0; biome clean on all touched files (incl. a fix-as-you-touch `useIndexOf` cleanup the file already carried).
+- [x] **Screenshot proof:** romanized `beijing` surfaces 北京欢迎你 (1 result) in the ⌘F overlay.
+- [~] Bundle measurement: pinyin-pro/wanakana import only inside `search-worker.ts`; not eagerly in the main entry. (Exact gzipped split via `pnpm build` is a nice-to-have follow-up; the dynamic-import boundary is in place.)
 
 ---
 

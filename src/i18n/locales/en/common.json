@@ -62,7 +62,7 @@
   },
   "globalSearch": {
     "title": "Search songs",
-    "placeholder": "Search every song…",
+    "placeholder": "Search every song — pinyin (bjhyn), romaji (kimi)…",
     "empty": "No playable songs match.",
     "count_one": "{{count}} result",
     "count_other": "{{count}} results",
@@ -464,7 +464,7 @@
     "modeTracks": "All songs",
     "toggleModeHint": "Switch view",
     "searchSets": "Search sets…",
-    "searchTracks": "Search all songs…",
+    "searchTracks": "Search all songs — pinyin / romaji…",
     "filterAll": "All",
     "filterLiked": "Liked",
     "sortRecent": "Recent",
