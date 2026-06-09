@@ -343,9 +343,13 @@
     "cloudSyncPhaseCompleted": "完了",
     "cloudSyncPhaseFailed": "失敗",
     "cloudSyncPhaseCancelled": "キャンセル済み",
+    "cloudSyncPhaseApplying": "変更を適用中",
+    "cloudSyncPhaseNeedsReview": "要確認",
     "cloudSyncObjects": "{{done}} / {{total}} オブジェクト",
     "cloudSyncBytes": "{{done}} / {{total}}",
     "cloudSyncFailures": "{{count}} 件失敗",
+    "cloudSyncNow": "今すぐ同期",
+    "cloudSyncCancel": "キャンセル",
     "cloudDriveKind": {
       "owned": "所有",
       "trusted": "信頼済み",

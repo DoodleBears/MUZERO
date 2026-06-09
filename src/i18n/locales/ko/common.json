@@ -343,9 +343,13 @@
     "cloudSyncPhaseCompleted": "완료됨",
     "cloudSyncPhaseFailed": "실패",
     "cloudSyncPhaseCancelled": "취소됨",
+    "cloudSyncPhaseApplying": "변경 사항 적용 중",
+    "cloudSyncPhaseNeedsReview": "검토 필요",
     "cloudSyncObjects": "객체 {{done}} / {{total}}개",
     "cloudSyncBytes": "{{done}} / {{total}}",
     "cloudSyncFailures": "실패 {{count}}개",
+    "cloudSyncNow": "지금 동기화",
+    "cloudSyncCancel": "취소",
     "cloudDriveKind": {
       "owned": "소유",
       "trusted": "신뢰",

@@ -343,9 +343,13 @@
     "cloudSyncPhaseCompleted": "已完成",
     "cloudSyncPhaseFailed": "失败",
     "cloudSyncPhaseCancelled": "已取消",
+    "cloudSyncPhaseApplying": "正在应用更改",
+    "cloudSyncPhaseNeedsReview": "需要复核",
     "cloudSyncObjects": "{{done}} / {{total}} 个对象",
     "cloudSyncBytes": "{{done}} / {{total}}",
     "cloudSyncFailures": "{{count}} 个失败",
+    "cloudSyncNow": "立即同步",
+    "cloudSyncCancel": "取消",
     "cloudDriveKind": {
       "owned": "Owner",
       "trusted": "受信任",

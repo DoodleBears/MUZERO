@@ -43,6 +43,7 @@ import {
 } from "@/musicgen/presets";
 import { type MusicGenProviderId, resolveMusicGenProvider } from "@/musicgen/registry";
 import { usePlayerStore } from "@/stores/player-store";
+import { useSyncStore } from "@/stores/sync-store";
 import { listCloudDrives, upsertCloudDrive } from "@/sync/cloud-drive-repo";
 import { buildOwnedR2Drive, saveR2CredentialsForDrive } from "@/sync/cloud-drive-settings";
 import {
@@ -65,6 +66,7 @@ import {
   type RemoteLibraryPreview,
   type RemoteSetPreview,
 } from "@/sync/r2-subscription";
+import type { SyncPhase, SyncProgress } from "@/sync/sync-orchestrator";
 import {
   type SyncProgressPhase,
   type SyncProgressSummary,
@@ -135,6 +137,26 @@ const SYNC_PROGRESS_PHASE_LABEL_KEY = {
   failed: "settings.cloudSyncPhaseFailed",
   cancelled: "settings.cloudSyncPhaseCancelled",
 } as const satisfies Record<SyncProgressPhase, string>;
+
+/** Phase labels for the live (ephemeral) per-drive run from `useSyncStore`. */
+const EPHEMERAL_SYNC_PHASE_LABEL_KEY = {
+  planning: "settings.cloudSyncPhasePreparing",
+  uploading: "settings.cloudSyncPhaseUploading",
+  downloading: "settings.cloudSyncPhaseDownloading",
+  applying: "settings.cloudSyncPhaseApplying",
+  completed: "settings.cloudSyncPhaseCompleted",
+  failed: "settings.cloudSyncPhaseFailed",
+  cancelled: "settings.cloudSyncPhaseCancelled",
+  "needs-review": "settings.cloudSyncPhaseNeedsReview",
+} as const satisfies Record<SyncPhase, string>;
+
+/** Phases where a run is still in flight and can be cancelled. */
+const RUNNING_SYNC_PHASES = new Set<SyncPhase>([
+  "planning",
+  "uploading",
+  "downloading",
+  "applying",
+]);
 
 /** On-device, BYOK settings. Nothing here is ever sent anywhere but the model/API you point it at. */
 export function SettingsPage() {
@@ -1192,25 +1214,69 @@ function TraceDiagnostics() {
 
 function CloudDriveRow({ drive, defaultDriveId }: { drive: CloudDrive; defaultDriveId?: string }) {
   const { t } = useTranslation();
+  // Minimal selector: only this drive's live progress (PRD §6 selector discipline).
+  const progress = useSyncStore((state) => state.progressByDrive[drive.id]);
+  const running = progress ? RUNNING_SYNC_PHASES.has(progress.phase) : false;
   return (
-    <div className="flex items-center justify-between gap-3 rounded-md border border-border bg-background/80 px-3 py-2">
-      <div className="min-w-0">
-        <p className="truncate text-sm">{drive.label}</p>
-        <p className="text-muted-foreground text-xs">
-          {t("settings.cloudDriveMeta", {
-            kind: t(CLOUD_DRIVE_KIND_LABEL_KEY[drive.kind]),
-            host: drive.manifestUrl ? sourceHost(drive.manifestUrl) : drive.provider,
-          })}
-        </p>
+    <div className="flex flex-col gap-2 rounded-md border border-border bg-background/80 px-3 py-2">
+      <div className="flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <p className="truncate text-sm">{drive.label}</p>
+          <p className="text-muted-foreground text-xs">
+            {t("settings.cloudDriveMeta", {
+              kind: t(CLOUD_DRIVE_KIND_LABEL_KEY[drive.kind]),
+              host: drive.manifestUrl ? sourceHost(drive.manifestUrl) : drive.provider,
+            })}
+          </p>
+        </div>
+        <div className="flex shrink-0 items-center gap-1.5 text-muted-foreground text-xs">
+          {drive.id === defaultDriveId && <span>{t("settings.cloudDefaultDrive")}</span>}
+          {drive.capabilities.write ? (
+            <ShieldCheck className="size-4" />
+          ) : (
+            <Cloud className="size-4" />
+          )}
+          {drive.capabilities.write &&
+            (running ? (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => useSyncStore.getState().cancel(drive.id)}
+              >
+                {t("settings.cloudSyncCancel")}
+              </Button>
+            ) : (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => void useSyncStore.getState().publishDrive(drive.id)}
+              >
+                <Cloud />
+                {t("settings.cloudSyncNow")}
+              </Button>
+            ))}
+        </div>
       </div>
-      <div className="flex shrink-0 items-center gap-1.5 text-muted-foreground text-xs">
-        {drive.id === defaultDriveId && <span>{t("settings.cloudDefaultDrive")}</span>}
-        {drive.capabilities.write ? (
-          <ShieldCheck className="size-4" />
-        ) : (
-          <Cloud className="size-4" />
-        )}
-      </div>
+      {progress && <CloudDriveLiveProgress progress={progress} />}
+    </div>
+  );
+}
+
+function CloudDriveLiveProgress({ progress }: { progress: SyncProgress }) {
+  const { t } = useTranslation();
+  const percent =
+    progress.bytesTotal > 0 ? Math.round((progress.bytesDone / progress.bytesTotal) * 100) : 0;
+  return (
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-muted-foreground text-xs">
+      <span className="font-medium">{t(EPHEMERAL_SYNC_PHASE_LABEL_KEY[progress.phase])}</span>
+      <span>
+        {t("settings.cloudSyncObjects", {
+          done: progress.objectsDone,
+          total: progress.objectsTotal,
+        })}
+      </span>
+      {progress.bytesTotal > 0 && <span>{percent}%</span>}
+      {progress.error && <span className="text-destructive">{progress.error}</span>}
     </div>
   );
 }

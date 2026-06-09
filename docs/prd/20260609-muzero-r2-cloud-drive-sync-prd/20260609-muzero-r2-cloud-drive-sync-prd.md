@@ -15,8 +15,8 @@
 |-------|------|--------|------|
 | 1 | Manifest protocol + read-only subscription | ✅ Done | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | R2 Setup Wizard + connection validation | ✅ Done | [Phase 2 Checklist](#phase-2-checklist) |
-| 3 | Local-to-cloud publish sync with visible progress | 🔄 In Progress | [Phase 3 Checklist](#phase-3-checklist) |
-| 4 | Cloud-to-local pull sync + conflict handling | 🔄 In Progress | [Phase 4 Checklist](#phase-4-checklist) |
+| 3 | Local-to-cloud publish sync with visible progress | ✅ Done | [Phase 3 Checklist](#phase-3-checklist) |
+| 4 | Cloud-to-local pull sync + conflict handling | ✅ Done | [Phase 4 Checklist](#phase-4-checklist) |
 | 5 | Anonymous device registry + playback stats sync | 🔄 In Progress | [Phase 5 Checklist](#phase-5-checklist) |
 | 6 | Optional low-frequency currently-playing presence | 🔄 In Progress | [Phase 6 Checklist](#phase-6-checklist) |
 
@@ -2055,3 +2055,4 @@ Do not record secrets, full signed URLs, or media content.
 | 2026-06-09 | MUZERO | Phase 3/4 sync orchestration core added: a pure injectable `createSyncOrchestrator().publish` maps the tested export-plan builder + publish executor into one user-triggerable run, emitting planning → uploading → completed ephemeral progress (object/byte counts, current key), blocking destructive publish when the plan has conflicts (needs-review), and reporting cancellation vs failure — with no IndexedDB/HTTP in the orchestration layer. |
 | 2026-06-09 | MUZERO | Phase 4 sync orchestration pull added: `createSyncOrchestrator().pull` wraps the tested dry-run/apply pull flow into planning → applying → completed progress, no-ops when nothing will mutate, surfaces `needs-review` for set/track/memory conflicts and `blocked` for hash-mismatch without applying, and never mutates IndexedDB on a refused pull. |
 | 2026-06-09 | MUZERO | Phase 3/4 sync orchestration store added (PRD §5.6): `useSyncStore` resolves a writable drive's publish context from IndexedDB (R2 credentials, public base URL, and local-origin set ids — remote-imported `ses_remote_` sets excluded), runs the orchestrator with a per-drive `AbortController` for cancel, blocks before start with an actionable reason when a drive is read-only/credential-less/URL-less, and keeps only ephemeral per-drive progress in Zustand (durable history stays in `syncRuns`, localized copy stays in the UI). |
+| 2026-06-09 | MUZERO | Phases 3 & 4 completed: Settings → Cloud Drive now wires a per-drive **Sync now** / **Cancel** control on each writable connected drive, with a compact live phase/object/percent/error line backed by `useSyncStore`, plus en/zh/ja/ko strings. Verified end-to-end in the preview: clicking Sync now resolves the publish context, builds the export plan, runs the publisher, and surfaces live + durable failure progress — closing the last integration gap between the tested publish/pull logic and a user-triggerable action. |

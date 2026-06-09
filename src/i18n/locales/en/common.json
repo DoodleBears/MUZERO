@@ -351,9 +351,13 @@
     "cloudSyncPhaseCompleted": "Completed",
     "cloudSyncPhaseFailed": "Failed",
     "cloudSyncPhaseCancelled": "Cancelled",
+    "cloudSyncPhaseApplying": "Applying changes",
+    "cloudSyncPhaseNeedsReview": "Needs review",
     "cloudSyncObjects": "{{done}} / {{total}} objects",
     "cloudSyncBytes": "{{done}} / {{total}}",
     "cloudSyncFailures": "{{count}} failures",
+    "cloudSyncNow": "Sync now",
+    "cloudSyncCancel": "Cancel",
     "cloudDriveKind": {
       "owned": "Owned",
       "trusted": "Trusted",
