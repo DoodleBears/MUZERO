@@ -1,27 +1,36 @@
 import type { Track } from "@/db/types";
 import type { AlbumEntry, ArtistEntry } from "@/lib/library-index";
+import {
+  type IndexableRow,
+  parseSearchTokens,
+  type SearchTokens,
+  scoreRow,
+} from "@/lib/search-core";
 import { NO_MATCH_SCORE, scoreVariants, searchVariants } from "@/lib/search-transliterate";
 
+export type { SearchTokens } from "@/lib/search-core";
+// Re-export the source-agnostic token helpers so existing importers (e.g.
+// r2-search-catalog) keep their import path.
+export { isEmptyTokens, parseSearchTokens } from "@/lib/search-core";
+
 /**
- * Pure track search over annotations + metadata. "Music carries memories", so
- * the track's memories and tags are first-class search surfaces alongside
+ * Track search over annotations + metadata. "Music carries memories", so the
+ * track's memories and tags are first-class search surfaces alongside
  * title/caption. All query tokens must match (AND).
  *
- * Matching runs through the transliteration engine ([`search-transliterate`]),
- * so CJK fields are reachable by phonetic input — Chinese pinyin (full + 首字母
- * initials) and Japanese kana↔romaji — and results are ranked by a tiered score
- * (exact < prefix < substring < subsequence). Until the dictionaries load it
- * degrades to substring matching, so behavior never regresses.
+ * This module is the Track-specific adapter over the source-agnostic matcher in
+ * [`search-core`]: it maps a `Track` to an `IndexableRow` and delegates scoring,
+ * so local and remote (catalog) rows share one matcher. Matching is
+ * transliteration-aware — CJK fields are reachable by Chinese pinyin (full +
+ * 首字母 initials) and Japanese kana↔romaji — and results rank by a tiered score
+ * (exact < prefix < substring < subsequence). It degrades to substring matching
+ * until the dictionaries load, so behavior never regresses.
  *
  * Tokens are field-scoped, extending the original `#tag` convention:
  *   - `#tag`     → matches tags only
  *   - `artist:x` → matches the artist / album-artist fields only
  *   - `album:x`  → matches the album field only
  *   - bare       → matched against any field
- *
- * Memories live in their own table, so callers pass the track's memory notes in
- * (e.g. from `memoryNotesByTrack`); the legacy `track.note` is still folded in
- * for any not-yet-migrated row.
  */
 export function trackSearchFields(track: Track, memoryNotes: readonly string[] = []): string[] {
   const m = track.mediaMetadata;
@@ -46,97 +55,29 @@ export function trackSearchFields(track: Track, memoryNotes: readonly string[] =
   ].filter((s): s is string => typeof s === "string" && s.length > 0);
 }
 
-/** Field-scoped query tokens, all lowercased. */
-export interface SearchTokens {
-  /** Bare substring tokens, matched against any field. */
-  free: string[];
-  /** `artist:` tokens, matched against the artist / album-artist fields. */
-  artist: string[];
-  /** `album:` tokens, matched against the album field. */
-  album: string[];
-  /** `#tag` tokens, matched against tags only. */
-  tags: string[];
-}
-
-/** Split a query into field-scoped tokens (`artist:`/`album:`/`#tag`) + free text. */
-export function parseSearchTokens(query: string): SearchTokens {
-  const tokens = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
-  const result: SearchTokens = { free: [], artist: [], album: [], tags: [] };
-  for (const token of tokens) {
-    if (token.startsWith("#") && token.length > 1) result.tags.push(token.slice(1));
-    else if (token.startsWith("artist:") && token.length > 7) result.artist.push(token.slice(7));
-    else if (token.startsWith("album:") && token.length > 6) result.album.push(token.slice(6));
-    else result.free.push(token);
-  }
-  return result;
-}
-
-export function isEmptyTokens(tokens: SearchTokens): boolean {
-  return (
-    tokens.free.length === 0 &&
-    tokens.artist.length === 0 &&
-    tokens.album.length === 0 &&
-    tokens.tags.length === 0
-  );
-}
-
 function trackArtistText(track: Track): string {
   const m = track.mediaMetadata;
   return [...(m?.artists ?? []), ...(m?.albumArtists ?? [])].join(" ");
 }
 
-function trackAlbumText(track: Track): string {
-  return track.mediaMetadata?.album ?? "";
+/** Reduce a track (+ its memory notes) to the source-agnostic searchable row. */
+export function trackToRow(track: Track, memoryNotes: readonly string[] = []): IndexableRow {
+  return {
+    id: track.id,
+    free: trackSearchFields(track, memoryNotes),
+    artist: [trackArtistText(track)].filter((s) => s.length > 0),
+    album: [track.mediaMetadata?.album ?? ""].filter((s) => s.length > 0),
+    tags: track.tags,
+  };
 }
 
-/** Best (lowest) score for one query token across a set of candidate fields. */
-function bestTokenScore(token: string, fields: readonly string[]): number {
-  const queryVariants = searchVariants(token);
-  let best = NO_MATCH_SCORE;
-  for (const field of fields) {
-    if (!field) continue;
-    const score = scoreVariants(queryVariants, searchVariants(field));
-    if (score < best) best = score;
-    if (best === 0) break; // can't beat exact
-  }
-  return best;
-}
-
-/** Sum of per-token best scores, or `NO_MATCH_SCORE` if any token is unmatched. */
-function scopeScore(tokens: readonly string[], fields: readonly string[]): number {
-  let total = 0;
-  for (const token of tokens) {
-    const best = bestTokenScore(token, fields);
-    if (best >= NO_MATCH_SCORE) return NO_MATCH_SCORE;
-    total += best;
-  }
-  return total;
-}
-
-/**
- * Relevance score for a track against a query (lower = better). Returns 0 for an
- * empty query, `NO_MATCH_SCORE` when any token's scope has no match, otherwise
- * the summed best score (capped just below the sentinel so matches always sort
- * ahead of non-matches).
- */
+/** Relevance score for a track against a query (lower = better; see `scoreRow`). */
 export function trackSearchScore(
   track: Track,
   query: string,
   memoryNotes: readonly string[] = [],
 ): number {
-  const tokens = parseSearchTokens(query);
-  if (isEmptyTokens(tokens)) return 0;
-
-  const free = scopeScore(tokens.free, trackSearchFields(track, memoryNotes));
-  if (free >= NO_MATCH_SCORE) return NO_MATCH_SCORE;
-  const artist = scopeScore(tokens.artist, [trackArtistText(track)]);
-  if (artist >= NO_MATCH_SCORE) return NO_MATCH_SCORE;
-  const album = scopeScore(tokens.album, [trackAlbumText(track)]);
-  if (album >= NO_MATCH_SCORE) return NO_MATCH_SCORE;
-  const tags = scopeScore(tokens.tags, track.tags);
-  if (tags >= NO_MATCH_SCORE) return NO_MATCH_SCORE;
-
-  return Math.min(free + artist + album + tags, NO_MATCH_SCORE - 1);
+  return scoreRow(trackToRow(track, memoryNotes), parseSearchTokens(query));
 }
 
 export function matchesQuery(
@@ -197,7 +138,7 @@ export function searchEntityFacets(
   albums: AlbumEntry[],
   query: string,
 ): EntityFacets {
-  const { free, artist, album } = parseSearchTokens(query);
+  const { free, artist, album }: SearchTokens = parseSearchTokens(query);
   const artistTokens = [...free, ...artist];
   const albumTokens = [...free, ...album];
   const matchedArtists =
