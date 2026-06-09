@@ -1755,7 +1755,7 @@ For a large shared playlist with many trusted devices, the UI should:
   - [ ] user-authored set/track/memory fields use explicit conflict UI when both sides changed
   - [ ] per-device profile conflicts use `revision` first, then explicit user choice
 - [ ] Add conflict UI with "keep local", "use remote", "duplicate both".
-- [ ] Add set-level indicators for local changes, remote changed, auto-merged, and needs review.
+- [x] Add set-level indicators for local changes, remote changed, auto-merged, and needs review.
 - [x] Add dry-run preview before applying large pulls.
 - [x] Verify imported Blob roles match expected object roles.
 - [x] Incrementally refresh remote search catalog pages by `updatedAt`/ETag/hash.
@@ -2042,3 +2042,4 @@ Do not record secrets, full signed URLs, or media content.
 | 2026-06-09 | MUZERO | Phase 4 pull offline-cache option added: `applyRemoteSetPull` remains stream-only by default but can now cache imported remote media into `mediaBlobs` for offline playback, reusing MIME/role validation before linking `Track.blobId`. |
 | 2026-06-09 | MUZERO | Phase 3 device avatar/profile write-policy checklist reconciled: `buildR2ExportPlanForDrive` is already covered by policy tests proving profiles and avatar objects publish only to owner/trusted writable drives with local R2 credentials. |
 | 2026-06-09 | MUZERO | Phase 3 owner-maintained discovery indexes completed: export plans now build `devices/index.json`, `stats/index.json`, and optional `presence/index.json`, and root `manifest.json` references whichever discovery indexes are present. |
+| 2026-06-09 | MUZERO | Phase 4 set-level sync indicator contract added: sync previews can now expose stable `local-changes`, `remote-changed`, `auto-merged`, and `needs-review` flags plus conflict metadata for later UI rendering. |
