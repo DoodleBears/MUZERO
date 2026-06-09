@@ -3,7 +3,6 @@ import {
   CheckCircle2,
   ClipboardCopy,
   Cloud,
-  Download,
   ExternalLink,
   RefreshCw,
   ShieldCheck,
@@ -57,13 +56,6 @@ import {
 import { summarizePlaybackAggregates } from "@/sync/playback-aggregate-summary";
 import { summarizePlaybackSyncState } from "@/sync/playback-sync-summary";
 import { buildRecommendedR2Cors } from "@/sync/r2-healthcheck";
-import { importRemoteSetStream } from "@/sync/r2-import-stream";
-import { connectReadOnlyManifest } from "@/sync/r2-shared-link";
-import {
-  loadRemoteSetIndex,
-  type RemoteLibraryPreview,
-  type RemoteSetPreview,
-} from "@/sync/r2-subscription";
 import type { SyncPhase, SyncProgress } from "@/sync/sync-orchestrator";
 import {
   type SyncProgressPhase,
@@ -176,19 +168,11 @@ export function SettingsPage() {
     [],
   );
   const rebuildEngine = usePlayerStore((s) => s.rebuildEngine);
-  const setActiveSession = usePlayerStore((s) => s.setActiveSession);
   const setSettingsItem = useNavStore((s) => s.setSettingsItem);
   const activeItem = resolveActiveSettingsItem(useNavStore((s) => s.settingsItem));
   const [draft, setDraft] = useState<AppSettings>(settings);
   const [saved, setSaved] = useState(false);
   const [health, setHealth] = useState<"unknown" | "ok" | "down" | "checking">("unknown");
-  const [cloudUrl, setCloudUrl] = useState("");
-  const [cloudPreview, setCloudPreview] = useState<RemoteLibraryPreview | null>(null);
-  const [cloudStatus, setCloudStatus] = useState<
-    "idle" | "previewing" | "importing" | "done" | "error"
-  >("idle");
-  const [cloudError, setCloudError] = useState<string | null>(null);
-  const [importingSetId, setImportingSetId] = useState<string | null>(null);
   const [addDriveOpen, setAddDriveOpen] = useState(false);
   const [corsCopied, setCorsCopied] = useState(false);
   // Font picker: the combobox input text, plus lazily-loaded system fonts.
@@ -316,43 +300,6 @@ export function SettingsPage() {
     const provider = resolveMusicGenProvider({ ...draft, musicGenProvider: "cloud" });
     const ok = (await provider.health?.()) ?? false;
     setHealth(ok ? "ok" : "down");
-  }
-
-  async function previewCloudDrive() {
-    const url = cloudUrl.trim();
-    if (!url) return;
-    setCloudStatus("previewing");
-    setCloudError(null);
-    try {
-      const connection = await connectReadOnlyManifest(url);
-      setCloudPreview(connection.preview);
-      setCloudStatus("idle");
-    } catch (error) {
-      setCloudPreview(null);
-      setCloudError(error instanceof Error ? error.message : String(error));
-      setCloudStatus("error");
-    }
-  }
-
-  async function importCloudSet(set: RemoteSetPreview) {
-    if (!cloudPreview) return;
-    setCloudStatus("importing");
-    setImportingSetId(set.id);
-    setCloudError(null);
-    try {
-      const remoteSet = await loadRemoteSetIndex(cloudPreview, set);
-      const result = await importRemoteSetStream({
-        driveId: cloudPreview.libraryId,
-        remoteSet,
-      });
-      await setActiveSession(result.sessionId);
-      setCloudStatus("done");
-    } catch (error) {
-      setCloudError(error instanceof Error ? error.message : String(error));
-      setCloudStatus("error");
-    } finally {
-      setImportingSetId(null);
-    }
   }
 
   async function copyCorsJson() {
@@ -927,89 +874,6 @@ export function SettingsPage() {
 
                 {activeItem === "cloud-sync" && syncProgress && (
                   <CloudSyncProgress progress={syncProgress} />
-                )}
-
-                {activeItem === "cloud-subscribe" && (
-                  <>
-                    <Field label={t("settings.cloudManifestUrl")}>
-                      <Input
-                        value={cloudUrl}
-                        onChange={(e) => {
-                          setCloudUrl(e.target.value);
-                          setCloudError(null);
-                        }}
-                        placeholder="https://music.example.com/muzero/manifest.json"
-                      />
-                    </Field>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        disabled={!cloudUrl.trim() || cloudStatus === "previewing"}
-                        onClick={() => void previewCloudDrive()}
-                      >
-                        <Cloud />
-                        {cloudStatus === "previewing"
-                          ? t("settings.cloudPreviewing")
-                          : t("settings.cloudPreview")}
-                      </Button>
-                      {cloudStatus === "done" && (
-                        <span className="text-xs text-muted-foreground">
-                          {t("settings.cloudImported")}
-                        </span>
-                      )}
-                    </div>
-                    {cloudError && <p className="text-xs text-destructive">{cloudError}</p>}
-                    {cloudPreview && (
-                      <div className="rounded-md border border-border bg-muted/30 p-3">
-                        <div className="flex flex-wrap items-center justify-between gap-2">
-                          <div>
-                            <p className="font-medium text-sm">{cloudPreview.title}</p>
-                            <p className="text-muted-foreground text-xs">
-                              {t("settings.cloudPreviewMeta", {
-                                host: sourceHost(cloudPreview.manifestUrl),
-                                sets: cloudPreview.setCount,
-                                tracks: cloudPreview.trackCount,
-                                bytes: formatBytes(cloudPreview.totalBytes),
-                              })}
-                            </p>
-                          </div>
-                        </div>
-                        <div className="mt-3 flex flex-col gap-2">
-                          {cloudPreview.sets.map((set) => (
-                            <div
-                              key={set.id}
-                              className="flex items-center justify-between gap-3 rounded-md border border-border bg-background/80 px-3 py-2"
-                            >
-                              <div className="min-w-0">
-                                <p className="truncate text-sm">{set.title}</p>
-                                <p className="text-muted-foreground text-xs">
-                                  {t("settings.cloudSetMeta", {
-                                    tracks: set.trackCount,
-                                    bytes: formatBytes(set.bytes),
-                                  })}
-                                </p>
-                              </div>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                disabled={cloudStatus === "importing"}
-                                onClick={() => void importCloudSet(set)}
-                              >
-                                <Download />
-                                {importingSetId === set.id
-                                  ? t("settings.cloudImporting")
-                                  : t("settings.cloudImport")}
-                              </Button>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                    <p className="text-xs text-muted-foreground">
-                      {t("settings.cloudReadOnlyNote")}
-                    </p>
-                  </>
                 )}
 
                 {activeItem === "cloud-sync" && (

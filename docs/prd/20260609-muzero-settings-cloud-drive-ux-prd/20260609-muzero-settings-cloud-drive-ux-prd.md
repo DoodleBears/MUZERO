@@ -225,15 +225,15 @@ share whole playlists / buckets through the same shared-link tab.)
 - [x] `AddDriveDialog` gets a mode switcher — "My R2" (owner) and "Shared link" (read-only URL → validate → name).
 - [ ] In the "My R2" tab, add a **public / private access-mode** choice (MUZERO asks, doesn't toggle the Cloudflare bucket): public shows the public-URL field + validates public reachability; private hides it (reads via local presign, own-devices-only for now), with trade-off hints. Record the mode on `CloudDrive`. See R2 PRD §2.6.1.
 - [x] Move remote-set browse/import onto each connected-drive row.
-- [ ] Remove the standalone `cloud-subscribe` item; relabel `cloud-owner` to a unified Drives item.
+- [x] Remove the standalone `cloud-subscribe` item; relabel `cloud-owner` to a unified Drives item.
 
 ### Phase 6 Checklist
 
-- [ ] Adding a drive — own R2 or a shared link — happens only in the modal.
-- [ ] The "My R2" tab lets the owner pick public or private; the form + validation adapt and explain the trade-off.
-- [ ] A shared link binds a read-only drive with a custom name.
-- [ ] Sets are browsed/imported from a drive row, not a separate page.
-- [ ] The Subscribe sidebar item is gone; no add/import capability is lost.
+- [x] Adding a drive — own R2 or a shared link — happens only in the modal.
+- [ ] The "My R2" tab lets the owner pick public or private; the form + validation adapt and explain the trade-off. *(deferred — blocked on local-presign reads / R2 PRD Tier ①)*
+- [x] A shared link binds a read-only drive with a custom name.
+- [x] Sets are browsed/imported from a drive row, not a separate page.
+- [x] The Subscribe sidebar item is gone; no add/import capability is lost.
 
 ---
 
@@ -289,3 +289,4 @@ share whole playlists / buckets through the same shared-link tab.)
 | 2026-06-10 | MUZERO | Phase 6 (in progress): `AddDriveDialog` now has a mode switcher — "My R2" (owner keys flow) and "Shared link" (read-only: paste a public manifest/share URL → validate → name), unifying both kinds of drive into one modal. `connectReadOnlyManifest` gained an optional `label`. Verified in the preview (the shared tab shows only the URL field). Moving set browse/import onto drive rows and retiring the standalone Subscribe item are the remaining tasks. |
 | 2026-06-10 | MUZERO | Phase 6 task added: the "My R2" tab will offer a public/private access-mode choice — MUZERO asks (it can't toggle the Cloudflare bucket), adapts the form (public-URL field + reachability check for public; keys + local-presign reads for private), records the mode on `CloudDrive`, and shows the trade-off hints. Anchored to R2 PRD §2.6.1. |
 | 2026-06-10 | MUZERO | Phase 6 progress: new `CloudDriveSets` component browses + imports a connected drive's remote sets inline on the drive row (lazy: loads the manifest on a Browse click; imports keyed by `drive.id`). TDD'd (mocked subscribe/loadIndex/import) and mounted in `CloudDriveRow`; reuses existing i18n keys. The access-mode toggle stays deferred until local-presign reads (R2 PRD Tier ①) exist — a "private" drive isn't readable without it. Retiring the standalone Subscribe item is next. |
+| 2026-06-10 | MUZERO | Phase 6: standalone Subscribe item retired — removed the `cloud-subscribe` nav item + its inline manifest-URL/preview/import block, the `previewCloudDrive`/`importCloudSet` handlers, their state, and now-unused imports from `settings-page`; relabeled the `cloud-owner` item to "Connected drives". Adding a drive is now only the modal (owner / shared-link tabs); set import is per-drive-row. Verified in the preview (no Subscribe item; cloud section = Connected drives / Sync & CORS / Listening now). Only the deferred public/private access-mode toggle remains in Phase 6. |
