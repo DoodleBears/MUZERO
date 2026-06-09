@@ -33,6 +33,31 @@ export const r2ManifestSchema = z.object({
   devicesIndex: remotePathSchema.optional(),
   statsIndex: remotePathSchema.optional(),
   presenceIndex: remotePathSchema.optional(),
+  // Library-global (not set-scoped): custom covers for derived artist/album
+  // entities. Points at `library/entity-covers/index.json`.
+  entityCoversIndex: remotePathSchema.optional(),
+});
+
+const r2CropSchema = z.object({
+  x: z.number(),
+  y: z.number(),
+  width: z.number(),
+  height: z.number(),
+});
+
+/** One artist/album custom cover in the library-global entity-covers index. */
+export const r2EntityCoverEntrySchema = z.object({
+  id: z.string().min(1), // entity projection key (normalizeArtistName / AlbumEntry.key)
+  kind: z.enum(["artist", "album"]),
+  cover: r2RemoteObjectSchema,
+  crop: r2CropSchema.optional(),
+  updatedAt: millisSchema, // last-write-wins clock
+});
+
+export const r2EntityCoversIndexSchema = z.object({
+  schema: z.literal("muzero-r2-entity-covers-v1"),
+  updatedAt: millisSchema,
+  entries: z.array(r2EntityCoverEntrySchema),
 });
 
 export const r2DjConfigSchema = z.object({
@@ -179,6 +204,8 @@ export const r2PresenceIndexSchema = z.object({
 });
 
 export type R2Manifest = z.infer<typeof r2ManifestSchema>;
+export type R2EntityCoverEntry = z.infer<typeof r2EntityCoverEntrySchema>;
+export type R2EntityCoversIndex = z.infer<typeof r2EntityCoversIndexSchema>;
 export type R2SetIndex = z.infer<typeof r2SetIndexSchema>;
 export type R2ShareManifest = z.infer<typeof r2ShareManifestSchema>;
 export type R2Stats = z.infer<typeof r2StatsSchema>;

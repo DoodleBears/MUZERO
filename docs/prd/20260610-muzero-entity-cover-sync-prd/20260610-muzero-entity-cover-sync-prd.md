@@ -13,7 +13,7 @@
 |-------|------|--------|------|
 | 1 | Local entity-cover store + resolution | ✅ Completed | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | Entity-detail header set/clear UX | ✅ Completed | [Phase 2 Checklist](#phase-2-checklist) |
-| 3 | R2 sync: library-scoped object namespace | 🔲 Pending | [Phase 3 Checklist](#phase-3-checklist) |
+| 3 | R2 sync: library-scoped object namespace | ✅ Completed | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | R2 sync: mutations, pull/import, conflict | 🔲 Pending | [Phase 4 Checklist](#phase-4-checklist) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
@@ -200,10 +200,11 @@ i18n: new `gallery.*` keys (set/replace/clear/hint) added to **en** first, then 
 > Note: the entity header uses `useEntityCoverUrl` (override → fallback track cover); the read-only placeholder span remains for pseudo-buckets.
 
 ### Phase 3 Checklist — Library-scoped object namespace
-- [ ] `r2EntityCoverSchema` + manifest `entityCovers` section ([r2-manifest-schema.ts](../../../src/sync/r2-manifest-schema.ts))
-- [ ] `R2ExportObjectKind: "entity-cover"`; `library/entities/<kind>/<keyHash>/cover.json` mapping; reuse `objects/covers` bytes
-- [ ] entityKey → keyHash hashing in the worker
-- [ ] Manifest schema tests
+- [x] `r2EntityCoverEntrySchema` + `r2EntityCoversIndexSchema` + `entityCoversIndex` on the manifest ([r2-manifest-schema.ts](../../../src/sync/r2-manifest-schema.ts))
+- [x] `R2ExportObjectKind: "entity-cover" | "entity-covers-index"`; singleton index at `library/entity-covers/index.json`; bytes reuse the content-addressed `objects/covers/sha256-…` dir ([r2-export-plan.ts](../../../src/sync/r2-export-plan.ts) `createEntityCoverObjects`, wired into `buildR2ExportPlan` + `createManifest`)
+- [x] Manifest schema + export-plan tests ([r2-entity-cover-sync.test.ts](../../../src/sync/r2-entity-cover-sync.test.ts))
+
+> Design refinement vs. the original sketch: a SINGLE library-global index (not per-entity `library/entities/<kind>/<keyHash>/cover.json`) — simpler, mirrors `sets/<id>/index.json`, and the entity key is stored verbatim in JSON so no path hashing is needed (only content-addressing of the bytes, which `sha256Blob` already does on the main thread; entity covers are few and small, so no worker).
 
 ### Phase 4 Checklist — Mutations, pull/import, conflict
 - [ ] `SyncMutation.scope: "entity-cover"`; write mutations from set/clear

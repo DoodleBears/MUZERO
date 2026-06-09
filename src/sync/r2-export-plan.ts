@@ -18,6 +18,7 @@ import {
   shouldFlushPlaybackEventSegment,
 } from "./playback-event-segments";
 import {
+  type R2EntityCoverEntry,
   type R2Manifest,
   type R2SetIndex,
   r2DjConfigSchema,
@@ -43,6 +44,8 @@ export type R2ExportObjectKind =
   | "stats-checkpoint"
   | "stats-aggregate"
   | "stats-index"
+  | "entity-cover"
+  | "entity-covers-index"
   | "manifest";
 
 export interface R2ExportObject {
@@ -241,12 +244,14 @@ export async function buildR2ExportPlan(input: R2ExportPlanInput): Promise<R2Exp
 
   const mutationObjects = await createSetMutationObjects(input.driveId, db);
   const deviceObjects = await createDeviceObjects(db, input.playbackEventFlush, input.deviceExport);
-  const manifest = createManifest(input, setIndexes, deviceObjects);
+  const entityCoverObjects = await createEntityCoverObjects(db);
+  const manifest = createManifest(input, setIndexes, [...deviceObjects, ...entityCoverObjects]);
   const objects = [
     ...binaryObjects,
     ...setIndexes.map(({ object }) => object),
     ...mutationObjects,
     ...deviceObjects,
+    ...entityCoverObjects,
     createJsonObject("manifest", "manifest.json", manifest),
   ];
 
@@ -276,7 +281,7 @@ async function loadOptionalBinaryObject(
 }
 
 async function createBinaryObject(
-  kind: "media" | "cover" | "memory-photo" | "device-avatar",
+  kind: "media" | "cover" | "memory-photo" | "device-avatar" | "entity-cover",
   blob: MediaBlob,
   refs: Pick<R2ExportObject, "setId" | "trackId" | "memoryId">,
 ): Promise<BinaryObjectResult> {
@@ -349,6 +354,40 @@ async function createSetMutationObjects(driveId: string, db: MuzeroDB): Promise<
         { setId: mutation.entityId },
       ),
     );
+}
+
+/**
+ * Library-global custom covers for derived artist/album entities. Unlike
+ * everything else (set-scoped under `sets/<id>/`), these live in a singleton
+ * `library/entity-covers/index.json`; the bytes are content-addressed into the
+ * shared `objects/covers/` directory. Rebuilt from `entityCovers` each run (the
+ * content hash dedupes unchanged bytes); mutations drive conflict detection on
+ * pull, not what gets exported. Returns `[]` (no index) when there are none.
+ */
+async function createEntityCoverObjects(db: MuzeroDB): Promise<R2ExportObject[]> {
+  const rows = (await db.entityCovers.toArray()).sort((a, b) => (a.id < b.id ? -1 : 1));
+  const binaryObjects: R2ExportObject[] = [];
+  const entries: R2EntityCoverEntry[] = [];
+  for (const row of rows) {
+    const blob = await db.mediaBlobs.get(row.coverBlobId);
+    if (!blob) continue;
+    const binary = await createBinaryObject("entity-cover", blob, {});
+    binaryObjects.push(binary.object);
+    entries.push({
+      id: row.id,
+      kind: row.kind,
+      cover: binary.remote,
+      crop: row.crop,
+      updatedAt: row.updatedAt,
+    });
+  }
+  if (entries.length === 0) return [];
+  const index = createJsonObject("entity-covers-index", "library/entity-covers/index.json", {
+    schema: "muzero-r2-entity-covers-v1",
+    updatedAt: entries.reduce((max, entry) => Math.max(max, entry.updatedAt), 0),
+    entries,
+  });
+  return [...binaryObjects, index];
 }
 
 async function foldSetMutationsIntoIndex(
@@ -543,6 +582,9 @@ function createManifest(
   const devicesIndex = indexObjects.find((object) => object.kind === "devices-index")?.key;
   const statsIndex = indexObjects.find((object) => object.kind === "stats-index")?.key;
   const presenceIndex = indexObjects.find((object) => object.kind === "presence-index")?.key;
+  const entityCoversIndex = indexObjects.find(
+    (object) => object.kind === "entity-covers-index",
+  )?.key;
   return {
     schema: "muzero-r2-manifest-v1",
     libraryId: input.libraryId,
@@ -553,6 +595,7 @@ function createManifest(
     devicesIndex,
     statsIndex,
     presenceIndex,
+    entityCoversIndex,
     sets: setIndexes.map(({ session, object }) => ({
       id: session.id,
       title: session.name,
@@ -804,9 +847,12 @@ async function sha256Text(value: string): Promise<string> {
   return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
-function binaryDirectory(kind: "media" | "cover" | "memory-photo" | "device-avatar"): string {
+function binaryDirectory(
+  kind: "media" | "cover" | "memory-photo" | "device-avatar" | "entity-cover",
+): string {
   if (kind === "media") return "objects/media";
-  if (kind === "cover") return "objects/covers";
+  // Entity covers share the content-addressed cover directory (deduped by hash).
+  if (kind === "cover" || kind === "entity-cover") return "objects/covers";
   if (kind === "device-avatar") return "objects/avatars";
   return "objects/memories";
 }
