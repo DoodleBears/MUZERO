@@ -1766,7 +1766,7 @@ For a large shared playlist with many trusted devices, the UI should:
 - [x] Pull sync can recreate a set on a new device.
 - [ ] Pull sync can download media for offline playback.
 - [x] Pull sync can stream without downloading.
-- [ ] Pull sync can update a large remote search catalog without downloading media bytes.
+- [x] Pull sync can update a large remote search catalog without downloading media bytes.
 - [ ] Conflicts are visible and never silently overwrite media.
 - [x] Two devices adding different tracks to the same set can auto-merge.
 - [x] Two devices renaming the same set differently produce a reviewable conflict.
@@ -2038,3 +2038,4 @@ Do not record secrets, full signed URLs, or media content.
 | 2026-06-09 | MUZERO | Phase 4 reviewable rename conflict metadata added: owner export plans now report overlapping set-field mutations with entity, field, reason, and mutation ids so two devices renaming the same set differently can be surfaced for explicit resolution instead of being silently dropped. |
 | 2026-06-09 | MUZERO | Phase 4 stale set snapshot guard added: set index export planning can attach observed remote ETags as `If-Match` preconditions, using the existing signed conditional PUT path so stale `sets/<setId>/index.json` publishes fail instead of overwriting newer remote snapshots. |
 | 2026-06-09 | MUZERO | Phase 4 remote-search lazy-load added: opening a remote search result can now fetch only the referenced set indexes plus matching share manifest/index pairs, without fetching unrelated sets or media bytes. |
+| 2026-06-09 | MUZERO | Phase 4 large remote-search catalog regression added: catalog pull now has coverage for 250 remote tracks proving only catalog/set/track JSON pages are fetched, while media and cover object bytes remain untouched. |

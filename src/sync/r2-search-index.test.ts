@@ -330,4 +330,87 @@ describe("remote search index", () => {
       },
     });
   });
+
+  it("updates a large remote search catalog without fetching media bytes", async () => {
+    const seen: string[] = [];
+    const tracks = Array.from({ length: 250 }, (_, index) => ({
+      id: `trk_${index}`,
+      title: `Remote Track ${index}`,
+      setIds: ["ses_tokyo"],
+      shareIds: [],
+      kind: "audio" as const,
+      origin: "uploaded" as const,
+      durationSec: 180,
+      tags: ["remote"],
+      memoryText: null,
+      briefCaption: null,
+      artistLike: null,
+      updatedAt: 1780944000000 + index,
+      mediaAvailable: true,
+      coverUrl: `objects/covers/trk_${index}.jpg`,
+    }));
+    const fetcher: SyncCatalogFetch = async (input) => {
+      const url = String(input);
+      seen.push(url);
+      if (url.includes("/objects/media/")) {
+        return new Response("media download should not happen", { status: 500 });
+      }
+      return fetchMap({
+        "https://music.example.com/muzero/catalog/library.json": {
+          schema: "muzero-r2-search-catalog-v1",
+          libraryId: "lib_big",
+          updatedAt: "2026-06-09T00:00:00.000Z",
+          locale: "en",
+          pages: {
+            sets: ["catalog/sets-page-0001.json"],
+            tracks: ["catalog/tracks-page-0001.json"],
+            shares: [],
+          },
+          counts: {
+            sets: 1,
+            tracks: tracks.length,
+            shares: 0,
+          },
+        },
+        "https://music.example.com/muzero/catalog/tracks-page-0001.json": {
+          schema: "muzero-r2-track-search-page-v1",
+          page: 1,
+          updatedAt: "2026-06-09T00:00:00.000Z",
+          tracks,
+        },
+        "https://music.example.com/muzero/catalog/sets-page-0001.json": {
+          schema: "muzero-r2-set-search-page-v1",
+          page: 1,
+          updatedAt: "2026-06-09T00:00:00.000Z",
+          sets: [
+            {
+              id: "ses_tokyo",
+              name: "Tokyo Night Drive",
+              trackCount: tracks.length,
+              updatedAt: 1780944000000,
+            },
+          ],
+        },
+      })(input);
+    };
+
+    await importRemoteSearchCatalog(
+      {
+        catalogId: "drv_a:lib_big",
+        driveId: "drv_a",
+        scope: "library",
+        baseUrl: "https://music.example.com/muzero/",
+        catalogUrl: "https://music.example.com/muzero/catalog/library.json",
+        fetcher,
+      },
+      db,
+    );
+
+    expect(await db.remoteSearchTracks.count()).toBe(250);
+    expect(seen).toEqual([
+      "https://music.example.com/muzero/catalog/library.json",
+      "https://music.example.com/muzero/catalog/tracks-page-0001.json",
+      "https://music.example.com/muzero/catalog/sets-page-0001.json",
+    ]);
+  });
 });
