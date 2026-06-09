@@ -484,6 +484,8 @@
     "setDescription": "Add a description…",
     "coverHint": "Drop / paste / click to set the cover",
     "removeCover": "Remove custom cover",
+    "setAsSongCover": "Set as song cover",
+    "setAsSetCover": "Set as set cover",
     "newSet": "New set",
     "addTracks": "Add tracks",
     "newSetName": "New set",

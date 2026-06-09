@@ -10,6 +10,7 @@ import {
   replaceEntries,
 } from "@/player/play-queue";
 import { clampIndex } from "@/player/queue";
+import type { ShortcutGesture } from "@/shortcuts/registry";
 import { db as defaultDb, type MuzeroDB } from "./muzero-db";
 import {
   type AppSettings,
@@ -59,6 +60,35 @@ export async function saveSettings(
   const next: AppSettings = { ...current, ...patch, id: "app" };
   await db.settings.put(next);
   return next;
+}
+
+// ------------------------------------------------------- shortcut overrides ----
+
+/** Set (replace) a user's binding list for one shortcut action. `[]` = unbound. */
+export async function setShortcutOverride(
+  actionId: string,
+  gestures: ShortcutGesture[],
+  db: MuzeroDB = defaultDb,
+): Promise<void> {
+  const settings = await getSettings(db);
+  await saveSettings(
+    { shortcutOverrides: { ...(settings.shortcutOverrides ?? {}), [actionId]: gestures } },
+    db,
+  );
+}
+
+/** Drop one action's override → it falls back to its built-in default. */
+export async function resetShortcut(actionId: string, db: MuzeroDB = defaultDb): Promise<void> {
+  const settings = await getSettings(db);
+  if (!settings.shortcutOverrides || !(actionId in settings.shortcutOverrides)) return;
+  const next = { ...settings.shortcutOverrides };
+  delete next[actionId];
+  await saveSettings({ shortcutOverrides: next }, db);
+}
+
+/** Clear every override → the whole keymap returns to defaults. */
+export async function resetAllShortcuts(db: MuzeroDB = defaultDb): Promise<void> {
+  await saveSettings({ shortcutOverrides: {} }, db);
 }
 
 // ----------------------------------------------------------- import folders ----
@@ -186,27 +216,28 @@ export async function prependTrackIds(
 /**
  * Set a 歌单-level cover image: store the bytes in `mediaBlobs` (role "cover",
  * keyed by the set id) and point `coverBlobId` at it. Replaces any prior cover.
+ * The optional square `crop` is stored non-destructively on the session (mirrors
+ * {@link setTrackCover}); a fresh cover without a crop clears any prior one.
  */
 export async function setSessionCover(
-  sessionId: string,
-  blob: Blob,
-  mime: string,
+  input: { sessionId: string; blob: Blob; mime: string; crop?: CropRect },
   db: MuzeroDB = defaultDb,
 ): Promise<void> {
   await db.transaction("rw", db.sessions, db.mediaBlobs, async () => {
-    const session = await db.sessions.get(sessionId);
+    const session = await db.sessions.get(input.sessionId);
     if (!session) return;
     if (session.coverBlobId) await db.mediaBlobs.delete(session.coverBlobId);
     const id = newId("blb");
     await db.mediaBlobs.add({
       id,
-      trackId: sessionId,
+      trackId: input.sessionId,
       role: "cover",
-      mime,
-      bytes: blob.size,
-      blob,
+      mime: input.mime,
+      bytes: input.blob.size,
+      blob: input.blob,
     });
     session.coverBlobId = id;
+    session.coverCrop = input.crop;
     session.updatedAt = Date.now();
     await db.sessions.put(session);
   });

@@ -9,22 +9,34 @@ import {
   createUploadedTrack,
   deleteImageBlob,
   deleteMemory,
+  deleteSession,
+  deleteTrack,
+  deleteTracks,
   getAllTags,
   getMemoryPhoto,
+  getPlayQueue,
   getSession,
   getSessionCover,
   getSettings,
   getTrack,
+  knownSourcePaths,
   listAllTracks,
   listMemories,
   listTrackBackgrounds,
   memoryNotesByTrack,
+  playQueueSet,
   prependTrackIds,
+  removeImportFolder,
+  removeTracksFromSession,
+  resetAllShortcuts,
+  resetShortcut,
   saveSettings,
+  setShortcutOverride,
   setSessionCover,
   setTrackNote,
   setTrackTags,
   updateMemoryNote,
+  upsertImportFolder,
 } from "./repositories";
 
 let db: MuzeroDB;
@@ -57,6 +69,22 @@ describe("settings", () => {
       playerShuffle: true,
     });
   });
+
+  it("sets, resets, and clears keyboard-shortcut overrides", async () => {
+    const z = { kind: "key" as const, stroke: { code: "KeyZ", keyLabel: "Z" } };
+    await setShortcutOverride("playback.prev", [z], db);
+    await setShortcutOverride("playback.next", [], db); // explicitly unbound
+    expect((await getSettings(db)).shortcutOverrides).toEqual({
+      "playback.prev": [z],
+      "playback.next": [],
+    });
+
+    await resetShortcut("playback.prev", db);
+    expect((await getSettings(db)).shortcutOverrides).toEqual({ "playback.next": [] });
+
+    await resetAllShortcuts(db);
+    expect((await getSettings(db)).shortcutOverrides).toEqual({});
+  });
 });
 
 describe("prependTrackIds", () => {
@@ -73,7 +101,7 @@ describe("setSessionCover / getSessionCover", () => {
   it("stores a set-level cover and reads it back", async () => {
     const s = await createSession({ seedPrompt: "", config: { autoExtend: false } }, db);
     const blob = new Blob([new Uint8Array([9, 9, 9])], { type: "image/png" });
-    await setSessionCover(s.id, blob, "image/png", db);
+    await setSessionCover({ sessionId: s.id, blob, mime: "image/png" }, db);
     const got = await getSession(s.id, db);
     expect(got?.coverBlobId).toBeTruthy();
     // The cover row is created correctly (role/key/mime — string fields survive
@@ -84,6 +112,16 @@ describe("setSessionCover / getSessionCover", () => {
     expect(row?.mime).toBe("image/png");
     // getSessionCover resolves the stored blob via coverBlobId.
     expect(await getSessionCover(s.id, db)).toBeTruthy();
+  });
+
+  it("stores a non-destructive square crop on the session", async () => {
+    const s = await createSession({ seedPrompt: "", config: { autoExtend: false } }, db);
+    const blob = new Blob([new Uint8Array([1])], { type: "image/png" });
+    await setSessionCover(
+      { sessionId: s.id, blob, mime: "image/png", crop: { x: 1, y: 2, width: 3, height: 4 } },
+      db,
+    );
+    expect((await getSession(s.id, db))?.coverCrop).toEqual({ x: 1, y: 2, width: 3, height: 4 });
   });
 });
 
@@ -626,5 +664,158 @@ describe("v9 → v10 migration removes legacy boot-resume pointers", () => {
         req.onsuccess = req.onerror = () => resolve();
       });
     }
+  });
+});
+
+describe("import-folder provenance + watch list", () => {
+  it("persists sourcePath and queries it via knownSourcePaths", async () => {
+    const session = await createSession({ seedPrompt: "", config: { autoExtend: false } }, db);
+    const make = (path: string) =>
+      createUploadedTrack(
+        {
+          sessionId: session.id,
+          title: path,
+          kind: "audio",
+          blob: new Blob([new Uint8Array([1])], { type: "audio/mpeg" }),
+          mime: "audio/mpeg",
+          durationSec: 1,
+          sourcePath: path,
+        },
+        db,
+      );
+    await make("/music/a.mp3");
+    await make("/music/b.mp3");
+
+    const known = await knownSourcePaths(["/music/a.mp3", "/music/c.mp3"], db);
+    expect(known).toEqual(new Set(["/music/a.mp3"]));
+    expect(await knownSourcePaths([], db)).toEqual(new Set());
+  });
+
+  it("upserts folders by id-or-path without dropping others, and removes by id", async () => {
+    const id1 = await upsertImportFolder(
+      { path: "/m/one", setId: "ses_1", displayName: "one" },
+      db,
+    );
+    const id2 = await upsertImportFolder(
+      { path: "/m/two", setId: "ses_2", displayName: "two" },
+      db,
+    );
+    expect(id1).not.toBe(id2);
+
+    // Re-adding the same path (no id) merges into the existing entry, keeping its
+    // stable id + untouched fields (displayName), and never grows the list.
+    await upsertImportFolder({ path: "/m/one", setId: "ses_1b", lastImportedCount: 3 }, db);
+    let folders = (await getSettings(db)).importFolders ?? [];
+    expect(folders).toHaveLength(2);
+    const one = folders.find((f) => f.id === id1);
+    expect(one?.setId).toBe("ses_1b");
+    expect(one?.lastImportedCount).toBe(3);
+    expect(one?.displayName).toBe("one");
+
+    await removeImportFolder(id1, db);
+    folders = (await getSettings(db)).importFolders ?? [];
+    expect(folders.map((f) => f.id)).toEqual([id2]);
+  });
+});
+
+describe("delete (tracks / sets across the multi-set model)", () => {
+  const newSet = () => createSession({ seedPrompt: "", config: { autoExtend: false } }, db);
+  const makeTrack = (sessionId: string, title: string) =>
+    createUploadedTrack(
+      {
+        sessionId,
+        title,
+        kind: "audio",
+        blob: new Blob([new Uint8Array(4)]),
+        mime: "audio/mpeg",
+        durationSec: 1,
+      },
+      db,
+    );
+
+  it("deleteTrack removes the track from EVERY set, its blobs, and the play queue", async () => {
+    const a = await newSet();
+    const b = await newSet();
+    const t = await makeTrack(a.id, "shared");
+    await prependTrackIds(a.id, [t.id], db);
+    await prependTrackIds(b.id, [t.id], db);
+    await playQueueSet([t.id], {}, db);
+
+    await deleteTrack(t.id, db);
+
+    expect((await getSession(a.id, db))?.trackIds).toEqual([]);
+    expect((await getSession(b.id, db))?.trackIds).toEqual([]); // the multi-set fix
+    expect(await getTrack(t.id, db)).toBeUndefined();
+    expect(await db.mediaBlobs.where("trackId").equals(t.id).count()).toBe(0);
+    expect((await getPlayQueue(db)).entries).toEqual([]);
+  });
+
+  it("deleteTracks deletes several at once, keeping the rest", async () => {
+    const s = await newSet();
+    const t1 = await makeTrack(s.id, "one");
+    const t2 = await makeTrack(s.id, "two");
+    const keep = await makeTrack(s.id, "keep");
+    await prependTrackIds(s.id, [t1.id, t2.id, keep.id], db);
+
+    await deleteTracks([t1.id, t2.id], db);
+
+    expect((await getSession(s.id, db))?.trackIds).toEqual([keep.id]);
+    expect(await getTrack(t1.id, db)).toBeUndefined();
+    expect(await getTrack(t2.id, db)).toBeUndefined();
+    expect(await getTrack(keep.id, db)).toBeDefined();
+  });
+
+  it("removeTracksFromSession unlinks from ONE set, keeping the track + other sets + queue", async () => {
+    const a = await newSet();
+    const b = await newSet();
+    const t = await makeTrack(a.id, "shared");
+    await prependTrackIds(a.id, [t.id], db);
+    await prependTrackIds(b.id, [t.id], db);
+    await playQueueSet([t.id], {}, db);
+
+    await removeTracksFromSession(a.id, [t.id], db);
+
+    expect((await getSession(a.id, db))?.trackIds).toEqual([]);
+    expect((await getSession(b.id, db))?.trackIds).toEqual([t.id]); // still in B
+    expect(await getTrack(t.id, db)).toBeDefined(); // track + blob intact
+    expect(await db.mediaBlobs.where("trackId").equals(t.id).count()).toBeGreaterThan(0);
+    expect((await getPlayQueue(db)).entries).toHaveLength(1); // queue untouched
+  });
+
+  it("deleteSession delete-only keeps songs (in 所有歌曲) and drops bound import folders", async () => {
+    const s = await newSet();
+    const t = await makeTrack(s.id, "keep me");
+    await prependTrackIds(s.id, [t.id], db);
+    await setSessionCover(
+      { sessionId: s.id, blob: new Blob([new Uint8Array(2)]), mime: "image/png" },
+      db,
+    );
+    await upsertImportFolder({ path: "/m/x", setId: s.id, displayName: "x" }, db);
+
+    const res = await deleteSession(s.id, { purgeExclusiveTracks: false }, db);
+
+    expect(res.purgedTrackIds).toEqual([]);
+    expect(await getSession(s.id, db)).toBeUndefined();
+    expect(await getTrack(t.id, db)).toBeDefined(); // song survives globally
+    expect((await getSettings(db)).importFolders ?? []).toEqual([]); // watch dropped
+  });
+
+  it("deleteSession purge deletes ONLY songs exclusive to this set; shared songs survive", async () => {
+    const a = await newSet();
+    const b = await newSet();
+    const exclusive = await makeTrack(a.id, "only in A");
+    const shared = await makeTrack(a.id, "in A and B");
+    await prependTrackIds(a.id, [exclusive.id, shared.id], db);
+    await prependTrackIds(b.id, [shared.id], db);
+    await playQueueSet([exclusive.id, shared.id], {}, db);
+
+    const res = await deleteSession(a.id, { purgeExclusiveTracks: true }, db);
+
+    expect(res.purgedTrackIds).toEqual([exclusive.id]);
+    expect(await getTrack(exclusive.id, db)).toBeUndefined();
+    expect(await db.mediaBlobs.where("trackId").equals(exclusive.id).count()).toBe(0);
+    expect(await getTrack(shared.id, db)).toBeDefined(); // shared kept
+    expect((await getSession(b.id, db))?.trackIds).toEqual([shared.id]);
+    expect((await getPlayQueue(db)).entries.map((e) => e.trackId)).toEqual([shared.id]);
   });
 });

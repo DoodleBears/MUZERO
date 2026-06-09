@@ -17,6 +17,7 @@ import { useTranslation } from "react-i18next";
 import { EntityDetailView } from "@/components/library/entity-detail";
 import { EntityGrid, type LibraryEntityItem } from "@/components/library/entity-grid";
 import { TrackListSection } from "@/components/library/track-list-section";
+import { CoverCropDialog } from "@/components/track/cover-crop-dialog";
 import { TrackInspectorPanel } from "@/components/track/track-inspector-panel";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -40,11 +41,13 @@ import {
   listSessions,
   memoryNotesByTrack,
   setSessionCover,
+  setTrackCover,
   updateSession,
 } from "@/db/repositories";
-import type { DjSession, Track } from "@/db/types";
+import type { CropRect, DjSession, Track } from "@/db/types";
 import { useBackGesture } from "@/hooks/use-back-gesture";
-import { useObjectUrl, useTrackCoverUrl } from "@/hooks/use-media";
+import { useTrackCoverUrl } from "@/hooks/use-media";
+import { hasModalDialogOpen, isTypingTarget } from "@/lib/dom-keys";
 import { dragHasFiles, filesFromTransfer, IMAGE_ACCEPT, MEDIA_ACCEPT } from "@/lib/file-drop";
 import {
   type AlbumEntry,
@@ -112,16 +115,6 @@ function isGalleryModeToggle(event: KeyboardEvent): boolean {
 }
 
 const GALLERY_CARD_SELECTOR = "[data-gallery-card]";
-
-function isTypingTarget(el: EventTarget | null): boolean {
-  if (!(el instanceof HTMLElement)) return false;
-  const tag = el.tagName;
-  return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || el.isContentEditable;
-}
-
-function hasModalDialogOpen(): boolean {
-  return !!document.querySelector('[role="dialog"][aria-modal="true"]');
-}
 
 /**
  * 歌单 Gallery — a two-level surface. Level 1 browses every set like an album wall
@@ -602,7 +595,7 @@ export function SearchPage() {
       )}
     >
       <TooltipProvider>
-        <div className="mb-3 inline-flex rounded-lg border border-border bg-background/10 w-fit p-1">
+        <div className="mb-3 mx-auto flex rounded-lg border border-border bg-background/10 w-fit p-1">
           <ModeTab active={mode === "sets"} onClick={() => setModePref("sets")}>
             {t("gallery.modeSets")}
           </ModeTab>
@@ -966,11 +959,17 @@ function SetDetailView({
     const id = ids.find((tid) => trackById.get(tid)?.coverBlobId) ?? ids[0];
     return id ? trackById.get(id) : undefined;
   }, [session, trackById]);
-  const coverUrl = useSetCoverUrl(session?.coverBlobId, coverTrack);
+  const coverUrl = useSetCoverUrl(session?.coverBlobId, coverTrack, session?.coverCrop);
+  // A pasted/dropped/picked image, queued for the crop dialog. `prefer` decides
+  // which confirm button is primary (Enter): the set-cover thumbnail prefers the
+  // set cover; a page-wide paste prefers the selected SONG's cover.
+  const [coverChoice, setCoverChoice] = useState<{ file: File; prefer: "song" | "set" } | null>(
+    null,
+  );
 
-  function applyCover(files: File[]) {
+  function openCoverCrop(files: File[], prefer: "song" | "set") {
     const img = files.find((f) => f.type.startsWith("image/"));
-    if (img) void setSessionCover(setId, img, img.type || "image/jpeg");
+    if (img) setCoverChoice({ file: img, prefer });
   }
   function commitName() {
     const v = name.trim();
@@ -982,21 +981,23 @@ function SetDetailView({
     if (session && (session.description ?? "") !== v) void updateSession(setId, { description: v });
   }
 
-  // Paste an image while on this set's detail page → set its cover.
+  // Paste an image while on this set's detail page → open the crop dialog,
+  // defaulting to the selected SONG's cover (set cover is the second button).
   useEffect(() => {
     const onPaste = (e: ClipboardEvent) => {
+      const el = e.target as HTMLElement | null;
+      if (el && (el.isContentEditable || el.tagName === "INPUT" || el.tagName === "TEXTAREA"))
+        return;
       const img = filesFromTransfer(e.clipboardData).find((f) => f.type.startsWith("image/"));
-      if (img) {
-        e.preventDefault();
-        // Stop the bubble before the window-level GlobalDropZone paste listener,
-        // so a set-detail paste sets the set cover only (no second image modal).
-        e.stopPropagation();
-        void setSessionCover(setId, img, img.type || "image/jpeg");
-      }
+      if (!img) return;
+      e.preventDefault();
+      // Stop the bubble before the window-level GlobalDropZone paste listener.
+      e.stopPropagation();
+      setCoverChoice({ file: img, prefer: "song" });
     };
     document.addEventListener("paste", onPaste);
     return () => document.removeEventListener("paste", onPaste);
-  }, [setId]);
+  }, []);
 
   return (
     <motion.div
@@ -1032,7 +1033,7 @@ function SetDetailView({
             e.preventDefault();
             e.stopPropagation();
             setDragOver(false);
-            applyCover(filesFromTransfer(e.dataTransfer));
+            openCoverCrop(filesFromTransfer(e.dataTransfer), "set");
           }}
           className={cn(
             "group relative grid size-20 shrink-0 place-items-center overflow-hidden rounded-xl bg-secondary outline-none transition-shadow focus-visible:ring-2 focus-visible:ring-ring",
@@ -1054,7 +1055,7 @@ function SetDetailView({
           accept={IMAGE_ACCEPT}
           className="hidden"
           onChange={(e) => {
-            if (e.target.files) applyCover(Array.from(e.target.files));
+            if (e.target.files) openCoverCrop(Array.from(e.target.files), "set");
             e.target.value = "";
           }}
         />
@@ -1130,7 +1131,74 @@ function SetDetailView({
         />
         <TrackInspectorPanel track={selectedTrack} />
       </div>
+
+      {coverChoice && (
+        <SetCoverCropDialog
+          setId={setId}
+          file={coverChoice.file}
+          prefer={coverChoice.prefer}
+          selectedTrack={selectedTrack}
+          onClose={() => setCoverChoice(null)}
+        />
+      )}
     </motion.div>
+  );
+}
+
+/**
+ * Crop dialog for a set-detail cover image with two targets: the selected SONG's
+ * cover or the SET cover. `prefer` decides which is primary (Enter-confirmable);
+ * the song option is hidden when the set has no selectable track.
+ */
+function SetCoverCropDialog({
+  setId,
+  file,
+  prefer,
+  selectedTrack,
+  onClose,
+}: {
+  setId: string;
+  file: File;
+  prefer: "song" | "set";
+  selectedTrack: Track | undefined;
+  onClose: () => void;
+}) {
+  const { t } = useTranslation();
+  const [saving, setSaving] = useState(false);
+  const mime = file.type || "image/jpeg";
+
+  async function applySong(crop: CropRect) {
+    if (!selectedTrack || saving) return;
+    setSaving(true);
+    await setTrackCover({ trackId: selectedTrack.id, blob: file, mime, crop });
+    onClose();
+  }
+  async function applySet(crop: CropRect) {
+    if (saving) return;
+    setSaving(true);
+    await setSessionCover({ sessionId: setId, blob: file, mime, crop });
+    onClose();
+  }
+
+  const songAction = selectedTrack
+    ? { label: t("gallery.setAsSongCover"), onConfirm: (c: CropRect) => void applySong(c) }
+    : null;
+  const setAction = {
+    label: t("gallery.setAsSetCover"),
+    onConfirm: (c: CropRect) => void applySet(c),
+  };
+  const primary = prefer === "song" && songAction ? songAction : setAction;
+  const secondary = primary === songAction ? setAction : songAction;
+
+  return (
+    <CoverCropDialog
+      file={file}
+      saving={saving}
+      confirmLabel={primary.label}
+      onConfirm={primary.onConfirm}
+      secondary={secondary ?? undefined}
+      onCancel={onClose}
+    />
   );
 }
 
@@ -1142,13 +1210,11 @@ function SetDetailView({
 function useSetCoverUrl(
   coverBlobId: string | undefined,
   fallbackTrack: Track | undefined,
+  coverCrop?: CropRect,
 ): string | null {
-  const setBlob = useLiveQuery(
-    () => (coverBlobId ? db.mediaBlobs.get(coverBlobId).then((r) => r?.blob ?? null) : null),
-    [coverBlobId],
-    null,
-  );
-  const setUrl = useObjectUrl(setBlob);
+  // Reuse the track cover pipeline (blob resolve + non-destructive square crop)
+  // by feeding the set cover through the same shape.
+  const setUrl = useTrackCoverUrl(coverBlobId ? { coverBlobId, coverCrop } : undefined);
   const trackUrl = useTrackCoverUrl(fallbackTrack);
   return coverBlobId ? setUrl : trackUrl;
 }
@@ -1303,7 +1369,7 @@ function SetCard({
   onRequestDelete?: () => void;
 }) {
   const { t } = useTranslation();
-  const coverUrl = useSetCoverUrl(item.session.coverBlobId, coverTrack);
+  const coverUrl = useSetCoverUrl(item.session.coverBlobId, coverTrack, item.session.coverCrop);
   const count = t("gallery.count", { count: item.trackCount });
 
   // The play button overlays the card (sibling, not nested) so a button doesn't

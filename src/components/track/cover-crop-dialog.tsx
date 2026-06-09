@@ -17,11 +17,17 @@ export function CoverCropDialog({
   saving = false,
   onConfirm,
   onCancel,
+  confirmLabel,
+  secondary,
 }: {
   file: File;
   saving?: boolean;
   onConfirm: (rect: CropRect) => void;
   onCancel: () => void;
+  /** Override the primary button label (defaults to "Done"). */
+  confirmLabel?: string;
+  /** Optional second confirm action (a different target), rendered before the primary. */
+  secondary?: { label: string; onConfirm: (rect: CropRect) => void };
 }) {
   const { t } = useTranslation();
   const url = useObjectUrl(file);
@@ -29,24 +35,52 @@ export function CoverCropDialog({
   const [zoom, setZoom] = useState(1);
   const areaRef = useRef<Area | null>(null);
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onCancel();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onCancel]);
-
-  function confirm() {
+  function currentRect(): CropRect | null {
     const a = areaRef.current;
-    if (!a) return;
-    onConfirm({
+    if (!a) return null;
+    return {
       x: Math.round(a.x),
       y: Math.round(a.y),
       width: Math.round(a.width),
       height: Math.round(a.height),
-    });
+    };
   }
+
+  function confirm() {
+    const rect = currentRect();
+    if (rect) onConfirm(rect);
+  }
+
+  function confirmSecondary() {
+    const rect = currentRect();
+    if (rect && secondary) secondary.onConfirm(rect);
+  }
+
+  // Esc cancels; Enter confirms the PRIMARY action (unless a button is focused,
+  // which handles its own Enter natively). Depends on onConfirm so the latest
+  // target is used.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        onCancel();
+        return;
+      }
+      if (e.key !== "Enter" || e.repeat || e.isComposing) return;
+      const el = e.target;
+      if (el instanceof HTMLElement && el.closest("button")) return;
+      const a = areaRef.current;
+      if (!a) return;
+      e.preventDefault();
+      onConfirm({
+        x: Math.round(a.x),
+        y: Math.round(a.y),
+        width: Math.round(a.width),
+        height: Math.round(a.height),
+      });
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onCancel, onConfirm]);
 
   return (
     <div
@@ -91,13 +125,18 @@ export function CoverCropDialog({
             className="flex-1"
           />
         </div>
-        <div className="flex justify-end gap-2">
+        <div className="flex flex-wrap justify-end gap-2">
           <Button variant="ghost" onClick={onCancel}>
             {t("drop.cancel")}
           </Button>
+          {secondary && (
+            <Button variant="outline" onClick={confirmSecondary} loading={saving}>
+              {secondary.label}
+            </Button>
+          )}
           <Button onClick={confirm} loading={saving}>
             <CropIcon className="size-4" />
-            {t("crop.apply")}
+            {confirmLabel ?? t("crop.apply")}
           </Button>
         </div>
       </div>

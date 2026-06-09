@@ -471,6 +471,8 @@
     "setDescription": "説明を追加…",
     "coverHint": "ドロップ / ペースト / クリックでカバーを設定",
     "removeCover": "カスタムカバーを削除",
+    "setAsSongCover": "曲のカバーに設定",
+    "setAsSetCover": "セットのカバーに設定",
     "newSet": "新規セット",
     "addTracks": "曲を追加",
     "newSetName": "新しいセット",

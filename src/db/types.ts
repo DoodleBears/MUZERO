@@ -3,6 +3,7 @@ import type { LlmProviderPresetId } from "@/ai/llm-providers";
 import type { TrackBrief } from "@/dj/dj-brief-schema";
 import type { CloudPresetId } from "@/musicgen/presets";
 import type { MusicGenProviderId } from "@/musicgen/registry";
+import type { ShortcutGesture } from "@/shortcuts/registry";
 import type { VisualizerStyleId } from "@/visualizer/types";
 
 /** Lifecycle of a single track. Uploaded tracks are born "ready". */
@@ -231,6 +232,8 @@ export interface DjSession {
    * When unset, the UI falls back to the topmost (newest) track's cover.
    */
   coverBlobId?: string;
+  /** Non-destructive square crop for the set cover (mirrors `Track.coverCrop`). */
+  coverCrop?: CropRect;
   /** Ordered, curated members. Newest is PREPENDED to the front (= the cover). */
   trackIds: string[];
   status: "idle" | "running";
@@ -442,6 +445,13 @@ export interface AppSettings {
   presenceEnabled?: boolean;
   /** Remembered local folders to incrementally re-sync on launch (desktop only). */
   importFolders?: ImportFolder[];
+  /**
+   * User keyboard-shortcut overrides, keyed by stable action id (codename layer,
+   * hard rule #4). Sparse: only changed actions appear; `[]` = explicitly unbound
+   * (vs absent → built-in default). Device-local, never synced. See the
+   * configurable-keyboard-shortcuts PRD.
+   */
+  shortcutOverrides?: Record<string, ShortcutGesture[]>;
 }
 
 /**

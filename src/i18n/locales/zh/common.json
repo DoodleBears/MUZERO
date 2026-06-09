@@ -471,6 +471,8 @@
     "setDescription": "添加描述…",
     "coverHint": "拖拽 / 粘贴 / 点击设置封面",
     "removeCover": "移除自定义封面",
+    "setAsSongCover": "设为歌曲封面",
+    "setAsSetCover": "设为歌单封面",
     "newSet": "新建歌单",
     "addTracks": "添加歌曲",
     "newSetName": "新歌单",
