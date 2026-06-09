@@ -1743,7 +1743,7 @@ For a large shared playlist with many trusted devices, the UI should:
 
 - [x] Implement remote diff against local DB.
 - [x] Add `SyncMutation` rows for local set/track/memory edits.
-- [ ] Upload per-device set mutation files under `sets/<setId>/mutations/<devicePublicId>/`.
+- [x] Upload per-device set mutation files under `sets/<setId>/mutations/<devicePublicId>/`.
 - [ ] Fold non-overlapping set mutations into the next owner-published `index.json` snapshot.
 - [ ] Add conflict detection for set/track/memory edits changed on both sides.
 - [x] Add ETag/hash/conditional-write guard before overwriting mutable remote JSON objects.
@@ -2028,5 +2028,6 @@ Do not record secrets, full signed URLs, or media content.
 | 2026-06-09 | MUZERO | Phase 5 uploaded device avatar export added: `DeviceRecord.avatarBlobId` media now publishes as a content-addressed `device-avatar` object and `DevicePublicProfile.avatar` references the remote object with mime/bytes/hash metadata. |
 | 2026-06-09 | MUZERO | Phase 5 profile publish policy wired into export planning: `buildR2ExportPlanForDrive` now emits device profiles/avatars only when the device opted in and the target owner/trusted R2 drive has local write credentials, while read-only/shared targets get manifest-only plans. |
 | 2026-06-09 | MUZERO | Phase 4 conditional R2 writes added: mutable export objects can now carry `If-Match` / `If-None-Match` preconditions, and `publishR2ExportPlan` signs and sends those headers so stale JSON overwrites can fail instead of silently clobbering remote changes. |
+| 2026-06-09 | MUZERO | Phase 4 per-device set mutation export added: unsynced local `SyncMutation` rows for set edits now publish as immutable JSON files under `sets/<setId>/mutations/<devicePublicId>/`, preserving base ETag/revision and payload for later owner folding/conflict review. |
 | 2026-06-09 | MUZERO | Phase 5 optional `stats/index.json` discovery completed for stats sync: device entries can point to aggregate cache, checkpoint, and latest immutable event segment without making the index the write-hot source of truth. |
 | 2026-06-09 | MUZERO | Phase 5 stats/profile write policy added: only owner/trusted drives with local R2 credentials may receive stats or opted-in device profiles, keeping read-only shared-link listener data local by default. |

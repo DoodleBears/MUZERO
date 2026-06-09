@@ -269,6 +269,57 @@ describe("buildR2ExportPlan", () => {
     });
   });
 
+  it("exports per-device set mutation files for unsynced local edits", async () => {
+    await db.syncMutations.put({
+      id: "mut_1",
+      driveId: "drv_1",
+      devicePublicId: "dvc_1",
+      scope: "set",
+      entityId: "ses_1",
+      action: "set-metadata-updated",
+      base: {
+        remoteKey: "sets/ses_1/index.json",
+        etag: '"etag-1"',
+        revision: 3,
+        updatedAt: 1_000,
+      },
+      payload: { name: "Renamed set" },
+      createdAt: 2_000,
+    });
+    await db.syncMutations.put({
+      id: "mut_synced",
+      driveId: "drv_1",
+      devicePublicId: "dvc_1",
+      scope: "set",
+      entityId: "ses_1",
+      action: "track-added-to-set",
+      payload: { trackId: "trk_old" },
+      createdAt: 1_000,
+      syncedAt: 3_000,
+    });
+
+    const plan = await buildR2ExportPlan({
+      driveId: "drv_1",
+      libraryId: "lib_1",
+      baseUrl: "https://music.example.com/muzero/",
+      setIds: [],
+      db,
+    });
+    const mutation = plan.objects.find((object) => object.kind === "set-mutation");
+
+    expect(mutation?.key).toBe("sets/ses_1/mutations/dvc_1/0000000002000-mut_1.json");
+    expect(JSON.parse(String(mutation?.body))).toMatchObject({
+      schema: "muzero-r2-set-mutation-v1",
+      mutation: {
+        id: "mut_1",
+        action: "set-metadata-updated",
+        base: { etag: '"etag-1"', revision: 3 },
+        payload: { name: "Renamed set" },
+      },
+    });
+    expect(plan.objects.filter((object) => object.kind === "set-mutation")).toHaveLength(1);
+  });
+
   it("exports immutable per-device playback event segments", async () => {
     await seedSet();
     await db.devices.put({

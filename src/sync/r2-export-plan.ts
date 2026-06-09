@@ -10,6 +10,7 @@ import type {
   Memory,
   PlaybackAggregate,
   PlaybackEvent,
+  SyncMutation,
   Track,
 } from "@/db/types";
 import {
@@ -27,6 +28,7 @@ export type R2ExportObjectKind =
   | "memory-photo"
   | "device-avatar"
   | "set-index"
+  | "set-mutation"
   | "device-profile"
   | "devices-index"
   | "stats-events-segment"
@@ -202,10 +204,12 @@ export async function buildR2ExportPlan(input: R2ExportPlanInput): Promise<R2Exp
   }
 
   const manifest = createManifest(input, setIndexes);
+  const mutationObjects = await createSetMutationObjects(input.driveId, db);
   const deviceObjects = await createDeviceObjects(db, input.playbackEventFlush, input.deviceExport);
   const objects = [
     ...binaryObjects,
     ...setIndexes.map(({ object }) => object),
+    ...mutationObjects,
     ...deviceObjects,
     createJsonObject("manifest", "manifest.json", manifest),
   ];
@@ -276,7 +280,7 @@ function toRemoteMemory(
 }
 
 function createJsonObject(
-  kind: Exclude<R2ExportObjectKind, "media" | "cover" | "memory-photo">,
+  kind: Exclude<R2ExportObjectKind, "media" | "cover" | "memory-photo" | "device-avatar">,
   key: string,
   value: unknown,
   refs: Pick<R2ExportObject, "setId"> = {},
@@ -290,6 +294,30 @@ function createJsonObject(
     body,
     ...refs,
   };
+}
+
+async function createSetMutationObjects(driveId: string, db: MuzeroDB): Promise<R2ExportObject[]> {
+  const rows = await db.syncMutations.where("driveId").equals(driveId).toArray();
+  return rows
+    .filter((mutation) => mutation.syncedAt == null && mutation.scope === "set")
+    .sort((a, b) => a.createdAt - b.createdAt)
+    .map((mutation) =>
+      createJsonObject(
+        "set-mutation",
+        setMutationKey(mutation),
+        {
+          schema: "muzero-r2-set-mutation-v1",
+          mutation,
+        },
+        { setId: mutation.entityId },
+      ),
+    );
+}
+
+function setMutationKey(mutation: SyncMutation): string {
+  return `sets/${mutation.entityId}/mutations/${mutation.devicePublicId}/${String(
+    mutation.createdAt,
+  ).padStart(13, "0")}-${mutation.id}.json`;
 }
 
 function createManifest(
