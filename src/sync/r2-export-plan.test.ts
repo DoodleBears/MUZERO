@@ -125,6 +125,43 @@ describe("buildR2ExportPlan", () => {
     expect(plan.objects.map((object) => object.kind)).toEqual(["set-index", "manifest"]);
   });
 
+  it("keeps historical memory author snapshots when the local device profile changes", async () => {
+    await seedSet();
+    await db.devices.put({
+      id: "dev_local",
+      publicId: "dvc_studio",
+      name: "Renamed laptop",
+      avatarSeed: "green",
+      platform: "browser",
+      appVersion: "0.1.0",
+      publishProfile: true,
+      profileRevision: 2,
+      createdAt: 100,
+      lastSeenAt: 300,
+    });
+
+    const plan = await buildR2ExportPlan({
+      driveId: "drv_1",
+      libraryId: "lib_1",
+      baseUrl: "https://music.example.com/muzero/",
+      setIds: ["ses_1"],
+      db,
+    });
+    const setIndex = JSON.parse(
+      String(plan.objects.find((object) => object.kind === "set-index")?.body),
+    );
+
+    expect(setIndex.tracks[0].memories[0].author).toEqual({
+      devicePublicId: "dvc_studio",
+      displayName: "Studio laptop",
+      avatarSeed: "blue",
+    });
+    const deviceProfile = JSON.parse(
+      String(plan.objects.find((object) => object.kind === "device-profile")?.body),
+    );
+    expect(deviceProfile.displayName).toBe("Renamed laptop");
+  });
+
   it("adds current-device profile, stats aggregate, and owner-maintained indexes", async () => {
     await seedSet();
     await db.devices.put({
