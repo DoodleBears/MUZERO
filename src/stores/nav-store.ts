@@ -8,22 +8,54 @@ import type { Tab } from "@/components/nav/dock-nav";
  * pattern as the locale (`muzero-locale`) and theme (`muzero-theme`); core data
  * still lives in IndexedDB.
  */
+/**
+ * An ephemeral "open this derived entity in the library" intent, set from any
+ * track surface (rows, inspector — which render outside the library tab) and
+ * consumed by the library page once it mounts/activates. Artist resolves by
+ * normalized name; album resolves by track membership (compilation-safe), so the
+ * caller never needs the derived album key.
+ */
+export type LibraryEntityTarget =
+  | { kind: "artist"; name: string }
+  | { kind: "album"; trackId: string };
+
 interface NavState {
   tab: Tab;
   setTab: (tab: Tab) => void;
   /** Active item in the two-column Settings page (sidebar → detail). */
   settingsItem: string;
   setSettingsItem: (item: string) => void;
+  /** Pending library entity to open; ephemeral, never persisted. */
+  pendingLibraryEntity: LibraryEntityTarget | null;
+  /** Switch to the library tab and queue an artist to open. */
+  openArtist: (name: string) => void;
+  /** Switch to the library tab and queue the album containing a track. */
+  openAlbumForTrack: (trackId: string) => void;
+  /** Read + clear the pending entity (the library page calls this on mount). */
+  consumeLibraryEntity: () => LibraryEntityTarget | null;
 }
 
 export const useNavStore = create<NavState>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       tab: "sessions",
       setTab: (tab) => set({ tab }),
       settingsItem: "appearance",
       setSettingsItem: (settingsItem) => set({ settingsItem }),
+      pendingLibraryEntity: null,
+      openArtist: (name) => set({ tab: "search", pendingLibraryEntity: { kind: "artist", name } }),
+      openAlbumForTrack: (trackId) =>
+        set({ tab: "search", pendingLibraryEntity: { kind: "album", trackId } }),
+      consumeLibraryEntity: () => {
+        const pending = get().pendingLibraryEntity;
+        if (pending) set({ pendingLibraryEntity: null });
+        return pending;
+      },
     }),
-    { name: "muzero-nav" },
+    {
+      name: "muzero-nav",
+      // Only persist navigation position — never the ephemeral open intent.
+      partialize: (state) => ({ tab: state.tab, settingsItem: state.settingsItem }),
+    },
   ),
 );

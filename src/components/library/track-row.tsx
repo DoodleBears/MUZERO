@@ -8,7 +8,7 @@ import {
   TriangleAlert,
   Video,
 } from "lucide-react";
-import { type KeyboardEvent, type MouseEvent, memo, useMemo, useState } from "react";
+import { Fragment, type KeyboardEvent, type MouseEvent, memo, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Command, type CommandItem } from "@/components/ui/command";
 import { Disc3Icon } from "@/components/ui/disc-3";
@@ -21,8 +21,9 @@ import {
 } from "@/components/ui/popover";
 import type { DjSession, Track } from "@/db/types";
 import { useTrackCoverUrl } from "@/hooks/use-media";
-import { trackSubtitle } from "@/lib/track-display";
+import { trackAlbum, trackArtists, trackSubtitle } from "@/lib/track-display";
 import { cn, formatDuration } from "@/lib/utils";
+import { useNavStore } from "@/stores/nav-store";
 
 interface TrackRowProps {
   track: Track;
@@ -37,6 +38,51 @@ interface TrackRowProps {
   onDownloadOriginal: () => void;
   onExportWithMetadata: () => void;
   onAddToSession: (sessionId: string) => void;
+}
+
+/** A clickable artist/album segment in a track's subtitle → opens that entity in
+ *  the library. Stops propagation so it never triggers the row's play/select. */
+function EntityLink({ onOpen, children }: { onOpen: () => void; children: React.ReactNode }) {
+  return (
+    <button
+      type="button"
+      onClick={(event) => {
+        event.stopPropagation();
+        onOpen();
+      }}
+      onDoubleClick={(event) => event.stopPropagation()}
+      className="rounded outline-none hover:text-foreground hover:underline focus-visible:text-foreground focus-visible:underline"
+    >
+      {children}
+    </button>
+  );
+}
+
+/**
+ * Track subtitle with clickable artist(s) + album when embedded metadata exists
+ * (any track surface → jump to the library entity). Falls back to the plain
+ * caption/note/title line for generated or untagged tracks.
+ */
+function TrackSubtitle({ track }: { track: Track }) {
+  const artists = trackArtists(track);
+  const album = trackAlbum(track);
+  if (artists.length === 0 && !album) return <>{trackSubtitle(track)}</>;
+  return (
+    <>
+      {artists.map((name, index) => (
+        <Fragment key={name}>
+          {index > 0 && ", "}
+          <EntityLink onOpen={() => useNavStore.getState().openArtist(name)}>{name}</EntityLink>
+        </Fragment>
+      ))}
+      {artists.length > 0 && album && <span aria-hidden> · </span>}
+      {album && (
+        <EntityLink onOpen={() => useNavStore.getState().openAlbumForTrack(track.id)}>
+          {album}
+        </EntityLink>
+      )}
+    </>
+  );
 }
 
 /** Shown in the thumbnail slot while a track is still pending/generating/failed. */
@@ -107,12 +153,25 @@ export const TrackRow = memo(function TrackRow({
     [sessions, track.id],
   );
 
+  // Two-tap activation: the first interaction selects the row (revealing its
+  // info in the inspector); interacting again with an already-selected row that
+  // isn't the one playing switches playback to it. Lists without a selection
+  // model (queue / Now Playing) leave `isSelected` undefined, so `onView` is the
+  // play handler there and a single click plays straight away.
+  function activate() {
+    if (isSelected && !isCurrent && !disabled) {
+      onPlay();
+      return;
+    }
+    onView();
+  }
+
   function handleRowKeyDown(event: KeyboardEvent<HTMLDivElement>) {
     if (event.target !== event.currentTarget) return;
     if (event.key !== "Enter" && event.key !== " ") return;
     event.preventDefault();
     event.stopPropagation();
-    onView();
+    activate();
   }
 
   function eventStartedInActions(event: MouseEvent<HTMLDivElement>) {
@@ -123,14 +182,15 @@ export const TrackRow = memo(function TrackRow({
 
   function handleRowClick(event: MouseEvent<HTMLDivElement>) {
     if (eventStartedInActions(event)) return;
-    onView();
+    activate();
   }
 
+  // The two single clicks of a double-click already run select-then-play (the
+  // selection update is flushed synchronously, so the second click sees it);
+  // this only stops the double-click from selecting the row's text.
   function handleRowDoubleClick(event: MouseEvent<HTMLDivElement>) {
     if (eventStartedInActions(event)) return;
-    if (disabled || isSelected) return;
     event.preventDefault();
-    onPlay();
   }
 
   return (
@@ -181,9 +241,11 @@ export const TrackRow = memo(function TrackRow({
             {track.kind === "video" && <Video className="size-3 shrink-0 text-muted-foreground" />}
           </div>
           <div className="truncate text-xs text-muted-foreground">
-            {track.status === "failed"
-              ? (track.error ?? t("track.generationFailed"))
-              : trackSubtitle(track)}
+            {track.status === "failed" ? (
+              (track.error ?? t("track.generationFailed"))
+            ) : (
+              <TrackSubtitle track={track} />
+            )}
           </div>
         </div>
       </div>

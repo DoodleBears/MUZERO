@@ -3,7 +3,9 @@ import { useTranslation } from "react-i18next";
 import { Disc3Icon } from "@/components/ui/disc-3";
 import type { Track } from "@/db/types";
 import { useTrackCoverUrl } from "@/hooks/use-media";
+import { trackAlbum, trackArtists } from "@/lib/track-display";
 import { cn, formatDuration } from "@/lib/utils";
+import { useNavStore } from "@/stores/nav-store";
 import { AnnotationEditor } from "./annotation-editor";
 
 interface TrackInspectorPanelProps {
@@ -45,21 +47,40 @@ export function TrackInspectorPanel({ className, track }: TrackInspectorPanelPro
   );
 }
 
+interface MetadataFact {
+  label: string;
+  value: string;
+  onOpen?: () => void;
+}
+
 function TrackMetadataSummary({ track }: { track: Track }) {
   const { t } = useTranslation();
   const coverUrl = useTrackCoverUrl(track);
   const metadata = track.mediaMetadata;
-  const artist = metadata?.artists?.join(", ") || metadata?.albumArtists?.join(", ");
-  const album = metadata?.album;
+  const artists = trackArtists(track);
+  const artist = artists.join(", ") || metadata?.albumArtists?.join(", ");
+  const album = trackAlbum(track);
   const genres = metadata?.genres?.join(", ");
   const year = metadata?.year ? String(metadata.year) : metadata?.date;
   const facts = [
-    artist ? { label: t("gallery.trackArtist"), value: artist } : undefined,
-    album ? { label: t("gallery.trackAlbum"), value: album } : undefined,
+    artist
+      ? {
+          label: t("gallery.trackArtist"),
+          value: artist,
+          onOpen: artists[0] ? () => useNavStore.getState().openArtist(artists[0]) : undefined,
+        }
+      : undefined,
+    album
+      ? {
+          label: t("gallery.trackAlbum"),
+          value: album,
+          onOpen: () => useNavStore.getState().openAlbumForTrack(track.id),
+        }
+      : undefined,
     genres ? { label: t("gallery.trackGenre"), value: genres } : undefined,
     year ? { label: t("gallery.trackYear"), value: year } : undefined,
     { label: t("gallery.trackDuration"), value: formatDuration(track.durationSec) },
-  ].filter((fact): fact is { label: string; value: string } => !!fact);
+  ].filter((fact): fact is MetadataFact => !!fact);
 
   return (
     <section className="flex flex-col gap-3">
@@ -84,7 +105,19 @@ function TrackMetadataSummary({ track }: { track: Track }) {
           {facts.map((fact) => (
             <div key={fact.label} className="grid grid-cols-[5.5rem_minmax(0,1fr)] gap-2">
               <dt className="text-muted-foreground">{fact.label}</dt>
-              <dd className="truncate text-foreground">{fact.value}</dd>
+              <dd className="truncate text-foreground">
+                {fact.onOpen ? (
+                  <button
+                    type="button"
+                    onClick={fact.onOpen}
+                    className="max-w-full truncate rounded text-left outline-none hover:underline focus-visible:underline"
+                  >
+                    {fact.value}
+                  </button>
+                ) : (
+                  fact.value
+                )}
+              </dd>
             </div>
           ))}
         </dl>

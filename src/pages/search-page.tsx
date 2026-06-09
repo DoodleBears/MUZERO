@@ -30,8 +30,11 @@ import { dragHasFiles, filesFromTransfer, IMAGE_ACCEPT, MEDIA_ACCEPT } from "@/l
 import {
   type AlbumEntry,
   type ArtistEntry,
+  albumsForArtist,
   buildAlbumIndex,
   buildArtistIndex,
+  findAlbumForTrack,
+  findArtistByName,
 } from "@/lib/library-index";
 import {
   filterSets,
@@ -43,6 +46,7 @@ import {
 import { searchTracks } from "@/lib/track-search";
 import { cn } from "@/lib/utils";
 import { transitionState } from "@/lib/view-transition-react";
+import { useNavStore } from "@/stores/nav-store";
 import { usePlayerStore } from "@/stores/player-store";
 import { useUploadTargetStore } from "@/stores/upload-target-store";
 import { matchesRemoteSearchTrack } from "@/sync/r2-search-catalog";
@@ -190,6 +194,34 @@ export function SearchPage() {
     [albumIndex, selectedAlbumKey],
   );
 
+  // Open an artist/album requested from elsewhere (track rows / inspector render
+  // outside this page). Resolve against the derived indexes once they're ready;
+  // leave the intent pending until the entity exists (the index may still be
+  // building from the track liveQuery).
+  const pendingEntity = useNavStore((s) => s.pendingLibraryEntity);
+  const consumeLibraryEntity = useNavStore((s) => s.consumeLibraryEntity);
+  useEffect(() => {
+    if (!pendingEntity) return;
+    if (pendingEntity.kind === "artist") {
+      const entry = findArtistByName(artistIndex, pendingEntity.name);
+      if (!entry) return;
+      setMode("artists");
+      if (typeof localStorage !== "undefined") localStorage.setItem(MODE_KEY, "artists");
+      setSelectedSetId(null);
+      setSelectedAlbumKey(null);
+      setSelectedArtistKey(entry.key);
+    } else {
+      const entry = findAlbumForTrack(albumIndex, pendingEntity.trackId);
+      if (!entry) return;
+      setMode("albums");
+      if (typeof localStorage !== "undefined") localStorage.setItem(MODE_KEY, "albums");
+      setSelectedSetId(null);
+      setSelectedArtistKey(null);
+      setSelectedAlbumKey(entry.key);
+    }
+    consumeLibraryEntity();
+  }, [pendingEntity, artistIndex, albumIndex, consumeLibraryEntity]);
+
   const items = useMemo<SetGalleryItem[]>(
     () =>
       sessions.map((s) => {
@@ -321,15 +353,27 @@ export function SearchPage() {
     const tracks = selectedArtist.trackIds
       .map((id) => trackById.get(id))
       .filter((tr): tr is Track => !!tr);
+    const artistAlbums = albumsForArtist(albumIndex, selectedArtist.trackIds).map((album) => ({
+      key: album.key,
+      label: albumDisplayLabel(album, t),
+      coverTrack: album.coverTrackId ? trackById.get(album.coverTrackId) : undefined,
+    }));
     return (
       <EntityDetailView
         kind="artist"
         title={artistDisplayLabel(selectedArtist, t)}
-        subtitle={t("gallery.albumCount", { count: selectedArtist.albumKeys.length })}
+        subtitle={t("gallery.albumCount", { count: artistAlbums.length })}
         coverTrack={
           selectedArtist.coverTrackId ? trackById.get(selectedArtist.coverTrackId) : undefined
         }
         tracks={tracks}
+        albums={artistAlbums}
+        onOpenAlbum={(key) =>
+          transitionState(() => {
+            setSelectedArtistKey(null);
+            setSelectedAlbumKey(key);
+          })
+        }
         onBack={() => transitionState(() => setSelectedArtistKey(null))}
       />
     );

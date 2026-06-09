@@ -3,8 +3,11 @@ import type { Track, TrackMediaMetadata } from "@/db/types";
 import {
   type AlbumEntry,
   type ArtistEntry,
+  albumsForArtist,
   buildAlbumIndex,
   buildArtistIndex,
+  findAlbumForTrack,
+  findArtistByName,
 } from "./library-index";
 import { normalizeArtistName, trackAlbum, trackArtists } from "./track-display";
 
@@ -213,6 +216,41 @@ describe("buildAlbumIndex", () => {
     const entry = idx.find((e) => !e.bucket) as AlbumEntry;
     expect(entry.year).toBe(2021);
     expect(entry.coverTrackId).toBe("1");
+  });
+});
+
+describe("entity lookups (cross-linking)", () => {
+  const tracks = [
+    track({
+      id: "1",
+      mediaMetadata: md({ artists: ["Yumi"], album: "One", albumArtists: ["Yumi"] }),
+    }),
+    track({
+      id: "2",
+      mediaMetadata: md({ artists: ["Yumi", "Ko"], album: "Now", albumArtists: ["VA"] }),
+    }),
+    track({ id: "3", mediaMetadata: md({ artists: ["Ko"], album: "Now", albumArtists: ["VA"] }) }),
+  ];
+  const artists = buildArtistIndex(tracks);
+  const albums = buildAlbumIndex(tracks);
+
+  it("findArtistByName matches on normalized name", () => {
+    expect(findArtistByName(artists, "  YUMI ")?.key).toBe("yumi");
+    expect(findArtistByName(artists, "nobody")).toBeUndefined();
+  });
+
+  it("findAlbumForTrack resolves the album containing a track (compilation-safe)", () => {
+    expect(findAlbumForTrack(albums, "1")?.name).toBe("One");
+    // track 2 is on the VA compilation "Now"
+    expect(findAlbumForTrack(albums, "2")?.isCompilation).toBe(true);
+  });
+
+  it("albumsForArtist includes compilations the artist contributed to", () => {
+    const yumi = findArtistByName(artists, "Yumi") as ArtistEntry;
+    const names = albumsForArtist(albums, yumi.trackIds)
+      .map((a) => a.name)
+      .sort();
+    expect(names).toEqual(["Now", "One"]);
   });
 });
 

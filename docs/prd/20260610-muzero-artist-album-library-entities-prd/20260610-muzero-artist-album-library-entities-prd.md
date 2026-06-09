@@ -13,7 +13,7 @@
 |-------|------|--------|------|
 | 1 | Derived Artist/Album Index (pure lib) | ✅ Completed | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | Library Browse Tabs: 专辑 / 歌手 (+ basic detail) | ✅ Completed | [Phase 2 Checklist](#phase-2-checklist) |
-| 3 | Cross-Linking Click-Through + Artist Albums Strip | 🔲 Pending | [Phase 3 Checklist](#phase-3-checklist) |
+| 3 | Cross-Linking Click-Through + Artist Albums Strip | ✅ Completed | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | Faceted Search (title / artist / album) | 🔲 Pending | [Phase 4 Checklist](#phase-4-checklist) |
 | 5 | Listening Stats by Artist & Album | 🔲 Pending | [Phase 5 Checklist](#phase-5-checklist) |
 
@@ -311,15 +311,16 @@ Routing reuses the existing level-1 ⇄ level-2 pattern (`selectedSetId` → `Se
 **Goal:** Artist/album are clickable everywhere a track shows them, and an artist's detail surfaces its albums.
 
 **Tasks:**
-- [ ] Make artist/album clickable in [`track-row.tsx`](../../../src/components/library/track-row.tsx) subtitle and in `TrackMetadataSummary` ([`track-inspector-panel.tsx`](../../../src/components/track/track-inspector-panel.tsx)) → open the entity detail. Needs a shared "navigate to entity" channel (e.g. a small UI store or callback) since track rows render outside `SearchPage`.
-- [ ] Artist detail: an "albums strip" (the artist's `AlbumEntry`s) above the track list.
-- [ ] (Stretch) A real cross-set "Play all" once an ad-hoc queue entry point exists.
+- [x] Shared "navigate to entity" channel: ephemeral intent on [`nav-store.ts`](../../../src/stores/nav-store.ts) (`openArtist`/`openAlbumForTrack`/`consumeLibraryEntity`, persisted state limited to `tab`/`settingsItem`). Artist resolves by normalized name; album by track membership (compilation-safe) via tested `findArtistByName`/`findAlbumForTrack`/`albumsForArtist` (+3 cases).
+- [x] Make artist/album clickable in [`track-row.tsx`](../../../src/components/library/track-row.tsx) subtitle (per-artist) and in `TrackMetadataSummary` ([`track-inspector-panel.tsx`](../../../src/components/track/track-inspector-panel.tsx)); `SearchPage` consumes the intent and opens the detail.
+- [x] Artist detail: an "albums strip" (compilation-aware, via `albumsForArtist`) above the track list, tapping opens the album.
+- [ ] (Stretch — deferred) A real cross-set "Play all" once an ad-hoc queue entry point exists.
 
 #### Phase 3 Checklist
-- [ ] Click artist in a track row → artist detail with all their tracks (Req 1).
-- [ ] Click album in a track row / inspector → album detail in track order (Req 1).
-- [ ] Artist detail shows the artist's albums; tapping one opens the album.
-- [ ] Back navigation returns to the correct mode.
+- [x] Click artist in a track row → artist detail with all their tracks (Req 1). _Verified live._
+- [x] Click album (artist albums strip / inspector) → album detail in track order (Req 1). _Verified live._
+- [x] Artist detail shows the artist's albums; tapping one opens the album. _Verified live (header "2 张专辑", strip)._
+- [x] Back navigation returns to the correct mode.
 
 ### Phase 4: Faceted Search (title / artist / album)
 
@@ -409,6 +410,7 @@ Routing reuses the existing level-1 ⇄ level-2 pattern (`selectedSetId` → `Se
 | 2026-06-10 | MUZERO | Resolved all 5 open questions (long-term-optimal): (1) artist/album = derived current-truth analytics dimension over the event log, cross-drive via synced `RemoteSearchTrack.mediaMetadata`, never a synced `PlaybackAggregate` scope; (2) show "Unknown Artist/Album" buckets; (3) "AI Generated" pseudo-artist; (4) album identity = album + albumArtist (MusicBrainz convention) with Various-Artists handling, year excluded; (5) grouped facets **and** scoped `artist:`/`album:` tokens. Propagated into §3.1/§3.2/§3.4/§4/§6/§7. |
 | 2026-06-10 | MUZERO | **Phase 1 completed (TDD).** Added `normalizeArtistName`/`trackArtists`/`trackAlbum` to `track-display.ts` and the pure `library-index.ts` (`buildArtistIndex`/`buildAlbumIndex`, two-pass compilation-aware grouping, Unknown/Generated/Various-Artists buckets). 18 unit cases, typecheck + biome clean. |
 | 2026-06-10 | MUZERO | **Phase 2 completed.** Added 专辑/歌手 browse tabs to `search-page.tsx` + shared `entity-grid.tsx`/`entity-detail.tsx` (read-only detail, per-row `playTrack`), `~` cycles four modes, i18n across en/zh/ja/ko. Verified live in the browser preview (tabs/placeholders/empty states, no console errors). Consolidated the speculative artist-grid/album-grid/artist-detail/album-detail into two shared components; re-scoped Phase 3 to cross-linking click-through + an artist albums strip (detail views shipped in Phase 2). |
+| 2026-06-10 | MUZERO | **Phase 3 completed.** Clickable artist/album in track-row subtitles + inspector facts, routed through an ephemeral `nav-store` intent (persists only tab/settingsItem) consumed by `SearchPage`; artist resolves by normalized name, album by membership (`findArtistByName`/`findAlbumForTrack`/`albumsForArtist`, +3 TDD cases). Artist detail gained a compilation-aware albums strip. Verified live with seeded tracks: row→artist detail, strip→album detail, no console errors. Cross-set "Play all" deferred (no ad-hoc queue entry point yet). |
 
 ---
 

@@ -10,11 +10,19 @@ import { transitionState } from "@/lib/view-transition-react";
 import { usePlayerStore } from "@/stores/player-store";
 import { VirtualTrackList } from "./virtual-track-list";
 
+/** A pre-resolved album for the artist-detail albums strip. */
+export interface EntityStripItem {
+  key: string;
+  label: string;
+  coverTrack?: Track;
+}
+
 /**
  * Read-only detail page for a derived library entity (one artist or one album).
  * Mirrors the set detail layout — header + virtualized track list + inspector —
  * but the header is not editable (artist/album are derived, not stored). Tapping
- * a row plays that track in its own set context via `playTrack`.
+ * a row plays that track in its own set context via `playTrack`. An artist detail
+ * also shows a horizontal strip of the artist's albums.
  */
 export function EntityDetailView({
   kind,
@@ -22,6 +30,8 @@ export function EntityDetailView({
   subtitle,
   coverTrack,
   tracks,
+  albums,
+  onOpenAlbum,
   onBack,
 }: {
   kind: "artist" | "album";
@@ -29,6 +39,8 @@ export function EntityDetailView({
   subtitle: string;
   coverTrack: Track | undefined;
   tracks: Track[];
+  albums?: EntityStripItem[];
+  onOpenAlbum?: (key: string) => void;
   onBack: () => void;
 }) {
   const { t } = useTranslation();
@@ -91,6 +103,14 @@ export function EntityDetailView({
         </div>
       </div>
 
+      {albums && albums.length > 0 && onOpenAlbum && (
+        <div className="no-scrollbar mb-3 flex gap-2 overflow-x-auto">
+          {albums.map((album) => (
+            <AlbumStripCard key={album.key} album={album} onOpen={() => onOpenAlbum(album.key)} />
+          ))}
+        </div>
+      )}
+
       <div className="grid min-h-0 flex-1 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(280px,360px)]">
         <div className="min-h-0">
           <VirtualTrackList
@@ -105,5 +125,28 @@ export function EntityDetailView({
         <TrackInspectorPanel track={selectedTrack} />
       </div>
     </motion.div>
+  );
+}
+
+/** One album tile in the artist-detail albums strip. */
+function AlbumStripCard({ album, onOpen }: { album: EntityStripItem; onOpen: () => void }) {
+  const { t } = useTranslation();
+  const coverUrl = useTrackCoverUrl(album.coverTrack);
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      aria-label={t("gallery.openEntity", { name: album.label })}
+      className="flex w-28 shrink-0 flex-col gap-1 rounded-lg p-1 text-left outline-none transition-colors hover:bg-accent/40 focus-visible:ring-2 focus-visible:ring-ring"
+    >
+      <span className="grid aspect-square w-full place-items-center overflow-hidden rounded-md bg-secondary">
+        {coverUrl ? (
+          <img src={coverUrl} alt="" className="size-full object-cover" />
+        ) : (
+          <Disc3 className="text-muted-foreground" />
+        )}
+      </span>
+      <span className="block truncate text-xs">{album.label}</span>
+    </button>
   );
 }
