@@ -15,7 +15,7 @@
 | 2 | Simplified owner R2 setup form | ✅ Completed | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | Two-column Settings layout (sidebar → detail) + persistence | ✅ Completed | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | Split the Cloud Drive section into items | ✅ Completed | [Phase 4 Checklist](#phase-4-checklist) |
-| 5 | Add-drive modal with a stepper | 🔄 In Progress | [Phase 5 Checklist](#phase-5-checklist) |
+| 5 | Add-drive modal with a stepper | ✅ Completed | [Phase 5 Checklist](#phase-5-checklist) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
 
@@ -202,15 +202,15 @@ collapsible advanced setting; the display name is last.
 - [x] Add optional `folder` (prefix) to `buildOwnerR2Connection` (default: whole bucket).
 - [x] Add a `Stepper` UI primitive (numbered steps + active state, a11y `aria-current`).
 - [x] Build `AddDriveDialog`: Step 1 connect (keys + public URL, advanced collapsible folder) → validate (ListBuckets + read/write) → auto-select bucket; Step 2 name + save.
-- [ ] Wire it into the `cloud-owner` item: replace the inline owner form with an "Add cloud drive" button + the connected-drives list; mount the dialog.
-- [ ] Add en/zh/ja/ko strings.
+- [x] Wire it into the `cloud-owner` item: replace the inline owner form with an "Add cloud drive" button + the connected-drives list; mount the dialog.
+- [x] Add en/zh/ja/ko strings.
 
 ### Phase 5 Checklist
 
-- [ ] Adding a drive is a focused modal, not an inline form.
-- [ ] Step 1 collects keys/URL with the folder tucked into an "Advanced" collapsible; validation auto-discovers the bucket.
-- [ ] Step 2 names the drive and saves it; the new drive appears in the connected list.
-- [ ] The flow scales to multiple drives; verified in the preview.
+- [x] Adding a drive is a focused modal, not an inline form.
+- [x] Step 1 collects keys/URL with the folder tucked into an "Advanced" collapsible; validation auto-discovers the bucket.
+- [x] Step 2 names the drive and saves it; the new drive appears in the connected list.
+- [x] The flow scales to multiple drives; verified in the preview.
 
 ---
 
@@ -262,3 +262,4 @@ collapsible advanced setting; the display name is last.
 | 2026-06-10 | MUZERO | Phase 4 completed: the Cloud Drive section is now four sidebar items — 我的盘(R2) (setup + owner form + connected drives), 订阅 (manifest link + preview/import), 同步与 CORS (sync progress + recommended CORS), and 在线状态 (presence toggle). One shared "Cloud Drive" card shows for any `cloud-*` item with each sub-block gated to its item. Verified each pane renders its own controls independently in the preview; en/zh/ja/ko item labels added. All four phases done. |
 | 2026-06-10 | MUZERO | Phase 3 refinement: the two columns now scroll independently — the root clips overflow and each column owns its own `overflow-y-auto` with `pt-chrome-top`/`pb-chrome-bottom` clearance, so a long detail pane (e.g. owner form) scrolls without moving the sidebar. Mobile keeps a sticky horizontal nav row with the detail scrolling beneath it. Verified at desktop + mobile widths. |
 | 2026-06-10 | MUZERO | Phase 5 (in progress): add-drive modal components built — `buildOwnerR2Connection` gained an optional `folder` prefix (default whole-bucket, tested), a `Stepper` UI primitive (tested), and `AddDriveDialog` (two-step: connect + validate/auto-bucket → name + save, with the folder under an Advanced collapsible) plus en/zh/ja/ko strings. Settings wiring (replace the inline owner form with the modal) is the remaining task. |
+| 2026-06-10 | MUZERO | Phase 5 completed: the `cloud-owner` item's inline owner form is replaced by an "Add cloud drive" button that opens `AddDriveDialog`; the connected-drives list and setup checklist stay. Verified in the preview — modal opens with the two-step stepper, the Advanced collapsible reveals the in-bucket folder, and Next stays disabled until validation. All five phases done. |

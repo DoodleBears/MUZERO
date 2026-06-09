@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { type CSSProperties, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { AddDriveDialog } from "@/components/settings/add-drive-dialog";
 import { BackgroundSettings } from "@/components/settings/background-settings";
 import { resolveActiveSettingsItem } from "@/components/settings/settings-nav";
 import { SettingsSidebar } from "@/components/settings/settings-sidebar";
@@ -34,7 +35,6 @@ import { saveSettings } from "@/db/repositories";
 import type { AppSettings, CloudDrive, LlmProviderId } from "@/db/types";
 import { useSettings } from "@/hooks/use-app-data";
 import { type Locale, locales, persistLocale } from "@/i18n/config";
-import { newId } from "@/lib/id";
 import { clearTrace, formatTraceEntries, useTraceEntries } from "@/lib/trace";
 import { formatDuration } from "@/lib/utils";
 import {
@@ -47,24 +47,16 @@ import { type MusicGenProviderId, resolveMusicGenProvider } from "@/musicgen/reg
 import { useNavStore } from "@/stores/nav-store";
 import { usePlayerStore } from "@/stores/player-store";
 import { useSyncStore } from "@/stores/sync-store";
-import { listCloudDrives, upsertCloudDrive } from "@/sync/cloud-drive-repo";
-import { buildOwnedR2Drive, saveR2CredentialsForDrive } from "@/sync/cloud-drive-settings";
+import { listCloudDrives } from "@/sync/cloud-drive-repo";
 import {
   getLocalDevice,
   getOrCreateLocalDevice,
   updateLocalDeviceProfile,
 } from "@/sync/device-repo";
-import { buildOwnerR2Connection, parseR2AccountId } from "@/sync/owner-r2-connection";
 import { summarizePlaybackAggregates } from "@/sync/playback-aggregate-summary";
 import { summarizePlaybackSyncState } from "@/sync/playback-sync-summary";
-import {
-  buildRecommendedR2Cors,
-  checkR2PublicRead,
-  checkR2WriteAccess,
-  maskSecret,
-} from "@/sync/r2-healthcheck";
+import { buildRecommendedR2Cors } from "@/sync/r2-healthcheck";
 import { importRemoteSetStream } from "@/sync/r2-import-stream";
-import { listR2Buckets } from "@/sync/r2-list-buckets";
 import { connectReadOnlyManifest } from "@/sync/r2-shared-link";
 import {
   loadRemoteSetIndex,
@@ -93,15 +85,6 @@ import {
 } from "@/theme/primary";
 import { loadSystemFonts } from "@/theme/system-fonts";
 import { DEFAULT_THEME, persistTheme, type Theme, themes } from "@/theme/theme";
-
-/** Minimal owner R2 setup form — everything else is derived (see owner-r2-connection). */
-interface OwnerR2Form {
-  label: string;
-  endpointOrAccountId: string;
-  accessKeyId: string;
-  secretAccessKey: string;
-  publicUrl: string;
-}
 
 /** Maps a preset id to its i18n option label (ids carry hyphens; keys don't). */
 const PRESET_LABEL_KEY = {
@@ -205,20 +188,7 @@ export function SettingsPage() {
   >("idle");
   const [cloudError, setCloudError] = useState<string | null>(null);
   const [importingSetId, setImportingSetId] = useState<string | null>(null);
-  const [ownerDriveId] = useState(() => newId("drv"));
-  const [ownerForm, setOwnerForm] = useState<OwnerR2Form>({
-    label: "",
-    endpointOrAccountId: "",
-    accessKeyId: "",
-    secretAccessKey: "",
-    publicUrl: "",
-  });
-  // Buckets discovered via ListBuckets; one bucket auto-selects ("whole bucket").
-  const [bucketOptions, setBucketOptions] = useState<string[]>([]);
-  const [selectedBucket, setSelectedBucket] = useState("");
-  const [discoverStatus, setDiscoverStatus] = useState<"idle" | "discovering" | "error">("idle");
-  const [ownerStatus, setOwnerStatus] = useState<"idle" | "checking" | "done" | "error">("idle");
-  const [ownerMessage, setOwnerMessage] = useState<string | null>(null);
+  const [addDriveOpen, setAddDriveOpen] = useState(false);
   const [corsCopied, setCorsCopied] = useState(false);
   // Font picker: the combobox input text, plus lazily-loaded system fonts.
   const [fontInput, setFontInput] = useState("");
@@ -381,75 +351,6 @@ export function SettingsPage() {
       setCloudStatus("error");
     } finally {
       setImportingSetId(null);
-    }
-  }
-
-  function patchOwner(patch: Partial<OwnerR2Form>) {
-    setOwnerForm((current) => ({ ...current, ...patch }));
-    setOwnerStatus("idle");
-    setOwnerMessage(null);
-  }
-
-  // Auto-discover the bucket from the keys so the user never types a bucket name.
-  async function discoverBuckets() {
-    setDiscoverStatus("discovering");
-    setOwnerMessage(null);
-    try {
-      const buckets = await listR2Buckets({
-        accountId: parseR2AccountId(ownerForm.endpointOrAccountId),
-        accessKeyId: ownerForm.accessKeyId.trim(),
-        secretAccessKey: ownerForm.secretAccessKey.trim(),
-      });
-      setBucketOptions(buckets);
-      setSelectedBucket(buckets.length === 1 ? (buckets[0] ?? "") : "");
-      setDiscoverStatus("idle");
-      if (buckets.length === 0) setOwnerMessage(t("settings.cloudOwnerNoBuckets"));
-    } catch (error) {
-      setDiscoverStatus("error");
-      setOwnerMessage(error instanceof Error ? error.message : String(error));
-    }
-  }
-
-  async function validateOwnerDrive() {
-    setOwnerStatus("checking");
-    setOwnerMessage(null);
-    try {
-      const connection = buildOwnerR2Connection({
-        endpointOrAccountId: ownerForm.endpointOrAccountId,
-        bucket: selectedBucket,
-        accessKeyId: ownerForm.accessKeyId,
-        secretAccessKey: ownerForm.secretAccessKey,
-        publicUrl: ownerForm.publicUrl,
-      });
-
-      const readResult = await checkR2PublicRead(connection.manifestUrl);
-      if (!readResult.ok || !readResult.preview) {
-        throw new Error(
-          readResult.hint ?? readResult.checks.at(-1)?.message ?? "Read check failed",
-        );
-      }
-
-      const writeResult = await checkR2WriteAccess(connection.credentials);
-      if (!writeResult.ok) {
-        throw new Error(
-          writeResult.hint ?? writeResult.checks.at(-1)?.message ?? "Write check failed",
-        );
-      }
-
-      const preview = readResult.preview;
-      const drive = buildOwnedR2Drive({
-        id: ownerDriveId,
-        label: ownerForm.label || preview.title,
-        manifestUrl: preview.manifestUrl,
-        publicBaseUrl: connection.publicBaseUrl || preview.baseUrl,
-      });
-      await upsertCloudDrive(drive);
-      await saveSettings(saveR2CredentialsForDrive(settings, drive.id, connection.credentials));
-      setOwnerStatus("done");
-      setOwnerMessage(t("settings.cloudOwnerValidated"));
-    } catch (error) {
-      setOwnerStatus("error");
-      setOwnerMessage(error instanceof Error ? error.message : String(error));
     }
   }
 
@@ -1157,129 +1058,26 @@ export function SettingsPage() {
                 )}
 
                 {activeItem === "cloud-owner" && (
-                  <div className="rounded-md border border-border p-3">
-                    <div className="mb-3 flex items-center gap-2">
-                      <ShieldCheck className="size-4 text-primary" />
-                      <p className="font-medium text-sm">{t("settings.cloudOwnerTitle")}</p>
-                    </div>
-                    <p className="mb-3 text-muted-foreground text-xs">
-                      {t("settings.cloudOwnerSimplifiedHint")}
-                    </p>
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      <Field label={t("settings.cloudDriveLabel")}>
-                        <Input
-                          value={ownerForm.label}
-                          onChange={(event) => patchOwner({ label: event.target.value })}
-                          placeholder={t("settings.cloudDriveLabelPlaceholder")}
-                        />
-                      </Field>
-                      <Field label={t("settings.cloudOwnerEndpoint")}>
-                        <Input
-                          value={ownerForm.endpointOrAccountId}
-                          onChange={(event) =>
-                            patchOwner({ endpointOrAccountId: event.target.value })
-                          }
-                          placeholder="https://<account>.r2.cloudflarestorage.com"
-                        />
-                      </Field>
-                      <Field label={t("settings.cloudOwnerAccessKey")}>
-                        <Input
-                          value={ownerForm.accessKeyId}
-                          onChange={(event) => patchOwner({ accessKeyId: event.target.value })}
-                        />
-                      </Field>
-                      <Field label={t("settings.cloudOwnerSecretKey")}>
-                        <Input
-                          type="password"
-                          value={ownerForm.secretAccessKey}
-                          onChange={(event) => patchOwner({ secretAccessKey: event.target.value })}
-                        />
-                      </Field>
-                      <Field label={t("settings.cloudOwnerPublicUrl")}>
-                        <Input
-                          value={ownerForm.publicUrl}
-                          onChange={(event) => patchOwner({ publicUrl: event.target.value })}
-                          placeholder="https://pub-xxxx.r2.dev"
-                        />
-                      </Field>
-                      <Field label={t("settings.cloudOwnerBucket")}>
-                        {bucketOptions.length > 1 ? (
-                          <Select
-                            value={selectedBucket}
-                            onValueChange={(value) => setSelectedBucket(value ?? "")}
-                          >
-                            <SelectTrigger>
-                              <SelectValue placeholder={t("settings.cloudOwnerSelectBucket")} />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {bucketOptions.map((name) => (
-                                <SelectItem key={name} value={name}>
-                                  {name}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        ) : (
-                          <Input
-                            value={selectedBucket}
-                            onChange={(event) => setSelectedBucket(event.target.value)}
-                            placeholder={t("settings.cloudOwnerBucketAuto")}
-                          />
-                        )}
-                      </Field>
-                    </div>
-                    <div className="mt-3 flex flex-wrap items-center gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        disabled={
-                          discoverStatus === "discovering" ||
-                          !ownerForm.endpointOrAccountId.trim() ||
-                          !ownerForm.accessKeyId.trim() ||
-                          !ownerForm.secretAccessKey.trim()
-                        }
-                        onClick={() => void discoverBuckets()}
-                      >
-                        <Cloud />
-                        {discoverStatus === "discovering"
-                          ? t("settings.cloudOwnerDiscovering")
-                          : t("settings.cloudOwnerDiscoverBuckets")}
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        disabled={
-                          ownerStatus === "checking" ||
-                          !selectedBucket.trim() ||
-                          !ownerForm.publicUrl.trim()
-                        }
-                        onClick={() => void validateOwnerDrive()}
-                      >
-                        <ShieldCheck />
-                        {ownerStatus === "checking"
-                          ? t("settings.cloudOwnerChecking")
-                          : t("settings.cloudOwnerValidate")}
-                      </Button>
-                      {ownerForm.secretAccessKey && (
-                        <span className="text-muted-foreground text-xs">
-                          {t("settings.cloudSecretStoredAs", {
-                            value: maskSecret(ownerForm.secretAccessKey),
-                          })}
-                        </span>
-                      )}
-                    </div>
-                    {ownerMessage && (
-                      <p
-                        className={
-                          ownerStatus === "error"
-                            ? "mt-2 text-destructive text-xs"
-                            : "mt-2 text-muted-foreground text-xs"
-                        }
-                      >
-                        {ownerMessage}
+                  <>
+                    <div className="rounded-md border border-border p-3">
+                      <div className="mb-2 flex items-center gap-2">
+                        <ShieldCheck className="size-4 text-primary" />
+                        <p className="font-medium text-sm">{t("settings.cloudOwnerTitle")}</p>
+                      </div>
+                      <p className="mb-3 text-muted-foreground text-xs">
+                        {t("settings.cloudOwnerSimplifiedHint")}
                       </p>
-                    )}
-                  </div>
+                      <Button size="sm" onClick={() => setAddDriveOpen(true)}>
+                        <Cloud />
+                        {t("settings.addDrive")}
+                      </Button>
+                    </div>
+                    <AddDriveDialog
+                      open={addDriveOpen}
+                      onOpenChange={setAddDriveOpen}
+                      settings={settings}
+                    />
+                  </>
                 )}
               </CardContent>
             </Card>
