@@ -77,6 +77,16 @@ describe("connectReadOnlyManifest", () => {
     });
   });
 
+  it("uses a custom label for the drive/share when one is provided", async () => {
+    await connectReadOnlyManifest(
+      "https://music.example.com/muzero/manifest.json",
+      { fetcher: async () => Response.json(manifest), label: "  Friend's drive  " },
+      db,
+    );
+    expect(await db.cloudDrives.get("drv_lib_demo")).toMatchObject({ label: "Friend's drive" });
+    expect(await db.cloudShares.get("shr_lib_demo")).toMatchObject({ label: "Friend's drive" });
+  });
+
   it("does not mutate local IndexedDB when the manifest is invalid", async () => {
     await expect(
       connectReadOnlyManifest(

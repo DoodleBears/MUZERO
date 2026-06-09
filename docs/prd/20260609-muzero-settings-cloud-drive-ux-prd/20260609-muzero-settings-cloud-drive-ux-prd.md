@@ -16,6 +16,7 @@
 | 3 | Two-column Settings layout (sidebar → detail) + persistence | ✅ Completed | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | Split the Cloud Drive section into items | ✅ Completed | [Phase 4 Checklist](#phase-4-checklist) |
 | 5 | Add-drive modal with a stepper | ✅ Completed | [Phase 5 Checklist](#phase-5-checklist) |
+| 6 | Unify add-drive (own R2 + shared link); retire the standalone Subscribe item | 🔄 In Progress | [Phase 6 Checklist](#phase-6-checklist) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
 
@@ -212,6 +213,26 @@ collapsible advanced setting; the display name is last.
 - [x] Step 2 names the drive and saves it; the new drive appears in the connected list.
 - [x] The flow scales to multiple drives; verified in the preview.
 
+### Phase 6: Unify add-drive; retire the standalone Subscribe item
+
+**Goal:** One place to add any drive. The manifest URL stays as the read
+mechanism, but pasting a shared link becomes the modal's second tab (read-only),
+not a separate Subscribe page. Set browse/import moves onto each drive row. (V3:
+share whole playlists / buckets through the same shared-link tab.)
+
+**Tasks:**
+- [x] `connectReadOnlyManifest` accepts an optional `label` (so the name step can rename a shared drive).
+- [x] `AddDriveDialog` gets a mode switcher — "My R2" (owner) and "Shared link" (read-only URL → validate → name).
+- [ ] Move remote-set browse/import onto each connected-drive row.
+- [ ] Remove the standalone `cloud-subscribe` item; relabel `cloud-owner` to a unified Drives item.
+
+### Phase 6 Checklist
+
+- [ ] Adding a drive — own R2 or a shared link — happens only in the modal.
+- [ ] A shared link binds a read-only drive with a custom name.
+- [ ] Sets are browsed/imported from a drive row, not a separate page.
+- [ ] The Subscribe sidebar item is gone; no add/import capability is lost.
+
 ---
 
 ## 7. Out of Scope
@@ -263,3 +284,4 @@ collapsible advanced setting; the display name is last.
 | 2026-06-10 | MUZERO | Phase 3 refinement: the two columns now scroll independently — the root clips overflow and each column owns its own `overflow-y-auto` with `pt-chrome-top`/`pb-chrome-bottom` clearance, so a long detail pane (e.g. owner form) scrolls without moving the sidebar. Mobile keeps a sticky horizontal nav row with the detail scrolling beneath it. Verified at desktop + mobile widths. |
 | 2026-06-10 | MUZERO | Phase 5 (in progress): add-drive modal components built — `buildOwnerR2Connection` gained an optional `folder` prefix (default whole-bucket, tested), a `Stepper` UI primitive (tested), and `AddDriveDialog` (two-step: connect + validate/auto-bucket → name + save, with the folder under an Advanced collapsible) plus en/zh/ja/ko strings. Settings wiring (replace the inline owner form with the modal) is the remaining task. |
 | 2026-06-10 | MUZERO | Phase 5 completed: the `cloud-owner` item's inline owner form is replaced by an "Add cloud drive" button that opens `AddDriveDialog`; the connected-drives list and setup checklist stay. Verified in the preview — modal opens with the two-step stepper, the Advanced collapsible reveals the in-bucket folder, and Next stays disabled until validation. All five phases done. |
+| 2026-06-10 | MUZERO | Phase 6 (in progress): `AddDriveDialog` now has a mode switcher — "My R2" (owner keys flow) and "Shared link" (read-only: paste a public manifest/share URL → validate → name), unifying both kinds of drive into one modal. `connectReadOnlyManifest` gained an optional `label`. Verified in the preview (the shared tab shows only the URL field). Moving set browse/import onto drive rows and retiring the standalone Subscribe item are the remaining tasks. |

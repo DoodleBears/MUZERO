@@ -1,4 +1,4 @@
-import { ChevronDown, Cloud, ShieldCheck } from "lucide-react";
+import { ChevronDown, Cloud, Link2, ShieldCheck } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
@@ -21,6 +21,10 @@ import { buildOwnedR2Drive, saveR2CredentialsForDrive } from "@/sync/cloud-drive
 import { buildOwnerR2Connection, parseR2AccountId } from "@/sync/owner-r2-connection";
 import { checkR2PublicRead, checkR2WriteAccess, maskSecret } from "@/sync/r2-healthcheck";
 import { listR2Buckets } from "@/sync/r2-list-buckets";
+import { connectReadOnlyManifest } from "@/sync/r2-shared-link";
+
+/** Owner = your own R2 (read+write keys). Shared = a public link (read-only). */
+type DriveMode = "owner" | "shared";
 
 interface DraftForm {
   endpointOrAccountId: string;
@@ -43,11 +47,12 @@ const EMPTY_FORM: DraftForm = {
 type ValidateStatus = "idle" | "validating" | "ok" | "error";
 
 /**
- * Add-a-cloud-drive flow as a two-step stepper modal: Step 1 collects the R2
- * connection (keys + public URL, with an optional folder under "Advanced"), runs
- * ListBuckets + read/write validation, and auto-selects the bucket; Step 2 names
- * the drive and saves it. Built to grow toward multiple drives and (later, V3)
- * adding others' shared resources.
+ * One place to add any cloud drive, as a two-step stepper modal:
+ *  - "My R2" (owner): keys + public URL (+ optional in-bucket folder under
+ *    Advanced) → validate (ListBuckets + read/write, auto-select bucket) → name.
+ *  - "Shared link" (read-only): paste a public manifest/share URL → validate →
+ *    name. (V3 will share whole playlists / buckets through the same tab.)
+ * Both produce a CloudDrive in the connected-drives list; step 2 names + saves.
  */
 export function AddDriveDialog({
   open,
@@ -59,6 +64,7 @@ export function AddDriveDialog({
   settings: AppSettings;
 }) {
   const { t } = useTranslation();
+  const [mode, setMode] = useState<DriveMode>("owner");
   const [step, setStep] = useState(0);
   const [form, setForm] = useState<DraftForm>(EMPTY_FORM);
   const [showAdvanced, setShowAdvanced] = useState(false);
@@ -73,6 +79,7 @@ export function AddDriveDialog({
   // Reset the whole flow whenever the dialog is (re)opened.
   useEffect(() => {
     if (!open) return;
+    setMode("owner");
     setStep(0);
     setForm(EMPTY_FORM);
     setShowAdvanced(false);
@@ -85,6 +92,17 @@ export function AddDriveDialog({
     setDriveId(newId("drv"));
   }, [open]);
 
+  function switchMode(next: DriveMode) {
+    if (next === mode) return;
+    setMode(next);
+    setStep(0);
+    setStatus("idle");
+    setMessage(null);
+    setBucketOptions([]);
+    setSelectedBucket("");
+    setPreviewTitle("");
+  }
+
   function patch(next: Partial<DraftForm>) {
     setForm((current) => ({ ...current, ...next }));
     setStatus("idle");
@@ -92,18 +110,36 @@ export function AddDriveDialog({
   }
 
   const canValidate =
-    !!form.endpointOrAccountId.trim() &&
-    !!form.accessKeyId.trim() &&
-    !!form.secretAccessKey.trim() &&
-    !!form.publicUrl.trim();
+    mode === "owner"
+      ? !!form.endpointOrAccountId.trim() &&
+        !!form.accessKeyId.trim() &&
+        !!form.secretAccessKey.trim() &&
+        !!form.publicUrl.trim()
+      : !!form.publicUrl.trim();
+
+  function fail(error: unknown) {
+    setStatus("error");
+    setMessage(error instanceof Error ? error.message : String(error));
+  }
 
   async function validate() {
     setStatus("validating");
     setMessage(null);
     try {
-      const accountId = parseR2AccountId(form.endpointOrAccountId);
+      if (mode === "shared") {
+        const read = await checkR2PublicRead(form.publicUrl);
+        if (!read.ok || !read.preview) {
+          setStatus("error");
+          setMessage(read.hint ?? read.checks.at(-1)?.message ?? "Read check failed");
+          return;
+        }
+        setPreviewTitle(read.preview.title);
+        setStatus("ok");
+        return;
+      }
+
       const buckets = await listR2Buckets({
-        accountId,
+        accountId: parseR2AccountId(form.endpointOrAccountId),
         accessKeyId: form.accessKeyId.trim(),
         secretAccessKey: form.secretAccessKey.trim(),
       });
@@ -115,8 +151,7 @@ export function AddDriveDialog({
       setBucketOptions(buckets);
       const bucket = buckets.length === 1 ? (buckets[0] ?? "") : selectedBucket;
       if (!bucket) {
-        // Multiple buckets — ask the user to pick one, then validate again.
-        setStatus("idle");
+        setStatus("idle"); // multiple — pick one, then validate again
         return;
       }
       setSelectedBucket(bucket);
@@ -144,14 +179,18 @@ export function AddDriveDialog({
       setPreviewTitle(read.preview.title);
       setStatus("ok");
     } catch (error) {
-      setStatus("error");
-      setMessage(error instanceof Error ? error.message : String(error));
+      fail(error);
     }
   }
 
   async function finish() {
     setSaving(true);
     try {
+      if (mode === "shared") {
+        await connectReadOnlyManifest(form.publicUrl, { label: form.label.trim() || undefined });
+        onOpenChange(false);
+        return;
+      }
       const connection = buildOwnerR2Connection({
         endpointOrAccountId: form.endpointOrAccountId,
         bucket: selectedBucket,
@@ -169,9 +208,12 @@ export function AddDriveDialog({
       await upsertCloudDrive(drive);
       await saveSettings(saveR2CredentialsForDrive(settings, drive.id, connection.credentials));
       onOpenChange(false);
-    } finally {
+    } catch (error) {
       setSaving(false);
+      fail(error);
+      return;
     }
+    setSaving(false);
   }
 
   const steps = [
@@ -184,84 +226,113 @@ export function AddDriveDialog({
       <DialogContent className="max-h-[90vh] overflow-y-auto">
         <DialogTitle>{t("settings.addDrive")}</DialogTitle>
         <DialogDescription>{t("settings.addDriveDesc")}</DialogDescription>
+
+        {step === 0 && (
+          <div className="grid grid-cols-2 gap-1 rounded-md bg-muted p-1">
+            <ModeTab active={mode === "owner"} onClick={() => switchMode("owner")}>
+              <Cloud className="size-4" />
+              {t("settings.addDriveModeOwner")}
+            </ModeTab>
+            <ModeTab active={mode === "shared"} onClick={() => switchMode("shared")}>
+              <Link2 className="size-4" />
+              {t("settings.addDriveModeShared")}
+            </ModeTab>
+          </div>
+        )}
+
         <Stepper steps={steps} current={step} />
 
         {step === 0 && (
           <div className="flex flex-col gap-3">
-            <Field label={t("settings.cloudOwnerEndpoint")}>
-              <Input
-                value={form.endpointOrAccountId}
-                onChange={(e) => patch({ endpointOrAccountId: e.target.value })}
-                placeholder="https://<account>.r2.cloudflarestorage.com"
-              />
-            </Field>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <Field label={t("settings.cloudOwnerAccessKey")}>
-                <Input
-                  value={form.accessKeyId}
-                  onChange={(e) => patch({ accessKeyId: e.target.value })}
-                />
-              </Field>
-              <Field label={t("settings.cloudOwnerSecretKey")}>
-                <Input
-                  type="password"
-                  value={form.secretAccessKey}
-                  onChange={(e) => patch({ secretAccessKey: e.target.value })}
-                />
-              </Field>
-            </div>
-            <Field label={t("settings.cloudOwnerPublicUrl")}>
-              <Input
-                value={form.publicUrl}
-                onChange={(e) => patch({ publicUrl: e.target.value })}
-                placeholder="https://pub-xxxx.r2.dev"
-              />
-            </Field>
-
-            <div className="rounded-md border border-border">
-              <button
-                type="button"
-                onClick={() => setShowAdvanced((v) => !v)}
-                className="flex w-full items-center justify-between px-3 py-2 text-muted-foreground text-sm"
-              >
-                <span>{t("settings.addDriveAdvanced")}</span>
-                <ChevronDown
-                  className={cn("size-4 transition-transform", showAdvanced && "rotate-180")}
-                />
-              </button>
-              {showAdvanced && (
-                <div className="border-border border-t px-3 py-3">
-                  <Field label={t("settings.addDriveFolder")}>
+            {mode === "owner" ? (
+              <>
+                <Field label={t("settings.cloudOwnerEndpoint")}>
+                  <Input
+                    value={form.endpointOrAccountId}
+                    onChange={(e) => patch({ endpointOrAccountId: e.target.value })}
+                    placeholder="https://<account>.r2.cloudflarestorage.com"
+                  />
+                </Field>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <Field label={t("settings.cloudOwnerAccessKey")}>
                     <Input
-                      value={form.folder}
-                      onChange={(e) => patch({ folder: e.target.value })}
-                      placeholder="music/2024"
+                      value={form.accessKeyId}
+                      onChange={(e) => patch({ accessKeyId: e.target.value })}
                     />
                   </Field>
-                  <p className="mt-1.5 text-muted-foreground text-xs">
-                    {t("settings.addDriveFolderHint")}
-                  </p>
+                  <Field label={t("settings.cloudOwnerSecretKey")}>
+                    <Input
+                      type="password"
+                      value={form.secretAccessKey}
+                      onChange={(e) => patch({ secretAccessKey: e.target.value })}
+                    />
+                  </Field>
                 </div>
-              )}
-            </div>
+                <Field label={t("settings.cloudOwnerPublicUrl")}>
+                  <Input
+                    value={form.publicUrl}
+                    onChange={(e) => patch({ publicUrl: e.target.value })}
+                    placeholder="https://pub-xxxx.r2.dev"
+                  />
+                </Field>
 
-            {bucketOptions.length > 1 && (
-              <Field label={t("settings.cloudOwnerBucket")}>
-                <Select
-                  value={selectedBucket}
-                  onValueChange={(value) => setSelectedBucket(value ?? "")}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder={t("settings.cloudOwnerSelectBucket")} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {bucketOptions.map((name) => (
-                      <SelectItem key={name} value={name}>
-                        {name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <div className="rounded-md border border-border">
+                  <button
+                    type="button"
+                    onClick={() => setShowAdvanced((v) => !v)}
+                    className="flex w-full items-center justify-between px-3 py-2 text-muted-foreground text-sm"
+                  >
+                    <span>{t("settings.addDriveAdvanced")}</span>
+                    <ChevronDown
+                      className={cn("size-4 transition-transform", showAdvanced && "rotate-180")}
+                    />
+                  </button>
+                  {showAdvanced && (
+                    <div className="border-border border-t px-3 py-3">
+                      <Field label={t("settings.addDriveFolder")}>
+                        <Input
+                          value={form.folder}
+                          onChange={(e) => patch({ folder: e.target.value })}
+                          placeholder="music/2024"
+                        />
+                      </Field>
+                      <p className="mt-1.5 text-muted-foreground text-xs">
+                        {t("settings.addDriveFolderHint")}
+                      </p>
+                    </div>
+                  )}
+                </div>
+
+                {bucketOptions.length > 1 && (
+                  <Field label={t("settings.cloudOwnerBucket")}>
+                    <Select
+                      value={selectedBucket}
+                      onValueChange={(value) => setSelectedBucket(value ?? "")}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder={t("settings.cloudOwnerSelectBucket")} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {bucketOptions.map((name) => (
+                          <SelectItem key={name} value={name}>
+                            {name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </Field>
+                )}
+              </>
+            ) : (
+              <Field label={t("settings.addDriveShareUrl")}>
+                <Input
+                  value={form.publicUrl}
+                  onChange={(e) => patch({ publicUrl: e.target.value })}
+                  placeholder="https://music.example.com/muzero/manifest.json"
+                />
+                <span className="text-muted-foreground text-xs">
+                  {t("settings.addDriveSharedHint")}
+                </span>
               </Field>
             )}
 
@@ -301,14 +372,18 @@ export function AddDriveDialog({
           <div className="flex flex-col gap-3">
             <div className="rounded-md border border-border bg-muted/25 p-3 text-muted-foreground text-xs">
               <p className="flex items-center gap-2 text-foreground text-sm">
-                <Cloud className="size-4 text-primary" />
-                {selectedBucket}
-                {form.folder.trim() && (
+                {mode === "owner" ? (
+                  <Cloud className="size-4 text-primary" />
+                ) : (
+                  <Link2 className="size-4 text-primary" />
+                )}
+                {mode === "owner" ? selectedBucket : previewTitle}
+                {mode === "owner" && form.folder.trim() && (
                   <span className="text-muted-foreground">/ {form.folder.trim()}</span>
                 )}
               </p>
               <p className="mt-1 truncate">{form.publicUrl.trim()}</p>
-              {form.secretAccessKey && (
+              {mode === "owner" && form.secretAccessKey && (
                 <p className="mt-1">
                   {t("settings.cloudSecretStoredAs", { value: maskSecret(form.secretAccessKey) })}
                 </p>
@@ -335,6 +410,31 @@ export function AddDriveDialog({
         )}
       </DialogContent>
     </Dialog>
+  );
+}
+
+function ModeTab({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "flex items-center justify-center gap-2 rounded px-3 py-1.5 text-sm transition-colors",
+        active
+          ? "bg-background font-medium text-foreground shadow-sm"
+          : "text-muted-foreground hover:text-foreground",
+      )}
+    >
+      {children}
+    </button>
   );
 }
 

@@ -11,7 +11,7 @@ export interface ReadOnlyManifestConnection {
 
 export async function connectReadOnlyManifest(
   manifestOrBaseUrl: string,
-  options: R2HealthcheckOptions = {},
+  options: R2HealthcheckOptions & { label?: string } = {},
   db: MuzeroDB = defaultDb,
 ): Promise<ReadOnlyManifestConnection> {
   const result = await checkR2PublicRead(manifestOrBaseUrl, options);
@@ -20,12 +20,13 @@ export async function connectReadOnlyManifest(
   }
 
   const preview = result.preview;
+  const label = options.label?.trim() || preview.title;
   const driveId = stableLocalId("drv", preview.libraryId);
   const shareId = stableLocalId("shr", preview.libraryId);
   await upsertCloudDrive(
     {
       id: driveId,
-      label: preview.title,
+      label,
       kind: "shared",
       provider: "r2",
       publicBaseUrl: preview.baseUrl,
@@ -45,7 +46,7 @@ export async function connectReadOnlyManifest(
       id: shareId,
       driveId,
       remoteShareId: preview.libraryId,
-      label: preview.title,
+      label,
       manifestUrl: preview.manifestUrl,
       access: "read-only",
       lastSyncedAt: Date.now(),
