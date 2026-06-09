@@ -1,6 +1,8 @@
 export type R2MergeFieldClass = "cache-metadata" | "user-authored";
 
 export interface R2CacheMetadataRef {
+  /** Object path, matching the non-string variant of a remote search page ref. */
+  path: string;
   updatedAt?: string;
   etag?: string;
   sha256?: string;
