@@ -209,7 +209,7 @@
     "modeIdleOnly": "Idle visualizer",
     "panelTitle": "Effect controls",
     "closePanel": "Close effect controls",
-    "rightClickSettings": "Right-click to open settings",
+    "openSettingsHint": "Right-click or long-press to open settings",
     "previewOnly": "Hide player UI while tuning",
     "previewOnlyHint": "Temporarily hides the cover, controls, queue, and dock so full-screen effects are easier to judge.",
     "hideBackgroundVisualizer": "Hide background visualizer",

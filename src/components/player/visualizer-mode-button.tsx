@@ -4,6 +4,7 @@ import { ControlTooltip } from "@/components/player/control-tooltip";
 import { Button } from "@/components/ui/button";
 import { saveSettings } from "@/db/repositories";
 import { useSettings } from "@/hooks/use-app-data";
+import { useLongPress } from "@/hooks/use-long-press";
 import { cn } from "@/lib/utils";
 import { useVisualizerPanelStore } from "@/stores/visualizer-panel-store";
 import { resolveVisualizerStyle } from "@/visualizer/registry";
@@ -68,16 +69,23 @@ export function VisualizerModeButton({ className }: { className?: string }) {
     });
   }
 
+  // Long-press is the touch-friendly twin of the right-click below.
+  const { handlers, consumeClick } = useLongPress(openTuningPanel);
+
   return (
-    <ControlTooltip label={label} hint={t("visualizer.rightClickSettings")}>
+    <ControlTooltip label={label} hint={t("visualizer.openSettingsHint")}>
       <Button
         variant="ghost"
         size="icon"
-        onClick={cycle}
+        onClick={() => {
+          if (consumeClick()) return;
+          cycle();
+        }}
         onContextMenu={(e) => {
           e.preventDefault();
           openTuningPanel();
         }}
+        {...handlers}
         aria-label={label}
         aria-pressed={active}
         className={cn(

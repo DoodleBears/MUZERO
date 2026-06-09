@@ -201,7 +201,7 @@
     "modeIdleOnly": "アイドル表示",
     "panelTitle": "エフェクトコントロール",
     "closePanel": "エフェクトコントロールを閉じる",
-    "rightClickSettings": "右クリックで設定を開く",
+    "openSettingsHint": "右クリックまたは長押しで設定を開く",
     "previewOnly": "調整中はプレイヤー UI を隠す",
     "previewOnlyHint": "カバー、操作、キュー、ドックを一時的に隠し、全画面のエフェクトを確認しやすくします。",
     "hideBackgroundVisualizer": "背景ビジュアライザーを隠す",

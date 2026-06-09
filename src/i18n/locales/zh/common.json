@@ -201,7 +201,7 @@
     "modeIdleOnly": "空闲沉浸",
     "panelTitle": "效果控制",
     "closePanel": "关闭效果控制",
-    "rightClickSettings": "右键打开设置",
+    "openSettingsHint": "右键或长按打开设置",
     "previewOnly": "调参时隐藏播放器 UI",
     "previewOnlyHint": "临时隐藏封面、控制器、队列和 Dock，方便全屏观察效果。",
     "hideBackgroundVisualizer": "隐藏背景频谱",

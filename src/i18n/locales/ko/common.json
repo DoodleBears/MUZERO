@@ -201,7 +201,7 @@
     "modeIdleOnly": "유휴 비주얼라이저",
     "panelTitle": "효과 컨트롤",
     "closePanel": "효과 컨트롤 닫기",
-    "rightClickSettings": "우클릭하여 설정 열기",
+    "openSettingsHint": "우클릭 또는 길게 눌러 설정 열기",
     "previewOnly": "조정 중 플레이어 UI 숨기기",
     "previewOnlyHint": "커버, 컨트롤, 큐, 독을 잠시 숨겨 전체 화면 효과를 확인하기 쉽게 합니다.",
     "hideBackgroundVisualizer": "배경 비주얼라이저 숨기기",
