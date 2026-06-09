@@ -43,7 +43,7 @@ import {
   type SetSort,
   sortSets,
 } from "@/lib/set-gallery";
-import { searchTracks } from "@/lib/track-search";
+import { searchEntityFacets, searchTracks } from "@/lib/track-search";
 import { cn } from "@/lib/utils";
 import { transitionState } from "@/lib/view-transition-react";
 import { useNavStore } from "@/stores/nav-store";
@@ -221,6 +221,33 @@ export function SearchPage() {
     }
     consumeLibraryEntity();
   }, [pendingEntity, artistIndex, albumIndex, consumeLibraryEntity]);
+
+  // Faceted search: matching artists/albums surfaced above the song list in the
+  // tracks ("全部歌曲") mode (honors scoped artist:/album: tokens).
+  const trackFacets = useMemo(
+    () => searchEntityFacets(artistIndex, albumIndex, trackQuery),
+    [artistIndex, albumIndex, trackQuery],
+  );
+  const facetArtistItems = useMemo<LibraryEntityItem[]>(
+    () =>
+      trackFacets.artists.slice(0, 8).map((entry) => ({
+        key: entry.key,
+        label: artistDisplayLabel(entry, t),
+        sublabel: t("gallery.count", { count: entry.trackIds.length }),
+        coverTrackId: entry.coverTrackId,
+      })),
+    [trackFacets, t],
+  );
+  const facetAlbumItems = useMemo<LibraryEntityItem[]>(
+    () =>
+      trackFacets.albums.slice(0, 8).map((entry) => ({
+        key: entry.key,
+        label: albumDisplayLabel(entry, t),
+        sublabel: albumArtistDisplayLabel(entry, t),
+        coverTrackId: entry.coverTrackId,
+      })),
+    [trackFacets, t],
+  );
 
   const items = useMemo<SetGalleryItem[]>(
     () =>
@@ -525,13 +552,50 @@ export function SearchPage() {
 
       {mode === "tracks" && (
         <div className="min-h-0 flex-1">
-          {shownTracks.length === 0 && shownRemoteTracks.length === 0 ? (
+          {shownTracks.length === 0 &&
+          shownRemoteTracks.length === 0 &&
+          facetArtistItems.length === 0 &&
+          facetAlbumItems.length === 0 ? (
             <p className="mt-12 text-center text-sm text-muted-foreground">
               {t("gallery.tracksEmpty")}
             </p>
           ) : (
             <div className="grid min-h-0 flex-1 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(280px,360px)]">
               <div className="flex min-h-0 flex-1 flex-col gap-4">
+                {(facetArtistItems.length > 0 || facetAlbumItems.length > 0) && (
+                  <div className="flex shrink-0 flex-col gap-3">
+                    {facetArtistItems.length > 0 && (
+                      <div>
+                        <p className="mb-1 px-1 text-muted-foreground text-xs font-medium uppercase tracking-wide">
+                          {t("gallery.modeArtists")}
+                        </p>
+                        <EntityGrid
+                          items={facetArtistItems}
+                          kind="artist"
+                          view="list"
+                          trackById={trackById}
+                          onOpen={(key) => transitionState(() => setSelectedArtistKey(key))}
+                          emptyHint=""
+                        />
+                      </div>
+                    )}
+                    {facetAlbumItems.length > 0 && (
+                      <div>
+                        <p className="mb-1 px-1 text-muted-foreground text-xs font-medium uppercase tracking-wide">
+                          {t("gallery.modeAlbums")}
+                        </p>
+                        <EntityGrid
+                          items={facetAlbumItems}
+                          kind="album"
+                          view="list"
+                          trackById={trackById}
+                          onOpen={(key) => transitionState(() => setSelectedAlbumKey(key))}
+                          emptyHint=""
+                        />
+                      </div>
+                    )}
+                  </div>
+                )}
                 {shownTracks.length > 0 && (
                   <TrackListMenu className="min-h-0 flex-1">
                     <VirtualTrackList

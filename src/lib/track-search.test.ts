@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
-import type { Track } from "@/db/types";
-import { matchesQuery, searchTracks, tracksWithTag } from "./track-search";
+import type { Track, TrackMediaMetadata } from "@/db/types";
+import { buildAlbumIndex, buildArtistIndex } from "./library-index";
+import {
+  matchesQuery,
+  parseSearchTokens,
+  searchEntityFacets,
+  searchTracks,
+  tracksWithTag,
+} from "./track-search";
 
 function track(partial: Partial<Track>): Track {
   return {
@@ -120,5 +127,81 @@ describe("searchTracks", () => {
 describe("tracksWithTag", () => {
   it("returns tracks carrying an exact tag", () => {
     expect(tracksWithTag([neonRain, workout], "workout").map((t) => t.id)).toEqual(["b"]);
+  });
+});
+
+const md = (partial: Partial<TrackMediaMetadata>): TrackMediaMetadata => ({
+  parser: "music-metadata",
+  parsedAt: 1,
+  ...partial,
+});
+
+describe("parseSearchTokens", () => {
+  it("splits scoped field tokens from free text", () => {
+    expect(parseSearchTokens("DoubleJ artist:yumi album:moon #chill")).toEqual({
+      free: ["doublej"],
+      artist: ["yumi"],
+      album: ["moon"],
+      tags: ["chill"],
+    });
+  });
+});
+
+describe("matchesQuery — scoped tokens", () => {
+  const song = track({
+    id: "s",
+    title: "Blue",
+    brief: undefined,
+    origin: "uploaded",
+    mediaMetadata: md({ artists: ["Deidian"], album: "Moonstone Beach" }),
+  });
+  it("artist: scopes to the artist field", () => {
+    expect(matchesQuery(song, "artist:deidian")).toBe(true);
+    expect(matchesQuery(song, "artist:moonstone")).toBe(false); // album, not artist
+  });
+  it("album: scopes to the album field", () => {
+    expect(matchesQuery(song, "album:moonstone")).toBe(true);
+    expect(matchesQuery(song, "album:deidian")).toBe(false);
+  });
+  it("composes scoped + free + tags (AND)", () => {
+    expect(matchesQuery(song, "blue artist:deidian")).toBe(true);
+    expect(matchesQuery(song, "blue artist:nobody")).toBe(false);
+  });
+});
+
+describe("searchEntityFacets", () => {
+  const tracks = [
+    track({
+      id: "1",
+      origin: "uploaded",
+      mediaMetadata: md({ artists: ["Deidian"], album: "Moonstone Beach" }),
+    }),
+    track({
+      id: "2",
+      origin: "uploaded",
+      mediaMetadata: md({ artists: ["Yumi"], album: "Night Drive" }),
+    }),
+  ];
+  const artists = buildArtistIndex(tracks);
+  const albums = buildAlbumIndex(tracks);
+
+  it("surfaces matching artists and albums for free text", () => {
+    const facets = searchEntityFacets(artists, albums, "moon");
+    expect(facets.albums.map((a) => a.name)).toEqual(["Moonstone Beach"]);
+    expect(facets.artists).toEqual([]); // "moon" isn't in any artist name
+  });
+
+  it("scoped tokens populate only their facet", () => {
+    expect(
+      searchEntityFacets(artists, albums, "artist:deidian").artists.map((a) => a.name),
+    ).toEqual(["Deidian"]);
+    expect(searchEntityFacets(artists, albums, "artist:deidian").albums).toEqual([]);
+    expect(searchEntityFacets(artists, albums, "album:night").albums.map((a) => a.name)).toEqual([
+      "Night Drive",
+    ]);
+  });
+
+  it("empty query yields no facet hits", () => {
+    expect(searchEntityFacets(artists, albums, "")).toEqual({ artists: [], albums: [] });
   });
 });

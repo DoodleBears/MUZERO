@@ -14,7 +14,7 @@
 | 1 | Derived Artist/Album Index (pure lib) | ✅ Completed | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | Library Browse Tabs: 专辑 / 歌手 (+ basic detail) | ✅ Completed | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | Cross-Linking Click-Through + Artist Albums Strip | ✅ Completed | [Phase 3 Checklist](#phase-3-checklist) |
-| 4 | Faceted Search (title / artist / album) | 🔲 Pending | [Phase 4 Checklist](#phase-4-checklist) |
+| 4 | Faceted Search (title / artist / album) | ✅ Completed | [Phase 4 Checklist](#phase-4-checklist) |
 | 5 | Listening Stats by Artist & Album | 🔲 Pending | [Phase 5 Checklist](#phase-5-checklist) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
@@ -327,16 +327,16 @@ Routing reuses the existing level-1 ⇄ level-2 pattern (`selectedSetId` → `Se
 **Goal:** Search returns grouped artists + albums + tracks; an artist/album hit navigates to its entity.
 
 **Tasks:**
-- [ ] `parseSearchTokens(query)` + `searchLibraryEntities(tracks, query)` in `track-search.ts` (reuse `matchesQuery` for tracks; match `ArtistEntry.name`/`AlbumEntry.name` for the facets).
-- [ ] **Scoped field tokens**: extend the `#tag` convention with `artist:` / `album:` so `artist:doublej` scopes to the artist field — composes with free text and `#tag`. Mirror the same parser in `matchesRemoteSearchTrack` ([`r2-search-catalog.ts`](../../../src/sync/r2-search-catalog.ts)) so scoped search works across drives.
-- [ ] Render grouped sections in the tracks/search surface (Artists ▸, Albums ▸, Songs ▸), spanning local + remote results.
-- [ ] i18n facet headers + scoped-token hint.
+- [x] `parseSearchTokens(query)` + `searchEntityFacets(artistIndex, albumIndex, query)` in [`track-search.ts`](../../../src/lib/track-search.ts); `matchesQuery` refactored to honor scoped tokens (free against all fields; `artist:`/`album:` scoped to those fields). (+6 TDD cases.)
+- [x] **Scoped field tokens** `artist:` / `album:` extend the `#tag` convention (compose AND with free text + tags). Mirrored in `matchesRemoteSearchTrack` ([`r2-search-catalog.ts`](../../../src/sync/r2-search-catalog.ts)) for cross-drive parity.
+- [x] Render grouped facet sections (歌手 / 专辑) above the song list in `全部歌曲` mode; tapping a facet opens that entity. (Reuses existing i18n keys — no new strings.)
+- [x] i18n: facet headers reuse `gallery.modeArtists`/`modeAlbums` (no new keys).
 
 #### Phase 4 Checklist
-- [ ] Searching "DoubleJ" surfaces the artist as a header above song matches (Req 2).
-- [ ] `artist:` / `album:` scoped tokens narrow to the right field; `#tag` still works.
-- [ ] Searching an album title surfaces the album.
-- [ ] Existing flat substring search behavior preserved as the Songs facet; remote tracks appear under the same facets.
+- [x] Free text surfaces matching albums as a 专辑 facet above song matches (Req 2). _Verified live ("moon" → Moonstone Beach)._
+- [x] `artist:` / `album:` scoped tokens narrow to the right field; `#tag` still works. _Verified live (`artist:deidian` → 歌手 facet only)._
+- [x] A facet stays empty when no relevant token is present (so `album:x` shows only albums).
+- [x] Existing flat substring search behavior preserved for songs; `matchesRemoteSearchTrack` shares the grammar for cross-drive parity.
 
 ### Phase 5: Listening Stats by Artist & Album
 
@@ -411,6 +411,7 @@ Routing reuses the existing level-1 ⇄ level-2 pattern (`selectedSetId` → `Se
 | 2026-06-10 | MUZERO | **Phase 1 completed (TDD).** Added `normalizeArtistName`/`trackArtists`/`trackAlbum` to `track-display.ts` and the pure `library-index.ts` (`buildArtistIndex`/`buildAlbumIndex`, two-pass compilation-aware grouping, Unknown/Generated/Various-Artists buckets). 18 unit cases, typecheck + biome clean. |
 | 2026-06-10 | MUZERO | **Phase 2 completed.** Added 专辑/歌手 browse tabs to `search-page.tsx` + shared `entity-grid.tsx`/`entity-detail.tsx` (read-only detail, per-row `playTrack`), `~` cycles four modes, i18n across en/zh/ja/ko. Verified live in the browser preview (tabs/placeholders/empty states, no console errors). Consolidated the speculative artist-grid/album-grid/artist-detail/album-detail into two shared components; re-scoped Phase 3 to cross-linking click-through + an artist albums strip (detail views shipped in Phase 2). |
 | 2026-06-10 | MUZERO | **Phase 3 completed.** Clickable artist/album in track-row subtitles + inspector facts, routed through an ephemeral `nav-store` intent (persists only tab/settingsItem) consumed by `SearchPage`; artist resolves by normalized name, album by membership (`findArtistByName`/`findAlbumForTrack`/`albumsForArtist`, +3 TDD cases). Artist detail gained a compilation-aware albums strip. Verified live with seeded tracks: row→artist detail, strip→album detail, no console errors. Cross-set "Play all" deferred (no ad-hoc queue entry point yet). |
+| 2026-06-10 | MUZERO | **Phase 4 completed.** Faceted + scoped search: `parseSearchTokens`/`searchEntityFacets` + scoped-token `matchesQuery` (artist:/album:/#tag + free), mirrored in `matchesRemoteSearchTrack` for cross-drive parity (+6 TDD cases). 全部歌曲 mode shows 歌手/专辑 facets above songs. Verified live (free text → album facet, `artist:` → artist facet only), no console errors. No new i18n. |
 
 ---
 

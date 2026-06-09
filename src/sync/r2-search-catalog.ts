@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { TrackKind, TrackMediaMetadata, TrackOrigin } from "@/db/types";
+import { isEmptyTokens, parseSearchTokens } from "@/lib/track-search";
 import { r2TrackMediaMetadataSchema } from "./r2-manifest-schema";
 
 const remotePathSchema = z.string().min(1);
@@ -188,13 +189,21 @@ export function remoteSearchSetToRow(input: RemoteSearchSetToRowInput): RemoteSe
 }
 
 export function matchesRemoteSearchTrack(row: RemoteSearchTrackRow, query: string): boolean {
-  const tokens = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
-  if (tokens.length === 0) return true;
-  return tokens.every((token) => {
-    if (token.startsWith("#") && token.length > 1) {
-      const tag = token.slice(1);
-      return row.tags.some((candidate) => candidate.includes(tag));
-    }
-    return row.normalizedText.includes(token);
-  });
+  // Mirror the local scoped-token grammar (artist:/album:/#tag + free text) so
+  // cross-drive search behaves identically to the local library.
+  const tokens = parseSearchTokens(query);
+  if (isEmptyTokens(tokens)) return true;
+  const artistHay = [
+    ...(row.mediaMetadata?.artists ?? []),
+    ...(row.mediaMetadata?.albumArtists ?? []),
+  ]
+    .join(" ")
+    .toLowerCase();
+  const albumHay = (row.mediaMetadata?.album ?? "").toLowerCase();
+  return (
+    tokens.free.every((token) => row.normalizedText.includes(token)) &&
+    tokens.tags.every((tag) => row.tags.some((candidate) => candidate.includes(tag))) &&
+    tokens.artist.every((token) => artistHay.includes(token)) &&
+    tokens.album.every((token) => albumHay.includes(token))
+  );
 }
