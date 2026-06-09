@@ -1744,7 +1744,7 @@ For a large shared playlist with many trusted devices, the UI should:
 - [x] Implement remote diff against local DB.
 - [x] Add `SyncMutation` rows for local set/track/memory edits.
 - [x] Upload per-device set mutation files under `sets/<setId>/mutations/<devicePublicId>/`.
-- [ ] Fold non-overlapping set mutations into the next owner-published `index.json` snapshot.
+- [x] Fold non-overlapping set mutations into the next owner-published `index.json` snapshot.
 - [x] Add conflict detection for set/track/memory edits changed on both sides.
 - [x] Add ETag/hash/conditional-write guard before overwriting mutable remote JSON objects.
 - [ ] Default merge rule:
@@ -2033,3 +2033,4 @@ Do not record secrets, full signed URLs, or media content.
 | 2026-06-09 | MUZERO | Phase 5 optional `stats/index.json` discovery completed for stats sync: device entries can point to aggregate cache, checkpoint, and latest immutable event segment without making the index the write-hot source of truth. |
 | 2026-06-09 | MUZERO | Phase 5 stats/profile write policy added: only owner/trusted drives with local R2 credentials may receive stats or opted-in device profiles, keeping read-only shared-link listener data local by default. |
 | 2026-06-09 | MUZERO | Phase 4 set/track/memory conflict detection completed: pull diff now maps unsynced local mutations back to remote set, track, and memory ids so double-edited user-authored fields become reviewable conflicts instead of being silently overwritten by remote updates. |
+| 2026-06-09 | MUZERO | Phase 4 owner set mutation folding added: export planning now applies non-overlapping set metadata, track add, and track remove mutations into the next owner-published `sets/<setId>/index.json` snapshot while leaving overlapping or invalid mutation payloads for later review. |

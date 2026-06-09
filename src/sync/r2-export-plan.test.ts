@@ -320,6 +320,77 @@ describe("buildR2ExportPlan", () => {
     expect(plan.objects.filter((object) => object.kind === "set-mutation")).toHaveLength(1);
   });
 
+  it("folds non-overlapping set mutations into the next owner set index snapshot", async () => {
+    await seedSet();
+    await db.syncMutations.bulkPut([
+      {
+        id: "mut_rename",
+        driveId: "drv_1",
+        devicePublicId: "dvc_1",
+        scope: "set",
+        entityId: "ses_1",
+        action: "set-metadata-updated",
+        base: { remoteKey: "sets/ses_1/index.json", revision: 1, updatedAt: 200 },
+        payload: { name: "Folded Night Drive" },
+        createdAt: 300,
+      },
+      {
+        id: "mut_add_track",
+        driveId: "drv_1",
+        devicePublicId: "dvc_2",
+        scope: "set",
+        entityId: "ses_1",
+        action: "track-added-to-set",
+        base: { remoteKey: "sets/ses_1/index.json", revision: 1, updatedAt: 200 },
+        payload: {
+          position: 1,
+          track: {
+            id: "trk_remote",
+            title: "Remote Blue",
+            kind: "audio",
+            origin: "uploaded",
+            provider: "upload",
+            durationSec: 160,
+            createdAt: 250,
+            liked: false,
+            tags: ["shared"],
+            media: {
+              url: "objects/media/remote-blue.mp3",
+              mime: "audio/mpeg",
+              bytes: 9,
+              sha256: "remote-sha",
+            },
+            memories: [],
+          },
+        },
+        createdAt: 320,
+      },
+    ]);
+
+    const plan = await buildR2ExportPlan({
+      driveId: "drv_1",
+      libraryId: "lib_1",
+      baseUrl: "https://music.example.com/muzero/",
+      setIds: ["ses_1"],
+      db,
+    });
+    const setIndex = JSON.parse(
+      String(plan.objects.find((object) => object.kind === "set-index")?.body),
+    );
+
+    expect(setIndex).toMatchObject({
+      revision: 2,
+      set: {
+        name: "Folded Night Drive",
+        updatedAt: 320,
+      },
+    });
+    expect(setIndex.tracks.map((track: { id: string }) => track.id)).toEqual([
+      "trk_1",
+      "trk_remote",
+    ]);
+  });
+
   it("exports immutable per-device playback event segments", async () => {
     await seedSet();
     await db.devices.put({

@@ -17,7 +17,12 @@ import {
   type PlaybackEventFlushPolicy,
   shouldFlushPlaybackEventSegment,
 } from "./playback-event-segments";
-import type { R2Manifest, R2SetIndex } from "./r2-manifest-schema";
+import {
+  type R2Manifest,
+  type R2SetIndex,
+  r2DjConfigSchema,
+  r2SetTrackSchema,
+} from "./r2-manifest-schema";
 import { canPublishDeviceProfileToDrive, canWriteStatsToDrive } from "./r2-stats-policy";
 
 type R2RemoteObject = R2SetIndex["tracks"][number]["media"];
@@ -189,19 +194,23 @@ export async function buildR2ExportPlan(input: R2ExportPlanInput): Promise<R2Exp
       });
     }
 
-    const setIndex: R2SetIndex = {
-      schema: "muzero-r2-set-index-v1",
-      set: {
-        id: session.id,
-        name: session.name,
-        seedPrompt: session.seedPrompt,
-        displayMode: session.displayMode,
-        config: session.config,
-        createdAt: session.createdAt,
-        updatedAt: session.updatedAt,
+    const setIndex = await foldSetMutationsIntoIndex(
+      {
+        schema: "muzero-r2-set-index-v1",
+        set: {
+          id: session.id,
+          name: session.name,
+          seedPrompt: session.seedPrompt,
+          displayMode: session.displayMode,
+          config: session.config,
+          createdAt: session.createdAt,
+          updatedAt: session.updatedAt,
+        },
+        tracks: setIndexTracks,
       },
-      tracks: setIndexTracks,
-    };
+      input.driveId,
+      db,
+    );
     setIndexes.push({
       session,
       object: createJsonObject("set-index", `sets/${session.id}/index.json`, setIndex, {
@@ -319,6 +328,125 @@ async function createSetMutationObjects(driveId: string, db: MuzeroDB): Promise<
         { setId: mutation.entityId },
       ),
     );
+}
+
+async function foldSetMutationsIntoIndex(
+  index: R2SetIndex,
+  driveId: string,
+  db: MuzeroDB,
+): Promise<R2SetIndex> {
+  const rows = await db.syncMutations.where("driveId").equals(driveId).toArray();
+  const mutations = rows
+    .filter(
+      (mutation) =>
+        mutation.syncedAt == null &&
+        mutation.scope === "set" &&
+        mutation.entityId === index.set.id &&
+        mutation.base?.remoteKey === `sets/${index.set.id}/index.json`,
+    )
+    .sort((a, b) => a.createdAt - b.createdAt);
+  if (mutations.length === 0) return index;
+
+  const folded: R2SetIndex = {
+    ...index,
+    set: { ...index.set },
+    tracks: [...index.tracks],
+  };
+  const touched = new Set<string>();
+  let appliedCount = 0;
+
+  for (const mutation of mutations) {
+    const touchedKeys = mutationTouchedKeys(mutation);
+    if (touchedKeys.length === 0 || touchedKeys.some((key) => touched.has(key))) continue;
+    if (!applySetMutation(folded, mutation)) continue;
+    for (const key of touchedKeys) touched.add(key);
+    appliedCount += 1;
+    folded.set.updatedAt = Math.max(folded.set.updatedAt, mutation.createdAt);
+  }
+
+  if (appliedCount === 0) return index;
+  folded.revision = (index.revision ?? 0) + appliedCount;
+  return folded;
+}
+
+function mutationTouchedKeys(mutation: SyncMutation): string[] {
+  if (mutation.action === "set-metadata-updated") {
+    const payload = mutation.payload;
+    if (!isRecord(payload)) return [];
+    return ["name", "description", "seedPrompt", "displayMode", "config"]
+      .filter((field) => Object.hasOwn(payload, field))
+      .map((field) => `set:${field}`);
+  }
+
+  if (mutation.action === "track-added-to-set") {
+    const track = trackPayload(mutation.payload);
+    return track ? [`track:${track.id}`] : [];
+  }
+
+  if (mutation.action === "track-removed-from-set") {
+    const trackId = trackIdPayload(mutation.payload);
+    return trackId ? [`track:${trackId}`] : [];
+  }
+
+  return [];
+}
+
+function applySetMutation(index: R2SetIndex, mutation: SyncMutation): boolean {
+  if (mutation.action === "set-metadata-updated") {
+    const payload = mutation.payload;
+    if (!isRecord(payload)) return false;
+    if (typeof payload.name === "string" && payload.name.trim()) index.set.name = payload.name;
+    if (typeof payload.description === "string") index.set.description = payload.description;
+    if (typeof payload.seedPrompt === "string") index.set.seedPrompt = payload.seedPrompt;
+    if (payload.displayMode === "video" || payload.displayMode === "cover") {
+      index.set.displayMode = payload.displayMode;
+    }
+    if (isRecord(payload.config)) {
+      const config = r2DjConfigSchema.partial().safeParse(payload.config);
+      if (config.success) index.set.config = { ...index.set.config, ...config.data };
+    }
+    return true;
+  }
+
+  if (mutation.action === "track-added-to-set") {
+    const track = trackPayload(mutation.payload);
+    if (!track || index.tracks.some((existing) => existing.id === track.id)) return false;
+    const position = trackPositionPayload(mutation.payload);
+    index.tracks.splice(position ?? index.tracks.length, 0, track);
+    return true;
+  }
+
+  if (mutation.action === "track-removed-from-set") {
+    const trackId = trackIdPayload(mutation.payload);
+    if (!trackId) return false;
+    const nextTracks = index.tracks.filter((track) => track.id !== trackId);
+    if (nextTracks.length === index.tracks.length) return false;
+    index.tracks = nextTracks;
+    return true;
+  }
+
+  return false;
+}
+
+function trackPayload(payload: unknown): R2SetIndex["tracks"][number] | undefined {
+  if (!isRecord(payload)) return undefined;
+  const result = r2SetTrackSchema.safeParse(payload.track);
+  return result.success ? result.data : undefined;
+}
+
+function trackIdPayload(payload: unknown): string | undefined {
+  return isRecord(payload) && typeof payload.trackId === "string" ? payload.trackId : undefined;
+}
+
+function trackPositionPayload(payload: unknown): number | undefined {
+  if (!isRecord(payload)) return undefined;
+  return typeof payload.position === "number" && Number.isInteger(payload.position)
+    ? Math.max(0, payload.position)
+    : undefined;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value != null && !Array.isArray(value);
 }
 
 function setMutationKey(mutation: SyncMutation): string {
