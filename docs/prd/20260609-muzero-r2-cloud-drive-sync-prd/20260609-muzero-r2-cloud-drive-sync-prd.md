@@ -224,6 +224,49 @@ The shared V2/V3 broker flow:
 - Collaborator pastes URL; broker validates token and allows only scoped operations, such as reading a specific share projection, stats/presence writeback for that share, or upload to a specific set/share.
 - Owner can revoke invite tokens from MUZERO UI.
 
+### 2.6.1 Access Tiers and Link Indirection
+
+The realistic usage profile is: **mostly the user's own devices, occasionally
+shared to others.** Match the mechanism to the tier, and keep the bucket
+**private by default** — public is opt-in, only for truly-public sharing.
+
+| Tier | Bucket | Who signs the read | Backend | Egress |
+|------|--------|--------------------|---------|--------|
+| **① Own devices (default)** | private | the device itself, **locally** | none | free |
+| **② Shared to others (occasional)** | private | a **Worker** (self-hosted V2 / mu0.app V3) | broker | free |
+| **③ Truly public** | public | n/a (open URL) | none | free |
+
+Key realizations:
+
+- **Same mechanism, different signer — a presigned GET URL.** Media elements
+  (`<audio>`/`<video>` `src`) cannot carry an `Authorization` header, so a
+  *private* object is fetched via a presigned URL (auth in the query string).
+  - **Own devices presign locally** — the device holds the R2 secret, so it
+    signs its own short-TTL GET URLs with no server. This makes V1 owner-sync
+    **private** (no public bucket needed) while egress stays free. This is a
+    **V1 enhancement**: reads resolve through a per-drive media-URL abstraction
+    (owned → local presign; shared → broker; public → open URL), which is the
+    abstraction PRD Open Question 5 anticipated.
+  - **Third parties cannot hold the secret**, so a Worker broker signs for them
+    (Tier ②). This is the only tier that needs a backend.
+
+- **Do NOT proxy media bytes through the broker.** The broker only issues
+  presigned URLs; the client fetches bytes **directly from R2** (egress stays
+  free). Proxying bytes would forfeit free egress, add cost, and bottleneck.
+
+- **Opaque share links (`mu0.app/s/<id>`)** are the durable shared identity. The
+  broker resolves the id → grant → real R2, then issues a presigned URL.
+  Benefits: revocation, no enumeration/hotlinking, and the durable link is
+  decoupled from the storage backend (owner can rotate buckets/keys without
+  breaking the link). Caveat: the issued presigned URL still names the R2
+  host/bucket/key at fetch time (it cannot be fully hidden without proxying),
+  but it expires in minutes and the bucket is not enumerable — equivalent to how
+  Dropbox/Drive share links resolve to temporary signed download URLs.
+
+- **Dependency note:** Tier ① has **no** dependency on mu0.app (local + direct).
+  Tier ② introduces a hard dependency on the broker's uptime and makes the
+  broker a custodian of access — a deliberate V3 trade-off, out of V1 scope.
+
 ### 2.7 Optional MUZERO Hosted Control Plane
 
 MUZERO is open source and users can self-host the app and any future drive broker. Separately, the available product domain is currently `mu0.app` (`0` = zero), which can offer an **optional hosted Worker backend** to make R2 binding, owner setup, and invite management easier for non-technical users.
@@ -1931,7 +1974,7 @@ Do not record secrets, full signed URLs, or media content.
 | 2 | Should generated lyrics/briefs be published? | Open | Include by default for DJ continuity, but show privacy warning. |
 | 3 | What threshold defines a play count? | Open | Candidate: count when listened >= max(30s, 30% duration), once per track start. |
 | 4 | Should remote deletes apply locally? | Open | v1 should preserve local data and surface deleted remote objects as conflicts. |
-| 5 | Should stream mode create remote-only tracks without `blobId`? | Open | Likely yes, but player/media engine needs a remote URL source abstraction. |
+| 5 | Should stream mode create remote-only tracks without `blobId`? | Resolved | Yes. V1 already streams remote-only tracks from a public URL. Next: a per-drive media-URL resolution abstraction (owned → local presign of a private object; shared → broker presign; public → open URL) so the bucket can be private by default (see §2.6.1). `<audio>`/`<video>` need the auth in the URL, hence presign. |
 | 6 | Should sync include chat sessions? | Resolved | No for this PRD; chat sync is out of scope due prompt/privacy sensitivity. |
 | 7 | Can browser and desktop share identical R2 write implementation? | Open | Prefer one S3 signing client with `getAppFetch()` injection; validate bundle size before adding AWS SDK. |
 | 8 | Should anonymous public listeners be able to contribute stats/presence to the owner? | Resolved | Not in the R2-only PRD. Requires a future user-deployed Worker or presigned-upload broker. |
@@ -2059,3 +2102,4 @@ Do not record secrets, full signed URLs, or media content.
 | 2026-06-09 | MUZERO | Phases 3 & 4 completed: Settings → Cloud Drive now wires a per-drive **Sync now** / **Cancel** control on each writable connected drive, with a compact live phase/object/percent/error line backed by `useSyncStore`, plus en/zh/ja/ko strings. Verified end-to-end in the preview: clicking Sync now resolves the publish context, builds the export plan, runs the publisher, and surfaces live + durable failure progress — closing the last integration gap between the tested publish/pull logic and a user-triggerable action. |
 | 2026-06-09 | MUZERO | Phase 6 presence read fetcher added: `readRemotePresence` reads the owner-maintained `presence/index.json` (new `muzero-r2-presence-index-v1` schema) and resolves each referenced per-device `presence/devices/<id>.json`, skipping a missing index or malformed device object rather than throwing and defaulting its fetch to the shared `getAppFetch()` path — the read side the `R2PresencePoller` previously lacked. |
 | 2026-06-09 | MUZERO | Phases 5 & 6 completed: the `useRemotePresence` hook resolves the active remote set's source drive by `ses_remote_<driveId>_` id prefix and polls `readRemotePresence` only while the new **Listening now** section is mounted on Now Playing (visible-scope, ≥60s interval), rendering trusted devices' current track via `ListeningNowList` (+ en/zh/ja/ko label); Phase 5's plays/listened-time stats UI was already wired into Settings. Now Playing render verified crash-free in the preview, with the section correctly hidden for local sets. All six phases are now ✅ Done. |
+| 2026-06-10 | MUZERO | §2.6.1 added — access tiers + link indirection. Private-by-default model: ① own devices read private objects via **local presign** (no public bucket, no backend, free egress) — a V1 enhancement via a per-drive media-URL resolution abstraction; ② occasional sharing via a **Worker broker** (self-hosted V2 / mu0.app V3) issuing presigned URLs, with opaque `mu0.app/s/<id>` durable links; ③ public only for truly-public sharing. Rule: the broker issues presigned URLs but **never proxies bytes** (egress stays free). Open Question 5 resolved accordingly. |
