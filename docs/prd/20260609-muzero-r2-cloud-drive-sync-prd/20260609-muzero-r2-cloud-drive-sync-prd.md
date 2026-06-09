@@ -1751,7 +1751,7 @@ For a large shared playlist with many trusted devices, the UI should:
   - [x] additive stats merge
   - [x] add new tracks/memories
   - [x] preserve local-only tracks unless user chooses delete
-  - [ ] latest `updatedAt` wins only for non-user-authored cache metadata
+  - [x] latest `updatedAt` wins only for non-user-authored cache metadata
   - [ ] user-authored set/track/memory fields use explicit conflict UI when both sides changed
   - [x] per-device profile conflicts use `revision` first, then explicit user choice
 - [ ] Add conflict UI with "keep local", "use remote", "duplicate both".
@@ -2047,3 +2047,4 @@ Do not record secrets, full signed URLs, or media content.
 | 2026-06-09 | MUZERO | Phase 4 conflict media safety verified: pull dry-run exposes track conflicts with mutation ids, and apply blocks conflicted pulls without replacing existing local `Track.blobId` or `mediaBlobs` rows. |
 | 2026-06-09 | MUZERO | Phase 4 device profile merge rule added: per-device profile conflicts now compare `revision` first, auto-apply the newer side, and mark same-revision profile field differences as `needs-review` for explicit user choice. |
 | 2026-06-09 | MUZERO | Phase 4 local-only track preservation added: refreshing a remote set now keeps existing non-remote track ids in the local session while applying the remote order for shared tracks. |
+| 2026-06-09 | MUZERO | Phase 4 updatedAt merge policy added: only non-user-authored cache metadata, such as search catalog page versions, may use `updatedAt` as an automatic cache freshness winner. |

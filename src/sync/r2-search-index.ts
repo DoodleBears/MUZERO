@@ -1,6 +1,7 @@
 import { db as defaultDb, type MuzeroDB } from "@/db/muzero-db";
 import type { RemoteSearchCatalog, RemoteSearchTrack } from "@/db/types";
 import { getAppFetch } from "@/lib/platform";
+import { cacheMetadataVersion } from "./r2-merge-policy";
 import {
   matchesRemoteSearchTrack,
   type R2SearchPageRef,
@@ -109,7 +110,7 @@ export async function importRemoteSearchCatalog(
 
   for (const pageRef of catalog.pages.tracks) {
     const pageUrl = resolveRemoteObjectUrl(input.baseUrl, pageRefPath(pageRef));
-    const version = pageRefVersion(pageRef);
+    const version = cacheMetadataVersion(pageRef);
     const versionKey = pageVersionKey("track", pageUrl);
     if (version) pageVersions[versionKey] = version;
     if (version && existing?.pageVersions?.[versionKey] === version) continue;
@@ -127,7 +128,7 @@ export async function importRemoteSearchCatalog(
 
   for (const pageRef of catalog.pages.sets) {
     const pageUrl = resolveRemoteObjectUrl(input.baseUrl, pageRefPath(pageRef));
-    const version = pageRefVersion(pageRef);
+    const version = cacheMetadataVersion(pageRef);
     const versionKey = pageVersionKey("set", pageUrl);
     if (version) pageVersions[versionKey] = version;
     if (version && existing?.pageVersions?.[versionKey] === version) continue;
@@ -159,11 +160,6 @@ export async function searchRemoteTracks(
 
 function pageRefPath(ref: R2SearchPageRef): string {
   return typeof ref === "string" ? ref : ref.path;
-}
-
-function pageRefVersion(ref: R2SearchPageRef): string | undefined {
-  if (typeof ref === "string") return undefined;
-  return ref.sha256 ?? ref.etag ?? ref.updatedAt;
 }
 
 function pageVersionKey(kind: "set" | "track", pageUrl: string): string {
