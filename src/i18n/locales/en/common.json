@@ -264,6 +264,13 @@
     "memoryPhotoAlt": "Memory photo"
   },
   "settings": {
+    "navSecAppearance": "Appearance",
+    "navSecPlayback": "Playback",
+    "navSecCloud": "Cloud Drive",
+    "navSecDevice": "Device",
+    "navSecAdvanced": "Advanced",
+    "navBackground": "Background",
+    "navVisualizer": "Visualizer",
     "language": "Language",
     "appearance": "Appearance",
     "theme": "Theme",

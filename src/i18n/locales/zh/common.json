@@ -256,6 +256,13 @@
     "memoryPhotoAlt": "记忆照片"
   },
   "settings": {
+    "navSecAppearance": "外观",
+    "navSecPlayback": "播放",
+    "navSecCloud": "云盘",
+    "navSecDevice": "设备",
+    "navSecAdvanced": "高级",
+    "navBackground": "背景",
+    "navVisualizer": "可视化",
     "language": "语言",
     "appearance": "外观",
     "theme": "主题",

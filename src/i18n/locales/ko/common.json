@@ -256,6 +256,13 @@
     "memoryPhotoAlt": "추억 사진"
   },
   "settings": {
+    "navSecAppearance": "모양",
+    "navSecPlayback": "재생",
+    "navSecCloud": "클라우드 드라이브",
+    "navSecDevice": "기기",
+    "navSecAdvanced": "고급",
+    "navBackground": "배경",
+    "navVisualizer": "비주얼라이저",
     "language": "언어",
     "appearance": "모양",
     "theme": "테마",

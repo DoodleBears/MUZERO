@@ -13,7 +13,7 @@
 |-------|------|--------|------|
 | 1 | Minimal owner R2 connection model + bucket auto-discovery | ✅ Completed | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | Simplified owner R2 setup form | ✅ Completed | [Phase 2 Checklist](#phase-2-checklist) |
-| 3 | Two-column Settings layout (sidebar → detail) + persistence | 🔄 In Progress | [Phase 3 Checklist](#phase-3-checklist) |
+| 3 | Two-column Settings layout (sidebar → detail) + persistence | ✅ Completed | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | Split the Cloud Drive section into items | 🔲 Pending | [Phase 4 Checklist](#phase-4-checklist) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
@@ -162,17 +162,17 @@ Settings
 
 **Tasks:**
 - [x] Persist active item in `nav-store` (`settingsItem`, localStorage).
-- [ ] Add `settings-nav.ts`: section/item config + `resolveActiveSettingsItem` fallback (pure, tested).
-- [ ] Add `SettingsSidebar` component (sections → item buttons, active highlight).
-- [ ] Refactor `SettingsPage` into a two-column shell rendering one item at a time (Cloud Drive as a single item for this phase).
-- [ ] Responsive: sidebar collapses to a top selector under `md`.
+- [x] Add `settings-nav.ts`: section/item config + `resolveActiveSettingsItem` fallback (pure, tested).
+- [x] Add `SettingsSidebar` component (sections → item buttons, active highlight).
+- [x] Refactor `SettingsPage` into a two-column shell rendering one item at a time (Cloud Drive as a single item for this phase).
+- [x] Responsive: sidebar collapses to a top selector under `md`.
 
 ### Phase 3 Checklist
 
-- [ ] Clicking a sidebar item shows only that item's controls on the right.
-- [ ] The active item persists across reloads.
-- [ ] An unknown/stale persisted id falls back to the first item.
-- [ ] No settings control is lost in the refactor; the page renders crash-free.
+- [x] Clicking a sidebar item shows only that item's controls on the right.
+- [x] The active item persists across reloads.
+- [x] An unknown/stale persisted id falls back to the first item.
+- [x] No settings control is lost in the refactor; the page renders crash-free.
 
 ### Phase 4: Split the Cloud Drive section into items
 
@@ -236,3 +236,4 @@ Settings
 | Date | Author | Changes |
 |------|--------|---------|
 | 2026-06-09 | MUZERO | Initial draft. Phase 1 (owner R2 connection model + ListBuckets) and Phase 2 (simplified owner form) already implemented; Phase 3 nav-store persistence landed. |
+| 2026-06-09 | MUZERO | Phase 3 completed: Settings is now a two-column master-detail — a pure `settings-nav` config (sections → items, with a stale-id fallback resolver) drives a `SettingsSidebar`; `SettingsPage` renders one item's controls at a time, gated by the persisted `nav-store.settingsItem`. Responsive (vertical sidebar on `md+`, horizontal scroll row on mobile). Verified in the preview at desktop + mobile widths; en/zh/ja/ko section labels added. |

@@ -256,6 +256,13 @@
     "memoryPhotoAlt": "メモリー写真"
   },
   "settings": {
+    "navSecAppearance": "外観",
+    "navSecPlayback": "再生",
+    "navSecCloud": "クラウドドライブ",
+    "navSecDevice": "デバイス",
+    "navSecAdvanced": "詳細",
+    "navBackground": "背景",
+    "navVisualizer": "ビジュアライザー",
     "language": "言語",
     "appearance": "外観",
     "theme": "テーマ",
