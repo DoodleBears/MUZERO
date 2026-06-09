@@ -1,7 +1,32 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { MuzeroDB } from "@/db/muzero-db";
 import { buildR2ExportPlan } from "./r2-export-plan";
+import { entityCoverRemoteWins, importRemoteEntityCovers } from "./r2-import-stream";
+import type { R2EntityCoversIndex } from "./r2-manifest-schema";
 import { r2EntityCoversIndexSchema, r2ManifestSchema } from "./r2-manifest-schema";
+
+const BASE = "https://music.example.com/muzero/";
+
+function remoteIndex(
+  entries: R2EntityCoversIndex["entries"],
+  updatedAt = 1000,
+): R2EntityCoversIndex {
+  return { schema: "muzero-r2-entity-covers-v1", updatedAt, entries };
+}
+
+function remoteEntry(id: string, updatedAt: number, kind: "artist" | "album" = "artist") {
+  return {
+    id,
+    kind,
+    cover: {
+      url: `objects/covers/sha256-${id}.jpg`,
+      mime: "image/jpeg",
+      bytes: 10,
+      sha256: id,
+    },
+    updatedAt,
+  };
+}
 
 let db: MuzeroDB;
 let dbName: string;
@@ -114,5 +139,72 @@ describe("buildR2ExportPlan — entity covers", () => {
     expect(plan.objects.map((o) => o.kind)).not.toContain("entity-covers-index");
     const manifest = JSON.parse(String(plan.objects.find((o) => o.kind === "manifest")?.body));
     expect(manifest.entityCoversIndex).toBeUndefined();
+  });
+
+  it("re-exports an imported (remote-backed) cover BY REFERENCE so a 2nd device can't drop it", async () => {
+    await importRemoteEntityCovers(
+      { baseUrl: BASE, index: remoteIndex([remoteEntry("a", 1000)]) },
+      db,
+    );
+
+    const plan = await buildR2ExportPlan({ ...EXPORT_INPUT, db });
+    const kinds = plan.objects.map((o) => o.kind);
+    // No binary re-upload (bytes already live remotely), but the index still lists it.
+    expect(kinds).not.toContain("entity-cover");
+    expect(kinds).toContain("entity-covers-index");
+    const index = JSON.parse(
+      String(plan.objects.find((o) => o.kind === "entity-covers-index")?.body),
+    );
+    expect(index.entries).toHaveLength(1);
+    expect(index.entries[0].cover.url).toBe("objects/covers/sha256-a.jpg");
+  });
+});
+
+describe("entityCoverRemoteWins (last-write-wins)", () => {
+  it("remote wins when there is no local cover or it is strictly newer", () => {
+    expect(entityCoverRemoteWins(undefined, 100)).toBe(true);
+    expect(entityCoverRemoteWins(100, 200)).toBe(true);
+  });
+  it("local wins on a newer or equal clock", () => {
+    expect(entityCoverRemoteWins(200, 100)).toBe(false);
+    expect(entityCoverRemoteWins(100, 100)).toBe(false);
+  });
+});
+
+describe("importRemoteEntityCovers", () => {
+  it("imports remote covers as remote-backed rows (resolved URL, no local blob)", async () => {
+    const res = await importRemoteEntityCovers(
+      { baseUrl: BASE, index: remoteIndex([remoteEntry("artist1", 1000)]) },
+      db,
+    );
+
+    expect(res).toEqual({ imported: 1, skipped: 0 });
+    const row = await db.entityCovers.get("artist1");
+    expect(row?.coverBlobId).toBeUndefined();
+    expect(row?.remoteCover?.url).toBe(`${BASE}objects/covers/sha256-artist1.jpg`);
+    expect(row?.remoteCover?.key).toBe("objects/covers/sha256-artist1.jpg");
+    expect(row?.updatedAt).toBe(1000);
+  });
+
+  it("keeps a strictly-newer local cover (LWW) and replaces an older one", async () => {
+    await seedEntityCover("keep", "artist", "blb_keep", 5000); // local newer
+    await seedEntityCover("replace", "artist", "blb_replace", 100); // local older
+
+    const res = await importRemoteEntityCovers(
+      {
+        baseUrl: BASE,
+        index: remoteIndex([remoteEntry("keep", 1000), remoteEntry("replace", 2000)]),
+      },
+      db,
+    );
+
+    expect(res).toEqual({ imported: 1, skipped: 1 });
+    // kept local
+    expect((await db.entityCovers.get("keep"))?.coverBlobId).toBe("blb_keep");
+    // replaced with remote-backed; old local blob cleaned up
+    const replaced = await db.entityCovers.get("replace");
+    expect(replaced?.coverBlobId).toBeUndefined();
+    expect(replaced?.remoteCover?.url).toBe(`${BASE}objects/covers/sha256-replace.jpg`);
+    expect(await db.mediaBlobs.get("blb_replace")).toBeUndefined();
   });
 });

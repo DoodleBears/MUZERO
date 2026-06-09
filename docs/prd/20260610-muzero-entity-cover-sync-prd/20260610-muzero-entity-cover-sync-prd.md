@@ -14,7 +14,7 @@
 | 1 | Local entity-cover store + resolution | ✅ Completed | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | Entity-detail header set/clear UX | ✅ Completed | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | R2 sync: library-scoped object namespace | ✅ Completed | [Phase 3 Checklist](#phase-3-checklist) |
-| 4 | R2 sync: mutations, pull/import, conflict | 🔲 Pending | [Phase 4 Checklist](#phase-4-checklist) |
+| 4 | R2 sync: pull/import + LWW conflict | ✅ Completed | [Phase 4 Checklist](#phase-4-checklist) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
 
@@ -206,12 +206,17 @@ i18n: new `gallery.*` keys (set/replace/clear/hint) added to **en** first, then 
 
 > Design refinement vs. the original sketch: a SINGLE library-global index (not per-entity `library/entities/<kind>/<keyHash>/cover.json`) — simpler, mirrors `sets/<id>/index.json`, and the entity key is stored verbatim in JSON so no path hashing is needed (only content-addressing of the bytes, which `sha256Blob` already does on the main thread; entity covers are few and small, so no worker).
 
-### Phase 4 Checklist — Mutations, pull/import, conflict
-- [ ] `SyncMutation.scope: "entity-cover"`; write mutations from set/clear
-- [ ] Export plan emits entity-cover objects from those mutations
-- [ ] Pull diff + import write-back (LWW, tombstone on clear)
-- [ ] Conflict resolution `entityType: "entity-cover"`
-- [ ] Round-trip sync test (export → pull → import) + conflict test
+### Phase 4 Checklist — Pull/import + LWW conflict
+- [x] `importRemoteEntityCovers` — reads the remote index → local `entityCovers` as **remote-backed rows** (display URL + re-export ref, no local bytes; mirrors remote track covers' `remoteCoverUrl`) — [r2-import-stream.ts](../../../src/sync/r2-import-stream.ts)
+- [x] **Re-export by reference**: imported (remote-backed) rows re-emit into the index without re-uploading bytes, so a 2nd device's full re-export can't drop another device's cover — [r2-export-plan.ts](../../../src/sync/r2-export-plan.ts) `createEntityCoverObjects`
+- [x] **LWW conflict** via `entityCoverRemoteWins(localUpdatedAt, remoteUpdatedAt)` — strictly-newer local kept, older local replaced + its blob cleaned up. Automatic (no user-facing conflict UI, unlike set/track/memory)
+- [x] `EntityCover.remoteCover` + optional `coverBlobId`; `useEntityCoverUrl` shows remote covers full-size (crop applies to local bytes only)
+- [x] `SyncMutation.scope` reserves `"entity-cover"` (recording deferred — see below)
+- [x] Import + re-export + LWW tests ([r2-entity-cover-sync.test.ts](../../../src/sync/r2-entity-cover-sync.test.ts))
+
+> **Deferred (consistent with the rest of the sync subsystem, which is itself not yet fully wired — `recordSyncMutation` has no production callers, set/track edits don't record mutations either):**
+> 1. **Edit→mutation recording.** `setEntityCover`/`clearEntityCover` don't write mutations yet. Today entity covers converge via *full re-export each run + LWW on import*, which is correct for set + edit but not for **clears** (a deleted cover isn't tombstoned, so a clear won't propagate to other devices). Wire when the general edit→mutation→orchestrator path lands.
+> 2. **Orchestrator pull wiring.** `importRemoteEntityCovers` is a tested unit (same granularity as `importRemoteSetStream`) but isn't called by the pull loop yet — same status as the set import's orchestration.
 
 ---
 

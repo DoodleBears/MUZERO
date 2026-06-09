@@ -1,6 +1,8 @@
 import { db as defaultDb, type MuzeroDB } from "@/db/muzero-db";
-import type { DjSession, Memory, SetDisplayMode, Track } from "@/db/types";
+import type { DjSession, EntityCover, Memory, SetDisplayMode, Track } from "@/db/types";
+import type { R2EntityCoversIndex } from "./r2-manifest-schema";
 import type { RemoteSetIndexResult } from "./r2-subscription";
+import { resolveRemoteObjectUrl } from "./r2-url";
 
 export interface ImportRemoteSetStreamInput {
   driveId: string;
@@ -112,4 +114,62 @@ export async function importRemoteSetStream(
   });
 
   return { sessionId, trackIds: remoteTrackIds };
+}
+
+/**
+ * Last-write-wins for an entity cover: the remote wins when there's no local
+ * cover or the remote clock is strictly newer. A tie keeps the local (the bytes
+ * are content-addressed, so a same-clock cover is the same image).
+ */
+export function entityCoverRemoteWins(
+  localUpdatedAt: number | undefined,
+  remoteUpdatedAt: number,
+): boolean {
+  return localUpdatedAt == null || remoteUpdatedAt > localUpdatedAt;
+}
+
+export interface ImportRemoteEntityCoversInput {
+  baseUrl: string;
+  index: R2EntityCoversIndex;
+}
+
+/**
+ * Import the library-global entity-cover index from R2 into local `entityCovers`,
+ * resolving each to a remote-backed row (display URL + re-export reference, no
+ * local bytes — mirrors how remote track covers store `remoteCoverUrl`). LWW per
+ * entity: a strictly-newer LOCAL cover is kept; an older local is replaced and its
+ * blob cleaned up. (Tombstone/clear propagation is deferred — see the PRD.)
+ */
+export async function importRemoteEntityCovers(
+  input: ImportRemoteEntityCoversInput,
+  db: MuzeroDB = defaultDb,
+): Promise<{ imported: number; skipped: number }> {
+  let imported = 0;
+  let skipped = 0;
+  await db.transaction("rw", db.entityCovers, db.mediaBlobs, async () => {
+    for (const entry of input.index.entries) {
+      const local = await db.entityCovers.get(entry.id);
+      if (!entityCoverRemoteWins(local?.updatedAt, entry.updatedAt)) {
+        skipped += 1;
+        continue;
+      }
+      if (local?.coverBlobId) await db.mediaBlobs.delete(local.coverBlobId);
+      const row: EntityCover = {
+        id: entry.id,
+        kind: entry.kind,
+        remoteCover: {
+          url: resolveRemoteObjectUrl(input.baseUrl, entry.cover.url),
+          key: entry.cover.url,
+          mime: entry.cover.mime,
+          bytes: entry.cover.bytes,
+          sha256: entry.cover.sha256,
+        },
+        crop: entry.crop,
+        updatedAt: entry.updatedAt,
+      };
+      await db.entityCovers.put(row);
+      imported += 1;
+    }
+  });
+  return { imported, skipped };
 }

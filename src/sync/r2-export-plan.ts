@@ -369,17 +369,28 @@ async function createEntityCoverObjects(db: MuzeroDB): Promise<R2ExportObject[]>
   const binaryObjects: R2ExportObject[] = [];
   const entries: R2EntityCoverEntry[] = [];
   for (const row of rows) {
-    const blob = await db.mediaBlobs.get(row.coverBlobId);
-    if (!blob) continue;
-    const binary = await createBinaryObject("entity-cover", blob, {});
-    binaryObjects.push(binary.object);
-    entries.push({
-      id: row.id,
-      kind: row.kind,
-      cover: binary.remote,
-      crop: row.crop,
-      updatedAt: row.updatedAt,
-    });
+    let cover: R2RemoteObject;
+    if (row.coverBlobId) {
+      // Local cover: content-address the bytes + upload them.
+      const blob = await db.mediaBlobs.get(row.coverBlobId);
+      if (!blob) continue;
+      const binary = await createBinaryObject("entity-cover", blob, {});
+      binaryObjects.push(binary.object);
+      cover = binary.remote;
+    } else if (row.remoteCover) {
+      // Imported cover: re-emit by reference (bytes already live remotely) so a
+      // re-export from this device doesn't drop another device's cover.
+      cover = {
+        key: row.remoteCover.key,
+        url: row.remoteCover.key,
+        mime: row.remoteCover.mime,
+        bytes: row.remoteCover.bytes,
+        sha256: row.remoteCover.sha256,
+      };
+    } else {
+      continue;
+    }
+    entries.push({ id: row.id, kind: row.kind, cover, crop: row.crop, updatedAt: row.updatedAt });
   }
   if (entries.length === 0) return [];
   const index = createJsonObject("entity-covers-index", "library/entity-covers/index.json", {

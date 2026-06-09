@@ -133,9 +133,17 @@ export function useEntityCoverUrl(
     [entityKey],
     null,
   );
-  // Both calls are unconditional (hook rules); only one result is returned.
+  // Both calls are unconditional (hook rules); only one result is returned. A
+  // local override crops its own blob; a remote-backed (imported) override has no
+  // local bytes to crop, so it shows the full image via `remoteCoverUrl`.
   const overrideUrl = useTrackCoverUrl(
-    override ? { coverBlobId: override.coverBlobId, coverCrop: override.crop } : undefined,
+    override
+      ? {
+          coverBlobId: override.coverBlobId,
+          coverCrop: override.coverBlobId ? override.crop : undefined,
+          remoteCoverUrl: override.remoteCover?.url,
+        }
+      : undefined,
   );
   const fallbackUrl = useTrackCoverUrl(fallbackTrack);
   return override ? overrideUrl : fallbackUrl;

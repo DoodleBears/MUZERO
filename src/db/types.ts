@@ -149,7 +149,19 @@ export interface MediaBlob {
 export interface EntityCover {
   id: string; // = entity projection key
   kind: "artist" | "album";
-  coverBlobId: string; // FK → mediaBlobs (role "cover", trackId = id)
+  /** Local cover bytes set on THIS device. Mutually exclusive with `remoteCover`. */
+  coverBlobId?: string; // FK → mediaBlobs (role "cover", trackId = id)
+  /**
+   * Cover imported from another device via R2 — displayed from the URL (lazy, no
+   * local bytes) and re-exported by reference so a re-export can't drop it.
+   */
+  remoteCover?: {
+    url: string; // absolute, for display
+    key: string; // relative object key (objects/covers/sha256-…), for re-export
+    mime: string;
+    bytes: number;
+    sha256?: string;
+  };
   crop?: CropRect;
   updatedAt: number; // last-write-wins clock for R2 sync
 }
@@ -636,7 +648,10 @@ export interface SyncMutation {
   id: string;
   driveId: string;
   devicePublicId: string;
-  scope: "set" | "track" | "memory" | "profile" | "stats";
+  // "entity-cover" is reserved for derived artist/album cover edits (entityId =
+  // projection key). Recording is deferred along with the rest of the not-yet-wired
+  // edit→mutation path; today entity covers sync via full re-export + LWW on import.
+  scope: "set" | "track" | "memory" | "profile" | "stats" | "entity-cover";
   entityId: string;
   action:
     | "set-metadata-updated"
