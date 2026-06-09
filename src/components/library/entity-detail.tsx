@@ -4,12 +4,14 @@ import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { TrackInspectorPanel } from "@/components/track/track-inspector-panel";
 import type { Track } from "@/db/types";
+import { useBackGesture } from "@/hooks/use-back-gesture";
 import { useTrackCoverUrl } from "@/hooks/use-media";
 import type { EntityStat } from "@/lib/library-stats";
-import { cn, formatListenTime } from "@/lib/utils";
+import { cn, formatDuration, formatListenTime } from "@/lib/utils";
 import { transitionState } from "@/lib/view-transition-react";
 import { usePlayerStore } from "@/stores/player-store";
-import { VirtualTrackList } from "./virtual-track-list";
+import { EntityCoverButton } from "./entity-cover-button";
+import { TrackListSection } from "./track-list-section";
 
 /** A pre-resolved album for the artist-detail albums strip. */
 export interface EntityStripItem {
@@ -27,6 +29,7 @@ export interface EntityStripItem {
  */
 export function EntityDetailView({
   kind,
+  entityKey,
   title,
   subtitle,
   coverTrack,
@@ -37,6 +40,8 @@ export function EntityDetailView({
   onBack,
 }: {
   kind: "artist" | "album";
+  /** Entity projection key; omitted for pseudo-buckets (no editable cover). */
+  entityKey?: string;
   title: string;
   subtitle: string;
   coverTrack: Track | undefined;
@@ -57,6 +62,15 @@ export function EntityDetailView({
     () => tracks.find((track) => track.id === selectedTrackId) ?? tracks[0],
     [selectedTrackId, tracks],
   );
+  // Total runtime of this entity's tracks (the album/artist length), distinct
+  // from the cumulative listen-time stat below.
+  const totalDurationSec = useMemo(
+    () => tracks.reduce((sum, track) => sum + (track.durationSec || 0), 0),
+    [tracks],
+  );
+
+  // Go back a level via A/← or a trackpad left→right swipe (mirrors the button).
+  useBackGesture(onBack);
 
   useEffect(() => {
     if (tracks.length === 0) {
@@ -85,23 +99,35 @@ export function EntityDetailView({
       </button>
 
       <div className="mb-3 flex items-center gap-3">
-        <span
-          className={cn(
-            "grid size-20 shrink-0 place-items-center overflow-hidden bg-secondary",
-            round ? "rounded-full" : "rounded-xl",
-          )}
-        >
-          {coverUrl ? (
-            <img src={coverUrl} alt="" className="size-full object-cover" />
-          ) : (
-            <Placeholder className="size-7 text-muted-foreground" />
-          )}
-        </span>
+        {entityKey ? (
+          <EntityCoverButton
+            entityKey={entityKey}
+            kind={kind}
+            coverTrack={coverTrack}
+            round={round}
+          />
+        ) : (
+          <span
+            className={cn(
+              "grid size-20 shrink-0 place-items-center overflow-hidden bg-secondary",
+              round ? "rounded-full" : "rounded-xl",
+            )}
+          >
+            {coverUrl ? (
+              <img src={coverUrl} alt="" className="size-full object-cover" />
+            ) : (
+              <Placeholder className="size-7 text-muted-foreground" />
+            )}
+          </span>
+        )}
         <div className="min-w-0 flex-1">
           <h1 className="truncate font-semibold text-lg">{title}</h1>
           <p className="truncate text-muted-foreground text-sm">{subtitle}</p>
           <p className="flex items-center gap-2 text-muted-foreground text-xs">
-            <span>{t("gallery.count", { count: tracks.length })}</span>
+            <span className="tabular-nums">
+              {t("gallery.count", { count: tracks.length })}
+              {totalDurationSec > 0 && ` · ${formatDuration(totalDurationSec)}`}
+            </span>
             {stat && stat.listenedSec > 0 && (
               <span className="inline-flex items-center gap-1">
                 <Clock className="size-3" />
@@ -119,7 +145,7 @@ export function EntityDetailView({
       </div>
 
       {albums && albums.length > 0 && onOpenAlbum && (
-        <div className="no-scrollbar mb-3 flex gap-2 overflow-x-auto">
+        <div className="no-scrollbar mb-3 flex gap-2 overflow-x-auto" data-no-swipe-back>
           {albums.map((album) => (
             <AlbumStripCard key={album.key} album={album} onOpen={() => onOpenAlbum(album.key)} />
           ))}
@@ -127,16 +153,14 @@ export function EntityDetailView({
       )}
 
       <div className="grid min-h-0 flex-1 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(280px,360px)]">
-        <div className="min-h-0">
-          <VirtualTrackList
-            tracks={tracks}
-            selectedTrackId={selectedTrack?.id}
-            onView={(track) => transitionState(() => setSelectedTrackId(track.id))}
-            onPlay={(track) => void playTrack(track)}
-            emptyHint={t("gallery.tracksEmpty")}
-            className="chrome-fade no-scrollbar pt-5 pb-chrome-bottom [--chrome-fade-top:1.25rem]"
-          />
-        </div>
+        <TrackListSection
+          tracks={tracks}
+          selectedTrackId={selectedTrack?.id}
+          onView={(track) => transitionState(() => setSelectedTrackId(track.id))}
+          onPlay={(track) => void playTrack(track)}
+          emptyHint={t("gallery.tracksEmpty")}
+          listClassName="chrome-fade no-scrollbar pt-5 pb-chrome-bottom [--chrome-fade-top:1.25rem]"
+        />
         <TrackInspectorPanel track={selectedTrack} />
       </div>
     </motion.div>

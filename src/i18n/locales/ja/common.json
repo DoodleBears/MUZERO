@@ -39,6 +39,16 @@
     "addFiles": "ファイルを追加",
     "empty": "空のセット —— ファイルを追加するか、DJ にまかせましょう。"
   },
+  "folderImport": {
+    "cta": "フォルダを読み込む",
+    "imported_other": "フォルダから {{count}} 件のファイルを読み込みました",
+    "skippedEncrypted_other": "{{count}} 件の暗号化ファイル（DRM / ストア形式）をスキップしました",
+    "nothingNew": "読み込む新しいファイルはありません",
+    "importingProgress": "読み込み中 {{done}} / {{total}}",
+    "cancelled_other": "読み込みを中止 —— {{count}} 件を追加しました",
+    "publishNow": "クラウドにアップロード",
+    "noCloudDrive": "先に設定でクラウドドライブを設定してください"
+  },
   "search": {
     "placeholder": "タイトル・メモ・タグを検索…（例：#ロードトリップ や「2019年の夏」）",
     "results_other": "{{count}} 件",
@@ -101,7 +111,10 @@
     "noMatchingSets": "一致するセットがありません",
     "empty": "まだ何もありません —— セットを始めれば DJ が埋めてくれます。",
     "uploadedAudio": "アップロード音声",
-    "uploadedVideo": "アップロード動画"
+    "uploadedVideo": "アップロード動画",
+    "deleteConfirmTitle": "この曲を完全に削除しますか？",
+    "deleteConfirmBody": "すべてのセットから削除し、音声・カバー・メモリーも削除します。元に戻せません。",
+    "deletedToast": "曲を削除しました"
   },
   "drop": {
     "addTitle": "ドロップしてセットに追加",
@@ -422,7 +435,16 @@
     "traceCopy": "Trace をコピー",
     "traceCopied": "コピーしました",
     "traceClear": "クリア",
-    "traceEmpty": "Trace イベントはまだありません。"
+    "traceEmpty": "Trace イベントはまだありません。",
+    "importFoldersTitle": "読み込んだフォルダ",
+    "importFoldersDesc": "記憶したローカルフォルダは起動時に再スキャンされ、新しいファイルが自動的に追加されます。",
+    "importFoldersDesktopOnly": "フォルダの監視はデスクトップアプリでのみ利用できます。",
+    "importFoldersEmpty": "フォルダはまだありません。",
+    "importFolderLastSynced": "最終同期 {{when}}",
+    "importFolderNeverSynced": "未同期",
+    "importFolderSyncNow": "今すぐ同期",
+    "importFolderRemove": "監視を停止",
+    "importFolderBoundSet": "セット：{{name}}"
   },
   "gallery": {
     "title": "セット",
@@ -448,6 +470,7 @@
     "setName": "セット名",
     "setDescription": "説明を追加…",
     "coverHint": "ドロップ / ペースト / クリックでカバーを設定",
+    "removeCover": "カスタムカバーを削除",
     "newSet": "新規セット",
     "addTracks": "曲を追加",
     "newSetName": "新しいセット",
@@ -508,5 +531,36 @@
     "copied": "コピーしました",
     "retry": "再試行",
     "reload": "アプリを再読み込み"
+  },
+  "common": {
+    "cancel": "キャンセル",
+    "undo": "元に戻す"
+  },
+  "select": {
+    "enter": "選択",
+    "done": "完了",
+    "selectAll": "すべて選択",
+    "clear": "クリア",
+    "selectedCount_other": "{{count}} 件選択",
+    "removeFromSet": "セットから削除",
+    "deletePermanently": "完全に削除",
+    "removedFromSet_other": "{{count}} 曲をセットから削除しました",
+    "deleted_other": "{{count}} 曲を削除しました"
+  },
+  "set": {
+    "contextDelete": "セットを削除…",
+    "deleteTitle": "「{{name}}」を削除しますか？",
+    "deleteBody": "曲は残す（他のセットと「すべての曲」に残ります）か、このセットにだけある曲も完全に削除します。",
+    "deleteOnly": "セットのみ削除",
+    "deleteWithExclusive_other": "セット + {{count}} 曲を削除",
+    "deleted": "セットを削除しました",
+    "deletedWithSongs_other": "セットと {{count}} 曲を削除しました"
+  },
+  "entity": {
+    "deleteAlbum": "アルバムを削除…",
+    "deleteArtist": "アーティストを削除…",
+    "deleteTitle": "「{{name}}」を削除しますか？",
+    "deleteBody_other": "{{count}} 曲を完全に削除しますか？すべてのセットからも削除され、元に戻せません。",
+    "deleteConfirm_other": "{{count}} 曲を削除"
   }
 }

@@ -39,6 +39,16 @@
     "addFiles": "添加文件",
     "empty": "空歌单 —— 添加文件，或让 DJ 来填充。"
   },
+  "folderImport": {
+    "cta": "导入文件夹",
+    "imported_other": "已从文件夹导入 {{count}} 个文件",
+    "skippedEncrypted_other": "已跳过 {{count}} 个加密文件（DRM / 商店格式）",
+    "nothingNew": "没有可导入的新文件",
+    "importingProgress": "导入中 {{done}} / {{total}}",
+    "cancelled_other": "已取消导入 —— 已添加 {{count}} 个文件",
+    "publishNow": "上传到云端",
+    "noCloudDrive": "请先在设置里配置云盘"
+  },
   "search": {
     "placeholder": "搜索标题、备注、标签…（例如 #公路旅行 或「2019 夏天」）",
     "results_other": "{{count}} 条结果",
@@ -101,7 +111,10 @@
     "noMatchingSets": "没有匹配的歌单",
     "empty": "还没有内容 —— 开启一个歌单，DJ 会来填充。",
     "uploadedAudio": "上传的音频",
-    "uploadedVideo": "上传的视频"
+    "uploadedVideo": "上传的视频",
+    "deleteConfirmTitle": "永久删除这首歌？",
+    "deleteConfirmBody": "将从所有歌单移除，并删除其音频、封面和记忆。此操作不可撤销。",
+    "deletedToast": "已删除歌曲"
   },
   "drop": {
     "addTitle": "拖放即可加入歌单",
@@ -422,7 +435,16 @@
     "traceCopy": "复制 trace",
     "traceCopied": "已复制",
     "traceClear": "清空",
-    "traceEmpty": "还没有 trace 事件。"
+    "traceEmpty": "还没有 trace 事件。",
+    "importFoldersTitle": "已导入的文件夹",
+    "importFoldersDesc": "记住的本地文件夹会在启动时重新扫描，新文件自动加入。",
+    "importFoldersDesktopOnly": "文件夹监视仅在桌面端可用。",
+    "importFoldersEmpty": "还没有文件夹。",
+    "importFolderLastSynced": "上次同步 {{when}}",
+    "importFolderNeverSynced": "尚未同步",
+    "importFolderSyncNow": "立即同步",
+    "importFolderRemove": "停止监视",
+    "importFolderBoundSet": "歌单：{{name}}"
   },
   "gallery": {
     "title": "歌单",
@@ -448,6 +470,7 @@
     "setName": "歌单名称",
     "setDescription": "添加描述…",
     "coverHint": "拖拽 / 粘贴 / 点击设置封面",
+    "removeCover": "移除自定义封面",
     "newSet": "新建歌单",
     "addTracks": "添加歌曲",
     "newSetName": "新歌单",
@@ -508,5 +531,36 @@
     "copied": "已复制",
     "retry": "重试",
     "reload": "重新加载应用"
+  },
+  "common": {
+    "cancel": "取消",
+    "undo": "撤销"
+  },
+  "select": {
+    "enter": "选择",
+    "done": "完成",
+    "selectAll": "全选",
+    "clear": "清除",
+    "selectedCount_other": "已选 {{count}} 首",
+    "removeFromSet": "移出歌单",
+    "deletePermanently": "永久删除",
+    "removedFromSet_other": "已从歌单移出 {{count}} 首",
+    "deleted_other": "已删除 {{count}} 首"
+  },
+  "set": {
+    "contextDelete": "删除歌单…",
+    "deleteTitle": "删除「{{name}}」？",
+    "deleteBody": "保留歌曲（它们仍在其它歌单和【所有歌曲】里），或同时永久删除仅属于此歌单的歌曲。",
+    "deleteOnly": "只删歌单",
+    "deleteWithExclusive_other": "删歌单 + {{count}} 首独占歌",
+    "deleted": "已删除歌单",
+    "deletedWithSongs_other": "已删除歌单及 {{count}} 首歌"
+  },
+  "entity": {
+    "deleteAlbum": "删除专辑…",
+    "deleteArtist": "删除歌手…",
+    "deleteTitle": "删除「{{name}}」？",
+    "deleteBody_other": "永久删除它的 {{count}} 首歌？同时从所有歌单移除,不可撤销。",
+    "deleteConfirm_other": "删除 {{count}} 首"
   }
 }

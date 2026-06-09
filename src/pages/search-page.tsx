@@ -1,22 +1,40 @@
 import { useLiveQuery } from "dexie-react-hooks";
 import type { TFunction } from "i18next";
-import { ArrowLeft, Heart, ImagePlus, LayoutGrid, List, Play, Plus, Search } from "lucide-react";
+import {
+  ArrowLeft,
+  Heart,
+  ImagePlus,
+  LayoutGrid,
+  List,
+  Play,
+  Plus,
+  Search,
+  Trash2,
+} from "lucide-react";
 import { motion } from "motion/react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { EntityDetailView } from "@/components/library/entity-detail";
 import { EntityGrid, type LibraryEntityItem } from "@/components/library/entity-grid";
-import { TrackListMenu } from "@/components/library/track-list-menu";
-import { VirtualTrackList } from "@/components/library/virtual-track-list";
+import { TrackListSection } from "@/components/library/track-list-section";
 import { TrackInspectorPanel } from "@/components/track/track-inspector-panel";
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu";
 import { Disc3Icon } from "@/components/ui/disc-3";
 import { Input } from "@/components/ui/input";
 import { Kbd, KbdGroup } from "@/components/ui/kbd";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { ImportFolderButton } from "@/components/upload/import-folder-button";
 import { db } from "@/db/muzero-db";
 import {
   createSession,
+  deleteTracks,
   getSession,
   listAllTracks,
   listSessions,
@@ -24,7 +42,8 @@ import {
   setSessionCover,
   updateSession,
 } from "@/db/repositories";
-import type { Track } from "@/db/types";
+import type { DjSession, Track } from "@/db/types";
+import { useBackGesture } from "@/hooks/use-back-gesture";
 import { useObjectUrl, useTrackCoverUrl } from "@/hooks/use-media";
 import { dragHasFiles, filesFromTransfer, IMAGE_ACCEPT, MEDIA_ACCEPT } from "@/lib/file-drop";
 import {
@@ -36,6 +55,7 @@ import {
   findAlbumForTrack,
   findArtistByName,
 } from "@/lib/library-index";
+import { libraryNavKey, rovingIndex } from "@/lib/library-nav";
 import { buildTrackStatsMap, deriveEntityStats, statFor } from "@/lib/library-stats";
 import {
   filterSets,
@@ -45,9 +65,11 @@ import {
   sortSets,
 } from "@/lib/set-gallery";
 import { searchEntityFacets, searchTracks } from "@/lib/track-search";
-import { cn, formatListenTime } from "@/lib/utils";
+import { cn, formatDuration, formatListenTime } from "@/lib/utils";
 import { transitionState } from "@/lib/view-transition-react";
+import { useCoverTargetStore } from "@/stores/cover-target-store";
 import { useNavStore } from "@/stores/nav-store";
+import { notify } from "@/stores/notification-store";
 import { usePlayerStore } from "@/stores/player-store";
 import { useUploadTargetStore } from "@/stores/upload-target-store";
 import { matchesRemoteSearchTrack } from "@/sync/r2-search-catalog";
@@ -89,6 +111,18 @@ function isGalleryModeToggle(event: KeyboardEvent): boolean {
   return event.code === "Backquote" || GALLERY_MODE_TOGGLE_KEYS.has(event.key);
 }
 
+const GALLERY_CARD_SELECTOR = "[data-gallery-card]";
+
+function isTypingTarget(el: EventTarget | null): boolean {
+  if (!(el instanceof HTMLElement)) return false;
+  const tag = el.tagName;
+  return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || el.isContentEditable;
+}
+
+function hasModalDialogOpen(): boolean {
+  return !!document.querySelector('[role="dialog"][aria-modal="true"]');
+}
+
 /**
  * 歌单 Gallery — a two-level surface. Level 1 browses every set like an album wall
  * (search / filter / sort / list⇄album-grid). Tapping a set opens level 2: that
@@ -113,6 +147,17 @@ export function SearchPage() {
       ? "grid"
       : "list",
   );
+  const [deletingSet, setDeletingSet] = useState<DjSession | null>(null);
+  const [deletingEntity, setDeletingEntity] = useState<{
+    kind: "album" | "artist";
+    name: string;
+    trackIds: string[];
+  } | null>(null);
+  // Wall scroll + roving-focus memory: restore the scroll position and re-focus
+  // the card we backed out of when returning from a detail (so W/S/↑↓ continues).
+  const wallScrollRef = useRef<HTMLDivElement | null>(null);
+  const wallScrollTopRef = useRef(0);
+  const returnFocusKeyRef = useRef<string | null>(null);
 
   const sessions = useLiveQuery(() => listSessions(db), [], []);
   const allTracks = useLiveQuery(() => listAllTracks(db), [], []);
@@ -131,7 +176,18 @@ export function SearchPage() {
   const setActiveSession = usePlayerStore((s) => s.setActiveSession);
   const play = usePlayerStore((s) => s.play);
   const playTrack = usePlayerStore((s) => s.playTrack);
+  const deleteSession = usePlayerStore((s) => s.deleteSession);
   const setUploadTarget = useUploadTargetStore((s) => s.setTarget);
+  const setCoverTarget = useCoverTargetStore((s) => s.setCoverTarget);
+
+  // Songs that live ONLY in the set being deleted — shown in the "+ songs" option.
+  const deletingExclusiveCount = useMemo(() => {
+    if (!deletingSet) return 0;
+    const elsewhere = new Set(
+      sessions.filter((s) => s.id !== deletingSet.id).flatMap((s) => s.trackIds),
+    );
+    return deletingSet.trackIds.filter((id) => !elsewhere.has(id)).length;
+  }, [deletingSet, sessions]);
 
   // Route app-wide dropped/pasted media: a set detail → that set; the album wall →
   // a target-set picker. Reset to the default behavior when leaving the gallery.
@@ -339,6 +395,16 @@ export function SearchPage() {
     }
   }, [mode, selectedLibraryTrackId, shownTracks]);
 
+  // Publish the image-paste cover target (see cover-target-store) for the surface
+  // on screen: the 全部歌曲 list targets its selected song; set detail and the
+  // grids have no per-track target (clear). An artist/album detail publishes its
+  // own selection, so leave the store to it. Clear on unmount (tab switch).
+  useEffect(() => {
+    if (selectedArtist || selectedAlbum) return;
+    setCoverTarget(!selectedSetId && mode === "tracks" ? (selectedLibraryTrackId ?? null) : null);
+  }, [selectedArtist, selectedAlbum, selectedSetId, mode, selectedLibraryTrackId, setCoverTarget]);
+  useEffect(() => () => setCoverTarget(null), [setCoverTarget]);
+
   function setViewPref(next: GalleryView) {
     setView(next);
     if (typeof localStorage !== "undefined") localStorage.setItem(VIEW_KEY, next);
@@ -362,6 +428,74 @@ export function SearchPage() {
     });
     transitionState(() => setSelectedSetId(s.id));
   }
+
+  // Opening a card remembers it so backing out re-focuses it (W/S/↑↓ continue from
+  // there) and restores the wall scroll position on the way back.
+  function openSet(id: string) {
+    returnFocusKeyRef.current = id;
+    transitionState(() => setSelectedSetId(id));
+  }
+  function openArtist(key: string) {
+    returnFocusKeyRef.current = key;
+    transitionState(() => setSelectedArtistKey(key));
+  }
+  function openAlbum(key: string) {
+    returnFocusKeyRef.current = key;
+    transitionState(() => setSelectedAlbumKey(key));
+  }
+
+  // Wall scroll container: record scroll as it moves; on remount (returning from a
+  // detail) restore the position and focus the card we came from.
+  const attachWall = useCallback((node: HTMLDivElement | null) => {
+    wallScrollRef.current = node;
+    if (!node) return;
+    node.scrollTop = wallScrollTopRef.current;
+    const key = returnFocusKeyRef.current;
+    if (!key) return;
+    window.requestAnimationFrame(() => {
+      node.querySelector<HTMLElement>(`[data-gallery-card-key="${CSS.escape(key)}"]`)?.focus();
+      returnFocusKeyRef.current = null;
+    });
+  }, []);
+
+  // Roving keyboard focus over the wall's cards (sets/albums/artists grids): W/↑
+  // prev, S/↓ next, D/→ open. The 全部歌曲 list keeps its own row nav. Runs in
+  // capture so ↑/↓ move focus here rather than changing volume (player shortcuts).
+  useEffect(() => {
+    const detailOpen = !!selectedSetId || !!selectedArtistKey || !!selectedAlbumKey;
+    if (detailOpen || mode === "tracks") return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return;
+      if (isTypingTarget(event.target) || hasModalDialogOpen()) return;
+      const intent = libraryNavKey(event.key);
+      if (!intent || intent === "back") return; // nothing is above the wall
+      const root = wallScrollRef.current;
+      if (!root) return;
+      const cards = Array.from(root.querySelectorAll<HTMLElement>(GALLERY_CARD_SELECTOR));
+      if (cards.length === 0) return;
+      const activeIndex = cards.findIndex((card) => card === document.activeElement);
+      if (intent === "open") {
+        if (event.key.toLowerCase() === "enter") return; // focused button clicks natively
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        if (activeIndex >= 0) cards[activeIndex].click();
+        else cards[0]?.focus();
+        return;
+      }
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      const fallbackKey = returnFocusKeyRef.current;
+      const fallbackIndex = fallbackKey
+        ? cards.findIndex((card) => card.dataset.galleryCardKey === fallbackKey)
+        : 0;
+      const target = rovingIndex(cards.length, activeIndex, intent, Math.max(0, fallbackIndex));
+      const el = cards[target];
+      el?.focus();
+      el?.scrollIntoView({ block: "nearest" });
+    };
+    window.addEventListener("keydown", onKeyDown, { capture: true });
+    return () => window.removeEventListener("keydown", onKeyDown, { capture: true });
+  }, [mode, selectedSetId, selectedArtistKey, selectedAlbumKey]);
 
   function focusTrackSearchResult(direction: "first" | "last") {
     if (mode !== "tracks" || shownTracks.length === 0) return;
@@ -409,6 +543,7 @@ export function SearchPage() {
     return (
       <EntityDetailView
         kind="artist"
+        entityKey={selectedArtist.bucket ? undefined : selectedArtist.key}
         title={artistDisplayLabel(selectedArtist, t)}
         subtitle={t("gallery.albumCount", { count: artistAlbums.length })}
         coverTrack={
@@ -434,6 +569,9 @@ export function SearchPage() {
     return (
       <EntityDetailView
         kind="album"
+        entityKey={
+          selectedAlbum.bucket || selectedAlbum.isCompilation ? undefined : selectedAlbum.key
+        }
         title={albumDisplayLabel(selectedAlbum, t)}
         subtitle={
           selectedAlbum.bucket === "unknown" ? "" : albumArtistDisplayLabel(selectedAlbum, t)
@@ -453,6 +591,10 @@ export function SearchPage() {
   // (`chrome-fade`), top and bottom, just like Now Playing.
   return (
     <div
+      ref={attachWall}
+      onScroll={(e) => {
+        wallScrollTopRef.current = e.currentTarget.scrollTop;
+      }}
       className={cn(
         "chrome-fade no-scrollbar mx-auto flex h-full w-full flex-col overflow-y-auto px-4 pt-chrome-top lg:px-6",
         mode === "tracks" ? "max-w-6xl" : "max-w-4xl",
@@ -550,8 +692,9 @@ export function SearchPage() {
                     item={item}
                     coverTrack={item.coverTrackId ? trackById.get(item.coverTrackId) : undefined}
                     view="grid"
-                    onEnter={() => transitionState(() => setSelectedSetId(item.session.id))}
+                    onEnter={() => openSet(item.session.id)}
                     onPlay={() => void playSet(item.session.id)}
+                    onRequestDelete={() => setDeletingSet(item.session)}
                   />
                 ))}
               </div>
@@ -563,8 +706,9 @@ export function SearchPage() {
                     item={item}
                     coverTrack={item.coverTrackId ? trackById.get(item.coverTrackId) : undefined}
                     view="list"
-                    onEnter={() => transitionState(() => setSelectedSetId(item.session.id))}
+                    onEnter={() => openSet(item.session.id)}
                     onPlay={() => void playSet(item.session.id)}
+                    onRequestDelete={() => setDeletingSet(item.session)}
                   />
                 ))}
               </div>
@@ -572,6 +716,53 @@ export function SearchPage() {
           </div>
         </>
       )}
+      {deletingSet ? (
+        <ConfirmDialog
+          open
+          onOpenChange={(open) => {
+            if (!open) setDeletingSet(null);
+          }}
+          title={t("set.deleteTitle", { name: deletingSet.name })}
+          description={t("set.deleteBody")}
+          confirm={{
+            label: t("set.deleteOnly"),
+            variant: "destructive-outline",
+            onConfirm: async () => {
+              await deleteSession(deletingSet.id, false);
+              notify.success(t("set.deleted"));
+            },
+          }}
+          secondary={
+            deletingExclusiveCount > 0
+              ? {
+                  label: t("set.deleteWithExclusive", { count: deletingExclusiveCount }),
+                  variant: "destructive",
+                  onConfirm: async () => {
+                    const purged = await deleteSession(deletingSet.id, true);
+                    notify.success(t("set.deletedWithSongs", { count: purged }));
+                  },
+                }
+              : undefined
+          }
+        />
+      ) : null}
+      {deletingEntity ? (
+        <ConfirmDialog
+          open
+          onOpenChange={(open) => {
+            if (!open) setDeletingEntity(null);
+          }}
+          title={t("entity.deleteTitle", { name: deletingEntity.name })}
+          description={t("entity.deleteBody", { count: deletingEntity.trackIds.length })}
+          confirm={{
+            label: t("entity.deleteConfirm", { count: deletingEntity.trackIds.length }),
+            onConfirm: async () => {
+              await deleteTracks(deletingEntity.trackIds);
+              notify.success(t("select.deleted", { count: deletingEntity.trackIds.length }));
+            },
+          }}
+        />
+      ) : null}
 
       {mode === "tracks" && (
         <div className="min-h-0 flex-1">
@@ -597,7 +788,7 @@ export function SearchPage() {
                           kind="artist"
                           view="list"
                           trackById={trackById}
-                          onOpen={(key) => transitionState(() => setSelectedArtistKey(key))}
+                          onOpen={openArtist}
                           emptyHint=""
                         />
                       </div>
@@ -612,7 +803,7 @@ export function SearchPage() {
                           kind="album"
                           view="list"
                           trackById={trackById}
-                          onOpen={(key) => transitionState(() => setSelectedAlbumKey(key))}
+                          onOpen={openAlbum}
                           emptyHint=""
                         />
                       </div>
@@ -620,16 +811,15 @@ export function SearchPage() {
                   </div>
                 )}
                 {shownTracks.length > 0 && (
-                  <TrackListMenu className="min-h-0 flex-1">
-                    <VirtualTrackList
-                      tracks={shownTracks}
-                      selectedTrackId={selectedLibraryTrack?.id}
-                      onView={(track) => transitionState(() => setSelectedLibraryTrackId(track.id))}
-                      onPlay={(track) => void playTrack(track)}
-                      emptyHint={t("gallery.tracksEmpty")}
-                      className="no-scrollbar pb-chrome-bottom"
-                    />
-                  </TrackListMenu>
+                  <TrackListSection
+                    tracks={shownTracks}
+                    selectedTrackId={selectedLibraryTrack?.id}
+                    onView={(track) => transitionState(() => setSelectedLibraryTrackId(track.id))}
+                    onPlay={(track) => void playTrack(track)}
+                    emptyHint={t("gallery.tracksEmpty")}
+                    listClassName="no-scrollbar pb-chrome-bottom"
+                    className="flex-1"
+                  />
                 )}
                 {shownRemoteTracks.length > 0 && (
                   <div className="flex flex-col gap-1 pb-chrome-bottom">
@@ -666,7 +856,17 @@ export function SearchPage() {
             kind="album"
             view={view}
             trackById={trackById}
-            onOpen={(key) => transitionState(() => setSelectedAlbumKey(key))}
+            onOpen={openAlbum}
+            onRequestDelete={(key) => {
+              const entry = albumIndex.find((a) => a.key === key);
+              if (!entry) return;
+              const item = albumItems.find((i) => i.key === key);
+              setDeletingEntity({
+                kind: "album",
+                name: item?.label ?? key,
+                trackIds: entry.trackIds,
+              });
+            }}
             emptyHint={t("gallery.albumsEmpty")}
           />
         </>
@@ -682,7 +882,7 @@ export function SearchPage() {
             kind="artist"
             view={view}
             trackById={trackById}
-            onOpen={(key) => transitionState(() => setSelectedArtistKey(key))}
+            onOpen={openArtist}
             emptyHint={t("gallery.artistsEmpty")}
           />
         </>
@@ -724,6 +924,13 @@ function SetDetailView({
     () => tracks.find((track) => track.id === selectedTrackId) ?? tracks[0],
     [selectedTrackId, tracks],
   );
+  const totalDurationSec = useMemo(
+    () => tracks.reduce((sum, track) => sum + (track.durationSec || 0), 0),
+    [tracks],
+  );
+
+  // Go back to the wall via A/← or a trackpad left→right swipe (mirrors the button).
+  useBackGesture(onBack);
 
   useEffect(() => {
     if (tracks.length === 0) {
@@ -781,6 +988,9 @@ function SetDetailView({
       const img = filesFromTransfer(e.clipboardData).find((f) => f.type.startsWith("image/"));
       if (img) {
         e.preventDefault();
+        // Stop the bubble before the window-level GlobalDropZone paste listener,
+        // so a set-detail paste sets the set cover only (no second image modal).
+        e.stopPropagation();
         void setSessionCover(setId, img, img.type || "image/jpeg");
       }
     };
@@ -875,8 +1085,9 @@ function SetDetailView({
             rows={1}
             className="-mx-1 mt-0.5 w-full resize-none overflow-hidden rounded-md border border-transparent bg-transparent px-1 text-xs leading-5 text-muted-foreground outline-none hover:border-input focus:border-input"
           />
-          <p className="px-1 pt-0.5 text-xs text-muted-foreground">
+          <p className="px-1 pt-0.5 text-xs text-muted-foreground tabular-nums">
             {t("gallery.count", { count: tracks.length })}
+            {totalDurationSec > 0 && ` · ${formatDuration(totalDurationSec)}`}
           </p>
         </div>
 
@@ -887,6 +1098,12 @@ function SetDetailView({
           <Button size="sm" variant="outline" onClick={() => addFileRef.current?.click()}>
             <Plus className="size-4" /> {t("gallery.addTracks")}
           </Button>
+          <ImportFolderButton
+            setId={setId}
+            variant="outline"
+            className="h-8 px-3 text-sm"
+            onWebFiles={(files) => addUploadsToSet(setId, files)}
+          />
           <input
             ref={addFileRef}
             type="file"
@@ -902,16 +1119,15 @@ function SetDetailView({
       </div>
 
       <div className="grid min-h-0 flex-1 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(280px,360px)]">
-        <TrackListMenu setId={setId} className="min-h-0">
-          <VirtualTrackList
-            tracks={tracks}
-            selectedTrackId={selectedTrack?.id}
-            onView={(track) => transitionState(() => setSelectedTrackId(track.id))}
-            onPlay={(track) => void playTrack(track)}
-            emptyHint={t("gallery.empty")}
-            className="chrome-fade no-scrollbar pt-5 pb-chrome-bottom [--chrome-fade-top:1.25rem]"
-          />
-        </TrackListMenu>
+        <TrackListSection
+          setId={setId}
+          tracks={tracks}
+          selectedTrackId={selectedTrack?.id}
+          onView={(track) => transitionState(() => setSelectedTrackId(track.id))}
+          onPlay={(track) => void playTrack(track)}
+          emptyHint={t("gallery.empty")}
+          listClassName="chrome-fade no-scrollbar pt-5 pb-chrome-bottom [--chrome-fade-top:1.25rem]"
+        />
         <TrackInspectorPanel track={selectedTrack} />
       </div>
     </motion.div>
@@ -1076,12 +1292,15 @@ function SetCard({
   view,
   onEnter,
   onPlay,
+  onRequestDelete,
 }: {
   item: SetGalleryItem;
   coverTrack: Track | undefined;
   view: GalleryView;
   onEnter: () => void;
   onPlay: () => void;
+  /** Right-click → "Delete set…". Omit to disable the context menu. */
+  onRequestDelete?: () => void;
 }) {
   const { t } = useTranslation();
   const coverUrl = useSetCoverUrl(item.session.coverBlobId, coverTrack);
@@ -1107,12 +1326,14 @@ function SetCard({
     </button>
   );
 
-  if (view === "grid") {
-    return (
-      <div className="group relative">
+  const inner =
+    view === "grid" ? (
+      <>
         <button
           type="button"
           onClick={onEnter}
+          data-gallery-card
+          data-gallery-card-key={item.session.id}
           className="flex w-full flex-col gap-2 rounded-xl p-2 text-left outline-none transition-colors hover:bg-accent/40 focus-visible:ring-2 focus-visible:ring-ring"
         >
           <span className="relative grid aspect-square w-full place-items-center overflow-hidden rounded-lg bg-secondary">
@@ -1131,33 +1352,45 @@ function SetCard({
           </span>
         </button>
         {playBtn}
-      </div>
+      </>
+    ) : (
+      <>
+        <button
+          type="button"
+          onClick={onEnter}
+          data-gallery-card
+          data-gallery-card-key={item.session.id}
+          className="flex w-full items-center gap-3 rounded-xl p-2 pe-12 text-left outline-none transition-colors hover:bg-accent/40 focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          <span className="grid size-12 shrink-0 place-items-center overflow-hidden rounded-lg bg-secondary">
+            {coverUrl ? (
+              <img src={coverUrl} alt="" className="size-full object-cover" />
+            ) : (
+              <Disc3Icon className="text-muted-foreground" size={20} />
+            )}
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-sm font-medium">{item.session.name}</span>
+            <span className="block truncate text-xs text-muted-foreground">{count}</span>
+          </span>
+          {item.likedCount > 0 && (
+            <Heart className="me-8 size-4 shrink-0 fill-primary text-primary" />
+          )}
+        </button>
+        {playBtn}
+      </>
     );
-  }
+
+  if (!onRequestDelete) return <div className="group relative">{inner}</div>;
 
   return (
-    <div className="group relative">
-      <button
-        type="button"
-        onClick={onEnter}
-        className="flex w-full items-center gap-3 rounded-xl p-2 pe-12 text-left outline-none transition-colors hover:bg-accent/40 focus-visible:ring-2 focus-visible:ring-ring"
-      >
-        <span className="grid size-12 shrink-0 place-items-center overflow-hidden rounded-lg bg-secondary">
-          {coverUrl ? (
-            <img src={coverUrl} alt="" className="size-full object-cover" />
-          ) : (
-            <Disc3Icon className="text-muted-foreground" size={20} />
-          )}
-        </span>
-        <span className="min-w-0 flex-1">
-          <span className="block truncate text-sm font-medium">{item.session.name}</span>
-          <span className="block truncate text-xs text-muted-foreground">{count}</span>
-        </span>
-        {item.likedCount > 0 && (
-          <Heart className="me-8 size-4 shrink-0 fill-primary text-primary" />
-        )}
-      </button>
-      {playBtn}
-    </div>
+    <ContextMenu>
+      <ContextMenuTrigger className="group relative">{inner}</ContextMenuTrigger>
+      <ContextMenuContent>
+        <ContextMenuItem className="text-destructive-foreground" onClick={onRequestDelete}>
+          <Trash2 /> {t("set.contextDelete")}
+        </ContextMenuItem>
+      </ContextMenuContent>
+    </ContextMenu>
   );
 }

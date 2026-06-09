@@ -39,6 +39,19 @@
     "addFiles": "Add files",
     "empty": "Empty set — add files or let the DJ go."
   },
+  "folderImport": {
+    "cta": "Import folder",
+    "imported_one": "Imported {{count}} file from folder",
+    "imported_other": "Imported {{count}} files from folder",
+    "skippedEncrypted_one": "Skipped {{count}} encrypted file (DRM / store format)",
+    "skippedEncrypted_other": "Skipped {{count}} encrypted files (DRM / store formats)",
+    "nothingNew": "No new files to import",
+    "importingProgress": "Importing {{done}} / {{total}}",
+    "cancelled_one": "Import cancelled — {{count}} file added",
+    "cancelled_other": "Import cancelled — {{count}} files added",
+    "publishNow": "Upload to cloud",
+    "noCloudDrive": "Set up a cloud drive in Settings first"
+  },
   "search": {
     "placeholder": "Search titles, notes, tags… (e.g. #roadtrip or ‘summer 2019’)",
     "results_one": "{{count}} result",
@@ -104,7 +117,10 @@
     "noMatchingSets": "No matching sets",
     "empty": "Nothing here yet — start a set and the DJ will fill it.",
     "uploadedAudio": "uploaded audio",
-    "uploadedVideo": "uploaded video"
+    "uploadedVideo": "uploaded video",
+    "deleteConfirmTitle": "Delete this song permanently?",
+    "deleteConfirmBody": "This removes it from all sets and deletes its audio, cover, and memories. This can’t be undone.",
+    "deletedToast": "Song deleted"
   },
   "drop": {
     "addTitle": "Drop to add to your set",
@@ -430,7 +446,16 @@
     "traceCopy": "Copy trace",
     "traceCopied": "Copied",
     "traceClear": "Clear",
-    "traceEmpty": "No trace events yet."
+    "traceEmpty": "No trace events yet.",
+    "importFoldersTitle": "Imported folders",
+    "importFoldersDesc": "Remembered local folders are re-scanned on launch; new files are added automatically.",
+    "importFoldersDesktopOnly": "Folder watching is available in the desktop app.",
+    "importFoldersEmpty": "No folders yet.",
+    "importFolderLastSynced": "Last synced {{when}}",
+    "importFolderNeverSynced": "Not synced yet",
+    "importFolderSyncNow": "Sync now",
+    "importFolderRemove": "Stop watching",
+    "importFolderBoundSet": "Set: {{name}}"
   },
   "gallery": {
     "title": "Sets",
@@ -458,6 +483,7 @@
     "setName": "Set name",
     "setDescription": "Add a description…",
     "coverHint": "Drop / paste / click to set the cover",
+    "removeCover": "Remove custom cover",
     "newSet": "New set",
     "addTracks": "Add tracks",
     "newSetName": "New set",
@@ -519,5 +545,43 @@
     "copied": "Copied",
     "retry": "Try again",
     "reload": "Reload app"
+  },
+  "common": {
+    "cancel": "Cancel",
+    "undo": "Undo"
+  },
+  "select": {
+    "enter": "Select",
+    "done": "Done",
+    "selectAll": "Select all",
+    "clear": "Clear",
+    "selectedCount_one": "{{count}} selected",
+    "selectedCount_other": "{{count}} selected",
+    "removeFromSet": "Remove from set",
+    "deletePermanently": "Delete permanently",
+    "removedFromSet_one": "Removed {{count}} song from set",
+    "removedFromSet_other": "Removed {{count}} songs from set",
+    "deleted_one": "Deleted {{count}} song",
+    "deleted_other": "Deleted {{count}} songs"
+  },
+  "set": {
+    "contextDelete": "Delete set…",
+    "deleteTitle": "Delete “{{name}}”?",
+    "deleteBody": "Keep the songs (they stay in your other sets and in All songs), or also permanently delete songs that exist only in this set.",
+    "deleteOnly": "Delete set only",
+    "deleteWithExclusive_one": "Delete set + {{count}} song",
+    "deleteWithExclusive_other": "Delete set + {{count}} songs",
+    "deleted": "Set deleted",
+    "deletedWithSongs_one": "Set and {{count}} song deleted",
+    "deletedWithSongs_other": "Set and {{count}} songs deleted"
+  },
+  "entity": {
+    "deleteAlbum": "Delete album…",
+    "deleteArtist": "Delete artist…",
+    "deleteTitle": "Delete “{{name}}”?",
+    "deleteBody_one": "Permanently delete its {{count}} song? It’s removed from every set too — this can’t be undone.",
+    "deleteBody_other": "Permanently delete its {{count}} songs? They’re removed from every set too — this can’t be undone.",
+    "deleteConfirm_one": "Delete {{count}} song",
+    "deleteConfirm_other": "Delete {{count}} songs"
   }
 }

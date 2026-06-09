@@ -12,7 +12,7 @@
 | Phase | Name | Status | Link |
 |-------|------|--------|------|
 | 1 | Local entity-cover store + resolution | ✅ Completed | [Phase 1 Checklist](#phase-1-checklist) |
-| 2 | Entity-detail header set/clear UX | 🔲 Pending | [Phase 2 Checklist](#phase-2-checklist) |
+| 2 | Entity-detail header set/clear UX | ✅ Completed | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | R2 sync: library-scoped object namespace | 🔲 Pending | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | R2 sync: mutations, pull/import, conflict | 🔲 Pending | [Phase 4 Checklist](#phase-4-checklist) |
 
@@ -192,10 +192,12 @@ i18n: new `gallery.*` keys (set/replace/clear/hint) added to **en** first, then 
 - [x] Unit tests: repo round-trip + replace + clear ([entity-cover-repo.test.ts](../../../src/db/entity-cover-repo.test.ts)) + hook fallback precedence ([use-media.test.ts](../../../src/hooks/use-media.test.ts))
 
 ### Phase 2 Checklist — Entity-detail UX
-- [ ] Header becomes click/drop/paste cover target (reuse `CoverCropDialog`); clear affordance
-- [ ] Extend the image cover-target so an entity page routes a pasted image straight to crop
-- [ ] Hide all affordances for pseudo-entities
-- [ ] en→zh/ja/ko strings; component test for set + clear
+- [x] Header becomes click/drop/paste cover target (reuse `CoverCropDialog`); clear affordance — new [entity-cover-button.tsx](../../../src/components/library/entity-cover-button.tsx)
+- [x] Page-wide paste on an entity page → crop → entity cover (own document listener, `stopPropagation` past GlobalDropZone). Supersedes Part-1's track cover-target on entity pages.
+- [x] Hide the affordance for pseudo-entities — [entity-detail.tsx](../../../src/components/library/entity-detail.tsx) renders the button only when `entityKey` is passed; [search-page.tsx](../../../src/pages/search-page.tsx) omits it for `bucket` / `isCompilation`
+- [x] `gallery.removeCover` in en→zh/ja/ko; component test for drop→set + clear ([entity-cover-button.test.tsx](../../../src/components/library/entity-cover-button.test.tsx))
+
+> Note: the entity header uses `useEntityCoverUrl` (override → fallback track cover); the read-only placeholder span remains for pseudo-buckets.
 
 ### Phase 3 Checklist — Library-scoped object namespace
 - [ ] `r2EntityCoverSchema` + manifest `entityCovers` section ([r2-manifest-schema.ts](../../../src/sync/r2-manifest-schema.ts))
