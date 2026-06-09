@@ -13,7 +13,7 @@
 
 | Phase | Name | Status | Link |
 |-------|------|--------|------|
-| 1 | Manifest protocol + read-only subscription | 🔄 In Progress | [Phase 1 Checklist](#phase-1-checklist) |
+| 1 | Manifest protocol + read-only subscription | ✅ Done | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | R2 Setup Wizard + connection validation | ✅ Done | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | Local-to-cloud publish sync with visible progress | 🔄 In Progress | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | Cloud-to-local pull sync + conflict handling | 🔄 In Progress | [Phase 4 Checklist](#phase-4-checklist) |
@@ -1679,7 +1679,7 @@ For a large shared playlist with many trusted devices, the UI should:
 
 - [x] Browser can subscribe to a public manifest link and play an audio track.
 - [x] Browser can subscribe to a public manifest link and play a video track.
-- [ ] Tauri/Electron use the same manifest import path.
+- [x] Tauri/Electron use the same manifest import path.
 - [x] No R2 write credential is required for subscription.
 - [x] Command/Ctrl+F can search synced remote catalog rows locally.
 - [x] Invalid manifests do not mutate local IndexedDB.
@@ -2051,3 +2051,4 @@ Do not record secrets, full signed URLs, or media content.
 | 2026-06-09 | MUZERO | Phase 4 explicit conflict-resolution contract added: set/track/memory conflicts now expose only `keep-local`, `use-remote`, and `duplicate-both` actions, and cannot resolve without a user-selected action. |
 | 2026-06-09 | MUZERO | Phase 4 conflict resolution panel added: reusable Settings-ready UI renders set/track/memory conflicts and emits keep-local, use-remote, or duplicate-both actions without embedding untranslated text. |
 | 2026-06-09 | MUZERO | Phase 1 subscribed-manifest playback verified end-to-end: a public manifest subscription streams imported audio and video tracks straight from their remote object URLs (`MediaEngine.loadUrl`) with no `mediaBlobs` download, locking the stream-mode play path with player-store regression tests. |
+| 2026-06-09 | MUZERO | Phase 1 completed: shared manifest import path verified — `subscribeManifest`/`loadRemoteSetIndex` default their reader to the `getAppFetch()` platform shim (Tauri http plugin vs browser/Electron `fetch`) and still honor an injected fetcher, so browser, Tauri, and Electron read manifests through one code path with no per-runtime fork. |
