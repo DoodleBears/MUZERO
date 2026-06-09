@@ -1,6 +1,8 @@
 import type { MuzeroDB } from "@/db/muzero-db";
 import { db as defaultDb } from "@/db/muzero-db";
 import type {
+  AppSettings,
+  CloudDrive,
   DevicePublicProfile,
   DeviceRecord,
   DjSession,
@@ -15,6 +17,7 @@ import {
   shouldFlushPlaybackEventSegment,
 } from "./playback-event-segments";
 import type { R2Manifest, R2SetIndex } from "./r2-manifest-schema";
+import { canPublishDeviceProfileToDrive, canWriteStatsToDrive } from "./r2-stats-policy";
 
 type R2RemoteObject = R2SetIndex["tracks"][number]["media"];
 
@@ -58,6 +61,7 @@ export interface R2ExportPlanInput {
   baseUrl: string;
   setIds: string[];
   db?: MuzeroDB;
+  deviceExport?: R2DeviceExportOptions;
   playbackEventFlush?: R2PlaybackEventFlushOptions;
 }
 
@@ -66,9 +70,44 @@ export interface R2PlaybackEventFlushOptions extends Partial<PlaybackEventFlushP
   now: number;
 }
 
+export interface R2DeviceExportOptions {
+  publishProfile?: boolean;
+  publishStats?: boolean;
+}
+
+export interface R2ExportPlanForDriveInput
+  extends Omit<R2ExportPlanInput, "driveId" | "deviceExport"> {
+  drive: CloudDrive;
+  settings: AppSettings;
+}
+
 interface BinaryObjectResult {
   object: R2ExportObject;
   remote: R2RemoteObject;
+}
+
+export async function buildR2ExportPlanForDrive(
+  input: R2ExportPlanForDriveInput,
+): Promise<R2ExportPlan> {
+  const db = input.db ?? defaultDb;
+  const device = await db.devices.get("dev_local");
+  const publishProfile = device
+    ? canPublishDeviceProfileToDrive(device, input.settings, input.drive)
+    : false;
+  const publishStats = canWriteStatsToDrive(input.settings, input.drive);
+
+  return buildR2ExportPlan({
+    driveId: input.drive.id,
+    libraryId: input.libraryId,
+    baseUrl: input.baseUrl,
+    setIds: input.setIds,
+    db,
+    playbackEventFlush: input.playbackEventFlush,
+    deviceExport: {
+      publishProfile,
+      publishStats,
+    },
+  });
 }
 
 export async function buildR2ExportPlan(input: R2ExportPlanInput): Promise<R2ExportPlan> {
@@ -157,7 +196,7 @@ export async function buildR2ExportPlan(input: R2ExportPlanInput): Promise<R2Exp
   }
 
   const manifest = createManifest(input, setIndexes);
-  const deviceObjects = await createDeviceObjects(db, input.playbackEventFlush);
+  const deviceObjects = await createDeviceObjects(db, input.playbackEventFlush, input.deviceExport);
   const objects = [
     ...binaryObjects,
     ...setIndexes.map(({ object }) => object),
@@ -273,6 +312,7 @@ function createManifest(
 async function createDeviceObjects(
   db: MuzeroDB,
   playbackEventFlush?: R2PlaybackEventFlushOptions,
+  deviceExport: R2DeviceExportOptions = {},
 ): Promise<R2ExportObject[]> {
   const device = await db.devices.get("dev_local");
   if (!device) return [];
@@ -281,13 +321,15 @@ async function createDeviceObjects(
   let checkpointKey: string | undefined;
   let latestSegmentKey: string | undefined;
   let statsUpdatedAt = 0;
+  const shouldPublishProfile = (deviceExport.publishProfile ?? true) && device.publishProfile;
+  const shouldPublishStats = deviceExport.publishStats ?? true;
   const avatar =
-    device.publishProfile && device.avatarBlobId
+    shouldPublishProfile && device.avatarBlobId
       ? await loadOptionalBinaryObject("device-avatar", device.avatarBlobId, db, {})
       : undefined;
   if (avatar) objects.push(avatar.object);
 
-  if (device.publishProfile) {
+  if (shouldPublishProfile) {
     objects.push(
       createJsonObject(
         "device-profile",
@@ -301,7 +343,7 @@ async function createDeviceObjects(
     .where("devicePublicId")
     .equals(device.publicId)
     .toArray();
-  if (aggregates.length > 0) {
+  if (shouldPublishStats && aggregates.length > 0) {
     statsUpdatedAt = Math.max(
       statsUpdatedAt,
       ...aggregates.map((aggregate) => aggregate.updatedAt),
@@ -319,7 +361,7 @@ async function createDeviceObjects(
     .where("devicePublicId")
     .equals(device.publicId)
     .sortBy("startedAt");
-  if (shouldExportPlaybackEvents(events, playbackEventFlush)) {
+  if (shouldPublishStats && shouldExportPlaybackEvents(events, playbackEventFlush)) {
     const segment = toPlaybackEventsSegment(device.publicId, events);
     const segmentKey = await playbackEventsSegmentKey(device.publicId, segment);
     latestSegmentKey = segmentKey;
@@ -335,7 +377,7 @@ async function createDeviceObjects(
     );
   }
 
-  if (device.publishProfile) {
+  if (shouldPublishProfile) {
     objects.push(
       createJsonObject("devices-index", "devices/index.json", {
         schema: "muzero-r2-devices-v1",
@@ -355,7 +397,7 @@ async function createDeviceObjects(
     );
   }
 
-  if (aggregates.length > 0 || checkpointKey || latestSegmentKey) {
+  if (shouldPublishStats && (aggregates.length > 0 || checkpointKey || latestSegmentKey)) {
     objects.push(
       createJsonObject("stats-index", "stats/index.json", {
         schema: "muzero-r2-stats-index-v1",

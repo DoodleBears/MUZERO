@@ -1783,7 +1783,7 @@ For a large shared playlist with many trusted devices, the UI should:
 - [x] Add UI to rename device.
 - [x] Add optional device avatar/color seed for attribution chips.
 - [x] Add optional uploaded avatar image with local storage and remote profile object reference.
-- [ ] Publish `DevicePublicProfile` to owner/trusted drives when enabled and write permission exists.
+- [x] Publish `DevicePublicProfile` to owner/trusted drives when enabled and write permission exists.
 - [ ] Add profile `revision` and ETag/hash checks so two offline edits cannot silently overwrite each other.
 - [x] Add `Memory.author?: MemoryAuthorRef` and backfill existing rows as unknown/local.
 - [x] Show memory author on memory cards.
@@ -2026,5 +2026,6 @@ Do not record secrets, full signed URLs, or media content.
 | 2026-06-09 | MUZERO | Phase 6 presence visible-scope polling added: the R2 presence poller reads immediately when the Listening Now UI becomes visible, clamps polling to at least 60 seconds, stops when hidden, and drops in-flight results after visibility changes. |
 | 2026-06-09 | MUZERO | Phase 6 Listening Now display component added: `ListeningNowList` renders trusted anonymous device names/public ids with the current track title/id so UI surfaces can show who is listening to which track without accounts. |
 | 2026-06-09 | MUZERO | Phase 5 uploaded device avatar export added: `DeviceRecord.avatarBlobId` media now publishes as a content-addressed `device-avatar` object and `DevicePublicProfile.avatar` references the remote object with mime/bytes/hash metadata. |
+| 2026-06-09 | MUZERO | Phase 5 profile publish policy wired into export planning: `buildR2ExportPlanForDrive` now emits device profiles/avatars only when the device opted in and the target owner/trusted R2 drive has local write credentials, while read-only/shared targets get manifest-only plans. |
 | 2026-06-09 | MUZERO | Phase 5 optional `stats/index.json` discovery completed for stats sync: device entries can point to aggregate cache, checkpoint, and latest immutable event segment without making the index the write-hot source of truth. |
 | 2026-06-09 | MUZERO | Phase 5 stats/profile write policy added: only owner/trusted drives with local R2 credentials may receive stats or opted-in device profiles, keeping read-only shared-link listener data local by default. |
