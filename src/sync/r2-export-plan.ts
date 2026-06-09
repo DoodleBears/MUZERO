@@ -67,6 +67,16 @@ export interface R2ExportPlan {
   baseUrl: string;
   objects: R2ExportObject[];
   totalBytes: number;
+  conflicts?: R2ExportConflict[];
+}
+
+export interface R2ExportConflict {
+  setId: string;
+  entityType: "set" | "track" | "memory";
+  entityId: string;
+  field?: string;
+  reason: "overlapping-mutations";
+  mutationIds: string[];
 }
 
 export interface R2ExportPlanInput {
@@ -135,6 +145,7 @@ export async function buildR2ExportPlan(input: R2ExportPlanInput): Promise<R2Exp
   const db = input.db ?? defaultDb;
   const binaryObjects: R2ExportObject[] = [];
   const setIndexes: Array<{ session: DjSession; object: R2ExportObject }> = [];
+  const conflicts: R2ExportConflict[] = [];
 
   for (const setId of input.setIds) {
     const session = await db.sessions.get(setId);
@@ -195,7 +206,7 @@ export async function buildR2ExportPlan(input: R2ExportPlanInput): Promise<R2Exp
       });
     }
 
-    const setIndex = await foldSetMutationsIntoIndex(
+    const folded = await foldSetMutationsIntoIndex(
       {
         schema: "muzero-r2-set-index-v1",
         set: {
@@ -212,9 +223,10 @@ export async function buildR2ExportPlan(input: R2ExportPlanInput): Promise<R2Exp
       input.driveId,
       db,
     );
+    conflicts.push(...folded.conflicts);
     setIndexes.push({
       session,
-      object: createJsonObject("set-index", `sets/${session.id}/index.json`, setIndex, {
+      object: createJsonObject("set-index", `sets/${session.id}/index.json`, folded.index, {
         setId: session.id,
       }),
     });
@@ -237,6 +249,7 @@ export async function buildR2ExportPlan(input: R2ExportPlanInput): Promise<R2Exp
     baseUrl: input.baseUrl,
     objects,
     totalBytes: objects.reduce((total, object) => total + object.bytes, 0),
+    conflicts,
   };
 }
 
@@ -335,7 +348,7 @@ async function foldSetMutationsIntoIndex(
   index: R2SetIndex,
   driveId: string,
   db: MuzeroDB,
-): Promise<R2SetIndex> {
+): Promise<{ index: R2SetIndex; conflicts: R2ExportConflict[] }> {
   const rows = await db.syncMutations.where("driveId").equals(driveId).toArray();
   const mutations = rows
     .filter(
@@ -346,28 +359,63 @@ async function foldSetMutationsIntoIndex(
         mutation.base?.remoteKey === `sets/${index.set.id}/index.json`,
     )
     .sort((a, b) => a.createdAt - b.createdAt);
-  if (mutations.length === 0) return index;
+  if (mutations.length === 0) return { index, conflicts: [] };
 
   const folded: R2SetIndex = {
     ...index,
     set: { ...index.set },
     tracks: [...index.tracks],
   };
-  const touched = new Set<string>();
+  const touched = new Map<string, SyncMutation>();
+  const conflicts: R2ExportConflict[] = [];
   let appliedCount = 0;
 
   for (const mutation of mutations) {
     const touchedKeys = mutationTouchedKeys(mutation);
-    if (touchedKeys.length === 0 || touchedKeys.some((key) => touched.has(key))) continue;
+    if (touchedKeys.length === 0) continue;
+    const overlappingKey = touchedKeys.find((key) => touched.has(key));
+    if (overlappingKey) {
+      const previous = touched.get(overlappingKey);
+      if (previous)
+        conflicts.push(mutationConflict(index.set.id, overlappingKey, previous, mutation));
+      continue;
+    }
     if (!applySetMutation(folded, mutation)) continue;
-    for (const key of touchedKeys) touched.add(key);
+    for (const key of touchedKeys) touched.set(key, mutation);
     appliedCount += 1;
     folded.set.updatedAt = Math.max(folded.set.updatedAt, mutation.createdAt);
   }
 
-  if (appliedCount === 0) return index;
+  if (appliedCount === 0) return { index, conflicts };
   folded.revision = (index.revision ?? 0) + appliedCount;
-  return folded;
+  return { index: folded, conflicts };
+}
+
+function mutationConflict(
+  setId: string,
+  key: string,
+  previous: SyncMutation,
+  current: SyncMutation,
+): R2ExportConflict {
+  const [entityType, fieldOrId] = key.split(":");
+  if (entityType === "set") {
+    return {
+      setId,
+      entityType,
+      entityId: setId,
+      field: fieldOrId,
+      reason: "overlapping-mutations",
+      mutationIds: [previous.id, current.id],
+    };
+  }
+
+  return {
+    setId,
+    entityType: entityType === "memory" ? "memory" : "track",
+    entityId: fieldOrId ?? setId,
+    reason: "overlapping-mutations",
+    mutationIds: [previous.id, current.id],
+  };
 }
 
 function mutationTouchedKeys(mutation: SyncMutation): string[] {

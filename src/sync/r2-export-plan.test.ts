@@ -459,6 +459,53 @@ describe("buildR2ExportPlan", () => {
     ]);
   });
 
+  it("reports a reviewable conflict when two devices rename the same set differently", async () => {
+    await seedSet();
+    await db.syncMutations.bulkPut([
+      {
+        id: "mut_rename_a",
+        driveId: "drv_1",
+        devicePublicId: "dvc_1",
+        scope: "set",
+        entityId: "ses_1",
+        action: "set-metadata-updated",
+        base: { remoteKey: "sets/ses_1/index.json", revision: 1, updatedAt: 200 },
+        payload: { name: "Device A Mix" },
+        createdAt: 300,
+      },
+      {
+        id: "mut_rename_b",
+        driveId: "drv_1",
+        devicePublicId: "dvc_2",
+        scope: "set",
+        entityId: "ses_1",
+        action: "set-metadata-updated",
+        base: { remoteKey: "sets/ses_1/index.json", revision: 1, updatedAt: 200 },
+        payload: { name: "Device B Mix" },
+        createdAt: 310,
+      },
+    ]);
+
+    const plan = await buildR2ExportPlan({
+      driveId: "drv_1",
+      libraryId: "lib_1",
+      baseUrl: "https://music.example.com/muzero/",
+      setIds: ["ses_1"],
+      db,
+    });
+
+    expect(plan.conflicts).toMatchObject([
+      {
+        setId: "ses_1",
+        entityType: "set",
+        entityId: "ses_1",
+        field: "name",
+        reason: "overlapping-mutations",
+        mutationIds: ["mut_rename_a", "mut_rename_b"],
+      },
+    ]);
+  });
+
   it("exports immutable per-device playback event segments", async () => {
     await seedSet();
     await db.devices.put({

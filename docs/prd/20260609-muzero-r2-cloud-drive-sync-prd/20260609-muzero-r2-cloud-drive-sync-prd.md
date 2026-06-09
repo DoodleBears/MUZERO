@@ -1769,7 +1769,7 @@ For a large shared playlist with many trusted devices, the UI should:
 - [ ] Pull sync can update a large remote search catalog without downloading media bytes.
 - [ ] Conflicts are visible and never silently overwrite media.
 - [x] Two devices adding different tracks to the same set can auto-merge.
-- [ ] Two devices renaming the same set differently produce a reviewable conflict.
+- [x] Two devices renaming the same set differently produce a reviewable conflict.
 - [ ] Stale set snapshot publish fails/replans instead of overwriting remote changes.
 - [x] Hash mismatch blocks import for that object.
 
@@ -2035,3 +2035,4 @@ Do not record secrets, full signed URLs, or media content.
 | 2026-06-09 | MUZERO | Phase 4 set/track/memory conflict detection completed: pull diff now maps unsynced local mutations back to remote set, track, and memory ids so double-edited user-authored fields become reviewable conflicts instead of being silently overwritten by remote updates. |
 | 2026-06-09 | MUZERO | Phase 4 owner set mutation folding added: export planning now applies non-overlapping set metadata, track add, and track remove mutations into the next owner-published `sets/<setId>/index.json` snapshot while leaving overlapping or invalid mutation payloads for later review. |
 | 2026-06-09 | MUZERO | Phase 4 additive set merge rule added: owner export folding now auto-merges different trusted devices adding distinct tracks plus new memories into the same set index, preserving per-object ids instead of coalescing writers into one mutable file. |
+| 2026-06-09 | MUZERO | Phase 4 reviewable rename conflict metadata added: owner export plans now report overlapping set-field mutations with entity, field, reason, and mutation ids so two devices renaming the same set differently can be surfaced for explicit resolution instead of being silently dropped. |
