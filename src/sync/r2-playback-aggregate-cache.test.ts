@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { MuzeroDB } from "@/db/muzero-db";
+import { summarizePlaybackAggregates } from "./playback-aggregate-summary";
 import { importR2PlaybackAggregateCache } from "./r2-playback-aggregate-cache";
 
 let db: MuzeroDB;
@@ -89,4 +90,44 @@ describe("importR2PlaybackAggregateCache", () => {
 
     expect(await db.playbackAggregates.count()).toBe(0);
   });
+
+  it("merges stats additively across imported per-device aggregate caches", async () => {
+    await importR2PlaybackAggregateCache(aggregateCache("dvc_a", 2, 120), db);
+    await importR2PlaybackAggregateCache(aggregateCache("dvc_b", 3, 180), db);
+
+    const rows = await db.playbackAggregates.toArray();
+
+    expect(rows).toHaveLength(2);
+    expect(new Set(rows.map((row) => row.devicePublicId))).toEqual(new Set(["dvc_a", "dvc_b"]));
+    expect(
+      summarizePlaybackAggregates(rows, {
+        scope: "track",
+        remoteTrackId: "trk_remote",
+      }),
+    ).toEqual({
+      deviceCount: 2,
+      playCount: 5,
+      listenedSec: 300,
+      lastPlayedAt: 2_000,
+    });
+  });
 });
+
+function aggregateCache(devicePublicId: string, playCount: number, listenedSec: number) {
+  return {
+    schema: "muzero-r2-playback-aggregate-v1",
+    devicePublicId,
+    updatedAt: 2_000,
+    aggregates: [
+      {
+        id: `${devicePublicId}:track:trk_remote`,
+        scope: "track",
+        remoteTrackId: "trk_remote",
+        playCount,
+        listenedSec,
+        lastPlayedAt: 2_000,
+        updatedAt: 2_000,
+      },
+    ],
+  };
+}

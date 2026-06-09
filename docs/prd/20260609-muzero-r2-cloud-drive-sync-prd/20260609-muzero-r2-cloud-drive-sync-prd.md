@@ -1748,7 +1748,7 @@ For a large shared playlist with many trusted devices, the UI should:
 - [x] Add conflict detection for set/track/memory edits changed on both sides.
 - [x] Add ETag/hash/conditional-write guard before overwriting mutable remote JSON objects.
 - [ ] Default merge rule:
-  - [ ] additive stats merge
+  - [x] additive stats merge
   - [x] add new tracks/memories
   - [ ] preserve local-only tracks unless user chooses delete
   - [ ] latest `updatedAt` wins only for non-user-authored cache metadata
@@ -2043,3 +2043,4 @@ Do not record secrets, full signed URLs, or media content.
 | 2026-06-09 | MUZERO | Phase 3 device avatar/profile write-policy checklist reconciled: `buildR2ExportPlanForDrive` is already covered by policy tests proving profiles and avatar objects publish only to owner/trusted writable drives with local R2 credentials. |
 | 2026-06-09 | MUZERO | Phase 3 owner-maintained discovery indexes completed: export plans now build `devices/index.json`, `stats/index.json`, and optional `presence/index.json`, and root `manifest.json` references whichever discovery indexes are present. |
 | 2026-06-09 | MUZERO | Phase 4 set-level sync indicator contract added: sync previews can now expose stable `local-changes`, `remote-changed`, `auto-merged`, and `needs-review` flags plus conflict metadata for later UI rendering. |
+| 2026-06-09 | MUZERO | Phase 4 additive stats merge verified: importing multiple per-device R2 aggregate caches preserves device-separated rows and query summaries add play counts/listened seconds without using a shared mutable counter. |
