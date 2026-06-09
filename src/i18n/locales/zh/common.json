@@ -495,6 +495,42 @@
     "albumCount_other": "{{count}} 张专辑",
     "openEntity": "打开 {{name}}"
   },
+  "shortcuts": {
+    "category": {
+      "playback": "播放",
+      "navigation": "导航",
+      "library": "媒体库",
+      "search": "搜索",
+      "memory": "记忆",
+      "reference": "参考"
+    },
+    "action": {
+      "playbackToggle": "播放 / 暂停",
+      "playbackPrev": "上一首",
+      "playbackNext": "下一首",
+      "playbackSeekBack": "快退",
+      "playbackSeekForward": "快进",
+      "playbackVolumeUp": "音量增大",
+      "playbackVolumeDown": "音量减小",
+      "playbackCycleRepeat": "切换循环模式",
+      "playbackToggleShuffle": "切换随机播放",
+      "playbackToggleFullscreen": "切换全屏",
+      "navTabNow": "前往正在播放",
+      "navTabLibrary": "前往媒体库",
+      "navTabSettings": "前往设置",
+      "navCycleGalleryMode": "切换媒体库标签",
+      "searchOpenGlobal": "打开搜索",
+      "libraryFocusPrev": "上移焦点",
+      "libraryFocusNext": "下移焦点",
+      "libraryOpen": "打开 / 播放所选",
+      "libraryBack": "返回",
+      "memoryQuickAdd": "添加记忆"
+    },
+    "gesture": {
+      "swipeBack": "从左向右滑动",
+      "coverSwipeLeft": "滑动封面"
+    }
+  },
   "notification": {
     "copy": "复制",
     "copySuccess": "已复制到剪贴板",

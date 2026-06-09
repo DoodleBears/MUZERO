@@ -13,7 +13,7 @@
 
 | Phase | Name | Status | Link |
 |-------|------|--------|------|
-| 1 | Registry + pure engine + persistence | 🔲 Pending | [Phase 1 Checklist](#phase-1-checklist) |
+| 1 | Registry + pure engine + persistence | ✅ Completed | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | Dispatch unification (registry-driven, behavior-preserving) | 🔲 Pending | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | "View all shortcuts" — read-only cheat-sheet (Settings + `?` overlay) | 🔲 Pending | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | Customization — recorder, multi-binding, cyclic conflict, reset | 🔲 Pending | [Phase 4 Checklist](#phase-4-checklist) |
@@ -274,10 +274,13 @@ Global `?` (Shift+/)  →  (OPTIONAL, Q8) components/shortcuts/shortcut-help-ove
 - [ ] i18n: `shortcuts.category.*`, `shortcuts.action.*` label/description keys in **en** first, then zh/ja/ko.
 
 #### Phase 1 Checklist
-- [ ] Every current binding (from the audit) has a registry action with the exact same default chord(s).
-- [ ] `registry.test.ts`: action ids unique; default bindings have **no same-scope conflicts** (the registry is self-consistent).
-- [ ] `engine.test.ts`: merge precedence; identity equality for `Cmd+F` → `Meta+KeyF` (mac) / `Ctrl+KeyF` (win); `matchAction` honors `inspector>library>global`; cross-scope same chord (`↑`) is NOT a conflict but resolves per active scope.
-- [ ] Overrides round-trip through Dexie; unknown-id + malformed values are dropped safely.
+- [x] Every current binding (from the audit) has a registry action with the exact same default chord(s). → [`registry.ts`](../../../src/shortcuts/registry.ts)
+- [x] `registry.test.ts`: action ids unique; default bindings have **no same-scope conflicts** (the registry is self-consistent).
+- [x] `engine.test.ts`: merge precedence; identity equality for `Cmd+F` → `Meta+KeyF` (mac) / `Ctrl+KeyF` (win); `matchAction` honors `inspector>library>global`; cross-scope same chord (`↑`) is NOT a conflict but resolves per active scope.
+- [x] Overrides round-trip through Dexie; unknown-id + malformed values are dropped safely (`sanitizeOverrides` + `setShortcutOverride`/`resetShortcut`/`resetAllShortcuts` in [`repositories.ts`](../../../src/db/repositories.ts)).
+- [x] i18n `shortcuts.category.*` / `shortcuts.action.*` / `shortcuts.gesture.*` added for all 4 locales (en/zh/ja/ko).
+
+> **Done 2026-06-10.** 56 tests green (`src/shortcuts/`, `repositories.test.ts`); typecheck + Biome clean. `AppSettings.shortcutOverrides` is an additive optional field (no DB version bump). No dispatch change yet — Phase 2 routes live keys through `matchAction`.
 
 ### Phase 2: Dispatch unification (behavior-preserving)
 

@@ -495,6 +495,42 @@
     "albumCount_other": "{{count}}개 앨범",
     "openEntity": "{{name}} 열기"
   },
+  "shortcuts": {
+    "category": {
+      "playback": "재생",
+      "navigation": "탐색",
+      "library": "라이브러리",
+      "search": "검색",
+      "memory": "메모리",
+      "reference": "참고"
+    },
+    "action": {
+      "playbackToggle": "재생 / 일시정지",
+      "playbackPrev": "이전 곡",
+      "playbackNext": "다음 곡",
+      "playbackSeekBack": "뒤로 탐색",
+      "playbackSeekForward": "앞으로 탐색",
+      "playbackVolumeUp": "볼륨 높이기",
+      "playbackVolumeDown": "볼륨 낮추기",
+      "playbackCycleRepeat": "반복 모드 전환",
+      "playbackToggleShuffle": "셔플 전환",
+      "playbackToggleFullscreen": "전체화면 전환",
+      "navTabNow": "재생 중으로 이동",
+      "navTabLibrary": "라이브러리로 이동",
+      "navTabSettings": "설정으로 이동",
+      "navCycleGalleryMode": "라이브러리 탭 전환",
+      "searchOpenGlobal": "검색 열기",
+      "libraryFocusPrev": "포커스 위로",
+      "libraryFocusNext": "포커스 아래로",
+      "libraryOpen": "선택 열기 / 재생",
+      "libraryBack": "뒤로",
+      "memoryQuickAdd": "메모리 추가"
+    },
+    "gesture": {
+      "swipeBack": "왼쪽→오른쪽 스와이프",
+      "coverSwipeLeft": "커버 스와이프"
+    }
+  },
   "notification": {
     "copy": "복사",
     "copySuccess": "클립보드에 복사했습니다",

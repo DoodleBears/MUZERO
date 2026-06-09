@@ -509,6 +509,42 @@
     "albumCount_other": "{{count}} albums",
     "openEntity": "Open {{name}}"
   },
+  "shortcuts": {
+    "category": {
+      "playback": "Playback",
+      "navigation": "Navigation",
+      "library": "Library",
+      "search": "Search",
+      "memory": "Memory",
+      "reference": "Reference"
+    },
+    "action": {
+      "playbackToggle": "Play / Pause",
+      "playbackPrev": "Previous track",
+      "playbackNext": "Next track",
+      "playbackSeekBack": "Seek backward",
+      "playbackSeekForward": "Seek forward",
+      "playbackVolumeUp": "Volume up",
+      "playbackVolumeDown": "Volume down",
+      "playbackCycleRepeat": "Cycle repeat mode",
+      "playbackToggleShuffle": "Toggle shuffle",
+      "playbackToggleFullscreen": "Toggle fullscreen",
+      "navTabNow": "Go to Now Playing",
+      "navTabLibrary": "Go to Library",
+      "navTabSettings": "Go to Settings",
+      "navCycleGalleryMode": "Cycle library tabs",
+      "searchOpenGlobal": "Open search",
+      "libraryFocusPrev": "Move focus up",
+      "libraryFocusNext": "Move focus down",
+      "libraryOpen": "Open / play focused",
+      "libraryBack": "Back",
+      "memoryQuickAdd": "Add a memory"
+    },
+    "gesture": {
+      "swipeBack": "Swipe left→right",
+      "coverSwipeLeft": "Swipe cover"
+    }
+  },
   "notification": {
     "copy": "Copy",
     "copySuccess": "Copied to clipboard",

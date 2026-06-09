@@ -495,6 +495,42 @@
     "albumCount_other": "{{count}} 枚のアルバム",
     "openEntity": "{{name}} を開く"
   },
+  "shortcuts": {
+    "category": {
+      "playback": "再生",
+      "navigation": "ナビゲーション",
+      "library": "ライブラリ",
+      "search": "検索",
+      "memory": "メモリー",
+      "reference": "リファレンス"
+    },
+    "action": {
+      "playbackToggle": "再生 / 一時停止",
+      "playbackPrev": "前の曲",
+      "playbackNext": "次の曲",
+      "playbackSeekBack": "巻き戻し",
+      "playbackSeekForward": "早送り",
+      "playbackVolumeUp": "音量を上げる",
+      "playbackVolumeDown": "音量を下げる",
+      "playbackCycleRepeat": "リピートモード切替",
+      "playbackToggleShuffle": "シャッフル切替",
+      "playbackToggleFullscreen": "全画面切替",
+      "navTabNow": "再生中へ移動",
+      "navTabLibrary": "ライブラリへ移動",
+      "navTabSettings": "設定へ移動",
+      "navCycleGalleryMode": "ライブラリタブ切替",
+      "searchOpenGlobal": "検索を開く",
+      "libraryFocusPrev": "フォーカスを上へ",
+      "libraryFocusNext": "フォーカスを下へ",
+      "libraryOpen": "選択を開く / 再生",
+      "libraryBack": "戻る",
+      "memoryQuickAdd": "メモリーを追加"
+    },
+    "gesture": {
+      "swipeBack": "左→右スワイプ",
+      "coverSwipeLeft": "カバーをスワイプ"
+    }
+  },
   "notification": {
     "copy": "コピー",
     "copySuccess": "クリップボードにコピーしました",
