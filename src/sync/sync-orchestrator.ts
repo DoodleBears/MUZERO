@@ -6,6 +6,12 @@ import type {
   R2ExportPlanForDriveInput,
 } from "./r2-export-plan";
 import type { runR2PublishSync } from "./r2-publish-sync";
+import type { RemoteSetConflict } from "./r2-pull-diff";
+import type {
+  ApplyRemoteSetPullInput,
+  applyRemoteSetPull,
+  dryRunRemoteSetPull,
+} from "./r2-pull-sync";
 
 /**
  * Pure publish/pull orchestration: maps the already-tested export-plan builder
@@ -53,6 +59,9 @@ export interface PublishDriveContext {
 export interface SyncOrchestratorDeps {
   buildPlan: typeof buildR2ExportPlanForDrive;
   runPublish: typeof runR2PublishSync;
+  /** Pull deps are optional so a publish-only orchestrator can omit them. */
+  dryRunPull?: typeof dryRunRemoteSetPull;
+  applyPull?: typeof applyRemoteSetPull;
 }
 
 export interface RunOptions {
@@ -65,8 +74,14 @@ export type PublishRunResult =
   | { status: "needs-review"; conflicts: R2ExportConflict[] }
   | { status: "cancelled" };
 
+export type PullRunResult =
+  | { status: "completed"; mutated: boolean; runId?: string; sessionId?: string }
+  | { status: "needs-review"; conflict?: RemoteSetConflict }
+  | { status: "blocked"; reason: string };
+
 export interface SyncOrchestrator {
   publish(ctx: PublishDriveContext, options?: RunOptions): Promise<PublishRunResult>;
+  pull(input: ApplyRemoteSetPullInput, options?: RunOptions): Promise<PullRunResult>;
 }
 
 export function createSyncOrchestrator(deps: SyncOrchestratorDeps): SyncOrchestrator {
@@ -133,6 +148,73 @@ export function createSyncOrchestrator(deps: SyncOrchestratorDeps): SyncOrchestr
           emit({ phase: "cancelled", objectsTotal, bytesTotal });
           return { status: "cancelled" };
         }
+        emit({
+          phase: "failed",
+          objectsTotal,
+          bytesTotal,
+          error: error instanceof Error ? error.message : String(error),
+        });
+        throw error;
+      }
+    },
+
+    async pull(input, options = {}) {
+      const { dryRunPull, applyPull } = deps;
+      if (!dryRunPull || !applyPull) {
+        throw new Error("sync orchestrator was created without pull dependencies");
+      }
+      const base = (): SyncProgress => ({
+        driveId: input.driveId,
+        direction: "pull",
+        phase: "planning",
+        objectsDone: 0,
+        objectsTotal: 0,
+        bytesDone: 0,
+        bytesTotal: 0,
+      });
+      const emit = (patch: Partial<SyncProgress> & { phase: SyncPhase }): void => {
+        options.onProgress?.({ ...base(), ...patch });
+      };
+
+      emit({ phase: "planning" });
+
+      const preview = await dryRunPull(input);
+      const objectsTotal = preview.trackCount;
+      const bytesTotal = preview.bytes;
+
+      if (preview.action === "blocked") {
+        const reason = preview.reason ?? "blocked";
+        emit({ phase: "failed", objectsTotal, bytesTotal, error: reason });
+        return { status: "blocked", reason };
+      }
+      if (preview.action === "conflict") {
+        emit({ phase: "needs-review", objectsTotal, bytesTotal });
+        return { status: "needs-review", conflict: preview.conflict };
+      }
+      if (!preview.willMutate) {
+        emit({ phase: "completed", objectsTotal, bytesTotal });
+        return { status: "completed", mutated: false };
+      }
+
+      emit({ phase: "applying", objectsTotal, bytesTotal });
+
+      try {
+        const result = await applyPull(input);
+        emit({
+          phase: "completed",
+          objectsDone: objectsTotal,
+          objectsTotal,
+          bytesDone: bytesTotal,
+          bytesTotal,
+          runId: result.runId,
+        });
+        return {
+          status: "completed",
+          mutated: true,
+          runId: result.runId,
+          sessionId: result.sessionId,
+        };
+      } catch (error) {
         emit({
           phase: "failed",
           objectsTotal,

@@ -2,6 +2,13 @@ import { describe, expect, it, vi } from "vitest";
 import type { AppSettings, CloudDrive, R2LocalCredentials } from "@/db/types";
 import type { R2ExportPlan } from "./r2-export-plan";
 import type { R2PublishProgressEvent } from "./r2-publish";
+import type { RemoteSetConflict } from "./r2-pull-diff";
+import type {
+  ApplyRemoteSetPullInput,
+  ApplyRemoteSetPullResult,
+  RemoteSetPullPreview,
+} from "./r2-pull-sync";
+import type { RemoteSetIndexResult } from "./r2-subscription";
 import {
   createSyncOrchestrator,
   type PublishDriveContext,
@@ -161,5 +168,127 @@ describe("createSyncOrchestrator.publish", () => {
       /network down/,
     );
     expect(events.at(-1)).toMatchObject({ phase: "failed", error: "network down" });
+  });
+});
+
+const pullInput = {
+  driveId: "drv_owned",
+  remoteSet: {} as RemoteSetIndexResult,
+} satisfies ApplyRemoteSetPullInput;
+
+function pullPreview(over: Partial<RemoteSetPullPreview> = {}): RemoteSetPullPreview {
+  return {
+    action: "apply-remote",
+    remoteSetId: "ses_x",
+    localSessionId: "ses_remote_drv_owned_ses_x",
+    reasons: [],
+    willMutate: true,
+    trackCount: 3,
+    bytes: 300,
+    ...over,
+  };
+}
+
+describe("createSyncOrchestrator.pull", () => {
+  it("applies a mutating pull: planning -> applying -> completed", async () => {
+    const events: SyncProgress[] = [];
+    const dryRunPull = vi.fn(async () => pullPreview());
+    const applyPull = vi.fn(
+      async () =>
+        ({
+          ...pullPreview(),
+          runId: "run_pull",
+          sessionId: "ses_remote_drv_owned_ses_x",
+          trackIds: ["t1", "t2", "t3"],
+          cachedMedia: 0,
+        }) as ApplyRemoteSetPullResult,
+    );
+    const orchestrator = createSyncOrchestrator({
+      buildPlan: vi.fn(),
+      runPublish: vi.fn(),
+      dryRunPull,
+      applyPull,
+    });
+
+    const result = await orchestrator.pull(pullInput, { onProgress: (p) => events.push(p) });
+
+    expect(result).toEqual({
+      status: "completed",
+      mutated: true,
+      runId: "run_pull",
+      sessionId: "ses_remote_drv_owned_ses_x",
+    });
+    expect(events.map((e) => e.phase)).toEqual(["planning", "applying", "completed"]);
+    expect(events.every((e) => e.direction === "pull")).toBe(true);
+    expect(events.at(-1)).toMatchObject({ objectsDone: 3, objectsTotal: 3, bytesDone: 300 });
+  });
+
+  it("is a no-op when nothing will mutate", async () => {
+    const events: SyncProgress[] = [];
+    const dryRunPull = vi.fn(async () =>
+      pullPreview({ action: "unchanged", willMutate: false, trackCount: 0, bytes: 0 }),
+    );
+    const applyPull = vi.fn();
+    const orchestrator = createSyncOrchestrator({
+      buildPlan: vi.fn(),
+      runPublish: vi.fn(),
+      dryRunPull,
+      applyPull,
+    });
+
+    const result = await orchestrator.pull(pullInput, { onProgress: (p) => events.push(p) });
+
+    expect(result).toEqual({ status: "completed", mutated: false });
+    expect(applyPull).not.toHaveBeenCalled();
+    expect(events.at(-1)?.phase).toBe("completed");
+  });
+
+  it("reports needs-review on a conflict without applying", async () => {
+    const conflict: RemoteSetConflict = {
+      entityType: "set",
+      entityId: "ses_x",
+      reason: "local-and-remote-changed",
+      localMutationIds: ["m1"],
+    };
+    const dryRunPull = vi.fn(async () =>
+      pullPreview({ action: "conflict", willMutate: false, conflict, trackCount: 2, bytes: 200 }),
+    );
+    const applyPull = vi.fn();
+    const orchestrator = createSyncOrchestrator({
+      buildPlan: vi.fn(),
+      runPublish: vi.fn(),
+      dryRunPull,
+      applyPull,
+    });
+
+    const result = await orchestrator.pull(pullInput);
+
+    expect(result).toEqual({ status: "needs-review", conflict });
+    expect(applyPull).not.toHaveBeenCalled();
+  });
+
+  it("reports a blocked hash mismatch without applying", async () => {
+    const events: SyncProgress[] = [];
+    const dryRunPull = vi.fn(async () =>
+      pullPreview({ action: "blocked", reason: "hash-mismatch", willMutate: false }),
+    );
+    const applyPull = vi.fn();
+    const orchestrator = createSyncOrchestrator({
+      buildPlan: vi.fn(),
+      runPublish: vi.fn(),
+      dryRunPull,
+      applyPull,
+    });
+
+    const result = await orchestrator.pull(pullInput, { onProgress: (p) => events.push(p) });
+
+    expect(result).toEqual({ status: "blocked", reason: "hash-mismatch" });
+    expect(applyPull).not.toHaveBeenCalled();
+    expect(events.at(-1)).toMatchObject({ phase: "failed", error: "hash-mismatch" });
+  });
+
+  it("throws when pull deps are not provided", async () => {
+    const orchestrator = createSyncOrchestrator({ buildPlan: vi.fn(), runPublish: vi.fn() });
+    await expect(orchestrator.pull(pullInput)).rejects.toThrow(/pull dependencies/);
   });
 });
