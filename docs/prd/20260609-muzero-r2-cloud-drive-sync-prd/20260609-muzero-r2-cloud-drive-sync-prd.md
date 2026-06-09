@@ -1730,7 +1730,7 @@ For a large shared playlist with many trusted devices, the UI should:
 - [x] Video media syncs to R2.
 - [x] Track covers sync to R2.
 - [x] Memory photos sync to R2.
-- [ ] Device avatar/profile syncs to R2 only where write permission exists.
+- [x] Device avatar/profile syncs to R2 only where write permission exists.
 - [x] Set metadata, `TrackBrief`, and normalized `Track.mediaMetadata` sync to R2 set indexes.
 - [x] Progress shows object count, byte count, current phase, and failures.
 - [x] Readers never see a manifest that references not-yet-uploaded objects.
@@ -2040,3 +2040,4 @@ Do not record secrets, full signed URLs, or media content.
 | 2026-06-09 | MUZERO | Phase 4 remote-search lazy-load added: opening a remote search result can now fetch only the referenced set indexes plus matching share manifest/index pairs, without fetching unrelated sets or media bytes. |
 | 2026-06-09 | MUZERO | Phase 4 large remote-search catalog regression added: catalog pull now has coverage for 250 remote tracks proving only catalog/set/track JSON pages are fetched, while media and cover object bytes remain untouched. |
 | 2026-06-09 | MUZERO | Phase 4 pull offline-cache option added: `applyRemoteSetPull` remains stream-only by default but can now cache imported remote media into `mediaBlobs` for offline playback, reusing MIME/role validation before linking `Track.blobId`. |
+| 2026-06-09 | MUZERO | Phase 3 device avatar/profile write-policy checklist reconciled: `buildR2ExportPlanForDrive` is already covered by policy tests proving profiles and avatar objects publish only to owner/trusted writable drives with local R2 credentials. |
