@@ -381,6 +381,50 @@ describe("buildR2ExportPlan", () => {
     });
   });
 
+  it("keeps trusted-device stats separated under that device public id", async () => {
+    await db.devices.put({
+      id: "dev_local",
+      publicId: "dvc_trusted_phone",
+      name: "Trusted phone",
+      platform: "browser",
+      appVersion: "0.1.0",
+      publishProfile: false,
+      profileRevision: 1,
+      createdAt: 100,
+      lastSeenAt: 200,
+    });
+    await db.playbackAggregates.put({
+      id: "dvc_trusted_phone:track:remote_trk_1",
+      devicePublicId: "dvc_trusted_phone",
+      scope: "track",
+      remoteTrackId: "remote_trk_1",
+      mediaSha256: "sha256-blue",
+      playCount: 3,
+      listenedSec: 135,
+      lastPlayedAt: 135_000,
+      updatedAt: 135_000,
+    });
+
+    const plan = await buildR2ExportPlan({
+      driveId: "drv_trusted",
+      libraryId: "lib_shared",
+      baseUrl: "https://shared.example.com/muzero/",
+      setIds: [],
+      db,
+    });
+
+    expect(plan.objects.find((object) => object.kind === "stats-aggregate")?.key).toBe(
+      "stats/devices/dvc_trusted_phone/aggregate.json",
+    );
+    const statsIndex = JSON.parse(
+      String(plan.objects.find((object) => object.kind === "stats-index")?.body),
+    );
+    expect(statsIndex.devices[0]).toMatchObject({
+      devicePublicId: "dvc_trusted_phone",
+      aggregate: "stats/devices/dvc_trusted_phone/aggregate.json",
+    });
+  });
+
   it("does not export playback event segments during auto sync before policy thresholds", async () => {
     await seedSet();
     await seedDeviceWithPlaybackEvents(10, 1_000);

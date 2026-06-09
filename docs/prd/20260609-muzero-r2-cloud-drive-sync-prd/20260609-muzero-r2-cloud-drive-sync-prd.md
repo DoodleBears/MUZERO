@@ -1821,7 +1821,7 @@ For a large shared playlist with many trusted devices, the UI should:
 - [x] The same track in two sets can show separate track-in-set play counts.
 - [x] A track played from someone else's shared set can be recorded locally without importing the track.
 - [x] A user can sync their own listening history about shared tracks to their own Owner R2.
-- [ ] Trusted devices with write credentials can sync separated stats to the shared R2 bucket.
+- [x] Trusted devices with write credentials can sync separated stats to the shared R2 bucket.
 - [x] UI can show total plays and listened time.
 
 ### Phase 6: Optional Low-Frequency Currently-Playing Presence
@@ -2021,5 +2021,6 @@ Do not record secrets, full signed URLs, or media content.
 | 2026-06-09 | MUZERO | Phase 5 device profile history safety verified: profile publish policy remains limited to owner/trusted writable drives, and R2 set index export now has regression coverage that current device profile changes do not rewrite historical memory author snapshots. |
 | 2026-06-09 | MUZERO | Phase 5 generated-avatar attribution completed: memory author cards already render generated avatar fallbacks, and owner/publisher device index entries now carry `avatarSeed` so device attribution surfaces can show an avatar without accounts or image uploads. |
 | 2026-06-09 | MUZERO | Phase 5 owner-drive shared-track history sync verified: local listening history for remote shared tracks exports to the user's owner R2 as stats aggregate/event segment objects with remote track references and without uploading shared media bytes. |
+| 2026-06-09 | MUZERO | Phase 5 trusted-device separated stats verified: trusted writers export aggregate stats under `stats/devices/<devicePublicId>/aggregate.json`, and `stats/index.json` points at that per-device object instead of coalescing anonymous devices into one mutable counter. |
 | 2026-06-09 | MUZERO | Phase 5 optional `stats/index.json` discovery completed for stats sync: device entries can point to aggregate cache, checkpoint, and latest immutable event segment without making the index the write-hot source of truth. |
 | 2026-06-09 | MUZERO | Phase 5 stats/profile write policy added: only owner/trusted drives with local R2 credentials may receive stats or opted-in device profiles, keeping read-only shared-link listener data local by default. |
