@@ -21,6 +21,24 @@ function remoteLocalId(prefix: "ses" | "trk" | "mem", driveId: string, remoteId:
   return `${prefix}_remote_${safeIdPart(driveId)}_${safeIdPart(remoteId)}`;
 }
 
+function remoteTrackIdPrefix(driveId: string): string {
+  return `trk_remote_${safeIdPart(driveId)}_`;
+}
+
+function mergeRemoteAndLocalOnlyTrackIds(
+  remoteTrackIds: string[],
+  existingTrackIds: string[] | undefined,
+  driveId: string,
+): string[] {
+  if (!existingTrackIds || existingTrackIds.length === 0) return remoteTrackIds;
+  const remoteIds = new Set(remoteTrackIds);
+  const remotePrefix = remoteTrackIdPrefix(driveId);
+  const localOnlyIds = existingTrackIds.filter(
+    (trackId) => !trackId.startsWith(remotePrefix) && !remoteIds.has(trackId),
+  );
+  return [...remoteTrackIds, ...localOnlyIds];
+}
+
 function normalizeDisplayMode(
   mode: RemoteSetIndexResult["index"]["set"]["displayMode"],
 ): SetDisplayMode {
@@ -33,7 +51,13 @@ export async function importRemoteSetStream(
 ): Promise<ImportRemoteSetStreamResult> {
   const { driveId, remoteSet } = input;
   const sessionId = remoteLocalId("ses", driveId, remoteSet.index.set.id);
-  const trackIds = remoteSet.tracks.map((track) => remoteLocalId("trk", driveId, track.id));
+  const remoteTrackIds = remoteSet.tracks.map((track) => remoteLocalId("trk", driveId, track.id));
+  const existingSession = await db.sessions.get(sessionId);
+  const trackIds = mergeRemoteAndLocalOnlyTrackIds(
+    remoteTrackIds,
+    existingSession?.trackIds,
+    driveId,
+  );
   const session: DjSession = {
     id: sessionId,
     name: remoteSet.index.set.name,
@@ -87,5 +111,5 @@ export async function importRemoteSetStream(
     if (memories.length > 0) await db.memories.bulkPut(memories);
   });
 
-  return { sessionId, trackIds };
+  return { sessionId, trackIds: remoteTrackIds };
 }

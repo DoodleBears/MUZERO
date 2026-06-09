@@ -196,4 +196,35 @@ describe("importRemoteSetStream", () => {
     expect(await db.tracks.count()).toBe(1);
     expect(await db.memories.count()).toBe(1);
   });
+
+  it("preserves local-only tracks when refreshing a remote set", async () => {
+    await importRemoteSetStream({ driveId: "drv_a", remoteSet }, db);
+    await db.tracks.put({
+      id: "trk_local_journal",
+      sessionId: "ses_remote_drv_a_ses_tokyo",
+      title: "Voice Memo",
+      kind: "audio",
+      origin: "uploaded",
+      provider: "upload",
+      status: "ready",
+      durationSec: 42,
+      createdAt: 1780945000000,
+      playCount: 0,
+      liked: false,
+      tags: ["local"],
+    });
+    await db.sessions.update("ses_remote_drv_a_ses_tokyo", {
+      trackIds: ["trk_remote_drv_a_trk_blue", "trk_local_journal"],
+    });
+
+    await importRemoteSetStream({ driveId: "drv_a", remoteSet }, db);
+
+    await expect(db.sessions.get("ses_remote_drv_a_ses_tokyo")).resolves.toMatchObject({
+      trackIds: ["trk_remote_drv_a_trk_blue", "trk_local_journal"],
+    });
+    await expect(db.tracks.get("trk_local_journal")).resolves.toMatchObject({
+      title: "Voice Memo",
+      sessionId: "ses_remote_drv_a_ses_tokyo",
+    });
+  });
 });
