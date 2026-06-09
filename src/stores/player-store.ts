@@ -42,12 +42,19 @@ import {
   shufflePrev,
 } from "@/player/queue";
 import { notify } from "@/stores/notification-store";
+import { listCloudDrives } from "@/sync/cloud-drive-repo";
 import { getOrCreateLocalDevice } from "@/sync/device-repo";
 import {
   createPlaybackListenTracker,
   type PlaybackListenFlush,
 } from "@/sync/playback-listen-session";
 import { recordPlaybackListen } from "@/sync/playback-stats";
+import { canWritePresenceToDrive } from "@/sync/r2-presence";
+import {
+  createR2PresenceCoordinator,
+  type R2PresenceCoordinator,
+} from "@/sync/r2-presence-coordinator";
+import { writeR2Presence } from "@/sync/r2-presence-sync";
 
 interface PlayerState {
   activeSessionId: string | null;
@@ -136,6 +143,8 @@ let playbackSettingsLoaded = false;
 // setShuffle rebuilds it, and it self-heals when stale vs the queue length.
 let shuffleOrder: number[] = [];
 const playbackListenTracker = createPlaybackListenTracker();
+let presenceCoordinator: R2PresenceCoordinator | null = null;
+let presenceCoordinatorKey = "";
 // Signature of the last `queue` we published, so a playQueue-row write that
 // doesn't change the rendered list (e.g. a future currentIndex / repeat persist)
 // doesn't churn the `queue` array and re-render every list consumer.
@@ -179,6 +188,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       // Repeat-one is an ended-track behavior only; manual next still advances.
       onEnded: () => {
         flushPlaybackListen(Date.now());
+        void publishPlaybackPresence("stopped", get());
         const state = get();
         if (state.repeat === "one" && state.currentIndex >= 0) {
           state.seek(0);
@@ -322,6 +332,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   pause() {
     set({ wantPlay: false });
     mediaEngine?.pause();
+    void publishPlaybackPresence("paused", get());
   },
 
   togglePlay() {
@@ -664,6 +675,7 @@ async function ensureLoadedAndPlay(
     void pump(set, get);
     return;
   }
+  const previousLoadedTrackId = loadedTrackId;
   if (loadedTrackId !== track.id) {
     flushPlaybackListen(Date.now());
     if (track.blobId) {
@@ -692,6 +704,14 @@ async function ensureLoadedAndPlay(
   if (wantPlay) {
     log.debug("player", "playing media", { trackId: track.id });
     await mediaEngine.play();
+    void publishPlaybackPresence(
+      previousLoadedTrackId == null
+        ? "trackStarted"
+        : previousLoadedTrackId === track.id
+          ? "resumed"
+          : "trackChanged",
+      get(),
+    );
   }
 }
 
@@ -772,6 +792,65 @@ function persistPlaybackListen(flush: PlaybackListenFlush): void {
       }),
     )
     .catch((error: unknown) => log.warn("player", "failed to record playback stats", error));
+}
+
+type PlaybackPresenceEvent = "trackStarted" | "trackChanged" | "paused" | "resumed" | "stopped";
+
+function publishPlaybackPresence(event: PlaybackPresenceEvent, state: PlayerState): void {
+  void getPresenceCoordinator()
+    .then((coordinator) => {
+      if (!coordinator) return;
+      const snapshot = playerPresenceSnapshot(state);
+      switch (event) {
+        case "trackStarted":
+          return coordinator.trackStarted(snapshot);
+        case "trackChanged":
+          return coordinator.trackChanged(snapshot);
+        case "paused":
+          return coordinator.paused({ positionSec: snapshot.positionSec });
+        case "resumed":
+          return coordinator.resumed({ positionSec: snapshot.positionSec });
+        case "stopped":
+          return coordinator.stopped({ positionSec: snapshot.positionSec });
+      }
+    })
+    .catch((error: unknown) => log.warn("player", "failed to publish presence", error));
+}
+
+function playerPresenceSnapshot(state: PlayerState) {
+  const track = state.queue[state.currentIndex];
+  return {
+    trackId: track?.id,
+    setId: state.activeSessionId ?? undefined,
+    positionSec: state.positionSec,
+  };
+}
+
+async function getPresenceCoordinator(): Promise<R2PresenceCoordinator | null> {
+  const settings = await getSettings();
+  if (!settings.presenceEnabled) return null;
+
+  const drives = await listCloudDrives();
+  const drive = drives.find(
+    (candidate) =>
+      canWritePresenceToDrive(settings, candidate) &&
+      Boolean(settings.r2CredentialsByDriveId?.[candidate.id]),
+  );
+  if (!drive) return null;
+
+  const device = await getOrCreateLocalDevice();
+  const key = `${drive.id}:${device.publicId}:${device.name}`;
+  if (presenceCoordinator && presenceCoordinatorKey === key) return presenceCoordinator;
+
+  presenceCoordinatorKey = key;
+  presenceCoordinator = createR2PresenceCoordinator({
+    devicePublicId: device.publicId,
+    deviceName: device.name,
+    writePresence: async (presence) => {
+      await writeR2Presence({ settings, drive, presence });
+    },
+  });
+  return presenceCoordinator;
 }
 
 async function afterQueueUpdate(
