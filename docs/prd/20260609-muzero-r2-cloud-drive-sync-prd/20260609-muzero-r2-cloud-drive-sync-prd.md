@@ -283,6 +283,28 @@ records it on the `CloudDrive`, adapts the form, and validates:
 The choice drives (a) whether the public-URL field shows, (b) how media URLs
 resolve, and (c) which sharing options are offered.
 
+**Considered & rejected — client-side strong encryption ("encrypted public").**
+A fourth option was weighed: a public bucket holding only ciphertext, with a
+password-derived key (Argon2/PBKDF2 → AES-GCM); recipients enter the password,
+download, decrypt, then play (no streaming — it would reuse the existing
+cache-mode/local-blob path). It is the only *no-backend* way to get real
+confidentiality on a public bucket. **Rejected** because:
+
+- **Coarse revocation** is its real weakness — a leaked password decrypts
+  everything, and revoking means re-encrypting + re-uploading the whole library.
+  (Note: *tampering* is **not** a weakness — a public bucket is read-only to
+  outsiders since writes need S3 credentials, and AES-GCM authenticates every
+  object, so silent modification is detected.)
+- It duplicates a second confidentiality mechanism alongside the broker, and
+  complicates key/password management and the playback pipeline.
+- Its only edge over Tier ② is "no backend" — not worth it once controlled
+  sharing is expected to use the broker anyway.
+
+**Decision:** private/controlled sharing is **always Tier ② (broker)**. The
+trade-off accepted: until the V3 broker ships, there is no "private sharing" —
+only ① own devices and ③ truly public. This matches the usage profile (default
+= own devices; sharing is occasional and can wait for V3).
+
 ### 2.7 Optional MUZERO Hosted Control Plane
 
 MUZERO is open source and users can self-host the app and any future drive broker. Separately, the available product domain is currently `mu0.app` (`0` = zero), which can offer an **optional hosted Worker backend** to make R2 binding, owner setup, and invite management easier for non-technical users.
@@ -1995,6 +2017,7 @@ Do not record secrets, full signed URLs, or media content.
 | 7 | Can browser and desktop share identical R2 write implementation? | Open | Prefer one S3 signing client with `getAppFetch()` injection; validate bundle size before adding AWS SDK. |
 | 8 | Should anonymous public listeners be able to contribute stats/presence to the owner? | Resolved | Not in the R2-only PRD. Requires a future user-deployed Worker or presigned-upload broker. |
 | 9 | Should device display name/avatar updates rewrite existing memories? | Resolved | No. Memories keep author snapshots; profile updates write only the per-device profile object and optional avatar object. |
+| 10 | Should private sharing have a no-backend, client-side-encryption fallback (a "share password")? | Resolved | No. Considered & rejected (see §2.6.1): coarse revocation + duplicate mechanism + playback complexity; its only edge is "no backend". Private/controlled sharing is always Tier ② (broker, V3). Until V3, only own-devices (Tier ①) and truly-public (Tier ③) exist. |
 
 ---
 
@@ -2120,3 +2143,4 @@ Do not record secrets, full signed URLs, or media content.
 | 2026-06-09 | MUZERO | Phases 5 & 6 completed: the `useRemotePresence` hook resolves the active remote set's source drive by `ses_remote_<driveId>_` id prefix and polls `readRemotePresence` only while the new **Listening now** section is mounted on Now Playing (visible-scope, ≥60s interval), rendering trusted devices' current track via `ListeningNowList` (+ en/zh/ja/ko label); Phase 5's plays/listened-time stats UI was already wired into Settings. Now Playing render verified crash-free in the preview, with the section correctly hidden for local sets. All six phases are now ✅ Done. |
 | 2026-06-10 | MUZERO | §2.6.1 added — access tiers + link indirection. Private-by-default model: ① own devices read private objects via **local presign** (no public bucket, no backend, free egress) — a V1 enhancement via a per-drive media-URL resolution abstraction; ② occasional sharing via a **Worker broker** (self-hosted V2 / mu0.app V3) issuing presigned URLs, with opaque `mu0.app/s/<id>` durable links; ③ public only for truly-public sharing. Rule: the broker issues presigned URLs but **never proxies bytes** (egress stays free). Open Question 5 resolved accordingly. |
 | 2026-06-10 | MUZERO | §2.6.1 expanded with setup-time access-mode selection: public/private is a Cloudflare bucket setting MUZERO cannot toggle, so the add-drive flow **asks** the intended mode, records it on `CloudDrive`, adapts the form (public-URL field only for public), validates accordingly (`checkR2PublicRead` for public; keys for private), and shows the trade-off hints. |
+| 2026-06-10 | MUZERO | §2.6.1: client-side strong encryption ("encrypted public", Tier ④) **considered & rejected** — coarse revocation + duplicate mechanism + playback complexity outweigh its only edge ("no backend"); tampering is not a weakness (public bucket is read-only to outsiders + AES-GCM authenticates). Decision: private/controlled sharing is always Tier ② (broker/V3); until V3, only own-devices and truly-public exist. Open Question 10 added/resolved accordingly. |
