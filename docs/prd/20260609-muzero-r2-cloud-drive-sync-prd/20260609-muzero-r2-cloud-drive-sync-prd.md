@@ -1747,14 +1747,14 @@ For a large shared playlist with many trusted devices, the UI should:
 - [x] Fold non-overlapping set mutations into the next owner-published `index.json` snapshot.
 - [x] Add conflict detection for set/track/memory edits changed on both sides.
 - [x] Add ETag/hash/conditional-write guard before overwriting mutable remote JSON objects.
-- [ ] Default merge rule:
+- [x] Default merge rule:
   - [x] additive stats merge
   - [x] add new tracks/memories
   - [x] preserve local-only tracks unless user chooses delete
   - [x] latest `updatedAt` wins only for non-user-authored cache metadata
   - [x] user-authored set/track/memory fields use explicit conflict UI when both sides changed
   - [x] per-device profile conflicts use `revision` first, then explicit user choice
-- [ ] Add conflict UI with "keep local", "use remote", "duplicate both".
+- [x] Add conflict UI with "keep local", "use remote", "duplicate both".
 - [x] Add set-level indicators for local changes, remote changed, auto-merged, and needs review.
 - [x] Add dry-run preview before applying large pulls.
 - [x] Verify imported Blob roles match expected object roles.
@@ -2049,3 +2049,4 @@ Do not record secrets, full signed URLs, or media content.
 | 2026-06-09 | MUZERO | Phase 4 local-only track preservation added: refreshing a remote set now keeps existing non-remote track ids in the local session while applying the remote order for shared tracks. |
 | 2026-06-09 | MUZERO | Phase 4 updatedAt merge policy added: only non-user-authored cache metadata, such as search catalog page versions, may use `updatedAt` as an automatic cache freshness winner. |
 | 2026-06-09 | MUZERO | Phase 4 explicit conflict-resolution contract added: set/track/memory conflicts now expose only `keep-local`, `use-remote`, and `duplicate-both` actions, and cannot resolve without a user-selected action. |
+| 2026-06-09 | MUZERO | Phase 4 conflict resolution panel added: reusable Settings-ready UI renders set/track/memory conflicts and emits keep-local, use-remote, or duplicate-both actions without embedding untranslated text. |
