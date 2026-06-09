@@ -5,9 +5,10 @@ import { normalizeManifestUrl } from "./r2-url";
  * Minimal owner R2 setup: the user pastes their S3 endpoint (or bare account id),
  * access key + secret, the bucket (auto-discovered via ListBuckets in the UI), and
  * the public bucket URL. We derive everything else — the S3 endpoint host comes
- * from the account id, the manifest URL from the public URL, and the prefix is
- * always empty ("occupy the whole bucket"). Keeping this a pure function makes the
- * parsing/derivation unit-testable without the form or network.
+ * from the account id and the manifest URL from the public URL. By default the
+ * whole bucket is used (no prefix); an optional `folder` confines MUZERO to one
+ * path inside the bucket. Keeping this a pure function makes the parsing/derivation
+ * unit-testable without the form or network.
  */
 export interface OwnerR2ConnectionInput {
   /** "https://<acct>.r2.cloudflarestorage.com" or just "<acct>". */
@@ -17,6 +18,8 @@ export interface OwnerR2ConnectionInput {
   secretAccessKey: string;
   /** Public bucket base URL or a direct manifest URL. */
   publicUrl: string;
+  /** Optional advanced setting: a folder/prefix inside the bucket. */
+  folder?: string;
 }
 
 export interface OwnerR2Connection {
@@ -42,12 +45,16 @@ export function buildOwnerR2Connection(input: OwnerR2ConnectionInput): OwnerR2Co
   const base = new URL(manifestUrl);
   base.pathname = base.pathname.slice(0, base.pathname.lastIndexOf("/") + 1);
 
+  // Normalize the optional folder to a clean prefix (no leading/trailing slashes).
+  const prefix = input.folder?.trim().replace(/^\/+|\/+$/g, "") || undefined;
+
   return {
     credentials: {
       accountId: parseR2AccountId(input.endpointOrAccountId),
       bucket: input.bucket.trim(),
       accessKeyId: input.accessKeyId.trim(),
       secretAccessKey: input.secretAccessKey.trim(),
+      ...(prefix ? { prefix } : {}),
     },
     publicBaseUrl: base.href,
     manifestUrl,

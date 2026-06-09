@@ -48,6 +48,37 @@ describe("buildOwnerR2Connection", () => {
     expect(result.manifestUrl).toBe("https://music.example.com/muzero/manifest.json");
   });
 
+  it("maps an optional folder to a cleaned prefix, default whole-bucket", () => {
+    const whole = buildOwnerR2Connection({
+      endpointOrAccountId: "acct",
+      bucket: "muzero",
+      accessKeyId: "AKID",
+      secretAccessKey: "SECRET",
+      publicUrl: "https://pub-x.r2.dev",
+    });
+    expect(whole.credentials.prefix).toBeUndefined();
+
+    const folder = buildOwnerR2Connection({
+      endpointOrAccountId: "acct",
+      bucket: "muzero",
+      accessKeyId: "AKID",
+      secretAccessKey: "SECRET",
+      publicUrl: "https://pub-x.r2.dev",
+      folder: "/music/2024/",
+    });
+    expect(folder.credentials.prefix).toBe("music/2024");
+
+    const blank = buildOwnerR2Connection({
+      endpointOrAccountId: "acct",
+      bucket: "muzero",
+      accessKeyId: "AKID",
+      secretAccessKey: "SECRET",
+      publicUrl: "https://pub-x.r2.dev",
+      folder: "   ",
+    });
+    expect(blank.credentials.prefix).toBeUndefined();
+  });
+
   it("trims credential fields", () => {
     const result = buildOwnerR2Connection({
       endpointOrAccountId: "acct",
