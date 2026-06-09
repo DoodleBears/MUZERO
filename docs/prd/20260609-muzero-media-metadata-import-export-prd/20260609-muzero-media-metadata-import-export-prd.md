@@ -360,6 +360,7 @@ No new page. The feature touches existing upload, list rows, Now Playing, and se
 | [AI DJ Foundation PRD](../20260606-muzero-ai-dj-foundation-prd/20260606-muzero-ai-dj-foundation-prd.md) | Original media/download future phase context. |
 | [Set Playqueue Memory Data Model PRD](../20260607-muzero-set-playqueue-memory-data-model-prd/20260607-muzero-set-playqueue-memory-data-model-prd.md) | Track/blob/cover/memory data model. |
 | [R2 Cloud Drive Sync PRD](../20260609-muzero-r2-cloud-drive-sync-prd/20260609-muzero-r2-cloud-drive-sync-prd.md) | Remote metadata and media sync context. |
+| [Artist & Album Library Entities PRD](../20260610-muzero-artist-album-library-entities-prd/20260610-muzero-artist-album-library-entities-prd.md) | **Downstream**: promotes the `mediaMetadata` parsed here into browsable/searchable artist & album entities + per-artist/album stats (realizes Open Question 1's "derive from mediaMetadata" path). |
 
 ---
 
@@ -367,7 +368,7 @@ No new page. The feature touches existing upload, list rows, Now Playing, and se
 
 | # | Question | Status | Decision |
 |---|----------|--------|----------|
-| 1 | Should `artist` be first-class on `Track` or only inside `mediaMetadata`? | Open | Prefer `mediaMetadata` initially to avoid table churn; derive display/search from it. |
+| 1 | Should `artist` be first-class on `Track` or only inside `mediaMetadata`? | ✅ Resolved | Stay in `mediaMetadata`; artist/album are **derived** entities (no new table/column). Realized by the [Artist & Album Library Entities PRD](../20260610-muzero-artist-album-library-entities-prd/20260610-muzero-artist-album-library-entities-prd.md) — projection over `mediaMetadata`, identity = normalized name. |
 | 2 | Do user memory tags (`Track.tags`) get embedded into exported genre/comment fields? | Open | Likely export `tags` to genre only when user opts into "with metadata". |
 | 3 | Should browser builds support metadata rewriting through WASM TagLib? | Open | Desktop first; consider only after bundle/license/perf review. |
 | 4 | Which ID3 version should MUZERO write by default? | Open | Need compatibility matrix; ID3v2.3 may be more widely tolerated, ID3v2.4 is the newer spec. |
@@ -390,3 +391,4 @@ No new page. The feature touches existing upload, list rows, Now Playing, and se
 | 2026-06-09 | MUZERO | Phase 3 UI entry added: the row download action now offers original download and metadata export choices. |
 | 2026-06-09 | MUZERO | Phase 3C completed conservative M4A/MP4 `ilst` metadata export for safe atom layouts, with parser round-trip tests. |
 | 2026-06-09 | MUZERO | PRD closed Phases 2 and 3 for MP3/M4A/FLAC import/export scope; Rust/lofty moved to future expansion for broader/unsafe containers. |
+| 2026-06-10 | MUZERO | Resolved Open Question 1 and linked the downstream [Artist & Album Library Entities PRD](../20260610-muzero-artist-album-library-entities-prd/20260610-muzero-artist-album-library-entities-prd.md), which surfaces this parsed `mediaMetadata` as navigable artist/album entities + stats. |

@@ -1013,6 +1013,7 @@ Search behavior:
 - Search text should be normalized locally: lowercase, trim, tag tokens, optional CJK-friendly substring matching.
 - Memories and notes are included only if the owner/share projection allows them.
 - `mediaMetadata` is optional and additive. It carries normalized, user-visible fields such as title, artists, album, genre, year, and original import identity when the owner/share projection allows them. It must not include raw native tag frames or embedded cover bytes; cover bytes remain separate media objects.
+- The synced `mediaMetadata` is consumed not only for flat substring search but also feeds **cross-drive artist/album entity derivation + faceted/scoped search** (Artists ▸ / Albums ▸ / Songs ▸, plus `artist:` / `album:` field tokens) per the [Artist & Album Library Entities PRD](../20260610-muzero-artist-album-library-entities-prd/20260610-muzero-artist-album-library-entities-prd.md). Remote tracks therefore participate in the same artist/album views as local tracks. `matchesRemoteSearchTrack` ([`r2-search-catalog.ts`](../../../src/sync/r2-search-catalog.ts)) must mirror the scoped-token parser used locally so cross-drive search has parity.
 
 Performance targets:
 
@@ -1284,6 +1285,8 @@ Recording model:
 3. A shared-link listener with no write credentials keeps these events/aggregates local.
 4. A user with an Owner R2 drive can optionally sync their own playback aggregates to their own R2, even when the listened track came from someone else's shared drive.
 5. Trusted devices can sync aggregates to the owner/shared R2 only when granted `writeStats`.
+
+**Artist/album rollups are a *derived dimension*, not a new aggregate scope.** Per-artist and per-album listening time/play-count are computed at read time by folding the per-track signal (events + `trackPlaybackStats`) over each track's **current** `mediaMetadata.artists`/`album` — including remote/shared plays resolved via `remoteTrackRef` + synced `RemoteSearchTrack.mediaMetadata`. They are deliberately **not** added to `PlaybackAggregate["scope"]` and **not** synced as standalone rows: artist/album are mutable, high-cardinality strings, and pinning them into the synced aggregate layer would go stale on re-tag and violate the "aggregate cache is rebuildable from events" rule below. This keeps event truth and current-truth dimensions cleanly separated. See the [Artist & Album Library Entities PRD §3.4](../20260610-muzero-artist-album-library-entities-prd/20260610-muzero-artist-album-library-entities-prd.md).
 
 Example: "I listened to B's shared Tokyo set"
 
@@ -1676,6 +1679,8 @@ Track detail / Now Playing should expose:
 - last played
 - optional per-device breakdown in a compact details panel
 
+Artist and album detail views (library, not this PRD) additionally surface **per-artist / per-album** listened time and play count, plus a "Top artists" sort — all derived from this same per-track/event signal (see [Artist & Album Library Entities PRD](../20260610-muzero-artist-album-library-entities-prd/20260610-muzero-artist-album-library-entities-prd.md) §3.4, §5). No new synced stats rows are introduced.
+
 Settings should expose:
 
 - device name
@@ -1997,6 +2002,7 @@ Do not record secrets, full signed URLs, or media content.
 |----------|-------------|
 | [MUZERO AI DJ Foundation](../20260606-muzero-ai-dj-foundation-prd/20260606-muzero-ai-dj-foundation-prd.md) | Original local-first AI DJ architecture. |
 | [Set / Play Queue / Memory Data Model](../20260607-muzero-set-playqueue-memory-data-model-prd/20260607-muzero-set-playqueue-memory-data-model-prd.md) | Current set, queue, track, memory model. |
+| [Artist & Album Library Entities](../20260610-muzero-artist-album-library-entities-prd/20260610-muzero-artist-album-library-entities-prd.md) | Consumes synced `mediaMetadata` (§3.4.2) for cross-drive entities/facets; defines artist/album stats as a derived dimension over §3.8's event/aggregate model. |
 | [Cloud Music-Gen Provider Selection](../20260607-muzero-cloud-musicgen-provider-selection-prd/20260607-muzero-cloud-musicgen-provider-selection-prd.md) | BYOK provider discipline and local secret handling. |
 | [Cloudflare R2 Public Buckets](https://developers.cloudflare.com/r2/data-access/public-buckets/) | Public R2 access behavior and custom domain guidance. |
 | [Cloudflare R2 CORS](https://developers.cloudflare.com/r2/buckets/cors/) | Required browser CORS setup. |
@@ -2047,6 +2053,7 @@ Do not record secrets, full signed URLs, or media content.
 |------|--------|---------|
 | 2026-06-09 | MUZERO | Initial draft for R2-only user-owned cloud drive sync. |
 | 2026-06-09 | MUZERO | Architecture review pass: clarified V1/V3 boundary, profile/avatar sync, per-device object ownership, and multi-writer conflict rules. |
+| 2026-06-10 | MUZERO | Cross-PRD reconciliation with Artist & Album Library Entities: §3.4.2 synced `mediaMetadata` also feeds cross-drive artist/album entities + faceted/scoped search (`matchesRemoteSearchTrack` mirrors the scoped-token parser); §3.8 artist/album rollups are a derived current-truth dimension, not a synced `PlaybackAggregate` scope; §5.4 artist/album detail stats noted. No shipped behavior changed. |
 | 2026-06-09 | MUZERO | Phase 1 implementation started: manifest/set/share/stats schemas and R2 URL normalization/resolution added with tests. |
 | 2026-06-09 | MUZERO | Phase 1 read-only subscription service added: public manifest preview and remote set index loading with resolved media URLs. |
 | 2026-06-09 | MUZERO | Phase 1 remote search catalog schemas and local remote-search row normalization added with tests. |
