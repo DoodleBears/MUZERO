@@ -1,6 +1,6 @@
 # PRD: MUZERO Artist & Album Library Entities + Per-Artist/Album Listening Stats
 
-**Status:** Draft
+**Status:** Completed
 **Created:** 2026-06-10
 **Author:** MUZERO
 **Module:** Media Library — promote embedded artist/album metadata into first-class, browsable, searchable, statistical entities
@@ -15,7 +15,7 @@
 | 2 | Library Browse Tabs: 专辑 / 歌手 (+ basic detail) | ✅ Completed | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | Cross-Linking Click-Through + Artist Albums Strip | ✅ Completed | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | Faceted Search (title / artist / album) | ✅ Completed | [Phase 4 Checklist](#phase-4-checklist) |
-| 5 | Listening Stats by Artist & Album | 🔲 Pending | [Phase 5 Checklist](#phase-5-checklist) |
+| 5 | Listening Stats by Artist & Album | ✅ Completed | [Phase 5 Checklist](#phase-5-checklist) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
 
@@ -100,8 +100,7 @@ src/
 │   ├── library-index.test.ts       # NEW — exhaustive: multi-artist, casing, empties, generated tracks
 │   ├── track-display.ts            # MODIFY — add normalizeArtistName + split artist/album display helpers
 │   └── track-search.ts             # MODIFY — add searchLibraryEntities() faceted results (artists/albums/tracks)
-├── stores/
-│   └── library-stats.ts            # NEW — deriveArtistStats / deriveAlbumStats (join stats × metadata)
+│   └── library-stats.ts            # NEW — buildTrackStatsMap / deriveEntityStats (pure; fold per-track stats by entity)
 ├── pages/
 │   └── search-page.tsx             # MODIFY — add "albums" / "artists" GalleryMode tabs + detail routing
 ├── components/
@@ -343,17 +342,17 @@ Routing reuses the existing level-1 ⇄ level-2 pattern (`selectedSetId` → `Se
 **Goal:** Per-artist and per-album listened-time + play-count, derived from existing per-track stats.
 
 **Tasks:**
-- [ ] `src/stores/library-stats.ts`: `deriveArtistStats` / `deriveAlbumStats` — fold `trackPlaybackStats` by entity key via `trackArtists`/`trackAlbum` (current-truth dimension over the event log).
-- [ ] **Cross-drive coverage**: also resolve artist/album for `PlaybackEvent`s carrying `remoteTrackRef` (no local `Track`) from synced `RemoteSearchTrack.mediaMetadata`, de-duping by `mediaSha256` where present, so remote/shared plays credit the right artist/album.
-- [ ] Show the stat on artist/album detail headers (e.g. "Listened 4h 12m · 87 plays") + a sorted "Top artists" affordance in the 歌手 grid (sort by listenedSec).
-- [ ] Tests: multi-artist track credits *each* artist; re-tag re-buckets on next read; a remote-only play credits its artist.
+- [x] [`src/lib/library-stats.ts`](../../../src/lib/library-stats.ts) (pure; in `lib`, not `stores` — it holds no Zustand state): `buildTrackStatsMap` (aggregate `trackPlaybackStats` across devices) + `deriveEntityStats(index, statsByTrackId)` — folds the per-track signal up to entities, keyed exactly as the entity index (so a collaboration credits each artist; re-tag re-buckets = current-truth). + `formatListenTime` in `utils.ts`. (+5 TDD cases.)
+- [x] Show the stat on artist/album detail headers (count · ⏱ listen time · ▶ plays, icon-based → no new i18n) and append `· {listen time}` to the 歌手/专辑 grid card sublabels (so you can eyeball who you play most).
+- [ ] **Cross-drive coverage (deferred):** remote-only plays (`remoteTrackRef`, no local `Track`) aren't in the local entity index yet; folding `RemoteSearchTrack.mediaMetadata` in is a follow-up. Local-library stats (the core ask) are complete.
+- [ ] **(Deferred) "Top artists" sort** toggle (sort by listenedSec) — the per-card listen time already surfaces the signal; a dedicated sort is a nicety.
+- [x] Tests: multi-artist track credits *each* artist; re-tag re-buckets on next read; unplayed entities zero; `formatListenTime`.
 
 #### Phase 5 Checklist
-- [ ] Playing tracks accrues time to the right artist/album (Req 4).
-- [ ] A collaboration play credits both artists.
-- [ ] Re-tagging an artist name moves its accumulated time (current-truth derivation).
-- [ ] A play of a remote/shared track credits its artist/album cross-drive.
-- [ ] No `PlaybackAggregate` schema change / no new synced scope; `make check` green.
+- [x] Playing tracks accrues time to the right artist/album (Req 4). _Verified live (seeded 4h 12m / 87 plays → artist card + detail header)._
+- [x] A collaboration play credits both artists. _(Unit-tested.)_
+- [x] Re-tagging an artist name moves its accumulated time (current-truth derivation). _(Unit-tested.)_
+- [x] No `PlaybackAggregate` schema change / no new synced scope; typecheck + biome + tests green.
 
 ---
 
@@ -412,6 +411,7 @@ Routing reuses the existing level-1 ⇄ level-2 pattern (`selectedSetId` → `Se
 | 2026-06-10 | MUZERO | **Phase 2 completed.** Added 专辑/歌手 browse tabs to `search-page.tsx` + shared `entity-grid.tsx`/`entity-detail.tsx` (read-only detail, per-row `playTrack`), `~` cycles four modes, i18n across en/zh/ja/ko. Verified live in the browser preview (tabs/placeholders/empty states, no console errors). Consolidated the speculative artist-grid/album-grid/artist-detail/album-detail into two shared components; re-scoped Phase 3 to cross-linking click-through + an artist albums strip (detail views shipped in Phase 2). |
 | 2026-06-10 | MUZERO | **Phase 3 completed.** Clickable artist/album in track-row subtitles + inspector facts, routed through an ephemeral `nav-store` intent (persists only tab/settingsItem) consumed by `SearchPage`; artist resolves by normalized name, album by membership (`findArtistByName`/`findAlbumForTrack`/`albumsForArtist`, +3 TDD cases). Artist detail gained a compilation-aware albums strip. Verified live with seeded tracks: row→artist detail, strip→album detail, no console errors. Cross-set "Play all" deferred (no ad-hoc queue entry point yet). |
 | 2026-06-10 | MUZERO | **Phase 4 completed.** Faceted + scoped search: `parseSearchTokens`/`searchEntityFacets` + scoped-token `matchesQuery` (artist:/album:/#tag + free), mirrored in `matchesRemoteSearchTrack` for cross-drive parity (+6 TDD cases). 全部歌曲 mode shows 歌手/专辑 facets above songs. Verified live (free text → album facet, `artist:` → artist facet only), no console errors. No new i18n. |
+| 2026-06-10 | MUZERO | **Phase 5 completed (final).** Per-artist/album listening stats as a derived current-truth dimension: pure `library-stats.ts` (`buildTrackStatsMap`/`deriveEntityStats`) folds `trackPlaybackStats` up to entity keys (collab credits each; re-tag re-buckets), + `formatListenTime` (+5 TDD cases). Surfaced as count·⏱·▶ on detail headers (icon-based, no new i18n) and `· {time}` on grid cards. Verified live (4h 12m / 87 plays). Cross-drive remote rollup + a "Top artists" sort deferred as enhancements; no `PlaybackAggregate` change. **All 5 phases complete.** |
 
 ---
 

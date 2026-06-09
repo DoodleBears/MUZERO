@@ -36,6 +36,7 @@ import {
   findAlbumForTrack,
   findArtistByName,
 } from "@/lib/library-index";
+import { buildTrackStatsMap, deriveEntityStats, statFor } from "@/lib/library-stats";
 import {
   filterSets,
   type SetFilter,
@@ -44,7 +45,7 @@ import {
   sortSets,
 } from "@/lib/set-gallery";
 import { searchEntityFacets, searchTracks } from "@/lib/track-search";
-import { cn } from "@/lib/utils";
+import { cn, formatListenTime } from "@/lib/utils";
 import { transitionState } from "@/lib/view-transition-react";
 import { useNavStore } from "@/stores/nav-store";
 import { usePlayerStore } from "@/stores/player-store";
@@ -160,31 +161,51 @@ export function SearchPage() {
   // (no stored table); re-project whenever the track liveQuery emits.
   const artistIndex = useMemo(() => buildArtistIndex(allTracks), [allTracks]);
   const albumIndex = useMemo(() => buildAlbumIndex(allTracks), [allTracks]);
+  // Per-artist/album listening time — a derived current-truth dimension folded
+  // from the per-track playback signal (re-tag re-buckets; see PRD §3.4).
+  const playbackStats = useLiveQuery(() => db.trackPlaybackStats.toArray(), [], []);
+  const statsByTrackId = useMemo(() => buildTrackStatsMap(playbackStats), [playbackStats]);
+  const artistStats = useMemo(
+    () => deriveEntityStats(artistIndex, statsByTrackId),
+    [artistIndex, statsByTrackId],
+  );
+  const albumStats = useMemo(
+    () => deriveEntityStats(albumIndex, statsByTrackId),
+    [albumIndex, statsByTrackId],
+  );
   const artistItems = useMemo<LibraryEntityItem[]>(() => {
     const q = artistQuery.trim().toLowerCase();
     return artistIndex
-      .map((entry) => ({
-        key: entry.key,
-        label: artistDisplayLabel(entry, t),
-        sublabel: t("gallery.count", { count: entry.trackIds.length }),
-        coverTrackId: entry.coverTrackId,
-      }))
+      .map((entry) => {
+        const count = t("gallery.count", { count: entry.trackIds.length });
+        const listened = statFor(artistStats, entry.key).listenedSec;
+        return {
+          key: entry.key,
+          label: artistDisplayLabel(entry, t),
+          sublabel: listened > 0 ? `${count} · ${formatListenTime(listened)}` : count,
+          coverTrackId: entry.coverTrackId,
+        };
+      })
       .filter((item) => !q || item.label.toLowerCase().includes(q));
-  }, [artistIndex, artistQuery, t]);
+  }, [artistIndex, artistQuery, t, artistStats]);
   const albumItems = useMemo<LibraryEntityItem[]>(() => {
     const q = albumQuery.trim().toLowerCase();
     return albumIndex
-      .map((entry) => ({
-        key: entry.key,
-        label: albumDisplayLabel(entry, t),
-        sublabel:
+      .map((entry) => {
+        const base =
           entry.bucket === "unknown"
             ? t("gallery.count", { count: entry.trackIds.length })
-            : albumArtistDisplayLabel(entry, t),
-        coverTrackId: entry.coverTrackId,
-      }))
+            : albumArtistDisplayLabel(entry, t);
+        const listened = statFor(albumStats, entry.key).listenedSec;
+        return {
+          key: entry.key,
+          label: albumDisplayLabel(entry, t),
+          sublabel: listened > 0 ? `${base} · ${formatListenTime(listened)}` : base,
+          coverTrackId: entry.coverTrackId,
+        };
+      })
       .filter((item) => !q || item.label.toLowerCase().includes(q));
-  }, [albumIndex, albumQuery, t]);
+  }, [albumIndex, albumQuery, t, albumStats]);
   const selectedArtist = useMemo(
     () => artistIndex.find((entry) => entry.key === selectedArtistKey),
     [artistIndex, selectedArtistKey],
@@ -395,6 +416,7 @@ export function SearchPage() {
         }
         tracks={tracks}
         albums={artistAlbums}
+        stat={statFor(artistStats, selectedArtist.key)}
         onOpenAlbum={(key) =>
           transitionState(() => {
             setSelectedArtistKey(null);
@@ -420,6 +442,7 @@ export function SearchPage() {
           selectedAlbum.coverTrackId ? trackById.get(selectedAlbum.coverTrackId) : undefined
         }
         tracks={tracks}
+        stat={statFor(albumStats, selectedAlbum.key)}
         onBack={() => transitionState(() => setSelectedAlbumKey(null))}
       />
     );

@@ -1,11 +1,12 @@
-import { ArrowLeft, Disc3, User } from "lucide-react";
+import { ArrowLeft, Clock, Disc3, Play, User } from "lucide-react";
 import { motion } from "motion/react";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { TrackInspectorPanel } from "@/components/track/track-inspector-panel";
 import type { Track } from "@/db/types";
 import { useTrackCoverUrl } from "@/hooks/use-media";
-import { cn } from "@/lib/utils";
+import type { EntityStat } from "@/lib/library-stats";
+import { cn, formatListenTime } from "@/lib/utils";
 import { transitionState } from "@/lib/view-transition-react";
 import { usePlayerStore } from "@/stores/player-store";
 import { VirtualTrackList } from "./virtual-track-list";
@@ -31,6 +32,7 @@ export function EntityDetailView({
   coverTrack,
   tracks,
   albums,
+  stat,
   onOpenAlbum,
   onBack,
 }: {
@@ -40,6 +42,7 @@ export function EntityDetailView({
   coverTrack: Track | undefined;
   tracks: Track[];
   albums?: EntityStripItem[];
+  stat?: EntityStat;
   onOpenAlbum?: (key: string) => void;
   onBack: () => void;
 }) {
@@ -97,8 +100,20 @@ export function EntityDetailView({
         <div className="min-w-0 flex-1">
           <h1 className="truncate font-semibold text-lg">{title}</h1>
           <p className="truncate text-muted-foreground text-sm">{subtitle}</p>
-          <p className="text-muted-foreground text-xs">
-            {t("gallery.count", { count: tracks.length })}
+          <p className="flex items-center gap-2 text-muted-foreground text-xs">
+            <span>{t("gallery.count", { count: tracks.length })}</span>
+            {stat && stat.listenedSec > 0 && (
+              <span className="inline-flex items-center gap-1">
+                <Clock className="size-3" />
+                {formatListenTime(stat.listenedSec)}
+              </span>
+            )}
+            {stat && stat.playCount > 0 && (
+              <span className="inline-flex items-center gap-1 tabular-nums">
+                <Play className="size-3" />
+                {stat.playCount}
+              </span>
+            )}
           </p>
         </div>
       </div>

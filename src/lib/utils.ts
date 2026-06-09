@@ -16,3 +16,13 @@ export function formatDuration(totalSeconds: number): string {
   if (h > 0) return `${h}:${m.toString().padStart(2, "0")}:${ss}`;
   return `${m}:${ss}`;
 }
+
+/** Coarse cumulative-listening format (`4h 12m` / `12m` / `45s`). Locale-agnostic. */
+export function formatListenTime(totalSeconds: number): string {
+  const sec = Number.isFinite(totalSeconds) ? Math.max(0, Math.round(totalSeconds)) : 0;
+  const h = Math.floor(sec / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  if (h > 0) return `${h}h ${m}m`;
+  if (m > 0) return `${m}m`;
+  return `${sec}s`;
+}
