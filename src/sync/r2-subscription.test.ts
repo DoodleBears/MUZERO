@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { loadRemoteSetIndex, type SyncFetch, subscribeManifest } from "./r2-subscription";
+import {
+  loadRemoteIndexesForSearchTrack,
+  loadRemoteSetIndex,
+  type SyncFetch,
+  subscribeManifest,
+} from "./r2-subscription";
 
 function jsonResponse(body: unknown, init: ResponseInit = {}): Response {
   return new Response(JSON.stringify(body), {
@@ -169,5 +174,77 @@ describe("loadRemoteSetIndex", () => {
         }),
       }),
     ).rejects.toThrow(/invalid set index/i);
+  });
+});
+
+describe("loadRemoteIndexesForSearchTrack", () => {
+  it("lazy-loads only the set and share indexes referenced by a search result", async () => {
+    const seen: string[] = [];
+    const fetcher: SyncFetch = async (input) => {
+      seen.push(String(input));
+      return fetchMap({
+        "https://music.example.com/muzero/manifest.json": {
+          ...manifest,
+          sets: [
+            ...manifest.sets,
+            {
+              id: "ses_unused",
+              title: "Unused Set",
+              index: "sets/ses_unused/index.json",
+              updatedAt: "2026-06-09T00:00:00.000Z",
+              trackCount: 1,
+              bytes: 555,
+            },
+          ],
+        },
+        "https://music.example.com/muzero/sets/ses_tokyo/index.json": setIndex,
+        "https://shares.example.com/tokyo/share.json": {
+          schema: "muzero-r2-share-manifest-v1",
+          shareId: "shr_tokyo",
+          title: "Tokyo share",
+          createdAt: "2026-06-09T00:00:00.000Z",
+          updatedAt: "2026-06-09T00:00:00.000Z",
+          baseUrl: "https://shares.example.com/tokyo/",
+          sourceSetId: "ses_tokyo",
+          index: "index.json",
+          capabilities: {
+            readMedia: true,
+            readMemories: true,
+            writeStats: false,
+            writePresence: false,
+          },
+        },
+        "https://shares.example.com/tokyo/index.json": setIndex,
+      })(input);
+    };
+    const preview = await subscribeManifest("https://music.example.com/muzero/manifest.json", {
+      fetcher,
+    });
+    seen.length = 0;
+
+    const result = await loadRemoteIndexesForSearchTrack(
+      {
+        preview,
+        track: {
+          setIds: ["ses_tokyo"],
+          shareIds: ["shr_tokyo"],
+        },
+        shares: [
+          {
+            shareId: "shr_tokyo",
+            manifestUrl: "https://shares.example.com/tokyo/share.json",
+          },
+        ],
+      },
+      { fetcher },
+    );
+
+    expect(result.sets.map((set) => set.index.set.id)).toEqual(["ses_tokyo"]);
+    expect(result.shares.map((share) => share.shareId)).toEqual(["shr_tokyo"]);
+    expect(seen).toEqual([
+      "https://music.example.com/muzero/sets/ses_tokyo/index.json",
+      "https://shares.example.com/tokyo/share.json",
+      "https://shares.example.com/tokyo/index.json",
+    ]);
   });
 });

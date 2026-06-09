@@ -1759,7 +1759,7 @@ For a large shared playlist with many trusted devices, the UI should:
 - [x] Add dry-run preview before applying large pulls.
 - [x] Verify imported Blob roles match expected object roles.
 - [x] Incrementally refresh remote search catalog pages by `updatedAt`/ETag/hash.
-- [ ] Lazy-load specific set/share indexes when a search result is opened.
+- [x] Lazy-load specific set/share indexes when a search result is opened.
 
 ### Phase 4 Checklist
 
@@ -2037,3 +2037,4 @@ Do not record secrets, full signed URLs, or media content.
 | 2026-06-09 | MUZERO | Phase 4 additive set merge rule added: owner export folding now auto-merges different trusted devices adding distinct tracks plus new memories into the same set index, preserving per-object ids instead of coalescing writers into one mutable file. |
 | 2026-06-09 | MUZERO | Phase 4 reviewable rename conflict metadata added: owner export plans now report overlapping set-field mutations with entity, field, reason, and mutation ids so two devices renaming the same set differently can be surfaced for explicit resolution instead of being silently dropped. |
 | 2026-06-09 | MUZERO | Phase 4 stale set snapshot guard added: set index export planning can attach observed remote ETags as `If-Match` preconditions, using the existing signed conditional PUT path so stale `sets/<setId>/index.json` publishes fail instead of overwriting newer remote snapshots. |
+| 2026-06-09 | MUZERO | Phase 4 remote-search lazy-load added: opening a remote search result can now fetch only the referenced set indexes plus matching share manifest/index pairs, without fetching unrelated sets or media bytes. |

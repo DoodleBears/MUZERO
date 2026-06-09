@@ -2,8 +2,10 @@ import { getAppFetch } from "@/lib/platform";
 import {
   type R2Manifest,
   type R2SetIndex,
+  type R2ShareManifest,
   r2ManifestSchema,
   r2SetIndexSchema,
+  r2ShareManifestSchema,
 } from "./r2-manifest-schema";
 import { normalizeManifestUrl, resolveRemoteObjectUrl } from "./r2-url";
 
@@ -44,6 +46,32 @@ export interface RemoteSetIndexResult {
   indexUrl: string;
   index: R2SetIndex;
   tracks: ResolvedRemoteTrack[];
+}
+
+export interface RemoteSharePreview {
+  shareId: string;
+  manifestUrl: string;
+}
+
+export interface RemoteShareIndexResult {
+  shareId: string;
+  manifestUrl: string;
+  manifest: R2ShareManifest;
+  set: RemoteSetIndexResult;
+}
+
+export interface LoadRemoteIndexesForSearchTrackInput {
+  preview: Pick<RemoteLibraryPreview, "baseUrl" | "sets">;
+  track: {
+    setIds: string[];
+    shareIds: string[];
+  };
+  shares?: RemoteSharePreview[];
+}
+
+export interface LoadRemoteIndexesForSearchTrackResult {
+  sets: RemoteSetIndexResult[];
+  shares: RemoteShareIndexResult[];
 }
 
 export interface SyncReadOptions {
@@ -136,4 +164,49 @@ export async function loadRemoteSetIndex(
       source: track,
     })),
   };
+}
+
+export async function loadRemoteIndexesForSearchTrack(
+  input: LoadRemoteIndexesForSearchTrackInput,
+  options: SyncReadOptions = {},
+): Promise<LoadRemoteIndexesForSearchTrackResult> {
+  const fetcher = await resolveFetcher(options.fetcher);
+  const targetSetIds = new Set(input.track.setIds);
+  const sets: RemoteSetIndexResult[] = [];
+
+  for (const set of input.preview.sets) {
+    if (!targetSetIds.has(set.id)) continue;
+    sets.push(await loadRemoteSetIndex(input.preview, set, { fetcher }));
+  }
+
+  const targetShareIds = new Set(input.track.shareIds);
+  const shares: RemoteShareIndexResult[] = [];
+  for (const share of input.shares ?? []) {
+    if (!targetShareIds.has(share.shareId)) continue;
+    const manifest = await loadRemoteShareManifest(share.manifestUrl, fetcher);
+    const indexUrl = resolveRemoteObjectUrl(manifest.baseUrl, manifest.index);
+    const set = await loadRemoteSetIndex({ baseUrl: manifest.baseUrl }, { indexUrl }, { fetcher });
+    shares.push({
+      shareId: share.shareId,
+      manifestUrl: share.manifestUrl,
+      manifest,
+      set,
+    });
+  }
+
+  return { sets, shares };
+}
+
+async function loadRemoteShareManifest(
+  manifestUrl: string,
+  fetcher: SyncFetch,
+): Promise<R2ShareManifest> {
+  const raw = await fetchJson(manifestUrl, "share manifest", fetcher);
+  const parsed = r2ShareManifestSchema.safeParse(raw);
+  if (!parsed.success) {
+    throw new Error(
+      `Invalid share manifest: ${parsed.error.issues[0]?.message ?? "schema mismatch"}`,
+    );
+  }
+  return parsed.data;
 }
