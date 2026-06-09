@@ -300,6 +300,87 @@ describe("buildR2ExportPlan", () => {
     });
   });
 
+  it("exports local listening history for shared remote tracks to the owner drive without media", async () => {
+    await db.devices.put({
+      id: "dev_local",
+      publicId: "dvc_1",
+      name: "Mac desktop",
+      platform: "browser",
+      appVersion: "0.1.0",
+      publishProfile: false,
+      profileRevision: 1,
+      createdAt: 100,
+      lastSeenAt: 200,
+    });
+    await db.playbackAggregates.put({
+      id: "dvc_1:track-in-share:shr_tokyo:remote_trk_1",
+      devicePublicId: "dvc_1",
+      scope: "track-in-share",
+      driveId: "drv_friend",
+      shareId: "shr_tokyo",
+      setId: "ses_tokyo",
+      remoteTrackId: "remote_trk_1",
+      mediaSha256: "sha256-blue",
+      playCount: 1,
+      listenedSec: 45,
+      lastPlayedAt: 45_000,
+      updatedAt: 45_000,
+    });
+    await db.playbackEvents.put({
+      id: "ple_remote",
+      devicePublicId: "dvc_1",
+      remoteTrackRef: {
+        driveId: "drv_friend",
+        shareId: "shr_tokyo",
+        setId: "ses_tokyo",
+        trackId: "remote_trk_1",
+        mediaSha256: "sha256-blue",
+      },
+      context: {
+        source: "shared-drive",
+        driveId: "drv_friend",
+        shareId: "shr_tokyo",
+        setId: "ses_tokyo",
+      },
+      startedAt: 1_000,
+      endedAt: 45_000,
+      listenedSec: 45,
+      countedAsPlay: true,
+    });
+
+    const plan = await buildR2ExportPlan({
+      driveId: "drv_owner",
+      libraryId: "lib_owner",
+      baseUrl: "https://owner.example.com/muzero/",
+      setIds: [],
+      db,
+      playbackEventFlush: { mode: "manual", now: 60_000 },
+    });
+    const aggregate = JSON.parse(
+      String(plan.objects.find((object) => object.kind === "stats-aggregate")?.body),
+    );
+    const segment = JSON.parse(
+      String(plan.objects.find((object) => object.kind === "stats-events-segment")?.body),
+    );
+
+    expect(plan.objects.some((object) => object.kind === "media")).toBe(false);
+    expect(aggregate.aggregates[0]).toMatchObject({
+      scope: "track-in-share",
+      shareId: "shr_tokyo",
+      remoteTrackId: "remote_trk_1",
+      mediaSha256: "sha256-blue",
+      playCount: 1,
+    });
+    expect(segment.events[0]).toMatchObject({
+      remoteTrackRef: {
+        driveId: "drv_friend",
+        shareId: "shr_tokyo",
+        setId: "ses_tokyo",
+        trackId: "remote_trk_1",
+      },
+    });
+  });
+
   it("does not export playback event segments during auto sync before policy thresholds", async () => {
     await seedSet();
     await seedDeviceWithPlaybackEvents(10, 1_000);
