@@ -267,6 +267,22 @@ Key realizations:
   Tier ② introduces a hard dependency on the broker's uptime and makes the
   broker a custodian of access — a deliberate V3 trade-off, out of V1 scope.
 
+**Setup-time access-mode selection (UX).** Public-vs-private is a Cloudflare
+*bucket* setting — MUZERO cannot toggle it via the S3 API. So MUZERO does **not**
+"set" the mode; it **asks** which mode the owner intends when adding the drive,
+records it on the `CloudDrive`, adapts the form, and validates:
+
+- **Public**: ask for the public base URL (r2.dev / custom domain); reads go via
+  that URL; validate with the existing `checkR2PublicRead` ("is your public URL
+  actually reachable?"); guide the user to enable public access + CORS in
+  Cloudflare. Hint: *anyone with the link can read; not revocable.*
+- **Private**: no public URL; reads resolve via local presign (Tier ①); validate
+  the S3 keys (ListBuckets + write probe). Hint: *most private; own devices only
+  for now — sharing to others arrives with the V3 broker.*
+
+The choice drives (a) whether the public-URL field shows, (b) how media URLs
+resolve, and (c) which sharing options are offered.
+
 ### 2.7 Optional MUZERO Hosted Control Plane
 
 MUZERO is open source and users can self-host the app and any future drive broker. Separately, the available product domain is currently `mu0.app` (`0` = zero), which can offer an **optional hosted Worker backend** to make R2 binding, owner setup, and invite management easier for non-technical users.
@@ -2103,3 +2119,4 @@ Do not record secrets, full signed URLs, or media content.
 | 2026-06-09 | MUZERO | Phase 6 presence read fetcher added: `readRemotePresence` reads the owner-maintained `presence/index.json` (new `muzero-r2-presence-index-v1` schema) and resolves each referenced per-device `presence/devices/<id>.json`, skipping a missing index or malformed device object rather than throwing and defaulting its fetch to the shared `getAppFetch()` path — the read side the `R2PresencePoller` previously lacked. |
 | 2026-06-09 | MUZERO | Phases 5 & 6 completed: the `useRemotePresence` hook resolves the active remote set's source drive by `ses_remote_<driveId>_` id prefix and polls `readRemotePresence` only while the new **Listening now** section is mounted on Now Playing (visible-scope, ≥60s interval), rendering trusted devices' current track via `ListeningNowList` (+ en/zh/ja/ko label); Phase 5's plays/listened-time stats UI was already wired into Settings. Now Playing render verified crash-free in the preview, with the section correctly hidden for local sets. All six phases are now ✅ Done. |
 | 2026-06-10 | MUZERO | §2.6.1 added — access tiers + link indirection. Private-by-default model: ① own devices read private objects via **local presign** (no public bucket, no backend, free egress) — a V1 enhancement via a per-drive media-URL resolution abstraction; ② occasional sharing via a **Worker broker** (self-hosted V2 / mu0.app V3) issuing presigned URLs, with opaque `mu0.app/s/<id>` durable links; ③ public only for truly-public sharing. Rule: the broker issues presigned URLs but **never proxies bytes** (egress stays free). Open Question 5 resolved accordingly. |
+| 2026-06-10 | MUZERO | §2.6.1 expanded with setup-time access-mode selection: public/private is a Cloudflare bucket setting MUZERO cannot toggle, so the add-drive flow **asks** the intended mode, records it on `CloudDrive`, adapts the form (public-URL field only for public), validates accordingly (`checkR2PublicRead` for public; keys for private), and shows the trade-off hints. |
