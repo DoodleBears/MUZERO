@@ -987,25 +987,27 @@ export function SettingsPage() {
             </Card>
           )}
 
-          {activeItem === "cloud" && (
+          {activeItem.startsWith("cloud-") && (
             <Card>
               <CardHeader>
                 <CardTitle>{t("settings.cloudDriveTitle")}</CardTitle>
               </CardHeader>
               <CardContent className="flex flex-col gap-4">
-                <div className="rounded-md border border-border bg-muted/25 p-3">
-                  <p className="font-medium text-sm">{t("settings.cloudSetupTitle")}</p>
-                  <div className="mt-2 grid gap-2 text-muted-foreground text-xs sm:grid-cols-2">
-                    {CLOUD_SETUP_KEYS.map((key) => (
-                      <div key={key} className="flex items-center gap-2">
-                        <CheckCircle2 className="size-3.5 text-primary" />
-                        <span>{t(key)}</span>
-                      </div>
-                    ))}
+                {activeItem === "cloud-owner" && (
+                  <div className="rounded-md border border-border bg-muted/25 p-3">
+                    <p className="font-medium text-sm">{t("settings.cloudSetupTitle")}</p>
+                    <div className="mt-2 grid gap-2 text-muted-foreground text-xs sm:grid-cols-2">
+                      {CLOUD_SETUP_KEYS.map((key) => (
+                        <div key={key} className="flex items-center gap-2">
+                          <CheckCircle2 className="size-3.5 text-primary" />
+                          <span>{t(key)}</span>
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                </div>
+                )}
 
-                {cloudDrives.length > 0 && (
+                {activeItem === "cloud-owner" && cloudDrives.length > 0 && (
                   <div className="flex flex-col gap-2">
                     <p className="font-medium text-sm">{t("settings.cloudConnectedDrives")}</p>
                     {cloudDrives.map((drive) => (
@@ -1018,246 +1020,264 @@ export function SettingsPage() {
                   </div>
                 )}
 
-                {syncProgress && <CloudSyncProgress progress={syncProgress} />}
+                {activeItem === "cloud-sync" && syncProgress && (
+                  <CloudSyncProgress progress={syncProgress} />
+                )}
 
-                <Field label={t("settings.cloudManifestUrl")}>
-                  <Input
-                    value={cloudUrl}
-                    onChange={(e) => {
-                      setCloudUrl(e.target.value);
-                      setCloudError(null);
-                    }}
-                    placeholder="https://music.example.com/muzero/manifest.json"
-                  />
-                </Field>
-                <div className="flex flex-wrap items-center gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={!cloudUrl.trim() || cloudStatus === "previewing"}
-                    onClick={() => void previewCloudDrive()}
-                  >
-                    <Cloud />
-                    {cloudStatus === "previewing"
-                      ? t("settings.cloudPreviewing")
-                      : t("settings.cloudPreview")}
-                  </Button>
-                  {cloudStatus === "done" && (
-                    <span className="text-xs text-muted-foreground">
-                      {t("settings.cloudImported")}
-                    </span>
-                  )}
-                </div>
-                {cloudError && <p className="text-xs text-destructive">{cloudError}</p>}
-                {cloudPreview && (
-                  <div className="rounded-md border border-border bg-muted/30 p-3">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <div>
-                        <p className="font-medium text-sm">{cloudPreview.title}</p>
-                        <p className="text-muted-foreground text-xs">
-                          {t("settings.cloudPreviewMeta", {
-                            host: sourceHost(cloudPreview.manifestUrl),
-                            sets: cloudPreview.setCount,
-                            tracks: cloudPreview.trackCount,
-                            bytes: formatBytes(cloudPreview.totalBytes),
-                          })}
-                        </p>
-                      </div>
+                {activeItem === "cloud-subscribe" && (
+                  <>
+                    <Field label={t("settings.cloudManifestUrl")}>
+                      <Input
+                        value={cloudUrl}
+                        onChange={(e) => {
+                          setCloudUrl(e.target.value);
+                          setCloudError(null);
+                        }}
+                        placeholder="https://music.example.com/muzero/manifest.json"
+                      />
+                    </Field>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={!cloudUrl.trim() || cloudStatus === "previewing"}
+                        onClick={() => void previewCloudDrive()}
+                      >
+                        <Cloud />
+                        {cloudStatus === "previewing"
+                          ? t("settings.cloudPreviewing")
+                          : t("settings.cloudPreview")}
+                      </Button>
+                      {cloudStatus === "done" && (
+                        <span className="text-xs text-muted-foreground">
+                          {t("settings.cloudImported")}
+                        </span>
+                      )}
                     </div>
-                    <div className="mt-3 flex flex-col gap-2">
-                      {cloudPreview.sets.map((set) => (
-                        <div
-                          key={set.id}
-                          className="flex items-center justify-between gap-3 rounded-md border border-border bg-background/80 px-3 py-2"
-                        >
-                          <div className="min-w-0">
-                            <p className="truncate text-sm">{set.title}</p>
+                    {cloudError && <p className="text-xs text-destructive">{cloudError}</p>}
+                    {cloudPreview && (
+                      <div className="rounded-md border border-border bg-muted/30 p-3">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <div>
+                            <p className="font-medium text-sm">{cloudPreview.title}</p>
                             <p className="text-muted-foreground text-xs">
-                              {t("settings.cloudSetMeta", {
-                                tracks: set.trackCount,
-                                bytes: formatBytes(set.bytes),
+                              {t("settings.cloudPreviewMeta", {
+                                host: sourceHost(cloudPreview.manifestUrl),
+                                sets: cloudPreview.setCount,
+                                tracks: cloudPreview.trackCount,
+                                bytes: formatBytes(cloudPreview.totalBytes),
                               })}
                             </p>
                           </div>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            disabled={cloudStatus === "importing"}
-                            onClick={() => void importCloudSet(set)}
-                          >
-                            <Download />
-                            {importingSetId === set.id
-                              ? t("settings.cloudImporting")
-                              : t("settings.cloudImport")}
-                          </Button>
                         </div>
-                      ))}
+                        <div className="mt-3 flex flex-col gap-2">
+                          {cloudPreview.sets.map((set) => (
+                            <div
+                              key={set.id}
+                              className="flex items-center justify-between gap-3 rounded-md border border-border bg-background/80 px-3 py-2"
+                            >
+                              <div className="min-w-0">
+                                <p className="truncate text-sm">{set.title}</p>
+                                <p className="text-muted-foreground text-xs">
+                                  {t("settings.cloudSetMeta", {
+                                    tracks: set.trackCount,
+                                    bytes: formatBytes(set.bytes),
+                                  })}
+                                </p>
+                              </div>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                disabled={cloudStatus === "importing"}
+                                onClick={() => void importCloudSet(set)}
+                              >
+                                <Download />
+                                {importingSetId === set.id
+                                  ? t("settings.cloudImporting")
+                                  : t("settings.cloudImport")}
+                              </Button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    <p className="text-xs text-muted-foreground">
+                      {t("settings.cloudReadOnlyNote")}
+                    </p>
+                  </>
+                )}
+
+                {activeItem === "cloud-sync" && (
+                  <div className="rounded-md border border-border p-3">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <p className="font-medium text-sm">{t("settings.cloudCorsTitle")}</p>
+                        <p className="text-muted-foreground text-xs">
+                          {t("settings.cloudCorsHint")}
+                        </p>
+                      </div>
+                      <Button variant="outline" size="sm" onClick={() => void copyCorsJson()}>
+                        <ClipboardCopy />
+                        {corsCopied ? t("settings.cloudCorsCopied") : t("settings.cloudCorsCopy")}
+                      </Button>
                     </div>
+                    <pre className="mt-3 max-h-44 overflow-auto rounded-md bg-muted p-3 text-[11px] leading-5 text-muted-foreground">
+                      {corsJson}
+                    </pre>
                   </div>
                 )}
-                <p className="text-xs text-muted-foreground">{t("settings.cloudReadOnlyNote")}</p>
 
-                <div className="rounded-md border border-border p-3">
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div>
-                      <p className="font-medium text-sm">{t("settings.cloudCorsTitle")}</p>
-                      <p className="text-muted-foreground text-xs">{t("settings.cloudCorsHint")}</p>
-                    </div>
-                    <Button variant="outline" size="sm" onClick={() => void copyCorsJson()}>
-                      <ClipboardCopy />
-                      {corsCopied ? t("settings.cloudCorsCopied") : t("settings.cloudCorsCopy")}
-                    </Button>
-                  </div>
-                  <pre className="mt-3 max-h-44 overflow-auto rounded-md bg-muted p-3 text-[11px] leading-5 text-muted-foreground">
-                    {corsJson}
-                  </pre>
-                </div>
-
-                <div className="rounded-md border border-border p-3">
-                  <label className="flex items-start gap-3">
-                    <input
-                      type="checkbox"
-                      checked={draft.presenceEnabled ?? false}
-                      onChange={(event) => void changePresenceEnabled(event.currentTarget.checked)}
-                      className="mt-1 size-4 accent-primary"
-                    />
-                    <span className="flex flex-col gap-1">
-                      <span className="font-medium text-sm">
-                        {t("settings.cloudPresenceTitle")}
-                      </span>
-                      <span className="text-muted-foreground text-xs">
-                        {t("settings.cloudPresenceHint")}
-                      </span>
-                      <span className="text-muted-foreground text-xs">
-                        {t("settings.cloudPresenceCost")}
-                      </span>
-                    </span>
-                  </label>
-                </div>
-
-                <div className="rounded-md border border-border p-3">
-                  <div className="mb-3 flex items-center gap-2">
-                    <ShieldCheck className="size-4 text-primary" />
-                    <p className="font-medium text-sm">{t("settings.cloudOwnerTitle")}</p>
-                  </div>
-                  <p className="mb-3 text-muted-foreground text-xs">
-                    {t("settings.cloudOwnerSimplifiedHint")}
-                  </p>
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <Field label={t("settings.cloudDriveLabel")}>
-                      <Input
-                        value={ownerForm.label}
-                        onChange={(event) => patchOwner({ label: event.target.value })}
-                        placeholder={t("settings.cloudDriveLabelPlaceholder")}
-                      />
-                    </Field>
-                    <Field label={t("settings.cloudOwnerEndpoint")}>
-                      <Input
-                        value={ownerForm.endpointOrAccountId}
+                {activeItem === "cloud-presence" && (
+                  <div className="rounded-md border border-border p-3">
+                    <label className="flex items-start gap-3">
+                      <input
+                        type="checkbox"
+                        checked={draft.presenceEnabled ?? false}
                         onChange={(event) =>
-                          patchOwner({ endpointOrAccountId: event.target.value })
+                          void changePresenceEnabled(event.currentTarget.checked)
                         }
-                        placeholder="https://<account>.r2.cloudflarestorage.com"
+                        className="mt-1 size-4 accent-primary"
                       />
-                    </Field>
-                    <Field label={t("settings.cloudOwnerAccessKey")}>
-                      <Input
-                        value={ownerForm.accessKeyId}
-                        onChange={(event) => patchOwner({ accessKeyId: event.target.value })}
-                      />
-                    </Field>
-                    <Field label={t("settings.cloudOwnerSecretKey")}>
-                      <Input
-                        type="password"
-                        value={ownerForm.secretAccessKey}
-                        onChange={(event) => patchOwner({ secretAccessKey: event.target.value })}
-                      />
-                    </Field>
-                    <Field label={t("settings.cloudOwnerPublicUrl")}>
-                      <Input
-                        value={ownerForm.publicUrl}
-                        onChange={(event) => patchOwner({ publicUrl: event.target.value })}
-                        placeholder="https://pub-xxxx.r2.dev"
-                      />
-                    </Field>
-                    <Field label={t("settings.cloudOwnerBucket")}>
-                      {bucketOptions.length > 1 ? (
-                        <Select
-                          value={selectedBucket}
-                          onValueChange={(value) => setSelectedBucket(value ?? "")}
-                        >
-                          <SelectTrigger>
-                            <SelectValue placeholder={t("settings.cloudOwnerSelectBucket")} />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {bucketOptions.map((name) => (
-                              <SelectItem key={name} value={name}>
-                                {name}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      ) : (
-                        <Input
-                          value={selectedBucket}
-                          onChange={(event) => setSelectedBucket(event.target.value)}
-                          placeholder={t("settings.cloudOwnerBucketAuto")}
-                        />
-                      )}
-                    </Field>
-                  </div>
-                  <div className="mt-3 flex flex-wrap items-center gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      disabled={
-                        discoverStatus === "discovering" ||
-                        !ownerForm.endpointOrAccountId.trim() ||
-                        !ownerForm.accessKeyId.trim() ||
-                        !ownerForm.secretAccessKey.trim()
-                      }
-                      onClick={() => void discoverBuckets()}
-                    >
-                      <Cloud />
-                      {discoverStatus === "discovering"
-                        ? t("settings.cloudOwnerDiscovering")
-                        : t("settings.cloudOwnerDiscoverBuckets")}
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      disabled={
-                        ownerStatus === "checking" ||
-                        !selectedBucket.trim() ||
-                        !ownerForm.publicUrl.trim()
-                      }
-                      onClick={() => void validateOwnerDrive()}
-                    >
-                      <ShieldCheck />
-                      {ownerStatus === "checking"
-                        ? t("settings.cloudOwnerChecking")
-                        : t("settings.cloudOwnerValidate")}
-                    </Button>
-                    {ownerForm.secretAccessKey && (
-                      <span className="text-muted-foreground text-xs">
-                        {t("settings.cloudSecretStoredAs", {
-                          value: maskSecret(ownerForm.secretAccessKey),
-                        })}
+                      <span className="flex flex-col gap-1">
+                        <span className="font-medium text-sm">
+                          {t("settings.cloudPresenceTitle")}
+                        </span>
+                        <span className="text-muted-foreground text-xs">
+                          {t("settings.cloudPresenceHint")}
+                        </span>
+                        <span className="text-muted-foreground text-xs">
+                          {t("settings.cloudPresenceCost")}
+                        </span>
                       </span>
+                    </label>
+                  </div>
+                )}
+
+                {activeItem === "cloud-owner" && (
+                  <div className="rounded-md border border-border p-3">
+                    <div className="mb-3 flex items-center gap-2">
+                      <ShieldCheck className="size-4 text-primary" />
+                      <p className="font-medium text-sm">{t("settings.cloudOwnerTitle")}</p>
+                    </div>
+                    <p className="mb-3 text-muted-foreground text-xs">
+                      {t("settings.cloudOwnerSimplifiedHint")}
+                    </p>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <Field label={t("settings.cloudDriveLabel")}>
+                        <Input
+                          value={ownerForm.label}
+                          onChange={(event) => patchOwner({ label: event.target.value })}
+                          placeholder={t("settings.cloudDriveLabelPlaceholder")}
+                        />
+                      </Field>
+                      <Field label={t("settings.cloudOwnerEndpoint")}>
+                        <Input
+                          value={ownerForm.endpointOrAccountId}
+                          onChange={(event) =>
+                            patchOwner({ endpointOrAccountId: event.target.value })
+                          }
+                          placeholder="https://<account>.r2.cloudflarestorage.com"
+                        />
+                      </Field>
+                      <Field label={t("settings.cloudOwnerAccessKey")}>
+                        <Input
+                          value={ownerForm.accessKeyId}
+                          onChange={(event) => patchOwner({ accessKeyId: event.target.value })}
+                        />
+                      </Field>
+                      <Field label={t("settings.cloudOwnerSecretKey")}>
+                        <Input
+                          type="password"
+                          value={ownerForm.secretAccessKey}
+                          onChange={(event) => patchOwner({ secretAccessKey: event.target.value })}
+                        />
+                      </Field>
+                      <Field label={t("settings.cloudOwnerPublicUrl")}>
+                        <Input
+                          value={ownerForm.publicUrl}
+                          onChange={(event) => patchOwner({ publicUrl: event.target.value })}
+                          placeholder="https://pub-xxxx.r2.dev"
+                        />
+                      </Field>
+                      <Field label={t("settings.cloudOwnerBucket")}>
+                        {bucketOptions.length > 1 ? (
+                          <Select
+                            value={selectedBucket}
+                            onValueChange={(value) => setSelectedBucket(value ?? "")}
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder={t("settings.cloudOwnerSelectBucket")} />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {bucketOptions.map((name) => (
+                                <SelectItem key={name} value={name}>
+                                  {name}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        ) : (
+                          <Input
+                            value={selectedBucket}
+                            onChange={(event) => setSelectedBucket(event.target.value)}
+                            placeholder={t("settings.cloudOwnerBucketAuto")}
+                          />
+                        )}
+                      </Field>
+                    </div>
+                    <div className="mt-3 flex flex-wrap items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={
+                          discoverStatus === "discovering" ||
+                          !ownerForm.endpointOrAccountId.trim() ||
+                          !ownerForm.accessKeyId.trim() ||
+                          !ownerForm.secretAccessKey.trim()
+                        }
+                        onClick={() => void discoverBuckets()}
+                      >
+                        <Cloud />
+                        {discoverStatus === "discovering"
+                          ? t("settings.cloudOwnerDiscovering")
+                          : t("settings.cloudOwnerDiscoverBuckets")}
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={
+                          ownerStatus === "checking" ||
+                          !selectedBucket.trim() ||
+                          !ownerForm.publicUrl.trim()
+                        }
+                        onClick={() => void validateOwnerDrive()}
+                      >
+                        <ShieldCheck />
+                        {ownerStatus === "checking"
+                          ? t("settings.cloudOwnerChecking")
+                          : t("settings.cloudOwnerValidate")}
+                      </Button>
+                      {ownerForm.secretAccessKey && (
+                        <span className="text-muted-foreground text-xs">
+                          {t("settings.cloudSecretStoredAs", {
+                            value: maskSecret(ownerForm.secretAccessKey),
+                          })}
+                        </span>
+                      )}
+                    </div>
+                    {ownerMessage && (
+                      <p
+                        className={
+                          ownerStatus === "error"
+                            ? "mt-2 text-destructive text-xs"
+                            : "mt-2 text-muted-foreground text-xs"
+                        }
+                      >
+                        {ownerMessage}
+                      </p>
                     )}
                   </div>
-                  {ownerMessage && (
-                    <p
-                      className={
-                        ownerStatus === "error"
-                          ? "mt-2 text-destructive text-xs"
-                          : "mt-2 text-muted-foreground text-xs"
-                      }
-                    >
-                      {ownerMessage}
-                    </p>
-                  )}
-                </div>
+                )}
               </CardContent>
             </Card>
           )}

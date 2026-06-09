@@ -14,7 +14,7 @@
 | 1 | Minimal owner R2 connection model + bucket auto-discovery | ✅ Completed | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | Simplified owner R2 setup form | ✅ Completed | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | Two-column Settings layout (sidebar → detail) + persistence | ✅ Completed | [Phase 3 Checklist](#phase-3-checklist) |
-| 4 | Split the Cloud Drive section into items | 🔲 Pending | [Phase 4 Checklist](#phase-4-checklist) |
+| 4 | Split the Cloud Drive section into items | ✅ Completed | [Phase 4 Checklist](#phase-4-checklist) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
 
@@ -179,16 +179,16 @@ Settings
 **Goal:** Break the dense Cloud Drive card into focused items.
 
 **Tasks:**
-- [ ] `cloud-owner`: setup checklist + simplified owner form + connected drives.
-- [ ] `cloud-subscribe`: subscribe via public link + set preview/import.
-- [ ] `cloud-sync`: recommended CORS + latest sync progress.
-- [ ] `cloud-presence`: Listening Now presence toggle.
+- [x] `cloud-owner`: setup checklist + simplified owner form + connected drives.
+- [x] `cloud-subscribe`: subscribe via public link + set preview/import.
+- [x] `cloud-sync`: recommended CORS + latest sync progress.
+- [x] `cloud-presence`: Listening Now presence toggle.
 
 ### Phase 4 Checklist
 
-- [ ] Each cloud concern is its own sidebar item under the Cloud Drive section.
-- [ ] Owner setup, subscribe, sync, and presence each render independently.
-- [ ] No cloud control is lost; verified in the preview.
+- [x] Each cloud concern is its own sidebar item under the Cloud Drive section.
+- [x] Owner setup, subscribe, sync, and presence each render independently.
+- [x] No cloud control is lost; verified in the preview.
 
 ---
 
@@ -237,3 +237,4 @@ Settings
 |------|--------|---------|
 | 2026-06-09 | MUZERO | Initial draft. Phase 1 (owner R2 connection model + ListBuckets) and Phase 2 (simplified owner form) already implemented; Phase 3 nav-store persistence landed. |
 | 2026-06-09 | MUZERO | Phase 3 completed: Settings is now a two-column master-detail — a pure `settings-nav` config (sections → items, with a stale-id fallback resolver) drives a `SettingsSidebar`; `SettingsPage` renders one item's controls at a time, gated by the persisted `nav-store.settingsItem`. Responsive (vertical sidebar on `md+`, horizontal scroll row on mobile). Verified in the preview at desktop + mobile widths; en/zh/ja/ko section labels added. |
+| 2026-06-10 | MUZERO | Phase 4 completed: the Cloud Drive section is now four sidebar items — 我的盘(R2) (setup + owner form + connected drives), 订阅 (manifest link + preview/import), 同步与 CORS (sync progress + recommended CORS), and 在线状态 (presence toggle). One shared "Cloud Drive" card shows for any `cloud-*` item with each sub-block gated to its item. Verified each pane renders its own controls independently in the preview; en/zh/ja/ko item labels added. All four phases done. |

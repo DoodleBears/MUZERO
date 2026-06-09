@@ -6,7 +6,8 @@ describe("settings-nav", () => {
     const ids = settingsItemIds();
     expect(ids).toContain("appearance");
     expect(ids).toContain("playback-music");
-    expect(ids).toContain("cloud");
+    expect(ids).toContain("cloud-owner");
+    expect(ids).toContain("cloud-presence");
     expect(ids).toContain("advanced");
     expect(new Set(ids).size).toBe(ids.length);
   });

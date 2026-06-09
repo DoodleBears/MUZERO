@@ -36,7 +36,12 @@ export const SETTINGS_NAV = [
   },
   {
     labelKey: "settings.navSecCloud",
-    items: [{ id: "cloud", labelKey: "settings.cloudDriveTitle" }],
+    items: [
+      { id: "cloud-owner", labelKey: "settings.navCloudOwner" },
+      { id: "cloud-subscribe", labelKey: "settings.navCloudSubscribe" },
+      { id: "cloud-sync", labelKey: "settings.navCloudSync" },
+      { id: "cloud-presence", labelKey: "settings.navCloudPresence" },
+    ],
   },
   {
     labelKey: "settings.navSecDevice",
