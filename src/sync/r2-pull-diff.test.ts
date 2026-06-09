@@ -80,6 +80,62 @@ describe("diffRemoteSet", () => {
     });
   });
 
+  it("surfaces a track conflict when local track metadata and the remote set changed", async () => {
+    await db.sessions.put(localSession({ updatedAt: 1500 }));
+    await recordSyncMutation(
+      {
+        driveId: "drv_1",
+        devicePublicId: "dvc_1",
+        scope: "track",
+        entityId: "trk_remote_drv_1_trk_blue",
+        action: "track-metadata-updated",
+        base: { remoteKey: "sets/ses_tokyo/index.json", updatedAt: 1000 },
+        payload: { title: "Local Blue" },
+        now: 1600,
+      },
+      db,
+    );
+
+    await expect(
+      diffRemoteSet({ driveId: "drv_1", remoteSet: remoteSet({ updatedAt: 2000 }) }, db),
+    ).resolves.toMatchObject({
+      action: "conflict",
+      conflict: {
+        entityType: "track",
+        entityId: "trk_blue",
+        reason: "local-and-remote-changed",
+      },
+    });
+  });
+
+  it("surfaces a memory conflict when local memory text and the remote set changed", async () => {
+    await db.sessions.put(localSession({ updatedAt: 1500 }));
+    await recordSyncMutation(
+      {
+        driveId: "drv_1",
+        devicePublicId: "dvc_1",
+        scope: "memory",
+        entityId: "mem_remote_drv_1_mem_blue_note",
+        action: "memory-updated",
+        base: { remoteKey: "sets/ses_tokyo/index.json", updatedAt: 1000 },
+        payload: { note: "Local note" },
+        now: 1600,
+      },
+      db,
+    );
+
+    await expect(
+      diffRemoteSet({ driveId: "drv_1", remoteSet: remoteSet({ updatedAt: 2000 }) }, db),
+    ).resolves.toMatchObject({
+      action: "conflict",
+      conflict: {
+        entityType: "memory",
+        entityId: "mem_blue_note",
+        reason: "local-and-remote-changed",
+      },
+    });
+  });
+
   it("blocks pull when a known remote object hash changes unexpectedly", async () => {
     await db.sessions.put(localSession({ updatedAt: 1000 }));
     await db.syncObjects.put(syncObject("sets/ses_tokyo/index.json", "old-sha"));
@@ -159,7 +215,13 @@ function remoteSet(input: { updatedAt?: number } = {}): RemoteSetIndexResult {
             bytes: 3,
             sha256: "media-sha",
           },
-          memories: [],
+          memories: [
+            {
+              id: "mem_blue_note",
+              note: "Remote note",
+              createdAt: 1000,
+            },
+          ],
         },
       ],
     },
@@ -185,7 +247,13 @@ function remoteSet(input: { updatedAt?: number } = {}): RemoteSetIndexResult {
             bytes: 3,
             sha256: "media-sha",
           },
-          memories: [],
+          memories: [
+            {
+              id: "mem_blue_note",
+              note: "Remote note",
+              createdAt: 1000,
+            },
+          ],
         },
       },
     ],

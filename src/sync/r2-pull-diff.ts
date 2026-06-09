@@ -70,19 +70,26 @@ export async function diffRemoteSet(
   }
 
   const mutations = await localMutationsForSet(input.driveId, remoteSetId, db);
-  const conflicting = mutations.filter((mutation) =>
-    mutationChangedFromRemoteBase(mutation, input),
-  );
+  const conflicting = mutations
+    .map((mutation) => ({
+      mutation,
+      entity: mutationConflictEntity(mutation, input),
+    }))
+    .filter(
+      (entry): entry is { mutation: SyncMutation; entity: ConflictEntity } =>
+        entry.entity != null && mutationChangedFromRemoteBase(entry.mutation, input),
+    );
   if (conflicting.length > 0) {
+    const firstConflict = conflicting[0];
     return {
       ...base,
       action: "conflict",
       reasons: ["local-and-remote-changed"],
       conflict: {
-        entityType: "set",
-        entityId: remoteSetId,
+        entityType: firstConflict.entity.type,
+        entityId: firstConflict.entity.id,
         reason: "local-and-remote-changed",
-        localMutationIds: conflicting.map((mutation) => mutation.id),
+        localMutationIds: conflicting.map((entry) => entry.mutation.id),
       },
     };
   }
@@ -99,13 +106,76 @@ function mutationChangedFromRemoteBase(mutation: SyncMutation, input: DiffRemote
   return input.remoteSet.index.set.updatedAt > baseUpdatedAt;
 }
 
+interface ConflictEntity {
+  type: RemoteSetConflict["entityType"];
+  id: string;
+}
+
+function mutationConflictEntity(
+  mutation: SyncMutation,
+  input: DiffRemoteSetInput,
+): ConflictEntity | undefined {
+  if (mutation.scope === "set") {
+    return matchesRemoteSetId(mutation.entityId, input)
+      ? { type: "set", id: input.remoteSet.index.set.id }
+      : undefined;
+  }
+
+  if (mutation.scope === "track") {
+    const remoteTrack = input.remoteSet.index.tracks.find((track) =>
+      matchesRemoteEntityId("trk", input.driveId, mutation.entityId, track.id),
+    );
+    if (remoteTrack) return { type: "track", id: remoteTrack.id };
+  }
+
+  if (mutation.scope === "memory") {
+    for (const track of input.remoteSet.index.tracks) {
+      const remoteMemory = track.memories.find((memory) =>
+        matchesRemoteEntityId("mem", input.driveId, mutation.entityId, memory.id),
+      );
+      if (remoteMemory) return { type: "memory", id: remoteMemory.id };
+    }
+  }
+
+  if (
+    (mutation.scope === "track" || mutation.scope === "memory") &&
+    mutation.base?.remoteKey === setIndexKey(input.remoteSet.index.set.id)
+  ) {
+    return { type: mutation.scope === "memory" ? "memory" : "track", id: mutation.entityId };
+  }
+
+  return undefined;
+}
+
+function matchesRemoteSetId(entityId: string, input: DiffRemoteSetInput): boolean {
+  return (
+    entityId === input.remoteSet.index.set.id ||
+    entityId === remoteLocalId("ses", input.driveId, input.remoteSet.index.set.id)
+  );
+}
+
+function matchesRemoteEntityId(
+  prefix: "trk" | "mem",
+  driveId: string,
+  entityId: string,
+  remoteId: string,
+): boolean {
+  return entityId === remoteId || entityId === remoteLocalId(prefix, driveId, remoteId);
+}
+
 async function localMutationsForSet(
   driveId: string,
   remoteSetId: string,
   db: MuzeroDB,
 ): Promise<SyncMutation[]> {
   const rows = await listUnsyncedMutations(driveId, db);
-  return rows.filter((mutation) => mutation.scope === "set" && mutation.entityId === remoteSetId);
+  const remoteIndexKey = setIndexKey(remoteSetId);
+  return rows.filter(
+    (mutation) =>
+      (mutation.scope === "set" || mutation.scope === "track" || mutation.scope === "memory") &&
+      (mutation.base?.remoteKey === remoteIndexKey ||
+        (mutation.scope === "set" && mutation.entityId === remoteSetId)),
+  );
 }
 
 function sameTrackShape(localTrackIds: string[], input: DiffRemoteSetInput): boolean {
