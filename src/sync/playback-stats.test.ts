@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { MuzeroDB } from "@/db/muzero-db";
 import type { Track } from "@/db/types";
+import { summarizePlaybackAggregates } from "./playback-aggregate-summary";
 import {
   derivePlaybackAggregatesFromEvents,
   rebuildPlaybackAggregatesFromEvents,
@@ -254,6 +255,53 @@ describe("recordPlaybackListen", () => {
     expect(await db.playbackAggregates.get("dvc_1:track:trk_1")).toMatchObject({
       playCount: 1,
       listenedSec: 31,
+    });
+  });
+
+  it("keeps a large shared playlist separated across many anonymous devices", () => {
+    const events = Array.from({ length: 100 }, (_, index) => ({
+      id: `ple_${index}`,
+      devicePublicId: `dvc_${index.toString().padStart(3, "0")}`,
+      remoteTrackRef: {
+        driveId: "drv_friend",
+        shareId: "shr_tokyo",
+        setId: "ses_tokyo",
+        trackId: "remote_trk_1",
+        mediaSha256: "sha256-blue",
+      },
+      context: {
+        source: "shared-drive" as const,
+        driveId: "drv_friend",
+        shareId: "shr_tokyo",
+        setId: "ses_tokyo",
+      },
+      startedAt: 1_000 + index,
+      endedAt: 31_000 + index,
+      listenedSec: 31,
+      countedAsPlay: true,
+    }));
+
+    const aggregates = derivePlaybackAggregatesFromEvents(events);
+    const trackInShareRows = aggregates.filter(
+      (aggregate) =>
+        aggregate.scope === "track-in-share" &&
+        aggregate.shareId === "shr_tokyo" &&
+        aggregate.remoteTrackId === "remote_trk_1",
+    );
+
+    expect(trackInShareRows).toHaveLength(100);
+    expect(new Set(trackInShareRows.map((row) => row.devicePublicId)).size).toBe(100);
+    expect(new Set(trackInShareRows.map((row) => row.id)).size).toBe(100);
+    expect(
+      summarizePlaybackAggregates(aggregates, {
+        scope: "track-in-share",
+        shareId: "shr_tokyo",
+        remoteTrackId: "remote_trk_1",
+      }),
+    ).toMatchObject({
+      deviceCount: 100,
+      listenedSec: 3_100,
+      playCount: 100,
     });
   });
 });
