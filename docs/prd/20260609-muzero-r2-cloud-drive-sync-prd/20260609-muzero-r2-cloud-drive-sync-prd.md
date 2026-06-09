@@ -1677,8 +1677,8 @@ For a large shared playlist with many trusted devices, the UI should:
 
 ### Phase 1 Checklist
 
-- [ ] Browser can subscribe to a public manifest link and play an audio track.
-- [ ] Browser can subscribe to a public manifest link and play a video track.
+- [x] Browser can subscribe to a public manifest link and play an audio track.
+- [x] Browser can subscribe to a public manifest link and play a video track.
 - [ ] Tauri/Electron use the same manifest import path.
 - [x] No R2 write credential is required for subscription.
 - [x] Command/Ctrl+F can search synced remote catalog rows locally.
@@ -2050,3 +2050,4 @@ Do not record secrets, full signed URLs, or media content.
 | 2026-06-09 | MUZERO | Phase 4 updatedAt merge policy added: only non-user-authored cache metadata, such as search catalog page versions, may use `updatedAt` as an automatic cache freshness winner. |
 | 2026-06-09 | MUZERO | Phase 4 explicit conflict-resolution contract added: set/track/memory conflicts now expose only `keep-local`, `use-remote`, and `duplicate-both` actions, and cannot resolve without a user-selected action. |
 | 2026-06-09 | MUZERO | Phase 4 conflict resolution panel added: reusable Settings-ready UI renders set/track/memory conflicts and emits keep-local, use-remote, or duplicate-both actions without embedding untranslated text. |
+| 2026-06-09 | MUZERO | Phase 1 subscribed-manifest playback verified end-to-end: a public manifest subscription streams imported audio and video tracks straight from their remote object URLs (`MediaEngine.loadUrl`) with no `mediaBlobs` download, locking the stream-mode play path with player-store regression tests. |
