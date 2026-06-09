@@ -500,10 +500,13 @@ export function SettingsPage() {
         });
 
   return (
-    <div className="no-scrollbar h-full w-full overflow-y-auto">
-      <div className="mx-auto flex w-full max-w-5xl flex-col gap-4 px-4 pt-chrome-top pb-chrome-bottom md:flex-row md:gap-6 lg:px-6">
-        <SettingsSidebar active={activeItem} onSelect={setSettingsItem} />
-        <div className="flex min-w-0 flex-1 flex-col gap-4">
+    <div className="h-full w-full overflow-hidden">
+      <div className="mx-auto flex h-full w-full max-w-5xl flex-col gap-2 px-4 md:flex-row md:gap-6 lg:px-6">
+        {/* Left and right columns scroll independently (each owns its overflow). */}
+        <div className="no-scrollbar shrink-0 overflow-y-auto pt-chrome-top md:w-52 md:pb-chrome-bottom">
+          <SettingsSidebar active={activeItem} onSelect={setSettingsItem} />
+        </div>
+        <div className="no-scrollbar flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-y-auto pb-chrome-bottom md:pt-chrome-top">
           {activeItem === "appearance" && (
             <Card>
               <CardHeader>
