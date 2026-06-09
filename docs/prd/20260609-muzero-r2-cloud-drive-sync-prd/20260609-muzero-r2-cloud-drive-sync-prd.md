@@ -1770,7 +1770,7 @@ For a large shared playlist with many trusted devices, the UI should:
 - [ ] Conflicts are visible and never silently overwrite media.
 - [x] Two devices adding different tracks to the same set can auto-merge.
 - [x] Two devices renaming the same set differently produce a reviewable conflict.
-- [ ] Stale set snapshot publish fails/replans instead of overwriting remote changes.
+- [x] Stale set snapshot publish fails/replans instead of overwriting remote changes.
 - [x] Hash mismatch blocks import for that object.
 
 ### Phase 5: Anonymous Device Registry + Playback Stats Sync
@@ -2036,3 +2036,4 @@ Do not record secrets, full signed URLs, or media content.
 | 2026-06-09 | MUZERO | Phase 4 owner set mutation folding added: export planning now applies non-overlapping set metadata, track add, and track remove mutations into the next owner-published `sets/<setId>/index.json` snapshot while leaving overlapping or invalid mutation payloads for later review. |
 | 2026-06-09 | MUZERO | Phase 4 additive set merge rule added: owner export folding now auto-merges different trusted devices adding distinct tracks plus new memories into the same set index, preserving per-object ids instead of coalescing writers into one mutable file. |
 | 2026-06-09 | MUZERO | Phase 4 reviewable rename conflict metadata added: owner export plans now report overlapping set-field mutations with entity, field, reason, and mutation ids so two devices renaming the same set differently can be surfaced for explicit resolution instead of being silently dropped. |
+| 2026-06-09 | MUZERO | Phase 4 stale set snapshot guard added: set index export planning can attach observed remote ETags as `If-Match` preconditions, using the existing signed conditional PUT path so stale `sets/<setId>/index.json` publishes fail instead of overwriting newer remote snapshots. |

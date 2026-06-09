@@ -87,6 +87,7 @@ export interface R2ExportPlanInput {
   db?: MuzeroDB;
   deviceExport?: R2DeviceExportOptions;
   playbackEventFlush?: R2PlaybackEventFlushOptions;
+  setIndexPreconditions?: Record<string, R2ObjectWritePrecondition>;
 }
 
 export interface R2PlaybackEventFlushOptions extends Partial<PlaybackEventFlushPolicy> {
@@ -228,6 +229,7 @@ export async function buildR2ExportPlan(input: R2ExportPlanInput): Promise<R2Exp
       session,
       object: createJsonObject("set-index", `sets/${session.id}/index.json`, folded.index, {
         setId: session.id,
+        precondition: input.setIndexPreconditions?.[session.id],
       }),
     });
   }

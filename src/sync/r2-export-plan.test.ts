@@ -391,6 +391,26 @@ describe("buildR2ExportPlan", () => {
     ]);
   });
 
+  it("attaches set index write preconditions from the observed remote etag", async () => {
+    await seedSet();
+
+    const plan = await buildR2ExportPlan({
+      driveId: "drv_1",
+      libraryId: "lib_1",
+      baseUrl: "https://music.example.com/muzero/",
+      setIds: ["ses_1"],
+      db,
+      setIndexPreconditions: {
+        ses_1: { ifMatch: '"set-etag-1"' },
+      },
+    });
+
+    expect(plan.objects.find((object) => object.kind === "set-index")).toMatchObject({
+      key: "sets/ses_1/index.json",
+      precondition: { ifMatch: '"set-etag-1"' },
+    });
+  });
+
   it("auto-merges different devices adding tracks and memories to the same set", async () => {
     await seedSet();
     await db.syncMutations.bulkPut([
