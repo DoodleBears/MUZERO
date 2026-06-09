@@ -7,24 +7,9 @@ import type { AnimatedNavIconHandle, NavFabItem } from "@/components/nav/nav-fab
 import { NAV_ITEMS } from "@/components/nav/nav-fab-items";
 import { Kbd, KbdGroup } from "@/components/ui/kbd";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { isMac, modifierSymbol, tabForShortcutKey } from "@/lib/shortcuts";
+import { isMac, modifierSymbol } from "@/lib/shortcuts";
 import { cn } from "@/lib/utils";
 import { transitionState } from "@/lib/view-transition-react";
-
-/** Cmd/Ctrl+1..3 jump straight to a destination (no need to open the FAB). */
-function useNavShortcuts(onChange: (tab: Tab) => void) {
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (!(e.metaKey || e.ctrlKey) || e.altKey || e.shiftKey) return;
-      const tab = tabForShortcutKey(e.key);
-      if (!tab) return;
-      e.preventDefault();
-      transitionState(() => onChange(tab));
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onChange]);
-}
 
 function shortcutKeys(index: number, mac: boolean): string[] {
   return [modifierSymbol(mac), String(index + 1)];
@@ -111,7 +96,6 @@ export function NavFab({ value, onChange }: { value: Tab; onChange: (tab: Tab) =
   const [expanded, setExpanded] = useState(false);
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const mac = isMac();
-  useNavShortcuts(onChange);
 
   function open() {
     if (closeTimer.current) clearTimeout(closeTimer.current);

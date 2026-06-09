@@ -8,7 +8,7 @@ import { PlayerDock } from "@/components/shell/player-dock";
 import { GlobalDropZone } from "@/components/upload/global-drop-zone";
 import { useSettings } from "@/hooks/use-app-data";
 import { useIdle } from "@/hooks/use-idle";
-import { usePlayerShortcuts } from "@/hooks/use-player-shortcuts";
+import { useShortcutDispatch } from "@/hooks/use-shortcut-dispatch";
 import { cn } from "@/lib/utils";
 import { NowPlayingPage } from "@/pages/now-playing-page";
 import { QueuePage } from "@/pages/queue-page";
@@ -17,6 +17,7 @@ import { SessionsPage } from "@/pages/sessions-page";
 import { SettingsPage } from "@/pages/settings-page";
 import { useNavStore } from "@/stores/nav-store";
 import { usePlayerStore } from "@/stores/player-store";
+import { startSyncIndicator } from "@/stores/sync-indicator";
 import { useVisualizerPanelStore } from "@/stores/visualizer-panel-store";
 import { resolveVisualizerStyle } from "@/visualizer/registry";
 
@@ -47,14 +48,30 @@ export default function App() {
   const [trackSearchOpen, setTrackSearchOpen] = useState(false);
   const fullscreenRestoreRef = useRef<{ element: HTMLElement; until: number } | null>(null);
   const settings = useSettings();
-  // Global transport shortcuts: Space/⌘P · ←→/AD · Shift±5s · ↑↓ volume · R · Option/Alt+R.
-  usePlayerShortcuts();
+  // Global keyboard shortcuts (transport + tab nav), resolved through the
+  // configurable registry so user overrides take effect live.
+  useShortcutDispatch();
 
   // Boot only wires the media engine. Auto-cueing the previous track during
   // WKWebView startup can make the full-screen media/background path flicker.
   useEffect(() => {
     init();
   }, [init]);
+
+  // Surface background sync (folder import + R2) as a persistent, cancelable toast.
+  useEffect(() => {
+    startSyncIndicator();
+  }, []);
+
+  // Desktop: re-scan remembered local-import folders for new files shortly after
+  // boot. Deferred so it never blocks first paint / WKWebView startup; the action
+  // self-guards (no-op in the browser or when no folders are remembered).
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      void usePlayerStore.getState().syncImportFolders();
+    }, 2500);
+    return () => window.clearTimeout(timer);
+  }, []);
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -142,7 +159,10 @@ export default function App() {
           // without needing a left inset.
           data-tauri-drag-region
           className={cn(
-            "fixed inset-x-0 top-0 z-30 flex items-center justify-center px-4 py-3 transition-opacity duration-500",
+            // `-webkit-app-region:drag` makes the header drag the Electron frameless
+            // window; `data-tauri-drag-region` does the same under Tauri (both inert
+            // on the other shell + the web build).
+            "fixed inset-x-0 top-0 z-30 flex items-center justify-center px-4 py-3 transition-opacity duration-500 [-webkit-app-region:drag]",
             ambientActive ? "" : "bg-background/80",
             (chromeHidden || foregroundHidden) && "pointer-events-none opacity-0",
           )}

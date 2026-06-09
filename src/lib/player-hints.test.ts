@@ -4,8 +4,8 @@ import { playerShortcutHint, volumeFromPointerY } from "./player-hints";
 describe("playerShortcutHint", () => {
   it("returns single keycaps for transport actions", () => {
     expect(playerShortcutHint("play", true)).toEqual(["Space"]);
-    expect(playerShortcutHint("prev", true)).toEqual(["←"]);
-    expect(playerShortcutHint("next", true)).toEqual(["→"]);
+    expect(playerShortcutHint("prev", true)).toEqual(["Q"]);
+    expect(playerShortcutHint("next", true)).toEqual(["E"]);
   });
 
   it("returns shortcuts for repeat and shuffle", () => {

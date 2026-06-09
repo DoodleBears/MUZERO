@@ -14,7 +14,8 @@
 | Phase | Name | Status | Link |
 |-------|------|--------|------|
 | 1 | Registry + pure engine + persistence | ✅ Completed | [Phase 1 Checklist](#phase-1-checklist) |
-| 2 | Dispatch unification (registry-driven, behavior-preserving) | 🔲 Pending | [Phase 2 Checklist](#phase-2-checklist) |
+| 2a | Global dispatch (transport + tabs) via registry | ✅ Completed | [Phase 2a Checklist](#phase-2a-checklist) |
+| 2b | Scoped surfaces (library/inspector/gallery) + hint swap | 🔲 Pending | [Phase 2b Checklist](#phase-2b-checklist) |
 | 3 | "View all shortcuts" — read-only cheat-sheet (Settings + `?` overlay) | 🔲 Pending | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | Customization — recorder, multi-binding, cyclic conflict, reset | 🔲 Pending | [Phase 4 Checklist](#phase-4-checklist) |
 | 5 | Stretch — presets, 2-stroke sequences, import/export | 🔲 Pending | [Phase 5 Checklist](#phase-5-checklist) |
@@ -284,20 +285,37 @@ Global `?` (Shift+/)  →  (OPTIONAL, Q8) components/shortcuts/shortcut-help-ove
 
 ### Phase 2: Dispatch unification (behavior-preserving)
 
-**Goal:** Make the registry the *live* source of truth — every key is matched via `matchAction`, defaults unchanged, two scope bugs fixed.
+**Goal:** Make the registry the *live* source of truth — every key is matched via `matchAction`, defaults unchanged, two scope bugs fixed. Split into **2a** (global, stable files — done) and **2b** (the churning library/inspector surfaces + hint swap).
+
+> **Why split:** the library files (`search-page.tsx`, `virtual-track-list.tsx`, `entity-grid.tsx`) are under active concurrent editing for the album/artist-delete feature. Refactoring their key-matching now would conflict, so the high-value global dispatch lands first; the scoped surfaces follow once that work settles.
+
+#### Phase 2a — global dispatch (transport + tabs) ✅
 
 **Tasks:**
-- [ ] `src/hooks/use-shortcut-dispatch.ts`: one capture-phase window `keydown`, computes `activeScopes` from nav/focus (global always; `library` when a gallery/list/detail surface is mounted; `inspector` when the track-notes panel is mounted), calls `matchAction`, invokes the action handler, `preventDefault`s on hit.
-- [ ] Re-express the scattered resolvers as registry consumers: fold [`player-shortcuts.ts`](../../../src/player/player-shortcuts.ts), the gallery roving + `` ` `` toggle in [`search-page.tsx`](../../../src/pages/search-page.tsx), row nav in [`virtual-track-list.tsx`](../../../src/components/library/virtual-track-list.tsx), `A/←` in [`use-back-gesture.ts`](../../../src/hooks/use-back-gesture.ts), tab nav in [`nav-fab.tsx`](../../../src/components/nav/nav-fab.tsx), and `T/N` in [`track-memory-notes-panel.tsx`](../../../src/components/track/track-memory-notes-panel.tsx) into action handlers keyed by action id. Keep the per-surface DOM effects (focus movement, swipe) — only the *key→intent* decision moves to the registry.
-- [ ] Fix bugs as part of folding: gate the gallery-cycle on `isTypingTarget`; scope `T/N` to `inspector` (active-surface), guarded by `hasModalDialogOpen`.
-- [ ] Consolidate the duplicate `isTypingTarget` copies (`App.tsx`, `use-player-shortcuts.ts`, `track-memory-notes-panel.tsx`) onto [`dom-keys.ts`](../../../src/lib/dom-keys.ts).
-- [ ] Swap `playerShortcutHint` → registry-backed `shortcutHint(actionId)`; tooltips now reflect live bindings.
+- [x] `src/hooks/use-shortcut-dispatch.ts`: one window `keydown` (bubble), guarded by `isTypingTarget` + `defaultPrevented`; `matchAction(gestureFromEvent(e), {global}, mergeBindings(sanitizeOverrides(settings.shortcutOverrides)))` → imperative action handler. Library/inspector surfaces keep their own capture handlers and preempt this one (existing `stopImmediatePropagation`/`defaultPrevented` contract → no scope tracker needed).
+- [x] Fold transport + tab nav: deleted `player-shortcuts.ts` / `use-player-shortcuts.ts` (+ test); removed `useNavShortcuts` from [`nav-fab.tsx`](../../../src/components/nav/nav-fab.tsx); App wires `useShortcutDispatch()`.
+- [x] `isTypingTarget` already consolidated onto [`dom-keys.ts`](../../../src/lib/dom-keys.ts) (Phase-0 of this work); the dispatcher imports it.
 
-#### Phase 2 Checklist
-- [ ] All existing shortcut **tests still pass** (`player-shortcuts.test.ts`, `library-nav.test.ts`, `player-hints.test.ts`, `shortcuts.test.ts`) — defaults are byte-for-byte equivalent.
-- [ ] Trackpad swipe-back + cover-swipe still work (gesture entries are display-only; their handlers are untouched).
-- [ ] Manual: `` ` `` no longer flips gallery mode while typing in the gallery search box; `T/N` only fires with the inspector active and no modal open.
-- [ ] No double-fire on `↑/↓` across volume / list-nav / slider (the `defaultPrevented` + capture-order contract is preserved by the single dispatcher).
+##### Phase 2a Checklist
+- [x] DOM test (`use-shortcut-dispatch.test.tsx`): default chords (Q/E/Space/↑) hit the right player-store actions; **a user override remaps live** (prev→Z frees Q); Ctrl+digit switches tabs; stands down while typing; ignores unbound keys.
+- [x] Transport is now **rebindable** (overrides flow through `matchAction`); defaults byte-for-byte unchanged.
+- [x] No double-fire on `↑/↓` (bubble dispatcher + `defaultPrevented` + library capture-preemption contract preserved); typecheck + Biome clean (61 tests green).
+
+> **Done 2026-06-10.** Headline win: transport + tab shortcuts are configurable. Scoped surfaces (below) still use their hard-coded defaults until 2b.
+
+#### Phase 2b — scoped surfaces + hint swap 🔲
+
+**Tasks:**
+- [ ] Route the **library** keys through the registry: gallery roving + `` ` `` toggle in [`search-page.tsx`](../../../src/pages/search-page.tsx), row nav in [`virtual-track-list.tsx`](../../../src/components/library/virtual-track-list.tsx), `A/←` in [`use-back-gesture.ts`](../../../src/hooks/use-back-gesture.ts) — replace `libraryNavKey(e.key)` checks with `matchesActionEvent(e, "library.*", bindings)`. Keep the per-surface DOM effects (focus movement, swipe).
+- [ ] Route `nav.cycleGalleryMode` + the search-open keys through the registry where they're handled (SearchPage / App).
+- [ ] Route `memory.quickAdd` (`T/N`) in [`track-memory-notes-panel.tsx`](../../../src/components/track/track-memory-notes-panel.tsx); fix its weak scope (guard `hasModalDialogOpen`, scope to the active inspector).
+- [ ] Fix the gallery-cycle-while-typing bug (gate on `isTypingTarget`).
+- [ ] Swap `playerShortcutHint` → registry-backed `shortcutHint(actionId)`; tooltips reflect live bindings.
+
+##### Phase 2b Checklist
+- [ ] `library-nav.test.ts` still green (or its logic migrates to the registry); WASD/arrow nav + swipe-back unchanged at defaults but now override-aware.
+- [ ] `` ` `` no longer flips gallery mode while typing; `T/N` only fires with the inspector active and no modal open.
+- [ ] Rebinding e.g. `library.focusNext` to `J` works live in a focused list.
 
 ### Phase 3: "View all shortcuts" (read-only cheat-sheet)
 
@@ -398,6 +416,7 @@ Global `?` (Shift+/)  →  (OPTIONAL, Q8) components/shortcuts/shortcut-help-ove
 |------|--------|---------|
 | 2026-06-10 | MUZERO | Initial draft — adapts ClipCombo's shortcut-customization architecture (registry + multi-binding + cyclic conflict + recorder + cheat-sheet) to MUZERO's local-first / no-telemetry / no-hidden-flag / 4-locale constraints; 5-phase plan, infrastructure-first |
 | 2026-06-10 | MUZERO | Resolved Q7 (intrinsic widget keys: not rebindable, but shown read-only in a cheat-sheet "Reference" section) and Q8 (Settings → Shortcuts is the canonical home; `?` overlay optional, no dock affordance) — propagated into §5.1, §6 Phase 3, §7 |
+| 2026-06-10 | MUZERO | Phase 1 shipped (registry + engine + persistence + i18n, 56 tests). Phase 2 split into 2a (global transport+tab dispatch via registry — shipped, transport now rebindable; deleted `player-shortcuts`/`use-player-shortcuts`) and 2b (library/inspector/gallery surfaces + hint swap — pending, deferred around concurrent library-delete edits) |
 
 ---
 

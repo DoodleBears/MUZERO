@@ -1,9 +1,11 @@
 /**
  * Display-only keyboard hints for the transport controls' tooltips. Pure (no
  * React/DOM) so the mapping is unit-tested and the control components stay thin.
- * Mirrors the bindings in {@link resolvePlayerShortcut} but shows ONE
- * representative key per action (alternatives like `A`/`D` are omitted to keep
- * the `Kbd` caps readable — multiple caps read as a chord).
+ * Mirrors the default transport bindings in the shortcut registry
+ * (`src/shortcuts/registry.ts`), showing ONE representative key per action.
+ * Transport sits on Q/E (the arrows/WASD drive library navigation instead);
+ * Shift+Q/E scrubs. NOTE: still hard-coded to defaults — Phase 2b swaps these for
+ * the user's live bindings via the registry.
  */
 export type HintAction = "play" | "prev" | "next" | "repeat" | "shuffle" | "volume";
 
@@ -12,9 +14,9 @@ export function playerShortcutHint(action: HintAction, mac: boolean): string[] {
     case "play":
       return ["Space"];
     case "prev":
-      return ["←"];
+      return ["Q"];
     case "next":
-      return ["→"];
+      return ["E"];
     case "repeat":
       return ["R"];
     case "shuffle":
