@@ -22,6 +22,7 @@ export type R2ExportObjectKind =
   | "media"
   | "cover"
   | "memory-photo"
+  | "device-avatar"
   | "set-index"
   | "device-profile"
   | "devices-index"
@@ -179,7 +180,7 @@ async function loadSessionTracks(session: DjSession, db: MuzeroDB): Promise<Trac
 }
 
 async function loadOptionalBinaryObject(
-  kind: "cover" | "memory-photo",
+  kind: "cover" | "memory-photo" | "device-avatar",
   blobId: string,
   db: MuzeroDB,
   refs: Pick<R2ExportObject, "setId" | "trackId" | "memoryId">,
@@ -189,7 +190,7 @@ async function loadOptionalBinaryObject(
 }
 
 async function createBinaryObject(
-  kind: "media" | "cover" | "memory-photo",
+  kind: "media" | "cover" | "memory-photo" | "device-avatar",
   blob: MediaBlob,
   refs: Pick<R2ExportObject, "setId" | "trackId" | "memoryId">,
 ): Promise<BinaryObjectResult> {
@@ -280,12 +281,18 @@ async function createDeviceObjects(
   let checkpointKey: string | undefined;
   let latestSegmentKey: string | undefined;
   let statsUpdatedAt = 0;
+  const avatar =
+    device.publishProfile && device.avatarBlobId
+      ? await loadOptionalBinaryObject("device-avatar", device.avatarBlobId, db, {})
+      : undefined;
+  if (avatar) objects.push(avatar.object);
+
   if (device.publishProfile) {
     objects.push(
       createJsonObject(
         "device-profile",
         `profiles/devices/${device.publicId}/profile.json`,
-        toDevicePublicProfile(device),
+        toDevicePublicProfile(device, avatar?.remote),
       ),
     );
   }
@@ -383,12 +390,13 @@ function shouldExportPlaybackEvents(
   });
 }
 
-function toDevicePublicProfile(device: DeviceRecord): DevicePublicProfile {
+function toDevicePublicProfile(device: DeviceRecord, avatar?: R2RemoteObject): DevicePublicProfile {
   return {
     schema: "muzero-r2-device-profile-v1",
     devicePublicId: device.publicId,
     displayName: device.name,
     avatarSeed: device.avatarSeed,
+    avatar,
     appVersion: device.appVersion,
     revision: device.profileRevision,
     updatedAt: device.lastSeenAt,
@@ -481,9 +489,10 @@ async function sha256Text(value: string): Promise<string> {
   return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
-function binaryDirectory(kind: "media" | "cover" | "memory-photo"): string {
+function binaryDirectory(kind: "media" | "cover" | "memory-photo" | "device-avatar"): string {
   if (kind === "media") return "objects/media";
   if (kind === "cover") return "objects/covers";
+  if (kind === "device-avatar") return "objects/avatars";
   return "objects/memories";
 }
 

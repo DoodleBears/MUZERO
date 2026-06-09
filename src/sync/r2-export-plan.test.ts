@@ -222,6 +222,53 @@ describe("buildR2ExportPlan", () => {
     );
   });
 
+  it("exports uploaded device avatar images through the public profile object", async () => {
+    await db.devices.put({
+      id: "dev_local",
+      publicId: "dvc_1",
+      name: "Mac desktop",
+      avatarSeed: "ocean-blue",
+      avatarBlobId: "blb_avatar",
+      platform: "browser",
+      appVersion: "0.1.0",
+      publishProfile: true,
+      profileRevision: 2,
+      createdAt: 100,
+      lastSeenAt: 200,
+    });
+    await db.mediaBlobs.put({
+      id: "blb_avatar",
+      trackId: "dev_local",
+      role: "avatar",
+      mime: "image/png",
+      bytes: 6,
+      blob: new Blob(["avatar"], { type: "image/png" }),
+    });
+
+    const plan = await buildR2ExportPlan({
+      driveId: "drv_1",
+      libraryId: "lib_1",
+      baseUrl: "https://music.example.com/muzero/",
+      setIds: [],
+      db,
+    });
+    const avatar = plan.objects.find((object) => object.kind === "device-avatar");
+    const profile = JSON.parse(
+      String(plan.objects.find((object) => object.kind === "device-profile")?.body),
+    );
+
+    expect(avatar).toMatchObject({
+      contentType: "image/png",
+      key: expect.stringMatching(/^objects\/avatars\/sha256-[a-f0-9]{64}\.png$/),
+    });
+    expect(profile.avatar).toMatchObject({
+      url: avatar?.key,
+      mime: "image/png",
+      bytes: 6,
+      sha256: avatar?.sha256,
+    });
+  });
+
   it("exports immutable per-device playback event segments", async () => {
     await seedSet();
     await db.devices.put({
