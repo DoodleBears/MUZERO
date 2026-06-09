@@ -5,6 +5,7 @@ import {
   insertNext,
   moveEntry,
   type PlayQueueState,
+  removeEntriesByTrackIds,
   removeEntry,
   replaceEntries,
 } from "@/player/play-queue";
@@ -17,6 +18,8 @@ import {
   DEFAULT_SETTINGS,
   type DjConfig,
   type DjSession,
+  type EntityCover,
+  type ImportFolder,
   type MediaBlob,
   type Memory,
   type MemoryAuthorRef,
@@ -56,6 +59,51 @@ export async function saveSettings(
   const next: AppSettings = { ...current, ...patch, id: "app" };
   await db.settings.put(next);
   return next;
+}
+
+// ----------------------------------------------------------- import folders ----
+
+/**
+ * Of the given absolute paths, which are already in the library. Drives the
+ * incremental local-folder sync: re-scanning a remembered folder imports only
+ * the complement. Uses the `sourcePath` index, so it stays cheap on large sets.
+ */
+export async function knownSourcePaths(
+  paths: string[],
+  db: MuzeroDB = defaultDb,
+): Promise<Set<string>> {
+  if (paths.length === 0) return new Set();
+  const rows = await db.tracks.where("sourcePath").anyOf(paths).toArray();
+  return new Set(rows.map((t) => t.sourcePath).filter((p): p is string => Boolean(p)));
+}
+
+/**
+ * Add or update a remembered import folder (matched by id or path). Re-reads
+ * settings inside so a concurrent settings write isn't clobbered. Returns the id.
+ */
+export async function upsertImportFolder(
+  folder: Omit<ImportFolder, "id"> & { id?: string },
+  db: MuzeroDB = defaultDb,
+): Promise<string> {
+  const settings = await getSettings(db);
+  const list = settings.importFolders ?? [];
+  // Match an existing entry by id (when provided) or by path; preserve its stable
+  // id across the merge so re-adding the same folder updates rather than dupes.
+  const at = list.findIndex((f) => (folder.id && f.id === folder.id) || f.path === folder.path);
+  const id = at >= 0 ? list[at].id : (folder.id ?? newId("imf"));
+  const next: ImportFolder = { ...folder, id };
+  const merged = at >= 0 ? list.map((f, i) => (i === at ? { ...f, ...next } : f)) : [...list, next];
+  await saveSettings({ importFolders: merged }, db);
+  return id;
+}
+
+/** Stop watching a folder. Imported tracks are kept — only the watch entry drops. */
+export async function removeImportFolder(id: string, db: MuzeroDB = defaultDb): Promise<void> {
+  const settings = await getSettings(db);
+  await saveSettings(
+    { importFolders: (settings.importFolders ?? []).filter((f) => f.id !== id) },
+    db,
+  );
 }
 
 // ---------------------------------------------------------------- sessions ----
@@ -174,18 +222,149 @@ export async function getSessionCover(
   return (await db.mediaBlobs.get(session.coverBlobId))?.blob;
 }
 
+/**
+ * Set a user-chosen cover for a DERIVED entity (one artist / album). The
+ * `entityKey` is the projection key from `library-index.ts` and becomes the
+ * `entityCovers` row id; bytes go in `mediaBlobs` (role "cover", keyed by that
+ * id) — the same owner-keyed shape as {@link setSessionCover}. Replaces any prior
+ * cover and bumps `updatedAt` (the last-write-wins clock for R2 sync).
+ */
+export async function setEntityCover(
+  input: {
+    entityKey: string;
+    kind: EntityCover["kind"];
+    blob: Blob;
+    mime: string;
+    crop?: CropRect;
+  },
+  db: MuzeroDB = defaultDb,
+): Promise<void> {
+  await db.transaction("rw", db.entityCovers, db.mediaBlobs, async () => {
+    const prev = await db.entityCovers.get(input.entityKey);
+    if (prev?.coverBlobId) await db.mediaBlobs.delete(prev.coverBlobId);
+    const cover: MediaBlob = {
+      id: newId("blb"),
+      trackId: input.entityKey,
+      role: "cover",
+      mime: input.mime,
+      bytes: input.blob.size,
+      blob: input.blob,
+    };
+    await db.mediaBlobs.put(cover);
+    await db.entityCovers.put({
+      id: input.entityKey,
+      kind: input.kind,
+      coverBlobId: cover.id,
+      crop: input.crop,
+      updatedAt: Date.now(),
+    });
+  });
+}
+
+/** Read an entity's custom cover blob (override only — not the fallback track). */
+export async function getEntityCover(
+  entityKey: string,
+  db: MuzeroDB = defaultDb,
+): Promise<Blob | undefined> {
+  const row = await db.entityCovers.get(entityKey);
+  if (!row?.coverBlobId) return undefined;
+  return (await db.mediaBlobs.get(row.coverBlobId))?.blob;
+}
+
+/** Remove an entity's custom cover (row + blob); resolution falls back to a track. */
+export async function clearEntityCover(entityKey: string, db: MuzeroDB = defaultDb): Promise<void> {
+  await db.transaction("rw", db.entityCovers, db.mediaBlobs, async () => {
+    const row = await db.entityCovers.get(entityKey);
+    if (!row) return;
+    if (row.coverBlobId) await db.mediaBlobs.delete(row.coverBlobId);
+    await db.entityCovers.delete(entityKey);
+  });
+}
+
 export async function removeTrackFromSession(
   sessionId: string,
   trackId: string,
   db: MuzeroDB = defaultDb,
 ): Promise<void> {
+  return removeTracksFromSession(sessionId, [trackId], db);
+}
+
+/**
+ * Remove tracks from ONE set's `trackIds` (reversible curation edit). The track
+ * rows, their blobs, and the play queue are untouched — the song stays in the
+ * library and in any other set. Set vs play queue stay decoupled.
+ */
+export async function removeTracksFromSession(
+  sessionId: string,
+  trackIds: string[],
+  db: MuzeroDB = defaultDb,
+): Promise<void> {
+  if (trackIds.length === 0) return;
+  const remove = new Set(trackIds);
   await db.transaction("rw", db.sessions, async () => {
     const session = await db.sessions.get(sessionId);
     if (!session) return;
-    session.trackIds = session.trackIds.filter((id) => id !== trackId);
+    session.trackIds = session.trackIds.filter((id) => !remove.has(id));
     session.updatedAt = Date.now();
     await db.sessions.put(session);
   });
+}
+
+export interface DeleteSessionResult {
+  /** Track ids permanently deleted because they lived only in this set. */
+  purgedTrackIds: string[];
+}
+
+/**
+ * Delete a 歌单. Always removes the set row, its cover blob, and any import-folder
+ * watches bound to it. With `purgeExclusiveTracks`, also permanently deletes tracks
+ * that live ONLY in this set (present in no other set) — their blobs, memories, and
+ * play-queue entries go too; tracks shared with other sets are kept. One rw txn.
+ */
+export async function deleteSession(
+  sessionId: string,
+  opts: { purgeExclusiveTracks: boolean },
+  db: MuzeroDB = defaultDb,
+): Promise<DeleteSessionResult> {
+  return db.transaction(
+    "rw",
+    [db.sessions, db.tracks, db.mediaBlobs, db.memories, db.playQueue, db.settings],
+    async () => {
+      const session = await db.sessions.get(sessionId);
+      if (!session) return { purgedTrackIds: [] };
+
+      let purgedTrackIds: string[] = [];
+      if (opts.purgeExclusiveTracks && session.trackIds.length > 0) {
+        const others = await db.sessions.where("id").notEqual(sessionId).toArray();
+        const elsewhere = new Set(others.flatMap((s) => s.trackIds));
+        purgedTrackIds = session.trackIds.filter((id) => !elsewhere.has(id));
+        if (purgedTrackIds.length > 0) {
+          const idSet = new Set(purgedTrackIds);
+          await db.mediaBlobs.where("trackId").anyOf(purgedTrackIds).delete();
+          await db.memories.where("trackId").anyOf(purgedTrackIds).delete();
+          await db.tracks.bulkDelete(purgedTrackIds);
+          // No other set references these (exclusive by definition) → no unlink scan.
+          await purgeTracksFromPlayQueue(idSet, db);
+        }
+      }
+
+      // The set-level cover blob (role "cover", trackId === sessionId).
+      if (session.coverBlobId) await db.mediaBlobs.delete(session.coverBlobId);
+      await db.sessions.delete(sessionId);
+
+      // Drop import-folder watches bound to this set. Done inline (not via
+      // removeImportFolder) to keep it inside this single transaction.
+      const settingsRow = await db.settings.get("app");
+      if (settingsRow?.importFolders?.some((f) => f.setId === sessionId)) {
+        await db.settings.put({
+          ...settingsRow,
+          importFolders: settingsRow.importFolders.filter((f) => f.setId !== sessionId),
+        });
+      }
+
+      return { purgedTrackIds };
+    },
+  );
 }
 
 // ------------------------------------------------------------------ tracks ----
@@ -252,6 +431,8 @@ export async function createUploadedTrack(
       blob: Blob;
       mime: string;
     };
+    /** Absolute on-disk path (local-folder import) — dedup key for re-sync. */
+    sourcePath?: string;
   },
   db: MuzeroDB = defaultDb,
 ): Promise<Track> {
@@ -270,6 +451,7 @@ export async function createUploadedTrack(
     liked: false,
     tags: [],
     mediaMetadata: input.mediaMetadata,
+    sourcePath: input.sourcePath,
   };
   const media: MediaBlob = {
     id: newId("blb"),
@@ -656,18 +838,54 @@ export async function getAllTags(
 
 // ------------------------------------------------------------------ delete ----
 
-/** Delete a track plus its blobs (media + cover) and unlink it from its set. */
-export async function deleteTrack(id: string, db: MuzeroDB = defaultDb): Promise<void> {
-  await db.transaction("rw", db.tracks, db.mediaBlobs, db.sessions, async () => {
-    const track = await db.tracks.get(id);
-    if (!track) return;
-    await db.mediaBlobs.where("trackId").equals(id).delete();
-    await db.tracks.delete(id);
-    const session = await db.sessions.get(track.sessionId);
-    if (session) {
-      session.trackIds = session.trackIds.filter((t) => t !== id);
-      await db.sessions.put(session);
-    }
+/**
+ * Permanently delete tracks: all their blobs (media / cover / background / memory
+ * photos — every blob keyed by the track id), their memory rows, unlink them from
+ * EVERY set that references them, and purge them from the play queue. One rw txn.
+ */
+export async function deleteTracks(ids: string[], db: MuzeroDB = defaultDb): Promise<void> {
+  if (ids.length === 0) return;
+  const idSet = new Set(ids);
+  await db.transaction(
+    "rw",
+    [db.tracks, db.mediaBlobs, db.sessions, db.memories, db.playQueue],
+    async () => {
+      await db.mediaBlobs.where("trackId").anyOf(ids).delete();
+      await db.memories.where("trackId").anyOf(ids).delete();
+      await db.tracks.bulkDelete(ids);
+      // Unlink from every set that referenced any of these tracks (not just the
+      // origin set — a track can live in many sets via `trackIds`).
+      const sessions = await db.sessions.toArray();
+      for (const session of sessions) {
+        if (!session.trackIds.some((t) => idSet.has(t))) continue;
+        await db.sessions.update(session.id, {
+          trackIds: session.trackIds.filter((t) => !idSet.has(t)),
+          updatedAt: Date.now(),
+        });
+      }
+      await purgeTracksFromPlayQueue(idSet, db);
+    },
+  );
+}
+
+/** Permanently delete one track everywhere (blobs + all sets + queue + memories). */
+export function deleteTrack(id: string, db: MuzeroDB = defaultDb): Promise<void> {
+  return deleteTracks([id], db);
+}
+
+/** Remove play-queue entries for the given track ids, in the CURRENT transaction. */
+async function purgeTracksFromPlayQueue(removed: Set<string>, db: MuzeroDB): Promise<void> {
+  const pq = await db.playQueue.get(PLAY_QUEUE_ID);
+  if (!pq) return;
+  const next = removeEntriesByTrackIds(
+    { entries: pq.entries, currentIndex: pq.currentIndex },
+    removed,
+  );
+  await db.playQueue.put({
+    ...pq,
+    entries: next.entries,
+    currentIndex: next.currentIndex,
+    updatedAt: Date.now(),
   });
 }
 

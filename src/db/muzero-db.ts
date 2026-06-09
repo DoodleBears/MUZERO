@@ -7,6 +7,7 @@ import type {
   CloudShare,
   DeviceRecord,
   DjSession,
+  EntityCover,
   MediaBlob,
   Memory,
   PlaybackAggregate,
@@ -48,6 +49,7 @@ export class MuzeroDB extends Dexie {
   trackPlaybackStats!: EntityTable<TrackPlaybackStats, "id">;
   playbackEvents!: EntityTable<PlaybackEvent, "id">;
   playbackAggregates!: EntityTable<PlaybackAggregate, "id">;
+  entityCovers!: EntityTable<EntityCover, "id">;
 
   constructor(name = "muzero-db") {
     super(name);
@@ -294,6 +296,22 @@ export class MuzeroDB extends Dexie {
             parsedAt: track.createdAt ?? Date.now(),
           };
         });
+    });
+
+    // v18 — local-folder import provenance. `sourcePath` records the absolute
+    // on-disk path a track was imported from, so re-syncing a remembered folder
+    // skips files already in the library. Additive + indexed; pre-v18 uploaded
+    // tracks simply lack it (they were never folder-sourced, so no collision),
+    // and the sparse index just omits them — no `.upgrade()` backfill needed.
+    this.version(18).stores({
+      tracks: "id, sessionId, status, createdAt, liked, *tags, kind, sourcePath",
+    });
+
+    // v19 — user-chosen covers for DERIVED artist/album entities. The row id IS
+    // the entity projection key (normalized artist name / album key); bytes reuse
+    // `mediaBlobs` (role "cover", trackId = key). Additive new table, no backfill.
+    this.version(19).stores({
+      entityCovers: "id, kind, updatedAt",
     });
   }
 }

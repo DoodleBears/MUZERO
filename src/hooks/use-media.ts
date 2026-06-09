@@ -117,6 +117,30 @@ export function useTrackCoverUrl(
   return originalUrl ?? remoteCoverUrl ?? null;
 }
 
+/**
+ * Reactive object URL for a DERIVED entity's cover (one artist / album). Resolves
+ * a user-chosen override (the `entityCovers` row keyed by the projection key)
+ * first, then falls back to the given track's cover (today's behavior — the first
+ * member track that has art). Reuses {@link useTrackCoverUrl} for the crop +
+ * object-URL lifecycle by feeding the override through the same shape.
+ */
+export function useEntityCoverUrl(
+  entityKey: string | undefined,
+  fallbackTrack: Pick<Track, "coverBlobId" | "coverCrop" | "remoteCoverUrl"> | undefined,
+): string | null {
+  const override = useLiveQuery(
+    async () => (entityKey ? ((await db.entityCovers.get(entityKey)) ?? null) : null),
+    [entityKey],
+    null,
+  );
+  // Both calls are unconditional (hook rules); only one result is returned.
+  const overrideUrl = useTrackCoverUrl(
+    override ? { coverBlobId: override.coverBlobId, coverCrop: override.crop } : undefined,
+  );
+  const fallbackUrl = useTrackCoverUrl(fallbackTrack);
+  return override ? overrideUrl : fallbackUrl;
+}
+
 /** Reactive object URL for a track's primary audio/video media bytes. */
 export function useTrackMediaUrl(
   track: Pick<Track, "blobId" | "remoteMediaUrl"> | undefined,

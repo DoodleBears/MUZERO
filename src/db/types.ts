@@ -83,6 +83,8 @@ export interface Track {
   tags: string[];
   /** Normalized embedded/generated media metadata. Raw native tag frames stay out of DB. */
   mediaMetadata?: TrackMediaMetadata;
+  /** Absolute on-disk path this track was imported from — dedup key for local-folder sync. */
+  sourcePath?: string;
   /**
    * @deprecated Superseded by the one-to-many {@link Memory} table (v4 migrates
    * any existing note into a first Memory). Kept nullable for defense; new code
@@ -134,6 +136,22 @@ export interface MediaBlob {
   mime: string;
   bytes: number;
   blob: Blob;
+}
+
+/**
+ * A user-chosen cover for a DERIVED library entity (one artist or one album).
+ * Artist/album are not stored tables — identity is the projection key from
+ * `library-index.ts` (`normalizeArtistName` for an artist, `AlbumEntry.key` for
+ * an album), so `id` IS that key. Bytes live in `mediaBlobs` (role "cover",
+ * `trackId` = this key), mirroring the owner-keyed set cover. The key format is a
+ * frozen codename-layer value — changing it orphans existing covers.
+ */
+export interface EntityCover {
+  id: string; // = entity projection key
+  kind: "artist" | "album";
+  coverBlobId: string; // FK → mediaBlobs (role "cover", trackId = id)
+  crop?: CropRect;
+  updatedAt: number; // last-write-wins clock for R2 sync
 }
 
 /**
@@ -410,6 +428,28 @@ export interface AppSettings {
   r2CredentialsByDriveId?: Record<string, R2LocalCredentials>;
   /** Optional low-frequency trusted-device presence. Off by default. */
   presenceEnabled?: boolean;
+  /** Remembered local folders to incrementally re-sync on launch (desktop only). */
+  importFolders?: ImportFolder[];
+}
+
+/**
+ * A local folder the user asked MUZERO to watch. On desktop launch each remembered
+ * folder is re-scanned and any media file not already in the library (by absolute
+ * {@link Track.sourcePath}) is imported into the bound set. Device-local; never synced.
+ */
+export interface ImportFolder {
+  /** `imf_…` */
+  id: string;
+  /** Absolute folder path on disk. */
+  path: string;
+  /** The {@link DjSession} new files are imported into. */
+  setId: string;
+  /** Folder basename, shown in Settings. */
+  displayName?: string;
+  /** Epoch ms of the most recent successful scan. */
+  lastScanAt?: number;
+  /** Files imported on the most recent scan (UI hint). */
+  lastImportedCount?: number;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
