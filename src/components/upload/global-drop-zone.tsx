@@ -16,12 +16,21 @@ import {
 } from "@/db/repositories";
 import type { CropRect, Track } from "@/db/types";
 import { useObjectUrl } from "@/hooks/use-media";
-import { classifyDrop, dragHasFiles, filesFromTransfer, summarizeDragItems } from "@/lib/file-drop";
+import {
+  classifyDrop,
+  dragHasFiles,
+  filesFromTransfer,
+  filesFromTransferDeep,
+  summarizeDragItems,
+} from "@/lib/file-drop";
+import { useCoverTargetStore } from "@/stores/cover-target-store";
 import { usePlayerStore } from "@/stores/player-store";
 import { useUploadTargetStore } from "@/stores/upload-target-store";
 
 type DragInfo = { count: number; allImages: boolean };
 type PendingCover = { file: File; track: Track | null };
+/** A pasted/dropped image headed straight to the crop step for a selected track. */
+type PendingCrop = { file: File; track: Track };
 type ImageAction = "cover" | "background" | "gallery";
 type Notice = { kind: "uploaded" | ImageAction | "unsupported"; count: number };
 
@@ -42,6 +51,8 @@ export function GlobalDropZone({
   const [isDragging, setIsDragging] = useState(false);
   const [dragInfo, setDragInfo] = useState<DragInfo>({ count: 0, allImages: false });
   const [pendingCover, setPendingCover] = useState<PendingCover | null>(null);
+  const [pendingCrop, setPendingCrop] = useState<PendingCrop | null>(null);
+  const [savingCrop, setSavingCrop] = useState(false);
   const [pendingMedia, setPendingMedia] = useState<File[] | null>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
   const dragDepth = useRef(0);
@@ -70,9 +81,20 @@ export function GlobalDropZone({
         return;
       }
       if (images.length > 0) {
-        // Lock the target to the track playing *now* — playback may advance
-        // (a short clip ending) while the modal is open, which would otherwise
-        // move the cover onto the wrong track.
+        // A view showing a selected track (库 所有歌曲 list, artist / album page)
+        // publishes it as the cover target — route the image straight to that
+        // song's crop step instead of the playing-track-or-gallery fallback.
+        const coverTrackId = useCoverTargetStore.getState().trackId;
+        if (coverTrackId) {
+          const target = await db.tracks.get(coverTrackId);
+          if (target) {
+            setPendingCrop({ file: images[0], track: target });
+            return;
+          }
+        }
+        // Otherwise lock the target to the track playing *now* — playback may
+        // advance (a short clip ending) while the modal is open, which would
+        // otherwise move the cover onto the wrong track.
         const { queue, currentIndex } = usePlayerStore.getState();
         setPendingCover({
           file: images[0],
@@ -114,8 +136,12 @@ export function GlobalDropZone({
       e.preventDefault();
       dragDepth.current = 0;
       setIsDragging(false);
-      const files = filesFromTransfer(e.dataTransfer);
-      if (files.length > 0) void handleFilesRef.current(files);
+      // Expand dropped folders into their files. `filesFromTransferDeep` reads the
+      // DataTransfer synchronously here (it's invalidated after onDrop returns),
+      // then resolves the directory recursion before we ingest.
+      void filesFromTransferDeep(e.dataTransfer).then((files) => {
+        if (files.length > 0) void handleFilesRef.current(files);
+      });
     }
     // Ctrl/Cmd+V — paste a copied audio/video/image file, same as a drop. Flash
     // the overlay so it gets the same "recognized" feedback as a drag.
@@ -191,6 +217,27 @@ export function GlobalDropZone({
           track={pendingCover.track}
           onClose={() => setPendingCover(null)}
           onDone={(kind) => setNotice({ kind, count: 1 })}
+        />
+      )}
+
+      {pendingCrop && (
+        <CoverCropDialog
+          file={pendingCrop.file}
+          saving={savingCrop}
+          onConfirm={async (crop) => {
+            if (savingCrop) return;
+            setSavingCrop(true);
+            await setTrackCover({
+              trackId: pendingCrop.track.id,
+              blob: pendingCrop.file,
+              mime: pendingCrop.file.type || "image/jpeg",
+              crop,
+            });
+            setNotice({ kind: "cover", count: 1 });
+            setPendingCrop(null);
+            setSavingCrop(false);
+          }}
+          onCancel={() => setPendingCrop(null)}
         />
       )}
 
