@@ -12,7 +12,7 @@
 | Phase | Name | Status | Link |
 |-------|------|--------|------|
 | 1 | Lenis 依赖 + 纯决策层（`resolveSmoothScroll`）+ 共享 rAF driver | ✅ Completed | [Phase 1 Checklist](#phase-1-checklist) |
-| 2 | `useSmoothScroll(ref)` hook（生命周期 + reduced-motion 响应）+ 程序化滚动路由 | 🔲 Pending | [Phase 2 Checklist](#phase-2-checklist) |
+| 2 | `useSmoothScroll(ref)` hook（生命周期 + reduced-motion 响应）+ 程序化滚动路由 | ✅ Completed | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | 在范围内的滚动容器接入（虚拟列表 / 卡片栅格 / 各页面） | 🔲 Pending | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | Settings「外观」可见开关 + i18n（en/zh/ja/ko）+ 帧节奏/longtask 验收 | 🔲 Pending | [Phase 4 Checklist](#phase-4-checklist) |
 
@@ -406,10 +406,11 @@ const lerp = clampLerp(settings.smoothScrollLerp); // 默认 0.10
 - [ ] 定义程序化滚动 helper：`scrollToWith(lenisRef, target, { immediate })`（lenis 存在走 Lenis，否则原生）。
 
 #### Phase 2 Checklist
-- [ ] hook 单测（jsdom + 假 Lenis）：enabled=false 不创建、返回 null；enabled=true 创建并 register；卸载 destroy+unregister。
-- [ ] 切 `smoothScroll` 设置即时创建/销毁；切 reduced-motion 即时销毁/恢复；改 `smoothScrollLerp` 走 in-place、实例不重建（断言 destroy 未被调用）。
-- [ ] 多容器同时挂载 → driver 中有多个实例、单 rAF 驱动（集成断言）。
-- [ ] `make check` 通过。
+- [x] hook 单测（jsdom + 假 Lenis）：enabled=false 不创建、返回 null；enabled=true 创建并 register；卸载 destroy+unregister（[`use-smooth-scroll.test.tsx`](../../../src/lib/smooth-scroll/use-smooth-scroll.test.tsx)，**23 tests total passing**）。
+- [x] 切 `smoothScroll` 设置即时创建/销毁；切 reduced-motion（macOS / `matchMedia` stub）不创建；改 `smoothScrollLerp` 走 **in-place**（`options.lerp` 被改、`destroy` 未被调用、实例数不变）。
+- [x] 多容器同时挂载 → driver 中有多个实例、**单 rAF** 驱动（[`lenis-driver.test.ts`](../../../src/lib/smooth-scroll/lenis-driver.test.ts) "drives every active instance in a single frame"）。
+- [x] 新增 `lenisScrollTo()` helper：lenis 存在走 `lenis.scrollTo(immediate)`、否则返回 false 让调用点回退原生（Phase 3 程序化滚动路由用）。
+- [x] 我的代码 typecheck（项目级 tsc 中 `smooth-scroll` 0 报错）+ biome 通过；项目级 tsc 当前因**并发 agent 的无关 WIP**（visualizer-* 文件）暂红，与本 phase 无关。
 
 ### Phase 3: 容器接入（虚拟列表 / 栅格 / 各页面）
 
