@@ -553,6 +553,14 @@
     "importKeymap": "가져오기",
     "importFailed": "가져올 수 없습니다 — 올바른 MUZERO 키맵 파일이 아닙니다.",
     "importDone": "단축키를 가져왔습니다.",
+    "presetsLabel": "프리셋:",
+    "applyPreset": "적용",
+    "applyPresetTitle": "“{{name}}” 적용할까요?",
+    "applyPresetBody": "현재 사용자 지정 단축키를 대체합니다.",
+    "preset": {
+      "arrows": "화살표 트랜스포트",
+      "vim": "Vim 탐색"
+    },
     "recorder": {
       "title": "“{{name}}” 다시 지정",
       "hint": "원하는 키 조합을 누르세요.",

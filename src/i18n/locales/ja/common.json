@@ -553,6 +553,14 @@
     "importKeymap": "インポート",
     "importFailed": "インポートできません — 有効な MUZERO キーマップではありません。",
     "importDone": "ショートカットをインポートしました。",
+    "presetsLabel": "プリセット：",
+    "applyPreset": "適用",
+    "applyPresetTitle": "「{{name}}」を適用しますか？",
+    "applyPresetBody": "現在のカスタム割り当てを置き換えます。",
+    "preset": {
+      "arrows": "矢印キー操作",
+      "vim": "Vim ナビゲーション"
+    },
     "recorder": {
       "title": "「{{name}}」を再割り当て",
       "hint": "使いたいキーの組み合わせを押してください。",

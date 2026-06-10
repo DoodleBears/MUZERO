@@ -567,6 +567,14 @@
     "importKeymap": "Import",
     "importFailed": "Couldn't import — not a valid MUZERO keymap file.",
     "importDone": "Shortcuts imported.",
+    "presetsLabel": "Presets:",
+    "applyPreset": "Apply",
+    "applyPresetTitle": "Apply {{name}}?",
+    "applyPresetBody": "This replaces your current custom bindings.",
+    "preset": {
+      "arrows": "Arrow transport",
+      "vim": "Vim navigation"
+    },
     "recorder": {
       "title": "Rebind {{name}}",
       "hint": "Press the key combination you want.",

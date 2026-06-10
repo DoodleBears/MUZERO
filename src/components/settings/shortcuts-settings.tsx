@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { ShortcutRecorderDialog } from "@/components/settings/shortcut-recorder-dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Input } from "@/components/ui/input";
 import { Kbd, KbdGroup } from "@/components/ui/kbd";
 import {
@@ -17,6 +18,7 @@ import { saveTextFile } from "@/lib/save-text-file";
 import { buildCheatSheet, type CheatSheetRow, cheatSheetRowMatches } from "@/shortcuts/cheatsheet";
 import { currentPlatform, mergeBindings, sanitizeOverrides } from "@/shortcuts/engine";
 import { parseKeymap, serializeKeymap } from "@/shortcuts/keymap-io";
+import { SHORTCUT_PRESETS, type ShortcutPreset } from "@/shortcuts/presets";
 import { notify } from "@/stores/notification-store";
 
 /**
@@ -32,6 +34,7 @@ export function ShortcutsSettings() {
   const overrides = useSettings().shortcutOverrides;
   const [query, setQuery] = useState("");
   const [recording, setRecording] = useState<{ actionId: string; label: string } | null>(null);
+  const [presetToApply, setPresetToApply] = useState<ShortcutPreset | null>(null);
   const platform = useMemo(() => currentPlatform(), []);
   const bindings = useMemo(
     () => mergeBindings(sanitizeOverrides(overrides, platform)),
@@ -95,6 +98,19 @@ export function ShortcutsSettings() {
           placeholder={t("settings.shortcutsSearch")}
           data-shortcut-search
         />
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-muted-foreground text-xs">{t("shortcuts.presetsLabel")}</span>
+          {SHORTCUT_PRESETS.map((preset) => (
+            <Button
+              key={preset.id}
+              variant="outline"
+              size="sm"
+              onClick={() => setPresetToApply(preset)}
+            >
+              {td(preset.labelKey)}
+            </Button>
+          ))}
+        </div>
         {sections.map((section) => {
           const rows = section.rows.filter((row) =>
             cheatSheetRowMatches(row, query, td(row.labelKey)),
@@ -124,6 +140,24 @@ export function ShortcutsSettings() {
         open={recording !== null}
         onOpenChange={(open) => {
           if (!open) setRecording(null);
+        }}
+      />
+
+      <ConfirmDialog
+        open={presetToApply !== null}
+        onOpenChange={(open) => {
+          if (!open) setPresetToApply(null);
+        }}
+        title={t("shortcuts.applyPresetTitle", {
+          name: presetToApply ? td(presetToApply.labelKey) : "",
+        })}
+        description={t("shortcuts.applyPresetBody")}
+        confirm={{
+          label: t("shortcuts.applyPreset"),
+          variant: "default",
+          onConfirm: async () => {
+            if (presetToApply) await setAllShortcutOverrides(presetToApply.overrides);
+          },
         }}
       />
     </Card>

@@ -18,7 +18,7 @@
 | 2b | Scoped surfaces (library/inspector/gallery) + hint swap | 🔄 Partial | [Phase 2b Checklist](#phase-2b-checklist) |
 | 3 | "View all shortcuts" — read-only cheat-sheet (Settings) | ✅ Completed | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | Customization — recorder, multi-binding, cyclic conflict, reset | ✅ Completed | [Phase 4 Checklist](#phase-4-checklist) |
-| 5 | Stretch — import/export ✅ · presets/sequences 🔲 | 🔄 Partial | [Phase 5 Checklist](#phase-5-checklist) |
+| 5 | Stretch — import/export ✅ · presets ✅ · sequences (deferred) | 🔄 Partial | [Phase 5 Checklist](#phase-5-checklist) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
 
@@ -362,12 +362,13 @@ Global `?` (Shift+/)  →  (OPTIONAL, Q8) components/shortcuts/shortcut-help-ove
 
 **Tasks:**
 - [x] **Import / Export** the keymap as JSON — [`keymap-io.ts`](../../../src/shortcuts/keymap-io.ts) (`serializeKeymap` / `parseKeymap`, versioned `muzero-shortcuts-v1`; import runs the same `sanitizeOverrides` so a file can't inject unknown/protected/malformed bindings). Export/Import buttons in the cheat-sheet header; save via [`save-text-file.ts`](../../../src/lib/save-text-file.ts) (desktop `saveFile` → browser-download fallback); import via a hidden file input → `setAllShortcutOverrides`. i18n ×4.
-- [ ] **Presets** (e.g. "Default", "Arrows-for-transport") → 3-tier merge (`override > preset > default`) + a preset `Select` with a preview dialog. Adds `AppSettings.shortcutPresetId`.
-- [ ] **2-stroke sequences** ("G then S") — type is already forward-compatible; needs a 450 ms sequence timer in dispatch + a "Then" slot in the recorder.
+- [x] **Presets** — [`presets.ts`](../../../src/shortcuts/presets.ts) (`SHORTCUT_PRESETS`: "Arrow transport" + "Vim navigation", curated conflict-free override maps). **Simpler apply-model** than the PRD's original 3-tier sketch: choosing a preset opens a confirm dialog then writes it via `setAllShortcutOverrides` (no `shortcutPresetId` / merge-layer needed; the user can then tweak). Preset buttons in the cheat-sheet.
+- [ ] ~~**2-stroke sequences** ("G then S")~~ — **deliberately deferred.** It requires changing the core `ShortcutGesture` type (single-stroke → sequence) + `gestureIdentity`/`gestureFromEvent`/dispatch-timer/recorder, destabilizing the heavily-tested engine for a feature MUZERO has no use case for. Documented as future work, not rushed.
 
 #### Phase 5 Checklist
 - [x] `keymap-io.test.ts`: serialize/parse round-trips; sanitizes on import (drops unknown/protected/malformed); rejects bad JSON / wrong schema / non-object. + component test: valid file applies overrides, invalid file → error toast, no write.
-- [ ] Presets + sequences pending.
+- [x] `presets.test.ts`: each preset has a unique id + i18n label, survives `sanitizeOverrides` unchanged (only editable actions), and is **conflict-free** once applied.
+- [ ] 2-stroke sequences — deferred (see above).
 
 #### Phase 5 Checklist
 - [ ] Presets never silently apply (preview + confirm); applying a preset clears overrides.
@@ -436,6 +437,7 @@ Global `?` (Shift+/)  →  (OPTIONAL, Q8) components/shortcuts/shortcut-help-ove
 | 2026-06-10 | MUZERO | Phase 2b hint swap: replaced hard-coded `playerShortcutHint` with the registry-backed `useShortcutHint` hook; the 4 transport-tooltip consumers now show live rebinds. Phase 2b is complete except the single entangled file (`virtual-track-list.tsx` row nav) |
 | 2026-06-10 | MUZERO | Feature add (registry extension): bare **1/2/3/4** jump straight to a library tab (歌单 / 全部歌曲 / 专辑 / 歌手) on the gallery wall. Four `nav.galleryTab*` actions (scope global, category navigation, `Digit1–4`); handled in SearchPage via `useShortcutMatcher`, so they're rebindable + show in the cheat-sheet. No clash with Cmd+1/2/3 (tab nav) |
 | 2026-06-10 | MUZERO | Phase 5 partial: keymap **import/export** (`keymap-io.ts` + `save-text-file.ts` + cheat-sheet Export/Import buttons), import sanitizes through the same guard as persistence; i18n ×4; 7 tests. Presets + 2-stroke sequences still pending |
+| 2026-06-10 | MUZERO | Phase 5 **presets** (`presets.ts`: Arrow-transport + Vim-navigation, conflict-free; apply-via-confirm → `setAllShortcutOverrides`; preset buttons + i18n ×4; 5 tests). 2-stroke sequences deliberately deferred (invasive core change, no MUZERO use case). The configurable-shortcuts feature is effectively complete — only the entangled `virtual-track-list.tsx` row-nav routing + sequences remain |
 
 ---
 
