@@ -1,11 +1,11 @@
 "use client";
 
-import { ImagePlus, X } from "lucide-react";
+import { ImagePlus, MapPin, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/input";
 import { IMAGE_ACCEPT } from "@/lib/file-drop";
-import { cn } from "@/lib/utils";
+import { cn, formatDuration } from "@/lib/utils";
 
 export interface MemoryNoteComposerLabels {
   addPhoto: string;
@@ -15,18 +15,32 @@ export interface MemoryNoteComposerLabels {
   photoInput: string;
   removePhoto: (name: string) => string;
   save: string;
+  /** Button that pins the memory to the current playback second. */
+  pinToTime: string;
+  /** Aria for the control that clears the pinned timestamp. */
+  clearTime: string;
+  /** Aria for the chip showing a pinned timestamp (formatted m:ss). */
+  pinnedAt: (time: string) => string;
 }
 
 interface MemoryNoteComposerProps {
   autoFocus?: boolean;
   className?: string;
   initialNote?: string;
+  /** Existing playback anchor when editing a pinned memory (seconds). */
+  initialAtSec?: number;
+  /**
+   * Non-reactive read of the current playback second; presence enables the
+   * "pin to current time" control. Pass a getter (not a value) so the composer
+   * doesn't re-render on every timeupdate.
+   */
+  getCurrentPositionSec?: () => number;
   isSubmitting?: boolean;
   labels: MemoryNoteComposerLabels;
   onCancel?: () => void;
   onPhotoRemove?: () => void;
   onPhotoSelect?: (file: File) => void;
-  onSubmit: (note: string) => void;
+  onSubmit: (note: string, atSec?: number) => void;
   selectedPhotoName?: string;
 }
 
@@ -34,6 +48,8 @@ export function MemoryNoteComposer({
   autoFocus = false,
   className,
   initialNote = "",
+  initialAtSec,
+  getCurrentPositionSec,
   isSubmitting = false,
   labels,
   onCancel,
@@ -43,15 +59,25 @@ export function MemoryNoteComposer({
   selectedPhotoName,
 }: MemoryNoteComposerProps) {
   const [draft, setDraft] = useState(initialNote);
+  const [atSec, setAtSec] = useState(initialAtSec);
   const fileRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => setDraft(initialNote), [initialNote]);
+  useEffect(() => setAtSec(initialAtSec), [initialAtSec]);
 
   function submit() {
     const note = draft.trim();
     if (!note) return;
-    onSubmit(note);
-    if (!initialNote) setDraft("");
+    onSubmit(note, atSec);
+    if (!initialNote) {
+      setDraft("");
+      setAtSec(undefined);
+    }
+  }
+
+  function pinToCurrentTime() {
+    if (!getCurrentPositionSec) return;
+    setAtSec(Math.max(0, Math.floor(getCurrentPositionSec())));
   }
 
   function selectPhoto(event: React.ChangeEvent<HTMLInputElement>) {
@@ -118,6 +144,34 @@ export function MemoryNoteComposer({
               )}
             </span>
           )}
+          {atSec != null ? (
+            <span
+              className="inline-flex items-center gap-1 rounded-full bg-primary/15 px-2 py-1 text-primary text-xs"
+              title={labels.pinnedAt(formatDuration(atSec))}
+            >
+              <MapPin aria-hidden="true" className="size-3" />
+              <span>{formatDuration(atSec)}</span>
+              <button
+                aria-label={labels.clearTime}
+                className="rounded-full hover:text-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                disabled={isSubmitting}
+                onClick={() => setAtSec(undefined)}
+                type="button"
+              >
+                <X aria-hidden="true" className="size-3" />
+              </button>
+            </span>
+          ) : getCurrentPositionSec ? (
+            <button
+              className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-muted-foreground text-xs hover:bg-black/10 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              disabled={isSubmitting}
+              onClick={pinToCurrentTime}
+              type="button"
+            >
+              <MapPin aria-hidden="true" className="size-3.5" />
+              {labels.pinToTime}
+            </button>
+          ) : null}
         </div>
         <div className="flex items-center gap-2">
           {onCancel && (

@@ -22,6 +22,9 @@ const labels: TrackMemoryNotesPanelLabels = {
     photoInput: "Memory photo",
     removePhoto: (name) => `Remove ${name}`,
     save: "Save memory",
+    pinToTime: "Pin to current time",
+    clearTime: "Clear timestamp",
+    pinnedAt: (time) => `Pinned at ${time}`,
   },
   createMemory: "Create memory",
   waterfall: {

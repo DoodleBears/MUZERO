@@ -178,6 +178,35 @@ describe("MemoryNotesWaterfall", () => {
     expect(screen.getByText("No memories yet")).toBeInTheDocument();
     expect(screen.queryByRole("listitem")).not.toBeInTheDocument();
   });
+
+  it("renders a clickable timestamp badge that seeks to the anchored second", () => {
+    const onSeekToMemory = vi.fn();
+    render(
+      <MemoryNotesWaterfall
+        formatCreatedAt={(createdAt) => `time-${createdAt}`}
+        labels={{ ...labels, seekToTimestamp: (memory) => `Jump to ${memory.note}` }}
+        memories={[{ id: "mem_a", trackId: "trk_1", note: "anchored", createdAt: 10, atSec: 98 }]}
+        onSeekToMemory={onSeekToMemory}
+      />,
+    );
+
+    expect(screen.getByText("1:38")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Jump to anchored" }));
+    expect(onSeekToMemory).toHaveBeenCalledWith(expect.objectContaining({ id: "mem_a" }));
+  });
+
+  it("renders the timestamp as static text when seeking is unavailable", () => {
+    render(
+      <MemoryNotesWaterfall
+        formatCreatedAt={(createdAt) => `time-${createdAt}`}
+        labels={labels}
+        memories={[{ id: "mem_b", trackId: "trk_1", note: "anchored", createdAt: 10, atSec: 5 }]}
+      />,
+    );
+
+    expect(screen.getByText("0:05")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Jump/ })).toBeNull();
+  });
 });
 
 describe("sortMemoriesForWaterfall", () => {

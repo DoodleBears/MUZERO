@@ -8,6 +8,9 @@ vi.mock("react-i18next", () => ({
     t: (key: string, values?: Record<string, string>) =>
       values ? `${key}:${Object.values(values).join(",")}` : key,
   }),
+  // AnnotationEditor now pulls in the player store (for pin-to-time), which
+  // imports the real i18n bootstrap; stub the plugin so `i18n.use()` is happy.
+  initReactI18next: { type: "3rdParty", init: () => undefined },
 }));
 
 vi.mock("@/components/track/track-memory-notes-panel", () => ({

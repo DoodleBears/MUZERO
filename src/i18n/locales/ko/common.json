@@ -286,7 +286,11 @@
     "editMemory": "추억 편집",
     "deleteMemory": "추억 삭제",
     "setMemoryPhotoAsCover": "커버로 사용",
-    "memoryPhotoAlt": "추억 사진"
+    "memoryPhotoAlt": "추억 사진",
+    "pinMemoryToTime": "현재 재생 위치에 고정",
+    "clearMemoryTime": "타임스탬프 지우기",
+    "memoryPinnedAt": "{{time}}에 고정됨",
+    "seekToMemoryTime": "{{time}}(으)로 이동"
   },
   "settings": {
     "navSecAppearance": "모양",

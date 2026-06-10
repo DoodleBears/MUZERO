@@ -1,5 +1,6 @@
 "use client";
 
+import { MapPin } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import {
   type ReactNode,
@@ -23,7 +24,7 @@ import {
   nextIdleMemoryIndex,
   sortMemoryTimelineItems,
 } from "@/lib/memory-timeline";
-import { cn } from "@/lib/utils";
+import { cn, formatDuration } from "@/lib/utils";
 
 const MEMORY_CAROUSEL_LAYOUT_SETTLE_MS = 460;
 
@@ -251,7 +252,13 @@ function MemoryCarouselSlide({
         />
       )}
       <MemoryCarouselNote enabled={mediaReady} note={memory.note} onFitLayout={markFitReady} />
-      <div className="mt-4 space-y-1 text-muted-foreground text-xs">
+      <div className="mt-4 flex items-center justify-center gap-2 text-muted-foreground text-xs">
+        {memory.atSec != null && (
+          <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-1.5 py-0.5 text-primary">
+            <MapPin aria-hidden="true" className="size-3" />
+            {formatDuration(memory.atSec)}
+          </span>
+        )}
         <time dateTime={new Date(memory.createdAt).toISOString()}>
           {formatCreatedAt(memory.createdAt)}
         </time>

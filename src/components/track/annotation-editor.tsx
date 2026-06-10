@@ -24,6 +24,8 @@ import {
 import type { CropRect, Track } from "@/db/types";
 import { useObjectUrls } from "@/hooks/use-media";
 import { IMAGE_ACCEPT } from "@/lib/file-drop";
+import { formatDuration } from "@/lib/utils";
+import { usePlayerStore } from "@/stores/player-store";
 
 /**
  * Per-track annotations: tags, memory notes, and an optional cover
@@ -32,6 +34,11 @@ import { IMAGE_ACCEPT } from "@/lib/file-drop";
  */
 export function AnnotationEditor({ track }: { track: Track }) {
   const { t } = useTranslation();
+  // Pin-to-time + seek only make sense while THIS track is the one playing.
+  // Scalar boolean selector → re-renders only when current-track-ness flips.
+  const isCurrentTrack = usePlayerStore(
+    (s) => (s.currentIndex >= 0 ? s.queue[s.currentIndex]?.id : undefined) === track.id,
+  );
   const [tagInput, setTagInput] = useState("");
   const [tagInputOpen, setTagInputOpen] = useState(false);
   const [visibleTags, setVisibleTags] = useState(track.tags);
@@ -163,6 +170,16 @@ export function AnnotationEditor({ track }: { track: Track }) {
               timeStyle: "short",
             }).format(createdAt)
           }
+          getCurrentPositionSec={
+            isCurrentTrack ? () => usePlayerStore.getState().positionSec : undefined
+          }
+          onSeekToMemory={
+            isCurrentTrack
+              ? (memory) => {
+                  if (memory.atSec != null) usePlayerStore.getState().seek(memory.atSec);
+                }
+              : undefined
+          }
           labels={{
             composer: {
               addPhoto: t("annotation.addMemoryPhoto"),
@@ -172,6 +189,9 @@ export function AnnotationEditor({ track }: { track: Track }) {
               photoInput: t("annotation.memoryPhotoInput"),
               removePhoto: (name) => t("annotation.removeMemoryPhoto", { name }),
               save: t("annotation.saveMemory"),
+              pinToTime: t("annotation.pinMemoryToTime"),
+              clearTime: t("annotation.clearMemoryTime"),
+              pinnedAt: (time) => t("annotation.memoryPinnedAt", { time }),
             },
             createMemory: t("annotation.createMemory"),
             waterfall: {
@@ -180,6 +200,8 @@ export function AnnotationEditor({ track }: { track: Track }) {
               empty: t("annotation.memoryEmpty"),
               photoAlt: () => t("annotation.memoryPhotoAlt"),
               setCoverFromMemory: () => t("annotation.setMemoryPhotoAsCover"),
+              seekToTimestamp: (memory) =>
+                t("annotation.seekToMemoryTime", { time: formatDuration(memory.atSec ?? 0) }),
             },
           }}
           trackId={track.id}

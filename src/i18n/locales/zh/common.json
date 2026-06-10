@@ -286,7 +286,11 @@
     "editMemory": "编辑记忆",
     "deleteMemory": "删除记忆",
     "setMemoryPhotoAsCover": "设为封面",
-    "memoryPhotoAlt": "记忆照片"
+    "memoryPhotoAlt": "记忆照片",
+    "pinMemoryToTime": "钉到当前时间",
+    "clearMemoryTime": "清除时间戳",
+    "memoryPinnedAt": "钉在 {{time}}",
+    "seekToMemoryTime": "跳到 {{time}}"
   },
   "settings": {
     "navSecAppearance": "外观",

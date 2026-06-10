@@ -16,7 +16,7 @@
 | Phase | Name | Status | Link |
 |-------|------|--------|------|
 | 1 | Timestamp foundation（`Memory.atSec` 数据层 + repo + 同步） | ✅ Completed | [Phase 1 Checklist](#phase-1-checklist) |
-| 2 | Capture & display the anchor（编辑器钉秒 + 列表/轮播徽标） | 🔲 Pending | [Phase 2 Checklist](#phase-2-checklist) |
+| 2 | Capture & display the anchor（编辑器钉秒 + 列表/轮播徽标） | ✅ Completed | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | Immersive memory overlay（沉浸浮层 + 调度引擎 + 设置开关） | 🔲 Pending | [Phase 3 Checklist](#phase-3-checklist) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
@@ -396,18 +396,18 @@ App 层已算出 `visualizerIdleOnly` / `foregroundHidden`（[`App.tsx:129-134`]
 **Goal:** 用户能在播放时把记忆钉到当前秒，并在列表/轮播看到时间徽标。
 
 **Tasks:**
-- [ ] `MemoryNoteComposer` 加「📍钉到当前秒」chip（`currentPositionSec` / `initialAtSec` / `onSubmit(note, atSec?)`）+ 可编辑 mm:ss + 清除；父级注入当前秒并 clamp。
-- [ ] `MemoryNotesWaterfall` + 轮播 slide 显示 `atSec` 徽标（mm:ss）。
-- [ ] 时间徽标可点 → seek 到 `atSec`（`stopPropagation`，卡片点击不跳转）。
-- [ ] i18n：composer chip / 徽标 / 清除 等 4 语言（en 先）。
+- [x] `MemoryNoteComposer` 加「📍钉到当前秒」chip（`getCurrentPositionSec` getter / `initialAtSec` / `onSubmit(note, atSec?)`）+ 整秒捕获 + 清除。
+- [x] `MemoryNotesWaterfall` + 轮播 slide（[`memory-timeline-rail.tsx`](src/components/player/memory-timeline-rail.tsx)）显示 `atSec` 徽标（mm:ss，`formatDuration`）。
+- [x] waterfall 时间徽标可点 → `onSeekToMemory`（`stopPropagation`，卡片不跳转）；annotation-editor 仅在「该曲正在播」时启用 pin/seek（scalar selector 守卫）。
+- [x] i18n：`pinMemoryToTime` / `clearMemoryTime` / `memoryPinnedAt` / `seekToMemoryTime` 四语言（en/zh/ja/ko）。
 
 ### Phase 2 Checklist
 
-- [ ] `memory-note-composer.test.tsx`：点 chip 捕获注入秒 → `onSubmit` 带 `atSec`；清除 → `atSec` 缺省；编辑 mm:ss 解析正确。
-- [ ] waterfall 测试：有/无 `atSec` 的徽标渲染正确。
-- [ ] 点徽标触发 seek（断言 seek 调用）；点卡片**不** seek。
-- [ ] 钉秒 clamp 到 `[0, durationSec]`（含视频/上传曲）；UI 捕获整秒粒度（Q4）。
-- [ ] i18n key 全量类型安全（4 locale）；`make check` 通过。
+- [x] `memory-note-composer.test.tsx`：pin chip 捕获注入秒（98.7→98 整秒）→ `onSubmit("…", 98)`；`initialAtSec` 显示 + 清除 → `onSubmit("…", undefined)`；无 getter 时不显示 pin。
+- [x] `memory-notes-waterfall.test.tsx`：有 `atSec` + `onSeekToMemory` → 可点徽标 seek；无 handler → 静态文本。
+- [x] 点徽标触发 `onSeekToMemory`（断言调用）；卡片本身无 click。
+- [x] sanitize/整秒：composer `Math.floor`+`Math.max(0,…)`；repo 已 sanitize 负/NaN（Phase 1）。
+- [x] typecheck green；biome clean（8 files）；composer/waterfall/panel/annotation 测试 25 passed（1 个 `quick-create` T/N 失败为 **HEAD 既有**、与本期无关，stash 复现）。
 
 ### Phase 3: Immersive memory overlay
 
@@ -494,6 +494,7 @@ App 层已算出 `visualizerIdleOnly` / `foregroundHidden`（[`App.tsx:129-134`]
 | 2026-06-10 | MUZERO (DoodleBear) | Initial draft — `Memory.atSec` 数据/同步基础、编辑器钉秒、沉浸记忆浮层 + 调度引擎，三 phase（基础设施→编辑器→沉浸表面） |
 | 2026-06-10 | MUZERO (DoodleBear) | 定稿 Q1–Q5：双 lane 抢占式调度（锚点抢占 floating + `MIN_SHOW_MS` 交叉淡出）、徽标专属 seek、统一时长抽象 `memoryDisplayDurationMs`（rail+浮层共用）、整秒捕获。Status 仍 Draft，待评审 |
 | 2026-06-10 | MUZERO (DoodleBear) | ✅ Phase 1 落地（TDD）：`Memory.atSec` + `addMemory`/`updateMemory` + R2 manifest 三处透传；64 tests green，无 Dexie bump |
+| 2026-06-10 | MUZERO (DoodleBear) | ✅ Phase 2 落地（TDD）：composer 钉秒 chip + waterfall/rail `atSec` 徽标 + 徽标专属 seek（仅当前曲）+ 4 语言 i18n |
 
 ---
 

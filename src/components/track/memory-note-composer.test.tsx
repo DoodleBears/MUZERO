@@ -10,6 +10,9 @@ const labels: MemoryNoteComposerLabels = {
   photoInput: "Memory photo",
   removePhoto: (name) => `Remove ${name}`,
   save: "Save memory",
+  pinToTime: "Pin to current time",
+  clearTime: "Clear timestamp",
+  pinnedAt: (time) => `Pinned at ${time}`,
 };
 
 describe("MemoryNoteComposer", () => {
@@ -22,7 +25,7 @@ describe("MemoryNoteComposer", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "Save memory" }));
 
-    expect(onSubmit).toHaveBeenCalledWith("late-night loop");
+    expect(onSubmit).toHaveBeenCalledWith("late-night loop", undefined);
     expect(screen.getByPlaceholderText("Write a memory")).toHaveValue("");
   });
 
@@ -105,6 +108,46 @@ describe("MemoryNoteComposer", () => {
     expect(onPhotoSelect).toHaveBeenCalledWith(file);
   });
 
+  it("pins the current playback second and submits it as a whole-second atSec", () => {
+    const onSubmit = vi.fn();
+    render(
+      <MemoryNoteComposer getCurrentPositionSec={() => 98.7} labels={labels} onSubmit={onSubmit} />,
+    );
+
+    fireEvent.change(screen.getByPlaceholderText("Write a memory"), {
+      target: { value: "drop hits" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Pin to current time" }));
+    expect(screen.getByText("1:38")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Save memory" }));
+
+    expect(onSubmit).toHaveBeenCalledWith("drop hits", 98);
+  });
+
+  it("shows the initial anchor and clears it before submitting", () => {
+    const onSubmit = vi.fn();
+    render(
+      <MemoryNoteComposer
+        initialAtSec={42}
+        initialNote="retimed"
+        labels={labels}
+        onSubmit={onSubmit}
+      />,
+    );
+
+    expect(screen.getByText("0:42")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Clear timestamp" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save memory" }));
+
+    expect(onSubmit).toHaveBeenCalledWith("retimed", undefined);
+  });
+
+  it("omits the pin control when no playback position is available", () => {
+    render(<MemoryNoteComposer labels={labels} onSubmit={() => undefined} />);
+
+    expect(screen.queryByRole("button", { name: "Pin to current time" })).toBeNull();
+  });
+
   it("submits with Enter and keeps Shift+Enter for new lines", () => {
     const onSubmit = vi.fn();
     render(<MemoryNoteComposer labels={labels} onSubmit={onSubmit} />);
@@ -122,6 +165,6 @@ describe("MemoryNoteComposer", () => {
     textarea.dispatchEvent(enterEvent);
 
     expect(enterEvent.defaultPrevented).toBe(true);
-    expect(onSubmit).toHaveBeenCalledWith("first line");
+    expect(onSubmit).toHaveBeenCalledWith("first line", undefined);
   });
 });

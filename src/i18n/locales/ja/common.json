@@ -286,7 +286,11 @@
     "editMemory": "メモリーを編集",
     "deleteMemory": "メモリーを削除",
     "setMemoryPhotoAsCover": "カバーに設定",
-    "memoryPhotoAlt": "メモリー写真"
+    "memoryPhotoAlt": "メモリー写真",
+    "pinMemoryToTime": "現在の再生位置にピン",
+    "clearMemoryTime": "タイムスタンプを消去",
+    "memoryPinnedAt": "{{time}} にピン",
+    "seekToMemoryTime": "{{time}} へジャンプ"
   },
   "settings": {
     "navSecAppearance": "外観",

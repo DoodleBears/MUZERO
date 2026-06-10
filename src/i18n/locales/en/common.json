@@ -297,7 +297,11 @@
     "editMemory": "Edit memory",
     "deleteMemory": "Delete memory",
     "setMemoryPhotoAsCover": "Use photo as cover",
-    "memoryPhotoAlt": "Memory photo"
+    "memoryPhotoAlt": "Memory photo",
+    "pinMemoryToTime": "Pin to current time",
+    "clearMemoryTime": "Clear timestamp",
+    "memoryPinnedAt": "Pinned at {{time}}",
+    "seekToMemoryTime": "Jump to {{time}}"
   },
   "settings": {
     "navSecAppearance": "Appearance",

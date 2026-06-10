@@ -11,7 +11,7 @@ import {
   getMemoryPhoto,
   listMemories,
   setTrackCoverFromMemory,
-  updateMemoryNote,
+  updateMemory,
 } from "@/db/repositories";
 import type { Memory } from "@/db/types";
 import { useShortcutMatcher } from "@/hooks/use-shortcut-matcher";
@@ -34,7 +34,11 @@ interface TrackMemoryNotesPanelProps {
   className?: string;
   db?: MuzeroDB;
   formatCreatedAt: (createdAt: number) => React.ReactNode;
+  /** Non-reactive read of the current playback second — enables pin-to-time. */
+  getCurrentPositionSec?: () => number;
   labels: TrackMemoryNotesPanelLabels;
+  /** Seek the player to an anchored memory's second (when it's the live track). */
+  onSeekToMemory?: (memory: MemoryNoteView) => void;
   trackId: string;
 }
 
@@ -42,7 +46,9 @@ export function TrackMemoryNotesPanel({
   className,
   db = defaultDb,
   formatCreatedAt,
+  getCurrentPositionSec,
   labels,
+  onSeekToMemory,
   trackId,
 }: TrackMemoryNotesPanelProps) {
   const memories = useLiveQuery(() => listMemories(trackId, db), [db, trackId], []);
@@ -72,9 +78,10 @@ export function TrackMemoryNotesPanel({
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
 
-  async function submitMemory(note: string) {
+  async function submitMemory(note: string, atSec?: number) {
     if (editingMemory) {
-      await updateMemoryNote(editingMemory.id, note, db);
+      // `null` clears the anchor when the user un-pins while editing.
+      await updateMemory(editingMemory.id, { note, atSec: atSec ?? null }, db);
       setEditingMemory(undefined);
       return;
     }
@@ -83,6 +90,7 @@ export function TrackMemoryNotesPanel({
       {
         trackId,
         note,
+        atSec,
         photo: photoFile ? { blob: photoFile, mime: photoFile.type || "image/jpeg" } : undefined,
       },
       db,
@@ -91,11 +99,12 @@ export function TrackMemoryNotesPanel({
     setIsCreating(false);
   }
 
-  async function submitQuickMemory(note: string) {
+  async function submitQuickMemory(note: string, atSec?: number) {
     await addMemory(
       {
         trackId,
         note,
+        atSec,
         photo: quickPhotoFile
           ? { blob: quickPhotoFile, mime: quickPhotoFile.type || "image/jpeg" }
           : undefined,
@@ -136,6 +145,8 @@ export function TrackMemoryNotesPanel({
     <MemoryNoteComposer
       className="p-2"
       autoFocus
+      getCurrentPositionSec={getCurrentPositionSec}
+      initialAtSec={editingMemory?.atSec}
       initialNote={editingMemory?.note}
       key={composerKey}
       labels={labels.composer}
@@ -171,6 +182,7 @@ export function TrackMemoryNotesPanel({
         memories={memoryViews}
         onDeleteMemory={removeMemory}
         onEditMemory={editMemory}
+        onSeekToMemory={onSeekToMemory}
         onSetCoverFromMemory={useMemoryPhotoAsCover}
       />
       <Dialog onOpenChange={setQuickDialogOpen} open={quickCreateOpen}>
@@ -178,6 +190,7 @@ export function TrackMemoryNotesPanel({
           <DialogTitle>{labels.createMemory}</DialogTitle>
           <MemoryNoteComposer
             autoFocus
+            getCurrentPositionSec={getCurrentPositionSec}
             labels={labels.composer}
             onCancel={() => setQuickDialogOpen(false)}
             onPhotoRemove={() => setQuickPhotoFile(undefined)}

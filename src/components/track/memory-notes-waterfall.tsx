@@ -1,6 +1,6 @@
 "use client";
 
-import { Image as ImageIcon, Pencil, Trash2 } from "lucide-react";
+import { Image as ImageIcon, MapPin, Pencil, Trash2 } from "lucide-react";
 import {
   type CSSProperties,
   type ReactNode,
@@ -16,7 +16,7 @@ import {
   MEMORY_MASONRY_LEADING_ID,
   memoryMasonryDefaults,
 } from "@/lib/memory-masonry";
-import { cn } from "@/lib/utils";
+import { cn, formatDuration } from "@/lib/utils";
 
 export interface MemoryNoteView extends Memory {
   photoUrl?: string;
@@ -28,6 +28,8 @@ export interface MemoryNotesWaterfallLabels {
   empty: ReactNode;
   photoAlt: (memory: MemoryNoteView) => string;
   setCoverFromMemory?: (memory: MemoryNoteView) => string;
+  /** Aria for the clickable timestamp badge (only used when `onSeekToMemory` is set). */
+  seekToTimestamp?: (memory: MemoryNoteView) => string;
 }
 
 interface MemoryNotesWaterfallProps {
@@ -39,6 +41,7 @@ interface MemoryNotesWaterfallProps {
   memories: MemoryNoteView[];
   onDeleteMemory?: (memory: MemoryNoteView) => void;
   onEditMemory?: (memory: MemoryNoteView) => void;
+  onSeekToMemory?: (memory: MemoryNoteView) => void;
   onSetCoverFromMemory?: (memory: MemoryNoteView) => void;
 }
 
@@ -51,6 +54,7 @@ export function MemoryNotesWaterfall({
   memories,
   onDeleteMemory,
   onEditMemory,
+  onSeekToMemory,
   onSetCoverFromMemory,
 }: MemoryNotesWaterfallProps) {
   const containerRef = useRef<HTMLUListElement>(null);
@@ -150,6 +154,26 @@ export function MemoryNotesWaterfall({
                   <time dateTime={new Date(memory.createdAt).toISOString()}>
                     {formatCreatedAt(memory.createdAt)}
                   </time>
+                  {memory.atSec != null &&
+                    (onSeekToMemory ? (
+                      <button
+                        aria-label={labels.seekToTimestamp?.(memory)}
+                        className="inline-flex w-fit items-center gap-1 rounded-full bg-primary/15 px-1.5 py-0.5 text-[11px] text-primary hover:bg-primary/25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          onSeekToMemory(memory);
+                        }}
+                        type="button"
+                      >
+                        <MapPin aria-hidden="true" className="size-3" />
+                        {formatDuration(memory.atSec)}
+                      </button>
+                    ) : (
+                      <span className="inline-flex w-fit items-center gap-1 rounded-full bg-primary/10 px-1.5 py-0.5 text-[11px] text-primary">
+                        <MapPin aria-hidden="true" className="size-3" />
+                        {formatDuration(memory.atSec)}
+                      </span>
+                    ))}
                 </div>
                 {((memory.photoBlobId && onSetCoverFromMemory && labels.setCoverFromMemory) ||
                   onEditMemory ||
