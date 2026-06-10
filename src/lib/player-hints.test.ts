@@ -1,25 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { playerShortcutHint, volumeFromPointerY } from "./player-hints";
-
-describe("playerShortcutHint", () => {
-  it("returns single keycaps for transport actions", () => {
-    expect(playerShortcutHint("play", true)).toEqual(["Space"]);
-    expect(playerShortcutHint("prev", true)).toEqual(["Q"]);
-    expect(playerShortcutHint("next", true)).toEqual(["E"]);
-  });
-
-  it("returns shortcuts for repeat and shuffle", () => {
-    expect(playerShortcutHint("repeat", true)).toEqual(["R"]);
-    expect(playerShortcutHint("repeat", false)).toEqual(["R"]);
-    expect(playerShortcutHint("shuffle", true)).toEqual(["Option", "R"]);
-    expect(playerShortcutHint("shuffle", false)).toEqual(["Alt", "R"]);
-  });
-
-  it("returns both arrow keys for volume (up/down)", () => {
-    expect(playerShortcutHint("volume", true)).toEqual(["↑", "↓"]);
-    expect(playerShortcutHint("volume", false)).toEqual(["↑", "↓"]);
-  });
-});
+import { volumeFromPointerY } from "./player-hints";
 
 describe("volumeFromPointerY", () => {
   const top = 100;

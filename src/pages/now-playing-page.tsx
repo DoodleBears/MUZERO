@@ -15,9 +15,8 @@ import { Button } from "@/components/ui/button";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { addTrackBackground, saveSettings, setTrackCover } from "@/db/repositories";
 import type { SetDisplayMode } from "@/db/types";
+import { useShortcutHint } from "@/hooks/use-shortcut-hint";
 import { classifyDrop, dragHasFiles, filesFromTransfer, summarizeDragItems } from "@/lib/file-drop";
-import { playerShortcutHint } from "@/lib/player-hints";
-import { isMac } from "@/lib/shortcuts";
 import { cn } from "@/lib/utils";
 import { nextRepeatMode } from "@/player/transport";
 import { usePlayerStore } from "@/stores/player-store";
@@ -264,7 +263,7 @@ function NowPlayingActionRow() {
   const setDisplayMode = usePlayerStore((s) => s.setDisplayMode);
   const setRepeat = usePlayerStore((s) => s.setRepeat);
   const setShuffle = usePlayerStore((s) => s.setShuffle);
-  const mac = isMac();
+  const hint = useShortcutHint();
 
   return (
     <TooltipProvider>
@@ -295,7 +294,7 @@ function NowPlayingActionRow() {
 
         <div className={cn("flex items-center gap-1", GLASS_CONTROL_GROUP)}>
           <VisualizerModeButton className="size-9" />
-          <ControlTooltip label={t("player.repeatLabel")} keys={playerShortcutHint("repeat", mac)}>
+          <ControlTooltip label={t("player.repeatLabel")} keys={hint("repeat")}>
             <Button
               variant="ghost"
               size="icon"
@@ -310,7 +309,7 @@ function NowPlayingActionRow() {
               {repeat === "one" ? <Repeat1 /> : <Repeat />}
             </Button>
           </ControlTooltip>
-          <ControlTooltip label={t("player.shuffle")} keys={playerShortcutHint("shuffle", mac)}>
+          <ControlTooltip label={t("player.shuffle")} keys={hint("shuffle")}>
             <Button
               variant="ghost"
               size="icon"

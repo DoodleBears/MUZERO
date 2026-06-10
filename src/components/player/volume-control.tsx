@@ -3,8 +3,8 @@ import { AnimatePresence, motion } from "motion/react";
 import { type PointerEvent as ReactPointerEvent, useEffect, useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Kbd, KbdGroup } from "@/components/ui/kbd";
-import { playerShortcutHint, volumeFromPointerY } from "@/lib/player-hints";
-import { isMac } from "@/lib/shortcuts";
+import { useShortcutHint } from "@/hooks/use-shortcut-hint";
+import { volumeFromPointerY } from "@/lib/player-hints";
 import { cn } from "@/lib/utils";
 import { usePlayerStore } from "@/stores/player-store";
 
@@ -52,7 +52,7 @@ export function VolumeControl({ className }: { className?: string }) {
 
   const Icon = volume <= 0 ? VolumeX : volume < 0.5 ? Volume1 : Volume2;
   const pct = Math.round(volume * 100);
-  const hint = playerShortcutHint("volume", isMac());
+  const hint = useShortcutHint()("volume");
 
   return (
     // biome-ignore lint/a11y/noStaticElementInteractions: hover/focus-intent wrapper; the button is keyboard-focusable and the global ↑/↓ shortcuts adjust volume

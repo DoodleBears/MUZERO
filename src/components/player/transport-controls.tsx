@@ -3,8 +3,7 @@ import { useTranslation } from "react-i18next";
 import { ControlTooltip } from "@/components/player/control-tooltip";
 import { Button } from "@/components/ui/button";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { playerShortcutHint } from "@/lib/player-hints";
-import { isMac } from "@/lib/shortcuts";
+import { useShortcutHint } from "@/hooks/use-shortcut-hint";
 import { cn } from "@/lib/utils";
 import { usePlayerStore } from "@/stores/player-store";
 
@@ -24,7 +23,7 @@ export function TransportControls({ className }: { className?: string }) {
   const togglePlay = usePlayerStore((s) => s.togglePlay);
   const next = usePlayerStore((s) => s.next);
   const prev = usePlayerStore((s) => s.prev);
-  const mac = isMac();
+  const hint = useShortcutHint();
 
   return (
     <TooltipProvider>
@@ -34,7 +33,7 @@ export function TransportControls({ className }: { className?: string }) {
           className,
         )}
       >
-        <ControlTooltip label={t("player.previous")} keys={playerShortcutHint("prev", mac)}>
+        <ControlTooltip label={t("player.previous")} keys={hint("prev")}>
           <Button
             variant="ghost"
             size="icon"
@@ -47,7 +46,7 @@ export function TransportControls({ className }: { className?: string }) {
         </ControlTooltip>
         <ControlTooltip
           label={isPlaying ? t("player.pause") : t("player.play")}
-          keys={playerShortcutHint("play", mac)}
+          keys={hint("play")}
         >
           <Button
             size="icon-xl"
@@ -58,7 +57,7 @@ export function TransportControls({ className }: { className?: string }) {
             {isPlaying ? <Pause /> : <Play />}
           </Button>
         </ControlTooltip>
-        <ControlTooltip label={t("player.next")} keys={playerShortcutHint("next", mac)}>
+        <ControlTooltip label={t("player.next")} keys={hint("next")}>
           <Button
             variant="ghost"
             size="icon"

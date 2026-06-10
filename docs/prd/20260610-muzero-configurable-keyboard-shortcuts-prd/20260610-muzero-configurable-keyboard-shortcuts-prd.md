@@ -312,12 +312,13 @@ Global `?` (Shift+/)  →  (OPTIONAL, Q8) components/shortcuts/shortcut-help-ove
 - [x] `memory.quickAdd` (`T/N`) in [`track-memory-notes-panel.tsx`](../../../src/components/track/track-memory-notes-panel.tsx) → `matches(e, "memory.quickAdd")`, **+ fixed the weak scope** (added the missing `hasModalDialogOpen` guard). Deleted the superseded `memory-shortcuts.ts`.
 - [x] **Gallery wall** in [`search-page.tsx`](../../../src/pages/search-page.tsx): roving focus → `matches(e, "library.focusPrev"/"library.focusNext"/"library.open")`; the `` ` `` toggle → `matches(e, "nav.cycleGalleryMode")` (code-based, so layout-independent — replaced `isGalleryModeToggle`) **+ fixed the `` ` ``-while-typing bug** (now guards `isTypingTarget`). `Shift+\`` reverse direction preserved.
 - [ ] **Row nav** in [`virtual-track-list.tsx`](../../../src/components/library/virtual-track-list.tsx) → `matches(e, "library.focus*")`: deferred — that file holds the user's uncommitted W/S + batch-select work; routing it would bundle/clobber that. (Row nav still works at defaults.)
-- [ ] Swap `playerShortcutHint` → registry-backed hint; tooltips reflect live bindings.
+- [x] Swapped `playerShortcutHint` → registry-backed [`useShortcutHint`](../../../src/hooks/use-shortcut-hint.ts): transport tooltips (prev/next/play/repeat/shuffle/volume) now show the user's **live** chips. Removed the hard-coded `playerShortcutHint`.
 
 ##### Phase 2b Checklist
 - [x] `library.back` + `memory.quickAdd` + gallery focus/open + gallery-cycle rebind live; defaults unchanged.
 - [x] `` ` `` no longer flips gallery mode while typing; `T/N` now also guards against an open modal.
-- [ ] Row-list focus nav routed (pending the user's `virtual-track-list.tsx` edits settling) + the cosmetic hint swap.
+- [x] Transport tooltips reflect rebinds (hint swap).
+- [ ] Row-list focus nav routed — the **only** remainder, pending the user's `virtual-track-list.tsx` edits settling.
 
 ### Phase 3: "View all shortcuts" (read-only cheat-sheet)
 
@@ -428,6 +429,7 @@ Global `?` (Shift+/)  →  (OPTIONAL, Q8) components/shortcuts/shortcut-help-ove
 | 2026-06-10 | MUZERO | Phase 4 UI shipped: `shortcut-recorder-dialog.tsx` (capture → `planReassignment` conflict preview → atomic save) + per-row +/✕/↺ edit affordances + Reset-all + `setAllShortcutOverrides`; i18n ×4. Customization is end-to-end. Only Phase 2b (route the churning library/inspector/gallery key-matching through the registry + hint swap) and Phase 5 (stretch) remain |
 | 2026-06-10 | MUZERO | Phase 2b partial: shared `eventMatchesAction` + `useShortcutMatcher` hook; routed `library.back` (back gesture) + `memory.quickAdd` (T/N) through the registry — both now rebindable, and T/N gained the missing modal guard; deleted superseded `memory-shortcuts.ts`. Library focus/open + gallery-cycle routing deferred — those files (`search-page`, `virtual-track-list`, `registry`) have the user's in-flight reverse-toggle/cover-crop edits |
 | 2026-06-10 | MUZERO | Phase 2b cont.: `search-page.tsx` settled (user committed the reverse-toggle), so routed the gallery roving focus + the `` ` `` cycle-toggle through the matcher (removed `isGalleryModeToggle`; code-based match is layout-independent) and **fixed the `` ` ``-while-typing bug**. Only `virtual-track-list.tsx` row nav (entangled with the user's uncommitted W/S + batch-select work) + the cosmetic hint swap remain |
+| 2026-06-10 | MUZERO | Phase 2b hint swap: replaced hard-coded `playerShortcutHint` with the registry-backed `useShortcutHint` hook; the 4 transport-tooltip consumers now show live rebinds. Phase 2b is complete except the single entangled file (`virtual-track-list.tsx` row nav) |
 
 ---
 
