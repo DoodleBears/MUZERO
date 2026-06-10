@@ -35,6 +35,8 @@
 | N2 | 网易播放响应解析（200/301/404/fee/freeTrial → 可播/登录/VIP/试听 + https 升级） | `src/streamsrc/netease/netease-resolve.ts` | canned 响应 ×9 | ✅ green |
 | P1a | 数据模型（`TrackOrigin+="streamed"`；Track stream 字段；`AppSettings.streamSources`；**附加非索引、零 Dexie 迁移**） | `src/db/types.ts`（+ r2 manifest/catalog enum 扩 `streamed`） | 全项目 tsc 绿 | ✅ |
 | P1b | StreamSourceProvider 契约 + 源检测（`detectStreamSource`/`isStreamedTrack` 纯函数，数据驱动而非 album-前缀 hack） | `src/streamsrc/provider.ts` · `src/streamsrc/source-detect.ts` | ×4 | ✅ green |
+| H1 | StreamHttp 注入式 HTTP 契约（源 provider 零 bridge 依赖，可 stub 单测；prod 接 muzfetch+header 别名待 Phase 1 infra） | `src/streamsrc/http.ts` | 经 B3 覆盖 | ✅ |
+| B3 | **Bilibili 源 provider（整条纵向打通）**：WBI key 取+10min 缓存 → 签名 → 搜索/view→cid/playurl → 选音轨 → `PlayableStream`(注 Referer) | `src/streamsrc/bili/bili-source.ts` | stub transport ×6 | ✅ green |
 
 ---
 
@@ -401,8 +403,8 @@ components/player/            # 无需改：streamed track 复用 media-stage / 
 - [ ] Settings 卡 + 搜索在线 tab + set 导入入口（i18n 全量）。
 
 #### Phase 2 Checklist
-- [ ] WBI 签名单测（固定输入 → 期望 `w_rid`）。
-- [ ] resolve 注入式单测（canned playurl JSON → 选中预期音轨）。
+- [x] WBI 签名单测（官方文档向量 → `w_rid`，Node md5 交叉验证）。
+- [x] resolve 注入式单测（canned playurl/view/nav → 选中预期音轨 + Referer 头；含缓存/`bvid#cid`/无音轨）。
 - [ ] 真机：搜 → 收藏入库 → 播放出声、可 seek、切 tab 不断播。
 - [ ] 未登录匿名可放普通音质；登录后可放高音质。
 - [ ] 直链过期重解析路径手测（改短 slack 验证）。
