@@ -15,6 +15,7 @@ import { useTranslation } from "react-i18next";
 import { AddDriveDialog } from "@/components/settings/add-drive-dialog";
 import { BackgroundSettings } from "@/components/settings/background-settings";
 import { CloudDriveSets } from "@/components/settings/cloud-drive-sets";
+import { FlowSettings } from "@/components/settings/flow-settings";
 import { ImportedFoldersSettings } from "@/components/settings/imported-folders-settings";
 import { LyricsSettings } from "@/components/settings/lyrics-settings";
 import { resolveActiveSettingsItem } from "@/components/settings/settings-nav";
@@ -588,6 +589,8 @@ export function SettingsPage() {
           {activeItem === "background" && <BackgroundSettings />}
 
           {activeItem === "visualizer" && <VisualizerSettings />}
+
+          {activeItem === "flow" && <FlowSettings />}
 
           {activeItem === "lyrics" && <LyricsSettings />}
           {activeItem === "stream-sources" && <StreamSourcesSettings />}
