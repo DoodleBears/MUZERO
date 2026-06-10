@@ -3,6 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
+  "main": "electron/main.cjs",
   "description": "MUZERO — local-first AI DJ music player. An LLM writes prompts, calls a music-generation API, and endlessly extends your playlist. Tauri desktop + mobile, no backend, no cloud.",
   "scripts": {
     "prepare": "lefthook install || true",
@@ -20,6 +21,7 @@
     "desktop:build": "tauri build",
     "electron:dev": "electron electron/main.cjs",
     "electron:preview": "electron electron/main.cjs",
+    "electron:build": "tsc --noEmit && vite build && electron-builder",
     "android:init": "tauri android init",
     "android:dev": "tauri android dev",
     "android:build": "tauri android build",
@@ -36,6 +38,7 @@
     "@ai-sdk/react": "^3.0.199",
     "@base-ui/react": "^1.5.0",
     "@chenglou/pretext": "^0.0.7",
+    "@noble/ciphers": "^2.2.0",
     "@tanstack/react-query": "^5.100.11",
     "@tanstack/react-virtual": "^3.13.25",
     "@tauri-apps/api": "^2.11.0",
@@ -63,10 +66,42 @@
     "react-i18next": "^17.0.8",
     "streamdown": "^2.5.0",
     "tailwind-merge": "^3.6.0",
+    "thumbhash": "^0.1.1",
     "twgl.js": "^7.0.0",
     "wanakana": "^5.3.1",
     "zod": "^4.4.3",
     "zustand": "^5.0.13"
+  },
+  "build": {
+    "appId": "com.doodlekuma.muzero",
+    "productName": "MUZERO",
+    "asar": false,
+    "files": [
+      "dist/**",
+      "electron/**"
+    ],
+    "directories": {
+      "output": "release"
+    },
+    "mac": {
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "category": "public.app-category.music"
+    },
+    "win": {
+      "target": [
+        "nsis"
+      ]
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "category": "Audio"
+    }
   },
   "devDependencies": {
     "@biomejs/biome": "^2.4.15",
@@ -80,6 +115,7 @@
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.2",
     "electron": "^42.3.3",
+    "electron-builder": "^26.0.12",
     "esbuild": "^0.28.0",
     "fake-indexeddb": "^6.0.0",
     "jsdom": "^29.1.1",
