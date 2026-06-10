@@ -14,7 +14,7 @@
 | Phase | Name | Status | Link |
 |-------|------|--------|------|
 | 1 | 基础设施：统一歌词模型 + 格式探测 + Enhanced-LRC `<…>` 健壮性（纯函数 + 单测，不改渲染） | ✅ Completed | [Phase 1 Checklist](#phase-1-checklist) |
-| 2 | 词级解析器：parseEnhancedLrc / parseYrc / parseQrc 归一化到统一模型 + `format` 落库 | 🔲 Pending | [Phase 2 Checklist](#phase-2-checklist) |
+| 2 | 词级解析器：parseEnhancedLrc / parseYrc / parseQrc 归一化到统一模型 + `format` 落库 | 🔄 In Progress（2a 解析器+dispatch+resolve 完成；2b 网易 yrc opt-in 待做） | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | 逐字卡拉OK渲染：SyncedLines 按词 fill（active 行）+ Settings 开关 + 回退整行高亮 | 🔲 Pending | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | 翻译 / 罗马音双行：模型携带 translation/roman 子行 + Settings 开关 | 🔲 Pending | [Phase 4 Checklist](#phase-4-checklist) |
 | 5（可选）| TTML 解析器 + amll-ttml-db 作为新 LyricsProvider（逐字+翻译+对唱的天花板源） | 🔲 Pending | [Phase 5 Checklist](#phase-5-checklist) |
@@ -291,16 +291,22 @@ export function activeWordIndex(words: WordTiming[], positionMs: number): number
 
 **Goal:** `parseEnhancedLrc / parseYrc / parseQrc` 归一到 `words[]`；provider 写库带 `format`。
 
-**Tasks:**
-- [ ] `formats/enhanced-lrc.ts` / `yrc.ts` / `qrc.ts`（各穷举单测，含「词自带空格」保留）。
-- [ ] 网易 provider：除 `lrc.lyric` 外，可取 `yrc`（带 format:"yrc"）；保留 `stripNeteaseMetaLines`。
-- [ ] `resolve-lyrics.ts`：synced 模式携带 `LyricLine[]`（含 words）。
+**2a Tasks（完成）：**
+- [x] [`formats/enhanced-lrc.ts`](../../../src/lyrics/formats/enhanced-lrc.ts)：`<mm:ss.xx>` 词标签 → `words[]`，词时长=下一词/下一行起点（末词默认 800ms）。
+- [x] [`formats/yrc.ts`](../../../src/lyrics/formats/yrc.ts)：`[start,dur]` 行 + `(s,d,0)词`（绝对时间、显式时长），跳过 credit-JSON。
+- [x] [`formats/qrc.ts`](../../../src/lyrics/formats/qrc.ts)：`[start,dur]` 行 + `词(s,d)`（text-then-time，与 yrc 相反）。
+- [x] [`parse.ts`](../../../src/lyrics/parse.ts) `switch` 挂载 elrc/yrc/qrc（ttml 占位返回 `[]`，Phase 5 接）。
+- [x] [`resolve-lyrics.ts`](../../../src/lyrics/resolve-lyrics.ts)：synced 模式改走 `parseLyrics(synced, format)`，`lines: LyricLine[]`（含 words；view 结构兼容零改动）。
+
+**2b Tasks（待做）：**
+- [ ] 网易 provider：除 `lrc.lyric` 外可取 `yrc`（带 `format:"yrc"`，有则优先）；保留 `stripNeteaseMetaLines`。
 
 #### Phase 2 Checklist
-- [ ] yrc/qrc 词时间轴解析对拍参考样本（固定输入 → 期望 words）。
-- [ ] 「youdon't」类丢空格回归测试（词尾空格保留）。
-- [ ] 无词级源回退整行（words undefined）。
-- [ ] `make check` 通过。
+- [x] yrc/qrc 词时间轴解析对拍参考样本（固定输入 → 期望 words）。
+- [x] 「youdon't」类丢空格回归测试（词尾空格保留，三个 parser 各覆盖）。
+- [x] 无词级源回退整行（lrc 路径 words undefined，resolve-lyrics 既有用例零回归）。
+- [x] 58 lyrics 单测全过；my-files tsc/biome 干净。
+- [ ] 2b：网易 yrc opt-in 落地 + `make check`。
 
 ### Phase 3: 逐字卡拉OK渲染
 

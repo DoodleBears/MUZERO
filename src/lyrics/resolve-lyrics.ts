@@ -7,11 +7,12 @@
  */
 
 import type { Track } from "@/db/types";
-import { type LyricsLine, parseLrc } from "./parse-lrc";
+import type { LyricLine } from "./model";
+import { parseLyrics } from "./parse";
 import type { LyricsRecord, LyricsSource } from "./provider";
 
 export type ResolvedLyrics =
-  | { mode: "synced"; lines: LyricsLine[]; source: LyricsSource }
+  | { mode: "synced"; lines: LyricLine[]; source: LyricsSource }
   | { mode: "plain"; text: string; source: LyricsSource | "brief" }
   | { mode: "instrumental" }
   | { mode: "none" };
@@ -23,7 +24,7 @@ export function resolveTrackLyrics(
   if (record) {
     if (record.instrumental || record.status === "instrumental") return { mode: "instrumental" };
     if (record.synced) {
-      const lines = parseLrc(record.synced);
+      const lines = parseLyrics(record.synced, record.format);
       if (lines.length > 0) return { mode: "synced", lines, source: record.source };
     }
     if (record.plain?.trim()) return { mode: "plain", text: record.plain, source: record.source };

@@ -49,12 +49,28 @@ describe("parseLyrics", () => {
     expect(parseLyrics("[00:12.34]hi", "lrc")).toEqual([{ timeMs: 12340, text: "hi" }]);
   });
 
-  it("strips Enhanced-LRC word stamps until the dedicated parser lands (Phase 1)", () => {
-    // Phase 1 routes elrc through the line parser, which strips <…> stamps. Phase 2
-    // replaces this with per-word parsing.
-    expect(parseLyrics("[00:10.00]<00:10.00>Cause <00:10.50>you")).toEqual([
-      { timeMs: 10000, text: "Cause you" },
+  it("dispatches Enhanced LRC to the word-level parser", () => {
+    const [line] = parseLyrics("[00:10.00]<00:10.00>Cause <00:10.50>you");
+    expect(line.text).toBe("Cause you");
+    expect(line.words).toEqual([
+      { timeMs: 10000, durMs: 500, text: "Cause " },
+      { timeMs: 10500, durMs: 800, text: "you" },
     ]);
+  });
+
+  it("dispatches NetEase yrc to the word-level parser", () => {
+    const [line] = parseLyrics("[1000,500](1000,200,0)Cause (1200,300,0)you");
+    expect(line.text).toBe("Cause you");
+    expect(line.words?.[0]).toEqual({ timeMs: 1000, durMs: 200, text: "Cause " });
+  });
+
+  it("dispatches QQ qrc to the word-level parser", () => {
+    const [line] = parseLyrics("[1000,500]Cause (1000,200)you(1200,300)");
+    expect(line.words?.map((w) => w.timeMs)).toEqual([1000, 1200]);
+  });
+
+  it("returns empty for TTML until Phase 5", () => {
+    expect(parseLyrics('<tt xmlns="x"><body><div><p>hi</p></div></body></tt>')).toEqual([]);
   });
 
   it("returns an empty array for plain or empty text", () => {

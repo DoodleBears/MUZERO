@@ -4,11 +4,14 @@
  * keeping every format's quirks inside its own pure parser — the renderer only
  * ever sees `LyricLine[]` and never branches on format.
  *
- * Phase 1 ships detection + the line-level LRC path (Enhanced-LRC `<…>` stamps are
- * stripped for clean rendering). Phases 2/5 plug in `elrc` / `yrc` / `qrc` / `ttml`
- * word-level parsers under the same `switch`. No IO — exhaustively unit-tested.
+ * Phase 1 shipped detection + the line-level LRC path. Phase 2 plugs in the
+ * `elrc` / `yrc` / `qrc` word-level parsers; Phase 5 adds `ttml`. The renderer
+ * only ever sees `LyricLine[]`. No IO — exhaustively unit-tested.
  */
 
+import { parseEnhancedLrc } from "./formats/enhanced-lrc";
+import { parseQrc } from "./formats/qrc";
+import { parseYrc } from "./formats/yrc";
 import type { LyricFormat, LyricLine } from "./model";
 import { parseLrc } from "./parse-lrc";
 
@@ -42,9 +45,14 @@ export function parseLyrics(raw: string, format?: LyricFormat): LyricLine[] {
   switch (format ?? detectLyricsFormat(raw)) {
     case "plain":
       return [];
-    // Phase 2/5 plug in dedicated word-level parsers here (elrc / yrc / qrc / ttml).
-    // Until then they route through the line parser, which strips `<…>` stamps and
-    // ignores ms-header formats (no live source feeds them yet).
+    case "elrc":
+      return parseEnhancedLrc(raw);
+    case "yrc":
+      return parseYrc(raw);
+    case "qrc":
+      return parseQrc(raw);
+    case "ttml":
+      return []; // Phase 5 plugs in parseTtml here.
     default:
       return parseLrc(raw).map((line) => ({ timeMs: line.timeMs, text: line.text }));
   }
