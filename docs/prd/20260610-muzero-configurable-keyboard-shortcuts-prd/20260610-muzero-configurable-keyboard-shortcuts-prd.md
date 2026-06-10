@@ -15,7 +15,7 @@
 |-------|------|--------|------|
 | 1 | Registry + pure engine + persistence | ✅ Completed | [Phase 1 Checklist](#phase-1-checklist) |
 | 2a | Global dispatch (transport + tabs) via registry | ✅ Completed | [Phase 2a Checklist](#phase-2a-checklist) |
-| 2b | Scoped surfaces (library/inspector/gallery) + hint swap | 🔄 Partial | [Phase 2b Checklist](#phase-2b-checklist) |
+| 2b | Scoped surfaces (library/inspector/gallery) + hint swap | ✅ Completed | [Phase 2b Checklist](#phase-2b-checklist) |
 | 3 | "View all shortcuts" — read-only cheat-sheet (Settings) | ✅ Completed | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | Customization — recorder, multi-binding, cyclic conflict, reset | ✅ Completed | [Phase 4 Checklist](#phase-4-checklist) |
 | 5 | Stretch — import/export ✅ · presets ✅ · sequences (deferred) | 🔄 Partial | [Phase 5 Checklist](#phase-5-checklist) |
@@ -311,14 +311,15 @@ Global `?` (Shift+/)  →  (OPTIONAL, Q8) components/shortcuts/shortcut-help-ove
 - [x] `A/←` back in [`use-back-gesture.ts`](../../../src/hooks/use-back-gesture.ts) → `matches(e, "library.back")` — **rebindable**.
 - [x] `memory.quickAdd` (`T/N`) in [`track-memory-notes-panel.tsx`](../../../src/components/track/track-memory-notes-panel.tsx) → `matches(e, "memory.quickAdd")`, **+ fixed the weak scope** (added the missing `hasModalDialogOpen` guard). Deleted the superseded `memory-shortcuts.ts`.
 - [x] **Gallery wall** in [`search-page.tsx`](../../../src/pages/search-page.tsx): roving focus → `matches(e, "library.focusPrev"/"library.focusNext"/"library.open")`; the `` ` `` toggle → `matches(e, "nav.cycleGalleryMode")` (code-based, so layout-independent — replaced `isGalleryModeToggle`) **+ fixed the `` ` ``-while-typing bug** (now guards `isTypingTarget`). `Shift+\`` reverse direction preserved.
-- [ ] **Row nav** in [`virtual-track-list.tsx`](../../../src/components/library/virtual-track-list.tsx) → `matches(e, "library.focus*")`: deferred — that file holds the user's uncommitted W/S + batch-select work; routing it would bundle/clobber that. (Row nav still works at defaults.)
+- [x] **Row nav** in [`virtual-track-list.tsx`](../../../src/components/library/virtual-track-list.tsx) → `matches(e, "library.focusPrev"/"library.focusNext")` (both the focused-row handler and the focus-first window handler). The matcher now accepts React **and** native events (`KeyChordEvent` structural type). Removed the superseded `libraryNavKey`.
 - [x] Swapped `playerShortcutHint` → registry-backed [`useShortcutHint`](../../../src/hooks/use-shortcut-hint.ts): transport tooltips (prev/next/play/repeat/shuffle/volume) now show the user's **live** chips. Removed the hard-coded `playerShortcutHint`.
 
 ##### Phase 2b Checklist
-- [x] `library.back` + `memory.quickAdd` + gallery focus/open + gallery-cycle rebind live; defaults unchanged.
+- [x] `library.back` + `memory.quickAdd` + gallery focus/open + gallery-cycle + **row-list focus nav** rebind live; defaults unchanged.
 - [x] `` ` `` no longer flips gallery mode while typing; `T/N` now also guards against an open modal.
 - [x] Transport tooltips reflect rebinds (hint swap).
-- [ ] Row-list focus nav routed — the **only** remainder, pending the user's `virtual-track-list.tsx` edits settling.
+
+> **Done 2026-06-10.** Phase 2b complete — every scoped surface now resolves keys through the registry, so **all** rebinds take effect.
 
 ### Phase 3: "View all shortcuts" (read-only cheat-sheet)
 
@@ -439,6 +440,7 @@ Global `?` (Shift+/)  →  (OPTIONAL, Q8) components/shortcuts/shortcut-help-ove
 | 2026-06-10 | MUZERO | Phase 5 partial: keymap **import/export** (`keymap-io.ts` + `save-text-file.ts` + cheat-sheet Export/Import buttons), import sanitizes through the same guard as persistence; i18n ×4; 7 tests. Presets + 2-stroke sequences still pending |
 | 2026-06-10 | MUZERO | Phase 5 **presets** (`presets.ts`: Arrow-transport + Vim-navigation, conflict-free; apply-via-confirm → `setAllShortcutOverrides`; preset buttons + i18n ×4; 5 tests). 2-stroke sequences deliberately deferred (invasive core change, no MUZERO use case). The configurable-shortcuts feature is effectively complete — only the entangled `virtual-track-list.tsx` row-nav routing + sequences remain |
 | 2026-06-10 | MUZERO | **Search NLP**: extracted `freeTextMatches` (transliteration-aware — pinyin / kana↔romaji, the ⌘F engine) into `search-core`; the **cheat-sheet search** now uses it (CJK labels/keywords reachable phonetically). Sibling addition: a **search box atop the Settings sidebar** filtering all settings items with the same matcher (`settings-sidebar.tsx`). i18n ×4; 4 tests |
+| 2026-06-10 | MUZERO | **Phase 2b complete**: routed `virtual-track-list.tsx` row nav (focused-row + focus-first handlers) through the registry; `useShortcutMatcher` now accepts React + native events (`KeyChordEvent`); removed the orphaned `libraryNavKey` (+test). Every scoped surface is now registry-driven — all library/inspector/gallery rebinds take effect |
 
 ---
 

@@ -1,30 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { accumulateBackSwipe, libraryNavKey, rovingIndex } from "./library-nav";
-
-describe("libraryNavKey", () => {
-  it("maps W/↑ to prev and S/↓ to next", () => {
-    expect(libraryNavKey("w")).toBe("prev");
-    expect(libraryNavKey("ArrowUp")).toBe("prev");
-    expect(libraryNavKey("s")).toBe("next");
-    expect(libraryNavKey("ArrowDown")).toBe("next");
-  });
-
-  it("maps D/→/Enter to open and A/← to back", () => {
-    expect(libraryNavKey("d")).toBe("open");
-    expect(libraryNavKey("ArrowRight")).toBe("open");
-    expect(libraryNavKey("Enter")).toBe("open");
-    expect(libraryNavKey("a")).toBe("back");
-    expect(libraryNavKey("ArrowLeft")).toBe("back");
-  });
-
-  it("is case-insensitive and leaves Q/E (transport) and others unmapped", () => {
-    expect(libraryNavKey("A")).toBe("back");
-    expect(libraryNavKey("q")).toBeNull();
-    expect(libraryNavKey("e")).toBeNull();
-    expect(libraryNavKey(" ")).toBeNull();
-    expect(libraryNavKey("x")).toBeNull();
-  });
-});
+import { accumulateBackSwipe, rovingIndex } from "./library-nav";
 
 describe("rovingIndex", () => {
   it("first prev/next press lands on the fallback when nothing is focused", () => {

@@ -1,11 +1,13 @@
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { motion, useMotionValue, useSpring } from "motion/react";
-import type { KeyboardEvent } from "react";
+import type { KeyboardEvent as ReactKeyboardEvent } from "react";
 import { useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { deleteTrack as deleteTrackRepo, prependTrackIds, setTrackLiked } from "@/db/repositories";
 import type { Track } from "@/db/types";
 import { useSessions } from "@/hooks/use-app-data";
+import { useShortcutMatcher } from "@/hooks/use-shortcut-matcher";
+import { hasModalDialogOpen, isTypingTarget } from "@/lib/dom-keys";
 import { downloadTrackMedia } from "@/lib/download-track";
 import { cn } from "@/lib/utils";
 import { notify } from "@/stores/notification-store";
@@ -14,6 +16,7 @@ import { TrackRow } from "./track-row";
 
 const TRACK_ROW_HEIGHT = 60;
 const TRACK_ROW_SELECTOR = "[data-muzero-track-row]";
+const GALLERY_CARD_SELECTOR = "[data-gallery-card]";
 const TRACK_LIST_EDGE_PULL_THRESHOLD = 96;
 const TRACK_LIST_EDGE_PULL_MAX = 56;
 const TRACK_LIST_EDGE_PULL_ARM_MS = 80;
@@ -40,6 +43,10 @@ export function VirtualTrackList({
   edgePullFeedback = false,
   onPullPastStart,
   onPullPastEnd,
+  selectable = false,
+  selectedIds,
+  onToggleSelect,
+  onDeleteTrack,
 }: {
   tracks: Track[];
   onPlay?: (track: Track, index: number) => void;
@@ -51,6 +58,13 @@ export function VirtualTrackList({
   edgePullFeedback?: boolean;
   onPullPastStart?: () => void;
   onPullPastEnd?: () => void;
+  /** Select mode: render per-row checkboxes; row click toggles selection. */
+  selectable?: boolean;
+  selectedIds?: ReadonlySet<string>;
+  onToggleSelect?: (trackId: string, opts?: { index?: number; shiftKey?: boolean }) => void;
+  /** Context-aware delete for the row's trash button. Falls back to permanent
+   *  delete (the historical behavior) when not provided. */
+  onDeleteTrack?: (track: Track) => void;
 }) {
   const { t } = useTranslation();
   const parentRef = useRef<HTMLDivElement | null>(null);
@@ -65,6 +79,11 @@ export function VirtualTrackList({
   const queue = usePlayerStore((s) => s.queue);
   const playIndex = usePlayerStore((s) => s.playIndex);
   const sessions = useSessions();
+  // Row nav resolves through the configurable registry (library.focusPrev/Next),
+  // so rebinds apply. Held in a ref so the window listener stays stable.
+  const matches = useShortcutMatcher();
+  const matchesRef = useRef(matches);
+  matchesRef.current = matches;
 
   const currentTrackId = currentIndex >= 0 ? queue[currentIndex]?.id : undefined;
   const handlePlay = onPlay ?? ((_track: Track, index: number) => void playIndex(index));
@@ -97,8 +116,15 @@ export function VirtualTrackList({
     });
   }
 
-  function onKeyDown(event: KeyboardEvent<HTMLDivElement>) {
-    if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
+  function onKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
+    // Row nav via the registry (library.focusPrev/Next — W/S/↑/↓ by default); A/←
+    // back and D/→ open are handled by the surrounding detail view / the row itself.
+    const intent = matchesRef.current(event, "library.focusPrev")
+      ? "prev"
+      : matchesRef.current(event, "library.focusNext")
+        ? "next"
+        : null;
+    if (!intent) return;
     const target = event.target instanceof HTMLElement ? event.target : null;
     const active = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const row =
@@ -107,7 +133,7 @@ export function VirtualTrackList({
     if (!row) return;
     const current = Number(row.dataset.trackIndex);
     if (!Number.isFinite(current)) return;
-    const next = event.key === "ArrowDown" ? current + 1 : current - 1;
+    const next = intent === "next" ? current + 1 : current - 1;
     if (next < 0 || next >= tracks.length) return;
     event.preventDefault();
     handleView(tracks[next], next);
@@ -126,6 +152,43 @@ export function VirtualTrackList({
     target.addEventListener("wheel", onWheel, { capture: true, passive: false });
     return () => target.removeEventListener("wheel", onWheel, { capture: true });
   });
+
+  // When this list is on screen but nothing is focused (you clicked into the
+  // detail with the mouse), W/S/↑/↓ land on the FIRST row so keyboard nav starts
+  // cleanly. A focused row keeps its own onKeyDown; a focused gallery card belongs
+  // to the wall's roving handler. Capture-phase so ↑/↓ don't hit volume first.
+  const focusFirstRef = useRef<() => void>(() => {});
+  focusFirstRef.current = () => {
+    if (tracks.length === 0) return;
+    handleView(tracks[0], 0);
+    focusTrackAt(0);
+  };
+  const hasTracksRef = useRef(false);
+  hasTracksRef.current = tracks.length > 0;
+  useEffect(() => {
+    const onWindowKeyDown = (event: KeyboardEvent) => {
+      if (
+        !matchesRef.current(event, "library.focusPrev") &&
+        !matchesRef.current(event, "library.focusNext")
+      ) {
+        return;
+      }
+      if (!hasTracksRef.current || !parentRef.current) return;
+      if (isTypingTarget(event.target) || hasModalDialogOpen()) return;
+      const active = document.activeElement;
+      if (
+        active instanceof HTMLElement &&
+        (active.closest(TRACK_ROW_SELECTOR) || active.closest(GALLERY_CARD_SELECTOR))
+      ) {
+        return; // a row / card is focused → its own handler owns the key
+      }
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      focusFirstRef.current();
+    };
+    window.addEventListener("keydown", onWindowKeyDown, { capture: true });
+    return () => window.removeEventListener("keydown", onWindowKeyDown, { capture: true });
+  }, []);
 
   function handleWheel(element: HTMLDivElement, event: WheelEvent) {
     const maxScrollTop = Math.max(0, element.scrollHeight - element.clientHeight);
@@ -244,10 +307,17 @@ export function VirtualTrackList({
                 isSelected={track.id === selectedTrackId}
                 listIndex={virtualRow.index}
                 sessions={sessions}
+                selectable={selectable}
+                checked={selectedIds?.has(track.id) ?? false}
+                onToggleSelect={(shiftKey) =>
+                  onToggleSelect?.(track.id, { index: virtualRow.index, shiftKey })
+                }
                 onPlay={() => handlePlay(track, virtualRow.index)}
                 onView={() => handleView(track, virtualRow.index)}
                 onToggleLike={() => void setTrackLiked(track.id, !track.liked)}
-                onDelete={() => void deleteTrackRepo(track.id)}
+                onDelete={() =>
+                  onDeleteTrack ? onDeleteTrack(track) : void deleteTrackRepo(track.id)
+                }
                 onDownloadOriginal={() => {
                   void downloadTrackMedia(track, "original").catch((error: unknown) =>
                     notify.error(t("track.downloadFailed"), { error, source: "track-download" }),

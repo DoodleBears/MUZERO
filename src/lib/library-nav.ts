@@ -5,37 +5,6 @@
  * thin. See {@link useBackGesture} and the SearchPage roving handler.
  */
 
-/** A library nav intent decoded from a key (independent of which surface it hits). */
-export type LibraryNavKey = "prev" | "next" | "open" | "back" | null;
-
-/**
- * Decode a bare key (no Cmd/Ctrl/Alt/Shift) into a library-navigation intent.
- *  - W / ArrowUp   → prev (move focus up / to the previous item)
- *  - S / ArrowDown → next
- *  - D / ArrowRight / Enter → open / drill in
- *  - A / ArrowLeft → back up a level
- * Q/E stay with the player (prev/next track), so they are never nav keys here.
- */
-export function libraryNavKey(key: string): LibraryNavKey {
-  switch (key.toLowerCase()) {
-    case "w":
-    case "arrowup":
-      return "prev";
-    case "s":
-    case "arrowdown":
-      return "next";
-    case "d":
-    case "arrowright":
-    case "enter":
-      return "open";
-    case "a":
-    case "arrowleft":
-      return "back";
-    default:
-      return null;
-  }
-}
-
 /**
  * Next index for roving focus across `count` items. `current` is the focused
  * index or -1 when nothing is focused yet — the first prev/next press lands on
