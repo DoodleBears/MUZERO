@@ -15,8 +15,10 @@ import { useTranslation } from "react-i18next";
 import { AddDriveDialog } from "@/components/settings/add-drive-dialog";
 import { BackgroundSettings } from "@/components/settings/background-settings";
 import { CloudDriveSets } from "@/components/settings/cloud-drive-sets";
+import { ImportedFoldersSettings } from "@/components/settings/imported-folders-settings";
 import { resolveActiveSettingsItem } from "@/components/settings/settings-nav";
 import { SettingsSidebar } from "@/components/settings/settings-sidebar";
+import { ShortcutsSettings } from "@/components/settings/shortcuts-settings";
 import { VisualizerSettings } from "@/components/settings/visualizer-settings";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -314,6 +316,10 @@ export function SettingsPage() {
     await saveSettings({ presenceEnabled: enabled });
   }
 
+  async function changeAutoFetchLyrics(enabled: boolean) {
+    await saveSettings({ autoFetchLyrics: enabled });
+  }
+
   const primary: PrimaryColors = {
     light: settings.primaryLight ?? DEFAULT_PRIMARY.light,
     dark: settings.primaryDark ?? DEFAULT_PRIMARY.dark,
@@ -518,9 +524,25 @@ export function SettingsPage() {
                     }
                   />
                 </div>
+                <label className="flex items-start gap-3 rounded-md border border-border p-3">
+                  <input
+                    type="checkbox"
+                    checked={settings.autoFetchLyrics ?? true}
+                    onChange={(event) => void changeAutoFetchLyrics(event.currentTarget.checked)}
+                    className="mt-1 size-4 accent-primary"
+                  />
+                  <span className="flex flex-col gap-1">
+                    <span className="font-medium text-sm">{t("settings.autoFetchLyrics")}</span>
+                    <span className="text-muted-foreground text-xs">
+                      {t("settings.autoFetchLyricsHint")}
+                    </span>
+                  </span>
+                </label>
               </CardContent>
             </Card>
           )}
+
+          {activeItem === "shortcuts" && <ShortcutsSettings />}
 
           {activeItem === "background" && <BackgroundSettings />}
 
@@ -655,6 +677,8 @@ export function SettingsPage() {
               </CardContent>
             </Card>
           )}
+
+          {activeItem === "device" && <ImportedFoldersSettings />}
 
           {activeItem === "playback-dj" && (
             <Card>

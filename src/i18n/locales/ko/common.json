@@ -289,6 +289,8 @@
     "navCloudPresence": "지금 듣는 중",
     "language": "언어",
     "appearance": "모양",
+    "autoFetchLyrics": "가사 자동 가져오기",
+    "autoFetchLyricsHint": "업로드한 곡의 동기화 가사를 LRCLIB에서 찾습니다. 곡 제목과 아티스트가 lrclib.net으로 전송됩니다.",
     "theme": "테마",
     "themeLight": "라이트",
     "themeDark": "다크",

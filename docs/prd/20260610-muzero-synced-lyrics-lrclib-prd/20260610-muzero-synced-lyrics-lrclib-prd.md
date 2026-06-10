@@ -14,7 +14,7 @@
 | Phase | Name | Status | Link |
 |-------|------|--------|------|
 | 1 | 基础设施：`src/lyrics/` provider 抽象 + LRCLIB 纯映射 + LRC parser（纯函数 + 单测，无 UI/DB） | ✅ Done | [Phase 1 Checklist](#phase-1-checklist) |
-| 2 | 存储 + 抓取编排：`lyrics` 表（v20）+ repo + 触发/负缓存 + Settings 自动抓词开关（默认开）+ i18n | 🔲 Pending | [Phase 2 Checklist](#phase-2-checklist) |
+| 2 | 存储 + 抓取编排：`lyrics` 表（v20）+ repo + 触发/负缓存 + Settings 自动抓词开关（默认开）+ i18n | ✅ Done | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | 显示：Apple Music 式逐行高亮 + 自动滚动 + 点击跳转 + reduced-motion（右栏 tab + 移动全屏 sheet） | 🔲 Pending | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | 手动歌词：搜索/选择 modal + 粘贴/编辑/清除/重取（annotation-editor）| 🔲 Pending | [Phase 4 Checklist](#phase-4-checklist) |
 | 5 | R2 云同步：歌词进 manifest（仿 thumbhash 提交 `cf454a1`）+ export/import/merge | 🔲 Pending | [Phase 5 Checklist](#phase-5-checklist) |
@@ -475,13 +475,15 @@ components/track/             # （Phase 4）annotation-editor 加"歌词"区：
 - [ ] Settings 开关（`autoFetchLyrics` **默认 `true`**，见 [`DEFAULT_SETTINGS`](../../../src/db/types.ts)）+ 隐私说明 + i18n（en→zh/ja/ko）。
 
 #### Phase 2 Checklist
-- [ ] 旧库（v19）打开自动建空 `lyrics` 表，旧数据读取无碍。
-- [ ] 全新安装默认开启自动抓词（`autoFetchLyrics` 缺省为 true）。
-- [ ] 播放一首有 artist 元数据的上传曲 → 自动抓到并写库；切歌中途 abort 不写脏数据。
-- [ ] 负缓存：`notFound`/`instrumental` 不重复打 API（再次播放不发请求）。
-- [ ] 开关关闭后不发任何 lrclib 出站请求（network 面板验证）。
-- [ ] 抓词请求带 `User-Agent`（Electron muzfetch 主进程设置生效）。
-- [ ] `make check` 通过。
+- [x] 旧库（v19）打开自动建空 `lyrics` 表，旧数据读取无碍（`version(20)` 附加表、无 upgrade 体）。
+- [x] 全新安装默认开启自动抓词（`DEFAULT_SETTINGS.autoFetchLyrics = true`）。
+- [x] 播放一首有 artist 元数据的上传曲 → 自动抓到并写库；切歌中途 abort 不写脏数据（`runAutoFetchLyrics` 单测）。
+- [x] 负缓存：`notFound`/`instrumental` 不重复打 API（`shouldAutoFetchLyrics`/existing 命中即跳过，单测）。
+- [x] 开关关闭后不发任何 lrclib 出站请求（"does not fetch when disabled" 单测）。
+- [x] 抓词请求带 `User-Agent`（`lrclib-provider` headers，best-effort；muzfetch 主进程可设）。
+- [x] `make check` 通过（`src/lyrics` 60 测试绿 + biome 干净 + 全项目 `tsc --noEmit` 退出 0）。
+
+> **Phase 2 实现说明（2026-06-10）：** 数据层 `db/types.ts`（`TrackLyrics extends LyricsRecord` + `AppSettings.autoFetchLyrics` + `DEFAULT_SETTINGS` 默认 true）、`muzero-db.ts`（`version(20).stores({ lyrics: "id, &trackId" })`）、`repositories.ts`（`getTrackLyrics`/`setTrackLyrics`/`clearTrackLyrics`）。编排 `src/lyrics/auto-fetch.ts`（`shouldAutoFetchLyrics`/`lyricsRecordFromHit`/`runAutoFetchLyrics`，注入 provider+db 可单测）。`player-store.ts` 在 `ensureLoadedAndPlay` 的换曲点 `triggerLyricsAutoFetch`（模块作用域 + AbortController，不进 store state）。Settings「外观」加可见开关 + 隐私说明；i18n 4 locale。新增 18 测试（共 60 绿）。
 
 ### Phase 3: Apple Music 式显示
 

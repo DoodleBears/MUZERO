@@ -1,6 +1,7 @@
 import type { UIMessage } from "ai";
 import type { LlmProviderPresetId } from "@/ai/llm-providers";
 import type { TrackBrief } from "@/dj/dj-brief-schema";
+import type { LyricsRecord } from "@/lyrics/provider";
 import type { CloudPresetId } from "@/musicgen/presets";
 import type { MusicGenProviderId } from "@/musicgen/registry";
 import type { ShortcutGesture } from "@/shortcuts/registry";
@@ -163,6 +164,15 @@ export interface Memory {
   /** Snapshot of the device/person who wrote this memory. */
   author?: MemoryAuthorRef;
   createdAt: number;
+  /**
+   * Optional playback anchor: the second in the song this memory is pinned to
+   * (user taps "pin to current time" while playing, e.g. 98 → 1:38). Absent =
+   * floating (shown to fill idle seconds, not tied to a moment). Callers clamp
+   * to `[0, track.durationSec]`; the repo only sanitizes negative/non-finite to
+   * undefined. Non-indexed additive field → no Dexie schema bump (same path as
+   * {@link Track.coverThumbhash}). Threaded through the R2 manifest (optional).
+   */
+  atSec?: number;
 }
 
 /**
@@ -508,6 +518,12 @@ export interface AppSettings {
    * configurable-keyboard-shortcuts PRD.
    */
   shortcutOverrides?: Record<string, ShortcutGesture[]>;
+  /**
+   * Auto-fetch lyrics from LRCLIB for uploaded/streamed tracks (synced-lyrics
+   * PRD). Sends title/artist to lrclib.net; a visible Settings toggle (rule 3),
+   * default on. Generated tracks use their own brief.lyrics and never fetch.
+   */
+  autoFetchLyrics?: boolean;
 }
 
 /**
@@ -530,6 +546,21 @@ export interface ImportFolder {
   lastImportedCount?: number;
 }
 
+/**
+ * Fetched or manual lyrics for a track (1:1 via trackId). Kept in its own table
+ * — NOT on the Track row — because LRC text is KB-scale and would otherwise ride
+ * every virtualized list query (rule 6). `status` doubles as a negative cache
+ * ("notFound" → don't re-hit the API). See the synced-lyrics PRD.
+ */
+export interface TrackLyrics extends LyricsRecord {
+  /** `lyr_…` */
+  id: string;
+  trackId: string;
+  /** Which record the provider matched (debug / correction). */
+  matched?: { trackName: string; artistName: string; durationSec: number };
+  fetchedAt: number;
+}
+
 export const DEFAULT_SETTINGS: AppSettings = {
   id: "app",
   llmProvider: "openai",
@@ -537,6 +568,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   musicGenProvider: "mock",
   musicCloudPreset: "mureka",
   locale: "en",
+  autoFetchLyrics: true,
   theme: "system",
   backgroundMode: "cover",
   backgroundRenderer: "noise",

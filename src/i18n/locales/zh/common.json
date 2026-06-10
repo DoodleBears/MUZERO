@@ -289,6 +289,8 @@
     "navCloudPresence": "在线状态",
     "language": "语言",
     "appearance": "外观",
+    "autoFetchLyrics": "自动获取歌词",
+    "autoFetchLyricsHint": "从 LRCLIB 为你上传的歌曲匹配同步歌词。会把歌曲标题和艺人发送给 lrclib.net。",
     "theme": "主题",
     "themeLight": "浅色",
     "themeDark": "深色",

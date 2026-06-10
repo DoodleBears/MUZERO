@@ -4,24 +4,41 @@ import { db } from "@/db/muzero-db";
 import {
   createSession,
   createUploadedTrack,
+  deleteSession as deleteSessionRepo,
   getPlayQueue,
   getSession,
   getSettings,
   getTrackBlob,
   getTrackCover,
   getTracksByIds,
+  knownSourcePaths,
   playQueueAppend,
   playQueuePlayNext,
   playQueueSet,
+  playQueueSetContext,
   playQueueSetIndex,
   prependTrackIds,
   saveSettings,
   setSessionDisplayMode,
+  setTrackCover,
+  upsertImportFolder,
 } from "@/db/repositories";
-import type { SetDisplayMode, Track } from "@/db/types";
+import type { ImportFolder, SetDisplayMode, Track } from "@/db/types";
 import { createAiDjBrain } from "@/dj/dj-brain-ai";
 import { createDjEngine, type DjEngine } from "@/dj/dj-engine";
 import i18n from "@/i18n/i18n";
+import { hasFolderAccess } from "@/lib/desktop/bridge";
+import {
+  basename,
+  createFolderFs,
+  type FolderFs,
+  grantFolderAccess,
+  mimeFromExtension,
+  pickFolder,
+  type ScannedFile,
+  scanFolderForMedia,
+  selectNewFiles,
+} from "@/lib/folder-import";
 import { log } from "@/lib/logger";
 import { fallbackUploadMediaMetadata, parseUploadedMediaMetadata } from "@/lib/media-metadata";
 import { isUnsupportedMediaError, probeMediaFile } from "@/lib/media-probe";
@@ -29,6 +46,10 @@ import {
   canSetPlatformMediaSessionMetadata,
   setPlatformMediaSessionMetadata,
 } from "@/lib/media-session";
+import { isNcmFile } from "@/lib/ncm-decode";
+import { getAppFetch } from "@/lib/platform";
+import { runAutoFetchLyrics } from "@/lyrics/auto-fetch";
+import { resolveLyricsProvider } from "@/lyrics/registry";
 import { resolveMusicGenProvider } from "@/musicgen/registry";
 import { MediaEngine } from "@/player/media-engine";
 import { reconcileCurrentIndex, unconsumedTrackIds } from "@/player/play-queue";
@@ -41,6 +62,11 @@ import {
   shuffleManualNext,
   shufflePrev,
 } from "@/player/queue";
+import {
+  beginFolderImport,
+  endFolderImport,
+  setFolderImportProgress,
+} from "@/stores/folder-import-store";
 import { notify } from "@/stores/notification-store";
 import { listCloudDrives } from "@/sync/cloud-drive-repo";
 import { getOrCreateLocalDevice } from "@/sync/device-repo";
@@ -55,6 +81,7 @@ import {
   type R2PresenceCoordinator,
 } from "@/sync/r2-presence-coordinator";
 import { writeR2Presence } from "@/sync/r2-presence-sync";
+import { ingestViaWorker } from "@/workers/heavy-client";
 
 interface PlayerState {
   activeSessionId: string | null;
@@ -114,6 +141,30 @@ interface PlayerState {
    * UI can surface it). `newSetName` is supplied by the caller (i18n lives in UI).
    */
   ingestDroppedMedia: (files: File[], newSetName: string) => Promise<{ createdSet: boolean }>;
+  /**
+   * Desktop only: pick a local folder, import its plaintext media into the
+   * active set (creating one named after the folder if none is active), and
+   * remember it for incremental re-sync on later launches. No-op in the browser.
+   * Resolves true when a folder was picked and imported, false on cancel/web.
+   */
+  importFolder: () => Promise<boolean>;
+  /**
+   * Desktop only: pick a folder and import its media into an EXISTING set (the
+   * set-detail "import folder" button), binding it for incremental re-sync.
+   * Resolves true when a folder was picked and imported, false on cancel/web.
+   */
+  importFolderIntoSet: (setId: string) => Promise<boolean>;
+  /**
+   * Desktop only: re-scan every remembered folder and import files not already
+   * in the library. Safe to call on boot; no-op in the browser or when none.
+   */
+  syncImportFolders: () => Promise<void>;
+  /**
+   * Delete a 歌单. With `purgeExclusiveTracks`, also permanently delete songs that
+   * live only in this set. Resets the active session if it was the deleted one.
+   * Resolves the number of tracks permanently purged.
+   */
+  deleteSession: (sessionId: string, purgeExclusiveTracks: boolean) => Promise<number>;
   /** Manually ask the DJ to draft more now. */
   draftNow: () => Promise<void>;
 }
@@ -138,6 +189,7 @@ let consumedTrackIds = new Set<string>();
 let djEngine: DjEngine | null = null;
 let pumping = false;
 let loadedTrackId: string | null = null;
+let lyricsAbort: AbortController | null = null;
 let playbackSettingsLoaded = false;
 // The active shuffled play order (queue indices). Non-reactive: next/prev read it,
 // setShuffle rebuilds it, and it self-heals when stale vs the queue length.
@@ -499,41 +551,9 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       const ids: string[] = [];
       const unsupported: string[] = [];
       for (const file of list) {
-        const probed = await probeMediaFile(file).catch((err: unknown) => {
-          if (!isUnsupportedMediaError(err)) throw err;
-          unsupported.push(err.fileName);
-          log.warn("player", "skipped unsupported upload", {
-            fileName: err.fileName,
-            mime: err.mime,
-            kind: err.kind,
-            mediaErrorCode: err.mediaErrorCode,
-          });
-          return null;
-        });
-        if (!probed) continue;
-        const parsedMetadata = await parseUploadedMediaMetadata(file).catch((err: unknown) => {
-          log.warn("player", "media metadata parse failed; falling back to filename metadata", {
-            error: err instanceof Error ? err.name : typeof err,
-            mime: file.type || probed.mime,
-            size: file.size,
-          });
-          return {
-            embeddedCover: undefined,
-            mediaMetadata: fallbackUploadMediaMetadata(file, probed.title),
-            title: undefined,
-          };
-        });
-        const track = await createUploadedTrack({
-          sessionId: setId,
-          title: parsedMetadata.title ?? probed.title,
-          kind: probed.kind,
-          blob: file,
-          mime: probed.mime,
-          durationSec: probed.durationSec,
-          mediaMetadata: parsedMetadata.mediaMetadata,
-          embeddedCover: parsedMetadata.embeddedCover,
-        });
-        ids.push(track.id);
+        const r = await ingestMediaFile(setId, file);
+        if (r.trackId) ids.push(r.trackId);
+        else if (r.unsupportedName) unsupported.push(r.unsupportedName);
       }
       // Newest on top (prepend) — the first added track becomes the set's cover.
       if (ids.length > 0) await prependTrackIds(setId, ids);
@@ -569,6 +589,84 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     return { createdSet };
   },
 
+  async importFolder() {
+    if (!hasFolderAccess()) return false;
+    const path = await pickFolder();
+    if (!path) return false;
+    await grantFolderAccess(path);
+
+    // A folder maps to its own set: reuse it if this folder is already remembered
+    // (re-sync), else create one named after the folder. Never dumps into an
+    // unrelated active set, so the behavior is the same from any entry point.
+    const existing = (await getSettings()).importFolders?.find((f) => f.path === path);
+    let setId = existing?.setId;
+    if (!setId || !(await getSession(setId))) {
+      const session = await createSession({
+        name: basename(path),
+        seedPrompt: "",
+        config: { autoExtend: false },
+        displayMode: "video",
+      });
+      setId = session.id;
+    }
+    await get().setActiveSession(setId);
+
+    // Remember it before scanning, so a crash mid-import still leaves it tracked.
+    const folderId = await upsertImportFolder({
+      id: existing?.id,
+      path,
+      setId,
+      displayName: basename(path),
+    });
+    await runFolderSync([folderId]);
+    return true;
+  },
+
+  async importFolderIntoSet(setId) {
+    if (!hasFolderAccess()) return false;
+    const path = await pickFolder();
+    if (!path) return false;
+    await grantFolderAccess(path);
+
+    // Bind this folder to the given set (reuse the entry if it's already
+    // remembered), then run the shared sync — progress indicator, dedup, abort,
+    // and the background import all come for free.
+    const existing = (await getSettings()).importFolders?.find((f) => f.path === path);
+    const folderId = await upsertImportFolder({
+      id: existing?.id,
+      path,
+      setId,
+      displayName: basename(path),
+    });
+    await runFolderSync([folderId]);
+    return true;
+  },
+
+  async syncImportFolders() {
+    if (!hasFolderAccess()) return;
+    const { importFolders } = await getSettings();
+    const ids = (importFolders ?? []).map((f) => f.id);
+    if (ids.length === 0) return;
+    await runFolderSync(ids);
+  },
+
+  async deleteSession(sessionId, purgeExclusiveTracks) {
+    const wasActive = get().activeSessionId === sessionId;
+    const { purgedTrackIds } = await deleteSessionRepo(sessionId, { purgeExclusiveTracks });
+    if (wasActive) {
+      // Detach the dead set: stop watching it, drop the queue's context (so
+      // autoExtend can't fire against it), and clear the active pointer. The
+      // play queue itself is left alone — the repo already removed any purged
+      // exclusive tracks; songs shared with other sets keep playing. The
+      // liveQuery subscription reconciles `queue`/`currentIndex` from that write.
+      watchSetForAppend(null, [], true);
+      await playQueueSetContext(undefined);
+      set({ activeSessionId: null, djEnabled: false });
+      await saveSettings({ lastSessionId: undefined });
+    }
+    return purgedTrackIds.length;
+  },
+
   async draftNow() {
     const { activeSessionId } = get();
     if (!activeSessionId || !djEngine) return;
@@ -585,6 +683,297 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     }
   },
 }));
+
+// ------------------------------------------------------------ folder import ----
+
+interface IngestResult {
+  /** Set when the file was imported. */
+  trackId?: string;
+  /** Set when the file decoded as media but this WebView can't play it. */
+  unsupportedName?: string;
+}
+
+/**
+ * Ingest a single media File into a set: probe → parse metadata → persist.
+ * Shared by drag/drop/file-picker uploads and local-folder import. One bad file
+ * never throws past here — an undecodable file is reported, not fatal.
+ * `sourcePath` carries folder provenance + the dedup key (absent for uploads).
+ */
+async function ingestMediaFile(
+  setId: string,
+  file: File,
+  sourcePath?: string,
+): Promise<IngestResult> {
+  // `.ncm` can't be probed/played encrypted — decrypt in the worker, then pull
+  // its cover from the carried CDN URL if no image was embedded.
+  if (isNcmFile(file.name)) return ingestNcmFile(setId, file, sourcePath);
+
+  const probed = await probeMediaFile(file).catch((err: unknown) => {
+    if (!isUnsupportedMediaError(err)) throw err;
+    log.warn("player", "skipped unsupported media", {
+      fileName: err.fileName,
+      mime: err.mime,
+      kind: err.kind,
+      mediaErrorCode: err.mediaErrorCode,
+    });
+    return null;
+  });
+  if (!probed) return { unsupportedName: file.name };
+
+  const parsed = await parseUploadedMediaMetadata(file).catch((err: unknown) => {
+    log.warn("player", "media metadata parse failed; falling back to filename metadata", {
+      error: err instanceof Error ? err.name : typeof err,
+      mime: file.type || probed.mime,
+      size: file.size,
+    });
+    return {
+      embeddedCover: undefined,
+      mediaMetadata: fallbackUploadMediaMetadata(file, probed.title),
+      title: undefined,
+      albumPicUrl: undefined,
+    };
+  });
+
+  const track = await createUploadedTrack({
+    sessionId: setId,
+    title: parsed.title ?? probed.title,
+    kind: probed.kind,
+    blob: file,
+    mime: probed.mime,
+    durationSec: probed.durationSec,
+    mediaMetadata: parsed.mediaMetadata,
+    embeddedCover: parsed.embeddedCover,
+    sourcePath,
+  });
+  // Plaintext NetEase export with a "163 key" comment but no embedded art → fetch.
+  if (!parsed.embeddedCover && parsed.albumPicUrl) {
+    void fetchAndStoreRemoteCover(track.id, parsed.albumPicUrl);
+  }
+  return { trackId: track.id };
+}
+
+/** Decrypt + ingest one `.ncm` (worker), then background-fetch its remote cover. */
+async function ingestNcmFile(
+  setId: string,
+  file: File,
+  sourcePath?: string,
+): Promise<IngestResult> {
+  const bytes = await file.arrayBuffer();
+  const res = await ingestViaWorker({
+    setId,
+    name: file.name,
+    kind: "audio",
+    mime: "",
+    sourcePath,
+    bytes,
+    decode: "ncm",
+  }).catch((err: unknown) => {
+    log.warn("player", "ncm decode failed", { name: file.name, err: String(err) });
+    return null;
+  });
+  if (!res) return { unsupportedName: file.name };
+  if (!res.hasCover && res.albumPicUrl) {
+    void fetchAndStoreRemoteCover(res.trackId, res.albumPicUrl);
+  }
+  return { trackId: res.trackId };
+}
+
+/**
+ * Download a track's remote cover (the `albumPic` URL an `.ncm` carries) and store
+ * it as the cover blob. Best-effort + non-blocking: the track is already playable,
+ * so a failed/offline fetch just leaves it cover-less; never throws to the caller.
+ * Routed through `getAppFetch()` so it bypasses CORS on the desktop shells.
+ */
+async function fetchAndStoreRemoteCover(trackId: string, url: string): Promise<void> {
+  try {
+    const appFetch = await getAppFetch();
+    const resp = await appFetch(url);
+    if (!resp.ok) return;
+    const blob = await resp.blob();
+    if (blob.size === 0) return;
+    const mime =
+      resp.headers.get("content-type")?.split(";")[0]?.trim() || blob.type || "image/jpeg";
+    if (!mime.startsWith("image/")) return;
+    await setTrackCover({ trackId, blob, mime });
+  } catch (err) {
+    log.warn("player", "failed to fetch remote cover", { trackId, err: String(err) });
+  }
+}
+
+// Guards the read-modify-write of `importFolders` against the boot sync and a
+// manual "sync now" overlapping. Module-scope (never selected) → no rerenders.
+let folderSyncRunning = false;
+
+/**
+ * Re-scan the given remembered folders and import any media not already in the
+ * library. Exported so tests can inject a fake {@link FolderFs}; production calls
+ * pass none and get the real Tauri-backed shell (which also re-grants read scope
+ * per folder, since the static fs scope is empty). Non-reentrant; degrades
+ * gracefully — an unreadable folder or one corrupt file never aborts the batch.
+ */
+export interface FolderSyncResult {
+  imported: number;
+  encrypted: number;
+  decodeFailed: number;
+  cancelled: boolean;
+}
+
+interface FolderPlan {
+  folder: ImportFolder;
+  setId: string;
+  fresh: ScannedFile[];
+}
+
+/**
+ * Scan the given remembered folders and import any media not already in the
+ * library. Two passes — scan + dedup all folders first (so the total is known),
+ * then import — so progress is meaningful and the run is cancelable between files
+ * (mirrors the R2 orchestrator's between-objects model; an in-flight file isn't
+ * interrupted). Emits live progress to {@link useFolderImportStore}; the sync
+ * indicator turns that into a persistent, cancelable toast. Returns counts so
+ * callers/tests can assert without spying on notifications.
+ */
+export async function runFolderSync(
+  folderIds: string[],
+  fsOverride?: FolderFs,
+): Promise<FolderSyncResult> {
+  if (folderSyncRunning) return { imported: 0, encrypted: 0, decodeFailed: 0, cancelled: false };
+  folderSyncRunning = true;
+  const signal = beginFolderImport();
+  usePlayerStore.setState({ isUploading: true });
+  const useRealShell = !fsOverride;
+  let imported = 0;
+  let encrypted = 0;
+  // Plaintext media defers its codec check to first play (never decode-fails here);
+  // `.ncm` can fail to decrypt, so this is bumped in the import loop's catch.
+  let decodeFailed = 0;
+  setFolderImportProgress({
+    phase: "scanning",
+    done: 0,
+    total: 0,
+    imported,
+    encrypted,
+    decodeFailed,
+  });
+  try {
+    const fs = fsOverride ?? createFolderFs();
+
+    // Pass 1 — scan + dedup each folder, recreating a deleted bound set as needed.
+    const plans: FolderPlan[] = [];
+    for (const folderId of folderIds) {
+      if (signal.aborted) break;
+      const folder = (await getSettings()).importFolders?.find((f) => f.id === folderId);
+      if (!folder) continue;
+      if (useRealShell) await grantFolderAccess(folder.path);
+
+      let setId = folder.setId;
+      if (!(await getSession(setId))) {
+        const session = await createSession({
+          name: folder.displayName ?? basename(folder.path),
+          seedPrompt: "",
+          config: { autoExtend: false },
+          displayMode: "video",
+        });
+        setId = session.id;
+        await upsertImportFolder({ ...folder, setId });
+      }
+
+      const scan = await scanFolderForMedia(folder.path, fs).catch((err: unknown) => {
+        log.warn("player", "folder scan failed", { path: folder.path, err: String(err) });
+        return null;
+      });
+      if (!scan) continue;
+      encrypted += scan.encryptedCount;
+      if (scan.unsupportedCount > 0) {
+        log.debug("player", "folder scan skipped non-media files", {
+          path: folder.path,
+          count: scan.unsupportedCount,
+        });
+      }
+      const known = await knownSourcePaths(scan.media.map((m) => m.path));
+      plans.push({ folder: { ...folder, setId }, setId, fresh: selectNewFiles(scan.media, known) });
+    }
+
+    // Pass 2 — import, emitting cumulative progress.
+    const total = plans.reduce((n, p) => n + p.fresh.length, 0);
+    let done = 0;
+    setFolderImportProgress({ phase: "importing", done, total, imported, encrypted, decodeFailed });
+    for (const plan of plans) {
+      const ids: string[] = [];
+      for (const file of plan.fresh) {
+        if (signal.aborted) break;
+        try {
+          // Read on the main thread (async IPC/plugin — off the CPU), then hand the
+          // bytes to the worker for the heavy parse/decrypt + DB write (no UI jank).
+          const bytes = await fs.readFile(file.path);
+          const res = await ingestViaWorker({
+            setId: plan.setId,
+            name: file.name,
+            kind: file.kind,
+            mime: file.decode === "ncm" ? "" : mimeFromExtension(file.name, file.kind),
+            sourcePath: file.path,
+            bytes: bytes.buffer as ArrayBuffer,
+            decode: file.decode,
+          });
+          ids.push(res.trackId);
+          imported += 1;
+          // No embedded image but a carried cover URL (`.ncm`, or a plaintext mp3
+          // with a NetEase "163 key" comment) → pull + store it.
+          if (!res.hasCover && res.albumPicUrl) {
+            void fetchAndStoreRemoteCover(res.trackId, res.albumPicUrl);
+          }
+        } catch (err) {
+          // One unreadable/corrupt file must not abort the batch.
+          if (file.decode === "ncm") decodeFailed += 1;
+          log.warn("player", "failed to import folder file", { path: file.path, err: String(err) });
+        }
+        done += 1;
+        setFolderImportProgress({
+          phase: "importing",
+          done,
+          total,
+          imported,
+          encrypted,
+          decodeFailed,
+          currentName: file.name,
+        });
+      }
+      if (ids.length > 0) await prependTrackIds(plan.setId, ids);
+      await upsertImportFolder({
+        ...plan.folder,
+        setId: plan.setId,
+        lastScanAt: Date.now(),
+        lastImportedCount: ids.length,
+      });
+      if (signal.aborted) break;
+    }
+
+    const cancelled = signal.aborted;
+    setFolderImportProgress({
+      phase: cancelled ? "cancelled" : "completed",
+      done,
+      total,
+      imported,
+      encrypted,
+      decodeFailed,
+    });
+    log.info(
+      "player",
+      `folder sync imported ${imported} file(s)${cancelled ? " (cancelled)" : ""}`,
+    );
+    return { imported, encrypted, decodeFailed, cancelled };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    usePlayerStore.setState({ djError: msg });
+    setFolderImportProgress(null);
+    log.error("player", "folder sync failed", msg);
+    return { imported, encrypted, decodeFailed, cancelled: signal.aborted };
+  } finally {
+    folderSyncRunning = false;
+    endFolderImport();
+    usePlayerStore.setState({ isUploading: false });
+  }
+}
 
 // --------------------------------------------------------------- internals ----
 
@@ -655,6 +1044,32 @@ async function hydratePlaybackSettings(
   shuffleOrder = shuffle ? buildShuffleOrder(get().queue.length, get().currentIndex) : [];
 }
 
+/**
+ * Fire-and-forget LRCLIB auto-fetch for the now-current track. Module scope (not
+ * store state) so per-frame playback never re-renders on it (rule 6). Aborts any
+ * in-flight fetch when the track changes; generated tracks use brief.lyrics and
+ * skip the network. All eligibility checks live in runAutoFetchLyrics.
+ */
+function triggerLyricsAutoFetch(track: Track): void {
+  lyricsAbort?.abort();
+  if (track.origin === "generated") return;
+  const controller = new AbortController();
+  lyricsAbort = controller;
+  void (async () => {
+    try {
+      const settings = await getSettings();
+      await runAutoFetchLyrics({
+        track,
+        settings,
+        provider: resolveLyricsProvider(settings),
+        signal: controller.signal,
+      });
+    } catch (err) {
+      log.warn("lyrics", "auto-fetch trigger failed", err);
+    }
+  })();
+}
+
 async function ensureLoadedAndPlay(
   set: (p: Partial<PlayerState>) => void,
   get: () => PlayerState,
@@ -699,6 +1114,7 @@ async function ensureLoadedAndPlay(
       await mediaEngine.loadUrl(track.remoteMediaUrl, track.kind);
     }
     loadedTrackId = track.id;
+    triggerLyricsAutoFetch(track);
     await updateMediaSessionMetadata(track);
   }
   if (wantPlay) {

@@ -21,6 +21,7 @@ import type {
   SyncObject,
   SyncRun,
   Track,
+  TrackLyrics,
   TrackPlaybackStats,
 } from "./types";
 
@@ -50,6 +51,7 @@ export class MuzeroDB extends Dexie {
   playbackEvents!: EntityTable<PlaybackEvent, "id">;
   playbackAggregates!: EntityTable<PlaybackAggregate, "id">;
   entityCovers!: EntityTable<EntityCover, "id">;
+  lyrics!: EntityTable<TrackLyrics, "id">;
 
   constructor(name = "muzero-db") {
     super(name);
@@ -312,6 +314,13 @@ export class MuzeroDB extends Dexie {
     // `mediaBlobs` (role "cover", trackId = key). Additive new table, no backfill.
     this.version(19).stores({
       entityCovers: "id, kind, updatedAt",
+    });
+
+    // v20 — auto-fetched / manual lyrics (synced-lyrics PRD). Separate table so
+    // KB-scale LRC text never rides the virtualized track-list query (rule 6).
+    // 1:1 with a track via the unique `trackId`. Additive new table, no backfill.
+    this.version(20).stores({
+      lyrics: "id, &trackId",
     });
   }
 }

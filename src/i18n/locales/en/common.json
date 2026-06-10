@@ -300,6 +300,8 @@
     "navCloudPresence": "Listening now",
     "language": "Language",
     "appearance": "Appearance",
+    "autoFetchLyrics": "Auto-fetch lyrics",
+    "autoFetchLyricsHint": "Look up time-synced lyrics from LRCLIB for your uploads. This sends the track title and artist to lrclib.net.",
     "theme": "Theme",
     "themeLight": "Light",
     "themeDark": "Dark",

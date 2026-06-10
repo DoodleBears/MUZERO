@@ -289,6 +289,8 @@
     "navCloudPresence": "再生中",
     "language": "言語",
     "appearance": "外観",
+    "autoFetchLyrics": "歌詞を自動取得",
+    "autoFetchLyricsHint": "アップロードした曲の同期歌詞を LRCLIB から検索します。曲名とアーティスト名が lrclib.net に送信されます。",
     "theme": "テーマ",
     "themeLight": "ライト",
     "themeDark": "ダーク",

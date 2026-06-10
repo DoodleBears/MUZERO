@@ -1,6 +1,7 @@
 import type { TrackBrief } from "@/dj/dj-brief-schema";
 import { encodeCoverThumbhash } from "@/lib/cover-thumbhash";
 import { newId } from "@/lib/id";
+import type { LyricsRecord } from "@/lyrics/provider";
 import {
   appendEntries,
   insertNext,
@@ -30,6 +31,7 @@ import {
   type SetDisplayMode,
   type Track,
   type TrackKind,
+  type TrackLyrics,
   type TrackMediaMetadata,
 } from "./types";
 
@@ -650,6 +652,45 @@ export async function setTrackNote(
   await db.tracks.update(id, { note: note.trim() || undefined });
 }
 
+// ------------------------------------------------------------------ lyrics ----
+
+/** The fetched/manual lyrics row for a track (1:1), or undefined. */
+export function getTrackLyrics(
+  trackId: string,
+  db: MuzeroDB = defaultDb,
+): Promise<TrackLyrics | undefined> {
+  return db.lyrics.where("trackId").equals(trackId).first();
+}
+
+/**
+ * Upsert a track's lyrics (auto-fetched or manual). Reuses the existing row id so
+ * the 1:1 mapping stays stable. `record.status === "notFound"` is the negative
+ * cache that stops re-hitting the API.
+ */
+export async function setTrackLyrics(
+  input: {
+    trackId: string;
+    record: LyricsRecord;
+    matched?: TrackLyrics["matched"];
+    fetchedAt?: number;
+  },
+  db: MuzeroDB = defaultDb,
+): Promise<void> {
+  const existing = await getTrackLyrics(input.trackId, db);
+  await db.lyrics.put({
+    id: existing?.id ?? newId("lyr"),
+    trackId: input.trackId,
+    ...input.record,
+    matched: input.matched,
+    fetchedAt: input.fetchedAt ?? Date.now(),
+  });
+}
+
+/** Remove a track's lyrics row (re-enables auto-fetch). No-op if absent. */
+export async function clearTrackLyrics(trackId: string, db: MuzeroDB = defaultDb): Promise<void> {
+  await db.lyrics.where("trackId").equals(trackId).delete();
+}
+
 /**
  * Attach (or replace) a cover image for a track. The full image is stored; an
  * optional `crop` records the square region to show (non-destructive). Passing
@@ -677,6 +718,24 @@ export async function setTrackCover(
       coverBlobId: cover.id,
       coverCrop: input.crop,
       coverThumbhash,
+    });
+  });
+}
+
+/**
+ * Remove a track's cover (row + blob), reverting to the placeholder. No-op if
+ * none is set. Mirrors {@link clearSessionCover} / {@link clearEntityCover};
+ * a track has no fallback cover, so it simply goes back to the disc icon.
+ */
+export async function clearTrackCover(trackId: string, db: MuzeroDB = defaultDb): Promise<void> {
+  await db.transaction("rw", db.tracks, db.mediaBlobs, async () => {
+    const track = await db.tracks.get(trackId);
+    if (!track?.coverBlobId) return;
+    await db.mediaBlobs.delete(track.coverBlobId);
+    await db.tracks.update(trackId, {
+      coverBlobId: undefined,
+      coverCrop: undefined,
+      coverThumbhash: undefined,
     });
   });
 }
@@ -816,6 +875,8 @@ export async function addMemory(
     photo?: { blob: Blob; mime: string };
     /** Timeline timestamp; defaults to now. Pass when importing/backfilling. */
     createdAt?: number;
+    /** Optional playback anchor (seconds). Negative/non-finite → floating. */
+    atSec?: number;
   },
   db: MuzeroDB = defaultDb,
 ): Promise<Memory> {
@@ -840,10 +901,20 @@ export async function addMemory(
       photoBlobId,
       author: sanitizeMemoryAuthor(input.author),
       createdAt: input.createdAt ?? Date.now(),
+      atSec: sanitizeAtSec(input.atSec),
     };
     await db.memories.put(memory);
     return memory;
   });
+}
+
+/**
+ * Validate a playback anchor: keep finite, non-negative seconds; otherwise drop
+ * to undefined (floating). Upper-bound clamping to `track.durationSec` is the
+ * caller's job (the repo doesn't know the track's duration).
+ */
+function sanitizeAtSec(atSec?: number | null): number | undefined {
+  return typeof atSec === "number" && Number.isFinite(atSec) && atSec >= 0 ? atSec : undefined;
 }
 
 function sanitizeMemoryAuthor(author?: MemoryAuthorRef): MemoryAuthorRef | undefined {
@@ -865,13 +936,38 @@ export function listMemories(trackId: string, db: MuzeroDB = defaultDb): Promise
   return db.memories.where("trackId").equals(trackId).sortBy("createdAt");
 }
 
-/** Edit a memory's note text in place. */
+/**
+ * Patch a memory's note and/or playback anchor in place.
+ *  - `note` (when given) is trimmed.
+ *  - `atSec: number` sets/moves the anchor (sanitized; invalid → cleared).
+ *  - `atSec: null` explicitly clears the anchor (→ floating).
+ *  - `atSec` absent leaves the anchor untouched.
+ */
+export async function updateMemory(
+  id: string,
+  patch: { note?: string; atSec?: number | null },
+  db: MuzeroDB = defaultDb,
+): Promise<void> {
+  await db.memories
+    .where("id")
+    .equals(id)
+    .modify((memory: Memory) => {
+      if (patch.note !== undefined) memory.note = patch.note.trim();
+      if (patch.atSec === null) {
+        memory.atSec = undefined;
+      } else if (patch.atSec !== undefined) {
+        memory.atSec = sanitizeAtSec(patch.atSec);
+      }
+    });
+}
+
+/** Edit a memory's note text in place (leaves the anchor untouched). */
 export async function updateMemoryNote(
   id: string,
   note: string,
   db: MuzeroDB = defaultDb,
 ): Promise<void> {
-  await db.memories.update(id, { note: note.trim() });
+  await updateMemory(id, { note }, db);
 }
 
 /** Delete a memory and its photo blob (if any). */
