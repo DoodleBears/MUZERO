@@ -84,6 +84,13 @@ import { matchesRemoteSearchTrack } from "@/sync/r2-search-catalog";
 type GalleryView = "list" | "grid";
 type GalleryMode = "sets" | "tracks" | "albums" | "artists";
 const GALLERY_MODES: GalleryMode[] = ["sets", "tracks", "albums", "artists"];
+/** Direct-jump shortcut action → gallery tab (bare 1/2/3/4 on the wall). */
+const GALLERY_TAB_ACTIONS: ReadonlyArray<readonly [string, GalleryMode]> = [
+  ["nav.galleryTabSets", "sets"],
+  ["nav.galleryTabTracks", "tracks"],
+  ["nav.galleryTabAlbums", "albums"],
+  ["nav.galleryTabArtists", "artists"],
+];
 const SEARCH_PLACEHOLDER_KEY = {
   sets: "gallery.searchSets",
   tracks: "gallery.searchTracks",
@@ -208,6 +215,22 @@ export function SearchPage() {
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [mode, selectedSetId]);
+
+  // Bare 1/2/3/4 jump straight to a library tab (sets / songs / albums / artists),
+  // at the wall only. Resolved through the registry, so the digits are rebindable.
+  useEffect(() => {
+    if (selectedSetId || selectedArtistKey || selectedAlbumKey) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (isTypingTarget(event.target) || hasModalDialogOpen()) return;
+      const hit = GALLERY_TAB_ACTIONS.find(([action]) => matchesRef.current(event, action));
+      if (!hit) return;
+      event.preventDefault();
+      setMode(hit[1]);
+      if (typeof localStorage !== "undefined") localStorage.setItem(MODE_KEY, hit[1]);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [selectedSetId, selectedArtistKey, selectedAlbumKey]);
 
   const trackById = useMemo(() => new Map(allTracks.map((tr) => [tr.id, tr])), [allTracks]);
 

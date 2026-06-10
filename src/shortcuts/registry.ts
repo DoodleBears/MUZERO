@@ -213,6 +213,41 @@ export const SHORTCUT_ACTIONS: readonly ShortcutActionDef[] = [
     defaultBindings: [key("Backquote", "`"), key("Backquote", "`", { shiftKey: true })],
     keywords: ["gallery", "tab", "模式"],
   },
+  // Jump straight to a library tab (bare 1/2/3/4 on the gallery wall). Handled in
+  // the SearchPage gallery handler; the dispatcher has no handler so they no-op
+  // elsewhere.
+  {
+    id: "nav.galleryTabSets",
+    scope: "global",
+    category: "navigation",
+    labelKey: "shortcuts.action.navGalleryTabSets",
+    defaultBindings: [key("Digit1", "1")],
+    keywords: ["gallery", "tab", "sets", "歌单"],
+  },
+  {
+    id: "nav.galleryTabTracks",
+    scope: "global",
+    category: "navigation",
+    labelKey: "shortcuts.action.navGalleryTabTracks",
+    defaultBindings: [key("Digit2", "2")],
+    keywords: ["gallery", "tab", "songs", "全部歌曲"],
+  },
+  {
+    id: "nav.galleryTabAlbums",
+    scope: "global",
+    category: "navigation",
+    labelKey: "shortcuts.action.navGalleryTabAlbums",
+    defaultBindings: [key("Digit3", "3")],
+    keywords: ["gallery", "tab", "albums", "专辑"],
+  },
+  {
+    id: "nav.galleryTabArtists",
+    scope: "global",
+    category: "navigation",
+    labelKey: "shortcuts.action.navGalleryTabArtists",
+    defaultBindings: [key("Digit4", "4")],
+    keywords: ["gallery", "tab", "artists", "歌手"],
+  },
   {
     id: "search.openGlobal",
     scope: "global",

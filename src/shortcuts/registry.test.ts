@@ -71,4 +71,20 @@ describe("SHORTCUT_ACTIONS registry", () => {
     expect(ref.category).toBe("reference");
     expect(ref.defaultBindings.some((g) => gestureIdentity(g, "other") === left)).toBe(true);
   });
+
+  it("binds bare Digit1–4 to the four library tabs (no clash with Cmd+1/2/3)", () => {
+    const tabs = [
+      ["nav.galleryTabSets", "Digit1"],
+      ["nav.galleryTabTracks", "Digit2"],
+      ["nav.galleryTabAlbums", "Digit3"],
+      ["nav.galleryTabArtists", "Digit4"],
+    ] as const;
+    for (const [id, code] of tabs) {
+      const action = SHORTCUT_ACTIONS_BY_ID[id];
+      expect(action.scope).toBe("global");
+      expect(action.defaultBindings).toEqual([
+        { kind: "key", stroke: { code, keyLabel: code.replace("Digit", "") } },
+      ]);
+    }
+  });
 });
