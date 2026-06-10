@@ -14,11 +14,11 @@ export const NETEASE_LYRIC_PATH = "/api/song/lyric/v1";
 
 /**
  * The eapi lyric request body. `lv/kv/tv` request the main/karaoke/translation
- * LRC; `yv` requests the word-level **yrc** (per-syllable karaoke) when the song
- * has it.
+ * LRC; `yv` requests the word-level **yrc** (per-syllable karaoke); `rv` requests
+ * the **romalrc** (romanization) — both when the song has them.
  */
 export function buildLyricBody(songId: string): Record<string, unknown> {
-  return { id: songId, cp: false, lv: 0, kv: 0, tv: 0, yv: 0 };
+  return { id: songId, cp: false, lv: 0, kv: 0, tv: 0, yv: 0, rv: 0 };
 }
 
 export interface NeteaseLyricResult {
@@ -26,8 +26,18 @@ export interface NeteaseLyricResult {
   synced?: string;
   /** Set to `"yrc"` for word-level lyrics; absent (→ lrc auto-detect) for line-level. */
   format?: LyricFormat;
+  /** Raw translation track (line-level LRC), when the song has one. */
+  translation?: string;
+  /** Raw romanization track (line-level LRC), when the song has one. */
+  romanization?: string;
   plain?: string;
   instrumental: boolean;
+}
+
+/** A sub-track (translation / roman) is usable only if it survives meta-stripping and has stamps. */
+function cleanSubTrack(lyric: unknown): string | undefined {
+  const s = stripNeteaseMetaLines(typeof lyric === "string" ? lyric : "");
+  return s && HAS_TIMESTAMP.test(s) ? s : undefined;
 }
 
 const HAS_TIMESTAMP = /\[\d{1,2}:\d{2}/;
@@ -54,18 +64,27 @@ export function stripNeteaseMetaLines(raw: string): string {
 
 /** Parse the `/song/lyric/v1` response. Returns null for uncollected/missing lyrics. */
 export function parseNeteaseLyric(json: unknown): NeteaseLyricResult | null {
-  const j = json as { lrc?: { lyric?: unknown }; yrc?: { lyric?: unknown } } | null;
+  const j = json as {
+    lrc?: { lyric?: unknown };
+    yrc?: { lyric?: unknown };
+    tlyric?: { lyric?: unknown };
+    romalrc?: { lyric?: unknown };
+  } | null;
+
+  const translation = cleanSubTrack(j?.tlyric?.lyric);
+  const romanization = cleanSubTrack(j?.romalrc?.lyric);
 
   // Prefer word-level yrc when the song carries it (after dropping credit JSON).
   const yrc = stripNeteaseMetaLines(typeof j?.yrc?.lyric === "string" ? j.yrc.lyric : "");
   if (yrc && detectLyricsFormat(yrc) === "yrc") {
-    return { synced: yrc, format: "yrc", instrumental: false };
+    return { synced: yrc, format: "yrc", translation, romanization, instrumental: false };
   }
 
   const raw = stripNeteaseMetaLines(typeof j?.lrc?.lyric === "string" ? j.lrc.lyric : "");
   if (!raw) return null;
   if (PURE_MUSIC.test(raw)) return { instrumental: true };
-  if (HAS_TIMESTAMP.test(raw)) return { synced: raw, instrumental: false };
+  if (HAS_TIMESTAMP.test(raw))
+    return { synced: raw, translation, romanization, instrumental: false };
   return { plain: raw, instrumental: false };
 }
 

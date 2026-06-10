@@ -105,6 +105,49 @@ describe("LyricsScroller (word-by-word karaoke)", () => {
   });
 });
 
+describe("LyricsScroller (translation / romanization)", () => {
+  const withSubs: ResolvedLyrics = {
+    mode: "synced",
+    source: "netease",
+    lines: [
+      {
+        timeMs: 1000,
+        text: "故事的小黄花",
+        translation: "the little yellow flower",
+        roman: "gushi",
+      },
+    ],
+  };
+
+  it("shows translation and romanization when enabled", () => {
+    render(
+      <LyricsScroller
+        resolved={withSubs}
+        activeIndex={0}
+        onSeek={() => {}}
+        showTranslation
+        showRomanization
+      />,
+    );
+    expect(screen.getByText("the little yellow flower")).toBeInTheDocument();
+    expect(screen.getByText("gushi")).toBeInTheDocument();
+  });
+
+  it("hides each sub-line when its toggle is off", () => {
+    render(
+      <LyricsScroller
+        resolved={withSubs}
+        activeIndex={0}
+        onSeek={() => {}}
+        showTranslation={false}
+        showRomanization={false}
+      />,
+    );
+    expect(screen.queryByText("the little yellow flower")).toBeNull();
+    expect(screen.queryByText("gushi")).toBeNull();
+  });
+});
+
 describe("LyricsScroller (plain)", () => {
   it("renders plain text and omits LRCLIB attribution for manual lyrics", () => {
     const plain: ResolvedLyrics = { mode: "plain", source: "manual", text: "hello world" };

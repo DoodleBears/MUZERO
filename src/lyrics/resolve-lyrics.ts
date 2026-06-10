@@ -10,6 +10,7 @@ import type { Track } from "@/db/types";
 import type { LyricLine } from "./model";
 import { parseLyrics } from "./parse";
 import type { LyricsRecord, LyricsSource } from "./provider";
+import { attachSubLyrics } from "./sub-lyrics";
 
 export type ResolvedLyrics =
   | { mode: "synced"; lines: LyricLine[]; source: LyricsSource }
@@ -24,8 +25,11 @@ export function resolveTrackLyrics(
   if (record) {
     if (record.instrumental || record.status === "instrumental") return { mode: "instrumental" };
     if (record.synced) {
-      const lines = parseLyrics(record.synced, record.format);
-      if (lines.length > 0) return { mode: "synced", lines, source: record.source };
+      const parsed = parseLyrics(record.synced, record.format);
+      if (parsed.length > 0) {
+        const lines = attachSubLyrics(parsed, record.translation, record.romanization);
+        return { mode: "synced", lines, source: record.source };
+      }
     }
     if (record.plain?.trim()) return { mode: "plain", text: record.plain, source: record.source };
   }

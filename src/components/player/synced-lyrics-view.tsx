@@ -143,6 +143,8 @@ export function SyncedLyricsView({ track }: { track?: Track }) {
       lyricStyle={lyricStyle}
       isPlaying={isPlaying}
       wordByWord={settings.lyricsWordByWord ?? true}
+      showTranslation={settings.lyricsShowTranslation ?? true}
+      showRomanization={settings.lyricsShowRomanization ?? false}
     />
   );
 }
@@ -164,6 +166,8 @@ export function LyricsScroller({
   lyricStyle = DEFAULT_LYRIC_STYLE,
   isPlaying = false,
   wordByWord = true,
+  showTranslation = true,
+  showRomanization = false,
 }: {
   resolved: ShownLyrics;
   activeIndex: number;
@@ -172,6 +176,8 @@ export function LyricsScroller({
   lyricStyle?: LyricStyle;
   isPlaying?: boolean;
   wordByWord?: boolean;
+  showTranslation?: boolean;
+  showRomanization?: boolean;
 }) {
   return (
     <div className="flex h-full flex-col">
@@ -204,6 +210,8 @@ export function LyricsScroller({
             lyricStyle={lyricStyle}
             isPlaying={isPlaying}
             wordByWord={wordByWord}
+            showTranslation={showTranslation}
+            showRomanization={showRomanization}
           />
         )}
       </div>
@@ -234,6 +242,8 @@ function SyncedLines({
   lyricStyle,
   isPlaying = false,
   wordByWord = true,
+  showTranslation = true,
+  showRomanization = false,
 }: {
   lines: LyricLine[];
   activeIndex: number;
@@ -241,6 +251,8 @@ function SyncedLines({
   lyricStyle: LyricStyle;
   isPlaying?: boolean;
   wordByWord?: boolean;
+  showTranslation?: boolean;
+  showRomanization?: boolean;
 }) {
   const { t } = useTranslation();
   const reduce = useReducedMotion();
@@ -447,6 +459,22 @@ function SyncedLines({
                       </span>
                     ))
                   : line.text || "♪"}
+                {showRomanization && line.roman && (
+                  <span
+                    className="mt-0.5 block font-medium"
+                    style={{ fontSize: "0.55em", opacity: 0.62 }}
+                  >
+                    {line.roman}
+                  </span>
+                )}
+                {showTranslation && line.translation && (
+                  <span
+                    className="mt-0.5 block font-medium"
+                    style={{ fontSize: "0.6em", opacity: 0.72 }}
+                  >
+                    {line.translation}
+                  </span>
+                )}
               </motion.button>
             );
           })}

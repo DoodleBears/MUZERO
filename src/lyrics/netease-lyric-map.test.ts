@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { buildLyricBody, parseNeteaseLyric, pickClosestByDuration } from "./netease-lyric-map";
 
 describe("buildLyricBody", () => {
-  it("builds the eapi lyric request body for a song id (incl. word-level yrc)", () => {
+  it("builds the eapi lyric request body for a song id (yrc + translation + roman)", () => {
     expect(buildLyricBody("33894312")).toEqual({
       id: "33894312",
       cp: false,
@@ -10,6 +10,7 @@ describe("buildLyricBody", () => {
       kv: 0,
       tv: 0,
       yv: 0,
+      rv: 0,
     });
   });
 });
@@ -73,6 +74,32 @@ describe("parseNeteaseLyric", () => {
     const lyric = '[00:00.00]{"c":[{"tx":"编曲: "},{"tx":"x"}]}\n[00:10.00]real line';
     expect(parseNeteaseLyric({ lrc: { lyric } })).toEqual({
       synced: "[00:10.00]real line",
+      instrumental: false,
+    });
+  });
+
+  it("attaches translation (tlyric) and romanization (romalrc) when present", () => {
+    const json = {
+      lrc: { lyric: "[00:12.34]故事的小黄花" },
+      tlyric: { lyric: "[00:12.34]The little yellow flower" },
+      romalrc: { lyric: "[00:12.34]gushi de xiao huanghua" },
+    };
+    expect(parseNeteaseLyric(json)).toEqual({
+      synced: "[00:12.34]故事的小黄花",
+      translation: "[00:12.34]The little yellow flower",
+      romanization: "[00:12.34]gushi de xiao huanghua",
+      instrumental: false,
+    });
+  });
+
+  it("ignores empty / timestamp-less translation tracks", () => {
+    const json = {
+      lrc: { lyric: "[00:01.00]line" },
+      tlyric: { lyric: "" },
+      romalrc: { lyric: "no timestamps" },
+    };
+    expect(parseNeteaseLyric(json)).toEqual({
+      synced: "[00:01.00]line",
       instrumental: false,
     });
   });

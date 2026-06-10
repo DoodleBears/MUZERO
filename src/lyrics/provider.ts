@@ -45,6 +45,10 @@ export interface LyricsRecord {
   synced?: string;
   /** Which parser to run over `synced`. Defaults to auto-detection when absent. */
   format?: LyricFormat;
+  /** Raw translation track (line-level LRC), aligned to `synced` by timestamp. */
+  translation?: string;
+  /** Raw romanization track (line-level LRC), aligned to `synced` by timestamp. */
+  romanization?: string;
   plain?: string;
   instrumental: boolean;
   status: LyricsStatus;
@@ -57,6 +61,10 @@ export interface LyricsHit {
   synced?: string;
   /** Format of `synced` (e.g. `"yrc"` for NetEase word-level); defaults to auto-detect. */
   format?: LyricFormat;
+  /** Raw translation track (line-level LRC), aligned to `synced` by timestamp. */
+  translation?: string;
+  /** Raw romanization track (line-level LRC), aligned to `synced` by timestamp. */
+  romanization?: string;
   plain?: string;
   instrumental: boolean;
   /** Which record the provider actually matched (debug / correction). */

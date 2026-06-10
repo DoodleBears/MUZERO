@@ -82,6 +82,8 @@ export function createNeteaseLyricsProvider(deps: NeteaseLyricsDeps = {}): Lyric
       sourceId: songId,
       synced: parsed.synced,
       format: parsed.format,
+      translation: parsed.translation,
+      romanization: parsed.romanization,
       plain: parsed.plain,
       instrumental: parsed.instrumental,
       matched: { trackName: "", artistName: "", durationSec: 0 },

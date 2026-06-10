@@ -16,7 +16,7 @@
 | 1 | 基础设施：统一歌词模型 + 格式探测 + Enhanced-LRC `<…>` 健壮性（纯函数 + 单测，不改渲染） | ✅ Completed | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | 词级解析器：parseEnhancedLrc / parseYrc / parseQrc 归一化到统一模型 + `format` 落库 | ✅ Completed | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | 逐字卡拉OK渲染：SyncedLines 按词 fill（active 行）+ Settings 开关 + 回退整行高亮 | ✅ Completed | [Phase 3 Checklist](#phase-3-checklist) |
-| 4 | 翻译 / 罗马音双行：模型携带 translation/roman 子行 + Settings 开关 | 🔲 Pending | [Phase 4 Checklist](#phase-4-checklist) |
+| 4 | 翻译 / 罗马音双行：模型携带 translation/roman 子行 + Settings 开关 | ✅ Completed | [Phase 4 Checklist](#phase-4-checklist) |
 | 5（可选）| TTML 解析器 + amll-ttml-db 作为新 LyricsProvider（逐字+翻译+对唱的天花板源） | 🔲 Pending | [Phase 5 Checklist](#phase-5-checklist) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
@@ -329,12 +329,17 @@ export function activeWordIndex(words: WordTiming[], positionMs: number): number
 **Goal:** 模型携带 translation/roman → 弱化子行 + Settings 开关。
 
 **Tasks:**
-- [ ] 双语 LRC（连续两行同时间戳）/ TTML role 归一到 `translation`。
-- [ ] 子行渲染 + `显示翻译`/`显示罗马音` 开关 + i18n ×4。
+- [x] [`sub-lyrics.ts`](../../../src/lyrics/sub-lyrics.ts) `attachSubLyrics`：把独立的 translation/roman 行级 LRC 按**最近时间戳**（400ms 容差）挂到 `LyricLine.translation/roman`（纯函数，保留 words，穷举单测）。
+- [x] 存储：`LyricsRecord`/`LyricsHit` 加 `translation?`/`romanization?` 原始 LRC（[`provider.ts`](../../../src/lyrics/provider.ts)），`lyricsRecordFromHit` 透传，`TrackLyrics` 继承（零迁移）。
+- [x] [`resolve-lyrics.ts`](../../../src/lyrics/resolve-lyrics.ts)：parse 后 `attachSubLyrics(parsed, translation, romanization)`。
+- [x] 渲染：[`synced-lyrics-view.tsx`](../../../src/components/player/synced-lyrics-view.tsx) 主行下渲染 roman + translation 弱化子行（em 相对字号随行缩放）。
+- [x] Settings `lyricsShowTranslation`（默认 true）/`lyricsShowRomanization`（默认 false）+ tuning 控件抽 `Toggle` 复用（wordByWord/translation/roman 三连）+ i18n ×4。
+- [x] 网易 4b：`buildLyricBody` 加 `rv:0`；`parseNeteaseLyric` 取 `tlyric`/`romalrc`（meta 剥离 + 须带时间戳）→ provider 透传。
 
 #### Phase 4 Checklist
-- [ ] 双语条目渲染原文 + 译文子行；开关生效。
-- [ ] 无译文零回归。
+- [x] 翻译/罗马音按时间戳对齐挂载（容差内最近，far 行忽略）；render 测试断言子行显隐随开关。
+- [x] 无译文零回归（`attachSubLyrics` 无 sub 时原样返回；resolve-lyrics 既有用例全绿）。
+- [x] 168 lyrics+view 单测全过；my-files tsc/biome 干净。
 
 ### Phase 5（可选）: TTML + amll-ttml-db provider
 
@@ -409,6 +414,7 @@ export function activeWordIndex(words: WordTiming[], positionMs: number): number
 | 2026-06-11 | DoodleBear | Status→Final，Q1–Q5 锁定（按倾向）。**Phase 1 完成**：`model.ts`（统一模型）+ `parse.ts`（`parseLyrics`/`detectLyricsFormat` 穷举单测）+ `parseLrc` 行内 `<…>` 剥离（`stripInlineWordTags`，修 Enhanced-LRC 乱码健壮性）+ `format?` 贯穿 `LyricsRecord`/`LyricsHit`/`lyricsRecordFromHit`。未建 `formats/lrc.ts`（直接扩 parseLrc，零 importer 改动）。54 单测全过 |
 | 2026-06-11 | DoodleBear | **Phase 2 完成**（2 commits）。2a：`formats/{enhanced-lrc,yrc,qrc}.ts` 三个词级解析器归一到 `words[]`（各保留词尾空格）+ `parse.ts` dispatch + `resolve-lyrics` synced→`LyricLine[]`（view 零改动）。2b：网易 provider opt-in `yv:0` 取 yrc、有则优先回退 lrc。渲染仍整行（逐字渲染在 Phase 3）|
 | 2026-06-11 | DoodleBear | **Phase 3 完成**：逐字卡拉OK渲染。`active-word.ts` + `SyncedLines` active 行 per-word `background-clip:text` wipe（直接 DOM rAF 写 `--wfill`，不每帧重渲）+ `lyricsWordByWord` 开关（默认 on，共用 tuning 控件）+ i18n ×4。无 words 源零回归。167 单测全过。逐字 wipe 实时观感需真实前台 dev server（预览沙箱冻 rAF）|
+| 2026-06-11 | DoodleBear | **Phase 4 完成**：翻译/罗马音双行。`sub-lyrics.ts` 时间戳对齐合并（独立 tlyric/romalrc → `LyricLine.translation/roman`）+ record/hit `translation/romanization` 原始字段（零迁移）+ resolve 挂载 + 主行下弱化子行渲染 + `lyricsShowTranslation`(默认 on)/`lyricsShowRomanization`(默认 off) 开关 + 网易 `rv:0` 取 romalrc/tlyric。168 单测全过 |
 
 ---
 

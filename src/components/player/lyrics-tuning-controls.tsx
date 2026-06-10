@@ -49,6 +49,8 @@ export function LyricsTuningControls({ className }: { className?: string }) {
   const customColor = s.lyricsCustomColor ?? "#ffffff";
   const align = s.lyricsAlign ?? "center";
   const wordByWord = s.lyricsWordByWord ?? true;
+  const showTranslation = s.lyricsShowTranslation ?? true;
+  const showRomanization = s.lyricsShowRomanization ?? false;
   const lineGap = s.lyricsLineGap ?? 8;
   const shadowOpacity = s.lyricsShadowOpacity ?? 50;
   const shadowBlur = s.lyricsShadowBlur ?? 8;
@@ -61,27 +63,24 @@ export function LyricsTuningControls({ className }: { className?: string }) {
 
   return (
     <div className={cn("flex flex-col gap-4", className)}>
-      <Field label={t("lyricsSettings.wordByWord")}>
-        <div className="flex gap-1">
-          {([true, false] as const).map((on) => (
-            <button
-              key={String(on)}
-              type="button"
-              onClick={() => void saveSettings({ lyricsWordByWord: on })}
-              aria-pressed={wordByWord === on}
-              className={cn(
-                "h-9 flex-1 rounded-md border font-medium text-sm transition-colors",
-                wordByWord === on
-                  ? "border-primary bg-primary/10 text-primary"
-                  : "border-border text-muted-foreground hover:text-foreground",
-              )}
-            >
-              {t(on ? "lyricsSettings.wordByWordOn" : "lyricsSettings.wordByWordOff")}
-            </button>
-          ))}
-        </div>
-        <p className="text-muted-foreground text-xs">{t("lyricsSettings.wordByWordHint")}</p>
-      </Field>
+      <Toggle
+        label={t("lyricsSettings.wordByWord")}
+        hint={t("lyricsSettings.wordByWordHint")}
+        value={wordByWord}
+        onChange={(v) => void saveSettings({ lyricsWordByWord: v })}
+      />
+      <Toggle
+        label={t("lyricsSettings.showTranslation")}
+        hint={t("lyricsSettings.showTranslationHint")}
+        value={showTranslation}
+        onChange={(v) => void saveSettings({ lyricsShowTranslation: v })}
+      />
+      <Toggle
+        label={t("lyricsSettings.showRomanization")}
+        hint={t("lyricsSettings.showRomanizationHint")}
+        value={showRomanization}
+        onChange={(v) => void saveSettings({ lyricsShowRomanization: v })}
+      />
       <Field label={t("lyricsSettings.activeFontSize", { px: activeSize })}>
         <Slider
           min={12}
@@ -291,6 +290,44 @@ export function LyricsTuningControls({ className }: { className?: string }) {
         </>
       )}
     </div>
+  );
+}
+
+/** An On/Off segmented toggle row (shared On/Off labels live under `wordByWord*`). */
+function Toggle({
+  label,
+  hint,
+  value,
+  onChange,
+}: {
+  label: string;
+  hint?: string;
+  value: boolean;
+  onChange: (next: boolean) => void;
+}) {
+  const { t } = useTranslation();
+  return (
+    <Field label={label}>
+      <div className="flex gap-1">
+        {([true, false] as const).map((on) => (
+          <button
+            key={String(on)}
+            type="button"
+            onClick={() => onChange(on)}
+            aria-pressed={value === on}
+            className={cn(
+              "h-9 flex-1 rounded-md border font-medium text-sm transition-colors",
+              value === on
+                ? "border-primary bg-primary/10 text-primary"
+                : "border-border text-muted-foreground hover:text-foreground",
+            )}
+          >
+            {t(on ? "lyricsSettings.wordByWordOn" : "lyricsSettings.wordByWordOff")}
+          </button>
+        ))}
+      </div>
+      {hint && <p className="text-muted-foreground text-xs">{hint}</p>}
+    </Field>
   );
 }
 

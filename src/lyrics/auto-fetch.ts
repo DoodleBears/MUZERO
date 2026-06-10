@@ -41,6 +41,8 @@ export function lyricsRecordFromHit(
     sourceId: hit.sourceId,
     synced: hit.synced,
     format: hit.format,
+    translation: hit.translation,
+    romanization: hit.romanization,
     plain: hit.plain,
     instrumental: hit.instrumental,
     status: hit.instrumental ? "instrumental" : "found",

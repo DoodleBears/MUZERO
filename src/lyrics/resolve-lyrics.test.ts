@@ -38,6 +38,30 @@ describe("resolveTrackLyrics", () => {
     });
   });
 
+  it("attaches translation / romanization tracks to the synced lines", () => {
+    const r = resolveTrackLyrics(
+      track(),
+      rec({
+        source: "netease",
+        synced: "[00:01.00]故事的小黄花",
+        translation: "[00:01.00]the little yellow flower",
+        romanization: "[00:01.00]gushi",
+      }),
+    );
+    expect(r).toEqual({
+      mode: "synced",
+      source: "netease",
+      lines: [
+        {
+          timeMs: 1000,
+          text: "故事的小黄花",
+          translation: "the little yellow flower",
+          roman: "gushi",
+        },
+      ],
+    });
+  });
+
   it("falls back to plain when there is no synced text", () => {
     expect(resolveTrackLyrics(track(), rec({ plain: "just words" }))).toEqual({
       mode: "plain",

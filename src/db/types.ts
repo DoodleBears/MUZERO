@@ -580,6 +580,10 @@ export interface AppSettings {
    * highlighting the whole line. No effect on line-level lyrics. Default true.
    */
   lyricsWordByWord?: boolean;
+  /** Show a translation sub-line under each lyric line, when the source has one. Default true. */
+  lyricsShowTranslation?: boolean;
+  /** Show a romanization sub-line under each lyric line, when the source has one. Default false. */
+  lyricsShowRomanization?: boolean;
   /** Whether the Now-Playing stage shows lyrics instead of the cover (persisted toggle). Default false. */
   lyricsStageOpen?: boolean;
   /** Lyric text-shadow strength, 0–100 (0 = no shadow). Default 35. */
@@ -757,6 +761,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   lyricsColorMode: "default",
   lyricsAlign: "center",
   lyricsWordByWord: true,
+  lyricsShowTranslation: true,
+  lyricsShowRomanization: false,
   lyricsStageOpen: false,
   lyricsShadowOpacity: 50,
   lyricsShadowBlur: 8,
