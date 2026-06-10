@@ -605,7 +605,7 @@ success：Set-Cookie 已被 net.fetch 写进默认 session → bridge.readSource
 
 | # | 单元 | 文件 | 测试 | 状态 |
 |---|---|---|---|---|
-| Q1 | QR 响应解析 + 状态码映射（两源 → 统一 `QrStatus`）+ generate/poll 端点配置（纯，注入式） | `src/streamsrc/qr-login.ts` | canned 响应 + 状态码穷举 | 🔲 |
+| Q1 | QR 响应解析 + 状态码映射（两源 → 统一 `QrStatus`）+ generate/poll 端点配置（纯，注入式） | `src/streamsrc/qr-login.ts` | canned 响应 + 状态码穷举 ×5 | ✅ green |
 | Q2 | **vendored QR 编码器**（公有领域 nayuki QR；URL → 模块矩阵 `boolean[][]`）→ 渲染 canvas/SVG | `src/lib/qrcode.ts` + `qrcode.test.ts` | 结构性（尺寸/定位图案）+ 已知向量 | 🔲 |
 | Q3 | QrLoginProvider（generate→poll 轮询引擎，注入 now/sleep/http，可确定性单测）+ `bridge.readSourceCookies`（主进程读默认 session cookie，登录成功后取）| `qr-login-provider.ts` · `bridge.ts`/`electron.ts`/`ipc.cjs` | 注入式状态机 + 运行时 | 🔲 |
 | Q4 | Settings 扫码 UI（二维码 + 状态文案「待扫描/已扫描/已过期/成功」+ 刷新）替换/并列 L2 的网页登录入口；i18n 4 语 | `stream-sources-settings.tsx` | 运行时 | 🔲 |
