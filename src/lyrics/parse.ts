@@ -11,6 +11,7 @@
 
 import { parseEnhancedLrc } from "./formats/enhanced-lrc";
 import { parseQrc } from "./formats/qrc";
+import { parseTtml } from "./formats/ttml";
 import { parseYrc } from "./formats/yrc";
 import type { LyricFormat, LyricLine } from "./model";
 import { parseLrc } from "./parse-lrc";
@@ -52,7 +53,7 @@ export function parseLyrics(raw: string, format?: LyricFormat): LyricLine[] {
     case "qrc":
       return parseQrc(raw);
     case "ttml":
-      return []; // Phase 5 plugs in parseTtml here.
+      return parseTtml(raw);
     default:
       return parseLrc(raw).map((line) => ({ timeMs: line.timeMs, text: line.text }));
   }

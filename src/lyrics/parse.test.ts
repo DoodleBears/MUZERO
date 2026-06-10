@@ -69,8 +69,12 @@ describe("parseLyrics", () => {
     expect(line.words?.map((w) => w.timeMs)).toEqual([1000, 1200]);
   });
 
-  it("returns empty for TTML until Phase 5", () => {
-    expect(parseLyrics('<tt xmlns="x"><body><div><p>hi</p></div></body></tt>')).toEqual([]);
+  it("dispatches TTML to the word-level parser", () => {
+    const ttml =
+      '<tt xmlns="http://www.w3.org/ns/ttml"><body><div><p begin="00:01.000" end="00:02.000"><span begin="00:01.000" end="00:01.500">hi</span></p></div></body></tt>';
+    const [line] = parseLyrics(ttml);
+    expect(line.timeMs).toBe(1000);
+    expect(line.words?.[0]).toEqual({ timeMs: 1000, durMs: 500, text: "hi" });
   });
 
   it("returns an empty array for plain or empty text", () => {
