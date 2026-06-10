@@ -5,6 +5,11 @@
     <link rel="icon" type="image/svg+xml" href="/muzero.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <meta name="theme-color" content="#09090b" />
+    <!-- External album art (e.g. bilibili i*.hdslb.com) blocks a foreign Referer but
+         serves with none. App API/media calls inject their own Referer in the main
+         process (muzfetch), so dropping the document referrer is safe and lets every
+         third-party cover <img>/Image() load succeed (stage, background, rows). -->
+    <meta name="referrer" content="no-referrer" />
     <title>MUZERO — AI DJ</title>
     <!-- Apply the saved theme + UI font before first paint to avoid a flash.
          Mirrors src/theme/theme.ts + src/theme/font.ts; localStorage is the source of truth. -->

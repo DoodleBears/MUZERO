@@ -33,6 +33,10 @@ export function CoverImage({
     }
     let alive = true;
     const img = new Image();
+    // External album art (e.g. bilibili hdslb) blocks a foreign Referer but serves
+    // with none; same-origin blobs ignore this. Must match the rendered <img> below
+    // so the preload and the display load identically.
+    img.referrerPolicy = "no-referrer";
     img.onload = () => {
       if (!alive) return;
       setLoaded(url);
@@ -58,6 +62,7 @@ export function CoverImage({
             key={loaded}
             src={loaded}
             alt=""
+            referrerPolicy="no-referrer"
             draggable={false}
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
