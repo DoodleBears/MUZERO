@@ -422,10 +422,12 @@ SetDetailView (search-page.tsx:1244)
 - [x] **drop indicator 升级**：方向感知插入线（`onDragOver` 算 active/over 索引 → 向下落 `bottom`、向上落 `top`），虚拟化下稳健（不靠 sortable transform 开合间隙，避免与 react-virtual 绝对定位双重位移）。✅
 - [x] 触摸 `TouchSensor`（`delay:200 + tolerance:8`，按压延迟避免与滚动冲突）；键盘 `KeyboardSensor` + `sortableKeyboardCoordinates` 已挂（grip 可聚焦操作）。✅
 - [x] 拖拽中批量操作互斥：`onDragActiveChange` 上抛 → `track-list-section` 置 `dragActive` → `BatchActionBar` 新增 `disabled` prop（`pointer-events-none + opacity-60`，action 按钮 disabled）。✅（2 测）
+- [x] **长按进入多选**（touch-friendly，像长按照片）：`TrackListSection` 根节点委托 `useLongPress`（既有 hook，500ms / 10px 容差），按行的 `data-track-index` 解析 → `sel.enter()` + `sel.toggle(id,{index})`；trailing click 经 `onClickCapture + consumeClick` 吞掉，仅在**非** select 模式挂。**零改 `TrackRow`/`VirtualTrackList`**（事件委托 + 既有 data 属性，避开并发热文件）。✅
 
 #### Phase 4 Checklist
 - [x] 虚拟化单测：mock `useVirtualizer` 只渲染窗口行（0/1/2），off-window 行不挂载（证明虚拟化）；每行有 drag handle；点击行 toggle 选择（`reorderable-track-list.test.tsx`，3 测）。✅
 - [x] 拖拽进行中批量操作互斥：`BatchActionBar` `disabled` → action 按钮 disabled（`batch-action-bar.test.tsx`，2 测）。✅
+- [x] 长按委托解析器单测：行内/后代命中、越界/非法 index 兜底、null 兜底（`track-row-target.test.ts`，4 测）。✅
 - [→] 键盘端到端一次重排焦点不丢、移动端窄屏不误触滚动、autoScroll 视觉：**enabler 已实现（TouchSensor/KeyboardSensor/autoScroll）**，交互实测留真实 Electron 壳（同 Phase 3，预览沙箱 hidden-tab 不可靠 + 并发热文件未稳）。
 
 ---
@@ -481,6 +483,8 @@ SetDetailView (search-page.tsx:1244)
 |------|--------|---------|
 | 2026-06-11 | DoodleBear / Product | Initial draft：Notion 式 float 分数序 + epsilon rebalance；`DjSession.trackRanks` 附加非索引零迁移；R2 manifest `rank` + `track-reordered-in-set` mutation per-track 合并；@dnd-kit 多选整块拖拽 + drop indicator + 手动顺序 gating。四 decision 已定（Q1–Q4）。 |
 | 2026-06-11 | DoodleBear / Product | Q5/Q6 定档：精度判定改用**浮点精确法**（中点落端点）取代绝对 epsilon；rebalance **无感**。新增 §3.4 落点 edge case 计算（队首/队尾/空邻居/首拖/no-op 精确钉死，被拖块先摘除、anchor 用 id、rank 可为负），`ranksAtTop/Bottom` 入 `set-order.ts`，Phase 1 穷举单测同步扩充。 |
+| 2026-06-11 | DoodleBear / Eng | **Phase 1-4 全实现**（TDD，commits 0ffda04→a76f0bf，~60 测）：分数序核心+repo、R2 manifest rank round-trip（整 session LWW，per-track mutation deferred）、@dnd-kit 独立 `reorderable-track-list`（避开并发热文件）虚拟化+方向感知 drop 线+整块移动+手动序门控+拖拽互斥。仅交互实测待真机。 |
+| 2026-06-11 | DoodleBear / Eng | 追加**长按进入多选**：`TrackListSection` 根节点事件委托 `useLongPress` + `data-track-index` 解析（纯 `track-row-target.ts`，4 测），零改 `TrackRow`/`VirtualTrackList`。 |
 
 ---
 

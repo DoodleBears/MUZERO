@@ -1,9 +1,10 @@
 import { Trash2 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { type BatchAction, BatchActionBar } from "@/components/library/batch-action-bar";
 import { ReorderableTrackList } from "@/components/library/reorderable-track-list";
 import { TrackListMenu } from "@/components/library/track-list-menu";
+import { trackIndexFromEventTarget } from "@/components/library/track-row-target";
 import { VirtualTrackList } from "@/components/library/virtual-track-list";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -14,6 +15,7 @@ import {
   reorderTracksInSession,
 } from "@/db/repositories";
 import type { Track } from "@/db/types";
+import { useLongPress } from "@/hooks/use-long-press";
 import { useTrackSelection } from "@/hooks/use-track-selection";
 import { cn } from "@/lib/utils";
 import { notify } from "@/stores/notification-store";
@@ -67,6 +69,33 @@ export function TrackListSection({
   // True while a reorder drag is in progress — disables the batch action bar so a
   // stray click can't delete/remove mid-drag.
   const [dragActive, setDragActive] = useState(false);
+
+  // Press-and-hold a row to ENTER multi-select (touch-friendly, like a long-press
+  // on a photo). Delegated from the section root via `data-track-index`, so it
+  // needs no edit to the row component. The trailing click is swallowed below.
+  const pressedIndexRef = useRef<number | null>(null);
+  const longPress = useLongPress(() => {
+    const index = pressedIndexRef.current;
+    if (index === null) return;
+    const id = tracks[index]?.id;
+    if (!id) return;
+    sel.enter();
+    sel.toggle(id, { index });
+  });
+  // Only wire long-press OUT of select mode (in select mode a plain tap toggles).
+  const longPressProps = sel.mode
+    ? {}
+    : {
+        ...longPress.handlers,
+        onPointerDownCapture: (event: React.PointerEvent) => {
+          pressedIndexRef.current = trackIndexFromEventTarget(event.target, tracks.length);
+        },
+        onClickCapture: (event: React.MouseEvent) => {
+          // A fired long-press emits a trailing click — drop it so it doesn't also
+          // play/select the row.
+          if (longPress.consumeClick()) event.stopPropagation();
+        },
+      };
 
   // Drag-to-reorder is offered only in a set's select mode AND when the true
   // curated order is showing (no sort/filter/search) — see SetDetailView.
@@ -135,7 +164,7 @@ export function TrackListSection({
   );
 
   return (
-    <div className={cn("flex min-h-0 flex-col", className)}>
+    <div className={cn("flex min-h-0 flex-col", className)} {...longPressProps}>
       {/* Without `listHeader` the toolbar is pinned above the list (set / detail views).
           With it, the header + toolbar move INTO the scroller so they scroll away with
           the rows (the library wall). */}
