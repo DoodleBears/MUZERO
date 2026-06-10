@@ -19,14 +19,14 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { GripVertical } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { CoverImage } from "@/components/ui/cover-image";
 import type { Track } from "@/db/types";
 import { useTrackCoverUrl } from "@/hooks/use-media";
 import { trackSubtitle } from "@/lib/track-display";
 import { cn } from "@/lib/utils";
-import { resolveDropTarget } from "./reorder-drop";
+import { applyBlockMove, resolveDropTarget } from "./reorder-drop";
 
 /** Row height (Tailwind h-14) — kept in sync between a row and its drop placeholder. */
 const ROW_CLASS = "h-14";
@@ -62,8 +62,16 @@ export function ReorderableTrackList({
   className?: string;
 }) {
   const { t } = useTranslation();
-  const ids = useMemo(() => tracks.map((track) => track.id), [tracks]);
   const [activeId, setActiveId] = useState<string | null>(null);
+  // Optimistic local order: a drop reorders this SYNCHRONOUSLY so the row lands at
+  // the dashed-box slot immediately, then the async rank persist reconciles via the
+  // `tracks` prop (liveQuery). Without it the @dnd-kit drop animation snaps the
+  // overlay back to the old slot before the async update arrives.
+  const [order, setOrder] = useState<Track[]>(tracks);
+  useEffect(() => {
+    setOrder(tracks);
+  }, [tracks]);
+  const ids = useMemo(() => order.map((track) => track.id), [order]);
 
   const sensors = useSensors(
     // A small drag threshold so a tap still toggles selection.
@@ -89,6 +97,17 @@ export function ReorderableTrackList({
     if (!over) return;
     const block = blockFor(String(active.id));
     const { insertBeforeId } = resolveDropTarget(ids, block, String(active.id), String(over.id));
+    // Optimistic: reorder the displayed list now so the drop settles at the slot…
+    setOrder((prev) => {
+      const nextIds = applyBlockMove(
+        prev.map((track) => track.id),
+        block,
+        insertBeforeId,
+      );
+      const byId = new Map(prev.map((track) => [track.id, track]));
+      return nextIds.map((id) => byId.get(id)).filter((track): track is Track => !!track);
+    });
+    // …and persist the rank change (liveQuery then reconciles `order` via the effect).
     onReorder(block, insertBeforeId);
   }
 
@@ -97,7 +116,7 @@ export function ReorderableTrackList({
     onDragActiveChange?.(false);
   }
 
-  const activeTrack = activeId ? tracks.find((track) => track.id === activeId) : undefined;
+  const activeTrack = activeId ? order.find((track) => track.id === activeId) : undefined;
   const activeBlockSize = activeId ? blockFor(activeId).length : 0;
 
   return (
@@ -114,7 +133,7 @@ export function ReorderableTrackList({
     >
       <SortableContext items={ids} strategy={verticalListSortingStrategy}>
         <ul className={cn("flex min-h-0 flex-col gap-0.5 overflow-y-auto", className)}>
-          {tracks.map((track) => (
+          {order.map((track) => (
             <SortableReorderRow
               key={track.id}
               track={track}

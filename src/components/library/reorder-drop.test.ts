@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { resolveDropTarget } from "./reorder-drop";
+import { applyBlockMove, resolveDropTarget } from "./reorder-drop";
 
 // orderedIds is the set's current DISPLAY order; the result feeds
 // reorderTracksInSession(setId, blockIds, insertBeforeId).
@@ -37,5 +37,30 @@ describe("resolveDropTarget", () => {
   it("returns null when active or over is unknown (defensive)", () => {
     expect(resolveDropTarget(order, ["a"], "a", "zzz")).toEqual({ insertBeforeId: null });
     expect(resolveDropTarget(order, ["zzz"], "zzz", "b")).toEqual({ insertBeforeId: null });
+  });
+});
+
+describe("applyBlockMove", () => {
+  const order = ["a", "b", "c", "d", "e"];
+
+  it("moves a single id before the anchor", () => {
+    expect(applyBlockMove(order, ["b"], "d")).toEqual(["a", "c", "b", "d", "e"]);
+  });
+
+  it("moves to the end when the anchor is null", () => {
+    expect(applyBlockMove(order, ["b"], null)).toEqual(["a", "c", "d", "e", "b"]);
+  });
+
+  it("moves a block keeping its relative order", () => {
+    expect(applyBlockMove(order, ["a", "c"], "e")).toEqual(["b", "d", "a", "c", "e"]);
+  });
+
+  it("is a no-op when the block already precedes the anchor", () => {
+    // resolveDropTarget hands back the current follower for a drop-in-place.
+    expect(applyBlockMove(order, ["a"], "b")).toEqual(order);
+  });
+
+  it("falls back to the end for an unknown anchor (defensive)", () => {
+    expect(applyBlockMove(order, ["a"], "zzz")).toEqual(["b", "c", "d", "e", "a"]);
   });
 });

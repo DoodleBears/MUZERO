@@ -41,3 +41,24 @@ export function resolveDropTarget(
   }
   return { insertBeforeId: null };
 }
+
+/**
+ * Apply a block move to an ordered id list: pull `blockIds` out (keeping their
+ * relative order) and reinsert them just before `insertBeforeId` (null = at the
+ * end). Used for an OPTIMISTIC reorder so the drop lands at the dashed-box slot
+ * instantly while the async rank persist reconciles via liveQuery — otherwise the
+ * @dnd-kit drop animation snaps the overlay back to the old slot first. Mirrors the
+ * ordering the rank repo will compute.
+ */
+export function applyBlockMove(
+  ids: readonly string[],
+  blockIds: readonly string[],
+  insertBeforeId: string | null,
+): string[] {
+  const blockSet = new Set(blockIds);
+  const block = ids.filter((id) => blockSet.has(id));
+  const remaining = ids.filter((id) => !blockSet.has(id));
+  const found = insertBeforeId === null ? remaining.length : remaining.indexOf(insertBeforeId);
+  const at = found < 0 ? remaining.length : found;
+  return [...remaining.slice(0, at), ...block, ...remaining.slice(at)];
+}
