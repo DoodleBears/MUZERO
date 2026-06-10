@@ -145,12 +145,28 @@ export function MemoryNoteComposer({
             </span>
           )}
           {atSec != null ? (
-            <span
-              className="inline-flex items-center gap-1 rounded-full bg-primary/15 px-2 py-1 text-primary text-xs"
-              title={labels.pinnedAt(formatDuration(atSec))}
-            >
-              <MapPin aria-hidden="true" className="size-3" />
-              <span>{formatDuration(atSec)}</span>
+            <span className="inline-flex items-center gap-1 rounded-full bg-primary/15 px-2 py-1 text-primary text-xs">
+              {getCurrentPositionSec ? (
+                // Re-click updates the anchor to the current playback second.
+                <button
+                  aria-label={labels.pinnedAt(formatDuration(atSec))}
+                  className="inline-flex items-center gap-1 rounded-full hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  disabled={isSubmitting}
+                  onClick={pinToCurrentTime}
+                  type="button"
+                >
+                  <MapPin aria-hidden="true" className="size-3" />
+                  {formatDuration(atSec)}
+                </button>
+              ) : (
+                <span
+                  className="inline-flex items-center gap-1"
+                  title={labels.pinnedAt(formatDuration(atSec))}
+                >
+                  <MapPin aria-hidden="true" className="size-3" />
+                  {formatDuration(atSec)}
+                </span>
+              )}
               <button
                 aria-label={labels.clearTime}
                 className="rounded-full hover:text-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"

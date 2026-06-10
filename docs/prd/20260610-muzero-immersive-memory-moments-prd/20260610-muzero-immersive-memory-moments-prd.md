@@ -346,9 +346,10 @@ App 层已算出 `visualizerIdleOnly` / `foregroundHidden`（[`App.tsx:129-134`]
 ### 5.2 UI Components
 
 **(a) `MemoryNoteComposer`（[`memory-note-composer.tsx`](src/components/track/memory-note-composer.tsx)）— 捕获锚点**
-- 新增 props：`currentPositionSec?: number`（由父级从 player-store 传入）、`initialAtSec?: number`；`onSubmit(note, atSec?)`。
-- UI：note 输入旁一个**「📍 钉到 mm:ss」chip**——点亮即把当前 `positionSec` 写入 `atSec`；再点取消（floating）。已钉时显示可编辑的 `mm:ss`（复用既有时间格式化，如进度条的 `formatTime`）+ 清除按钮。
-- 组件保持「纯展示 + 回调」，不直接订阅 store（父级注入当前秒），符合既有形态。
+- 新增 props：`getCurrentPositionSec?: () => number`（getter，父级从 player-store 非响应式读，避免每帧重渲染）、`initialAtSec?: number`；`onSubmit(note, atSec?)`。
+- UI：note 输入旁一个**「📍 钉到当前秒」chip**——点击即把当前 `positionSec`（`Math.floor`，整秒）写入 `atSec`。已钉时 chip 显示 `mm:ss`（`formatDuration`）：**点 mm:ss 重新钉到当前秒（更新时间戳）**，点 ✕ 取消绑定（→ floating）。
+- **三处入口共用**：创建、**编辑现有 note**、快捷键 quick-create modal 都是同一个 composer，均接收 `getCurrentPositionSec`；annotation-editor 仅在「该曲正在播」(`isCurrentTrack`) 时注入 getter，故只有标注当前播放曲时才出现 pin/重钉。
+- 组件保持「纯展示 + 回调」，不直接订阅 store（父级注入 getter），符合既有形态。
 
 **(b) `MemoryNotesWaterfall`（[`memory-notes-waterfall.tsx`](src/components/track/memory-notes-waterfall.tsx)）& 轮播 slide（[`memory-timeline-rail.tsx`](src/components/player/memory-timeline-rail.tsx)）— 显示锚点**
 - 有 `atSec` 的卡片显示一个小**时间徽标「1:38」**（置于 `createdAt` 旁）。
@@ -497,6 +498,7 @@ App 层已算出 `visualizerIdleOnly` / `foregroundHidden`（[`App.tsx:129-134`]
 | 2026-06-10 | MUZERO (DoodleBear) | ✅ Phase 1 落地（TDD）：`Memory.atSec` + `addMemory`/`updateMemory` + R2 manifest 三处透传；64 tests green，无 Dexie bump |
 | 2026-06-10 | MUZERO (DoodleBear) | ✅ Phase 2 落地（TDD）：composer 钉秒 chip + waterfall/rail `atSec` 徽标 + 徽标专属 seek（仅当前曲）+ 4 语言 i18n |
 | 2026-06-10 | MUZERO (DoodleBear) | ✅ Phase 3 落地（TDD）：统一时长 `memoryDisplayDurationMs` + 双 lane 调度引擎（10 例）+ `ImmersiveMemoryOverlay` 顶部浮层 + `immersiveMemoryOverlay` 设置 + 4 语言；三 phase 全完成 |
+| 2026-06-10 | MUZERO (DoodleBear) | 细化（用户反馈）：钉秒 chip 全入口共用（创建/编辑/quick-create）；**点 mm:ss 重新钉到当前秒更新时间戳**、点 ✕ 取消绑定（TDD：re-pin 用例） |
 
 ---
 

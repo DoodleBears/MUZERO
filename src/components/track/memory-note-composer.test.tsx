@@ -142,6 +142,29 @@ describe("MemoryNoteComposer", () => {
     expect(onSubmit).toHaveBeenCalledWith("retimed", undefined);
   });
 
+  it("re-pins to the new current second when the timestamp chip is clicked again", () => {
+    const onSubmit = vi.fn();
+    let now = 30;
+    render(
+      <MemoryNoteComposer
+        getCurrentPositionSec={() => now}
+        initialNote="x"
+        labels={labels}
+        onSubmit={onSubmit}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Pin to current time" }));
+    expect(screen.getByText("0:30")).toBeInTheDocument();
+
+    now = 75; // playback advanced
+    fireEvent.click(screen.getByRole("button", { name: "Pinned at 0:30" }));
+    expect(screen.getByText("1:15")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Save memory" }));
+    expect(onSubmit).toHaveBeenCalledWith("x", 75);
+  });
+
   it("omits the pin control when no playback position is available", () => {
     render(<MemoryNoteComposer labels={labels} onSubmit={() => undefined} />);
 
