@@ -393,6 +393,7 @@ No Zustand/store involvement (规则 6 — non-reactive singleton stays in modul
 | 2026-06-10 | MUZERO | **Switched preview hash blurhash → `thumbhash`** (embeds aspect ratio/alpha, smaller); brought **R2 manifest carry into scope** (Q6); confirmed avatars in scope (Q7); deferred thumbnail downscaling (Q8). All Open Qs resolved. |
 | 2026-06-10 | MUZERO | **Phase 1 ✅, Phase 2 🔄** (CoverImage + set/entity rollout; entity-grid/track-row deferred under concurrent edits). **Phase 3 🔄**: thumbhash data fields + encode helper + generate-on-save wired & tested. |
 | 2026-06-10 | MUZERO | Per user decision, switched the preview hash from the briefly-vendored source to the **`thumbhash` npm package** (`^0.1.1`); removed the vendored `thumbhash.ts`/test. Manifest (`package.json`/lock) left uncommitted alongside the in-flight electron-builder WIP to preserve shared-branch isolation. |
+| 2026-06-10 | MUZERO | **Phase 4 🔄**: `<CoverImage>` renders the decoded thumbhash preview; wired into SetCard + entity detail. Full suite **1007/1010**; the 3 failures (`virtual-track-list`, `chat-model-picker`, `track-memory-notes-panel`) import none of this PRD's modules — pre-existing other-agent WIP on the shared branch, not regressions here. **Remaining:** lazy backfill (needs owner-table context in `useTrackCoverUrl`), R2 manifest carry (§3.4), deferred UI rollouts (entity-grid/track-row/interactive/dock/avatars), Phase 5 wrap-up. |
 
 ---
 
