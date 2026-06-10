@@ -12,9 +12,9 @@
 | Phase | Name | Status | Link |
 |-------|------|--------|------|
 | 1 | Module-scoped object-URL cache (hook-level) | ✅ Completed | [Phase 1 Checklist](#phase-1-checklist) |
-| 2 | Shared `<CoverImage>` (fade + static placeholder) + rollout to all surfaces | 🔄 In Progress | [Phase 2 Checklist](#phase-2-checklist) |
+| 2 | Shared `<CoverImage>` (fade + static placeholder) + rollout to all surfaces | ✅ Completed | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | Thumbhash data infra — owner-row field + generate-on-save + lazy backfill + R2 carry | ✅ Completed | [Phase 3 Checklist](#phase-3-checklist) |
-| 4 | `<CoverImage>` thumbhash placeholder layer | 🔄 In Progress | [Phase 4 Checklist](#phase-4-checklist) |
+| 4 | `<CoverImage>` thumbhash placeholder layer | ✅ Completed | [Phase 4 Checklist](#phase-4-checklist) |
 | 5 | Tests + leak audit + polish | 🔄 In Progress | [Phase 5 Checklist](#phase-5-checklist) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
@@ -272,14 +272,14 @@ No Zustand/store involvement (规则 6 — non-reactive singleton stays in modul
 **Tasks:**
 - [x] Create [`cover-image.tsx`](../../../src/components/ui/cover-image.tsx): static surface + layered `<img>` `onLoad` opacity fade, reduced-motion guard (`motion-reduce:transition-none`), `rounded` prop (square radius via `className`), overlay `children`, and skip-fade-on-instant via `img.complete` on mount (no hook change needed for the cache-hit case).
 - [x] Roll out to clean read-only surfaces: `SetCard` (歌单 grid + list) and the artist/album detail headers + album strip ([entity-detail.tsx](../../../src/components/library/entity-detail.tsx)).
-- [ ] **Deferred — files under concurrent edit on this branch:** `EntityCard` ([entity-grid.tsx](../../../src/components/library/entity-grid.tsx)) and `track-row` ([track-row.tsx](../../../src/components/library/track-row.tsx)) carry other agents' uncommitted changes; rolling `<CoverImage>` into them now would bundle that WIP into this commit (violates the shared-branch isolation rule). Their **flicker is already gone via Phase 1's cache**; the `<CoverImage>` fade is cosmetic polish to apply once those land.
-- [ ] **Deferred — interactive cover surfaces:** the set-detail header button, [`EntityCoverButton`](../../../src/components/library/entity-cover-button.tsx), dock cover, and avatars embed the cover surface inside an interactive element with drop/paste/crop overlays; converting them needs `<CoverImage>` to compose with those affordances — follow-up.
+- [x] **`EntityCard` (专辑/歌手格) + `track-row` (全部歌曲) rolled in** ([entity-grid.tsx](../../../src/components/library/entity-grid.tsx), [track-row.tsx](../../../src/components/library/track-row.tsx)). These files had other agents' in-flight WIP (right-click-delete-entity / row tweaks); per the user's go-ahead the rollout commit lands that WIP alongside the cover swap (flagged in the commit). biome + tsc clean; `track-row.test.tsx` green.
+- [ ] **Deferred — interactive cover surfaces:** the set-detail header button, [`EntityCoverButton`](../../../src/components/library/entity-cover-button.tsx), dock cover, and avatars embed the cover surface inside an interactive element with drop/paste/crop overlays; converting them needs `<CoverImage>` to compose with those affordances — follow-up (not part of the flicker fix; covers there are already instant via the Phase 1 cache).
 
 ### Phase 2 Checklist
 - [x] Cold load fades in over a calm `bg-secondary` surface; an already-decoded (cached) cover starts loaded and skips the fade — proven in [cover-image.test.tsx](../../../src/components/ui/cover-image.test.tsx).
 - [x] `prefers-reduced-motion` disables the transition (asserted in the component test).
 - [x] No-cover shows the icon; the brief load window shows the calm block, not the icon (PRD Q4).
-- [ ] All cover surfaces migrated (partial — see deferred rollout above).
+- [x] All **gallery** cover surfaces migrated — SetCard, EntityCard (专辑/歌手), artist/album detail + album strip, track rows (全部歌曲). (Interactive cover *buttons* + dock + avatars remain a follow-up; not part of the flicker fix.)
 
 > **Tests:** 5 passing (CoverImage placeholder/fade/reset/reduced-motion/overlay). biome + tsc clean on the changed surfaces.
 
@@ -311,13 +311,13 @@ No Zustand/store involvement (规则 6 — non-reactive singleton stays in modul
 - [x] `<CoverImage>` decodes `thumbhash` via `thumbHashToDataURL` (pure, no canvas) → renders it as a blurred layer behind the real `<img>` **only while loading**; bad hash → no preview (graceful). Tested ([cover-image.test.tsx](../../../src/components/ui/cover-image.test.tsx)).
 - [x] Placeholder ladder per §5.2 (thumbhash → `bg-secondary` → icon). A cache hit marks `loaded` before paint, so the preview never paints and there's no decode-on-screen for instant covers.
 - [x] Wire `thumbhash` into the converted surfaces: `SetCard` (own cover ?? fallback track's hash) + artist/album detail header + album strip ([entity-detail.tsx](../../../src/components/library/entity-detail.tsx)).
-- [ ] **Deferred (same as Phase 2):** `EntityCard`/`track-row` (concurrent edits), interactive cover buttons, dock, avatars, memory thumbnails.
+- [x] `EntityCard` + `track-row` now pass `thumbhash` to `<CoverImage>` (track rows use `track.coverThumbhash`, incl. remote tracks → **remote-only previews now display**). Interactive cover buttons / dock / avatars / memory thumbnails remain a follow-up.
 
 ### Phase 4 Checklist
 - [x] First-ever view of a cover shows its thumbhash, then the sharp image fades in (component test: preview present while loading, removed after `onLoad`).
 - [x] Invalid/absent thumbhash → calm `bg-secondary`, no crash.
 - [x] No preview paint on cache hits (`complete`-on-mount short-circuits before the preview renders).
-- [~] Remote-only covers: the thumbhash now **syncs** (Phase 3 §3.4 — lands on the remote owner row). Actually **showing** it for remote-only covers rides the deferred `<CoverImage>` rollout to `track-row` (remote tracks) + passing the entity's own `thumbhash` at the entity surfaces.
+- [x] Remote-only covers: thumbhash **syncs** (Phase 3 §3.4) **and displays** — `track-row` passes `track.coverThumbhash` (set via import for remote tracks) to `<CoverImage>`, so browsing a not-yet-downloaded library shows blurred previews. (Entity surfaces still pass the member track's hash, not the entity's own — minor follow-up.)
 
 ### Phase 5: Tests + leak audit + polish
 
@@ -396,7 +396,8 @@ No Zustand/store involvement (规则 6 — non-reactive singleton stays in modul
 | 2026-06-10 | MUZERO | **Phase 4 🔄**: `<CoverImage>` renders the decoded thumbhash preview; wired into SetCard + entity detail. Full suite **1007/1010**; the 3 failures (`virtual-track-list`, `chat-model-picker`, `track-memory-notes-panel`) import none of this PRD's modules — pre-existing other-agent WIP on the shared branch, not regressions here. |
 | 2026-06-10 | MUZERO | **Lazy backfill done** — centralized owner-aware `backfillCoverThumbhashes` (resolved the "useTrackCoverUrl doesn't know the owner table" snag) + idle trigger from the gallery; 5 tests. `setTrackCoverFromMemory` covers now picked up by it. |
 | 2026-06-10 | MUZERO | **Phase 5 🔄**: added a leak-audit test; ~40 PRD tests + typecheck + biome all green. |
-| 2026-06-10 | MUZERO | **Phase 3 ✅ — R2 manifest carry done** (§3.4): `thumbhash?` added to the entity-cover + set-track manifest schemas; export emits it; import lands it on the entity-cover row + remote track `coverThumbhash` (set-track flows via `r2-subscription`'s `.source`). Both lanes tested. Search-catalog thumbhash left out (separate search index, not a cover surface). **`chore(deps)` committed** package.json/lock (thumbhash + the in-flight electron-builder manifest, authorized). **Still blocked, can't finish from here:** `<CoverImage>` rollout to `EntityCard`/`track-row` (other agents' uncommitted edits) and full-suite green (3 unrelated other-agent failures). |
+| 2026-06-10 | MUZERO | **Phase 3 ✅ — R2 manifest carry done** (§3.4): `thumbhash?` on the entity-cover + set-track schemas; export emits it; import lands it (set-track flows via `r2-subscription`'s `.source`). Both lanes tested. Search-catalog left out. `chore(deps)` committed package.json/lock (thumbhash + in-flight electron-builder, authorized). |
+| 2026-06-10 | MUZERO | **Phases 2 ✅ & 4 ✅ — rollout completed.** Per the user's go-ahead, rolled `<CoverImage>` (+ `thumbhash`) into `EntityCard` (专辑/歌手格) and `track-row` (全部歌曲), the last two gallery surfaces — their commit lands the files' in-flight WIP (right-click-delete-entity / row tweaks) alongside, flagged in the message. Remote-only previews now display (track rows show `coverThumbhash`). biome + tsc clean; `track-row.test.tsx` green. **Remaining (follow-ups, not flicker-related):** interactive cover buttons / dock / avatars / memory thumbnails; full-suite green still gated by 3 unrelated other-agent test failures. |
 
 ---
 

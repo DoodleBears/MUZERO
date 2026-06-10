@@ -10,7 +10,9 @@ import {
 } from "lucide-react";
 import { Fragment, type KeyboardEvent, type MouseEvent, memo, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Command, type CommandItem } from "@/components/ui/command";
+import { CoverImage } from "@/components/ui/cover-image";
 import { Disc3Icon } from "@/components/ui/disc-3";
 import {
   Popover,
@@ -29,6 +31,11 @@ interface TrackRowProps {
   track: Track;
   isCurrent: boolean;
   isSelected?: boolean;
+  /** Select mode: show a checkbox; activating the row toggles its selection.
+   *  `shiftKey` requests a range select from the last-toggled anchor. */
+  selectable?: boolean;
+  checked?: boolean;
+  onToggleSelect?: (shiftKey: boolean) => void;
   listIndex?: number;
   sessions: DjSession[];
   onPlay: () => void;
@@ -101,17 +108,13 @@ function TrackThumb({ track }: { track: Track }) {
       </div>
     );
   }
-  if (coverUrl) {
-    return (
-      <div className="size-10 shrink-0 overflow-hidden rounded-md bg-secondary">
-        <img src={coverUrl} alt="" className="size-full object-cover" />
-      </div>
-    );
-  }
   return (
-    <div className="grid size-10 shrink-0 place-items-center rounded-md bg-secondary text-muted-foreground">
-      {track.kind === "video" ? <Video className="size-4" /> : <Disc3Icon size={16} />}
-    </div>
+    <CoverImage
+      url={coverUrl}
+      thumbhash={track.coverThumbhash}
+      placeholder={track.kind === "video" ? <Video className="size-4" /> : <Disc3Icon size={16} />}
+      className="size-10 shrink-0 rounded-md text-muted-foreground"
+    />
   );
 }
 
@@ -136,6 +139,9 @@ export const TrackRow = memo(function TrackRow({
   track,
   isCurrent,
   isSelected,
+  selectable,
+  checked,
+  onToggleSelect,
   listIndex,
   sessions,
   onPlay,
@@ -158,7 +164,11 @@ export const TrackRow = memo(function TrackRow({
   // isn't the one playing switches playback to it. Lists without a selection
   // model (queue / Now Playing) leave `isSelected` undefined, so `onView` is the
   // play handler there and a single click plays straight away.
-  function activate() {
+  function activate(shiftKey = false) {
+    if (selectable) {
+      onToggleSelect?.(shiftKey);
+      return;
+    }
     if (isSelected && !isCurrent && !disabled) {
       onPlay();
       return;
@@ -168,10 +178,13 @@ export const TrackRow = memo(function TrackRow({
 
   function handleRowKeyDown(event: KeyboardEvent<HTMLDivElement>) {
     if (event.target !== event.currentTarget) return;
-    if (event.key !== "Enter" && event.key !== " ") return;
+    if (event.metaKey || event.ctrlKey || event.altKey) return;
+    // Activate on Enter/Space and on D/→ (the WASD library "drill in" keys).
+    const k = event.key.toLowerCase();
+    if (k !== "enter" && k !== " " && k !== "d" && k !== "arrowright") return;
     event.preventDefault();
     event.stopPropagation();
-    activate();
+    activate(event.shiftKey);
   }
 
   function eventStartedInActions(event: MouseEvent<HTMLDivElement>) {
@@ -182,7 +195,7 @@ export const TrackRow = memo(function TrackRow({
 
   function handleRowClick(event: MouseEvent<HTMLDivElement>) {
     if (eventStartedInActions(event)) return;
-    activate();
+    activate(event.shiftKey);
   }
 
   // The two single clicks of a double-click already run select-then-play (the
@@ -199,6 +212,7 @@ export const TrackRow = memo(function TrackRow({
       className={cn(
         "group relative flex w-full items-center gap-3 rounded-lg px-3 py-2 transition-colors outline-none",
         isCurrent ? "bg-accent" : isSelected ? "bg-accent/60" : "hover:bg-accent/50",
+        selectable && "select-none",
       )}
       data-muzero-track-row
       data-track-index={listIndex}
@@ -208,6 +222,9 @@ export const TrackRow = memo(function TrackRow({
       role="option"
       tabIndex={0}
     >
+      {selectable && (
+        <Checkbox checked={checked ?? false} className="pointer-events-none ms-0.5 shrink-0" />
+      )}
       <div className="group/thumb relative size-10 shrink-0">
         <div className="grid size-10 place-items-center rounded-md">
           <TrackThumb track={track} />

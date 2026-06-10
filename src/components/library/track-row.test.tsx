@@ -66,14 +66,16 @@ function session(id: string, name: string): DjSession {
 }
 
 function renderRow({
+  isCurrent = false,
   isSelected,
   sessions = [],
 }: {
+  isCurrent?: boolean;
   isSelected?: boolean;
   sessions?: DjSession[];
 } = {}) {
   const props = {
-    isCurrent: false,
+    isCurrent,
     isSelected,
     onAddToSession: vi.fn(),
     onDelete: vi.fn(),
@@ -117,25 +119,51 @@ describe("TrackRow", () => {
     expect(props.onAddToSession).toHaveBeenCalledWith("ses_night");
   });
 
-  it("does not play when an already selected row is clicked again", () => {
+  it("selects an unselected row on click without playing", () => {
+    const { container, props } = renderRow({ isSelected: false });
+    const row = container.querySelector<HTMLElement>("[data-muzero-track-row]");
+
+    fireEvent.click(row as HTMLElement);
+
+    expect(props.onView).toHaveBeenCalledTimes(1);
+    expect(props.onPlay).not.toHaveBeenCalled();
+  });
+
+  it("plays an already-selected row when it is clicked again", () => {
     const { container, props } = renderRow({ isSelected: true });
     const row = container.querySelector<HTMLElement>("[data-muzero-track-row]");
 
     fireEvent.click(row as HTMLElement);
-    fireEvent.doubleClick(row as HTMLElement);
 
-    expect(props.onView).toHaveBeenCalled();
-    expect(props.onPlay).not.toHaveBeenCalled();
+    expect(props.onPlay).toHaveBeenCalledTimes(1);
+    expect(props.onView).not.toHaveBeenCalled();
   });
 
-  it("uses Enter on the focused row for view instead of play", () => {
-    const { container, props } = renderRow({ isSelected: true });
+  it("does not replay the currently playing row when it is clicked", () => {
+    const { container, props } = renderRow({ isCurrent: true, isSelected: true });
     const row = container.querySelector<HTMLElement>("[data-muzero-track-row]");
 
-    fireEvent.keyDown(row as HTMLElement, { key: "Enter" });
+    fireEvent.click(row as HTMLElement);
 
-    expect(props.onView).toHaveBeenCalledTimes(1);
     expect(props.onPlay).not.toHaveBeenCalled();
+    expect(props.onView).toHaveBeenCalledTimes(1);
+  });
+
+  it("plays the selected focused row on Enter, but only selects an unselected one", () => {
+    const selected = renderRow({ isSelected: true });
+    fireEvent.keyDown(selected.container.querySelector("[data-muzero-track-row]") as HTMLElement, {
+      key: "Enter",
+    });
+    expect(selected.props.onPlay).toHaveBeenCalledTimes(1);
+    expect(selected.props.onView).not.toHaveBeenCalled();
+
+    const unselected = renderRow({ isSelected: false });
+    fireEvent.keyDown(
+      unselected.container.querySelector("[data-muzero-track-row]") as HTMLElement,
+      { key: "Enter" },
+    );
+    expect(unselected.props.onView).toHaveBeenCalledTimes(1);
+    expect(unselected.props.onPlay).not.toHaveBeenCalled();
   });
 
   it("does not view or play only because the row receives focus", () => {
