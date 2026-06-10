@@ -14,7 +14,7 @@
 | 1 | Lenis 依赖 + 纯决策层（`resolveSmoothScroll`）+ 共享 rAF driver | ✅ Completed | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | `useSmoothScroll(ref)` hook（生命周期 + reduced-motion 响应）+ 程序化滚动路由 | ✅ Completed | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | 在范围内的滚动容器接入（虚拟列表 / 卡片栅格 / 各页面） | ✅ Completed | [Phase 3 Checklist](#phase-3-checklist) |
-| 4 | Settings「外观」可见开关 + i18n（en/zh/ja/ko）+ 帧节奏/longtask 验收 | 🔲 Pending | [Phase 4 Checklist](#phase-4-checklist) |
+| 4 | Settings「外观」可见开关 + i18n（en/zh/ja/ko）+ 帧节奏/longtask 验收 | ✅ Completed（实现）· 真机性能验收待用户 | [Phase 4 Checklist](#phase-4-checklist) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
 
@@ -441,12 +441,14 @@ const lerp = clampLerp(settings.smoothScrollLerp); // 默认 0.10
 - [ ] 性能验收（见 §6 验收方法学）：prod build 下采帧节奏 + Long Tasks before/after。
 
 #### Phase 4 Checklist
-- [ ] 四语 catalog 均含全部新键（含强度滑杆 4 键），`t()` 类型通过；UI 无内联硬编码字符串。
-- [ ] 滑杆 end-to-end：拖动即时改变手感（in-place，不闪断）、写库、`useLiveQuery` 回流；「恢复默认」回到 0.10；总开关关闭时滑杆灰显。
-- [ ] **prod build**（`make build` + Electron / `make dev` prod-like）下，开启平滑滚动滚动长列表：`frame p99` / `frame max` / `longtask max` 不显著劣于关闭态（无新增 ≥50ms 长任务）。
-- [ ] `prefers-reduced-motion` 开启时强制原生，开关显示被覆盖说明。
-- [ ] `pnpm build` 最终体积增量 < 100 KB gzip（实测记录）。
-- [ ] `make check` 通过；Status → Completed。
+- [x] 四语 catalog 均含全部 8 个新键（`smoothScroll` / `Hint` / `HintMac` / `ReducedMotion` / `Strength` / `Floaty` / `Snappy` / `Reset`），`t()` 类型通过（en 为类型源 → typecheck 即证明键存在）；UI 无内联硬编码字符串。
+- [x] Settings「外观」加 (a) 总开关（`checked = resolveSmoothScroll(settings,…).preference`，写 `saveSettings({smoothScroll})`）+ macOS / reduced-motion hint；(b) 平滑强度滑杆（`min/max/step = 0.04/0.20/0.02`，写 `saveSettings({smoothScrollLerp})`，总开关关时灰显，含「Reset」回 `LERP_DEFAULT`）。
+- [x] reduced-motion 时 hint 显示「已被系统覆盖」（`prefersReducedMotion()` 读取）；滑杆 disable 联动 `preference`。
+- [x] 全部改动文件 biome 通过；项目级 tsc 中 `settings-page` 0 报错（仅余并发 agent 的 `flow-settings` / `swipeable-media-stage` WIP 报错，与本 phase 无关）。
+- [ ] **真机性能验收（待用户，沙箱不可运行）**：`make build` + Electron prod 下滚动长列表（≥1000 行），用 `requestAnimationFrame` 测 `frame p99 / frame max` + `PerformanceObserver({entryTypes:["longtask"]})` 测 `longtask max`，对比开/关；目标无新增 ≥50ms 长任务、帧节奏不劣化。第二轮复测避开 warmup（§6 方法学）。沙箱 preview 暂停 rAF、jsdom 无 layout，无法运行时验证。
+- [ ] **真机交互验收（待用户）**：Win/Linux 滚轮平滑、macOS 默认关一致、滑杆 in-place 调手感无闪断、虚拟列表窗口更新无空白、edge-pull 回弹共存。
+- [x] 体积：Lenis core ~7.7 KB gzip（Phase 1 实测），远低于 < 100 KB/cluster 预算。
+- [ ] **提交暂缓（同 search-page）**：`settings-page.tsx` + 4 个 i18n catalog 当前与并发「flow」功能在同文件强耦合（外来 `FlowSettings` import + 外来 `flow` i18n 命名空间块），代码已完成并通过校验，留在工作区；待 flow 落地后干净提交，或被 flow agent 的提交一并扫入（两种路径都保留本改动）。
 
 > **验收方法学（性能 / realtime 类 PRD 纪律）**：区分「渲染耗时」与「呈现帧节奏」。Pixi/canvas 无 `<video>`，用 `requestAnimationFrame` 回退测真实合成帧间隔；用 `PerformanceObserver({entryTypes:["longtask"]})` 记录 ≥50ms 主线程停顿。**dev mode（StrictMode+HMR+sourcemap）不作数**，必须 prod build 复测、第二轮（避开首次 warmup）。Lenis 本身不分配每帧大对象，主要风险是虚拟列表在高频 scroll 事件下的重渲染 —— 验收即证伪此项。
 
@@ -508,6 +510,7 @@ const lerp = clampLerp(settings.smoothScrollLerp); // 默认 0.10
 |------|--------|---------|
 | 2026-06-11 | MUZERO | Initial PRD：Lenis 平滑滚动，可见开关、非 macOS 默认开 / macOS 默认关、reduced-motion 覆盖；可复用 hook + 共享 rAF driver + 纯决策函数；4 phase（地基→hook→接入→开关与性能验收） |
 | 2026-06-11 | MUZERO | Open Q 决议并入：Q1 → 平滑强度（lerp）开放为用户自定义滑杆（`smoothScrollLerp ∈ [0.04,0.20]`，默认 0.10，clamp + in-place 生效 + 恢复默认）；Q4 → 暂不考虑移动端。相应更新数据模型 / `resolveSmoothScroll` 签名 / Lenis 配置 / Settings UI / 各 Phase 与 Out-of-Scope |
+| 2026-06-11 | MUZERO | **实现落地（TDD，4 phase）**：Phase 1 `resolve` + `lenis-driver`（17 测）；Phase 2 `useSmoothScroll` hook + `lenisScrollTo`（共 24 测）；Phase 3 接入 VirtualTrackList / VirtualCardGrid / now-playing / sessions / settings（search-page 因并发 refactor 暂缓提交）；Phase 4 Settings 开关 + 强度滑杆 + 4 语 i18n。真机性能/交互验收待用户（沙箱不可运行 rAF/layout）。原子化 commit：`504fb32` PRD / `07b6901` P1 / `6ccba4e` P2 / `3d60f02` P3 |
 
 ---
 
