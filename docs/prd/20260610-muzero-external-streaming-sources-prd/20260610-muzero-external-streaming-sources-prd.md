@@ -13,13 +13,15 @@
 
 | Phase | Name | Status | Link |
 |-------|------|--------|------|
-| 1 | 基础设施：muzfetch header 注入 + Range 透传 + StreamSource 抽象 + 数据模型 | 🔄 In Progress | [Phase 1 Checklist](#phase-1-checklist) |
-| 2 | Bilibili 源（架构试金石：WBI + DASH 音轨 + 登录 + 入库 + 播放路由） | 🔲 Pending | [Phase 2 Checklist](#phase-2-checklist) |
-| 3 | 网易云源（weapi/eapi 纯 TS 加密 + 登录 + 搜索 + 音质降级） | 🔲 Pending | [Phase 3 Checklist](#phase-3-checklist) |
+| 1 | 基础设施：muzfetch header 注入 + Range 透传 + StreamSource 抽象 + 数据模型 | ✅ Completed | [Phase 1 Checklist](#phase-1-checklist) |
+| 2 | Bilibili 源（架构试金石：WBI + DASH 音轨 + 登录 + 入库 + 播放路由） | ✅ Completed | [Phase 2 Checklist](#phase-2-checklist) |
+| 3 | 网易云源（weapi/eapi 纯 TS 加密 + 登录 + 搜索 + 音质降级 + 歌单同步 + 歌词） | ✅ Completed | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | YouTube 源（InnerTube + EJS sig/n 解密 + PoToken） | 🔲 Pending | [Phase 4 Checklist](#phase-4-checklist) |
-| 5 | 离线缓存 / 下载持久化（"尽量入库存储"，可选增强） | 🔲 Pending | [Phase 5 Checklist](#phase-5-checklist) |
+| 5 | 离线缓存 / 下载持久化（"尽量入库存储"，可选增强） | 🔄 In Progress | [Phase 5 Checklist](#phase-5-checklist) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
+>
+> **Phase 1–3 ✅（2026-06-10～11，Electron 端到端手测通过）**：基础设施(muzfetch header 注入/Range/`mediaProxyUrl`)、Bilibili(WBI+DASH+登录+播放)、网易云(weapi/eapi+登录+VIP+搜索+歌单同步+增量去重+歌词)均**端到端可用**（详见下方 Implementation Progress Log + §13–18）。剩余 §13/§14 的二维码**应用内**扫码 UI(Q2/Q4，待加 `qrcode-generator`)与各 checklist 的「真机手测」勾选项是验证仪式，不阻塞功能完成。**Phase 4(YouTube)** 是仅剩的大头(运行时重：隐藏 BrowserWindow 解 sig/PoToken)，刻意押后。**Phase 5(离线缓存)** 进行中。
 
 ### Implementation Progress Log（TDD，纯核心优先；网易 + B站，YouTube/Phase 4 押后）
 
@@ -672,3 +674,18 @@ success：Set-Cookie 已被 net.fetch 写进默认 session → bridge.readSource
 |---|---|---|---|---|
 | RB1 | `nextStreamSkipIndex(len,idx,skips,max)` 纯队列数学(前进 wrap + 双上限防死循环) | `player/queue.ts` | ×4 | ✅ green |
 | RB2 | `ensureLoadedAndPlay` resolve 失败→自动跳过下一可播(`streamSkips` 计数+`MAX_STREAM_SKIPS`，加载/停时归零，一次性 toast) | `stores/player-store.ts` | queue+player-store 30 测全绿 | ✅ |
+
+## 19. Phase 5：离线缓存 / 下载持久化
+
+把 streamed track resolve 到的字节**下载入库**(`mediaBlobs` role `media` + 回填 `Track.blobId`)，命中后播放走 player **既有 `if (track.blobId)` 本地分支**——离线可播、不再每次 resolve。红线同源（个人使用、设备本地、不分发）。
+
+**播放优先级天然成立**：`ensureLoadedAndPlay` 的 if 链 `blobId → remoteMediaUrl → isStreamedTrack(resolve)`，缓存好的 streamed track `blobId` 命中即走本地，零改动。
+
+| # | 单元 | 文件 | 测试 | 状态 |
+|---|---|---|---|---|
+| CA1 | 缓存 repo：`cacheStreamedTrackBlob`(存 blob+回填 blobId，重下替换旧 blob 不留孤儿)、`isStreamedTrackCached`、`summarizeStreamedCache`(占用统计)、`clearStreamedCache`(清缓存+复位 re-resolve) | `streamsrc/streamed-track-repo.ts` | fake-idb ×5 | ✅ green |
+| CA2 | 下载编排：`runStreamCache({resolve,fetchBytes,store})`→resolve→下载→存(注入式纯函数；VIP/登录门不下载、错误不写坏 blob、mime 回退) | `streamsrc/cache-stream.ts` | 注入 stub ×4 | ✅ green |
+| CA3 | player-store `downloadStreamedTrack(trackId)` action：接 `resolveStreamedTrackMedia`(账号 cookie)+`mediaProxyUrl` 拉字节+`cacheStreamedTrackBlob`；guard 已缓存/非 streamed；toast 结果 | `stores/player-store.ts` | 🔲 | 🔲 |
+| CA4 | Settings 缓存管理：占用显示 + 一键清理 + 自动缓存开关(`AppSettings.autoCacheStreamed`)；i18n×4。track 行/Now Playing 下载按钮 | `settings` · `track`/`player` UI · i18n | 🔲 | 🔲 |
+
+**CA1+CA2 落地**：缓存核心(repo + 编排)纯逻辑全单测，下载/存储管线注入式可测；接真实 resolve + 代理拉流是 CA3 运行时件。

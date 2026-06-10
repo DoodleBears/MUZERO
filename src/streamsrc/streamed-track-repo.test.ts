@@ -4,9 +4,13 @@ import { createSession } from "@/db/repositories";
 import type { StreamSearchHit } from "./provider";
 import {
   addHitsToSet,
+  cacheStreamedTrackBlob,
+  clearStreamedCache,
   createStreamedTrack,
   findStreamedTrack,
   hitToStreamedInput,
+  isStreamedTrackCached,
+  summarizeStreamedCache,
 } from "./streamed-track-repo";
 
 let dbName = "";
@@ -101,6 +105,61 @@ describe("addHitsToSet", () => {
     expect(res).toEqual({ added: 1, skipped: 1 });
     expect((await db.sessions.get(set.id))?.trackIds).toHaveLength(3);
     expect(await db.tracks.where("sessionId").equals(set.id).count()).toBe(3);
+  });
+});
+
+describe("offline cache (Phase 5)", () => {
+  const audio = (n: number) => new Blob([new Uint8Array(n)], { type: "audio/mpeg" });
+
+  it("caches media bytes and points blobId at them", async () => {
+    const track = await createStreamedTrack(hitToStreamedInput("ses_1", hit), db);
+    expect(isStreamedTrackCached(track)).toBe(false);
+
+    const blobId = await cacheStreamedTrackBlob(track.id, audio(1000), "audio/mpeg", db);
+    const stored = await db.tracks.get(track.id);
+    expect(stored?.blobId).toBe(blobId);
+    expect(isStreamedTrackCached(stored as NonNullable<typeof stored>)).toBe(true);
+    expect((await db.mediaBlobs.get(blobId))?.role).toBe("media");
+  });
+
+  it("replaces a prior cached blob on re-download (no orphan)", async () => {
+    const track = await createStreamedTrack(hitToStreamedInput("ses_1", hit), db);
+    const first = await cacheStreamedTrackBlob(track.id, audio(1000), "audio/mpeg", db);
+    const second = await cacheStreamedTrackBlob(track.id, audio(2000), "audio/flac", db);
+    expect(second).not.toBe(first);
+    expect(await db.mediaBlobs.get(first)).toBeUndefined(); // old one evicted
+    expect(await db.mediaBlobs.count()).toBe(1);
+  });
+
+  it("refuses to cache a non-streamed track", async () => {
+    await db.tracks.put({
+      ...((await createStreamedTrack(hitToStreamedInput("ses_1", hit), db)) as object),
+      id: "trk_up",
+      origin: "uploaded",
+    } as never);
+    await expect(cacheStreamedTrackBlob("trk_up", audio(10), "audio/mpeg", db)).rejects.toThrow();
+  });
+
+  it("summarizes only cached streamed tracks", async () => {
+    const a = await createStreamedTrack(hitToStreamedInput("ses_1", hit), db);
+    const b = await createStreamedTrack(
+      hitToStreamedInput("ses_1", { ...hit, externalId: "BV2#2" }),
+      db,
+    );
+    await cacheStreamedTrackBlob(a.id, audio(1500), "audio/mpeg", db);
+    // b stays uncached; summary counts only a.
+    expect(await summarizeStreamedCache(db)).toEqual({ count: 1, bytes: 1500 });
+    await cacheStreamedTrackBlob(b.id, audio(500), "audio/mpeg", db);
+    expect(await summarizeStreamedCache(db)).toEqual({ count: 2, bytes: 2000 });
+  });
+
+  it("clears the cache, freeing blobs and re-arming re-resolve", async () => {
+    const a = await createStreamedTrack(hitToStreamedInput("ses_1", hit), db);
+    await cacheStreamedTrackBlob(a.id, audio(1000), "audio/mpeg", db);
+    expect(await clearStreamedCache(db)).toBe(1);
+    expect((await db.tracks.get(a.id))?.blobId).toBeUndefined();
+    expect(await db.mediaBlobs.count()).toBe(0);
+    expect(await summarizeStreamedCache(db)).toEqual({ count: 0, bytes: 0 });
   });
 });
 

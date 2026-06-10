@@ -10,7 +10,7 @@
 
 import { db as defaultDb, type MuzeroDB } from "@/db/muzero-db";
 import { prependTrackIds } from "@/db/repositories";
-import type { StreamSourceId, StreamSourceMeta, Track, TrackKind } from "@/db/types";
+import type { MediaBlob, StreamSourceId, StreamSourceMeta, Track, TrackKind } from "@/db/types";
 import { newId } from "@/lib/id";
 import type { StreamSearchHit } from "./provider";
 
@@ -138,4 +138,88 @@ export async function addHitsToSet(
   await prependTrackIds(sessionId, ids, db);
   const addedIds = new Set(ids.filter((id) => !before.has(id)));
   return { added: addedIds.size, skipped: hits.length - addedIds.size };
+}
+
+// ---------------------------------------------------- offline cache (Phase 5) ----
+// Streamed tracks resolve a short-lived URL per play. Optionally we download those
+// bytes into `mediaBlobs` (role "media") and set `Track.blobId` so the player's
+// existing `if (track.blobId)` branch plays them locally — offline, no re-resolve.
+
+/**
+ * Store downloaded media bytes for a streamed track and point `blobId` at them,
+ * replacing any previously-cached blob (re-download / quality change). Throws if the
+ * track isn't streamed (generated/uploaded already own their bytes).
+ */
+export async function cacheStreamedTrackBlob(
+  trackId: string,
+  blob: Blob,
+  mime: string,
+  db: MuzeroDB = defaultDb,
+): Promise<string> {
+  const track = await db.tracks.get(trackId);
+  if (!track || track.origin !== "streamed") {
+    throw new Error(`cacheStreamedTrackBlob: ${trackId} is not a streamed track`);
+  }
+  const media: MediaBlob = {
+    id: newId("blb"),
+    trackId,
+    role: "media",
+    mime,
+    bytes: blob.size,
+    blob,
+  };
+  await db.transaction("rw", db.tracks, db.mediaBlobs, async () => {
+    const priorId = track.blobId;
+    await db.mediaBlobs.put(media);
+    if (priorId && priorId !== media.id) await db.mediaBlobs.delete(priorId);
+    await db.tracks.update(trackId, { blobId: media.id });
+  });
+  return media.id;
+}
+
+/** Whether a streamed track already has its media cached locally. */
+export function isStreamedTrackCached(track: Pick<Track, "origin" | "blobId">): boolean {
+  return track.origin === "streamed" && typeof track.blobId === "string";
+}
+
+export interface StreamCacheSummary {
+  /** Streamed tracks with locally-cached media. */
+  count: number;
+  /** Total cached bytes. */
+  bytes: number;
+}
+
+/** Tally the on-device offline cache for streamed tracks (Settings usage display). */
+export async function summarizeStreamedCache(
+  db: MuzeroDB = defaultDb,
+): Promise<StreamCacheSummary> {
+  const tracks = (await db.tracks.toArray()).filter(isStreamedTrackCached);
+  let count = 0;
+  let bytes = 0;
+  for (const track of tracks) {
+    if (!track.blobId) continue;
+    const media = await db.mediaBlobs.get(track.blobId);
+    if (media?.role === "media") {
+      count += 1;
+      bytes += media.bytes ?? media.blob?.size ?? 0;
+    }
+  }
+  return { count, bytes };
+}
+
+/** Evict all cached streamed media; the tracks stay (re-resolve on next play). Returns the count freed. */
+export async function clearStreamedCache(db: MuzeroDB = defaultDb): Promise<number> {
+  const tracks = (await db.tracks.toArray()).filter(isStreamedTrackCached);
+  let cleared = 0;
+  await db.transaction("rw", db.tracks, db.mediaBlobs, async () => {
+    for (const track of tracks) {
+      if (!track.blobId) continue;
+      const media = await db.mediaBlobs.get(track.blobId);
+      if (media?.role !== "media") continue;
+      await db.mediaBlobs.delete(track.blobId);
+      await db.tracks.update(track.id, { blobId: undefined });
+      cleared += 1;
+    }
+  });
+  return cleared;
 }
