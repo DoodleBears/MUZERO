@@ -5,8 +5,9 @@
  * official lyrics directly, no search. Otherwise it reuses the tested NetEase
  * stream source's cloudsearch to find a songId by title/artist, then fetches.
  *
- * NetEase's lyric body is LRC text → returned as-is in `synced` (parsed by the
- * shared `parseLrc`). All HTTP goes through the injected {@link StreamHttp}
+ * NetEase returns word-level yrc when available (tagged `format: "yrc"`), else
+ * line-level LRC — both ride `synced` and are parsed by the shared `parseLyrics`.
+ * All HTTP goes through the injected {@link StreamHttp}
  * (muzfetch proxy: Cookie/Referer/UA injection + CORS), so it's desktop-grade and
  * unit-testable with a stub.
  */
@@ -80,6 +81,7 @@ export function createNeteaseLyricsProvider(deps: NeteaseLyricsDeps = {}): Lyric
       source: "netease",
       sourceId: songId,
       synced: parsed.synced,
+      format: parsed.format,
       plain: parsed.plain,
       instrumental: parsed.instrumental,
       matched: { trackName: "", artistName: "", durationSec: 0 },

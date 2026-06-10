@@ -14,7 +14,7 @@
 | Phase | Name | Status | Link |
 |-------|------|--------|------|
 | 1 | 基础设施：统一歌词模型 + 格式探测 + Enhanced-LRC `<…>` 健壮性（纯函数 + 单测，不改渲染） | ✅ Completed | [Phase 1 Checklist](#phase-1-checklist) |
-| 2 | 词级解析器：parseEnhancedLrc / parseYrc / parseQrc 归一化到统一模型 + `format` 落库 | 🔄 In Progress（2a 解析器+dispatch+resolve 完成；2b 网易 yrc opt-in 待做） | [Phase 2 Checklist](#phase-2-checklist) |
+| 2 | 词级解析器：parseEnhancedLrc / parseYrc / parseQrc 归一化到统一模型 + `format` 落库 | ✅ Completed | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | 逐字卡拉OK渲染：SyncedLines 按词 fill（active 行）+ Settings 开关 + 回退整行高亮 | 🔲 Pending | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | 翻译 / 罗马音双行：模型携带 translation/roman 子行 + Settings 开关 | 🔲 Pending | [Phase 4 Checklist](#phase-4-checklist) |
 | 5（可选）| TTML 解析器 + amll-ttml-db 作为新 LyricsProvider（逐字+翻译+对唱的天花板源） | 🔲 Pending | [Phase 5 Checklist](#phase-5-checklist) |
@@ -298,15 +298,15 @@ export function activeWordIndex(words: WordTiming[], positionMs: number): number
 - [x] [`parse.ts`](../../../src/lyrics/parse.ts) `switch` 挂载 elrc/yrc/qrc（ttml 占位返回 `[]`，Phase 5 接）。
 - [x] [`resolve-lyrics.ts`](../../../src/lyrics/resolve-lyrics.ts)：synced 模式改走 `parseLyrics(synced, format)`，`lines: LyricLine[]`（含 words；view 结构兼容零改动）。
 
-**2b Tasks（待做）：**
-- [ ] 网易 provider：除 `lrc.lyric` 外可取 `yrc`（带 `format:"yrc"`，有则优先）；保留 `stripNeteaseMetaLines`。
+**2b Tasks（完成）：**
+- [x] 网易 provider 取 `yrc`：[`buildLyricBody`](../../../src/lyrics/netease-lyric-map.ts) 加 `yv:0`；`parseNeteaseLyric` 有 yrc 优先（`detectLyricsFormat==="yrc"` 校验）回退 lrc；保留 `stripNeteaseMetaLines`；`format` 透传进 hit（[`netease-lyrics-provider.ts`](../../../src/lyrics/netease-lyrics-provider.ts)）。
 
 #### Phase 2 Checklist
 - [x] yrc/qrc 词时间轴解析对拍参考样本（固定输入 → 期望 words）。
 - [x] 「youdon't」类丢空格回归测试（词尾空格保留，三个 parser 各覆盖）。
 - [x] 无词级源回退整行（lrc 路径 words undefined，resolve-lyrics 既有用例零回归）。
 - [x] 58 lyrics 单测全过；my-files tsc/biome 干净。
-- [ ] 2b：网易 yrc opt-in 落地 + `make check`。
+- [x] 2b：网易 yrc opt-in 落地（有 yrc 优先 / 空 yrc 回退 lrc 单测）；my-files tsc/biome 干净。
 
 ### Phase 3: 逐字卡拉OK渲染
 
@@ -405,6 +405,7 @@ export function activeWordIndex(words: WordTiming[], positionMs: number): number
 |------|--------|---------|
 | 2026-06-11 | DoodleBear | 初稿：多歌词格式（Enhanced LRC / YRC / QRC / TTML）+ 逐字卡拉OK + 翻译/罗马音。统一模型 + home-grown 纯函数解析器（不引入 AMLL lib）+ 渲染期解析零迁移；5 phase（基础设施→词级解析→逐字渲染→双行→TTML/amll-ttml-db）。Q1–Q5 待定 |
 | 2026-06-11 | DoodleBear | Status→Final，Q1–Q5 锁定（按倾向）。**Phase 1 完成**：`model.ts`（统一模型）+ `parse.ts`（`parseLyrics`/`detectLyricsFormat` 穷举单测）+ `parseLrc` 行内 `<…>` 剥离（`stripInlineWordTags`，修 Enhanced-LRC 乱码健壮性）+ `format?` 贯穿 `LyricsRecord`/`LyricsHit`/`lyricsRecordFromHit`。未建 `formats/lrc.ts`（直接扩 parseLrc，零 importer 改动）。54 单测全过 |
+| 2026-06-11 | DoodleBear | **Phase 2 完成**（2 commits）。2a：`formats/{enhanced-lrc,yrc,qrc}.ts` 三个词级解析器归一到 `words[]`（各保留词尾空格）+ `parse.ts` dispatch + `resolve-lyrics` synced→`LyricLine[]`（view 零改动）。2b：网易 provider opt-in `yv:0` 取 yrc、有则优先回退 lrc。渲染仍整行（逐字渲染在 Phase 3）|
 
 ---
 

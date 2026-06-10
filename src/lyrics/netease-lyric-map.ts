@@ -2,20 +2,30 @@
  * Pure NetEase lyric mappings — request body + response parsing for the eapi
  * `/api/song/lyric/v1` endpoint. Zero IO (mirrors `lrclib-map.ts`): the provider
  * shell wires the cookie-authed eapi request around these. NetEase returns
- * LRC-format text in `lrc.lyric`, so the existing `parseLrc` renders it as-is.
+ * line-level LRC in `lrc.lyric` and (when available) word-level karaoke in
+ * `yrc.lyric` — we prefer the latter, tagging it `format: "yrc"` for `parseLyrics`.
  */
+
+import type { LyricFormat } from "./model";
+import { detectLyricsFormat } from "./parse";
 
 export const NETEASE_LYRIC_URL = "https://interface.music.163.com/eapi/song/lyric/v1";
 export const NETEASE_LYRIC_PATH = "/api/song/lyric/v1";
 
-/** The eapi lyric request body. `lv/kv/tv` request the main/karaoke/translation LRC. */
+/**
+ * The eapi lyric request body. `lv/kv/tv` request the main/karaoke/translation
+ * LRC; `yv` requests the word-level **yrc** (per-syllable karaoke) when the song
+ * has it.
+ */
 export function buildLyricBody(songId: string): Record<string, unknown> {
-  return { id: songId, cp: false, lv: 0, kv: 0, tv: 0 };
+  return { id: songId, cp: false, lv: 0, kv: 0, tv: 0, yv: 0 };
 }
 
 export interface NeteaseLyricResult {
-  /** Raw LRC with `[mm:ss.cs]` timestamps (parsed downstream by `parseLrc`). */
+  /** Raw timed lyric text — line-level LRC, or word-level yrc when `format` says so. */
   synced?: string;
+  /** Set to `"yrc"` for word-level lyrics; absent (→ lrc auto-detect) for line-level. */
+  format?: LyricFormat;
   plain?: string;
   instrumental: boolean;
 }
@@ -44,8 +54,15 @@ export function stripNeteaseMetaLines(raw: string): string {
 
 /** Parse the `/song/lyric/v1` response. Returns null for uncollected/missing lyrics. */
 export function parseNeteaseLyric(json: unknown): NeteaseLyricResult | null {
-  const lyric = (json as { lrc?: { lyric?: unknown } } | null)?.lrc?.lyric;
-  const raw = stripNeteaseMetaLines(typeof lyric === "string" ? lyric : "");
+  const j = json as { lrc?: { lyric?: unknown }; yrc?: { lyric?: unknown } } | null;
+
+  // Prefer word-level yrc when the song carries it (after dropping credit JSON).
+  const yrc = stripNeteaseMetaLines(typeof j?.yrc?.lyric === "string" ? j.yrc.lyric : "");
+  if (yrc && detectLyricsFormat(yrc) === "yrc") {
+    return { synced: yrc, format: "yrc", instrumental: false };
+  }
+
+  const raw = stripNeteaseMetaLines(typeof j?.lrc?.lyric === "string" ? j.lrc.lyric : "");
   if (!raw) return null;
   if (PURE_MUSIC.test(raw)) return { instrumental: true };
   if (HAS_TIMESTAMP.test(raw)) return { synced: raw, instrumental: false };

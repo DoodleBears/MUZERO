@@ -2,13 +2,14 @@ import { describe, expect, it } from "vitest";
 import { buildLyricBody, parseNeteaseLyric, pickClosestByDuration } from "./netease-lyric-map";
 
 describe("buildLyricBody", () => {
-  it("builds the eapi lyric request body for a song id", () => {
+  it("builds the eapi lyric request body for a song id (incl. word-level yrc)", () => {
     expect(buildLyricBody("33894312")).toEqual({
       id: "33894312",
       cp: false,
       lv: 0,
       kv: 0,
       tv: 0,
+      yv: 0,
     });
   });
 });
@@ -28,6 +29,29 @@ describe("parseNeteaseLyric", () => {
   it("returns plain text when there are no timestamps", () => {
     expect(parseNeteaseLyric({ lrc: { lyric: "just a line\nanother line" } })).toEqual({
       plain: "just a line\nanother line",
+      instrumental: false,
+    });
+  });
+
+  it("prefers word-level yrc over line-level lrc when present", () => {
+    const json = {
+      yrc: { lyric: "[1000,800](1000,300,0)Hello (1300,250,0)world" },
+      lrc: { lyric: "[00:01.00]Hello world" },
+    };
+    expect(parseNeteaseLyric(json)).toEqual({
+      synced: "[1000,800](1000,300,0)Hello (1300,250,0)world",
+      format: "yrc",
+      instrumental: false,
+    });
+  });
+
+  it("falls back to lrc when yrc is empty or just credit metadata", () => {
+    const json = {
+      yrc: { lyric: '{"c":[{"tx":"作词: "},{"tx":"x"}]}' },
+      lrc: { lyric: "[00:01.00]Hello world" },
+    };
+    expect(parseNeteaseLyric(json)).toEqual({
+      synced: "[00:01.00]Hello world",
       instrumental: false,
     });
   });
