@@ -1,6 +1,6 @@
 # PRD: MUZERO Instant Cover Thumbnails (cache + thumbhash, no placeholder-icon flicker)
 
-**Status:** Draft
+**Status:** Completed — Phases 1–5 ✅ (follow-ups noted below: interactive cover buttons / dock / avatars / memory thumbnails)
 **Created:** 2026-06-10
 **Author:** MUZERO
 **Module:** Media Library — make every cover/avatar/thumbnail feel instant: persist object URLs across mounts (zero flash on revisit), show a **thumbhash** preview the very first time (locally and for not-yet-downloaded remote covers), and fade the real image in instead of snapping from a blank icon.
@@ -15,7 +15,7 @@
 | 2 | Shared `<CoverImage>` (fade + static placeholder) + rollout to all surfaces | ✅ Completed | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | Thumbhash data infra — owner-row field + generate-on-save + lazy backfill + R2 carry | ✅ Completed | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | `<CoverImage>` thumbhash placeholder layer | ✅ Completed | [Phase 4 Checklist](#phase-4-checklist) |
-| 5 | Tests + leak audit + polish | 🔄 In Progress | [Phase 5 Checklist](#phase-5-checklist) |
+| 5 | Tests + leak audit + polish | ✅ Completed | [Phase 5 Checklist](#phase-5-checklist) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
 
@@ -329,8 +329,8 @@ No Zustand/store involvement (规则 6 — non-reactive singleton stays in modul
 - [~] `make check` — typecheck + biome clean across all changes; **this PRD's ~40 tests all green**. Full suite is 1007/1010; the 3 failures are unrelated other-agent WIP (`virtual-track-list`/`chat-model-picker`/`track-memory-notes-panel`), not regressions here.
 
 ### Phase 5 Checklist
-- [x] All of this PRD's cache + thumbhash + CoverImage + backfill + leak tests green (~40).
-- [~] `make check` typecheck + lint green; test suite green except 3 pre-existing unrelated other-agent failures.
+- [x] All of this PRD's cache + thumbhash + CoverImage + backfill + leak tests green (~44).
+- [x] `make check` typecheck + biome green across all changes. Full suite **1015/1018** — the only 3 failures (`virtual-track-list`, `chat-model-picker`, `track-memory-notes-panel`) import none of this PRD's modules; they are other agents' in-flight WIP on the shared branch, unchanged by this work (this PRD added tests and introduced zero new failures).
 
 ---
 
@@ -397,6 +397,7 @@ No Zustand/store involvement (规则 6 — non-reactive singleton stays in modul
 | 2026-06-10 | MUZERO | **Lazy backfill done** — centralized owner-aware `backfillCoverThumbhashes` (resolved the "useTrackCoverUrl doesn't know the owner table" snag) + idle trigger from the gallery; 5 tests. `setTrackCoverFromMemory` covers now picked up by it. |
 | 2026-06-10 | MUZERO | **Phase 5 🔄**: added a leak-audit test; ~40 PRD tests + typecheck + biome all green. |
 | 2026-06-10 | MUZERO | **Phase 3 ✅ — R2 manifest carry done** (§3.4): `thumbhash?` on the entity-cover + set-track schemas; export emits it; import lands it (set-track flows via `r2-subscription`'s `.source`). Both lanes tested. Search-catalog left out. `chore(deps)` committed package.json/lock (thumbhash + in-flight electron-builder, authorized). |
+| 2026-06-10 | MUZERO | **All phases ✅.** Full suite 1015/1018 (3 failures are unrelated other-agent WIP, unchanged). PRD complete end-to-end: cache → CoverImage fade → thumbhash generate/render/backfill/R2-carry → all gallery surfaces. Follow-ups (not flicker-related, covers already instant via cache): interactive cover buttons / dock / avatars / memory thumbnails. |
 | 2026-06-10 | MUZERO | **Phases 2 ✅ & 4 ✅ — rollout completed.** Per the user's go-ahead, rolled `<CoverImage>` (+ `thumbhash`) into `EntityCard` (专辑/歌手格) and `track-row` (全部歌曲), the last two gallery surfaces — their commit lands the files' in-flight WIP (right-click-delete-entity / row tweaks) alongside, flagged in the message. Remote-only previews now display (track rows show `coverThumbhash`). biome + tsc clean; `track-row.test.tsx` green. **Remaining (follow-ups, not flicker-related):** interactive cover buttons / dock / avatars / memory thumbnails; full-suite green still gated by 3 unrelated other-agent test failures. |
 
 ---
