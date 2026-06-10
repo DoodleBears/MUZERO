@@ -51,6 +51,7 @@ describe("buildR2ExportPlan", () => {
       displayName: "Studio laptop",
       avatarSeed: "blue",
     });
+    expect(setIndex.tracks[0].memories[0].atSec).toBe(137);
     expect(setIndex.tracks[0].mediaMetadata).toMatchObject({
       album: "Blue City",
       artists: ["Doodle Bear"],
@@ -847,6 +848,7 @@ async function seedSet(options: { remoteOnly?: boolean } = {}) {
       avatarSeed: "blue",
     },
     createdAt: 150,
+    atSec: 137,
   };
   const blobs: MediaBlob[] = options.remoteOnly
     ? []

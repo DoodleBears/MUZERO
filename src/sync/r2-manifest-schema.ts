@@ -94,6 +94,8 @@ export const r2MemorySchema = z.object({
   note: z.string(),
   author: r2MemoryAuthorSchema.optional(),
   createdAt: millisSchema,
+  // Optional playback anchor (seconds) — additive, omitted by older manifests.
+  atSec: z.number().nonnegative().optional(),
   photo: r2RemoteObjectSchema.optional(),
 });
 

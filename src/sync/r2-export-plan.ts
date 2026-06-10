@@ -318,6 +318,7 @@ function toRemoteMemory(
     note: memory.note,
     author: memory.author,
     createdAt: memory.createdAt,
+    atSec: memory.atSec,
     photo,
   };
 }

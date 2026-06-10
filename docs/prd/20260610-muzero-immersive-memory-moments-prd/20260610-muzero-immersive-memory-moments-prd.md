@@ -15,7 +15,7 @@
 
 | Phase | Name | Status | Link |
 |-------|------|--------|------|
-| 1 | Timestamp foundation（`Memory.atSec` 数据层 + repo + 同步） | 🔲 Pending | [Phase 1 Checklist](#phase-1-checklist) |
+| 1 | Timestamp foundation（`Memory.atSec` 数据层 + repo + 同步） | ✅ Completed | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | Capture & display the anchor（编辑器钉秒 + 列表/轮播徽标） | 🔲 Pending | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | Immersive memory overlay（沉浸浮层 + 调度引擎 + 设置开关） | 🔲 Pending | [Phase 3 Checklist](#phase-3-checklist) |
 
@@ -379,17 +379,17 @@ App 层已算出 `visualizerIdleOnly` / `foregroundHidden`（[`App.tsx:129-134`]
 **Goal:** 让 `Memory` 能可选地存秒，并端到端（含 R2 同步）保真，纯数据层先行、零 UI。
 
 **Tasks:**
-- [ ] `Memory.atSec?: number` 加进 [`types.ts`](src/db/types.ts)（含注释：可选/非索引/clamp 规则）。
-- [ ] `addMemory` input 加 `atSec` 并透传；新增 `updateMemory(id, { note?, atSec? | null })`（`updateMemoryNote` 转调或保留）。
-- [ ] R2 同步三处透传：`r2MemorySchema` / `toRemoteMemory` / import 映射。
-- [ ] 确认**不需要** Dexie bump（写注释固化决定，引用 coverThumbhash 先例）。
+- [x] `Memory.atSec?: number` 加进 [`types.ts`](src/db/types.ts)（含注释：可选/非索引/clamp 规则）。
+- [x] `addMemory` input 加 `atSec` 并透传（`sanitizeAtSec`：负/非有限 → undefined）；新增 `updateMemory(id, { note?, atSec? | null })`，`updateMemoryNote` 转调它。
+- [x] R2 同步三处透传：`r2MemorySchema`（`+ atSec?`）/ `toRemoteMemory` / import 映射。
+- [x] 确认**不需要** Dexie bump（types.ts 注释固化决定，引用 coverThumbhash 先例）。
 
 ### Phase 1 Checklist
 
-- [ ] `repositories.test.ts`：`addMemory({atSec})` 往返；`updateMemory` 改秒/清秒（`atSec: null` → undefined）。
-- [ ] `r2-export-plan.test.ts` / `r2-import-stream.test.ts`：含/不含 `atSec` 的记忆导出→导入保真；老 manifest（无字段）解析为 floating 不报错。
-- [ ] clamp 行为（越界/NaN → undefined 或夹紧）有断言。
-- [ ] `make check` 通过（typecheck + lint + test）。
+- [x] `repositories.test.ts`：`addMemory({atSec})` 往返；`updateMemory` 改秒/清秒（`atSec: null` → undefined）；`updateMemoryNote` 保留 atSec。
+- [x] `r2-export-plan.test.ts` / `r2-import-stream.test.ts` / `r2-manifest-schema.test.ts`：含 `atSec` 的记忆导出→导入→schema 解析保真；`.optional()` 让老 manifest（无字段）解析为 floating 不报错。
+- [x] sanitize 行为（负值/NaN → undefined）有断言；上界 clamp 归调用方（repo 不知 durationSec）。
+- [x] typecheck（full, green）+ biome（changed files, clean）+ 目标测试 64 passed。
 
 ### Phase 2: Capture & display the anchor
 
@@ -493,6 +493,7 @@ App 层已算出 `visualizerIdleOnly` / `foregroundHidden`（[`App.tsx:129-134`]
 |------|--------|---------|
 | 2026-06-10 | MUZERO (DoodleBear) | Initial draft — `Memory.atSec` 数据/同步基础、编辑器钉秒、沉浸记忆浮层 + 调度引擎，三 phase（基础设施→编辑器→沉浸表面） |
 | 2026-06-10 | MUZERO (DoodleBear) | 定稿 Q1–Q5：双 lane 抢占式调度（锚点抢占 floating + `MIN_SHOW_MS` 交叉淡出）、徽标专属 seek、统一时长抽象 `memoryDisplayDurationMs`（rail+浮层共用）、整秒捕获。Status 仍 Draft，待评审 |
+| 2026-06-10 | MUZERO (DoodleBear) | ✅ Phase 1 落地（TDD）：`Memory.atSec` + `addMemory`/`updateMemory` + R2 manifest 三处透传；64 tests green，无 Dexie bump |
 
 ---
 

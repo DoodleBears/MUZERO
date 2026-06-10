@@ -105,6 +105,7 @@ export async function importRemoteSetStream(
       remotePhotoUrl: remoteTrack.memoryPhotoUrls.find((photo) => photo.memoryId === memory.id)
         ?.url,
       createdAt: memory.createdAt,
+      atSec: memory.atSec,
     }));
   });
 

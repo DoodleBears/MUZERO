@@ -75,6 +75,7 @@ const remoteSet: RemoteSetIndexResult = {
               avatarSeed: "green",
             },
             createdAt: 1780944000000,
+            atSec: 42,
             photo: {
               key: "objects/memories/mem_1.jpg",
               url: "objects/memories/mem_1.jpg",
@@ -133,6 +134,7 @@ const remoteSet: RemoteSetIndexResult = {
               avatarSeed: "green",
             },
             createdAt: 1780944000000,
+            atSec: 42,
             photo: {
               key: "objects/memories/mem_1.jpg",
               url: "objects/memories/mem_1.jpg",
@@ -178,6 +180,7 @@ describe("importRemoteSetStream", () => {
     const memories = await db.memories.where("trackId").equals(result.trackIds[0]!).toArray();
     expect(memories[0]).toMatchObject({
       note: "sea night",
+      atSec: 42,
       remotePhotoUrl: "https://music.example.com/muzero/objects/memories/mem_1.jpg",
       author: {
         devicePublicId: "dvc_friend",

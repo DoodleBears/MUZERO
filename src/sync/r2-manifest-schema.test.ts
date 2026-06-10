@@ -99,6 +99,7 @@ describe("r2SetIndexSchema", () => {
                 avatarSeed: "ocean-blue",
               },
               createdAt: 1780944000000,
+              atSec: 98,
             },
           ],
         },
@@ -106,6 +107,7 @@ describe("r2SetIndexSchema", () => {
     });
 
     expect(setIndex.tracks[0]?.memories?.[0]?.author?.devicePublicId).toBe("dvc_me");
+    expect(setIndex.tracks[0]?.memories?.[0]?.atSec).toBe(98);
   });
 });
 

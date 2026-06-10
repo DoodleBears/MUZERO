@@ -36,6 +36,7 @@ import {
   setShortcutOverride,
   setTrackNote,
   setTrackTags,
+  updateMemory,
   updateMemoryNote,
   upsertImportFolder,
 } from "./repositories";
@@ -426,6 +427,48 @@ describe("memories (one-to-many)", () => {
     await updateMemoryNote(mem.id, "  fixed  ", db);
     const [reloaded] = await listMemories("trk_e", db);
     expect(reloaded.note).toBe("fixed");
+  });
+
+  it("stores an optional atSec anchor; absent stays floating", async () => {
+    const anchored = await addMemory(
+      { trackId: "trk_ts", note: "drop hits", atSec: 98, createdAt: 1 },
+      db,
+    );
+    const floating = await addMemory({ trackId: "trk_ts", note: "no anchor", createdAt: 2 }, db);
+    expect(anchored.atSec).toBe(98);
+    expect(floating.atSec).toBeUndefined();
+    const [a, f] = await listMemories("trk_ts", db);
+    expect(a.atSec).toBe(98);
+    expect(f.atSec).toBeUndefined();
+  });
+
+  it("treats a negative or non-finite atSec as floating (unanchored)", async () => {
+    const neg = await addMemory({ trackId: "trk_bad", note: "neg", atSec: -3 }, db);
+    const nan = await addMemory({ trackId: "trk_bad", note: "nan", atSec: Number.NaN }, db);
+    expect(neg.atSec).toBeUndefined();
+    expect(nan.atSec).toBeUndefined();
+  });
+
+  it("updateMemory patches note and atSec independently; null clears the anchor", async () => {
+    const mem = await addMemory({ trackId: "trk_um", note: "x", atSec: 10 }, db);
+    await updateMemory(mem.id, { atSec: 42 }, db);
+    expect((await listMemories("trk_um", db))[0]?.atSec).toBe(42);
+    // note-only patch leaves the anchor untouched
+    await updateMemory(mem.id, { note: "  retimed  " }, db);
+    const [afterNote] = await listMemories("trk_um", db);
+    expect(afterNote.note).toBe("retimed");
+    expect(afterNote.atSec).toBe(42);
+    // null clears the anchor → floating
+    await updateMemory(mem.id, { atSec: null }, db);
+    expect((await listMemories("trk_um", db))[0]?.atSec).toBeUndefined();
+  });
+
+  it("updateMemoryNote still edits the note and leaves atSec intact", async () => {
+    const mem = await addMemory({ trackId: "trk_un", note: "typo", atSec: 5 }, db);
+    await updateMemoryNote(mem.id, "fixed", db);
+    const [reloaded] = await listMemories("trk_un", db);
+    expect(reloaded.note).toBe("fixed");
+    expect(reloaded.atSec).toBe(5);
   });
 
   it("deletes a memory and its photo blob", async () => {
