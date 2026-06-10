@@ -23,6 +23,7 @@ import type { StreamPlaylist, StreamSearchHit } from "@/streamsrc/provider";
 const ONLINE_SOURCES: { id: StreamSourceId; label: string }[] = [
   { id: "netease", label: "网易云" },
   { id: "bili", label: "Bilibili" },
+  { id: "youtube", label: "YouTube" },
 ];
 
 const EMPTY_MEMORY_NOTES = new Map<string, string[]>();

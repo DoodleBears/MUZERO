@@ -16,6 +16,7 @@ interface MuzeroApi {
   /** Main returns the RAW captured cookies (renderer assembles the header). */
   openSourceLogin(request: StreamLoginRequest): Promise<StreamCookie[] | null>;
   readSourceCookies(request: StreamLoginRequest): Promise<StreamCookie[] | null>;
+  evalYoutubeN(functionSource: string, n: string): Promise<string>;
 }
 
 const PROXY_URL = "muzfetch://proxy/";
@@ -84,6 +85,7 @@ export function createElectronBridge(): DesktopBridge {
       const cookies = await api.readSourceCookies(request);
       return cookies && cookies.length > 0 ? assembleCookieHeader(cookies) : null;
     },
+    evalYoutubeN: (functionSource, n) => api.evalYoutubeN(functionSource, n),
   };
 }
 

@@ -15,6 +15,8 @@ import { createBiliSource } from "./bili/bili-source";
 import type { StreamHttp } from "./http";
 import { createNeteaseSource } from "./netease/netease-source";
 import type { StreamSourceProvider } from "./provider";
+import { createBridgeYoutubeRuntime } from "./youtube/youtube-bridge-runtime";
+import { createYoutubeSource } from "./youtube/youtube-source";
 
 /** Codename-stable order (CLAUDE.md rule 4). */
 export const STREAM_SOURCE_IDS: StreamSourceId[] = ["netease", "bili", "youtube"];
@@ -26,7 +28,7 @@ export interface StreamSourceDeps {
   getCookie: (id: StreamSourceId) => string | undefined;
 }
 
-/** Build one source provider, or null if it isn't implemented yet (youtube → Phase 4). */
+/** Build one source provider. */
 export function createStreamSource(
   id: StreamSourceId,
   deps: StreamSourceDeps,
@@ -41,7 +43,13 @@ export function createStreamSource(
     case "netease":
       return createNeteaseSource({ http: deps.http, getCookie: () => deps.getCookie("netease") });
     case "youtube":
-      return null;
+      // Search works anywhere; resolve needs the desktop sig/n runtime (null on web/tauri).
+      return createYoutubeSource({
+        http: deps.http,
+        now: deps.now,
+        getCookie: () => deps.getCookie("youtube"),
+        runtime: createBridgeYoutubeRuntime(deps.http) ?? undefined,
+      });
   }
 }
 

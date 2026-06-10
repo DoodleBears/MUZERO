@@ -85,6 +85,7 @@ app.whenReady().then(() => {
   protocol.handle("muzfetch", handleMuzfetch);
   registerIpc();
   require("./source-login.cjs").registerSourceLogin();
+  require("./youtube-engine.cjs").registerYoutubeEngine();
   createWindow();
 });
 app.on("window-all-closed", () => {

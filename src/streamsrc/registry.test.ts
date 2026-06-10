@@ -31,8 +31,9 @@ describe("createStreamSource", () => {
     expect(netease?.isAuthed()).toBe(false); // no netease cookie
   });
 
-  it("returns null for youtube (Phase 4, not yet implemented)", () => {
-    expect(createStreamSource("youtube", deps)).toBeNull();
+  it("builds the youtube source (search works; resolve needs the desktop runtime)", () => {
+    const yt = createStreamSource("youtube", deps);
+    expect(yt?.id).toBe("youtube");
   });
 });
 
@@ -46,7 +47,7 @@ describe("resolveEnabledStreamSources", () => {
       },
     } as Pick<AppSettings, "streamSources">;
     const sources = resolveEnabledStreamSources(settings, deps);
-    expect(sources.map((s) => s.id)).toEqual(["bili"]); // netease disabled, youtube unimplemented
+    expect(sources.map((s) => s.id)).toEqual(["bili", "youtube"]); // netease disabled
   });
 
   it("returns [] when nothing is enabled", () => {
