@@ -699,9 +699,13 @@ InnerTube `/youtubei/v1/player` 取流 + EJS `sig`/`n` 解密(隐藏 sandboxed `
 | Y1 | `pickAdaptiveAudio` 纯音轨选择(MP4/AAC>WebM/Opus + 码率；忽略视频轨；`audioCodecOf`/`audioMimeFor`) | `youtube/youtube-formats.ts` | ×7 | ✅ green |
 | Y2 | InnerTube 纯映射：`buildPlayerRequestBody`(context/client/signatureTimestamp/visitorData/poToken)+`parsePlayerResponse`(playabilityStatus→verdict + formats + details + 过期)；`YT_CLIENTS`(WEB_REMIX/TV) | `youtube/youtube-innertube.ts` | ×5 | ✅ green |
 | Y3 | 密文 URL 纯组装：`parseSignatureCipher`(s/sp/url)+`resolveFormatUrl`(注入 `solveSig`/`solveN`→descramble+附 sig+变换 n) | `youtube/youtube-cipher.ts` | ×6 | ✅ green |
-| Y4 | InnerTube 取流编排：bootstrap(apiKey/visitorData/playerJsUrl)+ `WEB_REMIX→TV` 客户端轮询 `/player`，注入式(stub http+solvers) | `youtube/youtube-resolve.ts` | 🔲 | 🔲 |
-| Y5 | 主进程隐藏 `BrowserWindow` 生命周期 + IPC(`solveSig`/`solveN`/`getPoToken`)；渲染层经 bridge | `electron/youtube-engine.cjs` · `lib/desktop/*` | 🔲（运行时） | 🔲 |
-| Y6 | sig/n solver：在隔离世界跑 `yt.solver` 资产、按 `playerJsUrl` 缓存；PoToken：同窗口 BotGuard 缓存 6h | `youtube/youtube-solver.ts`（bridge 注入）| 🔲（运行时） | 🔲 |
-| Y7 | `createYoutubeSource`(search via InnerTube `/search` + resolve)+ registry `youtube` 分支(去掉 null) | `youtube/youtube-source.ts` · `registry.ts` | 🔲 | 🔲 |
+| Y4 | InnerTube 取流编排 `resolveYoutubeAudio`：`WEB_REMIX→TV` 客户端轮询 `/player`(LOGIN/age→下一客户端)→选音轨→`resolveFormatUrl`，注入式(stub http+bootstrap+solvers) | `youtube/youtube-resolve.ts` | ×5 | ✅ green |
+| Y4b | InnerTube `/search` 纯映射：`buildSearchRequestBody` + `parseSearchResults`(递归收 `videoRenderer`，抗结构漂移)+ `parseDurationText` | `youtube/youtube-search.ts` | ×5 | ✅ green |
+| Y7 | `createYoutubeSource`(search via InnerTube `/search` + resolve via Y4；runtime 注入式)：`StreamSourceProvider`，无 runtime→resolve「桌面专属」错误、search 仍可 | `youtube/youtube-source.ts` | ×4(stub http+runtime) | ✅ green |
+| Y5 | 主进程隐藏 `BrowserWindow` 生命周期 + IPC(`solveSig`/`solveN`/`getPoToken`/`getBootstrap`)；渲染层经 bridge | `electron/youtube-engine.cjs` · `lib/desktop/*` | 🔲（运行时） | 🔲 **阻塞** |
+| Y6 | sig/n solver + PoToken：跑 `yt.solver`/BotGuard 资产、按 `playerJsUrl` 缓存 / 6h 缓存 | `youtube/youtube-solver.ts`（bridge 注入）| 🔲（运行时） | 🔲 **阻塞** |
+| Y8 | registry `youtube` 分支接入(去掉 null)+ ⌘F 在线 chips 加 YouTube + StreamSourceDeps 注入 runtime | `registry.ts` · `global-track-search.tsx` | 🔲 | 🔲（待 Y5/Y6） |
 
-**Y1–Y3 落地**：YouTube 取流的三块纯逻辑(音轨选择 / InnerTube 请求-响应 / 密文 URL 组装)全单测；`sig`/`n` 解密与 PoToken 是注入点(运行时由隐藏窗口 solver 提供)，纯组装层零运行时依赖、可确定性测。
+**Y1–Y4 + Y4b + Y7 落地**：YouTube 整条**可注入/可单测架构已完成**(32 测全绿)——音轨选择、InnerTube 请求-响应、密文 URL 组装、多客户端取流编排、`/search` 解析、source provider 全部纯逻辑 + stub 验证。`createYoutubeSource` 已实现 `StreamSourceProvider` 契约（search 不需签名、即可工作；resolve 走注入 runtime）。
+
+**Y5/Y6 阻塞说明**：让 YouTube **真正出声**需要 `sig`/`n` 解密 + BotGuard PoToken 的运行时——这要么**引入 vendored solver 依赖**(`bgutils-js` / `youtubei.js` 等，当前**因 lockfile 被并发 agent 共享、不能加 npm 依赖**而阻塞)，要么**对真实 player.js 手写抽取**(需真实 YT 运行时反复验证，无法盲写即成)。故本轮**不冒充 YouTube 可播**：架构与契约就位、纯逻辑全测，运行时 solver 是独立后续(解依赖封锁后即可接 Y5/Y6/Y8，registry 一行接入)。
