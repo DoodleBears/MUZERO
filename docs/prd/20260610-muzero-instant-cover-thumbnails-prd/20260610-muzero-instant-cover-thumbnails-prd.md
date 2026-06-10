@@ -160,7 +160,7 @@ Dexie declares only **indexes** in `.stores()`; non-indexed properties are schem
 - **Generate at cover-set.** In `setTrackCover` / `setSessionCover` / `setEntityCover` / `setTrackCoverFromMemory` ([repositories.ts](../../../src/db/repositories.ts)): after writing the blob, encode a thumbhash and write the string onto the owner row in the **same transaction**.
 - **Encode from the displayed framing.** Encode from the **crop-applied** RGBA (reuse `getCroppedBlob`) so the preview matches what the user sees. `setTrackCoverCrop` (crop-only edit, no new blob) **also** regenerates the thumbhash (cheap; keeps the preview aligned with framing).
 - **Off-thread.** Decode → resize to thumbhash's ≤100 px max edge → `rgbaToThumbHash` runs in a Web Worker ([`src/workers/`](../../../src/workers/)); the cover-set call is already async, so awaiting the round-trip is fine.
-- **Lazy backfill (self-healing).** When `useTrackCoverUrl` resolves a cover blob whose owner row has no thumbhash, enqueue a one-time worker encode and persist it. Dedupe/throttle by owner id so a grid of 50 legacy covers doesn't stampede the worker.
+- **Lazy backfill (self-healing).** A **centralized, owner-aware** pass (`backfillCoverThumbhashes`) scans `tracks`/`sessions`/`entityCovers` for covers with bytes but no hash and fills them — owner-aware because the generic cover hook can't know which table to write back to. Triggered a few-per-idle-tick, once per session, from the gallery (`useCoverThumbhashBackfill`); a `skip` set makes the loop converge (un-encodable covers aren't retried). Implementation note: simpler than a per-hook worker enqueue and fully unit-testable via injected `encode`.
 - **Immutability holds.** Editing a cover already writes a **new** `coverBlobId` ([repositories.ts](../../../src/db/repositories.ts) `setSessionCover`/`setEntityCover` delete-then-add); the new thumbhash is written alongside, so preview and bytes never drift.
 
 ### 3.4 R2 sync (in scope — silky remote browsing)
@@ -292,16 +292,16 @@ No Zustand/store involvement (规则 6 — non-reactive singleton stays in modul
 - [x] Add `coverThumbhash?` to `Track` / `DjSession`, `thumbhash?` to `EntityCover` ([types.ts](../../../src/db/types.ts)) — **no `.stores()` change** (§3.2). (`avatarThumbhash` deferred with avatar rollout.)
 - [x] Encode helper [`cover-thumbhash.ts`](../../../src/lib/cover-thumbhash.ts): decode cropped pixels via `createImageBitmap` + (Offscreen)canvas → ≤96 px → `rgbaToThumbHash` → base64. Main-thread at cover-set; guarded → `undefined` on failure (no canvas / decode error → graceful, never blocks the save). Base64 round-trip unit-tested.
 - [x] Generate-on-save wired into `setTrackCover` / `setSessionCover` / `setEntityCover` (encode before the Dexie tx); regenerate in `setTrackCoverCrop` (re-reads the cover blob). Wiring unit-tested with a mocked encoder ([cover-thumbhash-repo.test.ts](../../../src/db/cover-thumbhash-repo.test.ts)).
-- [ ] `setTrackCoverFromMemory` (reads blob inside its tx) — left to lazy backfill.
-- [ ] Lazy backfill in `useTrackCoverUrl` (one-time, deduped per owner id).
-- [ ] Carry thumbhash in R2 manifest cover refs + land it on import next to `remoteCoverUrl` / `remoteCover` (§3.4).
+- [x] **Lazy backfill** — implemented as a **centralized, owner-aware** `backfillCoverThumbhashes(db, encode, {limit, skip})` in [repositories.ts](../../../src/db/repositories.ts) (NOT in `useTrackCoverUrl`, which can't know the owner table): it scans `tracks`/`sessions`/`entityCovers` for covers missing a hash and fills them. `encode` is injected → pure-tested (5 tests: cross-table fill / skip-already-done / limit / un-encodable→attempted / skip-set). Triggered a few-per-idle-tick, once per session, by `useCoverThumbhashBackfill()` ([use-media.ts](../../../src/hooks/use-media.ts)) called from the gallery.
+- [x] `setTrackCoverFromMemory` covers — no longer a special case: the centralized backfill picks them up (any track with `coverBlobId` & no `coverThumbhash`).
+- [ ] Carry thumbhash in R2 manifest cover refs + land it on import next to `remoteCoverUrl` / `remoteCover` (§3.4). **Deferred** — spans multiple cover schemas (entity-cover + set-track + search-catalog) across `r2-export-plan`/`r2-import-stream`; sizeable, lower-urgency (multi-device only).
 
 ### Phase 3 Checklist
 - [x] Setting a new cover stores a thumbhash on the owner row (same transaction) — 3 repo tests green.
 - [x] Crop-only edit refreshes the thumbhash (re-reads blob + re-encodes).
 - [x] Encode degrades gracefully (no canvas → `undefined`, cover-set still succeeds) — verified; existing repo tests unaffected.
-- [ ] Browsing legacy covers backfills their thumbhash exactly once each.
-- [ ] Export→import round-trip preserves the thumbhash on the remote owner row.
+- [x] Browsing legacy covers backfills their thumbhash (incremental, deduped, converges) — 5 backfill tests green.
+- [ ] Export→import round-trip preserves the thumbhash on the remote owner row — deferred with the R2 manifest carry.
 
 ### Phase 4: `<CoverImage>` thumbhash placeholder layer
 
@@ -393,7 +393,8 @@ No Zustand/store involvement (规则 6 — non-reactive singleton stays in modul
 | 2026-06-10 | MUZERO | **Switched preview hash blurhash → `thumbhash`** (embeds aspect ratio/alpha, smaller); brought **R2 manifest carry into scope** (Q6); confirmed avatars in scope (Q7); deferred thumbnail downscaling (Q8). All Open Qs resolved. |
 | 2026-06-10 | MUZERO | **Phase 1 ✅, Phase 2 🔄** (CoverImage + set/entity rollout; entity-grid/track-row deferred under concurrent edits). **Phase 3 🔄**: thumbhash data fields + encode helper + generate-on-save wired & tested. |
 | 2026-06-10 | MUZERO | Per user decision, switched the preview hash from the briefly-vendored source to the **`thumbhash` npm package** (`^0.1.1`); removed the vendored `thumbhash.ts`/test. Manifest (`package.json`/lock) left uncommitted alongside the in-flight electron-builder WIP to preserve shared-branch isolation. |
-| 2026-06-10 | MUZERO | **Phase 4 🔄**: `<CoverImage>` renders the decoded thumbhash preview; wired into SetCard + entity detail. Full suite **1007/1010**; the 3 failures (`virtual-track-list`, `chat-model-picker`, `track-memory-notes-panel`) import none of this PRD's modules — pre-existing other-agent WIP on the shared branch, not regressions here. **Remaining:** lazy backfill (needs owner-table context in `useTrackCoverUrl`), R2 manifest carry (§3.4), deferred UI rollouts (entity-grid/track-row/interactive/dock/avatars), Phase 5 wrap-up. |
+| 2026-06-10 | MUZERO | **Phase 4 🔄**: `<CoverImage>` renders the decoded thumbhash preview; wired into SetCard + entity detail. Full suite **1007/1010**; the 3 failures (`virtual-track-list`, `chat-model-picker`, `track-memory-notes-panel`) import none of this PRD's modules — pre-existing other-agent WIP on the shared branch, not regressions here. |
+| 2026-06-10 | MUZERO | **Lazy backfill done** — centralized owner-aware `backfillCoverThumbhashes` (resolved the "useTrackCoverUrl doesn't know the owner table" snag) + idle trigger from the gallery; 5 tests. `setTrackCoverFromMemory` covers now picked up by it. **Remaining:** R2 manifest carry (§3.4, deferred — multi-schema), deferred UI rollouts (entity-grid/track-row still under concurrent edit), Phase 5 wrap-up. |
 
 ---
 

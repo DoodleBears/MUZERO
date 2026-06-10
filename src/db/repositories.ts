@@ -729,6 +729,78 @@ export async function setTrackCoverCrop(
   await db.tracks.update(id, { coverCrop: crop, coverThumbhash });
 }
 
+/**
+ * Generate missing cover thumbhashes for EXISTING covers (instant-cover-thumbnails
+ * PRD Phase 3). Covers set before this feature — or imported — have a `coverBlobId`
+ * but no `*Thumbhash`; this fills them so they too get an instant blurred preview.
+ *
+ * Owner-aware (queries `tracks` / `sessions` / `entityCovers` directly — the generic
+ * cover hook can't know which table to write back to), incremental (`limit` per
+ * call), and pure-testable (`encode` is injected). `skip` lets a throttled caller
+ * avoid re-attempting covers it already tried this session (e.g. ones that failed
+ * to decode), so the loop converges. Returns how many rows were updated and which
+ * cover blob ids were attempted.
+ */
+export async function backfillCoverThumbhashes(
+  db: MuzeroDB = defaultDb,
+  encode: (blob: Blob, crop?: CropRect) => Promise<string | undefined> = encodeCoverThumbhash,
+  opts: { limit?: number; skip?: ReadonlySet<string> } = {},
+): Promise<{ updated: number; attempted: string[] }> {
+  const limit = opts.limit ?? 12;
+  const skip = opts.skip;
+
+  type Candidate = { blobId: string; crop?: CropRect; persist: (hash: string) => Promise<void> };
+  const candidates: Candidate[] = [];
+
+  for (const t of await db.tracks.filter((t) => !!t.coverBlobId && !t.coverThumbhash).toArray()) {
+    if (t.coverBlobId)
+      candidates.push({
+        blobId: t.coverBlobId,
+        crop: t.coverCrop,
+        persist: async (hash) => {
+          await db.tracks.update(t.id, { coverThumbhash: hash });
+        },
+      });
+  }
+  for (const s of await db.sessions.filter((s) => !!s.coverBlobId && !s.coverThumbhash).toArray()) {
+    if (s.coverBlobId)
+      candidates.push({
+        blobId: s.coverBlobId,
+        crop: s.coverCrop,
+        persist: async (hash) => {
+          await db.sessions.update(s.id, { coverThumbhash: hash });
+        },
+      });
+  }
+  for (const e of await db.entityCovers.filter((e) => !!e.coverBlobId && !e.thumbhash).toArray()) {
+    if (e.coverBlobId)
+      candidates.push({
+        blobId: e.coverBlobId,
+        crop: e.crop,
+        persist: async (hash) => {
+          await db.entityCovers.update(e.id, { thumbhash: hash });
+        },
+      });
+  }
+
+  const attempted: string[] = [];
+  let updated = 0;
+  let processed = 0;
+  for (const c of candidates) {
+    if (processed >= limit) break;
+    if (skip?.has(c.blobId)) continue;
+    processed += 1;
+    attempted.push(c.blobId);
+    const blob = (await db.mediaBlobs.get(c.blobId))?.blob;
+    if (!blob) continue;
+    const hash = await encode(blob, c.crop);
+    if (!hash) continue;
+    await c.persist(hash);
+    updated += 1;
+  }
+  return { updated, attempted };
+}
+
 // ----------------------------------------------------------------- memories ----
 
 /**
