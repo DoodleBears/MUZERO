@@ -105,6 +105,21 @@ export function scoreRow(row: IndexableRow, tokens: SearchTokens): number {
 }
 
 /**
+ * Transliteration-aware "does this query match these fields?" for simple
+ * label/keyword lists (shortcuts cheat-sheet, Settings sidebar). Multi-token AND;
+ * empty query matches. All fields are treated as free-scope. Degrades to
+ * substring until the dictionaries load — same as the rest of search.
+ */
+export function freeTextMatches(query: string, fields: readonly string[]): boolean {
+  const tokens = parseSearchTokens(query);
+  if (isEmptyTokens(tokens)) return true;
+  return (
+    scoreRow({ id: "", free: [...fields], artist: [], album: [], tags: [] }, tokens) <
+    NO_MATCH_SCORE
+  );
+}
+
+/**
  * Filter + rank rows by query relevance (best match first; stable for ties via
  * input order). An empty query returns every row in order with score 0. Returns
  * `{ id, score }` so callers can map ids back onto their own row objects.

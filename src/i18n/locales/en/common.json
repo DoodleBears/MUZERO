@@ -284,6 +284,8 @@
     "navSecPlayback": "Playback",
     "navSecKeyboard": "Keyboard",
     "navShortcuts": "Shortcuts",
+    "searchSettings": "Search settings…",
+    "searchNoResults": "No settings match.",
     "shortcutsTitle": "Keyboard shortcuts",
     "shortcutsSubtitle": "Every binding, grouped and searchable.",
     "shortcutsSearch": "Search shortcuts…",

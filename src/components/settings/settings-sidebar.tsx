@@ -1,12 +1,17 @@
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
+import { Input } from "@/components/ui/input";
+import { useTransliterationReady } from "@/hooks/use-transliteration-ready";
+import { freeTextMatches } from "@/lib/search-core";
 import { cn } from "@/lib/utils";
 import { SETTINGS_NAV } from "./settings-nav";
 
 /**
- * Left rail for the two-column Settings page: sections (group headers) → item
- * buttons. The active item is owned by `nav-store`; this component is purely
- * presentational. Under `md` it collapses to a horizontal, scrollable row above
- * the detail pane (section headers hidden).
+ * Left rail for the two-column Settings page: a search box that filters the
+ * sections/items (transliteration-aware — Chinese pinyin / Japanese kana↔romaji,
+ * same engine as ⌘F), then sections (group headers) → item buttons. The active
+ * item is owned by `nav-store`. Under `md` it collapses to a horizontal,
+ * scrollable row above the detail pane.
  */
 export function SettingsSidebar({
   active,
@@ -16,33 +21,56 @@ export function SettingsSidebar({
   onSelect: (id: string) => void;
 }) {
   const { t } = useTranslation();
+  useTransliterationReady(); // load pinyin/kana so CJK search "snaps in"
+  const [query, setQuery] = useState("");
+
+  const sections = SETTINGS_NAV.map((section) => ({
+    section,
+    items: section.items.filter((item) =>
+      freeTextMatches(query, [t(item.labelKey), t(section.labelKey), item.id]),
+    ),
+  })).filter((entry) => entry.items.length > 0);
+
   return (
-    <nav
-      aria-label={t("settings.navSecAppearance")}
-      className="-mx-1 flex shrink-0 gap-1 overflow-x-auto px-1 md:mx-0 md:w-52 md:flex-col md:overflow-visible md:px-0"
-    >
-      {SETTINGS_NAV.map((section) => (
-        <div key={section.labelKey} className="flex shrink-0 gap-1 md:flex-col">
-          <p className="hidden px-2 pt-3 pb-1 font-medium text-muted-foreground text-xs uppercase tracking-wide md:block">
-            {t(section.labelKey)}
-          </p>
-          {section.items.map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              onClick={() => onSelect(item.id)}
-              className={cn(
-                "shrink-0 whitespace-nowrap rounded-md px-3 py-1.5 text-left text-sm transition-colors",
-                active === item.id
-                  ? "bg-primary/15 font-medium text-primary"
-                  : "text-muted-foreground hover:bg-muted hover:text-foreground",
-              )}
-            >
-              {t(item.labelKey)}
-            </button>
-          ))}
-        </div>
-      ))}
-    </nav>
+    <div className="flex shrink-0 flex-col gap-2 md:w-52">
+      <Input
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+        placeholder={t("settings.searchSettings")}
+        className="h-8"
+        data-settings-search
+      />
+      <nav
+        aria-label={t("settings.searchSettings")}
+        className="-mx-1 flex gap-1 overflow-x-auto px-1 md:mx-0 md:flex-col md:overflow-visible md:px-0"
+      >
+        {sections.map(({ section, items }) => (
+          <div key={section.labelKey} className="flex shrink-0 gap-1 md:flex-col">
+            <p className="hidden px-2 pt-3 pb-1 font-medium text-muted-foreground text-xs uppercase tracking-wide md:block">
+              {t(section.labelKey)}
+            </p>
+            {items.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                data-settings-item={item.id}
+                onClick={() => onSelect(item.id)}
+                className={cn(
+                  "shrink-0 whitespace-nowrap rounded-md px-3 py-1.5 text-left text-sm transition-colors",
+                  active === item.id
+                    ? "bg-primary/15 font-medium text-primary"
+                    : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                )}
+              >
+                {t(item.labelKey)}
+              </button>
+            ))}
+          </div>
+        ))}
+        {sections.length === 0 && (
+          <p className="px-2 py-2 text-muted-foreground text-xs">{t("settings.searchNoResults")}</p>
+        )}
+      </nav>
+    </div>
   );
 }

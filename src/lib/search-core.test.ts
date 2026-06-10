@@ -1,5 +1,6 @@
 import { beforeAll, describe, expect, it } from "vitest";
 import {
+  freeTextMatches,
   type IndexableRow,
   isEmptyTokens,
   parseSearchTokens,
@@ -77,5 +78,21 @@ describe("queryRows", () => {
     const [first] = queryRows(rows, "drive");
     expect(first.id).toBe("exact");
     expect(first.score).toBe(0); // exact title match
+  });
+});
+
+describe("freeTextMatches", () => {
+  it("matches by substring and is multi-token AND", () => {
+    expect(freeTextMatches("", ["Play / Pause"])).toBe(true);
+    expect(freeTextMatches("play", ["Play / Pause", "pause"])).toBe(true);
+    expect(freeTextMatches("play pause", ["Play / Pause"])).toBe(true);
+    expect(freeTextMatches("play stop", ["Play / Pause"])).toBe(false);
+    expect(freeTextMatches("zzz", ["Play / Pause"])).toBe(false);
+  });
+
+  it("matches Chinese via pinyin once the dictionaries load", async () => {
+    await ensureTransliterationLoaded();
+    expect(freeTextMatches("shangyishou", ["上一首"])).toBe(true);
+    expect(freeTextMatches("sys", ["上一首"])).toBe(true); // 首字母 initials
   });
 });

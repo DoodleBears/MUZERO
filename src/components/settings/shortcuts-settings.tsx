@@ -14,6 +14,7 @@ import {
   setShortcutOverride,
 } from "@/db/repositories";
 import { useSettings } from "@/hooks/use-app-data";
+import { useTransliterationReady } from "@/hooks/use-transliteration-ready";
 import { saveTextFile } from "@/lib/save-text-file";
 import { buildCheatSheet, type CheatSheetRow, cheatSheetRowMatches } from "@/shortcuts/cheatsheet";
 import { currentPlatform, mergeBindings, sanitizeOverrides } from "@/shortcuts/engine";
@@ -31,6 +32,7 @@ import { notify } from "@/stores/notification-store";
 export function ShortcutsSettings() {
   const { t } = useTranslation();
   const td = t as unknown as (key: string) => string; // dynamic registry labelKeys
+  useTransliterationReady(); // load pinyin/kana so CJK search "snaps in"
   const overrides = useSettings().shortcutOverrides;
   const [query, setQuery] = useState("");
   const [recording, setRecording] = useState<{ actionId: string; label: string } | null>(null);

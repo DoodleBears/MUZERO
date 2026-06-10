@@ -273,6 +273,8 @@
     "navSecPlayback": "播放",
     "navSecKeyboard": "键盘",
     "navShortcuts": "快捷键",
+    "searchSettings": "搜索设置…",
+    "searchNoResults": "没有匹配的设置。",
     "shortcutsTitle": "键盘快捷键",
     "shortcutsSubtitle": "所有快捷键，按分类列出、可搜索。",
     "shortcutsSearch": "搜索快捷键…",

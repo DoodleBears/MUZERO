@@ -5,6 +5,7 @@
  * labels and renders; this stays unit-testable.
  */
 
+import { freeTextMatches } from "@/lib/search-core";
 import { actionBindingChips, type MergedBindings } from "./engine";
 import {
   isEditableAction,
@@ -79,14 +80,10 @@ export function buildCheatSheet(bindings: MergedBindings, platform: Platform): C
 }
 
 /**
- * Fuzzy-ish match of a row against a search query, using the already-resolved
- * (localized) action label. Matches label, action id, keywords, and chord text.
+ * Match a row against a search query, using the already-resolved (localized)
+ * action label. Transliteration-aware (Chinese pinyin / Japanese kana↔romaji) via
+ * `freeTextMatches`, over the label, action id, keywords, and chord text.
  */
 export function cheatSheetRowMatches(row: CheatSheetRow, query: string, label: string): boolean {
-  const q = query.trim().toLowerCase();
-  if (!q) return true;
-  if (label.toLowerCase().includes(q)) return true;
-  if (row.actionId.toLowerCase().includes(q)) return true;
-  if (row.keywords.some((k) => k.toLowerCase().includes(q))) return true;
-  return row.chips.flat().join(" ").toLowerCase().includes(q);
+  return freeTextMatches(query, [label, row.actionId, ...row.keywords, ...row.chips.flat()]);
 }

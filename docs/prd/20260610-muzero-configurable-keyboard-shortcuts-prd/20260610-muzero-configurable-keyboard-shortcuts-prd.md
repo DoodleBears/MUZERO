@@ -438,6 +438,7 @@ Global `?` (Shift+/)  →  (OPTIONAL, Q8) components/shortcuts/shortcut-help-ove
 | 2026-06-10 | MUZERO | Feature add (registry extension): bare **1/2/3/4** jump straight to a library tab (歌单 / 全部歌曲 / 专辑 / 歌手) on the gallery wall. Four `nav.galleryTab*` actions (scope global, category navigation, `Digit1–4`); handled in SearchPage via `useShortcutMatcher`, so they're rebindable + show in the cheat-sheet. No clash with Cmd+1/2/3 (tab nav) |
 | 2026-06-10 | MUZERO | Phase 5 partial: keymap **import/export** (`keymap-io.ts` + `save-text-file.ts` + cheat-sheet Export/Import buttons), import sanitizes through the same guard as persistence; i18n ×4; 7 tests. Presets + 2-stroke sequences still pending |
 | 2026-06-10 | MUZERO | Phase 5 **presets** (`presets.ts`: Arrow-transport + Vim-navigation, conflict-free; apply-via-confirm → `setAllShortcutOverrides`; preset buttons + i18n ×4; 5 tests). 2-stroke sequences deliberately deferred (invasive core change, no MUZERO use case). The configurable-shortcuts feature is effectively complete — only the entangled `virtual-track-list.tsx` row-nav routing + sequences remain |
+| 2026-06-10 | MUZERO | **Search NLP**: extracted `freeTextMatches` (transliteration-aware — pinyin / kana↔romaji, the ⌘F engine) into `search-core`; the **cheat-sheet search** now uses it (CJK labels/keywords reachable phonetically). Sibling addition: a **search box atop the Settings sidebar** filtering all settings items with the same matcher (`settings-sidebar.tsx`). i18n ×4; 4 tests |
 
 ---
 

@@ -273,6 +273,8 @@
     "navSecPlayback": "再生",
     "navSecKeyboard": "キーボード",
     "navShortcuts": "ショートカット",
+    "searchSettings": "設定を検索…",
+    "searchNoResults": "一致する設定がありません。",
     "shortcutsTitle": "キーボードショートカット",
     "shortcutsSubtitle": "すべてのショートカットを分類・検索できます。",
     "shortcutsSearch": "ショートカットを検索…",
