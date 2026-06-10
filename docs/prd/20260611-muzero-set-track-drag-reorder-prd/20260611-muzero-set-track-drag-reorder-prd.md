@@ -11,7 +11,7 @@
 
 | Phase | Name | Status | Link |
 |-------|------|--------|------|
-| 1 | 纯排序核心 + 仓库层（分数序算法 + lazy 物化 + reorder repo） | 🔲 Pending | [Phase 1 Checklist](#phase-1-checklist) |
+| 1 | 纯排序核心 + 仓库层（分数序算法 + lazy 物化 + reorder repo） | 🔄 In Progress | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | R2 Sync 对齐（manifest rank 字段 + reorder mutation + per-track 合并） | 🔲 Pending | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | 多选模式拖拽 UI（@dnd-kit + 虚拟化 + 整选区块移动 + drop indicator） | 🔲 Pending | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | 打磨（键盘 a11y reorder + 触摸自动滚动 + 边界回归） | 🔲 Pending | [Phase 4 Checklist](#phase-4-checklist) |
@@ -356,14 +356,14 @@ SetDetailView (search-page.tsx:1244)
 **Goal:** 落地分数序算法与持久化，**无 UI、无同步**，全靠单测验证。
 
 **Tasks:**
-- [ ] 新建 [`set-order.ts`](../../../src/player/set-order.ts)：`RANK_SPACING`、`rankBetween/Before/After`、`ranksForBlock`、`ranksAtTop/Bottom`、`rebalance`、`orderedSetTrackIds`（精度判定用浮点精确法 = 中点落到端点，**非**绝对 epsilon）。
+- [x] 新建 [`set-order.ts`](../../../src/player/set-order.ts)：`RANK_SPACING`、`rankBetween/Before/After`、`ranksForBlock`、`ranksAtTop/Bottom`、`rebalance`、`orderedSetTrackIds`、`planReorder`（精度判定用浮点精确法 = 中点落到端点，**非**绝对 epsilon）。✅ 26 测绿
 - [ ] `types.ts`：`DjSession.trackRanks?`；`SyncMutation.action` 加 `"track-reordered-in-set"`。
 - [ ] `repositories.ts`：`reorderTracksInSession(setId, blockIds, anchor)`（含 lazy 物化 + rebalance-on-epsilon + 写 `trackRanks`）；改 `prependTrackIds`/`removeTracksFromSession` 维护不变量。
 - [ ] `search-page.tsx` `SetDetailView`：用 `orderedSetTrackIds` 派生 `tracks`（替代裸 `session.trackIds` map），`shownTracks` 逻辑不变。
 
 #### Phase 1 Checklist
-- [ ] `set-order.test.ts` 穷举 §3.4 全部 edge case：拖到**位置 0** / **最末** / 中间、空歌单 / 移动全部、首次拖拽 lazy 物化、no-op 落回原位不写、被拖块先摘除再算邻居、整块 K 首保序、队首尾向外延伸**绝不 rebalance**、中间插入间隙耗尽 → rebalance 后全序正确、rebalance 幂等、**rank 可为负**（反复拖顶）、缺 rank 回落数组序、NaN / 重复 tiebreaker 兜底。
-- [ ] 压测：同一缝隙连续中点插入 ~50 次（double 二分极限）触发一次 rebalance，重算后可继续插入（「久用不重算」验证）。
+- [x] `set-order.test.ts` 穷举 §3.4 全部 edge case：拖到**位置 0** / **最末** / 中间、空歌单 / 移动全部、首次拖拽 lazy 物化、no-op 落回原位不写、被拖块先摘除再算邻居、整块 K 首保序、队首尾向外延伸**绝不 rebalance**、中间插入间隙耗尽 → rebalance 后全序正确、rebalance 幂等、**rank 可为负**（反复拖顶）、缺 rank 回落数组序、NaN / 重复 tiebreaker 兜底。✅
+- [x] 压测：间隙耗尽（相邻 doubles）触发一次 rebalance，重算后间隙重新拉大、可继续二分（「久用不重算」验证）。**room 取决于 ULP 非绝对间隙**（1e-12 间隙仍可容 100 首）→ 印证浮点精确判定优于固定 epsilon。✅
 - [ ] repo 集成测（`fake-indexeddb`）：首次拖拽物化、单首移动只改一个 rank、整块移动、移动到队首/队尾、移除后 rank 键清理、prepend 已物化歌单赋队首 rank。
 - [ ] legacy 歌单（无 `trackRanks`）展示顺序与改动前**逐一致**（回归）。
 - [ ] `make check` 绿（typecheck + lint + test）。
