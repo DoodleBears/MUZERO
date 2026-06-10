@@ -95,4 +95,45 @@ describe("ShortcutRecorderDialog", () => {
       { kind: "key", stroke: { code: "KeyZ", keyLabel: "Z" } },
     ]);
   });
+
+  it("re-recording a slot recomputes the chain (prunes a now-resolved conflict)", () => {
+    render(
+      <ShortcutRecorderDialog
+        actionId="playback.cycleRepeat"
+        actionLabel="Repeat"
+        open
+        onOpenChange={() => {}}
+      />,
+    );
+    const primary = document.querySelector('[data-capture-action="playback.cycleRepeat"]');
+    if (!primary) throw new Error("no primary slot");
+
+    fireEvent.keyDown(primary, { code: "KeyQ", key: "q" }); // Q → relocate slot for prev
+    expect(document.querySelector('[data-capture-action="playback.prev"]')).toBeTruthy();
+
+    // Re-record the primary to a free chord → the conflict (and its slot) vanish.
+    fireEvent.keyDown(primary, { code: "KeyZ", key: "z" });
+    expect(document.querySelector('[data-capture-action="playback.prev"]')).toBeFalsy();
+    expect(screen.getByText("shortcuts.recorder.save").closest("button")?.disabled).toBe(false);
+  });
+
+  it("the ✕ clears a recorded slot back to pending", () => {
+    render(
+      <ShortcutRecorderDialog
+        actionId="playback.prev"
+        actionLabel="Previous"
+        open
+        onOpenChange={() => {}}
+      />,
+    );
+    const save = () => screen.getByText("shortcuts.recorder.save").closest("button");
+    const capture = document.querySelector('[data-capture-action="playback.prev"]');
+    if (!capture) throw new Error("no slot");
+
+    fireEvent.keyDown(capture, { code: "KeyZ", key: "z" });
+    expect(save()?.disabled).toBe(false);
+
+    fireEvent.click(screen.getByLabelText("shortcuts.removeBinding"));
+    expect(save()?.disabled).toBe(true); // cleared → pending again
+  });
 });

@@ -584,6 +584,7 @@
       "reserved": "This combo may be reserved by your OS / browser and might not fire.",
       "willUnbind": "This unbinds: {{names}}",
       "relocate": "{{name}} loses {{chord}} — record a replacement",
+      "replace": "Press a new shortcut to replace…",
       "chainHint": "Resolving conflicts — record a new shortcut for each, or cancel.",
       "blocked": "Conflicts with a protected shortcut ({{names}}) — can't save.",
       "save": "Save"

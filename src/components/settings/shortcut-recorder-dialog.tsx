@@ -1,3 +1,4 @@
+import { X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
@@ -5,6 +6,7 @@ import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/compone
 import { Kbd, KbdGroup } from "@/components/ui/kbd";
 import { setAllShortcutOverrides } from "@/db/repositories";
 import { useSettings } from "@/hooks/use-app-data";
+import { cn } from "@/lib/utils";
 import { type RecorderDraft, reconcileRecorderDrafts } from "@/shortcuts/conflict";
 import {
   currentPlatform,
@@ -40,6 +42,8 @@ export function ShortcutRecorderDialog({
   // Accumulated user captures (source of truth); the reconcile derives the active,
   // pruned, chain-ordered slot list that we render.
   const [drafts, setDrafts] = useState<RecorderDraft[]>([]);
+  // Which slot is focused (capturing). A focused box prompts for a (re)record.
+  const [focusedId, setFocusedId] = useState<string | null>(null);
 
   useEffect(() => {
     if (open) setDrafts([{ actionId, gesture: null }]);
@@ -89,6 +93,18 @@ export function ShortcutRecorderDialog({
     );
   }
 
+  /** Clear a slot's recorded chord (→ pending), re-run the cascade, and re-focus it. */
+  function clearSlot(slotActionId: string) {
+    setDrafts((prev) =>
+      prev.map((d) => (d.actionId === slotActionId ? { ...d, gesture: null } : d)),
+    );
+    requestAnimationFrame(() => {
+      document
+        .querySelector<HTMLElement>(`[data-capture-action="${CSS.escape(slotActionId)}"]`)
+        ?.focus();
+    });
+  }
+
   async function save() {
     if (!reconcile.canSave) return;
     await setAllShortcutOverrides(reconcile.plan.overrides);
@@ -115,6 +131,10 @@ export function ShortcutRecorderDialog({
               index === 0
                 ? actionLabel
                 : td(SHORTCUT_ACTIONS_BY_ID[slot.actionId]?.labelKey ?? slot.actionId);
+            const focused = focusedId === slot.actionId;
+            // A focused box is "recording" — prompt for a (re)record, hiding the
+            // chip; an unfocused filled box shows its chip + a ✕ to clear.
+            const showPrompt = focused || !slot.gesture;
             return (
               <div key={slot.actionId} className="flex flex-col gap-1">
                 {index > 0 && slot.displacedChord && (
@@ -125,25 +145,44 @@ export function ShortcutRecorderDialog({
                     })}
                   </p>
                 )}
-                <button
-                  type="button"
-                  data-shortcut-capture
-                  data-capture-action={slot.actionId}
-                  onKeyDown={(e) => record(slot.actionId, slot.displacedChord, e)}
-                  className="grid min-h-12 w-full place-items-center rounded-lg border-2 border-input border-dashed bg-background/40 px-3 py-3 outline-none focus-visible:border-primary"
-                >
-                  {slot.gesture ? (
-                    <KbdGroup>
-                      {formatGesture(slot.gesture, platform).map((cap) => (
-                        <Kbd key={cap}>{cap}</Kbd>
-                      ))}
-                    </KbdGroup>
-                  ) : (
-                    <span className="text-muted-foreground text-sm">
-                      {t("shortcuts.recorder.press")}
-                    </span>
+                <div className="relative">
+                  <button
+                    type="button"
+                    data-shortcut-capture
+                    data-capture-action={slot.actionId}
+                    onKeyDown={(e) => record(slot.actionId, slot.displacedChord, e)}
+                    onFocus={() => setFocusedId(slot.actionId)}
+                    onBlur={() => setFocusedId((id) => (id === slot.actionId ? null : id))}
+                    className={cn(
+                      "grid min-h-12 w-full place-items-center rounded-lg border-2 bg-background/40 px-3 py-3 outline-none transition-colors",
+                      focused ? "border-primary border-solid" : "border-input border-dashed",
+                    )}
+                  >
+                    {!showPrompt && slot.gesture ? (
+                      <KbdGroup>
+                        {formatGesture(slot.gesture, platform).map((cap) => (
+                          <Kbd key={cap}>{cap}</Kbd>
+                        ))}
+                      </KbdGroup>
+                    ) : (
+                      <span className="text-muted-foreground text-sm">
+                        {focused && slot.gesture
+                          ? t("shortcuts.recorder.replace")
+                          : t("shortcuts.recorder.press")}
+                      </span>
+                    )}
+                  </button>
+                  {slot.gesture && !focused && (
+                    <button
+                      type="button"
+                      onClick={() => clearSlot(slot.actionId)}
+                      aria-label={t("shortcuts.removeBinding")}
+                      className="-translate-y-1/2 absolute top-1/2 right-2 grid size-7 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                    >
+                      <X className="size-4" />
+                    </button>
                   )}
-                </button>
+                </div>
                 {reserved && (
                   <p className="text-amber-600 text-xs dark:text-amber-500">
                     {t("shortcuts.recorder.reserved")}
