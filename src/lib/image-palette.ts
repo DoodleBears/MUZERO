@@ -12,12 +12,33 @@ type Bucket = {
   lightness: number;
 };
 
+/** Default palette size — dedup usually yields 2–4 useful swatches anyway. */
+const DEFAULT_PALETTE_COUNT = 4;
+/** Two swatches closer than this (sRGB euclidean) collapse into one — keeps a
+ *  palette from being five shades of the same purple. */
+const MIN_SWATCH_DISTANCE = 64;
+
 /**
- * Lightweight browser-side dominant color extraction. Anysoul uses
+ * Lightweight browser-side cover color extraction. Anysoul uses
  * `node-vibrant/browser`; MUZERO keeps this local and dependency-free because
- * cover colors are only used as a live visual accent.
+ * cover colors only drive a live visual accent (single dominant) and the
+ * flow background (a small multi-color palette).
  */
+export async function extractImagePalette(
+  blob: Blob,
+  count = DEFAULT_PALETTE_COUNT,
+): Promise<Rgb[]> {
+  const pixels = await sampleImagePixels(blob);
+  return pixels ? selectImagePalette(pixels, count) : [];
+}
+
+/** Single dominant color — the most prominent entry of {@link extractImagePalette}. */
 export async function extractDominantImageColor(blob: Blob): Promise<Rgb | null> {
+  return (await extractImagePalette(blob, 1))[0] ?? null;
+}
+
+/** Decode + downsample an image Blob to raw RGBA pixels (null if unsupported). */
+async function sampleImagePixels(blob: Blob): Promise<Uint8ClampedArray | null> {
   if (typeof document === "undefined" || !blob.type.startsWith("image/")) return null;
 
   const url = URL.createObjectURL(blob);
@@ -35,8 +56,7 @@ export async function extractDominantImageColor(blob: Blob): Promise<Rgb | null>
     if (!ctx) return null;
 
     ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-    const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
-    return selectDominantImageColor(pixels);
+    return ctx.getImageData(0, 0, canvas.width, canvas.height).data;
   } catch {
     return null;
   } finally {
@@ -44,7 +64,16 @@ export async function extractDominantImageColor(blob: Blob): Promise<Rgb | null>
   }
 }
 
-export function selectDominantImageColor(pixels: Uint8ClampedArray | number[]): Rgb | null {
+/**
+ * Extract up to `count` distinct, prominent chromatic swatches from raw RGBA
+ * pixels — most dominant first. White/black/gray-heavy pixels are skipped so the
+ * palette stays vivid, and near-duplicate swatches are merged. Returns `[]` when
+ * the art has no usable chromatic color (transparent / neutral-only).
+ */
+export function selectImagePalette(
+  pixels: Uint8ClampedArray | number[],
+  count = DEFAULT_PALETTE_COUNT,
+): Rgb[] {
   const buckets = new Map<string, Bucket>();
 
   for (let i = 0; i < pixels.length; i += 4) {
@@ -77,25 +106,41 @@ export function selectDominantImageColor(pixels: Uint8ClampedArray | number[]): 
     }
   }
 
-  let best: Bucket | null = null;
-  let bestScore = -Infinity;
-  for (const bucket of buckets.values()) {
-    const sat = bucket.saturation / bucket.count;
-    const light = bucket.lightness / bucket.count;
-    const lightBalance = 1 - Math.abs(light - 0.52);
-    const score = bucket.count * (0.65 + sat * 1.4) * Math.max(0.25, lightBalance);
-    if (score > bestScore) {
-      best = bucket;
-      bestScore = score;
+  // Average + score every bucket, then take the strongest, skipping any swatch
+  // too close to one already chosen (greedy dedup over score-sorted buckets).
+  const scored = Array.from(buckets.values())
+    .map((bucket) => {
+      const sat = bucket.saturation / bucket.count;
+      const light = bucket.lightness / bucket.count;
+      const lightBalance = 1 - Math.abs(light - 0.52);
+      return {
+        rgb: {
+          r: clampChannel(bucket.r / bucket.count),
+          g: clampChannel(bucket.g / bucket.count),
+          b: clampChannel(bucket.b / bucket.count),
+        },
+        score: bucket.count * (0.65 + sat * 1.4) * Math.max(0.25, lightBalance),
+      };
+    })
+    .sort((a, b) => b.score - a.score);
+
+  const palette: Rgb[] = [];
+  for (const { rgb } of scored) {
+    if (palette.length >= count) break;
+    if (palette.every((picked) => rgbDistance(picked, rgb) >= MIN_SWATCH_DISTANCE)) {
+      palette.push(rgb);
     }
   }
+  return palette;
+}
 
-  if (!best) return null;
-  return {
-    r: clampChannel(best.r / best.count),
-    g: clampChannel(best.g / best.count),
-    b: clampChannel(best.b / best.count),
-  };
+/** Single dominant color (pure) — the first entry of {@link selectImagePalette}. */
+export function selectDominantImageColor(pixels: Uint8ClampedArray | number[]): Rgb | null {
+  return selectImagePalette(pixels, 1)[0] ?? null;
+}
+
+function rgbDistance(a: Rgb, b: Rgb): number {
+  return Math.hypot(a.r - b.r, a.g - b.g, a.b - b.b);
 }
 
 function loadImage(src: string): Promise<HTMLImageElement> {

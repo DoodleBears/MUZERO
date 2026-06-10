@@ -3,7 +3,7 @@ import { useEffect } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { db } from "@/db/muzero-db";
 import { useSettings } from "@/hooks/use-app-data";
-import { extractDominantImageColor } from "@/lib/image-palette";
+import { extractImagePalette } from "@/lib/image-palette";
 import { type Rgb, readPrimaryRgb } from "@/lib/visualizer-color";
 import { usePlayerStore } from "@/stores/player-store";
 import {
@@ -11,7 +11,7 @@ import {
   useVisualizerCoverColorStore,
 } from "@/stores/visualizer-color-store";
 
-const colorCache = new Map<string, Rgb | null>();
+const colorCache = new Map<string, { rgb: Rgb | null; palette: Rgb[] }>();
 
 /**
  * Scoped dynamic visualizer accent. The color is stored outside the component so
@@ -56,15 +56,16 @@ export function useVisualizerCoverColorCss(active = true): string | null {
     const cacheKey = cover.id;
     const cached = colorCache.get(cacheKey);
     if (cached !== undefined) {
-      transitionVisualizerCoverColor(cacheKey, cached);
+      transitionVisualizerCoverColor(cacheKey, cached.rgb ?? readPrimaryRgb(), cached.palette);
       return;
     }
 
-    void extractDominantImageColor(cover.blob).then((rgb) => {
+    void extractImagePalette(cover.blob).then((palette) => {
       if (!alive) return;
-      colorCache.set(cacheKey, rgb);
+      const rgb = palette[0] ?? null;
+      colorCache.set(cacheKey, { rgb, palette });
       void primaryColorVersion;
-      transitionVisualizerCoverColor(cacheKey, rgb ?? readPrimaryRgb());
+      transitionVisualizerCoverColor(cacheKey, rgb ?? readPrimaryRgb(), palette);
     });
 
     return () => {

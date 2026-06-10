@@ -11,7 +11,7 @@
 
 | Phase | Name | Status | Link |
 |-------|------|--------|------|
-| 1 | 取色基础设施：把 `image-palette.ts` 的单色取色扩成**多色调色板**（`extractImagePalette` 返回 N 个去重色），扩 `visualizer-color-store` 持有 palette + 平滑过渡 | 🔲 Pending | [Phase 1 Checklist](#phase-1-checklist) |
+| 1 | 取色基础设施：把 `image-palette.ts` 的单色取色扩成**多色调色板**（`extractImagePalette` 返回 N 个去重色），扩 `visualizer-color-store` 持有 palette + 平滑过渡 | ✅ Completed | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | 渲染：在既有 twgl scene registry 新增 `scene-flow` 流光 shader（自研 mesh-gradient，多色 `uColors[N]` uniform，calm 时间流 + 可选轻度音频调制），WebGL 探测 + aura/CSS 回退 | 🔲 Pending | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | 取色源模型：`flowColorSource: "cover" \| "custom"`（默认 cover，无封面回退 custom）+ 始终存在的 `flowCustomColors[]`，把 palette 喂进 shader uniform | 🔲 Pending | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | Settings：在 Appearance 段新增独立 sidebar item「流光背景」面板（效果选择 / 取色源切换 / 多色编辑器 + 预设 / 压暗 / 透明度 / 动态强度），i18n 四语全量 | 🔲 Pending | [Phase 4 Checklist](#phase-4-checklist) |
@@ -224,16 +224,16 @@ interface VisualizerCoverColorState {
 
 切歌时 palette 与单色一同过渡（逐元素 `mixRgb`，长度不一时按 min 对齐 + 末色补齐），避免突变。缓存键沿用 `cover.id`（[`visualizer-dynamic-color.tsx:57`](../../../src/components/player/visualizer-dynamic-color.tsx) 的 `colorCache`，改存 `{rgb, palette}`）。
 
-### 3.3 取色算法（多色，纯函数，穷举单测）
+### 3.3 取色算法（多色，纯函数，穷举单测）✅
 
-`extractImagePalette(blob, { count, skipDark })` 复用 [`image-palette.ts`](../../../src/lib/image-palette.ts) 的下采样（≤96px）+ HSL 过滤（跳近黑/近白/低饱和）+ `QUANTIZE_STEP=16` 分桶逻辑，但**返回 top-N**：
+**已实现** [`image-palette.ts`](../../../src/lib/image-palette.ts)。`extractImagePalette(blob, count = 4): Promise<Rgb[]>` 复用既有下采样（≤96px）+ HSL 过滤（跳近黑/近白/低饱和）+ `QUANTIZE_STEP=16` 分桶逻辑，但**返回 top-N**：
 
 1. 量化分桶（同现有）；
-2. 每桶算 `score = count * (0.65 + sat*1.4) * lightBalance`（同现有单色打分）；
-3. 按 score 降序取桶，**去重**（HSL 距离 < 阈值的近似色合并，避免「5 个都是同一个紫」）；
-4. 取前 `count`（默认 4，范围 2..5），不足 2 个 → 返回 `[]`（调用方回退 custom）。
+2. 每桶算 `score = count * (0.65 + sat*1.4) * lightBalance`（同现有单色打分），按 score 降序；
+3. 贪心选桶，**去重**：跳过与已选色 sRGB 欧氏距离 `< MIN_SWATCH_DISTANCE`(=64) 的近似色（避免「5 个都是同一个紫」）；
+4. 取前 `count`（默认 4），无可用色 → 返回 `[]`（调用方回退 custom）。
 
-`extractDominantImageColor` 保留为 `extractImagePalette(...)[0]`（单色场景不回归）。
+> **实现微调（vs 原 PRD）**：去掉了 `skipDark` 入参——既有 HSL `lightness` 过滤（`< 0.1` 跳近黑）已覆盖「不要暗色」，多一个 knob 是 YAGNI。去重改用 sRGB 欧氏距离（比 HSL 距离实现更简单、对专辑图够用，已穷举单测锁定）。`extractDominantImageColor(blob)` / 纯函数 `selectDominantImageColor(pixels)` 保留为 `…Palette(…, 1)[0] ?? null`（单色调用方零回归，既有测试全绿）。
 
 ### 3.4 颜色解析纯函数 `flow-config.ts`
 
@@ -267,11 +267,13 @@ export function resolveFlowColors(
 
 | 符号 | 文件 | 签名 | 说明 |
 |---|---|---|---|
-| `extractImagePalette` | [`lib/image-palette.ts`](../../../src/lib/image-palette.ts) | `(blob: Blob, opts?) => Promise<Rgb[]>` | 多色取色（top-N 去重，亮色优先） |
-| `extractDominantImageColor` | 同上 | 不变 | `= palette[0]`，单色调用方不回归 |
+| `extractImagePalette` ✅ | [`lib/image-palette.ts`](../../../src/lib/image-palette.ts) | `(blob: Blob, count = 4) => Promise<Rgb[]>` | 多色取色（top-N 去重，dominant first） |
+| `selectImagePalette` ✅ | 同上 | `(pixels, count = 4) => Rgb[]` | 纯函数（穷举单测） |
+| `extractDominantImageColor` / `selectDominantImageColor` ✅ | 同上 | 不变 | `= …Palette(…,1)[0] ?? null`，单色调用方不回归 |
+| store `palette` + `getVisualizerCoverPalette()` ✅ | [`visualizer-color-store.ts`](../../../src/stores/visualizer-color-store.ts) | `Rgb[]`，随封面 900ms 过渡 | scene-flow 读取 |
+| `mixPalette` ✅ | 同上 | `(from, to, t) => Rgb[]` | 逐色插值，结果长度对齐 target（穷举单测） |
 | `resolveFlowColors` | `lib/flow-config.ts` 🆕 | `(source, palette, custom) => Rgb[]` | 取色源回退裁决（纯，穷举单测） |
 | `FLOW_PRESETS` / `FLOW_DEFAULT_COLORS` | 同上 | 常量 | 预设色组 + 默认自定义色 |
-| store `palette` | [`visualizer-color-store.ts`](../../../src/stores/visualizer-color-store.ts) | `Rgb[]` + 过渡 | scene-flow 读取 |
 | `scene-flow` META | [`registry.ts`](../../../src/visualizer/registry.ts) | `{ id:"scene-flow", kind:"scene", backend:"webgl", labelKey, fftSize, smoothing }` | 注册即出现在 Visualizer 样式选择 |
 | `FLOW_FRAG` | [`scene/scene-shaders.ts`](../../../src/visualizer/scene/scene-shaders.ts) | GLSL 字符串 | 自研 mesh-gradient，MIT (MUZERO) |
 
@@ -333,21 +335,21 @@ export function resolveFlowColors(
 
 > **Phase 顺序遵循「基础设施先于覆盖广度」**：取色多色化 + store（P1）→ shader（P2）→ 取色源回退（P3）→ Settings UI（P4）→ 打磨（P5）。每 phase 独立可 `make check` 通过、可单独 PR。
 
-### Phase 1: 多色取色基础设施
+### Phase 1: 多色取色基础设施 ✅
 
 **Goal:** `image-palette.ts` 出 N 色；store 持 palette 并平滑过渡。
 
 **Tasks:**
-- [ ] `extractImagePalette(blob, {count=4, skipDark=true})`：top-N 去重桶（复用现有量化 + HSL 过滤 + 打分）。
-- [ ] `extractDominantImageColor = palette[0]`，保证单色调用方零回归。
-- [ ] `visualizer-color-store` 加 `palette: Rgb[]` + 逐色 `mixRgb` 过渡；缓存改存 `{rgb, palette}`。
-- [ ] `visualizer-dynamic-color` 取 palette 写 store（保留单色写入）。
+- [x] `extractImagePalette(blob, count = 4)` + 纯函数 `selectImagePalette(pixels, count = 4)`：top-N 去重桶（复用现有量化 + HSL 过滤 + 打分；sRGB 距离去重）。
+- [x] `extractDominantImageColor` / `selectDominantImageColor = …Palette(…,1)[0]`，保证单色调用方零回归。
+- [x] `visualizer-color-store` 加 `palette: Rgb[]` + `mixPalette` 逐色过渡 + `getVisualizerCoverPalette()`；`transitionVisualizerCoverColor(coverBlobId, next, nextPalette=[])`。
+- [x] `visualizer-dynamic-color` 取 palette 写 store（缓存改存 `{rgb, palette}`，保留单色写入）。
 
 ### Phase 1 Checklist
-- [ ] `image-palette.test.ts` 扩：纯黑白图→`[]`、多彩图→去重 N 色、近似色合并、count 边界。
-- [ ] 单色 `extractDominantImageColor` 既有测试全绿（无回归）。
-- [ ] store palette 过渡单测（长度不一对齐、空→非空）。
-- [ ] `make check` 绿。
+- [x] `image-palette.test.ts` 扩：纯黑白图→`[]`、多彩图→去重 N 色、近似色合并、count 边界、`= palette[0]`。
+- [x] 单色 `selectDominantImageColor` 既有测试全绿（无回归）。
+- [x] `visualizer-color-store.test.ts` `mixPalette` 过渡单测（t=0/0.5/1、长度增/减对齐、空 from、空 to）。
+- [x] typecheck + biome（touched files）绿；无其它 importer 破坏。
 
 ### Phase 2: `scene-flow` shader + registry
 
@@ -469,6 +471,7 @@ export function resolveFlowColors(
 |------|--------|---------|
 | 2026-06-11 | DoodleBear / MUZERO | Initial draft：anysoul 调查（node-vibrant + @color4bg/react）+ MUZERO 自研落地方案（扩多色取色 + scene-flow twgl shader + 取色源回退 + 流光 Settings 面板），5 phase |
 | 2026-06-11 | DoodleBear / MUZERO | Open Questions 全部定稿：Q1 v1 curate 3 个效果（aurora-drift/liquid-mesh/soft-blobs，`uEffect` 分支）；Q2 不做额外 CSS 回退；Q3 surface+background 都支持；Q4 默认取 4 色（max 5）；Q5 默认 calm ~20 + 用户可自定义 |
+| 2026-06-11 | DoodleBear / MUZERO | **Phase 1 ✅ 实现**（TDD）：`extractImagePalette`/`selectImagePalette` 多色去重取色（sRGB 距离）、`extractDominantImageColor=palette[0]` 零回归；store `palette`+`mixPalette`+`getVisualizerCoverPalette`；`visualizer-dynamic-color` 写 palette。14 测试绿、typecheck/biome 净。去掉 `skipDark` 入参（YAGNI） |
 
 ---
 
