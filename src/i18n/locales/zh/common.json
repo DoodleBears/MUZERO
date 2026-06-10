@@ -319,7 +319,11 @@
     "motion": "流动速度（{{pct}}%）",
     "scale": "光斑大小（{{pct}}%）",
     "reactivity": "音频反应（{{pct}}%）",
-    "composite": "背景叠加"
+    "composite": "背景叠加",
+    "enable": "启用流光背景",
+    "enableHint": "在背景图片/视频之上、可视化频谱之下叠一层流光——两者叠加，不互斥。",
+    "opacity": "流光透明度（{{pct}}%）",
+    "dim": "流光压暗（{{pct}}%）"
   },
   "visualizer": {
     "title": "可视化",

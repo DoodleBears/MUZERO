@@ -231,6 +231,35 @@ function NowPlayingBackgroundContent({ hideVisualizer }: { hideVisualizer: boole
         <CrossfadeBackgroundImage src={renderImageTarget.src} />
       ) : null}
       <div className="absolute inset-0 bg-background" style={{ opacity: imageMaskOpacity }} />
+      {/* Independent 流光 layer: composited ABOVE the background image/video and
+          BELOW the visualizer spectrum. It's its own toggle (flowEnabled), NOT a
+          visualizer style — flow and the spectrum coexist. Forces styleId so it
+          renders flow regardless of the chosen visualizer. */}
+      <AnimatePresence>
+        {(settings.flowEnabled ?? false) && (
+          <motion.div
+            key="flow-layer"
+            className="absolute inset-0"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.4, ease: "easeInOut" }}
+          >
+            <VisualizerHost
+              active={isPlaying}
+              styleId="scene-flow"
+              coverColor
+              placement="background"
+              className="absolute inset-0"
+              style={{ opacity: (settings.flowOpacity ?? 100) / 100 }}
+            />
+            <div
+              className="absolute inset-0 bg-background"
+              style={{ opacity: (settings.flowDim ?? 0) / 100 }}
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
       {/* Fade the whole visualizer layer in/out when the mode toggles (V / the
           mode button) instead of popping. AnimatePresence runs the exit fade
           before unmount; the inner per-frame opacity/dim still apply on top. */}

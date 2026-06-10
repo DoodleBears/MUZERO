@@ -510,6 +510,14 @@ export interface AppSettings {
   flowScale?: number;
   /** How much audio modulates the flow, 0–100 (0 = pure ambient). Default 20. */
   flowAudioReactivity?: number;
+  /** Render the flow background as an INDEPENDENT layer — composited above the
+   *  Now-Playing background image/video and below the visualizer spectrum (not
+   *  mutually exclusive with the visualizer). Default false. */
+  flowEnabled?: boolean;
+  /** Opacity of the flow background layer, 0–100. Default 100. */
+  flowOpacity?: number;
+  /** Dim over the flow background layer, 0–100. Default 0. */
+  flowDim?: number;
   /** Override analyser FFT size for the active visualizer. Defaults to style metadata. */
   visualizerFftSize?: 256 | 512 | 1024 | 2048;
   /** Override analyser smoothing, 0–0.99. Defaults to style metadata. */

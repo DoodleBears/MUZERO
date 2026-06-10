@@ -319,7 +319,11 @@
     "motion": "흐름 속도 ({{pct}}%)",
     "scale": "블롭 크기 ({{pct}}%)",
     "reactivity": "오디오 반응 ({{pct}}%)",
-    "composite": "배경 합성"
+    "composite": "배경 합성",
+    "enable": "플로우 배경 켜기",
+    "enableHint": "배경 이미지/동영상 위·비주얼라이저 아래에 플로우 레이어를 겹칩니다 — 대체가 아니라 겹침.",
+    "opacity": "플로우 불투명도 ({{pct}}%)",
+    "dim": "플로우 어둡게 ({{pct}}%)"
   },
   "visualizer": {
     "title": "비주얼라이저",
