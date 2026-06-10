@@ -68,6 +68,43 @@ describe("LyricsScroller (synced)", () => {
   });
 });
 
+describe("LyricsScroller (word-by-word karaoke)", () => {
+  const wordSynced: ResolvedLyrics = {
+    mode: "synced",
+    source: "lrclib",
+    lines: [
+      {
+        timeMs: 1000,
+        endMs: 2000,
+        text: "Cause you",
+        words: [
+          { timeMs: 1000, durMs: 500, text: "Cause " },
+          { timeMs: 1500, durMs: 500, text: "you" },
+        ],
+      },
+      { timeMs: 2000, text: "next line" },
+    ],
+  };
+
+  it("splits the active line into per-word spans when word timings exist", () => {
+    const { container } = render(
+      <LyricsScroller resolved={wordSynced} activeIndex={0} onSeek={() => {}} wordByWord />,
+    );
+    const spans = container.querySelectorAll("[data-word]");
+    expect(Array.from(spans).map((s) => s.textContent)).toEqual(["Cause ", "you"]);
+    // The non-active line stays whole (no word spans).
+    expect(screen.getByText("next line").querySelectorAll("[data-word]").length).toBe(0);
+  });
+
+  it("renders the whole line (no word spans) when word-by-word is off", () => {
+    const { container } = render(
+      <LyricsScroller resolved={wordSynced} activeIndex={0} onSeek={() => {}} wordByWord={false} />,
+    );
+    expect(container.querySelectorAll("[data-word]").length).toBe(0);
+    expect(screen.getByText("Cause you")).toBeInTheDocument();
+  });
+});
+
 describe("LyricsScroller (plain)", () => {
   it("renders plain text and omits LRCLIB attribution for manual lyrics", () => {
     const plain: ResolvedLyrics = { mode: "plain", source: "manual", text: "hello world" };

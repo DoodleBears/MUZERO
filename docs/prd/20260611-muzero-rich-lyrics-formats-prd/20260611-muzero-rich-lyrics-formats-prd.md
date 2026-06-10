@@ -15,7 +15,7 @@
 |-------|------|--------|------|
 | 1 | 基础设施：统一歌词模型 + 格式探测 + Enhanced-LRC `<…>` 健壮性（纯函数 + 单测，不改渲染） | ✅ Completed | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | 词级解析器：parseEnhancedLrc / parseYrc / parseQrc 归一化到统一模型 + `format` 落库 | ✅ Completed | [Phase 2 Checklist](#phase-2-checklist) |
-| 3 | 逐字卡拉OK渲染：SyncedLines 按词 fill（active 行）+ Settings 开关 + 回退整行高亮 | 🔲 Pending | [Phase 3 Checklist](#phase-3-checklist) |
+| 3 | 逐字卡拉OK渲染：SyncedLines 按词 fill（active 行）+ Settings 开关 + 回退整行高亮 | ✅ Completed | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | 翻译 / 罗马音双行：模型携带 translation/roman 子行 + Settings 开关 | 🔲 Pending | [Phase 4 Checklist](#phase-4-checklist) |
 | 5（可选）| TTML 解析器 + amll-ttml-db 作为新 LyricsProvider（逐字+翻译+对唱的天花板源） | 🔲 Pending | [Phase 5 Checklist](#phase-5-checklist) |
 
@@ -313,14 +313,16 @@ export function activeWordIndex(words: WordTiming[], positionMs: number): number
 **Goal:** `SyncedLines` active 行逐字 fill（CSS background-clip）+ rAF 词内进度 + Settings 开关 + 回退整行。
 
 **Tasks:**
-- [ ] `active-word.ts` + 逐字 fill 渲染（不动 layout）。
-- [ ] Settings `逐字歌词` 开关 + i18n ×4。
+- [x] [`active-word.ts`](../../../src/lyrics/active-word.ts) `activeWordIndex`（纯函数二分，穷举单测）。
+- [x] [`synced-lyrics-view.tsx`](../../../src/components/player/synced-lyrics-view.tsx) 逐字 fill：active 行渲染 per-word `<span data-word>`，CSS `linear-gradient + background-clip:text` 按 `--wfill` wipe；sung=`color`，unsung=`color-mix(... inactive%)`。**直接 DOM rAF**（`useLayoutEffect` 写 `--wfill`，不进 React state → 不每帧重渲，规则 6）；`useLayoutEffect` 初帧 pre-paint 防闪。
+- [x] Settings `逐字卡拉OK` 开关（[`lyrics-tuning-controls.tsx`](../../../src/components/player/lyrics-tuning-controls.tsx) On/Off，Settings + 悬浮 panel 共用）+ `AppSettings.lyricsWordByWord`（默认 true）+ i18n ×4。
 
 #### Phase 3 Checklist
-- [ ] 有 words 的曲：当前行逐字渐亮、跟随播放。
-- [ ] 关开关 → 整行高亮（省渲染）；reduced-motion → 瞬切。
-- [ ] 无 words 源零回归。
-- [ ] 播放期不每帧整树重渲（仅 active 行/词，规则 6）。
+- [x] 有 words 的曲：active 行渲染逐字 span（单测断言 span 文本 = words），fill 跟随 `getCurrentTime`。
+- [x] 关开关 → 整行高亮（单测：`wordByWord={false}` 无 `[data-word]`，整行可见）。
+- [x] 无 words 源零回归（line-level 仍走整行；effect 早退）。
+- [x] 播放期仅 active 行 DOM 写 `--wfill`，不每帧整树重渲（规则 6）；11 view 单测 + 156 lyrics 单测全过。
+- [ ] ⚠️ 逐字 wipe 动画属 rAF 驱动，预览沙箱 hidden-tab 冻结 rAF（见 memory `preview-hidden-tab-gotcha`）→ 实时观感需用户真实前台 dev server 确认。
 
 ### Phase 4: 翻译 / 罗马音双行
 
@@ -406,6 +408,7 @@ export function activeWordIndex(words: WordTiming[], positionMs: number): number
 | 2026-06-11 | DoodleBear | 初稿：多歌词格式（Enhanced LRC / YRC / QRC / TTML）+ 逐字卡拉OK + 翻译/罗马音。统一模型 + home-grown 纯函数解析器（不引入 AMLL lib）+ 渲染期解析零迁移；5 phase（基础设施→词级解析→逐字渲染→双行→TTML/amll-ttml-db）。Q1–Q5 待定 |
 | 2026-06-11 | DoodleBear | Status→Final，Q1–Q5 锁定（按倾向）。**Phase 1 完成**：`model.ts`（统一模型）+ `parse.ts`（`parseLyrics`/`detectLyricsFormat` 穷举单测）+ `parseLrc` 行内 `<…>` 剥离（`stripInlineWordTags`，修 Enhanced-LRC 乱码健壮性）+ `format?` 贯穿 `LyricsRecord`/`LyricsHit`/`lyricsRecordFromHit`。未建 `formats/lrc.ts`（直接扩 parseLrc，零 importer 改动）。54 单测全过 |
 | 2026-06-11 | DoodleBear | **Phase 2 完成**（2 commits）。2a：`formats/{enhanced-lrc,yrc,qrc}.ts` 三个词级解析器归一到 `words[]`（各保留词尾空格）+ `parse.ts` dispatch + `resolve-lyrics` synced→`LyricLine[]`（view 零改动）。2b：网易 provider opt-in `yv:0` 取 yrc、有则优先回退 lrc。渲染仍整行（逐字渲染在 Phase 3）|
+| 2026-06-11 | DoodleBear | **Phase 3 完成**：逐字卡拉OK渲染。`active-word.ts` + `SyncedLines` active 行 per-word `background-clip:text` wipe（直接 DOM rAF 写 `--wfill`，不每帧重渲）+ `lyricsWordByWord` 开关（默认 on，共用 tuning 控件）+ i18n ×4。无 words 源零回归。167 单测全过。逐字 wipe 实时观感需真实前台 dev server（预览沙箱冻 rAF）|
 
 ---
 

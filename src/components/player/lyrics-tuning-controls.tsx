@@ -25,6 +25,13 @@ const ALIGNS = [
   { id: "right", Icon: AlignRight, labelKey: "lyricsSettings.alignRight" },
 ] as const;
 
+// The outline shares the text color's "cover"/"custom" sources (no "default":
+// a stroke needs an explicit contrasting color, not the foreground).
+const STROKE_COLOR_MODES = [
+  { id: "custom", labelKey: "lyricsSettings.colorCustom" },
+  { id: "cover", labelKey: "lyricsSettings.colorCover" },
+] as const;
+
 /**
  * Synced-lyrics appearance controls (font size + opacity for active vs inactive
  * lines, alignment, text-color source). Shared by the Settings page and the
@@ -41,14 +48,40 @@ export function LyricsTuningControls({ className }: { className?: string }) {
   const colorMode = s.lyricsColorMode ?? "default";
   const customColor = s.lyricsCustomColor ?? "#ffffff";
   const align = s.lyricsAlign ?? "center";
+  const wordByWord = s.lyricsWordByWord ?? true;
   const lineGap = s.lyricsLineGap ?? 8;
   const shadowOpacity = s.lyricsShadowOpacity ?? 50;
   const shadowBlur = s.lyricsShadowBlur ?? 8;
   const shadowOffsetX = s.lyricsShadowOffsetX ?? 0;
   const shadowOffsetY = s.lyricsShadowOffsetY ?? 2;
+  const strokeWidth = s.lyricsStrokeWidth ?? 0;
+  const strokeColorMode = s.lyricsStrokeColorMode ?? "custom";
+  const strokeColor = s.lyricsStrokeColor ?? "#000000";
+  const strokeOpacity = s.lyricsStrokeOpacity ?? 100;
 
   return (
     <div className={cn("flex flex-col gap-4", className)}>
+      <Field label={t("lyricsSettings.wordByWord")}>
+        <div className="flex gap-1">
+          {([true, false] as const).map((on) => (
+            <button
+              key={String(on)}
+              type="button"
+              onClick={() => void saveSettings({ lyricsWordByWord: on })}
+              aria-pressed={wordByWord === on}
+              className={cn(
+                "h-9 flex-1 rounded-md border font-medium text-sm transition-colors",
+                wordByWord === on
+                  ? "border-primary bg-primary/10 text-primary"
+                  : "border-border text-muted-foreground hover:text-foreground",
+              )}
+            >
+              {t(on ? "lyricsSettings.wordByWordOn" : "lyricsSettings.wordByWordOff")}
+            </button>
+          ))}
+        </div>
+        <p className="text-muted-foreground text-xs">{t("lyricsSettings.wordByWordHint")}</p>
+      </Field>
       <Field label={t("lyricsSettings.activeFontSize", { px: activeSize })}>
         <Slider
           min={12}
@@ -195,6 +228,68 @@ export function LyricsTuningControls({ className }: { className?: string }) {
           aria-label={t("lyricsSettings.shadowOffsetY", { px: shadowOffsetY })}
         />
       </Field>
+      <Field label={t("lyricsSettings.strokeWidth", { px: strokeWidth })}>
+        <Slider
+          min={0}
+          max={12}
+          step={1}
+          value={strokeWidth}
+          onValueChange={(v) => void saveSettings({ lyricsStrokeWidth: v })}
+          aria-label={t("lyricsSettings.strokeWidth", { px: strokeWidth })}
+        />
+      </Field>
+      {strokeWidth > 0 && (
+        <>
+          <Field label={t("lyricsSettings.strokeColor")}>
+            <Select
+              value={strokeColorMode}
+              onValueChange={(v) =>
+                void saveSettings({ lyricsStrokeColorMode: v as "custom" | "cover" })
+              }
+            >
+              <SelectTrigger>
+                <SelectValue>
+                  {(value) =>
+                    t(
+                      STROKE_COLOR_MODES.find((m) => m.id === value)?.labelKey ??
+                        "lyricsSettings.strokeColor",
+                    )
+                  }
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                {STROKE_COLOR_MODES.map((m) => (
+                  <SelectItem key={m.id} value={m.id}>
+                    {t(m.labelKey)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {strokeColorMode === "custom" && (
+              <input
+                type="color"
+                value={strokeColor}
+                onChange={(e) => void saveSettings({ lyricsStrokeColor: e.target.value })}
+                className="mt-1 h-9 w-16 cursor-pointer rounded-md border border-border bg-transparent"
+                aria-label={t("lyricsSettings.strokeColor")}
+              />
+            )}
+            {strokeColorMode === "cover" && (
+              <p className="text-muted-foreground text-xs">{t("lyricsSettings.colorCoverHint")}</p>
+            )}
+          </Field>
+          <Field label={t("lyricsSettings.strokeOpacity", { pct: strokeOpacity })}>
+            <Slider
+              min={0}
+              max={100}
+              step={1}
+              value={strokeOpacity}
+              onValueChange={(v) => void saveSettings({ lyricsStrokeOpacity: v })}
+              aria-label={t("lyricsSettings.strokeOpacity", { pct: strokeOpacity })}
+            />
+          </Field>
+        </>
+      )}
     </div>
   );
 }

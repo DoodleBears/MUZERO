@@ -1,7 +1,7 @@
 import { useLiveQuery } from "dexie-react-hooks";
 import { LocateFixed } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { LyricsSearchPanel } from "@/components/player/lyrics-search-panel";
 import { useVisualizerCoverColorCss } from "@/components/player/visualizer-dynamic-color";
@@ -10,8 +10,10 @@ import { getTrackLyrics } from "@/db/repositories";
 import type { Track } from "@/db/types";
 import { useSettings } from "@/hooks/use-app-data";
 import { cn } from "@/lib/utils";
+import { activeWordIndex } from "@/lyrics/active-word";
 import { DEFAULT_LYRIC_STYLE, type LyricStyle, resolveLyricStyle } from "@/lyrics/lyric-style";
-import { activeLineIndex, type LyricsLine } from "@/lyrics/parse-lrc";
+import type { LyricLine } from "@/lyrics/model";
+import { activeLineIndex } from "@/lyrics/parse-lrc";
 import { type ResolvedLyrics, resolveTrackLyrics } from "@/lyrics/resolve-lyrics";
 import { getMediaEngine, usePlayerStore } from "@/stores/player-store";
 import { useUiStore } from "@/stores/ui-store";
@@ -27,7 +29,7 @@ type ShownLyrics = Extract<ResolvedLyrics, { mode: "synced" } | { mode: "plain" 
  * there's no active line (before the first lyric or with no lyrics).
  */
 export function useActiveLyricLine(
-  lines: LyricsLine[] | null,
+  lines: LyricLine[] | null,
   isPlaying: boolean,
   // Observed only while paused (-1 while playing) so a paused seek re-syncs the
   // highlight without subscribing to the 4Hz position during playback.
@@ -139,6 +141,8 @@ export function SyncedLyricsView({ track }: { track?: Track }) {
       onSeek={seek}
       onSearch={track ? () => setSearchOpen(true) : undefined}
       lyricStyle={lyricStyle}
+      isPlaying={isPlaying}
+      wordByWord={settings.lyricsWordByWord ?? true}
     />
   );
 }
@@ -158,12 +162,16 @@ export function LyricsScroller({
   onSeek,
   onSearch,
   lyricStyle = DEFAULT_LYRIC_STYLE,
+  isPlaying = false,
+  wordByWord = true,
 }: {
   resolved: ShownLyrics;
   activeIndex: number;
   onSeek: (sec: number) => void;
   onSearch?: () => void;
   lyricStyle?: LyricStyle;
+  isPlaying?: boolean;
+  wordByWord?: boolean;
 }) {
   return (
     <div className="flex h-full flex-col">
@@ -181,6 +189,8 @@ export function LyricsScroller({
                 fontSize: lyricStyle.inactiveFontSize,
                 textAlign: lyricStyle.align,
                 textShadow: lyricStyle.textShadow,
+                WebkitTextStroke: lyricStyle.textStroke || undefined,
+                paintOrder: lyricStyle.textStroke ? "stroke fill" : undefined,
               }}
             >
               {resolved.text}
@@ -192,6 +202,8 @@ export function LyricsScroller({
             activeIndex={activeIndex}
             onSeek={onSeek}
             lyricStyle={lyricStyle}
+            isPlaying={isPlaying}
+            wordByWord={wordByWord}
           />
         )}
       </div>
@@ -220,11 +232,15 @@ function SyncedLines({
   activeIndex,
   onSeek,
   lyricStyle,
+  isPlaying = false,
+  wordByWord = true,
 }: {
-  lines: LyricsLine[];
+  lines: LyricLine[];
   activeIndex: number;
   onSeek: (sec: number) => void;
   lyricStyle: LyricStyle;
+  isPlaying?: boolean;
+  wordByWord?: boolean;
 }) {
   const { t } = useTranslation();
   const reduce = useReducedMotion();
@@ -236,6 +252,16 @@ function SyncedLines({
   // line without depending on a React ref's attachment timing.
   const activeIndexRef = useRef(activeIndex);
   activeIndexRef.current = activeIndex;
+
+  // Karaoke fill colors: the sung part shows the full lyric color; the unsung part
+  // sits at the inactive opacity (relative to active, since the whole line already
+  // carries activeOpacity) so it reads like the dim lines until it's sung.
+  const sungColor = lyricStyle.color;
+  const unsungPct = Math.round(
+    Math.max(0, Math.min(1, (lyricStyle.inactiveOpacity || 0) / (lyricStyle.activeOpacity || 1))) *
+      100,
+  );
+  const unsungColor = `color-mix(in srgb, ${lyricStyle.color} ${unsungPct}%, transparent)`;
 
   useEffect(() => {
     const vp = viewportRef.current;
@@ -291,6 +317,48 @@ function SyncedLines({
     };
   }, [following, reduce]);
 
+  // Per-syllable karaoke fill: while the active line has word timings, a single rAF
+  // wipes each word as it's sung by writing one CSS var per word span DIRECTLY to
+  // the DOM — never React state, so the tree doesn't re-render per frame (rule 6).
+  // useLayoutEffect paints once before the browser paints (no flash of unfilled
+  // text on a line/track switch); it then loops only while playing.
+  useLayoutEffect(() => {
+    if (!wordByWord || activeIndex < 0) return;
+    const words = lines[activeIndex]?.words;
+    if (!words || words.length === 0) return;
+    const el = stackRef.current?.children[activeIndex] as HTMLElement | undefined;
+    const spans = el?.querySelectorAll<HTMLElement>("[data-word]");
+    if (!spans || spans.length === 0) return;
+    const paint = () => {
+      const ms = (getMediaEngine()?.getCurrentTime() ?? 0) * 1000;
+      const idx = activeWordIndex(words, ms);
+      spans.forEach((span, j) => {
+        let pct: number;
+        if (j < idx) pct = 100;
+        else if (j > idx) pct = 0;
+        else {
+          const w = words[idx];
+          pct = w.durMs <= 0 ? 100 : Math.max(0, Math.min(100, ((ms - w.timeMs) / w.durMs) * 100));
+        }
+        span.style.setProperty("--wfill", `${pct}%`);
+      });
+    };
+    paint();
+    if (!isPlaying) return;
+    let raf = 0;
+    let stopped = false;
+    const loop = () => {
+      if (stopped) return;
+      paint();
+      raf = requestAnimationFrame(loop);
+    };
+    raf = requestAnimationFrame(loop);
+    return () => {
+      stopped = true;
+      cancelAnimationFrame(raf);
+    };
+  }, [wordByWord, activeIndex, isPlaying, lines]);
+
   return (
     <>
       <div
@@ -340,6 +408,8 @@ function SyncedLines({
                   fontSize: lyricStyle.activeFontSize,
                   color: lyricStyle.color,
                   textShadow: lyricStyle.textShadow,
+                  WebkitTextStroke: lyricStyle.textStroke || undefined,
+                  paintOrder: lyricStyle.textStroke ? "stroke fill" : undefined,
                   transformOrigin:
                     lyricStyle.align === "center"
                       ? "center"
@@ -356,7 +426,27 @@ function SyncedLines({
                       : "text-left",
                 )}
               >
-                {line.text || "♪"}
+                {isActive && wordByWord && line.words && line.words.length > 0
+                  ? line.words.map((w, j) => (
+                      <span
+                        // biome-ignore lint/suspicious/noArrayIndexKey: word spans are positional within a line
+                        key={j}
+                        data-word
+                        style={
+                          {
+                            "--wfill": "0%",
+                            backgroundImage: `linear-gradient(90deg, ${sungColor} var(--wfill), ${unsungColor} var(--wfill))`,
+                            WebkitBackgroundClip: "text",
+                            backgroundClip: "text",
+                            color: "transparent",
+                            WebkitTextFillColor: "transparent",
+                          } as React.CSSProperties
+                        }
+                      >
+                        {w.text}
+                      </span>
+                    ))
+                  : line.text || "♪"}
               </motion.button>
             );
           })}
