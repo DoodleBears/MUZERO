@@ -96,6 +96,17 @@
     "imported": "{{count}} 曲を「{{name}}」にインポートしました",
     "importError": "インポートに失敗しました"
   },
+  "streamCache": {
+    "title": "オフラインキャッシュ",
+    "autoToggle": "再生した曲を自動ダウンロード",
+    "autoToggleHint": "オンライン曲の再生後に音声を保存し、次回からオフライン再生できます。通信量とディスクを使います。",
+    "usage": "{{count}} 曲 · {{size}}",
+    "empty": "オフライン曲はまだありません",
+    "clear": "キャッシュを削除",
+    "cleared": "オフラインキャッシュを削除しました",
+    "downloaded": "オフライン保存しました",
+    "downloadFailed": "オフライン保存に失敗しました"
+  },
   "playlistImport": {
     "title": "プレイリストをインポート",
     "syncRecommended": "「{{name}}」に同期",
@@ -185,7 +196,10 @@
     "shadowOpacity": "影の濃さ（{{pct}}%）",
     "shadowBlur": "影のサイズ（{{px}}px）",
     "shadowOffsetX": "影のXオフセット（{{px}}px）",
-    "shadowOffsetY": "影のYオフセット（{{px}}px）"
+    "shadowOffsetY": "影のYオフセット（{{px}}px）",
+    "strokeWidth": "縁取りの太さ（{{px}}px）",
+    "strokeColor": "縁取りの色",
+    "strokeOpacity": "縁取りの不透明度（{{pct}}%）"
   },
   "displayMode": {
     "video": "動画",

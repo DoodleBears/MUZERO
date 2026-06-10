@@ -17,7 +17,7 @@
 | 2 | Bilibili 源（架构试金石：WBI + DASH 音轨 + 登录 + 入库 + 播放路由） | ✅ Completed | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | 网易云源（weapi/eapi 纯 TS 加密 + 登录 + 搜索 + 音质降级 + 歌单同步 + 歌词） | ✅ Completed | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | YouTube 源（InnerTube + EJS sig/n 解密 + PoToken） | 🔲 Pending | [Phase 4 Checklist](#phase-4-checklist) |
-| 5 | 离线缓存 / 下载持久化（"尽量入库存储"，可选增强） | 🔄 In Progress | [Phase 5 Checklist](#phase-5-checklist) |
+| 5 | 离线缓存 / 下载持久化（"尽量入库存储"，可选增强） | ✅ Completed | [Phase 5 Checklist](#phase-5-checklist) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
 >
@@ -685,7 +685,11 @@ success：Set-Cookie 已被 net.fetch 写进默认 session → bridge.readSource
 |---|---|---|---|---|
 | CA1 | 缓存 repo：`cacheStreamedTrackBlob`(存 blob+回填 blobId，重下替换旧 blob 不留孤儿)、`isStreamedTrackCached`、`summarizeStreamedCache`(占用统计)、`clearStreamedCache`(清缓存+复位 re-resolve) | `streamsrc/streamed-track-repo.ts` | fake-idb ×5 | ✅ green |
 | CA2 | 下载编排：`runStreamCache({resolve,fetchBytes,store})`→resolve→下载→存(注入式纯函数；VIP/登录门不下载、错误不写坏 blob、mime 回退) | `streamsrc/cache-stream.ts` | 注入 stub ×4 | ✅ green |
-| CA3 | player-store `downloadStreamedTrack(trackId)` action：接 `resolveStreamedTrackMedia`(账号 cookie)+`mediaProxyUrl` 拉字节+`cacheStreamedTrackBlob`；guard 已缓存/非 streamed；toast 结果 | `stores/player-store.ts` | 🔲 | 🔲 |
-| CA4 | Settings 缓存管理：占用显示 + 一键清理 + 自动缓存开关(`AppSettings.autoCacheStreamed`)；i18n×4。track 行/Now Playing 下载按钮 | `settings` · `track`/`player` UI · i18n | 🔲 | 🔲 |
+| CA3 | player-store `cacheStreamedTrackNow`(模块件)+`downloadStreamedTrack(trackId)` action：接 `resolveStreamedTrackMedia`(账号 cookie)+`mediaProxyUrl` 拉字节+`cacheStreamedTrackBlob`；**自动缓存钩子**(播放后若 `autoCacheStreamed` 开则后台下载)；toast 结果(VIP→`streamNeedsAccess`) | `stores/player-store.ts` · `db/types.ts`(`autoCacheStreamed`) | typecheck + 137 测全绿；**待 Electron 手测**(真实拉流) | ✅ |
+| CA4 | Settings 缓存管理（折进「在线音源」卡片）：自动缓存开关 + 占用显示(`summarizeStreamedCache` via liveQuery)+ 一键清理(`clearStreamedCache`)；i18n `streamCache.*`×4 | `components/settings/stream-sources-settings.tsx` · i18n | typecheck + biome + i18n 全绿 | ✅ |
 
-**CA1+CA2 落地**：缓存核心(repo + 编排)纯逻辑全单测，下载/存储管线注入式可测；接真实 resolve + 代理拉流是 CA3 运行时件。
+**落地**：缓存核心(repo + 编排)纯逻辑全单测；`cacheStreamedTrackNow` 接真实 resolve(账号 cookie)+ 代理拉字节(Referer 注入)+ 入库；`autoCacheStreamed` 开则播放后后台缓存(再 resolve 一次，字节单独下，已知 2× 下载——后续可 tee 优化)。Settings 折进「在线音源」卡片（开关 + 占用 + 清理）。**Phase 5 完成**（运行时拉流待 Electron 手测；性能优化项后续增量）。
+
+---
+
+> **Phase 4（YouTube）仍 Pending** —— 仅剩的大头：InnerTube 客户端 + EJS `sig`/`n` 解密(需在隐藏 sandboxed `BrowserWindow` 跑 YT 混淆 JS)+ BotGuard PoToken。**运行时极重、难纯 TDD**，且用户既定「YouTube 押后」。本轮不展开；其纯逻辑件(InnerTube 请求/响应映射、`pickAdaptiveAudio` 音轨选择)可作为后续 TDD 起点。

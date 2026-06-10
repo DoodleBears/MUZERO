@@ -8,6 +8,7 @@ import {
   getPlayQueue,
   getSession,
   getSettings,
+  getTrack,
   getTrackBlob,
   getTrackCover,
   getTracksByIds,
@@ -71,6 +72,7 @@ import {
   setFolderImportProgress,
 } from "@/stores/folder-import-store";
 import { notify } from "@/stores/notification-store";
+import { runStreamCache } from "@/streamsrc/cache-stream";
 import type { StreamSearchHit } from "@/streamsrc/provider";
 import { createStreamSource } from "@/streamsrc/registry";
 import { resolveStreamedTrackMedia } from "@/streamsrc/resolve-playback";
@@ -79,6 +81,7 @@ import { createStreamHttp } from "@/streamsrc/stream-http";
 import {
   type AddHitsResult,
   addHitsToSet,
+  cacheStreamedTrackBlob,
   createStreamedTrack,
   hitToStreamedInput,
 } from "@/streamsrc/streamed-track-repo";
@@ -154,6 +157,8 @@ interface PlayerState {
     playlistId: string,
     targetSetId: string,
   ) => Promise<AddHitsResult>;
+  /** Download a streamed track's media for offline play (Phase 5); no-op if already cached. */
+  downloadStreamedTrack: (trackId: string) => Promise<void>;
   next: () => Promise<void>;
   /** Previous track without the transport-button "restart current after 3s" rule. */
   skipPrev: () => Promise<void>;
@@ -530,6 +535,22 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     return addHitsToSet(targetSetId, hits);
   },
 
+  async downloadStreamedTrack(trackId) {
+    const track = await getTrack(trackId);
+    if (!track || !isStreamedTrack(track) || track.blobId) return; // not streamed / already cached
+    const result = await cacheStreamedTrackNow(track);
+    if (result.kind === "cached") {
+      notify.success(i18n.t("streamCache.downloaded"));
+    } else if (
+      result.kind === "requires-login" ||
+      (result.kind === "no-permission" && result.reason === "vip")
+    ) {
+      notify.error(i18n.t("player.streamNeedsAccess"));
+    } else if (result.kind !== "no-permission") {
+      notify.error(i18n.t("streamCache.downloadFailed"));
+    }
+  },
+
   async next() {
     const { queue, currentIndex, repeat, shuffle } = get();
     let ni: number | null;
@@ -877,6 +898,51 @@ async function ingestNcmFile(
  * depending on the proxy/referer each render. Goes through the media proxy (which
  * strips the element/localhost Referer hdslb 403s and adds ACAO) — best-effort.
  */
+/**
+ * Download a streamed track's media into a blob (Phase 5 offline cache): re-resolve
+ * with the account, fetch the bytes through the media proxy (Referer injection +
+ * CORS), and persist via {@link cacheStreamedTrackBlob}. After this the player's
+ * `if (track.blobId)` branch plays it locally, offline. Best-effort + idempotent
+ * (no-op if already cached / not streamed). Returns the cache verdict for callers
+ * that want to toast.
+ */
+async function cacheStreamedTrackNow(
+  track: Track,
+): Promise<Awaited<ReturnType<typeof runStreamCache>>> {
+  const settings = await getSettings();
+  const http = createStreamHttp();
+  const bridge = resolveDesktopBridge();
+  const result = await runStreamCache({
+    resolve: () =>
+      resolveStreamedTrackMedia(track, {
+        resolveSource: (id) =>
+          createStreamSource(id, {
+            http,
+            now: () => Date.now(),
+            getCookie: (sid) => settings.streamSources?.[sid]?.cookie,
+          }),
+        getQuality: (id) => settings.streamSources?.[id]?.quality,
+      }),
+    fetchBytes: async (url, headers) => {
+      // Same proxy routing as playback: inject Referer/UA + get ACAO-clean bytes.
+      const target = bridge.mediaProxyUrl ? bridge.mediaProxyUrl(url, headers) : url;
+      const appFetch = await getAppFetch();
+      const resp = await appFetch(target);
+      if (!resp.ok) throw new Error(`download failed (${resp.status})`);
+      const blob = await resp.blob();
+      if (blob.size === 0) throw new Error("empty media");
+      return blob;
+    },
+    store: (blob, mime) => cacheStreamedTrackBlob(track.id, blob, mime),
+  });
+  if (result.kind === "cached") {
+    log.info("player", "cached streamed track", { trackId: track.id, bytes: result.bytes });
+  } else {
+    log.warn("player", "cache streamed track failed", { trackId: track.id, kind: result.kind });
+  }
+  return result;
+}
+
 async function downloadStreamedCover(trackId: string, url: string): Promise<void> {
   const bridge = resolveDesktopBridge();
   if (!bridge.mediaProxyUrl) return; // web/tauri: keep the remote URL fallback
@@ -1393,6 +1459,9 @@ async function ensureLoadedAndPlay(
         track.kind,
         proxiedUrl ? { crossOrigin: "anonymous" } : undefined,
       );
+      // Offline cache (Phase 5): when enabled, download this song's bytes in the
+      // background so a later play is local + offline. Best-effort; skipped if cached.
+      if (settings.autoCacheStreamed && !track.blobId) void cacheStreamedTrackNow(track);
     }
     loadedTrackId = track.id;
     streamSkips = 0; // a track loaded — end any streamed-skip run cleanly

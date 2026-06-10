@@ -103,6 +103,17 @@
     "imported": "Imported {{count}} into \"{{name}}\"",
     "importError": "Import failed"
   },
+  "streamCache": {
+    "title": "Offline cache",
+    "autoToggle": "Auto-download played songs",
+    "autoToggleHint": "After an online song plays, save its audio so it plays offline next time. Uses bandwidth and disk.",
+    "usage": "{{count}} songs · {{size}}",
+    "empty": "No offline songs yet",
+    "clear": "Clear cache",
+    "cleared": "Cleared offline cache",
+    "downloaded": "Saved for offline",
+    "downloadFailed": "Couldn't download for offline"
+  },
   "playlistImport": {
     "title": "Import playlist",
     "syncRecommended": "Sync into \"{{name}}\"",
@@ -192,7 +203,10 @@
     "shadowOpacity": "Shadow strength ({{pct}}%)",
     "shadowBlur": "Shadow size ({{px}}px)",
     "shadowOffsetX": "Shadow offset X ({{px}}px)",
-    "shadowOffsetY": "Shadow offset Y ({{px}}px)"
+    "shadowOffsetY": "Shadow offset Y ({{px}}px)",
+    "strokeWidth": "Outline width ({{px}}px)",
+    "strokeColor": "Outline color",
+    "strokeOpacity": "Outline opacity ({{pct}}%)"
   },
   "displayMode": {
     "video": "Video",

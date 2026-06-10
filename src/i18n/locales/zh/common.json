@@ -96,6 +96,17 @@
     "imported": "已导入 {{count}} 首到「{{name}}」",
     "importError": "导入失败"
   },
+  "streamCache": {
+    "title": "离线缓存",
+    "autoToggle": "自动下载播放过的在线歌曲",
+    "autoToggleHint": "在线歌曲播放后保存其音频，下次可离线播放。会占用流量和磁盘。",
+    "usage": "{{count}} 首 · {{size}}",
+    "empty": "暂无离线歌曲",
+    "clear": "清理缓存",
+    "cleared": "已清理离线缓存",
+    "downloaded": "已保存离线",
+    "downloadFailed": "离线下载失败"
+  },
   "playlistImport": {
     "title": "导入歌单",
     "syncRecommended": "增量同步到「{{name}}」",
@@ -185,7 +196,10 @@
     "shadowOpacity": "阴影强度（{{pct}}%）",
     "shadowBlur": "阴影大小（{{px}}px）",
     "shadowOffsetX": "阴影 X 偏移（{{px}}px）",
-    "shadowOffsetY": "阴影 Y 偏移（{{px}}px）"
+    "shadowOffsetY": "阴影 Y 偏移（{{px}}px）",
+    "strokeWidth": "描边宽度（{{px}}px）",
+    "strokeColor": "描边颜色",
+    "strokeOpacity": "描边透明度（{{pct}}%）"
   },
   "displayMode": {
     "video": "视频",

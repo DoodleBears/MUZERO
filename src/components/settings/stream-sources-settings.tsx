@@ -1,3 +1,4 @@
+import { useLiveQuery } from "dexie-react-hooks";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { PlaylistImportDialog } from "@/components/stream/playlist-import-dialog";
@@ -17,6 +18,21 @@ import {
 import type { StreamPlaylist } from "@/streamsrc/provider";
 import { createStreamSource } from "@/streamsrc/registry";
 import { createStreamHttp } from "@/streamsrc/stream-http";
+import { clearStreamedCache, summarizeStreamedCache } from "@/streamsrc/streamed-track-repo";
+
+const EMPTY_CACHE = { count: 0, bytes: 0 };
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  const units = ["KB", "MB", "GB", "TB"];
+  let value = bytes / 1024;
+  let unit = 0;
+  while (value >= 1024 && unit < units.length - 1) {
+    value /= 1024;
+    unit += 1;
+  }
+  return `${value.toFixed(value < 10 ? 1 : 0)} ${units[unit]}`;
+}
 
 /** Implemented sources + their quality options (brand names are not i18n'd). */
 const SOURCES: { id: StreamSourceId; label: string; qualities: string[] }[] = [
@@ -151,8 +167,68 @@ export function StreamSourcesSettings() {
             </div>
           );
         })}
+        <StreamCacheControls />
       </CardContent>
     </Card>
+  );
+}
+
+/**
+ * Offline cache controls (Phase 5): auto-download toggle + on-device usage + a clear
+ * button. Cached streamed songs play locally (offline) via the player's blob branch.
+ */
+function StreamCacheControls() {
+  const { t } = useTranslation();
+  const settings = useSettings();
+  const summary = useLiveQuery(() => summarizeStreamedCache(), [], EMPTY_CACHE);
+  const [clearing, setClearing] = useState(false);
+
+  async function toggleAuto(on: boolean) {
+    await saveSettings({ autoCacheStreamed: on });
+  }
+
+  async function clear() {
+    setClearing(true);
+    try {
+      await clearStreamedCache();
+      notify.success(t("streamCache.cleared"));
+    } finally {
+      setClearing(false);
+    }
+  }
+
+  return (
+    <div className="space-y-3 rounded-lg border border-border p-3">
+      <span className="font-medium text-sm">{t("streamCache.title")}</span>
+      <label className="flex items-start gap-3">
+        <input
+          type="checkbox"
+          checked={!!settings.autoCacheStreamed}
+          onChange={(e) => void toggleAuto(e.currentTarget.checked)}
+          className="mt-1 size-4 accent-primary"
+        />
+        <span className="flex flex-col gap-1">
+          <span className="text-sm">{t("streamCache.autoToggle")}</span>
+          <span className="text-muted-foreground text-xs">{t("streamCache.autoToggleHint")}</span>
+        </span>
+      </label>
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-muted-foreground text-xs">
+          {summary.count > 0
+            ? t("streamCache.usage", { count: summary.count, size: formatBytes(summary.bytes) })
+            : t("streamCache.empty")}
+        </span>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={clearing || summary.count === 0}
+          onClick={() => void clear()}
+        >
+          {t("streamCache.clear")}
+        </Button>
+      </div>
+    </div>
   );
 }
 

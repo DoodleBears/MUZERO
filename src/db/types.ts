@@ -417,6 +417,12 @@ export interface AppSettings {
   streamSources?: Partial<Record<StreamSourceId, StreamSourceConfig>>;
   /** The set that collects songs played from an online source via global search. */
   streamOnlineSetId?: string;
+  /**
+   * Auto-download streamed songs to a local blob after they play (offline cache,
+   * Phase 5). Off by default — it's bandwidth + disk heavy and personal-use only.
+   * A visible Settings toggle (rule 3); cleared via "clear cache".
+   */
+  autoCacheStreamed?: boolean;
   // UI
   locale: "en" | "zh" | "ja" | "ko";
   /** Now-Playing background *priority*: prefer the track's own cover or its bound slideshow. Defaults to "cover". */
@@ -553,6 +559,12 @@ export interface AppSettings {
   lyricsCustomColor?: string;
   /** Lyric line alignment (the widescreen "pure lyrics" mode especially). Default "left". */
   lyricsAlign?: "left" | "center" | "right";
+  /**
+   * Per-syllable karaoke fill: when the active line has word-level timing
+   * (Enhanced LRC / yrc / qrc), wipe each word as it's sung instead of just
+   * highlighting the whole line. No effect on line-level lyrics. Default true.
+   */
+  lyricsWordByWord?: boolean;
   /** Whether the Now-Playing stage shows lyrics instead of the cover (persisted toggle). Default false. */
   lyricsStageOpen?: boolean;
   /** Lyric text-shadow strength, 0–100 (0 = no shadow). Default 35. */
@@ -565,6 +577,14 @@ export interface AppSettings {
   lyricsShadowOffsetY?: number;
   /** Vertical gap between lyric lines, in px. Default 8. */
   lyricsLineGap?: number;
+  /** Lyric text outline (stroke) width in px, 0–12 (0 = no outline). Default 0. */
+  lyricsStrokeWidth?: number;
+  /** Outline color source. "custom" = the hex below; "cover" = the visualizer's cover color. Default "custom". */
+  lyricsStrokeColorMode?: "custom" | "cover";
+  /** Lyric text outline color (hex) when `lyricsStrokeColorMode === "custom"`. Default "#000000". */
+  lyricsStrokeColor?: string;
+  /** Lyric text outline opacity, 0–100. Default 100. */
+  lyricsStrokeOpacity?: number;
   /**
    * Smooth scrolling (Lenis) master toggle. `undefined` = follow the platform
    * default (`!isMac()`): on for non-macOS, off on macOS where the trackpad is
@@ -721,12 +741,17 @@ export const DEFAULT_SETTINGS: AppSettings = {
   lyricsInactiveOpacity: 40,
   lyricsColorMode: "default",
   lyricsAlign: "center",
+  lyricsWordByWord: true,
   lyricsStageOpen: false,
   lyricsShadowOpacity: 50,
   lyricsShadowBlur: 8,
   lyricsLineGap: 8,
   lyricsShadowOffsetX: 0,
   lyricsShadowOffsetY: 2,
+  lyricsStrokeWidth: 0,
+  lyricsStrokeColorMode: "custom",
+  lyricsStrokeColor: "#000000",
+  lyricsStrokeOpacity: 100,
   playerRepeatMode: "off",
   playerShuffle: false,
   presenceEnabled: false,
