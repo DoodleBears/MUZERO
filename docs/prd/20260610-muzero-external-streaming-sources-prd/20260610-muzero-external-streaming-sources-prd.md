@@ -30,6 +30,9 @@
 | C1 | MD5（RFC 1321，eapi digest + WBI w_rid 的基石） | `src/streamsrc/crypto/md5.ts` | RFC 已知向量 ×10 | ✅ green |
 | B1 | Bilibili WBI 签名（mixinKey 重排 + `w_rid=md5(query+key)`，`wts` 注入可测） | `src/streamsrc/bili/bili-wbi.ts` | 官方文档向量 + Node md5 交叉验证 ×6 | ✅ green |
 | B2 | Bilibili DASH 音轨选择（normal/dolby/flac 标签化 + 偏好降级/升级 + CDN 排序） | `src/streamsrc/bili/bili-resolve.ts` | canned playurl ×9 | ✅ green |
+| C2 | 无填充 RSA（BigInt modpow，weapi encSecKey 包密钥；按字节宽 → 256-hex 非 258） | `src/streamsrc/crypto/rsa.ts` | 教科书 RSA 向量 + 朴素参照 ×6 | ✅ green |
+| N1 | 网易 weapi/eapi 加密（AES-CBC×2+RSA / AES-ECB+md5 digest，secretKey 注入可测） | `src/streamsrc/netease/netease-crypto.ts` | node:crypto 交叉验证 + 往返 ×7 | ✅ green |
+| N2 | 网易播放响应解析（200/301/404/fee/freeTrial → 可播/登录/VIP/试听 + https 升级） | `src/streamsrc/netease/netease-resolve.ts` | canned 响应 ×9 | ✅ green |
 
 ---
 
