@@ -33,7 +33,7 @@ import { Disc3Icon } from "@/components/ui/disc-3";
 import { Input } from "@/components/ui/input";
 import { Kbd, KbdGroup } from "@/components/ui/kbd";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { ImportFolderButton } from "@/components/upload/import-folder-button";
+import { AddTracksMenu } from "@/components/upload/add-tracks-menu";
 import { db } from "@/db/muzero-db";
 import {
   clearSessionCover,
@@ -53,7 +53,7 @@ import { useCoverThumbhashBackfill, useTrackCoverUrl } from "@/hooks/use-media";
 import { useShortcutMatcher } from "@/hooks/use-shortcut-matcher";
 import { useTransliterationReady } from "@/hooks/use-transliteration-ready";
 import { hasModalDialogOpen, isTypingTarget } from "@/lib/dom-keys";
-import { dragHasFiles, filesFromTransfer, IMAGE_ACCEPT, MEDIA_ACCEPT } from "@/lib/file-drop";
+import { dragHasFiles, filesFromTransfer, IMAGE_ACCEPT } from "@/lib/file-drop";
 import {
   type AlbumEntry,
   type ArtistEntry,
@@ -931,9 +931,7 @@ function SetDetailView({
   const { t } = useTranslation();
   const session = useLiveQuery(() => getSession(setId), [setId]);
   const playTrack = usePlayerStore((s) => s.playTrack);
-  const addUploadsToSet = usePlayerStore((s) => s.addUploadsToSet);
   const fileRef = useRef<HTMLInputElement>(null);
-  const addFileRef = useRef<HTMLInputElement>(null);
   const descRef = useRef<HTMLTextAreaElement>(null);
   const [name, setName] = useState("");
   const [desc, setDesc] = useState("");
@@ -1140,43 +1138,26 @@ function SetDetailView({
             {t("gallery.count", { count: tracks.length })}
             {totalDurationSec > 0 && ` · ${formatDuration(totalDurationSec)}`}
           </p>
-        </div>
-
-        <div className="flex shrink-0 flex-col gap-2">
-          <Button size="sm" onClick={onPlayAll} disabled={tracks.length === 0}>
-            <Play className="size-4" /> {t("gallery.playAll")}
-          </Button>
-          {likedCount > 0 && (
-            <Button
-              size="sm"
-              variant={likedOnly ? "default" : "outline"}
-              aria-pressed={likedOnly}
-              onClick={() => setLikedOnly((v) => !v)}
-            >
-              <Heart className={cn("size-4", likedOnly && "fill-current")} />{" "}
-              {t("gallery.filterLiked")}
+          {/* Action row, under the title/description (红心 acts on songs, so the
+              liked filter lives here in the playlist; 添加歌曲 merges file-pick +
+              folder import). */}
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <Button size="sm" onClick={onPlayAll} disabled={tracks.length === 0}>
+              <Play className="size-4" /> {t("gallery.playAll")}
             </Button>
-          )}
-          <Button size="sm" variant="outline" onClick={() => addFileRef.current?.click()}>
-            <Plus className="size-4" /> {t("gallery.addTracks")}
-          </Button>
-          <ImportFolderButton
-            setId={setId}
-            variant="outline"
-            className="h-8 px-3 text-sm"
-            onWebFiles={(files) => addUploadsToSet(setId, files)}
-          />
-          <input
-            ref={addFileRef}
-            type="file"
-            accept={MEDIA_ACCEPT}
-            multiple
-            className="hidden"
-            onChange={(e) => {
-              if (e.target.files) void addUploadsToSet(setId, e.target.files);
-              e.target.value = "";
-            }}
-          />
+            {likedCount > 0 && (
+              <Button
+                size="sm"
+                variant={likedOnly ? "default" : "outline"}
+                aria-pressed={likedOnly}
+                onClick={() => setLikedOnly((v) => !v)}
+              >
+                <Heart className={cn("size-4", likedOnly && "fill-current")} />{" "}
+                {t("gallery.filterLiked")}
+              </Button>
+            )}
+            <AddTracksMenu setId={setId} />
+          </div>
         </div>
       </div>
 
