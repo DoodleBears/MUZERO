@@ -1,5 +1,5 @@
 import { useLiveQuery } from "dexie-react-hooks";
-import { Disc3, ImagePlus, User, X } from "lucide-react";
+import { Disc3, ImagePlus, User } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { CoverCropDialog } from "@/components/track/cover-crop-dialog";
@@ -9,13 +9,15 @@ import type { CropRect, EntityCover, Track } from "@/db/types";
 import { useEntityCoverUrl } from "@/hooks/use-media";
 import { dragHasFiles, filesFromTransfer, IMAGE_ACCEPT } from "@/lib/file-drop";
 import { cn } from "@/lib/utils";
+import { CoverContextMenu } from "./cover-context-menu";
 
 /**
  * Editable cover for a DERIVED artist/album entity — the set-detail cover button,
  * adapted. Click / drop / page-wide paste an image → square crop → `setEntityCover`
- * (keyed by the entity projection key). A small ✕ clears a custom override back to
- * the fallback track cover. Rendered only for REAL entities (the caller passes no
- * `entityKey` for the Unknown / Generated / Various-Artists buckets).
+ * (keyed by the entity projection key). Right-click a custom override to remove it
+ * back to the fallback track cover (same as the set cover). Rendered only for REAL
+ * entities (the caller passes no `entityKey` for the Unknown / Generated /
+ * Various-Artists buckets).
  */
 export function EntityCoverButton({
   entityKey,
@@ -78,40 +80,42 @@ export function EntityCoverButton({
   }, []);
 
   return (
-    <div className="relative shrink-0">
-      <button
-        type="button"
-        onClick={() => fileRef.current?.click()}
-        aria-label={t("gallery.coverHint")}
-        title={t("gallery.coverHint")}
-        onDragOver={(e) => {
-          if (dragHasFiles(e.dataTransfer?.types)) {
+    <div className="shrink-0">
+      <CoverContextMenu hasCover={hasOverride} onRemove={() => void clearEntityCover(entityKey)}>
+        <button
+          type="button"
+          onClick={() => fileRef.current?.click()}
+          aria-label={t("gallery.coverHint")}
+          title={t("gallery.coverHint")}
+          onDragOver={(e) => {
+            if (dragHasFiles(e.dataTransfer?.types)) {
+              e.preventDefault();
+              setDragOver(true);
+            }
+          }}
+          onDragLeave={() => setDragOver(false)}
+          onDrop={(e) => {
             e.preventDefault();
-            setDragOver(true);
-          }
-        }}
-        onDragLeave={() => setDragOver(false)}
-        onDrop={(e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          setDragOver(false);
-          pickImage(filesFromTransfer(e.dataTransfer));
-        }}
-        className={cn(
-          "group relative grid size-20 place-items-center overflow-hidden bg-secondary outline-none transition-shadow focus-visible:ring-2 focus-visible:ring-ring",
-          round ? "rounded-full" : "rounded-xl",
-          dragOver && "ring-2 ring-primary",
-        )}
-      >
-        {coverUrl ? (
-          <img src={coverUrl} alt="" className="size-full object-cover" />
-        ) : (
-          <Placeholder className="size-7 text-muted-foreground" />
-        )}
-        <span className="absolute inset-0 grid place-items-center bg-black/40 opacity-0 transition-opacity group-hover:opacity-100">
-          <ImagePlus className="size-5 text-white" />
-        </span>
-      </button>
+            e.stopPropagation();
+            setDragOver(false);
+            pickImage(filesFromTransfer(e.dataTransfer));
+          }}
+          className={cn(
+            "group relative grid size-20 place-items-center overflow-hidden bg-secondary outline-none transition-shadow focus-visible:ring-2 focus-visible:ring-ring",
+            round ? "rounded-full" : "rounded-xl",
+            dragOver && "ring-2 ring-primary",
+          )}
+        >
+          {coverUrl ? (
+            <img src={coverUrl} alt="" className="size-full object-cover" />
+          ) : (
+            <Placeholder className="size-7 text-muted-foreground" />
+          )}
+          <span className="absolute inset-0 grid place-items-center bg-black/40 opacity-0 transition-opacity group-hover:opacity-100">
+            <ImagePlus className="size-5 text-white" />
+          </span>
+        </button>
+      </CoverContextMenu>
       <input
         ref={fileRef}
         type="file"
@@ -122,17 +126,6 @@ export function EntityCoverButton({
           e.target.value = "";
         }}
       />
-      {hasOverride && (
-        <button
-          type="button"
-          onClick={() => void clearEntityCover(entityKey)}
-          aria-label={t("gallery.removeCover")}
-          title={t("gallery.removeCover")}
-          className="absolute -right-1 -top-1 grid size-5 place-items-center rounded-full border border-border bg-background text-muted-foreground shadow-sm transition-colors hover:text-destructive"
-        >
-          <X className="size-3" />
-        </button>
-      )}
       {cropFile && (
         <CoverCropDialog
           file={cropFile}

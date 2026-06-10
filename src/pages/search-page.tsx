@@ -8,13 +8,13 @@ import {
   List,
   Play,
   Plus,
-  RotateCcw,
   Search,
   Trash2,
 } from "lucide-react";
 import { motion } from "motion/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { CoverContextMenu } from "@/components/library/cover-context-menu";
 import { EntityDetailView } from "@/components/library/entity-detail";
 import { EntityGrid, type LibraryEntityItem } from "@/components/library/entity-grid";
 import { TrackListSection } from "@/components/library/track-list-section";
@@ -1158,34 +1158,6 @@ function SetDetailView({
         />
       )}
     </motion.div>
-  );
-}
-
-/**
- * Right-click affordance on the set cover: when a custom cover is pinned, offer
- * "remove" (revert to the default first-track cover). Renders children bare when
- * there's nothing to remove, so a right-click never opens an empty menu.
- */
-function CoverContextMenu({
-  hasCover,
-  onRemove,
-  children,
-}: {
-  hasCover: boolean;
-  onRemove: () => void;
-  children: React.ReactNode;
-}) {
-  const { t } = useTranslation();
-  if (!hasCover) return <>{children}</>;
-  return (
-    <ContextMenu>
-      <ContextMenuTrigger className="shrink-0">{children}</ContextMenuTrigger>
-      <ContextMenuContent>
-        <ContextMenuItem onClick={onRemove}>
-          <RotateCcw /> {t("gallery.removeCover")}
-        </ContextMenuItem>
-      </ContextMenuContent>
-    </ContextMenu>
   );
 }
 

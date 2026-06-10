@@ -1,4 +1,5 @@
 import { fireEvent, render, screen } from "@testing-library/react";
+import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { EntityCoverButton } from "./entity-cover-button";
 
@@ -23,6 +24,24 @@ vi.mock("@/components/track/cover-crop-dialog", () => ({
       data-testid="crop-confirm"
       onClick={() => onConfirm({ x: 0, y: 0, width: 10, height: 10 })}
     />
+  ),
+}));
+// The remove affordance is a right-click context menu; mock it to a plain button
+// (gated on hasCover) so the test verifies the wiring, not base-ui menu internals.
+vi.mock("./cover-context-menu", () => ({
+  CoverContextMenu: ({
+    hasCover,
+    onRemove,
+    children,
+  }: {
+    hasCover: boolean;
+    onRemove: () => void;
+    children: ReactNode;
+  }) => (
+    <>
+      {children}
+      {hasCover && <button type="button" aria-label="gallery.removeCover" onClick={onRemove} />}
+    </>
   ),
 }));
 
