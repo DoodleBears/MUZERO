@@ -259,8 +259,23 @@ export type BackgroundMode = "cover" | "slideshow" | "none";
 
 /** Flow background color source: follow the cover palette or a fixed custom set. */
 export type FlowColorSource = "cover" | "custom";
-/** Flow effect variants (map to a `uEffect` shader branch in FLOW_FRAG). */
-export type FlowEffectId = "aurora-drift" | "liquid-mesh" | "soft-blobs";
+/** Flow effect variants — the full color4bg style family, each its own
+ *  self-authored shader in `flow-shaders.ts` (no color4bg dependency). */
+export type FlowEffectId =
+  | "ambient-light"
+  | "aesthetic-fluid"
+  | "big-blob"
+  | "blur-dot"
+  | "blur-gradient"
+  | "wavy-waves"
+  | "chaos-waves"
+  | "swirling-curves"
+  | "curve-gradient"
+  | "step-gradient"
+  | "grid-array"
+  | "triangles-mosaic"
+  | "random-cubes"
+  | "abstract-shape";
 export type BackgroundRenderer =
   | "image"
   | "blur"
