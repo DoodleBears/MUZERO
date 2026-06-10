@@ -41,6 +41,19 @@
 | P1c | StreamSource 注册表（`createStreamSource` 分发 + `resolveEnabledStreamSources`；youtube→null 待 Phase 4） | `src/streamsrc/registry.ts` | ×5 | ✅ green |
 | G1 | `createStreamedTrack` + 内存查重（origin streamed 落库；新文件避开并发 `repositories.ts`） | `src/streamsrc/streamed-track-repo.ts` | fake-idb ×6 | ✅ green |
 | G2 | 生产 `StreamHttp`（`getAppFetch` + `x-muzero-h-*` header 别名，绕渲染层 forbidden headers，proxy 还原前向兼容） | `src/streamsrc/stream-http.ts` | 注入 fetch ×5 | ✅ green |
+| T1 | **Dev 测试面板**（Electron-only 浮层：选源→搜索→resolve→`<audio>` 播放）——验证真实 API / CORS 绕过 / 播放，无需 player-store/登录/UI | `src/components/dev/stream-source-tester.tsx` + `App.tsx` 挂载（gate `desktopKind()==="electron"`） | 🔄 **待 Electron 手测** | 🔄 |
+
+### 🧪 现在可测（里程碑：NetEase 匿名端到端）
+
+```bash
+make dev            # 终端 1：Vite（通常已在跑）
+make electron-dev   # 终端 2：Electron 壳（连 dev server）
+```
+
+Electron 窗口左下角出现 **「▶ Stream sources (dev)」** 浮层 → 选 `netease` → 搜歌名 → 点结果播放。
+- **NetEase 匿名**：搜索 + 取直链 + 播放应**全通**（CDN 直链经 `<audio>` 跨域直接播，无需 Referer；API 调用走现有 muzfetch 代理绕 CORS）。
+- **Bilibili**：搜索 + resolve（能拿到直链、面板显示 URL）应通；但**播放会 403**——B站 CDN 需 `Referer` 注入，要等 Phase 1 的 muzfetch header 注入改造（那批文件目前被并发 agent 占用）。
+- 面板 i18n 豁免（dev 临时件，非产品 UI），后续由正式 Settings + 搜索 UI 替代。
 
 > 至此**两源全部纯逻辑 + provider 纵向（注入式 HTTP）已实现并单测**（10 文件 / 67 测试全绿）。剩余 = 接 muzfetch（header 注入别名 + Range，改并发文件 `electron/`）、登录窗口、player-store 即时 resolve 钩子（并发文件）、Settings/搜索/导入 UI + i18n、离线缓存（Phase 5）——均需运行中的 Electron 验证、且触碰其他 agent 未提交文件，**不在本轮自动落地**（见末尾状态）。
 
