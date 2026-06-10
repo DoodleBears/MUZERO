@@ -49,6 +49,7 @@ import {
 import type { CropRect, DjSession, Track } from "@/db/types";
 import { useBackGesture } from "@/hooks/use-back-gesture";
 import { useTrackCoverUrl } from "@/hooks/use-media";
+import { useShortcutMatcher } from "@/hooks/use-shortcut-matcher";
 import { useTransliterationReady } from "@/hooks/use-transliteration-ready";
 import { hasModalDialogOpen, isTypingTarget } from "@/lib/dom-keys";
 import { dragHasFiles, filesFromTransfer, IMAGE_ACCEPT, MEDIA_ACCEPT } from "@/lib/file-drop";
@@ -61,7 +62,7 @@ import {
   findAlbumForTrack,
   findArtistByName,
 } from "@/lib/library-index";
-import { libraryNavKey, rovingIndex } from "@/lib/library-nav";
+import { rovingIndex } from "@/lib/library-nav";
 import { buildTrackStatsMap, deriveEntityStats, statFor } from "@/lib/library-stats";
 import {
   filterSets,
@@ -93,7 +94,6 @@ const MODE_KEY = "muzero-gallery-mode";
 const VIEW_KEY = "muzero-gallery-view";
 const EMPTY_MEMORY_NOTES = new Map<string, string[]>();
 const TRACK_ROW_SELECTOR = "[data-muzero-track-row]";
-const GALLERY_MODE_TOGGLE_KEYS = new Set(["`", "~", "·", "｀"]);
 
 function savedGalleryMode(): GalleryMode {
   if (typeof localStorage === "undefined") return "sets";
@@ -110,11 +110,6 @@ function normalizeDescription(value: string): string {
 
 function stripDescriptionNewlines(value: string): string {
   return value.replace(/[\r\n]+/g, " ");
-}
-
-function isGalleryModeToggle(event: KeyboardEvent): boolean {
-  if (event.metaKey || event.ctrlKey || event.altKey || event.isComposing) return false;
-  return event.code === "Backquote" || GALLERY_MODE_TOGGLE_KEYS.has(event.key);
 }
 
 const GALLERY_CARD_SELECTOR = "[data-gallery-card]";
@@ -154,6 +149,11 @@ export function SearchPage() {
   const wallScrollRef = useRef<HTMLDivElement | null>(null);
   const wallScrollTopRef = useRef(0);
   const returnFocusKeyRef = useRef<string | null>(null);
+  // Library/gallery keys resolve through the configurable registry (so rebinds
+  // take effect). Held in a ref so the window listeners stay stable.
+  const matches = useShortcutMatcher();
+  const matchesRef = useRef(matches);
+  matchesRef.current = matches;
 
   const sessions = useLiveQuery(() => listSessions(db), [], []);
   const allTracks = useLiveQuery(() => listAllTracks(db), [], []);
@@ -195,9 +195,8 @@ export function SearchPage() {
   useEffect(() => {
     if (selectedSetId) return;
     const onKeyDown = (event: KeyboardEvent) => {
-      if (!isGalleryModeToggle(event)) return;
-      const target = event.target instanceof HTMLElement ? event.target : null;
-      if (target?.closest('[role="dialog"][aria-modal="true"]')) return;
+      if (!matchesRef.current(event, "nav.cycleGalleryMode")) return;
+      if (isTypingTarget(event.target) || hasModalDialogOpen()) return;
       event.preventDefault();
       // ` cycles forward through the tabs; Shift+` walks back to the previous one.
       const count = GALLERY_MODES.length;
@@ -472,10 +471,16 @@ export function SearchPage() {
     const detailOpen = !!selectedSetId || !!selectedArtistKey || !!selectedAlbumKey;
     if (detailOpen || mode === "tracks") return;
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return;
       if (isTypingTarget(event.target) || hasModalDialogOpen()) return;
-      const intent = libraryNavKey(event.key);
-      if (!intent || intent === "back") return; // nothing is above the wall
+      const match = matchesRef.current;
+      const intent: "prev" | "next" | "open" | null = match(event, "library.focusPrev")
+        ? "prev"
+        : match(event, "library.focusNext")
+          ? "next"
+          : match(event, "library.open")
+            ? "open"
+            : null;
+      if (!intent) return; // library.back is handled by the detail back-gesture, not the wall
       const root = wallScrollRef.current;
       if (!root) return;
       const cards = Array.from(root.querySelectorAll<HTMLElement>(GALLERY_CARD_SELECTOR));

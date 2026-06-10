@@ -310,13 +310,14 @@ Global `?` (Shift+/)  →  (OPTIONAL, Q8) components/shortcuts/shortcut-help-ove
 **Tasks:**
 - [x] `A/←` back in [`use-back-gesture.ts`](../../../src/hooks/use-back-gesture.ts) → `matches(e, "library.back")` — **rebindable**.
 - [x] `memory.quickAdd` (`T/N`) in [`track-memory-notes-panel.tsx`](../../../src/components/track/track-memory-notes-panel.tsx) → `matches(e, "memory.quickAdd")`, **+ fixed the weak scope** (added the missing `hasModalDialogOpen` guard). Deleted the superseded `memory-shortcuts.ts`.
-- [ ] **Blocked on concurrent edits:** library focus/open (gallery roving in [`search-page.tsx`](../../../src/pages/search-page.tsx) + row nav in [`virtual-track-list.tsx`](../../../src/components/library/virtual-track-list.tsx)) and `nav.cycleGalleryMode` + the `` ` ``-while-typing fix — these files have the user's in-flight `Shift+\`` reverse-toggle / cover-crop work; routing them through `matches(e, "library.focus*"/"library.open"/"nav.cycleGalleryMode")` is deferred to avoid clobbering it.
+- [x] **Gallery wall** in [`search-page.tsx`](../../../src/pages/search-page.tsx): roving focus → `matches(e, "library.focusPrev"/"library.focusNext"/"library.open")`; the `` ` `` toggle → `matches(e, "nav.cycleGalleryMode")` (code-based, so layout-independent — replaced `isGalleryModeToggle`) **+ fixed the `` ` ``-while-typing bug** (now guards `isTypingTarget`). `Shift+\`` reverse direction preserved.
+- [ ] **Row nav** in [`virtual-track-list.tsx`](../../../src/components/library/virtual-track-list.tsx) → `matches(e, "library.focus*")`: deferred — that file holds the user's uncommitted W/S + batch-select work; routing it would bundle/clobber that. (Row nav still works at defaults.)
 - [ ] Swap `playerShortcutHint` → registry-backed hint; tooltips reflect live bindings.
 
 ##### Phase 2b Checklist
-- [x] `library.back` + `memory.quickAdd` rebind live; defaults unchanged; `T/N` now also guards against an open modal.
-- [ ] Rebinding `library.focusNext` / gallery-cycle takes effect (pending the routing of the two churning files).
-- [ ] `` ` `` no longer flips gallery mode while typing (pending the search-page routing).
+- [x] `library.back` + `memory.quickAdd` + gallery focus/open + gallery-cycle rebind live; defaults unchanged.
+- [x] `` ` `` no longer flips gallery mode while typing; `T/N` now also guards against an open modal.
+- [ ] Row-list focus nav routed (pending the user's `virtual-track-list.tsx` edits settling) + the cosmetic hint swap.
 
 ### Phase 3: "View all shortcuts" (read-only cheat-sheet)
 
@@ -426,6 +427,7 @@ Global `?` (Shift+/)  →  (OPTIONAL, Q8) components/shortcuts/shortcut-help-ove
 | 2026-06-10 | MUZERO | Phase 3 shipped: read-only cheat-sheet in Settings → Shortcuts (`cheatsheet.ts` + `shortcuts-settings.tsx`), grouped + searchable, with a read-only Reference section (Q7). Added `category:"reference"` registry entries skipped by dispatch/conflict; i18n ×4. `?` overlay (Q8) left optional/unbuilt |
 | 2026-06-10 | MUZERO | Phase 4 UI shipped: `shortcut-recorder-dialog.tsx` (capture → `planReassignment` conflict preview → atomic save) + per-row +/✕/↺ edit affordances + Reset-all + `setAllShortcutOverrides`; i18n ×4. Customization is end-to-end. Only Phase 2b (route the churning library/inspector/gallery key-matching through the registry + hint swap) and Phase 5 (stretch) remain |
 | 2026-06-10 | MUZERO | Phase 2b partial: shared `eventMatchesAction` + `useShortcutMatcher` hook; routed `library.back` (back gesture) + `memory.quickAdd` (T/N) through the registry — both now rebindable, and T/N gained the missing modal guard; deleted superseded `memory-shortcuts.ts`. Library focus/open + gallery-cycle routing deferred — those files (`search-page`, `virtual-track-list`, `registry`) have the user's in-flight reverse-toggle/cover-crop edits |
+| 2026-06-10 | MUZERO | Phase 2b cont.: `search-page.tsx` settled (user committed the reverse-toggle), so routed the gallery roving focus + the `` ` `` cycle-toggle through the matcher (removed `isGalleryModeToggle`; code-based match is layout-independent) and **fixed the `` ` ``-while-typing bug**. Only `virtual-track-list.tsx` row nav (entangled with the user's uncommitted W/S + batch-select work) + the cosmetic hint swap remain |
 
 ---
 
