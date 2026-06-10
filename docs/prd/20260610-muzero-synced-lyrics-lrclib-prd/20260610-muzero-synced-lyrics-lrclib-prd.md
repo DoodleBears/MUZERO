@@ -499,14 +499,14 @@ components/track/             # （Phase 4）annotation-editor 加"歌词"区：
 #### Phase 3 Checklist
 - [x] synced 歌词逐行高亮（`activeLineIndex` 二分，单测）+ 自动滚动居中（`scrollIntoView({block:"center"})`）。
 - [x] 点击任意行跳到该句开头（`onSeek(timeMs/1000)`，组件单测验证）。
-- [x] reduced-motion 下瞬切（`prefersReducedMotion()` → `behavior:"auto"`）。**实现用 4Hz `positionSec` selector，非 per-frame rAF**——故无 hidden-tab rAF 隐患（rAF 平滑留作后续增强）。
+- [x] reduced-motion 下瞬切（`prefersReducedMotion()` → `behavior:"auto"`）。**逐行追踪用 per-frame rAF 读 `getCurrentTime()`**（帧率精度切行 + 即时滚动）：仅播放+可见时跑、tab 隐藏即停、暂停只同步一次（[preview-hidden-tab-gotcha](../../../.claude/projects/-Users-doodlebear-Documents-code-MUZERO/memory/preview-hidden-tab-gotcha.md) 纪律）。
 - [x] 生成曲 `brief.lyrics` 走 plain 路径正常显示（`resolveTrackLyrics` + plain 渲染，单测）。
 - [x] instrumental / noLyrics / fetching 三态正确（`SyncedLyricsView` 分支 + i18n）。
 - [x] 单一歌词面（now-playing-panel lyrics tab，桌面右栏 + now-playing-page 共用）。**注：仓库无独立 now-playing-sheet 组件**，故不另起；移动全屏由 now-playing-page 承载同一面板。
 - [x] 播放期不每帧整树重渲：最小 selector（`positionSec`/`seek`，4Hz）+ 模块作用域抓取，不进 store state（规则 6）。
 - [x] `make check` 通过（`src/lyrics` + 组件共 70 测试绿 + biome 干净 + `tsc --noEmit` 退出 0）。
 
-> **Phase 3 实现说明（2026-06-10）：** 新增 [`synced-lyrics-view.tsx`](../../../src/components/player/synced-lyrics-view.tsx)：`SyncedLyricsView`（hooks 壳：`useLiveQuery(getTrackLyrics)` + `usePlayerStore(positionSec/seek)` + `useSettings`，消费 `resolveTrackLyrics`）+ 导出的纯展示 `LyricsScroller`（synced 逐行高亮/点击跳转/自动滚动、plain、LRCLIB 署名）。`now-playing-panel` lyrics tab 由 `<pre>{brief.lyrics}` 换成 `<SyncedLyricsView track={current} />`。i18n `lyrics.fetching/instrumental/source` ×4 locale。**与 §2.2/§5.2 的偏差**：v1 用 store 的 4Hz `positionSec` 切行（够顺、零 rAF、规则 6），未上 per-frame rAF 平滑/within-line 填充——列为后续增强。新增 10 测试（共 70）。**视觉顺滑度建议用户在真实播放一首有 LRCLIB 匹配的上传曲时确认**（沙箱预览难以可靠地起播放 + 外网抓词）。
+> **Phase 3 实现说明（2026-06-10）：** 新增 [`synced-lyrics-view.tsx`](../../../src/components/player/synced-lyrics-view.tsx)：`SyncedLyricsView`（hooks 壳：`useLiveQuery(getTrackLyrics)` + `usePlayerStore(positionSec/seek)` + `useSettings`，消费 `resolveTrackLyrics`）+ 导出的纯展示 `LyricsScroller`（synced 逐行高亮/点击跳转/自动滚动、plain、LRCLIB 署名）。`now-playing-panel` lyrics tab 由 `<pre>{brief.lyrics}` 换成 `<SyncedLyricsView track={current} />`。i18n `lyrics.fetching/instrumental/source` ×4 locale。**显示驱动（按 §2.2/§5.2 原设计，rAF）**：`useActiveLyricLine` 本地 rAF 读 `getMediaEngine().getCurrentTime()`——播放时帧率精度切行，**仅在行索引变化时 `setState`**（不每帧重渲，规则 6）；播放期不订阅 4Hz `positionSec`（用「仅暂停时观察」的 selector 捕获 seek，零 4Hz 重渲），tab 隐藏即停 rAF，暂停只同步一次。within-line 卡拉OK 填充仍留作后续增强。新增 13 测试（含 rAF hook 假定时器单测）。**视觉顺滑度建议用户在真实播放一首有 LRCLIB 匹配的上传曲时确认**（沙箱预览难以可靠地起播放 + 外网抓词）。
 
 ### Phase 4: 手动歌词（核心）
 
@@ -600,7 +600,7 @@ components/track/             # （Phase 4）annotation-editor 加"歌词"区：
 |---|----------|--------|----------|
 | Q1 | 自动抓词默认开还是默认关？ | ✅ 已定（2026-06-10）| **默认开 + 可关 + 隐私说明**（`autoFetchLyrics` 缺省 true）|
 | Q2 | 歌词单独建表 vs 附加 `Track` 字段 | ✅ 已定 | **单独 `lyrics` 表**（KB 级文本不污染虚拟列表 query，规则 6）；bump v20、无 backfill |
-| Q3 | 平滑度方案 | ✅ 已定 | 切行用 `positionSec`(4Hz)；平滑滚动/within-line 用本地 rAF 读 `getCurrentTime()`，可见性+reduced-motion gate，不进 store |
+| Q3 | 平滑度方案 | ✅ 已定（已实现 rAF）| **逐行追踪用 per-frame rAF 读 `getCurrentTime()`**（帧率精度切行）；**仅在行索引变化时 `setState`**（不每帧重渲，规则 6）；可见性 gate + tab 隐藏即停 + 暂停只同步一次（用「仅暂停时观察」的 `positionSec` selector 捕获 seek，播放期零 4Hz 重渲）；不进 store。within-line 卡拉OK 填充后续增强 |
 | Q4 | 逐行 vs 逐字高亮 | ✅ 已定（v1）| v1 **逐行**；逐字需 enhanced LRC，多数无数据，后续评估 |
 | Q5 | 手动歌词 + 同步 | ✅ 已定（2026-06-10）| **手动上传/编辑歌词进核心**（Phase 4，annotation-editor）；歌词随 **R2 同步**进 manifest（Phase 5，仿 thumbhash）。**WebDAV 完全推后**（单列未来 PRD，见 §7；歌词在 manifest 里传输无关，将来自动带上）|
 | Q6 | LRCLIB 不可用时是否预留第二源 | ✅ 已定（2026-06-10）| 接口可插拔但 **v1 只 LRCLIB**；后续加源只实现 `LyricsProvider` + 注册 |
@@ -615,6 +615,7 @@ components/track/             # （Phase 4）annotation-editor 加"歌词"区：
 |------|--------|---------|
 | 2026-06-10 | DoodleBear | 初稿：LRCLIB 自动抓词 + Apple Music 式逐行播放（高亮/自动滚动/点击跳转）。确定单独 `lyrics` 表(v20)、provider 可插拔抽象、rAF 平滑方案；Q1/Q5/Q6 待定 |
 | 2026-06-10 | DoodleBear | 据评审定 Q1/Q5/Q6/Q7：自动抓词**默认开**；**手动歌词进核心**（Phase 4）；**歌词随 R2 同步**进 manifest（Phase 5，仿 thumbhash `cf454a1`，新增 §4.8 + §5.6）；**WebDAV 完全推后**（单列未来 PRD，§7）；v1 只 LRCLIB；自动+手动均同步。Phase 由 4 增至 5 |
+| 2026-06-10 | DoodleBear | Phase 3 显示驱动升级为 **per-frame rAF**（`useActiveLyricLine`）：帧率精度切行、仅行变化时 setState（规则 6）、tab 隐藏即停、播放期零 4Hz 重渲——落实 §2.2/§5.2/Q3 原 rAF 设计（替换 v1 临时的 4Hz selector）。+3 hook 假定时器单测 |
 | 2026-06-10 | DoodleBear | **Phases 1–5 全部实现完成（TDD）**：`src/lyrics/`（provider/parser/map/resolve/auto-fetch/manual）+ `lyrics` 表(v20) + Settings 开关 + `SyncedLyricsView`(Apple-Music 式) + 手动歌词 dialog + R2 manifest 同步。81 个新单测全绿；逐 phase 原子提交（`8cedbe7`/`73ff488`/`b9997c1`/`4c45b0e` + Phase 5）。Status → Completed |
 
 ---

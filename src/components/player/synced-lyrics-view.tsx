@@ -1,5 +1,5 @@
 import { useLiveQuery } from "dexie-react-hooks";
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { db } from "@/db/muzero-db";
 import { getTrackLyrics } from "@/db/repositories";
@@ -8,7 +8,7 @@ import { useSettings } from "@/hooks/use-app-data";
 import { cn } from "@/lib/utils";
 import { activeLineIndex, type LyricsLine } from "@/lyrics/parse-lrc";
 import { type ResolvedLyrics, resolveTrackLyrics } from "@/lyrics/resolve-lyrics";
-import { usePlayerStore } from "@/stores/player-store";
+import { getMediaEngine, usePlayerStore } from "@/stores/player-store";
 
 type ShownLyrics = Extract<ResolvedLyrics, { mode: "synced" } | { mode: "plain" }>;
 
@@ -19,12 +19,74 @@ function prefersReducedMotion(): boolean {
 }
 
 /**
+ * Track the active synced-lyric line at frame rate. A rAF loop reads the media
+ * engine's currentTime directly (not the store's ~4Hz position) so the highlight
+ * switches on the exact beat — the Apple-Music feel. It re-renders only when the
+ * line index actually changes (rule 6: no per-frame tree re-render), runs only
+ * while playing + tab-visible, and re-syncs once on pause/seek. Returns -1 when
+ * there's no active line (before the first lyric or with no lyrics).
+ */
+export function useActiveLyricLine(
+  lines: LyricsLine[] | null,
+  isPlaying: boolean,
+  // Observed only while paused (-1 while playing) so a paused seek re-syncs the
+  // highlight without subscribing to the 4Hz position during playback.
+  pausedPositionSec: number,
+): number {
+  const [active, setActive] = useState(-1);
+
+  useEffect(() => {
+    if (!lines || lines.length === 0) {
+      setActive(-1);
+      return;
+    }
+    const sync = () => {
+      const ms = (getMediaEngine()?.getCurrentTime() ?? 0) * 1000;
+      const next = activeLineIndex(lines, ms);
+      setActive((prev) => (prev === next ? prev : next));
+    };
+    sync(); // initial / paused-seek (re-runs via pausedPositionSec dep)
+    if (!isPlaying) return; // paused: the single sync above is enough
+
+    let raf = 0;
+    let stopped = false;
+    const loop = () => {
+      if (stopped) return;
+      sync();
+      raf = requestAnimationFrame(loop);
+    };
+    const start = () => {
+      if (!raf && !document.hidden) raf = requestAnimationFrame(loop);
+    };
+    const stop = () => {
+      if (raf) cancelAnimationFrame(raf);
+      raf = 0;
+    };
+    const onVisibility = () => {
+      if (document.hidden) stop();
+      else {
+        sync();
+        start();
+      }
+    };
+    start();
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      stopped = true;
+      stop();
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, [lines, isPlaying, pausedPositionSec]);
+
+  return active;
+}
+
+/**
  * The Now-Playing lyrics surface. Reads the track's stored lyrics (LRCLIB or
  * manual) and renders the single arbiter's verdict: time-synced karaoke lines
- * (Apple-Music style — active line highlighted, auto-scrolled to center,
- * click-to-seek), plain text, or an instrumental / fetching / empty message.
- * Subscribes to playback position at the store's ~4Hz cadence (no per-frame rAF,
- * so nothing here re-renders the tree on every animation frame — rule 6).
+ * (Apple-Music style — active line highlighted at frame rate, auto-scrolled to
+ * center, click-to-seek), plain text, or an instrumental / fetching / empty
+ * message.
  */
 export function SyncedLyricsView({ track }: { track?: Track }) {
   const { t } = useTranslation();
@@ -35,9 +97,12 @@ export function SyncedLyricsView({ track }: { track?: Track }) {
     [trackId],
     undefined,
   );
-  const positionSec = usePlayerStore((s) => s.positionSec);
+  const isPlaying = usePlayerStore((s) => s.isPlaying);
+  const pausedPositionSec = usePlayerStore((s) => (s.isPlaying ? -1 : s.positionSec));
   const seek = usePlayerStore((s) => s.seek);
   const resolved = useMemo(() => resolveTrackLyrics(track, row), [track, row]);
+  const lines = resolved.mode === "synced" ? resolved.lines : null;
+  const activeIndex = useActiveLyricLine(lines, isPlaying, pausedPositionSec);
 
   if (resolved.mode === "instrumental") {
     return <LyricsMessage>{t("lyrics.instrumental")}</LyricsMessage>;
@@ -47,21 +112,21 @@ export function SyncedLyricsView({ track }: { track?: Track }) {
       !!track && track.origin !== "generated" && (settings.autoFetchLyrics ?? true) && !row;
     return <LyricsMessage>{t(fetching ? "lyrics.fetching" : "nowPlaying.noLyrics")}</LyricsMessage>;
   }
-  return <LyricsScroller resolved={resolved} positionMs={positionSec * 1000} onSeek={seek} />;
+  return <LyricsScroller resolved={resolved} activeIndex={activeIndex} onSeek={seek} />;
 }
 
 function LyricsMessage({ children }: { children: React.ReactNode }) {
   return <p className="py-8 text-center text-sm text-muted-foreground">{children}</p>;
 }
 
-/** Presentational lyrics body — pure props, no store/db hooks (unit-tested). */
+/** Presentational lyrics body — pure props, no store/db/rAF (unit-tested). */
 export function LyricsScroller({
   resolved,
-  positionMs,
+  activeIndex,
   onSeek,
 }: {
   resolved: ShownLyrics;
-  positionMs: number;
+  activeIndex: number;
   onSeek: (sec: number) => void;
 }) {
   if (resolved.mode === "plain") {
@@ -77,7 +142,7 @@ export function LyricsScroller({
   return (
     <SyncedLines
       lines={resolved.lines}
-      positionMs={positionMs}
+      activeIndex={activeIndex}
       onSeek={onSeek}
       source={resolved.source}
     />
@@ -86,24 +151,23 @@ export function LyricsScroller({
 
 function SyncedLines({
   lines,
-  positionMs,
+  activeIndex,
   onSeek,
   source,
 }: {
   lines: LyricsLine[];
-  positionMs: number;
+  activeIndex: number;
   onSeek: (sec: number) => void;
   source: ShownLyrics["source"];
 }) {
-  const active = activeLineIndex(lines, positionMs);
   const activeRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
-    if (active < 0) return;
+    if (activeIndex < 0) return;
     const el = activeRef.current;
     if (!el || typeof el.scrollIntoView !== "function") return;
     el.scrollIntoView({ block: "center", behavior: prefersReducedMotion() ? "auto" : "smooth" });
-  }, [active]);
+  }, [activeIndex]);
 
   return (
     <div className="flex flex-col gap-1">
@@ -111,19 +175,19 @@ function SyncedLines({
         <button
           // biome-ignore lint/suspicious/noArrayIndexKey: lyric lines have no stable id; time+index is the natural key
           key={`${line.timeMs}-${i}`}
-          ref={i === active ? activeRef : undefined}
+          ref={i === activeIndex ? activeRef : undefined}
           type="button"
-          data-active={i === active || undefined}
-          aria-current={i === active ? "true" : undefined}
+          data-active={i === activeIndex || undefined}
+          aria-current={i === activeIndex ? "true" : undefined}
           onClick={() => onSeek(line.timeMs / 1000)}
           className={cn(
             "block w-full rounded-lg px-3 py-2 text-left text-lg font-semibold leading-snug transition-all duration-300",
-            i === active
+            i === activeIndex
               ? "text-foreground"
               : "text-muted-foreground/40 hover:text-muted-foreground",
           )}
         >
-          {line.text || " "}
+          {line.text || " "}
         </button>
       ))}
       <SourceTag source={source} />
