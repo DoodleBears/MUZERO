@@ -12,6 +12,7 @@ import { log } from "@/lib/logger";
 import type { StreamHttp } from "../http";
 import type {
   PlayableStream,
+  StreamPlaylist,
   StreamResolveOptions,
   StreamResolveResult,
   StreamSearchHit,
@@ -19,6 +20,13 @@ import type {
   StreamSourceProvider,
 } from "../provider";
 import { eapiEncrypt } from "./netease-crypto";
+import {
+  neteaseSongToHit,
+  parseNeteasePlaylistTrackIds,
+  parseNeteaseSongDetailHits,
+  parseNeteaseUserId,
+  parseNeteaseUserPlaylists,
+} from "./netease-playlists";
 import {
   NETEASE_PLAYER_URL_PATH,
   type NeteaseQuality,
@@ -31,6 +39,16 @@ import {
 const SEARCH_URL = "https://interface.music.163.com/eapi/cloudsearch/pc";
 const SEARCH_API_PATH = "/api/cloudsearch/pc";
 const PLAYER_URL = "https://interface.music.163.com/eapi/song/enhance/player/url/v1";
+// Library (logged-in): account → user playlists → playlist detail (trackIds) → song detail.
+const ACCOUNT_URL = "https://interface.music.163.com/eapi/nuser/account/get";
+const ACCOUNT_PATH = "/api/nuser/account/get";
+const USER_PLAYLIST_URL = "https://interface.music.163.com/eapi/user/playlist";
+const USER_PLAYLIST_PATH = "/api/user/playlist";
+const PLAYLIST_DETAIL_URL = "https://interface.music.163.com/eapi/v6/playlist/detail";
+const PLAYLIST_DETAIL_PATH = "/api/v6/playlist/detail";
+const SONG_DETAIL_URL = "https://interface.music.163.com/eapi/v3/song/detail";
+const SONG_DETAIL_PATH = "/api/v3/song/detail";
+const SONG_DETAIL_CHUNK = 500;
 const USER_AGENT =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
 const REFERER = "https://music.163.com";
@@ -90,7 +108,7 @@ export function createNeteaseSource(deps: NeteaseSourceDeps): StreamSourceProvid
       log.warn("netease", "search response is not JSON", { status, head: text.slice(0, 200) });
       return [];
     }
-    return (json.result?.songs ?? []).map(toHit);
+    return (json.result?.songs ?? []).map(neteaseSongToHit);
   }
 
   async function resolve(
@@ -126,6 +144,55 @@ export function createNeteaseSource(deps: NeteaseSourceDeps): StreamSourceProvid
     }
   }
 
+  async function postEapiJson(
+    url: string,
+    apiPath: string,
+    payload: Record<string, unknown>,
+    signal?: AbortSignal,
+  ): Promise<unknown> {
+    const { params } = eapiEncrypt(apiPath, JSON.stringify(payload));
+    const { text } = await post(url, formBody({ params }), signal);
+    return JSON.parse(text);
+  }
+
+  async function getUserId(signal?: AbortSignal): Promise<string | null> {
+    return parseNeteaseUserId(await postEapiJson(ACCOUNT_URL, ACCOUNT_PATH, {}, signal));
+  }
+
+  async function getUserPlaylists(opts?: { signal?: AbortSignal }): Promise<StreamPlaylist[]> {
+    const uid = await getUserId(opts?.signal);
+    if (!uid) return [];
+    const json = await postEapiJson(
+      USER_PLAYLIST_URL,
+      USER_PLAYLIST_PATH,
+      { uid, offset: "0", limit: "1000", includeVideo: "true" },
+      opts?.signal,
+    );
+    return parseNeteaseUserPlaylists(json);
+  }
+
+  async function importPlaylist(
+    playlistId: string,
+    opts?: { signal?: AbortSignal },
+  ): Promise<StreamSearchHit[]> {
+    const detail = await postEapiJson(
+      PLAYLIST_DETAIL_URL,
+      PLAYLIST_DETAIL_PATH,
+      { id: playlistId, n: "100000", s: "8" },
+      opts?.signal,
+    );
+    const ids = parseNeteasePlaylistTrackIds(detail);
+    const hits: StreamSearchHit[] = [];
+    // song/detail is batched (a full playlist's trackIds can be thousands).
+    for (let i = 0; i < ids.length; i += SONG_DETAIL_CHUNK) {
+      const chunk = ids.slice(i, i + SONG_DETAIL_CHUNK);
+      const c = JSON.stringify(chunk.map((id) => ({ id: Number(id) })));
+      const json = await postEapiJson(SONG_DETAIL_URL, SONG_DETAIL_PATH, { c }, opts?.signal);
+      hits.push(...parseNeteaseSongDetailHits(json));
+    }
+    return hits;
+  }
+
   return {
     id: "netease",
     label: "网易云音乐",
@@ -133,37 +200,8 @@ export function createNeteaseSource(deps: NeteaseSourceDeps): StreamSourceProvid
     isAuthed: () => Boolean(deps.getCookie?.()),
     search,
     resolve,
-  };
-}
-
-interface RawSong {
-  id?: number;
-  name?: string;
-  ar?: Array<{ name?: string }>;
-  artists?: Array<{ name?: string }>;
-  al?: { name?: string; picUrl?: string };
-  album?: { name?: string; picUrl?: string };
-  dt?: number;
-  duration?: number;
-}
-
-function toHit(raw: unknown): StreamSearchHit {
-  const song = raw as RawSong;
-  const artists = song.ar ?? song.artists ?? [];
-  const album = song.al ?? song.album;
-  const durationMs = song.dt ?? song.duration;
-  return {
-    source: "netease",
-    externalId: String(song.id ?? ""),
-    title: song.name ?? "",
-    artist:
-      artists
-        .map((a) => a.name)
-        .filter(Boolean)
-        .join("/") || undefined,
-    album: album?.name,
-    durationSec: typeof durationMs === "number" ? Math.round(durationMs / 1000) : undefined,
-    coverUrl: album?.picUrl,
+    getUserPlaylists,
+    importPlaylist,
   };
 }
 

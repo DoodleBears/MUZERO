@@ -613,3 +613,14 @@ success：Set-Cookie 已被 net.fetch 写进默认 session → bridge.readSource
 **Q2 阻塞说明**：正确的 QR 编码器需要大量**精确查表**（GF(256) RS 生成多项式 / 各 version 对齐图案坐标 / format·version 信息位串），deps 里**无 QR 库**且不能加（共享 lockfile）。从记忆手抄 ~500 行查表极易出错 → 生成**不可扫**的二维码（比不做更糟）。**两条可行路**：① 用户加一个小 QR 库（`qrcode`，MIT，~20KB）→ 我把 Q2/Q4 几行接好；② 用 **L2 内嵌官网登录页**（B站 passport 默认就显示官方二维码,可扫）—— Q1/Q3 逻辑两条路都复用。
 
 **红线/纪律不变**：默认关、个人使用、cookie 只存设备本地、桌面专属、加密/签名复用已测核心。
+
+## 15. 同步登录账号的歌单（NetEase）
+
+登录后从账号同步歌单(NeriPlayer 同款链路,全走已验证的 eapi + cookie 鉴权):
+`account/get`→userId → `user/playlist`→歌单列表 → `v6/playlist/detail`→全量 trackIds → `v3/song/detail`(分批 500)→ 每首的展示信息 → hits → `createStreamedTrack` 入库。
+
+| # | 单元 | 文件 | 测试 | 状态 |
+|---|---|---|---|---|
+| PL1 | 纯解析器(userId / 用户歌单 / 歌单 trackIds / song-detail→hits)+ 共享 `neteaseSongToHit` | `netease-playlists.ts` | canned 响应 ×6 | ✅ green |
+| PL2 | NeteaseSource `getUserPlaylists` + `importPlaylist`(eapi 请求 + 分批 song-detail)；provider 接口加 `getUserPlaylists?`/`StreamPlaylist` | `netease-source.ts` · `provider.ts` | 110 streamsrc 测全绿 | ✅ green |
+| PL3 | UI:登录后在 Settings/⌘F 列「我的歌单」→ 选中一键导入为 set(streamed tracks) | `stream-sources-settings.tsx` | 运行时 | 🔲 |

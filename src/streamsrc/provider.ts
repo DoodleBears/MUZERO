@@ -54,6 +54,15 @@ export interface StreamResolveOptions {
   signal?: AbortSignal;
 }
 
+/** A playlist on a source (the logged-in user's, or a public one). */
+export interface StreamPlaylist {
+  id: string;
+  name: string;
+  coverUrl?: string;
+  trackCount: number;
+  source: StreamSourceId;
+}
+
 export interface StreamSourceProvider {
   readonly id: StreamSourceId;
   readonly label: string;
@@ -63,6 +72,8 @@ export interface StreamSourceProvider {
   isAuthed(): boolean;
   search(query: string, opts?: StreamSearchOptions): Promise<StreamSearchHit[]>;
   resolve(externalId: string, opts?: StreamResolveOptions): Promise<StreamResolveResult>;
+  /** The logged-in user's playlists (optional; requires login). */
+  getUserPlaylists?(opts?: { signal?: AbortSignal }): Promise<StreamPlaylist[]>;
   /** Import a source playlist/favlist/collection into hits (optional per source). */
   importPlaylist?(playlistRef: string, opts?: { signal?: AbortSignal }): Promise<StreamSearchHit[]>;
   /** Best-effort reachability check for Settings. */
