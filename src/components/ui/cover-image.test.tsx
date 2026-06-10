@@ -1,9 +1,9 @@
 import { fireEvent, render } from "@testing-library/react";
 import { Disc3 } from "lucide-react";
 import { rgbaToThumbHash } from "thumbhash";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { thumbhashToBase64 } from "@/lib/cover-thumbhash";
-import { CoverImage } from "./cover-image";
+import { CoverImage, resetDecodedCoverUrls } from "./cover-image";
 
 /** A valid base64 thumbhash for a small solid image (so decode succeeds). */
 function sampleThumbhash(): string {
@@ -27,6 +27,10 @@ function sampleThumbhash(): string {
  * loaded so there's no pointless fade on an instant cover.
  */
 describe("CoverImage", () => {
+  // The cross-mount "already decoded" memory is module-level and persists across
+  // tests; clear it so each test starts cold (a fresh cover that still fades in).
+  beforeEach(resetDecodedCoverUrls);
+
   it("shows the placeholder and no <img> when there is no url", () => {
     const { container, getByTestId } = render(
       <CoverImage url={null} placeholder={<Disc3 data-testid="ph" />} />,

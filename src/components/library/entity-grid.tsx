@@ -70,11 +70,12 @@ export function EntityGrid({
   );
 }
 
-function EntityCard({
+export function EntityCard({
   item,
   kind,
   view,
   coverTrack,
+  coverViewTransitionName,
   onOpen,
   onRequestDelete,
 }: {
@@ -82,6 +83,9 @@ function EntityCard({
   kind: EntityKind;
   view: GridView;
   coverTrack: Track | undefined;
+  /** When set, the cover wears this `view-transition-name` so it morphs into the
+   *  detail-page cover on open (the wall passes it only for the card being opened). */
+  coverViewTransitionName?: string;
   onOpen: () => void;
   onRequestDelete?: () => void;
 }) {
@@ -97,6 +101,7 @@ function EntityCard({
       rounded={round}
       placeholder={<Placeholder className="text-muted-foreground" />}
       className={cn("shrink-0", !round && "rounded-lg", size)}
+      style={coverViewTransitionName ? { viewTransitionName: coverViewTransitionName } : undefined}
     />
   );
 

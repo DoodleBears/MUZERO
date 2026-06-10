@@ -24,11 +24,14 @@ export function EntityCoverButton({
   kind,
   coverTrack,
   round,
+  viewTransitionName,
 }: {
   entityKey: string;
   kind: EntityCover["kind"];
   coverTrack: Track | undefined;
   round: boolean;
+  /** Set so this cover morphs from the wall card the user tapped (gallery → detail). */
+  viewTransitionName?: string;
 }) {
   const { t } = useTranslation();
   const coverUrl = useEntityCoverUrl(entityKey, coverTrack);
@@ -105,6 +108,7 @@ export function EntityCoverButton({
             round ? "rounded-full" : "rounded-xl",
             dragOver && "ring-2 ring-primary",
           )}
+          style={viewTransitionName ? { viewTransitionName } : undefined}
         >
           {coverUrl ? (
             <img src={coverUrl} alt="" className="size-full object-cover" />

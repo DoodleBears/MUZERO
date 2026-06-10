@@ -27,6 +27,16 @@ function stubReducedMotion(matches: boolean): void {
   );
 }
 
+const CHROMIUM_UA =
+  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 Electron/28.0.0";
+const WEBKIT_UA =
+  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15";
+
+/** Swap the engine sniff's UA (canViewTransition reads only `navigator.userAgent`). */
+function stubUserAgent(ua: string): void {
+  vi.stubGlobal("navigator", { userAgent: ua });
+}
+
 afterEach(() => {
   doc.startViewTransition = undefined;
   vi.unstubAllGlobals();
@@ -38,15 +48,24 @@ describe("canViewTransition", () => {
     expect(canViewTransition()).toBe(false);
   });
 
-  it("stays false when the native API exists and motion is allowed", () => {
+  it("is true on a Chromium engine when the API exists and motion is allowed", () => {
     stubStartViewTransition();
     stubReducedMotion(false);
+    stubUserAgent(CHROMIUM_UA);
+    expect(canViewTransition()).toBe(true);
+  });
+
+  it("is false on a WebKit shell even when the API exists (WKWebView flicker)", () => {
+    stubStartViewTransition();
+    stubReducedMotion(false);
+    stubUserAgent(WEBKIT_UA);
     expect(canViewTransition()).toBe(false);
   });
 
-  it("is false when the user prefers reduced motion, even if the API exists", () => {
+  it("is false when the user prefers reduced motion, even on Chromium", () => {
     stubStartViewTransition();
     stubReducedMotion(true);
+    stubUserAgent(CHROMIUM_UA);
     expect(canViewTransition()).toBe(false);
   });
 });
@@ -58,9 +77,20 @@ describe("startViewTransition", () => {
     expect(update).toHaveBeenCalledTimes(1);
   });
 
-  it("bypasses document.startViewTransition even when supported", () => {
+  it("wraps the update in the native API on a Chromium engine", () => {
     stubStartViewTransition((cb) => cb());
     stubReducedMotion(false);
+    stubUserAgent(CHROMIUM_UA);
+    const update = vi.fn();
+    startViewTransition(update);
+    expect(doc.startViewTransition).toHaveBeenCalledTimes(1);
+    expect(update).toHaveBeenCalledTimes(1);
+  });
+
+  it("bypasses the native API on a WebKit shell (runs update directly)", () => {
+    stubStartViewTransition((cb) => cb());
+    stubReducedMotion(false);
+    stubUserAgent(WEBKIT_UA);
     const update = vi.fn();
     startViewTransition(update);
     expect(doc.startViewTransition).not.toHaveBeenCalled();
@@ -70,6 +100,7 @@ describe("startViewTransition", () => {
   it("bypasses the native API (runs update directly) under reduced motion", () => {
     stubStartViewTransition((cb) => cb());
     stubReducedMotion(true);
+    stubUserAgent(CHROMIUM_UA);
     const update = vi.fn();
     startViewTransition(update);
     expect(doc.startViewTransition).not.toHaveBeenCalled();

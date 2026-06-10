@@ -1,8 +1,31 @@
-import { type ReactNode, useLayoutEffect, useMemo, useRef, useState } from "react";
+import {
+  type CSSProperties,
+  type ReactNode,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { thumbHashToDataURL } from "thumbhash";
 import { base64ToThumbhash } from "@/lib/cover-thumbhash";
 import { log } from "@/lib/logger";
 import { cn } from "@/lib/utils";
+
+/**
+ * Cover object URLs whose `<img>` has decoded at least once this session. The
+ * object-URL cache keeps a cover's URL string stable across unmounts, so when a
+ * virtualized wall re-mounts (e.g. returning from a detail page) its covers get
+ * the SAME url they had before — already in this set — and start painted instead
+ * of replaying the opacity fade. That removes the cover "flash" on the way back.
+ * A freshly created `<img>` isn't reliably `complete` in a layout effect even for
+ * a cached blob URL, so this remembered signal is what makes the re-mount instant.
+ */
+const decodedCoverUrls = new Set<string>();
+
+/** Test-only: clear the session decode memory so each test starts from a cold cache. */
+export function resetDecodedCoverUrls(): void {
+  decodedCoverUrls.clear();
+}
 
 /**
  * Shared cover/thumbnail surface (instant-cover-thumbnails PRD Phases 2 & 4).
@@ -31,6 +54,7 @@ export function CoverImage({
   rounded,
   className,
   imgClassName,
+  style,
   children,
 }: {
   /** Object URL (from `useTrackCoverUrl` & friends) or null when there's no cover. */
@@ -46,11 +70,18 @@ export function CoverImage({
   /** Sizing/layout + square corner radius (e.g. `size-12 rounded-lg`, `aspect-square w-full rounded-md`). */
   className?: string;
   imgClassName?: string;
+  /** Inline style on the root box — used to set a `view-transition-name` so the
+   *  cover can morph into its detail-page counterpart (gallery → detail). */
+  style?: CSSProperties;
   children?: ReactNode;
 }) {
   const ref = useRef<HTMLImageElement>(null);
-  // Track which url has finished loading so a url change auto-resets the fade.
-  const [loadedUrl, setLoadedUrl] = useState<string | null>(null);
+  // Track which url has finished loading so a url change auto-resets the fade. A
+  // url we've already decoded this session (e.g. a wall re-mounting on the way
+  // back from a detail page) starts loaded, so it re-appears without re-fading.
+  const [loadedUrl, setLoadedUrl] = useState<string | null>(() =>
+    url && decodedCoverUrls.has(url) ? url : null,
+  );
   const loaded = url != null && loadedUrl === url;
 
   // Decode the thumbhash to a tiny PNG data URL (pure — no canvas). Memoized by
@@ -65,11 +96,15 @@ export function CoverImage({
     }
   }, [thumbhash]);
 
-  // A reused object URL is often already decoded → `complete` synchronously.
-  // Mark it loaded before paint so an instant cover doesn't pointlessly fade.
+  // Mark a reused cover loaded BEFORE paint so it doesn't pointlessly fade: either
+  // we decoded this exact url earlier this session, or the freshly-mounted <img>
+  // is already `complete` (a same-frame cache hit). The remembered-url check is the
+  // reliable one — a new <img> on a cached blob url often isn't `complete` yet.
   useLayoutEffect(() => {
     const img = ref.current;
-    if (url && img?.complete && img.naturalWidth > 0) setLoadedUrl(url);
+    if (url && (decodedCoverUrls.has(url) || (img?.complete && img.naturalWidth > 0))) {
+      setLoadedUrl(url);
+    }
   }, [url]);
 
   return (
@@ -79,6 +114,7 @@ export function CoverImage({
         rounded && "rounded-full",
         className,
       )}
+      style={style}
     >
       {!url && placeholder}
       {/* Blurred preview, behind the real image, only while it's still loading. */}
@@ -97,7 +133,10 @@ export function CoverImage({
           src={url}
           alt={alt}
           data-state={loaded ? "loaded" : "loading"}
-          onLoad={() => setLoadedUrl(url)}
+          onLoad={() => {
+            decodedCoverUrls.add(url);
+            setLoadedUrl(url);
+          }}
           className={cn(
             "relative size-full object-cover transition-opacity duration-200 ease-out motion-reduce:transition-none",
             loaded ? "opacity-100" : "opacity-0",
