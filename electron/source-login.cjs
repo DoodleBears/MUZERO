@@ -12,6 +12,27 @@ const TIMEOUT_MS = 5 * 60 * 1000; // give up if the window sits open 5 min witho
 
 function registerSourceLogin() {
   ipcMain.handle("muzero:openSourceLogin", (_event, request) => openSourceLogin(request));
+  ipcMain.handle("muzero:readSourceCookies", (_event, request) => readSourceCookies(request));
+}
+
+// Read the default session's cookies for a source's domains — used after an in-app
+// QR login succeeds (the poll response's Set-Cookie was stored by net.fetch). Returns
+// null until the auth cookie is present, so the renderer keeps polling.
+async function readSourceCookies(request) {
+  const { cookieUrls, authCookie } = request ?? {};
+  if (!Array.isArray(cookieUrls)) return null;
+  const ses = session.defaultSession;
+  const out = [];
+  for (const url of cookieUrls) {
+    try {
+      const cookies = await ses.cookies.get({ url });
+      for (const c of cookies) out.push({ name: c.name, value: c.value });
+    } catch {
+      // no cookies for this domain yet
+    }
+  }
+  if (authCookie && !out.some((c) => c.name === authCookie && c.value)) return null;
+  return out;
 }
 
 function openSourceLogin(request) {

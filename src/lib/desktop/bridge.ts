@@ -69,6 +69,12 @@ export interface DesktopBridge {
    * higher quality. Absent in web/tauri (no privileged window). See `src/streamsrc/login.ts`.
    */
   openSourceLogin?: (request: StreamLoginRequest) => Promise<string | null>;
+  /**
+   * Read the current session's `Cookie:` header for a source's domains — used after
+   * an in-app QR login succeeds (the platform's poll response Set-Cookie is stored in
+   * the default session by net.fetch). Returns null until the auth cookie is present.
+   */
+  readSourceCookies?: (request: StreamLoginRequest) => Promise<string | null>;
 }
 
 /** What the desktop auth window needs to drive a source login + capture its cookie. */

@@ -15,6 +15,7 @@ interface MuzeroApi {
   openExternal(url: string): Promise<void>;
   /** Main returns the RAW captured cookies (renderer assembles the header). */
   openSourceLogin(request: StreamLoginRequest): Promise<StreamCookie[] | null>;
+  readSourceCookies(request: StreamLoginRequest): Promise<StreamCookie[] | null>;
 }
 
 const PROXY_URL = "muzfetch://proxy/";
@@ -77,6 +78,10 @@ export function createElectronBridge(): DesktopBridge {
     mediaProxyUrl: electronMediaProxyUrl,
     openSourceLogin: async (request) => {
       const cookies = await api.openSourceLogin(request);
+      return cookies && cookies.length > 0 ? assembleCookieHeader(cookies) : null;
+    },
+    readSourceCookies: async (request) => {
+      const cookies = await api.readSourceCookies(request);
       return cookies && cookies.length > 0 ? assembleCookieHeader(cookies) : null;
     },
   };

@@ -13,4 +13,5 @@ contextBridge.exposeInMainWorld("muzero", {
   saveFile: (input) => ipcRenderer.invoke("muzero:saveFile", input),
   openExternal: (url) => ipcRenderer.invoke("muzero:openExternal", url),
   openSourceLogin: (request) => ipcRenderer.invoke("muzero:openSourceLogin", request),
+  readSourceCookies: (request) => ipcRenderer.invoke("muzero:readSourceCookies", request),
 });
