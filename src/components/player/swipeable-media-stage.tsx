@@ -26,6 +26,10 @@ const MIN_COMMIT_DISTANCE = 44;
 const MAX_COMMIT_DISTANCE = 96;
 const COMMIT_VELOCITY = 420;
 const COMMIT_DURATION_SEC = 1.08;
+// Switches triggered by buttons / Q-E / auto-advance animate the full travel
+// from 0 (a drag only animates the remaining distance), so they use a snappier
+// duration to feel responsive while keeping the same coverflow look.
+const SWITCH_DURATION_SEC = 0.62;
 const HANDOFF_DURATION_SEC = 0.32;
 const COVER_READY_SETTLE_MS = 440;
 const COMMIT_EASE = [0.22, 1, 0.36, 1] as const;
@@ -76,6 +80,13 @@ export function SwipeableMediaStage({
   const wheelAccum = useRef(0);
   const wheelEndTimer = useRef<number | null>(null);
   const wheelState = useRef<WheelState | null>(null);
+  // The track id a user drag/wheel commit is switching to, so the store change
+  // it causes isn't re-animated as if it had come from a button.
+  const selfSwitchRef = useRef<string | null>(null);
+  // Snapshot of the track + its peeks before the last change, so an external
+  // switch (button / Q-E / auto-advance) can be turned into the right-direction
+  // coverflow.
+  const switchSnapRef = useRef<SwitchSnapshot | null>(null);
   const [width, setWidth] = useState(FALLBACK_WIDTH);
   const [dragDirection, setDragDirection] = useState<SwipeDirection>(null);
   const [committing, setCommitting] = useState(false);
@@ -259,6 +270,9 @@ export function SwipeableMediaStage({
       }
 
       if (clearTimer.current != null) window.clearTimeout(clearTimer.current);
+      // This gesture animates the switch itself — tag the target so the store
+      // change it triggers isn't double-animated by the external-switch effect.
+      selfSwitchRef.current = targetVisual.track.id;
       setCommitting(true);
       setHandoffFading(false);
       void action();
@@ -296,6 +310,92 @@ export function SwipeableMediaStage({
       x,
     ],
   );
+
+  // Animate a switch the stage *didn't* initiate (transport buttons, Q-E,
+  // auto-advance, queue clicks). Same coverflow as a drag/wheel commit, only the
+  // store has already moved — so this just plays the visual catch-up.
+  const playProgrammaticSwitch = useCallback(
+    (direction: Exclude<SwipeDirection, null>, outgoing: VisualTrack, incoming: VisualTrack) => {
+      activeAnimation.current?.stop();
+      if (clearTimer.current != null) {
+        window.clearTimeout(clearTimer.current);
+        clearTimer.current = null;
+      }
+      if (handoffTimer.current != null) {
+        window.clearTimeout(handoffTimer.current);
+        handoffTimer.current = null;
+      }
+      animationToken.current += 1;
+      const token = animationToken.current;
+      x.set(0);
+      setReadyTrackIds({});
+      setHandoffFading(false);
+      setSettleTarget(null);
+      setCommitting(true);
+      setDragDirection(direction);
+      updateOverlayRect();
+      setStack({
+        current: outgoing,
+        next: direction === "next" ? incoming : null,
+        prev: direction === "prev" ? incoming : null,
+      });
+      const target = direction === "next" ? -exitTravel / DRAG_GAIN : exitTravel / DRAG_GAIN;
+      const controls = animate(x, target, {
+        duration: reducedMotion ? 0.2 : SWITCH_DURATION_SEC,
+        ease: COMMIT_EASE,
+        type: "tween",
+      });
+      activeAnimation.current = controls;
+      void controls.then(() => {
+        if (animationToken.current !== token) return;
+        activeAnimation.current = null;
+        setSettleTarget(incoming);
+        setCommitting(false);
+        setDragDirection(null);
+      });
+    },
+    [exitTravel, reducedMotion, updateOverlayRect, x],
+  );
+
+  useEffect(() => {
+    const prev = switchSnapRef.current;
+    const newId = current?.id;
+    if (prev?.id && newId && prev.id !== newId) {
+      if (selfSwitchRef.current === newId) {
+        // Our own drag/wheel commit is already animating this exact switch.
+        selfSwitchRef.current = null;
+      } else {
+        const outgoing = makeVisualTrack(prev.track, preloadedCoverUrls);
+        const incoming = makeVisualTrack(current, preloadedCoverUrls);
+        // Skip the slide if the incoming cover isn't loaded yet (a jump to a
+        // far track) — the plain crossfade handles those; we never deadlock the
+        // handoff waiting on a cover that the overlay can't show.
+        const incomingReady =
+          !!incoming && (!incoming.track.coverBlobId || !!incoming.initialCoverUrl);
+        if (outgoing && incoming && incomingReady) {
+          let direction: Exclude<SwipeDirection, null>;
+          if (newId === prev.nextId) direction = "next";
+          else if (newId === prev.prevId) direction = "prev";
+          else direction = currentIndex >= prev.index ? "next" : "prev";
+          playProgrammaticSwitch(direction, outgoing, incoming);
+        }
+      }
+    }
+    switchSnapRef.current = {
+      id: newId,
+      index: currentIndex,
+      nextId: nextTrack?.id,
+      prevId: prevTrack?.id,
+      track: current,
+    };
+  }, [
+    current,
+    currentIndex,
+    nextTrack?.id,
+    prevTrack?.id,
+    preloadedCoverUrls,
+    playProgrammaticSwitch,
+  ]);
 
   useEffect(() => {
     if (!settleTarget || handoffFading || current?.id !== settleTarget.track.id) return;
@@ -535,6 +635,13 @@ type SwipeStack = {
   current: VisualTrack | null;
   next: VisualTrack | null;
   prev: VisualTrack | null;
+};
+type SwitchSnapshot = {
+  id: string | undefined;
+  index: number;
+  nextId: string | undefined;
+  prevId: string | undefined;
+  track: Track | undefined;
 };
 type WheelState = {
   beginGesture: () => void;

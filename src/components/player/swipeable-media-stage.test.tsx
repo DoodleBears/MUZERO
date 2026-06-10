@@ -180,6 +180,20 @@ describe("SwipeableMediaStage", () => {
 
     expect(usePlayerStore.getState().currentIndex).toBe(0);
   });
+
+  it("plays the coverflow for an external switch (button / Q-E / auto-advance)", async () => {
+    render(<SwipeableMediaStage />);
+
+    // No gesture — the store just advances, as a transport button or shortcut
+    // would do. The stage should detect it and animate the same coverflow.
+    await act(async () => {
+      usePlayerStore.setState({ currentIndex: 1 });
+      await Promise.resolve();
+    });
+
+    // The incoming track settles through the overlay (not an instant swap).
+    expect(screen.getAllByTestId("visual-trk_b").length).toBeGreaterThan(0);
+  });
 });
 
 function latestDragProps() {
