@@ -7,6 +7,7 @@ import { ListeningNowSection } from "@/components/player/listening-now-section";
 import { NowPlayingPanel } from "@/components/player/now-playing-panel";
 import { PlaybackSpectrum } from "@/components/player/playback-spectrum";
 import { SwipeableMediaStage } from "@/components/player/swipeable-media-stage";
+import { SyncedLyricsView } from "@/components/player/synced-lyrics-view";
 import { TrackInfoCard } from "@/components/player/track-info-card";
 import { TransportControls } from "@/components/player/transport-controls";
 import { VisualizerModeButton } from "@/components/player/visualizer-mode-button";
@@ -42,6 +43,10 @@ export function NowPlayingPage({ foregroundHidden = false }: { foregroundHidden?
   const currentIndex = usePlayerStore((s) => s.currentIndex);
   const djEnabled = usePlayerStore((s) => s.djEnabled);
   const current = currentIndex >= 0 ? queue[currentIndex] : undefined;
+  // The lyrics surface lives in the right rail on md+; on narrow there is no
+  // rail, so it stacks into the scroll flow. Render exactly one (breakpoint-gated)
+  // so only one rAF lyric tracker runs.
+  const isNarrow = useIsNarrow();
 
   // Reset the scroll to the top when the track changes (the new media/info
   // should be in view), not used as a render value.
@@ -83,14 +88,22 @@ export function NowPlayingPage({ foregroundHidden = false }: { foregroundHidden?
 
           {current && <AnnotationEditor key={current.id} track={current} />}
 
+          {isNarrow && current && (
+            <div className="min-h-[60svh] rounded-2xl bg-muted/40 p-4 dark:bg-card/70">
+              <SyncedLyricsView track={current} />
+            </div>
+          )}
+
           {djEnabled && <DjConsole />}
 
           <ListeningNowSection />
         </section>
 
-        <aside className="hidden min-h-0 md:block">
-          <NowPlayingPanel collapsible showFloatingToggle={false} />
-        </aside>
+        {!isNarrow && (
+          <aside className="min-h-0">
+            <NowPlayingPanel collapsible showFloatingToggle={false} />
+          </aside>
+        )}
       </div>
     </div>
   );
@@ -252,6 +265,24 @@ function stageOverlayStyle(el: HTMLDivElement | null): CSSProperties {
     width: rect.width,
     height: rect.height,
   };
+}
+
+/** True below the `md` breakpoint (768px) — the now-page drops to one column. */
+function useIsNarrow(): boolean {
+  const [narrow, setNarrow] = useState(() =>
+    typeof window !== "undefined" && window.matchMedia
+      ? window.matchMedia("(max-width: 767px)").matches
+      : false,
+  );
+  useEffect(() => {
+    if (!window.matchMedia) return;
+    const media = window.matchMedia("(max-width: 767px)");
+    const update = () => setNarrow(media.matches);
+    update();
+    media.addEventListener("change", update);
+    return () => media.removeEventListener("change", update);
+  }, []);
+  return narrow;
 }
 
 function NowPlayingActionRow() {

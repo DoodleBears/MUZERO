@@ -14,7 +14,8 @@
   },
   "dock": {
     "memory": "メモリー",
-    "playlist": "プレイリスト"
+    "playlist": "プレイリスト",
+    "lyrics": "歌詞"
   },
   "sessions": {
     "startDjTitle": "AI DJ セットを始める",

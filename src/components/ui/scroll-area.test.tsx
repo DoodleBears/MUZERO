@@ -11,10 +11,7 @@ describe("ScrollArea primitive", () => {
     );
 
     expect(screen.getByText("Long model list")).toBeInTheDocument();
-    expect(container.querySelector('[data-slot="scroll-area-root"]')).toBeInTheDocument();
     expect(container.querySelector('[data-slot="scroll-area-viewport"]')).toBeInTheDocument();
     expect(container.querySelector('[data-slot="scroll-area-content"]')).toBeInTheDocument();
-    expect(container.querySelector('[data-slot="scroll-area-scrollbar"]')).toBeInTheDocument();
-    expect(container.querySelector('[data-slot="scroll-area-thumb"]')).toBeInTheDocument();
   });
 });

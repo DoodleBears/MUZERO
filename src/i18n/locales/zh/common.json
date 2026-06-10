@@ -14,7 +14,8 @@
   },
   "dock": {
     "memory": "记忆",
-    "playlist": "播放列表"
+    "playlist": "播放列表",
+    "lyrics": "歌词"
   },
   "sessions": {
     "startDjTitle": "开启一个 AI DJ 歌单",

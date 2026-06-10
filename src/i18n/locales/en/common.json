@@ -14,7 +14,8 @@
   },
   "dock": {
     "memory": "Memory",
-    "playlist": "Playlist"
+    "playlist": "Playlist",
+    "lyrics": "Lyrics"
   },
   "sessions": {
     "startDjTitle": "Start an AI DJ set",

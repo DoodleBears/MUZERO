@@ -36,7 +36,7 @@ export function DockControls({
               size="icon"
               onClick={onOpenQueue}
               aria-label={t("nowPlaying.upNext")}
-              className="size-8 rounded-full text-muted-foreground transition-colors hover:text-foreground sm:size-9 xl:hidden"
+              className="size-8 rounded-full text-muted-foreground transition-colors hover:text-foreground sm:size-9"
             >
               <ListMusic />
             </Button>

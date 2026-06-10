@@ -14,7 +14,8 @@
   },
   "dock": {
     "memory": "추억",
-    "playlist": "재생목록"
+    "playlist": "재생목록",
+    "lyrics": "가사"
   },
   "sessions": {
     "startDjTitle": "AI DJ 세트 시작하기",

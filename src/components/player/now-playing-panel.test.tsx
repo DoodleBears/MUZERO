@@ -33,6 +33,7 @@ vi.mock("react-i18next", () => ({
         "annotation.memoryEmpty": "No memories yet",
         "dock.memory": "Memory",
         "dock.playlist": "Playlist",
+        "dock.lyrics": "Lyrics",
         "queue.empty": "Queue empty",
       })[key] ?? key,
   }),
@@ -83,6 +84,10 @@ vi.mock("@/components/library/virtual-track-list", () => ({
   VirtualTrackList: ({ className }: { className?: string }) => (
     <div className={className} data-testid="queue-list" />
   ),
+}));
+
+vi.mock("@/components/player/synced-lyrics-view", () => ({
+  SyncedLyricsView: () => <div data-testid="lyrics-view" />,
 }));
 
 vi.mock("@/components/player/memory-timeline-rail", () => ({
@@ -140,13 +145,12 @@ describe("NowPlayingPanel collapse", () => {
     vi.useRealTimers();
   });
 
-  it("switches from queue to memory with the floating toggle", () => {
+  it("switches from lyrics to memory with the floating toggle", () => {
     mocks.memories = [{ createdAt: 1, id: "mem_1", note: "late bus", trackId: "trk_current" }];
     render(<NowPlayingPanel collapsible />);
 
     expect(screen.getByTestId("now-playing-panel")).toHaveAttribute("data-state", "expanded");
-    expect(screen.getByTestId("queue-list").closest(".mt-chrome-top")).toBeInTheDocument();
-    expect(screen.getByTestId("queue-list")).not.toHaveClass("pt-12");
+    expect(screen.getByTestId("lyrics-view")).toBeInTheDocument();
     const toggle = screen.getByRole("button", { name: "Memory" });
     expect(toggle).toHaveAttribute("data-testid", "now-playing-panel-floating-toggle");
     fireEvent.click(toggle);
@@ -154,18 +158,18 @@ describe("NowPlayingPanel collapse", () => {
     expect(mocks.saveSettings).toHaveBeenCalledWith({ nowPlayingRightRailCollapsed: true });
   });
 
-  it("switches from memory to queue with the floating toggle", () => {
+  it("switches from memory to lyrics with the floating toggle", () => {
     mocks.collapsed = true;
     mocks.memories = [{ createdAt: 1, id: "mem_1", note: "late bus", trackId: "trk_current" }];
 
     render(<NowPlayingPanel collapsible />);
 
     expect(screen.getByTestId("now-playing-panel")).toHaveAttribute("data-state", "collapsed");
-    expect(screen.getByRole("button", { name: "Playlist" })).toContainElement(
+    expect(screen.getByRole("button", { name: "Lyrics" })).toContainElement(
       screen.getByTestId("disc-3-icon"),
     );
-    expect(screen.queryByTestId("queue-list")).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Playlist" }));
+    expect(screen.queryByTestId("lyrics-view")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Lyrics" }));
 
     expect(mocks.saveSettings).toHaveBeenCalledWith({ nowPlayingRightRailCollapsed: false });
   });
