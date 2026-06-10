@@ -565,8 +565,51 @@ components/player/            # 无需改：streamed track 复用 media-stage / 
 3. **登录窗口**（Electron 隐藏 `BrowserWindow` 抓 cookie）+ `stream-auth-store`（observer 注入）。
 4. ~~player-store 即时 resolve 钩子~~ ✅ **已完成（I1）**——并发文件已提交后落地；streamed track → `resolve` → `loadUrl`（Bili 的 `mediaProxyUrl` 待 #1）。
 5. ~~`createStreamedTrack` repo~~ ✅ **已完成（G1）**。
-6. ~~UI：在线搜索归入 ⌘F~~ ✅ **已落地（U1）**——⌘F 本地结果 + 在线源结果并排，启用 chips（默认关）+ 选中→入库+播放；i18n 4 语已补。dev 面板（T1）可后续移除。**仍待**：各源**登录**（cookie 抓取，让 VIP/高音质可用）+ **音质选择** UI（目前匿名 + 默认音质）。
-7. **Phase 5 离线缓存**。
-8. **muzfetch header 注入 + Range**（#1）→ 让 Bili 媒体也能播。
+6. ~~UI：在线搜索归入 ⌘F~~ ✅ **已落地（U1）**；dev 面板（T1）已移除（并发 agent）。
+6b. ~~各源**登录** + **音质选择** UI~~ ✅ **已落地（L1–L3，worktree 分支 `feat/stream-source-login`）** —— 见 §13。
+7. **Phase 5 离线缓存**（封面已做；音频缓存待）。
+8. ~~muzfetch header 注入 + Range~~ ✅ 已落地（Bili 媒体可播）。
+
+## 13. 登录 Phase（worktree `feat/stream-source-login`，待 Electron 实测 + 合并）
+
+解锁 VIP/高音质需登录。因主分支多 agent 并发，登录在隔离 worktree 上做，三个 TDD 原子提交：
+
+| # | 单元 | 文件 | 测试 | 状态 |
+|---|---|---|---|---|
+| L1 | 登录配置 + 纯 cookie 助手（`assembleCookieHeader` 去重 / `hasAuthCookie` / `cookieStringHasAuth` / `streamSourcesAfterLogin·Logout` 设置补丁） | `src/streamsrc/login.ts` | ×10 | ✅ green |
+| L2 | 桌面登录窗（`bridge.openSourceLogin`：子 `BrowserWindow` 加载官方登录页 → 轮询默认 session cookie 至 `MUSIC_U`/`SESSDATA` 出现 → 回传 cookie；渲染层用 L1 拼 header） | `bridge.ts`·`electron.ts`·`preload.cjs`·`main.cjs`·`source-login.cjs` | 运行时（需 Electron 实测） | 🔄 待实测 |
+| L3 | Settings「在线音源」面板：各源登录/登出 + 音质 + `hasStreamingSources` 门控 + 红线文案；接入 settings nav/page + i18n 4 语 | `stream-sources-settings.tsx`·`settings-nav.ts`·`settings-page.tsx` | nav + L1 助手 ×14 | ✅ green |
+
+**机制**：登录窗用**默认 session** → cookie 同时进 app cookie jar（`net.fetch` 自动带上）+ 存进 `settings.streamSources[id].cookie`（BYOK，设备本地）+ 经 `x-muzero-h-cookie` 注入 → 双保险解锁 VIP。登出清 cookie。
+**待办**：① Electron 实测 cookie 抓取（登录窗能否捕获 `MUSIC_U`/`SESSDATA`）；② 合并回主分支（注意主分支半提交状态）；③ 登出未清默认 session（已知小限制）。
 
 > 续作前置：等上述并发文件落定（或获明确授权编辑），并在运行的 Electron 下验证。纯逻辑层已就绪，集成层是「把已验证的积木接到外壳」。
+
+## 14. 登录 v2：应用内扫码（QR API，worktree `feat/stream-source-login`）
+
+L2 的内嵌官网登录页虽支持扫码，但依赖官网页面在内嵌窗口正常渲染（网易云登录是模态、URL 不干净）。**v2 直接调平台扫码 API**，二维码画在 MUZERO 自己的 Settings 面板里 —— 更稳、更可控、更贴合本地优先风格（NeriPlayer 同款思路）。
+
+**流程（两源对称，状态机一致）：**
+```
+generate → 拿 {qrKey, qrContent} → 渲染二维码(qrContent) → poll(qrKey) 轮询：
+  waiting(未扫) → scanned(已扫待确认) → success(确认) | expired(过期)
+success：Set-Cookie 已被 net.fetch 写进默认 session → bridge.readSourceCookies 读出 → 存 settings + 注入
+```
+
+| 源 | generate | poll | 成功码 |
+|---|---|---|---|
+| **网易云** | `/api/login/qrcode/unikey`(eapi) → `unikey`；qrContent = `https://music.163.com/login?codekey=<unikey>` | `/api/login/qrcode/client/login`(eapi, `{key, type:1}`) | 800 过期 / 801 待扫 / 802 已扫 / **803 成功** |
+| **B站** | `/x/passport-login/web/qrcode/generate` → `{url, qrcode_key}` | `/x/passport-login/web/qrcode/poll?qrcode_key=` | 86038 过期 / 86101 待扫 / 86090 已扫 / **0 成功** |
+
+**Phase 拆分（TDD）：**
+
+| # | 单元 | 文件 | 测试 | 状态 |
+|---|---|---|---|---|
+| Q1 | QR 响应解析 + 状态码映射（两源 → 统一 `QrStatus`）+ generate/poll 端点配置（纯，注入式） | `src/streamsrc/qr-login.ts` | canned 响应 + 状态码穷举 ×5 | ✅ green |
+| Q3 | QrLoginProvider（`qrPollLoop` 状态机 waiting→scanned→success/expired/timeout/cancelled + 两源 generate/poll，注入 now/sleep/http，可确定性单测）+ `bridge.readSourceCookies`（主进程读默认 session cookie，成功后取） | `qr-login-provider.ts` · `bridge.ts`/`electron.ts`/`preload.cjs`/`source-login.cjs` | 状态机 + bili api ×10（bridge 部分待运行时） | ✅ green |
+| Q2 | QR 渲染（URL → 可扫二维码图） | `src/lib/qrcode.ts` | — | 🚧 **阻塞：需依赖决策** |
+| Q4 | Settings 扫码 UI（二维码 + 状态文案「待扫描/已扫描/已过期/成功」+ 刷新），调用 Q1/Q3 | `stream-sources-settings.tsx` + i18n 4 语 | 运行时 | 🔲（依赖 Q2） |
+
+**Q2 阻塞说明**：正确的 QR 编码器需要大量**精确查表**（GF(256) RS 生成多项式 / 各 version 对齐图案坐标 / format·version 信息位串），deps 里**无 QR 库**且不能加（共享 lockfile）。从记忆手抄 ~500 行查表极易出错 → 生成**不可扫**的二维码（比不做更糟）。**两条可行路**：① 用户加一个小 QR 库（`qrcode`，MIT，~20KB）→ 我把 Q2/Q4 几行接好；② 用 **L2 内嵌官网登录页**（B站 passport 默认就显示官方二维码,可扫）—— Q1/Q3 逻辑两条路都复用。
+
+**红线/纪律不变**：默认关、个人使用、cookie 只存设备本地、桌面专属、加密/签名复用已测核心。

@@ -71,6 +71,17 @@
     "onlineSetName": "온라인",
     "enableOnline": "온라인 검색:"
   },
+  "streamSources": {
+    "title": "온라인 소스",
+    "redline": "개인 사용 · 본인 계정 · 각 플랫폼 약관 준수",
+    "desktopOnly": "온라인 소스는 데스크톱 전용입니다.",
+    "login": "로그인",
+    "loggingIn": "로그인 중…",
+    "logout": "로그아웃",
+    "loggedIn": "로그인됨",
+    "notLoggedIn": "로그인 안 됨",
+    "quality": "음질"
+  },
   "player": {
     "previous": "이전",
     "next": "다음",

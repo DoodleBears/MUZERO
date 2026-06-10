@@ -77,6 +77,17 @@
     "onlineSetName": "Online",
     "enableOnline": "Online search:"
   },
+  "streamSources": {
+    "title": "Online sources",
+    "redline": "Personal use · your own account · respect each platform's terms",
+    "desktopOnly": "Online sources are desktop-only.",
+    "login": "Log in",
+    "loggingIn": "Logging in…",
+    "logout": "Log out",
+    "loggedIn": "Logged in",
+    "notLoggedIn": "Not logged in",
+    "quality": "Quality"
+  },
   "player": {
     "previous": "Previous",
     "next": "Next",

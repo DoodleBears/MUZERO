@@ -1,5 +1,6 @@
 import type { DirEntryLike } from "@/lib/folder-import";
-import type { DesktopBridge, SaveFileInput } from "./bridge";
+import { assembleCookieHeader, type StreamCookie } from "@/streamsrc/login";
+import type { DesktopBridge, SaveFileInput, StreamLoginRequest } from "./bridge";
 
 type FetchFn = typeof globalThis.fetch;
 
@@ -12,6 +13,9 @@ interface MuzeroApi {
   grantFolderAccess(path: string): Promise<void>;
   saveFile(input: { fileName: string; mime: string; bytes: ArrayBuffer }): Promise<boolean>;
   openExternal(url: string): Promise<void>;
+  /** Main returns the RAW captured cookies (renderer assembles the header). */
+  openSourceLogin(request: StreamLoginRequest): Promise<StreamCookie[] | null>;
+  readSourceCookies(request: StreamLoginRequest): Promise<StreamCookie[] | null>;
 }
 
 const PROXY_URL = "muzfetch://proxy/";
@@ -72,6 +76,14 @@ export function createElectronBridge(): DesktopBridge {
       api.saveFile({ fileName, mime, bytes: toStandaloneBuffer(bytes) }),
     openExternal: (url) => api.openExternal(url),
     mediaProxyUrl: electronMediaProxyUrl,
+    openSourceLogin: async (request) => {
+      const cookies = await api.openSourceLogin(request);
+      return cookies && cookies.length > 0 ? assembleCookieHeader(cookies) : null;
+    },
+    readSourceCookies: async (request) => {
+      const cookies = await api.readSourceCookies(request);
+      return cookies && cookies.length > 0 ? assembleCookieHeader(cookies) : null;
+    },
   };
 }
 

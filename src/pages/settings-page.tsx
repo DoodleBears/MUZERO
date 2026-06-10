@@ -20,6 +20,7 @@ import { LyricsSettings } from "@/components/settings/lyrics-settings";
 import { resolveActiveSettingsItem } from "@/components/settings/settings-nav";
 import { SettingsSidebar } from "@/components/settings/settings-sidebar";
 import { ShortcutsSettings } from "@/components/settings/shortcuts-settings";
+import { StreamSourcesSettings } from "@/components/settings/stream-sources-settings";
 import { VisualizerSettings } from "@/components/settings/visualizer-settings";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -550,6 +551,7 @@ export function SettingsPage() {
           {activeItem === "visualizer" && <VisualizerSettings />}
 
           {activeItem === "lyrics" && <LyricsSettings />}
+          {activeItem === "stream-sources" && <StreamSourcesSettings />}
 
           {activeItem === "advanced" && <TraceDiagnostics />}
 
