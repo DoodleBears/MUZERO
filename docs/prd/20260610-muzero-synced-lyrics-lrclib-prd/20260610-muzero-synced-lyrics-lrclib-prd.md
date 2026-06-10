@@ -629,6 +629,7 @@ components/track/             # （Phase 4）annotation-editor 加"歌词"区：
 | 2026-06-10 | DoodleBear | Phase 3/4 显示打磨：synced 视图改 **motion spring 整列平移居中** + 逐行 opacity/scale 渐变 + 边缘 fade（Apple-Music 风，替 scrollIntoView）；**空态即内联 LRCLIB 搜索**（`lyrics-search-panel` + 共享 `useLyricsSearch` hook，dialog 复用同一搜索/候选 + 「歌词不对?搜索」入口）。组件/单测 87 绿 |
 | 2026-06-10 | DoodleBear | **Phases 1–5 全部实现完成（TDD）**：`src/lyrics/`（provider/parser/map/resolve/auto-fetch/manual）+ `lyrics` 表(v20) + Settings 开关 + `SyncedLyricsView`(Apple-Music 式) + 手动歌词 dialog + R2 manifest 同步。81 个新单测全绿；逐 phase 原子提交（`8cedbe7`/`73ff488`/`b9997c1`/`4c45b0e` + Phase 5）。Status → Completed |
 | 2026-06-10 | DoodleBear | **Now-Playing 表面重构**（`0fd4fb9`）：队列(歌单列表)移到**统一 Dock 底部 Drawer**(COSS `drawer.tsx` on `@base-ui/react/drawer`，宽屏+窄屏一致、上拉+swipe；替掉手搓 `xl:hidden` 浮层)；**桌面右栏默认直接显示歌词**(lyrics-first)，浮动/dock 开关切「歌词 ↔ 回忆时间线」；**空态即内联搜索**；窄屏把单一歌词面 breakpoint-gated 叠进 now-page 滚动流(保留移动端歌词、单 rAF)。新增 `QueuePanel` + `dock.lyrics` i18n×4；ScrollArea 升级(向后兼容)。组件测试更新全绿 |
+| 2026-06-10 | DoodleBear | **歌词交互三连**：① `T` 快捷键改为**唤起队列 Drawer**(新 `queue.toggle` 全局动作 + `ui-store`；memory 保留 `N`)（`ea8665a`）。② **歌词外观设定**(Settings▸外观▸歌词)：active/非active 字号 + 透明度 + 颜色(主题默认/封面取色复用 `useVisualizerCoverColorCss`/自定义 hex)，`resolveLyricStyle` 纯函数单测；**歌词背景默认全透明**（`458c798`）。③ 歌词改**真实可滚动 + 脱离 follow**(wheel/touch 脱离，居中跟随，浮动「回到当前」按钮回到 follow，点行也回)（`00cae15`）。新增 8 单测，全绿 |
 
 ---
 
