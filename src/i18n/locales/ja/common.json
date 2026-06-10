@@ -69,6 +69,17 @@
     "onlineSetName": "オンライン",
     "enableOnline": "オンライン検索:"
   },
+  "streamSources": {
+    "title": "オンラインソース",
+    "redline": "個人利用 · 自分のアカウント · 各プラットフォームの規約を遵守",
+    "desktopOnly": "オンラインソースはデスクトップ専用です。",
+    "login": "ログイン",
+    "loggingIn": "ログイン中…",
+    "logout": "ログアウト",
+    "loggedIn": "ログイン済み",
+    "notLoggedIn": "未ログイン",
+    "quality": "音質"
+  },
   "player": {
     "previous": "前へ",
     "next": "次へ",

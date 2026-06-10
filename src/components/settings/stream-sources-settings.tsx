@@ -1,0 +1,145 @@
+import { useState } from "react";
+import { useTranslation } from "react-i18next";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { saveSettings } from "@/db/repositories";
+import type { StreamSourceId } from "@/db/types";
+import { useSettings } from "@/hooks/use-app-data";
+import { hasStreamingSources, resolveDesktopBridge } from "@/lib/desktop/bridge";
+import {
+  cookieStringHasAuth,
+  STREAM_LOGIN_CONFIGS,
+  streamSourcesAfterLogin,
+  streamSourcesAfterLogout,
+} from "@/streamsrc/login";
+
+/** Implemented sources + their quality options (brand names are not i18n'd). */
+const SOURCES: { id: StreamSourceId; label: string; qualities: string[] }[] = [
+  { id: "netease", label: "网易云", qualities: ["standard", "exhigh", "lossless", "hires"] },
+  { id: "bili", label: "Bilibili", qualities: ["low", "medium", "high", "lossless"] },
+];
+
+/**
+ * Per-source login (cookie capture) + quality for the external streaming sources.
+ * Desktop-only (needs the privileged auth window); off by default. Logging in unlocks
+ * VIP / higher quality. Cookies stay on-device (BYOK) — see `src/streamsrc/login.ts`.
+ */
+export function StreamSourcesSettings() {
+  const { t } = useTranslation();
+  const settings = useSettings();
+  const [busy, setBusy] = useState<StreamSourceId | null>(null);
+
+  if (!hasStreamingSources()) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>{t("streamSources.title")}</CardTitle>
+        </CardHeader>
+        <CardContent className="text-muted-foreground text-sm">
+          {t("streamSources.desktopOnly")}
+        </CardContent>
+      </Card>
+    );
+  }
+
+  async function login(source: StreamSourceId) {
+    const config = STREAM_LOGIN_CONFIGS[source];
+    const bridge = resolveDesktopBridge();
+    if (!config || !bridge.openSourceLogin) return;
+    setBusy(source);
+    try {
+      const cookie = await bridge.openSourceLogin({
+        loginUrl: config.loginUrl,
+        cookieUrls: config.cookieUrls,
+        authCookie: config.authCookie,
+      });
+      if (cookie) {
+        await saveSettings({
+          streamSources: streamSourcesAfterLogin(
+            settings.streamSources,
+            source,
+            cookie,
+            Date.now(),
+          ),
+        });
+      }
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function logout(source: StreamSourceId) {
+    await saveSettings({ streamSources: streamSourcesAfterLogout(settings.streamSources, source) });
+  }
+
+  async function setQuality(source: StreamSourceId, quality: string) {
+    const current = settings.streamSources ?? {};
+    await saveSettings({
+      streamSources: { ...current, [source]: { ...current[source], quality } },
+    });
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>{t("streamSources.title")}</CardTitle>
+        <p className="text-muted-foreground text-sm">{t("streamSources.redline")}</p>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {SOURCES.map(({ id, label, qualities }) => {
+          const config = STREAM_LOGIN_CONFIGS[id];
+          const loggedIn = cookieStringHasAuth(
+            settings.streamSources?.[id]?.cookie,
+            config?.authCookie ?? "",
+          );
+          const quality = settings.streamSources?.[id]?.quality ?? qualities[1] ?? qualities[0];
+          return (
+            <div
+              key={id}
+              className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border p-3"
+            >
+              <div className="flex items-center gap-2">
+                <span className="font-medium text-sm">{label}</span>
+                <span
+                  className={loggedIn ? "text-green-500 text-xs" : "text-muted-foreground text-xs"}
+                >
+                  {loggedIn ? t("streamSources.loggedIn") : t("streamSources.notLoggedIn")}
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <label className="flex items-center gap-1.5 text-muted-foreground text-xs">
+                  {t("streamSources.quality")}
+                  <select
+                    value={quality}
+                    onChange={(e) => void setQuality(id, e.target.value)}
+                    className="rounded-md border border-border bg-transparent px-1.5 py-1 text-foreground text-xs"
+                  >
+                    {qualities.map((q) => (
+                      <option key={q} value={q}>
+                        {q}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                {loggedIn ? (
+                  <Button type="button" variant="outline" size="sm" onClick={() => void logout(id)}>
+                    {t("streamSources.logout")}
+                  </Button>
+                ) : (
+                  <Button
+                    type="button"
+                    size="sm"
+                    disabled={busy === id}
+                    onClick={() => void login(id)}
+                  >
+                    {busy === id ? t("streamSources.loggingIn") : t("streamSources.login")}
+                  </Button>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </CardContent>
+    </Card>
+  );
+}

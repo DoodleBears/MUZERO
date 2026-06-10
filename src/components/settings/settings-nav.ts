@@ -33,6 +33,7 @@ export const SETTINGS_NAV = [
     items: [
       { id: "playback-dj", labelKey: "settings.djTitle" },
       { id: "playback-music", labelKey: "settings.musicTitle" },
+      { id: "stream-sources", labelKey: "streamSources.title" },
     ],
   },
   {

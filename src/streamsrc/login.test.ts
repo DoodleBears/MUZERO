@@ -4,6 +4,8 @@ import {
   cookieStringHasAuth,
   hasAuthCookie,
   STREAM_LOGIN_CONFIGS,
+  streamSourcesAfterLogin,
+  streamSourcesAfterLogout,
 } from "./login";
 
 describe("STREAM_LOGIN_CONFIGS", () => {
@@ -61,5 +63,39 @@ describe("cookieStringHasAuth", () => {
     expect(cookieStringHasAuth(undefined, "SESSDATA")).toBe(false);
     // Must match the cookie NAME, not a substring of another value.
     expect(cookieStringHasAuth("xSESSDATA=abc", "SESSDATA")).toBe(false);
+  });
+});
+
+describe("streamSourcesAfterLogin", () => {
+  it("stores the cookie, enables the source, keeps existing quality", () => {
+    const out = streamSourcesAfterLogin({ netease: { quality: "lossless" } }, "netease", "MUSIC_U=t", 1234);
+    expect(out.netease).toEqual({
+      quality: "lossless",
+      cookie: "MUSIC_U=t",
+      enabled: true,
+      lastAuthAt: 1234,
+    });
+  });
+
+  it("doesn't disturb other sources", () => {
+    const out = streamSourcesAfterLogin({ bili: { enabled: true } }, "netease", "c", 1);
+    expect(out.bili).toEqual({ enabled: true });
+    expect(out.netease?.cookie).toBe("c");
+  });
+});
+
+describe("streamSourcesAfterLogout", () => {
+  it("drops the cookie + lastAuthAt but keeps quality/enabled", () => {
+    const out = streamSourcesAfterLogout(
+      { netease: { cookie: "x", lastAuthAt: 9, quality: "exhigh", enabled: true } },
+      "netease",
+    );
+    expect(out.netease).toEqual({ quality: "exhigh", enabled: true });
+  });
+
+  it("is a no-op when the source has no config", () => {
+    expect(streamSourcesAfterLogout({ bili: { enabled: true } }, "netease")).toEqual({
+      bili: { enabled: true },
+    });
   });
 });

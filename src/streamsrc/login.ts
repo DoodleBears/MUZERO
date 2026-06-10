@@ -9,7 +9,7 @@
  * the window + cookie-store read live in the desktop layer.
  */
 
-import type { StreamSourceId } from "@/db/types";
+import type { StreamSourceConfig, StreamSourceId } from "@/db/types";
 
 export interface StreamCookie {
   name: string;
@@ -63,4 +63,36 @@ export function hasAuthCookie(cookies: StreamCookie[], authCookie: string): bool
 export function cookieStringHasAuth(cookie: string | undefined, authCookie: string): boolean {
   if (!cookie) return false;
   return cookie.split(";").some((pair) => pair.trim().startsWith(`${authCookie}=`));
+}
+
+type StreamSourcesMap = Partial<Record<StreamSourceId, StreamSourceConfig>>;
+
+/**
+ * Settings patch after a successful login: store the cookie + mark the source
+ * enabled, preserving any existing quality preference. Returns the new map (the
+ * caller wraps it as `{ streamSources }` for saveSettings).
+ */
+export function streamSourcesAfterLogin(
+  current: StreamSourcesMap | undefined,
+  source: StreamSourceId,
+  cookie: string,
+  now: number,
+): StreamSourcesMap {
+  const map = current ?? {};
+  return {
+    ...map,
+    [source]: { ...map[source], cookie, enabled: true, lastAuthAt: now },
+  };
+}
+
+/** Settings patch after logout: drop the cookie + auth timestamp, keep quality/enabled. */
+export function streamSourcesAfterLogout(
+  current: StreamSourcesMap | undefined,
+  source: StreamSourceId,
+): StreamSourcesMap {
+  const map = current ?? {};
+  const existing = map[source];
+  if (!existing) return map;
+  const { cookie: _cookie, lastAuthAt: _lastAuthAt, ...rest } = existing;
+  return { ...map, [source]: rest };
 }
