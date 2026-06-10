@@ -1,7 +1,7 @@
 .PHONY: help install update
 .PHONY: dev web desktop tauri electron-dev electron-preview electron-build ios ios-init android android-init mobile-info tauri-info
 .PHONY: build preview desktop-build desktop-debug mac win linux ios-build android-build desktop-locate
-.PHONY: version-bump
+.PHONY: version-bump changelog-check
 .PHONY: test test-watch typecheck lint format check
 .PHONY: icons ui ui-coss ui-theme clean clean-dist
 
@@ -64,6 +64,7 @@ help:
 	@echo ""
 	@echo "Release:"
 	@echo "  make version-bump TYPE=minor - Bump version across package.json + tauri.conf + Cargo (lockstep)"
+	@echo "  make changelog-check         - Fail if the current version has no changelog file"
 	@echo ""
 	@echo "Quality:"
 	@echo "  make check        - Full local gate: typecheck + lint + test"
@@ -179,6 +180,11 @@ desktop-locate:
 version-bump:
 	@[ -n "$(TYPE)" ] || { echo "Usage: make version-bump TYPE=major|minor|patch|beta"; exit 1; }
 	node scripts/bump-version.mjs $(TYPE)
+
+# Release gate — fail if there's no changelog releases/<version>.ts for the
+# current package.json version. A dependency of every release-* target.
+changelog-check:
+	node scripts/check-changelog.mjs
 
 # -------------------------------------------------------------- Quality ----
 

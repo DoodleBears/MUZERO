@@ -460,18 +460,18 @@ src/components/settings/
 **Goal:** 落地 changelog 规范（用户要求 #1）+ 回填历史大版本（用户要求 #2）+ 可视化。
 
 **Tasks:**
-- [ ] `src/content/changelog/{types.ts,index.ts}` + `changelog.test.ts`（不变量）。
-- [ ] `scripts/scaffold-changelog.mjs`（4 语骨架，en 必填）+ `scripts/check-changelog.mjs`（release gate）。
-- [ ] 回填 `releases/0.1.0.ts … 0.7.0.ts`（[§3.4](#34-历史大版本回填用户要求-2回顾-commit-历史整理成几个大版本)，每版 3~6 条 item，**en/zh/ja/ko 全量**，决议 Q6）。
-- [ ] `src/lib/changelog-seen.ts` + test（未读集 + 首装不弹）。
+- [x] `src/content/changelog/{types.ts,index.ts}` + `changelog.test.ts`（不变量）。✅ 类型化模型（area/category/platform/locale enums + `localize` en 兜底）+ glob loader（compareSemver 新→旧）+ 9 不变量测。
+- [x] `scripts/scaffold-changelog.mjs`（4 语骨架，en 必填）+ `scripts/check-changelog.mjs`（release gate，`--version` 可覆盖）。✅ 接进 `bump-version`（bump 后自动 scaffold）+ `make changelog-check`。
+- [x] 回填 `releases/0.1.0.ts … 0.7.0.ts`（[§3.4](#34-历史大版本回填用户要求-2回顾-commit-历史整理成几个大版本)，每版 4~5 条 item，**en/zh/ja/ko 全量**，决议 Q6）。✅ 7 文件，4 语全量（测强制每条 title+description 四语非空）。
+- [x] `src/lib/changelog-seen.ts` + test（未读集 + 首装不弹）。✅ `resolveChangelogAutoOpen`（首装 seed 不弹 / 回访按 compareSemver 取未读 / 已读不弹）+ localStorage 安全读写，7 测。
 - [ ] `changelog-modal.tsx`（自动弹 + 事件唤起）+ `common.json` 4 语加 `changelog.*` chrome 文案。
-- [ ] `about-settings.tsx` 接「查看更新日志」入口。
+- [→] `about-settings.tsx` 接「查看更新日志」入口（随 Phase 5 about 面板一起建）。
 
 ### Phase 2 Checklist
-- [ ] changelog 按 semver 新→旧加载，`latestVersion === 0.7.0`
-- [ ] 回填 7 版均通过 `changelog.test.ts`（版本=文件名、enum 合法、en 非空）
-- [ ] 改 `lastSeenVersion` 能复现「未读自动弹」；首装不弹
-- [ ] `make changelog-check` 在缺当前版文件时 exit 1
+- [x] changelog 按 semver 新→旧加载，`latestVersion === 0.7.0` ✅
+- [x] 回填 7 版均通过 `changelog.test.ts`（版本=文件名、enum 合法、4 语非空）✅
+- [x] 改 `lastSeenVersion` 能复现「未读自动弹」；首装不弹 ✅（changelog-seen.test）
+- [x] `make changelog-check` 在缺当前版文件时 exit 1 ✅（gate test：缺 0.0.999 → 非零；present → 0）
 
 ### Phase 3: Electron 发布打包硬化
 

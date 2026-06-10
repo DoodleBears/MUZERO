@@ -16,6 +16,7 @@
  * to land in the same commit (see scaffold-changelog.mjs / check-changelog.mjs).
  * See docs/prd/20260611-muzero-release-pipeline-changelog-prd §4.3.
  */
+import { execFileSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -95,13 +96,18 @@ function main() {
     process.stdout.write(`${JSON.stringify({ current, next, type, files }, null, 2)}\n`);
     return;
   }
+
+  // Scaffold the matching changelog file so the version bump and its changelog
+  // land in the same commit (and `make changelog-check` passes).
+  execFileSync("node", [join(ROOT, "scripts/scaffold-changelog.mjs"), next], { stdio: "inherit" });
+
   process.stdout.write(
     [
       `Bumped ${current} → ${next} (${type}) in:`,
       ...files.map((f) => `  - ${f}`),
       "",
-      "Next: write the changelog for this version, then commit package.json +",
-      "tauri.conf.json + Cargo.toml + the changelog file together.",
+      `Next: fill in src/content/changelog/releases/${next}.ts (all 4 locales), then`,
+      "commit package.json + tauri.conf.json + Cargo.toml + the changelog together.",
       "",
     ].join("\n"),
   );
