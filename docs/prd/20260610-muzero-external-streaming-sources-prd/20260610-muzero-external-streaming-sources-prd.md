@@ -43,6 +43,7 @@
 | G2 | 生产 `StreamHttp`（`getAppFetch` + `x-muzero-h-*` header 别名，绕渲染层 forbidden headers，proxy 还原前向兼容） | `src/streamsrc/stream-http.ts` | 注入 fetch ×5 | ✅ green |
 | T1 | **Dev 测试面板**（Electron-only 浮层：选源→搜索→resolve→`<audio>` 播放）——验证真实 API / CORS 绕过 / 播放，无需 player-store/登录/UI | `src/components/dev/stream-source-tester.tsx` + `App.tsx` 挂载（gate `desktopKind()==="electron"`） | 🔄 **待 Electron 手测** | 🔄 |
 | I1 | **player-store 播放 streamed track**（`ensureLoadedAndPlay` 加 resolve→`loadUrl` 分支；`hasPlayableMedia` 含 streamed；登录/VIP/错误→toast）+ resolve-playback 映射（注入式可测） | `src/stores/player-store.ts` · `src/streamsrc/resolve-playback.ts` | mock provider ×5 + player-store 套件无回归（87 全绿） | ✅ |
+| U1 | **⌘/Ctrl+F 全局搜索整合在线源**（用户指定的正式归宿）：启用 chips（默认关，红线）→ 防抖并发搜已启用源 → 「在线」结果区 → 选中走 `playStreamedHit`（建/复用「在线」set + 入库 + 真实 player 播放）。player-store 加 `playStreamedHit` action + `ensureOnlineSet`；`AppSettings.streamOnlineSetId` | `src/hooks/use-online-source-search.ts` · `global-track-search.tsx` · `player-store.ts` · i18n×4 | 依赖全已测核心；UI 待 Electron 手测 | 🔄 |
 
 ### 🧪 现在可测（里程碑：NetEase 匿名端到端）
 
@@ -552,7 +553,7 @@ components/player/            # 无需改：streamed track 复用 media-stage / 
 3. **登录窗口**（Electron 隐藏 `BrowserWindow` 抓 cookie）+ `stream-auth-store`（observer 注入）。
 4. ~~player-store 即时 resolve 钩子~~ ✅ **已完成（I1）**——并发文件已提交后落地；streamed track → `resolve` → `loadUrl`（Bili 的 `mediaProxyUrl` 待 #1）。
 5. ~~`createStreamedTrack` repo~~ ✅ **已完成（G1）**。
-6. **UI（进行中）**：在线搜索归入 **⌘/Ctrl+F 全局搜索**（`GlobalTrackSearch`，用户决定）——本地结果 + 在线源结果并排，选中→`createStreamedTrack`+播放；dev 面板（T1）临时，UI 落地后移除。各源**登录/音质** + 启用开关仍待（红线：默认关闭，用户显式启用）。i18n 4 语。
+6. ~~UI：在线搜索归入 ⌘F~~ ✅ **已落地（U1）**——⌘F 本地结果 + 在线源结果并排，启用 chips（默认关）+ 选中→入库+播放；i18n 4 语已补。dev 面板（T1）可后续移除。**仍待**：各源**登录**（cookie 抓取，让 VIP/高音质可用）+ **音质选择** UI（目前匿名 + 默认音质）。
 7. **Phase 5 离线缓存**。
 8. **muzfetch header 注入 + Range**（#1）→ 让 Bili 媒体也能播。
 

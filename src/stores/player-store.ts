@@ -68,10 +68,12 @@ import {
   setFolderImportProgress,
 } from "@/stores/folder-import-store";
 import { notify } from "@/stores/notification-store";
+import type { StreamSearchHit } from "@/streamsrc/provider";
 import { createStreamSource } from "@/streamsrc/registry";
 import { resolveStreamedTrackMedia } from "@/streamsrc/resolve-playback";
 import { isStreamedTrack } from "@/streamsrc/source-detect";
 import { createStreamHttp } from "@/streamsrc/stream-http";
+import { createStreamedTrack, hitToStreamedInput } from "@/streamsrc/streamed-track-repo";
 import { listCloudDrives } from "@/sync/cloud-drive-repo";
 import { getOrCreateLocalDevice } from "@/sync/device-repo";
 import {
@@ -124,6 +126,8 @@ interface PlayerState {
   playTrack: (track: Track) => Promise<void>;
   /** Insert a specific track right after the current play position. */
   playNextTrack: (track: Track) => Promise<void>;
+  /** Play a song from an online source (global search): import it into the online set, then play. */
+  playStreamedHit: (hit: StreamSearchHit) => Promise<void>;
   next: () => Promise<void>;
   /** Previous track without the transport-button "restart current after 3s" rule. */
   skipPrev: () => Promise<void>;
@@ -444,6 +448,21 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   async playNextTrack(track) {
     log.debug("player", "playNextTrack", { trackId: track.id });
     await playQueuePlayNext([track.id]);
+  },
+
+  async playStreamedHit(hit) {
+    // Import the online song into the dedicated "online" set (deduped), make sure
+    // it's in that set's track list, then activate + play it. setActiveSession
+    // seeds the queue synchronously, so findIndex below sees the new track.
+    const setId = await ensureOnlineSet();
+    const track = await createStreamedTrack(hitToStreamedInput(setId, hit));
+    const session = await getSession(setId);
+    if (!session?.trackIds.includes(track.id)) {
+      await prependTrackIds(setId, [track.id]);
+    }
+    await get().setActiveSession(setId);
+    const idx = get().queue.findIndex((t) => t.id === track.id);
+    if (idx >= 0) await get().playIndex(idx);
   },
 
   async next() {
@@ -1072,6 +1091,22 @@ function triggerLyricsAutoFetch(track: Track): void {
       log.warn("lyrics", "auto-fetch trigger failed", err);
     }
   })();
+}
+
+/** Get (or lazily create + remember) the set that collects online-source songs. */
+async function ensureOnlineSet(): Promise<string> {
+  const settings = await getSettings();
+  if (settings.streamOnlineSetId) {
+    const existing = await getSession(settings.streamOnlineSetId);
+    if (existing) return existing.id;
+  }
+  const session = await createSession({
+    name: i18n.t("globalSearch.onlineSetName"),
+    seedPrompt: "",
+    config: { autoExtend: false },
+  });
+  await saveSettings({ streamOnlineSetId: session.id });
+  return session.id;
 }
 
 async function ensureLoadedAndPlay(

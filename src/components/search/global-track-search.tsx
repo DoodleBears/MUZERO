@@ -6,13 +6,22 @@ import { useTranslation } from "react-i18next";
 import { Disc3Icon } from "@/components/ui/disc-3";
 import { Kbd, KbdGroup } from "@/components/ui/kbd";
 import { db } from "@/db/muzero-db";
-import { listAllTracks, memoryNotesByTrack } from "@/db/repositories";
-import type { Track } from "@/db/types";
+import { listAllTracks, memoryNotesByTrack, saveSettings } from "@/db/repositories";
+import type { StreamSourceId, Track } from "@/db/types";
+import { useSettings } from "@/hooks/use-app-data";
 import { useTrackCoverUrl } from "@/hooks/use-media";
+import { useOnlineSourceSearch } from "@/hooks/use-online-source-search";
 import { useWorkerTrackSearch } from "@/hooks/use-worker-track-search";
 import { trackSubtitle } from "@/lib/track-display";
 import { cn, formatDuration } from "@/lib/utils";
 import { usePlayerStore } from "@/stores/player-store";
+import type { StreamSearchHit } from "@/streamsrc/provider";
+
+/** Implemented online sources surfaced as enable chips (brand names, not i18n). */
+const ONLINE_SOURCES: { id: StreamSourceId; label: string }[] = [
+  { id: "netease", label: "网易云" },
+  { id: "bili", label: "Bilibili" },
+];
 
 const EMPTY_MEMORY_NOTES = new Map<string, string[]>();
 const MAX_RESULTS = 10;
@@ -43,6 +52,9 @@ export function GlobalTrackSearch({
   );
   const playTrack = usePlayerStore((s) => s.playTrack);
   const playNextTrack = usePlayerStore((s) => s.playNextTrack);
+  const playStreamedHit = usePlayerStore((s) => s.playStreamedHit);
+  const settings = useSettings();
+  const { hits: onlineHits, searching: onlineSearching } = useOnlineSourceSearch(query);
 
   const playable = useMemo(
     () =>
@@ -89,6 +101,18 @@ export function GlobalTrackSearch({
       await playTrack(track);
       onOpenChange(false);
     }
+  }
+
+  async function toggleSource(id: StreamSourceId) {
+    const current = settings.streamSources ?? {};
+    await saveSettings({
+      streamSources: { ...current, [id]: { ...current[id], enabled: !current[id]?.enabled } },
+    });
+  }
+
+  async function playOnline(hit: StreamSearchHit) {
+    await playStreamedHit(hit);
+    onOpenChange(false);
   }
 
   function onKeyDown(event: KeyboardEvent<HTMLDivElement>) {
@@ -145,6 +169,29 @@ export function GlobalTrackSearch({
           />
         </div>
 
+        <div className="flex flex-wrap items-center gap-1.5 border-white/10 border-b px-4 py-2 text-xs">
+          <span className="text-muted-foreground">{t("globalSearch.enableOnline")}</span>
+          {ONLINE_SOURCES.map(({ id, label }) => {
+            const on = !!settings.streamSources?.[id]?.enabled;
+            return (
+              <button
+                key={id}
+                type="button"
+                onClick={() => void toggleSource(id)}
+                aria-pressed={on}
+                className={cn(
+                  "rounded-full border px-2 py-0.5 transition-colors",
+                  on
+                    ? "border-primary bg-accent text-foreground"
+                    : "border-border text-muted-foreground hover:text-foreground",
+                )}
+              >
+                {label}
+              </button>
+            );
+          })}
+        </div>
+
         <div className="max-h-[52vh] overflow-y-auto p-2" role="listbox">
           {results.length === 0 ? (
             <div className="px-3 py-8 text-center text-muted-foreground text-sm">
@@ -162,6 +209,21 @@ export function GlobalTrackSearch({
                 onPlayNext={() => void commit(track, "next")}
               />
             ))
+          )}
+          {(onlineSearching || onlineHits.length > 0) && (
+            <div className="mt-2 border-white/10 border-t pt-2">
+              <p className="px-3 pb-1 text-muted-foreground text-xs">
+                {t("globalSearch.online")}
+                {onlineSearching ? ` · ${t("globalSearch.onlineSearching")}` : ""}
+              </p>
+              {onlineHits.map((hit) => (
+                <OnlineResultRow
+                  key={`${hit.source}:${hit.externalId}`}
+                  hit={hit}
+                  onPlay={() => void playOnline(hit)}
+                />
+              ))}
+            </div>
           )}
         </div>
 
@@ -257,5 +319,37 @@ function GlobalTrackSearchRow({
         {formatDuration(track.durationSec)}
       </span>
     </div>
+  );
+}
+
+/** A result row for an online streaming source — cover + title + source badge. */
+function OnlineResultRow({ hit, onPlay }: { hit: StreamSearchHit; onPlay: () => void }) {
+  const subtitle = [hit.artist, hit.album].filter(Boolean).join(" · ");
+  return (
+    <button
+      type="button"
+      onClick={onPlay}
+      className="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left transition-colors hover:bg-accent/60"
+    >
+      <div className="grid size-11 shrink-0 place-items-center overflow-hidden rounded-lg bg-secondary text-muted-foreground">
+        {hit.coverUrl ? (
+          <img src={hit.coverUrl} alt="" className="size-full object-cover" />
+        ) : (
+          <Disc3Icon size={16} />
+        )}
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="truncate font-medium text-sm">{hit.title}</div>
+        <div className="truncate text-muted-foreground text-xs">{subtitle || hit.source}</div>
+      </div>
+      <span className="shrink-0 rounded-full border border-border px-1.5 py-0.5 text-[10px] text-muted-foreground uppercase">
+        {hit.source}
+      </span>
+      {hit.durationSec ? (
+        <span className="w-10 shrink-0 text-right text-muted-foreground text-xs tabular-nums">
+          {formatDuration(hit.durationSec)}
+        </span>
+      ) : null}
+    </button>
   );
 }

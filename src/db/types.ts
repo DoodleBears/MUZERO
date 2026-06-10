@@ -388,6 +388,8 @@ export interface AppSettings {
    * logs in per source in Settings. Cookies/tokens stay on-device (rule 2).
    */
   streamSources?: Partial<Record<StreamSourceId, StreamSourceConfig>>;
+  /** The set that collects songs played from an online source via global search. */
+  streamOnlineSetId?: string;
   // UI
   locale: "en" | "zh" | "ja" | "ko";
   /** Now-Playing background *priority*: prefer the track's own cover or its bound slideshow. Defaults to "cover". */
