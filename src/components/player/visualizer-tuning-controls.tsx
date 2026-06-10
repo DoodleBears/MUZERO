@@ -126,10 +126,16 @@ export function VisualizerTuningControls({
           onChange={(v) => void saveSettings({ visualizerMirror: v })}
         />
       ) : null}
-      {/* Background-composite controls — opacity + dim let you fade the visualizer
-          back to read lyrics over it (also in Settings; surfaced here too). */}
+      {/* Background-composite controls — opacity + dim fade the visualizer back so
+          it doesn't fight the foreground. Two sets: the normal one, and a
+          separate one used WHEN lyrics are shown over it (so you can subdue the
+          viz only then, to keep the words readable). Shared by Settings + the
+          long-press panel, so both stay in sync. */}
       {(settings.visualizerAsBackground ?? false) ? (
         <>
+          <span className="text-xs font-medium text-muted-foreground">
+            {t("visualizer.bgNoLyrics")}
+          </span>
           <VisualizerSlider
             label={t("visualizer.backgroundOpacity", {
               pct: settings.visualizerBackgroundOpacity ?? 100,
@@ -147,6 +153,27 @@ export function VisualizerTuningControls({
             step={1}
             value={settings.visualizerBackgroundDim ?? 0}
             onChange={(v) => void saveSettings({ visualizerBackgroundDim: v })}
+          />
+          <span className="mt-1 text-xs font-medium text-muted-foreground">
+            {t("visualizer.bgWithLyrics")}
+          </span>
+          <VisualizerSlider
+            label={t("visualizer.backgroundOpacity", {
+              pct: settings.visualizerBgOpacityLyrics ?? 60,
+            })}
+            min={0}
+            max={100}
+            step={1}
+            value={settings.visualizerBgOpacityLyrics ?? 60}
+            onChange={(v) => void saveSettings({ visualizerBgOpacityLyrics: v })}
+          />
+          <VisualizerSlider
+            label={t("visualizer.backgroundDim", { pct: settings.visualizerBgDimLyrics ?? 40 })}
+            min={0}
+            max={100}
+            step={1}
+            value={settings.visualizerBgDimLyrics ?? 40}
+            onChange={(v) => void saveSettings({ visualizerBgDimLyrics: v })}
           />
         </>
       ) : null}

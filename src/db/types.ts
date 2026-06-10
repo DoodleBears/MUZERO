@@ -467,6 +467,10 @@ export interface AppSettings {
   visualizerBackgroundDim?: number;
   /** Opacity of the background visualizer layer, 0–100. Default 100. */
   visualizerBackgroundOpacity?: number;
+  /** Dim over the background visualizer WHEN lyrics are shown over it. Default 40. */
+  visualizerBgDimLyrics?: number;
+  /** Opacity of the background visualizer WHEN lyrics are shown over it. Default 60. */
+  visualizerBgOpacityLyrics?: number;
   /** Hide all Now-Playing foreground UI after idle, leaving only background + visualizer. Default false. */
   visualizerIdleOnly?: boolean;
   /** Surface memories as a top popover during full-immersive (idle-only) playback. Default true. */
@@ -631,6 +635,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   visualizerAsBackground: false,
   visualizerBackgroundDim: 0,
   visualizerBackgroundOpacity: 100,
+  visualizerBgDimLyrics: 40,
+  visualizerBgOpacityLyrics: 60,
   visualizerIdleOnly: false,
   immersiveMemoryOverlay: true,
   visualizerUseCoverColor: true,

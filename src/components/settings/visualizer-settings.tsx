@@ -8,7 +8,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Slider } from "@/components/ui/slider";
 import { saveSettings } from "@/db/repositories";
 import { useSettings } from "@/hooks/use-app-data";
 import { resolveVisualizerStyle, VISUALIZER_META } from "@/visualizer/registry";
@@ -24,8 +23,6 @@ export function VisualizerSettings() {
   const settings = useSettings();
   const style = resolveVisualizerStyle(settings.visualizerStyle);
   const asBackground = settings.visualizerAsBackground ?? false;
-  const dim = settings.visualizerBackgroundDim ?? 0;
-  const opacity = settings.visualizerBackgroundOpacity ?? 100;
 
   return (
     <Card>
@@ -87,34 +84,9 @@ export function VisualizerSettings() {
 
         {asBackground ? (
           <>
-            <div className="mt-1 flex flex-col gap-1.5">
-              <span className="text-xs font-medium text-muted-foreground">
-                {t("visualizer.backgroundDim", { pct: dim })}
-              </span>
-              <Slider
-                min={0}
-                max={100}
-                step={1}
-                value={dim}
-                onValueChange={(v) => void saveSettings({ visualizerBackgroundDim: v })}
-                aria-label={t("visualizer.backgroundDim", { pct: dim })}
-              />
-            </div>
-
-            <div className="mt-1 flex flex-col gap-1.5">
-              <span className="text-xs font-medium text-muted-foreground">
-                {t("visualizer.backgroundOpacity", { pct: opacity })}
-              </span>
-              <Slider
-                min={0}
-                max={100}
-                step={1}
-                value={opacity}
-                onValueChange={(v) => void saveSettings({ visualizerBackgroundOpacity: v })}
-                aria-label={t("visualizer.backgroundOpacity", { pct: opacity })}
-              />
-            </div>
-
+            {/* Opacity + dim (incl. the separate "with lyrics" set) live in the
+                shared VisualizerTuningControls above, so this page and the
+                long-press tuning panel stay identical. */}
             <label className="mt-1 flex items-center gap-2 text-sm">
               <input
                 type="checkbox"

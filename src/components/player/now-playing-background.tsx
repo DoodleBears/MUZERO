@@ -60,8 +60,18 @@ function NowPlayingBackgroundContent({ hideVisualizer }: { hideVisualizer: boole
     !!current &&
     (settings.visualizerAsBackground ?? false) &&
     (settings.visualizerStyle ?? "bars") !== "off";
-  const visualizerDim = (settings.visualizerBackgroundDim ?? 0) / 100;
-  const visualizerOpacity = (settings.visualizerBackgroundOpacity ?? 100) / 100;
+  // When lyrics are shown over the visualizer, use the separate "with lyrics"
+  // dim/opacity so the words stay readable. The 240ms opacity transitions below
+  // make the switch glide.
+  const lyricsActive = settings.lyricsStageOpen ?? false;
+  const visualizerDim =
+    (lyricsActive
+      ? (settings.visualizerBgDimLyrics ?? 40)
+      : (settings.visualizerBackgroundDim ?? 0)) / 100;
+  const visualizerOpacity =
+    (lyricsActive
+      ? (settings.visualizerBgOpacityLyrics ?? 60)
+      : (settings.visualizerBackgroundOpacity ?? 100)) / 100;
   const coverUrl = useTrackCoverUrl(current);
   const trackBackgrounds = useLiveQuery(
     () => (current?.id ? listTrackBackgrounds(current.id) : Promise.resolve([])),
