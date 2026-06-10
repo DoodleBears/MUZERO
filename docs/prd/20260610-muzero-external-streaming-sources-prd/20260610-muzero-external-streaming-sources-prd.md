@@ -690,6 +690,18 @@ success：Set-Cookie 已被 net.fetch 写进默认 session → bridge.readSource
 
 **落地**：缓存核心(repo + 编排)纯逻辑全单测；`cacheStreamedTrackNow` 接真实 resolve(账号 cookie)+ 代理拉字节(Referer 注入)+ 入库；`autoCacheStreamed` 开则播放后后台缓存(再 resolve 一次，字节单独下，已知 2× 下载——后续可 tee 优化)。Settings 折进「在线音源」卡片（开关 + 占用 + 清理）。**Phase 5 完成**（运行时拉流待 Electron 手测；性能优化项后续增量）。
 
----
+## 20. Phase 4：YouTube 源（进行中）
 
-> **Phase 4（YouTube）仍 Pending** —— 仅剩的大头：InnerTube 客户端 + EJS `sig`/`n` 解密(需在隐藏 sandboxed `BrowserWindow` 跑 YT 混淆 JS)+ BotGuard PoToken。**运行时极重、难纯 TDD**，且用户既定「YouTube 押后」。本轮不展开；其纯逻辑件(InnerTube 请求/响应映射、`pickAdaptiveAudio` 音轨选择)可作为后续 TDD 起点。
+InnerTube `/youtubei/v1/player` 取流 + EJS `sig`/`n` 解密(隐藏 sandboxed `BrowserWindow` 跑 YT 混淆 JS)+ BotGuard PoToken。**纯逻辑核心先 TDD**(与 bili/netease 同纪律)，运行时件(BrowserWindow solver / PoToken)随后、注入式可测。
+
+| # | 单元 | 文件 | 测试 | 状态 |
+|---|---|---|---|---|
+| Y1 | `pickAdaptiveAudio` 纯音轨选择(MP4/AAC>WebM/Opus + 码率；忽略视频轨；`audioCodecOf`/`audioMimeFor`) | `youtube/youtube-formats.ts` | ×7 | ✅ green |
+| Y2 | InnerTube 纯映射：`buildPlayerRequestBody`(context/client/signatureTimestamp/visitorData/poToken)+`parsePlayerResponse`(playabilityStatus→verdict + formats + details + 过期)；`YT_CLIENTS`(WEB_REMIX/TV) | `youtube/youtube-innertube.ts` | ×5 | ✅ green |
+| Y3 | 密文 URL 纯组装：`parseSignatureCipher`(s/sp/url)+`resolveFormatUrl`(注入 `solveSig`/`solveN`→descramble+附 sig+变换 n) | `youtube/youtube-cipher.ts` | ×6 | ✅ green |
+| Y4 | InnerTube 取流编排：bootstrap(apiKey/visitorData/playerJsUrl)+ `WEB_REMIX→TV` 客户端轮询 `/player`，注入式(stub http+solvers) | `youtube/youtube-resolve.ts` | 🔲 | 🔲 |
+| Y5 | 主进程隐藏 `BrowserWindow` 生命周期 + IPC(`solveSig`/`solveN`/`getPoToken`)；渲染层经 bridge | `electron/youtube-engine.cjs` · `lib/desktop/*` | 🔲（运行时） | 🔲 |
+| Y6 | sig/n solver：在隔离世界跑 `yt.solver` 资产、按 `playerJsUrl` 缓存；PoToken：同窗口 BotGuard 缓存 6h | `youtube/youtube-solver.ts`（bridge 注入）| 🔲（运行时） | 🔲 |
+| Y7 | `createYoutubeSource`(search via InnerTube `/search` + resolve)+ registry `youtube` 分支(去掉 null) | `youtube/youtube-source.ts` · `registry.ts` | 🔲 | 🔲 |
+
+**Y1–Y3 落地**：YouTube 取流的三块纯逻辑(音轨选择 / InnerTube 请求-响应 / 密文 URL 组装)全单测；`sig`/`n` 解密与 PoToken 是注入点(运行时由隐藏窗口 solver 提供)，纯组装层零运行时依赖、可确定性测。
