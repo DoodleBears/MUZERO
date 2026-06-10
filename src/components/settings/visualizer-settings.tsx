@@ -10,7 +10,11 @@ import {
 } from "@/components/ui/select";
 import { saveSettings } from "@/db/repositories";
 import { useSettings } from "@/hooks/use-app-data";
-import { resolveVisualizerStyle, VISUALIZER_META } from "@/visualizer/registry";
+import {
+  resolveVisualizerStyle,
+  VISUALIZER_META,
+  VISUALIZER_PICKER_META,
+} from "@/visualizer/registry";
 import type { VisualizerStyleId } from "@/visualizer/types";
 
 /**
@@ -49,7 +53,7 @@ export function VisualizerSettings() {
               </SelectValue>
             </SelectTrigger>
             <SelectContent>
-              {VISUALIZER_META.map((m) => (
+              {VISUALIZER_PICKER_META.map((m) => (
                 <SelectItem key={m.id} value={m.id}>
                   {t(m.labelKey)}
                 </SelectItem>

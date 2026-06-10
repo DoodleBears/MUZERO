@@ -43,8 +43,7 @@ export function FlowSettings() {
     settings.flowCustomColors && settings.flowCustomColors.length >= FLOW_MIN_COLORS
       ? settings.flowCustomColors
       : FLOW_DEFAULT_COLORS;
-  const isFlowBackground =
-    settings.visualizerStyle === "scene-flow" && (settings.visualizerAsBackground ?? false);
+  const flowEnabled = settings.flowEnabled ?? false;
 
   const setColors = (next: string[]) => void saveSettings({ flowCustomColors: next });
   const updateColor = (index: number, hex: string) => {
@@ -78,21 +77,16 @@ export function FlowSettings() {
           />
         </div>
 
-        {isFlowBackground ? (
-          <p className="text-xs text-primary">{t("flow.activeAsBackground")}</p>
-        ) : (
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="self-start"
-            onClick={() =>
-              void saveSettings({ visualizerStyle: "scene-flow", visualizerAsBackground: true })
-            }
-          >
-            {t("flow.useAsBackground")}
-          </Button>
-        )}
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={flowEnabled}
+            onChange={(e) => void saveSettings({ flowEnabled: e.target.checked })}
+            className="size-4 accent-[var(--color-primary)]"
+          />
+          {t("flow.enable")}
+        </label>
+        <p className="-mt-1 text-xs text-muted-foreground">{t("flow.enableHint")}</p>
 
         <Field label={t("flow.effect")}>
           <Select
@@ -200,20 +194,18 @@ export function FlowSettings() {
           />
         </div>
 
-        {isFlowBackground ? (
+        {flowEnabled ? (
           <div className="grid gap-3 border-border border-t pt-3">
             <span className="text-xs font-medium text-muted-foreground">{t("flow.composite")}</span>
             <PctSlider
-              label={t("visualizer.backgroundOpacity", {
-                pct: settings.visualizerBackgroundOpacity ?? 100,
-              })}
-              value={settings.visualizerBackgroundOpacity ?? 100}
-              onChange={(v) => void saveSettings({ visualizerBackgroundOpacity: v })}
+              label={t("flow.opacity", { pct: settings.flowOpacity ?? 100 })}
+              value={settings.flowOpacity ?? 100}
+              onChange={(v) => void saveSettings({ flowOpacity: v })}
             />
             <PctSlider
-              label={t("visualizer.backgroundDim", { pct: settings.visualizerBackgroundDim ?? 0 })}
-              value={settings.visualizerBackgroundDim ?? 0}
-              onChange={(v) => void saveSettings({ visualizerBackgroundDim: v })}
+              label={t("flow.dim", { pct: settings.flowDim ?? 0 })}
+              value={settings.flowDim ?? 0}
+              onChange={(v) => void saveSettings({ flowDim: v })}
             />
           </div>
         ) : null}

@@ -35,6 +35,10 @@ export interface VisualizerMeta {
   /** dB window for getByteFrequencyData (tightens dynamic range). Host defaults -100/-30. */
   minDecibels?: number;
   maxDecibels?: number;
+  /** Hidden from the visualizer style picker. Still renderable via an explicit
+   *  `styleId` — `scene-flow` is consumed by the independent flow background layer,
+   *  NOT chosen as a spectrum style (the two compose, they're not mutually exclusive). */
+  hidden?: boolean;
 }
 
 /**
@@ -122,8 +126,13 @@ export const VISUALIZER_META: VisualizerMeta[] = [
     labelKey: "visualizer.styleSceneFlow",
     fftSize: 1024,
     smoothing: 0.88,
+    // Flow is an independent background layer, not a spectrum choice → not listed.
+    hidden: true,
   },
 ];
+
+/** Styles offered in the visualizer style picker (excludes layer-only styles). */
+export const VISUALIZER_PICKER_META: VisualizerMeta[] = VISUALIZER_META.filter((m) => !m.hidden);
 
 export const VISUALIZER_STYLE_IDS: VisualizerStyleId[] = VISUALIZER_META.map((m) => m.id);
 

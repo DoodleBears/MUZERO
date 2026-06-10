@@ -16,6 +16,7 @@
 | 3 | 取色源模型：`flowColorSource: "cover" \| "custom"`（默认 cover，无封面回退 custom）+ 始终存在的 `flowCustomColors[]`，把 palette 喂进 shader uniform | ✅ Completed | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | Settings：在 Appearance 段新增独立 sidebar item「流光背景」面板（效果选择 / 取色源切换 / 多色编辑器 + 预设 / 压暗 / 透明度 / 动态强度），i18n 四语全量 | ✅ Completed | [Phase 4 Checklist](#phase-4-checklist) |
 | 5 | 打磨：reduced-motion / 移动 30fps / bundle 预算复测 / 无封面与切歌过渡 / 文档对齐 | ✅ Completed（运行时行为继承自 SceneHost；视觉验证待人工） | [Phase 5 Checklist](#phase-5-checklist) |
+| 6 | **设计修正**：流光改为**独立合成层**（背景图/视频 → 流光 → 频谱，**不互斥**），独立 `flowEnabled` 开关 + `flowOpacity`/`flowDim`；`scene-flow` 从频谱选择器隐藏（`hidden:true`，仍作图层强制 styleId 渲染） | ✅ Completed | [Phase 6 Checklist](#phase-6-checklist) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
 > 本 PRD 适用 [`prd-create.md`](../../../.cursor/commands/prd-create.md) 的 **§3「Effect / Shader / 外部依赖类」** 附加要求（license 第一公民、curate 不穷举、**不引入新 runtime owner**、bundle 预算、自研优先、i18n 四语、不散落硬编码、shader uniform prelude 约定、基础设施先于覆盖广度、回退=`git revert`）与 **§4「realtime preview 性能类」**（reduced-motion / 可见性暂停 / prod build 复测）。
@@ -91,7 +92,9 @@ MUZERO **不需要从零搭**——关键管线都已存在，本 PRD 是「升�
 
 MUZERO 的可视化已是可插拔 registry（[`src/visualizer/`](../../../src/visualizer/)）：`VisualizerHost` 按 `AppSettings.visualizerStyle` 选样式，scene kind 走 `SceneHost` → lazy `ReactiveScene`（twgl 单 fragment shader，IO 暂停 / reduced-motion / WebGL 回退 aura）。`now-playing-background.tsx` 在 `visualizerAsBackground` 打开时把 `VisualizerHost` 垫成 Now Playing 背景，且**已有**透明度（`visualizerBackgroundOpacity`）、压暗（`visualizerBackgroundDim`）、歌词时压低（`visualizerBgOpacityLyrics`/`Dim`）、`AnimatePresence` 淡入淡出。
 
-**结论：流光 = 新增一个 scene 样式 `scene-flow`**，自动继承上面**全部**生命周期/背景/透明度/压暗设施。我们只需补两件**新**东西：(1) 多色取色 + 多色 store；(2) flow 自己的配置面板。
+**结论：流光复用 `scene-flow` shader 的渲染机制（继承 `SceneHost` 全部生命周期），但落地为一个独立图层。** 补三件**新**东西：(1) 多色取色 + 多色 store；(2) flow 自己的配置面板；(3) flow 独立合成层。
+
+> ⚠️ **Phase 6 设计修正（owner 反馈）**：流光**不是**可视化频谱的「又一种样式」（早期实现误把它做成 `visualizerStyle` 选项，与频谱互斥）。正确模型是**独立合成层**：[`now-playing-background.tsx`](../../../src/components/player/now-playing-background.tsx) 里 **背景图/视频 → 流光层 → 可视化频谱** 三层叠加，流光由独立 `flowEnabled` 开关 + `flowOpacity`/`flowDim` 控制（强制 `styleId="scene-flow"` 渲染），与频谱**并存不互斥**。`scene-flow` 在 registry 标 `hidden:true` → 不进频谱选择器（`VISUALIZER_PICKER_META`），只作图层渲染载体。下文 §2.1–§5 中「flow 作为 visualizer 样式」的表述以本修正为准。
 
 ```
 封面 Blob ──extractImagePalette()──▶ Rgb[]（top-N 去重，亮色优先）
@@ -426,6 +429,24 @@ export function resolveFlowColors(
 - [ ] **真实 app 人工验证**（预览沙箱冻结 WebGL，需真实窗口）：多色流动 calm、跟封面变色、删封面回退自定义、三种效果差异、Settings 面板即时生效 + 预览同步、reduced-motion 静态、prod build 帧节奏。
 - [ ] bundle 增量 CI 实测（估算 < 30KB gz）。
 
+### Phase 6: 独立合成层（设计修正）✅
+
+**Goal:** 流光不是频谱样式，而是 **背景图/视频 → 流光 → 频谱** 的独立中间层（owner 反馈）。
+
+**Tasks:**
+- [x] `registry.ts`：`VisualizerMeta.hidden?` + `scene-flow` 标 `hidden:true` + `VISUALIZER_PICKER_META`（过滤 hidden）；`registry.test` 断言 scene-flow 注册但不进 picker。
+- [x] `visualizer-settings.tsx`：频谱选择器用 `VISUALIZER_PICKER_META`（scene-flow 不再出现，消除「选它=替换频谱」的互斥）。
+- [x] `db/types.ts`：加 `flowEnabled`/`flowOpacity`/`flowDim`（additive 无 DB bump）。
+- [x] `now-playing-background.tsx`：在 image-mask 与 visualizer `AnimatePresence` **之间**插独立流光层 `<VisualizerHost styleId="scene-flow" coverColor placement="background" style={{opacity:flowOpacity}}>` + dim 叠层，`flowEnabled` gate + `AnimatePresence` 淡入。
+- [x] `flow-settings.tsx`：「设为背景」按钮 → `flowEnabled` 复选开关；composite 段从 `visualizerBackground*` 改 `flowOpacity`/`flowDim`（流光层自己的透明度/压暗）。
+- [x] i18n 四语：`flow.enable`/`enableHint`/`opacity`/`dim`。
+
+### Phase 6 Checklist
+- [x] registry 测试（13）含 scene-flow `hidden` + 不在 picker。
+- [x] JSON 四语校验 + biome（6 files）+ whole-tree typecheck 绿。
+- [x] CLAUDE.md / PRD 修正层级模型。
+- [ ] **真实 app 人工验证**：流光层与频谱**同时**显示（不互斥）、垫在背景图之上频谱之下、`flowOpacity` 调透出底图、关 `flowEnabled` 只去流光层不影响频谱。
+
 ---
 
 ## 7. Out of Scope
@@ -486,6 +507,7 @@ export function resolveFlowColors(
 | 2026-06-11 | DoodleBear / MUZERO | **Phase 3 ✅ 实现**（TDD）：`flow-config.ts`（`resolveFlowColors` 回退裁决 + `resolveFlowConfig` settings→shader 映射 + presets/effects/hex utils，14 测试）；`db/types.ts` 加 6 个 flow* 字段 + `FlowColorSource`/`FlowEffectId`（additive 无 DB bump）；host→SceneHost→reactive-scene 经 `flowRef` 接线，shader 改用真实取色源 + flow 参数。40 测试绿、whole-tree typecheck/biome 净。`resolveFlowColors` 三参全 `Rgb[]`（hex 解析上移到 config 层） |
 | 2026-06-11 | DoodleBear / MUZERO | **Phase 4 ✅ 实现**：`flow-settings.tsx`（效果/取色源/多色编辑+预设/速度·尺度·反应/压暗·透明度/实时预览/快捷开关）+ `settings-nav` 加 flow item（测试）+ `settings-page` 路由 + 四语 i18n（navFlow + flow.* 27 keys）。settings-nav 测试 + JSON 校验 + biome 绿。co-modified（settings-page + locale）用 `git apply --cached` hunk 隔离提交（共享 working tree 不动他人 WIP）。修正 `t(dynamicKey)` 需 `defaultValue` |
 | 2026-06-11 | DoodleBear / MUZERO | **Phase 5 ✅ 收尾**：reduced-motion/可见性暂停/WebGL 回退/context-lost 全继承 `SceneHost`（零新增）；palette 900ms 过渡 + 无封面回退；`CLAUDE.md` 可视化段补 scene-flow/多色取色/取色源回退；状态 → Implemented。bundle 估算 < 30KB gz（未单独 build，留 CI）；真实 app 视觉/交互验证待人工。全套 PRD 5 phase 完成 |
+| 2026-06-11 | DoodleBear / MUZERO | **Phase 6 ✅ 设计修正**（owner 反馈：流光与频谱**不互斥**）：流光改为**独立合成层**（背景图/视频 → 流光 → 频谱），独立 `flowEnabled` 开关 + `flowOpacity`/`flowDim`；`scene-flow` 标 `hidden:true` 从频谱选择器隐藏（仍作图层 `VISUALIZER_PICKER_META`）。registry 测试 13 绿 + 四语 i18n + biome + whole-tree typecheck 净。确认全程**零** color4bg/ogl/node-vibrant |
 
 ---
 

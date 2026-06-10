@@ -5,6 +5,7 @@ import {
   isRegisteredVisualizerStyle,
   resolveVisualizerStyle,
   VISUALIZER_META,
+  VISUALIZER_PICKER_META,
   VISUALIZER_STYLE_IDS,
 } from "./registry";
 
@@ -86,5 +87,15 @@ describe("createVisualizer", () => {
       expect(getVisualizerMeta(id).backend).toBe("webgl");
       expect(createVisualizer(id)).toBeNull(); // React component, not a canvas renderer
     }
+  });
+
+  it("keeps scene-flow registered but hides it from the style picker (layer-only)", () => {
+    // Renderable via explicit styleId (the independent flow background layer)…
+    expect(isRegisteredVisualizerStyle("scene-flow")).toBe(true);
+    expect(getVisualizerMeta("scene-flow").hidden).toBe(true);
+    // …but never offered as a spectrum choice (not mutually exclusive with the picker).
+    expect(VISUALIZER_PICKER_META.some((m) => m.id === "scene-flow")).toBe(false);
+    expect(VISUALIZER_PICKER_META.some((m) => m.id === "bars")).toBe(true);
+    expect(VISUALIZER_PICKER_META.some((m) => m.id === "off")).toBe(true);
   });
 });
