@@ -1,27 +1,31 @@
-import { type ReactNode, useLayoutEffect, useRef, useState } from "react";
+import { type ReactNode, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { thumbHashToDataURL } from "thumbhash";
+import { base64ToThumbhash } from "@/lib/cover-thumbhash";
+import { log } from "@/lib/logger";
 import { cn } from "@/lib/utils";
 
 /**
- * Shared cover/thumbnail surface (instant-cover-thumbnails PRD Phase 2).
+ * Shared cover/thumbnail surface (instant-cover-thumbnails PRD Phases 2 & 4).
  *
  * One place to render a cover so every surface (sets, albums, artists, tracks,
  * avatars) behaves the same instead of re-implementing the
  * `coverUrl ? <img/> : <Icon/>` ternary:
  *
- *  - A static `bg-secondary` surface holds the space (and, Phase 4, the thumbhash
- *    preview); the `<img>` is layered above and fades `opacity 0→1` on load.
- *  - The fade is a **CSS** transition (works even when a tab is backgrounded and
- *    rAF is throttled) and is disabled under `prefers-reduced-motion`.
+ *  - Placeholder ladder (PRD §5.2): a decoded **thumbhash** preview if present →
+ *    else a calm `bg-secondary` block → the no-cover icon only when there's no
+ *    `url` at all (never during the brief load window).
+ *  - The real `<img>` is layered above and fades `opacity 0→1` on load. The fade
+ *    is a **CSS** transition (works when a tab is backgrounded and rAF is
+ *    throttled) and is disabled under `prefers-reduced-motion`.
  *  - An image the browser already has decoded (a cache hit from the cross-mount
- *    `coverUrlCache`) reports `complete` on mount, so we start `loaded` and skip
- *    the fade — an instant cover never animates.
- *  - The no-cover icon shows only when there is genuinely no `url` — never during
- *    the brief load window (that's the calm `bg-secondary` block, per PRD Q4).
+ *    `coverUrlCache`) reports `complete` on mount, so we start `loaded`, skip the
+ *    fade, and never even paint the preview — an instant cover doesn't animate.
  *
  * `children` are layered on top for overlays (liked heart, hover affordance).
  */
 export function CoverImage({
   url,
+  thumbhash,
   alt = "",
   placeholder,
   rounded,
@@ -31,6 +35,8 @@ export function CoverImage({
 }: {
   /** Object URL (from `useTrackCoverUrl` & friends) or null when there's no cover. */
   url: string | null;
+  /** Base64 thumbhash of the cover (owner row) — decoded to a blurred preview. */
+  thumbhash?: string | null;
   alt?: string;
   /** Shown only when `url` is null (e.g. a `Disc3` / `User` icon). */
   placeholder?: ReactNode;
@@ -46,6 +52,18 @@ export function CoverImage({
   // Track which url has finished loading so a url change auto-resets the fade.
   const [loadedUrl, setLoadedUrl] = useState<string | null>(null);
   const loaded = url != null && loadedUrl === url;
+
+  // Decode the thumbhash to a tiny PNG data URL (pure — no canvas). Memoized by
+  // the hash string; a bad hash degrades to no preview.
+  const preview = useMemo(() => {
+    if (!thumbhash) return null;
+    try {
+      return thumbHashToDataURL(base64ToThumbhash(thumbhash));
+    } catch (err) {
+      log.debug("thumbhash decode failed; using plain placeholder", err);
+      return null;
+    }
+  }, [thumbhash]);
 
   // A reused object URL is often already decoded → `complete` synchronously.
   // Mark it loaded before paint so an instant cover doesn't pointlessly fade.
@@ -63,6 +81,16 @@ export function CoverImage({
       )}
     >
       {!url && placeholder}
+      {/* Blurred preview, behind the real image, only while it's still loading. */}
+      {url && !loaded && preview && (
+        <img
+          src={preview}
+          alt=""
+          aria-hidden
+          data-cover-preview
+          className="absolute inset-0 size-full object-cover"
+        />
+      )}
       {url && (
         <img
           ref={ref}
@@ -71,7 +99,7 @@ export function CoverImage({
           data-state={loaded ? "loaded" : "loading"}
           onLoad={() => setLoadedUrl(url)}
           className={cn(
-            "size-full object-cover transition-opacity duration-200 ease-out motion-reduce:transition-none",
+            "relative size-full object-cover transition-opacity duration-200 ease-out motion-reduce:transition-none",
             loaded ? "opacity-100" : "opacity-0",
             imgClassName,
           )}

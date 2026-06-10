@@ -110,6 +110,7 @@ export function EntityDetailView({
         ) : (
           <CoverImage
             url={coverUrl}
+            thumbhash={coverTrack?.coverThumbhash}
             rounded={round}
             placeholder={<Placeholder className="size-7 text-muted-foreground" />}
             className={cn("size-20 shrink-0", !round && "rounded-xl")}
@@ -175,6 +176,7 @@ function AlbumStripCard({ album, onOpen }: { album: EntityStripItem; onOpen: () 
     >
       <CoverImage
         url={coverUrl}
+        thumbhash={album.coverTrack?.coverThumbhash}
         placeholder={<Disc3 className="text-muted-foreground" />}
         className="aspect-square w-full rounded-md"
       />

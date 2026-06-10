@@ -14,7 +14,7 @@
 | 1 | Module-scoped object-URL cache (hook-level) | ✅ Completed | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | Shared `<CoverImage>` (fade + static placeholder) + rollout to all surfaces | 🔄 In Progress | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | Thumbhash data infra — owner-row field + generate-on-save + lazy backfill + R2 carry | 🔄 In Progress | [Phase 3 Checklist](#phase-3-checklist) |
-| 4 | `<CoverImage>` thumbhash placeholder layer | 🔲 Pending | [Phase 4 Checklist](#phase-4-checklist) |
+| 4 | `<CoverImage>` thumbhash placeholder layer | 🔄 In Progress | [Phase 4 Checklist](#phase-4-checklist) |
 | 5 | Tests + leak audit + polish | 🔲 Pending | [Phase 5 Checklist](#phase-5-checklist) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
@@ -308,14 +308,16 @@ No Zustand/store involvement (规则 6 — non-reactive singleton stays in modul
 **Goal:** Cold/remote loads show the cover's own blurred colors, not a blank surface.
 
 **Tasks:**
-- [ ] `thumbHashToDataURL(hash)` → placeholder layer; skip decode entirely when `fromCache`.
-- [ ] Placeholder ladder per §5.2 (thumbhash → `bg-secondary` → icon); reduced-motion shows preview+image without fade.
-- [ ] (Stretch) memory-photo thumbnails.
+- [x] `<CoverImage>` decodes `thumbhash` via `thumbHashToDataURL` (pure, no canvas) → renders it as a blurred layer behind the real `<img>` **only while loading**; bad hash → no preview (graceful). Tested ([cover-image.test.tsx](../../../src/components/ui/cover-image.test.tsx)).
+- [x] Placeholder ladder per §5.2 (thumbhash → `bg-secondary` → icon). A cache hit marks `loaded` before paint, so the preview never paints and there's no decode-on-screen for instant covers.
+- [x] Wire `thumbhash` into the converted surfaces: `SetCard` (own cover ?? fallback track's hash) + artist/album detail header + album strip ([entity-detail.tsx](../../../src/components/library/entity-detail.tsx)).
+- [ ] **Deferred (same as Phase 2):** `EntityCard`/`track-row` (concurrent edits), interactive cover buttons, dock, avatars, memory thumbnails.
 
 ### Phase 4 Checklist
-- [ ] First-ever view of a cover shows its thumbhash, then the sharp image fades in.
-- [ ] Remote-only covers (manifest thumbhash, no local bytes) show the preview.
-- [ ] No decode work on cache hits.
+- [x] First-ever view of a cover shows its thumbhash, then the sharp image fades in (component test: preview present while loading, removed after `onLoad`).
+- [x] Invalid/absent thumbhash → calm `bg-secondary`, no crash.
+- [x] No preview paint on cache hits (`complete`-on-mount short-circuits before the preview renders).
+- [ ] Remote-only covers show the preview — pending the R2 manifest carry (§3.4).
 
 ### Phase 5: Tests + leak audit + polish
 

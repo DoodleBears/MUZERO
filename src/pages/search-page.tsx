@@ -1418,6 +1418,11 @@ function SetCard({
 }) {
   const { t } = useTranslation();
   const coverUrl = useSetCoverUrl(item.session.coverBlobId, coverTrack, item.session.coverCrop);
+  // Preview hash matching whichever cover is shown: the set's own, else the
+  // fallback track's (mirrors useSetCoverUrl's own/fallback choice).
+  const coverThumbhash = item.session.coverBlobId
+    ? item.session.coverThumbhash
+    : coverTrack?.coverThumbhash;
   const count = t("gallery.count", { count: item.trackCount });
 
   // The play button overlays the card (sibling, not nested) so a button doesn't
@@ -1452,6 +1457,7 @@ function SetCard({
         >
           <CoverImage
             url={coverUrl}
+            thumbhash={coverThumbhash}
             placeholder={<Disc3Icon className="text-muted-foreground" size={32} />}
             className="aspect-square w-full rounded-lg"
           >
@@ -1477,6 +1483,7 @@ function SetCard({
         >
           <CoverImage
             url={coverUrl}
+            thumbhash={coverThumbhash}
             placeholder={<Disc3Icon className="text-muted-foreground" size={20} />}
             className="size-12 shrink-0 rounded-lg"
           />
