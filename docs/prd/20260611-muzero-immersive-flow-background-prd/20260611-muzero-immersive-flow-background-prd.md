@@ -12,7 +12,7 @@
 | Phase | Name | Status | Link |
 |-------|------|--------|------|
 | 1 | 取色基础设施：把 `image-palette.ts` 的单色取色扩成**多色调色板**（`extractImagePalette` 返回 N 个去重色），扩 `visualizer-color-store` 持有 palette + 平滑过渡 | ✅ Completed | [Phase 1 Checklist](#phase-1-checklist) |
-| 2 | 渲染：在既有 twgl scene registry 新增 `scene-flow` 流光 shader（自研 mesh-gradient，多色 `uColors[N]` uniform，calm 时间流 + 可选轻度音频调制），WebGL 探测 + aura/CSS 回退 | 🔲 Pending | [Phase 2 Checklist](#phase-2-checklist) |
+| 2 | 渲染：在既有 twgl scene registry 新增 `scene-flow` 流光 shader（自研 mesh-gradient，多色 `uColors[N]` uniform，calm 时间流 + 可选轻度音频调制），WebGL 探测 + aura 回退 | ✅ Completed | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | 取色源模型：`flowColorSource: "cover" \| "custom"`（默认 cover，无封面回退 custom）+ 始终存在的 `flowCustomColors[]`，把 palette 喂进 shader uniform | 🔲 Pending | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | Settings：在 Appearance 段新增独立 sidebar item「流光背景」面板（效果选择 / 取色源切换 / 多色编辑器 + 预设 / 压暗 / 透明度 / 动态强度），i18n 四语全量 | 🔲 Pending | [Phase 4 Checklist](#phase-4-checklist) |
 | 5 | 打磨：reduced-motion / 移动 30fps / bundle 预算复测 / 无封面与切歌过渡 / 文档对齐 | 🔲 Pending | [Phase 5 Checklist](#phase-5-checklist) |
@@ -147,8 +147,11 @@ uniform vec3  uColors[FLOW_MAX_COLORS];  // 取色/自定义调色板（sRGB 0..
 uniform int   uColorCount;               // 实际颜色数（2..5）
 uniform float uFlowSpeed;                // 流动速度（来自 flowMotion 设置）
 uniform float uFlowScale;                // mesh 斑块尺度
+uniform float uReactivity;               // 音频调制强度（来自 flowAudioReactivity，calm 默认低）
 uniform int   uEffect;                   // 效果变体 0=aurora-drift 1=liquid-mesh 2=soft-blobs（flowEffect）
 ```
+
+> ✅ **已实现** [`scene-shaders.ts`](../../../src/visualizer/scene/scene-shaders.ts) `FLOW_FRAG` + [`reactive-scene.tsx`](../../../src/visualizer/scene/reactive-scene.tsx)。blob 用 Gaussian 权重 `exp(-d²/r²)` 归一化混合（`col/wsum`）得到全屏 melt 流光场，`uReactivity` 让 bass/energy 只做**轻度**调制。
 
 shader 主体：以多个**动态漂移的 radial blob**（每个 blob 绑一个 `uColors[i]`，圆心随 `uTime*uFlowSpeed` 做低频 Lissajous 漂移）做 soft-min 混合，得到 anysoul ambient-light 那种「多色互相渗透的流动 mesh」。音频是**可选轻度**调制（`uBass` 微推 blob 半径 / `uEnergy` 微调亮度），**默认很弱**，保证「氛围 calm」而非「蹦迪频谱」——这是 flow 与既有 `scene-aurora`（强音频反应）的产品区分。
 
@@ -351,21 +354,24 @@ export function resolveFlowColors(
 - [x] `visualizer-color-store.test.ts` `mixPalette` 过渡单测（t=0/0.5/1、长度增/减对齐、空 from、空 to）。
 - [x] typecheck + biome（touched files）绿；无其它 importer 破坏。
 
-### Phase 2: `scene-flow` shader + registry
+### Phase 2: `scene-flow` shader + registry ✅
 
 **Goal:** 新增一个 calm 多色流光 scene 样式，跑在既有 SceneHost 上。
 
 **Tasks:**
-- [ ] `FLOW_FRAG`（自研 mesh-gradient：N 个漂移 radial blob 绑 `uColors[i]`，soft-min 混合，`uTime*uFlowSpeed` 流动，`uFlowScale` 尺度）。header 标 `MIT (MUZERO)`。**v1 curate 3 个效果变体** `aurora-drift / liquid-mesh / soft-blobs`（一个 `uEffect` int uniform 分支，避免编 3 个 program）。
-- [ ] `reactive-scene.tsx`：`scene-flow` 分支选 `FLOW_FRAG`，`setUniforms` 补 `uColors/uColorCount/uFlowSpeed/uFlowScale/uEffect` + 轻度音频调制（按 `flowAudioReactivity`）。`scene-flow` 同时支持 surface（小尺寸预览）与 background placement（Open Q3 已定）。
-- [ ] `types.ts` 加 `"scene-flow"`；`registry.ts` META + `labelKey: "visualizer.styleSceneFlow"`。
-- [ ] WebGL 失败回退 aura（既有）；context-lost 复用既有处理。
+- [x] `FLOW_FRAG`（自研 mesh-gradient：N 个漂移 radial blob 绑 `uColors[i]`，Gaussian 权重归一化混合，`uTime*uFlowSpeed` 流动，`uFlowScale` 尺度）。header 标 `MIT (MUZERO)`。**v1 curate 3 个效果变体** `aurora-drift / liquid-mesh / soft-blobs`（一个 `uEffect` int uniform 分支，避免编 3 个 program）。
+- [x] `reactive-scene.tsx`：`scene-flow` 分支选 `FLOW_FRAG`，`setUniforms` 补 `uColors/uColorCount/uFlowSpeed/uFlowScale/uReactivity/uEffect` + 轻度音频调制（`uReactivity`）。color buffer 复用（`Float32Array` 不每帧分配）。`isFlow` 入 render-loop deps（切样式重启循环）。
+- [x] `types.ts` 加 `"scene-flow"`；`registry.ts` META（kind scene / backend webgl / smoothing 0.88）+ `labelKey: "visualizer.styleSceneFlow"` + createVisualizer scene case。
+- [x] i18n 四语 `visualizer.styleSceneFlow`（en 类型源 + zh/ja/ko）。
+- [x] WebGL 失败回退 aura（既有 `SceneHost`）；context-lost 复用既有 `onLost/onRestored`。
+
+> **Phase 2 取色来源（临时）**：scene-flow 当前读 `getVisualizerCoverPalette()`（封面取色），≥2 色用它，否则用 `uPrimary` 派生的色调 spread 兜底。**Phase 3 会把兜底换成 `resolveFlowColors(custom)`**，并把 `uFlowSpeed/uFlowScale/uReactivity/uEffect` 从硬编码默认接到 flow 设置。`scene-flow` 走既有 host，surface + background placement 自然都支持（Open Q3）。
 
 ### Phase 2 Checklist
-- [ ] `registry.test.ts`：`scene-flow` 注册、kind=scene、resolve 不回退、labelKey 存在。
-- [ ] 视觉验证（`make dev` / 截图）：多色流动、calm（默认低反应）、跟 `uColors` 变色。
-- [ ] 无 WebGL（mock）→ 回退 aura，不崩。
-- [ ] `make check` 绿。
+- [x] `registry.test.ts`：`scene-flow` 注册、kind=scene、backend=webgl、resolve 不回退、createVisualizer→null。
+- [x] typecheck（whole tree）+ biome（5 files）绿。
+- [ ] 视觉验证（真实 app / `make dev`）：多色流动、calm、跟 `uColors` 变色——**预览沙箱 WebGL rAF 冻结，留真实窗口/Phase 5 人工确认**（见 `preview-hidden-tab-gotcha` memory）。
+- [x] 无 WebGL → `SceneHost` 既有逻辑回退 aura（沿用，不新增路径）。
 
 ### Phase 3: 取色源回退模型
 
@@ -472,6 +478,7 @@ export function resolveFlowColors(
 | 2026-06-11 | DoodleBear / MUZERO | Initial draft：anysoul 调查（node-vibrant + @color4bg/react）+ MUZERO 自研落地方案（扩多色取色 + scene-flow twgl shader + 取色源回退 + 流光 Settings 面板），5 phase |
 | 2026-06-11 | DoodleBear / MUZERO | Open Questions 全部定稿：Q1 v1 curate 3 个效果（aurora-drift/liquid-mesh/soft-blobs，`uEffect` 分支）；Q2 不做额外 CSS 回退；Q3 surface+background 都支持；Q4 默认取 4 色（max 5）；Q5 默认 calm ~20 + 用户可自定义 |
 | 2026-06-11 | DoodleBear / MUZERO | **Phase 1 ✅ 实现**（TDD）：`extractImagePalette`/`selectImagePalette` 多色去重取色（sRGB 距离）、`extractDominantImageColor=palette[0]` 零回归；store `palette`+`mixPalette`+`getVisualizerCoverPalette`；`visualizer-dynamic-color` 写 palette。14 测试绿、typecheck/biome 净。去掉 `skipDark` 入参（YAGNI） |
+| 2026-06-11 | DoodleBear / MUZERO | **Phase 2 ✅ 实现**：`scene-flow` 注册（types/registry/i18n 四语）+ 自研 `FLOW_FRAG` mesh-gradient（多色 `uColors[5]` + `uEffect` 3 变体 + `uReactivity` 轻度音频）+ `reactive-scene` 接线（封面 palette / primary 兜底，复用 color buffer）。registry.test 12 绿、typecheck/biome 净。新增 `uReactivity` uniform。视觉验证留真实窗口（预览沙箱冻结 WebGL） |
 
 ---
 

@@ -16,6 +16,7 @@ export type VisualizerStyleId =
   | "waveform"
   | "scene-liquid"
   | "scene-aurora"
+  | "scene-flow"
   | "milkdrop";
 
 export type VisualizerKind = "spectrum" | "scene" | "milkdrop";

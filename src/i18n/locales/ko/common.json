@@ -299,6 +299,7 @@
     "styleWaveform": "파형",
     "styleSceneLiquid": "리퀴드(씬)",
     "styleSceneAurora": "오로라(씬)",
+    "styleSceneFlow": "플로우(流光)",
     "toggleMode": "비주얼라이저: {{mode}}",
     "modeOff": "끄기",
     "modeBackground": "배경",

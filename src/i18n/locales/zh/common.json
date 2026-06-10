@@ -299,6 +299,7 @@
     "styleWaveform": "波形",
     "styleSceneLiquid": "液态（场景）",
     "styleSceneAurora": "极光（场景）",
+    "styleSceneFlow": "流光",
     "toggleMode": "可视化：{{mode}}",
     "modeOff": "关闭",
     "modeBackground": "背景",

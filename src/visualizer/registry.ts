@@ -20,7 +20,8 @@ export type VisualizerLabelKey =
   | "visualizer.styleLed"
   | "visualizer.styleWaveform"
   | "visualizer.styleSceneLiquid"
-  | "visualizer.styleSceneAurora";
+  | "visualizer.styleSceneAurora"
+  | "visualizer.styleSceneFlow";
 
 export interface VisualizerMeta {
   id: VisualizerStyleId;
@@ -114,6 +115,14 @@ export const VISUALIZER_META: VisualizerMeta[] = [
     fftSize: 1024,
     smoothing: 0.85,
   },
+  {
+    id: "scene-flow",
+    kind: "scene",
+    backend: "webgl",
+    labelKey: "visualizer.styleSceneFlow",
+    fftSize: 1024,
+    smoothing: 0.88,
+  },
 ];
 
 export const VISUALIZER_STYLE_IDS: VisualizerStyleId[] = VISUALIZER_META.map((m) => m.id);
@@ -156,6 +165,7 @@ export function createVisualizer(id: VisualizerStyleId): Visualizer | null {
       return createWaveformVisualizer();
     case "scene-liquid":
     case "scene-aurora":
+    case "scene-flow":
       // GPU scenes are React components (rendered by SceneHost), not canvas-2D
       // renderers — they have no Visualizer instance.
       return null;

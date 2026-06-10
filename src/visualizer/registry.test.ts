@@ -79,10 +79,11 @@ describe("createVisualizer", () => {
     }
   });
   it("registers scene styles as kind=scene with no canvas renderer", () => {
-    for (const id of ["scene-liquid", "scene-aurora"] as const) {
+    for (const id of ["scene-liquid", "scene-aurora", "scene-flow"] as const) {
       expect(isRegisteredVisualizerStyle(id)).toBe(true);
       expect(resolveVisualizerStyle(id)).toBe(id);
       expect(getVisualizerMeta(id).kind).toBe("scene");
+      expect(getVisualizerMeta(id).backend).toBe("webgl");
       expect(createVisualizer(id)).toBeNull(); // React component, not a canvas renderer
     }
   });

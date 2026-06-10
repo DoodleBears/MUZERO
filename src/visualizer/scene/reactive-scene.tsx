@@ -1,10 +1,14 @@
 import { useEffect, useRef } from "react";
 import * as twgl from "twgl.js";
-import { readPrimaryRgb } from "@/lib/visualizer-color";
+import { darken, lighten, type Rgb, readPrimaryRgb } from "@/lib/visualizer-color";
 import type { VisualizerRenderOptions } from "@/lib/visualizer-effect-settings";
 import { getMediaEngine } from "@/stores/player-store";
+import { getVisualizerCoverPalette } from "@/stores/visualizer-color-store";
 import { computeAudioUniforms } from "./audio-uniforms";
-import { AURORA_FRAG, LIQUID_FRAG, SCENE_VERT } from "./scene-shaders";
+import { AURORA_FRAG, FLOW_FRAG, LIQUID_FRAG, SCENE_VERT } from "./scene-shaders";
+
+/** Matches `#define FLOW_MAX_COLORS` in FLOW_FRAG. */
+const FLOW_MAX_COLORS = 5;
 
 /**
  * Audio-reactive GPU scene — one full-screen fragment shader driven by the shared
@@ -41,7 +45,9 @@ export default function ReactiveScene({
   const activeRef = useRef(active);
   activeRef.current = active;
 
-  const frag = styleId === "scene-aurora" ? AURORA_FRAG : LIQUID_FRAG;
+  const frag =
+    styleId === "scene-aurora" ? AURORA_FRAG : styleId === "scene-flow" ? FLOW_FRAG : LIQUID_FRAG;
+  const isFlow = styleId === "scene-flow";
 
   // Build the GL program/buffers once per shader (+ analyser bin count).
   useEffect(() => {
@@ -106,6 +112,8 @@ export default function ReactiveScene({
   // Run the render loop, or paint a single frozen frame when paused.
   useEffect(() => {
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    // Reused per-frame so the flow palette upload doesn't churn the GC.
+    const flowColors = new Float32Array(FLOW_MAX_COLORS * 3);
 
     const renderFrame = (tMs: number) => {
       const s = stateRef.current;
@@ -141,6 +149,7 @@ export default function ReactiveScene({
         energy = a.energy;
       }
       const p = readPrimaryRgb(canvasRef.current);
+      const flowCount = isFlow ? fillFlowColors(flowColors, p) : 0;
 
       // biome-ignore lint/correctness/useHookAtTopLevel: gl.useProgram is a WebGL call, not a React hook
       gl.useProgram(programInfo.program);
@@ -156,6 +165,18 @@ export default function ReactiveScene({
         uIntensity: options.intensity,
         uPrimary: [p.r / 255, p.g / 255, p.b / 255],
         uSpread: options.spread,
+        // Flow-only uniforms (ignored by the other scene programs). Phase 2 uses
+        // calm defaults; Phase 3/4 will source these from flow settings.
+        ...(isFlow
+          ? {
+              uColors: flowColors,
+              uColorCount: flowCount,
+              uFlowSpeed: 0.4,
+              uFlowScale: 0.5,
+              uReactivity: 0.2,
+              uEffect: 0,
+            }
+          : null),
       });
       twgl.drawBufferInfo(gl, bufferInfo);
     };
@@ -171,7 +192,26 @@ export default function ReactiveScene({
     };
     raf = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(raf);
-  }, [paused, fftSize, smoothing, options]);
+  }, [paused, fftSize, smoothing, options, isFlow]);
 
   return <canvas ref={canvasRef} className="block h-full w-full" />;
+}
+
+/**
+ * Fill a flat vec3 buffer with the active flow palette and return the color
+ * count. Uses the cover-derived palette when present, else a tonal spread from
+ * the live primary (Phase 3 will swap in user custom colors via resolveFlowColors).
+ */
+function fillFlowColors(out: Float32Array, primary: Rgb): number {
+  const palette = getVisualizerCoverPalette();
+  const colors: Rgb[] =
+    palette.length >= 2 ? palette : [darken(primary, 0.18), primary, lighten(primary, 0.4)];
+  const count = Math.min(FLOW_MAX_COLORS, colors.length);
+  for (let i = 0; i < FLOW_MAX_COLORS; i++) {
+    const c = colors[Math.min(i, colors.length - 1)] ?? primary;
+    out[i * 3] = c.r / 255;
+    out[i * 3 + 1] = c.g / 255;
+    out[i * 3 + 2] = c.b / 255;
+  }
+  return count;
 }

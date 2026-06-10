@@ -299,6 +299,7 @@
     "styleWaveform": "波形",
     "styleSceneLiquid": "リキッド（シーン）",
     "styleSceneAurora": "オーロラ（シーン）",
+    "styleSceneFlow": "フロー（流光）",
     "toggleMode": "ビジュアライザー：{{mode}}",
     "modeOff": "オフ",
     "modeBackground": "背景",
