@@ -68,6 +68,10 @@ import {
   setFolderImportProgress,
 } from "@/stores/folder-import-store";
 import { notify } from "@/stores/notification-store";
+import { createStreamSource } from "@/streamsrc/registry";
+import { resolveStreamedTrackMedia } from "@/streamsrc/resolve-playback";
+import { isStreamedTrack } from "@/streamsrc/source-detect";
+import { createStreamHttp } from "@/streamsrc/stream-http";
 import { listCloudDrives } from "@/sync/cloud-drive-repo";
 import { getOrCreateLocalDevice } from "@/sync/device-repo";
 import {
@@ -1079,7 +1083,7 @@ async function ensureLoadedAndPlay(
   if (currentIndex < 0 || currentIndex >= queue.length) return;
   const track = queue[currentIndex];
   if (!mediaEngine) return;
-  const hasPlayableMedia = !!track.blobId || !!track.remoteMediaUrl;
+  const hasPlayableMedia = !!track.blobId || !!track.remoteMediaUrl || isStreamedTrack(track);
   if (track.status !== "ready" || !hasPlayableMedia) {
     log.debug("player", "track is not playable yet", {
       trackId: track.id,
@@ -1112,6 +1116,32 @@ async function ensureLoadedAndPlay(
         kind: track.kind,
       });
       await mediaEngine.loadUrl(track.remoteMediaUrl, track.kind);
+    } else if (isStreamedTrack(track)) {
+      // External streaming source: resolve a short-lived URL right before play.
+      // NetEase plays directly; Bilibili's URL needs the media proxy to inject a
+      // Referer (returned in `headers`, wired once the proxy lands) — until then a
+      // bili stream loads but the CDN GET 403s.
+      const settings = await getSettings();
+      const http = createStreamHttp();
+      const resolved = await resolveStreamedTrackMedia(track, {
+        resolveSource: (id) =>
+          createStreamSource(id, {
+            http,
+            now: () => Date.now(),
+            getCookie: (sid) => settings.streamSources?.[sid]?.cookie,
+          }),
+        getQuality: (id) => settings.streamSources?.[id]?.quality,
+      });
+      if (resolved.kind !== "ok") {
+        log.warn("player", "streamed resolve failed", { trackId: track.id, result: resolved });
+        notify.error(i18n.t("player.playbackError"));
+        return;
+      }
+      log.debug("player", "loading streamed media url", {
+        trackId: track.id,
+        source: track.streamSourceId,
+      });
+      await mediaEngine.loadUrl(resolved.url, track.kind);
     }
     loadedTrackId = track.id;
     triggerLyricsAutoFetch(track);

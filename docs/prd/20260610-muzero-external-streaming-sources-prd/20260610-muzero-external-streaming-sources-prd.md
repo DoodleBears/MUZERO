@@ -42,6 +42,7 @@
 | G1 | `createStreamedTrack` + 内存查重（origin streamed 落库；新文件避开并发 `repositories.ts`） | `src/streamsrc/streamed-track-repo.ts` | fake-idb ×6 | ✅ green |
 | G2 | 生产 `StreamHttp`（`getAppFetch` + `x-muzero-h-*` header 别名，绕渲染层 forbidden headers，proxy 还原前向兼容） | `src/streamsrc/stream-http.ts` | 注入 fetch ×5 | ✅ green |
 | T1 | **Dev 测试面板**（Electron-only 浮层：选源→搜索→resolve→`<audio>` 播放）——验证真实 API / CORS 绕过 / 播放，无需 player-store/登录/UI | `src/components/dev/stream-source-tester.tsx` + `App.tsx` 挂载（gate `desktopKind()==="electron"`） | 🔄 **待 Electron 手测** | 🔄 |
+| I1 | **player-store 播放 streamed track**（`ensureLoadedAndPlay` 加 resolve→`loadUrl` 分支；`hasPlayableMedia` 含 streamed；登录/VIP/错误→toast）+ resolve-playback 映射（注入式可测） | `src/stores/player-store.ts` · `src/streamsrc/resolve-playback.ts` | mock provider ×5 + player-store 套件无回归（87 全绿） | ✅ |
 
 ### 🧪 现在可测（里程碑：NetEase 匿名端到端）
 
@@ -549,9 +550,10 @@ components/player/            # 无需改：streamed track 复用 media-stage / 
 1. **muzfetch header 注入别名 + Range/206**（`electron/fetch-proxy.cjs`、`src/lib/desktop/electron.ts`）— 当前 untracked，属并发 Electron 壳 agent。
 2. **`StreamHttp` 生产实现**：把注入契约接到 `getAppFetch()` + `x-muzero-h-*` 别名（依赖 #1）。
 3. **登录窗口**（Electron 隐藏 `BrowserWindow` 抓 cookie）+ `stream-auth-store`（observer 注入）。
-4. **player-store 即时 resolve 钩子**（`src/stores/player-store.ts` — 并发 agent 正在改）：streamed track → `resolve` → `mediaProxyUrl` → `loadUrl`。
-5. **`createStreamedTrack` repo + 内存查重**（`src/db/repositories.ts` — 并发 agent 正在改）。
-6. **UI**：Settings 各源登录/音质卡、搜索在线 tab、set 导入入口 + i18n 4 语。
+4. ~~player-store 即时 resolve 钩子~~ ✅ **已完成（I1）**——并发文件已提交后落地；streamed track → `resolve` → `loadUrl`（Bili 的 `mediaProxyUrl` 待 #1）。
+5. ~~`createStreamedTrack` repo~~ ✅ **已完成（G1）**。
+6. **UI（进行中）**：在线搜索归入 **⌘/Ctrl+F 全局搜索**（`GlobalTrackSearch`，用户决定）——本地结果 + 在线源结果并排，选中→`createStreamedTrack`+播放；dev 面板（T1）临时，UI 落地后移除。各源**登录/音质** + 启用开关仍待（红线：默认关闭，用户显式启用）。i18n 4 语。
 7. **Phase 5 离线缓存**。
+8. **muzfetch header 注入 + Range**（#1）→ 让 Bili 媒体也能播。
 
 > 续作前置：等上述并发文件落定（或获明确授权编辑），并在运行的 Electron 下验证。纯逻辑层已就绪，集成层是「把已验证的积木接到外壳」。

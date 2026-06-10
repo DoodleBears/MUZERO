@@ -1,0 +1,80 @@
+import { describe, expect, it, vi } from "vitest";
+import type { StreamResolveResult, StreamSourceProvider } from "./provider";
+import { resolveStreamedTrackMedia } from "./resolve-playback";
+
+function fakeSource(result: StreamResolveResult): StreamSourceProvider {
+  return {
+    id: "netease",
+    label: "x",
+    requiresLogin: false,
+    isAuthed: () => true,
+    search: async () => [],
+    resolve: vi.fn(async () => result),
+  };
+}
+
+const track = { streamSourceId: "netease" as const, streamExternalId: "123" };
+
+describe("resolveStreamedTrackMedia", () => {
+  it("maps an ok resolve to a playable url + mime + headers", async () => {
+    const source = fakeSource({
+      kind: "ok",
+      stream: {
+        mediaUrl: "https://m7.music.126.net/x.flac",
+        mime: "audio/flac",
+        headers: { Referer: "https://music.163.com" },
+        quality: "lossless",
+      },
+    });
+    const res = await resolveStreamedTrackMedia(track, { resolveSource: () => source });
+    expect(res).toEqual({
+      kind: "ok",
+      url: "https://m7.music.126.net/x.flac",
+      mime: "audio/flac",
+      headers: { Referer: "https://music.163.com" },
+      quality: "lossless",
+    });
+  });
+
+  it("threads the per-source quality preference into resolve()", async () => {
+    const source = fakeSource({ kind: "ok", stream: { mediaUrl: "u", mime: "audio/mpeg" } });
+    await resolveStreamedTrackMedia(track, {
+      resolveSource: () => source,
+      getQuality: (id) => (id === "netease" ? "hires" : undefined),
+    });
+    expect(source.resolve).toHaveBeenCalledWith(
+      "123",
+      expect.objectContaining({ quality: "hires" }),
+    );
+  });
+
+  it("passes through requires-login / no-permission verdicts with the source id", async () => {
+    expect(
+      await resolveStreamedTrackMedia(track, {
+        resolveSource: () => fakeSource({ kind: "requires-login" }),
+      }),
+    ).toEqual({ kind: "requires-login", source: "netease" });
+
+    expect(
+      await resolveStreamedTrackMedia(track, {
+        resolveSource: () => fakeSource({ kind: "no-permission", reason: "vip" }),
+      }),
+    ).toEqual({ kind: "no-permission", source: "netease", reason: "vip" });
+  });
+
+  it("maps provider errors and unavailable sources to error", async () => {
+    expect(
+      await resolveStreamedTrackMedia(track, {
+        resolveSource: () => fakeSource({ kind: "error", message: "boom" }),
+      }),
+    ).toEqual({ kind: "error", message: "boom" });
+
+    expect((await resolveStreamedTrackMedia(track, { resolveSource: () => null })).kind).toBe(
+      "error",
+    );
+  });
+
+  it("errors when the track has no stream ref", async () => {
+    expect((await resolveStreamedTrackMedia({}, { resolveSource: () => null })).kind).toBe("error");
+  });
+});
