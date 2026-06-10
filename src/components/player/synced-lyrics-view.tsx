@@ -33,27 +33,29 @@ export function useActiveLyricLine(
   // highlight without subscribing to the 4Hz position during playback.
   pausedPositionSec: number,
 ): number {
-  const [active, setActive] = useState(-1);
+  const [, setNonce] = useState(0);
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: pausedPositionSec is an intentional re-sync trigger (time is read from the engine, not the dep)
+  // Compute the active line DURING render from the live playback time, so a track
+  // switch (new `lines`) paints the correct line on the very first frame — no
+  // flash from a stale/-1 index that would make the right line "grow in".
+  const activeIndex =
+    lines && lines.length > 0
+      ? activeLineIndex(lines, (getMediaEngine()?.getCurrentTime() ?? 0) * 1000)
+      : -1;
+  const lastIndexRef = useRef(activeIndex);
+  lastIndexRef.current = activeIndex;
+
+  // A rAF re-renders ONLY when the computed line changes (rule 6: not every
+  // frame) while playing + visible; a paused seek re-renders via pausedPositionSec.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: pausedPositionSec is an intentional paused-seek re-sync trigger
   useEffect(() => {
-    if (!lines || lines.length === 0) {
-      setActive(-1);
-      return;
-    }
-    const sync = () => {
-      const ms = (getMediaEngine()?.getCurrentTime() ?? 0) * 1000;
-      const next = activeLineIndex(lines, ms);
-      setActive((prev) => (prev === next ? prev : next));
-    };
-    sync(); // initial / paused-seek (re-runs via pausedPositionSec dep)
-    if (!isPlaying) return; // paused: the single sync above is enough
-
+    if (!lines || lines.length === 0 || !isPlaying) return;
     let raf = 0;
     let stopped = false;
     const loop = () => {
       if (stopped) return;
-      sync();
+      const ms = (getMediaEngine()?.getCurrentTime() ?? 0) * 1000;
+      if (activeLineIndex(lines, ms) !== lastIndexRef.current) setNonce((n) => n + 1);
       raf = requestAnimationFrame(loop);
     };
     const start = () => {
@@ -65,10 +67,7 @@ export function useActiveLyricLine(
     };
     const onVisibility = () => {
       if (document.hidden) stop();
-      else {
-        sync();
-        start();
-      }
+      else start();
     };
     start();
     document.addEventListener("visibilitychange", onVisibility);
@@ -79,7 +78,7 @@ export function useActiveLyricLine(
     };
   }, [lines, isPlaying, pausedPositionSec]);
 
-  return active;
+  return activeIndex;
 }
 
 /**
@@ -313,6 +312,10 @@ function SyncedLines({
                 // biome-ignore lint/suspicious/noArrayIndexKey: lyric lines have no stable id; time+index is the natural key
                 key={`${line.timeMs}-${i}`}
                 type="button"
+                // No mount animation: on a track switch the lines remount and must
+                // appear at their correct size immediately (the active line big,
+                // the rest small) — not grow in from a default.
+                initial={false}
                 data-active={isActive || undefined}
                 aria-current={isActive ? "true" : undefined}
                 onClick={() => {
