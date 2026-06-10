@@ -563,6 +563,10 @@
     "removeBinding": "Remove",
     "resetAction": "Reset to default",
     "resetAll": "Reset all",
+    "exportKeymap": "Export",
+    "importKeymap": "Import",
+    "importFailed": "Couldn't import — not a valid MUZERO keymap file.",
+    "importDone": "Shortcuts imported.",
     "recorder": {
       "title": "Rebind {{name}}",
       "hint": "Press the key combination you want.",

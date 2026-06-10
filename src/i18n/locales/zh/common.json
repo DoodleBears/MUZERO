@@ -549,6 +549,10 @@
     "removeBinding": "移除",
     "resetAction": "恢复默认",
     "resetAll": "全部恢复默认",
+    "exportKeymap": "导出",
+    "importKeymap": "导入",
+    "importFailed": "导入失败——不是有效的 MUZERO 快捷键文件。",
+    "importDone": "已导入快捷键。",
     "recorder": {
       "title": "重新绑定「{{name}}」",
       "hint": "按下你想要的按键组合。",

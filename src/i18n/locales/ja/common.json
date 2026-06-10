@@ -549,6 +549,10 @@
     "removeBinding": "削除",
     "resetAction": "デフォルトに戻す",
     "resetAll": "すべてリセット",
+    "exportKeymap": "エクスポート",
+    "importKeymap": "インポート",
+    "importFailed": "インポートできません — 有効な MUZERO キーマップではありません。",
+    "importDone": "ショートカットをインポートしました。",
     "recorder": {
       "title": "「{{name}}」を再割り当て",
       "hint": "使いたいキーの組み合わせを押してください。",

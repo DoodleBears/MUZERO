@@ -1,15 +1,23 @@
-import { Plus, RotateCcw, X } from "lucide-react";
-import { useMemo, useState } from "react";
+import { Download, Plus, RotateCcw, Upload, X } from "lucide-react";
+import { type ChangeEvent, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ShortcutRecorderDialog } from "@/components/settings/shortcut-recorder-dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Kbd, KbdGroup } from "@/components/ui/kbd";
-import { resetAllShortcuts, resetShortcut, setShortcutOverride } from "@/db/repositories";
+import {
+  resetAllShortcuts,
+  resetShortcut,
+  setAllShortcutOverrides,
+  setShortcutOverride,
+} from "@/db/repositories";
 import { useSettings } from "@/hooks/use-app-data";
+import { saveTextFile } from "@/lib/save-text-file";
 import { buildCheatSheet, type CheatSheetRow, cheatSheetRowMatches } from "@/shortcuts/cheatsheet";
 import { currentPlatform, mergeBindings, sanitizeOverrides } from "@/shortcuts/engine";
+import { parseKeymap, serializeKeymap } from "@/shortcuts/keymap-io";
+import { notify } from "@/stores/notification-store";
 
 /**
  * "View all shortcuts" + customize (PRD Phase 3 + 4 UI). Groups every registry
@@ -31,6 +39,24 @@ export function ShortcutsSettings() {
   );
   const sections = useMemo(() => buildCheatSheet(bindings, platform), [bindings, platform]);
   const hasAnyOverride = !!overrides && Object.keys(overrides).length > 0;
+  const importRef = useRef<HTMLInputElement>(null);
+
+  function exportKeymap() {
+    void saveTextFile("muzero-shortcuts.json", "application/json", serializeKeymap(overrides));
+  }
+
+  async function onImportFile(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    const parsed = parseKeymap(await file.text(), platform);
+    if (!parsed) {
+      notify.error(t("shortcuts.importFailed"));
+      return;
+    }
+    await setAllShortcutOverrides(parsed);
+    notify.success(t("shortcuts.importDone"));
+  }
 
   return (
     <Card>
@@ -39,11 +65,28 @@ export function ShortcutsSettings() {
           <CardTitle>{t("settings.shortcutsTitle")}</CardTitle>
           <p className="text-muted-foreground text-sm">{t("settings.shortcutsSubtitle")}</p>
         </div>
-        {hasAnyOverride && (
-          <Button variant="outline" size="sm" onClick={() => void resetAllShortcuts()}>
-            {t("shortcuts.resetAll")}
+        <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+          <Button variant="outline" size="sm" onClick={() => importRef.current?.click()}>
+            <Upload className="size-4" /> {t("shortcuts.importKeymap")}
           </Button>
-        )}
+          {hasAnyOverride && (
+            <Button variant="outline" size="sm" onClick={exportKeymap}>
+              <Download className="size-4" /> {t("shortcuts.exportKeymap")}
+            </Button>
+          )}
+          {hasAnyOverride && (
+            <Button variant="outline" size="sm" onClick={() => void resetAllShortcuts()}>
+              {t("shortcuts.resetAll")}
+            </Button>
+          )}
+          <input
+            ref={importRef}
+            type="file"
+            accept="application/json,.json"
+            hidden
+            onChange={(e) => void onImportFile(e)}
+          />
+        </div>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
         <Input
