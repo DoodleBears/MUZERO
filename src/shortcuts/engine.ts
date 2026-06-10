@@ -210,6 +210,31 @@ export function matchAction(
   return null;
 }
 
+/**
+ * Does a live keyboard event match ANY of one specific action's bindings? Used by
+ * scoped surfaces (library nav, back gesture, memory) that already know which
+ * action a key region maps to and just need "is this the rebound chord?".
+ */
+export function eventMatchesAction(
+  event: {
+    code: string;
+    key: string;
+    altKey: boolean;
+    ctrlKey: boolean;
+    metaKey: boolean;
+    shiftKey: boolean;
+  },
+  actionId: string,
+  bindings: MergedBindings,
+  platform: Platform,
+): boolean {
+  const target = gestureIdentity(gestureFromEvent(event), platform);
+  return (bindings[actionId] ?? []).some(
+    (binding) =>
+      binding.gesture.kind === "key" && gestureIdentity(binding.gesture, platform) === target,
+  );
+}
+
 // ──────────────────────────────────────────────────────── display ────────────
 
 /** Render a gesture as ordered Kbd-chip labels. Pointer gestures return []. */

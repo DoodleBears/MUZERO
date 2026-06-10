@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { useShortcutMatcher } from "@/hooks/use-shortcut-matcher";
 import { hasModalDialogOpen, isTypingTarget } from "@/lib/dom-keys";
 import { accumulateBackSwipe } from "@/lib/library-nav";
 
@@ -18,6 +19,11 @@ const SWIPE_RESET_MS = 140;
 export function useBackGesture(onBack: () => void, enabled = true): void {
   const onBackRef = useRef(onBack);
   onBackRef.current = onBack;
+  // The "back" key now comes from the configurable registry (library.back), so a
+  // user rebind takes effect. Held in a ref so the window listener stays stable.
+  const matches = useShortcutMatcher();
+  const matchesRef = useRef(matches);
+  matchesRef.current = matches;
 
   useEffect(() => {
     if (!enabled) return;
@@ -25,9 +31,7 @@ export function useBackGesture(onBack: () => void, enabled = true): void {
     let resetTimer: ReturnType<typeof setTimeout> | undefined;
 
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return;
-      const k = e.key.toLowerCase();
-      if (k !== "a" && k !== "arrowleft") return;
+      if (!matchesRef.current(e, "library.back")) return;
       if (isTypingTarget(e.target) || hasModalDialogOpen()) return;
       e.preventDefault();
       e.stopImmediatePropagation();

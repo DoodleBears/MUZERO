@@ -2,7 +2,7 @@
 
 import { useLiveQuery } from "dexie-react-hooks";
 import { Plus } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { db as defaultDb, type MuzeroDB } from "@/db/muzero-db";
 import {
@@ -14,8 +14,9 @@ import {
   updateMemoryNote,
 } from "@/db/repositories";
 import type { Memory } from "@/db/types";
+import { useShortcutMatcher } from "@/hooks/use-shortcut-matcher";
+import { hasModalDialogOpen } from "@/lib/dom-keys";
 import { memoryMasonryDefaults } from "@/lib/memory-masonry";
-import { resolveMemoryShortcut } from "@/lib/memory-shortcuts";
 import { MemoryNoteComposer, type MemoryNoteComposerLabels } from "./memory-note-composer";
 import {
   MemoryNotesWaterfall,
@@ -53,12 +54,16 @@ export function TrackMemoryNotesPanel({
   const [quickPhotoFile, setQuickPhotoFile] = useState<File | undefined>();
   const composerKey = editingMemory?.id ?? "new-memory";
   const showComposer = isCreating || Boolean(editingMemory);
+  // Quick-add (default T / N) now comes from the configurable registry
+  // (memory.quickAdd); held in a ref so the window listener stays stable.
+  const matches = useShortcutMatcher();
+  const matchesRef = useRef(matches);
+  matchesRef.current = matches;
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
-      if (event.defaultPrevented || isTypingTarget(event.target)) return;
-      const shortcut = resolveMemoryShortcut(event);
-      if (shortcut !== "create-memory") return;
+      if (event.defaultPrevented || isTypingTarget(event.target) || hasModalDialogOpen()) return;
+      if (!matchesRef.current(event, "memory.quickAdd")) return;
       event.preventDefault();
       setQuickCreateOpen(true);
     }

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   actionBindingChips,
   dedupeGestures,
+  eventMatchesAction,
   findConflicts,
   formatGesture,
   gestureFromEvent,
@@ -212,5 +213,21 @@ describe("formatGesture / actionBindingChips", () => {
   it("exposes per-action chips skipping pointer gestures", () => {
     const chips = actionBindingChips("library.back", mergeBindings(), "other");
     expect(chips).toEqual([["A"], ["←"]]); // pointer swipe-back is omitted
+  });
+});
+
+describe("eventMatchesAction", () => {
+  const bindings = mergeBindings();
+  it("matches a live event against one action's bindings (default + override)", () => {
+    expect(eventMatchesAction(ev("KeyW", "w"), "library.focusPrev", bindings, "other")).toBe(true);
+    expect(
+      eventMatchesAction(ev("ArrowUp", "ArrowUp"), "library.focusPrev", bindings, "other"),
+    ).toBe(true);
+    expect(eventMatchesAction(ev("KeyW", "w"), "library.focusNext", bindings, "other")).toBe(false);
+    const custom = mergeBindings({
+      "library.back": [{ kind: "key", stroke: { code: "KeyB", keyLabel: "B" } }],
+    });
+    expect(eventMatchesAction(ev("KeyB", "b"), "library.back", custom, "other")).toBe(true);
+    expect(eventMatchesAction(ev("KeyA", "a"), "library.back", custom, "other")).toBe(false);
   });
 });

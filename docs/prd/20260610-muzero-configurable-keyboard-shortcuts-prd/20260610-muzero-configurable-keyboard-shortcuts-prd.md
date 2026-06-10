@@ -15,7 +15,7 @@
 |-------|------|--------|------|
 | 1 | Registry + pure engine + persistence | ✅ Completed | [Phase 1 Checklist](#phase-1-checklist) |
 | 2a | Global dispatch (transport + tabs) via registry | ✅ Completed | [Phase 2a Checklist](#phase-2a-checklist) |
-| 2b | Scoped surfaces (library/inspector/gallery) + hint swap | 🔲 Pending | [Phase 2b Checklist](#phase-2b-checklist) |
+| 2b | Scoped surfaces (library/inspector/gallery) + hint swap | 🔄 Partial | [Phase 2b Checklist](#phase-2b-checklist) |
 | 3 | "View all shortcuts" — read-only cheat-sheet (Settings) | ✅ Completed | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | Customization — recorder, multi-binding, cyclic conflict, reset | ✅ Completed | [Phase 4 Checklist](#phase-4-checklist) |
 | 5 | Stretch — presets, 2-stroke sequences, import/export | 🔲 Pending | [Phase 5 Checklist](#phase-5-checklist) |
@@ -303,19 +303,20 @@ Global `?` (Shift+/)  →  (OPTIONAL, Q8) components/shortcuts/shortcut-help-ove
 
 > **Done 2026-06-10.** Headline win: transport + tab shortcuts are configurable. Scoped surfaces (below) still use their hard-coded defaults until 2b.
 
-#### Phase 2b — scoped surfaces + hint swap 🔲
+#### Phase 2b — scoped surfaces + hint swap 🔄 (partial)
+
+**Shared infra (done):** `engine.eventMatchesAction(event, actionId, bindings, platform)` + the [`useShortcutMatcher`](../../../src/hooks/use-shortcut-matcher.ts) hook ("does this live key match the user's bindings for this action?", live via `useSettings`).
 
 **Tasks:**
-- [ ] Route the **library** keys through the registry: gallery roving + `` ` `` toggle in [`search-page.tsx`](../../../src/pages/search-page.tsx), row nav in [`virtual-track-list.tsx`](../../../src/components/library/virtual-track-list.tsx), `A/←` in [`use-back-gesture.ts`](../../../src/hooks/use-back-gesture.ts) — replace `libraryNavKey(e.key)` checks with `matchesActionEvent(e, "library.*", bindings)`. Keep the per-surface DOM effects (focus movement, swipe).
-- [ ] Route `nav.cycleGalleryMode` + the search-open keys through the registry where they're handled (SearchPage / App).
-- [ ] Route `memory.quickAdd` (`T/N`) in [`track-memory-notes-panel.tsx`](../../../src/components/track/track-memory-notes-panel.tsx); fix its weak scope (guard `hasModalDialogOpen`, scope to the active inspector).
-- [ ] Fix the gallery-cycle-while-typing bug (gate on `isTypingTarget`).
-- [ ] Swap `playerShortcutHint` → registry-backed `shortcutHint(actionId)`; tooltips reflect live bindings.
+- [x] `A/←` back in [`use-back-gesture.ts`](../../../src/hooks/use-back-gesture.ts) → `matches(e, "library.back")` — **rebindable**.
+- [x] `memory.quickAdd` (`T/N`) in [`track-memory-notes-panel.tsx`](../../../src/components/track/track-memory-notes-panel.tsx) → `matches(e, "memory.quickAdd")`, **+ fixed the weak scope** (added the missing `hasModalDialogOpen` guard). Deleted the superseded `memory-shortcuts.ts`.
+- [ ] **Blocked on concurrent edits:** library focus/open (gallery roving in [`search-page.tsx`](../../../src/pages/search-page.tsx) + row nav in [`virtual-track-list.tsx`](../../../src/components/library/virtual-track-list.tsx)) and `nav.cycleGalleryMode` + the `` ` ``-while-typing fix — these files have the user's in-flight `Shift+\`` reverse-toggle / cover-crop work; routing them through `matches(e, "library.focus*"/"library.open"/"nav.cycleGalleryMode")` is deferred to avoid clobbering it.
+- [ ] Swap `playerShortcutHint` → registry-backed hint; tooltips reflect live bindings.
 
 ##### Phase 2b Checklist
-- [ ] `library-nav.test.ts` still green (or its logic migrates to the registry); WASD/arrow nav + swipe-back unchanged at defaults but now override-aware.
-- [ ] `` ` `` no longer flips gallery mode while typing; `T/N` only fires with the inspector active and no modal open.
-- [ ] Rebinding e.g. `library.focusNext` to `J` works live in a focused list.
+- [x] `library.back` + `memory.quickAdd` rebind live; defaults unchanged; `T/N` now also guards against an open modal.
+- [ ] Rebinding `library.focusNext` / gallery-cycle takes effect (pending the routing of the two churning files).
+- [ ] `` ` `` no longer flips gallery mode while typing (pending the search-page routing).
 
 ### Phase 3: "View all shortcuts" (read-only cheat-sheet)
 
@@ -424,6 +425,7 @@ Global `?` (Shift+/)  →  (OPTIONAL, Q8) components/shortcuts/shortcut-help-ove
 | 2026-06-10 | MUZERO | Phase 4 core landed out of order (no UI churn): `conflict.ts` (`planReassignment` cascading displacement + blocked) and `recorder.ts` (`reservedWarning`), TDD'd. Recorder/row UI + Phase 3 cheat-sheet + Phase 2b remain — they touch the actively-edited library/settings files, so they're sequenced after the branch settles |
 | 2026-06-10 | MUZERO | Phase 3 shipped: read-only cheat-sheet in Settings → Shortcuts (`cheatsheet.ts` + `shortcuts-settings.tsx`), grouped + searchable, with a read-only Reference section (Q7). Added `category:"reference"` registry entries skipped by dispatch/conflict; i18n ×4. `?` overlay (Q8) left optional/unbuilt |
 | 2026-06-10 | MUZERO | Phase 4 UI shipped: `shortcut-recorder-dialog.tsx` (capture → `planReassignment` conflict preview → atomic save) + per-row +/✕/↺ edit affordances + Reset-all + `setAllShortcutOverrides`; i18n ×4. Customization is end-to-end. Only Phase 2b (route the churning library/inspector/gallery key-matching through the registry + hint swap) and Phase 5 (stretch) remain |
+| 2026-06-10 | MUZERO | Phase 2b partial: shared `eventMatchesAction` + `useShortcutMatcher` hook; routed `library.back` (back gesture) + `memory.quickAdd` (T/N) through the registry — both now rebindable, and T/N gained the missing modal guard; deleted superseded `memory-shortcuts.ts`. Library focus/open + gallery-cycle routing deferred — those files (`search-page`, `virtual-track-list`, `registry`) have the user's in-flight reverse-toggle/cover-crop edits |
 
 ---
 
