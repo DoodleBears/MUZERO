@@ -1,0 +1,88 @@
+import type { DirEntryLike } from "@/lib/folder-import";
+import type { DesktopBridge, SaveFileInput } from "./bridge";
+
+type FetchFn = typeof globalThis.fetch;
+
+/** Shape the Electron preload exposes on `window.muzero` (see electron/preload.cjs). */
+interface MuzeroApi {
+  kind: "electron";
+  pickFolder(): Promise<string | null>;
+  readDir(path: string): Promise<DirEntryLike[]>;
+  readFile(path: string): Promise<ArrayBuffer>;
+  grantFolderAccess(path: string): Promise<void>;
+  saveFile(input: { fileName: string; mime: string; bytes: ArrayBuffer }): Promise<boolean>;
+  openExternal(url: string): Promise<void>;
+}
+
+const PROXY_URL = "muzfetch://proxy/";
+const MEDIA_PROXY_URL = "muzfetch://media/";
+const TARGET_HEADER = "x-muzero-target";
+
+/**
+ * Build a `muzfetch://media/` URL an `<audio>`/`<video>` element can stream through
+ * the proxy with injected request headers. A media element's own GET can't set
+ * Referer/User-Agent, so the target URL + headers ride in the query (`__mzurl` +
+ * `__mzh_<name>`); the main process restores them and preserves Range/206. Used for
+ * Bilibili, whose CDN 403s a foreign Referer.
+ */
+function electronMediaProxyUrl(url: string, headers?: Record<string, string>): string {
+  const params = new URLSearchParams({ __mzurl: url });
+  if (headers) {
+    for (const [name, value] of Object.entries(headers)) {
+      params.set(`__mzh_${name.toLowerCase()}`, value);
+    }
+  }
+  return `${MEDIA_PROXY_URL}?${params.toString()}`;
+}
+
+/**
+ * Route every request through the privileged `muzfetch://` scheme, which the main
+ * process handles via `net.fetch` (no renderer CORS / mixed-content). Streaming is
+ * preserved in both directions — DJ SSE and large R2 PUT bodies flow through — and
+ * the real target URL rides along in a header (the scheme can't carry an arbitrary
+ * absolute URL safely). To `getAppFetch()` consumers this is just a `fetch`.
+ */
+const electronFetch: FetchFn = (input, init) => {
+  const original = new Request(input as RequestInfo, init);
+  const proxied = new Request(PROXY_URL, {
+    method: original.method,
+    headers: original.headers,
+    body: original.body,
+    signal: original.signal,
+    // duplex is required by the Fetch spec when sending a streaming body.
+    ...(original.body ? { duplex: "half" } : {}),
+  } as RequestInit);
+  proxied.headers.set(TARGET_HEADER, original.url);
+  return globalThis.fetch(proxied);
+};
+
+export function createElectronBridge(): DesktopBridge {
+  const api = window.muzero as unknown as MuzeroApi;
+  return {
+    kind: "electron",
+    fetch: electronFetch,
+    pickFolder: () => api.pickFolder(),
+    readDir: (path) => api.readDir(path),
+    // Join renderer-side (no IPC round-trip per entry): forward slashes are fine
+    // because the main process realpath-normalizes every path before reading.
+    join: (base, name) => `${base.replace(/[/\\]+$/, "")}/${name}`,
+    readFile: async (path) => new Uint8Array(await api.readFile(path)),
+    grantFolderAccess: (path) => api.grantFolderAccess(path),
+    saveFile: ({ fileName, mime, bytes }: SaveFileInput) =>
+      api.saveFile({ fileName, mime, bytes: toStandaloneBuffer(bytes) }),
+    openExternal: (url) => api.openExternal(url),
+    mediaProxyUrl: electronMediaProxyUrl,
+  };
+}
+
+/** A standalone ArrayBuffer for IPC (not a view into a larger/shared buffer). */
+function toStandaloneBuffer(bytes: Uint8Array): ArrayBuffer {
+  if (
+    bytes.byteOffset === 0 &&
+    bytes.byteLength === bytes.buffer.byteLength &&
+    bytes.buffer instanceof ArrayBuffer
+  ) {
+    return bytes.buffer;
+  }
+  return bytes.slice().buffer;
+}
