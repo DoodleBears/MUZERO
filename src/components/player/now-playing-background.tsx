@@ -231,23 +231,35 @@ function NowPlayingBackgroundContent({ hideVisualizer }: { hideVisualizer: boole
         <CrossfadeBackgroundImage src={renderImageTarget.src} />
       ) : null}
       <div className="absolute inset-0 bg-background" style={{ opacity: imageMaskOpacity }} />
-      {showViz ? (
-        <>
-          <VisualizerHost
-            active={isPlaying}
+      {/* Fade the whole visualizer layer in/out when the mode toggles (V / the
+          mode button) instead of popping. AnimatePresence runs the exit fade
+          before unmount; the inner per-frame opacity/dim still apply on top. */}
+      <AnimatePresence>
+        {showViz && (
+          <motion.div
+            key="visualizer-layer"
             className="absolute inset-0"
-            coverColor
-            placement="background"
-            style={{ opacity: visualizerOpacity, transition: "opacity 240ms ease" }}
-          />
-          {/* Always rendered (opacity 0 when off) so the dim eases in/out smoothly
-              instead of popping when you raise it to read lyrics over the viz. */}
-          <div
-            className="absolute inset-0 bg-background"
-            style={{ opacity: visualizerDim, transition: "opacity 240ms ease" }}
-          />
-        </>
-      ) : null}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.4, ease: "easeInOut" }}
+          >
+            <VisualizerHost
+              active={isPlaying}
+              className="absolute inset-0"
+              coverColor
+              placement="background"
+              style={{ opacity: visualizerOpacity, transition: "opacity 240ms ease" }}
+            />
+            {/* Always rendered (opacity 0 when off) so the dim eases in/out smoothly
+                instead of popping when you raise it to read lyrics over the viz. */}
+            <div
+              className="absolute inset-0 bg-background"
+              style={{ opacity: visualizerDim, transition: "opacity 240ms ease" }}
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
     </>
   );
 }
