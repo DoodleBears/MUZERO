@@ -13,7 +13,7 @@
 |-------|------|--------|------|
 | 1 | Module-scoped object-URL cache (hook-level) | ✅ Completed | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | Shared `<CoverImage>` (fade + static placeholder) + rollout to all surfaces | 🔄 In Progress | [Phase 2 Checklist](#phase-2-checklist) |
-| 3 | Thumbhash data infra — owner-row field + generate-on-save + lazy backfill + R2 carry | 🔲 Pending | [Phase 3 Checklist](#phase-3-checklist) |
+| 3 | Thumbhash data infra — owner-row field + generate-on-save + lazy backfill + R2 carry | 🔄 In Progress | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | `<CoverImage>` thumbhash placeholder layer | 🔲 Pending | [Phase 4 Checklist](#phase-4-checklist) |
 | 5 | Tests + leak audit + polish | 🔲 Pending | [Phase 5 Checklist](#phase-5-checklist) |
 
@@ -117,12 +117,12 @@ setTrackCover / setSessionCover / setEntityCover     EntityCard / SetCard / deta
 | Component | Technology | Rationale |
 |-----------|------------|-----------|
 | **Cache** | Module-scoped `Map` + small LRU (in-memory) | Non-reactive singleton (规则 6); no DB, no store, no re-render churn |
-| **Preview hash** | [`thumbhash`](https://github.com/evanw/thumbhash) (npm, **MIT**, ~1–2 KB) | **Embeds aspect ratio + alpha** (no separate w/h to store, unlike blurhash); smaller, better perceptual quality. `rgbaToThumbHash` at save, `thumbHashToDataURL` at display |
+| **Preview hash** | [`thumbhash`](https://github.com/evanw/thumbhash) — **vendored** MIT source ([`thumbhash.ts`](../../../src/lib/thumbhash.ts)), not the npm package | **Embeds aspect ratio + alpha** (no separate w/h to store, unlike blurhash); smaller, better perceptual quality. Vendored (see note) so the concurrently-edited lockfile stays untouched. `rgbaToThumbHash` at save, `thumbHashToRGBA`→canvas at display |
 | **Encode work** | Web Worker ([`src/workers/`](../../../src/workers/)) | Image decode + `rgbaToThumbHash` off the main thread (规则 10) |
 | **Decode → preview** | `thumbHashToDataURL(hash)` | Returns a ready data URL — no manual canvas; drop straight into the placeholder layer |
 | **Presentation** | Tailwind v4 `opacity` transition on `<img onLoad>` | CSS transition (not rAF) — survives the Preview hidden-tab rAF freeze; honors `prefers-reduced-motion` |
 
-> **External-dependency declaration (per PRD guide §3):** `thumbhash` — `license.spdx: MIT`, `source: npm (evanw/thumbhash)`, ship-friendly. Bundle delta target < 3 KB gzipped. No new runtime owner / no state manager. Chosen over `blurhash` because the hash encodes its own aspect ratio (no sidecar width/height) and `thumbHashToDataURL` removes the decode-to-canvas step. `blurhash` remains a drop-in fallback if ever needed.
+> **External-dependency declaration (per PRD guide §3):** `thumbhash` — `license.spdx: MIT`, `source: clean-room vendored (evanw/thumbhash, MIT, attribution header in [`thumbhash.ts`](../../../src/lib/thumbhash.ts))`, ship-friendly. **Vendored rather than `pnpm add`** because this shared branch had a large in-flight electron-builder change sitting uncommitted in `package.json` / `pnpm-lock.yaml` (~2000 lock lines); adding the dep would have forced bundling that WIP into this commit (or a broken partial lockfile). Vendoring keeps the manifest untouched and matches the guide's "prefer home-grown, don't add a runtime owner" rule. The codec is ~150 pure lines, exhaustively unit-tested; trimmed to `rgbaToThumbHash` / `thumbHashToRGBA` / aspect-ratio (the UI renders decoded RGBA via canvas, so upstream's PNG/data-URL helper is dropped). Chosen over `blurhash` because the hash encodes its own aspect ratio.
 
 ### 2.4 Rejected alternative — keep-alive tab mounting
 
@@ -286,19 +286,19 @@ No Zustand/store involvement (规则 6 — non-reactive singleton stays in modul
 **Goal:** Generate + persist a thumbhash for every cover (Q1/Q4), without a migration, and carry it to R2 (Q6).
 
 **Tasks:**
-- [ ] Add `thumbhash` (MIT) dependency; record in `THIRD-PARTY-LICENSES` per PRD guide §3.
+- [x] Vendor the `thumbhash` MIT codec ([`thumbhash.ts`](../../../src/lib/thumbhash.ts)) instead of adding the npm dep (see §2.3 note) — `rgbaToThumbHash` / `thumbHashToRGBA` / `thumbHashToApproximateAspectRatio`, attribution header. Exhaustively unit-tested ([thumbhash.test.ts](../../../src/lib/thumbhash.test.ts)): solid-color round-trip, aspect-ratio sign, left/right structure, alpha flag + split.
 - [ ] Add `coverThumbhash?` to `Track` / `DjSession`, `thumbhash?` to `EntityCover`, `avatarThumbhash?` to the avatar owner ([types.ts](../../../src/db/types.ts)) — **no `.stores()` change** (§3.2).
-- [ ] Worker encode helper in [`src/workers/`](../../../src/workers/) (decode cropped pixels → resize ≤100 px → `rgbaToThumbHash`).
+- [ ] Encode helper (decode cropped pixels via `createImageBitmap`/canvas → resize ≤100 px → `rgbaToThumbHash` → base64). Main-thread at cover-set (cheap, user action); guarded → `undefined` on failure.
 - [ ] Generate-on-save in `setTrackCover` / `setSessionCover` / `setEntityCover` / `setTrackCoverFromMemory` (+ avatar set); regenerate in `setTrackCoverCrop`.
 - [ ] Lazy backfill in `useTrackCoverUrl` (one-time, deduped per owner id).
 - [ ] Carry thumbhash in R2 manifest cover refs + land it on import next to `remoteCoverUrl` / `remoteCover` (§3.4).
 
 ### Phase 3 Checklist
+- [x] Vendored codec is correct (encode/decode round-trip, aspect ratio, alpha) — 4 tests green.
 - [ ] Setting a new cover stores a thumbhash on the owner row, same transaction.
 - [ ] Crop-only edit refreshes the thumbhash.
 - [ ] Browsing legacy covers backfills their thumbhash exactly once each.
 - [ ] Export→import round-trip preserves the thumbhash on the remote owner row.
-- [ ] `pnpm build` bundle delta < 3 KB gzipped.
 
 ### Phase 4: `<CoverImage>` thumbhash placeholder layer
 
@@ -368,7 +368,7 @@ No Zustand/store involvement (规则 6 — non-reactive singleton stays in modul
 
 | # | Question | Status | Decision |
 |---|----------|--------|----------|
-| 1 | Preview hash: `blurhash` vs `thumbhash`? | Resolved | **`thumbhash`** — embeds aspect ratio (no sidecar w/h) + alpha, smaller, and `thumbHashToDataURL` removes the decode-to-canvas step. `blurhash` kept as drop-in fallback. |
+| 1 | Preview hash: `blurhash` vs `thumbhash`? | Resolved | **`thumbhash`, vendored** (MIT source inlined, not npm) — embeds aspect ratio + alpha, smaller; vendored to avoid touching the concurrently-edited lockfile (~2000 in-flight lines). `blurhash` kept as a fallback option. |
 | 2 | LRU eviction policy & cap? | Resolved | **Ref-count + warm released-LRU**, cap ≈256, revoke on eviction (Phase 1). Tune cap in Phase 5. |
 | 3 | Skip fade on cache hit? | Resolved | **Yes** — `fromCache` skips both the fade and the thumbhash decode. |
 | 4 | Cold placeholder when no thumbhash? | Resolved | Plain **`bg-secondary`** block (no dim icon); the kind icon only when there's no cover at all. |
@@ -385,7 +385,8 @@ No Zustand/store involvement (规则 6 — non-reactive singleton stays in modul
 |------|--------|---------|
 | 2026-06-10 | MUZERO | Initial draft — object-URL cache (Phase 1) + `<CoverImage>` fade (Phase 2) + tests; rejected keep-alive |
 | 2026-06-10 | MUZERO | Resolved Open Qs 1–5; added a preview-hash placeholder (Phases 3–4): owner-row field (no migration), generate-on-save in a worker, lazy backfill; expanded surfaces to avatars + memory thumbnails |
-| 2026-06-10 | MUZERO | **Switched preview hash blurhash → `thumbhash`** (embeds aspect ratio/alpha, smaller, `thumbHashToDataURL`); brought **R2 manifest carry into scope** (Q6); confirmed avatars in scope (Q7); deferred thumbnail downscaling (Q8). All Open Qs resolved. |
+| 2026-06-10 | MUZERO | **Switched preview hash blurhash → `thumbhash`** (embeds aspect ratio/alpha, smaller); brought **R2 manifest carry into scope** (Q6); confirmed avatars in scope (Q7); deferred thumbnail downscaling (Q8). All Open Qs resolved. |
+| 2026-06-10 | MUZERO | **Phase 1 ✅, Phase 2 🔄** (CoverImage + set/entity rollout; entity-grid/track-row deferred under concurrent edits). **Phase 3 🔄**: vendored the thumbhash MIT codec (not npm `pnpm add`) to avoid bundling a large in-flight electron-builder lockfile change on this shared branch; codec unit-tested. |
 
 ---
 
