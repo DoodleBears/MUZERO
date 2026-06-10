@@ -37,6 +37,10 @@
 | P1b | StreamSourceProvider 契约 + 源检测（`detectStreamSource`/`isStreamedTrack` 纯函数，数据驱动而非 album-前缀 hack） | `src/streamsrc/provider.ts` · `src/streamsrc/source-detect.ts` | ×4 | ✅ green |
 | H1 | StreamHttp 注入式 HTTP 契约（源 provider 零 bridge 依赖，可 stub 单测；prod 接 muzfetch+header 别名待 Phase 1 infra） | `src/streamsrc/http.ts` | 经 B3 覆盖 | ✅ |
 | B3 | **Bilibili 源 provider（整条纵向打通）**：WBI key 取+10min 缓存 → 签名 → 搜索/view→cid/playurl → 选音轨 → `PlayableStream`(注 Referer) | `src/streamsrc/bili/bili-source.ts` | stub transport ×6 | ✅ green |
+| N3 | **网易云 源 provider（整条纵向打通）**：weapi 搜索 → eapi 取直链 → parse → `PlayableStream`；301/VIP 分流 | `src/streamsrc/netease/netease-source.ts` | stub transport ×5 | ✅ green |
+| P1c | StreamSource 注册表（`createStreamSource` 分发 + `resolveEnabledStreamSources`；youtube→null 待 Phase 4） | `src/streamsrc/registry.ts` | ×5 | ✅ green |
+
+> 至此**两源全部纯逻辑 + provider 纵向（注入式 HTTP）已实现并单测**（10 文件 / 67 测试全绿）。剩余 = 接 muzfetch（header 注入别名 + Range，改并发文件 `electron/`）、登录窗口、player-store 即时 resolve 钩子（并发文件）、Settings/搜索/导入 UI + i18n、离线缓存（Phase 5）——均需运行中的 Electron 验证、且触碰其他 agent 未提交文件，**不在本轮自动落地**（见末尾状态）。
 
 ---
 
@@ -421,8 +425,8 @@ components/player/            # 无需改：streamed track 复用 media-stage / 
 - [ ] 登录：手机验证码 或 抓 `MUSIC_U`+`__csrf` cookie；csrf 预热。
 
 #### Phase 3 Checklist
-- [ ] 加密单测：已知 payload → 期望 params/encSecKey（对拍 NeriPlayer 输出）。
-- [ ] `parsePlayback` 分支单测（200/301/404/fee/freeTrialInfo）。
+- [x] 加密单测：weapi/eapi 对拍 **node:crypto**（独立 AES+MD5）+ weapi 往返；比对 NeriPlayer 输出更强的独立验证。
+- [x] `parsePlayback` 分支单测（200/301/404/fee/freeTrialInfo）+ 源 provider 301/VIP 分流。
 - [ ] 真机：登录后可放无损；未登录退化/提示。
 - [ ] 音质降级链命中下一档单测。
 

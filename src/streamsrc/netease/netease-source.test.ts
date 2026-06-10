@@ -1,0 +1,93 @@
+import { describe, expect, it } from "vitest";
+import type { StreamHttp, StreamHttpRequest } from "../http";
+import { createNeteaseSource } from "./netease-source";
+
+function makeHttp(routes: Array<[string, unknown]>) {
+  const calls: StreamHttpRequest[] = [];
+  const http: StreamHttp = async (req) => {
+    calls.push(req);
+    const hit = routes.find(([frag]) => req.url.includes(frag));
+    const body = hit ? hit[1] : { code: -460 };
+    return { status: 200, text: async () => JSON.stringify(body), json: async () => body };
+  };
+  return { http, calls };
+}
+
+const SEARCH = {
+  code: 200,
+  result: {
+    songs: [
+      {
+        id: 33894312,
+        name: "晴天",
+        ar: [{ name: "周杰伦" }],
+        al: { name: "叶惠美", picUrl: "https://p1.music.126.net/cover.jpg" },
+        dt: 269000,
+      },
+    ],
+  },
+};
+
+const URL_OK = {
+  code: 200,
+  data: [{ id: 33894312, url: "http://m7.music.126.net/x.flac", type: "flac", size: 4096, fee: 0 }],
+};
+
+function deps(routes: Array<[string, unknown]>, cookie?: string) {
+  const { http, calls } = makeHttp(routes);
+  const source = createNeteaseSource({
+    http,
+    getCookie: () => cookie,
+    randomKey: () => "abcdefghijklmnop",
+  });
+  return { source, calls };
+}
+
+describe("createNeteaseSource", () => {
+  it("is a netease provider; isAuthed tracks the MUSIC_U cookie", () => {
+    expect(deps([]).source.id).toBe("netease");
+    expect(deps([]).source.isAuthed()).toBe(false);
+    expect(deps([], "MUSIC_U=abc").source.isAuthed()).toBe(true);
+  });
+
+  it("searches via weapi and maps songs to hits", async () => {
+    const { source, calls } = deps([["/weapi/cloudsearch/get/web", SEARCH]]);
+    const hits = await source.search("晴天");
+    expect(hits[0]).toMatchObject({
+      source: "netease",
+      externalId: "33894312",
+      title: "晴天",
+      artist: "周杰伦",
+      album: "叶惠美",
+      durationSec: 269,
+      coverUrl: "https://p1.music.126.net/cover.jpg",
+    });
+    // weapi request body carries the encrypted params + RSA-wrapped key.
+    const body = calls.find((c) => c.url.includes("/weapi/"))?.body ?? "";
+    expect(body).toContain("params=");
+    expect(body).toContain("encSecKey=");
+  });
+
+  it("resolves via eapi to a playable (https-upgraded) flac stream", async () => {
+    const { source, calls } = deps([["/eapi/song/enhance/player/url/v1", URL_OK]]);
+    const res = await source.resolve("33894312", { quality: "lossless" });
+    expect(res.kind).toBe("ok");
+    if (res.kind !== "ok") return;
+    expect(res.stream.mediaUrl).toBe("https://m7.music.126.net/x.flac");
+    expect(res.stream.mime).toBe("audio/flac");
+    expect(calls.find((c) => c.url.includes("/eapi/"))?.body).toContain("params=");
+  });
+
+  it("maps code 301 to requires-login", async () => {
+    const { source } = deps([["/eapi/song/enhance/player/url/v1", { code: 301 }]]);
+    expect((await source.resolve("1")).kind).toBe("requires-login");
+  });
+
+  it("maps a VIP-only song (no url, fee>0) to no-permission", async () => {
+    const { source } = deps([
+      ["/eapi/song/enhance/player/url/v1", { code: 200, data: [{ url: null, fee: 1 }] }],
+    ]);
+    const res = await source.resolve("1");
+    expect(res).toEqual({ kind: "no-permission", reason: "vip" });
+  });
+});
