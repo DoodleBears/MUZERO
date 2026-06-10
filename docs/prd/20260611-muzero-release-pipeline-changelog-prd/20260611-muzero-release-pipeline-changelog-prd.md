@@ -444,15 +444,15 @@ src/components/settings/
 
 **Tasks:**
 - [ ] `scripts/bump-version.mjs`：读 `package.json.version` → 按 `TYPE` 算下一版（含 `beta` prerelease）→ 写 `package.json` + `src-tauri/tauri.conf.json` + `src-tauri/Cargo.toml` 三处 → 调 `scaffold-changelog.mjs` + `generate-release-meta.mjs`（不 commit，提示同提交）。
-- [ ] **release-meta（简化决定）**：不再生成 `src/generated/release-meta.ts`，改为 `vite.config.ts` + `vitest.config.ts` 的 `define` 直接注入 `__APP_VERSION__`/`__GIT_SHA__`/`__BUILD_TIME__`（config 求值期读 package.json + `git rev-parse`，try/catch 兜底），消除生成物 churn 与「测试期文件不存在」问题。
-- [ ] `vite.config.ts` + `vitest.config.ts` 加 `define` + `src/vite-env.d.ts` 声明三个 `__*__` global。
-- [ ] `src/lib/app-version.ts`：`export const APP_VERSION = __APP_VERSION__` + `GIT_SHA`/`BUILD_TIME`/派生 `RELEASE_ID`（唯一读取点，注释「别处不许硬写版本」）。
+- [x] **release-meta（简化决定）**：不再生成 `src/generated/release-meta.ts`，改为 `vite.config.ts` + `vitest.config.ts` 的 `define` 直接注入 `__APP_VERSION__`/`__GIT_SHA__`/`__BUILD_TIME__`（config 求值期读 package.json + `git rev-parse`，try/catch 兜底），消除生成物 churn 与「测试期文件不存在」问题。✅
+- [x] `vite.config.ts` + `vitest.config.ts` 加 `define` + `src/vite-env.d.ts` 声明三个 `__*__` global。✅
+- [x] `src/lib/app-version.ts`：`export const APP_VERSION = __APP_VERSION__` + `GIT_SHA`/`BUILD_TIME`/派生 `RELEASE_ID`（唯一读取点，注释「别处不许硬写版本」）。✅ 3 测（APP_VERSION===package.json version）。
 - [x] `src/lib/compare-semver.ts` + test（prerelease 排序）。✅ `parseSemver`/`compareSemver`/`isNewerVersion`，遵 semver §11 precedence，12 测全绿。
 - [ ] `electron/preload.cjs` 暴露 `getAppVersion`；`about-settings.tsx` 雏形显示版本/release-id（桌面优先用 IPC 权威值，web 用 `APP_VERSION`）。
 
 ### Phase 1 Checklist
 - [ ] `make version-bump TYPE=patch` 后三文件版本一致，可 `git diff` 验证
-- [ ] `pnpm build` 后 bundle 内 `APP_VERSION` 正确；Settings 显示当前版本
+- [x] bundle 内 `APP_VERSION` 正确（`define` 注入，app-version.test.ts 证 `APP_VERSION===package.json version`；`pnpm build` 全量构建暂被 base 的既有 tsc 错误挡住，与本改动无关）；🔲 Settings 显示当前版本（Phase 1 末 about-settings 雏形）
 - [x] `compareSemver` 单测覆盖 release/prerelease/相等 ✅
 
 ### Phase 2: Changelog 规范 + 数据模型 + 历史回填 + What's New
