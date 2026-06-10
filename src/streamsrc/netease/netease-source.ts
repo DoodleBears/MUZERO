@@ -8,6 +8,7 @@
  * rides on every request via the proxy-injected `Cookie` header.
  */
 
+import { log } from "@/lib/logger";
 import type { StreamHttp } from "../http";
 import type {
   PlayableStream,
@@ -59,9 +60,13 @@ export function createNeteaseSource(deps: NeteaseSourceDeps): StreamSourceProvid
     return h;
   }
 
-  async function post(url: string, body: string, signal?: AbortSignal): Promise<unknown> {
+  async function post(
+    url: string,
+    body: string,
+    signal?: AbortSignal,
+  ): Promise<{ status: number; text: string }> {
     const res = await deps.http({ url, method: "POST", headers: headers(), body, signal });
-    return res.json();
+    return { status: res.status, text: await res.text() };
   }
 
   async function search(query: string, opts?: StreamSearchOptions): Promise<StreamSearchHit[]> {
@@ -73,10 +78,24 @@ export function createNeteaseSource(deps: NeteaseSourceDeps): StreamSourceProvid
       total: "true",
     });
     const { params, encSecKey } = weapiEncrypt(payload, newKey());
-    const json = (await post(SEARCH_URL, formBody({ params, encSecKey }), opts?.signal)) as {
-      result?: { songs?: unknown[] };
-    };
-    return (json.result?.songs ?? []).map(toHit);
+    const { status, text } = await post(SEARCH_URL, formBody({ params, encSecKey }), opts?.signal);
+    let json: { code?: number; msg?: string; message?: string; result?: { songs?: unknown[] } };
+    try {
+      json = JSON.parse(text);
+    } catch {
+      // Diagnostic: a non-JSON body (anti-bot HTML, redirect, empty) is the usual cause
+      // of "no results". The head reveals which. Remove once the root cause is fixed.
+      log.warn("netease", "search response is not JSON", { status, head: text.slice(0, 240) });
+      return [];
+    }
+    const songs = json.result?.songs ?? [];
+    log.info("netease", "search", {
+      status,
+      code: json.code,
+      message: json.message ?? json.msg,
+      count: songs.length,
+    });
+    return songs.map(toHit);
   }
 
   async function resolve(
@@ -87,8 +106,8 @@ export function createNeteaseSource(deps: NeteaseSourceDeps): StreamSourceProvid
       const level = (opts?.quality as NeteaseQuality) || "exhigh";
       const payload = JSON.stringify(neteasePlaybackBody(externalId, level));
       const { params } = eapiEncrypt(NETEASE_PLAYER_URL_PATH, payload);
-      const raw = await post(PLAYER_URL, formBody({ params }), opts?.signal);
-      const verdict = parseNeteasePlayback(raw as object);
+      const { text } = await post(PLAYER_URL, formBody({ params }), opts?.signal);
+      const verdict = parseNeteasePlayback(text);
 
       switch (verdict.kind) {
         case "success": {
