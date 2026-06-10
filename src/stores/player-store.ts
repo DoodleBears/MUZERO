@@ -1191,16 +1191,23 @@ async function ensureLoadedAndPlay(
       // through the media proxy (Electron). NetEase URLs play directly. Falls back to
       // the raw URL when the shell has no media proxy (web/tauri).
       const bridge = resolveDesktopBridge();
-      const src =
+      const proxiedUrl =
         resolved.headers && bridge.mediaProxyUrl
           ? bridge.mediaProxyUrl(resolved.url, resolved.headers)
-          : resolved.url;
+          : null;
+      const src = proxiedUrl ?? resolved.url;
       log.debug("player", "loading streamed media url", {
         trackId: track.id,
         source: track.streamSourceId,
-        proxied: src !== resolved.url,
+        proxied: proxiedUrl !== null,
       });
-      await mediaEngine.loadUrl(src, track.kind);
+      // Proxied stream responses send ACAO:* — opt into CORS so the WebAudio graph
+      // doesn't taint (and silence) the audio.
+      await mediaEngine.loadUrl(
+        src,
+        track.kind,
+        proxiedUrl ? { crossOrigin: "anonymous" } : undefined,
+      );
     }
     loadedTrackId = track.id;
     triggerLyricsAutoFetch(track);

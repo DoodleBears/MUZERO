@@ -140,16 +140,25 @@ export class MediaEngine {
     log.debug("media", "loadBlob", { kind, type: blob.type, size: blob.size });
     this.revoke();
     this.objectUrl = URL.createObjectURL(blob);
-    this.loadSource(this.objectUrl, kind);
+    this.loadSource(this.objectUrl, kind, null);
   }
 
-  async loadUrl(url: string, kind: "audio" | "video" = "audio"): Promise<void> {
-    log.debug("media", "loadUrl", { kind });
+  async loadUrl(
+    url: string,
+    kind: "audio" | "video" = "audio",
+    opts?: { crossOrigin?: "anonymous" | null },
+  ): Promise<void> {
+    log.debug("media", "loadUrl", { kind, crossOrigin: opts?.crossOrigin });
     this.revoke();
-    this.loadSource(url, kind);
+    this.loadSource(url, kind, opts?.crossOrigin ?? null);
   }
 
-  private loadSource(src: string, kind: "audio" | "video"): void {
+  private loadSource(src: string, kind: "audio" | "video", crossOrigin: "anonymous" | null): void {
+    // Cross-origin streams fed into the WebAudio graph (createMediaElementSource) are
+    // tainted → silent unless the element opts into CORS and the response allows it.
+    // Proxied stream URLs return ACAO:* so "anonymous" makes them audible; blobs/same-
+    // origin use null (anonymous would needlessly force a CORS check).
+    this.setMediaCrossOrigin(crossOrigin);
     // The audio element is always the driver (it plays a video file's audio too).
     this.audioEl.src = src;
     this.audioEl.load();
@@ -163,6 +172,12 @@ export class MediaEngine {
       this.videoEl.removeAttribute("src");
       this.videoEl.load();
     }
+  }
+
+  /** Set (or clear) CORS mode on both media elements before a load — see loadSource. */
+  private setMediaCrossOrigin(value: "anonymous" | null): void {
+    if (this.audioEl instanceof HTMLMediaElement) this.audioEl.crossOrigin = value;
+    if (this.videoEl instanceof HTMLMediaElement) this.videoEl.crossOrigin = value;
   }
 
   async play(): Promise<void> {
