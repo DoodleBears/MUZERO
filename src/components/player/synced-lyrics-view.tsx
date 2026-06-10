@@ -180,6 +180,7 @@ export function LyricsScroller({
                 opacity: lyricStyle.activeOpacity,
                 fontSize: lyricStyle.inactiveFontSize,
                 textAlign: lyricStyle.align,
+                textShadow: lyricStyle.textShadow,
               }}
             >
               {resolved.text}
@@ -334,6 +335,7 @@ function SyncedLines({
                 style={{
                   fontSize: lyricStyle.activeFontSize,
                   color: lyricStyle.color,
+                  textShadow: lyricStyle.textShadow,
                   transformOrigin:
                     lyricStyle.align === "center"
                       ? "center"

@@ -144,7 +144,11 @@
     "colorCover": "カバーから",
     "colorCustom": "カスタム",
     "colorCoverHint": "ビジュアライザーが使うカバー色に追従します。",
-    "customColor": "カスタム色"
+    "customColor": "カスタム色",
+    "shadowOpacity": "影の濃さ（{{pct}}%）",
+    "shadowBlur": "影のサイズ（{{px}}px）",
+    "shadowOffsetX": "影のXオフセット（{{px}}px）",
+    "shadowOffsetY": "影のYオフセット（{{px}}px）"
   },
   "displayMode": {
     "video": "動画",

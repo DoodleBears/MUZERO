@@ -144,7 +144,11 @@
     "colorCover": "取自封面",
     "colorCustom": "自定义",
     "colorCoverHint": "跟随可视化使用的封面取色。",
-    "customColor": "自定义颜色"
+    "customColor": "自定义颜色",
+    "shadowOpacity": "阴影强度（{{pct}}%）",
+    "shadowBlur": "阴影大小（{{px}}px）",
+    "shadowOffsetX": "阴影 X 偏移（{{px}}px）",
+    "shadowOffsetY": "阴影 Y 偏移（{{px}}px）"
   },
   "displayMode": {
     "video": "视频",

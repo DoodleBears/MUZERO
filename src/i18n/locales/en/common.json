@@ -150,7 +150,11 @@
     "colorCover": "From cover",
     "colorCustom": "Custom",
     "colorCoverHint": "Follows the cover color used by the visualizer.",
-    "customColor": "Custom color"
+    "customColor": "Custom color",
+    "shadowOpacity": "Shadow strength ({{pct}}%)",
+    "shadowBlur": "Shadow size ({{px}}px)",
+    "shadowOffsetX": "Shadow offset X ({{px}}px)",
+    "shadowOffsetY": "Shadow offset Y ({{px}}px)"
   },
   "displayMode": {
     "video": "Video",

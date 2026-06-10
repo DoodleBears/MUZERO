@@ -14,6 +14,8 @@ export interface LyricStyle {
   color?: string;
   /** Horizontal alignment of the lyric lines. */
   align: "left" | "center" | "right";
+  /** CSS text-shadow for the lyrics ("none" when disabled). */
+  textShadow: string;
 }
 
 export const DEFAULT_LYRIC_STYLE: LyricStyle = {
@@ -22,11 +24,17 @@ export const DEFAULT_LYRIC_STYLE: LyricStyle = {
   activeOpacity: 1,
   inactiveOpacity: 0.4,
   align: "center",
+  textShadow: "0px 2px 8px rgba(0, 0, 0, 0.35)",
 };
 
 function clampPx(value: number | undefined, fallback: number): number {
   if (value == null || !Number.isFinite(value)) return fallback;
   return Math.min(64, Math.max(12, value));
+}
+
+function clampNum(value: number | undefined, fallback: number, min: number, max: number): number {
+  if (value == null || !Number.isFinite(value)) return fallback;
+  return Math.min(max, Math.max(min, value));
 }
 
 function clamp01(value: number | undefined, fallbackPct: number): number {
@@ -58,5 +66,16 @@ export function resolveLyricStyle(settings: AppSettings, coverColorCss: string |
     inactiveOpacity: clamp01(settings.lyricsInactiveOpacity, 40),
     color,
     align: settings.lyricsAlign ?? DEFAULT_LYRIC_STYLE.align,
+    textShadow: resolveTextShadow(settings),
   };
+}
+
+/** Build the CSS text-shadow from the offset/blur/strength settings. */
+function resolveTextShadow(settings: AppSettings): string {
+  const opacity = clamp01(settings.lyricsShadowOpacity, 35);
+  if (opacity <= 0) return "none";
+  const x = clampNum(settings.lyricsShadowOffsetX, 0, -32, 32);
+  const y = clampNum(settings.lyricsShadowOffsetY, 2, -32, 32);
+  const blur = clampNum(settings.lyricsShadowBlur, 8, 0, 48);
+  return `${x}px ${y}px ${blur}px rgba(0, 0, 0, ${opacity})`;
 }

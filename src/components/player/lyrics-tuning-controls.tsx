@@ -41,6 +41,10 @@ export function LyricsTuningControls({ className }: { className?: string }) {
   const colorMode = s.lyricsColorMode ?? "default";
   const customColor = s.lyricsCustomColor ?? "#ffffff";
   const align = s.lyricsAlign ?? "center";
+  const shadowOpacity = s.lyricsShadowOpacity ?? 35;
+  const shadowBlur = s.lyricsShadowBlur ?? 8;
+  const shadowOffsetX = s.lyricsShadowOffsetX ?? 0;
+  const shadowOffsetY = s.lyricsShadowOffsetY ?? 2;
 
   return (
     <div className={cn("flex flex-col gap-4", className)}>
@@ -139,6 +143,46 @@ export function LyricsTuningControls({ className }: { className?: string }) {
         {colorMode === "cover" && (
           <p className="text-muted-foreground text-xs">{t("lyricsSettings.colorCoverHint")}</p>
         )}
+      </Field>
+      <Field label={t("lyricsSettings.shadowOpacity", { pct: shadowOpacity })}>
+        <Slider
+          min={0}
+          max={100}
+          step={1}
+          value={shadowOpacity}
+          onValueChange={(v) => void saveSettings({ lyricsShadowOpacity: v })}
+          aria-label={t("lyricsSettings.shadowOpacity", { pct: shadowOpacity })}
+        />
+      </Field>
+      <Field label={t("lyricsSettings.shadowBlur", { px: shadowBlur })}>
+        <Slider
+          min={0}
+          max={48}
+          step={1}
+          value={shadowBlur}
+          onValueChange={(v) => void saveSettings({ lyricsShadowBlur: v })}
+          aria-label={t("lyricsSettings.shadowBlur", { px: shadowBlur })}
+        />
+      </Field>
+      <Field label={t("lyricsSettings.shadowOffsetX", { px: shadowOffsetX })}>
+        <Slider
+          min={-32}
+          max={32}
+          step={1}
+          value={shadowOffsetX}
+          onValueChange={(v) => void saveSettings({ lyricsShadowOffsetX: v })}
+          aria-label={t("lyricsSettings.shadowOffsetX", { px: shadowOffsetX })}
+        />
+      </Field>
+      <Field label={t("lyricsSettings.shadowOffsetY", { px: shadowOffsetY })}>
+        <Slider
+          min={-32}
+          max={32}
+          step={1}
+          value={shadowOffsetY}
+          onValueChange={(v) => void saveSettings({ lyricsShadowOffsetY: v })}
+          aria-label={t("lyricsSettings.shadowOffsetY", { px: shadowOffsetY })}
+        />
       </Field>
     </div>
   );

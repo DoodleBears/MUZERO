@@ -514,6 +514,14 @@ export interface AppSettings {
   lyricsAlign?: "left" | "center" | "right";
   /** Whether the Now-Playing stage shows lyrics instead of the cover (persisted toggle). Default false. */
   lyricsStageOpen?: boolean;
+  /** Lyric text-shadow strength, 0–100 (0 = no shadow). Default 35. */
+  lyricsShadowOpacity?: number;
+  /** Lyric text-shadow blur radius in px. Default 8. */
+  lyricsShadowBlur?: number;
+  /** Lyric text-shadow X offset in px. Default 0. */
+  lyricsShadowOffsetX?: number;
+  /** Lyric text-shadow Y offset in px. Default 2. */
+  lyricsShadowOffsetY?: number;
   /** Global color scheme. Mirrors localStorage `muzero-theme`; defaults to system. */
   theme?: "light" | "dark" | "system";
   /** Primary/accent color (hex) for light mode. Mirrors localStorage `muzero-primary-light`. */
@@ -653,6 +661,10 @@ export const DEFAULT_SETTINGS: AppSettings = {
   lyricsColorMode: "default",
   lyricsAlign: "center",
   lyricsStageOpen: false,
+  lyricsShadowOpacity: 35,
+  lyricsShadowBlur: 8,
+  lyricsShadowOffsetX: 0,
+  lyricsShadowOffsetY: 2,
   playerRepeatMode: "off",
   playerShuffle: false,
   presenceEnabled: false,
