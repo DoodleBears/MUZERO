@@ -606,8 +606,10 @@ success：Set-Cookie 已被 net.fetch 写进默认 session → bridge.readSource
 | # | 单元 | 文件 | 测试 | 状态 |
 |---|---|---|---|---|
 | Q1 | QR 响应解析 + 状态码映射（两源 → 统一 `QrStatus`）+ generate/poll 端点配置（纯，注入式） | `src/streamsrc/qr-login.ts` | canned 响应 + 状态码穷举 ×5 | ✅ green |
-| Q2 | **vendored QR 编码器**（公有领域 nayuki QR；URL → 模块矩阵 `boolean[][]`）→ 渲染 canvas/SVG | `src/lib/qrcode.ts` + `qrcode.test.ts` | 结构性（尺寸/定位图案）+ 已知向量 | 🔲 |
 | Q3 | QrLoginProvider（`qrPollLoop` 状态机 waiting→scanned→success/expired/timeout/cancelled + 两源 generate/poll，注入 now/sleep/http，可确定性单测）+ `bridge.readSourceCookies`（主进程读默认 session cookie，成功后取） | `qr-login-provider.ts` · `bridge.ts`/`electron.ts`/`preload.cjs`/`source-login.cjs` | 状态机 + bili api ×10（bridge 部分待运行时） | ✅ green |
-| Q4 | Settings 扫码 UI（二维码 + 状态文案「待扫描/已扫描/已过期/成功」+ 刷新）替换/并列 L2 的网页登录入口；i18n 4 语 | `stream-sources-settings.tsx` | 运行时 | 🔲 |
+| Q2 | QR 渲染（URL → 可扫二维码图） | `src/lib/qrcode.ts` | — | 🚧 **阻塞：需依赖决策** |
+| Q4 | Settings 扫码 UI（二维码 + 状态文案「待扫描/已扫描/已过期/成功」+ 刷新），调用 Q1/Q3 | `stream-sources-settings.tsx` + i18n 4 语 | 运行时 | 🔲（依赖 Q2） |
 
-**红线/纪律不变**：默认关、个人使用、cookie 只存设备本地、桌面专属、加密/签名复用已测核心。vendored QR 编码器带公有领域声明 + `THIRD-PARTY-LICENSES` 条目。
+**Q2 阻塞说明**：正确的 QR 编码器需要大量**精确查表**（GF(256) RS 生成多项式 / 各 version 对齐图案坐标 / format·version 信息位串），deps 里**无 QR 库**且不能加（共享 lockfile）。从记忆手抄 ~500 行查表极易出错 → 生成**不可扫**的二维码（比不做更糟）。**两条可行路**：① 用户加一个小 QR 库（`qrcode`，MIT，~20KB）→ 我把 Q2/Q4 几行接好；② 用 **L2 内嵌官网登录页**（B站 passport 默认就显示官方二维码,可扫）—— Q1/Q3 逻辑两条路都复用。
+
+**红线/纪律不变**：默认关、个人使用、cookie 只存设备本地、桌面专属、加密/签名复用已测核心。
