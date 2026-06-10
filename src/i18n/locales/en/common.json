@@ -843,7 +843,9 @@
     "removedFromSet_one": "Removed {{count}} song from set",
     "removedFromSet_other": "Removed {{count}} songs from set",
     "deleted_one": "Deleted {{count}} song",
-    "deleted_other": "Deleted {{count}} songs"
+    "deleted_other": "Deleted {{count}} songs",
+    "addedToSet_one": "Added {{count}} song to “{{name}}”",
+    "addedToSet_other": "Added {{count}} songs to “{{name}}”"
   },
   "reorder": {
     "dragHandle": "Drag to reorder",

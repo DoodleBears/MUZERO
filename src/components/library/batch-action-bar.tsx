@@ -25,6 +25,7 @@ export function BatchActionBar({
   onToggleAll,
   onCancel,
   actions,
+  extra,
   disabled,
 }: {
   count: number;
@@ -33,6 +34,8 @@ export function BatchActionBar({
   onToggleAll: () => void;
   onCancel: () => void;
   actions: BatchAction[];
+  /** Custom control(s) rendered with the actions (e.g. an "add to set" popover). */
+  extra?: ReactNode;
   /** Temporarily disable the actions (e.g. while a reorder drag is in progress). */
   disabled?: boolean;
 }) {
@@ -58,6 +61,7 @@ export function BatchActionBar({
       </button>
       <span className="font-medium text-sm">{t("select.selectedCount", { count })}</span>
       <div className="ml-auto flex items-center gap-2">
+        {extra}
         {actions.map((action) => (
           <Button
             key={action.label}

@@ -824,7 +824,8 @@
     "removeFromSet": "세트에서 제거",
     "deletePermanently": "영구 삭제",
     "removedFromSet_other": "{{count}}곡을 세트에서 제거했습니다",
-    "deleted_other": "{{count}}곡을 삭제했습니다"
+    "deleted_other": "{{count}}곡을 삭제했습니다",
+    "addedToSet_other": "{{count}}곡을 “{{name}}”에 추가했습니다"
   },
   "reorder": {
     "dragHandle": "드래그하여 순서 변경",

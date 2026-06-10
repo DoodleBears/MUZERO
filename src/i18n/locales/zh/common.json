@@ -825,7 +825,8 @@
     "removeFromSet": "移出歌单",
     "deletePermanently": "永久删除",
     "removedFromSet_other": "已从歌单移出 {{count}} 首",
-    "deleted_other": "已删除 {{count}} 首"
+    "deleted_other": "已删除 {{count}} 首",
+    "addedToSet_other": "已添加 {{count}} 首到「{{name}}」"
   },
   "reorder": {
     "dragHandle": "拖拽调整顺序",

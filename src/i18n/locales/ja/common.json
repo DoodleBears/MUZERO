@@ -825,7 +825,8 @@
     "removeFromSet": "セットから削除",
     "deletePermanently": "完全に削除",
     "removedFromSet_other": "{{count}} 曲をセットから削除しました",
-    "deleted_other": "{{count}} 曲を削除しました"
+    "deleted_other": "{{count}} 曲を削除しました",
+    "addedToSet_other": "{{count}} 曲を「{{name}}」に追加しました"
   },
   "reorder": {
     "dragHandle": "ドラッグして並べ替え",

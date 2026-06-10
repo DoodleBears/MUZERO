@@ -19,6 +19,7 @@ import { useLongPress } from "@/hooks/use-long-press";
 import { useTrackSelection } from "@/hooks/use-track-selection";
 import { cn } from "@/lib/utils";
 import { notify } from "@/stores/notification-store";
+import { AddToSetMenu } from "./add-to-set-menu";
 
 /**
  * A track list with a "Select" toggle, checkbox multi-select, a batch action bar,
@@ -215,6 +216,7 @@ export function TrackListSection({
           onToggleAll={sel.toggleAll}
           onCancel={sel.exit}
           actions={batchActions}
+          extra={<AddToSetMenu trackIds={[...sel.ids]} excludeSetId={setId} onAdded={sel.exit} />}
           disabled={dragActive}
         />
       ) : null}
