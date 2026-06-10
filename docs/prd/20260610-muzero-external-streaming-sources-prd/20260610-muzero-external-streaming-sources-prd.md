@@ -626,3 +626,19 @@ success：Set-Cookie 已被 net.fetch 写进默认 session → bridge.readSource
 | PL3 | UI:登录后 Settings 每个源下「同步我的歌单」按需加载歌单列表，每行一键导入为新 set(streamed tracks)；`importStreamedPlaylist` 落库 + i18n(en/zh/ja/ko) | `stream-sources-settings.tsx` · `player-store.ts` | typecheck + biome + player-store/netease-playlists 测全绿 | ✅ green |
 
 **PL3 落地**：`SourcePlaylists` 子组件（登录态才挂）按需调 `createStreamSource(id).getUserPlaylists()`，列表每行 `importStreamedPlaylist(sourceId, playlistId, name)` → 新建 set + 批量 `createStreamedTrack` + `prependTrackIds`，成功 toast「已导入 N 首到『歌单名』」。只持久化元数据，播放时再 resolve(URL 不入库)。
+
+## 16. ⌘/Ctrl+F 粘贴链接直达（歌曲 / 歌单链接）
+
+在全局搜索框粘贴**网易云分享链接**即直达，无需先打开网页找 id：
+- **歌曲链接**(`/song?id=`、`#/song?id=`、`/m/song/{id}/`、夹在分享文案里的 URL) → 取 id → `song/detail` → 作为「在线」结果行出现，点击即播。
+- **歌单链接**(`/playlist?id=`、`#/playlist?id=`、`/m/playlist?id=`) → 取 id → `v6/playlist/detail` 拿歌单元信息(名/封面/曲数) → 渲染**导入卡片**，一键 `importStreamedPlaylist` 成新 set——**可导入他人的公开歌单**，不限自己账号。
+
+链接解析是纯函数、source-agnostic(`{source,kind,id}`)，链接命中时**绕过防抖即时解析**且**无视「在线搜索」chip 是否开启**(意图明确)。
+
+| # | 单元 | 文件 | 测试 | 状态 |
+|---|---|---|---|---|
+| LK1 | `parseStreamLink` 纯解析器(网易歌曲/歌单：query-id / hash-id / `/song/{id}` path / 夹在分享文案；忽略 artist 等非歌曲歌单链接、非网易域、非 URL) | `streamsrc/stream-link.ts` | ×9 | ✅ green |
+| LK2 | `parseNeteasePlaylistMeta`(单个 playlist 对象→元信息，trackCount 缺则回退 trackIds 长度)；NeteaseSource `getTracksByIds`(song/detail) + `getPlaylistMeta`(v6/detail)；provider 接口加二者；`importPlaylist` 抽出共享 `songDetailHits` | `netease-playlists.ts` · `netease-source.ts` · `provider.ts` | 122 streamsrc 测全绿 | ✅ green |
+| LK3 | 搜索 hook 链接分流(song→hits / playlist→`playlistLink`)；⌘F 渲染歌单导入卡片 + 「来自链接」分区 + 未解析 hint；i18n(en/zh/ja/ko) | `use-online-source-search.ts` · `global-track-search.tsx` | typecheck + biome + 153 测全绿 | ✅ green |
+
+**LK 落地**：`useOnlineSourceSearch` 检到 `parseStreamLink(query)` 即走链接分支(song→`getTracksByIds`→`hits`、playlist→`getPlaylistMeta`→`playlistLink`)，返回 `{link, playlistLink}`；`GlobalTrackSearch` 在「在线」区渲染歌曲行(原有 `OnlineResultRow`，点播)或 `PlaylistLinkCard`(封面+名+曲数+导入按钮，复用 `streamSources.import/imported/trackCount` 文案)。**待 Electron 手测**(net.fetch 真实请求)。

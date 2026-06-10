@@ -69,7 +69,9 @@
     "onlineSearching": "온라인 검색 중…",
     "onlineEmpty": "온라인 결과 없음",
     "onlineSetName": "온라인",
-    "enableOnline": "온라인 검색:"
+    "enableOnline": "온라인 검색:",
+    "linkResult": "링크에서",
+    "linkNotFound": "링크를 확인할 수 없습니다"
   },
   "streamSources": {
     "title": "온라인 소스",

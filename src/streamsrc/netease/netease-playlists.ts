@@ -46,28 +46,43 @@ export function parseNeteaseUserId(json: unknown): string | null {
   return typeof id === "number" && id > 0 ? String(id) : null;
 }
 
+interface RawPlaylist {
+  id?: unknown;
+  name?: unknown;
+  coverImgUrl?: unknown;
+  trackCount?: unknown;
+  trackIds?: unknown[];
+}
+
+/** Map one NetEase playlist record (user/playlist item or playlist/detail) to meta. */
+function neteasePlaylistToMeta(raw: unknown): StreamPlaylist | null {
+  if (!raw || typeof raw !== "object") return null;
+  const p = raw as RawPlaylist;
+  const id = String(p.id ?? "");
+  if (!id) return null;
+  return {
+    id,
+    name: typeof p.name === "string" ? p.name : "",
+    coverUrl: typeof p.coverImgUrl === "string" ? p.coverImgUrl : undefined,
+    trackCount:
+      typeof p.trackCount === "number"
+        ? p.trackCount
+        : Array.isArray(p.trackIds)
+          ? p.trackIds.length
+          : 0,
+    source: "netease",
+  };
+}
+
 /** `/api/user/playlist` → the user's created + subscribed playlists. */
 export function parseNeteaseUserPlaylists(json: unknown): StreamPlaylist[] {
   const list = (json as { playlist?: unknown[] } | null)?.playlist ?? [];
-  const out: StreamPlaylist[] = [];
-  for (const raw of list) {
-    const p = raw as {
-      id?: unknown;
-      name?: unknown;
-      coverImgUrl?: unknown;
-      trackCount?: unknown;
-    };
-    const id = String(p.id ?? "");
-    if (!id) continue;
-    out.push({
-      id,
-      name: typeof p.name === "string" ? p.name : "",
-      coverUrl: typeof p.coverImgUrl === "string" ? p.coverImgUrl : undefined,
-      trackCount: typeof p.trackCount === "number" ? p.trackCount : 0,
-      source: "netease",
-    });
-  }
-  return out;
+  return list.map(neteasePlaylistToMeta).filter((p): p is StreamPlaylist => p !== null);
+}
+
+/** `/api/v6/playlist/detail` → the playlist's own meta (name/cover/count) for a pasted link. */
+export function parseNeteasePlaylistMeta(json: unknown): StreamPlaylist | null {
+  return neteasePlaylistToMeta((json as { playlist?: unknown } | null)?.playlist);
 }
 
 /** `/api/v6/playlist/detail` → the FULL ordered trackIds (the `tracks[]` only holds ~10). */

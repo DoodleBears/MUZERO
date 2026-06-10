@@ -69,7 +69,9 @@
     "onlineSearching": "在线搜索中…",
     "onlineEmpty": "没有在线结果",
     "onlineSetName": "在线",
-    "enableOnline": "在线搜索:"
+    "enableOnline": "在线搜索:",
+    "linkResult": "来自链接",
+    "linkNotFound": "无法解析该链接"
   },
   "streamSources": {
     "title": "在线音源",

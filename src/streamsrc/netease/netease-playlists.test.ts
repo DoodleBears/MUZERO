@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   neteaseSongToHit,
+  parseNeteasePlaylistMeta,
   parseNeteasePlaylistTrackIds,
   parseNeteaseSongDetailHits,
   parseNeteaseUserId,
@@ -9,7 +10,9 @@ import {
 
 describe("parseNeteaseUserId", () => {
   it("reads the logged-in user id from account/profile", () => {
-    expect(parseNeteaseUserId({ profile: { userId: 12345 }, account: { id: 12345 } })).toBe("12345");
+    expect(parseNeteaseUserId({ profile: { userId: 12345 }, account: { id: 12345 } })).toBe(
+      "12345",
+    );
     expect(parseNeteaseUserId({ account: { id: 678 } })).toBe("678");
     expect(parseNeteaseUserId({ code: 301 })).toBeNull(); // not logged in
   });
@@ -24,7 +27,13 @@ describe("parseNeteaseUserPlaylists", () => {
       ],
     });
     expect(out).toEqual([
-      { id: "1", name: "我喜欢的音乐", coverUrl: "https://p/a.jpg", trackCount: 200, source: "netease" },
+      {
+        id: "1",
+        name: "我喜欢的音乐",
+        coverUrl: "https://p/a.jpg",
+        trackCount: 200,
+        source: "netease",
+      },
       { id: "2", name: "歌单二", coverUrl: undefined, trackCount: 0, source: "netease" },
     ]);
   });
@@ -34,10 +43,40 @@ describe("parseNeteaseUserPlaylists", () => {
   });
 });
 
+describe("parseNeteasePlaylistMeta", () => {
+  it("maps a v6/playlist/detail playlist object to meta", () => {
+    expect(
+      parseNeteasePlaylistMeta({
+        playlist: { id: 99, name: "别人的歌单", coverImgUrl: "https://p/c.jpg", trackCount: 42 },
+      }),
+    ).toEqual({
+      id: "99",
+      name: "别人的歌单",
+      coverUrl: "https://p/c.jpg",
+      trackCount: 42,
+      source: "netease",
+    });
+  });
+
+  it("falls back to trackIds length when trackCount is absent", () => {
+    expect(
+      parseNeteasePlaylistMeta({
+        playlist: { id: 7, name: "x", trackIds: [{ id: 1 }, { id: 2 }] },
+      })?.trackCount,
+    ).toBe(2);
+  });
+
+  it("returns null when there is no playlist (private / not found)", () => {
+    expect(parseNeteasePlaylistMeta({ code: 401 })).toBeNull();
+  });
+});
+
 describe("parseNeteasePlaylistTrackIds", () => {
   it("extracts the full trackIds list (handles large playlists)", () => {
     expect(
-      parseNeteasePlaylistTrackIds({ playlist: { trackIds: [{ id: 111 }, { id: 222 }, { id: 333 }] } }),
+      parseNeteasePlaylistTrackIds({
+        playlist: { trackIds: [{ id: 111 }, { id: 222 }, { id: 333 }] },
+      }),
     ).toEqual(["111", "222", "333"]);
     expect(parseNeteasePlaylistTrackIds({ playlist: {} })).toEqual([]);
   });

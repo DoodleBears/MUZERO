@@ -75,7 +75,9 @@
     "onlineSearching": "Searching online…",
     "onlineEmpty": "No online results",
     "onlineSetName": "Online",
-    "enableOnline": "Online search:"
+    "enableOnline": "Online search:",
+    "linkResult": "From link",
+    "linkNotFound": "Couldn't resolve that link"
   },
   "streamSources": {
     "title": "Online sources",

@@ -69,7 +69,9 @@
     "onlineSearching": "オンライン検索中…",
     "onlineEmpty": "オンライン結果なし",
     "onlineSetName": "オンライン",
-    "enableOnline": "オンライン検索:"
+    "enableOnline": "オンライン検索:",
+    "linkResult": "リンクから",
+    "linkNotFound": "リンクを解決できませんでした"
   },
   "streamSources": {
     "title": "オンラインソース",

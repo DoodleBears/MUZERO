@@ -74,6 +74,13 @@ export interface StreamSourceProvider {
   resolve(externalId: string, opts?: StreamResolveOptions): Promise<StreamResolveResult>;
   /** The logged-in user's playlists (optional; requires login). */
   getUserPlaylists?(opts?: { signal?: AbortSignal }): Promise<StreamPlaylist[]>;
+  /** Resolve specific track ids (from a pasted song link) to hits (optional). */
+  getTracksByIds?(ids: string[], opts?: { signal?: AbortSignal }): Promise<StreamSearchHit[]>;
+  /** Fetch a playlist's meta by ref — for importing a pasted/foreign playlist link (optional). */
+  getPlaylistMeta?(
+    playlistRef: string,
+    opts?: { signal?: AbortSignal },
+  ): Promise<StreamPlaylist | null>;
   /** Import a source playlist/favlist/collection into hits (optional per source). */
   importPlaylist?(playlistRef: string, opts?: { signal?: AbortSignal }): Promise<StreamSearchHit[]>;
   /** Best-effort reachability check for Settings. */

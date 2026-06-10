@@ -22,6 +22,7 @@ import type {
 import { eapiEncrypt } from "./netease-crypto";
 import {
   neteaseSongToHit,
+  parseNeteasePlaylistMeta,
   parseNeteasePlaylistTrackIds,
   parseNeteaseSongDetailHits,
   parseNeteaseUserId,
@@ -171,6 +172,39 @@ export function createNeteaseSource(deps: NeteaseSourceDeps): StreamSourceProvid
     return parseNeteaseUserPlaylists(json);
   }
 
+  // song/detail is batched (a full playlist's trackIds can be thousands).
+  async function songDetailHits(ids: string[], signal?: AbortSignal): Promise<StreamSearchHit[]> {
+    const hits: StreamSearchHit[] = [];
+    for (let i = 0; i < ids.length; i += SONG_DETAIL_CHUNK) {
+      const chunk = ids.slice(i, i + SONG_DETAIL_CHUNK);
+      const c = JSON.stringify(chunk.map((id) => ({ id: Number(id) })));
+      const json = await postEapiJson(SONG_DETAIL_URL, SONG_DETAIL_PATH, { c }, signal);
+      hits.push(...parseNeteaseSongDetailHits(json));
+    }
+    return hits;
+  }
+
+  /** Resolve specific song ids (from a pasted `…/song?id=` link) to hits. */
+  async function getTracksByIds(
+    ids: string[],
+    opts?: { signal?: AbortSignal },
+  ): Promise<StreamSearchHit[]> {
+    return songDetailHits(ids, opts?.signal);
+  }
+
+  async function getPlaylistMeta(
+    playlistId: string,
+    opts?: { signal?: AbortSignal },
+  ): Promise<StreamPlaylist | null> {
+    const detail = await postEapiJson(
+      PLAYLIST_DETAIL_URL,
+      PLAYLIST_DETAIL_PATH,
+      { id: playlistId, n: "0", s: "0" },
+      opts?.signal,
+    );
+    return parseNeteasePlaylistMeta(detail);
+  }
+
   async function importPlaylist(
     playlistId: string,
     opts?: { signal?: AbortSignal },
@@ -181,16 +215,7 @@ export function createNeteaseSource(deps: NeteaseSourceDeps): StreamSourceProvid
       { id: playlistId, n: "100000", s: "8" },
       opts?.signal,
     );
-    const ids = parseNeteasePlaylistTrackIds(detail);
-    const hits: StreamSearchHit[] = [];
-    // song/detail is batched (a full playlist's trackIds can be thousands).
-    for (let i = 0; i < ids.length; i += SONG_DETAIL_CHUNK) {
-      const chunk = ids.slice(i, i + SONG_DETAIL_CHUNK);
-      const c = JSON.stringify(chunk.map((id) => ({ id: Number(id) })));
-      const json = await postEapiJson(SONG_DETAIL_URL, SONG_DETAIL_PATH, { c }, opts?.signal);
-      hits.push(...parseNeteaseSongDetailHits(json));
-    }
-    return hits;
+    return songDetailHits(parseNeteasePlaylistTrackIds(detail), opts?.signal);
   }
 
   return {
@@ -201,6 +226,8 @@ export function createNeteaseSource(deps: NeteaseSourceDeps): StreamSourceProvid
     search,
     resolve,
     getUserPlaylists,
+    getTracksByIds,
+    getPlaylistMeta,
     importPlaylist,
   };
 }
