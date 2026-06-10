@@ -3,6 +3,7 @@ import { motion } from "motion/react";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { TrackInspectorPanel } from "@/components/track/track-inspector-panel";
+import { CoverImage } from "@/components/ui/cover-image";
 import type { Track } from "@/db/types";
 import { useBackGesture } from "@/hooks/use-back-gesture";
 import { useTrackCoverUrl } from "@/hooks/use-media";
@@ -107,18 +108,12 @@ export function EntityDetailView({
             round={round}
           />
         ) : (
-          <span
-            className={cn(
-              "grid size-20 shrink-0 place-items-center overflow-hidden bg-secondary",
-              round ? "rounded-full" : "rounded-xl",
-            )}
-          >
-            {coverUrl ? (
-              <img src={coverUrl} alt="" className="size-full object-cover" />
-            ) : (
-              <Placeholder className="size-7 text-muted-foreground" />
-            )}
-          </span>
+          <CoverImage
+            url={coverUrl}
+            rounded={round}
+            placeholder={<Placeholder className="size-7 text-muted-foreground" />}
+            className={cn("size-20 shrink-0", !round && "rounded-xl")}
+          />
         )}
         <div className="min-w-0 flex-1">
           <h1 className="truncate font-semibold text-lg">{title}</h1>
@@ -178,13 +173,11 @@ function AlbumStripCard({ album, onOpen }: { album: EntityStripItem; onOpen: () 
       aria-label={t("gallery.openEntity", { name: album.label })}
       className="flex w-28 shrink-0 flex-col gap-1 rounded-lg p-1 text-left outline-none transition-colors hover:bg-accent/40 focus-visible:ring-2 focus-visible:ring-ring"
     >
-      <span className="grid aspect-square w-full place-items-center overflow-hidden rounded-md bg-secondary">
-        {coverUrl ? (
-          <img src={coverUrl} alt="" className="size-full object-cover" />
-        ) : (
-          <Disc3 className="text-muted-foreground" />
-        )}
-      </span>
+      <CoverImage
+        url={coverUrl}
+        placeholder={<Disc3 className="text-muted-foreground" />}
+        className="aspect-square w-full rounded-md"
+      />
       <span className="block truncate text-xs">{album.label}</span>
     </button>
   );

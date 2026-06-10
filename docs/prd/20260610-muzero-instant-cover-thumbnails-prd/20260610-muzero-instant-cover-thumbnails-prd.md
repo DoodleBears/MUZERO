@@ -12,7 +12,7 @@
 | Phase | Name | Status | Link |
 |-------|------|--------|------|
 | 1 | Module-scoped object-URL cache (hook-level) | ✅ Completed | [Phase 1 Checklist](#phase-1-checklist) |
-| 2 | Shared `<CoverImage>` (fade + static placeholder) + rollout to all surfaces | 🔲 Pending | [Phase 2 Checklist](#phase-2-checklist) |
+| 2 | Shared `<CoverImage>` (fade + static placeholder) + rollout to all surfaces | 🔄 In Progress | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | Thumbhash data infra — owner-row field + generate-on-save + lazy backfill + R2 carry | 🔲 Pending | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | `<CoverImage>` thumbhash placeholder layer | 🔲 Pending | [Phase 4 Checklist](#phase-4-checklist) |
 | 5 | Tests + leak audit + polish | 🔲 Pending | [Phase 5 Checklist](#phase-5-checklist) |
@@ -268,13 +268,18 @@ No Zustand/store involvement (规则 6 — non-reactive singleton stays in modul
 **Decisions:** **skip fade on cache hit (Q3)** via `fromCache`; **cold placeholder = `bg-secondary` block** (Q4, pre-thumbhash).
 
 **Tasks:**
-- [ ] Create [`src/components/ui/cover-image.tsx`](../../../src/components/ui/cover-image.tsx): static surface + layered `<img>` `onLoad` opacity fade, `decoding="async"`, `rounded` prop, reduced-motion guard, skip-fade when `fromCache`.
-- [ ] Roll out to `EntityCard`, `SetCard` (grid+list), set & entity detail headers, `track-row`, dock cover, avatars, memory thumbnails.
+- [x] Create [`cover-image.tsx`](../../../src/components/ui/cover-image.tsx): static surface + layered `<img>` `onLoad` opacity fade, reduced-motion guard (`motion-reduce:transition-none`), `rounded` prop (square radius via `className`), overlay `children`, and skip-fade-on-instant via `img.complete` on mount (no hook change needed for the cache-hit case).
+- [x] Roll out to clean read-only surfaces: `SetCard` (歌单 grid + list) and the artist/album detail headers + album strip ([entity-detail.tsx](../../../src/components/library/entity-detail.tsx)).
+- [ ] **Deferred — files under concurrent edit on this branch:** `EntityCard` ([entity-grid.tsx](../../../src/components/library/entity-grid.tsx)) and `track-row` ([track-row.tsx](../../../src/components/library/track-row.tsx)) carry other agents' uncommitted changes; rolling `<CoverImage>` into them now would bundle that WIP into this commit (violates the shared-branch isolation rule). Their **flicker is already gone via Phase 1's cache**; the `<CoverImage>` fade is cosmetic polish to apply once those land.
+- [ ] **Deferred — interactive cover surfaces:** the set-detail header button, [`EntityCoverButton`](../../../src/components/library/entity-cover-button.tsx), dock cover, and avatars embed the cover surface inside an interactive element with drop/paste/crop overlays; converting them needs `<CoverImage>` to compose with those affordances — follow-up.
 
 ### Phase 2 Checklist
-- [ ] Cold load fades in over a calm surface; cache hits render instantly with no fade.
-- [ ] `prefers-reduced-motion` disables the transition.
-- [ ] No leftover inline `coverUrl ? <img/> : <Icon/>` ternaries.
+- [x] Cold load fades in over a calm `bg-secondary` surface; an already-decoded (cached) cover starts loaded and skips the fade — proven in [cover-image.test.tsx](../../../src/components/ui/cover-image.test.tsx).
+- [x] `prefers-reduced-motion` disables the transition (asserted in the component test).
+- [x] No-cover shows the icon; the brief load window shows the calm block, not the icon (PRD Q4).
+- [ ] All cover surfaces migrated (partial — see deferred rollout above).
+
+> **Tests:** 5 passing (CoverImage placeholder/fade/reset/reduced-motion/overlay). biome + tsc clean on the changed surfaces.
 
 ### Phase 3: Thumbhash data infra
 

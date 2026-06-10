@@ -28,6 +28,7 @@ import {
   ContextMenuItem,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
+import { CoverImage } from "@/components/ui/cover-image";
 import { Disc3Icon } from "@/components/ui/disc-3";
 import { Input } from "@/components/ui/input";
 import { Kbd, KbdGroup } from "@/components/ui/kbd";
@@ -1449,16 +1450,15 @@ function SetCard({
           data-gallery-card-key={item.session.id}
           className="flex w-full flex-col gap-2 rounded-xl p-2 text-left outline-none transition-colors hover:bg-accent/40 focus-visible:ring-2 focus-visible:ring-ring"
         >
-          <span className="relative grid aspect-square w-full place-items-center overflow-hidden rounded-lg bg-secondary">
-            {coverUrl ? (
-              <img src={coverUrl} alt="" className="size-full object-cover" />
-            ) : (
-              <Disc3Icon className="text-muted-foreground" size={32} />
-            )}
+          <CoverImage
+            url={coverUrl}
+            placeholder={<Disc3Icon className="text-muted-foreground" size={32} />}
+            className="aspect-square w-full rounded-lg"
+          >
             {item.likedCount > 0 && (
               <Heart className="absolute right-2 top-2 size-4 fill-primary text-primary" />
             )}
-          </span>
+          </CoverImage>
           <span className="min-w-0">
             <span className="block truncate text-sm font-medium">{item.session.name}</span>
             <span className="block text-xs text-muted-foreground">{count}</span>
@@ -1475,13 +1475,11 @@ function SetCard({
           data-gallery-card-key={item.session.id}
           className="flex w-full items-center gap-3 rounded-xl p-2 pe-12 text-left outline-none transition-colors hover:bg-accent/40 focus-visible:ring-2 focus-visible:ring-ring"
         >
-          <span className="grid size-12 shrink-0 place-items-center overflow-hidden rounded-lg bg-secondary">
-            {coverUrl ? (
-              <img src={coverUrl} alt="" className="size-full object-cover" />
-            ) : (
-              <Disc3Icon className="text-muted-foreground" size={20} />
-            )}
-          </span>
+          <CoverImage
+            url={coverUrl}
+            placeholder={<Disc3Icon className="text-muted-foreground" size={20} />}
+            className="size-12 shrink-0 rounded-lg"
+          />
           <span className="min-w-0 flex-1">
             <span className="block truncate text-sm font-medium">{item.session.name}</span>
             <span className="block truncate text-xs text-muted-foreground">{count}</span>
