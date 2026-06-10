@@ -222,14 +222,14 @@ function SyncedLines({
   const viewportRef = useRef<HTMLDivElement>(null);
   const activeRef = useRef<HTMLButtonElement>(null);
   const [following, setFollowing] = useState(true);
-  // Top/bottom headroom ≈ 42% of the viewport so any line (incl. first/last) can
-  // sit at the vertical center.
-  const [pad, setPad] = useState(0);
+  // Track the viewport height so the stack can pad enough headroom for any line
+  // (incl. first/last) to reach the center-upper anchor (~38% from the top).
+  const [viewportH, setViewportH] = useState(0);
 
   useEffect(() => {
     const vp = viewportRef.current;
     if (!vp) return;
-    const measure = () => setPad(Math.round(vp.clientHeight * 0.42));
+    const measure = () => setViewportH(vp.clientHeight);
     measure();
     window.addEventListener("resize", measure);
     return () => window.removeEventListener("resize", measure);
@@ -239,12 +239,22 @@ function SyncedLines({
   // biome-ignore lint/correctness/useExhaustiveDependencies: reset follow when the lyric set changes
   useEffect(() => setFollowing(true), [lines]);
 
-  // Keep the active line centered while following.
+  // While following, anchor the active line ~38% from the top (centered, slightly
+  // up). Manual scrollTo (not scrollIntoView) so we can sit above exact center.
   useEffect(() => {
     if (!following || activeIndex < 0) return;
+    const vp = viewportRef.current;
     const el = activeRef.current;
-    if (!el || typeof el.scrollIntoView !== "function") return;
-    el.scrollIntoView({ block: "center", behavior: reduce ? "auto" : "smooth" });
+    if (!vp || !el) return;
+    const vpRect = vp.getBoundingClientRect();
+    const elRect = el.getBoundingClientRect();
+    const elCenterFromTop = elRect.top + elRect.height / 2 - vpRect.top;
+    const target = Math.max(0, vp.scrollTop + elCenterFromTop - vp.clientHeight * 0.38);
+    if (typeof vp.scrollTo === "function") {
+      vp.scrollTo({ top: target, behavior: reduce ? "auto" : "smooth" });
+    } else {
+      vp.scrollTop = target;
+    }
   }, [activeIndex, following, reduce]);
 
   return (
@@ -257,7 +267,10 @@ function SyncedLines({
         onWheel={() => setFollowing(false)}
         onTouchMove={() => setFollowing(false)}
       >
-        <div className="flex flex-col gap-1" style={{ paddingTop: pad, paddingBottom: pad }}>
+        <div
+          className="flex flex-col gap-1"
+          style={{ paddingTop: viewportH * 0.38, paddingBottom: viewportH * 0.62 }}
+        >
           {lines.map((line, i) => {
             const isActive = i === activeIndex;
             return (
