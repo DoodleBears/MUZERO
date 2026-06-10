@@ -61,7 +61,7 @@ describe("memory masonry layout", () => {
     );
 
     expect(layout.items[0]).toMatchObject({
-      height: 652,
+      height: 660,
       id: "mem_portrait",
       width: 300,
     });

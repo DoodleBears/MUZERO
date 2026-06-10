@@ -145,7 +145,7 @@ export function MemoryTimelineRail({
       <div
         aria-hidden={mode !== "carousel"}
         className={cn(
-          "absolute inset-0 grid h-full place-items-center p-3 transition-opacity duration-300 ease-out motion-reduce:transition-none",
+          "absolute inset-0 grid h-full place-items-center px-3 pt-chrome-top pb-chrome-bottom transition-opacity duration-300 ease-out motion-reduce:transition-none",
           mode === "carousel" ? "opacity-100" : "pointer-events-none opacity-0",
         )}
         data-testid="memory-carousel-stage"
@@ -170,7 +170,7 @@ export function MemoryTimelineRail({
       <div
         aria-hidden={mode !== "list"}
         className={cn(
-          "no-scrollbar absolute inset-0 h-full overflow-y-auto overscroll-none pt-12 pb-32 transition-opacity duration-300 ease-out motion-reduce:transition-none",
+          "no-scrollbar absolute inset-0 h-full overflow-y-auto overscroll-none pt-chrome-top pb-chrome-bottom transition-opacity duration-300 ease-out motion-reduce:transition-none",
           mode === "list" ? "opacity-100" : "pointer-events-none opacity-0",
         )}
         data-layout="masonry"

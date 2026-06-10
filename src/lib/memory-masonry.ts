@@ -57,7 +57,10 @@ export type MeasureMemoryTextHeight = (
 export const memoryMasonryDefaults = {
   cardPaddingX: 12,
   cardPaddingY: 12,
-  footerHeight: 40,
+  // Author row (16) + gap-1 (4) + date row (16) + pt-3 (12) = 48. The old 40
+  // underestimated, so every card came out ~8px short and the footer/note
+  // overflowed the card box.
+  footerHeight: 48,
   gap: 12,
   leadingCreateHeight: 128,
   leadingComposerHeight: 184,

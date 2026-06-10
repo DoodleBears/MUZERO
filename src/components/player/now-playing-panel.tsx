@@ -129,7 +129,11 @@ export function NowPlayingPanel({
         {collapsed ? (
           <motion.div
             animate={{ opacity: 1, y: 0 }}
-            className="flex h-full min-h-0 flex-col justify-end gap-3"
+            // Full-height surface, matching the left column. The rail's own
+            // carousel/list pad themselves with the chrome insets so content
+            // sits below the header and clears the bottom dock — giving the
+            // masonry the full height to scroll instead of a clipped band.
+            className="flex h-full min-h-0 flex-col"
             exit={{ opacity: 0, y: 12 }}
             initial={{ opacity: 0, y: 12 }}
             key="collapsed"

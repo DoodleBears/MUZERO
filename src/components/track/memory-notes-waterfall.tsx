@@ -56,7 +56,10 @@ export function MemoryNotesWaterfall({
   const containerRef = useRef<HTMLUListElement>(null);
   const containerWidth = useElementWidth(containerRef, 672);
   const [photoHeightRatios, setPhotoHeightRatios] = useState<Record<string, number>>({});
-  const sortedMemories = sortMemoriesForWaterfall(memories);
+  // Memoize the sort: a fresh array each render would bust the masonryLayout
+  // memo below, re-running pretext text measurement for every card on every
+  // render — including every scroll frame, which janks the scroll.
+  const sortedMemories = useMemo(() => sortMemoriesForWaterfall(memories), [memories]);
   const masonryLayout = useMemo(
     () =>
       layoutMemoryMasonry(
