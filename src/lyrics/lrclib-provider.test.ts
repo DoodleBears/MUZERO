@@ -70,7 +70,7 @@ describe("createLrclibProvider.fetch", () => {
     await expect(provider.fetch(QUERY)).rejects.toBeInstanceOf(LyricsError);
   });
 
-  it("passes the abort signal through to fetch", async () => {
+  it("propagates the caller's abort through the combined timeout signal", async () => {
     const fetchImpl = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) =>
       jsonResponse(GET_HIT),
     );
@@ -79,7 +79,28 @@ describe("createLrclibProvider.fetch", () => {
 
     await provider.fetch(QUERY, controller.signal);
 
-    expect(fetchImpl.mock.calls[0][1]).toMatchObject({ signal: controller.signal });
+    const passed = (fetchImpl.mock.calls[0][1] as RequestInit | undefined)?.signal;
+    expect(passed).toBeInstanceOf(AbortSignal);
+    expect(passed?.aborted).toBe(false);
+    controller.abort();
+    expect(passed?.aborted).toBe(true); // aborting the caller aborts the request
+  });
+
+  it("aborts a request that exceeds the timeout", async () => {
+    const fetchImpl = vi.fn(
+      (_input: RequestInfo | URL, requestInit?: RequestInit) =>
+        new Promise<Response>((_resolve, reject) => {
+          requestInit?.signal?.addEventListener("abort", () =>
+            reject(new DOMException("aborted", "AbortError")),
+          );
+        }),
+    );
+    const provider = createLrclibProvider({
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      timeoutMs: 10,
+    });
+
+    await expect(provider.fetch(QUERY)).rejects.toBeTruthy();
   });
 });
 

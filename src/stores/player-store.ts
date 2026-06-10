@@ -198,6 +198,7 @@ let djEngine: DjEngine | null = null;
 let pumping = false;
 let loadedTrackId: string | null = null;
 let lyricsAbort: AbortController | null = null;
+let lyricsTimer: ReturnType<typeof setTimeout> | null = null;
 let playbackSettingsLoaded = false;
 // The active shuffled play order (queue indices). Non-reactive: next/prev read it,
 // setShuffle rebuilds it, and it self-heals when stale vs the queue length.
@@ -1075,23 +1076,32 @@ async function hydratePlaybackSettings(
  * skip the network. All eligibility checks live in runAutoFetchLyrics.
  */
 function triggerLyricsAutoFetch(track: Track): void {
+  // Cancel any in-flight fetch + pending debounce from the previous track.
   lyricsAbort?.abort();
+  if (lyricsTimer !== null) clearTimeout(lyricsTimer);
+  lyricsTimer = null;
   if (track.origin === "generated") return;
   const controller = new AbortController();
   lyricsAbort = controller;
-  void (async () => {
-    try {
-      const settings = await getSettings();
-      await runAutoFetchLyrics({
-        track,
-        settings,
-        provider: resolveLyricsProvider(settings),
-        signal: controller.signal,
-      });
-    } catch (err) {
-      log.warn("lyrics", "auto-fetch trigger failed", err);
-    }
-  })();
+  // Debounce: only fetch once the user settles on a track, so rapid skipping
+  // never piles up requests. Always fire-and-forget — never blocks the switch.
+  lyricsTimer = setTimeout(() => {
+    lyricsTimer = null;
+    if (controller.signal.aborted) return;
+    void (async () => {
+      try {
+        const settings = await getSettings();
+        await runAutoFetchLyrics({
+          track,
+          settings,
+          provider: resolveLyricsProvider(settings),
+          signal: controller.signal,
+        });
+      } catch (err) {
+        log.warn("lyrics", "auto-fetch trigger failed", err);
+      }
+    })();
+  }, 350);
 }
 
 /** Poll the live queue for a track id — the set watcher appends newly-added tracks async. */
@@ -1184,7 +1194,12 @@ async function ensureLoadedAndPlay(
       });
       if (resolved.kind !== "ok") {
         log.warn("player", "streamed resolve failed", { trackId: track.id, result: resolved });
-        notify.error(i18n.t("player.playbackError"));
+        // A VIP/members-only or login-gated track isn't a generic error — tell the user
+        // they need to log into that source.
+        const needsAccess =
+          resolved.kind === "requires-login" ||
+          (resolved.kind === "no-permission" && resolved.reason === "vip");
+        notify.error(i18n.t(needsAccess ? "player.streamNeedsAccess" : "player.playbackError"));
         return;
       }
       // Bilibili's CDN GET needs a Referer the <audio> element can't set, so route it

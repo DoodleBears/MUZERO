@@ -24,15 +24,43 @@ import { LyricsError, type LyricsHit, type LyricsProvider, type LyricsQuery } fr
  */
 export const LRCLIB_USER_AGENT = "MUZERO (+https://mu0.app)";
 
+/** Default per-request timeout — a hung network must never keep a request alive. */
+const DEFAULT_TIMEOUT_MS = 8000;
+
+/**
+ * Combine the caller's abort (track switch) with a hard timeout so a stalled
+ * request always settles — it can't pin a connection (and on Electron, contend
+ * with other muzfetch traffic) indefinitely.
+ */
+function withTimeout(signal: AbortSignal | undefined, timeoutMs: number): AbortSignal {
+  const timeout = AbortSignal.timeout(timeoutMs);
+  if (!signal) return timeout;
+  if (typeof AbortSignal.any === "function") return AbortSignal.any([signal, timeout]);
+  // Fallback: mirror both inputs onto one controller.
+  const controller = new AbortController();
+  const abort = () => controller.abort();
+  if (signal.aborted) abort();
+  else signal.addEventListener("abort", abort, { once: true });
+  timeout.addEventListener("abort", abort, { once: true });
+  return controller.signal;
+}
+
 export interface LrclibProviderConfig {
   /** Injected fetch for tests; defaults to the CORS-safe getAppFetch. */
   fetchImpl?: typeof globalThis.fetch;
   userAgent?: string;
+  /** Per-request timeout in ms. Default 8000. */
+  timeoutMs?: number;
 }
 
 export function createLrclibProvider(cfg: LrclibProviderConfig = {}): LyricsProvider {
   const resolveFetch = async () => cfg.fetchImpl ?? (await getAppFetch());
   const headers = { "user-agent": cfg.userAgent ?? LRCLIB_USER_AGENT };
+  const timeoutMs = cfg.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  const init = (signal?: AbortSignal): RequestInit => ({
+    headers,
+    signal: withTimeout(signal, timeoutMs),
+  });
 
   return {
     id: "lrclib",
@@ -42,7 +70,7 @@ export function createLrclibProvider(cfg: LrclibProviderConfig = {}): LyricsProv
       const fetchFn = await resolveFetch();
 
       // 1) Exact signature match.
-      const getRes = await fetchFn(buildGetUrl(q), { headers, signal });
+      const getRes = await fetchFn(buildGetUrl(q), init(signal));
       if (getRes.ok) {
         const hit = parseHit(await getRes.json().catch(() => null));
         if (hit) return hit;
@@ -51,7 +79,7 @@ export function createLrclibProvider(cfg: LrclibProviderConfig = {}): LyricsProv
       }
 
       // 2) Fuzzy search fallback, ranked by synced/duration.
-      const searchRes = await fetchFn(buildSearchUrl(q), { headers, signal });
+      const searchRes = await fetchFn(buildSearchUrl(q), init(signal));
       if (!searchRes.ok) {
         if (searchRes.status === 404) return null;
         throw new LyricsError(`LRCLIB /api/search failed (${searchRes.status})`);
@@ -61,7 +89,7 @@ export function createLrclibProvider(cfg: LrclibProviderConfig = {}): LyricsProv
 
     async search(q: LyricsQuery, signal?: AbortSignal): Promise<LyricsHit[]> {
       const fetchFn = await resolveFetch();
-      const res = await fetchFn(buildSearchUrl(q), { headers, signal });
+      const res = await fetchFn(buildSearchUrl(q), init(signal));
       if (!res.ok) {
         if (res.status === 404) return [];
         throw new LyricsError(`LRCLIB /api/search failed (${res.status})`);
@@ -71,7 +99,7 @@ export function createLrclibProvider(cfg: LrclibProviderConfig = {}): LyricsProv
 
     async getById(id: string, signal?: AbortSignal): Promise<LyricsHit | null> {
       const fetchFn = await resolveFetch();
-      const res = await fetchFn(buildGetByIdUrl(id), { headers, signal });
+      const res = await fetchFn(buildGetByIdUrl(id), init(signal));
       if (res.status === 404) return null;
       if (!res.ok) throw new LyricsError(`LRCLIB /api/get/${id} failed (${res.status})`);
       return parseHit(await res.json().catch(() => null));
@@ -80,7 +108,7 @@ export function createLrclibProvider(cfg: LrclibProviderConfig = {}): LyricsProv
     async health(): Promise<boolean> {
       try {
         const fetchFn = await resolveFetch();
-        const res = await fetchFn(`${LRCLIB_BASE_URL}/api/search?q=test`, { headers });
+        const res = await fetchFn(`${LRCLIB_BASE_URL}/api/search?q=test`, init());
         return res.status < 500;
       } catch {
         return false;
