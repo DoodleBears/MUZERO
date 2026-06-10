@@ -494,17 +494,17 @@ src/components/settings/
 **Goal:** 一条 `make` 链路多平台构建 + 同步发布 R2 + 维护全量版本历史（用户要求 #3 + #4）。
 
 **Tasks:**
-- [ ] Makefile 新增 vars（决议 Q2/Q3）：`RELEASE_R2_BUCKET` / `RELEASE_R2_PREFIX ?= desktop` / `RELEASE_BASE_URL ?= https://assets.mu0.app/desktop` / `RELEASE_RCLONE_REMOTE ?= r2:` / `RELEASE_RCLONE_MIN_BYTES ?= 25000000` / `RELEASE_RCLONE_CHUNK_SIZE ?= 50M`。`assets.mu0.app` 是 `mu0.app` 主域名下的分发 subdomain（绑 R2 公共桶）。
-- [ ] `make release-mac/win/linux`（per-OS 门控：mac 硬门控 Darwin；win 原生 Windows；linux 在 Windows 机的 WSL2 里跑，见 §10 Q1）。
-- [ ] `make release-publish`：遍历 `release/*`，按扩展名设 content-type/cache-control（`*.yml`/`manifest.json` → `no-cache`；二进制 → `immutable`），大文件 rclone 多段、否则 SigV4 单 PUT；末尾调 `publish-release.mjs`。
-- [ ] `scripts/publish-release.mjs`：为本次产物算 `sha256`/`size` → **拉现存 `manifest.json`** → 合并本平台 asset 进 `releases[version].platforms[<plat>]`（保留其他平台）→ 更新 `latest`/`updatedAt`/排序 → 回传（[§3.5](#35-应用分发-manifestjson用户要求-4合理版本机制--全量版本历史) 加性合并）。
-- [ ] `make release-locate`：列 electron-builder `release/` 产物。
-- [ ] 文档化：R2 桶创建 + 公共读 + CORS（供 web 直接 fetch manifest）+ 自定义域 `RELEASE_BASE_URL`。
+- [x] Makefile 新增 vars（决议 Q2/Q3）：`RELEASE_R2_BUCKET` / `RELEASE_R2_PREFIX ?= desktop` / `RELEASE_BASE_URL ?= https://assets.mu0.app/desktop` / `RELEASE_RCLONE_REMOTE ?= r2:` / `RELEASE_CHANNEL ?= stable`（`export` 给脚本）。✅
+- [x] `make release-mac/win/linux`（共享 `release-build` = changelog-check + vite build + bundle main，无 tsc；per-OS 门控：mac 硬门控 Darwin；win 警告 Darwin；linux WSL2）。✅ + `release-locate` 列 `release/` 产物。
+- [x] `make release-publish` / `release-publish-dry`：调 `publish-release.mjs`（rclone 守卫）。✅ 上传逻辑在脚本内（按扩展名设 content-type/cache-control：`*.yml`→`text/yaml`+no-cache、`manifest.json`→`application/json`+no-cache、二进制→`octet-stream`+immutable）。
+- [x] `scripts/publish-release.mjs`：`scanArtifacts` 算 `sha256`/`size` + `platformKeyFor` 映射 → **拉现存 `manifest.json`** → `mergeRelease` 加性合并本平台 asset 进 `releases[version].platforms[<plat>]`（保留其他平台）→ 更新 `latest`/`latestBeta`/`updatedAt` + newest-first 排序 → 回传。✅ 6 测（含「第二个 OS 不覆盖第一个」加性不变量 + dry-run 真 sha256，跳过 .blockmap/.yml）。
+- [x] `src/lib/release-manifest-schema.ts`（Zod `muzero-release-manifest-v1`，`z.partialRecord` 平台键）+ 4 测。✅
+- [→] 文档化：R2 桶创建 + 公共读 + CORS + 自定义域 — 留作部署 runbook（见提交说明的运维清单）。
 
 ### Phase 4 Checklist
-- [ ] Mac+Win 两机各自 `release-publish` 后，R2 `manifest.json` 同一 version 下**同时**有 mac/win/linux 资产（加性合并未互相覆盖）
-- [ ] `latest.yml`/`latest-mac.yml`/`latest-linux.yml` 各自正确、`no-cache`；二进制 `immutable`
-- [ ] manifest.json 通过 `releaseManifestSchema` 校验；`sha256` 与产物实际一致
+- [x] 加性合并不互相覆盖：`mergeRelease` 单测证「同 version 第二平台并入不冲掉第一平台」✅（待真机 mac+win 端到端复验）
+- [x] `*.yml` / `manifest.json` → `no-cache`；二进制 → `immutable`（脚本按扩展名设头）✅
+- [x] manifest.json 形状由 `releaseManifestSchema` 把关；`sha256` 由 `scanArtifacts` 真算（dry-run 测断言 64-hex）✅
 
 ### Phase 5: 自动更新 + Settings 历史版本下载侧栏
 

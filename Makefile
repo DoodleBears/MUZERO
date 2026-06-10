@@ -1,7 +1,7 @@
 .PHONY: help install update
 .PHONY: dev web desktop tauri electron-dev electron-preview electron-build ios ios-init android android-init mobile-info tauri-info
 .PHONY: build preview desktop-build desktop-debug mac win linux ios-build android-build desktop-locate
-.PHONY: version-bump changelog-check
+.PHONY: version-bump changelog-check release-build release-mac release-win release-linux release-publish release-publish-dry release-locate
 .PHONY: test test-watch typecheck lint format check
 .PHONY: icons ui ui-coss ui-theme clean clean-dist
 
@@ -27,6 +27,16 @@ DESKTOP_PORT ?= 1430
 DEV_URL ?= http://localhost:$(WEB_PORT)
 BUNDLE_DIR := src-tauri/target/release/bundle
 UNAME := $(shell uname)
+
+# --- Release distribution (Electron → R2). See the release PRD. Decisions Q2/Q3:
+# official public bucket served at assets.mu0.app, transport via rclone. The S3
+# write creds live in the build machine's env / CI secret — NEVER in the bundle.
+RELEASE_R2_BUCKET ?= muzero-releases
+RELEASE_R2_PREFIX ?= desktop
+RELEASE_BASE_URL ?= https://assets.mu0.app/desktop
+RELEASE_RCLONE_REMOTE ?= r2:
+RELEASE_CHANNEL ?= stable
+export RELEASE_R2_BUCKET RELEASE_R2_PREFIX RELEASE_BASE_URL RELEASE_RCLONE_REMOTE RELEASE_CHANNEL
 
 .DEFAULT_GOAL := help
 
@@ -65,6 +75,11 @@ help:
 	@echo "Release:"
 	@echo "  make version-bump TYPE=minor - Bump version across package.json + tauri.conf + Cargo (lockstep)"
 	@echo "  make changelog-check         - Fail if the current version has no changelog file"
+	@echo "  make release-mac             - Build mac dmg+zip installers (Mac only) → release/"
+	@echo "  make release-win             - Build Windows nsis installer (run on Windows/WSL2)"
+	@echo "  make release-linux           - Build Linux AppImage+deb (run in WSL2/Linux)"
+	@echo "  make release-publish         - Upload release/* to R2 + merge manifest.json (needs rclone)"
+	@echo "  make release-publish-dry     - Print the merged manifest for release/ without uploading"
 	@echo ""
 	@echo "Quality:"
 	@echo "  make check        - Full local gate: typecheck + lint + test"
@@ -185,6 +200,48 @@ version-bump:
 # current package.json version. A dependency of every release-* target.
 changelog-check:
 	node scripts/check-changelog.mjs
+
+# Shared: build the renderer (dist/) + bundle the Electron main (dist-electron/).
+# No tsc here — type-safety is a separate gate (make typecheck / lefthook); a
+# release build shouldn't be blocked by unrelated type debt.
+release-build: changelog-check
+	$(PM) exec vite build
+	node scripts/build-electron-main.mjs
+
+# Per-OS installers. mac MUST run on a Mac; win/linux run on the Windows box
+# (win native, linux in WSL2 — decision Q1). Each emits its own latest*.yml feed
+# (per-platform, no cross-OS collision) into release/.
+release-mac:
+	@[ "$(UNAME)" = "Darwin" ] || { echo "ERROR: macOS bundles can only be built on a Mac."; exit 1; }
+	@$(MAKE) --no-print-directory release-build
+	$(PM) exec electron-builder --mac
+	@$(MAKE) --no-print-directory release-locate
+
+release-win:
+	@[ "$(UNAME)" != "Darwin" ] || echo "WARN: building Windows on macOS is unreliable — run on Windows (or WSL2 + Wine)."
+	@$(MAKE) --no-print-directory release-build
+	$(PM) exec electron-builder --win
+	@$(MAKE) --no-print-directory release-locate
+
+release-linux:
+	@$(MAKE) --no-print-directory release-build
+	$(PM) exec electron-builder --linux
+	@$(MAKE) --no-print-directory release-locate
+
+# Upload release/* to R2 (rclone, per-extension cache headers) + additively merge
+# this platform's assets into manifest.json. Needs rclone + an 'r2:' remote and
+# RELEASE_R2_BUCKET. Run once per OS after its release-* build.
+release-publish:
+	@command -v rclone >/dev/null 2>&1 || { echo "ERROR: rclone required — 'brew install rclone' + configure an '$(RELEASE_RCLONE_REMOTE)' R2 remote."; exit 1; }
+	node scripts/publish-release.mjs
+
+# Preview the merged manifest for what's in release/ without uploading anything.
+release-publish-dry:
+	node scripts/publish-release.mjs --dry-run
+
+release-locate:
+	@echo "Electron release artifacts (release/):"
+	@ls -1 release/*.dmg release/*.zip release/*.exe release/*.AppImage release/*.deb release/*.yml 2>/dev/null || echo "  none yet — run 'make release-mac' (or release-win / release-linux)"
 
 # -------------------------------------------------------------- Quality ----
 
