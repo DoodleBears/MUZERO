@@ -57,4 +57,60 @@ describe("resolveLyricStyle", () => {
     const s = { lyricsColorMode: "custom", lyricsCustomColor: "#ff8800" } as AppSettings;
     expect(resolveLyricStyle(s, "rgb(1,2,3)").color).toBe("#ff8800");
   });
+
+  describe("textStroke (outline)", () => {
+    it("is empty when width is 0 / unset (no outline)", () => {
+      expect(resolveLyricStyle(base, null).textStroke).toBe("");
+      expect(resolveLyricStyle({ lyricsStrokeWidth: 0 } as AppSettings, null).textStroke).toBe("");
+    });
+
+    it("is empty when fully transparent (opacity 0)", () => {
+      const s = { lyricsStrokeWidth: 3, lyricsStrokeOpacity: 0 } as AppSettings;
+      expect(resolveLyricStyle(s, null).textStroke).toBe("");
+    });
+
+    it("builds width + color, defaulting to opaque black (color passes through)", () => {
+      const s = { lyricsStrokeWidth: 3 } as AppSettings;
+      expect(resolveLyricStyle(s, null).textStroke).toBe("3px #000000");
+    });
+
+    it("applies the custom hex color and opacity via color-mix", () => {
+      const s = {
+        lyricsStrokeWidth: 2,
+        lyricsStrokeColor: "#ff8800",
+        lyricsStrokeOpacity: 50,
+      } as AppSettings;
+      expect(resolveLyricStyle(s, null).textStroke).toBe(
+        "2px color-mix(in srgb, #ff8800 50%, transparent)",
+      );
+    });
+
+    it("clamps width to 0–12px", () => {
+      expect(resolveLyricStyle({ lyricsStrokeWidth: 999 } as AppSettings, null).textStroke).toBe(
+        "12px #000000",
+      );
+    });
+
+    it("cover mode uses the visualizer cover color (any CSS format)", () => {
+      const opaque = {
+        lyricsStrokeWidth: 2,
+        lyricsStrokeColorMode: "cover",
+      } as AppSettings;
+      expect(resolveLyricStyle(opaque, "rgba(1, 2, 3, 1)").textStroke).toBe("2px rgba(1, 2, 3, 1)");
+
+      const dimmed = { ...opaque, lyricsStrokeOpacity: 40 } as AppSettings;
+      expect(resolveLyricStyle(dimmed, "rgba(1, 2, 3, 1)").textStroke).toBe(
+        "2px color-mix(in srgb, rgba(1, 2, 3, 1) 40%, transparent)",
+      );
+    });
+
+    it("cover mode falls back to the custom hex when no cover color is loaded", () => {
+      const s = {
+        lyricsStrokeWidth: 2,
+        lyricsStrokeColorMode: "cover",
+        lyricsStrokeColor: "#112233",
+      } as AppSettings;
+      expect(resolveLyricStyle(s, null).textStroke).toBe("2px #112233");
+    });
+  });
 });

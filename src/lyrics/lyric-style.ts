@@ -16,6 +16,8 @@ export interface LyricStyle {
   align: "left" | "center" | "right";
   /** CSS text-shadow for the lyrics ("none" when disabled). */
   textShadow: string;
+  /** CSS `-webkit-text-stroke` value for the lyrics ("" when disabled). */
+  textStroke: string;
   /** Vertical gap between lyric lines, in px. */
   lineGap: number;
 }
@@ -27,6 +29,7 @@ export const DEFAULT_LYRIC_STYLE: LyricStyle = {
   inactiveOpacity: 0.4,
   align: "center",
   textShadow: "0px 2px 8px rgba(0, 0, 0, 0.5)",
+  textStroke: "",
   lineGap: 8,
 };
 
@@ -70,6 +73,7 @@ export function resolveLyricStyle(settings: AppSettings, coverColorCss: string |
     color,
     align: settings.lyricsAlign ?? DEFAULT_LYRIC_STYLE.align,
     textShadow: resolveTextShadow(settings),
+    textStroke: resolveTextStroke(settings, coverColorCss),
     lineGap: clampNum(settings.lyricsLineGap, DEFAULT_LYRIC_STYLE.lineGap, 0, 48),
   };
 }
@@ -82,4 +86,34 @@ function resolveTextShadow(settings: AppSettings): string {
   const y = clampNum(settings.lyricsShadowOffsetY, 2, -32, 32);
   const blur = clampNum(settings.lyricsShadowBlur, 8, 0, 48);
   return `${x}px ${y}px ${blur}px rgba(0, 0, 0, ${opacity})`;
+}
+
+/**
+ * Build the CSS `-webkit-text-stroke` value (width + color) from the outline
+ * settings. Returns "" when there'd be no visible outline (width 0 or fully
+ * transparent) so the caller can skip the property entirely. The fill is painted
+ * on top (paint-order: stroke) so the outline never thins the glyph. The color
+ * source mirrors the text color: "cover" reuses the visualizer's cover color
+ * (any CSS format), "custom" uses the hex. Pure → unit-tested without the DOM.
+ */
+function resolveTextStroke(settings: AppSettings, coverColorCss: string | null): string {
+  const width = clampNum(settings.lyricsStrokeWidth, 0, 0, 12);
+  if (width <= 0) return "";
+  const opacity = clamp01(settings.lyricsStrokeOpacity, 100);
+  if (opacity <= 0) return "";
+  const custom = settings.lyricsStrokeColor || "#000000";
+  // "cover" → cover color, falling back to the custom hex when no cover is loaded.
+  const base =
+    (settings.lyricsStrokeColorMode ?? "custom") === "cover" ? (coverColorCss ?? custom) : custom;
+  return `${width}px ${withAlpha(base, opacity)}`;
+}
+
+/**
+ * Apply an alpha (0–1) to any CSS color. Uses `color-mix` so it works regardless
+ * of the input format (hex, rgb(a), the cover color) — at full opacity the color
+ * passes through untouched.
+ */
+function withAlpha(color: string, alpha: number): string {
+  if (alpha >= 1) return color;
+  return `color-mix(in srgb, ${color} ${Math.round(alpha * 100)}%, transparent)`;
 }
