@@ -66,13 +66,7 @@ import {
 import { rovingIndex } from "@/lib/library-nav";
 import { buildTrackStatsMap, deriveEntityStats, statFor } from "@/lib/library-stats";
 import { freeTextMatches } from "@/lib/search-core";
-import {
-  filterSets,
-  type SetFilter,
-  type SetGalleryItem,
-  type SetSort,
-  sortSets,
-} from "@/lib/set-gallery";
+import { filterSets, type SetGalleryItem, type SetSort, sortSets } from "@/lib/set-gallery";
 import { searchEntityFacets, searchTracks } from "@/lib/track-search";
 import { cn, formatDuration, formatListenTime } from "@/lib/utils";
 import { transitionState } from "@/lib/view-transition-react";
@@ -139,7 +133,6 @@ export function SearchPage() {
   const [trackQuery, setTrackQuery] = useState("");
   const [albumQuery, setAlbumQuery] = useState("");
   const [artistQuery, setArtistQuery] = useState("");
-  const [filter, setFilter] = useState<SetFilter>("all");
   const [sort, setSort] = useState<SetSort>("recent");
   const [selectedLibraryTrackId, setSelectedLibraryTrackId] = useState<string | null>(null);
   const [selectedArtistKey, setSelectedArtistKey] = useState<string | null>(null);
@@ -377,8 +370,8 @@ export function SearchPage() {
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: transliterationReady re-runs once dictionaries load
   const shown = useMemo(
-    () => sortSets(filterSets(items, setQuery, filter), sort),
-    [items, setQuery, filter, sort, transliterationReady],
+    () => sortSets(filterSets(items, setQuery), sort),
+    [items, setQuery, sort, transliterationReady],
   );
   // biome-ignore lint/correctness/useExhaustiveDependencies: transliterationReady re-runs once dictionaries load
   const shownTracks = useMemo(() => {
@@ -684,13 +677,6 @@ export function SearchPage() {
       {mode === "sets" && (
         <>
           <div className="mb-3 flex flex-wrap items-center gap-1.5">
-            <Chip active={filter === "all"} onClick={() => setFilter("all")}>
-              {t("gallery.filterAll")}
-            </Chip>
-            <Chip active={filter === "liked"} onClick={() => setFilter("liked")}>
-              <Heart className="size-3" /> {t("gallery.filterLiked")}
-            </Chip>
-            <span className="mx-1 h-4 w-px bg-border" />
             <Chip active={sort === "recent"} onClick={() => setSort("recent")}>
               {t("gallery.sortRecent")}
             </Chip>
@@ -953,15 +939,23 @@ function SetDetailView({
   const [desc, setDesc] = useState("");
   const [dragOver, setDragOver] = useState(false);
   const [selectedTrackId, setSelectedTrackId] = useState<string | null>(null);
+  // 红心 lives on songs, not sets — so the "liked only" filter is here, inside the
+  // playlist, rather than on the set wall.
+  const [likedOnly, setLikedOnly] = useState(false);
 
   const tracks = useMemo(
     () =>
       (session?.trackIds ?? []).map((id) => trackById.get(id)).filter((tr): tr is Track => !!tr),
     [session, trackById],
   );
+  const likedCount = useMemo(() => tracks.filter((tr) => tr.liked).length, [tracks]);
+  const shownTracks = useMemo(
+    () => (likedOnly ? tracks.filter((tr) => tr.liked) : tracks),
+    [likedOnly, tracks],
+  );
   const selectedTrack = useMemo(
-    () => tracks.find((track) => track.id === selectedTrackId) ?? tracks[0],
-    [selectedTrackId, tracks],
+    () => shownTracks.find((track) => track.id === selectedTrackId) ?? shownTracks[0],
+    [selectedTrackId, shownTracks],
   );
   const totalDurationSec = useMemo(
     () => tracks.reduce((sum, track) => sum + (track.durationSec || 0), 0),
@@ -972,14 +966,19 @@ function SetDetailView({
   useBackGesture(onBack);
 
   useEffect(() => {
-    if (tracks.length === 0) {
+    if (shownTracks.length === 0) {
       setSelectedTrackId(null);
       return;
     }
-    if (!selectedTrackId || !tracks.some((track) => track.id === selectedTrackId)) {
-      setSelectedTrackId(tracks[0].id);
+    if (!selectedTrackId || !shownTracks.some((track) => track.id === selectedTrackId)) {
+      setSelectedTrackId(shownTracks[0].id);
     }
-  }, [selectedTrackId, tracks]);
+  }, [selectedTrackId, shownTracks]);
+
+  // Drop back to "all" if the last liked track is unliked while filtered.
+  useEffect(() => {
+    if (likedOnly && likedCount === 0) setLikedOnly(false);
+  }, [likedOnly, likedCount]);
 
   // Initialize the editable fields once the set loads (and only on identity
   // change, so later updates / typing don't reset the inputs).
@@ -1147,6 +1146,17 @@ function SetDetailView({
           <Button size="sm" onClick={onPlayAll} disabled={tracks.length === 0}>
             <Play className="size-4" /> {t("gallery.playAll")}
           </Button>
+          {likedCount > 0 && (
+            <Button
+              size="sm"
+              variant={likedOnly ? "default" : "outline"}
+              aria-pressed={likedOnly}
+              onClick={() => setLikedOnly((v) => !v)}
+            >
+              <Heart className={cn("size-4", likedOnly && "fill-current")} />{" "}
+              {t("gallery.filterLiked")}
+            </Button>
+          )}
           <Button size="sm" variant="outline" onClick={() => addFileRef.current?.click()}>
             <Plus className="size-4" /> {t("gallery.addTracks")}
           </Button>
@@ -1173,7 +1183,7 @@ function SetDetailView({
       <div className="grid min-h-0 flex-1 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(280px,360px)]">
         <TrackListSection
           setId={setId}
-          tracks={tracks}
+          tracks={shownTracks}
           selectedTrackId={selectedTrack?.id}
           onView={(track) => transitionState(() => setSelectedTrackId(track.id))}
           onPlay={(track) => void playTrack(track)}

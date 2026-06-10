@@ -31,7 +31,7 @@ export type SetFilter = "all" | "liked";
 export function filterSets(
   items: SetGalleryItem[],
   query: string,
-  filter: SetFilter,
+  filter: SetFilter = "all",
 ): SetGalleryItem[] {
   const hasQuery = query.trim().length > 0;
   return items.filter((it) => {

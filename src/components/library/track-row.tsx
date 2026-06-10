@@ -268,6 +268,9 @@ export const TrackRow = memo(function TrackRow({
       </div>
       <div className="ml-auto flex shrink-0 items-center gap-3">
         <TrackTags tags={track.tags} />
+        {/* Persistent at-a-glance "liked" hint, left of the duration (the hover
+            toolbar carries the actual toggle). */}
+        {track.liked && <Heart className="size-3.5 shrink-0 text-primary" aria-hidden="true" />}
         <span className="w-10 shrink-0 text-right text-xs tabular-nums text-muted-foreground">
           {track.status === "ready" ? formatDuration(track.durationSec) : "—"}
         </span>
