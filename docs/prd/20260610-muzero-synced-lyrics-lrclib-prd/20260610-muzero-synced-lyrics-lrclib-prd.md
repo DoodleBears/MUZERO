@@ -435,6 +435,15 @@ components/track/             # （Phase 4）annotation-editor 加"歌词"区：
 - **空态即搜索**：没有歌词的曲，now-playing lyrics 面板**直接变成内联搜索 UI**（[`lyrics-search-panel.tsx`](../../../src/components/player/lyrics-search-panel.tsx)），与 dialog 共用 `useLyricsSearch` hook + 候选列表；synced/plain 视图底部有「歌词不对?搜索」入口。
 - 全程 i18n（§5.5），出站仍走 `getAppFetch()`（规则 5/10）。
 
+### 5.7 Now-Playing 表面布局（重构，`0fd4fb9`）
+
+把「队列在右栏 tab、窄屏靠手搓浮层」改为**职责分离 + 统一入口**：
+
+- **队列(歌单列表) → 统一 Dock 底部 Drawer**：[`drawer.tsx`](../../../src/components/ui/drawer.tsx)（COSS，基于 `@base-ui/react/drawer`，自带 swipe/snap）裹 [`QueuePanel`](../../../src/components/player/queue-panel.tsx)（"playing from" + `VirtualTrackList`）。宽屏+窄屏**同一个 Dock 按钮上拉**（[`player-dock.tsx`](../../../src/components/shell/player-dock.tsx)，替掉旧 `xl:hidden` 浮层；dock 队列按钮去掉 `xl:hidden`）。
+- **桌面右栏 = 歌词为主**：[`now-playing-panel.tsx`](../../../src/components/player/now-playing-panel.tsx) 去掉 queue/lyrics tab，展开态直接渲染 `SyncedLyricsView`（空态即搜索）；浮动/`DockMemoryToggle` 开关在**「歌词 ↔ 回忆时间线」**间切（`nowPlayingRightRailCollapsed`），保留「音乐承载回忆」。
+- **窄屏歌词不丢**：[`now-playing-page.tsx`](../../../src/pages/now-playing-page.tsx) 用 `useIsNarrow()`（matchMedia 767px）**只在一处**挂歌词面——md+ 右栏 aside，窄屏叠进左侧滚动流——避免双 rAF。
+- ScrollArea 随 COSS drawer 升级（向后兼容，仅 `ScrollArea` 导出被使用）。
+
 ---
 
 ## 6. Implementation Plan
@@ -619,6 +628,7 @@ components/track/             # （Phase 4）annotation-editor 加"歌词"区：
 | 2026-06-10 | DoodleBear | Phase 3 显示驱动升级为 **per-frame rAF**（`useActiveLyricLine`）：帧率精度切行、仅行变化时 setState（规则 6）、tab 隐藏即停、播放期零 4Hz 重渲——落实 §2.2/§5.2/Q3 原 rAF 设计（替换 v1 临时的 4Hz selector）。+3 hook 假定时器单测 |
 | 2026-06-10 | DoodleBear | Phase 3/4 显示打磨：synced 视图改 **motion spring 整列平移居中** + 逐行 opacity/scale 渐变 + 边缘 fade（Apple-Music 风，替 scrollIntoView）；**空态即内联 LRCLIB 搜索**（`lyrics-search-panel` + 共享 `useLyricsSearch` hook，dialog 复用同一搜索/候选 + 「歌词不对?搜索」入口）。组件/单测 87 绿 |
 | 2026-06-10 | DoodleBear | **Phases 1–5 全部实现完成（TDD）**：`src/lyrics/`（provider/parser/map/resolve/auto-fetch/manual）+ `lyrics` 表(v20) + Settings 开关 + `SyncedLyricsView`(Apple-Music 式) + 手动歌词 dialog + R2 manifest 同步。81 个新单测全绿；逐 phase 原子提交（`8cedbe7`/`73ff488`/`b9997c1`/`4c45b0e` + Phase 5）。Status → Completed |
+| 2026-06-10 | DoodleBear | **Now-Playing 表面重构**（`0fd4fb9`）：队列(歌单列表)移到**统一 Dock 底部 Drawer**(COSS `drawer.tsx` on `@base-ui/react/drawer`，宽屏+窄屏一致、上拉+swipe；替掉手搓 `xl:hidden` 浮层)；**桌面右栏默认直接显示歌词**(lyrics-first)，浮动/dock 开关切「歌词 ↔ 回忆时间线」；**空态即内联搜索**；窄屏把单一歌词面 breakpoint-gated 叠进 now-page 滚动流(保留移动端歌词、单 rAF)。新增 `QueuePanel` + `dock.lyrics` i18n×4；ScrollArea 升级(向后兼容)。组件测试更新全绿 |
 
 ---
 
