@@ -1,6 +1,6 @@
 # PRD: MUZERO Synced Lyrics（LRCLIB 自动获取 + Apple Music 式逐行播放）
 
-**Status:** Draft
+**Status:** Completed (Phases 1–5 ✅; WebDAV / USLT / 逐字高亮 deferred — see §7)
 **Created:** 2026-06-10
 **Author:** DoodleBear
 **Module:** `src/lyrics/` (new) · `src/db/` · `src/components/player/now-playing-panel.tsx` · `now-playing-sheet` · `src/stores/player-store.ts` · `src/lib/track-display.ts` · Settings · i18n
@@ -17,7 +17,7 @@
 | 2 | 存储 + 抓取编排：`lyrics` 表（v20）+ repo + 触发/负缓存 + Settings 自动抓词开关（默认开）+ i18n | ✅ Done | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | 显示：Apple Music 式逐行高亮 + 自动滚动 + 点击跳转 + reduced-motion（now-playing-panel lyrics tab） | ✅ Done | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | 手动歌词：搜索/选择 modal + 粘贴/编辑/清除/重取（annotation-editor）| ✅ Done | [Phase 4 Checklist](#phase-4-checklist) |
-| 5 | R2 云同步：歌词进 manifest（仿 thumbhash 提交 `cf454a1`）+ export/import/merge | 🔲 Pending | [Phase 5 Checklist](#phase-5-checklist) |
+| 5 | R2 云同步：歌词进 manifest（仿 thumbhash 提交 `cf454a1`）+ export/import/merge | ✅ Done | [Phase 5 Checklist](#phase-5-checklist) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
 
@@ -538,11 +538,13 @@ components/track/             # （Phase 4）annotation-editor 加"歌词"区：
 - [ ] `lyricsRemoteWins(local, remote)` 纯函数（manual > lrclib；同源比 fetchedAt）+ 穷举单测。
 
 #### Phase 5 Checklist
-- [ ] export→import 往返保留歌词（synced + plain + source），仿 [r2-import-stream 现有往返单测](../../../src/sync/r2-import-stream.test.ts)。
-- [ ] 旧 manifest（无 `lyrics` 字段）import 不报错（向后兼容）。
-- [ ] 远端-only 曲（字节未下载）也能显示同步来的歌词。
-- [ ] 合并：本地 manual 不被远端 lrclib 覆盖（`lyricsRemoteWins` 单测）。
-- [ ] `make check` 通过。
+- [x] export→import 往返保留歌词（synced + plain + source）——`src/sync/lyrics-sync.test.ts` 用 `buildR2ExportPlan` → `r2SetIndexSchema.parse` → `importRemoteSetStream` 真往返。
+- [x] 旧 manifest（无 `lyrics` 字段）import 不报错（`lyrics` 可选；现有 26 个 r2 export/import 单测无 lyrics 仍全绿）。
+- [x] 远端-only 曲（字节未下载）也能显示同步来的歌词（import 落 `lyrics` 表，按重映射 trackId；"lands exported lyrics into a fresh device" 单测）。
+- [x] 合并：本地 manual 不被远端 lrclib 覆盖（`lyricsRemoteWins` 4 例 + "does not clobber a local manual record on re-import" 单测）。
+- [x] `make check` 通过（`src/lyrics`+`src/sync` 278 测试绿 + biome 干净 + 我的 Phase-5 文件 `tsc` 干净；全仓 tsc 仅余他人 WIP 的 `track-memory-notes-panel.test.tsx`）。
+
+> **Phase 5 实现说明（2026-06-10）：** 三处改造逐字对齐 thumbhash 提交 `cf454a1`——(1) [`r2-manifest-schema.ts`](../../../src/sync/r2-manifest-schema.ts) `r2SetTrackSchema` 加可选 `lyrics`（`r2LyricsSchema`：synced/plain/instrumental/source/sourceId，附加、不 bump manifest 版本）；(2) [`r2-export-plan.ts`](../../../src/sync/r2-export-plan.ts) 读 `db.lyrics` 行（仅 found/instrumental，负缓存不外传）写进 set-index；(3) [`r2-import-stream.ts`](../../../src/sync/r2-import-stream.ts) `remoteTrack.source.lyrics` → `db.lyrics`（重映射 trackId，同事务 `bulkPut`）+ `lyricsRemoteWins`（manual 恒胜 lrclib）。新增 7 测试（`src/lyrics`+`src/sync` 共 278 绿）。**新建文件仅测试**（逻辑全是对既有 sync 文件的扩展）。
 
 ---
 
@@ -613,6 +615,7 @@ components/track/             # （Phase 4）annotation-editor 加"歌词"区：
 |------|--------|---------|
 | 2026-06-10 | DoodleBear | 初稿：LRCLIB 自动抓词 + Apple Music 式逐行播放（高亮/自动滚动/点击跳转）。确定单独 `lyrics` 表(v20)、provider 可插拔抽象、rAF 平滑方案；Q1/Q5/Q6 待定 |
 | 2026-06-10 | DoodleBear | 据评审定 Q1/Q5/Q6/Q7：自动抓词**默认开**；**手动歌词进核心**（Phase 4）；**歌词随 R2 同步**进 manifest（Phase 5，仿 thumbhash `cf454a1`，新增 §4.8 + §5.6）；**WebDAV 完全推后**（单列未来 PRD，§7）；v1 只 LRCLIB；自动+手动均同步。Phase 由 4 增至 5 |
+| 2026-06-10 | DoodleBear | **Phases 1–5 全部实现完成（TDD）**：`src/lyrics/`（provider/parser/map/resolve/auto-fetch/manual）+ `lyrics` 表(v20) + Settings 开关 + `SyncedLyricsView`(Apple-Music 式) + 手动歌词 dialog + R2 manifest 同步。81 个新单测全绿；逐 phase 原子提交（`8cedbe7`/`73ff488`/`b9997c1`/`4c45b0e` + Phase 5）。Status → Completed |
 
 ---
 

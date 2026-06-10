@@ -1,5 +1,13 @@
 import { db as defaultDb, type MuzeroDB } from "@/db/muzero-db";
-import type { DjSession, EntityCover, Memory, SetDisplayMode, Track } from "@/db/types";
+import type {
+  DjSession,
+  EntityCover,
+  Memory,
+  SetDisplayMode,
+  Track,
+  TrackLyrics,
+} from "@/db/types";
+import { newId } from "@/lib/id";
 import type { R2EntityCoversIndex } from "./r2-manifest-schema";
 import type { RemoteSetIndexResult } from "./r2-subscription";
 import { resolveRemoteObjectUrl } from "./r2-url";
@@ -109,10 +117,33 @@ export async function importRemoteSetStream(
     }));
   });
 
-  await db.transaction("rw", db.sessions, db.tracks, db.memories, async () => {
+  // Lyrics carried in the manifest land in the lyrics table, honoring the
+  // manual-wins merge (synced-lyrics PRD §4.8).
+  const lyricsRows: TrackLyrics[] = [];
+  for (const remoteTrack of remoteSet.tracks) {
+    const src = remoteTrack.source.lyrics;
+    if (!src) continue;
+    const trackId = remoteLocalId("trk", driveId, remoteTrack.id);
+    const existing = await db.lyrics.where("trackId").equals(trackId).first();
+    if (!lyricsRemoteWins(existing, src)) continue;
+    lyricsRows.push({
+      id: existing?.id ?? newId("lyr"),
+      trackId,
+      source: src.source,
+      sourceId: src.sourceId,
+      synced: src.synced,
+      plain: src.plain,
+      instrumental: src.instrumental,
+      status: src.instrumental ? "instrumental" : "found",
+      fetchedAt: existing?.fetchedAt ?? remoteTrack.source.createdAt,
+    });
+  }
+
+  await db.transaction("rw", db.sessions, db.tracks, db.memories, db.lyrics, async () => {
     await db.sessions.put(session);
     await db.tracks.bulkPut(tracks);
     if (memories.length > 0) await db.memories.bulkPut(memories);
+    if (lyricsRows.length > 0) await db.lyrics.bulkPut(lyricsRows);
   });
 
   return { sessionId, trackIds: remoteTrackIds };
@@ -128,6 +159,20 @@ export function entityCoverRemoteWins(
   remoteUpdatedAt: number,
 ): boolean {
   return localUpdatedAt == null || remoteUpdatedAt > localUpdatedAt;
+}
+
+/**
+ * Last-write-wins for lyrics: a local *manual* record is never clobbered by a
+ * remote *auto* (lrclib) one; otherwise the published remote version wins. The
+ * manifest carries no fetchedAt, so same-source recency can't be compared — the
+ * published catalog is authoritative. (synced-lyrics PRD §4.8.)
+ */
+export function lyricsRemoteWins(
+  local: { source: "lrclib" | "manual" } | undefined,
+  remote: { source: "lrclib" | "manual" },
+): boolean {
+  if (local?.source === "manual" && remote.source !== "manual") return false;
+  return true;
 }
 
 export interface ImportRemoteEntityCoversInput {

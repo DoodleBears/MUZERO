@@ -131,6 +131,16 @@ export const r2TrackMediaMetadataSchema = z.object({
   parsedAt: millisSchema,
 });
 
+// Synced/plain lyrics carried in the manifest (synced-lyrics PRD §4.8). Only the
+// content + provenance travel; `status`/`fetchedAt` are reconstructed on import.
+const r2LyricsSchema = z.object({
+  synced: z.string().optional(),
+  plain: z.string().optional(),
+  instrumental: z.boolean().default(false),
+  source: z.enum(["lrclib", "manual"]),
+  sourceId: z.string().optional(),
+});
+
 export const r2SetTrackSchema = z.object({
   id: z.string().min(1),
   title: z.string().min(1),
@@ -152,6 +162,9 @@ export const r2SetTrackSchema = z.object({
   // Base64 thumbhash of the cover — instant preview for a not-yet-downloaded
   // remote track cover (instant-cover-thumbnails PRD §3.4).
   thumbhash: z.string().optional(),
+  // Synced/plain lyrics (LRCLIB or manual) — additive optional field, mirrors the
+  // thumbhash carry: no manifest version bump (synced-lyrics PRD §4.8).
+  lyrics: r2LyricsSchema.optional(),
   memories: z.array(r2MemorySchema).default([]),
 });
 

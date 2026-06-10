@@ -195,6 +195,21 @@ export async function buildR2ExportPlan(input: R2ExportPlanInput): Promise<R2Exp
         remoteMemories.push(toRemoteMemory(memory, photo?.remote));
       }
 
+      // Carry lyrics (LRCLIB or manual) through the manifest — synced-lyrics PRD
+      // §4.8. Only real content travels; the "notFound" negative cache is local
+      // (other devices re-fetch on their own).
+      const lyricsRow = await db.lyrics.where("trackId").equals(track.id).first();
+      const lyrics =
+        lyricsRow && (lyricsRow.status === "found" || lyricsRow.status === "instrumental")
+          ? {
+              synced: lyricsRow.synced,
+              plain: lyricsRow.plain,
+              instrumental: lyricsRow.instrumental,
+              source: lyricsRow.source,
+              sourceId: lyricsRow.sourceId,
+            }
+          : undefined;
+
       setIndexTracks.push({
         id: track.id,
         title: track.title,
@@ -212,6 +227,7 @@ export async function buildR2ExportPlan(input: R2ExportPlanInput): Promise<R2Exp
         media: media.remote,
         cover: cover?.remote,
         thumbhash: track.coverThumbhash,
+        lyrics,
         memories: remoteMemories,
       });
     }
