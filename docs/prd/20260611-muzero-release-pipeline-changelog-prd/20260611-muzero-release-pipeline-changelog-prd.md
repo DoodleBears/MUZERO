@@ -13,7 +13,7 @@
 
 | Phase | Name | Status | Link |
 |-------|------|--------|------|
-| 1 | 版本号单一真相 + 注入 + 显示（package.json/tauri.conf.json/Cargo.toml 三处同步 + bump 脚本 + release-meta + Settings 显示） | 🔲 Pending | [Phase 1 Checklist](#phase-1-checklist) |
+| 1 | 版本号单一真相 + 注入 + 比较（三文件同步 bump + Vite define + compareSemver；Settings 显示移 P5） | ✅ Completed | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | Changelog 规范 + 类型化数据模型 + 历史大版本回填 + 「What's New」面板 | 🔲 Pending | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | Electron 发布打包硬化（publish provider + per-OS targets + app-update + 安全/外部依赖收口） | 🔲 Pending | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | Makefile 多平台发布指令 + R2 分发 + `manifest.json` 版本索引（合并式上传） | 🔲 Pending | [Phase 4 Checklist](#phase-4-checklist) |
@@ -448,7 +448,7 @@ src/components/settings/
 - [x] `vite.config.ts` + `vitest.config.ts` 加 `define` + `src/vite-env.d.ts` 声明三个 `__*__` global。✅
 - [x] `src/lib/app-version.ts`：`export const APP_VERSION = __APP_VERSION__` + `GIT_SHA`/`BUILD_TIME`/派生 `RELEASE_ID`（唯一读取点，注释「别处不许硬写版本」）。✅ 3 测（APP_VERSION===package.json version）。
 - [x] `src/lib/compare-semver.ts` + test（prerelease 排序）。✅ `parseSemver`/`compareSemver`/`isNewerVersion`，遵 semver §11 precedence，12 测全绿。
-- [ ] `electron/preload.cjs` 暴露 `getAppVersion`；`about-settings.tsx` 雏形显示版本/release-id（桌面优先用 IPC 权威值，web 用 `APP_VERSION`）。
+- [→] **移至 Phase 5**：`electron/preload.cjs` 暴露 `getAppVersion` + `about-settings.tsx` 显示版本/release-id。理由：preload `getAppVersion` 与 Phase 5 的 update IPC 同在一个 preload bridge；about 面板与 Phase 5 的「版本历史」侧栏同属新 `navSecAbout` 段 + 同套 i18n key——一次建好不返工。Phase 1 收口为「版本真相 + 注入 + 比较」纯地基（全单测覆盖），UI 显示随 Phase 5 落地。
 
 ### Phase 1 Checklist
 - [x] `make version-bump TYPE=patch` 后三文件版本一致，可 `git diff` 验证 ✅（0.1.0→0.1.1 三文件齐改，已 revert）
