@@ -10,6 +10,8 @@
  * interface — never `if (source === …)`.
  */
 
+import type { LyricFormat } from "./model";
+
 export type LyricsProviderId = "lrclib" | "netease";
 
 /** Where a stored lyrics row came from. `manual` = user-supplied, wins on merge. */
@@ -39,8 +41,10 @@ export interface LyricsQuery {
 export interface LyricsRecord {
   source: LyricsSource;
   sourceId?: string;
-  /** Raw LRC with `[mm:ss.cs]` timestamps. */
+  /** Raw timed lyric text (LRC / Enhanced-LRC / yrc / qrc / TTML). */
   synced?: string;
+  /** Which parser to run over `synced`. Defaults to auto-detection when absent. */
+  format?: LyricFormat;
   plain?: string;
   instrumental: boolean;
   status: LyricsStatus;
@@ -51,6 +55,8 @@ export interface LyricsHit {
   source: LyricsProviderId;
   sourceId?: string;
   synced?: string;
+  /** Format of `synced` (e.g. `"yrc"` for NetEase word-level); defaults to auto-detect. */
+  format?: LyricFormat;
   plain?: string;
   instrumental: boolean;
   /** Which record the provider actually matched (debug / correction). */

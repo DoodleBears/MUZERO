@@ -16,10 +16,21 @@ export interface LyricsLine {
 
 const TIME_TAG = /\[(\d{1,3}):(\d{1,2})(?:[.:](\d{1,3}))?\]/g;
 const OFFSET_TAG = /\[offset:\s*([+-]?\d+)\s*\]/i;
+const WORD_TAG = /<\d{1,2}:\d{2}(?:[.:]\d{1,3})?>/g;
 
 function fractionToMs(frac: string | undefined): number {
   if (!frac) return 0;
   return Math.round(Number.parseFloat(`0.${frac}`) * 1000);
+}
+
+/**
+ * Strip Enhanced-LRC / LRC-A2 per-word stamps (`<mm:ss.xx>`) from a line's text so
+ * the line-level parser renders the words, never the raw stamps. (Word-level
+ * timing is parsed by the dedicated `elrc` parser in Phase 2.) Collapses the
+ * doubled space a stamp leaves behind when it sat between two spaces.
+ */
+export function stripInlineWordTags(text: string): string {
+  return text.replace(WORD_TAG, "").replace(/ {2,}/g, " ");
 }
 
 export function parseLrc(lrc: string): LyricsLine[] {
@@ -42,7 +53,7 @@ export function parseLrc(lrc: string): LyricsLine[] {
       match = TIME_TAG.exec(rawLine);
     }
     if (stamps.length === 0) continue; // metadata / blank / garbage line
-    const text = rawLine.slice(textStart).trim();
+    const text = stripInlineWordTags(rawLine.slice(textStart)).trim();
     for (const stamp of stamps) {
       lines.push({ timeMs: Math.max(0, stamp + offsetMs), text });
     }

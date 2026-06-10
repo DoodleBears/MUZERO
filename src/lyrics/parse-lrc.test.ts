@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { activeLineIndex, parseLrc } from "./parse-lrc";
+import { activeLineIndex, parseLrc, stripInlineWordTags } from "./parse-lrc";
 
 describe("parseLrc", () => {
   it("parses a single timestamped line (centiseconds)", () => {
@@ -53,6 +53,38 @@ describe("parseLrc", () => {
   it("returns an empty array for empty or whitespace input", () => {
     expect(parseLrc("")).toEqual([]);
     expect(parseLrc("   \n  ")).toEqual([]);
+  });
+
+  // Enhanced LRC / LRC A2 robustness: a source may put per-word stamps INSIDE the
+  // line (`<mm:ss.xx>`). The line-level parser must not render them as text.
+  it("strips inline <mm:ss.xx> word stamps from Enhanced LRC lines", () => {
+    expect(parseLrc("[00:10.00]<00:10.00>Cause <00:10.50>you <00:10.80>don't")).toEqual([
+      { timeMs: 10000, text: "Cause you don't" },
+    ]);
+  });
+
+  it("strips a leading word stamp that duplicates the line stamp", () => {
+    expect(parseLrc("[00:12.34]<00:12.34>hello <00:12.90>world")).toEqual([
+      { timeMs: 12340, text: "hello world" },
+    ]);
+  });
+});
+
+describe("stripInlineWordTags", () => {
+  it("removes <mm:ss.xx> stamps and keeps the surrounding spacing", () => {
+    expect(stripInlineWordTags("Cause <00:10.50>you <00:10.80>don't")).toBe("Cause you don't");
+  });
+
+  it("handles 1–3 fractional digits and the colon variant", () => {
+    expect(stripInlineWordTags("<00:01.5>a <00:01.50>b <00:01:345>c")).toBe("a b c");
+  });
+
+  it("collapses the doubled space left by a stamp between two spaces", () => {
+    expect(stripInlineWordTags("a <00:01.00> b")).toBe("a b");
+  });
+
+  it("leaves plain text untouched", () => {
+    expect(stripInlineWordTags("just words")).toBe("just words");
   });
 });
 
