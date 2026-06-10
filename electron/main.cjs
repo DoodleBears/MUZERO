@@ -84,6 +84,7 @@ app.whenReady().then(() => {
   registerDistProtocol();
   protocol.handle("muzfetch", handleMuzfetch);
   registerIpc();
+  require("./source-login.cjs").registerSourceLogin();
   createWindow();
 });
 app.on("window-all-closed", () => {

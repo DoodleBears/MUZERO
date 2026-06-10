@@ -62,6 +62,20 @@ export interface DesktopBridge {
    * required for Bilibili, whose CDN 403s a foreign Referer).
    */
   mediaProxyUrl?: (url: string, headers?: Record<string, string>) => string;
+  /**
+   * Open a streaming source's real login page in a desktop auth window and resolve
+   * the captured `Cookie:` header once the session cookie appears (or null if the
+   * user closes it first). The cookie is stored on-device (BYOK) to unlock VIP /
+   * higher quality. Absent in web/tauri (no privileged window). See `src/streamsrc/login.ts`.
+   */
+  openSourceLogin?: (request: StreamLoginRequest) => Promise<string | null>;
+}
+
+/** What the desktop auth window needs to drive a source login + capture its cookie. */
+export interface StreamLoginRequest {
+  loginUrl: string;
+  cookieUrls: string[];
+  authCookie: string;
 }
 
 declare global {

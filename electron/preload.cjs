@@ -12,4 +12,5 @@ contextBridge.exposeInMainWorld("muzero", {
   grantFolderAccess: (path) => ipcRenderer.invoke("muzero:grantFolder", path),
   saveFile: (input) => ipcRenderer.invoke("muzero:saveFile", input),
   openExternal: (url) => ipcRenderer.invoke("muzero:openExternal", url),
+  openSourceLogin: (request) => ipcRenderer.invoke("muzero:openSourceLogin", request),
 });
