@@ -870,5 +870,38 @@
     "deleteBody_other": "Permanently delete its {{count}} songs? They’re removed from every set too — this can’t be undone.",
     "deleteConfirm_one": "Delete {{count}} song",
     "deleteConfirm_other": "Delete {{count}} songs"
+  },
+  "changelog": {
+    "title": "What's new",
+    "titleVersion": "What's new in v{{version}}",
+    "titleCount": "What's new ({{count}} updates)",
+    "gotIt": "Got it",
+    "viewAll": "View update history",
+    "empty": "No release notes yet.",
+    "category": {
+      "highlight": "Highlight",
+      "feature": "New",
+      "improvement": "Improved",
+      "fix": "Fixed",
+      "breaking": "Breaking"
+    },
+    "platform": {
+      "web": "Web",
+      "desktop": "Desktop"
+    },
+    "area": {
+      "dj": "DJ",
+      "player": "Player",
+      "library": "Library",
+      "sets": "Sets",
+      "memory": "Memories",
+      "lyrics": "Lyrics",
+      "visualizer": "Visualizer",
+      "search": "Search",
+      "streaming": "Streaming",
+      "sync": "Sync",
+      "settings": "Settings",
+      "app": "App"
+    }
   }
 }

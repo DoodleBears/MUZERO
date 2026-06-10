@@ -846,5 +846,38 @@
     "deleteTitle": "'{{name}}'을(를) 삭제할까요?",
     "deleteBody_other": "{{count}}곡을 영구 삭제할까요? 모든 세트에서도 제거되며 되돌릴 수 없습니다.",
     "deleteConfirm_other": "{{count}}곡 삭제"
+  },
+  "changelog": {
+    "title": "새로운 기능",
+    "titleVersion": "v{{version}}의 새로운 기능",
+    "titleCount": "새로운 기능 ({{count}}개)",
+    "gotIt": "확인",
+    "viewAll": "업데이트 기록 보기",
+    "empty": "아직 릴리스 노트가 없습니다.",
+    "category": {
+      "highlight": "하이라이트",
+      "feature": "신규",
+      "improvement": "개선",
+      "fix": "수정",
+      "breaking": "주요 변경"
+    },
+    "platform": {
+      "web": "웹",
+      "desktop": "데스크톱"
+    },
+    "area": {
+      "dj": "DJ",
+      "player": "플레이어",
+      "library": "라이브러리",
+      "sets": "세트",
+      "memory": "추억",
+      "lyrics": "가사",
+      "visualizer": "비주얼라이저",
+      "search": "검색",
+      "streaming": "스트리밍",
+      "sync": "동기화",
+      "settings": "설정",
+      "app": "앱"
+    }
   }
 }

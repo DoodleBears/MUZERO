@@ -847,5 +847,38 @@
     "deleteTitle": "「{{name}}」を削除しますか？",
     "deleteBody_other": "{{count}} 曲を完全に削除しますか？すべてのセットからも削除され、元に戻せません。",
     "deleteConfirm_other": "{{count}} 曲を削除"
+  },
+  "changelog": {
+    "title": "新着情報",
+    "titleVersion": "v{{version}} の新着情報",
+    "titleCount": "新着情報（{{count}} 件）",
+    "gotIt": "OK",
+    "viewAll": "更新履歴を見る",
+    "empty": "リリースノートはまだありません。",
+    "category": {
+      "highlight": "ハイライト",
+      "feature": "新機能",
+      "improvement": "改善",
+      "fix": "修正",
+      "breaking": "重要な変更"
+    },
+    "platform": {
+      "web": "ウェブ",
+      "desktop": "デスクトップ"
+    },
+    "area": {
+      "dj": "DJ",
+      "player": "プレーヤー",
+      "library": "ライブラリ",
+      "sets": "セット",
+      "memory": "思い出",
+      "lyrics": "歌詞",
+      "visualizer": "ビジュアライザー",
+      "search": "検索",
+      "streaming": "ストリーミング",
+      "sync": "同期",
+      "settings": "設定",
+      "app": "アプリ"
+    }
   }
 }

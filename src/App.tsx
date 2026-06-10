@@ -1,6 +1,7 @@
 import { MotionConfig } from "motion/react";
 import type { ReactNode } from "react";
 import { useEffect, useRef, useState } from "react";
+import { ChangelogModal } from "@/components/player/changelog-modal";
 import { ImmersiveLyricsOverlay } from "@/components/player/immersive-lyrics-overlay";
 import { ImmersiveMemoryOverlay } from "@/components/player/immersive-memory-overlay";
 import { LyricsTuningPanel } from "@/components/player/lyrics-tuning-panel";
@@ -229,6 +230,9 @@ export default function App() {
 
         {/* App-wide drag-and-drop + paste: media → import; image → cover/background/gallery. */}
         <GlobalDropZone onMediaUploaded={(createdSet) => createdSet && setTab("queue")} />
+
+        {/* "What's New" — auto-opens for unseen releases; also opens from Settings → About. */}
+        <ChangelogModal />
       </div>
     </MotionConfig>
   );

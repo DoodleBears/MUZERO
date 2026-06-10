@@ -14,7 +14,7 @@
 | Phase | Name | Status | Link |
 |-------|------|--------|------|
 | 1 | 版本号单一真相 + 注入 + 比较（三文件同步 bump + Vite define + compareSemver；Settings 显示移 P5） | ✅ Completed | [Phase 1 Checklist](#phase-1-checklist) |
-| 2 | Changelog 规范 + 类型化数据模型 + 历史大版本回填 + 「What's New」面板 | 🔲 Pending | [Phase 2 Checklist](#phase-2-checklist) |
+| 2 | Changelog 规范 + 类型化数据模型 + 历史大版本回填 + 「What's New」面板 | ✅ Completed | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | Electron 发布打包硬化（publish provider + per-OS targets + app-update + 安全/外部依赖收口） | 🔲 Pending | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | Makefile 多平台发布指令 + R2 分发 + `manifest.json` 版本索引（合并式上传） | 🔲 Pending | [Phase 4 Checklist](#phase-4-checklist) |
 | 5 | 自动更新（electron-updater IPC + 渲染层提示）+ Settings 历史版本下载侧栏 | 🔲 Pending | [Phase 5 Checklist](#phase-5-checklist) |
@@ -464,8 +464,8 @@ src/components/settings/
 - [x] `scripts/scaffold-changelog.mjs`（4 语骨架，en 必填）+ `scripts/check-changelog.mjs`（release gate，`--version` 可覆盖）。✅ 接进 `bump-version`（bump 后自动 scaffold）+ `make changelog-check`。
 - [x] 回填 `releases/0.1.0.ts … 0.7.0.ts`（[§3.4](#34-历史大版本回填用户要求-2回顾-commit-历史整理成几个大版本)，每版 4~5 条 item，**en/zh/ja/ko 全量**，决议 Q6）。✅ 7 文件，4 语全量（测强制每条 title+description 四语非空）。
 - [x] `src/lib/changelog-seen.ts` + test（未读集 + 首装不弹）。✅ `resolveChangelogAutoOpen`（首装 seed 不弹 / 回访按 compareSemver 取未读 / 已读不弹）+ localStorage 安全读写，7 测。
-- [ ] `changelog-modal.tsx`（自动弹 + 事件唤起）+ `common.json` 4 语加 `changelog.*` chrome 文案。
-- [→] `about-settings.tsx` 接「查看更新日志」入口（随 Phase 5 about 面板一起建）。
+- [x] `changelog-modal.tsx`（自动弹 + `openChangelog()` 事件唤起）+ `common.json` 4 语加 `changelog.*` chrome 文案 + 挂进 `App.tsx`。✅ category 图标 + area chip + platform 标 + 按 category 顺序；5 render 测（未读自动弹 / 已读不弹 / 首装 seed / 全史事件 / Got it 确认）；i18n 4 语 minimal-insert 不碰用户 WIP 区。
+- [→] `about-settings.tsx` 接「查看更新日志」入口（随 Phase 5 about 面板一起建，调 `openChangelog()`）。
 
 ### Phase 2 Checklist
 - [x] changelog 按 semver 新→旧加载，`latestVersion === 0.7.0` ✅
