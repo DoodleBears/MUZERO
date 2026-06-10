@@ -451,17 +451,18 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   },
 
   async playStreamedHit(hit) {
-    // Import the online song into the dedicated "online" set (deduped), make sure
-    // it's in that set's track list, then activate + play it. setActiveSession
-    // seeds the queue synchronously, so findIndex below sees the new track.
+    // Import the online song into the dedicated "online" set (deduped) and play it.
+    // If the set is already active we let its watcher append the new track to the live
+    // queue and DON'T re-run setActiveSession — doing both would playQueueSet AND race
+    // the watcher's append, queueing the song twice. If it's not active, activate it
+    // (which seeds the queue from trackIds). Then wait for the track to land + play.
     const setId = await ensureOnlineSet();
     const track = await createStreamedTrack(hitToStreamedInput(setId, hit));
+    const alreadyActive = get().activeSessionId === setId;
     const session = await getSession(setId);
-    if (!session?.trackIds.includes(track.id)) {
-      await prependTrackIds(setId, [track.id]);
-    }
-    await get().setActiveSession(setId);
-    const idx = get().queue.findIndex((t) => t.id === track.id);
+    if (!session?.trackIds.includes(track.id)) await prependTrackIds(setId, [track.id]);
+    if (!alreadyActive) await get().setActiveSession(setId);
+    const idx = await waitForQueueIndex(get, track.id);
     if (idx >= 0) await get().playIndex(idx);
   },
 
@@ -1091,6 +1092,20 @@ function triggerLyricsAutoFetch(track: Track): void {
       log.warn("lyrics", "auto-fetch trigger failed", err);
     }
   })();
+}
+
+/** Poll the live queue for a track id — the set watcher appends newly-added tracks async. */
+async function waitForQueueIndex(
+  get: () => PlayerState,
+  trackId: string,
+  tries = 40,
+): Promise<number> {
+  for (let i = 0; i < tries; i += 1) {
+    const idx = get().queue.findIndex((t) => t.id === trackId);
+    if (idx >= 0) return idx;
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  return get().queue.findIndex((t) => t.id === trackId);
 }
 
 /** Get (or lazily create + remember) the set that collects online-source songs. */

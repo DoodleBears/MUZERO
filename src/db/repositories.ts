@@ -218,7 +218,12 @@ export async function prependTrackIds(
   await db.transaction("rw", db.sessions, async () => {
     const session = await db.sessions.get(sessionId);
     if (!session) return;
-    session.trackIds = [...ids, ...session.trackIds];
+    // Idempotent: never add an id the set already contains. A set's trackIds is a
+    // membership list (not a queue), so duplicates there double-render library rows.
+    const existing = new Set(session.trackIds);
+    const fresh = ids.filter((id) => !existing.has(id));
+    if (fresh.length === 0) return;
+    session.trackIds = [...fresh, ...session.trackIds];
     session.updatedAt = Date.now();
     await db.sessions.put(session);
   });
