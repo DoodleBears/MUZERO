@@ -41,7 +41,10 @@ export function normalizeArtistName(name: string): string {
  */
 export function trackArtists(track: Track): string[] {
   const metadata = track.mediaMetadata;
-  const raw = (metadata?.artists?.length ? metadata.artists : metadata?.albumArtists) ?? [];
+  let raw = (metadata?.artists?.length ? metadata.artists : metadata?.albumArtists) ?? [];
+  // Streamed tracks keep their artist in streamMeta — fall back to it (covers rows
+  // created before streamMeta was mirrored into mediaMetadata).
+  if (raw.length === 0 && track.streamMeta?.artist) raw = [track.streamMeta.artist];
   const seen = new Set<string>();
   const out: string[] = [];
   for (const name of raw) {
@@ -57,7 +60,7 @@ export function trackArtists(track: Track): string[] {
 
 /** A track's display album title, or undefined when absent. */
 export function trackAlbum(track: Track): string | undefined {
-  return track.mediaMetadata?.album?.trim() || undefined;
+  return track.mediaMetadata?.album?.trim() || track.streamMeta?.album?.trim() || undefined;
 }
 
 /**
@@ -68,8 +71,8 @@ export function trackSubtitle(track: Track | undefined): string {
   if (!track) return "";
   if (track.brief?.caption) return track.brief.caption;
   const metadata = track.mediaMetadata;
-  const artist = metadata?.artists?.join(", ");
-  const album = metadata?.album;
+  const artist = metadata?.artists?.join(", ") || track.streamMeta?.artist;
+  const album = metadata?.album || track.streamMeta?.album;
   if (artist && album) return `${artist} - ${album}`;
   if (artist) return artist;
   if (album) return album;
