@@ -8,6 +8,7 @@ import {
   List,
   Play,
   Plus,
+  RotateCcw,
   Search,
   Trash2,
 } from "lucide-react";
@@ -34,6 +35,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { ImportFolderButton } from "@/components/upload/import-folder-button";
 import { db } from "@/db/muzero-db";
 import {
+  clearSessionCover,
   createSession,
   deleteTracks,
   getSession,
@@ -1025,39 +1027,44 @@ function SetDetailView({
       </button>
 
       <div className="mb-3 flex items-start gap-3">
-        {/* Cover — drop / paste / click to set */}
-        <button
-          type="button"
-          onClick={() => fileRef.current?.click()}
-          aria-label={t("gallery.coverHint")}
-          title={t("gallery.coverHint")}
-          onDragOver={(e) => {
-            if (dragHasFiles(e.dataTransfer?.types)) {
-              e.preventDefault();
-              setDragOver(true);
-            }
-          }}
-          onDragLeave={() => setDragOver(false)}
-          onDrop={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            setDragOver(false);
-            openCoverCrop(filesFromTransfer(e.dataTransfer), "set");
-          }}
-          className={cn(
-            "group relative grid size-20 shrink-0 place-items-center overflow-hidden rounded-xl bg-secondary outline-none transition-shadow focus-visible:ring-2 focus-visible:ring-ring",
-            dragOver && "ring-2 ring-primary",
-          )}
+        {/* Cover — left-click/drop/paste to set; right-click to remove a pinned cover */}
+        <CoverContextMenu
+          hasCover={!!session?.coverBlobId}
+          onRemove={() => void clearSessionCover(setId)}
         >
-          {coverUrl ? (
-            <img src={coverUrl} alt="" className="size-full object-cover" />
-          ) : (
-            <Disc3Icon className="text-muted-foreground" size={28} />
-          )}
-          <span className="absolute inset-0 grid place-items-center bg-black/40 opacity-0 transition-opacity group-hover:opacity-100">
-            <ImagePlus className="size-5 text-white" />
-          </span>
-        </button>
+          <button
+            type="button"
+            onClick={() => fileRef.current?.click()}
+            aria-label={t("gallery.coverHint")}
+            title={t("gallery.coverHint")}
+            onDragOver={(e) => {
+              if (dragHasFiles(e.dataTransfer?.types)) {
+                e.preventDefault();
+                setDragOver(true);
+              }
+            }}
+            onDragLeave={() => setDragOver(false)}
+            onDrop={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              setDragOver(false);
+              openCoverCrop(filesFromTransfer(e.dataTransfer), "set");
+            }}
+            className={cn(
+              "group relative grid size-20 shrink-0 place-items-center overflow-hidden rounded-xl bg-secondary outline-none transition-shadow focus-visible:ring-2 focus-visible:ring-ring",
+              dragOver && "ring-2 ring-primary",
+            )}
+          >
+            {coverUrl ? (
+              <img src={coverUrl} alt="" className="size-full object-cover" />
+            ) : (
+              <Disc3Icon className="text-muted-foreground" size={28} />
+            )}
+            <span className="absolute inset-0 grid place-items-center bg-black/40 opacity-0 transition-opacity group-hover:opacity-100">
+              <ImagePlus className="size-5 text-white" />
+            </span>
+          </button>
+        </CoverContextMenu>
         <input
           ref={fileRef}
           type="file"
@@ -1151,6 +1158,34 @@ function SetDetailView({
         />
       )}
     </motion.div>
+  );
+}
+
+/**
+ * Right-click affordance on the set cover: when a custom cover is pinned, offer
+ * "remove" (revert to the default first-track cover). Renders children bare when
+ * there's nothing to remove, so a right-click never opens an empty menu.
+ */
+function CoverContextMenu({
+  hasCover,
+  onRemove,
+  children,
+}: {
+  hasCover: boolean;
+  onRemove: () => void;
+  children: React.ReactNode;
+}) {
+  const { t } = useTranslation();
+  if (!hasCover) return <>{children}</>;
+  return (
+    <ContextMenu>
+      <ContextMenuTrigger className="shrink-0">{children}</ContextMenuTrigger>
+      <ContextMenuContent>
+        <ContextMenuItem onClick={onRemove}>
+          <RotateCcw /> {t("gallery.removeCover")}
+        </ContextMenuItem>
+      </ContextMenuContent>
+    </ContextMenu>
   );
 }
 

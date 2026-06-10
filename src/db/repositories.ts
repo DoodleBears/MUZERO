@@ -254,6 +254,25 @@ export async function getSessionCover(
 }
 
 /**
+ * Remove a 歌单's pinned cover (row + blob), reverting to the default fallback —
+ * the topmost (newest) member track that has a cover. No-op if none is set.
+ */
+export async function clearSessionCover(
+  sessionId: string,
+  db: MuzeroDB = defaultDb,
+): Promise<void> {
+  await db.transaction("rw", db.sessions, db.mediaBlobs, async () => {
+    const session = await db.sessions.get(sessionId);
+    if (!session?.coverBlobId) return;
+    await db.mediaBlobs.delete(session.coverBlobId);
+    session.coverBlobId = undefined;
+    session.coverCrop = undefined;
+    session.updatedAt = Date.now();
+    await db.sessions.put(session);
+  });
+}
+
+/**
  * Set a user-chosen cover for a DERIVED entity (one artist / album). The
  * `entityKey` is the projection key from `library-index.ts` and becomes the
  * `entityCovers` row id; bytes go in `mediaBlobs` (role "cover", keyed by that

@@ -4,6 +4,7 @@ import { MuzeroDB } from "./muzero-db";
 import {
   addMemory,
   addTrackBackground,
+  clearSessionCover,
   createPendingTrack,
   createSession,
   createUploadedTrack,
@@ -122,6 +123,28 @@ describe("setSessionCover / getSessionCover", () => {
       db,
     );
     expect((await getSession(s.id, db))?.coverCrop).toEqual({ x: 1, y: 2, width: 3, height: 4 });
+  });
+
+  it("clearSessionCover removes the pinned cover (row + blob), reverting to the default", async () => {
+    const s = await createSession({ seedPrompt: "", config: { autoExtend: false } }, db);
+    await setSessionCover(
+      {
+        sessionId: s.id,
+        blob: new Blob([new Uint8Array([1])], { type: "image/png" }),
+        mime: "image/png",
+        crop: { x: 1, y: 2, width: 3, height: 4 },
+      },
+      db,
+    );
+    const blobId = (await getSession(s.id, db))?.coverBlobId ?? "";
+
+    await clearSessionCover(s.id, db);
+
+    const got = await getSession(s.id, db);
+    expect(got?.coverBlobId).toBeUndefined();
+    expect(got?.coverCrop).toBeUndefined();
+    expect(await db.mediaBlobs.get(blobId)).toBeUndefined();
+    expect(await getSessionCover(s.id, db)).toBeUndefined();
   });
 });
 
