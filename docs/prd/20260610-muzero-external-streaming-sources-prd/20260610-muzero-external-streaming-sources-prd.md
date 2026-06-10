@@ -48,7 +48,7 @@
 **2026-06-10 Electron 手测发现 + 修复：**
 - **网易云搜不到结果** → 根因：`stream-http` 把 `Referer`/`UA` 别名成 `x-muzero-h-*`，但 `electron/fetch-proxy.cjs` **没还原**别名 → 网易收不到 Referer 返回空（B站 API 不挑 Referer 所以能搜）。**修**：代理加 `x-muzero-h-<name>`→真实名 还原（main 进程 net.fetch 不受 forbidden-header 限制）。⚠️ `fetch-proxy.cjs` 是并发未提交文件，改动只在工作区，**需随 Electron 壳那批提交** + **完整重启 Electron**。
 - **B站封面图裂开** → hdslb 防盗链拦外域 Referer。**修**：封面 `<img referrerPolicy="no-referrer">`（对网易封面也安全）。其它渲染 streamed 封面的位置（track-row / media-stage）同样需要 no-referrer —— 后续补。
-- **B站点击播放报 `403` / `MEDIA_ERR_SRC_NOT_SUPPORTED`** → 确认：媒体 GET 直连 `bilivideo.com`、带 `Referrer-Policy: strict-origin-when-cross-origin`（发 localhost referer）→ B站 CDN 403。需 `mediaProxyUrl`：把 `<audio>.src` 走 muzfetch 注入 `Referer: bilibili.com` + Range/206（**下一步，#1/#8**）。**网易云媒体是直链 mp3/flac，可直接 `<audio>` 播**，搜索修好后端到端可用。
+- **B站点击播放报 `403`** → 确认：媒体 GET 直连 `bilivideo.com` 发 `referer: localhost` → 403。**已实现 `mediaProxyUrl`**（#1/#8）：`bridge.mediaProxyUrl(url, headers)` → `muzfetch://media/?__mzurl=…&__mzh_referer=…`（`<audio src>` 带不了 header，编码进 URL）；`fetch-proxy.cjs` 从 URL 读 target+header、转发 Range/保留 206；player-store 对带 headers 的 streamed track 走它。⚠️ `bridge.ts`/`electron.ts`/`fetch-proxy.cjs` 是并发未提交文件（工作区已改，**需重启 Electron**）。**风险**：若 Electron `net.fetch` 在主进程也丢 `Referer`（同 netease 诊断的疑点），则 bili 仍 403 → 改 `net.request`。**网易云直链不受影响**。
 - **点一下加了两首**（同一 track id 在队列出现两次，virtual-track-list 重复 key 警告）→ 根因：online set 已 active 时，`playStreamedHit` 的 `prependTrackIds`（触发 set 监听器 append）+ `setActiveSession`（`playQueueSet`）**双路加入**，playQueue 是 entry-based 允许重复 → 同曲两条 entry。**修**：① `prependTrackIds` 幂等（去重已存在 id）；② set 已 active 时**不再** `setActiveSession`，只靠监听器 append 一次 + `waitForQueueIndex` 轮询等队列就绪再 `playIndex`。41 测无回归。
 
 ### 🧪 现在可测（里程碑：NetEase 匿名端到端）

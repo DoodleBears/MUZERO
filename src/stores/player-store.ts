@@ -27,7 +27,7 @@ import type { ImportFolder, SetDisplayMode, Track } from "@/db/types";
 import { createAiDjBrain } from "@/dj/dj-brain-ai";
 import { createDjEngine, type DjEngine } from "@/dj/dj-engine";
 import i18n from "@/i18n/i18n";
-import { hasFolderAccess } from "@/lib/desktop/bridge";
+import { hasFolderAccess, resolveDesktopBridge } from "@/lib/desktop/bridge";
 import {
   basename,
   createFolderFs,
@@ -1187,11 +1187,20 @@ async function ensureLoadedAndPlay(
         notify.error(i18n.t("player.playbackError"));
         return;
       }
+      // Bilibili's CDN GET needs a Referer the <audio> element can't set, so route it
+      // through the media proxy (Electron). NetEase URLs play directly. Falls back to
+      // the raw URL when the shell has no media proxy (web/tauri).
+      const bridge = resolveDesktopBridge();
+      const src =
+        resolved.headers && bridge.mediaProxyUrl
+          ? bridge.mediaProxyUrl(resolved.url, resolved.headers)
+          : resolved.url;
       log.debug("player", "loading streamed media url", {
         trackId: track.id,
         source: track.streamSourceId,
+        proxied: src !== resolved.url,
       });
-      await mediaEngine.loadUrl(resolved.url, track.kind);
+      await mediaEngine.loadUrl(src, track.kind);
     }
     loadedTrackId = track.id;
     triggerLyricsAutoFetch(track);
