@@ -321,13 +321,25 @@ function SyncedLines({
                 }}
                 animate={{
                   opacity: isActive ? lyricStyle.activeOpacity : lyricStyle.inactiveOpacity,
-                  fontSize: isActive ? lyricStyle.activeFontSize : lyricStyle.inactiveFontSize,
-                  scale: reduce || isActive ? 1 : 0.97,
+                  // Scale inactive lines DOWN instead of animating font-size: the
+                  // layout (and line wrapping) is fixed at the active size, so a
+                  // line never re-wraps when it becomes active — only a smooth,
+                  // layout-free transform changes.
+                  scale: isActive ? 1 : lyricStyle.inactiveFontSize / lyricStyle.activeFontSize,
                 }}
                 transition={{ duration: reduce ? 0 : 0.35, ease: [0.22, 1, 0.36, 1] }}
-                style={{ transformOrigin: "left center", color: lyricStyle.color }}
+                style={{
+                  fontSize: lyricStyle.activeFontSize,
+                  color: lyricStyle.color,
+                  transformOrigin:
+                    lyricStyle.align === "center"
+                      ? "center"
+                      : lyricStyle.align === "right"
+                        ? "right center"
+                        : "left center",
+                }}
                 className={cn(
-                  "block w-full rounded-lg px-3 py-2 font-bold leading-snug",
+                  "block w-full text-pretty rounded-lg px-3 py-2 font-bold leading-snug",
                   lyricStyle.align === "center"
                     ? "text-center"
                     : lyricStyle.align === "right"
