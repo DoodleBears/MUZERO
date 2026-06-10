@@ -9,6 +9,7 @@ import type {
 } from "@/db/types";
 import { newId } from "@/lib/id";
 import type { LyricsSource } from "@/lyrics/provider";
+import { RANK_SPACING } from "@/player/set-order";
 import type { R2EntityCoversIndex } from "./r2-manifest-schema";
 import type { RemoteSetIndexResult } from "./r2-subscription";
 import { resolveRemoteObjectUrl } from "./r2-url";
@@ -50,6 +51,37 @@ function mergeRemoteAndLocalOnlyTrackIds(
   return [...remoteTrackIds, ...localOnlyIds];
 }
 
+/**
+ * Rebuild the fractional-order ranks from a remote set index (drag-reorder PRD §4.2).
+ * Restores each remote track's `rank`; any local-only members (merged in, absent from
+ * the remote) are ranked after the max so the invariant — trackRanks covers every
+ * member — holds. Returns undefined for a legacy manifest with no ranks (the set then
+ * orders by the tracks[] array, which the exporter already emits in display order).
+ */
+function reconstructTrackRanks(
+  remoteTracks: RemoteSetIndexResult["tracks"],
+  driveId: string,
+  mergedTrackIds: string[],
+): Record<string, number> | undefined {
+  const ranks: Record<string, number> = {};
+  let anyRank = false;
+  for (const rt of remoteTracks) {
+    if (typeof rt.source.rank === "number") {
+      ranks[remoteLocalId("trk", driveId, rt.id)] = rt.source.rank;
+      anyRank = true;
+    }
+  }
+  if (!anyRank) return undefined;
+  const localOnly = mergedTrackIds.filter((id) => !(id in ranks));
+  if (localOnly.length > 0) {
+    const max = Math.max(...Object.values(ranks));
+    localOnly.forEach((id, i) => {
+      ranks[id] = max + (i + 1) * RANK_SPACING;
+    });
+  }
+  return ranks;
+}
+
 function normalizeDisplayMode(
   mode: RemoteSetIndexResult["index"]["set"]["displayMode"],
 ): SetDisplayMode {
@@ -69,12 +101,14 @@ export async function importRemoteSetStream(
     existingSession?.trackIds,
     driveId,
   );
+  const trackRanks = reconstructTrackRanks(remoteSet.tracks, driveId, trackIds);
   const session: DjSession = {
     id: sessionId,
     name: remoteSet.index.set.name,
     description: remoteSet.index.set.description,
     seedPrompt: remoteSet.index.set.seedPrompt,
     trackIds,
+    trackRanks,
     status: "idle",
     config: remoteSet.index.set.config,
     displayMode: normalizeDisplayMode(remoteSet.index.set.displayMode),

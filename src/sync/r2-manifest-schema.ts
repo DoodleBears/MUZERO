@@ -157,6 +157,10 @@ export const r2SetTrackSchema = z.object({
   mediaMetadata: r2TrackMediaMetadataSchema.optional(),
   brief: trackBriefSchema.nullable().optional(),
   providerPreset: z.string().nullable().optional(),
+  // 歌单内分数序 rank（drag-reorder PRD §4.2）。Additive optional → 无 manifest 版本
+  // bump（同 thumbhash / lyrics 的 carry）。导出端把 tracks[] 按 rank 排序并逐首带上
+  // rank；import 端据此重建 trackRanks。legacy manifest 省略 → 回落到数组顺序。
+  rank: z.number().optional(),
   media: r2RemoteObjectSchema,
   cover: r2RemoteObjectSchema.optional(),
   // Base64 thumbhash of the cover — instant preview for a not-yet-downloaded

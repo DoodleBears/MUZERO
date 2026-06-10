@@ -13,6 +13,7 @@ import type {
   SyncMutation,
   Track,
 } from "@/db/types";
+import { orderedSetTrackIds } from "@/player/set-order";
 import {
   type PlaybackEventFlushPolicy,
   shouldFlushPlaybackEventSegment,
@@ -224,6 +225,7 @@ export async function buildR2ExportPlan(input: R2ExportPlanInput): Promise<R2Exp
         mediaMetadata: track.mediaMetadata,
         brief: track.brief ?? null,
         providerPreset: track.providerPreset ?? null,
+        rank: session.trackRanks?.[track.id],
         media: media.remote,
         cover: cover?.remote,
         thumbhash: track.coverThumbhash,
@@ -283,7 +285,10 @@ export async function buildR2ExportPlan(input: R2ExportPlanInput): Promise<R2Exp
 }
 
 async function loadSessionTracks(session: DjSession, db: MuzeroDB): Promise<Track[]> {
-  const rows = await db.tracks.bulkGet(session.trackIds);
+  // Emit the manifest tracks[] in the set's DISPLAY order (fractional rank), so the
+  // order travels even for readers that ignore `rank` (drag-reorder PRD §4.2).
+  const orderedIds = orderedSetTrackIds(session.trackIds, session.trackRanks);
+  const rows = await db.tracks.bulkGet(orderedIds);
   return rows.filter((track): track is Track => Boolean(track));
 }
 

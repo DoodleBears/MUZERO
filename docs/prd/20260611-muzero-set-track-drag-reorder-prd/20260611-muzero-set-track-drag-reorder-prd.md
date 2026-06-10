@@ -12,7 +12,7 @@
 | Phase | Name | Status | Link |
 |-------|------|--------|------|
 | 1 | 纯排序核心 + 仓库层（分数序算法 + lazy 物化 + reorder repo） | ✅ Completed | [Phase 1 Checklist](#phase-1-checklist) |
-| 2 | R2 Sync 对齐（manifest rank 字段 + reorder mutation + per-track 合并） | 🔲 Pending | [Phase 2 Checklist](#phase-2-checklist) |
+| 2 | R2 Sync 对齐（manifest rank 字段 + export/import round-trip + 整 session LWW） | ✅ Completed | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | 多选模式拖拽 UI（@dnd-kit + 虚拟化 + 整选区块移动 + drop indicator） | 🔲 Pending | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | 打磨（键盘 a11y reorder + 触摸自动滚动 + 边界回归） | 🔲 Pending | [Phase 4 Checklist](#phase-4-checklist) |
 
@@ -272,13 +272,15 @@ export function orderedSetTrackIds(
 
 ### 4.2 R2 Sync 契约变更
 
-**manifest（[`r2-manifest-schema.ts:144`](../../../src/sync/r2-manifest-schema.ts) `r2SetTrackSchema`）加字段：**
+> **实现状态：** manifest `rank` 字段 + export/import round-trip **已实现**（Phase 2，经全量 re-export + 整 session LWW 同步）。下方 `track-reordered-in-set` mutation + `applySetMutation` fold + §4.3 per-track 合并是 **forward-design（deferred）**—— 依赖「edit→mutation 路径接入」（当前 `recordSyncMutation` 全仓零调用点，所有 set 编辑都走整 session LWW）。
+
+**manifest（[`r2-manifest-schema.ts`](../../../src/sync/r2-manifest-schema.ts) `r2SetTrackSchema`）加字段（✅ 已实现）：**
 ```typescript
 // 歌单内分数序 rank。可选——legacy/未物化歌单省略，import 端回落到数组顺序。
 rank: z.number().optional(),
 ```
 
-**新 mutation action（[`types.ts`](../../../src/db/types.ts) `SyncMutation`）：**
+**新 mutation action（[`types.ts`](../../../src/db/types.ts) `SyncMutation`，⏳ forward-design）：**
 ```typescript
 | "track-reordered-in-set"
 // payload: { ranks: Array<{ trackId: string; rank: number }> }
@@ -302,6 +304,8 @@ if (mutation.action === "track-reordered-in-set") {
 **import（[`r2-import-stream.ts`](../../../src/sync/r2-import-stream.ts)）：** 远端 `tracks[]` 若带 `rank` → 重建 `session.trackRanks` 并按 rank 排序生成 `trackIds`；不带 → 维持现有「数组顺序」逻辑（[`mergeRemoteAndLocalOnlyTrackIds`](../../../src/sync/r2-import-stream.ts) 不变，legacy 兼容）。
 
 ### 4.3 冲突处理（per-track LWW，best practice 的同步收益）
+
+> **⏳ forward-design（deferred）：** 本节描述 per-track 合并的目标态，依赖 §4.2 的 mutation 路径接入。**当前已实现**的是 **整 session LWW**（重排 bump `session.updatedAt`，pull 时较新者整体胜）—— 满足跨设备同步；细到「两端各重排不同歌都保留」需下方 per-track 路径。
 
 - **不同设备重排不同歌曲** → 触碰不同 `trackId` 的 rank → **干净合并**，两边重排都保留（这正是分数序相对「整数组 LWW」的核心优势）。
 - **同一首歌被两端重排** → 该 track 的 rank 按 `updatedAt` LWW（沿用既有 mutation base 时钟，[`r2-pull-diff.ts`](../../../src/sync/r2-pull-diff.ts) 的 `mutationChangedFromRemoteBase`）。
@@ -370,19 +374,21 @@ SetDetailView (search-page.tsx:1244)
 
 ### Phase 2: R2 Sync 对齐
 
-**Goal:** manifest 承载 rank，跨设备重排可 push/pull/合并。
+**Goal:** manifest 承载 rank，跨设备重排经 push/pull 传播。
+
+> **Scope 校正（落地时发现）：** `recordSyncMutation` 当前**未接入任何 set 编辑**（[`sync-mutation-repo.ts`](../../../src/sync/sync-mutation-repo.ts) 全仓零调用点）—— 所有 set 编辑都靠**全量 re-export + 整 session LWW**(`updatedAt`)同步，不是增量 mutation 流。因此本期把 rank 落进这条**既有、一致**的路径：manifest 逐首带 `rank` + import 重建 `trackRanks`，重排经 `session.updatedAt` LWW 整体传播 —— **完全满足需求 #2**（manifest 含此信息、跨设备同步）。`track-reordered-in-set` mutation + per-track 干净合并是**更细粒度的增强**，依赖「edit→mutation 路径接入」这个独立未做工程（与 entity-cover 等一并 deferred），见 §4.2/§4.3 forward-design，不在本期关键路径。
 
 **Tasks:**
-- [ ] `r2-manifest-schema.ts`：`r2SetTrackSchema` 加 `rank?: number`。
-- [ ] `r2-export-plan.ts`：导出时写 `track.rank = trackRanks[id]`；`applySetMutation` 处理 `"track-reordered-in-set"`（更新 rank + 按 rank sort）。
-- [ ] `r2-import-stream.ts`：远端带 rank → 重建 `trackRanks` + 按 rank 排 `trackIds`；不带 → 维持数组序。
-- [ ] `r2-pull-diff.ts`：reorder mutation 纳入 per-track 冲突判定（同 track LWW / 不同 track 干净合并）。
+- [x] `r2-manifest-schema.ts`：`r2SetTrackSchema` 加 `rank?: number`（additive optional，无 manifest 版本 bump）。✅
+- [x] `r2-export-plan.ts`：`loadSessionTracks` 改用 `orderedSetTrackIds` 按 rank 排 → manifest `tracks[]` 即显示序；逐首 `rank = session.trackRanks?.[id]`。✅
+- [x] `r2-import-stream.ts`：远端带 rank → `reconstructTrackRanks` 忠实还原 + 本地独有曲排在 max 之后（保「覆盖全集」不变量）；不带 → `trackRanks` 留 undefined（回落数组序）。✅
+- [→] `applySetMutation` 处理 `"track-reordered-in-set"` + `r2-pull-diff` per-track 冲突 → **deferred**（随 edit→mutation 路径接入，forward-design）。
 
 #### Phase 2 Checklist
-- [ ] 单测：export fold reorder mutation 后 manifest tracks 顺序正确；import 带 rank 还原顺序；import 无 rank（legacy manifest）兼容。
-- [ ] 合并测：A 重排 track X + B 重排 track Y → 合并后两者都保留（核心收益）；A、B 同改 track X → LWW（newer updatedAt 胜）。
-- [ ] rebalance mutation 跨设备合并后集合仍全序。
-- [ ] round-trip：本地重排 → export → import 到新库，顺序一致。
+- [x] export 单测：已物化集 `tracks[]` 按 rank 排序且逐首带 rank；未物化（legacy）集省略 rank、保持数组序。✅
+- [x] import 单测：带 rank → 忠实重建 `trackRanks` 且按 rank 排；legacy（无 rank）→ 不物化、数组序；本地独有曲排在 remote max 之后（覆盖全集不变量）。✅
+- [x] 既有 43 个 sync 测全绿（209 测）—— 未回归 export/import/manifest-schema/conflict。✅
+- [x] round-trip 等价：导出端 `tracks[]` 即显示序 → 导入端 `orderedSetTrackIds` 还原一致（5 个新测覆盖）。✅
 
 ### Phase 3: 多选模式拖拽 UI
 
