@@ -238,7 +238,7 @@ describe("runAutoFetchLyrics", () => {
     expect(await getTrackLyrics("trk_1", db)).toBeUndefined();
   });
 
-  it("swallows provider errors without writing", async () => {
+  it("caches a negative result on provider error (no auto-retry)", async () => {
     await expect(
       runAutoFetchLyrics({
         track: track(),
@@ -247,6 +247,19 @@ describe("runAutoFetchLyrics", () => {
         db,
       }),
     ).resolves.toBeUndefined();
+    expect((await getTrackLyrics("trk_1", db))?.status).toBe("notFound");
+  });
+
+  it("does NOT cache when aborted mid-flight (transient, retry later)", async () => {
+    const controller = new AbortController();
+    controller.abort();
+    await runAutoFetchLyrics({
+      track: track(),
+      settings: settings(),
+      provider: provider(new Error("net")),
+      signal: controller.signal,
+      db,
+    });
     expect(await getTrackLyrics("trk_1", db)).toBeUndefined();
   });
 });

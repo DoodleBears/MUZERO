@@ -76,7 +76,13 @@ export async function runAutoFetchLyrics(opts: RunAutoFetchOpts): Promise<void> 
       db,
     );
   } catch (err) {
-    if (signal?.aborted) return;
+    if (signal?.aborted) return; // track switched away — not a real failure, don't cache
     log.warn("lyrics", "auto-fetch failed", err);
+    // Persist a negative cache so a failed fetch (timeout / network / 5xx) isn't
+    // retried automatically on every play. Manual search or "re-fetch" clears it.
+    await setTrackLyrics(
+      { trackId: track.id, record: lyricsRecordFromHit(null), fetchedAt: now },
+      db,
+    ).catch(() => {});
   }
 }
