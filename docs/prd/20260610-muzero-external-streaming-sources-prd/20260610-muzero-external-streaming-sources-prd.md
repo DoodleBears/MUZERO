@@ -702,10 +702,12 @@ InnerTube `/youtubei/v1/player` 取流 + EJS `sig`/`n` 解密(隐藏 sandboxed `
 | Y4 | InnerTube 取流编排 `resolveYoutubeAudio`：`WEB_REMIX→TV` 客户端轮询 `/player`(LOGIN/age→下一客户端)→选音轨→`resolveFormatUrl`，注入式(stub http+bootstrap+solvers) | `youtube/youtube-resolve.ts` | ×5 | ✅ green |
 | Y4b | InnerTube `/search` 纯映射：`buildSearchRequestBody` + `parseSearchResults`(递归收 `videoRenderer`，抗结构漂移)+ `parseDurationText` | `youtube/youtube-search.ts` | ×5 | ✅ green |
 | Y7 | `createYoutubeSource`(search via InnerTube `/search` + resolve via Y4；runtime 注入式)：`StreamSourceProvider`，无 runtime→resolve「桌面专属」错误、search 仍可 | `youtube/youtube-source.ts` | ×4(stub http+runtime) | ✅ green |
-| Y5 | 主进程隐藏 `BrowserWindow` 生命周期 + IPC(`solveSig`/`solveN`/`getPoToken`/`getBootstrap`)；渲染层经 bridge | `electron/youtube-engine.cjs` · `lib/desktop/*` | 🔲（运行时） | 🔲 **阻塞** |
+| Y-sig | **签名解扰纯实现**(yt-dlp 法)：从 player.js 解析 helper 对象 reverse/splice/swap → 操作序列 → 纯 TS 应用；`solveSignature`/`extractSignatureTimestamp`。**无需 JS 引擎、无需依赖** | `youtube/youtube-sig.ts` | 合成 player.js fixture ×7 | ✅ green |
+| Y-nsig | **n throttling 函数抽取**(brace-balance)：`findNFunctionName`(含数组下标解析)+`extractFunctionSource`(配对花括号切出可运行源)→ 交 solver 窗口求值 | `youtube/youtube-nsig.ts` | fixture ×7（含 eval 往返）| ✅ green |
+| Y5 | 主进程隐藏 `BrowserWindow` 生命周期 + IPC(`solveN`/`getBootstrap`)：取 player.js、纯 TS 解 sig、窗口内 eval n-func、取 visitorData；渲染层经 bridge | `electron/youtube-engine.cjs` · `lib/desktop/*` | 🔲（运行时） | 🔲（待手测） |
 | Y6 | sig/n solver + PoToken：跑 `yt.solver`/BotGuard 资产、按 `playerJsUrl` 缓存 / 6h 缓存 | `youtube/youtube-solver.ts`（bridge 注入）| 🔲（运行时） | 🔲 **阻塞** |
 | Y8 | registry `youtube` 分支接入(去掉 null)+ ⌘F 在线 chips 加 YouTube + StreamSourceDeps 注入 runtime | `registry.ts` · `global-track-search.tsx` | 🔲 | 🔲（待 Y5/Y6） |
 
 **Y1–Y4 + Y4b + Y7 落地**：YouTube 整条**可注入/可单测架构已完成**(32 测全绿)——音轨选择、InnerTube 请求-响应、密文 URL 组装、多客户端取流编排、`/search` 解析、source provider 全部纯逻辑 + stub 验证。`createYoutubeSource` 已实现 `StreamSourceProvider` 契约（search 不需签名、即可工作；resolve 走注入 runtime）。
 
-**Y5/Y6 阻塞说明**：让 YouTube **真正出声**需要 `sig`/`n` 解密 + BotGuard PoToken 的运行时——这要么**引入 vendored solver 依赖**(`bgutils-js` / `youtubei.js` 等，当前**因 lockfile 被并发 agent 共享、不能加 npm 依赖**而阻塞)，要么**对真实 player.js 手写抽取**(需真实 YT 运行时反复验证，无法盲写即成)。故本轮**不冒充 YouTube 可播**：架构与契约就位、纯逻辑全测，运行时 solver 是独立后续(解依赖封锁后即可接 Y5/Y6/Y8，registry 一行接入)。
+**worktree 解封 + 自研 solver（2026-06-11，branch `feat/youtube-runtime`）**：开独立 worktree/branch 脱离并发 main，**改走「自研 player.js 解析」而非 vendored 依赖**——`sig` 用 yt-dlp 式操作序列在纯 TS 解(零依赖、零 JS 引擎，Y-sig 全测)；`n` 抽取函数源(Y-nsig 全测)交隐藏窗口 eval；**PoToken 暂不做**(优先 iOS/TV 客户端无 PoToken 取流；不足再议 `bgutils-js`)。至此 **sig/n 解密的纯逻辑全部 TDD 落地**，剩 Y5(隐藏窗口 + 取 player.js + 窗口内跑 n)/Y8(registry 接入) 为运行时件，**待 Electron 手测**。
