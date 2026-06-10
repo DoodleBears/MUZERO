@@ -79,7 +79,8 @@
     "repeatLabel": "반복",
     "volume": "볼륨",
     "shuffle": "셔플",
-    "playbackError": "재생 오류"
+    "playbackError": "재생 오류",
+    "streamNeedsAccess": "이 곡은 재생하려면 해당 소스에 로그인해야 해요 (VIP / 회원 전용)"
   },
   "dj": {
     "writing": "DJ가 다음 곡을 쓰는 중…",

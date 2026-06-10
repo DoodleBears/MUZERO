@@ -79,7 +79,8 @@
     "repeatLabel": "リピート",
     "volume": "音量",
     "shuffle": "シャッフル",
-    "playbackError": "再生エラー"
+    "playbackError": "再生エラー",
+    "streamNeedsAccess": "この曲は再生にそのソースへのログインが必要です（VIP / 会員限定）"
   },
   "dj": {
     "writing": "DJ が次の曲を書いています…",

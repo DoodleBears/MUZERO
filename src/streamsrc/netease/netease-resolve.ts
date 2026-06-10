@@ -68,8 +68,11 @@ export function parseNeteasePlayback(raw: string | object): NeteasePlaybackResul
     return { kind: "success", url, type, sizeBytes, preview: data.freeTrialInfo != null };
   }
 
+  // url null + a fee OR a free-trial privilege = VIP/paid: anonymous gets no stream,
+  // it needs a logged-in (subscribed) session. NetEase signals VIP via either `fee`
+  // or a `freeTrialPrivilege` object (newer responses use the latter even with fee 0).
   const fee = typeof data.fee === "number" ? data.fee : 0;
-  if (fee > 0) return { kind: "no-permission", reason: "vip" };
+  if (fee > 0 || data.freeTrialPrivilege != null) return { kind: "no-permission", reason: "vip" };
   if (code === 404) return { kind: "no-permission", reason: "unavailable" };
   return { kind: "failure", reason: "no-url" };
 }

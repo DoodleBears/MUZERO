@@ -65,6 +65,15 @@ describe("parseNeteasePlayback", () => {
     });
   });
 
+  it("maps a free-trial-only song (freeTrialPrivilege, fee 0) to no-permission (vip)", () => {
+    expect(
+      parseNeteasePlayback({
+        code: 200,
+        data: [{ url: null, br: 0, fee: 0, freeTrialPrivilege: { resConsumable: false } }],
+      }),
+    ).toEqual({ kind: "no-permission", reason: "vip" });
+  });
+
   it("maps code 404 with no url to no-permission (unavailable)", () => {
     expect(parseNeteasePlayback({ code: 404, data: [{ url: null, fee: 0 }] })).toEqual({
       kind: "no-permission",

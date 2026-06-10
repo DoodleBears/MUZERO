@@ -85,7 +85,8 @@
     "repeatLabel": "Repeat",
     "volume": "Volume",
     "shuffle": "Shuffle",
-    "playbackError": "Playback error"
+    "playbackError": "Playback error",
+    "streamNeedsAccess": "This song needs you to log in to that source (VIP / members only)"
   },
   "dj": {
     "writing": "DJ is writing the next track…",
