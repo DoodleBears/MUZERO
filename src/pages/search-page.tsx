@@ -844,6 +844,7 @@ export function SearchPage() {
                     emptyHint={t("gallery.tracksEmpty")}
                     listClassName="no-scrollbar pb-chrome-bottom"
                     className="flex-1"
+                    startActions={<AddTracksMenu />}
                   />
                 )}
                 {shownRemoteTracks.length > 0 && (
@@ -1138,26 +1139,6 @@ function SetDetailView({
             {t("gallery.count", { count: tracks.length })}
             {totalDurationSec > 0 && ` · ${formatDuration(totalDurationSec)}`}
           </p>
-          {/* Action row, under the title/description (红心 acts on songs, so the
-              liked filter lives here in the playlist; 添加歌曲 merges file-pick +
-              folder import). */}
-          <div className="mt-2 flex flex-wrap items-center gap-2">
-            <Button size="sm" onClick={onPlayAll} disabled={tracks.length === 0}>
-              <Play className="size-4" /> {t("gallery.playAll")}
-            </Button>
-            {likedCount > 0 && (
-              <Button
-                size="sm"
-                variant={likedOnly ? "default" : "outline"}
-                aria-pressed={likedOnly}
-                onClick={() => setLikedOnly((v) => !v)}
-              >
-                <Heart className={cn("size-4", likedOnly && "fill-current")} />{" "}
-                {t("gallery.filterLiked")}
-              </Button>
-            )}
-            <AddTracksMenu setId={setId} />
-          </div>
         </div>
       </div>
 
@@ -1170,6 +1151,25 @@ function SetDetailView({
           onPlay={(track) => void playTrack(track)}
           emptyHint={t("gallery.empty")}
           listClassName="chrome-fade no-scrollbar pt-5 pb-chrome-bottom [--chrome-fade-top:1.25rem]"
+          startActions={
+            <>
+              <Button size="sm" onClick={onPlayAll} disabled={tracks.length === 0}>
+                <Play className="size-4" /> {t("gallery.playAll")}
+              </Button>
+              {likedCount > 0 && (
+                <Button
+                  size="sm"
+                  variant={likedOnly ? "default" : "outline"}
+                  aria-pressed={likedOnly}
+                  onClick={() => setLikedOnly((v) => !v)}
+                >
+                  <Heart className={cn("size-4", likedOnly && "fill-current")} />{" "}
+                  {t("gallery.filterLiked")}
+                </Button>
+              )}
+              <AddTracksMenu setId={setId} />
+            </>
+          }
         />
         <TrackInspectorPanel track={selectedTrack} />
       </div>
