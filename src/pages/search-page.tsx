@@ -65,6 +65,7 @@ import {
 } from "@/lib/library-index";
 import { rovingIndex } from "@/lib/library-nav";
 import { buildTrackStatsMap, deriveEntityStats, statFor } from "@/lib/library-stats";
+import { freeTextMatches } from "@/lib/search-core";
 import {
   filterSets,
   type SetFilter,
@@ -253,8 +254,12 @@ export function SearchPage() {
     () => deriveEntityStats(albumIndex, statsByTrackId),
     [albumIndex, statsByTrackId],
   );
+  // Lazily load the transliteration dictionaries (pinyin / kana / romaji) on the
+  // main thread; the flag re-runs the inline matchers below once ready so search
+  // "snaps in" without retyping. (The ⌘F overlay scans off-thread via its Worker.)
+  const transliterationReady = useTransliterationReady();
+  // biome-ignore lint/correctness/useExhaustiveDependencies: transliterationReady re-runs once dictionaries load
   const artistItems = useMemo<LibraryEntityItem[]>(() => {
-    const q = artistQuery.trim().toLowerCase();
     return artistIndex
       .map((entry) => {
         const count = t("gallery.count", { count: entry.trackIds.length });
@@ -266,10 +271,10 @@ export function SearchPage() {
           coverTrackId: entry.coverTrackId,
         };
       })
-      .filter((item) => !q || item.label.toLowerCase().includes(q));
-  }, [artistIndex, artistQuery, t, artistStats]);
+      .filter((item) => freeTextMatches(artistQuery, [item.label]));
+  }, [artistIndex, artistQuery, t, artistStats, transliterationReady]);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: transliterationReady re-runs once dictionaries load
   const albumItems = useMemo<LibraryEntityItem[]>(() => {
-    const q = albumQuery.trim().toLowerCase();
     return albumIndex
       .map((entry) => {
         const base =
@@ -284,8 +289,8 @@ export function SearchPage() {
           coverTrackId: entry.coverTrackId,
         };
       })
-      .filter((item) => !q || item.label.toLowerCase().includes(q));
-  }, [albumIndex, albumQuery, t, albumStats]);
+      .filter((item) => freeTextMatches(albumQuery, [item.label]));
+  }, [albumIndex, albumQuery, t, albumStats, transliterationReady]);
   const selectedArtist = useMemo(
     () => artistIndex.find((entry) => entry.key === selectedArtistKey),
     [artistIndex, selectedArtistKey],
@@ -322,11 +327,6 @@ export function SearchPage() {
     }
     consumeLibraryEntity();
   }, [pendingEntity, artistIndex, albumIndex, consumeLibraryEntity]);
-
-  // Lazily load the transliteration dictionaries (pinyin / kana / romaji) on the
-  // main thread; the flag re-runs the inline matchers below once ready so search
-  // "snaps in" without retyping. (The ⌘F overlay scans off-thread via its Worker.)
-  const transliterationReady = useTransliterationReady();
 
   // Faceted search: matching artists/albums surfaced above the song list in the
   // tracks ("全部歌曲") mode (honors scoped artist:/album: tokens).
@@ -375,9 +375,10 @@ export function SearchPage() {
     [memoryNotes, sessions, trackById],
   );
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: transliterationReady re-runs once dictionaries load
   const shown = useMemo(
     () => sortSets(filterSets(items, setQuery, filter), sort),
-    [items, setQuery, filter, sort],
+    [items, setQuery, filter, sort, transliterationReady],
   );
   // biome-ignore lint/correctness/useExhaustiveDependencies: transliterationReady re-runs once dictionaries load
   const shownTracks = useMemo(() => {

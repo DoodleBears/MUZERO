@@ -5,6 +5,7 @@
  */
 
 import type { DjSession } from "@/db/types";
+import { freeTextMatches } from "@/lib/search-core";
 
 /** A 歌单 augmented with the stats the gallery filters / sorts / renders on. */
 export interface SetGalleryItem {
@@ -22,19 +23,22 @@ export interface SetGalleryItem {
 export type SetSort = "recent" | "name" | "size";
 export type SetFilter = "all" | "liked";
 
-/** Filter by a name/seed substring query and an optional "liked sets" filter. */
+/**
+ * Filter by a name/seed query (transliteration-aware — pinyin / kana / romaji,
+ * via {@link freeTextMatches}) and an optional "liked sets" filter. Track/tag/
+ * memory matches inside a set are delegated to `matchesQuery`.
+ */
 export function filterSets(
   items: SetGalleryItem[],
   query: string,
   filter: SetFilter,
 ): SetGalleryItem[] {
-  const q = query.trim().toLowerCase();
+  const hasQuery = query.trim().length > 0;
   return items.filter((it) => {
     if (filter === "liked" && it.likedCount <= 0) return false;
-    if (!q) return true;
+    if (!hasQuery) return true;
     return (
-      it.session.name.toLowerCase().includes(q) ||
-      it.session.seedPrompt.toLowerCase().includes(q) ||
+      freeTextMatches(query, [it.session.name, it.session.seedPrompt]) ||
       Boolean(it.matchesQuery?.(query))
     );
   });

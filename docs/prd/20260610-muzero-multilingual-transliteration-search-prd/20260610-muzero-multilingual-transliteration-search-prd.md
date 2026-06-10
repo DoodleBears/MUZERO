@@ -471,6 +471,7 @@ No user-visible string hardcoded in components (§3).
 |------|--------|---------|
 | 2026-06-10 | MUZERO | Initial draft — port ClipCombo transliteration matcher (拼音/首字母 + 假名/罗马音) into MUZERO search; 3 phases. |
 | 2026-06-10 | MUZERO | Revised after Open-Questions review: pivot to off-thread search **Worker** (Q1/Q5) mirroring `heavy-worker.ts`; adopt ClipCombo's exact regexes + **kana-first** detection (Q2/Q3); correct remote search to **all-local synced rows** with client-side variant baking (Q4); 4 phases (engine → inline matcher+ranking → Worker host → UX). |
+| 2026-06-10 | MUZERO | **Addendum — all 4 gallery tabs NLP-aware** (req: 歌单/专辑/歌手 too). `filterSets` (set-gallery.ts) + the `albumItems`/`artistItems` label filters now route through `freeTextMatches` (the source-agnostic helper added to `search-core`), with the `transliterationReady` snap-in dep. set-gallery gains 2 pinyin tests (12 green). Verified live: `beijing`/`bjhyn`→歌单「北京欢迎你」, `fantexi`→专辑「范特西」, `zhoujielun`/`zjl`→歌手「周杰伦」, negatives empty, zero console errors. |
 
 ---
 

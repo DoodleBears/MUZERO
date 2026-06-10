@@ -1,6 +1,13 @@
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 import { DEFAULT_DJ_CONFIG, type DjSession } from "@/db/types";
+import { ensureTransliterationLoaded } from "./search-transliterate";
 import { filterSets, type SetGalleryItem, sortSets } from "./set-gallery";
+
+// filterSets matches via the transliteration engine; warm the dictionaries so
+// pinyin assertions resolve (substring behavior holds before load — no regression).
+beforeAll(async () => {
+  await ensureTransliterationLoaded();
+});
 
 function makeItem(opts: {
   matchesQuery?: (query: string) => boolean;
@@ -72,6 +79,18 @@ describe("filterSets", () => {
   it("combines query and liked filter", () => {
     expect(filterSets(items, "jazz", "liked")).toHaveLength(1);
     expect(filterSets(items, "lofi", "liked")).toHaveLength(0);
+  });
+
+  it("matches set names by pinyin (full + initials)", () => {
+    const cn = [makeItem({ name: "北京欢迎你" }), makeItem({ name: "Rainy jazz", likedCount: 1 })];
+    expect(names(filterSets(cn, "beijing", "all"))).toEqual(["北京欢迎你"]);
+    expect(names(filterSets(cn, "bjhyn", "all"))).toEqual(["北京欢迎你"]);
+    expect(filterSets(cn, "shanghai", "all")).toHaveLength(0);
+  });
+
+  it("matches the seed prompt by pinyin", () => {
+    const cn = [makeItem({ name: "Mix", seed: "公路旅行" })];
+    expect(names(filterSets(cn, "gonglu", "all"))).toEqual(["Mix"]);
   });
 });
 
