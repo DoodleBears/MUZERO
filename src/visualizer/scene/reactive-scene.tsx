@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import * as twgl from "twgl.js";
+import { type FlowConfig, resolveFlowColors } from "@/lib/flow-config";
 import { darken, lighten, type Rgb, readPrimaryRgb } from "@/lib/visualizer-color";
 import type { VisualizerRenderOptions } from "@/lib/visualizer-effect-settings";
 import { getMediaEngine } from "@/stores/player-store";
@@ -32,6 +33,7 @@ export default function ReactiveScene({
   fftSize,
   options,
   smoothing,
+  flow,
 }: {
   styleId: string;
   active: boolean;
@@ -39,11 +41,16 @@ export default function ReactiveScene({
   fftSize: number;
   options: VisualizerRenderOptions;
   smoothing: number;
+  /** Flow background config (only used by scene-flow). */
+  flow?: FlowConfig;
 }) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const stateRef = useRef<GLState | null>(null);
   const activeRef = useRef(active);
   activeRef.current = active;
+  // Read live in the render loop so flow-setting changes don't restart the GL loop.
+  const flowRef = useRef(flow);
+  flowRef.current = flow;
 
   const frag =
     styleId === "scene-aurora" ? AURORA_FRAG : styleId === "scene-flow" ? FLOW_FRAG : LIQUID_FRAG;
@@ -149,7 +156,8 @@ export default function ReactiveScene({
         energy = a.energy;
       }
       const p = readPrimaryRgb(canvasRef.current);
-      const flowCount = isFlow ? fillFlowColors(flowColors, p) : 0;
+      const flowCfg = isFlow ? flowRef.current : undefined;
+      const flowCount = flowCfg ? fillFlowColors(flowColors, p, flowCfg) : 0;
 
       // biome-ignore lint/correctness/useHookAtTopLevel: gl.useProgram is a WebGL call, not a React hook
       gl.useProgram(programInfo.program);
@@ -165,16 +173,16 @@ export default function ReactiveScene({
         uIntensity: options.intensity,
         uPrimary: [p.r / 255, p.g / 255, p.b / 255],
         uSpread: options.spread,
-        // Flow-only uniforms (ignored by the other scene programs). Phase 2 uses
-        // calm defaults; Phase 3/4 will source these from flow settings.
-        ...(isFlow
+        // Flow-only uniforms (ignored by the other scene programs), sourced from
+        // the resolved flow settings (color source + custom palette + tuning).
+        ...(flowCfg
           ? {
               uColors: flowColors,
               uColorCount: flowCount,
-              uFlowSpeed: 0.4,
-              uFlowScale: 0.5,
-              uReactivity: 0.2,
-              uEffect: 0,
+              uFlowSpeed: flowCfg.speed,
+              uFlowScale: flowCfg.scale,
+              uReactivity: flowCfg.reactivity,
+              uEffect: flowCfg.effect,
             }
           : null),
       });
@@ -199,13 +207,14 @@ export default function ReactiveScene({
 
 /**
  * Fill a flat vec3 buffer with the active flow palette and return the color
- * count. Uses the cover-derived palette when present, else a tonal spread from
- * the live primary (Phase 3 will swap in user custom colors via resolveFlowColors).
+ * count. `resolveFlowColors` applies the cover→custom fallback rule; the
+ * primary-derived spread is only a last-resort guard (custom colors are always
+ * ≥ 2 via resolveFlowConfig).
  */
-function fillFlowColors(out: Float32Array, primary: Rgb): number {
-  const palette = getVisualizerCoverPalette();
+function fillFlowColors(out: Float32Array, primary: Rgb, flow: FlowConfig): number {
+  const resolved = resolveFlowColors(flow.source, getVisualizerCoverPalette(), flow.customColors);
   const colors: Rgb[] =
-    palette.length >= 2 ? palette : [darken(primary, 0.18), primary, lighten(primary, 0.4)];
+    resolved.length >= 2 ? resolved : [darken(primary, 0.18), primary, lighten(primary, 0.4)];
   const count = Math.min(FLOW_MAX_COLORS, colors.length);
   for (let i = 0; i < FLOW_MAX_COLORS; i++) {
     const c = colors[Math.min(i, colors.length - 1)] ?? primary;

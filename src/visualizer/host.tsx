@@ -1,6 +1,7 @@
 import { type CSSProperties, lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useVisualizerCoverColorCss } from "@/components/player/visualizer-dynamic-color";
 import { useSettings } from "@/hooks/use-app-data";
+import { type FlowConfig, resolveFlowConfig } from "@/lib/flow-config";
 import { cn } from "@/lib/utils";
 import { DYNAMIC_PRIMARY_CSS_VAR, readPrimaryRgb } from "@/lib/visualizer-color";
 import {
@@ -209,11 +210,13 @@ function SceneHost({
   active,
   className,
   effectSettings,
+  flow,
 }: {
   styleId: VisualizerStyleId;
   active: boolean;
   className?: string;
   effectSettings: VisualizerEffectSettings;
+  flow?: FlowConfig;
 }) {
   const ok = useMemo(() => hasWebGL(), []);
   const ref = useRef<HTMLDivElement | null>(null);
@@ -256,6 +259,7 @@ function SceneHost({
           fftSize={analyserOptions.fftSize}
           smoothing={analyserOptions.smoothing}
           options={renderOptions}
+          flow={flow}
         />
       </Suspense>
     </div>
@@ -311,6 +315,25 @@ export function VisualizerHost({
       settings.visualizerSpread,
     ],
   );
+  const flow = useMemo(
+    () =>
+      resolveFlowConfig({
+        flowColorSource: settings.flowColorSource,
+        flowCustomColors: settings.flowCustomColors,
+        flowEffect: settings.flowEffect,
+        flowMotion: settings.flowMotion,
+        flowScale: settings.flowScale,
+        flowAudioReactivity: settings.flowAudioReactivity,
+      }),
+    [
+      settings.flowColorSource,
+      settings.flowCustomColors,
+      settings.flowEffect,
+      settings.flowMotion,
+      settings.flowScale,
+      settings.flowAudioReactivity,
+    ],
+  );
   if (resolvedStyle === "off") return null;
   const scopedColorStyle = coverColorCss
     ? ({ [DYNAMIC_PRIMARY_CSS_VAR]: coverColorCss } as CSSProperties)
@@ -320,7 +343,12 @@ export function VisualizerHost({
   if (getVisualizerMeta(resolvedStyle).kind === "scene") {
     return (
       <div className={hostClassName} style={wrapperStyle}>
-        <SceneHost styleId={resolvedStyle} active={active} effectSettings={effectSettings} />
+        <SceneHost
+          styleId={resolvedStyle}
+          active={active}
+          effectSettings={effectSettings}
+          flow={flow}
+        />
       </div>
     );
   }

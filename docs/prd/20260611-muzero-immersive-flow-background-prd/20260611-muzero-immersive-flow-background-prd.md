@@ -13,7 +13,7 @@
 |-------|------|--------|------|
 | 1 | 取色基础设施：把 `image-palette.ts` 的单色取色扩成**多色调色板**（`extractImagePalette` 返回 N 个去重色），扩 `visualizer-color-store` 持有 palette + 平滑过渡 | ✅ Completed | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | 渲染：在既有 twgl scene registry 新增 `scene-flow` 流光 shader（自研 mesh-gradient，多色 `uColors[N]` uniform，calm 时间流 + 可选轻度音频调制），WebGL 探测 + aura 回退 | ✅ Completed | [Phase 2 Checklist](#phase-2-checklist) |
-| 3 | 取色源模型：`flowColorSource: "cover" \| "custom"`（默认 cover，无封面回退 custom）+ 始终存在的 `flowCustomColors[]`，把 palette 喂进 shader uniform | 🔲 Pending | [Phase 3 Checklist](#phase-3-checklist) |
+| 3 | 取色源模型：`flowColorSource: "cover" \| "custom"`（默认 cover，无封面回退 custom）+ 始终存在的 `flowCustomColors[]`，把 palette 喂进 shader uniform | ✅ Completed | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | Settings：在 Appearance 段新增独立 sidebar item「流光背景」面板（效果选择 / 取色源切换 / 多色编辑器 + 预设 / 压暗 / 透明度 / 动态强度），i18n 四语全量 | 🔲 Pending | [Phase 4 Checklist](#phase-4-checklist) |
 | 5 | 打磨：reduced-motion / 移动 30fps / bundle 预算复测 / 无封面与切歌过渡 / 文档对齐 | 🔲 Pending | [Phase 5 Checklist](#phase-5-checklist) |
 
@@ -238,7 +238,11 @@ interface VisualizerCoverColorState {
 
 > **实现微调（vs 原 PRD）**：去掉了 `skipDark` 入参——既有 HSL `lightness` 过滤（`< 0.1` 跳近黑）已覆盖「不要暗色」，多一个 knob 是 YAGNI。去重改用 sRGB 欧氏距离（比 HSL 距离实现更简单、对专辑图够用，已穷举单测锁定）。`extractDominantImageColor(blob)` / 纯函数 `selectDominantImageColor(pixels)` 保留为 `…Palette(…, 1)[0] ?? null`（单色调用方零回归，既有测试全绿）。
 
-### 3.4 颜色解析纯函数 `flow-config.ts`
+### 3.4 颜色解析纯函数 `flow-config.ts` ✅
+
+**已实现** [`flow-config.ts`](../../../src/lib/flow-config.ts)（14 测试穷举）。实际导出：`resolveFlowColors` + `resolveFlowConfig`（AppSettings→shader 值映射）+ `normalizeHexColor`/`hexToRgb`/`normalizeFlowColors` + `FLOW_DEFAULT_COLORS`/`FLOW_PRESETS`/`FLOW_EFFECTS`/`FLOW_MIN_COLORS`/`FLOW_MAX_COLORS`。`resolveFlowColors(source, palette, custom)` 三个参数都是 `Rgb[]`（hex→Rgb 解析在 `resolveFlowConfig`/`normalizeFlowColors`，让取色裁决保持纯 RGB）。`resolveFlowConfig` 把 `flowMotion/Scale/AudioReactivity`(0–100) clamp 成 0–1、`flowEffect`→shader branch index、`flowCustomColors` 解析且 `<2` 个有效时回退 `FLOW_DEFAULT_COLORS`。wiring：[`host.tsx`](../../../src/visualizer/host.tsx) `VisualizerHost` memo `resolveFlowConfig(settings)` → `SceneHost` → [`reactive-scene.tsx`](../../../src/visualizer/scene/reactive-scene.tsx) 用 `flowRef`（读取不重启 GL loop）+ `resolveFlowColors` 喂 `uColors`/`uEffect`/`uFlowSpeed`/`uFlowScale`/`uReactivity`。
+
+
 
 ```typescript
 export const FLOW_DEFAULT_COLORS = ["#7c5cff", "#22d3ee", "#f472b6", "#fbbf24"]; // synthwave-ish
@@ -373,20 +377,19 @@ export function resolveFlowColors(
 - [ ] 视觉验证（真实 app / `make dev`）：多色流动、calm、跟 `uColors` 变色——**预览沙箱 WebGL rAF 冻结，留真实窗口/Phase 5 人工确认**（见 `preview-hidden-tab-gotcha` memory）。
 - [x] 无 WebGL → `SceneHost` 既有逻辑回退 aura（沿用，不新增路径）。
 
-### Phase 3: 取色源回退模型
+### Phase 3: 取色源回退模型 ✅
 
 **Goal:** `flowColorSource` + `flowCustomColors` 同时生效，无封面回退（需求 1+2）。
 
 **Tasks:**
-- [ ] `flow-config.ts`：`resolveFlowColors` + `FLOW_PRESETS` + `FLOW_DEFAULT_COLORS` + hex 规范化/校验。
-- [ ] `db/types.ts` 加 `flow*` 可选字段（additive，无 DB bump）。
-- [ ] `scene-flow` 渲染读 `resolveFlowColors(source, store.palette, customColors)` → `uColors`。
+- [x] `flow-config.ts`：`resolveFlowColors` + `resolveFlowConfig`(settings→shader 值) + `FLOW_PRESETS` + `FLOW_DEFAULT_COLORS` + `FLOW_EFFECTS` + `normalizeHexColor`/`hexToRgb` 规范化/校验。
+- [x] `db/types.ts` 加 `flowColorSource`/`flowCustomColors`/`flowEffect`/`flowMotion`/`flowScale`/`flowAudioReactivity` + `FlowColorSource`/`FlowEffectId` 类型（additive 可选，无 DB bump）。
+- [x] `scene-flow` 渲染读 `resolveFlowColors(source, store.palette, customColors)` → `uColors` + flow 参数 uniform；host 经 `flowRef` 接线（不重启 GL loop）。
 
 ### Phase 3 Checklist
-- [ ] `flow-config.test.ts` 穷举：cover+palette、cover+空palette→custom、custom 模式、非法 hex 过滤、<2 色处理、去重。
-- [ ] 手测：删当前曲封面 → 流光不黑屏、回退到自定义色。
-- [ ] 切 source=custom → 忽略封面、用自定义。
-- [ ] `make check` 绿。
+- [x] `flow-config.test.ts` 穷举（14）：cover+palette、cover+空palette→custom、custom 模式、非法 hex 过滤、<2 色回退默认、effect 映射、0–100 clamp。
+- [x] typecheck（whole tree，含 host/scene/types）+ biome 绿。
+- [ ] 手测（真实 app）：删当前曲封面 → 流光不黑屏、回退自定义色；切 source=custom → 忽略封面 —— **留 Phase 4 接好 UI 后人工确认**。
 
 ### Phase 4: Settings「流光背景」面板 + i18n
 
@@ -479,6 +482,7 @@ export function resolveFlowColors(
 | 2026-06-11 | DoodleBear / MUZERO | Open Questions 全部定稿：Q1 v1 curate 3 个效果（aurora-drift/liquid-mesh/soft-blobs，`uEffect` 分支）；Q2 不做额外 CSS 回退；Q3 surface+background 都支持；Q4 默认取 4 色（max 5）；Q5 默认 calm ~20 + 用户可自定义 |
 | 2026-06-11 | DoodleBear / MUZERO | **Phase 1 ✅ 实现**（TDD）：`extractImagePalette`/`selectImagePalette` 多色去重取色（sRGB 距离）、`extractDominantImageColor=palette[0]` 零回归；store `palette`+`mixPalette`+`getVisualizerCoverPalette`；`visualizer-dynamic-color` 写 palette。14 测试绿、typecheck/biome 净。去掉 `skipDark` 入参（YAGNI） |
 | 2026-06-11 | DoodleBear / MUZERO | **Phase 2 ✅ 实现**：`scene-flow` 注册（types/registry/i18n 四语）+ 自研 `FLOW_FRAG` mesh-gradient（多色 `uColors[5]` + `uEffect` 3 变体 + `uReactivity` 轻度音频）+ `reactive-scene` 接线（封面 palette / primary 兜底，复用 color buffer）。registry.test 12 绿、typecheck/biome 净。新增 `uReactivity` uniform。视觉验证留真实窗口（预览沙箱冻结 WebGL） |
+| 2026-06-11 | DoodleBear / MUZERO | **Phase 3 ✅ 实现**（TDD）：`flow-config.ts`（`resolveFlowColors` 回退裁决 + `resolveFlowConfig` settings→shader 映射 + presets/effects/hex utils，14 测试）；`db/types.ts` 加 6 个 flow* 字段 + `FlowColorSource`/`FlowEffectId`（additive 无 DB bump）；host→SceneHost→reactive-scene 经 `flowRef` 接线，shader 改用真实取色源 + flow 参数。40 测试绿、whole-tree typecheck/biome 净。`resolveFlowColors` 三参全 `Rgb[]`（hex 解析上移到 config 层） |
 
 ---
 
