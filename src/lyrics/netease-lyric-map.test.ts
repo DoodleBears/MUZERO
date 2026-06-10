@@ -32,6 +32,27 @@ describe("parseNeteaseLyric", () => {
     });
   });
 
+  it("strips yrc metadata (songwriter/composer JSON) lines", () => {
+    const lyric = [
+      '{"c":[{"tx":"作词: "},{"tx":"virtua! girl","li":"http://x/y.id=1&type=artist"}]}',
+      '{"c":[{"tx":"作曲: "},{"tx":"virtua! girl"}]}',
+      "[00:12.34]Cause you don't need to run away tonight",
+      "[00:15.00]Tonight",
+    ].join("\n");
+    expect(parseNeteaseLyric({ lrc: { lyric } })).toEqual({
+      synced: "[00:12.34]Cause you don't need to run away tonight\n[00:15.00]Tonight",
+      instrumental: false,
+    });
+  });
+
+  it("strips a timestamp-prefixed yrc metadata line too", () => {
+    const lyric = '[00:00.00]{"c":[{"tx":"编曲: "},{"tx":"x"}]}\n[00:10.00]real line';
+    expect(parseNeteaseLyric({ lrc: { lyric } })).toEqual({
+      synced: "[00:10.00]real line",
+      instrumental: false,
+    });
+  });
+
   it("flags instrumental tracks (NetEase's 纯音乐 placeholder)", () => {
     expect(parseNeteaseLyric({ lrc: { lyric: "[99:00.00]纯音乐，请欣赏\n" } })).toEqual({
       instrumental: true,
