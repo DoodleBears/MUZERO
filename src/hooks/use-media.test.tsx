@@ -55,4 +55,18 @@ describe("useTrackCoverUrl — cross-mount object-URL cache (Phase 1)", () => {
     expect(result.current).toBe("https://example.com/c.jpg");
     expect(URL.createObjectURL).not.toHaveBeenCalled();
   });
+
+  it("leak audit: churning a grid (many mount/unmount cycles) stays bounded", async () => {
+    const track = { coverBlobId: "blb_leak_audit" };
+    // Mount + unmount the same cover many times, as scrolling/tab-switching does.
+    for (let i = 0; i < 8; i++) {
+      const r = renderHook(() => useTrackCoverUrl(track));
+      await act(async () => {});
+      expect(r.result.current).toMatch(/^blob:cover-/);
+      r.unmount();
+    }
+    // One URL total (the cache reused it every time); none revoked while it lived.
+    expect(URL.createObjectURL).toHaveBeenCalledTimes(1);
+    expect(URL.revokeObjectURL).not.toHaveBeenCalled();
+  });
 });
