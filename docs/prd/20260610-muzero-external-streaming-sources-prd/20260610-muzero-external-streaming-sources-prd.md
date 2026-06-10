@@ -565,8 +565,22 @@ components/player/            # 无需改：streamed track 复用 media-stage / 
 3. **登录窗口**（Electron 隐藏 `BrowserWindow` 抓 cookie）+ `stream-auth-store`（observer 注入）。
 4. ~~player-store 即时 resolve 钩子~~ ✅ **已完成（I1）**——并发文件已提交后落地；streamed track → `resolve` → `loadUrl`（Bili 的 `mediaProxyUrl` 待 #1）。
 5. ~~`createStreamedTrack` repo~~ ✅ **已完成（G1）**。
-6. ~~UI：在线搜索归入 ⌘F~~ ✅ **已落地（U1）**——⌘F 本地结果 + 在线源结果并排，启用 chips（默认关）+ 选中→入库+播放；i18n 4 语已补。dev 面板（T1）可后续移除。**仍待**：各源**登录**（cookie 抓取，让 VIP/高音质可用）+ **音质选择** UI（目前匿名 + 默认音质）。
-7. **Phase 5 离线缓存**。
-8. **muzfetch header 注入 + Range**（#1）→ 让 Bili 媒体也能播。
+6. ~~UI：在线搜索归入 ⌘F~~ ✅ **已落地（U1）**；dev 面板（T1）已移除（并发 agent）。
+6b. ~~各源**登录** + **音质选择** UI~~ ✅ **已落地（L1–L3，worktree 分支 `feat/stream-source-login`）** —— 见 §13。
+7. **Phase 5 离线缓存**（封面已做；音频缓存待）。
+8. ~~muzfetch header 注入 + Range~~ ✅ 已落地（Bili 媒体可播）。
+
+## 13. 登录 Phase（worktree `feat/stream-source-login`，待 Electron 实测 + 合并）
+
+解锁 VIP/高音质需登录。因主分支多 agent 并发，登录在隔离 worktree 上做，三个 TDD 原子提交：
+
+| # | 单元 | 文件 | 测试 | 状态 |
+|---|---|---|---|---|
+| L1 | 登录配置 + 纯 cookie 助手（`assembleCookieHeader` 去重 / `hasAuthCookie` / `cookieStringHasAuth` / `streamSourcesAfterLogin·Logout` 设置补丁） | `src/streamsrc/login.ts` | ×10 | ✅ green |
+| L2 | 桌面登录窗（`bridge.openSourceLogin`：子 `BrowserWindow` 加载官方登录页 → 轮询默认 session cookie 至 `MUSIC_U`/`SESSDATA` 出现 → 回传 cookie；渲染层用 L1 拼 header） | `bridge.ts`·`electron.ts`·`preload.cjs`·`main.cjs`·`source-login.cjs` | 运行时（需 Electron 实测） | 🔄 待实测 |
+| L3 | Settings「在线音源」面板：各源登录/登出 + 音质 + `hasStreamingSources` 门控 + 红线文案；接入 settings nav/page + i18n 4 语 | `stream-sources-settings.tsx`·`settings-nav.ts`·`settings-page.tsx` | nav + L1 助手 ×14 | ✅ green |
+
+**机制**：登录窗用**默认 session** → cookie 同时进 app cookie jar（`net.fetch` 自动带上）+ 存进 `settings.streamSources[id].cookie`（BYOK，设备本地）+ 经 `x-muzero-h-cookie` 注入 → 双保险解锁 VIP。登出清 cookie。
+**待办**：① Electron 实测 cookie 抓取（登录窗能否捕获 `MUSIC_U`/`SESSDATA`）；② 合并回主分支（注意主分支半提交状态）；③ 登出未清默认 session（已知小限制）。
 
 > 续作前置：等上述并发文件落定（或获明确授权编辑），并在运行的 Electron 下验证。纯逻辑层已就绪，集成层是「把已验证的积木接到外壳」。
