@@ -34,6 +34,14 @@ vi.mock("motion/react", async () => {
     void transition;
     return React.createElement("div", { ...domProps, ref }, children as React.ReactNode);
   });
+  // A stable, stateful motion value so the wheel handler can read x.get()/set().
+  let motionValue = 0;
+  const x = {
+    get: () => motionValue,
+    set: (next: number) => {
+      motionValue = next;
+    },
+  };
   return {
     animate: () => {
       const controls = Promise.resolve() as Promise<void> & { stop: () => void };
@@ -43,7 +51,7 @@ vi.mock("motion/react", async () => {
     motion: {
       div: MotionDiv,
     },
-    useMotionValue: () => ({ set: vi.fn() }),
+    useMotionValue: () => x,
     useReducedMotion: () => false,
     useTransform: () => 0,
   };
@@ -139,6 +147,38 @@ describe("SwipeableMediaStage", () => {
 
     expect(screen.queryByTestId("visual-trk_b")).not.toBeInTheDocument();
     expect(screen.getByTestId("media-stage")).toBeInTheDocument();
+  });
+
+  it("switches to the next track on a horizontal trackpad swipe", async () => {
+    render(<SwipeableMediaStage />);
+    // container (wheel target) = cover box wrapping the draggable stage.
+    const container = screen.getByTestId("media-stage").parentElement?.parentElement;
+    if (!container) throw new Error("Missing stage container");
+
+    await act(async () => {
+      // deltaX > 0, no vertical component → a leftward swipe = "next".
+      container.dispatchEvent(
+        new WheelEvent("wheel", { bubbles: true, cancelable: true, deltaX: 140, deltaY: 0 }),
+      );
+      await Promise.resolve();
+    });
+
+    expect(usePlayerStore.getState().currentIndex).toBe(1);
+  });
+
+  it("ignores vertical wheel scrolling", async () => {
+    render(<SwipeableMediaStage />);
+    const container = screen.getByTestId("media-stage").parentElement?.parentElement;
+    if (!container) throw new Error("Missing stage container");
+
+    await act(async () => {
+      container.dispatchEvent(
+        new WheelEvent("wheel", { bubbles: true, cancelable: true, deltaX: 4, deltaY: 120 }),
+      );
+      await Promise.resolve();
+    });
+
+    expect(usePlayerStore.getState().currentIndex).toBe(0);
   });
 });
 

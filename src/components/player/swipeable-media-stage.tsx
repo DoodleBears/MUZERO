@@ -1,5 +1,12 @@
-import { animate, motion, useMotionValue, useReducedMotion, useTransform } from "motion/react";
-import { type ComponentProps, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  animate,
+  type MotionValue,
+  motion,
+  useMotionValue,
+  useReducedMotion,
+  useTransform,
+} from "motion/react";
+import { type RefObject, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { db } from "@/db/muzero-db";
@@ -7,6 +14,7 @@ import type { Track } from "@/db/types";
 import { useSettings } from "@/hooks/use-app-data";
 import { useTrackCoverUrl } from "@/hooks/use-media";
 import { getCroppedBlob } from "@/lib/image-crop";
+import { trackSubtitle } from "@/lib/track-display";
 import { cn } from "@/lib/utils";
 import { usePlayerStore } from "@/stores/player-store";
 import { MediaStage } from "./media-stage";
@@ -22,21 +30,52 @@ const HANDOFF_DURATION_SEC = 0.32;
 const COVER_READY_SETTLE_MS = 440;
 const COMMIT_EASE = [0.22, 1, 0.36, 1] as const;
 const SNAP_EASE = [0.25, 1, 0.5, 1] as const;
-const EFFECT_TRAVEL_FRACTION = 0.42;
 const EXIT_TRAVEL_FRACTION = 0.92;
 const DRAG_GAIN = 2;
+// Trackpad / horizontal-wheel swipe: how much a deltaX pixel moves the strip,
+// how much horizontal travel must accumulate before the gesture engages (so a
+// near-vertical scroll doesn't nudge the cover), and how long after the last
+// wheel tick we treat the swipe as finished.
+const WHEEL_GAIN = 1;
+const WHEEL_ENGAGE_PX = 10;
+const WHEEL_END_MS = 140;
+// Coverflow look: each cover pivots around its own centre as the strip slides.
+const COVERFLOW_TILT = 34;
+const SIDE_SCALE = 0.86;
 const SWIPE_CARD_BASE =
   "pointer-events-none absolute inset-0 overflow-hidden rounded-lg bg-muted [backface-visibility:hidden]";
 
-export function SwipeableMediaStage({ className }: { className?: string }) {
+export function SwipeableMediaStage({
+  className,
+  coverRef,
+}: {
+  className?: string;
+  coverRef?: RefObject<HTMLDivElement | null>;
+}) {
   const { t } = useTranslation();
   const x = useMotionValue(0);
   const reducedMotion = useReducedMotion();
   const containerRef = useRef<HTMLDivElement | null>(null);
+  // The cover box is measured for the overlay portal and also serves as the
+  // now-playing image drop target, so forward it to the caller's ref.
+  const setStageRef = useCallback(
+    (el: HTMLDivElement | null) => {
+      containerRef.current = el;
+      if (coverRef) coverRef.current = el;
+    },
+    [coverRef],
+  );
   const activeAnimation = useRef<{ stop: () => void } | null>(null);
   const clearTimer = useRef<number | null>(null);
   const handoffTimer = useRef<number | null>(null);
   const animationToken = useRef(0);
+  // Horizontal trackpad/wheel swipe bookkeeping (a wheel gesture has no
+  // pointerup, so its end is debounced and momentum after a commit is swallowed).
+  const wheelEngaged = useRef(false);
+  const wheelCommitted = useRef(false);
+  const wheelAccum = useRef(0);
+  const wheelEndTimer = useRef<number | null>(null);
+  const wheelState = useRef<WheelState | null>(null);
   const [width, setWidth] = useState(FALLBACK_WIDTH);
   const [dragDirection, setDragDirection] = useState<SwipeDirection>(null);
   const [committing, setCommitting] = useState(false);
@@ -82,28 +121,16 @@ export function SwipeableMediaStage({ className }: { className?: string }) {
 
   const travel = Math.max(width, FALLBACK_WIDTH);
   const visualX = useTransform(x, (value) => value * DRAG_GAIN);
-  const effectTravel = Math.max(120, Math.min(travel * EFFECT_TRAVEL_FRACTION, 330));
   const exitTravel = Math.max(300, Math.min(travel * EXIT_TRAVEL_FRACTION, 760));
-  const sideOffset = Math.min(travel * 0.86, 780);
-  const rotateY = useTransform(
-    visualX,
-    [-effectTravel, 0, effectTravel],
-    reducedMotion ? [0, 0, 0] : [40, 0, -40],
-  );
-  const currentOpacity = useTransform(
-    visualX,
-    [-exitTravel, -effectTravel * 0.34, 0, effectTravel * 0.34, exitTravel],
-    [0, 0.9, 1, 0.9, 0],
-  );
-  const shadeOpacity = useTransform(visualX, [-effectTravel, 0, effectTravel], [0.28, 0, 0.28]);
-  const nextX = useTransform(visualX, [-effectTravel, 0], [0, sideOffset]);
-  const nextRotateY = useTransform(visualX, [-effectTravel, 0], reducedMotion ? [0, 0] : [0, -36]);
-  const nextOpacity = useTransform(visualX, [-effectTravel * 0.58, -12, 0], [1, 0.56, 0]);
-  const nextScale = useTransform(visualX, [-effectTravel, 0], [1, 0.94]);
-  const prevX = useTransform(visualX, [0, effectTravel], [-sideOffset, 0]);
-  const prevRotateY = useTransform(visualX, [0, effectTravel], reducedMotion ? [0, 0] : [36, 0]);
-  const prevOpacity = useTransform(visualX, [0, 12, effectTravel * 0.58], [0, 0.56, 1]);
-  const prevScale = useTransform(visualX, [0, effectTravel], [0.94, 1]);
+  // Cards sit one "step" apart and the whole strip translates with the drag, so
+  // each cover pivots around its own centre (no door-hinge overlap). One commit
+  // moves the strip exactly one step, landing the incoming cover dead-centre.
+  const step = exitTravel;
+  const tilt = reducedMotion ? 0 : COVERFLOW_TILT;
+  const sideScale = reducedMotion ? 1 : SIDE_SCALE;
+  const currentCard = useCoverflowCard(visualX, 0, step, tilt, sideScale);
+  const nextCard = useCoverflowCard(visualX, step, step, tilt, sideScale);
+  const prevCard = useCoverflowCard(visualX, -step, step, tilt, sideScale);
 
   useEffect(() => {
     const el = containerRef.current;
@@ -145,6 +172,7 @@ export function SwipeableMediaStage({ className }: { className?: string }) {
       activeAnimation.current?.stop();
       if (clearTimer.current != null) window.clearTimeout(clearTimer.current);
       if (handoffTimer.current != null) window.clearTimeout(handoffTimer.current);
+      if (wheelEndTimer.current != null) window.clearTimeout(wheelEndTimer.current);
     };
   }, []);
 
@@ -247,10 +275,13 @@ export function SwipeableMediaStage({ className }: { className?: string }) {
       void controls.then(() => {
         if (animationToken.current !== token) return;
         activeAnimation.current = null;
+        // Hand off to the settled card while the strip stays parked at the exit
+        // (the outgoing cover has already faded to 0 there). Resetting x now
+        // would snap the *old* card back to centre — that's the flash. The reset
+        // is deferred to the handoff below, once only the settled card renders.
         setSettleTarget(targetVisual);
         setCommitting(false);
         setDragDirection(null);
-        x.set(0);
       });
     },
     [
@@ -281,6 +312,9 @@ export function SwipeableMediaStage({ className }: { className?: string }) {
     const settleMs = settleTarget.track.coverBlobId ? COVER_READY_SETTLE_MS : 0;
     handoffTimer.current = window.setTimeout(() => {
       if (animationToken.current !== token) return;
+      // Only the settled card is on screen now (centre-pinned, x-independent),
+      // so parking the strip back at 0 is invisible — no old-cover snap.
+      x.set(0);
       setHandoffFading(true);
       clearTimer.current = window.setTimeout(() => {
         if (animationToken.current !== token) return;
@@ -298,7 +332,92 @@ export function SwipeableMediaStage({ className }: { className?: string }) {
         handoffTimer.current = null;
       }
     };
-  }, [current?.id, handoffFading, preloadedCoverUrls, readyTrackIds, settleTarget, stageCoverUrl]);
+  }, [
+    current?.id,
+    handoffFading,
+    preloadedCoverUrls,
+    readyTrackIds,
+    settleTarget,
+    stageCoverUrl,
+    x,
+  ]);
+
+  // Snapshot the latest callbacks/state so the native (passive:false) wheel
+  // listener below can read them without being re-attached every render.
+  wheelState.current = {
+    beginGesture,
+    commit,
+    committing,
+    dragDirection,
+    exitTravel,
+    handoffFading,
+    setDragDirection,
+    settleTarget,
+    snapBack,
+    width,
+    x,
+  };
+
+  // Horizontal trackpad / wheel swipe drives the very same coverflow commit as a
+  // drag. A wheel gesture has no pointerup, so it ends on a short debounce: past
+  // the commit threshold it switches (animation and all) and swallows the
+  // momentum tail; short of it, it snaps back.
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+
+    const finishWheel = () => {
+      wheelEndTimer.current = null;
+      const s = wheelState.current;
+      if (s && wheelEngaged.current && !wheelCommitted.current) s.snapBack();
+      wheelEngaged.current = false;
+      wheelCommitted.current = false;
+      wheelAccum.current = 0;
+    };
+
+    const onWheel = (e: WheelEvent) => {
+      const s = wheelState.current;
+      if (!s) return;
+      // Vertical-dominant wheels stay scrolls — leave the page alone.
+      if (e.deltaX === 0 || Math.abs(e.deltaX) <= Math.abs(e.deltaY)) return;
+      // Claim the horizontal swipe (no page scroll / history back-swipe).
+      e.preventDefault();
+      if (wheelEndTimer.current != null) window.clearTimeout(wheelEndTimer.current);
+      wheelEndTimer.current = window.setTimeout(finishWheel, WHEEL_END_MS);
+      // Already switched on this swipe → swallow the momentum tail.
+      if (wheelCommitted.current) return;
+      // A switch is already running (pointer drag or an earlier swipe) → ignore.
+      if (!wheelEngaged.current && (s.committing || s.settleTarget || s.handoffFading)) return;
+
+      const maxX = s.exitTravel / DRAG_GAIN;
+      const delta = -e.deltaX * WHEEL_GAIN;
+      if (!wheelEngaged.current) {
+        // Wait for a decisive amount of travel before showing the strip.
+        wheelAccum.current += delta;
+        if (Math.abs(wheelAccum.current) < WHEEL_ENGAGE_PX) return;
+        wheelEngaged.current = true;
+        s.beginGesture();
+        s.x.set(Math.max(-maxX, Math.min(maxX, wheelAccum.current)));
+      } else {
+        s.x.set(Math.max(-maxX, Math.min(maxX, s.x.get() + delta)));
+      }
+
+      const value = s.x.get();
+      if (value < -8 && s.dragDirection !== "next") s.setDragDirection("next");
+      if (value > 8 && s.dragDirection !== "prev") s.setDragDirection("prev");
+      const commitDistance = Math.min(
+        MAX_COMMIT_DISTANCE,
+        Math.max(MIN_COMMIT_DISTANCE, s.width * COMMIT_FRACTION),
+      );
+      if (Math.abs(value) >= commitDistance) {
+        wheelCommitted.current = true;
+        s.commit(value < 0 ? "next" : "prev");
+      }
+    };
+
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, []);
 
   const stackOverlay =
     stackActive && overlayRect && typeof document !== "undefined"
@@ -311,74 +430,50 @@ export function SwipeableMediaStage({ className }: { className?: string }) {
             style={overlayRect}
             transition={{ duration: HANDOFF_DURATION_SEC, ease: "easeOut" }}
           >
-            <SideCard
-              className={dragDirection === "prev" ? "z-30" : "z-0"}
-              style={{
-                x: prevX,
-                opacity: prevOpacity,
-                rotateY: prevRotateY,
-                scale: prevScale,
-                transformOrigin: "right center",
-              }}
-              onReady={markVisualReady}
-              visual={activeStack.prev}
-            />
-            <SideCard
-              className={dragDirection === "next" ? "z-30" : "z-0"}
-              style={{
-                x: nextX,
-                opacity: nextOpacity,
-                rotateY: nextRotateY,
-                scale: nextScale,
-                transformOrigin: "left center",
-              }}
-              onReady={markVisualReady}
-              visual={activeStack.next}
-            />
-            <motion.div
-              className={cn(SWIPE_CARD_BASE, "z-20")}
-              style={{
-                x: visualX,
-                opacity: currentOpacity,
-                rotateY,
-                transformOrigin:
-                  dragDirection === "next"
-                    ? "right center"
-                    : dragDirection === "prev"
-                      ? "left center"
-                      : "center center",
-                transformStyle: "preserve-3d",
-              }}
-            >
-              {activeStack.current && (
-                <TrackVisual
-                  key={activeStack.current.track.id}
+            {settleTarget ? (
+              // Once settled, only the new cover is on screen — the coverflow
+              // cards (incl. the outgoing one) are gone, so nothing stacks under it.
+              <SettleCard onReady={markVisualReady} visual={settleTarget} />
+            ) : (
+              <>
+                <CoverflowCard
+                  card={prevCard}
+                  onReady={markVisualReady}
+                  visual={activeStack.prev}
+                  zClass={dragDirection === "prev" ? "z-30" : "z-0"}
+                />
+                <CoverflowCard
+                  card={nextCard}
+                  onReady={markVisualReady}
+                  visual={activeStack.next}
+                  zClass={dragDirection === "next" ? "z-30" : "z-0"}
+                />
+                <CoverflowCard
+                  card={currentCard}
                   onReady={markVisualReady}
                   visual={activeStack.current}
+                  zClass="z-20"
                 />
-              )}
-              <motion.div className="absolute inset-0 bg-black" style={{ opacity: shadeOpacity }} />
-            </motion.div>
-            {settleTarget && (
-              <motion.div className={cn(SWIPE_CARD_BASE, "z-40")} initial={false}>
-                <TrackVisual
-                  key={settleTarget.track.id}
-                  onReady={markVisualReady}
-                  visual={settleTarget}
-                />
-              </motion.div>
+              </>
             )}
           </motion.div>,
           document.body,
         )
       : null;
 
+  const baseHidden = stackActive && !handoffFading;
+  // The cover cross-fades through the handoff, but the (translucent) title/author
+  // pills must NOT — two copies fading over each other darken the background. So
+  // the base owns the identity the moment the swipe settles; it's hidden only
+  // while the overlay's moving coverflow identity is on screen (active drag).
+  const identityHidden = stackActive && !settleTarget && !handoffFading;
+
   return (
     <>
-      <div className={cn("overflow-visible rounded-lg shadow-md", className)}>
+      <div className={cn("flex flex-col gap-2", className)}>
         <div
-          ref={containerRef}
-          className="relative isolate mx-auto w-full touch-pan-y select-none overflow-visible [perspective:1200px] [transform-style:preserve-3d] [&_*]:select-none [&_img]:pointer-events-none"
+          ref={setStageRef}
+          className="relative w-full overflow-visible rounded-lg shadow-md [perspective:1200px]"
         >
           <motion.div
             drag="x"
@@ -409,16 +504,24 @@ export function SwipeableMediaStage({ className }: { className?: string }) {
               }
             }}
             aria-label={`${t("player.previous")} / ${t("player.next")}`}
-            className="relative z-10 w-full cursor-grab active:cursor-grabbing"
+            className="relative z-10 w-full touch-pan-y cursor-grab select-none overflow-visible active:cursor-grabbing [&_*]:select-none [&_img]:pointer-events-none"
             style={{
               x,
-              opacity: stackActive && !handoffFading ? 0 : 1,
+              opacity: baseHidden ? 0 : 1,
               willChange: "transform",
             }}
           >
             <MediaStage className="shadow-none" />
           </motion.div>
         </div>
+        {/* Title + author travel with the cover during an active drag (handled by
+            the overlay coverflow cards); the moment the swipe settles, the base
+            takes the identity back so it doesn't cross-fade and darken. */}
+        {current && (
+          <div style={{ opacity: identityHidden ? 0 : 1 }}>
+            <StageIdentity track={current} />
+          </div>
+        )}
       </div>
       {stackOverlay}
     </>
@@ -433,27 +536,126 @@ type SwipeStack = {
   next: VisualTrack | null;
   prev: VisualTrack | null;
 };
+type WheelState = {
+  beginGesture: () => void;
+  commit: (direction: Exclude<SwipeDirection, null>) => void;
+  committing: boolean;
+  dragDirection: SwipeDirection;
+  exitTravel: number;
+  handoffFading: boolean;
+  setDragDirection: (direction: SwipeDirection) => void;
+  settleTarget: VisualTrack | null;
+  snapBack: () => void;
+  width: number;
+  x: MotionValue<number>;
+};
 
-function SideCard({
-  className,
-  style,
-  visual,
+type CoverflowMotion = ReturnType<typeof useCoverflowCard>;
+
+/**
+ * One cover in the swipe strip plus its title/author block. The cover gets the
+ * full coverflow treatment (centre-pivot tilt + scale + fade); the identity
+ * block only slides horizontally with it so the text stays flat and readable.
+ */
+function CoverflowCard({
+  card,
   onReady,
+  visual,
+  zClass,
 }: {
-  className?: string;
+  card: CoverflowMotion;
   onReady?: (trackId: string) => void;
-  style: ComponentProps<typeof motion.div>["style"];
   visual: VisualTrack | null;
+  zClass: string;
 }) {
   if (!visual) return null;
   return (
-    <motion.div
-      className={cn(SWIPE_CARD_BASE, className)}
-      style={{ ...style, transformStyle: "preserve-3d" }}
-    >
+    <>
+      <motion.div
+        className={cn(SWIPE_CARD_BASE, zClass)}
+        style={{
+          x: card.screenX,
+          opacity: card.coverOpacity,
+          rotateY: card.rotateY,
+          scale: card.scale,
+          transformOrigin: "center center",
+          transformStyle: "preserve-3d",
+        }}
+      >
+        <TrackVisual key={visual.track.id} onReady={onReady} visual={visual} />
+      </motion.div>
+      <motion.div
+        className={cn("pointer-events-none absolute inset-x-0 top-full mt-2", zClass)}
+        style={{ x: card.screenX, opacity: card.infoOpacity }}
+      >
+        <StageIdentity track={visual.track} />
+      </motion.div>
+    </>
+  );
+}
+
+/**
+ * The settled (incoming) cover, flat dead-centre under the fade-out. Only the
+ * cover — the title/author come from the base layer (which is already showing
+ * the new track by now), so the translucent pills never cross-fade and darken.
+ */
+function SettleCard({
+  onReady,
+  visual,
+}: {
+  onReady?: (trackId: string) => void;
+  visual: VisualTrack;
+}) {
+  return (
+    <motion.div className={cn(SWIPE_CARD_BASE, "z-40")} initial={false}>
       <TrackVisual key={visual.track.id} onReady={onReady} visual={visual} />
     </motion.div>
   );
+}
+
+/** Poweramp-style title + author pills shown directly below the stage cover. */
+function StageIdentity({ track }: { track: Track }) {
+  return (
+    <div className="flex w-full min-w-0 flex-col items-start gap-1.5">
+      <div className="max-w-full rounded-full border border-white/10 bg-black/35 px-4 py-1.5 shadow-lg backdrop-blur-md">
+        <div className="truncate text-2xl font-bold tracking-normal text-white">{track.title}</div>
+      </div>
+      <div className="max-w-full rounded-full border border-white/10 bg-black/30 px-3 py-1 shadow-md backdrop-blur-md">
+        <div className="truncate text-base font-semibold text-white/85">{trackSubtitle(track)}</div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Coverflow motion values for one card in the strip. `offset` is where the card
+ * sits relative to centre (0 current, +step next, -step prev); the card's
+ * on-screen position drives a symmetric centre-pivot tilt/scale/fade.
+ */
+function useCoverflowCard(
+  visualX: MotionValue<number>,
+  offset: number,
+  step: number,
+  tilt: number,
+  sideScale: number,
+) {
+  const screenX = useTransform(visualX, (value) => value + offset);
+  const rotateY = useTransform(screenX, [-step, 0, step], [tilt, 0, -tilt]);
+  const scale = useTransform(screenX, [-step, 0, step], [sideScale, 1, sideScale]);
+  // Reach 0 right at the exit (|screenX| === step) so the outgoing cover is
+  // fully faded by the time the strip parks — no pop, no leftover under the
+  // settled card. Side cards still read clearly through the mid-slide.
+  const coverOpacity = useTransform(
+    screenX,
+    [-step, -step * 0.55, 0, step * 0.55, step],
+    [0, 0.6, 1, 0.6, 0],
+  );
+  const infoOpacity = useTransform(
+    screenX,
+    [-step * 0.7, -step * 0.16, 0, step * 0.16, step * 0.7],
+    [0, 0.55, 1, 0.55, 0],
+  );
+  return { coverOpacity, infoOpacity, rotateY, scale, screenX };
 }
 
 function TrackVisual({

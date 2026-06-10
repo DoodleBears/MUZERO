@@ -1,30 +1,18 @@
 import type { ReactNode } from "react";
 import type { Track } from "@/db/types";
-import { trackSubtitle } from "@/lib/track-display";
 
 /**
- * Poweramp-style info row shown directly below the stage: title/subtitle first,
- * then compact musical chips. The like action lives in the player dock beside
- * play/pause, keeping this area light instead of card-like.
+ * Compact musical metadata shown below the stage. The title/author pills live in
+ * the stage itself (they travel with the cover during a swipe); this row carries
+ * the BPM/key/provider chips and the DJ note. Renders nothing for plain uploads.
  */
 export function TrackInfoCard({ track }: { track: Track }) {
-  const hasChips = !!track.brief?.bpm || !!track.brief?.keyscale || !!track.brief;
+  const hasChips = !!track.brief;
+  const hasNote = !!track.brief?.djNote;
+  if (!hasChips && !hasNote) return null;
 
   return (
-    <div className="-mt-1 mx-auto flex w-full flex-col gap-2 ">
-      <div className="flex min-w-0 flex-col items-start gap-1.5">
-        <div className="max-w-full rounded-full border border-white/10 bg-black/35 px-4 py-1.5 shadow-lg backdrop-blur-md">
-          <div className="truncate text-2xl font-bold tracking-normal text-white sm:text-2xl">
-            {track.title}
-          </div>
-        </div>
-        <div className="max-w-full rounded-full border border-white/10 bg-black/30 px-3 py-1 shadow-md backdrop-blur-md">
-          <div className="truncate text-base font-semibold text-white/85">
-            {trackSubtitle(track)}
-          </div>
-        </div>
-      </div>
-
+    <div className="mx-auto flex w-full flex-col gap-2">
       {hasChips && (
         <div className="flex flex-wrap gap-1.5 text-xs text-muted-foreground">
           {track.brief?.bpm && <Chip>{track.brief.bpm} BPM</Chip>}

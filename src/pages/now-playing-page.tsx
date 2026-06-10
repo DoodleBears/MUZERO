@@ -68,10 +68,9 @@ export function NowPlayingPage({ foregroundHidden = false }: { foregroundHidden?
           ref={sectionRef}
           className="no-scrollbar flex min-h-0 flex-col gap-3 overflow-y-auto overflow-x-visible pt-chrome-top pb-chrome-bottom"
         >
-          {/* Video fills the width at its own aspect ratio; audio shows a square. */}
-          <div ref={stageRef}>
-            <SwipeableMediaStage />
-          </div>
+          {/* Video fills the width at its own aspect ratio; audio shows a square.
+              The cover box (drop target) is measured via stageRef. */}
+          <SwipeableMediaStage coverRef={stageRef} />
 
           {current && <TrackInfoCard track={current} />}
 
