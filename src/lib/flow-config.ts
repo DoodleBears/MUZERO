@@ -29,12 +29,30 @@ export interface FlowEffectMeta {
   labelKey: string;
 }
 
-/** v1 curated flow effects, in display order. The index IS the `uEffect` branch. */
+/**
+ * Flow effects — the full color4bg style family, each its own self-authored
+ * shader (`flow-shaders.ts` `FLOW_FRAGS`). Display order: calm/flowing first,
+ * then waves/gradients, then geometric. Selecting one swaps the flow shader.
+ */
 export const FLOW_EFFECTS: FlowEffectMeta[] = [
-  { id: "aurora-drift", labelKey: "flow.effectAuroraDrift" },
-  { id: "liquid-mesh", labelKey: "flow.effectLiquidMesh" },
-  { id: "soft-blobs", labelKey: "flow.effectSoftBlobs" },
+  { id: "ambient-light", labelKey: "flow.effectAmbientLight" },
+  { id: "aesthetic-fluid", labelKey: "flow.effectAestheticFluid" },
+  { id: "big-blob", labelKey: "flow.effectBigBlob" },
+  { id: "blur-dot", labelKey: "flow.effectBlurDot" },
+  { id: "blur-gradient", labelKey: "flow.effectBlurGradient" },
+  { id: "wavy-waves", labelKey: "flow.effectWavyWaves" },
+  { id: "chaos-waves", labelKey: "flow.effectChaosWaves" },
+  { id: "swirling-curves", labelKey: "flow.effectSwirlingCurves" },
+  { id: "curve-gradient", labelKey: "flow.effectCurveGradient" },
+  { id: "step-gradient", labelKey: "flow.effectStepGradient" },
+  { id: "grid-array", labelKey: "flow.effectGridArray" },
+  { id: "triangles-mosaic", labelKey: "flow.effectTrianglesMosaic" },
+  { id: "random-cubes", labelKey: "flow.effectRandomCubes" },
+  { id: "abstract-shape", labelKey: "flow.effectAbstractShape" },
 ];
+
+/** Default flow effect (calm, the color4bg "ambient-light" look anysoul used). */
+export const DEFAULT_FLOW_EFFECT: FlowEffectId = "ambient-light";
 
 /** Smallest / largest number of flow colors a user can keep. */
 export const FLOW_MIN_COLORS = 2;
@@ -43,8 +61,8 @@ export const FLOW_MAX_COLORS = 5;
 export interface FlowConfig {
   source: FlowColorSource;
   customColors: Rgb[];
-  /** Shader branch index (FLOW_EFFECTS order). */
-  effect: number;
+  /** Which flow shader to render (selects `FLOW_FRAGS[effect]`). */
+  effect: FlowEffectId;
   /** 0..1 uniforms. */
   speed: number;
   scale: number;
@@ -104,11 +122,14 @@ type FlowSettings = Pick<
 
 /** Resolve persisted flow settings into shader-ready values (defaults applied). */
 export function resolveFlowConfig(settings: FlowSettings): FlowConfig {
-  const effectIndex = FLOW_EFFECTS.findIndex((e) => e.id === settings.flowEffect);
+  const effect: FlowEffectId =
+    settings.flowEffect && FLOW_EFFECTS.some((e) => e.id === settings.flowEffect)
+      ? settings.flowEffect
+      : DEFAULT_FLOW_EFFECT;
   return {
     source: settings.flowColorSource ?? "cover",
     customColors: pickCustomColors(settings.flowCustomColors),
-    effect: effectIndex >= 0 ? effectIndex : 0,
+    effect,
     speed: clamp01((settings.flowMotion ?? 40) / 100),
     scale: clamp01((settings.flowScale ?? 50) / 100),
     reactivity: clamp01((settings.flowAudioReactivity ?? 20) / 100),

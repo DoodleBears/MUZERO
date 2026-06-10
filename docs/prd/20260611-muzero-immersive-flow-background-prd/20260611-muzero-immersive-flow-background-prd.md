@@ -17,6 +17,7 @@
 | 4 | Settings：在 Appearance 段新增独立 sidebar item「流光背景」面板（效果选择 / 取色源切换 / 多色编辑器 + 预设 / 压暗 / 透明度 / 动态强度），i18n 四语全量 | ✅ Completed | [Phase 4 Checklist](#phase-4-checklist) |
 | 5 | 打磨：reduced-motion / 移动 30fps / bundle 预算复测 / 无封面与切歌过渡 / 文档对齐 | ✅ Completed（运行时行为继承自 SceneHost；视觉验证待人工） | [Phase 5 Checklist](#phase-5-checklist) |
 | 6 | **设计修正**：流光改为**独立合成层**（背景图/视频 → 流光 → 频谱，**不互斥**），独立 `flowEnabled` 开关 + `flowOpacity`/`flowDim`；`scene-flow` 从频谱选择器隐藏（`hidden:true`，仍作图层强制 styleId 渲染） | ✅ Completed | [Phase 6 Checklist](#phase-6-checklist) |
+| 7 | **全 color4bg 效果对齐**（owner：「支持这个包所有类型」）：14 个自研 flow shader（`flow-shaders.ts`，ambient-light/aesthetic-fluid/big-blob/blur-dot/blur-gradient/wavy-waves/chaos-waves/swirling-curves/curve-gradient/step-gradient/grid-array/triangles-mosaic/random-cubes/abstract-shape），`FlowEffectId` 扩成 14、每效果一 shader 按需编译 | ✅ Completed | [Phase 7 Checklist](#phase-7-checklist) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
 > 本 PRD 适用 [`prd-create.md`](../../../.cursor/commands/prd-create.md) 的 **§3「Effect / Shader / 外部依赖类」** 附加要求（license 第一公民、curate 不穷举、**不引入新 runtime owner**、bundle 预算、自研优先、i18n 四语、不散落硬编码、shader uniform prelude 约定、基础设施先于覆盖广度、回退=`git revert`）与 **§4「realtime preview 性能类」**（reduced-motion / 可见性暂停 / prod build 复测）。
@@ -447,6 +448,34 @@ export function resolveFlowColors(
 - [x] CLAUDE.md / PRD 修正层级模型。
 - [ ] **真实 app 人工验证**：流光层与频谱**同时**显示（不互斥）、垫在背景图之上频谱之下、`flowOpacity` 调透出底图、关 `flowEnabled` 只去流光层不影响频谱。
 
+### Phase 7: 全 color4bg 效果对齐（14 效果）✅
+
+**Goal:** owner 要求「支持这个包（color4bg）所有类型」——把 flow 效果从 3 个扩到 color4bg 全 14 种风格，**仍零依赖**（自研 shader，不引 color4bg/ogl）。
+
+**color4bg 14 style → 自研 shader 对应**（`flow-shaders.ts`，每个一段 GLSL，共享 `FLOW_PRELUDE` 的 noise/fbm/`ramp()` 多色映射）：
+
+| family | color4bg style → flow effect | 技法（自研复刻） |
+|---|---|---|
+| Blob/metaball（calm） | `ambient-light` / `aesthetic-fluid` / `big-blob` / `blur-dot` | 漂移 blob Gaussian/metaball 混合，封面多色逐 blob |
+| Gradient/band | `blur-gradient` / `step-gradient` / `curve-gradient` | 旋转/正弦扭曲渐变、网格涟漪、三角递归曲线 → `ramp()` |
+| Wave/flow-field | `wavy-waves` / `chaos-waves` / `swirling-curves` | 矢量场迭代 / 嵌套 FBM / FBM domain-warp marble |
+| Geometric/tiling | `grid-array` / `triangles-mosaic` / `random-cubes` / `abstract-shape` | SDF 圆角格 / 三角点阵 / 散布旋转方块(伪深度雾，3D 的 2D 近似) / voronoi |
+
+**Tasks:**
+- [x] `flow-shaders.ts`（🆕 shader 源文件）：`FLOW_PRELUDE` + 14 段 main + `FLOW_FRAGS: Record<FlowEffectId,string>`（TS 强制 14 个 id 齐全）。GLSL ES 1.0（仅 loop-index 数组访问、常量循环界）。
+- [x] `db/types.ts` `FlowEffectId` 扩成 14 个 color4bg style id；`flow-config.ts` `FLOW_EFFECTS`(14) + `FlowConfig.effect: FlowEffectId`（不再是 index）+ `resolveFlowConfig` 校验回退 `ambient-light`。
+- [x] `reactive-scene.tsx`：按 `flow.effect` 选 `FLOW_FRAGS[effect]`（换效果=重编译该 shader，颜色/速度仍走 `flowRef` 不重启循环）；移除 `uEffect` uniform。
+- [x] `scene-shaders.ts` 删除旧 `FLOW_FRAG`（被 `flow-shaders.ts` 取代）。
+- [x] i18n 四语 14 个 `flow.effect*` 标签（替换旧 3 个）。
+
+### Phase 7 Checklist
+- [x] `FLOW_FRAGS` 类型完整性（`Record<FlowEffectId,string>` 编译通过 = 14 齐全）；`flow-config.test` 改 effect=id（41 测试绿）。
+- [x] JSON 四语校验 + biome + whole-tree typecheck 净。
+- [x] 优雅降级：`ReactiveScene` 既有 try/catch —— 某个 shader 万一编译失败 → 该效果不渲染（透明），不崩树。
+- [ ] **真实 app 人工验证**：14 效果逐个观感（blob/wave/gradient/geometric 各家族明显不同）+ 跟封面多色 + calm。random-cubes/abstract-shape 是 color4bg 3D/canvas 原版的 **2D 近似**，观感对齐度待人工确认。
+
+> **curate vs 全量**：模板默认「curate 不穷举」，但 owner 明确要「所有类型」——本期按指示全 14。geometric 家族（grid/triangles/cubes/abstract）偏「图案」非纯「流光」，但属 color4bg 类型集，一并支持；用户可在面板自选。
+
 ---
 
 ## 7. Out of Scope
@@ -488,7 +517,7 @@ export function resolveFlowColors(
 
 | # | Question | Status | Decision |
 |---|----------|--------|----------|
-| 1 | 流光效果变体数量？ | ✅ Resolved | **按 best practice curate：v1 上 3 个**精选效果 `aurora-drift / liquid-mesh / soft-blobs`（用户诉求是「不同的流光效果」，3 个给真实选择又不穷举；更多变体进 v2 backlog） |
+| 1 | 流光效果变体数量？ | ✅ Resolved（Phase 7 改判） | 初判 curate 3 个；**owner 后续要求「支持 color4bg 所有类型」→ Phase 7 全量 14 个自研 shader**（见 Phase 7）。旧 3 id（aurora-drift/liquid-mesh/soft-blobs）被 14 个 color4bg style id 取代 |
 | 2 | WebGL 失败时是否再做 CSS `radial-gradient` 流光回退（anysoul 有）？ | ✅ Resolved | **不做。** 「我们这里不需要回退」——`SceneHost` 既有的 aura 回退是免费现成行为，保留即可，不额外造 CSS flow 回退 |
 | 3 | `scene-flow` 是否也提供给非背景的 stage 表面（小尺寸）？ | ✅ Resolved | **可以。** host 已 placement-aware，surface（小尺寸）与 background 都支持；Settings 预览面板正好用 surface 小尺寸 |
 | 4 | 多色取色默认 N：4 还是 5？ | ✅ Resolved | **默认 4**（按 best practice：去重后常 2–4 个有效色，过多糊成灰），shader `FLOW_MAX_COLORS=5` 留余量 |
@@ -508,6 +537,7 @@ export function resolveFlowColors(
 | 2026-06-11 | DoodleBear / MUZERO | **Phase 4 ✅ 实现**：`flow-settings.tsx`（效果/取色源/多色编辑+预设/速度·尺度·反应/压暗·透明度/实时预览/快捷开关）+ `settings-nav` 加 flow item（测试）+ `settings-page` 路由 + 四语 i18n（navFlow + flow.* 27 keys）。settings-nav 测试 + JSON 校验 + biome 绿。co-modified（settings-page + locale）用 `git apply --cached` hunk 隔离提交（共享 working tree 不动他人 WIP）。修正 `t(dynamicKey)` 需 `defaultValue` |
 | 2026-06-11 | DoodleBear / MUZERO | **Phase 5 ✅ 收尾**：reduced-motion/可见性暂停/WebGL 回退/context-lost 全继承 `SceneHost`（零新增）；palette 900ms 过渡 + 无封面回退；`CLAUDE.md` 可视化段补 scene-flow/多色取色/取色源回退；状态 → Implemented。bundle 估算 < 30KB gz（未单独 build，留 CI）；真实 app 视觉/交互验证待人工。全套 PRD 5 phase 完成 |
 | 2026-06-11 | DoodleBear / MUZERO | **Phase 6 ✅ 设计修正**（owner 反馈：流光与频谱**不互斥**）：流光改为**独立合成层**（背景图/视频 → 流光 → 频谱），独立 `flowEnabled` 开关 + `flowOpacity`/`flowDim`；`scene-flow` 标 `hidden:true` 从频谱选择器隐藏（仍作图层 `VISUALIZER_PICKER_META`）。registry 测试 13 绿 + 四语 i18n + biome + whole-tree typecheck 净。确认全程**零** color4bg/ogl/node-vibrant |
+| 2026-06-11 | DoodleBear / MUZERO | **Phase 7 ✅ 全 color4bg 效果对齐**（owner：「支持这个包所有类型」）：新建 `flow-shaders.ts` 14 段自研 GLSL（color4bg 全 14 style 的自研复刻，含 3D/canvas 的 2D 近似），`FlowEffectId` 扩 14、每效果一 shader 按需编译、移除 `uEffect`，删旧 `FLOW_FRAG`，四语 14 标签。**仍零依赖**（不引 color4bg/ogl）。41 测试绿 + typecheck/biome/JSON 净 |
 
 ---
 

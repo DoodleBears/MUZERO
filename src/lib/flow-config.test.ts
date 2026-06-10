@@ -58,16 +58,24 @@ describe("resolveFlowConfig", () => {
   it("applies calm defaults for an empty settings row", () => {
     const cfg = resolveFlowConfig({} as AppSettings);
     expect(cfg.source).toBe("cover");
-    expect(cfg.effect).toBe(0); // aurora-drift
+    expect(cfg.effect).toBe("ambient-light");
     expect(cfg.speed).toBeCloseTo(0.4);
     expect(cfg.scale).toBeCloseTo(0.5);
     expect(cfg.reactivity).toBeCloseTo(0.2);
     expect(cfg.customColors.length).toBeGreaterThanOrEqual(2);
   });
 
-  it("maps the effect id to a shader branch index", () => {
-    expect(resolveFlowConfig({ flowEffect: "liquid-mesh" } as AppSettings).effect).toBe(1);
-    expect(resolveFlowConfig({ flowEffect: "soft-blobs" } as AppSettings).effect).toBe(2);
+  it("keeps a valid effect id and falls back to ambient-light for unknown/empty", () => {
+    expect(resolveFlowConfig({ flowEffect: "aesthetic-fluid" } as AppSettings).effect).toBe(
+      "aesthetic-fluid",
+    );
+    expect(resolveFlowConfig({ flowEffect: "grid-array" } as AppSettings).effect).toBe(
+      "grid-array",
+    );
+    // A stale/unknown id (e.g. a removed v1 effect) → default.
+    expect(resolveFlowConfig({ flowEffect: "aurora-drift" } as unknown as AppSettings).effect).toBe(
+      "ambient-light",
+    );
   });
 
   it("normalizes + clamps the 0–100 sliders to 0–1", () => {
