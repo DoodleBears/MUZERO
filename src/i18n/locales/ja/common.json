@@ -827,6 +827,11 @@
     "removedFromSet_other": "{{count}} 曲をセットから削除しました",
     "deleted_other": "{{count}} 曲を削除しました"
   },
+  "reorder": {
+    "dragHandle": "ドラッグして並べ替え",
+    "movingCount_other": "{{count}} 曲",
+    "disabledHint": "並べ替えるには並び順・絞り込み・検索を解除してください"
+  },
   "set": {
     "contextDelete": "セットを削除…",
     "deleteTitle": "「{{name}}」を削除しますか？",

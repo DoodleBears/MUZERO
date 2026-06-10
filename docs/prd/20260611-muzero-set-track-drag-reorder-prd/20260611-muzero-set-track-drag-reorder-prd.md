@@ -13,8 +13,8 @@
 |-------|------|--------|------|
 | 1 | 纯排序核心 + 仓库层（分数序算法 + lazy 物化 + reorder repo） | ✅ Completed | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | R2 Sync 对齐（manifest rank 字段 + export/import round-trip + 整 session LWW） | ✅ Completed | [Phase 2 Checklist](#phase-2-checklist) |
-| 3 | 多选模式拖拽 UI（@dnd-kit + 虚拟化 + 整选区块移动 + drop indicator） | 🔲 Pending | [Phase 3 Checklist](#phase-3-checklist) |
-| 4 | 打磨（键盘 a11y reorder + 触摸自动滚动 + 边界回归） | 🔲 Pending | [Phase 4 Checklist](#phase-4-checklist) |
+| 3 | 多选模式拖拽 UI（@dnd-kit + 整选区块移动 + drop indicator + 手动序门控） | ✅ Completed（代码+单测；交互实测待真机） | [Phase 3 Checklist](#phase-3-checklist) |
+| 4 | 打磨（虚拟化 reorder + 键盘 a11y + 触摸自动滚动 + 边界回归） | 🔲 Pending | [Phase 4 Checklist](#phase-4-checklist) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
 
@@ -394,32 +394,37 @@ SetDetailView (search-page.tsx:1244)
 
 **Goal:** 在多选 + 手动顺序下可拖拽，整选区块移动，drop indicator 可见。
 
+> **架构校正（落地时，因并发冲突）：** `virtual-track-list.tsx` / `track-row.tsx` 当时正被并发 agent 重写（行体 80 行未提交）。为不 clobber 其在飞工作，改为**新建独立 [`reorderable-track-list.tsx`](../../../src/components/library/reorderable-track-list.tsx)**（@dnd-kit sortable + 紧凑自绘行，复用 `CoverImage`/`trackSubtitle`/`useTrackCoverUrl`，**不**改那两个热文件），由 `track-list-section.tsx` 在 select+手动序时切换渲染。代价：reorder 列表**暂不虚拟化**（移到 Phase 4）。
+
 **Tasks:**
-- [ ] 加依赖 `@dnd-kit/core` + `@dnd-kit/sortable` + `@dnd-kit/modifiers`（pnpm；测 bundle 增量）。
-- [ ] `track-list-section.tsx`：多选模式下挂 `DndContext`/`SortableContext`（传全量 id）；计算 `isManualOrder` gating；`onDragEnd` → `reorderTracksInSession`。
-- [ ] `virtual-track-list.tsx`：与 @dnd-kit + TanStack Virtual 协作（autoScroll、over 定位 drop indicator）。
-- [ ] `track-row.tsx`：reorder 模式渲染 drag handle（≥44px）；选中行块移动的 `DragOverlay`「N 首」。
-- [ ] drop indicator 高亮线 + 非手动顺序置灰 tooltip。
-- [ ] i18n：`reorder.dragHint` / `reorder.movedCount` / `reorder.disabledSorted` 四语（en 源 → zh/ja/ko）。
+- [x] 加依赖 `@dnd-kit/core@6.3.1` + `/sortable@10` + `/modifiers@9` + `/utilities@3`（pnpm）。✅
+- [x] 新建 `reorderable-track-list.tsx`：`DndContext`/`SortableContext`（传全量 id）+ PointerSensor(距离6)/KeyboardSensor + `restrictToVerticalAxis`；`onDragEnd` → `resolveDropTarget` → `reorderTracksInSession`。✅
+- [x] 纯 `reorder-drop.ts` 的 `resolveDropTarget`（@dnd-kit drag → `insertBeforeId` 锚点；整块/单行；穷举单测 7 个）。✅
+- [x] `track-list-section.tsx`：新增 `canReorder` prop；`sel.mode && setId && canReorder` 时渲染 ReorderableTrackList，否则 VirtualTrackList（热文件零改动）。✅
+- [x] `search-page.tsx` SetDetailView：`tracks` 改用 `orderedSetTrackIds` 派生；`isManualOrder = !sort && !likedOnly && query.trim()===""` → `canReorder`。✅（Phase 1 遗留的派生改动一并落此）
+- [x] drag handle（`GripVertical`，≥44px touch 区，`touch-none`）；drop indicator = sortable 间隙开合 + 源行 40% 透明；`DragOverlay`「N 首」badge。✅
+- [x] i18n：`reorder.dragHandle` / `reorder.movingCount` / `reorder.disabledHint` 四语（en 源 + zh/ja/ko，CJK 仅 `_other`）。✅
 
 #### Phase 3 Checklist
-- [ ] 多选选 3 首拖到中部 → 三首作为连续块落位、相对序保留。
-- [ ] 拖未选中行 → 仅单行移动。
-- [ ] 有列排序/筛选/搜索时手柄置灰 + tooltip；清除后可拖。
-- [ ] 数百首歌单虚拟化下拖到离屏位置（autoScroll）落位正确。
-- [ ] drop indicator 始终指向真实落点；reduced-motion 下无动画但功能正常。
-- [ ] Electron 桌面端实测（主力壳）；预览沙箱注意 hidden-tab rAF 暂停（见 [[preview-hidden-tab-gotcha]]，截图/真实窗口验证）。
+- [x] `resolveDropTarget` 单测：单行上/下/末、整块保序、块跳过自身成员、drop-on-self、未知 id 兜底（7 测绿）。✅
+- [x] 整块移动：拖任一已选行 → 整选区作为连续块落位（`blockFor` + planReorder，相对序保留）。✅（逻辑层 + repo 层已测）
+- [x] 拖未选中行 → 仅单行移动（`blockFor` 返回 `[id]`）。✅
+- [x] 手动序门控：`canReorder = isManualOrder`；有排序/筛选/搜索时不挂 DnD（仍走 VirtualTrackList）。✅
+- [→] **交互实测**（多端拖拽、autoScroll、drop indicator 视觉、reduced-motion）：留待**真实 Electron 壳**手测 —— 预览沙箱 hidden-tab rAF 暂停（[[preview-hidden-tab-gotcha]]）+ 并发 agent 正改同屏热文件，此刻预览态不稳。
+- [→] 虚拟化下拖到离屏位置（autoScroll）：reorder 列表当前**非虚拟化** → 移到 Phase 4。
 
 ### Phase 4: 打磨（可选）
 
-**Goal:** 键盘可达性 + 触摸体验 + 边界回归。
+**Goal:** 虚拟化 reorder + 键盘可达性 + 触摸体验 + 边界回归。
 
 **Tasks:**
-- [ ] 键盘 reorder（@dnd-kit `KeyboardSensor`：聚焦手柄 → 空格抓起 → 上下移动 → 空格落下）。
+- [ ] **虚拟化 reorder 列表**（大歌单 reorder 性能）：ReorderableTrackList 接 TanStack Virtual + @dnd-kit autoScroll 把离屏目标带进视口。（Phase 3 因避开热文件先做非虚拟化版。）
+- [ ] 键盘 reorder 实测（grip 已挂 `KeyboardSensor` + `sortableKeyboardCoordinates`，需端到端验证焦点不丢）。
 - [ ] 触摸 `TouchSensor`（按压延迟避免与滚动冲突）+ 边界 autoScroll 调参。
 - [ ] 与「移出歌单 / 删除」批量操作同屏共存的回归（拖拽中禁用批量按钮）。
 
 #### Phase 4 Checklist
+- [ ] 大歌单（数百首）reorder 不卡、autoScroll 正确。
 - [ ] 键盘可完成一次重排，焦点不丢。
 - [ ] 移动端（窄屏）拖拽不误触滚动。
 - [ ] 拖拽进行中批量操作互斥，无竞态。

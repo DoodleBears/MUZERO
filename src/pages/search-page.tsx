@@ -94,6 +94,7 @@ import { searchEntityFacets, searchTracks } from "@/lib/track-search";
 import { cn, formatDuration, formatListenTime } from "@/lib/utils";
 import { canViewTransition } from "@/lib/view-transition";
 import { transitionState } from "@/lib/view-transition-react";
+import { orderedSetTrackIds } from "@/player/set-order";
 import { useCoverTargetStore } from "@/stores/cover-target-store";
 import { useNavStore } from "@/stores/nav-store";
 import { notify } from "@/stores/notification-store";
@@ -1295,7 +1296,9 @@ function SetDetailView({
 
   const tracks = useMemo(
     () =>
-      (session?.trackIds ?? []).map((id) => trackById.get(id)).filter((tr): tr is Track => !!tr),
+      orderedSetTrackIds(session?.trackIds ?? [], session?.trackRanks)
+        .map((id) => trackById.get(id))
+        .filter((tr): tr is Track => !!tr),
     [session, trackById],
   );
   // Per-track memory notes for this set, so in-set search matches notes too (parity
@@ -1322,6 +1325,10 @@ function SetDetailView({
     // Empty query returns `ordered` untouched, so the curated/sorted order shows through.
     return searchTracks(ordered, query, memoryNotes);
   }, [likedOnly, tracks, sort, sortDir, lastPlayed, query, memoryNotes, transliterationReady]);
+  // Drag-to-reorder is only meaningful when the TRUE curated order is showing — a
+  // column sort, liked filter, or search query makes drop positions ambiguous
+  // (drag-reorder PRD §5.2). `tracks` then equals `shownTracks` in rank order.
+  const isManualOrder = !sort && !likedOnly && query.trim() === "";
   const selectedTrack = useMemo(
     () => shownTracks.find((track) => track.id === selectedTrackId) ?? shownTracks[0],
     [selectedTrackId, shownTracks],
@@ -1563,6 +1570,7 @@ function SetDetailView({
           <TrackListSection
             setId={setId}
             tracks={shownTracks}
+            canReorder={isManualOrder}
             selectedTrackId={selectedTrack?.id}
             onView={(track) => transitionState(() => setSelectedTrackId(track.id))}
             onPlay={(track) => void playTrack(track)}

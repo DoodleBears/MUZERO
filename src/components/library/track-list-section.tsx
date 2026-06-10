@@ -2,11 +2,17 @@ import { Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { type BatchAction, BatchActionBar } from "@/components/library/batch-action-bar";
+import { ReorderableTrackList } from "@/components/library/reorderable-track-list";
 import { TrackListMenu } from "@/components/library/track-list-menu";
 import { VirtualTrackList } from "@/components/library/virtual-track-list";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import { deleteTracks, prependTrackIds, removeTracksFromSession } from "@/db/repositories";
+import {
+  deleteTracks,
+  prependTrackIds,
+  removeTracksFromSession,
+  reorderTracksInSession,
+} from "@/db/repositories";
 import type { Track } from "@/db/types";
 import { useTrackSelection } from "@/hooks/use-track-selection";
 import { cn } from "@/lib/utils";
@@ -31,10 +37,14 @@ export function TrackListSection({
   startActions,
   endActions,
   listHeader,
+  canReorder,
 }: {
   tracks: Track[];
   /** Set context. Omit for the global library list (permanent delete only). */
   setId?: string;
+  /** Allow drag-to-reorder in select mode. Only when showing the true curated
+   *  order (no sort/filter/search active) — see SetDetailView `isManualOrder`. */
+  canReorder?: boolean;
   onPlay?: (track: Track) => void;
   onView?: (track: Track) => void;
   selectedTrackId?: string;
@@ -54,6 +64,15 @@ export function TrackListSection({
   const sel = useTrackSelection(trackIds);
   // Track ids awaiting a permanent-delete confirmation (null = dialog closed).
   const [pendingPermanent, setPendingPermanent] = useState<string[] | null>(null);
+
+  // Drag-to-reorder is offered only in a set's select mode AND when the true
+  // curated order is showing (no sort/filter/search) — see SetDetailView.
+  const showReorder = sel.mode && !!setId && !!canReorder;
+
+  function onReorder(blockIds: string[], insertBeforeId: string | null) {
+    if (!setId) return;
+    void reorderTracksInSession(setId, blockIds, insertBeforeId);
+  }
 
   function removeFromSet(ids: string[]) {
     if (!setId || ids.length === 0) return;
@@ -124,26 +143,36 @@ export function TrackListSection({
         selectMode={sel.mode}
         onToggleSelectMode={() => (sel.mode ? sel.exit() : sel.enter())}
       >
-        <VirtualTrackList
-          tracks={tracks}
-          selectedTrackId={selectedTrackId}
-          emptyHint={emptyHint}
-          className={listClassName}
-          header={
-            listHeader ? (
-              <div className="flex flex-col gap-4">
-                {listHeader}
-                {toolbar}
-              </div>
-            ) : undefined
-          }
-          onPlay={onPlay ? (track) => onPlay(track) : undefined}
-          onView={onView ? (track) => onView(track) : undefined}
-          selectable={sel.mode}
-          selectedIds={sel.ids}
-          onToggleSelect={sel.toggle}
-          onDeleteTrack={onDeleteTrack}
-        />
+        {showReorder ? (
+          <ReorderableTrackList
+            tracks={tracks}
+            selectedIds={sel.ids}
+            onToggleSelect={sel.toggle}
+            onReorder={onReorder}
+            className={listClassName}
+          />
+        ) : (
+          <VirtualTrackList
+            tracks={tracks}
+            selectedTrackId={selectedTrackId}
+            emptyHint={emptyHint}
+            className={listClassName}
+            header={
+              listHeader ? (
+                <div className="flex flex-col gap-4">
+                  {listHeader}
+                  {toolbar}
+                </div>
+              ) : undefined
+            }
+            onPlay={onPlay ? (track) => onPlay(track) : undefined}
+            onView={onView ? (track) => onView(track) : undefined}
+            selectable={sel.mode}
+            selectedIds={sel.ids}
+            onToggleSelect={sel.toggle}
+            onDeleteTrack={onDeleteTrack}
+          />
+        )}
       </TrackListMenu>
       {sel.mode ? (
         <BatchActionBar

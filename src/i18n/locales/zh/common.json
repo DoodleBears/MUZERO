@@ -827,6 +827,11 @@
     "removedFromSet_other": "已从歌单移出 {{count}} 首",
     "deleted_other": "已删除 {{count}} 首"
   },
+  "reorder": {
+    "dragHandle": "拖拽调整顺序",
+    "movingCount_other": "{{count}} 首",
+    "disabledHint": "清除排序、筛选和搜索后可拖拽"
+  },
   "set": {
     "contextDelete": "删除歌单…",
     "deleteTitle": "删除「{{name}}」？",

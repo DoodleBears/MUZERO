@@ -845,6 +845,12 @@
     "deleted_one": "Deleted {{count}} song",
     "deleted_other": "Deleted {{count}} songs"
   },
+  "reorder": {
+    "dragHandle": "Drag to reorder",
+    "movingCount_one": "{{count}} track",
+    "movingCount_other": "{{count}} tracks",
+    "disabledHint": "Clear sort, filter and search to reorder"
+  },
   "set": {
     "contextDelete": "Delete set…",
     "deleteTitle": "Delete “{{name}}”?",
