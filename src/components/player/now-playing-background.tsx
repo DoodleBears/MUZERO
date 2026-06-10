@@ -221,11 +221,14 @@ function NowPlayingBackgroundContent({ hideVisualizer }: { hideVisualizer: boole
             className="absolute inset-0"
             coverColor
             placement="background"
-            style={{ opacity: visualizerOpacity }}
+            style={{ opacity: visualizerOpacity, transition: "opacity 240ms ease" }}
           />
-          {visualizerDim > 0 ? (
-            <div className="absolute inset-0 bg-background" style={{ opacity: visualizerDim }} />
-          ) : null}
+          {/* Always rendered (opacity 0 when off) so the dim eases in/out smoothly
+              instead of popping when you raise it to read lyrics over the viz. */}
+          <div
+            className="absolute inset-0 bg-background"
+            style={{ opacity: visualizerDim, transition: "opacity 240ms ease" }}
+          />
         </>
       ) : null}
     </>

@@ -126,6 +126,30 @@ export function VisualizerTuningControls({
           onChange={(v) => void saveSettings({ visualizerMirror: v })}
         />
       ) : null}
+      {/* Background-composite controls — opacity + dim let you fade the visualizer
+          back to read lyrics over it (also in Settings; surfaced here too). */}
+      {(settings.visualizerAsBackground ?? false) ? (
+        <>
+          <VisualizerSlider
+            label={t("visualizer.backgroundOpacity", {
+              pct: settings.visualizerBackgroundOpacity ?? 100,
+            })}
+            min={0}
+            max={100}
+            step={1}
+            value={settings.visualizerBackgroundOpacity ?? 100}
+            onChange={(v) => void saveSettings({ visualizerBackgroundOpacity: v })}
+          />
+          <VisualizerSlider
+            label={t("visualizer.backgroundDim", { pct: settings.visualizerBackgroundDim ?? 0 })}
+            min={0}
+            max={100}
+            step={1}
+            value={settings.visualizerBackgroundDim ?? 0}
+            onChange={(v) => void saveSettings({ visualizerBackgroundDim: v })}
+          />
+        </>
+      ) : null}
     </div>
   );
 }
