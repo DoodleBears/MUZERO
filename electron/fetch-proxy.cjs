@@ -50,7 +50,11 @@ async function handleMuzfetch(request) {
     }
   }
 
-  const init = { method: request.method, headers, redirect: "follow" };
+  // credentials:"include" so net.fetch sends the default session's cookies even for a
+  // cross-origin target (default "same-origin" would drop them). After a source login,
+  // MUSIC_U / SESSDATA live in the default session, so this is what actually unlocks
+  // VIP / higher quality. Harmless for R2/AI (the session has no cookies for them).
+  const init = { method: request.method, headers, redirect: "follow", credentials: "include" };
   if (request.method !== "GET" && request.method !== "HEAD" && request.body) {
     init.body = request.body;
     init.duplex = "half";
