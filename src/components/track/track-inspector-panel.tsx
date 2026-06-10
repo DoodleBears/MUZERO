@@ -26,7 +26,7 @@ export function TrackInspectorPanel({ className, track }: TrackInspectorPanelPro
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: 18 }}
             transition={{ duration: 0.18, ease: "easeOut" }}
-            className="sticky top-14 flex max-h-[calc(100vh-9rem)] min-h-0 flex-col gap-4 overflow-y-auto pb-chrome-bottom"
+            className="no-scrollbar sticky top-14 flex max-h-[calc(100vh-9rem)] min-h-0 flex-col gap-4 overflow-y-auto pb-chrome-bottom"
           >
             <TrackMetadataSummary track={track} />
             <AnnotationEditor key={track.id} track={track} />
