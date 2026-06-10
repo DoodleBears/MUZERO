@@ -41,7 +41,7 @@ export function LyricsTuningControls({ className }: { className?: string }) {
   const colorMode = s.lyricsColorMode ?? "default";
   const customColor = s.lyricsCustomColor ?? "#ffffff";
   const align = s.lyricsAlign ?? "center";
-  const shadowOpacity = s.lyricsShadowOpacity ?? 35;
+  const shadowOpacity = s.lyricsShadowOpacity ?? 50;
   const shadowBlur = s.lyricsShadowBlur ?? 8;
   const shadowOffsetX = s.lyricsShadowOffsetX ?? 0;
   const shadowOffsetY = s.lyricsShadowOffsetY ?? 2;

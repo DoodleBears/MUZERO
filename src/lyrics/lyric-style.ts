@@ -24,7 +24,7 @@ export const DEFAULT_LYRIC_STYLE: LyricStyle = {
   activeOpacity: 1,
   inactiveOpacity: 0.4,
   align: "center",
-  textShadow: "0px 2px 8px rgba(0, 0, 0, 0.35)",
+  textShadow: "0px 2px 8px rgba(0, 0, 0, 0.5)",
 };
 
 function clampPx(value: number | undefined, fallback: number): number {
@@ -72,7 +72,7 @@ export function resolveLyricStyle(settings: AppSettings, coverColorCss: string |
 
 /** Build the CSS text-shadow from the offset/blur/strength settings. */
 function resolveTextShadow(settings: AppSettings): string {
-  const opacity = clamp01(settings.lyricsShadowOpacity, 35);
+  const opacity = clamp01(settings.lyricsShadowOpacity, 50);
   if (opacity <= 0) return "none";
   const x = clampNum(settings.lyricsShadowOffsetX, 0, -32, 32);
   const y = clampNum(settings.lyricsShadowOffsetY, 2, -32, 32);

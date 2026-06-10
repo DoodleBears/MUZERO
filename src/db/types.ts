@@ -661,7 +661,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   lyricsColorMode: "default",
   lyricsAlign: "center",
   lyricsStageOpen: false,
-  lyricsShadowOpacity: 35,
+  lyricsShadowOpacity: 50,
   lyricsShadowBlur: 8,
   lyricsShadowOffsetX: 0,
   lyricsShadowOffsetY: 2,
