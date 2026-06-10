@@ -562,6 +562,7 @@
       "navTabNow": "前往正在播放",
       "navTabLibrary": "前往媒体库",
       "navTabSettings": "前往设置",
+      "queueToggle": "开关播放队列",
       "navCycleGalleryMode": "切换媒体库标签",
       "navGalleryTabSets": "媒体库标签：歌单",
       "navGalleryTabTracks": "媒体库标签：全部歌曲",

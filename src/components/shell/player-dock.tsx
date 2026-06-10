@@ -1,5 +1,4 @@
 import { useLiveQuery } from "dexie-react-hooks";
-import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { Tab } from "@/components/nav/dock-nav";
 import { NavFab } from "@/components/nav/nav-fab";
@@ -15,6 +14,7 @@ import { saveSettings } from "@/db/repositories";
 import { useSettings } from "@/hooks/use-app-data";
 import { cn } from "@/lib/utils";
 import { usePlayerStore } from "@/stores/player-store";
+import { useUiStore } from "@/stores/ui-store";
 
 /**
  * The unified bottom player-dock: a slim tool row floats above the dock card
@@ -36,7 +36,8 @@ export function PlayerDock({
   hidden?: boolean;
 }) {
   const { t } = useTranslation();
-  const [queueOpen, setQueueOpen] = useState(false);
+  const queueOpen = useUiStore((s) => s.queueOpen);
+  const setQueueOpen = useUiStore((s) => s.setQueueOpen);
 
   return (
     <>

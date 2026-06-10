@@ -576,6 +576,7 @@
       "navTabNow": "Go to Now Playing",
       "navTabLibrary": "Go to Library",
       "navTabSettings": "Go to Settings",
+      "queueToggle": "Toggle up-next queue",
       "navCycleGalleryMode": "Cycle library tabs",
       "navGalleryTabSets": "Library tab: Sets",
       "navGalleryTabTracks": "Library tab: All songs",

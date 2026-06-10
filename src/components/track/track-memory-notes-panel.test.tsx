@@ -154,7 +154,7 @@ describe("TrackMemoryNotesPanel", () => {
     });
   });
 
-  it("opens a quick-create memory modal from T/N and saves pasted photos", async () => {
+  it("opens a quick-create memory modal from N and saves pasted photos", async () => {
     render(
       <TrackMemoryNotesPanel
         db={db}
@@ -164,7 +164,7 @@ describe("TrackMemoryNotesPanel", () => {
       />,
     );
 
-    fireEvent.keyDown(window, { key: "T", shiftKey: true });
+    fireEvent.keyDown(window, { key: "N", code: "KeyN" });
 
     const dialog = await screen.findByRole("dialog", { name: "Create memory" });
     expect(dialog).toBeInTheDocument();

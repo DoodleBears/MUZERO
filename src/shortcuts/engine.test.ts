@@ -170,10 +170,18 @@ describe("matchAction (scope precedence)", () => {
     );
   });
 
-  it("T resolves to quick-add-memory only when the inspector scope is active", () => {
+  it("T resolves to the queue toggle globally (no longer memory)", () => {
     const tt = gestureFromEvent(ev("KeyT", "t"));
-    expect(matchAction(tt, scopes("global", "library"), bindings, "other")).toBeNull();
+    expect(matchAction(tt, scopes("global", "library"), bindings, "other")).toBe("queue.toggle");
     expect(matchAction(tt, scopes("global", "library", "inspector"), bindings, "other")).toBe(
+      "queue.toggle",
+    );
+  });
+
+  it("N resolves to quick-add-memory only when the inspector scope is active", () => {
+    const nn = gestureFromEvent(ev("KeyN", "n"));
+    expect(matchAction(nn, scopes("global", "library"), bindings, "other")).toBeNull();
+    expect(matchAction(nn, scopes("global", "library", "inspector"), bindings, "other")).toBe(
       "memory.quickAdd",
     );
   });

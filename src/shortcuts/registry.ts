@@ -205,6 +205,14 @@ export const SHORTCUT_ACTIONS: readonly ShortcutActionDef[] = [
     defaultBindings: [key("Digit3", "3", { primaryKey: true })],
   },
   {
+    id: "queue.toggle",
+    scope: "global",
+    category: "navigation",
+    labelKey: "shortcuts.action.queueToggle",
+    defaultBindings: [key("KeyT", "T")],
+    keywords: ["queue", "up next", "drawer", "队列", "歌单", "播放列表"],
+  },
+  {
     id: "nav.cycleGalleryMode",
     scope: "global",
     category: "navigation",
@@ -296,7 +304,8 @@ export const SHORTCUT_ACTIONS: readonly ShortcutActionDef[] = [
     scope: "inspector",
     category: "memory",
     labelKey: "shortcuts.action.memoryQuickAdd",
-    defaultBindings: [key("KeyT", "T"), key("KeyN", "N")],
+    // `T` now opens the queue Drawer (queue.toggle); memory keeps `N`.
+    defaultBindings: [key("KeyN", "N")],
     keywords: ["memory", "note", "记忆", "备注"],
   },
   // ── Reference (read-only, Q7) — intrinsic widget keys + gestures. Shown in the

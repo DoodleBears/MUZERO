@@ -562,6 +562,7 @@
       "navTabNow": "再生中へ移動",
       "navTabLibrary": "ライブラリへ移動",
       "navTabSettings": "設定へ移動",
+      "queueToggle": "再生キューを開閉",
       "navCycleGalleryMode": "ライブラリタブ切替",
       "navGalleryTabSets": "ライブラリタブ：プレイリスト",
       "navGalleryTabTracks": "ライブラリタブ：すべての曲",

@@ -15,6 +15,7 @@ import {
 import type { ShortcutScope } from "@/shortcuts/registry";
 import { useNavStore } from "@/stores/nav-store";
 import { usePlayerStore } from "@/stores/player-store";
+import { useUiStore } from "@/stores/ui-store";
 
 const VOLUME_STEP = 0.05;
 const SEEK_STEP = 5;
@@ -78,6 +79,7 @@ const GLOBAL_HANDLERS: Record<string, (ctx: DispatchContext) => void> = {
   "nav.tabNow": (ctx) => transitionState(() => ctx.setTab("now")),
   "nav.tabLibrary": (ctx) => transitionState(() => ctx.setTab("search")),
   "nav.tabSettings": (ctx) => transitionState(() => ctx.setTab("settings")),
+  "queue.toggle": () => useUiStore.getState().toggleQueue(),
 };
 
 /**

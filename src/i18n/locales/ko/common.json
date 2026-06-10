@@ -562,6 +562,7 @@
       "navTabNow": "재생 중으로 이동",
       "navTabLibrary": "라이브러리로 이동",
       "navTabSettings": "설정으로 이동",
+      "queueToggle": "재생 대기열 열기/닫기",
       "navCycleGalleryMode": "라이브러리 탭 전환",
       "navGalleryTabSets": "라이브러리 탭: 플레이리스트",
       "navGalleryTabTracks": "라이브러리 탭: 전체 곡",
