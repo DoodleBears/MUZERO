@@ -11,8 +11,33 @@ const POLL_MS = 800;
 const TIMEOUT_MS = 5 * 60 * 1000; // give up if the window sits open 5 min without auth
 
 function registerSourceLogin() {
+  void seedNeteaseClientCookies();
   ipcMain.handle("muzero:openSourceLogin", (_event, request) => openSourceLogin(request));
   ipcMain.handle("muzero:readSourceCookies", (_event, request) => readSourceCookies(request));
+}
+
+// NetEase's eapi (mobile/client) endpoint only honors VIP when the request carries
+// os/appver client cookies. A *web* login sets MUSIC_U but not these, so seed them into
+// the DEFAULT session — net.fetch (credentials:"include") then sends MUSIC_U + os + appver
+// together. The `.music.163.com` domain covers music.163.com + interface.music.163.com.
+async function seedNeteaseClientCookies() {
+  try {
+    const ses = session.defaultSession;
+    for (const [name, value] of [
+      ["os", "pc"],
+      ["appver", "8.10.35"],
+    ]) {
+      await ses.cookies.set({
+        url: "https://music.163.com",
+        name,
+        value,
+        domain: ".music.163.com",
+        path: "/",
+      });
+    }
+  } catch {
+    // best-effort; the header path still carries os/appver
+  }
 }
 
 // Read the default session's cookies for a source's domains — used after an in-app
