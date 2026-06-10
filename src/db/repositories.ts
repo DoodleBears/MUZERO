@@ -29,6 +29,7 @@ import {
   type PlayQueue,
   type PlayQueueEntry,
   type SetDisplayMode,
+  type StreamSourceId,
   type Track,
   type TrackKind,
   type TrackLyrics,
@@ -155,6 +156,8 @@ export async function createSession(
     seedPrompt: string;
     config?: Partial<DjConfig>;
     displayMode?: SetDisplayMode;
+    /** Tag a sync-created set with its source playlist, for later incremental re-sync. */
+    streamPlaylistRef?: { source: StreamSourceId; id: string };
   },
   db: MuzeroDB = defaultDb,
 ): Promise<DjSession> {
@@ -167,11 +170,23 @@ export async function createSession(
     status: "idle",
     config: { ...DEFAULT_DJ_CONFIG, ...input.config },
     displayMode: input.displayMode ?? "video",
+    streamPlaylistRef: input.streamPlaylistRef,
     createdAt: now,
     updatedAt: now,
   };
   await db.sessions.put(session);
   return session;
+}
+
+/** Find a set previously synced from this external playlist (for incremental re-sync). */
+export async function findSessionByStreamPlaylist(
+  source: StreamSourceId,
+  playlistId: string,
+  db: MuzeroDB = defaultDb,
+): Promise<DjSession | undefined> {
+  return db.sessions
+    .filter((s) => s.streamPlaylistRef?.source === source && s.streamPlaylistRef?.id === playlistId)
+    .first();
 }
 
 function defaultSessionName(seed: string): string {

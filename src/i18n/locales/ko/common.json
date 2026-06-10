@@ -93,6 +93,17 @@
     "imported": "{{count}}곡을 \"{{name}}\"에 가져왔습니다",
     "importError": "가져오기 실패"
   },
+  "playlistImport": {
+    "title": "플레이리스트 가져오기",
+    "syncRecommended": "\"{{name}}\"에 동기화",
+    "recommendedTag": "추천",
+    "orAddToExisting": "또는 기존 세트에 추가",
+    "choosePlaceholder": "세트 선택…",
+    "addButton": "추가",
+    "newSet": "새 세트",
+    "cancel": "취소",
+    "added": "{{added}}곡을 \"{{name}}\"에 추가 · {{skipped}}곡은 이미 있음"
+  },
   "player": {
     "previous": "이전",
     "next": "다음",
@@ -224,6 +235,7 @@
     "mode": "재생 화면 배경",
     "modeCover": "커버 우선",
     "modeSlideshow": "슬라이드쇼 우선",
+    "modeNone": "배경 없음",
     "renderer": "배경 효과",
     "rendererImage": "원본 이미지",
     "rendererBlur": "흐림",

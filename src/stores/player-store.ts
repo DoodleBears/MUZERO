@@ -75,7 +75,12 @@ import { createStreamSource } from "@/streamsrc/registry";
 import { resolveStreamedTrackMedia } from "@/streamsrc/resolve-playback";
 import { isStreamedTrack } from "@/streamsrc/source-detect";
 import { createStreamHttp } from "@/streamsrc/stream-http";
-import { createStreamedTrack, hitToStreamedInput } from "@/streamsrc/streamed-track-repo";
+import {
+  type AddHitsResult,
+  addHitsToSet,
+  createStreamedTrack,
+  hitToStreamedInput,
+} from "@/streamsrc/streamed-track-repo";
 import { listCloudDrives } from "@/sync/cloud-drive-repo";
 import { getOrCreateLocalDevice } from "@/sync/device-repo";
 import {
@@ -130,12 +135,24 @@ interface PlayerState {
   playNextTrack: (track: Track) => Promise<void>;
   /** Play a song from an online source (global search): import it into the online set, then play. */
   playStreamedHit: (hit: StreamSearchHit) => Promise<void>;
-  /** Import a logged-in source playlist into a new set of streamed tracks; returns the count. */
+  /**
+   * Import a source playlist into a NEW set of streamed tracks (tagged with the
+   * playlist ref for later incremental re-sync); returns how many were added.
+   */
   importStreamedPlaylist: (
     sourceId: StreamSourceId,
     playlistId: string,
     name: string,
   ) => Promise<number>;
+  /**
+   * Add a source playlist's tracks into an EXISTING set, auto-deduping (incremental
+   * re-sync or "add to a set I choose"); returns {added, skipped}.
+   */
+  addStreamedPlaylistToSet: (
+    sourceId: StreamSourceId,
+    playlistId: string,
+    targetSetId: string,
+  ) => Promise<AddHitsResult>;
   next: () => Promise<void>;
   /** Previous track without the transport-button "restart current after 3s" rule. */
   skipPrev: () => Promise<void>;
@@ -489,22 +506,22 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   },
 
   async importStreamedPlaylist(sourceId, playlistId, name) {
-    const settings = await getSettings();
-    const source = createStreamSource(sourceId, {
-      http: createStreamHttp(),
-      now: () => Date.now(),
-      getCookie: (sid) => settings.streamSources?.[sid]?.cookie,
-    });
-    const hits = (await source?.importPlaylist?.(playlistId)) ?? [];
+    const hits = await fetchPlaylistHits(sourceId, playlistId);
     if (hits.length === 0) return 0;
-    const session = await createSession({ name, seedPrompt: "", config: { autoExtend: false } });
-    const ids: string[] = [];
-    for (const hit of hits) {
-      const track = await createStreamedTrack(hitToStreamedInput(session.id, hit));
-      ids.push(track.id);
-    }
-    await prependTrackIds(session.id, ids);
-    return hits.length;
+    // Tag the new set with the playlist ref so a later sync can offer incremental re-sync.
+    const session = await createSession({
+      name,
+      seedPrompt: "",
+      config: { autoExtend: false },
+      streamPlaylistRef: { source: sourceId, id: playlistId },
+    });
+    const { added } = await addHitsToSet(session.id, hits);
+    return added;
+  },
+
+  async addStreamedPlaylistToSet(sourceId, playlistId, targetSetId) {
+    const hits = await fetchPlaylistHits(sourceId, playlistId);
+    return addHitsToSet(targetSetId, hits);
   },
 
   async next() {
@@ -1233,6 +1250,20 @@ async function waitForQueueIndex(
 }
 
 /** Get (or lazily create + remember) the set that collects online-source songs. */
+/** Resolve a source playlist to its full hit list (the cookie-authed eapi/WBI path). */
+async function fetchPlaylistHits(
+  sourceId: StreamSourceId,
+  playlistId: string,
+): Promise<StreamSearchHit[]> {
+  const settings = await getSettings();
+  const source = createStreamSource(sourceId, {
+    http: createStreamHttp(),
+    now: () => Date.now(),
+    getCookie: (sid) => settings.streamSources?.[sid]?.cookie,
+  });
+  return (await source?.importPlaylist?.(playlistId)) ?? [];
+}
+
 async function ensureOnlineSet(): Promise<string> {
   const settings = await getSettings();
   if (settings.streamOnlineSetId) {

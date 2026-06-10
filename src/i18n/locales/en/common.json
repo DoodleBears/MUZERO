@@ -100,6 +100,17 @@
     "imported": "Imported {{count}} into \"{{name}}\"",
     "importError": "Import failed"
   },
+  "playlistImport": {
+    "title": "Import playlist",
+    "syncRecommended": "Sync into \"{{name}}\"",
+    "recommendedTag": "Recommended",
+    "orAddToExisting": "Or add to an existing set",
+    "choosePlaceholder": "Choose a set…",
+    "addButton": "Add",
+    "newSet": "New set",
+    "cancel": "Cancel",
+    "added": "Added {{added}} new to \"{{name}}\" · {{skipped}} already there"
+  },
   "player": {
     "previous": "Previous",
     "next": "Next",
@@ -234,6 +245,7 @@
     "mode": "Now Playing background",
     "modeCover": "Prefer cover",
     "modeSlideshow": "Prefer slideshow",
+    "modeNone": "No background",
     "renderer": "Background effect",
     "rendererImage": "Image",
     "rendererBlur": "Blur",

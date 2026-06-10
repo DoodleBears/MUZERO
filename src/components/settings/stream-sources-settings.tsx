@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
+import { PlaylistImportDialog } from "@/components/stream/playlist-import-dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { saveSettings } from "@/db/repositories";
@@ -7,7 +8,6 @@ import type { StreamSourceId } from "@/db/types";
 import { useSettings } from "@/hooks/use-app-data";
 import { hasStreamingSources, resolveDesktopBridge } from "@/lib/desktop/bridge";
 import { notify } from "@/stores/notification-store";
-import { usePlayerStore } from "@/stores/player-store";
 import {
   cookieStringHasAuth,
   STREAM_LOGIN_CONFIGS,
@@ -157,17 +157,16 @@ export function StreamSourcesSettings() {
 }
 
 /**
- * The logged-in user's playlists for one source, loaded on demand. Each row imports
- * into a new local set via `importStreamedPlaylist` (resolved-URL discipline kept —
- * only metadata is persisted; tracks re-resolve on play).
+ * The logged-in user's playlists for one source, loaded on demand. Each row opens the
+ * {@link PlaylistImportDialog} (new set / incremental re-sync / add to a chosen set);
+ * only metadata is persisted, tracks re-resolve on play.
  */
 function SourcePlaylists({ sourceId }: { sourceId: StreamSourceId }) {
   const { t } = useTranslation();
   const settings = useSettings();
-  const importStreamedPlaylist = usePlayerStore((s) => s.importStreamedPlaylist);
   const [playlists, setPlaylists] = useState<StreamPlaylist[] | null>(null);
   const [loading, setLoading] = useState(false);
-  const [importingId, setImportingId] = useState<string | null>(null);
+  const [importTarget, setImportTarget] = useState<StreamPlaylist | null>(null);
 
   async function load() {
     setLoading(true);
@@ -186,53 +185,45 @@ function SourcePlaylists({ sourceId }: { sourceId: StreamSourceId }) {
     }
   }
 
-  async function importOne(pl: StreamPlaylist) {
-    setImportingId(pl.id);
-    try {
-      const count = await importStreamedPlaylist(sourceId, pl.id, pl.name);
-      notify.success(t("streamSources.imported", { count, name: pl.name }));
-    } catch {
-      notify.error(t("streamSources.importError"));
-    } finally {
-      setImportingId(null);
-    }
-  }
+  const dialog = (
+    <PlaylistImportDialog playlist={importTarget} onClose={() => setImportTarget(null)} />
+  );
 
   if (playlists === null) {
     return (
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        disabled={loading}
-        onClick={() => void load()}
-      >
-        {loading ? t("streamSources.loadingPlaylists") : t("streamSources.syncPlaylists")}
-      </Button>
+      <>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={loading}
+          onClick={() => void load()}
+        >
+          {loading ? t("streamSources.loadingPlaylists") : t("streamSources.syncPlaylists")}
+        </Button>
+        {dialog}
+      </>
     );
   }
   if (playlists.length === 0) {
     return <p className="text-muted-foreground text-xs">{t("streamSources.noPlaylists")}</p>;
   }
   return (
-    <div className="space-y-1 border-border border-t pt-2">
-      {playlists.map((pl) => (
-        <div key={pl.id} className="flex items-center gap-2 text-sm">
-          <span className="min-w-0 flex-1 truncate">{pl.name}</span>
-          <span className="shrink-0 text-muted-foreground text-xs">
-            {t("streamSources.trackCount", { count: pl.trackCount })}
-          </span>
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            disabled={importingId === pl.id}
-            onClick={() => void importOne(pl)}
-          >
-            {importingId === pl.id ? t("streamSources.importing") : t("streamSources.import")}
-          </Button>
-        </div>
-      ))}
-    </div>
+    <>
+      <div className="space-y-1 border-border border-t pt-2">
+        {playlists.map((pl) => (
+          <div key={pl.id} className="flex items-center gap-2 text-sm">
+            <span className="min-w-0 flex-1 truncate">{pl.name}</span>
+            <span className="shrink-0 text-muted-foreground text-xs">
+              {t("streamSources.trackCount", { count: pl.trackCount })}
+            </span>
+            <Button type="button" variant="ghost" size="sm" onClick={() => setImportTarget(pl)}>
+              {t("streamSources.import")}
+            </Button>
+          </div>
+        ))}
+      </div>
+      {dialog}
+    </>
   );
 }

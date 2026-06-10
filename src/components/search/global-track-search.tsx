@@ -3,6 +3,7 @@ import { CornerDownLeft, ListPlus, Search } from "lucide-react";
 import type { KeyboardEvent } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { PlaylistImportDialog } from "@/components/stream/playlist-import-dialog";
 import { Disc3Icon } from "@/components/ui/disc-3";
 import { Kbd, KbdGroup } from "@/components/ui/kbd";
 import { db } from "@/db/muzero-db";
@@ -15,7 +16,6 @@ import { useWorkerTrackSearch } from "@/hooks/use-worker-track-search";
 import { hasStreamingSources } from "@/lib/desktop/bridge";
 import { trackSubtitle } from "@/lib/track-display";
 import { cn, formatDuration } from "@/lib/utils";
-import { notify } from "@/stores/notification-store";
 import { usePlayerStore } from "@/stores/player-store";
 import type { StreamPlaylist, StreamSearchHit } from "@/streamsrc/provider";
 
@@ -230,9 +230,7 @@ export function GlobalTrackSearch({
                 {t(link ? "globalSearch.linkResult" : "globalSearch.online")}
                 {onlineSearching ? ` · ${t("globalSearch.onlineSearching")}` : ""}
               </p>
-              {playlistLink && (
-                <PlaylistLinkCard playlist={playlistLink} onDone={() => onOpenChange(false)} />
-              )}
+              {playlistLink && <PlaylistLinkCard playlist={playlistLink} />}
               {onlineHits.map((hit) => (
                 <OnlineResultRow
                   key={`${hit.source}:${hit.externalId}`}
@@ -344,55 +342,43 @@ function GlobalTrackSearchRow({
   );
 }
 
-/** A pasted playlist link → one-click import into a new local set (streamed tracks). */
-function PlaylistLinkCard({ playlist, onDone }: { playlist: StreamPlaylist; onDone: () => void }) {
+/** A pasted playlist link → opens the import modal (new set / incremental sync / add to set). */
+function PlaylistLinkCard({ playlist }: { playlist: StreamPlaylist }) {
   const { t } = useTranslation();
-  const importStreamedPlaylist = usePlayerStore((s) => s.importStreamedPlaylist);
-  const [importing, setImporting] = useState(false);
-
-  async function doImport() {
-    setImporting(true);
-    try {
-      const count = await importStreamedPlaylist(playlist.source, playlist.id, playlist.name);
-      notify.success(t("streamSources.imported", { count, name: playlist.name }));
-      onDone();
-    } catch {
-      notify.error(t("streamSources.importError"));
-    } finally {
-      setImporting(false);
-    }
-  }
+  const [open, setOpen] = useState(false);
 
   return (
-    <div className="flex w-full items-center gap-3 rounded-xl px-3 py-2">
-      <div className="grid size-11 shrink-0 place-items-center overflow-hidden rounded-lg bg-secondary text-muted-foreground">
-        {playlist.coverUrl ? (
-          <img
-            src={playlist.coverUrl}
-            alt=""
-            referrerPolicy="no-referrer"
-            className="size-full object-cover"
-          />
-        ) : (
-          <Disc3Icon size={16} />
-        )}
-      </div>
-      <div className="min-w-0 flex-1">
-        <div className="truncate font-medium text-sm">{playlist.name}</div>
-        <div className="truncate text-muted-foreground text-xs">
-          {t("streamSources.trackCount", { count: playlist.trackCount })} · {playlist.source}
+    <>
+      <div className="flex w-full items-center gap-3 rounded-xl px-3 py-2">
+        <div className="grid size-11 shrink-0 place-items-center overflow-hidden rounded-lg bg-secondary text-muted-foreground">
+          {playlist.coverUrl ? (
+            <img
+              src={playlist.coverUrl}
+              alt=""
+              referrerPolicy="no-referrer"
+              className="size-full object-cover"
+            />
+          ) : (
+            <Disc3Icon size={16} />
+          )}
         </div>
+        <div className="min-w-0 flex-1">
+          <div className="truncate font-medium text-sm">{playlist.name}</div>
+          <div className="truncate text-muted-foreground text-xs">
+            {t("streamSources.trackCount", { count: playlist.trackCount })} · {playlist.source}
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-primary bg-accent px-2.5 py-1 text-xs transition-colors hover:bg-accent/70"
+        >
+          <ListPlus className="size-3.5" />
+          {t("streamSources.import")}
+        </button>
       </div>
-      <button
-        type="button"
-        onClick={() => void doImport()}
-        disabled={importing}
-        className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-primary bg-accent px-2.5 py-1 text-xs transition-colors hover:bg-accent/70 disabled:opacity-60"
-      >
-        <ListPlus className="size-3.5" />
-        {importing ? t("streamSources.importing") : t("streamSources.import")}
-      </button>
-    </div>
+      <PlaylistImportDialog playlist={open ? playlist : null} onClose={() => setOpen(false)} />
+    </>
   );
 }
 

@@ -93,6 +93,17 @@
     "imported": "已导入 {{count}} 首到「{{name}}」",
     "importError": "导入失败"
   },
+  "playlistImport": {
+    "title": "导入歌单",
+    "syncRecommended": "增量同步到「{{name}}」",
+    "recommendedTag": "推荐",
+    "orAddToExisting": "或添加到现有歌单",
+    "choosePlaceholder": "选择歌单…",
+    "addButton": "添加",
+    "newSet": "新建歌单",
+    "cancel": "取消",
+    "added": "已添加 {{added}} 首到「{{name}}」· {{skipped}} 首已存在"
+  },
   "player": {
     "previous": "上一首",
     "next": "下一首",
@@ -224,6 +235,7 @@
     "mode": "Now Playing 背景",
     "modeCover": "优先封面",
     "modeSlideshow": "优先幻灯片",
+    "modeNone": "不显示背景",
     "renderer": "背景效果",
     "rendererImage": "原图",
     "rendererBlur": "模糊",

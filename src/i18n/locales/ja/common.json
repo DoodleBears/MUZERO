@@ -93,6 +93,17 @@
     "imported": "{{count}} 曲を「{{name}}」にインポートしました",
     "importError": "インポートに失敗しました"
   },
+  "playlistImport": {
+    "title": "プレイリストをインポート",
+    "syncRecommended": "「{{name}}」に同期",
+    "recommendedTag": "おすすめ",
+    "orAddToExisting": "または既存のセットに追加",
+    "choosePlaceholder": "セットを選択…",
+    "addButton": "追加",
+    "newSet": "新しいセット",
+    "cancel": "キャンセル",
+    "added": "{{added}} 曲を「{{name}}」に追加 · {{skipped}} 曲は既存"
+  },
   "player": {
     "previous": "前へ",
     "next": "次へ",
@@ -224,6 +235,7 @@
     "mode": "再生中の背景",
     "modeCover": "カバーを優先",
     "modeSlideshow": "スライドショーを優先",
+    "modeNone": "背景なし",
     "renderer": "背景エフェクト",
     "rendererImage": "元画像",
     "rendererBlur": "ぼかし",

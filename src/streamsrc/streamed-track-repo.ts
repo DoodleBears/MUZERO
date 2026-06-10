@@ -9,6 +9,7 @@
  */
 
 import { db as defaultDb, type MuzeroDB } from "@/db/muzero-db";
+import { prependTrackIds } from "@/db/repositories";
 import type { StreamSourceId, StreamSourceMeta, Track, TrackKind } from "@/db/types";
 import { newId } from "@/lib/id";
 import type { StreamSearchHit } from "./provider";
@@ -108,4 +109,33 @@ export async function createStreamedTrack(
   };
   await db.tracks.put(track);
   return track;
+}
+
+export interface AddHitsResult {
+  /** Tracks newly added to the set this call. */
+  added: number;
+  /** Hits that were already in the set (deduped by source + externalId). */
+  skipped: number;
+}
+
+/**
+ * Add a batch of hits (a playlist) into an existing set, auto-deduping: a hit whose
+ * (source, externalId) is already a member returns the existing track and is counted
+ * as skipped. Used by both "new set from playlist" and "incremental re-sync into set".
+ */
+export async function addHitsToSet(
+  sessionId: string,
+  hits: StreamSearchHit[],
+  db: MuzeroDB = defaultDb,
+): Promise<AddHitsResult> {
+  const session = await db.sessions.get(sessionId);
+  const before = new Set(session?.trackIds ?? []);
+  const ids: string[] = [];
+  for (const hit of hits) {
+    const track = await createStreamedTrack(hitToStreamedInput(sessionId, hit), db);
+    ids.push(track.id);
+  }
+  await prependTrackIds(sessionId, ids, db);
+  const addedIds = new Set(ids.filter((id) => !before.has(id)));
+  return { added: addedIds.size, skipped: hits.length - addedIds.size };
 }

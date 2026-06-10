@@ -14,6 +14,7 @@ import {
   deleteSession,
   deleteTrack,
   deleteTracks,
+  findSessionByStreamPlaylist,
   getAllTags,
   getMemoryPhoto,
   getPlayQueue,
@@ -98,6 +99,35 @@ describe("prependTrackIds", () => {
     await prependTrackIds(s.id, ["c"], db);
     const got = await getSession(s.id, db);
     expect(got?.trackIds).toEqual(["c", "a", "b"]);
+  });
+});
+
+describe("findSessionByStreamPlaylist", () => {
+  it("records a streamPlaylistRef and finds the set again by (source, id)", async () => {
+    const s = await createSession(
+      {
+        seedPrompt: "",
+        config: { autoExtend: false },
+        streamPlaylistRef: { source: "netease", id: "777" },
+      },
+      db,
+    );
+    expect(s.streamPlaylistRef).toEqual({ source: "netease", id: "777" });
+    const found = await findSessionByStreamPlaylist("netease", "777", db);
+    expect(found?.id).toBe(s.id);
+  });
+
+  it("returns undefined for an unsynced playlist or a different source", async () => {
+    await createSession(
+      {
+        seedPrompt: "",
+        config: { autoExtend: false },
+        streamPlaylistRef: { source: "netease", id: "777" },
+      },
+      db,
+    );
+    expect(await findSessionByStreamPlaylist("netease", "888", db)).toBeUndefined();
+    expect(await findSessionByStreamPlaylist("bili", "777", db)).toBeUndefined();
   });
 });
 

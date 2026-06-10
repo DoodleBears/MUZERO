@@ -254,8 +254,8 @@ export interface PlayQueue {
   updatedAt: number;
 }
 
-/** Where the Now-Playing ambient background pulls its image(s) from. */
-export type BackgroundMode = "cover" | "slideshow";
+/** Where the Now-Playing ambient background pulls its image(s) from. `"none"` hides it entirely. */
+export type BackgroundMode = "cover" | "slideshow" | "none";
 export type BackgroundRenderer =
   | "image"
   | "blur"
@@ -307,6 +307,12 @@ export interface DjSession {
   config: DjConfig;
   /** Default stage rendering: video-first → cover → title. */
   displayMode: SetDisplayMode;
+  /**
+   * When this set was created by syncing an external playlist, the source + its
+   * playlist id — so a later sync can recognize "this is that playlist" and offer
+   * an incremental re-sync into the same set. Additive, non-indexed (no version bump).
+   */
+  streamPlaylistRef?: { source: StreamSourceId; id: string };
   createdAt: number;
   updatedAt: number;
 }

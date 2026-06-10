@@ -1,7 +1,13 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { MuzeroDB } from "@/db/muzero-db";
+import { createSession } from "@/db/repositories";
 import type { StreamSearchHit } from "./provider";
-import { createStreamedTrack, findStreamedTrack, hitToStreamedInput } from "./streamed-track-repo";
+import {
+  addHitsToSet,
+  createStreamedTrack,
+  findStreamedTrack,
+  hitToStreamedInput,
+} from "./streamed-track-repo";
 
 let dbName = "";
 let db: MuzeroDB;
@@ -73,6 +79,28 @@ describe("findStreamedTrack", () => {
     const found = await findStreamedTrack("ses_1", "bili", "BV1xx411c7mD#998877", db);
     expect(found?.id).toBe(created.id);
     expect(await findStreamedTrack("ses_1", "bili", "nope", db)).toBeUndefined();
+  });
+});
+
+describe("addHitsToSet", () => {
+  const a: StreamSearchHit = { source: "netease", externalId: "1", title: "A" };
+  const b: StreamSearchHit = { source: "netease", externalId: "2", title: "B" };
+  const c: StreamSearchHit = { source: "netease", externalId: "3", title: "C" };
+
+  it("adds all hits to a fresh set", async () => {
+    const set = await createSession({ seedPrompt: "", config: { autoExtend: false } }, db);
+    const res = await addHitsToSet(set.id, [a, b], db);
+    expect(res).toEqual({ added: 2, skipped: 0 });
+    expect((await db.sessions.get(set.id))?.trackIds).toHaveLength(2);
+  });
+
+  it("dedupes on incremental re-sync: only genuinely new hits count as added", async () => {
+    const set = await createSession({ seedPrompt: "", config: { autoExtend: false } }, db);
+    await addHitsToSet(set.id, [a, b], db);
+    const res = await addHitsToSet(set.id, [b, c], db); // b already present
+    expect(res).toEqual({ added: 1, skipped: 1 });
+    expect((await db.sessions.get(set.id))?.trackIds).toHaveLength(3);
+    expect(await db.tracks.where("sessionId").equals(set.id).count()).toBe(3);
   });
 });
 

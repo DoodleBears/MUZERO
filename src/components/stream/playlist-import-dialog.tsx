@@ -1,0 +1,171 @@
+import { ListPlus, RefreshCw } from "lucide-react";
+import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
+import { Disc3Icon } from "@/components/ui/disc-3";
+import { useSessions } from "@/hooks/use-app-data";
+import { notify } from "@/stores/notification-store";
+import { usePlayerStore } from "@/stores/player-store";
+import type { StreamPlaylist } from "@/streamsrc/provider";
+
+/**
+ * Decide where a playlist's tracks land before importing. If a set was previously
+ * synced from this same external playlist (matched by `streamPlaylistRef`), the
+ * modal recommends an incremental re-sync into it; otherwise the user can add the
+ * tracks to any existing set (auto-deduped) or create a fresh one.
+ *
+ * Controlled: pass the `playlist` to open, `null` to close. Shared by the Settings
+ * "我的歌单" list and the ⌘F pasted-link card.
+ */
+export function PlaylistImportDialog({
+  playlist,
+  onClose,
+}: {
+  playlist: StreamPlaylist | null;
+  onClose: () => void;
+}) {
+  const { t } = useTranslation();
+  const sessions = useSessions();
+  const importStreamedPlaylist = usePlayerStore((s) => s.importStreamedPlaylist);
+  const addStreamedPlaylistToSet = usePlayerStore((s) => s.addStreamedPlaylistToSet);
+  const [busy, setBusy] = useState(false);
+  const [targetId, setTargetId] = useState("");
+
+  // Reset the chosen target whenever the dialog opens for a different playlist.
+  const key = playlist ? `${playlist.source}:${playlist.id}` : null;
+  // biome-ignore lint/correctness/useExhaustiveDependencies: keyed on the playlist identity
+  useEffect(() => {
+    setTargetId("");
+  }, [key]);
+
+  if (!playlist) return null;
+  const pl = playlist;
+  const matched = sessions.find(
+    (s) => s.streamPlaylistRef?.source === pl.source && s.streamPlaylistRef?.id === pl.id,
+  );
+
+  async function run(action: () => Promise<void>) {
+    setBusy(true);
+    try {
+      await action();
+      onClose();
+    } catch {
+      notify.error(t("streamSources.importError"));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const createNewSet = () =>
+    run(async () => {
+      const count = await importStreamedPlaylist(pl.source, pl.id, pl.name);
+      notify.success(t("streamSources.imported", { count, name: pl.name }));
+    });
+
+  const syncInto = (setId: string, setName: string) =>
+    run(async () => {
+      const { added, skipped } = await addStreamedPlaylistToSet(pl.source, pl.id, setId);
+      notify.success(t("playlistImport.added", { added, skipped, name: setName }));
+    });
+
+  return (
+    <Dialog
+      open
+      onOpenChange={(open) => {
+        if (!open && !busy) onClose();
+      }}
+    >
+      {/* z-[100] so it sits above the ⌘F search overlay (z-90), which is its own backdrop. */}
+      <DialogContent className="z-[100] gap-3">
+        <DialogTitle>{t("playlistImport.title")}</DialogTitle>
+        <div className="flex items-center gap-3">
+          <div className="grid size-12 shrink-0 place-items-center overflow-hidden rounded-lg bg-secondary text-muted-foreground">
+            {pl.coverUrl ? (
+              <img
+                src={pl.coverUrl}
+                alt=""
+                referrerPolicy="no-referrer"
+                className="size-full object-cover"
+              />
+            ) : (
+              <Disc3Icon size={18} />
+            )}
+          </div>
+          <div className="min-w-0">
+            <div className="truncate font-medium text-sm">{pl.name}</div>
+            <DialogDescription>
+              {t("streamSources.trackCount", { count: pl.trackCount })} · {pl.source}
+            </DialogDescription>
+          </div>
+        </div>
+
+        {matched && (
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => syncInto(matched.id, matched.name)}
+            className="flex w-full items-center gap-2 rounded-lg border border-primary bg-accent px-3 py-2.5 text-left text-sm transition-colors hover:bg-accent/70 disabled:opacity-60"
+          >
+            <RefreshCw className="size-4 shrink-0" />
+            <span className="min-w-0 flex-1 truncate">
+              {t("playlistImport.syncRecommended", { name: matched.name })}
+            </span>
+            <span className="shrink-0 rounded-full bg-primary/15 px-1.5 py-0.5 text-[10px] text-primary">
+              {t("playlistImport.recommendedTag")}
+            </span>
+          </button>
+        )}
+
+        <div className="space-y-1.5">
+          <p className="text-muted-foreground text-xs">{t("playlistImport.orAddToExisting")}</p>
+          <div className="flex gap-2">
+            <select
+              value={targetId}
+              onChange={(e) => setTargetId(e.target.value)}
+              disabled={busy}
+              className="min-w-0 flex-1 rounded-md border border-border bg-transparent px-2 py-1.5 text-foreground text-sm"
+            >
+              <option value="">{t("playlistImport.choosePlaceholder")}</option>
+              {sessions.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              disabled={busy || !targetId}
+              onClick={() => {
+                const s = sessions.find((x) => x.id === targetId);
+                if (s) syncInto(s.id, s.name);
+              }}
+              className="shrink-0 rounded-md border border-border px-3 py-1.5 text-sm transition-colors hover:bg-accent disabled:opacity-50"
+            >
+              {t("playlistImport.addButton")}
+            </button>
+          </div>
+        </div>
+
+        <div className="flex items-center justify-between gap-2 pt-1">
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => onClose()}
+            className="rounded-md px-3 py-1.5 text-muted-foreground text-sm transition-colors hover:text-foreground disabled:opacity-50"
+          >
+            {t("playlistImport.cancel")}
+          </button>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={createNewSet}
+            className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-primary-foreground text-sm transition-opacity hover:opacity-90 disabled:opacity-60"
+          >
+            <ListPlus className="size-4" />
+            {busy ? t("streamSources.importing") : t("playlistImport.newSet")}
+          </button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}

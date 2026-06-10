@@ -642,3 +642,22 @@ success：Set-Cookie 已被 net.fetch 写进默认 session → bridge.readSource
 | LK3 | 搜索 hook 链接分流(song→hits / playlist→`playlistLink`)；⌘F 渲染歌单导入卡片 + 「来自链接」分区 + 未解析 hint；i18n(en/zh/ja/ko) | `use-online-source-search.ts` · `global-track-search.tsx` | typecheck + biome + 153 测全绿 | ✅ green |
 
 **LK 落地**：`useOnlineSourceSearch` 检到 `parseStreamLink(query)` 即走链接分支(song→`getTracksByIds`→`hits`、playlist→`getPlaylistMeta`→`playlistLink`)，返回 `{link, playlistLink}`；`GlobalTrackSearch` 在「在线」区渲染歌曲行(原有 `OnlineResultRow`，点播)或 `PlaylistLinkCard`(封面+名+曲数+导入按钮，复用 `streamSources.import/imported/trackCount` 文案)。**待 Electron 手测**(net.fetch 真实请求)。
+
+## 17. 增量同步：歌单 ↔ 本地 set 关联（去重）
+
+同步歌单不再「每次新建一个 set」。**sync-created set 记录 `streamPlaylistRef:{source,id}`**（附加非索引、零 Dexie 迁移，同 `coverThumbhash` 路径），下次导入同一歌单时识别为「已同步过」。导入改为弹 modal，三条去向：
+
+1. **增量同步到已匹配 set（推荐）**——`streamPlaylistRef` 命中的 set 高亮置顶，只把**新曲目**加进去（去重）。
+2. **添加到指定现有 set**——下拉选任意 set，自动去重后追加。
+3. **新建 set**——旧行为，但现在打 ref（供下次增量）。
+
+**去重天然成立**：`createStreamedTrack` 已按 `(sessionId, source, externalId)` 查重返回既有 track，`prependTrackIds` 再按 id 去重 → 同一 set 内重复曲目零新增。`addHitsToSet` 据此统计 `{added, skipped}`。modal（`PlaylistImportDialog`）由 Settings「我的歌单」行与 ⌘F 粘贴歌单卡片**共用**。
+
+| # | 单元 | 文件 | 测试 | 状态 |
+|---|---|---|---|---|
+| SY1 | `DjSession.streamPlaylistRef?`(附加非索引)；`createSession` 入参加 ref；`findSessionByStreamPlaylist(source,id)` repo | `db/types.ts` · `db/repositories.ts` | fake-idb ×2 | ✅ green |
+| SY2 | `addHitsToSet(sessionId, hits)→{added,skipped}`(批量建 streamed track + prepend，天然去重；复用 `prependTrackIds`) | `streamsrc/streamed-track-repo.ts` | fake-idb ×2(新 set / 增量去重) | ✅ green |
+| SY3 | player-store：`importStreamedPlaylist` 改打 ref + 走 `addHitsToSet`(返回 added)；新增 `addStreamedPlaylistToSet(source,id,targetSetId)→{added,skipped}`；抽 `fetchPlaylistHits` | `stores/player-store.ts` | typecheck(网络路径待运行时) | ✅ |
+| SY4 | `PlaylistImportDialog`(推荐增量 / 选 set 追加 / 新建)；接进 Settings `SourcePlaylists` + ⌘F `PlaylistLinkCard`(z-100 盖搜索浮层)；i18n `playlistImport.*`(en/zh/ja/ko) | `components/stream/playlist-import-dialog.tsx` ·(2 caller) | typecheck + biome + 218 测全绿 | ✅ green |
+
+**SY 落地**：modal 用 `useSessions()` 客户端匹配 `streamPlaylistRef` 找推荐 set；推荐路径与「选 set 追加」都调 `addStreamedPlaylistToSet`(去重，toast「已添加 N 首…M 首已存在」)，新建调 `importStreamedPlaylist`(toast「已导入 N 首」)。**待 Electron 手测**(同步真实歌单 → 二次同步只增新曲)。
