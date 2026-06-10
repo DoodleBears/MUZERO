@@ -488,6 +488,7 @@ SetDetailView (search-page.tsx:1244)
 | 2026-06-11 | DoodleBear / Eng | 追加**长按进入多选**：`TrackListSection` 根节点事件委托 `useLongPress` + `data-track-index` 解析（纯 `track-row-target.ts`，4 测），零改 `TrackRow`/`VirtualTrackList`。 |
 | 2026-06-11 | DoodleBear / Eng | **Bugfix**：Phase 4 虚拟化（绝对定位 + 丢 sortable transform）破坏 dnd-kit 碰撞 → `over` 卡首行、只能拖到最顶。**回退为非虚拟化正统 sortable**（apply `CSS.Transform`）。drop indicator 按用户要求改为**虚线框 placeholder**（被拖行槽位 = 虚线盒，靠 strategy 自动 snap 到落点）。 |
 | 2026-06-11 | DoodleBear / Eng | **Bugfix**：松手时 overlay 先弹回原位再跳到落点（rank 持久是 Dexie 异步，drop 动画时列表还是旧序）。加**乐观本地排序**：`onDragEnd` 同步 `applyBlockMove`（纯函数，5 测）更新本地 `order` → 落点即时正确，async rank 写入经 liveQuery 经 `useEffect` 回收。 |
+| 2026-06-11 | DoodleBear / Eng | **多选拖拽视觉**：拖拽浮层补 grip 列（与列表对齐）；多选拖拽时浮层显示**层叠卡片堆**（block>1，配「N 首」badge）+ 其余选中行**变暗 lift out**，让「拖多个」一眼可辨（不再像拖一个）。 |
 
 ---
 

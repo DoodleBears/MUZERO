@@ -118,6 +118,8 @@ export function ReorderableTrackList({
 
   const activeTrack = activeId ? order.find((track) => track.id === activeId) : undefined;
   const activeBlockSize = activeId ? blockFor(activeId).length : 0;
+  // A multi-select block is on the move — the other selected rows "lift out".
+  const blockDragActive = activeBlockSize > 1;
 
   return (
     <DndContext
@@ -138,6 +140,7 @@ export function ReorderableTrackList({
               key={track.id}
               track={track}
               checked={selectedIds.has(track.id)}
+              lifted={blockDragActive && track.id !== activeId && selectedIds.has(track.id)}
               dragLabel={t("reorder.dragHandle")}
               onToggle={(shiftKey) => onToggleSelect(track.id, { shiftKey })}
             />
@@ -152,17 +155,32 @@ export function ReorderableTrackList({
             <span className="flex h-11 w-8 shrink-0 items-center justify-center text-muted-foreground">
               <GripVertical className="size-4" />
             </span>
-            <div className="min-w-0 flex-1">
-              <ReorderRowBody
-                track={activeTrack}
-                checked={selectedIds.has(activeTrack.id)}
-                overlay
-                badge={
-                  activeBlockSize > 1
-                    ? t("reorder.movingCount", { count: activeBlockSize })
-                    : undefined
-                }
-              />
+            <div className="relative min-w-0 flex-1">
+              {/* A "stack" of cards peeking out behind so a block drag reads as many. */}
+              {activeBlockSize > 1 ? (
+                <>
+                  <div
+                    aria-hidden
+                    className="absolute inset-0 translate-y-2 scale-[0.94] rounded-lg border border-border bg-muted shadow"
+                  />
+                  <div
+                    aria-hidden
+                    className="absolute inset-0 translate-y-1 scale-[0.97] rounded-lg border border-border bg-background shadow"
+                  />
+                </>
+              ) : null}
+              <div className="relative">
+                <ReorderRowBody
+                  track={activeTrack}
+                  checked={selectedIds.has(activeTrack.id)}
+                  overlay
+                  badge={
+                    activeBlockSize > 1
+                      ? t("reorder.movingCount", { count: activeBlockSize })
+                      : undefined
+                  }
+                />
+              </div>
             </div>
           </div>
         ) : null}
@@ -174,11 +192,15 @@ export function ReorderableTrackList({
 function SortableReorderRow({
   track,
   checked,
+  lifted,
   dragLabel,
   onToggle,
 }: {
   track: Track;
   checked: boolean;
+  /** This row is a selected member of the block being dragged (but not the grabbed
+   *  one) — dim it so the whole selection visibly "lifts out" and travels together. */
+  lifted: boolean;
   dragLabel: string;
   onToggle: (shiftKey: boolean) => void;
 }) {
@@ -196,7 +218,7 @@ function SortableReorderRow({
     <li
       ref={setNodeRef}
       style={{ transform: CSS.Transform.toString(transform), transition }}
-      className={cn("list-none", isDragging && "relative z-10")}
+      className={cn("list-none", isDragging && "relative z-10", lifted && "opacity-40")}
     >
       {isDragging ? (
         // The dragged row's slot — a dashed box marking where it (or the block) lands.
