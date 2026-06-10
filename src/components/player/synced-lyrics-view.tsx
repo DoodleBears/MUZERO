@@ -165,9 +165,12 @@ export function LyricsScroller({
 }) {
   return (
     <div className="flex h-full flex-col">
-      <div className="min-h-0 flex-1">
+      {/* `relative` + an absolutely-filled scroll child guarantees a definite
+          pixel height (a plain h-full chain through nested flex can collapse and
+          kill scrolling). */}
+      <div className="relative min-h-0 flex-1">
         {resolved.mode === "plain" ? (
-          <div className="no-scrollbar h-full overflow-y-auto">
+          <div className="no-scrollbar absolute inset-0 overflow-y-auto">
             <pre
               className="whitespace-pre-wrap font-sans leading-relaxed"
               style={{
@@ -258,11 +261,11 @@ function SyncedLines({
   }, [activeIndex, following, reduce]);
 
   return (
-    <div className="relative h-full">
+    <>
       <div
         ref={viewportRef}
         data-testid="lyrics-scroll"
-        className="no-scrollbar h-full overflow-y-auto"
+        className="no-scrollbar absolute inset-0 overflow-y-auto"
         style={EDGE_FADE}
         onWheel={() => setFollowing(false)}
         onTouchMove={() => setFollowing(false)}
@@ -311,7 +314,7 @@ function SyncedLines({
           {t("lyrics.followCurrent")}
         </button>
       )}
-    </div>
+    </>
   );
 }
 
