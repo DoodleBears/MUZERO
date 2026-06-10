@@ -202,7 +202,7 @@ export function NowPlayingPanel({
                 </div>
               </>
             ) : (
-              <div className="no-scrollbar min-h-0 flex-1 overflow-y-auto px-4 pt-3 pb-chrome-bottom">
+              <div className="min-h-0 flex-1 overflow-hidden px-4 pt-3 pb-chrome-bottom">
                 <SyncedLyricsView track={current} />
               </div>
             )}

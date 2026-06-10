@@ -116,7 +116,10 @@
     "currentNone": "가사 없음",
     "currentSynced": "동기화 가사",
     "currentPlain": "일반 가사",
-    "currentInstrumental": "연주곡"
+    "currentInstrumental": "연주곡",
+    "searchPrompt": "아직 가사가 없어요 —— LRCLIB에서 검색해 보세요.",
+    "wrongLyrics": "가사가 틀렸나요? 검색",
+    "backToLyrics": "가사로 돌아가기"
   },
   "displayMode": {
     "video": "비디오",

@@ -122,7 +122,10 @@
     "currentNone": "No lyrics yet",
     "currentSynced": "Synced lyrics",
     "currentPlain": "Plain lyrics",
-    "currentInstrumental": "Instrumental"
+    "currentInstrumental": "Instrumental",
+    "searchPrompt": "No lyrics yet — search LRCLIB for them.",
+    "wrongLyrics": "Wrong lyrics? Search",
+    "backToLyrics": "Back to lyrics"
   },
   "displayMode": {
     "video": "Video",

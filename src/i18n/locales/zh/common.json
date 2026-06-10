@@ -116,7 +116,10 @@
     "currentNone": "暂无歌词",
     "currentSynced": "同步歌词",
     "currentPlain": "纯文本歌词",
-    "currentInstrumental": "纯音乐"
+    "currentInstrumental": "纯音乐",
+    "searchPrompt": "还没有歌词 —— 去 LRCLIB 搜索看看。",
+    "wrongLyrics": "歌词不对？搜索",
+    "backToLyrics": "返回歌词"
   },
   "displayMode": {
     "video": "视频",

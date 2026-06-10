@@ -1,7 +1,8 @@
 import { useLiveQuery } from "dexie-react-hooks";
 import { ScrollText, X } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
+import { LyricsCandidateList, LyricsSearchForm } from "@/components/player/lyrics-search-panel";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -10,13 +11,11 @@ import {
   DialogDescription,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
 import { clearTrackLyrics, getTrackLyrics, setTrackLyrics } from "@/db/repositories";
 import type { Track } from "@/db/types";
 import { useSettings } from "@/hooks/use-app-data";
-import { trackAlbum, trackArtists } from "@/lib/track-display";
+import { useLyricsSearch } from "@/hooks/use-lyrics-search";
 import { lyricsRecordFromHit } from "@/lyrics/auto-fetch";
 import { buildLyricsQuery } from "@/lyrics/build-query";
 import { lyricsRecordFromManualText } from "@/lyrics/manual";
@@ -26,7 +25,8 @@ import { resolveLyricsProvider } from "@/lyrics/registry";
 /**
  * Manual lyrics management for a track: search LRCLIB candidates and pick one,
  * paste/edit LRC or plain text, or clear / re-fetch. Anything the user chooses
- * here is stored as `source: "manual"` so auto-fetch never overwrites it.
+ * here is stored as `source: "manual"` so auto-fetch never overwrites it. Shares
+ * the search hook + candidate list with the inline now-playing search panel.
  */
 export function LyricsManagerButton({ track }: { track: Track }) {
   const { t } = useTranslation();
@@ -51,14 +51,8 @@ export function LyricsManagerButton({ track }: { track: Track }) {
 function LyricsManagerBody({ track, onDone }: { track: Track; onDone: () => void }) {
   const { t } = useTranslation();
   const settings = useSettings();
-  const provider = useMemo(() => resolveLyricsProvider(settings), [settings]);
   const row = useLiveQuery(() => getTrackLyrics(track.id), [track.id], undefined);
-
-  const [title, setTitle] = useState(track.title);
-  const [artist, setArtist] = useState(trackArtists(track).join(", "));
-  const [results, setResults] = useState<LyricsHit[] | null>(null);
-  const [searching, setSearching] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const search = useLyricsSearch(track);
   const [paste, setPaste] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -72,32 +66,9 @@ function LyricsManagerBody({ track, onDone }: { track: Track; onDone: () => void
           ? t("lyrics.currentPlain")
           : t("lyrics.currentNone");
 
-  async function runSearch() {
-    setSearching(true);
-    setError(null);
-    try {
-      const hits =
-        (await provider.search?.({
-          trackName: title.trim(),
-          artistName: artist.trim(),
-          albumName: trackAlbum(track),
-          durationSec: track.durationSec,
-        })) ?? [];
-      setResults(hits);
-    } catch {
-      setError(t("lyrics.searchError"));
-    } finally {
-      setSearching(false);
-    }
-  }
-
   async function pick(hit: LyricsHit) {
     setBusy(true);
-    await setTrackLyrics({
-      trackId: track.id,
-      record: lyricsRecordFromHit(hit, "manual"),
-      matched: hit.matched,
-    });
+    await search.pick(hit);
     onDone();
   }
 
@@ -120,7 +91,7 @@ function LyricsManagerBody({ track, onDone }: { track: Track; onDone: () => void
     const q = buildLyricsQuery(track);
     if (q) {
       try {
-        const hit = await provider.fetch(q);
+        const hit = await resolveLyricsProvider(settings).fetch(q);
         await setTrackLyrics({
           trackId: track.id,
           record: lyricsRecordFromHit(hit),
@@ -149,56 +120,14 @@ function LyricsManagerBody({ track, onDone }: { track: Track; onDone: () => void
       </div>
 
       <div className="flex flex-col gap-2">
-        <div className="flex gap-2">
-          <Input
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            placeholder={t("lyrics.searchTitle")}
-          />
-          <Input
-            value={artist}
-            onChange={(e) => setArtist(e.target.value)}
-            placeholder={t("lyrics.searchArtist")}
-          />
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => void runSearch()}
-            disabled={searching}
-          >
-            {searching ? <Spinner className="size-4" /> : t("lyrics.searchAction")}
-          </Button>
-        </div>
-        {error && <p className="text-destructive text-xs">{error}</p>}
-        {results && results.length === 0 && !searching && (
-          <p className="py-3 text-center text-muted-foreground text-xs">{t("lyrics.noResults")}</p>
-        )}
-        {results && results.length > 0 && (
-          <ul className="flex max-h-56 flex-col gap-1 overflow-y-auto">
-            {results.map((hit) => (
-              <li key={hit.sourceId ?? `${hit.matched.trackName}-${hit.matched.durationSec}`}>
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={() => void pick(hit)}
-                  className="flex w-full items-center justify-between gap-2 rounded-md border border-border bg-card/55 px-3 py-2 text-left text-sm transition-colors hover:bg-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                >
-                  <span className="min-w-0">
-                    <span className="block truncate font-medium">{hit.matched.trackName}</span>
-                    <span className="block truncate text-muted-foreground text-xs">
-                      {hit.matched.artistName} · {formatDuration(hit.matched.durationSec)}
-                    </span>
-                  </span>
-                  {hit.synced && (
-                    <span className="shrink-0 rounded-full bg-primary/15 px-2 py-0.5 font-medium text-[10px] text-primary">
-                      {t("lyrics.syncedBadge")}
-                    </span>
-                  )}
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
+        <LyricsSearchForm search={search} />
+        {search.error && <p className="text-destructive text-xs">{t("lyrics.searchError")}</p>}
+        <LyricsCandidateList
+          results={search.results}
+          searching={search.searching}
+          busy={busy}
+          onPick={pick}
+        />
       </div>
 
       <div className="flex flex-col gap-2">
@@ -243,13 +172,4 @@ function LyricsManagerBody({ track, onDone }: { track: Track; onDone: () => void
       </div>
     </div>
   );
-}
-
-function formatDuration(sec: number): string {
-  if (!Number.isFinite(sec) || sec <= 0) return "--:--";
-  const m = Math.floor(sec / 60);
-  const s = Math.floor(sec % 60)
-    .toString()
-    .padStart(2, "0");
-  return `${m}:${s}`;
 }

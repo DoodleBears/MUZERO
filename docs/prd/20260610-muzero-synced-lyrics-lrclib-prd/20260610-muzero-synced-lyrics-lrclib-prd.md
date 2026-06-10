@@ -432,6 +432,7 @@ components/track/             # （Phase 4）annotation-editor 加"歌词"区：
 - **粘贴/编辑**：直接粘贴 LRC 或纯文本（自动判别有无 `[mm:ss]` 时间戳走 synced/plain），保存为 `source:"manual"`。
 - **清除/重取**：清 `lyrics` 行（含负缓存），可重新自动获取。
 - **优先级**：`source:"manual"` 不被自动抓覆盖（编排里 `getTrackLyrics` 命中即跳过抓取；同步合并里 manual 恒胜，见 §4.8）。
+- **空态即搜索**：没有歌词的曲，now-playing lyrics 面板**直接变成内联搜索 UI**（[`lyrics-search-panel.tsx`](../../../src/components/player/lyrics-search-panel.tsx)），与 dialog 共用 `useLyricsSearch` hook + 候选列表；synced/plain 视图底部有「歌词不对?搜索」入口。
 - 全程 i18n（§5.5），出站仍走 `getAppFetch()`（规则 5/10）。
 
 ---
@@ -497,7 +498,7 @@ components/track/             # （Phase 4）annotation-editor 加"歌词"区：
 - [ ] 回退态：plain / instrumental / fetching / none + LRCLIB 署名。
 
 #### Phase 3 Checklist
-- [x] synced 歌词逐行高亮（`activeLineIndex` 二分，单测）+ 自动滚动居中（`scrollIntoView({block:"center"})`）。
+- [x] synced 歌词逐行高亮（`activeLineIndex` 二分，单测）+ **motion(framer) spring 整列平移**让当前行居中（~40% 锚点，替代 scrollIntoView）+ 按距离 opacity/scale 渐变 + 上下边缘 fade（Apple-Music 风）。
 - [x] 点击任意行跳到该句开头（`onSeek(timeMs/1000)`，组件单测验证）。
 - [x] reduced-motion 下瞬切（`prefersReducedMotion()` → `behavior:"auto"`）。**逐行追踪用 per-frame rAF 读 `getCurrentTime()`**（帧率精度切行 + 即时滚动）：仅播放+可见时跑、tab 隐藏即停、暂停只同步一次（[preview-hidden-tab-gotcha](../../../.claude/projects/-Users-doodlebear-Documents-code-MUZERO/memory/preview-hidden-tab-gotcha.md) 纪律）。
 - [x] 生成曲 `brief.lyrics` 走 plain 路径正常显示（`resolveTrackLyrics` + plain 渲染，单测）。
@@ -616,6 +617,7 @@ components/track/             # （Phase 4）annotation-editor 加"歌词"区：
 | 2026-06-10 | DoodleBear | 初稿：LRCLIB 自动抓词 + Apple Music 式逐行播放（高亮/自动滚动/点击跳转）。确定单独 `lyrics` 表(v20)、provider 可插拔抽象、rAF 平滑方案；Q1/Q5/Q6 待定 |
 | 2026-06-10 | DoodleBear | 据评审定 Q1/Q5/Q6/Q7：自动抓词**默认开**；**手动歌词进核心**（Phase 4）；**歌词随 R2 同步**进 manifest（Phase 5，仿 thumbhash `cf454a1`，新增 §4.8 + §5.6）；**WebDAV 完全推后**（单列未来 PRD，§7）；v1 只 LRCLIB；自动+手动均同步。Phase 由 4 增至 5 |
 | 2026-06-10 | DoodleBear | Phase 3 显示驱动升级为 **per-frame rAF**（`useActiveLyricLine`）：帧率精度切行、仅行变化时 setState（规则 6）、tab 隐藏即停、播放期零 4Hz 重渲——落实 §2.2/§5.2/Q3 原 rAF 设计（替换 v1 临时的 4Hz selector）。+3 hook 假定时器单测 |
+| 2026-06-10 | DoodleBear | Phase 3/4 显示打磨：synced 视图改 **motion spring 整列平移居中** + 逐行 opacity/scale 渐变 + 边缘 fade（Apple-Music 风，替 scrollIntoView）；**空态即内联 LRCLIB 搜索**（`lyrics-search-panel` + 共享 `useLyricsSearch` hook，dialog 复用同一搜索/候选 + 「歌词不对?搜索」入口）。组件/单测 87 绿 |
 | 2026-06-10 | DoodleBear | **Phases 1–5 全部实现完成（TDD）**：`src/lyrics/`（provider/parser/map/resolve/auto-fetch/manual）+ `lyrics` 表(v20) + Settings 开关 + `SyncedLyricsView`(Apple-Music 式) + 手动歌词 dialog + R2 manifest 同步。81 个新单测全绿；逐 phase 原子提交（`8cedbe7`/`73ff488`/`b9997c1`/`4c45b0e` + Phase 5）。Status → Completed |
 
 ---
