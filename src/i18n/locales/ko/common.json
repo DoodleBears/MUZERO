@@ -474,6 +474,7 @@
     "lyricsSourceHint": "가사를 찾을 곳. NetEase Cloud Music은 중·일·한 곡이 풍부하며, NetEase에서 재생한 곡은 항상 이를 사용합니다(정확 일치).",
     "lyricsSourceLrclib": "LRCLIB",
     "lyricsSourceNetease": "NetEase Cloud Music",
+    "lyricsSourceAmll": "AMLL TTML DB (글자별, NetEase 곡)",
     "theme": "테마",
     "themeLight": "라이트",
     "themeDark": "다크",

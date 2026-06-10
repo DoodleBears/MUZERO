@@ -596,6 +596,7 @@ export function SettingsPage() {
                     >
                       <option value="lrclib">{t("settings.lyricsSourceLrclib")}</option>
                       <option value="netease">{t("settings.lyricsSourceNetease")}</option>
+                      <option value="amll">{t("settings.lyricsSourceAmll")}</option>
                     </select>
                   </label>
                 )}

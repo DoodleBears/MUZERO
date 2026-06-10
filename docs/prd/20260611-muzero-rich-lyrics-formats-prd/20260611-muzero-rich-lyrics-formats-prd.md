@@ -1,6 +1,6 @@
 # PRD: MUZERO Rich Lyrics Formats（逐字卡拉OK + 多歌词格式适配：Enhanced LRC / YRC / QRC / TTML）
 
-**Status:** Final（Open Questions 已锁定 → §10；按 phase TDD 推进中）
+**Status:** Completed（Phase 1–5 全部完成，TDD 逐 phase 原子提交；Open Questions 已锁定 → §10）
 **Created:** 2026-06-11
 **Author:** DoodleBear
 **Module:** `src/lyrics/`（新增 format parsers + 统一模型）· `src/components/player/synced-lyrics-view.tsx`（逐字渲染）· `src/lyrics/registry.ts`（新 provider）· Settings · i18n
@@ -17,7 +17,7 @@
 | 2 | 词级解析器：parseEnhancedLrc / parseYrc / parseQrc 归一化到统一模型 + `format` 落库 | ✅ Completed | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | 逐字卡拉OK渲染：SyncedLines 按词 fill（active 行）+ Settings 开关 + 回退整行高亮 | ✅ Completed | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | 翻译 / 罗马音双行：模型携带 translation/roman 子行 + Settings 开关 | ✅ Completed | [Phase 4 Checklist](#phase-4-checklist) |
-| 5（可选）| TTML 解析器 + amll-ttml-db 作为新 LyricsProvider（逐字+翻译+对唱的天花板源） | 🔄 5a 完成（parseTtml + 手动粘贴端到端）；5b provider 评估中 | [Phase 5 Checklist](#phase-5-checklist) |
+| 5（可选）| TTML 解析器 + amll-ttml-db 作为新 LyricsProvider（逐字+翻译+对唱的天花板源） | ✅ Completed | [Phase 5 Checklist](#phase-5-checklist) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
 
@@ -350,14 +350,20 @@ export function activeWordIndex(words: WordTiming[], positionMs: number): number
 - [x] [`parse.ts`](../../../src/lyrics/parse.ts) dispatch `ttml → parseTtml`（不再占位）。
 - [x] **接入点：手动粘贴**。[`manual.ts`](../../../src/lyrics/manual.ts) 改用 `detectLyricsFormat` —— 粘贴任意 timed 格式（含 AMLL `.ttml`）即得逐字+翻译+罗马音；无时间戳→plain。**这就是 TTML 端到端通路**（用户粘 .ttml → format:"ttml" → parseTtml → 渲染 words/translation/roman）。
 
-**5b Tasks（评估后裁决，见 §10 决策）：**
-- [ ] `amll-ttml-provider.ts`：查 amll-ttml-db → 拉 TTML（getAppFetch）—— **取决于 DB lookup 是否稳定可验证**。
-- [ ] 对唱 agent 左右/弱化渲染 —— TTML agent 已进模型；视觉对唱排版作为独立增强（renderer 暂未消费 agent）。
+**5b Tasks（完成）：** DB 结构已核实可用 —— amll-ttml-db 提供**稳定 raw 直链**按平台 id 取（`…/ncm-lyrics/{ncmId}.ttml`），且 **CC0-1.0**（ship-friendly）。
+- [x] [`amll-ttml-provider.ts`](../../../src/lyrics/amll-ttml-provider.ts)：按 `neteaseSongId` 拉 `ncm-lyrics/{id}.ttml`（`getAppFetch` + timeout，注入 fetch 可测）；404/非 TTML→null；无 ncm id→不发请求（DB 是 id-keyed，**无 fuzzy search**，manual 文本搜索面板对它优雅降级为空）。
+- [x] registry：`LyricsProviderId/Source += "amll"`，`resolveLyricsProvider` 分支，`resolveLyricsProviderForTrack` 在用户选 amll 时让网易曲目走 AMLL。
+- [x] Settings「歌词来源」下拉加 AMLL 选项（**opt-in**，可见控件 rule 3，**不改默认自动端点** → 守住 Q4 精神）+ i18n ×4。
+- [x] [`THIRD-PARTY-LICENSES.md`](../../../THIRD-PARTY-LICENSES.md)：amll-ttml-db CC0-1.0 + LRCLIB/网易 来源与归属（§8）。
+- [~] 对唱 agent 左右/弱化渲染 —— TTML agent **已进模型**（parseTtml 产出）；视觉对唱排版列为**独立后续增强**（renderer 暂未消费 agent，见 §7）。
+
+> **Q4 裁决修订**：核实后发现 amll-ttml-db 是 **id-keyed 精确源**（非文本可搜），「仅手动文本搜索」并不契合它的本质。落地为**用户 opt-in 的精确 provider**（选了才用、可见 Settings 控件），**不动默认自动端点**——守住 Q4「不新增自动第三端点」的精神，同时让它对网易曲目可用。
 
 #### Phase 5 Checklist
 - [x] TTML 端到端（parser + 手动粘贴通路）：逐字 + 翻译 + 罗马音解析正确（`ttml.test.ts` 覆盖时间格式/agent/译文/罗马音）。
-- [x] 160 lyrics 单测全过；my-files tsc/biome 干净。
-- [ ] 5b：amll-ttml-db provider（getAppFetch / 命中未命中 / `THIRD-PARTY-LICENSES.md`）—— 待 DB 结构核实后裁决（见 §10）。
+- [x] amll-ttml-db 拉取走 `getAppFetch`；命中/404/非 TTML/无 id 四态测试（注入 fetch）。
+- [x] License/attribution 入 `THIRD-PARTY-LICENSES.md`（CC0-1.0）。
+- [x] 165 lyrics 单测全过；my-files tsc/biome 干净。
 
 ---
 
@@ -405,7 +411,7 @@ export function activeWordIndex(words: WordTiming[], positionMs: number): number
 | Q1 | 逐字默认开还是关？ | ✅ 锁定 | **默认开**（有 words 才逐字，无则整行；零额外成本）|
 | Q2 | 网易是否默认取 yrc（逐字）而非 lrc？ | ✅ 锁定 | **有 yrc 用 yrc，回退 lrc**（精度优先）|
 | Q3 | 翻译/罗马音默认显示？ | ✅ 锁定 | **翻译默认开、罗马音默认关** |
-| Q4 | Phase 5 接 amll-ttml-db 的范围 | ✅ 锁定 | **仅手动**「搜索歌词」里加 TTML 源，不自动出站第三端点 |
+| Q4 | Phase 5 接 amll-ttml-db 的范围 | ✅ 锁定→实现修订 | 原「仅手动文本搜索」；核实后 DB 是 **id-keyed 精确源**（不可文本搜），故落地为**用户 opt-in 精确 provider**（Settings 可见选项，按网易 id 取）**且不改默认自动端点** —— 守住「不新增自动第三端点」精神 |
 | Q5 | 逐字 fill 用 CSS 还是 motion？ | ✅ 锁定 | **CSS background-clip**（GPU、无重排、便宜）；复杂动效再上 motion |
 
 ---
@@ -420,6 +426,7 @@ export function activeWordIndex(words: WordTiming[], positionMs: number): number
 | 2026-06-11 | DoodleBear | **Phase 3 完成**：逐字卡拉OK渲染。`active-word.ts` + `SyncedLines` active 行 per-word `background-clip:text` wipe（直接 DOM rAF 写 `--wfill`，不每帧重渲）+ `lyricsWordByWord` 开关（默认 on，共用 tuning 控件）+ i18n ×4。无 words 源零回归。167 单测全过。逐字 wipe 实时观感需真实前台 dev server（预览沙箱冻 rAF）|
 | 2026-06-11 | DoodleBear | **Phase 4 完成**：翻译/罗马音双行。`sub-lyrics.ts` 时间戳对齐合并（独立 tlyric/romalrc → `LyricLine.translation/roman`）+ record/hit `translation/romanization` 原始字段（零迁移）+ resolve 挂载 + 主行下弱化子行渲染 + `lyricsShowTranslation`(默认 on)/`lyricsShowRomanization`(默认 off) 开关 + 网易 `rv:0` 取 romalrc/tlyric。168 单测全过 |
 | 2026-06-11 | DoodleBear | **Phase 5a 完成**：`formats/ttml.ts` `parseTtml`（DOMParser 解析 words+translation+roman+agent，多时间格式）+ `parse.ts` dispatch + `manual.ts` 改 `detectLyricsFormat`（粘贴 .ttml/yrc/qrc/elrc 即识别）→ TTML 端到端可用（手动粘贴通路）。160 单测全过。5b（amll-ttml-db provider）待 DB 结构核实 |
+| 2026-06-11 | DoodleBear | **Phase 5b 完成（全 PRD 收官）**：核实 amll-ttml-db = id-keyed 稳定 raw 直链 + CC0-1.0。`amll-ttml-provider.ts`（按 ncm id 拉 TTML，注入 fetch 四态测试）+ registry/provider union + Settings opt-in 下拉 + i18n ×4 + `THIRD-PARTY-LICENSES.md`。Q4 修订为「opt-in 精确 provider，不动默认自动端点」。165 单测全过。**Phase 1–5 全部完成** |
 
 ---
 

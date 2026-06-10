@@ -475,6 +475,7 @@
     "lyricsSourceHint": "歌詞の取得元。NetEase Cloud Music は中日韓の曲が豊富で、NetEase から再生した曲は常にこれを使います（完全一致）。",
     "lyricsSourceLrclib": "LRCLIB",
     "lyricsSourceNetease": "NetEase Cloud Music",
+    "lyricsSourceAmll": "AMLL TTML DB（文字単位・NetEase 楽曲）",
     "theme": "テーマ",
     "themeLight": "ライト",
     "themeDark": "ダーク",

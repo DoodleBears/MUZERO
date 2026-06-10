@@ -475,6 +475,7 @@
     "lyricsSourceHint": "从哪里获取歌词。网易云音乐的中日韩曲库很大；从网易云播放的歌曲始终用它（精确匹配）。",
     "lyricsSourceLrclib": "LRCLIB",
     "lyricsSourceNetease": "网易云音乐",
+    "lyricsSourceAmll": "AMLL TTML 库（逐字，网易曲目）",
     "theme": "主题",
     "themeLight": "浅色",
     "themeDark": "深色",

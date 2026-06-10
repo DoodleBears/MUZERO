@@ -12,10 +12,10 @@
 
 import type { LyricFormat } from "./model";
 
-export type LyricsProviderId = "lrclib" | "netease";
+export type LyricsProviderId = "lrclib" | "netease" | "amll";
 
 /** Where a stored lyrics row came from. `manual` = user-supplied, wins on merge. */
-export type LyricsSource = "lrclib" | "netease" | "manual";
+export type LyricsSource = "lrclib" | "netease" | "amll" | "manual";
 
 /** Persisted lyrics state. `notFound` is a negative-cache marker. */
 export type LyricsStatus = "found" | "notFound" | "instrumental";

@@ -487,6 +487,7 @@
     "lyricsSourceHint": "Where to look up lyrics. NetEase Cloud Music has a large CJK catalogue; songs streamed from NetEase always use it (exact match).",
     "lyricsSourceLrclib": "LRCLIB",
     "lyricsSourceNetease": "NetEase Cloud Music",
+    "lyricsSourceAmll": "AMLL TTML DB (word-by-word, NetEase tracks)",
     "theme": "Theme",
     "themeLight": "Light",
     "themeDark": "Dark",
