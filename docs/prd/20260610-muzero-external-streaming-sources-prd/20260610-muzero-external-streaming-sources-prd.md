@@ -28,6 +28,8 @@
 | # | 单元 | 文件 | 测试 | 状态 |
 |---|---|---|---|---|
 | C1 | MD5（RFC 1321，eapi digest + WBI w_rid 的基石） | `src/streamsrc/crypto/md5.ts` | RFC 已知向量 ×10 | ✅ green |
+| B1 | Bilibili WBI 签名（mixinKey 重排 + `w_rid=md5(query+key)`，`wts` 注入可测） | `src/streamsrc/bili/bili-wbi.ts` | 官方文档向量 + Node md5 交叉验证 ×6 | ✅ green |
+| B2 | Bilibili DASH 音轨选择（normal/dolby/flac 标签化 + 偏好降级/升级 + CDN 排序） | `src/streamsrc/bili/bili-resolve.ts` | canned playurl ×9 | ✅ green |
 
 ---
 
