@@ -92,6 +92,18 @@ export async function createStreamedTrack(
     streamExternalId: input.externalId,
     streamMeta: input.meta,
     remoteCoverUrl: input.coverUrl,
+    // Mirror the source metadata into mediaMetadata so every existing display surface
+    // (trackSubtitle / trackArtists / detail panel) shows the artist + album with no
+    // streamed-specific branching — exactly how uploaded tracks carry their tags.
+    mediaMetadata:
+      input.meta?.artist || input.meta?.album
+        ? {
+            artists: input.meta.artist ? [input.meta.artist] : undefined,
+            album: input.meta.album,
+            parser: "manual",
+            parsedAt: Date.now(),
+          }
+        : undefined,
   };
   await db.tracks.put(track);
   return track;

@@ -459,6 +459,10 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     // (which seeds the queue from trackIds). Then wait for the track to land + play.
     const setId = await ensureOnlineSet();
     const track = await createStreamedTrack(hitToStreamedInput(setId, hit));
+    // Persist the cover as a blob (best-effort, non-blocking) so it survives offline.
+    if (track.remoteCoverUrl && !track.coverBlobId) {
+      void downloadStreamedCover(track.id, track.remoteCoverUrl);
+    }
     const alreadyActive = get().activeSessionId === setId;
     const session = await getSession(setId);
     if (!session?.trackIds.includes(track.id)) await prependTrackIds(setId, [track.id]);
@@ -809,6 +813,25 @@ async function ingestNcmFile(
  * so a failed/offline fetch just leaves it cover-less; never throws to the caller.
  * Routed through `getAppFetch()` so it bypasses CORS on the desktop shells.
  */
+/**
+ * Download a streamed track's cover into a blob so it persists (offline) and stops
+ * depending on the proxy/referer each render. Goes through the media proxy (which
+ * strips the element/localhost Referer hdslb 403s and adds ACAO) — best-effort.
+ */
+async function downloadStreamedCover(trackId: string, url: string): Promise<void> {
+  const bridge = resolveDesktopBridge();
+  if (!bridge.mediaProxyUrl) return; // web/tauri: keep the remote URL fallback
+  try {
+    const resp = await fetch(bridge.mediaProxyUrl(url));
+    if (!resp.ok) return;
+    const blob = await resp.blob();
+    if (blob.size === 0 || !blob.type.startsWith("image/")) return;
+    await setTrackCover({ trackId, blob, mime: blob.type });
+  } catch (err) {
+    log.warn("player", "failed to download streamed cover", { trackId, err: String(err) });
+  }
+}
+
 async function fetchAndStoreRemoteCover(trackId: string, url: string): Promise<void> {
   try {
     const appFetch = await getAppFetch();
