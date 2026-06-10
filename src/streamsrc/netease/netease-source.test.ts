@@ -38,7 +38,6 @@ function deps(routes: Array<[string, unknown]>, cookie?: string) {
   const source = createNeteaseSource({
     http,
     getCookie: () => cookie,
-    randomKey: () => "abcdefghijklmnop",
   });
   return { source, calls };
 }
@@ -50,8 +49,8 @@ describe("createNeteaseSource", () => {
     expect(deps([], "MUSIC_U=abc").source.isAuthed()).toBe(true);
   });
 
-  it("searches via weapi and maps songs to hits", async () => {
-    const { source, calls } = deps([["/weapi/cloudsearch/get/web", SEARCH]]);
+  it("searches via eapi and maps songs to hits", async () => {
+    const { source, calls } = deps([["/eapi/cloudsearch/pc", SEARCH]]);
     const hits = await source.search("晴天");
     expect(hits[0]).toMatchObject({
       source: "netease",
@@ -62,10 +61,10 @@ describe("createNeteaseSource", () => {
       durationSec: 269,
       coverUrl: "https://p1.music.126.net/cover.jpg",
     });
-    // weapi request body carries the encrypted params + RSA-wrapped key.
-    const body = calls.find((c) => c.url.includes("/weapi/"))?.body ?? "";
+    // eapi search request carries the encrypted params (no RSA-wrapped key).
+    const body = calls.find((c) => c.url.includes("/eapi/cloudsearch/pc"))?.body ?? "";
     expect(body).toContain("params=");
-    expect(body).toContain("encSecKey=");
+    expect(body).not.toContain("encSecKey=");
   });
 
   it("resolves via eapi to a playable (https-upgraded) flac stream", async () => {

@@ -18,7 +18,7 @@ import type {
   StreamSearchOptions,
   StreamSourceProvider,
 } from "../provider";
-import { eapiEncrypt, randomSecretKey, weapiEncrypt } from "./netease-crypto";
+import { eapiEncrypt } from "./netease-crypto";
 import {
   NETEASE_PLAYER_URL_PATH,
   type NeteaseQuality,
@@ -26,7 +26,10 @@ import {
   parseNeteasePlayback,
 } from "./netease-resolve";
 
-const SEARCH_URL = "https://music.163.com/weapi/cloudsearch/get/web";
+// eapi (not the web weapi) — the web cloudsearch endpoint gates anonymous requests
+// with code 50000005; the eapi/pc endpoint doesn't, and it reuses the resolve crypto.
+const SEARCH_URL = "https://interface.music.163.com/eapi/cloudsearch/pc";
+const SEARCH_API_PATH = "/api/cloudsearch/pc";
 const PLAYER_URL = "https://interface.music.163.com/eapi/song/enhance/player/url/v1";
 const USER_AGENT =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
@@ -36,8 +39,6 @@ export interface NeteaseSourceDeps {
   http: StreamHttp;
   /** Current netease cookie (MUSIC_U…), or undefined when anonymous. */
   getCookie?: () => string | undefined;
-  /** 16-char weapi secret key factory; injected for deterministic tests. */
-  randomKey?: () => string;
 }
 
 function formBody(fields: Record<string, string>): string {
@@ -47,8 +48,6 @@ function formBody(fields: Record<string, string>): string {
 }
 
 export function createNeteaseSource(deps: NeteaseSourceDeps): StreamSourceProvider {
-  const newKey = deps.randomKey ?? randomSecretKey;
-
   function headers(): Record<string, string> {
     const h: Record<string, string> = {
       "User-Agent": USER_AGENT,
@@ -77,8 +76,8 @@ export function createNeteaseSource(deps: NeteaseSourceDeps): StreamSourceProvid
       offset: "0",
       total: "true",
     });
-    const { params, encSecKey } = weapiEncrypt(payload, newKey());
-    const { status, text } = await post(SEARCH_URL, formBody({ params, encSecKey }), opts?.signal);
+    const { params } = eapiEncrypt(SEARCH_API_PATH, payload);
+    const { status, text } = await post(SEARCH_URL, formBody({ params }), opts?.signal);
     let json: { code?: number; msg?: string; message?: string; result?: { songs?: unknown[] } };
     try {
       json = JSON.parse(text);
