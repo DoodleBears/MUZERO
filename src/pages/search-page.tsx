@@ -83,6 +83,7 @@ import {
   type SortDir,
   sortSets,
 } from "@/lib/set-gallery";
+import { useSmoothScroll } from "@/lib/smooth-scroll/use-smooth-scroll";
 import {
   filterLikedTracks,
   sortTracks,
@@ -193,6 +194,9 @@ export function SearchPage() {
   // Wall scroll + roving-focus memory: restore the scroll position and re-focus
   // the card we backed out of when returning from a detail (so W/S/↑↓ continues).
   const wallScrollRef = useRef<HTMLDivElement | null>(null);
+  // Smooth-scroll the gallery wall; the virtualized grids route their
+  // restore/scrollToIndex through this so they don't fight the smoothing.
+  const { lenisRef: wallLenisRef } = useSmoothScroll(wallScrollRef);
   // Adopt the wall scroller as STATE (not just a ref) so the virtualized grids
   // re-render with a live scroller the instant the callback ref attaches it.
   // Returning from a detail remounts the scroller and the grid in one commit; a
@@ -948,6 +952,7 @@ export function SearchPage() {
                     view={view}
                     getKey={getSetKey}
                     scrollElement={wallScrollEl}
+                    lenisRef={wallLenisRef}
                     restoreScrollTop={wallScrollTops.current.sets}
                     initialFocusKey={returnFocusKeyRef.current}
                     onInitialFocusHandled={() => {
@@ -1172,6 +1177,7 @@ export function SearchPage() {
                 view={view}
                 getKey={getEntityKey}
                 scrollElement={wallScrollEl}
+                lenisRef={wallLenisRef}
                 restoreScrollTop={wallScrollTops.current.albums}
                 initialFocusKey={returnFocusKeyRef.current}
                 onInitialFocusHandled={() => {
@@ -1215,6 +1221,7 @@ export function SearchPage() {
                 view={view}
                 getKey={getEntityKey}
                 scrollElement={wallScrollEl}
+                lenisRef={wallLenisRef}
                 restoreScrollTop={wallScrollTops.current.artists}
                 initialFocusKey={returnFocusKeyRef.current}
                 onInitialFocusHandled={() => {
