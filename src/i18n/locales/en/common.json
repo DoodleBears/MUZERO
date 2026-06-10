@@ -128,6 +128,19 @@
     "wrongLyrics": "Wrong lyrics? Search",
     "backToLyrics": "Back to lyrics"
   },
+  "lyricsSettings": {
+    "title": "Lyrics",
+    "activeFontSize": "Current line size ({{px}}px)",
+    "inactiveFontSize": "Other lines size ({{px}}px)",
+    "activeOpacity": "Current line opacity ({{pct}}%)",
+    "inactiveOpacity": "Other lines opacity ({{pct}}%)",
+    "color": "Text color",
+    "colorDefault": "Theme default",
+    "colorCover": "From cover",
+    "colorCustom": "Custom",
+    "colorCoverHint": "Follows the cover color used by the visualizer.",
+    "customColor": "Custom color"
+  },
   "displayMode": {
     "video": "Video",
     "cover": "Cover"
@@ -329,6 +342,7 @@
     "navSecAdvanced": "Advanced",
     "navBackground": "Background",
     "navVisualizer": "Visualizer",
+    "navLyrics": "Lyrics",
     "navCloudOwner": "My drive (R2)",
     "navCloudSubscribe": "Subscribe",
     "navCloudSync": "Sync & CORS",

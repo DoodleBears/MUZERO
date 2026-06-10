@@ -122,6 +122,19 @@
     "wrongLyrics": "가사가 틀렸나요? 검색",
     "backToLyrics": "가사로 돌아가기"
   },
+  "lyricsSettings": {
+    "title": "가사",
+    "activeFontSize": "현재 줄 크기 ({{px}}px)",
+    "inactiveFontSize": "다른 줄 크기 ({{px}}px)",
+    "activeOpacity": "현재 줄 불투명도 ({{pct}}%)",
+    "inactiveOpacity": "다른 줄 불투명도 ({{pct}}%)",
+    "color": "텍스트 색상",
+    "colorDefault": "테마 기본",
+    "colorCover": "커버에서",
+    "colorCustom": "사용자 지정",
+    "colorCoverHint": "비주얼라이저가 사용하는 커버 색상을 따릅니다.",
+    "customColor": "사용자 지정 색상"
+  },
   "displayMode": {
     "video": "비디오",
     "cover": "커버"

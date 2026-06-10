@@ -145,7 +145,7 @@ export function NowPlayingPanel({
         ) : (
           <motion.div
             animate={{ opacity: 1, y: 0 }}
-            className="mt-chrome-top flex h-[calc(100%-var(--spacing-chrome-top))] min-h-0 flex-col overflow-hidden rounded-2xl rounded-b-none bg-muted/50 px-4 pt-4 pb-chrome-bottom shadow-sm backdrop-blur-sm dark:bg-card/85"
+            className="mt-chrome-top flex h-[calc(100%-var(--spacing-chrome-top))] min-h-0 flex-col overflow-hidden px-4 pt-4 pb-chrome-bottom"
             data-testid="lyrics-rail"
             exit={{ opacity: 0, y: 12 }}
             initial={{ opacity: 0, y: 12 }}

@@ -89,7 +89,7 @@ export function NowPlayingPage({ foregroundHidden = false }: { foregroundHidden?
           {current && <AnnotationEditor key={current.id} track={current} />}
 
           {isNarrow && current && (
-            <div className="min-h-[60svh] rounded-2xl bg-muted/40 p-4 dark:bg-card/70">
+            <div className="min-h-[60svh] p-4">
               <SyncedLyricsView track={current} />
             </div>
           )}

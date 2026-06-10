@@ -122,6 +122,19 @@
     "wrongLyrics": "歌詞が違う？検索",
     "backToLyrics": "歌詞に戻る"
   },
+  "lyricsSettings": {
+    "title": "歌詞",
+    "activeFontSize": "現在の行のサイズ（{{px}}px）",
+    "inactiveFontSize": "他の行のサイズ（{{px}}px）",
+    "activeOpacity": "現在の行の不透明度（{{pct}}%）",
+    "inactiveOpacity": "他の行の不透明度（{{pct}}%）",
+    "color": "文字色",
+    "colorDefault": "テーマ既定",
+    "colorCover": "カバーから",
+    "colorCustom": "カスタム",
+    "colorCoverHint": "ビジュアライザーが使うカバー色に追従します。",
+    "customColor": "カスタム色"
+  },
   "displayMode": {
     "video": "動画",
     "cover": "カバー"
@@ -318,6 +331,7 @@
     "navSecAdvanced": "詳細",
     "navBackground": "背景",
     "navVisualizer": "ビジュアライザー",
+    "navLyrics": "歌詞",
     "navCloudOwner": "マイドライブ (R2)",
     "navCloudSubscribe": "購読",
     "navCloudSync": "同期と CORS",

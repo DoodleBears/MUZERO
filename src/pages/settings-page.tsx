@@ -16,6 +16,7 @@ import { AddDriveDialog } from "@/components/settings/add-drive-dialog";
 import { BackgroundSettings } from "@/components/settings/background-settings";
 import { CloudDriveSets } from "@/components/settings/cloud-drive-sets";
 import { ImportedFoldersSettings } from "@/components/settings/imported-folders-settings";
+import { LyricsSettings } from "@/components/settings/lyrics-settings";
 import { resolveActiveSettingsItem } from "@/components/settings/settings-nav";
 import { SettingsSidebar } from "@/components/settings/settings-sidebar";
 import { ShortcutsSettings } from "@/components/settings/shortcuts-settings";
@@ -547,6 +548,8 @@ export function SettingsPage() {
           {activeItem === "background" && <BackgroundSettings />}
 
           {activeItem === "visualizer" && <VisualizerSettings />}
+
+          {activeItem === "lyrics" && <LyricsSettings />}
 
           {activeItem === "advanced" && <TraceDiagnostics />}
 

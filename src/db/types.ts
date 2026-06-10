@@ -486,6 +486,19 @@ export interface AppSettings {
   visualizerGlow?: number;
   /** Visualizer mirror/reflection multiplier. Default 1. */
   visualizerMirror?: number;
+  // --- Synced-lyrics appearance (synced-lyrics PRD) --------------------------
+  /** Active (current) lyric line font size in px. Default 24. */
+  lyricsActiveFontSize?: number;
+  /** Inactive lyric line font size in px. Default 20. */
+  lyricsInactiveFontSize?: number;
+  /** Active lyric line opacity, 0–100. Default 100. */
+  lyricsActiveOpacity?: number;
+  /** Inactive lyric line opacity, 0–100. Default 40. */
+  lyricsInactiveOpacity?: number;
+  /** Lyric text color source. "default" = theme foreground. Default "default". */
+  lyricsColorMode?: "default" | "cover" | "custom";
+  /** Custom lyric color (hex) when `lyricsColorMode === "custom"`. */
+  lyricsCustomColor?: string;
   /** Global color scheme. Mirrors localStorage `muzero-theme`; defaults to system. */
   theme?: "light" | "dark" | "system";
   /** Primary/accent color (hex) for light mode. Mirrors localStorage `muzero-primary-light`. */
@@ -616,6 +629,11 @@ export const DEFAULT_SETTINGS: AppSettings = {
   visualizerSpread: 1,
   visualizerGlow: 1,
   visualizerMirror: 1,
+  lyricsActiveFontSize: 24,
+  lyricsInactiveFontSize: 20,
+  lyricsActiveOpacity: 100,
+  lyricsInactiveOpacity: 40,
+  lyricsColorMode: "default",
   playerRepeatMode: "off",
   playerShuffle: false,
   presenceEnabled: false,

@@ -122,6 +122,19 @@
     "wrongLyrics": "歌词不对？搜索",
     "backToLyrics": "返回歌词"
   },
+  "lyricsSettings": {
+    "title": "歌词",
+    "activeFontSize": "当前行字号（{{px}}px）",
+    "inactiveFontSize": "其他行字号（{{px}}px）",
+    "activeOpacity": "当前行透明度（{{pct}}%）",
+    "inactiveOpacity": "其他行透明度（{{pct}}%）",
+    "color": "文字颜色",
+    "colorDefault": "主题默认",
+    "colorCover": "取自封面",
+    "colorCustom": "自定义",
+    "colorCoverHint": "跟随可视化使用的封面取色。",
+    "customColor": "自定义颜色"
+  },
   "displayMode": {
     "video": "视频",
     "cover": "封面"
@@ -318,6 +331,7 @@
     "navSecAdvanced": "高级",
     "navBackground": "背景",
     "navVisualizer": "可视化",
+    "navLyrics": "歌词",
     "navCloudOwner": "我的盘 (R2)",
     "navCloudSubscribe": "订阅",
     "navCloudSync": "同步与 CORS",

@@ -3,11 +3,12 @@ import { motion, useReducedMotion } from "motion/react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { LyricsSearchPanel } from "@/components/player/lyrics-search-panel";
+import { useVisualizerCoverColorCss } from "@/components/player/visualizer-dynamic-color";
 import { db } from "@/db/muzero-db";
 import { getTrackLyrics } from "@/db/repositories";
 import type { Track } from "@/db/types";
 import { useSettings } from "@/hooks/use-app-data";
-import { cn } from "@/lib/utils";
+import { DEFAULT_LYRIC_STYLE, type LyricStyle, resolveLyricStyle } from "@/lyrics/lyric-style";
 import { activeLineIndex, type LyricsLine } from "@/lyrics/parse-lrc";
 import { type ResolvedLyrics, resolveTrackLyrics } from "@/lyrics/resolve-lyrics";
 import { getMediaEngine, usePlayerStore } from "@/stores/player-store";
@@ -97,6 +98,11 @@ export function SyncedLyricsView({ track }: { track?: Track }) {
   const isPlaying = usePlayerStore((s) => s.isPlaying);
   const pausedPositionSec = usePlayerStore((s) => (s.isPlaying ? -1 : s.positionSec));
   const seek = usePlayerStore((s) => s.seek);
+  const coverColorCss = useVisualizerCoverColorCss();
+  const lyricStyle = useMemo(
+    () => resolveLyricStyle(settings, coverColorCss),
+    [settings, coverColorCss],
+  );
   const resolved = useMemo(() => resolveTrackLyrics(track, row), [track, row]);
   const lines = resolved.mode === "synced" ? resolved.lines : null;
   const activeIndex = useActiveLyricLine(lines, isPlaying, pausedPositionSec);
@@ -129,6 +135,7 @@ export function SyncedLyricsView({ track }: { track?: Track }) {
       activeIndex={activeIndex}
       onSeek={seek}
       onSearch={track ? () => setSearchOpen(true) : undefined}
+      lyricStyle={lyricStyle}
     />
   );
 }
@@ -147,23 +154,37 @@ export function LyricsScroller({
   activeIndex,
   onSeek,
   onSearch,
+  lyricStyle = DEFAULT_LYRIC_STYLE,
 }: {
   resolved: ShownLyrics;
   activeIndex: number;
   onSeek: (sec: number) => void;
   onSearch?: () => void;
+  lyricStyle?: LyricStyle;
 }) {
   return (
     <div className="flex h-full flex-col">
       <div className="min-h-0 flex-1">
         {resolved.mode === "plain" ? (
           <div className="no-scrollbar h-full overflow-y-auto">
-            <pre className="whitespace-pre-wrap font-sans text-foreground/90 text-sm leading-relaxed">
+            <pre
+              className="whitespace-pre-wrap font-sans leading-relaxed"
+              style={{
+                color: lyricStyle.color,
+                opacity: lyricStyle.activeOpacity,
+                fontSize: lyricStyle.inactiveFontSize,
+              }}
+            >
               {resolved.text}
             </pre>
           </div>
         ) : (
-          <SyncedLines lines={resolved.lines} activeIndex={activeIndex} onSeek={onSeek} />
+          <SyncedLines
+            lines={resolved.lines}
+            activeIndex={activeIndex}
+            onSeek={onSeek}
+            lyricStyle={lyricStyle}
+          />
         )}
       </div>
       <LyricsFooter source={resolved.source} onSearch={onSearch} />
@@ -188,10 +209,12 @@ function SyncedLines({
   lines,
   activeIndex,
   onSeek,
+  lyricStyle,
 }: {
   lines: LyricsLine[];
   activeIndex: number;
   onSeek: (sec: number) => void;
+  lyricStyle: LyricStyle;
 }) {
   const reduce = useReducedMotion();
   const viewportRef = useRef<HTMLDivElement>(null);
@@ -223,7 +246,6 @@ function SyncedLines({
       >
         {lines.map((line, i) => {
           const isActive = i === activeIndex;
-          const dist = activeIndex < 0 ? i : Math.abs(i - activeIndex);
           return (
             <motion.button
               // biome-ignore lint/suspicious/noArrayIndexKey: lyric lines have no stable id; time+index is the natural key
@@ -235,20 +257,14 @@ function SyncedLines({
               data-active={isActive || undefined}
               aria-current={isActive ? "true" : undefined}
               onClick={() => onSeek(line.timeMs / 1000)}
-              animate={
-                reduce
-                  ? { opacity: isActive ? 1 : 0.4 }
-                  : {
-                      opacity: isActive ? 1 : Math.max(0.22, 0.55 - dist * 0.09),
-                      scale: isActive ? 1 : 0.96,
-                    }
-              }
+              animate={{
+                opacity: isActive ? lyricStyle.activeOpacity : lyricStyle.inactiveOpacity,
+                fontSize: isActive ? lyricStyle.activeFontSize : lyricStyle.inactiveFontSize,
+                scale: reduce || isActive ? 1 : 0.97,
+              }}
               transition={{ duration: reduce ? 0 : 0.35, ease: [0.22, 1, 0.36, 1] }}
-              style={{ transformOrigin: "left center" }}
-              className={cn(
-                "block w-full rounded-lg px-3 py-2 text-left font-bold text-2xl leading-snug text-foreground transition-colors",
-                isActive ? "text-foreground" : "hover:text-foreground/70",
-              )}
+              style={{ transformOrigin: "left center", color: lyricStyle.color }}
+              className="block w-full rounded-lg px-3 py-2 text-left font-bold leading-snug"
             >
               {line.text || "♪"}
             </motion.button>
