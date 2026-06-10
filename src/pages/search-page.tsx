@@ -1059,118 +1059,120 @@ function SetDetailView({
         <ArrowLeft className="size-5" />
       </button>
 
-      <div className="mb-3 flex items-start gap-3">
-        {/* Cover — left-click/drop/paste to set; right-click to remove a pinned cover */}
-        <CoverContextMenu
-          hasCover={!!session?.coverBlobId}
-          onRemove={() => void clearSessionCover(setId)}
-        >
-          <button
-            type="button"
-            onClick={() => fileRef.current?.click()}
-            aria-label={t("gallery.coverHint")}
-            title={t("gallery.coverHint")}
-            onDragOver={(e) => {
-              if (dragHasFiles(e.dataTransfer?.types)) {
-                e.preventDefault();
-                setDragOver(true);
-              }
-            }}
-            onDragLeave={() => setDragOver(false)}
-            onDrop={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              setDragOver(false);
-              openCoverCrop(filesFromTransfer(e.dataTransfer), "set");
-            }}
-            className={cn(
-              "group relative grid size-20 shrink-0 place-items-center overflow-hidden rounded-xl bg-secondary outline-none transition-shadow focus-visible:ring-2 focus-visible:ring-ring",
-              dragOver && "ring-2 ring-primary",
-            )}
-          >
-            {coverUrl ? (
-              <img src={coverUrl} alt="" className="size-full object-cover" />
-            ) : (
-              <Disc3Icon className="text-muted-foreground" size={28} />
-            )}
-            <span className="absolute inset-0 grid place-items-center bg-black/40 opacity-0 transition-opacity group-hover:opacity-100">
-              <ImagePlus className="size-5 text-white" />
-            </span>
-          </button>
-        </CoverContextMenu>
-        <input
-          ref={fileRef}
-          type="file"
-          accept={IMAGE_ACCEPT}
-          className="hidden"
-          onChange={(e) => {
-            if (e.target.files) openCoverCrop(Array.from(e.target.files), "set");
-            e.target.value = "";
-          }}
-        />
-
-        <div className="min-w-0 flex-1">
-          <input
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            onBlur={commitName}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") e.currentTarget.blur();
-            }}
-            placeholder={t("gallery.setName")}
-            className="-mx-1 w-full truncate rounded-md border border-transparent bg-transparent px-1 text-lg font-semibold outline-none hover:border-input focus:border-input"
-          />
-          <textarea
-            ref={descRef}
-            value={desc}
-            onChange={(e) => setDesc(stripDescriptionNewlines(e.target.value))}
-            onBlur={(e) => commitDesc(e.currentTarget.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.nativeEvent.isComposing) {
-                e.preventDefault();
-                e.currentTarget.blur();
-              }
-            }}
-            placeholder={t("gallery.setDescription")}
-            rows={1}
-            className="-mx-1 mt-0.5 w-full resize-none overflow-hidden rounded-md border border-transparent bg-transparent px-1 text-xs leading-5 text-muted-foreground outline-none hover:border-input focus:border-input"
-          />
-          <p className="px-1 pt-0.5 text-xs text-muted-foreground tabular-nums">
-            {t("gallery.count", { count: tracks.length })}
-            {totalDurationSec > 0 && ` · ${formatDuration(totalDurationSec)}`}
-          </p>
-        </div>
-      </div>
-
       <div className="grid min-h-0 flex-1 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(280px,360px)]">
-        <TrackListSection
-          setId={setId}
-          tracks={shownTracks}
-          selectedTrackId={selectedTrack?.id}
-          onView={(track) => transitionState(() => setSelectedTrackId(track.id))}
-          onPlay={(track) => void playTrack(track)}
-          emptyHint={t("gallery.empty")}
-          listClassName="chrome-fade no-scrollbar pt-5 pb-chrome-bottom [--chrome-fade-top:1.25rem]"
-          startActions={
-            <>
-              <Button size="sm" onClick={onPlayAll} disabled={tracks.length === 0}>
-                <Play className="size-4" /> {t("gallery.playAll")}
-              </Button>
-              {likedCount > 0 && (
-                <Button
-                  size="sm"
-                  variant={likedOnly ? "default" : "outline"}
-                  aria-pressed={likedOnly}
-                  onClick={() => setLikedOnly((v) => !v)}
-                >
-                  <Heart className={cn("size-4", likedOnly && "fill-current")} />{" "}
-                  {t("gallery.filterLiked")}
+        <div className="flex min-h-0 flex-col gap-3">
+          <div className="flex items-start gap-3">
+            {/* Cover — left-click/drop/paste to set; right-click to remove a pinned cover */}
+            <CoverContextMenu
+              hasCover={!!session?.coverBlobId}
+              onRemove={() => void clearSessionCover(setId)}
+            >
+              <button
+                type="button"
+                onClick={() => fileRef.current?.click()}
+                aria-label={t("gallery.coverHint")}
+                title={t("gallery.coverHint")}
+                onDragOver={(e) => {
+                  if (dragHasFiles(e.dataTransfer?.types)) {
+                    e.preventDefault();
+                    setDragOver(true);
+                  }
+                }}
+                onDragLeave={() => setDragOver(false)}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setDragOver(false);
+                  openCoverCrop(filesFromTransfer(e.dataTransfer), "set");
+                }}
+                className={cn(
+                  "group relative grid size-20 shrink-0 place-items-center overflow-hidden rounded-xl bg-secondary outline-none transition-shadow focus-visible:ring-2 focus-visible:ring-ring",
+                  dragOver && "ring-2 ring-primary",
+                )}
+              >
+                {coverUrl ? (
+                  <img src={coverUrl} alt="" className="size-full object-cover" />
+                ) : (
+                  <Disc3Icon className="text-muted-foreground" size={28} />
+                )}
+                <span className="absolute inset-0 grid place-items-center bg-black/40 opacity-0 transition-opacity group-hover:opacity-100">
+                  <ImagePlus className="size-5 text-white" />
+                </span>
+              </button>
+            </CoverContextMenu>
+            <input
+              ref={fileRef}
+              type="file"
+              accept={IMAGE_ACCEPT}
+              className="hidden"
+              onChange={(e) => {
+                if (e.target.files) openCoverCrop(Array.from(e.target.files), "set");
+                e.target.value = "";
+              }}
+            />
+
+            <div className="min-w-0 flex-1">
+              <input
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                onBlur={commitName}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") e.currentTarget.blur();
+                }}
+                placeholder={t("gallery.setName")}
+                className="-mx-1 w-full truncate rounded-md border border-transparent bg-transparent px-1 text-lg font-semibold outline-none hover:border-input focus:border-input"
+              />
+              <textarea
+                ref={descRef}
+                value={desc}
+                onChange={(e) => setDesc(stripDescriptionNewlines(e.target.value))}
+                onBlur={(e) => commitDesc(e.currentTarget.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.nativeEvent.isComposing) {
+                    e.preventDefault();
+                    e.currentTarget.blur();
+                  }
+                }}
+                placeholder={t("gallery.setDescription")}
+                rows={1}
+                className="-mx-1 mt-0.5 w-full resize-none overflow-hidden rounded-md border border-transparent bg-transparent px-1 text-xs leading-5 text-muted-foreground outline-none hover:border-input focus:border-input"
+              />
+              <p className="px-1 pt-0.5 text-xs text-muted-foreground tabular-nums">
+                {t("gallery.count", { count: tracks.length })}
+                {totalDurationSec > 0 && ` · ${formatDuration(totalDurationSec)}`}
+              </p>
+            </div>
+          </div>
+          <TrackListSection
+            setId={setId}
+            tracks={shownTracks}
+            selectedTrackId={selectedTrack?.id}
+            onView={(track) => transitionState(() => setSelectedTrackId(track.id))}
+            onPlay={(track) => void playTrack(track)}
+            emptyHint={t("gallery.empty")}
+            listClassName="chrome-fade no-scrollbar pt-5 pb-chrome-bottom [--chrome-fade-top:1.25rem]"
+            className="min-h-0 flex-1"
+            startActions={
+              <>
+                <Button size="sm" onClick={onPlayAll} disabled={tracks.length === 0}>
+                  <Play className="size-4" /> {t("gallery.playAll")}
                 </Button>
-              )}
-              <AddTracksMenu setId={setId} />
-            </>
-          }
-        />
+                {likedCount > 0 && (
+                  <Button
+                    size="sm"
+                    variant={likedOnly ? "default" : "outline"}
+                    aria-pressed={likedOnly}
+                    onClick={() => setLikedOnly((v) => !v)}
+                  >
+                    <Heart className={cn("size-4", likedOnly && "fill-current")} />{" "}
+                    {t("gallery.filterLiked")}
+                  </Button>
+                )}
+                <AddTracksMenu setId={setId} />
+              </>
+            }
+          />
+        </div>
         <TrackInspectorPanel track={selectedTrack} />
       </div>
 
