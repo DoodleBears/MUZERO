@@ -14,7 +14,7 @@
 | 1 | 取色基础设施：把 `image-palette.ts` 的单色取色扩成**多色调色板**（`extractImagePalette` 返回 N 个去重色），扩 `visualizer-color-store` 持有 palette + 平滑过渡 | ✅ Completed | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | 渲染：在既有 twgl scene registry 新增 `scene-flow` 流光 shader（自研 mesh-gradient，多色 `uColors[N]` uniform，calm 时间流 + 可选轻度音频调制），WebGL 探测 + aura 回退 | ✅ Completed | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | 取色源模型：`flowColorSource: "cover" \| "custom"`（默认 cover，无封面回退 custom）+ 始终存在的 `flowCustomColors[]`，把 palette 喂进 shader uniform | ✅ Completed | [Phase 3 Checklist](#phase-3-checklist) |
-| 4 | Settings：在 Appearance 段新增独立 sidebar item「流光背景」面板（效果选择 / 取色源切换 / 多色编辑器 + 预设 / 压暗 / 透明度 / 动态强度），i18n 四语全量 | 🔲 Pending | [Phase 4 Checklist](#phase-4-checklist) |
+| 4 | Settings：在 Appearance 段新增独立 sidebar item「流光背景」面板（效果选择 / 取色源切换 / 多色编辑器 + 预设 / 压暗 / 透明度 / 动态强度），i18n 四语全量 | ✅ Completed | [Phase 4 Checklist](#phase-4-checklist) |
 | 5 | 打磨：reduced-motion / 移动 30fps / bundle 预算复测 / 无封面与切歌过渡 / 文档对齐 | 🔲 Pending | [Phase 5 Checklist](#phase-5-checklist) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
@@ -391,22 +391,23 @@ export function resolveFlowColors(
 - [x] typecheck（whole tree，含 host/scene/types）+ biome 绿。
 - [ ] 手测（真实 app）：删当前曲封面 → 流光不黑屏、回退自定义色；切 source=custom → 忽略封面 —— **留 Phase 4 接好 UI 后人工确认**。
 
-### Phase 4: Settings「流光背景」面板 + i18n
+### Phase 4: Settings「流光背景」面板 + i18n ✅
 
 **Goal:** 需求 3 的独立 sidebar item 与全部配置控件。
 
 **Tasks:**
-- [ ] `settings-nav.ts` 加 `{ id:"flow", labelKey:"settings.navFlow" }`（Appearance 段）。
-- [ ] `flow-settings.tsx`：效果 / 取色源 / 多色编辑器(+预设) / 动态强度 / 速度 / 尺度 / 压暗 / 透明度（复用既有字段）+ 内嵌实时预览 + 「设为沉浸背景」快捷开关。
-- [ ] `settings-page.tsx` 路由 `"flow"`。
-- [ ] i18n 四语（en 类型源 → zh/ja/ko）：`settings.navFlow`、`flow.*`、`visualizer.styleSceneFlow`。
+- [x] `settings-nav.ts` 加 `{ id:"flow", labelKey:"settings.navFlow" }`（Appearance 段，visualizer 之后）。
+- [x] `flow-settings.tsx`：效果 Select / 取色源 segmented(cover|custom) / 多色编辑器(ColorPicker + add/remove min2 max5 + `FLOW_PRESETS` 一键) / 速度·尺度·动态强度 slider / 压暗·透明度（复用 `visualizerBackground*`）+ 内嵌 `VisualizerHost styleId="scene-flow"` 实时预览 + 「设为沉浸背景」快捷开关。
+- [x] `settings-page.tsx` 路由 `{activeItem === "flow" && <FlowSettings />}`。
+- [x] i18n 四语（en 类型源 → zh/ja/ko）：`settings.navFlow`、`flow.*`(title/intro/effect×3/colorSource/source×2/customColors/presets×4/tuning…)、`visualizer.styleSceneFlow`(Phase 2)。
 
 ### Phase 4 Checklist
-- [ ] `settings-nav` 测试含 `flow` id（stale fallback 不破）。
-- [ ] 四语 catalog 全量（缺则 PR 标 pending translation + followup issue）。
-- [ ] 无硬编码用户可见字符串（全 `t()`）。
-- [ ] 面板改值即时生效（saveSettings）+ 预览同步。
-- [ ] `make check` 绿。
+- [x] `settings-nav.test.ts` 含 `flow` id（4 测试绿，stale fallback 不破）。
+- [x] 四语 catalog 全量（en/zh/ja/ko 各 27 个 flow.* + navFlow；JSON 校验通过）。
+- [x] 无硬编码用户可见字符串（全 `t()`）；biome + whole-tree typecheck 绿。
+- [ ] 手测（真实 app）：面板改值即时生效 + 预览同步 + sidebar 搜索命中——**留人工/Phase 5 确认**。
+
+> **并发分支说明**：本 phase 落在多 agent 共享 working tree 上。`flow-settings.tsx`/`settings-nav.ts`/`settings-nav.test.ts` 是 mine-only 正常提交；`settings-page.tsx`（smooth-scroll agent 活跃 WIP）与 4 个 locale（globalSearch/lyrics agent）是 co-modified，用 `git apply --cached` 只暂存我的 hunk（不动 working tree，保护他人 WIP），单独提交。
 
 ### Phase 5: 打磨 / 性能 / 文档
 
@@ -483,6 +484,7 @@ export function resolveFlowColors(
 | 2026-06-11 | DoodleBear / MUZERO | **Phase 1 ✅ 实现**（TDD）：`extractImagePalette`/`selectImagePalette` 多色去重取色（sRGB 距离）、`extractDominantImageColor=palette[0]` 零回归；store `palette`+`mixPalette`+`getVisualizerCoverPalette`；`visualizer-dynamic-color` 写 palette。14 测试绿、typecheck/biome 净。去掉 `skipDark` 入参（YAGNI） |
 | 2026-06-11 | DoodleBear / MUZERO | **Phase 2 ✅ 实现**：`scene-flow` 注册（types/registry/i18n 四语）+ 自研 `FLOW_FRAG` mesh-gradient（多色 `uColors[5]` + `uEffect` 3 变体 + `uReactivity` 轻度音频）+ `reactive-scene` 接线（封面 palette / primary 兜底，复用 color buffer）。registry.test 12 绿、typecheck/biome 净。新增 `uReactivity` uniform。视觉验证留真实窗口（预览沙箱冻结 WebGL） |
 | 2026-06-11 | DoodleBear / MUZERO | **Phase 3 ✅ 实现**（TDD）：`flow-config.ts`（`resolveFlowColors` 回退裁决 + `resolveFlowConfig` settings→shader 映射 + presets/effects/hex utils，14 测试）；`db/types.ts` 加 6 个 flow* 字段 + `FlowColorSource`/`FlowEffectId`（additive 无 DB bump）；host→SceneHost→reactive-scene 经 `flowRef` 接线，shader 改用真实取色源 + flow 参数。40 测试绿、whole-tree typecheck/biome 净。`resolveFlowColors` 三参全 `Rgb[]`（hex 解析上移到 config 层） |
+| 2026-06-11 | DoodleBear / MUZERO | **Phase 4 ✅ 实现**：`flow-settings.tsx`（效果/取色源/多色编辑+预设/速度·尺度·反应/压暗·透明度/实时预览/快捷开关）+ `settings-nav` 加 flow item（测试）+ `settings-page` 路由 + 四语 i18n（navFlow + flow.* 27 keys）。settings-nav 测试 + JSON 校验 + biome 绿。co-modified（settings-page + locale）用 `git apply --cached` hunk 隔离提交（共享 working tree 不动他人 WIP） |
 
 ---
 

@@ -25,6 +25,7 @@ export const SETTINGS_NAV = [
       { id: "appearance", labelKey: "settings.appearance" },
       { id: "background", labelKey: "settings.navBackground" },
       { id: "visualizer", labelKey: "settings.navVisualizer" },
+      { id: "flow", labelKey: "settings.navFlow" },
       { id: "lyrics", labelKey: "settings.navLyrics" },
     ],
   },
