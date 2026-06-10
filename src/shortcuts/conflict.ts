@@ -86,6 +86,7 @@ export function planReassignment(
     // Displace the chord off every same-scope holder.
     for (const other of SHORTCUT_ACTIONS) {
       if (other.id === draft.actionId || other.scope !== target.scope) continue;
+      if (other.category === "reference") continue; // display-only intrinsic keys
       const list = working.get(other.id);
       if (!list?.some((g) => g.kind === "key" && gestureIdentity(g, platform) === identity))
         continue;

@@ -35,6 +35,10 @@ export const SETTINGS_NAV = [
     ],
   },
   {
+    labelKey: "settings.navSecKeyboard",
+    items: [{ id: "shortcuts", labelKey: "settings.navShortcuts" }],
+  },
+  {
     labelKey: "settings.navSecCloud",
     items: [
       { id: "cloud-owner", labelKey: "settings.cloudConnectedDrives" },

@@ -271,6 +271,11 @@
   "settings": {
     "navSecAppearance": "外观",
     "navSecPlayback": "播放",
+    "navSecKeyboard": "键盘",
+    "navShortcuts": "快捷键",
+    "shortcutsTitle": "键盘快捷键",
+    "shortcutsSubtitle": "所有快捷键，按分类列出、可搜索。",
+    "shortcutsSearch": "搜索快捷键…",
     "navSecCloud": "云盘",
     "navSecDevice": "设备",
     "navSecAdvanced": "高级",
@@ -524,12 +529,18 @@
       "libraryFocusNext": "下移焦点",
       "libraryOpen": "打开 / 播放所选",
       "libraryBack": "返回",
-      "memoryQuickAdd": "添加记忆"
+      "memoryQuickAdd": "添加记忆",
+      "refCloseDialog": "关闭对话框 / 浮层",
+      "refCommitField": "提交输入",
+      "refScrub": "拖动当前滑块",
+      "refSwipeBack": "滑动返回",
+      "refCoverSwipe": "滑动封面（上一首 / 下一首）"
     },
     "gesture": {
       "swipeBack": "从左向右滑动",
       "coverSwipeLeft": "滑动封面"
-    }
+    },
+    "unassigned": "未绑定"
   },
   "notification": {
     "copy": "复制",

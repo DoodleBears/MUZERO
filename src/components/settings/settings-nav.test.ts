@@ -5,6 +5,7 @@ describe("settings-nav", () => {
   it("flattens unique item ids across all sections", () => {
     const ids = settingsItemIds();
     expect(ids).toContain("appearance");
+    expect(ids).toContain("shortcuts");
     expect(ids).toContain("playback-music");
     expect(ids).toContain("cloud-owner");
     expect(ids).toContain("cloud-presence");

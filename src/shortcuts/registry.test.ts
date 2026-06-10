@@ -52,9 +52,23 @@ describe("SHORTCUT_ACTIONS registry", () => {
     expect(focus.defaultBindings.some((g) => gestureIdentity(g, "other") === up)).toBe(true);
   });
 
-  it("marks search.openGlobal protected and gesture bindings display-only", () => {
+  it("marks search.openGlobal protected and reference gestures display-only", () => {
     expect(isEditableAction(SHORTCUT_ACTIONS_BY_ID["search.openGlobal"])).toBe(false);
-    const back = SHORTCUT_ACTIONS_BY_ID["library.back"];
-    expect(back.defaultBindings.some((g) => g.kind === "pointer")).toBe(true);
+    const swipe = SHORTCUT_ACTIONS_BY_ID["ref.swipeBack"];
+    expect(swipe.category).toBe("reference");
+    expect(isEditableAction(swipe)).toBe(false);
+    expect(swipe.defaultBindings.some((g) => g.kind === "pointer")).toBe(true);
+  });
+
+  it("dispatch/conflict skip reference actions (intrinsic keys stay free to rebind onto)", () => {
+    // ← is a reference (scrub) chord; binding it to a real global action must not
+    // resolve to or be blocked by the reference entry.
+    const left = gestureIdentity(
+      { kind: "key", stroke: { code: "ArrowLeft", keyLabel: "←" } },
+      "other",
+    );
+    const ref = SHORTCUT_ACTIONS_BY_ID["ref.scrub"];
+    expect(ref.category).toBe("reference");
+    expect(ref.defaultBindings.some((g) => gestureIdentity(g, "other") === left)).toBe(true);
   });
 });

@@ -271,6 +271,11 @@
   "settings": {
     "navSecAppearance": "모양",
     "navSecPlayback": "재생",
+    "navSecKeyboard": "키보드",
+    "navShortcuts": "단축키",
+    "shortcutsTitle": "키보드 단축키",
+    "shortcutsSubtitle": "모든 단축키를 분류하고 검색할 수 있습니다.",
+    "shortcutsSearch": "단축키 검색…",
     "navSecCloud": "클라우드 드라이브",
     "navSecDevice": "기기",
     "navSecAdvanced": "고급",
@@ -524,12 +529,18 @@
       "libraryFocusNext": "포커스 아래로",
       "libraryOpen": "선택 열기 / 재생",
       "libraryBack": "뒤로",
-      "memoryQuickAdd": "메모리 추가"
+      "memoryQuickAdd": "메모리 추가",
+      "refCloseDialog": "대화상자 / 오버레이 닫기",
+      "refCommitField": "입력 확정",
+      "refScrub": "선택한 슬라이더 이동",
+      "refSwipeBack": "스와이프로 뒤로",
+      "refCoverSwipe": "커버 스와이프 (이전 / 다음)"
     },
     "gesture": {
       "swipeBack": "왼쪽→오른쪽 스와이프",
       "coverSwipeLeft": "커버 스와이프"
-    }
+    },
+    "unassigned": "미지정"
   },
   "notification": {
     "copy": "복사",

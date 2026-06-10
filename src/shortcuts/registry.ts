@@ -123,7 +123,7 @@ export const SHORTCUT_ACTIONS: readonly ShortcutActionDef[] = [
     scope: "global",
     category: "playback",
     labelKey: "shortcuts.action.playbackNext",
-    defaultBindings: [key("KeyE", "E"), pointer("shortcuts.gesture.coverSwipeLeft")],
+    defaultBindings: [key("KeyE", "E")],
     keywords: ["next", "下一首"],
   },
   {
@@ -251,11 +251,7 @@ export const SHORTCUT_ACTIONS: readonly ShortcutActionDef[] = [
     scope: "library",
     category: "library",
     labelKey: "shortcuts.action.libraryBack",
-    defaultBindings: [
-      key("KeyA", "A"),
-      key("ArrowLeft", "←"),
-      pointer("shortcuts.gesture.swipeBack"),
-    ],
+    defaultBindings: [key("KeyA", "A"), key("ArrowLeft", "←")],
     keywords: ["back", "返回"],
   },
   // ── Memory (inspector) ─────────────────────────────────────────────────────
@@ -266,6 +262,48 @@ export const SHORTCUT_ACTIONS: readonly ShortcutActionDef[] = [
     labelKey: "shortcuts.action.memoryQuickAdd",
     defaultBindings: [key("KeyT", "T"), key("KeyN", "N")],
     keywords: ["memory", "note", "记忆", "备注"],
+  },
+  // ── Reference (read-only, Q7) — intrinsic widget keys + gestures. Shown in the
+  //    cheat-sheet, never rebindable, and skipped by dispatch/conflict (engine).
+  {
+    id: "ref.closeDialog",
+    scope: "global",
+    category: "reference",
+    labelKey: "shortcuts.action.refCloseDialog",
+    defaultBindings: [key("Escape", "Esc")],
+    allowUserBindings: false,
+  },
+  {
+    id: "ref.commitField",
+    scope: "global",
+    category: "reference",
+    labelKey: "shortcuts.action.refCommitField",
+    defaultBindings: [key("Enter", "Enter")],
+    allowUserBindings: false,
+  },
+  {
+    id: "ref.scrub",
+    scope: "global",
+    category: "reference",
+    labelKey: "shortcuts.action.refScrub",
+    defaultBindings: [key("ArrowLeft", "←"), key("ArrowRight", "→")],
+    allowUserBindings: false,
+  },
+  {
+    id: "ref.swipeBack",
+    scope: "global",
+    category: "reference",
+    labelKey: "shortcuts.action.refSwipeBack",
+    defaultBindings: [pointer("shortcuts.gesture.swipeBack")],
+    allowUserBindings: false,
+  },
+  {
+    id: "ref.coverSwipe",
+    scope: "global",
+    category: "reference",
+    labelKey: "shortcuts.action.refCoverSwipe",
+    defaultBindings: [pointer("shortcuts.gesture.coverSwipeLeft")],
+    allowUserBindings: false,
   },
 ];
 

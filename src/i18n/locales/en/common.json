@@ -282,6 +282,11 @@
   "settings": {
     "navSecAppearance": "Appearance",
     "navSecPlayback": "Playback",
+    "navSecKeyboard": "Keyboard",
+    "navShortcuts": "Shortcuts",
+    "shortcutsTitle": "Keyboard shortcuts",
+    "shortcutsSubtitle": "Every binding, grouped and searchable.",
+    "shortcutsSearch": "Search shortcuts…",
     "navSecCloud": "Cloud Drive",
     "navSecDevice": "Device",
     "navSecAdvanced": "Advanced",
@@ -538,12 +543,18 @@
       "libraryFocusNext": "Move focus down",
       "libraryOpen": "Open / play focused",
       "libraryBack": "Back",
-      "memoryQuickAdd": "Add a memory"
+      "memoryQuickAdd": "Add a memory",
+      "refCloseDialog": "Close dialog / overlay",
+      "refCommitField": "Commit field",
+      "refScrub": "Scrub focused slider",
+      "refSwipeBack": "Swipe back",
+      "refCoverSwipe": "Swipe cover (prev / next)"
     },
     "gesture": {
       "swipeBack": "Swipe left→right",
       "coverSwipeLeft": "Swipe cover"
-    }
+    },
+    "unassigned": "Unassigned"
   },
   "notification": {
     "copy": "Copy",

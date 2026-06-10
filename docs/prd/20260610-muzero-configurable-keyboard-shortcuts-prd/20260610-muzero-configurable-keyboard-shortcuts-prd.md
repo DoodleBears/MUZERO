@@ -16,7 +16,7 @@
 | 1 | Registry + pure engine + persistence | ✅ Completed | [Phase 1 Checklist](#phase-1-checklist) |
 | 2a | Global dispatch (transport + tabs) via registry | ✅ Completed | [Phase 2a Checklist](#phase-2a-checklist) |
 | 2b | Scoped surfaces (library/inspector/gallery) + hint swap | 🔲 Pending | [Phase 2b Checklist](#phase-2b-checklist) |
-| 3 | "View all shortcuts" — read-only cheat-sheet (Settings + `?` overlay) | 🔲 Pending | [Phase 3 Checklist](#phase-3-checklist) |
+| 3 | "View all shortcuts" — read-only cheat-sheet (Settings) | ✅ Completed | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | Customization — cyclic-conflict engine ✅ · recorder/UI 🔲 | 🔄 In Progress | [Phase 4 Checklist](#phase-4-checklist) |
 | 5 | Stretch — presets, 2-stroke sequences, import/export | 🔲 Pending | [Phase 5 Checklist](#phase-5-checklist) |
 
@@ -328,9 +328,12 @@ Global `?` (Shift+/)  →  (OPTIONAL, Q8) components/shortcuts/shortcut-help-ove
 - [ ] i18n complete for all 4 locales; fuzzy search includes chord text + `keywords`.
 
 #### Phase 3 Checklist
-- [ ] Every configurable registry action appears exactly once, under the right category, with its live chips.
-- [ ] The Reference section lists the intrinsic widget keys + display-only gestures (swipe-back, cover-swipe) with chips and **no edit/remove/reset controls**.
-- [ ] If shipped, the `?` overlay opens/closes (Escape), is reduced-motion friendly; the Settings entry is the discovery point on desktop + mobile (touch).
+- [x] Every configurable registry action appears exactly once, under the right category, with its live chips — [`shortcuts-settings.tsx`](../../../src/components/settings/shortcuts-settings.tsx) driven by pure [`cheatsheet.ts`](../../../src/shortcuts/cheatsheet.ts) (`buildCheatSheet` + `cheatSheetRowMatches`).
+- [x] The Reference section lists intrinsic widget keys (Esc / Enter / scrub ←→) + display-only gestures (swipe-back, cover-swipe) with chips and **no edit controls** — modeled as `category:"reference"` registry entries (`allowUserBindings:false`), skipped by `matchAction`/`findConflicts`/`planReassignment`.
+- [x] Settings → Shortcuts entry added (`settings-nav.ts` "navSecKeyboard"); searchable (label / id / keyword / chord text); i18n for all 4 locales.
+- [ ] (Optional, Q8) the `?` overlay — not built; the Settings entry is the canonical home.
+
+> **Done 2026-06-10.** Cheat-sheet ships: 7 new tests (`cheatsheet.test.ts` + `shortcuts-settings.test.tsx`), typecheck + Biome clean. Read-only — per-row rebinding is the Phase-4 UI.
 
 ### Phase 4: Customization — recorder + cyclic conflict + reset
 
@@ -418,6 +421,7 @@ Global `?` (Shift+/)  →  (OPTIONAL, Q8) components/shortcuts/shortcut-help-ove
 | 2026-06-10 | MUZERO | Resolved Q7 (intrinsic widget keys: not rebindable, but shown read-only in a cheat-sheet "Reference" section) and Q8 (Settings → Shortcuts is the canonical home; `?` overlay optional, no dock affordance) — propagated into §5.1, §6 Phase 3, §7 |
 | 2026-06-10 | MUZERO | Phase 1 shipped (registry + engine + persistence + i18n, 56 tests). Phase 2 split into 2a (global transport+tab dispatch via registry — shipped, transport now rebindable; deleted `player-shortcuts`/`use-player-shortcuts`) and 2b (library/inspector/gallery surfaces + hint swap — pending, deferred around concurrent library-delete edits) |
 | 2026-06-10 | MUZERO | Phase 4 core landed out of order (no UI churn): `conflict.ts` (`planReassignment` cascading displacement + blocked) and `recorder.ts` (`reservedWarning`), TDD'd. Recorder/row UI + Phase 3 cheat-sheet + Phase 2b remain — they touch the actively-edited library/settings files, so they're sequenced after the branch settles |
+| 2026-06-10 | MUZERO | Phase 3 shipped: read-only cheat-sheet in Settings → Shortcuts (`cheatsheet.ts` + `shortcuts-settings.tsx`), grouped + searchable, with a read-only Reference section (Q7). Added `category:"reference"` registry entries skipped by dispatch/conflict; i18n ×4. `?` overlay (Q8) left optional/unbuilt |
 
 ---
 

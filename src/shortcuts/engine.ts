@@ -171,6 +171,7 @@ export function findConflicts(
   const conflicts: ShortcutConflict[] = [];
   for (const action of SHORTCUT_ACTIONS) {
     if (action.id === candidateActionId || action.scope !== scope) continue;
+    if (action.category === "reference") continue; // display-only intrinsic keys
     for (const binding of bindings[action.id] ?? []) {
       if (binding.gesture.kind !== "key") continue;
       if (gestureIdentity(binding.gesture, platform) === target) {
@@ -199,7 +200,7 @@ export function matchAction(
   for (const scope of SCOPE_PRECEDENCE) {
     if (!activeScopes.has(scope)) continue;
     for (const action of SHORTCUT_ACTIONS) {
-      if (action.scope !== scope) continue;
+      if (action.scope !== scope || action.category === "reference") continue;
       for (const binding of bindings[action.id] ?? []) {
         if (binding.gesture.kind !== "key") continue;
         if (gestureIdentity(binding.gesture, platform) === target) return action.id;

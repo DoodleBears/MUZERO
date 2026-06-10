@@ -271,6 +271,11 @@
   "settings": {
     "navSecAppearance": "外観",
     "navSecPlayback": "再生",
+    "navSecKeyboard": "キーボード",
+    "navShortcuts": "ショートカット",
+    "shortcutsTitle": "キーボードショートカット",
+    "shortcutsSubtitle": "すべてのショートカットを分類・検索できます。",
+    "shortcutsSearch": "ショートカットを検索…",
     "navSecCloud": "クラウドドライブ",
     "navSecDevice": "デバイス",
     "navSecAdvanced": "詳細",
@@ -524,12 +529,18 @@
       "libraryFocusNext": "フォーカスを下へ",
       "libraryOpen": "選択を開く / 再生",
       "libraryBack": "戻る",
-      "memoryQuickAdd": "メモリーを追加"
+      "memoryQuickAdd": "メモリーを追加",
+      "refCloseDialog": "ダイアログ / オーバーレイを閉じる",
+      "refCommitField": "入力を確定",
+      "refScrub": "フォーカス中のスライダーを操作",
+      "refSwipeBack": "スワイプで戻る",
+      "refCoverSwipe": "カバーをスワイプ（前 / 次）"
     },
     "gesture": {
       "swipeBack": "左→右スワイプ",
       "coverSwipeLeft": "カバーをスワイプ"
-    }
+    },
+    "unassigned": "未割り当て"
   },
   "notification": {
     "copy": "コピー",
