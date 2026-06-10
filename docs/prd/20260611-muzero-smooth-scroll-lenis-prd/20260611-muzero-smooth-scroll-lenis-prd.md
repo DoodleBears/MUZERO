@@ -11,7 +11,7 @@
 
 | Phase | Name | Status | Link |
 |-------|------|--------|------|
-| 1 | Lenis 依赖 + 纯决策层（`resolveSmoothScroll`）+ 共享 rAF driver | 🔲 Pending | [Phase 1 Checklist](#phase-1-checklist) |
+| 1 | Lenis 依赖 + 纯决策层（`resolveSmoothScroll`）+ 共享 rAF driver | ✅ Completed | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | `useSmoothScroll(ref)` hook（生命周期 + reduced-motion 响应）+ 程序化滚动路由 | 🔲 Pending | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | 在范围内的滚动容器接入（虚拟列表 / 卡片栅格 / 各页面） | 🔲 Pending | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | Settings「外观」可见开关 + i18n（en/zh/ja/ko）+ 帧节奏/longtask 验收 | 🔲 Pending | [Phase 4 Checklist](#phase-4-checklist) |
@@ -389,11 +389,11 @@ const lerp = clampLerp(settings.smoothScrollLerp); // 默认 0.10
 - [ ] `AppSettings` += `smoothScroll?: boolean` + `smoothScrollLerp?: number`（注释说明语义；均不进 `DEFAULT_SETTINGS`）。
 
 #### Phase 1 Checklist
-- [ ] `resolve.test.ts` 覆盖 §3.2 真值表全 6 行（平台默认 × 显式覆盖 × reduced-motion）。
-- [ ] `clampLerp` 单测：`undefined`/`NaN`→0.10；越界（0 / 1 / 负数）收敛到 `[0.04, 0.20]`；区间内原样返回；`options.lerp` 正确注入。
-- [ ] driver 单测：register→rAF 启动；unregister 到空→停；多实例同帧均被 `raf(t)`（注入假 Lenis + 假 rAF）。
-- [ ] `pnpm build` 体积增量实测并记录（目标 Lenis core < ~10 KB gzip）。
-- [ ] `make check`（typecheck + lint + test）通过；无 `console.*`、无散落 `if (isMac())`。
+- [x] `resolve.test.ts` 覆盖 §3.2 真值表全 6 行（平台默认 × 显式覆盖 × reduced-motion）。
+- [x] `clampLerp` 单测：`undefined`/`NaN`→0.10；越界（0 / 1 / 负数）收敛到 `[0.04, 0.20]`；区间内原样返回；`options.lerp` 正确注入。
+- [x] driver 单测：register→rAF 启动；unregister 到空→停；多实例同帧均被 `raf(t)`（注入假 Lenis + 假 rAF）。**17 tests passed**（[`resolve.test.ts`](../../../src/lib/smooth-scroll/resolve.test.ts) + [`lenis-driver.test.ts`](../../../src/lib/smooth-scroll/lenis-driver.test.ts)）。
+- [x] 体积增量实测：**Lenis core ~7.7 KB gzip**（`node_modules/lenis/dist/lenis.mjs`），远低于 < 100 KB/cluster 预算。
+- [x] 全项目 `tsc --noEmit` 通过 + 新文件 biome 通过；无 `console.*`、无散落 `if (isMac())`（唯一决策点是注入 `env.isMac` 的 `resolveSmoothScroll`）。
 
 ### Phase 2: `useSmoothScroll` hook + 程序化滚动路由
 

@@ -528,6 +528,17 @@ export interface AppSettings {
   lyricsShadowOffsetX?: number;
   /** Lyric text-shadow Y offset in px. Default 2. */
   lyricsShadowOffsetY?: number;
+  /**
+   * Smooth scrolling (Lenis) master toggle. `undefined` = follow the platform
+   * default (`!isMac()`): on for non-macOS, off on macOS where the trackpad is
+   * already smooth. Overridden to off by `prefers-reduced-motion`.
+   */
+  smoothScroll?: boolean;
+  /**
+   * Smooth-scroll strength (Lenis `lerp`). `undefined` = 0.10. Clamped to
+   * [0.04, 0.20] at read time: lower = floatier/slower, higher = snappier.
+   */
+  smoothScrollLerp?: number;
   /** Global color scheme. Mirrors localStorage `muzero-theme`; defaults to system. */
   theme?: "light" | "dark" | "system";
   /** Primary/accent color (hex) for light mode. Mirrors localStorage `muzero-primary-light`. */

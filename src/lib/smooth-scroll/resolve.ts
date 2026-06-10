@@ -1,0 +1,85 @@
+import type { LenisOptions } from "lenis";
+import type { AppSettings } from "@/db/types";
+
+/**
+ * Pure decision layer for smooth scrolling. The *only* place that decides
+ * whether Lenis runs and with what options — UI / pages never branch on
+ * `isMac()` / `settings.smoothScroll` directly (mirrors the provider /
+ * visualizer / desktop-bridge registry discipline).
+ */
+
+/** Smooth-scroll strength (Lenis `lerp`) safe range. Lower = floatier/slower catch-up, higher = snappier. */
+export const LERP_MIN = 0.04;
+export const LERP_MAX = 0.2;
+export const LERP_DEFAULT = 0.1;
+
+/** Coerce a stored/UI lerp into the safe range; `undefined`/`NaN`/out-of-range never break scrolling. */
+export function clampLerp(value: number | undefined): number {
+  if (typeof value !== "number" || Number.isNaN(value)) return LERP_DEFAULT;
+  if (value < LERP_MIN) return LERP_MIN;
+  if (value > LERP_MAX) return LERP_MAX;
+  return value;
+}
+
+/** The wrapper-agnostic Lenis options this app sets. `wrapper`/`content` are supplied per-container at construction. */
+export type LenisInitOptions = Pick<
+  LenisOptions,
+  | "lerp"
+  | "smoothWheel"
+  | "syncTouch"
+  | "wheelMultiplier"
+  | "orientation"
+  | "overscroll"
+  | "autoResize"
+  | "anchors"
+>;
+
+/**
+ * Static defaults shared by every smooth-scroll container. `lerp` is the
+ * user-tunable strength and is overridden per-resolve; `syncTouch: false`
+ * keeps mobile on native touch scroll (out of scope this phase).
+ */
+export const DEFAULT_LENIS_OPTIONS: LenisInitOptions = {
+  lerp: LERP_DEFAULT,
+  smoothWheel: true,
+  syncTouch: false,
+  wheelMultiplier: 1,
+  orientation: "vertical",
+  overscroll: true,
+  autoResize: true,
+  anchors: false,
+};
+
+/** Static base (no lerp) — exposed for tests / docs; the live options come from {@link resolveSmoothScroll}. */
+export const BASE_LENIS_OPTIONS: Omit<LenisInitOptions, "lerp"> = (() => {
+  const { lerp: _lerp, ...rest } = DEFAULT_LENIS_OPTIONS;
+  return rest;
+})();
+
+export interface SmoothScrollEnv {
+  isMac: boolean;
+  prefersReducedMotion: boolean;
+}
+
+export interface SmoothScrollDecision {
+  /** Platform/stored intent, ignoring the live reduced-motion override — drives the Settings toggle display. */
+  preference: boolean;
+  /** Whether Lenis should actually run (a11y override applied). */
+  enabled: boolean;
+  /** Options to construct Lenis with, carrying the user's clamped strength. */
+  options: LenisInitOptions;
+}
+
+export function resolveSmoothScroll(
+  settings: Pick<AppSettings, "smoothScroll" | "smoothScrollLerp">,
+  env: SmoothScrollEnv,
+): SmoothScrollDecision {
+  // undefined = follow platform default: on everywhere except macOS (trackpad already smooth).
+  const preference = settings.smoothScroll ?? !env.isMac;
+  const enabled = preference && !env.prefersReducedMotion;
+  return {
+    preference,
+    enabled,
+    options: { ...DEFAULT_LENIS_OPTIONS, lerp: clampLerp(settings.smoothScrollLerp) },
+  };
+}
