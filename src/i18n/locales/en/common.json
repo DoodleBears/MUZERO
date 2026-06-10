@@ -67,7 +67,12 @@
     "count_one": "{{count}} result",
     "count_other": "{{count}} results",
     "playHint": "Play",
-    "playNextHint": "Play next"
+    "playNextHint": "Play next",
+    "online": "Online sources",
+    "onlineSearching": "Searching online…",
+    "onlineEmpty": "No online results",
+    "onlineSetName": "Online",
+    "enableOnline": "Online search:"
   },
   "player": {
     "previous": "Previous",
@@ -272,7 +277,9 @@
     "backgroundDim": "Visualizer dim: {{pct}}%",
     "backgroundOpacity": "Visualizer opacity: {{pct}}%",
     "idleOnly": "Hide player UI when idle",
-    "idleOnlyHint": "On Now Playing, fade out the cover, controls, queue, header, and dock after a few idle seconds so only the background visualizer remains."
+    "idleOnlyHint": "On Now Playing, fade out the cover, controls, queue, header, and dock after a few idle seconds so only the background visualizer remains.",
+    "memoryOverlay": "Show memories while immersive",
+    "memoryOverlayHint": "When only the background and spectrum remain, surface your memories one at a time as a top popover — timestamp-pinned ones at their moment, the rest filling the quiet gaps."
   },
   "crop": {
     "title": "Crop cover (square)",

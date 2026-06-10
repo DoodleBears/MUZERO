@@ -61,7 +61,12 @@
     "empty": "再生できる一致曲はありません。",
     "count_other": "{{count}} 件",
     "playHint": "再生",
-    "playNextHint": "次に再生"
+    "playNextHint": "次に再生",
+    "online": "オンラインソース",
+    "onlineSearching": "オンライン検索中…",
+    "onlineEmpty": "オンライン結果なし",
+    "onlineSetName": "オンライン",
+    "enableOnline": "オンライン検索:"
   },
   "player": {
     "previous": "前へ",
@@ -261,7 +266,9 @@
     "backgroundDim": "ビジュアライザーの暗さ：{{pct}}%",
     "backgroundOpacity": "ビジュアライザーの透明度：{{pct}}%",
     "idleOnly": "操作がないとプレイヤー UI を隠す",
-    "idleOnlyHint": "再生中の画面で数秒操作がないと、カバー、操作、キュー、ヘッダー、ドックをフェードアウトし、背景とビジュアライザーだけを残します。"
+    "idleOnlyHint": "再生中の画面で数秒操作がないと、カバー、操作、キュー、ヘッダー、ドックをフェードアウトし、背景とビジュアライザーだけを残します。",
+    "memoryOverlay": "没入中にメモリーを表示",
+    "memoryOverlayHint": "背景とスペクトラムだけになったとき、メモリーを上部のポップオーバーで一つずつ表示します。タイムスタンプ付きはその瞬間に、それ以外は空いた時間に流れます。"
   },
   "crop": {
     "title": "カバーを切り抜き（正方形）",

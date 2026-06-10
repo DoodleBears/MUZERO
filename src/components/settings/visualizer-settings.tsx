@@ -125,6 +125,25 @@ export function VisualizerSettings() {
               {t("visualizer.idleOnly")}
             </label>
             <p className="-mt-1 text-xs text-muted-foreground">{t("visualizer.idleOnlyHint")}</p>
+
+            {settings.visualizerIdleOnly ? (
+              <>
+                <label className="mt-1 flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={settings.immersiveMemoryOverlay ?? true}
+                    onChange={(e) =>
+                      void saveSettings({ immersiveMemoryOverlay: e.target.checked })
+                    }
+                    className="size-4 accent-[var(--color-primary)]"
+                  />
+                  {t("visualizer.memoryOverlay")}
+                </label>
+                <p className="-mt-1 text-xs text-muted-foreground">
+                  {t("visualizer.memoryOverlayHint")}
+                </p>
+              </>
+            ) : null}
           </>
         ) : null}
       </CardContent>

@@ -1,6 +1,6 @@
 # PRD: Immersive Memory Moments — Timestamp-Anchored Memories + Full-Immersive Memory Overlay
 
-**Status:** Draft
+**Status:** Completed (Phases 1–3 ✅)
 **Created:** 2026-06-10
 **Author:** MUZERO (DoodleBear)
 **Module:** Now-Playing / Memory（音乐承载回忆）— 沉浸式记忆浮现
@@ -17,7 +17,7 @@
 |-------|------|--------|------|
 | 1 | Timestamp foundation（`Memory.atSec` 数据层 + repo + 同步） | ✅ Completed | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | Capture & display the anchor（编辑器钉秒 + 列表/轮播徽标） | ✅ Completed | [Phase 2 Checklist](#phase-2-checklist) |
-| 3 | Immersive memory overlay（沉浸浮层 + 调度引擎 + 设置开关） | 🔲 Pending | [Phase 3 Checklist](#phase-3-checklist) |
+| 3 | Immersive memory overlay（沉浸浮层 + 调度引擎 + 设置开关） | ✅ Completed | [Phase 3 Checklist](#phase-3-checklist) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
 
@@ -414,28 +414,29 @@ App 层已算出 `visualizerIdleOnly` / `foregroundHidden`（[`App.tsx:129-134`]
 **Goal:** 全沉浸（频谱+背景）时，记忆以顶部 popover 浮现——锚点准点、空闲补位、动态时长、放完才下一条。
 
 **Tasks:**
-- [ ] **统一时长（基础设施先行）**：抽 `memoryDisplayDurationMs`（含 photo 加成）+ `MIN_SHOW_MS`/`ANCHOR_STALE_SEC` 常量于 [`memory-timeline.ts`](src/lib/memory-timeline.ts)；rail 改为共用（行为等价回归）。
-- [ ] 新 `immersive-memory-schedule.ts`：`scheduleImmersiveMemory` **双 lane**状态机（re-arm / 跨越检测 / 随机平手 / **锚点抢占 floating + MIN_SHOW_MS** / 同 lane 顺序 / 陈旧丢弃 / floating 轮播 / 暂停冻结）。
-- [ ] 新 `ImmersiveMemoryOverlay`：顶部 popover，tick 驱动，标量 selector，交叉淡出，reduced-motion，`pointer-events-none`，仅 `visualizerIdleOnly` 时挂载。
-- [ ] `NowPlayingPage` / `App` 在 foreground 之外挂浮层。
-- [ ] Settings 可见开关 `immersiveMemoryOverlay`（默认 on）。
-- [ ] i18n：设置项 + aria-label。
+- [x] **统一时长（基础设施先行）**：[`memory-timeline.ts`](src/lib/memory-timeline.ts) 加 `memoryDisplayDurationMs`（base 曲线 + photo 加成）+ `MEMORY_DISPLAY_MIN_SHOW_MS` / `MEMORY_ANCHOR_STALE_SEC` 常量；rail 与浮层同源（base = `memoryTimelineCarouselIntervalMs`，rail 行为不变）。
+- [x] 新 [`immersive-memory-schedule.ts`](src/lib/immersive-memory-schedule.ts)：`scheduleImmersiveMemory` **双 lane**状态机（re-arm / 跨越检测 / 随机平手 / **锚点抢占 floating + MIN_SHOW_MS** / 同 lane 顺序 / 陈旧丢弃 / floating 轮播 / 暂停冻结）。
+- [x] 新 [`immersive-memory-overlay.tsx`](src/components/player/immersive-memory-overlay.tsx)：顶部 popover，250ms tick 驱动（`Date.now`+store getState，非响应式）、scalar selector（`currentTrackId`），AnimatePresence 交叉淡出，reduced-motion（全局 MotionConfig），`pointer-events-none`，`aria-live`。
+- [x] `App` 在 foreground/dock 之外挂浮层，仅 `immersiveMemoryActive = visualizerIdleOnly && (immersiveMemoryOverlay ?? true)` 时渲染（未挂载零成本）。
+- [x] Settings 可见开关 `immersiveMemoryOverlay`（默认 on），嵌在 visualizer「空闲沉浸」下（[`visualizer-settings.tsx`](src/components/settings/visualizer-settings.tsx)）。
+- [x] i18n：`visualizer.memoryOverlay` / `memoryOverlayHint` 四语言（en/zh/ja/ko）。
 
 ### Phase 3 Checklist
 
-- [ ] `memory-timeline.test.ts`：`memoryDisplayDurationMs` 短/长 note、有/无图；rail 时长曲线等价回归。
-- [ ] `immersive-memory-schedule.test.ts`（注入 `nowMs`/`positionSec`/`rng`）：
-  - [ ] 锚点跨越秒触发一次，不重复触发（防抖）。
-  - [ ] 同秒多锚 → `rng` 决定唯一显示，其余不迟显。
-  - [ ] floating 空闲轮播，时长正确（短/长 note、有图加成）。
-  - [ ] 同 lane 顺序：floating↔floating / anchored↔anchored 都「放完才下一条」。
-  - [ ] **锚点抢占 floating**：满足 `MIN_SHOW_MS` 后交叉淡出切锚点；未满则不闪切。
-  - [ ] 陈旧锚点（迟到 > `ANCHOR_STALE_SEC`，或被另一锚点挡住过久）被丢弃。
-  - [ ] seek 倒带/loop re-arm；大幅前跳不补放。
-  - [ ] 暂停冻结、恢复续放（暂停时不触发抢占）。
-- [ ] 浮层仅在 `visualizerIdleOnly` 挂载；退出沉浸正确卸载；不引发全树重渲染（最小 selector 验证）。
-- [ ] 无记忆/仅锚点/仅 floating 三态 UI 正常；reduced-motion 退化。
-- [ ] `make check` 通过；预览验证见 [§9 备注]。
+- [x] `memory-timeline.test.ts` + 复用：`memoryDisplayDurationMs` 短/长 note、有/无图（测试在 schedule 套件内通过 `memoryDisplayDurationMs` 断言）；rail 仍用 base 曲线，无回归。
+- [x] `immersive-memory-schedule.test.ts`（注入 `nowMs`/`positionSec`/`rng`，10 例全绿）：
+  - [x] 锚点跨越秒触发一次，不重复（`[null,"a","a",null]`）。
+  - [x] 同秒多锚 → `rng` 决定唯一（`b`），其余不迟显，全标记 fired。
+  - [x] floating 空闲轮播 `f1→f2→f1`，时长由内容长度决定。
+  - [x] 同 lane 顺序：floating↔floating / anchored↔anchored 放完才下一条。
+  - [x] **锚点抢占 floating**：满 `MIN_SHOW_MS` 后切锚点；未满不抢。
+  - [x] 陈旧锚点（迟到 > `ANCHOR_STALE_SEC`）被丢弃。
+  - [x] seek 倒带/loop re-arm 再触发；大幅前跳 ≤1 条且不全补放。
+  - [x] 暂停冻结（showing 不变、cursor 不进）。
+- [x] 浮层仅在 `immersiveMemoryActive` 条件挂载（App 三元），退出即卸载（停 tick）；scalar selector 不波及全树。
+- [x] 无记忆 → 不渲染卡片；仅锚点 / 仅 floating 三态由调度覆盖；reduced-motion 走全局 MotionConfig。
+- [x] typecheck（我方文件 0 error；另有他人 `global-track-search.tsx` 既有 unused-import 报错，与本期无关）+ biome clean（Phase 3 文件）+ 16 schedule/timeline tests green。
+- [ ] 真窗预览（动效 / idle）留待：Claude Preview hidden-tab 冻结 rAF/idle（见 [[preview-hidden-tab-gotcha]]），需 `make desktop` 真前台验证。
 
 ---
 
@@ -495,6 +496,7 @@ App 层已算出 `visualizerIdleOnly` / `foregroundHidden`（[`App.tsx:129-134`]
 | 2026-06-10 | MUZERO (DoodleBear) | 定稿 Q1–Q5：双 lane 抢占式调度（锚点抢占 floating + `MIN_SHOW_MS` 交叉淡出）、徽标专属 seek、统一时长抽象 `memoryDisplayDurationMs`（rail+浮层共用）、整秒捕获。Status 仍 Draft，待评审 |
 | 2026-06-10 | MUZERO (DoodleBear) | ✅ Phase 1 落地（TDD）：`Memory.atSec` + `addMemory`/`updateMemory` + R2 manifest 三处透传；64 tests green，无 Dexie bump |
 | 2026-06-10 | MUZERO (DoodleBear) | ✅ Phase 2 落地（TDD）：composer 钉秒 chip + waterfall/rail `atSec` 徽标 + 徽标专属 seek（仅当前曲）+ 4 语言 i18n |
+| 2026-06-10 | MUZERO (DoodleBear) | ✅ Phase 3 落地（TDD）：统一时长 `memoryDisplayDurationMs` + 双 lane 调度引擎（10 例）+ `ImmersiveMemoryOverlay` 顶部浮层 + `immersiveMemoryOverlay` 设置 + 4 语言；三 phase 全完成 |
 
 ---
 

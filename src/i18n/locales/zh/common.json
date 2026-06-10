@@ -61,7 +61,12 @@
     "empty": "没有匹配的可播放歌曲。",
     "count_other": "{{count}} 条结果",
     "playHint": "播放",
-    "playNextHint": "下一首播放"
+    "playNextHint": "下一首播放",
+    "online": "在线音源",
+    "onlineSearching": "在线搜索中…",
+    "onlineEmpty": "没有在线结果",
+    "onlineSetName": "在线",
+    "enableOnline": "在线搜索:"
   },
   "player": {
     "previous": "上一首",
@@ -261,7 +266,9 @@
     "backgroundDim": "可视化压暗：{{pct}}%",
     "backgroundOpacity": "可视化透明度：{{pct}}%",
     "idleOnly": "空闲时隐藏播放器 UI",
-    "idleOnlyHint": "在「正在播放」页，几秒无操作后淡出封面、控制器、队列、顶栏和 Dock，只保留背景与频谱。"
+    "idleOnlyHint": "在「正在播放」页，几秒无操作后淡出封面、控制器、队列、顶栏和 Dock，只保留背景与频谱。",
+    "memoryOverlay": "沉浸时浮现记忆",
+    "memoryOverlayHint": "当只剩背景与频谱时，把你的记忆以顶部浮层逐条浮现 —— 钉了时间戳的在那一刻出现，其余的在空闲间隙里补位。"
   },
   "crop": {
     "title": "裁切封面（正方形）",

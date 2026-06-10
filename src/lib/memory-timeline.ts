@@ -94,6 +94,30 @@ export function memoryTimelineCarouselIntervalMs(
   return Math.min(maxMs, Math.max(baseMs, Math.round(baseMs + extraCharacters * msPerCharacter)));
 }
 
+// --- Unified display-duration scheme (immersive-memory-moments PRD §4.3) -------
+// The carousel rail and the immersive overlay share ONE time curve so a memory
+// dwells consistently across surfaces. `memoryTimelineCarouselIntervalMs` is the
+// base curve (length → ms); the overlay adds a photo bonus on top.
+
+/** Minimum on-screen time before an anchored cue may preempt a floating one (ms). */
+export const MEMORY_DISPLAY_MIN_SHOW_MS = 2000;
+/** Extra dwell for a memory that carries a photo (ms). */
+export const MEMORY_DISPLAY_PHOTO_BONUS_MS = 2000;
+/** Drop an anchored cue that would surface more than this late vs its `atSec` (sec). */
+export const MEMORY_ANCHOR_STALE_SEC = 6;
+
+/**
+ * How long to keep one memory on screen, derived from the shared length curve
+ * ({@link memoryTimelineCarouselIntervalMs}) plus a bonus when it has a photo.
+ */
+export function memoryDisplayDurationMs(
+  memory: { note: string; hasPhoto?: boolean },
+  options: MemoryTimelineCarouselIntervalOptions & { photoBonusMs?: number } = {},
+): number {
+  const photoBonus = memory.hasPhoto ? (options.photoBonusMs ?? MEMORY_DISPLAY_PHOTO_BONUS_MS) : 0;
+  return memoryTimelineCarouselIntervalMs(memory.note, options) + photoBonus;
+}
+
 export function layoutMemoryTimelineItems(
   items: readonly MemoryTimelineLayoutInput[],
   {

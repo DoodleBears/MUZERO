@@ -61,7 +61,12 @@
     "empty": "재생 가능한 일치 곡이 없어요.",
     "count_other": "결과 {{count}}개",
     "playHint": "재생",
-    "playNextHint": "다음에 재생"
+    "playNextHint": "다음에 재생",
+    "online": "온라인 소스",
+    "onlineSearching": "온라인 검색 중…",
+    "onlineEmpty": "온라인 결과 없음",
+    "onlineSetName": "온라인",
+    "enableOnline": "온라인 검색:"
   },
   "player": {
     "previous": "이전",
@@ -261,7 +266,9 @@
     "backgroundDim": "비주얼라이저 어둡게: {{pct}}%",
     "backgroundOpacity": "비주얼라이저 투명도: {{pct}}%",
     "idleOnly": "유휴 시 플레이어 UI 숨기기",
-    "idleOnlyHint": "재생 화면에서 몇 초간 입력이 없으면 커버, 컨트롤, 큐, 헤더, 독을 페이드아웃하고 배경과 비주얼라이저만 남깁니다."
+    "idleOnlyHint": "재생 화면에서 몇 초간 입력이 없으면 커버, 컨트롤, 큐, 헤더, 독을 페이드아웃하고 배경과 비주얼라이저만 남깁니다.",
+    "memoryOverlay": "몰입 중 추억 표시",
+    "memoryOverlayHint": "배경과 스펙트럼만 남았을 때 추억을 상단 팝오버로 하나씩 띄웁니다. 타임스탬프가 고정된 추억은 그 순간에, 나머지는 빈 구간에 표시됩니다."
   },
   "crop": {
     "title": "커버 자르기 (정사각형)",

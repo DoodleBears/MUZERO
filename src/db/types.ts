@@ -460,6 +460,8 @@ export interface AppSettings {
   visualizerBackgroundOpacity?: number;
   /** Hide all Now-Playing foreground UI after idle, leaving only background + visualizer. Default false. */
   visualizerIdleOnly?: boolean;
+  /** Surface memories as a top popover during full-immersive (idle-only) playback. Default true. */
+  immersiveMemoryOverlay?: boolean;
   /** Prefer the current cover's extracted dominant color for visualizers. Default true. */
   visualizerUseCoverColor?: boolean;
   /** Override analyser FFT size for the active visualizer. Defaults to style metadata. */
@@ -604,6 +606,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   visualizerBackgroundDim: 0,
   visualizerBackgroundOpacity: 100,
   visualizerIdleOnly: false,
+  immersiveMemoryOverlay: true,
   visualizerUseCoverColor: true,
   visualizerIntensity: 1,
   visualizerMotion: 1,

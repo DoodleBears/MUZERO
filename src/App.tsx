@@ -2,6 +2,7 @@ import { MotionConfig } from "motion/react";
 import type { ReactNode } from "react";
 import { useEffect, useRef, useState } from "react";
 import { StreamSourceTester } from "@/components/dev/stream-source-tester";
+import { ImmersiveMemoryOverlay } from "@/components/player/immersive-memory-overlay";
 import { NowPlayingBackground } from "@/components/player/now-playing-background";
 import { VisualizerTuningPanel } from "@/components/player/visualizer-tuning-panel";
 import { GlobalTrackSearch } from "@/components/search/global-track-search";
@@ -134,6 +135,9 @@ export default function App() {
   const visualizerPreviewOnly = useVisualizerPanelStore((s) => s.previewOnly);
   const visualizerHidden = useVisualizerPanelStore((s) => s.visualizerHidden);
   const foregroundHidden = visualizerPreviewOnly || visualizerIdleOnly;
+  // In full-immersive (only background + spectrum, foreground rail hidden) surface
+  // memories as a top popover instead — see the immersive-memory-moments PRD.
+  const immersiveMemoryActive = visualizerIdleOnly && (settings.immersiveMemoryOverlay ?? true);
 
   // `reducedMotion="user"` makes every motion animation honor the OS
   // "reduce motion" setting app-wide, matching the view-transition helper.
@@ -202,6 +206,8 @@ export default function App() {
           onOpenNowPlaying={() => setTab("now")}
           hidden={chromeHidden || foregroundHidden}
         />
+
+        {immersiveMemoryActive && <ImmersiveMemoryOverlay />}
 
         <VisualizerTuningPanel />
 
