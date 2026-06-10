@@ -4,6 +4,7 @@ import { db } from "@/db/muzero-db";
 import type { Track } from "@/db/types";
 import { useSettings } from "@/hooks/use-app-data";
 import { getCroppedBlob } from "@/lib/image-crop";
+import { coverUrlCache } from "@/lib/object-url-cache";
 
 /**
  * Create an object URL for a Blob and revoke it on change/unmount. Returns null
@@ -88,33 +89,58 @@ export function useTrackCoverUrl(
       coverCropped && cc ? { x: cc.x, y: cc.y, width: cc.width, height: cc.height } : undefined,
     [coverCropped, cc?.x, cc?.y, cc?.width, cc?.height],
   );
-  const cropKey =
-    coverBlobId && crop ? `${coverBlobId}:${crop.x},${crop.y},${crop.width},${crop.height}` : null;
+  // A stable cache key built entirely from ROW fields (no async): the codename-
+  // stable blob id, plus the crop signature when a square crop applies. Distinct
+  // crops are distinct entries, mirroring the old cropped/original URL split.
+  const cacheKey = coverBlobId
+    ? crop
+      ? `${coverBlobId}:${crop.x},${crop.y},${crop.width},${crop.height}`
+      : coverBlobId
+    : null;
 
-  // Cropped render (canvas → object URL). Only runs when a crop applies.
-  const [croppedEntry, setCroppedEntry] = useState<{ key: string; url: string } | null>(null);
+  // Ref-count this key for the mount's lifetime so the cache never revokes a URL
+  // a visible <img> still points at (see ObjectUrlCache).
   useEffect(() => {
-    if (!blob || !crop || !cropKey) {
-      setCroppedEntry(null);
+    if (!cacheKey) return;
+    coverUrlCache.acquire(cacheKey);
+    return () => coverUrlCache.release(cacheKey);
+  }, [cacheKey]);
+
+  // On a cache MISS, resolve the blob (+ optional crop) → object URL → publish to
+  // the cache. `resolved` is only a re-render trigger; the cache is the source of
+  // truth. We never revoke on cleanup — the cache owns each URL's lifetime, which
+  // is what lets a cover survive unmount and re-appear instantly on the next tab
+  // visit (instant-cover-thumbnails PRD, Phase 1).
+  const [resolved, setResolved] = useState<{ key: string; url: string } | null>(null);
+  useEffect(() => {
+    if (!cacheKey) {
+      setResolved(null);
       return;
     }
+    const hit = coverUrlCache.get(cacheKey);
+    if (hit) {
+      setResolved({ key: cacheKey, url: hit });
+      return;
+    }
+    if (!blob) return; // bytes not resolved yet — re-runs when the liveQuery emits
     let alive = true;
-    let url: string | null = null;
-    void getCroppedBlob(blob, crop, blob.type || "image/jpeg").then((out) => {
+    void (async () => {
+      const out = crop ? await getCroppedBlob(blob, crop, blob.type || "image/jpeg") : blob;
       if (!alive) return;
-      url = URL.createObjectURL(out);
-      setCroppedEntry({ key: cropKey, url });
-    });
+      const created = URL.createObjectURL(out);
+      const url = coverUrlCache.store(cacheKey, created); // dedupes + revokes a late dup
+      setResolved({ key: cacheKey, url });
+    })();
     return () => {
       alive = false;
-      if (url) URL.revokeObjectURL(url);
     };
-  }, [blob, crop, cropKey]);
+  }, [cacheKey, blob, crop]);
 
-  // Original URL only when no crop applies (avoids a redundant object URL).
-  const originalUrl = useKeyedObjectUrl(crop ? null : blob, crop ? null : coverBlobId);
-  if (crop) return croppedEntry?.key === cropKey ? croppedEntry.url : null;
-  return originalUrl ?? remoteCoverUrl ?? null;
+  // Synchronous read: a cache hit returns the URL on frame 0 — instant on a
+  // re-mount, zero placeholder flash. `peek` doesn't mutate, so it's render-safe.
+  const cached = cacheKey ? coverUrlCache.peek(cacheKey) : undefined;
+  const url = cached ?? (resolved?.key === cacheKey ? resolved.url : undefined);
+  return url ?? remoteCoverUrl ?? null;
 }
 
 /**
