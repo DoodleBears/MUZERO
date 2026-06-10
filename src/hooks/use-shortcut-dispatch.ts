@@ -1,5 +1,6 @@
 import { useEffect, useMemo } from "react";
 import type { Tab } from "@/components/nav/dock-nav";
+import { getSettings, saveSettings } from "@/db/repositories";
 import { useSettings } from "@/hooks/use-app-data";
 import { isTypingTarget } from "@/lib/dom-keys";
 import { log } from "@/lib/logger";
@@ -16,6 +17,7 @@ import type { ShortcutScope } from "@/shortcuts/registry";
 import { useNavStore } from "@/stores/nav-store";
 import { usePlayerStore } from "@/stores/player-store";
 import { useUiStore } from "@/stores/ui-store";
+import { nextVisualizerPlacementPatch } from "@/visualizer/placement";
 
 const VOLUME_STEP = 0.05;
 const SEEK_STEP = 5;
@@ -40,6 +42,17 @@ async function toggleDocumentFullscreen(): Promise<void> {
   } catch (error) {
     log.warn("shortcuts.fullscreen", "Unable to toggle document fullscreen", error);
   }
+}
+
+/** Persisted toggle of the lyrics-on-stage view (C). Read-modify-write on settings. */
+async function toggleLyricsStage(): Promise<void> {
+  const s = await getSettings();
+  await saveSettings({ lyricsStageOpen: !(s.lyricsStageOpen ?? false) });
+}
+
+/** Advance the visualizer placement off→background→idle→off (V). */
+async function cycleVisualizerPlacement(): Promise<void> {
+  await saveSettings(nextVisualizerPlacementPatch(await getSettings()));
 }
 
 interface DispatchContext {
@@ -80,6 +93,8 @@ const GLOBAL_HANDLERS: Record<string, (ctx: DispatchContext) => void> = {
   "nav.tabLibrary": (ctx) => transitionState(() => ctx.setTab("search")),
   "nav.tabSettings": (ctx) => transitionState(() => ctx.setTab("settings")),
   "queue.toggle": () => useUiStore.getState().toggleQueue(),
+  "lyrics.toggleStage": () => void toggleLyricsStage(),
+  "visualizer.cycleMode": () => void cycleVisualizerPlacement(),
 };
 
 /**

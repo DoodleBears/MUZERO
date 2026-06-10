@@ -213,6 +213,22 @@ export const SHORTCUT_ACTIONS: readonly ShortcutActionDef[] = [
     keywords: ["queue", "up next", "drawer", "队列", "歌单", "播放列表"],
   },
   {
+    id: "lyrics.toggleStage",
+    scope: "global",
+    category: "playback",
+    labelKey: "shortcuts.action.lyricsToggleStage",
+    defaultBindings: [key("KeyC", "C")],
+    keywords: ["lyrics", "caption", "歌词", "字幕"],
+  },
+  {
+    id: "visualizer.cycleMode",
+    scope: "global",
+    category: "playback",
+    labelKey: "shortcuts.action.visualizerCycleMode",
+    defaultBindings: [key("KeyV", "V")],
+    keywords: ["visualizer", "spectrum", "可视化", "频谱"],
+  },
+  {
     id: "nav.cycleGalleryMode",
     scope: "global",
     category: "navigation",

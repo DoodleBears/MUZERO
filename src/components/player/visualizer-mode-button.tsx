@@ -7,11 +7,13 @@ import { useSettings } from "@/hooks/use-app-data";
 import { useLongPress } from "@/hooks/use-long-press";
 import { cn } from "@/lib/utils";
 import { useVisualizerPanelStore } from "@/stores/visualizer-panel-store";
+import {
+  nextVisualizerPlacementPatch,
+  resolveVisualizerPlacement,
+  type VisualizerPlacement,
+} from "@/visualizer/placement";
 import { resolveVisualizerStyle } from "@/visualizer/registry";
 
-type VisualizerPlacement = "off" | "background" | "idle";
-
-const PLACEMENTS: VisualizerPlacement[] = ["off", "background", "idle"];
 const PLACEMENT_LABEL_KEYS: Record<
   VisualizerPlacement,
   "visualizer.modeOff" | "visualizer.modeBackground" | "visualizer.modeIdleOnly"
@@ -21,24 +23,14 @@ const PLACEMENT_LABEL_KEYS: Record<
   idle: "visualizer.modeIdleOnly",
 };
 
-function resolvePlacement(settings: ReturnType<typeof useSettings>): VisualizerPlacement {
-  const style = resolveVisualizerStyle(settings.visualizerStyle);
-  if (style === "off" || !(settings.visualizerAsBackground ?? false)) return "off";
-  return (settings.visualizerIdleOnly ?? false) ? "idle" : "background";
-}
-
-function nextPlacement(placement: VisualizerPlacement): VisualizerPlacement {
-  return PLACEMENTS[(PLACEMENTS.indexOf(placement) + 1) % PLACEMENTS.length] ?? "off";
-}
-
 /**
- * One-click visualizer placement toggle, aligned with Settings:
- * off -> Now Playing background -> idle-only visualizer -> off.
+ * One-click visualizer placement toggle, aligned with Settings (and the `V`
+ * shortcut): off -> Now Playing background -> idle-only visualizer -> off.
  */
 export function VisualizerModeButton({ className }: { className?: string }) {
   const { t } = useTranslation();
   const settings = useSettings();
-  const placement = resolvePlacement(settings);
+  const placement = resolveVisualizerPlacement(settings);
   const setPanelOpen = useVisualizerPanelStore((s) => s.setOpen);
   const active = placement !== "off";
   const Icon = placement === "idle" ? EyeOff : AudioWaveform;
@@ -47,15 +39,7 @@ export function VisualizerModeButton({ className }: { className?: string }) {
   });
 
   function cycle() {
-    const next = nextPlacement(placement);
-    const currentStyle = resolveVisualizerStyle(settings.visualizerStyle);
-    const enabledStyle = currentStyle === "off" ? "bars" : currentStyle;
-
-    void saveSettings({
-      visualizerStyle: next === "off" ? "off" : enabledStyle,
-      visualizerAsBackground: next !== "off",
-      visualizerIdleOnly: next === "idle",
-    });
+    void saveSettings(nextVisualizerPlacementPatch(settings));
   }
 
   function openTuningPanel() {
