@@ -12,6 +12,7 @@ import {
   replaceEntries,
 } from "@/player/play-queue";
 import { clampIndex } from "@/player/queue";
+import { planReorder, ranksAtTop } from "@/player/set-order";
 import type { ShortcutGesture } from "@/shortcuts/registry";
 import { db as defaultDb, type MuzeroDB } from "./muzero-db";
 import {
@@ -239,6 +240,47 @@ export async function prependTrackIds(
     const fresh = ids.filter((id) => !existing.has(id));
     if (fresh.length === 0) return;
     session.trackIds = [...fresh, ...session.trackIds];
+    // Keep the fractional-order invariant: a materialized set ranks every member.
+    // New tracks join at the FRONT (newest = cover), below the current minimum rank.
+    if (session.trackRanks && Object.keys(session.trackRanks).length > 0) {
+      const min = Math.min(...Object.values(session.trackRanks));
+      const front = ranksAtTop(min, fresh.length); // increasing, all < min
+      const ranks = { ...session.trackRanks };
+      fresh.forEach((id, i) => {
+        ranks[id] = front[i];
+      });
+      session.trackRanks = ranks;
+    }
+    session.updatedAt = Date.now();
+    await db.sessions.put(session);
+  });
+}
+
+/**
+ * Reorder tracks within ONE set by fractional rank (Notion-block style). Moves
+ * `blockIds` (one row, or a whole multi-select block kept in its relative order) so
+ * they land immediately before `insertBeforeId` in the set's current order, or at
+ * the very END when it's `null`. Lazily materializes ranks on the first drag and
+ * rebalances only when a float gap is exhausted (see `player/set-order.ts`). A
+ * no-op (dropped in place / empty block / missing set) writes nothing.
+ *
+ * Membership (`trackIds`) is left as-is — order is derived from `trackRanks` via
+ * `orderedSetTrackIds`. The play queue stays decoupled: a set reorder never touches
+ * the live `playQueue`.
+ */
+export async function reorderTracksInSession(
+  sessionId: string,
+  blockIds: string[],
+  insertBeforeId: string | null,
+  db: MuzeroDB = defaultDb,
+): Promise<void> {
+  if (blockIds.length === 0) return;
+  await db.transaction("rw", db.sessions, async () => {
+    const session = await db.sessions.get(sessionId);
+    if (!session) return;
+    const plan = planReorder(session.trackIds, session.trackRanks, blockIds, insertBeforeId);
+    if (plan.noop) return;
+    session.trackRanks = plan.ranks;
     session.updatedAt = Date.now();
     await db.sessions.put(session);
   });
@@ -392,6 +434,12 @@ export async function removeTracksFromSession(
     const session = await db.sessions.get(sessionId);
     if (!session) return;
     session.trackIds = session.trackIds.filter((id) => !remove.has(id));
+    // Keep the fractional-order invariant: drop the removed members' rank keys.
+    if (session.trackRanks) {
+      const ranks = { ...session.trackRanks };
+      for (const id of remove) delete ranks[id];
+      session.trackRanks = ranks;
+    }
     session.updatedAt = Date.now();
     await db.sessions.put(session);
   });

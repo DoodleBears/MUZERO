@@ -308,6 +308,15 @@ export interface DjSession {
   coverThumbhash?: string;
   /** Ordered, curated members. Newest is PREPENDED to the front (= the cover). */
   trackIds: string[];
+  /**
+   * 歌单内每首歌的分数序 rank（Notion-block 式 drag-reorder）。一次拖拽只更新被移动
+   * 歌曲的一个值（相邻中点）；间隙耗尽时批量 renormalize。Additive、非索引（镜像
+   * {@link streamPlaylistRef} / {@link coverThumbhash}）→ 无 Dexie 版本 bump。
+   * 不变量：undefined（legacy / 从未拖过，顺序 = `trackIds` 数组）或覆盖 `trackIds`
+   * 全集（已物化，顺序 = rank 升序）。唯一裁决见 `player/set-order.ts` 的
+   * `orderedSetTrackIds`。
+   */
+  trackRanks?: Record<string, number>;
   status: "idle" | "running";
   config: DjConfig;
   /** Default stage rendering: video-first → cover → title. */
