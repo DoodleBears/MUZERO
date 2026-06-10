@@ -150,6 +150,7 @@ MUZERO/
 - 「搜索」→ [`src/lib/track-search.ts`](src/lib/track-search.ts)（纯函数）+ [`src/pages/search-page.tsx`](src/pages/search-page.tsx)
 - 「单个媒体元素」→ [`media-engine.ts`](src/player/media-engine.ts)（持久 `<video>`，`getMediaEngine().getAnalyser()`）
 - 「可视化样式（频谱 / shader 场景）」→ [`src/visualizer/`](src/visualizer/)：可插拔 registry（复刻 musicgen），`VisualizerHost` 按 `AppSettings.visualizerStyle` 选样式 + 单 rAF + 可见性暂停 + reduced-motion；spectrum 自研 canvas（[`spectrum/bands.ts`](src/visualizer/spectrum/bands.ts) 八度对数分带，跟随 `--primary`），scene 用 [twgl.js](src/visualizer/scene/reactive-scene.tsx) WebGL shader（懒加载、无 WebGL 回退 aura）。改样式只动 registry，**别在 UI/store 散落 `if (style===…)`**
+- 「流光背景（封面取色多色流光）」→ scene 样式 `scene-flow`（[`scene-shaders.ts`](src/visualizer/scene/scene-shaders.ts) `FLOW_FRAG` 多色 mesh-gradient + `uEffect` 3 变体 + 轻度音频）。取色多色化在 [`image-palette.ts`](src/lib/image-palette.ts) `extractImagePalette`（零依赖 canvas 量化，top-N 去重），存 [`visualizer-color-store.ts`](src/stores/visualizer-color-store.ts) `palette`。取色源回退（跟随封面 / 无封面→自定义多色，二者同设）唯一裁决在 [`flow-config.ts`](src/lib/flow-config.ts) `resolveFlowColors`/`resolveFlowConfig`。配置走 Settings「流光背景」面板（[`flow-settings.tsx`](src/components/settings/flow-settings.tsx)）。**不引入 color4bg/ogl/node-vibrant**——全自研（PRD `20260611-muzero-immersive-flow-background-prd`）
 
 ## 数据模型（v2）与混合集 / 注释 / 视频规则
 
