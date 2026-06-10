@@ -333,7 +333,14 @@ function OnlineResultRow({ hit, onPlay }: { hit: StreamSearchHit; onPlay: () => 
     >
       <div className="grid size-11 shrink-0 place-items-center overflow-hidden rounded-lg bg-secondary text-muted-foreground">
         {hit.coverUrl ? (
-          <img src={hit.coverUrl} alt="" className="size-full object-cover" />
+          // hdslb (bilibili) blocks a foreign Referer but serves with none; netease
+          // covers don't care — so no-referrer fixes bili and is safe for both.
+          <img
+            src={hit.coverUrl}
+            alt=""
+            referrerPolicy="no-referrer"
+            className="size-full object-cover"
+          />
         ) : (
           <Disc3Icon size={16} />
         )}

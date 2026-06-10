@@ -43,7 +43,12 @@
 | G2 | 生产 `StreamHttp`（`getAppFetch` + `x-muzero-h-*` header 别名，绕渲染层 forbidden headers，proxy 还原前向兼容） | `src/streamsrc/stream-http.ts` | 注入 fetch ×5 | ✅ green |
 | T1 | **Dev 测试面板**（Electron-only 浮层：选源→搜索→resolve→`<audio>` 播放）——验证真实 API / CORS 绕过 / 播放，无需 player-store/登录/UI | `src/components/dev/stream-source-tester.tsx` + `App.tsx` 挂载（gate `desktopKind()==="electron"`） | 🔄 **待 Electron 手测** | 🔄 |
 | I1 | **player-store 播放 streamed track**（`ensureLoadedAndPlay` 加 resolve→`loadUrl` 分支；`hasPlayableMedia` 含 streamed；登录/VIP/错误→toast）+ resolve-playback 映射（注入式可测） | `src/stores/player-store.ts` · `src/streamsrc/resolve-playback.ts` | mock provider ×5 + player-store 套件无回归（87 全绿） | ✅ |
-| U1 | **⌘/Ctrl+F 全局搜索整合在线源**（用户指定的正式归宿）：启用 chips（默认关，红线）→ 防抖并发搜已启用源 → 「在线」结果区 → 选中走 `playStreamedHit`（建/复用「在线」set + 入库 + 真实 player 播放）。player-store 加 `playStreamedHit` action + `ensureOnlineSet`；`AppSettings.streamOnlineSetId` | `src/hooks/use-online-source-search.ts` · `global-track-search.tsx` · `player-store.ts` · i18n×4 | 依赖全已测核心；UI 待 Electron 手测 | 🔄 |
+| U1 | **⌘/Ctrl+F 全局搜索整合在线源**（用户指定的正式归宿）：启用 chips（默认关，红线）→ 防抖并发搜已启用源 → 「在线」结果区 → 选中走 `playStreamedHit`（建/复用「在线」set + 入库 + 真实 player 播放）。player-store 加 `playStreamedHit` action + `ensureOnlineSet`；`AppSettings.streamOnlineSetId` | `src/hooks/use-online-source-search.ts` · `global-track-search.tsx` · `player-store.ts` · i18n×4 | Electron 手测：B站搜索✅、网易云搜索✅（修复后）、入库播放✅ | ✅ |
+
+**2026-06-10 Electron 手测发现 + 修复：**
+- **网易云搜不到结果** → 根因：`stream-http` 把 `Referer`/`UA` 别名成 `x-muzero-h-*`，但 `electron/fetch-proxy.cjs` **没还原**别名 → 网易收不到 Referer 返回空（B站 API 不挑 Referer 所以能搜）。**修**：代理加 `x-muzero-h-<name>`→真实名 还原（main 进程 net.fetch 不受 forbidden-header 限制）。⚠️ `fetch-proxy.cjs` 是并发未提交文件，改动只在工作区，**需随 Electron 壳那批提交** + **完整重启 Electron**。
+- **B站封面图裂开** → hdslb 防盗链拦外域 Referer。**修**：封面 `<img referrerPolicy="no-referrer">`（对网易封面也安全）。其它渲染 streamed 封面的位置（track-row / media-stage）同样需要 no-referrer —— 后续补。
+- **B站点击播放报 `MEDIA_ERR_SRC_NOT_SUPPORTED`** → 预期：`.m4s` DASH 直链需 Referer 注入（媒体 GET 不走 stream-http）+ 可能需 MSE。待 `mediaProxyUrl`（#1/#8）。**网易云媒体是直链 mp3/flac，可直接 `<audio>` 播**，搜索修好后端到端可用。
 
 ### 🧪 现在可测（里程碑：NetEase 匿名端到端）
 
