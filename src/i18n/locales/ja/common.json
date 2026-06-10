@@ -80,7 +80,16 @@
     "logout": "ログアウト",
     "loggedIn": "ログイン済み",
     "notLoggedIn": "未ログイン",
-    "quality": "音質"
+    "quality": "音質",
+    "syncPlaylists": "マイプレイリストを同期",
+    "loadingPlaylists": "読み込み中…",
+    "playlistsError": "プレイリストを読み込めませんでした",
+    "noPlaylists": "プレイリストがありません",
+    "trackCount_other": "{{count}} 曲",
+    "import": "インポート",
+    "importing": "インポート中…",
+    "imported": "{{count}} 曲を「{{name}}」にインポートしました",
+    "importError": "インポートに失敗しました"
   },
   "player": {
     "previous": "前へ",

@@ -6,12 +6,17 @@ import { saveSettings } from "@/db/repositories";
 import type { StreamSourceId } from "@/db/types";
 import { useSettings } from "@/hooks/use-app-data";
 import { hasStreamingSources, resolveDesktopBridge } from "@/lib/desktop/bridge";
+import { notify } from "@/stores/notification-store";
+import { usePlayerStore } from "@/stores/player-store";
 import {
   cookieStringHasAuth,
   STREAM_LOGIN_CONFIGS,
   streamSourcesAfterLogin,
   streamSourcesAfterLogout,
 } from "@/streamsrc/login";
+import type { StreamPlaylist } from "@/streamsrc/provider";
+import { createStreamSource } from "@/streamsrc/registry";
+import { createStreamHttp } from "@/streamsrc/stream-http";
 
 /** Implemented sources + their quality options (brand names are not i18n'd). */
 const SOURCES: { id: StreamSourceId; label: string; qualities: string[] }[] = [
@@ -94,52 +99,140 @@ export function StreamSourcesSettings() {
           );
           const quality = settings.streamSources?.[id]?.quality ?? qualities[1] ?? qualities[0];
           return (
-            <div
-              key={id}
-              className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border p-3"
-            >
-              <div className="flex items-center gap-2">
-                <span className="font-medium text-sm">{label}</span>
-                <span
-                  className={loggedIn ? "text-green-500 text-xs" : "text-muted-foreground text-xs"}
-                >
-                  {loggedIn ? t("streamSources.loggedIn") : t("streamSources.notLoggedIn")}
-                </span>
-              </div>
-              <div className="flex items-center gap-2">
-                <label className="flex items-center gap-1.5 text-muted-foreground text-xs">
-                  {t("streamSources.quality")}
-                  <select
-                    value={quality}
-                    onChange={(e) => void setQuality(id, e.target.value)}
-                    className="rounded-md border border-border bg-transparent px-1.5 py-1 text-foreground text-xs"
+            <div key={id} className="space-y-3 rounded-lg border border-border p-3">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <span className="font-medium text-sm">{label}</span>
+                  <span
+                    className={
+                      loggedIn ? "text-green-500 text-xs" : "text-muted-foreground text-xs"
+                    }
                   >
-                    {qualities.map((q) => (
-                      <option key={q} value={q}>
-                        {q}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                {loggedIn ? (
-                  <Button type="button" variant="outline" size="sm" onClick={() => void logout(id)}>
-                    {t("streamSources.logout")}
-                  </Button>
-                ) : (
-                  <Button
-                    type="button"
-                    size="sm"
-                    disabled={busy === id}
-                    onClick={() => void login(id)}
-                  >
-                    {busy === id ? t("streamSources.loggingIn") : t("streamSources.login")}
-                  </Button>
-                )}
+                    {loggedIn ? t("streamSources.loggedIn") : t("streamSources.notLoggedIn")}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <label className="flex items-center gap-1.5 text-muted-foreground text-xs">
+                    {t("streamSources.quality")}
+                    <select
+                      value={quality}
+                      onChange={(e) => void setQuality(id, e.target.value)}
+                      className="rounded-md border border-border bg-transparent px-1.5 py-1 text-foreground text-xs"
+                    >
+                      {qualities.map((q) => (
+                        <option key={q} value={q}>
+                          {q}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  {loggedIn ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => void logout(id)}
+                    >
+                      {t("streamSources.logout")}
+                    </Button>
+                  ) : (
+                    <Button
+                      type="button"
+                      size="sm"
+                      disabled={busy === id}
+                      onClick={() => void login(id)}
+                    >
+                      {busy === id ? t("streamSources.loggingIn") : t("streamSources.login")}
+                    </Button>
+                  )}
+                </div>
               </div>
+              {loggedIn && <SourcePlaylists sourceId={id} />}
             </div>
           );
         })}
       </CardContent>
     </Card>
+  );
+}
+
+/**
+ * The logged-in user's playlists for one source, loaded on demand. Each row imports
+ * into a new local set via `importStreamedPlaylist` (resolved-URL discipline kept —
+ * only metadata is persisted; tracks re-resolve on play).
+ */
+function SourcePlaylists({ sourceId }: { sourceId: StreamSourceId }) {
+  const { t } = useTranslation();
+  const settings = useSettings();
+  const importStreamedPlaylist = usePlayerStore((s) => s.importStreamedPlaylist);
+  const [playlists, setPlaylists] = useState<StreamPlaylist[] | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [importingId, setImportingId] = useState<string | null>(null);
+
+  async function load() {
+    setLoading(true);
+    try {
+      const source = createStreamSource(sourceId, {
+        http: createStreamHttp(),
+        now: () => Date.now(),
+        getCookie: (sid) => settings.streamSources?.[sid]?.cookie,
+      });
+      setPlaylists((await source?.getUserPlaylists?.()) ?? []);
+    } catch {
+      setPlaylists([]);
+      notify.error(t("streamSources.playlistsError"));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function importOne(pl: StreamPlaylist) {
+    setImportingId(pl.id);
+    try {
+      const count = await importStreamedPlaylist(sourceId, pl.id, pl.name);
+      notify.success(t("streamSources.imported", { count, name: pl.name }));
+    } catch {
+      notify.error(t("streamSources.importError"));
+    } finally {
+      setImportingId(null);
+    }
+  }
+
+  if (playlists === null) {
+    return (
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        disabled={loading}
+        onClick={() => void load()}
+      >
+        {loading ? t("streamSources.loadingPlaylists") : t("streamSources.syncPlaylists")}
+      </Button>
+    );
+  }
+  if (playlists.length === 0) {
+    return <p className="text-muted-foreground text-xs">{t("streamSources.noPlaylists")}</p>;
+  }
+  return (
+    <div className="space-y-1 border-border border-t pt-2">
+      {playlists.map((pl) => (
+        <div key={pl.id} className="flex items-center gap-2 text-sm">
+          <span className="min-w-0 flex-1 truncate">{pl.name}</span>
+          <span className="shrink-0 text-muted-foreground text-xs">
+            {t("streamSources.trackCount", { count: pl.trackCount })}
+          </span>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            disabled={importingId === pl.id}
+            onClick={() => void importOne(pl)}
+          >
+            {importingId === pl.id ? t("streamSources.importing") : t("streamSources.import")}
+          </Button>
+        </div>
+      ))}
+    </div>
   );
 }

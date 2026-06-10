@@ -80,7 +80,16 @@
     "logout": "登出",
     "loggedIn": "已登录",
     "notLoggedIn": "未登录",
-    "quality": "音质"
+    "quality": "音质",
+    "syncPlaylists": "同步我的歌单",
+    "loadingPlaylists": "加载中…",
+    "playlistsError": "无法加载歌单",
+    "noPlaylists": "没有歌单",
+    "trackCount_other": "{{count}} 首",
+    "import": "导入",
+    "importing": "导入中…",
+    "imported": "已导入 {{count}} 首到「{{name}}」",
+    "importError": "导入失败"
   },
   "player": {
     "previous": "上一首",

@@ -80,7 +80,16 @@
     "logout": "로그아웃",
     "loggedIn": "로그인됨",
     "notLoggedIn": "로그인 안 됨",
-    "quality": "음질"
+    "quality": "음질",
+    "syncPlaylists": "내 플레이리스트 동기화",
+    "loadingPlaylists": "불러오는 중…",
+    "playlistsError": "플레이리스트를 불러올 수 없습니다",
+    "noPlaylists": "플레이리스트 없음",
+    "trackCount_other": "{{count}}곡",
+    "import": "가져오기",
+    "importing": "가져오는 중…",
+    "imported": "{{count}}곡을 \"{{name}}\"에 가져왔습니다",
+    "importError": "가져오기 실패"
   },
   "player": {
     "previous": "이전",

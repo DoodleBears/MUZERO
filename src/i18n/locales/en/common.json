@@ -86,7 +86,17 @@
     "logout": "Log out",
     "loggedIn": "Logged in",
     "notLoggedIn": "Not logged in",
-    "quality": "Quality"
+    "quality": "Quality",
+    "syncPlaylists": "Sync my playlists",
+    "loadingPlaylists": "Loading…",
+    "playlistsError": "Couldn't load playlists",
+    "noPlaylists": "No playlists",
+    "trackCount_one": "{{count}} track",
+    "trackCount_other": "{{count}} tracks",
+    "import": "Import",
+    "importing": "Importing…",
+    "imported": "Imported {{count}} into \"{{name}}\"",
+    "importError": "Import failed"
   },
   "player": {
     "previous": "Previous",

@@ -23,7 +23,7 @@ import {
   setTrackCover,
   upsertImportFolder,
 } from "@/db/repositories";
-import type { ImportFolder, SetDisplayMode, Track } from "@/db/types";
+import type { ImportFolder, SetDisplayMode, StreamSourceId, Track } from "@/db/types";
 import { createAiDjBrain } from "@/dj/dj-brain-ai";
 import { createDjEngine, type DjEngine } from "@/dj/dj-engine";
 import i18n from "@/i18n/i18n";
@@ -130,6 +130,12 @@ interface PlayerState {
   playNextTrack: (track: Track) => Promise<void>;
   /** Play a song from an online source (global search): import it into the online set, then play. */
   playStreamedHit: (hit: StreamSearchHit) => Promise<void>;
+  /** Import a logged-in source playlist into a new set of streamed tracks; returns the count. */
+  importStreamedPlaylist: (
+    sourceId: StreamSourceId,
+    playlistId: string,
+    name: string,
+  ) => Promise<number>;
   next: () => Promise<void>;
   /** Previous track without the transport-button "restart current after 3s" rule. */
   skipPrev: () => Promise<void>;
@@ -480,6 +486,25 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     if (!alreadyActive) await get().setActiveSession(setId);
     const idx = await waitForQueueIndex(get, track.id);
     if (idx >= 0) await get().playIndex(idx);
+  },
+
+  async importStreamedPlaylist(sourceId, playlistId, name) {
+    const settings = await getSettings();
+    const source = createStreamSource(sourceId, {
+      http: createStreamHttp(),
+      now: () => Date.now(),
+      getCookie: (sid) => settings.streamSources?.[sid]?.cookie,
+    });
+    const hits = (await source?.importPlaylist?.(playlistId)) ?? [];
+    if (hits.length === 0) return 0;
+    const session = await createSession({ name, seedPrompt: "", config: { autoExtend: false } });
+    const ids: string[] = [];
+    for (const hit of hits) {
+      const track = await createStreamedTrack(hitToStreamedInput(session.id, hit));
+      ids.push(track.id);
+    }
+    await prependTrackIds(session.id, ids);
+    return hits.length;
   },
 
   async next() {

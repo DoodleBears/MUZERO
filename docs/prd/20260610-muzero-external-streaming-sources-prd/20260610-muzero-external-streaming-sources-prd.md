@@ -623,4 +623,6 @@ success：Set-Cookie 已被 net.fetch 写进默认 session → bridge.readSource
 |---|---|---|---|---|
 | PL1 | 纯解析器(userId / 用户歌单 / 歌单 trackIds / song-detail→hits)+ 共享 `neteaseSongToHit` | `netease-playlists.ts` | canned 响应 ×6 | ✅ green |
 | PL2 | NeteaseSource `getUserPlaylists` + `importPlaylist`(eapi 请求 + 分批 song-detail)；provider 接口加 `getUserPlaylists?`/`StreamPlaylist` | `netease-source.ts` · `provider.ts` | 110 streamsrc 测全绿 | ✅ green |
-| PL3 | UI:登录后在 Settings/⌘F 列「我的歌单」→ 选中一键导入为 set(streamed tracks) | `stream-sources-settings.tsx` | 运行时 | 🔲 |
+| PL3 | UI:登录后 Settings 每个源下「同步我的歌单」按需加载歌单列表，每行一键导入为新 set(streamed tracks)；`importStreamedPlaylist` 落库 + i18n(en/zh/ja/ko) | `stream-sources-settings.tsx` · `player-store.ts` | typecheck + biome + player-store/netease-playlists 测全绿 | ✅ green |
+
+**PL3 落地**：`SourcePlaylists` 子组件（登录态才挂）按需调 `createStreamSource(id).getUserPlaylists()`，列表每行 `importStreamedPlaylist(sourceId, playlistId, name)` → 新建 set + 批量 `createStreamedTrack` + `prependTrackIds`，成功 toast「已导入 N 首到『歌单名』」。只持久化元数据，播放时再 resolve(URL 不入库)。
