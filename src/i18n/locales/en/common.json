@@ -554,7 +554,20 @@
       "swipeBack": "Swipe left→right",
       "coverSwipeLeft": "Swipe cover"
     },
-    "unassigned": "Unassigned"
+    "unassigned": "Unassigned",
+    "addBinding": "Add a key",
+    "removeBinding": "Remove",
+    "resetAction": "Reset to default",
+    "resetAll": "Reset all",
+    "recorder": {
+      "title": "Rebind {{name}}",
+      "hint": "Press the key combination you want.",
+      "press": "Press a key combination…",
+      "reserved": "This combo may be reserved by your OS / browser and might not fire.",
+      "willUnbind": "This unbinds: {{names}}",
+      "blocked": "Conflicts with a protected shortcut ({{names}}) — can't save.",
+      "save": "Save"
+    }
   },
   "notification": {
     "copy": "Copy",

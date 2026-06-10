@@ -86,6 +86,14 @@ export async function resetShortcut(actionId: string, db: MuzeroDB = defaultDb):
   await saveSettings({ shortcutOverrides: next }, db);
 }
 
+/** Replace the entire override map (e.g. the resolved plan after a conflict chain). */
+export async function setAllShortcutOverrides(
+  overrides: Record<string, ShortcutGesture[]>,
+  db: MuzeroDB = defaultDb,
+): Promise<void> {
+  await saveSettings({ shortcutOverrides: overrides }, db);
+}
+
 /** Clear every override → the whole keymap returns to defaults. */
 export async function resetAllShortcuts(db: MuzeroDB = defaultDb): Promise<void> {
   await saveSettings({ shortcutOverrides: {} }, db);

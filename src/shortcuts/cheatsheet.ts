@@ -12,6 +12,7 @@ import {
   SHORTCUT_ACTIONS,
   type ShortcutActionDef,
   type ShortcutCategory,
+  type ShortcutGesture,
 } from "./registry";
 
 /** Section order in the cheat-sheet; `reference` (intrinsic keys) always last. */
@@ -31,6 +32,8 @@ export interface CheatSheetRow {
   editable: boolean;
   /** Formatted key-chord chips, one inner array per binding (its modifier+key caps). */
   chips: string[][];
+  /** The key gestures behind `chips`, same order — for per-chip remove. */
+  keyGestures: ShortcutGesture[];
   /** i18n labelKeys for display-only pointer gestures (swipe / cover). */
   gestureLabelKeys: string[];
   keywords: readonly string[];
@@ -52,6 +55,7 @@ function toRow(
     labelKey: action.labelKey,
     editable: isEditableAction(action),
     chips: actionBindingChips(action.id, bindings, platform),
+    keyGestures: list.map((b) => b.gesture).filter((g) => g.kind === "key"),
     gestureLabelKeys: list
       .map((b) => b.gesture)
       .filter((g) => g.kind === "pointer")

@@ -540,7 +540,20 @@
       "swipeBack": "왼쪽→오른쪽 스와이프",
       "coverSwipeLeft": "커버 스와이프"
     },
-    "unassigned": "미지정"
+    "unassigned": "미지정",
+    "addBinding": "키 추가",
+    "removeBinding": "제거",
+    "resetAction": "기본값으로",
+    "resetAll": "모두 초기화",
+    "recorder": {
+      "title": "“{{name}}” 다시 지정",
+      "hint": "원하는 키 조합을 누르세요.",
+      "press": "키 조합을 누르세요…",
+      "reserved": "이 조합은 OS / 브라우저에서 예약되어 작동하지 않을 수 있습니다.",
+      "willUnbind": "해제됨: {{names}}",
+      "blocked": "보호된 단축키({{names}})와 충돌하여 저장할 수 없습니다.",
+      "save": "저장"
+    }
   },
   "notification": {
     "copy": "복사",

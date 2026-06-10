@@ -540,7 +540,20 @@
       "swipeBack": "左→右スワイプ",
       "coverSwipeLeft": "カバーをスワイプ"
     },
-    "unassigned": "未割り当て"
+    "unassigned": "未割り当て",
+    "addBinding": "キーを追加",
+    "removeBinding": "削除",
+    "resetAction": "デフォルトに戻す",
+    "resetAll": "すべてリセット",
+    "recorder": {
+      "title": "「{{name}}」を再割り当て",
+      "hint": "使いたいキーの組み合わせを押してください。",
+      "press": "キーの組み合わせを押す…",
+      "reserved": "この組み合わせは OS / ブラウザが予約済みで、機能しない場合があります。",
+      "willUnbind": "解除されます：{{names}}",
+      "blocked": "保護されたショートカット（{{names}}）と競合するため保存できません。",
+      "save": "保存"
+    }
   },
   "notification": {
     "copy": "コピー",

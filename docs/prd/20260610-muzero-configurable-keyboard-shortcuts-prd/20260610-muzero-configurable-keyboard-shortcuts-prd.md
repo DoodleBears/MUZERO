@@ -17,7 +17,7 @@
 | 2a | Global dispatch (transport + tabs) via registry | ✅ Completed | [Phase 2a Checklist](#phase-2a-checklist) |
 | 2b | Scoped surfaces (library/inspector/gallery) + hint swap | 🔲 Pending | [Phase 2b Checklist](#phase-2b-checklist) |
 | 3 | "View all shortcuts" — read-only cheat-sheet (Settings) | ✅ Completed | [Phase 3 Checklist](#phase-3-checklist) |
-| 4 | Customization — cyclic-conflict engine ✅ · recorder/UI 🔲 | 🔄 In Progress | [Phase 4 Checklist](#phase-4-checklist) |
+| 4 | Customization — recorder, multi-binding, cyclic conflict, reset | ✅ Completed | [Phase 4 Checklist](#phase-4-checklist) |
 | 5 | Stretch — presets, 2-stroke sequences, import/export | 🔲 Pending | [Phase 5 Checklist](#phase-5-checklist) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
@@ -337,20 +337,21 @@ Global `?` (Shift+/)  →  (OPTIONAL, Q8) components/shortcuts/shortcut-help-ove
 
 ### Phase 4: Customization — recorder + cyclic conflict + reset
 
-**Goal:** Rebinding, multi-binding, and the non-destructive "循环" conflict flow. **Pure core landed; the recorder/row UI is pending (sequenced after Phase 3, once the library files settle).**
+**Goal:** Rebinding, multi-binding, and the non-destructive "循环" conflict flow.
 
 **Tasks:**
 - [x] `src/shortcuts/recorder.ts` (pure): `reservedWarning` (OS/browser-reserved bare-primary chords, ⌘W/⌘R/…), `isModifierOnlyKey` (capture buffering decision). (`gestureFromEvent` already in `engine.ts`.)
-- [x] `src/shortcuts/conflict.ts` (pure): `planReassignment` — the cascading-displacement model. Assigning an occupied chord DISPLACES it off its same-scope holder and reports the holder in `displaced` (the UI re-prompts → the chain); a replacement in the same plan resolves it; a `protected` holder or non-editable target lands in `blocked` (disables Save). Persistence repo helpers already exist (`setShortcutOverride`/`resetShortcut`/`resetAllShortcuts`, Phase 1).
-- [ ] `components/shortcuts/shortcut-recorder-dialog.tsx`: capture target, live preview, growing conflict-draft sections (drive with `planReassignment`), Save gating, reserved-key warning.
-- [ ] Wire `ShortcutRow` edit affordances (+ add binding, ✕ remove binding, ↺ reset) and "Reset all".
-- [ ] Commit on Save: write the whole resolved `plan.overrides` atomically via the repo helpers.
+- [x] `src/shortcuts/conflict.ts` (pure): `planReassignment` — the cascading-displacement model. Assigning an occupied chord DISPLACES it off its same-scope holder and reports the holder in `displaced`; a replacement in the same plan resolves it; a `protected` holder or non-editable target lands in `blocked` (disables Save). Persistence helpers `setShortcutOverride`/`resetShortcut`/`resetAllShortcuts` + `setAllShortcutOverrides` (the whole resolved map).
+- [x] [`shortcut-recorder-dialog.tsx`](../../../src/components/settings/shortcut-recorder-dialog.tsx): capture target (buffers modifiers, finalizes on a real key, never traps ⌘W), live chord preview, `planReassignment` preview ("will unbind X" / blocked-by-protected), reserved-key warning, Save gating, atomic write of `plan.overrides`.
+- [x] [`shortcuts-settings.tsx`](../../../src/components/settings/shortcuts-settings.tsx) `ShortcutRow` edit affordances: **+** add (opens recorder), **✕** remove one binding, **↺** reset action; **Reset all** in the header.
 
 #### Phase 4 Checklist
-- [x] `conflict.test.ts`: single displacement reports the holder; a same-plan replacement resolves the chain; cross-scope chords don't conflict but same-scope (library ↑) do; a `protected` holder (search Cmd+F) and a non-editable target both `block`. + `recorder.test.ts` for reserved-key warnings. (24 of the 36 `src/shortcuts/` tests.)
-- [ ] Multi-binding: an action can hold ≥2 chords; adding a duplicate de-dupes; removing the last leaves "Unassigned".
-- [ ] A rebind takes effect **live** (dispatch reads merged bindings) without reload; reset restores the default; reset-all clears the map.
-- [ ] `Cmd+W` (and friends) show the reserved warning; saving them is allowed but flagged.
+- [x] `conflict.test.ts`: single displacement reports the holder; a same-plan replacement resolves the chain; cross-scope chords don't conflict but same-scope (library ↑) do; a `protected` holder (search Cmd+F) and a non-editable target both `block`. + `recorder.test.ts` reserved-key matrix.
+- [x] Multi-binding: **+** adds a chord (de-duped); **✕** removes one; removing the last leaves "Unassigned" — recorder DOM test asserts `prev` gains Z while keeping Q.
+- [x] A rebind takes effect **live** (dispatch reads merged bindings via `useSettings`); reset restores the default; reset-all clears the map (repo helpers + liveQuery).
+- [x] `Cmd+W` (and friends) show the reserved warning; saving is allowed but flagged.
+
+> **Done 2026-06-10.** Customization ships end-to-end (request #2): rebind / multi-bind / remove / reset / reset-all with non-destructive conflict preview. 85 tests green across `src/shortcuts/` + settings. The full ClipCombo *forced re-record chain* (auto-prompting each displaced action) is a future polish — today a displaced chord is shown and left unbound for the user to rebind.
 
 ### Phase 5: Stretch (out of v1 scope unless prioritized)
 
@@ -422,6 +423,7 @@ Global `?` (Shift+/)  →  (OPTIONAL, Q8) components/shortcuts/shortcut-help-ove
 | 2026-06-10 | MUZERO | Phase 1 shipped (registry + engine + persistence + i18n, 56 tests). Phase 2 split into 2a (global transport+tab dispatch via registry — shipped, transport now rebindable; deleted `player-shortcuts`/`use-player-shortcuts`) and 2b (library/inspector/gallery surfaces + hint swap — pending, deferred around concurrent library-delete edits) |
 | 2026-06-10 | MUZERO | Phase 4 core landed out of order (no UI churn): `conflict.ts` (`planReassignment` cascading displacement + blocked) and `recorder.ts` (`reservedWarning`), TDD'd. Recorder/row UI + Phase 3 cheat-sheet + Phase 2b remain — they touch the actively-edited library/settings files, so they're sequenced after the branch settles |
 | 2026-06-10 | MUZERO | Phase 3 shipped: read-only cheat-sheet in Settings → Shortcuts (`cheatsheet.ts` + `shortcuts-settings.tsx`), grouped + searchable, with a read-only Reference section (Q7). Added `category:"reference"` registry entries skipped by dispatch/conflict; i18n ×4. `?` overlay (Q8) left optional/unbuilt |
+| 2026-06-10 | MUZERO | Phase 4 UI shipped: `shortcut-recorder-dialog.tsx` (capture → `planReassignment` conflict preview → atomic save) + per-row +/✕/↺ edit affordances + Reset-all + `setAllShortcutOverrides`; i18n ×4. Customization is end-to-end. Only Phase 2b (route the churning library/inspector/gallery key-matching through the registry + hint swap) and Phase 5 (stretch) remain |
 
 ---
 

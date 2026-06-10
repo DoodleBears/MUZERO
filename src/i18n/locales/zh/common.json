@@ -540,7 +540,20 @@
       "swipeBack": "从左向右滑动",
       "coverSwipeLeft": "滑动封面"
     },
-    "unassigned": "未绑定"
+    "unassigned": "未绑定",
+    "addBinding": "添加按键",
+    "removeBinding": "移除",
+    "resetAction": "恢复默认",
+    "resetAll": "全部恢复默认",
+    "recorder": {
+      "title": "重新绑定「{{name}}」",
+      "hint": "按下你想要的按键组合。",
+      "press": "按下一个按键组合…",
+      "reserved": "该组合可能被系统 / 浏览器占用，可能无法生效。",
+      "willUnbind": "将解绑：{{names}}",
+      "blocked": "与受保护的快捷键（{{names}}）冲突，无法保存。",
+      "save": "保存"
+    }
   },
   "notification": {
     "copy": "复制",
