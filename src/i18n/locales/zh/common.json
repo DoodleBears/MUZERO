@@ -129,6 +129,10 @@
   },
   "lyricsSettings": {
     "title": "歌词",
+    "align": "对齐",
+    "alignLeft": "左对齐",
+    "alignCenter": "居中对齐",
+    "alignRight": "右对齐",
     "activeFontSize": "当前行字号（{{px}}px）",
     "inactiveFontSize": "其他行字号（{{px}}px）",
     "activeOpacity": "当前行透明度（{{pct}}%）",

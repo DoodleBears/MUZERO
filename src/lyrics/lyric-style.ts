@@ -12,6 +12,8 @@ export interface LyricStyle {
   inactiveOpacity: number;
   /** CSS color for the lyrics; undefined → inherit the foreground color. */
   color?: string;
+  /** Horizontal alignment of the lyric lines. */
+  align: "left" | "center" | "right";
 }
 
 export const DEFAULT_LYRIC_STYLE: LyricStyle = {
@@ -19,6 +21,7 @@ export const DEFAULT_LYRIC_STYLE: LyricStyle = {
   inactiveFontSize: 20,
   activeOpacity: 1,
   inactiveOpacity: 0.4,
+  align: "left",
 };
 
 function clampPx(value: number | undefined, fallback: number): number {
@@ -54,5 +57,6 @@ export function resolveLyricStyle(settings: AppSettings, coverColorCss: string |
     activeOpacity: clamp01(settings.lyricsActiveOpacity, 100),
     inactiveOpacity: clamp01(settings.lyricsInactiveOpacity, 40),
     color,
+    align: settings.lyricsAlign ?? "left",
   };
 }

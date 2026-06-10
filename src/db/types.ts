@@ -499,6 +499,8 @@ export interface AppSettings {
   lyricsColorMode?: "default" | "cover" | "custom";
   /** Custom lyric color (hex) when `lyricsColorMode === "custom"`. */
   lyricsCustomColor?: string;
+  /** Lyric line alignment (the widescreen "pure lyrics" mode especially). Default "left". */
+  lyricsAlign?: "left" | "center" | "right";
   /** Global color scheme. Mirrors localStorage `muzero-theme`; defaults to system. */
   theme?: "light" | "dark" | "system";
   /** Primary/accent color (hex) for light mode. Mirrors localStorage `muzero-primary-light`. */

@@ -1,3 +1,4 @@
+import { AlignCenter, AlignLeft, AlignRight } from "lucide-react";
 import type React from "react";
 import { useTranslation } from "react-i18next";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -11,11 +12,18 @@ import {
 import { Slider } from "@/components/ui/slider";
 import { saveSettings } from "@/db/repositories";
 import { useSettings } from "@/hooks/use-app-data";
+import { cn } from "@/lib/utils";
 
 const COLOR_MODES = [
   { id: "default", labelKey: "lyricsSettings.colorDefault" },
   { id: "cover", labelKey: "lyricsSettings.colorCover" },
   { id: "custom", labelKey: "lyricsSettings.colorCustom" },
+] as const;
+
+const ALIGNS = [
+  { id: "left", Icon: AlignLeft, labelKey: "lyricsSettings.alignLeft" },
+  { id: "center", Icon: AlignCenter, labelKey: "lyricsSettings.alignCenter" },
+  { id: "right", Icon: AlignRight, labelKey: "lyricsSettings.alignRight" },
 ] as const;
 
 /**
@@ -32,6 +40,7 @@ export function LyricsSettings() {
   const inactiveOpacity = s.lyricsInactiveOpacity ?? 40;
   const colorMode = s.lyricsColorMode ?? "default";
   const customColor = s.lyricsCustomColor ?? "#ffffff";
+  const align = s.lyricsAlign ?? "left";
 
   return (
     <Card>
@@ -78,6 +87,27 @@ export function LyricsSettings() {
             onValueChange={(v) => void saveSettings({ lyricsInactiveOpacity: v })}
             aria-label={t("lyricsSettings.inactiveOpacity", { pct: inactiveOpacity })}
           />
+        </Field>
+        <Field label={t("lyricsSettings.align")}>
+          <div className="flex gap-1">
+            {ALIGNS.map((m) => (
+              <button
+                key={m.id}
+                type="button"
+                onClick={() => void saveSettings({ lyricsAlign: m.id })}
+                aria-pressed={align === m.id}
+                aria-label={t(m.labelKey)}
+                className={cn(
+                  "flex h-9 flex-1 items-center justify-center rounded-md border transition-colors",
+                  align === m.id
+                    ? "border-primary bg-primary/10 text-primary"
+                    : "border-border text-muted-foreground hover:text-foreground",
+                )}
+              >
+                <m.Icon className="size-4" />
+              </button>
+            ))}
+          </div>
         </Field>
         <Field label={t("lyricsSettings.color")}>
           <Select

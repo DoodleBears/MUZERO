@@ -135,6 +135,10 @@
   },
   "lyricsSettings": {
     "title": "Lyrics",
+    "align": "Alignment",
+    "alignLeft": "Align left",
+    "alignCenter": "Align center",
+    "alignRight": "Align right",
     "activeFontSize": "Current line size ({{px}}px)",
     "inactiveFontSize": "Other lines size ({{px}}px)",
     "activeOpacity": "Current line opacity ({{pct}}%)",

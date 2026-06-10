@@ -9,6 +9,7 @@ import { db } from "@/db/muzero-db";
 import { getTrackLyrics } from "@/db/repositories";
 import type { Track } from "@/db/types";
 import { useSettings } from "@/hooks/use-app-data";
+import { cn } from "@/lib/utils";
 import { DEFAULT_LYRIC_STYLE, type LyricStyle, resolveLyricStyle } from "@/lyrics/lyric-style";
 import { activeLineIndex, type LyricsLine } from "@/lyrics/parse-lrc";
 import { type ResolvedLyrics, resolveTrackLyrics } from "@/lyrics/resolve-lyrics";
@@ -179,6 +180,7 @@ export function LyricsScroller({
                 color: lyricStyle.color,
                 opacity: lyricStyle.activeOpacity,
                 fontSize: lyricStyle.inactiveFontSize,
+                textAlign: lyricStyle.align,
               }}
             >
               {resolved.text}
@@ -314,7 +316,14 @@ function SyncedLines({
                 }}
                 transition={{ duration: reduce ? 0 : 0.35, ease: [0.22, 1, 0.36, 1] }}
                 style={{ transformOrigin: "left center", color: lyricStyle.color }}
-                className="block w-full rounded-lg px-3 py-2 text-left font-bold leading-snug"
+                className={cn(
+                  "block w-full rounded-lg px-3 py-2 font-bold leading-snug",
+                  lyricStyle.align === "center"
+                    ? "text-center"
+                    : lyricStyle.align === "right"
+                      ? "text-right"
+                      : "text-left",
+                )}
               >
                 {line.text || "♪"}
               </motion.button>

@@ -129,6 +129,10 @@
   },
   "lyricsSettings": {
     "title": "가사",
+    "align": "정렬",
+    "alignLeft": "왼쪽 정렬",
+    "alignCenter": "가운데 정렬",
+    "alignRight": "오른쪽 정렬",
     "activeFontSize": "현재 줄 크기 ({{px}}px)",
     "inactiveFontSize": "다른 줄 크기 ({{px}}px)",
     "activeOpacity": "현재 줄 불투명도 ({{pct}}%)",
