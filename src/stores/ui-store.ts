@@ -17,6 +17,14 @@ interface UiState {
    */
   chromeHidden: boolean;
   setChromeHidden: (hidden: boolean) => void;
+  /**
+   * "Lyrics focus" — show lyrics on the Now-Playing stage (replacing the cover on
+   * mobile / the stage block on desktop) and, in immersive idle, centered over
+   * the background. Ephemeral; toggled by the lyrics-mode button or a cover tap.
+   */
+  lyricsStageOpen: boolean;
+  setLyricsStageOpen: (open: boolean) => void;
+  toggleLyricsStage: () => void;
 }
 
 export const useUiStore = create<UiState>((set) => ({
@@ -26,4 +34,7 @@ export const useUiStore = create<UiState>((set) => ({
   chromeHidden: false,
   setChromeHidden: (hidden) =>
     set((s) => (s.chromeHidden === hidden ? s : { chromeHidden: hidden })),
+  lyricsStageOpen: false,
+  setLyricsStageOpen: (open) => set({ lyricsStageOpen: open }),
+  toggleLyricsStage: () => set((s) => ({ lyricsStageOpen: !s.lyricsStageOpen })),
 }));

@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { DjConsole } from "@/components/dj/dj-console";
 import { ControlTooltip } from "@/components/player/control-tooltip";
 import { ListeningNowSection } from "@/components/player/listening-now-section";
+import { LyricsModeButton } from "@/components/player/lyrics-mode-button";
 import { NowPlayingPanel } from "@/components/player/now-playing-panel";
 import { PlaybackSpectrum } from "@/components/player/playback-spectrum";
 import { SwipeableMediaStage } from "@/components/player/swipeable-media-stage";
@@ -21,6 +22,7 @@ import { classifyDrop, dragHasFiles, filesFromTransfer, summarizeDragItems } fro
 import { cn } from "@/lib/utils";
 import { nextRepeatMode } from "@/player/transport";
 import { usePlayerStore } from "@/stores/player-store";
+import { useUiStore } from "@/stores/ui-store";
 
 const DISPLAY_MODES: { id: SetDisplayMode; icon: typeof Video }[] = [
   { id: "video", icon: Video },
@@ -42,6 +44,7 @@ export function NowPlayingPage({ foregroundHidden = false }: { foregroundHidden?
   const queue = usePlayerStore((s) => s.queue);
   const currentIndex = usePlayerStore((s) => s.currentIndex);
   const djEnabled = usePlayerStore((s) => s.djEnabled);
+  const lyricsStageOpen = useUiStore((s) => s.lyricsStageOpen);
   const current = currentIndex >= 0 ? queue[currentIndex] : undefined;
   // The lyrics surface lives in the right rail on md+; on narrow there is no
   // rail, so it stacks into the scroll flow. Render exactly one (breakpoint-gated)
@@ -65,7 +68,10 @@ export function NowPlayingPage({ foregroundHidden = false }: { foregroundHidden?
       <NowPlayingImageDropLayer current={current} stageRef={stageRef} />
       <div
         className={cn(
-          "sm:mx-8 lg:mx-12 grid h-full gap-6 px-4 transition-opacity duration-200 lg:px-6 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]",
+          "sm:mx-8 lg:mx-12 grid h-full gap-6 px-4 transition-opacity duration-200 lg:px-6",
+          // Lyrics-focus collapses to a single full-width column (no right rail).
+          !lyricsStageOpen &&
+            "md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]",
           foregroundHidden && "pointer-events-none opacity-0",
         )}
       >
@@ -73,11 +79,19 @@ export function NowPlayingPage({ foregroundHidden = false }: { foregroundHidden?
           ref={sectionRef}
           className="no-scrollbar flex min-h-0 flex-col gap-3 overflow-y-auto overflow-x-visible pt-chrome-top pb-chrome-bottom"
         >
-          {/* Video fills the width at its own aspect ratio; audio shows a square.
-              The cover box (drop target) is measured via stageRef. */}
-          <SwipeableMediaStage coverRef={stageRef} />
-
-          {current && <TrackInfoCard track={current} />}
+          {/* Lyrics-focus: lyrics replace the cover/title stage in place. Else the
+              normal stage — video at its aspect ratio / a square audio cover (the
+              drop target is measured via stageRef). */}
+          {lyricsStageOpen && current ? (
+            <div className="min-h-[60svh] flex-1">
+              <SyncedLyricsView track={current} />
+            </div>
+          ) : (
+            <>
+              <SwipeableMediaStage coverRef={stageRef} />
+              {current && <TrackInfoCard track={current} />}
+            </>
+          )}
 
           <NowPlayingActionRow />
 
@@ -88,7 +102,7 @@ export function NowPlayingPage({ foregroundHidden = false }: { foregroundHidden?
 
           {current && <AnnotationEditor key={current.id} track={current} />}
 
-          {isNarrow && current && (
+          {isNarrow && current && !lyricsStageOpen && (
             <div className="min-h-[60svh] p-4">
               <SyncedLyricsView track={current} />
             </div>
@@ -99,7 +113,7 @@ export function NowPlayingPage({ foregroundHidden = false }: { foregroundHidden?
           <ListeningNowSection />
         </section>
 
-        {!isNarrow && (
+        {!isNarrow && !lyricsStageOpen && (
           <aside className="min-h-0">
             <NowPlayingPanel collapsible showFloatingToggle={false} />
           </aside>
@@ -323,6 +337,7 @@ function NowPlayingActionRow() {
         </div>
 
         <div className={cn("flex items-center gap-1", GLASS_CONTROL_GROUP)}>
+          <LyricsModeButton className="size-9" />
           <VisualizerModeButton className="size-9" />
           <ControlTooltip label={t("player.repeatLabel")} keys={hint("repeat")}>
             <Button

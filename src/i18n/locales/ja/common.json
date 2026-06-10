@@ -123,7 +123,9 @@
     "searchPrompt": "まだ歌詞がありません —— LRCLIB で検索してみましょう。",
     "wrongLyrics": "歌詞が違う？検索",
     "backToLyrics": "歌詞に戻る",
-    "collapseSearch": "閉じる"
+    "collapseSearch": "閉じる",
+    "toggleStage": "歌詞",
+    "openSettingsHint": "長押しで歌詞設定"
   },
   "lyricsSettings": {
     "title": "歌詞",

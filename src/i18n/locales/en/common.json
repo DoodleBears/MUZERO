@@ -129,7 +129,9 @@
     "searchPrompt": "No lyrics yet — search LRCLIB for them.",
     "wrongLyrics": "Wrong lyrics? Search",
     "backToLyrics": "Back to lyrics",
-    "collapseSearch": "Hide"
+    "collapseSearch": "Hide",
+    "toggleStage": "Lyrics",
+    "openSettingsHint": "Long-press for lyrics settings"
   },
   "lyricsSettings": {
     "title": "Lyrics",
