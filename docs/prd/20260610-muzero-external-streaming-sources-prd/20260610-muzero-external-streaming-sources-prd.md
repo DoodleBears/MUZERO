@@ -518,3 +518,25 @@ components/player/            # 无需改：streamed track 复用 media-stage / 
 |---|---|---|
 | 2026-06-10 | DoodleBear | 初稿：基于 NeriPlayer 调研落地三源接入方案；确认三源全做 + 默认入库；Q3-Q5 待 spike |
 | 2026-06-10 | DoodleBear | 解决 Q3/Q4/Q5（best practice）：YT 用单隐藏 sandboxed BrowserWindow；stream 字段零迁移不索引；v1 仅 Electron（Tauri 推迟）。同步 §2.1/2.2/2.4/3.2/4.3/4.5/Phase1/Phase4/§7 |
+| 2026-06-10 | DoodleBear（TDD 实现）| 落地两源**全部纯逻辑 + provider 纵向**（C1/C2/B1/B2/B3/N1/N2/N3/P1a/P1b/P1c/H1，10 文件 67 测试，6 个原子 commit）。YouTube 押后。详见下「自动实现状态」 |
+
+---
+
+## 12. Autonomous Implementation Status (2026-06-10)
+
+**已完成并单测（67 测试全绿，6 个路径化原子 commit `5425a71`→`2a7cb17`）：**
+- 加密/签名基元：MD5（RFC 向量 + Node 交叉验证）、无填充 RSA（教科书向量 + 字节宽 256-hex）。
+- **Bilibili 纵向**：WBI 签名 → 搜索/view→cid/playurl → DASH 音轨选择 → `PlayableStream`（注 Referer），stub transport 端到端单测。
+- **NetEase 纵向**：weapi/eapi 加密（对拍 node:crypto + 往返）→ 搜索/取直链 → 响应解析（200/301/VIP/试听）→ `PlayableStream`。
+- 抽象层：`StreamSourceProvider` 契约、`detectStreamSource`、注册表、注入式 `StreamHttp` 契约、数据模型（附加非索引、零迁移）。
+
+**本轮未落地（刻意暂停，非遗漏）——原因：① 触碰其他 agent 未提交文件，② 需运行中的 Electron + 真实账号验证（不冒充已验证）：**
+1. **muzfetch header 注入别名 + Range/206**（`electron/fetch-proxy.cjs`、`src/lib/desktop/electron.ts`）— 当前 untracked，属并发 Electron 壳 agent。
+2. **`StreamHttp` 生产实现**：把注入契约接到 `getAppFetch()` + `x-muzero-h-*` 别名（依赖 #1）。
+3. **登录窗口**（Electron 隐藏 `BrowserWindow` 抓 cookie）+ `stream-auth-store`（observer 注入）。
+4. **player-store 即时 resolve 钩子**（`src/stores/player-store.ts` — 并发 agent 正在改）：streamed track → `resolve` → `mediaProxyUrl` → `loadUrl`。
+5. **`createStreamedTrack` repo + 内存查重**（`src/db/repositories.ts` — 并发 agent 正在改）。
+6. **UI**：Settings 各源登录/音质卡、搜索在线 tab、set 导入入口 + i18n 4 语。
+7. **Phase 5 离线缓存**。
+
+> 续作前置：等上述并发文件落定（或获明确授权编辑），并在运行的 Electron 下验证。纯逻辑层已就绪，集成层是「把已验证的积木接到外壳」。
