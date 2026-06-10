@@ -1,6 +1,7 @@
 .PHONY: help install update
 .PHONY: dev web desktop tauri electron-dev electron-preview electron-build ios ios-init android android-init mobile-info tauri-info
 .PHONY: build preview desktop-build desktop-debug mac win linux ios-build android-build desktop-locate
+.PHONY: version-bump
 .PHONY: test test-watch typecheck lint format check
 .PHONY: icons ui ui-coss ui-theme clean clean-dist
 
@@ -60,6 +61,9 @@ help:
 	@echo "  make ios-build    - Build a signed iOS app (Mac + Xcode)"
 	@echo "  make android-build- Build an Android APK/AAB"
 	@echo "  make desktop-locate - Show where packaged artifacts landed"
+	@echo ""
+	@echo "Release:"
+	@echo "  make version-bump TYPE=minor - Bump version across package.json + tauri.conf + Cargo (lockstep)"
 	@echo ""
 	@echo "Quality:"
 	@echo "  make check        - Full local gate: typecheck + lint + test"
@@ -162,6 +166,19 @@ android-build:
 desktop-locate:
 	@echo "Desktop bundles (if built):"
 	@ls -1 $(BUNDLE_DIR)/*/* 2>/dev/null || echo "  none yet — run 'make desktop-build' (or mac/win/linux)"
+
+# -------------------------------------------------------------- Release ----
+# Multi-platform Electron release + R2 distribution (see
+# docs/prd/20260611-muzero-release-pipeline-changelog-prd). Targets grow per PRD
+# phase: version-bump (P1) → changelog gate (P2) → release-* build + publish (P3/P4).
+
+# Bump the app version across the THREE files that must stay in lockstep —
+# package.json (source of truth) + src-tauri/tauri.conf.json + src-tauri/Cargo.toml.
+# Then write the changelog for the new version and commit all of it together.
+# TYPE = major | minor | patch | beta.
+version-bump:
+	@[ -n "$(TYPE)" ] || { echo "Usage: make version-bump TYPE=major|minor|patch|beta"; exit 1; }
+	node scripts/bump-version.mjs $(TYPE)
 
 # -------------------------------------------------------------- Quality ----
 

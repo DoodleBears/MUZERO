@@ -443,7 +443,7 @@ src/components/settings/
 **Goal:** 消灭三处手动同步的版本漂移；版本注入 bundle、运行期单点读取、Settings 可见。
 
 **Tasks:**
-- [ ] `scripts/bump-version.mjs`：读 `package.json.version` → 按 `TYPE` 算下一版（含 `beta` prerelease）→ 写 `package.json` + `src-tauri/tauri.conf.json` + `src-tauri/Cargo.toml` 三处 → 调 `scaffold-changelog.mjs` + `generate-release-meta.mjs`（不 commit，提示同提交）。
+- [x] `scripts/bump-version.mjs` + `make version-bump TYPE=…`：读 `package.json.version` → `nextVersion`（含 `beta` 次版 prerelease）→ 写 `package.json` + `src-tauri/tauri.conf.json` + `src-tauri/Cargo.toml` 三处（`--dry-run` 可预演；不 commit，提示同提交）。✅ 6 测（pure `nextVersion` + dry-run 集成）+ 实跑 write→revert 验证三文件齐改。`scaffold-changelog` 钩子留 Phase 2 接（release-meta 已按上条简化掉）。
 - [x] **release-meta（简化决定）**：不再生成 `src/generated/release-meta.ts`，改为 `vite.config.ts` + `vitest.config.ts` 的 `define` 直接注入 `__APP_VERSION__`/`__GIT_SHA__`/`__BUILD_TIME__`（config 求值期读 package.json + `git rev-parse`，try/catch 兜底），消除生成物 churn 与「测试期文件不存在」问题。✅
 - [x] `vite.config.ts` + `vitest.config.ts` 加 `define` + `src/vite-env.d.ts` 声明三个 `__*__` global。✅
 - [x] `src/lib/app-version.ts`：`export const APP_VERSION = __APP_VERSION__` + `GIT_SHA`/`BUILD_TIME`/派生 `RELEASE_ID`（唯一读取点，注释「别处不许硬写版本」）。✅ 3 测（APP_VERSION===package.json version）。
@@ -451,7 +451,7 @@ src/components/settings/
 - [ ] `electron/preload.cjs` 暴露 `getAppVersion`；`about-settings.tsx` 雏形显示版本/release-id（桌面优先用 IPC 权威值，web 用 `APP_VERSION`）。
 
 ### Phase 1 Checklist
-- [ ] `make version-bump TYPE=patch` 后三文件版本一致，可 `git diff` 验证
+- [x] `make version-bump TYPE=patch` 后三文件版本一致，可 `git diff` 验证 ✅（0.1.0→0.1.1 三文件齐改，已 revert）
 - [x] bundle 内 `APP_VERSION` 正确（`define` 注入，app-version.test.ts 证 `APP_VERSION===package.json version`；`pnpm build` 全量构建暂被 base 的既有 tsc 错误挡住，与本改动无关）；🔲 Settings 显示当前版本（Phase 1 末 about-settings 雏形）
 - [x] `compareSemver` 单测覆盖 release/prerelease/相等 ✅
 
