@@ -133,7 +133,9 @@ export const r2SetTrackSchema = z.object({
   id: z.string().min(1),
   title: z.string().min(1),
   kind: z.enum(["audio", "video"]),
-  origin: z.enum(["generated", "uploaded"]),
+  // "streamed" is accepted so the manifest can represent external-source tracks;
+  // exporting their media bytes is intentionally out of scope (see streaming PRD).
+  origin: z.enum(["generated", "uploaded", "streamed"]),
   provider: z.string().min(1),
   durationSec: z.number().nonnegative(),
   createdAt: millisSchema,

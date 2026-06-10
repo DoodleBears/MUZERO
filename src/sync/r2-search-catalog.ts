@@ -40,7 +40,7 @@ export const r2TrackSearchRecordSchema = z.object({
   setIds: z.array(z.string()),
   shareIds: z.array(z.string()),
   kind: z.enum(["audio", "video"]),
-  origin: z.enum(["generated", "uploaded"]),
+  origin: z.enum(["generated", "uploaded", "streamed"]),
   durationSec: z.number().nonnegative(),
   tags: z.array(z.string()),
   mediaMetadata: r2TrackMediaMetadataSchema.optional(),

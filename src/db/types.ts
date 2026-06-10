@@ -12,8 +12,37 @@ export type TrackStatus = "pending" | "generating" | "ready" | "failed";
 /** Playback type. A set can mix both freely. */
 export type TrackKind = "audio" | "video";
 
-/** Where the track came from. */
-export type TrackOrigin = "generated" | "uploaded";
+/** Where the track came from. `streamed` = resolved on demand from an external source. */
+export type TrackOrigin = "generated" | "uploaded" | "streamed";
+
+/**
+ * External streaming sources (NetEase / Bilibili / YouTube). Codename-stable ids
+ * (CLAUDE.md rule 4) — persisted on streamed tracks and keyed in settings, so they
+ * must not change across brand/shell pivots. See `src/streamsrc/`.
+ */
+export type StreamSourceId = "netease" | "bili" | "youtube";
+
+/** Per-source on-device config (BYOK): login state + quality preference. Never bundled. */
+export interface StreamSourceConfig {
+  enabled?: boolean;
+  /** Session cookie (netease MUSIC_U / bili SESSDATA…), captured at login. */
+  cookie?: string;
+  accessToken?: string;
+  refreshToken?: string;
+  /** Token/cookie expiry (ms epoch), when known. */
+  expiresAt?: number;
+  /** Source-specific quality key (e.g. netease "lossless", bili "high"). */
+  quality?: string;
+  lastAuthAt?: number;
+}
+
+/** Snapshot of an external track's display metadata, so the library renders offline. */
+export interface StreamSourceMeta {
+  artist?: string;
+  album?: string;
+  coverUrl?: string;
+  durationSec?: number;
+}
 
 export interface TrackMediaMetadata {
   title?: string;
@@ -104,6 +133,16 @@ export interface Track {
    * Q5). Undefined for uploaded/mock tracks. Display-only; safe when missing.
    */
   providerPreset?: string;
+  // --- External streaming source (origin === "streamed") --------------------
+  // Additive, non-indexed → no Dexie version bump (mirrors coverThumbhash). The
+  // playable URL is NOT stored (it expires); it's re-resolved before each play.
+  // An optional offline cache populates `blobId` (Phase 5), preferred when present.
+  /** Which external source this track streams from. */
+  streamSourceId?: StreamSourceId;
+  /** The source's stable id (netease songId / bili "bvid#cid" / youtube videoId). */
+  streamExternalId?: string;
+  /** Display snapshot so the library renders without an online round-trip. */
+  streamMeta?: StreamSourceMeta;
 }
 
 /**
@@ -333,6 +372,12 @@ export interface AppSettings {
   musicCloudUrl?: string;
   musicCloudApiKey?: string;
   musicCloudModel?: string;
+  /**
+   * External streaming sources (NetEase / Bilibili / YouTube), per-source BYOK
+   * config keyed by {@link StreamSourceId}. Off by default — the user opts in and
+   * logs in per source in Settings. Cookies/tokens stay on-device (rule 2).
+   */
+  streamSources?: Partial<Record<StreamSourceId, StreamSourceConfig>>;
   // UI
   locale: "en" | "zh" | "ja" | "ko";
   /** Now-Playing background *priority*: prefer the track's own cover or its bound slideshow. Defaults to "cover". */

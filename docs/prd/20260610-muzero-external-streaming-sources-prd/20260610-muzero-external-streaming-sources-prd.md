@@ -33,6 +33,8 @@
 | C2 | 无填充 RSA（BigInt modpow，weapi encSecKey 包密钥；按字节宽 → 256-hex 非 258） | `src/streamsrc/crypto/rsa.ts` | 教科书 RSA 向量 + 朴素参照 ×6 | ✅ green |
 | N1 | 网易 weapi/eapi 加密（AES-CBC×2+RSA / AES-ECB+md5 digest，secretKey 注入可测） | `src/streamsrc/netease/netease-crypto.ts` | node:crypto 交叉验证 + 往返 ×7 | ✅ green |
 | N2 | 网易播放响应解析（200/301/404/fee/freeTrial → 可播/登录/VIP/试听 + https 升级） | `src/streamsrc/netease/netease-resolve.ts` | canned 响应 ×9 | ✅ green |
+| P1a | 数据模型（`TrackOrigin+="streamed"`；Track stream 字段；`AppSettings.streamSources`；**附加非索引、零 Dexie 迁移**） | `src/db/types.ts`（+ r2 manifest/catalog enum 扩 `streamed`） | 全项目 tsc 绿 | ✅ |
+| P1b | StreamSourceProvider 契约 + 源检测（`detectStreamSource`/`isStreamedTrack` 纯函数，数据驱动而非 album-前缀 hack） | `src/streamsrc/provider.ts` · `src/streamsrc/source-detect.ts` | ×4 | ✅ green |
 
 ---
 
@@ -380,8 +382,9 @@ components/player/            # 无需改：streamed track 复用 media-stage / 
 #### Phase 1 Checklist
 - [ ] muzfetch 注入 `Referer` 能让一个真实 B站 CDN GET 不再 403（手测一个公开 bvid）。
 - [ ] 媒体元素经 `mediaProxyUrl` 能 **seek**（206 生效）。
-- [ ] `detectStreamSource` 纯函数穷举单测。
-- [ ] streamed track 可写读、与旧库（generated/uploaded）共存无碍；确认未触发 Dexie 版本升级（无 `.version()` 新增）。
+- [x] `detectStreamSource` 纯函数穷举单测。（`source-detect.test.ts` ×4 绿）
+- [x] 数据模型附加非索引、零迁移：`TrackOrigin/Track/AppSettings` 已扩，未新增 `.version()`；r2 manifest/catalog enum 同步扩 `streamed`，全项目 tsc 绿。
+- [ ] streamed track 端到端写读（待 `createStreamedTrack` repo + 写库测）。
 - [ ] 内存查重单测：同 `streamSourceId+externalId` 不重复入库。
 - [ ] Tauri / web 壳下 `hasStreamingSources()===false`，UI 入口隐藏。
 - [ ] `make check` 通过。
@@ -462,6 +465,7 @@ components/player/            # 无需改：streamed track 复用 media-stage / 
 - **写操作**：不做收藏到网易/B站/YT 服务端、不做评论/弹幕/点赞——只读取播放。
 - **视频画面**：B站/YT 默认取 **audio-only**；不做 MV 视频流（与现有上传 MV 的 `<video>` 不同链路，后续单独评估）。
 - **DRM 内容**：不碰 Widevine/FairPlay 等加密媒体。
+- **R2 云分享导出 streamed track 的媒体字节**：streamed track 无我方持有的音频字节（且是他方版权内容），R2 manifest 仅扩 enum 以能表示其 `origin`，**不导出其 media bytes**；导出计划遇 streamed track 应跳过媒体（随 streamed track 创建一并实现）。
 - **账号系统 / 跨设备同步登录态**：登录态各源各设备各自存（与 Electron↔Tauri 不迁移数据的已知限制一致）。
 - **多源聚合"全网搜一首歌"智能匹配**：v1 各源独立搜，不做跨源去重/最佳源自动选。
 
