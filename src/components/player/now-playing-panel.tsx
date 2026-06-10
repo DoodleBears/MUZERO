@@ -7,6 +7,7 @@ import {
   MemoryTimelineRail,
   type MemoryTimelineRailItem,
 } from "@/components/player/memory-timeline-rail";
+import { SyncedLyricsView } from "@/components/player/synced-lyrics-view";
 import { Disc3Icon } from "@/components/ui/disc-3";
 import { MessageCircleMoreIcon } from "@/components/ui/message-circle-more";
 import { db } from "@/db/muzero-db";
@@ -202,15 +203,7 @@ export function NowPlayingPanel({
               </>
             ) : (
               <div className="no-scrollbar min-h-0 flex-1 overflow-y-auto px-4 pt-3 pb-chrome-bottom">
-                {current?.brief?.lyrics ? (
-                  <pre className="whitespace-pre-wrap font-sans text-sm leading-relaxed text-foreground/90">
-                    {current.brief.lyrics}
-                  </pre>
-                ) : (
-                  <p className="py-8 text-center text-sm text-muted-foreground">
-                    {t("nowPlaying.noLyrics")}
-                  </p>
-                )}
+                <SyncedLyricsView track={current} />
               </div>
             )}
           </motion.div>

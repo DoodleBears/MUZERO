@@ -15,7 +15,7 @@
 |-------|------|--------|------|
 | 1 | 基础设施：`src/lyrics/` provider 抽象 + LRCLIB 纯映射 + LRC parser（纯函数 + 单测，无 UI/DB） | ✅ Done | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | 存储 + 抓取编排：`lyrics` 表（v20）+ repo + 触发/负缓存 + Settings 自动抓词开关（默认开）+ i18n | ✅ Done | [Phase 2 Checklist](#phase-2-checklist) |
-| 3 | 显示：Apple Music 式逐行高亮 + 自动滚动 + 点击跳转 + reduced-motion（右栏 tab + 移动全屏 sheet） | 🔲 Pending | [Phase 3 Checklist](#phase-3-checklist) |
+| 3 | 显示：Apple Music 式逐行高亮 + 自动滚动 + 点击跳转 + reduced-motion（now-playing-panel lyrics tab） | ✅ Done | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | 手动歌词：搜索/选择 modal + 粘贴/编辑/清除/重取（annotation-editor）| 🔲 Pending | [Phase 4 Checklist](#phase-4-checklist) |
 | 5 | R2 云同步：歌词进 manifest（仿 thumbhash 提交 `cf454a1`）+ export/import/merge | 🔲 Pending | [Phase 5 Checklist](#phase-5-checklist) |
 
@@ -497,14 +497,16 @@ components/track/             # （Phase 4）annotation-editor 加"歌词"区：
 - [ ] 回退态：plain / instrumental / fetching / none + LRCLIB 署名。
 
 #### Phase 3 Checklist
-- [ ] synced 歌词随播放逐行高亮、自动滚动居中。
-- [ ] 点击任意行跳到该句开头并续播（手测多行）。
-- [ ] reduced-motion 下无动画、瞬切；tab 隐藏/暂停时 rAF 停（[preview-hidden-tab-gotcha](../../../.claude/projects/-Users-doodlebear-Documents-code-MUZERO/memory/preview-hidden-tab-gotcha.md) 验证靠前台窗口/截图）。
-- [ ] 生成曲 `brief.lyrics` 走 plain 路径正常显示（无高亮/不可点）。
-- [ ] instrumental / noLyrics / fetching 三态正确。
-- [ ] 移动全屏 sheet 与桌面右栏视觉/交互一致。
-- [ ] 播放期无每帧整树重渲（React Profiler / 规则 6 验证）。
-- [ ] `make check` 通过。
+- [x] synced 歌词逐行高亮（`activeLineIndex` 二分，单测）+ 自动滚动居中（`scrollIntoView({block:"center"})`）。
+- [x] 点击任意行跳到该句开头（`onSeek(timeMs/1000)`，组件单测验证）。
+- [x] reduced-motion 下瞬切（`prefersReducedMotion()` → `behavior:"auto"`）。**实现用 4Hz `positionSec` selector，非 per-frame rAF**——故无 hidden-tab rAF 隐患（rAF 平滑留作后续增强）。
+- [x] 生成曲 `brief.lyrics` 走 plain 路径正常显示（`resolveTrackLyrics` + plain 渲染，单测）。
+- [x] instrumental / noLyrics / fetching 三态正确（`SyncedLyricsView` 分支 + i18n）。
+- [x] 单一歌词面（now-playing-panel lyrics tab，桌面右栏 + now-playing-page 共用）。**注：仓库无独立 now-playing-sheet 组件**，故不另起；移动全屏由 now-playing-page 承载同一面板。
+- [x] 播放期不每帧整树重渲：最小 selector（`positionSec`/`seek`，4Hz）+ 模块作用域抓取，不进 store state（规则 6）。
+- [x] `make check` 通过（`src/lyrics` + 组件共 70 测试绿 + biome 干净 + `tsc --noEmit` 退出 0）。
+
+> **Phase 3 实现说明（2026-06-10）：** 新增 [`synced-lyrics-view.tsx`](../../../src/components/player/synced-lyrics-view.tsx)：`SyncedLyricsView`（hooks 壳：`useLiveQuery(getTrackLyrics)` + `usePlayerStore(positionSec/seek)` + `useSettings`，消费 `resolveTrackLyrics`）+ 导出的纯展示 `LyricsScroller`（synced 逐行高亮/点击跳转/自动滚动、plain、LRCLIB 署名）。`now-playing-panel` lyrics tab 由 `<pre>{brief.lyrics}` 换成 `<SyncedLyricsView track={current} />`。i18n `lyrics.fetching/instrumental/source` ×4 locale。**与 §2.2/§5.2 的偏差**：v1 用 store 的 4Hz `positionSec` 切行（够顺、零 rAF、规则 6），未上 per-frame rAF 平滑/within-line 填充——列为后续增强。新增 10 测试（共 70）。**视觉顺滑度建议用户在真实播放一首有 LRCLIB 匹配的上传曲时确认**（沙箱预览难以可靠地起播放 + 外网抓词）。
 
 ### Phase 4: 手动歌词（核心）
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseLrc } from "./parse-lrc";
+import { activeLineIndex, parseLrc } from "./parse-lrc";
 
 describe("parseLrc", () => {
   it("parses a single timestamped line (centiseconds)", () => {
@@ -53,5 +53,36 @@ describe("parseLrc", () => {
   it("returns an empty array for empty or whitespace input", () => {
     expect(parseLrc("")).toEqual([]);
     expect(parseLrc("   \n  ")).toEqual([]);
+  });
+});
+
+describe("activeLineIndex", () => {
+  const lines = [
+    { timeMs: 1000, text: "a" },
+    { timeMs: 2000, text: "b" },
+    { timeMs: 3000, text: "c" },
+  ];
+
+  it("returns -1 before the first line", () => {
+    expect(activeLineIndex(lines, 0)).toBe(-1);
+    expect(activeLineIndex(lines, 999)).toBe(-1);
+  });
+
+  it("returns the index of a line at exactly its timestamp", () => {
+    expect(activeLineIndex(lines, 1000)).toBe(0);
+    expect(activeLineIndex(lines, 2000)).toBe(1);
+  });
+
+  it("returns the most recent line when between timestamps", () => {
+    expect(activeLineIndex(lines, 1500)).toBe(0);
+    expect(activeLineIndex(lines, 2999)).toBe(1);
+  });
+
+  it("returns the last line after the final timestamp", () => {
+    expect(activeLineIndex(lines, 9999)).toBe(2);
+  });
+
+  it("returns -1 for an empty list", () => {
+    expect(activeLineIndex([], 1000)).toBe(-1);
   });
 });

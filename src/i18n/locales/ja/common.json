@@ -93,6 +93,11 @@
     "playingFrom": "再生元",
     "noLyrics": "この曲には歌詞がありません。"
   },
+  "lyrics": {
+    "fetching": "歌詞を取得中…",
+    "instrumental": "インストゥルメンタル · 歌詞なし",
+    "source": "歌詞提供: {{source}}"
+  },
   "displayMode": {
     "video": "動画",
     "cover": "カバー"

@@ -93,6 +93,11 @@
     "playingFrom": "재생 출처",
     "noLyrics": "이 곡에는 가사가 없어요."
   },
+  "lyrics": {
+    "fetching": "가사를 가져오는 중…",
+    "instrumental": "연주곡 · 가사 없음",
+    "source": "가사 제공: {{source}}"
+  },
   "displayMode": {
     "video": "비디오",
     "cover": "커버"

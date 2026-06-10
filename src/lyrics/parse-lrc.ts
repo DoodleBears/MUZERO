@@ -51,3 +51,24 @@ export function parseLrc(lrc: string): LyricsLine[] {
   lines.sort((a, b) => a.timeMs - b.timeMs);
   return lines;
 }
+
+/**
+ * Index of the line that should be active at `positionMs` — the last line whose
+ * timestamp is ≤ the position. Returns -1 before the first line (or when empty).
+ * Binary search; `lines` must be time-sorted (parseLrc guarantees it).
+ */
+export function activeLineIndex(lines: LyricsLine[], positionMs: number): number {
+  let lo = 0;
+  let hi = lines.length - 1;
+  let ans = -1;
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1;
+    if (lines[mid].timeMs <= positionMs) {
+      ans = mid;
+      lo = mid + 1;
+    } else {
+      hi = mid - 1;
+    }
+  }
+  return ans;
+}

@@ -93,6 +93,11 @@
     "playingFrom": "播放的音乐来自",
     "noLyrics": "这首曲子暂无歌词。"
   },
+  "lyrics": {
+    "fetching": "正在获取歌词…",
+    "instrumental": "纯音乐 · 无歌词",
+    "source": "歌词来自 {{source}}"
+  },
   "displayMode": {
     "video": "视频",
     "cover": "封面"

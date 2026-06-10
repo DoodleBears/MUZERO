@@ -99,6 +99,11 @@
     "playingFrom": "Playing from",
     "noLyrics": "No lyrics for this track."
   },
+  "lyrics": {
+    "fetching": "Fetching lyrics…",
+    "instrumental": "Instrumental — no lyrics",
+    "source": "Lyrics from {{source}}"
+  },
   "displayMode": {
     "video": "Video",
     "cover": "Cover"
