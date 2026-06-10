@@ -232,9 +232,6 @@ function SyncedLines({
   const activeRef = useRef<HTMLButtonElement>(null);
   const [following, setFollowing] = useState(true);
   const [viewportH, setViewportH] = useState(0);
-  // Ignore the scroll events our own programmatic scrollTo emits, so follow only
-  // detaches on a real user scroll.
-  const programmaticUntil = useRef(0);
 
   useEffect(() => {
     const vp = viewportRef.current;
@@ -254,31 +251,39 @@ function SyncedLines({
   // biome-ignore lint/correctness/useExhaustiveDependencies: reset follow when the lyric set changes
   useEffect(() => setFollowing(true), [lines]);
 
-  // Follow: native smooth-scroll the active line to ~38% from the top. Native
-  // scroll always works once the viewport has a height (absolute inset-0) and the
-  // browser owns the easing — reliable + buttery; overscroll-contain keeps the
-  // gesture off the page behind.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: re-center on active / viewport / lyric-set changes
+  // Follow via a rAF that lerps scrollTop toward the active line's ~38% anchor
+  // every frame. It reads activeRef LIVE (not a React effect keyed on
+  // activeIndex), so it shares the highlight's cadence and can never desync or
+  // miss an update — that's what makes auto-scroll actually reliable. Runs only
+  // while following; a user wheel/touch detaches it.
   useEffect(() => {
-    if (!following || activeIndex < 0) return;
-    const vp = viewportRef.current;
-    const el = activeRef.current;
-    if (!vp || !el) return;
-    const top = Math.max(0, el.offsetTop - vp.clientHeight * 0.38 + el.offsetHeight / 2);
-    programmaticUntil.current = Date.now() + 900;
-    if (typeof vp.scrollTo === "function") {
-      vp.scrollTo({ top, behavior: reduce ? "auto" : "smooth" });
-    } else {
-      vp.scrollTop = top;
-    }
-  }, [activeIndex, following, reduce, viewportH, lines]);
-
-  // A real user scroll detaches follow; our own programmatic scrolls are ignored
-  // via the guard (wheel/touch also detach directly).
-  const onUserScroll = () => {
-    if (Date.now() < programmaticUntil.current) return;
-    setFollowing(false);
-  };
+    if (!following) return;
+    let raf = 0;
+    let stopped = false;
+    const ease = reduce ? 1 : 0.16;
+    const tick = () => {
+      if (stopped) return;
+      const vp = viewportRef.current;
+      const el = activeRef.current;
+      if (vp && el) {
+        // Rect-based (immune to offsetParent): where the active line's center
+        // currently sits relative to the viewport top, converted to an absolute
+        // scrollTop target at the ~38% anchor.
+        const vpRect = vp.getBoundingClientRect();
+        const elRect = el.getBoundingClientRect();
+        const elCenterFromTop = elRect.top + elRect.height / 2 - vpRect.top;
+        const target = Math.max(0, vp.scrollTop + elCenterFromTop - vp.clientHeight * 0.38);
+        const delta = target - vp.scrollTop;
+        if (Math.abs(delta) > 0.5) vp.scrollTop += delta * ease;
+      }
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => {
+      stopped = true;
+      cancelAnimationFrame(raf);
+    };
+  }, [following, reduce]);
 
   return (
     <>
@@ -287,7 +292,6 @@ function SyncedLines({
         data-testid="lyrics-scroll"
         className="no-scrollbar absolute inset-0 overflow-y-auto overscroll-contain"
         style={EDGE_FADE}
-        onScroll={onUserScroll}
         onWheel={() => setFollowing(false)}
         onTouchMove={() => setFollowing(false)}
       >
