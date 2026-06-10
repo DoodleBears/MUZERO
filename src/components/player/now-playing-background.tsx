@@ -1,7 +1,7 @@
 import { useLiveQuery } from "dexie-react-hooks";
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useMemo, useState } from "react";
-import { listGalleryImages, listTrackBackgrounds } from "@/db/repositories";
+import { getTrackLyrics, listGalleryImages, listTrackBackgrounds } from "@/db/repositories";
 import { useSettings } from "@/hooks/use-app-data";
 import { useObjectUrls, useTrackCoverUrl, useTrackMediaUrl } from "@/hooks/use-media";
 import {
@@ -12,6 +12,7 @@ import {
 } from "@/lib/background";
 import { nextSlideIndex } from "@/lib/slideshow";
 import { cn } from "@/lib/utils";
+import { resolveTrackLyrics } from "@/lyrics/resolve-lyrics";
 import { usePlayerStore } from "@/stores/player-store";
 import { VisualizerHost } from "@/visualizer/host";
 import { CanvasBlurBackground } from "./canvas-blur-background";
@@ -60,16 +61,22 @@ function NowPlayingBackgroundContent({ hideVisualizer }: { hideVisualizer: boole
     !!current &&
     (settings.visualizerAsBackground ?? false) &&
     (settings.visualizerStyle ?? "bars") !== "off";
-  // When lyrics are shown over the visualizer, use the separate "with lyrics"
-  // dim/opacity so the words stay readable. The 240ms opacity transitions below
-  // make the switch glide.
-  const lyricsActive = settings.lyricsStageOpen ?? false;
+  // "Has lyrics" is decided by the TRACK itself (does it have displayable
+  // lyrics?), not the lyrics-display toggle — so the visualizer auto-subdues
+  // whenever there are words to read. The 240ms opacity transitions below make
+  // the switch glide.
+  const lyricsRow = useLiveQuery(
+    () => (current?.id ? getTrackLyrics(current.id) : Promise.resolve(undefined)),
+    [current?.id],
+    undefined,
+  );
+  const lyricsMode = resolveTrackLyrics(current, lyricsRow).mode;
+  const hasLyrics = lyricsMode === "synced" || lyricsMode === "plain";
   const visualizerDim =
-    (lyricsActive
-      ? (settings.visualizerBgDimLyrics ?? 40)
-      : (settings.visualizerBackgroundDim ?? 0)) / 100;
+    (hasLyrics ? (settings.visualizerBgDimLyrics ?? 40) : (settings.visualizerBackgroundDim ?? 0)) /
+    100;
   const visualizerOpacity =
-    (lyricsActive
+    (hasLyrics
       ? (settings.visualizerBgOpacityLyrics ?? 60)
       : (settings.visualizerBackgroundOpacity ?? 100)) / 100;
   const coverUrl = useTrackCoverUrl(current);
