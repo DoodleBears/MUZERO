@@ -122,3 +122,67 @@ export function planReassignment(
 
   return { overrides, displaced, blocked };
 }
+
+/** One slot in the cascading recorder: an action + the chord being recorded for it. */
+export interface RecorderDraft {
+  actionId: string;
+  /** The recorded replacement (null = awaiting capture). */
+  gesture: ShortcutGesture | null;
+  /** The chord this action LOST (set for displacement slots; absent for the primary). */
+  displacedChord?: ShortcutGesture;
+}
+
+export interface RecorderReconcile {
+  /** Drafts in chain order: the primary, then each displaced action's slot. */
+  drafts: RecorderDraft[];
+  /** The plan over the filled drafts (overrides to save; displaced; blocked). */
+  plan: ReassignmentPlan;
+  /** Every slot is filled and nothing is blocked by a protected holder. */
+  canSave: boolean;
+}
+
+/**
+ * Reactive cascade for the recorder: given the current draft slots, activate the
+ * chain rooted at the primary draft — apply the active FILLED drafts, find what
+ * each newly displaces, and add a pending slot for it; repeat to a fixpoint. Slots
+ * not reachable from the primary (e.g. after the user re-records an upstream chord)
+ * are pruned. Filled slots are reused so the user's captures persist.
+ *
+ * Pure, so the cascade/prune logic is unit-tested; the recorder dialog just feeds
+ * it the current slots after each capture and renders the result.
+ */
+export function reconcileRecorderDrafts(
+  drafts: RecorderDraft[],
+  baseOverrides: Record<string, ShortcutGesture[]> | undefined,
+  platform: Platform,
+): RecorderReconcile {
+  const byId = new Map(drafts.map((draft) => [draft.actionId, draft]));
+  const primary = drafts.find((draft) => draft.displacedChord === undefined);
+
+  const active = new Map<string, RecorderDraft>();
+  if (primary) active.set(primary.actionId, primary);
+
+  let plan = planReassignment([], baseOverrides, platform);
+  let changed = true;
+  for (let guard = 0; changed && guard < 64; guard++) {
+    changed = false;
+    const activeFilled = [...active.values()]
+      .filter((d): d is RecorderDraft & { gesture: ShortcutGesture } => d.gesture !== null)
+      .map((d) => ({ actionId: d.actionId, gesture: d.gesture }));
+    plan = planReassignment(activeFilled, baseOverrides, platform);
+    for (const displaced of plan.displaced) {
+      if (active.has(displaced.actionId)) continue;
+      const existing = byId.get(displaced.actionId);
+      active.set(displaced.actionId, {
+        actionId: displaced.actionId,
+        gesture: existing?.gesture ?? null,
+        displacedChord: displaced.gesture,
+      });
+      changed = true;
+    }
+  }
+
+  const out = [...active.values()];
+  const canSave = out.every((draft) => draft.gesture !== null) && plan.blocked.length === 0;
+  return { drafts: out, plan, canSave };
+}

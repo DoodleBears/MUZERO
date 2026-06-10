@@ -355,18 +355,20 @@ Global `?` (Shift+/)  →  (OPTIONAL, Q8) components/shortcuts/shortcut-help-ove
 - [x] A rebind takes effect **live** (dispatch reads merged bindings via `useSettings`); reset restores the default; reset-all clears the map (repo helpers + liveQuery).
 - [x] `Cmd+W` (and friends) show the reserved warning; saving is allowed but flagged.
 
-> **Done 2026-06-10.** Customization ships end-to-end (request #2): rebind / multi-bind / remove / reset / reset-all with non-destructive conflict preview. 85 tests green across `src/shortcuts/` + settings. The full ClipCombo *forced re-record chain* (auto-prompting each displaced action) is a future polish — today a displaced chord is shown and left unbound for the user to rebind.
+> **Done 2026-06-10.** Customization ships end-to-end (request #2): rebind / multi-bind / remove / reset / reset-all with non-destructive conflict preview. **Update:** the full ClipCombo *cascading re-record chain* is now implemented (see Phase 5) — assigning an occupied chord opens a relocate slot for the displaced action, cascading to a fixpoint, reactive + cancelable, with a single batch write on Save.
 
 ### Phase 5: Stretch (out of v1 scope unless prioritized) 🔄 (partial)
 
 **Goal:** Parity extras from ClipCombo that aren't required for the core ask.
 
 **Tasks:**
+- [x] **Cascading conflict recorder** (the ClipCombo "循环" UX, finally) — `reconcileRecorderDrafts` in [`conflict.ts`](../../../src/shortcuts/conflict.ts): from the primary draft, apply the active FILLED drafts, add a relocate slot for each newly-displaced action, repeat to a fixpoint; prune slots no longer reachable when an upstream chord is re-recorded; reuse filled slots so captures persist. The [recorder dialog](../../../src/components/settings/shortcut-recorder-dialog.tsx) renders one capture box per slot, is reactive (slots appear/prune as you type), cancelable (Esc), and Save batch-writes the whole resolved chain via `setAllShortcutOverrides`. Save gated until every slot is filled + no protected block. i18n ×4 (`relocate`/`chainHint`).
 - [x] **Import / Export** the keymap as JSON — [`keymap-io.ts`](../../../src/shortcuts/keymap-io.ts) (`serializeKeymap` / `parseKeymap`, versioned `muzero-shortcuts-v1`; import runs the same `sanitizeOverrides` so a file can't inject unknown/protected/malformed bindings). Export/Import buttons in the cheat-sheet header; save via [`save-text-file.ts`](../../../src/lib/save-text-file.ts) (desktop `saveFile` → browser-download fallback); import via a hidden file input → `setAllShortcutOverrides`. i18n ×4.
 - [x] **Presets** — [`presets.ts`](../../../src/shortcuts/presets.ts) (`SHORTCUT_PRESETS`: "Arrow transport" + "Vim navigation", curated conflict-free override maps). **Simpler apply-model** than the PRD's original 3-tier sketch: choosing a preset opens a confirm dialog then writes it via `setAllShortcutOverrides` (no `shortcutPresetId` / merge-layer needed; the user can then tweak). Preset buttons in the cheat-sheet.
 - [ ] ~~**2-stroke sequences** ("G then S")~~ — **deliberately deferred.** It requires changing the core `ShortcutGesture` type (single-stroke → sequence) + `gestureIdentity`/`gestureFromEvent`/dispatch-timer/recorder, destabilizing the heavily-tested engine for a feature MUZERO has no use case for. Documented as future work, not rushed.
 
 #### Phase 5 Checklist
+- [x] `conflict.test.ts` (cascade): an occupied chord spawns a relocate slot; a 2nd level cascades (prev's replacement displaces next); re-recording the primary prunes the stale slot; a protected holder blocks save. + recorder DOM test: record Q → relocate slot appears → record Z → batch-save `{cycleRepeat:[R,Q], prev:[Z]}`.
 - [x] `keymap-io.test.ts`: serialize/parse round-trips; sanitizes on import (drops unknown/protected/malformed); rejects bad JSON / wrong schema / non-object. + component test: valid file applies overrides, invalid file → error toast, no write.
 - [x] `presets.test.ts`: each preset has a unique id + i18n label, survives `sanitizeOverrides` unchanged (only editable actions), and is **conflict-free** once applied.
 - [ ] 2-stroke sequences — deferred (see above).
@@ -441,6 +443,7 @@ Global `?` (Shift+/)  →  (OPTIONAL, Q8) components/shortcuts/shortcut-help-ove
 | 2026-06-10 | MUZERO | Phase 5 **presets** (`presets.ts`: Arrow-transport + Vim-navigation, conflict-free; apply-via-confirm → `setAllShortcutOverrides`; preset buttons + i18n ×4; 5 tests). 2-stroke sequences deliberately deferred (invasive core change, no MUZERO use case). The configurable-shortcuts feature is effectively complete — only the entangled `virtual-track-list.tsx` row-nav routing + sequences remain |
 | 2026-06-10 | MUZERO | **Search NLP**: extracted `freeTextMatches` (transliteration-aware — pinyin / kana↔romaji, the ⌘F engine) into `search-core`; the **cheat-sheet search** now uses it (CJK labels/keywords reachable phonetically). Sibling addition: a **search box atop the Settings sidebar** filtering all settings items with the same matcher (`settings-sidebar.tsx`). i18n ×4; 4 tests |
 | 2026-06-10 | MUZERO | **Phase 2b complete**: routed `virtual-track-list.tsx` row nav (focused-row + focus-first handlers) through the registry; `useShortcutMatcher` now accepts React + native events (`KeyChordEvent`); removed the orphaned `libraryNavKey` (+test). Every scoped surface is now registry-driven — all library/inspector/gallery rebinds take effect |
+| 2026-06-10 | MUZERO | **Cascading recorder** (Phase 5): `reconcileRecorderDrafts` fixpoint (cascade + prune-on-re-record) + reworked recorder dialog into a reactive multi-slot chain — assigning an occupied chord prompts to relocate the displaced action, cascading until resolved, cancelable, batch-saved. The full ClipCombo "循环" UX. 9 new tests (cascade logic + DOM chain) |
 
 ---
 

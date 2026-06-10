@@ -57,4 +57,42 @@ describe("ShortcutRecorderDialog", () => {
     const save = screen.getByText("shortcuts.recorder.save").closest("button");
     expect(save?.disabled).toBe(true);
   });
+
+  it("cascades: an occupied chord spawns a relocate slot, then batch-saves the chain", () => {
+    repo.setAll.mockClear();
+    render(
+      <ShortcutRecorderDialog
+        actionId="playback.cycleRepeat"
+        actionLabel="Repeat"
+        open
+        onOpenChange={() => {}}
+      />,
+    );
+    const save = () => screen.getByText("shortcuts.recorder.save").closest("button");
+
+    // Record Q for cycleRepeat — Q is held by playback.prev, so a relocate slot appears.
+    const primary = document.querySelector('[data-capture-action="playback.cycleRepeat"]');
+    if (!primary) throw new Error("no primary slot");
+    fireEvent.keyDown(primary, { code: "KeyQ", key: "q" });
+
+    const prevSlot = document.querySelector('[data-capture-action="playback.prev"]');
+    expect(prevSlot).toBeTruthy(); // the cascade slot
+    expect(save()?.disabled).toBe(true); // prev slot still pending
+
+    // Relocate prev to a free chord → chain resolved.
+    if (!prevSlot) return;
+    fireEvent.keyDown(prevSlot, { code: "KeyZ", key: "z" });
+    expect(save()?.disabled).toBe(false);
+
+    fireEvent.click(save() as HTMLButtonElement);
+    expect(repo.setAll).toHaveBeenCalledTimes(1);
+    const overrides = repo.setAll.mock.calls[0][0];
+    expect(overrides["playback.cycleRepeat"]).toEqual([
+      { kind: "key", stroke: { code: "KeyR", keyLabel: "R" } },
+      { kind: "key", stroke: { code: "KeyQ", keyLabel: "Q" } },
+    ]);
+    expect(overrides["playback.prev"]).toEqual([
+      { kind: "key", stroke: { code: "KeyZ", keyLabel: "Z" } },
+    ]);
+  });
 });
