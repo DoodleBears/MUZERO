@@ -1,6 +1,7 @@
 import { MotionConfig } from "motion/react";
 import type { ReactNode } from "react";
 import { useEffect, useRef, useState } from "react";
+import { ImmersiveLyricsOverlay } from "@/components/player/immersive-lyrics-overlay";
 import { ImmersiveMemoryOverlay } from "@/components/player/immersive-memory-overlay";
 import { NowPlayingBackground } from "@/components/player/now-playing-background";
 import { VisualizerTuningPanel } from "@/components/player/visualizer-tuning-panel";
@@ -137,6 +138,10 @@ export default function App() {
   // In full-immersive (only background + spectrum, foreground rail hidden) surface
   // memories as a top popover instead — see the immersive-memory-moments PRD.
   const immersiveMemoryActive = visualizerIdleOnly && (settings.immersiveMemoryOverlay ?? true);
+  // Lyrics-focus + foreground hidden → centered lyrics over the background
+  // (takes over from the memory overlay while it's on).
+  const lyricsStageOpen = useUiStore((s) => s.lyricsStageOpen);
+  const immersiveLyricsActive = foregroundHidden && lyricsStageOpen;
 
   // Mirror the chrome-hidden signal so deep surfaces (e.g. the lyrics search
   // affordance) can fade in sync with the Dock during immersive idle.
@@ -184,22 +189,24 @@ export default function App() {
         <main className="chrome-fade absolute inset-0 z-10 overflow-hidden [--chrome-fade-bottom:calc(var(--spacing-chrome-bottom)/2)] [--chrome-fade-top:3rem]">
           {tab === "now" && <NowPlayingPage foregroundHidden={foregroundHidden} />}
           {tab === "queue" && (
-            <AmbientPageOverlay active={ambientActive}>
+            <AmbientPageOverlay active={ambientActive} dragGutter="max-w-3xl">
               <QueuePage />
             </AmbientPageOverlay>
           )}
           {tab === "search" && (
-            <AmbientPageOverlay active={ambientActive}>
+            // Widest of the gallery's inner modes (tracks is max-w-6xl) so the
+            // gutters never overlap content; narrower modes just get less drag area.
+            <AmbientPageOverlay active={ambientActive} dragGutter="max-w-6xl">
               <SearchPage />
             </AmbientPageOverlay>
           )}
           {tab === "sessions" && (
-            <AmbientPageOverlay active={ambientActive}>
+            <AmbientPageOverlay active={ambientActive} dragGutter="max-w-2xl">
               <SessionsPage onStarted={() => setTab("now")} />
             </AmbientPageOverlay>
           )}
           {tab === "settings" && (
-            <AmbientPageOverlay active={ambientActive}>
+            <AmbientPageOverlay active={ambientActive} dragGutter="max-w-5xl">
               <SettingsPage />
             </AmbientPageOverlay>
           )}
@@ -212,7 +219,8 @@ export default function App() {
           hidden={chromeHidden || foregroundHidden}
         />
 
-        {immersiveMemoryActive && <ImmersiveMemoryOverlay />}
+        {immersiveMemoryActive && !lyricsStageOpen && <ImmersiveMemoryOverlay />}
+        {immersiveLyricsActive && <ImmersiveLyricsOverlay />}
 
         <VisualizerTuningPanel />
 
@@ -225,14 +233,43 @@ export default function App() {
   );
 }
 
-function AmbientPageOverlay({ active, children }: { active: boolean; children: ReactNode }) {
+function AmbientPageOverlay({
+  active,
+  dragGutter = "max-w-3xl",
+  children,
+}: {
+  active: boolean;
+  /**
+   * Tailwind `max-w-*` matching this page's centered content. The empty space
+   * left/right of that width becomes a desktop window-drag handle (see below).
+   */
+  dragGutter?: string;
+  children: ReactNode;
+}) {
   return (
     <div
       className={cn(
-        "h-full transition-colors duration-500",
+        "relative h-full transition-colors duration-500",
         active && "bg-background/45 backdrop-blur-[2px]",
       )}
     >
+      {/* Desktop: the empty gutters left/right of the centered content drag the
+          frameless window — `-webkit-app-region:drag` (Electron) + `data-tauri-drag-region`
+          (Tauri), both inert on web/mobile. A centered max-width box anchors two
+          strips that reach *outward* into the gutters only, so the drag geometry
+          never overlaps the content, the dock, or portaled dialogs (Electron's
+          drag region is union(drag) − union(no-drag); anything we covered without
+          a no-drag marker would be swallowed). Mirror the page's own max-width. */}
+      <div aria-hidden className={cn("pointer-events-none absolute inset-0 mx-auto", dragGutter)}>
+        <div
+          data-tauri-drag-region
+          className="pointer-events-auto absolute inset-y-0 right-full w-screen [-webkit-app-region:drag]"
+        />
+        <div
+          data-tauri-drag-region
+          className="pointer-events-auto absolute inset-y-0 left-full w-screen [-webkit-app-region:drag]"
+        />
+      </div>
       {children}
     </div>
   );

@@ -52,12 +52,18 @@ const SWIPE_CARD_BASE =
 export function SwipeableMediaStage({
   className,
   coverRef,
+  onTap,
 }: {
   className?: string;
   coverRef?: RefObject<HTMLDivElement | null>;
+  /** Fired on a plain tap of the cover (no swipe) — e.g. toggle lyrics on mobile. */
+  onTap?: () => void;
 }) {
   const { t } = useTranslation();
   const x = useMotionValue(0);
+  // Tap-vs-swipe bookkeeping for `onTap` (a swipe sets `moved`, suppressing it).
+  const tapStart = useRef<{ x: number; y: number; t: number } | null>(null);
+  const tapMoved = useRef(false);
   const reducedMotion = useReducedMotion();
   const containerRef = useRef<HTMLDivElement | null>(null);
   // The cover box is measured for the overlay portal and also serves as the
@@ -580,11 +586,27 @@ export function SwipeableMediaStage({
             dragConstraints={{ left: 0, right: 0 }}
             dragElastic={0.24}
             dragMomentum={false}
-            onPointerDown={beginGesture}
-            onPointerUp={() => {
+            onPointerDown={(e) => {
+              tapStart.current = { x: e.clientX, y: e.clientY, t: Date.now() };
+              tapMoved.current = false;
+              beginGesture();
+            }}
+            onPointerUp={(e) => {
+              const start = tapStart.current;
+              tapStart.current = null;
+              const isTap =
+                !!onTap &&
+                !!start &&
+                !tapMoved.current &&
+                !dragDirection &&
+                !committing &&
+                Date.now() - start.t < 400 &&
+                Math.hypot(e.clientX - start.x, e.clientY - start.y) < 10;
               if (!dragDirection && !committing && stackVisible) clearStack();
+              if (isTap) onTap?.();
             }}
             onDrag={(_, info) => {
+              tapMoved.current = true;
               if (info.offset.x < -8 && dragDirection !== "next") setDragDirection("next");
               if (info.offset.x > 8 && dragDirection !== "prev") setDragDirection("prev");
             }}

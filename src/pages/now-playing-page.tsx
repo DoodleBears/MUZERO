@@ -45,6 +45,7 @@ export function NowPlayingPage({ foregroundHidden = false }: { foregroundHidden?
   const currentIndex = usePlayerStore((s) => s.currentIndex);
   const djEnabled = usePlayerStore((s) => s.djEnabled);
   const lyricsStageOpen = useUiStore((s) => s.lyricsStageOpen);
+  const toggleLyricsStage = useUiStore((s) => s.toggleLyricsStage);
   const current = currentIndex >= 0 ? queue[currentIndex] : undefined;
   // The lyrics surface lives in the right rail on md+; on narrow there is no
   // rail, so it stacks into the scroll flow. Render exactly one (breakpoint-gated)
@@ -88,7 +89,12 @@ export function NowPlayingPage({ foregroundHidden = false }: { foregroundHidden?
             </div>
           ) : (
             <>
-              <SwipeableMediaStage coverRef={stageRef} />
+              {/* Mobile: a plain tap of the cover flips to lyrics (swipes still
+                  change tracks). Desktop uses the lyrics-mode button. */}
+              <SwipeableMediaStage
+                coverRef={stageRef}
+                onTap={isNarrow ? toggleLyricsStage : undefined}
+              />
               {current && <TrackInfoCard track={current} />}
             </>
           )}
