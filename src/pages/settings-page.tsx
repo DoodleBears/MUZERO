@@ -35,15 +35,25 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Slider } from "@/components/ui/slider";
 import { db } from "@/db/muzero-db";
 import { saveSettings } from "@/db/repositories";
 import type { AppSettings, CloudDrive, LlmProviderId } from "@/db/types";
 import { useSettings } from "@/hooks/use-app-data";
 import { type Locale, locales, persistLocale } from "@/i18n/config";
 import { hasStreamingSources } from "@/lib/desktop/bridge";
+import { isMac } from "@/lib/shortcuts";
+import {
+  clampLerp,
+  LERP_DEFAULT,
+  LERP_MAX,
+  LERP_MIN,
+  resolveSmoothScroll,
+} from "@/lib/smooth-scroll/resolve";
 import { useSmoothScroll } from "@/lib/smooth-scroll/use-smooth-scroll";
 import { clearTrace, formatTraceEntries, useTraceEntries } from "@/lib/trace";
 import { formatDuration } from "@/lib/utils";
+import { prefersReducedMotion } from "@/lib/view-transition";
 import {
   CLOUD_PRESET_IDS,
   type CloudPresetId,
@@ -330,6 +340,15 @@ export function SettingsPage() {
     await saveSettings({ autoFetchLyrics: enabled });
   }
 
+  // Smooth scrolling — `preference` reflects the stored/platform intent (ignoring
+  // the live reduced-motion override, which we surface as a hint instead).
+  const smoothScrollPref = resolveSmoothScroll(settings, {
+    isMac: isMac(),
+    prefersReducedMotion: false,
+  }).preference;
+  const smoothScrollReduced = prefersReducedMotion();
+  const smoothScrollLerp = clampLerp(settings.smoothScrollLerp);
+
   async function changeLyricsProvider(id: AppSettings["lyricsProviderId"]) {
     await saveSettings({ lyricsProviderId: id });
   }
@@ -580,6 +599,57 @@ export function SettingsPage() {
                     </select>
                   </label>
                 )}
+                <div className="flex flex-col gap-3 rounded-md border border-border p-3">
+                  <label className="flex items-start gap-3">
+                    <input
+                      type="checkbox"
+                      checked={smoothScrollPref}
+                      onChange={(event) =>
+                        void saveSettings({ smoothScroll: event.currentTarget.checked })
+                      }
+                      className="mt-1 size-4 accent-primary"
+                    />
+                    <span className="flex flex-col gap-1">
+                      <span className="font-medium text-sm">{t("settings.smoothScroll")}</span>
+                      <span className="text-muted-foreground text-xs">
+                        {isMac()
+                          ? t("settings.smoothScrollHintMac")
+                          : t("settings.smoothScrollHint")}
+                      </span>
+                      {smoothScrollReduced && (
+                        <span className="text-muted-foreground text-xs">
+                          {t("settings.smoothScrollReducedMotion")}
+                        </span>
+                      )}
+                    </span>
+                  </label>
+                  <div className="flex flex-col gap-1.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm">{t("settings.smoothScrollStrength")}</span>
+                      <button
+                        type="button"
+                        disabled={!smoothScrollPref}
+                        onClick={() => void saveSettings({ smoothScrollLerp: LERP_DEFAULT })}
+                        className="text-muted-foreground text-xs hover:text-foreground disabled:opacity-40"
+                      >
+                        {t("settings.smoothScrollReset")}
+                      </button>
+                    </div>
+                    <Slider
+                      min={LERP_MIN}
+                      max={LERP_MAX}
+                      step={0.02}
+                      value={smoothScrollLerp}
+                      disabled={!smoothScrollPref}
+                      onValueChange={(value) => void saveSettings({ smoothScrollLerp: value })}
+                      aria-label={t("settings.smoothScrollStrength")}
+                    />
+                    <div className="flex justify-between text-muted-foreground text-xs">
+                      <span>{t("settings.smoothScrollFloaty")}</span>
+                      <span>{t("settings.smoothScrollSnappy")}</span>
+                    </div>
+                  </div>
+                </div>
               </CardContent>
             </Card>
           )}
