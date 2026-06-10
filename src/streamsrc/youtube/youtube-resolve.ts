@@ -122,7 +122,7 @@ export async function resolveYoutubeAudio(
       lastVerdict = { kind: "unavailable", reason: "no audio format" };
       continue;
     }
-    const url = resolveFormatUrl(picked.format, deps.solvers);
+    const url = await resolveFormatUrl(picked.format, deps.solvers);
     if (!url) {
       lastVerdict = { kind: "unavailable", reason: "unresolved stream url" };
       continue;

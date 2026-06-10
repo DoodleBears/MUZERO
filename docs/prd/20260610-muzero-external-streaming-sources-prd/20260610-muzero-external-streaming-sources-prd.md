@@ -704,6 +704,7 @@ InnerTube `/youtubei/v1/player` 取流 + EJS `sig`/`n` 解密(隐藏 sandboxed `
 | Y7 | `createYoutubeSource`(search via InnerTube `/search` + resolve via Y4；runtime 注入式)：`StreamSourceProvider`，无 runtime→resolve「桌面专属」错误、search 仍可 | `youtube/youtube-source.ts` | ×4(stub http+runtime) | ✅ green |
 | Y-sig | **签名解扰纯实现**(yt-dlp 法)：从 player.js 解析 helper 对象 reverse/splice/swap → 操作序列 → 纯 TS 应用；`solveSignature`/`extractSignatureTimestamp`。**无需 JS 引擎、无需依赖** | `youtube/youtube-sig.ts` | 合成 player.js fixture ×7 | ✅ green |
 | Y-nsig | **n throttling 函数抽取**(brace-balance)：`findNFunctionName`(含数组下标解析)+`extractFunctionSource`(配对花括号切出可运行源)→ 交 solver 窗口求值 | `youtube/youtube-nsig.ts` | fixture ×7（含 eval 往返）| ✅ green |
+| Y-rt | **运行时编排** `createYoutubeRuntime`：取 iframe_api→player.js URL→base.js，缓存 sig 序列 / n-func 源 / sts；`getBootstrap`(sts+visitorData) + 异步 `solvers`(solveSig 纯应用 / solveN 经注入 `evalN` 沙箱)。`CipherSolvers`/`resolveFormatUrl` 改异步 | `youtube/youtube-runtime.ts` · `youtube-cipher.ts` | stub http+evalN ×5 + 缓存验证 | ✅ green |
 | Y5 | 主进程隐藏 `BrowserWindow` 生命周期 + IPC(`solveN`/`getBootstrap`)：取 player.js、纯 TS 解 sig、窗口内 eval n-func、取 visitorData；渲染层经 bridge | `electron/youtube-engine.cjs` · `lib/desktop/*` | 🔲（运行时） | 🔲（待手测） |
 | Y6 | sig/n solver + PoToken：跑 `yt.solver`/BotGuard 资产、按 `playerJsUrl` 缓存 / 6h 缓存 | `youtube/youtube-solver.ts`（bridge 注入）| 🔲（运行时） | 🔲 **阻塞** |
 | Y8 | registry `youtube` 分支接入(去掉 null)+ ⌘F 在线 chips 加 YouTube + StreamSourceDeps 注入 runtime | `registry.ts` · `global-track-search.tsx` | 🔲 | 🔲（待 Y5/Y6） |
