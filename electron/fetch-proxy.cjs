@@ -22,6 +22,12 @@ async function handleMuzfetch(request) {
     const reqUrl = new URL(request.url);
     if (reqUrl.searchParams.has("__mzurl")) {
       target = reqUrl.searchParams.get("__mzurl");
+      // The <audio>/<img> element's own Referer/Origin (localhost) is wrong for the
+      // target CDN (hdslb/bilivideo 403 a foreign Referer) — drop them and use only
+      // the explicitly-injected __mzh_* headers (bili media injects its Referer; cover
+      // images inject none, and the CDNs serve with no Referer).
+      headers.delete("referer");
+      headers.delete("origin");
       for (const [name, value] of reqUrl.searchParams) {
         if (name.startsWith("__mzh_")) headers.set(name.slice("__mzh_".length), value);
       }

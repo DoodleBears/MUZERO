@@ -5,6 +5,7 @@ import { backfillCoverThumbhashes } from "@/db/repositories";
 import type { Track } from "@/db/types";
 import { useSettings } from "@/hooks/use-app-data";
 import { encodeCoverThumbhash } from "@/lib/cover-thumbhash";
+import { resolveDesktopBridge } from "@/lib/desktop/bridge";
 import { getCroppedBlob } from "@/lib/image-crop";
 import { log } from "@/lib/logger";
 import { coverUrlCache } from "@/lib/object-url-cache";
@@ -143,7 +144,19 @@ export function useTrackCoverUrl(
   // re-mount, zero placeholder flash. `peek` doesn't mutate, so it's render-safe.
   const cached = cacheKey ? coverUrlCache.peek(cacheKey) : undefined;
   const url = cached ?? (resolved?.key === cacheKey ? resolved.url : undefined);
-  return url ?? remoteCoverUrl ?? null;
+  return url ?? proxyExternalCover(remoteCoverUrl);
+}
+
+/**
+ * Route an external (http) cover through the media proxy so the response carries
+ * `ACAO:*` — needed for the WebAudio/Pixi(WebGL) backgrounds to use a cross-origin
+ * cover as a texture without tainting. Blob/same-origin URLs and shells without a
+ * media proxy (web/tauri) pass through unchanged.
+ */
+function proxyExternalCover(url: string | undefined): string | null {
+  if (!url) return null;
+  if (!/^https?:\/\//i.test(url)) return url;
+  return resolveDesktopBridge().mediaProxyUrl?.(url) ?? url;
 }
 
 /**
