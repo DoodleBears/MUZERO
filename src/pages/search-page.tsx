@@ -199,7 +199,10 @@ export function SearchPage() {
       const target = event.target instanceof HTMLElement ? event.target : null;
       if (target?.closest('[role="dialog"][aria-modal="true"]')) return;
       event.preventDefault();
-      const next = GALLERY_MODES[(GALLERY_MODES.indexOf(mode) + 1) % GALLERY_MODES.length];
+      // ` cycles forward through the tabs; Shift+` walks back to the previous one.
+      const count = GALLERY_MODES.length;
+      const step = event.shiftKey ? -1 : 1;
+      const next = GALLERY_MODES[(GALLERY_MODES.indexOf(mode) + step + count) % count];
       setMode(next);
       if (typeof localStorage !== "undefined") localStorage.setItem(MODE_KEY, next);
     };

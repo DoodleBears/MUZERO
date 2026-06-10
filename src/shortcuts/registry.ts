@@ -209,7 +209,8 @@ export const SHORTCUT_ACTIONS: readonly ShortcutActionDef[] = [
     scope: "global",
     category: "navigation",
     labelKey: "shortcuts.action.navCycleGalleryMode",
-    defaultBindings: [key("Backquote", "`")],
+    // ` next tab · Shift+` previous tab (reverse direction lives in the gallery handler).
+    defaultBindings: [key("Backquote", "`"), key("Backquote", "`", { shiftKey: true })],
     keywords: ["gallery", "tab", "模式"],
   },
   {
