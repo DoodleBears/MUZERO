@@ -229,9 +229,13 @@ function SyncedLines({
   const { t } = useTranslation();
   const reduce = useReducedMotion();
   const viewportRef = useRef<HTMLDivElement>(null);
-  const activeRef = useRef<HTMLButtonElement>(null);
+  const stackRef = useRef<HTMLDivElement>(null);
   const [following, setFollowing] = useState(true);
   const [viewportH, setViewportH] = useState(0);
+  // Live mirror of activeIndex so the (once-created) follow rAF reads the current
+  // line without depending on a React ref's attachment timing.
+  const activeIndexRef = useRef(activeIndex);
+  activeIndexRef.current = activeIndex;
 
   useEffect(() => {
     const vp = viewportRef.current;
@@ -264,7 +268,9 @@ function SyncedLines({
     const tick = () => {
       if (stopped) return;
       const vp = viewportRef.current;
-      const el = activeRef.current;
+      const stack = stackRef.current;
+      const idx = activeIndexRef.current;
+      const el = stack && idx >= 0 ? (stack.children[idx] as HTMLElement | undefined) : undefined;
       if (vp && el) {
         // Rect-based (immune to offsetParent): where the active line's center
         // currently sits relative to the viewport top, converted to an absolute
@@ -296,6 +302,7 @@ function SyncedLines({
         onTouchMove={() => setFollowing(false)}
       >
         <div
+          ref={stackRef}
           className="flex flex-col gap-1"
           style={{ paddingTop: viewportH * 0.38, paddingBottom: viewportH * 0.62 }}
         >
@@ -305,7 +312,6 @@ function SyncedLines({
               <motion.button
                 // biome-ignore lint/suspicious/noArrayIndexKey: lyric lines have no stable id; time+index is the natural key
                 key={`${line.timeMs}-${i}`}
-                ref={isActive ? activeRef : undefined}
                 type="button"
                 data-active={isActive || undefined}
                 aria-current={isActive ? "true" : undefined}
