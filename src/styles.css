@@ -208,6 +208,21 @@
   [data-no-drag] {
     -webkit-app-region: no-drag;
   }
+
+  /*
+   * Scroll containers must opt out too: a `-webkit-app-region: drag` ancestor
+   * (the page surface) otherwise swallows wheel/scroll input, freezing the
+   * overflow area in Electron. Trade-off: their inner empty space no longer drags
+   * the window — fine, since scrolling matters more and the side gutters (outside
+   * the scroller) still drag.
+   */
+  .overflow-y-auto,
+  .overflow-auto,
+  .overflow-y-scroll,
+  .overflow-scroll,
+  .overflow-x-auto {
+    -webkit-app-region: no-drag;
+  }
 }
 
 /*
