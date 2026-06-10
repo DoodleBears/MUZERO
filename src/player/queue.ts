@@ -52,6 +52,25 @@ export function prevIndex(length: number, index: number, repeat: RepeatMode): nu
   return index - 1;
 }
 
+/**
+ * Where to go when a streamed track fails to resolve mid-playback (VIP / unavailable
+ * / region-locked). Walks forward (wrapping) to find another track to try, bounded by
+ * `maxSkips` so a queue where every remaining song is un-streamable stops instead of
+ * looping. Returns null = give up and stop. Pure — the store tracks the running
+ * `skipsSoFar` and acts on the result.
+ */
+export function nextStreamSkipIndex(
+  length: number,
+  index: number,
+  skipsSoFar: number,
+  maxSkips: number,
+): number | null {
+  if (length <= 1 || index < 0) return null;
+  // Never scan a track more than once: cap at the other tracks in the queue.
+  if (skipsSoFar >= Math.min(maxSkips, length - 1)) return null;
+  return (index + 1) % length;
+}
+
 /** Clamp an arbitrary index into `[0, length-1]`, or -1 when empty. */
 export function clampIndex(length: number, index: number): number {
   if (length <= 0) return -1;

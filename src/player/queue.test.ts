@@ -4,6 +4,7 @@ import {
   clampIndex,
   manualNextIndex,
   nextIndex,
+  nextStreamSkipIndex,
   prevIndex,
   shouldAutoExtend,
   shuffleManualNext,
@@ -83,6 +84,29 @@ describe("clampIndex", () => {
     expect(clampIndex(3, 5)).toBe(2);
     expect(clampIndex(3, -2)).toBe(0);
     expect(clampIndex(0, 1)).toBe(-1);
+  });
+});
+
+describe("nextStreamSkipIndex (skip un-streamable songs)", () => {
+  it("walks forward, wrapping past the end", () => {
+    expect(nextStreamSkipIndex(5, 0, 0, 30)).toBe(1);
+    expect(nextStreamSkipIndex(5, 4, 0, 30)).toBe(0); // wrap
+  });
+
+  it("stops once it has scanned every other track (no infinite loop)", () => {
+    // length 4 → at most 3 skips, then give up.
+    expect(nextStreamSkipIndex(4, 0, 2, 30)).toBe(1);
+    expect(nextStreamSkipIndex(4, 0, 3, 30)).toBeNull();
+  });
+
+  it("respects the maxSkips cap before length", () => {
+    expect(nextStreamSkipIndex(100, 0, 30, 30)).toBeNull();
+    expect(nextStreamSkipIndex(100, 0, 29, 30)).toBe(1);
+  });
+
+  it("returns null for a single-track or empty queue", () => {
+    expect(nextStreamSkipIndex(1, 0, 0, 30)).toBeNull();
+    expect(nextStreamSkipIndex(0, -1, 0, 30)).toBeNull();
   });
 });
 

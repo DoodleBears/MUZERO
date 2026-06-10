@@ -661,3 +661,14 @@ success：Set-Cookie 已被 net.fetch 写进默认 session → bridge.readSource
 | SY4 | `PlaylistImportDialog`(推荐增量 / 选 set 追加 / 新建)；接进 Settings `SourcePlaylists` + ⌘F `PlaylistLinkCard`(z-100 盖搜索浮层)；i18n `playlistImport.*`(en/zh/ja/ko) | `components/stream/playlist-import-dialog.tsx` ·(2 caller) | typecheck + biome + 218 测全绿 | ✅ green |
 
 **SY 落地**：modal 用 `useSessions()` 客户端匹配 `streamPlaylistRef` 找推荐 set；推荐路径与「选 set 追加」都调 `addStreamedPlaylistToSet`(去重，toast「已添加 N 首…M 首已存在」)，新建调 `importStreamedPlaylist`(toast「已导入 N 首」)。**待 Electron 手测**(同步真实歌单 → 二次同步只增新曲)。
+
+## 18. 导入歌单可播：自动跳过不可播曲目
+
+**症状**：导入的外部歌单「听不了」。**根因**不是缺信息——导入的 track 与可播的搜索结果**完全同路创建**(`hitToStreamedInput`+`createStreamedTrack`，带 `streamSourceId`+`streamExternalId`=songId)，播放时 `ensureLoadedAndPlay` 用**账号 cookie** resolve(与搜索同路)。真正问题：歌单里混有账号**无权播放**的曲目(VIP/付费/数字专辑/下架)，过去 resolve 失败只弹 toast + `return`**停在第一首不可播**，整单像废了。
+
+**修**：resolve 失败时**自动前进到下一首可播曲**(纯函数 [`nextStreamSkipIndex`](src/player/queue.ts)：前进+wrap、`maxSkips` 上限、扫完整队列无果才停)，`player-store` 跑一次跳过链(模块 `streamSkips` 计数，成功加载/硬停归零)，**每次跳过链只弹一次** toast(VIP→`streamNeedsAccess`，否则 `playbackError`)。账号鉴权本就生效；这条让混合歌单**播得过去**。
+
+| # | 单元 | 文件 | 测试 | 状态 |
+|---|---|---|---|---|
+| RB1 | `nextStreamSkipIndex(len,idx,skips,max)` 纯队列数学(前进 wrap + 双上限防死循环) | `player/queue.ts` | ×4 | ✅ green |
+| RB2 | `ensureLoadedAndPlay` resolve 失败→自动跳过下一可播(`streamSkips` 计数+`MAX_STREAM_SKIPS`，加载/停时归零，一次性 toast) | `stores/player-store.ts` | queue+player-store 30 测全绿 | ✅ |

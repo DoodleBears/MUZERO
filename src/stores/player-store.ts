@@ -59,6 +59,7 @@ import {
   buildShuffleOrder,
   clampIndex,
   manualNextIndex,
+  nextStreamSkipIndex,
   prevIndex,
   type RepeatMode,
   shuffleManualNext,
@@ -222,6 +223,11 @@ let consumedTrackIds = new Set<string>();
 let djEngine: DjEngine | null = null;
 let pumping = false;
 let loadedTrackId: string | null = null;
+// Consecutive streamed tracks auto-skipped this play-run because they failed to
+// resolve (VIP / unavailable). Reset on any successful load or hard stop; bounds the
+// skip recursion so an all-unplayable queue stops instead of looping.
+let streamSkips = 0;
+const MAX_STREAM_SKIPS = 30;
 let lyricsAbort: AbortController | null = null;
 let lyricsTimer: ReturnType<typeof setTimeout> | null = null;
 let playbackSettingsLoaded = false;
@@ -1344,7 +1350,26 @@ async function ensureLoadedAndPlay(
         const needsAccess =
           resolved.kind === "requires-login" ||
           (resolved.kind === "no-permission" && resolved.reason === "vip");
-        notify.error(i18n.t(needsAccess ? "player.streamNeedsAccess" : "player.playbackError"));
+        // Auto-skip past un-streamable songs (common in imported playlists: VIP /
+        // 付费 / 下架 tracks the account can't play) so the rest of the set still
+        // plays through, instead of halting on the first gap. Bounded by streamSkips.
+        const { queue, currentIndex, wantPlay: stillWants } = get();
+        const skipTo = stillWants
+          ? nextStreamSkipIndex(queue.length, currentIndex, streamSkips, MAX_STREAM_SKIPS)
+          : null;
+        if (streamSkips === 0) {
+          // One toast per skip-run, so a playlist full of gaps doesn't spam.
+          notify.error(i18n.t(needsAccess ? "player.streamNeedsAccess" : "player.playbackError"));
+        }
+        if (skipTo !== null) {
+          streamSkips += 1;
+          await get().playIndex(skipTo); // recurses; nextStreamSkipIndex bounds it
+          return;
+        }
+        // Single track, paused, or scanned the whole queue with nothing playable.
+        streamSkips = 0;
+        get().pause();
+        set({ isPlaying: false });
         return;
       }
       // Bilibili's CDN GET needs a Referer the <audio> element can't set, so route it
@@ -1370,6 +1395,7 @@ async function ensureLoadedAndPlay(
       );
     }
     loadedTrackId = track.id;
+    streamSkips = 0; // a track loaded — end any streamed-skip run cleanly
     triggerLyricsAutoFetch(track);
     await updateMediaSessionMetadata(track);
   }
