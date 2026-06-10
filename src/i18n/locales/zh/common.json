@@ -46,6 +46,8 @@
     "skippedEncrypted_other": "已跳过 {{count}} 个加密文件（DRM / 商店格式）",
     "nothingNew": "没有可导入的新文件",
     "importingProgress": "导入中 {{done}} / {{total}}",
+    "fetchingCovers": "正在获取封面…",
+    "coversProgress": "获取封面 {{done}} / {{total}}",
     "cancelled_other": "已取消导入 —— 已添加 {{count}} 个文件",
     "publishNow": "上传到云端",
     "noCloudDrive": "请先在设置里配置云盘"

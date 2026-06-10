@@ -48,6 +48,8 @@
     "skippedEncrypted_other": "Skipped {{count}} encrypted files (DRM / store formats)",
     "nothingNew": "No new files to import",
     "importingProgress": "Importing {{done}} / {{total}}",
+    "fetchingCovers": "Fetching covers…",
+    "coversProgress": "Fetching covers {{done}} / {{total}}",
     "cancelled_one": "Import cancelled — {{count}} file added",
     "cancelled_other": "Import cancelled — {{count}} files added",
     "publishNow": "Upload to cloud",

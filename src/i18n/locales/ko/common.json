@@ -46,6 +46,8 @@
     "skippedEncrypted_other": "암호화된 파일 {{count}}개를 건너뛰었습니다 (DRM / 스토어 형식)",
     "nothingNew": "가져올 새 파일이 없습니다",
     "importingProgress": "가져오는 중 {{done}} / {{total}}",
+    "fetchingCovers": "커버 가져오는 중…",
+    "coversProgress": "커버 가져오는 중 {{done}} / {{total}}",
     "cancelled_other": "가져오기 취소됨 —— 파일 {{count}}개 추가됨",
     "publishNow": "클라우드에 업로드",
     "noCloudDrive": "먼저 설정에서 클라우드 드라이브를 구성하세요"

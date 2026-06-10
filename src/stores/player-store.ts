@@ -848,6 +848,37 @@ async function fetchAndStoreRemoteCover(trackId: string, url: string): Promise<v
   }
 }
 
+/** Max simultaneous cover downloads during a folder sync (a big NetEase folder can
+ *  carry hundreds of `albumPic` URLs — firing them all at once trickles them in out
+ *  of order and overwhelms the proxy). Each job still targets its own track. */
+const FOLDER_COVER_FETCH_CONCURRENCY = 6;
+
+/**
+ * Download the carried `albumPic` covers for a batch of just-imported tracks, with
+ * bounded concurrency and honoring the sync's abort signal. The tracks are already
+ * playable; covers fill in here, so a cancel stops the remaining downloads instead
+ * of letting hundreds of fire-and-forget fetches outlive the run.
+ */
+async function fetchRemoteCovers(
+  jobs: ReadonlyArray<{ trackId: string; url: string }>,
+  signal: AbortSignal,
+  onProgress?: (done: number) => void,
+): Promise<void> {
+  let cursor = 0;
+  let completed = 0;
+  const worker = async () => {
+    while (cursor < jobs.length && !signal.aborted) {
+      const job = jobs[cursor];
+      cursor += 1;
+      await fetchAndStoreRemoteCover(job.trackId, job.url);
+      completed += 1;
+      onProgress?.(completed);
+    }
+  };
+  const lanes = Math.min(FOLDER_COVER_FETCH_CONCURRENCY, jobs.length);
+  await Promise.all(Array.from({ length: lanes }, () => worker()));
+}
+
 // Guards the read-modify-write of `importFolders` against the boot sync and a
 // manual "sync now" overlapping. Module-scope (never selected) → no rerenders.
 let folderSyncRunning = false;
@@ -945,6 +976,9 @@ export async function runFolderSync(
     // Pass 2 — import, emitting cumulative progress.
     const total = plans.reduce((n, p) => n + p.fresh.length, 0);
     let done = 0;
+    // Carried-cover URLs to pull AFTER the audio is in (bounded, below) — each keyed
+    // to its own track, so order of completion never reassigns a cover.
+    const coverJobs: Array<{ trackId: string; url: string }> = [];
     setFolderImportProgress({ phase: "importing", done, total, imported, encrypted, decodeFailed });
     for (const plan of plans) {
       const ids: string[] = [];
@@ -966,9 +1000,9 @@ export async function runFolderSync(
           ids.push(res.trackId);
           imported += 1;
           // No embedded image but a carried cover URL (`.ncm`, or a plaintext mp3
-          // with a NetEase "163 key" comment) → pull + store it.
+          // with a NetEase "163 key" comment) → queue it for the bounded fetch pass.
           if (!res.hasCover && res.albumPicUrl) {
-            void fetchAndStoreRemoteCover(res.trackId, res.albumPicUrl);
+            coverJobs.push({ trackId: res.trackId, url: res.albumPicUrl });
           }
         } catch (err) {
           // One unreadable/corrupt file must not abort the batch.
@@ -994,6 +1028,27 @@ export async function runFolderSync(
         lastImportedCount: ids.length,
       });
       if (signal.aborted) break;
+    }
+
+    // Covers come from a CDN — fetch them bounded + abortable so a large folder
+    // doesn't fire hundreds of concurrent downloads. Audio is already imported, so
+    // tracks play immediately; this only fills in the artwork. Its own progress
+    // phase keeps the indicator honest instead of sitting at "done/total".
+    if (coverJobs.length > 0 && !signal.aborted) {
+      const coverTotal = coverJobs.length;
+      const emitCovers = (coverDone: number) =>
+        setFolderImportProgress({
+          phase: "covers",
+          done,
+          total,
+          imported,
+          encrypted,
+          decodeFailed,
+          coverDone,
+          coverTotal,
+        });
+      emitCovers(0);
+      await fetchRemoteCovers(coverJobs, signal, emitCovers);
     }
 
     const cancelled = signal.aborted;

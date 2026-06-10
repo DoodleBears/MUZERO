@@ -46,6 +46,8 @@
     "skippedEncrypted_other": "{{count}} 件の暗号化ファイル（DRM / ストア形式）をスキップしました",
     "nothingNew": "読み込む新しいファイルはありません",
     "importingProgress": "読み込み中 {{done}} / {{total}}",
+    "fetchingCovers": "カバーを取得中…",
+    "coversProgress": "カバーを取得中 {{done}} / {{total}}",
     "cancelled_other": "読み込みを中止 —— {{count}} 件を追加しました",
     "publishNow": "クラウドにアップロード",
     "noCloudDrive": "先に設定でクラウドドライブを設定してください"
