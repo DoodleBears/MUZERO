@@ -2,10 +2,11 @@ import { Captions } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { ControlTooltip } from "@/components/player/control-tooltip";
 import { Button } from "@/components/ui/button";
+import { saveSettings } from "@/db/repositories";
+import { useSettings } from "@/hooks/use-app-data";
 import { useLongPress } from "@/hooks/use-long-press";
 import { cn } from "@/lib/utils";
 import { useNavStore } from "@/stores/nav-store";
-import { useUiStore } from "@/stores/ui-store";
 
 /**
  * Lyrics-focus toggle, sibling of the visualizer-mode button: a tap shows lyrics
@@ -15,8 +16,8 @@ import { useUiStore } from "@/stores/ui-store";
  */
 export function LyricsModeButton({ className }: { className?: string }) {
   const { t } = useTranslation();
-  const open = useUiStore((s) => s.lyricsStageOpen);
-  const toggle = useUiStore((s) => s.toggleLyricsStage);
+  const open = useSettings().lyricsStageOpen ?? false;
+  const toggle = () => void saveSettings({ lyricsStageOpen: !open });
   const setTab = useNavStore((s) => s.setTab);
   const setSettingsItem = useNavStore((s) => s.setSettingsItem);
 

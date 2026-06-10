@@ -17,12 +17,13 @@ import { Button } from "@/components/ui/button";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { addTrackBackground, saveSettings, setTrackCover } from "@/db/repositories";
 import type { SetDisplayMode } from "@/db/types";
+import { useSettings } from "@/hooks/use-app-data";
 import { useShortcutHint } from "@/hooks/use-shortcut-hint";
 import { classifyDrop, dragHasFiles, filesFromTransfer, summarizeDragItems } from "@/lib/file-drop";
 import { cn } from "@/lib/utils";
+import { dragWindowOnEmptyPress } from "@/lib/window-drag";
 import { nextRepeatMode } from "@/player/transport";
 import { usePlayerStore } from "@/stores/player-store";
-import { useUiStore } from "@/stores/ui-store";
 
 const DISPLAY_MODES: { id: SetDisplayMode; icon: typeof Video }[] = [
   { id: "video", icon: Video },
@@ -44,8 +45,8 @@ export function NowPlayingPage({ foregroundHidden = false }: { foregroundHidden?
   const queue = usePlayerStore((s) => s.queue);
   const currentIndex = usePlayerStore((s) => s.currentIndex);
   const djEnabled = usePlayerStore((s) => s.djEnabled);
-  const lyricsStageOpen = useUiStore((s) => s.lyricsStageOpen);
-  const toggleLyricsStage = useUiStore((s) => s.toggleLyricsStage);
+  const lyricsStageOpen = useSettings().lyricsStageOpen ?? false;
+  const toggleLyricsStage = () => void saveSettings({ lyricsStageOpen: !lyricsStageOpen });
   const current = currentIndex >= 0 ? queue[currentIndex] : undefined;
   // The lyrics surface lives in the right rail on md+; on narrow there is no
   // rail, so it stacks into the scroll flow. Render exactly one (breakpoint-gated)
@@ -64,8 +65,11 @@ export function NowPlayingPage({ foregroundHidden = false }: { foregroundHidden?
   return (
     // Columns are full-bleed (no top reserve) and pad themselves with
     // scroll-padding, so content rests below the bars at rest but scrolls up
-    // *under* them.
-    <div className="h-full">
+    // *under* them. The page is also a desktop window-drag surface (same as the
+    // other tabs): empty space / margins move the frameless window, while the
+    // media stage (`data-no-drag`, a swipe target) and every control opt out.
+    // biome-ignore lint/a11y/noStaticElementInteractions: passive window-drag surface — no role/keyboard action; it only moves the OS window on desktop.
+    <div onMouseDown={dragWindowOnEmptyPress} className="h-full [-webkit-app-region:drag]">
       <NowPlayingImageDropLayer current={current} stageRef={stageRef} />
       <div
         className={cn(

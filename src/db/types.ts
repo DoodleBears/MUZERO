@@ -114,6 +114,13 @@ export interface Track {
   coverThumbhash?: string;
   error?: string;
   createdAt: number;
+  /**
+   * Last user-edit clock (annotation edits: tags / note / cover / liked / memories).
+   * Additive + non-indexed (same path as {@link Track.coverThumbhash}) — legacy rows
+   * lack it, so readers fall back to `createdAt`; no Dexie bump / backfill needed.
+   * Distinct from `generatedAt` (pipeline) and playback `lastPlayedAt` (stats).
+   */
+  updatedAt?: number;
   generatedAt?: number;
   playCount: number;
   liked: boolean;
@@ -501,6 +508,8 @@ export interface AppSettings {
   lyricsCustomColor?: string;
   /** Lyric line alignment (the widescreen "pure lyrics" mode especially). Default "left". */
   lyricsAlign?: "left" | "center" | "right";
+  /** Whether the Now-Playing stage shows lyrics instead of the cover (persisted toggle). Default false. */
+  lyricsStageOpen?: boolean;
   /** Global color scheme. Mirrors localStorage `muzero-theme`; defaults to system. */
   theme?: "light" | "dark" | "system";
   /** Primary/accent color (hex) for light mode. Mirrors localStorage `muzero-primary-light`. */
@@ -636,6 +645,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   lyricsActiveOpacity: 100,
   lyricsInactiveOpacity: 40,
   lyricsColorMode: "default",
+  lyricsStageOpen: false,
   playerRepeatMode: "off",
   playerShuffle: false,
   presenceEnabled: false,

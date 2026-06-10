@@ -141,7 +141,7 @@ export default function App() {
   const immersiveMemoryActive = visualizerIdleOnly && (settings.immersiveMemoryOverlay ?? true);
   // Lyrics-focus + foreground hidden → centered lyrics over the background
   // (takes over from the memory overlay while it's on).
-  const lyricsStageOpen = useUiStore((s) => s.lyricsStageOpen);
+  const lyricsStageOpen = settings.lyricsStageOpen ?? false;
   const immersiveLyricsActive = foregroundHidden && lyricsStageOpen;
 
   // Mirror the chrome-hidden signal so deep surfaces (e.g. the lyrics search
