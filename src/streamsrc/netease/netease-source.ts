@@ -105,7 +105,10 @@ export function createNeteaseSource(deps: NeteaseSourceDeps): StreamSourceProvid
       const level = (opts?.quality as NeteaseQuality) || "exhigh";
       const payload = JSON.stringify(neteasePlaybackBody(externalId, level));
       const { params } = eapiEncrypt(NETEASE_PLAYER_URL_PATH, payload);
-      const { text } = await post(PLAYER_URL, formBody({ params }), opts?.signal);
+      const { status, text } = await post(PLAYER_URL, formBody({ params }), opts?.signal);
+      // Diagnostic: the raw player/url body reveals why a track has no playable URL
+      // (VIP fee, login required, free-trial clip, anti-crawler). Remove once stable.
+      log.info("netease", "resolve", { status, level, head: text.slice(0, 320) });
       const verdict = parseNeteasePlayback(text);
 
       switch (verdict.kind) {
