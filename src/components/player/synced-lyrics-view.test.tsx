@@ -96,6 +96,22 @@ describe("LyricsScroller (word-by-word karaoke)", () => {
     expect(screen.getByText("next line").querySelectorAll("[data-word]").length).toBe(0);
   });
 
+  it("fills word spans with a valid color in the default color mode (no invisible text)", () => {
+    // Regression: with lyricStyle.color undefined (default mode), the gradient must
+    // fall back to currentColor — never an "undefined" stop, which background-clip:text
+    // would render as fully invisible text.
+    const { container } = render(
+      <LyricsScroller resolved={wordSynced} activeIndex={0} onSeek={() => {}} wordByWord />,
+    );
+    const span = container.querySelector("[data-word]") as HTMLElement;
+    const style = (span.getAttribute("style") ?? "").toLowerCase();
+    expect(span.style.backgroundImage).not.toContain("undefined");
+    expect(style).toContain("currentcolor");
+    // The FILL is transparent-ized, but `color` itself must keep inheriting so
+    // currentColor resolves to the foreground.
+    expect(span.style.color).not.toBe("transparent");
+  });
+
   it("renders the whole line (no word spans) when word-by-word is off", () => {
     const { container } = render(
       <LyricsScroller resolved={wordSynced} activeIndex={0} onSeek={() => {}} wordByWord={false} />,

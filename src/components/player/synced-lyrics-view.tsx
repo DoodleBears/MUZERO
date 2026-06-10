@@ -268,12 +268,18 @@ function SyncedLines({
   // Karaoke fill colors: the sung part shows the full lyric color; the unsung part
   // sits at the inactive opacity (relative to active, since the whole line already
   // carries activeOpacity) so it reads like the dim lines until it's sung.
-  const sungColor = lyricStyle.color;
+  // Fall back to `currentColor` (the inherited foreground) when no explicit lyric
+  // color is set — in the default color mode `lyricStyle.color` is undefined, and
+  // an "undefined" gradient stop would make `background-clip:text` paint NOTHING,
+  // rendering the active line invisible (only its shadow showed). The word span
+  // keeps its `color` inheriting and transparent-izes only the text FILL, so
+  // `currentColor` still resolves to the real foreground.
+  const sungColor = lyricStyle.color ?? "currentColor";
   const unsungPct = Math.round(
     Math.max(0, Math.min(1, (lyricStyle.inactiveOpacity || 0) / (lyricStyle.activeOpacity || 1))) *
       100,
   );
-  const unsungColor = `color-mix(in srgb, ${lyricStyle.color} ${unsungPct}%, transparent)`;
+  const unsungColor = `color-mix(in srgb, ${sungColor} ${unsungPct}%, transparent)`;
 
   useEffect(() => {
     const vp = viewportRef.current;
@@ -450,7 +456,9 @@ function SyncedLines({
                             backgroundImage: `linear-gradient(90deg, ${sungColor} var(--wfill), ${unsungColor} var(--wfill))`,
                             WebkitBackgroundClip: "text",
                             backgroundClip: "text",
-                            color: "transparent",
+                            // Transparent-ize only the FILL (not `color`) so the
+                            // gradient shows through AND `currentColor` above still
+                            // resolves to the inherited foreground.
                             WebkitTextFillColor: "transparent",
                           } as React.CSSProperties
                         }
