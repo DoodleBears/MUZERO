@@ -14,7 +14,7 @@
 | 1 | 纯排序核心 + 仓库层（分数序算法 + lazy 物化 + reorder repo） | ✅ Completed | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | R2 Sync 对齐（manifest rank 字段 + export/import round-trip + 整 session LWW） | ✅ Completed | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | 多选模式拖拽 UI（@dnd-kit + 整选区块移动 + drop indicator + 手动序门控） | ✅ Completed（代码+单测；交互实测待真机） | [Phase 3 Checklist](#phase-3-checklist) |
-| 4 | 打磨（虚拟化 reorder + 键盘 a11y + 触摸 + drop indicator + 拖拽互斥） | ✅ Completed（代码+单测；交互实测待真机） | [Phase 4 Checklist](#phase-4-checklist) |
+| 4 | 打磨（正统 sortable + 虚线框 drop placeholder + 键盘/触摸 + 拖拽互斥 + 长按进入多选） | ✅ Completed（代码+单测；交互实测待真机；虚拟化回退见下） | [Phase 4 Checklist](#phase-4-checklist) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
 
@@ -418,17 +418,18 @@ SetDetailView (search-page.tsx:1244)
 **Goal:** 虚拟化 reorder + 键盘可达性 + 触摸体验 + 边界回归。
 
 **Tasks:**
-- [x] **虚拟化 reorder 列表**（大歌单 reorder 性能）：`ReorderableTrackList` 接 `useVirtualizer`（固定行高 56、overscan 8、绝对定位 `translateY(start)`）；只挂窗口内行 + @dnd-kit 内建 autoScroll 把离屏目标带进视口。✅
-- [x] **drop indicator 升级**：方向感知插入线（`onDragOver` 算 active/over 索引 → 向下落 `bottom`、向上落 `top`），虚拟化下稳健（不靠 sortable transform 开合间隙，避免与 react-virtual 绝对定位双重位移）。✅
+- [~] ~~**虚拟化 reorder 列表**：`useVirtualizer` 绝对定位 `translateY(start)`~~ —— **已回退**（实测 bug：绝对定位 + 丢弃 sortable transform 破坏了 @dnd-kit 的 rect 测量/碰撞，`over` 永远卡在首行 → 只能拖到最顶）。改回**非虚拟化正统 sortable**（每行 apply `CSS.Transform`，正常流），碰撞/落点恢复正确。大歌单虚拟化 reorder 需 dnd-kit+react-virtual 的定制碰撞器，移到独立后续（见 Out of Scope）。
+- [x] **drop indicator = 虚线框 placeholder**（用户指定）：被拖行的槽位渲染为 `border-2 border-dashed border-primary/60` 空盒，靠 `verticalListSortingStrategy` 的 transform **自动 snap 到落点**（周围行让位开槽）；`DragOverlay` 浮层显示真实内容 +「N 首」badge。原「方向感知插入线」随虚拟化回退一并移除（虚线框更直观且不依赖手算 over 索引）。✅
 - [x] 触摸 `TouchSensor`（`delay:200 + tolerance:8`，按压延迟避免与滚动冲突）；键盘 `KeyboardSensor` + `sortableKeyboardCoordinates` 已挂（grip 可聚焦操作）。✅
 - [x] 拖拽中批量操作互斥：`onDragActiveChange` 上抛 → `track-list-section` 置 `dragActive` → `BatchActionBar` 新增 `disabled` prop（`pointer-events-none + opacity-60`，action 按钮 disabled）。✅（2 测）
 - [x] **长按进入多选**（touch-friendly，像长按照片）：`TrackListSection` 根节点委托 `useLongPress`（既有 hook，500ms / 10px 容差），按行的 `data-track-index` 解析 → `sel.enter()` + `sel.toggle(id,{index})`；trailing click 经 `onClickCapture + consumeClick` 吞掉，仅在**非** select 模式挂。**零改 `TrackRow`/`VirtualTrackList`**（事件委托 + 既有 data 属性，避开并发热文件）。✅
 
 #### Phase 4 Checklist
-- [x] 虚拟化单测：mock `useVirtualizer` 只渲染窗口行（0/1/2），off-window 行不挂载（证明虚拟化）；每行有 drag handle；点击行 toggle 选择（`reorderable-track-list.test.tsx`，3 测）。✅
+- [x] 组件单测（非虚拟化）：每首歌一行 + 每行有 drag handle + 点击行 body toggle 选择（`reorderable-track-list.test.tsx`，3 测）。✅
 - [x] 拖拽进行中批量操作互斥：`BatchActionBar` `disabled` → action 按钮 disabled（`batch-action-bar.test.tsx`，2 测）。✅
 - [x] 长按委托解析器单测：行内/后代命中、越界/非法 index 兜底、null 兜底（`track-row-target.test.ts`，4 测）。✅
-- [→] 键盘端到端一次重排焦点不丢、移动端窄屏不误触滚动、autoScroll 视觉：**enabler 已实现（TouchSensor/KeyboardSensor/autoScroll）**，交互实测留真实 Electron 壳（同 Phase 3，预览沙箱 hidden-tab 不可靠 + 并发热文件未稳）。
+- [→] 键盘端到端一次重排焦点不丢、移动端窄屏不误触滚动、虚线框 snap 视觉：**enabler 已实现（TouchSensor/KeyboardSensor + 正统 sortable）**，交互实测留真实 Electron 壳。
+- [→] **大歌单虚拟化 reorder**：回退后非虚拟化（reorder 是 opt-in 编辑态，典型歌单可接受）；超大歌单需 dnd-kit 定制碰撞器，独立后续。
 
 ---
 
@@ -485,6 +486,7 @@ SetDetailView (search-page.tsx:1244)
 | 2026-06-11 | DoodleBear / Product | Q5/Q6 定档：精度判定改用**浮点精确法**（中点落端点）取代绝对 epsilon；rebalance **无感**。新增 §3.4 落点 edge case 计算（队首/队尾/空邻居/首拖/no-op 精确钉死，被拖块先摘除、anchor 用 id、rank 可为负），`ranksAtTop/Bottom` 入 `set-order.ts`，Phase 1 穷举单测同步扩充。 |
 | 2026-06-11 | DoodleBear / Eng | **Phase 1-4 全实现**（TDD，commits 0ffda04→a76f0bf，~60 测）：分数序核心+repo、R2 manifest rank round-trip（整 session LWW，per-track mutation deferred）、@dnd-kit 独立 `reorderable-track-list`（避开并发热文件）虚拟化+方向感知 drop 线+整块移动+手动序门控+拖拽互斥。仅交互实测待真机。 |
 | 2026-06-11 | DoodleBear / Eng | 追加**长按进入多选**：`TrackListSection` 根节点事件委托 `useLongPress` + `data-track-index` 解析（纯 `track-row-target.ts`，4 测），零改 `TrackRow`/`VirtualTrackList`。 |
+| 2026-06-11 | DoodleBear / Eng | **Bugfix**：Phase 4 虚拟化（绝对定位 + 丢 sortable transform）破坏 dnd-kit 碰撞 → `over` 卡首行、只能拖到最顶。**回退为非虚拟化正统 sortable**（apply `CSS.Transform`）。drop indicator 按用户要求改为**虚线框 placeholder**（被拖行槽位 = 虚线盒，靠 strategy 自动 snap 到落点）。 |
 
 ---
 
