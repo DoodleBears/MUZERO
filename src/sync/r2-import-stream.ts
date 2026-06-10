@@ -8,6 +8,7 @@ import type {
   TrackLyrics,
 } from "@/db/types";
 import { newId } from "@/lib/id";
+import type { LyricsSource } from "@/lyrics/provider";
 import type { R2EntityCoversIndex } from "./r2-manifest-schema";
 import type { RemoteSetIndexResult } from "./r2-subscription";
 import { resolveRemoteObjectUrl } from "./r2-url";
@@ -169,8 +170,8 @@ export function entityCoverRemoteWins(
  * published catalog is authoritative. (synced-lyrics PRD §4.8.)
  */
 export function lyricsRemoteWins(
-  local: { source: "lrclib" | "manual" } | undefined,
-  remote: { source: "lrclib" | "manual" },
+  local: { source: LyricsSource } | undefined,
+  remote: { source: LyricsSource },
 ): boolean {
   if (local?.source === "manual" && remote.source !== "manual") return false;
   return true;

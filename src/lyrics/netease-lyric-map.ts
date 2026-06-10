@@ -1,0 +1,79 @@
+/**
+ * Pure NetEase lyric mappings — request body + response parsing for the eapi
+ * `/api/song/lyric/v1` endpoint. Zero IO (mirrors `lrclib-map.ts`): the provider
+ * shell wires the cookie-authed eapi request around these. NetEase returns
+ * LRC-format text in `lrc.lyric`, so the existing `parseLrc` renders it as-is.
+ */
+
+export const NETEASE_LYRIC_URL = "https://interface.music.163.com/eapi/song/lyric/v1";
+export const NETEASE_LYRIC_PATH = "/api/song/lyric/v1";
+
+/** The eapi lyric request body. `lv/kv/tv` request the main/karaoke/translation LRC. */
+export function buildLyricBody(songId: string): Record<string, unknown> {
+  return { id: songId, cp: false, lv: 0, kv: 0, tv: 0 };
+}
+
+export interface NeteaseLyricResult {
+  /** Raw LRC with `[mm:ss.cs]` timestamps (parsed downstream by `parseLrc`). */
+  synced?: string;
+  plain?: string;
+  instrumental: boolean;
+}
+
+const HAS_TIMESTAMP = /\[\d{1,2}:\d{2}/;
+// NetEase ships instrumentals with a single "纯音乐，请欣赏" (pure music) placeholder line.
+const PURE_MUSIC = /纯音乐/;
+
+/**
+ * Drop NetEase's rich-lyric (yrc) metadata lines, which embed the songwriter /
+ * composer / arranger credits as raw JSON in the lyric text, e.g.
+ *   {"c":[{"tx":"作词: "},{"tx":"name","li":"…&type=artist"}]}
+ * (optionally prefixed by a `[mm:ss.xx]` stamp). Left in, they render as garbled
+ * "lyrics". Real lyric lines (plain or `[mm:ss]text`) are kept untouched.
+ */
+export function stripNeteaseMetaLines(raw: string): string {
+  return raw
+    .split(/\r?\n/)
+    .filter((line) => {
+      const body = line.replace(/^\s*(?:\[\d{1,2}:\d{2}(?:[.:]\d{1,3})?\])+\s*/, "").trim();
+      return !(body.startsWith("{") && (body.includes('"tx"') || body.includes('"c":[')));
+    })
+    .join("\n")
+    .trim();
+}
+
+/** Parse the `/song/lyric/v1` response. Returns null for uncollected/missing lyrics. */
+export function parseNeteaseLyric(json: unknown): NeteaseLyricResult | null {
+  const lyric = (json as { lrc?: { lyric?: unknown } } | null)?.lrc?.lyric;
+  const raw = stripNeteaseMetaLines(typeof lyric === "string" ? lyric : "");
+  if (!raw) return null;
+  if (PURE_MUSIC.test(raw)) return { instrumental: true };
+  if (HAS_TIMESTAMP.test(raw)) return { synced: raw, instrumental: false };
+  return { plain: raw, instrumental: false };
+}
+
+/**
+ * From a list of search hits, the one whose duration is closest to the target —
+ * NetEase cloudsearch ranks by relevance, but duration disambiguates covers /
+ * live versions. Falls back to the first hit when no usable target.
+ */
+export function pickClosestByDuration<T extends { durationSec?: number }>(
+  hits: T[],
+  durationSec?: number,
+): T | null {
+  if (hits.length === 0) return null;
+  if (durationSec == null || !Number.isFinite(durationSec)) return hits[0];
+  let best = hits[0];
+  let bestDelta = Number.POSITIVE_INFINITY;
+  for (const hit of hits) {
+    const delta =
+      typeof hit.durationSec === "number"
+        ? Math.abs(hit.durationSec - durationSec)
+        : Number.POSITIVE_INFINITY;
+    if (delta < bestDelta) {
+      best = hit;
+      bestDelta = delta;
+    }
+  }
+  return best;
+}

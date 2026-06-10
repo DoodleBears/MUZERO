@@ -20,7 +20,7 @@ import { lyricsRecordFromHit } from "@/lyrics/auto-fetch";
 import { buildLyricsQuery } from "@/lyrics/build-query";
 import { lyricsRecordFromManualText } from "@/lyrics/manual";
 import type { LyricsHit } from "@/lyrics/provider";
-import { resolveLyricsProvider } from "@/lyrics/registry";
+import { resolveLyricsProviderForTrack } from "@/lyrics/registry";
 
 /**
  * Manual lyrics management for a track: search LRCLIB candidates and pick one,
@@ -91,10 +91,11 @@ function LyricsManagerBody({ track, onDone }: { track: Track; onDone: () => void
     const q = buildLyricsQuery(track);
     if (q) {
       try {
-        const hit = await resolveLyricsProvider(settings).fetch(q);
+        const provider = resolveLyricsProviderForTrack(settings, track);
+        const hit = await provider.fetch(q);
         await setTrackLyrics({
           trackId: track.id,
-          record: lyricsRecordFromHit(hit),
+          record: lyricsRecordFromHit(hit, provider.id),
           matched: hit?.matched,
         });
       } catch {

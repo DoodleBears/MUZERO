@@ -69,7 +69,7 @@ export async function runAutoFetchLyrics(opts: RunAutoFetchOpts): Promise<void> 
     await setTrackLyrics(
       {
         trackId: track.id,
-        record: lyricsRecordFromHit(hit),
+        record: lyricsRecordFromHit(hit, provider.id),
         matched: hit?.matched,
         fetchedAt: now,
       },
@@ -81,7 +81,7 @@ export async function runAutoFetchLyrics(opts: RunAutoFetchOpts): Promise<void> 
     // Persist a negative cache so a failed fetch (timeout / network / 5xx) isn't
     // retried automatically on every play. Manual search or "re-fetch" clears it.
     await setTrackLyrics(
-      { trackId: track.id, record: lyricsRecordFromHit(null), fetchedAt: now },
+      { trackId: track.id, record: lyricsRecordFromHit(null, provider.id), fetchedAt: now },
       db,
     ).catch(() => {});
   }

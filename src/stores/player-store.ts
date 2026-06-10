@@ -51,7 +51,7 @@ import {
 import { isNcmFile } from "@/lib/ncm-decode";
 import { getAppFetch } from "@/lib/platform";
 import { runAutoFetchLyrics } from "@/lyrics/auto-fetch";
-import { resolveLyricsProvider } from "@/lyrics/registry";
+import { resolveLyricsProviderForTrack } from "@/lyrics/registry";
 import { resolveMusicGenProvider } from "@/musicgen/registry";
 import { MediaEngine } from "@/player/media-engine";
 import { reconcileCurrentIndex, unconsumedTrackIds } from "@/player/play-queue";
@@ -1225,7 +1225,7 @@ function triggerLyricsAutoFetch(track: Track): void {
         await runAutoFetchLyrics({
           track,
           settings,
-          provider: resolveLyricsProvider(settings),
+          provider: resolveLyricsProviderForTrack(settings, track),
           signal: controller.signal,
         });
       } catch (err) {

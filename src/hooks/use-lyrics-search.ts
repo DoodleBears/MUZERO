@@ -5,7 +5,7 @@ import { useSettings } from "@/hooks/use-app-data";
 import { trackAlbum, trackArtists } from "@/lib/track-display";
 import { lyricsRecordFromHit } from "@/lyrics/auto-fetch";
 import type { LyricsHit } from "@/lyrics/provider";
-import { resolveLyricsProvider } from "@/lyrics/registry";
+import { resolveLyricsProviderForTrack } from "@/lyrics/registry";
 
 export interface LyricsSearch {
   title: string;
@@ -27,7 +27,7 @@ export interface LyricsSearch {
  */
 export function useLyricsSearch(track: Track): LyricsSearch {
   const settings = useSettings();
-  const provider = useMemo(() => resolveLyricsProvider(settings), [settings]);
+  const provider = useMemo(() => resolveLyricsProviderForTrack(settings, track), [settings, track]);
   const [title, setTitle] = useState(track.title);
   const [artist, setArtist] = useState(() => trackArtists(track).join(", "));
   const [results, setResults] = useState<LyricsHit[] | null>(null);

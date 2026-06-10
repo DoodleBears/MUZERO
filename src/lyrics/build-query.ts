@@ -10,11 +10,13 @@ import { trackAlbum, trackArtists } from "@/lib/track-display";
 import type { LyricsQuery } from "./provider";
 
 export function buildLyricsQuery(track: Track): LyricsQuery | null {
-  const trackName = track.title?.trim();
-  if (!trackName) return null;
+  const trackName = track.title?.trim() ?? "";
   const artistName = trackArtists(track).join(", ").trim();
-  if (!artistName) return null;
+  // A streamed NetEase track carries the exact songId — enough to fetch official
+  // lyrics with no title/artist. Other tracks still need both for a meaningful lookup.
+  const neteaseSongId = track.streamSourceId === "netease" ? track.streamExternalId : undefined;
+  if (!neteaseSongId && (!trackName || !artistName)) return null;
   const durationSec =
     Number.isFinite(track.durationSec) && track.durationSec > 0 ? track.durationSec : undefined;
-  return { trackName, artistName, albumName: trackAlbum(track), durationSec };
+  return { trackName, artistName, albumName: trackAlbum(track), durationSec, neteaseSongId };
 }

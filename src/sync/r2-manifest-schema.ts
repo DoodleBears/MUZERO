@@ -137,7 +137,7 @@ const r2LyricsSchema = z.object({
   synced: z.string().optional(),
   plain: z.string().optional(),
   instrumental: z.boolean().default(false),
-  source: z.enum(["lrclib", "manual"]),
+  source: z.enum(["lrclib", "netease", "manual"]),
   sourceId: z.string().optional(),
 });
 

@@ -256,6 +256,11 @@ export interface PlayQueue {
 
 /** Where the Now-Playing ambient background pulls its image(s) from. `"none"` hides it entirely. */
 export type BackgroundMode = "cover" | "slideshow" | "none";
+
+/** Flow background color source: follow the cover palette or a fixed custom set. */
+export type FlowColorSource = "cover" | "custom";
+/** Flow effect variants (map to a `uEffect` shader branch in FLOW_FRAG). */
+export type FlowEffectId = "aurora-drift" | "liquid-mesh" | "soft-blobs";
 export type BackgroundRenderer =
   | "image"
   | "blur"
@@ -483,6 +488,19 @@ export interface AppSettings {
   immersiveMemoryOverlay?: boolean;
   /** Prefer the current cover's extracted dominant color for visualizers. Default true. */
   visualizerUseCoverColor?: boolean;
+  /** Flow background ("流光") color source: follow the cover palette, or a fixed custom set.
+   *  When "cover" but the cover yields no palette, falls back to `flowCustomColors`. Default "cover". */
+  flowColorSource?: FlowColorSource;
+  /** Custom flow colors (hex, 2–5). Always kept — the fallback when no cover palette. */
+  flowCustomColors?: string[];
+  /** Flow effect variant (shader branch). Default "aurora-drift". */
+  flowEffect?: FlowEffectId;
+  /** Flow drift speed, 0–100. Default 40 (calm). */
+  flowMotion?: number;
+  /** Flow blob scale, 0–100. Default 50. */
+  flowScale?: number;
+  /** How much audio modulates the flow, 0–100 (0 = pure ambient). Default 20. */
+  flowAudioReactivity?: number;
   /** Override analyser FFT size for the active visualizer. Defaults to style metadata. */
   visualizerFftSize?: 256 | 512 | 1024 | 2048;
   /** Override analyser smoothing, 0–0.99. Defaults to style metadata. */

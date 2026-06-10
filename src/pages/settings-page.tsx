@@ -39,6 +39,8 @@ import { saveSettings } from "@/db/repositories";
 import type { AppSettings, CloudDrive, LlmProviderId } from "@/db/types";
 import { useSettings } from "@/hooks/use-app-data";
 import { type Locale, locales, persistLocale } from "@/i18n/config";
+import { hasStreamingSources } from "@/lib/desktop/bridge";
+import { useSmoothScroll } from "@/lib/smooth-scroll/use-smooth-scroll";
 import { clearTrace, formatTraceEntries, useTraceEntries } from "@/lib/trace";
 import { formatDuration } from "@/lib/utils";
 import {
@@ -150,6 +152,11 @@ const RUNNING_SYNC_PHASES = new Set<SyncPhase>([
 export function SettingsPage() {
   const { t, i18n } = useTranslation();
   const settings = useSettings();
+  // Two independently scrolling columns — each opts into smooth scrolling.
+  const navScrollRef = useRef<HTMLDivElement | null>(null);
+  const contentScrollRef = useRef<HTMLDivElement | null>(null);
+  useSmoothScroll(navScrollRef);
+  useSmoothScroll(contentScrollRef);
   const cloudDrives = useLiveQuery(() => listCloudDrives(), [], []);
   const latestSyncRun = useLiveQuery(() => db.syncRuns.orderBy("startedAt").last(), [], undefined);
   const localDevice = useLiveQuery(() => getLocalDevice(), [], undefined);
@@ -322,6 +329,10 @@ export function SettingsPage() {
     await saveSettings({ autoFetchLyrics: enabled });
   }
 
+  async function changeLyricsProvider(id: AppSettings["lyricsProviderId"]) {
+    await saveSettings({ lyricsProviderId: id });
+  }
+
   const primary: PrimaryColors = {
     light: settings.primaryLight ?? DEFAULT_PRIMARY.light,
     dark: settings.primaryDark ?? DEFAULT_PRIMARY.dark,
@@ -360,10 +371,16 @@ export function SettingsPage() {
     <div className="h-full w-full overflow-hidden">
       <div className="mx-auto flex h-full w-full max-w-5xl flex-col gap-2 px-4 md:flex-row md:gap-6 lg:px-6">
         {/* Left and right columns scroll independently (each owns its overflow). */}
-        <div className="no-scrollbar shrink-0 overflow-y-auto pt-chrome-top md:w-52 md:pb-chrome-bottom">
+        <div
+          ref={navScrollRef}
+          className="no-scrollbar shrink-0 overflow-y-auto pt-chrome-top md:w-52 md:pb-chrome-bottom"
+        >
           <SettingsSidebar active={activeItem} onSelect={setSettingsItem} />
         </div>
-        <div className="no-scrollbar flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-y-auto pb-chrome-bottom md:pt-chrome-top">
+        <div
+          ref={contentScrollRef}
+          className="no-scrollbar flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-y-auto pb-chrome-bottom md:pt-chrome-top"
+        >
           {activeItem === "appearance" && (
             <Card>
               <CardHeader>
@@ -540,6 +557,28 @@ export function SettingsPage() {
                     </span>
                   </span>
                 </label>
+                {hasStreamingSources() && (
+                  <label className="flex items-center justify-between gap-3 rounded-md border border-border p-3">
+                    <span className="flex flex-col gap-1">
+                      <span className="font-medium text-sm">{t("settings.lyricsSource")}</span>
+                      <span className="text-muted-foreground text-xs">
+                        {t("settings.lyricsSourceHint")}
+                      </span>
+                    </span>
+                    <select
+                      value={settings.lyricsProviderId ?? "lrclib"}
+                      onChange={(event) =>
+                        void changeLyricsProvider(
+                          event.currentTarget.value as AppSettings["lyricsProviderId"],
+                        )
+                      }
+                      className="shrink-0 rounded-md border border-border bg-transparent px-2 py-1.5 text-foreground text-sm"
+                    >
+                      <option value="lrclib">{t("settings.lyricsSourceLrclib")}</option>
+                      <option value="netease">{t("settings.lyricsSourceNetease")}</option>
+                    </select>
+                  </label>
+                )}
               </CardContent>
             </Card>
           )}

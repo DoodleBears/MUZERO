@@ -55,4 +55,31 @@ describe("buildLyricsQuery", () => {
     const q = buildLyricsQuery(track({ durationSec: 0 }));
     expect(q?.durationSec).toBeUndefined();
   });
+
+  it("carries the NetEase songId for streamed NetEase tracks", () => {
+    const q = buildLyricsQuery(
+      track({ origin: "streamed", streamSourceId: "netease", streamExternalId: "33894312" }),
+    );
+    expect(q?.neteaseSongId).toBe("33894312");
+  });
+
+  it("still builds a query for a NetEase track even without artist (songId is enough)", () => {
+    const q = buildLyricsQuery(
+      track({
+        origin: "streamed",
+        streamSourceId: "netease",
+        streamExternalId: "999",
+        mediaMetadata: undefined,
+      }),
+    );
+    expect(q).not.toBeNull();
+    expect(q?.neteaseSongId).toBe("999");
+  });
+
+  it("does not set a songId for non-NetEase streamed tracks", () => {
+    const q = buildLyricsQuery(
+      track({ origin: "streamed", streamSourceId: "bili", streamExternalId: "BV1#1" }),
+    );
+    expect(q?.neteaseSongId).toBeUndefined();
+  });
 });

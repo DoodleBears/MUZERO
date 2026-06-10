@@ -10,10 +10,10 @@
  * interface — never `if (source === …)`.
  */
 
-export type LyricsProviderId = "lrclib";
+export type LyricsProviderId = "lrclib" | "netease";
 
 /** Where a stored lyrics row came from. `manual` = user-supplied, wins on merge. */
-export type LyricsSource = "lrclib" | "manual";
+export type LyricsSource = "lrclib" | "netease" | "manual";
 
 /** Persisted lyrics state. `notFound` is a negative-cache marker. */
 export type LyricsStatus = "found" | "notFound" | "instrumental";
@@ -24,6 +24,12 @@ export interface LyricsQuery {
   artistName: string;
   albumName?: string;
   durationSec?: number;
+  /**
+   * NetEase songId, when the track streams from NetEase (`streamExternalId`). Lets
+   * the NetEase provider fetch the exact official lyrics with no fuzzy search;
+   * ignored by other providers.
+   */
+  neteaseSongId?: string;
 }
 
 /**
