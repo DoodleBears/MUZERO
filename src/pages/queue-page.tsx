@@ -3,6 +3,7 @@ import { useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { VirtualTrackList } from "@/components/library/virtual-track-list";
 import { Button } from "@/components/ui/button";
+import { ImportFolderButton } from "@/components/upload/import-folder-button";
 import { MEDIA_ACCEPT } from "@/lib/file-drop";
 import { usePlayerStore } from "@/stores/player-store";
 
@@ -47,6 +48,10 @@ export function QueuePage() {
               e.target.value = "";
               if (files.length) void addUploads(files);
             }}
+          />
+          <ImportFolderButton
+            className="hidden sm:inline-flex"
+            onWebFiles={(files) => addUploads(files)}
           />
         </div>
       </div>

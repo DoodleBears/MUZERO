@@ -1,6 +1,11 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { Track } from "@/db/types";
-import { buildMediaSessionMetadataInit, setPlatformMediaSessionMetadata } from "./media-session";
+import {
+  buildMediaSessionMetadataInit,
+  setPlatformMediaSessionActionHandlers,
+  setPlatformMediaSessionMetadata,
+  setPlatformMediaSessionPlaybackState,
+} from "./media-session";
 
 function track(overrides: Partial<Track> = {}): Track {
   return {
@@ -67,5 +72,74 @@ describe("setPlatformMediaSessionMetadata", () => {
 
   it("returns false without throwing when Media Session is unsupported", () => {
     expect(setPlatformMediaSessionMetadata(track(), undefined, {})).toBe(false);
+  });
+});
+
+describe("setPlatformMediaSessionActionHandlers", () => {
+  it("registers transport handlers and clears unset actions", () => {
+    const handlers: Record<string, (() => void) | null> = {};
+    const target = {
+      navigator: {
+        mediaSession: {
+          metadata: null,
+          setActionHandler(action: string, handler: (() => void) | null) {
+            handlers[action] = handler;
+          },
+        },
+      },
+    };
+    const next = vi.fn();
+
+    expect(setPlatformMediaSessionActionHandlers({ nexttrack: next }, target)).toBe(true);
+    handlers.nexttrack?.();
+    expect(next).toHaveBeenCalledOnce();
+    // previoustrack/play/pause weren't provided → registered as null, not left stale.
+    expect(handlers.previoustrack).toBeNull();
+    expect(handlers.play).toBeNull();
+  });
+
+  it("ignores actions the platform rejects", () => {
+    const target = {
+      navigator: {
+        mediaSession: {
+          metadata: null,
+          setActionHandler(action: string) {
+            if (action === "previoustrack") throw new TypeError("unsupported action");
+          },
+        },
+      },
+    };
+    expect(() =>
+      setPlatformMediaSessionActionHandlers(
+        { previoustrack: () => {}, nexttrack: () => {} },
+        target,
+      ),
+    ).not.toThrow();
+  });
+
+  it("returns false when action handlers are unsupported", () => {
+    expect(setPlatformMediaSessionActionHandlers({ nexttrack: () => {} }, {})).toBe(false);
+    expect(
+      setPlatformMediaSessionActionHandlers(
+        { nexttrack: () => {} },
+        { navigator: { mediaSession: { metadata: null } } },
+      ),
+    ).toBe(false);
+  });
+});
+
+describe("setPlatformMediaSessionPlaybackState", () => {
+  it("mirrors playback state when supported", () => {
+    const target = {
+      navigator: {
+        mediaSession: { metadata: null, playbackState: "none" as MediaSessionPlaybackState },
+      },
+    };
+    expect(setPlatformMediaSessionPlaybackState("playing", target)).toBe(true);
+    expect(target.navigator.mediaSession.playbackState).toBe("playing");
+  });
+
+  it("returns false when Media Session is unsupported", () => {
+    expect(setPlatformMediaSessionPlaybackState("playing", {})).toBe(false);
   });
 });

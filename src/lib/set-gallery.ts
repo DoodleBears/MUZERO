@@ -22,6 +22,18 @@ export interface SetGalleryItem {
 
 export type SetSort = "recent" | "name" | "size";
 export type SetFilter = "all" | "liked";
+/** Sort direction. Ascending = A→Z / oldest→newest / shortest→longest. */
+export type SortDir = "asc" | "desc";
+
+/**
+ * The orientation each sort selects when first picked; clicking the active chip
+ * again flips it (the gallery owns that toggle, the lib just applies `dir`).
+ */
+export const SET_SORT_DEFAULT_DIR: Record<SetSort, SortDir> = {
+  recent: "desc",
+  name: "asc",
+  size: "desc",
+};
 
 /**
  * Filter by a name/seed query (transliteration-aware — pinyin / kana / romaji,
@@ -44,15 +56,30 @@ export function filterSets(
   });
 }
 
-/** Sort a copy (never mutates the input) by the chosen mode. */
-export function sortSets(items: SetGalleryItem[], sort: SetSort): SetGalleryItem[] {
-  const copy = [...items];
+/** Ascending comparison for a sort field; callers apply the direction sign. */
+function compareSetsAsc(a: SetGalleryItem, b: SetGalleryItem, sort: SetSort): number {
   switch (sort) {
     case "name":
-      return copy.sort((a, b) => a.session.name.localeCompare(b.session.name));
+      return a.session.name.localeCompare(b.session.name);
     case "size":
-      return copy.sort((a, b) => b.trackCount - a.trackCount);
+      return a.trackCount - b.trackCount;
     default:
-      return copy.sort((a, b) => b.lastActivityAt - a.lastActivityAt);
+      return a.lastActivityAt - b.lastActivityAt;
   }
+}
+
+/**
+ * Sort a copy (never mutates the input). `dir` defaults to the field's natural
+ * orientation ({@link SET_SORT_DEFAULT_DIR}); equal keys break by name for a
+ * stable, deterministic order.
+ */
+export function sortSets(
+  items: SetGalleryItem[],
+  sort: SetSort,
+  dir: SortDir = SET_SORT_DEFAULT_DIR[sort],
+): SetGalleryItem[] {
+  const sign = dir === "asc" ? 1 : -1;
+  return [...items].sort(
+    (a, b) => sign * compareSetsAsc(a, b, sort) || a.session.name.localeCompare(b.session.name),
+  );
 }

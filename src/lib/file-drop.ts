@@ -5,6 +5,8 @@
  * (Mirrors ClipCombo's landing-page drop classification.)
  */
 
+import { isNcmFile } from "@/lib/ncm-decode";
+
 export type DroppedKind = "audio" | "video" | "image";
 
 const VIDEO_EXT = /\.(mp4|m4v|mov|webm|mkv|avi)$/i;
@@ -22,6 +24,8 @@ export function classifyFile(file: FileLike): DroppedKind | null {
   const name = file.name.toLowerCase();
   if (VIDEO_EXT.test(name)) return "video";
   if (AUDIO_EXT.test(name)) return "audio";
+  // NetEase `.ncm` carries no playable MIME — it's decrypted to audio on ingest.
+  if (isNcmFile(name)) return "audio";
   if (IMAGE_EXT.test(name)) return "image";
   return null;
 }
@@ -97,13 +101,90 @@ export function filesFromTransfer(dt: DataTransfer | null | undefined): File[] {
   return out;
 }
 
+/** Guard against pathological deep / self-referential dropped trees. */
+const MAX_DROP_DEPTH = 24;
+
+/** Recursively read a dropped `FileSystemEntry` (file or directory) into Files. */
+function readDropEntry(entry: FileSystemEntry, depth: number): Promise<File[]> {
+  if (depth > MAX_DROP_DEPTH) return Promise.resolve([]);
+  if (entry.isFile) {
+    return new Promise((resolve) => {
+      (entry as FileSystemFileEntry).file(
+        (file) => resolve([file]),
+        () => resolve([]),
+      );
+    });
+  }
+  if (!entry.isDirectory) return Promise.resolve([]);
+  const reader = (entry as FileSystemDirectoryEntry).createReader();
+  return new Promise((resolve) => {
+    const collected: FileSystemEntry[] = [];
+    // `readEntries` returns in batches and must be called until it yields none.
+    const readBatch = () => {
+      reader.readEntries(
+        (batch) => {
+          if (batch.length === 0) {
+            Promise.all(collected.map((e) => readDropEntry(e, depth + 1)))
+              .then((nested) => resolve(nested.flat()))
+              .catch(() => resolve([]));
+            return;
+          }
+          collected.push(...batch);
+          readBatch();
+        },
+        () => resolve([]),
+      );
+    };
+    readBatch();
+  });
+}
+
+/**
+ * Like {@link filesFromTransfer}, but expands dropped FOLDERS into their files via
+ * `webkitGetAsEntry()`. The DataTransfer is invalidated once the drop event
+ * returns, so the synchronous part (capturing entries) must run inside the
+ * handler — call this directly in `onDrop`; it reads the transfer before its first
+ * `await`, then resolves the directory recursion. Falls back to the flat reader
+ * where the entry API is unavailable.
+ */
+export async function filesFromTransferDeep(dt: DataTransfer | null | undefined): Promise<File[]> {
+  if (!dt?.items) return filesFromTransfer(dt);
+  const entries: FileSystemEntry[] = [];
+  const flat: File[] = [];
+  let sawEntryApi = false;
+  for (let i = 0; i < dt.items.length; i += 1) {
+    const item = dt.items[i];
+    if (item.kind !== "file") continue;
+    const entry = item.webkitGetAsEntry?.();
+    if (entry) {
+      entries.push(entry);
+      sawEntryApi = true;
+    } else {
+      const file = item.getAsFile();
+      if (file) flat.push(file);
+    }
+  }
+  if (!sawEntryApi) return filesFromTransfer(dt);
+  const fromEntries = (await Promise.all(entries.map((e) => readDropEntry(e, 0)))).flat();
+  // Dedupe the union (a file may surface through both an entry and `.getAsFile`).
+  const seen = new Set<string>();
+  const out: File[] = [];
+  for (const file of [...fromEntries, ...flat]) {
+    const key = JSON.stringify([file.name, file.size, file.lastModified, file.type]);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(file);
+  }
+  return out;
+}
+
 /**
  * `accept` for media file inputs. MIME wildcards alone make some OS pickers grey
  * out containers with no/odd MIME (notably .mkv → video/x-matroska), so we list
  * extensions explicitly too. Drag-and-drop and paste bypass this entirely.
  */
 export const MEDIA_ACCEPT =
-  "audio/*,video/*,.mp4,.m4v,.mov,.webm,.mkv,.avi,.mp3,.m4a,.aac,.flac,.ogg,.opus,.wav";
+  "audio/*,video/*,.mp4,.m4v,.mov,.webm,.mkv,.avi,.mp3,.m4a,.aac,.flac,.ogg,.opus,.wav,.ncm";
 
 /**
  * `accept` for image inputs. MIME wildcards alone can miss files whose OS picker

@@ -272,3 +272,36 @@
     animation: none;
   }
 }
+
+/*
+ * Auto-scrolling text — the Now Playing title/subtitle pills ping-pong sideways
+ * when their content overflows the pill. `auto-scroll-text.tsx` measures the
+ * overflow and feeds the travel distance (`--auto-scroll-x`, negative px) and the
+ * round-trip `--auto-scroll-duration`; this keyframe only describes the dwell →
+ * scroll-to-end → dwell → scroll-back rhythm. Reduced-motion users never get the
+ * class applied (gated in the component), so no kill switch is needed here.
+ */
+@keyframes auto-scroll-text {
+  0%,
+  12% {
+    transform: translateX(0);
+  }
+  46%,
+  56% {
+    transform: translateX(var(--auto-scroll-x, 0));
+  }
+  90%,
+  100% {
+    transform: translateX(0);
+  }
+}
+
+.auto-scroll-animate {
+  animation: auto-scroll-text var(--auto-scroll-duration, 8s) ease-in-out infinite;
+  will-change: transform;
+}
+
+/* Pause the scroll on hover so a moving artist/album link can be clicked. */
+.auto-scroll-animate:hover {
+  animation-play-state: paused;
+}

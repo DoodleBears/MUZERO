@@ -4,6 +4,7 @@ import {
   classifyFile,
   dragHasFiles,
   filesFromTransfer,
+  filesFromTransferDeep,
   summarizeDragItems,
 } from "./file-drop";
 
@@ -20,6 +21,28 @@ const transfer = (parts: { files?: File[]; items?: DataTransferItem[] }): DataTr
     files: (parts.files ?? []) as unknown as FileList,
     items: parts.items as unknown as DataTransferItemList,
   }) as DataTransfer;
+
+// --- folder-drop (webkitGetAsEntry) fakes -------------------------------------
+const fileEntry = (f: File): FileSystemEntry =>
+  ({ isFile: true, isDirectory: false, file: (cb: (f: File) => void) => cb(f) }) as never;
+const dirEntry = (children: FileSystemEntry[]): FileSystemEntry => {
+  let drained = false;
+  return {
+    isFile: false,
+    isDirectory: true,
+    createReader: () => ({
+      // readEntries yields once, then [] (the batch protocol). Flip `drained`
+      // BEFORE invoking cb — our reader recurses synchronously inside it.
+      readEntries: (cb: (entries: FileSystemEntry[]) => void) => {
+        const batch = drained ? [] : children;
+        drained = true;
+        cb(batch);
+      },
+    }),
+  } as never;
+};
+const entryItem = (entry: FileSystemEntry | null, asFile: File | null = null): DataTransferItem =>
+  ({ kind: "file", webkitGetAsEntry: () => entry, getAsFile: () => asFile }) as never;
 
 describe("classifyFile", () => {
   it("classifies by MIME type first", () => {
@@ -178,5 +201,34 @@ describe("multi-file paste → classify ingest seam", () => {
     const dt = transfer({ files: [a], items: [fileItem(a), fileItem(b), fileItem(c)] });
     const { images } = classifyDrop(filesFromTransfer(dt));
     expect(images.map((f) => f.name)).toEqual(["a.png", "b.jpg", "c.webp"]);
+  });
+});
+
+describe("filesFromTransferDeep", () => {
+  it("expands a dropped folder (including nested) into its files", async () => {
+    const a = file("a.mp3");
+    const b = file("b.flac");
+    const c = file("c.mp4");
+    const folder = dirEntry([fileEntry(a), dirEntry([fileEntry(c)]), fileEntry(b)]);
+    const dt = transfer({ items: [entryItem(folder)] });
+    const files = await filesFromTransferDeep(dt);
+    expect(files.map((f) => f.name).sort()).toEqual(["a.mp3", "b.flac", "c.mp4"]);
+  });
+
+  it("handles a mix of a top-level file and a folder", async () => {
+    const top = file("top.mp3");
+    const inner = file("inner.wav");
+    const dt = transfer({
+      items: [entryItem(fileEntry(top)), entryItem(dirEntry([fileEntry(inner)]))],
+    });
+    const files = await filesFromTransferDeep(dt);
+    expect(files.map((f) => f.name).sort()).toEqual(["inner.wav", "top.mp3"]);
+  });
+
+  it("falls back to the flat reader when webkitGetAsEntry is unavailable", async () => {
+    const a = file("a.mp3", "audio/mpeg", 1);
+    const dt = transfer({ files: [a], items: [fileItem(a)] });
+    const files = await filesFromTransferDeep(dt);
+    expect(files.map((f) => f.name)).toEqual(["a.mp3"]);
   });
 });

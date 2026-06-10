@@ -32,7 +32,7 @@ export function SettingsSidebar({
   })).filter((entry) => entry.items.length > 0);
 
   return (
-    <div className="flex shrink-0 flex-col gap-2 md:w-52">
+    <div className="flex shrink-0 flex-col gap-2 md:w-52 px-1">
       <Input
         value={query}
         onChange={(e) => setQuery(e.target.value)}
@@ -46,7 +46,7 @@ export function SettingsSidebar({
       >
         {sections.map(({ section, items }) => (
           <div key={section.labelKey} className="flex shrink-0 gap-1 md:flex-col">
-            <p className="hidden px-2 pt-3 pb-1 font-medium text-muted-foreground text-xs uppercase tracking-wide md:block">
+            <p className="hidden px-2 pl-0 pt-3 pb-1 font-medium text-muted-foreground text-xs uppercase tracking-wide md:block">
               {t(section.labelKey)}
             </p>
             {items.map((item) => (

@@ -1,6 +1,8 @@
 import { AnimatePresence, motion } from "motion/react";
 import { useTranslation } from "react-i18next";
+import { CoverContextMenu } from "@/components/library/cover-context-menu";
 import { Disc3Icon } from "@/components/ui/disc-3";
+import { clearTrackCover } from "@/db/repositories";
 import type { Track } from "@/db/types";
 import { useTrackCoverUrl } from "@/hooks/use-media";
 import { trackAlbum, trackArtists } from "@/lib/track-display";
@@ -17,7 +19,16 @@ export function TrackInspectorPanel({ className, track }: TrackInspectorPanelPro
   const { t } = useTranslation();
 
   return (
-    <aside className={cn("hidden min-h-0 border-border border-l ps-4 lg:block", className)}>
+    <aside
+      className={cn(
+        // Its own bounded scroll column (the parent grid row caps its height), so the
+        // detail pane scrolls independently of the list and its top dissolves under the
+        // floating search box via `chrome-fade` — matching the list/wall scrollers.
+        "hidden min-h-0 border-border border-l ps-4 lg:block",
+        "chrome-fade no-scrollbar overflow-y-auto pt-2 pb-chrome-bottom [--chrome-fade-top:0.75rem]",
+        className,
+      )}
+    >
       <AnimatePresence mode="wait" initial={false}>
         {track ? (
           <motion.div
@@ -26,7 +37,7 @@ export function TrackInspectorPanel({ className, track }: TrackInspectorPanelPro
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: 18 }}
             transition={{ duration: 0.18, ease: "easeOut" }}
-            className="no-scrollbar sticky top-14 flex max-h-[calc(100vh-9rem)] min-h-0 flex-col gap-4 overflow-y-auto pb-chrome-bottom"
+            className="flex min-h-0 flex-col gap-4"
           >
             <TrackMetadataSummary track={track} />
             <AnnotationEditor key={track.id} track={track} />
@@ -84,13 +95,19 @@ function TrackMetadataSummary({ track }: { track: Track }) {
 
   return (
     <section className="flex flex-col gap-3">
-      <div className="grid aspect-square w-full place-items-center overflow-hidden rounded-lg bg-secondary">
-        {coverUrl ? (
-          <img src={coverUrl} alt="" className="size-full object-cover" />
-        ) : (
-          <Disc3Icon className="text-muted-foreground" size={48} />
-        )}
-      </div>
+      {/* Right-click a pinned cover to remove it back to the disc placeholder. */}
+      <CoverContextMenu
+        hasCover={!!track.coverBlobId}
+        onRemove={() => void clearTrackCover(track.id)}
+      >
+        <div className="grid aspect-square w-full place-items-center overflow-hidden rounded-lg bg-secondary">
+          {coverUrl ? (
+            <img src={coverUrl} alt="" className="size-full object-cover" />
+          ) : (
+            <Disc3Icon className="text-muted-foreground" size={48} />
+          )}
+        </div>
+      </CoverContextMenu>
       <div className="min-w-0">
         <h2 className="truncate font-semibold text-lg">{track.title}</h2>
         <p className="mt-1 line-clamp-2 text-muted-foreground text-sm">

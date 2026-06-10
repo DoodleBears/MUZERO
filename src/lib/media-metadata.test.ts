@@ -1,5 +1,6 @@
 import type { IAudioMetadata } from "music-metadata";
 import { describe, expect, it } from "vitest";
+import { encode163KeyComment } from "@/lib/ncm-fixture";
 import {
   fallbackUploadMediaMetadata,
   metadataFromParsedAudio,
@@ -63,6 +64,50 @@ describe("metadataFromParsedAudio", () => {
     await expect(parsed.embeddedCover?.blob.arrayBuffer()).resolves.toEqual(
       new Uint8Array([1, 2, 3]).buffer,
     );
+  });
+
+  it("recovers the cover URL + backfills missing tags from a NetEase 163-key comment", () => {
+    const comment = encode163KeyComment({
+      musicName: "脱壳单曲",
+      artist: [["网易歌手", 1]],
+      album: "注释专辑",
+      albumPic: "http://p2.music.126.net/abc/def.jpg",
+    });
+    const parsed = metadataFromParsedAudio(
+      {
+        common: { comment: [{ text: comment }] }, // no title/artist/album/picture from ID3
+        format: { container: "MPEG", duration: 91 },
+        native: {},
+      } as unknown as IAudioMetadata,
+      { name: "song.mp3", type: "audio/mpeg" } as File,
+      1,
+    );
+
+    expect(parsed.albumPicUrl).toBe("http://p2.music.126.net/abc/def.jpg");
+    expect(parsed.embeddedCover).toBeUndefined(); // → caller will fetch the remote cover
+    expect(parsed.mediaMetadata.title).toBe("脱壳单曲");
+    expect(parsed.mediaMetadata.album).toBe("注释专辑");
+    expect(parsed.mediaMetadata.artists).toEqual(["网易歌手"]);
+  });
+
+  it("does not let a 163-key comment override real ID3 tags", () => {
+    const comment = encode163KeyComment({
+      musicName: "WRONG",
+      album: "WRONG",
+      albumPic: "http://p2.music.126.net/x.jpg",
+    });
+    const parsed = metadataFromParsedAudio(
+      {
+        common: { title: "Real Title", album: "Real Album", comment: [{ text: comment }] },
+        format: { container: "MPEG" },
+        native: {},
+      } as unknown as IAudioMetadata,
+      { name: "song.mp3", type: "audio/mpeg" } as File,
+      1,
+    );
+    expect(parsed.mediaMetadata.title).toBe("Real Title");
+    expect(parsed.mediaMetadata.album).toBe("Real Album");
+    expect(parsed.albumPicUrl).toBe("http://p2.music.126.net/x.jpg"); // URL still surfaced
   });
 });
 

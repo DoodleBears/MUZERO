@@ -68,7 +68,7 @@ export function LyricsCandidateList({
 export function LyricsSearchForm({ search }: { search: LyricsSearch }) {
   const { t } = useTranslation();
   return (
-    <div className="flex flex-col gap-2">
+    <div className="flex flex-col gap-2 px-1">
       <Input
         value={search.title}
         onChange={(e) => search.setTitle(e.target.value)}
@@ -86,7 +86,12 @@ export function LyricsSearchForm({ search }: { search: LyricsSearch }) {
             if (e.key === "Enter") void search.runSearch();
           }}
         />
-        <Button type="button" onClick={() => void search.runSearch()} disabled={search.searching}>
+        <Button
+          size="lg"
+          type="button"
+          onClick={() => void search.runSearch()}
+          disabled={search.searching}
+        >
           {search.searching ? <Spinner className="size-4" /> : t("lyrics.searchAction")}
         </Button>
       </div>

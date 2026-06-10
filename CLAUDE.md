@@ -6,7 +6,7 @@
 
 ## 技术栈
 
-- **壳层**：Tauri 2（桌面 + 移动）。Rust 侧只托管 WebView，并提供 `http` / `fs` / `os` / `dialog` 插件。整个 App 就是前端。
+- **壳层**：**Electron（桌面主力）+ Tauri 2（保留可跑 + 移动）**。因 WebView 在不同平台不稳定（WKWebView/WebView2 UI 问题），桌面已转向 Electron；Tauri 暂留。两者都藏在 [`src/lib/desktop`](src/lib/desktop/bridge.ts) 平台抽象层后（`resolveDesktopBridge()` 按运行时选 electron/tauri/web）。整个 App 就是前端。Electron 主进程见 [`electron/`](electron/main.cjs)（preload + IPC + `muzfetch://` CORS 代理）。
 - **构建**：Vite 8 + React 19 + TypeScript（不是 Astro/Next）
 - **样式**：Tailwind CSS v4（`@tailwindcss/vite`，CSS-first `@theme`，无 `tailwind.config`）
 - **UI 库**：COSS UI（基于 Base UI，shadcn 风格 registry）+ LiveKit audio visualizer
@@ -68,7 +68,7 @@ LLM 与托管 provider 的 API key 只存在 IndexedDB 的 `settings` 行（设�
 - 接入具体云 vendor = 只改 [`src/musicgen/cloud-provider.ts`](src/musicgen/cloud-provider.ts) 的三个纯函数 `mapBriefToBody` / `parseCreate` / `parseStatus`（vendor-specific 请求/响应映射）；submit→poll→download 流程、abort、DB 写入都不动。异步轮询引擎在 [`cloud-job.ts`](src/musicgen/cloud-job.ts)（注入 `now`/`sleep`，可确定性单测）。
 - 若要再加一个独立 provider = 实现 [`MusicGenProvider`](src/musicgen/provider.ts) 接口 + 在 [`registry.ts`](src/musicgen/registry.ts) 注册 + 在 `AppSettings.musicGenProvider` union 加 id。**不要**在 DJ/store/UI 里 `if (provider === "cloud")` 散落分支。
 - provider 必须返回 `{ blob, mime, durationSec }`；音频字节进 `mediaBlobs` 表，**永远不进** `tracks` 行（保持列表查询轻量，虚拟化才有意义）。
-- provider 实现里凡是 HTTP 都走 [`getAppFetch()`](src/lib/platform.ts)（Tauri 内绕过 CORS / mixed-content，云 https 同样适用），不要直接 `window.fetch` 调外部 API。
+- provider 实现里凡是 HTTP 都走 [`getAppFetch()`](src/lib/platform.ts)（→ 桌面 bridge：Electron `muzfetch://` 代理 / Tauri http 插件 / web global，绕过 CORS / mixed-content），不要直接 `window.fetch` 调外部 API。
 
 ### 6. Zustand selector 纪律
 
@@ -91,7 +91,14 @@ DJ 续歌是这个 App 的命脉。必须有 integration test 覆盖：draft→p
 - **断点纪律**：`md` 是内容布局的桌面/移动分界。页面内容用响应式容器（表单 `mx-auto max-w-2xl`、Now Playing 在 `lg+` 变双栏 + 常驻队列），不要在桌面宽窗里把内容拉满或留大片空白。Tauri 默认窗口是桌面尺寸（1180×780，见 `tauri.conf.json`）。
 - 移动端细节（已埋好，后续打磨）：安全区 inset（`styles.css` 的 `env(safe-area-inset-*)`）、触摸友好控件、后台音频。
 - 音频用单个 `HTMLAudioElement`（[`AudioEngine`](src/player/audio-engine.ts)），object-URL revoke-before-replace，不泄漏 Blob URL；WebAudio graph 在首次 play（用户手势）时懒建。
-- 出站 HTTP 走 Tauri `http` 插件，避免 WebView 的 CORS / mixed-content。
+- 出站 HTTP 走 `getAppFetch()` → 桌面 bridge（见规则 10），避免 WebView 的 CORS / mixed-content。
+
+### 10. 桌面壳层抽象（Electron / Tauri / web）
+
+- **所有 native 访问一律走 [`resolveDesktopBridge()`](src/lib/desktop/bridge.ts)**（CORS-free fetch / pickFolder / readDir / readFile / saveFile / openExternal）。**禁止** `src/**` 直接 `import('@tauri-apps/...')`、读 `window.muzero`、或散落 `if (isTauri())` 行为分支（与 provider / visualizer registry 同纪律）。加能力 = 扩 `DesktopBridge` 接口 + 三个实现（[`tauri.ts`](src/lib/desktop/tauri.ts) / [`electron.ts`](src/lib/desktop/electron.ts) / [`web.ts`](src/lib/desktop/web.ts)）。判定「能否读本地文件夹」用 `hasFolderAccess()`，不要 `isTauri()`。
+- **Electron 安全**：`contextIsolation:true + sandbox:true + nodeIntegration:false`；preload 只经 `contextBridge` 暴露最小 IPC（[`electron/preload.cjs`](electron/preload.cjs)）。CORS 绕过用特权 `muzfetch://` 流式协议（`net.fetch` 主进程，[`electron/fetch-proxy.cjs`](electron/fetch-proxy.cjs)），**不**用 `webSecurity:false`。fs 用主进程内存 allowlist + realpath 校验（[`electron/ipc.cjs`](electron/ipc.cjs)），镜像 Tauri「运行时逐文件夹授权」，每次启动从 `importFolders` 重授。
+- **codename 层不变**：Electron 与 Tauri 是不同 origin/userData，各自独立 IndexedDB——切壳不迁移数据（已知限制）。但 db 名 `muzero-db` / id 前缀 / provider id 跨壳保持一致。
+- 重活不卡主线程：见 [`src/workers`](src/workers/)（解析 + 写库 + R2 hash/sign 进 Web Worker），bridge 的网络/fs 调用留主线程（worker 里没有 Tauri internals / Electron preload）。
 
 ## 项目结构
 
@@ -116,10 +123,13 @@ MUZERO/
 │   ├── stores/                             # player-store（编排循环 + 上传 + 显示模式）+ ui-store（sheet 开合，ephemeral）
 │   ├── ai/                                 # Vercel AI SDK model 解析（BYOK）
 │   ├── hooks/ lib/                         # use-media / track-search / track-display / media-probe / view-transition(+react) / ...
+│   ├── lib/desktop/                        # 桌面壳层抽象：bridge(resolveDesktopBridge) + tauri/electron/web 三实现
+│   ├── workers/                            # 重活 Web Worker（解析+写库+R2 hash/sign，主线程不卡）
 │   └── i18n/locales/{en,zh,ja,ko}/         # 文案 catalog（en 默认）
-├── src-tauri/                              # Tauri 2 壳（desktop + mobile）
+├── electron/                               # Electron 主进程（主力桌面壳）：main.cjs + preload.cjs + ipc.cjs(fs allowlist) + fetch-proxy.cjs(muzfetch)
+├── src-tauri/                              # Tauri 2 壳（保留可跑 + 移动）
 │   ├── Cargo.toml / tauri.conf.json / build.rs
-│   ├── src/lib.rs（mobile_entry_point）/ main.rs
+│   ├── src/lib.rs（mobile_entry_point + allow_read_path）/ main.rs
 │   └── capabilities/default.json           # http/os/fs/dialog 权限
 ├── docs/prd/                               # PRD（命名 YYYYMMDD-<topic>-prd/）
 ├── .cursor/commands/                       # 复用自 doodlekuma 的工作流命令

@@ -106,3 +106,25 @@ export function reconcileCurrentIndex(
   if (trackIds.length === 0 || fallbackIndex < 0) return -1;
   return Math.min(fallbackIndex, trackIds.length - 1);
 }
+
+/**
+ * Remove every entry whose trackId ∈ `removed`, keeping the cursor pinned to the
+ * PLAYING track by id (so deleting other tracks never changes what plays). If the
+ * playing track itself was removed, the cursor falls back to the slot it held
+ * (now the following track); an idle (-1) or emptied queue stays idle.
+ */
+export function removeEntriesByTrackIds(
+  state: PlayQueueState,
+  removed: ReadonlySet<string>,
+): PlayQueueState {
+  if (removed.size === 0) return state;
+  const playing = state.entries[state.currentIndex];
+  const playingRemoved = playing !== undefined && removed.has(playing.trackId);
+  const entries = state.entries.filter((e) => !removed.has(e.trackId));
+  const currentIndex = reconcileCurrentIndex(
+    entries.map((e) => e.trackId),
+    playingRemoved ? null : (playing?.trackId ?? null),
+    state.currentIndex,
+  );
+  return { entries, currentIndex };
+}

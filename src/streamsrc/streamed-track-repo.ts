@@ -85,6 +85,7 @@ export async function createStreamedTrack(
     status: "ready",
     durationSec: input.meta?.durationSec ?? 0,
     createdAt: Date.now(),
+    updatedAt: Date.now(),
     playCount: 0,
     liked: false,
     tags: [],

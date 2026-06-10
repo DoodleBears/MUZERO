@@ -29,6 +29,8 @@ export function TrackListSection({
   listClassName,
   className,
   startActions,
+  endActions,
+  listHeader,
 }: {
   tracks: Track[];
   /** Set context. Omit for the global library list (permanent delete only). */
@@ -41,6 +43,11 @@ export function TrackListSection({
   className?: string;
   /** Buttons rendered at the left of the toolbar row, sharing it with "Select". */
   startActions?: React.ReactNode;
+  /** Content rendered at the right of the toolbar row, after the "Select" toggle. */
+  endActions?: React.ReactNode;
+  /** When set, this content + the toolbar row scroll WITH the list (rendered inside the
+   *  scroll container as its header) instead of staying pinned above it. */
+  listHeader?: React.ReactNode;
 }) {
   const { t } = useTranslation();
   const trackIds = useMemo(() => tracks.map((track) => track.id), [tracks]);
@@ -93,14 +100,24 @@ export function TrackListSection({
     sel.exit();
   }
 
-  return (
-    <div className={cn("flex min-h-0 flex-col", className)}>
-      <div className="flex shrink-0 items-center justify-between gap-2 px-1 pb-1">
-        <div className="flex min-w-0 flex-wrap items-center gap-2">{startActions}</div>
+  const toolbar = (
+    <div className="flex shrink-0 items-center justify-between gap-2 px-1 pb-1">
+      <div className="flex min-w-0 flex-wrap items-center gap-2">{startActions}</div>
+      <div className="flex shrink-0 items-center gap-1">
         <Button variant="ghost" size="sm" onClick={() => (sel.mode ? sel.exit() : sel.enter())}>
           {sel.mode ? t("select.done") : t("select.enter")}
         </Button>
+        {endActions}
       </div>
+    </div>
+  );
+
+  return (
+    <div className={cn("flex min-h-0 flex-col", className)}>
+      {/* Without `listHeader` the toolbar is pinned above the list (set / detail views).
+          With it, the header + toolbar move INTO the scroller so they scroll away with
+          the rows (the library wall). */}
+      {listHeader ? null : toolbar}
       <TrackListMenu
         setId={setId}
         className="min-h-0 flex-1"
@@ -112,6 +129,14 @@ export function TrackListSection({
           selectedTrackId={selectedTrackId}
           emptyHint={emptyHint}
           className={listClassName}
+          header={
+            listHeader ? (
+              <div className="flex flex-col gap-4">
+                {listHeader}
+                {toolbar}
+              </div>
+            ) : undefined
+          }
           onPlay={onPlay ? (track) => onPlay(track) : undefined}
           onView={onView ? (track) => onView(track) : undefined}
           selectable={sel.mode}

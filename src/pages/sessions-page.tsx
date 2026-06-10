@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Disc3Icon } from "@/components/ui/disc-3";
 import { Textarea } from "@/components/ui/input";
+import { ImportFolderButton } from "@/components/upload/import-folder-button";
 import { createSession } from "@/db/repositories";
 import { useSessions } from "@/hooks/use-app-data";
 import { MEDIA_ACCEPT } from "@/lib/file-drop";
@@ -83,6 +84,12 @@ export function SessionsPage({ onStarted }: { onStarted: () => void }) {
         >
           <Upload /> {isUploading ? t("sessions.importing") : t("sessions.uploadCta")}
         </Button>
+        <ImportFolderButton
+          variant="secondary"
+          className="w-full"
+          onWebFiles={newUploadSet}
+          onImported={onStarted}
+        />
         <input
           ref={uploadRef}
           type="file"

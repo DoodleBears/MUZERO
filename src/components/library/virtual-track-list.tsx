@@ -1,7 +1,7 @@
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { motion, useMotionValue, useSpring } from "motion/react";
-import type { KeyboardEvent as ReactKeyboardEvent } from "react";
-import { useEffect, useRef } from "react";
+import type { KeyboardEvent as ReactKeyboardEvent, ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { deleteTrack as deleteTrackRepo, prependTrackIds, setTrackLiked } from "@/db/repositories";
 import type { Track } from "@/db/types";
@@ -47,6 +47,7 @@ export function VirtualTrackList({
   selectedIds,
   onToggleSelect,
   onDeleteTrack,
+  header,
 }: {
   tracks: Track[];
   onPlay?: (track: Track, index: number) => void;
@@ -54,6 +55,10 @@ export function VirtualTrackList({
   emptyHint?: string;
   /** Extra classes for the scroll element — e.g. `pb-chrome-bottom` to clear the dock. */
   className?: string;
+  /** Content rendered INSIDE the scroll container, above the rows — it scrolls with
+   *  them (e.g. sort chips + a toolbar). The virtualizer offsets by its height via
+   *  `scrollMargin`, so rows stay correctly placed. */
+  header?: ReactNode;
   selectedTrackId?: string;
   edgePullFeedback?: boolean;
   onPullPastStart?: () => void;
@@ -68,7 +73,13 @@ export function VirtualTrackList({
 }) {
   const { t } = useTranslation();
   const parentRef = useRef<HTMLDivElement | null>(null);
+  const headerRef = useRef<HTMLDivElement | null>(null);
   const edgePullContentRef = useRef<HTMLDivElement | null>(null);
+  // A scrollable `header` sits above the rows inside the scroller; tell the virtualizer
+  // how far down the rows start so it positions them correctly. Re-measured on resize
+  // (chips wrap, facets appear) so the offset stays accurate.
+  const [scrollMargin, setScrollMargin] = useState(0);
+  const hasHeader = !!header;
   const edgePullArmTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const edgePullResetTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const edgePullDistanceRef = useRef(0);
@@ -95,7 +106,25 @@ export function VirtualTrackList({
     getItemKey: (index) => tracks[index]?.id ?? index,
     getScrollElement: () => parentRef.current,
     overscan: 8,
+    scrollMargin,
   });
+
+  // Keep `scrollMargin` in sync with the rows container's offset within the scroller
+  // (= header height + top padding). Only when a header is present; otherwise 0.
+  useLayoutEffect(() => {
+    if (!hasHeader) {
+      setScrollMargin(0);
+      return;
+    }
+    const measure = () => {
+      const offset = edgePullContentRef.current?.offsetTop ?? 0;
+      setScrollMargin((prev) => (prev === offset ? prev : offset));
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    if (headerRef.current) ro.observe(headerRef.current);
+    return () => ro.disconnect();
+  }, [hasHeader]);
 
   useEffect(
     () => () => {
@@ -265,6 +294,21 @@ export function VirtualTrackList({
   }
 
   if (tracks.length === 0) {
+    // Keep the scrollable header visible when empty (e.g. a search that matched only
+    // artists/albums, not track titles) so the chips/facets don't vanish.
+    if (header) {
+      return (
+        <div
+          className={cn("relative h-full overflow-y-auto", className)}
+          data-testid="virtual-track-list"
+        >
+          <div ref={headerRef}>{header}</div>
+          <p className="p-8 text-center text-sm text-muted-foreground">
+            {emptyHint ?? t("track.empty")}
+          </p>
+        </div>
+      );
+    }
     return (
       <div className="flex h-full items-center justify-center p-8 text-center text-sm text-muted-foreground">
         {emptyHint ?? t("track.empty")}
@@ -274,7 +318,7 @@ export function VirtualTrackList({
 
   return (
     <div
-      className={cn("h-full overflow-y-auto", className)}
+      className={cn("relative h-full overflow-y-auto", className)}
       data-testid="virtual-track-list"
       data-virtualized="fixed-size"
       onKeyDown={onKeyDown}
@@ -282,6 +326,7 @@ export function VirtualTrackList({
       ref={parentRef}
       role="listbox"
     >
+      {header ? <div ref={headerRef}>{header}</div> : null}
       <motion.div
         className="relative w-full"
         data-edge-pull="0"
@@ -298,7 +343,7 @@ export function VirtualTrackList({
               key={track.id}
               style={{
                 height: `${virtualRow.size}px`,
-                transform: `translateY(${virtualRow.start}px)`,
+                transform: `translateY(${virtualRow.start - scrollMargin}px)`,
               }}
             >
               <TrackRow

@@ -5,6 +5,7 @@ import {
   aggregateBands,
   applyTilt,
   type Band,
+  decayBands,
   octaveBands,
   smoothBands,
   tiltWeights,
@@ -63,25 +64,27 @@ export function createBarsVisualizer(): Visualizer {
         rebuild(analyser, options.detail);
       }
 
-      let target: number[];
       if (analyser && active && bands.length) {
         analyser.getByteFrequencyData(data as Uint8Array<ArrayBuffer>);
-        target = applyTilt(aggregateBands(data, bands), weights);
+        const target = applyTilt(aggregateBands(data, bands), weights);
+        levels = smoothBands(levels, target, Math.max(0.15, Math.min(0.9, 0.5 * options.motion)));
       } else {
-        const t = Date.now() / 600;
-        const n = Math.max(bands.length, 24);
-        target = Array.from({ length: n }, (_, i) => 0.04 + 0.03 * Math.abs(Math.sin(t + i * 0.3)));
+        // No audio: sink to rest instead of faking idle motion.
+        levels = decayBands(levels);
       }
-      levels = smoothBands(levels, target, Math.max(0.15, Math.min(0.9, 0.5 * options.motion)));
 
       const n = levels.length || 1;
       const gap = Math.max(1, w * 0.004 * options.spread);
       const bw = Math.max(1, (w - gap * (n - 1)) / n);
       const tip = lighten(primary, 0.4);
       const background = c.placement === "background";
+      // The background baseline keeps bars visible while there's sound, but
+      // fades with the overall level so a paused track sinks to the floor.
+      const peak = levels.reduce((m, v) => (v > m ? v : m), 0);
+      const baseline = background ? h * 0.08 * Math.min(1, peak / 0.1) : 0;
       for (let i = 0; i < levels.length; i++) {
         const level = Math.min(1, Math.max(0, (levels[i] ?? 0) * options.intensity));
-        const bh = background ? Math.max(h * 0.08, level * h) : Math.max(1, level * h * 0.92);
+        const bh = background ? Math.max(baseline, level * h) : Math.max(1, level * h * 0.92);
         const x = i * (bw + gap);
         const y = background ? (h - bh) / 2 : h - bh;
         const g = ctx.createLinearGradient(0, background ? y + bh : h, 0, y);

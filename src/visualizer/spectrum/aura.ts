@@ -1,6 +1,7 @@
 import { lighten, type Rgb, rgba } from "@/lib/visualizer-color";
 import { visualizerAuraRayCount } from "@/lib/visualizer-effect-settings";
 import type { Visualizer, VisualizerContext } from "../types";
+import { decayLevel } from "./bands";
 
 /**
  * Aura — a radial frequency "bloom" driven by the player's AnalyserNode. This is
@@ -13,6 +14,7 @@ export function createAuraVisualizer(): Visualizer {
   let tint: Rgb = { r: 191, g: 131, b: 254 };
   let bright: Rgb = lighten(tint, 0.3);
   let frame = 0;
+  let level = 0; // persisted so the bloom can ease back to rest when paused
 
   const refreshPalette = () => {
     if (!c) return;
@@ -40,17 +42,17 @@ export function createAuraVisualizer(): Visualizer {
       const active = c.active();
       const options = c.options;
 
-      let level = 0;
       if (analyser && active) {
         if (data.length !== analyser.frequencyBinCount) {
           data = new Uint8Array(analyser.frequencyBinCount);
         }
         analyser.getByteFrequencyData(data as Uint8Array<ArrayBuffer>);
-        for (let i = 0; i < data.length; i++) level += data[i];
-        level = level / data.length / 255; // 0..1
+        let sum = 0;
+        for (let i = 0; i < data.length; i++) sum += data[i];
+        level = sum / data.length / 255; // 0..1
       } else {
-        // Gentle idle breathing when nothing is playing.
-        level = 0.06 + 0.04 * Math.abs(Math.sin(Date.now() / 900));
+        // No audio: ease the bloom back to rest instead of idle breathing.
+        level = decayLevel(level);
       }
 
       const cx = w / 2;

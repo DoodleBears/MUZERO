@@ -88,3 +88,37 @@ export function smoothBands(prev: number[], next: number[], alpha = 0.5): number
     return p + (v - p) * alpha;
   });
 }
+
+/**
+ * Per-frame factor for sinking levels back to rest when nothing is playing —
+ * small, so a paused track's bars fall gently (~1s settle at 60fps) instead of
+ * snapping to the floor, and a silent player rests flat instead of faking
+ * idle motion.
+ */
+export const REST_DECAY = 0.08;
+
+/**
+ * Below this magnitude a decaying level is visually indistinguishable from rest,
+ * so we snap it to a true 0 — exponential decay otherwise has an infinite tail
+ * that lingers at imperceptible values and keeps the render loop busy forever.
+ */
+export const REST_EPSILON = 1e-3;
+
+/**
+ * Ease a single value toward zero by `alpha`, snapping the imperceptible tail to
+ * a true rest. `Math.abs` so it works for unsigned band levels and signed
+ * waveform samples alike.
+ */
+export function decayLevel(v: number, alpha = REST_DECAY): number {
+  const next = v * (1 - alpha);
+  return Math.abs(next) < REST_EPSILON ? 0 : next;
+}
+
+/**
+ * Ease band levels toward zero (the "no audio" rest state). Equivalent to
+ * `smoothBands(levels, zeros, alpha)` but without allocating a target array, and
+ * settles to an exact 0 (see `decayLevel`).
+ */
+export function decayBands(levels: number[], alpha = REST_DECAY): number[] {
+  return levels.map((v) => decayLevel(v, alpha));
+}

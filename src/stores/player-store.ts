@@ -44,7 +44,9 @@ import { fallbackUploadMediaMetadata, parseUploadedMediaMetadata } from "@/lib/m
 import { isUnsupportedMediaError, probeMediaFile } from "@/lib/media-probe";
 import {
   canSetPlatformMediaSessionMetadata,
+  setPlatformMediaSessionActionHandlers,
   setPlatformMediaSessionMetadata,
+  setPlatformMediaSessionPlaybackState,
 } from "@/lib/media-session";
 import { isNcmFile } from "@/lib/ncm-decode";
 import { getAppFetch } from "@/lib/platform";
@@ -265,6 +267,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       onPlayStateChange: (isPlaying) => {
         if (!isPlaying) flushPlaybackListen(Date.now());
         set({ isPlaying });
+        setPlatformMediaSessionPlaybackState(isPlaying ? "playing" : "paused");
       },
       onError: (error) => {
         // A playback failure is a notification, not dock chrome — keep it out
@@ -277,6 +280,14 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       },
     });
     mediaEngine.setVolume(get().volume);
+    // Wire hardware media keys / OS now-playing widget to transport once. Handlers
+    // read fresh state via get() on each press, so registering a single time is safe.
+    setPlatformMediaSessionActionHandlers({
+      play: () => void get().play(),
+      pause: () => get().pause(),
+      previoustrack: () => void get().prev(),
+      nexttrack: () => void get().next(),
+    });
     void hydratePlaybackSettings(set, get).catch((err: unknown) =>
       log.warn("player", "failed to hydrate playback settings", err),
     );

@@ -1,0 +1,28 @@
+/// <reference lib="webworker" />
+/**
+ * Off-main-thread heavy worker. Owns the CPU + IndexedDB cost of importing media
+ * (music-metadata parse + Dexie write) so the renderer stays responsive during
+ * large folder imports. It re-opens the SAME Dexie database (`@/db/muzero-db`
+ * instantiates the schema in this context), so writes land in the one store the
+ * main thread reads — Dexie's cross-context observability refreshes liveQueries;
+ * the `db-changed` ping is a belt-and-suspenders nudge.
+ */
+
+import { type IngestBytesInput, ingestMediaBytes } from "./ingest-core";
+
+type IngestRequest = { type: "ingest"; reqId: number } & IngestBytesInput;
+type WorkerRequest = IngestRequest;
+
+const ctx = self as unknown as DedicatedWorkerGlobalScope;
+
+ctx.onmessage = async (event: MessageEvent<WorkerRequest>) => {
+  const msg = event.data;
+  if (msg.type !== "ingest") return;
+  try {
+    const result = await ingestMediaBytes(msg);
+    ctx.postMessage({ type: "ingested", reqId: msg.reqId, ...result });
+    ctx.postMessage({ type: "db-changed" });
+  } catch (err) {
+    ctx.postMessage({ type: "ingest-error", reqId: msg.reqId, error: String(err) });
+  }
+};

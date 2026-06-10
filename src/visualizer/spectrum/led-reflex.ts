@@ -5,6 +5,7 @@ import {
   aggregateBands,
   applyTilt,
   type Band,
+  decayBands,
   octaveBands,
   smoothBands,
   tiltWeights,
@@ -63,19 +64,14 @@ export function createLedReflexVisualizer(): Visualizer {
         rebuild(analyser, options.detail);
       }
 
-      let target: number[];
       if (analyser && active && bands.length) {
         analyser.getByteFrequencyData(data as Uint8Array<ArrayBuffer>);
-        target = applyTilt(aggregateBands(data, bands), weights);
+        const target = applyTilt(aggregateBands(data, bands), weights);
+        levels = smoothBands(levels, target, Math.max(0.15, Math.min(0.9, 0.5 * options.motion)));
       } else {
-        const t = Date.now() / 600;
-        const n = Math.max(bands.length, 24);
-        target = Array.from(
-          { length: n },
-          (_, i) => 0.05 + 0.04 * Math.abs(Math.sin(t + i * 0.35)),
-        );
+        // No audio: let the LEDs fall back to the baseline instead of faking motion.
+        levels = decayBands(levels);
       }
-      levels = smoothBands(levels, target, Math.max(0.15, Math.min(0.9, 0.5 * options.motion)));
 
       const n = levels.length || 1;
       const baseline = h * 0.66;

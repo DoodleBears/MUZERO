@@ -6,6 +6,7 @@ import {
   moveEntry,
   type PlayQueueState,
   reconcileCurrentIndex,
+  removeEntriesByTrackIds,
   removeEntry,
   replaceEntries,
   unconsumedTrackIds,
@@ -152,5 +153,48 @@ describe("unconsumedTrackIds (high-water by id, prepend-safe)", () => {
   it("returns nothing when all are consumed, everything when none are", () => {
     expect(unconsumedTrackIds(["a", "b"], new Set(["a", "b"]))).toEqual([]);
     expect(unconsumedTrackIds(["a", "b"], new Set())).toEqual(["a", "b"]);
+  });
+});
+
+describe("removeEntriesByTrackIds", () => {
+  it("removes the entries and keeps the cursor on the playing track", () => {
+    const next = removeEntriesByTrackIds(state(["a", "b", "c", "d"], 2), new Set(["a", "b"]));
+    expect(next.entries.map((e) => e.trackId)).toEqual(["c", "d"]);
+    expect(next.currentIndex).toBe(0); // still on "c"
+  });
+
+  it("falls back to the held slot when the playing track is removed", () => {
+    const next = removeEntriesByTrackIds(state(["a", "b", "c", "d"], 1), new Set(["b"]));
+    expect(next.entries.map((e) => e.trackId)).toEqual(["a", "c", "d"]);
+    expect(next.currentIndex).toBe(1); // slot 1 now holds "c"
+  });
+
+  it("clamps to the last entry when the removed playing track was last", () => {
+    const next = removeEntriesByTrackIds(state(["a", "b", "c"], 2), new Set(["c"]));
+    expect(next.entries.map((e) => e.trackId)).toEqual(["a", "b"]);
+    expect(next.currentIndex).toBe(1);
+  });
+
+  it("goes idle (-1) when every entry is removed", () => {
+    const next = removeEntriesByTrackIds(state(["a", "b"], 0), new Set(["a", "b"]));
+    expect(next.entries).toEqual([]);
+    expect(next.currentIndex).toBe(-1);
+  });
+
+  it("keeps an idle queue idle", () => {
+    const next = removeEntriesByTrackIds(state(["a", "b", "c"], -1), new Set(["a"]));
+    expect(next.entries.map((e) => e.trackId)).toEqual(["b", "c"]);
+    expect(next.currentIndex).toBe(-1);
+  });
+
+  it("removes ALL entries sharing a removed trackId (duplicates)", () => {
+    const next = removeEntriesByTrackIds(state(["a", "b", "a", "c"], 3), new Set(["a"]));
+    expect(next.entries.map((e) => e.trackId)).toEqual(["b", "c"]);
+    expect(next.currentIndex).toBe(1); // still on "c"
+  });
+
+  it("returns the same state when nothing matches", () => {
+    const before = state(["a", "b"], 1);
+    expect(removeEntriesByTrackIds(before, new Set())).toBe(before);
   });
 });

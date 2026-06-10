@@ -6,16 +6,27 @@ import {
   useReducedMotion,
   useTransform,
 } from "motion/react";
-import { type RefObject, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  Fragment,
+  type ReactNode,
+  type RefObject,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
+import { AutoScrollText } from "@/components/ui/auto-scroll-text";
 import { db } from "@/db/muzero-db";
 import type { Track } from "@/db/types";
 import { useSettings } from "@/hooks/use-app-data";
 import { useTrackCoverUrl } from "@/hooks/use-media";
 import { getCroppedBlob } from "@/lib/image-crop";
-import { trackSubtitle } from "@/lib/track-display";
+import { trackAlbum, trackArtists, trackSubtitle } from "@/lib/track-display";
 import { cn } from "@/lib/utils";
+import { useNavStore } from "@/stores/nav-store";
 import { usePlayerStore } from "@/stores/player-store";
 import { MediaStage } from "./media-stage";
 import { StageTitleFallback } from "./stage-title-fallback";
@@ -576,7 +587,9 @@ export function SwipeableMediaStage({
 
   return (
     <>
-      <div className={cn("flex flex-col gap-2", className)}>
+      {/* `data-no-drag`: the stage is a mouse-swipe surface (motion `drag="x"`),
+          so it must opt out of the Now Playing window-drag region (both shells). */}
+      <div data-no-drag className={cn("flex flex-col gap-2", className)}>
         <div
           ref={setStageRef}
           className="relative w-full overflow-visible rounded-lg shadow-md [perspective:1200px]"
@@ -640,7 +653,14 @@ export function SwipeableMediaStage({
             the overlay coverflow cards); the moment the swipe settles, the base
             takes the identity back so it doesn't cross-fade and darken. */}
         {current && (
-          <div style={{ opacity: identityHidden ? 0 : 1 }}>
+          <div
+            style={{
+              opacity: identityHidden ? 0 : 1,
+              // Only let the artist/album links take clicks while at rest (the
+              // identity stays in the DOM but invisible during a swipe).
+              pointerEvents: identityHidden ? "none" : "auto",
+            }}
+          >
             <StageIdentity track={current} />
           </div>
         )}
@@ -746,13 +766,62 @@ function SettleCard({
 function StageIdentity({ track }: { track: Track }) {
   return (
     <div className="flex w-full min-w-0 flex-col items-start gap-1.5">
-      <div className="max-w-full rounded-full border border-white/10 bg-black/35 px-4 py-1.5 shadow-lg backdrop-blur-md">
-        <div className="truncate text-2xl font-bold tracking-normal text-white">{track.title}</div>
+      <div className="max-w-full overflow-hidden rounded-full border border-white/10 bg-black/55 px-4 py-1.5 shadow-lg backdrop-blur-md">
+        <AutoScrollText className="text-2xl font-bold tracking-normal text-white">
+          {track.title}
+        </AutoScrollText>
       </div>
-      <div className="max-w-full rounded-full border border-white/10 bg-black/30 px-3 py-1 shadow-md backdrop-blur-md">
-        <div className="truncate text-base font-semibold text-white/85">{trackSubtitle(track)}</div>
+      <div className="max-w-full overflow-hidden rounded-full border border-white/10 bg-black/50 px-3 py-1 shadow-md backdrop-blur-md">
+        <AutoScrollText className="text-base font-semibold text-white/85">
+          <StageSubtitle track={track} />
+        </AutoScrollText>
       </div>
     </div>
+  );
+}
+
+/**
+ * Artist(s) · album subtitle with each entity clickable — opens it in the
+ * library (tab 2). Falls back to the plain caption/note/title line for generated
+ * or untagged tracks that carry no embedded artist/album metadata.
+ */
+function StageSubtitle({ track }: { track: Track }) {
+  const artists = trackArtists(track);
+  const album = trackAlbum(track);
+  if (artists.length === 0 && !album) return <>{trackSubtitle(track)}</>;
+  return (
+    <>
+      {artists.map((name, index) => (
+        <Fragment key={name}>
+          {index > 0 && ", "}
+          <StageEntityLink onOpen={() => useNavStore.getState().openArtist(name)}>
+            {name}
+          </StageEntityLink>
+        </Fragment>
+      ))}
+      {artists.length > 0 && album && <span aria-hidden> · </span>}
+      {album && (
+        <StageEntityLink onOpen={() => useNavStore.getState().openAlbumForTrack(track.id)}>
+          {album}
+        </StageEntityLink>
+      )}
+    </>
+  );
+}
+
+/** A clickable artist/album segment inside the stage subtitle → library (tab 2). */
+function StageEntityLink({ onOpen, children }: { onOpen: () => void; children: ReactNode }) {
+  return (
+    <button
+      type="button"
+      onClick={(event) => {
+        event.stopPropagation();
+        onOpen();
+      }}
+      className="rounded outline-none transition-colors hover:text-primary focus-visible:text-primary"
+    >
+      {children}
+    </button>
   );
 }
 

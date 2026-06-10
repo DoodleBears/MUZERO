@@ -3,7 +3,11 @@ import {
   aggregateBands,
   applyTilt,
   type Band,
+  decayBands,
+  decayLevel,
   octaveBands,
+  REST_DECAY,
+  REST_EPSILON,
   smoothBands,
   tiltWeights,
 } from "./bands";
@@ -93,5 +97,42 @@ describe("smoothBands (EMA)", () => {
   });
   it("treats missing prev entries as 0", () => {
     expect(smoothBands([], [0.6], 0.5)).toEqual([0.3]);
+  });
+});
+
+describe("decayLevel", () => {
+  it("shrinks toward zero by the decay factor", () => {
+    expect(decayLevel(1, 0.1)).toBeCloseTo(0.9, 5);
+  });
+
+  it("snaps the imperceptible tail to an exact 0", () => {
+    expect(decayLevel(REST_EPSILON / 2)).toBe(0);
+    expect(Object.is(decayLevel(REST_EPSILON / 2), 0)).toBe(true); // truly 0, not -0/epsilon
+  });
+
+  it("handles signed (waveform) samples symmetrically", () => {
+    expect(decayLevel(-1, 0.1)).toBeCloseTo(-0.9, 5);
+    expect(decayLevel(-(REST_EPSILON / 2))).toBe(0); // tiny negative also snaps to rest
+  });
+});
+
+describe("decayBands", () => {
+  it("shrinks every level toward zero by the decay factor", () => {
+    expect(decayBands([1, 0.5], 0.1)).toEqual([0.9, 0.45]);
+  });
+
+  it("settles to an exact, flat rest after enough frames", () => {
+    let levels = [0.8, 0.2, 0];
+    for (let i = 0; i < 200; i++) levels = decayBands(levels, REST_DECAY);
+    expect(levels).toEqual([0, 0, 0]); // fully at rest, no lingering tail
+  });
+
+  it("settles gently — not in a single frame (REST_DECAY is small)", () => {
+    const [next] = decayBands([1], REST_DECAY);
+    expect(next).toBeGreaterThan(0.8); // still most of the way up after one frame
+  });
+
+  it("returns [] for empty input", () => {
+    expect(decayBands([])).toEqual([]);
   });
 });

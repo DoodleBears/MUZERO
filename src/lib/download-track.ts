@@ -1,7 +1,8 @@
 import { getTrackBlob, getTrackCover } from "@/db/repositories";
 import type { Track } from "@/db/types";
+import { resolveDesktopBridge } from "@/lib/desktop/bridge";
 import { createTrackExportBlob, type TrackExportMode } from "@/lib/metadata-export";
-import { getAppFetch, isTauri } from "@/lib/platform";
+import { getAppFetch } from "@/lib/platform";
 
 const MIME_EXTENSIONS: Record<string, string> = {
   "audio/aac": "aac",
@@ -27,8 +28,10 @@ export async function downloadTrackMedia(
   const media = await resolveTrackDownloadMedia(track, mode);
   const fileName = downloadFileName(track, media.mime);
 
-  if (isTauri()) {
-    await saveWithTauri(fileName, media.mime, media.blob);
+  const bridge = resolveDesktopBridge();
+  if (bridge.saveFile) {
+    const bytes = new Uint8Array(await media.blob.arrayBuffer());
+    await bridge.saveFile({ fileName, mime: media.mime, bytes });
     return;
   }
 
@@ -87,20 +90,6 @@ function sanitizeFileName(value: string): string {
     .slice(0, 120);
 }
 
-async function saveWithTauri(fileName: string, mime: string, blob: Blob): Promise<void> {
-  const [{ save }, { writeFile }] = await Promise.all([
-    import("@tauri-apps/plugin-dialog"),
-    import("@tauri-apps/plugin-fs"),
-  ]);
-  const path = await save({
-    defaultPath: fileName,
-    filters: [{ name: mediaFilterName(mime), extensions: [fileName.split(".").pop() ?? "bin"] }],
-    title: "Download track",
-  });
-  if (!path) return;
-  await writeFile(path, new Uint8Array(await blob.arrayBuffer()));
-}
-
 function saveWithBrowser(fileName: string, blob: Blob): void {
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
@@ -109,10 +98,4 @@ function saveWithBrowser(fileName: string, blob: Blob): void {
   anchor.rel = "noreferrer";
   anchor.click();
   window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-}
-
-function mediaFilterName(mime: string): string {
-  if (mime.startsWith("video/")) return "Video";
-  if (mime.startsWith("audio/")) return "Audio";
-  return "Media";
 }

@@ -1,5 +1,6 @@
 import { type IAudioMetadata, type IPicture, parseBlob } from "music-metadata";
 import type { TrackMediaMetadata } from "@/db/types";
+import { parse163KeyComment } from "@/lib/ncm-decode";
 
 export interface ParsedUploadMetadata {
   embeddedCover?: {
@@ -8,6 +9,12 @@ export interface ParsedUploadMetadata {
   };
   mediaMetadata: TrackMediaMetadata;
   title?: string;
+  /**
+   * Cover URL recovered from a NetEase "163 key" ID3 comment (present on plaintext
+   * mp3/flac exported from `.ncm`). The main thread downloads + stores it when the
+   * file carries no embedded image. See {@link parse163KeyComment}.
+   */
+  albumPicUrl?: string;
 }
 
 export async function parseUploadedMediaMetadata(file: File): Promise<ParsedUploadMetadata> {
@@ -37,7 +44,7 @@ export function metadataFromParsedAudio(
 ): ParsedUploadMetadata {
   const common = metadata.common;
   const format = metadata.format;
-  const mediaMetadata = pruneMetadata({
+  let mediaMetadata = pruneMetadata({
     album: cleanString(common.album),
     albumArtists: cleanStrings(common.albumartists ?? splitArtistLike(common.albumartist)),
     artists: cleanStrings(common.artists ?? splitArtistLike(common.artist)),
@@ -67,6 +74,21 @@ export function metadataFromParsedAudio(
     trackOf: cleanNumber(common.track?.of),
     year: cleanNumber(common.year ?? common.originalyear),
   });
+  // NetEase writes its "163 key" metadata blob into the ID3 comment of exported
+  // plaintext files — recover the cover URL + backfill any tags ID3 didn't carry.
+  const netease = parse163FromComments(common.comment);
+  if (netease) {
+    if (!mediaMetadata.title && netease.musicName) {
+      mediaMetadata = { ...mediaMetadata, title: netease.musicName };
+    }
+    if (!mediaMetadata.album && netease.album) {
+      mediaMetadata = { ...mediaMetadata, album: netease.album };
+    }
+    if ((mediaMetadata.artists?.length ?? 0) === 0 && netease.artists.length > 0) {
+      mediaMetadata = { ...mediaMetadata, artists: netease.artists };
+    }
+  }
+
   const picture = pickCoverPicture(common.picture);
   return {
     embeddedCover: picture
@@ -77,7 +99,18 @@ export function metadataFromParsedAudio(
       : undefined,
     mediaMetadata,
     title: mediaMetadata.title,
+    albumPicUrl: netease?.albumPicUrl,
   };
+}
+
+/** Find a NetEase "163 key" blob among the ID3 comment frames, if any. */
+function parse163FromComments(comments: ReadonlyArray<{ text?: string }> | undefined) {
+  if (!comments) return null;
+  for (const comment of comments) {
+    const parsed = comment.text ? parse163KeyComment(comment.text) : null;
+    if (parsed) return parsed;
+  }
+  return null;
 }
 
 function copyBytes(bytes: Uint8Array): Uint8Array<ArrayBuffer> {

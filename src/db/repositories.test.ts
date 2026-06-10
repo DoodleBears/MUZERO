@@ -5,6 +5,7 @@ import {
   addMemory,
   addTrackBackground,
   clearSessionCover,
+  clearTrackCover,
   createPendingTrack,
   createSession,
   createUploadedTrack,
@@ -34,6 +35,7 @@ import {
   saveSettings,
   setSessionCover,
   setShortcutOverride,
+  setTrackCover,
   setTrackNote,
   setTrackTags,
   updateMemory,
@@ -146,6 +148,59 @@ describe("setSessionCover / getSessionCover", () => {
     expect(got?.coverCrop).toBeUndefined();
     expect(await db.mediaBlobs.get(blobId)).toBeUndefined();
     expect(await getSessionCover(s.id, db)).toBeUndefined();
+  });
+});
+
+describe("clearTrackCover", () => {
+  it("removes a track's cover (row + blob) and its crop/thumbhash", async () => {
+    const session = await createSession({ seedPrompt: "", config: { autoExtend: false } }, db);
+    const track = await createUploadedTrack(
+      {
+        sessionId: session.id,
+        title: "Moonstone Beach",
+        kind: "audio",
+        blob: new Blob([new Uint8Array([1, 2, 3])], { type: "audio/mpeg" }),
+        mime: "audio/mpeg",
+        durationSec: 180,
+      },
+      db,
+    );
+    await setTrackCover(
+      {
+        trackId: track.id,
+        blob: new Blob([new Uint8Array([9])], { type: "image/png" }),
+        mime: "image/png",
+        crop: { x: 1, y: 2, width: 3, height: 4 },
+      },
+      db,
+    );
+    const blobId = (await getTrack(track.id, db))?.coverBlobId ?? "";
+    expect(blobId).toBeTruthy();
+
+    await clearTrackCover(track.id, db);
+
+    const got = await getTrack(track.id, db);
+    expect(got?.coverBlobId).toBeUndefined();
+    expect(got?.coverCrop).toBeUndefined();
+    expect(got?.coverThumbhash).toBeUndefined();
+    expect(await db.mediaBlobs.get(blobId)).toBeUndefined();
+  });
+
+  it("is a no-op when the track has no cover", async () => {
+    const session = await createSession({ seedPrompt: "", config: { autoExtend: false } }, db);
+    const track = await createUploadedTrack(
+      {
+        sessionId: session.id,
+        title: "No Cover",
+        kind: "audio",
+        blob: new Blob([new Uint8Array([1])], { type: "audio/mpeg" }),
+        mime: "audio/mpeg",
+        durationSec: 5,
+      },
+      db,
+    );
+    await expect(clearTrackCover(track.id, db)).resolves.toBeUndefined();
+    expect((await getTrack(track.id, db))?.coverBlobId).toBeUndefined();
   });
 });
 

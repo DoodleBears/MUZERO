@@ -1,6 +1,7 @@
 import { lighten, type Rgb, rgba } from "@/lib/visualizer-color";
 import { visualizerWaveformPointCount } from "@/lib/visualizer-effect-settings";
 import type { Visualizer, VisualizerContext } from "../types";
+import { decayLevel } from "./bands";
 
 /**
  * Waveform — a time-domain oscilloscope line that wiggles with the audio,
@@ -12,6 +13,7 @@ export function createWaveformVisualizer(): Visualizer {
   let data = new Uint8Array(1024);
   let primary: Rgb = { r: 191, g: 131, b: 254 };
   let frame = 0;
+  let pts: number[] = []; // persisted [-1, 1] samples so the line can relax to flat when paused
 
   return {
     id: "waveform",
@@ -33,7 +35,7 @@ export function createWaveformVisualizer(): Visualizer {
 
       // Sample the waveform into [-1, 1] across the width.
       const N = visualizerWaveformPointCount(options.detail);
-      const pts: number[] = new Array(N);
+      if (pts.length !== N) pts = new Array(N).fill(0);
       if (analyser && active) {
         if (data.length !== analyser.fftSize) data = new Uint8Array(analyser.fftSize);
         analyser.getByteTimeDomainData(data as Uint8Array<ArrayBuffer>);
@@ -42,11 +44,8 @@ export function createWaveformVisualizer(): Visualizer {
           pts[i] = (data[idx] - 128) / 128;
         }
       } else {
-        const t = (Date.now() / 500) * options.motion;
-        for (let i = 0; i < N; i++) {
-          const x = i / (N - 1);
-          pts[i] = 0.06 * Math.sin(x * Math.PI * 4 + t) * Math.sin(x * Math.PI);
-        }
+        // No audio: relax the line toward the center instead of faking a wiggle.
+        for (let i = 0; i < N; i++) pts[i] = decayLevel(pts[i] ?? 0);
       }
 
       const drawLine = (sign: number, alpha: number, lift: Rgb) => {

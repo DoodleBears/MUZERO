@@ -463,6 +463,7 @@ export async function createPendingTrack(
     status: "pending",
     durationSec: input.brief.durationSec,
     createdAt: Date.now(),
+    updatedAt: Date.now(),
     playCount: 0,
     liked: false,
     tags: [],
@@ -518,6 +519,7 @@ export async function createUploadedTrack(
     status: "ready",
     durationSec: input.durationSec,
     createdAt: Date.now(),
+    updatedAt: Date.now(),
     generatedAt: Date.now(),
     playCount: 0,
     liked: false,
@@ -634,7 +636,7 @@ export async function setTrackLiked(
   liked: boolean,
   db: MuzeroDB = defaultDb,
 ): Promise<void> {
-  await db.tracks.update(id, { liked });
+  await db.tracks.update(id, { liked, updatedAt: Date.now() });
 }
 
 // ------------------------------------------------------------- annotations ----
@@ -646,7 +648,7 @@ export async function setTrackTags(
 ): Promise<void> {
   // Normalize: trim, drop empties, de-dupe, lowercase for stable matching.
   const clean = Array.from(new Set(tags.map((t) => t.trim().toLowerCase()).filter(Boolean)));
-  await db.tracks.update(id, { tags: clean });
+  await db.tracks.update(id, { tags: clean, updatedAt: Date.now() });
 }
 
 export async function setTrackNote(
@@ -654,7 +656,7 @@ export async function setTrackNote(
   note: string,
   db: MuzeroDB = defaultDb,
 ): Promise<void> {
-  await db.tracks.update(id, { note: note.trim() || undefined });
+  await db.tracks.update(id, { note: note.trim() || undefined, updatedAt: Date.now() });
 }
 
 // ------------------------------------------------------------------ lyrics ----
@@ -723,6 +725,7 @@ export async function setTrackCover(
       coverBlobId: cover.id,
       coverCrop: input.crop,
       coverThumbhash,
+      updatedAt: Date.now(),
     });
   });
 }
@@ -741,6 +744,7 @@ export async function clearTrackCover(trackId: string, db: MuzeroDB = defaultDb)
       coverBlobId: undefined,
       coverCrop: undefined,
       coverThumbhash: undefined,
+      updatedAt: Date.now(),
     });
   });
 }
@@ -775,7 +779,11 @@ export async function setTrackCoverFromMemory(
       blob: photo.blob,
     };
     await db.mediaBlobs.put(cover);
-    await db.tracks.update(memory.trackId, { coverBlobId: cover.id, coverCrop: undefined });
+    await db.tracks.update(memory.trackId, {
+      coverBlobId: cover.id,
+      coverCrop: undefined,
+      updatedAt: Date.now(),
+    });
     return true;
   });
 }
@@ -790,7 +798,7 @@ export async function setTrackCoverCrop(
   const track = await db.tracks.get(id);
   const blob = track?.coverBlobId ? (await db.mediaBlobs.get(track.coverBlobId))?.blob : undefined;
   const coverThumbhash = blob ? await encodeCoverThumbhash(blob, crop) : undefined;
-  await db.tracks.update(id, { coverCrop: crop, coverThumbhash });
+  await db.tracks.update(id, { coverCrop: crop, coverThumbhash, updatedAt: Date.now() });
 }
 
 /**
@@ -885,7 +893,7 @@ export async function addMemory(
   },
   db: MuzeroDB = defaultDb,
 ): Promise<Memory> {
-  return db.transaction("rw", db.memories, db.mediaBlobs, async () => {
+  return db.transaction("rw", db.tracks, db.memories, db.mediaBlobs, async () => {
     let photoBlobId: string | undefined;
     if (input.photo) {
       const photo: MediaBlob = {
@@ -909,6 +917,9 @@ export async function addMemory(
       atSec: sanitizeAtSec(input.atSec),
     };
     await db.memories.put(memory);
+    // A memory is a track annotation ("music carries memories") — bump the parent's
+    // last-edit clock so the 最后修改 sort reflects it.
+    await db.tracks.update(input.trackId, { updatedAt: Date.now() });
     return memory;
   });
 }
@@ -953,17 +964,23 @@ export async function updateMemory(
   patch: { note?: string; atSec?: number | null },
   db: MuzeroDB = defaultDb,
 ): Promise<void> {
-  await db.memories
-    .where("id")
-    .equals(id)
-    .modify((memory: Memory) => {
-      if (patch.note !== undefined) memory.note = patch.note.trim();
-      if (patch.atSec === null) {
-        memory.atSec = undefined;
-      } else if (patch.atSec !== undefined) {
-        memory.atSec = sanitizeAtSec(patch.atSec);
-      }
-    });
+  await db.transaction("rw", db.tracks, db.memories, async () => {
+    let trackId: string | undefined;
+    await db.memories
+      .where("id")
+      .equals(id)
+      .modify((memory: Memory) => {
+        trackId = memory.trackId;
+        if (patch.note !== undefined) memory.note = patch.note.trim();
+        if (patch.atSec === null) {
+          memory.atSec = undefined;
+        } else if (patch.atSec !== undefined) {
+          memory.atSec = sanitizeAtSec(patch.atSec);
+        }
+      });
+    // Memory edit → bump the parent track's last-edit clock (最后修改 sort).
+    if (trackId) await db.tracks.update(trackId, { updatedAt: Date.now() });
+  });
 }
 
 /** Edit a memory's note text in place (leaves the anchor untouched). */
@@ -977,10 +994,12 @@ export async function updateMemoryNote(
 
 /** Delete a memory and its photo blob (if any). */
 export async function deleteMemory(id: string, db: MuzeroDB = defaultDb): Promise<void> {
-  await db.transaction("rw", db.memories, db.mediaBlobs, async () => {
+  await db.transaction("rw", db.tracks, db.memories, db.mediaBlobs, async () => {
     const memory = await db.memories.get(id);
     if (memory?.photoBlobId) await db.mediaBlobs.delete(memory.photoBlobId);
     await db.memories.delete(id);
+    // Removing a memory is an edit to the track's annotations (最后修改 sort).
+    if (memory) await db.tracks.update(memory.trackId, { updatedAt: Date.now() });
   });
 }
 

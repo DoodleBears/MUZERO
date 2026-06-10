@@ -96,6 +96,7 @@ export async function importRemoteSetStream(
     remoteCoverUrl: remoteTrack.coverUrl,
     coverThumbhash: remoteTrack.source.thumbhash ?? undefined,
     createdAt: remoteTrack.source.createdAt,
+    updatedAt: remoteTrack.source.createdAt,
     generatedAt: remoteTrack.source.generatedAt ?? undefined,
     playCount: 0,
     liked: remoteTrack.source.liked,
