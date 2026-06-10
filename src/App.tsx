@@ -12,6 +12,7 @@ import { useSettings } from "@/hooks/use-app-data";
 import { useIdle } from "@/hooks/use-idle";
 import { useShortcutDispatch } from "@/hooks/use-shortcut-dispatch";
 import { cn } from "@/lib/utils";
+import { dragWindowOnEmptyPress } from "@/lib/window-drag";
 import { NowPlayingPage } from "@/pages/now-playing-page";
 import { QueuePage } from "@/pages/queue-page";
 import { SearchPage } from "@/pages/search-page";
@@ -189,24 +190,22 @@ export default function App() {
         <main className="chrome-fade absolute inset-0 z-10 overflow-hidden [--chrome-fade-bottom:calc(var(--spacing-chrome-bottom)/2)] [--chrome-fade-top:3rem]">
           {tab === "now" && <NowPlayingPage foregroundHidden={foregroundHidden} />}
           {tab === "queue" && (
-            <AmbientPageOverlay active={ambientActive} dragGutter="max-w-3xl">
+            <AmbientPageOverlay active={ambientActive}>
               <QueuePage />
             </AmbientPageOverlay>
           )}
           {tab === "search" && (
-            // Widest of the gallery's inner modes (tracks is max-w-6xl) so the
-            // gutters never overlap content; narrower modes just get less drag area.
-            <AmbientPageOverlay active={ambientActive} dragGutter="max-w-6xl">
+            <AmbientPageOverlay active={ambientActive}>
               <SearchPage />
             </AmbientPageOverlay>
           )}
           {tab === "sessions" && (
-            <AmbientPageOverlay active={ambientActive} dragGutter="max-w-2xl">
+            <AmbientPageOverlay active={ambientActive}>
               <SessionsPage onStarted={() => setTab("now")} />
             </AmbientPageOverlay>
           )}
           {tab === "settings" && (
-            <AmbientPageOverlay active={ambientActive} dragGutter="max-w-5xl">
+            <AmbientPageOverlay active={ambientActive}>
               <SettingsPage />
             </AmbientPageOverlay>
           )}
@@ -233,43 +232,27 @@ export default function App() {
   );
 }
 
-function AmbientPageOverlay({
-  active,
-  dragGutter = "max-w-3xl",
-  children,
-}: {
-  active: boolean;
-  /**
-   * Tailwind `max-w-*` matching this page's centered content. The empty space
-   * left/right of that width becomes a desktop window-drag handle (see below).
-   */
-  dragGutter?: string;
-  children: ReactNode;
-}) {
+function AmbientPageOverlay({ active, children }: { active: boolean; children: ReactNode }) {
   return (
+    // Desktop window drag: the whole page is a drag surface, so any empty space —
+    // side gutters AND gaps inside the content (unfilled grid cells, padding) —
+    // moves the frameless window, like a native app. Both shells are wired (each
+    // inert on the other + web):
+    //   • Electron → `-webkit-app-region:drag` here; every interactive control +
+    //     overlay opts out via the global `no-drag` rule in styles.css (Electron's
+    //     drag region is geometric, so controls must explicitly carve themselves
+    //     out). The dock/dialog backdrops/popovers carry `data-no-drag`.
+    //   • Tauri → `onMouseDown` delegates to the native `startDragging` for any
+    //     press that isn't on a control (its `data-tauri-drag-region` is exact-hit,
+    //     so a single delegated handler is how we cover dynamic empty space).
+    // biome-ignore lint/a11y/noStaticElementInteractions: a passive window-drag surface, not a content control — no role/keyboard action; it only moves the OS window on desktop.
     <div
+      onMouseDown={dragWindowOnEmptyPress}
       className={cn(
-        "relative h-full transition-colors duration-500",
+        "relative h-full transition-colors duration-500 [-webkit-app-region:drag]",
         active && "bg-background/45 backdrop-blur-[2px]",
       )}
     >
-      {/* Desktop: the empty gutters left/right of the centered content drag the
-          frameless window — `-webkit-app-region:drag` (Electron) + `data-tauri-drag-region`
-          (Tauri), both inert on web/mobile. A centered max-width box anchors two
-          strips that reach *outward* into the gutters only, so the drag geometry
-          never overlaps the content, the dock, or portaled dialogs (Electron's
-          drag region is union(drag) − union(no-drag); anything we covered without
-          a no-drag marker would be swallowed). Mirror the page's own max-width. */}
-      <div aria-hidden className={cn("pointer-events-none absolute inset-0 mx-auto", dragGutter)}>
-        <div
-          data-tauri-drag-region
-          className="pointer-events-auto absolute inset-y-0 right-full w-screen [-webkit-app-region:drag]"
-        />
-        <div
-          data-tauri-drag-region
-          className="pointer-events-auto absolute inset-y-0 left-full w-screen [-webkit-app-region:drag]"
-        />
-      </div>
       {children}
     </div>
   );

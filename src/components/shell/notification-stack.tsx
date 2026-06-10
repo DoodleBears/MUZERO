@@ -104,6 +104,7 @@ function NotificationItemView({
       animate={{ opacity: 1, x: 0, scale: 1 }}
       exit={{ opacity: 0, x: -24, scale: 0.98 }}
       transition={{ ...enterSpring, opacity: { duration: 0.2 }, layout: layoutSpring }}
+      data-no-drag
       className="pointer-events-auto max-w-full"
     >
       <div

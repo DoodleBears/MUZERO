@@ -165,6 +165,49 @@
     -webkit-user-select: text;
     user-select: text;
   }
+
+  /*
+   * Electron frameless-window drag. The page content is a drag surface (see
+   * `AmbientPageOverlay` in App.tsx), so any empty space / static text moves the
+   * window — matching native apps. Every interactive control + floating overlay
+   * opts back out here, because Electron's drag region is geometric (union(drag) −
+   * union(no-drag)): a control sitting over the drag surface with no `no-drag`
+   * would be swallowed and stop responding to clicks. `[data-no-drag]` is the
+   * shared opt-out marker (the Tauri JS drag handler honors it too — see
+   * `src/lib/window-drag.ts`). Inert in Tauri/web, which ignore `-webkit-app-region`.
+   */
+  a[href],
+  button,
+  input,
+  textarea,
+  select,
+  label,
+  summary,
+  [role="button"],
+  [role="link"],
+  [role="tab"],
+  [role="menuitem"],
+  [role="menuitemradio"],
+  [role="menuitemcheckbox"],
+  [role="option"],
+  [role="checkbox"],
+  [role="radio"],
+  [role="switch"],
+  [role="slider"],
+  [role="combobox"],
+  [role="textbox"],
+  [role="searchbox"],
+  [role="spinbutton"],
+  [role="dialog"],
+  [role="alertdialog"],
+  [role="menu"],
+  [role="listbox"],
+  [role="tooltip"],
+  [contenteditable="true"],
+  [contenteditable=""],
+  [data-no-drag] {
+    -webkit-app-region: no-drag;
+  }
 }
 
 /*

@@ -22,6 +22,7 @@ export function PopoverContent({
     <PopoverPrimitive.Portal>
       <PopoverPrimitive.Positioner className="z-50" side={side} sideOffset={sideOffset}>
         <PopoverPrimitive.Popup
+          data-no-drag
           className={cn(
             "rounded-lg border border-border bg-popover p-3 text-popover-foreground shadow-lg outline-none",
             className,

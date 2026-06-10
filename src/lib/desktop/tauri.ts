@@ -78,6 +78,10 @@ export function createTauriBridge(): DesktopBridge {
       const { openUrl } = await import("@tauri-apps/plugin-opener");
       await openUrl(url);
     },
+    async startWindowDrag() {
+      const { getCurrentWindow } = await import("@tauri-apps/api/window");
+      await getCurrentWindow().startDragging();
+    },
   };
 }
 

@@ -49,6 +49,12 @@ export interface DesktopBridge {
   /** Open an http(s) URL in the system browser. */
   openExternal: (url: string) => Promise<void>;
   /**
+   * Start a native window drag for the current press (frameless window move).
+   * Tauri only — Electron drags via `-webkit-app-region` CSS, web has no window —
+   * so absent elsewhere. Call synchronously from a `mousedown`. See {@link dragWindowOnEmptyPress}.
+   */
+  startWindowDrag?: () => Promise<void>;
+  /**
    * Wrap a media URL so an `<audio>`/`<video>` element streams it through the
    * CORS-free proxy WITH injected request headers (Referer / User-Agent) the element
    * can't set itself, preserving Range/206 for seeking. Absent in web/tauri → the
