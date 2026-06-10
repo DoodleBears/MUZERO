@@ -203,11 +203,13 @@ const EDGE_FADE = {
 } as const;
 
 /**
- * Apple-Music-style synced lines in a real scroll area. While "following", the
- * active line is kept centered (smooth scrollIntoView); a wheel/touch detaches
- * follow so the user can read ahead, and a floating button re-attaches (it also
- * re-follows when you tap a line). Each line eases its size/opacity per the lyric
- * style; the list re-renders only on active-index change (the rAF gates that).
+ * Apple-Music-style synced lines. The stack is positioned by a CSS transform
+ * (translateY), NOT native scroll — a transform always moves regardless of how
+ * the flex height chain resolves, which is why follow-scroll is reliable here.
+ * While "following", the active line is translated to ~38% from the top; a
+ * wheel/touch gesture detaches follow into manual scrolling, and a floating
+ * button (or tapping a line) re-attaches. Re-renders only on active-index change
+ * (the rAF gates that); padding gives any line headroom to reach the anchor.
  */
 function SyncedLines({
   lines,
@@ -223,10 +225,11 @@ function SyncedLines({
   const { t } = useTranslation();
   const reduce = useReducedMotion();
   const viewportRef = useRef<HTMLDivElement>(null);
+  const stackRef = useRef<HTMLDivElement>(null);
   const activeRef = useRef<HTMLButtonElement>(null);
+  const touchStartY = useRef(0);
   const [following, setFollowing] = useState(true);
-  // Track the viewport height so the stack can pad enough headroom for any line
-  // (incl. first/last) to reach the center-upper anchor (~38% from the top).
+  const [offsetY, setOffsetY] = useState(0);
   const [viewportH, setViewportH] = useState(0);
 
   useEffect(() => {
@@ -234,6 +237,11 @@ function SyncedLines({
     if (!vp) return;
     const measure = () => setViewportH(vp.clientHeight);
     measure();
+    if (typeof ResizeObserver === "function") {
+      const ro = new ResizeObserver(measure);
+      ro.observe(vp);
+      return () => ro.disconnect();
+    }
     window.addEventListener("resize", measure);
     return () => window.removeEventListener("resize", measure);
   }, []);
@@ -242,37 +250,53 @@ function SyncedLines({
   // biome-ignore lint/correctness/useExhaustiveDependencies: reset follow when the lyric set changes
   useEffect(() => setFollowing(true), [lines]);
 
-  // While following, anchor the active line ~38% from the top (centered, slightly
-  // up). Manual scrollTo (not scrollIntoView) so we can sit above exact center.
+  // While following, translate the stack so the active line sits ~38% from the
+  // top (centered, slightly up). offsetTop is transform-independent, so this is
+  // exact regardless of the current translate.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: re-center on active / viewport / lyric-set changes
   useEffect(() => {
     if (!following || activeIndex < 0) return;
-    const vp = viewportRef.current;
     const el = activeRef.current;
-    if (!vp || !el) return;
-    const vpRect = vp.getBoundingClientRect();
-    const elRect = el.getBoundingClientRect();
-    const elCenterFromTop = elRect.top + elRect.height / 2 - vpRect.top;
-    const target = Math.max(0, vp.scrollTop + elCenterFromTop - vp.clientHeight * 0.38);
-    if (typeof vp.scrollTo === "function") {
-      vp.scrollTo({ top: target, behavior: reduce ? "auto" : "smooth" });
-    } else {
-      vp.scrollTop = target;
-    }
-  }, [activeIndex, following, reduce]);
+    if (!el) return;
+    setOffsetY(viewportH * 0.38 - (el.offsetTop + el.offsetHeight / 2));
+  }, [activeIndex, following, viewportH, lines]);
+
+  // Wheel / touch-drag = manual scroll → detach follow (clamped to content).
+  function scrollByDelta(deltaY: number) {
+    setFollowing(false);
+    setOffsetY((prev) => {
+      const vp = viewportRef.current;
+      const stack = stackRef.current;
+      const min = vp && stack ? Math.min(0, vp.clientHeight - stack.scrollHeight) : prev - deltaY;
+      return Math.max(min, Math.min(0, prev - deltaY));
+    });
+  }
 
   return (
     <>
       <div
         ref={viewportRef}
         data-testid="lyrics-scroll"
-        className="no-scrollbar absolute inset-0 overflow-y-auto"
+        className="absolute inset-0 overflow-hidden"
         style={EDGE_FADE}
-        onWheel={() => setFollowing(false)}
-        onTouchMove={() => setFollowing(false)}
+        onWheel={(e) => scrollByDelta(e.deltaY)}
+        onTouchStart={(e) => {
+          touchStartY.current = e.touches[0]?.clientY ?? 0;
+        }}
+        onTouchMove={(e) => {
+          const yNow = e.touches[0]?.clientY ?? touchStartY.current;
+          scrollByDelta(touchStartY.current - yNow);
+          touchStartY.current = yNow;
+        }}
       >
-        <div
-          className="flex flex-col gap-1"
+        <motion.div
+          ref={stackRef}
+          className="relative flex flex-col gap-1"
           style={{ paddingTop: viewportH * 0.38, paddingBottom: viewportH * 0.62 }}
+          animate={{ y: offsetY }}
+          transition={
+            reduce ? { duration: 0 } : { type: "spring", stiffness: 280, damping: 36, mass: 0.7 }
+          }
         >
           {lines.map((line, i) => {
             const isActive = i === activeIndex;
@@ -301,7 +325,7 @@ function SyncedLines({
               </motion.button>
             );
           })}
-        </div>
+        </motion.div>
       </div>
       {!following && (
         <button
