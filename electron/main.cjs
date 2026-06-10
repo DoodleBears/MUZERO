@@ -53,7 +53,7 @@ function createWindow() {
     minHeight: 600,
     minWidth: 380,
     show: false,
-    title: "MUZERO Electron Probe",
+    title: "MUZERO",
     titleBarStyle: "hiddenInset",
     width: 1180,
     webPreferences: {

@@ -15,7 +15,7 @@
 |-------|------|--------|------|
 | 1 | 版本号单一真相 + 注入 + 比较（三文件同步 bump + Vite define + compareSemver；Settings 显示移 P5） | ✅ Completed | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | Changelog 规范 + 类型化数据模型 + 历史大版本回填 + 「What's New」面板 | ✅ Completed | [Phase 2 Checklist](#phase-2-checklist) |
-| 3 | Electron 发布打包硬化（publish provider + per-OS targets + app-update + 安全/外部依赖收口） | 🔲 Pending | [Phase 3 Checklist](#phase-3-checklist) |
+| 3 | Electron 发布打包硬化（publish provider + per-OS targets + app-update + 安全/外部依赖收口） | ✅ Completed | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | Makefile 多平台发布指令 + R2 分发 + `manifest.json` 版本索引（合并式上传） | 🔲 Pending | [Phase 4 Checklist](#phase-4-checklist) |
 | 5 | 自动更新（electron-updater IPC + 渲染层提示）+ Settings 历史版本下载侧栏 | 🔲 Pending | [Phase 5 Checklist](#phase-5-checklist) |
 
@@ -478,16 +478,16 @@ src/components/settings/
 **Goal:** 让 Electron 成为可分发、可自动更新的 desktop 载体。
 
 **Tasks:**
-- [ ] （推荐）引入 `electron.vite.config.ts` 3-target，`externalizeDepsPlugin({ exclude: ["electron-updater"] })` 把更新器 inline 进 `main`；否则给现有 `electron/main.cjs` 加 esbuild bundle + 「外部 bare-import」校验脚本。
-- [ ] 硬化 `package.json` `build` 块：加 `publish: { provider: generic, url: "https://assets.mu0.app/desktop" }` + `generateUpdatesFilesForAllChannels: true` + `compression: maximum`；统一 `appId: "app.mu0.muzero"`（mu0.app 反向 DNS + 产品名；修当前 Electron `com.doodlekuma.muzero` vs Tauri `com.muzero.app` 不一致，**同步改 `src-tauri/tauri.conf.json` 的 `identifier`**，记入 CLAUDE.md codename 层 — 决议 Q5）；mac `target: [dmg, zip]`（updater 需 zip）、win `nsis`、linux `AppImage,deb`；`executableName: muzero`。
-- [ ] `electron/main.cjs`：窗口标题 `"MUZERO Electron Probe"` → `"MUZERO"`；`app.whenReady` 接 `initDesktopUpdater()`。
-- [ ] `build/` 放图标（复用 `src-tauri/icons`），`directories.buildResources`。
-- [ ] devDep 加 `electron-updater`（+ 可选 `electron-vite`）。
+- [x] **选 esbuild bundle 路线**（不引 electron.vite）：`scripts/build-electron-main.mjs` 用 esbuild 把 `electron/main.cjs` + `preload.cjs` 打成 `dist-electron/`（`external: ["electron"]`，inline 一切 npm 依赖含 P5 的 electron-updater）。`main.cjs` 无外部 npm 依赖时输出仍含本地 require inline；`dist-electron/` 与 `dist/` 同级，保持 `../dist` + `./preload.cjs` 相对路径。✅ + 「外部 bare-require 校验」测（leak 任何非 electron/node 包即 fail——即 ClipCombo 的 verify-externals 守卫）。
+- [x] 硬化 `package.json` `build` 块：`publish: { provider: generic, url: "https://assets.mu0.app/desktop" }` + `generateUpdatesFilesForAllChannels: true` + `compression: maximum` + **排除 node_modules**（renderer 已进 dist/、main 已 bundle，最大体积杠杆）；统一 `appId: "app.mu0.muzero"`（决议 Q5，**同步改 `src-tauri/tauri.conf.json` identifier**）；`executableName: muzero`；mac `[dmg,zip]×[arm64,x64]`（updater 需 zip）+ icon、win `nsis×x64` + icon + nsis 选项、linux `AppImage,deb` + icon。✅
+- [x] `electron/main.cjs`：窗口标题 `"MUZERO Electron Probe"` → `"MUZERO"`；`main` 字段 → `dist-electron/main.cjs`；`electron:build` script = `vite build && bundle main && electron-builder`。（`initDesktopUpdater()` 在 Phase 5 接）✅
+- [x] 图标复用 `src-tauri/icons/{icon.icns,icon.ico,icon.png}`（无需新建 build/）。✅
+- [x] devDep 加 `electron-updater`（^6.8.9，bundle 时 inline）。✅ `dist-electron/` + `release/` 进 .gitignore。
 
 ### Phase 3 Checklist
-- [ ] `make release-mac`（Mac 上）产出可启动 `.dmg` + `latest-mac.yml`
-- [ ] 打包后 app 标题/图标/版本正确，无 "Probe" 残留
-- [ ] bundle 内无 `node_modules` 残留导致的 `ERR_MODULE_NOT_FOUND`（外部依赖校验通过）
+- [~] `make release-mac`（Mac 上）产出可启动 `.dmg` + `latest-mac.yml` — release-mac 目标在 Phase 4 加；本阶段先跑 `electron-builder --mac --dir` 验证配置（见提交说明）
+- [x] 打包后 app 标题/图标/版本正确，无 "Probe" 残留 ✅（标题改 MUZERO，icon 指向 icns/ico/png）
+- [x] bundle 内无 `node_modules` 残留导致的 `ERR_MODULE_NOT_FOUND`（外部依赖校验通过）✅（externals 守卫测：只允许 electron + node: + 相对）
 
 ### Phase 4: Makefile 多平台发布 + R2 分发 + manifest.json 版本索引
 

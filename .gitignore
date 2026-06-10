@@ -6,6 +6,10 @@ dist/
 dist-ssr/
 *.local
 
+# Electron build artifacts (bundled main + packaged installers)
+dist-electron/
+release/
+
 # Tauri build artifacts (Rust target + generated mobile projects)
 src-tauri/target/
 src-tauri/gen/

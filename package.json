@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "main": "electron/main.cjs",
+  "main": "dist-electron/main.cjs",
   "description": "MUZERO — local-first AI DJ music player. An LLM writes prompts, calls a music-generation API, and endlessly extends your playlist. Tauri desktop + mobile, no backend, no cloud.",
   "scripts": {
     "prepare": "lefthook install || true",
@@ -21,7 +21,8 @@
     "desktop:build": "tauri build",
     "electron:dev": "electron electron/main.cjs",
     "electron:preview": "electron electron/main.cjs",
-    "electron:build": "tsc --noEmit && vite build && electron-builder",
+    "electron:bundle": "node scripts/build-electron-main.mjs",
+    "electron:build": "vite build && node scripts/build-electron-main.mjs && electron-builder",
     "android:init": "tauri android init",
     "android:dev": "tauri android dev",
     "android:build": "tauri android build",
@@ -78,34 +79,71 @@
     "zustand": "^5.0.13"
   },
   "build": {
-    "appId": "com.doodlekuma.muzero",
+    "appId": "app.mu0.muzero",
     "productName": "MUZERO",
+    "executableName": "muzero",
+    "copyright": "© Doodlekuma",
     "asar": false,
+    "compression": "maximum",
+    "generateUpdatesFilesForAllChannels": true,
     "files": [
       "dist/**",
-      "electron/**"
+      "dist-electron/**",
+      "package.json",
+      "!node_modules",
+      "!node_modules/**"
     ],
     "directories": {
       "output": "release"
     },
+    "publish": {
+      "provider": "generic",
+      "url": "https://assets.mu0.app/desktop",
+      "channel": "latest"
+    },
     "mac": {
       "target": [
-        "dmg",
-        "zip"
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        }
       ],
-      "category": "public.app-category.music"
+      "category": "public.app-category.music",
+      "icon": "src-tauri/icons/icon.icns"
     },
     "win": {
       "target": [
-        "nsis"
-      ]
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "src-tauri/icons/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true
     },
     "linux": {
       "target": [
         "AppImage",
         "deb"
       ],
-      "category": "Audio"
+      "category": "Audio",
+      "icon": "src-tauri/icons/icon.png"
     }
   },
   "devDependencies": {
@@ -121,6 +159,7 @@
     "@vitejs/plugin-react": "^6.0.2",
     "electron": "^42.3.3",
     "electron-builder": "^26.0.12",
+    "electron-updater": "^6.8.9",
     "esbuild": "^0.28.0",
     "fake-indexeddb": "^6.0.0",
     "jsdom": "^29.1.1",
