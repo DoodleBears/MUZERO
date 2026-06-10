@@ -20,6 +20,7 @@ import type { SetDisplayMode } from "@/db/types";
 import { useSettings } from "@/hooks/use-app-data";
 import { useShortcutHint } from "@/hooks/use-shortcut-hint";
 import { classifyDrop, dragHasFiles, filesFromTransfer, summarizeDragItems } from "@/lib/file-drop";
+import { lenisScrollTo, useSmoothScroll } from "@/lib/smooth-scroll/use-smooth-scroll";
 import { cn } from "@/lib/utils";
 import { dragWindowOnEmptyPress } from "@/lib/window-drag";
 import { nextRepeatMode } from "@/player/transport";
@@ -57,9 +58,11 @@ export function NowPlayingPage({ foregroundHidden = false }: { foregroundHidden?
   // should be in view), not used as a render value.
   const sectionRef = useRef<HTMLElement>(null);
   const stageRef = useRef<HTMLDivElement>(null);
+  const { lenisRef } = useSmoothScroll(sectionRef);
   // biome-ignore lint/correctness/useExhaustiveDependencies: track id is the reset trigger, not read in the body
   useEffect(() => {
-    sectionRef.current?.scrollTo({ top: 0 });
+    // Route through Lenis when active so the reset doesn't fight the smoothing.
+    if (!lenisScrollTo(lenisRef, 0, { immediate: true })) sectionRef.current?.scrollTo({ top: 0 });
   }, [current?.id]);
 
   return (
@@ -88,7 +91,9 @@ export function NowPlayingPage({ foregroundHidden = false }: { foregroundHidden?
               normal stage — video at its aspect ratio / a square audio cover (the
               drop target is measured via stageRef). */}
           {lyricsStageOpen && current ? (
-            <div className="min-h-[60svh] flex-1">
+            // Lyrics own their auto-scroll + overscroll-contain; let them scroll
+            // natively instead of being captured by the column's Lenis instance.
+            <div className="min-h-[60svh] flex-1" data-lenis-prevent>
               <SyncedLyricsView track={current} />
             </div>
           ) : (

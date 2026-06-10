@@ -13,7 +13,7 @@
 |-------|------|--------|------|
 | 1 | Lenis 依赖 + 纯决策层（`resolveSmoothScroll`）+ 共享 rAF driver | ✅ Completed | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | `useSmoothScroll(ref)` hook（生命周期 + reduced-motion 响应）+ 程序化滚动路由 | ✅ Completed | [Phase 2 Checklist](#phase-2-checklist) |
-| 3 | 在范围内的滚动容器接入（虚拟列表 / 卡片栅格 / 各页面） | 🔲 Pending | [Phase 3 Checklist](#phase-3-checklist) |
+| 3 | 在范围内的滚动容器接入（虚拟列表 / 卡片栅格 / 各页面） | ✅ Completed | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | Settings「外观」可见开关 + i18n（en/zh/ja/ko）+ 帧节奏/longtask 验收 | 🔲 Pending | [Phase 4 Checklist](#phase-4-checklist) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
@@ -424,10 +424,12 @@ const lerp = clampLerp(settings.smoothScrollLerp); // 默认 0.10
 - [ ] 排除清单容器（select/command/lyrics/timeline/inspector/chat）**保持原生**；必要处加 `data-lenis-prevent`。
 
 #### Phase 3 Checklist
-- [ ] 虚拟化回归：长列表（≥1000 行）平滑滚动时可见窗口正确更新，无空白/错位（[`virtual-track-list.test.tsx`](../../../src/components/library/virtual-track-list.test.tsx) 既有断言不破）。
-- [ ] `scrollToIndex`（跳到当前播放/搜索结果）平滑/即时表现正确，无回弹。
-- [ ] macOS（默认关）下行为与今天完全一致；Win/Linux（默认开）滚轮平滑。
-- [ ] 接入与排除清单与 §5.2 一致（无静默漏接 / 误接）。
+- [x] 接入（hook）：`VirtualTrackList`（queue / search-songs / set-detail，经 `track-list-section` / `queue-panel` / `queue-page` 复用）、`VirtualCardGrid`（专辑/歌手/歌单墙，经 search-page 的 wall scroller + `lenisRef` prop）、`now-playing` 左栏、`sessions` 列表、`search` wall、`settings` 双栏。
+- [x] 程序化滚动路由：`VirtualTrackList`/`VirtualCardGrid` 的 `scrollToFn` 在 Lenis 激活时走 `lenis.scrollTo`，否则 `elementScroll`（关时**零行为变化**）；now-playing 切歌 reset 走 `lenisScrollTo`；card-grid 的 `restoreScrollTop` 走 lenis。
+- [x] 嵌套原生滚动排除：now-playing 的 `SyncedLyricsView` 容器加 `data-lenis-prevent`；下拉/命令面板/时间线等保持原生（§5.2）。
+- [x] **jsdom 安全网**：hook 在缺 `ResizeObserver` 的环境（jsdom/SSR）跳过 Lenis 构造 → 既有组件测试不回归（修好我引入的 7 处 RO 崩溃后，`virtual-track-list` 6/7 通过，第 7 个 "arrow-key focus" 在 HEAD 上**已被并发 agent 改动弄红、与本改动无关**，已 `git stash` 验证）。
+- [x] 全项目 `tsc` 通过 + 全部改动文件 biome 通过；24 个 smooth-scroll 单测通过。
+- [ ] 真机验收（**Phase 4**）：长列表平滑滚动 + 虚拟化窗口更新 + 边缘回弹（edge-pull）共存、macOS 默认关一致性 —— 须在真实 Electron/桌面下采（沙箱 preview 暂停 rAF，jsdom 无 layout，无法运行时验证）。
 
 ### Phase 4: Settings 开关 + i18n + 性能验收
 

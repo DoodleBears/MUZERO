@@ -31,14 +31,27 @@ export function useSmoothScroll(ref: RefObject<HTMLElement | null>): {
   const optionsRef = useRef(options);
   optionsRef.current = options;
 
-  // Create / destroy. Keyed only on `enabled` (+ the stable ref): toggling the
-  // setting or reduced-motion flips this; strength changes do NOT recreate.
+  // Track the live DOM node. A ref alone can't retrigger the create effect when a
+  // conditionally rendered scroll container mounts (e.g. an empty→non-empty list),
+  // so mirror `ref.current` into state — this effect runs after every commit and
+  // re-attaches Lenis once the node appears.
+  const [element, setElement] = useState<HTMLElement | null>(() => ref.current);
+  // No deps: runs after every commit so it catches the node mounting/unmounting.
   useEffect(() => {
-    const el = ref.current;
-    if (!enabled || !el) return;
+    if (ref.current !== element) setElement(ref.current);
+  });
+
+  // Create / destroy. Keyed on `enabled` + the resolved node: toggling the setting
+  // or reduced-motion flips `enabled`; the node mounting flips `element`. Strength
+  // changes do NOT recreate (applied in place below).
+  useEffect(() => {
+    // Lenis needs a real browser layout environment (it observes size via
+    // ResizeObserver). Skip in jsdom / SSR / non-DOM contexts where that's
+    // absent — callers just keep native scrolling.
+    if (!enabled || !element || typeof ResizeObserver === "undefined") return;
     const lenis = new Lenis({
-      wrapper: el,
-      content: el.firstElementChild ?? el,
+      wrapper: element,
+      content: element.firstElementChild ?? element,
       autoRaf: false, // shared driver ticks us
       ...optionsRef.current,
     });
@@ -49,7 +62,7 @@ export function useSmoothScroll(ref: RefObject<HTMLElement | null>): {
       lenis.destroy();
       lenisRef.current = null;
     };
-  }, [enabled, ref]);
+  }, [enabled, element]);
 
   // Apply strength changes in place (Lenis reads options.lerp each frame).
   useEffect(() => {

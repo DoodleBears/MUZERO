@@ -1,4 +1,4 @@
-import { useVirtualizer } from "@tanstack/react-virtual";
+import { elementScroll, useVirtualizer } from "@tanstack/react-virtual";
 import { motion, useMotionValue, useSpring } from "motion/react";
 import type { KeyboardEvent as ReactKeyboardEvent, ReactNode } from "react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
@@ -9,6 +9,7 @@ import { useSessions } from "@/hooks/use-app-data";
 import { useShortcutMatcher } from "@/hooks/use-shortcut-matcher";
 import { hasModalDialogOpen, isTypingTarget } from "@/lib/dom-keys";
 import { downloadTrackMedia } from "@/lib/download-track";
+import { useSmoothScroll } from "@/lib/smooth-scroll/use-smooth-scroll";
 import { cn } from "@/lib/utils";
 import { notify } from "@/stores/notification-store";
 import { usePlayerStore } from "@/stores/player-store";
@@ -95,6 +96,9 @@ export function VirtualTrackList({
   const matches = useShortcutMatcher();
   const matchesRef = useRef(matches);
   matchesRef.current = matches;
+  // Opt this scroll container into smooth scrolling (no-op on macOS default /
+  // reduced-motion). `lenisRef` routes programmatic jumps so they don't fight it.
+  const { lenisRef } = useSmoothScroll(parentRef);
 
   const currentTrackId = currentIndex >= 0 ? queue[currentIndex]?.id : undefined;
   const handlePlay = onPlay ?? ((_track: Track, index: number) => void playIndex(index));
@@ -107,6 +111,15 @@ export function VirtualTrackList({
     getScrollElement: () => parentRef.current,
     overscan: 8,
     scrollMargin,
+    // Route scrollToIndex through Lenis when active (a raw element.scrollTo
+    // desyncs the smoothing); fall back to the exact default otherwise.
+    scrollToFn: (offset, opts, instance) => {
+      if (lenisRef.current) {
+        lenisRef.current.scrollTo(offset, { immediate: opts.behavior !== "smooth" });
+        return;
+      }
+      elementScroll(offset, opts, instance);
+    },
   });
 
   // Keep `scrollMargin` in sync with the rows container's offset within the scroller

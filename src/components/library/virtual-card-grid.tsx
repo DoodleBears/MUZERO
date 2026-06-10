@@ -1,6 +1,7 @@
 "use client";
 
-import { useVirtualizer } from "@tanstack/react-virtual";
+import { elementScroll, useVirtualizer } from "@tanstack/react-virtual";
+import type Lenis from "lenis";
 import {
   type ReactNode,
   type RefObject,
@@ -57,6 +58,9 @@ interface VirtualCardGridProps<T> {
   /** Card key to focus once on mount (focus restore returning from a detail view). */
   initialFocusKey?: string | null;
   onInitialFocusHandled?: () => void;
+  /** The Lenis instance smooth-scrolling the ancestor `scrollElement`, if any —
+   *  so the grid's restore/scrollToIndex route through it instead of fighting it. */
+  lenisRef?: RefObject<Lenis | null>;
 }
 
 /**
@@ -81,6 +85,7 @@ export function VirtualCardGrid<T>({
   restoreScrollTop,
   initialFocusKey,
   onInitialFocusHandled,
+  lenisRef,
 }: VirtualCardGridProps<T>) {
   const listRef = useRef<HTMLDivElement | null>(null);
   const [viewportWidth, setViewportWidth] = useState(() =>
@@ -112,6 +117,15 @@ export function VirtualCardGrid<T>({
     getItemKey: (rowIndex) => {
       const first = items[rowIndex * (view === "list" ? 1 : columns)];
       return first ? `${rowIndex}:${getKey(first)}` : rowIndex;
+    },
+    // Route scrollToIndex through the ancestor's Lenis when smooth-scrolling, so
+    // it doesn't desync; otherwise the exact default element scroll.
+    scrollToFn: (offset, opts, instance) => {
+      if (lenisRef?.current) {
+        lenisRef.current.scrollTo(offset, { immediate: opts.behavior !== "smooth" });
+        return;
+      }
+      elementScroll(offset, opts, instance);
     },
   });
 
@@ -177,8 +191,10 @@ export function VirtualCardGrid<T>({
     if (!scrollElement || !restoreScrollTop) return;
     if (view === "grid" && contentWidth <= 0) return;
     didRestoreRef.current = true;
-    scrollElement.scrollTop = restoreScrollTop;
-  }, [scrollElement, restoreScrollTop, contentWidth, view]);
+    // Route through Lenis when active so the restore lands instead of snapping back.
+    if (lenisRef?.current) lenisRef.current.scrollTo(restoreScrollTop, { immediate: true });
+    else scrollElement.scrollTop = restoreScrollTop;
+  }, [scrollElement, restoreScrollTop, contentWidth, view, lenisRef]);
 
   const scrollToKey = useCallback(
     (key: string) => {

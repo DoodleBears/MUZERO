@@ -59,6 +59,16 @@ beforeEach(() => {
   state.isMac = false;
   state.settings = {};
   stubMatchMedia(false);
+  // The hook requires a real-browser env (ResizeObserver). jsdom lacks it, so
+  // stub it here — the mocked Lenis ignores it, we just need the guard to pass.
+  vi.stubGlobal(
+    "ResizeObserver",
+    class {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    },
+  );
 });
 
 afterEach(() => {
@@ -127,5 +137,21 @@ describe("useSmoothScroll — reactive settings", () => {
 
     expect(lenisInstances[0].destroyed).toBe(true);
     expect(__activeCount()).toBe(0);
+  });
+
+  it("attaches once a conditionally-rendered node appears later (empty→non-empty list)", () => {
+    // Start with no node (empty list), then the scroll container mounts.
+    const ref: { current: HTMLElement | null } = { current: null };
+    const { rerender } = renderHook(() => useSmoothScroll(ref as never));
+    expect(lenisInstances).toHaveLength(0); // nothing to attach to yet
+
+    const el = document.createElement("div");
+    el.appendChild(document.createElement("div"));
+    ref.current = el; // node mounts
+    act(() => rerender());
+
+    expect(lenisInstances).toHaveLength(1);
+    expect((lenisInstances[0].opts as { wrapper?: HTMLElement }).wrapper).toBe(el);
+    expect(__activeCount()).toBe(1);
   });
 });
