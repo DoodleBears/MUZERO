@@ -13,6 +13,7 @@ import { DEFAULT_LYRIC_STYLE, type LyricStyle, resolveLyricStyle } from "@/lyric
 import { activeLineIndex, type LyricsLine } from "@/lyrics/parse-lrc";
 import { type ResolvedLyrics, resolveTrackLyrics } from "@/lyrics/resolve-lyrics";
 import { getMediaEngine, usePlayerStore } from "@/stores/player-store";
+import { useUiStore } from "@/stores/ui-store";
 
 type ShownLyrics = Extract<ResolvedLyrics, { mode: "synced" } | { mode: "plain" }>;
 
@@ -116,6 +117,7 @@ export function SyncedLyricsView({ track }: { track?: Track }) {
     return (
       <LyricsSearchPanel
         track={track}
+        defaultOpen
         onCancel={() => setSearchOpen(false)}
         onPicked={() => setSearchOpen(false)}
       />
@@ -351,8 +353,9 @@ function LyricsFooter({
   onSearch?: () => void;
 }) {
   const { t } = useTranslation();
+  const chromeHidden = useUiStore((s) => s.chromeHidden);
   const hasSource = source === "lrclib";
-  if (!hasSource && !onSearch) return null;
+  if (chromeHidden || (!hasSource && !onSearch)) return null;
   return (
     <div className="flex shrink-0 items-center justify-between gap-2 px-1 pt-2 pb-1">
       <span className="text-[11px] text-muted-foreground/70">

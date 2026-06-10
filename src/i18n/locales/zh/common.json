@@ -122,7 +122,8 @@
     "currentInstrumental": "纯音乐",
     "searchPrompt": "还没有歌词 —— 去 LRCLIB 搜索看看。",
     "wrongLyrics": "歌词不对？搜索",
-    "backToLyrics": "返回歌词"
+    "backToLyrics": "返回歌词",
+    "collapseSearch": "收起"
   },
   "lyricsSettings": {
     "title": "歌词",

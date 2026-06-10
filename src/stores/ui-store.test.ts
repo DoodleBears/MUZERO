@@ -17,4 +17,13 @@ describe("ui-store", () => {
     useUiStore.getState().toggleQueue();
     expect(useUiStore.getState().queueOpen).toBe(false);
   });
+
+  it("mirrors the chrome-hidden signal idempotently", () => {
+    const before = useUiStore.getState();
+    expect(before.chromeHidden).toBe(false);
+    before.setChromeHidden(false); // no-op keeps the same state object
+    expect(useUiStore.getState()).toBe(before);
+    before.setChromeHidden(true);
+    expect(useUiStore.getState().chromeHidden).toBe(true);
+  });
 });

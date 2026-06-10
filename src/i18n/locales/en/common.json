@@ -128,7 +128,8 @@
     "currentInstrumental": "Instrumental",
     "searchPrompt": "No lyrics yet — search LRCLIB for them.",
     "wrongLyrics": "Wrong lyrics? Search",
-    "backToLyrics": "Back to lyrics"
+    "backToLyrics": "Back to lyrics",
+    "collapseSearch": "Hide"
   },
   "lyricsSettings": {
     "title": "Lyrics",

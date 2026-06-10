@@ -19,6 +19,7 @@ import { SettingsPage } from "@/pages/settings-page";
 import { useNavStore } from "@/stores/nav-store";
 import { usePlayerStore } from "@/stores/player-store";
 import { startSyncIndicator } from "@/stores/sync-indicator";
+import { useUiStore } from "@/stores/ui-store";
 import { useVisualizerPanelStore } from "@/stores/visualizer-panel-store";
 import { resolveVisualizerStyle } from "@/visualizer/registry";
 
@@ -136,6 +137,12 @@ export default function App() {
   // In full-immersive (only background + spectrum, foreground rail hidden) surface
   // memories as a top popover instead — see the immersive-memory-moments PRD.
   const immersiveMemoryActive = visualizerIdleOnly && (settings.immersiveMemoryOverlay ?? true);
+
+  // Mirror the chrome-hidden signal so deep surfaces (e.g. the lyrics search
+  // affordance) can fade in sync with the Dock during immersive idle.
+  useEffect(() => {
+    useUiStore.getState().setChromeHidden(chromeHidden || foregroundHidden);
+  }, [chromeHidden, foregroundHidden]);
 
   // `reducedMotion="user"` makes every motion animation honor the OS
   // "reduce motion" setting app-wide, matching the view-transition helper.

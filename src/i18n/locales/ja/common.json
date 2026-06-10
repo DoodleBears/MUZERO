@@ -122,7 +122,8 @@
     "currentInstrumental": "インストゥルメンタル",
     "searchPrompt": "まだ歌詞がありません —— LRCLIB で検索してみましょう。",
     "wrongLyrics": "歌詞が違う？検索",
-    "backToLyrics": "歌詞に戻る"
+    "backToLyrics": "歌詞に戻る",
+    "collapseSearch": "閉じる"
   },
   "lyricsSettings": {
     "title": "歌詞",

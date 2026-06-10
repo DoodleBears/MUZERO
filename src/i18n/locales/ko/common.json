@@ -122,7 +122,8 @@
     "currentInstrumental": "연주곡",
     "searchPrompt": "아직 가사가 없어요 —— LRCLIB에서 검색해 보세요.",
     "wrongLyrics": "가사가 틀렸나요? 검색",
-    "backToLyrics": "가사로 돌아가기"
+    "backToLyrics": "가사로 돌아가기",
+    "collapseSearch": "접기"
   },
   "lyricsSettings": {
     "title": "가사",
