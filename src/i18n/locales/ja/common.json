@@ -102,6 +102,7 @@
   "lyrics": {
     "fetching": "歌詞を取得中…",
     "instrumental": "インストゥルメンタル · 歌詞なし",
+    "followCurrent": "現在の歌詞へ戻る",
     "source": "歌詞提供: {{source}}",
     "manage": "歌詞",
     "searchTitle": "タイトル",

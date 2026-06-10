@@ -53,6 +53,19 @@ describe("LyricsScroller (synced)", () => {
     render(<LyricsScroller resolved={synced} activeIndex={0} onSeek={() => {}} />);
     expect(screen.getByText("Lyrics from LRCLIB")).toBeInTheDocument();
   });
+
+  it("detaches follow on wheel and re-attaches via the return button", () => {
+    render(<LyricsScroller resolved={synced} activeIndex={1} onSeek={() => {}} />);
+    // Following by default → no return button.
+    expect(screen.queryByLabelText("lyrics.followCurrent")).toBeNull();
+
+    fireEvent.wheel(screen.getByTestId("lyrics-scroll"));
+    const back = screen.getByLabelText("lyrics.followCurrent");
+    expect(back).toBeInTheDocument();
+
+    fireEvent.click(back);
+    expect(screen.queryByLabelText("lyrics.followCurrent")).toBeNull();
+  });
 });
 
 describe("LyricsScroller (plain)", () => {

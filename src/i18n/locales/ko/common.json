@@ -102,6 +102,7 @@
   "lyrics": {
     "fetching": "가사를 가져오는 중…",
     "instrumental": "연주곡 · 가사 없음",
+    "followCurrent": "현재 가사로 돌아가기",
     "source": "가사 제공: {{source}}",
     "manage": "가사",
     "searchTitle": "제목",

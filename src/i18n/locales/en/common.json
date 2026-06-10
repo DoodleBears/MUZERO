@@ -108,6 +108,7 @@
   "lyrics": {
     "fetching": "Fetching lyrics…",
     "instrumental": "Instrumental — no lyrics",
+    "followCurrent": "Back to current line",
     "source": "Lyrics from {{source}}",
     "manage": "Lyrics",
     "searchTitle": "Title",

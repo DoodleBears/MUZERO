@@ -1,4 +1,5 @@
 import { useLiveQuery } from "dexie-react-hooks";
+import { LocateFixed } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -199,11 +200,11 @@ const EDGE_FADE = {
 } as const;
 
 /**
- * Apple-Music-style synced lines: the whole stack spring-translates so the
- * active line stays ~40% down the viewport, while each line eases its
- * opacity/scale by distance from the active one. Re-renders only when the active
- * index changes (the rAF in useActiveLyricLine gates that), so motion animates
- * off the React path.
+ * Apple-Music-style synced lines in a real scroll area. While "following", the
+ * active line is kept centered (smooth scrollIntoView); a wheel/touch detaches
+ * follow so the user can read ahead, and a floating button re-attaches (it also
+ * re-follows when you tap a line). Each line eases its size/opacity per the lyric
+ * style; the list re-renders only on active-index change (the rAF gates that).
  */
 function SyncedLines({
   lines,
@@ -216,61 +217,87 @@ function SyncedLines({
   onSeek: (sec: number) => void;
   lyricStyle: LyricStyle;
 }) {
+  const { t } = useTranslation();
   const reduce = useReducedMotion();
   const viewportRef = useRef<HTMLDivElement>(null);
-  const lineRefs = useRef<Array<HTMLButtonElement | null>>([]);
-  const [offsetY, setOffsetY] = useState(0);
+  const activeRef = useRef<HTMLButtonElement>(null);
+  const [following, setFollowing] = useState(true);
+  // Top/bottom headroom ≈ 42% of the viewport so any line (incl. first/last) can
+  // sit at the vertical center.
+  const [pad, setPad] = useState(0);
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: re-measure the anchor when the lyric lines change
   useEffect(() => {
-    const viewport = viewportRef.current;
-    if (!viewport) return;
-    if (activeIndex < 0) {
-      setOffsetY(0);
-      return;
-    }
-    const el = lineRefs.current[activeIndex];
-    if (!el) return;
-    // Anchor the active line ~40% down the viewport.
-    setOffsetY(viewport.clientHeight * 0.4 - (el.offsetTop + el.offsetHeight / 2));
-  }, [activeIndex, lines]);
+    const vp = viewportRef.current;
+    if (!vp) return;
+    const measure = () => setPad(Math.round(vp.clientHeight * 0.42));
+    measure();
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
+  }, []);
+
+  // A new song re-attaches follow.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: reset follow when the lyric set changes
+  useEffect(() => setFollowing(true), [lines]);
+
+  // Keep the active line centered while following.
+  useEffect(() => {
+    if (!following || activeIndex < 0) return;
+    const el = activeRef.current;
+    if (!el || typeof el.scrollIntoView !== "function") return;
+    el.scrollIntoView({ block: "center", behavior: reduce ? "auto" : "smooth" });
+  }, [activeIndex, following, reduce]);
 
   return (
-    <div ref={viewportRef} className="relative h-full overflow-hidden" style={EDGE_FADE}>
-      <motion.div
-        animate={{ y: offsetY }}
-        transition={
-          reduce ? { duration: 0 } : { type: "spring", stiffness: 320, damping: 36, mass: 0.7 }
-        }
-        className="flex flex-col gap-1 will-change-transform"
+    <div className="relative h-full">
+      <div
+        ref={viewportRef}
+        data-testid="lyrics-scroll"
+        className="no-scrollbar h-full overflow-y-auto"
+        style={EDGE_FADE}
+        onWheel={() => setFollowing(false)}
+        onTouchMove={() => setFollowing(false)}
       >
-        {lines.map((line, i) => {
-          const isActive = i === activeIndex;
-          return (
-            <motion.button
-              // biome-ignore lint/suspicious/noArrayIndexKey: lyric lines have no stable id; time+index is the natural key
-              key={`${line.timeMs}-${i}`}
-              ref={(node) => {
-                lineRefs.current[i] = node;
-              }}
-              type="button"
-              data-active={isActive || undefined}
-              aria-current={isActive ? "true" : undefined}
-              onClick={() => onSeek(line.timeMs / 1000)}
-              animate={{
-                opacity: isActive ? lyricStyle.activeOpacity : lyricStyle.inactiveOpacity,
-                fontSize: isActive ? lyricStyle.activeFontSize : lyricStyle.inactiveFontSize,
-                scale: reduce || isActive ? 1 : 0.97,
-              }}
-              transition={{ duration: reduce ? 0 : 0.35, ease: [0.22, 1, 0.36, 1] }}
-              style={{ transformOrigin: "left center", color: lyricStyle.color }}
-              className="block w-full rounded-lg px-3 py-2 text-left font-bold leading-snug"
-            >
-              {line.text || "♪"}
-            </motion.button>
-          );
-        })}
-      </motion.div>
+        <div className="flex flex-col gap-1" style={{ paddingTop: pad, paddingBottom: pad }}>
+          {lines.map((line, i) => {
+            const isActive = i === activeIndex;
+            return (
+              <motion.button
+                // biome-ignore lint/suspicious/noArrayIndexKey: lyric lines have no stable id; time+index is the natural key
+                key={`${line.timeMs}-${i}`}
+                ref={isActive ? activeRef : undefined}
+                type="button"
+                data-active={isActive || undefined}
+                aria-current={isActive ? "true" : undefined}
+                onClick={() => {
+                  onSeek(line.timeMs / 1000);
+                  setFollowing(true);
+                }}
+                animate={{
+                  opacity: isActive ? lyricStyle.activeOpacity : lyricStyle.inactiveOpacity,
+                  fontSize: isActive ? lyricStyle.activeFontSize : lyricStyle.inactiveFontSize,
+                  scale: reduce || isActive ? 1 : 0.97,
+                }}
+                transition={{ duration: reduce ? 0 : 0.35, ease: [0.22, 1, 0.36, 1] }}
+                style={{ transformOrigin: "left center", color: lyricStyle.color }}
+                className="block w-full rounded-lg px-3 py-2 text-left font-bold leading-snug"
+              >
+                {line.text || "♪"}
+              </motion.button>
+            );
+          })}
+        </div>
+      </div>
+      {!following && (
+        <button
+          type="button"
+          onClick={() => setFollowing(true)}
+          aria-label={t("lyrics.followCurrent")}
+          className="-translate-x-1/2 absolute bottom-3 left-1/2 flex items-center gap-1.5 rounded-full border border-border/70 bg-background/85 px-3 py-1.5 font-medium text-xs shadow-lg backdrop-blur-md transition-colors hover:bg-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          <LocateFixed className="size-3.5" />
+          {t("lyrics.followCurrent")}
+        </button>
+      )}
     </div>
   );
 }

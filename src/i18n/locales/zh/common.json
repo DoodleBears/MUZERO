@@ -102,6 +102,7 @@
   "lyrics": {
     "fetching": "正在获取歌词…",
     "instrumental": "纯音乐 · 无歌词",
+    "followCurrent": "回到当前歌词",
     "source": "歌词来自 {{source}}",
     "manage": "歌词",
     "searchTitle": "标题",
