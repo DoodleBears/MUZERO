@@ -406,7 +406,7 @@ components/player/            # 无需改：streamed track 复用 media-stage / 
 
 **Tasks:**
 - [ ] `electron/fetch-proxy.cjs`：`x-muzero-h-*` → 真实 header 还原；`Range` 转发 + `206/Content-Range/Accept-Ranges` 透传。
-- [ ] `DesktopBridge.mediaProxyUrl` + **Electron 实现**（Tauri/web 缺省）；`hasStreamingSources()` 按能力存在判定。
+- [x] `DesktopBridge.mediaProxyUrl` + **Electron 实现**（Tauri/web 缺省）；`hasStreamingSources()` 按能力存在判定。✅ 已落地 + 提交（Electron 壳 commit）。
 - [ ] `src/streamsrc/{provider,registry,source-detect,http}.ts` 接口与纯函数骨架。
 - [ ] 数据模型（**附加非索引、零迁移**）：`TrackOrigin += "streamed"`；`Track` 加 stream 字段；`AppSettings.streamSources`。**不** bump Dexie 版本、**不**建索引。
 - [ ] `createStreamedTrack()` repo + `streamSourceId+externalId` 内存查重。
@@ -418,7 +418,7 @@ components/player/            # 无需改：streamed track 复用 media-stage / 
 - [x] 数据模型附加非索引、零迁移：`TrackOrigin/Track/AppSettings` 已扩，未新增 `.version()`；r2 manifest/catalog enum 同步扩 `streamed`，全项目 tsc 绿。
 - [ ] streamed track 端到端写读（待 `createStreamedTrack` repo + 写库测）。
 - [ ] 内存查重单测：同 `streamSourceId+externalId` 不重复入库。
-- [ ] Tauri / web 壳下 `hasStreamingSources()===false`，UI 入口隐藏。
+- [x] Tauri / web 壳下 `hasStreamingSources()===false`，UI 入口隐藏。✅ ⌘F 在线 chips + 结果区已 gate；dev 面板已移除；netease 诊断日志已清。
 - [ ] `make check` 通过。
 
 ### Phase 2: Bilibili（架构试金石）

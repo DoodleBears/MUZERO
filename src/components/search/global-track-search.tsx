@@ -12,6 +12,7 @@ import { useSettings } from "@/hooks/use-app-data";
 import { useTrackCoverUrl } from "@/hooks/use-media";
 import { useOnlineSourceSearch } from "@/hooks/use-online-source-search";
 import { useWorkerTrackSearch } from "@/hooks/use-worker-track-search";
+import { hasStreamingSources } from "@/lib/desktop/bridge";
 import { trackSubtitle } from "@/lib/track-display";
 import { cn, formatDuration } from "@/lib/utils";
 import { usePlayerStore } from "@/stores/player-store";
@@ -54,6 +55,8 @@ export function GlobalTrackSearch({
   const playNextTrack = usePlayerStore((s) => s.playNextTrack);
   const playStreamedHit = usePlayerStore((s) => s.playStreamedHit);
   const settings = useSettings();
+  // Online sources need the desktop media proxy (Referer/CORS). Hidden on web/tauri.
+  const streamingSupported = hasStreamingSources();
   const { hits: onlineHits, searching: onlineSearching } = useOnlineSourceSearch(query);
 
   const playable = useMemo(
@@ -169,28 +172,30 @@ export function GlobalTrackSearch({
           />
         </div>
 
-        <div className="flex flex-wrap items-center gap-1.5 border-white/10 border-b px-4 py-2 text-xs">
-          <span className="text-muted-foreground">{t("globalSearch.enableOnline")}</span>
-          {ONLINE_SOURCES.map(({ id, label }) => {
-            const on = !!settings.streamSources?.[id]?.enabled;
-            return (
-              <button
-                key={id}
-                type="button"
-                onClick={() => void toggleSource(id)}
-                aria-pressed={on}
-                className={cn(
-                  "rounded-full border px-2 py-0.5 transition-colors",
-                  on
-                    ? "border-primary bg-accent text-foreground"
-                    : "border-border text-muted-foreground hover:text-foreground",
-                )}
-              >
-                {label}
-              </button>
-            );
-          })}
-        </div>
+        {streamingSupported && (
+          <div className="flex flex-wrap items-center gap-1.5 border-white/10 border-b px-4 py-2 text-xs">
+            <span className="text-muted-foreground">{t("globalSearch.enableOnline")}</span>
+            {ONLINE_SOURCES.map(({ id, label }) => {
+              const on = !!settings.streamSources?.[id]?.enabled;
+              return (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => void toggleSource(id)}
+                  aria-pressed={on}
+                  className={cn(
+                    "rounded-full border px-2 py-0.5 transition-colors",
+                    on
+                      ? "border-primary bg-accent text-foreground"
+                      : "border-border text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  {label}
+                </button>
+              );
+            })}
+          </div>
+        )}
 
         <div className="max-h-[52vh] overflow-y-auto p-2" role="listbox">
           {results.length === 0 ? (
@@ -210,7 +215,7 @@ export function GlobalTrackSearch({
               />
             ))
           )}
-          {(onlineSearching || onlineHits.length > 0) && (
+          {streamingSupported && (onlineSearching || onlineHits.length > 0) && (
             <div className="mt-2 border-white/10 border-t pt-2">
               <p className="px-3 pb-1 text-muted-foreground text-xs">
                 {t("globalSearch.online")}

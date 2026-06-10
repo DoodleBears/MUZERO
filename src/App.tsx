@@ -1,7 +1,6 @@
 import { MotionConfig } from "motion/react";
 import type { ReactNode } from "react";
 import { useEffect, useRef, useState } from "react";
-import { StreamSourceTester } from "@/components/dev/stream-source-tester";
 import { ImmersiveMemoryOverlay } from "@/components/player/immersive-memory-overlay";
 import { NowPlayingBackground } from "@/components/player/now-playing-background";
 import { VisualizerTuningPanel } from "@/components/player/visualizer-tuning-panel";
@@ -11,7 +10,6 @@ import { GlobalDropZone } from "@/components/upload/global-drop-zone";
 import { useSettings } from "@/hooks/use-app-data";
 import { useIdle } from "@/hooks/use-idle";
 import { useShortcutDispatch } from "@/hooks/use-shortcut-dispatch";
-import { desktopKind } from "@/lib/desktop/bridge";
 import { cn } from "@/lib/utils";
 import { NowPlayingPage } from "@/pages/now-playing-page";
 import { QueuePage } from "@/pages/queue-page";
@@ -215,9 +213,6 @@ export default function App() {
 
         {/* App-wide drag-and-drop + paste: media → import; image → cover/background/gallery. */}
         <GlobalDropZone onMediaUploaded={(createdSet) => createdSet && setTab("queue")} />
-
-        {/* Dev-only: validate an external streaming source end-to-end (Electron only). */}
-        {desktopKind() === "electron" && <StreamSourceTester />}
       </div>
     </MotionConfig>
   );

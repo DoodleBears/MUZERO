@@ -78,23 +78,15 @@ export function createNeteaseSource(deps: NeteaseSourceDeps): StreamSourceProvid
     });
     const { params } = eapiEncrypt(SEARCH_API_PATH, payload);
     const { status, text } = await post(SEARCH_URL, formBody({ params }), opts?.signal);
-    let json: { code?: number; msg?: string; message?: string; result?: { songs?: unknown[] } };
+    let json: { result?: { songs?: unknown[] } };
     try {
       json = JSON.parse(text);
     } catch {
-      // Diagnostic: a non-JSON body (anti-bot HTML, redirect, empty) is the usual cause
-      // of "no results". The head reveals which. Remove once the root cause is fixed.
-      log.warn("netease", "search response is not JSON", { status, head: text.slice(0, 240) });
+      // A non-JSON body (anti-bot HTML, redirect, empty) means no results.
+      log.warn("netease", "search response is not JSON", { status, head: text.slice(0, 200) });
       return [];
     }
-    const songs = json.result?.songs ?? [];
-    log.info("netease", "search", {
-      status,
-      code: json.code,
-      message: json.message ?? json.msg,
-      count: songs.length,
-    });
-    return songs.map(toHit);
+    return (json.result?.songs ?? []).map(toHit);
   }
 
   async function resolve(
@@ -105,10 +97,7 @@ export function createNeteaseSource(deps: NeteaseSourceDeps): StreamSourceProvid
       const level = (opts?.quality as NeteaseQuality) || "exhigh";
       const payload = JSON.stringify(neteasePlaybackBody(externalId, level));
       const { params } = eapiEncrypt(NETEASE_PLAYER_URL_PATH, payload);
-      const { status, text } = await post(PLAYER_URL, formBody({ params }), opts?.signal);
-      // Diagnostic: the raw player/url body reveals why a track has no playable URL
-      // (VIP fee, login required, free-trial clip, anti-crawler). Remove once stable.
-      log.info("netease", "resolve", { status, level, head: text.slice(0, 320) });
+      const { text } = await post(PLAYER_URL, formBody({ params }), opts?.signal);
       const verdict = parseNeteasePlayback(text);
 
       switch (verdict.kind) {

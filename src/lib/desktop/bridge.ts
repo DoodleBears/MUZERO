@@ -105,3 +105,13 @@ export function hasFolderAccess(): boolean {
   const bridge = resolveDesktopBridge();
   return Boolean(bridge.pickFolder && bridge.readDir && bridge.readFile);
 }
+
+/**
+ * Whether the shell can stream external sources (NetEase / Bilibili / YouTube) — it
+ * needs the CORS-free fetch + media proxy (Referer/UA injection + Range). Only
+ * Electron implements `mediaProxyUrl` today; web/tauri return false, so the UI hides
+ * the online-source entry points there (per the streaming-sources PRD, desktop-only).
+ */
+export function hasStreamingSources(): boolean {
+  return Boolean(resolveDesktopBridge().mediaProxyUrl);
+}
