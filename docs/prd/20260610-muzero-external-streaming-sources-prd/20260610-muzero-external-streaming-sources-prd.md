@@ -584,3 +584,30 @@ components/player/            # 无需改：streamed track 复用 media-stage / 
 **待办**：① Electron 实测 cookie 抓取（登录窗能否捕获 `MUSIC_U`/`SESSDATA`）；② 合并回主分支（注意主分支半提交状态）；③ 登出未清默认 session（已知小限制）。
 
 > 续作前置：等上述并发文件落定（或获明确授权编辑），并在运行的 Electron 下验证。纯逻辑层已就绪，集成层是「把已验证的积木接到外壳」。
+
+## 14. 登录 v2：应用内扫码（QR API，worktree `feat/stream-source-login`）
+
+L2 的内嵌官网登录页虽支持扫码，但依赖官网页面在内嵌窗口正常渲染（网易云登录是模态、URL 不干净）。**v2 直接调平台扫码 API**，二维码画在 MUZERO 自己的 Settings 面板里 —— 更稳、更可控、更贴合本地优先风格（NeriPlayer 同款思路）。
+
+**流程（两源对称，状态机一致）：**
+```
+generate → 拿 {qrKey, qrContent} → 渲染二维码(qrContent) → poll(qrKey) 轮询：
+  waiting(未扫) → scanned(已扫待确认) → success(确认) | expired(过期)
+success：Set-Cookie 已被 net.fetch 写进默认 session → bridge.readSourceCookies 读出 → 存 settings + 注入
+```
+
+| 源 | generate | poll | 成功码 |
+|---|---|---|---|
+| **网易云** | `/api/login/qrcode/unikey`(eapi) → `unikey`；qrContent = `https://music.163.com/login?codekey=<unikey>` | `/api/login/qrcode/client/login`(eapi, `{key, type:1}`) | 800 过期 / 801 待扫 / 802 已扫 / **803 成功** |
+| **B站** | `/x/passport-login/web/qrcode/generate` → `{url, qrcode_key}` | `/x/passport-login/web/qrcode/poll?qrcode_key=` | 86038 过期 / 86101 待扫 / 86090 已扫 / **0 成功** |
+
+**Phase 拆分（TDD）：**
+
+| # | 单元 | 文件 | 测试 | 状态 |
+|---|---|---|---|---|
+| Q1 | QR 响应解析 + 状态码映射（两源 → 统一 `QrStatus`）+ generate/poll 端点配置（纯，注入式） | `src/streamsrc/qr-login.ts` | canned 响应 + 状态码穷举 | 🔲 |
+| Q2 | **vendored QR 编码器**（公有领域 nayuki QR；URL → 模块矩阵 `boolean[][]`）→ 渲染 canvas/SVG | `src/lib/qrcode.ts` + `qrcode.test.ts` | 结构性（尺寸/定位图案）+ 已知向量 | 🔲 |
+| Q3 | QrLoginProvider（generate→poll 轮询引擎，注入 now/sleep/http，可确定性单测）+ `bridge.readSourceCookies`（主进程读默认 session cookie，登录成功后取）| `qr-login-provider.ts` · `bridge.ts`/`electron.ts`/`ipc.cjs` | 注入式状态机 + 运行时 | 🔲 |
+| Q4 | Settings 扫码 UI（二维码 + 状态文案「待扫描/已扫描/已过期/成功」+ 刷新）替换/并列 L2 的网页登录入口；i18n 4 语 | `stream-sources-settings.tsx` | 运行时 | 🔲 |
+
+**红线/纪律不变**：默认关、个人使用、cookie 只存设备本地、桌面专属、加密/签名复用已测核心。vendored QR 编码器带公有领域声明 + `THIRD-PARTY-LICENSES` 条目。
