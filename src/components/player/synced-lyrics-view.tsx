@@ -1,7 +1,7 @@
 import { useLiveQuery } from "dexie-react-hooks";
 import { LocateFixed } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { LyricsSearchPanel } from "@/components/player/lyrics-search-panel";
 import { useVisualizerCoverColorCss } from "@/components/player/visualizer-dynamic-color";
@@ -205,13 +205,13 @@ const EDGE_FADE = {
 } as const;
 
 /**
- * Apple-Music-style synced lines. The stack is positioned by a CSS transform
- * (translateY), NOT native scroll — a transform always moves regardless of how
- * the flex height chain resolves, which is why follow-scroll is reliable here.
- * While "following", the active line is translated to ~38% from the top; a
- * wheel/touch gesture detaches follow into manual scrolling, and a floating
- * button (or tapping a line) re-attaches. Re-renders only on active-index change
- * (the rAF gates that); padding gives any line headroom to reach the anchor.
+ * Apple-Music-style synced lines on a NATIVE scroll viewport (overflow-y-auto +
+ * overscroll-contain — so the gesture never reaches the page behind, and mobile
+ * gets momentum). While "following", the active line is smooth-scrolled to ~38%
+ * from the top (the browser owns the easing); a user scroll/wheel/touch detaches
+ * into free scrolling, and the floating button (or tapping a line) re-attaches.
+ * Top/bottom padding gives any line headroom to reach the anchor; the per-line
+ * size/opacity transitions are motion-driven.
  */
 function SyncedLines({
   lines,
@@ -227,11 +227,12 @@ function SyncedLines({
   const { t } = useTranslation();
   const reduce = useReducedMotion();
   const viewportRef = useRef<HTMLDivElement>(null);
-  const stackRef = useRef<HTMLDivElement>(null);
   const activeRef = useRef<HTMLButtonElement>(null);
   const [following, setFollowing] = useState(true);
-  const [offsetY, setOffsetY] = useState(0);
   const [viewportH, setViewportH] = useState(0);
+  // Ignore the scroll events our own programmatic scrollTo emits, so follow only
+  // detaches on a real user scroll.
+  const programmaticUntil = useRef(0);
 
   useEffect(() => {
     const vp = viewportRef.current;
@@ -251,75 +252,46 @@ function SyncedLines({
   // biome-ignore lint/correctness/useExhaustiveDependencies: reset follow when the lyric set changes
   useEffect(() => setFollowing(true), [lines]);
 
-  // While following, translate the stack so the active line sits ~38% from the
-  // top (centered, slightly up). offsetTop is transform-independent, so this is
-  // exact regardless of the current translate.
+  // Follow: native smooth-scroll the active line to ~38% from the top. Native
+  // scroll always works once the viewport has a height (absolute inset-0) and the
+  // browser owns the easing — reliable + buttery; overscroll-contain keeps the
+  // gesture off the page behind.
   // biome-ignore lint/correctness/useExhaustiveDependencies: re-center on active / viewport / lyric-set changes
   useEffect(() => {
     if (!following || activeIndex < 0) return;
-    const el = activeRef.current;
-    if (!el) return;
-    setOffsetY(viewportH * 0.38 - (el.offsetTop + el.offsetHeight / 2));
-  }, [activeIndex, following, viewportH, lines]);
-
-  // Wheel / touch-drag = manual scroll → detach follow (clamped to content).
-  const scrollByDelta = useCallback((deltaY: number) => {
-    setFollowing(false);
-    setOffsetY((prev) => {
-      const vp = viewportRef.current;
-      const stack = stackRef.current;
-      const min = vp && stack ? Math.min(0, vp.clientHeight - stack.scrollHeight) : prev - deltaY;
-      return Math.max(min, Math.min(0, prev - deltaY));
-    });
-  }, []);
-
-  // Native, NON-passive wheel + touch so the lyrics fully own their gesture: the
-  // page behind never scrolls when you scroll the lyrics (the React synthetic
-  // handlers are passive, so they couldn't preventDefault and the outer scroll
-  // leaked through — most visible on mobile).
-  useEffect(() => {
     const vp = viewportRef.current;
-    if (!vp) return;
-    let lastY = 0;
-    const onWheel = (e: WheelEvent) => {
-      e.preventDefault();
-      scrollByDelta(e.deltaY);
-    };
-    const onTouchStart = (e: TouchEvent) => {
-      lastY = e.touches[0]?.clientY ?? 0;
-    };
-    const onTouchMove = (e: TouchEvent) => {
-      e.preventDefault();
-      const y = e.touches[0]?.clientY ?? lastY;
-      scrollByDelta(lastY - y);
-      lastY = y;
-    };
-    vp.addEventListener("wheel", onWheel, { passive: false });
-    vp.addEventListener("touchstart", onTouchStart, { passive: true });
-    vp.addEventListener("touchmove", onTouchMove, { passive: false });
-    return () => {
-      vp.removeEventListener("wheel", onWheel);
-      vp.removeEventListener("touchstart", onTouchStart);
-      vp.removeEventListener("touchmove", onTouchMove);
-    };
-  }, [scrollByDelta]);
+    const el = activeRef.current;
+    if (!vp || !el) return;
+    const top = Math.max(0, el.offsetTop - vp.clientHeight * 0.38 + el.offsetHeight / 2);
+    programmaticUntil.current = Date.now() + 900;
+    if (typeof vp.scrollTo === "function") {
+      vp.scrollTo({ top, behavior: reduce ? "auto" : "smooth" });
+    } else {
+      vp.scrollTop = top;
+    }
+  }, [activeIndex, following, reduce, viewportH, lines]);
+
+  // A real user scroll detaches follow; our own programmatic scrolls are ignored
+  // via the guard (wheel/touch also detach directly).
+  const onUserScroll = () => {
+    if (Date.now() < programmaticUntil.current) return;
+    setFollowing(false);
+  };
 
   return (
     <>
       <div
         ref={viewportRef}
         data-testid="lyrics-scroll"
-        className="absolute inset-0 touch-none overflow-hidden"
+        className="no-scrollbar absolute inset-0 overflow-y-auto overscroll-contain"
         style={EDGE_FADE}
+        onScroll={onUserScroll}
+        onWheel={() => setFollowing(false)}
+        onTouchMove={() => setFollowing(false)}
       >
-        <motion.div
-          ref={stackRef}
-          className="relative flex flex-col gap-1"
+        <div
+          className="flex flex-col gap-1"
           style={{ paddingTop: viewportH * 0.38, paddingBottom: viewportH * 0.62 }}
-          animate={{ y: offsetY }}
-          transition={
-            reduce ? { duration: 0 } : { type: "spring", stiffness: 280, damping: 36, mass: 0.7 }
-          }
         >
           {lines.map((line, i) => {
             const isActive = i === activeIndex;
@@ -348,7 +320,7 @@ function SyncedLines({
               </motion.button>
             );
           })}
-        </motion.div>
+        </div>
       </div>
       {!following && (
         <button
