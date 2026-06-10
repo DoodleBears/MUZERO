@@ -6,7 +6,7 @@ import { saveSettings } from "@/db/repositories";
 import { useSettings } from "@/hooks/use-app-data";
 import { useLongPress } from "@/hooks/use-long-press";
 import { cn } from "@/lib/utils";
-import { useNavStore } from "@/stores/nav-store";
+import { useLyricsPanelStore } from "@/stores/lyrics-panel-store";
 
 /**
  * Lyrics-focus toggle, sibling of the visualizer-mode button: a tap shows lyrics
@@ -18,12 +18,10 @@ export function LyricsModeButton({ className }: { className?: string }) {
   const { t } = useTranslation();
   const open = useSettings().lyricsStageOpen ?? false;
   const toggle = () => void saveSettings({ lyricsStageOpen: !open });
-  const setTab = useNavStore((s) => s.setTab);
-  const setSettingsItem = useNavStore((s) => s.setSettingsItem);
+  const openPanel = useLyricsPanelStore((s) => s.setOpen);
 
   function openSettings() {
-    setSettingsItem("lyrics");
-    setTab("settings");
+    openPanel(true);
   }
 
   // Long-press is the touch-friendly twin of the right-click below.

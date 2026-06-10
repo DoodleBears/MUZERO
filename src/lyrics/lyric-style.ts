@@ -17,11 +17,11 @@ export interface LyricStyle {
 }
 
 export const DEFAULT_LYRIC_STYLE: LyricStyle = {
-  activeFontSize: 24,
-  inactiveFontSize: 20,
+  activeFontSize: 30,
+  inactiveFontSize: 24,
   activeOpacity: 1,
   inactiveOpacity: 0.4,
-  align: "left",
+  align: "center",
 };
 
 function clampPx(value: number | undefined, fallback: number): number {
@@ -57,6 +57,6 @@ export function resolveLyricStyle(settings: AppSettings, coverColorCss: string |
     activeOpacity: clamp01(settings.lyricsActiveOpacity, 100),
     inactiveOpacity: clamp01(settings.lyricsInactiveOpacity, 40),
     color,
-    align: settings.lyricsAlign ?? "left",
+    align: settings.lyricsAlign ?? DEFAULT_LYRIC_STYLE.align,
   };
 }

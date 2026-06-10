@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { useEffect, useRef, useState } from "react";
 import { ImmersiveLyricsOverlay } from "@/components/player/immersive-lyrics-overlay";
 import { ImmersiveMemoryOverlay } from "@/components/player/immersive-memory-overlay";
+import { LyricsTuningPanel } from "@/components/player/lyrics-tuning-panel";
 import { NowPlayingBackground } from "@/components/player/now-playing-background";
 import { VisualizerTuningPanel } from "@/components/player/visualizer-tuning-panel";
 import { GlobalTrackSearch } from "@/components/search/global-track-search";
@@ -222,6 +223,7 @@ export default function App() {
         {immersiveLyricsActive && <ImmersiveLyricsOverlay />}
 
         <VisualizerTuningPanel />
+        <LyricsTuningPanel />
 
         <GlobalTrackSearch open={trackSearchOpen} onOpenChange={setTrackSearchOpen} />
 
