@@ -238,12 +238,16 @@ function NowPlayingBackgroundContent({ hideVisualizer }: { hideVisualizer: boole
       <AnimatePresence>
         {(settings.flowEnabled ?? false) && (
           <motion.div
-            key="flow-layer"
+            // Key by effect so switching effects crossfades (old shader fades out
+            // while the new fades in) instead of popping on recompile. Song
+            // changes keep the same key → same canvas → colors glide via the
+            // cover-palette store's 900ms interpolation (same as the spectrum).
+            key={`flow-${settings.flowEffect ?? "ambient-light"}`}
             className="absolute inset-0"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            transition={{ duration: 0.4, ease: "easeInOut" }}
+            transition={{ duration: 0.5, ease: "easeInOut" }}
           >
             <VisualizerHost
               active={isPlaying}

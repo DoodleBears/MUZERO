@@ -18,6 +18,7 @@
 | 5 | 打磨：reduced-motion / 移动 30fps / bundle 预算复测 / 无封面与切歌过渡 / 文档对齐 | ✅ Completed（运行时行为继承自 SceneHost；视觉验证待人工） | [Phase 5 Checklist](#phase-5-checklist) |
 | 6 | **设计修正**：流光改为**独立合成层**（背景图/视频 → 流光 → 频谱，**不互斥**），独立 `flowEnabled` 开关 + `flowOpacity`/`flowDim`；`scene-flow` 从频谱选择器隐藏（`hidden:true`，仍作图层强制 styleId 渲染） | ✅ Completed | [Phase 6 Checklist](#phase-6-checklist) |
 | 7 | **全 color4bg 效果对齐**（owner：「支持这个包所有类型」）：14 个自研 flow shader（`flow-shaders.ts`，ambient-light/aesthetic-fluid/big-blob/blur-dot/blur-gradient/wavy-waves/chaos-waves/swirling-curves/curve-gradient/step-gradient/grid-array/triangles-mosaic/random-cubes/abstract-shape），`FlowEffectId` 扩成 14、每效果一 shader 按需编译 | ✅ Completed | [Phase 7 Checklist](#phase-7-checklist) |
+| 8 | **过渡自然化**（owner）：切**效果**时 flow 层按 `flowEffect` 做 `key` → AnimatePresence 淡出/淡入**交叉淡化**（不再 recompile 硬切）；切**歌曲**时颜色复用既有封面取色 store 的 900ms `mixPalette` 插值（与频谱同机制，同一 canvas 不重挂） | ✅ Completed | [Phase 8 Checklist](#phase-8-checklist) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
 > 本 PRD 适用 [`prd-create.md`](../../../.cursor/commands/prd-create.md) 的 **§3「Effect / Shader / 外部依赖类」** 附加要求（license 第一公民、curate 不穷举、**不引入新 runtime owner**、bundle 预算、自研优先、i18n 四语、不散落硬编码、shader uniform prelude 约定、基础设施先于覆盖广度、回退=`git revert`）与 **§4「realtime preview 性能类」**（reduced-motion / 可见性暂停 / prod build 复测）。
@@ -476,6 +477,22 @@ export function resolveFlowColors(
 
 > **curate vs 全量**：模板默认「curate 不穷举」，但 owner 明确要「所有类型」——本期按指示全 14。geometric 家族（grid/triangles/cubes/abstract）偏「图案」非纯「流光」，但属 color4bg 类型集，一并支持；用户可在面板自选。
 
+### Phase 8: 切换过渡自然化 ✅
+
+**Goal:** owner 反馈切效果 / 切歌时流光「突变」，要像频谱一样自然过渡或淡入淡出。
+
+**两类过渡，两种机制：**
+- **切效果**（`flowEffect` 变）：[`now-playing-background.tsx`](../../../src/components/player/now-playing-background.tsx) 流光层 `motion.div` 的 `key` 改为 `flow-${flowEffect}`。AnimatePresence 检测到 key 变 → 旧 shader canvas 淡出、新的淡入（**交叉淡化** 0.5s），取代「换 shader 即重编译硬切」。
+- **切歌**（封面取色变）：**不动**——颜色已走既有封面取色 store（[`visualizer-color-store.ts`](../../../src/stores/visualizer-color-store.ts) `transitionVisualizerCoverColor` + `mixPalette`）的 **900ms 逐色插值**，flow 每帧 `getVisualizerCoverPalette()` 读到的是插值中的 palette，与频谱**同一机制**。key 不含 song → 切歌不重挂 canvas，颜色平滑 glide（不被淡入淡出打断）。
+
+**Tasks:**
+- [x] flow 层 `key="flow-layer"` → `key={\`flow-${settings.flowEffect ?? "ambient-light"}\`}`；duration 0.4→0.5s。
+- [x] 确认切歌颜色过渡复用 store 插值（无需改动 reactive-scene 的 `fillFlowColors`，它每帧读插值 palette）。
+
+### Phase 8 Checklist
+- [x] biome + whole-tree typecheck 净。
+- [ ] **真实 app 人工验证**：切效果有交叉淡化不闪；切歌颜色 glide 不硬跳；切歌时不会因 key 变而误触发淡入淡出。
+
 ---
 
 ## 7. Out of Scope
@@ -538,6 +555,7 @@ export function resolveFlowColors(
 | 2026-06-11 | DoodleBear / MUZERO | **Phase 5 ✅ 收尾**：reduced-motion/可见性暂停/WebGL 回退/context-lost 全继承 `SceneHost`（零新增）；palette 900ms 过渡 + 无封面回退；`CLAUDE.md` 可视化段补 scene-flow/多色取色/取色源回退；状态 → Implemented。bundle 估算 < 30KB gz（未单独 build，留 CI）；真实 app 视觉/交互验证待人工。全套 PRD 5 phase 完成 |
 | 2026-06-11 | DoodleBear / MUZERO | **Phase 6 ✅ 设计修正**（owner 反馈：流光与频谱**不互斥**）：流光改为**独立合成层**（背景图/视频 → 流光 → 频谱），独立 `flowEnabled` 开关 + `flowOpacity`/`flowDim`；`scene-flow` 标 `hidden:true` 从频谱选择器隐藏（仍作图层 `VISUALIZER_PICKER_META`）。registry 测试 13 绿 + 四语 i18n + biome + whole-tree typecheck 净。确认全程**零** color4bg/ogl/node-vibrant |
 | 2026-06-11 | DoodleBear / MUZERO | **Phase 7 ✅ 全 color4bg 效果对齐**（owner：「支持这个包所有类型」）：新建 `flow-shaders.ts` 14 段自研 GLSL（color4bg 全 14 style 的自研复刻，含 3D/canvas 的 2D 近似），`FlowEffectId` 扩 14、每效果一 shader 按需编译、移除 `uEffect`，删旧 `FLOW_FRAG`，四语 14 标签。**仍零依赖**（不引 color4bg/ogl）。41 测试绿 + typecheck/biome/JSON 净 |
+| 2026-06-11 | DoodleBear / MUZERO | **Phase 8 ✅ 切换过渡自然化**（owner）：切效果 → flow 层 `key={flow-${effect}}` 触发 AnimatePresence 交叉淡化（0.5s，取代 recompile 硬切）；切歌颜色复用既有封面取色 store 900ms `mixPalette` 插值（同频谱，canvas 不重挂）。biome/typecheck 净 |
 
 ---
 
