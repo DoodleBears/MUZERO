@@ -102,7 +102,22 @@
   "lyrics": {
     "fetching": "Fetching lyrics…",
     "instrumental": "Instrumental — no lyrics",
-    "source": "Lyrics from {{source}}"
+    "source": "Lyrics from {{source}}",
+    "manage": "Lyrics",
+    "searchTitle": "Title",
+    "searchArtist": "Artist",
+    "searchAction": "Search",
+    "searchError": "Search failed. Try again.",
+    "noResults": "No matching lyrics found.",
+    "syncedBadge": "Synced",
+    "pastePlaceholder": "Paste LRC or plain lyrics…",
+    "save": "Save",
+    "clear": "Clear",
+    "refetch": "Re-fetch",
+    "currentNone": "No lyrics yet",
+    "currentSynced": "Synced lyrics",
+    "currentPlain": "Plain lyrics",
+    "currentInstrumental": "Instrumental"
   },
   "displayMode": {
     "video": "Video",

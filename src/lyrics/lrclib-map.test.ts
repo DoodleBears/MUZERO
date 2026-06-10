@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildGetByIdUrl,
   buildGetUrl,
   buildSearchUrl,
   LRCLIB_BASE_URL,
@@ -54,6 +55,16 @@ describe("buildSearchUrl", () => {
     expect(qs.get("track_name")).toBe("I Want to Live");
     expect(qs.get("artist_name")).toBe("Borislav Slavov");
     expect(qs.has("duration")).toBe(false);
+  });
+});
+
+describe("buildGetByIdUrl", () => {
+  it("targets /api/get/{id}", () => {
+    expect(buildGetByIdUrl("3396226")).toBe(`${LRCLIB_BASE_URL}/api/get/3396226`);
+  });
+
+  it("encodes the id", () => {
+    expect(buildGetByIdUrl("a/b")).toBe(`${LRCLIB_BASE_URL}/api/get/a%2Fb`);
   });
 });
 

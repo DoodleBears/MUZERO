@@ -3,6 +3,7 @@ import { ImagePlus, Images, Tag, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { CoverCropDialog } from "@/components/track/cover-crop-dialog";
+import { LyricsManagerButton } from "@/components/track/lyrics-manager-dialog";
 import { TrackMemoryNotesPanel } from "@/components/track/track-memory-notes-panel";
 import { Button } from "@/components/ui/button";
 import {
@@ -144,6 +145,7 @@ export function AnnotationEditor({ track }: { track: Track }) {
               <ImagePlus className="size-3.5" />
             </button>
             <TrackBackgroundManager trackId={track.id} />
+            <LyricsManagerButton track={track} />
             <input
               ref={fileRef}
               type="file"

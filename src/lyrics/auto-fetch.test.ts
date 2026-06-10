@@ -135,6 +135,10 @@ describe("lyricsRecordFromHit", () => {
       status: "notFound",
     });
   });
+
+  it("stamps a manual source when asked", () => {
+    expect(lyricsRecordFromHit(HIT, "manual").source).toBe("manual");
+  });
 });
 
 describe("shouldAutoFetchLyrics", () => {

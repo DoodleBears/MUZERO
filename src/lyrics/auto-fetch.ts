@@ -12,7 +12,7 @@ import { getTrackLyrics, setTrackLyrics } from "@/db/repositories";
 import type { AppSettings, Track, TrackLyrics } from "@/db/types";
 import { log } from "@/lib/logger";
 import { buildLyricsQuery } from "./build-query";
-import type { LyricsHit, LyricsProvider, LyricsRecord } from "./provider";
+import type { LyricsHit, LyricsProvider, LyricsRecord, LyricsSource } from "./provider";
 
 /** Whether we should hit the network for this track right now. Pure. */
 export function shouldAutoFetchLyrics(
@@ -26,11 +26,18 @@ export function shouldAutoFetchLyrics(
   return buildLyricsQuery(track) !== null;
 }
 
-/** Map a provider hit (or a miss) into a persistable record. Pure. */
-export function lyricsRecordFromHit(hit: LyricsHit | null): LyricsRecord {
-  if (!hit) return { source: "lrclib", instrumental: false, status: "notFound" };
+/**
+ * Map a provider hit (or a miss) into a persistable record. Pure. `source`
+ * defaults to "lrclib" (auto-fetch); the manual flow passes "manual" so the
+ * result wins on merge and is never overwritten by auto-fetch.
+ */
+export function lyricsRecordFromHit(
+  hit: LyricsHit | null,
+  source: LyricsSource = "lrclib",
+): LyricsRecord {
+  if (!hit) return { source, instrumental: false, status: "notFound" };
   return {
-    source: "lrclib",
+    source,
     sourceId: hit.sourceId,
     synced: hit.synced,
     plain: hit.plain,

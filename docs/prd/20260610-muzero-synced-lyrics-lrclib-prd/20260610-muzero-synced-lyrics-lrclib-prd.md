@@ -16,7 +16,7 @@
 | 1 | 基础设施：`src/lyrics/` provider 抽象 + LRCLIB 纯映射 + LRC parser（纯函数 + 单测，无 UI/DB） | ✅ Done | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | 存储 + 抓取编排：`lyrics` 表（v20）+ repo + 触发/负缓存 + Settings 自动抓词开关（默认开）+ i18n | ✅ Done | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | 显示：Apple Music 式逐行高亮 + 自动滚动 + 点击跳转 + reduced-motion（now-playing-panel lyrics tab） | ✅ Done | [Phase 3 Checklist](#phase-3-checklist) |
-| 4 | 手动歌词：搜索/选择 modal + 粘贴/编辑/清除/重取（annotation-editor）| 🔲 Pending | [Phase 4 Checklist](#phase-4-checklist) |
+| 4 | 手动歌词：搜索/选择 modal + 粘贴/编辑/清除/重取（annotation-editor）| ✅ Done | [Phase 4 Checklist](#phase-4-checklist) |
 | 5 | R2 云同步：歌词进 manifest（仿 thumbhash 提交 `cf454a1`）+ export/import/merge | 🔲 Pending | [Phase 5 Checklist](#phase-5-checklist) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
@@ -520,10 +520,12 @@ components/track/             # （Phase 4）annotation-editor 加"歌词"区：
 - [ ] i18n（en→zh/ja/ko）。
 
 #### Phase 4 Checklist
-- [ ] 手动选择/粘贴的歌词覆盖自动结果且不被再抓覆盖（`source:"manual"` 优先）。
-- [ ] 粘贴的 LRC 能逐行播放（接 Phase 3 显示）。
-- [ ] 清除后可重新自动获取。
-- [ ] `make check` 通过。
+- [x] 手动选择/粘贴的歌词覆盖自动结果且不被再抓覆盖（`lyricsRecordFromHit(hit,"manual")` / `lyricsRecordFromManualText` 均 `source:"manual"`；`shouldAutoFetchLyrics` 见 existing 即跳过——单测）。
+- [x] 粘贴的 LRC 能逐行播放（`lyricsRecordFromManualText` 探测时间戳→synced→`resolveTrackLyrics`→Phase 3 `SyncedLines`，组合单测覆盖）。
+- [x] 清除后可重新自动获取（`clearTrackLyrics` 删行 → 下次播放 `shouldAutoFetchLyrics` 复为 true；"Re-fetch" 显式 clear+fetch）。
+- [x] `make check` 通过（`src/lyrics` 74 测试绿 + biome 干净 + `tsc --noEmit` 退出 0）。
+
+> **Phase 4 实现说明（2026-06-10）：** 逻辑：`lrclib-map.buildGetByIdUrl` + provider `search()`/`getById()`（注入 fetch，单测）+ `src/lyrics/manual.ts` `lyricsRecordFromManualText`（探测 `[mm:ss]` → synced/plain）+ `lyricsRecordFromHit(hit, source)` 加 `source` 形参。UI：新增 [`lyrics-manager-dialog.tsx`](../../../src/components/track/lyrics-manager-dialog.tsx)（`LyricsManagerButton`）——搜索（标题/艺人→候选列表，synced 徽标，点选写 manual）/粘贴编辑/清除/重取；接进 [`annotation-editor`](../../../src/components/track/annotation-editor.tsx) 注释面板按钮组。i18n `lyrics.*` 扩 15 键 ×4 locale。新增 8 测试（共 74）。LRCLIB `/api/search` 已返回完整歌词，故点选直接用候选 hit（`getById` 已实现备用）。
 
 ### Phase 5: R2 云同步（仿 thumbhash 提交 `cf454a1`）
 

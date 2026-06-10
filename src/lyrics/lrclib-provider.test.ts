@@ -82,3 +82,39 @@ describe("createLrclibProvider.fetch", () => {
     expect(fetchImpl.mock.calls[0][1]).toMatchObject({ signal: controller.signal });
   });
 });
+
+describe("createLrclibProvider.search", () => {
+  it("returns all candidates from /api/search", async () => {
+    const fetchImpl = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) =>
+      jsonResponse([GET_HIT, { ...GET_HIT, id: 2 }]),
+    );
+    const provider = createLrclibProvider({ fetchImpl: fetchImpl as unknown as typeof fetch });
+    const hits = await provider.search?.(QUERY);
+    expect(hits?.map((h) => h.sourceId)).toEqual(["1", "2"]);
+    expect(String(fetchImpl.mock.calls[0][0])).toContain("/api/search?");
+  });
+
+  it("returns [] on 404", async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse({}, 404));
+    const provider = createLrclibProvider({ fetchImpl: fetchImpl as unknown as typeof fetch });
+    expect(await provider.search?.(QUERY)).toEqual([]);
+  });
+});
+
+describe("createLrclibProvider.getById", () => {
+  it("fetches a single record by id", async () => {
+    const fetchImpl = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) =>
+      jsonResponse(GET_HIT),
+    );
+    const provider = createLrclibProvider({ fetchImpl: fetchImpl as unknown as typeof fetch });
+    const hit = await provider.getById?.("1");
+    expect(hit?.sourceId).toBe("1");
+    expect(String(fetchImpl.mock.calls[0][0])).toContain("/api/get/1");
+  });
+
+  it("returns null on 404", async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse({}, 404));
+    const provider = createLrclibProvider({ fetchImpl: fetchImpl as unknown as typeof fetch });
+    expect(await provider.getById?.("nope")).toBeNull();
+  });
+});

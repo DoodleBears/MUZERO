@@ -8,6 +8,7 @@
 
 import { getAppFetch } from "@/lib/platform";
 import {
+  buildGetByIdUrl,
   buildGetUrl,
   buildSearchUrl,
   LRCLIB_BASE_URL,
@@ -56,6 +57,24 @@ export function createLrclibProvider(cfg: LrclibProviderConfig = {}): LyricsProv
         throw new LyricsError(`LRCLIB /api/search failed (${searchRes.status})`);
       }
       return pickBestHit(parseSearchResults(await searchRes.json().catch(() => null)), q);
+    },
+
+    async search(q: LyricsQuery, signal?: AbortSignal): Promise<LyricsHit[]> {
+      const fetchFn = await resolveFetch();
+      const res = await fetchFn(buildSearchUrl(q), { headers, signal });
+      if (!res.ok) {
+        if (res.status === 404) return [];
+        throw new LyricsError(`LRCLIB /api/search failed (${res.status})`);
+      }
+      return parseSearchResults(await res.json().catch(() => null));
+    },
+
+    async getById(id: string, signal?: AbortSignal): Promise<LyricsHit | null> {
+      const fetchFn = await resolveFetch();
+      const res = await fetchFn(buildGetByIdUrl(id), { headers, signal });
+      if (res.status === 404) return null;
+      if (!res.ok) throw new LyricsError(`LRCLIB /api/get/${id} failed (${res.status})`);
+      return parseHit(await res.json().catch(() => null));
     },
 
     async health(): Promise<boolean> {

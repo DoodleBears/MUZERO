@@ -96,7 +96,22 @@
   "lyrics": {
     "fetching": "歌詞を取得中…",
     "instrumental": "インストゥルメンタル · 歌詞なし",
-    "source": "歌詞提供: {{source}}"
+    "source": "歌詞提供: {{source}}",
+    "manage": "歌詞",
+    "searchTitle": "タイトル",
+    "searchArtist": "アーティスト",
+    "searchAction": "検索",
+    "searchError": "検索に失敗しました。もう一度お試しください。",
+    "noResults": "一致する歌詞が見つかりませんでした。",
+    "syncedBadge": "同期済み",
+    "pastePlaceholder": "LRC またはテキスト歌詞を貼り付け…",
+    "save": "保存",
+    "clear": "クリア",
+    "refetch": "再取得",
+    "currentNone": "歌詞なし",
+    "currentSynced": "同期歌詞",
+    "currentPlain": "テキスト歌詞",
+    "currentInstrumental": "インストゥルメンタル"
   },
   "displayMode": {
     "video": "動画",

@@ -56,6 +56,10 @@ export interface LyricsProvider {
   readonly label: string;
   /** Resolve lyrics for a query. Returns null when nothing matches; throws on network/server errors. */
   fetch(q: LyricsQuery, signal?: AbortSignal): Promise<LyricsHit | null>;
+  /** Manual correction: list candidate matches for a query (full lyrics included). */
+  search?(q: LyricsQuery, signal?: AbortSignal): Promise<LyricsHit[]>;
+  /** Manual correction: fetch one specific record by its source id. */
+  getById?(id: string, signal?: AbortSignal): Promise<LyricsHit | null>;
   /** Best-effort reachability check for Settings. */
   health?(): Promise<boolean>;
 }

@@ -32,6 +32,11 @@ export function buildSearchUrl(q: LyricsQuery): string {
   return `${LRCLIB_BASE_URL}/api/search?${params.toString()}`;
 }
 
+/** GET /api/get/{id} — fetch one specific record (manual selection). */
+export function buildGetByIdUrl(id: string): string {
+  return `${LRCLIB_BASE_URL}/api/get/${encodeURIComponent(id)}`;
+}
+
 function str(value: unknown): string | undefined {
   return typeof value === "string" && value.length > 0 ? value : undefined;
 }

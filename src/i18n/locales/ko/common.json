@@ -96,7 +96,22 @@
   "lyrics": {
     "fetching": "가사를 가져오는 중…",
     "instrumental": "연주곡 · 가사 없음",
-    "source": "가사 제공: {{source}}"
+    "source": "가사 제공: {{source}}",
+    "manage": "가사",
+    "searchTitle": "제목",
+    "searchArtist": "아티스트",
+    "searchAction": "검색",
+    "searchError": "검색에 실패했습니다. 다시 시도하세요.",
+    "noResults": "일치하는 가사를 찾지 못했어요.",
+    "syncedBadge": "동기화됨",
+    "pastePlaceholder": "LRC 또는 일반 텍스트 가사 붙여넣기…",
+    "save": "저장",
+    "clear": "지우기",
+    "refetch": "다시 가져오기",
+    "currentNone": "가사 없음",
+    "currentSynced": "동기화 가사",
+    "currentPlain": "일반 가사",
+    "currentInstrumental": "연주곡"
   },
   "displayMode": {
     "video": "비디오",

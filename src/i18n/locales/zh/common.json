@@ -96,7 +96,22 @@
   "lyrics": {
     "fetching": "正在获取歌词…",
     "instrumental": "纯音乐 · 无歌词",
-    "source": "歌词来自 {{source}}"
+    "source": "歌词来自 {{source}}",
+    "manage": "歌词",
+    "searchTitle": "标题",
+    "searchArtist": "艺人",
+    "searchAction": "搜索",
+    "searchError": "搜索失败，请重试。",
+    "noResults": "未找到匹配的歌词。",
+    "syncedBadge": "已同步",
+    "pastePlaceholder": "粘贴 LRC 或纯文本歌词…",
+    "save": "保存",
+    "clear": "清除",
+    "refetch": "重新获取",
+    "currentNone": "暂无歌词",
+    "currentSynced": "同步歌词",
+    "currentPlain": "纯文本歌词",
+    "currentInstrumental": "纯音乐"
   },
   "displayMode": {
     "video": "视频",
