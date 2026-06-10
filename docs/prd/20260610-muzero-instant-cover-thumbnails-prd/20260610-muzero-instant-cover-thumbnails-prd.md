@@ -13,7 +13,7 @@
 |-------|------|--------|------|
 | 1 | Module-scoped object-URL cache (hook-level) | ✅ Completed | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | Shared `<CoverImage>` (fade + static placeholder) + rollout to all surfaces | 🔄 In Progress | [Phase 2 Checklist](#phase-2-checklist) |
-| 3 | Thumbhash data infra — owner-row field + generate-on-save + lazy backfill + R2 carry | 🔄 In Progress | [Phase 3 Checklist](#phase-3-checklist) |
+| 3 | Thumbhash data infra — owner-row field + generate-on-save + lazy backfill + R2 carry | ✅ Completed | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | `<CoverImage>` thumbhash placeholder layer | 🔄 In Progress | [Phase 4 Checklist](#phase-4-checklist) |
 | 5 | Tests + leak audit + polish | 🔄 In Progress | [Phase 5 Checklist](#phase-5-checklist) |
 
@@ -294,14 +294,14 @@ No Zustand/store involvement (规则 6 — non-reactive singleton stays in modul
 - [x] Generate-on-save wired into `setTrackCover` / `setSessionCover` / `setEntityCover` (encode before the Dexie tx); regenerate in `setTrackCoverCrop` (re-reads the cover blob). Wiring unit-tested with a mocked encoder ([cover-thumbhash-repo.test.ts](../../../src/db/cover-thumbhash-repo.test.ts)).
 - [x] **Lazy backfill** — implemented as a **centralized, owner-aware** `backfillCoverThumbhashes(db, encode, {limit, skip})` in [repositories.ts](../../../src/db/repositories.ts) (NOT in `useTrackCoverUrl`, which can't know the owner table): it scans `tracks`/`sessions`/`entityCovers` for covers missing a hash and fills them. `encode` is injected → pure-tested (5 tests: cross-table fill / skip-already-done / limit / un-encodable→attempted / skip-set). Triggered a few-per-idle-tick, once per session, by `useCoverThumbhashBackfill()` ([use-media.ts](../../../src/hooks/use-media.ts)) called from the gallery.
 - [x] `setTrackCoverFromMemory` covers — no longer a special case: the centralized backfill picks them up (any track with `coverBlobId` & no `coverThumbhash`).
-- [ ] Carry thumbhash in R2 manifest cover refs + land it on import next to `remoteCoverUrl` / `remoteCover` (§3.4). **Deferred** — spans multiple cover schemas (entity-cover + set-track + search-catalog) across `r2-export-plan`/`r2-import-stream`; sizeable, lower-urgency (multi-device only).
+- [x] Carry thumbhash in the R2 manifest + land it on import (§3.4). Added `thumbhash?` to `r2EntityCoverEntrySchema` + `r2SetTrackSchema`; export emits `row.thumbhash` / `track.coverThumbhash`; import lands it on the entity-cover row + the remote track's `coverThumbhash` (set-track flows for free since `r2-subscription` passes the whole parsed track as `.source`). Tested both lanes. *Search-catalog (`RemoteSearchTrack.coverUrl`) thumbhash — a separate index schema — left out (search results, not a cover-display surface).*
 
 ### Phase 3 Checklist
 - [x] Setting a new cover stores a thumbhash on the owner row (same transaction) — 3 repo tests green.
 - [x] Crop-only edit refreshes the thumbhash (re-reads blob + re-encodes).
 - [x] Encode degrades gracefully (no canvas → `undefined`, cover-set still succeeds) — verified; existing repo tests unaffected.
 - [x] Browsing legacy covers backfills their thumbhash (incremental, deduped, converges) — 5 backfill tests green.
-- [ ] Export→import round-trip preserves the thumbhash on the remote owner row — deferred with the R2 manifest carry.
+- [x] Export→import round-trip preserves the thumbhash (entity-cover row + remote track `coverThumbhash`) — 2 import tests green.
 
 ### Phase 4: `<CoverImage>` thumbhash placeholder layer
 
@@ -317,7 +317,7 @@ No Zustand/store involvement (规则 6 — non-reactive singleton stays in modul
 - [x] First-ever view of a cover shows its thumbhash, then the sharp image fades in (component test: preview present while loading, removed after `onLoad`).
 - [x] Invalid/absent thumbhash → calm `bg-secondary`, no crash.
 - [x] No preview paint on cache hits (`complete`-on-mount short-circuits before the preview renders).
-- [ ] Remote-only covers show the preview — pending the R2 manifest carry (§3.4).
+- [~] Remote-only covers: the thumbhash now **syncs** (Phase 3 §3.4 — lands on the remote owner row). Actually **showing** it for remote-only covers rides the deferred `<CoverImage>` rollout to `track-row` (remote tracks) + passing the entity's own `thumbhash` at the entity surfaces.
 
 ### Phase 5: Tests + leak audit + polish
 
@@ -395,7 +395,8 @@ No Zustand/store involvement (规则 6 — non-reactive singleton stays in modul
 | 2026-06-10 | MUZERO | Per user decision, switched the preview hash from the briefly-vendored source to the **`thumbhash` npm package** (`^0.1.1`); removed the vendored `thumbhash.ts`/test. Manifest (`package.json`/lock) left uncommitted alongside the in-flight electron-builder WIP to preserve shared-branch isolation. |
 | 2026-06-10 | MUZERO | **Phase 4 🔄**: `<CoverImage>` renders the decoded thumbhash preview; wired into SetCard + entity detail. Full suite **1007/1010**; the 3 failures (`virtual-track-list`, `chat-model-picker`, `track-memory-notes-panel`) import none of this PRD's modules — pre-existing other-agent WIP on the shared branch, not regressions here. |
 | 2026-06-10 | MUZERO | **Lazy backfill done** — centralized owner-aware `backfillCoverThumbhashes` (resolved the "useTrackCoverUrl doesn't know the owner table" snag) + idle trigger from the gallery; 5 tests. `setTrackCoverFromMemory` covers now picked up by it. |
-| 2026-06-10 | MUZERO | **Phase 5 🔄**: added a leak-audit test (8× mount/unmount → 1 createObjectURL, never revoked); ~40 PRD tests + typecheck + biome all green. **Genuinely remaining / blocked:** (a) R2 manifest carry §3.4 — deferred (multi-schema, multi-device-only); (b) `<CoverImage>` rollout to `EntityCard`/`track-row` — **hard-blocked** by other agents' uncommitted edits to those files; (c) full-suite green — blocked by 3 unrelated other-agent test failures. (a)–(c) can't be cleanly finished from here without touching others' WIP or waiting for it to land. |
+| 2026-06-10 | MUZERO | **Phase 5 🔄**: added a leak-audit test; ~40 PRD tests + typecheck + biome all green. |
+| 2026-06-10 | MUZERO | **Phase 3 ✅ — R2 manifest carry done** (§3.4): `thumbhash?` added to the entity-cover + set-track manifest schemas; export emits it; import lands it on the entity-cover row + remote track `coverThumbhash` (set-track flows via `r2-subscription`'s `.source`). Both lanes tested. Search-catalog thumbhash left out (separate search index, not a cover surface). **`chore(deps)` committed** package.json/lock (thumbhash + the in-flight electron-builder manifest, authorized). **Still blocked, can't finish from here:** `<CoverImage>` rollout to `EntityCard`/`track-row` (other agents' uncommitted edits) and full-suite green (3 unrelated other-agent failures). |
 
 ---
 

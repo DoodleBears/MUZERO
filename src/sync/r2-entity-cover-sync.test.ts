@@ -186,6 +186,17 @@ describe("importRemoteEntityCovers", () => {
     expect(row?.updatedAt).toBe(1000);
   });
 
+  it("carries the cover thumbhash onto the imported (remote-backed) row", async () => {
+    await importRemoteEntityCovers(
+      {
+        baseUrl: BASE,
+        index: remoteIndex([{ ...remoteEntry("artistTH", 1000), thumbhash: "TH64" }]),
+      },
+      db,
+    );
+    expect((await db.entityCovers.get("artistTH"))?.thumbhash).toBe("TH64");
+  });
+
   it("keeps a strictly-newer local cover (LWW) and replaces an older one", async () => {
     await seedEntityCover("keep", "artist", "blb_keep", 5000); // local newer
     await seedEntityCover("replace", "artist", "blb_replace", 100); // local older

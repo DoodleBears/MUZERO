@@ -86,6 +86,7 @@ export async function importRemoteSetStream(
     durationSec: remoteTrack.source.durationSec,
     remoteMediaUrl: remoteTrack.mediaUrl,
     remoteCoverUrl: remoteTrack.coverUrl,
+    coverThumbhash: remoteTrack.source.thumbhash ?? undefined,
     createdAt: remoteTrack.source.createdAt,
     generatedAt: remoteTrack.source.generatedAt ?? undefined,
     playCount: 0,
@@ -165,6 +166,7 @@ export async function importRemoteEntityCovers(
           sha256: entry.cover.sha256,
         },
         crop: entry.crop,
+        thumbhash: entry.thumbhash,
         updatedAt: entry.updatedAt,
       };
       await db.entityCovers.put(row);

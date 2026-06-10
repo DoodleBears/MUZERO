@@ -211,6 +211,7 @@ export async function buildR2ExportPlan(input: R2ExportPlanInput): Promise<R2Exp
         providerPreset: track.providerPreset ?? null,
         media: media.remote,
         cover: cover?.remote,
+        thumbhash: track.coverThumbhash,
         memories: remoteMemories,
       });
     }
@@ -390,7 +391,14 @@ async function createEntityCoverObjects(db: MuzeroDB): Promise<R2ExportObject[]>
     } else {
       continue;
     }
-    entries.push({ id: row.id, kind: row.kind, cover, crop: row.crop, updatedAt: row.updatedAt });
+    entries.push({
+      id: row.id,
+      kind: row.kind,
+      cover,
+      crop: row.crop,
+      thumbhash: row.thumbhash,
+      updatedAt: row.updatedAt,
+    });
   }
   if (entries.length === 0) return [];
   const index = createJsonObject("entity-covers-index", "library/entity-covers/index.json", {

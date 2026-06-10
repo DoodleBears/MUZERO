@@ -188,6 +188,19 @@ describe("importRemoteSetStream", () => {
     expect(await db.mediaBlobs.count()).toBe(0);
   });
 
+  it("carries the cover thumbhash from the manifest onto the imported track", async () => {
+    const withThumbhash: RemoteSetIndexResult = {
+      ...remoteSet,
+      tracks: remoteSet.tracks.map((tr) => ({
+        ...tr,
+        source: { ...tr.source, thumbhash: "SETTH64" },
+      })),
+    };
+    await importRemoteSetStream({ driveId: "drv_th", remoteSet: withThumbhash }, db);
+    const track = await db.tracks.get("trk_remote_drv_th_trk_blue");
+    expect(track?.coverThumbhash).toBe("SETTH64");
+  });
+
   it("is idempotent for duplicate remote set imports", async () => {
     await importRemoteSetStream({ driveId: "drv_a", remoteSet }, db);
     await importRemoteSetStream({ driveId: "drv_a", remoteSet }, db);

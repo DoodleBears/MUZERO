@@ -51,6 +51,9 @@ export const r2EntityCoverEntrySchema = z.object({
   kind: z.enum(["artist", "album"]),
   cover: r2RemoteObjectSchema,
   crop: r2CropSchema.optional(),
+  // Base64 thumbhash — instant blurred preview for a remote-only cover before its
+  // bytes download (instant-cover-thumbnails PRD §3.4).
+  thumbhash: z.string().optional(),
   updatedAt: millisSchema, // last-write-wins clock
 });
 
@@ -142,6 +145,9 @@ export const r2SetTrackSchema = z.object({
   providerPreset: z.string().nullable().optional(),
   media: r2RemoteObjectSchema,
   cover: r2RemoteObjectSchema.optional(),
+  // Base64 thumbhash of the cover — instant preview for a not-yet-downloaded
+  // remote track cover (instant-cover-thumbnails PRD §3.4).
+  thumbhash: z.string().optional(),
   memories: z.array(r2MemorySchema).default([]),
 });
 
