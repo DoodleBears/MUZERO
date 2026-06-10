@@ -13,7 +13,7 @@
 
 | Phase | Name | Status | Link |
 |-------|------|--------|------|
-| 1 | 基础设施：`src/lyrics/` provider 抽象 + LRCLIB 纯映射 + LRC parser（纯函数 + 单测，无 UI/DB） | 🔲 Pending | [Phase 1 Checklist](#phase-1-checklist) |
+| 1 | 基础设施：`src/lyrics/` provider 抽象 + LRCLIB 纯映射 + LRC parser（纯函数 + 单测，无 UI/DB） | ✅ Done | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | 存储 + 抓取编排：`lyrics` 表（v20）+ repo + 触发/负缓存 + Settings 自动抓词开关（默认开）+ i18n | 🔲 Pending | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | 显示：Apple Music 式逐行高亮 + 自动滚动 + 点击跳转 + reduced-motion（右栏 tab + 移动全屏 sheet） | 🔲 Pending | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | 手动歌词：搜索/选择 modal + 粘贴/编辑/清除/重取（annotation-editor）| 🔲 Pending | [Phase 4 Checklist](#phase-4-checklist) |
@@ -453,13 +453,15 @@ components/track/             # （Phase 4）annotation-editor 加"歌词"区：
 - [ ] `lrclib-provider.ts`：薄壳（get→404→search→pickBest），注入 fetch 可单测。
 
 #### Phase 1 Checklist
-- [ ] `buildGetUrl` 对固定 query 产出期望 URL（snake_case + URL 编码）。
-- [ ] `parseHit` 对 canned LRCLIB JSON（含 instrumental、含 null synced）映射正确。
-- [ ] `pickBestHit` 按 duration 邻近 + synced 优先选中预期条目（含容差边界）。
-- [ ] `parseLrc` 穷举：多时间戳行展开、`offset` 平移、非法行丢弃、空行保留、升序。
-- [ ] `resolveTrackLyrics` 穷举：synced/plain/instrumental/brief/none 五态。
-- [ ] `lrclib-provider` 注入式单测：get 命中 / get 404→search 兜底 / 全空→null / 网络错误→throw。
-- [ ] `make check` 通过。
+- [x] `buildGetUrl` 对固定 query 产出期望 URL（snake_case + URL 编码）。
+- [x] `parseHit` 对 canned LRCLIB JSON（含 instrumental、含 null synced）映射正确。
+- [x] `pickBestHit` 按 duration 邻近 + synced 优先选中预期条目（含容差边界）。
+- [x] `parseLrc` 穷举：多时间戳行展开、`offset` 平移、非法行丢弃、空行保留、升序。
+- [x] `resolveTrackLyrics` 穷举：synced/plain/instrumental/brief/none 五态。
+- [x] `lrclib-provider` 注入式单测：get 命中 / get 404→search 兜底 / 全空→null / 网络错误→throw。
+- [x] `make check` 通过（`src/lyrics` 42 测试绿 + biome 干净 + lefthook 暂存 typecheck）。
+
+> **Phase 1 实现说明（2026-06-10）：** `src/lyrics/` 落地 7 文件——`provider.ts`（契约 + `LyricsRecord`/`LyricsHit`/`LyricsError`）、`parse-lrc.ts`、`lrclib-map.ts`（`buildGetUrl`/`buildSearchUrl`/`parseHit`/`parseSearchResults`/`pickBestHit`）、`build-query.ts`、`resolve-lyrics.ts`、`lrclib-provider.ts`（注入 fetch）、`registry.ts`。5 个 `.test.ts` 共 42 例，全绿。无 DB/UI 依赖。
 
 ### Phase 2: 存储 + 抓取编排
 
