@@ -101,16 +101,7 @@ export function createNeteaseSource(deps: NeteaseSourceDeps): StreamSourceProvid
       const level = (opts?.quality as NeteaseQuality) || "exhigh";
       const payload = JSON.stringify(neteasePlaybackBody(externalId, level));
       const { params } = eapiEncrypt(NETEASE_PLAYER_URL_PATH, payload);
-      const { status, text } = await post(PLAYER_URL, formBody({ params }), opts?.signal);
-      // Diagnostic: the raw player/url body tells us if auth landed (a url) vs VIP-locked
-      // (freeTrialPrivilege) vs needs-login (code 301). `loggedIn` flags whether a cookie
-      // was attached. Remove once VIP playback is confirmed.
-      log.info("netease", "resolve", {
-        status,
-        level,
-        loggedIn: Boolean(deps.getCookie?.()),
-        head: text.slice(0, 360),
-      });
+      const { text } = await post(PLAYER_URL, formBody({ params }), opts?.signal);
       const verdict = parseNeteasePlayback(text);
 
       switch (verdict.kind) {
