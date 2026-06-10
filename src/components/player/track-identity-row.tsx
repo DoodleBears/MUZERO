@@ -1,6 +1,6 @@
 import { Pause, Play } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
-import { type ReactNode, useMemo } from "react";
+import { type ReactNode, useEffect, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { useShallow } from "zustand/react/shallow";
 import { CoverImage } from "@/components/player/cover-image";
@@ -13,6 +13,17 @@ import { cn } from "@/lib/utils";
 import { transitionState } from "@/lib/view-transition-react";
 import { usePlayerStore } from "@/stores/player-store";
 import { CurrentTrackContextMenu } from "./track-context-menu";
+
+// Dock song-area swipe: how far / how fast a drag must go to switch tracks.
+const DOCK_SWITCH_DISTANCE = 40;
+const DOCK_SWITCH_VELOCITY = 380;
+// Trackpad pan (no press needed): accumulated delta to switch, how long after
+// the last tick the pan is treated as finished, and the per-tick magnitude
+// below which a flick's momentum tail counts as "dead" (so the next deliberate
+// pan re-arms and switches again).
+const DOCK_WHEEL_SWITCH_PX = 56;
+const DOCK_WHEEL_END_MS = 140;
+const DOCK_WHEEL_REARM_PX = 4;
 
 /**
  * Row 1 of the player-dock: cover + title/artist + the single play/pause button.
@@ -50,6 +61,66 @@ export function TrackIdentityRow({
   );
   const isPlaying = usePlayerStore((s) => s.isPlaying);
   const togglePlay = usePlayerStore((s) => s.togglePlay);
+  const next = usePlayerStore((s) => s.next);
+  const skipPrev = usePlayerStore((s) => s.skipPrev);
+  // Set when a press turns into a drag, so the release doesn't also fire the
+  // tap-to-open. Reset on every fresh pointer-down.
+  const didDrag = useRef(false);
+
+  // Trackpad two-finger horizontal pan (a wheel gesture, no press) → switch.
+  const songRef = useRef<HTMLButtonElement | null>(null);
+  const wheelAccum = useRef(0);
+  const wheelCommitted = useRef(false);
+  const wheelEndTimer = useRef<number | null>(null);
+  const wheelDeps = useRef({ hasTrack: false, next, skipPrev });
+  wheelDeps.current = { hasTrack: !!track, next, skipPrev };
+
+  useEffect(() => {
+    const el = songRef.current;
+    if (!el) return;
+    // A wheel pan has no pointerup, so the gesture ends on a short debounce; the
+    // momentum tail after a commit is swallowed until then.
+    const finishPan = () => {
+      wheelEndTimer.current = null;
+      wheelCommitted.current = false;
+      wheelAccum.current = 0;
+    };
+    const onWheel = (e: WheelEvent) => {
+      const d = wheelDeps.current;
+      if (!d.hasTrack) return;
+      // Dominant axis decides — a left/right OR up/down pan both switch.
+      const horizontal = Math.abs(e.deltaX) >= Math.abs(e.deltaY);
+      const delta = horizontal ? e.deltaX : e.deltaY;
+      if (delta === 0) return;
+      e.preventDefault(); // no page scroll / history back-swipe
+      if (wheelEndTimer.current != null) window.clearTimeout(wheelEndTimer.current);
+      wheelEndTimer.current = window.setTimeout(finishPan, DOCK_WHEEL_END_MS);
+      if (wheelCommitted.current) {
+        // Don't fire again on this flick's momentum tail, but re-arm as soon as
+        // it dies down so the *next* deliberate pan switches — letting you pan
+        // several times in a row.
+        if (Math.abs(delta) <= DOCK_WHEEL_REARM_PX) {
+          wheelCommitted.current = false;
+          wheelAccum.current = 0;
+        }
+        return;
+      }
+      wheelAccum.current += delta;
+      if (Math.abs(wheelAccum.current) < DOCK_WHEEL_SWITCH_PX) return;
+      // Natural-scroll deltas are inverted vs. finger motion: pan left/up →
+      // positive delta → next; pan right/down → negative → previous (matches drag).
+      const forward = wheelAccum.current > 0;
+      wheelCommitted.current = true;
+      wheelAccum.current = 0;
+      if (forward) void d.next();
+      else void d.skipPrev();
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => {
+      el.removeEventListener("wheel", onWheel);
+      if (wheelEndTimer.current != null) window.clearTimeout(wheelEndTimer.current);
+    };
+  }, []);
 
   // Reassemble the minimal cover descriptor (stable while the scalars are).
   // biome-ignore lint/correctness/useExhaustiveDependencies: depend on scalars, not the picked object, to keep this stable
@@ -82,12 +153,38 @@ export function TrackIdentityRow({
   return (
     <div className={cn("flex items-center gap-2 sm:gap-3", className)}>
       <CurrentTrackContextMenu className="min-w-0 flex-1">
-        <button
+        <motion.button
+          ref={songRef}
           type="button"
-          onClick={handleOpen}
+          onPointerDown={() => {
+            didDrag.current = false;
+          }}
+          onClick={() => {
+            // Swallow the click that trails a drag; a plain tap still opens.
+            if (didDrag.current) return;
+            handleOpen();
+          }}
           disabled={!track}
           aria-label={t("nav.now")}
-          className="flex w-full min-w-0 items-center gap-2.5 rounded-2xl text-left outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-default sm:gap-3"
+          drag={!!track}
+          dragConstraints={{ left: 0, right: 0, top: 0, bottom: 0 }}
+          dragElastic={0.16}
+          dragMomentum={false}
+          dragDirectionLock={false}
+          dragSnapToOrigin
+          onDragStart={() => {
+            didDrag.current = true;
+          }}
+          onDragEnd={(_, info) => {
+            // Drag left OR up → next; right OR down → previous. The dominant
+            // axis decides, so a diagonal still resolves cleanly.
+            const horizontal = Math.abs(info.offset.x) >= Math.abs(info.offset.y);
+            const dist = horizontal ? info.offset.x : info.offset.y;
+            const vel = horizontal ? info.velocity.x : info.velocity.y;
+            if (dist <= -DOCK_SWITCH_DISTANCE || vel <= -DOCK_SWITCH_VELOCITY) void next();
+            else if (dist >= DOCK_SWITCH_DISTANCE || vel >= DOCK_SWITCH_VELOCITY) void skipPrev();
+          }}
+          className="flex w-full min-w-0 cursor-grab items-center gap-2.5 rounded-2xl text-left outline-none focus-visible:ring-2 focus-visible:ring-ring active:cursor-grabbing disabled:cursor-default sm:gap-3"
         >
           <motion.span
             layoutId="now-cover"
@@ -120,7 +217,7 @@ export function TrackIdentityRow({
               </motion.span>
             </AnimatePresence>
           </span>
-        </button>
+        </motion.button>
       </CurrentTrackContextMenu>
       {controls && <div className="shrink-0">{controls}</div>}
       <Button
