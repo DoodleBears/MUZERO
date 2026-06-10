@@ -75,6 +75,13 @@ export interface Track {
   remoteCoverUrl?: string;
   /** Non-destructive square crop for the cover, in the original image's pixels. */
   coverCrop?: CropRect;
+  /**
+   * Base64 thumbhash of the cover (its displayed framing) — a ~25-byte blurred
+   * preview shown instantly before the cover blob resolves (instant-cover-thumbnails
+   * PRD). Derived from OUR cover bytes, not the file's tags. Non-indexed → additive,
+   * no schema bump; absent on legacy/remote covers until generated/backfilled.
+   */
+  coverThumbhash?: string;
   error?: string;
   createdAt: number;
   generatedAt?: number;
@@ -164,6 +171,8 @@ export interface EntityCover {
     sha256?: string;
   };
   crop?: CropRect;
+  /** Base64 thumbhash of the entity cover — instant blurred preview (mirrors `Track.coverThumbhash`). */
+  thumbhash?: string;
   updatedAt: number; // last-write-wins clock for R2 sync
 }
 
@@ -234,6 +243,8 @@ export interface DjSession {
   coverBlobId?: string;
   /** Non-destructive square crop for the set cover (mirrors `Track.coverCrop`). */
   coverCrop?: CropRect;
+  /** Base64 thumbhash of the set cover — instant blurred preview (mirrors `Track.coverThumbhash`). */
+  coverThumbhash?: string;
   /** Ordered, curated members. Newest is PREPENDED to the front (= the cover). */
   trackIds: string[];
   status: "idle" | "running";

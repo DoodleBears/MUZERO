@@ -1,4 +1,5 @@
 import type { TrackBrief } from "@/dj/dj-brief-schema";
+import { encodeCoverThumbhash } from "@/lib/cover-thumbhash";
 import { newId } from "@/lib/id";
 import {
   appendEntries,
@@ -231,6 +232,9 @@ export async function setSessionCover(
   input: { sessionId: string; blob: Blob; mime: string; crop?: CropRect },
   db: MuzeroDB = defaultDb,
 ): Promise<void> {
+  // Encode the blurred preview before the transaction (canvas decode is async and
+  // must not run inside a Dexie tx); undefined on failure / non-browser.
+  const coverThumbhash = await encodeCoverThumbhash(input.blob, input.crop);
   await db.transaction("rw", db.sessions, db.mediaBlobs, async () => {
     const session = await db.sessions.get(input.sessionId);
     if (!session) return;
@@ -246,6 +250,7 @@ export async function setSessionCover(
     });
     session.coverBlobId = id;
     session.coverCrop = input.crop;
+    session.coverThumbhash = coverThumbhash;
     session.updatedAt = Date.now();
     await db.sessions.put(session);
   });
@@ -297,6 +302,7 @@ export async function setEntityCover(
   },
   db: MuzeroDB = defaultDb,
 ): Promise<void> {
+  const thumbhash = await encodeCoverThumbhash(input.blob, input.crop);
   await db.transaction("rw", db.entityCovers, db.mediaBlobs, async () => {
     const prev = await db.entityCovers.get(input.entityKey);
     if (prev?.coverBlobId) await db.mediaBlobs.delete(prev.coverBlobId);
@@ -314,6 +320,7 @@ export async function setEntityCover(
       kind: input.kind,
       coverBlobId: cover.id,
       crop: input.crop,
+      thumbhash,
       updatedAt: Date.now(),
     });
   });
@@ -652,6 +659,7 @@ export async function setTrackCover(
   input: { trackId: string; blob: Blob; mime: string; crop?: CropRect },
   db: MuzeroDB = defaultDb,
 ): Promise<void> {
+  const coverThumbhash = await encodeCoverThumbhash(input.blob, input.crop);
   await db.transaction("rw", db.tracks, db.mediaBlobs, async () => {
     const track = await db.tracks.get(input.trackId);
     if (!track) return;
@@ -665,7 +673,11 @@ export async function setTrackCover(
       blob: input.blob,
     };
     await db.mediaBlobs.put(cover);
-    await db.tracks.update(input.trackId, { coverBlobId: cover.id, coverCrop: input.crop });
+    await db.tracks.update(input.trackId, {
+      coverBlobId: cover.id,
+      coverCrop: input.crop,
+      coverThumbhash,
+    });
   });
 }
 
@@ -704,13 +716,17 @@ export async function setTrackCoverFromMemory(
   });
 }
 
-/** Update just the cover crop (re-crop without re-uploading). Undefined clears it. */
+/** Update just the cover crop (re-crop without re-uploading). Undefined clears it.
+ *  Regenerates the thumbhash so the blurred preview keeps matching the framing. */
 export async function setTrackCoverCrop(
   id: string,
   crop: CropRect | undefined,
   db: MuzeroDB = defaultDb,
 ): Promise<void> {
-  await db.tracks.update(id, { coverCrop: crop });
+  const track = await db.tracks.get(id);
+  const blob = track?.coverBlobId ? (await db.mediaBlobs.get(track.coverBlobId))?.blob : undefined;
+  const coverThumbhash = blob ? await encodeCoverThumbhash(blob, crop) : undefined;
+  await db.tracks.update(id, { coverCrop: crop, coverThumbhash });
 }
 
 // ----------------------------------------------------------------- memories ----
