@@ -1,7 +1,7 @@
 import { useLiveQuery } from "dexie-react-hooks";
 import { LocateFixed } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { LyricsSearchPanel } from "@/components/player/lyrics-search-panel";
 import { useVisualizerCoverColorCss } from "@/components/player/visualizer-dynamic-color";
@@ -229,7 +229,6 @@ function SyncedLines({
   const viewportRef = useRef<HTMLDivElement>(null);
   const stackRef = useRef<HTMLDivElement>(null);
   const activeRef = useRef<HTMLButtonElement>(null);
-  const touchStartY = useRef(0);
   const [following, setFollowing] = useState(true);
   const [offsetY, setOffsetY] = useState(0);
   const [viewportH, setViewportH] = useState(0);
@@ -264,7 +263,7 @@ function SyncedLines({
   }, [activeIndex, following, viewportH, lines]);
 
   // Wheel / touch-drag = manual scroll → detach follow (clamped to content).
-  function scrollByDelta(deltaY: number) {
+  const scrollByDelta = useCallback((deltaY: number) => {
     setFollowing(false);
     setOffsetY((prev) => {
       const vp = viewportRef.current;
@@ -272,24 +271,46 @@ function SyncedLines({
       const min = vp && stack ? Math.min(0, vp.clientHeight - stack.scrollHeight) : prev - deltaY;
       return Math.max(min, Math.min(0, prev - deltaY));
     });
-  }
+  }, []);
+
+  // Native, NON-passive wheel + touch so the lyrics fully own their gesture: the
+  // page behind never scrolls when you scroll the lyrics (the React synthetic
+  // handlers are passive, so they couldn't preventDefault and the outer scroll
+  // leaked through — most visible on mobile).
+  useEffect(() => {
+    const vp = viewportRef.current;
+    if (!vp) return;
+    let lastY = 0;
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      scrollByDelta(e.deltaY);
+    };
+    const onTouchStart = (e: TouchEvent) => {
+      lastY = e.touches[0]?.clientY ?? 0;
+    };
+    const onTouchMove = (e: TouchEvent) => {
+      e.preventDefault();
+      const y = e.touches[0]?.clientY ?? lastY;
+      scrollByDelta(lastY - y);
+      lastY = y;
+    };
+    vp.addEventListener("wheel", onWheel, { passive: false });
+    vp.addEventListener("touchstart", onTouchStart, { passive: true });
+    vp.addEventListener("touchmove", onTouchMove, { passive: false });
+    return () => {
+      vp.removeEventListener("wheel", onWheel);
+      vp.removeEventListener("touchstart", onTouchStart);
+      vp.removeEventListener("touchmove", onTouchMove);
+    };
+  }, [scrollByDelta]);
 
   return (
     <>
       <div
         ref={viewportRef}
         data-testid="lyrics-scroll"
-        className="absolute inset-0 overflow-hidden"
+        className="absolute inset-0 touch-none overflow-hidden"
         style={EDGE_FADE}
-        onWheel={(e) => scrollByDelta(e.deltaY)}
-        onTouchStart={(e) => {
-          touchStartY.current = e.touches[0]?.clientY ?? 0;
-        }}
-        onTouchMove={(e) => {
-          const yNow = e.touches[0]?.clientY ?? touchStartY.current;
-          scrollByDelta(touchStartY.current - yNow);
-          touchStartY.current = yNow;
-        }}
       >
         <motion.div
           ref={stackRef}
