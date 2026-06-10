@@ -146,14 +146,25 @@ export function ReorderableTrackList({
       </SortableContext>
       <DragOverlay>
         {activeTrack ? (
-          <ReorderRowBody
-            track={activeTrack}
-            checked={selectedIds.has(activeTrack.id)}
-            overlay
-            badge={
-              activeBlockSize > 1 ? t("reorder.movingCount", { count: activeBlockSize }) : undefined
-            }
-          />
+          // Mirror a row's columns (grip + body) so the floating item stays aligned
+          // with the list — the grip must remain visible while dragging.
+          <div className="flex items-center gap-1">
+            <span className="flex h-11 w-8 shrink-0 items-center justify-center text-muted-foreground">
+              <GripVertical className="size-4" />
+            </span>
+            <div className="min-w-0 flex-1">
+              <ReorderRowBody
+                track={activeTrack}
+                checked={selectedIds.has(activeTrack.id)}
+                overlay
+                badge={
+                  activeBlockSize > 1
+                    ? t("reorder.movingCount", { count: activeBlockSize })
+                    : undefined
+                }
+              />
+            </div>
+          </div>
         ) : null}
       </DragOverlay>
     </DndContext>
