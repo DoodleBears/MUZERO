@@ -14,7 +14,7 @@
 | 1 | 纯排序核心 + 仓库层（分数序算法 + lazy 物化 + reorder repo） | ✅ Completed | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | R2 Sync 对齐（manifest rank 字段 + export/import round-trip + 整 session LWW） | ✅ Completed | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | 多选模式拖拽 UI（@dnd-kit + 整选区块移动 + drop indicator + 手动序门控） | ✅ Completed（代码+单测；交互实测待真机） | [Phase 3 Checklist](#phase-3-checklist) |
-| 4 | 打磨（虚拟化 reorder + 键盘 a11y + 触摸自动滚动 + 边界回归） | 🔲 Pending | [Phase 4 Checklist](#phase-4-checklist) |
+| 4 | 打磨（虚拟化 reorder + 键盘 a11y + 触摸 + drop indicator + 拖拽互斥） | ✅ Completed（代码+单测；交互实测待真机） | [Phase 4 Checklist](#phase-4-checklist) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
 
@@ -418,16 +418,15 @@ SetDetailView (search-page.tsx:1244)
 **Goal:** 虚拟化 reorder + 键盘可达性 + 触摸体验 + 边界回归。
 
 **Tasks:**
-- [ ] **虚拟化 reorder 列表**（大歌单 reorder 性能）：ReorderableTrackList 接 TanStack Virtual + @dnd-kit autoScroll 把离屏目标带进视口。（Phase 3 因避开热文件先做非虚拟化版。）
-- [ ] 键盘 reorder 实测（grip 已挂 `KeyboardSensor` + `sortableKeyboardCoordinates`，需端到端验证焦点不丢）。
-- [ ] 触摸 `TouchSensor`（按压延迟避免与滚动冲突）+ 边界 autoScroll 调参。
-- [ ] 与「移出歌单 / 删除」批量操作同屏共存的回归（拖拽中禁用批量按钮）。
+- [x] **虚拟化 reorder 列表**（大歌单 reorder 性能）：`ReorderableTrackList` 接 `useVirtualizer`（固定行高 56、overscan 8、绝对定位 `translateY(start)`）；只挂窗口内行 + @dnd-kit 内建 autoScroll 把离屏目标带进视口。✅
+- [x] **drop indicator 升级**：方向感知插入线（`onDragOver` 算 active/over 索引 → 向下落 `bottom`、向上落 `top`），虚拟化下稳健（不靠 sortable transform 开合间隙，避免与 react-virtual 绝对定位双重位移）。✅
+- [x] 触摸 `TouchSensor`（`delay:200 + tolerance:8`，按压延迟避免与滚动冲突）；键盘 `KeyboardSensor` + `sortableKeyboardCoordinates` 已挂（grip 可聚焦操作）。✅
+- [x] 拖拽中批量操作互斥：`onDragActiveChange` 上抛 → `track-list-section` 置 `dragActive` → `BatchActionBar` 新增 `disabled` prop（`pointer-events-none + opacity-60`，action 按钮 disabled）。✅（2 测）
 
 #### Phase 4 Checklist
-- [ ] 大歌单（数百首）reorder 不卡、autoScroll 正确。
-- [ ] 键盘可完成一次重排，焦点不丢。
-- [ ] 移动端（窄屏）拖拽不误触滚动。
-- [ ] 拖拽进行中批量操作互斥，无竞态。
+- [x] 虚拟化单测：mock `useVirtualizer` 只渲染窗口行（0/1/2），off-window 行不挂载（证明虚拟化）；每行有 drag handle；点击行 toggle 选择（`reorderable-track-list.test.tsx`，3 测）。✅
+- [x] 拖拽进行中批量操作互斥：`BatchActionBar` `disabled` → action 按钮 disabled（`batch-action-bar.test.tsx`，2 测）。✅
+- [→] 键盘端到端一次重排焦点不丢、移动端窄屏不误触滚动、autoScroll 视觉：**enabler 已实现（TouchSensor/KeyboardSensor/autoScroll）**，交互实测留真实 Electron 壳（同 Phase 3，预览沙箱 hidden-tab 不可靠 + 并发热文件未稳）。
 
 ---
 

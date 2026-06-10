@@ -64,6 +64,9 @@ export function TrackListSection({
   const sel = useTrackSelection(trackIds);
   // Track ids awaiting a permanent-delete confirmation (null = dialog closed).
   const [pendingPermanent, setPendingPermanent] = useState<string[] | null>(null);
+  // True while a reorder drag is in progress — disables the batch action bar so a
+  // stray click can't delete/remove mid-drag.
+  const [dragActive, setDragActive] = useState(false);
 
   // Drag-to-reorder is offered only in a set's select mode AND when the true
   // curated order is showing (no sort/filter/search) — see SetDetailView.
@@ -149,6 +152,7 @@ export function TrackListSection({
             selectedIds={sel.ids}
             onToggleSelect={sel.toggle}
             onReorder={onReorder}
+            onDragActiveChange={setDragActive}
             className={listClassName}
           />
         ) : (
@@ -182,6 +186,7 @@ export function TrackListSection({
           onToggleAll={sel.toggleAll}
           onCancel={sel.exit}
           actions={batchActions}
+          disabled={dragActive}
         />
       ) : null}
       <ConfirmDialog

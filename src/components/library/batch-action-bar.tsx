@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { cn } from "@/lib/utils";
 
 export interface BatchAction {
   label: string;
@@ -24,6 +25,7 @@ export function BatchActionBar({
   onToggleAll,
   onCancel,
   actions,
+  disabled,
 }: {
   count: number;
   allSelected: boolean;
@@ -31,10 +33,17 @@ export function BatchActionBar({
   onToggleAll: () => void;
   onCancel: () => void;
   actions: BatchAction[];
+  /** Temporarily disable the actions (e.g. while a reorder drag is in progress). */
+  disabled?: boolean;
 }) {
   const { t } = useTranslation();
   return (
-    <div className="-translate-x-1/2 fixed bottom-[calc(var(--spacing-chrome-bottom)+0.5rem)] left-1/2 z-40 flex w-[min(calc(100vw-2rem),38rem)] items-center gap-3 rounded-xl border border-border bg-popover/95 px-3 py-2 shadow-lg backdrop-blur">
+    <div
+      className={cn(
+        "-translate-x-1/2 fixed bottom-[calc(var(--spacing-chrome-bottom)+0.5rem)] left-1/2 z-40 flex w-[min(calc(100vw-2rem),38rem)] items-center gap-3 rounded-xl border border-border bg-popover/95 px-3 py-2 shadow-lg backdrop-blur",
+        disabled && "pointer-events-none opacity-60",
+      )}
+    >
       <button
         type="button"
         onClick={onToggleAll}
@@ -54,7 +63,7 @@ export function BatchActionBar({
             key={action.label}
             variant={action.variant ?? "outline"}
             size="sm"
-            disabled={count === 0}
+            disabled={disabled || count === 0}
             onClick={action.onClick}
           >
             {action.icon}

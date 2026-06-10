@@ -2,10 +2,12 @@ import {
   closestCenter,
   DndContext,
   type DragEndEvent,
+  type DragOverEvent,
   DragOverlay,
   type DragStartEvent,
   KeyboardSensor,
   PointerSensor,
+  TouchSensor,
   useSensor,
   useSensors,
 } from "@dnd-kit/core";
@@ -16,9 +18,9 @@ import {
   useSortable,
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import { GripVertical } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { CoverImage } from "@/components/ui/cover-image";
 import type { Track } from "@/db/types";
@@ -27,20 +29,28 @@ import { trackSubtitle } from "@/lib/track-display";
 import { cn } from "@/lib/utils";
 import { resolveDropTarget } from "./reorder-drop";
 
+/** Fixed row height so the virtualizer needs no per-row measurement. */
+const REORDER_ROW_HEIGHT = 56;
+
+/** Where the drop-indicator line sits relative to the hovered row. */
+type DropEdge = "top" | "bottom";
+
 /**
- * Drag-to-reorder list used in a set's multi-select mode (drag-reorder PRD §5).
- * Self-contained (a compact row, NOT the heavy `TrackRow`) so it stays decoupled
- * from the library row's churn. @dnd-kit sortable: dragging any SELECTED row moves
- * the whole selection as one block (relative order kept); dragging an unselected
- * row moves just that row. The opening gap is the drop indicator; the floating
- * overlay shows how many tracks travel. Reorder is only mounted in "manual order"
- * (no sort/filter/search), so `tracks` is the true curated order.
+ * Drag-to-reorder list used in a set's multi-select mode (drag-reorder PRD §5/§Phase 4).
+ * Self-contained (a compact row, NOT the heavy `TrackRow`) so it stays decoupled from
+ * the library row's churn, and VIRTUALIZED (react-virtual) so a several-hundred-track
+ * set stays light in reorder mode. @dnd-kit sortable: dragging any SELECTED row moves
+ * the whole selection as one block (relative order kept); dragging an unselected row
+ * moves just that row. A direction-aware indicator line marks the drop point; the
+ * floating overlay shows how many tracks travel. Reorder is only mounted in "manual
+ * order" (no sort/filter/search), so `tracks` is the true curated order.
  */
 export function ReorderableTrackList({
   tracks,
   selectedIds,
   onToggleSelect,
   onReorder,
+  onDragActiveChange,
   className,
 }: {
   /** Tracks in the set's current display (rank) order. */
@@ -49,15 +59,29 @@ export function ReorderableTrackList({
   onToggleSelect: (trackId: string, opts?: { index?: number; shiftKey?: boolean }) => void;
   /** Commit a move: relocate `blockIds` to just before `insertBeforeId` (null = end). */
   onReorder: (blockIds: string[], insertBeforeId: string | null) => void;
+  /** Fires true on drag start, false on end/cancel — lets the surface disable batch ops. */
+  onDragActiveChange?: (active: boolean) => void;
   className?: string;
 }) {
   const { t } = useTranslation();
   const ids = useMemo(() => tracks.map((track) => track.id), [tracks]);
   const [activeId, setActiveId] = useState<string | null>(null);
+  const [dropAt, setDropAt] = useState<{ id: string; edge: DropEdge } | null>(null);
+
+  const parentRef = useRef<HTMLDivElement | null>(null);
+  const rowVirtualizer = useVirtualizer({
+    count: tracks.length,
+    estimateSize: () => REORDER_ROW_HEIGHT,
+    getItemKey: (index) => tracks[index]?.id ?? index,
+    getScrollElement: () => parentRef.current,
+    overscan: 8,
+  });
 
   const sensors = useSensors(
     // A small drag threshold so a tap still toggles selection.
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    // Press-and-hold on touch so dragging doesn't fight list scrolling.
+    useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 8 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
 
@@ -70,13 +94,33 @@ export function ReorderableTrackList({
     return [id];
   }
 
+  function onDragOver(event: DragOverEvent) {
+    const { active, over } = event;
+    if (!over || active.id === over.id) {
+      setDropAt(null);
+      return;
+    }
+    const activeIndex = ids.indexOf(String(active.id));
+    const overIndex = ids.indexOf(String(over.id));
+    // Dragging downward lands the block AFTER the hovered row; upward, BEFORE it.
+    setDropAt({ id: String(over.id), edge: activeIndex < overIndex ? "bottom" : "top" });
+  }
+
   function onDragEnd(event: DragEndEvent) {
     setActiveId(null);
+    setDropAt(null);
+    onDragActiveChange?.(false);
     const { active, over } = event;
     if (!over) return;
     const block = blockFor(String(active.id));
     const { insertBeforeId } = resolveDropTarget(ids, block, String(active.id), String(over.id));
     onReorder(block, insertBeforeId);
+  }
+
+  function onDragCancel() {
+    setActiveId(null);
+    setDropAt(null);
+    onDragActiveChange?.(false);
   }
 
   const activeTrack = activeId ? tracks.find((track) => track.id === activeId) : undefined;
@@ -87,22 +131,36 @@ export function ReorderableTrackList({
       sensors={sensors}
       collisionDetection={closestCenter}
       modifiers={[restrictToVerticalAxis]}
-      onDragStart={(event: DragStartEvent) => setActiveId(String(event.active.id))}
+      onDragStart={(event: DragStartEvent) => {
+        setActiveId(String(event.active.id));
+        onDragActiveChange?.(true);
+      }}
+      onDragOver={onDragOver}
       onDragEnd={onDragEnd}
-      onDragCancel={() => setActiveId(null)}
+      onDragCancel={onDragCancel}
     >
       <SortableContext items={ids} strategy={verticalListSortingStrategy}>
-        <ul className={cn("flex min-h-0 flex-col gap-0.5 overflow-y-auto", className)}>
-          {tracks.map((track) => (
-            <SortableReorderRow
-              key={track.id}
-              track={track}
-              checked={selectedIds.has(track.id)}
-              dragLabel={t("reorder.dragHandle")}
-              onToggle={(shiftKey) => onToggleSelect(track.id, { shiftKey })}
-            />
-          ))}
-        </ul>
+        <div ref={parentRef} className={cn("min-h-0 flex-1 overflow-y-auto", className)}>
+          <div
+            style={{ height: rowVirtualizer.getTotalSize(), position: "relative", width: "100%" }}
+          >
+            {rowVirtualizer.getVirtualItems().map((virtualItem) => {
+              const track = tracks[virtualItem.index];
+              if (!track) return null;
+              return (
+                <SortableReorderRow
+                  key={virtualItem.key}
+                  track={track}
+                  start={virtualItem.start}
+                  checked={selectedIds.has(track.id)}
+                  dropEdge={dropAt?.id === track.id ? dropAt.edge : null}
+                  dragLabel={t("reorder.dragHandle")}
+                  onToggle={(shiftKey) => onToggleSelect(track.id, { shiftKey })}
+                />
+              );
+            })}
+          </div>
+        </div>
       </SortableContext>
       <DragOverlay>
         {activeTrack ? (
@@ -122,32 +180,48 @@ export function ReorderableTrackList({
 
 function SortableReorderRow({
   track,
+  start,
   checked,
+  dropEdge,
   dragLabel,
   onToggle,
 }: {
   track: Track;
+  /** Absolute offset from the virtualizer. */
+  start: number;
   checked: boolean;
+  dropEdge: DropEdge | null;
   dragLabel: string;
   onToggle: (shiftKey: boolean) => void;
 }) {
-  const {
-    attributes,
-    listeners,
-    setNodeRef,
-    setActivatorNodeRef,
-    transform,
-    transition,
-    isDragging,
-  } = useSortable({ id: track.id });
+  const { attributes, listeners, setNodeRef, setActivatorNodeRef, transition, isDragging } =
+    useSortable({ id: track.id });
 
   return (
     <li
       ref={setNodeRef}
-      style={{ transform: CSS.Transform.toString(transform), transition }}
+      style={{
+        position: "absolute",
+        top: 0,
+        left: 0,
+        width: "100%",
+        height: REORDER_ROW_HEIGHT,
+        transform: `translateY(${start}px)`,
+        transition,
+      }}
       className={cn("list-none", isDragging && "opacity-40")}
     >
-      <div className="flex items-center gap-1">
+      {/* Direction-aware drop indicator: the block lands at this line. */}
+      {dropEdge ? (
+        <span
+          aria-hidden
+          className={cn(
+            "absolute inset-x-2 h-0.5 rounded-full bg-primary",
+            dropEdge === "top" ? "-top-px" : "-bottom-px",
+          )}
+        />
+      ) : null}
+      <div className="flex h-full items-center gap-1">
         <button
           type="button"
           ref={setActivatorNodeRef}
