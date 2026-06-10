@@ -16,6 +16,8 @@ export interface LyricStyle {
   align: "left" | "center" | "right";
   /** CSS text-shadow for the lyrics ("none" when disabled). */
   textShadow: string;
+  /** Vertical gap between lyric lines, in px. */
+  lineGap: number;
 }
 
 export const DEFAULT_LYRIC_STYLE: LyricStyle = {
@@ -25,6 +27,7 @@ export const DEFAULT_LYRIC_STYLE: LyricStyle = {
   inactiveOpacity: 0.4,
   align: "center",
   textShadow: "0px 2px 8px rgba(0, 0, 0, 0.5)",
+  lineGap: 8,
 };
 
 function clampPx(value: number | undefined, fallback: number): number {
@@ -67,6 +70,7 @@ export function resolveLyricStyle(settings: AppSettings, coverColorCss: string |
     color,
     align: settings.lyricsAlign ?? DEFAULT_LYRIC_STYLE.align,
     textShadow: resolveTextShadow(settings),
+    lineGap: clampNum(settings.lyricsLineGap, DEFAULT_LYRIC_STYLE.lineGap, 0, 48),
   };
 }
 

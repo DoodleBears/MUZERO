@@ -41,6 +41,7 @@ export function LyricsTuningControls({ className }: { className?: string }) {
   const colorMode = s.lyricsColorMode ?? "default";
   const customColor = s.lyricsCustomColor ?? "#ffffff";
   const align = s.lyricsAlign ?? "center";
+  const lineGap = s.lyricsLineGap ?? 8;
   const shadowOpacity = s.lyricsShadowOpacity ?? 50;
   const shadowBlur = s.lyricsShadowBlur ?? 8;
   const shadowOffsetX = s.lyricsShadowOffsetX ?? 0;
@@ -66,6 +67,16 @@ export function LyricsTuningControls({ className }: { className?: string }) {
           value={inactiveSize}
           onValueChange={(v) => void saveSettings({ lyricsInactiveFontSize: v })}
           aria-label={t("lyricsSettings.inactiveFontSize", { px: inactiveSize })}
+        />
+      </Field>
+      <Field label={t("lyricsSettings.lineGap", { px: lineGap })}>
+        <Slider
+          min={0}
+          max={48}
+          step={1}
+          value={lineGap}
+          onValueChange={(v) => void saveSettings({ lyricsLineGap: v })}
+          aria-label={t("lyricsSettings.lineGap", { px: lineGap })}
         />
       </Field>
       <Field label={t("lyricsSettings.activeOpacity", { pct: activeOpacity })}>

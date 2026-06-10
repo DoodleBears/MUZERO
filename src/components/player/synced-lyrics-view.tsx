@@ -303,8 +303,12 @@ function SyncedLines({
       >
         <div
           ref={stackRef}
-          className="flex flex-col gap-1"
-          style={{ paddingTop: viewportH * 0.38, paddingBottom: viewportH * 0.62 }}
+          className="flex flex-col"
+          style={{
+            paddingTop: viewportH * 0.38,
+            paddingBottom: viewportH * 0.62,
+            rowGap: lyricStyle.lineGap,
+          }}
         >
           {lines.map((line, i) => {
             const isActive = i === activeIndex;

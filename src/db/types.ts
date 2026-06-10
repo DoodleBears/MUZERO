@@ -1,7 +1,7 @@
 import type { UIMessage } from "ai";
 import type { LlmProviderPresetId } from "@/ai/llm-providers";
 import type { TrackBrief } from "@/dj/dj-brief-schema";
-import type { LyricsRecord } from "@/lyrics/provider";
+import type { LyricsProviderId, LyricsRecord } from "@/lyrics/provider";
 import type { CloudPresetId } from "@/musicgen/presets";
 import type { MusicGenProviderId } from "@/musicgen/registry";
 import type { ShortcutGesture } from "@/shortcuts/registry";
@@ -528,6 +528,8 @@ export interface AppSettings {
   lyricsShadowOffsetX?: number;
   /** Lyric text-shadow Y offset in px. Default 2. */
   lyricsShadowOffsetY?: number;
+  /** Vertical gap between lyric lines, in px. Default 8. */
+  lyricsLineGap?: number;
   /**
    * Smooth scrolling (Lenis) master toggle. `undefined` = follow the platform
    * default (`!isMac()`): on for non-macOS, off on macOS where the trackpad is
@@ -581,6 +583,12 @@ export interface AppSettings {
    * default on. Generated tracks use their own brief.lyrics and never fetch.
    */
   autoFetchLyrics?: boolean;
+  /**
+   * Which lyrics source to use (visible Settings dropdown, rule 3). Default
+   * `lrclib`. Streamed NetEase tracks always use NetEase regardless (their songId
+   * gives the exact official lyrics) — see `resolveLyricsProviderForTrack`.
+   */
+  lyricsProviderId?: LyricsProviderId;
 }
 
 /**
@@ -626,6 +634,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   musicCloudPreset: "mureka",
   locale: "en",
   autoFetchLyrics: true,
+  lyricsProviderId: "lrclib",
   theme: "system",
   backgroundMode: "cover",
   backgroundRenderer: "noise",
@@ -680,6 +689,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   lyricsStageOpen: false,
   lyricsShadowOpacity: 50,
   lyricsShadowBlur: 8,
+  lyricsLineGap: 8,
   lyricsShadowOffsetX: 0,
   lyricsShadowOffsetY: 2,
   playerRepeatMode: "off",
