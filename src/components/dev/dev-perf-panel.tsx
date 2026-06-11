@@ -18,7 +18,7 @@ import {
   readJsHeapBytes,
   summarizePerf,
 } from "@/lib/perf-metrics";
-import { formatTraceEntries, useTraceEntries } from "@/lib/trace";
+import { formatTraceEntries, getTraceEntries } from "@/lib/trace";
 import { cn } from "@/lib/utils";
 import { usePlayerStore } from "@/stores/player-store";
 
@@ -46,6 +46,7 @@ interface Snapshot {
   blobsLive: number;
   blobsCreated: number;
   dbRequeries: number;
+  traceCount: number;
 }
 
 const EMPTY_SNAPSHOT: Snapshot = {
@@ -55,6 +56,7 @@ const EMPTY_SNAPSHOT: Snapshot = {
   blobsLive: 0,
   blobsCreated: 0,
   dbRequeries: 0,
+  traceCount: 0,
 };
 
 export function DevPerfPanel() {
@@ -63,7 +65,6 @@ export function DevPerfPanel() {
   );
   const [snap, setSnap] = useState<Snapshot>(EMPTY_SNAPSHOT);
   const [traceCopied, setTraceCopied] = useState(false);
-  const traceEntries = useTraceEntries();
   const framesRef = useRef(new PerfWindow(180));
   const longTasksRef = useRef(new PerfWindow(60));
   const queueLength = usePlayerStore((s) => s.queue.length);
@@ -119,6 +120,9 @@ export function DevPerfPanel() {
         blobsLive: blobs.live,
         blobsCreated: blobs.created,
         dbRequeries: DB_REQUERY_COUNTERS.reduce((sum, name) => sum + readPerfCounter(name), 0),
+        // Polled, NOT subscribed — a useTraceEntries subscription would re-render
+        // this HUD on every log line (PRD F-L5).
+        traceCount: getTraceEntries().length,
       });
     }, SNAPSHOT_MS);
     return () => window.clearInterval(id);
@@ -135,8 +139,9 @@ export function DevPerfPanel() {
   };
 
   const copyAllTrace = async () => {
-    if (!navigator.clipboard || traceEntries.length === 0) return;
-    await navigator.clipboard.writeText(formatTraceEntries(traceEntries));
+    const entries = getTraceEntries();
+    if (!navigator.clipboard || entries.length === 0) return;
+    await navigator.clipboard.writeText(formatTraceEntries(entries));
     setTraceCopied(true);
     window.setTimeout(() => setTraceCopied(false), 1600);
   };
@@ -186,12 +191,12 @@ export function DevPerfPanel() {
           <button
             type="button"
             onClick={() => void copyAllTrace()}
-            disabled={traceEntries.length === 0}
+            disabled={snap.traceCount === 0}
             className="col-span-2 mt-1 flex items-center justify-center gap-1 rounded border border-white/15 px-2 py-1 text-white/80 transition hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
             title="Copy all trace"
           >
             {traceCopied ? <Check className="size-3" /> : <ClipboardCopy className="size-3" />}
-            {traceCopied ? "copied" : `copy trace (${traceEntries.length})`}
+            {traceCopied ? "copied" : `copy trace (${snap.traceCount})`}
           </button>
         </div>
       )}

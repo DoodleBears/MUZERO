@@ -61,6 +61,35 @@ describe("perf counters", () => {
       expect(entries[0]).toMatchObject({ level: "debug", scope: "db" });
       expect(entries[0].message).toContain("listAllTracks");
     });
+
+    it("coalesces trace emission during a requery burst while keeping the counter exact (PRD F-L4)", () => {
+      vi.useFakeTimers();
+      try {
+        setPerfCountersEnabled(true);
+        noteDbRequery("listAllTracks");
+        noteDbRequery("listAllTracks");
+        noteDbRequery("listAllTracks");
+        // Counter counts every execution; the trace ring gets one line per window.
+        expect(readPerfCounter("db.listAllTracks")).toBe(3);
+        expect(getTraceEntries()).toHaveLength(1);
+
+        vi.advanceTimersByTime(1100);
+        noteDbRequery("listAllTracks");
+        const entries = getTraceEntries();
+        expect(entries).toHaveLength(2);
+        // The next line carries the count it swallowed during the window.
+        expect(entries[1].message).toContain("+2");
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("rate-limits per query name, not globally", () => {
+      setPerfCountersEnabled(true);
+      noteDbRequery("listAllTracks");
+      noteDbRequery("memoryNotesByTrack");
+      expect(getTraceEntries()).toHaveLength(2);
+    });
   });
 
   describe("blob URL tracker", () => {

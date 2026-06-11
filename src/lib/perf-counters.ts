@@ -33,18 +33,38 @@ export function readPerfCounter(name: string): number {
 
 export function resetPerfCounters(): void {
   counts.clear();
+  requeryTraceWindows.clear();
 }
+
+/** Per-query trace window — a Dexie write burst re-runs these queries once per
+ *  transaction, and one ring entry per execution would flood the 300-entry ring
+ *  AND amplify into the archive writer (PRD F-L4). */
+const DB_REQUERY_TRACE_WINDOW_MS = 1000;
+const requeryTraceWindows = new Map<string, { emittedAt: number; coalesced: number }>();
 
 /**
  * Note one execution of a heavyweight DB query (`listAllTracks`-class full-table
- * reads). Counts toward the HUD's `db` row and lands in the trace ring at debug
- * level, so a copy-trace export shows how often a write burst re-ran the query
- * (finding F-3). No-op while the HUD is not mounted.
+ * reads). The counter counts EVERY execution (the HUD's `db` row stays exact);
+ * the trace ring gets at most one line per query per window, carrying how many
+ * executions it coalesced (finding F-3 observability). No-op while the HUD is
+ * not mounted.
  */
 export function noteDbRequery(query: string): void {
   if (!enabled) return;
   bumpPerfCounter(`db.${query}`);
-  traceEvent("debug", "db", `${query} requery`);
+  const now = Date.now();
+  const window = requeryTraceWindows.get(query);
+  if (window && now - window.emittedAt < DB_REQUERY_TRACE_WINDOW_MS) {
+    window.coalesced += 1;
+    return;
+  }
+  const coalesced = window?.coalesced ?? 0;
+  requeryTraceWindows.set(query, { emittedAt: now, coalesced: 0 });
+  traceEvent(
+    "debug",
+    "db",
+    coalesced > 0 ? `${query} requery (+${coalesced} coalesced)` : `${query} requery`,
+  );
 }
 
 // ----------------------------------------------------------- blob URL census --

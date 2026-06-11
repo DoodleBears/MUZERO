@@ -21,20 +21,36 @@ export interface TraceEntry extends Omit<DiagnosticEntry, "event" | "context"> {
 
 const MAX_ENTRIES = 300;
 let nextId = 1;
-let entries: TraceEntry[] = [];
+// Circular buffer: O(1) append. Every log.* call in src/** lands here (the
+// console is only a dev mirror), so the previous copy-per-append
+// (`[...entries].slice(-300)`) made each log line an O(300) allocation during
+// write bursts (memory-perf-audit PRD F-L2). The immutable array consumers
+// need is materialized lazily — once per append *generation*, and only when
+// someone actually reads (panels closed → zero copies).
+const ring: (TraceEntry | undefined)[] = new Array(MAX_ENTRIES);
+let ringHead = 0;
+let ringSize = 0;
+let snapshotCache: TraceEntry[] | null = null;
 const listeners = new Set<() => void>();
 
 function emit() {
   for (const listener of listeners) listener();
 }
 
-function subscribe(listener: () => void): () => void {
+/** Subscribe to ring appends (exported for non-React consumers; see useTraceEntries). */
+export function subscribeTrace(listener: () => void): () => void {
   listeners.add(listener);
   return () => listeners.delete(listener);
 }
 
 function snapshot(): TraceEntry[] {
-  return entries;
+  if (snapshotCache) return snapshotCache;
+  const out: TraceEntry[] = new Array(ringSize);
+  for (let i = 0; i < ringSize; i++) {
+    out[i] = ring[(ringHead + i) % MAX_ENTRIES] as TraceEntry;
+  }
+  snapshotCache = out;
+  return out;
 }
 
 export function traceEvent(
@@ -68,31 +84,39 @@ export function traceDiagnosticEvent(
 }
 
 function appendTraceEntry(entry: Omit<TraceEntry, "id" | "at">): void {
-  entries = [
-    ...entries,
-    {
-      id: nextId++,
-      at: Date.now(),
-      ...entry,
-    },
-  ].slice(-MAX_ENTRIES);
+  const full: TraceEntry = {
+    id: nextId++,
+    at: Date.now(),
+    ...entry,
+  };
+  if (ringSize < MAX_ENTRIES) {
+    ring[(ringHead + ringSize) % MAX_ENTRIES] = full;
+    ringSize += 1;
+  } else {
+    ring[ringHead] = full;
+    ringHead = (ringHead + 1) % MAX_ENTRIES;
+  }
+  snapshotCache = null;
   emit();
 }
 
 export function clearTrace(): void {
-  entries = [];
+  ring.fill(undefined);
+  ringHead = 0;
+  ringSize = 0;
+  snapshotCache = null;
   emit();
 }
 
 export function getTraceEntries(): TraceEntry[] {
-  return entries;
+  return snapshot();
 }
 
 export function useTraceEntries(): TraceEntry[] {
-  return useSyncExternalStore(subscribe, snapshot, snapshot);
+  return useSyncExternalStore(subscribeTrace, snapshot, snapshot);
 }
 
-export function formatTraceEntries(items: TraceEntry[] = entries): string {
+export function formatTraceEntries(items: TraceEntry[] = snapshot()): string {
   return items.map(formatTraceEntry).join("\n");
 }
 

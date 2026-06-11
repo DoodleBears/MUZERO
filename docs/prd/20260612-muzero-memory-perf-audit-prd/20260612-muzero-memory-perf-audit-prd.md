@@ -16,6 +16,7 @@
 | 3 | 全表查询放大链治理（列表 / 搜索 / 统计） | ✅ Completed | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | 渲染层 GPU / GC 卫生（可视化 + 背景） | 🔄 In Progress（F-6/F-7 被并发改动阻塞） | [Phase 4 Checklist](#phase-4-checklist) |
 | 5 | 大文件内存防护（预热 / 缓存 / 下载） | ✅ Completed（同步 UI 标注待并发改动合入） | [Phase 5 Checklist](#phase-5-checklist) |
+| 6 | 日志 / trace 管线防放大 | ✅ Completed | [Phase 6 Checklist](#phase-6-checklist) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
 
@@ -135,6 +136,10 @@ MUZERO 是本地优先的长驻播放器：用户会让它**连续运行数小�
 | F-11 | DJ 队列无界增长 | [player-store.ts](../../../src/stores/player-store.ts)（playQueue/session.trackIds） | **Low** | 设计确认 |
 | F-12 | artwork 竞态 | [player-store.ts:2122-2155](../../../src/stores/player-store.ts) | **Low** | 确证（非泄漏） |
 | F-13 | 单例卫生项 | media-engine 无 destroy()、theme.ts matchMedia 无 guard、sync-indicator 订阅永驻 | **Low** | 确证（仅 dev/test） |
+| F-L1 | 日志/trace 管线 | [use-trace-archive-recorder.ts](../../../src/hooks/use-trace-archive-recorder.ts) + [trace-archive.ts](../../../src/lib/trace-archive.ts) | **High** | 确证 |
+| F-L2 | trace 环 | [trace.ts](../../../src/lib/trace.ts) `appendTraceEntry` | **Medium** | 确证 |
+| F-L4 | db 重查 trace 事件 | [perf-counters.ts](../../../src/lib/perf-counters.ts) `noteDbRequery`（Phase 1 引入） | **Medium** | 确证 |
+| F-L5 | HUD trace 订阅 | [dev-perf-panel.tsx](../../../src/components/dev/dev-perf-panel.tsx) `useTraceEntries` | **Low** | 确证 |
 
 ### 4.2 逐项细节与修复方向
 
@@ -244,6 +249,27 @@ player-store.ts:2122-2155 两次 `updateMediaSessionMetadata` 交错时（await 
 - [sync-indicator.ts:182-195](../../../src/stores/sync-indicator.ts) 模块级 zustand subscribe 永不退订（prod 单例语义正确，违反「订阅即有 cleanup」规约）。
 
 统一处理：补 guard / 返回 cleanup，一个小 PR 内完成。
+
+#### F-L1（High）trace→archive 管线默认开启且逐事件做整库 IndexedDB 往返
+
+二次审计（用户提示「注意 Log/trace 的处理」）发现的最重日志链路问题。`isTraceArchiveEnabled()` 是 `!== "false"` 判定 → **归档默认开启**；`useTraceArchiveRecorder`（main.tsx 常驻挂载）经 `useTraceEntries` 订阅 trace 环 → **每条日志**触发 React 重渲染 + `appendTraceArchiveEntries`：每次调用**新开一个 IndexedDB 连接 → put → prune 时 `getAll()` 整个归档库（至多 1000 条）+ 排序 → close**。而 `log.*` 的**所有**级别（含 prod 下 console 静默的 debug/info）都进 trace 环——logger.ts 的设计是「Settings Trace 是支持的事实来源，console 只是 dev 镜像」。于是导入 / 流媒体解析 / 同步的每条日志在 prod 都付一次完整 IndexedDB 写循环，正是 prd-create §4 警告的「渲染 tick 之间的主线程停顿（IndexedDB 反序列化）」家族。
+
+- **修复（已实施）**：recorder 不再走 React 订阅（消除逐条重渲染），改为 `subscribeTrace` + **1s trailing 收集窗口**——突发期间至多每秒一次「开库→批量 put→prune→close」；卸载时 flush 尾巴。已知取舍：>300 条/秒的极端突发会让最老条目先轮出 300 容量的环、错过归档（best-effort 镜像可接受，注释已记录）。
+- **验收**：recorder 单测断言 5 连发只产生 1 次 append、水位线不重复归档、卸载冲洗。
+
+#### F-L2（Medium）trace 环每条事件整数组拷贝
+
+trace.ts 旧实现 `entries = [...entries, e].slice(-300)`——每条日志 O(300) 数组拷贝 + 立即通知订阅者。已改为**环形缓冲 O(1) 追加 + 惰性快照**：不可变数组只在「有人读且本代未缓存」时物化一次；诊断面板关闭时零拷贝。行为单测钉死（容量轮转顺序、快照引用稳定性、追加后新 identity——`useSyncExternalStore` 契约）。`data` 的 `sanitizeDiagnosticData` 保持在追加时执行（隐私义务先于存储，条目可能被导出）。
+
+#### F-L4（Medium）Phase 1 引入的 db 重查 trace 事件在突发下反向放大
+
+`noteDbRequery` 每次查询执行发一条 trace 事件——导入突发时 Dexie 每事务提交重跑 liveQuery，数百条事件灌进 trace 环并经 F-L1 链放大（自查自纠：观测设施本身不能成为放大器）。已改为**每查询名 1s 窗口限频**：HUD `db` 行计数器仍精确计每次执行，trace 环每窗口至多一条、并携带窗口内吞掉的次数（`listAllTracks requery (+23 coalesced)`）。
+
+#### F-L5（Low）HUD 自身订阅 trace 环
+
+DevPerfPanel 经 `useTraceEntries` 订阅（为 copy 按钮计数）→ 面板挂载时每条日志重渲染一次面板。已改为复用既有 500ms 快照轮询读 `getTraceEntries().length`，点击时才取全量。
+
+**已核实健康（log/trace 链路）**：trace-archive 有 1000 条 + 7 天双上限 prune；导出经 `sanitizeDiagnosticData` 双重脱敏；TraceRecorder 的 player.state 订阅有 diff 守卫（positionSec 心跳不触发）；`onTimeUpdate` 热路径无 log 调用；prod 下 debug/info 的 console 写出（及其参数 sanitize）在级别检查后短路。
 
 ### 4.3 误报澄清（已核实无问题，避免重复排查）
 
@@ -360,6 +386,22 @@ player-store.ts:2122-2155 两次 `updateMediaSessionMetadata` 交错时（await 
 - [ ] 同步含超大文件的远程集不中断已由单测覆盖（caller 容错结构核实）；用户可见标注待并发改动合入后跟进
 - [x] 既有 sync / musicgen / preload 测试全绿（62 测，含新增超限用例：preload 断言 `blob()` 未被调用、r2-cache 断言无写库不挂链）
 
+### Phase 6: 日志 / trace 管线防放大
+
+**Goal:** 日志与 trace 自身不再是写突发的放大器（详见 §4.2 F-L1/L2/L4/L5）。
+
+**Tasks:**
+- [x] F-L2：trace 环改环形缓冲 O(1) 追加 + 惰性快照（行为单测钉死：容量轮转、快照引用稳定、追加后新 identity）
+- [x] F-L1：archive recorder 弃 React 订阅，改 `subscribeTrace` + 1s trailing 收集——突发期至多 1 次/秒 IndexedDB 写循环；卸载 flush
+- [x] F-L4：`noteDbRequery` trace 发射按查询名 1s 限频（计数器保持精确，限频行携带 coalesced 次数）
+- [x] F-L5：DevPerfPanel 改 500ms 快照轮询 trace 计数，点击时才取全量
+
+### Phase 6 Checklist
+
+- [x] trace / recorder / perf-counters / 诊断面板测试全绿（23 测）
+- [x] preview 验证：HUD 渲染正常、copy trace 计数轮询更新、无崩溃边界
+- [ ] 真机：导入 500 首期间 longtask 无 archive 写循环成因的尖刺（与 S2 一并采集）
+
 ---
 
 ## 6. Out of Scope
@@ -425,3 +467,4 @@ player-store.ts:2122-2155 两次 `updateMediaSessionMetadata` 交错时（await 
 |------|--------|---------|
 | 2026-06-12 | Claude Code | 初稿：全库排查 + 人工核实，13 项发现（1 P0 / 2 High）、6 条误报澄清、5 phase 修复计划 |
 | 2026-06-12 | Claude Code | Phase 1 改为对接既有 trace.ts + DevPerfPanel（frame/longtask/heap 已有，只补 blobs/db-requery/queue 三行）；新增 prod 采集的 Settings 可见开关任务 |
+| 2026-06-12 | Claude Code | Phase 1-5 实施完成（F-6/F-7 与同步 UI 标注因并发改动占用文件推迟；真机基线待采）；新增日志/trace 链路二次审计（F-L1/L2/L4/L5，§4.2）+ Phase 6 实施完成 |
