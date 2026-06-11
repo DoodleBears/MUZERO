@@ -150,6 +150,53 @@ describe("fetchRemotePublishBase", () => {
     ]);
   });
 
+  it("bypasses the cached ETag for keys that just failed a conditional write", async () => {
+    const cache = createRemotePublishBaseCache();
+    await fetchRemotePublishBase({
+      credentials,
+      cache,
+      fetcher: fetchMap({
+        [`${BASE}/manifest.json`]: () => jsonResponse(manifest, '"etag-manifest"'),
+        [`${BASE}/devices/index.json`]: () => jsonResponse(devicesIndex, '"etag-devices"'),
+        [`${BASE}/sets/ses_theirs/index.json`]: () =>
+          jsonResponse(
+            { ...orphanSetIndex, set: { ...orphanSetIndex.set, id: "ses_theirs" } },
+            '"old-set"',
+          ),
+      }),
+      setRemoteIds: ["ses_theirs"],
+    });
+
+    const seen: Array<{ url: string; ifNoneMatch: string | null }> = [];
+    const base = await fetchRemotePublishBase({
+      credentials,
+      cache,
+      forceRefreshKeys: ["sets/ses_theirs/index.json"],
+      setRemoteIds: ["ses_theirs"],
+      fetcher: async (input, init) => {
+        const url = String(input);
+        seen.push({
+          url,
+          ifNoneMatch: new Headers(init?.headers).get("if-none-match"),
+        });
+        if (url.endsWith("/sets/ses_theirs/index.json")) {
+          return jsonResponse(
+            { ...orphanSetIndex, set: { ...orphanSetIndex.set, id: "ses_theirs" } },
+            '"new-set"',
+          );
+        }
+        return new Response(null, { status: 304 });
+      },
+    });
+
+    expect(base.setIndexes?.ses_theirs?.etag).toBe('"new-set"');
+    expect(seen).toEqual([
+      { url: `${BASE}/manifest.json`, ifNoneMatch: '"etag-manifest"' },
+      { url: `${BASE}/devices/index.json`, ifNoneMatch: '"etag-devices"' },
+      { url: `${BASE}/sets/ses_theirs/index.json`, ifNoneMatch: null },
+    ]);
+  });
+
   it("treats a missing manifest as an empty first-publish base without probing indexes", async () => {
     const seen: Array<{ url: string; method?: string; authorization: string | null }> = [];
     const base = await fetchRemotePublishBase({

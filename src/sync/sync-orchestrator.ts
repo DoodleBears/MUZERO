@@ -6,7 +6,7 @@ import type {
   R2ExportPlanForDriveInput,
 } from "./r2-export-plan";
 import { publishedEntityId } from "./r2-import-stream";
-import { isPreconditionFailure } from "./r2-publish";
+import { preconditionFailureKey } from "./r2-publish";
 import type { fetchRemotePublishBase } from "./r2-publish-base";
 import type { runR2PublishSync } from "./r2-publish-sync";
 import type { RemoteSetConflict } from "./r2-pull-diff";
@@ -123,7 +123,7 @@ export function createSyncOrchestrator(deps: SyncOrchestratorDeps): SyncOrchestr
       const MAX_MERGE_RETRIES = 2;
       const fetchBase = deps.fetchPublishBase;
 
-      const readBase = async () => {
+      const readBase = async (forceRefreshKeys: string[] = []) => {
         emit({ phase: "planning" });
         if (!fetchBase) return undefined;
         const base = await fetchBase({
@@ -131,6 +131,7 @@ export function createSyncOrchestrator(deps: SyncOrchestratorDeps): SyncOrchestr
           // Remote indexes of the sets we're about to write — co-editing
           // merge input (PRD §12.5), keyed by published id.
           setRemoteIds: ctx.setIds.map((id) => publishedEntityId("ses", ctx.drive.id, id)),
+          forceRefreshKeys,
           signal: options.signal,
         });
         // Receive half of co-editing: land other devices' set edits locally
@@ -208,8 +209,9 @@ export function createSyncOrchestrator(deps: SyncOrchestratorDeps): SyncOrchestr
             emit({ phase: "cancelled", objectsTotal, bytesTotal });
             return { status: "cancelled" };
           }
-          if (fetchBase && attempt < MAX_MERGE_RETRIES && isPreconditionFailure(error)) {
-            remoteBase = await readBase();
+          const failedKey = preconditionFailureKey(error);
+          if (fetchBase && attempt < MAX_MERGE_RETRIES && failedKey) {
+            remoteBase = await readBase([failedKey]);
             continue;
           }
           emit({

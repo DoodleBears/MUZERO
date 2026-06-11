@@ -216,6 +216,8 @@ describe("createSyncOrchestrator.publish read-merge-write (MW-4)", () => {
     expect(result).toEqual({ status: "completed", runId: "run_2" });
     // The race loser re-reads the remote state and merges instead of clobbering.
     expect(fetchPublishBase).toHaveBeenCalledTimes(2);
+    expect(fetchPublishBase.mock.calls[0]?.[0].forceRefreshKeys).toEqual([]);
+    expect(fetchPublishBase.mock.calls[1]?.[0].forceRefreshKeys).toEqual(["manifest.json"]);
     expect(buildPlan).toHaveBeenCalledTimes(2);
     expect(buildPlan.mock.calls[0]?.[0]).toMatchObject({ remoteBase: baseA });
     expect(buildPlan.mock.calls[1]?.[0]).toMatchObject({ remoteBase: baseB });

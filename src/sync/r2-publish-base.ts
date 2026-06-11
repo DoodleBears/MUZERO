@@ -57,6 +57,8 @@ export interface FetchRemotePublishBaseInput {
   credentials: R2LocalCredentials;
   /** Published set ids whose remote indexes should be fetched for the merge. */
   setRemoteIds?: string[];
+  /** Keys that just failed a conditional write; bypass their cached ETag on this read. */
+  forceRefreshKeys?: string[];
   fetcher?: SyncFetch;
   now?: () => Date;
   signal?: AbortSignal;
@@ -116,7 +118,9 @@ async function readRemoteJson<T>(
   schema: ZodType<T>,
   ctx: FetchRemotePublishBaseInput & { fetcher: SyncFetch },
 ): Promise<RemoteBaseObject<T> | undefined> {
-  const cached = ctx.cache?.get(key);
+  const forceRefresh = ctx.forceRefreshKeys?.includes(key) ?? false;
+  if (forceRefresh) ctx.cache?.delete(key);
+  const cached = forceRefresh ? undefined : ctx.cache?.get(key);
   const response = await r2SignedFetch({
     fetcher: ctx.fetcher,
     credentials: ctx.credentials,

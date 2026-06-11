@@ -28,6 +28,10 @@ export function isPreconditionFailure(error: unknown): boolean {
   return error instanceof R2PublishHttpError && error.status === 412;
 }
 
+export function preconditionFailureKey(error: unknown): string | undefined {
+  return error instanceof R2PublishHttpError && error.status === 412 ? error.key : undefined;
+}
+
 export interface R2PublishProgressEvent {
   object: R2ExportObject;
   status: R2PublishObjectStatus;
