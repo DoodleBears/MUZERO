@@ -63,7 +63,7 @@ export const FLOW_DEFAULTS = {
   reactivity: 75,
   opacity: 50,
   dim: 0,
-  blendMode: "screen" as FlowBlendMode,
+  blendMode: "overlay" as FlowBlendMode,
 } as const;
 
 /** Blend modes offered for compositing the flow over the background (CSS
