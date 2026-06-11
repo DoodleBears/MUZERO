@@ -134,7 +134,7 @@ export function ReorderableTrackList({
       onDragCancel={onDragCancel}
     >
       <SortableContext items={ids} strategy={verticalListSortingStrategy}>
-        <ul className={cn("flex min-h-0 flex-col gap-0.5 overflow-y-auto", className)}>
+        <ul className={cn("flex h-full flex-col gap-0.5 overflow-y-auto", className)}>
           {order.map((track) => (
             <SortableReorderRow
               key={track.id}
