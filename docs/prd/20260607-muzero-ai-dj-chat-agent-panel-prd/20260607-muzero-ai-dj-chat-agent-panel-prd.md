@@ -244,16 +244,21 @@ interface ChatUiState {
 
 | Chat-facing | Runtime canonical | 读/写 | 落点 |
 |---|---|---|---|
-| `library_search_tracks` | `muzero.library.search_tracks` | 读 | [`track-search.ts`](../../../src/lib/track-search.ts)（搜 tags + 各曲 memory.note）over `listAllTracks` |
+| `library_search_tracks` | `muzero.library.search_tracks` | 读 | [`track-search.ts`](../../../src/lib/track-search.ts)（搜 tags + 各曲 memory.note）over `listAllTracks`。**多关键词** `queries[]`（per-term 搜、`match` any=并集/all=交集），**字段投影** `fields`（默认仅 `id`+`title`，缩小 JSON 回传），**放开 50 上限**（`limit` ≤500，回 `{total, returned, tracks}`，`total` 是完整命中数让 agent 知是否被截断）|
 | `library_list_tags` | `muzero.library.list_tags` | 读 | `getAllTags` |
 | `now_playing_get` | `muzero.player.now_playing` | 读 | player-store：当前曲 + 队列摘要 + 活跃歌单（**也每轮注入 system**，见下）|
 | `set_list` / `set_get` | `muzero.set.list` / `.get` | 读 | `listSessions` / `getSession`（歌单=`DjSession`）|
 | `set_create` | `muzero.set.create` | 写·免费 | `createSession`（seed/config）|
-| `set_update` | `muzero.set.update` | 写·免费 | 改名/config；歌单成员加删重排（`appendTrackIds`/`removeTrackFromSession`，union op）|
+| `set_update` | `muzero.set.update` | 写·免费 | 改名/config |
+| `set_add_tracks` | `muzero.set.add_tracks` | 写·免费 | **【新】把现有本地 track id 加进歌单（策展核心）**——「搜出所有 lofi → 建新歌单」。`prependTrackIds`（幂等，只加存在的本地曲、跳过已在的），让 agent 把搜索结果**整理成歌单**。用于**手挑少量** id |
+| `set_add_by_search` | `muzero.set.add_by_search` | 写·免费 | **【新】一步策展**：按 `queries[]`（match any/all）搜**全库**、把每条命中**直接灌进歌单**——agent 无需把每个 id 列进上下文（大库不爆 token）。回 `{matched, added, skipped}`。用于「把整个流派/心情做成歌单」 |
 | `set_delete` | `muzero.set.delete` | 写·免费 | 删歌单 |
-| `set_switch` | `muzero.set.switch` | 写·免费 | `playSet(setId)`：把歌单灌进播放列表 |
-| `queue_add` | `muzero.queue.add` | 写·免费 | `playNext` / `addToQueue`（曲或整张歌单加入播放列表，含「下一手」）|
-| `queue_edit` | `muzero.queue.edit` | 写·免费 | `removeFromQueue` / `reorderQueue` / `setRepeat`（union op）|
+| `set_switch` | `muzero.set.switch` | 写·免费 | `playQueueSet(setId)`：把歌单灌进播放列表（**只装载、不一定播**）|
+| `play_set` | `muzero.player.play_set` | 控制 | **【新】立即播放歌单**：装载进播放列表（覆盖）+ 从头开始播。经 `PlayerControl` 桥接 player-store（`setActiveSession`+`play`，懒 import 保持 tool 模块无 store 耦合/可测）|
+| `play_track` | `muzero.player.play_track` | 控制 | **【新】切换当前播放歌曲**到指定本地曲（`store.playTrack`，立即播）|
+| `queue_add` | `muzero.queue.add` | 写·免费 | `playNext` / `append`（往播放列表塞，含「下一手」）|
+| `queue_edit` | `muzero.queue.edit` | 写·免费 | `setRepeat`（循环方式）|
+| `queue_clear` | `muzero.queue.clear` | 写·免费 | **【新】清空播放列表**（`playQueueSet([])`，不删任何歌单）|
 | `add_memory` | `muzero.memory.add` | 写·免费 | `addMemory(trackId,{note,photo?})`；**now-playing 感知**：默认作用于「正在播放的曲」，让你**听歌时对话加记忆**（"给这首记一句『写代码神器』、加 #雨天"）。一曲多条（见数据模型 PRD）|
 | `online_search_tracks` | `muzero.online.search_tracks` | 读·**免费** | **🟢 仅当启用任一在线源时插入**（`hasEnabledStreamSources`）。搜 YouTube / Bilibili / NetEase（`resolveEnabledStreamSources` + 各 `source.search()`，并发、单源失败不影响其余）→ 返回 `StreamSearchHit[]`。**便宜**——生成贵、搜索几乎免费，本地 LLM（LM Studio）也能跑 |
 | `online_add_tracks` | `muzero.online.add_tracks` | 写·免费 | **🟢 仅当启用在线源时插入**。把上一步 hits **入库**到指定歌单（`addHitsToSet`，按 source+externalId 去重、**不自动播放**、可撤），不审批 |
@@ -262,6 +267,7 @@ interface ChatUiState {
 | `suggest_next_prompts` | （UI-only） | 读 | 非 mutating、无审批、返回 `{accepted,count}` |
 
 **约定（硬性）**：
+- **歌单(Set) vs 播放列表(PlayQueue) 已是既有机制（数据模型 PRD DM-1）**：**播放列表 = 单例「默认歌单」**，是当前在播的可变列表，player 消费它。agent 可全程驱动:**整理→建歌单→播放**（`library_search_tracks`→`set_create`→`set_add_tracks`→`play_set`）、**填充/替换/覆盖**（`play_set`/`set_switch` 用歌单灌满）、**往里塞**（`queue_add` next/append）、**清空**（`queue_clear`）、**切当前**（`play_track`）。**写播放列表 DB ≠ 出声**：实际播放由 player-store 驱动(需 AudioEngine 已解锁)，故 `play_set`/`play_track` 经 `PlayerControl` 桥接 store（懒 import，tool 模块仍无 store 耦合、可单测 fake control）。
 - **工具集按配置裁剪（`createDjChatTools({includeGenerate, includeOnline})`，agent 每轮按 settings 计算）**：
   - **生成贵 → 默认关**：`dj_propose_briefs` / `dj_generate_tracks` **仅当 `canGenerateMusic(settings)`**（用户在 Settings 开启 AI 生成 **且** 配好 cloud BYOK）才插入。未配置/未开启 → 这两个工具根本不进 tool set（模型不会去花钱）。
   - **搜索便宜 → 有源就给**：`online_search_tracks` / `online_add_tracks` **仅当 `hasEnabledStreamSources(settings)`**（启用了 YT/B站/网易云任一）才插入。这是「不生成也能用」的核心路径——本地 LLM 即可策展真实歌曲、零生成成本。
@@ -630,6 +636,8 @@ chat 入口落在**记忆 icon + 切 tab icon 的左边**、占该行剩余宽�
 | 2026-06-11 | Claude | **CHAT-5f provider 品牌图标 + 图标化 combobox（owner：对齐 ClipCombo 的真实 LLM icon）**，2 个原子 commit。**5f1** `provider-brand-icons.tsx`——Claude/Gemini/DeepSeek/OpenRouter 路径内联自 simple-icons（**CC0-1.0**，提取后移除该 dep，零运行时依赖）+ OpenAI 自研规范 path（simple-icons 已下架）；`getProviderBrandIcon(id)` 返回 `currentColor` 单色 glyph（anthropic→claude 别名），Groq/动态 custom/未知 → 通用 `Cpu` 兜底（恒可渲染）。**评估并否决 `@lobehub/icons`**（依赖 `antd-style` + peer `antd`，与 Tailwind+Base UI 不符）。**5f2** provider 选择由 grid 改 **`provider-combobox.tsx`**（Popover+Command：每 item 品牌 icon + label + key 状态 ready/optional/missing，trigger 显示选中 provider icon）；给 `Command` 原语加可选 `icon`/`description` slot（向后兼容）；`ModelCatalogCombobox` trigger + `ChatModelPicker` item/trigger 同款 provider icon。i18n `settings.llmProviderSearch` ×4；改写 `llm-provider-settings.test`（combobox 交互）+ 修 base 既有 `chat-model-picker.test`（input role 是 combobox 非 searchbox）。88 测全绿、tsc 清。 |
 | 2026-06-12 | Claude | **CHAT-5g 模型能力 + 切换 bug**（已合 main）：**5g1** 修 model 切换「没反应」（`llmModelForPreset` 之前对非 custom preset 只认 hardcoded 列表 → 实时目录选的 model 被打回默认；改为无条件信任 remembered）；**5g2** `LlmModelPreset` 加 `supportsVision/Audio/Tools` + `parseModelCatalog` 读 OpenRouter `architecture.input_modalities`/`supported_parameters`；**5g3** `ModelCapabilityBadges`（lucide：Eye/AudioLines/Wrench/Ruler+128K/Coins+$in/$out，title tooltip）挂 model combobox item + trigger。|
 | 2026-06-12 | Claude | **CHAT-5h 在线搜索入库 tool + 生成默认关 + minimize 修复**（owner，5 个原子 commit，独立 worktree）。**① UI**：chip→icon 最小化原用共享 `layoutId` morph 两个不同尺寸盒子 → 整体拉伸变形；改单一 `overflow-hidden` 容器 + `layout` 动画，Sparkles 钉左、输入+按钮向右裁剪收起（左 Sparkles 钮兼任最小化/恢复）。**② 门控放宽**：`canUseDjChat` 改 **LLM-only**（生成不再是前提——搜索便宜、本地 LLM 可跑）；新 `AppSettings.aiDjGenerationEnabled`（**默认关**）+ `canGenerateMusic`（开关 + cloud 配好）+ `hasEnabledStreamSources`。**③ 工具**：新增 `online_search_tracks`（搜 YT/B站/网易云，读·免费）+ `online_add_tracks`（`addHitsToSet` 入库、去重、不自动播、不审批）；`createDjChatTools` 按 `includeGenerate`/`includeOnline` 裁剪，agent 每轮按 settings 计算（未配生成 → 不插入花钱工具；有在线源 → 插入搜索工具）。**④ Settings**：音乐生成区改「启用 AI 音乐生成」勾选（默认关），开启才显示 cloud BYOK 配置；**移除 mock/离线本地选项**。重写 §4.2 工具表 + §5.1 门控 + i18n ×4。176 测全绿、tsc 清。|
+| 2026-06-12 | Claude | **CHAT-5i agent 策展播放列表**（owner：「AI 搜集我的歌→建歌单→播放；切当前/插下一首/清空/用歌单覆盖播放列表」）。澄清:**机制已存在**(歌单 Set vs 播放列表 PlayQueue 单例，数据模型 DM-1)，缺的是 agent 工具 + 「写队列≠出声」的播放桥接。新增 5 工具:**`set_add_tracks`**(把现有本地 track id 加进歌单=策展核心，`prependTrackIds` 幂等、只加存在的)、**`queue_clear`**(`playQueueSet([])` 清空)、**`play_set`**(装载歌单+从头播)、**`play_track`**(切当前曲)；后两个经 `PlayerControl` 接口桥接 player-store(`setActiveSession`+`play` / `playTrack`)——**懒 `import('@/stores/player-store')`** 保持 tool 模块无 store 耦合、单测注入 fake control。system prompt 补策展→播放流程指引。重写 §4.2 工具表 + §4.2 约定(播放列表机制说明)。chat 套件 55 测全绿、tsc 清。|
+| 2026-06-12 | Claude | **CHAT-5j 搜索可扩展性 + 一步策展**（owner：「query 歌曲似乎有 50 上限，怎么设计让 agent 能很好筛歌」）。`library_search_tracks` 三项改进：**① 多关键词** `queries[]`（per-term 搜，`match` any=并集「凑一个流派」/all=交集「收窄」）；**② 字段投影** `fields`（默认仅回 `id`+`title` 缩小 JSON，按需取 artist/album/tags/…，artist/album 从 `mediaMetadata`/`streamMeta` 派生）；**③ 放开 50 上限**（`limit`≤500，回 `{total, returned, tracks}`，`total` 是完整命中数让 agent 知是否被截断）。新增 **`set_add_by_search`**(`muzero.set.add_by_search`)：按 `queries[]` 搜**全库**(无展示上限)、把每条命中**直接灌进歌单**——matched id 永不进 LLM 上下文，大库不爆 token，回 `{matched, added, skipped}`。system prompt 改用「set_create + set_add_by_search 一步成单，set_add_tracks 仅手挑少量」。重写 §4.2 工具表两行。chat 套件 59 测全绿、tsc 清。|
 
 ---
 

@@ -7,6 +7,7 @@ import {
   getTrack,
   getTrackBlob,
   memoryNotesByTrack,
+  playQueueSet,
   saveSettings,
 } from "@/db/repositories";
 import { trackBriefSchema } from "@/dj/dj-brief-schema";
@@ -19,6 +20,8 @@ import {
   executeOnlineSearchTracks,
   executeProposeBriefs,
   executeSearchTracks,
+  executeSetAddBySearch,
+  executeSetAddTracks,
   generateTracksInputSchema,
   proposeBriefsInputSchema,
 } from "./dj-chat-tools";
@@ -244,7 +247,81 @@ describe("DJ chat tools", () => {
     });
 
     const result = await executeSearchTracks({ query: "shibuya", limit: 10 }, { db });
+    expect(result.total).toBe(1);
+    expect(result.returned).toBe(1);
     expect(result.tracks.map((track) => track.title)).toEqual(["Metro Bloom"]);
+    // default projection is id+title only — keep the JSON payload tiny.
+    expect(Object.keys(result.tracks[0]).sort()).toEqual(["id", "title"]);
+  });
+});
+
+describe("search projection + multi-keyword + curate-by-search", () => {
+  function brief(title: string, caption: string) {
+    return trackBriefSchema.parse({ title, caption, lyrics: "", durationSec: 60 });
+  }
+
+  async function seed() {
+    const src = await createSession({ seedPrompt: "lib" }, db);
+    const gen = await executeGenerateTracks(
+      {
+        sessionId: src.id,
+        briefs: [
+          brief("Night Drive", "deep techno warehouse"),
+          brief("Rain Loop", "lofi piano beat"),
+          brief("Sunset Tape", "lofi chillhop with techno bass"),
+        ],
+      },
+      { db, providerId: "mock" },
+    );
+    return { src, ids: gen.diff.createdTrackIds };
+  }
+
+  it("merges queries[] with match 'any' (union) and 'all' (intersection)", async () => {
+    await seed();
+    const anyHit = await executeSearchTracks({ queries: ["techno", "lofi"], match: "any" }, { db });
+    expect(anyHit.total).toBe(3); // every track matches at least one keyword
+
+    const allHit = await executeSearchTracks({ queries: ["techno", "lofi"], match: "all" }, { db });
+    expect(allHit.tracks.map((t) => t.title)).toEqual(["Sunset Tape"]); // only the one with both
+  });
+
+  it("projects only requested fields and reports total vs returned under a limit", async () => {
+    await seed();
+    const out = await executeSearchTracks({ query: "lofi", fields: ["id", "kind"], limit: 1 }, { db });
+    expect(out.total).toBe(2); // Rain Loop + Sunset Tape match "lofi"
+    expect(out.returned).toBe(1); // capped by limit
+    expect(out.tracks).toHaveLength(1);
+    expect(Object.keys(out.tracks[0]).sort()).toEqual(["id", "kind"]);
+  });
+
+  it("set_add_by_search curates every match into a set (deduped) without listing ids", async () => {
+    await seed();
+    const target = await createSession({ seedPrompt: "playlist" }, db);
+
+    const first = await executeSetAddBySearch(
+      { sessionId: target.id, queries: ["lofi"], match: "any" },
+      { db },
+    );
+    expect(first.status).toBe("ok");
+    expect(first.diff.matched).toBe(2);
+    expect(first.diff.added).toBe(2);
+    expect((await getSession(target.id, db))?.trackIds.length).toBe(2);
+
+    // Re-running is idempotent: same matches, nothing new added.
+    const again = await executeSetAddBySearch(
+      { sessionId: target.id, queries: ["lofi"] },
+      { db },
+    );
+    expect(again.diff.matched).toBe(2);
+    expect(again.diff.added).toBe(0);
+    expect(again.diff.skipped).toBe(2);
+
+    const missing = await executeSetAddBySearch(
+      { sessionId: "ses_missing", queries: ["lofi"] },
+      { db },
+    );
+    expect(missing.status).toBe("error");
+    expect(missing.warnings).toContain("missing-session");
   });
 });
 
@@ -311,5 +388,66 @@ describe("online search / ingest tools", () => {
     );
     expect(out.status).toBe("error");
     expect(out.warnings).toContain("missing-session");
+  });
+});
+
+describe("curation + queue clear", () => {
+  function brief(title: string) {
+    return trackBriefSchema.parse({ title, caption: "c", lyrics: "", durationSec: 60 });
+  }
+
+  it("set_add_tracks adds existing local ids to a set (idempotent; skips unknown)", async () => {
+    const src = await createSession({ seedPrompt: "src" }, db);
+    const gen = await executeGenerateTracks(
+      { sessionId: src.id, briefs: [brief("A"), brief("B")] },
+      { db, providerId: "mock" },
+    );
+    const [a, b] = gen.diff.createdTrackIds;
+
+    const target = await createSession({ seedPrompt: "playlist" }, db);
+    const r1 = await executeSetAddTracks(
+      { sessionId: target.id, trackIds: [a, b, "trk_missing"] },
+      { db },
+    );
+    expect(r1.diff.added).toBe(2);
+    expect(r1.diff.skipped).toBe(1); // the unknown id
+    expect((await getSession(target.id, db))?.trackIds.sort()).toEqual([a, b].sort());
+
+    const r2 = await executeSetAddTracks({ sessionId: target.id, trackIds: [a] }, { db });
+    expect(r2.diff.added).toBe(0); // already present
+
+    const missing = await executeSetAddTracks({ sessionId: "ses_x", trackIds: [a] }, { db });
+    expect(missing.status).toBe("error");
+  });
+
+  it("queue_clear empties the play queue", async () => {
+    const src = await createSession({ seedPrompt: "q" }, db);
+    const gen = await executeGenerateTracks(
+      { sessionId: src.id, briefs: [brief("Q")] },
+      { db, providerId: "mock" },
+    );
+    await playQueueSet(gen.diff.createdTrackIds, {}, db);
+    expect((await getPlayQueue(db)).entries.length).toBe(1);
+
+    const tools = createDjChatTools({ db });
+    await tools.queue_clear.execute?.({}, { toolCallId: "t", messages: [] } as never);
+    expect((await getPlayQueue(db)).entries.length).toBe(0);
+  });
+
+  it("play_set / play_track drive the injected player control", async () => {
+    const calls: string[] = [];
+    const player = {
+      playSet: async (id: string) => {
+        calls.push(`set:${id}`);
+      },
+      playTrack: async (id: string) => {
+        calls.push(`track:${id}`);
+      },
+    };
+    const tools = createDjChatTools({ db, player });
+    const opts = { toolCallId: "t", messages: [] } as never;
+    await tools.play_set.execute?.({ sessionId: "ses_1" }, opts);
+    await tools.play_track.execute?.({ trackId: "trk_1" }, opts);
+    expect(calls).toEqual(["set:ses_1", "track:trk_1"]);
   });
 });

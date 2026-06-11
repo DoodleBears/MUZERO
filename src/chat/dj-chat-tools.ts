@@ -44,10 +44,62 @@ export const agentWriteResultSchema = z.object({
 
 export type AgentWriteResult = z.infer<typeof agentWriteResultSchema>;
 
+/** Fields the agent can project in search results — keep payloads small. */
+export const TRACK_RESULT_FIELDS = [
+  "id",
+  "title",
+  "artist",
+  "album",
+  "tags",
+  "durationSec",
+  "origin",
+  "kind",
+  "liked",
+  "playCount",
+] as const;
+export type TrackResultField = (typeof TRACK_RESULT_FIELDS)[number];
+
 export const searchTracksInputSchema = z.object({
-  query: z.string().default(""),
-  limit: z.number().int().min(1).max(50).default(12),
+  /** One or more keywords; each is matched independently (combined per `match`). */
+  queries: z.array(z.string().min(1)).max(8).optional(),
+  /** Single-keyword convenience (merged with `queries`). */
+  query: z.string().optional(),
+  /** "any" = a track matching ANY keyword (gather a genre); "all" = ALL keywords. */
+  match: z.enum(["any", "all"]).default("any"),
+  /** Which fields to return per track. Default ["id","title"] to keep JSON tiny. */
+  fields: z.array(z.enum(TRACK_RESULT_FIELDS)).optional(),
+  /** Cap returned rows (the full match count is reported as `total`). */
+  limit: z.number().int().min(1).max(500).default(30),
 });
+
+export type SearchTracksInput = z.input<typeof searchTracksInputSchema>;
+
+/** Project a Track to only the requested fields (artist/album derived from metadata). */
+function projectTrack(track: Track, fields: readonly TrackResultField[]): Record<string, unknown> {
+  const row: Record<string, unknown> = {};
+  for (const f of fields) {
+    if (f === "artist") row.artist = track.mediaMetadata?.artists?.[0] ?? track.streamMeta?.artist;
+    else if (f === "album") row.album = track.mediaMetadata?.album ?? track.streamMeta?.album;
+    else row[f] = track[f as keyof Track];
+  }
+  return row;
+}
+
+/** Multi-keyword search: per-term match, combined by union ("any") or intersection ("all"). */
+function searchMultiTerm(
+  tracks: Track[],
+  terms: string[],
+  match: "any" | "all",
+  notes?: ReadonlyMap<string, readonly string[]>,
+): Track[] {
+  const cleaned = terms.map((t) => t.trim()).filter(Boolean);
+  if (cleaned.length === 0) return tracks;
+  if (cleaned.length === 1) return searchTracks(tracks, cleaned[0], notes);
+  const perTerm = cleaned.map((t) => new Set(searchTracks(tracks, t, notes).map((x) => x.id)));
+  return tracks.filter((t) =>
+    match === "all" ? perTerm.every((s) => s.has(t.id)) : perTerm.some((s) => s.has(t.id)),
+  );
+}
 
 export const generateTracksInputSchema = z.object({
   sessionId: z.string().min(1),
@@ -93,6 +145,50 @@ export const onlineAddInputSchema = z.object({
 
 export type OnlineAddInput = z.input<typeof onlineAddInputSchema>;
 
+export const setAddTracksInputSchema = z.object({
+  sessionId: z.string().min(1),
+  trackIds: z.array(z.string().min(1)).min(1).max(200),
+});
+
+export type SetAddTracksInput = z.input<typeof setAddTracksInputSchema>;
+
+export const setAddBySearchInputSchema = z.object({
+  sessionId: z.string().min(1),
+  queries: z.array(z.string().min(1)).min(1).max(8),
+  match: z.enum(["any", "all"]).default("any"),
+  /** Safety cap on how many matches to add (no 50-item display limit applies here). */
+  limit: z.number().int().min(1).max(2000).default(1000),
+});
+
+export type SetAddBySearchInput = z.input<typeof setAddBySearchInputSchema>;
+
+/**
+ * Playback side-effects the agent can trigger. Kept behind an interface so the
+ * tool module stays store-free (testable): the real bridge lazily imports the
+ * player-store at call time, tests inject a fake.
+ */
+export interface PlayerControl {
+  /** Load a set into the play queue and start playing from the top (replace). */
+  playSet(sessionId: string): Promise<void>;
+  /** Switch the currently playing song to a specific local track (play now). */
+  playTrack(trackId: string): Promise<void>;
+}
+
+async function defaultPlayerControl(db: MuzeroDB): Promise<PlayerControl> {
+  const { usePlayerStore } = await import("@/stores/player-store");
+  return {
+    async playSet(sessionId) {
+      const store = usePlayerStore.getState();
+      await store.setActiveSession(sessionId);
+      await store.play();
+    },
+    async playTrack(trackId) {
+      const [track] = await getTracksByIds([trackId], db);
+      if (track) await usePlayerStore.getState().playTrack(track);
+    },
+  };
+}
+
 export interface DjChatToolDeps {
   db?: MuzeroDB;
   providerId?: string;
@@ -102,29 +198,28 @@ export interface DjChatToolDeps {
   includeOnline?: boolean;
   /** Injected stream deps for the online tools (tests stub the providers). */
   streamDeps?: StreamSourceDeps;
+  /** Playback bridge for play_set / play_track. Defaults to the live player-store. */
+  player?: PlayerControl;
 }
 
 export async function executeSearchTracks(
-  input: z.infer<typeof searchTracksInputSchema>,
+  rawInput: SearchTracksInput,
   deps: { db?: MuzeroDB } = {},
-): Promise<{ tracks: Array<Pick<Track, "id" | "title" | "kind" | "origin" | "status" | "tags">> }> {
+): Promise<{ total: number; returned: number; tracks: Array<Record<string, unknown>> }> {
+  const input = searchTracksInputSchema.parse(rawInput);
   const db = deps.db ?? defaultDb;
   const tracks = await listAllTracks(db);
   const notes = await memoryNotesByTrack(
     tracks.map((track) => track.id),
     db,
   );
+  const terms = [...(input.queries ?? []), ...(input.query ? [input.query] : [])];
+  const matched = searchMultiTerm(tracks, terms, input.match, notes);
+  const fields = input.fields?.length ? input.fields : (["id", "title"] as const);
   return {
-    tracks: searchTracks(tracks, input.query, notes)
-      .slice(0, input.limit)
-      .map((track) => ({
-        id: track.id,
-        title: track.title,
-        kind: track.kind,
-        origin: track.origin,
-        status: track.status,
-        tags: track.tags,
-      })),
+    total: matched.length, // full match count so the agent knows if it's truncated
+    returned: Math.min(matched.length, input.limit),
+    tracks: matched.slice(0, input.limit).map((track) => projectTrack(track, fields)),
   };
 }
 
@@ -209,6 +304,92 @@ export function executeProposeBriefs(rawInput: ProposeBriefsInput): {
 }
 
 /**
+ * Curate: add EXISTING local track ids to a set's membership list (prepend,
+ * idempotent). This is how the agent turns search results into a playlist —
+ * "gather all my lofi → new set". Only ids that exist as local tracks are added;
+ * unknown ids and already-present members are skipped. Free / undoable.
+ */
+export async function executeSetAddTracks(
+  rawInput: SetAddTracksInput,
+  deps: { db?: MuzeroDB } = {},
+): Promise<AgentWriteResult & { diff: { sessionId: string; added: number; skipped: number } }> {
+  const input = setAddTracksInputSchema.parse(rawInput);
+  const db = deps.db ?? defaultDb;
+  const session = await getSession(input.sessionId, db);
+  if (!session) {
+    return {
+      status: "error",
+      commandId: "muzero.set.add_tracks",
+      summary: "Target set was not found.",
+      diff: { sessionId: input.sessionId, added: 0, skipped: 0 },
+      warnings: ["missing-session"],
+    };
+  }
+  const existing = new Set(session.trackIds);
+  const present = await getTracksByIds(input.trackIds, db); // skips ids with no track row
+  const toAdd = present.map((t) => t.id).filter((id) => !existing.has(id));
+  await prependTrackIds(session.id, toAdd, db);
+  return {
+    status: "ok",
+    commandId: "muzero.set.add_tracks",
+    summary: `Added ${toAdd.length} track(s) to the set; ${input.trackIds.length - toAdd.length} skipped (unknown or already present).`,
+    diff: {
+      sessionId: session.id,
+      added: toAdd.length,
+      skipped: input.trackIds.length - toAdd.length,
+    },
+    warnings: [],
+  };
+}
+
+/**
+ * Curate by query: search the WHOLE local library (no display cap) and add every
+ * match to a set in one call. The matched track ids never enter the LLM context —
+ * the agent says "make a lofi set" and gets back a count — so this scales to a big
+ * library without blowing the token budget. Free / undoable.
+ */
+export async function executeSetAddBySearch(
+  rawInput: SetAddBySearchInput,
+  deps: { db?: MuzeroDB } = {},
+): Promise<
+  AgentWriteResult & { diff: { sessionId: string; matched: number; added: number; skipped: number } }
+> {
+  const input = setAddBySearchInputSchema.parse(rawInput);
+  const db = deps.db ?? defaultDb;
+  const session = await getSession(input.sessionId, db);
+  if (!session) {
+    return {
+      status: "error",
+      commandId: "muzero.set.add_by_search",
+      summary: "Target set was not found.",
+      diff: { sessionId: input.sessionId, matched: 0, added: 0, skipped: 0 },
+      warnings: ["missing-session"],
+    };
+  }
+  const tracks = await listAllTracks(db);
+  const notes = await memoryNotesByTrack(
+    tracks.map((t) => t.id),
+    db,
+  );
+  const matched = searchMultiTerm(tracks, input.queries, input.match, notes).slice(0, input.limit);
+  const existing = new Set(session.trackIds);
+  const toAdd = matched.map((t) => t.id).filter((id) => !existing.has(id));
+  await prependTrackIds(session.id, toAdd, db);
+  return {
+    status: "ok",
+    commandId: "muzero.set.add_by_search",
+    summary: `Matched ${matched.length}; added ${toAdd.length} to the set (${matched.length - toAdd.length} already present).`,
+    diff: {
+      sessionId: session.id,
+      matched: matched.length,
+      added: toAdd.length,
+      skipped: matched.length - toAdd.length,
+    },
+    warnings: [],
+  };
+}
+
+/**
  * Search the user's ENABLED streaming sources (YouTube / Bilibili / NetEase) for
  * songs. Read-only and cheap — the whole point is that search costs nothing
  * (unlike paid generation), so a locally-hosted LLM can curate from real songs.
@@ -276,7 +457,8 @@ export function createDjChatTools(deps: DjChatToolDeps = {}): ToolSet {
   const db = deps.db ?? defaultDb;
   const tools: ToolSet = {
     library_search_tracks: tool({
-      description: "Search local tracks by title, caption, tags, legacy note, and Memory notes.",
+      description:
+        "Search local tracks by title, caption, tags, legacy note, and Memory notes. Pass multiple keywords as `queries` (match \"any\" gathers a genre, \"all\" narrows). Returns are projected to `fields` (default id+title) to keep JSON small; `total` is the full match count, `returned` is what's included. To curate a whole genre into a set without listing every id, prefer set_add_by_search.",
       inputSchema: searchTracksInputSchema,
       execute: (input) => executeSearchTracks(input, { db }),
     }),
@@ -332,6 +514,18 @@ export function createDjChatTools(deps: DjChatToolDeps = {}): ToolSet {
         } satisfies AgentWriteResult;
       },
     }),
+    set_add_tracks: tool({
+      description:
+        "Add existing local track ids to a set (curate a playlist from search results). Idempotent; only known local tracks are added.",
+      inputSchema: setAddTracksInputSchema,
+      execute: (input) => executeSetAddTracks(input, { db }),
+    }),
+    set_add_by_search: tool({
+      description:
+        "Curate in one shot: search the whole library with `queries` (match any/all) and add every match to a set — no need to list track ids. Returns matched/added/skipped counts. Use this to build a genre/mood set from the listener's library.",
+      inputSchema: setAddBySearchInputSchema,
+      execute: (input) => executeSetAddBySearch(input, { db }),
+    }),
     set_switch: tool({
       description: "Load a set's tracks into the playback queue.",
       inputSchema: z.object({
@@ -357,6 +551,40 @@ export function createDjChatTools(deps: DjChatToolDeps = {}): ToolSet {
       description: "Update play queue repeat mode.",
       inputSchema: z.object({ repeat: z.enum(["off", "one", "all"]) }),
       execute: ({ repeat }) => playQueueSetRepeat(repeat, db),
+    }),
+    queue_clear: tool({
+      description: "Empty the play queue (the playlist). Does not delete any set.",
+      inputSchema: z.object({}),
+      execute: () => playQueueSet([], {}, db),
+    }),
+    play_set: tool({
+      description:
+        "Start playing a set now: load its tracks into the play queue (replacing the current playlist) and begin from the top.",
+      inputSchema: z.object({ sessionId: z.string().min(1) }),
+      execute: async ({ sessionId }) => {
+        await (deps.player ?? (await defaultPlayerControl(db))).playSet(sessionId);
+        return {
+          status: "ok",
+          commandId: "muzero.player.play_set",
+          summary: "Playing the set.",
+          diff: { sessionId },
+          warnings: [],
+        } satisfies AgentWriteResult;
+      },
+    }),
+    play_track: tool({
+      description: "Switch the currently playing song to a specific local track and play it now.",
+      inputSchema: z.object({ trackId: z.string().min(1) }),
+      execute: async ({ trackId }) => {
+        await (deps.player ?? (await defaultPlayerControl(db))).playTrack(trackId);
+        return {
+          status: "ok",
+          commandId: "muzero.player.play_track",
+          summary: "Switched the current track.",
+          diff: { trackId },
+          warnings: [],
+        } satisfies AgentWriteResult;
+      },
     }),
     add_memory: tool({
       description: "Attach a Memory note to a local track.",
