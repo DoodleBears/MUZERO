@@ -143,6 +143,8 @@
     "volume": "Volume",
     "shuffle": "Shuffle",
     "playbackError": "Playback error",
+    "loadingRemote": "Downloading from cloud: {{title}}",
+    "loadingTrack": "Preparing: {{title}}",
     "streamNeedsAccess": "This song needs you to log in to that source (VIP / members only)"
   },
   "dj": {

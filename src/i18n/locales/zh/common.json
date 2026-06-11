@@ -134,6 +134,8 @@
     "volume": "音量",
     "shuffle": "随机播放",
     "playbackError": "播放出错",
+    "loadingRemote": "正在从云端下载：{{title}}",
+    "loadingTrack": "正在准备：{{title}}",
     "streamNeedsAccess": "这首歌需要登录该来源才能播放（VIP / 会员专享）"
   },
   "dj": {

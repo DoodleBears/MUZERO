@@ -29,6 +29,7 @@
 | 14 | Smart sync content fingerprinting | ✅ Done | [§12.10](#1210-phase-14-smart-sync-content-fingerprinting) |
 | 15 | Cloud-to-Local Playlist Cache UX | ✅ Done | [§12.11](#1211-phase-15-cloud-to-local-playlist-cache-ux) |
 | 16 | Pull identity dedupe + metadata integrity | ✅ Done | [§12.12](#1212-phase-16-pull-identity-dedupe--metadata-integrity) |
+| 17 | Remote Playback Handoff UX | ✅ Done | [§12.13](#1213-phase-17-remote-playback-handoff-ux) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
 
@@ -2396,12 +2397,38 @@ Do not record secrets, full signed URLs, or media content.
 
 **Outcome (2026-06-11): Phase 16 ✅.** Remote set previews now carry publisher identity, Cloud Drive import-all skips local-device authored sets, and the pull diff's unchanged path verifies track row integrity before suppressing an apply. If metadata is missing, the pull re-runs `importRemoteSetStream` and repairs the local track rows without creating duplicate sessions.
 
+### 12.13 Phase 17: Remote Playback Handoff UX
+
+**Goal:** make R2-backed playback feel intentional even when media bytes cannot start instantly. Users should never wonder whether their click worked, and active playback should not fall silent merely because the next cloud object is still downloading.
+
+**Status (2026-06-11):** Phase 17 is completed. When a song is already playing and the user selects an uncached R2 remote track, MUZERO now keeps the current track/cursor/metadata active while it downloads the target remote object, shows a Dock-level loading row, and commits the track switch only after the target media bytes are ready to load.
+
+**Product requirements:**
+
+1. **Hold current playback during remote preparation.**
+   - If a track is actively playing, selecting an uncached R2 remote track should keep the current audio, cover, progress, lyrics, and memory context stable until the remote media fetch succeeds.
+   - If no track is playing, MUZERO may show the target track as current while preparing it because there is no previous audio context to preserve.
+2. **Visible loading feedback.**
+   - The Dock should show a compact status row above the player card while the target remote media is being requested/downloaded.
+   - The row should name the target track and use localized copy so the delay reads as intentional work, not a broken click.
+3. **Race-safe handoff.**
+   - Rapidly choosing another track must abort or invalidate the previous remote load; a stale remote fetch must not switch playback after the user has moved on.
+   - The persistent play-queue cursor should update only when MUZERO commits the new track handoff.
+
+**Checklist:**
+
+- [x] RH-1 Add playback loading state with request tokens/abort handling for remote loads.
+- [x] RH-2 Defer R2 `currentIndex` handoff while current audio is playing, then commit after bytes are ready.
+- [x] RH-3 Render a Dock loading row with localized remote-preparation copy.
+- [x] RH-4 Add regression coverage for the held-current-song remote handoff.
+
 ---
 
 ## 13. Document Change Log
 
 | Date | Author | Changes |
 |------|--------|---------|
+| 2026-06-11 | MUZERO | Phase 17 completed: R2 remote playback now uses a held-current-track handoff when another song is already playing. MUZERO displays a Dock loading row while the target object downloads, aborts/invalidates stale loads, and commits `currentIndex` only after the target media is ready. |
 | 2026-06-11 | MUZERO | Phase 16 completed: remote set previews preserve `publishedBy`, Cloud Drive automatic/manual import skips sets published by the local device to prevent `2 + 7 + 2` self-duplication, and pull diff now verifies local track metadata integrity before treating a set as unchanged so partial imports are repaired. |
 | 2026-06-11 | MUZERO | Phase 16 added from QA: avoid B-device self-published set duplication during import-all by preserving `publishedBy`, and strengthen pull diff so an existing set shell without complete track metadata is repaired instead of treated as unchanged. |
 | 2026-06-11 | MUZERO | Phase 15 completed: playlist track rows and set headers now treat R2 `remoteMediaUrl` tracks without local blobs as cacheable-to-device, reusing the existing `mediaBlobs` cache path so both single-track and whole-set "download to local" actions work for cloud-drive media. |

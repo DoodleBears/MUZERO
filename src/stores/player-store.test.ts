@@ -147,6 +147,14 @@ function expectLoadedBlob(kind: Track["kind"], mime: string): Blob {
   return loadedBlob;
 }
 
+function deferredResponse() {
+  let resolve!: (response: Response) => void;
+  const promise = new Promise<Response>((res) => {
+    resolve = res;
+  });
+  return { promise, resolve };
+}
+
 describe("player-store playback resume", () => {
   it("hydrates the last queue cursor and active set from IndexedDB", async () => {
     const { session, first, second, usePlayerStore } = await seedQueue(1);
@@ -181,12 +189,107 @@ describe("player-store playback resume", () => {
 
     await usePlayerStore.getState().play();
 
-    expect(platformFetchMock).toHaveBeenCalledWith("https://media.example.com/second.mp3", {
-      cache: "no-store",
-    });
+    expect(platformFetchMock).toHaveBeenCalledWith(
+      "https://media.example.com/second.mp3",
+      expect.objectContaining({ cache: "no-store" }),
+    );
     expectLoadedBlob("audio", "audio/mpeg");
     expect(mediaEngineMock.seek).toHaveBeenCalledWith(12);
     expect(mediaEngineMock.play).toHaveBeenCalled();
+  });
+
+  it("keeps the current song visible and playing while the next R2 track downloads", async () => {
+    const { db, first, second, usePlayerStore } = await seedQueue(0);
+    await db.mediaBlobs.put({
+      id: "blb_first",
+      trackId: first.id,
+      role: "media",
+      mime: "audio/mpeg",
+      bytes: 3,
+      blob: new Blob([new Uint8Array([1, 2, 3])], { type: "audio/mpeg" }),
+    });
+    await db.tracks.update(first.id, { status: "ready", blobId: "blb_first" });
+    await db.tracks.update(second.id, {
+      status: "ready",
+      remoteMediaUrl: "https://media.example.com/second.mp3",
+    });
+    usePlayerStore.getState().init();
+
+    await waitFor(() => expect(usePlayerStore.getState().queue).toHaveLength(2));
+    await usePlayerStore.getState().playIndex(0);
+    usePlayerStore.setState({ isPlaying: true });
+    mediaEngineMock.loadBlob.mockClear();
+    mediaEngineMock.play.mockClear();
+    const remote = deferredResponse();
+    platformFetchMock.mockImplementationOnce(async () => remote.promise);
+
+    const playNext = usePlayerStore.getState().playIndex(1);
+
+    await waitFor(() =>
+      expect(platformFetchMock).toHaveBeenCalledWith(
+        "https://media.example.com/second.mp3",
+        expect.objectContaining({ cache: "no-store" }),
+      ),
+    );
+    expect(usePlayerStore.getState().currentIndex).toBe(0);
+    expect(usePlayerStore.getState().playbackLoading).toMatchObject({
+      trackId: second.id,
+      title: second.title,
+      sourceKind: "remote",
+    });
+    expect(mediaEngineMock.loadBlob).not.toHaveBeenCalled();
+
+    remote.resolve(
+      new Response("remote", {
+        headers: { "content-type": "audio/mpeg" },
+      }),
+    );
+    await playNext;
+
+    expect(usePlayerStore.getState().currentIndex).toBe(1);
+    expect(usePlayerStore.getState().playbackLoading).toBeNull();
+    expectLoadedBlob("audio", "audio/mpeg");
+    expect(mediaEngineMock.play).toHaveBeenCalled();
+  });
+
+  it("ignores a stale R2 handoff when the user moves on before the download finishes", async () => {
+    const { db, first, second, usePlayerStore } = await seedQueue(0);
+    await db.mediaBlobs.put({
+      id: "blb_first",
+      trackId: first.id,
+      role: "media",
+      mime: "audio/mpeg",
+      bytes: 3,
+      blob: new Blob([new Uint8Array([1, 2, 3])], { type: "audio/mpeg" }),
+    });
+    await db.tracks.update(first.id, { status: "ready", blobId: "blb_first" });
+    await db.tracks.update(second.id, {
+      status: "ready",
+      remoteMediaUrl: "https://media.example.com/second.mp3",
+    });
+    usePlayerStore.getState().init();
+
+    await waitFor(() => expect(usePlayerStore.getState().queue).toHaveLength(2));
+    await usePlayerStore.getState().playIndex(0);
+    usePlayerStore.setState({ isPlaying: true });
+    const remote = deferredResponse();
+    platformFetchMock.mockImplementationOnce(async () => remote.promise);
+
+    const stalePlay = usePlayerStore.getState().playIndex(1);
+    await waitFor(() => expect(usePlayerStore.getState().playbackLoading?.trackId).toBe(second.id));
+
+    await usePlayerStore.getState().playIndex(0);
+    expect(usePlayerStore.getState().playbackLoading).toBeNull();
+
+    remote.resolve(
+      new Response("late", {
+        headers: { "content-type": "audio/mpeg" },
+      }),
+    );
+    await stalePlay;
+
+    expect(usePlayerStore.getState().currentIndex).toBe(0);
+    expect(usePlayerStore.getState().playbackLoading).toBeNull();
   });
 
   it("persists the queue cursor when the user picks another track", async () => {
@@ -319,9 +422,10 @@ describe("player-store remote subscribed-manifest playback", () => {
 
     await usePlayerStore.getState().playIndex(0);
 
-    expect(platformFetchMock).toHaveBeenCalledWith(REMOTE_AUDIO_URL, {
-      cache: "no-store",
-    });
+    expect(platformFetchMock).toHaveBeenCalledWith(
+      REMOTE_AUDIO_URL,
+      expect.objectContaining({ cache: "no-store" }),
+    );
     expectLoadedBlob("audio", "audio/mpeg");
     expect(mediaEngineMock.setDiagnosticsContext).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -359,9 +463,10 @@ describe("player-store remote subscribed-manifest playback", () => {
 
     await usePlayerStore.getState().playIndex(1);
 
-    expect(platformFetchMock).toHaveBeenCalledWith(REMOTE_VIDEO_URL, {
-      cache: "no-store",
-    });
+    expect(platformFetchMock).toHaveBeenCalledWith(
+      REMOTE_VIDEO_URL,
+      expect.objectContaining({ cache: "no-store" }),
+    );
     expectLoadedBlob("video", "video/mp4");
     expect(mediaEngineMock.loadUrl).not.toHaveBeenCalled();
   });
