@@ -1040,6 +1040,10 @@
     "upToDate": "最新の状態です。"
   },
   "chat": {
+    "modelEmpty": "キー設定済みのプロバイダーがありません",
+    "modelInherited": "デフォルト",
+    "modelSearch": "モデルを検索…",
+    "modelPick": "モデル",
     "title": "AI DJ",
     "open": "DJに聞く",
     "placeholder": "DJに聞く…",

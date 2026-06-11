@@ -265,3 +265,21 @@ export async function renameChatSession(
 export async function deleteChatSession(id: string, db: MuzeroDB = defaultDb): Promise<void> {
   await db.chatSessions.delete(id);
 }
+
+/**
+ * Per-session model override (PRD Q3): stores only the preset id + model id —
+ * NEVER the API key, which stays in settings (stale keys must not ride chat
+ * history). Pass empty strings to clear back to the global default.
+ */
+export async function setChatSessionLlm(
+  id: string,
+  presetId: string,
+  model: string,
+  db: MuzeroDB = defaultDb,
+): Promise<void> {
+  await db.chatSessions.update(id, {
+    llmProviderPresetId: presetId.trim() || undefined,
+    llmModel: model.trim() || undefined,
+    updatedAt: Date.now(),
+  });
+}

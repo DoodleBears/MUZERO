@@ -1066,6 +1066,10 @@
     "upToDate": "You're up to date."
   },
   "chat": {
+    "modelEmpty": "No providers with a key yet",
+    "modelInherited": "Default",
+    "modelSearch": "Search models…",
+    "modelPick": "Model",
     "title": "AI DJ",
     "open": "Ask the DJ",
     "placeholder": "Ask the DJ…",

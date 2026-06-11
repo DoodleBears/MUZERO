@@ -1040,6 +1040,10 @@
     "upToDate": "已是最新版本。"
   },
   "chat": {
+    "modelEmpty": "还没有配置 key 的 provider",
+    "modelInherited": "默认",
+    "modelSearch": "搜索模型…",
+    "modelPick": "模型",
     "title": "AI DJ",
     "open": "问问 DJ",
     "placeholder": "问问 DJ…",

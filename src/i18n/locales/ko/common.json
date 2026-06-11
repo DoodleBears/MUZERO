@@ -1039,6 +1039,10 @@
     "upToDate": "최신 상태입니다."
   },
   "chat": {
+    "modelEmpty": "키가 설정된 프로바이더가 없습니다",
+    "modelInherited": "기본값",
+    "modelSearch": "모델 검색…",
+    "modelPick": "모델",
     "title": "AI DJ",
     "open": "DJ에게 묻기",
     "placeholder": "DJ에게 묻기…",

@@ -72,6 +72,22 @@ describe("chat session repository", () => {
     expect(rows[0].title).toBe("renamed");
   });
 
+  it("sets and clears the per-session model override without touching keys", async () => {
+    const session = await createChatSession({ firstUserText: "model override" }, db);
+
+    const { setChatSessionLlm } = await import("./dj-chat-sessions");
+    await setChatSessionLlm(session.id, "custom:abc", "qwen-7b", db);
+    let row = await getChatSession(session.id, db);
+    expect(row?.llmProviderPresetId).toBe("custom:abc");
+    expect(row?.llmModel).toBe("qwen-7b");
+    expect(JSON.stringify(row)).not.toContain("apiKey");
+
+    await setChatSessionLlm(session.id, "", "  ", db);
+    row = await getChatSession(session.id, db);
+    expect(row?.llmProviderPresetId).toBeUndefined();
+    expect(row?.llmModel).toBeUndefined();
+  });
+
   it("derives an automatic title from the first persisted user message for empty sessions", async () => {
     const session = await createChatSession({}, db);
 
