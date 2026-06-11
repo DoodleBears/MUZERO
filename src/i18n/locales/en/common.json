@@ -854,7 +854,12 @@
     "llmModelUseCustom": "Use \"{{model}}\"",
     "llmModelIsDefault": "This is the DJ's default model",
     "llmModelSetsDefault": "Selecting sets the DJ's default",
-    "llmProviderSearch": "Search providers"
+    "llmProviderSearch": "Search providers",
+    "capVision": "Vision (image input)",
+    "capAudio": "Audio input",
+    "capTools": "Function calling",
+    "capContext": "Context window",
+    "capPrice": "Input {{in}} · output {{out}} per 1M tokens"
   },
   "gallery": {
     "title": "Sets",

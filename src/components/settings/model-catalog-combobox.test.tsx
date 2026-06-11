@@ -19,6 +19,13 @@ const labels = {
   searchPlaceholder: "Search models",
   trigger: "Pick a model",
   customLabel: (q: string) => `Use "${q}"`,
+  capabilities: {
+    vision: "Vision",
+    audio: "Audio",
+    tools: "Tools",
+    context: "Context",
+    price: (i: string, o: string) => `${i} / ${o}`,
+  },
 };
 
 afterEach(() => clearModelCatalogCache());

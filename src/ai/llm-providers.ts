@@ -19,6 +19,12 @@ export interface LlmModelPreset {
   contextLimit?: number;
   inputCostPerMillionUsd?: number;
   outputCostPerMillionUsd?: number;
+  /** Accepts image input (vision). */
+  supportsVision?: boolean;
+  /** Accepts audio input. */
+  supportsAudio?: boolean;
+  /** Supports function/tool calling. */
+  supportsTools?: boolean;
 }
 
 export interface LlmProviderPreset {

@@ -839,7 +839,12 @@
     "llmModelUseCustom": "\"{{model}}\" 사용",
     "llmModelIsDefault": "DJ의 기본 모델입니다",
     "llmModelSetsDefault": "선택하면 DJ 기본값으로 설정됩니다",
-    "llmProviderSearch": "제공자 검색"
+    "llmProviderSearch": "제공자 검색",
+    "capVision": "비전(이미지 입력)",
+    "capAudio": "오디오 입력",
+    "capTools": "함수 호출",
+    "capContext": "컨텍스트 창",
+    "capPrice": "입력 {{in}} · 출력 {{out}} / 100만 토큰"
   },
   "gallery": {
     "title": "세트",
