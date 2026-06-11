@@ -791,7 +791,8 @@
     "llmModelRefresh": "更新",
     "llmModelUseCustom": "「{{model}}」を使う",
     "llmModelIsDefault": "これが DJ の既定モデルです",
-    "llmModelSetsDefault": "選択すると DJ の既定になります"
+    "llmModelSetsDefault": "選択すると DJ の既定になります",
+    "llmProviderSearch": "プロバイダーを検索"
   },
   "gallery": {
     "title": "セット",

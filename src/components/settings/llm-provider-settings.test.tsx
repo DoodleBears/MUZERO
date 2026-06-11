@@ -33,13 +33,8 @@ vi.mock("@/ai/custom-llm-providers", async (importOriginal) => {
 const openExternalUrl = vi.fn();
 vi.mock("@/lib/platform", () => ({
   openExternalUrl: (...args: unknown[]) => openExternalUrl(...args),
-}));
-
-// The combobox is covered by its own tests; stub it to a marker.
-vi.mock("@/components/chat/chat-model-picker", () => ({
-  ChatModelPicker: ({ presets }: { presets: Array<{ id: string }> }) => (
-    <div data-presets={presets.map((p) => p.id).join(",")} data-testid="model-picker" />
-  ),
+  // ModelCatalogCombobox only fetches on open; a no-op fetch keeps it inert here.
+  getAppFetch: async () => globalThis.fetch,
 }));
 
 import { LlmProviderSettings } from "./llm-provider-settings";
@@ -53,6 +48,11 @@ const vllm: CustomLlmProvider = {
   updatedAt: 1,
 };
 
+/** Open the provider combobox (its items render only when expanded). */
+function openProviderCombobox() {
+  fireEvent.click(screen.getByRole("button", { name: "settings.provider" }));
+}
+
 beforeEach(() => {
   settings = { ...DEFAULT_SETTINGS };
   customProviders = [];
@@ -62,19 +62,20 @@ beforeEach(() => {
 });
 
 describe("LlmProviderSettings", () => {
-  it("renders built-in presets with key status and customs from the hook", () => {
+  it("lists built-in presets + customs with key status in the provider combobox", () => {
     settings = { ...DEFAULT_SETTINGS, apiKeysByPresetId: { groq: "gsk_x" } };
     customProviders = [vllm];
     render(<LlmProviderSettings />);
-    expect(screen.getByText("OpenAI")).toBeTruthy();
+    openProviderCombobox();
     expect(screen.getByText("Groq")).toBeTruthy();
     expect(screen.getByText("My vLLM")).toBeTruthy();
     expect(screen.getAllByText("settings.llmKeyReady")).toHaveLength(1); // groq only
     expect(screen.getAllByText("settings.llmKeyOptional").length).toBeGreaterThan(0); // the custom
   });
 
-  it("commits an API key for the selected provider on blur", () => {
+  it("commits an API key for the provider picked in the combobox on blur", () => {
     render(<LlmProviderSettings />);
+    openProviderCombobox();
     fireEvent.click(screen.getByText("Groq"));
     const input = screen.getByPlaceholderText("sk-…") as HTMLInputElement;
     fireEvent.change(input, { target: { value: " gsk_secret " } });
@@ -96,6 +97,7 @@ describe("LlmProviderSettings", () => {
   it("edits a custom provider: add model + delete provider", () => {
     customProviders = [vllm];
     render(<LlmProviderSettings />);
+    openProviderCombobox();
     fireEvent.click(screen.getByText("My vLLM"));
 
     const modelInput = screen.getByPlaceholderText("settings.llmCustomModelPlaceholder");
@@ -110,12 +112,5 @@ describe("LlmProviderSettings", () => {
 
     fireEvent.click(screen.getByText("settings.llmCustomDelete"));
     expect(deleteCustomLlmProvider).toHaveBeenCalledWith("custom:abc");
-  });
-
-  it("feeds only enabled presets (keyed built-ins + customs) to the model picker", () => {
-    settings = { ...DEFAULT_SETTINGS, apiKeysByPresetId: { groq: "gsk_x" } };
-    customProviders = [vllm];
-    render(<LlmProviderSettings />);
-    expect(screen.getByTestId("model-picker").getAttribute("data-presets")).toBe("groq,custom:abc");
   });
 });

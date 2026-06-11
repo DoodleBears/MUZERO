@@ -791,7 +791,8 @@
     "llmModelRefresh": "刷新",
     "llmModelUseCustom": "使用「{{model}}」",
     "llmModelIsDefault": "这是 DJ 的默认模型",
-    "llmModelSetsDefault": "选择后即设为 DJ 默认"
+    "llmModelSetsDefault": "选择后即设为 DJ 默认",
+    "llmProviderSearch": "搜索 provider"
   },
   "gallery": {
     "title": "歌单",

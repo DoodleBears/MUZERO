@@ -805,7 +805,8 @@
     "llmModelRefresh": "Refresh",
     "llmModelUseCustom": "Use \"{{model}}\"",
     "llmModelIsDefault": "This is the DJ's default model",
-    "llmModelSetsDefault": "Selecting sets the DJ's default"
+    "llmModelSetsDefault": "Selecting sets the DJ's default",
+    "llmProviderSearch": "Search providers"
   },
   "gallery": {
     "title": "Sets",

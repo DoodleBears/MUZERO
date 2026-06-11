@@ -1,4 +1,4 @@
-import { Check, ExternalLink, Eye, EyeOff, Plus, Server, Trash2 } from "lucide-react";
+import { ExternalLink, Eye, EyeOff, Plus, Trash2 } from "lucide-react";
 import { useId, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
@@ -19,13 +19,13 @@ import {
   resolveLlmProviderPreset,
 } from "@/ai/llm-providers";
 import { ModelCatalogCombobox } from "@/components/settings/model-catalog-combobox";
+import { ProviderCombobox } from "@/components/settings/provider-combobox";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { saveSettings } from "@/db/repositories";
 import type { CustomLlmProvider } from "@/db/types";
 import { useSettings } from "@/hooks/use-app-data";
 import { openExternalUrl } from "@/lib/platform";
-import { cn } from "@/lib/utils";
 
 /**
  * Multi-provider LLM settings (chat PRD §6.1, ClipCombo parity): a provider
@@ -64,47 +64,23 @@ export function LlmProviderSettings() {
 
   return (
     <div className="flex flex-col gap-4">
-      {/* Provider grid: key status per preset; click selects for editing. */}
-      <div className="grid gap-1.5 sm:grid-cols-2">
-        {presets.map((preset) => {
-          const key = apiKeyForPreset(settings, preset.id)?.trim();
-          const optional = llmProviderAllowsMissingApiKey(preset.id);
-          const ready = Boolean(key) || optional;
-          const active = preset.id === activeId;
-          return (
-            <button
-              className={cn(
-                "flex min-w-0 items-center gap-2 rounded-lg border px-2.5 py-2 text-left outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring",
-                active ? "border-primary bg-accent/40" : "border-border hover:bg-accent/20",
-              )}
-              key={preset.id}
-              onClick={() => setEditingId(preset.id)}
-              type="button"
-            >
-              <Server aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />
-              <span className="min-w-0 flex-1">
-                <span className="block truncate font-medium text-sm">{preset.label}</span>
-                <span
-                  className={cn(
-                    "block truncate text-[11px]",
-                    key
-                      ? "text-primary"
-                      : optional
-                        ? "text-muted-foreground"
-                        : "text-muted-foreground",
-                  )}
-                >
-                  {key
-                    ? t("settings.llmKeyReady")
-                    : optional
-                      ? t("settings.llmKeyOptional")
-                      : t("settings.llmKeyMissing")}
-                </span>
-              </span>
-              {ready && <Check aria-hidden="true" className="size-3.5 shrink-0 text-primary" />}
-            </button>
-          );
-        })}
+      {/* Provider selection — brand-iconed combobox (ClipCombo parity). */}
+      <div className="flex flex-col gap-1.5">
+        <span className="text-muted-foreground text-xs">{t("settings.provider")}</span>
+        <ProviderCombobox
+          labels={{
+            empty: t("settings.llmNoEnabled"),
+            keyMissing: t("settings.llmKeyMissing"),
+            keyOptional: t("settings.llmKeyOptional"),
+            keyReady: t("settings.llmKeyReady"),
+            searchPlaceholder: t("settings.llmProviderSearch"),
+            trigger: t("settings.provider"),
+          }}
+          onSelect={setEditingId}
+          presets={presets}
+          selectedId={activeId}
+          settings={settings}
+        />
       </div>
       <Button onClick={() => void addCustomProvider()} size="sm" type="button" variant="outline">
         <Plus /> {t("settings.llmAddCustom")}
