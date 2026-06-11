@@ -173,7 +173,7 @@ async function publishObject(
         key: object.key,
         kind: object.kind,
         status: response.status,
-        hasPrecondition: Boolean(object.precondition),
+        precondition: object.precondition,
       });
     }
     throw new R2PublishHttpError(object.key, response.status);

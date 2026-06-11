@@ -338,6 +338,39 @@ describe("buildR2ExportPlan", () => {
     });
   });
 
+  it("does not guard absent child JSON with If-None-Match under an existing manifest", async () => {
+    await seedSet();
+    const plan = await buildR2ExportPlan({
+      driveId: "drv_1",
+      libraryId: "lib_1",
+      baseUrl: "https://music.example.com/muzero/",
+      setIds: ["ses_1"],
+      db,
+      remoteBase: {
+        manifest: {
+          etag: '"m1"',
+          value: {
+            schema: "muzero-r2-manifest-v1",
+            libraryId: "lib_1",
+            title: "Drive",
+            createdAt: "2026-06-01T00:00:00.000Z",
+            updatedAt: "2026-06-01T00:00:00.000Z",
+            baseUrl: "https://music.example.com/muzero/",
+            sets: [],
+          },
+        },
+      },
+    });
+
+    expect(plan.objects.find((object) => object.kind === "set-index")).toMatchObject({
+      key: "sets/ses_1/index.json",
+      precondition: undefined,
+    });
+    expect(plan.objects.find((object) => object.kind === "manifest")?.precondition).toEqual({
+      ifMatch: '"m1"',
+    });
+  });
+
   it("without a remote base, keeps the legacy unconditional write behavior (MW-3)", async () => {
     await seedSet();
     const plan = await buildR2ExportPlan({

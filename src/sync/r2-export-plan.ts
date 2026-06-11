@@ -736,12 +736,10 @@ function createManifest(
 }
 
 /**
- * Precondition for a merged JSON write (PRD §12.4): with a fetched base, an
- * existing object writes with `If-Match` (its ETag) and an absent one guards
- * the first write with `If-None-Match: *` — a concurrent publish then 412s and
- * re-merges instead of clobbering. No base (legacy callers) → unconditional.
- * An object whose read lacked an ETag also writes unconditionally (we cannot
- * condition safely on nothing).
+ * Precondition for the root manifest write (PRD §12.4): with a fetched base, an
+ * existing object writes with `If-Match` (its ETag) and an absent one guards the
+ * first write with `If-None-Match: *`. No base (legacy callers) → unconditional.
+ * An object whose read lacked an ETag also writes unconditionally.
  */
 function basePrecondition(
   remoteBase: RemotePublishBase | undefined,
@@ -756,8 +754,8 @@ function childPrecondition(
   remoteBase: RemotePublishBase | undefined,
   baseObject: RemoteBaseObject<unknown> | undefined,
 ): R2ObjectWritePrecondition | undefined {
-  if (remoteBase && !remoteBase.manifest && !baseObject) return undefined;
-  return basePrecondition(remoteBase, baseObject);
+  if (!remoteBase || !baseObject) return undefined;
+  return baseObject.etag ? { ifMatch: baseObject.etag } : undefined;
 }
 
 async function createDeviceObjects(
