@@ -20,6 +20,7 @@ export interface MediaStorageProvider {
   put(input: MediaStorageProviderPutInput): Promise<{ storageKey?: string }>;
   get(input: { storageKey?: string; blob?: Blob; mime?: string }): Promise<Blob | null>;
   delete(input: { storageKey?: string }): Promise<void>;
+  list?(): Promise<Array<{ storageKey: string; bytes?: number }>>;
   estimate?(): Promise<{ bytesUsed?: number; quotaBytes?: number }>;
 }
 

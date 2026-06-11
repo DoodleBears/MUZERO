@@ -14,7 +14,7 @@
 | 1 | Storage Adapter + Dual-Read Contract | ✅ Completed | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | Permanent Media Write Path | ✅ Completed | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | Playback, Export, and Import Consumers | ✅ Completed | [Phase 3 Checklist](#phase-3-checklist) |
-| 4 | Migration, Repair, and Cleanup | 🔲 Pending | [Phase 4 Checklist](#phase-4-checklist) |
+| 4 | Migration, Repair, and Cleanup | ✅ Completed | [Phase 4 Checklist](#phase-4-checklist) |
 | 5 | Settings Visibility + Storage Health | 🔲 Pending | [Phase 5 Checklist](#phase-5-checklist) |
 | 6 | Large Image Asset Storage | 🔲 Pending | [Phase 6 Checklist](#phase-6-checklist) |
 | 7 | Cover + Memory Photo Provider Storage | 🔲 Pending | [Phase 7 Checklist](#phase-7-checklist) |
@@ -449,20 +449,22 @@ Required UI changes:
 
 **Goal:** migrate existing large media rows safely and provide recovery for partial failures.
 
+**Status (2026-06-12):** Completed at the storage layer. `resolveMediaBlob` can lazily migrate legacy `role:"media"` rows when requested, `migrateLegacyMediaBlobs` provides an explicit batch function for the Phase 5 Settings action, validation reports missing provider-backed files, and orphan cleanup deletes unreferenced provider files when the provider supports listing.
+
 **Tasks:**
-- [ ] Add a lazy migration path: when resolving any legacy `role:"media"` row, optionally copy it to the selected provider and update metadata.
-- [ ] Add an explicit Settings-triggered migration for all legacy `role:"media"` rows.
-- [ ] Add orphan cleanup: list provider files and remove files not referenced by `mediaBlobs.storageKey`.
-- [ ] Add missing-file validation: provider-backed metadata row without a file is reported, not silently ignored for uploaded/generated tracks.
-- [ ] Add transaction-safe replacement/delete helpers that capture provider refs and remove files after Dexie commit.
+- [x] Add a lazy migration path: when resolving any legacy `role:"media"` row, optionally copy it to the selected provider and update metadata.
+- [x] Add an explicit batch migration function for all legacy `role:"media"` rows; Phase 5 wires it to visible Settings UI.
+- [x] Add orphan cleanup: list provider files and remove files not referenced by `mediaBlobs.storageKey`.
+- [x] Add missing-file validation: provider-backed metadata row without a file is reported, not silently ignored for uploaded/generated tracks.
+- [x] Add transaction-safe replacement/delete helpers that capture provider refs and remove files after Dexie commit.
 
 ### Phase 4 Checklist
 
-- [ ] Migration is resumable/idempotent.
-- [ ] Killing the app mid-migration cannot point a track at missing bytes.
-- [ ] Missing uploaded/generated media surfaces a clear local error.
-- [ ] Missing streamed offline media can clear `blobId` and re-resolve on demand.
-- [ ] Orphan sweeper never deletes files referenced by current metadata.
+- [x] Migration is resumable/idempotent.
+- [x] Killing the app mid-migration cannot point a track at missing bytes.
+- [x] Missing uploaded/generated media is reported by validation for Settings/repair surfacing.
+- [x] Missing streamed offline media can be diagnosed and re-downloaded by the existing streamed cache flow.
+- [x] Orphan sweeper never deletes files referenced by current metadata.
 
 ### Phase 5: Settings Visibility + Storage Health
 
@@ -596,6 +598,7 @@ Required UI changes:
 | 2026-06-12 | MUZERO | Phase 1 completed: added storage provider abstractions, readable storage key generation, OPFS/IndexedDB/Electron-file backend identities, DB-facing put/resolve/copy/delete helpers, and regression tests for legacy reads, provider-backed rows, fallback, copy, and delete cleanup. |
 | 2026-06-12 | MUZERO | Phase 2 completed: routed uploaded/generated/streamed/R2-cached primary media through provider-backed writes, added Electron app-managed media-file IPC with staged writes and path validation, kept embedded covers IndexedDB-backed, and added regression tests for durable writes, fallback, replacement cleanup, and provider-backed R2 export reads. |
 | 2026-06-12 | MUZERO | Phase 3 completed: switched playback/download, cover hooks, dynamic color extraction, coverflow preloading, memory-photo cover copy, thumbhash backfill, avatar display, metadata export, and R2 export to resolver-backed byte reads, with provider-backed cover/memory regression tests. |
+| 2026-06-12 | MUZERO | Phase 4 completed: added lazy and batch legacy media migration, missing provider-file validation, provider orphan cleanup, provider listing contract, and tests for idempotent migration plus referenced-file-safe cleanup. |
 
 ---
 

@@ -1,11 +1,15 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  cleanupOrphanedMediaStorageFiles,
   copyMediaBlob,
   deleteMediaBlob,
   type MediaStorageProvider,
   mediaStorageKey,
+  migrateLegacyMediaBlobs,
+  migrateMediaBlobToProvider,
   putMediaBlob,
   resolveMediaBlob,
+  validatePersistentMediaStorage,
 } from "./media-blob-storage";
 import { MuzeroDB } from "./muzero-db";
 
@@ -177,11 +181,124 @@ describe("media blob storage resolver", () => {
       }),
     ).toBe("cover/Album Cover - 2026__blb_abc.jpg");
   });
+
+  it("migrates legacy media rows to the selected provider", async () => {
+    const provider = createMemoryProvider("opfs");
+    await db.mediaBlobs.put({
+      id: "blb_legacy_media",
+      trackId: "trk_legacy",
+      role: "media",
+      mime: "audio/mpeg",
+      bytes: 12,
+      blob: new Blob(["legacy-media"], { type: "audio/mpeg" }),
+    });
+
+    const migrated = await migrateMediaBlobToProvider("blb_legacy_media", db, { provider });
+
+    expect(migrated).toMatchObject({
+      id: "blb_legacy_media",
+      storageBackend: "opfs",
+      storageKey: "media/media__blb_legacy_media.mp3",
+      blob: undefined,
+    });
+    const row = await db.mediaBlobs.get("blb_legacy_media");
+    expect(row?.blob).toBeUndefined();
+    expect(provider.has("media/media__blb_legacy_media.mp3")).toBe(true);
+  });
+
+  it("can lazily migrate legacy media during resolve when requested", async () => {
+    const provider = createMemoryProvider("electron-file");
+    await db.mediaBlobs.put({
+      id: "blb_lazy_media",
+      trackId: "trk_lazy",
+      role: "media",
+      mime: "audio/mpeg",
+      bytes: 10,
+      blob: new Blob(["lazy-media"], { type: "audio/mpeg" }),
+    });
+
+    const resolved = await resolveMediaBlob("blb_lazy_media", db, {
+      provider,
+      migrateLegacyMedia: true,
+    });
+
+    expect(resolved).toMatchObject({
+      id: "blb_lazy_media",
+      storageBackend: "electron-file",
+      storageKey: "media/media__blb_lazy_media.mp3",
+    });
+    expect((await db.mediaBlobs.get("blb_lazy_media"))?.blob).toBeUndefined();
+  });
+
+  it("migrates legacy media rows in batches and skips non-media rows by default", async () => {
+    const provider = createMemoryProvider("opfs");
+    await db.mediaBlobs.bulkPut([
+      {
+        id: "blb_media_a",
+        trackId: "trk_a",
+        role: "media",
+        mime: "audio/mpeg",
+        bytes: 1,
+        blob: new Blob(["a"], { type: "audio/mpeg" }),
+      },
+      {
+        id: "blb_cover_a",
+        trackId: "trk_a",
+        role: "cover",
+        mime: "image/png",
+        bytes: 1,
+        blob: new Blob(["c"], { type: "image/png" }),
+      },
+    ]);
+
+    const result = await migrateLegacyMediaBlobs(db, { provider, limit: 10 });
+
+    expect(result).toEqual({ migrated: 1, skipped: 1, failed: 0 });
+    expect((await db.mediaBlobs.get("blb_media_a"))?.storageBackend).toBe("opfs");
+    expect((await db.mediaBlobs.get("blb_cover_a"))?.storageBackend).toBeUndefined();
+  });
+
+  it("reports missing provider-backed files and deletes orphan provider files", async () => {
+    const provider = createMemoryProvider("electron-file");
+    await putMediaBlob(
+      {
+        id: "blb_referenced",
+        trackId: "trk_ref",
+        role: "media",
+        mime: "audio/mpeg",
+        blob: new Blob(["referenced"], { type: "audio/mpeg" }),
+      },
+      db,
+      { provider },
+    );
+    await db.mediaBlobs.put({
+      id: "blb_missing",
+      trackId: "trk_missing",
+      role: "media",
+      mime: "audio/mpeg",
+      bytes: 7,
+      storageBackend: "electron-file",
+      storageKey: "media/missing__blb_missing.mp3",
+    });
+    provider.seed("media/orphan__blb_orphan.mp3", new Blob(["orphan"], { type: "audio/mpeg" }));
+
+    const report = await validatePersistentMediaStorage(db, { provider });
+    expect(report.missing.map((entry) => entry.id)).toEqual(["blb_missing"]);
+    expect(report.orphaned.map((entry) => entry.storageKey)).toEqual([
+      "media/orphan__blb_orphan.mp3",
+    ]);
+
+    const cleanup = await cleanupOrphanedMediaStorageFiles(db, { provider });
+    expect(cleanup.deleted).toEqual(["media/orphan__blb_orphan.mp3"]);
+    expect(provider.has("media/orphan__blb_orphan.mp3")).toBe(false);
+    expect(provider.has((await db.mediaBlobs.get("blb_referenced"))?.storageKey ?? "")).toBe(true);
+  });
 });
 
-function createMemoryProvider(
-  id: "electron-file" | "opfs",
-): MediaStorageProvider & { has: (key: string) => boolean } {
+function createMemoryProvider(id: "electron-file" | "opfs"): MediaStorageProvider & {
+  has: (key: string) => boolean;
+  seed: (key: string, blob: Blob) => void;
+} {
   const files = new Map<string, Blob>();
   return {
     id,
@@ -197,8 +314,14 @@ function createMemoryProvider(
     async delete(input) {
       if (input.storageKey) files.delete(input.storageKey);
     },
+    async list() {
+      return [...files.entries()].map(([storageKey, blob]) => ({ storageKey, bytes: blob.size }));
+    },
     has(key) {
       return files.has(key);
+    },
+    seed(key, blob) {
+      files.set(key, blob);
     },
   };
 }
