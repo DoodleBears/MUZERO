@@ -243,6 +243,8 @@ interface PlayerState {
 // Non-reactive singletons (never selected by components → no rerenders).
 let mediaEngine: MediaEngine | null = null;
 let mediaSessionArtworkObjectUrl: string | null = null;
+/** Monotonic token discarding stale async metadata updates (PRD F-12). */
+let mediaSessionMetadataSeq = 0;
 
 /** Access the shared media engine (for the stage to mount + the visualizer). */
 export function getMediaEngine(): MediaEngine | null {
@@ -2042,21 +2044,19 @@ async function ensureLoadedAndPlay(
       // the raw URL when the shell has no media proxy (web/tauri).
       const bridge = resolveDesktopBridge();
       const mediaTrace = streamMediaTrace(track, playbackTrace);
+      // Blob transport carries no url (PRD F-1) — the proxy/direct paths only
+      // apply when the resolver handed back a CDN url.
+      const resolvedUrl = resolved.url;
       const proxiedUrl =
-        resolved.headers && bridge.mediaProxyUrl && !resolved.url.startsWith("blob:")
-          ? bridge.mediaProxyUrl(resolved.url, resolved.headers, mediaTrace)
+        resolved.headers && bridge.mediaProxyUrl && resolvedUrl
+          ? bridge.mediaProxyUrl(resolvedUrl, resolved.headers, mediaTrace)
           : null;
-      const src = proxiedUrl ?? resolved.url;
+      const src = proxiedUrl ?? resolvedUrl;
       tracePlaybackLoad("media.load.stream", track, playbackTrace, {
-        transport:
-          resolved.blob || resolved.url.startsWith("blob:")
-            ? "blob"
-            : proxiedUrl
-              ? "media-proxy"
-              : "direct",
+        transport: resolved.blob ? "blob" : proxiedUrl ? "media-proxy" : "direct",
         sourceId: track.streamSourceId,
         proxied: proxiedUrl !== null,
-        ...streamUrlTraceContext(resolved.url),
+        ...(resolvedUrl ? streamUrlTraceContext(resolvedUrl) : null),
       });
       log.debug("player", "loading streamed media url", {
         trackId: track.id,
@@ -2070,7 +2070,7 @@ async function ensureLoadedAndPlay(
         // YouTube already paid the full download cost before playback. Persist that
         // same blob so the next play is local-first and does not re-hit YouTube.
         void cacheResolvedStreamBlob(track, { ...resolved, blob: resolvedBlob }, playbackTrace);
-      } else {
+      } else if (src) {
         // Proxied stream responses send ACAO:* — opt into CORS so the WebAudio graph
         // doesn't taint (and silence) the audio.
         await mediaEngine.loadUrl(
@@ -2078,6 +2078,15 @@ async function ensureLoadedAndPlay(
           track.kind,
           proxiedUrl ? { crossOrigin: "anonymous" } : undefined,
         );
+      } else {
+        // Contract violation — an ok resolve always carries one of blob/url.
+        notify.error(i18n.t("player.playbackError"));
+        log.warn("player", "streamed resolve returned neither blob nor url", {
+          trackId: track.id,
+          source: track.streamSourceId,
+        });
+        set({ isPlaying: false, wantPlay: false });
+        return;
       }
       // Offline cache (Phase 5): when enabled, download this song's bytes in the
       // background so a later play is local + offline. Best-effort; skipped if cached.
@@ -2125,6 +2134,10 @@ async function updateMediaSessionMetadata(track: Track): Promise<void> {
     return;
   }
 
+  // Sequence the async cover fetches: an older call finishing late must discard
+  // its own URL, not revoke the newer one already handed to the media session
+  // (PRD F-12).
+  const seq = ++mediaSessionMetadataSeq;
   let nextArtworkObjectUrl: string | null = null;
   let artwork:
     | {
@@ -2142,7 +2155,7 @@ async function updateMediaSessionMetadata(track: Track): Promise<void> {
     }
   }
 
-  if (loadedTrackId !== track.id) {
+  if (loadedTrackId !== track.id || seq !== mediaSessionMetadataSeq) {
     if (nextArtworkObjectUrl) URL.revokeObjectURL(nextArtworkObjectUrl);
     return;
   }

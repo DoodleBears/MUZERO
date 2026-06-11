@@ -108,17 +108,20 @@ export function createYoutubeSource(deps: YoutubeSourceDeps): StreamSourceProvid
     const playback = await deps.runtime.resolveAudio(externalId, { trace });
     switch (playback.kind) {
       case "ok": {
-        const safeUrl = sanitizeUrlForTrace(playback.url);
+        // Blob transport carries the bytes and no url (PRD F-1); direct
+        // transport carries the bare CDN url for the media proxy.
+        const blobTransport = Boolean(playback.blob);
+        const safeUrl = playback.url ? sanitizeUrlForTrace(playback.url) : undefined;
         traceYoutube("info", "resolve.success", trace, externalId, {
           message: "youtube source resolved media",
           phase: "success",
           mime: playback.mime,
-          requestHost: safeUrl.host ?? undefined,
-          requestPathHash: safeUrl.pathHash,
-          safeQuery: safeUrl.safeQuery,
-          redactions: safeUrl.redactions,
-          transport: playback.url.startsWith("blob:") ? "blob" : "direct",
-          hasHeaders: !playback.url.startsWith("blob:"),
+          requestHost: safeUrl?.host ?? undefined,
+          requestPathHash: safeUrl?.pathHash,
+          safeQuery: safeUrl?.safeQuery,
+          redactions: safeUrl?.redactions,
+          transport: blobTransport ? "blob" : "direct",
+          hasHeaders: !blobTransport,
           codec: playback.codec,
           durationSec: playback.details?.lengthSeconds,
         });
@@ -130,7 +133,7 @@ export function createYoutubeSource(deps: YoutubeSourceDeps): StreamSourceProvid
             // Match youtubei's own media downloader: the googlevideo request needs
             // YouTube's stream headers, and the media element can only send them via
             // the desktop media proxy.
-            headers: playback.url.startsWith("blob:") ? undefined : MEDIA_HEADERS,
+            headers: blobTransport ? undefined : MEDIA_HEADERS,
             mime: playback.mime,
             durationSec: playback.details?.lengthSeconds,
             expiresAt: playback.expiresInSeconds

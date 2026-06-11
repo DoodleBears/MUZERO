@@ -97,10 +97,11 @@ describe("createYoutubeSource", () => {
   it("passes trace context to the runtime and records provider resolve", async () => {
     const http: StreamHttp = vi.fn(async () => res(okPlayer));
     const blob = new Blob([new Uint8Array([1, 2, 3])], { type: "audio/mp4" });
+    // Blob transport carries the bytes directly — no url is minted (PRD F-1:
+    // an unused object URL would pin the whole audio blob until reload).
     const tracedRuntime: YoutubeRuntime = {
       resolveAudio: vi.fn(async () => ({
         kind: "ok" as const,
-        url: "blob:http://localhost/youtube",
         blob,
         mime: "audio/mp4",
         codec: "aac" as const,
@@ -121,7 +122,7 @@ describe("createYoutubeSource", () => {
     expect(result).toMatchObject({
       kind: "ok",
       stream: {
-        mediaUrl: "blob:http://localhost/youtube",
+        mediaUrl: undefined,
         blob,
         headers: undefined,
       },

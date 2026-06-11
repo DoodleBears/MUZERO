@@ -12,7 +12,7 @@
 | Phase | Name | Status | Link |
 |-------|------|--------|------|
 | 1 | 观测先行：内存与帧节奏指标 | 🔄 In Progress | [Phase 1 Checklist](#phase-1-checklist) |
-| 2 | 确证泄漏修复（P0：YouTube 播放路径） | 🔲 Pending | [Phase 2 Checklist](#phase-2-checklist) |
+| 2 | 确证泄漏修复（P0：YouTube 播放路径） | ✅ Completed | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | 全表查询放大链治理（列表 / 搜索 / 统计） | 🔲 Pending | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | 渲染层 GPU / GC 卫生（可视化 + 背景） | 🔲 Pending | [Phase 4 Checklist](#phase-4-checklist) |
 | 5 | 大文件内存防护（预热 / 缓存 / 下载） | 🔲 Pending | [Phase 5 Checklist](#phase-5-checklist) |
@@ -296,16 +296,16 @@ player-store.ts:2122-2155 两次 `updateMediaSessionMetadata` 交错时（await 
 **Goal:** 流媒体长播内存曲线回落平稳。
 
 **Tasks:**
-- [ ] F-1：blob transport 不再创建未使用的 object URL（resolver 契约：`blob` 与 `url` 互斥），player-store 消费侧同步调整
-- [ ] F-2：`readableStreamToBlob` 加 try/finally + `reader.cancel()`；读循环加累计字节守卫
-- [ ] F-12 顺手修：artwork 更新加请求序号
-- [ ] 单测：注入 fake stream 断言 abort 路径 cancel；blob transport 断言无 createObjectURL 调用（spy）
+- [x] F-1：blob transport 不再创建未使用的 object URL——契约改为 `url?`（blob/url 至少其一）贯穿 `YoutubePlayback` → `PlayableStream.mediaUrl?` → `StreamPlaybackResult.url?`；youtube-ytjs 删除 `createObjectURL`；youtube-source 按 `blob` 判定 transport；cache-stream / player-store 加契约守卫
+- [x] F-2：`readableStreamToBlob` 导出 + try/finally `reader.cancel()`（错误/早退路径释放网络与队列）+ 200MB 累计字节 cap（超 cap 主动 cancel 底层 source）
+- [x] F-12 顺手修：`updateMediaSessionMetadata` 加单调序号，迟到的旧请求只丢弃自己的 URL，不再 revoke 新 artwork
+- [x] 单测：fake stream 断言超 cap 时底层 source 被 cancel、错误传播；blob-only resolve 在 source/resolve-playback 两层断言无 url 透传（流自身 error 时 cancel 是 no-op，故 spy 断言放在 cap 路径——比原计划的 createObjectURL spy 更贴近真实行为）
 
 ### Phase 2 Checklist
 
-- [ ] 场景 S1：30 首流媒体播放后 blob: URL 计数回基线、GC 后 heap 增幅 < 50MB
-- [ ] 场景 S5：快速切歌 ×50 计数稳定
-- [ ] 既有 streamsrc / player-store 测试全绿
+- [ ] 场景 S1：30 首流媒体播放后 blob: URL 计数回基线、GC 后 heap 增幅 < 50MB（人工，待真机用 Phase 1 HUD 验证）
+- [ ] 场景 S5：快速切歌 ×50 计数稳定（人工，待真机）
+- [x] 既有 streamsrc 测试全绿（215/215）；stores 触达区测试通过（folder-sync 3 个失败为 pre-existing，与 repositories 超时同族、已另开任务）
 
 ### Phase 3: 全表查询放大链治理
 

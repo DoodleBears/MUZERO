@@ -42,6 +42,23 @@ describe("resolveStreamedTrackMedia", () => {
     });
   });
 
+  it("passes a blob-only stream through without a url (blob transport, PRD F-1)", async () => {
+    const blob = new Blob([new Uint8Array([1, 2, 3])], { type: "audio/mp4" });
+    const source = fakeSource({
+      kind: "ok",
+      stream: { blob, mime: "audio/mp4", quality: "aac" },
+    });
+    const res = await resolveStreamedTrackMedia(track, { resolveSource: () => source });
+    expect(res).toEqual({
+      kind: "ok",
+      url: undefined,
+      mime: "audio/mp4",
+      blob,
+      headers: undefined,
+      quality: "aac",
+    });
+  });
+
   it("threads the per-source quality preference into resolve()", async () => {
     const source = fakeSource({ kind: "ok", stream: { mediaUrl: "u", mime: "audio/mpeg" } });
     await resolveStreamedTrackMedia(track, {

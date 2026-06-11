@@ -26,8 +26,10 @@ export interface StreamSearchHit {
 }
 
 export interface PlayableStream {
-  /** Bare CDN URL (un-proxied). The desktop media proxy wraps it + injects `headers`. */
-  mediaUrl: string;
+  /** Bare CDN URL (un-proxied). The desktop media proxy wraps it + injects `headers`.
+   *  Absent for blob transport — `blob` carries the bytes instead (no object URL is
+   *  minted; one of `mediaUrl`/`blob` is always present). */
+  mediaUrl?: string;
   /** Already-downloaded bytes for sources that must fetch before playback (YouTube). */
   blob?: Blob;
   /** Headers the media GET must carry (e.g. bili `Referer`), since `<audio>` can't set them. */

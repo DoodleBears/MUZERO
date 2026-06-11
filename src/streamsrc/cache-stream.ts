@@ -73,7 +73,18 @@ export async function runStreamCache(deps: RunStreamCacheDeps): Promise<RunStrea
     return { kind: "error", message: resolved.message };
   }
   try {
-    const blob = resolved.blob ?? (await deps.fetchBytes(resolved.url, resolved.headers));
+    const blob =
+      resolved.blob ??
+      (resolved.url ? await deps.fetchBytes(resolved.url, resolved.headers) : null);
+    if (!blob) {
+      // Contract violation — an ok resolve always carries one of blob/url.
+      traceCache("error", "cache.failed", deps.trace, {
+        message: "resolved stream has neither blob nor url",
+        phase: "fail",
+        errorKind: "unknown",
+      });
+      return { kind: "error", message: "resolved stream has neither blob nor url" };
+    }
     const mime = resolved.mime || blob.type || "audio/mpeg";
     const blobId = await deps.store(blob, mime);
     traceCache("info", "cache.success", deps.trace, {

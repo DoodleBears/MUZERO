@@ -53,7 +53,10 @@ export interface YoutubeResolveDeps {
 export type YoutubePlayback =
   | {
       kind: "ok";
-      url: string;
+      /** Direct CDN URL. Absent for blob transport — `blob` carries the bytes and
+       *  no object URL is minted (an unused one would pin the whole download in
+       *  memory until reload; memory-perf-audit PRD F-1). */
+      url?: string;
       mime: string;
       blob?: Blob;
       codec: AudioCodec;

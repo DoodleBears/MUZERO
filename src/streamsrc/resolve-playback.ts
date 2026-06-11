@@ -31,7 +31,8 @@ export interface ResolveStreamedDeps {
 export type StreamPlaybackResult =
   | {
       kind: "ok";
-      url: string;
+      /** Absent for blob transport — `blob` carries the bytes (one of the two is set). */
+      url?: string;
       mime: string;
       blob?: Blob;
       headers?: Record<string, string>;
@@ -78,7 +79,7 @@ export async function resolveStreamedTrackMedia(
   switch (res.kind) {
     case "ok": {
       if (deps.trace?.traceId) {
-        const url = sanitizeUrlForTrace(res.stream.mediaUrl);
+        const url = res.stream.mediaUrl ? sanitizeUrlForTrace(res.stream.mediaUrl) : undefined;
         resolveLog.info("resolve.success", {
           message: "stream resolve succeeded",
           ...deps.trace,
@@ -87,9 +88,9 @@ export async function resolveStreamedTrackMedia(
           phase: "success",
           mime: res.stream.mime,
           quality: res.stream.quality,
-          requestHost: url.host ?? undefined,
-          requestPathHash: url.pathHash,
-          redactions: url.redactions,
+          requestHost: url?.host ?? undefined,
+          requestPathHash: url?.pathHash,
+          redactions: url?.redactions,
         });
       }
       return {

@@ -162,20 +162,40 @@ function codecOf(mime: string | undefined): AudioCodec {
   return "other";
 }
 
-async function readableStreamToBlob(
+/** Whole-download buffering guard: audio tops out well below this; anything past
+ *  it means a wrong format pick or a hostile response (memory-perf-audit PRD F-2). */
+const MAX_DOWNLOAD_BYTES = 200 * 1024 * 1024;
+
+export async function readableStreamToBlob(
   stream: ReadableStream<Uint8Array>,
   mime: string,
+  opts: { maxBytes?: number } = {},
 ): Promise<Blob> {
+  const maxBytes = opts.maxBytes ?? MAX_DOWNLOAD_BYTES;
   const chunks: BlobPart[] = [];
+  let total = 0;
   const reader = stream.getReader();
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    if (value) {
-      const copy = new Uint8Array(value.byteLength);
-      copy.set(value);
-      chunks.push(copy.buffer as ArrayBuffer);
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (value) {
+        total += value.byteLength;
+        if (total > maxBytes) {
+          // Stop the source producing before bailing — without cancel() the
+          // network keeps streaming into the queue (PRD F-2).
+          await reader.cancel().catch(() => {});
+          throw new Error(`download exceeds ${maxBytes} byte cap`);
+        }
+        const copy = new Uint8Array(value.byteLength);
+        copy.set(value);
+        chunks.push(copy.buffer as ArrayBuffer);
+      }
     }
+  } finally {
+    // No-op after a clean close / source error, but releases the network +
+    // queued chunks when the loop exits early for any other reason.
+    await reader.cancel().catch(() => {});
   }
   return new Blob(chunks, { type: mime });
 }
@@ -333,7 +353,9 @@ export function createYtjsRuntime(): YoutubeRuntime {
           bitrate: format.bitrate,
           hasCpn: Boolean(cpn),
         });
-        let url: string;
+        // Blob transport returns the bytes directly and mints NO object URL —
+        // an unused one would pin the whole download until reload (PRD F-1).
+        let url: string | undefined;
         let transport: "blob" | "direct" = "blob";
         let downloadedBlob: Blob | undefined;
         traceYoutube("info", "po_token.applied", trace, videoId, {
@@ -365,7 +387,6 @@ export function createYtjsRuntime(): YoutubeRuntime {
           });
           if (blob.size === 0) return { kind: "unavailable", reason: "empty youtube download" };
           downloadedBlob = blob;
-          url = URL.createObjectURL(blob);
           log.info("youtube", "downloaded", { videoId, itag: format.itag, bytes: blob.size });
           traceYoutube("info", "download.success", trace, videoId, {
             message: "youtube audio downloaded",

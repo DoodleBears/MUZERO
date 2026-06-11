@@ -48,7 +48,7 @@ describe("resolveYoutubeAudio", () => {
       details: { title: "Song" },
     });
     // n param transformed by the injected solver.
-    if (out.kind === "ok") expect(new URL(out.url).searchParams.get("n")).toBe("th_ok");
+    if (out.kind === "ok") expect(new URL(out.url ?? "").searchParams.get("n")).toBe("th_ok");
   });
 
   it("falls through to the next client on LOGIN_REQUIRED", async () => {
@@ -101,6 +101,6 @@ describe("resolveYoutubeAudio", () => {
     );
     const out = await resolveYoutubeAudio("v", { http, getBootstrap, decipherFormat });
     if (out.kind !== "ok") throw new Error("expected ok");
-    expect(new URL(out.url).searchParams.get("sig")).toBe("CBA"); // reversed
+    expect(new URL(out.url ?? "").searchParams.get("sig")).toBe("CBA"); // reversed
   });
 });
