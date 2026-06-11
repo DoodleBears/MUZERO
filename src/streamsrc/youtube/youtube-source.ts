@@ -9,15 +9,13 @@
 import { log } from "@/lib/logger";
 import type { StreamHttp } from "../http";
 import type {
-  StreamResolveOptions,
   StreamResolveResult,
   StreamSearchHit,
   StreamSearchOptions,
   StreamSourceProvider,
 } from "../provider";
-import type { YoutubeFormat } from "./youtube-formats";
 import { YT_CLIENTS } from "./youtube-innertube";
-import { resolveYoutubeAudio, type YoutubeBootstrap } from "./youtube-resolve";
+import type { YoutubePlayback } from "./youtube-resolve";
 import { buildSearchRequestBody, parseSearchResults } from "./youtube-search";
 
 // Search uses the WEB client (its response carries `videoRenderer` nodes the parser
@@ -27,11 +25,9 @@ const REFERER = "https://www.youtube.com";
 const USER_AGENT =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
 
-/** The Electron-only runtime that supplies the things only a JS engine can compute. */
+/** The Electron-only runtime (youtubei.js) that resolves a videoId to a playable URL. */
 export interface YoutubeRuntime {
-  getBootstrap: () => Promise<YoutubeBootstrap>;
-  /** Decipher a chosen format to a final URL (sig + n) — youtubei.js's player. */
-  decipherFormat: (format: YoutubeFormat) => Promise<string>;
+  resolveAudio: (videoId: string) => Promise<YoutubePlayback>;
 }
 
 export interface YoutubeSourceDeps {
@@ -80,23 +76,11 @@ export function createYoutubeSource(deps: YoutubeSourceDeps): StreamSourceProvid
     }
   }
 
-  async function resolve(
-    externalId: string,
-    opts?: StreamResolveOptions,
-  ): Promise<StreamResolveResult> {
+  async function resolve(externalId: string): Promise<StreamResolveResult> {
     if (!deps.runtime) {
       return { kind: "error", message: "YouTube playback needs the desktop runtime" };
     }
-    const playback = await resolveYoutubeAudio(
-      externalId,
-      {
-        http: deps.http,
-        getBootstrap: deps.runtime.getBootstrap,
-        decipherFormat: deps.runtime.decipherFormat,
-        getCookie: deps.getCookie,
-      },
-      opts?.signal,
-    );
+    const playback = await deps.runtime.resolveAudio(externalId);
     switch (playback.kind) {
       case "ok":
         return {

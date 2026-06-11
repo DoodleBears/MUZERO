@@ -8,9 +8,14 @@ function res(json: unknown): StreamHttpResponse {
 }
 
 const runtime: YoutubeRuntime = {
-  getBootstrap: async () => ({ visitorData: "VD", signatureTimestamp: 1 }),
-  // The okPlayer format below carries a direct url; youtubei.js would return it as-is.
-  decipherFormat: async (format) => format.url ?? "",
+  resolveAudio: async (videoId) => ({
+    kind: "ok",
+    url: "https://cdn/a",
+    mime: "audio/mp4",
+    codec: "aac",
+    expiresInSeconds: 3600,
+    details: { videoId, lengthSeconds: 180, title: "Song One" },
+  }),
 };
 
 const searchJson = {
@@ -79,10 +84,9 @@ describe("createYoutubeSource", () => {
   });
 
   it("maps a login-gated video to requires-login", async () => {
-    const http: StreamHttp = vi.fn(async () =>
-      res({ playabilityStatus: { status: "LOGIN_REQUIRED" } }),
-    );
-    const source = createYoutubeSource({ http, now: () => 0, runtime });
+    const http: StreamHttp = vi.fn(async () => res({}));
+    const gated: YoutubeRuntime = { resolveAudio: async () => ({ kind: "login-required" }) };
+    const source = createYoutubeSource({ http, now: () => 0, runtime: gated });
     expect(await source.resolve("v1")).toEqual({ kind: "requires-login" });
   });
 });
