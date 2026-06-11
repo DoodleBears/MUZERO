@@ -137,20 +137,20 @@ export function DjChatEntry({
   const surface = "bg-card/90 shadow-lg ring-1 ring-border/40 backdrop-blur-md";
 
   return (
-    <div className={cn("relative min-w-0", mode === "chip" ? "flex-1" : "w-fit", className)}>
+    // Always flex-1 so the Sparkles icon stays pinned at the SAME far-left spot
+    // in both chip and mini (the dock row right-aligns the memory/nav icons).
+    <div className={cn("relative flex min-w-0 flex-1", className)}>
       {mode !== "expanded" && (
-        // One rounded container that collapses from the RIGHT toward the
-        // Sparkles icon on minimize: the icon stays pinned left while the input
-        // + actions clip away (overflow-hidden) as `layout` animates the width —
-        // no whole-box stretch (the old shared-layoutId morph distorted it).
-        <motion.div
+        // The Sparkles icon is ONE always-present, fixed element (the same icon
+        // in chip + mini). Only the input + actions collapse their WIDTH — no
+        // box-scale, so the icon never stretches (the old `layout` morph did).
+        // The pill hugs its content (`w-fit`): a circle in mini, a wide pill in
+        // chip; `max-w-full` keeps it from overflowing past the nav icons.
+        <div
           className={cn(
-            "flex h-11 min-w-0 items-center overflow-hidden rounded-full",
-            mode === "chip" && "w-full pe-1",
+            "flex h-11 w-fit max-w-full items-center overflow-hidden rounded-full",
             surface,
           )}
-          layout
-          transition={{ type: "spring", stiffness: 420, damping: 36 }}
         >
           <button
             aria-label={mode === "chip" ? t("chat.minimize") : t("chat.open")}
@@ -164,16 +164,21 @@ export function DjChatEntry({
           <AnimatePresence initial={false}>
             {mode === "chip" && (
               <motion.form
-                animate={{ opacity: 1 }}
-                className="flex min-w-0 flex-1 items-center gap-1"
-                exit={{ opacity: 0 }}
-                initial={{ opacity: 0 }}
+                animate={{ width: "auto", opacity: 1 }}
+                className="flex items-center gap-1 overflow-hidden pe-1"
+                exit={{ width: 0, opacity: 0 }}
+                initial={{ width: 0, opacity: 0 }}
                 key="dj-chat-chip-body"
                 onSubmit={handleSubmit}
-                transition={{ duration: 0.12 }}
+                transition={{
+                  type: "spring",
+                  stiffness: 480,
+                  damping: 40,
+                  opacity: { duration: 0.1 },
+                }}
               >
                 <input
-                  className="h-full min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+                  className="h-9 w-[min(56vw,30rem)] min-w-0 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
                   onChange={(e) => setDraft(e.target.value)}
                   placeholder={t("chat.placeholder")}
                   value={draft}
@@ -216,7 +221,7 @@ export function DjChatEntry({
               </motion.form>
             )}
           </AnimatePresence>
-        </motion.div>
+        </div>
       )}
 
       {typeof document !== "undefined" && createPortal(<ChatReplyNotification />, document.body)}
