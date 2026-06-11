@@ -1061,6 +1061,15 @@ export function SettingsPage() {
                   </div>
                 )}
 
+                {activeItem === "cloud-sync" && (
+                  // Publish rebuilds the manifest + discovery indexes from THIS
+                  // device only (R2 PRD §12.2 F4) — until merge-on-publish lands,
+                  // exactly one device should write a given drive.
+                  <p className="rounded-md border border-border bg-muted/40 p-3 text-muted-foreground text-xs">
+                    {t("settings.cloudSingleWriterHint")}
+                  </p>
+                )}
+
                 {activeItem === "cloud-sync" && syncProgress && (
                   <CloudSyncProgress progress={syncProgress} />
                 )}

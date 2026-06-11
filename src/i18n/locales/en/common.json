@@ -615,6 +615,7 @@
     },
     "cloudCorsTitle": "Recommended R2 CORS",
     "cloudCorsHint": "Use this on the bucket when running MUZERO in a browser.",
+    "cloudSingleWriterHint": "Sync from one device per drive: publishing rebuilds the drive's manifest and device indexes from this device only, so a second writing device would overwrite the first. Other devices should add the drive as a shared link (read-only) for now.",
     "cloudCorsCopy": "Copy CORS",
     "cloudCorsCopied": "Copied",
     "cloudPresenceTitle": "Listening now presence",

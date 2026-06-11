@@ -601,6 +601,7 @@
     },
     "cloudCorsTitle": "推奨 R2 CORS",
     "cloudCorsHint": "ブラウザーで MUZERO を使う場合、この設定をバケット CORS に追加してください。",
+    "cloudSingleWriterHint": "同期は 1 ドライブにつき 1 台のデバイスで：公開はこのデバイスの内容でドライブの manifest とデバイスインデックスを作り直すため、2 台目の書き込みデバイスは先のデバイスを上書きします。他のデバイスは当面、共有リンク（読み取り専用）でドライブを追加してください。",
     "cloudCorsCopy": "CORS をコピー",
     "cloudCorsCopied": "コピーしました",
     "cloudPresenceTitle": "Listening now presence",

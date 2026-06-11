@@ -600,6 +600,7 @@
     },
     "cloudCorsTitle": "권장 R2 CORS",
     "cloudCorsHint": "브라우저에서 MUZERO를 사용할 때 이 설정을 버킷 CORS에 추가하세요.",
+    "cloudSingleWriterHint": "드라이브마다 한 기기에서만 동기화하세요. 게시할 때 이 기기 기준으로 드라이브의 manifest와 기기 인덱스를 다시 만들기 때문에, 두 번째 쓰기 기기가 첫 기기를 덮어씁니다. 다른 기기는 당분간 공유 링크(읽기 전용)로 드라이브를 추가하세요.",
     "cloudCorsCopy": "CORS 복사",
     "cloudCorsCopied": "복사됨",
     "cloudPresenceTitle": "Listening now presence",

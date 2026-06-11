@@ -601,6 +601,7 @@
     },
     "cloudCorsTitle": "推荐 R2 CORS",
     "cloudCorsHint": "在浏览器里使用 MUZERO 时，将这段配置放到 bucket CORS。",
+    "cloudSingleWriterHint": "每个云盘只用一台设备同步：发布会以本设备为准重建云盘的 manifest 和设备索引，第二台写入设备会覆盖前一台。其他设备目前请以共享链接（只读）方式添加该云盘。",
     "cloudCorsCopy": "复制 CORS",
     "cloudCorsCopied": "已复制",
     "cloudPresenceTitle": "正在听 Presence",
