@@ -1,6 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { MuzeroDB } from "@/db/muzero-db";
-import { getLocalDevice, getOrCreateLocalDevice, updateLocalDeviceProfile } from "./device-repo";
+import {
+  getLocalDevice,
+  getOrCreateLocalDevice,
+  setLocalDeviceAvatar,
+  updateLocalDeviceProfile,
+} from "./device-repo";
 
 let db: MuzeroDB;
 let dbName: string;
@@ -148,5 +153,31 @@ describe("device repository", () => {
       profileRevision: 3,
       lastSeenAt: 3000,
     });
+  });
+
+  it("stores an uploaded avatar as a device-bound media blob", async () => {
+    await getOrCreateLocalDevice(
+      {
+        now: 1000,
+        publicIdFactory: () => "dvc_test",
+        platform: "browser",
+      },
+      db,
+    );
+    const blob = new Blob(["avatar-bytes"], { type: "image/png" });
+
+    const updated = await setLocalDeviceAvatar({ blob, mime: "image/png", now: 2000 }, db);
+
+    expect(updated.avatarBlobId).toMatch(/^blb_/);
+    expect(updated.profileRevision).toBe(2);
+    expect(updated.lastSeenAt).toBe(2000);
+    const media = await db.mediaBlobs.get(updated.avatarBlobId ?? "");
+    expect(media).toMatchObject({
+      trackId: updated.id,
+      role: "avatar",
+      mime: "image/png",
+      bytes: blob.size,
+    });
+    expect(media?.blob).toBeDefined();
   });
 });

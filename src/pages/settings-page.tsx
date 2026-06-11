@@ -16,6 +16,7 @@ import { AddDriveDialog } from "@/components/settings/add-drive-dialog";
 import { BackgroundSettings } from "@/components/settings/background-settings";
 import { CloudDriveSets } from "@/components/settings/cloud-drive-sets";
 import { CloudDriveSyncControls } from "@/components/settings/cloud-drive-sync-controls";
+import { DeviceAvatarPicker } from "@/components/settings/device-avatar-picker";
 import { FlowSettings } from "@/components/settings/flow-settings";
 import { ImportedFoldersSettings } from "@/components/settings/imported-folders-settings";
 import { LyricsSettings } from "@/components/settings/lyrics-settings";
@@ -46,12 +47,15 @@ import type {
   CloudDrive,
   CloudDriveAutoSyncFrequency,
   CloudDriveUploadConcurrency,
+  CropRect,
   LlmProviderId,
 } from "@/db/types";
 import { useSettings } from "@/hooks/use-app-data";
+import { useObjectUrl } from "@/hooks/use-media";
 import { type Locale, locales, persistLocale } from "@/i18n/config";
 import { APP_ICON_OPTIONS, type AppIconId, resolveAppIcon } from "@/lib/app-icon";
 import { hasAppIcon, hasStreamingSources } from "@/lib/desktop/bridge";
+import { getCroppedBlob } from "@/lib/image-crop";
 import { log } from "@/lib/logger";
 import { isMac } from "@/lib/shortcuts";
 import {
@@ -82,6 +86,7 @@ import {
 import {
   getLocalDevice,
   getOrCreateLocalDevice,
+  setLocalDeviceAvatar,
   updateLocalDeviceProfile,
 } from "@/sync/device-repo";
 import { summarizePlaybackAggregates } from "@/sync/playback-aggregate-summary";
@@ -199,6 +204,15 @@ export function SettingsPage() {
   const cloudDrives = useLiveQuery(() => listCloudDrives(), [], []);
   const latestSyncRun = useLiveQuery(() => db.syncRuns.orderBy("startedAt").last(), [], undefined);
   const localDevice = useLiveQuery(() => getLocalDevice(), [], undefined);
+  const deviceAvatarBlob = useLiveQuery(
+    async () =>
+      localDevice?.avatarBlobId
+        ? (await db.mediaBlobs.get(localDevice.avatarBlobId))?.blob
+        : undefined,
+    [localDevice?.avatarBlobId],
+    undefined,
+  );
+  const deviceAvatarUrl = useObjectUrl(deviceAvatarBlob);
   const playbackAggregateRows = useLiveQuery(
     () => db.playbackAggregates.where("scope").equals("track").toArray(),
     [],
@@ -234,6 +248,7 @@ export function SettingsPage() {
   const [deviceAvatarSeed, setDeviceAvatarSeed] = useState("");
   const [devicePublishProfile, setDevicePublishProfile] = useState(false);
   const [deviceSaved, setDeviceSaved] = useState(false);
+  const [deviceAvatarSaving, setDeviceAvatarSaving] = useState(false);
 
   // Keep the local draft in sync once the persisted settings load.
   useEffect(() => setDraft(settings), [settings]);
@@ -348,6 +363,27 @@ export function SettingsPage() {
     setDeviceAvatarSeed(updated.avatarSeed ?? updated.publicId);
     setDevicePublishProfile(updated.publishProfile);
     setDeviceSaved(true);
+  }
+
+  async function saveDeviceAvatar(file: File, rect: CropRect) {
+    setDeviceAvatarSaving(true);
+    try {
+      const mime = file.type || "image/jpeg";
+      const cropped = await getCroppedBlob(file, rect, mime);
+      const updated = await setLocalDeviceAvatar({
+        blob: cropped,
+        mime: cropped.type || mime,
+        name: deviceName,
+        avatarSeed: deviceAvatarSeed,
+        publishProfile: devicePublishProfile,
+      });
+      setDeviceName(updated.name);
+      setDeviceAvatarSeed(updated.avatarSeed ?? updated.publicId);
+      setDevicePublishProfile(updated.publishProfile);
+      setDeviceSaved(true);
+    } finally {
+      setDeviceAvatarSaving(false);
+    }
   }
 
   async function checkCloud() {
@@ -746,25 +782,24 @@ export function SettingsPage() {
                 <CardTitle>{t("settings.deviceTitle")}</CardTitle>
               </CardHeader>
               <CardContent className="flex flex-col gap-4">
-                <div className="flex items-center gap-3">
-                  <div
-                    className="grid size-14 shrink-0 place-items-center rounded-md text-white shadow-sm"
-                    style={deviceAvatarStyle(deviceAvatarSeed || localDevice?.publicId)}
-                  >
-                    <UserRound className="size-7" />
-                  </div>
-                  <div className="min-w-0">
-                    <p className="truncate font-medium text-sm">
-                      {localDevice?.name ?? t("settings.devicePending")}
-                    </p>
-                    <p className="text-muted-foreground text-xs">
-                      {t("settings.deviceMeta", {
-                        publicId: localDevice?.publicId ?? "pending",
-                        revision: localDevice?.profileRevision ?? 0,
-                      })}
-                    </p>
-                  </div>
+                <div className="min-w-0">
+                  <p className="truncate font-medium text-sm">
+                    {localDevice?.name ?? t("settings.devicePending")}
+                  </p>
+                  <p className="text-muted-foreground text-xs">
+                    {t("settings.deviceMeta", {
+                      publicId: localDevice?.publicId ?? "pending",
+                      revision: localDevice?.profileRevision ?? 0,
+                    })}
+                  </p>
                 </div>
+
+                <DeviceAvatarPicker
+                  avatarUrl={deviceAvatarUrl}
+                  fallbackStyle={deviceAvatarStyle(deviceAvatarSeed || localDevice?.publicId)}
+                  saving={deviceAvatarSaving}
+                  onSaveAvatar={saveDeviceAvatar}
+                />
 
                 <div className="grid gap-2 rounded-md border border-border bg-muted/25 p-3 text-xs sm:grid-cols-2">
                   <div>

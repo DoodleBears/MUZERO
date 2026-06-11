@@ -1260,8 +1260,8 @@ export interface Memory {
 Rules:
 
 - Device names are user-authored profile data, not hidden telemetry.
-- Avatar is user-authored profile data. V1 should provide generated initials/color avatars from `avatarSeed`; uploaded avatar images are optional and can ship later in the same profile schema.
-- Uploaded avatar images, if enabled, are stored in the user's local DB and published to the user's R2 profile object path, not to MUZERO-hosted storage.
+- Avatar is user-authored profile data. V1 provides generated color avatars from `avatarSeed` and allows the user to upload/crop an avatar image from Settings > This device.
+- Uploaded avatar images are stored in the user's local DB and published to the user's R2 profile object path when profile publishing is enabled, not to MUZERO-hosted storage.
 - Device profile sync is visible and can be disabled.
 - A device profile update writes only to writable scopes where the current install has permission:
   - its own Owner R2 drive, if owner sync is enabled
@@ -1887,6 +1887,7 @@ For a large shared playlist with many trusted devices, the UI should:
 - [x] Add UI to rename device.
 - [x] Add optional device avatar/color seed for attribution chips.
 - [x] Add optional uploaded avatar image with local storage and remote profile object reference.
+- [x] Add Settings UI to upload/crop the local device avatar before syncing it through the existing profile publish path.
 - [x] Publish `DevicePublicProfile` to owner/trusted drives when enabled and write permission exists.
 - [x] Add profile `revision` and ETag/hash checks so two offline edits cannot silently overwrite each other.
 - [x] Add `Memory.author?: MemoryAuthorRef` and backfill existing rows as unknown/local.
@@ -2259,12 +2260,34 @@ Do not record secrets, full signed URLs, or media content.
 
 **Outcome (2026-06-11): Phase 11 ✅.** A configured owner/trusted R2 drive can now copy a trusted-device setup link; another MUZERO install can paste it into Add Drive and become a writable trusted device without manually retyping endpoint, bucket, public URL, access key, secret, or prefix. The UX explicitly warns that the link contains write credentials and is only for the user's trusted devices. Local device profiles remain renameable, and new local profiles avoid default-name collisions.
 
+### 12.8 Phase 12: Device Avatar UX + Source Attribution
+
+**Goal:** make multi-device / multi-drive libraries understandable at a glance by pairing every publish source with a visible avatar + name while keeping V1's no-account, R2-only boundary.
+
+**Status (2026-06-11):** DA-1 is implemented. The remaining attribution indicators need a dedicated follow-up because the browse/import UI currently reads `publishedBy` from the manifest but does not yet resolve `devices/index.json` / `DevicePublicProfile` into a local display cache for set and track surfaces.
+
+**Product requirements:**
+
+1. **Local device avatar upload.** Settings > This device lets the user choose an image, crop it square, store it as a local `mediaBlobs(role="avatar")` object, and point `DeviceRecord.avatarBlobId` at it.
+2. **Avatar sync is explicit.** The avatar only uploads to owner/trusted writable R2 drives when profile publishing is enabled; read-only/public drives never receive local profile data.
+3. **Set owner attribution.** Remote set preview/import surfaces should resolve `manifest.sets[].publishedBy` through `devices/index.json` and/or `profiles/devices/<id>/profile.json`, then show avatar + display name with fallbacks to generated seed, public id, and drive label.
+4. **Track/source attribution.** Tracks and sets imported from `ses_remote_<driveId>_*` / `trk_remote_<driveId>_*` should show a small source indicator in list rows and set headers so users can tell whether a song came from this device, another trusted device, or another connected cloud drive.
+5. **No trust implication.** Device name/avatar are attribution only, not authentication. Write permission remains governed solely by local R2 credentials or future broker grants.
+
+**Checklist:**
+
+- [x] DA-1 Add tested Settings avatar upload/crop UI and local avatar media storage.
+- [ ] DA-2 Load remote device profiles/indexes during cloud-drive browse/import and cache safe display fields locally.
+- [ ] DA-3 Render owner/source avatar chips on remote set preview rows, imported set headers, and track rows.
+- [ ] DA-4 Add fallback and privacy copy: local-only when profile publishing is off; generated avatar/public id when a profile image is missing.
+
 ---
 
 ## 13. Document Change Log
 
 | Date | Author | Changes |
 |------|--------|---------|
+| 2026-06-11 | MUZERO | Phase 12 DA-1 started/completed: Settings > This device now supports uploaded avatar images via the existing square cropper, stores the cropped image as a device-bound avatar media blob, and reuses the existing `DevicePublicProfile.avatar` R2 publish path when profile publishing is enabled. Phase 12 also records the remaining owner/source avatar-chip UX for remote set previews, imported set headers, and track rows. |
 | 2026-06-11 | MUZERO | UX follow-up: Add Drive now gives writable owner/trusted R2 drives explicit post-add choices before saving — run `Sync now` immediately and/or enable `After local changes` auto sync. Both are opt-in, visible, and covered by component tests so adding a drive no longer leaves users guessing whether the first sync will happen. |
 | 2026-06-11 | MUZERO | Regression fix: weak R2 ETags such as `W/"..."` are no longer used as `If-Match` write preconditions. Export planning now only emits `If-Match` for strong validators; weak or missing child/manifest validators fall back to the existing manifest-last recovery behavior instead of entering a guaranteed HTTP 412 loop. The concurrent-upload regression test now asserts JSON barrier ordering without assuming a fixed order among parallel immutable PUTs. |
 | 2026-06-11 | MUZERO | Regression fix: child JSON objects (`sets/*/index.json`, discovery indexes) no longer use `If-None-Match: *` when their base object is absent or unreadable. Child writes use `If-Match` only when a valid ETag was read; otherwise they overwrite as recoverable intermediate artifacts while the root `manifest.json` remains the conditional, manifest-last publish boundary. This prevents orphan/legacy child objects from causing endless 412 loops. |

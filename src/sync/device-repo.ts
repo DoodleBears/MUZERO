@@ -1,5 +1,6 @@
 import { db as defaultDb, type MuzeroDB } from "@/db/muzero-db";
 import type { DeviceRecord } from "@/db/types";
+import { newId } from "@/lib/id";
 
 export interface LocalDeviceOptions {
   now?: number;
@@ -15,6 +16,15 @@ export interface UpdateLocalDeviceProfileInput {
   name?: string;
   avatarSeed?: string;
   avatarBlobId?: string;
+  publishProfile?: boolean;
+  now?: number;
+}
+
+export interface SetLocalDeviceAvatarInput {
+  blob: Blob;
+  mime?: string;
+  name?: string;
+  avatarSeed?: string;
   publishProfile?: boolean;
   now?: number;
 }
@@ -82,6 +92,36 @@ export async function updateLocalDeviceProfile(
     lastSeenAt: input.now ?? Date.now(),
   };
   await db.devices.put(next);
+  return next;
+}
+
+export async function setLocalDeviceAvatar(
+  input: SetLocalDeviceAvatarInput,
+  db: MuzeroDB = defaultDb,
+): Promise<DeviceRecord> {
+  const now = input.now ?? Date.now();
+  const current = await getOrCreateLocalDevice({ now }, db);
+  const avatarBlobId = newId("blb");
+  const next: DeviceRecord = {
+    ...current,
+    name: input.name?.trim() || current.name,
+    avatarSeed: input.avatarSeed?.trim() || current.avatarSeed,
+    avatarBlobId,
+    publishProfile: input.publishProfile ?? current.publishProfile,
+    profileRevision: current.profileRevision + 1,
+    lastSeenAt: now,
+  };
+  await db.transaction("rw", db.mediaBlobs, db.devices, async () => {
+    await db.mediaBlobs.put({
+      id: avatarBlobId,
+      trackId: current.id,
+      role: "avatar",
+      mime: input.mime || input.blob.type || "image/jpeg",
+      bytes: input.blob.size,
+      blob: input.blob,
+    });
+    await db.devices.put(next);
+  });
   return next;
 }
 
