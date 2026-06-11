@@ -2285,7 +2285,7 @@ Do not record secrets, full signed URLs, or media content.
 
 **Goal:** make cloud-drive setup feel like one coherent workflow, make the automatic/manual sync choice explicit, and ensure imported R2 songs are immediately playable, not merely downloadable.
 
-**Status (2026-06-11):** SA-1 through SA-4 are completed. Remote R2 playback now fetches the remote object through MUZERO's CORS-aware app fetch path and plays a temporary Blob so the WebAudio graph cannot mute a cross-origin media element; newly added/defaulted cloud drives now use automatic mode that imports every remote set through the guarded pull pipeline, and Settings now exposes one consolidated Cloud Drive area for setup, connected drives, sync state, and CORS.
+**Status (2026-06-11):** Phase 13 is completed. Remote R2 playback now fetches the remote object through MUZERO's CORS-aware app fetch path and plays a temporary Blob so the WebAudio graph cannot mute a cross-origin media element; newly added/defaulted cloud drives now use automatic mode that imports every remote set through the guarded pull pipeline; Settings exposes one consolidated Cloud Drive area for setup, connected drives, sync state, and CORS; and the Add Drive flow is a two-column R2 setup guide that separates public read/CORS from optional write credentials.
 
 **Product requirements:**
 
@@ -2317,7 +2317,7 @@ Do not record secrets, full signed URLs, or media content.
 - [x] SA-2 Add a tested sync-mode policy and default newly added drives to automatic import-all unless the user chooses manual.
 - [x] SA-3 Wire automatic import-all into add/refresh flows while preserving manual import controls.
 - [x] SA-4 Consolidate cloud drive/CORS/sync controls into one Settings area and update four-language copy.
-- [ ] SA-5 Redesign the Add R2 Drive modal as a two-column step-by-step guide with public-read vs optional write-credential sections.
+- [x] SA-5 Redesign the Add R2 Drive modal as a two-column step-by-step guide with public-read vs optional write-credential sections.
 
 ---
 
@@ -2325,6 +2325,7 @@ Do not record secrets, full signed URLs, or media content.
 
 | Date | Author | Changes |
 |------|--------|---------|
+| 2026-06-11 | MUZERO | Phase 13 SA-5 completed: Add Drive is now a wider two-column modal with the form/stepper on the left and contextual R2 setup guidance on the right. The owner flow separates write credentials from the public read URL, links to the R2 dashboard/token docs, and explains that public/read-only imports do not need Access Key ID / Secret Access Key while owner/trusted bidirectional sync does. |
 | 2026-06-11 | MUZERO | Phase 13 SA-4 completed: Settings now has a single Cloud Drive sidebar destination for the R2 setup checklist, add-drive action, connected drive cards, sync/progress state, multi-writer explanation, and copyable CORS JSON. Stale `cloud-owner` / `cloud-sync` navigation ids alias to the consolidated pane so persisted selections remain safe. |
 | 2026-06-11 | MUZERO | Phase 13 SA-1 reliability follow-up: remote R2 audio/video playback now uses `getAppFetch()` to read the object as a temporary Blob before loading the `MediaEngine`, eliminating the remaining browser case where progress advanced but WebAudio produced no sound. The regression tests now require remote audio/video to use the Blob path rather than direct cross-origin media element loading. |
 | 2026-06-11 | MUZERO | Phase 13 SA-2/SA-3 completed: CloudDrive defaults now resolve to `change-debounce` automatic mode, Add Drive defaults the post-add sync/auto-sync choices on for writable owner/trusted drives, and `CloudDriveSets` automatically browses/imports every remote set for automatic drives through the existing orchestrated `pullRemoteSet` path while keeping manual preview/import controls available. |

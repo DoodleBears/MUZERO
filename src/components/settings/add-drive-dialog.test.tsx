@@ -64,6 +64,31 @@ describe("AddDriveDialog", () => {
     mocks.publishDrive.mockResolvedValue(undefined);
   });
 
+  it("shows contextual setup guidance and switches it with the drive mode", () => {
+    render(
+      <AddDriveDialog
+        open
+        onOpenChange={mocks.onOpenChange}
+        settings={{ r2CredentialsByDriveId: {} } as AppSettings}
+      />,
+    );
+
+    expect(screen.getByText("settings.addDriveGuidePublicReadTitle")).toBeInTheDocument();
+    expect(screen.getByText("settings.addDriveGuideWriteTitle")).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "settings.addDriveGuideDashboardLink" }),
+    ).toHaveAttribute("href", "https://dash.cloudflare.com/?to=/:account/r2");
+    expect(screen.getByRole("link", { name: "settings.addDriveGuideTokenLink" })).toHaveAttribute(
+      "href",
+      "https://developers.cloudflare.com/r2/api/s3/tokens/",
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /settings.addDriveModeShared/ }));
+
+    expect(screen.getByText("settings.addDriveGuideSharedTitle")).toBeInTheDocument();
+    expect(screen.queryByText("settings.addDriveGuideWriteTitle")).not.toBeInTheDocument();
+  });
+
   it("offers post-add sync choices and honors them for a writable R2 drive", async () => {
     render(
       <AddDriveDialog
