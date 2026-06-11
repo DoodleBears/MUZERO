@@ -52,11 +52,18 @@ function curlMediaFetch(target, range) {
         return;
       }
       headerBuf = Buffer.concat([headerBuf, chunk]);
-      const sep = headerBuf.indexOf("\r\n\r\n");
+      // The header/body boundary is a blank line — CRLF over HTTP/1.1, but curl's
+      // HTTP/2 `-i` output can use LF. Accept either.
+      let sep = headerBuf.indexOf("\r\n\r\n");
+      let sepLen = 4;
+      if (sep === -1) {
+        sep = headerBuf.indexOf("\n\n");
+        sepLen = 2;
+      }
       if (sep === -1) return;
-      const lines = headerBuf.subarray(0, sep).toString("latin1").split("\r\n");
-      const rest = headerBuf.subarray(sep + 4);
-      const status = Number.parseInt(lines[0].split(/\s+/)[1], 10) || 200;
+      const lines = headerBuf.subarray(0, sep).toString("latin1").split(/\r?\n/);
+      const rest = headerBuf.subarray(sep + sepLen);
+      const status = Number.parseInt((lines[0] || "").split(/\s+/)[1], 10) || 200;
       const respHeaders = new Headers();
       for (const line of lines.slice(1)) {
         const i = line.indexOf(":");
@@ -67,6 +74,12 @@ function curlMediaFetch(target, range) {
           // skip a header value the Headers ctor rejects (e.g. duplicates curl folds)
         }
       }
+      console.error(
+        "[muzfetch] curl googlevideo",
+        status,
+        respHeaders.get("content-type"),
+        respHeaders.get("content-range") || respHeaders.get("content-length"),
+      );
       parsed = true;
       resolve(new Response(body, { status, headers: respHeaders }));
       if (rest.length) controller.enqueue(rest);
@@ -79,9 +92,15 @@ function curlMediaFetch(target, range) {
     child.stderr.on("data", (c) => {
       errText += c;
     });
-    child.on("error", reject);
+    child.on("error", (err) => {
+      console.error("[muzfetch] curl spawn error", err.message);
+      reject(err);
+    });
     child.on("close", (code) => {
-      if (!parsed) reject(new Error(`curl exited ${code}: ${errText.slice(0, 160)}`));
+      if (!parsed) {
+        console.error("[muzfetch] curl no response — exit", code, errText.slice(0, 160));
+        reject(new Error(`curl exited ${code}`));
+      }
     });
   });
 }
