@@ -261,6 +261,46 @@ describe("CloudDriveSets", () => {
     });
   });
 
+  it("uses freshly loaded device profiles when automatic sync imports sets", async () => {
+    const attributedPreview = {
+      ...preview,
+      sets: [{ ...preview.sets[0]!, publishedBy: "dvc_friend" }],
+    };
+    const profiles = new Map([
+      [
+        "dvc_friend",
+        {
+          devicePublicId: "dvc_friend",
+          displayName: "Friend phone",
+          avatarSeed: "green",
+          avatarUrl: "https://pub.example.com/muzero/objects/avatars/friend.jpg",
+        },
+      ],
+    ]);
+    subscribeManifest.mockResolvedValueOnce(attributedPreview);
+    loadRemoteDeviceProfiles.mockResolvedValueOnce(profiles);
+    loadRemoteEntityCovers.mockResolvedValueOnce(undefined);
+    const remoteSet = { indexUrl: attributedPreview.sets[0]!.indexUrl, index: {}, tracks: [] };
+    loadRemoteSetIndex.mockResolvedValueOnce(remoteSet);
+    pullRemoteSet.mockResolvedValue(undefined);
+
+    render(<CloudDriveSets drive={{ ...drive, autoSyncFrequency: "change-debounce" }} />);
+
+    await waitFor(() => expect(pullRemoteSet).toHaveBeenCalledTimes(1));
+    expect(pullRemoteSet).toHaveBeenCalledWith({
+      driveId: drive.id,
+      remoteSet,
+      source: {
+        driveId: drive.id,
+        driveLabel: drive.label,
+        devicePublicId: "dvc_friend",
+        displayName: "Friend phone",
+        avatarSeed: "green",
+        avatarUrl: "https://pub.example.com/muzero/objects/avatars/friend.jpg",
+      },
+    });
+  });
+
   it("skips legacy empty duplicate set previews during automatic import-all", async () => {
     const repairedPreview = {
       ...multiPreview,

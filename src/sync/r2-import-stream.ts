@@ -104,7 +104,7 @@ function normalizeDisplayMode(
   return mode === "title" ? "cover" : mode;
 }
 
-function sanitizeCloudSource(source: CloudSourceAttribution): CloudSourceAttribution {
+export function sanitizeCloudSource(source: CloudSourceAttribution): CloudSourceAttribution {
   return {
     driveId: source.driveId,
     driveLabel: source.driveLabel?.trim() || undefined,

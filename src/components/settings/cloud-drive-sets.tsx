@@ -66,33 +66,40 @@ export function CloudDriveSets({ drive }: { drive: CloudDrive }) {
   }, []);
 
   const importSetFromPreview = useCallback(
-    async (result: RemoteLibraryPreview, set: RemoteSetPreview) => {
+    async (
+      result: RemoteLibraryPreview,
+      set: RemoteSetPreview,
+      profiles: ReadonlyMap<string, RemoteDeviceProfileSummary> = deviceProfiles,
+    ) => {
       const publicId = localDevicePublicId ?? (await getLocalDevice())?.publicId;
       if (isSelfPublishedSet(set, publicId)) return;
       const remoteSet = await loadRemoteSetIndex(result, set);
       await useSyncStore.getState().pullRemoteSet({
         driveId: drive.id,
         remoteSet,
-        source: sourceForRemoteSet(drive, set, deviceProfiles),
+        source: sourceForRemoteSet(drive, set, profiles),
       });
     },
     [deviceProfiles, drive, localDevicePublicId],
   );
 
   const importAllSets = useCallback(
-    async (result: RemoteLibraryPreview) => {
+    async (
+      result: RemoteLibraryPreview,
+      profiles: ReadonlyMap<string, RemoteDeviceProfileSummary> = deviceProfiles,
+    ) => {
       setImportingSetId(AUTO_IMPORTING_SET_ID);
       try {
         const publicId = localDevicePublicId ?? (await getLocalDevice())?.publicId;
         for (const set of visibleRemoteSets(result.sets)) {
           if (isSelfPublishedSet(set, publicId)) continue;
-          await importSetFromPreview(result, set);
+          await importSetFromPreview(result, set, profiles);
         }
       } finally {
         setImportingSetId(null);
       }
     },
-    [importSetFromPreview, localDevicePublicId],
+    [deviceProfiles, importSetFromPreview, localDevicePublicId],
   );
 
   const browse = useCallback(
@@ -107,7 +114,7 @@ export function CloudDriveSets({ drive }: { drive: CloudDrive }) {
         setPreview(result);
         setStatus("loaded");
         void importDriveEntityCovers(result);
-        if (options.importAll) await importAllSets(result);
+        if (options.importAll) await importAllSets(result, profiles);
       } catch (cause) {
         if (isMissingManifest(cause)) {
           setPreview(null);

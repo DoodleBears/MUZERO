@@ -2677,12 +2677,34 @@ Do not record secrets, full signed URLs, or media content.
 - [x] SV-4 Add cover palette start/cache/success/fallback/failure diagnostics.
 - [x] SV-5 Add four-locale labels for source rows and source kinds.
 
+### 12.24 Phase 28: Device Attribution Backfill for Cloud Sources
+
+**Goal:** make every cloud-imported set and song show the same device name/avatar that the Cloud Drive browser resolves from the remote device profile.
+
+**Status (2026-06-12):** Phase 28 is completed. Automatic import-all now passes the freshly loaded remote device-profile map into each pull instead of using a stale React state snapshot, so first-time auto-sync writes the correct `displayName`, `avatarSeed`, and `avatarUrl` into `DjSession.cloudSource` and `Track.cloudSource`. Pulls that are otherwise `unchanged` now still refresh source attribution on the imported session and tracks, repairing older rows that were imported before the profile was available.
+
+**Product requirements:**
+
+1. **Keep source identity consistent across Settings and song rows.**
+   - If the Cloud Drive browser shows a remote publisher as a named device with avatar, imported songs from that set must show the same name/avatar in source chips.
+   - Auto-sync and manual import must use the same profile-enriched attribution path.
+2. **Repair historical incomplete attribution without destructive re-import.**
+   - When a remote set has no content changes, a pull may still update local `cloudSource` display fields.
+   - The repair must not touch local playback cache, tags, liked state, local covers, play counts, or other user-authored track state.
+
+**Checklist:**
+
+- [x] DA-1 Pass freshly loaded device profiles into automatic import-all.
+- [x] DA-2 Refresh `cloudSource` on unchanged pulls for imported session and track rows.
+- [x] DA-3 Cover auto-sync profile propagation and attribution backfill with regression tests.
+
 ---
 
 ## 13. Document Change Log
 
 | Date | Author | Changes |
 |------|--------|---------|
+| 2026-06-12 | MUZERO | Phase 28 completed: Cloud Drive auto-sync now imports sets with the freshly loaded remote device profiles, and unchanged pulls refresh existing session/track `cloudSource` snapshots so song source chips show the correct device name/avatar without re-importing or clobbering local state. |
 | 2026-06-12 | MUZERO | Phase 27 completed: track details now show media and cover source types (local/cache, R2 object, URL, stream, missing), playback trace logs include sanitized media/cover source kind and host, and cover palette extraction logs start/cache/success/fallback/failure with sanitized remote URL context, local blob mime/bytes, palette count, and theme-fallback state. |
 | 2026-06-12 | MUZERO | Phase 26 completed: streamed playback auto-skip now tracks failed track ids per play-run, stops after every current queue member has failed once (or after the 30-track hard cap), resets on successful load/hard stop, and keeps notifications to one warning/error per skip run. |
 | 2026-06-12 | MUZERO | Phase 25 completed: streamed playlist imports now cache each song's cover image as `Track.coverBlobId` so existing R2 `track.cover` export syncs per-track artwork. Incremental playlist syncs do the same, existing local covers are preserved, and imported metadata-only tracks fall back to `streamMeta.coverUrl` when no private R2 cover object exists yet. |

@@ -2,7 +2,7 @@ import { db as defaultDb, type MuzeroDB } from "@/db/muzero-db";
 import type { CloudSourceAttribution, SyncRun } from "@/db/types";
 import { newId } from "@/lib/id";
 import { cacheRemoteTrackMedia, type SyncCacheFetch } from "./r2-cache";
-import { importRemoteSetStream } from "./r2-import-stream";
+import { importRemoteSetStream, sanitizeCloudSource } from "./r2-import-stream";
 import { type DiffRemoteSetInput, diffRemoteSet, type RemoteSetDiff } from "./r2-pull-diff";
 
 export interface RemoteSetPullPreview extends RemoteSetDiff {
@@ -58,6 +58,7 @@ export async function applyRemoteSetPull(
     throw new Error("Pull blocked: conflict");
   }
   if (!preview.willMutate) {
+    await refreshRemoteSourceAttribution(input, db);
     await completePullRun(run, 0, 0, db);
     return { ...preview, runId: run.id, trackIds: [], cachedMedia: 0, cacheFailures: 0 };
   }
@@ -91,6 +92,55 @@ export async function applyRemoteSetPull(
     );
     throw error;
   }
+}
+
+function remoteLocalId(prefix: "ses" | "trk", driveId: string, remoteId: string): string {
+  return `${prefix}_remote_${safeIdPart(driveId)}_${safeIdPart(remoteId)}`;
+}
+
+function safeIdPart(value: string): string {
+  return value.replace(/[^a-zA-Z0-9_-]+/g, "_");
+}
+
+async function refreshRemoteSourceAttribution(
+  input: ApplyRemoteSetPullInput,
+  db: MuzeroDB,
+): Promise<void> {
+  if (!input.source) return;
+  const source = sanitizeCloudSource(input.source);
+  const sessionId = remoteLocalId("ses", input.driveId, input.remoteSet.index.set.id);
+  const trackIds = input.remoteSet.tracks.map((track) =>
+    remoteLocalId("trk", input.driveId, track.id),
+  );
+
+  await db.transaction("rw", db.sessions, db.tracks, async () => {
+    const session = await db.sessions.get(sessionId);
+    if (session && !sameCloudSource(session.cloudSource, source)) {
+      await db.sessions.update(sessionId, { cloudSource: source });
+    }
+    const tracks = await db.tracks.bulkGet(trackIds);
+    await Promise.all(
+      tracks.map((track) =>
+        track && !sameCloudSource(track.cloudSource, source)
+          ? db.tracks.update(track.id, { cloudSource: source })
+          : undefined,
+      ),
+    );
+  });
+}
+
+function sameCloudSource(
+  a: ReturnType<typeof sanitizeCloudSource> | undefined,
+  b: ReturnType<typeof sanitizeCloudSource>,
+): boolean {
+  return (
+    a?.driveId === b.driveId &&
+    (a.driveLabel ?? undefined) === (b.driveLabel ?? undefined) &&
+    (a.devicePublicId ?? undefined) === (b.devicePublicId ?? undefined) &&
+    (a.displayName ?? undefined) === (b.displayName ?? undefined) &&
+    (a.avatarSeed ?? undefined) === (b.avatarSeed ?? undefined) &&
+    (a.avatarUrl ?? undefined) === (b.avatarUrl ?? undefined)
+  );
 }
 
 function throwIfPullAborted(signal?: AbortSignal): void {

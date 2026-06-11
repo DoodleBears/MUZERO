@@ -128,6 +128,108 @@ describe("R2 pull sync", () => {
     });
   });
 
+  it("refreshes source attribution on unchanged imported tracks", async () => {
+    await seedLocalImportedSet({ updatedAt: 1000 });
+    await db.sessions.update("ses_remote_drv_1_ses_tokyo", {
+      cloudSource: {
+        driveId: "drv_1",
+        driveLabel: "Studio R2",
+        devicePublicId: "dvc_friend",
+        avatarSeed: "dvc_friend",
+      },
+    });
+    await db.tracks.update("trk_remote_drv_1_trk_blue", {
+      title: "Blue",
+      blobId: undefined,
+      cloudSource: {
+        driveId: "drv_1",
+        driveLabel: "Studio R2",
+        devicePublicId: "dvc_friend",
+        avatarSeed: "dvc_friend",
+      },
+    });
+
+    const result = await applyRemoteSetPull(
+      {
+        driveId: "drv_1",
+        remoteSet: remoteSet({ updatedAt: 1000 }),
+        source: {
+          driveId: "drv_1",
+          driveLabel: "Studio R2",
+          devicePublicId: "dvc_friend",
+          displayName: "Friend phone",
+          avatarSeed: "green",
+          avatarUrl: "https://music.example.com/muzero/objects/avatars/friend.jpg",
+        },
+      },
+      db,
+    );
+
+    expect(result.action).toBe("unchanged");
+    await expect(db.sessions.get("ses_remote_drv_1_ses_tokyo")).resolves.toMatchObject({
+      cloudSource: {
+        displayName: "Friend phone",
+        avatarSeed: "green",
+        avatarUrl: "https://music.example.com/muzero/objects/avatars/friend.jpg",
+      },
+    });
+    await expect(db.tracks.get("trk_remote_drv_1_trk_blue")).resolves.toMatchObject({
+      cloudSource: {
+        displayName: "Friend phone",
+        avatarSeed: "green",
+        avatarUrl: "https://music.example.com/muzero/objects/avatars/friend.jpg",
+      },
+    });
+  });
+
+  it("refreshes source attribution even when remote content is unchanged", async () => {
+    await applyRemoteSetPull(
+      {
+        driveId: "drv_1",
+        remoteSet: remoteSet(),
+        source: {
+          driveId: "drv_1",
+          driveLabel: "Shared Drive",
+          devicePublicId: "dvc_old",
+          displayName: "Old laptop",
+          avatarSeed: "blue",
+        },
+      },
+      db,
+    );
+
+    const result = await applyRemoteSetPull(
+      {
+        driveId: "drv_1",
+        remoteSet: remoteSet(),
+        source: {
+          driveId: "drv_1",
+          driveLabel: "Shared Drive",
+          devicePublicId: "dvc_new",
+          displayName: "New studio",
+          avatarSeed: "green",
+          avatarUrl: "https://music.example.com/muzero/objects/avatars/new.jpg",
+        },
+      },
+      db,
+    );
+
+    expect(result).toMatchObject({ action: "unchanged", willMutate: false });
+    await expect(db.sessions.get("ses_remote_drv_1_ses_tokyo")).resolves.toMatchObject({
+      cloudSource: {
+        devicePublicId: "dvc_new",
+        displayName: "New studio",
+        avatarSeed: "green",
+      },
+    });
+    await expect(db.tracks.get("trk_remote_drv_1_trk_blue")).resolves.toMatchObject({
+      cloudSource: {
+        devicePublicId: "dvc_new",
+        avatarUrl: "https://music.example.com/muzero/objects/avatars/new.jpg",
+      },
+    });
+  });
+
   it("marks the run cancelled and never mutates when the pull is aborted (F6)", async () => {
     const controller = new AbortController();
     controller.abort();
