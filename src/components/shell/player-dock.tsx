@@ -1,5 +1,6 @@
 import { useLiveQuery } from "dexie-react-hooks";
 import { useTranslation } from "react-i18next";
+import { DjChatEntry } from "@/components/chat/dj-chat-entry";
 import type { Tab } from "@/components/nav/dock-nav";
 import { NavFab } from "@/components/nav/nav-fab";
 import { DockControls } from "@/components/player/dock-controls";
@@ -49,16 +50,17 @@ export function PlayerDock({
       >
         <div className="mx-auto flex w-[min(calc(100vw-1.5rem),46rem)] min-w-0 flex-col gap-2">
           <div
-            className={cn(
-              // w-fit + self-end: hug the controls on the right so the empty left
-              // of this band stays click-through (pointer-events live on content,
-              // not on the full-width wrapper above).
-              "flex w-fit min-w-0 items-center justify-end gap-2 self-end px-4",
-              !hidden && "pointer-events-auto",
-            )}
+            // Full-width so the chat entry can fill the space left of the
+            // memory/nav icons; pointer-events stay on the CHILDREN so any
+            // empty stretch of this band remains click-through.
+            className="flex w-full min-w-0 items-center justify-end gap-2 px-4"
           >
-            <DockMemoryToggle className="hidden md:flex" visible={tab === "now"} />
-            <div className="shrink-0">
+            <DjChatEntry className={cn(!hidden && "pointer-events-auto")} />
+            <DockMemoryToggle
+              className={cn("hidden md:flex", !hidden && "pointer-events-auto")}
+              visible={tab === "now"}
+            />
+            <div className={cn("shrink-0", !hidden && "pointer-events-auto")}>
               <NavFab value={tab} onChange={onTabChange} />
             </div>
           </div>

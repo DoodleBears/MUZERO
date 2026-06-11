@@ -16,7 +16,7 @@
 | Phase | Name | Status | Link |
 |-------|------|--------|------|
 | 1 | Chat runtime 地基（Dexie v5 + Runtime Actor + 单 session 流式 + streamdown） | ✅ Completed | §7 |
-| 2 | **Dock 集成对话入口**（minimize 图标 / normal 圆角 chip 输入条 / expand framer-motion widget；gated on LLM+musicgen 已配置） | 🔄 **2026-06-11 重新设计**：旧 FAB/bar/Dock-1∕3 壳作废、改挂 player-dock 上方工具行；runtime/composer/turns/notification 组件复用 | §7 |
+| 2 | **Dock 集成对话入口**（minimize 图标 / normal 圆角 chip 输入条 / expand framer-motion widget；gated on LLM+musicgen 已配置） | ✅ Completed（2026-06-11 重设计后落地：`canUseDjChat` 门控 + 三态 `dj-chat-entry` 挂 dock 工具行 + i18n ×4；preview 实测零报错，动效手感待真实窗口） | §7 |
 | 3 | DJ 工具调用（search/create/curate/propose/generate + HITL 审批） | 🔄 6 工具+审批桥+折叠 UI+测试 ✅；HITL ask/auto 切换 + i18n 待 | §7 |
 | 4 | 多 Session + 历史列表（搜索）+ branch/regenerate | 🔄 search/branch/regenerate/session-home ✅；列表挂载待 WIP | §7 |
 | 5 | 多 Provider 模型选型（preset + **自定义 provider，复刻 ClipCombo** + combobox + Settings + key 入 Dexie） | 🔄 7 preset+model picker+dialog/popover/command/scroll-area 原语 ✅；**动态 custom-provider（Dexie）+ Settings provider 面板 + enabled grid + i18n 待** | §7 |
@@ -334,7 +334,7 @@ chat 入口落在**记忆 icon + 切 tab icon 的左边**、占该行剩余宽�
 
 ### 5.3 形态 3：expand（framer-motion 过渡成对话 widget）
 
-- 点 chip 右侧「展开」钮 / 点回复通知 → `mode="expanded"`：chip **用 framer-motion `layoutId` 共享布局过渡** morph 成一个对话 widget（同一节点平滑放大，不是淡入另起的新面板），承载完整 panel body（header + `chat-turns` 历史 + `chat-composer` + session 控件 + 模型 picker + 队列托盘）。
+- 点 chip 右侧「展开」钮 / 点回复通知 → `mode="expanded"`：从 dock 入口处**framer-motion 过渡**成一个对话 widget，承载完整 panel body（header + `chat-turns` 历史 + `chat-composer` + session 控件 + 模型 picker + 队列托盘）。**实现注记**：icon↔chip 间用 `layoutId` 共享布局 morph；chip→widget 用 widget 自身 spring（origin-bottom scale+y+fade，从 dock 区域长出）——widget 经 portal 渲染（dock 容器带 centering transform，`fixed` 相对它解析），跨 portal 共享 `layoutId` 会死锁 motion projection。
 - **桌面（`md+`）**：widget 是一个**从 dock 入口上方长出的浮层卡片**（锚在入口处向上展开），约 `w-[min(36rem,calc(100vw-1.5rem))] h-[min(70vh,40rem)]`，圆角 + `bg-card/95 backdrop-blur-xl ring-1 shadow-2xl`，盖在 main 之上（**不挤** player-dock 布局、**不引入 sidebar**，硬规则 #9；点外侧 / `Esc` 收回）。
 - **移动（`<md`）**：展开成**全屏 sheet**（复用 now-playing sheet 同款 `inset-0` + 安全区），关闭回 chip/icon。断点用统一 `matchMedia` hook（`md` 分界，参考 ClipCombo `useMobileWorkbenchLayout` 简化为单断点）。
 - 收起：`Minimize2` / `Esc` / 点外侧 → 回 `chip`（或上次的 `icon`）；`layoutId` 反向 widget→chip 过渡。
@@ -438,15 +438,15 @@ chat 入口落在**记忆 icon + 切 tab icon 的左边**、占该行剩余宽�
 - [x] `chat-store` 的 `mode` + persist：`ChatMode` 改 `icon`/`chip`/`expanded`（默认 chip）、移除 `dockSide`；persist `version:1` + `migrateChatUiState`（fab→icon、bar→chip、dock/fullscreen→expanded、丢 dockSide、未知值回 chip，直接单测）。
 - [x] ~~`chat-launcher-fab` / `chat-input-bar` / `chat-dock` / `use-chat-breakpoint`（旧壳）~~ **已删除**（`git rm` + chat-shell.test 重写为 `chat-reply-notification.test.tsx`）；逻辑并入新 `dj-chat-entry.tsx`（CHAT-2c）。`chat-reply-notification` 判定改 `mode !== "expanded"`、点击展开到 `expanded`。
 - [x] **`dj-chat-availability.ts`（纯函数 + TDD）**：`canUseDjChat` / `hasUsableLlm` / `hasUsableMusicgen`（9 测：fresh install false、`apiKeysByPresetId` 任一非空 key、空白 key 忽略、legacy openai/anthropic 字段、`mock` 永真、cloud 无 key false、mureka fixed-endpoint+key true、custom preset 还需 baseUrl、AND 门控矩阵）。keyless-local 留 Phase 5 动态 custom provider 落地时扩。
-- [ ] **`dj-chat-entry.tsx`**：挂进 [`player-dock.tsx`](../../../src/components/shell/player-dock.tsx) 上方工具行（记忆+nav icon **左侧**、`min-w-0 flex-1` 吃满；行 `w-fit self-end` 按可用性切 `w-full`）。`canUseDjChat===false` 整入口不渲染。三态：**icon**（圆钮）/ **chip**（`rounded-full` composer 条，默认）/ **expanded**（`layoutId` morph 成 widget：桌面浮层卡片、移动全屏 sheet）。
+- [x] **`dj-chat-entry.tsx`**：挂进 [`player-dock.tsx`](../../../src/components/shell/player-dock.tsx) 上方工具行（记忆+nav icon **左侧**、`min-w-0 flex-1` 吃满；行改 `w-full`，pointer-events 落在**子元素**上保持空白区 click-through）。`canUseDjChat===false` 整入口不渲染。三态：**icon**（圆钮）/ **chip**（`rounded-full` 单行输入 + 3 态主按钮[发送/停/入队] + 展开钮，默认）/ **expanded**（widget：桌面浮层卡片 576×520、移动全屏 sheet，内嵌 `ChatPanel`，chip 发送自动建 session）。⚠️ **实现修正**：icon↔chip 用 `layoutId` morph；**widget 用自身 spring**（进出场 scale+y+fade）——chip 在 dock 树内、widget 经 portal 渲染（dock 容器有 centering transform，`fixed` 会相对它解析），跨 portal 共享 `layoutId` 会让 motion projection 死锁（幽灵卡在 chip 尺寸）。AnimatePresence 子元素必须**带 key 直挂**（fragment 包裹会断 exit 追踪导致退场后不卸载）。`ChatReplyNotification` 一并经 portal 挂 body（同 transform 祖先问题）。8 组件测。
 - [x] `chat-reply-notification.tsx`（§5.2.1）：折叠态（icon/chip）DJ 回复走顶部 toast；expanded 时不显示。
-- [ ] reduced-motion（`MotionConfig`）morph 退化为即时切换；`Esc` / 点外侧收回。
+- [x] reduced-motion（App 根 `MotionConfig reducedMotion="user"` 继承）morph 退化为即时切换；`Esc` / 点 backdrop 收回（组件测覆盖两者）。
 
 **Phase 2 Checklist:**
-- [ ] **门控**：未配 LLM / musicgen → 入口与 icon 都不渲染、工具行恢复右对齐；配齐后出现（`canUseDjChat` 单测穷举 + 组件测）。
-- [ ] 三态切换正确（icon↔chip↔expanded）、偏好持久化；chip 吃满剩余宽度且与 memory/nav 等高；expanded 桌面浮层 / 移动全屏。
+- [x] **门控**：未配 LLM / musicgen → 入口与 icon 都不渲染、工具行恢复右对齐；配齐后出现（`canUseDjChat` 9 单测穷举 + 2 组件测；preview 实测写 key 进 IndexedDB 后 liveQuery 即时出现）。
+- [x] 三态切换正确（icon↔chip↔expanded）、偏好持久化（含 v0→v1 迁移）；chip 吃满剩余宽度（实测 652px @1280 viewport）且与 memory/nav 等高 h-11；expanded 桌面浮层 576×520 / 移动全屏 sheet（CSS 断点）。
 - [x] 折叠态收到回复 → 顶部通知出现 / streaming 实时预览 / 点击展开到 expanded；expanded 态不重复弹。
-- [ ] 浏览器 preview 实测三态 + `layoutId` morph 过渡 + 通知 + 暗色 + 响应式，零 console 报错。
+- [x] 浏览器 preview 实测（:1440 隔离实例）：门控开关、icon↔chip↔expanded 全循环、Esc/backdrop 收回 + AnimatePresence 正确卸载、widget computed 样式（bg-card/95 + blur24 + 576×520）、i18n zh 文案、**零 console 报错**。⚠️ spring 动画视觉效果在 preview 隐藏 tab 冻结（rAF 节流，已知沙箱限制）——动效手感请在真实前台窗口复核。
 
 ### Phase 3: DJ 工具调用
 **Tasks:**
@@ -616,6 +616,7 @@ chat 入口落在**记忆 icon + 切 tab icon 的左边**、占该行剩余宽�
 | 2026-06-07 | Codex | 推进 Phase 5e：新增 Base UI `scroll-area` primitive（root/viewport/content/scrollbar/thumb/corner），默认 keepMounted scrollbar 便于稳定布局与测试；`make check` 通过（60 files / 392 tests）。 |
 | 2026-06-07 | Codex | 推进 Phase 5f：新增无内置文案的 `Command` primitive（items/placeholder/empty 由调用方传入，支持 label+keywords 搜索过滤与 select 回调）；`make check` 通过（61 files / 395 tests）。 |
 | 2026-06-07 | Codex | 推进 Phase 5g：新增无内置文案的 `ChatModelPicker` 展示层，基于 Popover+Command 展示 enabled presets/models，支持选中态、搜索过滤、空态与 `{presetId, model}` 选择回调；Settings/App/i18n/DB 接线继续等待并行 WIP 落地。`make check` 通过（62 files / 398 tests）。 |
+| 2026-06-11 | Claude | **Phase 2 落地（CHAT-2a/b/c 三个原子 commit）**：① `dj-chat-availability.ts` 纯门控（9 测）；② `ChatMode` 改 icon/chip/expanded + persist v1 迁移（fab→icon、bar→chip、dock/fullscreen→expanded）、删旧四形态壳（launcher-fab/input-bar/dock/breakpoint hook）、reply-notification 改判定（8 测）；③ `dj-chat-entry.tsx` 三态入口挂 player-dock 工具行（memory/nav 左侧 flex-1、空白区 click-through）+ chip 发送自动建 session + expanded 内嵌 ChatPanel + Esc/backdrop 收回 + i18n `chat.*` ×4（8 组件测）。**两个 motion 陷阱记录在案**：跨 portal 共享 layoutId 死锁 projection（widget 改自身 spring）；AnimatePresence 内 fragment 包裹断 exit 追踪（改 keyed 直挂子元素）。preview(:1440) 实测全循环零 console 报错；spring 视觉在隐藏 tab 冻结属沙箱限制。 |
 | 2026-06-11 | Claude | **Phase 2 外壳重新设计（owner 定）+ Phase 5 provider 扩展**。① 放弃 FAB / bar / Dock-1∕3 / 全屏四形态，改为**集成进 player-dock 上方工具行**的单一对话入口（落在记忆 + 切 tab icon **左侧**、`flex-1` 吃满剩余宽度），三态 **icon(minimize) → chip(normal，full-rounded 输入条，默认) → expanded(framer-motion `layoutId` morph 成 widget：桌面浮层卡片 / 移动全屏 sheet)**。② 新增**门控** `canUseDjChat`（`hasUsableLlm && hasUsableMusicgen`）：**未配 LLM + musicgen 时连 icon 都不渲染**（纯函数 + TDD）。③ §6.1 扩成**逐项复刻 ClipCombo 动态自定义 provider**（Dexie `llmCustomProviders` 表 + repo + `customLlmProviderConfigToPreset` + Settings provider 面板 enabled grid + `ApiKeyField` + `resolveDjModel` 的 openai-compatible/keyless-local 分支）。重写 §3.3/§5/§6.1 + Phase 2/5 plan + §2.4 结构；旧 `chat-launcher-fab`/`chat-input-bar`/`chat-dock`/`use-chat-breakpoint` 壳作废重做，runtime（`src/chat/*`）+ 展示层组件（composer/turns/session-home/model-picker/queue-tray/empty/notice）全部复用。Now Playing redesign 已并入 main → 本 phase 不再 WIP-blocked。 |
 
 ---
