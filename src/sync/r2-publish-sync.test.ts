@@ -73,6 +73,74 @@ describe("runR2PublishSync", () => {
     });
   });
 
+  it("marks the drive's unsynced set mutations as synced after a successful publish (F3)", async () => {
+    await db.syncMutations.bulkPut([
+      {
+        id: "mut_unsynced",
+        driveId: "drv_1",
+        devicePublicId: "dvc_1",
+        scope: "set",
+        entityId: "ses_1",
+        action: "set-metadata-updated",
+        payload: { name: "A" },
+        createdAt: 1,
+      },
+      {
+        id: "mut_other_drive",
+        driveId: "drv_2",
+        devicePublicId: "dvc_1",
+        scope: "set",
+        entityId: "ses_1",
+        action: "set-metadata-updated",
+        payload: { name: "B" },
+        createdAt: 1,
+      },
+      {
+        id: "mut_already",
+        driveId: "drv_1",
+        devicePublicId: "dvc_1",
+        scope: "set",
+        entityId: "ses_1",
+        action: "set-metadata-updated",
+        payload: { name: "C" },
+        createdAt: 1,
+        syncedAt: 42,
+      },
+    ]);
+
+    await runR2PublishSync(plan, credentials, {
+      db,
+      fetcher: async () => new Response(null, { status: 204 }),
+    });
+
+    expect((await db.syncMutations.get("mut_unsynced"))?.syncedAt).toBeGreaterThan(0);
+    expect((await db.syncMutations.get("mut_other_drive"))?.syncedAt).toBeUndefined();
+    expect((await db.syncMutations.get("mut_already"))?.syncedAt).toBe(42);
+  });
+
+  it("leaves mutations unsynced when the publish fails (F3)", async () => {
+    await db.syncMutations.put({
+      id: "mut_unsynced",
+      driveId: "drv_1",
+      devicePublicId: "dvc_1",
+      scope: "set",
+      entityId: "ses_1",
+      action: "set-metadata-updated",
+      payload: { name: "A" },
+      createdAt: 1,
+    });
+
+    await expect(
+      runR2PublishSync(plan, credentials, {
+        db,
+        fetcher: async () => new Response(null, { status: 500 }),
+        retry: { sleep: async () => {} },
+      }),
+    ).rejects.toThrow();
+
+    expect((await db.syncMutations.get("mut_unsynced"))?.syncedAt).toBeUndefined();
+  });
+
   it("marks failed runs without deleting existing object mappings", async () => {
     await db.syncObjects.put({
       id: "drv_1:manifest.json",

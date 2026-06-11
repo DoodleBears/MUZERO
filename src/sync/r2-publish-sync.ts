@@ -38,7 +38,7 @@ export async function runR2PublishSync(
   try {
     const result = await publishR2ExportPlan(plan, credentials, options);
     const finishedAt = Date.now();
-    await db.transaction("rw", db.syncRuns, db.syncObjects, async () => {
+    await db.transaction("rw", db.syncRuns, db.syncObjects, db.syncMutations, async () => {
       await db.syncRuns.put({
         ...baseRun,
         status: "completed",
@@ -51,6 +51,15 @@ export async function runR2PublishSync(
       await db.syncObjects.bulkPut(
         plan.objects.map((object) => toSyncObject(plan.driveId, object, runId, finishedAt)),
       );
+      // The plan folded every pre-run unsynced mutation for this drive (plans
+      // with overlapping mutations never reach the publisher — they short-circuit
+      // to needs-review). Mark them synced so they don't re-fold, re-upload, and
+      // re-conflict on every subsequent publish (audit F3).
+      await db.syncMutations
+        .where("driveId")
+        .equals(plan.driveId)
+        .filter((mutation) => mutation.syncedAt == null && mutation.createdAt <= baseRun.startedAt)
+        .modify({ syncedAt: finishedAt });
     });
     return { runId };
   } catch (error) {
