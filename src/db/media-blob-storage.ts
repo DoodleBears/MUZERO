@@ -53,6 +53,21 @@ export interface PersistentMediaOrphanEntry {
   bytes?: number;
 }
 
+export interface PersistentMediaStorageBucket {
+  count: number;
+  bytes: number;
+}
+
+export interface PersistentMediaStorageSummary {
+  count: number;
+  bytes: number;
+  legacyMediaCount: number;
+  missingCount: number;
+  orphanedCount: number;
+  byBackend: Record<MediaStorageBackend, PersistentMediaStorageBucket>;
+  byRole: Partial<Record<MediaBlob["role"], PersistentMediaStorageBucket>>;
+}
+
 export async function putMediaBlob(
   input: PutMediaBlobInput,
   db: MuzeroDB = defaultDb,
@@ -255,6 +270,50 @@ export async function cleanupOrphanedMediaStorageFiles(
     }
   }
   return { deleted, failed };
+}
+
+export async function summarizePersistentMediaStorage(
+  db: MuzeroDB = defaultDb,
+  options: MediaBlobStorageOptions & { includeHealth?: boolean } = {},
+): Promise<PersistentMediaStorageSummary> {
+  const rows = await db.mediaBlobs.toArray();
+  const summary: PersistentMediaStorageSummary = {
+    count: 0,
+    bytes: 0,
+    legacyMediaCount: 0,
+    missingCount: 0,
+    orphanedCount: 0,
+    byBackend: {
+      indexeddb: { count: 0, bytes: 0 },
+      opfs: { count: 0, bytes: 0 },
+      "electron-file": { count: 0, bytes: 0 },
+    },
+    byRole: {},
+  };
+
+  for (const row of rows) {
+    const backend = mediaStorageBackend(row);
+    summary.count += 1;
+    summary.bytes += row.bytes;
+    summary.byBackend[backend].count += 1;
+    summary.byBackend[backend].bytes += row.bytes;
+    let role = summary.byRole[row.role];
+    if (!role) {
+      role = { count: 0, bytes: 0 };
+      summary.byRole[row.role] = role;
+    }
+    role.count += 1;
+    role.bytes += row.bytes;
+    if (row.role === "media" && backend === "indexeddb") summary.legacyMediaCount += 1;
+  }
+
+  if (options.includeHealth) {
+    const health = await validatePersistentMediaStorage(db, options);
+    summary.missingCount = health.missing.length;
+    summary.orphanedCount = health.orphaned.length;
+  }
+
+  return summary;
 }
 
 export async function deleteMediaBlob(

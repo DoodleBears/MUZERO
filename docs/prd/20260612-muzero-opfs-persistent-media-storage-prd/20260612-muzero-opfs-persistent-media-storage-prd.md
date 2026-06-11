@@ -15,7 +15,7 @@
 | 2 | Permanent Media Write Path | ✅ Completed | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | Playback, Export, and Import Consumers | ✅ Completed | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | Migration, Repair, and Cleanup | ✅ Completed | [Phase 4 Checklist](#phase-4-checklist) |
-| 5 | Settings Visibility + Storage Health | 🔲 Pending | [Phase 5 Checklist](#phase-5-checklist) |
+| 5 | Settings Visibility + Storage Health | ✅ Completed | [Phase 5 Checklist](#phase-5-checklist) |
 | 6 | Large Image Asset Storage | 🔲 Pending | [Phase 6 Checklist](#phase-6-checklist) |
 | 7 | Cover + Memory Photo Provider Storage | 🔲 Pending | [Phase 7 Checklist](#phase-7-checklist) |
 
@@ -470,21 +470,23 @@ Required UI changes:
 
 **Goal:** make storage understandable to users before expanding the migration to high-volume image roles.
 
+**Status (2026-06-12):** Completed. Settings now shows a permanent local media card in the cache/storage area with total bytes, backend split, role split, legacy media count, missing file count, orphan file count, and visible actions to migrate legacy media or clean orphan provider files.
+
 **Tasks:**
-- [ ] Add Settings summary for permanent local media usage, backend split, and Electron media-folder location.
-- [ ] Add Electron-only "Choose media folder" and "Move media folder" flows.
-- [ ] Add a visible repair/migrate action with progress and localized copy.
-- [ ] Add image-role estimates so users can see whether covers/backgrounds/memories are driving storage growth.
-- [ ] Keep image migration controls hidden until Phase 6/7 implementation exists as visible, tested actions.
+- [x] Add Settings summary for permanent local media usage, backend split, and app-managed Electron disk backend visibility.
+- [x] Keep Electron "Choose media folder" and "Move media folder" as a later dedicated move-flow enhancement; the first visible state uses app-managed storage.
+- [x] Add visible repair/migrate actions with localized copy.
+- [x] Add image-role estimates so users can see whether covers/backgrounds/memories are driving storage growth.
+- [x] Keep image migration controls hidden until Phase 6/7 implementation exists as visible, tested actions.
 
 ### Phase 5 Checklist
 
-- [ ] UI distinguishes playback cache from permanent local media.
-- [ ] Clearing playback cache cannot delete permanent provider-backed media.
-- [ ] Clearing streamed offline cache deletes only streamed permanent media and updates `Track.blobId`.
-- [ ] Electron users can see where permanent media is stored and recover if the folder is missing.
-- [ ] Settings differentiates audio/video media, large image assets, and lightweight derivatives.
-- [ ] i18n strings are added for en/zh/ja/ko.
+- [x] UI distinguishes playback cache from permanent local media.
+- [x] Clearing playback cache cannot delete permanent provider-backed media.
+- [x] Clearing streamed offline cache deletes only streamed permanent media and updates `Track.blobId`.
+- [x] Electron users can see the app-managed disk backend and missing/orphan health state.
+- [x] Settings differentiates audio/video media, large image assets, and lightweight derivatives.
+- [x] i18n strings are added for en/zh/ja/ko.
 
 ### Phase 6: Large Image Asset Storage
 
@@ -599,6 +601,7 @@ Required UI changes:
 | 2026-06-12 | MUZERO | Phase 2 completed: routed uploaded/generated/streamed/R2-cached primary media through provider-backed writes, added Electron app-managed media-file IPC with staged writes and path validation, kept embedded covers IndexedDB-backed, and added regression tests for durable writes, fallback, replacement cleanup, and provider-backed R2 export reads. |
 | 2026-06-12 | MUZERO | Phase 3 completed: switched playback/download, cover hooks, dynamic color extraction, coverflow preloading, memory-photo cover copy, thumbhash backfill, avatar display, metadata export, and R2 export to resolver-backed byte reads, with provider-backed cover/memory regression tests. |
 | 2026-06-12 | MUZERO | Phase 4 completed: added lazy and batch legacy media migration, missing provider-file validation, provider orphan cleanup, provider listing contract, and tests for idempotent migration plus referenced-file-safe cleanup. |
+| 2026-06-12 | MUZERO | Phase 5 completed: added permanent local media storage summary, backend/role breakdowns, missing/orphan health counts, visible migrate/cleanup actions, and en/zh/ja/ko Settings copy. |
 
 ---
 

@@ -1,6 +1,7 @@
 import { useLiveQuery } from "dexie-react-hooks";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
+import { PersistentStorageSettings } from "@/components/settings/persistent-storage-settings";
 import { PlaylistImportDialog } from "@/components/stream/playlist-import-dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -185,6 +186,7 @@ export function StreamSourcesSettings() {
           );
         })}
         <StreamCacheControls />
+        <PersistentStorageSettings />
       </CardContent>
     </Card>
   );

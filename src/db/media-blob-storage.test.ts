@@ -9,6 +9,7 @@ import {
   migrateMediaBlobToProvider,
   putMediaBlob,
   resolveMediaBlob,
+  summarizePersistentMediaStorage,
   validatePersistentMediaStorage,
 } from "./media-blob-storage";
 import { MuzeroDB } from "./muzero-db";
@@ -292,6 +293,52 @@ describe("media blob storage resolver", () => {
     expect(cleanup.deleted).toEqual(["media/orphan__blb_orphan.mp3"]);
     expect(provider.has("media/orphan__blb_orphan.mp3")).toBe(false);
     expect(provider.has((await db.mediaBlobs.get("blb_referenced"))?.storageKey ?? "")).toBe(true);
+  });
+
+  it("summarizes permanent media storage by backend and role", async () => {
+    const provider = createMemoryProvider("opfs");
+    await putMediaBlob(
+      {
+        id: "blb_provider_media",
+        trackId: "trk_provider",
+        role: "media",
+        mime: "audio/mpeg",
+        blob: new Blob(["provider"], { type: "audio/mpeg" }),
+      },
+      db,
+      { provider },
+    );
+    await db.mediaBlobs.put({
+      id: "blb_legacy_media",
+      trackId: "trk_legacy",
+      role: "media",
+      mime: "audio/mpeg",
+      bytes: 6,
+      blob: new Blob(["legacy"], { type: "audio/mpeg" }),
+    });
+    await db.mediaBlobs.put({
+      id: "blb_cover",
+      trackId: "trk_cover",
+      role: "cover",
+      mime: "image/png",
+      bytes: 5,
+      blob: new Blob(["cover"], { type: "image/png" }),
+    });
+
+    const summary = await summarizePersistentMediaStorage(db, {
+      provider,
+      includeHealth: true,
+    });
+
+    expect(summary.count).toBe(3);
+    expect(summary.bytes).toBe(19);
+    expect(summary.legacyMediaCount).toBe(1);
+    expect(summary.byBackend.opfs).toMatchObject({ count: 1, bytes: 8 });
+    expect(summary.byBackend.indexeddb).toMatchObject({ count: 2, bytes: 11 });
+    expect(summary.byRole.media).toMatchObject({ count: 2, bytes: 14 });
+    expect(summary.byRole.cover).toMatchObject({ count: 1, bytes: 5 });
+    expect(summary.missingCount).toBe(0);
+    expect(summary.orphanedCount).toBe(0);
   });
 });
 
