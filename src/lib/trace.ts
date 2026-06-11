@@ -1,13 +1,21 @@
 import { useSyncExternalStore } from "react";
+import {
+  type DiagnosticContext,
+  type DiagnosticEntry,
+  type DiagnosticLevel,
+  sanitizeDiagnosticData,
+} from "@/lib/diagnostics";
 
-export type TraceLevel = "debug" | "info" | "warn" | "error";
+export type TraceLevel = DiagnosticLevel;
 
-export interface TraceEntry {
+export interface TraceEntry extends Omit<DiagnosticEntry, "event" | "context"> {
   id: number;
   at: number;
   level: TraceLevel;
   scope: string;
+  event?: string;
   message: string;
+  context?: DiagnosticContext;
   data?: unknown[];
 }
 
@@ -35,15 +43,37 @@ export function traceEvent(
   message: string,
   ...data: unknown[]
 ): void {
+  appendTraceEntry({
+    level,
+    scope,
+    message,
+    data: data.length > 0 ? data.map((value) => sanitizeDiagnosticData(value)) : undefined,
+  });
+}
+
+export function traceDiagnosticEvent(
+  level: TraceLevel,
+  scope: string,
+  event: string,
+  message: string,
+  context?: DiagnosticContext,
+): void {
+  appendTraceEntry({
+    level,
+    scope,
+    event,
+    message,
+    context: context ? (sanitizeDiagnosticData(context) as DiagnosticContext) : undefined,
+  });
+}
+
+function appendTraceEntry(entry: Omit<TraceEntry, "id" | "at">): void {
   entries = [
     ...entries,
     {
       id: nextId++,
       at: Date.now(),
-      level,
-      scope,
-      message,
-      data: data.length > 0 ? data : undefined,
+      ...entry,
     },
   ].slice(-MAX_ENTRIES);
   emit();
@@ -52,6 +82,10 @@ export function traceEvent(
 export function clearTrace(): void {
   entries = [];
   emit();
+}
+
+export function getTraceEntries(): TraceEntry[] {
+  return entries;
 }
 
 export function useTraceEntries(): TraceEntry[] {
@@ -65,35 +99,33 @@ export function formatTraceEntries(items: TraceEntry[] = entries): string {
 function formatTraceEntry(entry: TraceEntry): string {
   const at = new Date(entry.at).toISOString();
   const data = entry.data?.length ? ` ${entry.data.map(formatValue).join(" ")}` : "";
-  return `${at} ${entry.level.toUpperCase()} [${entry.scope}] ${entry.message}${data}`;
+  const event = entry.event ? ` ${entry.event}` : "";
+  const context = entry.context ? ` ${formatContext(entry.context)}` : "";
+  return `${at} ${entry.level.toUpperCase()} [${entry.scope}]${event} ${entry.message}${context}${data}`;
 }
 
 function formatValue(value: unknown): string {
-  if (value instanceof Error) return `${value.name}: ${value.message}\n${value.stack ?? ""}`.trim();
-  if (value instanceof Event) return value.type;
   if (typeof value === "string") return value;
   try {
-    return JSON.stringify(value, jsonReplacer);
+    return JSON.stringify(sanitizeDiagnosticData(value));
   } catch {
     return String(value);
   }
 }
 
-function jsonReplacer(_key: string, value: unknown): unknown {
-  if (value instanceof Error) {
-    return {
-      name: value.name,
-      message: value.message,
-      stack: value.stack,
-    };
-  }
-  if (value instanceof Event) return { type: value.type };
-  if (value instanceof Element) {
-    return {
-      tagName: value.tagName,
-      id: value.id || undefined,
-      className: typeof value.className === "string" ? value.className || undefined : undefined,
-    };
-  }
-  return value;
+function formatContext(context: DiagnosticContext): string {
+  const parts = [
+    context.traceId ? `trace=${context.traceId}` : null,
+    context.trackId ? `track=${context.trackId}` : null,
+    context.sessionId ? `session=${context.sessionId}` : null,
+    context.sourceId ? `source=${context.sourceId}` : null,
+    context.videoId ? `video=${context.videoId}` : null,
+    context.category ? `category=${context.category}` : null,
+    context.phase ? `phase=${context.phase}` : null,
+    context.errorKind ? `errorKind=${context.errorKind}` : null,
+    context.httpStatus ? `status=${context.httpStatus}` : null,
+    context.requestHost ? `host=${context.requestHost}` : null,
+    context.controlId ? `control=${context.controlId}` : null,
+  ].filter(Boolean);
+  return parts.join(" ");
 }

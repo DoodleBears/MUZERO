@@ -1,9 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
+  createTraceId,
   type DiagnosticEntry,
+  finishDiagnosticSpan,
   matchesDiagnosticFilter,
   sanitizeDiagnosticData,
   sanitizeUrlForTrace,
+  startDiagnosticSpan,
 } from "@/lib/diagnostics";
 
 describe("sanitizeDiagnosticData", () => {
@@ -141,5 +144,29 @@ describe("matchesDiagnosticFilter", () => {
     expect(matchesDiagnosticFilter(entry, { text: "download.failed" })).toBe(true);
     expect(matchesDiagnosticFilter(entry, { text: "youtube" })).toBe(true);
     expect(matchesDiagnosticFilter(entry, { text: "track-row" })).toBe(false);
+  });
+});
+
+describe("trace id and span helpers", () => {
+  it("creates readable trace ids with a caller prefix", () => {
+    expect(createTraceId("ply")).toMatch(/^ply_[a-z0-9]+$/);
+  });
+
+  it("tracks span duration and merges finish context", () => {
+    const span = startDiagnosticSpan("ply_1", "youtube.resolve", 1000);
+
+    expect(span).toMatchObject({
+      traceId: "ply_1",
+      operation: "youtube.resolve",
+      startedAt: 1000,
+    });
+    expect(finishDiagnosticSpan(span, "success", { sourceId: "youtube" }, 1250)).toEqual({
+      traceId: "ply_1",
+      spanId: span.spanId,
+      operation: "youtube.resolve",
+      phase: "success",
+      durationMs: 250,
+      sourceId: "youtube",
+    });
   });
 });

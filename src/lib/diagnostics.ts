@@ -103,6 +103,13 @@ export interface SanitizedUrlSummary {
   redactions: string[];
 }
 
+export interface DiagnosticSpan {
+  traceId: string;
+  spanId: string;
+  operation: string;
+  startedAt: number;
+}
+
 // Redaction is allowlist-minded: technical ids survive, secrets and raw user text do not.
 const SECRET_KEY_RE =
   /^(authorization|cookie|set-cookie|x-api-key|api[-_]?key|access[-_]?key|secret|token|password|bearer)$/i;
@@ -129,6 +136,39 @@ const SAFE_URL_PARAMS = new Set(["itag", "mime", "dur", "clen", "source"]);
 
 export function sanitizeDiagnosticData(value: unknown): unknown {
   return sanitizeValue(value, undefined, new WeakSet<object>());
+}
+
+export function createTraceId(prefix: string): string {
+  return `${safeIdPrefix(prefix)}_${Date.now().toString(36)}${randomIdPart()}`;
+}
+
+export function startDiagnosticSpan(
+  traceId: string,
+  operation: string,
+  now: number = Date.now(),
+): DiagnosticSpan {
+  return {
+    traceId,
+    spanId: createTraceId("spn"),
+    operation,
+    startedAt: now,
+  };
+}
+
+export function finishDiagnosticSpan(
+  span: DiagnosticSpan,
+  phase: DiagnosticPhase,
+  context: DiagnosticContext = {},
+  now: number = Date.now(),
+): DiagnosticContext {
+  return {
+    ...context,
+    traceId: span.traceId,
+    spanId: span.spanId,
+    operation: span.operation,
+    phase,
+    durationMs: Math.max(0, now - span.startedAt),
+  };
 }
 
 export function sanitizeUrlForTrace(rawUrl: string): SanitizedUrlSummary {
@@ -271,4 +311,17 @@ function stableHash(input: string): string {
     hash = Math.imul(hash, 16777619);
   }
   return (hash >>> 0).toString(36);
+}
+
+function safeIdPrefix(prefix: string): string {
+  const safe = prefix
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+  return safe || "trc";
+}
+
+function randomIdPart(): string {
+  return Math.random().toString(36).slice(2, 8);
 }

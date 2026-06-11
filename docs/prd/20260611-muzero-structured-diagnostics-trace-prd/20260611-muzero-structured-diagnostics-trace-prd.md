@@ -12,7 +12,7 @@
 | Phase | Name | Status | Link |
 |-------|------|--------|------|
 | 1 | Audit, Taxonomy, Redaction Contract | Completed | [Phase 1 Checklist](#phase-1-checklist) |
-| 2 | Shared Structured Logger API | Pending | [Phase 2 Checklist](#phase-2-checklist) |
+| 2 | Shared Structured Logger API | Completed | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | Playback / Stream Trace Migration | Pending | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | Settings Trace Workbench | Pending | [Phase 4 Checklist](#phase-4-checklist) |
 | 5 | Electron Main Process Bridge | Pending | [Phase 5 Checklist](#phase-5-checklist) |
@@ -615,23 +615,23 @@ All user-facing strings must go through i18n catalogs in `src/i18n/locales/{en,z
 **Goal:** Add the shared function that future code should use.
 
 **Tasks:**
-- [ ] Extend `src/lib/logger.ts` or add `src/lib/diagnostics.ts` if the type surface becomes too large.
-- [ ] Preserve `log.debug/info/warn/error(scope, ...args)` compatibility.
-- [ ] Add `createDiagnosticLogger(scope)`.
-- [ ] Add `recordUserAction(event, context)` helper for UI handlers that need safe reproduction breadcrumbs.
-- [ ] Add trace id/span helpers.
-- [ ] Add structured formatter and compact text formatter.
-- [ ] Add unit tests for compatibility calls and structured calls.
+- [x] Extend `src/lib/logger.ts` or add `src/lib/diagnostics.ts` if the type surface becomes too large.
+- [x] Preserve `log.debug/info/warn/error(scope, ...args)` compatibility.
+- [x] Add `createDiagnosticLogger(scope)`.
+- [x] Add `recordUserAction(event, context)` helper for UI handlers that need safe reproduction breadcrumbs.
+- [x] Add trace id/span helpers.
+- [x] Add structured formatter and compact text formatter.
+- [x] Add unit tests for compatibility calls and structured calls.
 
 ### Phase 2 Checklist
 
-- [ ] New structured logger writes to Settings Trace as the source of truth.
-- [ ] User action helper redacts raw input and emits `category=user-action`.
-- [ ] Development console mirror, if enabled, uses the same sanitized payload as trace.
-- [ ] `debug` / `info` console behavior still respects production silence.
-- [ ] `warn` / `error` production console mirror is sanitized and never the only diagnostic copy.
-- [ ] Serialization failure falls back to a safe minimal event.
-- [ ] TypeScript makes `event` and `scope` explicit for structured calls.
+- [x] New structured logger writes to Settings Trace as the source of truth.
+- [x] User action helper redacts raw input and emits `category=user-action`.
+- [x] Development console mirror, if enabled, uses the same sanitized payload as trace.
+- [x] `debug` / `info` console behavior still respects production silence.
+- [x] `warn` / `error` production console mirror is sanitized and never the only diagnostic copy.
+- [x] Serialization failure falls back to a safe minimal event.
+- [x] TypeScript makes `event` and `scope` explicit for structured calls.
 
 ### Phase 3: Playback / Stream Trace Migration
 
@@ -832,3 +832,4 @@ Given a stream source requires headers/cookies/login or returns no playable URL:
 | 2026-06-11 | Codex | Added console-as-secondary policy and local trace archive/file export requirements |
 | 2026-06-11 | Codex | Resolved Open Questions 1-5 by best practice and added user-action/repro-step trace requirements |
 | 2026-06-11 | Codex | Completed Phase 1 with structured diagnostics schema, filter helpers, URL summarization, and redaction tests |
+| 2026-06-11 | Codex | Completed Phase 2 with structured logger facade, sanitized legacy logging, user-action helper, and trace formatter tests |
