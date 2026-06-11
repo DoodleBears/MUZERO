@@ -592,6 +592,7 @@
     "cloudSyncObjects": "{{done}} / {{total}} オブジェクト",
     "cloudSyncBytes": "{{done}} / {{total}}",
     "cloudSyncCurrent": "{{kind}} · {{key}}",
+    "cloudSyncActiveUploads": "{{count}} 件実行中",
     "cloudSyncKindMedia": "メディア",
     "cloudSyncKindCover": "カバー",
     "cloudSyncKindMemory": "メモリー写真",
@@ -615,6 +616,7 @@
     "cloudAutoSyncEvery60": "60 分ごと",
     "cloudUploadConcurrency": "アップロード並列数",
     "cloudUploadConcurrencyOption": "同時に {{count}} 件",
+    "cloudAutoSyncPaused": "自動同期は一時停止中です。今すぐ同期するか、この設定を変更すると再開します。",
     "cloudDriveKind": {
       "owned": "所有",
       "trusted": "信頼済み",

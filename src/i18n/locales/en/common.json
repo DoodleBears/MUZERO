@@ -606,6 +606,7 @@
     "cloudSyncObjects": "{{done}} / {{total}} objects",
     "cloudSyncBytes": "{{done}} / {{total}}",
     "cloudSyncCurrent": "{{kind}} · {{key}}",
+    "cloudSyncActiveUploads": "{{count}} active",
     "cloudSyncKindMedia": "Media",
     "cloudSyncKindCover": "Cover",
     "cloudSyncKindMemory": "Memory photo",
@@ -629,6 +630,7 @@
     "cloudAutoSyncEvery60": "Every 60 min",
     "cloudUploadConcurrency": "Upload concurrency",
     "cloudUploadConcurrencyOption": "{{count}} at a time",
+    "cloudAutoSyncPaused": "Auto sync is paused. Run Sync now or change this setting to resume.",
     "cloudDriveKind": {
       "owned": "Owned",
       "trusted": "Trusted",

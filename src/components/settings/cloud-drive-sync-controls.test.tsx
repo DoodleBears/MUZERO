@@ -96,4 +96,21 @@ describe("CloudDriveSyncControls", () => {
     expect(screen.getByLabelText("settings.cloudAutoSyncFrequency")).toBeDisabled();
     expect(screen.getByLabelText("settings.cloudUploadConcurrency")).toBeDisabled();
   });
+
+  it("shows when automatic sync is paused", () => {
+    render(
+      <CloudDriveSyncControls
+        drive={{
+          ...drive,
+          autoSyncFrequency: "30min",
+          autoSyncPausedAt: 123,
+          autoSyncPauseReason: "needs-review",
+        }}
+        onAutoSyncFrequencyChange={vi.fn()}
+        onUploadConcurrencyChange={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("settings.cloudAutoSyncPaused")).toBeInTheDocument();
+  });
 });

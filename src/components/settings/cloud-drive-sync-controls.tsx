@@ -100,6 +100,11 @@ export function CloudDriveSyncControls({
           </SelectContent>
         </Select>
       </div>
+      {drive.autoSyncPausedAt != null && (
+        <p className="text-muted-foreground text-xs sm:col-span-2">
+          {t("settings.cloudAutoSyncPaused")}
+        </p>
+      )}
     </div>
   );
 }

@@ -44,6 +44,7 @@ export interface SyncProgress {
   bytesDone: number;
   bytesTotal: number;
   currentKey?: string;
+  activeUploads?: number;
   runId?: string;
   error?: string;
   conflicts?: R2ExportConflict[];
@@ -190,6 +191,7 @@ export function createSyncOrchestrator(deps: SyncOrchestratorDeps): SyncOrchestr
                 bytesDone: event.bytesDone,
                 bytesTotal: event.bytesTotal,
                 currentKey: event.object.key,
+                activeUploads: event.activeUploads,
               }),
           });
           emit({

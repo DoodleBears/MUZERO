@@ -179,6 +179,7 @@ describe("publishR2ExportPlan", () => {
       ],
     };
     const seen: string[] = [];
+    const activeEvents: number[] = [];
     let activePuts = 0;
     let peakPuts = 0;
     const releaseMediaPuts: Array<() => void> = [];
@@ -186,6 +187,9 @@ describe("publishR2ExportPlan", () => {
     const pending = publishR2ExportPlan(concurrentPlan, credentials, {
       uploadConcurrency: 2,
       skipExistingChecks: true,
+      onProgress: (event) => {
+        if (event.status === "uploading") activeEvents.push(event.activeUploads ?? 0);
+      },
       fetcher: async (url, init) => {
         const request = `${init?.method ?? "GET"} ${String(url)}`;
         seen.push(request);
@@ -204,6 +208,7 @@ describe("publishR2ExportPlan", () => {
     for (const release of releaseMediaPuts) release();
     await pending;
 
+    expect(activeEvents).toContain(2);
     expect(seen.map((request) => new URL(request.split(" ")[1] ?? "").pathname)).toEqual([
       "/muzero/library/objects/media/sha256-a.mp3",
       "/muzero/library/objects/covers/sha256-b.jpg",

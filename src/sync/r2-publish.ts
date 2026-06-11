@@ -4,7 +4,7 @@ import type { R2ExportObject, R2ExportPlan } from "./r2-export-plan";
 import { r2SignedFetch } from "./r2-s3";
 import type { SyncFetch } from "./r2-subscription";
 
-export type R2PublishObjectStatus = "uploaded" | "skipped";
+export type R2PublishObjectStatus = "uploading" | "uploaded" | "skipped";
 
 /**
  * An upload that failed with a definite HTTP status. A 412 means a conditional
@@ -34,6 +34,7 @@ export interface R2PublishProgressEvent {
   skipped: number;
   bytesDone: number;
   bytesTotal: number;
+  activeUploads?: number;
 }
 
 export interface R2PublishResult {
@@ -87,6 +88,7 @@ export async function publishR2ExportPlan(
 
   const uploadConcurrency = clampUploadConcurrency(options.uploadConcurrency);
   let concurrentGroup: R2ExportObject[] = [];
+  const activeUploads = { count: 0 };
 
   const flushConcurrentGroup = async (): Promise<void> => {
     if (concurrentGroup.length === 0) return;
@@ -95,7 +97,9 @@ export async function publishR2ExportPlan(
     for (let index = 0; index < group.length; index += uploadConcurrency) {
       const chunk = group.slice(index, index + uploadConcurrency);
       await Promise.all(
-        chunk.map((object) => publishObject(object, credentials, fetcher, options, result)),
+        chunk.map((object) =>
+          publishObject(object, credentials, fetcher, options, result, activeUploads),
+        ),
       );
     }
   };
@@ -106,7 +110,7 @@ export async function publishR2ExportPlan(
       concurrentGroup.push(object);
     } else {
       await flushConcurrentGroup();
-      await publishObject(object, credentials, fetcher, options, result);
+      await publishObject(object, credentials, fetcher, options, result, activeUploads);
     }
   }
   await flushConcurrentGroup();
@@ -120,6 +124,7 @@ async function publishObject(
   fetcher: SyncFetch,
   options: R2PublishOptions,
   result: R2PublishResult,
+  activeUploads: { count: number },
 ): Promise<void> {
   throwIfAborted(options.signal);
   if (options.isKnownUploaded?.(object)) {
@@ -142,10 +147,19 @@ async function publishObject(
 
   let response: Response;
   try {
+    activeUploads.count += 1;
+    options.onProgress?.({
+      object,
+      status: "uploading",
+      activeUploads: activeUploads.count,
+      ...result,
+    });
     response = await putObjectWithRetry(object, credentials, fetcher, options);
   } catch (error) {
     result.failed += 1;
     throw error;
+  } finally {
+    activeUploads.count = Math.max(0, activeUploads.count - 1);
   }
   if (!response.ok) {
     result.failed += 1;
@@ -154,7 +168,12 @@ async function publishObject(
   result.uploaded += 1;
   result.bytesDone += object.bytes;
   await markObjectSynced(object, "uploaded", options);
-  options.onProgress?.({ object, status: "uploaded", ...result });
+  options.onProgress?.({
+    object,
+    status: "uploaded",
+    activeUploads: activeUploads.count,
+    ...result,
+  });
 }
 
 async function markObjectSynced(

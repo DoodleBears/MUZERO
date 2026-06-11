@@ -1333,6 +1333,9 @@ function CloudDriveLiveProgress({ progress }: { progress: SyncProgress }) {
             total: formatBytes(progress.bytesTotal),
           })}
         </span>
+        {progress.activeUploads ? (
+          <span>{t("settings.cloudSyncActiveUploads", { count: progress.activeUploads })}</span>
+        ) : null}
         {currentObject && (
           <span className="min-w-0 truncate" title={progress.currentKey}>
             {t("settings.cloudSyncCurrent", {

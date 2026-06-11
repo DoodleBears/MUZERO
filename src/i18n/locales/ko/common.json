@@ -591,6 +591,7 @@
     "cloudSyncObjects": "객체 {{done}} / {{total}}개",
     "cloudSyncBytes": "{{done}} / {{total}}",
     "cloudSyncCurrent": "{{kind}} · {{key}}",
+    "cloudSyncActiveUploads": "{{count}}개 진행 중",
     "cloudSyncKindMedia": "미디어",
     "cloudSyncKindCover": "커버",
     "cloudSyncKindMemory": "추억 사진",
@@ -614,6 +615,7 @@
     "cloudAutoSyncEvery60": "60분마다",
     "cloudUploadConcurrency": "업로드 동시성",
     "cloudUploadConcurrencyOption": "동시에 {{count}}개",
+    "cloudAutoSyncPaused": "자동 동기화가 일시 중지되었습니다. 지금 동기화하거나 이 설정을 바꾸면 다시 시작합니다.",
     "cloudDriveKind": {
       "owned": "소유",
       "trusted": "신뢰",

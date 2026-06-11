@@ -592,6 +592,7 @@
     "cloudSyncObjects": "{{done}} / {{total}} 个对象",
     "cloudSyncBytes": "{{done}} / {{total}}",
     "cloudSyncCurrent": "{{kind}} · {{key}}",
+    "cloudSyncActiveUploads": "{{count}} 个进行中",
     "cloudSyncKindMedia": "媒体",
     "cloudSyncKindCover": "封面",
     "cloudSyncKindMemory": "回忆照片",
@@ -615,6 +616,7 @@
     "cloudAutoSyncEvery60": "每 60 分钟",
     "cloudUploadConcurrency": "上传并发",
     "cloudUploadConcurrencyOption": "同时 {{count}} 个",
+    "cloudAutoSyncPaused": "自动同步已暂停。点击立即同步或更改此设置即可恢复。",
     "cloudDriveKind": {
       "owned": "Owner",
       "trusted": "受信任",

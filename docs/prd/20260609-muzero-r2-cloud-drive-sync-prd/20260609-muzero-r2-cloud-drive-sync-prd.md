@@ -2207,7 +2207,7 @@ Do not record secrets, full signed URLs, or media content.
 - [x] AS-2 Implement a per-drive scheduler that triggers the existing orchestrator, honoring in-flight guards, jitter, debounce, backoff, and conflict pause.
 - [x] AS-3 Add dirty tracking so automatic runs can skip when there is nothing meaningful to publish.
 - [x] AS-4 Add bounded immutable-object upload concurrency while preserving ordered conditional JSON writes and manifest-last publish.
-- [ ] AS-5 Update progress UI/tests for concurrent active uploads and scheduler state.
+- [x] AS-5 Update progress UI/tests for concurrent active uploads and scheduler state.
 - [ ] AS-6 Add ETag/conditional-read cache for manifest/index base fetches.
 - [ ] AS-7 Revisit large-library scale: paged set indexes, mutation-log compaction, and multipart upload as separate implementation slices.
 
@@ -2225,6 +2225,7 @@ Do not record secrets, full signed URLs, or media content.
 
 | Date | Author | Changes |
 |------|--------|---------|
+| 2026-06-11 | MUZERO | Phase 10 AS-5 completed: publish progress now reports active concurrent uploads, the live cloud-drive progress row displays the active count, and the drive sync controls show when automatic sync is paused. Tests cover active-upload progress events and paused scheduler state rendering. |
 | 2026-06-11 | MUZERO | Phase 10 AS-4 completed: `publishR2ExportPlan` now supports bounded upload concurrency for immutable/resumable objects only, while mutable JSON objects remain ordered barriers and `manifest.json` remains last. The orchestrator forwards each drive's visible upload concurrency preference, and tests verify concurrent media/cover PUTs do not allow set indexes or the root manifest to overtake unfinished immutable uploads. |
 | 2026-06-11 | MUZERO | Phase 10 AS-3 completed: added tested dirty tracking for automatic cloud sync. The scheduler now receives the oldest locally changed publishable set since the latest successful push, including co-edited sets imported from the same drive and excluding read-only imports from other drives, so `After local changes` can debounce real pending work and skip empty runs. |
 | 2026-06-11 | MUZERO | Phase 10 AS-2 completed: added a tested automatic-sync scheduler policy/runtime, started it from the app lifecycle, gated runs on write capability, local credentials, visibility, network state, in-flight sync, jitter, interval, failure backoff, app-start delay, and pause state. Publish outcomes now pause auto-sync on `needs-review`, cancellation, or failure, while a successful manual publish or preference change clears the pause. `After local changes` is wired as a scheduler input and will become active when AS-3 dirty tracking supplies pending-change timestamps. |
