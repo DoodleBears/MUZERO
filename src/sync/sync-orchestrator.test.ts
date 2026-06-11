@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 import type { AppSettings, CloudDrive, R2LocalCredentials } from "@/db/types";
-import type { R2ExportPlan } from "./r2-export-plan";
+import type { R2ExportPlan, R2ExportPlanForDriveInput } from "./r2-export-plan";
 import type { R2PublishProgressEvent } from "./r2-publish";
+import { R2PublishHttpError } from "./r2-publish";
 import type { RemoteSetConflict } from "./r2-pull-diff";
 import type {
   ApplyRemoteSetPullInput,
@@ -188,6 +189,69 @@ function pullPreview(over: Partial<RemoteSetPullPreview> = {}): RemoteSetPullPre
     ...over,
   };
 }
+
+describe("createSyncOrchestrator.publish read-merge-write (MW-4)", () => {
+  it("refetches the base, re-plans, and retries when a conditional write 412s", async () => {
+    const events: SyncProgress[] = [];
+    const baseA = {};
+    const baseB = {};
+    const bases = [baseA, baseB];
+    const fetchPublishBase = vi.fn(async () => bases.shift() ?? {});
+    const buildPlan = vi.fn(async (_input: R2ExportPlanForDriveInput) => makePlan());
+    let runs = 0;
+    const runPublish = vi.fn(async () => {
+      runs += 1;
+      if (runs === 1) throw new R2PublishHttpError("manifest.json", 412);
+      return { runId: "run_2" };
+    });
+    const orchestrator = createSyncOrchestrator({ buildPlan, runPublish, fetchPublishBase });
+
+    const result = await orchestrator.publish(ctx, { onProgress: (p) => events.push(p) });
+
+    expect(result).toEqual({ status: "completed", runId: "run_2" });
+    // The race loser re-reads the remote state and merges instead of clobbering.
+    expect(fetchPublishBase).toHaveBeenCalledTimes(2);
+    expect(buildPlan).toHaveBeenCalledTimes(2);
+    expect(buildPlan.mock.calls[0]?.[0]).toMatchObject({ remoteBase: baseA });
+    expect(buildPlan.mock.calls[1]?.[0]).toMatchObject({ remoteBase: baseB });
+    expect(events.map((e) => e.phase)).toEqual([
+      "planning",
+      "uploading",
+      "planning",
+      "uploading",
+      "completed",
+    ]);
+  });
+
+  it("gives up after bounded re-merge retries and fails", async () => {
+    const fetchPublishBase = vi.fn(async () => ({}));
+    const runPublish = vi.fn(async () => {
+      throw new R2PublishHttpError("manifest.json", 412);
+    });
+    const orchestrator = createSyncOrchestrator({
+      buildPlan: vi.fn(async () => makePlan()),
+      runPublish,
+      fetchPublishBase,
+    });
+
+    await expect(orchestrator.publish(ctx)).rejects.toThrow(/HTTP 412/);
+    expect(runPublish).toHaveBeenCalledTimes(3); // 1 + 2 bounded retries
+  });
+
+  it("does not refetch the base for a non-412 failure", async () => {
+    const fetchPublishBase = vi.fn(async () => ({}));
+    const orchestrator = createSyncOrchestrator({
+      buildPlan: vi.fn(async () => makePlan()),
+      runPublish: vi.fn(async () => {
+        throw new Error("network down");
+      }),
+      fetchPublishBase,
+    });
+
+    await expect(orchestrator.publish(ctx)).rejects.toThrow("network down");
+    expect(fetchPublishBase).toHaveBeenCalledTimes(1);
+  });
+});
 
 describe("createSyncOrchestrator.pull", () => {
   it("applies a mutating pull: planning -> applying -> completed", async () => {

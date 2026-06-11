@@ -4,6 +4,7 @@ import { log } from "@/lib/logger";
 import { listCloudDrives } from "@/sync/cloud-drive-repo";
 import { getR2CredentialsForDrive } from "@/sync/cloud-drive-settings";
 import { buildR2ExportPlanForDrive } from "@/sync/r2-export-plan";
+import { fetchRemotePublishBase } from "@/sync/r2-publish-base";
 import { runR2PublishSync } from "@/sync/r2-publish-sync";
 import {
   type ApplyRemoteSetPullInput,
@@ -49,6 +50,9 @@ function getOrchestrator(): SyncOrchestrator {
   return createSyncOrchestrator({
     buildPlan: buildR2ExportPlanForDrive,
     runPublish: runR2PublishSync,
+    // Multi-writer read-merge-write (PRD §12.4): every publish plans against
+    // the current remote state and merges instead of mirroring over it.
+    fetchPublishBase: fetchRemotePublishBase,
     dryRunPull: dryRunRemoteSetPull,
     applyPull: applyRemoteSetPull,
   });

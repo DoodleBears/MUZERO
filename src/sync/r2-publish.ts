@@ -6,6 +6,27 @@ import type { SyncFetch } from "./r2-subscription";
 
 export type R2PublishObjectStatus = "uploaded" | "skipped";
 
+/**
+ * An upload that failed with a definite HTTP status. A 412 means a conditional
+ * write lost a race with another publisher — the orchestrator refetches the
+ * remote base, re-merges, and retries (PRD §12.4).
+ */
+export class R2PublishHttpError extends Error {
+  readonly status: number;
+  readonly key: string;
+
+  constructor(key: string, status: number) {
+    super(`Failed to upload ${key}: HTTP ${status}`);
+    this.name = "R2PublishHttpError";
+    this.status = status;
+    this.key = key;
+  }
+}
+
+export function isPreconditionFailure(error: unknown): boolean {
+  return error instanceof R2PublishHttpError && error.status === 412;
+}
+
 export interface R2PublishProgressEvent {
   object: R2ExportObject;
   status: R2PublishObjectStatus;
@@ -76,7 +97,7 @@ export async function publishR2ExportPlan(
     }
     if (!response.ok) {
       result.failed += 1;
-      throw new Error(`Failed to upload ${object.key}: HTTP ${response.status}`);
+      throw new R2PublishHttpError(object.key, response.status);
     }
     result.uploaded += 1;
     result.bytesDone += object.bytes;
