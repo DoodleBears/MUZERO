@@ -362,7 +362,14 @@
     "enable": "フロー背景を有効化",
     "enableHint": "背景画像/動画の上・ビジュアライザーの下に流光レイヤーを重ねます——置き換えではなく重ね合わせ。",
     "opacity": "フロー不透明度（{{pct}}%）",
-    "dim": "フローの暗さ（{{pct}}%）"
+    "dim": "フローの暗さ（{{pct}}%）",
+    "blend": "ブレンドモード",
+    "blendNormal": "通常",
+    "blendScreen": "スクリーン（発光）",
+    "blendAdd": "加算",
+    "blendMultiply": "乗算",
+    "blendOverlay": "オーバーレイ",
+    "blendSoftLight": "ソフトライト"
   },
   "visualizer": {
     "title": "ビジュアライザー",

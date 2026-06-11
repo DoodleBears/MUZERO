@@ -362,7 +362,14 @@
     "enable": "启用流光背景",
     "enableHint": "在背景图片/视频之上、可视化频谱之下叠一层流光——两者叠加，不互斥。",
     "opacity": "流光透明度（{{pct}}%）",
-    "dim": "流光压暗（{{pct}}%）"
+    "dim": "流光压暗（{{pct}}%）",
+    "blend": "混合模式",
+    "blendNormal": "正常",
+    "blendScreen": "滤色（发光）",
+    "blendAdd": "相加",
+    "blendMultiply": "正片叠底",
+    "blendOverlay": "叠加",
+    "blendSoftLight": "柔光"
   },
   "visualizer": {
     "title": "可视化",

@@ -40,8 +40,10 @@ export function NowPlayingBackground({
 }) {
   return (
     <div
+      // `isolate` scopes the flow layer's mix-blend-mode to this background group
+      // (image/video + flow + visualizer) so it never blends with the app behind.
       className={cn(
-        "pointer-events-none absolute inset-0 overflow-hidden bg-background",
+        "pointer-events-none absolute inset-0 isolate overflow-hidden bg-background",
         className,
       )}
       aria-hidden="true"
@@ -258,7 +260,12 @@ function NowPlayingBackgroundContent({ hideVisualizer }: { hideVisualizer: boole
               coverColor
               placement="background"
               className="absolute inset-0"
-              style={{ opacity: (settings.flowOpacity ?? FLOW_DEFAULTS.opacity) / 100 }}
+              style={{
+                opacity: (settings.flowOpacity ?? FLOW_DEFAULTS.opacity) / 100,
+                // Composite the flow with the background below it (add/multiply/…)
+                // via the native compositor — same result as Pixi blend modes.
+                mixBlendMode: settings.flowBlendMode ?? FLOW_DEFAULTS.blendMode,
+              }}
             />
             <div
               className="absolute inset-0 bg-background"

@@ -376,7 +376,14 @@
     "enable": "Enable flow background",
     "enableHint": "Adds a flowing-light layer above the background image/video and below the visualizer — they stack, not replace.",
     "opacity": "Flow opacity ({{pct}}%)",
-    "dim": "Flow dim ({{pct}}%)"
+    "dim": "Flow dim ({{pct}}%)",
+    "blend": "Blend mode",
+    "blendNormal": "Normal",
+    "blendScreen": "Screen (glow)",
+    "blendAdd": "Add",
+    "blendMultiply": "Multiply",
+    "blendOverlay": "Overlay",
+    "blendSoftLight": "Soft light"
   },
   "visualizer": {
     "title": "Visualizer",

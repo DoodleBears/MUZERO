@@ -362,7 +362,14 @@
     "enable": "플로우 배경 켜기",
     "enableHint": "배경 이미지/동영상 위·비주얼라이저 아래에 플로우 레이어를 겹칩니다 — 대체가 아니라 겹침.",
     "opacity": "플로우 불투명도 ({{pct}}%)",
-    "dim": "플로우 어둡게 ({{pct}}%)"
+    "dim": "플로우 어둡게 ({{pct}}%)",
+    "blend": "블렌드 모드",
+    "blendNormal": "기본",
+    "blendScreen": "스크린(발광)",
+    "blendAdd": "더하기",
+    "blendMultiply": "곱하기",
+    "blendOverlay": "오버레이",
+    "blendSoftLight": "소프트 라이트"
   },
   "visualizer": {
     "title": "비주얼라이저",
