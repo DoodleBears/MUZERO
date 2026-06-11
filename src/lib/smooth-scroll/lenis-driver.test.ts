@@ -1,6 +1,12 @@
 import type Lenis from "lenis";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { __activeCount, __resetDriver, registerLenis, unregisterLenis } from "./lenis-driver";
+import {
+  __activeCount,
+  __resetDriver,
+  lenisForElement,
+  registerLenis,
+  unregisterLenis,
+} from "./lenis-driver";
 
 // Minimal fake — the driver only ever calls `.raf(time)`.
 function fakeLenis() {
@@ -79,6 +85,14 @@ describe("lenis-driver — one shared rAF for all instances (PRD §4.2)", () => 
     const b = fakeLenis();
     registerLenis(b);
     expect(rafCalls).toBe(2);
+  });
+
+  it("lenisForElement returns the instance whose rootElement matches, else null", () => {
+    const el = document.createElement("div");
+    const lenis = { raf: vi.fn(), rootElement: el } as unknown as Lenis;
+    registerLenis(lenis);
+    expect(lenisForElement(el)).toBe(lenis);
+    expect(lenisForElement(document.createElement("div"))).toBeNull();
   });
 
   it("self-stops: a tick with an empty set does not reschedule", () => {

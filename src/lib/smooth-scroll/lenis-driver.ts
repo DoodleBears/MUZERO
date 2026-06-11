@@ -36,6 +36,18 @@ export function unregisterLenis(lenis: Lenis): void {
   }
 }
 
+/**
+ * The active Lenis whose wrapper is `element`, if any. Lets a parent route a
+ * programmatic scroll through Lenis (so it isn't overridden on the next frame)
+ * without holding the child's `lenisRef`.
+ */
+export function lenisForElement(element: Element): Lenis | null {
+  for (const lenis of active) {
+    if (lenis.rootElement === element) return lenis;
+  }
+  return null;
+}
+
 /** @internal test-only: how many instances the driver is currently ticking. */
 export function __activeCount(): number {
   return active.size;

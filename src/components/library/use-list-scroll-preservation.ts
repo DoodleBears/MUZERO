@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useRef } from "react";
+import { lenisForElement } from "@/lib/smooth-scroll/lenis-driver";
 
 /** Both track lists share the same scroll viewport size; their scrollable content
  *  height is `count * pitch`, so `scrollHeight / count` recovers a height-agnostic
@@ -47,11 +48,24 @@ export function useListScrollPreservation(swapKey: unknown, count: number) {
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: restore only on the swap, not on count changes
   useLayoutEffect(() => {
-    const index = anchorIndexRef.current;
-    if (index === null || index <= 0) return;
-    const el = rootRef.current?.querySelector<HTMLElement>(SCROLL_SELECTOR);
-    if (!el) return;
-    el.scrollTop = scrollTopForRow(index, el.scrollHeight, countRef.current);
+    const root = rootRef.current;
+    const apply = () => {
+      const index = anchorIndexRef.current;
+      if (index === null || index <= 0) return;
+      const el = root?.querySelector<HTMLElement>(SCROLL_SELECTOR);
+      if (!el) return;
+      const top = scrollTopForRow(index, el.scrollHeight, countRef.current);
+      // The virtual list is Lenis-driven: a raw scrollTop write is reverted on its
+      // next frame, so route through Lenis when present (falls back to native).
+      const lenis = lenisForElement(el);
+      if (lenis) lenis.scrollTo(top, { immediate: true });
+      else el.scrollTop = top;
+    };
+    apply();
+    // Lenis is attached in a passive effect AFTER this layout effect, so re-apply
+    // once it exists — otherwise it starts the fresh container at the top.
+    const raf = requestAnimationFrame(apply);
+    return () => cancelAnimationFrame(raf);
   }, [swapKey]);
 
   return rootRef;
