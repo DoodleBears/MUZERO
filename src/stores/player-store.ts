@@ -60,7 +60,6 @@ import {
   buildShuffleOrder,
   clampIndex,
   manualNextIndex,
-  nextStreamSkipIndex,
   prevIndex,
   type RepeatMode,
   shuffleManualNext,
@@ -1489,21 +1488,22 @@ async function ensureLoadedAndPlay(
           (resolved.kind === "no-permission" && resolved.reason === "vip");
         // Auto-skip past un-streamable songs (common in imported playlists: VIP /
         // 付费 / 下架 tracks the account can't play) so the rest of the set still
-        // plays through, instead of halting on the first gap. Bounded by streamSkips.
-        const { queue, currentIndex, wantPlay: stillWants } = get();
-        const skipTo = stillWants
-          ? nextStreamSkipIndex(queue.length, currentIndex, streamSkips, MAX_STREAM_SKIPS)
-          : null;
+        // plays through, instead of halting on the first gap. Routed through the
+        // SAME `next()` a user/transport triggers — so the cover transition, repeat
+        // / shuffle, and presence all behave identically (no bespoke skip path that
+        // drifts out of sync). `streamSkips` bounds the run so a queue full of gaps
+        // stops instead of looping; it resets to 0 the moment a track loads (below).
+        const { wantPlay: stillWants } = get();
         if (streamSkips === 0) {
           // One toast per skip-run, so a playlist full of gaps doesn't spam.
           notify.error(i18n.t(needsAccess ? "player.streamNeedsAccess" : "player.playbackError"));
         }
-        if (skipTo !== null) {
+        if (stillWants && streamSkips < MAX_STREAM_SKIPS) {
           streamSkips += 1;
-          await get().playIndex(skipTo); // recurses; nextStreamSkipIndex bounds it
+          await get().next(); // unified switch; recurses here if the next is also unplayable
           return;
         }
-        // Single track, paused, or scanned the whole queue with nothing playable.
+        // Paused, or scanned the whole queue with nothing playable → give up cleanly.
         streamSkips = 0;
         get().pause();
         set({ isPlaying: false });

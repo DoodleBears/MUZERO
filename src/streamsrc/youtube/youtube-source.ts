@@ -113,8 +113,13 @@ export function createYoutubeSource(deps: YoutubeSourceDeps): StreamSourceProvid
           },
         };
       case "login-required":
+        log.warn("youtube", "resolve login-required", { videoId: externalId });
         return { kind: "requires-login" };
       default:
+        log.warn("youtube", "resolve unavailable", {
+          videoId: externalId,
+          reason: playback.reason,
+        });
         return { kind: "error", message: playback.reason };
     }
   }

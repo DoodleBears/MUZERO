@@ -32,6 +32,7 @@ async function getInnertube(): Promise<Innertube> {
       return yt;
     })().catch((err) => {
       innertubePromise = null; // let the next play retry a failed bootstrap
+      log.warn("youtube", "youtubei init failed", { err: String(err) });
       throw err;
     });
   }
