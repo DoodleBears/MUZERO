@@ -1,80 +1,43 @@
-# MUZERO — Implementation TODO
+# TODO — Implementation Priority
 
-> **优先级 = 依赖驱动 + 基础设施先于广度（infra-before-breadth）。** 三份 PRD：① 数据模型（地基）→ ② AI DJ chat（依赖 ①）；③ musicgen provider（已实现，剩收尾）。每项 TDD、原子 commit、做完更新对应 PRD 状态。
+> 跨 PRD 实施顺序。排序依据:**存储抽象先行**(share PRD Phase 1 的投影发布必须走 `CloudObjectStore`,避免在 S3 直连代码上继续堆量);broker 线与 WebDAV 线在抽象落地后**可并行**;分享功能按 Q1 决议整批 ship。
+>
+> 相关 PRD:
+> - **[storage-prd]** [Cloud Storage Provider Abstraction + WebDAV](docs/prd/20260612-muzero-cloud-storage-provider-abstraction-webdav-prd/20260612-muzero-cloud-storage-provider-abstraction-webdav-prd.md)
+> - **[share-prd]** [mu0 Share Links + Control Plane](docs/prd/20260612-muzero-mu0-share-links-control-plane-prd/20260612-muzero-mu0-share-links-control-plane-prd.md)
 
-## 依赖与建议顺序
+## P0 — 前置重构(阻塞两条线)
 
-```
-musicgen ✅(已实现) ──┐
-                      ├─ (provenance 自动 Note 依赖 Memory)
-① 数据模型 (P0 地基) ──┴──▶ ② chat agent (P1)
-   歌单/播放列表/记忆          多 session / 三形态 / 工具
-P2 独立小项（Tauri opener / providerPreset 字段）可随时插入
-```
+- [ ] **[storage-prd] Phase 1** — 抽出 `CloudObjectStore` 接口 + S3 adapter + in-memory fake + contract test suite(纯重构,行为冻结:现有 sync 测试全绿)
+- [ ] **[storage-prd] Phase 2** — capability model + 降级策略(guarded single-writer 等)+ registry,消灭 `provider === "r2"` 散落分支
 
-**起步点：`DM-1`（播放列表地基）** —— 它重构 `player-store` 让 player 消费 `playQueue`，是 chat 工具与一切队列能力的前置。
+## P1 — 分享地基(依赖 P0)
 
----
+- [ ] **[share-prd] Phase 1** — share projection writer(激活已有 `muzero-r2-share-manifest-v1` schema;经 `CloudObjectStore` 发布)+ raw-URL 分享/导入闭环
 
-## ✅ 已完成
+## P2 — 双线并行
 
-- **musicgen provider 选型（4 phase）** — preset infra / ACE-Step / Mureka / Settings+成本+Get-key 链接，全 commit、76 tests 绿。
-  - 战略：**ACE-Step 音质差已降级 → 只主推 Mureka**（默认 mureka）；ACE-Step 保留为可选便宜档但不再验证。
-- 三份 PRD 与全部 Open Question 已定稿。
+**A 线:分享(整批 ship,Q1 决议——Phase 1–6 同一个 release)**
 
----
+- [ ] **[share-prd] Phase 2** — mu0 broker(Worker + D1 + 设备 Ed25519 认证 + 稳定短链 + revoke)
+- [ ] **[share-prd] Phase 3** — `mu0.app/s/<slug>` 网页 viewer(打开即播 + OG unfurl + 政策页,Q6)
+- [ ] **[share-prd] Phase 4** — Owner Sharing 管理面板(复制/改权限/过期/撤销 + 访问计数)
+- [ ] **[share-prd] Phase 5** — 接收流 + `muzero://` 深链 + Add-to-Set 即 track 级 fork(Q5)
+- [ ] **[share-prd] Phase 6** — invite-only + redeem-to-grant(Q7:逐收件人可撤销)
 
-## 🔴 P0 — 数据模型地基（关键路径，chat 前置）
+**B 线:WebDAV(独立于 broker 线,落地即随时可 ship)**
 
-PRD: [`20260607-muzero-set-playqueue-memory-data-model-prd`](docs/prd/20260607-muzero-set-playqueue-memory-data-model-prd/20260607-muzero-set-playqueue-memory-data-model-prd.md)
+- [ ] **[storage-prd] Phase 3** — WebDAV adapter(PROPFIND/MKCOL/Basic auth/capability probe,contract suite 三服务器画像全绿)
+- [ ] **[storage-prd] Phase 4** — WebDAV 添加云盘 UX(storage 选择器 + app password 引导 + trusted setup link v2)
 
-- [x] **DM-1 播放列表 Play Queue 地基** ✅ — 纯函数 play-queue(12测) + Dexie v3 playQueue 表 + repo + v2→v3 seed 迁移(8测) + player-store 改消费 playQueue + high-water 追加。浏览器验证迁移 seed+播放、零报错；全套件绿。（用户级编辑 actions 延后 DM-4）
-- [x] **DM-2 autoExtend → 播放列表** ✅ — `refillIfNeeded(sessionId,queueLength,currentIndex)` 阈值改测播放列表 upcoming；`maybeRefill` 传 queue.length；续歌喂队列由 DM-1c high-water 承担。dj-engine 9 测更新、全套件 148 绿。
-- [x] **DM-3 歌曲记忆 Memory** ✅ — `Memory` 类型 + `memories` 表 + `mediaBlobs` `role:"memory"` + repo；迁移 `Track.note`→首条 Memory；`annotation-editor` 改记忆便签瀑布流（Pretext 动态测量文本高度；第一格虚线创建便签，点击原地聚焦输入；composer 支持粘贴图片、Enter 提交、Shift+Enter 换行；记忆照片按自然比例响应式高度完整显示不裁切；第一行 top-align；加/编辑/删/照片/时间）；`track-search`/`search-page` 搜 memory.note；`RecentTrack` 喂记忆给 DJ；生成路径写 provenance Memory（mock 不污染）。浏览器全流程视觉验收并入 DM-4。
-  - 验收：一曲多记忆（含照片）；搜索命中记忆文字；旧 note 变首条记忆；DJ 上下文带记忆。
-- [ ] **DM-4 UI 打磨** — 歌单管理（CRUD+播放/加入队列/切换）；播放列表视图（play-next/add/remove/reorder/loop）；记忆相册；封面取自记忆；i18n 4 语。
-  - [x] 当前歌曲/封面右键菜单：MediaStage 与底部歌曲行可打开 context menu，切换 video/cover/title、audio-only，并添加/更换当前歌曲封面。
-  - [x] 从记忆照片设为封面：带照片的记忆便签可一键复制为独立歌曲封面，原记忆照片保留。
-  - [x] 宽屏右侧播放列表 rail 可折叠，折叠偏好持久化到 settings，折叠态用 motion 保留底部 compact header；移动端队列 overlay 不受影响。
-  - [x] 播放列表视图使用虚拟化动态行高：Now Playing 右侧 rail / Queue / Search 共用 `VirtualTrackList`，由 TanStack Virtual 测量实际 row 高度，支持长标题、状态行和响应式内容高度。
-  - [x] 折叠后的右侧 rail 显示当前歌曲记忆时间线/idle 轮播：idle 时透明外壳、居中轮播当前歌曲 memories；用户操作时中心便签淡出并切为歌词式纵向 timeline list（不显示实体 playhead/中心卡），第一下拖拽即建立捕获，上下拖动/滚动 list 更新持久化锚点；timeline list 使用 TanStack Virtual 动态 row + 原生 scrollTop 驱动，避免拖拽时整列 transform 到视窗外。
-  - [x] 折叠态记忆卡不重复显示当前歌曲名；无当前歌曲记忆时不显示任何空态文案；带照片的记忆在 idle 大卡（约占 rail 4/5）和 timeline list 中以 `object-contain` 完整显示；timeline list 用 Pretext 测量文本并按单列响应式高度排布，不固定卡片高度；idle 大卡的记忆正文用 Pretext 测量自动 fit text，默认尽可能使用 64px 上限，内容过长时降字号避免溢出画面；切歌/切 memory 时旧卡先 fade-out，新歌第一张卡等待图片 load/error、Pretext fit layout 与短暂 settle 后再 fade-in，避免看到 Pretext/图片重排抖动；轮播停留时长按正文长度增加并封顶，前后切换用 motion crossfade 淡入淡出。
-  - [x] 记忆快捷创建：`T` / `N` 在当前记忆面板挂载时打开创建 Memory modal，直接聚焦 composer；支持粘贴图片、Enter 提交、Shift+Enter 换行。
-  - [x] 折叠 rail 方向/边角修正：折叠/展开按钮使用 bottom panel 图标；折叠后 compact header 保持 `rounded-b-none`，底部无圆角。
-  - 验收：浏览器 preview 全流程 + 暗色 + 响应式 + 零报错；四语种齐全。
+## P3 — 收尾增强
 
----
+- [ ] **[storage-prd] Phase 5** — drive-aware 媒体源解析(WebDAV 认证播放走 store-fetch→blob;实现 R2 PRD OQ5 的 per-drive 抽象)
+- [ ] **[share-prd] Phase 7** — 私有桶:凭证 vault(opt-in)+ broker presign(S3-only;真撤销)
+- [ ] **[share-prd] Phase 8** — ops/审计/abuse 处理 + broker 自托管打包
+- [ ] **[storage-prd] Phase 6** — 服务器兼容矩阵 + 文档 + 跨 PRD 对齐(CLAUDE.md 增 storage registry 纪律)
 
-## 🟠 P1 — AI DJ Chat Agent（数据模型 DM-1~3 后）
+## 备注
 
-PRD: [`20260607-muzero-ai-dj-chat-agent-panel-prd`](docs/prd/20260607-muzero-ai-dj-chat-agent-panel-prd/20260607-muzero-ai-dj-chat-agent-panel-prd.md)
-
-- [x] **CHAT-1 runtime 地基** ✅ — `muzero-db` v5 `chatSessions` 表 + Runtime Actor（模块作用域 + `Chat`+懒解析 `ToolLoopAgent` transport，`resolveDjModel`+`getAppFetch`）+ chat-store + 单 session 流式/快照恢复 + `streamdown`（加依赖；组件内导入 package CSS，未触碰 dirty `styles.css`）+ 补 `textarea` 原语。
-  - 验收：send→stream→快照落库→重建 actor 恢复（fake-indexeddb）；runtime 全模块作用域；`make check` 绿。
-- [ ] **CHAT-2 三形态外壳** 🟡 — `mode: fab|bar|dock|fullscreen` + FAB + 底部输入条 + Dock(桌面 1∕3 / 移动全屏) + **顶部 Notification toast 折叠态回复**（`motion/react`，仿 anysoul MessageToast）。已完成可独立落地的 shell 组件 + store/hook 测试；`App.tsx` 挂载仍等并行 Now Playing WIP 落地后补 CHAT-2b。
-  - 验收：三形态切换+偏好持久化；折叠态回复弹通知/点击展开已单测覆盖；preview/App 挂载待 CHAT-2b。
-- [ ] **CHAT-3 DJ 工具** 🟡 — `set_*`/`queue_*`/`add_memory`/`now_playing_get`/`dj_propose_briefs`→`dj_generate_tracks`（Zod，**审批=成本驱动**只 generate 审批，C 方案 propose→确认，无审批模式开关）；落 DjEngine/repos/数据模型；now-playing 注入 system；能力 gate 接 musicgen §4.5。已完成 Phase 3a：工具核心、`dj_generate_tracks` 审批标记、pending track + set + play-next 队列写入、memory-aware search 测试。已完成 Phase 3b：`dj_propose_briefs` 校验 TrackBrief + 摘要 + 零写入、无审批。已完成 Phase 3c：核心 propose→generate→mock materialize→ready/blob 集成测。已完成 Phase 3d：runtime approval response 桥接 AI SDK tool loop。已完成 Phase 3e：无内置文案的 `chat-tool-collapsible` 展示审批/结果/错误。已完成 Phase 3f：ChatTurns/ChatPanel 可选接入 tool UI + approval callbacks。
-  - 验收：工具核心写入/拒绝前 schema 校验/读工具无审批已测；propose→generate 的非花钱/花钱边界已测；`chat-tool-collapsible` 审批 UI、pump 物化 E2E 待后续提交。
-- [ ] **CHAT-4 多 session + 历史 + branch/regenerate** 🟡 — session home 列表 + 子串搜索 + 自动标题；多 actor 并发（切走仍流）；regenerate(edit-resend) + branch(截断深拷贝)。已完成 Phase 4a：session 搜索（标题 + user 文本，不搜 assistant）、branch 深拷贝截断、actor edit-resend regenerate。已完成 Phase 4b：两个 session runtime actor 并发发送/持久化隔离测试。已完成 Phase 4c：空 session 首次持久化 user 消息时自动标题。已完成 Phase 4d：并发 session 中审批态与错误态互不串。已完成 Phase 4e：无内置文案的 `ChatSessionHome` 展示层，支持列表、标题/user 文本本地搜索、打开、重命名、删除回调。
-- [ ] **CHAT-5 多 provider 模型选型** 🟡 — `ai/llm-providers.ts` preset 化（openrouter/openai/claude/gemini/groq/deepseek/custom）+ `resolveDjModel` 扩展 + key 入 Dexie；补 `command`/`combobox`/`dialog`/`popover` 原语；全局默认 + per-session combobox 覆盖。已完成 Phase 5a：preset registry、settings 字段、legacy openai/anthropic bridge、per-preset key selection、OpenAI-compatible/Anthropic model resolve。已完成 Phase 5b：runtime transport 按 `ChatSession.llmProviderPresetId/llmModel` 覆盖模型选择，key 仍只从 settings 读取。已完成 Phase 5c：Base UI `dialog` primitive（trigger/content/title/description/close）+ 测试。已完成 Phase 5d：Base UI `popover` primitive（trigger/content/title/description/close/positioner）+ 测试。已完成 Phase 5e：Base UI `scroll-area` primitive（root/viewport/content/scrollbar/thumb/corner）+ 测试。已完成 Phase 5f：无内置文案的 `Command` primitive（搜索过滤/empty/select）+ 测试。已完成 Phase 5g：无内置文案的 `ChatModelPicker` 展示层，基于 Popover+Command 展示 enabled presets/models，选择回调 `{presetId, model}`；Settings/App/i18n/DB 接线待并行 WIP 落地后补。
-- [ ] **CHAT-6 队列/打断 + onboarding + 压缩** 🟡 — 队列托盘（DnD、Stop≠Interrupt、reload 后默认关）；冷启动 chips + 空态引导；上下文预算/压缩（block-and-explain）。已完成 Phase 6a：token 估算、context budget ok/warn/block、压缩起点纯函数。已完成 Phase 6b：session-scoped queued prompts 持久化、actor rebuild 不自动派发、手动派发与 interrupt marker。已完成 Phase 6c：`contextStartIndex` actor/repo 持久化，旧消息仍保留可见。已完成 Phase 6d：composer 键盘矩阵 Enter/Shift+Enter/Cmd/Ctrl+Enter，running+draft 入队/interrupt。已完成 Phase 6e：pending approval 暂停 queued prompt 派发。已完成 Phase 6f：runtime actor 暴露 queued prompt 重排/删除且不触发发送。已完成 Phase 6g：无内置文案的 `ChatQueueTray` 展示层，支持 DnD/按钮重排、立即发送/删除回调与默认关闭的 auto-dispatch switch。已完成 Phase 6h：runtime snapshot 暴露队列详情，`ChatPanel` 可选 `queueLabels` 接入队列托盘并转发 send/delete/reorder 到 actor。已完成 Phase 6i：无内置文案的 `ChatEmptyState` 展示层，preset chips 只触发 insert 回调不发送，并暴露上传库/输入 vibe 引导动作。已完成 Phase 6j：无内置文案的 `ChatContextBudgetNotice` 展示层，支持 ok 隐藏、warn/status、block/alert 与压缩回调；App+i18n/composer draft/block 接线待后续。
-
----
-
-## 🟢 P2 — 独立小项（低风险，可随时插入）
-
-- [x] **OPENER Tauri opener 插件** ✅ — `@tauri-apps/plugin-opener` + `lib.rs` 注册 + capability `opener:allow-open-url` + `openExternalUrl()`（Tauri 用 opener、浏览器回退 `window.open`）已完成并测试；Settings 的 Get-key/docs 链接 + chat 外链接线待并行 Settings/chat UI WIP 落地后补。**（musicgen Q9：必须走系统浏览器）**
-  - 注：碰 Rust/Cargo/capability，但独立、小、已决策。可作热身先做掉。
-- [x] **PROVENANCE 字段** ✅ — `Track.providerPreset?` 已随 DM-3a 落类型；生成路径已写入 provider/model key + 自动 provenance Memory（mock 不污染 Memory）。UI 展示/过滤待相关页面 WIP 落地后补。
-
----
-
-## 👤 Manual（用户人工，需真实 key）
-
-- [ ] **Mureka 真实 key 端到端** — 出中/日/韩各一首落库可播；确认确切 model 字符串、商用授权。
-- [ ] **Mureka `$/首` 单位** — 默认出 2 首，确认 `n=1` 是否=$0.045（musicgen Q8）。
-- [ ] **（ACE-Step 已降级，fal 计费/质量验证搁置，如未来重启再测）**
-
----
-
-> 维护：做完一项勾选 + 更新对应 PRD 的 Phase 状态 + changelog。新需求先进 PRD，再回填本表。
+- WebDAV 云盘默认 **own-devices only**:无匿名公读的服务器不能背书 public 分享(storage-prd §2.5);broker presign 是 S3 专属。
+- 两份 PRD 的 Open Questions 已全部 resolve(2026-06-12,见各自 §10):share-prd 7 个;storage-prd 4 个(自动化测试仅 fixtures+人工真机矩阵、single-writer 硬阻断、publicReadBaseUrl 手动录入+探测验证、web 端可用性由 CORS 探测决定)。
