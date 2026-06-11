@@ -402,11 +402,22 @@ function lastAssistantText(messages: DjChatUIMessage[]): string | undefined {
 }
 
 function countPendingApprovals(messages: DjChatUIMessage[]): number {
-  return messages.reduce(
-    (count, message) =>
-      count +
-      message.parts.filter((part) => isToolUIPart(part) && part.state === "approval-requested")
-        .length,
-    0,
-  );
+  return pendingApprovalIds(messages).length;
+}
+
+/**
+ * Ids of every tool call currently paused on `approval-requested`. Pure — used
+ * by the meta snapshot and by the no-approval ("auto") mode to accept them
+ * programmatically (PRD §4.3).
+ */
+export function pendingApprovalIds(messages: DjChatUIMessage[]): string[] {
+  const ids: string[] = [];
+  for (const message of messages) {
+    for (const part of message.parts) {
+      if (isToolUIPart(part) && part.state === "approval-requested" && part.approval?.id) {
+        ids.push(part.approval.id);
+      }
+    }
+  }
+  return ids;
 }

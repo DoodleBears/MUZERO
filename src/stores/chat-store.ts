@@ -12,11 +12,21 @@ export type ChatMode = "icon" | "chip" | "expanded";
 
 const CHAT_UI_VERSION = 1;
 
+/**
+ * HITL approval preference (PRD §4.3): "ask" (default) pauses paid tool calls
+ * (dj_generate_tracks) on an approval card; "auto" is the user-opted
+ * no-approval mode that accepts them automatically. A human setting — the
+ * model never chooses it.
+ */
+export type ChatApprovalMode = "ask" | "auto";
+
 interface ChatState {
   mode: ChatMode;
+  approvalMode: ChatApprovalMode;
   activeSessionId: string | null;
   runtimeMetaBySessionId: Record<string, DjChatRuntimeMeta>;
   setMode: (mode: ChatMode) => void;
+  setApprovalMode: (approvalMode: ChatApprovalMode) => void;
   setActiveSessionId: (sessionId: string | null) => void;
   setRuntimeMeta: (meta: DjChatRuntimeMeta) => void;
   clearRuntimeMeta: (sessionId: string) => void;
@@ -47,9 +57,11 @@ export const useChatStore = create<ChatState>()(
   persist(
     (set) => ({
       mode: "chip",
+      approvalMode: "ask",
       activeSessionId: null,
       runtimeMetaBySessionId: {},
       setMode: (mode) => set({ mode }),
+      setApprovalMode: (approvalMode) => set({ approvalMode }),
       setActiveSessionId: (activeSessionId) => set({ activeSessionId }),
       setRuntimeMeta: (meta) =>
         set((state) => ({
@@ -71,6 +83,7 @@ export const useChatStore = create<ChatState>()(
       migrate: migrateChatUiState,
       partialize: (state) => ({
         mode: state.mode,
+        approvalMode: state.approvalMode,
         activeSessionId: state.activeSessionId,
       }),
     },

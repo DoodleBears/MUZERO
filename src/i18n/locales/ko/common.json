@@ -941,6 +941,27 @@
     "queue": "대기열에 추가",
     "stop": "중지",
     "expand": "채팅 펼치기",
-    "minimize": "채팅 접기"
+    "minimize": "채팅 접기",
+    "approvalAsk": "유료 생성 전 확인",
+    "approvalAuto": "생성 자동 승인",
+    "toolApprove": "승인",
+    "toolReject": "거절",
+    "toolInput": "입력",
+    "toolOutput": "결과",
+    "toolError": "오류",
+    "toolStateApproval": "승인 대기",
+    "toolStateResponded": "승인 응답됨",
+    "toolStateRunning": "실행 중",
+    "toolStateDone": "완료",
+    "toolStateDenied": "거절됨",
+    "toolStateError": "실패",
+    "queueTitle": "대기 중인 프롬프트",
+    "queueEmpty": "대기열이 비어 있음",
+    "queueSend": "지금 보내기",
+    "queueDelete": "제거",
+    "queueMoveUp": "위로",
+    "queueMoveDown": "아래로",
+    "queueDragHandle": "순서 변경",
+    "queueAutoDispatch": "대기열 자동 전송"
   }
 }

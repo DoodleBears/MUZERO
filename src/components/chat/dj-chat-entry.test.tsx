@@ -120,6 +120,18 @@ describe("DjChatEntry — three states", () => {
     expect(createChatSession).toHaveBeenCalledOnce();
   });
 
+  it("expanded header Shield toggles the HITL approval mode (ask ↔ auto)", async () => {
+    asAvailable();
+    useChatStore.setState({ mode: "expanded", activeSessionId: "cht_1" });
+    render(<DjChatEntry />);
+
+    await waitFor(() => expect(screen.getByTestId("chat-panel")).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: "chat.approvalAsk" }));
+    expect(useChatStore.getState().approvalMode).toBe("auto");
+    fireEvent.click(screen.getByRole("button", { name: "chat.approvalAuto" }));
+    expect(useChatStore.getState().approvalMode).toBe("ask");
+  });
+
   it("backdrop click collapses the widget", async () => {
     asAvailable();
     useChatStore.setState({ mode: "expanded", activeSessionId: "cht_1" });

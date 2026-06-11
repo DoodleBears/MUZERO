@@ -57,4 +57,10 @@ describe("chat-store — persisted shell state", () => {
     expect(migrateChatUiState({ mode: "icon" }, 1)).toMatchObject({ mode: "icon" });
     expect(migrateChatUiState({ mode: "bogus" }, 0)).toMatchObject({ mode: "chip" });
   });
+
+  it("defaults HITL approval to ask and persists the auto opt-in", () => {
+    expect(useChatStore.getState().approvalMode).toBe("ask");
+    useChatStore.getState().setApprovalMode("auto");
+    expect(localStorage.getItem("muzero-chat-ui")).toContain("auto");
+  });
 });

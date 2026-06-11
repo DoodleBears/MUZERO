@@ -17,7 +17,7 @@
 |-------|------|--------|------|
 | 1 | Chat runtime 地基（Dexie v5 + Runtime Actor + 单 session 流式 + streamdown） | ✅ Completed | §7 |
 | 2 | **Dock 集成对话入口**（minimize 图标 / normal 圆角 chip 输入条 / expand framer-motion widget；gated on LLM+musicgen 已配置） | ✅ Completed（2026-06-11 重设计后落地：`canUseDjChat` 门控 + 三态 `dj-chat-entry` 挂 dock 工具行 + i18n ×4；preview 实测零报错，动效手感待真实窗口） | §7 |
-| 3 | DJ 工具调用（search/create/curate/propose/generate + HITL 审批） | 🔄 6 工具+审批桥+折叠 UI+测试 ✅；HITL ask/auto 切换 + i18n 待 | §7 |
+| 3 | DJ 工具调用（search/create/curate/propose/generate + HITL 审批） | ✅ Completed（6 工具+审批桥+折叠 UI+ask/auto 偏好切换+labels i18n ×4 全接线；余 store-pump E2E 一项见 checklist） | §7 |
 | 4 | 多 Session + 历史列表（搜索）+ branch/regenerate | 🔄 search/branch/regenerate/session-home ✅；列表挂载待 WIP | §7 |
 | 5 | 多 Provider 模型选型（preset + **自定义 provider，复刻 ClipCombo** + combobox + Settings + key 入 Dexie） | 🔄 7 preset+model picker+dialog/popover/command/scroll-area 原语 ✅；**动态 custom-provider（Dexie）+ Settings provider 面板 + enabled grid + i18n 待** | §7 |
 | 6 | 队列/打断 prompt + 空态 onboarding + 上下文压缩 | 🔄 token/budget/queue-tray/empty/notice ✅；App 挂载 + i18n 待 | §7 |
@@ -453,7 +453,7 @@ chat 入口落在**记忆 icon + 切 tab icon 的左边**、占该行剩余宽�
 - [x] `dj-chat-tools.ts`（§4.2 工具集，Zod schema，读/写 + `needsApproval`，`AgentWriteResult`）；`dj-chat-prompt.ts`。
 - [x] `chat-tool-collapsible.tsx` presentational 组件（审批/结果/错误；labels 由调用方传入，避免内置文案）。
 - [x] `ChatTurns`/`ChatPanel` 可选接入 `chat-tool-collapsible` + runtime approval callbacks。
-- [ ] HITL `ask`/`auto` 偏好 + App/i18n labels 接线。
+- [x] HITL `ask`/`auto` 偏好 + App/i18n labels 接线：`chat-store.approvalMode`（ask 默认/auto，persist）+ expanded header `ShieldQuestion`/`ShieldCheck` 切换钮；`pendingApprovalIds`（actor 导出纯函数）+ `ChatPanel.autoApprove` effect 自动 accept（响应幂等，安全重跑）；`dj-chat-entry` 给 ChatPanel 接 `toolLabels`（7 态）+ `queueLabels` 全量 i18n（`chat.*` 21 keys ×4 语）。
 - [x] Runtime approval bridge：actor 可响应 tool approval，并让 AI SDK tool loop 继续。
 - [x] 工具落 repos；`dj_generate_tracks` 走 `createPendingTrack`+`prependTrackIds` + play-next queue（物化由 store pump 自动）；provider id 从 settings 注入，保持 provider-agnostic。
 - [x] `dj_propose_briefs`：校验候选 `TrackBrief[]` 并返回 proposal id + summaries，不写 DB、不花钱、不审批；确认后才走 `dj_generate_tracks`。

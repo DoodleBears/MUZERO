@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { pendingApprovalIds } from "@/chat/dj-chat-runtime-actor";
 import {
   getOrCreateDjChatRuntimeActor,
   useDjChatRuntimeSnapshot,
@@ -11,6 +12,8 @@ import type { ChatToolLabels } from "./chat-tool-collapsible";
 import { ChatTurns } from "./chat-turns";
 
 interface ChatPanelProps {
+  /** No-approval mode (PRD §4.3 "auto"): pending approvals are accepted automatically. */
+  autoApprove?: boolean;
   autoDispatchEnabled?: boolean;
   sessionId: string;
   db?: MuzeroDB;
@@ -20,6 +23,7 @@ interface ChatPanelProps {
 }
 
 export function ChatPanel({
+  autoApprove = false,
   autoDispatchEnabled = false,
   sessionId,
   db,
@@ -35,6 +39,17 @@ export function ChatPanel({
   }, [setRuntimeMeta, snapshot?.meta]);
 
   const actor = getOrCreateDjChatRuntimeActor(sessionId, db ? { db } : {});
+
+  // Auto-accept paused tool calls in no-approval mode. Approval responses are
+  // idempotent per id, so re-runs on snapshot churn are safe.
+  const pendingIds = snapshot ? pendingApprovalIds(snapshot.messages) : [];
+  const pendingSig = pendingIds.join("|");
+  useEffect(() => {
+    if (!autoApprove || !pendingSig) return;
+    for (const id of pendingSig.split("|")) {
+      void actor.respondToToolApproval(id, true);
+    }
+  }, [autoApprove, pendingSig, actor]);
   const isRunning = snapshot?.meta.status === "submitted" || snapshot?.meta.status === "streaming";
 
   return (

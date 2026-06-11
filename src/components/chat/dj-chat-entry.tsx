@@ -1,4 +1,13 @@
-import { ArrowUp, CircleStop, ListEnd, Maximize2, Minimize2, Sparkles } from "lucide-react";
+import {
+  ArrowUp,
+  CircleStop,
+  ListEnd,
+  Maximize2,
+  Minimize2,
+  ShieldCheck,
+  ShieldQuestion,
+  Sparkles,
+} from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { type FormEvent, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
@@ -33,6 +42,8 @@ export function DjChatEntry({ className }: { className?: string }) {
   const available = canUseDjChat(settings);
   const mode = useChatStore((s) => s.mode);
   const setMode = useChatStore((s) => s.setMode);
+  const approvalMode = useChatStore((s) => s.approvalMode);
+  const setApprovalMode = useChatStore((s) => s.setApprovalMode);
   const activeSessionId = useChatStore((s) => s.activeSessionId);
   const setActiveSessionId = useChatStore((s) => s.setActiveSessionId);
   const runtimeStatus = useChatStore((s) =>
@@ -201,6 +212,27 @@ export function DjChatEntry({ className }: { className?: string }) {
                     {t("chat.title")}
                   </span>
                   <button
+                    aria-label={
+                      approvalMode === "auto" ? t("chat.approvalAuto") : t("chat.approvalAsk")
+                    }
+                    aria-pressed={approvalMode === "auto"}
+                    className={cn(
+                      "grid size-8 place-items-center rounded-full outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring",
+                      approvalMode === "auto"
+                        ? "text-primary"
+                        : "text-muted-foreground hover:text-foreground",
+                    )}
+                    onClick={() => setApprovalMode(approvalMode === "auto" ? "ask" : "auto")}
+                    title={approvalMode === "auto" ? t("chat.approvalAuto") : t("chat.approvalAsk")}
+                    type="button"
+                  >
+                    {approvalMode === "auto" ? (
+                      <ShieldCheck aria-hidden="true" className="size-4" />
+                    ) : (
+                      <ShieldQuestion aria-hidden="true" className="size-4" />
+                    )}
+                  </button>
+                  <button
                     aria-label={t("chat.minimize")}
                     className="grid size-8 place-items-center rounded-full text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
                     onClick={() => setMode("chip")}
@@ -209,7 +241,39 @@ export function DjChatEntry({ className }: { className?: string }) {
                     <Minimize2 aria-hidden="true" className="size-4" />
                   </button>
                 </header>
-                {activeSessionId && <ChatPanel sessionId={activeSessionId} />}
+                {activeSessionId && (
+                  <ChatPanel
+                    autoApprove={approvalMode === "auto"}
+                    queueLabels={{
+                      autoDispatch: t("chat.queueAutoDispatch"),
+                      delete: t("chat.queueDelete"),
+                      dragHandle: t("chat.queueDragHandle"),
+                      empty: t("chat.queueEmpty"),
+                      itemPosition: (index, total) => `${index + 1} / ${total}`,
+                      moveDown: t("chat.queueMoveDown"),
+                      moveUp: t("chat.queueMoveUp"),
+                      send: t("chat.queueSend"),
+                      title: t("chat.queueTitle"),
+                    }}
+                    sessionId={activeSessionId}
+                    toolLabels={{
+                      approve: t("chat.toolApprove"),
+                      error: t("chat.toolError"),
+                      input: t("chat.toolInput"),
+                      output: t("chat.toolOutput"),
+                      reject: t("chat.toolReject"),
+                      states: {
+                        "approval-requested": t("chat.toolStateApproval"),
+                        "approval-responded": t("chat.toolStateResponded"),
+                        "input-available": t("chat.toolStateRunning"),
+                        "input-streaming": t("chat.toolStateRunning"),
+                        "output-available": t("chat.toolStateDone"),
+                        "output-denied": t("chat.toolStateDenied"),
+                        "output-error": t("chat.toolStateError"),
+                      },
+                    }}
+                  />
+                )}
               </motion.section>
             )}
           </AnimatePresence>,

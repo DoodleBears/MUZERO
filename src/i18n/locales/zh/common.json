@@ -942,6 +942,27 @@
     "queue": "加入队列",
     "stop": "停止",
     "expand": "展开对话",
-    "minimize": "收起对话"
+    "minimize": "收起对话",
+    "approvalAsk": "付费生成前先确认",
+    "approvalAuto": "自动批准生成",
+    "toolApprove": "批准",
+    "toolReject": "拒绝",
+    "toolInput": "输入",
+    "toolOutput": "结果",
+    "toolError": "错误",
+    "toolStateApproval": "等待批准",
+    "toolStateResponded": "已回应批准",
+    "toolStateRunning": "执行中",
+    "toolStateDone": "完成",
+    "toolStateDenied": "已拒绝",
+    "toolStateError": "失败",
+    "queueTitle": "排队的指令",
+    "queueEmpty": "队列为空",
+    "queueSend": "立即发送",
+    "queueDelete": "移除",
+    "queueMoveUp": "上移",
+    "queueMoveDown": "下移",
+    "queueDragHandle": "拖拽排序",
+    "queueAutoDispatch": "自动发送排队指令"
   }
 }

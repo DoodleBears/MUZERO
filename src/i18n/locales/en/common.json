@@ -968,6 +968,27 @@
     "queue": "Queue prompt",
     "stop": "Stop",
     "expand": "Expand chat",
-    "minimize": "Minimize chat"
+    "minimize": "Minimize chat",
+    "approvalAsk": "Ask before paid generation",
+    "approvalAuto": "Auto-approve generation",
+    "toolApprove": "Approve",
+    "toolReject": "Reject",
+    "toolInput": "Input",
+    "toolOutput": "Result",
+    "toolError": "Error",
+    "toolStateApproval": "Needs approval",
+    "toolStateResponded": "Approval answered",
+    "toolStateRunning": "Running",
+    "toolStateDone": "Done",
+    "toolStateDenied": "Denied",
+    "toolStateError": "Failed",
+    "queueTitle": "Queued prompts",
+    "queueEmpty": "Nothing queued",
+    "queueSend": "Send now",
+    "queueDelete": "Remove",
+    "queueMoveUp": "Move up",
+    "queueMoveDown": "Move down",
+    "queueDragHandle": "Reorder",
+    "queueAutoDispatch": "Auto-send queued prompts"
   }
 }

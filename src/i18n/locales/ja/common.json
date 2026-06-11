@@ -942,6 +942,27 @@
     "queue": "キューに追加",
     "stop": "停止",
     "expand": "チャットを展開",
-    "minimize": "チャットを最小化"
+    "minimize": "チャットを最小化",
+    "approvalAsk": "有料生成の前に確認",
+    "approvalAuto": "生成を自動承認",
+    "toolApprove": "承認",
+    "toolReject": "却下",
+    "toolInput": "入力",
+    "toolOutput": "結果",
+    "toolError": "エラー",
+    "toolStateApproval": "承認待ち",
+    "toolStateResponded": "承認回答済み",
+    "toolStateRunning": "実行中",
+    "toolStateDone": "完了",
+    "toolStateDenied": "却下済み",
+    "toolStateError": "失敗",
+    "queueTitle": "キュー内のプロンプト",
+    "queueEmpty": "キューは空です",
+    "queueSend": "今すぐ送信",
+    "queueDelete": "削除",
+    "queueMoveUp": "上へ",
+    "queueMoveDown": "下へ",
+    "queueDragHandle": "並べ替え",
+    "queueAutoDispatch": "キューを自動送信"
   }
 }
