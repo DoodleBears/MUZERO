@@ -2,10 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <!-- Theme-aware favicon: dark tile (light text) for dark UI, light tile for
-         light UI. The boot script below swaps href before paint; applyTheme()
-         (src/theme/theme.ts) keeps it in sync on theme / OS-preference changes. -->
-    <link rel="icon" id="favicon" type="image/png" href="/muzero-logo-dark.png" />
+    <link rel="icon" id="favicon" type="image/png" href="/muzero-logo-light.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <meta name="theme-color" content="#09090b" />
     <!-- External album art (e.g. bilibili i*.hdslb.com) blocks a foreign Referer but
@@ -57,7 +54,16 @@
             (t === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches);
           document.documentElement.classList.toggle("dark", dark);
           var icon = document.getElementById("favicon");
-          if (icon) icon.href = dark ? "/muzero-logo-dark.png" : "/muzero-logo-light.png";
+          var appIcon = localStorage.getItem("muzero-app-icon") || "light";
+          var iconHref =
+            {
+              light: "/muzero-logo-light.png",
+              dark: "/muzero-logo-dark.png",
+              sketch: "/muzero-logo.png",
+              monogram: "/muzero-logo-1.png",
+              split: "/muzero-logo-2.png",
+            }[appIcon] || "/muzero-logo-light.png";
+          if (icon) icon.href = iconHref;
           var f = localStorage.getItem("muzero-font");
           if (f) document.documentElement.style.setProperty("--app-font", f);
         } catch (e) {}

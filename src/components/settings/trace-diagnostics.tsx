@@ -1,10 +1,17 @@
 import { ClipboardCopy, Download } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { DeleteIcon } from "@/components/ui/delete";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { APP_VERSION, GIT_SHA } from "@/lib/app-version";
 import {
   type DiagnosticCategory,
@@ -47,6 +54,34 @@ const ERROR_KIND_OPTIONS = [
 type LevelOption = (typeof LEVEL_OPTIONS)[number];
 type CategoryOption = (typeof CATEGORY_OPTIONS)[number];
 type ErrorKindOption = (typeof ERROR_KIND_OPTIONS)[number];
+
+const LEVEL_OPTION_LABELS = {
+  all: "settings.traceOptionAll",
+  debug: "settings.traceLevelDebug",
+  info: "settings.traceLevelInfo",
+  warn: "settings.traceLevelWarn",
+  error: "settings.traceLevelError",
+} as const satisfies Record<LevelOption, string>;
+
+const CATEGORY_OPTION_LABELS = {
+  all: "settings.traceOptionAll",
+  "user-action": "settings.traceCategoryUserAction",
+  network: "settings.traceCategoryNetwork",
+  stream: "settings.traceCategoryStream",
+  media: "settings.traceCategoryMedia",
+  cache: "settings.traceCategoryCache",
+  sync: "settings.traceCategorySync",
+} as const satisfies Record<CategoryOption, string>;
+
+const ERROR_KIND_OPTION_LABELS = {
+  all: "settings.traceOptionAll",
+  http_status: "settings.traceErrorHttpStatus",
+  network_error: "settings.traceErrorNetworkError",
+  media_decode: "settings.traceErrorMediaDecode",
+  auth_required: "settings.traceErrorAuthRequired",
+  permission_denied: "settings.traceErrorPermissionDenied",
+  po_token: "settings.traceErrorPoToken",
+} as const satisfies Record<ErrorKindOption, string>;
 
 export function TraceDiagnostics() {
   const { t } = useTranslation();
@@ -217,19 +252,22 @@ export function TraceDiagnostics() {
             label={t("settings.traceLevel")}
             value={level}
             options={LEVEL_OPTIONS}
-            onChange={(value) => setLevel(value as LevelOption)}
+            getOptionLabel={(option) => t(LEVEL_OPTION_LABELS[option])}
+            onChange={setLevel}
           />
           <TraceSelect
             label={t("settings.traceCategory")}
             value={category}
             options={CATEGORY_OPTIONS}
-            onChange={(value) => setCategory(value as CategoryOption)}
+            getOptionLabel={(option) => t(CATEGORY_OPTION_LABELS[option])}
+            onChange={setCategory}
           />
           <TraceSelect
             label={t("settings.traceErrorKind")}
             value={errorKind}
             options={ERROR_KIND_OPTIONS}
-            onChange={(value) => setErrorKind(value as ErrorKindOption)}
+            getOptionLabel={(option) => t(ERROR_KIND_OPTION_LABELS[option])}
+            onChange={setErrorKind}
           />
           <label
             htmlFor="trace-search"
@@ -270,32 +308,41 @@ function traceExportFileName(): string {
   return `muzero-trace-${stamp}.jsonl`;
 }
 
-function TraceSelect({
+function TraceSelect<TOption extends string>({
   label,
   value,
   options,
+  getOptionLabel,
   onChange,
 }: {
   label: string;
-  value: string;
-  options: readonly string[];
-  onChange: (value: string) => void;
+  value: TOption;
+  options: readonly TOption[];
+  getOptionLabel: (value: TOption) => string;
+  onChange: (value: TOption) => void;
 }) {
+  const labelId = useId();
+
   return (
-    <label className="flex flex-col gap-1 text-xs text-muted-foreground">
-      {label}
-      <select
+    <div className="flex flex-col gap-1 text-xs text-muted-foreground">
+      <span id={labelId}>{label}</span>
+      <Select
+        aria-label={label}
         value={value}
-        onChange={(event) => onChange(event.target.value)}
-        className="h-9 rounded-md border border-input bg-background px-2 text-xs text-foreground"
+        onValueChange={(nextValue) => onChange(nextValue as TOption)}
       >
-        {options.map((option) => (
-          <option key={option} value={option}>
-            {option}
-          </option>
-        ))}
-      </select>
-    </label>
+        <SelectTrigger aria-labelledby={labelId} className="h-9 text-xs">
+          <SelectValue>{(selectedValue) => getOptionLabel(selectedValue as TOption)}</SelectValue>
+        </SelectTrigger>
+        <SelectContent>
+          {options.map((option) => (
+            <SelectItem key={option} value={option}>
+              {getOptionLabel(option)}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
   );
 }
 

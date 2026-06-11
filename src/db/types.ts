@@ -690,7 +690,8 @@ export interface AppSettings {
   theme?: "light" | "dark" | "system";
   /**
    * Which alternate desktop app icon to show (Electron only) — swaps the running
-   * dock/taskbar icon. Defaults to "dark". See {@link AppIconId} + use-app-icon.ts.
+   * dock/taskbar icon and browser favicon. Defaults to "light". See
+   * {@link AppIconId} + use-app-icon.ts.
    */
   appIcon?: AppIconId;
   /** Primary/accent color (hex) for light mode. Mirrors localStorage `muzero-primary-light`. */
@@ -810,7 +811,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   autoFetchLyrics: true,
   lyricsProviderId: "lrclib",
   theme: "system",
-  appIcon: "dark",
+  appIcon: "light",
   backgroundMode: "cover",
   backgroundRenderer: "noise",
   backgroundPixelSize: 12,

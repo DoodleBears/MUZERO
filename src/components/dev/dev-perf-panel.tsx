@@ -1,3 +1,4 @@
+import { Check, ClipboardCopy } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import {
   formatFps,
@@ -9,6 +10,7 @@ import {
   readJsHeapBytes,
   summarizePerf,
 } from "@/lib/perf-metrics";
+import { formatTraceEntries, useTraceEntries } from "@/lib/trace";
 import { cn } from "@/lib/utils";
 
 /**
@@ -38,6 +40,8 @@ export function DevPerfPanel() {
     () => typeof localStorage !== "undefined" && localStorage.getItem(COLLAPSED_KEY) === "1",
   );
   const [snap, setSnap] = useState<Snapshot>(EMPTY_SNAPSHOT);
+  const [traceCopied, setTraceCopied] = useState(false);
+  const traceEntries = useTraceEntries();
   const framesRef = useRef(new PerfWindow(180));
   const longTasksRef = useRef(new PerfWindow(60));
 
@@ -91,6 +95,13 @@ export function DevPerfPanel() {
     });
   };
 
+  const copyAllTrace = async () => {
+    if (!navigator.clipboard || traceEntries.length === 0) return;
+    await navigator.clipboard.writeText(formatTraceEntries(traceEntries));
+    setTraceCopied(true);
+    window.setTimeout(() => setTraceCopied(false), 1600);
+  };
+
   const fpsAvg = fpsFromIntervalMs(snap.frames.avg);
   const fpsLow = fpsFromIntervalMs(snap.frames.max); // worst frame interval → lowest fps
   const fpsColor =
@@ -106,7 +117,6 @@ export function DevPerfPanel() {
     <div
       className="pointer-events-auto fixed bottom-3 left-3 z-[70] select-none rounded-md bg-black/75 font-mono text-[10px] text-white/90 leading-tight shadow-lg backdrop-blur-sm"
       style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}
-      aria-hidden
     >
       <button
         type="button"
@@ -131,6 +141,16 @@ export function DevPerfPanel() {
             value={snap.longTaskMax == null ? "–" : `max ${formatMs(snap.longTaskMax)}`}
           />
           <Row label="heap" value={formatMb(snap.heapBytes)} />
+          <button
+            type="button"
+            onClick={() => void copyAllTrace()}
+            disabled={traceEntries.length === 0}
+            className="col-span-2 mt-1 flex items-center justify-center gap-1 rounded border border-white/15 px-2 py-1 text-white/80 transition hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+            title="Copy all trace"
+          >
+            {traceCopied ? <Check className="size-3" /> : <ClipboardCopy className="size-3" />}
+            {traceCopied ? "copied" : `copy trace (${traceEntries.length})`}
+          </button>
         </div>
       )}
     </div>

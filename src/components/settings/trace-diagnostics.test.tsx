@@ -1,5 +1,6 @@
 import "fake-indexeddb/auto";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { saveTextFile } from "@/lib/save-text-file";
 import { clearTrace, traceDiagnosticEvent } from "@/lib/trace";
@@ -19,6 +20,34 @@ vi.mock("react-i18next", () => ({
     t: (key: string, options?: Record<string, unknown>) =>
       options ? `${key} ${JSON.stringify(options)}` : key,
   }),
+}));
+
+vi.mock("@/components/ui/select", () => ({
+  Select: ({
+    children,
+    onValueChange,
+    value,
+    "aria-label": ariaLabel,
+  }: {
+    "aria-label"?: string;
+    children: ReactNode;
+    onValueChange?: (value: string) => void;
+    value?: string;
+  }) => (
+    <select
+      aria-label={ariaLabel}
+      value={value}
+      onChange={(event) => onValueChange?.(event.currentTarget.value)}
+    >
+      {children}
+    </select>
+  ),
+  SelectContent: ({ children }: { children: ReactNode }) => children,
+  SelectItem: ({ children, value }: { children: ReactNode; value: string }) => (
+    <option value={value}>{children}</option>
+  ),
+  SelectTrigger: ({ children }: { children: ReactNode }) => children,
+  SelectValue: () => null,
 }));
 
 describe("TraceDiagnostics", () => {

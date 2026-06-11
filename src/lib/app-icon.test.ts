@@ -11,6 +11,9 @@ describe("app-icon registry", () => {
   it("recognizes valid ids and rejects everything else", () => {
     expect(isAppIconId("dark")).toBe(true);
     expect(isAppIconId("light")).toBe(true);
+    expect(isAppIconId("sketch")).toBe(true);
+    expect(isAppIconId("monogram")).toBe(true);
+    expect(isAppIconId("split")).toBe(true);
     expect(isAppIconId("auto")).toBe(false);
     expect(isAppIconId("")).toBe(false);
     expect(isAppIconId(undefined)).toBe(false);
@@ -21,14 +24,14 @@ describe("app-icon registry", () => {
     expect(resolveAppIcon("light")).toBe("light");
     expect(resolveAppIcon("nope")).toBe(DEFAULT_APP_ICON);
     expect(resolveAppIcon(undefined)).toBe(DEFAULT_APP_ICON);
-    expect(DEFAULT_APP_ICON).toBe("dark");
+    expect(DEFAULT_APP_ICON).toBe("light");
   });
 
   it("exposes one picker row per icon, in registry order", () => {
     expect(APP_ICON_OPTIONS.map((o) => o.value)).toEqual([...APP_ICONS]);
     for (const option of APP_ICON_OPTIONS) {
       expect(isAppIconId(option.value)).toBe(true);
-      expect(option.preview).toMatch(/^\/muzero-logo-.+\.png$/);
+      expect(option.preview).toMatch(/^\/muzero-logo(?:-.+)?\.png$/);
     }
   });
 });

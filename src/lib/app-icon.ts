@@ -1,20 +1,14 @@
 /**
- * Alternate desktop app icons the user can switch between (Electron only). Two
- * built-in variants today — the dark tile (default) and the light tile, the same
- * pair the theme-aware favicon uses. Pure registry so the id set + labels are
- * unit-tested without React; the runtime swap lives in the desktop bridge
- * (`setAppIcon`) → Electron main (`electron/app-icon.cjs`), and the apply-on-boot
- * hook in `src/hooks/use-app-icon.ts`.
- *
- * Note: this changes the RUNNING dock / taskbar icon only. The installed bundle
- * icon (Finder / Launchpad / installer) is baked from the dark logo at build
- * time (`build/icon.icns` + `build/icon.png`) and changes only on rebuild.
+ * Alternate app logos the user can switch between. The same allowlist feeds the
+ * browser favicon and the Electron runtime dock/taskbar icon; installed bundle
+ * icons (Finder / Launchpad / installer) are still baked at build time.
  */
 
-export const APP_ICONS = ["dark", "light"] as const;
+export const APP_ICONS = ["light", "dark", "sketch", "monogram", "split"] as const;
 export type AppIconId = (typeof APP_ICONS)[number];
 
-export const DEFAULT_APP_ICON: AppIconId = "dark";
+export const DEFAULT_APP_ICON: AppIconId = "light";
+export const APP_ICON_STORAGE_KEY = "muzero-app-icon";
 
 export function isAppIconId(value: unknown): value is AppIconId {
   return typeof value === "string" && (APP_ICONS as readonly string[]).includes(value);
@@ -25,12 +19,43 @@ export function resolveAppIcon(value: unknown): AppIconId {
   return isAppIconId(value) ? value : DEFAULT_APP_ICON;
 }
 
-/** Picker rows: id → i18n label key + the public preview image shown as a swatch. */
+type AppIconLabelKey =
+  | "settings.appIconLight"
+  | "settings.appIconDark"
+  | "settings.appIconSketch"
+  | "settings.appIconMonogram"
+  | "settings.appIconSplit";
+
+/** Picker rows: id → i18n label key + the public image used for previews/favicon. */
 export const APP_ICON_OPTIONS: ReadonlyArray<{
   value: AppIconId;
-  labelKey: `settings.appIcon${Capitalize<AppIconId>}`;
+  labelKey: AppIconLabelKey;
   preview: string;
 }> = [
-  { value: "dark", labelKey: "settings.appIconDark", preview: "/muzero-logo-dark.png" },
   { value: "light", labelKey: "settings.appIconLight", preview: "/muzero-logo-light.png" },
+  { value: "dark", labelKey: "settings.appIconDark", preview: "/muzero-logo-dark.png" },
+  { value: "sketch", labelKey: "settings.appIconSketch", preview: "/muzero-logo.png" },
+  { value: "monogram", labelKey: "settings.appIconMonogram", preview: "/muzero-logo-1.png" },
+  { value: "split", labelKey: "settings.appIconSplit", preview: "/muzero-logo-2.png" },
 ];
+
+export function resolveAppIconOption(value: unknown) {
+  const icon = resolveAppIcon(value);
+  return APP_ICON_OPTIONS.find((option) => option.value === icon) ?? APP_ICON_OPTIONS[0];
+}
+
+export function readStoredAppIcon(): AppIconId {
+  if (typeof window === "undefined") return DEFAULT_APP_ICON;
+  return resolveAppIcon(window.localStorage.getItem(APP_ICON_STORAGE_KEY));
+}
+
+export function applyFavicon(appIcon: AppIconId): void {
+  if (typeof document === "undefined") return;
+  document.getElementById("favicon")?.setAttribute("href", resolveAppIconOption(appIcon).preview);
+}
+
+export function persistAppIcon(appIcon: AppIconId): void {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(APP_ICON_STORAGE_KEY, appIcon);
+  applyFavicon(appIcon);
+}

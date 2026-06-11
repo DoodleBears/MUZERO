@@ -10,6 +10,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useSettings } from "@/hooks/use-app-data";
+import { resolveAppIconOption } from "@/lib/app-icon";
 import { APP_VERSION, RELEASE_ID } from "@/lib/app-version";
 import { type UpdateChannel, useDesktopUpdate } from "@/lib/desktop/desktop-update";
 
@@ -46,9 +48,11 @@ function useUpdateStatusLabel(): string {
 
 export function AboutSettings() {
   const { t } = useTranslation();
+  const settings = useSettings();
   const { supported, status, check, install, setChannel } = useDesktopUpdate();
   const [channel, setLocalChannel] = useState<UpdateChannel>(readChannel);
   const statusLabel = useUpdateStatusLabel();
+  const appIcon = resolveAppIconOption(settings.appIcon);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: align the main process with the persisted channel once when the bridge becomes available
   useEffect(() => {
@@ -74,23 +78,13 @@ export function AboutSettings() {
         <CardTitle>{t("settings.aboutTitle")}</CardTitle>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
-        {/* Brand logo — theme-aware (light tile in light mode, dark tile in dark
-            mode) via the .dark class on <html>, mirroring the favicon swap in
-            index.html. No JS/hook needed; exactly one img is ever displayed. */}
         <div className="flex flex-col items-center gap-1.5 pb-1">
           <img
-            src="/muzero-logo-light.png"
+            src={appIcon.preview}
             alt="MUZERO"
-            width={80}
-            height={80}
-            className="size-20 drop-shadow-[0_10px_28px_rgba(0,0,0,0.22)] dark:hidden"
-          />
-          <img
-            src="/muzero-logo-dark.png"
-            alt="MUZERO"
-            width={80}
-            height={80}
-            className="hidden size-20 drop-shadow-[0_10px_28px_rgba(0,0,0,0.5)] dark:block"
+            width={128}
+            height={128}
+            className="size-32 rounded-[1.75rem] drop-shadow-[0_16px_36px_rgba(0,0,0,0.26)]"
           />
         </div>
         <div className="flex items-center justify-between gap-4">

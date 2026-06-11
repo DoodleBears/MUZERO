@@ -46,7 +46,7 @@ export function SettingsSidebar({
       >
         {sections.map(({ section, items }) => (
           <div key={section.labelKey} className="flex shrink-0 gap-1 md:flex-col">
-            <p className="hidden px-2 pl-0 pt-3 pb-1 font-medium text-muted-foreground text-xs uppercase tracking-wide md:block">
+            <p className="hidden px-2 pl-0 pt-3 pb-1 font-medium text-foreground/70 text-xs uppercase tracking-wide md:block">
               {t(section.labelKey)}
             </p>
             {items.map((item) => (
@@ -59,7 +59,7 @@ export function SettingsSidebar({
                   "shrink-0 whitespace-nowrap rounded-md px-3 py-1.5 text-left text-sm transition-colors",
                   active === item.id
                     ? "bg-primary/15 font-medium text-primary"
-                    : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                    : "text-foreground hover:bg-muted/70 hover:text-primary",
                 )}
               >
                 {t(item.labelKey)}

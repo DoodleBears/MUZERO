@@ -8,6 +8,8 @@
  * "system" follows the OS `prefers-color-scheme` and updates live.
  */
 
+import { applyFavicon, readStoredAppIcon } from "@/lib/app-icon";
+
 export const THEMES = ["light", "dark", "system"] as const;
 export type Theme = (typeof THEMES)[number];
 
@@ -21,16 +23,6 @@ export const THEME_STORAGE_KEY = "muzero-theme";
 const THEME_COLOR: Record<ResolvedTheme, string> = {
   light: "#ffffff",
   dark: "#09090b",
-};
-
-/**
- * Favicon per resolved scheme: the dark tile (light "MU ZERO" text) reads on a
- * dark tab bar, the light tile on a light one. Kept in sync with the pre-paint
- * swap in index.html so the tab icon tracks the live theme.
- */
-const FAVICON: Record<ResolvedTheme, string> = {
-  light: "/muzero-logo-light.png",
-  dark: "/muzero-logo-dark.png",
 };
 
 export const themes: Array<{ value: Theme; labelKey: `settings.theme${Capitalize<Theme>}` }> = [
@@ -69,7 +61,7 @@ export function applyTheme(theme: Theme): void {
   document
     .querySelector('meta[name="theme-color"]')
     ?.setAttribute("content", THEME_COLOR[resolved]);
-  document.getElementById("favicon")?.setAttribute("href", FAVICON[resolved]);
+  applyFavicon(readStoredAppIcon());
 }
 
 /** Persist the chosen theme and apply it immediately. */

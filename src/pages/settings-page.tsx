@@ -54,7 +54,7 @@ import type {
 import { useSettings } from "@/hooks/use-app-data";
 import { useObjectUrl } from "@/hooks/use-media";
 import { type Locale, locales, persistLocale } from "@/i18n/config";
-import { APP_ICON_OPTIONS, type AppIconId, resolveAppIcon } from "@/lib/app-icon";
+import { APP_ICON_OPTIONS, type AppIconId, persistAppIcon, resolveAppIcon } from "@/lib/app-icon";
 import { hasAppIcon, hasStreamingSources } from "@/lib/desktop/bridge";
 import { getCroppedBlob } from "@/lib/image-crop";
 import { log } from "@/lib/logger";
@@ -291,6 +291,7 @@ export function SettingsPage() {
 
   // Persist the chosen app icon; App's useAppIcon hook applies it to the shell.
   async function changeAppIcon(appIcon: AppIconId) {
+    persistAppIcon(appIcon);
     await saveSettings({ appIcon });
   }
 
@@ -449,6 +450,7 @@ export function SettingsPage() {
       }),
     [localDevice?.publicId, playbackAggregateRows, playbackEventRows, statsSyncObjects],
   );
+  const supportsDesktopAppIcon = hasAppIcon();
   const costText =
     cloudPreset.estCostPerSongUsd == null
       ? t("settings.costUnknown")
@@ -523,41 +525,43 @@ export function SettingsPage() {
                     </SelectContent>
                   </Select>
                 </Field>
-                {hasAppIcon() && (
-                  <div className="flex flex-col gap-2">
-                    <span className="text-xs font-medium text-muted-foreground">
-                      {t("settings.appIcon")}
-                    </span>
-                    <div className="flex flex-wrap gap-2">
-                      {APP_ICON_OPTIONS.map((option) => {
-                        const active = resolveAppIcon(settings.appIcon) === option.value;
-                        return (
-                          <button
-                            key={option.value}
-                            type="button"
-                            aria-pressed={active}
-                            onClick={() => void changeAppIcon(option.value)}
-                            className={`flex items-center gap-2 rounded-lg border py-1 pe-3 ps-1 text-xs transition-colors ${
-                              active
-                                ? "border-primary bg-accent/50"
-                                : "border-input hover:bg-accent/50"
-                            }`}
-                          >
-                            <img
-                              src={option.preview}
-                              alt=""
-                              className="size-7 rounded-md border border-border"
-                            />
-                            {t(option.labelKey)}
-                          </button>
-                        );
-                      })}
-                    </div>
-                    <span className="text-xs text-muted-foreground">
-                      {t("settings.appIconHint")}
-                    </span>
+                <div className="flex flex-col gap-2">
+                  <span className="text-xs font-medium text-muted-foreground">
+                    {t("settings.appIcon")}
+                  </span>
+                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                    {APP_ICON_OPTIONS.map((option) => {
+                      const active = resolveAppIcon(settings.appIcon) === option.value;
+                      return (
+                        <button
+                          key={option.value}
+                          type="button"
+                          aria-pressed={active}
+                          onClick={() => void changeAppIcon(option.value)}
+                          className={`flex min-w-0 flex-col items-center gap-2 rounded-lg border p-2 text-xs transition-colors ${
+                            active
+                              ? "border-primary bg-accent/50"
+                              : "border-input hover:bg-accent/50"
+                          }`}
+                        >
+                          <img
+                            src={option.preview}
+                            alt=""
+                            className="size-16 rounded-md border border-border object-cover shadow-sm"
+                          />
+                          <span className="max-w-full truncate">{t(option.labelKey)}</span>
+                        </button>
+                      );
+                    })}
                   </div>
-                )}
+                  <span className="text-xs text-muted-foreground">
+                    {t(
+                      supportsDesktopAppIcon
+                        ? "settings.appIconHint"
+                        : "settings.appIconBrowserHint",
+                    )}
+                  </span>
+                </div>
                 <div className="flex flex-col gap-2">
                   <span className="text-xs font-medium text-muted-foreground">
                     {t("settings.primaryColor")}
