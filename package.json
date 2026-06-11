@@ -5,6 +5,7 @@
   "type": "module",
   "main": "dist-electron/main.cjs",
   "description": "MUZERO — your private, local-first music museum. Sync & play MV and music across every device, with friends. No account, no cloud; everything lives on your device. Electron desktop + Tauri mobile.",
+  "license": "Apache-2.0",
   "scripts": {
     "prepare": "lefthook install || true",
     "dev": "vite",

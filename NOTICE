@@ -1,0 +1,13 @@
+MUZERO
+Copyright 2026 DoodleBear
+
+This product is licensed under the Apache License, Version 2.0 (see LICENSE).
+
+Third-party data sources and bundled assets, with their own licenses and
+attributions, are listed in THIRD-PARTY-LICENSES.md. Notably, MUZERO does NOT
+include or link any AGPL-licensed code: lyric formats (LRC, Enhanced LRC,
+NetEase YRC, QQ QRC, and W3C TTML) are parsed by clean-room implementations of
+the public format specs, not by the AGPL-3.0 AMLL libraries. The optional
+AMLL TTML Database lyric source supplies CC0-1.0 data fetched at runtime.
+
+Runtime dependency licenses are those declared by each package in node_modules.

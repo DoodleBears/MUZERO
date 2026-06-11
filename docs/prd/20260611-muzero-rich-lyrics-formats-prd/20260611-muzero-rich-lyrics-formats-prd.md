@@ -448,7 +448,7 @@ export function activeWordIndex(words: WordTiming[], positionMs: number): number
 | Q3 | 翻译/罗马音默认显示？ | ✅ 锁定 | **翻译默认开、罗马音默认关** |
 | Q4 | Phase 5 接 amll-ttml-db 的范围 | ✅ 锁定→实现修订 | 原「仅手动文本搜索」；核实后 DB 是 **id-keyed 精确源**（不可文本搜），故落地为**用户 opt-in 精确 provider**（Settings 可见选项，按网易 id 取）**且不改默认自动端点** —— 守住「不新增自动第三端点」精神 |
 | Q5 | 逐字 fill 用 CSS 还是 motion？ | ✅ 锁定 | **CSS background-clip**（GPU、无重排、便宜）；复杂动效再上 motion |
-| Q6 | **MUZERO 开源用什么协议？**（§8.1 审计：依赖树无 GPL/AGPL，可自由选）| 🔲 待用户拍板 | 倾向 **Apache-2.0**（宽松 + 专利授权 + 商标条款，App-Store 兼容）；或 **MIT**（极简）。**不建议 GPL/AGPL**（与 iOS/Play 上架冲突，且与 clean-room 避 AGPL 自相矛盾）。拍板后建 `LICENSE` + `package.json` license 字段 |
+| Q6 | **MUZERO 开源用什么协议？**（§8.1 审计：依赖树无 GPL/AGPL，可自由选）| ✅ 锁定 | **Apache-2.0**（用户 2026-06-11 拍板）——宽松 + 显式专利授权 + 商标条款，App-Store 兼容。已建根 `LICENSE`（全文）+ `NOTICE` + `package.json` `"license": "Apache-2.0"` |
 
 ---
 
@@ -465,6 +465,7 @@ export function activeWordIndex(words: WordTiming[], positionMs: number): number
 | 2026-06-11 | DoodleBear | **Phase 5b 完成（全 PRD 收官）**：核实 amll-ttml-db = id-keyed 稳定 raw 直链 + CC0-1.0。`amll-ttml-provider.ts`（按 ncm id 拉 TTML，注入 fetch 四态测试）+ registry/provider union + Settings opt-in 下拉 + i18n ×4 + `THIRD-PARTY-LICENSES.md`。Q4 修订为「opt-in 精确 provider，不动默认自动端点」。165 单测全过。**Phase 1–5 全部完成** |
 | 2026-06-11 | DoodleBear | **修复**：逐字 active 行在默认颜色模式不可见（渐变 stop 取 `undefined` → `background-clip:text` 透明）。回退 `currentColor` + 仅透明化 text-fill。回归测试已加（commit `f44ae0b`）|
 | 2026-06-11 | DoodleBear | **新增 §8.1 License Audit**：核实 AMLL *代码*=AGPL-3.0（**未依赖/未 vendor**，clean-room 隔离）、TTML 格式=W3C royalty-free、amll-ttml-db *数据*=CC0-1.0 → 三道隔离，AGPL 不传染。依赖树 598 包审计：全宽松，无 GPL/AGPL/LGPL（唯一 copyleft 是构建期 lightningcss 的弱 MPL-2.0）。新增 **Q6**：开源协议建议 Apache-2.0/MIT，待拍板 |
+| 2026-06-11 | DoodleBear | **Q6 拍板 = Apache-2.0**。落地根 `LICENSE`（Apache-2.0 全文）+ `NOTICE`（声明无 AGPL 代码、TTML clean-room、amll-ttml-db CC0）+ `package.json` `"license": "Apache-2.0"` |
 
 ---
 
