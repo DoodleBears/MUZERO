@@ -126,6 +126,110 @@ describe("buildR2ExportPlan", () => {
     expect(plan.objects.map((object) => object.kind)).toEqual(["set-index", "manifest"]);
   });
 
+  it("read-merge-write: preserves the other device's manifest sets/index entries, stamps ownership, writes conditionally (MW-3)", async () => {
+    await seedSet();
+    await db.devices.put({
+      id: "dev_local",
+      publicId: "dvc_b",
+      name: "Bedroom desktop",
+      avatarSeed: "green",
+      platform: "browser",
+      appVersion: "0.1.0",
+      publishProfile: true,
+      profileRevision: 1,
+      createdAt: 100,
+      lastSeenAt: 2000,
+    });
+
+    const plan = await buildR2ExportPlan({
+      driveId: "drv_1",
+      libraryId: "lib_1",
+      baseUrl: "https://music.example.com/muzero/",
+      setIds: ["ses_1"],
+      db,
+      deviceExport: { publishProfile: true, publishStats: false, publishPresence: false },
+      remoteBase: {
+        manifest: {
+          etag: '"m1"',
+          value: {
+            schema: "muzero-r2-manifest-v1",
+            libraryId: "lib_1",
+            title: "MUZERO Library",
+            createdAt: "2026-06-01T00:00:00.000Z",
+            updatedAt: "2026-06-10T00:00:00.000Z",
+            baseUrl: "https://music.example.com/muzero/",
+            statsIndex: "stats/index.json",
+            sets: [
+              {
+                id: "ses_theirs",
+                title: "Their set",
+                index: "sets/ses_theirs/index.json",
+                updatedAt: "2026-06-10T00:00:00.000Z",
+                trackCount: 3,
+                bytes: 300,
+                publishedBy: "dvc_a",
+              },
+            ],
+          },
+        },
+        devicesIndex: {
+          etag: '"d1"',
+          value: {
+            schema: "muzero-r2-devices-v1",
+            updatedAt: 1000,
+            devices: [{ publicId: "dvc_a", displayName: "Studio laptop", lastSeenAt: 1000 }],
+          },
+        },
+      },
+    });
+
+    const manifestObject = plan.objects.find((object) => object.kind === "manifest");
+    const manifest = JSON.parse(String(manifestObject?.body));
+    // The other device's set is preserved; ours is stamped with our device id.
+    expect(manifest.sets.map((set: { id: string }) => set.id)).toEqual(["ses_theirs", "ses_1"]);
+    expect(manifest.sets[1].publishedBy).toBe("dvc_b");
+    // The library's birth date survives; the remote stats pointer survives even
+    // though this run publishes no stats.
+    expect(manifest.createdAt).toBe("2026-06-01T00:00:00.000Z");
+    expect(manifest.statsIndex).toBe("stats/index.json");
+    expect(manifestObject?.precondition).toEqual({ ifMatch: '"m1"' });
+
+    const devicesObject = plan.objects.find((object) => object.kind === "devices-index");
+    const devices = JSON.parse(String(devicesObject?.body));
+    expect(devices.devices.map((d: { publicId: string }) => d.publicId).sort()).toEqual([
+      "dvc_a",
+      "dvc_b",
+    ]);
+    expect(devicesObject?.precondition).toEqual({ ifMatch: '"d1"' });
+  });
+
+  it("with a base where objects are absent, guards first writes with If-None-Match (MW-3)", async () => {
+    await seedSet();
+    const plan = await buildR2ExportPlan({
+      driveId: "drv_1",
+      libraryId: "lib_1",
+      baseUrl: "https://music.example.com/muzero/",
+      setIds: ["ses_1"],
+      db,
+      remoteBase: {},
+    });
+    expect(plan.objects.find((object) => object.kind === "manifest")?.precondition).toEqual({
+      ifNoneMatch: "*",
+    });
+  });
+
+  it("without a remote base, keeps the legacy unconditional write behavior (MW-3)", async () => {
+    await seedSet();
+    const plan = await buildR2ExportPlan({
+      driveId: "drv_1",
+      libraryId: "lib_1",
+      baseUrl: "https://music.example.com/muzero/",
+      setIds: ["ses_1"],
+      db,
+    });
+    expect(plan.objects.find((object) => object.kind === "manifest")?.precondition).toBeUndefined();
+  });
+
   it("carries the track cover crop through the set index (F11)", async () => {
     await seedSet();
     await db.tracks.update("trk_1", { coverCrop: { x: 10, y: 20, width: 100, height: 100 } });

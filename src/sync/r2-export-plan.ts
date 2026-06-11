@@ -19,14 +19,24 @@ import {
   shouldFlushPlaybackEventSegment,
 } from "./playback-event-segments";
 import {
+  type R2DevicesIndex,
   type R2EntityCoverEntry,
   type R2Manifest,
+  type R2PresenceIndex,
   type R2SetIndex,
+  type R2StatsIndex,
   r2DjConfigSchema,
   r2MemorySchema,
   r2SetTrackSchema,
 } from "./r2-manifest-schema";
 import { canWritePresenceToDrive } from "./r2-presence";
+import type { RemoteBaseObject, RemotePublishBase } from "./r2-publish-base";
+import {
+  mergeDevicesIndex,
+  mergeManifestSets,
+  mergePresenceIndex,
+  mergeStatsIndex,
+} from "./r2-publish-merge";
 import { canPublishDeviceProfileToDrive, canWriteStatsToDrive } from "./r2-stats-policy";
 
 type R2RemoteObject = R2SetIndex["tracks"][number]["media"];
@@ -94,6 +104,14 @@ export interface R2ExportPlanInput {
   deviceExport?: R2DeviceExportOptions;
   playbackEventFlush?: R2PlaybackEventFlushOptions;
   setIndexPreconditions?: Record<string, R2ObjectWritePrecondition>;
+  /**
+   * The current remote manifest/indexes (+ ETags) for a read-merge-write
+   * multi-writer publish (PRD §12.4). When provided, discovery indexes merge
+   * with the remote entries, the manifest unions sets by ownership, and the
+   * merged JSON writes carry `If-Match`/`If-None-Match` preconditions. When
+   * omitted, the plan keeps the legacy single-writer mirror behavior.
+   */
+  remoteBase?: RemotePublishBase;
 }
 
 export interface R2PlaybackEventFlushOptions extends Partial<PlaybackEventFlushPolicy> {
@@ -140,6 +158,8 @@ export async function buildR2ExportPlanForDrive(
     setIds: input.setIds,
     db,
     playbackEventFlush: input.playbackEventFlush,
+    setIndexPreconditions: input.setIndexPreconditions,
+    remoteBase: input.remoteBase,
     deviceExport: {
       publishProfile,
       publishStats,
@@ -270,17 +290,30 @@ export async function buildR2ExportPlan(input: R2ExportPlanInput): Promise<R2Exp
     });
   }
 
+  const localDevice = await db.devices.get("dev_local");
   const mutationObjects = await createSetMutationObjects(input.driveId, db);
-  const deviceObjects = await createDeviceObjects(db, input.playbackEventFlush, input.deviceExport);
+  const deviceObjects = await createDeviceObjects(
+    db,
+    input.playbackEventFlush,
+    input.deviceExport,
+    input.remoteBase,
+  );
   const entityCoverObjects = await createEntityCoverObjects(db);
-  const manifest = createManifest(input, setIndexes, [...deviceObjects, ...entityCoverObjects]);
+  const manifest = createManifest(
+    input,
+    setIndexes,
+    [...deviceObjects, ...entityCoverObjects],
+    localDevice?.publicId,
+  );
   const objects = [
     ...binaryObjects,
     ...setIndexes.map(({ object }) => object),
     ...mutationObjects,
     ...deviceObjects,
     ...entityCoverObjects,
-    createJsonObject("manifest", "manifest.json", manifest),
+    createJsonObject("manifest", "manifest.json", manifest, {
+      precondition: basePrecondition(input.remoteBase, input.remoteBase?.manifest),
+    }),
   ];
 
   return {
@@ -627,40 +660,69 @@ function createManifest(
   input: R2ExportPlanInput,
   setIndexes: Array<{ session: DjSession; trackCount: number; object: R2ExportObject }>,
   indexObjects: R2ExportObject[] = [],
+  selfDeviceId?: string,
 ): R2Manifest {
   const now = new Date().toISOString();
-  const devicesIndex = indexObjects.find((object) => object.kind === "devices-index")?.key;
-  const statsIndex = indexObjects.find((object) => object.kind === "stats-index")?.key;
-  const presenceIndex = indexObjects.find((object) => object.kind === "presence-index")?.key;
-  const entityCoversIndex = indexObjects.find(
-    (object) => object.kind === "entity-covers-index",
-  )?.key;
+  const remoteManifest = input.remoteBase?.manifest?.value;
+  // Discovery pointers this run didn't (re)write fall back to the remote
+  // manifest's — another device's stats/presence/etc. must stay discoverable.
+  const devicesIndex =
+    indexObjects.find((object) => object.kind === "devices-index")?.key ??
+    remoteManifest?.devicesIndex;
+  const statsIndex =
+    indexObjects.find((object) => object.kind === "stats-index")?.key ?? remoteManifest?.statsIndex;
+  const presenceIndex =
+    indexObjects.find((object) => object.kind === "presence-index")?.key ??
+    remoteManifest?.presenceIndex;
+  const entityCoversIndex =
+    indexObjects.find((object) => object.kind === "entity-covers-index")?.key ??
+    remoteManifest?.entityCoversIndex;
+  const localSets = setIndexes.map(({ session, trackCount, object }) => ({
+    id: session.id,
+    title: session.name,
+    index: object.key,
+    updatedAt: new Date(session.updatedAt).toISOString(),
+    trackCount,
+    bytes: object.bytes,
+    publishedBy: selfDeviceId,
+  }));
   return {
     schema: "muzero-r2-manifest-v1",
     libraryId: input.libraryId,
     title: "MUZERO Library",
-    createdAt: now,
+    createdAt: remoteManifest?.createdAt ?? now,
     updatedAt: now,
     baseUrl: input.baseUrl,
     devicesIndex,
     statsIndex,
     presenceIndex,
     entityCoversIndex,
-    sets: setIndexes.map(({ session, trackCount, object }) => ({
-      id: session.id,
-      title: session.name,
-      index: object.key,
-      updatedAt: new Date(session.updatedAt).toISOString(),
-      trackCount,
-      bytes: object.bytes,
-    })),
+    sets: mergeManifestSets(remoteManifest?.sets ?? [], localSets, selfDeviceId),
   };
+}
+
+/**
+ * Precondition for a merged JSON write (PRD §12.4): with a fetched base, an
+ * existing object writes with `If-Match` (its ETag) and an absent one guards
+ * the first write with `If-None-Match: *` — a concurrent publish then 412s and
+ * re-merges instead of clobbering. No base (legacy callers) → unconditional.
+ * An object whose read lacked an ETag also writes unconditionally (we cannot
+ * condition safely on nothing).
+ */
+function basePrecondition(
+  remoteBase: RemotePublishBase | undefined,
+  baseObject: RemoteBaseObject<unknown> | undefined,
+): R2ObjectWritePrecondition | undefined {
+  if (!remoteBase) return undefined;
+  if (!baseObject) return { ifNoneMatch: "*" };
+  return baseObject.etag ? { ifMatch: baseObject.etag } : undefined;
 }
 
 async function createDeviceObjects(
   db: MuzeroDB,
   playbackEventFlush?: R2PlaybackEventFlushOptions,
   deviceExport: R2DeviceExportOptions = {},
+  remoteBase?: RemotePublishBase,
 ): Promise<R2ExportObject[]> {
   const device = await db.devices.get("dev_local");
   if (!device) return [];
@@ -728,57 +790,75 @@ async function createDeviceObjects(
   }
 
   if (shouldPublishProfile) {
+    const localDevicesIndex: R2DevicesIndex = {
+      schema: "muzero-r2-devices-v1",
+      updatedAt: device.lastSeenAt,
+      devices: [
+        {
+          publicId: device.publicId,
+          displayName: device.name,
+          avatarSeed: device.avatarSeed,
+          profile: `profiles/devices/${device.publicId}/profile.json`,
+          stats: `stats/devices/${device.publicId}/aggregate.json`,
+          lastSeenAt: device.lastSeenAt,
+          profileUpdatedAt: device.lastSeenAt,
+        },
+      ],
+    };
     objects.push(
-      createJsonObject("devices-index", "devices/index.json", {
-        schema: "muzero-r2-devices-v1",
-        updatedAt: device.lastSeenAt,
-        devices: [
-          {
-            publicId: device.publicId,
-            displayName: device.name,
-            avatarSeed: device.avatarSeed,
-            profile: `profiles/devices/${device.publicId}/profile.json`,
-            stats: `stats/devices/${device.publicId}/aggregate.json`,
-            lastSeenAt: device.lastSeenAt,
-            profileUpdatedAt: device.lastSeenAt,
-          },
-        ],
-      }),
+      createJsonObject(
+        "devices-index",
+        "devices/index.json",
+        mergeDevicesIndex(remoteBase?.devicesIndex?.value, localDevicesIndex),
+        { precondition: basePrecondition(remoteBase, remoteBase?.devicesIndex) },
+      ),
     );
   }
 
   if (shouldPublishStats && (aggregates.length > 0 || checkpointKey || latestSegmentKey)) {
+    const localStatsIndex: R2StatsIndex = {
+      schema: "muzero-r2-stats-index-v1",
+      updatedAt: statsUpdatedAt,
+      devices: [
+        {
+          devicePublicId: device.publicId,
+          aggregate:
+            aggregates.length > 0 ? `stats/devices/${device.publicId}/aggregate.json` : undefined,
+          checkpoint: checkpointKey,
+          latestSegment: latestSegmentKey,
+          updatedAt: statsUpdatedAt,
+        },
+      ],
+    };
     objects.push(
-      createJsonObject("stats-index", "stats/index.json", {
-        schema: "muzero-r2-stats-index-v1",
-        updatedAt: statsUpdatedAt,
-        devices: [
-          {
-            devicePublicId: device.publicId,
-            aggregate:
-              aggregates.length > 0 ? `stats/devices/${device.publicId}/aggregate.json` : undefined,
-            checkpoint: checkpointKey,
-            latestSegment: latestSegmentKey,
-            updatedAt: statsUpdatedAt,
-          },
-        ],
-      }),
+      createJsonObject(
+        "stats-index",
+        "stats/index.json",
+        mergeStatsIndex(remoteBase?.statsIndex?.value, localStatsIndex),
+        { precondition: basePrecondition(remoteBase, remoteBase?.statsIndex) },
+      ),
     );
   }
 
   if (shouldPublishPresence) {
+    const localPresenceIndex: R2PresenceIndex = {
+      schema: "muzero-r2-presence-index-v1",
+      updatedAt: device.lastSeenAt,
+      devices: [
+        {
+          devicePublicId: device.publicId,
+          presence: `presence/devices/${device.publicId}.json`,
+          updatedAt: device.lastSeenAt,
+        },
+      ],
+    };
     objects.push(
-      createJsonObject("presence-index", "presence/index.json", {
-        schema: "muzero-r2-presence-index-v1",
-        updatedAt: device.lastSeenAt,
-        devices: [
-          {
-            devicePublicId: device.publicId,
-            presence: `presence/devices/${device.publicId}.json`,
-            updatedAt: device.lastSeenAt,
-          },
-        ],
-      }),
+      createJsonObject(
+        "presence-index",
+        "presence/index.json",
+        mergePresenceIndex(remoteBase?.presenceIndex?.value, localPresenceIndex),
+        { precondition: basePrecondition(remoteBase, remoteBase?.presenceIndex) },
+      ),
     );
   }
 

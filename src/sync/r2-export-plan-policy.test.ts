@@ -74,6 +74,48 @@ describe("buildR2ExportPlanForDrive", () => {
     expect(plan.objects.map((object) => object.kind)).toEqual(["manifest"]);
   });
 
+  it("forwards the remote publish base into the plan (MW-3)", async () => {
+    await seedDevice();
+
+    const plan = await buildR2ExportPlanForDrive({
+      drive: ownedDrive,
+      settings: settingsWithCredentials,
+      libraryId: "lib_1",
+      baseUrl: "https://music.example.com/muzero/",
+      setIds: [],
+      db,
+      remoteBase: {
+        manifest: {
+          etag: '"m1"',
+          value: {
+            schema: "muzero-r2-manifest-v1",
+            libraryId: "lib_1",
+            title: "MUZERO Library",
+            createdAt: "2026-06-01T00:00:00.000Z",
+            updatedAt: "2026-06-10T00:00:00.000Z",
+            baseUrl: "https://music.example.com/muzero/",
+            sets: [
+              {
+                id: "ses_theirs",
+                title: "Their set",
+                index: "sets/ses_theirs/index.json",
+                updatedAt: "2026-06-10T00:00:00.000Z",
+                trackCount: 3,
+                bytes: 300,
+                publishedBy: "dvc_other",
+              },
+            ],
+          },
+        },
+      },
+    });
+
+    const manifestObject = plan.objects.find((object) => object.kind === "manifest");
+    expect(manifestObject?.precondition).toEqual({ ifMatch: '"m1"' });
+    const manifest = JSON.parse(String(manifestObject?.body));
+    expect(manifest.sets.map((set: { id: string }) => set.id)).toEqual(["ses_theirs"]);
+  });
+
   it("attaches an observed profile ETag precondition before overwriting the remote profile", async () => {
     await seedDevice();
 
