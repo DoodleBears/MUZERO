@@ -38,6 +38,28 @@ const devicesIndex = {
   devices: [{ publicId: "dvc_a", displayName: "Studio laptop", lastSeenAt: 1000 }],
 };
 
+const orphanSetIndex = {
+  schema: "muzero-r2-set-index-v1",
+  set: {
+    id: "ses_orphan",
+    name: "Recovered set",
+    seedPrompt: "",
+    displayMode: "cover",
+    config: {
+      autoExtend: false,
+      refillThreshold: 2,
+      batchSize: 1,
+      targetDurationSec: 60,
+      allowVocals: true,
+    },
+    createdAt: 1000,
+    updatedAt: 2000,
+  },
+  tracks: [],
+  revision: 1,
+  updatedAt: 2000,
+};
+
 function jsonResponse(body: unknown, etag?: string): Response {
   return new Response(JSON.stringify(body), {
     status: 200,
@@ -138,6 +160,32 @@ describe("fetchRemotePublishBase", () => {
 
     expect(base).toEqual({});
     expect(seen.map((call) => call.url)).toEqual([`${BASE}/manifest.json`]);
+  });
+
+  it("probes requested set indexes even when the manifest does not reference them yet", async () => {
+    const seen: Array<{ url: string; method?: string; authorization: string | null }> = [];
+    const base = await fetchRemotePublishBase({
+      credentials,
+      fetcher: fetchMap(
+        {
+          [`${BASE}/manifest.json`]: () => jsonResponse({ ...manifest, sets: [] }, '"m1"'),
+          [`${BASE}/sets/ses_orphan/index.json`]: () => jsonResponse(orphanSetIndex, '"s1"'),
+        },
+        seen,
+      ),
+      setRemoteIds: ["ses_orphan"],
+    });
+
+    expect(base.manifest?.etag).toBe('"m1"');
+    expect(base.setIndexes?.ses_orphan).toMatchObject({
+      etag: '"s1"',
+      value: { set: { id: "ses_orphan", name: "Recovered set" } },
+    });
+    expect(seen.map((call) => call.url).sort()).toEqual([
+      `${BASE}/devices/index.json`,
+      `${BASE}/manifest.json`,
+      `${BASE}/sets/ses_orphan/index.json`,
+    ]);
   });
 
   it("treats an unparseable remote object as absent (recoverable by overwrite)", async () => {

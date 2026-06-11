@@ -94,10 +94,7 @@ export async function fetchRemotePublishBase(
       : undefined,
   ]);
   let setIndexes: RemotePublishBase["setIndexes"];
-  const manifestSetIds = new Set(manifest.value.sets.map((set) => set.id));
-  const setRemoteIds = [...new Set(input.setRemoteIds ?? [])].filter((id) =>
-    manifestSetIds.has(id),
-  );
+  const setRemoteIds = [...new Set(input.setRemoteIds ?? [])];
   if (setRemoteIds.length > 0) {
     const indexBySetId = new Map(manifest.value.sets.map((set) => [set.id, set.index]));
     const fetched = await Promise.all(
