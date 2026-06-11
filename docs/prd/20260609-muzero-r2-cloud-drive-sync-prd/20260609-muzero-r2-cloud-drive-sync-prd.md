@@ -2281,12 +2281,50 @@ Do not record secrets, full signed URLs, or media content.
 - [ ] DA-3 Render owner/source avatar chips on remote set preview rows, imported set headers, and track rows.
 - [ ] DA-4 Add fallback and privacy copy: local-only when profile publishing is off; generated avatar/public id when a profile image is missing.
 
+### 12.9 Phase 13: Sync Mode UX + Remote Playback Reliability + R2 Setup Flow
+
+**Goal:** make cloud-drive setup feel like one coherent workflow, make the automatic/manual sync choice explicit, and ensure imported R2 songs are immediately playable, not merely downloadable.
+
+**Status (2026-06-11):** planned from QA feedback. SA-1 is the first implementation priority because a synced playlist whose tracks cannot make sound is a functional regression.
+
+**Product requirements:**
+
+1. **Two visible sync modes.**
+   - `Automatic sync` is the default for newly added writable owner/trusted drives.
+   - `Automatic sync` should automatically import all remote sets when a drive is added or refreshed, and should keep using the existing guarded sync pipeline for bidirectional owner/trusted changes.
+   - `Manual sync` keeps the drive connected but requires the user to click preview/import/sync actions.
+   - Read-only/public drives can still default to automatic import-all because that path has no write credentials and no local secrets.
+2. **Remote playback reliability.**
+   - R2-imported tracks may remain non-persistent/streamed locally, but playback must use the same CORS-safe app fetch/proxy capability as download.
+   - A remote track that can be downloaded through MUZERO must also be playable through MUZERO.
+   - The player may fetch the remote object into an in-memory Blob for playback without storing it in IndexedDB; durable offline caching remains an explicit separate action.
+3. **Settings UI consolidation.**
+   - The current cloud-drive, sync, CORS, and setup-link surfaces should be merged into one `Cloud Drive` settings area instead of scattered sidebar destinations or disconnected cards.
+   - Drive cards should show mode, last sync state, progress, CORS/public-read health, import status, and actions in one scan-friendly block.
+4. **R2 setup modal as a two-column guide.**
+   - The left column is the form/progress stepper.
+   - The right column is contextual guidance for the selected step, with direct Cloudflare links and exact copy/paste snippets where applicable.
+   - Steps should separate: bucket/public access, CORS, public read URL, optional write credentials, and validation.
+5. **Credential explanation.**
+   - Public R2 read only needs a public manifest/base URL and CORS/public access. It does **not** need Access Key ID / Secret Access Key.
+   - Owner/trusted write sync needs R2 S3 API credentials. Cloudflare creates these from an R2 API token, but the S3-compatible client still receives an `Access Key ID` and `Secret Access Key`.
+   - The UI should label the write section as optional for public/read-only use and required for bidirectional sync, never as a generic "account password".
+
+**Checklist:**
+
+- [ ] SA-1 Add regression tests and fix R2-imported remote media playback so downloadable remote tracks also make sound.
+- [ ] SA-2 Add a tested sync-mode policy and default newly added drives to automatic import-all unless the user chooses manual.
+- [ ] SA-3 Wire automatic import-all into add/refresh flows while preserving manual import controls.
+- [ ] SA-4 Consolidate cloud drive/CORS/sync controls into one Settings area and update four-language copy.
+- [ ] SA-5 Redesign the Add R2 Drive modal as a two-column step-by-step guide with public-read vs optional write-credential sections.
+
 ---
 
 ## 13. Document Change Log
 
 | Date | Author | Changes |
 |------|--------|---------|
+| 2026-06-11 | MUZERO | Phase 13 added from QA feedback: split cloud drive UX into explicit automatic/manual sync modes (automatic import-all default), prioritize the R2-imported playback-no-sound regression, and specify a consolidated Cloud Drive settings area plus a two-column R2 setup modal that separates public read/CORS from optional write credentials generated from Cloudflare R2 API tokens. |
 | 2026-06-11 | MUZERO | Phase 12 DA-1 started/completed: Settings > This device now supports uploaded avatar images via the existing square cropper, stores the cropped image as a device-bound avatar media blob, and reuses the existing `DevicePublicProfile.avatar` R2 publish path when profile publishing is enabled. Phase 12 also records the remaining owner/source avatar-chip UX for remote set previews, imported set headers, and track rows. |
 | 2026-06-11 | MUZERO | UX follow-up: Add Drive now gives writable owner/trusted R2 drives explicit post-add choices before saving — run `Sync now` immediately and/or enable `After local changes` auto sync. Both are opt-in, visible, and covered by component tests so adding a drive no longer leaves users guessing whether the first sync will happen. |
 | 2026-06-11 | MUZERO | Regression fix: weak R2 ETags such as `W/"..."` are no longer used as `If-Match` write preconditions. Export planning now only emits `If-Match` for strong validators; weak or missing child/manifest validators fall back to the existing manifest-last recovery behavior instead of entering a guaranteed HTTP 412 loop. The concurrent-upload regression test now asserts JSON barrier ordering without assuming a fixed order among parallel immutable PUTs. |
