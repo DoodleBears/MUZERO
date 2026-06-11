@@ -1435,6 +1435,33 @@ function describePlaybackError(error: unknown): string {
   return error ? String(error) : "unknown";
 }
 
+async function fetchRemotePlaybackBlob(
+  track: Track,
+  trace: PlaybackTraceContext | undefined,
+): Promise<{ blob: Blob; bytes: number; mime: string }> {
+  const url = track.remoteMediaUrl;
+  if (!url) throw new Error("Track has no remote media URL");
+
+  tracePlaybackLoad("media.fetch.remote", track, trace, {
+    transport: "remote",
+    ...streamUrlTraceContext(url),
+  });
+  const fetcher = await getAppFetch();
+  const response = await fetcher(url, { cache: "no-store" });
+  if (!response.ok) throw new Error(`Remote playback fetch failed: HTTP ${response.status}`);
+
+  const blob = await response.blob();
+  if (blob.size === 0) throw new Error("Remote playback fetch returned an empty file");
+  const mime = response.headers.get("content-type") ?? blob.type ?? "application/octet-stream";
+  tracePlaybackLoad("media.load.remote.blob", track, trace, {
+    transport: "blob",
+    bytes: blob.size,
+    mime,
+    ...streamUrlTraceContext(url),
+  });
+  return { blob, bytes: blob.size, mime };
+}
+
 function persistQueueIndex(index: number): void {
   void playQueueSetIndex(index).catch((err: unknown) =>
     log.warn("player", "failed to persist queue index", err),
@@ -1609,14 +1636,21 @@ async function ensureLoadedAndPlay(
         trackId: track.id,
         kind: track.kind,
       });
-      tracePlaybackLoad("media.load.remote", track, playbackTrace, {
-        transport: "remote",
-      });
-      // R2 URLs are cross-origin in the web app. Because the MediaEngine taps the
-      // media element into WebAudio for visualization, the element must opt into
-      // CORS or browsers can advance playback time while outputting silence.
-      // biome-ignore lint/style/noNonNullAssertion: sourceKind === "remote" implies remoteMediaUrl
-      await mediaEngine.loadUrl(track.remoteMediaUrl!, track.kind, { crossOrigin: "anonymous" });
+      try {
+        const media = await fetchRemotePlaybackBlob(track, playbackTrace);
+        await mediaEngine.loadBlob(media.blob, track.kind);
+      } catch (error) {
+        notify.error(i18n.t("player.playbackError"), {
+          detail: describePlaybackError(error),
+          error,
+        });
+        log.warn("player", "remote media playback fetch failed", {
+          trackId: track.id,
+          error,
+        });
+        set({ isPlaying: false, wantPlay: false });
+        return;
+      }
     } else if (sourceKind === "stream") {
       // External streaming source: resolve a short-lived URL right before play.
       // NetEase plays directly; Bilibili's URL needs the media proxy to inject a

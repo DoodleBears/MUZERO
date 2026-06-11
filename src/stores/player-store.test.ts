@@ -13,6 +13,9 @@ const mediaEngineMock = vi.hoisted(() => ({
   play: vi.fn(() => Promise.resolve()),
   setDiagnosticsContext: vi.fn(),
 }));
+const platformFetchMock = vi.hoisted(() =>
+  vi.fn(async () => new Response("remote", { headers: { "content-type": "audio/mpeg" } })),
+);
 
 vi.mock("@/player/media-engine", () => {
   class MockMediaEngine {
@@ -43,6 +46,10 @@ vi.mock("@/player/media-engine", () => {
   return { MediaEngine: MockMediaEngine };
 });
 
+vi.mock("@/lib/platform", () => ({
+  getAppFetch: async () => platformFetchMock,
+}));
+
 let openedDb: MuzeroDB | null = null;
 
 async function deleteDefaultDb() {
@@ -58,6 +65,10 @@ beforeEach(async () => {
   mediaEngineMock.loadBlob.mockClear();
   mediaEngineMock.play.mockClear();
   mediaEngineMock.setDiagnosticsContext.mockClear();
+  platformFetchMock.mockClear();
+  platformFetchMock.mockResolvedValue(
+    new Response("remote", { headers: { "content-type": "audio/mpeg" } }),
+  );
   await deleteDefaultDb();
 });
 
@@ -257,16 +268,26 @@ async function subscribeAndActivateRemoteSet() {
 }
 
 describe("player-store remote subscribed-manifest playback", () => {
-  it("loads remote R2 audio with a CORS-enabled media element", async () => {
+  it("loads remote R2 audio through a temporary Blob so WebAudio cannot silence it", async () => {
     const { usePlayerStore } = await subscribeAndActivateRemoteSet();
     const trace = await import("@/lib/trace");
     trace.clearTrace();
+    platformFetchMock.mockResolvedValueOnce(
+      new Response("audio", {
+        status: 200,
+        headers: { "content-type": "audio/mpeg" },
+      }),
+    );
 
     await usePlayerStore.getState().playIndex(0);
 
-    expect(mediaEngineMock.loadUrl).toHaveBeenCalledWith(REMOTE_AUDIO_URL, "audio", {
-      crossOrigin: "anonymous",
+    expect(platformFetchMock).toHaveBeenCalledWith(REMOTE_AUDIO_URL, {
+      cache: "no-store",
     });
+    const loadedBlob = mediaEngineMock.loadBlob.mock.calls[0]?.[0] as Blob;
+    expect(loadedBlob.size).toBeGreaterThan(0);
+    expect(loadedBlob.type).toBe("audio/mpeg");
+    expect(mediaEngineMock.loadBlob.mock.calls[0]?.[1]).toBe("audio");
     expect(mediaEngineMock.setDiagnosticsContext).toHaveBeenCalledWith(
       expect.objectContaining({
         traceId: expect.stringMatching(/^ply_/),
@@ -288,18 +309,28 @@ describe("player-store remote subscribed-manifest playback", () => {
         }),
       ]),
     );
-    expect(mediaEngineMock.loadBlob).not.toHaveBeenCalled();
+    expect(mediaEngineMock.loadUrl).not.toHaveBeenCalled();
     expect(mediaEngineMock.play).toHaveBeenCalled();
   });
 
-  it("loads remote R2 video with a CORS-enabled media element", async () => {
+  it("loads remote R2 video through a temporary Blob for the audio driver and visual layer", async () => {
     const { usePlayerStore } = await subscribeAndActivateRemoteSet();
+    platformFetchMock.mockResolvedValueOnce(
+      new Response("video", {
+        status: 200,
+        headers: { "content-type": "video/mp4" },
+      }),
+    );
 
     await usePlayerStore.getState().playIndex(1);
 
-    expect(mediaEngineMock.loadUrl).toHaveBeenCalledWith(REMOTE_VIDEO_URL, "video", {
-      crossOrigin: "anonymous",
+    expect(platformFetchMock).toHaveBeenCalledWith(REMOTE_VIDEO_URL, {
+      cache: "no-store",
     });
-    expect(mediaEngineMock.loadBlob).not.toHaveBeenCalled();
+    const loadedBlob = mediaEngineMock.loadBlob.mock.calls[0]?.[0] as Blob;
+    expect(loadedBlob.size).toBeGreaterThan(0);
+    expect(loadedBlob.type).toBe("video/mp4");
+    expect(mediaEngineMock.loadBlob.mock.calls[0]?.[1]).toBe("video");
+    expect(mediaEngineMock.loadUrl).not.toHaveBeenCalled();
   });
 });
