@@ -66,6 +66,40 @@ describe("parseModelCatalog", () => {
     ]);
   });
 
+  it("extracts capability flags from OpenRouter (vision / audio / tools)", () => {
+    const [model] = parseModelCatalog({
+      data: [
+        {
+          id: "openai/gpt-4o",
+          name: "GPT-4o",
+          context_length: 128000,
+          architecture: { input_modalities: ["text", "image", "audio"], modality: "text+image" },
+          supported_parameters: ["tools", "tool_choice", "max_tokens"],
+        },
+      ],
+    });
+    expect(model).toMatchObject({
+      supportsVision: true,
+      supportsAudio: true,
+      supportsTools: true,
+    });
+  });
+
+  it("leaves capability flags undefined for text-only models without tool support", () => {
+    const [model] = parseModelCatalog({
+      data: [
+        {
+          id: "meta/llama-3-text",
+          architecture: { input_modalities: ["text"] },
+          supported_parameters: ["max_tokens"],
+        },
+      ],
+    });
+    expect(model.supportsVision).toBeUndefined();
+    expect(model.supportsAudio).toBeUndefined();
+    expect(model.supportsTools).toBeUndefined();
+  });
+
   it("dedupes by id and ignores malformed entries / shapes", () => {
     expect(
       parseModelCatalog({ data: [{ id: "a" }, { id: "a" }, { id: "" }, {}, null, 5] }),
