@@ -368,7 +368,7 @@ https://assets.mu0.app/desktop/
 
 | 目标 | 平台门控 | 作用 |
 |------|---------|------|
-| `make version-bump TYPE=major\|minor\|patch\|beta` | 任意 | bump semver → 同步写三文件 → scaffold `releases/<ver>.ts` → 生成 release-meta |
+| `make version-bump`（无 TYPE 交互选 patch/minor/major/beta，显示各自结果版本）或 `TYPE=…` | 任意 | bump semver → 同步写三文件 → scaffold `releases/<ver>.ts` |
 | `make changelog-check` | 任意 | release gate：缺 `releases/<当前ver>.ts` → exit 1（被所有 release 目标依赖） |
 | `make release-mac` | **硬门控 Darwin** | `changelog-check` → electron-vite build → `electron-builder --mac`（dmg/zip + latest-mac.yml） |
 | `make release-win` | Windows（或带 Wine 的 Linux，警告） | `electron-builder --win`（nsis + .blockmap + latest.yml） |
@@ -444,7 +444,7 @@ src/components/settings/
 **Goal:** 消灭三处手动同步的版本漂移；版本注入 bundle、运行期单点读取、Settings 可见。
 
 **Tasks:**
-- [x] `scripts/bump-version.mjs` + `make version-bump TYPE=…`：读 `package.json.version` → `nextVersion`（含 `beta` 次版 prerelease）→ 写 `package.json` + `src-tauri/tauri.conf.json` + `src-tauri/Cargo.toml` 三处（`--dry-run` 可预演；不 commit，提示同提交）。✅ 6 测（pure `nextVersion` + dry-run 集成）+ 实跑 write→revert 验证三文件齐改。`scaffold-changelog` 钩子留 Phase 2 接（release-meta 已按上条简化掉）。
+- [x] `scripts/bump-version.mjs` + `make version-bump`：读 `package.json.version` → `nextVersion`（含 `beta` 次版 prerelease）→ 写 `package.json` + `src-tauri/tauri.conf.json` + `src-tauri/Cargo.toml` 三处（`--dry-run` 可预演；不 commit，提示同提交）。**无 TYPE 时交互式选 patch/minor/major/beta**（菜单显示各自结果版本；非 TTY 回退 usage error）。✅ 10 测（pure `nextVersion`/`bumpOptions`/`resolveSelection` + dry-run 集成）+ pty 实测菜单渲染 + write→revert 验证三文件齐改。
 - [x] **release-meta（简化决定）**：不再生成 `src/generated/release-meta.ts`，改为 `vite.config.ts` + `vitest.config.ts` 的 `define` 直接注入 `__APP_VERSION__`/`__GIT_SHA__`/`__BUILD_TIME__`（config 求值期读 package.json + `git rev-parse`，try/catch 兜底），消除生成物 churn 与「测试期文件不存在」问题。✅
 - [x] `vite.config.ts` + `vitest.config.ts` 加 `define` + `src/vite-env.d.ts` 声明三个 `__*__` global。✅
 - [x] `src/lib/app-version.ts`：`export const APP_VERSION = __APP_VERSION__` + `GIT_SHA`/`BUILD_TIME`/派生 `RELEASE_ID`（唯一读取点，注释「别处不许硬写版本」）。✅ 3 测（APP_VERSION===package.json version）。

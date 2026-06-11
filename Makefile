@@ -73,7 +73,7 @@ help:
 	@echo "  make desktop-locate - Show where packaged artifacts landed"
 	@echo ""
 	@echo "Release:"
-	@echo "  make version-bump TYPE=minor - Bump version across package.json + tauri.conf + Cargo (lockstep)"
+	@echo "  make version-bump            - Pick patch/minor/major/beta interactively (or pass TYPE=)"
 	@echo "  make changelog-check         - Fail if the current version has no changelog file"
 	@echo "  make release-check           - Pre-release gate: changelog present + versions in lockstep"
 	@echo "  make release-show            - Print version + lockstep sync + changelog status"
@@ -196,9 +196,9 @@ desktop-locate:
 # Bump the app version across the THREE files that must stay in lockstep —
 # package.json (source of truth) + src-tauri/tauri.conf.json + src-tauri/Cargo.toml.
 # Then write the changelog for the new version and commit all of it together.
-# TYPE = major | minor | patch | beta.
+# Run `make version-bump` with no TYPE for an interactive picker (shows the
+# resulting version for patch/minor/major/beta), or pass TYPE=major|minor|patch|beta.
 version-bump:
-	@[ -n "$(TYPE)" ] || { echo "Usage: make version-bump TYPE=major|minor|patch|beta"; exit 1; }
 	node scripts/bump-version.mjs $(TYPE)
 
 # Release gate — fail if there's no changelog releases/<version>.ts for the
