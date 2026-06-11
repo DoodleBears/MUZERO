@@ -233,6 +233,7 @@ export async function buildR2ExportPlan(input: R2ExportPlanInput): Promise<R2Exp
         rank: session.trackRanks?.[track.id],
         media: media.remote,
         cover: cover?.remote,
+        coverCrop: track.coverCrop,
         thumbhash: track.coverThumbhash,
         lyrics,
         memories: remoteMemories,

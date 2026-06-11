@@ -149,7 +149,8 @@ export async function importRemoteSetStream(
       generatedAt: remoteTrack.source.generatedAt ?? undefined,
       blobId: existing?.blobId,
       coverBlobId: existing?.coverBlobId,
-      coverCrop: existing?.coverCrop,
+      // A local crop edit wins; otherwise the published crop travels (F11).
+      coverCrop: existing?.coverCrop ?? remoteTrack.source.coverCrop,
       note: existing?.note,
       playCount: existing?.playCount ?? 0,
       liked: existing?.liked ?? remoteTrack.source.liked,

@@ -126,6 +126,24 @@ describe("buildR2ExportPlan", () => {
     expect(plan.objects.map((object) => object.kind)).toEqual(["set-index", "manifest"]);
   });
 
+  it("carries the track cover crop through the set index (F11)", async () => {
+    await seedSet();
+    await db.tracks.update("trk_1", { coverCrop: { x: 10, y: 20, width: 100, height: 100 } });
+
+    const plan = await buildR2ExportPlan({
+      driveId: "drv_1",
+      libraryId: "lib_1",
+      baseUrl: "https://music.example.com/muzero/",
+      setIds: ["ses_1"],
+      db,
+    });
+
+    const setIndex = JSON.parse(
+      String(plan.objects.find((object) => object.kind === "set-index")?.body),
+    );
+    expect(setIndex.tracks[0].coverCrop).toEqual({ x: 10, y: 20, width: 100, height: 100 });
+  });
+
   it("never exports streamed-origin tracks (even cached) and counts only exported tracks (F5)", async () => {
     await seedSet();
     // A cached streamed track in the same set: it HAS local bytes (blobId), but

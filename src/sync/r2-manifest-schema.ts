@@ -170,6 +170,10 @@ export const r2SetTrackSchema = z.object({
   rank: z.number().optional(),
   media: r2RemoteObjectSchema,
   cover: r2RemoteObjectSchema.optional(),
+  // Non-destructive square crop for the cover, in the original image's pixels —
+  // additive optional (audit F11), so a cropped cover renders the same framing
+  // on the subscribing device.
+  coverCrop: r2CropSchema.optional(),
   // Base64 thumbhash of the cover — instant preview for a not-yet-downloaded
   // remote track cover (instant-cover-thumbnails PRD §3.4).
   thumbhash: z.string().optional(),

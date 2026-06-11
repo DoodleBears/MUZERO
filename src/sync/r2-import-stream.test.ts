@@ -191,6 +191,19 @@ describe("importRemoteSetStream", () => {
     expect(await db.mediaBlobs.count()).toBe(0);
   });
 
+  it("carries the cover crop from the manifest onto the imported track (F11)", async () => {
+    const withCrop: RemoteSetIndexResult = {
+      ...remoteSet,
+      tracks: remoteSet.tracks.map((tr) => ({
+        ...tr,
+        source: { ...tr.source, coverCrop: { x: 1, y: 2, width: 30, height: 30 } },
+      })),
+    };
+    await importRemoteSetStream({ driveId: "drv_crop", remoteSet: withCrop }, db);
+    const track = await db.tracks.get("trk_remote_drv_crop_trk_blue");
+    expect(track?.coverCrop).toEqual({ x: 1, y: 2, width: 30, height: 30 });
+  });
+
   it("carries the cover thumbhash from the manifest onto the imported track", async () => {
     const withThumbhash: RemoteSetIndexResult = {
       ...remoteSet,
