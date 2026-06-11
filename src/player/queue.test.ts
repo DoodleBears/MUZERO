@@ -11,6 +11,7 @@ import {
   shuffleNext,
   shufflePrev,
   upcomingCount,
+  upcomingManualIndices,
 } from "./queue";
 
 describe("upcomingCount", () => {
@@ -168,5 +169,75 @@ describe("shuffleNext / shufflePrev", () => {
     expect(shufflePrev(order, 4, 2, "off").index).toBe(2); // 2 is first → stay
     expect(shufflePrev(order, 4, 2, "all").index).toBe(1); // wrap to last
     expect(shufflePrev(order, 4, 2, "one").index).toBe(1); // repeat-one wraps too
+  });
+});
+
+describe("upcomingManualIndices", () => {
+  it("previews the next two sequential manual targets", () => {
+    expect(
+      upcomingManualIndices({
+        count: 2,
+        currentIndex: 1,
+        length: 5,
+        repeat: "off",
+      }),
+    ).toEqual([2, 3]);
+  });
+
+  it("stops at the end when repeat is off", () => {
+    expect(
+      upcomingManualIndices({
+        count: 2,
+        currentIndex: 3,
+        length: 4,
+        repeat: "off",
+      }),
+    ).toEqual([]);
+  });
+
+  it("wraps under repeat-all without repeating the current track", () => {
+    expect(
+      upcomingManualIndices({
+        count: 3,
+        currentIndex: 2,
+        length: 4,
+        repeat: "all",
+      }),
+    ).toEqual([3, 0, 1]);
+  });
+
+  it("uses manual-next semantics for repeat-one", () => {
+    expect(
+      upcomingManualIndices({
+        count: 2,
+        currentIndex: 1,
+        length: 4,
+        repeat: "one",
+      }),
+    ).toEqual([2, 3]);
+  });
+
+  it("follows the active shuffle cycle for random playback", () => {
+    expect(
+      upcomingManualIndices({
+        count: 2,
+        currentIndex: 0,
+        length: 4,
+        repeat: "off",
+        shuffleOrder: [2, 0, 3, 1],
+      }),
+    ).toEqual([3, 1]);
+  });
+
+  it("wraps the active shuffle cycle for warmup under repeat-all", () => {
+    expect(
+      upcomingManualIndices({
+        count: 2,
+        currentIndex: 1,
+        length: 4,
+        repeat: "all",
+        shuffleOrder: [2, 0, 3, 1],
+      }),
+    ).toEqual([2, 0]);
   });
 });

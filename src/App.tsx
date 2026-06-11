@@ -15,6 +15,7 @@ import { useSettings } from "@/hooks/use-app-data";
 import { useAppIcon } from "@/hooks/use-app-icon";
 import { useDocumentTitle } from "@/hooks/use-document-title";
 import { useIdle } from "@/hooks/use-idle";
+import { usePlaybackWarmup } from "@/hooks/use-playback-warmup";
 import { useShortcutDispatch } from "@/hooks/use-shortcut-dispatch";
 import { cn } from "@/lib/utils";
 import { dragWindowOnEmptyPress } from "@/lib/window-drag";
@@ -65,6 +66,9 @@ export default function App() {
   useDocumentTitle();
   // Apply the chosen desktop app icon (Electron only; no-op on web/tauri).
   useAppIcon();
+  // Keep the next transport targets warm so keyboard/button skips don't paint
+  // empty cover/background states while local blobs or R2 bytes resolve.
+  usePlaybackWarmup();
 
   // Boot only wires the media engine. Auto-cueing the previous track during
   // WKWebView startup can make the full-screen media/background path flicker.

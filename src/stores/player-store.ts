@@ -76,6 +76,7 @@ import {
   type RepeatMode,
   shuffleManualNext,
   shufflePrev,
+  upcomingManualIndices,
 } from "@/player/queue";
 import {
   beginFolderImport,
@@ -194,6 +195,8 @@ interface PlayerState {
   prev: () => Promise<void>;
   /** Read the track that a manual next/previous action would move to. */
   peekTrack: (direction: "next" | "prev") => Track | undefined;
+  /** Read the next N manual-advance tracks in playback order without mutating state. */
+  peekUpcomingTracks: (count: number) => Track[];
   seek: (sec: number) => void;
   setVolume: (v: number) => void;
   setRepeat: (mode: RepeatMode) => void;
@@ -933,6 +936,19 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     }
     if (index === null || index === currentIndex) return undefined;
     return queue[index];
+  },
+
+  peekUpcomingTracks(count) {
+    const { queue, currentIndex, repeat, shuffle } = get();
+    return upcomingManualIndices({
+      count,
+      currentIndex,
+      length: queue.length,
+      repeat,
+      shuffleOrder: shuffle ? shuffleOrder : undefined,
+    })
+      .map((index) => queue[index])
+      .filter((track): track is Track => Boolean(track));
   },
 
   seek(sec) {

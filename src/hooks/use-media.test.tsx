@@ -2,13 +2,16 @@ import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // A stable blob the mocked liveQuery hands back (as if mediaBlobs.get resolved).
-const { coverBlob } = vi.hoisted(() => ({
+const { coverBlob, liveQueryState } = vi.hoisted(() => ({
   coverBlob: new Blob([new Uint8Array([1, 2, 3])], { type: "image/png" }),
+  liveQueryState: {
+    blob: undefined as Blob | null | undefined,
+  },
 }));
 
 // Isolate the hook from Dexie + settings: the blob is "already resolved", and
 // covers render uncropped so no canvas (jsdom has none) is touched.
-vi.mock("dexie-react-hooks", () => ({ useLiveQuery: () => coverBlob }));
+vi.mock("dexie-react-hooks", () => ({ useLiveQuery: () => liveQueryState.blob }));
 vi.mock("@/hooks/use-app-data", () => ({ useSettings: () => ({ coverCropped: false }) }));
 
 import { useTrackCoverUrl } from "./use-media";
@@ -19,6 +22,7 @@ beforeEach(() => {
   created = 0;
   vi.spyOn(URL, "createObjectURL").mockImplementation(() => `blob:cover-${++created}`);
   vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
+  liveQueryState.blob = coverBlob;
 });
 
 afterEach(() => {
@@ -49,6 +53,7 @@ describe("useTrackCoverUrl — cross-mount object-URL cache (Phase 1)", () => {
   });
 
   it("returns the remote cover URL when there is no local blob id", () => {
+    liveQueryState.blob = null;
     const { result } = renderHook(() =>
       useTrackCoverUrl({ remoteCoverUrl: "https://example.com/c.jpg" }),
     );
@@ -68,5 +73,25 @@ describe("useTrackCoverUrl — cross-mount object-URL cache (Phase 1)", () => {
     // One URL total (the cache reused it every time); none revoked while it lived.
     expect(URL.createObjectURL).toHaveBeenCalledTimes(1);
     expect(URL.revokeObjectURL).not.toHaveBeenCalled();
+  });
+
+  it("keeps the previous local cover while the next cover blob is still resolving", async () => {
+    const { rerender, result } = renderHook(({ track }) => useTrackCoverUrl(track), {
+      initialProps: { track: { coverBlobId: "blb_hold_a" } },
+    });
+
+    await act(async () => {});
+    const firstUrl = result.current;
+    expect(firstUrl).toMatch(/^blob:cover-/);
+
+    liveQueryState.blob = undefined;
+    rerender({ track: { coverBlobId: "blb_hold_b" } });
+
+    expect(result.current).toBe(firstUrl);
+
+    liveQueryState.blob = null;
+    rerender({ track: { coverBlobId: "blb_hold_b" } });
+
+    expect(result.current).toBeNull();
   });
 });

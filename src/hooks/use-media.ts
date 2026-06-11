@@ -6,10 +6,10 @@ import { backfillCoverMetadata } from "@/db/repositories";
 import type { Track } from "@/db/types";
 import { useSettings } from "@/hooks/use-app-data";
 import { encodeCoverThumbhash } from "@/lib/cover-thumbhash";
-import { resolveDesktopBridge } from "@/lib/desktop/bridge";
 import { getCroppedBlob } from "@/lib/image-crop";
 import { log } from "@/lib/logger";
 import { coverUrlCache } from "@/lib/object-url-cache";
+import { proxyRemoteCover, trackCoverCacheKey } from "@/player/playback-preload";
 
 /**
  * Create an object URL for a Blob and revoke it on change/unmount. Returns null
@@ -78,7 +78,7 @@ export function useTrackCoverUrl(
   const coverBlobId = track?.coverBlobId;
   const remoteCoverUrl = track?.remoteCoverUrl;
   const blob = useLiveQuery(
-    async () => (coverBlobId ? (await resolveMediaBlob(coverBlobId, db))?.blob : undefined),
+    async () => (coverBlobId ? ((await resolveMediaBlob(coverBlobId, db))?.blob ?? null) : null),
     [coverBlobId],
     undefined,
   );
@@ -97,11 +97,13 @@ export function useTrackCoverUrl(
   // A stable cache key built entirely from ROW fields (no async): the codename-
   // stable blob id, plus the crop signature when a square crop applies. Distinct
   // crops are distinct entries, mirroring the old cropped/original URL split.
-  const cacheKey = coverBlobId
-    ? crop
-      ? `${coverBlobId}:${crop.x},${crop.y},${crop.width},${crop.height}`
-      : coverBlobId
-    : null;
+  const cacheKey = trackCoverCacheKey(
+    {
+      coverBlobId,
+      coverCrop: crop,
+    },
+    true,
+  );
 
   // Ref-count this key for the mount's lifetime so the cache never revokes a URL
   // a visible <img> still points at (see ObjectUrlCache).
@@ -127,7 +129,11 @@ export function useTrackCoverUrl(
       setResolved({ key: cacheKey, url: hit });
       return;
     }
-    if (!blob) return; // bytes not resolved yet — re-runs when the liveQuery emits
+    if (blob === undefined) return; // bytes not resolved yet — re-runs when the liveQuery emits
+    if (!blob) {
+      setResolved(null);
+      return;
+    }
     let alive = true;
     void (async () => {
       const out = crop ? await getCroppedBlob(blob, crop, blob.type || "image/jpeg") : blob;
@@ -144,8 +150,19 @@ export function useTrackCoverUrl(
   // Synchronous read: a cache hit returns the URL on frame 0 — instant on a
   // re-mount, zero placeholder flash. `peek` doesn't mutate, so it's render-safe.
   const cached = cacheKey ? coverUrlCache.peek(cacheKey) : undefined;
-  const url = cached ?? (resolved?.key === cacheKey ? resolved.url : undefined);
-  return url ?? proxyExternalCover(remoteCoverUrl);
+  const resolvedUrl = cached ?? (resolved?.key === cacheKey ? resolved.url : undefined);
+  const remoteUrl = proxyExternalCover(remoteCoverUrl);
+  const committedUrl = resolvedUrl ?? remoteUrl;
+  const lastCommittedUrl = useRef<string | null>(null);
+  useEffect(() => {
+    if (committedUrl) {
+      lastCommittedUrl.current = committedUrl;
+    } else if (!coverBlobId && !remoteCoverUrl) {
+      lastCommittedUrl.current = null;
+    }
+  }, [committedUrl, coverBlobId, remoteCoverUrl]);
+  const pendingLocalCover = Boolean(coverBlobId) && blob === undefined && !committedUrl;
+  return committedUrl ?? (pendingLocalCover ? lastCommittedUrl.current : null);
 }
 
 /**
@@ -155,9 +172,7 @@ export function useTrackCoverUrl(
  * media proxy (web/tauri) pass through unchanged.
  */
 export function proxyExternalCover(url: string | undefined): string | null {
-  if (!url) return null;
-  if (!/^https?:\/\//i.test(url)) return url;
-  return resolveDesktopBridge().mediaProxyUrl?.(url) ?? url;
+  return proxyRemoteCover(url);
 }
 
 /**

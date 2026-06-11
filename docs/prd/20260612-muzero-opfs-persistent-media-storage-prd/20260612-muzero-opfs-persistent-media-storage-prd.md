@@ -608,6 +608,7 @@ Required UI changes:
 | 2026-06-12 | MUZERO | Phase 5 completed: added permanent local media storage summary, backend/role breakdowns, missing/orphan health counts, visible migrate/cleanup actions, and en/zh/ja/ko Settings copy. |
 | 2026-06-12 | MUZERO | Phase 6 completed: routed background/gallery image writes through provider storage, resolved slideshow/gallery reads through shared blob helpers, made image deletion provider-aware, and added role-scoped migration tests for existing large image rows. |
 | 2026-06-12 | MUZERO | Phase 7 completed: added the shared 512 KB image storage threshold, moved large cover/memory/avatar originals to provider-backed storage, kept small images IndexedDB-backed, added thresholded migration support, and verified cover/memory/avatar export and resolver paths. |
+| 2026-06-12 | MUZERO | Playback warmup follow-up: App-level preload now downloads the next two remote R2 playback targets into the existing LRU playback cache and leaves permanent `Track.blobId` / media-provider storage untouched; cover warmup remains object-URL-cache-only. |
 
 ---
 

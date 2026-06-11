@@ -158,3 +158,55 @@ export function shufflePrev(
   if (repeat !== "off") return { index: ord[ord.length - 1], order: ord };
   return { index: currentIndex, order: ord };
 }
+
+/**
+ * Preview the next manual-advance queue indices without mutating playback state.
+ * This is intentionally "manual next" semantics, so repeat-one still advances
+ * when a user presses Next / E. In shuffle mode it follows the active shuffle
+ * cycle; when the cycle wraps we reuse that cycle order for warmup rather than
+ * drawing a new random order just for preloading.
+ */
+export function upcomingManualIndices(opts: {
+  count: number;
+  currentIndex: number;
+  length: number;
+  repeat: RepeatMode;
+  shuffleOrder?: readonly number[];
+}): number[] {
+  const { count, currentIndex, length, repeat, shuffleOrder } = opts;
+  if (count <= 0 || length <= 0 || currentIndex < 0 || currentIndex >= length) return [];
+  const seen = new Set<number>([currentIndex]);
+  const out: number[] = [];
+
+  if (!shuffleOrder) {
+    let cursor = currentIndex;
+    while (out.length < count) {
+      const next = manualNextIndex(length, cursor, repeat);
+      if (next === null || seen.has(next)) break;
+      out.push(next);
+      seen.add(next);
+      cursor = next;
+    }
+    return out;
+  }
+
+  if (shuffleOrder.length !== length) return [];
+  let cursorPos = shuffleOrder.indexOf(currentIndex);
+  if (cursorPos < 0) return [];
+  const effectiveRepeat = repeat === "one" ? "all" : repeat;
+
+  while (out.length < count) {
+    let nextPos = cursorPos + 1;
+    if (nextPos >= shuffleOrder.length) {
+      if (effectiveRepeat === "off") break;
+      nextPos = 0;
+    }
+    const next = shuffleOrder[nextPos];
+    if (next == null || seen.has(next)) break;
+    out.push(next);
+    seen.add(next);
+    cursorPos = nextPos;
+  }
+
+  return out;
+}

@@ -331,6 +331,7 @@ No Zustand/store involvement (规则 6 — non-reactive singleton stays in modul
 ### Phase 5 Checklist
 - [x] All of this PRD's cache + thumbhash + CoverImage + backfill + leak tests green (~44).
 - [x] `make check` typecheck + biome green across all changes. Full suite **1015/1018** — the only 3 failures (`virtual-track-list`, `chat-model-picker`, `track-memory-notes-panel`) import none of this PRD's modules; they are other agents' in-flight WIP on the shared branch, unchanged by this work (this PRD added tests and introduced zero new failures).
+- [x] **2026-06-12 regression hardening:** direct transport switches (buttons / Q-E / auto-advance) now keep the last committed cover URL while the next local cover blob is still resolving, so the stage/background no longer briefly paints the base black/empty surface. App-level playback warmup also primes the current/previous/next cover URLs outside the swipe-only coverflow path.
 
 ---
 
@@ -399,6 +400,7 @@ No Zustand/store involvement (规则 6 — non-reactive singleton stays in modul
 | 2026-06-10 | MUZERO | **Phase 3 ✅ — R2 manifest carry done** (§3.4): `thumbhash?` on the entity-cover + set-track schemas; export emits it; import lands it (set-track flows via `r2-subscription`'s `.source`). Both lanes tested. Search-catalog left out. `chore(deps)` committed package.json/lock (thumbhash + in-flight electron-builder, authorized). |
 | 2026-06-10 | MUZERO | **All phases ✅.** Full suite 1015/1018 (3 failures are unrelated other-agent WIP, unchanged). PRD complete end-to-end: cache → CoverImage fade → thumbhash generate/render/backfill/R2-carry → all gallery surfaces. Follow-ups (not flicker-related, covers already instant via cache): interactive cover buttons / dock / avatars / memory thumbnails. |
 | 2026-06-10 | MUZERO | **Phases 2 ✅ & 4 ✅ — rollout completed.** Per the user's go-ahead, rolled `<CoverImage>` (+ `thumbhash`) into `EntityCard` (专辑/歌手格) and `track-row` (全部歌曲), the last two gallery surfaces — their commit lands the files' in-flight WIP (right-click-delete-entity / row tweaks) alongside, flagged in the message. Remote-only previews now display (track rows show `coverThumbhash`). biome + tsc clean; `track-row.test.tsx` green. **Remaining (follow-ups, not flicker-related):** interactive cover buttons / dock / avatars / memory thumbnails; full-suite green still gated by 3 unrelated other-agent test failures. |
+| 2026-06-12 | MUZERO | Regression hardening after Q/E transport testing: `useTrackCoverUrl` distinguishes pending-vs-missing local blobs and holds the previous stable cover during the pending window; added queue-driven playback warmup so non-drag switches benefit from cover preloading too. |
 
 ---
 
