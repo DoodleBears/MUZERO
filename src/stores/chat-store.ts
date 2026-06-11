@@ -25,11 +25,19 @@ interface ChatState {
   approvalMode: ChatApprovalMode;
   activeSessionId: string | null;
   runtimeMetaBySessionId: Record<string, DjChatRuntimeMeta>;
+  /**
+   * Per-session auto-dispatch switch (PRD §5.8). Ephemeral — NOT persisted, so
+   * a reload defaults every session back to off ("reason: reload"), the desired
+   * safety behavior. Lives in the store (not the actor) so the queue tray
+   * reflects it without a runtime round-trip.
+   */
+  autoDispatchBySessionId: Record<string, boolean>;
   setMode: (mode: ChatMode) => void;
   setApprovalMode: (approvalMode: ChatApprovalMode) => void;
   setActiveSessionId: (sessionId: string | null) => void;
   setRuntimeMeta: (meta: DjChatRuntimeMeta) => void;
   clearRuntimeMeta: (sessionId: string) => void;
+  setAutoDispatch: (sessionId: string, enabled: boolean) => void;
 }
 
 /**
@@ -60,6 +68,7 @@ export const useChatStore = create<ChatState>()(
       approvalMode: "ask",
       activeSessionId: null,
       runtimeMetaBySessionId: {},
+      autoDispatchBySessionId: {},
       setMode: (mode) => set({ mode }),
       setApprovalMode: (approvalMode) => set({ approvalMode }),
       setActiveSessionId: (activeSessionId) => set({ activeSessionId }),
@@ -76,6 +85,10 @@ export const useChatStore = create<ChatState>()(
           delete next[sessionId];
           return { runtimeMetaBySessionId: next };
         }),
+      setAutoDispatch: (sessionId, enabled) =>
+        set((state) => ({
+          autoDispatchBySessionId: { ...state.autoDispatchBySessionId, [sessionId]: enabled },
+        })),
     }),
     {
       name: "muzero-chat-ui",

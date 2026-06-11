@@ -512,7 +512,7 @@ chat 入口落在**记忆 icon + 切 tab icon 的左边**、占该行剩余宽�
 **Tasks:**
 - [x] `chat-queue-tray.tsx` 展示层（DnD 重排、可访问按钮重排、立即发送/删除回调、auto-dispatch Switch 默认关、无内置文案）。
 - [x] ChatPanel 可选 `queueLabels` 挂接 `chat-queue-tray.tsx` 到 runtime actor（send/delete/reorder）；runtime snapshot 暴露 queued prompt 详情。
-- [ ] App 挂载 + i18n labels + auto-dispatch 偏好持久化接线；待并行 App/i18n WIP 落地后补。
+- [x] App 挂载（dj-chat-entry 已在 player-dock）+ i18n labels（queue/tool/home/model 全接）+ **auto-dispatch 接线（CHAT-6k）**：纯函数 `shouldAutoDispatchQueued`（enabled + idle + 队列非空 + 无 pending approval，TDD 5 例）；chat-store 加 **ephemeral** `autoDispatchBySessionId`（不 partialize → 重载默认关，符合 §5.8「reason reload」）+ `setAutoDispatch`；ChatPanel useEffect 驱动 turn 完成自动派发队首；dj-chat-entry 把 store 状态接进 ChatPanel `autoDispatchEnabled`/`onAutoDispatchChange`。
 - [x] 队列 runtime 核心：`ChatSession.queuedPromptsJson` 解析/入队/重排/删除；actor 重建只恢复队列计数、不自动派发；手动派发移除 queued prompt 后发送；actor 重排/删除不触发发送；interrupt 立即发送并带一次性 marker。
 - [x] `chat-empty-state.tsx` 展示层：预设 chips 只触发 insert 回调不发送 + 空库/无 seed 引导动作（上传/输入 vibe），无内置文案。
 - [ ] 空态 App/composer draft/i18n 接线：chips 插入 textarea draft、上传/输入 vibe 导航动作。

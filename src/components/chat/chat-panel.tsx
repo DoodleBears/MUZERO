@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { shouldAutoDispatchQueued } from "@/chat/dj-chat-auto-dispatch";
 import { pendingApprovalIds } from "@/chat/dj-chat-runtime-actor";
 import {
   getOrCreateDjChatRuntimeActor,
@@ -51,6 +52,20 @@ export function ChatPanel({
     }
   }, [autoApprove, pendingSig, actor]);
   const isRunning = snapshot?.meta.status === "submitted" || snapshot?.meta.status === "streaming";
+
+  // Auto-dispatch driver (PRD §5.8): once the turn finishes and nothing is
+  // pending, fire the head of the queue. `sendQueuedPrompt` is idempotent on a
+  // missing id, so a re-run after the head changes is safe.
+  const queueHeadId = snapshot?.queuedPrompts[0]?.id;
+  const autoDispatch = shouldAutoDispatchQueued({
+    enabled: autoDispatchEnabled,
+    status: snapshot?.meta.status,
+    queueLength: snapshot?.queuedPrompts.length ?? 0,
+    pendingApprovalCount: pendingIds.length,
+  });
+  useEffect(() => {
+    if (autoDispatch && queueHeadId) void actor.sendQueuedPrompt(queueHeadId);
+  }, [autoDispatch, queueHeadId, actor]);
 
   return (
     <section className="flex min-h-0 flex-1 flex-col overflow-hidden bg-background">

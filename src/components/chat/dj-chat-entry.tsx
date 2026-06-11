@@ -63,6 +63,10 @@ export function DjChatEntry({ className }: { className?: string }) {
   const setApprovalMode = useChatStore((s) => s.setApprovalMode);
   const activeSessionId = useChatStore((s) => s.activeSessionId);
   const setActiveSessionId = useChatStore((s) => s.setActiveSessionId);
+  const autoDispatchEnabled = useChatStore((s) =>
+    s.activeSessionId ? (s.autoDispatchBySessionId[s.activeSessionId] ?? false) : false,
+  );
+  const setAutoDispatch = useChatStore((s) => s.setAutoDispatch);
   const runtimeStatus = useChatStore((s) =>
     s.activeSessionId ? s.runtimeMetaBySessionId[s.activeSessionId]?.status : undefined,
   );
@@ -352,6 +356,8 @@ export function DjChatEntry({ className }: { className?: string }) {
                 {!showHome && activeSessionId && (
                   <ChatPanel
                     autoApprove={approvalMode === "auto"}
+                    autoDispatchEnabled={autoDispatchEnabled}
+                    onAutoDispatchChange={(enabled) => setAutoDispatch(activeSessionId, enabled)}
                     queueLabels={{
                       autoDispatch: t("chat.queueAutoDispatch"),
                       delete: t("chat.queueDelete"),
