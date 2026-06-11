@@ -390,6 +390,16 @@ export function DjChatEntry({
                         },
                       ],
                     }}
+                    budgetLabels={{
+                      compress: t("chat.budgetCompress"),
+                      detail: (result) =>
+                        `~${result.estimatedTokens.toLocaleString()} / ${result.maxTokens.toLocaleString()} tokens`,
+                      states: {
+                        block: t("chat.budgetBlock"),
+                        ok: "",
+                        warn: t("chat.budgetWarn"),
+                      },
+                    }}
                     onAutoDispatchChange={(enabled) => setAutoDispatch(activeSessionId, enabled)}
                     onUploadLibrary={() => {
                       setMode("chip");

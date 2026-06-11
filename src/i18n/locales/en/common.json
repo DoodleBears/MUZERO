@@ -1066,6 +1066,9 @@
     "upToDate": "You're up to date."
   },
   "chat": {
+    "budgetCompress": "Compress context",
+    "budgetWarn": "Context is getting long",
+    "budgetBlock": "Context is full — compress to continue",
     "emptyTitle": "Tell your DJ what to play",
     "emptyBody": "Describe a vibe, ask for a set, or pull from your library. The DJ writes briefs and queues up songs.",
     "emptyPresets": "Try",

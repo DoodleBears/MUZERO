@@ -1039,6 +1039,9 @@
     "upToDate": "최신 상태입니다."
   },
   "chat": {
+    "budgetCompress": "컨텍스트 압축",
+    "budgetWarn": "컨텍스트가 길어지고 있습니다",
+    "budgetBlock": "컨텍스트가 가득 찼습니다 — 압축 후 계속",
     "emptyTitle": "DJ에게 듣고 싶은 걸 알려주세요",
     "emptyBody": "분위기를 설명하거나 세트를 요청하거나 라이브러리에서 골라보세요. DJ가 브리프를 쓰고 곡을 큐에 넣습니다.",
     "emptyPresets": "예시",

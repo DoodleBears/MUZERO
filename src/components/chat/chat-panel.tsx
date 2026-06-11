@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { shouldAutoDispatchQueued } from "@/chat/dj-chat-auto-dispatch";
+import { evaluateChatContextBudget } from "@/chat/dj-chat-context-budget";
 import { pendingApprovalIds } from "@/chat/dj-chat-runtime-actor";
 import {
   getOrCreateDjChatRuntimeActor,
@@ -8,6 +9,10 @@ import {
 import type { MuzeroDB } from "@/db/muzero-db";
 import { useChatStore } from "@/stores/chat-store";
 import { ChatComposer } from "./chat-composer";
+import {
+  ChatContextBudgetNotice,
+  type ChatContextBudgetNoticeLabels,
+} from "./chat-context-budget-notice";
 import {
   ChatEmptyState,
   type ChatEmptyStateLabels,
@@ -27,6 +32,8 @@ interface ChatPanelProps {
   /** Onboarding empty state (shown until the session has its first message). */
   emptyState?: { labels: ChatEmptyStateLabels; presets: ChatPromptPreset[] };
   onUploadLibrary?: () => void;
+  /** Context-budget notice (warn/block). Block disables the composer until compress. */
+  budgetLabels?: ChatContextBudgetNoticeLabels;
   queueLabels?: ChatQueueTrayLabels;
   toolLabels?: ChatToolLabels;
 }
@@ -39,6 +46,7 @@ export function ChatPanel({
   onAutoDispatchChange,
   emptyState,
   onUploadLibrary,
+  budgetLabels,
   queueLabels,
   toolLabels,
 }: ChatPanelProps) {
@@ -82,6 +90,14 @@ export function ChatPanel({
   const messages = snapshot?.messages ?? [];
   const showEmptyState = Boolean(emptyState) && messages.length === 0;
 
+  // Context budget over the active window (what would be sent — messages from
+  // the compression pointer onward). Block disables the composer (block-and-
+  // explain); compress moves the pointer to the latest user turn (old messages
+  // stay visible, never silently truncated).
+  const contextStartIndex = snapshot?.meta.contextStartIndex ?? 0;
+  const budgetResult = evaluateChatContextBudget(messages.slice(contextStartIndex));
+  const sendBlocked = budgetResult.status === "block";
+
   return (
     <section className="flex min-h-0 flex-1 flex-col overflow-hidden bg-background" ref={panelRef}>
       {showEmptyState && emptyState ? (
@@ -117,7 +133,17 @@ export function ChatPanel({
           prompts={snapshot?.queuedPrompts ?? []}
         />
       )}
+      {budgetLabels && (
+        <ChatContextBudgetNotice
+          labels={budgetLabels}
+          onCompress={() => {
+            void actor.setContextStartIndex(messages.length);
+          }}
+          result={budgetResult}
+        />
+      )}
       <ChatComposer
+        disabled={sendBlocked}
         isRunning={isRunning}
         onInterrupt={(text) => actor.interruptWithMessage(text)}
         onQueue={async (text) => {

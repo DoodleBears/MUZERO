@@ -1040,6 +1040,9 @@
     "upToDate": "最新の状態です。"
   },
   "chat": {
+    "budgetCompress": "コンテキストを圧縮",
+    "budgetWarn": "コンテキストが長くなっています",
+    "budgetBlock": "コンテキストが満杯です——圧縮して続行",
     "emptyTitle": "DJ に聴きたいものを伝えよう",
     "emptyBody": "雰囲気を伝えたり、セットを頼んだり、ライブラリから選んだり。DJ がブリーフを書いて曲をキューに入れます。",
     "emptyPresets": "お試し",

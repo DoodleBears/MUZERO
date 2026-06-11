@@ -1040,6 +1040,9 @@
     "upToDate": "已是最新版本。"
   },
   "chat": {
+    "budgetCompress": "压缩上下文",
+    "budgetWarn": "上下文有点长了",
+    "budgetBlock": "上下文已满——压缩后继续",
     "emptyTitle": "告诉 DJ 想听什么",
     "emptyBody": "描述一种氛围、点一个歌单,或从你的曲库里挑。DJ 会写 brief 并把歌排进队列。",
     "emptyPresets": "试试",

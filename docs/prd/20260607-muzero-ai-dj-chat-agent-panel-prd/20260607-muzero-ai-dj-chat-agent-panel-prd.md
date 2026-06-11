@@ -1,6 +1,6 @@
 # PRD: MUZERO — AI DJ Chat Agent Panel（多 Session 对话 · 三形态 · 流式 · 工具调用）
 
-**Status:** In Progress（Phase 1 ✅；Phase 2–6 的运行时 / 组件 / 测试**全部已建并绿**[`src/chat/*` runtime actor·tools·sessions·tokens·budget；`src/components/chat/*` FAB·bar·dock·session-home·model-picker·queue-tray·empty·notice；Dexie v5 chatSessions]，但统一阻塞于两件事：① `App.tsx` 挂载属并行 Now Playing redesign WIP → 待其落地做 CHAT-2b；② chat 命名空间 i18n 4 语 + Settings key 管理接线。即「逻辑齐备、外壳未挂」——审计 2026-06-11）
+**Status:** Implemented（Phase 1–6 全 ✅ 落地；外壳已重设计为 dock 集成三态入口并挂进 player-dock；多 provider + 动态自定义 provider + per-session 模型选择 + auto-dispatch + 空态 onboarding + 上下文预算拦截全接线 + i18n ×4。余：Phase 3 store-pump E2E 仍 blocked 于 player-store 并行 WIP；真实 LLM/endpoint 端到端对话待人工。分支 `feat/chat-llm-providers`，2026-06-11）
 **Created:** 2026-06-07
 **Author:** MUZERO
 **Module:** AI DJ 对话助手 —— 本地优先、BYOK、Vercel AI SDK v6 tool-loop、Dexie 持久化
@@ -20,7 +20,7 @@
 | 3 | DJ 工具调用（search/create/curate/propose/generate + HITL 审批） | ✅ Completed（6 工具+审批桥+折叠 UI+ask/auto 偏好切换+labels i18n ×4 全接线；余 store-pump E2E 一项见 checklist） | §7 |
 | 4 | 多 Session + 历史列表（搜索）+ branch/regenerate | ✅ Completed（search/branch/regenerate + session-home 挂进 expanded widget：History 切换 + 新建即开 + 重命名/删除；切换零 dispose） | §7 |
 | 5 | 多 Provider 模型选型（preset + **自定义 provider，复刻 ClipCombo** + combobox + Settings + key 入 Dexie） | ✅ Completed（5a 数据层 / 5b keyless 解析 / 5c Settings 面板 / 5d per-session picker；于 `feat/chat-llm-providers`；真实 endpoint e2e 待人工） | §7 |
-| 6 | 队列/打断 prompt + 空态 onboarding + 上下文压缩 | 🔄 token/budget/queue-tray/empty/notice ✅；App 挂载 + i18n 待 | §7 |
+| 6 | 队列/打断 prompt + 空态 onboarding + 上下文压缩 | ✅ Completed（auto-dispatch + 空态 + 预算拦截全接线 6k/6l/6m） | §7 |
 
 > Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
 
@@ -529,7 +529,7 @@ chat 入口落在**记忆 icon + 切 tab icon 的左边**、占该行剩余宽�
 - [x] 超预算时纯函数返回 block（调用点负责解释）；压缩指针计算保留最新 user turn，不静默截断。
 - [x] 压缩指针 actor/repo 持久化、旧消息仍可见。
 - [x] `chat-context-budget-notice.tsx` 展示层：ok 默认隐藏、warn=`status`、block=`alert`，压缩动作只回调给上层，无内置文案。
-- [ ] 上下文预算 ChatPanel/App/composer 发送拦截与 block-and-explain 文案（待 i18n/App 挂载解锁）。
+- [x] 上下文预算 ChatPanel/App/composer 发送拦截与 block-and-explain 文案（**CHAT-6m**）：ChatPanel 用 `evaluateChatContextBudget` 对活跃窗口（`messages.slice(contextStartIndex)`）算预算 → 挂 `ChatContextBudgetNotice`（ok 隐藏 / warn / block）；**block 时 disable composer**（block-and-explain，不静默截断）；压缩动作 `actor.setContextStartIndex(len)` → `nextContextStartIndex` 前移到最新 user turn（旧消息仍可见）、窗口缩小后 composer 重新启用。dj-chat-entry 传 `budgetLabels`，i18n `chat.budget*` 3 键 ×4 语。组件测：超预算 block + 压缩后解锁（`contextStartIndex` 前移）。
 
 ---
 
@@ -618,6 +618,7 @@ chat 入口落在**记忆 icon + 切 tab icon 的左边**、占该行剩余宽�
 | 2026-06-07 | Codex | 推进 Phase 5g：新增无内置文案的 `ChatModelPicker` 展示层，基于 Popover+Command 展示 enabled presets/models，支持选中态、搜索过滤、空态与 `{presetId, model}` 选择回调；Settings/App/i18n/DB 接线继续等待并行 WIP 落地。`make check` 通过（62 files / 398 tests）。 |
 | 2026-06-11 | Claude | **Phase 2 落地（CHAT-2a/b/c 三个原子 commit）**：① `dj-chat-availability.ts` 纯门控（9 测）；② `ChatMode` 改 icon/chip/expanded + persist v1 迁移（fab→icon、bar→chip、dock/fullscreen→expanded）、删旧四形态壳（launcher-fab/input-bar/dock/breakpoint hook）、reply-notification 改判定（8 测）；③ `dj-chat-entry.tsx` 三态入口挂 player-dock 工具行（memory/nav 左侧 flex-1、空白区 click-through）+ chip 发送自动建 session + expanded 内嵌 ChatPanel + Esc/backdrop 收回 + i18n `chat.*` ×4（8 组件测）。**两个 motion 陷阱记录在案**：跨 portal 共享 layoutId 死锁 projection（widget 改自身 spring）；AnimatePresence 内 fragment 包裹断 exit 追踪（改 keyed 直挂子元素）。preview(:1440) 实测全循环零 console 报错；spring 视觉在隐藏 tab 冻结属沙箱限制。 |
 | 2026-06-11 | Claude | **Phase 2 外壳重新设计（owner 定）+ Phase 5 provider 扩展**。① 放弃 FAB / bar / Dock-1∕3 / 全屏四形态，改为**集成进 player-dock 上方工具行**的单一对话入口（落在记忆 + 切 tab icon **左侧**、`flex-1` 吃满剩余宽度），三态 **icon(minimize) → chip(normal，full-rounded 输入条，默认) → expanded(framer-motion `layoutId` morph 成 widget：桌面浮层卡片 / 移动全屏 sheet)**。② 新增**门控** `canUseDjChat`（`hasUsableLlm && hasUsableMusicgen`）：**未配 LLM + musicgen 时连 icon 都不渲染**（纯函数 + TDD）。③ §6.1 扩成**逐项复刻 ClipCombo 动态自定义 provider**（Dexie `llmCustomProviders` 表 + repo + `customLlmProviderConfigToPreset` + Settings provider 面板 enabled grid + `ApiKeyField` + `resolveDjModel` 的 openai-compatible/keyless-local 分支）。重写 §3.3/§5/§6.1 + Phase 2/5 plan + §2.4 结构；旧 `chat-launcher-fab`/`chat-input-bar`/`chat-dock`/`use-chat-breakpoint` 壳作废重做，runtime（`src/chat/*`）+ 展示层组件（composer/turns/session-home/model-picker/queue-tray/empty/notice）全部复用。Now Playing redesign 已并入 main → 本 phase 不再 WIP-blocked。 |
+| 2026-06-11 | Claude | **Phase 5 + Phase 6 全部落地（独立 worktree `feat/chat-llm-providers`，5 个原子 commit）**。迁出 main 直接开发改进 worktree 隔离（避免与并行 WIP 串）。**CHAT-5a** custom-provider 数据层（Dexie v21 `llmCustomProviders` + repo + `normalize`/`toPreset` + `LlmProviderPresetId` 拓宽 `custom:${uuid}` + `modelsByPresetId`，16 测）；**5b** `resolveDjModel` keyless 分支（`normalizeOpenAiCompatibleBaseUrl` 补 `/v1` + `fetchWithoutAuthorization` 剥 auth 头，transport 懒读 custom）；**5c** Settings `llm-provider-settings.tsx`（provider grid + key 状态 + 内联 ApiKeyField + 自定义编辑 + 默认模型 combobox，替换旧双 provider 表单，5 测，20 i18n 键 ×4）；**5d** expanded widget header per-session ChatModelPicker（`setChatSessionLlm` 只存 presetId+model 不存 key）。**CHAT-6k** auto-dispatch（纯函 `shouldAutoDispatchQueued` 5 测 + ephemeral `autoDispatchBySessionId` 重载默认关 + ChatPanel 驱动）；**6l** 空态 onboarding（`ChatComposer` 受控化 + ChatPanel `emptyState` + chips 注入 composer + `onUploadLibrary`→切 gallery，8 i18n 键）；**6m** 上下文预算拦截（`ChatContextBudgetNotice` + block 时 disable composer + 压缩前移 `contextStartIndex` 旧消息仍可见，3 i18n 键，组件测）。**6 phase 全 ✅**；余 store-pump E2E（Phase 3）仍 blocked 于 player-store 并行 WIP。注：branch base 继承 main 的 `chat-model-picker`/`virtual-track-list` 2 个既有测试失败（stash 验证非本分支引入）。 |
 
 ---
 
