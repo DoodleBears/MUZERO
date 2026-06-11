@@ -656,6 +656,7 @@ All user-facing strings must go through i18n catalogs in `src/i18n/locales/{en,z
 - [x] The trace includes media element error code, ready state, and network state.
 - [x] Cache-stream failures share the same playback `traceId`.
 - [x] No test snapshots contain raw signed URLs, cookies, tokens, prompts, lyrics, notes, or file names.
+- [x] A real successful YouTube trace proves the fixed path: video-bound PoToken applied to the active player, `hasCpn=true`, `download.success`, and `play.resolved`.
 
 ### Phase 4: Settings Trace Workbench
 
@@ -841,3 +842,4 @@ Given a stream source requires headers/cookies/login or returns no playable URL:
 | 2026-06-11 | Codex | Completed Phase 4 with Settings Trace filters, copy-visible/all, repro-step timeline, i18n, and component tests |
 | 2026-06-11 | Codex | Completed Phase 5 with Electron main diagnostics buffering, preload bridge, renderer trace ingestion, and redacted media proxy events |
 | 2026-06-11 | Codex | Completed Phase 6 with IndexedDB trace archive, visible enable/export controls, bounded rotation, JSONL export metadata, and archive tests |
+| 2026-06-11 | Codex | Recorded successful YouTube playback trace after active-player video PoToken binding and `cpn` fix |

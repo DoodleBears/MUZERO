@@ -16,14 +16,14 @@
 | 1 | 基础设施：muzfetch header 注入 + Range 透传 + StreamSource 抽象 + 数据模型 | ✅ Completed | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | Bilibili 源（架构试金石：WBI + DASH 音轨 + 登录 + 入库 + 播放路由） | ✅ Completed | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | 网易云源（weapi/eapi 纯 TS 加密 + 登录 + 搜索 + 音质降级 + 歌单同步 + 歌词） | ✅ Completed | [Phase 3 Checklist](#phase-3-checklist) |
-| 4 | YouTube 源（**已改用 `youtubei.js` decipher**；自研 sig/n/vm 沙箱实现保留为 dead code）（PoToken 押后） | 🔄 接线完成（57 纯测绿，Vite pre-bundle 修好）/ 待 Electron 手测 | [Phase 4 Checklist](#phase-4-checklist) |
+| 4 | YouTube 源（`youtubei.js` decipher + BotGuard video-bound PoToken + blob 播放） | ✅ Electron 手测可播放（2026-06-11 trace 验证） | [Phase 4 Checklist](#phase-4-checklist) |
 | 5 | 离线缓存 / 下载持久化（"尽量入库存储"，可选增强） | ✅ Completed | [Phase 5 Checklist](#phase-5-checklist) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
 >
-> **Phase 1–3 ✅（2026-06-10～11，Electron 端到端手测通过）**：基础设施(muzfetch header 注入/Range/`mediaProxyUrl`)、Bilibili(WBI+DASH+登录+播放)、网易云(weapi/eapi+登录+VIP+搜索+歌单同步+增量去重+歌词)均**端到端可用**（详见下方 Implementation Progress Log + §13–18）。剩余 §13/§14 的二维码**应用内**扫码 UI(Q2/Q4，待加 `qrcode-generator`)与各 checklist 的「真机手测」勾选项是验证仪式，不阻塞功能完成。**Phase 4(YouTube)** 是仅剩的大头(运行时重：隐藏 BrowserWindow 解 sig/PoToken)，刻意押后。**Phase 5(离线缓存)** 进行中。
+> **Phase 1–5 ✅（2026-06-10～11，Electron 端到端手测通过）**：基础设施(muzfetch header 注入/Range/`mediaProxyUrl`)、Bilibili(WBI+DASH+登录+播放)、网易云(weapi/eapi+登录+VIP+搜索+歌单同步+增量去重+歌词)、YouTube(`youtubei.js` decipher + video-bound PoToken + blob 播放)、离线缓存核心均已打通（详见下方 Implementation Progress Log + §13–20）。剩余 §13/§14 的二维码**应用内**扫码 UI(Q2/Q4，待加 `qrcode-generator`)与各 checklist 的「真机手测」勾选项是验证仪式，不阻塞功能完成。
 
-### Implementation Progress Log（TDD，纯核心优先；网易 + B站，YouTube/Phase 4 押后）
+### Implementation Progress Log（TDD，纯核心优先；网易 + B站 + YouTube）
 
 > 每行 = 一个 TDD 原子单元（test → impl → green → 路径化 commit）。纯函数核心可在 vitest 完整验证；带网络/Electron 运行时的部分（代理 header 注入、登录窗口、live resolve、UI）实现后标「待运行时验证」，不冒充已验证。
 
@@ -721,3 +721,5 @@ InnerTube `/youtubei/v1/player` 取流 + EJS `sig`/`n` 解密(隐藏 sandboxed `
 **落地方案**：保留我方 InnerTube `/player` 请求 + 选轨（Y2/Y3/Y4 全留），**只把最难的解扰（sig+n）交 youtubei.js**——其 **browser 构建自带 JS evaluator**（`platform/web.js` → `jsruntime/default.js`），在渲染进程跑 player.js 自己的 sig/n 函数（Vite 走 browser 条件，渲染器即有；node 平台无 evaluator 故 CLI 报错，渲染器不报）。`createYtjsRuntime`(`youtube-ytjs.ts`) 提供 `{ getBootstrap(visitorData/sts), decipherFormat(format)→player.decipher }`；`resolveYoutubeAudio` 的 `solvers` 改 `decipherFormat`。**registry 接 `createYtjsRuntime()`**。依赖只加 `youtubei.js`（bgutils/jsdom 已移除）。`getAppFetch`(muzfetch) 注入 youtubei，绕 CORS。
 
 **状态**：整合完成，**Vite 构建通过**（youtubei.js 浏览器构建打包成功，5937 模块）、**57 个 streamsrc/youtube + registry 测全绿**、typecheck/biome 干净。**唯一剩余 = Electron 真机手测**（渲染器真浏览器环境才有 evaluator + muzfetch；CLI 无法验证 decipher 出声）。自研 solver 旧件（`youtube-sig/nsig/runtime/bridge-runtime`、`evalYoutubeN` 桥、`youtube-cipher`）现已废用，待清理 commit。
+
+**Electron 手测通过（2026-06-11）**：结构化 trace 证明 YouTube 播放链路已端到端成立。关键证据：`po_token.minted poTokenBinding=video` → `po_token.applied ... hasCpn=true playerPoToken=true poTokenBinding=video` → `download.success bytes=34994301` → `media.load.stream proxied=false` → `loadedmetadata/canplay/play.resolved`。根因修复是：`info.download()` 与 direct fallback 期间临时把 youtubei active player 的 `po_token` 切到 video-bound PoToken，并为 direct fallback URL 补 `cpn`；此前仅把 token 传给 `getInfo`，最终 `Format.decipher()` 仍可能使用 session/player 上的 visitor token，导致 googlevideo 403。
