@@ -124,6 +124,16 @@ async function handleMuzfetch(request) {
     init.duplex = "half";
   }
 
+  if (isGoogleVideo) {
+    // googlevideo serves a *bare* GET (only Range) a 206 but 403s the <audio>
+    // element's forwarded Accept / Accept-Encoding / UA / Connection headers. Strip
+    // to just Range — exactly the request that returned 206 in the standalone probe.
+    const bare = new Headers();
+    const range = headers.get("range");
+    if (range) bare.set("range", range);
+    init.headers = bare;
+  }
+
   const res = isGoogleVideo
     ? await nodeHttpsFetch(target, init)
     : await net.fetch(target, init);
