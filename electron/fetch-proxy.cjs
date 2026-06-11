@@ -50,11 +50,19 @@ async function handleMuzfetch(request) {
     }
   }
 
-  // credentials:"include" so net.fetch sends the default session's cookies even for a
-  // cross-origin target (default "same-origin" would drop them). After a source login,
-  // MUSIC_U / SESSDATA live in the default session, so this is what actually unlocks
-  // VIP / higher quality. Harmless for R2/AI (the session has no cookies for them).
-  const init = { method: request.method, headers, redirect: "follow", credentials: "include" };
+  // credentials:"include" so net.fetch sends the default session's cookies even cross-
+  // origin (default "same-origin" would drop them). After a source login, MUSIC_U /
+  // SESSDATA live in the default session — this unlocks VIP / higher quality.
+  // Exception: googlevideo issues *guest* playback URLs (signed by ip + expire) and
+  // 403s a GET that arrives carrying YouTube account/visitor cookies — so omit them
+  // for googlevideo media only (NetEase/Bilibili CDN GETs are unaffected).
+  let credentials = "include";
+  try {
+    if (/(^|\.)googlevideo\.com$/i.test(new URL(target).hostname)) credentials = "omit";
+  } catch {
+    // non-absolute target — leave credentials as-is
+  }
+  const init = { method: request.method, headers, redirect: "follow", credentials };
   if (request.method !== "GET" && request.method !== "HEAD" && request.body) {
     init.body = request.body;
     init.duplex = "half";
