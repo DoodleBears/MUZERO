@@ -1,6 +1,6 @@
 # PRD: MUZERO 发版流水线 — Changelog 规范 + 多平台构建 + R2 分发 + 应用内版本下载
 
-**Status:** Draft
+**Status:** Implemented (Phase 1–5 code + tests on `feat/release-pipeline`; real-machine multi-platform release E2E pending a first live publish)
 **Created:** 2026-06-11
 **Author:** DoodleBear / Product
 **Module:** Release Engineering — 版本号契约 / Changelog / Electron 打包 / R2 分发清单 / Settings 下载中心
@@ -581,3 +581,4 @@ src/components/settings/
 |------|--------|--------|
 | 2026-06-11 | DoodleBear / Product | 初稿（Draft）。调研 ClipCombo 发版/changelog/R2 架构，适配 MUZERO 双壳层 + 无后端 + manifest 全量历史 + 应用内下载场景。 |
 | 2026-06-11 | DoodleBear / Product | Q1-Q6 全部拍板（见 §10）：Linux 经 WSL2 构建；分发域 `assets.mu0.app`；统一 rclone；beta 留接口+可切；`appId = app.mu0.muzero`；changelog 4 语全量回填。概念已定稿，待开发实现。 |
+| 2026-06-11 | Claude (Opus 4.8) | **Phase 1–5 全部 TDD 实现**（分支 `feat/release-pipeline`，~12 atomic commits，66 release 测全绿，typecheck 零新增错误）。版本三文件同步 + Vite define + compareSemver；类型化 changelog + 7 版 4 语回填 + What's New 弹窗 + release gate；Electron 打包硬化（esbuild bundle main、排除 node_modules，`electron-builder --mac` 真机验证产物 dist+dist-electron+package.json）；`make release-mac/win/linux` + rclone 发布 + `manifest.json` 加性合并（对真实 mac 产物验证 platformKeyFor）；electron-updater IPC + Settings About/版本历史下载中心。**实现期偏离 PRD 之处**：(a) release-meta 改 Vite define 不再生成 `src/generated/release-meta.ts`；(b) 桌面更新载体确认 esbuild bundle（非 electron-vite）；(c) `getAppVersion`/About 从 Phase 1 移至 Phase 5 与 update IPC 同建。**剩余**：真机三平台首发 + R2 桶/`assets.mu0.app` 开通 + 部署 runbook。 |
