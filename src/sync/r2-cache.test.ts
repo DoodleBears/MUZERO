@@ -61,6 +61,27 @@ function remoteTrack(partial: Partial<Track> = {}): Track {
 }
 
 describe("cacheRemoteTrackMedia", () => {
+  it("refuses media whose declared size is past the cache cap (PRD F-8)", async () => {
+    await db.tracks.put(remoteTrack({ kind: "video", remoteMediaUrl: "https://r2/movie.mp4" }));
+    const fetcher: SyncCacheFetch = async () =>
+      ({
+        ok: true,
+        headers: new Headers({
+          "content-type": "video/mp4",
+          "content-length": String(500 * 1024 * 1024),
+        }),
+        blob: async () => new Blob(["x"], { type: "video/mp4" }),
+        body: null,
+      }) as unknown as Response;
+
+    await expect(cacheRemoteTrackMedia("trk_remote", { fetcher }, db)).rejects.toMatchObject({
+      name: "RemoteMediaTooLargeError",
+    });
+    // Nothing stored, track not linked — the set still streams (caller counts a failure).
+    expect((await db.tracks.get("trk_remote"))?.blobId).toBeUndefined();
+    expect(await db.mediaBlobs.count()).toBe(0);
+  });
+
   it("downloads a remote media URL into mediaBlobs and links the track", async () => {
     await db.tracks.put(remoteTrack());
     const fetcher: SyncCacheFetch = async () =>

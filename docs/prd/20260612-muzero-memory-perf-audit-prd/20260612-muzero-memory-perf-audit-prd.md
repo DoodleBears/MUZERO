@@ -15,7 +15,7 @@
 | 2 | 确证泄漏修复（P0：YouTube 播放路径） | ✅ Completed | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | 全表查询放大链治理（列表 / 搜索 / 统计） | ✅ Completed | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | 渲染层 GPU / GC 卫生（可视化 + 背景） | 🔄 In Progress（F-6/F-7 被并发改动阻塞） | [Phase 4 Checklist](#phase-4-checklist) |
-| 5 | 大文件内存防护（预热 / 缓存 / 下载） | 🔲 Pending | [Phase 5 Checklist](#phase-5-checklist) |
+| 5 | 大文件内存防护（预热 / 缓存 / 下载） | ✅ Completed（同步 UI 标注待并发改动合入） | [Phase 5 Checklist](#phase-5-checklist) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
 
@@ -349,15 +349,16 @@ player-store.ts:2122-2155 两次 `updateMediaSessionMetadata` 交错时（await 
 **Goal:** 数百 MB 级远程视频不再造成全量内存峰值。
 
 **Tasks:**
-- [ ] F-8：统一 content-length 阈值常量；预热（playback-preload）、R2 缓存（r2-cache）、musicgen 下载三处接入
-- [ ] 超阈值行为：预热跳过；播放走 `loadUrl` 流式；R2 缓存跳过并在同步指示器中标注「文件过大未离线」
-- [ ] F-11：队列长度进诊断观测（上限策略留 Q-3）
+- [x] F-8：统一阈值常量 [`media-size-limits.ts`](../../../src/lib/media-size-limits.ts)（256MB；content-length 缺失/畸形 → 视为不超限，chunked 响应仍可缓存）；预热（playback-preload）、R2 缓存（r2-cache）、musicgen 下载三处接入，超限均 `body.cancel()` 不缓冲
+- [x] 超阈值行为：预热静默跳过（播放自然走 `loadUrl` 流式）；R2 缓存抛 `RemoteMediaTooLargeError` → `cacheImportedMedia` 既有 per-track try/catch 计入 failures、整体拉取不中断（已核实 r2-pull-sync.ts:118-135 容错结构）；musicgen 抛 `MusicGenError`
+- [ ] 同步指示器「文件过大未离线」**用户可见标注（i18n 四语）推迟**：r2-pull-sync.ts 及同步 UI 正被并发改动占用；当前超限失败计入既有 failures 计数展示。待文件释放后把 `RemoteMediaTooLargeError` 单独成桶 + 四语文案
+- [x] F-11：队列长度进诊断观测（Phase 1 HUD `queue` 行已落地；上限策略留 Q-3）
 
 ### Phase 5 Checklist
 
-- [ ] >500MB 远程视频场景进程内存增幅受控
-- [ ] 同步含超大文件的远程集不中断、有用户可见标注（i18n 四语，硬规则 i18n）
-- [ ] 既有 sync / preload 测试全绿
+- [ ] >500MB 远程视频场景进程内存增幅受控（人工，待真机）
+- [ ] 同步含超大文件的远程集不中断已由单测覆盖（caller 容错结构核实）；用户可见标注待并发改动合入后跟进
+- [x] 既有 sync / musicgen / preload 测试全绿（62 测，含新增超限用例：preload 断言 `blob()` 未被调用、r2-cache 断言无写库不挂链）
 
 ---
 

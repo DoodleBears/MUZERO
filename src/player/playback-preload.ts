@@ -5,6 +5,7 @@ import type { Track } from "@/db/types";
 import { resolveDesktopBridge } from "@/lib/desktop/bridge";
 import { getCroppedBlob } from "@/lib/image-crop";
 import { log } from "@/lib/logger";
+import { exceedsRemoteMediaCacheLimit } from "@/lib/media-size-limits";
 import { coverUrlCache } from "@/lib/object-url-cache";
 import { getAppFetch } from "@/lib/platform";
 import {
@@ -145,6 +146,16 @@ async function runRemoteMediaWarmup(
       signal: options.signal,
     });
     if (!response.ok) return;
+    if (exceedsRemoteMediaCacheLimit(response)) {
+      // Warming buffers the whole file via blob() — skip past the cap; playback
+      // streams the URL directly instead (PRD F-8).
+      void response.body?.cancel().catch(() => {});
+      log.debug("player", "playback preload skipped oversized media", {
+        trackId: track.id,
+        contentLength: response.headers.get("content-length"),
+      });
+      return;
+    }
 
     const blob = await response.blob();
     if (blob.size === 0 || options.signal?.aborted) return;

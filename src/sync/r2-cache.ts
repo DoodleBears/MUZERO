@@ -5,6 +5,12 @@ import {
 } from "@/db/media-blob-storage";
 import { db as defaultDb, type MuzeroDB } from "@/db/muzero-db";
 import { newId } from "@/lib/id";
+import {
+  exceedsRemoteMediaCacheLimit,
+  REMOTE_MEDIA_CACHE_MAX_BYTES,
+  RemoteMediaTooLargeError,
+  responseContentLength,
+} from "@/lib/media-size-limits";
 import { getAppFetch } from "@/lib/platform";
 
 export type SyncCacheFetch = typeof globalThis.fetch;
@@ -38,6 +44,15 @@ export async function cacheRemoteTrackMedia(
   const fetcher = await resolveFetcher(options.fetcher);
   const response = await fetcher(track.remoteMediaUrl, { signal: options.signal });
   if (!response.ok) throw new Error(`Failed to fetch remote media: HTTP ${response.status}`);
+  if (exceedsRemoteMediaCacheLimit(response)) {
+    // Caching buffers the whole file via blob() — refuse past the cap so the
+    // pull counts one failure and the track keeps streaming (PRD F-8).
+    void response.body?.cancel().catch(() => {});
+    throw new RemoteMediaTooLargeError(
+      responseContentLength(response) ?? 0,
+      REMOTE_MEDIA_CACHE_MAX_BYTES,
+    );
+  }
 
   const blob = await response.blob();
   const mime = response.headers.get("content-type") ?? blob.type ?? "application/octet-stream";

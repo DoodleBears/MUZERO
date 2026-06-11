@@ -1,5 +1,6 @@
 import type { TrackBrief } from "@/dj/dj-brief-schema";
 import { log } from "@/lib/logger";
+import { exceedsRemoteMediaCacheLimit } from "@/lib/media-size-limits";
 import { getAppFetch } from "@/lib/platform";
 import { type JobStatus, pollUntilComplete } from "./cloud-job";
 import {
@@ -158,6 +159,15 @@ export function createCloudMusicGenProvider(
     const fullUrl = url.startsWith("http") ? url : `${base}/${url.replace(/^\//, "")}`;
     const res = await fetchFn(fullUrl, { signal });
     if (!res.ok) throw new MusicGenError(`Audio download failed (${res.status})`, "cloud");
+    if (exceedsRemoteMediaCacheLimit(res)) {
+      // blob() buffers the whole response — a generated song should never be
+      // this big; refuse instead of risking an OOM (PRD F-8).
+      void res.body?.cancel().catch(() => {});
+      throw new MusicGenError(
+        `Generated audio is too large to buffer (${res.headers.get("content-length")} bytes)`,
+        "cloud",
+      );
+    }
     const blob = await res.blob();
     return { blob, mime: blob.type || "audio/mpeg" };
   }

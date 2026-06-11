@@ -61,6 +61,32 @@ describe("playback preload", () => {
     });
   });
 
+  it("skips warming media whose declared size is past the cache cap (PRD F-8)", async () => {
+    const track = makeTrack("trk_huge", {
+      kind: "video",
+      remoteMediaUrl: "https://r2.example.com/movie.mp4",
+    });
+    const blob = vi.fn(async () => new Blob(["x"], { type: "video/mp4" }));
+    const fetcher = vi.fn(
+      async () =>
+        ({
+          ok: true,
+          headers: new Headers({
+            "content-type": "video/mp4",
+            "content-length": String(500 * 1024 * 1024),
+          }),
+          blob,
+          body: null,
+        }) as unknown as Response,
+    );
+
+    await warmTrackMedia(track, { cacheMaxBytes: 1024, db, fetcher });
+
+    // Neither buffered into memory nor cached — playback streams via loadUrl.
+    expect(blob).not.toHaveBeenCalled();
+    await expect(getCachedRemotePlayback(track, db)).resolves.toBeFalsy();
+  });
+
   it("does not download remote media again when the playback cache is warm", async () => {
     const track = makeTrack("trk_remote_cached", {
       remoteMediaUrl: "https://r2.example.com/audio-b.mp3",
