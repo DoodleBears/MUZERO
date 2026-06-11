@@ -27,7 +27,7 @@
 > 🔄 **2026-06-11 — Phase 2 外壳重新设计（owner 定）**：放弃旧「FAB / 底部输入条 / Dock 1∕3 侧栏 / 全屏」四形态，改为**集成进 player-dock 上方工具行**的单一对话入口（详见 §5 重写）：
 > - **位置**：dock 卡片**上方的浮动工具行**，置于「切 tab 的 `NavFab` + 记忆 `DockMemoryToggle`」**左侧**，吃掉剩余空间。
 > - **三态**：**minimize**（只一个 icon）→ **normal**（full-rounded 圆角 chip 文字输入框，默认）→ **expand**（framer-motion `layoutId` 过渡成对话 widget）。
-> - **门控（硬性）**：**未配置 LLM API 且未配置 musicgen API 时，入口不可用、且 icon 根本不渲染**（单一纯函数 `canUseDjChat(settings)` 裁决，见 §5.1）。
+> - **门控（硬性，2026-06-12 放宽为 LLM-only）**：**未配置 LLM 时入口不可用、icon 根本不渲染**（`canUseDjChat(settings)`，见 §5.1）。音乐生成不再是前提（搜索/入库便宜，本地 LLM 可跑）；花钱的生成工具单独由 `canGenerateMusic` 门控。
 > - **Provider 复刻 ClipCombo**：§6 扩成「内置 preset + 用户动态自定义 provider（OpenAI-compatible baseURL，存 Dexie）+ 每 provider key + enabled grid + model 选择器」，逐项对照 ClipCombo `clip-llm-providers.ts` / `EditorSettingsPopover` / `clip-chat-model.ts`。
 >
 > 旧 `chat-launcher-fab` / `chat-input-bar` / `chat-dock` / `use-chat-breakpoint` 壳**作废重做**；**runtime（`src/chat/*`）+ 展示层（composer / turns / session-home / model-picker / queue-tray / empty / notification）+ 工具/会话/provider 后端全部保留**，只换宿主与状态机。
@@ -116,7 +116,7 @@ src/
 │   ├── dj-chat-sessions.ts               # Dexie session CRUD + 节流快照 persist + 标题派生
 │   ├── dj-chat-context-budget.ts          # 上下文预算/压缩（Phase 6，纯函数）
 │   ├── dj-chat-tokens.ts                  # 字符≈token 估算（纯函数）
-│   └── dj-chat-availability.ts            # 【新】canUseDjChat / hasUsableLlm / hasUsableMusicgen 门控（纯函数 + TDD）
+│   └── dj-chat-availability.ts            # 【新】canUseDjChat(LLM-only) / hasUsableLlm / canGenerateMusic / hasEnabledStreamSources 门控（纯函数 + TDD）
 ├── stores/
 │   └── chat-store.ts                      # 新：三形态 mode + 当前 session id + 轻量 runtime meta（Zustand）
 ├── components/chat/                       # 新：UI
@@ -217,7 +217,7 @@ interface ChatUiState {
 }
 ```
 
-> **可见性是派生、不入 store**：入口是否渲染由 `canUseDjChat(settings)`（§5.1）裁决——**未配置 LLM + musicgen 时无论 `mode` 为何都不渲染**（连 icon 都不出）。`mode` 只在「可用」时决定 icon/chip/expanded 形态。
+> **可见性是派生、不入 store**：入口是否渲染由 `canUseDjChat(settings)`（§5.1，**LLM-only**）裁决——**没配 LLM 时无论 `mode` 为何都不渲染**（连 icon 都不出）。`mode` 只在「可用」时决定 icon/chip/expanded 形态。
 > 这是**纯 UI 偏好**，放 localStorage 合规（不是行为门控 flag——硬规则 #3 针对隐藏后端开关；可见的形态切换 + 偏好持久化 OK，与 theme/locale/primary 同模式）。
 > **`activeSessionId`**：chat-store 持 live 值；持久 resume 指针镜像到 `AppSettings.lastChatSessionId?`（决议 Q1），boot 回填——与 ClipCombo「nav store(live)+Dexie(durable)」双写、MUZERO 既有 theme/primary 镜像同构。`mode` 不入 Dexie。旧 `dockSide` 字段移除——入口已锚定 dock 工具行、widget 自该处展开。
 
@@ -255,13 +255,18 @@ interface ChatUiState {
 | `queue_add` | `muzero.queue.add` | 写·免费 | `playNext` / `addToQueue`（曲或整张歌单加入播放列表，含「下一手」）|
 | `queue_edit` | `muzero.queue.edit` | 写·免费 | `removeFromQueue` / `reorderQueue` / `setRepeat`（union op）|
 | `add_memory` | `muzero.memory.add` | 写·免费 | `addMemory(trackId,{note,photo?})`；**now-playing 感知**：默认作用于「正在播放的曲」，让你**听歌时对话加记忆**（"给这首记一句『写代码神器』、加 #雨天"）。一曲多条（见数据模型 PRD）|
-| `dj_propose_briefs` | `muzero.dj.propose_briefs` | 读（产出待确认）| 借对话上下文起草 `TrackBrief[]` + `describeBrief` chips，**等确认**（C 方案）|
-| `dj_generate_tracks` | `muzero.dj.generate_tracks` | **写·花钱 ✅审批** | 校验 `trackBriefSchema` → `createPendingTrack` + 写当前歌单 + **`playNext` 续在下一手**；物化由 store `pump` 自动 |
+| `online_search_tracks` | `muzero.online.search_tracks` | 读·**免费** | **🟢 仅当启用任一在线源时插入**（`hasEnabledStreamSources`）。搜 YouTube / Bilibili / NetEase（`resolveEnabledStreamSources` + 各 `source.search()`，并发、单源失败不影响其余）→ 返回 `StreamSearchHit[]`。**便宜**——生成贵、搜索几乎免费，本地 LLM（LM Studio）也能跑 |
+| `online_add_tracks` | `muzero.online.add_tracks` | 写·免费 | **🟢 仅当启用在线源时插入**。把上一步 hits **入库**到指定歌单（`addHitsToSet`，按 source+externalId 去重、**不自动播放**、可撤），不审批 |
+| `dj_propose_briefs` | `muzero.dj.propose_briefs` | 读（产出待确认）| **🟡 仅当 `canGenerateMusic` 时插入**。借对话上下文起草 `TrackBrief[]` + `describeBrief` chips，**等确认**（C 方案）|
+| `dj_generate_tracks` | `muzero.dj.generate_tracks` | **写·花钱 ✅审批** | **🟡 仅当 `canGenerateMusic` 时插入**。校验 `trackBriefSchema` → `createPendingTrack` + 写当前歌单 + **`playNext` 续在下一手**；物化由 store `pump` 自动 |
 | `suggest_next_prompts` | （UI-only） | 读 | 非 mutating、无审批、返回 `{accepted,count}` |
 
 **约定（硬性）**：
-- **C 方案 propose→确认→generate**：`dj_propose_briefs` 出提案 → 用户确认 → `dj_generate_tracks` 花钱生成。提供**「无审批模式」开关**（auto-accept，不用每次点 suggest，自动 accept）——即 HITL 的 `auto`（§4.3）。
-- **审批 = 成本驱动**：只有 `dj_generate_tracks`（Mureka $0.045/首）`needsApproval:true`；`set_*`/`queue_*`/`add_memory` 免费可撤 → 不审批，体验顺。
+- **工具集按配置裁剪（`createDjChatTools({includeGenerate, includeOnline})`，agent 每轮按 settings 计算）**：
+  - **生成贵 → 默认关**：`dj_propose_briefs` / `dj_generate_tracks` **仅当 `canGenerateMusic(settings)`**（用户在 Settings 开启 AI 生成 **且** 配好 cloud BYOK）才插入。未配置/未开启 → 这两个工具根本不进 tool set（模型不会去花钱）。
+  - **搜索便宜 → 有源就给**：`online_search_tracks` / `online_add_tracks` **仅当 `hasEnabledStreamSources(settings)`**（启用了 YT/B站/网易云任一）才插入。这是「不生成也能用」的核心路径——本地 LLM 即可策展真实歌曲、零生成成本。
+- **C 方案 propose→确认→generate**：`dj_propose_briefs` 出提案 → 用户确认 → `dj_generate_tracks` 花钱生成。提供**「无审批模式」开关**（auto-accept）——即 HITL 的 `auto`（§4.3）。
+- **审批 = 成本驱动**：只有 `dj_generate_tracks`（Mureka $0.045/首）`needsApproval:true`；`set_*`/`queue_*`/`add_memory`/`online_*` 免费可撤 → 不审批，体验顺。
 - **now-playing 每轮注入 system**：当前曲（title/brief/tags + 该曲已有记忆摘要）+ 播放列表 upcoming 摘要 + 活跃歌单 → 注入 system，让「这首」「下一首」有所指；`now_playing_get` 作补充读工具。
 - **domain-first 命名** + 每个 description 写清名词边界（"歌单 Set ≠ 播放列表 Queue ≠ 记忆 Memory"），测试在用错 domain 名词时失败。
 - **写工具统一返回 `AgentWriteResult`** `{status,commandId,summary,diff,warnings}`；走现有仓库 mutation（人类同款、可撤）。
@@ -295,10 +300,11 @@ interface ChatUiState {
 
 chat 入口落在**记忆 icon + 切 tab icon 的左边**、占该行剩余宽度（行 `w-fit self-end` → `w-full`，右两枚 icon `shrink-0`）；`mode==="icon"` 时入口收成 `w-fit` 圆 icon、左侧恢复 click-through。
 
-**门控（硬性，requirement #1）**：单一纯函数 **`canUseDjChat(settings)`**（[`src/chat/dj-chat-availability.ts`](../../../src/chat/dj-chat-availability.ts)，TDD 穷举）= `hasUsableLlm(settings) && hasUsableMusicgen(settings)`：
-- `hasUsableLlm` —— 当前/默认 LLM provider 有可用 key（或显式 keyless-local 的 custom endpoint）；LLM 是 BYOK 无离线兜底 → 没 key 即不可用。
-- `hasUsableMusicgen` —— 选定 music provider 可用（`mock` 永真；`cloud`/Mureka 需 key）。
-- **`false` → 整个入口（连 icon）不渲染**（不是 disabled、是不存在），工具行恢复旧 `[memory][nav]` 右对齐布局。配好缺项后即出现。判定走 `useSettings()` 派生 selector，**别散落 `if(provider===)`**（硬规则 #5/#6）。
+**门控（硬性，2026-06-12 放宽）**：三个纯函数（[`src/chat/dj-chat-availability.ts`](../../../src/chat/dj-chat-availability.ts)，TDD 穷举）：
+- **`canUseDjChat(settings) = hasUsableLlm(settings)`（仅 LLM！）** —— 入口是否渲染。**音乐生成不再是前提**：搜索 + 入库（YT/B站/网易云）便宜、本地 LLM(LM Studio)即可跑，没配生成也能用。`hasUsableLlm` = 任一 provider preset 有 key（或 keyless-local custom endpoint）。LLM 是 BYOK 无离线兜底 → 没 key 即整入口（连 icon）不渲染（不是 disabled、是不存在），工具行恢复 `[memory][nav]` 右对齐。
+- **`canGenerateMusic(settings)`** —— 是否给 agent 插入花钱的生成工具 = `aiDjGenerationEnabled`（Settings 开关，**默认关**）**且** cloud BYOK 配好（key + 端点；custom preset 还需 baseUrl）。**无离线/本地生成选项。**
+- **`hasEnabledStreamSources(settings)`** —— 是否插入在线搜索/入库工具 = 启用了任一 `streamSources[id].enabled`。
+- 判定全走 `useSettings()` 派生 selector，**别散落 `if(provider===)`**（硬规则 #5/#6）。
 
 ### 5.1 形态 1：minimize（只一个 icon）
 
@@ -622,6 +628,8 @@ chat 入口落在**记忆 icon + 切 tab icon 的左边**、占该行剩余宽�
 | 2026-06-11 | Claude | **Phase 5 + Phase 6 全部落地（独立 worktree `feat/chat-llm-providers`，5 个原子 commit）**。迁出 main 直接开发改进 worktree 隔离（避免与并行 WIP 串）。**CHAT-5a** custom-provider 数据层（Dexie v21 `llmCustomProviders` + repo + `normalize`/`toPreset` + `LlmProviderPresetId` 拓宽 `custom:${uuid}` + `modelsByPresetId`，16 测）；**5b** `resolveDjModel` keyless 分支（`normalizeOpenAiCompatibleBaseUrl` 补 `/v1` + `fetchWithoutAuthorization` 剥 auth 头，transport 懒读 custom）；**5c** Settings `llm-provider-settings.tsx`（provider grid + key 状态 + 内联 ApiKeyField + 自定义编辑 + 默认模型 combobox，替换旧双 provider 表单，5 测，20 i18n 键 ×4）；**5d** expanded widget header per-session ChatModelPicker（`setChatSessionLlm` 只存 presetId+model 不存 key）。**CHAT-6k** auto-dispatch（纯函 `shouldAutoDispatchQueued` 5 测 + ephemeral `autoDispatchBySessionId` 重载默认关 + ChatPanel 驱动）；**6l** 空态 onboarding（`ChatComposer` 受控化 + ChatPanel `emptyState` + chips 注入 composer + `onUploadLibrary`→切 gallery，8 i18n 键）；**6m** 上下文预算拦截（`ChatContextBudgetNotice` + block 时 disable composer + 压缩前移 `contextStartIndex` 旧消息仍可见，3 i18n 键，组件测）。**6 phase 全 ✅**；余 store-pump E2E（Phase 3）仍 blocked 于 player-store 并行 WIP。注：branch base 继承 main 的 `chat-model-picker`/`virtual-track-list` 2 个既有测试失败（stash 验证非本分支引入）。 |
 | 2026-06-11 | Claude | **CHAT-5e 动态 model 目录（超出 ClipCombo：通用化到所有 OpenAI-compatible provider）**，2 个原子 commit。回应 owner #2「OpenRouter 直接走 API endpoint 拉取过滤模型」：**5e1** `src/ai/model-catalog.ts` 纯模块——`modelsEndpointFor`（OpenRouter/OpenAI/Groq/DeepSeek/Gemini + 本地 ollama/vLLM/LM Studio → `{baseURL}/v1/models`；Anthropic→null）+ `parseModelCatalog`（OpenRouter rich name/context/pricing + 通用 `{data:[{id}]}`，去重）+ `fetchModelCatalog`（模块缓存 5min TTL + in-flight dedup + bearer key，fetch/now 注入，9 测）；**5e2** `use-model-catalog` hook（`getAppFetch` CORS-safe + refresh 清缓存）+ `model-catalog-combobox.tsx`（shadcn Popover+Command：hardcoded ∪ live 目录去重 + **自由输入自定义 model id**「Use '<q>'」+ loading/refresh）；接进 `llm-provider-settings`（替换旧 default-model picker，按当前 provider 拉目录、选中即设 DJ 默认 + `modelsByPresetId`）；i18n `settings.llmModel*` 8 键 ×4；组件测 merge+live+自定义 id（2 测）。**至此三种 model 来源齐备**：hardcoded preset / 自定义 model id / **API 拉取过滤**——全走同一 combobox。 |
 | 2026-06-11 | Claude | **CHAT-5f provider 品牌图标 + 图标化 combobox（owner：对齐 ClipCombo 的真实 LLM icon）**，2 个原子 commit。**5f1** `provider-brand-icons.tsx`——Claude/Gemini/DeepSeek/OpenRouter 路径内联自 simple-icons（**CC0-1.0**，提取后移除该 dep，零运行时依赖）+ OpenAI 自研规范 path（simple-icons 已下架）；`getProviderBrandIcon(id)` 返回 `currentColor` 单色 glyph（anthropic→claude 别名），Groq/动态 custom/未知 → 通用 `Cpu` 兜底（恒可渲染）。**评估并否决 `@lobehub/icons`**（依赖 `antd-style` + peer `antd`，与 Tailwind+Base UI 不符）。**5f2** provider 选择由 grid 改 **`provider-combobox.tsx`**（Popover+Command：每 item 品牌 icon + label + key 状态 ready/optional/missing，trigger 显示选中 provider icon）；给 `Command` 原语加可选 `icon`/`description` slot（向后兼容）；`ModelCatalogCombobox` trigger + `ChatModelPicker` item/trigger 同款 provider icon。i18n `settings.llmProviderSearch` ×4；改写 `llm-provider-settings.test`（combobox 交互）+ 修 base 既有 `chat-model-picker.test`（input role 是 combobox 非 searchbox）。88 测全绿、tsc 清。 |
+| 2026-06-12 | Claude | **CHAT-5g 模型能力 + 切换 bug**（已合 main）：**5g1** 修 model 切换「没反应」（`llmModelForPreset` 之前对非 custom preset 只认 hardcoded 列表 → 实时目录选的 model 被打回默认；改为无条件信任 remembered）；**5g2** `LlmModelPreset` 加 `supportsVision/Audio/Tools` + `parseModelCatalog` 读 OpenRouter `architecture.input_modalities`/`supported_parameters`；**5g3** `ModelCapabilityBadges`（lucide：Eye/AudioLines/Wrench/Ruler+128K/Coins+$in/$out，title tooltip）挂 model combobox item + trigger。|
+| 2026-06-12 | Claude | **CHAT-5h 在线搜索入库 tool + 生成默认关 + minimize 修复**（owner，5 个原子 commit，独立 worktree）。**① UI**：chip→icon 最小化原用共享 `layoutId` morph 两个不同尺寸盒子 → 整体拉伸变形；改单一 `overflow-hidden` 容器 + `layout` 动画，Sparkles 钉左、输入+按钮向右裁剪收起（左 Sparkles 钮兼任最小化/恢复）。**② 门控放宽**：`canUseDjChat` 改 **LLM-only**（生成不再是前提——搜索便宜、本地 LLM 可跑）；新 `AppSettings.aiDjGenerationEnabled`（**默认关**）+ `canGenerateMusic`（开关 + cloud 配好）+ `hasEnabledStreamSources`。**③ 工具**：新增 `online_search_tracks`（搜 YT/B站/网易云，读·免费）+ `online_add_tracks`（`addHitsToSet` 入库、去重、不自动播、不审批）；`createDjChatTools` 按 `includeGenerate`/`includeOnline` 裁剪，agent 每轮按 settings 计算（未配生成 → 不插入花钱工具；有在线源 → 插入搜索工具）。**④ Settings**：音乐生成区改「启用 AI 音乐生成」勾选（默认关），开启才显示 cloud BYOK 配置；**移除 mock/离线本地选项**。重写 §4.2 工具表 + §5.1 门控 + i18n ×4。176 测全绿、tsc 清。|
 
 ---
 
