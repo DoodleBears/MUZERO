@@ -1,9 +1,12 @@
 import { useEffect } from "react";
+import { useTraceArchiveRecorder } from "@/hooks/use-trace-archive-recorder";
 import { subscribeElectronDiagnostics } from "@/lib/desktop/electron";
 import { traceDiagnosticEvent, traceEvent } from "@/lib/trace";
 import { usePlayerStore } from "@/stores/player-store";
 
 export function TraceRecorder() {
+  useTraceArchiveRecorder();
+
   useEffect(() => {
     traceEvent("info", "app", "trace recorder mounted", {
       userAgent: navigator.userAgent,

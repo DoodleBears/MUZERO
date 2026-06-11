@@ -16,7 +16,7 @@
 | 3 | Playback / Stream Trace Migration | In Progress | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | Settings Trace Workbench | Completed | [Phase 4 Checklist](#phase-4-checklist) |
 | 5 | Electron Main Process Bridge | Completed | [Phase 5 Checklist](#phase-5-checklist) |
-| 6 | Local Trace Archive / File Export | Pending | [Phase 6 Checklist](#phase-6-checklist) |
+| 6 | Local Trace Archive / File Export | Completed | [Phase 6 Checklist](#phase-6-checklist) |
 
 > Status Legend: Completed | In Progress | Pending
 
@@ -703,20 +703,20 @@ All user-facing strings must go through i18n catalogs in `src/i18n/locales/{en,z
 **Goal:** Support longer repro sessions and shareable local diagnostic files without making DevTools console the support path.
 
 **Tasks:**
-- [ ] Decide V1 archive backend: IndexedDB ring, app-data JSONL files, or both.
-- [ ] Add visible Settings controls for archive enablement, retained size, export, open location, and clear archive.
-- [ ] Implement bounded rotation by size and age.
-- [ ] Add redacted diagnostics bundle export.
-- [ ] Add app version / release id / shell / platform metadata to exported bundle.
-- [ ] Add tests for rotation, clear, export, redaction, and write failure fallback.
+- [x] Decide V1 archive backend: IndexedDB ring, app-data JSONL files, or both.
+- [x] Add visible Settings controls for archive enablement, retained size, export, and clear archive.
+- [x] Implement bounded rotation by size and age.
+- [x] Add redacted diagnostics bundle export.
+- [x] Add app version / release id / shell / platform metadata to exported bundle.
+- [x] Add tests for rotation, clear, export, redaction, and write failure fallback.
 
 ### Phase 6 Checklist
 
-- [ ] User can export a redacted trace file from Settings without opening DevTools.
-- [ ] A reproduced issue from before opening Settings can still be found if persistent archive was enabled.
-- [ ] Archive disk usage is bounded and visible.
-- [ ] Clear Trace removes active trace and archived trace.
-- [ ] Archive write failure is recorded as trace and does not affect playback.
+- [x] User can export a redacted trace file from Settings without opening DevTools.
+- [x] A reproduced issue from before opening Settings can still be found if persistent archive was enabled.
+- [x] Archive disk usage is bounded and visible.
+- [x] Clear Trace removes active trace and archived trace.
+- [x] Archive write failure is recorded as trace and does not affect playback.
 
 ---
 
@@ -839,3 +839,4 @@ Given a stream source requires headers/cookies/login or returns no playable URL:
 | 2026-06-11 | Codex | Advanced Phase 3a with safe TrackRow play breadcrumbs plus structured stream resolve/cache trace events and tests |
 | 2026-06-11 | Codex | Completed Phase 4 with Settings Trace filters, copy-visible/all, repro-step timeline, i18n, and component tests |
 | 2026-06-11 | Codex | Completed Phase 5 with Electron main diagnostics buffering, preload bridge, renderer trace ingestion, and redacted media proxy events |
+| 2026-06-11 | Codex | Completed Phase 6 with IndexedDB trace archive, visible enable/export controls, bounded rotation, JSONL export metadata, and archive tests |

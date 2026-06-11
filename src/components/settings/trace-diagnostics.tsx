@@ -1,17 +1,28 @@
-import { ClipboardCopy } from "lucide-react";
-import { useMemo, useState } from "react";
+import { ClipboardCopy, Download } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { DeleteIcon } from "@/components/ui/delete";
 import { Input } from "@/components/ui/input";
+import { APP_VERSION, GIT_SHA } from "@/lib/app-version";
 import {
   type DiagnosticCategory,
   type DiagnosticErrorKind,
   type DiagnosticLevel,
   matchesDiagnosticFilter,
 } from "@/lib/diagnostics";
+import { saveTextFile } from "@/lib/save-text-file";
 import { clearTrace, formatTraceEntries, type TraceEntry, useTraceEntries } from "@/lib/trace";
+import {
+  clearTraceArchive,
+  createTraceArchive,
+  exportTraceArchiveJsonl,
+  isTraceArchiveEnabled,
+  readTraceArchiveEntries,
+  setTraceArchiveEnabled,
+  subscribeTraceArchiveEnabled,
+} from "@/lib/trace-archive";
 
 const LEVEL_OPTIONS = ["all", "debug", "info", "warn", "error"] as const;
 const CATEGORY_OPTIONS = [
@@ -40,21 +51,27 @@ type ErrorKindOption = (typeof ERROR_KIND_OPTIONS)[number];
 export function TraceDiagnostics() {
   const { t } = useTranslation();
   const entries = useTraceEntries();
-  const [copied, setCopied] = useState<"visible" | "current" | "all" | null>(null);
+  const [copied, setCopied] = useState<"visible" | "current" | "all" | "archive" | null>(null);
   const [level, setLevel] = useState<LevelOption>("all");
   const [category, setCategory] = useState<CategoryOption>("all");
   const [errorKind, setErrorKind] = useState<ErrorKindOption>("all");
   const [query, setQuery] = useState("");
+  const [archiveEnabled, setArchiveEnabledState] = useState(isTraceArchiveEnabled);
+  const [archiveCount, setArchiveCount] = useState(0);
+  const [archiveBusy, setArchiveBusy] = useState(false);
   const visible = useMemo(
     () =>
       entries
         .filter((entry) =>
-          matchesDiagnosticFilter(entry, {
-            levels: level === "all" ? undefined : [level as DiagnosticLevel],
-            categories: category === "all" ? undefined : [category as DiagnosticCategory],
-            errorKinds: errorKind === "all" ? undefined : [errorKind as DiagnosticErrorKind],
-            text: query.trim() || undefined,
-          }),
+          matchesDiagnosticFilter(
+            { ...entry, event: entry.event ?? "" },
+            {
+              levels: level === "all" ? undefined : [level as DiagnosticLevel],
+              categories: category === "all" ? undefined : [category as DiagnosticCategory],
+              errorKinds: errorKind === "all" ? undefined : [errorKind as DiagnosticErrorKind],
+              text: query.trim() || undefined,
+            },
+          ),
         )
         .slice(-120),
     [entries, level, category, errorKind, query],
@@ -70,12 +87,48 @@ export function TraceDiagnostics() {
   const currentText = formatTraceEntries(currentTraceEntries);
   const allText = formatTraceEntries(entries);
 
+  useEffect(() => subscribeTraceArchiveEnabled(setArchiveEnabledState), []);
+
+  useEffect(() => {
+    let alive = true;
+    void refreshArchiveCount().then((count) => {
+      if (alive) setArchiveCount(count);
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
   async function copyTrace(kind: "visible" | "current" | "all") {
     if (!navigator.clipboard) return;
     const text = kind === "visible" ? visibleText : kind === "current" ? currentText : allText;
     await navigator.clipboard.writeText(text);
     setCopied(kind);
     window.setTimeout(() => setCopied(null), 1600);
+  }
+
+  async function exportArchive() {
+    setArchiveBusy(true);
+    try {
+      const archive = createTraceArchive();
+      const text = await exportTraceArchiveJsonl(archive, {
+        appVersion: APP_VERSION,
+        gitSha: GIT_SHA,
+        platform: navigator.userAgent,
+      });
+      await saveTextFile(traceExportFileName(), "application/x-ndjson", text);
+      setArchiveCount((await readTraceArchiveEntries(archive)).length);
+      setCopied("archive");
+      window.setTimeout(() => setCopied(null), 1600);
+    } finally {
+      setArchiveBusy(false);
+    }
+  }
+
+  async function clearActiveAndArchive() {
+    clearTrace();
+    await clearTraceArchive();
+    setArchiveCount(0);
   }
 
   return (
@@ -120,13 +173,45 @@ export function TraceDiagnostics() {
             <ClipboardCopy />
             {copied === "all" ? t("settings.traceCopied") : t("settings.traceCopyAll")}
           </Button>
-          <Button variant="ghost" size="sm" disabled={entries.length === 0} onClick={clearTrace}>
+          <Button
+            variant="ghost"
+            size="sm"
+            disabled={entries.length === 0 && archiveCount === 0}
+            onClick={() => void clearActiveAndArchive()}
+          >
             <DeleteIcon size={16} />
             {t("settings.traceClear")}
           </Button>
         </div>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
+        <div className="flex flex-col gap-2 rounded-md border border-border p-3 md:flex-row md:items-center md:justify-between">
+          <label className="flex items-start gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={archiveEnabled}
+              onChange={(event) => setTraceArchiveEnabled(event.currentTarget.checked)}
+              className="mt-1"
+            />
+            <span className="flex flex-col gap-1">
+              <span className="font-medium text-foreground">{t("settings.traceArchive")}</span>
+              <span className="text-muted-foreground text-xs">
+                {t("settings.traceArchiveHint", { count: archiveCount })}
+              </span>
+            </span>
+          </label>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={archiveBusy || archiveCount === 0}
+            onClick={() => void exportArchive()}
+          >
+            <Download />
+            {copied === "archive"
+              ? t("settings.traceArchiveExported")
+              : t("settings.traceArchiveExport")}
+          </Button>
+        </div>
         <div className="grid gap-2 md:grid-cols-[repeat(3,minmax(0,1fr))_minmax(180px,1.4fr)]">
           <TraceSelect
             label={t("settings.traceLevel")}
@@ -174,6 +259,15 @@ export function TraceDiagnostics() {
       </CardContent>
     </Card>
   );
+}
+
+async function refreshArchiveCount(): Promise<number> {
+  return (await readTraceArchiveEntries()).length;
+}
+
+function traceExportFileName(): string {
+  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+  return `muzero-trace-${stamp}.jsonl`;
 }
 
 function TraceSelect({

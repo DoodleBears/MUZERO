@@ -1,7 +1,18 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import "fake-indexeddb/auto";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { saveTextFile } from "@/lib/save-text-file";
 import { clearTrace, traceDiagnosticEvent } from "@/lib/trace";
+import {
+  appendTraceArchiveEntries,
+  clearTraceArchive,
+  createTraceArchive,
+} from "@/lib/trace-archive";
 import { TraceDiagnostics } from "./trace-diagnostics";
+
+vi.mock("@/lib/save-text-file", () => ({
+  saveTextFile: vi.fn(async () => undefined),
+}));
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
@@ -11,8 +22,10 @@ vi.mock("react-i18next", () => ({
 }));
 
 describe("TraceDiagnostics", () => {
-  afterEach(() => {
+  afterEach(async () => {
     clearTrace();
+    await clearTraceArchive();
+    window.localStorage.clear();
     vi.restoreAllMocks();
   });
 
@@ -54,7 +67,7 @@ describe("TraceDiagnostics", () => {
   });
 
   it("copies visible entries rather than always copying the full buffer", async () => {
-    const writeText = vi.fn(async () => undefined);
+    const writeText = vi.fn(async (_text: string) => undefined);
     Object.assign(navigator, { clipboard: { writeText } });
     traceDiagnosticEvent("info", "ui.action", "play.click", "track play clicked", {
       category: "user-action",
@@ -72,16 +85,16 @@ describe("TraceDiagnostics", () => {
     fireEvent.click(screen.getByRole("button", { name: /settings.traceCopyVisible/ }));
 
     expect(writeText).toHaveBeenCalledTimes(1);
-    expect(writeText.mock.calls[0][0]).toContain("resolve.failed");
-    expect(writeText.mock.calls[0][0]).not.toContain("play.click");
+    expect(writeText.mock.calls[0]?.[0]).toContain("resolve.failed");
+    expect(writeText.mock.calls[0]?.[0]).not.toContain("play.click");
 
     fireEvent.click(screen.getByRole("button", { name: /settings.traceCopyAll/ }));
-    expect(writeText.mock.calls[1][0]).toContain("resolve.failed");
-    expect(writeText.mock.calls[1][0]).toContain("play.click");
+    expect(writeText.mock.calls[1]?.[0]).toContain("resolve.failed");
+    expect(writeText.mock.calls[1]?.[0]).toContain("play.click");
   });
 
   it("copies the latest traceId group as the current playback attempt", async () => {
-    const writeText = vi.fn(async () => undefined);
+    const writeText = vi.fn(async (_text: string) => undefined);
     Object.assign(navigator, { clipboard: { writeText } });
     traceDiagnosticEvent("error", "stream.resolve", "resolve.failed", "old failed", {
       category: "stream",
@@ -103,9 +116,9 @@ describe("TraceDiagnostics", () => {
     fireEvent.click(screen.getByRole("button", { name: /settings.traceCopyCurrent/ }));
 
     expect(writeText).toHaveBeenCalledTimes(1);
-    expect(writeText.mock.calls[0][0]).toContain("ply_new");
-    expect(writeText.mock.calls[0][0]).toContain("new media failed");
-    expect(writeText.mock.calls[0][0]).not.toContain("ply_old");
+    expect(writeText.mock.calls[0]?.[0]).toContain("ply_new");
+    expect(writeText.mock.calls[0]?.[0]).toContain("new media failed");
+    expect(writeText.mock.calls[0]?.[0]).not.toContain("ply_old");
   });
 
   it("clears active trace entries", () => {
@@ -121,5 +134,36 @@ describe("TraceDiagnostics", () => {
     expect(within(logPanel.parentElement as HTMLElement).getByText("settings.traceEmpty")).toBe(
       logPanel,
     );
+  });
+
+  it("exports archived trace entries as a local file", async () => {
+    await appendTraceArchiveEntries(
+      [
+        {
+          id: 1,
+          at: 1_000,
+          level: "error",
+          scope: "stream.proxy",
+          event: "request.failed",
+          message: "media proxy response",
+          context: { category: "network", errorKind: "http_status", httpStatus: 403 },
+        },
+      ],
+      createTraceArchive({ now: () => 1_000 }),
+    );
+
+    render(<TraceDiagnostics />);
+
+    const exportButton = await screen.findByRole("button", {
+      name: /settings.traceArchiveExport/,
+    });
+    await waitFor(() => expect(exportButton).not.toBeDisabled());
+    fireEvent.click(exportButton);
+
+    await waitFor(() => expect(saveTextFile).toHaveBeenCalledTimes(1));
+    const [, mime, text] = vi.mocked(saveTextFile).mock.calls[0] ?? [];
+    expect(mime).toBe("application/x-ndjson");
+    expect(text).toContain("media proxy response");
+    expect(text).toContain('"httpStatus":403');
   });
 });
