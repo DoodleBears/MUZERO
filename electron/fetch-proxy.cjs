@@ -28,6 +28,14 @@ async function handleMuzfetch(request) {
       // images inject none, and the CDNs serve with no Referer).
       headers.delete("referer");
       headers.delete("origin");
+      // The <audio crossOrigin> element's cors-intent + client-hint headers
+      // (Sec-Fetch-*, Sec-Ch-Ua*) leak the browser context to the CDN. node/undici
+      // never sends them and googlevideo 403s a cors-mode media GET — so strip them
+      // so the proxied request looks like a plain media fetch (harmless for the
+      // bili/netease CDNs, which ignore them).
+      for (const name of [...headers.keys()]) {
+        if (name.startsWith("sec-fetch-") || name.startsWith("sec-ch-ua")) headers.delete(name);
+      }
       for (const [name, value] of reqUrl.searchParams) {
         if (name.startsWith("__mzh_")) headers.set(name.slice("__mzh_".length), value);
       }
@@ -69,6 +77,14 @@ async function handleMuzfetch(request) {
   }
 
   const res = await net.fetch(target, init);
+  if (res.status === 403 && /(^|\.)googlevideo\.com$/i.test(new URL(target).hostname)) {
+    // Diagnostic for the stubborn YouTube 403 — what did we actually send?
+    console.error("[muzfetch] googlevideo 403", {
+      cred: credentials,
+      cookie: headers.has("cookie"),
+      secFetch: [...headers.keys()].filter((n) => n.startsWith("sec-")),
+    });
+  }
   // Re-emit with permissive CORS so the privileged-scheme renderer can read it,
   // keeping the body a live stream (no buffering).
   const outHeaders = new Headers(res.headers);
