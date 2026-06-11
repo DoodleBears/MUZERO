@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "type": "module",
   "main": "electron/main.cjs",
-  "description": "MUZERO — local-first AI DJ music player. An LLM writes prompts, calls a music-generation API, and endlessly extends your playlist. Tauri desktop + mobile, no backend, no cloud.",
+  "description": "MUZERO — your private, local-first music museum. Sync & play MV and music across every device, with friends. No account, no cloud; everything lives on your device. Electron desktop + Tauri mobile.",
   "scripts": {
     "prepare": "lefthook install || true",
     "dev": "vite",

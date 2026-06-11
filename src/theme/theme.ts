@@ -23,6 +23,16 @@ const THEME_COLOR: Record<ResolvedTheme, string> = {
   dark: "#09090b",
 };
 
+/**
+ * Favicon per resolved scheme: the dark tile (light "MU ZERO" text) reads on a
+ * dark tab bar, the light tile on a light one. Kept in sync with the pre-paint
+ * swap in index.html so the tab icon tracks the live theme.
+ */
+const FAVICON: Record<ResolvedTheme, string> = {
+  light: "/muzero-logo-light.png",
+  dark: "/muzero-logo-dark.png",
+};
+
 export const themes: Array<{ value: Theme; labelKey: `settings.theme${Capitalize<Theme>}` }> = [
   { value: "system", labelKey: "settings.themeSystem" },
   { value: "light", labelKey: "settings.themeLight" },
@@ -59,6 +69,7 @@ export function applyTheme(theme: Theme): void {
   document
     .querySelector('meta[name="theme-color"]')
     ?.setAttribute("content", THEME_COLOR[resolved]);
+  document.getElementById("favicon")?.setAttribute("href", FAVICON[resolved]);
 }
 
 /** Persist the chosen theme and apply it immediately. */

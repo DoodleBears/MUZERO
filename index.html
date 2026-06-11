@@ -2,7 +2,10 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/muzero.svg" />
+    <!-- Theme-aware favicon: dark tile (light text) for dark UI, light tile for
+         light UI. The boot script below swaps href before paint; applyTheme()
+         (src/theme/theme.ts) keeps it in sync on theme / OS-preference changes. -->
+    <link rel="icon" id="favicon" type="image/png" href="/muzero-logo-dark.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <meta name="theme-color" content="#09090b" />
     <!-- External album art (e.g. bilibili i*.hdslb.com) blocks a foreign Referer but
@@ -10,7 +13,39 @@
          process (muzfetch), so dropping the document referrer is safe and lets every
          third-party cover <img>/Image() load succeed (stage, background, rows). -->
     <meta name="referrer" content="no-referrer" />
-    <title>MUZERO — AI DJ</title>
+
+    <!-- SEO / social. Positioning: a private, local-first music museum you
+         sync & play across every device, with friends. Canonical / og:url /
+         og:image use the mu0.app domain (muzero.app was unavailable — see the
+         release-pipeline PRD, Q5; matches the assets.mu0.app feed). -->
+    <title>MUZERO — Your Private Music Museum</title>
+    <meta
+      name="description"
+      content="MUZERO is your private music museum: sync & play MV and music across every device, with friends. Local-first — no account, no cloud, everything stays on your device."
+    />
+    <meta name="application-name" content="MUZERO" />
+    <meta name="apple-mobile-web-app-title" content="MUZERO" />
+    <link rel="canonical" href="https://mu0.app/" />
+
+    <!-- Open Graph -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="MUZERO" />
+    <meta property="og:title" content="MUZERO — Your Private Music Museum" />
+    <meta
+      property="og:description"
+      content="Sync & play MV and music across every device, with friends. Local-first — no account, no cloud."
+    />
+    <meta property="og:url" content="https://mu0.app/" />
+    <meta property="og:image" content="https://mu0.app/muzero-logo-dark.png" />
+
+    <!-- Twitter (square logo → summary card) -->
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content="MUZERO — Your Private Music Museum" />
+    <meta
+      name="twitter:description"
+      content="Sync & play MV and music across every device, with friends. Local-first — no account, no cloud."
+    />
+    <meta name="twitter:image" content="https://mu0.app/muzero-logo-dark.png" />
     <!-- Apply the saved theme + UI font before first paint to avoid a flash.
          Mirrors src/theme/theme.ts + src/theme/font.ts; localStorage is the source of truth. -->
     <script>
@@ -21,6 +56,8 @@
             t === "dark" ||
             (t === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches);
           document.documentElement.classList.toggle("dark", dark);
+          var icon = document.getElementById("favicon");
+          if (icon) icon.href = dark ? "/muzero-logo-dark.png" : "/muzero-logo-light.png";
           var f = localStorage.getItem("muzero-font");
           if (f) document.documentElement.style.setProperty("--app-font", f);
         } catch (e) {}
