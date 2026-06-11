@@ -383,7 +383,8 @@
     "blendAdd": "Add",
     "blendMultiply": "Multiply",
     "blendOverlay": "Overlay",
-    "blendSoftLight": "Soft light"
+    "blendSoftLight": "Soft light",
+    "tab": "Flow"
   },
   "visualizer": {
     "title": "Visualizer",

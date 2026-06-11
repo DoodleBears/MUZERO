@@ -34,7 +34,7 @@ import { VisualizerHost } from "@/visualizer/host";
  * the no-cover fallback), and tune motion / dim / opacity. Saves immediately
  * (appearance-style). All flow values resolve through `resolveFlowConfig`.
  */
-export function FlowSettings() {
+export function FlowControls({ className }: { className?: string }) {
   const { t } = useTranslation();
   // Effect/preset labelKeys are typed `string` (not literal i18n keys), so pass a
   // defaultValue to satisfy i18next's strict key typing.
@@ -62,185 +62,193 @@ export function FlowSettings() {
   };
 
   return (
+    <div className={cn("flex flex-col gap-4", className)}>
+      <p className="text-xs text-muted-foreground">{t("flow.intro")}</p>
+
+      {/* Live preview — follows the current cover palette (or the custom fallback). */}
+      <div className="relative h-32 overflow-hidden rounded-lg border border-border bg-background">
+        <VisualizerHost
+          active
+          styleId="scene-flow"
+          coverColor
+          placement="background"
+          className="absolute inset-0"
+        />
+      </div>
+
+      <label className="flex items-center gap-2 text-sm">
+        <input
+          type="checkbox"
+          checked={flowEnabled}
+          onChange={(e) => void saveSettings({ flowEnabled: e.target.checked })}
+          className="size-4 accent-[var(--color-primary)]"
+        />
+        {t("flow.enable")}
+      </label>
+      <p className="-mt-1 text-xs text-muted-foreground">{t("flow.enableHint")}</p>
+
+      <Field label={t("flow.effect")}>
+        <Select
+          value={effect}
+          onValueChange={(value) => void saveSettings({ flowEffect: value as FlowEffectId })}
+        >
+          <SelectTrigger>
+            <SelectValue>
+              {(value) =>
+                tk(FLOW_EFFECTS.find((e) => e.id === value)?.labelKey ?? "flow.effectChaosWaves")
+              }
+            </SelectValue>
+          </SelectTrigger>
+          <SelectContent>
+            {FLOW_EFFECTS.map((e) => (
+              <SelectItem key={e.id} value={e.id}>
+                {tk(e.labelKey)}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </Field>
+
+      <Field label={t("flow.colorSource")}>
+        <div className="flex gap-2">
+          <SourceButton
+            active={source === "cover"}
+            onClick={() => void saveSettings({ flowColorSource: "cover" })}
+          >
+            {t("flow.sourceCover")}
+          </SourceButton>
+          <SourceButton
+            active={source === "custom"}
+            onClick={() => void saveSettings({ flowColorSource: "custom" })}
+          >
+            {t("flow.sourceCustom")}
+          </SourceButton>
+        </div>
+        <p className="text-xs text-muted-foreground">{t("flow.sourceHint")}</p>
+      </Field>
+
+      <Field label={t("flow.customColors")}>
+        <p className="-mt-1 text-xs text-muted-foreground">{t("flow.customColorsHint")}</p>
+        <div className="flex flex-wrap items-center gap-2">
+          {colors.map((c, i) => (
+            // biome-ignore lint/suspicious/noArrayIndexKey: the slot index IS the color's identity (values can repeat)
+            <div key={i} className="flex items-center gap-1">
+              <ColorPicker
+                value={normalizeHexColor(c) ?? "#8b5cf6"}
+                onChange={(hex) => updateColor(i, hex)}
+                label={t("flow.colorN", { n: i + 1 })}
+              />
+              {colors.length > FLOW_MIN_COLORS ? (
+                <button
+                  type="button"
+                  onClick={() => removeColor(i)}
+                  aria-label={t("flow.removeColor")}
+                  className="flex size-5 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground"
+                >
+                  ×
+                </button>
+              ) : null}
+            </div>
+          ))}
+          {colors.length < FLOW_MAX_COLORS ? (
+            <Button type="button" variant="outline" size="sm" onClick={addColor}>
+              {t("flow.addColor")}
+            </Button>
+          ) : null}
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-xs text-muted-foreground">{t("flow.presets")}</span>
+          {FLOW_PRESETS.map((p) => (
+            <button
+              key={p.id}
+              type="button"
+              onClick={() => setColors(p.colors)}
+              title={tk(p.labelKey)}
+              className="flex overflow-hidden rounded border border-border hover:ring-2 hover:ring-ring"
+            >
+              {p.colors.map((c) => (
+                <span key={c} className="size-4" style={{ backgroundColor: c }} />
+              ))}
+            </button>
+          ))}
+        </div>
+      </Field>
+
+      <div className="grid gap-3 border-border border-t pt-3">
+        <span className="text-xs font-medium text-muted-foreground">{t("flow.tuning")}</span>
+        <PctSlider
+          label={t("flow.motion", { pct: settings.flowMotion ?? FLOW_DEFAULTS.motion })}
+          value={settings.flowMotion ?? FLOW_DEFAULTS.motion}
+          onChange={(v) => void saveSettings({ flowMotion: v })}
+        />
+        <PctSlider
+          label={t("flow.scale", { pct: settings.flowScale ?? FLOW_DEFAULTS.scale })}
+          value={settings.flowScale ?? FLOW_DEFAULTS.scale}
+          onChange={(v) => void saveSettings({ flowScale: v })}
+        />
+        <PctSlider
+          label={t("flow.reactivity", {
+            pct: settings.flowAudioReactivity ?? FLOW_DEFAULTS.reactivity,
+          })}
+          value={settings.flowAudioReactivity ?? FLOW_DEFAULTS.reactivity}
+          onChange={(v) => void saveSettings({ flowAudioReactivity: v })}
+        />
+      </div>
+
+      {flowEnabled ? (
+        <div className="grid gap-3 border-border border-t pt-3">
+          <span className="text-xs font-medium text-muted-foreground">{t("flow.composite")}</span>
+          <div className="grid gap-1.5">
+            <span className="text-xs text-muted-foreground">{t("flow.blend")}</span>
+            <Select
+              value={settings.flowBlendMode ?? FLOW_DEFAULTS.blendMode}
+              onValueChange={(value) =>
+                void saveSettings({ flowBlendMode: value as FlowBlendMode })
+              }
+            >
+              <SelectTrigger>
+                <SelectValue>
+                  {(value) =>
+                    tk(FLOW_BLEND_MODES.find((b) => b.id === value)?.labelKey ?? "flow.blendScreen")
+                  }
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                {FLOW_BLEND_MODES.map((b) => (
+                  <SelectItem key={b.id} value={b.id}>
+                    {tk(b.labelKey)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <PctSlider
+            label={t("flow.opacity", { pct: settings.flowOpacity ?? FLOW_DEFAULTS.opacity })}
+            value={settings.flowOpacity ?? FLOW_DEFAULTS.opacity}
+            onChange={(v) => void saveSettings({ flowOpacity: v })}
+          />
+          <PctSlider
+            label={t("flow.dim", { pct: settings.flowDim ?? FLOW_DEFAULTS.dim })}
+            value={settings.flowDim ?? FLOW_DEFAULTS.dim}
+            onChange={(v) => void saveSettings({ flowDim: v })}
+          />
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+/** Card-wrapped flow controls for the Settings page. The same `FlowControls` body
+ *  is reused on Now Playing via the visualizer tuning panel's Flow tab. */
+export function FlowSettings() {
+  const { t } = useTranslation();
+  return (
     <Card>
       <CardHeader>
         <CardTitle>{t("flow.title")}</CardTitle>
       </CardHeader>
-      <CardContent className="flex flex-col gap-4">
-        <p className="text-xs text-muted-foreground">{t("flow.intro")}</p>
-
-        {/* Live preview — follows the current cover palette (or the custom fallback). */}
-        <div className="relative h-32 overflow-hidden rounded-lg border border-border bg-background">
-          <VisualizerHost
-            active
-            styleId="scene-flow"
-            coverColor
-            placement="background"
-            className="absolute inset-0"
-          />
-        </div>
-
-        <label className="flex items-center gap-2 text-sm">
-          <input
-            type="checkbox"
-            checked={flowEnabled}
-            onChange={(e) => void saveSettings({ flowEnabled: e.target.checked })}
-            className="size-4 accent-[var(--color-primary)]"
-          />
-          {t("flow.enable")}
-        </label>
-        <p className="-mt-1 text-xs text-muted-foreground">{t("flow.enableHint")}</p>
-
-        <Field label={t("flow.effect")}>
-          <Select
-            value={effect}
-            onValueChange={(value) => void saveSettings({ flowEffect: value as FlowEffectId })}
-          >
-            <SelectTrigger>
-              <SelectValue>
-                {(value) =>
-                  tk(FLOW_EFFECTS.find((e) => e.id === value)?.labelKey ?? "flow.effectChaosWaves")
-                }
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              {FLOW_EFFECTS.map((e) => (
-                <SelectItem key={e.id} value={e.id}>
-                  {tk(e.labelKey)}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </Field>
-
-        <Field label={t("flow.colorSource")}>
-          <div className="flex gap-2">
-            <SourceButton
-              active={source === "cover"}
-              onClick={() => void saveSettings({ flowColorSource: "cover" })}
-            >
-              {t("flow.sourceCover")}
-            </SourceButton>
-            <SourceButton
-              active={source === "custom"}
-              onClick={() => void saveSettings({ flowColorSource: "custom" })}
-            >
-              {t("flow.sourceCustom")}
-            </SourceButton>
-          </div>
-          <p className="text-xs text-muted-foreground">{t("flow.sourceHint")}</p>
-        </Field>
-
-        <Field label={t("flow.customColors")}>
-          <p className="-mt-1 text-xs text-muted-foreground">{t("flow.customColorsHint")}</p>
-          <div className="flex flex-wrap items-center gap-2">
-            {colors.map((c, i) => (
-              // biome-ignore lint/suspicious/noArrayIndexKey: the slot index IS the color's identity (values can repeat)
-              <div key={i} className="flex items-center gap-1">
-                <ColorPicker
-                  value={normalizeHexColor(c) ?? "#8b5cf6"}
-                  onChange={(hex) => updateColor(i, hex)}
-                  label={t("flow.colorN", { n: i + 1 })}
-                />
-                {colors.length > FLOW_MIN_COLORS ? (
-                  <button
-                    type="button"
-                    onClick={() => removeColor(i)}
-                    aria-label={t("flow.removeColor")}
-                    className="flex size-5 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground"
-                  >
-                    ×
-                  </button>
-                ) : null}
-              </div>
-            ))}
-            {colors.length < FLOW_MAX_COLORS ? (
-              <Button type="button" variant="outline" size="sm" onClick={addColor}>
-                {t("flow.addColor")}
-              </Button>
-            ) : null}
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-xs text-muted-foreground">{t("flow.presets")}</span>
-            {FLOW_PRESETS.map((p) => (
-              <button
-                key={p.id}
-                type="button"
-                onClick={() => setColors(p.colors)}
-                title={tk(p.labelKey)}
-                className="flex overflow-hidden rounded border border-border hover:ring-2 hover:ring-ring"
-              >
-                {p.colors.map((c) => (
-                  <span key={c} className="size-4" style={{ backgroundColor: c }} />
-                ))}
-              </button>
-            ))}
-          </div>
-        </Field>
-
-        <div className="grid gap-3 border-border border-t pt-3">
-          <span className="text-xs font-medium text-muted-foreground">{t("flow.tuning")}</span>
-          <PctSlider
-            label={t("flow.motion", { pct: settings.flowMotion ?? FLOW_DEFAULTS.motion })}
-            value={settings.flowMotion ?? FLOW_DEFAULTS.motion}
-            onChange={(v) => void saveSettings({ flowMotion: v })}
-          />
-          <PctSlider
-            label={t("flow.scale", { pct: settings.flowScale ?? FLOW_DEFAULTS.scale })}
-            value={settings.flowScale ?? FLOW_DEFAULTS.scale}
-            onChange={(v) => void saveSettings({ flowScale: v })}
-          />
-          <PctSlider
-            label={t("flow.reactivity", {
-              pct: settings.flowAudioReactivity ?? FLOW_DEFAULTS.reactivity,
-            })}
-            value={settings.flowAudioReactivity ?? FLOW_DEFAULTS.reactivity}
-            onChange={(v) => void saveSettings({ flowAudioReactivity: v })}
-          />
-        </div>
-
-        {flowEnabled ? (
-          <div className="grid gap-3 border-border border-t pt-3">
-            <span className="text-xs font-medium text-muted-foreground">{t("flow.composite")}</span>
-            <div className="grid gap-1.5">
-              <span className="text-xs text-muted-foreground">{t("flow.blend")}</span>
-              <Select
-                value={settings.flowBlendMode ?? FLOW_DEFAULTS.blendMode}
-                onValueChange={(value) =>
-                  void saveSettings({ flowBlendMode: value as FlowBlendMode })
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue>
-                    {(value) =>
-                      tk(
-                        FLOW_BLEND_MODES.find((b) => b.id === value)?.labelKey ??
-                          "flow.blendScreen",
-                      )
-                    }
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  {FLOW_BLEND_MODES.map((b) => (
-                    <SelectItem key={b.id} value={b.id}>
-                      {tk(b.labelKey)}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <PctSlider
-              label={t("flow.opacity", { pct: settings.flowOpacity ?? FLOW_DEFAULTS.opacity })}
-              value={settings.flowOpacity ?? FLOW_DEFAULTS.opacity}
-              onChange={(v) => void saveSettings({ flowOpacity: v })}
-            />
-            <PctSlider
-              label={t("flow.dim", { pct: settings.flowDim ?? FLOW_DEFAULTS.dim })}
-              value={settings.flowDim ?? FLOW_DEFAULTS.dim}
-              onChange={(v) => void saveSettings({ flowDim: v })}
-            />
-          </div>
-        ) : null}
+      <CardContent>
+        <FlowControls />
       </CardContent>
     </Card>
   );

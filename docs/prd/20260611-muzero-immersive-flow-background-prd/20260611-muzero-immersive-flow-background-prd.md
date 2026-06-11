@@ -603,6 +603,7 @@ export function resolveFlowColors(
 | 2026-06-11 | DoodleBear / MUZERO | **Phase 9 ✅ 默认+性能+Dev HUD**（owner）：默认 chaos-waves/透50/暗0/反应75/流速100（`FLOW_DEFAULTS` 集中）；背景 scene 低功耗（DPR≤1.5 + 40fps cap，约省 60% GPU）；新增 dev-only 悬浮性能面板（`perf-metrics.ts`+`dev-perf-panel.tsx`：FPS/帧 p99/longtask jank/JS heap，500ms 快照，仿 ClipCombo）。14+8 测试绿 |
 | 2026-06-11 | DoodleBear / MUZERO | **Phase 10 ✅ 混合模式**（PM：流光×背景更自然融合）：用 **CSS `mix-blend-mode`**（合成器原生 add/multiply，**不整合进 Pixi**、零 shader 移植）。`FlowBlendMode` 6 档 + `flowBlendMode` 设置（默认 screen）+ 根层 `isolate` 限定混合范围 + flow-settings 混合 Select；顺手修残留 `aurora-drift` 默认 bug。四语 i18n。typecheck/biome/JSON 净 |
 | 2026-06-11 | DoodleBear / MUZERO | **Phase 11 ✅ 频谱层也支持混合**（owner：3 层中能支持 blend 的都支持）：频谱 canvas 也支持 `mix-blend-mode`——`visualizerBlendMode` 设置（默认 normal）+ now-playing 频谱 `VisualizerHost style.mixBlendMode` + visualizer-settings 混合 Select（复用 `FLOW_BLEND_MODES`/`flow.blend*`）。**底层背景是基底（下方仅纯色 app bg）→ 不加 blend**。层级：背景图/视频(基底) → 流光(blend) → 频谱(blend) |
+| 2026-06-11 | DoodleBear / MUZERO | **Phase 12 ✅ 流光控件进 Now Playing 悬浮面板**（owner：效果/流光控制可在悬浮 panel 直接调）：把 `FlowSettings` 抽成可复用 `FlowControls`（FlowSettings = Card 包壳），给既有可拖拽 `VisualizerTuningPanel` 加第 3 个「流光」Tab（`Waves` 图标 + `flow.tab` 四语）渲染 `FlowControls`——Now Playing 经 visualizer-mode-button 打开面板即可直接调流光效果/混合/配色/速度。biome/typecheck/JSON 净 |
 
 ---
 

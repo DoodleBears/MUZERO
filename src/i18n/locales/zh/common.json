@@ -369,7 +369,8 @@
     "blendAdd": "相加",
     "blendMultiply": "正片叠底",
     "blendOverlay": "叠加",
-    "blendSoftLight": "柔光"
+    "blendSoftLight": "柔光",
+    "tab": "流光"
   },
   "visualizer": {
     "title": "可视化",

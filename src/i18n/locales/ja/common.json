@@ -369,7 +369,8 @@
     "blendAdd": "加算",
     "blendMultiply": "乗算",
     "blendOverlay": "オーバーレイ",
-    "blendSoftLight": "ソフトライト"
+    "blendSoftLight": "ソフトライト",
+    "tab": "フロー"
   },
   "visualizer": {
     "title": "ビジュアライザー",

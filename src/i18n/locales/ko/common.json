@@ -369,7 +369,8 @@
     "blendAdd": "더하기",
     "blendMultiply": "곱하기",
     "blendOverlay": "오버레이",
-    "blendSoftLight": "소프트 라이트"
+    "blendSoftLight": "소프트 라이트",
+    "tab": "플로우"
   },
   "visualizer": {
     "title": "비주얼라이저",

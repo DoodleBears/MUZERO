@@ -1,9 +1,10 @@
-import { Grip, Image, SlidersHorizontal, X } from "lucide-react";
+import { Grip, Image, SlidersHorizontal, Waves, X } from "lucide-react";
 import type { ReactNode } from "react";
 import { type PointerEvent, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { VisualizerTuningControls } from "@/components/player/visualizer-tuning-controls";
 import { BackgroundEffectControls } from "@/components/settings/background-effect-controls";
+import { FlowControls } from "@/components/settings/flow-settings";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -21,7 +22,7 @@ import type { VisualizerStyleId } from "@/visualizer/types";
 
 const PANEL_W = 360;
 const PANEL_H = 560;
-type TuningTab = "visualizer" | "background";
+type TuningTab = "visualizer" | "background" | "flow";
 
 export function VisualizerTuningPanel() {
   const { t } = useTranslation();
@@ -126,10 +127,14 @@ export function VisualizerTuningPanel() {
       </div>
 
       <div className="no-scrollbar flex min-h-0 flex-col gap-3 overflow-y-auto p-3">
-        <div className="grid grid-cols-2 gap-1 rounded-lg border border-border bg-muted/30 p-1">
+        <div className="grid grid-cols-3 gap-1 rounded-lg border border-border bg-muted/30 p-1">
           <TabButton active={tab === "visualizer"} onClick={() => setTab("visualizer")}>
             <SlidersHorizontal className="size-3.5" />
             {t("visualizer.title")}
+          </TabButton>
+          <TabButton active={tab === "flow"} onClick={() => setTab("flow")}>
+            <Waves className="size-3.5" />
+            {t("flow.tab")}
           </TabButton>
           <TabButton active={tab === "background"} onClick={() => setTab("background")}>
             <Image className="size-3.5" />
@@ -205,6 +210,8 @@ export function VisualizerTuningPanel() {
 
             <VisualizerTuningControls className="grid gap-3 border-border border-t pt-3" />
           </>
+        ) : tab === "flow" ? (
+          <FlowControls />
         ) : (
           <>
             <div className="grid gap-2 rounded-lg border border-border/70 bg-background/30 p-3">
