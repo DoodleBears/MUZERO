@@ -249,6 +249,7 @@ describe("DJ chat tools", () => {
     const result = await executeSearchTracks({ query: "shibuya", limit: 10 }, { db });
     expect(result.total).toBe(1);
     expect(result.returned).toBe(1);
+    expect(result.nextCursor).toBeNull(); // single match, nothing more to page
     expect(result.tracks.map((track) => track.title)).toEqual(["Metro Bloom"]);
     // default projection is id+title only — keep the JSON payload tiny.
     expect(Object.keys(result.tracks[0]).sort()).toEqual(["id", "title"]);
@@ -287,11 +288,47 @@ describe("search projection + multi-keyword + curate-by-search", () => {
 
   it("projects only requested fields and reports total vs returned under a limit", async () => {
     await seed();
-    const out = await executeSearchTracks({ query: "lofi", fields: ["id", "kind"], limit: 1 }, { db });
+    const out = await executeSearchTracks(
+      { query: "lofi", fields: ["id", "kind"], limit: 1 },
+      { db },
+    );
     expect(out.total).toBe(2); // Rain Loop + Sunset Tape match "lofi"
     expect(out.returned).toBe(1); // capped by limit
+    expect(out.nextCursor).toBe(1); // one more page available
     expect(out.tracks).toHaveLength(1);
     expect(Object.keys(out.tracks[0]).sort()).toEqual(["id", "kind"]);
+  });
+
+  it("pages through capped matches with cursor / nextCursor", async () => {
+    await seed(); // 3 tracks all match "techno" OR "lofi"
+    const opts = { queries: ["techno", "lofi"], match: "any" as const, limit: 2 };
+
+    const page1 = await executeSearchTracks(opts, { db });
+    expect(page1.total).toBe(3);
+    expect(page1.returned).toBe(2);
+    expect(page1.nextCursor).toBe(2);
+
+    const page2 = await executeSearchTracks({ ...opts, cursor: page1.nextCursor ?? 0 }, { db });
+    expect(page2.returned).toBe(1);
+    expect(page2.nextCursor).toBeNull(); // last page
+
+    // the two pages are disjoint and together cover every match
+    const ids = [...page1.tracks, ...page2.tracks].map((track) => track.id);
+    expect(new Set(ids).size).toBe(3);
+  });
+
+  it("set_add_by_search grows an EXISTING set that already has members", async () => {
+    const { ids } = await seed();
+    const target = await createSession({ seedPrompt: "existing" }, db);
+    await executeSetAddTracks({ sessionId: target.id, trackIds: [ids[0]] }, { db }); // pre-existing member
+
+    const grown = await executeSetAddBySearch(
+      { sessionId: target.id, queries: ["lofi"], match: "any" },
+      { db },
+    );
+    expect(grown.diff.matched).toBe(2); // Rain Loop + Sunset Tape
+    expect(grown.diff.added).toBe(2); // both new; the pre-existing techno track stays
+    expect((await getSession(target.id, db))?.trackIds.length).toBe(3);
   });
 
   it("set_add_by_search curates every match into a set (deduped) without listing ids", async () => {
@@ -308,10 +345,7 @@ describe("search projection + multi-keyword + curate-by-search", () => {
     expect((await getSession(target.id, db))?.trackIds.length).toBe(2);
 
     // Re-running is idempotent: same matches, nothing new added.
-    const again = await executeSetAddBySearch(
-      { sessionId: target.id, queries: ["lofi"] },
-      { db },
-    );
+    const again = await executeSetAddBySearch({ sessionId: target.id, queries: ["lofi"] }, { db });
     expect(again.diff.matched).toBe(2);
     expect(again.diff.added).toBe(0);
     expect(again.diff.skipped).toBe(2);

@@ -70,6 +70,8 @@ export const searchTracksInputSchema = z.object({
   fields: z.array(z.enum(TRACK_RESULT_FIELDS)).optional(),
   /** Cap returned rows (the full match count is reported as `total`). */
   limit: z.number().int().min(1).max(500).default(30),
+  /** Page offset into the matches; pass the previous call's `nextCursor` to page. */
+  cursor: z.number().int().min(0).default(0),
 });
 
 export type SearchTracksInput = z.input<typeof searchTracksInputSchema>;
@@ -205,7 +207,13 @@ export interface DjChatToolDeps {
 export async function executeSearchTracks(
   rawInput: SearchTracksInput,
   deps: { db?: MuzeroDB } = {},
-): Promise<{ total: number; returned: number; tracks: Array<Record<string, unknown>> }> {
+): Promise<{
+  total: number;
+  returned: number;
+  /** Offset to pass as `cursor` for the next page, or null when this is the last. */
+  nextCursor: number | null;
+  tracks: Array<Record<string, unknown>>;
+}> {
   const input = searchTracksInputSchema.parse(rawInput);
   const db = deps.db ?? defaultDb;
   const tracks = await listAllTracks(db);
@@ -216,10 +224,13 @@ export async function executeSearchTracks(
   const terms = [...(input.queries ?? []), ...(input.query ? [input.query] : [])];
   const matched = searchMultiTerm(tracks, terms, input.match, notes);
   const fields = input.fields?.length ? input.fields : (["id", "title"] as const);
+  const page = matched.slice(input.cursor, input.cursor + input.limit);
+  const nextOffset = input.cursor + page.length;
   return {
     total: matched.length, // full match count so the agent knows if it's truncated
-    returned: Math.min(matched.length, input.limit),
-    tracks: matched.slice(0, input.limit).map((track) => projectTrack(track, fields)),
+    returned: page.length,
+    nextCursor: nextOffset < matched.length ? nextOffset : null,
+    tracks: page.map((track) => projectTrack(track, fields)),
   };
 }
 
@@ -352,7 +363,9 @@ export async function executeSetAddBySearch(
   rawInput: SetAddBySearchInput,
   deps: { db?: MuzeroDB } = {},
 ): Promise<
-  AgentWriteResult & { diff: { sessionId: string; matched: number; added: number; skipped: number } }
+  AgentWriteResult & {
+    diff: { sessionId: string; matched: number; added: number; skipped: number };
+  }
 > {
   const input = setAddBySearchInputSchema.parse(rawInput);
   const db = deps.db ?? defaultDb;
@@ -458,7 +471,7 @@ export function createDjChatTools(deps: DjChatToolDeps = {}): ToolSet {
   const tools: ToolSet = {
     library_search_tracks: tool({
       description:
-        "Search local tracks by title, caption, tags, legacy note, and Memory notes. Pass multiple keywords as `queries` (match \"any\" gathers a genre, \"all\" narrows). Returns are projected to `fields` (default id+title) to keep JSON small; `total` is the full match count, `returned` is what's included. To curate a whole genre into a set without listing every id, prefer set_add_by_search.",
+        'Search local tracks by title, caption, tags, legacy note, and Memory notes. Pass multiple keywords as `queries` (match "any" gathers a genre, "all" narrows). Returns are projected to `fields` (default id+title) to keep JSON small; `total` is the full match count, `returned` is this page. Page through large results with `cursor`: pass the previous call\'s `nextCursor` back as `cursor` until it is null. To curate a whole genre into a set without listing every id, prefer set_add_by_search.',
       inputSchema: searchTracksInputSchema,
       execute: (input) => executeSearchTracks(input, { db }),
     }),
@@ -516,13 +529,13 @@ export function createDjChatTools(deps: DjChatToolDeps = {}): ToolSet {
     }),
     set_add_tracks: tool({
       description:
-        "Add existing local track ids to a set (curate a playlist from search results). Idempotent; only known local tracks are added.",
+        "Add existing local track ids to a set — works on ANY set: an existing one (find its id via set_list/set_get) or a freshly created one. Idempotent; only known local tracks are added. Use for a hand-picked few ids.",
       inputSchema: setAddTracksInputSchema,
       execute: (input) => executeSetAddTracks(input, { db }),
     }),
     set_add_by_search: tool({
       description:
-        "Curate in one shot: search the whole library with `queries` (match any/all) and add every match to a set — no need to list track ids. Returns matched/added/skipped counts. Use this to build a genre/mood set from the listener's library.",
+        "Curate in one shot: search the whole library with `queries` (match any/all) and add every match to a set — no need to list track ids. Targets ANY set: pass an existing set's id (from set_list) to grow it, or a new set's id. Returns matched/added/skipped counts.",
       inputSchema: setAddBySearchInputSchema,
       execute: (input) => executeSetAddBySearch(input, { db }),
     }),
