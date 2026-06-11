@@ -262,7 +262,7 @@ export function VirtualCardGrid<T>({
   if (items.length === 0) return null;
 
   return (
-    <div ref={listRef} className={cn("relative w-full", className)}>
+    <div ref={listRef} className={cn("relative w-full pb-48", className)}>
       <div className="relative w-full" style={{ height: `${virtualizer.getTotalSize()}px` }}>
         {virtualizer.getVirtualItems().map((virtualRow) => {
           const start = view === "list" ? virtualRow.index : virtualRow.index * columns;
