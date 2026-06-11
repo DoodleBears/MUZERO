@@ -33,6 +33,17 @@ export interface RemoteBaseObject<T> {
   etag?: string;
 }
 
+interface CachedRemoteBaseObject {
+  value: unknown;
+  etag?: string;
+}
+
+export interface RemotePublishBaseCache {
+  get: (key: string) => CachedRemoteBaseObject | undefined;
+  set: (key: string, object: CachedRemoteBaseObject) => void;
+  delete: (key: string) => void;
+}
+
 export interface RemotePublishBase {
   manifest?: RemoteBaseObject<R2Manifest>;
   devicesIndex?: RemoteBaseObject<R2DevicesIndex>;
@@ -49,6 +60,18 @@ export interface FetchRemotePublishBaseInput {
   fetcher?: SyncFetch;
   now?: () => Date;
   signal?: AbortSignal;
+  cache?: RemotePublishBaseCache;
+}
+
+export function createRemotePublishBaseCache(): RemotePublishBaseCache {
+  const objects = new Map<string, CachedRemoteBaseObject>();
+  return {
+    get: (key) => objects.get(key),
+    set: (key, object) => objects.set(key, object),
+    delete: (key) => {
+      objects.delete(key);
+    },
+  };
 }
 
 export async function fetchRemotePublishBase(
@@ -56,17 +79,31 @@ export async function fetchRemotePublishBase(
 ): Promise<RemotePublishBase> {
   const fetcher = input.fetcher ?? (await getAppFetch());
   const ctx = { ...input, fetcher };
-  const [manifest, devicesIndex, statsIndex, presenceIndex] = await Promise.all([
-    readRemoteJson("manifest.json", r2ManifestSchema, ctx),
-    readRemoteJson("devices/index.json", r2DevicesIndexSchema, ctx),
-    readRemoteJson("stats/index.json", r2StatsIndexSchema, ctx),
-    readRemoteJson("presence/index.json", r2PresenceIndexSchema, ctx),
+  const manifest = await readRemoteJson("manifest.json", r2ManifestSchema, ctx);
+  if (!manifest) return {};
+
+  const [devicesIndex, statsIndex, presenceIndex] = await Promise.all([
+    manifest.value.devicesIndex
+      ? readRemoteJson(manifest.value.devicesIndex, r2DevicesIndexSchema, ctx)
+      : undefined,
+    manifest.value.statsIndex
+      ? readRemoteJson(manifest.value.statsIndex, r2StatsIndexSchema, ctx)
+      : undefined,
+    manifest.value.presenceIndex
+      ? readRemoteJson(manifest.value.presenceIndex, r2PresenceIndexSchema, ctx)
+      : undefined,
   ]);
   let setIndexes: RemotePublishBase["setIndexes"];
-  const setRemoteIds = [...new Set(input.setRemoteIds ?? [])];
+  const manifestSetIds = new Set(manifest.value.sets.map((set) => set.id));
+  const setRemoteIds = [...new Set(input.setRemoteIds ?? [])].filter((id) =>
+    manifestSetIds.has(id),
+  );
   if (setRemoteIds.length > 0) {
+    const indexBySetId = new Map(manifest.value.sets.map((set) => [set.id, set.index]));
     const fetched = await Promise.all(
-      setRemoteIds.map((id) => readRemoteJson(`sets/${id}/index.json`, r2SetIndexSchema, ctx)),
+      setRemoteIds.map((id) =>
+        readRemoteJson(indexBySetId.get(id) ?? `sets/${id}/index.json`, r2SetIndexSchema, ctx),
+      ),
     );
     setIndexes = {};
     setRemoteIds.forEach((id, i) => {
@@ -82,16 +119,24 @@ async function readRemoteJson<T>(
   schema: ZodType<T>,
   ctx: FetchRemotePublishBaseInput & { fetcher: SyncFetch },
 ): Promise<RemoteBaseObject<T> | undefined> {
+  const cached = ctx.cache?.get(key);
   const response = await r2SignedFetch({
     fetcher: ctx.fetcher,
     credentials: ctx.credentials,
     method: "GET",
     key,
     contentType: "application/json",
+    headers: cached?.etag ? { "if-none-match": cached.etag } : undefined,
     now: ctx.now,
     signal: ctx.signal,
   });
-  if (response.status === 404) return undefined;
+  if (response.status === 304 && cached) {
+    return { value: cached.value as T, etag: cached.etag };
+  }
+  if (response.status === 404) {
+    ctx.cache?.delete(key);
+    return undefined;
+  }
   if (!response.ok) {
     throw new Error(`Failed to read publish base ${key}: HTTP ${response.status}`);
   }
@@ -108,5 +153,7 @@ async function readRemoteJson<T>(
     log.warn("sync", "publish base object failed schema validation; treating as absent", { key });
     return undefined;
   }
-  return { value: parsed.data, etag };
+  const object = { value: parsed.data, etag };
+  ctx.cache?.set(key, object);
+  return object;
 }

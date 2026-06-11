@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { getSettings, listSessions } from "@/db/repositories";
+import type { R2LocalCredentials } from "@/db/types";
 import { log } from "@/lib/logger";
 import {
   clearCloudDriveAutoSyncPause,
@@ -9,7 +10,11 @@ import {
 import { getR2CredentialsForDrive } from "@/sync/cloud-drive-settings";
 import { buildR2ExportPlanForDrive } from "@/sync/r2-export-plan";
 import { publishedEntityId } from "@/sync/r2-import-stream";
-import { fetchRemotePublishBase } from "@/sync/r2-publish-base";
+import {
+  createRemotePublishBaseCache,
+  fetchRemotePublishBase,
+  type RemotePublishBaseCache,
+} from "@/sync/r2-publish-base";
 import { runR2PublishSync } from "@/sync/r2-publish-sync";
 import {
   type ApplyRemoteSetPullInput,
@@ -44,6 +49,7 @@ interface SyncStoreState {
 
 // Non-reactive singletons (never selected by components → no rerenders).
 const controllers = new Map<string, AbortController>();
+const publishBaseCaches = new Map<string, RemotePublishBaseCache>();
 let orchestratorOverride: SyncOrchestrator | null = null;
 
 /** Test seam: inject a fake orchestrator. Pass `null` to restore the real one. */
@@ -58,12 +64,29 @@ function getOrchestrator(): SyncOrchestrator {
     runPublish: runR2PublishSync,
     // Multi-writer read-merge-write (PRD §12.4): every publish plans against
     // the current remote state and merges instead of mirroring over it.
-    fetchPublishBase: fetchRemotePublishBase,
+    fetchPublishBase: (input) =>
+      fetchRemotePublishBase({
+        ...input,
+        cache: publishBaseCache(input.credentials),
+      }),
     // Same-set co-editing receive half (PRD §12.5).
     applyPullMerges: applySetPullMerges,
     dryRunPull: dryRunRemoteSetPull,
     applyPull: applyRemoteSetPull,
   });
+}
+
+function publishBaseCache(credentials: R2LocalCredentials): RemotePublishBaseCache {
+  const key = [
+    credentials.endpointUrl ?? credentials.accountId,
+    credentials.bucket,
+    credentials.prefix ?? "",
+  ].join("/");
+  const existing = publishBaseCaches.get(key);
+  if (existing) return existing;
+  const cache = createRemotePublishBaseCache();
+  publishBaseCaches.set(key, cache);
+  return cache;
 }
 
 /**

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { fetchRemotePublishBase } from "./r2-publish-base";
+import { createRemotePublishBaseCache, fetchRemotePublishBase } from "./r2-publish-base";
 import type { SyncFetch } from "./r2-subscription";
 
 const credentials = {
@@ -18,6 +18,7 @@ const manifest = {
   createdAt: "2026-06-09T00:00:00.000Z",
   updatedAt: "2026-06-10T00:00:00.000Z",
   baseUrl: "https://music.example.com/muzero/",
+  devicesIndex: "devices/index.json",
   sets: [
     {
       id: "ses_theirs",
@@ -82,7 +83,7 @@ describe("fetchRemotePublishBase", () => {
     expect(base.manifest?.etag).toBe('"etag-manifest"');
     expect(base.devicesIndex?.value.devices[0]?.publicId).toBe("dvc_a");
     expect(base.devicesIndex?.etag).toBe('"etag-devices"');
-    // Absent objects (404) are simply absent — a first publish has no base.
+    // Manifest-discovered indexes are read; omitted manifest pointers are not guessed.
     expect(base.statsIndex).toBeUndefined();
     expect(base.presenceIndex).toBeUndefined();
 
@@ -92,9 +93,51 @@ describe("fetchRemotePublishBase", () => {
     expect(seen.map((call) => call.url).sort()).toEqual([
       `${BASE}/devices/index.json`,
       `${BASE}/manifest.json`,
-      `${BASE}/presence/index.json`,
-      `${BASE}/stats/index.json`,
     ]);
+  });
+
+  it("uses ETag conditional reads and cached validated objects on 304", async () => {
+    const cache = createRemotePublishBaseCache();
+    await fetchRemotePublishBase({
+      credentials,
+      cache,
+      fetcher: fetchMap({
+        [`${BASE}/manifest.json`]: () => jsonResponse(manifest, '"etag-manifest"'),
+        [`${BASE}/devices/index.json`]: () => jsonResponse(devicesIndex, '"etag-devices"'),
+      }),
+    });
+
+    const seen: Array<{ url: string; ifNoneMatch: string | null }> = [];
+    const base = await fetchRemotePublishBase({
+      credentials,
+      cache,
+      fetcher: async (input, init) => {
+        seen.push({
+          url: String(input),
+          ifNoneMatch: new Headers(init?.headers).get("if-none-match"),
+        });
+        return new Response(null, { status: 304 });
+      },
+    });
+
+    expect(base.manifest?.value.libraryId).toBe("lib_abc");
+    expect(base.devicesIndex?.value.devices[0]?.publicId).toBe("dvc_a");
+    expect(seen).toEqual([
+      { url: `${BASE}/manifest.json`, ifNoneMatch: '"etag-manifest"' },
+      { url: `${BASE}/devices/index.json`, ifNoneMatch: '"etag-devices"' },
+    ]);
+  });
+
+  it("treats a missing manifest as an empty first-publish base without probing indexes", async () => {
+    const seen: Array<{ url: string; method?: string; authorization: string | null }> = [];
+    const base = await fetchRemotePublishBase({
+      credentials,
+      fetcher: fetchMap({}, seen),
+      setRemoteIds: ["ses_missing"],
+    });
+
+    expect(base).toEqual({});
+    expect(seen.map((call) => call.url)).toEqual([`${BASE}/manifest.json`]);
   });
 
   it("treats an unparseable remote object as absent (recoverable by overwrite)", async () => {
