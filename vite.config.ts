@@ -48,6 +48,13 @@ export default defineConfig({
     },
   },
 
+  // youtubei.js is exports-map-only (no main/module) and pulled in deep by the
+  // YouTube source; pre-bundle it so the dev server resolves it (its browser
+  // condition → web.js, which ships the JS evaluator we need for deciphering).
+  optimizeDeps: {
+    include: ["youtubei.js"],
+  },
+
   // Tauri expects a fixed port and fails if it's not available.
   clearScreen: false,
   server: {
