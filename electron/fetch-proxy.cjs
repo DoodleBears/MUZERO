@@ -30,7 +30,25 @@ function nodeHttpsFetch(target, init, depth = 0) {
     // saw; if this GET egresses over IPv6 the source IP differs and googlevideo 403s.
     const req = https.request(url, { method: init.method || "GET", headers, family: 4 }, (res) => {
       const status = res.statusCode || 0;
-      if (status === 403) console.error("[muzfetch] node:https googlevideo 403", url.hostname);
+      if (status === 403 && depth === 0) {
+        // Definitive check: what IPv4 does THIS process egress from vs the url's ip lock?
+        https
+          .request("https://api.ipify.org", { family: 4 }, (r) => {
+            let ip = "";
+            r.on("data", (c) => {
+              ip += c;
+            });
+            r.on("end", () =>
+              console.error(
+                "[muzfetch] googlevideo 403 — process egress IP:",
+                ip,
+                "| url ip:",
+                url.searchParams.get("ip"),
+              ),
+            );
+          })
+          .end();
+      }
       const location = res.headers.location;
       if (location && status >= 300 && status < 400 && depth < 5) {
         res.resume(); // drain
@@ -125,13 +143,19 @@ async function handleMuzfetch(request) {
   }
 
   if (isGoogleVideo) {
-    // googlevideo serves a *bare* GET (only Range) a 206 but 403s the <audio>
-    // element's forwarded Accept / Accept-Encoding / UA / Connection headers. Strip
-    // to just Range — exactly the request that returned 206 in the standalone probe.
-    const bare = new Headers();
+    // Clean, browser-like minimal headers — what undici sends by default (UA + Accept),
+    // which returned 206. A bare GET with NO User-Agent gets 403'd; the <audio>
+    // element's full forwarded set also 403s. Send only Range + a normal Chrome UA.
+    const clean = new Headers();
     const range = headers.get("range");
-    if (range) bare.set("range", range);
-    init.headers = bare;
+    if (range) clean.set("range", range);
+    clean.set(
+      "user-agent",
+      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+    );
+    clean.set("accept", "*/*");
+    clean.set("accept-encoding", "identity");
+    init.headers = clean;
   }
 
   const res = isGoogleVideo
