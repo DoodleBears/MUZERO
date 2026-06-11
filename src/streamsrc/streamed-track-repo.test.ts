@@ -148,9 +148,42 @@ describe("offline cache (Phase 5)", () => {
     );
     await cacheStreamedTrackBlob(a.id, audio(1500), "audio/mpeg", db);
     // b stays uncached; summary counts only a.
-    expect(await summarizeStreamedCache(db)).toEqual({ count: 1, bytes: 1500 });
+    expect(await summarizeStreamedCache(db)).toEqual({
+      count: 1,
+      bytes: 1500,
+      sources: [{ sourceId: "bili", count: 1, bytes: 1500 }],
+    });
     await cacheStreamedTrackBlob(b.id, audio(500), "audio/mpeg", db);
-    expect(await summarizeStreamedCache(db)).toEqual({ count: 2, bytes: 2000 });
+    expect(await summarizeStreamedCache(db)).toEqual({
+      count: 2,
+      bytes: 2000,
+      sources: [{ sourceId: "bili", count: 2, bytes: 2000 }],
+    });
+  });
+
+  it("summarizes cached streamed tracks by source", async () => {
+    const bili = await createStreamedTrack(hitToStreamedInput("ses_1", hit), db);
+    const youtube = await createStreamedTrack(
+      hitToStreamedInput("ses_1", {
+        ...hit,
+        source: "youtube",
+        externalId: "yt_1",
+        title: "YouTube song",
+      }),
+      db,
+    );
+
+    await cacheStreamedTrackBlob(bili.id, audio(1000), "audio/mpeg", db);
+    await cacheStreamedTrackBlob(youtube.id, audio(2500), "audio/mp4", db);
+
+    expect(await summarizeStreamedCache(db)).toEqual({
+      count: 2,
+      bytes: 3500,
+      sources: [
+        { sourceId: "youtube", count: 1, bytes: 2500 },
+        { sourceId: "bili", count: 1, bytes: 1000 },
+      ],
+    });
   });
 
   it("clears the cache, freeing blobs and re-arming re-resolve", async () => {
@@ -159,7 +192,42 @@ describe("offline cache (Phase 5)", () => {
     expect(await clearStreamedCache(db)).toBe(1);
     expect((await db.tracks.get(a.id))?.blobId).toBeUndefined();
     expect(await db.mediaBlobs.count()).toBe(0);
-    expect(await summarizeStreamedCache(db)).toEqual({ count: 0, bytes: 0 });
+    expect(await summarizeStreamedCache(db)).toEqual({ count: 0, bytes: 0, sources: [] });
+  });
+
+  it("clears one source without deleting playlist source metadata", async () => {
+    const set = await createSession({ seedPrompt: "", config: { autoExtend: false } }, db);
+    const bili = await createStreamedTrack(hitToStreamedInput(set.id, hit), db);
+    const youtube = await createStreamedTrack(
+      hitToStreamedInput(set.id, {
+        ...hit,
+        source: "youtube",
+        externalId: "yt_1",
+        title: "YouTube song",
+      }),
+      db,
+    );
+    await db.sessions.update(set.id, { trackIds: [bili.id, youtube.id] });
+    await cacheStreamedTrackBlob(bili.id, audio(1000), "audio/mpeg", db);
+    await cacheStreamedTrackBlob(youtube.id, audio(2500), "audio/mp4", db);
+
+    expect(await clearStreamedCache(db, { sourceId: "youtube" })).toBe(1);
+
+    const storedBili = await db.tracks.get(bili.id);
+    const storedYoutube = await db.tracks.get(youtube.id);
+    expect(storedBili?.blobId).toBeDefined();
+    expect(storedYoutube?.blobId).toBeUndefined();
+    expect(storedYoutube).toMatchObject({
+      streamSourceId: "youtube",
+      streamExternalId: "yt_1",
+      streamMeta: expect.objectContaining({ artist: "周杰伦" }),
+    });
+    expect((await db.sessions.get(set.id))?.trackIds).toEqual([bili.id, youtube.id]);
+    expect(await summarizeStreamedCache(db)).toEqual({
+      count: 1,
+      bytes: 1000,
+      sources: [{ sourceId: "bili", count: 1, bytes: 1000 }],
+    });
   });
 });
 

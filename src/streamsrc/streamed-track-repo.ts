@@ -157,7 +157,7 @@ export async function cacheStreamedTrackBlob(
   db: MuzeroDB = defaultDb,
 ): Promise<string> {
   const track = await db.tracks.get(trackId);
-  if (!track || track.origin !== "streamed") {
+  if (track?.origin !== "streamed") {
     throw new Error(`cacheStreamedTrackBlob: ${trackId} is not a streamed track`);
   }
   const media: MediaBlob = {
@@ -187,6 +187,14 @@ export interface StreamCacheSummary {
   count: number;
   /** Total cached bytes. */
   bytes: number;
+  /** Per-source breakdown, useful for Settings storage management. */
+  sources: StreamCacheSourceSummary[];
+}
+
+export interface StreamCacheSourceSummary {
+  sourceId: StreamSourceId;
+  count: number;
+  bytes: number;
 }
 
 /** Tally the on-device offline cache for streamed tracks (Settings usage display). */
@@ -196,20 +204,46 @@ export async function summarizeStreamedCache(
   const tracks = (await db.tracks.toArray()).filter(isStreamedTrackCached);
   let count = 0;
   let bytes = 0;
+  const bySource = new Map<StreamSourceId, StreamCacheSourceSummary>();
   for (const track of tracks) {
     if (!track.blobId) continue;
     const media = await db.mediaBlobs.get(track.blobId);
     if (media?.role === "media") {
+      const mediaBytes = media.bytes ?? media.blob?.size ?? 0;
       count += 1;
-      bytes += media.bytes ?? media.blob?.size ?? 0;
+      bytes += mediaBytes;
+      if (track.streamSourceId) {
+        const current = bySource.get(track.streamSourceId) ?? {
+          sourceId: track.streamSourceId,
+          count: 0,
+          bytes: 0,
+        };
+        current.count += 1;
+        current.bytes += mediaBytes;
+        bySource.set(track.streamSourceId, current);
+      }
     }
   }
-  return { count, bytes };
+  return { count, bytes, sources: [...bySource.values()].sort((a, b) => b.bytes - a.bytes) };
 }
 
-/** Evict all cached streamed media; the tracks stay (re-resolve on next play). Returns the count freed. */
-export async function clearStreamedCache(db: MuzeroDB = defaultDb): Promise<number> {
-  const tracks = (await db.tracks.toArray()).filter(isStreamedTrackCached);
+export interface ClearStreamedCacheOptions {
+  /** Limit eviction to one source; omitted means all streamed cache. */
+  sourceId?: StreamSourceId;
+}
+
+/**
+ * Evict cached streamed media; the tracks stay (re-resolve on next play). Returns the count freed.
+ */
+export async function clearStreamedCache(
+  db: MuzeroDB = defaultDb,
+  options: ClearStreamedCacheOptions = {},
+): Promise<number> {
+  const tracks = (await db.tracks.toArray()).filter(
+    (track) =>
+      isStreamedTrackCached(track) &&
+      (!options.sourceId || track.streamSourceId === options.sourceId),
+  );
   let cleared = 0;
   await db.transaction("rw", db.tracks, db.mediaBlobs, async () => {
     for (const track of tracks) {
@@ -222,4 +256,9 @@ export async function clearStreamedCache(db: MuzeroDB = defaultDb): Promise<numb
     }
   });
   return cleared;
+}
+
+/** Convenience wrapper for UI callers that use the default app db. */
+export async function clearStreamedCacheForSource(sourceId: StreamSourceId): Promise<number> {
+  return clearStreamedCache(defaultDb, { sourceId });
 }

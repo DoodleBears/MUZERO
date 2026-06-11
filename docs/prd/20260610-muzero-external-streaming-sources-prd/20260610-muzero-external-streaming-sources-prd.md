@@ -683,14 +683,14 @@ success：Set-Cookie 已被 net.fetch 写进默认 session → bridge.readSource
 
 | # | 单元 | 文件 | 测试 | 状态 |
 |---|---|---|---|---|
-| CA1 | 缓存 repo：`cacheStreamedTrackBlob`(存 blob+回填 blobId，重下替换旧 blob 不留孤儿)、`isStreamedTrackCached`、`summarizeStreamedCache`(占用统计)、`clearStreamedCache`(清缓存+复位 re-resolve) | `streamsrc/streamed-track-repo.ts` | fake-idb ×5 | ✅ green |
+| CA1 | 缓存 repo：`cacheStreamedTrackBlob`(存 blob+回填 blobId，重下替换旧 blob 不留孤儿)、`isStreamedTrackCached`、`summarizeStreamedCache`(总量 + 按来源占用统计)、`clearStreamedCache`(全量/按来源清缓存+复位 re-resolve；保留歌单与来源元信息) | `streamsrc/streamed-track-repo.ts` | fake-idb ×7 | ✅ green |
 | CA2 | 下载编排：`runStreamCache({resolve,fetchBytes,store})`→resolve→下载→存(注入式纯函数；VIP/登录门不下载、错误不写坏 blob、mime 回退) | `streamsrc/cache-stream.ts` | 注入 stub ×4 | ✅ green |
 | CA3 | player-store `cacheStreamedTrackNow`(模块件)+`downloadStreamedTrack(trackId)` action：接 `resolveStreamedTrackMedia`(账号 cookie)+`mediaProxyUrl` 拉字节+`cacheStreamedTrackBlob`；**自动缓存钩子**(播放后若 `autoCacheStreamed` 开则后台下载)；toast 结果(VIP→`streamNeedsAccess`) | `stores/player-store.ts` · `db/types.ts`(`autoCacheStreamed`) | typecheck + 137 测全绿；**待 Electron 手测**(真实拉流) | ✅ |
 | CA3b | YouTube 已下载 Blob 直存：provider/runtime 把 `info.download()` 得到的 Blob 穿透到 `PlayableStream.blob`；player 直接 `loadBlob()` 播放并后台 `cacheStreamedTrackBlob`，不再对 `blob:` URL 二次 fetch | `provider.ts` · `resolve-playback.ts` · `cache-stream.ts` · `youtube-ytjs.ts` · `youtube-source.ts` · `player-store.ts` | `cache-stream.test.ts` + `youtube-source.test.ts` 增量；相关 32 测绿 | ✅ green |
-| CA4 | Settings 缓存管理（折进「在线音源」卡片）：自动缓存开关 + 占用显示(`summarizeStreamedCache` via liveQuery)+ 一键清理(`clearStreamedCache`)；i18n `streamCache.*`×4 | `components/settings/stream-sources-settings.tsx` · i18n | typecheck + biome + i18n 全绿 | ✅ |
+| CA4 | Settings 缓存管理（折进「在线音源」卡片）：自动缓存开关 + 总占用显示(`summarizeStreamedCache` via liveQuery)+ 全部清理(`clearStreamedCache`)+ 按来源占用/清理（YouTube / Bilibili / NetEase）；i18n 复用 `streamCache.*`×4 | `components/settings/stream-sources-settings.tsx` · i18n | focused vitest + biome | ✅ green |
 | CA5 | **本地优先播放裁决**：`playbackSourceKind` 纯函数(blob→remote→stream→none) + `ensureLoadedAndPlay` 路由经它(就绪判定 + 加载分支)，锁死「下载后播本地不联网」契约 | `streamsrc/source-detect.ts` · `stores/player-store.ts` | `source-detect.test.ts` ×4(下载走 blob/未下载走 stream/blob 压 remote+stream/缺 id→none) | ✅ green |
 
-**落地**：缓存核心(repo + 编排)纯逻辑全单测；`cacheStreamedTrackNow` 接真实 resolve(账号 cookie)+ 代理拉字节(Referer 注入)+ 入库；`autoCacheStreamed` 开则播放后后台缓存。YouTube 例外：由于可播路径本身已经先完整下载音频 Blob（video-bound PoToken + `info.download()`），播放器复用同一份 Blob 播放并后台落库，避免二次下载或 fetch `blob:` URL 失败。Settings 折进「在线音源」卡片（开关 + 占用 + 清理）。**播放走本地优先**由 `playbackSourceKind` 单点裁决并单测锁定（CA5）：缓存后的 YouTube track 下次直接走 `blobId`，不 re-resolve、不触碰 YouTube。**Phase 5 完成**（离线断网手测仍待补）。
+**落地**：缓存核心(repo + 编排)纯逻辑全单测；`cacheStreamedTrackNow` 接真实 resolve(账号 cookie)+ 代理拉字节(Referer 注入)+ 入库；`autoCacheStreamed` 开则播放后后台缓存。YouTube 例外：由于可播路径本身已经先完整下载音频 Blob（video-bound PoToken + `info.download()`），播放器复用同一份 Blob 播放并后台落库，避免二次下载或 fetch `blob:` URL 失败。Settings 折进「在线音源」卡片（开关 + 总占用 + 分来源占用 + 全部/单来源清理）；清理只删除 `origin:"streamed"` 曲目的本地 `mediaBlobs` 音频并清空 `blobId`，保留 set trackIds、`streamSourceId`、`streamExternalId`、`streamMeta`，所以下次播放可重新 resolve/download。**播放走本地优先**由 `playbackSourceKind` 单点裁决并单测锁定（CA5）：缓存后的 YouTube track 下次直接走 `blobId`，不 re-resolve、不触碰 YouTube。**Phase 5 完成**（离线断网手测仍待补）。
 
 ## 20. Phase 4：YouTube 源（进行中）
 

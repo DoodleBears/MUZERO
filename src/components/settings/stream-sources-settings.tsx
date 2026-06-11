@@ -18,9 +18,14 @@ import {
 import type { StreamPlaylist } from "@/streamsrc/provider";
 import { createStreamSource } from "@/streamsrc/registry";
 import { createStreamHttp } from "@/streamsrc/stream-http";
-import { clearStreamedCache, summarizeStreamedCache } from "@/streamsrc/streamed-track-repo";
+import {
+  clearStreamedCache,
+  clearStreamedCacheForSource,
+  type StreamCacheSummary,
+  summarizeStreamedCache,
+} from "@/streamsrc/streamed-track-repo";
 
-const EMPTY_CACHE = { count: 0, bytes: 0 };
+const EMPTY_CACHE = { count: 0, bytes: 0, sources: [] } satisfies StreamCacheSummary;
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -39,6 +44,12 @@ const SOURCES: { id: StreamSourceId; label: string; qualities: string[] }[] = [
   { id: "netease", label: "网易云", qualities: ["standard", "exhigh", "lossless", "hires"] },
   { id: "bili", label: "Bilibili", qualities: ["low", "medium", "high", "lossless"] },
 ];
+
+const SOURCE_LABELS: Record<StreamSourceId, string> = {
+  netease: "网易云",
+  bili: "Bilibili",
+  youtube: "YouTube",
+};
 
 /**
  * Per-source login (cookie capture) + quality for the external streaming sources.
@@ -181,19 +192,23 @@ function StreamCacheControls() {
   const { t } = useTranslation();
   const settings = useSettings();
   const summary = useLiveQuery(() => summarizeStreamedCache(), [], EMPTY_CACHE);
-  const [clearing, setClearing] = useState(false);
+  const [clearing, setClearing] = useState<StreamSourceId | "all" | null>(null);
 
   async function toggleAuto(on: boolean) {
     await saveSettings({ autoCacheStreamed: on });
   }
 
-  async function clear() {
-    setClearing(true);
+  async function clear(sourceId?: StreamSourceId) {
+    setClearing(sourceId ?? "all");
     try {
-      await clearStreamedCache();
+      if (sourceId) {
+        await clearStreamedCacheForSource(sourceId);
+      } else {
+        await clearStreamedCache();
+      }
       notify.success(t("streamCache.cleared"));
     } finally {
-      setClearing(false);
+      setClearing(null);
     }
   }
 
@@ -222,12 +237,43 @@ function StreamCacheControls() {
           type="button"
           variant="outline"
           size="sm"
-          disabled={clearing || summary.count === 0}
+          disabled={!!clearing || summary.count === 0}
           onClick={() => void clear()}
         >
           {t("streamCache.clear")}
         </Button>
       </div>
+      {summary.sources.length > 0 && (
+        <div className="space-y-2">
+          {summary.sources.map((source) => (
+            <div
+              key={source.sourceId}
+              className="flex items-center justify-between gap-2 rounded-md bg-muted/40 px-3 py-2"
+            >
+              <span className="text-xs">
+                <span className="font-medium text-foreground">
+                  {SOURCE_LABELS[source.sourceId]}
+                </span>
+                <span className="ml-2 text-muted-foreground">
+                  {t("streamCache.usage", {
+                    count: source.count,
+                    size: formatBytes(source.bytes),
+                  })}
+                </span>
+              </span>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={!!clearing}
+                onClick={() => void clear(source.sourceId)}
+              >
+                {t("streamCache.clear")}
+              </Button>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
