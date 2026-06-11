@@ -1,6 +1,7 @@
-import type { AppSettings, LlmProviderId } from "@/db/types";
+import type { AppSettings, CustomLlmProvider, LlmProviderId } from "@/db/types";
+import { customLlmProviderToPreset, isCustomLlmProviderId } from "./custom-llm-providers";
 
-export type LlmProviderPresetId =
+export type BuiltinLlmProviderPresetId =
   | "openrouter"
   | "openai"
   | "claude"
@@ -8,6 +9,9 @@ export type LlmProviderPresetId =
   | "groq"
   | "deepseek"
   | "custom";
+
+/** Built-ins plus user-defined `custom:<uuid>` providers (Dexie-backed). */
+export type LlmProviderPresetId = BuiltinLlmProviderPresetId | `custom:${string}`;
 
 export interface LlmModelPreset {
   id: string;
@@ -38,7 +42,7 @@ export interface LlmSessionSelectionOverride {
   llmModel?: string;
 }
 
-export const LLM_PROVIDER_PRESETS: Record<LlmProviderPresetId, LlmProviderPreset> = {
+export const LLM_PROVIDER_PRESETS: Record<BuiltinLlmProviderPresetId, LlmProviderPreset> = {
   openrouter: {
     id: "openrouter",
     label: "OpenRouter",
@@ -108,26 +112,74 @@ export const LLM_PROVIDER_PRESETS: Record<LlmProviderPresetId, LlmProviderPreset
   },
 };
 
-export const LLM_PROVIDER_PRESET_IDS = Object.keys(LLM_PROVIDER_PRESETS) as LlmProviderPresetId[];
+export const LLM_PROVIDER_PRESET_IDS = Object.keys(
+  LLM_PROVIDER_PRESETS,
+) as BuiltinLlmProviderPresetId[];
 
-export function resolveLlmProviderPreset(id: string | undefined): LlmProviderPreset {
+/** Built-ins followed by the user's dynamic custom providers (Settings order). */
+export function allLlmProviderPresets(custom: CustomLlmProvider[] = []): LlmProviderPreset[] {
+  return [
+    ...LLM_PROVIDER_PRESET_IDS.map((id) => LLM_PROVIDER_PRESETS[id]),
+    ...custom.map(customLlmProviderToPreset),
+  ];
+}
+
+export function resolveLlmProviderPreset(
+  id: string | undefined,
+  custom: CustomLlmProvider[] = [],
+): LlmProviderPreset {
+  if (isCustomLlmProviderId(id)) {
+    const match = custom.find((provider) => provider.id === id);
+    if (match) return customLlmProviderToPreset(match);
+  }
   return (
-    LLM_PROVIDER_PRESETS[(id as LlmProviderPresetId | undefined) ?? "openai"] ??
+    LLM_PROVIDER_PRESETS[(id as BuiltinLlmProviderPresetId | undefined) ?? "openai"] ??
     LLM_PROVIDER_PRESETS.openai
   );
 }
 
-export function defaultModelForPreset(id: string | undefined): string {
-  return resolveLlmProviderPreset(id).models[0]?.id ?? "gpt-4o-mini";
+/** Dynamic custom endpoints may run keyless (local vLLM/ollama-style servers). */
+export function llmProviderAllowsMissingApiKey(id: string | undefined): boolean {
+  return isCustomLlmProviderId(id);
+}
+
+export function defaultModelForPreset(
+  id: string | undefined,
+  custom: CustomLlmProvider[] = [],
+): string {
+  return resolveLlmProviderPreset(id, custom).models[0]?.id ?? "gpt-4o-mini";
+}
+
+/**
+ * The model to show/use when switching to a preset: last remembered for that
+ * preset → current setting if the preset knows it → the preset's first model
+ * (ClipCombo's `editorLlmModelForPreset`).
+ */
+export function llmModelForPreset(
+  settings: Pick<AppSettings, "modelsByPresetId">,
+  preset: LlmProviderPreset,
+): string {
+  const remembered = settings.modelsByPresetId?.[preset.id]?.trim();
+  if (
+    remembered &&
+    (isCustomLlmProviderId(preset.id) || preset.models.some((m) => m.id === remembered))
+  ) {
+    return remembered;
+  }
+  return preset.models[0]?.id ?? "gpt-4o-mini";
 }
 
 export function legacyPresetFor(provider: LlmProviderId): LlmProviderPresetId {
   return provider === "anthropic" ? "claude" : "openai";
 }
 
-export function llmSelectionFromSettings(settings: AppSettings): LlmSelection {
+export function llmSelectionFromSettings(
+  settings: AppSettings,
+  custom: CustomLlmProvider[] = [],
+): LlmSelection {
   const presetId = settings.defaultLlmProviderPresetId ?? legacyPresetFor(settings.llmProvider);
-  const model = settings.defaultLlmModel ?? (settings.llmModel || defaultModelForPreset(presetId));
+  const model =
+    settings.defaultLlmModel ?? (settings.llmModel || defaultModelForPreset(presetId, custom));
   return {
     presetId,
     model,
@@ -138,13 +190,14 @@ export function llmSelectionFromSettings(settings: AppSettings): LlmSelection {
 export function llmSelectionForChatSession(
   settings: AppSettings,
   session: LlmSessionSelectionOverride | undefined,
+  custom: CustomLlmProvider[] = [],
 ): LlmSelection {
-  const base = llmSelectionFromSettings(settings);
+  const base = llmSelectionFromSettings(settings, custom);
   const presetId =
     (session?.llmProviderPresetId as LlmProviderPresetId | undefined) ?? base.presetId;
   const model =
     session?.llmModel?.trim() ||
-    (presetId === base.presetId ? base.model : defaultModelForPreset(presetId));
+    (presetId === base.presetId ? base.model : defaultModelForPreset(presetId, custom));
   return {
     presetId,
     model,
@@ -163,6 +216,16 @@ export function apiKeyForPreset(
   );
 }
 
-export function enabledLlmPresetIds(settings: AppSettings): LlmProviderPresetId[] {
-  return LLM_PROVIDER_PRESET_IDS.filter((id) => Boolean(apiKeyForPreset(settings, id)));
+/**
+ * Presets selectable in the model picker: built-ins with a key, plus every
+ * dynamic custom provider (their key is optional — keyless local endpoints).
+ */
+export function enabledLlmPresetIds(
+  settings: AppSettings,
+  custom: CustomLlmProvider[] = [],
+): LlmProviderPresetId[] {
+  return [
+    ...LLM_PROVIDER_PRESET_IDS.filter((id) => Boolean(apiKeyForPreset(settings, id))),
+    ...custom.map((provider) => provider.id),
+  ];
 }

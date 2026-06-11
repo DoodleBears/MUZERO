@@ -5,6 +5,7 @@ import type {
   ChatSession,
   CloudDrive,
   CloudShare,
+  CustomLlmProvider,
   DeviceRecord,
   DjSession,
   EntityCover,
@@ -52,6 +53,7 @@ export class MuzeroDB extends Dexie {
   playbackAggregates!: EntityTable<PlaybackAggregate, "id">;
   entityCovers!: EntityTable<EntityCover, "id">;
   lyrics!: EntityTable<TrackLyrics, "id">;
+  llmCustomProviders!: EntityTable<CustomLlmProvider, "id">;
 
   constructor(name = "muzero-db") {
     super(name);
@@ -321,6 +323,13 @@ export class MuzeroDB extends Dexie {
     // 1:1 with a track via the unique `trackId`. Additive new table, no backfill.
     this.version(20).stores({
       lyrics: "id, &trackId",
+    });
+
+    // v21 — user-defined OpenAI-compatible LLM providers (chat PRD §6.1,
+    // ClipCombo parity). Additive new table, no backfill; keys stay in the
+    // settings row, never here.
+    this.version(21).stores({
+      llmCustomProviders: "id, createdAt",
     });
   }
 }
