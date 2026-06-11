@@ -11,7 +11,7 @@
 
 | Phase | Name | Status | Link |
 |-------|------|--------|------|
-| 1 | Audit, Taxonomy, Redaction Contract | Pending | [Phase 1 Checklist](#phase-1-checklist) |
+| 1 | Audit, Taxonomy, Redaction Contract | Completed | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | Shared Structured Logger API | Pending | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | Playback / Stream Trace Migration | Pending | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | Settings Trace Workbench | Pending | [Phase 4 Checklist](#phase-4-checklist) |
@@ -596,19 +596,19 @@ All user-facing strings must go through i18n catalogs in `src/i18n/locales/{en,z
 **Goal:** Freeze the diagnostic vocabulary before migrating logs.
 
 **Tasks:**
-- [ ] Audit current `log.*` and `traceEvent()` calls in `src/**`.
-- [ ] Audit Electron main-process `console.*` usage, especially `electron/fetch-proxy.cjs`.
-- [ ] Define `DiagnosticContext`, taxonomy enums, and event naming rules.
-- [ ] Implement redaction policy tests before broad migration.
-- [ ] Document safe vs forbidden diagnostic fields in code comments near sanitizer.
+- [x] Audit current `log.*` and `traceEvent()` calls in `src/**`.
+- [x] Audit Electron main-process `console.*` usage, especially `electron/fetch-proxy.cjs`.
+- [x] Define `DiagnosticContext`, taxonomy enums, and event naming rules.
+- [x] Implement redaction policy tests before broad migration.
+- [x] Document safe vs forbidden diagnostic fields in code comments near sanitizer.
 
 ### Phase 1 Checklist
 
-- [ ] No known secret field can pass through sanitizer unredacted.
-- [ ] Full signed media URLs are never copied into Settings trace.
-- [ ] Raw user input, search queries, note text, chat text, prompt text, pasted text, and file names are never copied into Settings trace.
-- [ ] Existing trace copy remains functional after schema additions.
-- [ ] PR review includes at least one real pasted YouTube failure log mapped to target events.
+- [x] No known secret field can pass through sanitizer unredacted.
+- [x] Full signed media URLs are never copied into Settings trace.
+- [x] Raw user input, search queries, note text, chat text, prompt text, pasted text, and file names are never copied into Settings trace.
+- [x] Existing trace copy remains functional after schema additions.
+- [x] PR review includes at least one real pasted YouTube failure log mapped to target events.
 
 ### Phase 2: Shared Structured Logger API
 
@@ -831,3 +831,4 @@ Given a stream source requires headers/cookies/login or returns no playable URL:
 | 2026-06-11 | Codex | Initial draft based on current logger/trace audit and external streaming debug needs |
 | 2026-06-11 | Codex | Added console-as-secondary policy and local trace archive/file export requirements |
 | 2026-06-11 | Codex | Resolved Open Questions 1-5 by best practice and added user-action/repro-step trace requirements |
+| 2026-06-11 | Codex | Completed Phase 1 with structured diagnostics schema, filter helpers, URL summarization, and redaction tests |
