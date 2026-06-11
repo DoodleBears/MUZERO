@@ -1,6 +1,7 @@
 import { MotionConfig } from "motion/react";
 import type { ReactNode } from "react";
 import { useEffect, useRef, useState } from "react";
+import { DevPerfPanel } from "@/components/dev/dev-perf-panel";
 import { ImmersiveLyricsOverlay } from "@/components/player/immersive-lyrics-overlay";
 import { ImmersiveMemoryOverlay } from "@/components/player/immersive-memory-overlay";
 import { LyricsTuningPanel } from "@/components/player/lyrics-tuning-panel";
@@ -232,6 +233,9 @@ export default function App() {
 
         {/* App-wide drag-and-drop + paste: media → import; image → cover/background/gallery. */}
         <GlobalDropZone onMediaUploaded={(createdSet) => createdSet && setTab("queue")} />
+
+        {/* Dev-only floating perf HUD (FPS / frame cadence / jank / JS heap). */}
+        {import.meta.env.DEV && <DevPerfPanel />}
       </div>
     </MotionConfig>
   );
