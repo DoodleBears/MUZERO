@@ -1,6 +1,6 @@
 # PRD: MUZERO Custom Artist / Album Covers (with R2 Sync)
 
-**Status:** Draft
+**Status:** Completed（Phase 1–4 核心全实现：本地 entity-cover store + 详情页设/清 UX + R2 library 命名空间 + pull/import LWW。延后[随大 sync 子系统]：`setEntityCover`/`clearEntityCover` 的 mutation 记录 + pull orchestrator 接线 → 清除暂不跨设备传播 — 审计 2026-06-11）
 **Created:** 2026-06-10
 **Author:** MUZERO
 **Module:** Media Library — let users set a memorable cover/avatar per artist & album, persisted locally and synced across devices via R2

@@ -16,7 +16,7 @@
 | 1 | 播放列表 Play Queue 地基（表 + repo + player-store 改消费它 + 迁移现有播放） | ✅ Completed | §6 |
 | 2 | autoExtend / refill 迁到 Play Queue（续歌喂队列） | ✅ Completed | §6 |
 | 3 | 歌曲记忆 Memory（表 + 迁移 `Track.note` + 多记忆编辑 + 搜索/DJ 上下文接 memory） | ✅ Completed（数据层 + annotation 便签 UI + search/DJ/provenance；浏览器全流程预览并入 Phase 4） | §6 |
-| 4 | UI 打磨（歌单管理、播放列表 play-next/add/reorder、记忆相册、封面取自记忆） | 🔄 In Progress | §6 |
+| 4 | UI 打磨（歌单管理、播放列表 play-next/add/reorder、记忆相册、封面取自记忆） | 🔄 ~85%：记忆相册/时间线轨/封面取自记忆(`setTrackCoverFromMemory`)/当前曲右键菜单/折叠记忆轨/虚拟行高 ✅；剩「歌单管理显式 play/加入队列 动作」+ 4 语 i18n 全量 — 审计 2026-06-11 | §6 |
 
 > Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
 

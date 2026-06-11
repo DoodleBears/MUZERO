@@ -1,6 +1,6 @@
 # PRD: MUZERO — 播放快捷键 + Dock 音量/循环控件 + Kbd 提示
 
-**Status:** Completed（3 phase 全实现，294 tests 绿；浏览器实测音量 hover 滑块 + 循环 cycle + dock 控件，dark/mobile 响应式 OK）
+**Status:** Completed → 已重构（功能保留，审计 2026-06-11）。Phase 1/2 的硬编码 `player-shortcuts.ts` / `use-player-shortcuts.ts` **已被 [configurable-keyboard-shortcuts] 的 registry + `use-shortcut-dispatch` 取代并删除**（行为等价且现可改键）。Phase 3 dock 控件保留：音量 hover 竖向滑块 ✅、tooltip 经 `use-shortcut-hint` **实时反映用户改键** ✅；但**循环控件已移出 dock**（dock 现为 queue+shuffle+音量+收藏簇，repeat 改置于 Now Playing 动作行）。`playerShortcutHint`→`useShortcutHint`（仅 `volumeFromPointerY` 留在 `player-hints.ts`）。
 **Created:** 2026-06-07
 **Author:** MUZERO
 **Module:** 播放器 —— 全局键盘快捷键、Dock 音量 hover 滑块 + 循环控件、transport 控件 hover(label + Kbd)
@@ -15,7 +15,7 @@
 |-------|------|--------|------|
 | 1 | 纯快捷键解析 `resolvePlayerShortcut`（key→action，TDD） | ✅ Completed | §5 |
 | 2 | 全局键盘处理 + dispatch（接 player-store，让快捷键真正生效） | ✅ Completed | §5 |
-| 3 | Dock 音量控件（hover 竖向滑块）+ 循环控件 + transport tooltip(label+Kbd) | ✅ Completed | §5 |
+| 3 | Dock 音量控件（hover 竖向滑块）+ 循环控件 + transport tooltip(label+Kbd) | ✅ 音量滑块+tooltip 保留；循环已移出 dock | §5 |
 
 > Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
 

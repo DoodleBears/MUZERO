@@ -1,6 +1,6 @@
 # PRD: MUZERO — 音频驱动播放（修「切界面音乐暂停」根因）
 
-**Status:** Draft
+**Status:** Implemented（双元素 `MediaEngine`[持久 `<audio>` 驱动 + muted `<video>` 视层 + drift 同步]代码完成 + 单测绿；跨界面连续播放的**真实环境验证待人工**[`make desktop` / 前台窗口——Preview 隐藏 tab 会被浏览器暂停，无法验证] — 审计 2026-06-11）
 **Created:** 2026-06-07
 **Author:** MUZERO
 **Module:** 播放引擎 —— `<audio>` 驱动播放 + 静音 `<video>` 视觉层，使播放跨界面不中断

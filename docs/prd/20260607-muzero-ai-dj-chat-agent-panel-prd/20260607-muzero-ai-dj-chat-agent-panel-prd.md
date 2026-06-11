@@ -1,6 +1,6 @@
 # PRD: MUZERO — AI DJ Chat Agent Panel（多 Session 对话 · 三形态 · 流式 · 工具调用）
 
-**Status:** Draft
+**Status:** In Progress（Phase 1 ✅；Phase 2–6 的运行时 / 组件 / 测试**全部已建并绿**[`src/chat/*` runtime actor·tools·sessions·tokens·budget；`src/components/chat/*` FAB·bar·dock·session-home·model-picker·queue-tray·empty·notice；Dexie v5 chatSessions]，但统一阻塞于两件事：① `App.tsx` 挂载属并行 Now Playing redesign WIP → 待其落地做 CHAT-2b；② chat 命名空间 i18n 4 语 + Settings key 管理接线。即「逻辑齐备、外壳未挂」——审计 2026-06-11）
 **Created:** 2026-06-07
 **Author:** MUZERO
 **Module:** AI DJ 对话助手 —— 本地优先、BYOK、Vercel AI SDK v6 tool-loop、Dexie 持久化
@@ -16,11 +16,11 @@
 | Phase | Name | Status | Link |
 |-------|------|--------|------|
 | 1 | Chat runtime 地基（Dexie v5 + Runtime Actor + 单 session 流式 + streamdown） | ✅ Completed | §7 |
-| 2 | 三形态显示外壳（FAB / 底部输入条 / Dock 1∕3 → 移动端全屏） | 🔄 In Progress | §7 |
-| 3 | DJ 工具调用（search/create/curate/propose/generate + HITL 审批） | 🔄 In Progress | §7 |
-| 4 | 多 Session + 历史列表（搜索）+ branch/regenerate | 🔄 In Progress | §7 |
-| 5 | 多 Provider 模型选型（preset 化 + combobox + Settings + key 入 Dexie） | 🔄 In Progress | §7 |
-| 6 | 队列/打断 prompt + 空态 onboarding + 上下文压缩 | 🔄 In Progress | §7 |
+| 2 | 三形态显示外壳（FAB / 底部输入条 / Dock 1∕3 → 移动端全屏） | 🔄 组件+breakpoint+测试 ✅；**App.tsx 挂载待 WIP**（CHAT-2b） | §7 |
+| 3 | DJ 工具调用（search/create/curate/propose/generate + HITL 审批） | 🔄 6 工具+审批桥+折叠 UI+测试 ✅；HITL ask/auto 切换 + i18n 待 | §7 |
+| 4 | 多 Session + 历史列表（搜索）+ branch/regenerate | 🔄 search/branch/regenerate/session-home ✅；列表挂载待 WIP | §7 |
+| 5 | 多 Provider 模型选型（preset 化 + combobox + Settings + key 入 Dexie） | 🔄 7 preset+model picker+dialog/popover/command 原语 ✅；Settings key UI + i18n 待 | §7 |
+| 6 | 队列/打断 prompt + 空态 onboarding + 上下文压缩 | 🔄 token/budget/queue-tray/empty/notice ✅；App 挂载 + i18n 待 | §7 |
 
 > Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
 

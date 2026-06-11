@@ -1,6 +1,6 @@
 # PRD: 歌单内拖拽排序（多选模式 · Notion 式分数序）
 
-**Status:** Draft
+**Status:** Completed（Phase 1–4 全实现：分数序核心 + 仓库层 + R2 rank 同步 round-trip + @dnd-kit 多选拖拽 UI[整选区移动 / drop 指示线 / 手动序门控]；~60 测绿，交互实测待真机 — 审计 2026-06-11）
 **Created:** 2026-06-11
 **Author:** DoodleBear / Product
 **Module:** Sets / Library — 歌单内 track 顺序（drag-to-reorder）

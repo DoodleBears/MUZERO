@@ -1,6 +1,6 @@
 # PRD: Settings Two-Column Layout + Cloud Drive Setup Simplification
 
-**Status:** Review
+**Status:** Completed（Phase 1–5 + Phase 6 核心统一全实现：owner/shared-link 双 tab + 每盘 set 浏览/导入 + 退役独立 Subscribe item。Phase 6 仅「public/private 访问模式切换」延后，阻塞于 local-presign 私有读[R2 PRD Tier ①] — 审计 2026-06-11）
 **Created:** 2026-06-09
 **Author:** MUZERO
 **Module:** Settings page (`src/pages/settings-page.tsx`) + R2 owner setup (`src/sync/*`)

@@ -1,6 +1,6 @@
 # PRD: MUZERO — User-Owned R2 Cloud Drive Sync
 
-**Status:** Draft
+**Status:** Completed（Phase 1–6 全实现 + 测试；post-v1 manifest 扩展 [entity-cover / rank / thumbhash / lyrics / memory atSec / streamed origin] 已并入 schema。延后：V2 自托管 broker、V3 `mu0.app` 托管控制面 — 审计 2026-06-11）
 **Created:** 2026-06-09
 **Author:** MUZERO
 **Module:** Sync / Sharing — Cloudflare R2 as user-owned cloud drive

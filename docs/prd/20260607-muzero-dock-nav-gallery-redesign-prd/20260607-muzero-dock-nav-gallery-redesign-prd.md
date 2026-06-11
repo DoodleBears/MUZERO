@@ -16,7 +16,7 @@
 | 1 | 歌单 Gallery 纯逻辑（filter / sort，纯函数 TDD） | ✅ Completed | §6 |
 | 2 | 歌单 Gallery 页面（search-page 改造：搜索框 + filter/sort chips + list/album-grid） | ✅ Completed | §6 |
 | 3 | 导航极简化（first=播放页；移除 AI tab；合并为可折叠 nav FAB 置于播放信息右侧） | ✅ Completed | §6 |
-| 4 | 可拖拽 AI FAB（悬浮、自由拖拽，承接 chat PRD 的 `fab` 形态） | 🔲 Pending | §6 |
+| 4 | 可拖拽 AI FAB（悬浮、自由拖拽，承接 chat PRD 的 `fab` 形态） | 🔄 `chat-launcher-fab` 静态壳已存在（`fixed` 定位 + 未读点）；**自由拖拽 + 位置持久化 + 边界 clamp 待做** — 审计 2026-06-11 | §6 |
 
 > Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
 

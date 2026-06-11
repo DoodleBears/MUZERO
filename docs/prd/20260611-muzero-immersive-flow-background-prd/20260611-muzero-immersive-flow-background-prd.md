@@ -1,6 +1,6 @@
 # PRD: 沉浸式「流光」动态背景（封面取色多色流光 + 可配置颜色组合）
 
-**Status:** Implemented（Phase 1–5 ✅ 已落地并提交；真实 app 视觉/交互验证待人工）
+**Status:** Implemented（Phase 1–10 ✅ 全实现并提交：14 个自研 flow shader 全在 `flow-shaders.ts`、`scene-flow` registry `hidden:true`、独立合成层 + CSS `mix-blend-mode`、切效果交叉淡化 + 切歌 900ms `mixPalette`、`FLOW_DEFAULTS` + 低功耗背景；真实 app 视觉验证 + bundle 复测待人工 — 审计 2026-06-11）
 **Created:** 2026-06-11
 **Author:** DoodleBear / MUZERO
 **Module:** Player — Now Playing 沉浸式背景。新增 `scene-flow` 流光可视化（复用既有 twgl scene registry + `now-playing-background` 背景层 + 封面取色管线），把现在的「单一主色光晕」升级为「多色封面取色 / 自定义多色流光」，并在 Settings 新增独立「流光背景」面板（效果 / 取色源 / 颜色组合 / 压暗 / 透明度）

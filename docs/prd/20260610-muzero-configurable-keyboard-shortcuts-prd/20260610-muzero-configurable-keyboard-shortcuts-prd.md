@@ -1,6 +1,6 @@
 # PRD: Configurable Keyboard Shortcuts (registry + cheat-sheet + cyclic-conflict rebind)
 
-**Status:** Draft
+**Status:** Implemented（Phase 1–4 + Phase 5 部分全实现：registry+engine+持久化、全局/分域 dispatch、Settings cheat-sheet、级联「循环」冲突录制器、import/export + presets；2-stroke 序列按设计延后；~100 测绿。**已取代旧 player-shortcuts 硬编码解析**[`player-shortcuts.ts`/`use-player-shortcuts.ts` 已删] — 审计 2026-06-11）
 **Created:** 2026-06-10
 **Author:** MUZERO
 **Module:** Shortcuts — a single source of truth for every key/gesture binding, a discoverable "view all shortcuts" surface in Settings, and per-action rebinding with multi-binding + cascading ("循环") conflict resolution.

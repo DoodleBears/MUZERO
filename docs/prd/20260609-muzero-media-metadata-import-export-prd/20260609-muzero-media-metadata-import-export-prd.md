@@ -1,6 +1,6 @@
 # PRD: MUZERO Media Metadata Import and Export
 
-**Status:** Draft
+**Status:** Completed（Phase 0–3 全实现：raw 下载按钮 + 导入期 metadata 解析[`media-metadata.ts`] + library 展示面 + metadata-correct 导出管线 — 审计 2026-06-11）
 **Created:** 2026-06-09
 **Author:** MUZERO
 **Module:** Media Library - Import metadata, cover extraction, and metadata-correct export

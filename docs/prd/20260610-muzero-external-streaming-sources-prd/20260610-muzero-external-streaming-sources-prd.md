@@ -16,7 +16,7 @@
 | 1 | 基础设施：muzfetch header 注入 + Range 透传 + StreamSource 抽象 + 数据模型 | ✅ Completed | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | Bilibili 源（架构试金石：WBI + DASH 音轨 + 登录 + 入库 + 播放路由） | ✅ Completed | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | 网易云源（weapi/eapi 纯 TS 加密 + 登录 + 搜索 + 音质降级 + 歌单同步 + 歌词） | ✅ Completed | [Phase 3 Checklist](#phase-3-checklist) |
-| 4 | YouTube 源（InnerTube + 自研 sig/n 解密 + vm 沙箱）（PoToken 押后） | 🔄 接线完成 / 待手测 | [Phase 4 Checklist](#phase-4-checklist) |
+| 4 | YouTube 源（**已改用 `youtubei.js` decipher**；自研 sig/n/vm 沙箱实现保留为 dead code）（PoToken 押后） | 🔄 接线完成（57 纯测绿，Vite pre-bundle 修好）/ 待 Electron 手测 | [Phase 4 Checklist](#phase-4-checklist) |
 | 5 | 离线缓存 / 下载持久化（"尽量入库存储"，可选增强） | ✅ Completed | [Phase 5 Checklist](#phase-5-checklist) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
