@@ -16,8 +16,8 @@
 | 1 | 版本号单一真相 + 注入 + 比较（三文件同步 bump + Vite define + compareSemver；Settings 显示移 P5） | ✅ Completed | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | Changelog 规范 + 类型化数据模型 + 历史大版本回填 + 「What's New」面板 | ✅ Completed | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | Electron 发布打包硬化（publish provider + per-OS targets + app-update + 安全/外部依赖收口） | ✅ Completed | [Phase 3 Checklist](#phase-3-checklist) |
-| 4 | Makefile 多平台发布指令 + R2 分发 + `manifest.json` 版本索引（合并式上传） | 🔲 Pending | [Phase 4 Checklist](#phase-4-checklist) |
-| 5 | 自动更新（electron-updater IPC + 渲染层提示）+ Settings 历史版本下载侧栏 | 🔲 Pending | [Phase 5 Checklist](#phase-5-checklist) |
+| 4 | Makefile 多平台发布指令 + R2 分发 + `manifest.json` 版本索引（合并式上传） | ✅ Completed | [Phase 4 Checklist](#phase-4-checklist) |
+| 5 | 自动更新（electron-updater IPC + 渲染层提示）+ Settings 历史版本下载侧栏 | ✅ Completed | [Phase 5 Checklist](#phase-5-checklist) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
 
@@ -511,19 +511,19 @@ src/components/settings/
 **Goal:** 桌面端自动收到更新（用户要求落地）+ 全平台应用内历史下载（用户要求 #5）。
 
 **Tasks:**
-- [ ] `electron/updater.cjs`：`autoUpdater` 配置（autoDownload、6h+启动+手动 check）、`updaterSupported()`（`app.isPackaged && !isMac`）、macOS `manual-required` 分支、状态广播 `muzero:update:status`、`install`/`setChannel` IPC。
-- [ ] `electron/preload.cjs` 暴露 `window.muzero.update.{onStatus,check,install,setChannel}`。
-- [ ] `src/lib/desktop/desktop-update.ts` hook（订阅 + web 降级 `supported:false`）。
-- [ ] `about-settings.tsx`：检查更新按钮 + 状态条 + 通道（可选）。
-- [ ] `version-history-settings.tsx`：`useReleaseManifest()`（TanStack Query + getAppFetch + Zod）→ 历史列表 + 按当前平台高亮下载 + 展开全平台资产 + 加载/错误/空态。
-- [ ] `settings-nav.ts` 加 `navSecAbout` 段两项；`settings-page.tsx` 接分支；`settings-nav.test.ts` 更新。
-- [ ] `common.json` 4 语加 `settings.navSecAbout/navAbout/navVersionHistory` + `update.*` + 下载相关文案。
+- [x] `electron/updater.cjs`：`autoUpdater`（autoDownload + autoInstallOnAppQuit、启动 5s + 每 6h + 手动 check）、`canAutoApply()`（`app.isPackaged && !isMac`）、macOS `manual-required` 分支（openExternal 下载页）、状态广播 `muzero:update:status`、`getAppVersion`/`check`/`install`(quitAndInstall)/`setChannel`(stable→latest/beta→beta + allowDowngrade) IPC。✅ 由 esbuild bundle inline（externals 守卫测证 electron-updater 全树打进 main，node_modules 可排除）。
+- [x] `electron/preload.cjs` 暴露 `window.muzero.update.{onStatus,check,install,setChannel}` + `getAppVersion`；`main.cjs` whenReady 接 `initDesktopUpdater()`。✅
+- [x] `src/lib/desktop/desktop-update.ts` hook（订阅 `onStatus` + web 降级 `supported:false`）。✅ 3 测（web idle / 订阅广播 / 转发 check·install·setChannel）。
+- [x] `about-settings.tsx`：版本 + RELEASE_ID 诊断 + 检查更新按钮 + 状态条（idle/checking/available/downloading%/downloaded→重启·manual→下载/error）+ 通道切换（持久 localStorage）+ What's New 入口（`openChangelog()`）+ web 降级文案。✅
+- [x] `version-history-settings.tsx`：`useReleaseManifest()`（TanStack Query + getAppFetch + Zod）→ 历史列表 + 按当前 OS 高亮下载 + 全平台资产 + size/sha + 加载/错误/重试/空态。✅ fetch + OS 检测 5 测。
+- [x] `settings-nav.ts` 加 `navSecAbout` 段（about + version-history 两项）；`settings-page.tsx` 接分支；`settings-nav.test.ts` 更新。✅
+- [x] `common.json` 4 语加 `settings.navSecAbout/navAbout/navVersionHistory` + `settings.about*`/`versionHistory*`/`dl*` + 顶层 `update.*`（tail-anchored minimal insert，避开用户 WIP 区）。✅
 
 ### Phase 5 Checklist
-- [ ] 桌面端（打包态）启动后能 check 到 R2 更高版本 → 显示 available；Win/Linux 可下载并 `quitAndInstall`
-- [ ] macOS 收到 `manual-required` → 点按打开下载页
-- [ ] Settings「版本历史」列出 manifest 全部版本，点击下载对应平台安装包（桌面经 muzfetch / web 直链）
-- [ ] web 上更新区灰掉/隐藏，下载列表仍可用
+- [~] 桌面端（打包态）启动后 check R2 更高版本 → available；Win/Linux 下载并 `quitAndInstall` — 逻辑完成；真机端到端待打包态实测（需先真实发布一版到 R2）
+- [x] macOS 收到 `manual-required` → 点按打开下载页 ✅（updater.cjs isMac 分支 + about 面板 install 按钮 openExternal）
+- [x] Settings「版本历史」列出 manifest 全部版本，点击下载对应平台安装包（桌面经 bridge.openExternal / web window.open）✅（面板 + manifest fetch 测）
+- [x] web 上更新区灰掉/隐藏（`supported:false` 显示「网页版自动更新」），下载列表仍可用 ✅
 
 ---
 

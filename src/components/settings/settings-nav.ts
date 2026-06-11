@@ -57,6 +57,13 @@ export const SETTINGS_NAV = [
     labelKey: "settings.navSecAdvanced",
     items: [{ id: "advanced", labelKey: "settings.traceTitle" }],
   },
+  {
+    labelKey: "settings.navSecAbout",
+    items: [
+      { id: "about", labelKey: "settings.navAbout" },
+      { id: "version-history", labelKey: "settings.navVersionHistory" },
+    ],
+  },
 ] as const satisfies readonly SettingsNavSection[];
 
 export function settingsItemIds(nav: readonly SettingsNavSection[] = SETTINGS_NAV): string[] {

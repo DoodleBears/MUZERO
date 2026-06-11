@@ -11,6 +11,8 @@ describe("settings-nav", () => {
     expect(ids).toContain("cloud-owner");
     expect(ids).toContain("cloud-presence");
     expect(ids).toContain("advanced");
+    expect(ids).toContain("about");
+    expect(ids).toContain("version-history");
     expect(new Set(ids).size).toBe(ids.length);
   });
 

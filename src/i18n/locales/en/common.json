@@ -650,7 +650,29 @@
     "importFolderNeverSynced": "Not synced yet",
     "importFolderSyncNow": "Sync now",
     "importFolderRemove": "Stop watching",
-    "importFolderBoundSet": "Set: {{name}}"
+    "importFolderBoundSet": "Set: {{name}}",
+    "navSecAbout": "About",
+    "navAbout": "About MUZERO",
+    "navVersionHistory": "Version history",
+    "aboutTitle": "About",
+    "aboutCurrentVersion": "Current version",
+    "aboutBuild": "Build",
+    "aboutChannel": "Update channel",
+    "aboutChannelStable": "Stable",
+    "aboutChannelBeta": "Beta",
+    "aboutCheckUpdates": "Check for updates",
+    "aboutViewChangelog": "What's new",
+    "aboutWebOnly": "You're on the web app — it updates automatically when you reload.",
+    "versionHistoryTitle": "Version history",
+    "versionHistoryLoading": "Loading releases…",
+    "versionHistoryError": "Couldn't load the release list.",
+    "versionHistoryRetry": "Retry",
+    "versionHistoryEmpty": "No releases published yet.",
+    "dlMacArm64": "macOS (Apple Silicon)",
+    "dlMacX64": "macOS (Intel)",
+    "dlWinX64": "Windows",
+    "dlLinuxAppimage": "Linux (AppImage)",
+    "dlLinuxDeb": "Linux (deb)"
   },
   "gallery": {
     "title": "Sets",
@@ -903,5 +925,16 @@
       "settings": "Settings",
       "app": "App"
     }
+  },
+  "update": {
+    "checking": "Checking for updates…",
+    "available": "v{{version}} available — downloading…",
+    "downloading": "Downloading… {{percent}}%",
+    "downloaded": "v{{version}} ready to install",
+    "restartToUpdate": "Restart to update",
+    "manualRequired": "A new version is available.",
+    "download": "Download",
+    "error": "Update check failed.",
+    "upToDate": "You're up to date."
   }
 }

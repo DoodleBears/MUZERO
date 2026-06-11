@@ -637,7 +637,29 @@
     "importFolderNeverSynced": "아직 동기화되지 않음",
     "importFolderSyncNow": "지금 동기화",
     "importFolderRemove": "감시 중지",
-    "importFolderBoundSet": "세트: {{name}}"
+    "importFolderBoundSet": "세트: {{name}}",
+    "navSecAbout": "정보",
+    "navAbout": "MUZERO 정보",
+    "navVersionHistory": "버전 기록",
+    "aboutTitle": "정보",
+    "aboutCurrentVersion": "현재 버전",
+    "aboutBuild": "빌드",
+    "aboutChannel": "업데이트 채널",
+    "aboutChannelStable": "안정 버전",
+    "aboutChannelBeta": "베타",
+    "aboutCheckUpdates": "업데이트 확인",
+    "aboutViewChangelog": "새로운 기능",
+    "aboutWebOnly": "웹 앱을 사용 중입니다. 새로고침하면 자동으로 업데이트됩니다.",
+    "versionHistoryTitle": "버전 기록",
+    "versionHistoryLoading": "릴리스 불러오는 중…",
+    "versionHistoryError": "릴리스 목록을 불러오지 못했습니다.",
+    "versionHistoryRetry": "다시 시도",
+    "versionHistoryEmpty": "아직 게시된 릴리스가 없습니다.",
+    "dlMacArm64": "macOS (Apple 실리콘)",
+    "dlMacX64": "macOS (Intel)",
+    "dlWinX64": "Windows",
+    "dlLinuxAppimage": "Linux (AppImage)",
+    "dlLinuxDeb": "Linux (deb)"
   },
   "gallery": {
     "title": "세트",
@@ -879,5 +901,16 @@
       "settings": "설정",
       "app": "앱"
     }
+  },
+  "update": {
+    "checking": "업데이트 확인 중…",
+    "available": "v{{version}} 사용 가능 — 다운로드 중…",
+    "downloading": "다운로드 중… {{percent}}%",
+    "downloaded": "v{{version}} 설치 준비 완료",
+    "restartToUpdate": "재시작하여 업데이트",
+    "manualRequired": "새 버전이 있습니다.",
+    "download": "다운로드",
+    "error": "업데이트 확인에 실패했습니다.",
+    "upToDate": "최신 상태입니다."
   }
 }

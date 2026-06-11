@@ -1,6 +1,7 @@
 // @vitest-environment node
 // esbuild requires a real Node environment (jsdom's TextEncoder breaks its invariant).
 import { readFileSync } from "node:fs";
+import { builtinModules } from "node:module";
 import { join } from "node:path";
 import { build } from "esbuild";
 import { describe, expect, it } from "vitest";
@@ -8,14 +9,18 @@ import { ESBUILD_OPTIONS } from "./build-electron-main.mjs";
 
 const ROOT = process.cwd();
 
-// Allowed external requires in the bundled main: electron + node builtins only.
-// Anything else means an npm dep leaked unbundled — it would crash the packaged
-// app (node_modules is excluded). This is the build-integrity guard.
+// Provided by the runtime: electron + node builtins (bare or node:-prefixed).
+const RUNTIME = new Set([
+  "electron",
+  ...builtinModules,
+  ...builtinModules.map((m) => `node:${m}`),
+]);
+
+// Anything left as a bare require that ISN'T runtime-provided is a leaked npm dep
+// — it would crash the packaged app (node_modules is excluded). Integrity guard.
 function externalBareRequires(code) {
   const requires = [...code.matchAll(/require\(["']([^"']+)["']\)/g)].map((m) => m[1]);
-  return requires.filter(
-    (id) => id !== "electron" && !id.startsWith("node:") && !id.startsWith("."),
-  );
+  return requires.filter((id) => !id.startsWith(".") && !RUNTIME.has(id));
 }
 
 describe("electron main bundle", () => {

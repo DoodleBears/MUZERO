@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { type CSSProperties, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { AboutSettings } from "@/components/settings/about-settings";
 import { AddDriveDialog } from "@/components/settings/add-drive-dialog";
 import { BackgroundSettings } from "@/components/settings/background-settings";
 import { CloudDriveSets } from "@/components/settings/cloud-drive-sets";
@@ -22,6 +23,7 @@ import { resolveActiveSettingsItem } from "@/components/settings/settings-nav";
 import { SettingsSidebar } from "@/components/settings/settings-sidebar";
 import { ShortcutsSettings } from "@/components/settings/shortcuts-settings";
 import { StreamSourcesSettings } from "@/components/settings/stream-sources-settings";
+import { VersionHistorySettings } from "@/components/settings/version-history-settings";
 import { VisualizerSettings } from "@/components/settings/visualizer-settings";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -667,6 +669,10 @@ export function SettingsPage() {
           {activeItem === "stream-sources" && <StreamSourcesSettings />}
 
           {activeItem === "advanced" && <TraceDiagnostics />}
+
+          {activeItem === "about" && <AboutSettings />}
+
+          {activeItem === "version-history" && <VersionHistorySettings />}
 
           {activeItem === "device" && (
             <Card>

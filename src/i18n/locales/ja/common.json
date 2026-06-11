@@ -638,7 +638,29 @@
     "importFolderNeverSynced": "未同期",
     "importFolderSyncNow": "今すぐ同期",
     "importFolderRemove": "監視を停止",
-    "importFolderBoundSet": "セット：{{name}}"
+    "importFolderBoundSet": "セット：{{name}}",
+    "navSecAbout": "情報",
+    "navAbout": "MUZERO について",
+    "navVersionHistory": "バージョン履歴",
+    "aboutTitle": "情報",
+    "aboutCurrentVersion": "現在のバージョン",
+    "aboutBuild": "ビルド",
+    "aboutChannel": "更新チャンネル",
+    "aboutChannelStable": "安定版",
+    "aboutChannelBeta": "ベータ版",
+    "aboutCheckUpdates": "更新を確認",
+    "aboutViewChangelog": "新着情報",
+    "aboutWebOnly": "ウェブ版を使用中です。再読み込みで自動的に更新されます。",
+    "versionHistoryTitle": "バージョン履歴",
+    "versionHistoryLoading": "リリースを読み込み中…",
+    "versionHistoryError": "リリース一覧を読み込めませんでした。",
+    "versionHistoryRetry": "再試行",
+    "versionHistoryEmpty": "公開されたリリースはまだありません。",
+    "dlMacArm64": "macOS（Apple シリコン）",
+    "dlMacX64": "macOS（Intel）",
+    "dlWinX64": "Windows",
+    "dlLinuxAppimage": "Linux（AppImage）",
+    "dlLinuxDeb": "Linux（deb）"
   },
   "gallery": {
     "title": "セット",
@@ -880,5 +902,16 @@
       "settings": "設定",
       "app": "アプリ"
     }
+  },
+  "update": {
+    "checking": "更新を確認中…",
+    "available": "v{{version}} が利用可能 — ダウンロード中…",
+    "downloading": "ダウンロード中… {{percent}}%",
+    "downloaded": "v{{version}} をインストールできます",
+    "restartToUpdate": "再起動して更新",
+    "manualRequired": "新しいバージョンがあります。",
+    "download": "ダウンロード",
+    "error": "更新の確認に失敗しました。",
+    "upToDate": "最新の状態です。"
   }
 }

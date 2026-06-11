@@ -638,7 +638,29 @@
     "importFolderNeverSynced": "尚未同步",
     "importFolderSyncNow": "立即同步",
     "importFolderRemove": "停止监视",
-    "importFolderBoundSet": "歌单：{{name}}"
+    "importFolderBoundSet": "歌单：{{name}}",
+    "navSecAbout": "关于",
+    "navAbout": "关于 MUZERO",
+    "navVersionHistory": "版本历史",
+    "aboutTitle": "关于",
+    "aboutCurrentVersion": "当前版本",
+    "aboutBuild": "构建",
+    "aboutChannel": "更新通道",
+    "aboutChannelStable": "稳定版",
+    "aboutChannelBeta": "测试版",
+    "aboutCheckUpdates": "检查更新",
+    "aboutViewChangelog": "更新内容",
+    "aboutWebOnly": "你正在使用网页版——刷新页面即自动更新。",
+    "versionHistoryTitle": "版本历史",
+    "versionHistoryLoading": "正在加载版本…",
+    "versionHistoryError": "无法加载版本列表。",
+    "versionHistoryRetry": "重试",
+    "versionHistoryEmpty": "尚未发布任何版本。",
+    "dlMacArm64": "macOS（Apple 芯片）",
+    "dlMacX64": "macOS（Intel）",
+    "dlWinX64": "Windows",
+    "dlLinuxAppimage": "Linux（AppImage）",
+    "dlLinuxDeb": "Linux（deb）"
   },
   "gallery": {
     "title": "歌单",
@@ -880,5 +902,16 @@
       "settings": "设置",
       "app": "应用"
     }
+  },
+  "update": {
+    "checking": "正在检查更新…",
+    "available": "发现 v{{version}}——正在下载…",
+    "downloading": "正在下载… {{percent}}%",
+    "downloaded": "v{{version}} 已就绪",
+    "restartToUpdate": "重启以更新",
+    "manualRequired": "有新版本可用。",
+    "download": "下载",
+    "error": "检查更新失败。",
+    "upToDate": "已是最新版本。"
   }
 }

@@ -14,4 +14,15 @@ contextBridge.exposeInMainWorld("muzero", {
   openExternal: (url) => ipcRenderer.invoke("muzero:openExternal", url),
   openSourceLogin: (request) => ipcRenderer.invoke("muzero:openSourceLogin", request),
   readSourceCookies: (request) => ipcRenderer.invoke("muzero:readSourceCookies", request),
+  getAppVersion: () => ipcRenderer.invoke("muzero:getAppVersion"),
+  update: {
+    onStatus: (callback) => {
+      const listener = (_event, status) => callback(status);
+      ipcRenderer.on("muzero:update:status", listener);
+      return () => ipcRenderer.removeListener("muzero:update:status", listener);
+    },
+    check: () => ipcRenderer.invoke("muzero:update:check"),
+    install: () => ipcRenderer.invoke("muzero:update:install"),
+    setChannel: (channel) => ipcRenderer.invoke("muzero:update:setChannel", channel),
+  },
 });

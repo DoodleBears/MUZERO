@@ -26,6 +26,7 @@ describe("platformKeyFor", () => {
   it("maps installers to platform keys and ignores feed/updater files", () => {
     expect(platformKeyFor("MUZERO-0.7.0-arm64.dmg")).toBe("mac-arm64");
     expect(platformKeyFor("MUZERO-0.7.0-x64.dmg")).toBe("mac-x64");
+    expect(platformKeyFor("MUZERO-0.7.0.dmg")).toBe("mac-x64"); // electron-builder leaves x64 arch-less
     expect(platformKeyFor("MUZERO Setup 0.7.0.exe")).toBe("win-x64");
     expect(platformKeyFor("MUZERO-0.7.0.AppImage")).toBe("linux-x64-appimage");
     expect(platformKeyFor("muzero_0.7.0_amd64.deb")).toBe("linux-x64-deb");

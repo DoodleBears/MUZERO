@@ -60,11 +60,9 @@ export function cmpVersion(a, b) {
 /** Map an electron-builder artifact filename to a manifest platform key (or null = not a primary download). */
 export function platformKeyFor(filename) {
   const f = filename.toLowerCase();
-  if (f.endsWith(".dmg")) {
-    if (f.includes("arm64")) return "mac-arm64";
-    if (f.includes("x64") || f.includes("x86_64")) return "mac-x64";
-    return "mac-arm64";
-  }
+  // electron-builder tags arm64 explicitly but leaves the x64 dmg arch-less
+  // ("MUZERO-0.7.0.dmg"), so anything that isn't arm64 is x64.
+  if (f.endsWith(".dmg")) return f.includes("arm64") ? "mac-arm64" : "mac-x64";
   if (f.endsWith(".exe")) return "win-x64";
   if (f.endsWith(".appimage")) return "linux-x64-appimage";
   if (f.endsWith(".deb")) return "linux-x64-deb";
@@ -178,6 +176,7 @@ function main() {
 
   // 1. Upload every artifact in the dir (binaries + .yml feeds + .blockmap).
   for (const name of readdirSync(dir)) {
+    if (name === "builder-debug.yml") continue; // electron-builder debug trace, not a feed
     const full = join(dir, name);
     if (!statSync(full).isFile()) continue;
     const isFeed = /\.ya?ml$/.test(name);
