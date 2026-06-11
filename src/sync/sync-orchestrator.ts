@@ -15,6 +15,7 @@ import type {
   applyRemoteSetPull,
   dryRunRemoteSetPull,
 } from "./r2-pull-sync";
+import type { applySetPullMerges } from "./r2-set-pull-merge";
 
 /**
  * Pure publish/pull orchestration: maps the already-tested export-plan builder
@@ -68,6 +69,11 @@ export interface SyncOrchestratorDeps {
    * refetches + re-merges + retries (bounded). Omitted → legacy mirror publish.
    */
   fetchPublishBase?: typeof fetchRemotePublishBase;
+  /**
+   * Co-editing receive half (PRD §12.5): applied after every base fetch so
+   * other devices' set edits land locally before the merged publish plans.
+   */
+  applyPullMerges?: typeof applySetPullMerges;
   /** Pull deps are optional so a publish-only orchestrator can omit them. */
   dryRunPull?: typeof dryRunRemoteSetPull;
   applyPull?: typeof applyRemoteSetPull;
@@ -118,15 +124,25 @@ export function createSyncOrchestrator(deps: SyncOrchestratorDeps): SyncOrchestr
 
       const readBase = async () => {
         emit({ phase: "planning" });
-        return fetchBase
-          ? await fetchBase({
-              credentials: ctx.credentials,
-              // Remote indexes of the sets we're about to write — co-editing
-              // merge input (PRD §12.5), keyed by published id.
-              setRemoteIds: ctx.setIds.map((id) => publishedEntityId("ses", ctx.drive.id, id)),
-              signal: options.signal,
-            })
-          : undefined;
+        if (!fetchBase) return undefined;
+        const base = await fetchBase({
+          credentials: ctx.credentials,
+          // Remote indexes of the sets we're about to write — co-editing
+          // merge input (PRD §12.5), keyed by published id.
+          setRemoteIds: ctx.setIds.map((id) => publishedEntityId("ses", ctx.drive.id, id)),
+          signal: options.signal,
+        });
+        // Receive half of co-editing: land other devices' set edits locally
+        // BEFORE planning, so the publish merges a current local state.
+        if (deps.applyPullMerges) {
+          await deps.applyPullMerges({
+            driveId: ctx.drive.id,
+            baseUrl: ctx.baseUrl,
+            setIds: ctx.setIds,
+            base,
+          });
+        }
+        return base;
       };
 
       let remoteBase: Awaited<ReturnType<typeof readBase>>;

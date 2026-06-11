@@ -12,6 +12,7 @@ import {
   applyRemoteSetPull,
   dryRunRemoteSetPull,
 } from "@/sync/r2-pull-sync";
+import { applySetPullMerges } from "@/sync/r2-set-pull-merge";
 import {
   createSyncOrchestrator,
   type PublishDriveContext,
@@ -54,6 +55,8 @@ function getOrchestrator(): SyncOrchestrator {
     // Multi-writer read-merge-write (PRD §12.4): every publish plans against
     // the current remote state and merges instead of mirroring over it.
     fetchPublishBase: fetchRemotePublishBase,
+    // Same-set co-editing receive half (PRD §12.5).
+    applyPullMerges: applySetPullMerges,
     dryRunPull: dryRunRemoteSetPull,
     applyPull: applyRemoteSetPull,
   });

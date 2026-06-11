@@ -350,6 +350,12 @@ export interface DjSession {
    * Additive + non-indexed (same path as {@link trackRanks}) — no Dexie bump.
    */
   removedTracks?: Record<string, number>;
+  /**
+   * When a sync pull-merge last applied this set's remote index (PRD §12.5).
+   * Disambiguates a genuine local re-add (membership re-added AFTER a pull
+   * already applied the removal) from a stale copy. Additive + non-indexed.
+   */
+  lastPulledAt?: number;
   status: "idle" | "running";
   config: DjConfig;
   /** Default stage rendering: video-first → cover → title. */
@@ -664,6 +670,8 @@ export interface AppSettings {
   defaultLlmModel?: string;
   /** BYOK keys by visible provider preset id. Device-local only. */
   apiKeysByPresetId?: Partial<Record<LlmProviderPresetId, string>>;
+  /** Last selected model per provider preset, restored when switching back (ClipCombo parity). */
+  modelsByPresetId?: Partial<Record<LlmProviderPresetId, string>>;
   /** Default selected cloud drive. R2 credentials remain device-local settings, never synced. */
   defaultCloudDriveId?: string;
   /** R2 write credentials by local drive id. Device-local only; never exported to manifests. */
@@ -726,6 +734,28 @@ export interface TrackLyrics extends LyricsRecord {
   /** Which record the provider matched (debug / correction). */
   matched?: { trackName: string; artistName: string; durationSec: number };
   fetchedAt: number;
+}
+
+/** One model exposed by a user-defined LLM endpoint. */
+export interface CustomLlmModel {
+  id: string;
+  label?: string;
+}
+
+/**
+ * A user-defined OpenAI-compatible LLM provider (ClipCombo parity): arbitrary
+ * baseURL + its own model list, addressed as `custom:<uuid>` alongside the
+ * built-in presets. Keys still live in `AppSettings.apiKeysByPresetId` (and may
+ * be absent — local endpoints run keyless). Stored in `llmCustomProviders`.
+ */
+export interface CustomLlmProvider {
+  /** `custom:<uuid>` — the dynamic-custom id namespace (codename-stable). */
+  id: `custom:${string}`;
+  label: string;
+  baseUrl: string;
+  models: CustomLlmModel[];
+  createdAt: number;
+  updatedAt: number;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
