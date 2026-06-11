@@ -11,6 +11,7 @@
  * three implementations (tauri/electron/web).
  */
 
+import type { AppIconId } from "@/lib/app-icon";
 import type { DirEntryLike } from "@/lib/folder-import";
 import { createElectronBridge } from "./electron";
 import { createTauriBridge } from "./tauri";
@@ -48,6 +49,13 @@ export interface DesktopBridge {
   saveFile?: (input: SaveFileInput) => Promise<boolean>;
   /** Open an http(s) URL in the system browser. */
   openExternal: (url: string) => Promise<void>;
+  /**
+   * Swap the RUNNING dock / taskbar icon to a built-in variant (the user's
+   * choice in Settings → Appearance). Electron only — web/tauri omit it, so the
+   * apply hook + the Settings picker no-op there. The installed bundle icon is
+   * static (baked at build time); this only affects the live process.
+   */
+  setAppIcon?: (icon: AppIconId) => Promise<void>;
   /**
    * Start a native window drag for the current press (frameless window move).
    * Tauri only — Electron drags via `-webkit-app-region` CSS, web has no window —
@@ -147,4 +155,12 @@ export function hasFolderAccess(): boolean {
  */
 export function hasStreamingSources(): boolean {
   return Boolean(resolveDesktopBridge().mediaProxyUrl);
+}
+
+/**
+ * Whether the shell can swap the running app icon (Electron only). Gates the
+ * Settings → Appearance "App Icon" picker, which is meaningless on web/tauri.
+ */
+export function hasAppIcon(): boolean {
+  return Boolean(resolveDesktopBridge().setAppIcon);
 }

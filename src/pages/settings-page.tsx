@@ -41,7 +41,8 @@ import { saveSettings } from "@/db/repositories";
 import type { AppSettings, CloudDrive, LlmProviderId } from "@/db/types";
 import { useSettings } from "@/hooks/use-app-data";
 import { type Locale, locales, persistLocale } from "@/i18n/config";
-import { hasStreamingSources } from "@/lib/desktop/bridge";
+import { APP_ICON_OPTIONS, type AppIconId, resolveAppIcon } from "@/lib/app-icon";
+import { hasAppIcon, hasStreamingSources } from "@/lib/desktop/bridge";
 import { isMac } from "@/lib/shortcuts";
 import {
   clampLerp,
@@ -243,6 +244,11 @@ export function SettingsPage() {
   async function changeTheme(theme: Theme) {
     persistTheme(theme);
     await saveSettings({ theme });
+  }
+
+  // Persist the chosen app icon; App's useAppIcon hook applies it to the shell.
+  async function changeAppIcon(appIcon: AppIconId) {
+    await saveSettings({ appIcon });
   }
 
   async function changePrimary(next: PrimaryColors) {
@@ -453,6 +459,41 @@ export function SettingsPage() {
                     </SelectContent>
                   </Select>
                 </Field>
+                {hasAppIcon() && (
+                  <div className="flex flex-col gap-2">
+                    <span className="text-xs font-medium text-muted-foreground">
+                      {t("settings.appIcon")}
+                    </span>
+                    <div className="flex flex-wrap gap-2">
+                      {APP_ICON_OPTIONS.map((option) => {
+                        const active = resolveAppIcon(settings.appIcon) === option.value;
+                        return (
+                          <button
+                            key={option.value}
+                            type="button"
+                            aria-pressed={active}
+                            onClick={() => void changeAppIcon(option.value)}
+                            className={`flex items-center gap-2 rounded-lg border py-1 pe-3 ps-1 text-xs transition-colors ${
+                              active
+                                ? "border-primary bg-accent/50"
+                                : "border-input hover:bg-accent/50"
+                            }`}
+                          >
+                            <img
+                              src={option.preview}
+                              alt=""
+                              className="size-7 rounded-md border border-border"
+                            />
+                            {t(option.labelKey)}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <span className="text-xs text-muted-foreground">
+                      {t("settings.appIconHint")}
+                    </span>
+                  </div>
+                )}
                 <div className="flex flex-col gap-2">
                   <span className="text-xs font-medium text-muted-foreground">
                     {t("settings.primaryColor")}

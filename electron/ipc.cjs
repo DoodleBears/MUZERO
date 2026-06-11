@@ -9,6 +9,7 @@ const { ipcMain, dialog, shell } = require("electron");
 const fs = require("node:fs");
 const fsp = require("node:fs/promises");
 const path = require("node:path");
+const { applyAppIcon } = require("./app-icon.cjs");
 
 /** Granted folder roots (real paths). In-memory, not persisted — re-granted on boot. */
 const allowedRoots = new Set();
@@ -78,6 +79,12 @@ function registerIpc() {
       throw new Error("Unsupported external URL protocol");
     }
     await shell.openExternal(u.toString());
+  });
+
+  // Swap the running dock/taskbar icon. `applyAppIcon` allowlists the variant id
+  // → a bundled asset, so an unknown/forged value is a silent no-op (never a path).
+  ipcMain.handle("muzero:setAppIcon", (_event, icon) => {
+    applyAppIcon(icon);
   });
 }
 

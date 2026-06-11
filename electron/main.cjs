@@ -4,6 +4,7 @@ const { pathToFileURL } = require("node:url");
 const { app, BrowserWindow, net, protocol, shell } = require("electron");
 const { registerIpc } = require("./ipc.cjs");
 const { handleMuzfetch } = require("./fetch-proxy.cjs");
+const { applyAppIcon, appIconPath, DEFAULT_APP_ICON } = require("./app-icon.cjs");
 
 const devUrl = process.env.MUZERO_ELECTRON_URL;
 const distDir = path.join(__dirname, "..", "dist");
@@ -49,6 +50,9 @@ function registerDistProtocol() {
 function createWindow() {
   const win = new BrowserWindow({
     backgroundColor: "#09090b",
+    // Default window/taskbar icon (Windows/Linux; ignored on macOS, which uses the
+    // dock icon set in app.whenReady). The renderer refines it to the saved choice.
+    icon: appIconPath(DEFAULT_APP_ICON),
     height: 780,
     minHeight: 600,
     minWidth: 380,
@@ -87,6 +91,9 @@ app.whenReady().then(() => {
   require("./source-login.cjs").registerSourceLogin();
   require("./youtube-engine.cjs").registerYoutubeEngine();
   createWindow();
+  // macOS dock icon (no window icon there). The renderer's use-app-icon hook
+  // re-applies the user's saved variant once settings load.
+  applyAppIcon(DEFAULT_APP_ICON);
 });
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") app.quit();

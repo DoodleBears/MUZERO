@@ -12,6 +12,7 @@ contextBridge.exposeInMainWorld("muzero", {
   grantFolderAccess: (path) => ipcRenderer.invoke("muzero:grantFolder", path),
   saveFile: (input) => ipcRenderer.invoke("muzero:saveFile", input),
   openExternal: (url) => ipcRenderer.invoke("muzero:openExternal", url),
+  setAppIcon: (icon) => ipcRenderer.invoke("muzero:setAppIcon", icon),
   openSourceLogin: (request) => ipcRenderer.invoke("muzero:openSourceLogin", request),
   readSourceCookies: (request) => ipcRenderer.invoke("muzero:readSourceCookies", request),
   evalYoutubeN: (functionSource, n) =>

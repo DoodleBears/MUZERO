@@ -11,6 +11,7 @@ import { GlobalTrackSearch } from "@/components/search/global-track-search";
 import { PlayerDock } from "@/components/shell/player-dock";
 import { GlobalDropZone } from "@/components/upload/global-drop-zone";
 import { useSettings } from "@/hooks/use-app-data";
+import { useAppIcon } from "@/hooks/use-app-icon";
 import { useDocumentTitle } from "@/hooks/use-document-title";
 import { useIdle } from "@/hooks/use-idle";
 import { useShortcutDispatch } from "@/hooks/use-shortcut-dispatch";
@@ -60,6 +61,8 @@ export default function App() {
   useShortcutDispatch();
   // Browser tab title tracks the current track: `Title · Artist · Album | MUZERO`.
   useDocumentTitle();
+  // Apply the chosen desktop app icon (Electron only; no-op on web/tauri).
+  useAppIcon();
 
   // Boot only wires the media engine. Auto-cueing the previous track during
   // WKWebView startup can make the full-screen media/background path flicker.

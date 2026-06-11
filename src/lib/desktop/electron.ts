@@ -13,6 +13,7 @@ interface MuzeroApi {
   grantFolderAccess(path: string): Promise<void>;
   saveFile(input: { fileName: string; mime: string; bytes: ArrayBuffer }): Promise<boolean>;
   openExternal(url: string): Promise<void>;
+  setAppIcon(icon: string): Promise<void>;
   /** Main returns the RAW captured cookies (renderer assembles the header). */
   openSourceLogin(request: StreamLoginRequest): Promise<StreamCookie[] | null>;
   readSourceCookies(request: StreamLoginRequest): Promise<StreamCookie[] | null>;
@@ -76,6 +77,7 @@ export function createElectronBridge(): DesktopBridge {
     saveFile: ({ fileName, mime, bytes }: SaveFileInput) =>
       api.saveFile({ fileName, mime, bytes: toStandaloneBuffer(bytes) }),
     openExternal: (url) => api.openExternal(url),
+    setAppIcon: (icon) => api.setAppIcon(icon),
     mediaProxyUrl: electronMediaProxyUrl,
     openSourceLogin: async (request) => {
       const cookies = await api.openSourceLogin(request);
