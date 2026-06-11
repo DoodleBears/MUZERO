@@ -87,7 +87,12 @@ export function createYoutubeSource(deps: YoutubeSourceDeps): StreamSourceProvid
           kind: "ok",
           stream: {
             mediaUrl: playback.url,
-            headers: { Referer: REFERER, "User-Agent": USER_AGENT },
+            // Empty (but present, so the player still proxies for CORS/Range): the
+            // googlevideo URL is signed for youtubei's session, which used the
+            // Electron default UA + no cookies. Injecting a different UA (Chrome/124)
+            // or the session cookies makes googlevideo 403 the guest URL — so send
+            // neither; net.fetch then uses the same default UA as the /player call.
+            headers: {},
             mime: playback.mime,
             durationSec: playback.details?.lengthSeconds,
             expiresAt: playback.expiresInSeconds

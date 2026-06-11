@@ -73,7 +73,9 @@ describe("createYoutubeSource", () => {
       expect(result.stream.mediaUrl).toBe("https://cdn/a");
       expect(result.stream.mime).toBe("audio/mp4");
       expect(result.stream.expiresAt).toBe(1000 + 3600 * 1000);
-      expect(result.stream.headers?.Referer).toBe("https://www.youtube.com");
+      // Empty-but-present headers: the player still proxies (CORS/Range) but injects
+      // no Referer/UA/cookies, so the googlevideo guest URL isn't 403'd.
+      expect(result.stream.headers).toEqual({});
     }
   });
 
