@@ -10,6 +10,7 @@ vi.mock("react-i18next", () => ({
 const subscribeManifest = vi.fn();
 const loadRemoteSetIndex = vi.fn();
 const loadRemoteEntityCovers = vi.fn();
+const loadRemoteDeviceProfiles = vi.fn();
 const importRemoteEntityCovers = vi.fn();
 const pullRemoteSet = vi.fn();
 const getLocalDevice = vi.fn();
@@ -18,6 +19,7 @@ vi.mock("@/sync/r2-subscription", () => ({
   subscribeManifest: (...args: unknown[]) => subscribeManifest(...args),
   loadRemoteSetIndex: (...args: unknown[]) => loadRemoteSetIndex(...args),
   loadRemoteEntityCovers: (...args: unknown[]) => loadRemoteEntityCovers(...args),
+  loadRemoteDeviceProfiles: (...args: unknown[]) => loadRemoteDeviceProfiles(...args),
 }));
 vi.mock("@/sync/r2-import-stream", () => ({
   importRemoteEntityCovers: (...args: unknown[]) => importRemoteEntityCovers(...args),
@@ -93,6 +95,7 @@ describe("CloudDriveSets", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     getLocalDevice.mockResolvedValue(undefined);
+    loadRemoteDeviceProfiles.mockResolvedValue(new Map());
   });
 
   it("loads and lists the drive's remote sets on browse", async () => {
@@ -123,6 +126,49 @@ describe("CloudDriveSets", () => {
     expect(loadRemoteEntityCovers).toHaveBeenCalledWith(preview);
   });
 
+  it("loads remote device profiles and passes source attribution into the pull", async () => {
+    const attributedPreview = {
+      ...preview,
+      sets: [{ ...preview.sets[0]!, publishedBy: "dvc_friend" }],
+    };
+    const profiles = new Map([
+      [
+        "dvc_friend",
+        {
+          devicePublicId: "dvc_friend",
+          displayName: "Friend phone",
+          avatarSeed: "green",
+          avatarUrl: "https://pub.example.com/muzero/objects/avatars/friend.jpg",
+        },
+      ],
+    ]);
+    subscribeManifest.mockResolvedValueOnce(attributedPreview);
+    loadRemoteDeviceProfiles.mockResolvedValueOnce(profiles);
+    const remoteSet = { indexUrl: attributedPreview.sets[0]!.indexUrl, index: {}, tracks: [] };
+    loadRemoteSetIndex.mockResolvedValueOnce(remoteSet);
+    pullRemoteSet.mockResolvedValueOnce(undefined);
+
+    render(<CloudDriveSets drive={drive} />);
+    fireEvent.click(screen.getByRole("button"));
+    await screen.findByText("Friend phone");
+    fireEvent.click(screen.getByRole("button", { name: /cloudImport/ }));
+
+    await waitFor(() => expect(pullRemoteSet).toHaveBeenCalled());
+    expect(loadRemoteDeviceProfiles).toHaveBeenCalledWith(attributedPreview);
+    expect(pullRemoteSet).toHaveBeenCalledWith({
+      driveId: drive.id,
+      remoteSet,
+      source: {
+        driveId: drive.id,
+        driveLabel: drive.label,
+        devicePublicId: "dvc_friend",
+        displayName: "Friend phone",
+        avatarSeed: "green",
+        avatarUrl: "https://pub.example.com/muzero/objects/avatars/friend.jpg",
+      },
+    });
+  });
+
   it("imports a set via loadRemoteSetIndex + the orchestrated pullRemoteSet keyed by the drive id", async () => {
     subscribeManifest.mockResolvedValueOnce(preview);
     const remoteSet = { indexUrl: preview.sets[0]!.indexUrl, index: {}, tracks: [] };
@@ -138,7 +184,11 @@ describe("CloudDriveSets", () => {
 
     await waitFor(() => expect(pullRemoteSet).toHaveBeenCalled());
     expect(loadRemoteSetIndex).toHaveBeenCalledWith(preview, preview.sets[0]);
-    expect(pullRemoteSet).toHaveBeenCalledWith({ driveId: "drv_lib_abc", remoteSet });
+    expect(pullRemoteSet).toHaveBeenCalledWith({
+      driveId: "drv_lib_abc",
+      remoteSet,
+      source: expect.objectContaining({ driveId: drive.id, driveLabel: drive.label }),
+    });
   });
 
   it("automatically imports every remote set for automatic-sync drives", async () => {
@@ -155,8 +205,16 @@ describe("CloudDriveSets", () => {
     expect(subscribeManifest).toHaveBeenCalledWith(drive.manifestUrl);
     expect(loadRemoteSetIndex).toHaveBeenNthCalledWith(1, multiPreview, multiPreview.sets[0]);
     expect(loadRemoteSetIndex).toHaveBeenNthCalledWith(2, multiPreview, multiPreview.sets[1]);
-    expect(pullRemoteSet).toHaveBeenNthCalledWith(1, { driveId: drive.id, remoteSet: remoteSetA });
-    expect(pullRemoteSet).toHaveBeenNthCalledWith(2, { driveId: drive.id, remoteSet: remoteSetB });
+    expect(pullRemoteSet).toHaveBeenNthCalledWith(1, {
+      driveId: drive.id,
+      remoteSet: remoteSetA,
+      source: expect.objectContaining({ driveId: drive.id, driveLabel: drive.label }),
+    });
+    expect(pullRemoteSet).toHaveBeenNthCalledWith(2, {
+      driveId: drive.id,
+      remoteSet: remoteSetB,
+      source: expect.objectContaining({ driveId: drive.id, driveLabel: drive.label }),
+    });
   });
 
   it("skips self-published sets during automatic import-all to avoid duplicating local sets", async () => {
@@ -179,7 +237,15 @@ describe("CloudDriveSets", () => {
     await waitFor(() => expect(pullRemoteSet).toHaveBeenCalledTimes(1));
     expect(loadRemoteSetIndex).toHaveBeenCalledWith(selfAwarePreview, selfAwarePreview.sets[0]);
     expect(loadRemoteSetIndex).not.toHaveBeenCalledWith(selfAwarePreview, selfAwarePreview.sets[1]);
-    expect(pullRemoteSet).toHaveBeenCalledWith({ driveId: drive.id, remoteSet: remoteSetA });
+    expect(pullRemoteSet).toHaveBeenCalledWith({
+      driveId: drive.id,
+      remoteSet: remoteSetA,
+      source: expect.objectContaining({
+        driveId: drive.id,
+        driveLabel: drive.label,
+        devicePublicId: "dvc_a",
+      }),
+    });
   });
 
   it("treats a missing manifest as an empty unpublished drive", async () => {

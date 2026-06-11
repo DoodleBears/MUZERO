@@ -1,6 +1,7 @@
 import { Heart, Loader2, Play, TriangleAlert, Video } from "lucide-react";
 import { Fragment, type KeyboardEvent, type MouseEvent, memo, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { SourceAttributionChip } from "@/components/cloud/source-attribution-chip";
 import { BookmarkPlusIcon } from "@/components/ui/bookmark-plus";
 import { Checkbox } from "@/components/ui/checkbox";
 import { CloudDownloadIcon } from "@/components/ui/cloud-download";
@@ -274,6 +275,14 @@ export const TrackRow = memo(function TrackRow({
           >
             <span className="truncate">{track.title}</span>
             {track.kind === "video" && <Video className="size-3 shrink-0 text-muted-foreground" />}
+            {track.cloudSource && (
+              <SourceAttributionChip
+                source={track.cloudSource}
+                fallback={t("track.cloudSourceUnknown")}
+                compact
+                className="hidden max-w-32 lg:inline-flex"
+              />
+            )}
           </div>
           <div className="truncate text-xs text-muted-foreground">
             {track.status === "failed" ? (

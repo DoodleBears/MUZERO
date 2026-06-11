@@ -1,15 +1,18 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { SourceAttributionChip } from "@/components/cloud/source-attribution-chip";
 import { Button } from "@/components/ui/button";
 import { CloudDownloadIcon } from "@/components/ui/cloud-download";
-import type { CloudDrive } from "@/db/types";
+import type { CloudDrive, CloudSourceAttribution } from "@/db/types";
 import { log } from "@/lib/logger";
 import { useSyncStore } from "@/stores/sync-store";
 import { getLocalDevice } from "@/sync/device-repo";
 import { importRemoteEntityCovers } from "@/sync/r2-import-stream";
 import {
+  loadRemoteDeviceProfiles,
   loadRemoteEntityCovers,
   loadRemoteSetIndex,
+  type RemoteDeviceProfileSummary,
   type RemoteLibraryPreview,
   type RemoteSetPreview,
   subscribeManifest,
@@ -34,6 +37,9 @@ export function CloudDriveSets({ drive }: { drive: CloudDrive }) {
   const [error, setError] = useState<string | null>(null);
   const [importingSetId, setImportingSetId] = useState<string | null>(null);
   const [localDevicePublicId, setLocalDevicePublicId] = useState<string | undefined>();
+  const [deviceProfiles, setDeviceProfiles] = useState<Map<string, RemoteDeviceProfileSummary>>(
+    () => new Map(),
+  );
   const autoImportStartedRef = useRef(false);
 
   useEffect(() => {
@@ -64,9 +70,13 @@ export function CloudDriveSets({ drive }: { drive: CloudDrive }) {
       const publicId = localDevicePublicId ?? (await getLocalDevice())?.publicId;
       if (isSelfPublishedSet(set, publicId)) return;
       const remoteSet = await loadRemoteSetIndex(result, set);
-      await useSyncStore.getState().pullRemoteSet({ driveId: drive.id, remoteSet });
+      await useSyncStore.getState().pullRemoteSet({
+        driveId: drive.id,
+        remoteSet,
+        source: sourceForRemoteSet(drive, set, deviceProfiles),
+      });
     },
-    [drive.id, localDevicePublicId],
+    [deviceProfiles, drive, localDevicePublicId],
   );
 
   const importAllSets = useCallback(
@@ -92,6 +102,8 @@ export function CloudDriveSets({ drive }: { drive: CloudDrive }) {
       setError(null);
       try {
         const result = await subscribeManifest(drive.manifestUrl);
+        const profiles = await loadDriveDeviceProfiles(result);
+        setDeviceProfiles(profiles);
         setPreview(result);
         setStatus("loaded");
         void importDriveEntityCovers(result);
@@ -152,12 +164,18 @@ export function CloudDriveSets({ drive }: { drive: CloudDrive }) {
         >
           <div className="min-w-0">
             <p className="truncate text-sm">{set.title}</p>
-            <p className="text-muted-foreground text-xs">
-              {t("settings.cloudSetMeta", {
-                tracks: set.trackCount,
-                bytes: formatBytes(set.bytes),
-              })}
-            </p>
+            <div className="mt-1 flex min-w-0 flex-wrap items-center gap-2 text-muted-foreground text-xs">
+              <SourceAttributionChip
+                source={sourceForRemoteSet(drive, set, deviceProfiles)}
+                fallback={t("settings.cloudSourceUnknown")}
+              />
+              <span>
+                {t("settings.cloudSetMeta", {
+                  tracks: set.trackCount,
+                  bytes: formatBytes(set.bytes),
+                })}
+              </span>
+            </div>
           </div>
           <Button
             size="sm"
@@ -176,6 +194,33 @@ export function CloudDriveSets({ drive }: { drive: CloudDrive }) {
       ))}
     </div>
   );
+}
+
+async function loadDriveDeviceProfiles(
+  preview: RemoteLibraryPreview,
+): Promise<Map<string, RemoteDeviceProfileSummary>> {
+  try {
+    return await loadRemoteDeviceProfiles(preview);
+  } catch (cause) {
+    log.warn("settings", "failed to load remote device profiles", cause);
+    return new Map();
+  }
+}
+
+function sourceForRemoteSet(
+  drive: CloudDrive,
+  set: RemoteSetPreview,
+  profiles: ReadonlyMap<string, RemoteDeviceProfileSummary>,
+): CloudSourceAttribution {
+  const profile = set.publishedBy ? profiles.get(set.publishedBy) : undefined;
+  return {
+    driveId: drive.id,
+    driveLabel: drive.label,
+    devicePublicId: set.publishedBy,
+    displayName: profile?.displayName,
+    avatarSeed: profile?.avatarSeed ?? set.publishedBy,
+    avatarUrl: profile?.avatarUrl,
+  };
 }
 
 function isSelfPublishedSet(

@@ -1,5 +1,6 @@
 import { db as defaultDb, type MuzeroDB } from "@/db/muzero-db";
 import type {
+  CloudSourceAttribution,
   DjSession,
   EntityCover,
   Memory,
@@ -18,6 +19,7 @@ export interface ImportRemoteSetStreamInput {
   driveId: string;
   shareId?: string;
   remoteSet: RemoteSetIndexResult;
+  source?: CloudSourceAttribution;
 }
 
 export interface ImportRemoteSetStreamResult {
@@ -102,6 +104,17 @@ function normalizeDisplayMode(
   return mode === "title" ? "cover" : mode;
 }
 
+function sanitizeCloudSource(source: CloudSourceAttribution): CloudSourceAttribution {
+  return {
+    driveId: source.driveId,
+    driveLabel: source.driveLabel?.trim() || undefined,
+    devicePublicId: source.devicePublicId?.trim() || undefined,
+    displayName: source.displayName?.trim() || undefined,
+    avatarSeed: source.avatarSeed?.trim() || undefined,
+    avatarUrl: source.avatarUrl?.trim() || undefined,
+  };
+}
+
 export async function importRemoteSetStream(
   input: ImportRemoteSetStreamInput,
   db: MuzeroDB = defaultDb,
@@ -126,6 +139,7 @@ export async function importRemoteSetStream(
     status: "idle",
     config: remoteSet.index.set.config,
     displayMode: normalizeDisplayMode(remoteSet.index.set.displayMode),
+    cloudSource: input.source ? sanitizeCloudSource(input.source) : existingSession?.cloudSource,
     createdAt: remoteSet.index.set.createdAt,
     updatedAt: remoteSet.index.set.updatedAt,
   };
@@ -170,6 +184,7 @@ export async function importRemoteSetStream(
       liked: existing?.liked ?? remoteTrack.source.liked,
       tags: existing?.tags ?? remoteTrack.source.tags,
       mediaMetadata: remoteTrack.source.mediaMetadata,
+      cloudSource: input.source ? sanitizeCloudSource(input.source) : existing?.cloudSource,
     };
   });
 

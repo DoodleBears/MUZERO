@@ -217,6 +217,42 @@ describe("importRemoteSetStream", () => {
     expect(track?.coverThumbhash).toBe("SETTH64");
   });
 
+  it("caches remote source attribution on imported set and track rows", async () => {
+    await importRemoteSetStream(
+      {
+        driveId: "drv_friend",
+        remoteSet,
+        source: {
+          driveId: "drv_friend",
+          driveLabel: "Friend Drive",
+          devicePublicId: "dvc_friend",
+          displayName: "Friend phone",
+          avatarSeed: "green",
+          avatarUrl: "https://music.example.com/muzero/objects/avatars/friend.jpg",
+        },
+      },
+      db,
+    );
+
+    await expect(db.sessions.get("ses_remote_drv_friend_ses_tokyo")).resolves.toMatchObject({
+      cloudSource: {
+        driveId: "drv_friend",
+        driveLabel: "Friend Drive",
+        devicePublicId: "dvc_friend",
+        displayName: "Friend phone",
+        avatarSeed: "green",
+        avatarUrl: "https://music.example.com/muzero/objects/avatars/friend.jpg",
+      },
+    });
+    await expect(db.tracks.get("trk_remote_drv_friend_trk_blue")).resolves.toMatchObject({
+      cloudSource: {
+        driveId: "drv_friend",
+        devicePublicId: "dvc_friend",
+        displayName: "Friend phone",
+      },
+    });
+  });
+
   it("is idempotent for duplicate remote set imports", async () => {
     await importRemoteSetStream({ driveId: "drv_a", remoteSet }, db);
     await importRemoteSetStream({ driveId: "drv_a", remoteSet }, db);

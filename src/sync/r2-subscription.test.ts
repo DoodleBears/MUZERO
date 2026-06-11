@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  loadRemoteDeviceProfiles,
   loadRemoteEntityCovers,
   loadRemoteIndexesForSearchTrack,
   loadRemoteSetIndex,
@@ -189,6 +190,90 @@ describe("subscribeManifest", () => {
         }),
       }),
     ).rejects.toThrow(/invalid manifest/i);
+  });
+});
+
+describe("loadRemoteDeviceProfiles", () => {
+  it("resolves devices/index.json entries into safe display profiles", async () => {
+    const fetcher = fetchMap({
+      "https://music.example.com/muzero/manifest.json": {
+        ...manifest,
+        devicesIndex: "devices/index.json",
+        sets: [{ ...manifest.sets[0], publishedBy: "dvc_friend" }],
+      },
+      "https://music.example.com/muzero/devices/index.json": {
+        schema: "muzero-r2-devices-v1",
+        updatedAt: 1780944000000,
+        devices: [
+          {
+            publicId: "dvc_friend",
+            displayName: "Friend phone",
+            avatarSeed: "green",
+            profile: "profiles/devices/dvc_friend/profile.json",
+          },
+        ],
+      },
+      "https://music.example.com/muzero/profiles/devices/dvc_friend/profile.json": {
+        schema: "muzero-r2-device-profile-v1",
+        devicePublicId: "dvc_friend",
+        displayName: "Friend phone profile",
+        avatarSeed: "blue",
+        avatar: {
+          url: "objects/avatars/sha256-avatar.jpg",
+          mime: "image/jpeg",
+          bytes: 123,
+        },
+        revision: 2,
+        updatedAt: 1780945000000,
+      },
+    });
+    const preview = await subscribeManifest("https://music.example.com/muzero/manifest.json", {
+      fetcher,
+    });
+
+    const profiles = await loadRemoteDeviceProfiles(preview, { fetcher });
+
+    expect(profiles.get("dvc_friend")).toEqual({
+      devicePublicId: "dvc_friend",
+      displayName: "Friend phone profile",
+      avatarSeed: "blue",
+      avatarUrl: "https://music.example.com/muzero/objects/avatars/sha256-avatar.jpg",
+      revision: 2,
+      updatedAt: 1780945000000,
+    });
+  });
+
+  it("falls back to the device index entry when a profile object is missing", async () => {
+    const fetcher = fetchMap({
+      "https://music.example.com/muzero/manifest.json": {
+        ...manifest,
+        devicesIndex: "devices/index.json",
+        sets: [{ ...manifest.sets[0], publishedBy: "dvc_friend" }],
+      },
+      "https://music.example.com/muzero/devices/index.json": {
+        schema: "muzero-r2-devices-v1",
+        updatedAt: 1780944000000,
+        devices: [
+          {
+            publicId: "dvc_friend",
+            displayName: "Friend phone",
+            avatarSeed: "green",
+            profile: "profiles/devices/dvc_friend/profile.json",
+          },
+        ],
+      },
+    });
+    const preview = await subscribeManifest("https://music.example.com/muzero/manifest.json", {
+      fetcher,
+    });
+
+    const profiles = await loadRemoteDeviceProfiles(preview, { fetcher });
+
+    expect(profiles.get("dvc_friend")).toMatchObject({
+      devicePublicId: "dvc_friend",
+      displayName: "Friend phone",
+      avatarSeed: "green",
+    });
   });
 });
 

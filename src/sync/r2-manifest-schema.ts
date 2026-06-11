@@ -288,8 +288,20 @@ export const r2PresenceIndexSchema = z.object({
   ),
 });
 
+export const r2DevicePublicProfileSchema = z.object({
+  schema: z.literal("muzero-r2-device-profile-v1"),
+  devicePublicId: z.string().min(1),
+  displayName: z.string().min(1),
+  avatarSeed: z.string().optional(),
+  avatar: r2RemoteObjectSchema.optional(),
+  appVersion: z.string().optional(),
+  revision: z.number().int().nonnegative(),
+  updatedAt: millisSchema,
+});
+
 export type R2Manifest = z.infer<typeof r2ManifestSchema>;
 export type R2SetSummary = z.infer<typeof r2SetSummarySchema>;
+export type R2DevicePublicProfile = z.infer<typeof r2DevicePublicProfileSchema>;
 export type R2DevicesIndex = z.infer<typeof r2DevicesIndexSchema>;
 export type R2StatsIndex = z.infer<typeof r2StatsIndexSchema>;
 export type R2EntityCoverEntry = z.infer<typeof r2EntityCoverEntrySchema>;

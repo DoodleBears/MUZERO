@@ -1,9 +1,13 @@
 import { getAppFetch } from "@/lib/platform";
 import {
+  type R2DevicePublicProfile,
+  type R2DevicesIndex,
   type R2EntityCoversIndex,
   type R2Manifest,
   type R2SetIndex,
   type R2ShareManifest,
+  r2DevicePublicProfileSchema,
+  r2DevicesIndexSchema,
   r2EntityCoversIndexSchema,
   r2ManifestSchema,
   r2SetIndexSchema,
@@ -21,6 +25,15 @@ export interface RemoteSetPreview {
   trackCount: number;
   bytes: number;
   publishedBy?: string;
+}
+
+export interface RemoteDeviceProfileSummary {
+  devicePublicId: string;
+  displayName?: string;
+  avatarSeed?: string;
+  avatarUrl?: string;
+  revision?: number;
+  updatedAt?: number;
 }
 
 export interface RemoteLibraryPreview {
@@ -162,6 +175,39 @@ export async function loadRemoteEntityCovers(
   return { baseUrl: preview.baseUrl, index: parsed.data };
 }
 
+export async function loadRemoteDeviceProfiles(
+  preview: Pick<RemoteLibraryPreview, "baseUrl" | "manifest">,
+  options: SyncReadOptions = {},
+): Promise<Map<string, RemoteDeviceProfileSummary>> {
+  const path = preview.manifest.devicesIndex;
+  if (!path) return new Map();
+  const fetcher = await resolveFetcher(options.fetcher);
+  const raw = await fetchJson(
+    resolveRemoteObjectUrl(preview.baseUrl, path),
+    "devices index",
+    fetcher,
+  );
+  const parsed = r2DevicesIndexSchema.safeParse(raw);
+  if (!parsed.success) {
+    throw new Error(
+      `Invalid devices index: ${parsed.error.issues[0]?.message ?? "schema mismatch"}`,
+    );
+  }
+  const profiles = new Map<string, RemoteDeviceProfileSummary>();
+  for (const entry of parsed.data.devices) {
+    profiles.set(entry.publicId, fallbackProfile(entry));
+  }
+  await Promise.all(
+    parsed.data.devices.map(async (entry) => {
+      if (!entry.profile) return;
+      const profile = await tryLoadDeviceProfile(preview.baseUrl, entry.profile, fetcher);
+      if (!profile) return;
+      profiles.set(entry.publicId, profile);
+    }),
+  );
+  return profiles;
+}
+
 export async function loadRemoteSetIndex(
   preview: Pick<RemoteLibraryPreview, "baseUrl">,
   set: Pick<RemoteSetPreview, "indexUrl">,
@@ -195,6 +241,44 @@ export async function loadRemoteSetIndex(
       ),
       source: track,
     })),
+  };
+}
+
+async function tryLoadDeviceProfile(
+  baseUrl: string,
+  path: string,
+  fetcher: SyncFetch,
+): Promise<RemoteDeviceProfileSummary | undefined> {
+  try {
+    const raw = await fetchJson(resolveRemoteObjectUrl(baseUrl, path), "device profile", fetcher);
+    const parsed = r2DevicePublicProfileSchema.safeParse(raw);
+    if (!parsed.success) return undefined;
+    return profileSummary(baseUrl, parsed.data);
+  } catch {
+    return undefined;
+  }
+}
+
+function fallbackProfile(entry: R2DevicesIndex["devices"][number]): RemoteDeviceProfileSummary {
+  return {
+    devicePublicId: entry.publicId,
+    displayName: entry.displayName?.trim() || undefined,
+    avatarSeed: entry.avatarSeed?.trim() || undefined,
+    updatedAt: entry.profileUpdatedAt ?? entry.lastSeenAt,
+  };
+}
+
+function profileSummary(
+  baseUrl: string,
+  profile: R2DevicePublicProfile,
+): RemoteDeviceProfileSummary {
+  return {
+    devicePublicId: profile.devicePublicId,
+    displayName: profile.displayName.trim() || undefined,
+    avatarSeed: profile.avatarSeed?.trim() || undefined,
+    avatarUrl: profile.avatar ? resolveRemoteObjectUrl(baseUrl, profile.avatar.url) : undefined,
+    revision: profile.revision,
+    updatedAt: profile.updatedAt,
   };
 }
 

@@ -1,5 +1,5 @@
 import { db as defaultDb, type MuzeroDB } from "@/db/muzero-db";
-import type { SyncRun } from "@/db/types";
+import type { CloudSourceAttribution, SyncRun } from "@/db/types";
 import { newId } from "@/lib/id";
 import { cacheRemoteTrackMedia, type SyncCacheFetch } from "./r2-cache";
 import { importRemoteSetStream } from "./r2-import-stream";
@@ -21,6 +21,7 @@ export interface ApplyRemoteSetPullResult extends RemoteSetPullPreview {
 }
 
 export interface ApplyRemoteSetPullInput extends DiffRemoteSetInput {
+  source?: CloudSourceAttribution;
   cacheMedia?: {
     fetcher?: SyncCacheFetch;
   };
@@ -67,6 +68,7 @@ export async function applyRemoteSetPull(
       {
         driveId: input.driveId,
         remoteSet: input.remoteSet,
+        source: input.source,
       },
       db,
     );

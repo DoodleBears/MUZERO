@@ -24,7 +24,7 @@
 | 9 | Same-set co-editing (one user, multiple devices) | ✅ Done | [§12.5](#125-phase-9-same-set-co-editing-one-user-multiple-devices) |
 | 10 | Automatic sync + R2 scale optimizations | ✅ Done | [§12.6](#126-phase-10-automatic-sync--r2-scale-optimizations) |
 | 11 | Trusted-device setup link + local device naming UX | ✅ Done | [§12.7](#127-phase-11-trusted-device-setup-link--local-device-naming-ux) |
-| 12 | Device Avatar UX + Source Attribution | 🔄 In Progress | [§12.8](#128-phase-12-device-avatar-ux--source-attribution) |
+| 12 | Device Avatar UX + Source Attribution | ✅ Done | [§12.8](#128-phase-12-device-avatar-ux--source-attribution) |
 | 13 | Sync Mode UX + Remote Playback Reliability + R2 Setup Flow | ✅ Done | [§12.9](#129-phase-13-sync-mode-ux--remote-playback-reliability--r2-setup-flow) |
 | 14 | Smart sync content fingerprinting | ✅ Done | [§12.10](#1210-phase-14-smart-sync-content-fingerprinting) |
 | 15 | Cloud-to-Local Playlist Cache UX | ✅ Done | [§12.11](#1211-phase-15-cloud-to-local-playlist-cache-ux) |
@@ -2272,7 +2272,7 @@ Do not record secrets, full signed URLs, or media content.
 
 **Goal:** make multi-device / multi-drive libraries understandable at a glance by pairing every publish source with a visible avatar + name while keeping V1's no-account, R2-only boundary.
 
-**Status (2026-06-11):** DA-1 is implemented. The remaining attribution indicators need a dedicated follow-up because the browse/import UI currently reads `publishedBy` from the manifest but does not yet resolve `devices/index.json` / `DevicePublicProfile` into a local display cache for set and track surfaces.
+**Status (2026-06-12):** Phase 12 is completed. The browse/import path now resolves `devices/index.json` plus per-device `profile.json` when available, falls back safely to the index summary or drive label, and stores a display-only `cloudSource` snapshot on imported set/track rows. Remote set preview rows, imported set headers, and cloud-imported track rows render the same avatar/name source chip. Device names/avatars remain attribution only and do not imply trust.
 
 **Product requirements:**
 
@@ -2285,9 +2285,11 @@ Do not record secrets, full signed URLs, or media content.
 **Checklist:**
 
 - [x] DA-1 Add tested Settings avatar upload/crop UI and local avatar media storage.
-- [ ] DA-2 Load remote device profiles/indexes during cloud-drive browse/import and cache safe display fields locally.
-- [ ] DA-3 Render owner/source avatar chips on remote set preview rows, imported set headers, and track rows.
-- [ ] DA-4 Add fallback and privacy copy: local-only when profile publishing is off; generated avatar/public id when a profile image is missing.
+- [x] DA-2 Load remote device profiles/indexes during cloud-drive browse/import and cache safe display fields locally.
+- [x] DA-3 Render owner/source avatar chips on remote set preview rows, imported set headers, and track rows.
+- [x] DA-4 Add fallback and privacy copy: local-only when profile publishing is off; generated avatar/public id when a profile image is missing.
+
+**Outcome (2026-06-12): Phase 12 ✅.** Device avatar publishing stays explicit and writable-drive-only, while subscribers can now understand where remote content came from without re-entering context manually. A missing or invalid per-device profile no longer blocks set browsing/import; MUZERO uses the owner-maintained devices index, public id, and drive label fallbacks. Imported rows cache only safe display fields (`driveId`, local drive label, optional `devicePublicId`, display name, avatar seed, avatar URL), so list/header attribution remains available offline and does not become an authentication boundary.
 
 ### 12.9 Phase 13: Sync Mode UX + Remote Playback Reliability + R2 Setup Flow
 

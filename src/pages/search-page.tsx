@@ -15,6 +15,7 @@ import { motion } from "motion/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { useTranslation } from "react-i18next";
+import { SourceAttributionChip } from "@/components/cloud/source-attribution-chip";
 import { CollapsibleSearch } from "@/components/library/collapsible-search";
 import { CoverContextMenu } from "@/components/library/cover-context-menu";
 import { EntityDetailView } from "@/components/library/entity-detail";
@@ -1557,6 +1558,14 @@ function SetDetailView({
                 {t("gallery.count", { count: tracks.length })}
                 {totalDurationSec > 0 && ` · ${formatDuration(totalDurationSec)}`}
               </p>
+              {session?.cloudSource && (
+                <div className="px-1 pt-1">
+                  <SourceAttributionChip
+                    source={session.cloudSource}
+                    fallback={t("gallery.cloudSourceUnknown")}
+                  />
+                </div>
+              )}
             </div>
           </div>
           <div className="mb-3 flex shrink-0 flex-wrap items-center gap-1.5">

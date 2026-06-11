@@ -75,10 +75,12 @@ function renderRow({
   isCurrent = false,
   isSelected,
   sessions = [],
+  track: rowTrack = track(),
 }: {
   isCurrent?: boolean;
   isSelected?: boolean;
   sessions?: DjSession[];
+  track?: Track;
 } = {}) {
   const props = {
     isCurrent,
@@ -92,7 +94,7 @@ function renderRow({
     onToggleLike: vi.fn(),
     onView: vi.fn(),
     sessions,
-    track: track(),
+    track: rowTrack,
   };
 
   const view = render(<TrackRow {...props} />);
@@ -166,6 +168,23 @@ describe("TrackRow", () => {
 
     expect(props.onAddToNewSession).toHaveBeenCalledWith("Roadtrip");
     expect(props.onAddToSession).not.toHaveBeenCalled();
+  });
+
+  it("shows source attribution for cloud-imported tracks", () => {
+    renderRow({
+      track: {
+        ...track(),
+        cloudSource: {
+          driveId: "drv_friend",
+          driveLabel: "Friend Drive",
+          devicePublicId: "dvc_friend",
+          displayName: "Friend phone",
+          avatarSeed: "green",
+        },
+      },
+    });
+
+    expect(screen.getByText("Friend phone")).toBeInTheDocument();
   });
 
   it("selects an unselected row on click without playing", () => {

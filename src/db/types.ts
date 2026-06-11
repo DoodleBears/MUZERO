@@ -152,6 +152,8 @@ export interface Track {
   streamExternalId?: string;
   /** Display snapshot so the library renders without an online round-trip. */
   streamMeta?: StreamSourceMeta;
+  /** Safe display-only source snapshot for tracks imported from a cloud drive. */
+  cloudSource?: CloudSourceAttribution;
 }
 
 /**
@@ -366,8 +368,19 @@ export interface DjSession {
    * an incremental re-sync into the same set. Additive, non-indexed (no version bump).
    */
   streamPlaylistRef?: { source: StreamSourceId; id: string };
+  /** Safe display-only source snapshot for sets imported from a cloud drive. */
+  cloudSource?: CloudSourceAttribution;
   createdAt: number;
   updatedAt: number;
+}
+
+export interface CloudSourceAttribution {
+  driveId: string;
+  driveLabel?: string;
+  devicePublicId?: string;
+  displayName?: string;
+  avatarSeed?: string;
+  avatarUrl?: string;
 }
 
 export interface DjChatMessageMetadata {
