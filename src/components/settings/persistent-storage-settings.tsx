@@ -1,12 +1,13 @@
 import { useLiveQuery } from "dexie-react-hooks";
-import { RefreshCw, Trash2 } from "lucide-react";
-import { useState } from "react";
+import { RefreshCw, Trash2, XCircle } from "lucide-react";
+import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   cleanupOrphanedMediaStorageFiles,
-  migrateLegacyMediaBlobs,
+  type MediaBlobMigrationProgress,
+  migrateLegacyMediaBlobsWithProgress,
   type PersistentMediaStorageBucket,
   type PersistentMediaStorageSummary,
   summarizePersistentMediaStorage,
@@ -53,7 +54,11 @@ function formatBytes(bytes: number): string {
 export function PersistentStorageSettings() {
   const { t } = useTranslation();
   const [busy, setBusy] = useState<"migrate" | "cleanup" | null>(null);
+  const [migrationProgress, setMigrationProgress] = useState<MediaBlobMigrationProgress | null>(
+    null,
+  );
   const [refreshToken, setRefreshToken] = useState(0);
+  const migrationAbortRef = useRef<AbortController | null>(null);
   const summary = useLiveQuery(
     () => summarizePersistentMediaStorage(undefined, { includeHealth: true }),
     [refreshToken],
@@ -62,13 +67,40 @@ export function PersistentStorageSettings() {
 
   async function migrateLegacy() {
     setBusy("migrate");
+    const controller = new AbortController();
+    migrationAbortRef.current = controller;
+    setMigrationProgress({
+      cancelled: false,
+      failed: 0,
+      migrated: 0,
+      processed: 0,
+      skipped: 0,
+      total: summary.legacyMediaCount,
+    });
     try {
-      const result = await migrateLegacyMediaBlobs();
-      notify.success(t("streamCache.permanentMigrateDone", { count: result.migrated }));
+      const result = await migrateLegacyMediaBlobsWithProgress(undefined, {
+        batchSize: 20,
+        onProgress: setMigrationProgress,
+        signal: controller.signal,
+      });
+      setMigrationProgress(result);
+      notify.success(
+        t(
+          result.cancelled
+            ? "streamCache.permanentMigrateCancelled"
+            : "streamCache.permanentMigrateDone",
+          { count: result.migrated },
+        ),
+      );
       setRefreshToken((value) => value + 1);
     } finally {
+      migrationAbortRef.current = null;
       setBusy(null);
     }
+  }
+
+  function cancelMigration() {
+    migrationAbortRef.current?.abort();
   }
 
   async function cleanupOrphans() {
@@ -85,6 +117,10 @@ export function PersistentStorageSettings() {
   const roles = Object.entries(summary.byRole).filter(
     (entry): entry is [MediaBlob["role"], PersistentMediaStorageBucket] => Boolean(entry[1]),
   );
+  const migrationPercent =
+    migrationProgress && migrationProgress.total > 0
+      ? Math.round((migrationProgress.processed / migrationProgress.total) * 100)
+      : 0;
 
   return (
     <Card>
@@ -129,6 +165,49 @@ export function PersistentStorageSettings() {
           <span>{t("streamCache.permanentOrphaned", { count: summary.orphanedCount })}</span>
         </div>
 
+        {migrationProgress && (
+          <div className="rounded-md border border-border bg-muted/20 p-3">
+            <div className="mb-2 flex items-center justify-between gap-3 text-xs">
+              <span className="font-medium">
+                {t("streamCache.permanentProgress", {
+                  processed: migrationProgress.processed,
+                  total: migrationProgress.total,
+                })}
+              </span>
+              <span className="text-muted-foreground">{migrationPercent}%</span>
+            </div>
+            <div
+              role="progressbar"
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={migrationPercent}
+              className="h-2 overflow-hidden rounded-full bg-muted"
+            >
+              <div
+                className="h-full rounded-full bg-primary transition-[width]"
+                style={{ width: `${migrationPercent}%` }}
+              />
+            </div>
+            <div className="mt-2 grid gap-1 text-muted-foreground text-xs sm:grid-cols-2">
+              <span>
+                {t("streamCache.permanentProgressDetail", {
+                  failed: migrationProgress.failed,
+                  migrated: migrationProgress.migrated,
+                  skipped: migrationProgress.skipped,
+                })}
+              </span>
+              {migrationProgress.current && (
+                <span>
+                  {t("streamCache.permanentCurrent", {
+                    role: t(ROLE_LABEL_KEYS[migrationProgress.current.role]),
+                    size: formatBytes(migrationProgress.current.bytes),
+                  })}
+                </span>
+              )}
+            </div>
+          </div>
+        )}
+
         <div className="flex flex-wrap gap-2">
           <Button
             type="button"
@@ -139,6 +218,11 @@ export function PersistentStorageSettings() {
           >
             <RefreshCw /> {t("streamCache.permanentMigrate")}
           </Button>
+          {busy === "migrate" && (
+            <Button type="button" size="sm" variant="outline" onClick={cancelMigration}>
+              <XCircle /> {t("streamCache.permanentCancel")}
+            </Button>
+          )}
           <Button
             type="button"
             size="sm"

@@ -133,6 +133,11 @@
     "permanentOrphaned": "{{count}} 件の孤立ファイル",
     "permanentMigrate": "旧メディアを移行",
     "permanentMigrateDone": "{{count}} 件のメディアを移行しました",
+    "permanentMigrateCancelled": "{{count}} 件を移行したところで停止しました",
+    "permanentProgress": "{{processed}} / {{total}} を移行中",
+    "permanentProgressDetail": "移行 {{migrated}} · スキップ {{skipped}} · 失敗 {{failed}}",
+    "permanentCurrent": "現在: {{role}} · {{size}}",
+    "permanentCancel": "移行をキャンセル",
     "permanentCleanup": "孤立ファイルを削除",
     "permanentCleanupDone": "{{count}} 件の孤立ファイルを削除しました",
     "downloadFailedMany_other": "{{count}} 曲をダウンロードできませんでした"

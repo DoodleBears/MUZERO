@@ -142,6 +142,11 @@
     "permanentOrphaned": "{{count}} orphan files",
     "permanentMigrate": "Migrate legacy media",
     "permanentMigrateDone": "Migrated {{count}} media files",
+    "permanentMigrateCancelled": "Stopped after migrating {{count}} media files",
+    "permanentProgress": "Migrating {{processed}} / {{total}}",
+    "permanentProgressDetail": "Migrated {{migrated}} · skipped {{skipped}} · failed {{failed}}",
+    "permanentCurrent": "Current: {{role}} · {{size}}",
+    "permanentCancel": "Cancel migration",
     "permanentCleanup": "Clean orphan files",
     "permanentCleanupDone": "Deleted {{count}} orphan files",
     "downloadFailedMany_other": "{{count}} songs couldn't be downloaded"

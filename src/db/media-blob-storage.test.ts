@@ -7,6 +7,7 @@ import {
   type MediaStorageProvider,
   mediaStorageKey,
   migrateLegacyMediaBlobs,
+  migrateLegacyMediaBlobsWithProgress,
   migrateMediaBlobToProvider,
   putMediaBlob,
   resolveMediaBlob,
@@ -258,6 +259,63 @@ describe("media blob storage resolver", () => {
     expect(result).toEqual({ migrated: 1, skipped: 1, failed: 0 });
     expect((await db.mediaBlobs.get("blb_media_a"))?.storageBackend).toBe("opfs");
     expect((await db.mediaBlobs.get("blb_cover_a"))?.storageBackend).toBeUndefined();
+  });
+
+  it("reports per-file progress while migrating legacy media rows", async () => {
+    const provider = createMemoryProvider("opfs");
+    await db.mediaBlobs.bulkPut([
+      {
+        id: "blb_media_a",
+        trackId: "trk_a",
+        role: "media",
+        mime: "audio/mpeg",
+        bytes: 1,
+        blob: new Blob(["a"], { type: "audio/mpeg" }),
+      },
+      {
+        id: "blb_media_b",
+        trackId: "trk_b",
+        role: "media",
+        mime: "audio/mpeg",
+        bytes: 1,
+        blob: new Blob(["b"], { type: "audio/mpeg" }),
+      },
+      {
+        id: "blb_cover_a",
+        trackId: "trk_a",
+        role: "cover",
+        mime: "image/png",
+        bytes: 1,
+        blob: new Blob(["c"], { type: "image/png" }),
+      },
+    ]);
+    const progress: Array<{ processed: number; total: number; migrated: number }> = [];
+
+    const result = await migrateLegacyMediaBlobsWithProgress(db, {
+      provider,
+      batchSize: 1,
+      onProgress: (next) => {
+        progress.push({
+          processed: next.processed,
+          total: next.total,
+          migrated: next.migrated,
+        });
+      },
+    });
+
+    expect(result).toMatchObject({
+      cancelled: false,
+      failed: 0,
+      migrated: 2,
+      processed: 2,
+      skipped: 0,
+      total: 2,
+    });
+    expect(progress).toEqual([
+      { processed: 0, total: 2, migrated: 0 },
+      { processed: 1, total: 2, migrated: 1 },
+      { processed: 2, total: 2, migrated: 2 },
+    ]);
   });
 
   it("migrates selected legacy image roles for large background and gallery assets", async () => {

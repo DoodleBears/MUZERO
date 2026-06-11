@@ -133,6 +133,11 @@
     "permanentOrphaned": "고아 파일 {{count}}개",
     "permanentMigrate": "레거시 미디어 마이그레이션",
     "permanentMigrateDone": "미디어 파일 {{count}}개를 마이그레이션함",
+    "permanentMigrateCancelled": "미디어 파일 {{count}}개를 마이그레이션한 뒤 중지함",
+    "permanentProgress": "{{processed}} / {{total}} 마이그레이션 중",
+    "permanentProgressDetail": "성공 {{migrated}} · 건너뜀 {{skipped}} · 실패 {{failed}}",
+    "permanentCurrent": "현재: {{role}} · {{size}}",
+    "permanentCancel": "마이그레이션 취소",
     "permanentCleanup": "고아 파일 정리",
     "permanentCleanupDone": "고아 파일 {{count}}개를 삭제함",
     "downloadFailedMany_other": "{{count}}곡을 다운로드하지 못함"

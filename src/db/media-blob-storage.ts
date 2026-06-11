@@ -41,6 +41,18 @@ export interface MediaBlobMigrationSummary {
   failed: number;
 }
 
+export interface MediaBlobMigrationProgress extends MediaBlobMigrationSummary {
+  total: number;
+  processed: number;
+  cancelled: boolean;
+  current?: {
+    id: string;
+    role: MediaBlob["role"];
+    bytes: number;
+    mime: string;
+  };
+}
+
 export interface PersistentMediaMissingEntry {
   id: string;
   role: MediaBlob["role"];
@@ -226,6 +238,64 @@ export async function migrateLegacyMediaBlobs(
     }
   }
   return summary;
+}
+
+export async function migrateLegacyMediaBlobsWithProgress(
+  db: MuzeroDB = defaultDb,
+  options: MediaBlobStorageOptions & {
+    batchSize?: number;
+    minBytes?: number;
+    onProgress?: (progress: MediaBlobMigrationProgress) => void | Promise<void>;
+    roles?: ReadonlyArray<MediaBlob["role"]>;
+    signal?: AbortSignal;
+  } = {},
+): Promise<MediaBlobMigrationProgress> {
+  const roles = new Set(options.roles ?? ["media"]);
+  const rows = await db.mediaBlobs.toArray();
+  const candidates = rows.filter(
+    (row) =>
+      mediaStorageBackend(row) === "indexeddb" &&
+      roles.has(row.role) &&
+      (options.minBytes === undefined || row.bytes >= options.minBytes),
+  );
+  const progress: MediaBlobMigrationProgress = {
+    cancelled: false,
+    failed: 0,
+    migrated: 0,
+    processed: 0,
+    skipped: 0,
+    total: candidates.length,
+  };
+  const batchSize = Math.max(1, options.batchSize ?? 20);
+  await emitMigrationProgress(progress, options.onProgress);
+
+  for (const row of candidates) {
+    if (options.signal?.aborted) {
+      progress.cancelled = true;
+      break;
+    }
+    progress.current = {
+      bytes: row.bytes,
+      id: row.id,
+      mime: row.mime,
+      role: row.role,
+    };
+    try {
+      const migrated = await migrateMediaBlobToProvider(row, db, options);
+      if (migrated && mediaStorageBackend(migrated) !== "indexeddb") progress.migrated += 1;
+      else progress.skipped += 1;
+    } catch {
+      progress.failed += 1;
+    }
+    progress.processed += 1;
+    await emitMigrationProgress(progress, options.onProgress);
+    if (progress.processed % batchSize === 0) await yieldToEventLoop();
+  }
+
+  if (options.signal?.aborted) progress.cancelled = true;
+  progress.current = undefined;
+  if (progress.cancelled) await emitMigrationProgress(progress, options.onProgress);
+  return progress;
 }
 
 export async function validatePersistentMediaStorage(
@@ -422,4 +492,19 @@ async function deleteProviderBytes(
   await providerFor(backend, options)
     .delete({ storageKey: row.storageKey })
     .catch(() => {});
+}
+
+async function emitMigrationProgress(
+  progress: MediaBlobMigrationProgress,
+  onProgress?: (progress: MediaBlobMigrationProgress) => void | Promise<void>,
+): Promise<void> {
+  if (!onProgress) return;
+  await onProgress({
+    ...progress,
+    current: progress.current ? { ...progress.current } : undefined,
+  });
+}
+
+function yieldToEventLoop(): Promise<void> {
+  return new Promise((resolve) => globalThis.setTimeout(resolve, 0));
 }
