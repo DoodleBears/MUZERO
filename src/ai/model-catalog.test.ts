@@ -100,6 +100,18 @@ describe("parseModelCatalog", () => {
     expect(model.supportsTools).toBeUndefined();
   });
 
+  it("formats context length + price compactly", async () => {
+    const { formatContextLength, formatPricePerMillion } = await import("./model-catalog");
+    expect(formatContextLength(128000)).toBe("128K");
+    expect(formatContextLength(1_000_000)).toBe("1M");
+    expect(formatContextLength(1_500_000)).toBe("1.5M");
+    expect(formatContextLength(512)).toBe("512");
+    expect(formatPricePerMillion(3)).toBe("$3");
+    expect(formatPricePerMillion(0.15)).toBe("$0.15");
+    expect(formatPricePerMillion(2.5)).toBe("$2.50");
+    expect(formatPricePerMillion(0)).toBe("$0");
+  });
+
   it("dedupes by id and ignores malformed entries / shapes", () => {
     expect(
       parseModelCatalog({ data: [{ id: "a" }, { id: "a" }, { id: "" }, {}, null, 5] }),

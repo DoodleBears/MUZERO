@@ -127,6 +127,13 @@ export function LlmProviderSettings() {
             searchPlaceholder: t("settings.llmModelSearch"),
             trigger: t("settings.llmModelPick"),
             customLabel: (q) => t("settings.llmModelUseCustom", { model: q }),
+            capabilities: {
+              vision: t("settings.capVision"),
+              audio: t("settings.capAudio"),
+              tools: t("settings.capTools"),
+              context: t("settings.capContext"),
+              price: (inLabel, outLabel) => t("settings.capPrice", { in: inLabel, out: outLabel }),
+            },
           }}
           onSelect={(model) =>
             void saveSettings({

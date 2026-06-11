@@ -840,7 +840,12 @@
     "llmModelUseCustom": "使用「{{model}}」",
     "llmModelIsDefault": "这是 DJ 的默认模型",
     "llmModelSetsDefault": "选择后即设为 DJ 默认",
-    "llmProviderSearch": "搜索 provider"
+    "llmProviderSearch": "搜索 provider",
+    "capVision": "视觉（图像输入）",
+    "capAudio": "音频输入",
+    "capTools": "函数调用",
+    "capContext": "上下文窗口",
+    "capPrice": "输入 {{in}} · 输出 {{out}} / 每百万 token"
   },
   "gallery": {
     "title": "歌单",

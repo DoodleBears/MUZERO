@@ -840,7 +840,12 @@
     "llmModelUseCustom": "「{{model}}」を使う",
     "llmModelIsDefault": "これが DJ の既定モデルです",
     "llmModelSetsDefault": "選択すると DJ の既定になります",
-    "llmProviderSearch": "プロバイダーを検索"
+    "llmProviderSearch": "プロバイダーを検索",
+    "capVision": "ビジョン（画像入力）",
+    "capAudio": "音声入力",
+    "capTools": "関数呼び出し",
+    "capContext": "コンテキスト長",
+    "capPrice": "入力 {{in}} · 出力 {{out}} / 100万トークン"
   },
   "gallery": {
     "title": "セット",
