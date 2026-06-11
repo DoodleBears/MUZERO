@@ -19,6 +19,7 @@
 | 4 | Cloud-to-local pull sync + conflict handling | ✅ Done | [Phase 4 Checklist](#phase-4-checklist) |
 | 5 | Anonymous device registry + playback stats sync | ✅ Done | [Phase 5 Checklist](#phase-5-checklist) |
 | 6 | Optional low-frequency currently-playing presence | ✅ Done | [Phase 6 Checklist](#phase-6-checklist) |
+| 7 | Sync hardening (2026-06-11 audit follow-ups) | 🔲 Pending | [§12.3 backlog](#123-phase-7-proposed-sync-hardening) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
 
@@ -794,6 +795,19 @@ Root object:
 ```
 
 `devicesIndex`, `statsIndex`, and `presenceIndex` are optional owner-maintained discovery indexes. They make large drives cheaper to browse, but readers must still tolerate missing or stale indexes and fall back to per-set/profile/stat references already present in manifests and share indexes.
+
+#### Additive post-v1 manifest extensions (as-built, audited 2026-06-11)
+
+Other PRDs extended `muzero-r2-manifest-v1` after the six phases closed. All are **additive optional fields — no schema version bump** (per the additive rule; legacy manifests parse unchanged). Recorded here so this PRD stays the protocol's source of truth:
+
+| Field | Where | Carries | Source PRD / commit |
+|-------|-------|---------|---------------------|
+| `entityCoversIndex` | root manifest | path to `library/entity-covers/index.json` (`muzero-r2-entity-covers-v1`): library-global artist/album custom covers, content-addressed bytes in `objects/covers/`, LWW `updatedAt` per entry | artist/album entities PRD; `c2df2f9`/`9401dde` |
+| `tracks[].rank` | set index | fractional rank (drag-reorder); exporter also emits `tracks[]` in display order so rank-ignorant readers still see the order; importer rebuilds `trackRanks`, ranking local-only members after the max | drag-reorder PRD §4.2; `f4f38c0` |
+| `tracks[].thumbhash` | set index | base64 thumbhash of the track cover for instant remote previews | instant-cover-thumbnails PRD §3.4; `cf454a1` |
+| `tracks[].lyrics` | set index | synced/plain lyrics + `source`/`sourceId`/`instrumental`; only `found`/`instrumental` rows travel (negative cache stays local); import merge = manual-wins (`lyricsRemoteWins`) | synced-lyrics PRD §4.8; `e4592f7` |
+| `tracks[].memories[].atSec` | set index | optional playback-anchor seconds on a memory | immersive-memory-moments PRD; `1a31006` |
+| `tracks[].origin: "streamed"` | set index | accepted so manifests can represent external-source tracks | external-streaming-sources PRD; `b88b959` (see audit §12.2-F5 for the cached-bytes caveat) |
 
 ### 3.4.1 Share Manifest and Set-Level Projection
 
@@ -2047,7 +2061,67 @@ Do not record secrets, full signed URLs, or media content.
 
 ---
 
-## 12. Document Change Log
+## 12. Implementation Audit — 2026-06-11
+
+> Full-codebase re-audit after two days of post-phase feature work (lyrics, ranks, entity covers, streaming sources, library entities). Two outputs: **(12.1)** the wiring truth — what is actually reachable in the running app vs built-but-unwired — and **(12.2)** sync edge cases found by reading the engine end to end. Findings feed the Phase 7 hardening backlog (12.3).
+
+### 12.1 Wiring truth
+
+**Wired and live:**
+
+- Manual per-drive publish: `CloudDriveRow` → `useSyncStore.publishDrive` → orchestrator → `buildR2ExportPlanForDrive` + `runR2PublishSync`; live progress + durable `syncRuns`; cancel between objects.
+- Per-drive-row browse + import: `CloudDriveSets` → `subscribeManifest`/`loadRemoteSetIndex` → `importRemoteSetStream` (raw path — see F2).
+- Presence: write coordinator on playback events (player-store) + `useRemotePresence` poller on Now Playing for `ses_remote_` sets.
+- Playback stats: recorded on listens; manual sync flushes a small pending segment.
+- Round-trips: lyrics (manual-wins), rank, memory `atSec`, cover thumbhash, memory authors; entity-cover **export**.
+
+**Built and tested, but NOT reachable in production:**
+
+| Component | State | Consequence |
+|-----------|-------|-------------|
+| `useSyncStore.pullRemoteSet` (orchestrated pull: dry-run diff → conflict/blocked gates → apply → pull `syncRuns`) | zero UI callers | the only live import path is the raw one (F2) |
+| `R2ConflictResolutionPanel` (keep-local / use-remote / duplicate-both) | component exists, never mounted | conflicts have no resolution surface |
+| `recordSyncMutation` | zero production callers — no repository/store records mutations on set edits | the entire mutation machinery (folding, set-mutation objects, overlap conflicts, pull conflict detection, `needs-review`) is unreachable; publish is effectively a full-state mirror |
+| mutation `syncedAt` | nothing ever sets it | if mutations were ever recorded, they would re-fold + re-upload forever, and an overlap conflict would permanently dead-end publish in `needs-review` (it returns before uploading) with no resolve/clear path |
+| `importRemoteEntityCovers` | zero callers; `subscribeManifest` doesn't even surface `entityCoversIndex` | entity covers publish but never land on the subscribing device (export-only half-feature) |
+| Remote search catalog (§3.4.2) | exporter never emits `catalog/library.json`; importer `r2-search-index.ts` has zero callers | end-to-end unwired — only the query/matching layer (`matchesRemoteSearchTrack`) is live, against an effectively empty cache table |
+| `setIndexPreconditions` / device-profile ETag (`If-Match` guards) | supported by plan/publish, never passed by `sync-store` | stale-overwrite protection exists but is dormant; all JSON writes are unconditional |
+
+### 12.2 Sync edge-case findings
+
+| # | Severity | Finding |
+|---|----------|---------|
+| **F1** | **High** | **Re-import clobbers local state on remote tracks.** `importRemoteSetStream` `bulkPut`s whole `trk_remote_*` rows rebuilt from the manifest (`r2-import-stream.ts:119–140`). Re-importing an updated set wipes: `blobId` (cached offline media → blob orphaned in `mediaBlobs`, playback silently falls back to streaming), local `liked`/`tags` edits, `playCount`, local `coverBlobId`/`coverCrop`. Lyrics/memories merge politely; the track row does not. |
+| **F2** | **High** | **The live import path has no protection.** `CloudDriveSets.importSet` calls `importRemoteSetStream` directly, bypassing `dryRunRemoteSetPull` — so no `keep-local` guard (local-newer is overwritten), no conflict gate, no pull `syncRuns` history, no cancellation. The protected orchestrated path exists but is the unwired one (§12.1). |
+| **F3** | **High (structural)** | **Conflict machinery is dead in production** (no mutation writers, no `syncedAt` writer, panel unmounted — §12.1). Local edits to imported sets are silently lost (F1/F2); two-device edits to one drive merge by overwrite. Decide: either wire mutations end-to-end (record on set edits → mark synced after publish → mount the panel), or delete the machinery and declare LWW-mirror semantics. Keeping it half-built invites accidental activation → permanent `needs-review` deadlock. |
+| **F4** | **High (multi-device)** | **Publish is a single-writer mirror; a second device's publish erases the first.** `devices/index.json`, `stats/index.json`, `presence/index.json` are each rebuilt listing **only the local device** (`r2-export-plan.ts:721–774`), and `manifest.json` lists only the publisher's local sets — all written unconditionally (no `If-Match`, §12.1). Device A then B publish → A vanishes from every index + any A-only sets vanish from the manifest (objects remain orphaned). Until merge-on-publish (read-modify-write indexes + union manifests) lands, the PRD must state the rule: **one writing device per drive**; additional devices subscribe read-only. |
+| **F5** | **Medium (policy)** | **Cached streamed tracks DO export their media bytes.** The export filter is only `!track.blobId` (`r2-export-plan.ts:167`), and `cacheStreamedTrackBlob` sets `blobId` on streamed tracks — so a downloaded YouTube/NetEase track's bytes upload to the user's R2, contradicting the schema comment ("exporting their media bytes is intentionally out of scope"). Meanwhile *un-cached* streamed tracks are **silently dropped** from the set index, but `manifest.sets[].trackCount` still counts them (`session.trackIds.length`) → subscriber previews over-report. Pick a policy: skip `origin === "streamed"` always (consistent, conservative) or export-if-cached and update the schema comment + a publish-time disclosure. |
+| **F6** | **Medium** | **Cancel is weaker than the UI implies.** Publish: the abort signal is checked only between objects — `r2SignedFetch` never receives it, so a multi-hundred-MB in-flight PUT cannot be cancelled. Pull/import: no abort support at all, yet the sync-indicator toast offers Cancel for both directions. |
+| **F7** | **Medium** | **One failed object aborts the whole publish** (`r2-publish.ts:66–69`): no retry/backoff, no continue-with-rest. Re-running self-heals via HEAD-skips for content-addressed binaries, but every JSON re-uploads, and a flaky object late in a big plan wastes the run. Pull: a media-cache failure after a successful import marks the run `failed` even though the session landed (misleading history). |
+| **F8** | **Low** | **Publish and pull share one controller/progress slot per drive** (`sync-store.ts:39`): concurrent publish + import on the same drive overwrite each other's `AbortController` (first becomes uncancellable) and interleave one progress line. |
+| **F9** | **Low** | **Dead/stale guards:** the pull `blocked: hash-mismatch` gate compares against `syncObjects.sha256`, but set-index JSON objects are recorded without `sha256` → unreachable. The streamed-origin schema comment is stale (F5). `plan.totalBytes` double-counts duplicate content-addressed objects (same blob on two tracks) → progress % overshoots; second occurrence self-skips via HEAD. |
+| **F10** | **Low (accepted)** | **LWW uses device wall clocks** (entity covers `updatedAt`, set diff `remoteUpdatedAt > local.updatedAt`): clock skew across devices can pick the older write. Acceptable for v1 single-writer; revisit with F4. |
+| **F11** | **Low** | **Track `coverCrop` doesn't travel** — `r2SetTrackSchema` has no crop on the track cover (entity covers do carry one), so a cropped cover renders differently on the subscribing device. |
+
+### 12.3 Phase 7 (proposed): Sync Hardening
+
+**Goal:** close the audit gaps — make the live paths safe (F1/F2), settle the half-built machinery (F3), and declare or fix multi-device semantics (F4).
+
+- [ ] F1: merge-preserving re-import — keep local `blobId`/`liked`/`tags`/`playCount`/`coverBlobId`/`coverCrop` on existing `trk_remote_*` rows (field-level merge instead of whole-row `bulkPut`), or re-link cached blobs after import.
+- [ ] F2: route `CloudDriveSets.importSet` through `useSyncStore.pullRemoteSet` (dry-run gates + pull `syncRuns` + one progress pipeline).
+- [ ] F3: decide mutation machinery — wire end-to-end (record on edits, mark `syncedAt` post-publish, mount `R2ConflictResolutionPanel`) **or** remove it and document LWW-mirror semantics.
+- [ ] F4: document "one writing device per drive" in Settings copy now; later: read-merge-write for `devices/stats/presence` indexes + manifest set-union, with `If-Match` preconditions actually passed.
+- [ ] F5: streamed-track export policy — skip `origin === "streamed"` (or export-if-cached + disclosure); fix `trackCount` to count exported tracks; refresh the schema comment.
+- [ ] F6: pass the abort signal into `r2SignedFetch`/fetch; give pull an abort path or hide Cancel for pulls.
+- [ ] F7: per-object retry with backoff; don't fail the pull run when only optional media caching failed.
+- [ ] Entity covers: import on subscribe (call `importRemoteEntityCovers` from the drive browse/pull path; surface `entityCoversIndex` on `RemoteLibraryPreview`) — or descope the read half explicitly.
+- [ ] Search catalog: either emit `catalog/library.json` in the export plan + trigger the importer on subscribe, or mark §3.4.2 deferred.
+- [ ] F8: serialize per-drive operations (or key controllers by direction).
+- [ ] F11: carry the track cover crop in the set index (additive optional).
+
+---
+
+## 13. Document Change Log
 
 | Date | Author | Changes |
 |------|--------|---------|
@@ -2150,4 +2224,6 @@ Do not record secrets, full signed URLs, or media content.
 | 2026-06-09 | MUZERO | Phases 5 & 6 completed: the `useRemotePresence` hook resolves the active remote set's source drive by `ses_remote_<driveId>_` id prefix and polls `readRemotePresence` only while the new **Listening now** section is mounted on Now Playing (visible-scope, ≥60s interval), rendering trusted devices' current track via `ListeningNowList` (+ en/zh/ja/ko label); Phase 5's plays/listened-time stats UI was already wired into Settings. Now Playing render verified crash-free in the preview, with the section correctly hidden for local sets. All six phases are now ✅ Done. |
 | 2026-06-10 | MUZERO | §2.6.1 added — access tiers + link indirection. Private-by-default model: ① own devices read private objects via **local presign** (no public bucket, no backend, free egress) — a V1 enhancement via a per-drive media-URL resolution abstraction; ② occasional sharing via a **Worker broker** (self-hosted V2 / mu0.app V3) issuing presigned URLs, with opaque `mu0.app/s/<id>` durable links; ③ public only for truly-public sharing. Rule: the broker issues presigned URLs but **never proxies bytes** (egress stays free). Open Question 5 resolved accordingly. |
 | 2026-06-10 | MUZERO | §2.6.1 expanded with setup-time access-mode selection: public/private is a Cloudflare bucket setting MUZERO cannot toggle, so the add-drive flow **asks** the intended mode, records it on `CloudDrive`, adapts the form (public-URL field only for public), validates accordingly (`checkR2PublicRead` for public; keys for private), and shows the trade-off hints. |
+| 2026-06-11 | MUZERO | §3.4 updated with the additive post-v1 manifest extensions that other PRDs landed (`entityCoversIndex`, track `rank`/`thumbhash`/`lyrics`, memory `atSec`, `origin: "streamed"`), so this PRD stays the protocol's source of truth. No behavior change. |
+| 2026-06-11 | MUZERO | §12 full-codebase implementation audit added: §12.1 wiring truth (orchestrated pull, conflict panel, mutation recording/`syncedAt`, entity-cover import, search catalog, and `If-Match` guards are all built-but-unreachable in production), §12.2 eleven edge-case findings (headline: F1 re-import clobbers local track state + orphans cached blobs; F2 the live import path bypasses every pull safeguard; F4 publish is a single-writer mirror — a second device's publish erases the first from indexes/manifest; F5 cached streamed tracks export media bytes while un-cached ones silently drop), §12.3 Phase 7 hardening backlog added to the phase table. Audit only — no code changed. |
 | 2026-06-10 | MUZERO | §2.6.1: client-side strong encryption ("encrypted public", Tier ④) **considered & rejected** — coarse revocation + duplicate mechanism + playback complexity outweigh its only edge ("no backend"); tampering is not a weakness (public bucket is read-only to outsiders + AES-GCM authenticates). Decision: private/controlled sharing is always Tier ② (broker/V3); until V3, only own-devices and truly-public exist. Open Question 10 added/resolved accordingly. |

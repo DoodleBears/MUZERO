@@ -92,6 +92,8 @@ Owner R2 credentials continue to live only in the local `settings` row
 
 ### 5.1 Sidebar Information Architecture
 
+Original design (Phase 3/4):
+
 ```
 Settings
 ├── Appearance   → [appearance, background, visualizer]
@@ -99,6 +101,21 @@ Settings
 ├── Cloud Drive  → [cloud-owner, cloud-subscribe, cloud-sync, cloud-presence]
 ├── Device       → [device]
 └── Advanced     → [advanced]   (Trace diagnostics)
+```
+
+As-built (2026-06-11) — the pure-config IA absorbed later features as intended;
+`settings-nav.ts` stays the single source of truth:
+
+```
+Settings
+├── Appearance   → [appearance, background, visualizer, flow, lyrics]
+├── Playback     → [playback-dj, playback-music, stream-sources]
+├── Keyboard     → [shortcuts]
+├── Cloud Drive  → [cloud-owner (Connected drives), cloud-sync, cloud-presence]
+│                    (cloud-subscribe retired in Phase 6 — import lives on drive rows)
+├── Device       → [device]
+├── Advanced     → [advanced]   (Trace diagnostics)
+└── About        → [about, version-history]
 ```
 
 - Left sidebar lists sections (group headers) → items (buttons). Clicking an
@@ -290,3 +307,4 @@ share whole playlists / buckets through the same shared-link tab.)
 | 2026-06-10 | MUZERO | Phase 6 task added: the "My R2" tab will offer a public/private access-mode choice — MUZERO asks (it can't toggle the Cloudflare bucket), adapts the form (public-URL field + reachability check for public; keys + local-presign reads for private), records the mode on `CloudDrive`, and shows the trade-off hints. Anchored to R2 PRD §2.6.1. |
 | 2026-06-10 | MUZERO | Phase 6 progress: new `CloudDriveSets` component browses + imports a connected drive's remote sets inline on the drive row (lazy: loads the manifest on a Browse click; imports keyed by `drive.id`). TDD'd (mocked subscribe/loadIndex/import) and mounted in `CloudDriveRow`; reuses existing i18n keys. The access-mode toggle stays deferred until local-presign reads (R2 PRD Tier ①) exist — a "private" drive isn't readable without it. Retiring the standalone Subscribe item is next. |
 | 2026-06-10 | MUZERO | Phase 6: standalone Subscribe item retired — removed the `cloud-subscribe` nav item + its inline manifest-URL/preview/import block, the `previewCloudDrive`/`importCloudSet` handlers, their state, and now-unused imports from `settings-page`; relabeled the `cloud-owner` item to "Connected drives". Adding a drive is now only the modal (owner / shared-link tabs); set import is per-drive-row. Verified in the preview (no Subscribe item; cloud section = Connected drives / Sync & CORS / Listening now). Only the deferred public/private access-mode toggle remains in Phase 6. |
+| 2026-06-11 | MUZERO | Codebase re-audit: §5.1 updated with the as-built sidebar IA — later features added items through the pure `settings-nav` config exactly as designed (Appearance grew flow/lyrics, Playback grew stream-sources, new Keyboard and About sections), validating the architecture. Note: the per-drive-row import path this PRD shipped (`CloudDriveSets`) calls the raw importer and bypasses the orchestrated pull's diff/conflict gates — recorded as finding F2 + Phase 7 backlog in the R2 sync PRD §12. |
