@@ -2,6 +2,7 @@ import { ChevronDown, Cloud, Link2, ShieldCheck } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Stepper } from "@/components/ui/stepper";
@@ -9,6 +10,7 @@ import { saveSettings } from "@/db/repositories";
 import type { AppSettings } from "@/db/types";
 import { newId } from "@/lib/id";
 import { cn } from "@/lib/utils";
+import { useSyncStore } from "@/stores/sync-store";
 import { upsertCloudDrive } from "@/sync/cloud-drive-repo";
 import {
   buildOwnedR2Drive,
@@ -71,6 +73,8 @@ export function AddDriveDialog({
   const [message, setMessage] = useState<string | null>(null);
   const [previewTitle, setPreviewTitle] = useState("");
   const [trustedSetup, setTrustedSetup] = useState<TrustedR2DriveSetupPayload | undefined>();
+  const [syncAfterAdd, setSyncAfterAdd] = useState(false);
+  const [autoSyncAfterChanges, setAutoSyncAfterChanges] = useState(false);
   const [saving, setSaving] = useState(false);
   const [driveId, setDriveId] = useState(() => newId("drv"));
 
@@ -86,6 +90,8 @@ export function AddDriveDialog({
     setMessage(null);
     setPreviewTitle("");
     setTrustedSetup(undefined);
+    setSyncAfterAdd(false);
+    setAutoSyncAfterChanges(false);
     setSaving(false);
     setDriveId(newId("drv"));
   }, [open]);
@@ -99,6 +105,8 @@ export function AddDriveDialog({
     setSelectedBucket("");
     setPreviewTitle("");
     setTrustedSetup(undefined);
+    setSyncAfterAdd(false);
+    setAutoSyncAfterChanges(false);
   }
 
   function patch(next: Partial<DraftForm>) {
@@ -189,9 +197,14 @@ export function AddDriveDialog({
             setup,
             label: form.label.trim() || undefined,
           });
-          await upsertCloudDrive(drive);
+          const writableDrive = {
+            ...drive,
+            autoSyncFrequency: autoSyncAfterChanges ? "change-debounce" : "manual",
+          } as const;
+          await upsertCloudDrive(writableDrive);
           await saveSettings(saveR2CredentialsForDrive(settings, drive.id, setup.credentials));
           onOpenChange(false);
+          if (syncAfterAdd) void useSyncStore.getState().publishDrive(drive.id);
           return;
         }
         await connectReadOnlyManifest(form.publicUrl, { label: form.label.trim() || undefined });
@@ -212,9 +225,14 @@ export function AddDriveDialog({
         manifestUrl: connection.manifestUrl,
         publicBaseUrl: connection.publicBaseUrl,
       });
-      await upsertCloudDrive(drive);
+      const writableDrive = {
+        ...drive,
+        autoSyncFrequency: autoSyncAfterChanges ? "change-debounce" : "manual",
+      } as const;
+      await upsertCloudDrive(writableDrive);
       await saveSettings(saveR2CredentialsForDrive(settings, drive.id, connection.credentials));
       onOpenChange(false);
+      if (syncAfterAdd) void useSyncStore.getState().publishDrive(drive.id);
     } catch (error) {
       setSaving(false);
       fail(error);
@@ -227,6 +245,7 @@ export function AddDriveDialog({
     { id: "connect", label: t("settings.addDriveStepConnect") },
     { id: "name", label: t("settings.addDriveStepName") },
   ];
+  const isWritableDriveFlow = mode === "owner" || Boolean(trustedSetup);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -407,6 +426,25 @@ export function AddDriveDialog({
                 }
               />
             </Field>
+            {isWritableDriveFlow && (
+              <div className="grid gap-2 rounded-md border border-border bg-muted/20 p-3">
+                <p className="font-medium text-sm">{t("settings.addDriveAfterAddTitle")}</p>
+                <PostAddOption
+                  id="add-drive-sync-after-add"
+                  checked={syncAfterAdd}
+                  label={t("settings.addDriveSyncAfterAdd")}
+                  hint={t("settings.addDriveSyncAfterAddHint")}
+                  onCheckedChange={setSyncAfterAdd}
+                />
+                <PostAddOption
+                  id="add-drive-auto-sync-after-changes"
+                  checked={autoSyncAfterChanges}
+                  label={t("settings.addDriveAutoSyncAfterChanges")}
+                  hint={t("settings.addDriveAutoSyncAfterChangesHint")}
+                  onCheckedChange={setAutoSyncAfterChanges}
+                />
+              </div>
+            )}
             <div className="flex items-center justify-between gap-2">
               <Button variant="ghost" size="sm" onClick={() => setStep(0)}>
                 {t("settings.addDriveBack")}
@@ -419,6 +457,36 @@ export function AddDriveDialog({
         )}
       </DialogContent>
     </Dialog>
+  );
+}
+
+function PostAddOption({
+  id,
+  checked,
+  label,
+  hint,
+  onCheckedChange,
+}: {
+  id: string;
+  checked: boolean;
+  label: string;
+  hint: string;
+  onCheckedChange: (checked: boolean) => void;
+}) {
+  return (
+    <label htmlFor={id} className="flex cursor-pointer items-start gap-2.5">
+      <Checkbox
+        id={id}
+        aria-label={label}
+        checked={checked}
+        onCheckedChange={(next) => onCheckedChange(next === true)}
+        className="mt-0.5"
+      />
+      <span className="min-w-0">
+        <span className="block text-sm">{label}</span>
+        <span className="block text-muted-foreground text-xs">{hint}</span>
+      </span>
+    </label>
   );
 }
 
