@@ -51,9 +51,27 @@ describe("TrackInspectorPanel", () => {
     expect(screen.getAllByText("Deidian")).toHaveLength(2);
     expect(screen.getByText("Moon Record")).toBeInTheDocument();
     expect(screen.getByText("Ambient")).toBeInTheDocument();
+    expect(screen.getByText("gallery.trackSourceMissing")).toBeInTheDocument();
+    expect(screen.getByText("gallery.trackCoverMissing")).toBeInTheDocument();
     expect(screen.getByTestId("annotation-editor")).toHaveTextContent(
       "memories for Moonstone Beach",
     );
+  });
+
+  it("shows cloud media and external cover source details", () => {
+    render(
+      <TrackInspectorPanel
+        track={{
+          ...track(),
+          cloudSource: { driveId: "drv_1", driveLabel: "Studio R2" },
+          remoteMediaUrl: "https://r2.example.com/objects/media/song.mp3",
+          remoteCoverUrl: "https://p1.music.126.net/cover.jpg",
+        }}
+      />,
+    );
+
+    expect(screen.getByText("gallery.trackSourceR2File · r2.example.com")).toBeInTheDocument();
+    expect(screen.getByText("gallery.trackCoverUrl · p1.music.126.net")).toBeInTheDocument();
   });
 
   it("shows the empty selection state", () => {

@@ -2652,12 +2652,38 @@ Do not record secrets, full signed URLs, or media content.
 - [x] SK-3 Keep successful loads and hard stops resetting the skip-run state.
 - [x] SK-4 Add regression tests for partial failure, all-failed queue, and hard cap.
 
+### 12.23 Phase 27: Track Source Visibility + Cover Palette Diagnostics
+
+**Goal:** make cloud-imported tracks explain where their media and cover are coming from, and make cover-color failures debuggable when the cover is visibly rendered but palette extraction falls back.
+
+**Status (2026-06-12):** Phase 27 is completed. Track details now show separate media-source and cover-source rows, distinguishing local files/cache, R2 objects, generic URLs, streamed sources, and missing media/cover. Playback trace logs now include sanitized media/cover source kind and host on `playback.start` and `media.load.*` events. Cover palette extraction now emits `cover.palette.*` diagnostics for start/cache/success/fallback/failure, including track id, cover source kind, sanitized host/path hash for remote covers, blob mime/bytes for local covers, palette count, and whether the visualizer fell back to the theme color.
+
+**Product requirements:**
+
+1. **Expose source type in the song information pane.**
+   - Media source must distinguish local file/cache, R2 cloud file, generic URL, streamed provider, and missing media.
+   - Cover source must distinguish local cover, R2 cover, generic image URL, and missing cover.
+   - Do not display full signed URLs or secrets; host-only details are acceptable.
+2. **Make playback/cover-color diagnostics actionable.**
+   - Playback trace events should carry the same source classification used by the UI.
+   - Cover palette extraction should log whether it used local blob bytes or fetched a remote cover, and why it fell back.
+   - Remote-cover diagnostics must sanitize URLs with host/path hash/query redaction, matching existing trace discipline.
+
+**Checklist:**
+
+- [x] SV-1 Add a tested track media/cover source classifier.
+- [x] SV-2 Render media and cover source rows in the track inspector.
+- [x] SV-3 Include source kind/host in playback trace logs.
+- [x] SV-4 Add cover palette start/cache/success/fallback/failure diagnostics.
+- [x] SV-5 Add four-locale labels for source rows and source kinds.
+
 ---
 
 ## 13. Document Change Log
 
 | Date | Author | Changes |
 |------|--------|---------|
+| 2026-06-12 | MUZERO | Phase 27 completed: track details now show media and cover source types (local/cache, R2 object, URL, stream, missing), playback trace logs include sanitized media/cover source kind and host, and cover palette extraction logs start/cache/success/fallback/failure with sanitized remote URL context, local blob mime/bytes, palette count, and theme-fallback state. |
 | 2026-06-12 | MUZERO | Phase 26 completed: streamed playback auto-skip now tracks failed track ids per play-run, stops after every current queue member has failed once (or after the 30-track hard cap), resets on successful load/hard stop, and keeps notifications to one warning/error per skip run. |
 | 2026-06-12 | MUZERO | Phase 25 completed: streamed playlist imports now cache each song's cover image as `Track.coverBlobId` so existing R2 `track.cover` export syncs per-track artwork. Incremental playlist syncs do the same, existing local covers are preserved, and imported metadata-only tracks fall back to `streamMeta.coverUrl` when no private R2 cover object exists yet. |
 | 2026-06-12 | MUZERO | Phase 24 completed: streamed playlist imports now best-effort cache playlist covers as set covers; R2 set indexes publish set-level cover/crop/thumbhash metadata and subscribers render remote set covers; cloud metadata-only streamed playback resolve failures now surface as warning-level source-access gaps instead of generic playback errors. |

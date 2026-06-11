@@ -52,6 +52,7 @@ import {
 } from "@/lib/media-session";
 import { isNcmFile } from "@/lib/ncm-decode";
 import { getAppFetch } from "@/lib/platform";
+import { describeTrackCoverSource, describeTrackMediaSource } from "@/lib/track-source";
 import { runAutoFetchLyrics } from "@/lyrics/auto-fetch";
 import { resolveLyricsProviderForTrack } from "@/lyrics/registry";
 import { resolveMusicGenProvider } from "@/musicgen/registry";
@@ -346,6 +347,8 @@ function cursorPatch(
 }
 
 function startPlaybackTrace(track: Track): PlaybackTraceContext {
+  const mediaSource = describeTrackMediaSource(track);
+  const coverSource = describeTrackCoverSource(track);
   const trace: PlaybackTraceContext = {
     traceId: createTraceId("ply"),
     trackId: track.id,
@@ -359,6 +362,10 @@ function startPlaybackTrace(track: Track): PlaybackTraceContext {
     category: "media",
     phase: "start",
     sourceKind: playbackSourceKind(track),
+    mediaSourceKind: mediaSource.kind,
+    mediaSourceHost: mediaSource.host || undefined,
+    coverSourceKind: coverSource.kind,
+    coverSourceHost: coverSource.host || undefined,
     trackKind: track.kind,
   });
   return trace;
@@ -429,12 +436,18 @@ function tracePlaybackLoad(
   },
 ): void {
   if (!trace?.traceId) return;
+  const mediaSource = describeTrackMediaSource(track);
+  const coverSource = describeTrackCoverSource(track);
   playbackLog.info(event, {
     message: "media source loading",
     ...trace,
     ...context,
     category: "media",
     phase: "start",
+    mediaSourceKind: mediaSource.kind,
+    mediaSourceHost: mediaSource.host || undefined,
+    coverSourceKind: coverSource.kind,
+    coverSourceHost: coverSource.host || undefined,
     trackKind: track.kind,
   });
 }

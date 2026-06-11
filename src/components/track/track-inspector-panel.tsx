@@ -6,6 +6,11 @@ import { clearTrackCover } from "@/db/repositories";
 import type { Track } from "@/db/types";
 import { useTrackCoverUrl } from "@/hooks/use-media";
 import { trackAlbum, trackArtists } from "@/lib/track-display";
+import {
+  describeTrackCoverSource,
+  describeTrackMediaSource,
+  type TrackSourceSummary,
+} from "@/lib/track-source";
 import { cn, formatDuration } from "@/lib/utils";
 import { useNavStore } from "@/stores/nav-store";
 import { AnnotationEditor } from "./annotation-editor";
@@ -73,6 +78,9 @@ function TrackMetadataSummary({ track }: { track: Track }) {
   const album = trackAlbum(track);
   const genres = metadata?.genres?.join(", ");
   const year = metadata?.year ? String(metadata.year) : metadata?.date;
+  const mediaSource = describeTrackMediaSource(track);
+  const coverSource = describeTrackCoverSource(track);
+  const translateSource = t as unknown as (key: string, params?: Record<string, string>) => string;
   const facts = [
     artist
       ? {
@@ -91,6 +99,14 @@ function TrackMetadataSummary({ track }: { track: Track }) {
     genres ? { label: t("gallery.trackGenre"), value: genres } : undefined,
     year ? { label: t("gallery.trackYear"), value: year } : undefined,
     { label: t("gallery.trackDuration"), value: formatDuration(track.durationSec) },
+    {
+      label: t("gallery.trackMediaSource"),
+      value: sourceLabel(translateSource, mediaSource),
+    },
+    {
+      label: t("gallery.trackCoverSource"),
+      value: sourceLabel(translateSource, coverSource),
+    },
   ].filter((fact): fact is MetadataFact => !!fact);
 
   return (
@@ -141,4 +157,12 @@ function TrackMetadataSummary({ track }: { track: Track }) {
       )}
     </section>
   );
+}
+
+function sourceLabel(
+  t: (key: string, params?: Record<string, string>) => unknown,
+  source: TrackSourceSummary,
+): string {
+  const label = String(t(source.labelKey, source.params));
+  return source.host ? `${label} · ${source.host}` : label;
 }
