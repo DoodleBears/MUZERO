@@ -15,7 +15,7 @@ import type {
   StreamSearchOptions,
   StreamSourceProvider,
 } from "../provider";
-import type { CipherSolvers } from "./youtube-cipher";
+import type { YoutubeFormat } from "./youtube-formats";
 import { YT_CLIENTS } from "./youtube-innertube";
 import { resolveYoutubeAudio, type YoutubeBootstrap } from "./youtube-resolve";
 import { buildSearchRequestBody, parseSearchResults } from "./youtube-search";
@@ -30,7 +30,8 @@ const USER_AGENT =
 /** The Electron-only runtime that supplies the things only a JS engine can compute. */
 export interface YoutubeRuntime {
   getBootstrap: () => Promise<YoutubeBootstrap>;
-  solvers: CipherSolvers;
+  /** Decipher a chosen format to a final URL (sig + n) — youtubei.js's player. */
+  decipherFormat: (format: YoutubeFormat) => Promise<string>;
 }
 
 export interface YoutubeSourceDeps {
@@ -91,7 +92,7 @@ export function createYoutubeSource(deps: YoutubeSourceDeps): StreamSourceProvid
       {
         http: deps.http,
         getBootstrap: deps.runtime.getBootstrap,
-        solvers: deps.runtime.solvers,
+        decipherFormat: deps.runtime.decipherFormat,
         getCookie: deps.getCookie,
       },
       opts?.signal,

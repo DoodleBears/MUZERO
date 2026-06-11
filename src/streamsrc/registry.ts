@@ -15,8 +15,8 @@ import { createBiliSource } from "./bili/bili-source";
 import type { StreamHttp } from "./http";
 import { createNeteaseSource } from "./netease/netease-source";
 import type { StreamSourceProvider } from "./provider";
-import { createBridgeYoutubeRuntime } from "./youtube/youtube-bridge-runtime";
 import { createYoutubeSource } from "./youtube/youtube-source";
+import { createYtjsRuntime } from "./youtube/youtube-ytjs";
 
 /** Codename-stable order (CLAUDE.md rule 4). */
 export const STREAM_SOURCE_IDS: StreamSourceId[] = ["netease", "bili", "youtube"];
@@ -43,12 +43,14 @@ export function createStreamSource(
     case "netease":
       return createNeteaseSource({ http: deps.http, getCookie: () => deps.getCookie("netease") });
     case "youtube":
-      // Search works anywhere; resolve needs the desktop sig/n runtime (null on web/tauri).
+      // Search + resolve both need the muzfetch proxy for youtube.com (Electron).
+      // Resolve delegates sig/n deciphering to youtubei.js (its browser eval runs
+      // player.js's own functions); the InnerTube request + format pick stay ours.
       return createYoutubeSource({
         http: deps.http,
         now: deps.now,
         getCookie: () => deps.getCookie("youtube"),
-        runtime: createBridgeYoutubeRuntime(deps.http) ?? undefined,
+        runtime: createYtjsRuntime(),
       });
   }
 }
