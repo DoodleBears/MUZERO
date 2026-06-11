@@ -108,6 +108,14 @@
     "downloadSet": "すべてオフライン保存",
     "downloadFailed": "オフライン保存に失敗しました",
     "downloadedMany_other": "{{count}} 曲を端末に保存しました",
+    "playbackTitle": "クラウド再生キャッシュ",
+    "playbackHint": "リモート曲は初回読み込み後、この LRU キャッシュから再生します。手動で端末保存したファイルは別管理で、この上限では削除されません。",
+    "playbackSize": "キャッシュサイズ",
+    "playbackSizeOption": "{{gb}} GB",
+    "playbackUsage": "{{count}} 件のキャッシュ · {{size}}",
+    "playbackEmpty": "クラウド再生キャッシュはまだありません",
+    "playbackClear": "再生キャッシュを削除",
+    "playbackCleared": "再生キャッシュを削除しました",
     "downloadFailedMany_other": "{{count}} 曲をダウンロードできませんでした"
   },
   "playlistImport": {

@@ -206,6 +206,26 @@ export interface MediaBlob {
 }
 
 /**
+ * Automatically managed remote playback cache. Media bytes prefer OPFS and only
+ * fall back to IndexedDB Blob storage when OPFS is unavailable; either way this
+ * cache is LRU-evictable and must not be treated as a permanent download.
+ */
+export interface PlaybackCacheEntry {
+  id: string;
+  sourceUrl: string;
+  trackId: string;
+  kind: TrackKind;
+  storage: "opfs" | "indexeddb";
+  fileName?: string;
+  mime: string;
+  bytes: number;
+  blob?: Blob;
+  createdAt: number;
+  updatedAt: number;
+  lastAccessedAt: number;
+}
+
+/**
  * A user-chosen cover for a DERIVED library entity (one artist or one album).
  * Artist/album are not stored tables — identity is the projection key from
  * `library-index.ts` (`normalizeArtistName` for an artist, `AlbumEntry.key` for
@@ -475,6 +495,11 @@ export interface AppSettings {
    * A visible Settings toggle (rule 3); cleared via "clear cache".
    */
   autoCacheStreamed?: boolean;
+  /**
+   * Maximum size for the automatic remote playback cache, in bytes. This is a
+   * visible 1–10 GiB setting and does not affect permanent manual downloads.
+   */
+  playbackCacheMaxBytes?: number;
   // UI
   locale: "en" | "zh" | "ja" | "ko";
   /** Now-Playing background *priority*: prefer the track's own cover or its bound slideshow. Defaults to "cover". */

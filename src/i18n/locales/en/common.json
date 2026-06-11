@@ -117,6 +117,14 @@
     "downloadedMany_one": "Downloaded {{count}} song for offline",
     "downloadedMany_other": "Downloaded {{count}} songs for offline",
     "downloadFailedMany_one": "{{count}} song couldn't be downloaded",
+    "playbackTitle": "Cloud playback cache",
+    "playbackHint": "Remote songs play from this LRU cache after the first load. Manual downloads stay saved separately and are never evicted by this limit.",
+    "playbackSize": "Cache size",
+    "playbackSizeOption": "{{gb}} GB",
+    "playbackUsage": "{{count}} cached files · {{size}}",
+    "playbackEmpty": "No cloud playback cache yet",
+    "playbackClear": "Clear playback cache",
+    "playbackCleared": "Cleared playback cache",
     "downloadFailedMany_other": "{{count}} songs couldn't be downloaded"
   },
   "playlistImport": {

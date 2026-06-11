@@ -58,6 +58,11 @@ import { resolveMusicGenProvider } from "@/musicgen/registry";
 import { MediaEngine } from "@/player/media-engine";
 import { reconcileCurrentIndex, unconsumedTrackIds } from "@/player/play-queue";
 import {
+  getCachedRemotePlayback,
+  playbackCacheLimitBytes,
+  putRemotePlaybackCache,
+} from "@/player/playback-cache";
+import {
   buildShuffleOrder,
   clampIndex,
   manualNextIndex,
@@ -80,6 +85,7 @@ import { resolveStreamedTrackMedia, type StreamPlaybackResult } from "@/streamsr
 import {
   isStreamedTrack,
   isTrackCacheableToDevice,
+  type PlaybackSourceKind,
   playbackSourceKind,
 } from "@/streamsrc/source-detect";
 import { createStreamHttp } from "@/streamsrc/stream-http";
@@ -684,6 +690,15 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       state.currentIndex !== clamped
     ) {
       const playbackTrace = startPlaybackTrace(target);
+      const cached = await readRemotePlaybackCache(target, playbackTrace);
+      if (cached) {
+        preparedRemotePlayback = { trackId: target.id, ...cached };
+        set(cursorPatch(queue, clamped, true));
+        persistQueueIndex(clamped);
+        await ensureLoadedAndPlay(set, get);
+        void maybeRefill(set, get);
+        return;
+      }
       const request = beginPlaybackLoading(set, target, sourceKind);
       try {
         const media = await fetchRemotePlaybackBlob(
@@ -693,6 +708,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
         );
         if (!isPlaybackLoadCurrent(request.id)) return;
         preparedRemotePlayback = { trackId: target.id, ...media };
+        void writeRemotePlaybackCache(target, media);
         set(cursorPatch(queue, clamped, true));
         persistQueueIndex(clamped);
         await ensureLoadedAndPlay(set, get);
@@ -1664,6 +1680,44 @@ async function fetchRemotePlaybackBlob(
   return { blob, bytes: blob.size, mime };
 }
 
+async function readRemotePlaybackCache(
+  track: Track,
+  trace: PlaybackTraceContext | undefined,
+): Promise<{ blob: Blob; bytes: number; mime: string } | null> {
+  try {
+    const cached = await getCachedRemotePlayback(track);
+    if (!cached) return null;
+    tracePlaybackLoad("media.load.remote.cache", track, trace, {
+      transport: "blob",
+      bytes: cached.bytes,
+      mime: cached.mime,
+      ...streamUrlTraceContext(cached.sourceUrl),
+    });
+    return { blob: cached.blob, bytes: cached.bytes, mime: cached.mime };
+  } catch (error) {
+    log.warn("player", "remote playback cache read failed", {
+      trackId: track.id,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return null;
+  }
+}
+
+async function writeRemotePlaybackCache(
+  track: Track,
+  media: { blob: Blob; bytes: number; mime: string },
+): Promise<void> {
+  try {
+    const settings = await getSettings();
+    await putRemotePlaybackCache(track, media, { maxBytes: playbackCacheLimitBytes(settings) });
+  } catch (error) {
+    log.warn("player", "remote playback cache write failed", {
+      trackId: track.id,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
+
 function persistQueueIndex(index: number): void {
   void playQueueSetIndex(index).catch((err: unknown) =>
     log.warn("player", "failed to persist queue index", err),
@@ -1838,30 +1892,36 @@ async function ensureLoadedAndPlay(
         trackId: track.id,
         kind: track.kind,
       });
-      const request = beginPlaybackLoading(set, track, sourceKind);
-      try {
-        const prepared =
-          preparedRemotePlayback?.trackId === track.id ? preparedRemotePlayback : null;
-        preparedRemotePlayback = null;
-        const media =
-          prepared ??
-          (await fetchRemotePlaybackBlob(track, playbackTrace, request.controller.signal));
-        if (!isPlaybackLoadCurrent(request.id) || currentTrack(get())?.id !== track.id) return;
-        await mediaEngine.loadBlob(media.blob, track.kind);
-      } catch (error) {
-        if (isAbortError(error) || !isPlaybackLoadCurrent(request.id)) return;
-        notify.error(i18n.t("player.playbackError"), {
-          detail: describePlaybackError(error),
-          error,
-        });
-        log.warn("player", "remote media playback fetch failed", {
-          trackId: track.id,
-          error,
-        });
-        set({ isPlaying: false, wantPlay: false });
-        return;
-      } finally {
-        clearPlaybackLoading(set, request.id);
+      const cached = await readRemotePlaybackCache(track, playbackTrace);
+      if (cached) {
+        await mediaEngine.loadBlob(cached.blob, track.kind);
+      } else {
+        const request = beginPlaybackLoading(set, track, sourceKind);
+        try {
+          const prepared =
+            preparedRemotePlayback?.trackId === track.id ? preparedRemotePlayback : null;
+          preparedRemotePlayback = null;
+          const media =
+            prepared ??
+            (await fetchRemotePlaybackBlob(track, playbackTrace, request.controller.signal));
+          if (!isPlaybackLoadCurrent(request.id) || currentTrack(get())?.id !== track.id) return;
+          await mediaEngine.loadBlob(media.blob, track.kind);
+          void writeRemotePlaybackCache(track, media);
+        } catch (error) {
+          if (isAbortError(error) || !isPlaybackLoadCurrent(request.id)) return;
+          notify.error(i18n.t("player.playbackError"), {
+            detail: describePlaybackError(error),
+            error,
+          });
+          log.warn("player", "remote media playback fetch failed", {
+            trackId: track.id,
+            error,
+          });
+          set({ isPlaying: false, wantPlay: false });
+          return;
+        } finally {
+          clearPlaybackLoading(set, request.id);
+        }
       }
     } else if (sourceKind === "stream") {
       // External streaming source: resolve a short-lived URL right before play.

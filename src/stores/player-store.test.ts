@@ -15,7 +15,10 @@ const mediaEngineMock = vi.hoisted(() => ({
   setDiagnosticsContext: vi.fn(),
 }));
 const platformFetchMock = vi.hoisted(() =>
-  vi.fn(async () => new Response("remote", { headers: { "content-type": "audio/mpeg" } })),
+  vi.fn(
+    async (_input: RequestInfo | URL, _init?: RequestInit) =>
+      new Response("remote", { headers: { "content-type": "audio/mpeg" } }),
+  ),
 );
 
 vi.mock("@/player/media-engine", () => {
@@ -86,6 +89,7 @@ async function loadRuntime() {
   openedDb = dbMod.db;
   const repos = await import("@/db/repositories");
   const store = await import("./player-store");
+  const playbackCache = await import("@/player/playback-cache");
   // Imported AFTER resetModules so they share the same `muzero-db` singleton the
   // store uses — the remote import writes tracks the store then plays.
   const subscription = await import("@/sync/r2-subscription");
@@ -94,6 +98,7 @@ async function loadRuntime() {
     db: dbMod.db,
     repos,
     usePlayerStore: store.usePlayerStore,
+    playbackCache,
     sync: {
       subscribeManifest: subscription.subscribeManifest,
       loadRemoteSetIndex: subscription.loadRemoteSetIndex,
@@ -103,7 +108,7 @@ async function loadRuntime() {
 }
 
 async function seedQueue(currentIndex = 1) {
-  const { db, repos, usePlayerStore } = await loadRuntime();
+  const { db, repos, usePlayerStore, playbackCache } = await loadRuntime();
   const session = await repos.createSession({
     seedPrompt: "",
     config: { autoExtend: false },
@@ -117,7 +122,7 @@ async function seedQueue(currentIndex = 1) {
     contextSetId: session.id,
     currentIndex,
   });
-  return { db, repos, session, first, second, usePlayerStore };
+  return { db, repos, session, first, second, usePlayerStore, playbackCache };
 }
 
 function track(id: string, sessionId: string, title: string): Track {
@@ -196,6 +201,37 @@ describe("player-store playback resume", () => {
     expectLoadedBlob("audio", "audio/mpeg");
     expect(mediaEngineMock.seek).toHaveBeenCalledWith(12);
     expect(mediaEngineMock.play).toHaveBeenCalled();
+  });
+
+  it("loads a remote R2 track from playback cache before showing loading or fetching", async () => {
+    const { db, second, usePlayerStore, playbackCache } = await seedQueue(1);
+    await db.tracks.update(second.id, {
+      status: "ready",
+      remoteMediaUrl: "https://media.example.com/second.mp3",
+    });
+    const cachedTrack = await db.tracks.get(second.id);
+    if (!cachedTrack) throw new Error("expected seeded track");
+    const cachedBlob = { size: 3, type: "audio/mpeg" } as Blob;
+    await playbackCache.putRemotePlaybackCache(
+      cachedTrack,
+      {
+        blob: cachedBlob,
+        bytes: 3,
+        mime: "audio/mpeg",
+      },
+      { maxBytes: 100, now: () => 1 },
+      db,
+    );
+    usePlayerStore.getState().init();
+
+    await waitFor(() => expect(usePlayerStore.getState().durationSec).toBe(30));
+    await usePlayerStore.getState().play();
+
+    expect(platformFetchMock).not.toHaveBeenCalled();
+    expect(usePlayerStore.getState().playbackLoading).toBeNull();
+    expectLoadedBlob("audio", "audio/mpeg");
+    expect(mediaEngineMock.play).toHaveBeenCalled();
+    await expect(db.playbackCache.count()).resolves.toBe(1);
   });
 
   it("keeps the current song visible and playing while the next R2 track downloads", async () => {

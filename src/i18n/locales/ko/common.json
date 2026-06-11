@@ -108,6 +108,14 @@
     "downloadSet": "전체 오프라인 저장",
     "downloadFailed": "오프라인 다운로드 실패",
     "downloadedMany_other": "{{count}}곡을 기기에 다운로드함",
+    "playbackTitle": "클라우드 재생 캐시",
+    "playbackHint": "원격 곡은 첫 로드 후 이 LRU 캐시에서 재생합니다. 수동으로 기기에 저장한 파일은 별도로 보관되며 이 한도로 삭제되지 않습니다.",
+    "playbackSize": "캐시 크기",
+    "playbackSizeOption": "{{gb}} GB",
+    "playbackUsage": "캐시된 파일 {{count}}개 · {{size}}",
+    "playbackEmpty": "클라우드 재생 캐시가 아직 없습니다",
+    "playbackClear": "재생 캐시 비우기",
+    "playbackCleared": "재생 캐시를 비웠습니다",
     "downloadFailedMany_other": "{{count}}곡을 다운로드하지 못함"
   },
   "playlistImport": {

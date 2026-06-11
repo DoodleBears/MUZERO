@@ -12,6 +12,7 @@ import type {
   MediaBlob,
   Memory,
   PlaybackAggregate,
+  PlaybackCacheEntry,
   PlaybackEvent,
   PlayQueue,
   PlayQueueEntry,
@@ -54,6 +55,7 @@ export class MuzeroDB extends Dexie {
   entityCovers!: EntityTable<EntityCover, "id">;
   lyrics!: EntityTable<TrackLyrics, "id">;
   llmCustomProviders!: EntityTable<CustomLlmProvider, "id">;
+  playbackCache!: EntityTable<PlaybackCacheEntry, "id">;
 
   constructor(name = "muzero-db") {
     super(name);
@@ -330,6 +332,13 @@ export class MuzeroDB extends Dexie {
     // settings row, never here.
     this.version(21).stores({
       llmCustomProviders: "id, createdAt",
+    });
+
+    // v22 — bounded LRU playback cache for remote media bytes. Unlike
+    // `mediaBlobs`/`Track.blobId`, this is not a user-requested offline download;
+    // it may be evicted when the size limit is exceeded.
+    this.version(22).stores({
+      playbackCache: "id, sourceUrl, trackId, lastAccessedAt",
     });
   }
 }

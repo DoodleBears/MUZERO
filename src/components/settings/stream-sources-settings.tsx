@@ -8,6 +8,12 @@ import { saveSettings } from "@/db/repositories";
 import type { StreamSourceId } from "@/db/types";
 import { useSettings } from "@/hooks/use-app-data";
 import { hasStreamingSources, resolveDesktopBridge } from "@/lib/desktop/bridge";
+import {
+  clearPlaybackCache,
+  PLAYBACK_CACHE_GB_OPTIONS,
+  playbackCacheLimitBytes,
+  summarizePlaybackCache,
+} from "@/player/playback-cache";
 import { notify } from "@/stores/notification-store";
 import {
   cookieStringHasAuth,
@@ -192,7 +198,9 @@ function StreamCacheControls() {
   const { t } = useTranslation();
   const settings = useSettings();
   const summary = useLiveQuery(() => summarizeStreamedCache(), [], EMPTY_CACHE);
-  const [clearing, setClearing] = useState<StreamSourceId | "all" | null>(null);
+  const playbackSummary = useLiveQuery(() => summarizePlaybackCache(), [], EMPTY_CACHE);
+  const [clearing, setClearing] = useState<StreamSourceId | "all" | "playback" | null>(null);
+  const playbackCacheGb = Math.round(playbackCacheLimitBytes(settings) / 1024 ** 3);
 
   async function toggleAuto(on: boolean) {
     await saveSettings({ autoCacheStreamed: on });
@@ -207,6 +215,22 @@ function StreamCacheControls() {
         await clearStreamedCache();
       }
       notify.success(t("streamCache.cleared"));
+    } finally {
+      setClearing(null);
+    }
+  }
+
+  async function setPlaybackCacheSize(gb: string) {
+    await saveSettings({
+      playbackCacheMaxBytes: Number(gb) * 1024 ** 3,
+    });
+  }
+
+  async function clearPlayback() {
+    setClearing("playback");
+    try {
+      await clearPlaybackCache();
+      notify.success(t("streamCache.playbackCleared"));
     } finally {
       setClearing(null);
     }
@@ -274,6 +298,46 @@ function StreamCacheControls() {
           ))}
         </div>
       )}
+      <div className="space-y-3 rounded-md bg-muted/35 p-3">
+        <div className="space-y-1">
+          <span className="font-medium text-sm">{t("streamCache.playbackTitle")}</span>
+          <p className="text-muted-foreground text-xs">{t("streamCache.playbackHint")}</p>
+        </div>
+        <label className="flex flex-wrap items-center justify-between gap-2">
+          <span className="text-muted-foreground text-xs">{t("streamCache.playbackSize")}</span>
+          <select
+            aria-label={t("streamCache.playbackSize")}
+            className="rounded-md border border-border bg-transparent px-2 py-1 text-foreground text-xs"
+            value={String(playbackCacheGb)}
+            onChange={(event) => void setPlaybackCacheSize(event.currentTarget.value)}
+          >
+            {PLAYBACK_CACHE_GB_OPTIONS.map((gb) => (
+              <option key={gb} value={gb}>
+                {t("streamCache.playbackSizeOption", { gb })}
+              </option>
+            ))}
+          </select>
+        </label>
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-muted-foreground text-xs">
+            {playbackSummary.count > 0
+              ? t("streamCache.playbackUsage", {
+                  count: playbackSummary.count,
+                  size: formatBytes(playbackSummary.bytes),
+                })
+              : t("streamCache.playbackEmpty")}
+          </span>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={clearing === "playback" || playbackSummary.count === 0}
+            onClick={() => void clearPlayback()}
+          >
+            {t("streamCache.playbackClear")}
+          </Button>
+        </div>
+      </div>
     </div>
   );
 }

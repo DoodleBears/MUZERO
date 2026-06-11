@@ -108,6 +108,14 @@
     "downloadSet": "全部下载到本地",
     "downloadFailed": "离线下载失败",
     "downloadedMany_other": "已下载 {{count}} 首到本地",
+    "playbackTitle": "云端播放缓存",
+    "playbackHint": "远端歌曲首次加载后会进入这个 LRU 缓存。手动下载到本地的文件会单独保存，不受这个上限淘汰。",
+    "playbackSize": "缓存大小",
+    "playbackSizeOption": "{{gb}} GB",
+    "playbackUsage": "{{count}} 个缓存文件 · {{size}}",
+    "playbackEmpty": "暂无云端播放缓存",
+    "playbackClear": "清理播放缓存",
+    "playbackCleared": "已清理播放缓存",
     "downloadFailedMany_other": "{{count}} 首下载失败"
   },
   "playlistImport": {

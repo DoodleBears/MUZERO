@@ -32,6 +32,7 @@
 | 17 | Remote Playback Handoff UX | ✅ Done | [§12.13](#1213-phase-17-remote-playback-handoff-ux) |
 | 18 | Remote Cover Palette Reliability | ✅ Done | [§12.14](#1214-phase-18-remote-cover-palette-reliability) |
 | 19 | Remote Cover MIME + Dock Loading Polish | ✅ Done | [§12.15](#1215-phase-19-remote-cover-mime--dock-loading-polish) |
+| 20 | Remote Playback LRU Cache | ✅ Done | [§12.16](#1216-phase-20-remote-playback-lru-cache) |
 | 21 | Sync Notification Quiet Refresh | ✅ Done | [§12.17](#1217-phase-21-sync-notification-quiet-refresh) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
@@ -2475,6 +2476,35 @@ Do not record secrets, full signed URLs, or media content.
 - [x] DP-2 Move playback loading UI from a separate Dock row to a cover-slot spinner.
 - [x] DP-3 Add regression tests for octet-stream cover sampling and the Dock cover loading indicator.
 
+### 12.16 Phase 20: Remote Playback LRU Cache
+
+**Goal:** avoid repeated remote-media preparation on refresh/replay while keeping user-requested offline downloads distinct from an automatically managed playback cache.
+
+**Status (2026-06-12):** Phase 20 is completed. MUZERO now has a separate remote playback cache for R2/cloud media: Dexie keeps URL-keyed metadata/LRU state, OPFS stores media bytes when available, and IndexedDB Blob storage is only a compatibility fallback. Playback checks permanent local media first (`Track.blobId` → `mediaBlobs`), then the bounded LRU playback cache, and only downloads from R2 when both are missing. Cache misses still show the Dock cover spinner; cache hits load immediately without entering `playbackLoading`. The Settings offline-cache area exposes a visible 1–10 GB cache-size control and clear action.
+
+**Product requirements:**
+
+1. **Two storage tiers.**
+   - Manual "download to device" remains permanent/offline storage in `mediaBlobs` and links through `Track.blobId`.
+   - Automatic playback reuse lives in the remote playback cache; it may be evicted by LRU and must not set `Track.blobId`.
+   - The cache stores media bytes in OPFS when supported, because it is origin-private, quota-bound, and optimized for file-like byte storage. Dexie stores metadata only; IndexedDB Blob bytes are the fallback when OPFS is unavailable.
+2. **Playback priority.**
+   - Play from `Track.blobId` / `mediaBlobs` first.
+   - If no permanent local media exists, try `playbackCache` by remote media URL and refresh `lastAccessedAt` on hit.
+   - Only on cache miss should MUZERO show loading, fetch through `getAppFetch()`, then save the fetched Blob into the LRU cache.
+3. **User-visible cache policy.**
+   - Expose a bounded cache-size selector from 1 GB to 10 GB.
+   - Evict least-recently-used playback-cache rows when the cache exceeds the selected size.
+   - Clearing playback cache must not delete permanent offline downloads.
+
+**Checklist:**
+
+- [x] PC-1 Add a Dexie `playbackCache` table with URL-keyed LRU metadata and OPFS-backed media bytes.
+- [x] PC-2 Add cache read/write/prune helpers with 1–10 GB limit handling.
+- [x] PC-3 Wire remote R2 playback through permanent local media → playback cache → remote fetch priority.
+- [x] PC-4 Add Settings controls for cache size and clearing playback cache.
+- [x] PC-5 Add regression coverage for cache hits, LRU pruning, and permanent-download isolation.
+
 ### 12.17 Phase 21: Sync Notification Quiet Refresh
 
 **Goal:** keep the Cloud Drive settings page refresh/auto-preview path quiet when it only confirms already-synced remote sets.
@@ -2503,6 +2533,7 @@ Do not record secrets, full signed URLs, or media content.
 | Date | Author | Changes |
 |------|--------|---------|
 | 2026-06-12 | MUZERO | Phase 21 completed: Cloud Drive page refresh / auto-preview paths no longer emit one success toast per unchanged remote set. The sync indicator treats completed pull progress without a `runId` as a dry-run unchanged result, while real completed sync runs and terminal errors remain visible. |
+| 2026-06-12 | MUZERO | Phase 20 completed: R2/cloud playback now uses a separate bounded LRU playback cache after permanent `mediaBlobs` and before remote fetch, so refresh/replay can avoid the loading spinner. Cache bytes prefer OPFS with IndexedDB Blob fallback, while Dexie tracks URL-keyed metadata/LRU state. Settings exposes a 1–10 GB playback cache size and clear action; manual downloads remain permanent and are not evicted by playback-cache pruning. |
 | 2026-06-12 | MUZERO | Phase 19 completed: remote cover palette extraction now infers image MIME from `.jpg`/`.png`/`.webp`/etc. object URLs when R2/proxy responses are generic octet-stream, and remote media loading feedback moved from a separate Dock chip to an accessible spinner over the album-cover slot. |
 | 2026-06-11 | MUZERO | Phase 18 completed: R2 remote covers now feed flow/spectrum cover-color extraction by fetching cover bytes through `getAppFetch()`, sampling a local Blob URL, caching by remote URL, and falling back to the theme primary only on fetch/decode failure. |
 | 2026-06-11 | MUZERO | Phase 17 completed: R2 remote playback now uses a held-current-track handoff when another song is already playing. MUZERO displays a Dock loading indicator while the target object downloads, aborts/invalidates stale loads, and commits `currentIndex` only after the target media is ready. |
