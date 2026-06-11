@@ -1,4 +1,5 @@
 import type { R2LocalCredentials } from "@/db/types";
+import { log } from "@/lib/logger";
 import { getAppFetch } from "@/lib/platform";
 import type { R2ExportObject, R2ExportPlan } from "./r2-export-plan";
 import { r2SignedFetch } from "./r2-s3";
@@ -163,6 +164,14 @@ async function publishObject(
   }
   if (!response.ok) {
     result.failed += 1;
+    if (response.status === 412) {
+      log.warn("sync", "publish object precondition failed", {
+        key: object.key,
+        kind: object.kind,
+        status: response.status,
+        hasPrecondition: Boolean(object.precondition),
+      });
+    }
     throw new R2PublishHttpError(object.key, response.status);
   }
   result.uploaded += 1;

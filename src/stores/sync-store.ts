@@ -10,6 +10,7 @@ import {
 import { getR2CredentialsForDrive } from "@/sync/cloud-drive-settings";
 import { buildR2ExportPlanForDrive } from "@/sync/r2-export-plan";
 import { publishedEntityId } from "@/sync/r2-import-stream";
+import { R2PublishHttpError } from "@/sync/r2-publish";
 import {
   createRemotePublishBaseCache,
   fetchRemotePublishBase,
@@ -180,7 +181,7 @@ export const useSyncStore = create<SyncStoreState>((set) => ({
     } catch (error) {
       // The orchestrator already emitted a `failed` progress before throwing.
       await pauseCloudDriveAutoSync(driveId, "failed").catch(() => undefined);
-      log.error("sync", "publish failed", { driveId, error });
+      log.error("sync", "publish failed", { driveId, ...syncErrorContext(error) });
     } finally {
       controllers.delete(driveId);
     }
@@ -200,7 +201,7 @@ export const useSyncStore = create<SyncStoreState>((set) => ({
         onProgress: (progress) => setProgress(set, driveId, progress),
       });
     } catch (error) {
-      log.error("sync", "pull failed", { driveId, error });
+      log.error("sync", "pull failed", { driveId, ...syncErrorContext(error) });
     } finally {
       controllers.delete(driveId);
     }
@@ -217,4 +218,22 @@ function setProgress(
   progress: SyncProgress,
 ): void {
   set((state) => ({ progressByDrive: { ...state.progressByDrive, [driveId]: progress } }));
+}
+
+function syncErrorContext(error: unknown): Record<string, unknown> {
+  if (error instanceof R2PublishHttpError) {
+    return {
+      message: error.message,
+      status: error.status,
+      key: error.key,
+      errorName: error.name,
+    };
+  }
+  if (error instanceof Error) {
+    return {
+      message: error.message,
+      errorName: error.name,
+    };
+  }
+  return { message: String(error) };
 }
