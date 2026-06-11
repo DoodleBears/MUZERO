@@ -468,3 +468,4 @@ DevPerfPanel 经 `useTraceEntries` 订阅（为 copy 按钮计数）→ 面板�
 | 2026-06-12 | Claude Code | 初稿：全库排查 + 人工核实，13 项发现（1 P0 / 2 High）、6 条误报澄清、5 phase 修复计划 |
 | 2026-06-12 | Claude Code | Phase 1 改为对接既有 trace.ts + DevPerfPanel（frame/longtask/heap 已有，只补 blobs/db-requery/queue 三行）；新增 prod 采集的 Settings 可见开关任务 |
 | 2026-06-12 | Claude Code | Phase 1-5 实施完成（F-6/F-7 与同步 UI 标注因并发改动占用文件推迟；真机基线待采）；新增日志/trace 链路二次审计（F-L1/L2/L4/L5，§4.2）+ Phase 6 实施完成 |
+| 2026-06-12 | Claude Code | 排查用户报告的「Pixi filter Chrome 失效」回归：**与本 PRD 各提交无关**（本地封面在 Chrome 管线验证健康）。根因 = 远程封面（云享/在线源）在浏览器无 media proxy、裸 https 不带 `crossOrigin` → WebGL 纹理 taint → Pixi 抛错回退普通 `<img>`；Electron 走 muzfetch 代理（ACAO:*）故正常。修复：image/video 两条纹理加载共用 `needsCrossOrigin`（https/muzfetch 均 opt-in CORS） |

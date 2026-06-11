@@ -315,9 +315,14 @@ function loadImage(src: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const image = new Image();
     image.decoding = "async";
-    // A proxied (muzfetch) cover is cross-origin but returns ACAO:* — opt into CORS so
-    // it can become a WebGL texture without tainting (else the effect renders black).
-    if (src.startsWith("muzfetch:")) image.crossOrigin = "anonymous";
+    // Cross-origin covers must opt into CORS to become a WebGL texture. On
+    // Electron remote covers arrive proxied (muzfetch: returns ACAO:*); in the
+    // BROWSER there is no media proxy, so cloud-share / streamed covers come as
+    // raw https — without crossOrigin the upload taints, Pixi throws, and the
+    // whole filter layer silently falls back to the plain <img> (the "filters
+    // work on Electron but not in Chrome" regression). Hosts without ACAO fail
+    // the load instead and hit the same plain-image fallback as before.
+    if (needsCrossOrigin(src)) image.crossOrigin = "anonymous";
     image.onload = () => resolve(image);
     image.onerror = () => reject(new Error(`Unable to load background image: ${src}`));
     image.src = src;
@@ -339,6 +344,10 @@ async function loadVideo(Pixi: typeof import("pixi.js"), src: string): Promise<B
   video.playsInline = true;
   video.setAttribute("playsinline", "");
   video.preload = "auto";
+  // R2/public cloud videos are cross-origin. Pixi/WebGL needs a CORS-clean media
+  // element to sample video frames as a texture; otherwise Chrome can play the
+  // <video> but render a blank/black background texture.
+  if (needsCrossOrigin(src)) video.crossOrigin = "anonymous";
   video.src = src;
   video.load();
   await waitForVideoData(video);
@@ -356,6 +365,11 @@ async function loadVideo(Pixi: typeof import("pixi.js"), src: string): Promise<B
     type: "video",
     width: video.videoWidth,
   };
+}
+
+/** Shared CORS opt-in for both texture loaders — see the loadImage comment. */
+export function needsCrossOrigin(src: string): boolean {
+  return /^(https?|muzfetch):/i.test(src);
 }
 
 function destroyBackgroundMedia(media: BackgroundMedia) {
