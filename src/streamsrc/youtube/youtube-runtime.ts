@@ -9,6 +9,7 @@
  * player.js; in prod the bridge supplies `evalN` and `http` is the muzfetch proxy.
  */
 
+import { log } from "@/lib/logger";
 import type { StreamHttp } from "../http";
 import type { CipherSolvers } from "./youtube-cipher";
 import { extractNFunctionSource } from "./youtube-nsig";
@@ -27,7 +28,10 @@ const USER_AGENT =
 
 /** Build the base.js URL from the iframe_api JS (it embeds the current player hash). */
 export function parsePlayerJsUrl(iframeApi: string): string | null {
-  const m = iframeApi.match(/\/s\/player\/([0-9a-zA-Z_-]+)\//);
+  // iframe_api ships its urls with escaped slashes (`\/s\/player\/HASH\/www-widgetapi…`);
+  // unescape before matching, then reuse the shared player HASH to build base.js.
+  const text = iframeApi.replace(/\\\//g, "/");
+  const m = text.match(/\/s\/player\/([0-9A-Za-z_-]+)\//);
   return m ? `https://www.youtube.com/s/player/${m[1]}/player_ias.vflset/en_US/base.js` : null;
 }
 
@@ -68,13 +72,24 @@ export function createYoutubeRuntime(deps: YoutubeRuntimeDeps): YoutubeRuntimeHa
     if (player) return player;
     const iframe = await getText(deps.http, IFRAME_API_URL);
     const playerUrl = parsePlayerJsUrl(iframe);
-    if (!playerUrl) throw new Error("youtube: could not locate player.js");
+    if (!playerUrl) {
+      log.warn("youtube", "could not locate player.js in iframe_api", {
+        head: iframe.slice(0, 200),
+      });
+      throw new Error("youtube: could not locate player.js");
+    }
     const js = await getText(deps.http, playerUrl);
     player = {
       sigOps: extractSigOperations(js),
       nSource: extractNFunctionSource(js),
       sts: extractSignatureTimestamp(js),
     };
+    log.info("youtube", "player.js parsed", {
+      playerUrl,
+      sigOps: player.sigOps?.length ?? null,
+      hasN: player.nSource !== null,
+      sts: player.sts,
+    });
     return player;
   }
 

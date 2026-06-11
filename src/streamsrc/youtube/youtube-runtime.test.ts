@@ -19,7 +19,10 @@ function stubHttp(): { http: StreamHttp; calls: string[] } {
   const http: StreamHttp = async (req) => {
     calls.push(req.url);
     if (req.url.includes("iframe_api"))
-      return text('a="/s/player/abcd1234/player_ias.vflset/en_US/base.js"');
+      // Real iframe_api escapes its slashes + only names www-widgetapi (not base.js).
+      return text(
+        "scriptUrl='https:\\/\\/www.youtube.com\\/s\\/player\\/abcd1234\\/www-widgetapi.vflset\\/www-widgetapi.js';",
+      );
     if (req.url.includes("base.js")) return text(PLAYER_JS);
     return text('window.ytcfg={"visitorData":"VISITOR_XYZ"};'); // home
   };
@@ -27,10 +30,16 @@ function stubHttp(): { http: StreamHttp; calls: string[] } {
 }
 
 describe("parsePlayerJsUrl / parseVisitorData", () => {
-  it("builds base.js url from the iframe_api hash", () => {
+  it("builds base.js url from the iframe_api hash (incl. escaped slashes)", () => {
     expect(parsePlayerJsUrl('"/s/player/deadbeef/player_ias.vflset/en_US/base.js"')).toBe(
       "https://www.youtube.com/s/player/deadbeef/player_ias.vflset/en_US/base.js",
     );
+    // The real iframe_api response escapes its slashes — must still resolve.
+    expect(
+      parsePlayerJsUrl(
+        "u='https:\\/\\/www.youtube.com\\/s\\/player\\/c0ffee01\\/www-widgetapi.vflset\\/www-widgetapi.js'",
+      ),
+    ).toBe("https://www.youtube.com/s/player/c0ffee01/player_ias.vflset/en_US/base.js");
     expect(parsePlayerJsUrl("no player here")).toBeNull();
   });
 

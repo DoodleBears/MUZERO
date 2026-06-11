@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import type { StreamHttp, StreamHttpResponse } from "../http";
+import type { StreamHttp, StreamHttpRequest, StreamHttpResponse } from "../http";
 import { createYoutubeSource, type YoutubeRuntime } from "./youtube-source";
 
 function res(json: unknown): StreamHttpResponse {
@@ -42,17 +42,20 @@ const okPlayer = {
 
 describe("createYoutubeSource", () => {
   it("searches the keyed WEB endpoint and maps videoRenderers to hits", async () => {
-    const http = vi.fn(async () => res(searchJson));
+    let lastReq: StreamHttpRequest | undefined;
+    const http: StreamHttp = async (req) => {
+      lastReq = req;
+      return res(searchJson);
+    };
     const source = createYoutubeSource({ http, now: () => 1000 });
     const hits = await source.search("song one");
     expect(hits).toHaveLength(1);
     expect(hits[0]).toMatchObject({ source: "youtube", externalId: "v1", title: "Song One" });
     // The WEB client (not WEB_REMIX) + its API key are what make a real request
     // return `videoRenderer` nodes the parser walks.
-    const req = http.mock.calls[0][0];
-    expect(req.url).toContain("/youtubei/v1/search");
-    expect(req.url).toContain("key=");
-    expect(req.headers?.["X-Youtube-Client-Name"]).toBe("1"); // WEB
+    expect(lastReq?.url).toContain("/youtubei/v1/search");
+    expect(lastReq?.url).toContain("key=");
+    expect(lastReq?.headers?.["X-Youtube-Client-Name"]).toBe("1"); // WEB
   });
 
   it("resolves a videoId to a playable stream when the runtime is present", async () => {

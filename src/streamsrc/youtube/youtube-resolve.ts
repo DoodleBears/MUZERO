@@ -67,7 +67,14 @@ export async function resolveYoutubeAudio(
   deps: YoutubeResolveDeps,
   signal?: AbortSignal,
 ): Promise<YoutubePlayback> {
-  const boot = await deps.getBootstrap();
+  let boot: YoutubeBootstrap;
+  try {
+    boot = await deps.getBootstrap();
+  } catch (err) {
+    // Bootstrap (player.js fetch / parse) failed — surface it as unavailable so the
+    // player shows a toast instead of an uncaught promise rejection.
+    return { kind: "unavailable", reason: err instanceof Error ? err.message : String(err) };
+  }
   const clients = deps.clients ?? DEFAULT_CLIENTS;
   let lastVerdict: YoutubePlayback = { kind: "unavailable", reason: "no clients" };
 
