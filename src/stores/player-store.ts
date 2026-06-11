@@ -77,7 +77,7 @@ import { runStreamCache } from "@/streamsrc/cache-stream";
 import type { StreamSearchHit } from "@/streamsrc/provider";
 import { createStreamSource } from "@/streamsrc/registry";
 import { resolveStreamedTrackMedia } from "@/streamsrc/resolve-playback";
-import { isStreamedTrack } from "@/streamsrc/source-detect";
+import { isStreamedTrack, playbackSourceKind } from "@/streamsrc/source-detect";
 import { createStreamHttp } from "@/streamsrc/stream-http";
 import {
   type AddHitsResult,
@@ -1428,8 +1428,9 @@ async function ensureLoadedAndPlay(
   if (currentIndex < 0 || currentIndex >= queue.length) return;
   const track = queue[currentIndex];
   if (!mediaEngine) return;
-  const hasPlayableMedia = !!track.blobId || !!track.remoteMediaUrl || isStreamedTrack(track);
-  if (track.status !== "ready" || !hasPlayableMedia) {
+  // Local-first priority: blob (downloaded/offline) → remoteMediaUrl → stream (online).
+  const sourceKind = playbackSourceKind(track);
+  if (track.status !== "ready" || sourceKind === "none") {
     log.debug("player", "track is not playable yet", {
       trackId: track.id,
       status: track.status,
@@ -1442,7 +1443,8 @@ async function ensureLoadedAndPlay(
   const previousLoadedTrackId = loadedTrackId;
   if (loadedTrackId !== track.id) {
     flushPlaybackListen(Date.now());
-    if (track.blobId) {
+    if (sourceKind === "blob") {
+      // Cached/downloaded bytes — plays locally, offline, no network round-trip.
       const media = await getTrackBlob(track);
       if (!media) {
         log.warn("player", "missing media blob", { trackId: track.id, blobId: track.blobId });
@@ -1455,13 +1457,14 @@ async function ensureLoadedAndPlay(
         bytes: media.bytes,
       });
       await mediaEngine.loadBlob(media.blob, track.kind);
-    } else if (track.remoteMediaUrl) {
+    } else if (sourceKind === "remote") {
       log.debug("player", "loading remote media url", {
         trackId: track.id,
         kind: track.kind,
       });
-      await mediaEngine.loadUrl(track.remoteMediaUrl, track.kind);
-    } else if (isStreamedTrack(track)) {
+      // biome-ignore lint/style/noNonNullAssertion: sourceKind === "remote" implies remoteMediaUrl
+      await mediaEngine.loadUrl(track.remoteMediaUrl!, track.kind);
+    } else if (sourceKind === "stream") {
       // External streaming source: resolve a short-lived URL right before play.
       // NetEase plays directly; Bilibili's URL needs the media proxy to inject a
       // Referer (returned in `headers`, wired once the proxy lands) — until then a

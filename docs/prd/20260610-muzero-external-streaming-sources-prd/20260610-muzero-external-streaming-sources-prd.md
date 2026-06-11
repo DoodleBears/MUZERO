@@ -484,13 +484,13 @@ components/player/            # 无需改：streamed track 复用 media-stage / 
 **Goal:** 用户可把 streamed track 的音频字节缓存到 `mediaBlobs`（role:"media"）供离线；命中则播本地、不再 resolve。
 
 **Tasks:**
-- [ ] 下载：经 muzfetch 拉 resolve 到的字节 → `mediaBlobs` → 回填 `Track.blobId`；进度/可取消（沿用 [`electron-shell-pivot`](../../../.claude/projects/-Users-doodlebear-Documents-code-MUZERO/memory/electron-shell-pivot.md) 的同步指示器纪律）。
-- [ ] 播放优先级：`blobId` 命中走本地，否则即时 resolve。
-- [ ] 缓存管理：Settings 显示占用 + 清理。
+- [x] 下载：经 `mediaProxyUrl`(账号 cookie + Referer 注入) 拉 resolve 到的字节 → `mediaBlobs` → 回填 `Track.blobId`（`cacheStreamedTrackBlob` 重下替换旧 blob 不留孤儿；`downloadStreamedTrack` action + `autoCacheStreamed` 播放后后台缓存）。
+- [x] 播放优先级：`playbackSourceKind` 纯函数裁决 **blob → remote → stream → none**（local-first），`ensureLoadedAndPlay` 路由经它——下载后的 streamed track `blobId` 命中即播本地、**零联网**（不 resolve、不打 CDN）。
+- [x] 缓存管理：Settings「在线音源」卡折入 自动缓存开关 + 占用显示 + 一键清理。
 
 #### Phase 5 Checklist
-- [ ] 下载后断网仍可播。
-- [ ] 缓存与即时 resolve 的优先级单测。
+- [ ] 下载后断网仍可播（待 Electron 手测真实拉流）。
+- [x] 缓存与即时 resolve 的优先级单测（`source-detect.test.ts` ×4：下载后走 blob 不联网、未下载走 stream、blob 压过 remote/stream、缺 externalId→none）。
 - [ ] object-URL revoke-before-replace 不泄漏（规则 9）。
 
 ---
@@ -679,7 +679,7 @@ success：Set-Cookie 已被 net.fetch 写进默认 session → bridge.readSource
 
 把 streamed track resolve 到的字节**下载入库**(`mediaBlobs` role `media` + 回填 `Track.blobId`)，命中后播放走 player **既有 `if (track.blobId)` 本地分支**——离线可播、不再每次 resolve。红线同源（个人使用、设备本地、不分发）。
 
-**播放优先级天然成立**：`ensureLoadedAndPlay` 的 if 链 `blobId → remoteMediaUrl → isStreamedTrack(resolve)`，缓存好的 streamed track `blobId` 命中即走本地，零改动。
+**播放优先级**：由纯函数 `playbackSourceKind(track)` 单点裁决 **blob → remote → stream → none**（local-first）；`ensureLoadedAndPlay` 的就绪判定 + 加载分支都路由经它，所以缓存好的 streamed track `blobId` 命中即走本地、**零联网**（不 resolve、不打 CDN），离线可播。
 
 | # | 单元 | 文件 | 测试 | 状态 |
 |---|---|---|---|---|
@@ -687,8 +687,9 @@ success：Set-Cookie 已被 net.fetch 写进默认 session → bridge.readSource
 | CA2 | 下载编排：`runStreamCache({resolve,fetchBytes,store})`→resolve→下载→存(注入式纯函数；VIP/登录门不下载、错误不写坏 blob、mime 回退) | `streamsrc/cache-stream.ts` | 注入 stub ×4 | ✅ green |
 | CA3 | player-store `cacheStreamedTrackNow`(模块件)+`downloadStreamedTrack(trackId)` action：接 `resolveStreamedTrackMedia`(账号 cookie)+`mediaProxyUrl` 拉字节+`cacheStreamedTrackBlob`；**自动缓存钩子**(播放后若 `autoCacheStreamed` 开则后台下载)；toast 结果(VIP→`streamNeedsAccess`) | `stores/player-store.ts` · `db/types.ts`(`autoCacheStreamed`) | typecheck + 137 测全绿；**待 Electron 手测**(真实拉流) | ✅ |
 | CA4 | Settings 缓存管理（折进「在线音源」卡片）：自动缓存开关 + 占用显示(`summarizeStreamedCache` via liveQuery)+ 一键清理(`clearStreamedCache`)；i18n `streamCache.*`×4 | `components/settings/stream-sources-settings.tsx` · i18n | typecheck + biome + i18n 全绿 | ✅ |
+| CA5 | **本地优先播放裁决**：`playbackSourceKind` 纯函数(blob→remote→stream→none) + `ensureLoadedAndPlay` 路由经它(就绪判定 + 加载分支)，锁死「下载后播本地不联网」契约 | `streamsrc/source-detect.ts` · `stores/player-store.ts` | `source-detect.test.ts` ×4(下载走 blob/未下载走 stream/blob 压 remote+stream/缺 id→none) | ✅ green |
 
-**落地**：缓存核心(repo + 编排)纯逻辑全单测；`cacheStreamedTrackNow` 接真实 resolve(账号 cookie)+ 代理拉字节(Referer 注入)+ 入库；`autoCacheStreamed` 开则播放后后台缓存(再 resolve 一次，字节单独下，已知 2× 下载——后续可 tee 优化)。Settings 折进「在线音源」卡片（开关 + 占用 + 清理）。**Phase 5 完成**（运行时拉流待 Electron 手测；性能优化项后续增量）。
+**落地**：缓存核心(repo + 编排)纯逻辑全单测；`cacheStreamedTrackNow` 接真实 resolve(账号 cookie)+ 代理拉字节(Referer 注入)+ 入库；`autoCacheStreamed` 开则播放后后台缓存(再 resolve 一次，字节单独下，已知 2× 下载——后续可 tee 优化)。Settings 折进「在线音源」卡片（开关 + 占用 + 清理）。**播放走本地优先**由 `playbackSourceKind` 单点裁决并单测锁定（CA5）。**Phase 5 完成**（运行时拉流待 Electron 手测；性能优化项后续增量）。
 
 ## 20. Phase 4：YouTube 源（进行中）
 
