@@ -6,6 +6,7 @@ import {
 } from "@/lib/cover-palette";
 import { encodeCoverThumbhash } from "@/lib/cover-thumbhash";
 import { newId } from "@/lib/id";
+import { noteDbRequery } from "@/lib/perf-counters";
 import type { LyricsRecord } from "@/lyrics/provider";
 import {
   appendEntries,
@@ -47,6 +48,7 @@ import {
   type TrackKind,
   type TrackLyrics,
   type TrackMediaMetadata,
+  type TrackPlaybackStats,
 } from "./types";
 
 /**
@@ -774,7 +776,14 @@ export async function getTracksByIds(ids: string[], db: MuzeroDB = defaultDb): P
 }
 
 export function listAllTracks(db: MuzeroDB = defaultDb): Promise<Track[]> {
+  noteDbRequery("listAllTracks");
   return db.tracks.toArray();
+}
+
+/** Full playback-stats table (entity listening time projections) — see PRD F-4. */
+export function listTrackPlaybackStats(db: MuzeroDB = defaultDb): Promise<TrackPlaybackStats[]> {
+  noteDbRequery("trackPlaybackStats");
+  return db.trackPlaybackStats.toArray();
 }
 
 export async function getTrackBlob(
@@ -1446,6 +1455,7 @@ export async function memoryNotesByTrack(
   trackIds: string[],
   db: MuzeroDB = defaultDb,
 ): Promise<Map<string, string[]>> {
+  noteDbRequery("memoryNotesByTrack");
   const rows = await db.memories.where("trackId").anyOf(trackIds).toArray();
   const map = new Map<string, string[]>();
   for (const m of rows.sort((a, b) => a.createdAt - b.createdAt)) {

@@ -277,9 +277,9 @@ player-store.ts:2122-2155 两次 `updateMediaSessionMetadata` 交错时（await 
 **Goal:** 在既有 [`DevPerfPanel`](../../../src/components/dev/dev-perf-panel.tsx)（左下角 dev HUD，已有 fps / frame p99 / jank / heap / copy-trace）和 [`trace.ts`](../../../src/lib/trace.ts) 管道上补齐本审计缺的三个计数器，固化 before 基线；纯 observability，低风险可独立先 ship。**不新建采样器、不新建日志通道。**
 
 **Tasks:**
-- [ ] blob: URL 存活计数器：DEV 构建下包装 `URL.createObjectURL/revokeObjectURL`（live diff），DevPerfPanel 加一行 `blobs`
-- [ ] liveQuery 重查计数：`listAllTracks` / `memoryNotesByTrack` / `trackPlaybackStats` 查询入口 `traceEvent("debug", "db", …)` 进 trace 环（copy-trace 一键带出），面板加累计行
-- [ ] 队列长度行：playQueue entries 数进面板（F-11 观测）
+- [x] blob: URL 存活计数器：DEV 构建下包装 `URL.createObjectURL/revokeObjectURL`（live diff），DevPerfPanel 加一行 `blobs`（[perf-counters.ts](../../../src/lib/perf-counters.ts) `installBlobUrlTracker`，refcount + 卸载还原，TDD 11 测）
+- [x] liveQuery 重查计数：`listAllTracks` / `memoryNotesByTrack` / `trackPlaybackStats` 查询入口经 `noteDbRequery` 计数 + `traceEvent("debug", "db", …)` 进 trace 环（copy-trace 一键带出），面板加 `db` 累计行；search-page 的内联 stats 查询改走新仓库函数 `listTrackPlaybackStats`
+- [x] 队列长度行：playQueue entries 数进面板（F-11 观测，最小 selector `s.queue.length`）
 - [ ] prod build 采集途径：DevPerfPanel 当前仅 `import.meta.env.DEV` 挂载，与 §2.2「prod build 复测」冲突——在 Settings 开发者区加**可见开关**（默认关）允许 prod 构建挂载面板（硬规则 3 允许可见 Settings 控件，禁止的是 hidden flag）
 - [ ] 按 §2.3 五个场景在 prod build 采集 before 基线，数字回填本 PRD §10
 

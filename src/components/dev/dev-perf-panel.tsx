@@ -1,6 +1,13 @@
 import { Check, ClipboardCopy } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import {
+  blobUrlStats,
+  installBlobUrlTracker,
+  readPerfCounter,
+  resetPerfCounters,
+  setPerfCountersEnabled,
+} from "@/lib/perf-counters";
+import {
   formatFps,
   formatMb,
   formatMs,
@@ -12,6 +19,14 @@ import {
 } from "@/lib/perf-metrics";
 import { formatTraceEntries, useTraceEntries } from "@/lib/trace";
 import { cn } from "@/lib/utils";
+import { usePlayerStore } from "@/stores/player-store";
+
+/** Heavyweight full-table queries surfaced in the `db` row (PRD F-3/F-4). */
+const DB_REQUERY_COUNTERS = [
+  "db.listAllTracks",
+  "db.memoryNotesByTrack",
+  "db.trackPlaybackStats",
+] as const;
 
 /**
  * Floating dev-only perf HUD (FPS / frame cadence / long-task jank / JS heap).
@@ -27,12 +42,18 @@ interface Snapshot {
   frames: PerfSummary;
   longTaskMax: number | null;
   heapBytes: number | null;
+  blobsLive: number;
+  blobsCreated: number;
+  dbRequeries: number;
 }
 
 const EMPTY_SNAPSHOT: Snapshot = {
   frames: summarizePerf([]),
   longTaskMax: null,
   heapBytes: null,
+  blobsLive: 0,
+  blobsCreated: 0,
+  dbRequeries: 0,
 };
 
 export function DevPerfPanel() {
@@ -44,6 +65,19 @@ export function DevPerfPanel() {
   const traceEntries = useTraceEntries();
   const framesRef = useRef(new PerfWindow(180));
   const longTasksRef = useRef(new PerfWindow(60));
+  const queueLength = usePlayerStore((s) => s.queue.length);
+
+  // Counters + blob-URL census live only while the HUD is mounted — zero
+  // overhead otherwise (memory-perf-audit PRD Phase 1).
+  useEffect(() => {
+    setPerfCountersEnabled(true);
+    const uninstall = installBlobUrlTracker();
+    return () => {
+      setPerfCountersEnabled(false);
+      resetPerfCounters();
+      uninstall();
+    };
+  }, []);
 
   // Global frame cadence via rAF deltas.
   useEffect(() => {
@@ -76,10 +110,14 @@ export function DevPerfPanel() {
   // Throttled snapshot so the panel doesn't poll every frame.
   useEffect(() => {
     const id = window.setInterval(() => {
+      const blobs = blobUrlStats();
       setSnap({
         frames: framesRef.current.summary(),
         longTaskMax: longTasksRef.current.summary().max,
         heapBytes: readJsHeapBytes(),
+        blobsLive: blobs.live,
+        blobsCreated: blobs.created,
+        dbRequeries: DB_REQUERY_COUNTERS.reduce((sum, name) => sum + readPerfCounter(name), 0),
       });
     }, SNAPSHOT_MS);
     return () => window.clearInterval(id);
@@ -141,6 +179,9 @@ export function DevPerfPanel() {
             value={snap.longTaskMax == null ? "–" : `max ${formatMs(snap.longTaskMax)}`}
           />
           <Row label="heap" value={formatMb(snap.heapBytes)} />
+          <Row label="blobs" value={`${snap.blobsLive} live · ${snap.blobsCreated} made`} />
+          <Row label="db" value={`${snap.dbRequeries} requeries`} />
+          <Row label="queue" value={`${queueLength}`} />
           <button
             type="button"
             onClick={() => void copyAllTrace()}

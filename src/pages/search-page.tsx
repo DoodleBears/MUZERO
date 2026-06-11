@@ -52,6 +52,7 @@ import {
   getSession,
   listAllTracks,
   listSessions,
+  listTrackPlaybackStats,
   memoryNotesByTrack,
   setSessionCover,
   setTrackCover,
@@ -308,7 +309,7 @@ export function SearchPage() {
   const albumIndex = useMemo(() => buildAlbumIndex(allTracks), [allTracks]);
   // Per-artist/album listening time — a derived current-truth dimension folded
   // from the per-track playback signal (re-tag re-buckets; see PRD §3.4).
-  const playbackStats = useLiveQuery(() => db.trackPlaybackStats.toArray(), [], []);
+  const playbackStats = useLiveQuery(() => listTrackPlaybackStats(db), [], []);
   const statsByTrackId = useMemo(() => buildTrackStatsMap(playbackStats), [playbackStats]);
   // trackId → last-played epoch ms, for the 最近播放 sort (never-played omitted → 0).
   const lastPlayedByTrack = useMemo(() => {
