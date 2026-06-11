@@ -1,4 +1,5 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { clearTrace, getTraceEntries } from "@/lib/trace";
 import type { StreamResolveResult, StreamSourceProvider } from "./provider";
 import { resolveStreamedTrackMedia } from "./resolve-playback";
 
@@ -16,6 +17,11 @@ function fakeSource(result: StreamResolveResult): StreamSourceProvider {
 const track = { streamSourceId: "netease" as const, streamExternalId: "123" };
 
 describe("resolveStreamedTrackMedia", () => {
+  afterEach(() => {
+    clearTrace();
+    vi.restoreAllMocks();
+  });
+
   it("maps an ok resolve to a playable url + mime + headers", async () => {
     const source = fakeSource({
       kind: "ok",
@@ -76,5 +82,64 @@ describe("resolveStreamedTrackMedia", () => {
 
   it("errors when the track has no stream ref", async () => {
     expect((await resolveStreamedTrackMedia({}, { resolveSource: () => null })).kind).toBe("error");
+  });
+
+  it("emits structured trace events for resolve success and failure", async () => {
+    vi.spyOn(console, "info").mockImplementation(() => undefined);
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const source = fakeSource({
+      kind: "ok",
+      stream: { mediaUrl: "https://cdn.example/song.mp3?sig=secret", mime: "audio/mpeg" },
+    });
+
+    await resolveStreamedTrackMedia(track, {
+      resolveSource: () => source,
+      trace: { traceId: "ply_1", trackId: "trk_1" },
+    });
+    await resolveStreamedTrackMedia(track, {
+      resolveSource: () => fakeSource({ kind: "error", message: "boom" }),
+      trace: { traceId: "ply_2", trackId: "trk_2" },
+    });
+
+    expect(getTraceEntries()).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          level: "info",
+          scope: "stream.resolve",
+          event: "resolve.start",
+          context: expect.objectContaining({
+            traceId: "ply_1",
+            trackId: "trk_1",
+            sourceId: "netease",
+            category: "stream",
+            phase: "start",
+          }),
+        }),
+        expect.objectContaining({
+          level: "info",
+          scope: "stream.resolve",
+          event: "resolve.success",
+          context: expect.objectContaining({
+            traceId: "ply_1",
+            mime: "audio/mpeg",
+            requestHost: "cdn.example",
+            redactions: expect.arrayContaining(["url.query.sig"]),
+          }),
+        }),
+        expect.objectContaining({
+          level: "error",
+          scope: "stream.resolve",
+          event: "resolve.failed",
+          context: expect.objectContaining({
+            traceId: "ply_2",
+            trackId: "trk_2",
+            sourceId: "netease",
+            category: "stream",
+            phase: "fail",
+            errorKind: "unknown",
+          }),
+        }),
+      ]),
+    );
   });
 });

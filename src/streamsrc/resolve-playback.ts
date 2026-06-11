@@ -9,6 +9,9 @@
  */
 
 import type { StreamSourceId } from "@/db/types";
+import type { DiagnosticContext } from "@/lib/diagnostics";
+import { sanitizeUrlForTrace } from "@/lib/diagnostics";
+import { createDiagnosticLogger } from "@/lib/logger";
 import type { StreamSourceProvider } from "./provider";
 
 export interface StreamedTrackRef {
@@ -22,6 +25,7 @@ export interface ResolveStreamedDeps {
   /** Preferred per-source quality key from settings. */
   getQuality?: (id: StreamSourceId) => string | undefined;
   signal?: AbortSignal;
+  trace?: Pick<DiagnosticContext, "traceId" | "trackId" | "sessionId">;
 }
 
 export type StreamPlaybackResult =
@@ -30,6 +34,8 @@ export type StreamPlaybackResult =
   | { kind: "no-permission"; source: StreamSourceId; reason: string }
   | { kind: "error"; message: string };
 
+const resolveLog = createDiagnosticLogger("stream.resolve");
+
 /** Resolve a streamed track's current playable media, mapping provider verdicts. */
 export async function resolveStreamedTrackMedia(
   track: StreamedTrackRef,
@@ -37,18 +43,47 @@ export async function resolveStreamedTrackMedia(
 ): Promise<StreamPlaybackResult> {
   const { streamSourceId, streamExternalId } = track;
   if (!streamSourceId || !streamExternalId) {
+    traceResolveFailed(deps.trace, "track has no stream source ref", { errorKind: "schema" });
     return { kind: "error", message: "track has no stream source ref" };
   }
   const source = deps.resolveSource(streamSourceId);
   if (!source) {
+    traceResolveFailed(deps.trace, `stream source "${streamSourceId}" unavailable`, {
+      sourceId: streamSourceId,
+      errorKind: "unsupported_source",
+    });
     return { kind: "error", message: `stream source "${streamSourceId}" unavailable` };
+  }
+  if (deps.trace?.traceId) {
+    resolveLog.info("resolve.start", {
+      message: "stream resolve started",
+      ...deps.trace,
+      sourceId: streamSourceId,
+      category: "stream",
+      phase: "start",
+    });
   }
   const res = await source.resolve(streamExternalId, {
     quality: deps.getQuality?.(streamSourceId),
     signal: deps.signal,
   });
   switch (res.kind) {
-    case "ok":
+    case "ok": {
+      if (deps.trace?.traceId) {
+        const url = sanitizeUrlForTrace(res.stream.mediaUrl);
+        resolveLog.info("resolve.success", {
+          message: "stream resolve succeeded",
+          ...deps.trace,
+          sourceId: streamSourceId,
+          category: "stream",
+          phase: "success",
+          mime: res.stream.mime,
+          quality: res.stream.quality,
+          requestHost: url.host ?? undefined,
+          requestPathHash: url.pathHash,
+          redactions: url.redactions,
+        });
+      }
       return {
         kind: "ok",
         url: res.stream.mediaUrl,
@@ -56,11 +91,39 @@ export async function resolveStreamedTrackMedia(
         headers: res.stream.headers,
         quality: res.stream.quality,
       };
+    }
     case "requires-login":
+      traceResolveFailed(deps.trace, "stream source requires login", {
+        sourceId: streamSourceId,
+        errorKind: "auth_required",
+      });
       return { kind: "requires-login", source: streamSourceId };
     case "no-permission":
+      traceResolveFailed(deps.trace, "stream source denied playback", {
+        sourceId: streamSourceId,
+        errorKind: "permission_denied",
+      });
       return { kind: "no-permission", source: streamSourceId, reason: res.reason };
     default:
+      traceResolveFailed(deps.trace, res.message, {
+        sourceId: streamSourceId,
+        errorKind: "unknown",
+      });
       return { kind: "error", message: res.message };
   }
+}
+
+function traceResolveFailed(
+  trace: ResolveStreamedDeps["trace"],
+  message: string,
+  context: Pick<DiagnosticContext, "sourceId" | "errorKind">,
+): void {
+  if (!trace?.traceId) return;
+  resolveLog.error("resolve.failed", {
+    message,
+    ...trace,
+    ...context,
+    category: "stream",
+    phase: "fail",
+  });
 }

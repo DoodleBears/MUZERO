@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/popover";
 import type { DjSession, Track } from "@/db/types";
 import { useTrackCoverUrl } from "@/hooks/use-media";
+import { recordUserAction } from "@/lib/logger";
 import { trackAlbum, trackArtists, trackSubtitle } from "@/lib/track-display";
 import { cn, formatDuration } from "@/lib/utils";
 import { useNavStore } from "@/stores/nav-store";
@@ -168,13 +169,25 @@ export const TrackRow = memo(function TrackRow({
   // isn't the one playing switches playback to it. Lists without a selection
   // model (queue / Now Playing) leave `isSelected` undefined, so `onView` is the
   // play handler there and a single click plays straight away.
-  function activate(shiftKey = false) {
+  function requestPlay(actionKind: "click" | "keyboard") {
+    recordUserAction("play.click", {
+      message: "track play clicked",
+      trackId: track.id,
+      sessionId: track.sessionId,
+      uiSurface: "track-row",
+      controlId: "track.play",
+      actionKind,
+    });
+    onPlay();
+  }
+
+  function activate(shiftKey = false, actionKind: "click" | "keyboard" = "click") {
     if (selectable) {
       onToggleSelect?.(shiftKey);
       return;
     }
     if (isSelected && !isCurrent && !disabled) {
-      onPlay();
+      requestPlay(actionKind);
       return;
     }
     onView();
@@ -188,7 +201,7 @@ export const TrackRow = memo(function TrackRow({
     if (k !== "enter" && k !== " " && k !== "d" && k !== "arrowright") return;
     event.preventDefault();
     event.stopPropagation();
-    activate(event.shiftKey);
+    activate(event.shiftKey, "keyboard");
   }
 
   function eventStartedInActions(event: MouseEvent<HTMLDivElement>) {
@@ -238,7 +251,7 @@ export const TrackRow = memo(function TrackRow({
             type="button"
             onClick={(event) => {
               event.stopPropagation();
-              onPlay();
+              requestPlay("click");
             }}
             onDoubleClick={(event) => event.stopPropagation()}
             className="pointer-events-none absolute inset-0 grid place-items-center rounded-md bg-black/45 text-foreground opacity-0 outline-none transition-opacity group-hover/thumb:pointer-events-auto group-hover/thumb:opacity-100 focus-visible:pointer-events-auto focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring"

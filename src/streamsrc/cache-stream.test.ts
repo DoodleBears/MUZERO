@@ -1,4 +1,5 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { clearTrace, getTraceEntries } from "@/lib/trace";
 import { runStreamCache } from "./cache-stream";
 import type { StreamPlaybackResult } from "./resolve-playback";
 
@@ -10,6 +11,11 @@ const ok: StreamPlaybackResult = {
 };
 
 describe("runStreamCache", () => {
+  afterEach(() => {
+    clearTrace();
+    vi.restoreAllMocks();
+  });
+
   it("resolves, downloads, stores, and reports the cached blob", async () => {
     const blob = new Blob([new Uint8Array(2048)], { type: "audio/mpeg" });
     const fetchBytes = vi.fn(async () => blob);
@@ -75,5 +81,65 @@ describe("runStreamCache", () => {
       store,
     });
     expect(store).toHaveBeenCalledWith(blob, "audio/flac");
+  });
+
+  it("emits structured trace events for cache success and download failure", async () => {
+    vi.spyOn(console, "info").mockImplementation(() => undefined);
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const blob = new Blob([new Uint8Array(12)], { type: "audio/mpeg" });
+
+    await runStreamCache({
+      resolve: async () => ok,
+      fetchBytes: async () => blob,
+      store: async () => "blb_1",
+      trace: { traceId: "ply_1", trackId: "trk_1" },
+    });
+    await runStreamCache({
+      resolve: async () => ok,
+      fetchBytes: async () => {
+        throw new Error("403");
+      },
+      store: vi.fn(),
+      trace: { traceId: "ply_2", trackId: "trk_2" },
+    });
+
+    expect(getTraceEntries()).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          level: "info",
+          scope: "stream.cache",
+          event: "cache.start",
+          context: expect.objectContaining({
+            traceId: "ply_1",
+            trackId: "trk_1",
+            category: "cache",
+            phase: "start",
+          }),
+        }),
+        expect.objectContaining({
+          level: "info",
+          scope: "stream.cache",
+          event: "cache.success",
+          context: expect.objectContaining({
+            traceId: "ply_1",
+            trackId: "trk_1",
+            bytes: 12,
+            mime: "audio/mpeg",
+          }),
+        }),
+        expect.objectContaining({
+          level: "error",
+          scope: "stream.cache",
+          event: "cache.failed",
+          context: expect.objectContaining({
+            traceId: "ply_2",
+            trackId: "trk_2",
+            category: "cache",
+            phase: "fail",
+            errorKind: "network_error",
+          }),
+        }),
+      ]),
+    );
   });
 });

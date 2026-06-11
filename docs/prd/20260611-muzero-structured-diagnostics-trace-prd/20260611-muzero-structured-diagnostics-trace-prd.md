@@ -13,7 +13,7 @@
 |-------|------|--------|------|
 | 1 | Audit, Taxonomy, Redaction Contract | Completed | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | Shared Structured Logger API | Completed | [Phase 2 Checklist](#phase-2-checklist) |
-| 3 | Playback / Stream Trace Migration | Pending | [Phase 3 Checklist](#phase-3-checklist) |
+| 3 | Playback / Stream Trace Migration | In Progress | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | Settings Trace Workbench | Pending | [Phase 4 Checklist](#phase-4-checklist) |
 | 5 | Electron Main Process Bridge | Pending | [Phase 5 Checklist](#phase-5-checklist) |
 | 6 | Local Trace Archive / File Export | Pending | [Phase 6 Checklist](#phase-6-checklist) |
@@ -638,6 +638,9 @@ All user-facing strings must go through i18n catalogs in `src/i18n/locales/{en,z
 **Goal:** Make the active debugging path, external streaming playback, fully traceable.
 
 **Tasks:**
+- [x] Add safe `ui.action play.click` breadcrumbs to `TrackRow` playback requests.
+- [x] Add structured `stream.resolve` events to `resolveStreamedTrackMedia`.
+- [x] Add structured `stream.cache` events to `runStreamCache`.
 - [ ] Create a playback `traceId` when a row/set/queue item starts playback.
 - [ ] Thread `traceId` through `player-store`, stream resolver, source adapter, cache, and `media-engine`.
 - [ ] Migrate `src/streamsrc/youtube/youtube-ytjs.ts` logs to structured events.
@@ -833,3 +836,4 @@ Given a stream source requires headers/cookies/login or returns no playable URL:
 | 2026-06-11 | Codex | Resolved Open Questions 1-5 by best practice and added user-action/repro-step trace requirements |
 | 2026-06-11 | Codex | Completed Phase 1 with structured diagnostics schema, filter helpers, URL summarization, and redaction tests |
 | 2026-06-11 | Codex | Completed Phase 2 with structured logger facade, sanitized legacy logging, user-action helper, and trace formatter tests |
+| 2026-06-11 | Codex | Advanced Phase 3a with safe TrackRow play breadcrumbs plus structured stream resolve/cache trace events and tests |

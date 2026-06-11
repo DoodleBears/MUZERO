@@ -1,7 +1,8 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import type * as React from "react";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { DjSession, Track } from "@/db/types";
+import { clearTrace, getTraceEntries } from "@/lib/trace";
 import { TrackRow } from "./track-row";
 
 vi.mock("react-i18next", () => ({
@@ -26,6 +27,11 @@ vi.mock("@/components/ui/popover", () => ({
     </button>
   ),
 }));
+
+afterEach(() => {
+  clearTrace();
+  vi.restoreAllMocks();
+});
 
 function track(): Track {
   return {
@@ -105,6 +111,31 @@ describe("TrackRow", () => {
 
     fireEvent.click(screen.getByLabelText("player.play"));
     expect(props.onPlay).toHaveBeenCalledTimes(1);
+  });
+
+  it("records a safe user-action breadcrumb when playback is requested", () => {
+    vi.spyOn(console, "info").mockImplementation(() => undefined);
+    const { container } = renderRow({ isSelected: true });
+    const row = container.querySelector<HTMLElement>("[data-muzero-track-row]");
+
+    fireEvent.click(row as HTMLElement);
+
+    expect(getTraceEntries()).toEqual([
+      expect.objectContaining({
+        level: "info",
+        scope: "ui.action",
+        event: "play.click",
+        context: expect.objectContaining({
+          category: "user-action",
+          phase: "start",
+          trackId: "trk_1",
+          sessionId: "ses_1",
+          uiSurface: "track-row",
+          controlId: "track.play",
+          actionKind: "click",
+        }),
+      }),
+    ]);
   });
 
   it("searches add-to-set targets before selecting a set", () => {
