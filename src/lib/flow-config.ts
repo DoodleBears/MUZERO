@@ -51,8 +51,19 @@ export const FLOW_EFFECTS: FlowEffectMeta[] = [
   { id: "abstract-shape", labelKey: "flow.effectAbstractShape" },
 ];
 
-/** Default flow effect (calm, the color4bg "ambient-light" look anysoul used). */
-export const DEFAULT_FLOW_EFFECT: FlowEffectId = "ambient-light";
+/** Default flow effect. */
+export const DEFAULT_FLOW_EFFECT: FlowEffectId = "chaos-waves";
+
+/** Default flow tuning (0–100 sliders + effect). Centralized so the resolver,
+ *  the Settings panel, and the background layer agree. */
+export const FLOW_DEFAULTS = {
+  effect: DEFAULT_FLOW_EFFECT,
+  motion: 100,
+  scale: 50,
+  reactivity: 75,
+  opacity: 50,
+  dim: 0,
+} as const;
 
 /** Smallest / largest number of flow colors a user can keep. */
 export const FLOW_MIN_COLORS = 2;
@@ -130,9 +141,9 @@ export function resolveFlowConfig(settings: FlowSettings): FlowConfig {
     source: settings.flowColorSource ?? "cover",
     customColors: pickCustomColors(settings.flowCustomColors),
     effect,
-    speed: clamp01((settings.flowMotion ?? 40) / 100),
-    scale: clamp01((settings.flowScale ?? 50) / 100),
-    reactivity: clamp01((settings.flowAudioReactivity ?? 20) / 100),
+    speed: clamp01((settings.flowMotion ?? FLOW_DEFAULTS.motion) / 100),
+    scale: clamp01((settings.flowScale ?? FLOW_DEFAULTS.scale) / 100),
+    reactivity: clamp01((settings.flowAudioReactivity ?? FLOW_DEFAULTS.reactivity) / 100),
   };
 }
 

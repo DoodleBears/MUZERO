@@ -16,6 +16,7 @@ import type { FlowEffectId } from "@/db/types";
 import { useSettings } from "@/hooks/use-app-data";
 import {
   FLOW_DEFAULT_COLORS,
+  FLOW_DEFAULTS,
   FLOW_EFFECTS,
   FLOW_MAX_COLORS,
   FLOW_MIN_COLORS,
@@ -178,18 +179,20 @@ export function FlowSettings() {
         <div className="grid gap-3 border-border border-t pt-3">
           <span className="text-xs font-medium text-muted-foreground">{t("flow.tuning")}</span>
           <PctSlider
-            label={t("flow.motion", { pct: settings.flowMotion ?? 40 })}
-            value={settings.flowMotion ?? 40}
+            label={t("flow.motion", { pct: settings.flowMotion ?? FLOW_DEFAULTS.motion })}
+            value={settings.flowMotion ?? FLOW_DEFAULTS.motion}
             onChange={(v) => void saveSettings({ flowMotion: v })}
           />
           <PctSlider
-            label={t("flow.scale", { pct: settings.flowScale ?? 50 })}
-            value={settings.flowScale ?? 50}
+            label={t("flow.scale", { pct: settings.flowScale ?? FLOW_DEFAULTS.scale })}
+            value={settings.flowScale ?? FLOW_DEFAULTS.scale}
             onChange={(v) => void saveSettings({ flowScale: v })}
           />
           <PctSlider
-            label={t("flow.reactivity", { pct: settings.flowAudioReactivity ?? 20 })}
-            value={settings.flowAudioReactivity ?? 20}
+            label={t("flow.reactivity", {
+              pct: settings.flowAudioReactivity ?? FLOW_DEFAULTS.reactivity,
+            })}
+            value={settings.flowAudioReactivity ?? FLOW_DEFAULTS.reactivity}
             onChange={(v) => void saveSettings({ flowAudioReactivity: v })}
           />
         </div>
@@ -198,13 +201,13 @@ export function FlowSettings() {
           <div className="grid gap-3 border-border border-t pt-3">
             <span className="text-xs font-medium text-muted-foreground">{t("flow.composite")}</span>
             <PctSlider
-              label={t("flow.opacity", { pct: settings.flowOpacity ?? 100 })}
-              value={settings.flowOpacity ?? 100}
+              label={t("flow.opacity", { pct: settings.flowOpacity ?? FLOW_DEFAULTS.opacity })}
+              value={settings.flowOpacity ?? FLOW_DEFAULTS.opacity}
               onChange={(v) => void saveSettings({ flowOpacity: v })}
             />
             <PctSlider
-              label={t("flow.dim", { pct: settings.flowDim ?? 0 })}
-              value={settings.flowDim ?? 0}
+              label={t("flow.dim", { pct: settings.flowDim ?? FLOW_DEFAULTS.dim })}
+              value={settings.flowDim ?? FLOW_DEFAULTS.dim}
               onChange={(v) => void saveSettings({ flowDim: v })}
             />
           </div>

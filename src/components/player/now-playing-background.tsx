@@ -10,6 +10,7 @@ import {
   resolvePixiBackgroundMedia,
   settleBackgroundTarget,
 } from "@/lib/background";
+import { FLOW_DEFAULTS } from "@/lib/flow-config";
 import { nextSlideIndex } from "@/lib/slideshow";
 import { trackHasCover } from "@/lib/track-display";
 import { cn } from "@/lib/utils";
@@ -257,11 +258,11 @@ function NowPlayingBackgroundContent({ hideVisualizer }: { hideVisualizer: boole
               coverColor
               placement="background"
               className="absolute inset-0"
-              style={{ opacity: (settings.flowOpacity ?? 100) / 100 }}
+              style={{ opacity: (settings.flowOpacity ?? FLOW_DEFAULTS.opacity) / 100 }}
             />
             <div
               className="absolute inset-0 bg-background"
-              style={{ opacity: (settings.flowDim ?? 0) / 100 }}
+              style={{ opacity: (settings.flowDim ?? FLOW_DEFAULTS.dim) / 100 }}
             />
           </motion.div>
         )}

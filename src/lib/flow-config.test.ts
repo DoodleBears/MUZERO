@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { AppSettings } from "@/db/types";
 import type { Rgb } from "@/lib/visualizer-color";
 import {
+  DEFAULT_FLOW_EFFECT,
   FLOW_DEFAULT_COLORS,
   hexToRgb,
   normalizeHexColor,
@@ -58,23 +59,23 @@ describe("resolveFlowConfig", () => {
   it("applies calm defaults for an empty settings row", () => {
     const cfg = resolveFlowConfig({} as AppSettings);
     expect(cfg.source).toBe("cover");
-    expect(cfg.effect).toBe("ambient-light");
-    expect(cfg.speed).toBeCloseTo(0.4);
+    expect(cfg.effect).toBe("chaos-waves");
+    expect(cfg.speed).toBeCloseTo(1);
     expect(cfg.scale).toBeCloseTo(0.5);
-    expect(cfg.reactivity).toBeCloseTo(0.2);
+    expect(cfg.reactivity).toBeCloseTo(0.75);
     expect(cfg.customColors.length).toBeGreaterThanOrEqual(2);
   });
 
-  it("keeps a valid effect id and falls back to ambient-light for unknown/empty", () => {
+  it("keeps a valid effect id and falls back to the default for unknown/empty", () => {
     expect(resolveFlowConfig({ flowEffect: "aesthetic-fluid" } as AppSettings).effect).toBe(
       "aesthetic-fluid",
     );
     expect(resolveFlowConfig({ flowEffect: "grid-array" } as AppSettings).effect).toBe(
       "grid-array",
     );
-    // A stale/unknown id (e.g. a removed v1 effect) → default.
+    // A stale/unknown id (e.g. a removed v1 effect) → DEFAULT_FLOW_EFFECT.
     expect(resolveFlowConfig({ flowEffect: "aurora-drift" } as unknown as AppSettings).effect).toBe(
-      "ambient-light",
+      DEFAULT_FLOW_EFFECT,
     );
   });
 

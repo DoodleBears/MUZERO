@@ -19,6 +19,7 @@
 | 6 | **设计修正**：流光改为**独立合成层**（背景图/视频 → 流光 → 频谱，**不互斥**），独立 `flowEnabled` 开关 + `flowOpacity`/`flowDim`；`scene-flow` 从频谱选择器隐藏（`hidden:true`，仍作图层强制 styleId 渲染） | ✅ Completed | [Phase 6 Checklist](#phase-6-checklist) |
 | 7 | **全 color4bg 效果对齐**（owner：「支持这个包所有类型」）：14 个自研 flow shader（`flow-shaders.ts`，ambient-light/aesthetic-fluid/big-blob/blur-dot/blur-gradient/wavy-waves/chaos-waves/swirling-curves/curve-gradient/step-gradient/grid-array/triangles-mosaic/random-cubes/abstract-shape），`FlowEffectId` 扩成 14、每效果一 shader 按需编译 | ✅ Completed | [Phase 7 Checklist](#phase-7-checklist) |
 | 8 | **过渡自然化**（owner）：切**效果**时 flow 层按 `flowEffect` 做 `key` → AnimatePresence 淡出/淡入**交叉淡化**（不再 recompile 硬切）；切**歌曲**时颜色复用既有封面取色 store 的 900ms `mixPalette` 插值（与频谱同机制，同一 canvas 不重挂） | ✅ Completed | [Phase 8 Checklist](#phase-8-checklist) |
+| 9 | **默认 + 性能 + Dev HUD**（owner）：默认改 chaos-waves / 透明度 50 / 压暗 0 / 音频反应 75 / 流速 100（集中到 `FLOW_DEFAULTS`）；背景 scene 低功耗（DPR≤1.5 + 40fps cap）；新增 dev-only 悬浮性能面板（FPS/帧节奏/jank/JS heap，仿 ClipCombo） | ✅ Completed | [Phase 9 Checklist](#phase-9-checklist) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
 > 本 PRD 适用 [`prd-create.md`](../../../.cursor/commands/prd-create.md) 的 **§3「Effect / Shader / 外部依赖类」** 附加要求（license 第一公民、curate 不穷举、**不引入新 runtime owner**、bundle 预算、自研优先、i18n 四语、不散落硬编码、shader uniform prelude 约定、基础设施先于覆盖广度、回退=`git revert`）与 **§4「realtime preview 性能类」**（reduced-motion / 可见性暂停 / prod build 复测）。
@@ -493,6 +494,28 @@ export function resolveFlowColors(
 - [x] biome + whole-tree typecheck 净。
 - [ ] **真实 app 人工验证**：切效果有交叉淡化不闪；切歌颜色 glide 不硬跳；切歌时不会因 key 变而误触发淡入淡出。
 
+### Phase 9: 默认调整 + 性能 + Dev 性能面板 ✅
+
+**Goal:** owner：(1) 改默认 flow 设置；(2) 优化性能；(3) 加一个仿 ClipCombo 的悬浮 dev debug 面板看内存 + 渲染速度。
+
+**(1) 新默认**（集中到 [`flow-config.ts`](../../../src/lib/flow-config.ts) `FLOW_DEFAULTS`，resolver/面板/背景层统一引用）：effect `chaos-waves`、透明度 `flowOpacity` 50、压暗 `flowDim` 0、音频反应 `flowAudioReactivity` 75、流速 `flowMotion` 100、尺度 50。
+
+**(2) 性能**（[`reactive-scene.tsx`](../../../src/visualizer/scene/reactive-scene.tsx) + `host.tsx` 传 `placement`）：背景 scene（flow 永远是 background）走低功耗——**DPR cap 1.5**（vs surface 2.0，retina 上约省 44% 片元）+ **40fps 帧率上限**（跳帧不跳时间，uTime 仍按真实时钟）。两者对软背景观感无损，合计约省 60% GPU。chaos-waves（嵌套 fbm）最吃，受益最大。
+
+**(3) Dev 性能面板**（dev-only，仿 ClipCombo `PreviewDevMetricsOverlay` 精简版）：
+- 纯逻辑 [`perf-metrics.ts`](../../../src/lib/perf-metrics.ts)：`PerfWindow`（FIFO ring）+ `summarizePerf`（nearest-rank p50/p99/min/max）+ `fpsFromIntervalMs`/`formatMs`/`formatMb`/`readJsHeapBytes`（穷举单测）。
+- 组件 [`dev-perf-panel.tsx`](../../../src/components/dev/dev-perf-panel.tsx)：rAF 测全局帧间隔 → FPS（avg + low）+ 帧 ms（avg/p99）；`PerformanceObserver(["longtask"])` 测 ≥50ms 卡顿；`performance.memory.usedJSHeapSize` → JS heap MB。**每 500ms 快照**（面板自身不每帧轮询）。悬浮左下、可折叠（localStorage 记忆）、FPS 颜色档（绿≥55/琥珀≥30/红）。
+- 仅 `import.meta.env.DEV` 在 [`App.tsx`](../../../src/App.tsx) 挂载（不进 prod 行为）。
+
+**Tasks:**
+- [x] `FLOW_DEFAULTS` 集中默认 + resolver/flow-settings/now-playing-background 全引用；`flow-config.test` 默认改 chaos-waves/速1/反应.75。
+- [x] `placement` 穿到 ReactiveScene；背景 DPR 1.5 + 40fps；deps 加 `lowPower`。
+- [x] `perf-metrics.ts`(+test 8) + `dev-perf-panel.tsx` + App dev-only 挂载。
+
+### Phase 9 Checklist
+- [x] flow-config(14) + perf-metrics(8) 测试绿；biome + whole-tree typecheck 净。
+- [ ] **真实 app 人工验证**：打开 dev 面板看 FPS/heap；开 flow（chaos-waves，默认）观察 FPS 是否稳（低功耗生效）；调流速/反应默认观感；面板折叠记忆。
+
 ---
 
 ## 7. Out of Scope
@@ -556,6 +579,7 @@ export function resolveFlowColors(
 | 2026-06-11 | DoodleBear / MUZERO | **Phase 6 ✅ 设计修正**（owner 反馈：流光与频谱**不互斥**）：流光改为**独立合成层**（背景图/视频 → 流光 → 频谱），独立 `flowEnabled` 开关 + `flowOpacity`/`flowDim`；`scene-flow` 标 `hidden:true` 从频谱选择器隐藏（仍作图层 `VISUALIZER_PICKER_META`）。registry 测试 13 绿 + 四语 i18n + biome + whole-tree typecheck 净。确认全程**零** color4bg/ogl/node-vibrant |
 | 2026-06-11 | DoodleBear / MUZERO | **Phase 7 ✅ 全 color4bg 效果对齐**（owner：「支持这个包所有类型」）：新建 `flow-shaders.ts` 14 段自研 GLSL（color4bg 全 14 style 的自研复刻，含 3D/canvas 的 2D 近似），`FlowEffectId` 扩 14、每效果一 shader 按需编译、移除 `uEffect`，删旧 `FLOW_FRAG`，四语 14 标签。**仍零依赖**（不引 color4bg/ogl）。41 测试绿 + typecheck/biome/JSON 净 |
 | 2026-06-11 | DoodleBear / MUZERO | **Phase 8 ✅ 切换过渡自然化**（owner）：切效果 → flow 层 `key={flow-${effect}}` 触发 AnimatePresence 交叉淡化（0.5s，取代 recompile 硬切）；切歌颜色复用既有封面取色 store 900ms `mixPalette` 插值（同频谱，canvas 不重挂）。biome/typecheck 净 |
+| 2026-06-11 | DoodleBear / MUZERO | **Phase 9 ✅ 默认+性能+Dev HUD**（owner）：默认 chaos-waves/透50/暗0/反应75/流速100（`FLOW_DEFAULTS` 集中）；背景 scene 低功耗（DPR≤1.5 + 40fps cap，约省 60% GPU）；新增 dev-only 悬浮性能面板（`perf-metrics.ts`+`dev-perf-panel.tsx`：FPS/帧 p99/longtask jank/JS heap，500ms 快照，仿 ClipCombo）。14+8 测试绿 |
 
 ---
 

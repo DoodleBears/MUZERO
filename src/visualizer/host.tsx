@@ -211,12 +211,14 @@ function SceneHost({
   className,
   effectSettings,
   flow,
+  placement = "surface",
 }: {
   styleId: VisualizerStyleId;
   active: boolean;
   className?: string;
   effectSettings: VisualizerEffectSettings;
   flow?: FlowConfig;
+  placement?: VisualizerPlacement;
 }) {
   const ok = useMemo(() => hasWebGL(), []);
   const ref = useRef<HTMLDivElement | null>(null);
@@ -260,6 +262,7 @@ function SceneHost({
           smoothing={analyserOptions.smoothing}
           options={renderOptions}
           flow={flow}
+          placement={placement}
         />
       </Suspense>
     </div>
@@ -348,6 +351,7 @@ export function VisualizerHost({
           active={active}
           effectSettings={effectSettings}
           flow={flow}
+          placement={placement}
         />
       </div>
     );

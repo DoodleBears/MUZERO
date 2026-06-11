@@ -35,6 +35,7 @@ export default function ReactiveScene({
   options,
   smoothing,
   flow,
+  placement = "surface",
 }: {
   styleId: string;
   active: boolean;
@@ -44,7 +45,12 @@ export default function ReactiveScene({
   smoothing: number;
   /** Flow background config (only used by scene-flow). */
   flow?: FlowConfig;
+  /** Background scenes (e.g. the full-screen flow) render at lower cost. */
+  placement?: "surface" | "background";
 }) {
+  // A full-screen background scene doesn't need crisp DPR or 60fps — cap both to
+  // cut GPU work (esp. the heavy fbm flow effects) without a visible change.
+  const lowPower = placement === "background";
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const stateRef = useRef<GLState | null>(null);
   const activeRef = useRef(active);
@@ -121,7 +127,9 @@ export default function ReactiveScene({
 
   // Run the render loop, or paint a single frozen frame when paused.
   useEffect(() => {
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const dpr = Math.min(window.devicePixelRatio || 1, lowPower ? 1.5 : 2);
+    // Cap background scenes to ~40fps (0 = uncapped for surface visualizers).
+    const minFrameMs = lowPower ? 1000 / 40 : 0;
     // Reused per-frame so the flow palette upload doesn't churn the GC.
     const flowColors = new Float32Array(FLOW_MAX_COLORS * 3);
 
@@ -196,13 +204,17 @@ export default function ReactiveScene({
       return () => cancelAnimationFrame(id);
     }
     let raf = 0;
+    let lastRender = 0;
     const loop = (t: number) => {
-      renderFrame(t);
+      if (t - lastRender >= minFrameMs) {
+        renderFrame(t);
+        lastRender = t;
+      }
       raf = requestAnimationFrame(loop);
     };
     raf = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(raf);
-  }, [paused, fftSize, smoothing, options, isFlow]);
+  }, [paused, fftSize, smoothing, options, isFlow, lowPower]);
 
   return <canvas ref={canvasRef} className="block h-full w-full" />;
 }
