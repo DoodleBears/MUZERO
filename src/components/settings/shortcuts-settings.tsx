@@ -1,10 +1,11 @@
-import { Download, Plus, RotateCcw, Upload, X } from "lucide-react";
+import { Plus, RotateCcw, Upload, X } from "lucide-react";
 import { type ChangeEvent, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ShortcutRecorderDialog } from "@/components/settings/shortcut-recorder-dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { DownloadIcon } from "@/components/ui/download";
 import { Input } from "@/components/ui/input";
 import { Kbd, KbdGroup } from "@/components/ui/kbd";
 import {
@@ -76,7 +77,7 @@ export function ShortcutsSettings() {
           </Button>
           {hasAnyOverride && (
             <Button variant="outline" size="sm" onClick={exportKeymap}>
-              <Download className="size-4" /> {t("shortcuts.exportKeymap")}
+              <DownloadIcon size={16} /> {t("shortcuts.exportKeymap")}
             </Button>
           )}
           {hasAnyOverride && (

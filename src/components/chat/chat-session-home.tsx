@@ -1,8 +1,9 @@
-import { Check, MessageSquare, Pencil, Search, Trash2, X } from "lucide-react";
+import { Check, MessageSquare, Pencil, Search, X } from "lucide-react";
 import { type FormEvent, type ReactNode, useMemo, useState } from "react";
 import { parseChatMessages, parseQueuedPrompts } from "@/chat/dj-chat-sessions";
 import type { ChatSession } from "@/chat/types";
 import { Button } from "@/components/ui/button";
+import { DeleteIcon } from "@/components/ui/delete";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 
@@ -151,7 +152,7 @@ export function ChatSessionHome({
                       size="icon-xs"
                       variant="ghost"
                     >
-                      <Trash2 />
+                      <DeleteIcon size={16} />
                     </Button>
                   </div>
                 )}

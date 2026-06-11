@@ -1,7 +1,7 @@
-import { Download } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
+import { CloudDownloadIcon } from "@/components/ui/cloud-download";
 import type { CloudDrive } from "@/db/types";
 import { log } from "@/lib/logger";
 import { importRemoteSetStream } from "@/sync/r2-import-stream";
@@ -88,7 +88,7 @@ export function CloudDriveSets({ drive }: { drive: CloudDrive }) {
             disabled={importingSetId === set.id}
             onClick={() => void importSet(set)}
           >
-            <Download />
+            <CloudDownloadIcon size={16} />
             {importingSetId === set.id ? t("settings.cloudImporting") : t("settings.cloudImport")}
           </Button>
         </div>

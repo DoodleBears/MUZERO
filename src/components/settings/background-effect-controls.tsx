@@ -25,6 +25,7 @@ export function BackgroundEffectControls({ className }: { className?: string }) 
   const modeItems: { label: string; value: BackgroundMode }[] = [
     { value: "cover", label: t("background.modeCover") },
     { value: "slideshow", label: t("background.modeSlideshow") },
+    { value: "none", label: t("background.modeNone") },
   ];
   const rendererItems: { label: string; value: BackgroundRenderer }[] = [
     { value: "image", label: t("background.rendererImage") },

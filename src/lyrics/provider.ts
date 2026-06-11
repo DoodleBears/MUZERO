@@ -14,8 +14,15 @@ import type { LyricFormat } from "./model";
 
 export type LyricsProviderId = "lrclib" | "netease" | "amll";
 
+/**
+ * Every lyrics provenance value. Single source of truth for both the `LyricsSource`
+ * union and the R2 manifest's lyrics `source` enum (`r2-manifest-schema.ts`) — keep
+ * them aligned by reusing this array, never re-declaring a narrower literal union.
+ */
+export const LYRICS_SOURCES = ["lrclib", "netease", "amll", "manual"] as const;
+
 /** Where a stored lyrics row came from. `manual` = user-supplied, wins on merge. */
-export type LyricsSource = "lrclib" | "netease" | "amll" | "manual";
+export type LyricsSource = (typeof LYRICS_SOURCES)[number];
 
 /** Persisted lyrics state. `notFound` is a negative-cache marker. */
 export type LyricsStatus = "found" | "notFound" | "instrumental";

@@ -1,6 +1,6 @@
 "use client";
 
-import { Image as ImageIcon, MapPin, Pencil, Trash2 } from "lucide-react";
+import { Image as ImageIcon, MapPin, Pencil } from "lucide-react";
 import {
   type CSSProperties,
   type ReactNode,
@@ -10,6 +10,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { DeleteIcon } from "@/components/ui/delete";
 import type { Memory } from "@/db/types";
 import {
   layoutMemoryMasonry,
@@ -206,7 +207,7 @@ export function MemoryNotesWaterfall({
                         onClick={() => onDeleteMemory(memory)}
                         type="button"
                       >
-                        <Trash2 aria-hidden="true" className="size-3.5" />
+                        <DeleteIcon aria-hidden="true" size={14} />
                       </button>
                     )}
                   </div>

@@ -6,7 +6,6 @@ import {
   ExternalLink,
   RefreshCw,
   ShieldCheck,
-  Trash2,
   UserRound,
   XCircle,
 } from "lucide-react";
@@ -27,6 +26,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ColorPicker } from "@/components/ui/color-picker";
 import { Combobox, type ComboboxItem } from "@/components/ui/combobox";
+import { DeleteIcon } from "@/components/ui/delete";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -1138,7 +1138,7 @@ function TraceDiagnostics() {
             {copied ? t("settings.traceCopied") : t("settings.traceCopy")}
           </Button>
           <Button variant="ghost" size="sm" disabled={entries.length === 0} onClick={clearTrace}>
-            <Trash2 />
+            <DeleteIcon size={16} />
             {t("settings.traceClear")}
           </Button>
         </div>

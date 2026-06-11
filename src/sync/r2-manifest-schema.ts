@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { trackBriefSchema } from "@/dj/dj-brief-schema";
+import { LYRICS_SOURCES } from "@/lyrics/provider";
 
 const timestampStringSchema = z.string().min(1);
 const millisSchema = z.number().int().nonnegative();
@@ -137,7 +138,10 @@ const r2LyricsSchema = z.object({
   synced: z.string().optional(),
   plain: z.string().optional(),
   instrumental: z.boolean().default(false),
-  source: z.enum(["lrclib", "netease", "manual"]),
+  // Reuse the canonical LyricsSource list so the manifest enum can never drift
+  // narrower than the union (the `"amll"` provider was added later). Additive —
+  // still a free string slot, no manifest version bump (rule #4).
+  source: z.enum(LYRICS_SOURCES),
   sourceId: z.string().optional(),
 });
 

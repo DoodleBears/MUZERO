@@ -1,6 +1,7 @@
-import { ArrowDown, ArrowUp, GripVertical, Send, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, GripVertical, Send } from "lucide-react";
 import { type DragEvent, type ReactNode, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { DeleteIcon } from "@/components/ui/delete";
 import type { DjChatQueuedPrompt } from "@/db/types";
 import { cn } from "@/lib/utils";
 
@@ -161,7 +162,7 @@ export function ChatQueueTray({
                     size="icon-xs"
                     variant="ghost"
                   >
-                    <Trash2 />
+                    <DeleteIcon size={16} />
                   </Button>
                 </div>
               </div>
