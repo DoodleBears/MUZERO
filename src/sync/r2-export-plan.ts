@@ -166,9 +166,7 @@ export async function buildR2ExportPlanForDrive(
       publishProfile,
       publishStats,
       publishPresence,
-      profilePrecondition: input.deviceProfileBase?.etag
-        ? { ifMatch: input.deviceProfileBase.etag }
-        : undefined,
+      profilePrecondition: writeIfMatchPrecondition(input.deviceProfileBase?.etag),
     },
   });
 }
@@ -309,7 +307,7 @@ export async function buildR2ExportPlan(input: R2ExportPlanInput): Promise<R2Exp
         setId: session.id,
         precondition:
           childPrecondition(input.remoteBase, input.remoteBase?.setIndexes?.[publishedId]) ??
-          input.setIndexPreconditions?.[session.id],
+          sanitizeWritePrecondition(input.setIndexPreconditions?.[session.id]),
       }),
     });
   }
@@ -737,9 +735,10 @@ function createManifest(
 
 /**
  * Precondition for the root manifest write (PRD §12.4): with a fetched base, an
- * existing object writes with `If-Match` (its ETag) and an absent one guards the
- * first write with `If-None-Match: *`. No base (legacy callers) → unconditional.
- * An object whose read lacked an ETag also writes unconditionally.
+ * existing object writes with `If-Match` only when the base has a strong ETag,
+ * and an absent one guards the first write with `If-None-Match: *`. No base
+ * (legacy callers) → unconditional. Weak ETags (`W/"..."`) cannot satisfy
+ * `If-Match`, so using them would create a guaranteed 412 loop.
  */
 function basePrecondition(
   remoteBase: RemotePublishBase | undefined,
@@ -747,7 +746,7 @@ function basePrecondition(
 ): R2ObjectWritePrecondition | undefined {
   if (!remoteBase) return undefined;
   if (!baseObject) return { ifNoneMatch: "*" };
-  return baseObject.etag ? { ifMatch: baseObject.etag } : undefined;
+  return writeIfMatchPrecondition(baseObject.etag);
 }
 
 function childPrecondition(
@@ -755,7 +754,30 @@ function childPrecondition(
   baseObject: RemoteBaseObject<unknown> | undefined,
 ): R2ObjectWritePrecondition | undefined {
   if (!remoteBase || !baseObject) return undefined;
-  return baseObject.etag ? { ifMatch: baseObject.etag } : undefined;
+  return writeIfMatchPrecondition(baseObject.etag);
+}
+
+function writeIfMatchPrecondition(etag: string | undefined): R2ObjectWritePrecondition | undefined {
+  const strongEtag = strongIfMatchEtag(etag);
+  return strongEtag ? { ifMatch: strongEtag } : undefined;
+}
+
+function sanitizeWritePrecondition(
+  precondition: R2ObjectWritePrecondition | undefined,
+): R2ObjectWritePrecondition | undefined {
+  if (!precondition) return undefined;
+  const ifMatch = strongIfMatchEtag(precondition.ifMatch);
+  const sanitized = {
+    ...(ifMatch ? { ifMatch } : {}),
+    ...(precondition.ifNoneMatch ? { ifNoneMatch: precondition.ifNoneMatch } : {}),
+  };
+  return sanitized.ifMatch || sanitized.ifNoneMatch ? sanitized : undefined;
+}
+
+function strongIfMatchEtag(etag: string | undefined): string | undefined {
+  const trimmed = etag?.trim();
+  if (!trimmed || /^W\//i.test(trimmed)) return undefined;
+  return trimmed;
 }
 
 async function createDeviceObjects(

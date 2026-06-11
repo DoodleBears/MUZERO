@@ -209,19 +209,20 @@ describe("publishR2ExportPlan", () => {
     await pending;
 
     expect(activeEvents).toContain(2);
-    expect(seen.map((request) => new URL(request.split(" ")[1] ?? "").pathname)).toEqual([
-      "/muzero/library/objects/media/sha256-a.mp3",
-      "/muzero/library/objects/covers/sha256-b.jpg",
+    const paths = seen.map((request) => new URL(request.split(" ")[1] ?? "").pathname);
+    expect(paths.slice(0, 2).sort()).toEqual(
+      [
+        "/muzero/library/objects/covers/sha256-b.jpg",
+        "/muzero/library/objects/media/sha256-a.mp3",
+      ].sort(),
+    );
+    expect(paths.slice(2)).toEqual([
       "/muzero/library/sets/ses_1/index.json",
       "/muzero/library/manifest.json",
     ]);
-    expect(
-      seen.map((request) =>
-        new URL(request.split(" ")[1] ?? "").pathname.replace("/muzero/library/", ""),
-      ),
-    ).toEqual([
-      "objects/media/sha256-a.mp3",
-      "objects/covers/sha256-b.jpg",
+    expect(paths.map((path) => path.replace("/muzero/library/", ""))).toEqual([
+      expect.stringMatching(/^objects\/(covers\/sha256-b\.jpg|media\/sha256-a\.mp3)$/),
+      expect.stringMatching(/^objects\/(covers\/sha256-b\.jpg|media\/sha256-a\.mp3)$/),
       "sets/ses_1/index.json",
       "manifest.json",
     ]);

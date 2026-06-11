@@ -371,6 +371,69 @@ describe("buildR2ExportPlan", () => {
     });
   });
 
+  it("does not use weak ETags for If-Match preconditions", async () => {
+    await seedSet();
+    const plan = await buildR2ExportPlan({
+      driveId: "drv_1",
+      libraryId: "lib_1",
+      baseUrl: "https://music.example.com/muzero/",
+      setIds: ["ses_1"],
+      db,
+      remoteBase: {
+        manifest: {
+          etag: 'W/"manifest-weak"',
+          value: {
+            schema: "muzero-r2-manifest-v1",
+            libraryId: "lib_1",
+            title: "Drive",
+            createdAt: "2026-06-01T00:00:00.000Z",
+            updatedAt: "2026-06-01T00:00:00.000Z",
+            baseUrl: "https://music.example.com/muzero/",
+            sets: [
+              {
+                id: "ses_1",
+                title: "Night Drive",
+                index: "sets/ses_1/index.json",
+                updatedAt: "2026-06-01T00:00:00.000Z",
+                trackCount: 0,
+                bytes: 0,
+              },
+            ],
+          },
+        },
+        setIndexes: {
+          ses_1: {
+            etag: 'W/"set-weak"',
+            value: {
+              schema: "muzero-r2-set-index-v1",
+              set: {
+                id: "ses_1",
+                name: "Night Drive",
+                seedPrompt: "city pop at midnight",
+                displayMode: "video",
+                config: {
+                  autoExtend: false,
+                  refillThreshold: 2,
+                  batchSize: 1,
+                  targetDurationSec: 180,
+                  allowVocals: true,
+                },
+                createdAt: 100,
+                updatedAt: 200,
+              },
+              tracks: [],
+            },
+          },
+        },
+      },
+    });
+
+    expect(
+      plan.objects.find((object) => object.kind === "set-index")?.precondition,
+    ).toBeUndefined();
+    expect(plan.objects.find((object) => object.kind === "manifest")?.precondition).toBeUndefined();
+  });
+
   it("without a remote base, keeps the legacy unconditional write behavior (MW-3)", async () => {
     await seedSet();
     const plan = await buildR2ExportPlan({
