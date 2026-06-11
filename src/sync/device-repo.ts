@@ -44,10 +44,15 @@ export async function getOrCreateLocalDevice(
     return next;
   }
 
+  const existingNames = await db.devices.toArray();
+  const name = nextAvailableDeviceName(
+    defaultDeviceName(options.platform),
+    existingNames.map((device) => device.name),
+  );
   const device: DeviceRecord = {
     id: LOCAL_DEVICE_ID,
     publicId: options.publicIdFactory?.() ?? randomPublicId(),
-    name: defaultDeviceName(options.platform),
+    name,
     platform: options.platform ?? "browser",
     userAgent: options.userAgent,
     os: options.os,
@@ -84,6 +89,20 @@ function defaultDeviceName(platform?: DeviceRecord["platform"]): string {
   if (platform === "tauri") return "Desktop";
   if (platform === "electron") return "Electron";
   return "Browser";
+}
+
+function nextAvailableDeviceName(baseName: string, names: string[]): string {
+  const taken = new Set(names.map(normalizeDeviceName).filter(Boolean));
+  if (!taken.has(normalizeDeviceName(baseName))) return baseName;
+  for (let index = 2; index < 1000; index += 1) {
+    const candidate = `${baseName} ${index}`;
+    if (!taken.has(normalizeDeviceName(candidate))) return candidate;
+  }
+  return `${baseName} ${Date.now()}`;
+}
+
+function normalizeDeviceName(name: string): string {
+  return name.trim().replace(/\s+/g, " ").toLowerCase();
 }
 
 function randomPublicId(): string {

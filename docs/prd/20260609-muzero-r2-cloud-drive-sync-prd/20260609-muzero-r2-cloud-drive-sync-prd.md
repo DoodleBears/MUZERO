@@ -23,6 +23,7 @@
 | 8 | Multi-writer library (read-merge-write publish) | ✅ Done | [§12.4](#124-phase-8-multi-writer-library-read-merge-write-publish) |
 | 9 | Same-set co-editing (one user, multiple devices) | ✅ Done | [§12.5](#125-phase-9-same-set-co-editing-one-user-multiple-devices) |
 | 10 | Automatic sync + R2 scale optimizations | ✅ Done | [§12.6](#126-phase-10-automatic-sync--r2-scale-optimizations) |
+| 11 | Trusted-device setup link + local device naming UX | ✅ Done | [§12.7](#127-phase-11-trusted-device-setup-link--local-device-naming-ux) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
 
@@ -2228,12 +2229,43 @@ Do not record secrets, full signed URLs, or media content.
 
 **Outcome (2026-06-11): Phase 10 ✅.** Cloud drives now have visible per-drive auto-sync frequency and upload-concurrency controls; an app-lifecycle scheduler triggers the existing orchestrated Sync now path with app-start/interval/change-debounce policy, jitter, visibility/network/in-flight guards, failure backoff, and pause-on-conflict/cancel/failure semantics. Automatic sync skips empty runs via dirty tracking, immutable/resumable objects can upload with bounded concurrency while JSON barriers and manifest-last safety remain intact, progress UI shows active uploads and pause state, and remote base reads use ETag/304 caching. Larger protocol changes (paged set indexes, mutation-log compaction, multipart upload) are deliberately split into future slices.
 
+### 12.7 Phase 11: Trusted-device setup link + local device naming UX
+
+**Goal:** reduce repeated R2 setup friction across the same user's own devices without weakening the public share/write-credential boundary.
+
+**Product requirements:**
+
+1. **Copy one trusted-device setup link from a configured writable R2 drive.** The connected-drive card exposes a copy action only when the local device has write credentials for that drive.
+2. **Paste-to-add on another trusted device.** The Add Drive dialog accepts the setup link in the same paste field as share/manifest URLs. A recognized setup link creates a writable `trusted` drive and stores the R2 credentials in the receiving device's local `AppSettings`.
+3. **Clear trust labeling.** The UI must call this a trusted-device setup link, not a public share. Copy hints must state that the link contains write credentials and should only be sent to the user's own trusted devices.
+4. **Credential locality remains intact.** The link is an explicit user-copied transfer bundle; credentials still do not go into `CloudDrive` rows, synced manifests, logs, telemetry, or public read-only links.
+5. **Casual exposure reduction.** The setup payload uses a custom `muzero://trusted-r2-drive#v1=...` fragment bundle so the secret is not shown as plain form fields or normal query parameters. This is not encryption; anyone with the full link can recover the credentials.
+6. **Local display names stay user-editable.** Settings > This device continues to let the user rename the local device profile.
+7. **Creation-time name conflict avoidance.** When a local device profile is first created, its default display name must avoid existing device names in the local registry, case-insensitively (`Browser`, `Browser 2`, `Browser 3`, ...).
+
+**Non-goals for Phase 11:**
+
+- No public write invite.
+- No revocation of copied setup links beyond rotating the user's R2 token in Cloudflare.
+- No MUZERO-hosted broker or credential vault.
+- No encrypted/passphrase-protected transfer bundle yet. If added later, it must be explicit in the UI and tested as a separate security slice.
+
+**Checklist:**
+
+- [x] TS-1 Add tested setup-link encode/decode helpers and trusted-drive construction that never embeds credentials in `CloudDrive`.
+- [x] TS-2 Add copy setup action on writable R2 drive cards with en/zh/ja/ko trusted-device warning copy.
+- [x] TS-3 Teach Add Drive to recognize a trusted-device setup link and save the receiving drive as writable `trusted` with local-only credentials.
+- [x] TS-4 Keep device display name editable and add creation-time default-name conflict avoidance with repository tests.
+
+**Outcome (2026-06-11): Phase 11 ✅.** A configured owner/trusted R2 drive can now copy a trusted-device setup link; another MUZERO install can paste it into Add Drive and become a writable trusted device without manually retyping endpoint, bucket, public URL, access key, secret, or prefix. The UX explicitly warns that the link contains write credentials and is only for the user's trusted devices. Local device profiles remain renameable, and new local profiles avoid default-name collisions.
+
 ---
 
 ## 13. Document Change Log
 
 | Date | Author | Changes |
 |------|--------|---------|
+| 2026-06-11 | MUZERO | Phase 11 added and completed: trusted-device setup links let a configured writable R2 drive export a pasteable credential bundle for the user's other trusted devices; Add Drive imports it as a writable `trusted` drive with credentials stored only in local settings; cloud drive cards and four locales warn that the link contains write credentials. Local device creation now avoids display-name collisions while keeping the Settings device name editable. |
 | 2026-06-11 | MUZERO | Phase 10 AS-7 completed and Phase 10 closed: large-library protocol work was split into future explicit slices instead of hidden migration. Paged set indexes require an additive compatibility protocol, mutation-log compaction remains reserved for multi-user/trusted-collaborator sync, and multipart upload needs its own persisted-upload/part-cleanup/manifest-last design. Phase 10 outcome recorded as complete. |
 | 2026-06-11 | MUZERO | Phase 10 AS-6 completed: remote publish-base reads now support an explicit ETag cache. Validated manifest/index objects are cached with their ETags, later reads send `If-None-Match`, and HTTP 304 reuses the cached parsed object. The sync store wires a per-R2-drive cache into every publish-base fetch, and tests cover conditional headers plus cached-object reuse. |
 | 2026-06-11 | MUZERO | Phase 10 AS-5 completed: publish progress now reports active concurrent uploads, the live cloud-drive progress row displays the active count, and the drive sync controls show when automatic sync is paused. Tests cover active-upload progress events and paused scheduler state rendering. |

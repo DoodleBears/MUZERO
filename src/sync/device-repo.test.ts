@@ -75,6 +75,44 @@ describe("device repository", () => {
     });
   });
 
+  it("creates a conflict-free default display name for the local device", async () => {
+    await db.devices.bulkPut([
+      {
+        id: "dev_remote_1",
+        publicId: "dvc_remote_1",
+        name: "Browser",
+        platform: "browser",
+        appVersion: "0.1.0",
+        publishProfile: false,
+        profileRevision: 1,
+        createdAt: 900,
+        lastSeenAt: 900,
+      },
+      {
+        id: "dev_remote_2",
+        publicId: "dvc_remote_2",
+        name: "browser 2",
+        platform: "browser",
+        appVersion: "0.1.0",
+        publishProfile: false,
+        profileRevision: 1,
+        createdAt: 950,
+        lastSeenAt: 950,
+      },
+    ]);
+
+    const device = await getOrCreateLocalDevice(
+      {
+        now: 1000,
+        publicIdFactory: () => "dvc_test",
+        platform: "browser",
+      },
+      db,
+    );
+
+    expect(device.name).toBe("Browser 3");
+  });
+
   it("reads the local device without touching lastSeenAt", async () => {
     await getOrCreateLocalDevice(
       {

@@ -4,23 +4,21 @@ import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Stepper } from "@/components/ui/stepper";
 import { saveSettings } from "@/db/repositories";
 import type { AppSettings } from "@/db/types";
 import { newId } from "@/lib/id";
 import { cn } from "@/lib/utils";
 import { upsertCloudDrive } from "@/sync/cloud-drive-repo";
-import { buildOwnedR2Drive, saveR2CredentialsForDrive } from "@/sync/cloud-drive-settings";
-import { buildOwnerR2Connection, parseR2AccountId } from "@/sync/owner-r2-connection";
+import {
+  buildOwnedR2Drive,
+  buildTrustedR2DriveFromSetup,
+  parseTrustedR2DriveSetupLink,
+  saveR2CredentialsForDrive,
+  type TrustedR2DriveSetupPayload,
+} from "@/sync/cloud-drive-settings";
+import { buildOwnerR2Connection } from "@/sync/owner-r2-connection";
 import { checkR2PublicRead, checkR2WriteAccess, maskSecret } from "@/sync/r2-healthcheck";
-import { listR2Buckets } from "@/sync/r2-list-buckets";
 import { connectReadOnlyManifest } from "@/sync/r2-shared-link";
 
 /** Owner = your own R2 (read+write keys). Shared = a public link (read-only). */
@@ -48,8 +46,8 @@ type ValidateStatus = "idle" | "validating" | "ok" | "error";
 
 /**
  * One place to add any cloud drive, as a two-step stepper modal:
- *  - "My R2" (owner): keys + public URL (+ optional in-bucket folder under
- *    Advanced) → validate (ListBuckets + read/write, auto-select bucket) → name.
+ *  - "My R2" (owner): bucket + keys + public URL (+ optional in-bucket folder
+ *    under Advanced) → validate read/write → name.
  *  - "Shared link" (read-only): paste a public manifest/share URL → validate →
  *    name. (V3 will share whole playlists / buckets through the same tab.)
  * Both produce a CloudDrive in the connected-drives list; step 2 names + saves.
@@ -68,11 +66,11 @@ export function AddDriveDialog({
   const [step, setStep] = useState(0);
   const [form, setForm] = useState<DraftForm>(EMPTY_FORM);
   const [showAdvanced, setShowAdvanced] = useState(false);
-  const [bucketOptions, setBucketOptions] = useState<string[]>([]);
   const [selectedBucket, setSelectedBucket] = useState("");
   const [status, setStatus] = useState<ValidateStatus>("idle");
   const [message, setMessage] = useState<string | null>(null);
   const [previewTitle, setPreviewTitle] = useState("");
+  const [trustedSetup, setTrustedSetup] = useState<TrustedR2DriveSetupPayload | undefined>();
   const [saving, setSaving] = useState(false);
   const [driveId, setDriveId] = useState(() => newId("drv"));
 
@@ -83,11 +81,11 @@ export function AddDriveDialog({
     setStep(0);
     setForm(EMPTY_FORM);
     setShowAdvanced(false);
-    setBucketOptions([]);
     setSelectedBucket("");
     setStatus("idle");
     setMessage(null);
     setPreviewTitle("");
+    setTrustedSetup(undefined);
     setSaving(false);
     setDriveId(newId("drv"));
   }, [open]);
@@ -98,13 +96,20 @@ export function AddDriveDialog({
     setStep(0);
     setStatus("idle");
     setMessage(null);
-    setBucketOptions([]);
     setSelectedBucket("");
     setPreviewTitle("");
+    setTrustedSetup(undefined);
   }
 
   function patch(next: Partial<DraftForm>) {
     setForm((current) => ({ ...current, ...next }));
+    setStatus("idle");
+    setMessage(null);
+    setTrustedSetup(undefined);
+  }
+
+  function changeBucket(value: string) {
+    setSelectedBucket(value);
     setStatus("idle");
     setMessage(null);
   }
@@ -112,6 +117,7 @@ export function AddDriveDialog({
   const canValidate =
     mode === "owner"
       ? !!form.endpointOrAccountId.trim() &&
+        !!selectedBucket.trim() &&
         !!form.accessKeyId.trim() &&
         !!form.secretAccessKey.trim() &&
         !!form.publicUrl.trim()
@@ -127,6 +133,13 @@ export function AddDriveDialog({
     setMessage(null);
     try {
       if (mode === "shared") {
+        const setup = parseTrustedR2DriveSetupLink(form.publicUrl);
+        if (setup) {
+          setTrustedSetup(setup);
+          setPreviewTitle(setup.label);
+          setStatus("ok");
+          return;
+        }
         const read = await checkR2PublicRead(form.publicUrl);
         if (!read.ok || !read.preview) {
           setStatus("error");
@@ -138,34 +151,16 @@ export function AddDriveDialog({
         return;
       }
 
-      const buckets = await listR2Buckets({
-        accountId: parseR2AccountId(form.endpointOrAccountId),
-        accessKeyId: form.accessKeyId.trim(),
-        secretAccessKey: form.secretAccessKey.trim(),
-      });
-      if (buckets.length === 0) {
-        setStatus("error");
-        setMessage(t("settings.cloudOwnerNoBuckets"));
-        return;
-      }
-      setBucketOptions(buckets);
-      const bucket = buckets.length === 1 ? (buckets[0] ?? "") : selectedBucket;
-      if (!bucket) {
-        setStatus("idle"); // multiple — pick one, then validate again
-        return;
-      }
-      setSelectedBucket(bucket);
-
       const connection = buildOwnerR2Connection({
         endpointOrAccountId: form.endpointOrAccountId,
-        bucket,
+        bucket: selectedBucket,
         accessKeyId: form.accessKeyId,
         secretAccessKey: form.secretAccessKey,
         publicUrl: form.publicUrl,
         folder: form.folder,
       });
       const read = await checkR2PublicRead(connection.manifestUrl);
-      if (!read.ok || !read.preview) {
+      if ((!read.ok || !read.preview) && !isMissingOwnerManifest(read)) {
         setStatus("error");
         setMessage(read.hint ?? read.checks.at(-1)?.message ?? "Read check failed");
         return;
@@ -176,7 +171,7 @@ export function AddDriveDialog({
         setMessage(write.hint ?? write.checks.at(-1)?.message ?? "Write check failed");
         return;
       }
-      setPreviewTitle(read.preview.title);
+      setPreviewTitle(read.preview?.title ?? selectedBucket.trim());
       setStatus("ok");
     } catch (error) {
       fail(error);
@@ -187,13 +182,25 @@ export function AddDriveDialog({
     setSaving(true);
     try {
       if (mode === "shared") {
+        const setup = trustedSetup ?? parseTrustedR2DriveSetupLink(form.publicUrl);
+        if (setup) {
+          const drive = buildTrustedR2DriveFromSetup({
+            id: driveId,
+            setup,
+            label: form.label.trim() || undefined,
+          });
+          await upsertCloudDrive(drive);
+          await saveSettings(saveR2CredentialsForDrive(settings, drive.id, setup.credentials));
+          onOpenChange(false);
+          return;
+        }
         await connectReadOnlyManifest(form.publicUrl, { label: form.label.trim() || undefined });
         onOpenChange(false);
         return;
       }
       const connection = buildOwnerR2Connection({
         endpointOrAccountId: form.endpointOrAccountId,
-        bucket: selectedBucket,
+        bucket: selectedBucket.trim(),
         accessKeyId: form.accessKeyId,
         secretAccessKey: form.secretAccessKey,
         publicUrl: form.publicUrl,
@@ -253,6 +260,13 @@ export function AddDriveDialog({
                     placeholder="https://<account>.r2.cloudflarestorage.com"
                   />
                 </Field>
+                <Field label={t("settings.cloudOwnerBucket")}>
+                  <Input
+                    value={selectedBucket}
+                    onChange={(e) => changeBucket(e.target.value)}
+                    placeholder="muzero-r2-sync-test"
+                  />
+                </Field>
                 <div className="grid gap-3 sm:grid-cols-2">
                   <Field label={t("settings.cloudOwnerAccessKey")}>
                     <Input
@@ -302,33 +316,13 @@ export function AddDriveDialog({
                     </div>
                   )}
                 </div>
-
-                {bucketOptions.length > 1 && (
-                  <Field label={t("settings.cloudOwnerBucket")}>
-                    <Select
-                      value={selectedBucket}
-                      onValueChange={(value) => setSelectedBucket(value ?? "")}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder={t("settings.cloudOwnerSelectBucket")} />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {bucketOptions.map((name) => (
-                          <SelectItem key={name} value={name}>
-                            {name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </Field>
-                )}
               </>
             ) : (
               <Field label={t("settings.addDriveShareUrl")}>
                 <Input
                   value={form.publicUrl}
                   onChange={(e) => patch({ publicUrl: e.target.value })}
-                  placeholder="https://music.example.com/muzero/manifest.json"
+                  placeholder="muzero://trusted-r2-drive#v1=…"
                 />
                 <span className="text-muted-foreground text-xs">
                   {t("settings.addDriveSharedHint")}
@@ -374,6 +368,8 @@ export function AddDriveDialog({
               <p className="flex items-center gap-2 text-foreground text-sm">
                 {mode === "owner" ? (
                   <Cloud className="size-4 text-primary" />
+                ) : trustedSetup ? (
+                  <ShieldCheck className="size-4 text-primary" />
                 ) : (
                   <Link2 className="size-4 text-primary" />
                 )}
@@ -382,10 +378,23 @@ export function AddDriveDialog({
                   <span className="text-muted-foreground">/ {form.folder.trim()}</span>
                 )}
               </p>
-              <p className="mt-1 truncate">{form.publicUrl.trim()}</p>
+              <p className="mt-1 truncate">
+                {trustedSetup
+                  ? t("settings.addDriveTrustedSetupSummary", {
+                      bucket: trustedSetup.credentials.bucket,
+                    })
+                  : form.publicUrl.trim()}
+              </p>
               {mode === "owner" && form.secretAccessKey && (
                 <p className="mt-1">
                   {t("settings.cloudSecretStoredAs", { value: maskSecret(form.secretAccessKey) })}
+                </p>
+              )}
+              {trustedSetup && (
+                <p className="mt-1">
+                  {t("settings.cloudSecretStoredAs", {
+                    value: maskSecret(trustedSetup.credentials.secretAccessKey),
+                  })}
                 </p>
               )}
             </div>
@@ -435,6 +444,12 @@ function ModeTab({
     >
       {children}
     </button>
+  );
+}
+
+function isMissingOwnerManifest(read: Awaited<ReturnType<typeof checkR2PublicRead>>): boolean {
+  return read.checks.some(
+    (check) => check.id === "manifest-fetch" && /HTTP 404\b/.test(check.message),
   );
 }
 

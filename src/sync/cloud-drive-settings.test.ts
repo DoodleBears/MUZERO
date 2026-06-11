@@ -2,7 +2,10 @@ import { describe, expect, it } from "vitest";
 import { DEFAULT_SETTINGS } from "@/db/types";
 import {
   buildOwnedR2Drive,
+  buildTrustedR2DriveFromSetup,
+  buildTrustedR2DriveSetupLink,
   getR2CredentialsForDrive,
+  parseTrustedR2DriveSetupLink,
   saveR2CredentialsForDrive,
 } from "./cloud-drive-settings";
 
@@ -75,5 +78,83 @@ describe("cloud drive settings helpers", () => {
     const next = { ...current, ...patch };
 
     expect(Object.keys(next.r2CredentialsByDriveId ?? {}).sort()).toEqual(["drv_new", "drv_old"]);
+  });
+
+  it("round-trips a trusted-device R2 setup link without embedding credentials in the drive row", () => {
+    const sourceDrive = buildOwnedR2Drive({
+      id: "drv_owner",
+      label: "Studio R2",
+      manifestUrl: "https://music.example.com/muzero/manifest.json",
+      publicBaseUrl: "https://music.example.com/muzero/",
+      now: 1000,
+    });
+    const link = buildTrustedR2DriveSetupLink({
+      drive: {
+        ...sourceDrive,
+        autoSyncFrequency: "change-debounce",
+        uploadConcurrency: 3,
+      },
+      credentials: {
+        accountId: "abc123",
+        bucket: "muzero",
+        accessKeyId: "key-id",
+        secretAccessKey: "secret-key",
+        prefix: "muzero",
+        endpointUrl: "https://abc123.r2.cloudflarestorage.com",
+      },
+    });
+
+    expect(link).toMatch(/^muzero:\/\/trusted-r2-drive#v1=/);
+    expect(link).not.toContain("secret-key");
+
+    const setup = parseTrustedR2DriveSetupLink(link);
+    expect(setup).toMatchObject({
+      schema: "muzero-r2-trusted-drive-v1",
+      label: "Studio R2",
+      manifestUrl: "https://music.example.com/muzero/manifest.json",
+      publicBaseUrl: "https://music.example.com/muzero/",
+      autoSyncFrequency: "change-debounce",
+      uploadConcurrency: 3,
+      credentials: {
+        accountId: "abc123",
+        bucket: "muzero",
+        accessKeyId: "key-id",
+        secretAccessKey: "secret-key",
+        prefix: "muzero",
+        endpointUrl: "https://abc123.r2.cloudflarestorage.com",
+      },
+    });
+
+    const imported = buildTrustedR2DriveFromSetup({
+      id: "drv_trusted",
+      setup: setup!,
+      now: 2000,
+    });
+
+    expect(imported).toMatchObject({
+      id: "drv_trusted",
+      label: "Studio R2",
+      kind: "trusted",
+      provider: "r2",
+      manifestUrl: "https://music.example.com/muzero/manifest.json",
+      publicBaseUrl: "https://music.example.com/muzero/",
+      autoSyncFrequency: "change-debounce",
+      uploadConcurrency: 3,
+      capabilities: {
+        read: true,
+        write: true,
+        manageInvites: false,
+        writeStats: true,
+        writePresence: true,
+      },
+    });
+    expect(JSON.stringify(imported)).not.toContain("secret-key");
+  });
+
+  it("rejects malformed trusted-device setup links", () => {
+    expect(parseTrustedR2DriveSetupLink("https://music.example.com/muzero/manifest.json")).toBe(
+      undefined,
+    );
+    expect(parseTrustedR2DriveSetupLink("muzero://trusted-r2-drive#v1=not-base64")).toBe(undefined);
   });
 });

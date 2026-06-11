@@ -76,6 +76,10 @@ import { usePlayerStore } from "@/stores/player-store";
 import { useSyncStore } from "@/stores/sync-store";
 import { listCloudDrives, updateCloudDriveSyncPreferences } from "@/sync/cloud-drive-repo";
 import {
+  buildTrustedR2DriveSetupLink,
+  getR2CredentialsForDrive,
+} from "@/sync/cloud-drive-settings";
+import {
   getLocalDevice,
   getOrCreateLocalDevice,
   updateLocalDeviceProfile,
@@ -1077,6 +1081,7 @@ export function SettingsPage() {
                         key={drive.id}
                         drive={drive}
                         defaultDriveId={settings.defaultCloudDriveId}
+                        settings={settings}
                       />
                     ))}
                   </div>
@@ -1151,6 +1156,9 @@ export function SettingsPage() {
                       <p className="mb-3 text-muted-foreground text-xs">
                         {t("settings.cloudOwnerSimplifiedHint")}
                       </p>
+                      <p className="mb-3 text-muted-foreground text-xs">
+                        {t("settings.cloudTrustedSetupHint")}
+                      </p>
                       <Button size="sm" onClick={() => setAddDriveOpen(true)}>
                         <Cloud />
                         {t("settings.addDrive")}
@@ -1182,11 +1190,25 @@ export function SettingsPage() {
   );
 }
 
-function CloudDriveRow({ drive, defaultDriveId }: { drive: CloudDrive; defaultDriveId?: string }) {
+function CloudDriveRow({
+  drive,
+  defaultDriveId,
+  settings,
+}: {
+  drive: CloudDrive;
+  defaultDriveId?: string;
+  settings: AppSettings;
+}) {
   const { t } = useTranslation();
   // Minimal selector: only this drive's live progress (PRD §6 selector discipline).
   const progress = useSyncStore((state) => state.progressByDrive[drive.id]);
   const running = progress ? RUNNING_SYNC_PHASES.has(progress.phase) : false;
+  const [trustedSetupCopied, setTrustedSetupCopied] = useState(false);
+  const credentials =
+    drive.provider === "r2" && drive.capabilities.write
+      ? getR2CredentialsForDrive(settings, drive.id)
+      : undefined;
+  const canCopyTrustedSetup = !!credentials;
   async function updateSyncPreferences(input: {
     autoSyncFrequency?: CloudDriveAutoSyncFrequency;
     uploadConcurrency?: CloudDriveUploadConcurrency;
@@ -1196,6 +1218,13 @@ function CloudDriveRow({ drive, defaultDriveId }: { drive: CloudDrive; defaultDr
     } catch (error) {
       log.warn("sync", "cloud drive sync preference update failed", { driveId: drive.id, error });
     }
+  }
+
+  async function copyTrustedSetupLink() {
+    if (!navigator.clipboard || !credentials) return;
+    await navigator.clipboard.writeText(buildTrustedR2DriveSetupLink({ drive, credentials }));
+    setTrustedSetupCopied(true);
+    window.setTimeout(() => setTrustedSetupCopied(false), 1600);
   }
 
   return (
@@ -1216,6 +1245,14 @@ function CloudDriveRow({ drive, defaultDriveId }: { drive: CloudDrive; defaultDr
             <ShieldCheck className="size-4" />
           ) : (
             <Cloud className="size-4" />
+          )}
+          {canCopyTrustedSetup && (
+            <Button variant="outline" size="sm" onClick={() => void copyTrustedSetupLink()}>
+              <ClipboardCopy />
+              {trustedSetupCopied
+                ? t("settings.cloudTrustedSetupCopied")
+                : t("settings.cloudTrustedSetupCopy")}
+            </Button>
           )}
           {drive.capabilities.write &&
             (running ? (
