@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { CloudDrive } from "@/db/types";
 import { CloudDriveSets } from "./cloud-drive-sets";
 
@@ -69,7 +69,27 @@ const preview = {
   ],
 };
 
+const multiPreview = {
+  ...preview,
+  setCount: 2,
+  sets: [
+    ...preview.sets,
+    {
+      id: "ses_osaka",
+      title: "Osaka Sunrise",
+      indexUrl: "https://pub.example.com/muzero/sets/ses_osaka/index.json",
+      updatedAt: "2026-06-10T00:00:00.000Z",
+      trackCount: 3,
+      bytes: 4096,
+    },
+  ],
+};
+
 describe("CloudDriveSets", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
   it("loads and lists the drive's remote sets on browse", async () => {
     subscribeManifest.mockResolvedValueOnce(preview);
     loadRemoteEntityCovers.mockResolvedValueOnce(undefined);
@@ -114,5 +134,33 @@ describe("CloudDriveSets", () => {
     await waitFor(() => expect(pullRemoteSet).toHaveBeenCalled());
     expect(loadRemoteSetIndex).toHaveBeenCalledWith(preview, preview.sets[0]);
     expect(pullRemoteSet).toHaveBeenCalledWith({ driveId: "drv_lib_abc", remoteSet });
+  });
+
+  it("automatically imports every remote set for automatic-sync drives", async () => {
+    subscribeManifest.mockResolvedValueOnce(multiPreview);
+    loadRemoteEntityCovers.mockResolvedValueOnce(undefined);
+    const remoteSetA = { indexUrl: multiPreview.sets[0]!.indexUrl, index: {}, tracks: [] };
+    const remoteSetB = { indexUrl: multiPreview.sets[1]!.indexUrl, index: {}, tracks: [] };
+    loadRemoteSetIndex.mockResolvedValueOnce(remoteSetA).mockResolvedValueOnce(remoteSetB);
+    pullRemoteSet.mockResolvedValue(undefined);
+
+    render(<CloudDriveSets drive={{ ...drive, autoSyncFrequency: "change-debounce" }} />);
+
+    await waitFor(() => expect(pullRemoteSet).toHaveBeenCalledTimes(2));
+    expect(subscribeManifest).toHaveBeenCalledWith(drive.manifestUrl);
+    expect(loadRemoteSetIndex).toHaveBeenNthCalledWith(1, multiPreview, multiPreview.sets[0]);
+    expect(loadRemoteSetIndex).toHaveBeenNthCalledWith(2, multiPreview, multiPreview.sets[1]);
+    expect(pullRemoteSet).toHaveBeenNthCalledWith(1, { driveId: drive.id, remoteSet: remoteSetA });
+    expect(pullRemoteSet).toHaveBeenNthCalledWith(2, { driveId: drive.id, remoteSet: remoteSetB });
+  });
+
+  it("treats a missing manifest as an empty unpublished drive", async () => {
+    subscribeManifest.mockRejectedValueOnce(new Error("Failed to fetch manifest: HTTP 404"));
+
+    render(<CloudDriveSets drive={drive} />);
+    fireEvent.click(screen.getByRole("button"));
+
+    await screen.findByText("settings.cloudPreviewEmpty");
+    expect(loadRemoteEntityCovers).not.toHaveBeenCalled();
   });
 });

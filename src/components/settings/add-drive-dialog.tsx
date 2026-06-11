@@ -73,8 +73,8 @@ export function AddDriveDialog({
   const [message, setMessage] = useState<string | null>(null);
   const [previewTitle, setPreviewTitle] = useState("");
   const [trustedSetup, setTrustedSetup] = useState<TrustedR2DriveSetupPayload | undefined>();
-  const [syncAfterAdd, setSyncAfterAdd] = useState(false);
-  const [autoSyncAfterChanges, setAutoSyncAfterChanges] = useState(false);
+  const [syncAfterAdd, setSyncAfterAdd] = useState(true);
+  const [autoSyncAfterChanges, setAutoSyncAfterChanges] = useState(true);
   const [saving, setSaving] = useState(false);
   const [driveId, setDriveId] = useState(() => newId("drv"));
 
@@ -90,8 +90,8 @@ export function AddDriveDialog({
     setMessage(null);
     setPreviewTitle("");
     setTrustedSetup(undefined);
-    setSyncAfterAdd(false);
-    setAutoSyncAfterChanges(false);
+    setSyncAfterAdd(true);
+    setAutoSyncAfterChanges(true);
     setSaving(false);
     setDriveId(newId("drv"));
   }, [open]);
@@ -105,8 +105,8 @@ export function AddDriveDialog({
     setSelectedBucket("");
     setPreviewTitle("");
     setTrustedSetup(undefined);
-    setSyncAfterAdd(false);
-    setAutoSyncAfterChanges(false);
+    setSyncAfterAdd(true);
+    setAutoSyncAfterChanges(true);
   }
 
   function patch(next: Partial<DraftForm>) {

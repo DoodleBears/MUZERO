@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { CloudDownloadIcon } from "@/components/ui/cloud-download";
@@ -15,6 +15,7 @@ import {
 } from "@/sync/r2-subscription";
 
 type BrowseStatus = "idle" | "loading" | "loaded" | "error";
+const AUTO_IMPORTING_SET_ID = "__all__";
 
 /**
  * Browse + import a connected drive's remote sets, inline on the drive row. This
@@ -31,46 +32,78 @@ export function CloudDriveSets({ drive }: { drive: CloudDrive }) {
   const [preview, setPreview] = useState<RemoteLibraryPreview | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [importingSetId, setImportingSetId] = useState<string | null>(null);
+  const autoImportStartedRef = useRef(false);
 
-  async function browse() {
-    if (!drive.manifestUrl) return;
-    setStatus("loading");
-    setError(null);
-    try {
-      const result = await subscribeManifest(drive.manifestUrl);
-      setPreview(result);
-      setStatus("loaded");
-      void importDriveEntityCovers(result);
-    } catch (cause) {
-      setStatus("error");
-      setError(cause instanceof Error ? cause.message : String(cause));
-      log.warn("settings", "failed to browse drive sets", cause);
-    }
-  }
-
-  /**
-   * Library-global artist/album covers ride along with a browse: LWW-merged
-   * (`importRemoteEntityCovers` keeps strictly-newer local covers), idempotent,
-   * and best-effort — a failure here never blocks browsing the sets.
-   */
-  async function importDriveEntityCovers(result: RemoteLibraryPreview) {
+  const importDriveEntityCovers = useCallback(async (result: RemoteLibraryPreview) => {
     try {
       const covers = await loadRemoteEntityCovers(result);
       if (covers) await importRemoteEntityCovers(covers);
     } catch (cause) {
       log.warn("settings", "failed to import drive entity covers", cause);
     }
-  }
+  }, []);
+
+  const importSetFromPreview = useCallback(
+    async (result: RemoteLibraryPreview, set: RemoteSetPreview) => {
+      const remoteSet = await loadRemoteSetIndex(result, set);
+      await useSyncStore.getState().pullRemoteSet({ driveId: drive.id, remoteSet });
+    },
+    [drive.id],
+  );
+
+  const importAllSets = useCallback(
+    async (result: RemoteLibraryPreview) => {
+      setImportingSetId(AUTO_IMPORTING_SET_ID);
+      try {
+        for (const set of result.sets) await importSetFromPreview(result, set);
+      } finally {
+        setImportingSetId(null);
+      }
+    },
+    [importSetFromPreview],
+  );
+
+  const browse = useCallback(
+    async (options: { importAll?: boolean } = {}) => {
+      if (!drive.manifestUrl) return;
+      setStatus("loading");
+      setError(null);
+      try {
+        const result = await subscribeManifest(drive.manifestUrl);
+        setPreview(result);
+        setStatus("loaded");
+        void importDriveEntityCovers(result);
+        if (options.importAll) await importAllSets(result);
+      } catch (cause) {
+        if (isMissingManifest(cause)) {
+          setPreview(null);
+          setStatus("loaded");
+          setError(t("settings.cloudPreviewEmpty"));
+          return;
+        }
+        setStatus("error");
+        setError(cause instanceof Error ? cause.message : String(cause));
+        log.warn("settings", "failed to browse drive sets", cause);
+      }
+    },
+    [drive.manifestUrl, importAllSets, importDriveEntityCovers, t],
+  );
+
+  useEffect(() => {
+    if (drive.autoSyncFrequency == null || drive.autoSyncFrequency === "manual") return;
+    if (!drive.manifestUrl || autoImportStartedRef.current) return;
+    autoImportStartedRef.current = true;
+    void browse({ importAll: true });
+  }, [browse, drive.autoSyncFrequency, drive.manifestUrl]);
 
   async function importSet(set: RemoteSetPreview) {
     if (!preview) return;
     setImportingSetId(set.id);
     setError(null);
     try {
-      const remoteSet = await loadRemoteSetIndex(preview, set);
       // Outcomes (completed / needs-review / blocked / failed) surface through the
       // drive's progress line + sync toast; this only reports the index fetch.
-      await useSyncStore.getState().pullRemoteSet({ driveId: drive.id, remoteSet });
+      await importSetFromPreview(preview, set);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
       log.warn("settings", "failed to import remote set", cause);
@@ -107,7 +140,7 @@ export function CloudDriveSets({ drive }: { drive: CloudDrive }) {
           <Button
             size="sm"
             variant="outline"
-            disabled={importingSetId === set.id}
+            disabled={importingSetId === set.id || importingSetId === AUTO_IMPORTING_SET_ID}
             onClick={() => void importSet(set)}
           >
             <CloudDownloadIcon size={16} />
@@ -117,6 +150,10 @@ export function CloudDriveSets({ drive }: { drive: CloudDrive }) {
       ))}
     </div>
   );
+}
+
+function isMissingManifest(cause: unknown): boolean {
+  return cause instanceof Error && /Failed to fetch manifest: HTTP 404\b/.test(cause.message);
 }
 
 function formatBytes(bytes: number): string {

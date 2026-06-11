@@ -76,7 +76,7 @@ describe("cloud drive repository", () => {
       db,
     );
 
-    expect(defaulted.autoSyncFrequency).toBe("manual");
+    expect(defaulted.autoSyncFrequency).toBe("change-debounce");
     expect(defaulted.uploadConcurrency).toBe(2);
 
     const customized = await upsertCloudDrive(

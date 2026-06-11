@@ -2285,7 +2285,7 @@ Do not record secrets, full signed URLs, or media content.
 
 **Goal:** make cloud-drive setup feel like one coherent workflow, make the automatic/manual sync choice explicit, and ensure imported R2 songs are immediately playable, not merely downloadable.
 
-**Status (2026-06-11):** SA-1 is completed. Remote R2 playback now opts the media element into CORS before attaching it to the WebAudio graph, fixing the web regression where the progress bar advanced but no sound was produced.
+**Status (2026-06-11):** SA-1 through SA-3 are completed. Remote R2 playback now opts the media element into CORS before attaching it to the WebAudio graph, and newly added/defaulted cloud drives now use automatic mode that imports every remote set through the guarded pull pipeline.
 
 **Product requirements:**
 
@@ -2314,8 +2314,8 @@ Do not record secrets, full signed URLs, or media content.
 **Checklist:**
 
 - [x] SA-1 Add regression tests and fix R2-imported remote media playback so downloadable remote tracks also make sound.
-- [ ] SA-2 Add a tested sync-mode policy and default newly added drives to automatic import-all unless the user chooses manual.
-- [ ] SA-3 Wire automatic import-all into add/refresh flows while preserving manual import controls.
+- [x] SA-2 Add a tested sync-mode policy and default newly added drives to automatic import-all unless the user chooses manual.
+- [x] SA-3 Wire automatic import-all into add/refresh flows while preserving manual import controls.
 - [ ] SA-4 Consolidate cloud drive/CORS/sync controls into one Settings area and update four-language copy.
 - [ ] SA-5 Redesign the Add R2 Drive modal as a two-column step-by-step guide with public-read vs optional write-credential sections.
 
@@ -2325,6 +2325,7 @@ Do not record secrets, full signed URLs, or media content.
 
 | Date | Author | Changes |
 |------|--------|---------|
+| 2026-06-11 | MUZERO | Phase 13 SA-2/SA-3 completed: CloudDrive defaults now resolve to `change-debounce` automatic mode, Add Drive defaults the post-add sync/auto-sync choices on for writable owner/trusted drives, and `CloudDriveSets` automatically browses/imports every remote set for automatic drives through the existing orchestrated `pullRemoteSet` path while keeping manual preview/import controls available. |
 | 2026-06-11 | MUZERO | Phase 13 SA-1 completed: R2-imported remote audio/video now loads with `crossOrigin: "anonymous"` so WebAudio visualization/analyser wiring does not taint the media element into silent playback in the web app. Regression coverage in `player-store.test.ts` requires remote R2 audio/video to use the CORS-enabled media element path. |
 | 2026-06-11 | MUZERO | Phase 13 added from QA feedback: split cloud drive UX into explicit automatic/manual sync modes (automatic import-all default), prioritize the R2-imported playback-no-sound regression, and specify a consolidated Cloud Drive settings area plus a two-column R2 setup modal that separates public read/CORS from optional write credentials generated from Cloudflare R2 API tokens. |
 | 2026-06-11 | MUZERO | Phase 12 DA-1 started/completed: Settings > This device now supports uploaded avatar images via the existing square cropper, stores the cropped image as a device-bound avatar media blob, and reuses the existing `DevicePublicProfile.avatar` R2 publish path when profile publishing is enabled. Phase 12 also records the remaining owner/source avatar-chip UX for remote set previews, imported set headers, and track rows. |

@@ -94,8 +94,8 @@ describe("AddDriveDialog", () => {
     fireEvent.click(screen.getByRole("button", { name: "settings.addDriveNext" }));
 
     expect(screen.getByText("settings.addDriveAfterAddTitle")).toBeInTheDocument();
-    fireEvent.click(screen.getByLabelText("settings.addDriveSyncAfterAdd"));
-    fireEvent.click(screen.getByLabelText("settings.addDriveAutoSyncAfterChanges"));
+    expect(screen.getByLabelText("settings.addDriveSyncAfterAdd")).toBeChecked();
+    expect(screen.getByLabelText("settings.addDriveAutoSyncAfterChanges")).toBeChecked();
     fireEvent.click(screen.getByRole("button", { name: "settings.addDriveFinish" }));
 
     await waitFor(() => expect(mocks.upsertCloudDrive).toHaveBeenCalled());

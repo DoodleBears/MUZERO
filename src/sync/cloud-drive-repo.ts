@@ -17,7 +17,8 @@ export interface CloudDriveSyncPreferencesInput {
 
 export type CloudShareInput = Omit<CloudShare, "addedAt"> & Partial<Pick<CloudShare, "addedAt">>;
 
-export const DEFAULT_CLOUD_DRIVE_AUTO_SYNC_FREQUENCY: CloudDriveAutoSyncFrequency = "manual";
+export const DEFAULT_CLOUD_DRIVE_AUTO_SYNC_FREQUENCY: CloudDriveAutoSyncFrequency =
+  "change-debounce";
 export const DEFAULT_CLOUD_DRIVE_UPLOAD_CONCURRENCY: CloudDriveUploadConcurrency = 2;
 
 export async function upsertCloudDrive(
