@@ -8,6 +8,7 @@ import type {
   Track,
   TrackLyrics,
 } from "@/db/types";
+import { normalizeCoverPalette } from "@/lib/cover-palette";
 import { newId } from "@/lib/id";
 import type { LyricsSource } from "@/lyrics/provider";
 import { RANK_SPACING } from "@/player/set-order";
@@ -168,6 +169,11 @@ export async function importRemoteSetStream(
   const tracks: Track[] = remoteSet.tracks.map((remoteTrack) => {
     const id = remoteLocalId("trk", driveId, remoteTrack.id);
     const existing = existingTracks.get(id);
+    const remoteCoverUrl = remoteTrack.coverUrl ?? remoteTrack.source.streamMeta?.coverUrl;
+    const remoteCoverPalette = normalizeCoverPalette(remoteTrack.source.coverPalette);
+    const existingPaletteMatches =
+      existing?.coverPaletteSource === remoteCoverUrl ||
+      (!existing?.coverPaletteSource && existing?.remoteCoverUrl === remoteCoverUrl);
     return {
       id,
       sessionId,
@@ -183,8 +189,22 @@ export async function importRemoteSetStream(
       status: "ready",
       durationSec: remoteTrack.source.durationSec,
       remoteMediaUrl: remoteTrack.mediaUrl,
-      remoteCoverUrl: remoteTrack.coverUrl ?? remoteTrack.source.streamMeta?.coverUrl,
+      remoteCoverUrl,
       coverThumbhash: existing?.coverThumbhash ?? remoteTrack.source.thumbhash ?? undefined,
+      coverPalette: existing?.coverBlobId
+        ? existing.coverPalette
+        : remoteCoverPalette.length > 0
+          ? remoteCoverPalette
+          : existingPaletteMatches
+            ? existing?.coverPalette
+            : undefined,
+      coverPaletteSource: existing?.coverBlobId
+        ? existing.coverPaletteSource
+        : remoteCoverPalette.length > 0
+          ? remoteCoverUrl
+          : existingPaletteMatches
+            ? existing?.coverPaletteSource
+            : undefined,
       createdAt: remoteTrack.source.createdAt,
       updatedAt: existing?.updatedAt ?? remoteTrack.source.createdAt,
       generatedAt: remoteTrack.source.generatedAt ?? undefined,

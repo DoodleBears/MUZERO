@@ -345,6 +345,28 @@ describe("importRemoteSetStream", () => {
     expect(track?.coverThumbhash).toBe("SETTH64");
   });
 
+  it("carries the cover palette from the manifest onto the imported remote track", async () => {
+    const coverPalette = [
+      { r: 20, g: 120, b: 220 },
+      { r: 230, g: 140, b: 30 },
+    ];
+    const withPalette: RemoteSetIndexResult = {
+      ...remoteSet,
+      tracks: remoteSet.tracks.map((tr) => ({
+        ...tr,
+        source: { ...tr.source, coverPalette },
+      })),
+    };
+
+    await importRemoteSetStream({ driveId: "drv_pal", remoteSet: withPalette }, db);
+
+    const track = await db.tracks.get("trk_remote_drv_pal_trk_blue");
+    expect(track?.coverPalette).toEqual(coverPalette);
+    expect(track?.coverPaletteSource).toBe(
+      "https://music.example.com/muzero/objects/covers/blue.jpg",
+    );
+  });
+
   it("caches remote source attribution on imported set and track rows", async () => {
     await importRemoteSetStream(
       {

@@ -1,4 +1,5 @@
 import type { TrackBrief } from "@/dj/dj-brief-schema";
+import { coverPaletteFields, extractCoverPalette } from "@/lib/cover-palette";
 import { encodeCoverThumbhash } from "@/lib/cover-thumbhash";
 import { newId } from "@/lib/id";
 import type { LyricsRecord } from "@/lyrics/provider";
@@ -690,7 +691,16 @@ export async function createUploadedTrack(
           storage,
         )
       : undefined;
-    if (cover) track.coverBlobId = cover.id;
+    if (cover && input.embeddedCover) {
+      track.coverBlobId = cover.id;
+      Object.assign(
+        track,
+        coverPaletteFields(
+          await extractCoverPalette(input.embeddedCover.blob, undefined, input.embeddedCover.mime),
+          cover.id,
+        ),
+      );
+    }
     await db.transaction("rw", db.tracks, async () => {
       await db.tracks.put(track);
     });
@@ -864,7 +874,10 @@ export async function setTrackCover(
   db: MuzeroDB = defaultDb,
   storage: MediaBlobStorageOptions = {},
 ): Promise<void> {
-  const coverThumbhash = await encodeCoverThumbhash(input.blob, input.crop);
+  const [coverThumbhash, coverPalette] = await Promise.all([
+    encodeCoverThumbhash(input.blob, input.crop),
+    extractCoverPalette(input.blob, input.crop, input.mime),
+  ]);
   const existing = await db.tracks.get(input.trackId);
   if (!existing) return;
   const cover = await putSizeAwareImageBlob(
@@ -890,6 +903,7 @@ export async function setTrackCover(
         coverBlobId: cover.id,
         coverCrop: input.crop,
         coverThumbhash,
+        ...coverPaletteFields(coverPalette, cover.id),
         updatedAt: Date.now(),
       });
     });
@@ -919,6 +933,8 @@ export async function clearTrackCover(
       coverBlobId: undefined,
       coverCrop: undefined,
       coverThumbhash: undefined,
+      coverPalette: undefined,
+      coverPaletteSource: undefined,
       updatedAt: Date.now(),
     });
   });
@@ -940,6 +956,10 @@ export async function setTrackCoverFromMemory(
   if (!photo?.blob) return false;
   const track = await db.tracks.get(memory.trackId);
   if (!track) return false;
+  const [coverThumbhash, coverPalette] = await Promise.all([
+    encodeCoverThumbhash(photo.blob),
+    extractCoverPalette(photo.blob, undefined, photo.mime),
+  ]);
   const cover = await putSizeAwareImageBlob(
     {
       id: newId("blb"),
@@ -962,6 +982,8 @@ export async function setTrackCoverFromMemory(
       await db.tracks.update(memory.trackId, {
         coverBlobId: cover.id,
         coverCrop: undefined,
+        coverThumbhash,
+        ...coverPaletteFields(coverPalette, cover.id),
         updatedAt: Date.now(),
       });
     });
@@ -982,11 +1004,24 @@ export async function setTrackCoverCrop(
   storage: MediaBlobStorageOptions = {},
 ): Promise<void> {
   const track = await db.tracks.get(id);
-  const blob = track?.coverBlobId
-    ? (await resolveMediaBlob(track.coverBlobId, db, storage))?.blob
+  const cover = track?.coverBlobId
+    ? await resolveMediaBlob(track.coverBlobId, db, storage)
     : undefined;
-  const coverThumbhash = blob ? await encodeCoverThumbhash(blob, crop) : undefined;
-  await db.tracks.update(id, { coverCrop: crop, coverThumbhash, updatedAt: Date.now() });
+  const blob = cover?.blob;
+  let coverThumbhash: string | undefined;
+  let coverPalette: Awaited<ReturnType<typeof extractCoverPalette>> = [];
+  if (blob) {
+    [coverThumbhash, coverPalette] = await Promise.all([
+      encodeCoverThumbhash(blob, crop),
+      extractCoverPalette(blob, crop, cover.mime),
+    ]);
+  }
+  await db.tracks.update(id, {
+    coverCrop: crop,
+    coverThumbhash,
+    ...coverPaletteFields(coverPalette, track?.coverBlobId),
+    updatedAt: Date.now(),
+  });
 }
 
 /**

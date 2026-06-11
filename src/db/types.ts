@@ -24,6 +24,12 @@ export type TrackOrigin = "generated" | "uploaded" | "streamed";
  */
 export type StreamSourceId = "netease" | "bili" | "youtube";
 
+export interface CoverPaletteRgb {
+  r: number;
+  g: number;
+  b: number;
+}
+
 /** Per-source on-device config (BYOK): login state + quality preference. Never bundled. */
 export interface StreamSourceConfig {
   enabled?: boolean;
@@ -113,6 +119,14 @@ export interface Track {
    * no schema bump; absent on legacy/remote covers until generated/backfilled.
    */
   coverThumbhash?: string;
+  /**
+   * Small extracted cover palette used by spectrum/flow effects. Stored with the
+   * track so browser-only R2 playback does not need CORS-clean cover bytes just to
+   * tint visual effects. First color is the dominant swatch. Additive/non-indexed.
+   */
+  coverPalette?: CoverPaletteRgb[];
+  /** Source identity for `coverPalette`: local cover blob id or remote cover URL. */
+  coverPaletteSource?: string;
   error?: string;
   createdAt: number;
   /**

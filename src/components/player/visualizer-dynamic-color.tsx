@@ -3,9 +3,17 @@ import { useEffect } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { resolveMediaBlob } from "@/db/media-blob-storage";
 import { db } from "@/db/muzero-db";
+import type { Track } from "@/db/types";
 import { useSettings } from "@/hooks/use-app-data";
+import {
+  coverPaletteFields,
+  coverPaletteFromThumbhash,
+  extractCoverPalette,
+  normalizeCoverPalette,
+} from "@/lib/cover-palette";
+import { resolveDesktopBridge } from "@/lib/desktop/bridge";
 import { sanitizeUrlForTrace } from "@/lib/diagnostics";
-import { extractImagePalette, extractImagePaletteFromFetchedUrl } from "@/lib/image-palette";
+import { extractImagePaletteFromFetchedUrl } from "@/lib/image-palette";
 import { createDiagnosticLogger } from "@/lib/logger";
 import { getAppFetch } from "@/lib/platform";
 import { describeTrackCoverSource } from "@/lib/track-source";
@@ -18,6 +26,48 @@ import {
 
 const colorCache = new Map<string, { rgb: Rgb | null; palette: Rgb[] }>();
 const coverColorLog = createDiagnosticLogger("cover.palette");
+
+type CurrentCoverState = {
+  id: string;
+  cloudSource: Track["cloudSource"];
+  coverBlobId?: string;
+  coverCrop?: Track["coverCrop"];
+  remoteCoverUrl?: string;
+  coverThumbhash?: string;
+  coverPalette?: Rgb[];
+  coverPaletteSource?: string;
+};
+
+function paletteCacheEntry(palette: readonly Rgb[] | undefined | null): {
+  rgb: Rgb;
+  palette: Rgb[];
+} | null {
+  const clean = normalizeCoverPalette(palette);
+  const rgb = clean[0];
+  return rgb ? { rgb, palette: clean } : null;
+}
+
+function cachedTrackPalette(
+  current: CurrentCoverState,
+  cacheKey: string | undefined,
+): { rgb: Rgb; palette: Rgb[] } | null {
+  const entry = paletteCacheEntry(current.coverPalette);
+  if (!entry) return null;
+  const source = current.coverPaletteSource;
+  if (source && current.coverBlobId && source !== current.coverBlobId && source !== cacheKey) {
+    return null;
+  }
+  if (
+    source &&
+    !current.coverBlobId &&
+    current.remoteCoverUrl &&
+    source !== current.remoteCoverUrl &&
+    source !== cacheKey
+  ) {
+    return null;
+  }
+  return entry;
+}
 
 /**
  * Scoped dynamic visualizer accent. The color is stored outside the component so
@@ -33,12 +83,16 @@ export function useVisualizerCoverColorCss(active = true): string | null {
     useShallow((s) => {
       const track = s.currentIndex >= 0 ? s.queue[s.currentIndex] : undefined;
       return track
-        ? {
+        ? ({
             id: track.id,
             cloudSource: track.cloudSource,
             coverBlobId: track.coverBlobId,
+            coverCrop: track.coverCrop,
+            coverPalette: track.coverPalette,
+            coverPaletteSource: track.coverPaletteSource,
+            coverThumbhash: track.coverThumbhash,
             remoteCoverUrl: track.remoteCoverUrl,
-          }
+          } satisfies CurrentCoverState)
         : null;
     }),
   );
@@ -76,11 +130,29 @@ export function useVisualizerCoverColorCss(active = true): string | null {
       const controller = new AbortController();
       const cacheKey = `remote:${remoteCoverUrl}`;
       const cached = colorCache.get(cacheKey);
+      const stored = cachedTrackPalette(current, cacheKey);
+      const thumbhashFallback = paletteCacheEntry(
+        coverPaletteFromThumbhash(current.coverThumbhash),
+      );
       const coverSource = describeTrackCoverSource({
         cloudSource: current.cloudSource,
         remoteCoverUrl,
       });
       const safeUrl = sanitizeUrlForTrace(remoteCoverUrl);
+      if (stored) {
+        coverColorLog.debug("cover.palette.track-metadata", {
+          message: "cover palette loaded from track metadata",
+          trackId: current.id,
+          category: "media",
+          phase: "state",
+          coverSourceKind: coverSource.kind,
+          coverSourceHost: coverSource.host || safeUrl.host || undefined,
+          paletteCount: stored.palette.length,
+        });
+        colorCache.set(cacheKey, stored);
+        transitionVisualizerCoverColor(cacheKey, stored.rgb, stored.palette);
+        return;
+      }
       if (cached !== undefined) {
         coverColorLog.debug("cover.palette.cache", {
           message: "cover palette cache hit",
@@ -92,6 +164,26 @@ export function useVisualizerCoverColorCss(active = true): string | null {
           paletteCount: cached.palette.length,
         });
         transitionVisualizerCoverColor(cacheKey, cached.rgb ?? readPrimaryRgb(), cached.palette);
+        return;
+      }
+      if (thumbhashFallback) {
+        transitionVisualizerCoverColor(
+          `thumbhash:${current.coverThumbhash}`,
+          thumbhashFallback.rgb,
+          thumbhashFallback.palette,
+        );
+      }
+      if (thumbhashFallback && resolveDesktopBridge().kind === "web") {
+        coverColorLog.debug("cover.palette.thumbhash-fallback", {
+          message: "remote cover palette uses thumbhash fallback in browser",
+          trackId: current.id,
+          category: "media",
+          phase: "state",
+          coverSourceKind: coverSource.kind,
+          coverSourceHost: coverSource.host || safeUrl.host || undefined,
+          paletteCount: thumbhashFallback.palette.length,
+        });
+        colorCache.set(cacheKey, thumbhashFallback);
         return;
       }
       void (async () => {
@@ -127,24 +219,47 @@ export function useVisualizerCoverColorCss(active = true): string | null {
         }
       })().then((palette) => {
         if (!alive) return;
-        const rgb = palette[0] ?? null;
-        colorCache.set(cacheKey, { rgb, palette });
+        const clean = normalizeCoverPalette(palette);
+        const extracted = paletteCacheEntry(clean) ?? thumbhashFallback;
+        const rgb = extracted?.rgb ?? null;
+        const resolvedPalette = extracted?.palette ?? [];
+        if (clean.length > 0) {
+          void db.tracks.update(current.id, coverPaletteFields(clean, remoteCoverUrl));
+        }
+        colorCache.set(cacheKey, { rgb, palette: resolvedPalette });
         coverColorLog.info("cover.palette.success", {
           message: "remote cover palette extraction finished",
           trackId: current.id,
           category: "media",
-          phase: palette.length > 0 ? "success" : "skip",
+          phase: clean.length > 0 ? "success" : thumbhashFallback ? "state" : "skip",
+          fallbackKind: thumbhashFallback && clean.length === 0 ? "thumbhash" : undefined,
           coverSourceKind: coverSource.kind,
           coverSourceHost: coverSource.host || safeUrl.host || undefined,
-          paletteCount: palette.length,
-          fallbackToTheme: palette.length === 0,
+          paletteCount: resolvedPalette.length,
+          fallbackToTheme: resolvedPalette.length === 0,
         });
-        transitionVisualizerCoverColor(cacheKey, rgb ?? readPrimaryRgb(), palette);
+        transitionVisualizerCoverColor(cacheKey, rgb ?? readPrimaryRgb(), resolvedPalette);
       });
       return () => {
         alive = false;
         controller.abort();
       };
+    }
+
+    const stored = cachedTrackPalette(current, current.coverBlobId);
+    if (stored && current.coverBlobId) {
+      colorCache.set(current.coverBlobId, stored);
+      coverColorLog.debug("cover.palette.track-metadata", {
+        message: "cover palette loaded from track metadata",
+        trackId: current.id,
+        category: "media",
+        phase: "state",
+        coverSourceKind: "local-cover",
+        coverBlobId: current.coverBlobId,
+        paletteCount: stored.palette.length,
+      });
+      transitionVisualizerCoverColor(current.coverBlobId, stored.rgb, stored.palette);
+      return;
     }
 
     if (cover === undefined) return;
@@ -165,6 +280,7 @@ export function useVisualizerCoverColorCss(active = true): string | null {
     let alive = true;
     const cacheKey = cover.id;
     const cached = colorCache.get(cacheKey);
+    const thumbhashFallback = paletteCacheEntry(coverPaletteFromThumbhash(current.coverThumbhash));
     if (cached !== undefined) {
       coverColorLog.debug("cover.palette.cache", {
         message: "cover palette cache hit",
@@ -178,6 +294,13 @@ export function useVisualizerCoverColorCss(active = true): string | null {
       transitionVisualizerCoverColor(cacheKey, cached.rgb ?? readPrimaryRgb(), cached.palette);
       return;
     }
+    if (thumbhashFallback) {
+      transitionVisualizerCoverColor(
+        `thumbhash:${current.coverThumbhash}`,
+        thumbhashFallback.rgb,
+        thumbhashFallback.palette,
+      );
+    }
 
     coverColorLog.debug("cover.palette.start", {
       message: "local cover palette extraction started",
@@ -189,25 +312,32 @@ export function useVisualizerCoverColorCss(active = true): string | null {
       mime: cover.mime,
       bytes: cover.bytes,
     });
-    void extractImagePalette(cover.blob)
+    void extractCoverPalette(cover.blob, current.coverCrop, cover.mime)
       .then((palette) => {
         if (!alive) return;
-        const rgb = palette[0] ?? null;
-        colorCache.set(cacheKey, { rgb, palette });
+        const clean = normalizeCoverPalette(palette);
+        const extracted = paletteCacheEntry(clean) ?? thumbhashFallback;
+        const rgb = extracted?.rgb ?? null;
+        const resolvedPalette = extracted?.palette ?? [];
+        if (clean.length > 0) {
+          void db.tracks.update(current.id, coverPaletteFields(clean, cover.id));
+        }
+        colorCache.set(cacheKey, { rgb, palette: resolvedPalette });
         void primaryColorVersion;
         coverColorLog.info("cover.palette.success", {
           message: "local cover palette extraction finished",
           trackId: current?.id,
           category: "media",
-          phase: palette.length > 0 ? "success" : "skip",
+          phase: clean.length > 0 ? "success" : thumbhashFallback ? "state" : "skip",
+          fallbackKind: thumbhashFallback && clean.length === 0 ? "thumbhash" : undefined,
           coverSourceKind: "local-cover",
           coverBlobId: cover.id,
           mime: cover.mime,
           bytes: cover.bytes,
-          paletteCount: palette.length,
-          fallbackToTheme: palette.length === 0,
+          paletteCount: resolvedPalette.length,
+          fallbackToTheme: resolvedPalette.length === 0,
         });
-        transitionVisualizerCoverColor(cacheKey, rgb ?? readPrimaryRgb(), palette);
+        transitionVisualizerCoverColor(cacheKey, rgb ?? readPrimaryRgb(), resolvedPalette);
       })
       .catch((error) => {
         if (!alive) return;
@@ -228,16 +358,7 @@ export function useVisualizerCoverColorCss(active = true): string | null {
     return () => {
       alive = false;
     };
-  }, [
-    active,
-    coverColorEnabled,
-    current?.cloudSource,
-    current?.coverBlobId,
-    current?.id,
-    current?.remoteCoverUrl,
-    cover,
-    primaryColorVersion,
-  ]);
+  }, [active, coverColorEnabled, current, cover, primaryColorVersion]);
 
   return active ? css : null;
 }

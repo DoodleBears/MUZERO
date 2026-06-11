@@ -7,6 +7,17 @@ vi.mock("@/lib/cover-thumbhash", () => ({
   encodeCoverThumbhash: vi.fn(async () => "THUMB64"),
 }));
 
+const mocks = vi.hoisted(() => ({
+  palette: [
+    { r: 20, g: 120, b: 220 },
+    { r: 230, g: 140, b: 30 },
+  ],
+}));
+
+vi.mock("@/lib/image-palette", () => ({
+  extractImagePalette: vi.fn(async () => mocks.palette),
+}));
+
 import { MuzeroDB } from "./muzero-db";
 import { createSession, setEntityCover, setSessionCover, setTrackCover } from "./repositories";
 
@@ -46,7 +57,10 @@ describe("cover-set generates + persists a thumbhash on the owner row (Phase 3)"
       tags: [],
     });
     await setTrackCover({ trackId: id as string, blob: png(), mime: "image/png" }, db);
-    expect((await db.tracks.get("trk_thumb"))?.coverThumbhash).toBe("THUMB64");
+    const track = await db.tracks.get("trk_thumb");
+    expect(track?.coverThumbhash).toBe("THUMB64");
+    expect(track?.coverPalette).toEqual(mocks.palette);
+    expect(track?.coverPaletteSource).toBe(track?.coverBlobId);
   });
 
   it("setSessionCover stores coverThumbhash on the session", async () => {

@@ -311,15 +311,16 @@ interface PreparedRemotePlayback {
 }
 
 /** Cheap signature of what the queue list renders (ids + generation status +
- * cover identity). `coverBlobId`/`coverCrop` are included so a cover edit on the
- * current track republishes `queue` and the now-playing stage reacts live —
- * without them, a cover-only change keeps the same sig and gets swallowed. */
+ * cover identity/metadata). Cover fields are included so a cover edit or palette
+ * backfill on the current track republishes `queue` and the visual layer reacts
+ * live — without them, a cover-only change keeps the same sig and gets swallowed. */
 function queueSig(tracks: Track[]): string {
   return tracks
     .map((t) => {
       const c = t.coverCrop;
       const crop = c ? `${c.x},${c.y},${c.width},${c.height}` : "";
-      return `${t.id}:${t.status}:${t.blobId ?? ""}:${t.remoteMediaUrl ?? ""}:${t.coverBlobId ?? ""}:${t.remoteCoverUrl ?? ""}:${crop}`;
+      const palette = (t.coverPalette ?? []).map((rgb) => `${rgb.r},${rgb.g},${rgb.b}`).join(";");
+      return `${t.id}:${t.status}:${t.blobId ?? ""}:${t.remoteMediaUrl ?? ""}:${t.coverBlobId ?? ""}:${t.remoteCoverUrl ?? ""}:${crop}:${t.coverThumbhash ?? ""}:${t.coverPaletteSource ?? ""}:${palette}`;
     })
     .join("|");
 }

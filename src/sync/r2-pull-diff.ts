@@ -1,5 +1,6 @@
 import { db as defaultDb, type MuzeroDB } from "@/db/muzero-db";
 import type { DjSession, SyncMutation } from "@/db/types";
+import { normalizeCoverPalette } from "@/lib/cover-palette";
 import type { RemoteSetIndexResult } from "./r2-subscription";
 import { listUnsyncedMutations } from "./sync-mutation-repo";
 
@@ -226,6 +227,14 @@ async function sameTrackRows(input: DiffRemoteSetInput, db: MuzeroDB): Promise<b
     if (local.remoteMediaUrl !== remoteTrack.mediaUrl) return false;
     const remoteCoverUrl = remoteTrack.coverUrl ?? remoteTrack.source.streamMeta?.coverUrl;
     if ((local.remoteCoverUrl ?? undefined) !== (remoteCoverUrl ?? undefined)) return false;
+    const remoteCoverPalette = normalizeCoverPalette(remoteTrack.source.coverPalette);
+    if (
+      remoteCoverPalette.length > 0 &&
+      !local.coverBlobId &&
+      !sameJson(normalizeCoverPalette(local.coverPalette), remoteCoverPalette)
+    ) {
+      return false;
+    }
     if ((local.brief ?? undefined) !== (remoteTrack.source.brief ?? undefined)) return false;
     if (!sameJson(local.mediaMetadata, remoteTrack.source.mediaMetadata)) return false;
     if (!sameJson(local.streamMeta, remoteTrack.source.streamMeta)) return false;

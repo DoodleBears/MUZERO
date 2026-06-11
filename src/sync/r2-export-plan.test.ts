@@ -520,6 +520,33 @@ describe("buildR2ExportPlan", () => {
     expect(setIndex.tracks[0].coverCrop).toEqual({ x: 10, y: 20, width: 100, height: 100 });
   });
 
+  it("carries the track cover palette through the set index", async () => {
+    await seedSet();
+    await db.tracks.update("trk_1", {
+      coverPalette: [
+        { r: 20, g: 120, b: 220 },
+        { r: 230, g: 140, b: 30 },
+      ],
+      coverPaletteSource: "blb_cover",
+    });
+
+    const plan = await buildR2ExportPlan({
+      driveId: "drv_1",
+      libraryId: "lib_1",
+      baseUrl: "https://music.example.com/muzero/",
+      setIds: ["ses_1"],
+      db,
+    });
+
+    const setIndex = JSON.parse(
+      String(plan.objects.find((object) => object.kind === "set-index")?.body),
+    );
+    expect(setIndex.tracks[0].coverPalette).toEqual([
+      { r: 20, g: 120, b: 220 },
+      { r: 230, g: 140, b: 30 },
+    ]);
+  });
+
   it("exports streamed-origin metadata when no local media bytes exist", async () => {
     await seedSet();
     const streamed: Track = {

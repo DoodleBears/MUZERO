@@ -51,6 +51,12 @@ const r2CropSchema = z.object({
   height: z.number(),
 });
 
+const r2RgbSchema = z.object({
+  r: z.number().int().min(0).max(255),
+  g: z.number().int().min(0).max(255),
+  b: z.number().int().min(0).max(255),
+});
+
 /** One artist/album custom cover in the library-global entity-covers index. */
 export const r2EntityCoverEntrySchema = z.object({
   id: z.string().min(1), // entity projection key (normalizeArtistName / AlbumEntry.key)
@@ -194,6 +200,9 @@ export const r2SetTrackSchema = z
     // Base64 thumbhash of the cover — instant preview for a not-yet-downloaded
     // remote track cover (instant-cover-thumbnails PRD §3.4).
     thumbhash: z.string().optional(),
+    // Tiny extracted cover palette for browser-only subscribers: lets spectrum /
+    // flow effects follow remote R2 art without fetching CORS-clean cover bytes.
+    coverPalette: z.array(r2RgbSchema).max(4).optional(),
     // Synced/plain lyrics (LRCLIB or manual) — additive optional field, mirrors the
     // thumbhash carry: no manifest version bump (synced-lyrics PRD §4.8).
     lyrics: r2LyricsSchema.optional(),

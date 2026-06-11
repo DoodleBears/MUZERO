@@ -14,6 +14,7 @@ import type {
   SyncMutation,
   Track,
 } from "@/db/types";
+import { normalizeCoverPalette } from "@/lib/cover-palette";
 import { orderedSetTrackIds } from "@/player/set-order";
 import {
   type PlaybackEventFlushPolicy,
@@ -272,6 +273,7 @@ export async function buildR2ExportPlan(input: R2ExportPlanInput): Promise<R2Exp
               sourceId: lyricsRow.sourceId,
             }
           : undefined;
+      const coverPalette = normalizeCoverPalette(track.coverPalette);
 
       setIndexTracks.push({
         id: track.id,
@@ -295,6 +297,7 @@ export async function buildR2ExportPlan(input: R2ExportPlanInput): Promise<R2Exp
         cover: cover?.remote,
         coverCrop: track.coverCrop,
         thumbhash: track.coverThumbhash,
+        coverPalette: coverPalette.length > 0 ? coverPalette : undefined,
         lyrics,
         memories: remoteMemories,
       });
