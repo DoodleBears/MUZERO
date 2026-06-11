@@ -596,9 +596,22 @@ src/components/settings/
 
 一次性开通（首发前做一遍），之后每次发版只跑 [§4.3](#43-makefile-发布命令用户要求-3--4) 的 `make` 流程。
 
+### 12.0 现状（2026-06-11 已自动完成 / 待手动）
+
+复用 **doodlekuma Cloudflare 账户**（`account_id = 332e72d480d7cb3e60ee671d3ca0cad0`，与 ClipCombo 同账户，决议沿用）：
+
+- ✅ **桶已建**：`muzero-releases`（经已配置的 rclone `r2:` remote `rclone mkdir` 创建，空桶）。
+- ✅ **rclone `r2:` remote 已就绪**（§12.3 已满足）：endpoint 指向该账户，含 Object R/W S3 凭证 → `make release-publish` 可直接上传，无需新建凭证。
+- ✅ **`wrangler.toml` 已加**（仓库根）：仅 `account_id`（非密），供一次性 `pnpm dlx wrangler r2 …` 管理命令（CORS / 自定义域）解析账户；MUZERO 无 Worker/Pages 后端，故**不**含 ClipCombo 的 D1/DO/routes。
+- ⚠️ **待手动**（需 Cloudflare 管理认证——`wrangler login` 缓存已过期，需重新 `wrangler login` 或给 `CLOUDFLARE_API_TOKEN`，或控制台点选）：
+  1. **公共读 + 自定义域 `assets.mu0.app`**（§12.1.3）——前提是 `mu0.app` zone 在本账户。
+  2. **CORS**（§12.2）——仅 web 版需要；桌面走 `muzfetch` 不受限。
+
+> 即：**核心链路已通**（建桶 + 上传）；剩下「让 `assets.mu0.app/desktop/*` 公网可读」是纯 Cloudflare 控制台/管理 API 动作，rclone 的 S3 凭证无权操作桶级公共访问/域绑定。
+
 ### 12.1 创建桶 + 公共读
 
-1. Cloudflare 控制台 → R2 → **Create bucket**：名 `muzero-releases`（= Makefile `RELEASE_R2_BUCKET`，可改）。
+1. ~~Cloudflare 控制台 → R2 → **Create bucket**：名 `muzero-releases`~~ **✅ 已建**（§12.0，经 rclone）。（= Makefile `RELEASE_R2_BUCKET`，可改）
 2. 该桶**只放分发物**（安装包 + `*.yml` feed + `manifest.json`），**永不**放用户数据——与用户库 BYOK 桶物理隔离（[§2.4](#24-决策记录--分发-r2-不违反本地优先)）。
 3. 开公共读：桶 → Settings → **Public access** → 绑自定义域 **`assets.mu0.app`**（决议 Q2）。在 Cloudflare DNS 给 `assets` 加 CNAME 到该桶的 r2.dev 端点（或用 R2 custom domain 功能一键绑）。过渡期可先用 `<hash>.r2.dev` 公共 URL，改 Makefile `RELEASE_BASE_URL` 即可切换、零代码改动。
 

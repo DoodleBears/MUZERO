@@ -1,0 +1,11 @@
+# MUZERO ships as a desktop app — NOT a Cloudflare Worker or Pages site. This
+# file exists ONLY so one-time R2 admin commands (`pnpm dlx wrangler r2 ...` for
+# the release bucket's CORS / custom domain) resolve the account without a flag.
+#
+# The account id is an identifier, not a secret (ClipCombo commits it too). R2
+# *write* credentials live in the local rclone `r2:` remote / CI env — NEVER here.
+# Per-release uploads go through rclone (see scripts/publish-release.mjs); wrangler
+# is only for bucket-level setup. See the release PRD §12.
+name = "muzero-releases"
+account_id = "332e72d480d7cb3e60ee671d3ca0cad0"
+compatibility_date = "2026-06-11"
