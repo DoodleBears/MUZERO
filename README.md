@@ -1,75 +1,217 @@
 <div align="center">
+  <img src="./public/muzero-logo-dark.png" width="96" alt="MUZERO app icon" />
 
-# 🎧 MUZERO
+# MUZERO
 
-**A local-first AI DJ that never stops the music.**
+**Your private music bank, visual player, and AI DJ.**
 
-An LLM acts as your DJ — it writes the brief for each next track (style, lyrics, tempo, key),
-calls a music-generation API to render it, and keeps extending the playlist as you listen.
-No backend, no cloud. Everything lives on your device. Ships to desktop **and** mobile via Tauri.
+MUZERO is a local-first music and video player for people whose songs are also memories.
+It brings your private library, scattered online music sources, visual playback, cloud-drive
+sync, and an LLM-powered DJ into one app.
+
+[English](./README.md) · [简体中文](./README.zh-CN.md) · [日本語](./README.ja-JP.md) · [한국어](./README.ko-KR.md)
+
+[mu0.app](https://mu0.app) · [Changelog](./CHANGELOG.md) · [Product PRD](./docs/prd/20260612-muzero-product-positioning-readme-prd/20260612-muzero-product-positioning-readme-prd.md)
 
 </div>
 
 ---
 
-## What it does
+## What Is MUZERO?
 
+MUZERO started from a simple idea: a private music bank, almost like a private museum.
+Every song can carry notes, tags, cover photos, and memory fragments. When a track plays,
+you can return to the time and place it belongs to.
+
+It has since grown into four connected experiences:
+
+- **Private music museum**: upload audio and music videos, annotate every track, and sync your library to storage you own.
+- **Multi-source music hub**: search and play from NetEase Cloud Music, Bilibili, and YouTube on desktop, then keep those tracks in your MUZERO library.
+- **Visual player**: Poweramp-inspired playback surfaces, reactive backgrounds, cover-driven palettes, and audio visualizers.
+- **Agent DJ**: connect a local model or online LLM API, let it search your library, curate sets, or call music-generation APIs to create the next song.
+
+You can use the free hosted service at [mu0.app](https://mu0.app), or clone the project and deploy the web build / optional sharing control plane yourself on Cloudflare. Core data stays local. Cross-device sync uses your own R2, S3-compatible storage, or WebDAV-style private cloud as the storage backend evolves.
+
+## The Promise
+
+| Principle | What it means |
+|-----------|---------------|
+| **Local-first** | Tracks, sets, notes, tags, covers, settings, playback stats, and media metadata live in the device-local IndexedDB database `muzero-db`. |
+| **No MUZERO media backend** | MUZERO does not host your music library. Cloud sync points at storage you configure and own. |
+| **BYOK** | LLM keys, music-generation keys, source login sessions, and storage credentials are stored locally on your device. |
+| **Free hosted service** | `mu0.app` is free. It exists for distribution, web access, and optional share-link permission management, not for taking custody of your library. |
+| **Explicit sharing boundary** | Only share links and permission metadata need the `mu0` service. Track bytes still come from your configured storage or local device. |
+
+## Product Highlights
+
+### Fast, Keyboard-First
+
+- Customize a large set of shortcuts; common playback, queue, search, navigation, and library actions can be completed without leaving the keyboard.
+- Press `Command/Ctrl + F` for global search across tracks, albums, artists, sets, lyrics, tags, notes, and online sources.
+- MUZERO is designed for local, large-library searching: a 6,000-track playlist should not take half a minute before you can use it.
+
+### Sync Once, Play Everywhere
+
+- Configure your cloud drive once, then copy a trusted setup link to quickly bring another phone or computer into the same library.
+- Sync sets, tracks, covers, notes, memories, lyrics, and playback metadata across your own devices without a MUZERO media backend.
+- Share music with friends through read-only library/share links, with richer `mu0.app` short links and revocable invites on the product roadmap.
+
+### Highly Customizable Visuals
+
+- Choose from background video, background image, cover-palette backgrounds, spectrum backgrounds, waveform styles, shader scenes, and theme color presets.
+- Tune background effects, visualizer styles, palettes, lyric effects, translations, romanization, and word-by-word lyric rendering so the listening surface feels as personal as the library.
+
+### AI DJ For Vibe Coding
+
+- Run MUZERO on a side monitor as a DJ / radio while you code, design, write, or drift through a long session.
+- Tell the Agent the mood, seed it with a set, or let it search your library and keep the queue moving without babysitting the player.
+
+## Features
+
+### Private Music Bank
+
+- Upload audio files, folders, and music videos into mixed sets.
+- Add notes, tags, memory photos, and custom covers to each track.
+- Search by title, artist, album, tag, note, lyrics, transliteration, and source metadata.
+- Browse artists, albums, sets, memories, lyrics, and playback history from the same local library.
+
+### Sync To Your Own Cloud
+
+- Publish and pull your library through a cloud drive you own.
+- Current production path: Cloudflare R2 / S3-compatible object storage.
+- Storage-provider roadmap: WebDAV support for Nextcloud, Synology, rclone serve, and other private clouds.
+- Media bytes are content-addressed and stored outside lightweight track rows, so large libraries remain searchable and fast.
+
+### Online Sources
+
+- Search and resolve desktop streams from:
+  - NetEase Cloud Music
+  - Bilibili
+  - YouTube
+- Sign in locally for higher-quality or account-gated content where the source requires it.
+- Cache streamed tracks and covers locally for offline playback.
+
+### Visual Player
+
+- Player-first bottom dock: cover/title, full-width progress, status, and navigation in one surface.
+- Now Playing stage supports video, cover art, title fallback, audio-only mode, and immersive backgrounds.
+- Built-in visualizers include spectrum, waveform, radial, LED reflex, liquid, aurora, and cover-palette flow styles.
+- Desktop-first layout with responsive mobile support.
+
+### Agent DJ
+
+- The DJ writes `TrackBrief` objects: caption, lyrics, style, BPM, key, structure, and generation hints.
+- Pluggable music-generation providers: offline mock by default, cloud BYOK provider for real generation APIs.
+- The Agent can search your library, use tags and notes as context, curate a set, or continue the queue like a DJ.
+- LLM and provider concepts stay isolated behind adapters, so the music library never depends on one vendor.
+
+## Architecture
+
+```text
+local files / online sources / AI generation
+              |
+              v
+        Track + MediaBlob
+              |
+              v
+ IndexedDB `muzero-db`  <---->  optional user-owned cloud drive
+              |
+              v
+        Player + visualizer
+              |
+              v
+        Agent DJ / search / share
 ```
-your vibe ──▶ 🤖 AI DJ (LLM) writes a TrackBrief ──▶ 🎵 music-gen renders a song
-                     ▲                                          │
-                     └────── 续上歌单: refill as the queue drains ◀┘
+
+Core loops:
+
+```text
+memory + vibe + recent tracks
+          |
+          v
+    LLM Agent writes TrackBrief
+          |
+          v
+ music-generation provider renders audio
+          |
+          v
+ pending track -> ready track -> queue refill
 ```
 
-- **AI DJ loop** — the LLM drafts coherent, evolving track briefs that segue from what just played, and auto-extends the set when the queue runs low.
-- **Your own media too** — like YouTube Music, upload audio/video (MVs, voice memos) into a mixed set. Per-set display mode falls back **video → cover → title**, with an audio-only toggle.
-- **Memories** — tag any track, write a note, attach a cover photo. All searchable, and fed back into the DJ so it picks up the mood of what those songs mean to you.
-- **Pluggable music generation** — ships with an offline mock synth (zero setup) and a generic **cloud API (BYOK)** provider with an async submit→poll→download flow. Wire your chosen vendor (Replicate / ElevenLabs Music / Suno-style / …) by editing three mapping functions.
-- **Local-first** — tracks, audio/video blobs, sets, annotations, and settings persist in IndexedDB (Dexie). No accounts, no telemetry, no servers.
-- **BYOK** — your LLM/music API keys are stored on-device and sent only to the provider you choose.
-- **Cross-platform** — one codebase → macOS / Windows / Linux / iOS / Android via Tauri 2.
+## Run Locally
 
-## Stack
+Requirements:
 
-Tauri 2 · React 19 · Vite 8 · TypeScript · Tailwind CSS v4 · COSS UI (Base UI) ·
-TanStack Query + Virtual · Dexie (IndexedDB) · Zustand · Vercel AI SDK · Zod · Vitest · Biome
-
-## Quick start
-
-`make` (or `make help`) lists everything; the essentials:
+- Node.js and pnpm
+- Rust + Tauri prerequisites for Tauri desktop/mobile builds
+- Xcode for iOS, Android SDK/NDK for Android
 
 ```bash
-make install        # deps + git hooks
-make dev            # browser dev at http://localhost:1420 (fastest loop)
-make desktop        # Tauri desktop app with hot reload (Vite HMR + Rust shell)
-make check          # full local gate: typecheck + lint + test
+make install
+make dev
 ```
 
-The app works out of the box with the **offline mock** music provider — start a set and the DJ
-fills it immediately. To generate real music, add your LLM API key in **Settings**, switch the
-music provider to *Cloud API (BYOK)*, and point it at your provider's endpoint + key. The
-request/response mapping for your vendor lives in [`src/musicgen/cloud-provider.ts`](src/musicgen/cloud-provider.ts).
+Open the web dev server at `http://localhost:1420`.
 
-### Mobile
+For the desktop shell:
 
 ```bash
-make ios-init && make ios          # needs Xcode
-make android-init && make android  # needs Android SDK + NDK
+make electron-dev
 ```
 
-## Project layout
+Tauri parity commands are also available:
 
-See [`CLAUDE.md`](CLAUDE.md) for the full architecture, hard rules, and navigation map. The short version:
+```bash
+make desktop
+make ios-init && make ios
+make android-init && make android
+```
 
-| Area | Where |
-|------|-------|
-| AI DJ engine (draft → generate → enqueue → refill) | [`src/dj/`](src/dj/) |
-| Music-gen providers (mock, cloud BYOK, interface) | [`src/musicgen/`](src/musicgen/) |
-| Track brief contract (Zod, single source of truth) | [`src/dj/dj-brief-schema.ts`](src/dj/dj-brief-schema.ts) |
-| Local storage (Dexie schema + repositories) | [`src/db/`](src/db/) |
-| Player transport + DJ orchestration | [`src/stores/player-store.ts`](src/stores/player-store.ts) |
-| Queue math + auto-extend trigger | [`src/player/queue.ts`](src/player/queue.ts) |
-| Tauri shell (desktop + mobile) | [`src-tauri/`](src-tauri/) |
+Quality gate:
+
+```bash
+make check
+```
+
+## Deploy Or Self-Host
+
+MUZERO is a Vite app and can be built as static files:
+
+```bash
+make build
+```
+
+You can deploy `dist/` to Cloudflare Pages for a personal web build. Some desktop-only capabilities, especially online source playback that needs custom request headers, work best in the Electron desktop shell.
+
+`mu0.app` is the official free hosted surface. The optional share-link control plane is designed for Cloudflare Workers + D1 + KV and can be self-hosted when that phase lands. The project does not require a MUZERO account for local playback, local library management, or user-owned cloud drive sync.
+
+## Project Map
+
+| Area | Path |
+|------|------|
+| App shell and routes | [`src/App.tsx`](./src/App.tsx), [`src/pages/`](./src/pages/) |
+| Player and media engine | [`src/player/`](./src/player/), [`src/components/player/`](./src/components/player/) |
+| AI DJ engine | [`src/dj/`](./src/dj/) |
+| Music-generation providers | [`src/musicgen/`](./src/musicgen/) |
+| Online source providers | [`src/streamsrc/`](./src/streamsrc/) |
+| Local database | [`src/db/`](./src/db/) |
+| Cloud sync | [`src/sync/`](./src/sync/) |
+| Visualizers | [`src/visualizer/`](./src/visualizer/) |
+| Desktop and mobile shell | [`src-tauri/`](./src-tauri/), [`electron/`](./electron/) |
+| Product requirements | [`docs/prd/`](./docs/prd/) |
+
+## Tech Stack
+
+Tauri 2, Electron, Vite, React 19, TypeScript, Tailwind CSS v4, COSS UI, Base UI, Dexie, IndexedDB, Zustand, TanStack Query, TanStack Virtual, Vercel AI SDK, Zod, Vitest, Biome, Cloudflare R2, and Cloudflare Workers for the optional hosted control plane.
+
+## Roadmap
+
+- WebDAV storage adapter and cloud-drive provider abstraction.
+- `mu0.app` share links with revocable invites and browser playback pages.
+- More Agent tools for searching, curating, explaining, and generating music.
+- Better mobile polish for background audio and touch-first browsing.
+- More visualizer presets and cover-driven immersive scenes.
 
 ## License
 
-Private / unreleased.
+Apache-2.0. See [`LICENSE`](./LICENSE).

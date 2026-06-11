@@ -96,7 +96,7 @@ help:
 	@echo "  make ui C=button  - Add a COSS UI component (pnpm dlx shadcn add @coss/button)"
 	@echo "  make ui-coss      - Add the full COSS UI component set"
 	@echo "  make ui-theme     - Add the official COSS theme (@coss/style)"
-	@echo "  make icons        - Regenerate Tauri app icons from app-icon.png"
+	@echo "  make icons        - Regenerate Tauri app icons from public/muzero-logo-dark.png"
 	@echo ""
 	@echo "Maintenance:"
 	@echo "  make clean        - Remove node_modules, dist, and the Rust target"
@@ -299,9 +299,9 @@ ui-coss:
 ui-theme:
 	$(PM) dlx shadcn@latest add @coss/style
 
-# Regenerate the full desktop/iOS/Android icon set from the source PNG.
+# Regenerate the full desktop/iOS/Android icon set from the default dark logo PNG.
 icons:
-	$(PM) tauri icon app-icon.png
+	$(PM) tauri icon public/muzero-logo-dark.png
 
 # ---------------------------------------------------------- Maintenance ----
 
