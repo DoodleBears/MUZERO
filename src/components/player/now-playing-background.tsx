@@ -91,10 +91,13 @@ function NowPlayingBackgroundContent({ hideVisualizer }: { hideVisualizer: boole
   );
   const gallery = useLiveQuery(() => listGalleryImages(), [], []);
   const trackBackgroundBlobs = useMemo(
-    () => trackBackgrounds.map((b) => b.blob),
+    () => trackBackgrounds.map((b) => b.blob).filter((blob): blob is Blob => Boolean(blob)),
     [trackBackgrounds],
   );
-  const galleryBlobs = useMemo(() => gallery.map((b) => b.blob), [gallery]);
+  const galleryBlobs = useMemo(
+    () => gallery.map((b) => b.blob).filter((blob): blob is Blob => Boolean(blob)),
+    [gallery],
+  );
   const trackBackgroundUrls = useObjectUrls(trackBackgroundBlobs);
   const galleryUrls = useObjectUrls(galleryBlobs);
   const source = resolveBackgroundSource({

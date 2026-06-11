@@ -154,7 +154,6 @@ export async function migrateMediaBlobToProvider(
   const row = typeof rowOrId === "string" ? await db.mediaBlobs.get(rowOrId) : rowOrId;
   if (!row) return undefined;
   if (mediaStorageBackend(row) !== "indexeddb") return row;
-  if (row.role !== "media") return row;
   const provider = options.provider ?? defaultMediaStorageProvider();
   if (provider.id === "indexeddb") return row;
   const source = await resolveMediaBlob(row, db, {

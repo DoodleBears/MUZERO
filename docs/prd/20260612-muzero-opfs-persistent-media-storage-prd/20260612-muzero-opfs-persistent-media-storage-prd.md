@@ -16,7 +16,7 @@
 | 3 | Playback, Export, and Import Consumers | ✅ Completed | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | Migration, Repair, and Cleanup | ✅ Completed | [Phase 4 Checklist](#phase-4-checklist) |
 | 5 | Settings Visibility + Storage Health | ✅ Completed | [Phase 5 Checklist](#phase-5-checklist) |
-| 6 | Large Image Asset Storage | 🔲 Pending | [Phase 6 Checklist](#phase-6-checklist) |
+| 6 | Large Image Asset Storage | ✅ Completed | [Phase 6 Checklist](#phase-6-checklist) |
 | 7 | Cover + Memory Photo Provider Storage | 🔲 Pending | [Phase 7 Checklist](#phase-7-checklist) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
@@ -495,19 +495,21 @@ Required UI changes:
 **Why this phase exists:** these roles can reach 1w images. At 100–300 KB each they become 1–3 GB; at phone-photo size they become 10–40 GB. Keeping those full-size Blobs in IndexedDB is likely to cause storage pressure and expensive deserialization. They are also less latency-sensitive than list covers, so provider-backed reads are a good fit.
 
 **Tasks:**
-- [ ] Route `addTrackBackground` and `addGalleryImage` through `putMediaBlob`.
-- [ ] Update `listTrackBackgrounds` and `listGalleryImages` callers to resolve bytes through the storage helper before creating object URLs.
-- [ ] Add migration for existing `role:"background"` and `role:"gallery"` rows.
-- [ ] Add delete helpers so removing gallery/background images also removes provider files.
-- [ ] Keep any future small preview/thumbhash metadata in IndexedDB.
+- [x] Route `addTrackBackground` and `addGalleryImage` through `putMediaBlob`.
+- [x] Update `listTrackBackgrounds` and `listGalleryImages` callers to resolve bytes through the storage helper before creating object URLs.
+- [x] Add migration for existing `role:"background"` and `role:"gallery"` rows.
+- [x] Add delete helpers so removing gallery/background images also removes provider files.
+- [x] Keep any future small preview/thumbhash metadata in IndexedDB.
+
+**Status (2026-06-12):** Completed. New per-track background and global gallery images now write through provider-backed storage, list reads resolve bytes through the shared helper, deletion uses provider-aware cleanup, and `migrateLegacyMediaBlobs(..., { roles: ["background", "gallery"] })` supports resumable migration with migrated/skipped/failed reporting.
 
 ### Phase 6 Checklist
 
-- [ ] New background/gallery images write to Electron disk or Browser OPFS by default.
-- [ ] Existing background/gallery IndexedDB Blob rows remain readable.
-- [ ] Migration is resumable and reports migrated/skipped/missing counts.
-- [ ] Background slideshow and global gallery continue to render after migration.
-- [ ] Removing an image deletes both metadata and provider bytes best-effort.
+- [x] New background/gallery images write to Electron disk or Browser OPFS by default.
+- [x] Existing background/gallery IndexedDB Blob rows remain readable.
+- [x] Migration is resumable and reports migrated/skipped/missing counts.
+- [x] Background slideshow and global gallery continue to render after migration.
+- [x] Removing an image deletes both metadata and provider bytes best-effort.
 
 ### Phase 7: Cover + Memory Photo Provider Storage
 
@@ -602,6 +604,7 @@ Required UI changes:
 | 2026-06-12 | MUZERO | Phase 3 completed: switched playback/download, cover hooks, dynamic color extraction, coverflow preloading, memory-photo cover copy, thumbhash backfill, avatar display, metadata export, and R2 export to resolver-backed byte reads, with provider-backed cover/memory regression tests. |
 | 2026-06-12 | MUZERO | Phase 4 completed: added lazy and batch legacy media migration, missing provider-file validation, provider orphan cleanup, provider listing contract, and tests for idempotent migration plus referenced-file-safe cleanup. |
 | 2026-06-12 | MUZERO | Phase 5 completed: added permanent local media storage summary, backend/role breakdowns, missing/orphan health counts, visible migrate/cleanup actions, and en/zh/ja/ko Settings copy. |
+| 2026-06-12 | MUZERO | Phase 6 completed: routed background/gallery image writes through provider storage, resolved slideshow/gallery reads through shared blob helpers, made image deletion provider-aware, and added role-scoped migration tests for existing large image rows. |
 
 ---
 

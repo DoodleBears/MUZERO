@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { type MediaStorageProvider, putMediaBlob } from "./media-blob-storage";
 import { MuzeroDB } from "./muzero-db";
 import {
+  addGalleryImage,
   addMemory,
   addTrackBackground,
   clearSessionCover,
@@ -26,6 +27,7 @@ import {
   getTrack,
   knownSourcePaths,
   listAllTracks,
+  listGalleryImages,
   listMemories,
   listTrackBackgrounds,
   markTrackReady,
@@ -586,6 +588,63 @@ describe("track backgrounds", () => {
 
     expect((await listTrackBackgrounds(first.id, db)).map((bg) => bg.id)).toEqual([b.id]);
     expect(await listTrackBackgrounds(second.id, db)).toHaveLength(1);
+  });
+
+  it("stores large background and gallery images through provider storage", async () => {
+    const provider = createMemoryProvider("opfs");
+    const session = await createSession({ seedPrompt: "", config: { autoExtend: false } }, db);
+    const track = await createUploadedTrack(
+      {
+        sessionId: session.id,
+        title: "big image host",
+        kind: "audio",
+        blob: new Blob(["audio"], { type: "audio/mpeg" }),
+        mime: "audio/mpeg",
+        durationSec: 1,
+      },
+      db,
+    );
+
+    const background = await addTrackBackground(
+      {
+        trackId: track.id,
+        blob: new Blob(["background"], { type: "image/png" }),
+        mime: "image/png",
+      },
+      db,
+      { provider },
+    );
+    const gallery = await addGalleryImage(
+      {
+        blob: new Blob(["gallery"], { type: "image/webp" }),
+        mime: "image/webp",
+      },
+      db,
+      { provider },
+    );
+
+    expect(background.storageBackend).toBe("opfs");
+    expect(background.storageKey).toBeTruthy();
+    expect(background.blob).toBeUndefined();
+    expect(gallery.storageBackend).toBe("opfs");
+    expect(gallery.storageKey).toBeTruthy();
+    expect(gallery.blob).toBeUndefined();
+    expect(provider.files.has(background.storageKey ?? "")).toBe(true);
+    expect(provider.files.has(gallery.storageKey ?? "")).toBe(true);
+
+    const listedBackgrounds = await listTrackBackgrounds(track.id, db, { providers: [provider] });
+    const listedGallery = await listGalleryImages(db, { providers: [provider] });
+
+    expect(await listedBackgrounds[0]?.blob?.text()).toBe("background");
+    expect(await listedGallery[0]?.blob?.text()).toBe("gallery");
+
+    await deleteImageBlob(background.id, db, { providers: [provider] });
+
+    expect(provider.files.has(background.storageKey ?? "")).toBe(false);
+    expect(await listTrackBackgrounds(track.id, db, { providers: [provider] })).toEqual([]);
+    expect((await listGalleryImages(db, { providers: [provider] })).map((img) => img.id)).toEqual([
+      gallery.id,
+    ]);
   });
 });
 

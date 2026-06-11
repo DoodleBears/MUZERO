@@ -259,6 +259,48 @@ describe("media blob storage resolver", () => {
     expect((await db.mediaBlobs.get("blb_cover_a"))?.storageBackend).toBeUndefined();
   });
 
+  it("migrates selected legacy image roles for large background and gallery assets", async () => {
+    const provider = createMemoryProvider("opfs");
+    await db.mediaBlobs.bulkPut([
+      {
+        id: "blb_background_a",
+        trackId: "trk_a",
+        role: "background",
+        mime: "image/png",
+        bytes: 10,
+        blob: new Blob(["background"], { type: "image/png" }),
+      },
+      {
+        id: "blb_gallery_a",
+        trackId: "global",
+        role: "gallery",
+        mime: "image/webp",
+        bytes: 7,
+        blob: new Blob(["gallery"], { type: "image/webp" }),
+      },
+      {
+        id: "blb_cover_a",
+        trackId: "trk_a",
+        role: "cover",
+        mime: "image/png",
+        bytes: 5,
+        blob: new Blob(["cover"], { type: "image/png" }),
+      },
+    ]);
+
+    const result = await migrateLegacyMediaBlobs(db, {
+      provider,
+      roles: ["background", "gallery"],
+    });
+
+    expect(result).toEqual({ migrated: 2, skipped: 1, failed: 0 });
+    expect((await db.mediaBlobs.get("blb_background_a"))?.storageBackend).toBe("opfs");
+    expect((await db.mediaBlobs.get("blb_gallery_a"))?.storageBackend).toBe("opfs");
+    expect((await db.mediaBlobs.get("blb_cover_a"))?.storageBackend).toBeUndefined();
+    expect(provider.has("background/background__blb_background_a.png")).toBe(true);
+    expect(provider.has("gallery/gallery__blb_gallery_a.webp")).toBe(true);
+  });
+
   it("reports missing provider-backed files and deletes orphan provider files", async () => {
     const provider = createMemoryProvider("electron-file");
     await putMediaBlob(

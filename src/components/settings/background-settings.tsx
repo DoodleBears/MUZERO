@@ -17,7 +17,10 @@ import { classifyDrop, filesFromTransfer, IMAGE_ACCEPT } from "@/lib/file-drop";
 export function BackgroundSettings() {
   const { t } = useTranslation();
   const gallery = useLiveQuery(() => listGalleryImages(), [], []);
-  const blobs = useMemo(() => gallery.map((g) => g.blob), [gallery]);
+  const blobs = useMemo(
+    () => gallery.map((g) => g.blob).filter((blob): blob is Blob => Boolean(blob)),
+    [gallery],
+  );
   const urls = useObjectUrls(blobs);
   const inputRef = useRef<HTMLInputElement | null>(null);
 

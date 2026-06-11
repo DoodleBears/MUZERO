@@ -1156,56 +1156,83 @@ export const GLOBAL_GALLERY_ID = "global";
 export async function addTrackBackground(
   input: { trackId: string; blob: Blob; mime: string },
   db: MuzeroDB = defaultDb,
+  storage: MediaBlobStorageOptions = {},
 ): Promise<MediaBlob> {
-  const bg: MediaBlob = {
-    id: newId("blb"),
-    trackId: input.trackId,
-    role: "background",
-    mime: input.mime,
-    bytes: input.blob.size,
-    blob: input.blob,
-  };
-  await db.mediaBlobs.put(bg);
-  return bg;
+  return putMediaBlob(
+    {
+      id: newId("blb"),
+      trackId: input.trackId,
+      role: "background",
+      mime: input.mime,
+      bytes: input.blob.size,
+      blob: input.blob,
+      suggestedName: "Background",
+    },
+    db,
+    storage,
+  );
+}
+
+async function resolveMediaBlobRows(
+  rows: MediaBlob[],
+  db: MuzeroDB,
+  storage: MediaBlobStorageOptions,
+): Promise<MediaBlob[]> {
+  const resolved = await Promise.all(rows.map((row) => resolveMediaBlob(row, db, storage)));
+  return resolved.filter((row): row is NonNullable<typeof row> => Boolean(row));
 }
 
 /** A track's bound slideshow backgrounds, oldest first. */
-export function listTrackBackgrounds(
+export async function listTrackBackgrounds(
   trackId: string,
   db: MuzeroDB = defaultDb,
+  storage: MediaBlobStorageOptions = {},
 ): Promise<MediaBlob[]> {
-  return db.mediaBlobs
+  const rows = await db.mediaBlobs
     .where("trackId")
     .equals(trackId)
     .filter((b) => b.role === "background")
     .toArray();
+  return resolveMediaBlobRows(rows, db, storage);
 }
 
 /** Add an image to the global slideshow gallery. */
 export async function addGalleryImage(
   input: { blob: Blob; mime: string },
   db: MuzeroDB = defaultDb,
+  storage: MediaBlobStorageOptions = {},
 ): Promise<MediaBlob> {
-  const img: MediaBlob = {
-    id: newId("blb"),
-    trackId: GLOBAL_GALLERY_ID,
-    role: "gallery",
-    mime: input.mime,
-    bytes: input.blob.size,
-    blob: input.blob,
-  };
-  await db.mediaBlobs.put(img);
-  return img;
+  return putMediaBlob(
+    {
+      id: newId("blb"),
+      trackId: GLOBAL_GALLERY_ID,
+      role: "gallery",
+      mime: input.mime,
+      bytes: input.blob.size,
+      blob: input.blob,
+      suggestedName: "Gallery",
+    },
+    db,
+    storage,
+  );
 }
 
 /** All global gallery images. */
-export function listGalleryImages(db: MuzeroDB = defaultDb): Promise<MediaBlob[]> {
-  return db.mediaBlobs.where("trackId").equals(GLOBAL_GALLERY_ID).toArray();
+export async function listGalleryImages(
+  db: MuzeroDB = defaultDb,
+  storage: MediaBlobStorageOptions = {},
+): Promise<MediaBlob[]> {
+  const rows = await db.mediaBlobs.where("trackId").equals(GLOBAL_GALLERY_ID).toArray();
+  return resolveMediaBlobRows(rows, db, storage);
 }
 
 /** Delete a single background or gallery image blob by id. */
-export async function deleteImageBlob(id: string, db: MuzeroDB = defaultDb): Promise<void> {
-  await db.mediaBlobs.delete(id);
+export async function deleteImageBlob(
+  id: string,
+  db: MuzeroDB = defaultDb,
+  storage: MediaBlobStorageOptions = {},
+): Promise<void> {
+  await deleteMediaBlob(id, db, storage);
 }
 
 /** Distinct tags across all tracks, with usage counts (desc). */

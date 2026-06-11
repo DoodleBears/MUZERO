@@ -219,7 +219,10 @@ function TrackBackgroundManager({ trackId }: { trackId: string }) {
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [open, setOpen] = useState(false);
   const backgrounds = useLiveQuery(() => listTrackBackgrounds(trackId), [trackId], []);
-  const blobs = useMemo(() => backgrounds.map((bg) => bg.blob), [backgrounds]);
+  const blobs = useMemo(
+    () => backgrounds.map((bg) => bg.blob).filter((blob): blob is Blob => Boolean(blob)),
+    [backgrounds],
+  );
   const urls = useObjectUrls(blobs);
 
   async function addImages(files: File[]) {
