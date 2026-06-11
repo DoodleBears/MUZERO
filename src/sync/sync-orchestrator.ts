@@ -77,7 +77,8 @@ export type PublishRunResult =
 export type PullRunResult =
   | { status: "completed"; mutated: boolean; runId?: string; sessionId?: string }
   | { status: "needs-review"; conflict?: RemoteSetConflict }
-  | { status: "blocked"; reason: string };
+  | { status: "blocked"; reason: string }
+  | { status: "cancelled" };
 
 export interface SyncOrchestrator {
   publish(ctx: PublishDriveContext, options?: RunOptions): Promise<PublishRunResult>;
@@ -199,7 +200,8 @@ export function createSyncOrchestrator(deps: SyncOrchestratorDeps): SyncOrchestr
       emit({ phase: "applying", objectsTotal, bytesTotal });
 
       try {
-        const result = await applyPull(input);
+        // Forward the signal so the apply can abort mid-flight (F6), mirroring publish.
+        const result = await applyPull({ ...input, signal: options.signal });
         emit({
           phase: "completed",
           objectsDone: objectsTotal,
@@ -215,6 +217,10 @@ export function createSyncOrchestrator(deps: SyncOrchestratorDeps): SyncOrchestr
           sessionId: result.sessionId,
         };
       } catch (error) {
+        if (options.signal?.aborted) {
+          emit({ phase: "cancelled", objectsTotal, bytesTotal });
+          return { status: "cancelled" };
+        }
         emit({
           phase: "failed",
           objectsTotal,

@@ -7,6 +7,8 @@ export type SyncCacheFetch = typeof globalThis.fetch;
 
 export interface CacheRemoteTrackMediaOptions {
   fetcher?: SyncCacheFetch;
+  /** Abort the in-flight media download (audit F6). */
+  signal?: AbortSignal;
 }
 
 export interface CacheRemoteTrackMediaResult {
@@ -29,7 +31,7 @@ export async function cacheRemoteTrackMedia(
   if (!track.remoteMediaUrl) throw new Error("Track does not have a remote media URL to cache");
 
   const fetcher = await resolveFetcher(options.fetcher);
-  const response = await fetcher(track.remoteMediaUrl);
+  const response = await fetcher(track.remoteMediaUrl, { signal: options.signal });
   if (!response.ok) throw new Error(`Failed to fetch remote media: HTTP ${response.status}`);
 
   const blob = await response.blob();

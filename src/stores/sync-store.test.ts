@@ -199,6 +199,37 @@ describe("sync-store publishDrive", () => {
     ctx.storeMod.__setSyncOrchestratorForTest(null);
   });
 
+  it("refuses to start a second operation on a drive while one is in flight (F8)", async () => {
+    const { storeMod, useSyncStore } = await seedWritableDrive();
+
+    const orchestrator: SyncOrchestrator = {
+      publish: vi.fn(async (ctx, options) => {
+        options?.onProgress?.({ ...completedProgress(ctx.drive.id), phase: "uploading" });
+        await new Promise<void>((resolve) => {
+          options?.signal?.addEventListener("abort", () => resolve());
+        });
+        return { status: "cancelled" as const };
+      }),
+      pull: vi.fn(),
+    };
+    storeMod.__setSyncOrchestratorForTest(orchestrator);
+
+    const pending = useSyncStore.getState().publishDrive("drv_owned");
+    await waitFor(() =>
+      expect(useSyncStore.getState().progressByDrive.drv_owned?.phase).toBe("uploading"),
+    );
+    // Concurrent publish AND pull on the same drive are refused — they would
+    // overwrite each other's AbortController and interleave one progress line.
+    await useSyncStore.getState().publishDrive("drv_owned");
+    await useSyncStore.getState().pullRemoteSet({ driveId: "drv_owned", remoteSet: {} } as never);
+    expect(orchestrator.publish).toHaveBeenCalledTimes(1);
+    expect(orchestrator.pull).not.toHaveBeenCalled();
+
+    useSyncStore.getState().cancel("drv_owned");
+    await pending;
+    storeMod.__setSyncOrchestratorForTest(null);
+  });
+
   it("cancel() aborts the in-flight publish signal", async () => {
     const { storeMod, useSyncStore } = await seedWritableDrive();
 

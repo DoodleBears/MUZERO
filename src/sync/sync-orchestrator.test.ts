@@ -223,6 +223,31 @@ describe("createSyncOrchestrator.pull", () => {
     expect(events.at(-1)).toMatchObject({ objectsDone: 3, objectsTotal: 3, bytesDone: 300 });
   });
 
+  it("forwards the signal into applyPull and reports cancelled on abort (F6)", async () => {
+    const events: SyncProgress[] = [];
+    const controller = new AbortController();
+    const dryRunPull = vi.fn(async () => pullPreview());
+    const applyPull = vi.fn(async (input: ApplyRemoteSetPullInput) => {
+      expect(input.signal).toBe(controller.signal);
+      controller.abort();
+      throw new DOMException("R2 pull was cancelled.", "AbortError");
+    });
+    const orchestrator = createSyncOrchestrator({
+      buildPlan: vi.fn(),
+      runPublish: vi.fn(),
+      dryRunPull,
+      applyPull: applyPull as never,
+    });
+
+    const result = await orchestrator.pull(pullInput, {
+      signal: controller.signal,
+      onProgress: (p) => events.push(p),
+    });
+
+    expect(result).toEqual({ status: "cancelled" });
+    expect(events.at(-1)?.phase).toBe("cancelled");
+  });
+
   it("is a no-op when nothing will mutate", async () => {
     const events: SyncProgress[] = [];
     const dryRunPull = vi.fn(async () =>

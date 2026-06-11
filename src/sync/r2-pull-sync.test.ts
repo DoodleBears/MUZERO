@@ -80,6 +80,22 @@ describe("R2 pull sync", () => {
     });
   });
 
+  it("marks the run cancelled and never mutates when the pull is aborted (F6)", async () => {
+    const controller = new AbortController();
+    controller.abort();
+
+    await expect(
+      applyRemoteSetPull(
+        { driveId: "drv_1", remoteSet: remoteSet(), signal: controller.signal },
+        db,
+      ),
+    ).rejects.toMatchObject({ name: "AbortError" });
+
+    expect(await db.sessions.count()).toBe(0);
+    expect(await db.tracks.count()).toBe(0);
+    expect(await db.syncRuns.toArray()).toMatchObject([{ direction: "pull", status: "cancelled" }]);
+  });
+
   it("does not mutate when the diff is blocked", async () => {
     await db.sessions.put({
       id: "ses_remote_drv_1_ses_tokyo",

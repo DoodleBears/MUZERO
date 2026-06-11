@@ -12,6 +12,8 @@ export interface R2SignedFetchOptions {
   contentType?: string;
   headers?: Record<string, string>;
   now?: () => Date;
+  /** Abort the in-flight request itself, not just between requests (audit F6). */
+  signal?: AbortSignal;
 }
 
 const EMPTY_SHA256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
@@ -44,6 +46,7 @@ export async function r2SignedFetch(options: R2SignedFetchOptions): Promise<Resp
     method: options.method,
     headers,
     body: options.method === "HEAD" ? undefined : options.body,
+    signal: options.signal,
   });
 }
 

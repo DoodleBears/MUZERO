@@ -62,6 +62,7 @@ export async function publishR2ExportPlan(
       contentType: object.contentType,
       headers: preconditionHeaders(object),
       now: options.now,
+      signal: options.signal,
     });
     if (!response.ok) {
       result.failed += 1;
@@ -79,7 +80,7 @@ async function shouldSkipObject(
   object: R2ExportObject,
   credentials: R2LocalCredentials,
   fetcher: SyncFetch,
-  options: Pick<R2PublishOptions, "now">,
+  options: Pick<R2PublishOptions, "now" | "signal">,
 ): Promise<boolean> {
   if (!isSkippableObject(object)) return false;
   const response = await r2SignedFetch({
@@ -89,6 +90,7 @@ async function shouldSkipObject(
     key: object.key,
     contentType: object.contentType,
     now: options.now,
+    signal: options.signal,
   });
   return response.ok;
 }

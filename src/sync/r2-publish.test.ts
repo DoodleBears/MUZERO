@@ -45,6 +45,24 @@ const credentials = {
 };
 
 describe("publishR2ExportPlan", () => {
+  it("forwards the abort signal into every signed request (F6)", async () => {
+    const controller = new AbortController();
+    const signals: Array<AbortSignal | null | undefined> = [];
+
+    await publishR2ExportPlan(plan, credentials, {
+      fetcher: async (_url, init) => {
+        signals.push(init?.signal);
+        return new Response(null, { status: init?.method === "HEAD" ? 404 : 204 });
+      },
+      signal: controller.signal,
+    });
+
+    // HEAD skip-checks and PUT uploads alike — an in-flight request must be
+    // abortable, not just the gaps between objects.
+    expect(signals.length).toBeGreaterThan(0);
+    for (const signal of signals) expect(signal).toBe(controller.signal);
+  });
+
   it("uploads binary objects before set indexes and root manifest", async () => {
     const seen: Array<{ method: string; url: string; authorization: string | null }> = [];
 

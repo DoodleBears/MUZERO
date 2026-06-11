@@ -103,19 +103,27 @@ export const useSyncStore = create<SyncStoreState>((set) => ({
   progressByDrive: {},
 
   async publishDrive(driveId) {
-    let context: PublishDriveContext;
-    try {
-      context = await resolvePublishContext(driveId);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      setProgress(set, driveId, failedProgress(driveId, message));
-      log.warn("sync", "publish blocked before start", { driveId, message });
+    // One operation per drive at a time (audit F8): a concurrent publish/pull
+    // would overwrite this drive's AbortController and interleave its progress.
+    // Register the controller BEFORE the async context resolve so a rapid second
+    // call can't slip through the gap.
+    if (controllers.has(driveId)) {
+      log.warn("sync", "publish refused: another sync is in flight for this drive", { driveId });
       return;
     }
-
     const controller = new AbortController();
     controllers.set(driveId, controller);
     try {
+      let context: PublishDriveContext;
+      try {
+        context = await resolvePublishContext(driveId);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        setProgress(set, driveId, failedProgress(driveId, message));
+        log.warn("sync", "publish blocked before start", { driveId, message });
+        return;
+      }
+
       await getOrchestrator().publish(context, {
         signal: controller.signal,
         onProgress: (progress) => setProgress(set, driveId, progress),
@@ -130,6 +138,10 @@ export const useSyncStore = create<SyncStoreState>((set) => ({
 
   async pullRemoteSet(input) {
     const { driveId } = input;
+    if (controllers.has(driveId)) {
+      log.warn("sync", "pull refused: another sync is in flight for this drive", { driveId });
+      return;
+    }
     const controller = new AbortController();
     controllers.set(driveId, controller);
     try {

@@ -22,6 +22,8 @@ export interface ApplyRemoteSetPullInput extends DiffRemoteSetInput {
   cacheMedia?: {
     fetcher?: SyncCacheFetch;
   };
+  /** Abort the apply — checked before mutating and between media downloads (F6). */
+  signal?: AbortSignal;
 }
 
 export async function dryRunRemoteSetPull(
@@ -58,6 +60,7 @@ export async function applyRemoteSetPull(
   }
 
   try {
+    throwIfPullAborted(input.signal);
     const imported = await importRemoteSetStream(
       {
         driveId: input.driveId,
@@ -75,9 +78,19 @@ export async function applyRemoteSetPull(
       cachedMedia,
     };
   } catch (error) {
-    await failPullRun(run, error instanceof Error ? error.message : String(error), db);
+    await failPullRun(
+      run,
+      error instanceof Error ? error.message : String(error),
+      db,
+      input.signal?.aborted ? "cancelled" : "failed",
+    );
     throw error;
   }
+}
+
+function throwIfPullAborted(signal?: AbortSignal): void {
+  if (!signal?.aborted) return;
+  throw new DOMException("R2 pull was cancelled.", "AbortError");
 }
 
 async function cacheImportedMedia(
@@ -88,7 +101,12 @@ async function cacheImportedMedia(
   if (!input.cacheMedia) return 0;
   let cached = 0;
   for (const trackId of trackIds) {
-    await cacheRemoteTrackMedia(trackId, { fetcher: input.cacheMedia.fetcher }, db);
+    throwIfPullAborted(input.signal);
+    await cacheRemoteTrackMedia(
+      trackId,
+      { fetcher: input.cacheMedia.fetcher, signal: input.signal },
+      db,
+    );
     cached += 1;
   }
   return cached;
@@ -131,10 +149,15 @@ async function completePullRun(
   });
 }
 
-async function failPullRun(run: SyncRun, error: string, db: MuzeroDB): Promise<void> {
+async function failPullRun(
+  run: SyncRun,
+  error: string,
+  db: MuzeroDB,
+  status: "failed" | "cancelled" = "failed",
+): Promise<void> {
   await db.syncRuns.put({
     ...run,
-    status: "failed",
+    status,
     finishedAt: Date.now(),
     failed: 1,
     error,
