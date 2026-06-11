@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { CloudDownloadIcon } from "@/components/ui/cloud-download";
 import type { CloudDrive } from "@/db/types";
 import { log } from "@/lib/logger";
-import { importRemoteSetStream } from "@/sync/r2-import-stream";
+import { useSyncStore } from "@/stores/sync-store";
 import {
   loadRemoteSetIndex,
   type RemoteLibraryPreview,
@@ -18,7 +18,10 @@ type BrowseStatus = "idle" | "loading" | "loaded" | "error";
  * Browse + import a connected drive's remote sets, inline on the drive row. This
  * replaces the standalone Subscribe page — set discovery/import is a property of
  * a drive. Imports are keyed by `drive.id` so local session/track ids
- * (`ses_remote_<driveId>_…`) stay consistent with the drive.
+ * (`ses_remote_<driveId>_…`) stay consistent with the drive, and go through the
+ * orchestrated pull (audit F2): dry-run diff gates (keep-local / conflict /
+ * blocked), durable pull `syncRuns`, and the per-drive progress pipeline that
+ * `CloudDriveLiveProgress` + the sync toast already render.
  */
 export function CloudDriveSets({ drive }: { drive: CloudDrive }) {
   const { t } = useTranslation();
@@ -48,7 +51,9 @@ export function CloudDriveSets({ drive }: { drive: CloudDrive }) {
     setError(null);
     try {
       const remoteSet = await loadRemoteSetIndex(preview, set);
-      await importRemoteSetStream({ driveId: drive.id, remoteSet });
+      // Outcomes (completed / needs-review / blocked / failed) surface through the
+      // drive's progress line + sync toast; this only reports the index fetch.
+      await useSyncStore.getState().pullRemoteSet({ driveId: drive.id, remoteSet });
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
       log.warn("settings", "failed to import remote set", cause);

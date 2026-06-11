@@ -9,14 +9,18 @@ vi.mock("react-i18next", () => ({
 
 const subscribeManifest = vi.fn();
 const loadRemoteSetIndex = vi.fn();
-const importRemoteSetStream = vi.fn();
+const pullRemoteSet = vi.fn();
 
 vi.mock("@/sync/r2-subscription", () => ({
   subscribeManifest: (...args: unknown[]) => subscribeManifest(...args),
   loadRemoteSetIndex: (...args: unknown[]) => loadRemoteSetIndex(...args),
 }));
-vi.mock("@/sync/r2-import-stream", () => ({
-  importRemoteSetStream: (...args: unknown[]) => importRemoteSetStream(...args),
+// The import goes through the orchestrated pull (audit F2): dry-run diff gates +
+// pull syncRuns + the per-drive progress pipeline — never the raw importer.
+vi.mock("@/stores/sync-store", () => ({
+  useSyncStore: {
+    getState: () => ({ pullRemoteSet: (...args: unknown[]) => pullRemoteSet(...args) }),
+  },
 }));
 
 const drive: CloudDrive = {
@@ -70,11 +74,11 @@ describe("CloudDriveSets", () => {
     expect(subscribeManifest).toHaveBeenCalledWith(drive.manifestUrl);
   });
 
-  it("imports a set via loadRemoteSetIndex + importRemoteSetStream keyed by the drive id", async () => {
+  it("imports a set via loadRemoteSetIndex + the orchestrated pullRemoteSet keyed by the drive id", async () => {
     subscribeManifest.mockResolvedValueOnce(preview);
     const remoteSet = { indexUrl: preview.sets[0]!.indexUrl, index: {}, tracks: [] };
     loadRemoteSetIndex.mockResolvedValueOnce(remoteSet);
-    importRemoteSetStream.mockResolvedValueOnce({ sessionId: "s", trackIds: [] });
+    pullRemoteSet.mockResolvedValueOnce(undefined);
 
     render(<CloudDriveSets drive={drive} />);
     fireEvent.click(screen.getByRole("button"));
@@ -83,8 +87,8 @@ describe("CloudDriveSets", () => {
     const importBtn = screen.getByRole("button", { name: /cloudImport/ });
     fireEvent.click(importBtn);
 
-    await waitFor(() => expect(importRemoteSetStream).toHaveBeenCalled());
+    await waitFor(() => expect(pullRemoteSet).toHaveBeenCalled());
     expect(loadRemoteSetIndex).toHaveBeenCalledWith(preview, preview.sets[0]);
-    expect(importRemoteSetStream).toHaveBeenCalledWith({ driveId: "drv_lib_abc", remoteSet });
+    expect(pullRemoteSet).toHaveBeenCalledWith({ driveId: "drv_lib_abc", remoteSet });
   });
 });
