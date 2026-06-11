@@ -1,5 +1,6 @@
 import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import type { Track } from "@/db/types";
+import { LIBRARY_QUERY_COALESCE_MS, useThrottledValue } from "@/hooks/use-throttled-value";
 import { trackToRow } from "@/lib/track-search";
 import { searchRows, setSearchRows } from "@/workers/search-client";
 
@@ -21,12 +22,17 @@ export function useWorkerTrackSearch(
   const deferredQuery = useDeferredValue(query);
   const [result, setResult] = useState<Track[]>(tracks);
 
-  // Push the row snapshot whenever the library (or its memories) changes.
+  // Push the row snapshot whenever the library (or its memories) changes —
+  // coalesced: serializing + structured-cloning the whole library per write
+  // turns an import burst into O(N×writes) (PRD F-3). Queries below still rank
+  // against the live `tracks`, so results never lag behind the visible list.
+  const snapshotTracks = useThrottledValue(tracks, LIBRARY_QUERY_COALESCE_MS);
+  const snapshotNotes = useThrottledValue(memoryNotesByTrackId, LIBRARY_QUERY_COALESCE_MS);
   useEffect(() => {
     setSearchRows(
-      tracks.map((track) => trackToRow(track, memoryNotesByTrackId?.get(track.id) ?? [])),
+      snapshotTracks.map((track) => trackToRow(track, snapshotNotes?.get(track.id) ?? [])),
     );
-  }, [tracks, memoryNotesByTrackId]);
+  }, [snapshotTracks, snapshotNotes]);
 
   const byId = useMemo(() => new Map(tracks.map((track) => [track.id, track])), [tracks]);
 

@@ -13,7 +13,7 @@
 |-------|------|--------|------|
 | 1 | 观测先行：内存与帧节奏指标 | 🔄 In Progress | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | 确证泄漏修复（P0：YouTube 播放路径） | ✅ Completed | [Phase 2 Checklist](#phase-2-checklist) |
-| 3 | 全表查询放大链治理（列表 / 搜索 / 统计） | 🔲 Pending | [Phase 3 Checklist](#phase-3-checklist) |
+| 3 | 全表查询放大链治理（列表 / 搜索 / 统计） | ✅ Completed | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | 渲染层 GPU / GC 卫生（可视化 + 背景） | 🔲 Pending | [Phase 4 Checklist](#phase-4-checklist) |
 | 5 | 大文件内存防护（预热 / 缓存 / 下载） | 🔲 Pending | [Phase 5 Checklist](#phase-5-checklist) |
 
@@ -312,17 +312,18 @@ player-store.ts:2122-2155 两次 `updateMediaSessionMetadata` 交错时（await 
 **Goal:** 写库突发（导入 / DJ 续歌）不再触发 O(N×写入) 级联。
 
 **Tasks:**
-- [ ] F-3-1：审计 DJ 引擎与导入路径的写事务合批（同事务多写 = 单次 liveQuery 重查）
-- [ ] F-3-2：`allTracks` 重查询输出防抖（trailing ~250ms）后再进派生计算
-- [ ] F-3-3：`setSearchRows` 防抖合并（增量 diff 协议列为 v2，本期不做）
-- [ ] F-3-4：artist/album 索引构建包 `startTransition`/`useDeferredValue`
-- [ ] F-4：stats liveQuery 防抖，确认仅搜索页可见时订阅
+- [x] F-3-1：审计完成，**决定不改写侧**——dj-engine 每次 draft 仅 batchSize(~3)+1 次写，全部落进读侧 250ms 合并窗口；folder import 已在 worker 批量写。不动 dj-engine（命脉文件），合批收益已被读侧覆盖
+- [x] F-3-2：新建 [`useThrottledValue`](../../../src/hooks/use-throttled-value.ts)（**leading+trailing 节流**而非纯 trailing debounce——持续写入流下纯 debounce 会饿死，测试覆盖该场景）；search-page / global-track-search 的 `allTracks` 经 250ms 合并后再进派生计算，memoryNotes liveQuery 因依赖其 identity 自动随之降频
+- [x] F-3-3：`useWorkerTrackSearch` 的快照 push 输入节流——worker 序列化 + 结构化克隆至多每 250ms 一次；查询仍对 live `tracks` 排序，结果不滞后于可见列表
+- [x] F-3-4：artist/album 索引构建源包 `useDeferredValue`，合并后的更新先画列表、O(N) 重投影走 transition 优先级
+- [x] F-4：`listTrackPlaybackStats` 输出同样 250ms 合并（播放心跳 flush 不再逐次触发整表重扫 + 三层统计重建）；订阅本就限于搜索页挂载期
 
 ### Phase 3 Checklist
 
-- [ ] 场景 S2：导入 500 首期间 `listAllTracks` 执行次数较基线下降 ≥10×，longtask max < 200ms
-- [ ] 搜索结果正确性不回归（既有 track-search / 拼音搜索测试全绿）
-- [ ] DJ 续歌 integration test（硬规则 7）全绿
+- [ ] 场景 S2：导入 500 首期间 `listAllTracks` 执行次数较基线下降 ≥10×，longtask max < 200ms（人工，待真机用 HUD `db` 行验证）
+- [x] 搜索结果正确性不回归（hooks/search/pages 40 测 + track-search 全绿）
+- [x] DJ 续歌 integration test（硬规则 7）全绿（dj 套件 39 测）
+- [x] preview 验证：改动后 app 正常启动渲染、HUD `db` 计数行端到端工作、无 console 错误（曾出现一次 HMR hook 顺序报错，整页刷新后消失，确认为热更新中间态而非真实 bug）
 
 ### Phase 4: 渲染层 GPU / GC 卫生
 

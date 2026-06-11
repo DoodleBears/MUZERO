@@ -12,6 +12,7 @@ import type { StreamSourceId, Track } from "@/db/types";
 import { useSettings } from "@/hooks/use-app-data";
 import { useTrackCoverUrl } from "@/hooks/use-media";
 import { useOnlineSourceSearch } from "@/hooks/use-online-source-search";
+import { LIBRARY_QUERY_COALESCE_MS, useThrottledValue } from "@/hooks/use-throttled-value";
 import { useTransliterationReady } from "@/hooks/use-transliteration-ready";
 import { useWorkerTrackSearch } from "@/hooks/use-worker-track-search";
 import { hasStreamingSources } from "@/lib/desktop/bridge";
@@ -81,7 +82,10 @@ export function GlobalTrackSearch({
   const [menuDismissed, setMenuDismissed] = useState(false);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
-  const allTracks = useLiveQuery(() => listAllTracks(db), [], []);
+  // Coalesce write bursts so the memory join + worker snapshot below re-run at
+  // most once per interval instead of once per tracks write (PRD F-3).
+  const allTracksLive = useLiveQuery(() => listAllTracks(db), [], []);
+  const allTracks = useThrottledValue(allTracksLive, LIBRARY_QUERY_COALESCE_MS);
   const memoryNotes = useLiveQuery(
     () =>
       allTracks.length > 0

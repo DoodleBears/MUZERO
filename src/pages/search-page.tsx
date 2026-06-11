@@ -12,7 +12,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { motion } from "motion/react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { SourceAttributionChip } from "@/components/cloud/source-attribution-chip";
@@ -62,6 +62,7 @@ import type { CropRect, DjSession, Track } from "@/db/types";
 import { useBackGesture } from "@/hooks/use-back-gesture";
 import { useCoverMetadataBackfill, useTrackCoverUrl } from "@/hooks/use-media";
 import { useShortcutMatcher } from "@/hooks/use-shortcut-matcher";
+import { LIBRARY_QUERY_COALESCE_MS, useThrottledValue } from "@/hooks/use-throttled-value";
 import { useTransliterationReady } from "@/hooks/use-transliteration-ready";
 import { hasModalDialogOpen, isTypingTarget } from "@/lib/dom-keys";
 import { ENTITY_SORT_DEFAULT_DIR, type EntitySort, sortEntities } from "@/lib/entity-gallery";
@@ -232,7 +233,12 @@ export function SearchPage() {
   matchesRef.current = matches;
 
   const sessions = useLiveQuery(() => listSessions(db), [], []);
-  const allTracks = useLiveQuery(() => listAllTracks(db), [], []);
+  // Every tracks write re-runs the full-table query with a fresh array. Coalesce
+  // bursts (folder import, DJ refill) so the O(N) consumers below — memory join,
+  // artist/album indexes, worker search snapshot — re-run at most once per
+  // interval instead of once per write (PRD F-3).
+  const allTracksLive = useLiveQuery(() => listAllTracks(db), [], []);
+  const allTracks = useThrottledValue(allTracksLive, LIBRARY_QUERY_COALESCE_MS);
   const remoteTracks = useLiveQuery(() => db.remoteSearchTracks.toArray(), [], []);
   const memoryNotes = useLiveQuery(
     () =>
@@ -304,12 +310,17 @@ export function SearchPage() {
   const trackById = useMemo(() => new Map(allTracks.map((tr) => [tr.id, tr])), [allTracks]);
 
   // Derived artist/album entities — pure projections over the imported metadata
-  // (no stored table); re-project whenever the track liveQuery emits.
-  const artistIndex = useMemo(() => buildArtistIndex(allTracks), [allTracks]);
-  const albumIndex = useMemo(() => buildAlbumIndex(allTracks), [allTracks]);
+  // (no stored table). Deferred so a coalesced library update paints the lists
+  // first and the O(N) re-projection runs at transition priority (PRD F-3).
+  const indexSource = useDeferredValue(allTracks);
+  const artistIndex = useMemo(() => buildArtistIndex(indexSource), [indexSource]);
+  const albumIndex = useMemo(() => buildAlbumIndex(indexSource), [indexSource]);
   // Per-artist/album listening time — a derived current-truth dimension folded
   // from the per-track playback signal (re-tag re-buckets; see PRD §3.4).
-  const playbackStats = useLiveQuery(() => listTrackPlaybackStats(db), [], []);
+  // Playback heartbeats write this table every flush DURING playback — coalesce
+  // so sitting on this page while music plays doesn't re-scan per flush (F-4).
+  const playbackStatsLive = useLiveQuery(() => listTrackPlaybackStats(db), [], []);
+  const playbackStats = useThrottledValue(playbackStatsLive, LIBRARY_QUERY_COALESCE_MS);
   const statsByTrackId = useMemo(() => buildTrackStatsMap(playbackStats), [playbackStats]);
   // trackId → last-played epoch ms, for the 最近播放 sort (never-played omitted → 0).
   const lastPlayedByTrack = useMemo(() => {
