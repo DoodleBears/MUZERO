@@ -22,7 +22,7 @@
 | 7 | Sync hardening (2026-06-11 audit follow-ups) | ✅ Done | [§12.3 backlog](#123-phase-7-proposed-sync-hardening) |
 | 8 | Multi-writer library (read-merge-write publish) | ✅ Done | [§12.4](#124-phase-8-multi-writer-library-read-merge-write-publish) |
 | 9 | Same-set co-editing (one user, multiple devices) | ✅ Done | [§12.5](#125-phase-9-same-set-co-editing-one-user-multiple-devices) |
-| 10 | Automatic sync + R2 scale optimizations | 🔲 Pending | [§12.6](#126-phase-10-automatic-sync--r2-scale-optimizations) |
+| 10 | Automatic sync + R2 scale optimizations | ✅ Done | [§12.6](#126-phase-10-automatic-sync--r2-scale-optimizations) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
 
@@ -2209,7 +2209,14 @@ Do not record secrets, full signed URLs, or media content.
 - [x] AS-4 Add bounded immutable-object upload concurrency while preserving ordered conditional JSON writes and manifest-last publish.
 - [x] AS-5 Update progress UI/tests for concurrent active uploads and scheduler state.
 - [x] AS-6 Add ETag/conditional-read cache for manifest/index base fetches.
-- [ ] AS-7 Revisit large-library scale: paged set indexes, mutation-log compaction, and multipart upload as separate implementation slices.
+- [x] AS-7 Revisit large-library scale: paged set indexes, mutation-log compaction, and multipart upload as separate implementation slices.
+
+**AS-7 scale follow-up decisions:**
+
+1. **Paged set indexes become a future protocol slice, not a hidden change.** Keep `sets/<setId>/index.json` as the v1 canonical snapshot until a real set size threshold justifies pagination. The future slice must add an additive manifest/index capability such as `pages`, keep legacy readers working, and test mixed v1/vpaged subscribers.
+2. **Mutation-log compaction remains reserved for multi-user/trusted-collaborator sync.** The current single-user multi-device flow already merges same-set edits with tombstones/ranks. Append-only mutation files under `sets/<setId>/mutations/<devicePublicId>/...` should become the normal transport only when untrusted or semi-trusted writers need reviewable conflict resolution and snapshot compaction.
+3. **Multipart upload is a separate large-video resilience slice.** The current Phase 10 implementation remains object-level resumable: a successful object is persisted immediately and skipped on retry; a failed single PUT retries the whole object. Multipart must design persisted upload ids, part checksums, complete/abort cleanup, and manifest-last safety before implementation.
+4. **No automatic protocol migration in Phase 10.** AS-1 through AS-6 already deliver the user-visible automatic sync and R2 performance wins without changing reader compatibility. Large-library protocol changes need their own PRD/checklist and migration tests.
 
 **Non-goals for Phase 10:**
 
@@ -2219,12 +2226,15 @@ Do not record secrets, full signed URLs, or media content.
 - No byte-level resume until multipart upload is designed and tested.
 - No anonymous public writeback without the future broker layer.
 
+**Outcome (2026-06-11): Phase 10 ✅.** Cloud drives now have visible per-drive auto-sync frequency and upload-concurrency controls; an app-lifecycle scheduler triggers the existing orchestrated Sync now path with app-start/interval/change-debounce policy, jitter, visibility/network/in-flight guards, failure backoff, and pause-on-conflict/cancel/failure semantics. Automatic sync skips empty runs via dirty tracking, immutable/resumable objects can upload with bounded concurrency while JSON barriers and manifest-last safety remain intact, progress UI shows active uploads and pause state, and remote base reads use ETag/304 caching. Larger protocol changes (paged set indexes, mutation-log compaction, multipart upload) are deliberately split into future slices.
+
 ---
 
 ## 13. Document Change Log
 
 | Date | Author | Changes |
 |------|--------|---------|
+| 2026-06-11 | MUZERO | Phase 10 AS-7 completed and Phase 10 closed: large-library protocol work was split into future explicit slices instead of hidden migration. Paged set indexes require an additive compatibility protocol, mutation-log compaction remains reserved for multi-user/trusted-collaborator sync, and multipart upload needs its own persisted-upload/part-cleanup/manifest-last design. Phase 10 outcome recorded as complete. |
 | 2026-06-11 | MUZERO | Phase 10 AS-6 completed: remote publish-base reads now support an explicit ETag cache. Validated manifest/index objects are cached with their ETags, later reads send `If-None-Match`, and HTTP 304 reuses the cached parsed object. The sync store wires a per-R2-drive cache into every publish-base fetch, and tests cover conditional headers plus cached-object reuse. |
 | 2026-06-11 | MUZERO | Phase 10 AS-5 completed: publish progress now reports active concurrent uploads, the live cloud-drive progress row displays the active count, and the drive sync controls show when automatic sync is paused. Tests cover active-upload progress events and paused scheduler state rendering. |
 | 2026-06-11 | MUZERO | Phase 10 AS-4 completed: `publishR2ExportPlan` now supports bounded upload concurrency for immutable/resumable objects only, while mutable JSON objects remain ordered barriers and `manifest.json` remains last. The orchestrator forwards each drive's visible upload concurrency preference, and tests verify concurrent media/cover PUTs do not allow set indexes or the root manifest to overtake unfinished immutable uploads. |
