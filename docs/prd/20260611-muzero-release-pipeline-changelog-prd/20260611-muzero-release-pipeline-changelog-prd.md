@@ -18,6 +18,7 @@
 | 3 | Electron 发布打包硬化（publish provider + per-OS targets + app-update + 安全/外部依赖收口） | ✅ Completed | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | Makefile 多平台发布指令 + R2 分发 + `manifest.json` 版本索引（合并式上传） | ✅ Completed | [Phase 4 Checklist](#phase-4-checklist) |
 | 5 | 自动更新（electron-updater IPC + 渲染层提示）+ Settings 历史版本下载侧栏 | ✅ Completed | [Phase 5 Checklist](#phase-5-checklist) |
+| 6 | 发版健壮性 + 部署 runbook（版本三文件同步守卫 + `release-check`/`release-show` + `CHANGELOG.md` 导出 + R2 开通文档） | 🔄 In Progress | [Phase 6 Checklist](#phase-6-checklist) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
 
@@ -524,6 +525,22 @@ src/components/settings/
 - [x] macOS 收到 `manual-required` → 点按打开下载页 ✅（updater.cjs isMac 分支 + about 面板 install 按钮 openExternal）
 - [x] Settings「版本历史」列出 manifest 全部版本，点击下载对应平台安装包（桌面经 bridge.openExternal / web window.open）✅（面板 + manifest fetch 测）
 - [x] web 上更新区灰掉/隐藏（`supported:false` 显示「网页版自动更新」），下载列表仍可用 ✅
+
+### Phase 6: 发版健壮性 + 部署 runbook
+
+**Goal:** 守住 Phase 1 的「三文件版本 lockstep」承诺、给发版加一道总闸、把类型化 changelog 导出成仓库标准 `CHANGELOG.md`、并补齐 R2 开通的部署文档——让首发可照单执行。
+
+**Tasks:**
+- [x] `scripts/check-version-sync.mjs`：读 `package.json` + `tauri.conf.json` + `Cargo.toml` 三处版本，drift 即 exit 1。✅ `collectVersions`/`versionsInSync` + 4 测。
+- [x] `make release-check`（= `changelog-check` + `version-sync`）作为 `release-build` 前置总闸（所有 `release-*` 经由它）；`make release-show` 打印版本 + 三文件一致性 + changelog 就位。✅
+- [ ] `scripts/export-changelog-md.mjs`：把类型化 changelog 渲染成根 `CHANGELOG.md`（en，Keep-a-Changelog 风，按 category 分组）。纯 `renderChangelogMarkdown` + test；`make changelog-md` 重新生成。
+- [ ] R2 部署 runbook（[§12](#12-deployment-runbook-r2-分发桶)）：建桶 + 公共读 + CORS + 绑 `assets.mu0.app` + rclone `r2:` remote + 凭证纪律。
+
+### Phase 6 Checklist
+- [x] `make release-check` 在三文件版本一致且 changelog 就位时通过；任一漂移/缺失即非零 ✅
+- [x] `make release-show` 输出当前版本 + 同步状态 ✅
+- [ ] `make changelog-md` 生成的 `CHANGELOG.md` 含全部 7 版、按 category 分组、版本顺序新→旧
+- [ ] runbook 步骤可照单开通 R2 并首发
 
 ---
 

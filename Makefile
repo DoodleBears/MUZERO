@@ -1,7 +1,7 @@
 .PHONY: help install update
 .PHONY: dev web desktop tauri electron-dev electron-preview electron-build ios ios-init android android-init mobile-info tauri-info
 .PHONY: build preview desktop-build desktop-debug mac win linux ios-build android-build desktop-locate
-.PHONY: version-bump changelog-check release-build release-mac release-win release-linux release-publish release-publish-dry release-locate
+.PHONY: version-bump changelog-check version-sync release-check release-show release-build release-mac release-win release-linux release-publish release-publish-dry release-locate changelog-md
 .PHONY: test test-watch typecheck lint format check
 .PHONY: icons ui ui-coss ui-theme clean clean-dist
 
@@ -75,6 +75,9 @@ help:
 	@echo "Release:"
 	@echo "  make version-bump TYPE=minor - Bump version across package.json + tauri.conf + Cargo (lockstep)"
 	@echo "  make changelog-check         - Fail if the current version has no changelog file"
+	@echo "  make release-check           - Pre-release gate: changelog present + versions in lockstep"
+	@echo "  make release-show            - Print version + lockstep sync + changelog status"
+	@echo "  make changelog-md            - Regenerate CHANGELOG.md from the typed changelog"
 	@echo "  make release-mac             - Build mac dmg+zip installers (Mac only) → release/"
 	@echo "  make release-win             - Build Windows nsis installer (run on Windows/WSL2)"
 	@echo "  make release-linux           - Build Linux AppImage+deb (run in WSL2/Linux)"
@@ -197,14 +200,28 @@ version-bump:
 	node scripts/bump-version.mjs $(TYPE)
 
 # Release gate — fail if there's no changelog releases/<version>.ts for the
-# current package.json version. A dependency of every release-* target.
+# current package.json version.
 changelog-check:
 	node scripts/check-changelog.mjs
+
+# Fail if the version drifts across package.json / tauri.conf.json / Cargo.toml.
+version-sync:
+	node scripts/check-version-sync.mjs
+
+# The total pre-release gate: changelog present + versions in lockstep. A
+# dependency of every release-* build.
+release-check: changelog-check version-sync
+
+# Print the current release status: version + lockstep sync + changelog presence.
+release-show:
+	@printf 'MUZERO version: '; node -e "process.stdout.write(require('./package.json').version + '\n')"
+	@node scripts/check-version-sync.mjs || true
+	@node scripts/check-changelog.mjs || true
 
 # Shared: build the renderer (dist/) + bundle the Electron main (dist-electron/).
 # No tsc here — type-safety is a separate gate (make typecheck / lefthook); a
 # release build shouldn't be blocked by unrelated type debt.
-release-build: changelog-check
+release-build: release-check
 	$(PM) exec vite build
 	node scripts/build-electron-main.mjs
 
