@@ -354,7 +354,7 @@ chat 入口落在**记忆 icon + 切 tab icon 的左边**、占该行剩余宽�
 
 ### 5.4 Composer（`chat-composer.tsx`）
 
-- v1 用**新 `textarea` 原语**（auto-grow 上限 ~6 行）；@mention（track/session 引用）与 `/` 命令做成**后续增强**（ClipCombo 用 contentEditable+chips，较重，先不抄）。
+- v1 用**新 `textarea` 原语**；**autosize：默认 1 行行高，随换行/折行长高到 3 行（`MAX_ROWS`），超出则内部滚动**（`useLayoutEffect` 先把 `height` 置 `auto` 再设 `min(scrollHeight, 3 行+padding)`，并据此切 `overflow-y`）。`textarea` 原语补 ref 透传（React 19 ref-as-prop）。@mention（track/session 引用）与 `/` 命令做成**后续增强**（ClipCombo 用 contentEditable+chips，较重，先不抄）。
 - **3 态主按钮**（抄队列 PRD）：idle+有草稿 `ArrowUp` 发送 / running+空 `CircleStop` 停 / running+有草稿 `ListEnd` 入队。
 - **键盘契约**：`Enter` 发送（idle）或入队（running）；`Ctrl/Cmd+Enter` 打断并发；`Shift+Enter` 换行。
 - **空态 onboarding**：无 session + 输入空时，composer 上方一排**本地化预设 chips**（"做一个深夜 focus set" / "从我 #gym 上传里挑" / "续上更 chill 的"）；点击**只插入不自动发**；有文字/进 session/无 key 时隐藏。
@@ -379,7 +379,8 @@ chat 入口落在**记忆 icon + 切 tab icon 的左边**、占该行剩余宽�
 ### 5.8 队列/打断托盘（Phase 6）
 
 - 队列只存 `composerRaw` + 紧凑 contextSnapshot；**派发时**才重建展开 prompt（不存展开/密钥/媒体）。
-- 重载/actor 重建后 `autoDispatchEnabled=false`（reason `reload`），托盘里可见 Switch + 每项「立即发送」。**Stop ≠ Interrupt**：Stop 中止当前 turn 并暂停自动派发；Interrupt 中止并插队即发 + 一次性「被新指令打断」标记。DnD 重排（抄 export-drawer 模式）。session 作用域，不跨 session 泄漏。
+- **托盘按需显示**：仅当**队列非空**时才渲染整块「排队的指令」区（含 Switch）；空队列**完全不占位**（chat-panel 在 `queuedPrompts.length > 0` 时才挂 `ChatQueueTray`）。
+- **auto-dispatch 默认开**：读取点默认 `?? true`（dj-chat-entry，per-session），即队首在 turn settle 后自动发；用户可在托盘 Switch 显式关（关态才写入 ephemeral `autoDispatchBySessionId`，不 partialize）。**Stop ≠ Interrupt**：Stop 中止当前 turn 并暂停自动派发；Interrupt 中止并插队即发 + 一次性「被新指令打断」标记。DnD 重排（抄 export-drawer 模式）。session 作用域，不跨 session 泄漏。
 
 ### 5.9 State 纪律（Zustand slice / selector / 防无关重渲染）—— 硬性
 
@@ -637,6 +638,7 @@ chat 入口落在**记忆 icon + 切 tab icon 的左边**、占该行剩余宽�
 | 2026-06-12 | Claude | **CHAT-5g 模型能力 + 切换 bug**（已合 main）：**5g1** 修 model 切换「没反应」（`llmModelForPreset` 之前对非 custom preset 只认 hardcoded 列表 → 实时目录选的 model 被打回默认；改为无条件信任 remembered）；**5g2** `LlmModelPreset` 加 `supportsVision/Audio/Tools` + `parseModelCatalog` 读 OpenRouter `architecture.input_modalities`/`supported_parameters`；**5g3** `ModelCapabilityBadges`（lucide：Eye/AudioLines/Wrench/Ruler+128K/Coins+$in/$out，title tooltip）挂 model combobox item + trigger。|
 | 2026-06-12 | Claude | **CHAT-5h 在线搜索入库 tool + 生成默认关 + minimize 修复**（owner，5 个原子 commit，独立 worktree）。**① UI**：chip→icon 最小化原用共享 `layoutId` morph 两个不同尺寸盒子 → 整体拉伸变形；改单一 `overflow-hidden` 容器 + `layout` 动画，Sparkles 钉左、输入+按钮向右裁剪收起（左 Sparkles 钮兼任最小化/恢复）。**② 门控放宽**：`canUseDjChat` 改 **LLM-only**（生成不再是前提——搜索便宜、本地 LLM 可跑）；新 `AppSettings.aiDjGenerationEnabled`（**默认关**）+ `canGenerateMusic`（开关 + cloud 配好）+ `hasEnabledStreamSources`。**③ 工具**：新增 `online_search_tracks`（搜 YT/B站/网易云，读·免费）+ `online_add_tracks`（`addHitsToSet` 入库、去重、不自动播、不审批）；`createDjChatTools` 按 `includeGenerate`/`includeOnline` 裁剪，agent 每轮按 settings 计算（未配生成 → 不插入花钱工具；有在线源 → 插入搜索工具）。**④ Settings**：音乐生成区改「启用 AI 音乐生成」勾选（默认关），开启才显示 cloud BYOK 配置；**移除 mock/离线本地选项**。重写 §4.2 工具表 + §5.1 门控 + i18n ×4。176 测全绿、tsc 清。|
 | 2026-06-12 | Claude | **CHAT-5i agent 策展播放列表**（owner：「AI 搜集我的歌→建歌单→播放；切当前/插下一首/清空/用歌单覆盖播放列表」）。澄清:**机制已存在**(歌单 Set vs 播放列表 PlayQueue 单例，数据模型 DM-1)，缺的是 agent 工具 + 「写队列≠出声」的播放桥接。新增 5 工具:**`set_add_tracks`**(把现有本地 track id 加进歌单=策展核心，`prependTrackIds` 幂等、只加存在的)、**`queue_clear`**(`playQueueSet([])` 清空)、**`play_set`**(装载歌单+从头播)、**`play_track`**(切当前曲)；后两个经 `PlayerControl` 接口桥接 player-store(`setActiveSession`+`play` / `playTrack`)——**懒 `import('@/stores/player-store')`** 保持 tool 模块无 store 耦合、单测注入 fake control。system prompt 补策展→播放流程指引。重写 §4.2 工具表 + §4.2 约定(播放列表机制说明)。chat 套件 55 测全绿、tsc 清。|
+| 2026-06-12 | Claude | **CHAT-5k 对话 UX 三连**（owner 截图反馈）。**① 排队托盘按需显示**：空队列**完全不渲染**「排队的指令」区（chat-panel 仅在 `queuedPrompts.length>0` 时挂 `ChatQueueTray`），不再常驻一个「队列为空」空盒。**② auto-dispatch 默认开**：dj-chat-entry 读取点 `?? false`→`?? true`（per-session，关态才写 ephemeral store）。**③ composer autosize**：默认 1 行行高，随换行长到 3 行（`MAX_ROWS`）再内部滚动（`useLayoutEffect` 置 `auto`→`min(scrollHeight, 3 行)`+ 切 overflow）；`textarea` 原语补 React 19 ref 透传。**④ 工具调用默认折叠**：`ChatToolCollapsible` 默认 `open=false`，仅 `approval-requested`/`output-error`（需用户介入）自动展开；summary 行加 `ChevronRight`（`group-open:rotate-90`）affordance，折叠态显示工具名+状态徽标。改写 §5.4/§5.8 + 2 新组件测（折叠默认、托盘 drain 隐藏）。chat UI 11 测全绿、tsc 清。|
 | 2026-06-12 | Claude | **CHAT-5j 搜索可扩展性 + 一步策展**（owner：「query 歌曲似乎有 50 上限，怎么设计让 agent 能很好筛歌」）。`library_search_tracks` 三项改进：**① 多关键词** `queries[]`（per-term 搜，`match` any=并集「凑一个流派」/all=交集「收窄」）；**② 字段投影** `fields`（默认仅回 `id`+`title` 缩小 JSON，按需取 artist/album/tags/…，artist/album 从 `mediaMetadata`/`streamMeta` 派生）；**③ 放开 50 上限**（`limit`≤500，回 `{total, returned, tracks}`，`total` 是完整命中数让 agent 知是否被截断）。新增 **`set_add_by_search`**(`muzero.set.add_by_search`)：按 `queries[]` 搜**全库**(无展示上限)、把每条命中**直接灌进歌单**——matched id 永不进 LLM 上下文，大库不爆 token，回 `{matched, added, skipped}`。system prompt 改用「set_create + set_add_by_search 一步成单，set_add_tracks 仅手挑少量」。重写 §4.2 工具表两行。chat 套件 59 测全绿、tsc 清。|
 
 ---

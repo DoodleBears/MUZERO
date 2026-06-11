@@ -111,6 +111,27 @@ describe("ChatPanel queued prompt tray", () => {
       await actor.flush();
     });
   });
+
+  it("hides the tray once the queue drains to empty", async () => {
+    const session = await createChatSession({ firstUserText: "drain" }, db);
+    const actor = getOrCreateDjChatRuntimeActor(session.id, { db });
+    await actor.ready;
+    await act(async () => {
+      await actor.queuePrompt("only prompt");
+    });
+
+    render(<ChatPanel db={db} queueLabels={queueLabels} sessionId={session.id} />);
+
+    // Visible while a prompt is queued…
+    const tray = await screen.findByRole("region", { name: "Queued prompts" });
+    expect(within(tray).getByText("only prompt")).toBeInTheDocument();
+
+    // …then the whole tray (and its auto-dispatch switch) unmounts when drained.
+    fireEvent.click(within(tray).getByRole("button", { name: "Delete queued prompt" }));
+    await waitFor(() => {
+      expect(screen.queryByRole("region", { name: "Queued prompts" })).not.toBeInTheDocument();
+    });
+  });
 });
 
 const emptyState = {

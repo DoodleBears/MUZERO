@@ -116,7 +116,7 @@ export function ChatPanel({
           toolLabels={toolLabels}
         />
       )}
-      {queueLabels && (
+      {queueLabels && (snapshot?.queuedPrompts.length ?? 0) > 0 && (
         <ChatQueueTray
           autoDispatchEnabled={autoDispatchEnabled}
           labels={queueLabels}

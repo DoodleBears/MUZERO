@@ -1,8 +1,11 @@
 import { ArrowUp, CircleStop, ListEnd } from "lucide-react";
 import type { FormEvent, KeyboardEvent } from "react";
-import { useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+
+/** Grow the composer from one line up to this many, then scroll internally. */
+const MAX_ROWS = 3;
 
 interface ChatComposerProps {
   disabled?: boolean;
@@ -32,6 +35,22 @@ export function ChatComposer({
   const draft = value ?? internalDraft;
   const setDraft = (next: string) => (onValueChange ? onValueChange(next) : setInternalDraft(next));
   const canSend = draft.trim().length > 0 && !disabled;
+
+  // Autosize: one line by default, grow with wrapped/newline content up to
+  // MAX_ROWS, then scroll inside. Reset to `auto` first so it can also shrink.
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `draft` is the resize trigger (content changed), even though the effect reads height from the DOM, not from draft.
+  useLayoutEffect(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    const styles = getComputedStyle(el);
+    const lineHeight = Number.parseFloat(styles.lineHeight) || 20;
+    const paddingY = Number.parseFloat(styles.paddingTop) + Number.parseFloat(styles.paddingBottom);
+    const maxHeight = lineHeight * MAX_ROWS + paddingY;
+    el.style.height = `${Math.min(el.scrollHeight, maxHeight)}px`;
+    el.style.overflowY = el.scrollHeight > maxHeight ? "auto" : "hidden";
+  }, [draft]);
 
   async function submitDraft(action: "send" | "queue" | "interrupt") {
     if (!canSend) return;
@@ -69,11 +88,13 @@ export function ChatComposer({
       onSubmit={handleSubmit}
     >
       <Textarea
-        className="max-h-36 min-h-11 resize-none"
+        className="min-h-0 resize-none overflow-y-hidden"
         disabled={disabled}
         onChange={(event) => setDraft(event.target.value)}
         onKeyDown={handleKeyDown}
         placeholder={placeholder}
+        ref={textareaRef}
+        rows={1}
         value={draft}
       />
       {isRunning && !draft.trim() ? (

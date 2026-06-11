@@ -73,4 +73,37 @@ describe("ChatToolCollapsible", () => {
     expect(screen.getByText("Failed")).toBeInTheDocument();
     expect(screen.getByRole("alert")).toHaveTextContent("Target set was not found.");
   });
+
+  it("collapses completed calls by default but auto-opens ones needing attention", () => {
+    const donePart = {
+      type: "tool-set_create",
+      toolCallId: "call_d",
+      state: "output-available",
+      input: { name: "Roadtrip" },
+      output: { status: "ok" },
+    } satisfies ToolUIPart;
+    const approvalPart = {
+      type: "tool-dj_generate_tracks",
+      toolCallId: "call_a",
+      state: "approval-requested",
+      input: { sessionId: "ses_1" },
+      approval: { id: "approval_2" },
+    } satisfies ToolUIPart;
+    const errorPart = {
+      type: "tool-dj_generate_tracks",
+      toolCallId: "call_e",
+      state: "output-error",
+      input: {},
+      errorText: "boom",
+    } satisfies ToolUIPart;
+
+    const detailsFor = (part: ToolUIPart) =>
+      render(<ChatToolCollapsible labels={labels} part={part} />).container.querySelector(
+        "details",
+      );
+
+    expect(detailsFor(donePart)?.open).toBe(false); // collapsed at a glance
+    expect(detailsFor(approvalPart)?.open).toBe(true); // approval needs eyes
+    expect(detailsFor(errorPart)?.open).toBe(true); // error needs eyes
+  });
 });

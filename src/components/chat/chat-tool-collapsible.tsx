@@ -1,4 +1,5 @@
 import { type DynamicToolUIPart, getToolName, type ToolUIPart } from "ai";
+import { ChevronRight } from "lucide-react";
 import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -26,7 +27,7 @@ interface ChatToolCollapsibleProps {
 
 export function ChatToolCollapsible({
   className,
-  defaultOpen = true,
+  defaultOpen,
   labels,
   onApprove,
   onReject,
@@ -37,13 +38,25 @@ export function ChatToolCollapsible({
       ? part.approval.id
       : undefined;
 
+  // Collapsed by default — the summary row (name + state) is enough at a glance.
+  // Auto-open only when the call wants the listener's eyes: an approval to grant
+  // or an error to read. An explicit `defaultOpen` overrides.
+  const needsAttention = part.state === "approval-requested" || part.state === "output-error";
+  const open = defaultOpen ?? needsAttention;
+
   return (
     <details
-      className={cn("rounded-lg border border-border bg-muted/30 text-sm", className)}
-      open={defaultOpen}
+      className={cn("group rounded-lg border border-border bg-muted/30 text-sm", className)}
+      open={open}
     >
-      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2">
-        <span className="min-w-0 truncate font-medium">{part.title ?? getToolName(part)}</span>
+      <summary className="flex cursor-pointer list-none items-center gap-2 px-3 py-2">
+        <ChevronRight
+          aria-hidden
+          className="size-3.5 shrink-0 text-muted-foreground transition-transform group-open:rotate-90"
+        />
+        <span className="min-w-0 flex-1 truncate font-medium">
+          {part.title ?? getToolName(part)}
+        </span>
         <span className="shrink-0 rounded-md bg-background px-2 py-0.5 text-muted-foreground text-xs">
           {labels.states[part.state]}
         </span>

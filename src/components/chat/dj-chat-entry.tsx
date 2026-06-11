@@ -70,8 +70,10 @@ export function DjChatEntry({
   const setApprovalMode = useChatStore((s) => s.setApprovalMode);
   const activeSessionId = useChatStore((s) => s.activeSessionId);
   const setActiveSessionId = useChatStore((s) => s.setActiveSessionId);
+  // Default ON: queued prompts fire automatically once the turn settles, unless
+  // the listener explicitly turned auto-dispatch off for this session.
   const autoDispatchEnabled = useChatStore((s) =>
-    s.activeSessionId ? (s.autoDispatchBySessionId[s.activeSessionId] ?? false) : false,
+    s.activeSessionId ? (s.autoDispatchBySessionId[s.activeSessionId] ?? true) : true,
   );
   const setAutoDispatch = useChatStore((s) => s.setAutoDispatch);
   const runtimeStatus = useChatStore((s) =>
