@@ -12,9 +12,11 @@ import {
 } from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
 import { saveSettings } from "@/db/repositories";
-import type { FlowEffectId } from "@/db/types";
+import type { FlowBlendMode, FlowEffectId } from "@/db/types";
 import { useSettings } from "@/hooks/use-app-data";
 import {
+  DEFAULT_FLOW_EFFECT,
+  FLOW_BLEND_MODES,
   FLOW_DEFAULT_COLORS,
   FLOW_DEFAULTS,
   FLOW_EFFECTS,
@@ -39,7 +41,7 @@ export function FlowSettings() {
   const tk = (key: string) => t(key, { defaultValue: key });
   const settings = useSettings();
   const source = settings.flowColorSource ?? "cover";
-  const effect = settings.flowEffect ?? "aurora-drift";
+  const effect = settings.flowEffect ?? DEFAULT_FLOW_EFFECT;
   const colors =
     settings.flowCustomColors && settings.flowCustomColors.length >= FLOW_MIN_COLORS
       ? settings.flowCustomColors
@@ -97,7 +99,7 @@ export function FlowSettings() {
             <SelectTrigger>
               <SelectValue>
                 {(value) =>
-                  tk(FLOW_EFFECTS.find((e) => e.id === value)?.labelKey ?? "flow.effectAuroraDrift")
+                  tk(FLOW_EFFECTS.find((e) => e.id === value)?.labelKey ?? "flow.effectChaosWaves")
                 }
               </SelectValue>
             </SelectTrigger>
@@ -200,6 +202,33 @@ export function FlowSettings() {
         {flowEnabled ? (
           <div className="grid gap-3 border-border border-t pt-3">
             <span className="text-xs font-medium text-muted-foreground">{t("flow.composite")}</span>
+            <div className="grid gap-1.5">
+              <span className="text-xs text-muted-foreground">{t("flow.blend")}</span>
+              <Select
+                value={settings.flowBlendMode ?? FLOW_DEFAULTS.blendMode}
+                onValueChange={(value) =>
+                  void saveSettings({ flowBlendMode: value as FlowBlendMode })
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue>
+                    {(value) =>
+                      tk(
+                        FLOW_BLEND_MODES.find((b) => b.id === value)?.labelKey ??
+                          "flow.blendScreen",
+                      )
+                    }
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {FLOW_BLEND_MODES.map((b) => (
+                    <SelectItem key={b.id} value={b.id}>
+                      {tk(b.labelKey)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
             <PctSlider
               label={t("flow.opacity", { pct: settings.flowOpacity ?? FLOW_DEFAULTS.opacity })}
               value={settings.flowOpacity ?? FLOW_DEFAULTS.opacity}

@@ -20,6 +20,7 @@
 | 7 | **全 color4bg 效果对齐**（owner：「支持这个包所有类型」）：14 个自研 flow shader（`flow-shaders.ts`，ambient-light/aesthetic-fluid/big-blob/blur-dot/blur-gradient/wavy-waves/chaos-waves/swirling-curves/curve-gradient/step-gradient/grid-array/triangles-mosaic/random-cubes/abstract-shape），`FlowEffectId` 扩成 14、每效果一 shader 按需编译 | ✅ Completed | [Phase 7 Checklist](#phase-7-checklist) |
 | 8 | **过渡自然化**（owner）：切**效果**时 flow 层按 `flowEffect` 做 `key` → AnimatePresence 淡出/淡入**交叉淡化**（不再 recompile 硬切）；切**歌曲**时颜色复用既有封面取色 store 的 900ms `mixPalette` 插值（与频谱同机制，同一 canvas 不重挂） | ✅ Completed | [Phase 8 Checklist](#phase-8-checklist) |
 | 9 | **默认 + 性能 + Dev HUD**（owner）：默认改 chaos-waves / 透明度 50 / 压暗 0 / 音频反应 75 / 流速 100（集中到 `FLOW_DEFAULTS`）；背景 scene 低功耗（DPR≤1.5 + 40fps cap）；新增 dev-only 悬浮性能面板（FPS/帧节奏/jank/JS heap，仿 ClipCombo） | ✅ Completed | [Phase 9 Checklist](#phase-9-checklist) |
+| 10 | **混合模式**（PM：要 add/multiply 让流光与背景结合更自然）：用 **CSS `mix-blend-mode`**（合成器原生 add/multiply，**无需 Pixi/无 shader 移植**）。新增 `flowBlendMode`（normal/screen/plus-lighter(add)/multiply/overlay/soft-light，默认 screen）+ 根层 `isolate` 限定混合范围；顺手修 flow-settings 残留 `aurora-drift` 默认 bug | ✅ Completed | [Phase 10 Checklist](#phase-10-checklist) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
 > 本 PRD 适用 [`prd-create.md`](../../../.cursor/commands/prd-create.md) 的 **§3「Effect / Shader / 外部依赖类」** 附加要求（license 第一公民、curate 不穷举、**不引入新 runtime owner**、bundle 预算、自研优先、i18n 四语、不散落硬编码、shader uniform prelude 约定、基础设施先于覆盖广度、回退=`git revert`）与 **§4「realtime preview 性能类」**（reduced-motion / 可见性暂停 / prod build 复测）。
@@ -516,6 +517,26 @@ export function resolveFlowColors(
 - [x] flow-config(14) + perf-metrics(8) 测试绿；biome + whole-tree typecheck 净。
 - [ ] **真实 app 人工验证**：打开 dev 面板看 FPS/heap；开 flow（chaos-waves，默认）观察 FPS 是否稳（低功耗生效）；调流速/反应默认观感；面板折叠记忆。
 
+### Phase 10: 混合模式（流光 × 背景自然融合）✅
+
+**Goal:** PM 要 Pixi 那种图层 blend mode（add / multiply），让流光和背景图/视频结合更自然。
+
+**决策：用 CSS `mix-blend-mode`，不整合进 Pixi。** 浏览器合成器原生支持 add/multiply 等图层混合——流光 canvas 直接与下方背景按混合模式合成，**视觉等价于 Pixi `BLEND_MODES.ADD/MULTIPLY`**，但**零 shader 移植、零 context 合并、零耦合**（不必把 14 个 WebGL1 shader 搬进 Pixi v8，也不必把独立流光层耦合进条件性的 Pixi 背景）。Pixi 整合的唯一额外收益是省 1 个 context（仅 pixi 背景效果时），代价远大于收益（见 §2.3 同源推理）。
+
+**Tasks:**
+- [x] `db/types.ts` `FlowBlendMode = normal|screen|plus-lighter|multiply|overlay|soft-light` + `AppSettings.flowBlendMode`（additive 无 DB bump）。
+- [x] `flow-config.ts` `FLOW_BLEND_MODES`（含 labelKey）+ `FLOW_DEFAULTS.blendMode = "screen"`。
+- [x] `now-playing-background.tsx`：流光 `VisualizerHost` 加 `style.mixBlendMode`；**根层加 `isolate`**（`isolation:isolate`）把混合范围限定在「背景图/视频 + 流光 + 频谱」这组，绝不与 app 其余部分混合。
+- [x] `flow-settings.tsx`：composite 段加混合模式 Select；**修残留 bug**——`effect` 默认从已删的 `aurora-drift` 改 `DEFAULT_FLOW_EFFECT`（否则效果选择器显示空选中）。
+- [x] i18n 四语 `flow.blend*`（6 个混合模式标签）。
+
+> **screen vs plus-lighter**：`plus-lighter` 是真·线性相加（Chromium/Electron 支持），`screen` 是更柔的加亮、跨浏览器更稳——默认 `screen`（发光感、不易过曝），用户想要强相加一键切 add。`multiply` 则让封面透出、被流光染色（最「保留封面」的融合）。
+
+### Phase 10 Checklist
+- [x] flow-config(14) 测试绿；四语 JSON 校验 + biome + 我方文件 typecheck 净（`mixBlendMode:"plus-lighter"` csstype 通过）。
+- [x] `isolate` 限定混合范围（不外溢到 app）。
+- [ ] **真实 app 人工验证**：screen/add/multiply 逐个看流光与封面背景的融合；折叠/展开仍正常；混合不影响频谱层与前景 UI。
+
 ---
 
 ## 7. Out of Scope
@@ -580,6 +601,7 @@ export function resolveFlowColors(
 | 2026-06-11 | DoodleBear / MUZERO | **Phase 7 ✅ 全 color4bg 效果对齐**（owner：「支持这个包所有类型」）：新建 `flow-shaders.ts` 14 段自研 GLSL（color4bg 全 14 style 的自研复刻，含 3D/canvas 的 2D 近似），`FlowEffectId` 扩 14、每效果一 shader 按需编译、移除 `uEffect`，删旧 `FLOW_FRAG`，四语 14 标签。**仍零依赖**（不引 color4bg/ogl）。41 测试绿 + typecheck/biome/JSON 净 |
 | 2026-06-11 | DoodleBear / MUZERO | **Phase 8 ✅ 切换过渡自然化**（owner）：切效果 → flow 层 `key={flow-${effect}}` 触发 AnimatePresence 交叉淡化（0.5s，取代 recompile 硬切）；切歌颜色复用既有封面取色 store 900ms `mixPalette` 插值（同频谱，canvas 不重挂）。biome/typecheck 净 |
 | 2026-06-11 | DoodleBear / MUZERO | **Phase 9 ✅ 默认+性能+Dev HUD**（owner）：默认 chaos-waves/透50/暗0/反应75/流速100（`FLOW_DEFAULTS` 集中）；背景 scene 低功耗（DPR≤1.5 + 40fps cap，约省 60% GPU）；新增 dev-only 悬浮性能面板（`perf-metrics.ts`+`dev-perf-panel.tsx`：FPS/帧 p99/longtask jank/JS heap，500ms 快照，仿 ClipCombo）。14+8 测试绿 |
+| 2026-06-11 | DoodleBear / MUZERO | **Phase 10 ✅ 混合模式**（PM：流光×背景更自然融合）：用 **CSS `mix-blend-mode`**（合成器原生 add/multiply，**不整合进 Pixi**、零 shader 移植）。`FlowBlendMode` 6 档 + `flowBlendMode` 设置（默认 screen）+ 根层 `isolate` 限定混合范围 + flow-settings 混合 Select；顺手修残留 `aurora-drift` 默认 bug。四语 i18n。typecheck/biome/JSON 净 |
 
 ---
 
