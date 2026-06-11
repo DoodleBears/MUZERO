@@ -9,6 +9,10 @@ export interface CommandItem {
   id: string;
   keywords?: string[];
   label: string;
+  /** Optional leading glyph (e.g. a provider brand icon). */
+  icon?: ReactNode;
+  /** Optional secondary line under the label (e.g. key status / model id). */
+  description?: ReactNode;
 }
 
 interface CommandProps {
@@ -73,7 +77,7 @@ export function Command({
               aria-disabled={item.disabled || undefined}
               aria-selected={selectedId === item.id}
               className={cn(
-                "flex w-full cursor-pointer items-center rounded-md px-3 py-2 text-left text-sm outline-none",
+                "flex w-full cursor-pointer items-center gap-2 rounded-md px-3 py-2 text-left text-sm outline-none",
                 "hover:bg-accent focus-visible:bg-accent data-[selected=true]:bg-accent/60 data-[selected=true]:font-medium",
                 item.disabled && "cursor-not-allowed opacity-50",
               )}
@@ -84,7 +88,15 @@ export function Command({
               role="option"
               type="button"
             >
-              {item.label}
+              {item.icon && <span className="shrink-0 text-muted-foreground">{item.icon}</span>}
+              {item.description ? (
+                <span className="flex min-w-0 flex-1 flex-col">
+                  <span className="truncate">{item.label}</span>
+                  <span className="truncate text-muted-foreground text-xs">{item.description}</span>
+                </span>
+              ) : (
+                <span className="min-w-0 flex-1 truncate">{item.label}</span>
+              )}
             </button>
           ))
         )}

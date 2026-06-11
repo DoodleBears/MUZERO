@@ -3,6 +3,7 @@
 import { ChevronsUpDown } from "lucide-react";
 import { type ReactNode, useMemo, useState } from "react";
 import type { LlmProviderPreset, LlmProviderPresetId } from "@/ai/llm-providers";
+import { getProviderBrandIcon } from "@/components/settings/provider-brand-icons";
 import { Button } from "@/components/ui/button";
 import { Command, type CommandItem } from "@/components/ui/command";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -61,7 +62,10 @@ export function ChatModelPicker({
             className={cn("min-w-48 justify-between", className)}
             variant="outline"
           >
-            <span className="truncate">{selectedLabel ?? labels.inherited}</span>
+            <span className="flex min-w-0 items-center gap-2">
+              {selectedPresetId && <SelectedProviderIcon presetId={selectedPresetId} />}
+              <span className="truncate">{selectedLabel ?? labels.inherited}</span>
+            </span>
             <ChevronsUpDown aria-hidden="true" className="opacity-60" />
           </Button>
         }
@@ -79,6 +83,11 @@ export function ChatModelPicker({
   );
 }
 
+function SelectedProviderIcon({ presetId }: { presetId: string }) {
+  const Icon = getProviderBrandIcon(presetId);
+  return <Icon className="size-4 shrink-0" />;
+}
+
 function modelItemsFor(
   presets: readonly LlmProviderPreset[],
   selectedPresetId: string | undefined,
@@ -90,6 +99,7 @@ function modelItemsFor(
   let selectedLabel: string | undefined;
 
   for (const preset of presets) {
+    const Icon = getProviderBrandIcon(preset.id);
     for (const model of preset.models) {
       const id = itemIdFor(preset.id, model.id);
       const label = `${preset.label} / ${model.label}`;
@@ -98,6 +108,7 @@ function modelItemsFor(
         id,
         keywords: [preset.id, preset.label, model.id, model.label],
         label,
+        icon: <Icon className="size-4" />,
       });
       if (preset.id === selectedPresetId && model.id === selectedModel) {
         selectedId = id;

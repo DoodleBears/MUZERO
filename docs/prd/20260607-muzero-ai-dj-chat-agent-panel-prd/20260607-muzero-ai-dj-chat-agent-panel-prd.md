@@ -1,6 +1,6 @@
 # PRD: MUZERO — AI DJ Chat Agent Panel（多 Session 对话 · 三形态 · 流式 · 工具调用）
 
-**Status:** In Progress（Phase 1 ✅；Phase 2–6 的运行时 / 组件 / 测试**全部已建并绿**[`src/chat/*` runtime actor·tools·sessions·tokens·budget；`src/components/chat/*` FAB·bar·dock·session-home·model-picker·queue-tray·empty·notice；Dexie v5 chatSessions]，但统一阻塞于两件事：① `App.tsx` 挂载属并行 Now Playing redesign WIP → 待其落地做 CHAT-2b；② chat 命名空间 i18n 4 语 + Settings key 管理接线。即「逻辑齐备、外壳未挂」——审计 2026-06-11）
+**Status:** Implemented（Phase 1–6 全 ✅ 落地；外壳已重设计为 dock 集成三态入口并挂进 player-dock；多 provider + 动态自定义 provider + per-session 模型选择 + auto-dispatch + 空态 onboarding + 上下文预算拦截全接线 + i18n ×4。余：Phase 3 store-pump E2E 仍 blocked 于 player-store 并行 WIP；真实 LLM/endpoint 端到端对话待人工。分支 `feat/chat-llm-providers`，2026-06-11）
 **Created:** 2026-06-07
 **Author:** MUZERO
 **Module:** AI DJ 对话助手 —— 本地优先、BYOK、Vercel AI SDK v6 tool-loop、Dexie 持久化
@@ -19,8 +19,8 @@
 | 2 | **Dock 集成对话入口**（minimize 图标 / normal 圆角 chip 输入条 / expand framer-motion widget；gated on LLM+musicgen 已配置） | ✅ Completed（2026-06-11 重设计后落地：`canUseDjChat` 门控 + 三态 `dj-chat-entry` 挂 dock 工具行 + i18n ×4；preview 实测零报错，动效手感待真实窗口） | §7 |
 | 3 | DJ 工具调用（search/create/curate/propose/generate + HITL 审批） | ✅ Completed（6 工具+审批桥+折叠 UI+ask/auto 偏好切换+labels i18n ×4 全接线；余 store-pump E2E 一项见 checklist） | §7 |
 | 4 | 多 Session + 历史列表（搜索）+ branch/regenerate | ✅ Completed（search/branch/regenerate + session-home 挂进 expanded widget：History 切换 + 新建即开 + 重命名/删除；切换零 dispose） | §7 |
-| 5 | 多 Provider 模型选型（preset + **自定义 provider，复刻 ClipCombo** + combobox + Settings + key 入 Dexie） | 🔄 7 preset+model picker+dialog/popover/command/scroll-area 原语 ✅；**动态 custom-provider（Dexie）+ Settings provider 面板 + enabled grid + i18n 待** | §7 |
-| 6 | 队列/打断 prompt + 空态 onboarding + 上下文压缩 | 🔄 token/budget/queue-tray/empty/notice ✅；App 挂载 + i18n 待 | §7 |
+| 5 | 多 Provider 模型选型（preset + **自定义 provider，复刻 ClipCombo** + combobox + Settings + key 入 Dexie） | ✅ Completed（5a 数据层 / 5b keyless 解析 / 5c Settings 面板 / 5d per-session picker；于 `feat/chat-llm-providers`；真实 endpoint e2e 待人工） | §7 |
+| 6 | 队列/打断 prompt + 空态 onboarding + 上下文压缩 | ✅ Completed（auto-dispatch + 空态 + 预算拦截全接线 6k/6l/6m） | §7 |
 
 > Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
 
@@ -404,11 +404,12 @@ chat 入口落在**记忆 icon + 切 tab icon 的左边**、占该行剩余宽�
 | `list/put/deleteEditorCustomLlmProvider` + `useLiveQuery` + `notify…Changed` 事件 | **`src/ai/custom-llm-providers.ts` repo**（list/put/delete + `useLiveQuery`）；`normalizeCustomProviders()`（去重 / trim / 至少一 model）| 🔲 待做 |
 | `customLlmProviderConfigToPreset()`（custom → preset，恒 `openai-compatible`）| 同名纯函数，merge 进 `resolveProviderPresets(builtins, customProviders)` | 🔲 待做 |
 | `apiKeysByPresetId` / `modelsByPresetId`（per-provider 记 key + 上次 model）| settings 行（key 进 IndexedDB，硬规则 #2）；**补 `modelsByPresetId`** 切 provider 复原上次 model | 🔄 key 有、`modelsByPresetId` 待补 |
-| Provider 选择 = Popover+Command；「+ Add Custom Provider」建 `custom:${uuid}` | `chat-model-picker.tsx`（✅）扩 provider 维度 + Settings「+ 自定义 provider」按钮 | 🔄 |
+| Provider 选择 = Popover+Command **带品牌 icon**；「+ Add Custom Provider」建 `custom:${uuid}` | **`provider-combobox.tsx`**（每 item 品牌 glyph + label + key 状态、trigger 显示选中 icon，替换 grid）+ `provider-brand-icons.tsx`（CC0 内联 SVG）+ Command 原语加 `icon`/`description` slot；model picker/catalog combobox 同款 icon | ✅ CHAT-5f |
 | 自定义编辑：label / baseUrl / model 列表 add-remove / delete provider | **Settings provider 面板新组件 `llm-provider-settings.tsx`** | 🔲 待做 |
 | 「Enabled providers」勾选网格 + 每项 key 状态（ready / optional / missing）| 同面板内 grid；纯函数 `isLlmProviderKeyReady(settings, id)` | 🔲 待做 |
-| `ApiKeyField`（遮罩 + reveal + `apiKeyUrl` 链接 + onCommit 提交）| **新 `api-key-field.tsx`**（每 provider 一枚，写 `apiKeysByPresetId[id]`）| 🔲 待做 |
-| `createClipChatLanguageModel(settings)`：anthropic vs openai-compatible / keyless-local 去 auth header / baseURL 归一（补 `/v1`）| `resolveDjModel` 扩（[`src/ai/model.ts`](../../../src/ai/model.ts)）：anthropic 走 `createAnthropic`+浏览器直连 header；其余 `createOpenAI({ baseURL, apiKey, fetch: getAppFetch() })`；无 key 的 local endpoint 用 `fetchWithoutAuthorization` | 🔄 preset 解析有、custom/keyless 分支待补 |
+| `ApiKeyField`（遮罩 + reveal + `apiKeyUrl` 链接 + onCommit 提交）| 内联于 `llm-provider-settings.tsx`（每 provider 一枚，写 `apiKeysByPresetId[id]`）| ✅ CHAT-5c |
+| `createClipChatLanguageModel(settings)`：anthropic vs openai-compatible / keyless-local 去 auth header / baseURL 归一（补 `/v1`）| `resolveDjModel` 扩（[`src/ai/model.ts`](../../../src/ai/model.ts)）：anthropic `createAnthropic`+浏览器直连 header；其余 `createOpenAI({ baseURL, apiKey, fetch })`；keyless-local `fetchWithoutAuthorization` | ✅ CHAT-5b |
+| **动态 model 目录（ClipCombo 只做 OpenRouter，MUZERO 通用化）**：拉 provider `/v1/models` 实时列表，combobox 可过滤 + 自由输入自定义 id | **新 `src/ai/model-catalog.ts`**（`modelsEndpointFor`/`parseModelCatalog`[OpenRouter rich + 通用]/`fetchModelCatalog` 缓存+dedup）+ `use-model-catalog` hook + `model-catalog-combobox.tsx`（hardcoded ∪ live ∪ 自定义 id + loading/refresh）；覆盖 OpenRouter/OpenAI/Groq/DeepSeek/Gemini + **本地 ollama/vLLM/LM Studio**；Anthropic 无开放列表→hardcoded | ✅ CHAT-5e |
 | 视觉能力推断（`supportsVision` per model/provider）| v1 可省（DJ chat 暂不收图）；留 `models[].supportsVision?` 字段位 | ⏸️ 省 |
 
 **纪律**：custom provider 恒 `openai-compatible`；key **只进 IndexedDB `settings`**（不像 ClipCombo 放 localStorage——硬规则 #2）；HTTP 全程 `getAppFetch()`（桌面 muzfetch 绕 CORS——硬规则 #5/#10）；删 provider/model 走可撤的 repo mutation；`custom:` id 前缀属 codename 层稳定（硬规则 #4）。**`canUseDjChat` 的 `hasUsableLlm` 直接复用 `isLlmProviderKeyReady`**（任一「启用且 key-ready」的 provider 即满足门控）。
@@ -492,9 +493,9 @@ chat 入口落在**记忆 icon + 切 tab icon 的左边**、占该行剩余宽�
 - [x] 补 `command` primitive（无内置文案：items/placeholder/empty 由调用方传入；label+keywords 搜索过滤；select 回调）。
 - [x] `chat-model-picker.tsx` 展示层（无内置文案，Popover+Command 选择 enabled provider/model，回调 `{presetId, model}`）。
 - [x] **动态自定义 provider 数据层（复刻 ClipCombo §6.1，CHAT-5a）**：`CustomLlmProvider` 类型（types.ts）+ Dexie **v21** 新表 `llmCustomProviders`（`id, createdAt`，无 upgrade）+ `src/ai/custom-llm-providers.ts`（`isCustomLlmProviderId`/`createCustomLlmProviderId`/`normalizeCustomLlmProviders`[去重/trim/≥1 model/仅 `custom:` id]/`customLlmProviderToPreset`/list-put-delete repo/`useCustomLlmProviders` liveQuery）；`llm-providers.ts` 拓宽 `LlmProviderPresetId = Builtin | custom:${string}` + `allLlmProviderPresets`/`resolveLlmProviderPreset(id, custom)`/`llmProviderAllowsMissingApiKey`（keyless-local）/`enabledLlmPresetIds(settings, custom)`（custom 无 key 也 enabled）/`llmModelForPreset`+`AppSettings.modelsByPresetId`（per-preset 记忆上次 model）。16 测。
-- [ ] **Settings provider 面板 `llm-provider-settings.tsx`**：enabled grid（key ready/optional/missing 状态，`isLlmProviderKeyReady`）+ per-provider `api-key-field.tsx`（遮罩 / reveal / `apiKeyUrl` 链接）+「+ 自定义 provider」建 `custom:${uuid}` + 自定义编辑（label / baseUrl / model add-remove / delete）。
+- [x] **Settings provider 面板 `llm-provider-settings.tsx`（CHAT-5c，`feat/chat-llm-providers` worktree）**：provider grid（全 preset+custom，per-provider key 状态 ready/optional/missing，点选编辑）+ 内联 `ApiKeyField`（遮罩/reveal/`apiKeyUrl` 外链 `openExternalUrl`，blur 提交 `apiKeysByPresetId[id]`）+「+ 自定义 provider」建 `custom:${uuid}`（默认 `localhost:11434/v1`）+ 自定义编辑器（label/baseUrl blur 保存、model 列表 Enter/按钮增删、删 provider）+ 全局默认模型 `ChatModelPicker`（enabled=有 key 内置+全部 custom；选中写 `defaultLlm*`+`modelsByPresetId`）。替换 settings-page `playback-dj` 旧双 provider 表单（legacy 字段留 bridge）。i18n `settings.llm*` 20 键 ×4 语。组件测 5 例。注：main 继承的 chat-model-picker / virtual-track-list 2 个既有测试失败与本分支无关（stash 验证）。
 - [x] `resolveDjModel` 扩 custom/keyless 分支（CHAT-5b）：`normalizeOpenAiCompatibleBaseUrl`（trim/去尾斜杠/无版本段补 `/v1`，`/v1beta/openai` 保留）+ `fetchWithoutAuthorization`（keyless 用占位 key + 剥 `Authorization` 头）；transport `defaultResolveModel` 每次 send 懒读 `listCustomLlmProviders` 传入 selection+model 解析（settings/custom 改完即生效）。`modelsByPresetId` 记忆已随 5a 落（`llmModelForPreset`）。model.test.ts 新增（keyless 不抛/keyed 缺 key 抛/头剥离）。
-- [ ] Settings/App/i18n/DB 接线：provider key 管理、全局默认、per-session 覆盖持久化；上下文限制检测。
+- [x] Settings/App/i18n/DB 接线（CHAT-5c/5d）：key 管理 + 全局默认（Settings 面板）；**per-session 覆盖持久化**（`setChatSessionLlm` repo：只存 presetId+model、空串清空回全局默认 + expanded widget header 内 `ChatModelPicker`，选中即写 session 行、下一次 send 生效）。上下文限制 v1 = preset `contextLimit` 元数据 + budget 模块保守 128k 估算；动态拉取检测列后续增强。
 - [x] `ChatSession.llmProviderPresetId`/`llmModel`（不存 key）字段已随 CHAT-1 落库；Phase 5a 补全全局默认 fields + legacy bridge。
 
 **Phase 5 Checklist:**
@@ -505,17 +506,17 @@ chat 入口落在**记忆 icon + 切 tab icon 的左边**、占该行剩余宽�
 - [x] ScrollArea primitive 具备 root/viewport/content/scrollbar/thumb 稳定结构测试覆盖。
 - [x] Command primitive 具备 label/keyword 过滤、empty state、select id 回调测试覆盖。
 - [x] ChatModelPicker 展示层具备选中模型展示、provider/model 搜索过滤、空态与 select 回调测试覆盖。
-- [ ] 自定义 provider 全链路：建 `custom:${uuid}` → 编辑 baseUrl/model → 选中 → `resolveDjModel` 装配 openai-compatible → 对话可用；删除走可撤 mutation；key 只在 settings、不进 history（单测 + 组件测）。
-- [ ] i18n 4 语全覆盖（provider/model label、combobox 文案、自定义编辑/key 面板）。
+- [x] 自定义 provider 全链路：建 `custom:${uuid}`（5c 组件测）→ 编辑 baseUrl/model（5c）→ 选中（5d header picker / 5c 默认 picker）→ `resolveDjModel` 装配 openai-compatible + keyless（5b 单测）→ transport 懒读生效（5b）；删除走 repo delete（5a/5c 测）；key 只在 settings、session 行不存 key（5d repo 测断言 JSON 无 apiKey）。真实 endpoint 对话待人工 e2e。
+- [x] i18n 4 语全覆盖：`settings.llm*` 20 键 + `chat.model*` 4 键 ×4 语（provider/model/combobox/自定义编辑/key 面板）。
 
 ### Phase 6: 队列/打断 + onboarding + 压缩
 **Tasks:**
 - [x] `chat-queue-tray.tsx` 展示层（DnD 重排、可访问按钮重排、立即发送/删除回调、auto-dispatch Switch 默认关、无内置文案）。
 - [x] ChatPanel 可选 `queueLabels` 挂接 `chat-queue-tray.tsx` 到 runtime actor（send/delete/reorder）；runtime snapshot 暴露 queued prompt 详情。
-- [ ] App 挂载 + i18n labels + auto-dispatch 偏好持久化接线；待并行 App/i18n WIP 落地后补。
+- [x] App 挂载（dj-chat-entry 已在 player-dock）+ i18n labels（queue/tool/home/model 全接）+ **auto-dispatch 接线（CHAT-6k）**：纯函数 `shouldAutoDispatchQueued`（enabled + idle + 队列非空 + 无 pending approval，TDD 5 例）；chat-store 加 **ephemeral** `autoDispatchBySessionId`（不 partialize → 重载默认关，符合 §5.8「reason reload」）+ `setAutoDispatch`；ChatPanel useEffect 驱动 turn 完成自动派发队首；dj-chat-entry 把 store 状态接进 ChatPanel `autoDispatchEnabled`/`onAutoDispatchChange`。
 - [x] 队列 runtime 核心：`ChatSession.queuedPromptsJson` 解析/入队/重排/删除；actor 重建只恢复队列计数、不自动派发；手动派发移除 queued prompt 后发送；actor 重排/删除不触发发送；interrupt 立即发送并带一次性 marker。
 - [x] `chat-empty-state.tsx` 展示层：预设 chips 只触发 insert 回调不发送 + 空库/无 seed 引导动作（上传/输入 vibe），无内置文案。
-- [ ] 空态 App/composer draft/i18n 接线：chips 插入 textarea draft、上传/输入 vibe 导航动作。
+- [x] **空态 App/composer draft/i18n 接线（CHAT-6l）**：`ChatComposer` 受控化（可选 `value`/`onValueChange`，向后兼容内部 state）；`ChatPanel` 持 draft + `emptyState` prop，session 无消息时渲染 `ChatEmptyState`（chips `onInsertPrompt`→`setDraft` 注入 composer、`onStartWithVibe`→focus textarea、`onUploadLibrary`→回调）；dj-chat-entry 传 3 预设 chips + `onUploadLibrary`（收 widget + 切 search tab，player-dock 注入 `onTabChange("search")`）。i18n `chat.empty*`/`chat.preset*` 8 键 ×4 语。组件测：空态显示 + chip 注入 composer。
 - [x] `dj-chat-context-budget.ts` + `dj-chat-tokens.ts`：预算 gate + 滑动 `contextStartIndex` 压缩（block-and-explain，不静默截断）。
 
 **Phase 6 Checklist:**
@@ -529,7 +530,7 @@ chat 入口落在**记忆 icon + 切 tab icon 的左边**、占该行剩余宽�
 - [x] 超预算时纯函数返回 block（调用点负责解释）；压缩指针计算保留最新 user turn，不静默截断。
 - [x] 压缩指针 actor/repo 持久化、旧消息仍可见。
 - [x] `chat-context-budget-notice.tsx` 展示层：ok 默认隐藏、warn=`status`、block=`alert`，压缩动作只回调给上层，无内置文案。
-- [ ] 上下文预算 ChatPanel/App/composer 发送拦截与 block-and-explain 文案（待 i18n/App 挂载解锁）。
+- [x] 上下文预算 ChatPanel/App/composer 发送拦截与 block-and-explain 文案（**CHAT-6m**）：ChatPanel 用 `evaluateChatContextBudget` 对活跃窗口（`messages.slice(contextStartIndex)`）算预算 → 挂 `ChatContextBudgetNotice`（ok 隐藏 / warn / block）；**block 时 disable composer**（block-and-explain，不静默截断）；压缩动作 `actor.setContextStartIndex(len)` → `nextContextStartIndex` 前移到最新 user turn（旧消息仍可见）、窗口缩小后 composer 重新启用。dj-chat-entry 传 `budgetLabels`，i18n `chat.budget*` 3 键 ×4 语。组件测：超预算 block + 压缩后解锁（`contextStartIndex` 前移）。
 
 ---
 
@@ -618,6 +619,9 @@ chat 入口落在**记忆 icon + 切 tab icon 的左边**、占该行剩余宽�
 | 2026-06-07 | Codex | 推进 Phase 5g：新增无内置文案的 `ChatModelPicker` 展示层，基于 Popover+Command 展示 enabled presets/models，支持选中态、搜索过滤、空态与 `{presetId, model}` 选择回调；Settings/App/i18n/DB 接线继续等待并行 WIP 落地。`make check` 通过（62 files / 398 tests）。 |
 | 2026-06-11 | Claude | **Phase 2 落地（CHAT-2a/b/c 三个原子 commit）**：① `dj-chat-availability.ts` 纯门控（9 测）；② `ChatMode` 改 icon/chip/expanded + persist v1 迁移（fab→icon、bar→chip、dock/fullscreen→expanded）、删旧四形态壳（launcher-fab/input-bar/dock/breakpoint hook）、reply-notification 改判定（8 测）；③ `dj-chat-entry.tsx` 三态入口挂 player-dock 工具行（memory/nav 左侧 flex-1、空白区 click-through）+ chip 发送自动建 session + expanded 内嵌 ChatPanel + Esc/backdrop 收回 + i18n `chat.*` ×4（8 组件测）。**两个 motion 陷阱记录在案**：跨 portal 共享 layoutId 死锁 projection（widget 改自身 spring）；AnimatePresence 内 fragment 包裹断 exit 追踪（改 keyed 直挂子元素）。preview(:1440) 实测全循环零 console 报错；spring 视觉在隐藏 tab 冻结属沙箱限制。 |
 | 2026-06-11 | Claude | **Phase 2 外壳重新设计（owner 定）+ Phase 5 provider 扩展**。① 放弃 FAB / bar / Dock-1∕3 / 全屏四形态，改为**集成进 player-dock 上方工具行**的单一对话入口（落在记忆 + 切 tab icon **左侧**、`flex-1` 吃满剩余宽度），三态 **icon(minimize) → chip(normal，full-rounded 输入条，默认) → expanded(framer-motion `layoutId` morph 成 widget：桌面浮层卡片 / 移动全屏 sheet)**。② 新增**门控** `canUseDjChat`（`hasUsableLlm && hasUsableMusicgen`）：**未配 LLM + musicgen 时连 icon 都不渲染**（纯函数 + TDD）。③ §6.1 扩成**逐项复刻 ClipCombo 动态自定义 provider**（Dexie `llmCustomProviders` 表 + repo + `customLlmProviderConfigToPreset` + Settings provider 面板 enabled grid + `ApiKeyField` + `resolveDjModel` 的 openai-compatible/keyless-local 分支）。重写 §3.3/§5/§6.1 + Phase 2/5 plan + §2.4 结构；旧 `chat-launcher-fab`/`chat-input-bar`/`chat-dock`/`use-chat-breakpoint` 壳作废重做，runtime（`src/chat/*`）+ 展示层组件（composer/turns/session-home/model-picker/queue-tray/empty/notice）全部复用。Now Playing redesign 已并入 main → 本 phase 不再 WIP-blocked。 |
+| 2026-06-11 | Claude | **Phase 5 + Phase 6 全部落地（独立 worktree `feat/chat-llm-providers`，5 个原子 commit）**。迁出 main 直接开发改进 worktree 隔离（避免与并行 WIP 串）。**CHAT-5a** custom-provider 数据层（Dexie v21 `llmCustomProviders` + repo + `normalize`/`toPreset` + `LlmProviderPresetId` 拓宽 `custom:${uuid}` + `modelsByPresetId`，16 测）；**5b** `resolveDjModel` keyless 分支（`normalizeOpenAiCompatibleBaseUrl` 补 `/v1` + `fetchWithoutAuthorization` 剥 auth 头，transport 懒读 custom）；**5c** Settings `llm-provider-settings.tsx`（provider grid + key 状态 + 内联 ApiKeyField + 自定义编辑 + 默认模型 combobox，替换旧双 provider 表单，5 测，20 i18n 键 ×4）；**5d** expanded widget header per-session ChatModelPicker（`setChatSessionLlm` 只存 presetId+model 不存 key）。**CHAT-6k** auto-dispatch（纯函 `shouldAutoDispatchQueued` 5 测 + ephemeral `autoDispatchBySessionId` 重载默认关 + ChatPanel 驱动）；**6l** 空态 onboarding（`ChatComposer` 受控化 + ChatPanel `emptyState` + chips 注入 composer + `onUploadLibrary`→切 gallery，8 i18n 键）；**6m** 上下文预算拦截（`ChatContextBudgetNotice` + block 时 disable composer + 压缩前移 `contextStartIndex` 旧消息仍可见，3 i18n 键，组件测）。**6 phase 全 ✅**；余 store-pump E2E（Phase 3）仍 blocked 于 player-store 并行 WIP。注：branch base 继承 main 的 `chat-model-picker`/`virtual-track-list` 2 个既有测试失败（stash 验证非本分支引入）。 |
+| 2026-06-11 | Claude | **CHAT-5e 动态 model 目录（超出 ClipCombo：通用化到所有 OpenAI-compatible provider）**，2 个原子 commit。回应 owner #2「OpenRouter 直接走 API endpoint 拉取过滤模型」：**5e1** `src/ai/model-catalog.ts` 纯模块——`modelsEndpointFor`（OpenRouter/OpenAI/Groq/DeepSeek/Gemini + 本地 ollama/vLLM/LM Studio → `{baseURL}/v1/models`；Anthropic→null）+ `parseModelCatalog`（OpenRouter rich name/context/pricing + 通用 `{data:[{id}]}`，去重）+ `fetchModelCatalog`（模块缓存 5min TTL + in-flight dedup + bearer key，fetch/now 注入，9 测）；**5e2** `use-model-catalog` hook（`getAppFetch` CORS-safe + refresh 清缓存）+ `model-catalog-combobox.tsx`（shadcn Popover+Command：hardcoded ∪ live 目录去重 + **自由输入自定义 model id**「Use '<q>'」+ loading/refresh）；接进 `llm-provider-settings`（替换旧 default-model picker，按当前 provider 拉目录、选中即设 DJ 默认 + `modelsByPresetId`）；i18n `settings.llmModel*` 8 键 ×4；组件测 merge+live+自定义 id（2 测）。**至此三种 model 来源齐备**：hardcoded preset / 自定义 model id / **API 拉取过滤**——全走同一 combobox。 |
+| 2026-06-11 | Claude | **CHAT-5f provider 品牌图标 + 图标化 combobox（owner：对齐 ClipCombo 的真实 LLM icon）**，2 个原子 commit。**5f1** `provider-brand-icons.tsx`——Claude/Gemini/DeepSeek/OpenRouter 路径内联自 simple-icons（**CC0-1.0**，提取后移除该 dep，零运行时依赖）+ OpenAI 自研规范 path（simple-icons 已下架）；`getProviderBrandIcon(id)` 返回 `currentColor` 单色 glyph（anthropic→claude 别名），Groq/动态 custom/未知 → 通用 `Cpu` 兜底（恒可渲染）。**评估并否决 `@lobehub/icons`**（依赖 `antd-style` + peer `antd`，与 Tailwind+Base UI 不符）。**5f2** provider 选择由 grid 改 **`provider-combobox.tsx`**（Popover+Command：每 item 品牌 icon + label + key 状态 ready/optional/missing，trigger 显示选中 provider icon）；给 `Command` 原语加可选 `icon`/`description` slot（向后兼容）；`ModelCatalogCombobox` trigger + `ChatModelPicker` item/trigger 同款 provider icon。i18n `settings.llmProviderSearch` ×4；改写 `llm-provider-settings.test`（combobox 交互）+ 修 base 既有 `chat-model-picker.test`（input role 是 combobox 非 searchbox）。88 测全绿、tsc 清。 |
 
 ---
 

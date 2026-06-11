@@ -55,7 +55,10 @@ export function PlayerDock({
             // empty stretch of this band remains click-through.
             className="flex w-full min-w-0 items-center justify-end gap-2 px-4"
           >
-            <DjChatEntry className={cn(!hidden && "pointer-events-auto")} />
+            <DjChatEntry
+              className={cn(!hidden && "pointer-events-auto")}
+              onUploadLibrary={() => onTabChange("search")}
+            />
             <DockMemoryToggle
               className={cn("hidden md:flex", !hidden && "pointer-events-auto")}
               visible={tab === "now"}

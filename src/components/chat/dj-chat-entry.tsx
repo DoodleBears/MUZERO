@@ -15,6 +15,12 @@ import { AnimatePresence, motion } from "motion/react";
 import { type FormEvent, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
+import { useCustomLlmProviders } from "@/ai/custom-llm-providers";
+import {
+  enabledLlmPresetIds,
+  llmSelectionForChatSession,
+  resolveLlmProviderPreset,
+} from "@/ai/llm-providers";
 import { canUseDjChat } from "@/chat/dj-chat-availability";
 import { getOrCreateDjChatRuntimeActor } from "@/chat/dj-chat-runtime-registry";
 import {
@@ -22,7 +28,9 @@ import {
   deleteChatSession,
   listChatSessions,
   renameChatSession,
+  setChatSessionLlm,
 } from "@/chat/dj-chat-sessions";
+import { ChatModelPicker } from "@/components/chat/chat-model-picker";
 import { ChatPanel } from "@/components/chat/chat-panel";
 import { ChatReplyNotification } from "@/components/chat/chat-reply-notification";
 import { ChatSessionHome } from "@/components/chat/chat-session-home";
@@ -45,7 +53,14 @@ import { useChatStore } from "@/stores/chat-store";
  * is translated (centering transform), which would otherwise make
  * `position: fixed` resolve against the dock instead of the viewport.
  */
-export function DjChatEntry({ className }: { className?: string }) {
+export function DjChatEntry({
+  className,
+  onUploadLibrary,
+}: {
+  className?: string;
+  /** Navigate to the 歌单 gallery (empty-state "upload to your library"). */
+  onUploadLibrary?: () => void;
+}) {
   const { t } = useTranslation();
   const settings = useSettings();
   const available = canUseDjChat(settings);
@@ -55,6 +70,10 @@ export function DjChatEntry({ className }: { className?: string }) {
   const setApprovalMode = useChatStore((s) => s.setApprovalMode);
   const activeSessionId = useChatStore((s) => s.activeSessionId);
   const setActiveSessionId = useChatStore((s) => s.setActiveSessionId);
+  const autoDispatchEnabled = useChatStore((s) =>
+    s.activeSessionId ? (s.autoDispatchBySessionId[s.activeSessionId] ?? false) : false,
+  );
+  const setAutoDispatch = useChatStore((s) => s.setAutoDispatch);
   const runtimeStatus = useChatStore((s) =>
     s.activeSessionId ? s.runtimeMetaBySessionId[s.activeSessionId]?.status : undefined,
   );
@@ -65,6 +84,16 @@ export function DjChatEntry({ className }: { className?: string }) {
   const [showHome, setShowHome] = useState(false);
   const sessions = useLiveQuery(() => listChatSessions(), [], []);
   const isRunning = runtimeStatus === "submitted" || runtimeStatus === "streaming";
+
+  // Per-session model override (PRD Q3): the combobox shows the session's
+  // override (or the global default) over the enabled presets; picking writes
+  // only presetId+model to the session row — keys stay in settings.
+  const customProviders = useCustomLlmProviders();
+  const activeSession = sessions.find((s) => s.id === activeSessionId);
+  const sessionSelection = llmSelectionForChatSession(settings, activeSession, customProviders);
+  const enabledPresets = enabledLlmPresetIds(settings, customProviders).map((id) =>
+    resolveLlmProviderPreset(id, customProviders),
+  );
 
   // Esc collapses the widget back to the chip.
   useEffect(() => {
@@ -225,6 +254,23 @@ export function DjChatEntry({ className }: { className?: string }) {
                   <span className="min-w-0 flex-1 truncate text-sm font-semibold">
                     {t("chat.title")}
                   </span>
+                  {!showHome && activeSessionId && (
+                    <ChatModelPicker
+                      className="max-w-44"
+                      labels={{
+                        empty: t("chat.modelEmpty"),
+                        inherited: t("chat.modelInherited"),
+                        searchPlaceholder: t("chat.modelSearch"),
+                        trigger: t("chat.modelPick"),
+                      }}
+                      onSelect={({ presetId, model }) =>
+                        void setChatSessionLlm(activeSessionId, presetId, model)
+                      }
+                      presets={enabledPresets}
+                      selectedModel={sessionSelection.model}
+                      selectedPresetId={sessionSelection.presetId}
+                    />
+                  )}
                   <button
                     aria-label={t("chat.newSession")}
                     className="grid size-8 place-items-center rounded-full text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
@@ -317,6 +363,48 @@ export function DjChatEntry({ className }: { className?: string }) {
                 {!showHome && activeSessionId && (
                   <ChatPanel
                     autoApprove={approvalMode === "auto"}
+                    autoDispatchEnabled={autoDispatchEnabled}
+                    emptyState={{
+                      labels: {
+                        body: t("chat.emptyBody"),
+                        presets: t("chat.emptyPresets"),
+                        startWithVibe: t("chat.emptyStartVibe"),
+                        title: t("chat.emptyTitle"),
+                        uploadLibrary: t("chat.emptyUpload"),
+                      },
+                      presets: [
+                        {
+                          id: "focus",
+                          label: t("chat.presetFocus"),
+                          prompt: t("chat.presetFocusPrompt"),
+                        },
+                        {
+                          id: "chill",
+                          label: t("chat.presetChill"),
+                          prompt: t("chat.presetChillPrompt"),
+                        },
+                        {
+                          id: "hype",
+                          label: t("chat.presetHype"),
+                          prompt: t("chat.presetHypePrompt"),
+                        },
+                      ],
+                    }}
+                    budgetLabels={{
+                      compress: t("chat.budgetCompress"),
+                      detail: (result) =>
+                        `~${result.estimatedTokens.toLocaleString()} / ${result.maxTokens.toLocaleString()} tokens`,
+                      states: {
+                        block: t("chat.budgetBlock"),
+                        ok: "",
+                        warn: t("chat.budgetWarn"),
+                      },
+                    }}
+                    onAutoDispatchChange={(enabled) => setAutoDispatch(activeSessionId, enabled)}
+                    onUploadLibrary={() => {
+                      setMode("chip");
+                      onUploadLibrary?.();
+                    }}
                     queueLabels={{
                       autoDispatch: t("chat.queueAutoDispatch"),
                       delete: t("chat.queueDelete"),

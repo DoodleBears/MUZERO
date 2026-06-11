@@ -5,7 +5,7 @@ import {
   clearDjChatRuntimeActors,
   getOrCreateDjChatRuntimeActor,
 } from "@/chat/dj-chat-runtime-registry";
-import { createChatSession } from "@/chat/dj-chat-sessions";
+import { createChatSession, saveChatSessionSnapshot } from "@/chat/dj-chat-sessions";
 import type { DjChatUIMessage } from "@/chat/types";
 import { MuzeroDB } from "@/db/muzero-db";
 import { ChatPanel } from "./chat-panel";
@@ -110,5 +110,68 @@ describe("ChatPanel queued prompt tray", () => {
     await act(async () => {
       await actor.flush();
     });
+  });
+});
+
+const emptyState = {
+  labels: {
+    body: "Tell your DJ what to play",
+    presets: "Try",
+    startWithVibe: "Start typing",
+    title: "Empty chat",
+    uploadLibrary: "Upload to your library",
+  },
+  presets: [{ id: "focus", label: "Late-night focus", prompt: "Make a late-night focus set." }],
+};
+
+describe("ChatPanel onboarding empty state", () => {
+  it("shows the empty state with no messages and a preset chip fills the composer", async () => {
+    const session = await createChatSession({ firstUserText: "empty test" }, db);
+    const actor = getOrCreateDjChatRuntimeActor(session.id, { db });
+    await actor.ready;
+
+    render(<ChatPanel db={db} emptyState={emptyState} sessionId={session.id} />);
+
+    expect(await screen.findByText("Empty chat")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Late-night focus/ }));
+
+    const composer = screen.getByRole("textbox") as HTMLTextAreaElement;
+    expect(composer.value).toBe("Make a late-night focus set.");
+  });
+});
+
+const budgetLabels = {
+  compress: "Compress context",
+  detail: () => "tokens",
+  states: { block: "Context is full", ok: "", warn: "Getting long" },
+};
+
+describe("ChatPanel context budget", () => {
+  it("blocks the composer when over budget and compresses on demand", async () => {
+    const session = await createChatSession({ firstUserText: "budget" }, db);
+    // A huge OLD turn blows past the default 128k-token budget; a small recent
+    // user turn means compression can move the pointer forward past the old one.
+    const huge = "x ".repeat(300_000);
+    const messages: DjChatUIMessage[] = [
+      { id: "u1", role: "user", parts: [{ type: "text", text: huge }] },
+      { id: "a1", role: "assistant", parts: [{ type: "text", text: "ok" }] },
+      { id: "u2", role: "user", parts: [{ type: "text", text: "keep going" }] },
+    ];
+    await saveChatSessionSnapshot({ sessionId: session.id, messages, composerDraftRaw: "" }, db);
+    const actor = getOrCreateDjChatRuntimeActor(session.id, { db });
+    await actor.ready;
+
+    render(<ChatPanel budgetLabels={budgetLabels} db={db} sessionId={session.id} />);
+
+    expect(await screen.findByText("Context is full")).toBeInTheDocument();
+    expect(screen.getByRole("textbox")).toBeDisabled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Compress context" }));
+    // Pointer moves to the latest user turn (drops the huge old turn); the
+    // composer re-enables because the active window is now small.
+    await waitFor(() => {
+      expect(actor.getSnapshot().meta.contextStartIndex).toBe(2);
+    });
+    await waitFor(() => expect(screen.getByRole("textbox")).not.toBeDisabled());
   });
 });

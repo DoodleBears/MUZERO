@@ -35,6 +35,15 @@ describe("chat-store — persisted shell state", () => {
     expect(raw).not.toContain("runtimeMetaBySessionId");
   });
 
+  it("tracks per-session auto-dispatch but never persists it (reload defaults off)", () => {
+    useChatStore.getState().setAutoDispatch("cht_1", true);
+    expect(useChatStore.getState().autoDispatchBySessionId.cht_1).toBe(true);
+    // independent per session
+    expect(useChatStore.getState().autoDispatchBySessionId.cht_2).toBeUndefined();
+    const raw = localStorage.getItem("muzero-chat-ui") ?? "";
+    expect(raw).not.toContain("autoDispatch");
+  });
+
   it("migrates the retired four-form modes to the dock-entry states", () => {
     expect(migrateChatUiState({ mode: "fab", dockSide: "right" }, 0)).toMatchObject({
       mode: "icon",

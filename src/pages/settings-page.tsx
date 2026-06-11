@@ -19,6 +19,7 @@ import { CloudDriveSyncControls } from "@/components/settings/cloud-drive-sync-c
 import { DeviceAvatarPicker } from "@/components/settings/device-avatar-picker";
 import { FlowSettings } from "@/components/settings/flow-settings";
 import { ImportedFoldersSettings } from "@/components/settings/imported-folders-settings";
+import { LlmProviderSettings } from "@/components/settings/llm-provider-settings";
 import { LyricsSettings } from "@/components/settings/lyrics-settings";
 import { PersistentStorageSettings } from "@/components/settings/persistent-storage-settings";
 import { resolveActiveSettingsItem } from "@/components/settings/settings-nav";
@@ -50,7 +51,6 @@ import type {
   CloudDriveAutoSyncFrequency,
   CloudDriveUploadConcurrency,
   CropRect,
-  LlmProviderId,
 } from "@/db/types";
 import { useSettings } from "@/hooks/use-app-data";
 import { useObjectUrl } from "@/hooks/use-media";
@@ -918,50 +918,11 @@ export function SettingsPage() {
                 <CardTitle>{t("settings.djTitle")}</CardTitle>
               </CardHeader>
               <CardContent className="flex flex-col gap-3">
-                <Field label={t("settings.provider")}>
-                  <Select
-                    value={draft.llmProvider}
-                    onValueChange={(value) => patch({ llmProvider: value as LlmProviderId })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue>
-                        {(value) =>
-                          value === "anthropic" ? "Anthropic" : value === "openai" ? "OpenAI" : ""
-                        }
-                      </SelectValue>
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="openai">OpenAI</SelectItem>
-                      <SelectItem value="anthropic">Anthropic</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </Field>
-                <Field label={t("settings.model")}>
-                  <Input
-                    value={draft.llmModel}
-                    onChange={(e) => patch({ llmModel: e.target.value })}
-                    placeholder="gpt-4o-mini"
-                  />
-                </Field>
-                {draft.llmProvider === "openai" ? (
-                  <Field label={t("settings.openaiKey")}>
-                    <Input
-                      type="password"
-                      value={draft.openaiApiKey ?? ""}
-                      onChange={(e) => patch({ openaiApiKey: e.target.value })}
-                      placeholder="sk-…"
-                    />
-                  </Field>
-                ) : (
-                  <Field label={t("settings.anthropicKey")}>
-                    <Input
-                      type="password"
-                      value={draft.anthropicApiKey ?? ""}
-                      onChange={(e) => patch({ anthropicApiKey: e.target.value })}
-                      placeholder="sk-ant-…"
-                    />
-                  </Field>
-                )}
+                {/* Multi-provider presets + dynamic customs + per-provider keys
+                    + global default model (chat PRD §6.1). Replaces the legacy
+                    two-provider form; legacy llmProvider/llmModel stay in the
+                    settings row for the preset bridge. */}
+                <LlmProviderSettings />
               </CardContent>
             </Card>
           )}

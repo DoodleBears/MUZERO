@@ -50,7 +50,7 @@ describe("ChatModelPicker", () => {
     render(<ChatModelPicker labels={labels} onSelect={onSelect} presets={presets} />);
 
     fireEvent.click(screen.getByRole("button", { name: "Choose chat model" }));
-    fireEvent.change(await screen.findByRole("searchbox", { name: "Search models" }), {
+    fireEvent.change(await screen.findByRole("combobox", { name: "Search models" }), {
       target: { value: "sonnet" },
     });
     fireEvent.click(screen.getByRole("option", { name: "Claude / Claude Sonnet 4.5" }));
