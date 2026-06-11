@@ -3,8 +3,8 @@ import { useEffect } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { db } from "@/db/muzero-db";
 import { useSettings } from "@/hooks/use-app-data";
-import { proxyExternalCover } from "@/hooks/use-media";
-import { extractImagePalette, extractImagePaletteFromUrl } from "@/lib/image-palette";
+import { extractImagePalette, extractImagePaletteFromFetchedUrl } from "@/lib/image-palette";
+import { getAppFetch } from "@/lib/platform";
 import { type Rgb, readPrimaryRgb } from "@/lib/visualizer-color";
 import { usePlayerStore } from "@/stores/player-store";
 import {
@@ -51,19 +51,29 @@ export function useVisualizerCoverColorCss(active = true): string | null {
       return;
     }
 
-    // Streamed cover: bytes aren't in a local Blob, so extract straight from the
-    // proxied remote URL (same proxy the stage/background use, so the canvas isn't
-    // tainted). Keep the current color while it resolves — no flash to theme.
+    // Remote cover: bytes aren't in a local Blob yet, so fetch them through the
+    // app fetch path first and then extract from the resulting same-origin Blob.
+    // Keep the current color while it resolves — no flash to theme.
     if (!current.coverBlobId && remoteCoverUrl) {
       let alive = true;
+      const controller = new AbortController();
       const cacheKey = `remote:${remoteCoverUrl}`;
       const cached = colorCache.get(cacheKey);
       if (cached !== undefined) {
         transitionVisualizerCoverColor(cacheKey, cached.rgb ?? readPrimaryRgb(), cached.palette);
         return;
       }
-      const proxied = proxyExternalCover(remoteCoverUrl) ?? remoteCoverUrl;
-      void extractImagePaletteFromUrl(proxied).then((palette) => {
+      void (async () => {
+        try {
+          const fetcher = await getAppFetch();
+          return await extractImagePaletteFromFetchedUrl(remoteCoverUrl, {
+            fetcher,
+            signal: controller.signal,
+          });
+        } catch {
+          return [];
+        }
+      })().then((palette) => {
         if (!alive) return;
         const rgb = palette[0] ?? null;
         colorCache.set(cacheKey, { rgb, palette });
@@ -71,6 +81,7 @@ export function useVisualizerCoverColorCss(active = true): string | null {
       });
       return () => {
         alive = false;
+        controller.abort();
       };
     }
 

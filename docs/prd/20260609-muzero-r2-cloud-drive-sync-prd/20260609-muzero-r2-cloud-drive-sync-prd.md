@@ -30,6 +30,7 @@
 | 15 | Cloud-to-Local Playlist Cache UX | ✅ Done | [§12.11](#1211-phase-15-cloud-to-local-playlist-cache-ux) |
 | 16 | Pull identity dedupe + metadata integrity | ✅ Done | [§12.12](#1212-phase-16-pull-identity-dedupe--metadata-integrity) |
 | 17 | Remote Playback Handoff UX | ✅ Done | [§12.13](#1213-phase-17-remote-playback-handoff-ux) |
+| 18 | Remote Cover Palette Reliability | ✅ Done | [§12.14](#1214-phase-18-remote-cover-palette-reliability) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
 
@@ -2422,12 +2423,37 @@ Do not record secrets, full signed URLs, or media content.
 - [x] RH-3 Render a Dock loading row with localized remote-preparation copy.
 - [x] RH-4 Add regression coverage for the held-current-song remote handoff.
 
+### 12.14 Phase 18: Remote Cover Palette Reliability
+
+**Goal:** make cloud-drive covers participate in the same visual color system as local covers. When a remote R2 cover is visible in the player, spectrum bars, flow backgrounds, and other cover-color-driven visuals should extract colors from that cover instead of silently falling back to the theme primary.
+
+**Status (2026-06-11):** Phase 18 is completed. Remote cover palette extraction now fetches cover bytes through MUZERO's app fetch path, converts them to a local Blob URL, and reuses the existing Blob palette pipeline. This avoids canvas readback failures caused by direct cross-origin image URLs, cached R2 responses, or proxy/CORS differences.
+
+**Product requirements:**
+
+1. **Remote covers use the Blob palette path.**
+   - A track with `remoteCoverUrl` but no local `coverBlobId` must fetch the image bytes first and then sample pixels from a local `blob:` URL.
+   - The remote path should use `getAppFetch()` so Electron/Tauri/browser runtime differences stay behind the existing platform fetch abstraction.
+2. **Graceful visual fallback.**
+   - If the remote cover fetch, decode, or pixel sampling fails, MUZERO should keep playback usable and fall back to the current theme primary color without throwing.
+   - The current visualizer color should stay stable while the remote palette resolves; no visible flash back to the theme color is required during the request.
+3. **Race-safe color updates.**
+   - Switching tracks before a remote palette request finishes must abort or ignore the stale request so a previous cover does not recolor the current track.
+   - Remote cover palettes should be cached by URL for the current app session, matching the existing local cover color cache behavior.
+
+**Checklist:**
+
+- [x] RC-1 Add a fetched-URL palette helper that reads remote cover bytes into a Blob before image sampling.
+- [x] RC-2 Use the helper from the visualizer dynamic color hook for `remoteCoverUrl`, with abort/ignore cleanup.
+- [x] RC-3 Add a regression test proving remote R2 cover palette extraction uses a Blob URL path.
+
 ---
 
 ## 13. Document Change Log
 
 | Date | Author | Changes |
 |------|--------|---------|
+| 2026-06-11 | MUZERO | Phase 18 completed: R2 remote covers now feed flow/spectrum cover-color extraction by fetching cover bytes through `getAppFetch()`, sampling a local Blob URL, caching by remote URL, and falling back to the theme primary only on fetch/decode failure. |
 | 2026-06-11 | MUZERO | Phase 17 completed: R2 remote playback now uses a held-current-track handoff when another song is already playing. MUZERO displays a Dock loading row while the target object downloads, aborts/invalidates stale loads, and commits `currentIndex` only after the target media is ready. |
 | 2026-06-11 | MUZERO | Phase 16 completed: remote set previews preserve `publishedBy`, Cloud Drive automatic/manual import skips sets published by the local device to prevent `2 + 7 + 2` self-duplication, and pull diff now verifies local track metadata integrity before treating a set as unchanged so partial imports are repaired. |
 | 2026-06-11 | MUZERO | Phase 16 added from QA: avoid B-device self-published set duplication during import-all by preserving `publishedBy`, and strengthen pull diff so an existing set shell without complete track metadata is repaired instead of treated as unchanged. |

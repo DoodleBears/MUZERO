@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  extractImagePaletteFromFetchedUrl,
   extractImagePaletteFromUrl,
   selectDominantImageColor,
   selectImagePalette,
@@ -126,6 +127,8 @@ describe("selectImagePalette", () => {
 describe("extractImagePaletteFromUrl — canvas CORS for remote covers", () => {
   const realImage = globalThis.Image;
   const realCreateElement = document.createElement.bind(document);
+  const realCreateObjectURL = URL.createObjectURL;
+  const realRevokeObjectURL = URL.revokeObjectURL;
   let loaded: Array<{ src: string; crossOrigin: string | null }>;
 
   beforeEach(() => {
@@ -163,10 +166,20 @@ describe("extractImagePaletteFromUrl — canvas CORS for remote covers", () => {
         }),
       } as unknown as HTMLCanvasElement;
     });
+    Object.defineProperty(URL, "createObjectURL", {
+      configurable: true,
+      value: vi.fn(() => "blob:remote-cover"),
+    });
+    Object.defineProperty(URL, "revokeObjectURL", {
+      configurable: true,
+      value: vi.fn(),
+    });
   });
 
   afterEach(() => {
     globalThis.Image = realImage;
+    restoreUrlMethod("createObjectURL", realCreateObjectURL);
+    restoreUrlMethod("revokeObjectURL", realRevokeObjectURL);
     vi.restoreAllMocks();
   });
 
@@ -180,4 +193,35 @@ describe("extractImagePaletteFromUrl — canvas CORS for remote covers", () => {
     await extractImagePaletteFromUrl("https://p1.music.126.net/cover.jpg");
     expect(loaded.at(-1)?.crossOrigin).toBe("anonymous");
   });
+
+  it("fetches remote cover bytes first so R2 palette extraction uses a Blob URL", async () => {
+    const fetchedBlob = new Blob([new Uint8Array([1, 2, 3])], { type: "image/png" });
+    const fetcher = vi.fn(async () => {
+      return {
+        ok: true,
+        headers: new Headers({ "content-type": "image/png" }),
+        blob: async () => fetchedBlob,
+      } as Response;
+    });
+
+    const palette = await extractImagePaletteFromFetchedUrl("https://r2.example/cover.png", {
+      fetcher,
+    });
+
+    expect(fetcher).toHaveBeenCalledWith(
+      "https://r2.example/cover.png",
+      expect.objectContaining({ cache: "force-cache" }),
+    );
+    expect(URL.createObjectURL).toHaveBeenCalledWith(fetchedBlob);
+    expect(loaded.at(-1)).toMatchObject({ src: "blob:remote-cover", crossOrigin: null });
+    expect(palette.length).toBeGreaterThan(0);
+  });
 });
+
+function restoreUrlMethod(name: "createObjectURL" | "revokeObjectURL", value: unknown) {
+  if (typeof value === "function") {
+    Object.defineProperty(URL, name, { configurable: true, value });
+  } else {
+    delete (URL as unknown as Record<string, unknown>)[name];
+  }
+}

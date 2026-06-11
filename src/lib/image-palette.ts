@@ -18,6 +18,15 @@ const DEFAULT_PALETTE_COUNT = 4;
  *  palette from being five shades of the same purple. */
 const MIN_SWATCH_DISTANCE = 64;
 
+type ImagePaletteFetch = typeof globalThis.fetch;
+
+interface FetchedImagePaletteOptions {
+  fetcher: ImagePaletteFetch;
+  count?: number;
+  signal?: AbortSignal;
+  cache?: RequestCache;
+}
+
 /**
  * Lightweight browser-side cover color extraction. Anysoul uses
  * `node-vibrant/browser`; MUZERO keeps this local and dependency-free because
@@ -51,6 +60,35 @@ export async function extractImagePaletteFromUrl(
 ): Promise<Rgb[]> {
   const pixels = await samplePixelsFromUrl(url);
   return pixels ? selectImagePalette(pixels, count) : [];
+}
+
+/**
+ * Fetch an image URL as bytes first, then reuse the local Blob palette path.
+ * This is the reliable path for R2/public-cloud covers: the cover can be visible
+ * as an `<img>` but still fail canvas readback due to CORS/cache/proxy details.
+ * Reading via MUZERO's app fetch path produces a same-origin Blob URL for the
+ * canvas, matching local covers and keeping flow/spectrum colors available.
+ */
+export async function extractImagePaletteFromFetchedUrl(
+  url: string,
+  {
+    fetcher,
+    count = DEFAULT_PALETTE_COUNT,
+    signal,
+    cache = "force-cache",
+  }: FetchedImagePaletteOptions,
+): Promise<Rgb[]> {
+  try {
+    const response = await fetcher(url, { cache, signal });
+    if (!response.ok) return [];
+    const blob = await response.blob();
+    const contentType = response.headers.get("content-type") ?? blob.type;
+    const typedBlob =
+      contentType && blob.type !== contentType ? blob.slice(0, blob.size, contentType) : blob;
+    return extractImagePalette(typedBlob, count);
+  } catch {
+    return [];
+  }
 }
 
 /** Decode + downsample an image Blob to raw RGBA pixels (null if unsupported). */
