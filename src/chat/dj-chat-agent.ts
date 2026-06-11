@@ -10,6 +10,7 @@ import { llmSelectionForChatSession } from "@/ai/llm-providers";
 import { resolveDjModel } from "@/ai/model";
 import type { MuzeroDB } from "@/db/muzero-db";
 import { getSettings } from "@/db/repositories";
+import { canGenerateMusic, hasEnabledStreamSources } from "./dj-chat-availability";
 import { DJ_CHAT_SYSTEM_PROMPT } from "./dj-chat-prompt";
 import { getChatSession } from "./dj-chat-sessions";
 import { createDjChatTools } from "./dj-chat-tools";
@@ -32,7 +33,15 @@ export function createDjChatTransport({
   return {
     async sendMessages(options) {
       const model = await resolveModel({ db, sessionId: options.chatId });
-      const tools = createDjChatTools({ db });
+      // Gate the tool set per the user's config: only offer the paid generate
+      // tools when generation is enabled + configured; only offer the online
+      // search/ingest tools when a streaming source is enabled (PRD §4.2).
+      const settings = await getSettings(db);
+      const tools = createDjChatTools({
+        db,
+        includeGenerate: canGenerateMusic(settings),
+        includeOnline: hasEnabledStreamSources(settings),
+      });
       const agent = new ToolLoopAgent({
         model,
         tools,

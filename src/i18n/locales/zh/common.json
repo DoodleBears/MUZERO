@@ -847,7 +847,9 @@
     "capAudio": "音频输入",
     "capTools": "函数调用",
     "capContext": "上下文窗口",
-    "capPrice": "输入 {{in}} · 输出 {{out}} / 每百万 token"
+    "capPrice": "输入 {{in}} · 输出 {{out}} / 每百万 token",
+    "aiGenEnable": "启用 AI 音乐生成",
+    "aiGenHint": "默认关闭。生成走付费云 API(BYOK)。开启后 DJ 可生成歌曲;无论开关,从在线源搜索并入库都是免费的。"
   },
   "gallery": {
     "title": "歌单",

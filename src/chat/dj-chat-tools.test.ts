@@ -15,6 +15,8 @@ import { createMockMusicGenProvider } from "@/musicgen/mock-provider";
 import {
   createDjChatTools,
   executeGenerateTracks,
+  executeOnlineAddTracks,
+  executeOnlineSearchTracks,
   executeProposeBriefs,
   executeSearchTracks,
   generateTracksInputSchema,
@@ -243,5 +245,71 @@ describe("DJ chat tools", () => {
 
     const result = await executeSearchTracks({ query: "shibuya", limit: 10 }, { db });
     expect(result.tracks.map((track) => track.title)).toEqual(["Metro Bloom"]);
+  });
+});
+
+describe("DJ chat tools — conditional tool set", () => {
+  it("omits the paid generate tools when includeGenerate is false", () => {
+    const tools = createDjChatTools({ db, includeGenerate: false });
+    expect(tools.dj_generate_tracks).toBeUndefined();
+    expect(tools.dj_propose_briefs).toBeUndefined();
+    expect(tools.library_search_tracks).toBeDefined(); // base tools stay
+  });
+
+  it("adds the online tools only when includeOnline is true", () => {
+    expect(createDjChatTools({ db }).online_search_tracks).toBeUndefined();
+    const withOnline = createDjChatTools({ db, includeOnline: true });
+    expect(withOnline.online_search_tracks).toBeDefined();
+    expect(withOnline.online_add_tracks).toBeDefined();
+    expect(withOnline.online_add_tracks.needsApproval).toBeUndefined(); // free, no approval
+  });
+});
+
+describe("online search / ingest tools", () => {
+  it("searches enabled sources via the injected resolver and flattens hits", async () => {
+    const fakeSource = {
+      id: "netease" as const,
+      label: "NetEase",
+      requiresLogin: false,
+      isAuthed: () => true,
+      search: async () => [
+        { externalId: "n1", title: "Online Song", source: "netease" as const, artist: "A" },
+      ],
+    };
+    const out = await executeOnlineSearchTracks(
+      { query: "rain", limit: 5 },
+      { db, resolveSources: () => [fakeSource as never] },
+    );
+    expect(out.hits.map((h) => h.title)).toEqual(["Online Song"]);
+    expect(out.sources).toEqual(["netease"]);
+  });
+
+  it("ingests hits into a set (deduped) without playing them", async () => {
+    const session = await createSession({ seedPrompt: "online" }, db);
+    const hit = { externalId: "yt1", title: "From YouTube", source: "youtube" as const };
+
+    const first = await executeOnlineAddTracks({ sessionId: session.id, hits: [hit] }, { db });
+    expect(first.status).toBe("ok");
+    expect(first.diff.added).toBe(1);
+
+    const tracks = await getSession(session.id, db);
+    expect(tracks?.trackIds.length).toBe(1);
+    const row = await db.tracks.get(tracks?.trackIds[0] ?? "");
+    expect(row?.origin).toBe("streamed");
+    expect(row?.streamSourceId).toBe("youtube");
+
+    // Re-adding the same hit is a no-op (deduped by source + externalId).
+    const second = await executeOnlineAddTracks({ sessionId: session.id, hits: [hit] }, { db });
+    expect(second.diff.added).toBe(0);
+    expect(second.diff.skipped).toBe(1);
+  });
+
+  it("errors when the target set is missing", async () => {
+    const out = await executeOnlineAddTracks(
+      { sessionId: "ses_missing", hits: [{ externalId: "x", title: "X", source: "bili" }] },
+      { db },
+    );
+    expect(out.status).toBe("error");
+    expect(out.warnings).toContain("missing-session");
   });
 });

@@ -846,7 +846,9 @@
     "capAudio": "오디오 입력",
     "capTools": "함수 호출",
     "capContext": "컨텍스트 창",
-    "capPrice": "입력 {{in}} · 출력 {{out}} / 100만 토큰"
+    "capPrice": "입력 {{in}} · 출력 {{out}} / 100만 토큰",
+    "aiGenEnable": "AI 음악 생성 사용",
+    "aiGenHint": "기본은 꺼짐. 생성은 유료 클라우드 API(BYOK)를 사용합니다. 켜면 DJ가 곡을 생성할 수 있습니다. 스트리밍 검색·가져오기는 항상 무료입니다."
   },
   "gallery": {
     "title": "세트",

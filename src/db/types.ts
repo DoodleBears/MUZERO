@@ -494,6 +494,13 @@ export interface AppSettings {
   anthropicApiKey?: string;
   // Music generation (BYOK cloud API; "mock" needs no config)
   musicGenProvider: MusicGenProviderId;
+  /**
+   * Whether AI DJ music generation is enabled. OFF by default — generation hits
+   * a paid cloud API, so the user opts in explicitly in Settings. When off, the
+   * chat agent is not given the generate tools (search/ingest still work). There
+   * is no offline/local generation option.
+   */
+  aiDjGenerationEnabled?: boolean;
   /** Which cloud vendor preset drives the "cloud" provider. Defaults to mureka. */
   musicCloudPreset?: CloudPresetId;
   musicCloudUrl?: string;

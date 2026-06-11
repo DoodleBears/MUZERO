@@ -861,7 +861,9 @@
     "capAudio": "Audio input",
     "capTools": "Function calling",
     "capContext": "Context window",
-    "capPrice": "Input {{in}} · output {{out}} per 1M tokens"
+    "capPrice": "Input {{in}} · output {{out}} per 1M tokens",
+    "aiGenEnable": "Enable AI music generation",
+    "aiGenHint": "Off by default. Generation uses a paid cloud API (BYOK). When on, the DJ can generate songs; search & ingest from streaming sources stays free either way."
   },
   "gallery": {
     "title": "Sets",

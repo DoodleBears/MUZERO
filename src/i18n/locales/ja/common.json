@@ -847,7 +847,9 @@
     "capAudio": "音声入力",
     "capTools": "関数呼び出し",
     "capContext": "コンテキスト長",
-    "capPrice": "入力 {{in}} · 出力 {{out}} / 100万トークン"
+    "capPrice": "入力 {{in}} · 出力 {{out}} / 100万トークン",
+    "aiGenEnable": "AI 音楽生成を有効化",
+    "aiGenHint": "デフォルトはオフ。生成は有料のクラウド API(BYOK)を使用。オンにすると DJ が曲を生成できます。ストリーミング検索と取り込みは常に無料です。"
   },
   "gallery": {
     "title": "セット",
