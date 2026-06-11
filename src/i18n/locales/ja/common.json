@@ -762,6 +762,8 @@
     "addDriveAutoSyncAfterChanges": "「ローカル変更後」の自動同期を有効化",
     "addDriveAutoSyncAfterChangesHint": "今後のローカル編集は短い待機後に同期します。ドライブカードでも変更できます。",
     "cloudSecretStoredAs": "Secret はこの端末に {{value}} として保存",
+    "perfHud": "パフォーマンス HUD",
+    "perfHudHint": "左下に FPS・メモリ・blob URL を表示するフローティングモニター。性能計測用で、既定はオフです。",
     "traceTitle": "Trace",
     "traceHint": "現在のアプリセッションのローカル再生診断です。問題を再現してからコピーしてください。",
     "traceCopy": "Trace をコピー",

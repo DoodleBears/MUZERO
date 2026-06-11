@@ -165,6 +165,19 @@ describe("TraceDiagnostics", () => {
     );
   });
 
+  it("toggles the performance HUD setting (visible prod-build switch, rule 3)", async () => {
+    render(<TraceDiagnostics />);
+
+    const toggle = screen.getByRole("checkbox", { name: /settings.perfHud/ });
+    expect(toggle).not.toBeChecked();
+    fireEvent.click(toggle);
+
+    const { getSettings } = await import("@/db/repositories");
+    await waitFor(async () => {
+      expect((await getSettings()).perfHudEnabled).toBe(true);
+    });
+  });
+
   it("exports archived trace entries as a local file", async () => {
     await appendTraceArchiveEntries(
       [

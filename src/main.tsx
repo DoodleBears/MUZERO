@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MotionConfig } from "motion/react";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
+import { ProdPerfHud } from "@/components/dev/dev-perf-panel";
 import { GlobalErrorBoundary } from "@/components/shell/global-error-boundary";
 import { NotificationStack } from "@/components/shell/notification-stack";
 import { TraceRecorder } from "@/components/shell/trace-recorder";
@@ -45,6 +46,9 @@ createRoot(root).render(
       <MotionConfig reducedMotion="user">
         <NotificationStack />
       </MotionConfig>
+      {/* Prod-only perf HUD behind the visible Settings switch; dev builds
+          mount the HUD from App.tsx (memory-perf-audit PRD Phase 1). */}
+      <ProdPerfHud />
     </QueryClientProvider>
   </StrictMode>,
 );

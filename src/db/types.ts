@@ -599,6 +599,9 @@ export interface AppSettings {
   visualizerIdleOnly?: boolean;
   /** Surface memories as a top popover during full-immersive (idle-only) playback. Default true. */
   immersiveMemoryOverlay?: boolean;
+  /** Mount the floating performance HUD in prod builds (dev always mounts it).
+   *  Visible Settings switch for perf baselining — memory-perf-audit PRD Phase 1. Default false. */
+  perfHudEnabled?: boolean;
   /** Prefer the current cover's extracted dominant color for visualizers. Default true. */
   visualizerUseCoverColor?: boolean;
   /** Flow background ("流光") color source: follow the cover palette, or a fixed custom set.

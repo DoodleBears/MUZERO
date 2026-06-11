@@ -12,6 +12,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { saveSettings } from "@/db/repositories";
+import { useSettings } from "@/hooks/use-app-data";
 import { APP_VERSION, GIT_SHA } from "@/lib/app-version";
 import {
   type DiagnosticCategory,
@@ -85,6 +87,7 @@ const ERROR_KIND_OPTION_LABELS = {
 
 export function TraceDiagnostics() {
   const { t } = useTranslation();
+  const settings = useSettings();
   const entries = useTraceEntries();
   const [copied, setCopied] = useState<"visible" | "current" | "all" | "archive" | null>(null);
   const [level, setLevel] = useState<LevelOption>("all");
@@ -246,6 +249,22 @@ export function TraceDiagnostics() {
               ? t("settings.traceArchiveExported")
               : t("settings.traceArchiveExport")}
           </Button>
+        </div>
+        <div className="rounded-md border border-border p-3">
+          <label className="flex items-start gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={settings.perfHudEnabled ?? false}
+              onChange={(event) =>
+                void saveSettings({ perfHudEnabled: event.currentTarget.checked })
+              }
+              className="mt-1"
+            />
+            <span className="flex flex-col gap-1">
+              <span className="font-medium text-foreground">{t("settings.perfHud")}</span>
+              <span className="text-muted-foreground text-xs">{t("settings.perfHudHint")}</span>
+            </span>
+          </label>
         </div>
         <div className="grid gap-2 md:grid-cols-[repeat(3,minmax(0,1fr))_minmax(180px,1.4fr)]">
           <TraceSelect

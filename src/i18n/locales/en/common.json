@@ -776,6 +776,8 @@
     "addDriveAutoSyncAfterChanges": "Enable After local changes",
     "addDriveAutoSyncAfterChangesHint": "Future local edits sync after a short debounce. You can change this on the drive card.",
     "cloudSecretStoredAs": "Secret stored locally as {{value}}",
+    "perfHud": "Performance HUD",
+    "perfHudHint": "Floating FPS / memory / blob-URL monitor in the bottom-left corner. Used for performance baselining; off by default.",
     "traceTitle": "Trace",
     "traceHint": "Local playback diagnostics for the current app session. Reproduce the issue, then copy this log.",
     "traceCopy": "Copy trace",

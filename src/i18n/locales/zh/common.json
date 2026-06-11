@@ -762,6 +762,8 @@
     "addDriveAutoSyncAfterChanges": "开启「本地更改后」自动同步",
     "addDriveAutoSyncAfterChangesHint": "之后的本地编辑会在短暂防抖后同步。也可以在云盘卡片上修改。",
     "cloudSecretStoredAs": "Secret 仅本地保存为 {{value}}",
+    "perfHud": "性能监控面板",
+    "perfHudHint": "左下角悬浮的 FPS / 内存 / blob URL 监控，用于性能基线采集；默认关闭。",
     "traceTitle": "Trace 诊断",
     "traceHint": "当前 app 会话的本地播放诊断。复现问题后复制这段日志。",
     "traceCopy": "复制 trace",

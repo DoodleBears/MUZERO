@@ -1,5 +1,6 @@
 import { Check, ClipboardCopy } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { useSettings } from "@/hooks/use-app-data";
 import {
   blobUrlStats,
   installBlobUrlTracker,
@@ -196,6 +197,18 @@ export function DevPerfPanel() {
       )}
     </div>
   );
+}
+
+/**
+ * Prod-build gate for the HUD, mounted in `main.tsx`. Dev builds mount the HUD
+ * directly from App.tsx, so this renders nothing there (no double mount); prod
+ * builds mount it only behind the visible Settings switch (`perfHudEnabled`,
+ * rule 3 — a Settings control, not a hidden flag).
+ */
+export function ProdPerfHud() {
+  const settings = useSettings();
+  if (import.meta.env.DEV || !settings.perfHudEnabled) return null;
+  return <DevPerfPanel />;
 }
 
 function Row({ label, value }: { label: string; value: string }) {

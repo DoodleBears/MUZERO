@@ -280,16 +280,16 @@ player-store.ts:2122-2155 两次 `updateMediaSessionMetadata` 交错时（await 
 - [x] blob: URL 存活计数器：DEV 构建下包装 `URL.createObjectURL/revokeObjectURL`（live diff），DevPerfPanel 加一行 `blobs`（[perf-counters.ts](../../../src/lib/perf-counters.ts) `installBlobUrlTracker`，refcount + 卸载还原，TDD 11 测）
 - [x] liveQuery 重查计数：`listAllTracks` / `memoryNotesByTrack` / `trackPlaybackStats` 查询入口经 `noteDbRequery` 计数 + `traceEvent("debug", "db", …)` 进 trace 环（copy-trace 一键带出），面板加 `db` 累计行；search-page 的内联 stats 查询改走新仓库函数 `listTrackPlaybackStats`
 - [x] 队列长度行：playQueue entries 数进面板（F-11 观测，最小 selector `s.queue.length`）
-- [ ] prod build 采集途径：DevPerfPanel 当前仅 `import.meta.env.DEV` 挂载，与 §2.2「prod build 复测」冲突——在 Settings 开发者区加**可见开关**（默认关）允许 prod 构建挂载面板（硬规则 3 允许可见 Settings 控件，禁止的是 hidden flag）
-- [ ] 按 §2.3 五个场景在 prod build 采集 before 基线，数字回填本 PRD §10
+- [x] prod build 采集途径：Settings「Trace 诊断」区新增可见开关 `perfHudEnabled`（默认关，i18n 四语），prod 经 main.tsx 的 `ProdPerfHud` 网关挂载（dev 仍由 App.tsx 挂载，互斥不双挂）
+- [ ] 按 §2.3 五个场景在 prod build 采集 before 基线，数字回填本 PRD §10（人工操作，待真机采集）
 
 ### Phase 1 Checklist
 
-- [ ] 面板新增 blobs / db-requery / queue 三行，数值随场景操作正确变动
-- [ ] copy-trace 导出含 db 重查事件（经 `sanitizeDiagnosticData` 脱敏）
-- [ ] prod build 经 Settings 开关可见面板；默认关闭时零开销（不挂 observer）
-- [ ] 五场景 before 基线已记录
-- [ ] `make check` 通过；无新增 console 直连（硬规则 8）
+- [x] 面板新增 blobs / db-requery / queue 三行（preview 验证渲染正常，无 console 错误）
+- [x] copy-trace 导出含 db 重查事件（`noteDbRequery` → `traceEvent`，经 `sanitizeDiagnosticData` 脱敏；单测覆盖）
+- [x] prod build 经 Settings 开关可见面板；默认关闭时零开销（计数器 enabled 标志 + HUD 卸载时还原 URL 包装，单测覆盖 refcount/还原）
+- [ ] 五场景 before 基线已记录（人工，待真机）
+- [x] typecheck + 触达区测试通过；无新增 console 直连（硬规则 8）。注：`repositories.test.ts` 有 6 个干净 HEAD 上即失败的 pre-existing 超时（provider-storage 路径），已另开任务跟踪，与本 phase 无关
 
 ### Phase 2: 确证泄漏修复（P0）
 

@@ -761,6 +761,8 @@
     "addDriveAutoSyncAfterChanges": "‘로컬 변경 후’ 자동 동기화 켜기",
     "addDriveAutoSyncAfterChangesHint": "이후 로컬 편집은 짧은 대기 후 동기화합니다. 드라이브 카드에서도 바꿀 수 있습니다.",
     "cloudSecretStoredAs": "Secret은 이 기기에 {{value}}로 저장됨",
+    "perfHud": "성능 HUD",
+    "perfHudHint": "왼쪽 아래에 FPS·메모리·blob URL을 표시하는 플로팅 모니터입니다. 성능 측정용이며 기본은 꺼짐입니다.",
     "traceTitle": "Trace",
     "traceHint": "현재 앱 세션의 로컬 재생 진단입니다. 문제를 재현한 뒤 복사하세요.",
     "traceCopy": "Trace 복사",
