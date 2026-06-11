@@ -27,6 +27,29 @@ type GLState = {
   start: number;
 };
 
+/**
+ * Release GPU-side program/shaders/buffers. GL resources are NOT freed by JS GC
+ * while the context lives, so switching flow effects (each is its own shader)
+ * would otherwise accumulate compiled programs until the canvas unmounts
+ * (memory-perf-audit PRD F-5). Unlike `loseContext`, deleting a program leaves
+ * the context reusable — safe under StrictMode's remount on the same canvas.
+ */
+export function releaseGlState(
+  state: {
+    gl: Pick<WebGLRenderingContext, "isContextLost" | "deleteProgram" | "deleteBuffer">;
+    programInfo: { program: WebGLProgram };
+    bufferInfo: Pick<twgl.BufferInfo, "attribs" | "indices">;
+  } | null,
+): void {
+  if (!state) return;
+  const { gl, programInfo, bufferInfo } = state;
+  // A lost context already dropped its resources; deleting handles would throw.
+  if (gl.isContextLost()) return;
+  gl.deleteProgram(programInfo.program);
+  for (const attrib of Object.values(bufferInfo.attribs ?? {})) gl.deleteBuffer(attrib.buffer);
+  if (bufferInfo.indices) gl.deleteBuffer(bufferInfo.indices);
+}
+
 export default function ReactiveScene({
   styleId,
   active,
@@ -120,7 +143,10 @@ export default function ReactiveScene({
       // (mount→cleanup→mount) reusing the SAME canvas, and a context killed via
       // loseContext can't be recovered through getContext — the re-mount would
       // build its program on a dead context (link fails → crash). The context is
-      // released by GC when the canvas element unmounts.
+      // released by GC when the canvas element unmounts. The program/buffers ARE
+      // deleted though — they live on the GPU until then and would pile up per
+      // shader switch (F-5).
+      releaseGlState(stateRef.current);
       stateRef.current = null;
     };
   }, [frag, fftSize]);
@@ -132,6 +158,10 @@ export default function ReactiveScene({
     const minFrameMs = lowPower ? 1000 / 40 : 0;
     // Reused per-frame so the flow palette upload doesn't churn the GC.
     const flowColors = new Float32Array(FLOW_MAX_COLORS * 3);
+    // getComputedStyle every frame forces a per-frame style read (F-9) — refresh
+    // the accent on the same ~6-frame cadence the spectrum renderers use.
+    let frame = 0;
+    let primary = readPrimaryRgb(canvasRef.current);
 
     const renderFrame = (tMs: number) => {
       const s = stateRef.current;
@@ -166,7 +196,8 @@ export default function ReactiveScene({
         treble = a.treble;
         energy = a.energy;
       }
-      const p = readPrimaryRgb(canvasRef.current);
+      if (frame++ % 6 === 0) primary = readPrimaryRgb(canvasRef.current);
+      const p = primary;
       const flowCfg = isFlow ? flowRef.current : undefined;
       const flowCount = flowCfg ? fillFlowColors(flowColors, p, flowCfg) : 0;
 

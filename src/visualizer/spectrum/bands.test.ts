@@ -1,16 +1,73 @@
 import { describe, expect, it } from "vitest";
 import {
   aggregateBands,
+  aggregateBandsInto,
   applyTilt,
+  applyTiltInto,
   type Band,
   decayBands,
+  decayBandsInto,
   decayLevel,
   octaveBands,
   REST_DECAY,
   REST_EPSILON,
   smoothBands,
+  smoothBandsInto,
   tiltWeights,
 } from "./bands";
+
+/**
+ * In-place variants for the 60fps render loops (memory-perf-audit PRD F-10) —
+ * must match the pure versions exactly, just without allocating per frame.
+ */
+describe("in-place band variants", () => {
+  const bands: Band[] = [
+    { lo: 0, hi: 1 },
+    { lo: 2, hi: 3 },
+    { lo: 4, hi: 6 },
+  ];
+  const data = [10, 200, 40, 80, 255, 0, 30];
+
+  it("aggregateBandsInto matches aggregateBands and reuses the out array", () => {
+    const out = new Array(bands.length).fill(-1);
+    const returned = aggregateBandsInto(out, data, bands);
+    expect(returned).toBe(out);
+    expect(out).toEqual(aggregateBands(data, bands));
+  });
+
+  it("applyTiltInto matches applyTilt, mutating levels", () => {
+    const weights = tiltWeights(3);
+    const pure = applyTilt([0.2, 0.5, 0.9], weights);
+    const levels = [0.2, 0.5, 0.9];
+    const returned = applyTiltInto(levels, weights);
+    expect(returned).toBe(levels);
+    expect(levels).toEqual(pure);
+  });
+
+  it("smoothBandsInto matches smoothBands, writing into prev", () => {
+    const prev = [0.1, 0.4, 0.8];
+    const next = [0.5, 0.2, 1.0];
+    const pure = smoothBands([0.1, 0.4, 0.8], next, 0.5);
+    const returned = smoothBandsInto(prev, next, 0.5);
+    expect(returned).toBe(prev);
+    expect(prev).toEqual(pure);
+  });
+
+  it("smoothBandsInto grows prev to match a longer next (rebuild race)", () => {
+    const prev = [0.5];
+    smoothBandsInto(prev, [0.2, 0.4], 0.5);
+    expect(prev).toEqual(smoothBands([0.5], [0.2, 0.4], 0.5));
+  });
+
+  it("decayBandsInto matches decayBands, mutating levels, snapping the tail to 0", () => {
+    const pure = decayBands([0.5, REST_EPSILON, 0]);
+    const levels = [0.5, REST_EPSILON, 0];
+    const returned = decayBandsInto(levels);
+    expect(returned).toBe(levels);
+    expect(levels).toEqual(pure);
+    expect(levels[1]).toBe(0);
+  });
+});
 
 describe("octaveBands", () => {
   const opts = { fftSize: 2048, sampleRate: 44100, bandsPerOctave: 3 };

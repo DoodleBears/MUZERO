@@ -14,7 +14,7 @@
 | 1 | 观测先行：内存与帧节奏指标 | 🔄 In Progress | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | 确证泄漏修复（P0：YouTube 播放路径） | ✅ Completed | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | 全表查询放大链治理（列表 / 搜索 / 统计） | ✅ Completed | [Phase 3 Checklist](#phase-3-checklist) |
-| 4 | 渲染层 GPU / GC 卫生（可视化 + 背景） | 🔲 Pending | [Phase 4 Checklist](#phase-4-checklist) |
+| 4 | 渲染层 GPU / GC 卫生（可视化 + 背景） | 🔄 In Progress（F-6/F-7 被并发改动阻塞） | [Phase 4 Checklist](#phase-4-checklist) |
 | 5 | 大文件内存防护（预热 / 缓存 / 下载） | 🔲 Pending | [Phase 5 Checklist](#phase-5-checklist) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
@@ -330,18 +330,19 @@ player-store.ts:2122-2155 两次 `updateMediaSessionMetadata` 交错时（await 
 **Goal:** 效果切换无资源累积；render loop 每帧主线程成本有预算。
 
 **Tasks:**
-- [ ] F-5：ReactiveScene cleanup 删除旧 program/buffer（保留不 loseContext 决策）
-- [ ] F-6：像素视频背景 ticker 随 `isPlaying` 启停
-- [ ] F-7：像素背景复用单 Application，换源只换纹理（交叉淡入语义保留）
-- [ ] F-9：`readPrimaryRgb` 结果缓存，主色 store 更新时失效
-- [ ] F-10：bands 热路径原地变体 + 渲染器复用数组（纯函数版保留，补对照单测）
+- [x] F-5：ReactiveScene cleanup 释放旧 program/attrib buffer/index buffer（`releaseGlState`，context-lost 时跳过；保留不 loseContext 决策——删 program 不杀 context，StrictMode 安全；单测覆盖三种路径）
+- [ ] F-6：像素视频背景 ticker 随 `isPlaying` 启停 —— **推迟**：`pixi-pixel-background.tsx` 工作区有并发进行中的改动（dock-idle/背景功能），路径化提交无法安全隔离同文件；待该工作落地后跟进
+- [ ] F-7：像素背景复用单 Application —— 同上推迟，与 F-6 同文件
+- [x] F-9：实测确认每帧 `getComputedStyle` 仅 reactive-scene 一处（spectrum 渲染器已有 `frame % 6` 节流、playback-spectrum 有 `% 30`）；改为对齐 spectrum 的 6 帧节奏缓存，**不做**全局 `readPrimaryRgb` TTL 缓存——主题切换瞬间读旧值会让 `transitionVisualizerCoverColor("theme-primary", …)` 过渡到过期颜色，引入真 bug
+- [x] F-10：bands.ts 增加 `aggregateBandsInto` / `applyTiltInto` / `smoothBandsInto` / `decayBandsInto` 原地变体（纯函数版保留），bars / radial / led-reflex 三个渲染器换用 + 持有复用 scratch 数组——render loop 零分配；对照单测断言与纯函数版逐项一致（含 rebuild 竞态下的长度增长）
 
 ### Phase 4 Checklist
 
-- [ ] 场景 S4：效果轮换三轮后 GPU 内存回落、无 context lost
-- [ ] 场景 S3：1 小时长播 frame p99 < 33ms、无周期性 >100ms 尖刺
-- [ ] 火焰图确认 render loop 内无 recalc style 片段
-- [ ] bands.ts 既有穷举单测 + 原地版对照测试全绿
+- [ ] 场景 S4：效果轮换三轮后 GPU 内存回落、无 context lost（人工，待真机）
+- [ ] 场景 S3：1 小时长播 frame p99 < 33ms、无周期性 >100ms 尖刺（人工，待真机）
+- [ ] 火焰图确认 render loop 内无 recalc style 片段（人工；代码层 reactive-scene 已降为 1/6 帧）
+- [x] bands.ts 既有穷举单测 + 原地版对照测试全绿（visualizer 套件 66 测）
+- [ ] F-6/F-7 在 pixi-pixel-background 并发改动合入后跟进（见 Tasks 注）
 
 ### Phase 5: 大文件内存防护
 

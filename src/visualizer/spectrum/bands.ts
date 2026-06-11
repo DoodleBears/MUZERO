@@ -54,14 +54,27 @@ export function octaveBands(opts: {
  * each band so transient peaks survive (averaging washes them out).
  */
 export function aggregateBands(data: Uint8Array | number[], bands: Band[]): number[] {
-  return bands.map(({ lo, hi }) => {
+  return aggregateBandsInto(new Array(bands.length), data, bands);
+}
+
+/** {@link aggregateBands} writing into a reused array — for the 60fps render
+ *  loops, which otherwise allocate several short-lived arrays per frame (F-10). */
+export function aggregateBandsInto(
+  out: number[],
+  data: Uint8Array | number[],
+  bands: Band[],
+): number[] {
+  out.length = bands.length;
+  for (let b = 0; b < bands.length; b++) {
+    const { lo, hi } = bands[b];
     let max = 0;
     for (let i = lo; i <= hi; i++) {
       const v = data[i] ?? 0;
       if (v > max) max = v;
     }
-    return max / 255;
-  });
+    out[b] = max / 255;
+  }
+  return out;
 }
 
 /**
@@ -78,6 +91,14 @@ export function applyTilt(levels: number[], weights: number[]): number[] {
   return levels.map((v, i) => Math.min(1, v * (weights[i] ?? 1)));
 }
 
+/** {@link applyTilt} mutating `levels` in place (F-10). */
+export function applyTiltInto(levels: number[], weights: number[]): number[] {
+  for (let i = 0; i < levels.length; i++) {
+    levels[i] = Math.min(1, levels[i] * (weights[i] ?? 1));
+  }
+  return levels;
+}
+
 /**
  * Exponential moving average toward `next` (alpha 1 = no smoothing, 0 = frozen).
  * Missing prev entries are treated as 0. Returns a new array.
@@ -87,6 +108,17 @@ export function smoothBands(prev: number[], next: number[], alpha = 0.5): number
     const p = prev[i] ?? 0;
     return p + (v - p) * alpha;
   });
+}
+
+/** {@link smoothBands} writing into `prev` (resized to match `next`; F-10). */
+export function smoothBandsInto(prev: number[], next: number[], alpha = 0.5): number[] {
+  const n = next.length;
+  for (let i = 0; i < n; i++) {
+    const p = prev[i] ?? 0;
+    prev[i] = p + (next[i] - p) * alpha;
+  }
+  prev.length = n;
+  return prev;
 }
 
 /**
@@ -121,4 +153,10 @@ export function decayLevel(v: number, alpha = REST_DECAY): number {
  */
 export function decayBands(levels: number[], alpha = REST_DECAY): number[] {
   return levels.map((v) => decayLevel(v, alpha));
+}
+
+/** {@link decayBands} mutating `levels` in place (F-10). */
+export function decayBandsInto(levels: number[], alpha = REST_DECAY): number[] {
+  for (let i = 0; i < levels.length; i++) levels[i] = decayLevel(levels[i], alpha);
+  return levels;
 }

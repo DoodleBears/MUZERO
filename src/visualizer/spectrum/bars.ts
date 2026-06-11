@@ -2,12 +2,12 @@ import { lighten, type Rgb, rgba } from "@/lib/visualizer-color";
 import { visualizerBandsPerOctave } from "@/lib/visualizer-effect-settings";
 import type { Visualizer, VisualizerContext } from "../types";
 import {
-  aggregateBands,
-  applyTilt,
+  aggregateBandsInto,
+  applyTiltInto,
   type Band,
-  decayBands,
+  decayBandsInto,
   octaveBands,
-  smoothBands,
+  smoothBandsInto,
   tiltWeights,
 } from "./bands";
 
@@ -22,6 +22,8 @@ export function createBarsVisualizer(): Visualizer {
   let bands: Band[] = [];
   let weights: number[] = [];
   let levels: number[] = [];
+  // Reused per-frame target buffer — the render loop allocates nothing (F-10).
+  const scratch: number[] = [];
   let primary: Rgb = { r: 191, g: 131, b: 254 };
   let frame = 0;
   let bandsPerOctave = 0;
@@ -66,11 +68,12 @@ export function createBarsVisualizer(): Visualizer {
 
       if (analyser && active && bands.length) {
         analyser.getByteFrequencyData(data as Uint8Array<ArrayBuffer>);
-        const target = applyTilt(aggregateBands(data, bands), weights);
-        levels = smoothBands(levels, target, Math.max(0.15, Math.min(0.9, 0.5 * options.motion)));
+        aggregateBandsInto(scratch, data, bands);
+        applyTiltInto(scratch, weights);
+        smoothBandsInto(levels, scratch, Math.max(0.15, Math.min(0.9, 0.5 * options.motion)));
       } else {
         // No audio: sink to rest instead of faking idle motion.
-        levels = decayBands(levels);
+        decayBandsInto(levels);
       }
 
       const n = levels.length || 1;
