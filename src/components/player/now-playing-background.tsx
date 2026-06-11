@@ -11,6 +11,7 @@ import {
   settleBackgroundTarget,
 } from "@/lib/background";
 import { nextSlideIndex } from "@/lib/slideshow";
+import { trackHasCover } from "@/lib/track-display";
 import { cn } from "@/lib/utils";
 import { resolveTrackLyrics } from "@/lyrics/resolve-lyrics";
 import { usePlayerStore } from "@/stores/player-store";
@@ -96,7 +97,7 @@ function NowPlayingBackgroundContent({ hideVisualizer }: { hideVisualizer: boole
   const source = resolveBackgroundSource({
     mode: settings.backgroundMode,
     galleryFallback: settings.backgroundGalleryFallback ?? true,
-    hasCover: !!current?.coverBlobId,
+    hasCover: trackHasCover(current),
     trackBackgroundCount: trackBackgroundBlobs.length,
     galleryCount: galleryBlobs.length,
   });
@@ -164,6 +165,7 @@ function NowPlayingBackgroundContent({ hideVisualizer }: { hideVisualizer: boole
         : null;
   const pixiMedia = resolvePixiBackgroundMedia({
     imageSource: source,
+    mode: settings.backgroundMode,
     trackKind: current?.kind,
     trackStatus: current?.status,
     hasTrackMedia: !!current?.blobId,
@@ -171,7 +173,7 @@ function NowPlayingBackgroundContent({ hideVisualizer }: { hideVisualizer: boole
   const pixiUrl = pixiMedia.source === "track-video" ? currentVideoUrl : backgroundUrl;
   const hasPendingImageBackground =
     source === "cover"
-      ? !!current?.coverBlobId
+      ? trackHasCover(current)
       : source === "track-slideshow"
         ? trackBackgroundBlobs.length > 0
         : source === "gallery-slideshow"

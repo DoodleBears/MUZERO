@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Track } from "@/db/types";
-import { resolveStageContent, trackSubtitle } from "./track-display";
+import { resolveStageContent, trackHasCover, trackSubtitle } from "./track-display";
 
 function track(partial: Partial<Track>): Track {
   return {
@@ -79,6 +79,25 @@ describe("resolveStageContent — video-first fallback", () => {
         hasCover: false,
       }),
     ).toBe("title");
+  });
+});
+
+describe("trackHasCover", () => {
+  it("is true for a local cover blob", () => {
+    expect(trackHasCover(track({ coverBlobId: "blb_1" }))).toBe(true);
+  });
+
+  it("is true for a streamed track whose art is a remote URL (no local blob)", () => {
+    expect(
+      trackHasCover(
+        track({ coverBlobId: undefined, remoteCoverUrl: "https://p1.music.126.net/x" }),
+      ),
+    ).toBe(true);
+  });
+
+  it("is false when the track has neither, or is undefined", () => {
+    expect(trackHasCover(track({ coverBlobId: undefined, remoteCoverUrl: undefined }))).toBe(false);
+    expect(trackHasCover(undefined)).toBe(false);
   });
 });
 

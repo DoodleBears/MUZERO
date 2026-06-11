@@ -37,11 +37,36 @@ export async function extractDominantImageColor(blob: Blob): Promise<Rgb | null>
   return (await extractImagePalette(blob, 1))[0] ?? null;
 }
 
+/**
+ * Same as {@link extractImagePalette} but from an already-resolved image URL —
+ * for streamed (remote) covers whose bytes live behind a URL, not a local Blob.
+ * Remote schemes (http/https/muzfetch) are loaded CORS-clean (see {@link loadImage});
+ * the muzfetch proxy answers `ACAO:*`, so the canvas isn't tainted and pixels read
+ * back. A URL whose server lacks CORS simply fails to load → `[]` (graceful theme
+ * fallback) — the same outcome a tainted canvas would have produced.
+ */
+export async function extractImagePaletteFromUrl(
+  url: string,
+  count = DEFAULT_PALETTE_COUNT,
+): Promise<Rgb[]> {
+  const pixels = await samplePixelsFromUrl(url);
+  return pixels ? selectImagePalette(pixels, count) : [];
+}
+
 /** Decode + downsample an image Blob to raw RGBA pixels (null if unsupported). */
 async function sampleImagePixels(blob: Blob): Promise<Uint8ClampedArray | null> {
   if (typeof document === "undefined" || !blob.type.startsWith("image/")) return null;
-
   const url = URL.createObjectURL(blob);
+  try {
+    return await samplePixelsFromUrl(url);
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
+/** Decode + downsample an image URL to raw RGBA pixels (null if unsupported/tainted). */
+async function samplePixelsFromUrl(url: string): Promise<Uint8ClampedArray | null> {
+  if (typeof document === "undefined") return null;
   try {
     const img = await loadImage(url);
     const width = img.naturalWidth || img.width;
@@ -59,8 +84,6 @@ async function sampleImagePixels(blob: Blob): Promise<Uint8ClampedArray | null> 
     return ctx.getImageData(0, 0, canvas.width, canvas.height).data;
   } catch {
     return null;
-  } finally {
-    URL.revokeObjectURL(url);
   }
 }
 
@@ -147,10 +170,24 @@ function loadImage(src: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const img = new Image();
     img.decoding = "async";
+    // Remote/proxied covers come from another origin. Without this, the browser
+    // loads the image in no-CORS mode, `drawImage` taints the canvas, and the
+    // later `getImageData` throws — so a visible streamed cover yields NO palette
+    // (flow drops to custom colors, the spectrum to the theme primary). Requesting
+    // it CORS-clean lets the muzfetch proxy's `ACAO:*` response read back; this
+    // mirrors the Pixi background (pixi-pixel-background.tsx) and the WebAudio
+    // cover (player-store). Must be set BEFORE `src`. blob:/data: are same-origin.
+    if (needsCrossOrigin(src)) img.crossOrigin = "anonymous";
     img.onload = () => resolve(img);
     img.onerror = reject;
     img.src = src;
   });
+}
+
+/** http(s)/muzfetch covers are cross-origin → need a CORS-clean request to stay
+ *  canvas-readable; blob:/data: object URLs are same-origin and left untouched. */
+function needsCrossOrigin(src: string): boolean {
+  return /^(https?|muzfetch):/i.test(src);
 }
 
 function quantize(value: number): number {

@@ -22,9 +22,9 @@ import { AutoScrollText } from "@/components/ui/auto-scroll-text";
 import { db } from "@/db/muzero-db";
 import type { Track } from "@/db/types";
 import { useSettings } from "@/hooks/use-app-data";
-import { useTrackCoverUrl } from "@/hooks/use-media";
+import { proxyExternalCover, useTrackCoverUrl } from "@/hooks/use-media";
 import { getCroppedBlob } from "@/lib/image-crop";
-import { trackAlbum, trackArtists, trackSubtitle } from "@/lib/track-display";
+import { trackAlbum, trackArtists, trackHasCover, trackSubtitle } from "@/lib/track-display";
 import { cn } from "@/lib/utils";
 import { useNavStore } from "@/stores/nav-store";
 import { usePlayerStore } from "@/stores/player-store";
@@ -386,9 +386,13 @@ export function SwipeableMediaStage({
         const incoming = makeVisualTrack(current, preloadedCoverUrls);
         // Skip the slide if the incoming cover isn't loaded yet (a jump to a
         // far track) — the plain crossfade handles those; we never deadlock the
-        // handoff waiting on a cover that the overlay can't show.
+        // handoff waiting on a cover that the overlay can't show. `trackHasCover`
+        // (not coverBlobId) so a streamed track — which has a remote cover but no
+        // preloaded blob the overlay can paint — falls through to the base
+        // MediaStage crossfade instead of sliding a bare title card then popping
+        // the cover in (the "title flash then cover" on every switch).
         const incomingReady =
-          !!incoming && (!incoming.track.coverBlobId || !!incoming.initialCoverUrl);
+          !!incoming && (!trackHasCover(incoming.track) || !!incoming.initialCoverUrl);
         if (outgoing && incoming && incomingReady) {
           let direction: Exclude<SwipeDirection, null>;
           if (newId === prev.nextId) direction = "next";
@@ -864,7 +868,7 @@ function TrackVisual({
   visual: VisualTrack;
 }) {
   const [initialFailed, setInitialFailed] = useState(false);
-  const hasCover = !!visual.track.coverBlobId;
+  const hasCover = trackHasCover(visual.track);
   const coverUrl = hasCover && !initialFailed ? visual.initialCoverUrl : null;
 
   useEffect(() => {
@@ -875,6 +879,8 @@ function TrackVisual({
     <img
       src={coverUrl}
       alt=""
+      // Streamed covers come from third-party hosts that 403 a foreign referer.
+      referrerPolicy="no-referrer"
       draggable={false}
       className="absolute inset-0 size-full object-cover"
       onError={() => setInitialFailed(true)}
@@ -888,8 +894,13 @@ function makeVisualTrack(
   track: Track | undefined,
   preloadedCoverUrls: Record<string, string>,
 ): VisualTrack | null {
+  // `trackHasCover` (not coverBlobId) so a streamed track's preloaded remote cover
+  // flows into the coverflow strip just like a local blob's object URL.
   return track
-    ? { initialCoverUrl: track.coverBlobId ? (preloadedCoverUrls[track.id] ?? null) : null, track }
+    ? {
+        initialCoverUrl: trackHasCover(track) ? (preloadedCoverUrls[track.id] ?? null) : null,
+        track,
+      }
     : null;
 }
 
@@ -905,11 +916,23 @@ function compactTracks(tracks: Array<Track | undefined>): Track[] {
 }
 
 type PreloadRequest = {
-  coverBlobId: string;
-  crop: Track["coverCrop"] | undefined;
+  coverBlobId?: string;
+  crop?: Track["coverCrop"] | undefined;
+  /** Proxied remote cover URL for streamed tracks (no local blob). */
+  remoteUrl?: string;
   key: string;
   trackId: string;
 };
+
+/** Prime the browser cache for a remote cover so the coverflow <img> paints
+ *  without a fetch round-trip. Fire-and-forget — failures are harmless. */
+function warmImage(url: string): void {
+  if (typeof Image === "undefined") return;
+  const img = new Image();
+  img.decoding = "async";
+  img.referrerPolicy = "no-referrer";
+  img.src = url;
+}
 
 type PreloadedCover = {
   key: string;
@@ -923,18 +946,32 @@ function usePreloadedCoverUrls(tracks: Track[]): Record<string, string> {
   const [urls, setUrls] = useState<Record<string, string>>({});
   const requests = useMemo<PreloadRequest[]>(
     () =>
-      tracks.flatMap((track) => {
-        if (!track.coverBlobId) return [];
-        const crop = coverCropped ? track.coverCrop : undefined;
-        const cropKey = crop ? `${crop.x},${crop.y},${crop.width},${crop.height}` : "original";
-        return [
-          {
-            coverBlobId: track.coverBlobId,
-            crop,
-            key: `${track.id}:${track.coverBlobId}:${cropKey}`,
-            trackId: track.id,
-          },
-        ];
+      tracks.flatMap((track): PreloadRequest[] => {
+        if (track.coverBlobId) {
+          const crop = coverCropped ? track.coverCrop : undefined;
+          const cropKey = crop ? `${crop.x},${crop.y},${crop.width},${crop.height}` : "original";
+          return [
+            {
+              coverBlobId: track.coverBlobId,
+              crop,
+              key: `${track.id}:${track.coverBlobId}:${cropKey}`,
+              trackId: track.id,
+            },
+          ];
+        }
+        // Streamed cover: no local blob — preload the proxied remote URL so the
+        // prev/next covers are ready in the coverflow strip during a drag-swipe.
+        if (track.remoteCoverUrl) {
+          const url = proxyExternalCover(track.remoteCoverUrl) ?? track.remoteCoverUrl;
+          return [
+            {
+              key: `${track.id}:remote:${track.remoteCoverUrl}`,
+              remoteUrl: url,
+              trackId: track.id,
+            },
+          ];
+        }
+        return [];
       }),
     [coverCropped, tracks],
   );
@@ -952,6 +989,15 @@ function usePreloadedCoverUrls(tracks: Track[]): Record<string, string> {
           nextEntries[request.trackId] = reusable;
           continue;
         }
+
+        // Remote cover: the proxied URL is ready synchronously; warm the cache and
+        // record it directly (no object URL to own/revoke).
+        if (request.remoteUrl) {
+          warmImage(request.remoteUrl);
+          nextEntries[request.trackId] = { key: request.key, url: request.remoteUrl };
+          continue;
+        }
+        if (!request.coverBlobId) continue;
 
         const record = await db.mediaBlobs.get(request.coverBlobId);
         let blob = record?.blob;

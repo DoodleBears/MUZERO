@@ -77,6 +77,7 @@ vi.mock("@/hooks/use-app-data", () => ({
 
 vi.mock("@/hooks/use-media", () => ({
   useTrackCoverUrl: () => null,
+  proxyExternalCover: (url: string | undefined) => url ?? null,
 }));
 
 vi.mock("./media-stage", () => ({
@@ -194,6 +195,27 @@ describe("SwipeableMediaStage", () => {
     // The incoming track settles through the overlay (not an instant swap).
     expect(screen.getAllByTestId("visual-trk_b").length).toBeGreaterThan(0);
   });
+
+  it("never shows a bare title card for a streamed track switch (remote cover preloads)", async () => {
+    // A streamed track keeps its art in `remoteCoverUrl` with no local blob. Its
+    // proxied URL is preloaded into the coverflow strip, so the incoming card
+    // paints the cover <img> — never the title-card fallback (whether the
+    // coverflow plays or the base MediaStage crossfade takes it).
+    const streamed = [
+      makeTrack("trk_s1", { coverBlobId: undefined, remoteCoverUrl: "https://x/1.jpg" }),
+      makeTrack("trk_s2", { coverBlobId: undefined, remoteCoverUrl: "https://x/2.jpg" }),
+    ];
+    usePlayerStore.setState({ currentIndex: 0, queue: streamed });
+    render(<SwipeableMediaStage />);
+
+    await act(async () => {
+      usePlayerStore.setState({ currentIndex: 1 });
+      await Promise.resolve();
+    });
+
+    expect(screen.queryByTestId("visual-trk_s2")).not.toBeInTheDocument();
+    expect(screen.getByTestId("media-stage")).toBeInTheDocument();
+  });
 });
 
 function latestDragProps() {
@@ -206,7 +228,7 @@ function latestDragProps() {
   };
 }
 
-function makeTrack(id: string): Track {
+function makeTrack(id: string, overrides?: Partial<Track>): Track {
   return {
     createdAt: 1,
     durationSec: 30,
@@ -220,5 +242,6 @@ function makeTrack(id: string): Track {
     status: "ready",
     tags: [],
     title: id,
+    ...overrides,
   };
 }

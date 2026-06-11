@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useSettings } from "@/hooks/use-app-data";
 import { useTrackCoverUrl } from "@/hooks/use-media";
-import { resolveStageContent } from "@/lib/track-display";
+import { resolveStageContent, trackHasCover } from "@/lib/track-display";
 import { cn } from "@/lib/utils";
 import { getMediaEngine, usePlayerStore } from "@/stores/player-store";
 import { CoverImage } from "./cover-image";
@@ -37,7 +37,7 @@ export function MediaStage({ className }: { className?: string }) {
     displayMode,
     // Whether a cover *exists* (sync) — not whether its URL has resolved yet — so
     // the stage doesn't flip to the visualizer during a track change.
-    hasCover: !!current?.coverBlobId || !!current?.remoteCoverUrl,
+    hasCover: trackHasCover(current),
   });
   const showVideo = content === "video";
   // A video track the WebView accepted as "video" but failed to decode.
@@ -120,7 +120,7 @@ export function MediaStage({ className }: { className?: string }) {
         {content === "cover" && (
           <CoverImage
             url={coverUrl}
-            hasCover={!!current?.coverBlobId || !!current?.remoteCoverUrl}
+            hasCover={trackHasCover(current)}
             fallback={<StageTitleFallback track={current} dim={asBgActive} />}
             className="z-10 rounded-lg"
           />

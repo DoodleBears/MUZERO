@@ -1,5 +1,9 @@
-import { describe, expect, it } from "vitest";
-import { selectDominantImageColor, selectImagePalette } from "./image-palette";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  extractImagePaletteFromUrl,
+  selectDominantImageColor,
+  selectImagePalette,
+} from "./image-palette";
 
 function pixels(colors: Array<[number, number, number, number?]>): Uint8ClampedArray {
   return new Uint8ClampedArray(colors.flatMap(([r, g, b, a = 255]) => [r, g, b, a]));
@@ -112,5 +116,68 @@ describe("selectImagePalette", () => {
         ]),
       ),
     ).toEqual([]);
+  });
+});
+
+// Streamed covers (NetEase / Bilibili imports) live behind a proxied muzfetch URL,
+// not a local Blob. They MUST be loaded CORS-clean or `drawImage` taints the canvas
+// and `getImageData` throws → empty palette → flow/spectrum lose the cover color even
+// though the cover image is visible. Regression guard for that exact gotcha.
+describe("extractImagePaletteFromUrl — canvas CORS for remote covers", () => {
+  const realImage = globalThis.Image;
+  const realCreateElement = document.createElement.bind(document);
+  let loaded: Array<{ src: string; crossOrigin: string | null }>;
+
+  beforeEach(() => {
+    loaded = [];
+    class StubImage {
+      decoding = "";
+      crossOrigin: string | null = null;
+      naturalWidth = 2;
+      naturalHeight = 2;
+      width = 2;
+      height = 2;
+      onload: (() => void) | null = null;
+      onerror: (() => void) | null = null;
+      #src = "";
+      get src() {
+        return this.#src;
+      }
+      set src(value: string) {
+        this.#src = value;
+        loaded.push({ src: value, crossOrigin: this.crossOrigin });
+        queueMicrotask(() => this.onload?.());
+      }
+    }
+    // @ts-expect-error minimal stub for the canvas-extraction path
+    globalThis.Image = StubImage;
+    vi.spyOn(document, "createElement").mockImplementation((tag: string) => {
+      if (tag !== "canvas") return realCreateElement(tag);
+      return {
+        width: 0,
+        height: 0,
+        getContext: () => ({
+          drawImage: () => {},
+          // one saturated blue pixel so a non-empty palette comes back
+          getImageData: () => ({ data: new Uint8ClampedArray([20, 120, 220, 255]) }),
+        }),
+      } as unknown as HTMLCanvasElement;
+    });
+  });
+
+  afterEach(() => {
+    globalThis.Image = realImage;
+    vi.restoreAllMocks();
+  });
+
+  it("loads a proxied muzfetch cover with crossOrigin=anonymous (untainted canvas)", async () => {
+    const palette = await extractImagePaletteFromUrl("muzfetch://media/?__mzurl=cover");
+    expect(loaded.at(-1)?.crossOrigin).toBe("anonymous");
+    expect(palette.length).toBeGreaterThan(0); // canvas readable → real color extracted
+  });
+
+  it("loads a raw https cover with crossOrigin=anonymous", async () => {
+    await extractImagePaletteFromUrl("https://p1.music.126.net/cover.jpg");
+    expect(loaded.at(-1)?.crossOrigin).toBe("anonymous");
   });
 });

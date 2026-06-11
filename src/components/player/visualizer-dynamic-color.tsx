@@ -3,7 +3,8 @@ import { useEffect } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { db } from "@/db/muzero-db";
 import { useSettings } from "@/hooks/use-app-data";
-import { extractImagePalette } from "@/lib/image-palette";
+import { proxyExternalCover } from "@/hooks/use-media";
+import { extractImagePalette, extractImagePaletteFromUrl } from "@/lib/image-palette";
 import { type Rgb, readPrimaryRgb } from "@/lib/visualizer-color";
 import { usePlayerStore } from "@/stores/player-store";
 import {
@@ -26,7 +27,9 @@ export function useVisualizerCoverColorCss(active = true): string | null {
   const current = usePlayerStore(
     useShallow((s) => {
       const track = s.currentIndex >= 0 ? s.queue[s.currentIndex] : undefined;
-      return track ? { id: track.id, coverBlobId: track.coverBlobId } : null;
+      return track
+        ? { id: track.id, coverBlobId: track.coverBlobId, remoteCoverUrl: track.remoteCoverUrl }
+        : null;
     }),
   );
   const cover = useLiveQuery(
@@ -40,11 +43,37 @@ export function useVisualizerCoverColorCss(active = true): string | null {
 
   useEffect(() => {
     if (!active) return;
-    if (!coverColorEnabled || !current?.coverBlobId) {
+    const remoteCoverUrl = current?.remoteCoverUrl;
+    // Feature off, or the track has no cover at all → follow the theme primary.
+    if (!coverColorEnabled || (!current?.coverBlobId && !remoteCoverUrl)) {
       void primaryColorVersion;
       transitionVisualizerCoverColor("theme-primary", readPrimaryRgb());
       return;
     }
+
+    // Streamed cover: bytes aren't in a local Blob, so extract straight from the
+    // proxied remote URL (same proxy the stage/background use, so the canvas isn't
+    // tainted). Keep the current color while it resolves — no flash to theme.
+    if (!current.coverBlobId && remoteCoverUrl) {
+      let alive = true;
+      const cacheKey = `remote:${remoteCoverUrl}`;
+      const cached = colorCache.get(cacheKey);
+      if (cached !== undefined) {
+        transitionVisualizerCoverColor(cacheKey, cached.rgb ?? readPrimaryRgb(), cached.palette);
+        return;
+      }
+      const proxied = proxyExternalCover(remoteCoverUrl) ?? remoteCoverUrl;
+      void extractImagePaletteFromUrl(proxied).then((palette) => {
+        if (!alive) return;
+        const rgb = palette[0] ?? null;
+        colorCache.set(cacheKey, { rgb, palette });
+        transitionVisualizerCoverColor(cacheKey, rgb ?? readPrimaryRgb(), palette);
+      });
+      return () => {
+        alive = false;
+      };
+    }
+
     if (cover === undefined) return;
     if (!cover?.blob) {
       void primaryColorVersion;
@@ -71,7 +100,14 @@ export function useVisualizerCoverColorCss(active = true): string | null {
     return () => {
       alive = false;
     };
-  }, [active, coverColorEnabled, current?.coverBlobId, cover, primaryColorVersion]);
+  }, [
+    active,
+    coverColorEnabled,
+    current?.coverBlobId,
+    current?.remoteCoverUrl,
+    cover,
+    primaryColorVersion,
+  ]);
 
   return active ? css : null;
 }

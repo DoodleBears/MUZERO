@@ -109,6 +109,17 @@ describe("resolveBackgroundSource", () => {
     ).toBe("none");
   });
 
+  it("none: shows nothing even when a cover, slideshow, and gallery all exist", () => {
+    expect(
+      resolveBackgroundSource({
+        mode: "none",
+        hasCover: true,
+        trackBackgroundCount: 3,
+        galleryCount: 5,
+      }),
+    ).toBe("none");
+  });
+
   it("treats an undefined mode as cover priority", () => {
     expect(
       resolveBackgroundSource({
@@ -131,6 +142,18 @@ describe("resolvePixiBackgroundMedia", () => {
         hasTrackMedia: true,
       }),
     ).toEqual({ source: "track-video", mediaType: "video" });
+  });
+
+  it("none mode suppresses the MV backdrop even for a ready video track", () => {
+    expect(
+      resolvePixiBackgroundMedia({
+        imageSource: "none",
+        mode: "none",
+        trackKind: "video",
+        trackStatus: "ready",
+        hasTrackMedia: true,
+      }),
+    ).toEqual({ source: "none", mediaType: "image" });
   });
 
   it("keeps image sources for audio, pending video, or missing media", () => {

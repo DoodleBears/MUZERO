@@ -6,6 +6,7 @@ import type { BackgroundMode, TrackKind, TrackStatus } from "@/db/types";
  * the track's two own image assets, then the global gallery is an optional last resort:
  *  - "cover"     → the track's cover first, then its bound slideshow.
  *  - "slideshow" → the track's bound slideshow first, then its cover.
+ *  - "none"      → no ambient background at all (cover/slideshow/gallery all off).
  * When the track has neither, fall back to the shared global gallery only if
  * `galleryFallback` is on; otherwise nothing.
  */
@@ -27,6 +28,9 @@ export function resolveBackgroundSource(opts: {
 }): BackgroundSource {
   const { mode, galleryFallback = true, hasCover, trackBackgroundCount, galleryCount } = opts;
   const hasTrackSlideshow = trackBackgroundCount > 0;
+
+  // The user explicitly wants no ambient background — skip cover/slideshow/gallery.
+  if (mode === "none") return "none";
 
   // The track's own assets, ordered by the chosen priority.
   if (mode === "slideshow") {
@@ -50,10 +54,13 @@ export function resolveBackgroundSource(opts: {
  */
 export function resolvePixiBackgroundMedia(opts: {
   imageSource: BackgroundSource;
+  /** When the user explicitly picked "none", suppress the MV-as-backdrop too. */
+  mode?: BackgroundMode;
   trackKind?: TrackKind;
   trackStatus?: TrackStatus;
   hasTrackMedia: boolean;
 }): { source: BackgroundMediaSource; mediaType: BackgroundMediaType } {
+  if (opts.mode === "none") return { source: "none", mediaType: "image" };
   if (opts.trackKind === "video" && opts.trackStatus === "ready" && opts.hasTrackMedia) {
     return { source: "track-video", mediaType: "video" };
   }

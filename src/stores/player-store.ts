@@ -72,6 +72,7 @@ import {
   setFolderImportProgress,
 } from "@/stores/folder-import-store";
 import { notify } from "@/stores/notification-store";
+import { setSetBulkDownloading, setStreamDownloading } from "@/stores/stream-cache-store";
 import { runStreamCache } from "@/streamsrc/cache-stream";
 import type { StreamSearchHit } from "@/streamsrc/provider";
 import { createStreamSource } from "@/streamsrc/registry";
@@ -142,23 +143,29 @@ interface PlayerState {
   /**
    * Import a source playlist into a NEW set of streamed tracks (tagged with the
    * playlist ref for later incremental re-sync); returns how many were added.
+   * `opts.download` then caches every track to a local blob in the background.
    */
   importStreamedPlaylist: (
     sourceId: StreamSourceId,
     playlistId: string,
     name: string,
+    opts?: { download?: boolean },
   ) => Promise<number>;
   /**
    * Add a source playlist's tracks into an EXISTING set, auto-deduping (incremental
-   * re-sync or "add to a set I choose"); returns {added, skipped}.
+   * re-sync or "add to a set I choose"); returns {added, skipped}. `opts.download`
+   * then caches the set's uncached streamed tracks to local blobs in the background.
    */
   addStreamedPlaylistToSet: (
     sourceId: StreamSourceId,
     playlistId: string,
     targetSetId: string,
+    opts?: { download?: boolean },
   ) => Promise<AddHitsResult>;
   /** Download a streamed track's media for offline play (Phase 5); no-op if already cached. */
   downloadStreamedTrack: (trackId: string) => Promise<void>;
+  /** Download every not-yet-cached streamed track in a set to local blobs. */
+  downloadStreamedSet: (setId: string) => Promise<void>;
   next: () => Promise<void>;
   /** Previous track without the transport-button "restart current after 3s" rule. */
   skipPrev: () => Promise<void>;
@@ -516,7 +523,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     if (idx >= 0) await get().playIndex(idx);
   },
 
-  async importStreamedPlaylist(sourceId, playlistId, name) {
+  async importStreamedPlaylist(sourceId, playlistId, name, opts) {
     const hits = await fetchPlaylistHits(sourceId, playlistId);
     if (hits.length === 0) return 0;
     // Tag the new set with the playlist ref so a later sync can offer incremental re-sync.
@@ -527,12 +534,15 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       streamPlaylistRef: { source: sourceId, id: playlistId },
     });
     const { added } = await addHitsToSet(session.id, hits);
+    if (opts?.download) void downloadStreamedSetTracks(session.id);
     return added;
   },
 
-  async addStreamedPlaylistToSet(sourceId, playlistId, targetSetId) {
+  async addStreamedPlaylistToSet(sourceId, playlistId, targetSetId, opts) {
     const hits = await fetchPlaylistHits(sourceId, playlistId);
-    return addHitsToSet(targetSetId, hits);
+    const result = await addHitsToSet(targetSetId, hits);
+    if (opts?.download) void downloadStreamedSetTracks(targetSetId);
+    return result;
   },
 
   async downloadStreamedTrack(trackId) {
@@ -549,6 +559,10 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     } else if (result.kind !== "no-permission") {
       notify.error(i18n.t("streamCache.downloadFailed"));
     }
+  },
+
+  async downloadStreamedSet(setId) {
+    await downloadStreamedSetTracks(setId);
   },
 
   async next() {
@@ -909,6 +923,17 @@ async function ingestNcmFile(
 async function cacheStreamedTrackNow(
   track: Track,
 ): Promise<Awaited<ReturnType<typeof runStreamCache>>> {
+  setStreamDownloading(track.id, true);
+  try {
+    return await runCacheStreamedTrack(track);
+  } finally {
+    setStreamDownloading(track.id, false);
+  }
+}
+
+async function runCacheStreamedTrack(
+  track: Track,
+): Promise<Awaited<ReturnType<typeof runStreamCache>>> {
   const settings = await getSettings();
   const http = createStreamHttp();
   const bridge = resolveDesktopBridge();
@@ -941,6 +966,49 @@ async function cacheStreamedTrackNow(
     log.warn("player", "cache streamed track failed", { trackId: track.id, kind: result.kind });
   }
   return result;
+}
+
+/** Max concurrent offline downloads when caching a whole imported playlist — the
+ *  same bounded-lane shape as {@link fetchRemoteCovers}, so a big set trickles in
+ *  instead of opening hundreds of sockets at once. */
+const STREAM_DOWNLOAD_CONCURRENCY = 4;
+
+/**
+ * Download every not-yet-cached streamed track in a set to local blobs (the
+ * "download to this device" option on playlist import). Best-effort: each track
+ * reports its own spinner via {@link cacheStreamedTrackNow}; a final toast tallies
+ * how many landed vs. failed (VIP/login gates count as failures here). Fire-and-
+ * forget — the set is already playable online, so this fills in offline copies.
+ */
+async function downloadStreamedSetTracks(setId: string): Promise<void> {
+  const session = await getSession(setId);
+  if (!session) return;
+  const rows = await Promise.all(session.trackIds.map((id) => getTrack(id)));
+  const pending = rows.filter((t): t is Track => !!t && isStreamedTrack(t) && !t.blobId);
+  if (pending.length === 0) return;
+
+  setSetBulkDownloading(setId, true);
+  let cursor = 0;
+  let cached = 0;
+  let failed = 0;
+  const worker = async () => {
+    while (cursor < pending.length) {
+      const track = pending[cursor];
+      cursor += 1;
+      const result = await cacheStreamedTrackNow(track);
+      if (result.kind === "cached") cached += 1;
+      else failed += 1;
+    }
+  };
+  const lanes = Math.min(STREAM_DOWNLOAD_CONCURRENCY, pending.length);
+  try {
+    await Promise.all(Array.from({ length: lanes }, () => worker()));
+  } finally {
+    setSetBulkDownloading(setId, false);
+  }
+
+  if (cached > 0) notify.success(i18n.t("streamCache.downloadedMany", { count: cached }));
+  if (failed > 0) notify.error(i18n.t("streamCache.downloadFailedMany", { count: failed }));
 }
 
 async function downloadStreamedCover(trackId: string, url: string): Promise<void> {

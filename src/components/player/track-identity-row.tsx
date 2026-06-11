@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Disc3Icon } from "@/components/ui/disc-3";
 import type { Track } from "@/db/types";
 import { useTrackCoverUrl } from "@/hooks/use-media";
-import { trackSubtitle } from "@/lib/track-display";
+import { trackHasCover, trackSubtitle } from "@/lib/track-display";
 import { cn } from "@/lib/utils";
 import { transitionState } from "@/lib/view-transition-react";
 import { usePlayerStore } from "@/stores/player-store";
@@ -52,6 +52,7 @@ export function TrackIdentityRow({
         title: c.title,
         subtitle: trackSubtitle(c),
         coverBlobId: c.coverBlobId,
+        remoteCoverUrl: c.remoteCoverUrl,
         cropX: crop?.x,
         cropY: crop?.y,
         cropW: crop?.width,
@@ -124,11 +125,14 @@ export function TrackIdentityRow({
 
   // Reassemble the minimal cover descriptor (stable while the scalars are).
   // biome-ignore lint/correctness/useExhaustiveDependencies: depend on scalars, not the picked object, to keep this stable
-  const coverInput = useMemo<Pick<Track, "coverBlobId" | "coverCrop"> | undefined>(
+  const coverInput = useMemo<
+    Pick<Track, "coverBlobId" | "coverCrop" | "remoteCoverUrl"> | undefined
+  >(
     () =>
       track
         ? {
             coverBlobId: track.coverBlobId,
+            remoteCoverUrl: track.remoteCoverUrl,
             coverCrop:
               track.cropW != null
                 ? {
@@ -140,7 +144,14 @@ export function TrackIdentityRow({
                 : undefined,
           }
         : undefined,
-    [track?.coverBlobId, track?.cropX, track?.cropY, track?.cropW, track?.cropH],
+    [
+      track?.coverBlobId,
+      track?.remoteCoverUrl,
+      track?.cropX,
+      track?.cropY,
+      track?.cropW,
+      track?.cropH,
+    ],
   );
   const coverUrl = useTrackCoverUrl(coverInput);
 
@@ -193,7 +204,7 @@ export function TrackIdentityRow({
             {/* Crossfades to the next cover only once it has decoded (no flash). */}
             <CoverImage
               url={coverUrl}
-              hasCover={!!track?.coverBlobId}
+              hasCover={trackHasCover(track ?? undefined)}
               fallback={<Disc3Icon className="text-muted-foreground" size={20} />}
             />
           </motion.span>

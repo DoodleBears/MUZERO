@@ -25,6 +25,19 @@ export function resolveStageContent(opts: {
 }
 
 /**
+ * Whether a track has any cover to render — a local cover blob OR a remote cover
+ * URL. Streamed tracks (NetEase / Bilibili / …) keep their art as `remoteCoverUrl`
+ * with no local blob, so a `coverBlobId`-only check wrongly reports "no cover" and
+ * the cover stage / ambient background fall through to title. Single read authority
+ * so every cover surface agrees.
+ */
+export function trackHasCover(
+  track: Pick<Track, "coverBlobId" | "remoteCoverUrl"> | undefined,
+): boolean {
+  return !!track?.coverBlobId || !!track?.remoteCoverUrl;
+}
+
+/**
  * The single normalization used as the artist/album join key: trim, lowercase,
  * collapse internal whitespace. Unicode/CJK-safe (does not strip non-ASCII).
  * Mirrors the tag-normalization discipline so every surface keys identically.
