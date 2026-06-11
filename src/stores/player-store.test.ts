@@ -11,6 +11,7 @@ const mediaEngineMock = vi.hoisted(() => ({
   loadUrl: vi.fn(() => Promise.resolve()),
   loadBlob: vi.fn(() => Promise.resolve()),
   play: vi.fn(() => Promise.resolve()),
+  seek: vi.fn(),
   setDiagnosticsContext: vi.fn(),
 }));
 const platformFetchMock = vi.hoisted(() =>
@@ -32,7 +33,7 @@ vi.mock("@/player/media-engine", () => {
     }
     setVolume() {}
     pause() {}
-    seek() {}
+    seek = mediaEngineMock.seek;
     mount() {}
     unmount() {}
     stop() {}
@@ -64,6 +65,7 @@ beforeEach(async () => {
   mediaEngineMock.loadUrl.mockClear();
   mediaEngineMock.loadBlob.mockClear();
   mediaEngineMock.play.mockClear();
+  mediaEngineMock.seek.mockClear();
   mediaEngineMock.setDiagnosticsContext.mockClear();
   platformFetchMock.mockClear();
   platformFetchMock.mockResolvedValue(
@@ -115,7 +117,7 @@ async function seedQueue(currentIndex = 1) {
     contextSetId: session.id,
     currentIndex,
   });
-  return { repos, session, first, second, usePlayerStore };
+  return { db, repos, session, first, second, usePlayerStore };
 }
 
 function track(id: string, sessionId: string, title: string): Track {
@@ -135,6 +137,16 @@ function track(id: string, sessionId: string, title: string): Track {
   };
 }
 
+function expectLoadedBlob(kind: Track["kind"], mime: string): Blob {
+  const call = (mediaEngineMock.loadBlob.mock.calls as unknown as [Blob, Track["kind"]][])[0];
+  if (!call) throw new Error("Expected mediaEngine.loadBlob to have been called");
+  const [loadedBlob, loadedKind] = call;
+  expect(loadedBlob.size).toBeGreaterThan(0);
+  expect(loadedBlob.type).toBe(mime);
+  expect(loadedKind).toBe(kind);
+  return loadedBlob;
+}
+
 describe("player-store playback resume", () => {
   it("hydrates the last queue cursor and active set from IndexedDB", async () => {
     const { session, first, second, usePlayerStore } = await seedQueue(1);
@@ -149,6 +161,32 @@ describe("player-store playback resume", () => {
       expect(state.displayMode).toBe("cover");
       expect(state.djEnabled).toBe(false);
     });
+    expect(usePlayerStore.getState().durationSec).toBe(second.durationSec);
+  });
+
+  it("keeps a pre-load seek and applies it after media loads", async () => {
+    const { db, second, usePlayerStore } = await seedQueue(1);
+    await db.tracks.update(second.id, {
+      status: "ready",
+      remoteMediaUrl: "https://media.example.com/second.mp3",
+    });
+    usePlayerStore.getState().init();
+
+    await waitFor(() => expect(usePlayerStore.getState().durationSec).toBe(30));
+
+    usePlayerStore.getState().seek(12);
+
+    expect(usePlayerStore.getState().positionSec).toBe(12);
+    expect(mediaEngineMock.seek).not.toHaveBeenCalled();
+
+    await usePlayerStore.getState().play();
+
+    expect(platformFetchMock).toHaveBeenCalledWith("https://media.example.com/second.mp3", {
+      cache: "no-store",
+    });
+    expectLoadedBlob("audio", "audio/mpeg");
+    expect(mediaEngineMock.seek).toHaveBeenCalledWith(12);
+    expect(mediaEngineMock.play).toHaveBeenCalled();
   });
 
   it("persists the queue cursor when the user picks another track", async () => {
@@ -284,10 +322,7 @@ describe("player-store remote subscribed-manifest playback", () => {
     expect(platformFetchMock).toHaveBeenCalledWith(REMOTE_AUDIO_URL, {
       cache: "no-store",
     });
-    const loadedBlob = mediaEngineMock.loadBlob.mock.calls[0]?.[0] as Blob;
-    expect(loadedBlob.size).toBeGreaterThan(0);
-    expect(loadedBlob.type).toBe("audio/mpeg");
-    expect(mediaEngineMock.loadBlob.mock.calls[0]?.[1]).toBe("audio");
+    expectLoadedBlob("audio", "audio/mpeg");
     expect(mediaEngineMock.setDiagnosticsContext).toHaveBeenCalledWith(
       expect.objectContaining({
         traceId: expect.stringMatching(/^ply_/),
@@ -327,10 +362,7 @@ describe("player-store remote subscribed-manifest playback", () => {
     expect(platformFetchMock).toHaveBeenCalledWith(REMOTE_VIDEO_URL, {
       cache: "no-store",
     });
-    const loadedBlob = mediaEngineMock.loadBlob.mock.calls[0]?.[0] as Blob;
-    expect(loadedBlob.size).toBeGreaterThan(0);
-    expect(loadedBlob.type).toBe("video/mp4");
-    expect(mediaEngineMock.loadBlob.mock.calls[0]?.[1]).toBe("video");
+    expectLoadedBlob("video", "video/mp4");
     expect(mediaEngineMock.loadUrl).not.toHaveBeenCalled();
   });
 });

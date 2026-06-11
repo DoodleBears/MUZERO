@@ -28,7 +28,7 @@ export interface SliderChromeProps extends HTMLAttributes<HTMLDivElement> {
 }
 
 export const SliderChrome = forwardRef<HTMLDivElement, SliderChromeProps>(function SliderChrome(
-  { className, dragging = false, laneRef, percent, style, ...props },
+  { children, className, dragging = false, laneRef, percent, style, ...props },
   ref,
 ) {
   return (
@@ -52,6 +52,7 @@ export const SliderChrome = forwardRef<HTMLDivElement, SliderChromeProps>(functi
           className="absolute top-1/2 left-[var(--slider-pct)] h-3 w-6 rounded-full bg-primary shadow-sm ring-2 ring-card transition-[width,height,box-shadow] duration-150 ease-out [transform:translate(calc(var(--slider-ratio)*-100%),-50%)] group-hover:h-3.5 group-hover:w-8 data-[dragging=true]:h-3.5 data-[dragging=true]:w-8"
         />
       </div>
+      {children}
     </div>
   );
 });
@@ -162,17 +163,21 @@ export function Slider({
 
 export function sliderPercentStyle(percent: number): CSSProperties {
   const pct = Math.min(100, Math.max(0, percent));
+  const ratio = pct / 100;
   return {
     "--slider-pct": `${pct}%`,
-    "--slider-ratio": String(pct / 100),
+    "--slider-ratio": String(ratio),
+    "--slider-thumb-center-offset": `${(0.5 - ratio) * 32}px`,
   } as CSSProperties;
 }
 
 export function setSliderPercent(el: HTMLElement | null, percent: number) {
   if (!el) return;
   const pct = Math.min(100, Math.max(0, percent));
+  const ratio = pct / 100;
   el.style.setProperty("--slider-pct", `${pct}%`);
-  el.style.setProperty("--slider-ratio", String(pct / 100));
+  el.style.setProperty("--slider-ratio", String(ratio));
+  el.style.setProperty("--slider-thumb-center-offset", `${(0.5 - ratio) * 32}px`);
 }
 
 function valueToPercent(value: number, min: number, max: number): number {

@@ -279,6 +279,28 @@ function queueSig(tracks: Track[]): string {
     .join("|");
 }
 
+function currentTrack(state: PlayerState): Track | undefined {
+  return state.currentIndex >= 0 ? state.queue[state.currentIndex] : undefined;
+}
+
+function playableDurationSec(value: number | undefined): number {
+  return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : 0;
+}
+
+function cursorPatch(
+  queue: Track[],
+  currentIndex: number,
+  wantPlay: boolean,
+): Pick<PlayerState, "currentIndex" | "wantPlay" | "positionSec" | "durationSec"> {
+  const track = currentIndex >= 0 ? queue[currentIndex] : undefined;
+  return {
+    currentIndex,
+    wantPlay,
+    positionSec: 0,
+    durationSec: playableDurationSec(track?.durationSec),
+  };
+}
+
 function startPlaybackTrace(track: Track): PlaybackTraceContext {
   const trace: PlaybackTraceContext = {
     traceId: createTraceId("ply"),
@@ -396,8 +418,11 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
         void state.next();
       },
       onTimeUpdate: (positionSec, durationSec) => {
-        set({ positionSec, durationSec });
-        observePlaybackListen(get(), positionSec, durationSec);
+        const track = currentTrack(get());
+        const nextDuration =
+          playableDurationSec(durationSec) || playableDurationSec(track?.durationSec);
+        set({ positionSec, durationSec: nextDuration });
+        observePlaybackListen(get(), positionSec, nextDuration);
       },
       onPlayStateChange: (isPlaying) => {
         if (!isPlaying) flushPlaybackListen(Date.now());
@@ -461,6 +486,10 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
             )
           : persistedIndex;
         const state = get();
+        const previousTrackId = currentTrack(state)?.id;
+        const nextTrack = currentIndex >= 0 ? queue[currentIndex] : undefined;
+        const nextTrackId = nextTrack?.id;
+        const metadataDuration = playableDurationSec(nextTrack?.durationSec);
         const patch: Partial<PlayerState> = {
           activeSessionId: contextSetId,
           currentIndex,
@@ -468,12 +497,23 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
           djEnabled: session?.config.autoExtend ?? false,
         };
         if (listChanged) patch.queue = queue;
+        if (!nextTrackId) {
+          patch.positionSec = 0;
+          patch.durationSec = 0;
+        } else if (nextTrackId !== previousTrackId) {
+          patch.positionSec = 0;
+          patch.durationSec = metadataDuration;
+        } else if (metadataDuration > 0 && state.durationSec <= 0) {
+          patch.durationSec = metadataDuration;
+        }
         const changed =
           listChanged ||
           state.activeSessionId !== patch.activeSessionId ||
           state.currentIndex !== patch.currentIndex ||
           state.displayMode !== patch.displayMode ||
-          state.djEnabled !== patch.djEnabled;
+          state.djEnabled !== patch.djEnabled ||
+          ("positionSec" in patch && state.positionSec !== patch.positionSec) ||
+          ("durationSec" in patch && state.durationSec !== patch.durationSec);
         if (!changed) return;
         set(patch);
         void afterQueueUpdate(set, get);
@@ -511,6 +551,8 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       queue: initialQueue,
       currentIndex: -1,
       wantPlay: false,
+      positionSec: 0,
+      durationSec: 0,
       displayMode: session?.displayMode ?? "video",
       djEnabled: session?.config.autoExtend ?? false,
     });
@@ -557,7 +599,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       trackId: clamped >= 0 ? queue[clamped]?.id : null,
     });
     if (clamped >= 0 && queue[clamped]) startPlaybackTrace(queue[clamped]);
-    set({ currentIndex: clamped, wantPlay: true });
+    set(cursorPatch(queue, clamped, true));
     persistQueueIndex(clamped);
     await ensureLoadedAndPlay(set, get);
     void maybeRefill(set, get);
@@ -569,7 +611,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     // wantPlay:false makes ensureLoadedAndPlay load + show the track but skip
     // play() — so a fresh launch never fires a gesture-blocked play() / spins up
     // the AudioContext before the user has interacted.
-    set({ currentIndex: clamped, wantPlay: false });
+    set(cursorPatch(queue, clamped, false));
     persistQueueIndex(clamped);
     await ensureLoadedAndPlay(set, get);
   },
@@ -726,8 +768,12 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   },
 
   seek(sec) {
-    mediaEngine?.seek(sec);
-    set({ positionSec: sec });
+    const track = currentTrack(get());
+    const duration =
+      playableDurationSec(get().durationSec) || playableDurationSec(track?.durationSec);
+    const positionSec = duration > 0 ? Math.min(duration, Math.max(0, sec)) : Math.max(0, sec);
+    if (loadedTrackId === track?.id) mediaEngine?.seek(positionSec);
+    set({ positionSec, durationSec: duration || get().durationSec });
   },
 
   setVolume(v) {
@@ -1747,6 +1793,16 @@ async function ensureLoadedAndPlay(
     }
     loadedTrackId = track.id;
     streamSkips = 0; // a track loaded — end any streamed-skip run cleanly
+    const requestedPosition = Math.max(0, get().positionSec);
+    const duration =
+      playableDurationSec(get().durationSec) || playableDurationSec(track.durationSec);
+    if (requestedPosition > 0) {
+      const seekPosition = duration > 0 ? Math.min(duration, requestedPosition) : requestedPosition;
+      mediaEngine.seek(seekPosition);
+      set({ positionSec: seekPosition, durationSec: duration || get().durationSec });
+    } else if (duration > 0 && get().durationSec <= 0) {
+      set({ durationSec: duration });
+    }
     triggerLyricsAutoFetch(track);
     await updateMediaSessionMetadata(track);
   }
