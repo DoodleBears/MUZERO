@@ -11,7 +11,7 @@ license and attribution (CLAUDE.md rule 5 + prd-create §3).
 |--------|------|---------|-----|
 | **LRCLIB** | Synced + plain lyrics (LRC) | Public domain (CC0-style); free, keyless API | https://lrclib.net |
 | **NetEase Cloud Music** | Official synced LRC + word-level `yrc` + translation/romanization | Provider data; fetched via the user's own account (BYOK). Personal use, per platform terms | https://music.163.com |
-| **AMLL TTML Database** (`amll-ttml-db`) | Community word-by-word **TTML** lyrics (Apple-Music-like; word timing + translation + romanization + duet) | **CC0-1.0** for contributor-authored content; external data follows its original provider's terms | https://github.com/Steve-xmh/amll-ttml-db |
+| **AMLL TTML Database** (`amll-ttml-db`) | Community word-by-word **TTML** lyrics (Apple-Music-like; word timing + translation + romanization + duet) | **CC0-1.0** for contributor-authored content; external data follows its original provider's terms | https://github.com/amll-dev/amll-ttml-db |
 
 Notes:
 
