@@ -149,8 +149,11 @@ export const r2SetTrackSchema = z.object({
   id: z.string().min(1),
   title: z.string().min(1),
   kind: z.enum(["audio", "video"]),
-  // "streamed" is accepted so the manifest can represent external-source tracks;
-  // exporting their media bytes is intentionally out of scope (see streaming PRD).
+  // "streamed" is accepted so the manifest can represent external-source tracks,
+  // but the exporter never publishes streamed-origin tracks — not even locally
+  // cached ones (their bytes are platform-derived; see the streaming PRD and the
+  // R2 sync PRD audit F5). They are skipped from the set index and excluded from
+  // the manifest's trackCount.
   origin: z.enum(["generated", "uploaded", "streamed"]),
   provider: z.string().min(1),
   durationSec: z.number().nonnegative(),

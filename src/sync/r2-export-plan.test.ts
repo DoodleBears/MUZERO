@@ -126,6 +126,57 @@ describe("buildR2ExportPlan", () => {
     expect(plan.objects.map((object) => object.kind)).toEqual(["set-index", "manifest"]);
   });
 
+  it("never exports streamed-origin tracks (even cached) and counts only exported tracks (F5)", async () => {
+    await seedSet();
+    // A cached streamed track in the same set: it HAS local bytes (blobId), but
+    // platform-derived media must never publish (streaming PRD scope).
+    const streamed: Track = {
+      id: "trk_yt",
+      sessionId: "ses_1",
+      title: "Stream Cache",
+      kind: "audio",
+      origin: "streamed",
+      provider: "youtube",
+      status: "ready",
+      durationSec: 99,
+      blobId: "blb_yt",
+      createdAt: 110,
+      playCount: 0,
+      liked: false,
+      tags: [],
+    };
+    await db.tracks.put(streamed);
+    await db.mediaBlobs.put({
+      id: "blb_yt",
+      trackId: "trk_yt",
+      role: "media",
+      mime: "audio/mpeg",
+      bytes: 3,
+      blob: new Blob(["xyz"], { type: "audio/mpeg" }),
+    });
+    await db.sessions.update("ses_1", { trackIds: ["trk_1", "trk_yt"] });
+
+    const plan = await buildR2ExportPlan({
+      driveId: "drv_1",
+      libraryId: "lib_1",
+      baseUrl: "https://music.example.com/muzero/",
+      setIds: ["ses_1"],
+      db,
+    });
+
+    expect(plan.objects.filter((object) => object.kind === "media")).toHaveLength(1);
+    const setIndex = JSON.parse(
+      String(plan.objects.find((object) => object.kind === "set-index")?.body),
+    );
+    expect(setIndex.tracks.map((track: { id: string }) => track.id)).toEqual(["trk_1"]);
+    // Manifest trackCount reflects what subscribers actually receive, not the
+    // session's full member list (which still holds the skipped streamed track).
+    const manifest = JSON.parse(
+      String(plan.objects.find((object) => object.kind === "manifest")?.body),
+    );
+    expect(manifest.sets[0].trackCount).toBe(1);
+  });
+
   it("keeps historical memory author snapshots when the local device profile changes", async () => {
     await seedSet();
     await db.devices.put({

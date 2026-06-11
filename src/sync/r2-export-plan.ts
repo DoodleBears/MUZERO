@@ -154,7 +154,7 @@ export async function buildR2ExportPlanForDrive(
 export async function buildR2ExportPlan(input: R2ExportPlanInput): Promise<R2ExportPlan> {
   const db = input.db ?? defaultDb;
   const binaryObjects: R2ExportObject[] = [];
-  const setIndexes: Array<{ session: DjSession; object: R2ExportObject }> = [];
+  const setIndexes: Array<{ session: DjSession; trackCount: number; object: R2ExportObject }> = [];
   const conflicts: R2ExportConflict[] = [];
 
   for (const setId of input.setIds) {
@@ -164,6 +164,11 @@ export async function buildR2ExportPlan(input: R2ExportPlanInput): Promise<R2Exp
     const setIndexTracks: R2SetIndex["tracks"] = [];
 
     for (const track of tracks) {
+      // Streamed-origin tracks never publish — not even cached ones (their bytes
+      // are platform-derived; external-streaming PRD keeps them out of scope).
+      // Audit F5: this must be an origin check, because the local cache DOES set
+      // `blobId` on streamed tracks.
+      if (track.origin === "streamed") continue;
       if (!track.blobId) continue;
       const mediaBlob = await db.mediaBlobs.get(track.blobId);
       if (!mediaBlob) continue;
@@ -254,6 +259,9 @@ export async function buildR2ExportPlan(input: R2ExportPlanInput): Promise<R2Exp
     conflicts.push(...folded.conflicts);
     setIndexes.push({
       session,
+      // Manifest trackCount must reflect what subscribers receive (post-skip,
+      // post-fold), not the session's full member list (audit F5).
+      trackCount: folded.index.tracks.length,
       object: createJsonObject("set-index", `sets/${session.id}/index.json`, folded.index, {
         setId: session.id,
         precondition: input.setIndexPreconditions?.[session.id],
@@ -616,7 +624,7 @@ function setMutationKey(mutation: SyncMutation): string {
 
 function createManifest(
   input: R2ExportPlanInput,
-  setIndexes: Array<{ session: DjSession; object: R2ExportObject }>,
+  setIndexes: Array<{ session: DjSession; trackCount: number; object: R2ExportObject }>,
   indexObjects: R2ExportObject[] = [],
 ): R2Manifest {
   const now = new Date().toISOString();
@@ -637,12 +645,12 @@ function createManifest(
     statsIndex,
     presenceIndex,
     entityCoversIndex,
-    sets: setIndexes.map(({ session, object }) => ({
+    sets: setIndexes.map(({ session, trackCount, object }) => ({
       id: session.id,
       title: session.name,
       index: object.key,
       updatedAt: new Date(session.updatedAt).toISOString(),
-      trackCount: session.trackIds.length,
+      trackCount,
       bytes: object.bytes,
     })),
   };
