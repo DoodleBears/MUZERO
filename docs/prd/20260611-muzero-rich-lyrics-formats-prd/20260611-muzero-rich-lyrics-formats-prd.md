@@ -379,13 +379,48 @@ export function activeWordIndex(words: WordTiming[], positionMs: number): number
 
 ## 8. Security / Dependency / License Considerations
 
-- **🚩 不引入新 runtime owner（prd-create §3）**：**不依赖** `@applemusic-like-lyrics/*` 等第三方歌词 lib（第二套事实来源 + 体积）。所有格式解析 **clean-room home-grown 纯函数**；TTML 用浏览器原生 `DOMParser`。
-- **License 第一公民（§3）**：Phase 5 接 amll-ttml-db 须在 `THIRD-PARTY-LICENSES.md` 声明其数据 license（社区 DB，多为 CC 系；**拉取时按需取、不 bundle 歌词数据**）。解析器是 self-authored = `MIT (MUZERO)`。
+- **🚩 不引入新 runtime owner（prd-create §3）= 也避开 AGPL 传染**：**不依赖、不 vendor** `@applemusic-like-lyrics/*` 等 AMLL 代码（见 §8.1：AMLL 代码是 **AGPL-3.0** 强传染）。所有格式解析 **clean-room home-grown 纯函数**；TTML 用浏览器原生 `DOMParser`。这同时是体积/单点纪律**和** license 隔离。
+- **License 第一公民（§3）**：Phase 5 接 amll-ttml-db 已在 `THIRD-PARTY-LICENSES.md` 声明：其贡献者自著内容 **CC0-1.0**（外来数据随原平台条款）；**拉取时按需取、不 bundle 歌词数据**。解析器 self-authored = `MIT (MUZERO)`。完整核实见 **§8.1**。
 - **本地优先 / 无后端（规则 1）**：歌词存设备本地；amll-ttml-db 是第三方**只读**源（GitHub raw），不经任何 MUZERO 服务端。出站经 `getAppFetch()`（规则 5/10）。
 - **隐私**：amll-ttml-db 查询会把 title/artist 发给 GitHub，同 LRCLIB 口径——受 `autoFetchLyrics` 开关与隐私说明约束（规则 3）。
 - **codename 稳定（规则 4）**：`format` 取值 `lrc|elrc|yrc|qrc|ttml|plain`、provider id `amll` 跨品牌/壳稳定；db 名/前缀不变。
 - **i18n 4 locale 全量**（§3）：新开关/子行文案 en→zh/ja/ko，少 locale 标 pending。
 - **回退 = `git revert`（§3 / 规则 3）**：格式/渲染不藏 hidden flag；逐字/翻译/罗马音是可见 Settings 控件。
+
+### 8.1 License Audit（核实于 2026-06-11，回答「AMLL 是不是 AGPL」+「MUZERO 开源选什么协议」）
+
+**结论先行：AMLL 的*代码*确是 AGPL-3.0，但 MUZERO 一行都没用；我们只用了 (a) TTML 这个*格式*，(b) amll-ttml-db 的 *CC0 数据*——两者都不传染。MUZERO 可自由选任意协议，包括宽松协议。**
+
+| 对象 | 我们的关系 | 实际 license（已核实） | 对 MUZERO 的传染力 |
+|---|---|---|---|
+| **AMLL 代码**（`Steve-xmh/applemusic-like-lyrics` 主仓 + `@applemusic-like-lyrics/core·react·vue·lyric` npm 包）| **不依赖、不 vendor、不链接**（clean-room） | **AGPL-3.0**（强 network-copyleft）| **无** —— 没引入就不触发 copyleft |
+| **TTML 这个*格式*** | 我们用 `DOMParser` 自写解析器读它 | W3C Recommendation，royalty-free（[w3.org/TR/ttml2](https://www.w3.org/TR/ttml2/)）；**文件格式本身不受著作权保护** | **无** —— 实现一个格式 ≠ 衍生自某个 AGPL 解析器 |
+| **amll-ttml-db 的歌词*数据*** | 运行时 opt-in 拉取、显示，不 bundle | **CC0-1.0**（贡献者自著内容；外来数据随原平台条款）| **无** —— CC0 = 公有领域；况且运行时取数据 ≠ 链接代码 |
+
+**为什么 AGPL 没传染过来（三道独立隔离）：**
+1. **没链接代码**：copyleft（GPL/AGPL）约束的是「基于该*代码*的衍生/链接」。我们 `package.json` 里**零** `@applemusic-like-lyrics` 依赖（已 grep 核实），自写 `formats/ttml.ts`。没有「衍生作品」，AGPL 条款无从触发。
+2. **格式不可著作权化**：TTML 是 W3C 开放标准，royalty-free；格式/接口本身不受版权保护，独立实现一个 TTML 解析器不是 AMLL 解析器的衍生作。
+3. **数据是 CC0、且是运行时获取**：amll-ttml-db 自著内容 CC0-1.0（公有领域）；即便不是，运行时 fetch 并显示数据也不构成对其代码的链接。
+
+**MUZERO 自身依赖树 license 审计（598 个已安装包，已核实）：**
+
+```
+447 MIT · 76 ISC · 22 Apache-2.0 · 21 BSD-3 · 9 BlueOak · 8 BSD-2 · 余为 Unlicense/0BSD/WTFPL/Zlib/CC0…（全宽松）
+唯一 copyleft：MPL-2.0 ×2（lightningcss + 其 darwin-arm64 二进制，Tailwind v4 的*构建期* CSS 工具）
+            ＋ dompurify（(MPL-2.0 OR Apache-2.0) 双授权 → 取 Apache 侧）
+❌ 全树无任何 GPL / AGPL / LGPL / SSPL / CC-BY-SA
+```
+
+- **MPL-2.0（lightningcss）不构成约束**：MPL 是**逐文件弱 copyleft**——只有当你*修改 MPL 文件本身*才需回馈那些文件，**不感染**项目其余代码（与 GPL 整体传染本质不同）；且它是**构建期独立可执行工具**（不链进发布包）。dompurify 双授权可直接走 Apache-2.0。
+- ⇒ **MUZERO 不被任何依赖强制 copyleft，开源协议完全自由选择。**
+
+**开源协议建议（决策见 §10 Q6）：宽松协议（Apache-2.0 优先，或 MIT）。理由：**
+1. **分发兼容性是硬约束**：MUZERO 走 Electron/Tauri + **移动端 App Store / Google Play**。**GPL/AGPL 与 Apple App Store 条款冲突**（FSF 明确，VLC 是先例），会直接堵死 iOS 上架。宽松协议无此问题。
+2. **我们已经为「避开 AGPL」付出了 clean-room 成本**——选 AGPL 自我设限自相矛盾。
+3. **Apache-2.0 vs MIT**：两者都宽松、App-Store 友好。**优先 Apache-2.0**，因为它多两层对本项目有意义的保护：(a) **显式专利授权**（音频/编解码/shader/音乐生成领域有专利风险）；(b) **商标条款**（保护「MUZERO」品牌名，契合规则 4 的 brand/codename 分层）。想要极简/最短文本则选 **MIT**。
+4. **若以后真要 vendor AMLL 代码**（不推荐）：那一刻 MUZERO 才必须变 AGPL——但这与多端 App Store 分发不可兼得。维持 clean-room 是正解。
+
+> 落地动作（待 §10 Q6 拍板）：新增根 `LICENSE`（选定协议全文）+ `package.json` 补 `"license"` 字段 + 源码可选 SPDX header。`THIRD-PARTY-LICENSES.md` 已就绪。
 
 ---
 
@@ -413,6 +448,7 @@ export function activeWordIndex(words: WordTiming[], positionMs: number): number
 | Q3 | 翻译/罗马音默认显示？ | ✅ 锁定 | **翻译默认开、罗马音默认关** |
 | Q4 | Phase 5 接 amll-ttml-db 的范围 | ✅ 锁定→实现修订 | 原「仅手动文本搜索」；核实后 DB 是 **id-keyed 精确源**（不可文本搜），故落地为**用户 opt-in 精确 provider**（Settings 可见选项，按网易 id 取）**且不改默认自动端点** —— 守住「不新增自动第三端点」精神 |
 | Q5 | 逐字 fill 用 CSS 还是 motion？ | ✅ 锁定 | **CSS background-clip**（GPU、无重排、便宜）；复杂动效再上 motion |
+| Q6 | **MUZERO 开源用什么协议？**（§8.1 审计：依赖树无 GPL/AGPL，可自由选）| 🔲 待用户拍板 | 倾向 **Apache-2.0**（宽松 + 专利授权 + 商标条款，App-Store 兼容）；或 **MIT**（极简）。**不建议 GPL/AGPL**（与 iOS/Play 上架冲突，且与 clean-room 避 AGPL 自相矛盾）。拍板后建 `LICENSE` + `package.json` license 字段 |
 
 ---
 
@@ -427,6 +463,8 @@ export function activeWordIndex(words: WordTiming[], positionMs: number): number
 | 2026-06-11 | DoodleBear | **Phase 4 完成**：翻译/罗马音双行。`sub-lyrics.ts` 时间戳对齐合并（独立 tlyric/romalrc → `LyricLine.translation/roman`）+ record/hit `translation/romanization` 原始字段（零迁移）+ resolve 挂载 + 主行下弱化子行渲染 + `lyricsShowTranslation`(默认 on)/`lyricsShowRomanization`(默认 off) 开关 + 网易 `rv:0` 取 romalrc/tlyric。168 单测全过 |
 | 2026-06-11 | DoodleBear | **Phase 5a 完成**：`formats/ttml.ts` `parseTtml`（DOMParser 解析 words+translation+roman+agent，多时间格式）+ `parse.ts` dispatch + `manual.ts` 改 `detectLyricsFormat`（粘贴 .ttml/yrc/qrc/elrc 即识别）→ TTML 端到端可用（手动粘贴通路）。160 单测全过。5b（amll-ttml-db provider）待 DB 结构核实 |
 | 2026-06-11 | DoodleBear | **Phase 5b 完成（全 PRD 收官）**：核实 amll-ttml-db = id-keyed 稳定 raw 直链 + CC0-1.0。`amll-ttml-provider.ts`（按 ncm id 拉 TTML，注入 fetch 四态测试）+ registry/provider union + Settings opt-in 下拉 + i18n ×4 + `THIRD-PARTY-LICENSES.md`。Q4 修订为「opt-in 精确 provider，不动默认自动端点」。165 单测全过。**Phase 1–5 全部完成** |
+| 2026-06-11 | DoodleBear | **修复**：逐字 active 行在默认颜色模式不可见（渐变 stop 取 `undefined` → `background-clip:text` 透明）。回退 `currentColor` + 仅透明化 text-fill。回归测试已加（commit `f44ae0b`）|
+| 2026-06-11 | DoodleBear | **新增 §8.1 License Audit**：核实 AMLL *代码*=AGPL-3.0（**未依赖/未 vendor**，clean-room 隔离）、TTML 格式=W3C royalty-free、amll-ttml-db *数据*=CC0-1.0 → 三道隔离，AGPL 不传染。依赖树 598 包审计：全宽松，无 GPL/AGPL/LGPL（唯一 copyleft 是构建期 lightningcss 的弱 MPL-2.0）。新增 **Q6**：开源协议建议 Apache-2.0/MIT，待拍板 |
 
 ---
 
