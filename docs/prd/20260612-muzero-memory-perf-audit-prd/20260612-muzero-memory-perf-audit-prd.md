@@ -14,7 +14,7 @@
 | 1 | 观测先行：内存与帧节奏指标 | 🔄 In Progress | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | 确证泄漏修复（P0：YouTube 播放路径） | ✅ Completed | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | 全表查询放大链治理（列表 / 搜索 / 统计） | ✅ Completed | [Phase 3 Checklist](#phase-3-checklist) |
-| 4 | 渲染层 GPU / GC 卫生（可视化 + 背景） | 🔄 In Progress（F-6/F-7 被并发改动阻塞） | [Phase 4 Checklist](#phase-4-checklist) |
+| 4 | 渲染层 GPU / GC 卫生（可视化 + 背景） | ✅ Completed（F-7 移入 Out of Scope，并入 Q-2 后续重构） | [Phase 4 Checklist](#phase-4-checklist) |
 | 5 | 大文件内存防护（预热 / 缓存 / 下载） | ✅ Completed（同步 UI 标注待并发改动合入） | [Phase 5 Checklist](#phase-5-checklist) |
 | 6 | 日志 / trace 管线防放大 | ✅ Completed | [Phase 6 Checklist](#phase-6-checklist) |
 
@@ -357,8 +357,8 @@ DevPerfPanel 经 `useTraceEntries` 订阅（为 copy 按钮计数）→ 面板�
 
 **Tasks:**
 - [x] F-5：ReactiveScene cleanup 释放旧 program/attrib buffer/index buffer（`releaseGlState`，context-lost 时跳过；保留不 loseContext 决策——删 program 不杀 context，StrictMode 安全；单测覆盖三种路径）
-- [ ] F-6：像素视频背景 ticker 随 `isPlaying` 启停 —— **推迟**：`pixi-pixel-background.tsx` 工作区有并发进行中的改动（dock-idle/背景功能），路径化提交无法安全隔离同文件；待该工作落地后跟进
-- [ ] F-7：像素背景复用单 Application —— 同上推迟，与 F-6 同文件
+- [x] F-6：像素背景 ticker 随播放状态启停（`syncLayerTicker`，单测 5 用例）。**发现升级**：Pixi `Application.init` 默认 `autoStart: true`——此前**静态封面**（noise/CRT over image，最常见形态）也在 60fps 空转重渲染，不只是视频。现 `autoStart: false`：图片层只在 resize 时按需 render；视频层 ticker 只在播放中运行，暂停时冻结帧 + `seeked` 按帧补画；顺带删除了与 Application 自带 render 重复的手动 tick 回调（此前视频层每帧渲染两次）
+- [ ] F-7：像素背景复用单 Application —— **移入 Out of Scope**（文件虽已释放，但 sprite-alpha 交叉淡入动画在 preview 沙箱不可验证、消费者 `now-playing-background.tsx` 仍有进行中的并发改动；与 Q-2「复用 MediaEngine video 纹理源消除双解码」同属 pixi 背景架构重构，合并为一个真机会话的后续项）
 - [x] F-9：实测确认每帧 `getComputedStyle` 仅 reactive-scene 一处（spectrum 渲染器已有 `frame % 6` 节流、playback-spectrum 有 `% 30`）；改为对齐 spectrum 的 6 帧节奏缓存，**不做**全局 `readPrimaryRgb` TTL 缓存——主题切换瞬间读旧值会让 `transitionVisualizerCoverColor("theme-primary", …)` 过渡到过期颜色，引入真 bug
 - [x] F-10：bands.ts 增加 `aggregateBandsInto` / `applyTiltInto` / `smoothBandsInto` / `decayBandsInto` 原地变体（纯函数版保留），bars / radial / led-reflex 三个渲染器换用 + 持有复用 scratch 数组——render loop 零分配；对照单测断言与纯函数版逐项一致（含 rebuild 竞态下的长度增长）
 
@@ -368,7 +368,8 @@ DevPerfPanel 经 `useTraceEntries` 订阅（为 copy 按钮计数）→ 面板�
 - [ ] 场景 S3：1 小时长播 frame p99 < 33ms、无周期性 >100ms 尖刺（人工，待真机）
 - [ ] 火焰图确认 render loop 内无 recalc style 片段（人工；代码层 reactive-scene 已降为 1/6 帧）
 - [x] bands.ts 既有穷举单测 + 原地版对照测试全绿（visualizer 套件 66 测）
-- [ ] F-6/F-7 在 pixi-pixel-background 并发改动合入后跟进（见 Tasks 注）
+- [x] F-6 已落地（pixi 文件随 CORS 修复释放后跟进完成）；F-7 移入 Out of Scope（见 Tasks 注）
+- [x] preview 验证：F-6 后静态封面背景仍正常渲染（resize 同步 render），零 background 警告
 
 ### Phase 5: 大文件内存防护
 
@@ -409,6 +410,7 @@ DevPerfPanel 经 `useTraceEntries` 订阅（为 copy 按钮计数）→ 面板�
 - **OPFS / 流式存储重构**：媒体字节从「整 Blob 进 IndexedDB」迁移到分块/OPFS 是独立大改，本期只做阈值守卫（F-8）。
 - **搜索快照增量 diff 协议**：本期防抖即可达标，diff 协议列 v2。
 - **DJ 队列上限 / 历史归档策略**：牵涉 set/queue/memory 数据模型语义，归属 [data-model PRD](../20260610-muzero-set-queue-memory-prd/) 后续 phase（见 Q-3）。
+- **F-7 像素背景单 Application 重构**（换源只换纹理 + sprite-alpha 交叉淡入）：与 Q-2（复用 MediaEngine video 消除双解码）合并为独立的 pixi 背景架构重构——动画语义需真机视觉验证，且消费者组件有进行中的并发改动；F-6 已消除其中最大的浪费（静态封面 60fps 空转），剩余收益为每次切歌省一次 Application.init 与 WebGL context churn。
 - **mediabunny 音轨抽取**（audioOnly 真抽轨）：既有规划，与本审计无关。
 - **Electron muzfetch 代理流式行为验证**：初查未发现实证问题（`net.fetch` + `protocol.handle` 按流式设计），深度验证（背压、大文件 PUT）列 Q-1 调研项，不阻塞本 PRD。
 - **移动端（Tauri WKWebView）专项画像**：桌面优先（硬规则 9）；WKWebView Blob 落盘行为差异在 F-8 注明，专项测量推后。

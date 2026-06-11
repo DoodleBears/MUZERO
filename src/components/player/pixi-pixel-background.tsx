@@ -55,6 +55,10 @@ export function PixiPixelBackground({
         await nextApp.init({
           antialias: false,
           autoDensity: false,
+          // The ticker re-renders every frame — needed only while a video is
+          // progressing. Static covers (noise/CRT) render on demand in resize();
+          // syncLayerTicker starts/stops it with playback (PRD F-6).
+          autoStart: false,
           backgroundAlpha: 0,
           height: 1,
           powerPreference: "low-power",
@@ -100,7 +104,6 @@ export function PixiPixelBackground({
         }
         if (filter) sprite.filters = [filter];
         nextApp.stage.addChild(sprite);
-        let tick: (() => void) | undefined;
         if (media.type === "video") {
           const video = media.element;
           const { isPlaying, positionSec } = usePlayerStore.getState();
@@ -113,10 +116,11 @@ export function PixiPixelBackground({
             );
             return;
           }
-          tick = () => {
-            nextApp.render();
-          };
-          nextApp.ticker.add(tick);
+          // A paused seek decodes a new frame while the ticker is stopped —
+          // repaint once per decoded frame so the frozen background tracks it.
+          video.addEventListener("seeked", () => {
+            if (!usePlayerStore.getState().isPlaying) nextApp.render();
+          });
           if (isPlaying) void video.play().catch(() => {});
         }
 
@@ -144,9 +148,9 @@ export function PixiPixelBackground({
           canvas,
           media: media.type === "video" ? media.element : undefined,
           resizeObserver,
-          tick,
           unload: media.unload,
         };
+        syncLayerTicker(pendingLayer, usePlayerStore.getState().isPlaying);
         const previousLayer = currentLayerRef.current;
         currentLayerRef.current = pendingLayer;
         hostRef.current.appendChild(canvas);
@@ -186,13 +190,17 @@ export function PixiPixelBackground({
 
   useEffect(() => {
     return usePlayerStore.subscribe((state, prev) => {
-      const video = currentLayerRef.current?.media;
-      if (!video) return;
+      const layer = currentLayerRef.current;
+      const video = layer?.media;
+      if (!layer || !video) return;
       if (state.currentIndex !== prev.currentIndex) syncVideo(video, state.positionSec, true);
       else syncVideo(video, state.positionSec);
       if (state.isPlaying !== prev.isPlaying) {
         if (state.isPlaying) void video.play().catch(() => {});
         else video.pause();
+        syncLayerTicker(layer, state.isPlaying);
+        // Pausing freezes the ticker — paint the frame we stopped on.
+        if (!state.isPlaying) layer.app.render();
       }
     });
   }, []);
@@ -233,13 +241,32 @@ type PixiLayer = {
   canvas: HTMLCanvasElement;
   media?: HTMLVideoElement;
   resizeObserver: ResizeObserver;
-  tick?: () => void;
   unload?: () => void;
 };
 
+/**
+ * Drive the layer's ticker (which re-renders the stage every frame) only while
+ * a video is actually progressing. Static covers — the common noise/CRT-over-
+ * image case — and paused MVs render on demand (resize / seeked / pause paint)
+ * instead of burning GPU at 60fps (memory-perf-audit PRD F-6).
+ */
+export function syncLayerTicker(
+  layer: {
+    media?: HTMLVideoElement;
+    app: { ticker: Pick<import("pixi.js").Ticker, "start" | "stop" | "started"> };
+  },
+  isPlaying: boolean,
+): void {
+  const ticker = layer.app.ticker;
+  if (layer.media && isPlaying) {
+    if (!ticker.started) ticker.start();
+  } else if (ticker.started) {
+    ticker.stop();
+  }
+}
+
 function destroyPixiLayer(layer: PixiLayer) {
   layer.resizeObserver.disconnect();
-  if (layer.tick) layer.app.ticker.remove(layer.tick);
   if (layer.media) destroyVideo(layer.media);
   layer.app.destroy(
     { removeView: true },

@@ -1,5 +1,59 @@
-import { describe, expect, it } from "vitest";
-import { needsCrossOrigin } from "./pixi-pixel-background";
+import { describe, expect, it, vi } from "vitest";
+import { needsCrossOrigin, syncLayerTicker } from "./pixi-pixel-background";
+
+function tickerStub(started = false) {
+  const ticker = {
+    started,
+    start: vi.fn(() => {
+      ticker.started = true;
+    }),
+    stop: vi.fn(() => {
+      ticker.started = false;
+    }),
+  };
+  return ticker;
+}
+
+/**
+ * The layer's ticker drives `app.render()` every frame — it must run ONLY while
+ * a video is actually progressing. Static covers (noise/CRT over an image) and
+ * paused MVs render on demand instead of burning GPU at 60fps (PRD F-6).
+ */
+describe("syncLayerTicker", () => {
+  const video = document.createElement("video");
+
+  it("starts the ticker for a playing video layer", () => {
+    const ticker = tickerStub(false);
+    syncLayerTicker({ media: video, app: { ticker } }, true);
+    expect(ticker.start).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not double-start an already running ticker", () => {
+    const ticker = tickerStub(true);
+    syncLayerTicker({ media: video, app: { ticker } }, true);
+    expect(ticker.start).not.toHaveBeenCalled();
+    expect(ticker.stop).not.toHaveBeenCalled();
+  });
+
+  it("stops the ticker when playback pauses", () => {
+    const ticker = tickerStub(true);
+    syncLayerTicker({ media: video, app: { ticker } }, false);
+    expect(ticker.stop).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps image layers (no media) stopped even while music plays", () => {
+    const ticker = tickerStub(true);
+    syncLayerTicker({ media: undefined, app: { ticker } }, true);
+    expect(ticker.stop).toHaveBeenCalledTimes(1);
+  });
+
+  it("is a no-op on an already stopped image layer", () => {
+    const ticker = tickerStub(false);
+    syncLayerTicker({ media: undefined, app: { ticker } }, false);
+    expect(ticker.start).not.toHaveBeenCalled();
+    expect(ticker.stop).not.toHaveBeenCalled();
+  });
+});
 
 /**
  * Shared CORS opt-in rule for Pixi background textures (image + video loaders).
