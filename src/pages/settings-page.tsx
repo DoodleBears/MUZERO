@@ -23,13 +23,13 @@ import { resolveActiveSettingsItem } from "@/components/settings/settings-nav";
 import { SettingsSidebar } from "@/components/settings/settings-sidebar";
 import { ShortcutsSettings } from "@/components/settings/shortcuts-settings";
 import { StreamSourcesSettings } from "@/components/settings/stream-sources-settings";
+import { TraceDiagnostics } from "@/components/settings/trace-diagnostics";
 import { VersionHistorySettings } from "@/components/settings/version-history-settings";
 import { VisualizerSettings } from "@/components/settings/visualizer-settings";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ColorPicker } from "@/components/ui/color-picker";
 import { Combobox, type ComboboxItem } from "@/components/ui/combobox";
-import { DeleteIcon } from "@/components/ui/delete";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -62,7 +62,6 @@ import {
   resolveSmoothScroll,
 } from "@/lib/smooth-scroll/resolve";
 import { useSmoothScroll } from "@/lib/smooth-scroll/use-smooth-scroll";
-import { clearTrace, formatTraceEntries, useTraceEntries } from "@/lib/trace";
 import { formatDuration } from "@/lib/utils";
 import { prefersReducedMotion } from "@/lib/view-transition";
 import {
@@ -1180,53 +1179,6 @@ export function SettingsPage() {
         </div>
       </div>
     </div>
-  );
-}
-
-function TraceDiagnostics() {
-  const { t } = useTranslation();
-  const entries = useTraceEntries();
-  const [copied, setCopied] = useState(false);
-  const visible = entries.slice(-120);
-  const visibleText = formatTraceEntries(visible);
-  const allText = formatTraceEntries(entries);
-
-  async function copyTrace() {
-    if (!navigator.clipboard) return;
-    await navigator.clipboard.writeText(allText);
-    setCopied(true);
-    window.setTimeout(() => setCopied(false), 1600);
-  }
-
-  return (
-    <Card>
-      <CardHeader className="flex-row items-start justify-between gap-3">
-        <div className="flex flex-col gap-1.5">
-          <CardTitle>{t("settings.traceTitle")}</CardTitle>
-          <p className="text-muted-foreground text-sm">{t("settings.traceHint")}</p>
-        </div>
-        <div className="flex shrink-0 gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={entries.length === 0}
-            onClick={() => void copyTrace()}
-          >
-            <ClipboardCopy />
-            {copied ? t("settings.traceCopied") : t("settings.traceCopy")}
-          </Button>
-          <Button variant="ghost" size="sm" disabled={entries.length === 0} onClick={clearTrace}>
-            <DeleteIcon size={16} />
-            {t("settings.traceClear")}
-          </Button>
-        </div>
-      </CardHeader>
-      <CardContent>
-        <pre className="max-h-72 overflow-auto rounded-lg bg-muted p-3 text-[11px] leading-5 text-muted-foreground">
-          {visibleText || t("settings.traceEmpty")}
-        </pre>
-      </CardContent>
-    </Card>
   );
 }
 

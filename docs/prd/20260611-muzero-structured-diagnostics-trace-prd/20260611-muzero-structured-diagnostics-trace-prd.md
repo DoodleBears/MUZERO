@@ -14,7 +14,7 @@
 | 1 | Audit, Taxonomy, Redaction Contract | Completed | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | Shared Structured Logger API | Completed | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | Playback / Stream Trace Migration | In Progress | [Phase 3 Checklist](#phase-3-checklist) |
-| 4 | Settings Trace Workbench | Pending | [Phase 4 Checklist](#phase-4-checklist) |
+| 4 | Settings Trace Workbench | Completed | [Phase 4 Checklist](#phase-4-checklist) |
 | 5 | Electron Main Process Bridge | Pending | [Phase 5 Checklist](#phase-5-checklist) |
 | 6 | Local Trace Archive / File Export | Pending | [Phase 6 Checklist](#phase-6-checklist) |
 
@@ -662,23 +662,23 @@ All user-facing strings must go through i18n catalogs in `src/i18n/locales/{en,z
 **Goal:** Make Settings Trace useful without opening DevTools.
 
 **Tasks:**
-- [ ] Add level/scope/category filters.
-- [ ] Add error-kind filter.
-- [ ] Add traceId grouping and search.
-- [ ] Add user-action "Repro steps" timeline.
-- [ ] Add copy visible, copy current playback attempt, and copy full diagnostics bundle.
-- [ ] Add local explanatory copy and 4-locale i18n keys.
-- [ ] Add component tests for filter/copy/clear behavior.
+- [x] Add level/scope/category filters.
+- [x] Add error-kind filter.
+- [x] Add traceId grouping and search.
+- [x] Add user-action "Repro steps" timeline.
+- [x] Add copy visible, copy current playback attempt, and copy full diagnostics bundle.
+- [x] Add local explanatory copy and 4-locale i18n keys.
+- [x] Add component tests for filter/copy/clear behavior.
 
 ### Phase 4 Checklist
 
-- [ ] User can reproduce a playback issue and copy only that playback attempt.
-- [ ] User can filter to errors only, user actions only, or network/media failures only.
-- [ ] User can copy a reproduction timeline that includes safe user-action breadcrumbs.
-- [ ] User can still copy all trace with one click.
-- [ ] Empty state remains clear.
-- [ ] Trace UI does not rerender on playback progress frames unless a trace entry is added.
-- [ ] UI text does not claim that trace is uploaded or remote.
+- [x] User can reproduce a playback issue and copy only that playback attempt.
+- [x] User can filter to errors only, user actions only, or network/media failures only.
+- [x] User can copy a reproduction timeline that includes safe user-action breadcrumbs.
+- [x] User can still copy all trace with one click.
+- [x] Empty state remains clear.
+- [x] Trace UI does not rerender on playback progress frames unless a trace entry is added.
+- [x] UI text does not claim that trace is uploaded or remote.
 
 ### Phase 5: Electron Main Process Bridge
 
@@ -837,3 +837,4 @@ Given a stream source requires headers/cookies/login or returns no playable URL:
 | 2026-06-11 | Codex | Completed Phase 1 with structured diagnostics schema, filter helpers, URL summarization, and redaction tests |
 | 2026-06-11 | Codex | Completed Phase 2 with structured logger facade, sanitized legacy logging, user-action helper, and trace formatter tests |
 | 2026-06-11 | Codex | Advanced Phase 3a with safe TrackRow play breadcrumbs plus structured stream resolve/cache trace events and tests |
+| 2026-06-11 | Codex | Completed Phase 4 with Settings Trace filters, copy-visible/all, repro-step timeline, i18n, and component tests |
