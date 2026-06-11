@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { type AppSettings, DEFAULT_SETTINGS } from "@/db/types";
-import { canUseDjChat, hasUsableLlm, hasUsableMusicgen } from "./dj-chat-availability";
+import {
+  canGenerateMusic,
+  canUseDjChat,
+  hasEnabledStreamSources,
+  hasUsableLlm,
+} from "./dj-chat-availability";
 
 function settings(overrides: Partial<AppSettings>): AppSettings {
   return { ...DEFAULT_SETTINGS, ...overrides };
@@ -25,66 +30,59 @@ describe("hasUsableLlm", () => {
   });
 });
 
-describe("hasUsableMusicgen", () => {
-  it("is true for the offline mock provider (no key needed)", () => {
-    expect(hasUsableMusicgen(settings({ musicGenProvider: "mock" }))).toBe(true);
+describe("canUseDjChat", () => {
+  it("requires only a usable LLM — music generation is NOT required", () => {
+    expect(canUseDjChat(settings({}))).toBe(false); // no llm
+    expect(canUseDjChat(settings({ apiKeysByPresetId: { openai: "sk" } }))).toBe(true); // llm only
+    expect(canUseDjChat(settings({ openaiApiKey: "sk" }))).toBe(true);
   });
+});
 
-  it("is false for cloud without a key", () => {
-    expect(hasUsableMusicgen(settings({ musicGenProvider: "cloud" }))).toBe(false);
-    expect(hasUsableMusicgen(settings({ musicGenProvider: "cloud", musicCloudApiKey: "  " }))).toBe(
+describe("canGenerateMusic", () => {
+  it("is false when generation is disabled (the default), even with a cloud key", () => {
+    expect(canGenerateMusic(settings({}))).toBe(false);
+    expect(canGenerateMusic(settings({ musicCloudPreset: "mureka", musicCloudApiKey: "mk" }))).toBe(
       false,
     );
   });
 
-  it("is true for a fixed-endpoint cloud preset with a key (mureka)", () => {
+  it("needs the toggle on AND a cloud key", () => {
+    expect(canGenerateMusic(settings({ aiDjGenerationEnabled: true }))).toBe(false); // no key
     expect(
-      hasUsableMusicgen(
+      canGenerateMusic(
         settings({
-          musicGenProvider: "cloud",
+          aiDjGenerationEnabled: true,
           musicCloudPreset: "mureka",
-          musicCloudApiKey: "mk_x",
+          musicCloudApiKey: "mk",
         }),
       ),
     ).toBe(true);
   });
 
-  it("requires a base URL for the custom (user-endpoint) preset", () => {
+  it("requires a base URL for the user-endpoint custom preset", () => {
     const base = {
-      musicGenProvider: "cloud" as const,
+      aiDjGenerationEnabled: true,
       musicCloudPreset: "custom" as const,
       musicCloudApiKey: "k",
     };
-    expect(hasUsableMusicgen(settings(base))).toBe(false);
-    expect(hasUsableMusicgen(settings({ ...base, musicCloudUrl: "https://gen.example" }))).toBe(
+    expect(canGenerateMusic(settings(base))).toBe(false);
+    expect(canGenerateMusic(settings({ ...base, musicCloudUrl: "https://gen.example" }))).toBe(
       true,
     );
   });
 });
 
-describe("canUseDjChat", () => {
-  it("requires BOTH llm and musicgen to be usable", () => {
-    // neither
-    expect(canUseDjChat(settings({ musicGenProvider: "cloud" }))).toBe(false);
-    // llm only
+describe("hasEnabledStreamSources", () => {
+  it("is false when no source is enabled", () => {
+    expect(hasEnabledStreamSources(settings({}))).toBe(false);
     expect(
-      canUseDjChat(settings({ apiKeysByPresetId: { openai: "sk" }, musicGenProvider: "cloud" })),
+      hasEnabledStreamSources(settings({ streamSources: { youtube: { enabled: false } } })),
     ).toBe(false);
-    // musicgen only (mock) without llm key
-    expect(canUseDjChat(settings({ musicGenProvider: "mock" }))).toBe(false);
-    // both
+  });
+
+  it("is true when any source is enabled", () => {
     expect(
-      canUseDjChat(settings({ apiKeysByPresetId: { openai: "sk" }, musicGenProvider: "mock" })),
-    ).toBe(true);
-    expect(
-      canUseDjChat(
-        settings({
-          openaiApiKey: "sk",
-          musicGenProvider: "cloud",
-          musicCloudPreset: "mureka",
-          musicCloudApiKey: "mk",
-        }),
-      ),
+      hasEnabledStreamSources(settings({ streamSources: { netease: { enabled: true } } })),
     ).toBe(true);
   });
 });

@@ -56,20 +56,15 @@ afterEach(() => {
 });
 
 describe("DjChatEntry — availability gate", () => {
-  it("renders nothing (not even the icon) when LLM + musicgen are unconfigured", () => {
+  it("renders nothing (not even the icon) when no LLM is configured", () => {
     const { container } = render(<DjChatEntry />);
     expect(container.firstChild).toBeNull();
   });
 
-  it("renders nothing when only the LLM is configured but cloud musicgen lacks a key", () => {
-    settings = {
-      ...DEFAULT_SETTINGS,
-      apiKeysByPresetId: { openai: "sk" },
-      musicGenProvider: "cloud",
-      musicCloudApiKey: "",
-    };
+  it("renders with an LLM only — music generation is NOT required (search/ingest still work)", () => {
+    settings = { ...DEFAULT_SETTINGS, apiKeysByPresetId: { openai: "sk" } };
     const { container } = render(<DjChatEntry />);
-    expect(container.firstChild).toBeNull();
+    expect(container.firstChild).not.toBeNull();
   });
 });
 
