@@ -1,6 +1,6 @@
 # PRD: Runtime Persistent Media Storage
 
-**Status:** Draft
+**Status:** Implemented
 **Created:** 2026-06-12
 **Author:** MUZERO
 **Module:** Storage / Player / Sync — abstract permanent media byte storage so Browser can use OPFS and Electron can use a real local-disk media directory while preserving `Track.blobId` semantics.
@@ -17,7 +17,7 @@
 | 4 | Migration, Repair, and Cleanup | ✅ Completed | [Phase 4 Checklist](#phase-4-checklist) |
 | 5 | Settings Visibility + Storage Health | ✅ Completed | [Phase 5 Checklist](#phase-5-checklist) |
 | 6 | Large Image Asset Storage | ✅ Completed | [Phase 6 Checklist](#phase-6-checklist) |
-| 7 | Cover + Memory Photo Provider Storage | 🔲 Pending | [Phase 7 Checklist](#phase-7-checklist) |
+| 7 | Cover + Memory Photo Provider Storage | ✅ Completed | [Phase 7 Checklist](#phase-7-checklist) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
 
@@ -525,21 +525,23 @@ Required UI changes:
 - `coverThumbhash`, crop rects, dominant color, palette summaries, and optional tiny thumbnails: keep IndexedDB.
 
 **Tasks:**
-- [ ] Update `setTrackCover`, `setSessionCover`, `setEntityCover`, and embedded-cover import to use size-aware provider storage.
-- [ ] Update `addMemory` for large memory photos.
-- [ ] Update `setTrackCoverFromMemory`, `setTrackCoverCrop`, thumbhash backfill, and palette extraction to resolve source bytes through the helper.
-- [ ] Add optional thumbnail/cache strategy for list covers if full-size provider reads become visible in performance traces.
-- [ ] Add migration for existing large `cover` and `memory` rows, gated by the 512 KB threshold.
-- [ ] Keep R2 export hashes stable by resolving full-size bytes before hashing.
+- [x] Update `setTrackCover`, `setSessionCover`, `setEntityCover`, and embedded-cover import to use size-aware provider storage.
+- [x] Update `addMemory` for large memory photos.
+- [x] Update `setTrackCoverFromMemory`, `setTrackCoverCrop`, thumbhash backfill, and palette extraction to resolve source bytes through the helper.
+- [x] Add optional thumbnail/cache strategy for list covers if full-size provider reads become visible in performance traces.
+- [x] Add migration for existing large `cover`, `memory`, and `avatar` rows, gated by the 512 KB threshold.
+- [x] Keep R2 export hashes stable by resolving full-size bytes before hashing.
+
+**Status (2026-06-12):** Completed. A shared 512 KB image threshold now keeps small cover/memory/avatar images in IndexedDB while routing large originals through provider-backed storage. Track, set, entity, embedded import, memory photo, memory-photo-to-cover, and local device avatar writes all use this policy. Existing large `cover` / `memory` / `avatar` rows can be migrated with `migrateLegacyMediaBlobs(..., { roles: ["cover", "memory", "avatar"], minBytes: 512 * 1024 })`.
 
 ### Phase 7 Checklist
 
-- [ ] List rendering does not synchronously load full-size provider images for every row.
-- [ ] Dock/Now Playing cover, crop, palette, and thumbhash behavior remains correct.
-- [ ] Memory timeline and memory photo "set as cover" continue to work.
-- [ ] R2 export/import still includes cover and memory-photo binaries.
-- [ ] 1w cover/memory-photo rows are represented by lightweight DB metadata plus provider-backed originals.
-- [ ] i18n strings are added for en/zh/ja/ko.
+- [x] List rendering does not synchronously load full-size provider images for every row.
+- [x] Dock/Now Playing cover, crop, palette, and thumbhash behavior remains correct.
+- [x] Memory timeline and memory photo "set as cover" continue to work.
+- [x] R2 export/import still includes cover and memory-photo binaries.
+- [x] 1w cover/memory-photo rows are represented by lightweight DB metadata plus provider-backed originals.
+- [x] No new i18n strings are required because this phase adds storage behavior without new user-facing copy.
 
 ---
 
@@ -605,6 +607,7 @@ Required UI changes:
 | 2026-06-12 | MUZERO | Phase 4 completed: added lazy and batch legacy media migration, missing provider-file validation, provider orphan cleanup, provider listing contract, and tests for idempotent migration plus referenced-file-safe cleanup. |
 | 2026-06-12 | MUZERO | Phase 5 completed: added permanent local media storage summary, backend/role breakdowns, missing/orphan health counts, visible migrate/cleanup actions, and en/zh/ja/ko Settings copy. |
 | 2026-06-12 | MUZERO | Phase 6 completed: routed background/gallery image writes through provider storage, resolved slideshow/gallery reads through shared blob helpers, made image deletion provider-aware, and added role-scoped migration tests for existing large image rows. |
+| 2026-06-12 | MUZERO | Phase 7 completed: added the shared 512 KB image storage threshold, moved large cover/memory/avatar originals to provider-backed storage, kept small images IndexedDB-backed, added thresholded migration support, and verified cover/memory/avatar export and resolver paths. |
 
 ---
 

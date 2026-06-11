@@ -12,6 +12,8 @@ import type { MediaBlob } from "./types";
 export type { MediaStorageBackend, MediaStorageProvider };
 export { mediaStorageKey };
 
+export const LARGE_IMAGE_PROVIDER_THRESHOLD_BYTES = 512 * 1024;
+
 export interface ResolvedMediaBlob extends Omit<MediaBlob, "blob" | "storageBackend"> {
   storageBackend: MediaStorageBackend;
   blob: Blob;
@@ -123,6 +125,19 @@ export async function putMediaBlob(
   return row;
 }
 
+export async function putSizeAwareImageBlob(
+  input: PutMediaBlobInput,
+  db: MuzeroDB = defaultDb,
+  options: MediaBlobStorageOptions = {},
+): Promise<MediaBlob> {
+  const bytes = input.bytes ?? input.blob.size;
+  const storage =
+    bytes >= LARGE_IMAGE_PROVIDER_THRESHOLD_BYTES
+      ? options
+      : { ...options, provider: indexedDbMediaStorageProvider };
+  return putMediaBlob({ ...input, bytes }, db, storage);
+}
+
 export async function resolveMediaBlob(
   rowOrId: string | MediaBlob | undefined,
   db: MuzeroDB = defaultDb,
@@ -182,6 +197,7 @@ export async function migrateLegacyMediaBlobs(
   db: MuzeroDB = defaultDb,
   options: MediaBlobStorageOptions & {
     limit?: number;
+    minBytes?: number;
     roles?: ReadonlyArray<MediaBlob["role"]>;
   } = {},
 ): Promise<MediaBlobMigrationSummary> {
@@ -197,6 +213,10 @@ export async function migrateLegacyMediaBlobs(
       continue;
     }
     processed += 1;
+    if (options.minBytes !== undefined && row.bytes < options.minBytes) {
+      summary.skipped += 1;
+      continue;
+    }
     try {
       const migrated = await migrateMediaBlobToProvider(row, db, options);
       if (migrated && mediaStorageBackend(migrated) !== "indexeddb") summary.migrated += 1;

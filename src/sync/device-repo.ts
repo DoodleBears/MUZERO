@@ -1,3 +1,8 @@
+import {
+  deleteMediaBlob,
+  type MediaBlobStorageOptions,
+  putSizeAwareImageBlob,
+} from "@/db/media-blob-storage";
 import { db as defaultDb, type MuzeroDB } from "@/db/muzero-db";
 import type { DeviceRecord } from "@/db/types";
 import { newId } from "@/lib/id";
@@ -98,30 +103,43 @@ export async function updateLocalDeviceProfile(
 export async function setLocalDeviceAvatar(
   input: SetLocalDeviceAvatarInput,
   db: MuzeroDB = defaultDb,
+  storage: MediaBlobStorageOptions = {},
 ): Promise<DeviceRecord> {
   const now = input.now ?? Date.now();
   const current = await getOrCreateLocalDevice({ now }, db);
-  const avatarBlobId = newId("blb");
-  const next: DeviceRecord = {
-    ...current,
-    name: input.name?.trim() || current.name,
-    avatarSeed: input.avatarSeed?.trim() || current.avatarSeed,
-    avatarBlobId,
-    publishProfile: input.publishProfile ?? current.publishProfile,
-    profileRevision: current.profileRevision + 1,
-    lastSeenAt: now,
-  };
-  await db.transaction("rw", db.mediaBlobs, db.devices, async () => {
-    await db.mediaBlobs.put({
-      id: avatarBlobId,
+  const avatar = await putSizeAwareImageBlob(
+    {
+      id: newId("blb"),
       trackId: current.id,
       role: "avatar",
       mime: input.mime || input.blob.type || "image/jpeg",
       bytes: input.blob.size,
       blob: input.blob,
+      suggestedName: "Avatar",
+    },
+    db,
+    storage,
+  );
+  const next: DeviceRecord = {
+    ...current,
+    name: input.name?.trim() || current.name,
+    avatarSeed: input.avatarSeed?.trim() || current.avatarSeed,
+    avatarBlobId: avatar.id,
+    publishProfile: input.publishProfile ?? current.publishProfile,
+    profileRevision: current.profileRevision + 1,
+    lastSeenAt: now,
+  };
+  try {
+    await db.transaction("rw", db.devices, async () => {
+      await db.devices.put(next);
     });
-    await db.devices.put(next);
-  });
+  } catch (error) {
+    await deleteMediaBlob(avatar.id, db, storage);
+    throw error;
+  }
+  if (current.avatarBlobId) {
+    await deleteMediaBlob(current.avatarBlobId, db, storage);
+  }
   return next;
 }
 

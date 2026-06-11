@@ -1,4 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import {
+  LARGE_IMAGE_PROVIDER_THRESHOLD_BYTES,
+  type MediaStorageProvider,
+} from "@/db/media-blob-storage";
 import { MuzeroDB } from "@/db/muzero-db";
 import {
   getLocalDevice,
@@ -22,6 +26,27 @@ afterEach(async () => {
     req.onsuccess = req.onerror = () => resolve();
   });
 });
+
+function createMemoryProvider(id: "opfs" | "electron-file" = "opfs") {
+  const files = new Map<string, Blob>();
+  const provider: MediaStorageProvider & { files: Map<string, Blob> } = {
+    id,
+    userVisible: id === "electron-file",
+    files,
+    async put(input) {
+      const storageKey = `avatar/${input.suggestedName ?? input.id}`;
+      files.set(storageKey, input.blob);
+      return { storageKey };
+    },
+    async get(input) {
+      return input.storageKey ? (files.get(input.storageKey) ?? null) : null;
+    },
+    async delete(input) {
+      if (input.storageKey) files.delete(input.storageKey);
+    },
+  };
+  return provider;
+}
 
 describe("device repository", () => {
   it("creates one stable anonymous local device per app profile", async () => {
@@ -179,5 +204,33 @@ describe("device repository", () => {
       bytes: blob.size,
     });
     expect(media?.blob).toBeDefined();
+  });
+
+  it("stores large uploaded avatars through provider storage", async () => {
+    await getOrCreateLocalDevice(
+      {
+        now: 1000,
+        publicIdFactory: () => "dvc_test",
+        platform: "browser",
+      },
+      db,
+    );
+    const provider = createMemoryProvider("opfs");
+    const blob = new Blob([new Uint8Array(LARGE_IMAGE_PROVIDER_THRESHOLD_BYTES)], {
+      type: "image/png",
+    });
+
+    const updated = await setLocalDeviceAvatar({ blob, mime: "image/png", now: 2000 }, db, {
+      provider,
+    });
+
+    const media = await db.mediaBlobs.get(updated.avatarBlobId ?? "");
+    expect(media).toMatchObject({
+      trackId: updated.id,
+      role: "avatar",
+      storageBackend: "opfs",
+      blob: undefined,
+    });
+    expect(provider.files.has(media?.storageKey ?? "")).toBe(true);
   });
 });

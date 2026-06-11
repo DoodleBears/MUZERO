@@ -18,6 +18,7 @@ import {
   deleteMediaBlob,
   type MediaBlobStorageOptions,
   putMediaBlob,
+  putSizeAwareImageBlob,
   resolveMediaBlob,
 } from "./media-blob-storage";
 import { db as defaultDb, type MuzeroDB } from "./muzero-db";
@@ -307,29 +308,43 @@ export async function reorderTracksInSession(
 export async function setSessionCover(
   input: { sessionId: string; blob: Blob; mime: string; crop?: CropRect },
   db: MuzeroDB = defaultDb,
+  storage: MediaBlobStorageOptions = {},
 ): Promise<void> {
   // Encode the blurred preview before the transaction (canvas decode is async and
   // must not run inside a Dexie tx); undefined on failure / non-browser.
   const coverThumbhash = await encodeCoverThumbhash(input.blob, input.crop);
-  await db.transaction("rw", db.sessions, db.mediaBlobs, async () => {
-    const session = await db.sessions.get(input.sessionId);
-    if (!session) return;
-    if (session.coverBlobId) await db.mediaBlobs.delete(session.coverBlobId);
-    const id = newId("blb");
-    await db.mediaBlobs.add({
-      id,
+  const existing = await db.sessions.get(input.sessionId);
+  if (!existing) return;
+  const cover = await putSizeAwareImageBlob(
+    {
+      id: newId("blb"),
       trackId: input.sessionId,
       role: "cover",
       mime: input.mime,
       bytes: input.blob.size,
       blob: input.blob,
+      suggestedName: "Cover",
+    },
+    db,
+    storage,
+  );
+  let previousCoverId: string | undefined;
+  try {
+    await db.transaction("rw", db.sessions, async () => {
+      const session = await db.sessions.get(input.sessionId);
+      if (!session) throw new Error(`Session not found: ${input.sessionId}`);
+      previousCoverId = session.coverBlobId;
+      session.coverBlobId = cover.id;
+      session.coverCrop = input.crop;
+      session.coverThumbhash = coverThumbhash;
+      session.updatedAt = Date.now();
+      await db.sessions.put(session);
     });
-    session.coverBlobId = id;
-    session.coverCrop = input.crop;
-    session.coverThumbhash = coverThumbhash;
-    session.updatedAt = Date.now();
-    await db.sessions.put(session);
-  });
+  } catch (error) {
+    await deleteMediaBlob(cover.id, db, storage);
+    throw error;
+  }
+  if (previousCoverId) await deleteMediaBlob(previousCoverId, db, storage);
 }
 
 /** Read a 歌单's cover blob (the set-level cover only — not a track cover). */
@@ -350,16 +365,20 @@ export async function getSessionCover(
 export async function clearSessionCover(
   sessionId: string,
   db: MuzeroDB = defaultDb,
+  storage: MediaBlobStorageOptions = {},
 ): Promise<void> {
-  await db.transaction("rw", db.sessions, db.mediaBlobs, async () => {
+  let coverBlobId: string | undefined;
+  await db.transaction("rw", db.sessions, async () => {
     const session = await db.sessions.get(sessionId);
     if (!session?.coverBlobId) return;
-    await db.mediaBlobs.delete(session.coverBlobId);
+    coverBlobId = session.coverBlobId;
     session.coverBlobId = undefined;
     session.coverCrop = undefined;
+    session.coverThumbhash = undefined;
     session.updatedAt = Date.now();
     await db.sessions.put(session);
   });
+  if (coverBlobId) await deleteMediaBlob(coverBlobId, db, storage);
 }
 
 /**
@@ -378,29 +397,41 @@ export async function setEntityCover(
     crop?: CropRect;
   },
   db: MuzeroDB = defaultDb,
+  storage: MediaBlobStorageOptions = {},
 ): Promise<void> {
   const thumbhash = await encodeCoverThumbhash(input.blob, input.crop);
-  await db.transaction("rw", db.entityCovers, db.mediaBlobs, async () => {
-    const prev = await db.entityCovers.get(input.entityKey);
-    if (prev?.coverBlobId) await db.mediaBlobs.delete(prev.coverBlobId);
-    const cover: MediaBlob = {
+  const cover = await putSizeAwareImageBlob(
+    {
       id: newId("blb"),
       trackId: input.entityKey,
       role: "cover",
       mime: input.mime,
       bytes: input.blob.size,
       blob: input.blob,
-    };
-    await db.mediaBlobs.put(cover);
-    await db.entityCovers.put({
-      id: input.entityKey,
-      kind: input.kind,
-      coverBlobId: cover.id,
-      crop: input.crop,
-      thumbhash,
-      updatedAt: Date.now(),
+      suggestedName: "Cover",
+    },
+    db,
+    storage,
+  );
+  let previousCoverId: string | undefined;
+  try {
+    await db.transaction("rw", db.entityCovers, async () => {
+      const prev = await db.entityCovers.get(input.entityKey);
+      previousCoverId = prev?.coverBlobId;
+      await db.entityCovers.put({
+        id: input.entityKey,
+        kind: input.kind,
+        coverBlobId: cover.id,
+        crop: input.crop,
+        thumbhash,
+        updatedAt: Date.now(),
+      });
     });
-  });
+  } catch (error) {
+    await deleteMediaBlob(cover.id, db, storage);
+    throw error;
+  }
+  if (previousCoverId) await deleteMediaBlob(previousCoverId, db, storage);
 }
 
 /** Read an entity's custom cover blob (override only — not the fallback track). */
@@ -415,13 +446,19 @@ export async function getEntityCover(
 }
 
 /** Remove an entity's custom cover (row + blob); resolution falls back to a track. */
-export async function clearEntityCover(entityKey: string, db: MuzeroDB = defaultDb): Promise<void> {
-  await db.transaction("rw", db.entityCovers, db.mediaBlobs, async () => {
-    const row = await db.entityCovers.get(entityKey);
-    if (!row) return;
-    if (row.coverBlobId) await db.mediaBlobs.delete(row.coverBlobId);
+export async function clearEntityCover(
+  entityKey: string,
+  db: MuzeroDB = defaultDb,
+  storage: MediaBlobStorageOptions = {},
+): Promise<void> {
+  let coverBlobId: string | undefined;
+  await db.transaction("rw", db.entityCovers, async () => {
+    const prev = await db.entityCovers.get(entityKey);
+    if (!prev) return;
+    coverBlobId = prev.coverBlobId;
     await db.entityCovers.delete(entityKey);
   });
+  if (coverBlobId) await deleteMediaBlob(coverBlobId, db, storage);
 }
 
 export async function removeTrackFromSession(
@@ -636,25 +673,30 @@ export async function createUploadedTrack(
     storage,
   );
   track.blobId = media.id;
-  const cover: MediaBlob | undefined = input.embeddedCover
-    ? {
-        id: newId("blb"),
-        trackId: track.id,
-        role: "cover",
-        mime: input.embeddedCover.mime,
-        bytes: input.embeddedCover.blob.size,
-        storageBackend: "indexeddb",
-        blob: input.embeddedCover.blob,
-      }
-    : undefined;
-  if (cover) track.coverBlobId = cover.id;
+  let cover: MediaBlob | undefined;
   try {
-    await db.transaction("rw", db.tracks, db.mediaBlobs, async () => {
-      if (cover) await db.mediaBlobs.put(cover);
+    cover = input.embeddedCover
+      ? await putSizeAwareImageBlob(
+          {
+            id: newId("blb"),
+            trackId: track.id,
+            role: "cover",
+            mime: input.embeddedCover.mime,
+            bytes: input.embeddedCover.blob.size,
+            blob: input.embeddedCover.blob,
+            suggestedName: "Cover",
+          },
+          db,
+          storage,
+        )
+      : undefined;
+    if (cover) track.coverBlobId = cover.id;
+    await db.transaction("rw", db.tracks, async () => {
       await db.tracks.put(track);
     });
   } catch (error) {
     await deleteMediaBlob(media.id, db, storage);
+    if (cover) await deleteMediaBlob(cover.id, db, storage);
     throw error;
   }
   return track;
@@ -820,28 +862,42 @@ export async function clearTrackLyrics(trackId: string, db: MuzeroDB = defaultDb
 export async function setTrackCover(
   input: { trackId: string; blob: Blob; mime: string; crop?: CropRect },
   db: MuzeroDB = defaultDb,
+  storage: MediaBlobStorageOptions = {},
 ): Promise<void> {
   const coverThumbhash = await encodeCoverThumbhash(input.blob, input.crop);
-  await db.transaction("rw", db.tracks, db.mediaBlobs, async () => {
-    const track = await db.tracks.get(input.trackId);
-    if (!track) return;
-    if (track.coverBlobId) await db.mediaBlobs.delete(track.coverBlobId);
-    const cover: MediaBlob = {
+  const existing = await db.tracks.get(input.trackId);
+  if (!existing) return;
+  const cover = await putSizeAwareImageBlob(
+    {
       id: newId("blb"),
       trackId: input.trackId,
       role: "cover",
       mime: input.mime,
       bytes: input.blob.size,
       blob: input.blob,
-    };
-    await db.mediaBlobs.put(cover);
-    await db.tracks.update(input.trackId, {
-      coverBlobId: cover.id,
-      coverCrop: input.crop,
-      coverThumbhash,
-      updatedAt: Date.now(),
+      suggestedName: "Cover",
+    },
+    db,
+    storage,
+  );
+  let previousCoverId: string | undefined;
+  try {
+    await db.transaction("rw", db.tracks, async () => {
+      const track = await db.tracks.get(input.trackId);
+      if (!track) throw new Error(`Track not found: ${input.trackId}`);
+      previousCoverId = track.coverBlobId;
+      await db.tracks.update(input.trackId, {
+        coverBlobId: cover.id,
+        coverCrop: input.crop,
+        coverThumbhash,
+        updatedAt: Date.now(),
+      });
     });
-  });
+  } catch (error) {
+    await deleteMediaBlob(cover.id, db, storage);
+    throw error;
+  }
+  if (previousCoverId) await deleteMediaBlob(previousCoverId, db, storage);
 }
 
 /**
@@ -849,11 +905,16 @@ export async function setTrackCover(
  * none is set. Mirrors {@link clearSessionCover} / {@link clearEntityCover};
  * a track has no fallback cover, so it simply goes back to the disc icon.
  */
-export async function clearTrackCover(trackId: string, db: MuzeroDB = defaultDb): Promise<void> {
-  await db.transaction("rw", db.tracks, db.mediaBlobs, async () => {
+export async function clearTrackCover(
+  trackId: string,
+  db: MuzeroDB = defaultDb,
+  storage: MediaBlobStorageOptions = {},
+): Promise<void> {
+  let coverBlobId: string | undefined;
+  await db.transaction("rw", db.tracks, async () => {
     const track = await db.tracks.get(trackId);
     if (!track?.coverBlobId) return;
-    await db.mediaBlobs.delete(track.coverBlobId);
+    coverBlobId = track.coverBlobId;
     await db.tracks.update(trackId, {
       coverBlobId: undefined,
       coverCrop: undefined,
@@ -861,6 +922,7 @@ export async function clearTrackCover(trackId: string, db: MuzeroDB = defaultDb)
       updatedAt: Date.now(),
     });
   });
+  if (coverBlobId) await deleteMediaBlob(coverBlobId, db, storage);
 }
 
 /**
@@ -876,32 +938,39 @@ export async function setTrackCoverFromMemory(
   if (!memory?.photoBlobId) return false;
   const photo = await resolveMediaBlob(memory.photoBlobId, db, storage);
   if (!photo?.blob) return false;
-
-  return db.transaction("rw", db.tracks, db.memories, db.mediaBlobs, async () => {
-    const track = await db.tracks.get(memory.trackId);
-    if (!track) return false;
-
-    if (track.coverBlobId) {
-      const previous = await db.mediaBlobs.get(track.coverBlobId);
-      if (previous?.role === "cover") await db.mediaBlobs.delete(track.coverBlobId);
-    }
-
-    const cover: MediaBlob = {
+  const track = await db.tracks.get(memory.trackId);
+  if (!track) return false;
+  const cover = await putSizeAwareImageBlob(
+    {
       id: newId("blb"),
       trackId: memory.trackId,
       role: "cover",
       mime: photo.mime,
       bytes: photo.bytes,
       blob: photo.blob,
-    };
-    await db.mediaBlobs.put(cover);
-    await db.tracks.update(memory.trackId, {
-      coverBlobId: cover.id,
-      coverCrop: undefined,
-      updatedAt: Date.now(),
+      suggestedName: "Cover",
+    },
+    db,
+    storage,
+  );
+  let previousCoverId: string | undefined;
+  try {
+    await db.transaction("rw", db.tracks, async () => {
+      const current = await db.tracks.get(memory.trackId);
+      if (!current) throw new Error(`Track not found: ${memory.trackId}`);
+      previousCoverId = current.coverBlobId;
+      await db.tracks.update(memory.trackId, {
+        coverBlobId: cover.id,
+        coverCrop: undefined,
+        updatedAt: Date.now(),
+      });
     });
-    return true;
-  });
+  } catch (error) {
+    await deleteMediaBlob(cover.id, db, storage);
+    throw error;
+  }
+  if (previousCoverId) await deleteMediaBlob(previousCoverId, db, storage);
+  return true;
 }
 
 /** Update just the cover crop (re-crop without re-uploading). Undefined clears it.
@@ -1011,36 +1080,45 @@ export async function addMemory(
     atSec?: number;
   },
   db: MuzeroDB = defaultDb,
+  storage: MediaBlobStorageOptions = {},
 ): Promise<Memory> {
-  return db.transaction("rw", db.tracks, db.memories, db.mediaBlobs, async () => {
-    let photoBlobId: string | undefined;
-    if (input.photo) {
-      const photo: MediaBlob = {
-        id: newId("blb"),
+  let photo: MediaBlob | undefined;
+  try {
+    photo = input.photo
+      ? await putSizeAwareImageBlob(
+          {
+            id: newId("blb"),
+            trackId: input.trackId,
+            role: "memory",
+            mime: input.photo.mime,
+            bytes: input.photo.blob.size,
+            blob: input.photo.blob,
+            suggestedName: "Memory",
+          },
+          db,
+          storage,
+        )
+      : undefined;
+    return await db.transaction("rw", db.tracks, db.memories, async () => {
+      const memory: Memory = {
+        id: newId("mem"),
         trackId: input.trackId,
-        role: "memory",
-        mime: input.photo.mime,
-        bytes: input.photo.blob.size,
-        blob: input.photo.blob,
+        note: input.note.trim(),
+        photoBlobId: photo?.id,
+        author: sanitizeMemoryAuthor(input.author),
+        createdAt: input.createdAt ?? Date.now(),
+        atSec: sanitizeAtSec(input.atSec),
       };
-      await db.mediaBlobs.put(photo);
-      photoBlobId = photo.id;
-    }
-    const memory: Memory = {
-      id: newId("mem"),
-      trackId: input.trackId,
-      note: input.note.trim(),
-      photoBlobId,
-      author: sanitizeMemoryAuthor(input.author),
-      createdAt: input.createdAt ?? Date.now(),
-      atSec: sanitizeAtSec(input.atSec),
-    };
-    await db.memories.put(memory);
-    // A memory is a track annotation ("music carries memories") — bump the parent's
-    // last-edit clock so the 最后修改 sort reflects it.
-    await db.tracks.update(input.trackId, { updatedAt: Date.now() });
-    return memory;
-  });
+      await db.memories.put(memory);
+      // A memory is a track annotation ("music carries memories") — bump the parent's
+      // last-edit clock so the 最后修改 sort reflects it.
+      await db.tracks.update(input.trackId, { updatedAt: Date.now() });
+      return memory;
+    });
+  } catch (error) {
+    if (photo) await deleteMediaBlob(photo.id, db, storage);
+    throw error;
+  }
 }
 
 /**
@@ -1112,14 +1190,20 @@ export async function updateMemoryNote(
 }
 
 /** Delete a memory and its photo blob (if any). */
-export async function deleteMemory(id: string, db: MuzeroDB = defaultDb): Promise<void> {
-  await db.transaction("rw", db.tracks, db.memories, db.mediaBlobs, async () => {
+export async function deleteMemory(
+  id: string,
+  db: MuzeroDB = defaultDb,
+  storage: MediaBlobStorageOptions = {},
+): Promise<void> {
+  let photoBlobId: string | undefined;
+  await db.transaction("rw", db.tracks, db.memories, async () => {
     const memory = await db.memories.get(id);
-    if (memory?.photoBlobId) await db.mediaBlobs.delete(memory.photoBlobId);
+    photoBlobId = memory?.photoBlobId;
     await db.memories.delete(id);
     // Removing a memory is an edit to the track's annotations (最后修改 sort).
     if (memory) await db.tracks.update(memory.trackId, { updatedAt: Date.now() });
   });
+  if (photoBlobId) await deleteMediaBlob(photoBlobId, db, storage);
 }
 
 /** Resolve a memory's photo blob, or undefined when it has none. */

@@ -16,9 +16,10 @@ export async function createTrackExportBlob(input: {
   track: Track;
 }): Promise<Blob> {
   const { cover, media, mode, track } = input;
+  if (!media.blob) throw new Error(`Cannot export track ${track.id}: media bytes are missing`);
   if (mode === "original") return media.blob;
   const mediaBytes = new Uint8Array(await media.blob.arrayBuffer());
-  const coverPayload = cover
+  const coverPayload = cover?.blob
     ? { bytes: new Uint8Array(await cover.blob.arrayBuffer()), mime: cover.mime }
     : undefined;
   if (isMp3Media(media, track)) {

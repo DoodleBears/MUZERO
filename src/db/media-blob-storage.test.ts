@@ -3,6 +3,7 @@ import {
   cleanupOrphanedMediaStorageFiles,
   copyMediaBlob,
   deleteMediaBlob,
+  LARGE_IMAGE_PROVIDER_THRESHOLD_BYTES,
   type MediaStorageProvider,
   mediaStorageKey,
   migrateLegacyMediaBlobs,
@@ -299,6 +300,64 @@ describe("media blob storage resolver", () => {
     expect((await db.mediaBlobs.get("blb_cover_a"))?.storageBackend).toBeUndefined();
     expect(provider.has("background/background__blb_background_a.png")).toBe(true);
     expect(provider.has("gallery/gallery__blb_gallery_a.webp")).toBe(true);
+  });
+
+  it("migrates only large legacy cover memory and avatar images above the threshold", async () => {
+    const provider = createMemoryProvider("opfs");
+    await db.mediaBlobs.bulkPut([
+      {
+        id: "blb_cover_large",
+        trackId: "trk_a",
+        role: "cover",
+        mime: "image/jpeg",
+        bytes: LARGE_IMAGE_PROVIDER_THRESHOLD_BYTES,
+        blob: new Blob([new Uint8Array(LARGE_IMAGE_PROVIDER_THRESHOLD_BYTES)], {
+          type: "image/jpeg",
+        }),
+      },
+      {
+        id: "blb_memory_large",
+        trackId: "trk_a",
+        role: "memory",
+        mime: "image/png",
+        bytes: LARGE_IMAGE_PROVIDER_THRESHOLD_BYTES + 1,
+        blob: new Blob([new Uint8Array(LARGE_IMAGE_PROVIDER_THRESHOLD_BYTES + 1)], {
+          type: "image/png",
+        }),
+      },
+      {
+        id: "blb_avatar_small",
+        trackId: "dev_local",
+        role: "avatar",
+        mime: "image/png",
+        bytes: LARGE_IMAGE_PROVIDER_THRESHOLD_BYTES - 1,
+        blob: new Blob([new Uint8Array(LARGE_IMAGE_PROVIDER_THRESHOLD_BYTES - 1)], {
+          type: "image/png",
+        }),
+      },
+      {
+        id: "blb_gallery_large",
+        trackId: "global",
+        role: "gallery",
+        mime: "image/webp",
+        bytes: LARGE_IMAGE_PROVIDER_THRESHOLD_BYTES,
+        blob: new Blob([new Uint8Array(LARGE_IMAGE_PROVIDER_THRESHOLD_BYTES)], {
+          type: "image/webp",
+        }),
+      },
+    ]);
+
+    const result = await migrateLegacyMediaBlobs(db, {
+      provider,
+      roles: ["cover", "memory", "avatar"],
+      minBytes: LARGE_IMAGE_PROVIDER_THRESHOLD_BYTES,
+    });
+
+    expect(result).toEqual({ migrated: 2, skipped: 2, failed: 0 });
+    expect((await db.mediaBlobs.get("blb_cover_large"))?.storageBackend).toBe("opfs");
+    expect((await db.mediaBlobs.get("blb_memory_large"))?.storageBackend).toBe("opfs");
+    expect((await db.mediaBlobs.get("blb_avatar_small"))?.storageBackend).toBeUndefined();
+    expect((await db.mediaBlobs.get("blb_gallery_large"))?.storageBackend).toBeUndefined();
   });
 
   it("reports missing provider-backed files and deletes orphan provider files", async () => {

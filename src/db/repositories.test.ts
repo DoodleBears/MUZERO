@@ -1,6 +1,10 @@
 import Dexie from "dexie";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { type MediaStorageProvider, putMediaBlob } from "./media-blob-storage";
+import {
+  LARGE_IMAGE_PROVIDER_THRESHOLD_BYTES,
+  type MediaStorageProvider,
+  putMediaBlob,
+} from "./media-blob-storage";
 import { MuzeroDB } from "./muzero-db";
 import {
   addGalleryImage,
@@ -25,6 +29,7 @@ import {
   getSessionCover,
   getSettings,
   getTrack,
+  getTrackCover,
   knownSourcePaths,
   listAllTracks,
   listGalleryImages,
@@ -39,6 +44,7 @@ import {
   resetAllShortcuts,
   resetShortcut,
   saveSettings,
+  setEntityCover,
   setSessionCover,
   setShortcutOverride,
   setTrackCover,
@@ -84,6 +90,10 @@ function createMemoryProvider(id: "opfs" | "electron-file" = "electron-file") {
     },
   };
   return provider;
+}
+
+function largeImageBlob(type = "image/jpeg") {
+  return new Blob([new Uint8Array(LARGE_IMAGE_PROVIDER_THRESHOLD_BYTES)], { type });
 }
 
 describe("settings", () => {
@@ -195,6 +205,40 @@ describe("setSessionCover / getSessionCover", () => {
     ).resolves.toBe("set-cover");
   });
 
+  it("stores large set covers through provider storage while small covers stay in IndexedDB", async () => {
+    const provider = createMemoryProvider("opfs");
+    const smallSet = await createSession({ seedPrompt: "", config: { autoExtend: false } }, db);
+    const largeSet = await createSession({ seedPrompt: "", config: { autoExtend: false } }, db);
+
+    await setSessionCover(
+      {
+        sessionId: smallSet.id,
+        blob: new Blob(["small"], { type: "image/png" }),
+        mime: "image/png",
+      },
+      db,
+      { provider },
+    );
+    await setSessionCover(
+      { sessionId: largeSet.id, blob: largeImageBlob("image/jpeg"), mime: "image/jpeg" },
+      db,
+      { provider },
+    );
+
+    const smallCover = await db.mediaBlobs.get(
+      (await getSession(smallSet.id, db))?.coverBlobId ?? "",
+    );
+    const largeCover = await db.mediaBlobs.get(
+      (await getSession(largeSet.id, db))?.coverBlobId ?? "",
+    );
+
+    expect(smallCover).toMatchObject({ role: "cover", storageBackend: "indexeddb" });
+    expect(smallCover?.blob).toBeTruthy();
+    expect(largeCover).toMatchObject({ role: "cover", storageBackend: "opfs", blob: undefined });
+    expect(provider.files.has(largeCover?.storageKey ?? "")).toBe(true);
+    expect(await getSessionCover(largeSet.id, db, { providers: [provider] })).toBeTruthy();
+  });
+
   it("stores a non-destructive square crop on the session", async () => {
     const s = await createSession({ seedPrompt: "", config: { autoExtend: false } }, db);
     const blob = new Blob([new Uint8Array([1])], { type: "image/png" });
@@ -253,9 +297,72 @@ describe("getEntityCover", () => {
       (await getEntityCover("artist:deidian", db, { providers: [provider] }))?.text(),
     ).resolves.toBe("entity-cover");
   });
+
+  it("stores large custom entity covers through provider storage", async () => {
+    const provider = createMemoryProvider("opfs");
+
+    await setEntityCover(
+      {
+        entityKey: "artist:deidian",
+        kind: "artist",
+        blob: largeImageBlob("image/png"),
+        mime: "image/png",
+      },
+      db,
+      { provider },
+    );
+
+    const entity = await db.entityCovers.get("artist:deidian");
+    const cover = await db.mediaBlobs.get(entity?.coverBlobId ?? "");
+    expect(cover).toMatchObject({ role: "cover", storageBackend: "opfs", blob: undefined });
+    expect(provider.files.has(cover?.storageKey ?? "")).toBe(true);
+    expect(await getEntityCover("artist:deidian", db, { providers: [provider] })).toBeTruthy();
+  });
 });
 
 describe("clearTrackCover", () => {
+  it("stores large track covers through provider storage while small covers stay in IndexedDB", async () => {
+    const provider = createMemoryProvider("opfs");
+    const session = await createSession({ seedPrompt: "", config: { autoExtend: false } }, db);
+    const makeTrack = (title: string) =>
+      createUploadedTrack(
+        {
+          sessionId: session.id,
+          title,
+          kind: "audio",
+          blob: new Blob(["audio"], { type: "audio/mpeg" }),
+          mime: "audio/mpeg",
+          durationSec: 5,
+        },
+        db,
+      );
+    const small = await makeTrack("small cover");
+    const large = await makeTrack("large cover");
+
+    await setTrackCover(
+      { trackId: small.id, blob: new Blob(["small"], { type: "image/png" }), mime: "image/png" },
+      db,
+      { provider },
+    );
+    await setTrackCover(
+      { trackId: large.id, blob: largeImageBlob("image/jpeg"), mime: "image/jpeg" },
+      db,
+      { provider },
+    );
+
+    const smallCover = await db.mediaBlobs.get((await getTrack(small.id, db))?.coverBlobId ?? "");
+    const largeCover = await db.mediaBlobs.get((await getTrack(large.id, db))?.coverBlobId ?? "");
+
+    expect(smallCover).toMatchObject({ role: "cover", storageBackend: "indexeddb" });
+    expect(smallCover?.blob).toBeTruthy();
+    expect(largeCover).toMatchObject({ role: "cover", storageBackend: "opfs", blob: undefined });
+    expect(provider.files.has(largeCover?.storageKey ?? "")).toBe(true);
+    expect(
+      (await getTrackCover((await getTrack(large.id, db))!, db, { providers: [provider] }))?.blob
+        ?.size,
+    ).toBe(LARGE_IMAGE_PROVIDER_THRESHOLD_BYTES);
+  });
+
   it("removes a track's cover (row + blob) and its crop/thumbhash", async () => {
     const session = await createSession({ seedPrompt: "", config: { autoExtend: false } }, db);
     const track = await createUploadedTrack(
@@ -390,7 +497,11 @@ describe("createUploadedTrack", () => {
         blob,
         mime: "audio/mpeg",
         durationSec: 180,
-        mediaMetadata: { originalFileName: "Provider Song.mp3" },
+        mediaMetadata: {
+          originalFileName: "Provider Song.mp3",
+          parsedAt: 1,
+          parser: "music-metadata",
+        },
         embeddedCover: { blob: cover, mime: "image/jpeg" },
       },
       db,
@@ -413,6 +524,32 @@ describe("createUploadedTrack", () => {
       bytes: 3,
     });
     expect(coverRow?.blob).toBeTruthy();
+  });
+
+  it("stores large embedded covers through provider storage on import", async () => {
+    const session = await createSession({ seedPrompt: "", config: { autoExtend: false } }, db);
+    const provider = createMemoryProvider("opfs");
+
+    const track = await createUploadedTrack(
+      {
+        sessionId: session.id,
+        title: "Large Cover Import",
+        kind: "audio",
+        blob: new Blob(["audio"], { type: "audio/mpeg" }),
+        mime: "audio/mpeg",
+        durationSec: 180,
+        embeddedCover: { blob: largeImageBlob("image/jpeg"), mime: "image/jpeg" },
+      },
+      db,
+      { provider },
+    );
+
+    const cover = await db.mediaBlobs.get(track.coverBlobId ?? "");
+    expect(cover).toMatchObject({ role: "cover", storageBackend: "opfs", blob: undefined });
+    expect(provider.files.has(cover?.storageKey ?? "")).toBe(true);
+    expect((await getTrackCover(track, db, { providers: [provider] }))?.blob?.size).toBe(
+      LARGE_IMAGE_PROVIDER_THRESHOLD_BYTES,
+    );
   });
 });
 
@@ -698,6 +835,38 @@ describe("memories (one-to-many)", () => {
     await expect(
       (await getMemoryPhoto(reloaded, db, { providers: [provider] }))?.text(),
     ).resolves.toBe("memory-photo");
+  });
+
+  it("stores large memory photos through provider storage while small photos stay in IndexedDB", async () => {
+    const provider = createMemoryProvider("opfs");
+
+    const small = await addMemory(
+      {
+        trackId: "trk_p",
+        note: "small photo",
+        photo: { blob: new Blob(["small"], { type: "image/jpeg" }), mime: "image/jpeg" },
+      },
+      db,
+      { provider },
+    );
+    const large = await addMemory(
+      {
+        trackId: "trk_p",
+        note: "large photo",
+        photo: { blob: largeImageBlob("image/jpeg"), mime: "image/jpeg" },
+      },
+      db,
+      { provider },
+    );
+
+    const smallPhoto = await db.mediaBlobs.get(small.photoBlobId ?? "");
+    const largePhoto = await db.mediaBlobs.get(large.photoBlobId ?? "");
+
+    expect(smallPhoto).toMatchObject({ role: "memory", storageBackend: "indexeddb" });
+    expect(smallPhoto?.blob).toBeTruthy();
+    expect(largePhoto).toMatchObject({ role: "memory", storageBackend: "opfs", blob: undefined });
+    expect(provider.files.has(largePhoto?.storageKey ?? "")).toBe(true);
+    expect(await getMemoryPhoto(large, db, { providers: [provider] })).toBeTruthy();
   });
 
   it("stores a memory author snapshot when provided", async () => {
