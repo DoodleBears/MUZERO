@@ -226,6 +226,7 @@ function syncErrorContext(error: unknown): Record<string, unknown> {
       message: error.message,
       status: error.status,
       key: error.key,
+      responseText: error.responseText,
       errorName: error.name,
     };
   }

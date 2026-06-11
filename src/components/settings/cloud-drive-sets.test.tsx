@@ -110,6 +110,50 @@ describe("CloudDriveSets", () => {
     expect(importRemoteEntityCovers).not.toHaveBeenCalled();
   });
 
+  it("hides legacy empty duplicate set previews when a repaired non-empty set exists", async () => {
+    subscribeManifest.mockResolvedValueOnce({
+      ...preview,
+      sets: [
+        {
+          ...preview.sets[0]!,
+          id: "ses_old_empty",
+          trackCount: 0,
+          bytes: 434,
+          publishedBy: "dvc_friend",
+        },
+        {
+          ...preview.sets[0]!,
+          id: "ses_repaired",
+          trackCount: 79,
+          bytes: 129_000,
+          publishedBy: "dvc_friend",
+        },
+        {
+          ...preview.sets[0]!,
+          id: "ses_empty_unique",
+          title: "Empty Draft",
+          trackCount: 0,
+          bytes: 439,
+          publishedBy: "dvc_friend",
+        },
+        {
+          ...preview.sets[0]!,
+          id: "ses_empty_unique_duplicate",
+          title: "Empty   Draft",
+          trackCount: 0,
+          bytes: 441,
+          publishedBy: "dvc_friend",
+        },
+      ],
+    });
+
+    render(<CloudDriveSets drive={drive} />);
+    fireEvent.click(screen.getByRole("button"));
+
+    await waitFor(() => expect(screen.getAllByText("Tokyo Night Drive")).toHaveLength(1));
+    expect(screen.getAllByText("Empty Draft")).toHaveLength(1);
+  });
+
   it("imports the drive's entity covers on browse when the manifest has them", async () => {
     subscribeManifest.mockResolvedValueOnce(preview);
     const covers = {
@@ -215,6 +259,39 @@ describe("CloudDriveSets", () => {
       remoteSet: remoteSetB,
       source: expect.objectContaining({ driveId: drive.id, driveLabel: drive.label }),
     });
+  });
+
+  it("skips legacy empty duplicate set previews during automatic import-all", async () => {
+    const repairedPreview = {
+      ...multiPreview,
+      sets: [
+        {
+          ...multiPreview.sets[0]!,
+          id: "ses_old_empty",
+          trackCount: 0,
+          bytes: 434,
+          publishedBy: "dvc_a",
+        },
+        {
+          ...multiPreview.sets[0]!,
+          id: "ses_repaired",
+          trackCount: 79,
+          bytes: 129_000,
+          publishedBy: "dvc_a",
+        },
+      ],
+    };
+    subscribeManifest.mockResolvedValueOnce(repairedPreview);
+    loadRemoteEntityCovers.mockResolvedValueOnce(undefined);
+    const remoteSet = { indexUrl: repairedPreview.sets[1]!.indexUrl, index: {}, tracks: [] };
+    loadRemoteSetIndex.mockResolvedValueOnce(remoteSet);
+    pullRemoteSet.mockResolvedValue(undefined);
+
+    render(<CloudDriveSets drive={{ ...drive, autoSyncFrequency: "change-debounce" }} />);
+
+    await waitFor(() => expect(pullRemoteSet).toHaveBeenCalledTimes(1));
+    expect(loadRemoteSetIndex).toHaveBeenCalledWith(repairedPreview, repairedPreview.sets[1]);
+    expect(loadRemoteSetIndex).not.toHaveBeenCalledWith(repairedPreview, repairedPreview.sets[0]);
   });
 
   it("skips self-published sets during automatic import-all to avoid duplicating local sets", async () => {

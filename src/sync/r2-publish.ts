@@ -15,12 +15,14 @@ export type R2PublishObjectStatus = "uploading" | "uploaded" | "skipped";
 export class R2PublishHttpError extends Error {
   readonly status: number;
   readonly key: string;
+  readonly responseText?: string;
 
-  constructor(key: string, status: number) {
-    super(`Failed to upload ${key}: HTTP ${status}`);
+  constructor(key: string, status: number, responseText?: string) {
+    super(`Failed to upload ${key}: HTTP ${status}${responseText ? ` (${responseText})` : ""}`);
     this.name = "R2PublishHttpError";
     this.status = status;
     this.key = key;
+    this.responseText = responseText;
   }
 }
 
@@ -229,7 +231,11 @@ async function putObjectWithRetry(
       });
       // Non-transient HTTP failures (e.g. 412 If-Match) surface to the caller.
       if (response.ok || !isTransientStatus(response.status)) return response;
-      lastFailure = new Error(`Failed to upload ${object.key}: HTTP ${response.status}`);
+      lastFailure = new R2PublishHttpError(
+        object.key,
+        response.status,
+        await responseSummary(response),
+      );
     } catch (error) {
       if (isAbortError(error)) throw error;
       lastFailure = error;
@@ -238,6 +244,16 @@ async function putObjectWithRetry(
   throw lastFailure instanceof Error
     ? lastFailure
     : new Error(`Failed to upload ${object.key}: ${String(lastFailure)}`);
+}
+
+async function responseSummary(response: Response): Promise<string | undefined> {
+  try {
+    const text = await response.text();
+    const normalized = text.replace(/\s+/g, " ").trim();
+    return normalized ? normalized.slice(0, 300) : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 async function shouldSkipObject(

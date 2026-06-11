@@ -84,7 +84,7 @@ export function CloudDriveSets({ drive }: { drive: CloudDrive }) {
       setImportingSetId(AUTO_IMPORTING_SET_ID);
       try {
         const publicId = localDevicePublicId ?? (await getLocalDevice())?.publicId;
-        for (const set of result.sets) {
+        for (const set of visibleRemoteSets(result.sets)) {
           if (isSelfPublishedSet(set, publicId)) continue;
           await importSetFromPreview(result, set);
         }
@@ -157,41 +157,45 @@ export function CloudDriveSets({ drive }: { drive: CloudDrive }) {
         {status === "loading" ? t("settings.cloudPreviewing") : t("settings.cloudPreview")}
       </Button>
       {error && <p className="text-destructive text-xs">{error}</p>}
-      {preview?.sets.map((set) => (
-        <div
-          key={set.id}
-          className="flex items-center justify-between gap-3 rounded-md border border-border bg-background/80 px-3 py-2"
-        >
-          <div className="min-w-0">
-            <p className="truncate text-sm">{set.title}</p>
-            <div className="mt-1 flex min-w-0 flex-wrap items-center gap-2 text-muted-foreground text-xs">
-              <SourceAttributionChip
-                source={sourceForRemoteSet(drive, set, deviceProfiles)}
-                fallback={t("settings.cloudSourceUnknown")}
-              />
-              <span>
-                {t("settings.cloudSetMeta", {
-                  tracks: set.trackCount,
-                  bytes: formatBytes(set.bytes),
-                })}
-              </span>
+      {preview
+        ? visibleRemoteSets(preview.sets).map((set) => (
+            <div
+              key={set.id}
+              className="flex items-center justify-between gap-3 rounded-md border border-border bg-background/80 px-3 py-2"
+            >
+              <div className="min-w-0">
+                <p className="truncate text-sm">{set.title}</p>
+                <div className="mt-1 flex min-w-0 flex-wrap items-center gap-2 text-muted-foreground text-xs">
+                  <SourceAttributionChip
+                    source={sourceForRemoteSet(drive, set, deviceProfiles)}
+                    fallback={t("settings.cloudSourceUnknown")}
+                  />
+                  <span>
+                    {t("settings.cloudSetMeta", {
+                      tracks: set.trackCount,
+                      bytes: formatBytes(set.bytes),
+                    })}
+                  </span>
+                </div>
+              </div>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={
+                  isSelfPublishedSet(set, localDevicePublicId) ||
+                  importingSetId === set.id ||
+                  importingSetId === AUTO_IMPORTING_SET_ID
+                }
+                onClick={() => void importSet(set)}
+              >
+                <CloudDownloadIcon size={16} />
+                {importingSetId === set.id
+                  ? t("settings.cloudImporting")
+                  : t("settings.cloudImport")}
+              </Button>
             </div>
-          </div>
-          <Button
-            size="sm"
-            variant="outline"
-            disabled={
-              isSelfPublishedSet(set, localDevicePublicId) ||
-              importingSetId === set.id ||
-              importingSetId === AUTO_IMPORTING_SET_ID
-            }
-            onClick={() => void importSet(set)}
-          >
-            <CloudDownloadIcon size={16} />
-            {importingSetId === set.id ? t("settings.cloudImporting") : t("settings.cloudImport")}
-          </Button>
-        </div>
-      ))}
+          ))
+        : null}
     </div>
   );
 }
@@ -228,6 +232,27 @@ function isSelfPublishedSet(
   localDevicePublicId: string | undefined,
 ): boolean {
   return Boolean(localDevicePublicId && set.publishedBy === localDevicePublicId);
+}
+
+function visibleRemoteSets(sets: RemoteSetPreview[]): RemoteSetPreview[] {
+  const nonEmptyKeys = new Set(
+    sets.filter((set) => set.trackCount > 0).map((set) => remoteSetLegacyKey(set)),
+  );
+  const keptEmptyKeys = new Set<string>();
+  return sets.filter((set) => {
+    if (set.trackCount > 0) return true;
+    const key = remoteSetLegacyKey(set);
+    if (nonEmptyKeys.has(key)) return false;
+    if (keptEmptyKeys.has(key)) return false;
+    keptEmptyKeys.add(key);
+    return true;
+  });
+}
+
+function remoteSetLegacyKey(set: RemoteSetPreview): string {
+  const publisher = set.publishedBy ?? "";
+  const title = set.title.trim().replace(/\s+/g, " ").toLocaleLowerCase();
+  return `${publisher}\u0000${title}`;
 }
 
 function isMissingManifest(cause: unknown): boolean {

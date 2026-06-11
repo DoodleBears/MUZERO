@@ -1,7 +1,7 @@
 import { waitFor } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import type { R2ExportPlan } from "./r2-export-plan";
-import { publishR2ExportPlan } from "./r2-publish";
+import { publishR2ExportPlan, R2PublishHttpError } from "./r2-publish";
 
 const plan: R2ExportPlan = {
   driveId: "drv_1",
@@ -82,6 +82,30 @@ describe("publishR2ExportPlan", () => {
     expect(result.failed).toBe(0);
     expect(putAttempts).toBe(5); // 3 objects + 2 retries of the first
     expect(delays).toEqual([500, 1000]); // exponential backoff
+  });
+
+  it("surfaces an exhausted transient upload as a structured HTTP error", async () => {
+    let caught: unknown;
+
+    try {
+      await publishR2ExportPlan(plan, credentials, {
+        fetcher: async (_url, init) => {
+          if (init?.method === "HEAD") return new Response(null, { status: 404 });
+          return new Response("<Error><Code>InternalError</Code></Error>", { status: 500 });
+        },
+        retry: { attempts: 1, sleep: async () => {} },
+      });
+    } catch (error) {
+      caught = error;
+    }
+
+    expect(caught).toBeInstanceOf(R2PublishHttpError);
+    expect(caught).toMatchObject({
+      key: "objects/media/sha256-a.mp3",
+      status: 500,
+      responseText: "<Error><Code>InternalError</Code></Error>",
+    });
+    expect((caught as Error).message).toContain("HTTP 500");
   });
 
   it("does not retry a non-transient 4xx and fails the publish (F7)", async () => {

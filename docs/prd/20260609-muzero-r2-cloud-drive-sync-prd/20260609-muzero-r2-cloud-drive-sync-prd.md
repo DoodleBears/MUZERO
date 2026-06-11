@@ -2554,12 +2554,39 @@ Do not record secrets, full signed URLs, or media content.
 - [x] SM-4 Import streamed source fields onto local remote tracks so playback can resolve on another device.
 - [x] SM-5 Update pull diff + regression tests for streamed metadata changes.
 
+### 12.19 Phase 23: Legacy Empty Set Repair UX + R2 5xx Diagnostics
+
+**Goal:** make the Phase 22 upgrade understandable in existing libraries that already published empty streamed-set indexes, and make transient R2 write failures debuggable without guessing.
+
+**Status (2026-06-12):** Phase 23 is completed. Cloud Drive browse/import now hides legacy empty duplicate set previews when the same publisher/title also has a repaired non-empty preview, and collapses repeated same-publisher same-title empty previews to a single row. Automatic import-all uses the same filtered list, so B devices do not import a pile of old `0 songs / <1 KB` shells once A has republished the repaired set. R2 publish errors that exhaust 5xx retries now surface as structured `R2PublishHttpError` values with `status`, `key`, and a short response body summary in logs.
+
+**Product requirements:**
+
+1. **Do not show users historical empty-shell spam.**
+   - If a non-empty repaired set exists for the same publisher + normalized title, hide the old `trackCount: 0` preview.
+   - If only repeated empty same-title previews exist, show one row as the remaining repair hint.
+   - Keep unique empty sets visible so intentionally empty playlists are not silently removed.
+2. **Do not auto-import legacy empty duplicates.**
+   - Automatic import-all must use the same filtered preview list as the UI.
+3. **Make R2 500 actionable.**
+   - Exhausted 5xx uploads should keep the object key and status structured.
+   - Logs should include a short response summary when R2 returns one.
+   - Manifest-last semantics remain unchanged: a failed child `sets/*/index.json` write prevents publishing a new root manifest, so the remote library is not advanced into a half-success state.
+
+**Checklist:**
+
+- [x] LR-1 Filter repaired legacy empty duplicate previews from Cloud Drive set browsing.
+- [x] LR-2 Reuse the same filtering during automatic import-all.
+- [x] LR-3 Preserve structured publish error context for exhausted R2 5xx uploads.
+- [x] LR-4 Add regression coverage for duplicate empty previews and 5xx error diagnostics.
+
 ---
 
 ## 13. Document Change Log
 
 | Date | Author | Changes |
 |------|--------|---------|
+| 2026-06-12 | MUZERO | Phase 23 completed: Cloud Drive browse/import now filters historical duplicate empty set previews once a repaired non-empty set exists for the same publisher/title, collapses repeated empty same-title previews to one row, and applies that filter to automatic import-all. Exhausted R2 5xx uploads now throw/log structured `R2PublishHttpError` details including object key, status, and a short response summary. |
 | 2026-06-12 | MUZERO | Phase 22 completed: streamed-source playlist tracks now sync their source identifiers and display metadata instead of being dropped from set indexes. Cached streamed tracks with concrete local media blobs publish those bytes to the user's private R2 bucket, while metadata-only streamed tracks remain resolvable on another device through its configured source credentials. Generated/uploaded tracks still require media objects, and pull diff checks streamed source metadata. |
 | 2026-06-12 | MUZERO | Phase 21 completed: Cloud Drive page refresh / auto-preview paths no longer emit one success toast per unchanged remote set. The sync indicator treats completed pull progress without a `runId` as a dry-run unchanged result, while real completed sync runs and terminal errors remain visible. |
 | 2026-06-12 | MUZERO | Phase 20 completed: R2/cloud playback now uses a separate bounded LRU playback cache after permanent `mediaBlobs` and before remote fetch, so refresh/replay can avoid the loading spinner. Cache bytes prefer OPFS with IndexedDB Blob fallback, while Dexie tracks URL-keyed metadata/LRU state. Settings exposes a 1–10 GB playback cache size and clear action; manual downloads remain permanent and are not evicted by playback-cache pruning. |
