@@ -16,6 +16,8 @@ export interface ApplyRemoteSetPullResult extends RemoteSetPullPreview {
   sessionId?: string;
   trackIds: string[];
   cachedMedia: number;
+  /** Optional media downloads that failed; the import itself still succeeded (F7). */
+  cacheFailures: number;
 }
 
 export interface ApplyRemoteSetPullInput extends DiffRemoteSetInput {
@@ -56,7 +58,7 @@ export async function applyRemoteSetPull(
   }
   if (!preview.willMutate) {
     await completePullRun(run, 0, 0, db);
-    return { ...preview, runId: run.id, trackIds: [], cachedMedia: 0 };
+    return { ...preview, runId: run.id, trackIds: [], cachedMedia: 0, cacheFailures: 0 };
   }
 
   try {
@@ -68,14 +70,15 @@ export async function applyRemoteSetPull(
       },
       db,
     );
-    const cachedMedia = await cacheImportedMedia(input, imported.trackIds, db);
-    await completePullRun(run, preview.bytes, input.remoteSet.tracks.length, db);
+    const cache = await cacheImportedMedia(input, imported.trackIds, db);
+    await completePullRun(run, preview.bytes, input.remoteSet.tracks.length, db, cache.failures);
     return {
       ...preview,
       runId: run.id,
       sessionId: imported.sessionId,
       trackIds: imported.trackIds,
-      cachedMedia,
+      cachedMedia: cache.cached,
+      cacheFailures: cache.failures,
     };
   } catch (error) {
     await failPullRun(
@@ -97,19 +100,27 @@ async function cacheImportedMedia(
   input: ApplyRemoteSetPullInput,
   trackIds: string[],
   db: MuzeroDB,
-): Promise<number> {
-  if (!input.cacheMedia) return 0;
+): Promise<{ cached: number; failures: number }> {
+  if (!input.cacheMedia) return { cached: 0, failures: 0 };
   let cached = 0;
+  let failures = 0;
   for (const trackId of trackIds) {
     throwIfPullAborted(input.signal);
-    await cacheRemoteTrackMedia(
-      trackId,
-      { fetcher: input.cacheMedia.fetcher, signal: input.signal },
-      db,
-    );
-    cached += 1;
+    try {
+      await cacheRemoteTrackMedia(
+        trackId,
+        { fetcher: input.cacheMedia.fetcher, signal: input.signal },
+        db,
+      );
+      cached += 1;
+    } catch (error) {
+      // Caching is optional — the imported set still streams. Keep going and
+      // report the failure count instead of failing the whole pull (F7).
+      if ((error as { name?: string } | null)?.name === "AbortError") throw error;
+      failures += 1;
+    }
   }
-  return cached;
+  return { cached, failures };
 }
 
 async function createPullRun(
@@ -139,6 +150,7 @@ async function completePullRun(
   bytesDone: number,
   objectCount: number,
   db: MuzeroDB,
+  failed = 0,
 ): Promise<void> {
   await db.syncRuns.put({
     ...run,
@@ -146,6 +158,7 @@ async function completePullRun(
     finishedAt: Date.now(),
     bytesDone,
     objectCount,
+    failed,
   });
 }
 

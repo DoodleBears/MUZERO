@@ -80,6 +80,24 @@ describe("R2 pull sync", () => {
     });
   });
 
+  it("completes the pull when only optional media caching fails (F7)", async () => {
+    const fetcher = async () => new Response(null, { status: 500 });
+
+    const result = await applyRemoteSetPull(
+      { driveId: "drv_1", remoteSet: remoteSet(), cacheMedia: { fetcher } },
+      db,
+    );
+
+    // The set imported fine — caching is optional, so the run is not a failure.
+    expect(result.sessionId).toBeDefined();
+    expect(result.cachedMedia).toBe(0);
+    expect(result.cacheFailures).toBe(1);
+    expect(await db.sessions.count()).toBe(1);
+    expect(await db.syncRuns.toArray()).toMatchObject([
+      { direction: "pull", status: "completed", failed: 1 },
+    ]);
+  });
+
   it("marks the run cancelled and never mutates when the pull is aborted (F6)", async () => {
     const controller = new AbortController();
     controller.abort();

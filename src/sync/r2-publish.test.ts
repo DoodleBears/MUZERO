@@ -63,6 +63,55 @@ describe("publishR2ExportPlan", () => {
     for (const signal of signals) expect(signal).toBe(controller.signal);
   });
 
+  it("retries a transient 5xx upload with backoff before succeeding (F7)", async () => {
+    const delays: number[] = [];
+    let putAttempts = 0;
+
+    const result = await publishR2ExportPlan(plan, credentials, {
+      fetcher: async (_url, init) => {
+        if (init?.method === "HEAD") return new Response(null, { status: 404 });
+        putAttempts += 1;
+        // First object fails twice with a 500, then everything succeeds.
+        return new Response(null, { status: putAttempts <= 2 ? 500 : 204 });
+      },
+      retry: { sleep: async (ms) => void delays.push(ms) },
+    });
+
+    expect(result.uploaded).toBe(3);
+    expect(result.failed).toBe(0);
+    expect(putAttempts).toBe(5); // 3 objects + 2 retries of the first
+    expect(delays).toEqual([500, 1000]); // exponential backoff
+  });
+
+  it("does not retry a non-transient 4xx and fails the publish (F7)", async () => {
+    let putAttempts = 0;
+
+    await expect(
+      publishR2ExportPlan(plan, credentials, {
+        fetcher: async (_url, init) => {
+          if (init?.method === "HEAD") return new Response(null, { status: 404 });
+          putAttempts += 1;
+          return new Response(null, { status: 412 });
+        },
+        retry: { sleep: async () => {} },
+      }),
+    ).rejects.toThrow(/HTTP 412/);
+
+    expect(putAttempts).toBe(1);
+  });
+
+  it("treats a failed HEAD probe as not-skippable instead of failing the publish (F7)", async () => {
+    const result = await publishR2ExportPlan(plan, credentials, {
+      fetcher: async (_url, init) => {
+        if (init?.method === "HEAD") throw new Error("network down");
+        return new Response(null, { status: 204 });
+      },
+    });
+
+    expect(result.uploaded).toBe(3);
+    expect(result.skipped).toBe(0);
+  });
+
   it("uploads binary objects before set indexes and root manifest", async () => {
     const seen: Array<{ method: string; url: string; authorization: string | null }> = [];
 
