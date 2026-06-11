@@ -24,7 +24,10 @@
 | 9 | Same-set co-editing (one user, multiple devices) | ✅ Done | [§12.5](#125-phase-9-same-set-co-editing-one-user-multiple-devices) |
 | 10 | Automatic sync + R2 scale optimizations | ✅ Done | [§12.6](#126-phase-10-automatic-sync--r2-scale-optimizations) |
 | 11 | Trusted-device setup link + local device naming UX | ✅ Done | [§12.7](#127-phase-11-trusted-device-setup-link--local-device-naming-ux) |
-| 14 | Smart sync content fingerprinting | 🔄 In Progress | [§12.10](#1210-phase-14-smart-sync-content-fingerprinting) |
+| 12 | Device Avatar UX + Source Attribution | 🔄 In Progress | [§12.8](#128-phase-12-device-avatar-ux--source-attribution) |
+| 13 | Sync Mode UX + Remote Playback Reliability + R2 Setup Flow | ✅ Done | [§12.9](#129-phase-13-sync-mode-ux--remote-playback-reliability--r2-setup-flow) |
+| 14 | Smart sync content fingerprinting | ✅ Done | [§12.10](#1210-phase-14-smart-sync-content-fingerprinting) |
+| 15 | Cloud-to-Local Playlist Cache UX | ✅ Done | [§12.11](#1211-phase-15-cloud-to-local-playlist-cache-ux) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
 
@@ -2324,7 +2327,7 @@ Do not record secrets, full signed URLs, or media content.
 
 **Goal:** avoid no-op automatic/manual sync work by proving whether local publish objects actually changed before uploading, while preserving the manifest-last safety boundary and multi-device merge semantics.
 
-**Status (2026-06-11):** In progress. The first slice adds content hashes to JSON publish objects and uses the durable `syncObjects` table to skip objects whose key/kind/hash already match a prior successful upload. This complements existing content-addressed binary keys and remote ETag guards.
+**Status (2026-06-11):** Completed. Export planning now gives every deterministic JSON publish object a `sha256`, and publish-sync uses durable `syncObjects` key/kind/hash matches to skip unchanged objects without doing remote PUTs. This complements existing content-addressed binary keys and remote ETag guards.
 
 **Best-practice policy:**
 
@@ -2338,10 +2341,12 @@ Do not record secrets, full signed URLs, or media content.
 
 **Checklist:**
 
-- [ ] SS-1 Add deterministic `sha256` to JSON export objects.
-- [ ] SS-2 Skip upload for locally recorded key/kind/hash matches while still counting skipped bytes/objects in progress.
-- [ ] SS-3 Add regression coverage proving a second identical publish sends no PUTs for JSON and a failed run resumes without re-uploading already recorded objects.
-- [ ] SS-4 Update durable run history so users see skipped objects instead of a reset-from-zero no-op upload.
+- [x] SS-1 Add deterministic `sha256` to JSON export objects.
+- [x] SS-2 Skip upload for locally recorded key/kind/hash matches while still counting skipped bytes/objects in progress.
+- [x] SS-3 Add regression coverage proving a second identical publish sends no PUTs for JSON and a failed run resumes without re-uploading already recorded objects.
+- [x] SS-4 Update durable run history so users see skipped objects instead of a reset-from-zero no-op upload.
+
+**Outcome (2026-06-11): Phase 14 ✅.** Repeated sync clicks and automatic sync ticks now treat unchanged JSON like unchanged content-addressed media: they are counted as skipped, not re-uploaded. Remote existence probing and upload concurrency remain restricted to immutable objects, so mutable JSON indexes keep their ordered barriers and conditional-write semantics.
 
 ### 12.11 Phase 15: Cloud-to-Local Playlist Cache UX
 
@@ -2374,6 +2379,7 @@ Do not record secrets, full signed URLs, or media content.
 | Date | Author | Changes |
 |------|--------|---------|
 | 2026-06-11 | MUZERO | Phase 15 completed: playlist track rows and set headers now treat R2 `remoteMediaUrl` tracks without local blobs as cacheable-to-device, reusing the existing `mediaBlobs` cache path so both single-track and whole-set "download to local" actions work for cloud-drive media. |
+| 2026-06-11 | MUZERO | Phase 14 completed: JSON publish objects now carry deterministic sha256 fingerprints, publish-sync skips locally recorded key/kind/hash matches with durable skipped-byte accounting, and remote HEAD/concurrency skips remain limited to immutable objects so mutable JSON still respects ordered barriers and conditional writes. Focused sync tests cover JSON hashing, no-PUT repeated publish, and failed-run object reuse. |
 | 2026-06-11 | MUZERO | Phase 14 added for smart sync best practices: deterministic object hashes drive no-op upload suppression, remoteBase/ETag remains the multi-device merge guard, manifest-last atomicity stays intact, and failed runs resume object-by-object instead of making users watch unchanged data upload again. |
 | 2026-06-11 | MUZERO | Phase 13 SA-5 completed: Add Drive is now a wider two-column modal with the form/stepper on the left and contextual R2 setup guidance on the right. The owner flow separates write credentials from the public read URL, links to the R2 dashboard/token docs, and explains that public/read-only imports do not need Access Key ID / Secret Access Key while owner/trusted bidirectional sync does. |
 | 2026-06-11 | MUZERO | Phase 13 SA-4 completed: Settings now has a single Cloud Drive sidebar destination for the R2 setup checklist, add-drive action, connected drive cards, sync/progress state, multi-writer explanation, and copyable CORS JSON. Stale `cloud-owner` / `cloud-sync` navigation ids alias to the consolidated pane so persisted selections remain safe. |

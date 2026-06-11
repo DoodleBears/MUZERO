@@ -81,6 +81,24 @@ describe("buildR2ExportPlan", () => {
     );
   });
 
+  it("adds deterministic content hashes to JSON objects for smart no-op sync", async () => {
+    await seedSet();
+
+    const plan = await buildR2ExportPlan({
+      driveId: "drv_1",
+      libraryId: "lib_1",
+      baseUrl: "https://music.example.com/muzero/",
+      setIds: ["ses_1"],
+      db,
+    });
+
+    const jsonObjects = plan.objects.filter((object) => object.contentType === "application/json");
+    expect(jsonObjects.map((object) => object.kind)).toEqual(["set-index", "manifest"]);
+    for (const object of jsonObjects) {
+      expect(object.sha256).toMatch(/^[a-f0-9]{64}$/);
+    }
+  });
+
   it("exports uploaded video media as content-addressed mp4 objects", async () => {
     await seedSet();
     await db.tracks.update("trk_1", { kind: "video" });

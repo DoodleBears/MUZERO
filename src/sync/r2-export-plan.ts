@@ -303,7 +303,7 @@ export async function buildR2ExportPlan(input: R2ExportPlanInput): Promise<R2Exp
       // Manifest trackCount must reflect what subscribers receive (post-skip,
       // post-merge, post-fold), not the session's full member list (audit F5).
       trackCount: folded.index.tracks.length,
-      object: createJsonObject("set-index", `sets/${publishedId}/index.json`, folded.index, {
+      object: await createJsonObject("set-index", `sets/${publishedId}/index.json`, folded.index, {
         setId: session.id,
         precondition:
           childPrecondition(input.remoteBase, input.remoteBase?.setIndexes?.[publishedId]) ??
@@ -333,7 +333,7 @@ export async function buildR2ExportPlan(input: R2ExportPlanInput): Promise<R2Exp
     ...mutationObjects,
     ...deviceObjects,
     ...entityCoverObjects,
-    createJsonObject("manifest", "manifest.json", manifest, {
+    await createJsonObject("manifest", "manifest.json", manifest, {
       precondition: basePrecondition(input.remoteBase, input.remoteBase?.manifest),
     }),
   ];
@@ -408,12 +408,12 @@ function toRemoteMemory(
   };
 }
 
-function createJsonObject(
+async function createJsonObject(
   kind: Exclude<R2ExportObjectKind, "media" | "cover" | "memory-photo" | "device-avatar">,
   key: string,
   value: unknown,
   refs: Pick<R2ExportObject, "setId" | "precondition"> = {},
-): R2ExportObject {
+): Promise<R2ExportObject> {
   const body = `${JSON.stringify(value, null, 2)}\n`;
   return {
     kind,
@@ -421,26 +421,29 @@ function createJsonObject(
     contentType: "application/json",
     bytes: new TextEncoder().encode(body).byteLength,
     body,
+    sha256: await sha256Text(body),
     ...refs,
   };
 }
 
 async function createSetMutationObjects(driveId: string, db: MuzeroDB): Promise<R2ExportObject[]> {
   const rows = await db.syncMutations.where("driveId").equals(driveId).toArray();
-  return rows
-    .filter((mutation) => mutation.syncedAt == null && mutation.scope === "set")
-    .sort((a, b) => a.createdAt - b.createdAt)
-    .map((mutation) =>
-      createJsonObject(
-        "set-mutation",
-        setMutationKey(mutation),
-        {
-          schema: "muzero-r2-set-mutation-v1",
-          mutation,
-        },
-        { setId: mutation.entityId },
+  return Promise.all(
+    rows
+      .filter((mutation) => mutation.syncedAt == null && mutation.scope === "set")
+      .sort((a, b) => a.createdAt - b.createdAt)
+      .map((mutation) =>
+        createJsonObject(
+          "set-mutation",
+          setMutationKey(mutation),
+          {
+            schema: "muzero-r2-set-mutation-v1",
+            mutation,
+          },
+          { setId: mutation.entityId },
+        ),
       ),
-    );
+  );
 }
 
 /**
@@ -487,7 +490,7 @@ async function createEntityCoverObjects(db: MuzeroDB): Promise<R2ExportObject[]>
     });
   }
   if (entries.length === 0) return [];
-  const index = createJsonObject("entity-covers-index", "library/entity-covers/index.json", {
+  const index = await createJsonObject("entity-covers-index", "library/entity-covers/index.json", {
     schema: "muzero-r2-entity-covers-v1",
     updatedAt: entries.reduce((max, entry) => Math.max(max, entry.updatedAt), 0),
     entries,
@@ -804,7 +807,7 @@ async function createDeviceObjects(
 
   if (shouldPublishProfile) {
     objects.push(
-      createJsonObject(
+      await createJsonObject(
         "device-profile",
         `profiles/devices/${device.publicId}/profile.json`,
         toDevicePublicProfile(device, avatar?.remote),
@@ -823,7 +826,7 @@ async function createDeviceObjects(
       ...aggregates.map((aggregate) => aggregate.updatedAt),
     );
     objects.push(
-      createJsonObject(
+      await createJsonObject(
         "stats-aggregate",
         `stats/devices/${device.publicId}/aggregate.json`,
         toStatsAggregateObject(device.publicId, aggregates),
@@ -842,8 +845,8 @@ async function createDeviceObjects(
     checkpointKey = `stats/devices/${device.publicId}/checkpoint.json`;
     statsUpdatedAt = Math.max(statsUpdatedAt, segment.updatedAt);
     objects.push(
-      createJsonObject("stats-events-segment", segmentKey, segment),
-      createJsonObject(
+      await createJsonObject("stats-events-segment", segmentKey, segment),
+      await createJsonObject(
         "stats-checkpoint",
         checkpointKey,
         toPlaybackEventsCheckpoint(device.publicId, events, segmentKey),
@@ -868,7 +871,7 @@ async function createDeviceObjects(
       ],
     };
     objects.push(
-      createJsonObject(
+      await createJsonObject(
         "devices-index",
         "devices/index.json",
         mergeDevicesIndex(remoteBase?.devicesIndex?.value, localDevicesIndex),
@@ -893,7 +896,7 @@ async function createDeviceObjects(
       ],
     };
     objects.push(
-      createJsonObject(
+      await createJsonObject(
         "stats-index",
         "stats/index.json",
         mergeStatsIndex(remoteBase?.statsIndex?.value, localStatsIndex),
@@ -915,7 +918,7 @@ async function createDeviceObjects(
       ],
     };
     objects.push(
-      createJsonObject(
+      await createJsonObject(
         "presence-index",
         "presence/index.json",
         mergePresenceIndex(remoteBase?.presenceIndex?.value, localPresenceIndex),

@@ -285,11 +285,22 @@ function preconditionHeaders(object: R2ExportObject): Record<string, string> | u
 }
 
 function isSkippableObject(object: R2ExportObject): boolean {
-  return Boolean(object.sha256) || object.kind === "stats-events-segment";
+  return isImmutableUploadObject(object);
 }
 
 function isConcurrentSafeObject(object: R2ExportObject): boolean {
-  return isSkippableObject(object);
+  return isImmutableUploadObject(object);
+}
+
+function isImmutableUploadObject(object: R2ExportObject): boolean {
+  return (
+    object.kind === "media" ||
+    object.kind === "cover" ||
+    object.kind === "memory-photo" ||
+    object.kind === "device-avatar" ||
+    object.kind === "entity-cover" ||
+    object.kind === "stats-events-segment"
+  );
 }
 
 function clampUploadConcurrency(value: number | undefined): number {

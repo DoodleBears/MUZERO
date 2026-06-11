@@ -73,6 +73,58 @@ describe("runR2PublishSync", () => {
     });
   });
 
+  it("skips unchanged JSON objects by locally recorded content hash", async () => {
+    const smartPlan: R2ExportPlan = {
+      driveId: "drv_1",
+      libraryId: "lib_1",
+      baseUrl: "https://music.example.com/muzero/",
+      totalBytes: 11,
+      objects: [
+        {
+          kind: "set-index",
+          key: "sets/ses_1/index.json",
+          contentType: "application/json",
+          bytes: 8,
+          body: '{"a":1}\n',
+          sha256: "hash-a",
+          setId: "ses_1",
+        },
+        {
+          kind: "manifest",
+          key: "manifest.json",
+          contentType: "application/json",
+          bytes: 3,
+          body: "{}\n",
+          sha256: "hash-b",
+        },
+      ],
+    };
+
+    await runR2PublishSync(smartPlan, credentials, {
+      db,
+      fetcher: async () => new Response(null, { status: 204 }),
+    });
+
+    const calls: Array<{ method?: string; url: string }> = [];
+    const result = await runR2PublishSync(smartPlan, credentials, {
+      db,
+      fetcher: async (url, init) => {
+        calls.push({ method: init?.method, url: String(url) });
+        return new Response(null, { status: 204 });
+      },
+    });
+
+    const run = await db.syncRuns.get(result.runId);
+    expect(calls).toEqual([]);
+    expect(run).toMatchObject({
+      status: "completed",
+      bytesDone: 11,
+      uploaded: 0,
+      skipped: 2,
+      failed: 0,
+    });
+  });
+
   it("marks the drive's unsynced set mutations as synced after a successful publish (F3)", async () => {
     await db.syncMutations.bulkPut([
       {
@@ -216,11 +268,81 @@ describe("runR2PublishSync", () => {
 
     const run = await db.syncRuns.get(result.runId);
     const segmentCalls = calls.filter((call) => call.url.includes("/stats/events/"));
-    expect(segmentCalls.map((call) => call.method)).toEqual(["HEAD"]);
+    expect(segmentCalls).toEqual([]);
     expect(run).toMatchObject({
       status: "completed",
       uploaded: 1,
       skipped: 1,
     });
+  });
+
+  it("resumes a failed first publish by reusing locally recorded immutable uploads", async () => {
+    const resumePlan: R2ExportPlan = {
+      driveId: "drv_1",
+      libraryId: "lib_1",
+      baseUrl: "https://music.example.com/muzero/",
+      totalBytes: 16,
+      objects: [
+        {
+          kind: "media",
+          key: "objects/media/sha256-a.mp3",
+          contentType: "audio/mpeg",
+          bytes: 3,
+          body: new Blob(["abc"], { type: "audio/mpeg" }),
+          sha256: "a",
+          setId: "ses_1",
+          trackId: "trk_1",
+        },
+        {
+          kind: "set-index",
+          key: "sets/ses_1/index.json",
+          contentType: "application/json",
+          bytes: 6,
+          body: "{}\n",
+          setId: "ses_1",
+        },
+        {
+          kind: "manifest",
+          key: "manifest.json",
+          contentType: "application/json",
+          bytes: 7,
+          body: "{}\n",
+        },
+      ],
+    };
+
+    await expect(
+      runR2PublishSync(resumePlan, credentials, {
+        db,
+        fetcher: async (url, init) => {
+          if (init?.method === "PUT" && String(url).includes("/sets/ses_1/index.json")) {
+            return new Response(null, { status: 500 });
+          }
+          return new Response(null, { status: 204 });
+        },
+        skipExistingChecks: true,
+        retry: { sleep: async () => {} },
+      }),
+    ).rejects.toThrow("Failed to upload sets/ses_1/index.json");
+
+    await expect(db.syncObjects.get("drv_1:objects/media/sha256-a.mp3")).resolves.toMatchObject({
+      key: "objects/media/sha256-a.mp3",
+      sha256: "a",
+    });
+
+    const calls: Array<{ method?: string; url: string }> = [];
+    const result = await runR2PublishSync(resumePlan, credentials, {
+      db,
+      skipExistingChecks: true,
+      fetcher: async (url, init) => {
+        calls.push({ method: init?.method, url: String(url) });
+        return new Response(null, { status: 204 });
+      },
+    });
+
+    const run = await db.syncRuns.get(result.runId);
+    const mediaCalls = calls.filter((call) => call.url.includes("/objects/media/sha256-a.mp3"));
+    expect(mediaCalls).toEqual([]);
+    expect(run).toMatchObject({ status: "completed", uploaded: 2, skipped: 1 });
   });
 });

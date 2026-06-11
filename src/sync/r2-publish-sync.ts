@@ -36,7 +36,18 @@ export async function runR2PublishSync(
   await db.syncRuns.put(baseRun);
 
   try {
-    const result = await publishR2ExportPlan(plan, credentials, options);
+    const knownUploadedObjects = await loadKnownUploadedObjects(plan.driveId, db);
+    const result = await publishR2ExportPlan(plan, credentials, {
+      ...options,
+      isKnownUploaded: (object) =>
+        options.isKnownUploaded?.(object) ?? isKnownUploadedObject(object, knownUploadedObjects),
+      onObjectSynced: async (object, status) => {
+        await options.onObjectSynced?.(object, status);
+        if (!isResumableObject(object)) return;
+        await db.syncObjects.put(toSyncObject(plan.driveId, object, runId, Date.now()));
+        knownUploadedObjects.set(object.key, object);
+      },
+    });
     const finishedAt = Date.now();
     await db.transaction("rw", db.syncRuns, db.syncObjects, db.syncMutations, async () => {
       await db.syncRuns.put({
@@ -99,4 +110,29 @@ function toSyncObject(
 
 function syncObjectId(driveId: string, key: string): string {
   return `${driveId}:${key}`;
+}
+
+async function loadKnownUploadedObjects(
+  driveId: string,
+  db: MuzeroDB,
+): Promise<Map<string, Pick<SyncObject, "key" | "kind" | "sha256">>> {
+  const rows = await db.syncObjects.where("driveId").equals(driveId).toArray();
+  return new Map(rows.map((object) => [object.key, object]));
+}
+
+function isKnownUploadedObject(
+  object: R2ExportObject,
+  known: Map<string, Pick<SyncObject, "key" | "kind" | "sha256">>,
+): boolean {
+  if (!isResumableObject(object)) return false;
+  // If planning proved the remote object is absent, a local stale upload record
+  // is not enough; the guarded first write still has to recreate it remotely.
+  if (object.precondition?.ifNoneMatch === "*") return false;
+  const row = known.get(object.key);
+  if (!row || row.kind !== object.kind) return false;
+  return object.sha256 ? row.sha256 === object.sha256 : true;
+}
+
+function isResumableObject(object: R2ExportObject): boolean {
+  return Boolean(object.sha256) || object.kind === "stats-events-segment";
 }
