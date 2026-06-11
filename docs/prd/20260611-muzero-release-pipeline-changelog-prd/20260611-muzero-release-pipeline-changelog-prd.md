@@ -1,6 +1,6 @@
 # PRD: MUZERO 发版流水线 — Changelog 规范 + 多平台构建 + R2 分发 + 应用内版本下载
 
-**Status:** Implemented (Phase 1–5 code + tests on `feat/release-pipeline`; real-machine multi-platform release E2E pending a first live publish)
+**Status:** Implemented (Phase 1–6 code + tests on `feat/release-pipeline`; real-machine multi-platform release E2E + R2 桶开通 pending a first live publish — runbook in §12)
 **Created:** 2026-06-11
 **Author:** DoodleBear / Product
 **Module:** Release Engineering — 版本号契约 / Changelog / Electron 打包 / R2 分发清单 / Settings 下载中心
@@ -18,7 +18,7 @@
 | 3 | Electron 发布打包硬化（publish provider + per-OS targets + app-update + 安全/外部依赖收口） | ✅ Completed | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | Makefile 多平台发布指令 + R2 分发 + `manifest.json` 版本索引（合并式上传） | ✅ Completed | [Phase 4 Checklist](#phase-4-checklist) |
 | 5 | 自动更新（electron-updater IPC + 渲染层提示）+ Settings 历史版本下载侧栏 | ✅ Completed | [Phase 5 Checklist](#phase-5-checklist) |
-| 6 | 发版健壮性 + 部署 runbook（版本三文件同步守卫 + `release-check`/`release-show` + `CHANGELOG.md` 导出 + R2 开通文档） | 🔄 In Progress | [Phase 6 Checklist](#phase-6-checklist) |
+| 6 | 发版健壮性 + 部署 runbook（版本三文件同步守卫 + `release-check`/`release-show` + `CHANGELOG.md` 导出 + R2 开通文档） | ✅ Completed | [Phase 6 Checklist](#phase-6-checklist) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
 
@@ -534,13 +534,13 @@ src/components/settings/
 - [x] `scripts/check-version-sync.mjs`：读 `package.json` + `tauri.conf.json` + `Cargo.toml` 三处版本，drift 即 exit 1。✅ `collectVersions`/`versionsInSync` + 4 测。
 - [x] `make release-check`（= `changelog-check` + `version-sync`）作为 `release-build` 前置总闸（所有 `release-*` 经由它）；`make release-show` 打印版本 + 三文件一致性 + changelog 就位。✅
 - [x] `scripts/export-changelog-md.mjs`：把类型化 changelog 渲染成根 `CHANGELOG.md`（en，Keep-a-Changelog 风，按 category 分组 + platform 标）。✅ 纯 `renderChangelogMarkdown` + 3 测（含真实 7 版生成）；node 经 esbuild transform + data-URI 加载 .ts 释放（绕开 import.meta.glob）；`make changelog-md` 重新生成。
-- [ ] R2 部署 runbook（[§12](#12-deployment-runbook-r2-分发桶)）：建桶 + 公共读 + CORS + 绑 `assets.mu0.app` + rclone `r2:` remote + 凭证纪律。
+- [x] R2 部署 runbook（[§12](#12-deployment-runbook-r2-分发桶)）：建桶 + 公共读 + CORS + 绑 `assets.mu0.app` + rclone `r2:` remote + 凭证纪律 + 首发照单流程。✅
 
 ### Phase 6 Checklist
 - [x] `make release-check` 在三文件版本一致且 changelog 就位时通过；任一漂移/缺失即非零 ✅
 - [x] `make release-show` 输出当前版本 + 同步状态 ✅
 - [x] `make changelog-md` 生成的 `CHANGELOG.md` 含全部 7 版、按 category 分组、版本顺序新→旧 ✅
-- [ ] runbook 步骤可照单开通 R2 并首发
+- [x] runbook 步骤可照单开通 R2 并首发 ✅（§12 建桶/CORS/rclone/首发命令序列）
 
 ---
 
@@ -592,10 +592,83 @@ src/components/settings/
 
 ---
 
+## 12. Deployment Runbook — R2 分发桶
+
+一次性开通（首发前做一遍），之后每次发版只跑 [§4.3](#43-makefile-发布命令用户要求-3--4) 的 `make` 流程。
+
+### 12.1 创建桶 + 公共读
+
+1. Cloudflare 控制台 → R2 → **Create bucket**：名 `muzero-releases`（= Makefile `RELEASE_R2_BUCKET`，可改）。
+2. 该桶**只放分发物**（安装包 + `*.yml` feed + `manifest.json`），**永不**放用户数据——与用户库 BYOK 桶物理隔离（[§2.4](#24-决策记录--分发-r2-不违反本地优先)）。
+3. 开公共读：桶 → Settings → **Public access** → 绑自定义域 **`assets.mu0.app`**（决议 Q2）。在 Cloudflare DNS 给 `assets` 加 CNAME 到该桶的 r2.dev 端点（或用 R2 custom domain 功能一键绑）。过渡期可先用 `<hash>.r2.dev` 公共 URL，改 Makefile `RELEASE_BASE_URL` 即可切换、零代码改动。
+
+### 12.2 CORS（让 web 版能 `fetch` manifest.json）
+
+桶 → Settings → **CORS policy**（web 版渲染层直接 `fetch(assets.mu0.app/desktop/manifest.json)`，需放行）：
+
+```json
+[
+  {
+    "AllowedOrigins": ["https://mu0.app", "http://localhost:1420", "http://localhost:1430"],
+    "AllowedMethods": ["GET", "HEAD"],
+    "AllowedHeaders": ["*"],
+    "MaxAgeSeconds": 86400
+  }
+]
+```
+
+> 桌面端走 `muzfetch://` 代理不受 CORS 限制；CORS 只为 web/PWA。安装包二进制是浏览器直接下载（`openExternal`/`window.open`），不需要 CORS。
+
+### 12.3 配置 rclone `r2:` remote（构建机 / CI）
+
+R2 → **Manage R2 API Tokens** → 建一个 **Object Read & Write** token（限定到 `muzero-releases` 桶），拿到 `Access Key ID` + `Secret Access Key` + account id。
+
+```bash
+rclone config create r2 s3 \
+  provider=Cloudflare \
+  access_key_id=<KEY> \
+  secret_access_key=<SECRET> \
+  endpoint=https://<ACCOUNT_ID>.r2.cloudflarestorage.com \
+  acl=private
+```
+
+- remote 名 `r2`（= Makefile `RELEASE_RCLONE_REMOTE ?= r2:`）。
+- **凭证纪律（规则 #2）**：这对 S3 写凭证是**维护者基础设施凭证**，只存构建机本地 rclone 配置 / CI secret，**绝不**进 bundle / committed `.env` / 日志。与用户 BYOK key 两条线。CI 里用 `RCLONE_CONFIG_R2_*` 环境变量注入，不落盘明文。
+
+### 12.4 首发流程（照单执行）
+
+```bash
+# 1) 任意机：定版 + 写 changelog 内容 + 同一提交
+make version-bump TYPE=minor            # 0.7.0 → 0.8.0，三文件同步 + scaffold 0.8.0.ts
+$EDITOR src/content/changelog/releases/0.8.0.ts   # 填 4 语 title/summary/items + date
+make changelog-md                        # 刷新 CHANGELOG.md
+make release-check                       # 闸门：版本三文件一致 + changelog 就位
+git commit -am "release: 0.8.0"
+
+# 2) macOS 机
+make release-mac && make release-publish
+
+# 3) Windows 机（同一 commit）
+make release-win && make release-publish          # Windows 原生
+#   同机 WSL2 里：
+make release-linux && make release-publish
+
+# 4) 校验
+#   - assets.mu0.app/desktop/latest.yml / latest-mac.yml / latest-linux.yml 各就位
+#   - assets.mu0.app/desktop/manifest.json 同一 0.8.0 下含 mac/win/linux 全平台资产
+#   - 应用 Settings →「版本历史」拉到列表，下载按钮可用
+#   - 旧版桌面端启动后 ~5s check 到 0.8.0（Win/Linux 自动下载、mac 提示手动）
+```
+
+> 回滚（规则 #3）：不藏 kill switch。回滚 = 发更高版本，或用户从 Settings 历史列表手动下装旧版。
+
+---
+
 ## 11. Document Change Log
 
 | Date | Author | Change |
 |------|--------|--------|
 | 2026-06-11 | DoodleBear / Product | 初稿（Draft）。调研 ClipCombo 发版/changelog/R2 架构，适配 MUZERO 双壳层 + 无后端 + manifest 全量历史 + 应用内下载场景。 |
 | 2026-06-11 | DoodleBear / Product | Q1-Q6 全部拍板（见 §10）：Linux 经 WSL2 构建；分发域 `assets.mu0.app`；统一 rclone；beta 留接口+可切；`appId = app.mu0.muzero`；changelog 4 语全量回填。概念已定稿，待开发实现。 |
+| 2026-06-11 | Claude (Opus 4.8) | **Phase 6（发版健壮性 + runbook）TDD 实现**：`check-version-sync.mjs`（三文件 lockstep 守卫）+ `make release-check`/`release-show` 总闸（`release-build` 经由它）+ `export-changelog-md.mjs`（类型化 changelog → 根 `CHANGELOG.md`，node 经 esbuild+data-URI 加载 .ts）+ `make changelog-md` + §12 R2 部署 runbook（建桶/公共读/CORS/rclone/凭证纪律/首发命令）。+7 测（release 测共 73）。 |
 | 2026-06-11 | Claude (Opus 4.8) | **Phase 1–5 全部 TDD 实现**（分支 `feat/release-pipeline`，~12 atomic commits，66 release 测全绿，typecheck 零新增错误）。版本三文件同步 + Vite define + compareSemver；类型化 changelog + 7 版 4 语回填 + What's New 弹窗 + release gate；Electron 打包硬化（esbuild bundle main、排除 node_modules，`electron-builder --mac` 真机验证产物 dist+dist-electron+package.json）；`make release-mac/win/linux` + rclone 发布 + `manifest.json` 加性合并（对真实 mac 产物验证 platformKeyFor）；electron-updater IPC + Settings About/版本历史下载中心。**实现期偏离 PRD 之处**：(a) release-meta 改 Vite define 不再生成 `src/generated/release-meta.ts`；(b) 桌面更新载体确认 esbuild bundle（非 electron-vite）；(c) `getAppVersion`/About 从 Phase 1 移至 Phase 5 与 update IPC 同建。**剩余**：真机三平台首发 + R2 桶/`assets.mu0.app` 开通 + 部署 runbook。 |
