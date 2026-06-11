@@ -1,3 +1,4 @@
+import { waitFor } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import type { R2ExportPlan } from "./r2-export-plan";
 import { publishR2ExportPlan } from "./r2-publish";
@@ -140,6 +141,87 @@ describe("publishR2ExportPlan", () => {
     );
   });
 
+  it("uploads immutable objects concurrently but keeps JSON barriers ordered", async () => {
+    const concurrentPlan: R2ExportPlan = {
+      ...plan,
+      totalBytes: 20,
+      objects: [
+        {
+          kind: "media",
+          key: "objects/media/sha256-a.mp3",
+          contentType: "audio/mpeg",
+          bytes: 3,
+          body: new Blob(["abc"], { type: "audio/mpeg" }),
+          sha256: "a",
+        },
+        {
+          kind: "cover",
+          key: "objects/covers/sha256-b.jpg",
+          contentType: "image/jpeg",
+          bytes: 4,
+          body: new Blob(["bbbb"], { type: "image/jpeg" }),
+          sha256: "b",
+        },
+        {
+          kind: "set-index",
+          key: "sets/ses_1/index.json",
+          contentType: "application/json",
+          bytes: 6,
+          body: "{}\n",
+        },
+        {
+          kind: "manifest",
+          key: "manifest.json",
+          contentType: "application/json",
+          bytes: 7,
+          body: "{}\n",
+        },
+      ],
+    };
+    const seen: string[] = [];
+    let activePuts = 0;
+    let peakPuts = 0;
+    const releaseMediaPuts: Array<() => void> = [];
+
+    const pending = publishR2ExportPlan(concurrentPlan, credentials, {
+      uploadConcurrency: 2,
+      skipExistingChecks: true,
+      fetcher: async (url, init) => {
+        const request = `${init?.method ?? "GET"} ${String(url)}`;
+        seen.push(request);
+        if (request.includes("/objects/")) {
+          activePuts += 1;
+          peakPuts = Math.max(peakPuts, activePuts);
+          await new Promise<void>((resolve) => releaseMediaPuts.push(resolve));
+          activePuts -= 1;
+        }
+        return new Response(null, { status: 204 });
+      },
+    });
+
+    await waitFor(() => expect(peakPuts).toBe(2));
+    expect(seen.some((request) => request.includes("/sets/ses_1/index.json"))).toBe(false);
+    for (const release of releaseMediaPuts) release();
+    await pending;
+
+    expect(seen.map((request) => new URL(request.split(" ")[1] ?? "").pathname)).toEqual([
+      "/muzero/library/objects/media/sha256-a.mp3",
+      "/muzero/library/objects/covers/sha256-b.jpg",
+      "/muzero/library/sets/ses_1/index.json",
+      "/muzero/library/manifest.json",
+    ]);
+    expect(
+      seen.map((request) =>
+        new URL(request.split(" ")[1] ?? "").pathname.replace("/muzero/library/", ""),
+      ),
+    ).toEqual([
+      "objects/media/sha256-a.mp3",
+      "objects/covers/sha256-b.jpg",
+      "sets/ses_1/index.json",
+      "manifest.json",
+    ]);
+  });
+
   it("skips content-addressed binary objects that already exist", async () => {
     const seen: string[] = [];
 
@@ -152,6 +234,21 @@ describe("publishR2ExportPlan", () => {
 
     expect(result).toMatchObject({ uploaded: 2, skipped: 1, failed: 0 });
     expect(seen).toEqual(["HEAD", "PUT", "PUT"]);
+  });
+
+  it("can skip HEAD existence checks for a first publish into an empty remote", async () => {
+    const seen: string[] = [];
+
+    const result = await publishR2ExportPlan(plan, credentials, {
+      skipExistingChecks: true,
+      fetcher: async (_url, init) => {
+        seen.push(init?.method ?? "GET");
+        return new Response(null, { status: 204 });
+      },
+    });
+
+    expect(result).toMatchObject({ uploaded: 3, skipped: 0, failed: 0 });
+    expect(seen).toEqual(["PUT", "PUT", "PUT"]);
   });
 
   it("can cancel between objects", async () => {

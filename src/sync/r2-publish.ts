@@ -49,7 +49,13 @@ export interface R2PublishOptions {
   now?: () => Date;
   signal?: AbortSignal;
   onProgress?: (event: R2PublishProgressEvent) => void;
+  onObjectSynced?: (object: R2ExportObject, status: R2PublishObjectStatus) => void | Promise<void>;
   retry?: R2PublishRetryOptions;
+  /** First publish into an empty remote can PUT content-addressed objects directly. */
+  skipExistingChecks?: boolean;
+  isKnownUploaded?: (object: R2ExportObject) => boolean;
+  /** Max parallel immutable/resumable object uploads. Mutable JSON remains ordered. */
+  uploadConcurrency?: number;
 }
 
 /**
@@ -79,32 +85,84 @@ export async function publishR2ExportPlan(
     bytesTotal: plan.totalBytes,
   };
 
+  const uploadConcurrency = clampUploadConcurrency(options.uploadConcurrency);
+  let concurrentGroup: R2ExportObject[] = [];
+
+  const flushConcurrentGroup = async (): Promise<void> => {
+    if (concurrentGroup.length === 0) return;
+    const group = concurrentGroup;
+    concurrentGroup = [];
+    for (let index = 0; index < group.length; index += uploadConcurrency) {
+      const chunk = group.slice(index, index + uploadConcurrency);
+      await Promise.all(
+        chunk.map((object) => publishObject(object, credentials, fetcher, options, result)),
+      );
+    }
+  };
+
   for (const object of plan.objects) {
     throwIfAborted(options.signal);
-    if (await shouldSkipObject(object, credentials, fetcher, options)) {
-      result.skipped += 1;
-      result.bytesDone += object.bytes;
-      options.onProgress?.({ object, status: "skipped", ...result });
-      continue;
+    if (uploadConcurrency > 1 && isConcurrentSafeObject(object)) {
+      concurrentGroup.push(object);
+    } else {
+      await flushConcurrentGroup();
+      await publishObject(object, credentials, fetcher, options, result);
     }
-
-    let response: Response;
-    try {
-      response = await putObjectWithRetry(object, credentials, fetcher, options);
-    } catch (error) {
-      result.failed += 1;
-      throw error;
-    }
-    if (!response.ok) {
-      result.failed += 1;
-      throw new R2PublishHttpError(object.key, response.status);
-    }
-    result.uploaded += 1;
-    result.bytesDone += object.bytes;
-    options.onProgress?.({ object, status: "uploaded", ...result });
   }
+  await flushConcurrentGroup();
 
   return result;
+}
+
+async function publishObject(
+  object: R2ExportObject,
+  credentials: R2LocalCredentials,
+  fetcher: SyncFetch,
+  options: R2PublishOptions,
+  result: R2PublishResult,
+): Promise<void> {
+  throwIfAborted(options.signal);
+  if (options.isKnownUploaded?.(object)) {
+    await markObjectSynced(object, "skipped", options);
+    result.skipped += 1;
+    result.bytesDone += object.bytes;
+    options.onProgress?.({ object, status: "skipped", ...result });
+    return;
+  }
+  if (
+    !options.skipExistingChecks &&
+    (await shouldSkipObject(object, credentials, fetcher, options))
+  ) {
+    await markObjectSynced(object, "skipped", options);
+    result.skipped += 1;
+    result.bytesDone += object.bytes;
+    options.onProgress?.({ object, status: "skipped", ...result });
+    return;
+  }
+
+  let response: Response;
+  try {
+    response = await putObjectWithRetry(object, credentials, fetcher, options);
+  } catch (error) {
+    result.failed += 1;
+    throw error;
+  }
+  if (!response.ok) {
+    result.failed += 1;
+    throw new R2PublishHttpError(object.key, response.status);
+  }
+  result.uploaded += 1;
+  result.bytesDone += object.bytes;
+  await markObjectSynced(object, "uploaded", options);
+  options.onProgress?.({ object, status: "uploaded", ...result });
+}
+
+async function markObjectSynced(
+  object: R2ExportObject,
+  status: R2PublishObjectStatus,
+  options: R2PublishOptions,
+): Promise<void> {
+  await options.onObjectSynced?.(object, status);
 }
 
 async function putObjectWithRetry(
@@ -196,6 +254,15 @@ function preconditionHeaders(object: R2ExportObject): Record<string, string> | u
 
 function isSkippableObject(object: R2ExportObject): boolean {
   return Boolean(object.sha256) || object.kind === "stats-events-segment";
+}
+
+function isConcurrentSafeObject(object: R2ExportObject): boolean {
+  return isSkippableObject(object);
+}
+
+function clampUploadConcurrency(value: number | undefined): number {
+  if (value === 1 || value === 2 || value === 3) return value;
+  return 1;
 }
 
 function throwIfAborted(signal?: AbortSignal): void {

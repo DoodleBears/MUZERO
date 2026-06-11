@@ -50,7 +50,7 @@ const credentials: R2LocalCredentials = {
 };
 
 const ctx: PublishDriveContext = {
-  drive: { id: "drv_owned" } as CloudDrive,
+  drive: { id: "drv_owned", uploadConcurrency: 3 } as CloudDrive,
   settings: {} as AppSettings,
   credentials,
   libraryId: "lib_1",
@@ -90,6 +90,11 @@ describe("createSyncOrchestrator.publish", () => {
     expect(result).toEqual({ status: "completed", runId: "run_1" });
     expect(buildPlan).toHaveBeenCalledWith(
       expect.objectContaining({ libraryId: "lib_1", setIds: ["s"], drive: ctx.drive }),
+    );
+    expect(runPublish).toHaveBeenCalledWith(
+      expect.anything(),
+      credentials,
+      expect.objectContaining({ uploadConcurrency: 3 }),
     );
     expect(events.map((e) => e.phase)).toEqual([
       "planning",

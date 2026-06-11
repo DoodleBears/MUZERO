@@ -180,6 +180,8 @@ export function createSyncOrchestrator(deps: SyncOrchestratorDeps): SyncOrchestr
         try {
           const { runId } = await deps.runPublish(plan, ctx.credentials, {
             signal: options.signal,
+            skipExistingChecks: isEmptyRemoteBase(remoteBase),
+            uploadConcurrency: ctx.drive.uploadConcurrency,
             onProgress: (event) =>
               emit({
                 phase: "uploading",
@@ -291,4 +293,17 @@ export function createSyncOrchestrator(deps: SyncOrchestratorDeps): SyncOrchestr
       }
     },
   };
+}
+
+function isEmptyRemoteBase(
+  remoteBase: Awaited<ReturnType<typeof fetchRemotePublishBase>> | undefined,
+): boolean {
+  return Boolean(
+    remoteBase &&
+      !remoteBase.manifest &&
+      !remoteBase.devicesIndex &&
+      !remoteBase.statsIndex &&
+      !remoteBase.presenceIndex &&
+      Object.keys(remoteBase.setIndexes ?? {}).length === 0,
+  );
 }
