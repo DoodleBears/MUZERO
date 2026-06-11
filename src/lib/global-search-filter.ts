@@ -17,7 +17,7 @@ export type SearchFilter =
 
 export interface FilterOption {
   /** Stable id (menu key + label switch). */
-  id: "artist" | "album" | "bili" | "netease";
+  id: "artist" | "album" | "bili" | "netease" | "youtube";
   /** The filter this option produces when chosen. */
   filter: SearchFilter;
   /** Latin + CJK aliases (lowercased) the `@token` prefix-matches against. */
@@ -26,8 +26,8 @@ export interface FilterOption {
 
 /**
  * The offered filters, in menu order. Sources mirror the overlay's enable chips
- * (netease + bili; YouTube isn't surfaced). Aliases carry both latin and CJK
- * forms so `@歌手` and `@artist` both narrow to the same option.
+ * (netease + bili + YouTube). Aliases carry both latin and CJK forms so `@歌手`
+ * and `@artist` both narrow to the same option.
  */
 export const FILTER_OPTIONS: FilterOption[] = [
   {
@@ -45,6 +45,11 @@ export const FILTER_OPTIONS: FilterOption[] = [
     id: "netease",
     filter: { kind: "source", source: "netease" },
     aliases: ["netease", "网易云", "网易", "wyy"],
+  },
+  {
+    id: "youtube",
+    filter: { kind: "source", source: "youtube" },
+    aliases: ["youtube", "yt", "ytb", "油管"],
   },
 ];
 

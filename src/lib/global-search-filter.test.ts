@@ -38,7 +38,13 @@ describe("parseMention", () => {
 
 describe("matchFilterOptions", () => {
   it("returns every option for an empty partial", () => {
-    expect(matchFilterOptions("").map((o) => o.id)).toEqual(["artist", "album", "bili", "netease"]);
+    expect(matchFilterOptions("").map((o) => o.id)).toEqual([
+      "artist",
+      "album",
+      "bili",
+      "netease",
+      "youtube",
+    ]);
   });
 
   it("prefix-matches latin aliases", () => {
@@ -46,6 +52,8 @@ describe("matchFilterOptions", () => {
     expect(matchFilterOptions("alb").map((o) => o.id)).toEqual(["album"]);
     expect(matchFilterOptions("bil").map((o) => o.id)).toEqual(["bili"]);
     expect(matchFilterOptions("net").map((o) => o.id)).toEqual(["netease"]);
+    expect(matchFilterOptions("yt").map((o) => o.id)).toEqual(["youtube"]);
+    expect(matchFilterOptions("油管").map((o) => o.id)).toEqual(["youtube"]);
   });
 
   it("prefix-matches CJK aliases", () => {
