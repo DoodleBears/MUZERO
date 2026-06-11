@@ -783,7 +783,15 @@
     "dlMacX64": "macOS（Intel）",
     "dlWinX64": "Windows",
     "dlLinuxAppimage": "Linux（AppImage）",
-    "dlLinuxDeb": "Linux（deb）"
+    "dlLinuxDeb": "Linux（deb）",
+    "llmModelFor": "{{provider}} 的模型",
+    "llmModelPick": "选择模型",
+    "llmModelLoading": "正在拉取模型…",
+    "llmModelEmpty": "无模型——直接输入 model id",
+    "llmModelRefresh": "刷新",
+    "llmModelUseCustom": "使用「{{model}}」",
+    "llmModelIsDefault": "这是 DJ 的默认模型",
+    "llmModelSetsDefault": "选择后即设为 DJ 默认"
   },
   "gallery": {
     "title": "歌单",

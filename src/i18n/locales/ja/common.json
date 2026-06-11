@@ -783,7 +783,15 @@
     "dlMacX64": "macOS（Intel）",
     "dlWinX64": "Windows",
     "dlLinuxAppimage": "Linux（AppImage）",
-    "dlLinuxDeb": "Linux（deb）"
+    "dlLinuxDeb": "Linux（deb）",
+    "llmModelFor": "{{provider}} のモデル",
+    "llmModelPick": "モデルを選択",
+    "llmModelLoading": "モデルを取得中…",
+    "llmModelEmpty": "モデルなし——model id を入力",
+    "llmModelRefresh": "更新",
+    "llmModelUseCustom": "「{{model}}」を使う",
+    "llmModelIsDefault": "これが DJ の既定モデルです",
+    "llmModelSetsDefault": "選択すると DJ の既定になります"
   },
   "gallery": {
     "title": "セット",

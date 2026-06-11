@@ -797,7 +797,15 @@
     "dlMacX64": "macOS (Intel)",
     "dlWinX64": "Windows",
     "dlLinuxAppimage": "Linux (AppImage)",
-    "dlLinuxDeb": "Linux (deb)"
+    "dlLinuxDeb": "Linux (deb)",
+    "llmModelFor": "Model for {{provider}}",
+    "llmModelPick": "Pick a model",
+    "llmModelLoading": "Fetching models…",
+    "llmModelEmpty": "No models — type a model id",
+    "llmModelRefresh": "Refresh",
+    "llmModelUseCustom": "Use \"{{model}}\"",
+    "llmModelIsDefault": "This is the DJ's default model",
+    "llmModelSetsDefault": "Selecting sets the DJ's default"
   },
   "gallery": {
     "title": "Sets",

@@ -11,14 +11,14 @@ import {
 import {
   allLlmProviderPresets,
   apiKeyForPreset,
-  enabledLlmPresetIds,
   type LlmProviderPreset,
   type LlmProviderPresetId,
+  llmModelForPreset,
   llmProviderAllowsMissingApiKey,
   llmSelectionFromSettings,
   resolveLlmProviderPreset,
 } from "@/ai/llm-providers";
-import { ChatModelPicker } from "@/components/chat/chat-model-picker";
+import { ModelCatalogCombobox } from "@/components/settings/model-catalog-combobox";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { saveSettings } from "@/db/repositories";
@@ -47,9 +47,6 @@ export function LlmProviderSettings() {
   const activeCustom = isCustomLlmProviderId(activeId)
     ? customProviders.find((p) => p.id === activeId)
     : undefined;
-  const enabledPresets = enabledLlmPresetIds(settings, customProviders).map((id) =>
-    resolveLlmProviderPreset(id, customProviders),
-  );
 
   async function addCustomProvider() {
     const now = Date.now();
@@ -136,27 +133,41 @@ export function LlmProviderSettings() {
         />
       )}
 
-      {/* Global default model over enabled providers (combobox). */}
+      {/* Default model for the active provider — backed by the provider's LIVE
+          /models catalog (OpenRouter/OpenAI/Groq/local…) merged with hardcoded
+          models, plus free-text custom ids. Picking sets this provider+model as
+          the global DJ default. */}
       <div className="flex flex-col gap-1.5">
-        <span className="text-muted-foreground text-xs">{t("settings.llmDefaultModel")}</span>
-        <ChatModelPicker
+        <span className="text-muted-foreground text-xs">
+          {t("settings.llmModelFor", { provider: activePreset.label })}
+        </span>
+        <ModelCatalogCombobox
+          apiKey={apiKeyForPreset(settings, activeId)}
+          key={activeId}
           labels={{
-            empty: t("settings.llmNoEnabled"),
-            inherited: "",
+            empty: t("settings.llmModelEmpty"),
+            loading: t("settings.llmModelLoading"),
+            refresh: t("settings.llmModelRefresh"),
             searchPlaceholder: t("settings.llmModelSearch"),
-            trigger: t("settings.llmDefaultModel"),
+            trigger: t("settings.llmModelPick"),
+            customLabel: (q) => t("settings.llmModelUseCustom", { model: q }),
           }}
-          onSelect={({ presetId, model }) =>
+          onSelect={(model) =>
             void saveSettings({
-              defaultLlmProviderPresetId: presetId,
+              defaultLlmProviderPresetId: activeId,
               defaultLlmModel: model,
-              modelsByPresetId: { ...settings.modelsByPresetId, [presetId]: model },
+              modelsByPresetId: { ...settings.modelsByPresetId, [activeId]: model },
             })
           }
-          presets={enabledPresets}
-          selectedModel={selection.model}
-          selectedPresetId={selection.presetId}
+          preset={activePreset}
+          selectedModel={llmModelForPreset(settings, activePreset)}
         />
+        <span className="text-muted-foreground text-[11px]">
+          {activeId === selection.presetId &&
+          llmModelForPreset(settings, activePreset) === selection.model
+            ? t("settings.llmModelIsDefault")
+            : t("settings.llmModelSetsDefault")}
+        </span>
       </div>
     </div>
   );

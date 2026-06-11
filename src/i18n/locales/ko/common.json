@@ -782,7 +782,15 @@
     "dlMacX64": "macOS (Intel)",
     "dlWinX64": "Windows",
     "dlLinuxAppimage": "Linux (AppImage)",
-    "dlLinuxDeb": "Linux (deb)"
+    "dlLinuxDeb": "Linux (deb)",
+    "llmModelFor": "{{provider}} 모델",
+    "llmModelPick": "모델 선택",
+    "llmModelLoading": "모델 가져오는 중…",
+    "llmModelEmpty": "모델 없음 — model id 입력",
+    "llmModelRefresh": "새로고침",
+    "llmModelUseCustom": "\"{{model}}\" 사용",
+    "llmModelIsDefault": "DJ의 기본 모델입니다",
+    "llmModelSetsDefault": "선택하면 DJ 기본값으로 설정됩니다"
   },
   "gallery": {
     "title": "세트",
