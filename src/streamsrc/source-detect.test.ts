@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type { Track } from "@/db/types";
-import { detectStreamSource, isStreamedTrack, playbackSourceKind } from "./source-detect";
+import {
+  detectStreamSource,
+  isStreamedTrack,
+  isTrackCacheableToDevice,
+  playbackSourceKind,
+} from "./source-detect";
 
 function track(partial: Partial<Track>): Track {
   return {
@@ -85,5 +90,30 @@ describe("playbackSourceKind (local-first priority)", () => {
     expect(playbackSourceKind(track({ origin: "streamed", streamSourceId: "netease" }))).toBe(
       "none",
     );
+  });
+});
+
+describe("isTrackCacheableToDevice", () => {
+  const streamed = {
+    origin: "streamed" as const,
+    streamSourceId: "netease" as const,
+    streamExternalId: "33894312",
+  };
+
+  it("includes streamed tracks and R2 remote tracks that still lack local blobs", () => {
+    expect(isTrackCacheableToDevice(track({ ...streamed }))).toBe(true);
+    expect(
+      isTrackCacheableToDevice(track({ origin: "uploaded", remoteMediaUrl: "https://cdn/x.mp3" })),
+    ).toBe(true);
+  });
+
+  it("excludes tracks that are already local, not ready, or have no fetchable source", () => {
+    expect(isTrackCacheableToDevice(track({ ...streamed, blobId: "blb_1" }))).toBe(false);
+    expect(
+      isTrackCacheableToDevice(
+        track({ origin: "uploaded", remoteMediaUrl: "https://cdn/x.mp3", status: "pending" }),
+      ),
+    ).toBe(false);
+    expect(isTrackCacheableToDevice(track({ origin: "uploaded" }))).toBe(false);
   });
 });

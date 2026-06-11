@@ -32,6 +32,15 @@ export type PlaybackSourceKind = "blob" | "remote" | "stream" | "none";
 
 type PlaybackFields = StreamFields & Pick<Track, "blobId" | "remoteMediaUrl">;
 
+/** Whether MUZERO can fetch missing media bytes into a local `mediaBlobs` row. */
+export function isTrackCacheableToDevice(track: PlaybackFields & Pick<Track, "status">): boolean {
+  return (
+    track.status === "ready" &&
+    !track.blobId &&
+    (Boolean(track.remoteMediaUrl) || isStreamedTrack(track))
+  );
+}
+
 /**
  * Pick a track's playback source in strict priority order — **local first**:
  *  1. `blob`   — locally-stored bytes (`blobId`): generated/uploaded tracks, OR a

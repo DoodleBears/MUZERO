@@ -105,7 +105,7 @@ import { notify } from "@/stores/notification-store";
 import { usePlayerStore } from "@/stores/player-store";
 import { useIsSetBulkDownloading } from "@/stores/stream-cache-store";
 import { useUploadTargetStore } from "@/stores/upload-target-store";
-import { isStreamedTrack } from "@/streamsrc/source-detect";
+import { isTrackCacheableToDevice } from "@/streamsrc/source-detect";
 import { matchesRemoteSearchTrack } from "@/sync/r2-search-catalog";
 
 type GalleryView = "list" | "grid";
@@ -1253,16 +1253,16 @@ export function SearchPage() {
   );
 }
 
-/** Set-header "save all offline" button: caches every streamed track in the set that
- *  has no local blob yet. Hidden when nothing is pending (a fully-local or generated
- *  set), so it only appears when there's actually cloud audio to pull down. Spinner +
- *  disabled while the bulk run is in flight (shared store, survives row remounts). */
+/** Set-header "save all offline" button: caches every streamed or R2-remote track
+ *  in the set that has no local blob yet. Hidden when nothing is pending (a fully-
+ *  local or generated set), so it only appears when there's actually cloud audio/
+ *  video to pull down. Spinner + disabled while the bulk run is in flight. */
 function SetCloudDownloadButton({ setId, tracks }: { setId: string; tracks: Track[] }) {
   const { t } = useTranslation();
   const downloading = useIsSetBulkDownloading(setId);
   const downloadStreamedSet = usePlayerStore((s) => s.downloadStreamedSet);
   const pending = useMemo(
-    () => tracks.filter((tr) => isStreamedTrack(tr) && !tr.blobId).length,
+    () => tracks.filter((tr) => isTrackCacheableToDevice(tr)).length,
     [tracks],
   );
   if (pending === 0) return null;

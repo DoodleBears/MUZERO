@@ -24,6 +24,7 @@
 | 9 | Same-set co-editing (one user, multiple devices) | ✅ Done | [§12.5](#125-phase-9-same-set-co-editing-one-user-multiple-devices) |
 | 10 | Automatic sync + R2 scale optimizations | ✅ Done | [§12.6](#126-phase-10-automatic-sync--r2-scale-optimizations) |
 | 11 | Trusted-device setup link + local device naming UX | ✅ Done | [§12.7](#127-phase-11-trusted-device-setup-link--local-device-naming-ux) |
+| 14 | Smart sync content fingerprinting | 🔄 In Progress | [§12.10](#1210-phase-14-smart-sync-content-fingerprinting) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
 
@@ -2319,12 +2320,61 @@ Do not record secrets, full signed URLs, or media content.
 - [x] SA-4 Consolidate cloud drive/CORS/sync controls into one Settings area and update four-language copy.
 - [x] SA-5 Redesign the Add R2 Drive modal as a two-column step-by-step guide with public-read vs optional write-credential sections.
 
+### 12.10 Phase 14: Smart Sync Content Fingerprinting
+
+**Goal:** avoid no-op automatic/manual sync work by proving whether local publish objects actually changed before uploading, while preserving the manifest-last safety boundary and multi-device merge semantics.
+
+**Status (2026-06-11):** In progress. The first slice adds content hashes to JSON publish objects and uses the durable `syncObjects` table to skip objects whose key/kind/hash already match a prior successful upload. This complements existing content-addressed binary keys and remote ETag guards.
+
+**Best-practice policy:**
+
+1. **Use content hash for local change detection.** Every planned object that has deterministic bytes should carry `sha256`, including mutable JSON indexes/manifests. Binary objects already do this through content-addressed keys.
+2. **Skip by key + kind + hash, not timestamp alone.** `updatedAt` is useful for UI ordering and merge rules, but upload suppression must be based on bytes/hash so clock skew and repeated sync clicks do not cause duplicate writes.
+3. **Keep remoteBase as the multi-device truth.** Before planning a writable drive publish, MUZERO still fetches the remote manifest/index base with ETags. If another device changed the drive, the merged JSON body changes, so its hash changes and the object uploads conditionally.
+4. **Preserve manifest-last atomicity.** Skipping an unchanged manifest is allowed only after referenced objects have either uploaded or been proven unchanged/skipped. A changed manifest remains last.
+5. **Resume failed runs object-by-object.** If a run uploads immutable media or deterministic JSON and later fails, the next run may reuse the recorded object hash instead of starting from zero.
+6. **Stats event segments remain immutable.** Event segment keys are hash-derived/idempotent; checkpoint and aggregate JSON use normal hash-based skip only when their bytes did not change.
+7. **Do not delete remote objects automatically.** Smart sync suppresses redundant writes; cleanup of unreferenced remote blobs remains a separate explicit product flow.
+
+**Checklist:**
+
+- [ ] SS-1 Add deterministic `sha256` to JSON export objects.
+- [ ] SS-2 Skip upload for locally recorded key/kind/hash matches while still counting skipped bytes/objects in progress.
+- [ ] SS-3 Add regression coverage proving a second identical publish sends no PUTs for JSON and a failed run resumes without re-uploading already recorded objects.
+- [ ] SS-4 Update durable run history so users see skipped objects instead of a reset-from-zero no-op upload.
+
+### 12.11 Phase 15: Cloud-to-Local Playlist Cache UX
+
+**Goal:** make remote R2 media feel first-class in playlist surfaces: if a song is playable from cloud storage but not cached locally, users should see the same "download to this device" affordance as external streamed tracks, both per-track and for the whole set header.
+
+**Status (2026-06-11):** Phase 15 is completed. MUZERO now treats any ready track without a local `blobId` as cacheable when it has either a streamed-source resolver or an R2 `remoteMediaUrl`. Track rows show the cloud-to-device button for R2 remote tracks, and the set header's "Save all offline" action caches every pending streamed/R2 remote track in the set through the existing bounded download queue.
+
+**Product requirements:**
+
+1. **Unified cacheability rule.**
+   - A track is cacheable to the current device only when it is `ready`, lacks `blobId`, and has a fetchable cloud source: either a supported external stream source or an R2 `remoteMediaUrl`.
+   - Already-local generated/uploaded tracks and already-cached tracks must not show a cloud download action.
+2. **Track-row action parity.**
+   - R2-imported tracks that are stream-only locally must show the cloud-to-device button instead of a file-export popover.
+   - After caching succeeds, the row should naturally fall back to the normal local export behavior because `track.blobId` is linked.
+3. **Set-header cache-all action.**
+   - The set detail header's cache-all button must count and download both external streamed tracks and R2 remote tracks.
+   - Bulk download should continue to use bounded concurrency and per-track durable `mediaBlobs` writes; a failure on one track must not block the others from being cached.
+
+**Checklist:**
+
+- [x] CL-1 Add a pure cacheability predicate covering streamed and R2 remote tracks.
+- [x] CL-2 Show cloud-to-device actions on track rows and set headers for R2 remote tracks without local blobs.
+- [x] CL-3 Cache remote R2 tracks through `cacheRemoteTrackMedia` for both single-track and whole-set actions.
+
 ---
 
 ## 13. Document Change Log
 
 | Date | Author | Changes |
 |------|--------|---------|
+| 2026-06-11 | MUZERO | Phase 15 completed: playlist track rows and set headers now treat R2 `remoteMediaUrl` tracks without local blobs as cacheable-to-device, reusing the existing `mediaBlobs` cache path so both single-track and whole-set "download to local" actions work for cloud-drive media. |
+| 2026-06-11 | MUZERO | Phase 14 added for smart sync best practices: deterministic object hashes drive no-op upload suppression, remoteBase/ETag remains the multi-device merge guard, manifest-last atomicity stays intact, and failed runs resume object-by-object instead of making users watch unchanged data upload again. |
 | 2026-06-11 | MUZERO | Phase 13 SA-5 completed: Add Drive is now a wider two-column modal with the form/stepper on the left and contextual R2 setup guidance on the right. The owner flow separates write credentials from the public read URL, links to the R2 dashboard/token docs, and explains that public/read-only imports do not need Access Key ID / Secret Access Key while owner/trusted bidirectional sync does. |
 | 2026-06-11 | MUZERO | Phase 13 SA-4 completed: Settings now has a single Cloud Drive sidebar destination for the R2 setup checklist, add-drive action, connected drive cards, sync/progress state, multi-writer explanation, and copyable CORS JSON. Stale `cloud-owner` / `cloud-sync` navigation ids alias to the consolidated pane so persisted selections remain safe. |
 | 2026-06-11 | MUZERO | Phase 13 SA-1 reliability follow-up: remote R2 audio/video playback now uses `getAppFetch()` to read the object as a temporary Blob before loading the `MediaEngine`, eliminating the remaining browser case where progress advanced but WebAudio produced no sound. The regression tests now require remote audio/video to use the Blob path rather than direct cross-origin media element loading. |

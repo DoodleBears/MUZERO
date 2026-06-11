@@ -24,6 +24,7 @@ import { trackAlbum, trackArtists, trackSubtitle } from "@/lib/track-display";
 import { cn, formatDuration } from "@/lib/utils";
 import { useNavStore } from "@/stores/nav-store";
 import { useIsStreamDownloading } from "@/stores/stream-cache-store";
+import { isTrackCacheableToDevice } from "@/streamsrc/source-detect";
 
 interface TrackRowProps {
   track: Track;
@@ -318,8 +319,8 @@ export const TrackRow = memo(function TrackRow({
         >
           <DeleteIcon size={16} />
         </button>
-        {track.status === "ready" && track.origin === "streamed" && !track.blobId ? (
-          // Online track with no local copy yet → fetch it from the cloud into a
+        {isTrackCacheableToDevice(track) ? (
+          // Online/R2 track with no local copy yet → fetch it from the cloud into a
           // local blob (cloud-download glyph), not a disabled export menu.
           <DownloadToDeviceButton trackId={track.id} onDownload={onDownloadToDevice} />
         ) : track.status === "ready" && track.origin === "streamed" ? (

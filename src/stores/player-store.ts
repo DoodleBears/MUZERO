@@ -77,7 +77,11 @@ import { runStreamCache } from "@/streamsrc/cache-stream";
 import type { StreamSearchHit } from "@/streamsrc/provider";
 import { createStreamSource } from "@/streamsrc/registry";
 import { resolveStreamedTrackMedia, type StreamPlaybackResult } from "@/streamsrc/resolve-playback";
-import { isStreamedTrack, playbackSourceKind } from "@/streamsrc/source-detect";
+import {
+  isStreamedTrack,
+  isTrackCacheableToDevice,
+  playbackSourceKind,
+} from "@/streamsrc/source-detect";
 import { createStreamHttp } from "@/streamsrc/stream-http";
 import {
   type AddHitsResult,
@@ -93,6 +97,7 @@ import {
   type PlaybackListenFlush,
 } from "@/sync/playback-listen-session";
 import { recordPlaybackListen } from "@/sync/playback-stats";
+import { cacheRemoteTrackMedia } from "@/sync/r2-cache";
 import { canWritePresenceToDrive } from "@/sync/r2-presence";
 import {
   createR2PresenceCoordinator,
@@ -684,7 +689,14 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
 
   async downloadStreamedTrack(trackId) {
     const track = await getTrack(trackId);
-    if (!track || !isStreamedTrack(track) || track.blobId) return; // not streamed / already cached
+    if (!track || !isTrackCacheableToDevice(track)) return; // no cloud source / already cached
+    if (track.remoteMediaUrl) {
+      const result = await cacheRemoteTrackNow(track);
+      if (result.kind === "cached") notify.success(i18n.t("streamCache.downloaded"));
+      else if (result.kind === "failed") notify.error(i18n.t("streamCache.downloadFailed"));
+      return;
+    }
+    if (!isStreamedTrack(track)) return;
     const result = await cacheStreamedTrackNow(track);
     if (result.kind === "cached") {
       notify.success(i18n.t("streamCache.downloaded"));
@@ -1118,6 +1130,29 @@ async function runCacheStreamedTrack(
   return result;
 }
 
+async function cacheRemoteTrackNow(track: Track): Promise<{ kind: "cached" | "failed" }> {
+  setStreamDownloading(track.id, true);
+  try {
+    const latest = await getTrack(track.id);
+    if (!latest || latest.blobId || !latest.remoteMediaUrl) return { kind: "failed" };
+    const result = await cacheRemoteTrackMedia(latest.id);
+    log.info("player", "cached remote track", {
+      trackId: latest.id,
+      bytes: result.bytes,
+      mime: result.mime,
+    });
+    return { kind: "cached" };
+  } catch (err) {
+    log.warn("player", "cache remote track failed", {
+      trackId: track.id,
+      err: err instanceof Error ? err.message : String(err),
+    });
+    return { kind: "failed" };
+  } finally {
+    setStreamDownloading(track.id, false);
+  }
+}
+
 async function cacheResolvedStreamBlob(
   track: Track,
   resolved: Extract<StreamPlaybackResult, { kind: "ok" }> & { blob: Blob },
@@ -1160,17 +1195,18 @@ async function cacheResolvedStreamBlob(
 const STREAM_DOWNLOAD_CONCURRENCY = 4;
 
 /**
- * Download every not-yet-cached streamed track in a set to local blobs (the
+ * Download every not-yet-cached streamed or remote-R2 track in a set to local blobs (the
  * "download to this device" option on playlist import). Best-effort: each track
- * reports its own spinner via {@link cacheStreamedTrackNow}; a final toast tallies
- * how many landed vs. failed (VIP/login gates count as failures here). Fire-and-
- * forget — the set is already playable online, so this fills in offline copies.
+ * reports its own spinner via {@link cacheStreamedTrackNow} / {@link cacheRemoteTrackNow};
+ * a final toast tallies how many landed vs. failed (VIP/login gates count as failures
+ * here). Fire-and-forget — the set is already playable online, so this fills in
+ * offline copies.
  */
 async function downloadStreamedSetTracks(setId: string): Promise<void> {
   const session = await getSession(setId);
   if (!session) return;
   const rows = await Promise.all(session.trackIds.map((id) => getTrack(id)));
-  const pending = rows.filter((t): t is Track => !!t && isStreamedTrack(t) && !t.blobId);
+  const pending = rows.filter((t): t is Track => !!t && isTrackCacheableToDevice(t));
   if (pending.length === 0) return;
 
   setSetBulkDownloading(setId, true);
@@ -1181,9 +1217,17 @@ async function downloadStreamedSetTracks(setId: string): Promise<void> {
     while (cursor < pending.length) {
       const track = pending[cursor];
       cursor += 1;
-      const result = await cacheStreamedTrackNow(track);
-      if (result.kind === "cached") cached += 1;
-      else failed += 1;
+      if (track.remoteMediaUrl) {
+        const result = await cacheRemoteTrackNow(track);
+        if (result.kind === "cached") cached += 1;
+        else failed += 1;
+      } else if (isStreamedTrack(track)) {
+        const result = await cacheStreamedTrackNow(track);
+        if (result.kind === "cached") cached += 1;
+        else failed += 1;
+      } else {
+        failed += 1;
+      }
     }
   };
   const lanes = Math.min(STREAM_DOWNLOAD_CONCURRENCY, pending.length);

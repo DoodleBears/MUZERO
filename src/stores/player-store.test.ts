@@ -365,4 +365,56 @@ describe("player-store remote subscribed-manifest playback", () => {
     expectLoadedBlob("video", "video/mp4");
     expect(mediaEngineMock.loadUrl).not.toHaveBeenCalled();
   });
+
+  it("downloads one remote R2 track to local media blobs from the track-row action", async () => {
+    const { db, usePlayerStore } = await subscribeAndActivateRemoteSet();
+    const track = usePlayerStore.getState().queue[0]!;
+    platformFetchMock.mockResolvedValueOnce(
+      new Response(new Uint8Array([1, 2, 3]), {
+        status: 200,
+        headers: { "content-type": "audio/mpeg" },
+      }),
+    );
+
+    await usePlayerStore.getState().downloadStreamedTrack(track.id);
+
+    const stored = await db.tracks.get(track.id);
+    expect(stored?.blobId).toEqual(expect.stringMatching(/^blb_/));
+    await expect(db.mediaBlobs.get(stored?.blobId ?? "")).resolves.toMatchObject({
+      trackId: track.id,
+      role: "media",
+      mime: "audio/mpeg",
+      bytes: 3,
+    });
+    expect(platformFetchMock).toHaveBeenCalledWith(REMOTE_AUDIO_URL, { signal: undefined });
+  });
+
+  it("downloads every remote R2 track in a set from the set-header action", async () => {
+    const { db, repos, usePlayerStore } = await subscribeAndActivateRemoteSet();
+    const setId = usePlayerStore.getState().activeSessionId!;
+    const session = await repos.getSession(setId);
+    platformFetchMock.mockImplementation(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("clip.mp4")) {
+        return new Response(new Uint8Array([4, 5, 6, 7]), {
+          status: 200,
+          headers: { "content-type": "video/mp4" },
+        });
+      }
+      return new Response(new Uint8Array([1, 2, 3]), {
+        status: 200,
+        headers: { "content-type": "audio/mpeg" },
+      });
+    });
+
+    await usePlayerStore.getState().downloadStreamedSet(setId);
+
+    const tracks = await db.tracks.bulkGet(session?.trackIds ?? []);
+    expect(tracks).toHaveLength(2);
+    expect(tracks.every((track) => !!track?.blobId)).toBe(true);
+    const blobs = await db.mediaBlobs.toArray();
+    expect(blobs.map((blob) => blob.mime).sort()).toEqual(["audio/mpeg", "video/mp4"]);
+    expect(platformFetchMock).toHaveBeenCalledWith(REMOTE_AUDIO_URL, { signal: undefined });
+    expect(platformFetchMock).toHaveBeenCalledWith(REMOTE_VIDEO_URL, { signal: undefined });
+  });
 });
