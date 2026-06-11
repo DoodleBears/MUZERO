@@ -22,6 +22,7 @@
 | 7 | Sync hardening (2026-06-11 audit follow-ups) | ✅ Done | [§12.3 backlog](#123-phase-7-proposed-sync-hardening) |
 | 8 | Multi-writer library (read-merge-write publish) | ✅ Done | [§12.4](#124-phase-8-multi-writer-library-read-merge-write-publish) |
 | 9 | Same-set co-editing (one user, multiple devices) | ✅ Done | [§12.5](#125-phase-9-same-set-co-editing-one-user-multiple-devices) |
+| 10 | Automatic sync + R2 scale optimizations | 🔲 Pending | [§12.6](#126-phase-10-automatic-sync--r2-scale-optimizations) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
 
@@ -2166,12 +2167,65 @@ Do not record secrets, full signed URLs, or media content.
 
 **Outcome (2026-06-11): Phase 9 ✅.** Any of the user's devices can add tracks to, remove tracks from, rename, and reorder the SAME set; one Sync now click receives the other devices' edits and publishes the merged result. Semantics: adds union (both sides kept), removals propagate via capped tombstones with a re-add escape hatch, metadata LWW, order via ranks, ownership (`publishedBy`) never moves. Known limits (recorded): per-track field conflicts resolve by local-entry-wins (no per-track clocks); tombstone/LWW clocks are device wall clocks (F10); the dormant mutation/conflict-panel machinery remains reserved for a future multi-USER (untrusted writers) phase.
 
+### 12.6 Phase 10: Automatic sync + R2 scale optimizations
+
+**Goal:** make cloud drive sync feel automatic without turning R2 into a hot, fragile coordination service. The existing manual `Sync now` path remains the source of truth; automatic sync is a visible user setting that schedules the same orchestrated publish/pull pipeline with conservative throttling, backoff, and conflict gates.
+
+**Product requirements:**
+
+1. **Per-drive automatic sync frequency.** Each writable owner/trusted drive can choose `Manual only` (default), `On app start`, `Every 15 min`, `Every 30 min`, `Every 60 min`, and `After local changes`. Read-only/shared drives do not show write-frequency controls.
+2. **Visible and reversible.** The setting lives in Settings > Cloud Drive on the drive card, not in hidden flags, URL params, or localStorage-only toggles. The card shows the next scheduled sync, last auto-sync result, and whether the scheduler is paused.
+3. **Scheduler guardrails.** Auto sync must not call `setInterval(sync)` blindly. It checks: drive write capability, local R2 credentials, no in-flight per-drive operation, app visibility, network reachability when detectable, last success/failure time, pending local changes, and the user's selected frequency.
+4. **Debounce local changes.** `After local changes` waits at least 2-5 minutes after the latest local mutation before syncing, with a minimum interval between runs. Batch edits should collapse into one publish.
+5. **Jitter + backoff.** Scheduled runs add jitter so multiple devices do not all publish at the exact same minute. Consecutive failures use exponential backoff and stop escalating after a capped delay.
+6. **Conflict pause.** `needs-review`, a bounded 412 retry failure, repeated auth/CORS failures, or user cancellation pauses auto sync for that drive until the user manually retries or changes settings.
+7. **Manual remains first-class.** `Sync now` bypasses the schedule delay, still uses the same per-drive controller/progress row, and can be cancelled. A manual success may clear a scheduler pause.
+8. **Battery/data respect.** Mobile builds should default to `Manual only`; later mobile-specific options may restrict auto sync to Wi-Fi/charging, but those controls are out of the desktop-first v1 slice.
+
+**Upload throughput requirements:**
+
+1. **Bounded upload concurrency.** Introduce a user-visible `Upload concurrency` setting per drive or global cloud sync settings, with conservative choices `1`, `2` (default), and `3`.
+2. **Only immutable bytes run in parallel.** Media, cover, memory photo, avatar, and immutable stats-event segment objects may upload concurrently. Mutable JSON (`sets/*/index.json`, devices/stats/presence indexes, checkpoints, and `manifest.json`) remains ordered and conditional.
+3. **Manifest remains last.** The root manifest is still the final write. A failed media/index upload must prevent the manifest from referencing incomplete content.
+4. **Progress stays intelligible.** The progress row continues to show object count, byte count, current object, and phase. With concurrency, `currentKey` may mean "one of the active uploads"; UI may show a small active-count label instead of flickering keys.
+5. **Resume semantics stay object-level.** Persist each successfully uploaded resumable object immediately in `syncObjects`. A failed run can skip already-uploaded content-addressed objects on retry. Byte-level resume is explicitly deferred to multipart upload.
+6. **Bandwidth limit is later.** A true speed cap requires a throttled `ReadableStream`/chunked body path and platform testing. It should not block bounded concurrency.
+
+**R2 protocol optimization backlog:**
+
+1. **ETag-aware reads.** Store remote manifest/index ETags and use conditional GETs where available to avoid re-downloading unchanged JSON during read-merge-write.
+2. **Dirty-set planning.** Track which local sets/devices/stats changed since the last successful sync. A scheduled auto sync should plan only dirty entities plus required discovery indexes whenever possible.
+3. **Avoid duplicate object accounting.** De-duplicate identical content-addressed objects in `plan.totalBytes` and progress totals so progress does not over-count the same blob referenced by multiple tracks.
+4. **Paged large set indexes.** For very large sets, split `sets/<setId>/index.json` into a small header plus paged track/memory/member pages. This reduces write amplification for small edits and makes remote browsing cheaper.
+5. **Append-only mutation logs.** For multi-user/trusted-collaborator scenarios, prefer per-device append-only mutation files under `sets/<setId>/mutations/<devicePublicId>/...` and periodic snapshot compaction over having every device race to rewrite the whole set index.
+6. **Multipart upload for huge videos.** Add S3 multipart upload only after the object-level resume path is stable. Multipart must persist upload id/parts safely, abort stale multipart sessions, and keep manifest-last atomicity.
+7. **Private/broker path remains separate.** Anonymous listener writeback, revocable invites, presigned upload grants, and private-by-default sharing require the future Worker broker / `mu0.app` control plane; they are not hidden inside the R2-only scheduler.
+
+**Checklist:**
+
+- [ ] AS-1 Add persisted sync scheduling settings (`Manual only` default) and Cloud Drive card controls with en/zh/ja/ko copy.
+- [ ] AS-2 Implement a per-drive scheduler that triggers the existing orchestrator, honoring in-flight guards, jitter, debounce, backoff, and conflict pause.
+- [ ] AS-3 Add dirty tracking so automatic runs can skip when there is nothing meaningful to publish.
+- [ ] AS-4 Add bounded immutable-object upload concurrency while preserving ordered conditional JSON writes and manifest-last publish.
+- [ ] AS-5 Update progress UI/tests for concurrent active uploads and scheduler state.
+- [ ] AS-6 Add ETag/conditional-read cache for manifest/index base fetches.
+- [ ] AS-7 Revisit large-library scale: paged set indexes, mutation-log compaction, and multipart upload as separate implementation slices.
+
+**Non-goals for Phase 10:**
+
+- No hidden auto-sync feature flag.
+- No background daemon outside the app lifecycle.
+- No central lock server or MUZERO backend.
+- No byte-level resume until multipart upload is designed and tested.
+- No anonymous public writeback without the future broker layer.
+
 ---
 
 ## 13. Document Change Log
 
 | Date | Author | Changes |
 |------|--------|---------|
+| 2026-06-11 | MUZERO | Phase 10 backlog added for automatic sync frequency and R2 scale optimization: visible per-drive scheduling (`Manual only` default), debounce/jitter/backoff/conflict pause, bounded immutable-object upload concurrency, object-level resume preservation, ETag/dirty planning, paged indexes, mutation-log compaction, multipart upload, and broker-only future writeback. |
 | 2026-06-09 | MUZERO | Initial draft for R2-only user-owned cloud drive sync. |
 | 2026-06-09 | MUZERO | Architecture review pass: clarified V1/V3 boundary, profile/avatar sync, per-device object ownership, and multi-writer conflict rules. |
 | 2026-06-10 | MUZERO | Cross-PRD reconciliation with Artist & Album Library Entities: §3.4.2 synced `mediaMetadata` also feeds cross-drive artist/album entities + faceted/scoped search (`matchesRemoteSearchTrack` mirrors the scoped-token parser); §3.8 artist/album rollups are a derived current-truth dimension, not a synced `PlaybackAggregate` scope; §5.4 artist/album detail stats noted. No shipped behavior changed. |
