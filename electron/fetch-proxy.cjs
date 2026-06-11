@@ -3,7 +3,7 @@
 // the main process performs it with `net.fetch` (Chromium's network stack), so no
 // renderer CORS / mixed-content applies. Streaming is preserved both ways — DJ SSE
 // and large R2 PUT bodies flow through unbuffered — and SigV4 headers pass verbatim.
-const { net } = require("electron");
+const { net, session } = require("electron");
 const { spawn } = require("node:child_process");
 
 const TARGET_HEADER = "x-muzero-target";
@@ -12,17 +12,44 @@ const MEDIA_UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
 
 /**
+ * Resolve the proxy Chromium would use for `target` into a `curl -x` argument.
+ * Critical for googlevideo: the renderer's youtubei `/player` call runs through
+ * `net.fetch` (Chromium), which honors the OS/system proxy — so the media URL is
+ * IP-locked to the *proxy's* exit. `curl` ignores the system proxy by default and
+ * would egress the real ISP IP → mismatch → 403. Tunnelling curl through the same
+ * proxy makes both egress the same IP. Returns null for DIRECT (no proxy).
+ */
+async function resolveProxyArg(target) {
+  try {
+    const rule = await session.defaultSession.resolveProxy(target);
+    const first = (rule || "").split(/[;,]/)[0].trim(); // "PROXY h:p" | "SOCKS5 h:p" | "DIRECT"
+    if (!first || /^DIRECT$/i.test(first)) return null;
+    const [scheme, hostport] = first.split(/\s+/);
+    if (!hostport) return null;
+    const s = scheme.toUpperCase();
+    if (s.startsWith("SOCKS")) return `socks5h://${hostport}`;
+    if (s === "HTTPS") return `https://${hostport}`;
+    return `http://${hostport}`; // PROXY / HTTP
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Fetch a googlevideo media URL through the system `curl`. Every request from the
  * Electron process — `net.fetch` AND `node:https`, both on Chromium's BoringSSL —
  * is fingerprinted by googlevideo and 403'd, while curl's own TLS gets a 206 (proven
  * against the exact URL + IP: same egress IP, same headers, opposite result). curl
- * ships on macOS, Windows 10+, and virtually all Linux. We stream curl's stdout as
- * the Response body and parse the status + headers from its `-i` header block; the
- * `<audio>` element's Range rides along for 206 seeking.
+ * ships on macOS, Windows 10+, and virtually all Linux. When a system proxy is in
+ * play we tunnel curl through it (`-x`) so its egress IP matches the proxy-bound
+ * `/player` URL. We stream curl's stdout as the Response body and parse the status +
+ * headers from its `-i` header block; the `<audio>` element's Range rides along for
+ * 206 seeking.
  */
-function curlMediaFetch(target, range) {
+function curlMediaFetch(target, range, proxy) {
   return new Promise((resolve, reject) => {
     const args = ["-sS", "-i", "--connect-timeout", "15", "-A", MEDIA_UA];
+    if (proxy) args.push("-x", proxy);
     if (range) args.push("-H", `Range: ${range}`);
     args.push(target);
 
@@ -99,6 +126,7 @@ function curlMediaFetch(target, range) {
       console.error(
         "[muzfetch] curl googlevideo",
         status,
+        proxy ? `via ${proxy}` : "DIRECT",
         respHeaders.get("content-type"),
         respHeaders.get("content-range") || respHeaders.get("content-length"),
       );
@@ -168,7 +196,8 @@ async function handleMuzfetch(request) {
   let res;
   if (isGoogleVideo) {
     try {
-      res = await curlMediaFetch(target, headers.get("range"));
+      const proxy = await resolveProxyArg(target);
+      res = await curlMediaFetch(target, headers.get("range"), proxy);
     } catch (err) {
       return new Response(`youtube media fetch failed: ${err.message}`, { status: 502 });
     }
