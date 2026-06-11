@@ -112,10 +112,12 @@ export function ChangelogModal() {
           ) : (
             shown.map((release) => (
               <section key={release.version} className="mb-5 last:mb-0">
-                <div className="mb-2 flex items-baseline justify-between gap-3">
-                  <h3 className="font-semibold text-sm">
+                <div className="mb-2 flex items-center gap-3">
+                  <h3 className="min-w-0 shrink-0 truncate font-semibold text-sm">
                     {localize(release.title, locale) || `v${release.version}`}
                   </h3>
+                  {/* leader line connecting the title to the version */}
+                  <span aria-hidden className="h-px flex-1 bg-border" />
                   <span className="shrink-0 text-muted-foreground text-xs">
                     v{release.version} · {release.date}
                   </span>
