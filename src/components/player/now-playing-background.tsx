@@ -292,7 +292,12 @@ function NowPlayingBackgroundContent({ hideVisualizer }: { hideVisualizer: boole
               className="absolute inset-0"
               coverColor
               placement="background"
-              style={{ opacity: visualizerOpacity, transition: "opacity 240ms ease" }}
+              style={{
+                opacity: visualizerOpacity,
+                transition: "opacity 240ms ease",
+                // Blend the spectrum (a canvas) with the flow + background below it.
+                mixBlendMode: settings.visualizerBlendMode ?? "normal",
+              }}
             />
             {/* Always rendered (opacity 0 when off) so the dim eases in/out smoothly
                 instead of popping when you raise it to read lyrics over the viz. */}

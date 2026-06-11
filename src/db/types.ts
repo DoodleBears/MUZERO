@@ -518,6 +518,9 @@ export interface AppSettings {
   visualizerBackgroundDim?: number;
   /** Opacity of the background visualizer layer, 0–100. Default 100. */
   visualizerBackgroundOpacity?: number;
+  /** How the background visualizer (spectrum) blends with the layers below it
+   *  (flow + background). CSS mix-blend-mode. Default "normal". */
+  visualizerBlendMode?: FlowBlendMode;
   /** Dim over the background visualizer WHEN lyrics are shown over it. Default 40. */
   visualizerBgDimLyrics?: number;
   /** Opacity of the background visualizer WHEN lyrics are shown over it. Default 60. */
