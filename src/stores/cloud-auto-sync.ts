@@ -4,6 +4,7 @@ import {
   type CloudAutoSyncScheduler,
   createCloudAutoSyncScheduler,
 } from "@/sync/auto-sync-scheduler";
+import { findPendingCloudDriveLocalChangesSince } from "@/sync/cloud-drive-dirty";
 import { listCloudDrives } from "@/sync/cloud-drive-repo";
 import { getR2CredentialsForDrive } from "@/sync/cloud-drive-settings";
 import { useSyncStore } from "./sync-store";
@@ -30,6 +31,7 @@ export function startCloudAutoSyncScheduler(): () => void {
     isOnline: () => typeof navigator === "undefined" || navigator.onLine !== false,
     now: () => Date.now(),
     jitterMs: stableJitterMs,
+    pendingLocalChangesSince: findPendingCloudDriveLocalChangesSince,
     publishDrive: (driveId) => useSyncStore.getState().publishDrive(driveId),
     onError: (error) => log.warn("sync", "cloud auto-sync scheduler tick failed", { error }),
   });

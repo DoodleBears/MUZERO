@@ -2205,7 +2205,7 @@ Do not record secrets, full signed URLs, or media content.
 
 - [x] AS-1 Add persisted sync scheduling settings (`Manual only` default) and Cloud Drive card controls with en/zh/ja/ko copy.
 - [x] AS-2 Implement a per-drive scheduler that triggers the existing orchestrator, honoring in-flight guards, jitter, debounce, backoff, and conflict pause.
-- [ ] AS-3 Add dirty tracking so automatic runs can skip when there is nothing meaningful to publish.
+- [x] AS-3 Add dirty tracking so automatic runs can skip when there is nothing meaningful to publish.
 - [ ] AS-4 Add bounded immutable-object upload concurrency while preserving ordered conditional JSON writes and manifest-last publish.
 - [ ] AS-5 Update progress UI/tests for concurrent active uploads and scheduler state.
 - [ ] AS-6 Add ETag/conditional-read cache for manifest/index base fetches.
@@ -2225,6 +2225,7 @@ Do not record secrets, full signed URLs, or media content.
 
 | Date | Author | Changes |
 |------|--------|---------|
+| 2026-06-11 | MUZERO | Phase 10 AS-3 completed: added tested dirty tracking for automatic cloud sync. The scheduler now receives the oldest locally changed publishable set since the latest successful push, including co-edited sets imported from the same drive and excluding read-only imports from other drives, so `After local changes` can debounce real pending work and skip empty runs. |
 | 2026-06-11 | MUZERO | Phase 10 AS-2 completed: added a tested automatic-sync scheduler policy/runtime, started it from the app lifecycle, gated runs on write capability, local credentials, visibility, network state, in-flight sync, jitter, interval, failure backoff, app-start delay, and pause state. Publish outcomes now pause auto-sync on `needs-review`, cancellation, or failure, while a successful manual publish or preference change clears the pause. `After local changes` is wired as a scheduler input and will become active when AS-3 dirty tracking supplies pending-change timestamps. |
 | 2026-06-11 | MUZERO | Phase 10 AS-1 completed: CloudDrive now persists visible per-drive auto-sync frequency and upload concurrency preferences with safe defaults (`Manual only`, concurrency `2`), Settings cloud drive cards expose the controls with en/zh/ja/ko copy, and repository/component tests cover defaults, updates, disabled read-only controls, and change callbacks. |
 | 2026-06-11 | MUZERO | Phase 10 backlog added for automatic sync frequency and R2 scale optimization: visible per-drive scheduling (`Manual only` default), debounce/jitter/backoff/conflict pause, bounded immutable-object upload concurrency, object-level resume preservation, ETag/dirty planning, paged indexes, mutation-log compaction, multipart upload, and broker-only future writeback. |
