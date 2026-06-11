@@ -11,7 +11,7 @@
 
 | Phase | Name | Status | Link |
 |-------|------|--------|------|
-| 1 | 观测先行：内存与帧节奏指标 | 🔲 Pending | [Phase 1 Checklist](#phase-1-checklist) |
+| 1 | 观测先行：内存与帧节奏指标 | 🔄 In Progress | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | 确证泄漏修复（P0：YouTube 播放路径） | 🔲 Pending | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | 全表查询放大链治理（列表 / 搜索 / 统计） | 🔲 Pending | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | 渲染层 GPU / GC 卫生（可视化 + 背景） | 🔲 Pending | [Phase 4 Checklist](#phase-4-checklist) |
