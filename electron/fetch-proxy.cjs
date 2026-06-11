@@ -4,8 +4,53 @@
 // renderer CORS / mixed-content applies. Streaming is preserved both ways — DJ SSE
 // and large R2 PUT bodies flow through unbuffered — and SigV4 headers pass verbatim.
 const { net } = require("electron");
+const https = require("node:https");
+const { Readable } = require("node:stream");
 
 const TARGET_HEADER = "x-muzero-target";
+
+/**
+ * Fetch via Node's OWN net stack (node:https), bypassing Electron's net.fetch /
+ * patched global fetch (both Chromium-backed). googlevideo 403s the Chromium request
+ * but serves an identical Node request a 206 — verified against the exact URL + IP.
+ * Returns a web `Response` so the caller re-wraps it unchanged. Follows redirects.
+ */
+function nodeHttpsFetch(target, init, depth = 0) {
+  return new Promise((resolve, reject) => {
+    let url;
+    try {
+      url = new URL(target);
+    } catch (err) {
+      reject(err);
+      return;
+    }
+    const headers = {};
+    for (const [name, value] of init.headers) headers[name] = value;
+    const req = https.request(url, { method: init.method || "GET", headers }, (res) => {
+      const status = res.statusCode || 0;
+      const location = res.headers.location;
+      if (location && status >= 300 && status < 400 && depth < 5) {
+        res.resume(); // drain
+        resolve(nodeHttpsFetch(new URL(location, url).href, init, depth + 1));
+        return;
+      }
+      const outHeaders = new Headers();
+      for (const [name, value] of Object.entries(res.headers)) {
+        if (value != null) outHeaders.set(name, Array.isArray(value) ? value.join(", ") : value);
+      }
+      resolve(
+        new Response(Readable.toWeb(res), {
+          status,
+          statusText: res.statusMessage,
+          headers: outHeaders,
+        }),
+      );
+    });
+    req.on("error", reject);
+    if (init.body) Readable.fromWeb(init.body).pipe(req);
+    else req.end();
+  });
+}
 
 async function handleMuzfetch(request) {
   const headers = new Headers(request.headers);
@@ -58,12 +103,12 @@ async function handleMuzfetch(request) {
     }
   }
 
-  // googlevideo 403s Chromium's net.fetch but serves Node's undici a 206 — same URL,
-  // same IP, identical clean headers (verified). So route googlevideo media through
-  // the main process's own `fetch` (undici); everything else stays on net.fetch for
-  // cookies / session / privileged-scheme CORS bypass. credentials:"include" sends the
-  // default session's cookies cross-origin (MUSIC_U / SESSDATA after a source login
-  // unlock VIP); undici ignores it (no cookie jar — googlevideo wants none anyway).
+  // googlevideo 403s Chromium's net.fetch but serves an identical Node request a 206
+  // (same URL, same IP, clean headers — verified). So route googlevideo through
+  // node:https; everything else stays on net.fetch for cookies / session / privileged-
+  // scheme CORS bypass. credentials:"include" sends the default session's cookies
+  // cross-origin (MUSIC_U / SESSDATA after a source login unlock VIP); node:https has
+  // no cookie jar (googlevideo wants none anyway).
   let isGoogleVideo = false;
   try {
     isGoogleVideo = /(^|\.)googlevideo\.com$/i.test(new URL(target).hostname);
@@ -76,7 +121,9 @@ async function handleMuzfetch(request) {
     init.duplex = "half";
   }
 
-  const res = await (isGoogleVideo ? globalThis.fetch : net.fetch)(target, init);
+  const res = isGoogleVideo
+    ? await nodeHttpsFetch(target, init)
+    : await net.fetch(target, init);
   // Re-emit with permissive CORS so the privileged-scheme renderer can read it,
   // keeping the body a live stream (no buffering).
   const outHeaders = new Headers(res.headers);
