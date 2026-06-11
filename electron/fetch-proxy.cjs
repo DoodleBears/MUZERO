@@ -37,18 +37,40 @@ function curlMediaFetch(target, range) {
     let headerBuf = Buffer.alloc(0);
     let parsed = false;
     let controller;
+    let closed = false;
+    // The consumer (an <audio> seek / track switch) can cancel mid-stream, and stdout
+    // `end` + child `close` can both fire — guard so we never enqueue/close twice.
+    const safeEnqueue = (chunk) => {
+      if (closed) return;
+      try {
+        controller.enqueue(chunk);
+      } catch {
+        closed = true;
+        child.kill();
+      }
+    };
+    const safeClose = () => {
+      if (closed) return;
+      closed = true;
+      try {
+        controller.close();
+      } catch {
+        // already closed
+      }
+    };
     const body = new ReadableStream({
       start(c) {
         controller = c;
       },
       cancel() {
+        closed = true;
         child.kill();
       },
     });
 
     child.stdout.on("data", (chunk) => {
       if (parsed) {
-        controller.enqueue(chunk);
+        safeEnqueue(chunk);
         return;
       }
       headerBuf = Buffer.concat([headerBuf, chunk]);
@@ -82,10 +104,10 @@ function curlMediaFetch(target, range) {
       );
       parsed = true;
       resolve(new Response(body, { status, headers: respHeaders }));
-      if (rest.length) controller.enqueue(rest);
+      if (rest.length) safeEnqueue(rest);
     });
     child.stdout.on("end", () => {
-      if (parsed) controller.close();
+      if (parsed) safeClose();
     });
 
     let errText = "";
