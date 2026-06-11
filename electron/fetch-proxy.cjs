@@ -5,6 +5,7 @@
 // and large R2 PUT bodies flow through unbuffered — and SigV4 headers pass verbatim.
 const { net, session } = require("electron");
 const { spawn } = require("node:child_process");
+const { emitMainDiagnostic } = require("./diagnostics.cjs");
 
 const TARGET_HEADER = "x-muzero-target";
 
@@ -123,12 +124,25 @@ function curlMediaFetch(target, range, proxy) {
           // skip a header value the Headers ctor rejects (e.g. duplicates curl folds)
         }
       }
-      console.error(
-        "[muzfetch] curl googlevideo",
-        status,
-        proxy ? `via ${proxy}` : "DIRECT",
-        respHeaders.get("content-type"),
-        respHeaders.get("content-range") || respHeaders.get("content-length"),
+      emitMainDiagnostic(
+        status >= 400 ? "error" : "debug",
+        "stream.proxy",
+        status >= 400 ? "request.failed" : "response.received",
+        "curl googlevideo response",
+        {
+          category: "network",
+          phase: status >= 400 ? "fail" : "success",
+          errorKind: status >= 400 ? "http_status" : undefined,
+          source: "electron-main",
+          httpStatus: status,
+          contentType: respHeaders.get("content-type") || undefined,
+          range: range || null,
+          acceptRanges: respHeaders.get("accept-ranges") || null,
+          contentRange: respHeaders.get("content-range") || null,
+          contentLength: respHeaders.get("content-length") || null,
+          requestHost: hostForTarget(target),
+          proxyMode: proxy ? "system-proxy" : "direct",
+        },
       );
       parsed = true;
       resolve(new Response(body, { status, headers: respHeaders }));
@@ -143,12 +157,28 @@ function curlMediaFetch(target, range, proxy) {
       errText += c;
     });
     child.on("error", (err) => {
-      console.error("[muzfetch] curl spawn error", err.message);
+      emitMainDiagnostic("error", "stream.proxy", "request.failed", "curl spawn error", {
+        category: "network",
+        phase: "fail",
+        errorKind: "network_error",
+        source: "electron-main",
+        requestHost: hostForTarget(target),
+        errorName: err.name,
+        errorMessage: err.message,
+      });
       reject(err);
     });
     child.on("close", (code) => {
       if (!parsed) {
-        console.error("[muzfetch] curl no response — exit", code, errText.slice(0, 160));
+        emitMainDiagnostic("error", "stream.proxy", "request.failed", "curl no response", {
+          category: "network",
+          phase: "fail",
+          errorKind: "network_error",
+          source: "electron-main",
+          requestHost: hostForTarget(target),
+          exitCode: code,
+          stderrPreview: errText.slice(0, 160),
+        });
         reject(new Error(`curl exited ${code}`));
       }
     });
@@ -166,9 +196,11 @@ async function handleMuzfetch(request) {
   //      __mzh_<name>=…` URL (see electronMediaProxyUrl). The element's own Range
   //      header is on `request` and is forwarded, so 206 seeking works.
   let target = request.headers.get(TARGET_HEADER);
+  let isMediaRequest = false;
   if (!target) {
     const reqUrl = new URL(request.url);
     if (reqUrl.searchParams.has("__mzurl")) {
+      isMediaRequest = true;
       target = reqUrl.searchParams.get("__mzurl");
       // The <audio>/<img> element's own Referer/Origin (localhost) is wrong for the
       // target CDN (hdslb/bilivideo 403 a foreign Referer) — drop them and use only
@@ -230,12 +262,41 @@ async function handleMuzfetch(request) {
   // Re-emit with permissive CORS so the privileged-scheme renderer can read it,
   // keeping the body a live stream (no buffering).
   const outHeaders = new Headers(res.headers);
+  if (isMediaRequest) {
+    emitMainDiagnostic(
+      res.status >= 400 ? "error" : "debug",
+      "stream.proxy",
+      res.status >= 400 ? "request.failed" : "response.received",
+      "media proxy response",
+      {
+        category: "network",
+        phase: res.status >= 400 ? "fail" : "success",
+        errorKind: res.status >= 400 ? "http_status" : undefined,
+        source: "electron-main",
+        httpStatus: res.status,
+        contentType: outHeaders.get("content-type") || undefined,
+        range: request.headers.get("range") || null,
+        acceptRanges: outHeaders.get("accept-ranges") || null,
+        contentRange: outHeaders.get("content-range") || null,
+        contentLength: outHeaders.get("content-length") || null,
+        requestHost: hostForTarget(target),
+      },
+    );
+  }
   outHeaders.set("access-control-allow-origin", "*");
   return new Response(res.body, {
     status: res.status,
     statusText: res.statusText,
     headers: outHeaders,
   });
+}
+
+function hostForTarget(target) {
+  try {
+    return new URL(target).hostname;
+  } catch {
+    return undefined;
+  }
 }
 
 module.exports = { handleMuzfetch };

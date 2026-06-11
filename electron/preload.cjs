@@ -3,6 +3,9 @@
 // native access (folder picking, fs reads, save dialog, opening links) through it.
 // Network goes through the `muzfetch://` scheme, not here (see electron/main.cjs).
 const { contextBridge, ipcRenderer } = require("electron");
+// Sandboxed preloads can only require Electron's limited preload modules; keep
+// this in sync with electron/diagnostics.cjs without requiring that local file.
+const DIAGNOSTICS_CHANNEL = "muzero:diagnostics:event";
 
 contextBridge.exposeInMainWorld("muzero", {
   kind: "electron",
@@ -27,5 +30,12 @@ contextBridge.exposeInMainWorld("muzero", {
     check: () => ipcRenderer.invoke("muzero:update:check"),
     install: () => ipcRenderer.invoke("muzero:update:install"),
     setChannel: (channel) => ipcRenderer.invoke("muzero:update:setChannel", channel),
+  },
+  diagnostics: {
+    onEvent: (callback) => {
+      const listener = (_event, entry) => callback(entry);
+      ipcRenderer.on(DIAGNOSTICS_CHANNEL, listener);
+      return () => ipcRenderer.removeListener(DIAGNOSTICS_CHANNEL, listener);
+    },
   },
 });

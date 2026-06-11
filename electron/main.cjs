@@ -5,6 +5,7 @@ const { app, BrowserWindow, net, protocol, shell } = require("electron");
 const { registerIpc } = require("./ipc.cjs");
 const { handleMuzfetch } = require("./fetch-proxy.cjs");
 const { applyAppIcon, appIconPath, DEFAULT_APP_ICON } = require("./app-icon.cjs");
+const { attachDiagnosticsWindow } = require("./diagnostics.cjs");
 
 const devUrl = process.env.MUZERO_ELECTRON_URL;
 const distDir = path.join(__dirname, "..", "dist");
@@ -69,6 +70,7 @@ function createWindow() {
   });
 
   win.once("ready-to-show", () => win.show());
+  attachDiagnosticsWindow(win);
   win.webContents.setWindowOpenHandler(({ url }) => {
     void shell.openExternal(url);
     return { action: "deny" };

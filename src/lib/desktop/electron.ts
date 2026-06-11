@@ -1,3 +1,4 @@
+import type { DiagnosticEntry } from "@/lib/diagnostics";
 import type { DirEntryLike } from "@/lib/folder-import";
 import { assembleCookieHeader, type StreamCookie } from "@/streamsrc/login";
 import type { DesktopBridge, SaveFileInput, StreamLoginRequest } from "./bridge";
@@ -18,6 +19,9 @@ interface MuzeroApi {
   openSourceLogin(request: StreamLoginRequest): Promise<StreamCookie[] | null>;
   readSourceCookies(request: StreamLoginRequest): Promise<StreamCookie[] | null>;
   evalYoutubeN(functionSource: string, n: string): Promise<string>;
+  diagnostics?: {
+    onEvent(callback: (entry: DiagnosticEntry) => void): () => void;
+  };
 }
 
 const PROXY_URL = "muzfetch://proxy/";
@@ -89,6 +93,14 @@ export function createElectronBridge(): DesktopBridge {
     },
     evalYoutubeN: (functionSource, n) => api.evalYoutubeN(functionSource, n),
   };
+}
+
+export function subscribeElectronDiagnostics(
+  callback: (entry: DiagnosticEntry) => void,
+): () => void {
+  if (typeof window === "undefined") return () => undefined;
+  const api = window.muzero as unknown as MuzeroApi | undefined;
+  return api?.diagnostics?.onEvent(callback) ?? (() => undefined);
 }
 
 /** A standalone ArrayBuffer for IPC (not a view into a larger/shared buffer). */

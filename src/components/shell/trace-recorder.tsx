@@ -1,5 +1,6 @@
 import { useEffect } from "react";
-import { traceEvent } from "@/lib/trace";
+import { subscribeElectronDiagnostics } from "@/lib/desktop/electron";
+import { traceDiagnosticEvent, traceEvent } from "@/lib/trace";
 import { usePlayerStore } from "@/stores/player-store";
 
 export function TraceRecorder() {
@@ -30,6 +31,12 @@ export function TraceRecorder() {
     window.addEventListener("error", onError);
     window.addEventListener("unhandledrejection", onUnhandledRejection);
     document.addEventListener("visibilitychange", onVisibility);
+    const unsubscribeElectronDiagnostics = subscribeElectronDiagnostics((entry) => {
+      traceDiagnosticEvent(entry.level, entry.scope, entry.event ?? "main.event", entry.message, {
+        ...entry.context,
+        source: entry.context?.source ?? "electron-main",
+      });
+    });
     const unsubPlayer = usePlayerStore.subscribe((state, prev) => {
       const currentTrack = state.currentIndex >= 0 ? state.queue[state.currentIndex] : undefined;
       const prevTrack = prev.currentIndex >= 0 ? prev.queue[prev.currentIndex] : undefined;
@@ -55,6 +62,7 @@ export function TraceRecorder() {
       window.removeEventListener("error", onError);
       window.removeEventListener("unhandledrejection", onUnhandledRejection);
       document.removeEventListener("visibilitychange", onVisibility);
+      unsubscribeElectronDiagnostics();
       unsubPlayer();
     };
   }, []);
