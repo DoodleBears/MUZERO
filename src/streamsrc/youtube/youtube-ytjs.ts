@@ -21,6 +21,7 @@
 import { BG, type BgConfig } from "bgutils-js";
 import { Innertube, Platform } from "youtubei.js";
 import type { DiagnosticContext } from "@/lib/diagnostics";
+import { sanitizeUrlForTrace } from "@/lib/diagnostics";
 import { createDiagnosticLogger, log } from "@/lib/logger";
 import { getAppFetch } from "@/lib/platform";
 import { aliasRestrictedHeaders } from "../stream-http";
@@ -179,13 +180,66 @@ async function readableStreamToBlob(
   return new Blob(chunks, { type: mime });
 }
 
+type DecipherableYtjsFormat<TPlayer> = {
+  decipher: (player?: TPlayer) => Promise<string>;
+};
+
+type YtjsPlayerWithPoToken = {
+  po_token?: string | null;
+};
+
+type YtjsInfoWithCpn = {
+  cpn?: string;
+};
+
+export async function decipherYtjsFormatUrl<TPlayer>(
+  format: DecipherableYtjsFormat<TPlayer>,
+  player: TPlayer,
+): Promise<string> {
+  return format.decipher(player);
+}
+
+export async function withYtjsPlayerPoToken<T>(
+  player: YtjsPlayerWithPoToken,
+  poToken: string | null | undefined,
+  fn: () => Promise<T>,
+): Promise<T> {
+  if (!poToken) return fn();
+  const previousPoToken = player.po_token;
+  player.po_token = poToken;
+  try {
+    return await fn();
+  } finally {
+    player.po_token = previousPoToken;
+  }
+}
+
+export function appendYoutubeCpn(url: string, cpn: string | undefined): string {
+  if (!cpn) return url;
+  const parsed = new URL(url);
+  if (!parsed.searchParams.has("cpn")) parsed.searchParams.set("cpn", cpn);
+  return parsed.toString();
+}
+
 export function createYtjsRuntime(): YoutubeRuntime {
   return {
     async resolveAudio(videoId: string, opts?: { trace?: YoutubeTrace }) {
       const trace = opts?.trace ? { ...opts.trace, sourceId: "youtube" as const } : undefined;
+      traceYoutube("info", "runtime.start", trace, videoId, {
+        message: "youtube runtime resolve started",
+        phase: "start",
+      });
       let yt: Innertube;
       try {
         yt = await getInnertube();
+        traceYoutube("info", "runtime.ready", trace, videoId, {
+          message: "youtubei runtime ready",
+          phase: "success",
+          visitorData: Boolean(yt.session.context.client.visitorData),
+          playerPoToken: Boolean(yt.session.player?.po_token),
+          sessionPoToken: Boolean(yt.session.po_token),
+          sts: yt.session.player?.signature_timestamp,
+        });
       } catch (err) {
         traceYoutube("error", "runtime.unavailable", trace, videoId, {
           message: `youtubei init failed: ${String(err)}`,
@@ -196,6 +250,12 @@ export function createYtjsRuntime(): YoutubeRuntime {
       }
       try {
         const visitorData = yt.session.context.client.visitorData;
+        traceYoutube("info", "po_token.start", trace, videoId, {
+          message: "youtube video PoToken mint started",
+          phase: "start",
+          poTokenBinding: "video",
+          visitorData: Boolean(visitorData),
+        });
         const contentPoToken = visitorData
           ? await mintPoToken(videoId, yt.session.http.fetch_function, visitorData)
           : null;
@@ -219,11 +279,23 @@ export function createYtjsRuntime(): YoutubeRuntime {
             poTokenBinding: "video",
           });
         }
+        traceYoutube("info", "get_info.start", trace, videoId, {
+          message: "youtube music getInfo started",
+          phase: "start",
+          poTokenBinding: contentPoToken ? "video" : undefined,
+        });
         const info = await yt.music.getInfo(
           videoId,
           contentPoToken ? { po_token: contentPoToken } : undefined,
         );
+        const cpn = (info as YtjsInfoWithCpn).cpn;
         const status = info.playability_status?.status;
+        traceYoutube(status === "OK" ? "info" : "warn", "playability.status", trace, videoId, {
+          message: status ?? "missing playability status",
+          phase: status === "OK" ? "success" : "fail",
+          errorKind: status === "OK" ? undefined : "unknown",
+          playabilityStatus: status,
+        });
         if (status !== "OK") {
           if (status === "LOGIN_REQUIRED" || status === "AGE_VERIFICATION_REQUIRED") {
             traceYoutube("warn", "playability.failed", trace, videoId, {
@@ -245,20 +317,51 @@ export function createYtjsRuntime(): YoutubeRuntime {
         }
         const format = info.chooseFormat({ type: "audio", quality: "best" });
         if (!yt.session.player) return { kind: "unavailable", reason: "player not loaded" };
+        const player = yt.session.player;
         const expires = info.streaming_data?.expires;
         const expiresInSeconds =
           expires instanceof Date
             ? Math.max(0, Math.round((expires.getTime() - Date.now()) / 1000))
             : undefined;
         const mime = (format.mime_type ?? "audio/mp4").split(";")[0].trim();
+        traceYoutube("info", "format.selected", trace, videoId, {
+          message: "youtube audio format selected",
+          phase: "success",
+          mime,
+          itag: format.itag,
+          codec: codecOf(format.mime_type),
+          bitrate: format.bitrate,
+          hasCpn: Boolean(cpn),
+        });
         let url: string;
+        let transport: "blob" | "direct" = "blob";
+        traceYoutube("info", "po_token.applied", trace, videoId, {
+          message: contentPoToken
+            ? "youtube video PoToken applied to active player"
+            : "youtube using active player PoToken",
+          phase: "state",
+          poTokenBinding: contentPoToken ? "video" : undefined,
+          playerPoToken: Boolean(player.po_token),
+          hasCpn: Boolean(cpn),
+        });
         try {
-          const stream = await info.download({
-            type: "audio",
-            quality: "best",
-            itag: Number(format.itag),
+          const blob = await withYtjsPlayerPoToken(player, contentPoToken, async () => {
+            traceYoutube("info", "download.start", trace, videoId, {
+              message: "youtube audio download started",
+              phase: "start",
+              mime,
+              itag: format.itag,
+              poTokenBinding: contentPoToken ? "video" : undefined,
+              playerPoToken: Boolean(player.po_token),
+              hasCpn: Boolean(cpn),
+            });
+            const stream = await info.download({
+              type: "audio",
+              quality: "best",
+              itag: Number(format.itag),
+            });
+            return readableStreamToBlob(stream, mime);
           });
-          const blob = await readableStreamToBlob(stream, mime);
           if (blob.size === 0) return { kind: "unavailable", reason: "empty youtube download" };
           url = URL.createObjectURL(blob);
           log.info("youtube", "downloaded", { videoId, itag: format.itag, bytes: blob.size });
@@ -272,12 +375,48 @@ export function createYtjsRuntime(): YoutubeRuntime {
           });
         } catch (err) {
           log.warn("youtube", "download fallback failed", { videoId, err: String(err) });
-          traceYoutube("error", "download.failed", trace, videoId, {
+          traceYoutube("warn", "download.failed", trace, videoId, {
             message: String(err),
             phase: "fail",
             errorKind: "network_error",
           });
-          return { kind: "unavailable", reason: `youtube download failed: ${String(err)}` };
+          try {
+            const directUrl = await withYtjsPlayerPoToken(player, contentPoToken, () =>
+              decipherYtjsFormatUrl(format, player),
+            );
+            url = appendYoutubeCpn(directUrl, cpn);
+            transport = "direct";
+            const safeUrl = sanitizeUrlForTrace(url);
+            traceYoutube("info", "download.fallback_direct", trace, videoId, {
+              message: "youtube falling back to direct media url",
+              phase: "retry",
+              mime,
+              itag: format.itag,
+              transport,
+              requestHost: safeUrl.host ?? undefined,
+              requestPathHash: safeUrl.pathHash,
+              safeQuery: safeUrl.safeQuery,
+              redactions: safeUrl.redactions,
+              poTokenBinding: contentPoToken ? "video" : undefined,
+              playerPoToken: Boolean(contentPoToken || player.po_token),
+              hasPot: hasUrlParam(url, "pot"),
+              hasCpn: hasUrlParam(url, "cpn"),
+              hasSig: hasAnyUrlParam(url, ["sig", "lsig", "signature"]),
+              hasNParam: hasUrlParam(url, "n"),
+            });
+          } catch (fallbackErr) {
+            traceYoutube("error", "download.failed", trace, videoId, {
+              message: String(fallbackErr),
+              phase: "fail",
+              errorKind: "network_error",
+            });
+            return {
+              kind: "unavailable",
+              reason: `youtube download failed: ${String(err)}; direct fallback failed: ${String(
+                fallbackErr,
+              )}`,
+            };
+          }
         }
         log.info("youtube", "resolved", { videoId, itag: format.itag, mime: format.mime_type });
         traceYoutube("info", "resolve.success", trace, videoId, {
@@ -285,7 +424,7 @@ export function createYtjsRuntime(): YoutubeRuntime {
           phase: "success",
           mime,
           itag: format.itag,
-          transport: url.startsWith("blob:") ? "blob" : "direct",
+          transport,
         });
         return {
           kind: "ok",
@@ -313,17 +452,36 @@ export function createYtjsRuntime(): YoutubeRuntime {
   };
 }
 
+function hasUrlParam(url: string, key: string): boolean {
+  try {
+    return new URL(url).searchParams.has(key);
+  } catch {
+    return false;
+  }
+}
+
+function hasAnyUrlParam(url: string, keys: string[]): boolean {
+  return keys.some((key) => hasUrlParam(url, key));
+}
+
 function traceYoutube(
   level: "info" | "warn" | "error",
   event: string,
   trace: YoutubeTrace | undefined,
   videoId: string,
-  context: Pick<DiagnosticContext, "phase" | "errorKind" | "bytes" | "mime"> & {
+  context: Partial<DiagnosticContext> & {
     message: string;
     itag?: unknown;
     transport?: "blob" | "direct";
     poTokenBinding?: "video";
     poTokenLength?: number;
+    visitorData?: boolean;
+    playerPoToken?: boolean;
+    sessionPoToken?: boolean;
+    sts?: number;
+    playabilityStatus?: string;
+    codec?: AudioCodec;
+    bitrate?: unknown;
   },
 ): void {
   if (!trace?.traceId) return;

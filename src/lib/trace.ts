@@ -125,6 +125,16 @@ function formatContext(context: DiagnosticContext): string {
     context.errorKind ? `errorKind=${context.errorKind}` : null,
     context.httpStatus ? `status=${context.httpStatus}` : null,
     context.requestHost ? `host=${context.requestHost}` : null,
+    context.requestPathHash ? `path=${context.requestPathHash}` : null,
+    typeof context.hasPot === "boolean" ? `hasPot=${context.hasPot}` : null,
+    typeof context.hasCpn === "boolean" ? `hasCpn=${context.hasCpn}` : null,
+    typeof context.hasSig === "boolean" ? `hasSig=${context.hasSig}` : null,
+    typeof context.hasNParam === "boolean" ? `hasN=${context.hasNParam}` : null,
+    typeof context.playerPoToken === "boolean" ? `playerPoToken=${context.playerPoToken}` : null,
+    context.poTokenBinding ? `poTokenBinding=${context.poTokenBinding}` : null,
+    context.safeQuery && Object.keys(context.safeQuery).length
+      ? `safeQuery=${formatValue(context.safeQuery)}`
+      : null,
     context.controlId ? `control=${context.controlId}` : null,
   ].filter(Boolean);
   return parts.join(" ");
