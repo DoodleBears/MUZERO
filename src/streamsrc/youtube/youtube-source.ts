@@ -7,6 +7,7 @@
  */
 
 import type { DiagnosticContext } from "@/lib/diagnostics";
+import { sanitizeUrlForTrace } from "@/lib/diagnostics";
 import { createDiagnosticLogger, log } from "@/lib/logger";
 import type { StreamHttp } from "../http";
 import type {
@@ -106,11 +107,26 @@ export function createYoutubeSource(deps: YoutubeSourceDeps): StreamSourceProvid
     }
     const playback = await deps.runtime.resolveAudio(externalId, { trace });
     switch (playback.kind) {
-      case "ok":
+      case "ok": {
+        const safeUrl = sanitizeUrlForTrace(playback.url);
+        traceYoutube("info", "resolve.success", trace, externalId, {
+          message: "youtube source resolved media",
+          phase: "success",
+          mime: playback.mime,
+          requestHost: safeUrl.host ?? undefined,
+          requestPathHash: safeUrl.pathHash,
+          safeQuery: safeUrl.safeQuery,
+          redactions: safeUrl.redactions,
+          transport: playback.url.startsWith("blob:") ? "blob" : "direct",
+          hasHeaders: !playback.url.startsWith("blob:"),
+          codec: playback.codec,
+          durationSec: playback.details?.lengthSeconds,
+        });
         return {
           kind: "ok",
           stream: {
             mediaUrl: playback.url,
+            blob: playback.blob,
             // Match youtubei's own media downloader: the googlevideo request needs
             // YouTube's stream headers, and the media element can only send them via
             // the desktop media proxy.
@@ -123,6 +139,7 @@ export function createYoutubeSource(deps: YoutubeSourceDeps): StreamSourceProvid
             quality: playback.codec,
           },
         };
+      }
       case "login-required":
         log.warn("youtube", "resolve login-required", { videoId: externalId });
         traceYoutube("warn", "resolve.failed", trace, externalId, {
@@ -160,7 +177,12 @@ function traceYoutube(
   event: string,
   trace: YoutubeTrace | undefined,
   videoId: string,
-  context: Pick<DiagnosticContext, "phase" | "errorKind"> & { message: string },
+  context: Partial<DiagnosticContext> & {
+    message: string;
+    transport?: "blob" | "direct";
+    hasHeaders?: boolean;
+    codec?: string;
+  },
 ): void {
   if (!trace?.traceId) return;
   youtubeLog[level](event, {

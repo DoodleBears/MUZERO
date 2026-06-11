@@ -29,7 +29,7 @@ import { createAiDjBrain } from "@/dj/dj-brain-ai";
 import { createDjEngine, type DjEngine } from "@/dj/dj-engine";
 import i18n from "@/i18n/i18n";
 import { hasFolderAccess, resolveDesktopBridge } from "@/lib/desktop/bridge";
-import { createTraceId, type DiagnosticContext } from "@/lib/diagnostics";
+import { createTraceId, type DiagnosticContext, sanitizeUrlForTrace } from "@/lib/diagnostics";
 import {
   basename,
   createFolderFs,
@@ -76,7 +76,7 @@ import { setSetBulkDownloading, setStreamDownloading } from "@/stores/stream-cac
 import { runStreamCache } from "@/streamsrc/cache-stream";
 import type { StreamSearchHit } from "@/streamsrc/provider";
 import { createStreamSource } from "@/streamsrc/registry";
-import { resolveStreamedTrackMedia } from "@/streamsrc/resolve-playback";
+import { resolveStreamedTrackMedia, type StreamPlaybackResult } from "@/streamsrc/resolve-playback";
 import { isStreamedTrack, playbackSourceKind } from "@/streamsrc/source-detect";
 import { createStreamHttp } from "@/streamsrc/stream-http";
 import {
@@ -260,6 +260,10 @@ type PlaybackTraceContext = Pick<
   DiagnosticContext,
   "traceId" | "trackId" | "sessionId" | "sourceId"
 >;
+type StreamMediaTraceContext = Pick<
+  DiagnosticContext,
+  "traceId" | "trackId" | "sessionId" | "sourceId" | "videoId"
+>;
 
 /** Cheap signature of what the queue list renders (ids + generation status +
  * cover identity). `coverBlobId`/`coverCrop` are included so a cover edit on the
@@ -304,8 +308,16 @@ function tracePlaybackLoad(
   event: string,
   track: Track,
   trace: PlaybackTraceContext | undefined,
-  context: Pick<DiagnosticContext, "bytes" | "mime" | "sourceId"> & {
+  context: Pick<
+    DiagnosticContext,
+    "bytes" | "mime" | "sourceId" | "requestHost" | "requestPathHash" | "redactions"
+  > & {
     transport: "blob" | "remote" | "direct" | "media-proxy";
+    safeQuery?: Record<string, string>;
+    hasPot?: boolean;
+    hasSig?: boolean;
+    hasNParam?: boolean;
+    proxied?: boolean;
   },
 ): void {
   if (!trace?.traceId) return;
@@ -317,6 +329,37 @@ function tracePlaybackLoad(
     phase: "start",
     trackKind: track.kind,
   });
+}
+
+function streamMediaTrace(track: Track, trace: PlaybackTraceContext | undefined) {
+  if (!trace) return undefined;
+  return {
+    ...trace,
+    sourceId: track.streamSourceId,
+    videoId: track.streamSourceId === "youtube" ? track.streamExternalId : undefined,
+  } satisfies StreamMediaTraceContext;
+}
+
+function streamUrlTraceContext(url: string) {
+  const safeUrl = sanitizeUrlForTrace(url);
+  const params = parseUrlParams(url);
+  return {
+    requestHost: safeUrl.host ?? undefined,
+    requestPathHash: safeUrl.pathHash,
+    safeQuery: safeUrl.safeQuery,
+    redactions: safeUrl.redactions,
+    hasPot: params?.has("pot") ?? false,
+    hasSig: (params?.has("sig") || params?.has("lsig") || params?.has("signature")) ?? false,
+    hasNParam: params?.has("n") ?? false,
+  };
+}
+
+function parseUrlParams(url: string): URLSearchParams | null {
+  try {
+    return new URL(url).searchParams;
+  } catch {
+    return null;
+  }
 }
 
 export const usePlayerStore = create<PlayerState>((set, get) => ({
@@ -1008,7 +1051,7 @@ async function runCacheStreamedTrack(
       const target = url.startsWith("blob:")
         ? url
         : bridge.mediaProxyUrl
-          ? bridge.mediaProxyUrl(url, headers, trace?.traceId)
+          ? bridge.mediaProxyUrl(url, headers, streamMediaTrace(track, trace))
           : url;
       const resp = target.startsWith("muzfetch://")
         ? await fetch(target)
@@ -1027,6 +1070,42 @@ async function runCacheStreamedTrack(
     log.warn("player", "cache streamed track failed", { trackId: track.id, kind: result.kind });
   }
   return result;
+}
+
+async function cacheResolvedStreamBlob(
+  track: Track,
+  resolved: Extract<StreamPlaybackResult, { kind: "ok" }> & { blob: Blob },
+  trace?: PlaybackTraceContext,
+): Promise<void> {
+  if (track.blobId) return;
+  setStreamDownloading(track.id, true);
+  try {
+    const latest = await getTrack(track.id);
+    if (!latest || latest.blobId || !isStreamedTrack(latest)) return;
+    const result = await runStreamCache({
+      resolve: async () => resolved,
+      fetchBytes: async () => {
+        throw new Error("resolved stream already supplied a blob");
+      },
+      store: (blob, mime) => cacheStreamedTrackBlob(track.id, blob, mime),
+      trace: trace ? { ...trace, sourceId: track.streamSourceId } : undefined,
+    });
+    if (result.kind === "cached") {
+      log.info("player", "cached resolved streamed blob", {
+        trackId: track.id,
+        source: track.streamSourceId,
+        bytes: result.bytes,
+      });
+    } else {
+      log.warn("player", "cache resolved streamed blob failed", {
+        trackId: track.id,
+        source: track.streamSourceId,
+        kind: result.kind,
+      });
+    }
+  } finally {
+    setStreamDownloading(track.id, false);
+  }
 }
 
 /** Max concurrent offline downloads when caching a whole imported playlist — the
@@ -1584,34 +1663,47 @@ async function ensureLoadedAndPlay(
       // through the media proxy (Electron). NetEase URLs play directly. Falls back to
       // the raw URL when the shell has no media proxy (web/tauri).
       const bridge = resolveDesktopBridge();
+      const mediaTrace = streamMediaTrace(track, playbackTrace);
       const proxiedUrl =
         resolved.headers && bridge.mediaProxyUrl && !resolved.url.startsWith("blob:")
-          ? bridge.mediaProxyUrl(resolved.url, resolved.headers, playbackTrace?.traceId)
+          ? bridge.mediaProxyUrl(resolved.url, resolved.headers, mediaTrace)
           : null;
       const src = proxiedUrl ?? resolved.url;
       tracePlaybackLoad("media.load.stream", track, playbackTrace, {
-        transport: resolved.url.startsWith("blob:")
-          ? "blob"
-          : proxiedUrl
-            ? "media-proxy"
-            : "direct",
+        transport:
+          resolved.blob || resolved.url.startsWith("blob:")
+            ? "blob"
+            : proxiedUrl
+              ? "media-proxy"
+              : "direct",
         sourceId: track.streamSourceId,
+        proxied: proxiedUrl !== null,
+        ...streamUrlTraceContext(resolved.url),
       });
       log.debug("player", "loading streamed media url", {
         trackId: track.id,
         source: track.streamSourceId,
         proxied: proxiedUrl !== null,
+        downloadedBlob: Boolean(resolved.blob),
       });
-      // Proxied stream responses send ACAO:* — opt into CORS so the WebAudio graph
-      // doesn't taint (and silence) the audio.
-      await mediaEngine.loadUrl(
-        src,
-        track.kind,
-        proxiedUrl ? { crossOrigin: "anonymous" } : undefined,
-      );
+      const resolvedBlob = resolved.blob;
+      if (resolvedBlob) {
+        await mediaEngine.loadBlob(resolvedBlob, track.kind);
+        // YouTube already paid the full download cost before playback. Persist that
+        // same blob so the next play is local-first and does not re-hit YouTube.
+        void cacheResolvedStreamBlob(track, { ...resolved, blob: resolvedBlob }, playbackTrace);
+      } else {
+        // Proxied stream responses send ACAO:* — opt into CORS so the WebAudio graph
+        // doesn't taint (and silence) the audio.
+        await mediaEngine.loadUrl(
+          src,
+          track.kind,
+          proxiedUrl ? { crossOrigin: "anonymous" } : undefined,
+        );
+      }
       // Offline cache (Phase 5): when enabled, download this song's bytes in the
       // background so a later play is local + offline. Best-effort; skipped if cached.
-      if (settings.autoCacheStreamed && !track.blobId)
+      if (settings.autoCacheStreamed && !track.blobId && !resolved.blob)
         void cacheStreamedTrackNow(track, playbackTrace);
     }
     loadedTrackId = track.id;

@@ -102,6 +102,7 @@ function traceHttp(
     category: "network",
     requestHost: safeUrl.host ?? undefined,
     requestPathHash: safeUrl.pathHash,
+    safeQuery: safeUrl.safeQuery,
     redactions: safeUrl.redactions,
   });
 }

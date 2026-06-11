@@ -12,6 +12,7 @@
  */
 
 import type { AppIconId } from "@/lib/app-icon";
+import type { DiagnosticContext } from "@/lib/diagnostics";
 import type { DirEntryLike } from "@/lib/folder-import";
 import { createElectronBridge } from "./electron";
 import { createTauriBridge } from "./tauri";
@@ -20,6 +21,10 @@ import { createWebBridge } from "./web";
 export type DesktopKind = "tauri" | "electron" | "web";
 
 type FetchFn = typeof globalThis.fetch;
+export type MediaProxyTrace = Pick<
+  DiagnosticContext,
+  "traceId" | "trackId" | "sessionId" | "sourceId" | "videoId"
+>;
 
 export interface SaveFileInput {
   fileName: string;
@@ -69,7 +74,11 @@ export interface DesktopBridge {
    * caller uses the raw URL (fine for CDNs that don't gate on Referer, e.g. NetEase;
    * required for Bilibili, whose CDN 403s a foreign Referer).
    */
-  mediaProxyUrl?: (url: string, headers?: Record<string, string>, traceId?: string) => string;
+  mediaProxyUrl?: (
+    url: string,
+    headers?: Record<string, string>,
+    trace?: string | MediaProxyTrace,
+  ) => string;
   /**
    * Open a streaming source's real login page in a desktop auth window and resolve
    * the captured `Cookie:` header once the session cookie appears (or null if the

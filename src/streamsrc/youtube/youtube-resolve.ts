@@ -55,6 +55,7 @@ export type YoutubePlayback =
       kind: "ok";
       url: string;
       mime: string;
+      blob?: Blob;
       codec: AudioCodec;
       expiresInSeconds?: number;
       details?: PlayerDetails;

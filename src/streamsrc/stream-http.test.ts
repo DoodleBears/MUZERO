@@ -100,6 +100,7 @@ describe("createStreamHttp", () => {
             sourceId: "youtube",
             httpStatus: 403,
             requestHost: "rr.example.com",
+            safeQuery: { itag: "140" },
             redactions: expect.arrayContaining(["url.query.sig"]),
           }),
         }),

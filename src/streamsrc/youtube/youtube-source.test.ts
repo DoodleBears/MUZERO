@@ -96,17 +96,19 @@ describe("createYoutubeSource", () => {
 
   it("passes trace context to the runtime and records provider resolve", async () => {
     const http: StreamHttp = vi.fn(async () => res(okPlayer));
+    const blob = new Blob([new Uint8Array([1, 2, 3])], { type: "audio/mp4" });
     const tracedRuntime: YoutubeRuntime = {
       resolveAudio: vi.fn(async () => ({
         kind: "ok" as const,
         url: "blob:http://localhost/youtube",
+        blob,
         mime: "audio/mp4",
         codec: "aac" as const,
       })),
     };
     const source = createYoutubeSource({ http, now: () => 1000, runtime: tracedRuntime });
 
-    await source.resolve("v1", {
+    const result = await source.resolve("v1", {
       trace: { traceId: "ply_1", trackId: "trk_1", sourceId: "youtube" },
     });
 
@@ -116,6 +118,14 @@ describe("createYoutubeSource", () => {
         trace: expect.objectContaining({ traceId: "ply_1", trackId: "trk_1" }),
       }),
     );
+    expect(result).toMatchObject({
+      kind: "ok",
+      stream: {
+        mediaUrl: "blob:http://localhost/youtube",
+        blob,
+        headers: undefined,
+      },
+    });
     expect(getTraceEntries()).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -126,6 +136,17 @@ describe("createYoutubeSource", () => {
             trackId: "trk_1",
             sourceId: "youtube",
             videoId: "v1",
+          }),
+        }),
+        expect.objectContaining({
+          scope: "stream.youtube",
+          event: "resolve.success",
+          context: expect.objectContaining({
+            traceId: "ply_1",
+            trackId: "trk_1",
+            sourceId: "youtube",
+            videoId: "v1",
+            transport: "blob",
           }),
         }),
       ]),

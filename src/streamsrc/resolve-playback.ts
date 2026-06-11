@@ -29,7 +29,14 @@ export interface ResolveStreamedDeps {
 }
 
 export type StreamPlaybackResult =
-  | { kind: "ok"; url: string; mime: string; headers?: Record<string, string>; quality?: string }
+  | {
+      kind: "ok";
+      url: string;
+      mime: string;
+      blob?: Blob;
+      headers?: Record<string, string>;
+      quality?: string;
+    }
   | { kind: "requires-login"; source: StreamSourceId }
   | { kind: "no-permission"; source: StreamSourceId; reason: string }
   | { kind: "error"; message: string };
@@ -89,6 +96,7 @@ export async function resolveStreamedTrackMedia(
         kind: "ok",
         url: res.stream.mediaUrl,
         mime: res.stream.mime,
+        blob: res.stream.blob,
         headers: res.stream.headers,
         quality: res.stream.quality,
       };

@@ -335,6 +335,7 @@ export function createYtjsRuntime(): YoutubeRuntime {
         });
         let url: string;
         let transport: "blob" | "direct" = "blob";
+        let downloadedBlob: Blob | undefined;
         traceYoutube("info", "po_token.applied", trace, videoId, {
           message: contentPoToken
             ? "youtube video PoToken applied to active player"
@@ -363,6 +364,7 @@ export function createYtjsRuntime(): YoutubeRuntime {
             return readableStreamToBlob(stream, mime);
           });
           if (blob.size === 0) return { kind: "unavailable", reason: "empty youtube download" };
+          downloadedBlob = blob;
           url = URL.createObjectURL(blob);
           log.info("youtube", "downloaded", { videoId, itag: format.itag, bytes: blob.size });
           traceYoutube("info", "download.success", trace, videoId, {
@@ -430,6 +432,7 @@ export function createYtjsRuntime(): YoutubeRuntime {
           kind: "ok",
           url,
           mime,
+          blob: downloadedBlob,
           codec: codecOf(format.mime_type),
           expiresInSeconds,
           details: {

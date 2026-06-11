@@ -27,6 +27,26 @@ describe("runStreamCache", () => {
     expect(store).toHaveBeenCalledWith(blob, "audio/mpeg");
   });
 
+  it("stores a resolver-supplied blob without downloading it again", async () => {
+    const blob = new Blob([new Uint8Array(4096)], { type: "audio/mp4" });
+    const fetchBytes = vi.fn();
+    const store = vi.fn(async () => "blb_youtube");
+    const res = await runStreamCache({
+      resolve: async () => ({
+        ...ok,
+        url: "blob:http://localhost/youtube",
+        mime: "audio/mp4",
+        blob,
+      }),
+      fetchBytes,
+      store,
+    });
+
+    expect(res).toEqual({ kind: "cached", blobId: "blb_youtube", bytes: 4096 });
+    expect(fetchBytes).not.toHaveBeenCalled();
+    expect(store).toHaveBeenCalledWith(blob, "audio/mp4");
+  });
+
   it("does not download/store a login- or VIP-gated track", async () => {
     const fetchBytes = vi.fn();
     const store = vi.fn();

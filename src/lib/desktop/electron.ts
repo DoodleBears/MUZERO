@@ -1,7 +1,7 @@
 import type { DiagnosticEntry } from "@/lib/diagnostics";
 import type { DirEntryLike } from "@/lib/folder-import";
 import { assembleCookieHeader, type StreamCookie } from "@/streamsrc/login";
-import type { DesktopBridge, SaveFileInput, StreamLoginRequest } from "./bridge";
+import type { DesktopBridge, MediaProxyTrace, SaveFileInput, StreamLoginRequest } from "./bridge";
 
 type FetchFn = typeof globalThis.fetch;
 
@@ -35,13 +35,18 @@ const TARGET_HEADER = "x-muzero-target";
  * `__mzh_<name>`); the main process restores them and preserves Range/206. Used for
  * Bilibili, whose CDN 403s a foreign Referer.
  */
-function electronMediaProxyUrl(
+export function electronMediaProxyUrl(
   url: string,
   headers?: Record<string, string>,
-  traceId?: string,
+  trace?: string | MediaProxyTrace,
 ): string {
   const params = new URLSearchParams({ __mzurl: url });
-  if (traceId) params.set("__mztrace", traceId);
+  const traceContext = typeof trace === "string" ? { traceId: trace } : trace;
+  if (traceContext?.traceId) params.set("__mztrace", traceContext.traceId);
+  if (traceContext?.trackId) params.set("__mztrack", traceContext.trackId);
+  if (traceContext?.sessionId) params.set("__mzsession", traceContext.sessionId);
+  if (traceContext?.sourceId) params.set("__mzsource", traceContext.sourceId);
+  if (traceContext?.videoId) params.set("__mzvideo", traceContext.videoId);
   if (headers) {
     for (const [name, value] of Object.entries(headers)) {
       params.set(`__mzh_${name.toLowerCase()}`, value);

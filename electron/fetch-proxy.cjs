@@ -20,12 +20,18 @@ async function handleMuzfetch(request) {
   //      header is on `request` and is forwarded, so 206 seeking works.
   let target = request.headers.get(TARGET_HEADER);
   let isMediaRequest = false;
-  let traceId;
+  let mediaTraceContext = {};
   if (!target) {
     const reqUrl = new URL(request.url);
     if (reqUrl.searchParams.has("__mzurl")) {
       isMediaRequest = true;
-      traceId = reqUrl.searchParams.get("__mztrace") || undefined;
+      mediaTraceContext = {
+        traceId: reqUrl.searchParams.get("__mztrace") || undefined,
+        trackId: reqUrl.searchParams.get("__mztrack") || undefined,
+        sessionId: reqUrl.searchParams.get("__mzsession") || undefined,
+        sourceId: reqUrl.searchParams.get("__mzsource") || undefined,
+        videoId: reqUrl.searchParams.get("__mzvideo") || undefined,
+      };
       target = reqUrl.searchParams.get("__mzurl");
       // The <audio>/<img> element's own Referer/Origin (localhost) is wrong for the
       // target CDN (hdslb/bilivideo 403 a foreign Referer) — drop them and use only
@@ -62,7 +68,31 @@ async function handleMuzfetch(request) {
     init.body = request.body;
     init.duplex = "half";
   }
-  const res = await net.fetch(target, init);
+  const mediaRequestContext = isMediaRequest
+    ? createMediaRequestContext(target, request, headers, mediaTraceContext)
+    : null;
+  if (mediaRequestContext) {
+    emitMainDiagnostic("debug", "stream.proxy", "request.start", "media proxy request started", {
+      ...mediaRequestContext,
+      phase: "start",
+    });
+  }
+
+  let res;
+  try {
+    res = await net.fetch(target, init);
+  } catch (error) {
+    if (mediaRequestContext) {
+      emitMainDiagnostic("error", "stream.proxy", "request.failed", "media proxy request failed", {
+        ...mediaRequestContext,
+        phase: "fail",
+        errorKind: "network_error",
+        errorName: error?.name,
+        errorMessage: error?.message ?? String(error),
+      });
+    }
+    throw error;
+  }
 
   // Re-emit with permissive CORS so the privileged-scheme renderer can read it,
   // keeping the body a live stream (no buffering).
@@ -74,24 +104,22 @@ async function handleMuzfetch(request) {
     outHeaders.delete("content-encoding");
     outHeaders.delete("content-length");
     outHeaders.delete("transfer-encoding");
-    const targetUrl = new URL(target);
     emitMainDiagnostic(
       res.status >= 400 ? "error" : "debug",
       "stream.proxy",
       res.status >= 400 ? "request.failed" : "response.received",
       "media proxy response",
       {
+        ...mediaRequestContext,
         category: "network",
         phase: res.status >= 400 ? "fail" : "success",
         errorKind: res.status >= 400 ? "http_status" : undefined,
         source: "electron-main",
-        traceId,
         httpStatus: res.status,
         contentType: outHeaders.get("content-type") || undefined,
         range: request.headers.get("range") || null,
         acceptRanges: outHeaders.get("accept-ranges") || null,
         contentRange: outHeaders.get("content-range") || null,
-        requestHost: targetUrl.hostname,
       },
     );
   }
@@ -101,6 +129,81 @@ async function handleMuzfetch(request) {
     statusText: res.statusText,
     headers: outHeaders,
   });
+}
+
+function createMediaRequestContext(target, request, headers, traceContext) {
+  const targetUrl = safeUrl(target);
+  const params = targetUrl?.searchParams;
+  return {
+    ...traceContext,
+    category: "network",
+    source: "electron-main",
+    requestHost: targetUrl?.hostname,
+    requestPathHash: stableHash(targetUrl?.pathname ?? target),
+    safeQuery: safeMediaQuery(params),
+    redactions: redactedMediaParams(params),
+    hasPot: params?.has("pot") ?? false,
+    hasSig:
+      (params?.has("sig") || params?.has("lsig") || params?.has("signature")) ?? false,
+    hasNParam: params?.has("n") ?? false,
+    range: request.headers.get("range") || null,
+    injectedHeaderNames: [...headers.keys()]
+      .map((name) => name.toLowerCase())
+      .filter((name) => !name.startsWith("x-muzero-"))
+      .sort(),
+  };
+}
+
+function safeUrl(rawUrl) {
+  try {
+    return new URL(rawUrl);
+  } catch {
+    return null;
+  }
+}
+
+function safeMediaQuery(params) {
+  if (!params) return {};
+  const safe = {};
+  for (const key of ["itag", "mime", "dur", "clen", "source", "expire"]) {
+    if (params.has(key)) safe[key] = params.get(key);
+  }
+  return safe;
+}
+
+function redactedMediaParams(params) {
+  if (!params) return ["url.invalid"];
+  const signed = new Set([
+    "pot",
+    "sig",
+    "lsig",
+    "signature",
+    "spc",
+    "bui",
+    "id",
+    "n",
+    "cpn",
+    "key",
+    "token",
+    "access_token",
+    "auth",
+    "authorization",
+    "cookie",
+  ]);
+  const redactions = [];
+  for (const key of params.keys()) {
+    if (signed.has(key.toLowerCase())) redactions.push(`url.query.${key}`);
+  }
+  return redactions.sort();
+}
+
+function stableHash(input) {
+  let hash = 2166136261;
+  for (let index = 0; index < input.length; index++) {
+    hash ^= input.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(36);
 }
 
 module.exports = { handleMuzfetch };

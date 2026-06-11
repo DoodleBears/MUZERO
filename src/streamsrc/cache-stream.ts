@@ -73,7 +73,7 @@ export async function runStreamCache(deps: RunStreamCacheDeps): Promise<RunStrea
     return { kind: "error", message: resolved.message };
   }
   try {
-    const blob = await deps.fetchBytes(resolved.url, resolved.headers);
+    const blob = resolved.blob ?? (await deps.fetchBytes(resolved.url, resolved.headers));
     const mime = resolved.mime || blob.type || "audio/mpeg";
     const blobId = await deps.store(blob, mime);
     traceCache("info", "cache.success", deps.trace, {
