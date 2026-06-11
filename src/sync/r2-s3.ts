@@ -1,7 +1,7 @@
 import type { R2LocalCredentials } from "@/db/types";
 import type { SyncFetch } from "./r2-subscription";
 
-export type R2S3Method = "PUT" | "HEAD" | "DELETE";
+export type R2S3Method = "GET" | "PUT" | "HEAD" | "DELETE";
 
 export interface R2SignedFetchOptions {
   fetcher: SyncFetch;
@@ -45,7 +45,7 @@ export async function r2SignedFetch(options: R2SignedFetchOptions): Promise<Resp
   return options.fetcher(url, {
     method: options.method,
     headers,
-    body: options.method === "HEAD" ? undefined : options.body,
+    body: options.method === "HEAD" || options.method === "GET" ? undefined : options.body,
     signal: options.signal,
   });
 }
