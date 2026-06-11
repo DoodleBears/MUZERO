@@ -257,14 +257,16 @@ async function subscribeAndActivateRemoteSet() {
 }
 
 describe("player-store remote subscribed-manifest playback", () => {
-  it("streams an audio track from a subscribed public manifest (no blob download)", async () => {
+  it("loads remote R2 audio with a CORS-enabled media element", async () => {
     const { usePlayerStore } = await subscribeAndActivateRemoteSet();
     const trace = await import("@/lib/trace");
     trace.clearTrace();
 
     await usePlayerStore.getState().playIndex(0);
 
-    expect(mediaEngineMock.loadUrl).toHaveBeenCalledWith(REMOTE_AUDIO_URL, "audio");
+    expect(mediaEngineMock.loadUrl).toHaveBeenCalledWith(REMOTE_AUDIO_URL, "audio", {
+      crossOrigin: "anonymous",
+    });
     expect(mediaEngineMock.setDiagnosticsContext).toHaveBeenCalledWith(
       expect.objectContaining({
         traceId: expect.stringMatching(/^ply_/),
@@ -290,12 +292,14 @@ describe("player-store remote subscribed-manifest playback", () => {
     expect(mediaEngineMock.play).toHaveBeenCalled();
   });
 
-  it("streams a video track from a subscribed public manifest", async () => {
+  it("loads remote R2 video with a CORS-enabled media element", async () => {
     const { usePlayerStore } = await subscribeAndActivateRemoteSet();
 
     await usePlayerStore.getState().playIndex(1);
 
-    expect(mediaEngineMock.loadUrl).toHaveBeenCalledWith(REMOTE_VIDEO_URL, "video");
+    expect(mediaEngineMock.loadUrl).toHaveBeenCalledWith(REMOTE_VIDEO_URL, "video", {
+      crossOrigin: "anonymous",
+    });
     expect(mediaEngineMock.loadBlob).not.toHaveBeenCalled();
   });
 });

@@ -1609,9 +1609,14 @@ async function ensureLoadedAndPlay(
         trackId: track.id,
         kind: track.kind,
       });
-      tracePlaybackLoad("media.load.remote", track, playbackTrace, { transport: "remote" });
+      tracePlaybackLoad("media.load.remote", track, playbackTrace, {
+        transport: "remote",
+      });
+      // R2 URLs are cross-origin in the web app. Because the MediaEngine taps the
+      // media element into WebAudio for visualization, the element must opt into
+      // CORS or browsers can advance playback time while outputting silence.
       // biome-ignore lint/style/noNonNullAssertion: sourceKind === "remote" implies remoteMediaUrl
-      await mediaEngine.loadUrl(track.remoteMediaUrl!, track.kind);
+      await mediaEngine.loadUrl(track.remoteMediaUrl!, track.kind, { crossOrigin: "anonymous" });
     } else if (sourceKind === "stream") {
       // External streaming source: resolve a short-lived URL right before play.
       // NetEase plays directly; Bilibili's URL needs the media proxy to inject a

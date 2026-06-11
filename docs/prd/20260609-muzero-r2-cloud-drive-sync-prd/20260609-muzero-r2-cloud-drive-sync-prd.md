@@ -2285,7 +2285,7 @@ Do not record secrets, full signed URLs, or media content.
 
 **Goal:** make cloud-drive setup feel like one coherent workflow, make the automatic/manual sync choice explicit, and ensure imported R2 songs are immediately playable, not merely downloadable.
 
-**Status (2026-06-11):** planned from QA feedback. SA-1 is the first implementation priority because a synced playlist whose tracks cannot make sound is a functional regression.
+**Status (2026-06-11):** SA-1 is completed. Remote R2 playback now opts the media element into CORS before attaching it to the WebAudio graph, fixing the web regression where the progress bar advanced but no sound was produced.
 
 **Product requirements:**
 
@@ -2295,9 +2295,10 @@ Do not record secrets, full signed URLs, or media content.
    - `Manual sync` keeps the drive connected but requires the user to click preview/import/sync actions.
    - Read-only/public drives can still default to automatic import-all because that path has no write credentials and no local secrets.
 2. **Remote playback reliability.**
-   - R2-imported tracks may remain non-persistent/streamed locally, but playback must use the same CORS-safe app fetch/proxy capability as download.
+   - R2-imported tracks may remain non-persistent/streamed locally, but playback must load the media through a CORS-enabled path before WebAudio visualization/analyser wiring.
+   - In the web app, direct R2 media URLs must use `crossOrigin="anonymous"` on the media element; if a bucket lacks compatible CORS, the UI should surface a CORS/setup problem instead of silently playing muted audio.
    - A remote track that can be downloaded through MUZERO must also be playable through MUZERO.
-   - The player may fetch the remote object into an in-memory Blob for playback without storing it in IndexedDB; durable offline caching remains an explicit separate action.
+   - The player may later add an in-memory Blob fallback for browsers/shells where direct CORS media streaming is unreliable, but durable offline caching remains an explicit separate action.
 3. **Settings UI consolidation.**
    - The current cloud-drive, sync, CORS, and setup-link surfaces should be merged into one `Cloud Drive` settings area instead of scattered sidebar destinations or disconnected cards.
    - Drive cards should show mode, last sync state, progress, CORS/public-read health, import status, and actions in one scan-friendly block.
@@ -2312,7 +2313,7 @@ Do not record secrets, full signed URLs, or media content.
 
 **Checklist:**
 
-- [ ] SA-1 Add regression tests and fix R2-imported remote media playback so downloadable remote tracks also make sound.
+- [x] SA-1 Add regression tests and fix R2-imported remote media playback so downloadable remote tracks also make sound.
 - [ ] SA-2 Add a tested sync-mode policy and default newly added drives to automatic import-all unless the user chooses manual.
 - [ ] SA-3 Wire automatic import-all into add/refresh flows while preserving manual import controls.
 - [ ] SA-4 Consolidate cloud drive/CORS/sync controls into one Settings area and update four-language copy.
@@ -2324,6 +2325,7 @@ Do not record secrets, full signed URLs, or media content.
 
 | Date | Author | Changes |
 |------|--------|---------|
+| 2026-06-11 | MUZERO | Phase 13 SA-1 completed: R2-imported remote audio/video now loads with `crossOrigin: "anonymous"` so WebAudio visualization/analyser wiring does not taint the media element into silent playback in the web app. Regression coverage in `player-store.test.ts` requires remote R2 audio/video to use the CORS-enabled media element path. |
 | 2026-06-11 | MUZERO | Phase 13 added from QA feedback: split cloud drive UX into explicit automatic/manual sync modes (automatic import-all default), prioritize the R2-imported playback-no-sound regression, and specify a consolidated Cloud Drive settings area plus a two-column R2 setup modal that separates public read/CORS from optional write credentials generated from Cloudflare R2 API tokens. |
 | 2026-06-11 | MUZERO | Phase 12 DA-1 started/completed: Settings > This device now supports uploaded avatar images via the existing square cropper, stores the cropped image as a device-bound avatar media blob, and reuses the existing `DevicePublicProfile.avatar` R2 publish path when profile publishing is enabled. Phase 12 also records the remaining owner/source avatar-chip UX for remote set previews, imported set headers, and track rows. |
 | 2026-06-11 | MUZERO | UX follow-up: Add Drive now gives writable owner/trusted R2 drives explicit post-add choices before saving — run `Sync now` immediately and/or enable `After local changes` auto sync. Both are opt-in, visible, and covered by component tests so adding a drive no longer leaves users guessing whether the first sync will happen. |
