@@ -892,6 +892,16 @@ export interface CloudDriveCapabilities {
   writePresence: boolean;
 }
 
+export type CloudDriveAutoSyncFrequency =
+  | "manual"
+  | "app-start"
+  | "change-debounce"
+  | "15min"
+  | "30min"
+  | "60min";
+
+export type CloudDriveUploadConcurrency = 1 | 2 | 3;
+
 export interface R2LocalCredentials {
   accountId: string;
   bucket: string;
@@ -910,6 +920,10 @@ export interface CloudDrive {
   manifestUrl?: string;
   apiBaseUrl?: string;
   capabilities: CloudDriveCapabilities;
+  /** Visible per-drive scheduler choice. Defaults to manual; never hidden behind flags. */
+  autoSyncFrequency?: CloudDriveAutoSyncFrequency;
+  /** Max parallel immutable-object uploads. Mutable JSON still writes ordered. Defaults to 2. */
+  uploadConcurrency?: CloudDriveUploadConcurrency;
   createdAt: number;
   updatedAt: number;
   lastSyncedAt?: number;

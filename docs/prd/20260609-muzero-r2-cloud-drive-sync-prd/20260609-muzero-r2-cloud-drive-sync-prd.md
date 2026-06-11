@@ -2203,7 +2203,7 @@ Do not record secrets, full signed URLs, or media content.
 
 **Checklist:**
 
-- [ ] AS-1 Add persisted sync scheduling settings (`Manual only` default) and Cloud Drive card controls with en/zh/ja/ko copy.
+- [x] AS-1 Add persisted sync scheduling settings (`Manual only` default) and Cloud Drive card controls with en/zh/ja/ko copy.
 - [ ] AS-2 Implement a per-drive scheduler that triggers the existing orchestrator, honoring in-flight guards, jitter, debounce, backoff, and conflict pause.
 - [ ] AS-3 Add dirty tracking so automatic runs can skip when there is nothing meaningful to publish.
 - [ ] AS-4 Add bounded immutable-object upload concurrency while preserving ordered conditional JSON writes and manifest-last publish.
@@ -2225,6 +2225,7 @@ Do not record secrets, full signed URLs, or media content.
 
 | Date | Author | Changes |
 |------|--------|---------|
+| 2026-06-11 | MUZERO | Phase 10 AS-1 completed: CloudDrive now persists visible per-drive auto-sync frequency and upload concurrency preferences with safe defaults (`Manual only`, concurrency `2`), Settings cloud drive cards expose the controls with en/zh/ja/ko copy, and repository/component tests cover defaults, updates, disabled read-only controls, and change callbacks. |
 | 2026-06-11 | MUZERO | Phase 10 backlog added for automatic sync frequency and R2 scale optimization: visible per-drive scheduling (`Manual only` default), debounce/jitter/backoff/conflict pause, bounded immutable-object upload concurrency, object-level resume preservation, ETag/dirty planning, paged indexes, mutation-log compaction, multipart upload, and broker-only future writeback. |
 | 2026-06-09 | MUZERO | Initial draft for R2-only user-owned cloud drive sync. |
 | 2026-06-09 | MUZERO | Architecture review pass: clarified V1/V3 boundary, profile/avatar sync, per-device object ownership, and multi-writer conflict rules. |

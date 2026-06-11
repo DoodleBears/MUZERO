@@ -3,6 +3,7 @@ import { MuzeroDB } from "@/db/muzero-db";
 import {
   listCloudDrives,
   listCloudShares,
+  updateCloudDriveSyncPreferences,
   upsertCloudDrive,
   upsertCloudShare,
 } from "./cloud-drive-repo";
@@ -55,6 +56,78 @@ describe("cloud drive repository", () => {
         },
       },
     ]);
+  });
+
+  it("defaults cloud sync scheduling preferences and preserves explicit choices", async () => {
+    const defaulted = await upsertCloudDrive(
+      {
+        id: "drv_default_sync",
+        label: "Default Sync",
+        kind: "owned",
+        provider: "r2",
+        capabilities: {
+          read: true,
+          write: true,
+          manageInvites: false,
+          writeStats: true,
+          writePresence: true,
+        },
+      },
+      db,
+    );
+
+    expect(defaulted.autoSyncFrequency).toBe("manual");
+    expect(defaulted.uploadConcurrency).toBe(2);
+
+    const customized = await upsertCloudDrive(
+      {
+        ...defaulted,
+        autoSyncFrequency: "30min",
+        uploadConcurrency: 3,
+      },
+      db,
+    );
+
+    expect(customized.autoSyncFrequency).toBe("30min");
+    expect(customized.uploadConcurrency).toBe(3);
+  });
+
+  it("updates cloud sync preferences without replacing the drive", async () => {
+    const initial = await upsertCloudDrive(
+      {
+        id: "drv_sync_prefs",
+        label: "Sync Prefs",
+        kind: "owned",
+        provider: "r2",
+        publicBaseUrl: "https://music.example.com/muzero/",
+        capabilities: {
+          read: true,
+          write: true,
+          manageInvites: false,
+          writeStats: true,
+          writePresence: true,
+        },
+        createdAt: 100,
+        updatedAt: 200,
+      },
+      db,
+    );
+
+    const updated = await updateCloudDriveSyncPreferences(
+      "drv_sync_prefs",
+      { autoSyncFrequency: "change-debounce", uploadConcurrency: 1 },
+      db,
+    );
+
+    expect(updated).toMatchObject({
+      id: "drv_sync_prefs",
+      label: "Sync Prefs",
+      publicBaseUrl: "https://music.example.com/muzero/",
+      autoSyncFrequency: "change-debounce",
+      uploadConcurrency: 1,
+      createdAt: initial.createdAt,
+    });
+    expect(updated.updatedAt).toBeGreaterThan(initial.updatedAt);
   });
 
   it("stores read-only shared links separately from owned drives", async () => {

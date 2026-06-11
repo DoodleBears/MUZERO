@@ -15,6 +15,7 @@ import { AboutSettings } from "@/components/settings/about-settings";
 import { AddDriveDialog } from "@/components/settings/add-drive-dialog";
 import { BackgroundSettings } from "@/components/settings/background-settings";
 import { CloudDriveSets } from "@/components/settings/cloud-drive-sets";
+import { CloudDriveSyncControls } from "@/components/settings/cloud-drive-sync-controls";
 import { FlowSettings } from "@/components/settings/flow-settings";
 import { ImportedFoldersSettings } from "@/components/settings/imported-folders-settings";
 import { LyricsSettings } from "@/components/settings/lyrics-settings";
@@ -40,11 +41,18 @@ import {
 import { Slider } from "@/components/ui/slider";
 import { db } from "@/db/muzero-db";
 import { saveSettings } from "@/db/repositories";
-import type { AppSettings, CloudDrive, LlmProviderId } from "@/db/types";
+import type {
+  AppSettings,
+  CloudDrive,
+  CloudDriveAutoSyncFrequency,
+  CloudDriveUploadConcurrency,
+  LlmProviderId,
+} from "@/db/types";
 import { useSettings } from "@/hooks/use-app-data";
 import { type Locale, locales, persistLocale } from "@/i18n/config";
 import { APP_ICON_OPTIONS, type AppIconId, resolveAppIcon } from "@/lib/app-icon";
 import { hasAppIcon, hasStreamingSources } from "@/lib/desktop/bridge";
+import { log } from "@/lib/logger";
 import { isMac } from "@/lib/shortcuts";
 import {
   clampLerp,
@@ -67,7 +75,7 @@ import { type MusicGenProviderId, resolveMusicGenProvider } from "@/musicgen/reg
 import { useNavStore } from "@/stores/nav-store";
 import { usePlayerStore } from "@/stores/player-store";
 import { useSyncStore } from "@/stores/sync-store";
-import { listCloudDrives } from "@/sync/cloud-drive-repo";
+import { listCloudDrives, updateCloudDriveSyncPreferences } from "@/sync/cloud-drive-repo";
 import {
   getLocalDevice,
   getOrCreateLocalDevice,
@@ -153,6 +161,20 @@ const EPHEMERAL_SYNC_PHASE_LABEL_KEY = {
   cancelled: "settings.cloudSyncPhaseCancelled",
   "needs-review": "settings.cloudSyncPhaseNeedsReview",
 } as const satisfies Record<SyncPhase, string>;
+
+const SYNC_OBJECT_KIND_LABEL_KEY = {
+  media: "settings.cloudSyncKindMedia",
+  cover: "settings.cloudSyncKindCover",
+  memory: "settings.cloudSyncKindMemory",
+  avatar: "settings.cloudSyncKindAvatar",
+  set: "settings.cloudSyncKindSet",
+  stats: "settings.cloudSyncKindStats",
+  presence: "settings.cloudSyncKindPresence",
+  device: "settings.cloudSyncKindDevice",
+  manifest: "settings.cloudSyncKindManifest",
+  mutation: "settings.cloudSyncKindMutation",
+  object: "settings.cloudSyncKindObject",
+} as const;
 
 /** Phases where a run is still in flight and can be cancelled. */
 const RUNNING_SYNC_PHASES = new Set<SyncPhase>([
@@ -1213,6 +1235,17 @@ function CloudDriveRow({ drive, defaultDriveId }: { drive: CloudDrive; defaultDr
   // Minimal selector: only this drive's live progress (PRD §6 selector discipline).
   const progress = useSyncStore((state) => state.progressByDrive[drive.id]);
   const running = progress ? RUNNING_SYNC_PHASES.has(progress.phase) : false;
+  async function updateSyncPreferences(input: {
+    autoSyncFrequency?: CloudDriveAutoSyncFrequency;
+    uploadConcurrency?: CloudDriveUploadConcurrency;
+  }) {
+    try {
+      await updateCloudDriveSyncPreferences(drive.id, input);
+    } catch (error) {
+      log.warn("sync", "cloud drive sync preference update failed", { driveId: drive.id, error });
+    }
+  }
+
   return (
     <div className="flex flex-col gap-2 rounded-md border border-border bg-background/80 px-3 py-2">
       <div className="flex items-center justify-between gap-3">
@@ -1253,6 +1286,15 @@ function CloudDriveRow({ drive, defaultDriveId }: { drive: CloudDrive; defaultDr
             ))}
         </div>
       </div>
+      <CloudDriveSyncControls
+        drive={drive}
+        onAutoSyncFrequencyChange={(autoSyncFrequency) =>
+          void updateSyncPreferences({ autoSyncFrequency })
+        }
+        onUploadConcurrencyChange={(uploadConcurrency) =>
+          void updateSyncPreferences({ uploadConcurrency })
+        }
+      />
       {progress && <CloudDriveLiveProgress progress={progress} />}
       <CloudDriveSets drive={drive} />
     </div>
@@ -1263,17 +1305,44 @@ function CloudDriveLiveProgress({ progress }: { progress: SyncProgress }) {
   const { t } = useTranslation();
   const percent =
     progress.bytesTotal > 0 ? Math.round((progress.bytesDone / progress.bytesTotal) * 100) : 0;
+  const currentObject = progress.currentKey ? describeSyncObject(progress.currentKey) : undefined;
   return (
-    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-muted-foreground text-xs">
-      <span className="font-medium">{t(EPHEMERAL_SYNC_PHASE_LABEL_KEY[progress.phase])}</span>
-      <span>
-        {t("settings.cloudSyncObjects", {
-          done: progress.objectsDone,
-          total: progress.objectsTotal,
-        })}
-      </span>
-      {progress.bytesTotal > 0 && <span>{percent}%</span>}
-      {progress.error && <span className="text-destructive">{progress.error}</span>}
+    <div className="rounded-md border border-border bg-muted/25 px-3 py-2 text-muted-foreground text-xs">
+      <div className="flex items-center justify-between gap-3">
+        <span className="font-medium text-foreground">
+          {t(EPHEMERAL_SYNC_PHASE_LABEL_KEY[progress.phase])}
+        </span>
+        <span className="font-medium">{percent}%</span>
+      </div>
+      <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-background">
+        <div
+          className="h-full rounded-full bg-primary transition-[width]"
+          style={{ width: `${percent}%` }}
+        />
+      </div>
+      <div className="mt-2 grid gap-x-3 gap-y-1 sm:grid-cols-[auto_auto_1fr]">
+        <span>
+          {t("settings.cloudSyncObjects", {
+            done: progress.objectsDone,
+            total: progress.objectsTotal,
+          })}
+        </span>
+        <span>
+          {t("settings.cloudSyncBytes", {
+            done: formatBytes(progress.bytesDone),
+            total: formatBytes(progress.bytesTotal),
+          })}
+        </span>
+        {currentObject && (
+          <span className="min-w-0 truncate" title={progress.currentKey}>
+            {t("settings.cloudSyncCurrent", {
+              kind: t(SYNC_OBJECT_KIND_LABEL_KEY[currentObject.kind]),
+              key: currentObject.label,
+            })}
+          </span>
+        )}
+      </div>
+      {progress.error && <p className="mt-1 text-destructive">{progress.error}</p>}
     </div>
   );
 }
@@ -1332,6 +1401,34 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 
 function browserOrigin(): string {
   return globalThis.location?.origin ?? "http://localhost:1420";
+}
+
+function describeSyncObject(key: string): {
+  kind: keyof typeof SYNC_OBJECT_KIND_LABEL_KEY;
+  label: string;
+} {
+  const normalized = key.replace(/^\/+/, "");
+  const fileName = normalized.split("/").filter(Boolean).at(-1) ?? normalized;
+  if (normalized === "manifest.json") return { kind: "manifest", label: normalized };
+  if (normalized.startsWith("objects/media/")) return { kind: "media", label: fileName };
+  if (normalized.startsWith("objects/covers/")) return { kind: "cover", label: fileName };
+  if (normalized.startsWith("objects/memories/")) return { kind: "memory", label: fileName };
+  if (normalized.startsWith("objects/avatars/")) return { kind: "avatar", label: fileName };
+  if (normalized.startsWith("sets/") && normalized.endsWith("/index.json")) {
+    return { kind: "set", label: setIdFromIndexKey(normalized) ?? normalized };
+  }
+  if (normalized.startsWith("sets/") && normalized.includes("/mutations/")) {
+    return { kind: "mutation", label: fileName };
+  }
+  if (normalized.startsWith("stats/")) return { kind: "stats", label: fileName };
+  if (normalized.startsWith("presence/")) return { kind: "presence", label: fileName };
+  if (normalized.startsWith("devices/")) return { kind: "device", label: fileName };
+  return { kind: "object", label: normalized };
+}
+
+function setIdFromIndexKey(key: string): string | undefined {
+  const match = /^sets\/([^/]+)\/index\.json$/.exec(key);
+  return match?.[1];
 }
 
 function deviceAvatarStyle(seed?: string): CSSProperties {
