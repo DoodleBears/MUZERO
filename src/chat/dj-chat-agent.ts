@@ -5,6 +5,7 @@ import {
   stepCountIs,
   ToolLoopAgent,
 } from "ai";
+import { listCustomLlmProviders } from "@/ai/custom-llm-providers";
 import { llmSelectionForChatSession } from "@/ai/llm-providers";
 import { resolveDjModel } from "@/ai/model";
 import type { MuzeroDB } from "@/db/muzero-db";
@@ -58,5 +59,6 @@ async function defaultResolveModel({
 }): Promise<LanguageModel> {
   const settings = await getSettings(db);
   const session = await getChatSession(sessionId, db);
-  return resolveDjModel(settings, llmSelectionForChatSession(settings, session));
+  const custom = await listCustomLlmProviders(db);
+  return resolveDjModel(settings, llmSelectionForChatSession(settings, session, custom), custom);
 }

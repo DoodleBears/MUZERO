@@ -143,6 +143,18 @@ export function llmProviderAllowsMissingApiKey(id: string | undefined): boolean 
   return isCustomLlmProviderId(id);
 }
 
+/**
+ * Normalize a user-supplied OpenAI-compatible base URL (ClipCombo parity):
+ * trim, drop trailing slashes, and append `/v1` unless the path already ends
+ * in a versioned segment (`/v1`, `/v1beta/openai`, …).
+ */
+export function normalizeOpenAiCompatibleBaseUrl(raw: string): string {
+  const trimmed = raw.trim().replace(/\/+$/, "");
+  if (!trimmed) return trimmed;
+  if (/\/v\d+(beta\/openai)?$/i.test(trimmed)) return trimmed;
+  return `${trimmed}/v1`;
+}
+
 export function defaultModelForPreset(
   id: string | undefined,
   custom: CustomLlmProvider[] = [],

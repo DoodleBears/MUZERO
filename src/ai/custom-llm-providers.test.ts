@@ -94,6 +94,23 @@ describe("customLlmProviderToPreset + registry merge", () => {
   });
 });
 
+describe("normalizeOpenAiCompatibleBaseUrl", () => {
+  it("appends /v1 to bare hosts and strips trailing slashes", async () => {
+    const { normalizeOpenAiCompatibleBaseUrl } = await import("./llm-providers");
+    expect(normalizeOpenAiCompatibleBaseUrl("http://localhost:8000")).toBe(
+      "http://localhost:8000/v1",
+    );
+    expect(normalizeOpenAiCompatibleBaseUrl("http://localhost:8000/")).toBe(
+      "http://localhost:8000/v1",
+    );
+    expect(normalizeOpenAiCompatibleBaseUrl("https://api.x.ai/v1")).toBe("https://api.x.ai/v1");
+    expect(
+      normalizeOpenAiCompatibleBaseUrl("https://generativelanguage.googleapis.com/v1beta/openai"),
+    ).toBe("https://generativelanguage.googleapis.com/v1beta/openai");
+    expect(normalizeOpenAiCompatibleBaseUrl("  ")).toBe("");
+  });
+});
+
 describe("custom provider repo (Dexie v21)", () => {
   let db: MuzeroDB;
   beforeEach(() => {
