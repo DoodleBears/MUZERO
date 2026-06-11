@@ -313,6 +313,7 @@ describe("importRemoteSetStream", () => {
         artists: ["Aki"],
         album: "Rain City",
       },
+      remoteCoverUrl: "https://p1.music.126.net/cover.jpg",
     });
     expect(track?.remoteMediaUrl).toBeUndefined();
     expect(track?.blobId).toBeUndefined();

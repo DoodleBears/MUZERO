@@ -2605,12 +2605,37 @@ Do not record secrets, full signed URLs, or media content.
 - [x] PC-4 Treat cloud metadata-only streamed playback resolve failures as warning-level source-access failures.
 - [x] PC-5 Add focused regression tests for cover cache, export/import/subscription cover metadata, and warning classification.
 
+### 12.21 Phase 25: Streamed Track Cover Cache + Sync
+
+**Goal:** treat per-song artwork inside imported streamed playlists as the primary cover sync surface. The playlist/set cover is useful identity metadata, but the user-visible gallery, queue, Now Playing, and track rows mostly depend on each track's cover.
+
+**Status (2026-06-12):** Phase 25 is completed. After importing or incrementally syncing a streamed playlist, MUZERO now starts a best-effort background cache for each hit's `coverUrl`, stores successful image responses as `Track.coverBlobId`, and skips tracks that already have a local cover so user edits are not overwritten. Existing R2 export/import already publishes local track covers as `track.cover`; this phase makes streamed playlist covers enter that path. For older metadata-only synced tracks that have not yet cached private cover bytes, subscribers now fall back from `track.cover` to `streamMeta.coverUrl` so Device B can still show the song artwork while Device A repairs and republishes private R2 cover objects.
+
+**Product requirements:**
+
+1. **Song covers are first-class synced metadata.**
+   - Every imported playlist hit with `coverUrl` should attempt to cache the image as the local track cover.
+   - Cached track covers publish through the existing R2 `track.cover` object field.
+   - Existing local/user-edited `coverBlobId` values must not be overwritten by background playlist cover caching.
+2. **Old metadata-only sync remains displayable.**
+   - If a remote set index has no private `track.cover` object yet, but the streamed metadata has `streamMeta.coverUrl`, import should set `Track.remoteCoverUrl` from that source URL.
+   - Pull diff should treat missing fallback cover metadata as repairable, so a future pull can fill it in.
+
+**Checklist:**
+
+- [x] TC-1 Cache per-track streamed playlist cover images after new-set import.
+- [x] TC-2 Cache per-track streamed playlist cover images after incremental playlist sync into an existing set.
+- [x] TC-3 Skip track cover cache writes when the track already has a local cover.
+- [x] TC-4 Import `streamMeta.coverUrl` as the display fallback when no R2 `track.cover` exists.
+- [x] TC-5 Add regression coverage for playlist track-cover caching and metadata-only remote-cover fallback.
+
 ---
 
 ## 13. Document Change Log
 
 | Date | Author | Changes |
 |------|--------|---------|
+| 2026-06-12 | MUZERO | Phase 25 completed: streamed playlist imports now cache each song's cover image as `Track.coverBlobId` so existing R2 `track.cover` export syncs per-track artwork. Incremental playlist syncs do the same, existing local covers are preserved, and imported metadata-only tracks fall back to `streamMeta.coverUrl` when no private R2 cover object exists yet. |
 | 2026-06-12 | MUZERO | Phase 24 completed: streamed playlist imports now best-effort cache playlist covers as set covers; R2 set indexes publish set-level cover/crop/thumbhash metadata and subscribers render remote set covers; cloud metadata-only streamed playback resolve failures now surface as warning-level source-access gaps instead of generic playback errors. |
 | 2026-06-12 | MUZERO | Phase 23 completed: Cloud Drive browse/import now filters historical duplicate empty set previews once a repaired non-empty set exists for the same publisher/title, collapses repeated empty same-title previews to one row, and applies that filter to automatic import-all. Exhausted R2 5xx uploads now throw/log structured `R2PublishHttpError` details including object key, status, and a short response summary. |
 | 2026-06-12 | MUZERO | Phase 22 completed: streamed-source playlist tracks now sync their source identifiers and display metadata instead of being dropped from set indexes. Cached streamed tracks with concrete local media blobs publish those bytes to the user's private R2 bucket, while metadata-only streamed tracks remain resolvable on another device through its configured source credentials. Generated/uploaded tracks still require media objects, and pull diff checks streamed source metadata. |

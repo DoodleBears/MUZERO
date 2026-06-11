@@ -224,7 +224,8 @@ async function sameTrackRows(input: DiffRemoteSetInput, db: MuzeroDB): Promise<b
     }
     if (local.durationSec !== remoteTrack.source.durationSec) return false;
     if (local.remoteMediaUrl !== remoteTrack.mediaUrl) return false;
-    if ((local.remoteCoverUrl ?? undefined) !== (remoteTrack.coverUrl ?? undefined)) return false;
+    const remoteCoverUrl = remoteTrack.coverUrl ?? remoteTrack.source.streamMeta?.coverUrl;
+    if ((local.remoteCoverUrl ?? undefined) !== (remoteCoverUrl ?? undefined)) return false;
     if ((local.brief ?? undefined) !== (remoteTrack.source.brief ?? undefined)) return false;
     if (!sameJson(local.mediaMetadata, remoteTrack.source.mediaMetadata)) return false;
     if (!sameJson(local.streamMeta, remoteTrack.source.streamMeta)) return false;

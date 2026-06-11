@@ -183,7 +183,7 @@ export async function importRemoteSetStream(
       status: "ready",
       durationSec: remoteTrack.source.durationSec,
       remoteMediaUrl: remoteTrack.mediaUrl,
-      remoteCoverUrl: remoteTrack.coverUrl,
+      remoteCoverUrl: remoteTrack.coverUrl ?? remoteTrack.source.streamMeta?.coverUrl,
       coverThumbhash: existing?.coverThumbhash ?? remoteTrack.source.thumbhash ?? undefined,
       createdAt: remoteTrack.source.createdAt,
       updatedAt: existing?.updatedAt ?? remoteTrack.source.createdAt,

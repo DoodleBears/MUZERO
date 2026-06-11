@@ -112,7 +112,7 @@ async function mergeRemoteIntoSession(
           : undefined,
         remoteCoverUrl: entry.cover
           ? resolveRemoteObjectUrl(input.baseUrl, entry.cover.url)
-          : undefined,
+          : entry.streamMeta?.coverUrl,
         coverCrop: entry.coverCrop,
         coverThumbhash: entry.thumbhash ?? undefined,
         createdAt: entry.createdAt,

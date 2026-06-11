@@ -83,7 +83,10 @@ import {
 import { notify } from "@/stores/notification-store";
 import { setSetBulkDownloading, setStreamDownloading } from "@/stores/stream-cache-store";
 import { runStreamCache } from "@/streamsrc/cache-stream";
-import { cacheStreamPlaylistCover } from "@/streamsrc/playlist-cover-cache";
+import {
+  cacheStreamPlaylistCover,
+  cacheStreamPlaylistTrackCovers,
+} from "@/streamsrc/playlist-cover-cache";
 import type { StreamSearchHit } from "@/streamsrc/provider";
 import { createStreamSource } from "@/streamsrc/registry";
 import { resolveStreamedTrackMedia, type StreamPlaybackResult } from "@/streamsrc/resolve-playback";
@@ -811,6 +814,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       void cacheStreamPlaylistCover({ sessionId: session.id, coverUrl: opts.coverUrl });
     }
     const { added } = await addHitsToSet(session.id, hits);
+    void cacheStreamPlaylistTrackCovers({ sessionId: session.id, hits });
     if (opts?.download) void downloadStreamedSetTracks(session.id);
     return added;
   },
@@ -818,6 +822,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   async addStreamedPlaylistToSet(sourceId, playlistId, targetSetId, opts) {
     const hits = await fetchPlaylistHits(sourceId, playlistId);
     const result = await addHitsToSet(targetSetId, hits);
+    void cacheStreamPlaylistTrackCovers({ sessionId: targetSetId, hits });
     if (opts?.download) void downloadStreamedSetTracks(targetSetId);
     return result;
   },
