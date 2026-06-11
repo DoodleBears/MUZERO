@@ -821,7 +821,7 @@ Other PRDs extended `muzero-r2-manifest-v1` after the six phases closed. All are
 | `tracks[].thumbhash` | set index | base64 thumbhash of the track cover for instant remote previews | instant-cover-thumbnails PRD §3.4; `cf454a1` |
 | `tracks[].lyrics` | set index | synced/plain lyrics + `source`/`sourceId`/`instrumental`; only `found`/`instrumental` rows travel (negative cache stays local); import merge = manual-wins (`lyricsRemoteWins`) | synced-lyrics PRD §4.8; `e4592f7` |
 | `tracks[].memories[].atSec` | set index | optional playback-anchor seconds on a memory | immersive-memory-moments PRD; `1a31006` |
-| `tracks[].origin: "streamed"` | set index | accepted so manifests can represent external-source tracks | external-streaming-sources PRD; `b88b959` (see audit §12.2-F5 for the cached-bytes caveat) |
+| `tracks[].origin: "streamed"` + `streamSourceId` / `streamExternalId` / `streamMeta` | set index | external-source tracks publish enough metadata to recreate playback on another device; if the publishing device has local media bytes (`blobId`), the private R2 drive also publishes the media object | external-streaming-sources PRD; Phase 22 supersedes the earlier conservative F5 skip policy |
 
 ### 3.4.1 Share Manifest and Set-Level Projection
 
@@ -2128,7 +2128,7 @@ Do not record secrets, full signed URLs, or media content.
 - [x] F2: `CloudDriveSets.importSet` now routes through `useSyncStore.pullRemoteSet` — dry-run diff gates (keep-local / conflict / blocked), durable pull `syncRuns`, and outcomes rendered by the existing per-drive progress line + sync toast. The raw importer is no longer called from UI.
 - [x] F3 (decision + hazard defused): the mutation machinery is **kept, dormant** — it's the foundation for the future multi-writer phase, and deleting tested protocol code buys nothing. The structural hazard is fixed: a successful publish now marks the drive's pre-run unsynced mutations `syncedAt` (in the same transaction as the run bookkeeping), so if mutations ever get recorded they can no longer re-fold/re-upload/re-conflict forever. **Deferred to the multi-writer phase:** recording mutations on set edits + mounting `R2ConflictResolutionPanel`. Until then, sync semantics are an LWW mirror protected by the F1 local-wins merge and the F2 pull gates.
 - [x] F4 (documented now; merge deferred): the Sync & CORS pane shows a "one writing device per drive" notice (`settings.cloudSingleWriterHint`, en/zh/ja/ko) explaining that publish rebuilds the manifest + device indexes from the publishing device and a second writer overwrites the first — other devices should add the drive as a read-only shared link. The real fix (read-merge-write for `devices/stats/presence` indexes + manifest set-union + passing `If-Match` preconditions) is the **multi-writer phase**, out of Phase 7's hardening scope.
-- [x] F5: streamed-track export policy decided + enforced — the exporter skips `origin === "streamed"` unconditionally (an origin check, because the local cache sets `blobId` on streamed tracks; platform-derived bytes stay out of the user's R2). `manifest.sets[].trackCount` now counts the post-skip/post-fold set-index tracks, and the schema comment is refreshed.
+- [x] F5: streamed-track export policy decided + enforced — Phase 7 initially chose the conservative policy of skipping `origin === "streamed"` unconditionally. That was later superseded by Phase 22 after product clarified the R2 bucket is the user's private cloud drive: streamed tracks now publish source metadata, and cached streamed media bytes publish when a concrete local `mediaBlobs` row exists.
 - [x] F6: real cancellation — `r2SignedFetch` forwards the abort signal into the underlying fetch (in-flight PUT/HEAD abort, not just between objects), and pull is now abortable end-to-end: `ApplyRemoteSetPullInput.signal` is checked before mutating and between media downloads, the media-cache fetch takes the signal, the orchestrator forwards it and reports `cancelled` (new `PullRunResult` variant), and an aborted pull run is recorded as `cancelled` (not `failed`).
 - [x] F7: per-object PUT retry with exponential backoff (default 3 attempts; only network errors + 5xx/429 retry — a 412 precondition surfaces immediately; abort is never retried); a failed HEAD probe now degrades to "not skippable" instead of killing the publish; pull media-cache failures no longer fail the run — the import completes with a `cacheFailures` count recorded on the `syncRun`.
 - [x] Entity covers: the read half is wired — `loadRemoteEntityCovers(preview)` fetches + validates the manifest-referenced `library/entity-covers/index.json`, and the drive browse imports it via `importRemoteEntityCovers` (LWW keeps strictly-newer local covers; best-effort — a covers failure never blocks browsing sets).
@@ -2526,12 +2526,41 @@ Do not record secrets, full signed URLs, or media content.
 - [x] SN-2 Keep completed real sync runs (`runId` present) notifying successfully.
 - [x] SN-3 Update the R2 sync indicator terminal handling.
 
+### 12.18 Phase 22: Streamed Playlist Metadata + Private Media Export
+
+**Goal:** make external-source playlists (NetEase / Bilibili / YouTube) sync as real playable playlists instead of empty shells, while treating any already-present local audio bytes as user-owned private-drive content.
+
+**Status (2026-06-12):** Phase 22 is completed. Streamed-origin tracks now publish their source ref (`streamSourceId`, `streamExternalId`) and display snapshot (`streamMeta`, `mediaMetadata`) in set indexes. If a device has a local `mediaBlobs` row for that streamed track (for example, a downloaded NetEase song), the exporter publishes that media object to the user's R2 bucket. If no local bytes exist, the remote import still creates a resolvable streamed track on the other device, so playback can resolve through that device's configured source credentials. Generated/uploaded tracks still require a media object.
+
+**Product requirements:**
+
+1. **No more playlist-only streamed sync.**
+   - A set imported from NetEase must carry its track rows, artist/album/duration snapshot, tags, rank, lyrics, memories, and source identifiers.
+   - Another device should import those rows with stable remote-local IDs and dedupe normally instead of creating duplicate shells.
+2. **Private R2 means cached source bytes can sync.**
+   - If `Track.blobId` points at a concrete local media blob, publish it regardless of whether `origin` is `uploaded`, `generated`, or `streamed`.
+   - Streamed tracks without local bytes publish metadata-only and rely on `streamSourceId + streamExternalId` for playback resolution.
+3. **Keep non-streamed integrity strict.**
+   - `uploaded` and `generated` tracks remain invalid without a `media` object in the set index.
+   - Metadata-only tracks are only valid for `origin: "streamed"`.
+4. **Diffs must notice source metadata changes.**
+   - Pull dry-run / unchanged checks compare `streamSourceId`, `streamExternalId`, and `streamMeta`, not only title/media URL.
+
+**Checklist:**
+
+- [x] SM-1 Extend set-index schema with streamed source fields and optional media only for streamed tracks.
+- [x] SM-2 Export streamed metadata-only tracks when no local bytes exist.
+- [x] SM-3 Export cached streamed media bytes when a local `mediaBlobs` row exists.
+- [x] SM-4 Import streamed source fields onto local remote tracks so playback can resolve on another device.
+- [x] SM-5 Update pull diff + regression tests for streamed metadata changes.
+
 ---
 
 ## 13. Document Change Log
 
 | Date | Author | Changes |
 |------|--------|---------|
+| 2026-06-12 | MUZERO | Phase 22 completed: streamed-source playlist tracks now sync their source identifiers and display metadata instead of being dropped from set indexes. Cached streamed tracks with concrete local media blobs publish those bytes to the user's private R2 bucket, while metadata-only streamed tracks remain resolvable on another device through its configured source credentials. Generated/uploaded tracks still require media objects, and pull diff checks streamed source metadata. |
 | 2026-06-12 | MUZERO | Phase 21 completed: Cloud Drive page refresh / auto-preview paths no longer emit one success toast per unchanged remote set. The sync indicator treats completed pull progress without a `runId` as a dry-run unchanged result, while real completed sync runs and terminal errors remain visible. |
 | 2026-06-12 | MUZERO | Phase 20 completed: R2/cloud playback now uses a separate bounded LRU playback cache after permanent `mediaBlobs` and before remote fetch, so refresh/replay can avoid the loading spinner. Cache bytes prefer OPFS with IndexedDB Blob fallback, while Dexie tracks URL-keyed metadata/LRU state. Settings exposes a 1–10 GB playback cache size and clear action; manual downloads remain permanent and are not evicted by playback-cache pruning. |
 | 2026-06-12 | MUZERO | Phase 19 completed: remote cover palette extraction now infers image MIME from `.jpg`/`.png`/`.webp`/etc. object URLs when R2/proxy responses are generic octet-stream, and remote media loading feedback moved from a separate Dock chip to an accessible spinner over the album-cover slot. |

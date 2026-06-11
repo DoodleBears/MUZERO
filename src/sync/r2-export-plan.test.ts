@@ -482,35 +482,32 @@ describe("buildR2ExportPlan", () => {
     expect(setIndex.tracks[0].coverCrop).toEqual({ x: 10, y: 20, width: 100, height: 100 });
   });
 
-  it("never exports streamed-origin tracks (even cached) and counts only exported tracks (F5)", async () => {
+  it("exports streamed-origin metadata when no local media bytes exist", async () => {
     await seedSet();
-    // A cached streamed track in the same set: it HAS local bytes (blobId), but
-    // platform-derived media must never publish (streaming PRD scope).
     const streamed: Track = {
-      id: "trk_yt",
+      id: "trk_ne",
       sessionId: "ses_1",
-      title: "Stream Cache",
+      title: "Moon Bridge",
       kind: "audio",
       origin: "streamed",
-      provider: "youtube",
+      provider: "netease",
       status: "ready",
-      durationSec: 99,
-      blobId: "blb_yt",
+      durationSec: 198,
       createdAt: 110,
       playCount: 0,
       liked: false,
-      tags: [],
+      tags: ["netease"],
+      streamSourceId: "netease",
+      streamExternalId: "song_42",
+      streamMeta: {
+        artist: "Aki",
+        album: "Rain City",
+        coverUrl: "https://p1.music.126.net/cover.jpg",
+        durationSec: 198,
+      },
     };
     await db.tracks.put(streamed);
-    await db.mediaBlobs.put({
-      id: "blb_yt",
-      trackId: "trk_yt",
-      role: "media",
-      mime: "audio/mpeg",
-      bytes: 3,
-      blob: new Blob(["xyz"], { type: "audio/mpeg" }),
-    });
-    await db.sessions.update("ses_1", { trackIds: ["trk_1", "trk_yt"] });
+    await db.sessions.update("ses_1", { trackIds: ["trk_1", "trk_ne"] });
 
     const plan = await buildR2ExportPlan({
       driveId: "drv_1",
@@ -524,13 +521,79 @@ describe("buildR2ExportPlan", () => {
     const setIndex = JSON.parse(
       String(plan.objects.find((object) => object.kind === "set-index")?.body),
     );
-    expect(setIndex.tracks.map((track: { id: string }) => track.id)).toEqual(["trk_1"]);
-    // Manifest trackCount reflects what subscribers actually receive, not the
-    // session's full member list (which still holds the skipped streamed track).
+    expect(setIndex.tracks.map((track: { id: string }) => track.id)).toEqual(["trk_1", "trk_ne"]);
+    expect(setIndex.tracks[1]).toMatchObject({
+      id: "trk_ne",
+      origin: "streamed",
+      provider: "netease",
+      streamSourceId: "netease",
+      streamExternalId: "song_42",
+      streamMeta: {
+        artist: "Aki",
+        album: "Rain City",
+        coverUrl: "https://p1.music.126.net/cover.jpg",
+        durationSec: 198,
+      },
+    });
+    expect(setIndex.tracks[1].media).toBeUndefined();
     const manifest = JSON.parse(
       String(plan.objects.find((object) => object.kind === "manifest")?.body),
     );
-    expect(manifest.sets[0].trackCount).toBe(1);
+    expect(manifest.sets[0].trackCount).toBe(2);
+  });
+
+  it("exports cached streamed-origin media bytes to the private R2 drive", async () => {
+    await seedSet();
+    const streamed: Track = {
+      id: "trk_ne_cached",
+      sessionId: "ses_1",
+      title: "Cached Moon Bridge",
+      kind: "audio",
+      origin: "streamed",
+      provider: "netease",
+      status: "ready",
+      durationSec: 198,
+      blobId: "blb_ne_cached",
+      createdAt: 110,
+      playCount: 0,
+      liked: false,
+      tags: ["offline"],
+      streamSourceId: "netease",
+      streamExternalId: "song_42",
+    };
+    await db.tracks.put(streamed);
+    await db.mediaBlobs.put({
+      id: "blb_ne_cached",
+      trackId: "trk_ne_cached",
+      role: "media",
+      mime: "audio/mpeg",
+      bytes: 3,
+      blob: new Blob(["xyz"], { type: "audio/mpeg" }),
+    });
+    await db.sessions.update("ses_1", { trackIds: ["trk_1", "trk_ne_cached"] });
+
+    const plan = await buildR2ExportPlan({
+      driveId: "drv_1",
+      libraryId: "lib_1",
+      baseUrl: "https://music.example.com/muzero/",
+      setIds: ["ses_1"],
+      db,
+    });
+
+    expect(plan.objects.filter((object) => object.kind === "media")).toHaveLength(2);
+    const setIndex = JSON.parse(
+      String(plan.objects.find((object) => object.kind === "set-index")?.body),
+    );
+    expect(setIndex.tracks[1]).toMatchObject({
+      id: "trk_ne_cached",
+      origin: "streamed",
+      streamSourceId: "netease",
+      streamExternalId: "song_42",
+      media: {
+        mime: "audio/mpeg",
+        bytes: 3,
+      },
+    });
   });
 
   it("keeps historical memory author snapshots when the local device profile changes", async () => {

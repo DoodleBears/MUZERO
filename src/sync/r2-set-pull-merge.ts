@@ -102,9 +102,14 @@ async function mergeRemoteIntoSession(
         brief: entry.brief ?? undefined,
         provider: entry.provider,
         providerPreset: entry.providerPreset ?? undefined,
+        streamSourceId: entry.streamSourceId,
+        streamExternalId: entry.streamExternalId,
+        streamMeta: entry.streamMeta,
         status: "ready",
         durationSec: entry.durationSec,
-        remoteMediaUrl: resolveRemoteObjectUrl(input.baseUrl, entry.media.url),
+        remoteMediaUrl: entry.media
+          ? resolveRemoteObjectUrl(input.baseUrl, entry.media.url)
+          : undefined,
         remoteCoverUrl: entry.cover
           ? resolveRemoteObjectUrl(input.baseUrl, entry.cover.url)
           : undefined,

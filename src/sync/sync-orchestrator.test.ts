@@ -3,6 +3,7 @@ import type { AppSettings, CloudDrive, R2LocalCredentials } from "@/db/types";
 import type { R2ExportPlan, R2ExportPlanForDriveInput } from "./r2-export-plan";
 import type { R2PublishProgressEvent } from "./r2-publish";
 import { R2PublishHttpError } from "./r2-publish";
+import type { FetchRemotePublishBaseInput, RemotePublishBase } from "./r2-publish-base";
 import type { RemoteSetConflict } from "./r2-pull-diff";
 import type {
   ApplyRemoteSetPullInput,
@@ -200,8 +201,10 @@ describe("createSyncOrchestrator.publish read-merge-write (MW-4)", () => {
     const events: SyncProgress[] = [];
     const baseA = {};
     const baseB = {};
-    const bases = [baseA, baseB];
-    const fetchPublishBase = vi.fn(async () => bases.shift() ?? {});
+    const bases: RemotePublishBase[] = [baseA, baseB];
+    const fetchPublishBase = vi.fn(
+      async (_input: FetchRemotePublishBaseInput) => bases.shift() ?? {},
+    );
     const buildPlan = vi.fn(async (_input: R2ExportPlanForDriveInput) => makePlan());
     let runs = 0;
     const runPublish = vi.fn(async () => {

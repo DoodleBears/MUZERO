@@ -191,6 +191,101 @@ describe("importRemoteSetStream", () => {
     expect(await db.mediaBlobs.count()).toBe(0);
   });
 
+  it("imports streamed source metadata so another device can resolve the same playlist", async () => {
+    const streamedRemoteSet: RemoteSetIndexResult = {
+      ...remoteSet,
+      index: {
+        ...remoteSet.index,
+        tracks: [
+          {
+            id: "trk_ne",
+            title: "Moon Bridge",
+            kind: "audio",
+            origin: "streamed",
+            provider: "netease",
+            durationSec: 198,
+            createdAt: 1780944000000,
+            liked: false,
+            tags: ["netease"],
+            streamSourceId: "netease",
+            streamExternalId: "song_42",
+            streamMeta: {
+              artist: "Aki",
+              album: "Rain City",
+              coverUrl: "https://p1.music.126.net/cover.jpg",
+              durationSec: 198,
+            },
+            mediaMetadata: {
+              artists: ["Aki"],
+              album: "Rain City",
+              parser: "manual",
+              parsedAt: 1780944000000,
+            },
+            memories: [],
+          },
+        ],
+      },
+      tracks: [
+        {
+          id: "trk_ne",
+          title: "Moon Bridge",
+          memoryPhotoUrls: [],
+          source: {
+            id: "trk_ne",
+            title: "Moon Bridge",
+            kind: "audio",
+            origin: "streamed",
+            provider: "netease",
+            durationSec: 198,
+            createdAt: 1780944000000,
+            liked: false,
+            tags: ["netease"],
+            streamSourceId: "netease",
+            streamExternalId: "song_42",
+            streamMeta: {
+              artist: "Aki",
+              album: "Rain City",
+              coverUrl: "https://p1.music.126.net/cover.jpg",
+              durationSec: 198,
+            },
+            mediaMetadata: {
+              artists: ["Aki"],
+              album: "Rain City",
+              parser: "manual",
+              parsedAt: 1780944000000,
+            },
+            memories: [],
+          },
+        },
+      ],
+    };
+
+    const result = await importRemoteSetStream(
+      { driveId: "drv_streamed", remoteSet: streamedRemoteSet },
+      db,
+    );
+
+    const track = await db.tracks.get(result.trackIds[0]!);
+    expect(track).toMatchObject({
+      title: "Moon Bridge",
+      origin: "streamed",
+      provider: "netease",
+      streamSourceId: "netease",
+      streamExternalId: "song_42",
+      streamMeta: {
+        artist: "Aki",
+        album: "Rain City",
+        coverUrl: "https://p1.music.126.net/cover.jpg",
+      },
+      mediaMetadata: {
+        artists: ["Aki"],
+        album: "Rain City",
+      },
+    });
+    expect(track?.remoteMediaUrl).toBeUndefined();
+    expect(track?.blobId).toBeUndefined();
+  });
+
   it("carries the cover crop from the manifest onto the imported track (F11)", async () => {
     const withCrop: RemoteSetIndexResult = {
       ...remoteSet,

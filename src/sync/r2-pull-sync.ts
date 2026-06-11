@@ -38,7 +38,7 @@ export async function dryRunRemoteSetPull(
     ...diff,
     willMutate: diff.action === "create-set" || diff.action === "apply-remote",
     trackCount: input.remoteSet.tracks.length,
-    bytes: input.remoteSet.index.tracks.reduce((sum, track) => sum + track.media.bytes, 0),
+    bytes: input.remoteSet.index.tracks.reduce((sum, track) => sum + (track.media?.bytes ?? 0), 0),
   };
 }
 

@@ -52,7 +52,7 @@ export interface RemoteLibraryPreview {
 export interface ResolvedRemoteTrack {
   id: string;
   title: string;
-  mediaUrl: string;
+  mediaUrl?: string;
   coverUrl?: string;
   memoryPhotoUrls: Array<{ memoryId: string; url: string }>;
   source: R2SetIndex["tracks"][number];
@@ -227,7 +227,7 @@ export async function loadRemoteSetIndex(
     tracks: index.tracks.map((track) => ({
       id: track.id,
       title: track.title,
-      mediaUrl: resolveRemoteObjectUrl(preview.baseUrl, track.media.url),
+      mediaUrl: track.media ? resolveRemoteObjectUrl(preview.baseUrl, track.media.url) : undefined,
       coverUrl: track.cover ? resolveRemoteObjectUrl(preview.baseUrl, track.cover.url) : undefined,
       memoryPhotoUrls: track.memories.flatMap((memory) =>
         memory.photo

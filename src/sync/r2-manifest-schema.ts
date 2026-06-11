@@ -150,43 +150,61 @@ const r2LyricsSchema = z.object({
   sourceId: z.string().optional(),
 });
 
-export const r2SetTrackSchema = z.object({
-  id: z.string().min(1),
-  title: z.string().min(1),
-  kind: z.enum(["audio", "video"]),
-  // "streamed" is accepted so the manifest can represent external-source tracks,
-  // but the exporter never publishes streamed-origin tracks — not even locally
-  // cached ones (their bytes are platform-derived; see the streaming PRD and the
-  // R2 sync PRD audit F5). They are skipped from the set index and excluded from
-  // the manifest's trackCount.
-  origin: z.enum(["generated", "uploaded", "streamed"]),
-  provider: z.string().min(1),
-  durationSec: z.number().nonnegative(),
-  createdAt: millisSchema,
-  generatedAt: millisSchema.nullable().optional(),
-  liked: z.boolean().default(false),
-  tags: z.array(z.string()).default([]),
-  mediaMetadata: r2TrackMediaMetadataSchema.optional(),
-  brief: trackBriefSchema.nullable().optional(),
-  providerPreset: z.string().nullable().optional(),
-  // 歌单内分数序 rank（drag-reorder PRD §4.2）。Additive optional → 无 manifest 版本
-  // bump（同 thumbhash / lyrics 的 carry）。导出端把 tracks[] 按 rank 排序并逐首带上
-  // rank；import 端据此重建 trackRanks。legacy manifest 省略 → 回落到数组顺序。
-  rank: z.number().optional(),
-  media: r2RemoteObjectSchema,
-  cover: r2RemoteObjectSchema.optional(),
-  // Non-destructive square crop for the cover, in the original image's pixels —
-  // additive optional (audit F11), so a cropped cover renders the same framing
-  // on the subscribing device.
-  coverCrop: r2CropSchema.optional(),
-  // Base64 thumbhash of the cover — instant preview for a not-yet-downloaded
-  // remote track cover (instant-cover-thumbnails PRD §3.4).
-  thumbhash: z.string().optional(),
-  // Synced/plain lyrics (LRCLIB or manual) — additive optional field, mirrors the
-  // thumbhash carry: no manifest version bump (synced-lyrics PRD §4.8).
-  lyrics: r2LyricsSchema.optional(),
-  memories: z.array(r2MemorySchema).default([]),
+const r2StreamMetaSchema = z.object({
+  artist: z.string().optional(),
+  album: z.string().optional(),
+  coverUrl: z.string().url().optional(),
+  durationSec: z.number().nonnegative().optional(),
 });
+
+export const r2SetTrackSchema = z
+  .object({
+    id: z.string().min(1),
+    title: z.string().min(1),
+    kind: z.enum(["audio", "video"]),
+    // Streamed tracks publish their source ref + display snapshot. If the device
+    // has cached media bytes, those bytes are private-drive content and publish
+    // as the optional media object too.
+    origin: z.enum(["generated", "uploaded", "streamed"]),
+    provider: z.string().min(1),
+    durationSec: z.number().nonnegative(),
+    createdAt: millisSchema,
+    generatedAt: millisSchema.nullable().optional(),
+    liked: z.boolean().default(false),
+    tags: z.array(z.string()).default([]),
+    mediaMetadata: r2TrackMediaMetadataSchema.optional(),
+    brief: trackBriefSchema.nullable().optional(),
+    providerPreset: z.string().nullable().optional(),
+    streamSourceId: z.enum(["netease", "bili", "youtube"]).optional(),
+    streamExternalId: z.string().min(1).optional(),
+    streamMeta: r2StreamMetaSchema.optional(),
+    // 歌单内分数序 rank（drag-reorder PRD §4.2）。Additive optional → 无 manifest 版本
+    // bump（同 thumbhash / lyrics 的 carry）。导出端把 tracks[] 按 rank 排序并逐首带上
+    // rank；import 端据此重建 trackRanks。legacy manifest 省略 → 回落到数组顺序。
+    rank: z.number().optional(),
+    media: r2RemoteObjectSchema.optional(),
+    cover: r2RemoteObjectSchema.optional(),
+    // Non-destructive square crop for the cover, in the original image's pixels —
+    // additive optional (audit F11), so a cropped cover renders the same framing
+    // on the subscribing device.
+    coverCrop: r2CropSchema.optional(),
+    // Base64 thumbhash of the cover — instant preview for a not-yet-downloaded
+    // remote track cover (instant-cover-thumbnails PRD §3.4).
+    thumbhash: z.string().optional(),
+    // Synced/plain lyrics (LRCLIB or manual) — additive optional field, mirrors the
+    // thumbhash carry: no manifest version bump (synced-lyrics PRD §4.8).
+    lyrics: r2LyricsSchema.optional(),
+    memories: z.array(r2MemorySchema).default([]),
+  })
+  .superRefine((track, ctx) => {
+    if (track.origin !== "streamed" && !track.media) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["media"],
+        message: "generated/uploaded tracks must include media",
+      });
+    }
+  });
 
 // Removal tombstone for multi-device co-editing (PRD §12.5): a removed member's
 // published id + when. Additive optional — legacy indexes omit it. Without these,

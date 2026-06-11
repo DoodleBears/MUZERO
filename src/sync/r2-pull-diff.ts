@@ -201,11 +201,20 @@ async function sameTrackRows(input: DiffRemoteSetInput, db: MuzeroDB): Promise<b
     if ((local.providerPreset ?? undefined) !== (remoteTrack.source.providerPreset ?? undefined)) {
       return false;
     }
+    if ((local.streamSourceId ?? undefined) !== (remoteTrack.source.streamSourceId ?? undefined)) {
+      return false;
+    }
+    if (
+      (local.streamExternalId ?? undefined) !== (remoteTrack.source.streamExternalId ?? undefined)
+    ) {
+      return false;
+    }
     if (local.durationSec !== remoteTrack.source.durationSec) return false;
     if (local.remoteMediaUrl !== remoteTrack.mediaUrl) return false;
     if ((local.remoteCoverUrl ?? undefined) !== (remoteTrack.coverUrl ?? undefined)) return false;
     if ((local.brief ?? undefined) !== (remoteTrack.source.brief ?? undefined)) return false;
     if (!sameJson(local.mediaMetadata, remoteTrack.source.mediaMetadata)) return false;
+    if (!sameJson(local.streamMeta, remoteTrack.source.streamMeta)) return false;
   }
   return true;
 }

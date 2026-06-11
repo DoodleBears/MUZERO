@@ -195,20 +195,17 @@ export async function buildR2ExportPlan(input: R2ExportPlanInput): Promise<R2Exp
 
     for (const track of tracks) {
       if (publishedEntityId("trk", input.driveId, track.id) !== track.id) continue;
-      // Streamed-origin tracks never publish — not even cached ones (their bytes
-      // are platform-derived; external-streaming PRD keeps them out of scope).
-      // Audit F5: this must be an origin check, because the local cache DOES set
-      // `blobId` on streamed tracks.
-      if (track.origin === "streamed") continue;
-      if (!track.blobId) continue;
-      const mediaBlob = await db.mediaBlobs.get(track.blobId);
-      if (!mediaBlob) continue;
+      const mediaBlob = track.blobId ? await db.mediaBlobs.get(track.blobId) : undefined;
+      if (!mediaBlob && track.origin !== "streamed") continue;
+      if (!mediaBlob && (!track.streamSourceId || !track.streamExternalId)) continue;
 
-      const media = await createBinaryObject("media", mediaBlob, {
-        setId: session.id,
-        trackId: track.id,
-      });
-      binaryObjects.push(media.object);
+      const media = mediaBlob
+        ? await createBinaryObject("media", mediaBlob, {
+            setId: session.id,
+            trackId: track.id,
+          })
+        : undefined;
+      if (media) binaryObjects.push(media.object);
 
       const cover = track.coverBlobId
         ? await loadOptionalBinaryObject("cover", track.coverBlobId, db, {
@@ -261,8 +258,11 @@ export async function buildR2ExportPlan(input: R2ExportPlanInput): Promise<R2Exp
         mediaMetadata: track.mediaMetadata,
         brief: track.brief ?? null,
         providerPreset: track.providerPreset ?? null,
+        streamSourceId: track.streamSourceId,
+        streamExternalId: track.streamExternalId,
+        streamMeta: track.streamMeta,
         rank: session.trackRanks?.[track.id],
-        media: media.remote,
+        media: media?.remote,
         cover: cover?.remote,
         coverCrop: track.coverCrop,
         thumbhash: track.coverThumbhash,
@@ -480,6 +480,7 @@ async function createEntityCoverObjects(db: MuzeroDB): Promise<R2ExportObject[]>
     } else {
       continue;
     }
+    if (!cover) continue;
     entries.push({
       id: row.id,
       kind: row.kind,

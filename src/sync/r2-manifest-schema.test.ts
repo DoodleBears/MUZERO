@@ -109,6 +109,74 @@ describe("r2SetIndexSchema", () => {
     expect(setIndex.tracks[0]?.memories?.[0]?.author?.devicePublicId).toBe("dvc_me");
     expect(setIndex.tracks[0]?.memories?.[0]?.atSec).toBe(98);
   });
+
+  it("allows streamed source metadata without media but still requires media for local-origin tracks", () => {
+    const baseSet = {
+      id: "ses_tokyo",
+      name: "Tokyo Night Drive",
+      seedPrompt: "source playlist",
+      displayMode: "cover" as const,
+      config: {
+        autoExtend: false,
+        refillThreshold: 2,
+        batchSize: 1,
+        targetDurationSec: 60,
+        allowVocals: true,
+      },
+      createdAt: 1780944000000,
+      updatedAt: 1780944000000,
+    };
+
+    const streamed = r2SetIndexSchema.parse({
+      schema: "muzero-r2-set-index-v1",
+      set: baseSet,
+      tracks: [
+        {
+          id: "trk_ne",
+          title: "Moon Bridge",
+          kind: "audio",
+          origin: "streamed",
+          provider: "netease",
+          durationSec: 198,
+          createdAt: 1780944000000,
+          liked: false,
+          tags: [],
+          streamSourceId: "netease",
+          streamExternalId: "song_42",
+          streamMeta: {
+            artist: "Aki",
+            album: "Rain City",
+            coverUrl: "https://p1.music.126.net/cover.jpg",
+            durationSec: 198,
+          },
+          memories: [],
+        },
+      ],
+    });
+
+    expect(streamed.tracks[0]?.media).toBeUndefined();
+    expect(streamed.tracks[0]?.streamExternalId).toBe("song_42");
+    expect(() =>
+      r2SetIndexSchema.parse({
+        schema: "muzero-r2-set-index-v1",
+        set: baseSet,
+        tracks: [
+          {
+            id: "trk_upload",
+            title: "Upload",
+            kind: "audio",
+            origin: "uploaded",
+            provider: "upload",
+            durationSec: 10,
+            createdAt: 1780944000000,
+            liked: false,
+            tags: [],
+            memories: [],
+          },
+        ],
+      }),
+    ).toThrow(/media/);
+  });
 });
 
 describe("share and stats schemas", () => {

@@ -305,6 +305,53 @@ describe("loadRemoteSetIndex", () => {
     ]);
   });
 
+  it("loads streamed metadata-only tracks without requiring a remote media URL", async () => {
+    const preview = await subscribeManifest("https://music.example.com/muzero/manifest.json", {
+      fetcher: fetchMap({
+        "https://music.example.com/muzero/manifest.json": manifest,
+      }),
+    });
+
+    const remoteSet = await loadRemoteSetIndex(preview, preview.sets[0]!, {
+      fetcher: fetchMap({
+        "https://music.example.com/muzero/sets/ses_tokyo/index.json": {
+          ...setIndex,
+          tracks: [
+            {
+              id: "trk_ne",
+              title: "Moon Bridge",
+              kind: "audio",
+              origin: "streamed",
+              provider: "netease",
+              durationSec: 198,
+              createdAt: 1780944000000,
+              liked: false,
+              tags: [],
+              streamSourceId: "netease",
+              streamExternalId: "song_42",
+              streamMeta: {
+                artist: "Aki",
+                album: "Rain City",
+                coverUrl: "https://p1.music.126.net/cover.jpg",
+              },
+              memories: [],
+            },
+          ],
+        },
+      }),
+    });
+
+    expect(remoteSet.tracks[0]).toMatchObject({
+      id: "trk_ne",
+      mediaUrl: undefined,
+      source: {
+        origin: "streamed",
+        streamSourceId: "netease",
+        streamExternalId: "song_42",
+      },
+    });
+  });
+
   it("rejects invalid set indexes", async () => {
     const preview = await subscribeManifest("https://music.example.com/muzero/manifest.json", {
       fetcher: fetchMap({
