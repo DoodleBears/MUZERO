@@ -58,33 +58,25 @@ async function handleMuzfetch(request) {
     }
   }
 
-  // credentials:"include" so net.fetch sends the default session's cookies even cross-
-  // origin (default "same-origin" would drop them). After a source login, MUSIC_U /
-  // SESSDATA live in the default session — this unlocks VIP / higher quality.
-  // Exception: googlevideo issues *guest* playback URLs (signed by ip + expire) and
-  // 403s a GET that arrives carrying YouTube account/visitor cookies — so omit them
-  // for googlevideo media only (NetEase/Bilibili CDN GETs are unaffected).
-  let credentials = "include";
+  // googlevideo 403s Chromium's net.fetch but serves Node's undici a 206 — same URL,
+  // same IP, identical clean headers (verified). So route googlevideo media through
+  // the main process's own `fetch` (undici); everything else stays on net.fetch for
+  // cookies / session / privileged-scheme CORS bypass. credentials:"include" sends the
+  // default session's cookies cross-origin (MUSIC_U / SESSDATA after a source login
+  // unlock VIP); undici ignores it (no cookie jar — googlevideo wants none anyway).
+  let isGoogleVideo = false;
   try {
-    if (/(^|\.)googlevideo\.com$/i.test(new URL(target).hostname)) credentials = "omit";
+    isGoogleVideo = /(^|\.)googlevideo\.com$/i.test(new URL(target).hostname);
   } catch {
-    // non-absolute target — leave credentials as-is
+    // non-absolute target — treat as a normal proxied request
   }
-  const init = { method: request.method, headers, redirect: "follow", credentials };
+  const init = { method: request.method, headers, redirect: "follow", credentials: "include" };
   if (request.method !== "GET" && request.method !== "HEAD" && request.body) {
     init.body = request.body;
     init.duplex = "half";
   }
 
-  const res = await net.fetch(target, init);
-  if (res.status === 403 && /(^|\.)googlevideo\.com$/i.test(new URL(target).hostname)) {
-    // Diagnostic for the stubborn YouTube 403 — what did we actually send?
-    console.error("[muzfetch] googlevideo 403", {
-      cred: credentials,
-      cookie: headers.has("cookie"),
-      secFetch: [...headers.keys()].filter((n) => n.startsWith("sec-")),
-    });
-  }
+  const res = await (isGoogleVideo ? globalThis.fetch : net.fetch)(target, init);
   // Re-emit with permissive CORS so the privileged-scheme renderer can read it,
   // keeping the body a live stream (no buffering).
   const outHeaders = new Headers(res.headers);
