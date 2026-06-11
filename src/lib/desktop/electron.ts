@@ -35,8 +35,13 @@ const TARGET_HEADER = "x-muzero-target";
  * `__mzh_<name>`); the main process restores them and preserves Range/206. Used for
  * Bilibili, whose CDN 403s a foreign Referer.
  */
-function electronMediaProxyUrl(url: string, headers?: Record<string, string>): string {
+function electronMediaProxyUrl(
+  url: string,
+  headers?: Record<string, string>,
+  traceId?: string,
+): string {
   const params = new URLSearchParams({ __mzurl: url });
+  if (traceId) params.set("__mztrace", traceId);
   if (headers) {
     for (const [name, value] of Object.entries(headers)) {
       params.set(`__mzh_${name.toLowerCase()}`, value);

@@ -69,7 +69,7 @@ export interface DesktopBridge {
    * caller uses the raw URL (fine for CDNs that don't gate on Referer, e.g. NetEase;
    * required for Bilibili, whose CDN 403s a foreign Referer).
    */
-  mediaProxyUrl?: (url: string, headers?: Record<string, string>) => string;
+  mediaProxyUrl?: (url: string, headers?: Record<string, string>, traceId?: string) => string;
   /**
    * Open a streaming source's real login page in a desktop auth window and resolve
    * the captured `Cookie:` header once the session cookie appears (or null if the

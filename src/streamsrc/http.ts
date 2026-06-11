@@ -9,6 +9,8 @@
  * infra); this module only declares the contract the providers code against.
  */
 
+import type { DiagnosticContext } from "@/lib/diagnostics";
+
 export interface StreamHttpRequest {
   url: string;
   method?: "GET" | "POST";
@@ -16,6 +18,7 @@ export interface StreamHttpRequest {
   headers?: Record<string, string>;
   body?: string;
   signal?: AbortSignal;
+  trace?: Pick<DiagnosticContext, "traceId" | "trackId" | "sessionId" | "sourceId">;
 }
 
 export interface StreamHttpResponse {

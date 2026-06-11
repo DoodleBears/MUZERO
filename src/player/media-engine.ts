@@ -1,5 +1,5 @@
-import { log } from "@/lib/logger";
-import { traceEvent } from "@/lib/trace";
+import type { DiagnosticContext, DiagnosticErrorKind, DiagnosticPhase } from "@/lib/diagnostics";
+import { createDiagnosticLogger, log } from "@/lib/logger";
 
 /**
  * Owns playback through a persistent `<audio>` element (the driver) plus a muted
@@ -41,6 +41,11 @@ const MEDIA_TRACE_EVENTS = [
   "abort",
   "error",
 ] as const;
+const mediaLog = createDiagnosticLogger("player.media");
+type MediaDiagnosticsContext = Pick<
+  DiagnosticContext,
+  "traceId" | "trackId" | "sessionId" | "sourceId"
+>;
 
 export class MediaEngine {
   private readonly audioEl: HTMLAudioElement;
@@ -51,6 +56,7 @@ export class MediaEngine {
   private objectUrl: string | null = null;
   private audioCtx: AudioContext | null = null;
   private analyser: AnalyserNode | null = null;
+  private diagnosticsContext: MediaDiagnosticsContext | undefined;
 
   constructor(private callbacks: MediaEngineCallbacks = {}) {
     const canDom = typeof document !== "undefined";
@@ -88,10 +94,10 @@ export class MediaEngine {
     this.videoEl.addEventListener("error", () => this.callbacks.onError?.(this.videoEl.error));
     for (const event of MEDIA_TRACE_EVENTS) {
       this.audioEl.addEventListener(event, () =>
-        traceEvent("debug", "media.audio", event, describeMediaElement(this.audioEl)),
+        this.traceMediaElementEvent("audio", event, this.audioEl),
       );
       this.videoEl.addEventListener(event, () =>
-        traceEvent("debug", "media.video", event, describeMediaElement(this.videoEl)),
+        this.traceMediaElementEvent("video", event, this.videoEl),
       );
     }
 
@@ -112,6 +118,10 @@ export class MediaEngine {
 
   setCallbacks(cb: MediaEngineCallbacks): void {
     this.callbacks = cb;
+  }
+
+  setDiagnosticsContext(context: MediaDiagnosticsContext | undefined): void {
+    this.diagnosticsContext = context;
   }
 
   /** Adopt the muted video into the stage; resync to the audio driver if playing. */
@@ -150,6 +160,7 @@ export class MediaEngine {
   ): Promise<void> {
     log.debug("media", "loadUrl", { kind, crossOrigin: opts?.crossOrigin });
     this.revoke();
+    if (url.startsWith("blob:")) this.objectUrl = url;
     this.loadSource(url, kind, opts?.crossOrigin ?? null);
   }
 
@@ -162,12 +173,20 @@ export class MediaEngine {
     // The audio element is always the driver (it plays a video file's audio too).
     this.audioEl.src = src;
     this.audioEl.load();
-    traceEvent("debug", "media", "audio source loaded", describeMediaElement(this.audioEl));
+    this.traceMediaElementEvent("audio", "source.loaded", this.audioEl, {
+      phase: "start",
+      mediaKind: kind,
+      sourceScheme: sourceScheme(src),
+    });
     this.hasVideo = kind === "video";
     if (this.hasVideo) {
       this.videoEl.src = src;
       this.videoEl.load();
-      traceEvent("debug", "media", "video source loaded", describeMediaElement(this.videoEl));
+      this.traceMediaElementEvent("video", "source.loaded", this.videoEl, {
+        phase: "start",
+        mediaKind: kind,
+        sourceScheme: sourceScheme(src),
+      });
     } else {
       this.videoEl.removeAttribute("src");
       this.videoEl.load();
@@ -188,6 +207,7 @@ export class MediaEngine {
       currentSrc: !!this.audioEl.currentSrc,
     });
     this.ensureGraph();
+    this.traceMediaElementEvent("audio", "play.requested", this.audioEl, { phase: "start" });
     let settled = false;
     try {
       const playPromise = this.audioEl.play();
@@ -195,21 +215,35 @@ export class MediaEngine {
         .then(() => {
           settled = true;
           log.debug("media", "play resolved", describeMediaElement(this.audioEl));
+          this.traceMediaElementEvent("audio", "play.resolved", this.audioEl, {
+            phase: "success",
+          });
         })
         .catch((err: unknown) => {
           settled = true;
           log.warn("media", "play() rejected", err, describeMediaElement(this.audioEl));
+          this.traceMediaElementEvent("audio", "play.rejected", this.audioEl, {
+            phase: "fail",
+            errorKind: "unsupported_source",
+          });
         });
       await Promise.race([
         playPromise.then(() => undefined).catch(() => undefined),
         delay(PLAY_PENDING_MS).then(() => {
           if (!settled) {
             log.warn("media", "play() still pending", describeMediaElement(this.audioEl));
+            this.traceMediaElementEvent("audio", "play.pending", this.audioEl, {
+              phase: "retry",
+            });
           }
         }),
       ]);
     } catch (err) {
       log.warn("media", "play() threw synchronously", err, describeMediaElement(this.audioEl));
+      this.traceMediaElementEvent("audio", "play.threw", this.audioEl, {
+        phase: "fail",
+        errorKind: "unknown",
+      });
     }
   }
 
@@ -278,6 +312,30 @@ export class MediaEngine {
       this.objectUrl = null;
     }
   }
+
+  private traceMediaElementEvent(
+    elementKind: "audio" | "video",
+    event: string,
+    el: HTMLMediaElement,
+    extra: Partial<DiagnosticContext> = {},
+  ): void {
+    if (!this.diagnosticsContext?.traceId) return;
+    const described = describeMediaElement(el);
+    const isError = event === "error" || described.error;
+    mediaLog[isError ? "error" : "debug"](event, {
+      message: `${elementKind} ${event}`,
+      ...this.diagnosticsContext,
+      ...extra,
+      category: "media",
+      phase: extra.phase ?? mediaEventPhase(event),
+      errorKind: extra.errorKind ?? mediaErrorKind(event, described.error),
+      mediaElement: elementKind,
+      mediaReadyState: described.readyState,
+      mediaNetworkState: described.networkState,
+      mediaErrorCode: described.error?.code,
+      mediaErrorMessage: described.error?.message,
+    });
+  }
 }
 
 function delay(ms: number): Promise<void> {
@@ -304,6 +362,31 @@ function describeMediaError(error: MediaError | null) {
     code: error.code,
     message: error.message,
   };
+}
+
+function mediaEventPhase(event: string): DiagnosticPhase {
+  if (event === "error" || event === "abort") return "fail";
+  if (event === "waiting" || event === "stalled" || event === "suspend") return "retry";
+  if (event === "loadedmetadata" || event === "loadeddata" || event === "canplay") return "success";
+  return "state";
+}
+
+function mediaErrorKind(
+  event: string,
+  error: ReturnType<typeof describeMediaError>,
+): DiagnosticErrorKind | undefined {
+  if (event === "error" || error) return "media_decode";
+  return undefined;
+}
+
+function sourceScheme(src: string): string {
+  if (src.startsWith("blob:")) return "blob";
+  if (src.startsWith("muzfetch:")) return "muzfetch";
+  try {
+    return new URL(src).protocol.replace(/:$/, "") || "unknown";
+  } catch {
+    return "unknown";
+  }
 }
 
 function finiteOrNull(value: number): number | null {

@@ -13,7 +13,7 @@
 |-------|------|--------|------|
 | 1 | Audit, Taxonomy, Redaction Contract | Completed | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | Shared Structured Logger API | Completed | [Phase 2 Checklist](#phase-2-checklist) |
-| 3 | Playback / Stream Trace Migration | In Progress | [Phase 3 Checklist](#phase-3-checklist) |
+| 3 | Playback / Stream Trace Migration | Completed | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | Settings Trace Workbench | Completed | [Phase 4 Checklist](#phase-4-checklist) |
 | 5 | Electron Main Process Bridge | Completed | [Phase 5 Checklist](#phase-5-checklist) |
 | 6 | Local Trace Archive / File Export | Completed | [Phase 6 Checklist](#phase-6-checklist) |
@@ -641,21 +641,21 @@ All user-facing strings must go through i18n catalogs in `src/i18n/locales/{en,z
 - [x] Add safe `ui.action play.click` breadcrumbs to `TrackRow` playback requests.
 - [x] Add structured `stream.resolve` events to `resolveStreamedTrackMedia`.
 - [x] Add structured `stream.cache` events to `runStreamCache`.
-- [ ] Create a playback `traceId` when a row/set/queue item starts playback.
-- [ ] Thread `traceId` through `player-store`, stream resolver, source adapter, cache, and `media-engine`.
-- [ ] Migrate `src/streamsrc/youtube/youtube-ytjs.ts` logs to structured events.
-- [ ] Migrate `src/streamsrc/youtube/youtube-source.ts` and `src/streamsrc/stream-http.ts`.
-- [ ] Migrate `src/player/media-engine.ts` direct `traceEvent()` media events to the shared logger.
-- [ ] Add tests for successful YouTube path and 403/download failure path using fake fetch.
+- [x] Create a playback `traceId` when a row/set/queue item starts playback.
+- [x] Thread `traceId` through `player-store`, stream resolver, source adapter, cache, media proxy URL, and `media-engine`.
+- [x] Migrate `src/streamsrc/youtube/youtube-ytjs.ts` logs to structured events.
+- [x] Migrate `src/streamsrc/youtube/youtube-source.ts` and `src/streamsrc/stream-http.ts`.
+- [x] Migrate `src/player/media-engine.ts` direct `traceEvent()` media events to the shared logger.
+- [x] Add tests for successful YouTube path and 403/download failure path using fake fetch.
 
 ### Phase 3 Checklist
 
-- [ ] A pasted YouTube failure trace proves whether PoToken was minted.
-- [ ] The trace proves whether playback used a downloaded `blob:` URL or `muzfetch://media` proxy.
-- [ ] The trace includes HTTP status, content type, host, range support, and redaction markers for failed media requests.
-- [ ] The trace includes media element error code, ready state, and network state.
-- [ ] Cache-stream failures share the same playback `traceId`.
-- [ ] No test snapshots contain raw signed URLs, cookies, tokens, prompts, lyrics, notes, or file names.
+- [x] A pasted YouTube failure trace proves whether PoToken was minted.
+- [x] The trace proves whether playback used a downloaded `blob:` URL or `muzfetch://media` proxy.
+- [x] The trace includes HTTP status, content type, host, range support, and redaction markers for failed media requests.
+- [x] The trace includes media element error code, ready state, and network state.
+- [x] Cache-stream failures share the same playback `traceId`.
+- [x] No test snapshots contain raw signed URLs, cookies, tokens, prompts, lyrics, notes, or file names.
 
 ### Phase 4: Settings Trace Workbench
 
@@ -837,6 +837,7 @@ Given a stream source requires headers/cookies/login or returns no playable URL:
 | 2026-06-11 | Codex | Completed Phase 1 with structured diagnostics schema, filter helpers, URL summarization, and redaction tests |
 | 2026-06-11 | Codex | Completed Phase 2 with structured logger facade, sanitized legacy logging, user-action helper, and trace formatter tests |
 | 2026-06-11 | Codex | Advanced Phase 3a with safe TrackRow play breadcrumbs plus structured stream resolve/cache trace events and tests |
+| 2026-06-11 | Codex | Completed Phase 3 with playback traceId propagation through player, stream resolver/cache, YouTube provider/runtime, media engine, stream HTTP, and media proxy events |
 | 2026-06-11 | Codex | Completed Phase 4 with Settings Trace filters, copy-visible/all, repro-step timeline, i18n, and component tests |
 | 2026-06-11 | Codex | Completed Phase 5 with Electron main diagnostics buffering, preload bridge, renderer trace ingestion, and redacted media proxy events |
 | 2026-06-11 | Codex | Completed Phase 6 with IndexedDB trace archive, visible enable/export controls, bounded rotation, JSONL export metadata, and archive tests |

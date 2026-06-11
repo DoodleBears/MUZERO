@@ -1,5 +1,10 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
+import { clearTrace, getTraceEntries } from "@/lib/trace";
 import { MediaEngine } from "./media-engine";
+
+afterEach(() => {
+  clearTrace();
+});
 
 /**
  * Playback is driven by a persistent <audio> element that NEVER leaves the
@@ -40,5 +45,31 @@ describe("MediaEngine — audio driver stays in the document, video is the visua
     await engine.loadUrl("https://music.example.com/muzero/objects/video.mp4", "video");
 
     expect(engine.element.src).toBe("https://music.example.com/muzero/objects/video.mp4");
+  });
+
+  it("emits structured media diagnostics with playback trace context", async () => {
+    const engine = new MediaEngine();
+    engine.setDiagnosticsContext({ traceId: "ply_1", trackId: "trk_1", sessionId: "ses_1" });
+
+    await engine.loadUrl("https://music.example.com/song.mp3?sig=secret", "audio");
+
+    expect(getTraceEntries()).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          scope: "player.media",
+          event: "source.loaded",
+          context: expect.objectContaining({
+            traceId: "ply_1",
+            trackId: "trk_1",
+            sessionId: "ses_1",
+            category: "media",
+            phase: "start",
+            mediaReadyState: expect.any(Number),
+            mediaNetworkState: expect.any(Number),
+          }),
+        }),
+      ]),
+    );
+    expect(JSON.stringify(getTraceEntries())).not.toContain("sig=secret");
   });
 });

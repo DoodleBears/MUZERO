@@ -1,5 +1,11 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { clearTrace, getTraceEntries } from "@/lib/trace";
 import { aliasRestrictedHeaders, createStreamHttp } from "./stream-http";
+
+afterEach(() => {
+  clearTrace();
+  vi.restoreAllMocks();
+});
 
 describe("aliasRestrictedHeaders", () => {
   it("rewrites Cookie/User-Agent/Referer/Origin to x-muzero-h-* aliases", () => {
@@ -68,5 +74,37 @@ describe("createStreamHttp", () => {
     const http = createStreamHttp(async () => fetchFn as unknown as typeof globalThis.fetch);
     await http({ url: "https://api.bilibili.com/x" });
     expect((fetchFn as ReturnType<typeof vi.fn>).mock.calls[0][1].method).toBe("GET");
+  });
+
+  it("emits structured trace events without raw URL secrets", async () => {
+    const fetchFn = vi.fn(async () => ({
+      status: 403,
+      text: async () => "nope",
+      json: async () => ({}),
+    }));
+    const http = createStreamHttp(async () => fetchFn as unknown as typeof globalThis.fetch);
+
+    await http({
+      url: "https://rr.example.com/videoplayback?sig=secret&itag=140",
+      trace: { traceId: "ply_1", trackId: "trk_1", sourceId: "youtube" },
+    });
+
+    expect(getTraceEntries()).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          scope: "stream.http",
+          event: "request.failed",
+          context: expect.objectContaining({
+            traceId: "ply_1",
+            trackId: "trk_1",
+            sourceId: "youtube",
+            httpStatus: 403,
+            requestHost: "rr.example.com",
+            redactions: expect.arrayContaining(["url.query.sig"]),
+          }),
+        }),
+      ]),
+    );
+    expect(JSON.stringify(getTraceEntries())).not.toContain("sig=secret");
   });
 });

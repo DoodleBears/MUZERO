@@ -6,9 +6,11 @@
  * works. This keeps the provider unit-testable with stubs (CLAUDE.md rule 5).
  */
 
-import { log } from "@/lib/logger";
+import type { DiagnosticContext } from "@/lib/diagnostics";
+import { createDiagnosticLogger, log } from "@/lib/logger";
 import type { StreamHttp } from "../http";
 import type {
+  StreamResolveOptions,
   StreamResolveResult,
   StreamSearchHit,
   StreamSearchOptions,
@@ -24,10 +26,19 @@ const SEARCH_URL = `https://www.youtube.com/youtubei/v1/search?key=${YT_CLIENTS.
 const REFERER = "https://www.youtube.com";
 const USER_AGENT =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
+const MEDIA_HEADERS = {
+  Accept: "*/*",
+  Origin: REFERER,
+  Referer: REFERER,
+  DNT: "?1",
+};
+const youtubeLog = createDiagnosticLogger("stream.youtube");
+
+type YoutubeTrace = Pick<DiagnosticContext, "traceId" | "trackId" | "sessionId" | "sourceId">;
 
 /** The Electron-only runtime (youtubei.js) that resolves a videoId to a playable URL. */
 export interface YoutubeRuntime {
-  resolveAudio: (videoId: string) => Promise<YoutubePlayback>;
+  resolveAudio: (videoId: string, opts?: { trace?: YoutubeTrace }) => Promise<YoutubePlayback>;
 }
 
 export interface YoutubeSourceDeps {
@@ -76,23 +87,34 @@ export function createYoutubeSource(deps: YoutubeSourceDeps): StreamSourceProvid
     }
   }
 
-  async function resolve(externalId: string): Promise<StreamResolveResult> {
+  async function resolve(
+    externalId: string,
+    opts?: StreamResolveOptions,
+  ): Promise<StreamResolveResult> {
+    const trace = opts?.trace ? { ...opts.trace, sourceId: "youtube" as const } : undefined;
+    traceYoutube("info", "resolve.start", trace, externalId, {
+      message: "youtube resolve started",
+      phase: "start",
+    });
     if (!deps.runtime) {
+      traceYoutube("error", "resolve.failed", trace, externalId, {
+        message: "YouTube playback needs the desktop runtime",
+        phase: "fail",
+        errorKind: "unsupported_source",
+      });
       return { kind: "error", message: "YouTube playback needs the desktop runtime" };
     }
-    const playback = await deps.runtime.resolveAudio(externalId);
+    const playback = await deps.runtime.resolveAudio(externalId, { trace });
     switch (playback.kind) {
       case "ok":
         return {
           kind: "ok",
           stream: {
             mediaUrl: playback.url,
-            // Empty (but present, so the player still proxies for CORS/Range): the
-            // googlevideo URL is signed for youtubei's session, which used the
-            // Electron default UA + no cookies. Injecting a different UA (Chrome/124)
-            // or the session cookies makes googlevideo 403 the guest URL — so send
-            // neither; net.fetch then uses the same default UA as the /player call.
-            headers: {},
+            // Match youtubei's own media downloader: the googlevideo request needs
+            // YouTube's stream headers, and the media element can only send them via
+            // the desktop media proxy.
+            headers: playback.url.startsWith("blob:") ? undefined : MEDIA_HEADERS,
             mime: playback.mime,
             durationSec: playback.details?.lengthSeconds,
             expiresAt: playback.expiresInSeconds
@@ -103,11 +125,21 @@ export function createYoutubeSource(deps: YoutubeSourceDeps): StreamSourceProvid
         };
       case "login-required":
         log.warn("youtube", "resolve login-required", { videoId: externalId });
+        traceYoutube("warn", "resolve.failed", trace, externalId, {
+          message: "youtube resolve requires login",
+          phase: "fail",
+          errorKind: "auth_required",
+        });
         return { kind: "requires-login" };
       default:
         log.warn("youtube", "resolve unavailable", {
           videoId: externalId,
           reason: playback.reason,
+        });
+        traceYoutube("error", "resolve.failed", trace, externalId, {
+          message: playback.reason,
+          phase: "fail",
+          errorKind: "unknown",
         });
         return { kind: "error", message: playback.reason };
     }
@@ -121,4 +153,20 @@ export function createYoutubeSource(deps: YoutubeSourceDeps): StreamSourceProvid
     search,
     resolve,
   };
+}
+
+function traceYoutube(
+  level: "info" | "warn" | "error",
+  event: string,
+  trace: YoutubeTrace | undefined,
+  videoId: string,
+  context: Pick<DiagnosticContext, "phase" | "errorKind"> & { message: string },
+): void {
+  if (!trace?.traceId) return;
+  youtubeLog[level](event, {
+    ...trace,
+    ...context,
+    category: "stream",
+    videoId,
+  });
 }

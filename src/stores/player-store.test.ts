@@ -11,6 +11,7 @@ const mediaEngineMock = vi.hoisted(() => ({
   loadUrl: vi.fn(() => Promise.resolve()),
   loadBlob: vi.fn(() => Promise.resolve()),
   play: vi.fn(() => Promise.resolve()),
+  setDiagnosticsContext: vi.fn(),
 }));
 
 vi.mock("@/player/media-engine", () => {
@@ -19,6 +20,7 @@ vi.mock("@/player/media-engine", () => {
     loadUrl = mediaEngineMock.loadUrl;
     loadBlob = mediaEngineMock.loadBlob;
     play = mediaEngineMock.play;
+    setDiagnosticsContext = mediaEngineMock.setDiagnosticsContext;
     constructor(callbacks: unknown = {}) {
       this.callbacks = callbacks;
     }
@@ -55,6 +57,7 @@ beforeEach(async () => {
   mediaEngineMock.loadUrl.mockClear();
   mediaEngineMock.loadBlob.mockClear();
   mediaEngineMock.play.mockClear();
+  mediaEngineMock.setDiagnosticsContext.mockClear();
   await deleteDefaultDb();
 });
 
@@ -256,10 +259,33 @@ async function subscribeAndActivateRemoteSet() {
 describe("player-store remote subscribed-manifest playback", () => {
   it("streams an audio track from a subscribed public manifest (no blob download)", async () => {
     const { usePlayerStore } = await subscribeAndActivateRemoteSet();
+    const trace = await import("@/lib/trace");
+    trace.clearTrace();
 
     await usePlayerStore.getState().playIndex(0);
 
     expect(mediaEngineMock.loadUrl).toHaveBeenCalledWith(REMOTE_AUDIO_URL, "audio");
+    expect(mediaEngineMock.setDiagnosticsContext).toHaveBeenCalledWith(
+      expect.objectContaining({
+        traceId: expect.stringMatching(/^ply_/),
+        trackId: expect.stringContaining("trk_audio"),
+        sessionId: expect.stringContaining("ses_mix"),
+      }),
+    );
+    expect(trace.getTraceEntries()).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          scope: "player.playback",
+          event: "playback.start",
+          context: expect.objectContaining({
+            trackId: expect.stringContaining("trk_audio"),
+            sessionId: expect.stringContaining("ses_mix"),
+            category: "media",
+            phase: "start",
+          }),
+        }),
+      ]),
+    );
     expect(mediaEngineMock.loadBlob).not.toHaveBeenCalled();
     expect(mediaEngineMock.play).toHaveBeenCalled();
   });

@@ -1,4 +1,5 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { clearTrace, getTraceEntries } from "@/lib/trace";
 import type { StreamHttp, StreamHttpRequest, StreamHttpResponse } from "../http";
 import { createYoutubeSource, type YoutubeRuntime } from "./youtube-source";
 
@@ -47,6 +48,11 @@ const okPlayer = {
 };
 
 describe("createYoutubeSource", () => {
+  afterEach(() => {
+    clearTrace();
+    vi.restoreAllMocks();
+  });
+
   it("searches the keyed WEB endpoint and maps videoRenderers to hits", async () => {
     let lastReq: StreamHttpRequest | undefined;
     const http: StreamHttp = async (req) => {
@@ -73,9 +79,12 @@ describe("createYoutubeSource", () => {
       expect(result.stream.mediaUrl).toBe("https://cdn/a");
       expect(result.stream.mime).toBe("audio/mp4");
       expect(result.stream.expiresAt).toBe(1000 + 3600 * 1000);
-      // Empty-but-present headers: the player still proxies (CORS/Range) but injects
-      // no Referer/UA/cookies, so the googlevideo guest URL isn't 403'd.
-      expect(result.stream.headers).toEqual({});
+      expect(result.stream.headers).toEqual({
+        Accept: "*/*",
+        Origin: "https://www.youtube.com",
+        Referer: "https://www.youtube.com",
+        DNT: "?1",
+      });
     }
   });
 
@@ -83,6 +92,44 @@ describe("createYoutubeSource", () => {
     const http: StreamHttp = vi.fn(async () => res(okPlayer));
     const source = createYoutubeSource({ http, now: () => 0 });
     expect(await source.resolve("v1")).toMatchObject({ kind: "error" });
+  });
+
+  it("passes trace context to the runtime and records provider resolve", async () => {
+    const http: StreamHttp = vi.fn(async () => res(okPlayer));
+    const tracedRuntime: YoutubeRuntime = {
+      resolveAudio: vi.fn(async () => ({
+        kind: "ok" as const,
+        url: "blob:http://localhost/youtube",
+        mime: "audio/mp4",
+        codec: "aac" as const,
+      })),
+    };
+    const source = createYoutubeSource({ http, now: () => 1000, runtime: tracedRuntime });
+
+    await source.resolve("v1", {
+      trace: { traceId: "ply_1", trackId: "trk_1", sourceId: "youtube" },
+    });
+
+    expect(tracedRuntime.resolveAudio).toHaveBeenCalledWith(
+      "v1",
+      expect.objectContaining({
+        trace: expect.objectContaining({ traceId: "ply_1", trackId: "trk_1" }),
+      }),
+    );
+    expect(getTraceEntries()).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          scope: "stream.youtube",
+          event: "resolve.start",
+          context: expect.objectContaining({
+            traceId: "ply_1",
+            trackId: "trk_1",
+            sourceId: "youtube",
+            videoId: "v1",
+          }),
+        }),
+      ]),
+    );
   });
 
   it("maps a login-gated video to requires-login", async () => {

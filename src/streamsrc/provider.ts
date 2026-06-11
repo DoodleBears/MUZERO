@@ -12,6 +12,7 @@
  */
 
 import type { StreamSourceId } from "@/db/types";
+import type { DiagnosticContext } from "@/lib/diagnostics";
 
 export interface StreamSearchHit {
   /** The source's stable id for this track (netease songId / bili "bvid#cid" / yt videoId). */
@@ -52,6 +53,7 @@ export interface StreamResolveOptions {
   /** Preferred source-specific quality key; the provider downgrades as needed. */
   quality?: string;
   signal?: AbortSignal;
+  trace?: Pick<DiagnosticContext, "traceId" | "trackId" | "sessionId" | "sourceId">;
 }
 
 /** A playlist on a source (the logged-in user's, or a public one). */

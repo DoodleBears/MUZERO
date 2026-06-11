@@ -29,6 +29,7 @@ import { createAiDjBrain } from "@/dj/dj-brain-ai";
 import { createDjEngine, type DjEngine } from "@/dj/dj-engine";
 import i18n from "@/i18n/i18n";
 import { hasFolderAccess, resolveDesktopBridge } from "@/lib/desktop/bridge";
+import { createTraceId, type DiagnosticContext } from "@/lib/diagnostics";
 import {
   basename,
   createFolderFs,
@@ -40,7 +41,7 @@ import {
   scanFolderForMedia,
   selectNewFiles,
 } from "@/lib/folder-import";
-import { log } from "@/lib/logger";
+import { createDiagnosticLogger, log } from "@/lib/logger";
 import { fallbackUploadMediaMetadata, parseUploadedMediaMetadata } from "@/lib/media-metadata";
 import { isUnsupportedMediaError, probeMediaFile } from "@/lib/media-probe";
 import {
@@ -234,6 +235,7 @@ let consumedTrackIds = new Set<string>();
 let djEngine: DjEngine | null = null;
 let pumping = false;
 let loadedTrackId: string | null = null;
+let activePlaybackTrace: PlaybackTraceContext | null = null;
 // Consecutive streamed tracks auto-skipped this play-run because they failed to
 // resolve (VIP / unavailable). Reset on any successful load or hard stop; bounds the
 // skip recursion so an all-unplayable queue stops instead of looping.
@@ -252,6 +254,12 @@ let presenceCoordinatorKey = "";
 // doesn't change the rendered list (e.g. a future currentIndex / repeat persist)
 // doesn't churn the `queue` array and re-render every list consumer.
 let lastQueueSig = "";
+const playbackLog = createDiagnosticLogger("player.playback");
+
+type PlaybackTraceContext = Pick<
+  DiagnosticContext,
+  "traceId" | "trackId" | "sessionId" | "sourceId"
+>;
 
 /** Cheap signature of what the queue list renders (ids + generation status +
  * cover identity). `coverBlobId`/`coverCrop` are included so a cover edit on the
@@ -265,6 +273,50 @@ function queueSig(tracks: Track[]): string {
       return `${t.id}:${t.status}:${t.blobId ?? ""}:${t.remoteMediaUrl ?? ""}:${t.coverBlobId ?? ""}:${t.remoteCoverUrl ?? ""}:${crop}`;
     })
     .join("|");
+}
+
+function startPlaybackTrace(track: Track): PlaybackTraceContext {
+  const trace: PlaybackTraceContext = {
+    traceId: createTraceId("ply"),
+    trackId: track.id,
+    sessionId: track.sessionId,
+    sourceId: track.streamSourceId,
+  };
+  activePlaybackTrace = trace;
+  playbackLog.info("playback.start", {
+    message: "playback attempt started",
+    ...trace,
+    category: "media",
+    phase: "start",
+    sourceKind: playbackSourceKind(track),
+    trackKind: track.kind,
+  });
+  return trace;
+}
+
+function ensurePlaybackTrace(track: Track, wantPlay: boolean): PlaybackTraceContext | undefined {
+  if (!wantPlay) return undefined;
+  if (activePlaybackTrace?.trackId === track.id) return activePlaybackTrace;
+  return startPlaybackTrace(track);
+}
+
+function tracePlaybackLoad(
+  event: string,
+  track: Track,
+  trace: PlaybackTraceContext | undefined,
+  context: Pick<DiagnosticContext, "bytes" | "mime" | "sourceId"> & {
+    transport: "blob" | "remote" | "direct" | "media-proxy";
+  },
+): void {
+  if (!trace?.traceId) return;
+  playbackLog.info(event, {
+    message: "media source loading",
+    ...trace,
+    ...context,
+    category: "media",
+    phase: "start",
+    trackKind: track.kind,
+  });
 }
 
 export const usePlayerStore = create<PlayerState>((set, get) => ({
@@ -461,6 +513,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       queueLength: queue.length,
       trackId: clamped >= 0 ? queue[clamped]?.id : null,
     });
+    if (clamped >= 0 && queue[clamped]) startPlaybackTrace(queue[clamped]);
     set({ currentIndex: clamped, wantPlay: true });
     persistQueueIndex(clamped);
     await ensureLoadedAndPlay(set, get);
@@ -921,10 +974,11 @@ async function ingestNcmFile(
  */
 async function cacheStreamedTrackNow(
   track: Track,
+  trace?: PlaybackTraceContext,
 ): Promise<Awaited<ReturnType<typeof runStreamCache>>> {
   setStreamDownloading(track.id, true);
   try {
-    return await runCacheStreamedTrack(track);
+    return await runCacheStreamedTrack(track, trace);
   } finally {
     setStreamDownloading(track.id, false);
   }
@@ -932,6 +986,7 @@ async function cacheStreamedTrackNow(
 
 async function runCacheStreamedTrack(
   track: Track,
+  trace?: PlaybackTraceContext,
 ): Promise<Awaited<ReturnType<typeof runStreamCache>>> {
   const settings = await getSettings();
   const http = createStreamHttp();
@@ -946,18 +1001,25 @@ async function runCacheStreamedTrack(
             getCookie: (sid) => settings.streamSources?.[sid]?.cookie,
           }),
         getQuality: (id) => settings.streamSources?.[id]?.quality,
+        trace,
       }),
     fetchBytes: async (url, headers) => {
       // Same proxy routing as playback: inject Referer/UA + get ACAO-clean bytes.
-      const target = bridge.mediaProxyUrl ? bridge.mediaProxyUrl(url, headers) : url;
-      const appFetch = await getAppFetch();
-      const resp = await appFetch(target);
+      const target = url.startsWith("blob:")
+        ? url
+        : bridge.mediaProxyUrl
+          ? bridge.mediaProxyUrl(url, headers, trace?.traceId)
+          : url;
+      const resp = target.startsWith("muzfetch://")
+        ? await fetch(target)
+        : await (await getAppFetch())(target);
       if (!resp.ok) throw new Error(`download failed (${resp.status})`);
       const blob = await resp.blob();
       if (blob.size === 0) throw new Error("empty media");
       return blob;
     },
     store: (blob, mime) => cacheStreamedTrackBlob(track.id, blob, mime),
+    trace: trace ? { ...trace, sourceId: track.streamSourceId } : undefined,
   });
   if (result.kind === "cached") {
     log.info("player", "cached streamed track", { trackId: track.id, bytes: result.bytes });
@@ -1427,6 +1489,8 @@ async function ensureLoadedAndPlay(
   if (currentIndex < 0 || currentIndex >= queue.length) return;
   const track = queue[currentIndex];
   if (!mediaEngine) return;
+  const playbackTrace = ensurePlaybackTrace(track, wantPlay);
+  mediaEngine.setDiagnosticsContext(playbackTrace);
   // Local-first priority: blob (downloaded/offline) → remoteMediaUrl → stream (online).
   const sourceKind = playbackSourceKind(track);
   if (track.status !== "ready" || sourceKind === "none") {
@@ -1455,12 +1519,18 @@ async function ensureLoadedAndPlay(
         mime: media.mime,
         bytes: media.bytes,
       });
+      tracePlaybackLoad("media.load.blob", track, playbackTrace, {
+        bytes: media.bytes,
+        mime: media.mime,
+        transport: "blob",
+      });
       await mediaEngine.loadBlob(media.blob, track.kind);
     } else if (sourceKind === "remote") {
       log.debug("player", "loading remote media url", {
         trackId: track.id,
         kind: track.kind,
       });
+      tracePlaybackLoad("media.load.remote", track, playbackTrace, { transport: "remote" });
       // biome-ignore lint/style/noNonNullAssertion: sourceKind === "remote" implies remoteMediaUrl
       await mediaEngine.loadUrl(track.remoteMediaUrl!, track.kind);
     } else if (sourceKind === "stream") {
@@ -1478,6 +1548,7 @@ async function ensureLoadedAndPlay(
             getCookie: (sid) => settings.streamSources?.[sid]?.cookie,
           }),
         getQuality: (id) => settings.streamSources?.[id]?.quality,
+        trace: playbackTrace ? { ...playbackTrace, sourceId: track.streamSourceId } : undefined,
       });
       if (resolved.kind !== "ok") {
         log.warn("player", "streamed resolve failed", { trackId: track.id, result: resolved });
@@ -1514,10 +1585,18 @@ async function ensureLoadedAndPlay(
       // the raw URL when the shell has no media proxy (web/tauri).
       const bridge = resolveDesktopBridge();
       const proxiedUrl =
-        resolved.headers && bridge.mediaProxyUrl
-          ? bridge.mediaProxyUrl(resolved.url, resolved.headers)
+        resolved.headers && bridge.mediaProxyUrl && !resolved.url.startsWith("blob:")
+          ? bridge.mediaProxyUrl(resolved.url, resolved.headers, playbackTrace?.traceId)
           : null;
       const src = proxiedUrl ?? resolved.url;
+      tracePlaybackLoad("media.load.stream", track, playbackTrace, {
+        transport: resolved.url.startsWith("blob:")
+          ? "blob"
+          : proxiedUrl
+            ? "media-proxy"
+            : "direct",
+        sourceId: track.streamSourceId,
+      });
       log.debug("player", "loading streamed media url", {
         trackId: track.id,
         source: track.streamSourceId,
@@ -1532,7 +1611,8 @@ async function ensureLoadedAndPlay(
       );
       // Offline cache (Phase 5): when enabled, download this song's bytes in the
       // background so a later play is local + offline. Best-effort; skipped if cached.
-      if (settings.autoCacheStreamed && !track.blobId) void cacheStreamedTrackNow(track);
+      if (settings.autoCacheStreamed && !track.blobId)
+        void cacheStreamedTrackNow(track, playbackTrace);
     }
     loadedTrackId = track.id;
     streamSkips = 0; // a track loaded — end any streamed-skip run cleanly
@@ -1541,6 +1621,12 @@ async function ensureLoadedAndPlay(
   }
   if (wantPlay) {
     log.debug("player", "playing media", { trackId: track.id });
+    playbackLog.info("play.requested", {
+      message: "media play requested",
+      ...playbackTrace,
+      category: "media",
+      phase: "start",
+    });
     await mediaEngine.play();
     void publishPlaybackPresence(
       previousLoadedTrackId == null

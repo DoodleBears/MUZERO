@@ -25,7 +25,7 @@ export interface ResolveStreamedDeps {
   /** Preferred per-source quality key from settings. */
   getQuality?: (id: StreamSourceId) => string | undefined;
   signal?: AbortSignal;
-  trace?: Pick<DiagnosticContext, "traceId" | "trackId" | "sessionId">;
+  trace?: Pick<DiagnosticContext, "traceId" | "trackId" | "sessionId" | "sourceId">;
 }
 
 export type StreamPlaybackResult =
@@ -66,6 +66,7 @@ export async function resolveStreamedTrackMedia(
   const res = await source.resolve(streamExternalId, {
     quality: deps.getQuality?.(streamSourceId),
     signal: deps.signal,
+    trace: deps.trace ? { ...deps.trace, sourceId: streamSourceId } : undefined,
   });
   switch (res.kind) {
     case "ok": {
