@@ -116,28 +116,47 @@ export async function importRemoteSetStream(
     updatedAt: remoteSet.index.set.updatedAt,
   };
 
-  const tracks: Track[] = remoteSet.tracks.map((remoteTrack) => ({
-    id: remoteLocalId("trk", driveId, remoteTrack.id),
-    sessionId,
-    title: remoteTrack.source.title,
-    kind: remoteTrack.source.kind,
-    origin: remoteTrack.source.origin,
-    brief: remoteTrack.source.brief ?? undefined,
-    provider: remoteTrack.source.provider,
-    providerPreset: remoteTrack.source.providerPreset ?? undefined,
-    status: "ready",
-    durationSec: remoteTrack.source.durationSec,
-    remoteMediaUrl: remoteTrack.mediaUrl,
-    remoteCoverUrl: remoteTrack.coverUrl,
-    coverThumbhash: remoteTrack.source.thumbhash ?? undefined,
-    createdAt: remoteTrack.source.createdAt,
-    updatedAt: remoteTrack.source.createdAt,
-    generatedAt: remoteTrack.source.generatedAt ?? undefined,
-    playCount: 0,
-    liked: remoteTrack.source.liked,
-    tags: remoteTrack.source.tags,
-    mediaMetadata: remoteTrack.source.mediaMetadata,
-  }));
+  // Field-level merge for rows that already exist locally (audit F1): the remote
+  // index is authoritative for CONTENT (title/brief/media URLs/metadata), but a
+  // re-import must never clobber LOCAL state — cached media (`blobId`), the local
+  // custom cover (+crop), annotation edits (liked/tags/note), play counts, or the
+  // local annotation clock. Without per-field clocks this is a simple local-wins
+  // rule; first imports still take the remote values verbatim.
+  const existingTracks = new Map(
+    (await db.tracks.bulkGet(remoteTrackIds))
+      .filter((track): track is Track => Boolean(track))
+      .map((track) => [track.id, track]),
+  );
+  const tracks: Track[] = remoteSet.tracks.map((remoteTrack) => {
+    const id = remoteLocalId("trk", driveId, remoteTrack.id);
+    const existing = existingTracks.get(id);
+    return {
+      id,
+      sessionId,
+      title: remoteTrack.source.title,
+      kind: remoteTrack.source.kind,
+      origin: remoteTrack.source.origin,
+      brief: remoteTrack.source.brief ?? undefined,
+      provider: remoteTrack.source.provider,
+      providerPreset: remoteTrack.source.providerPreset ?? undefined,
+      status: "ready",
+      durationSec: remoteTrack.source.durationSec,
+      remoteMediaUrl: remoteTrack.mediaUrl,
+      remoteCoverUrl: remoteTrack.coverUrl,
+      coverThumbhash: existing?.coverThumbhash ?? remoteTrack.source.thumbhash ?? undefined,
+      createdAt: remoteTrack.source.createdAt,
+      updatedAt: existing?.updatedAt ?? remoteTrack.source.createdAt,
+      generatedAt: remoteTrack.source.generatedAt ?? undefined,
+      blobId: existing?.blobId,
+      coverBlobId: existing?.coverBlobId,
+      coverCrop: existing?.coverCrop,
+      note: existing?.note,
+      playCount: existing?.playCount ?? 0,
+      liked: existing?.liked ?? remoteTrack.source.liked,
+      tags: existing?.tags ?? remoteTrack.source.tags,
+      mediaMetadata: remoteTrack.source.mediaMetadata,
+    };
+  });
 
   const memories: Memory[] = remoteSet.tracks.flatMap((remoteTrack) => {
     const trackId = remoteLocalId("trk", driveId, remoteTrack.id);

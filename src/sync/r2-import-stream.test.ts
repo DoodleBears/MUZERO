@@ -213,6 +213,64 @@ describe("importRemoteSetStream", () => {
     expect(await db.memories.count()).toBe(1);
   });
 
+  it("preserves cached media + local annotations when re-importing an updated set (F1)", async () => {
+    await importRemoteSetStream({ driveId: "drv_a", remoteSet }, db);
+    const trackId = "trk_remote_drv_a_trk_blue";
+
+    // The user caches the media offline and edits annotations locally.
+    await db.mediaBlobs.put({
+      id: "blb_cached",
+      trackId,
+      role: "media",
+      mime: "audio/mpeg",
+      bytes: 8241123,
+      blob: new Blob(["bytes"], { type: "audio/mpeg" }),
+    });
+    await db.tracks.update(trackId, {
+      blobId: "blb_cached",
+      coverBlobId: "blb_local_cover",
+      coverCrop: { x: 1, y: 2, width: 3, height: 4 },
+      liked: false,
+      tags: ["night", "fav"],
+      playCount: 7,
+      updatedAt: 1780946000000,
+    });
+
+    // The owner publishes an update (new title, newer set clock).
+    const updated: RemoteSetIndexResult = {
+      ...remoteSet,
+      index: {
+        ...remoteSet.index,
+        set: { ...remoteSet.index.set, updatedAt: 1780947000000 },
+      },
+      tracks: remoteSet.tracks.map((tr) => ({
+        ...tr,
+        source: { ...tr.source, title: "Blue Highway (Remaster)" },
+      })),
+    };
+    await importRemoteSetStream({ driveId: "drv_a", remoteSet: updated }, db);
+
+    const track = await db.tracks.get(trackId);
+    // Remote-authoritative content refreshes…
+    expect(track?.title).toBe("Blue Highway (Remaster)");
+    // …while local-authoritative state survives the re-import.
+    expect(track).toMatchObject({
+      blobId: "blb_cached",
+      coverBlobId: "blb_local_cover",
+      coverCrop: { x: 1, y: 2, width: 3, height: 4 },
+      liked: false,
+      tags: ["night", "fav"],
+      playCount: 7,
+      updatedAt: 1780946000000,
+    });
+  });
+
+  it("takes remote liked/tags on first import (no local row to preserve)", async () => {
+    await importRemoteSetStream({ driveId: "drv_fresh", remoteSet }, db);
+    const track = await db.tracks.get("trk_remote_drv_fresh_trk_blue");
+    expect(track).toMatchObject({ liked: true, tags: ["night"], playCount: 0 });
+  });
+
   it("preserves local-only tracks when refreshing a remote set", async () => {
     await importRemoteSetStream({ driveId: "drv_a", remoteSet }, db);
     await db.tracks.put({
