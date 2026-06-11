@@ -970,3 +970,54 @@ describe("delete (tracks / sets across the multi-set model)", () => {
     expect((await getPlayQueue(db)).entries.map((e) => e.trackId)).toEqual([shared.id]);
   });
 });
+
+describe("set removal tombstones (co-editing, R2 PRD §12.5)", () => {
+  async function seedSetWithTrack() {
+    const session = await createSession({ seedPrompt: "", config: {}, displayMode: "cover" }, db);
+    const track = await createUploadedTrack(
+      {
+        sessionId: session.id,
+        title: "Blue",
+        kind: "audio",
+        blob: new Blob(["a"], { type: "audio/mpeg" }),
+        mime: "audio/mpeg",
+        durationSec: 10,
+      },
+      db,
+    );
+    await prependTrackIds(session.id, [track.id], db);
+    return { session, track };
+  }
+
+  it("removing a track from a set records a tombstone", async () => {
+    const { session, track } = await seedSetWithTrack();
+
+    await removeTracksFromSession(session.id, [track.id], db);
+
+    const updated = await db.sessions.get(session.id);
+    expect(updated?.trackIds).toEqual([]);
+    expect(updated?.removedTracks?.[track.id]).toBeGreaterThan(0);
+  });
+
+  it("re-adding a removed track clears its tombstone", async () => {
+    const { session, track } = await seedSetWithTrack();
+    await removeTracksFromSession(session.id, [track.id], db);
+
+    await prependTrackIds(session.id, [track.id], db);
+
+    const updated = await db.sessions.get(session.id);
+    expect(updated?.trackIds).toEqual([track.id]);
+    expect(updated?.removedTracks?.[track.id]).toBeUndefined();
+  });
+
+  it("deleting a track everywhere tombstones it in every containing set", async () => {
+    const { session, track } = await seedSetWithTrack();
+    const other = await createSession({ seedPrompt: "", config: {}, displayMode: "cover" }, db);
+    await prependTrackIds(other.id, [track.id], db);
+
+    await deleteTracks([track.id], db);
+
+    expect((await db.sessions.get(session.id))?.removedTracks?.[track.id]).toBeGreaterThan(0);
+    expect((await db.sessions.get(other.id))?.removedTracks?.[track.id]).toBeGreaterThan(0);
+  });
+});

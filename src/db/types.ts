@@ -342,6 +342,14 @@ export interface DjSession {
    * `orderedSetTrackIds`。
    */
   trackRanks?: Record<string, number>;
+  /**
+   * Removal tombstones for multi-device co-editing (R2 PRD §12.5): trackId →
+   * removedAt (ms). Recorded when a member is removed/deleted, cleared on
+   * re-add, capped to the newest 200. Published into the set index's
+   * `removedTracks` so another device's stale copy can't resurrect the track.
+   * Additive + non-indexed (same path as {@link trackRanks}) — no Dexie bump.
+   */
+  removedTracks?: Record<string, number>;
   status: "idle" | "running";
   config: DjConfig;
   /** Default stage rendering: video-first → cover → title. */

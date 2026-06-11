@@ -21,6 +21,7 @@
 | 6 | Optional low-frequency currently-playing presence | ✅ Done | [Phase 6 Checklist](#phase-6-checklist) |
 | 7 | Sync hardening (2026-06-11 audit follow-ups) | ✅ Done | [§12.3 backlog](#123-phase-7-proposed-sync-hardening) |
 | 8 | Multi-writer library (read-merge-write publish) | ✅ Done | [§12.4](#124-phase-8-multi-writer-library-read-merge-write-publish) |
+| 9 | Same-set co-editing (one user, multiple devices) | 🔄 In Progress | [§12.5](#125-phase-9-same-set-co-editing-one-user-multiple-devices) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
 
@@ -2142,6 +2143,26 @@ Do not record secrets, full signed URLs, or media content.
 - [x] MW-5 Settings copy: `settings.cloudMultiWriterHint` (en/zh/ja/ko) replaces the single-writer warning — publish merges with the drive's current state, conflicts auto-re-merge, and a set still belongs to its publishing device. Preview-verified; the full sync surface (53 files / 270 tests) is green.
 
 **Outcome (2026-06-11): Phase 8 ✅.** Two (or more) devices can each add the same drive with write credentials and publish — libraries union in the manifest (`publishedBy` ownership), per-device profiles/stats/presence coexist in merged indexes, concurrent publishes resolve by 412 → re-merge → retry, and deletions propagate only for the deleting device's own sets. Remaining for the future **co-editing phase**: two devices editing the SAME set (mutation recording on edits + the dormant conflict panel + `keep-local`/`use-remote`/`duplicate-both` appliers); F10's wall-clock LWW skew also lives there.
+
+### 12.5 Phase 9: Same-set co-editing (one user, multiple devices)
+
+**Goal:** 多台设备编辑同一个歌单 — add tracks to, remove tracks from, rename, and reorder the SAME set from any of the user's devices, converging through the drive.
+
+**Design (extends §12.4's read-merge-write; no mutation machinery needed for the single-user case):**
+
+1. **Adds = union.** Each device publishes its local-origin members of the set (including media bytes for its own uploads); members contributed by other devices stay on the remote side of the merge (`trk_remote_*` rows are never re-exported — the remote index already carries them). Set-index merge unions tracks by published id; the local entry wins for an id both sides have.
+2. **Removals = tombstones.** `DjSession.removedTracks` (trackId → removedAt, capped 200, additive non-indexed) records removals at the repo layer (`removeTracksFromSession`, `deleteTracks`); re-adding clears the tombstone. The set index carries additive `removedTracks: [{id, removedAt}]`; merge = tombstone union applied to the track union, EXCEPT ids the local session re-added after its pull-merge (re-add intent drops the remote tombstone). Without tombstones, a stale copy resurrects removed tracks.
+3. **Metadata = LWW** on `set.updatedAt`; **order = ranks** carried per entry (existing).
+4. **Sync now becomes bidirectional:** after the base fetch, a **pull-merge** applies the remote set index INTO matching local sessions (other devices' new tracks land as remote-backed rows, tombstones remove membership, metadata LWW) — then the publish merge writes the union back with `If-Match`; 412 → §12.4's re-merge retry.
+5. **Imported sets write back:** `ses_remote_<driveId>_*` sets publish back to their source drive under the ORIGINAL set id; manifest `publishedBy` stays with the original publisher (co-editing never steals ownership; only the owner's local deletion drops the manifest entry).
+
+**Checklist:**
+
+- [x] CE-1 Tombstone data layer: `DjSession.removedTracks` + repo recording on remove/delete-everywhere, cleared on re-add, capped 200; additive `removedTracks` on `muzero-r2-set-index-v1`.
+- [ ] CE-2 Pure `mergeSetIndex`: track union (local wins by id), metadata LWW, tombstone union + re-add exception, rank carry, revision bump.
+- [ ] CE-3 Publish side: base fetch extended to set indexes (+ ETags); export plan merges each set with its remote index under the published id (imported sets write back; `trk_remote_*`/streamed entries excluded from local export); `If-Match` on set indexes; store includes the target drive's imported sets.
+- [ ] CE-4 Pull-merge into local sessions during Sync now (orchestrator step after base fetch): remote-only tracks land as remote-backed rows, remote tombstones remove membership, metadata LWW, ranks for new members.
+- [ ] CE-5 Copy update + PRD close + full sweep + preview verification.
 
 ---
 

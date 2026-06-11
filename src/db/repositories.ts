@@ -240,6 +240,12 @@ export async function prependTrackIds(
     const fresh = ids.filter((id) => !existing.has(id));
     if (fresh.length === 0) return;
     session.trackIds = [...fresh, ...session.trackIds];
+    // A re-add revokes the removal tombstone — the sync merge must not delete it.
+    if (session.removedTracks) {
+      const tombstones = { ...session.removedTracks };
+      for (const id of fresh) delete tombstones[id];
+      session.removedTracks = tombstones;
+    }
     // Keep the fractional-order invariant: a materialized set ranks every member.
     // New tracks join at the FRONT (newest = cover), below the current minimum rank.
     if (session.trackRanks && Object.keys(session.trackRanks).length > 0) {
@@ -418,6 +424,22 @@ export async function removeTrackFromSession(
   return removeTracksFromSession(sessionId, [trackId], db);
 }
 
+/** Cap kept tombstones so a long-lived set's record can't grow unbounded. */
+const REMOVAL_TOMBSTONE_CAP = 200;
+
+function recordRemovalTombstones(
+  current: Record<string, number> | undefined,
+  removedIds: Set<string>,
+): Record<string, number> {
+  const next = { ...current };
+  const now = Date.now();
+  for (const id of removedIds) next[id] = now;
+  const entries = Object.entries(next);
+  if (entries.length <= REMOVAL_TOMBSTONE_CAP) return next;
+  entries.sort((a, b) => b[1] - a[1]);
+  return Object.fromEntries(entries.slice(0, REMOVAL_TOMBSTONE_CAP));
+}
+
 /**
  * Remove tracks from ONE set's `trackIds` (reversible curation edit). The track
  * rows, their blobs, and the play queue are untouched — the song stays in the
@@ -440,6 +462,7 @@ export async function removeTracksFromSession(
       for (const id of remove) delete ranks[id];
       session.trackRanks = ranks;
     }
+    session.removedTracks = recordRemovalTombstones(session.removedTracks, remove);
     session.updatedAt = Date.now();
     await db.sessions.put(session);
   });
@@ -1189,6 +1212,10 @@ export async function deleteTracks(ids: string[], db: MuzeroDB = defaultDb): Pro
         if (!session.trackIds.some((t) => idSet.has(t))) continue;
         await db.sessions.update(session.id, {
           trackIds: session.trackIds.filter((t) => !idSet.has(t)),
+          removedTracks: recordRemovalTombstones(
+            session.removedTracks,
+            new Set(session.trackIds.filter((t) => idSet.has(t))),
+          ),
           updatedAt: Date.now(),
         });
       }

@@ -188,11 +188,20 @@ export const r2SetTrackSchema = z.object({
   memories: z.array(r2MemorySchema).default([]),
 });
 
+// Removal tombstone for multi-device co-editing (PRD §12.5): a removed member's
+// published id + when. Additive optional — legacy indexes omit it. Without these,
+// a stale copy on another device would resurrect removed tracks at merge time.
+export const r2RemovedTrackSchema = z.object({
+  id: z.string().min(1),
+  removedAt: millisSchema,
+});
+
 export const r2SetIndexSchema = z.object({
   schema: z.literal("muzero-r2-set-index-v1"),
   revision: z.number().int().nonnegative().optional(),
   set: r2SetSchema,
   tracks: z.array(r2SetTrackSchema),
+  removedTracks: z.array(r2RemovedTrackSchema).optional(),
 });
 
 export const r2ShareManifestSchema = z.object({
