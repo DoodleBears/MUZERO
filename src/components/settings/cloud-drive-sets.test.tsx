@@ -9,11 +9,17 @@ vi.mock("react-i18next", () => ({
 
 const subscribeManifest = vi.fn();
 const loadRemoteSetIndex = vi.fn();
+const loadRemoteEntityCovers = vi.fn();
+const importRemoteEntityCovers = vi.fn();
 const pullRemoteSet = vi.fn();
 
 vi.mock("@/sync/r2-subscription", () => ({
   subscribeManifest: (...args: unknown[]) => subscribeManifest(...args),
   loadRemoteSetIndex: (...args: unknown[]) => loadRemoteSetIndex(...args),
+  loadRemoteEntityCovers: (...args: unknown[]) => loadRemoteEntityCovers(...args),
+}));
+vi.mock("@/sync/r2-import-stream", () => ({
+  importRemoteEntityCovers: (...args: unknown[]) => importRemoteEntityCovers(...args),
 }));
 // The import goes through the orchestrated pull (audit F2): dry-run diff gates +
 // pull syncRuns + the per-drive progress pipeline — never the raw importer.
@@ -66,12 +72,30 @@ const preview = {
 describe("CloudDriveSets", () => {
   it("loads and lists the drive's remote sets on browse", async () => {
     subscribeManifest.mockResolvedValueOnce(preview);
+    loadRemoteEntityCovers.mockResolvedValueOnce(undefined);
     render(<CloudDriveSets drive={drive} />);
 
     fireEvent.click(screen.getByRole("button"));
 
     await waitFor(() => expect(screen.getByText("Tokyo Night Drive")).toBeTruthy());
     expect(subscribeManifest).toHaveBeenCalledWith(drive.manifestUrl);
+    expect(importRemoteEntityCovers).not.toHaveBeenCalled();
+  });
+
+  it("imports the drive's entity covers on browse when the manifest has them", async () => {
+    subscribeManifest.mockResolvedValueOnce(preview);
+    const covers = {
+      baseUrl: preview.baseUrl,
+      index: { schema: "muzero-r2-entity-covers-v1", updatedAt: 1, entries: [] },
+    };
+    loadRemoteEntityCovers.mockResolvedValueOnce(covers);
+    importRemoteEntityCovers.mockResolvedValueOnce({ imported: 1, skipped: 0 });
+
+    render(<CloudDriveSets drive={drive} />);
+    fireEvent.click(screen.getByRole("button"));
+
+    await waitFor(() => expect(importRemoteEntityCovers).toHaveBeenCalledWith(covers));
+    expect(loadRemoteEntityCovers).toHaveBeenCalledWith(preview);
   });
 
   it("imports a set via loadRemoteSetIndex + the orchestrated pullRemoteSet keyed by the drive id", async () => {

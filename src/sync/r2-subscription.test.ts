@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  loadRemoteEntityCovers,
   loadRemoteIndexesForSearchTrack,
   loadRemoteSetIndex,
   type SyncFetch,
@@ -99,6 +100,52 @@ const setIndex = {
     },
   ],
 };
+
+describe("loadRemoteEntityCovers", () => {
+  const coversIndex = {
+    schema: "muzero-r2-entity-covers-v1",
+    updatedAt: 1780944000000,
+    entries: [
+      {
+        id: "artist:deidian",
+        kind: "artist",
+        cover: {
+          key: "objects/covers/sha256-aa.jpg",
+          url: "objects/covers/sha256-aa.jpg",
+          mime: "image/jpeg",
+          bytes: 1024,
+        },
+        updatedAt: 1780944000000,
+      },
+    ],
+  };
+
+  it("loads the entity-covers index referenced by the manifest", async () => {
+    const fetcher = fetchMap({
+      "https://music.example.com/muzero/manifest.json": {
+        ...manifest,
+        entityCoversIndex: "library/entity-covers/index.json",
+      },
+      "https://music.example.com/muzero/library/entity-covers/index.json": coversIndex,
+    });
+    const preview = await subscribeManifest("https://music.example.com/muzero", { fetcher });
+
+    const covers = await loadRemoteEntityCovers(preview, { fetcher });
+
+    expect(covers).toMatchObject({
+      baseUrl: "https://music.example.com/muzero/",
+      index: { entries: [{ id: "artist:deidian", kind: "artist" }] },
+    });
+  });
+
+  it("returns undefined when the manifest references no entity covers", async () => {
+    const preview = await subscribeManifest("https://music.example.com/muzero", {
+      fetcher: fetchMap({ "https://music.example.com/muzero/manifest.json": manifest }),
+    });
+
+    await expect(loadRemoteEntityCovers(preview)).resolves.toBeUndefined();
+  });
+});
 
 describe("subscribeManifest", () => {
   it("loads a manifest preview from a public base URL", async () => {

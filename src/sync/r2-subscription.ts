@@ -1,8 +1,10 @@
 import { getAppFetch } from "@/lib/platform";
 import {
+  type R2EntityCoversIndex,
   type R2Manifest,
   type R2SetIndex,
   type R2ShareManifest,
+  r2EntityCoversIndexSchema,
   r2ManifestSchema,
   r2SetIndexSchema,
   r2ShareManifestSchema,
@@ -128,6 +130,34 @@ export async function subscribeManifest(
     manifest,
     sets,
   };
+}
+
+export interface RemoteEntityCoversResult {
+  baseUrl: string;
+  index: R2EntityCoversIndex;
+}
+
+/**
+ * Load the library-global entity-covers index a manifest references (or
+ * `undefined` when it has none). The result feeds `importRemoteEntityCovers`
+ * on the subscriber — the read half of the entity-cover round trip.
+ */
+export async function loadRemoteEntityCovers(
+  preview: Pick<RemoteLibraryPreview, "baseUrl" | "manifest">,
+  options: SyncReadOptions = {},
+): Promise<RemoteEntityCoversResult | undefined> {
+  const path = preview.manifest.entityCoversIndex;
+  if (!path) return undefined;
+  const fetcher = await resolveFetcher(options.fetcher);
+  const url = resolveRemoteObjectUrl(preview.baseUrl, path);
+  const raw = await fetchJson(url, "entity covers index", fetcher);
+  const parsed = r2EntityCoversIndexSchema.safeParse(raw);
+  if (!parsed.success) {
+    throw new Error(
+      `Invalid entity covers index: ${parsed.error.issues[0]?.message ?? "schema mismatch"}`,
+    );
+  }
+  return { baseUrl: preview.baseUrl, index: parsed.data };
 }
 
 export async function loadRemoteSetIndex(

@@ -5,7 +5,9 @@ import { CloudDownloadIcon } from "@/components/ui/cloud-download";
 import type { CloudDrive } from "@/db/types";
 import { log } from "@/lib/logger";
 import { useSyncStore } from "@/stores/sync-store";
+import { importRemoteEntityCovers } from "@/sync/r2-import-stream";
 import {
+  loadRemoteEntityCovers,
   loadRemoteSetIndex,
   type RemoteLibraryPreview,
   type RemoteSetPreview,
@@ -38,10 +40,25 @@ export function CloudDriveSets({ drive }: { drive: CloudDrive }) {
       const result = await subscribeManifest(drive.manifestUrl);
       setPreview(result);
       setStatus("loaded");
+      void importDriveEntityCovers(result);
     } catch (cause) {
       setStatus("error");
       setError(cause instanceof Error ? cause.message : String(cause));
       log.warn("settings", "failed to browse drive sets", cause);
+    }
+  }
+
+  /**
+   * Library-global artist/album covers ride along with a browse: LWW-merged
+   * (`importRemoteEntityCovers` keeps strictly-newer local covers), idempotent,
+   * and best-effort — a failure here never blocks browsing the sets.
+   */
+  async function importDriveEntityCovers(result: RemoteLibraryPreview) {
+    try {
+      const covers = await loadRemoteEntityCovers(result);
+      if (covers) await importRemoteEntityCovers(covers);
+    } catch (cause) {
+      log.warn("settings", "failed to import drive entity covers", cause);
     }
   }
 
