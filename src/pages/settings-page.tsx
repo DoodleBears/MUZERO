@@ -1088,71 +1088,89 @@ export function SettingsPage() {
             </Card>
           )}
 
-          {activeItem.startsWith("cloud-") && (
+          {(activeItem === "cloud" || activeItem === "cloud-presence") && (
             <Card>
               <CardHeader>
                 <CardTitle>{t("settings.cloudDriveTitle")}</CardTitle>
               </CardHeader>
               <CardContent className="flex flex-col gap-4">
-                {activeItem === "cloud-owner" && (
-                  <div className="rounded-md border border-border bg-muted/25 p-3">
-                    <p className="font-medium text-sm">{t("settings.cloudSetupTitle")}</p>
-                    <div className="mt-2 grid gap-2 text-muted-foreground text-xs sm:grid-cols-2">
-                      {CLOUD_SETUP_KEYS.map((key) => (
-                        <div key={key} className="flex items-center gap-2">
-                          <CheckCircle2 className="size-3.5 text-primary" />
-                          <span>{t(key)}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {activeItem === "cloud-owner" && cloudDrives.length > 0 && (
-                  <div className="flex flex-col gap-2">
-                    <p className="font-medium text-sm">{t("settings.cloudConnectedDrives")}</p>
-                    {cloudDrives.map((drive) => (
-                      <CloudDriveRow
-                        key={drive.id}
-                        drive={drive}
-                        defaultDriveId={settings.defaultCloudDriveId}
-                        settings={settings}
-                      />
-                    ))}
-                  </div>
-                )}
-
-                {activeItem === "cloud-sync" && (
-                  // Publish is read-merge-write (R2 PRD §12.4): devices merge into
-                  // the drive's manifest/indexes instead of mirroring over them.
-                  // Same-set co-editing is still single-owner — say so.
-                  <p className="rounded-md border border-border bg-muted/40 p-3 text-muted-foreground text-xs">
-                    {t("settings.cloudMultiWriterHint")}
-                  </p>
-                )}
-
-                {activeItem === "cloud-sync" && syncProgress && (
-                  <CloudSyncProgress progress={syncProgress} />
-                )}
-
-                {activeItem === "cloud-sync" && (
-                  <div className="rounded-md border border-border p-3">
-                    <div className="flex flex-wrap items-start justify-between gap-3">
-                      <div>
-                        <p className="font-medium text-sm">{t("settings.cloudCorsTitle")}</p>
-                        <p className="text-muted-foreground text-xs">
-                          {t("settings.cloudCorsHint")}
-                        </p>
+                {activeItem === "cloud" && (
+                  <>
+                    <div className="rounded-md border border-border bg-muted/25 p-3">
+                      <p className="font-medium text-sm">{t("settings.cloudSetupTitle")}</p>
+                      <div className="mt-2 grid gap-2 text-muted-foreground text-xs sm:grid-cols-2">
+                        {CLOUD_SETUP_KEYS.map((key) => (
+                          <div key={key} className="flex items-center gap-2">
+                            <CheckCircle2 className="size-3.5 text-primary" />
+                            <span>{t(key)}</span>
+                          </div>
+                        ))}
                       </div>
-                      <Button variant="outline" size="sm" onClick={() => void copyCorsJson()}>
-                        <ClipboardCopy />
-                        {corsCopied ? t("settings.cloudCorsCopied") : t("settings.cloudCorsCopy")}
+                    </div>
+
+                    <div className="rounded-md border border-border p-3">
+                      <div className="mb-2 flex items-center gap-2">
+                        <ShieldCheck className="size-4 text-primary" />
+                        <p className="font-medium text-sm">{t("settings.cloudOwnerTitle")}</p>
+                      </div>
+                      <p className="mb-3 text-muted-foreground text-xs">
+                        {t("settings.cloudOwnerSimplifiedHint")}
+                      </p>
+                      <p className="mb-3 text-muted-foreground text-xs">
+                        {t("settings.cloudTrustedSetupHint")}
+                      </p>
+                      <Button size="sm" onClick={() => setAddDriveOpen(true)}>
+                        <Cloud />
+                        {t("settings.addDrive")}
                       </Button>
                     </div>
-                    <pre className="mt-3 max-h-44 overflow-auto rounded-md bg-muted p-3 text-[11px] leading-5 text-muted-foreground">
-                      {corsJson}
-                    </pre>
-                  </div>
+
+                    {cloudDrives.length > 0 && (
+                      <div className="flex flex-col gap-2">
+                        <p className="font-medium text-sm">{t("settings.cloudConnectedDrives")}</p>
+                        {cloudDrives.map((drive) => (
+                          <CloudDriveRow
+                            key={drive.id}
+                            drive={drive}
+                            defaultDriveId={settings.defaultCloudDriveId}
+                            settings={settings}
+                          />
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Publish is read-merge-write (R2 PRD §12.4): devices merge
+                    into the drive's manifest/indexes instead of mirroring over
+                    them. Same-set co-editing is still single-owner — say so. */}
+                    <p className="rounded-md border border-border bg-muted/40 p-3 text-muted-foreground text-xs">
+                      {t("settings.cloudMultiWriterHint")}
+                    </p>
+
+                    {syncProgress && <CloudSyncProgress progress={syncProgress} />}
+
+                    <div className="rounded-md border border-border p-3">
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                          <p className="font-medium text-sm">{t("settings.cloudCorsTitle")}</p>
+                          <p className="text-muted-foreground text-xs">
+                            {t("settings.cloudCorsHint")}
+                          </p>
+                        </div>
+                        <Button variant="outline" size="sm" onClick={() => void copyCorsJson()}>
+                          <ClipboardCopy />
+                          {corsCopied ? t("settings.cloudCorsCopied") : t("settings.cloudCorsCopy")}
+                        </Button>
+                      </div>
+                      <pre className="mt-3 max-h-44 overflow-auto rounded-md bg-muted p-3 text-[11px] leading-5 text-muted-foreground">
+                        {corsJson}
+                      </pre>
+                    </div>
+                    <AddDriveDialog
+                      open={addDriveOpen}
+                      onOpenChange={setAddDriveOpen}
+                      settings={settings}
+                    />
+                  </>
                 )}
 
                 {activeItem === "cloud-presence" && (
@@ -1179,32 +1197,6 @@ export function SettingsPage() {
                       </span>
                     </label>
                   </div>
-                )}
-
-                {activeItem === "cloud-owner" && (
-                  <>
-                    <div className="rounded-md border border-border p-3">
-                      <div className="mb-2 flex items-center gap-2">
-                        <ShieldCheck className="size-4 text-primary" />
-                        <p className="font-medium text-sm">{t("settings.cloudOwnerTitle")}</p>
-                      </div>
-                      <p className="mb-3 text-muted-foreground text-xs">
-                        {t("settings.cloudOwnerSimplifiedHint")}
-                      </p>
-                      <p className="mb-3 text-muted-foreground text-xs">
-                        {t("settings.cloudTrustedSetupHint")}
-                      </p>
-                      <Button size="sm" onClick={() => setAddDriveOpen(true)}>
-                        <Cloud />
-                        {t("settings.addDrive")}
-                      </Button>
-                    </div>
-                    <AddDriveDialog
-                      open={addDriveOpen}
-                      onOpenChange={setAddDriveOpen}
-                      settings={settings}
-                    />
-                  </>
                 )}
               </CardContent>
             </Card>

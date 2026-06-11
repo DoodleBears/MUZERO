@@ -5,8 +5,8 @@
  * reuse existing card-title i18n keys where possible; section headers add a small
  * set of `navSec*` keys.
  *
- * Phase 3 keeps Cloud Drive as a single `cloud` item; Phase 4 splits it into
- * `cloud-owner` / `cloud-subscribe` / `cloud-sync` / `cloud-presence`.
+ * Cloud Drive stays as one scan-friendly pane; stale split-pane ids are aliased
+ * below so a persisted sidebar selection never drops the user into a dead pane.
  */
 export interface SettingsNavItem {
   id: string;
@@ -44,8 +44,7 @@ export const SETTINGS_NAV = [
   {
     labelKey: "settings.navSecCloud",
     items: [
-      { id: "cloud-owner", labelKey: "settings.cloudConnectedDrives" },
-      { id: "cloud-sync", labelKey: "settings.navCloudSync" },
+      { id: "cloud", labelKey: "settings.cloudDriveTitle" },
       { id: "cloud-presence", labelKey: "settings.navCloudPresence" },
     ],
   },
@@ -66,6 +65,11 @@ export const SETTINGS_NAV = [
   },
 ] as const satisfies readonly SettingsNavSection[];
 
+const SETTINGS_ITEM_ALIASES: Record<string, string> = {
+  "cloud-owner": "cloud",
+  "cloud-sync": "cloud",
+};
+
 export function settingsItemIds(nav: readonly SettingsNavSection[] = SETTINGS_NAV): string[] {
   return nav.flatMap((section) => section.items.map((item) => item.id));
 }
@@ -76,5 +80,6 @@ export function resolveActiveSettingsItem(
   nav: readonly SettingsNavSection[] = SETTINGS_NAV,
 ): string {
   const ids = settingsItemIds(nav);
-  return ids.includes(active) ? active : (ids[0] ?? active);
+  const candidate = SETTINGS_ITEM_ALIASES[active] ?? active;
+  return ids.includes(candidate) ? candidate : (ids[0] ?? candidate);
 }

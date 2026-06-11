@@ -8,7 +8,9 @@ describe("settings-nav", () => {
     expect(ids).toContain("flow");
     expect(ids).toContain("shortcuts");
     expect(ids).toContain("playback-music");
-    expect(ids).toContain("cloud-owner");
+    expect(ids).toContain("cloud");
+    expect(ids).not.toContain("cloud-owner");
+    expect(ids).not.toContain("cloud-sync");
     expect(ids).toContain("cloud-presence");
     expect(ids).toContain("advanced");
     expect(ids).toContain("about");
@@ -30,5 +32,10 @@ describe("settings-nav", () => {
     const first = settingsItemIds()[0];
     expect(resolveActiveSettingsItem("does-not-exist")).toBe(first);
     expect(resolveActiveSettingsItem("")).toBe(first);
+  });
+
+  it("aliases stale cloud split-pane ids to the consolidated cloud drive pane", () => {
+    expect(resolveActiveSettingsItem("cloud-owner")).toBe("cloud");
+    expect(resolveActiveSettingsItem("cloud-sync")).toBe("cloud");
   });
 });
