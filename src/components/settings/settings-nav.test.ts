@@ -8,6 +8,7 @@ describe("settings-nav", () => {
     expect(ids).toContain("flow");
     expect(ids).toContain("shortcuts");
     expect(ids).toContain("playback-music");
+    expect(ids).toContain("storage");
     expect(ids).toContain("cloud");
     expect(ids).not.toContain("cloud-owner");
     expect(ids).not.toContain("cloud-sync");

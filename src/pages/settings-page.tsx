@@ -20,6 +20,7 @@ import { DeviceAvatarPicker } from "@/components/settings/device-avatar-picker";
 import { FlowSettings } from "@/components/settings/flow-settings";
 import { ImportedFoldersSettings } from "@/components/settings/imported-folders-settings";
 import { LyricsSettings } from "@/components/settings/lyrics-settings";
+import { PersistentStorageSettings } from "@/components/settings/persistent-storage-settings";
 import { resolveActiveSettingsItem } from "@/components/settings/settings-nav";
 import { SettingsSidebar } from "@/components/settings/settings-sidebar";
 import { ShortcutsSettings } from "@/components/settings/shortcuts-settings";
@@ -774,6 +775,7 @@ export function SettingsPage() {
 
           {activeItem === "lyrics" && <LyricsSettings />}
           {activeItem === "stream-sources" && <StreamSourcesSettings />}
+          {activeItem === "storage" && <PersistentStorageSettings />}
 
           {activeItem === "advanced" && <TraceDiagnostics />}
 
