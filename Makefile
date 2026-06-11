@@ -103,8 +103,10 @@ desktop tauri:
 # Electron is the primary desktop shell (WebView2/WKWebView instability pushed us
 # off Tauri's bundled webview). `make desktop` still runs Tauri behind the
 # src/lib/desktop bridge for parity testing.
+# electronmon auto-restarts the main process on changes to its require graph
+# (main/preload/ipc/app-icon/…); the renderer still hot-reloads via Vite.
 electron-dev:
-	MUZERO_ELECTRON_URL=$(DEV_URL) $(PM) exec electron electron/main.cjs
+	MUZERO_ELECTRON_URL=$(DEV_URL) $(PM) exec electronmon electron/main.cjs
 
 electron-preview: build
 	$(PM) exec electron electron/main.cjs
