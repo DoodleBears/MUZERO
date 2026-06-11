@@ -105,7 +105,7 @@ export function ChangelogModal() {
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="w-[min(calc(100vw-2rem),40rem)] gap-3">
-        <DialogTitle>{title}</DialogTitle>
+        <DialogTitle className="border-border border-b pb-3">{title}</DialogTitle>
         <div className="-mr-2 max-h-[60vh] overflow-y-auto pr-2">
           {shown.length === 0 ? (
             <p className="text-muted-foreground text-sm">{t("changelog.empty")}</p>
