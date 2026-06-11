@@ -296,7 +296,7 @@ function NowPlayingBackgroundContent({ hideVisualizer }: { hideVisualizer: boole
                 opacity: visualizerOpacity,
                 transition: "opacity 240ms ease",
                 // Blend the spectrum (a canvas) with the flow + background below it.
-                mixBlendMode: settings.visualizerBlendMode ?? "normal",
+                mixBlendMode: settings.visualizerBlendMode ?? "overlay",
               }}
             />
             {/* Always rendered (opacity 0 when off) so the dim eases in/out smoothly
