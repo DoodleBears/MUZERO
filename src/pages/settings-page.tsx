@@ -76,7 +76,7 @@ import {
   continuousHourlyUsd,
   resolveCloudPreset,
 } from "@/musicgen/presets";
-import { type MusicGenProviderId, resolveMusicGenProvider } from "@/musicgen/registry";
+import { resolveMusicGenProvider } from "@/musicgen/registry";
 import { useNavStore } from "@/stores/nav-store";
 import { usePlayerStore } from "@/stores/player-store";
 import { useSyncStore } from "@/stores/sync-store";
@@ -933,31 +933,29 @@ export function SettingsPage() {
                 <CardTitle>{t("settings.musicTitle")}</CardTitle>
               </CardHeader>
               <CardContent className="flex flex-col gap-3">
-                <Field label={t("settings.provider")}>
-                  <Select
-                    value={draft.musicGenProvider}
-                    onValueChange={(value) =>
-                      patch({ musicGenProvider: value as MusicGenProviderId })
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue>
-                        {(value) =>
-                          value === "cloud"
-                            ? t("settings.providerCloud")
-                            : value === "mock"
-                              ? t("settings.providerMock")
-                              : ""
-                        }
-                      </SelectValue>
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="mock">{t("settings.providerMock")}</SelectItem>
-                      <SelectItem value="cloud">{t("settings.providerCloud")}</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </Field>
-                {draft.musicGenProvider === "cloud" && (
+                {/* AI music generation is OFF by default — it hits a paid cloud
+                    API. When enabled, the DJ chat is given the generate tools and
+                    the cloud BYOK config appears. There is no offline/local
+                    generation option. */}
+                <label className="flex items-start gap-3 rounded-md border border-border p-3">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(draft.aiDjGenerationEnabled)}
+                    onChange={(event) => {
+                      const next = event.currentTarget.checked;
+                      patch({
+                        aiDjGenerationEnabled: next,
+                        musicGenProvider: next ? "cloud" : "mock",
+                      });
+                    }}
+                    className="mt-1 size-4 accent-primary"
+                  />
+                  <span className="flex flex-col gap-1">
+                    <span className="font-medium text-sm">{t("settings.aiGenEnable")}</span>
+                    <span className="text-muted-foreground text-xs">{t("settings.aiGenHint")}</span>
+                  </span>
+                </label>
+                {draft.aiDjGenerationEnabled && (
                   <>
                     <Field label={t("settings.preset")}>
                       <Select
