@@ -105,7 +105,10 @@
     "clear": "キャッシュを削除",
     "cleared": "オフラインキャッシュを削除しました",
     "downloaded": "オフライン保存しました",
-    "downloadFailed": "オフライン保存に失敗しました"
+    "downloadSet": "すべてオフライン保存",
+    "downloadFailed": "オフライン保存に失敗しました",
+    "downloadedMany_other": "{{count}} 曲を端末に保存しました",
+    "downloadFailedMany_other": "{{count}} 曲をダウンロードできませんでした"
   },
   "playlistImport": {
     "title": "プレイリストをインポート",
@@ -116,7 +119,9 @@
     "addButton": "追加",
     "newSet": "新しいセット",
     "cancel": "キャンセル",
-    "added": "{{added}} 曲を「{{name}}」に追加 · {{skipped}} 曲は既存"
+    "added": "{{added}} 曲を「{{name}}」に追加 · {{skipped}} 曲は既存",
+    "download": "端末にダウンロード",
+    "downloadHint": "各曲を端末に保存してオフライン再生。通信量とディスクを使用します。"
   },
   "player": {
     "previous": "前へ",
@@ -221,6 +226,7 @@
     "downloadOriginal": "元ファイルをダウンロード",
     "exportWithMetadata": "メタデータ付きで書き出し",
     "downloadFailed": "曲をダウンロードできませんでした",
+    "downloadToDevice": "端末にダウンロード",
     "addToSet": "他のセットに追加",
     "searchOrCreateSet": "セットを検索または作成…",
     "createSet": "「{{name}}」を作成",

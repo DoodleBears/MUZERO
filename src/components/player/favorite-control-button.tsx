@@ -1,9 +1,9 @@
 import { useLiveQuery } from "dexie-react-hooks";
-import { Heart } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useShallow } from "zustand/react/shallow";
 import { ControlTooltip } from "@/components/player/control-tooltip";
 import { Button } from "@/components/ui/button";
+import { HeartIcon } from "@/components/ui/heart";
 import { db } from "@/db/muzero-db";
 import { setTrackLiked } from "@/db/repositories";
 import { cn } from "@/lib/utils";
@@ -44,7 +44,7 @@ export function FavoriteControlButton({ className }: { className?: string }) {
           className,
         )}
       >
-        <Heart className={liked ? "fill-current" : undefined} />
+        <HeartIcon size={18} className={cn(liked && "[&_svg]:fill-current")} />
       </Button>
     </ControlTooltip>
   );

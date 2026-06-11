@@ -105,7 +105,10 @@
     "clear": "清理缓存",
     "cleared": "已清理离线缓存",
     "downloaded": "已保存离线",
-    "downloadFailed": "离线下载失败"
+    "downloadSet": "全部下载到本地",
+    "downloadFailed": "离线下载失败",
+    "downloadedMany_other": "已下载 {{count}} 首到本地",
+    "downloadFailedMany_other": "{{count}} 首下载失败"
   },
   "playlistImport": {
     "title": "导入歌单",
@@ -116,7 +119,9 @@
     "addButton": "添加",
     "newSet": "新建歌单",
     "cancel": "取消",
-    "added": "已添加 {{added}} 首到「{{name}}」· {{skipped}} 首已存在"
+    "added": "已添加 {{added}} 首到「{{name}}」· {{skipped}} 首已存在",
+    "download": "下载到本地",
+    "downloadHint": "导入后把每首歌都下载到本地，可离线播放。会占用流量和磁盘。"
   },
   "player": {
     "previous": "上一首",
@@ -221,6 +226,7 @@
     "downloadOriginal": "下载原文件",
     "exportWithMetadata": "导出含元数据",
     "downloadFailed": "下载失败",
+    "downloadToDevice": "下载到本地",
     "addToSet": "添加到其他歌单",
     "searchOrCreateSet": "搜索或新建歌单…",
     "createSet": "新建歌单“{{name}}”",

@@ -3,7 +3,12 @@ import { motion, useMotionValue, useSpring } from "motion/react";
 import type { KeyboardEvent as ReactKeyboardEvent, ReactNode } from "react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { deleteTrack as deleteTrackRepo, prependTrackIds, setTrackLiked } from "@/db/repositories";
+import {
+  createSession,
+  deleteTrack as deleteTrackRepo,
+  prependTrackIds,
+  setTrackLiked,
+} from "@/db/repositories";
 import type { Track } from "@/db/types";
 import { useSessions } from "@/hooks/use-app-data";
 import { useShortcutMatcher } from "@/hooks/use-shortcut-matcher";
@@ -146,6 +151,19 @@ export function VirtualTrackList({
     },
     [],
   );
+
+  // Keep Lenis' cached scroll limit in sync with the list height. Lenis derives its
+  // limit from `scrollElement.scrollHeight`, but only recomputes when its
+  // ResizeObserver fires for the scroller's firstElementChild (the header, when
+  // present) — not this virtual rows container. Fixed-row lists are usually correct
+  // on first paint, but the count grows after mount (the DJ appends tracks; async
+  // loads), and Lenis would then clamp scrolling above the new bottom. `resize()`
+  // re-reads the dimensions and realigns to the current scroll, no jump.
+  const totalSize = rowVirtualizer.getTotalSize();
+  // biome-ignore lint/correctness/useExhaustiveDependencies: re-sync Lenis when the content height changes
+  useEffect(() => {
+    lenisRef.current?.resize();
+  }, [totalSize]);
 
   function focusTrackAt(index: number) {
     rowVirtualizer.scrollToIndex(index, { align: "center" });
@@ -386,7 +404,11 @@ export function VirtualTrackList({
                     notify.error(t("track.downloadFailed"), { error, source: "track-download" }),
                   );
                 }}
+                onDownloadToDevice={() =>
+                  void usePlayerStore.getState().downloadStreamedTrack(track.id)
+                }
                 onAddToSession={(sessionId) => void prependTrackIds(sessionId, [track.id])}
+                onAddToNewSession={(name) => void addTrackToNewSet(name, track.id)}
               />
             </div>
           );
@@ -398,4 +420,15 @@ export function VirtualTrackList({
 
 function easeEdgePull(distance: number) {
   return Math.min(TRACK_LIST_EDGE_PULL_MAX, distance * 0.45);
+}
+
+/**
+ * Create a manual (non-DJ) set named `name` and drop `trackId` into it — the
+ * "no matching set, make one from the typed name" path of the row's add-to-set
+ * menu. `autoExtend: false` mirrors the gallery's "New set" so the DJ doesn't
+ * start refilling a set the user assembled by hand.
+ */
+async function addTrackToNewSet(name: string, trackId: string) {
+  const set = await createSession({ name, seedPrompt: "", config: { autoExtend: false } });
+  await prependTrackIds(set.id, [trackId]);
 }

@@ -1,6 +1,7 @@
-import { ListPlus, RefreshCw } from "lucide-react";
+import { ArrowDownToLine, ListPlus, RefreshCw } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { Disc3Icon } from "@/components/ui/disc-3";
 import { useSessions } from "@/hooks/use-app-data";
@@ -30,6 +31,9 @@ export function PlaylistImportDialog({
   const addStreamedPlaylistToSet = usePlayerStore((s) => s.addStreamedPlaylistToSet);
   const [busy, setBusy] = useState(false);
   const [targetId, setTargetId] = useState("");
+  // When on, every import path below also downloads the tracks to local blobs
+  // (offline play + stable cover-color extraction) in the background after import.
+  const [download, setDownload] = useState(false);
 
   // Reset the chosen target whenever the dialog opens for a different playlist.
   const key = playlist ? `${playlist.source}:${playlist.id}` : null;
@@ -58,13 +62,15 @@ export function PlaylistImportDialog({
 
   const createNewSet = () =>
     run(async () => {
-      const count = await importStreamedPlaylist(pl.source, pl.id, pl.name);
+      const count = await importStreamedPlaylist(pl.source, pl.id, pl.name, { download });
       notify.success(t("streamSources.imported", { count, name: pl.name }));
     });
 
   const syncInto = (setId: string, setName: string) =>
     run(async () => {
-      const { added, skipped } = await addStreamedPlaylistToSet(pl.source, pl.id, setId);
+      const { added, skipped } = await addStreamedPlaylistToSet(pl.source, pl.id, setId, {
+        download,
+      });
       notify.success(t("playlistImport.added", { added, skipped, name: setName }));
     });
 
@@ -145,6 +151,28 @@ export function PlaylistImportDialog({
             </button>
           </div>
         </div>
+
+        <label
+          htmlFor="playlist-import-download"
+          className="flex cursor-pointer items-start gap-2.5 rounded-lg border border-border px-3 py-2.5 transition-colors hover:bg-accent/50"
+        >
+          <Checkbox
+            id="playlist-import-download"
+            checked={download}
+            onCheckedChange={(checked) => setDownload(checked === true)}
+            disabled={busy}
+            className="mt-0.5"
+          />
+          <span className="min-w-0">
+            <span className="flex items-center gap-1.5 font-medium text-sm">
+              <ArrowDownToLine className="size-3.5 shrink-0" />
+              {t("playlistImport.download")}
+            </span>
+            <span className="block text-muted-foreground text-xs">
+              {t("playlistImport.downloadHint")}
+            </span>
+          </span>
+        </label>
 
         <div className="flex items-center justify-between gap-2 pt-1">
           <button

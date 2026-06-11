@@ -153,7 +153,7 @@ export function useTrackCoverUrl(
  * cover as a texture without tainting. Blob/same-origin URLs and shells without a
  * media proxy (web/tauri) pass through unchanged.
  */
-function proxyExternalCover(url: string | undefined): string | null {
+export function proxyExternalCover(url: string | undefined): string | null {
   if (!url) return null;
   if (!/^https?:\/\//i.test(url)) return url;
   return resolveDesktopBridge().mediaProxyUrl?.(url) ?? url;

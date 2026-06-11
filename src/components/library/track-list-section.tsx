@@ -1,4 +1,3 @@
-import { Trash2 } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { type BatchAction, BatchActionBar } from "@/components/library/batch-action-bar";
@@ -8,6 +7,7 @@ import { trackIndexFromEventTarget } from "@/components/library/track-row-target
 import { VirtualTrackList } from "@/components/library/virtual-track-list";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { DeleteIcon } from "@/components/ui/delete";
 import {
   deleteTracks,
   prependTrackIds,
@@ -138,7 +138,7 @@ export function TrackListSection({
         {
           label: t("select.deletePermanently"),
           variant: "destructive",
-          icon: <Trash2 />,
+          icon: <DeleteIcon size={16} />,
           onClick: () => setPendingPermanent([...sel.ids]),
         },
       ]
@@ -146,7 +146,7 @@ export function TrackListSection({
         {
           label: t("select.deletePermanently"),
           variant: "destructive",
-          icon: <Trash2 />,
+          icon: <DeleteIcon size={16} />,
           onClick: () => setPendingPermanent([...sel.ids]),
         },
       ];

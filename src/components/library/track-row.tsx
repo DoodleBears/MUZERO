@@ -1,19 +1,15 @@
-import {
-  Download,
-  Heart,
-  ListPlus,
-  Loader2,
-  Play,
-  Trash2,
-  TriangleAlert,
-  Video,
-} from "lucide-react";
+import { Heart, Loader2, Play, TriangleAlert, Video } from "lucide-react";
 import { Fragment, type KeyboardEvent, type MouseEvent, memo, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { BookmarkPlusIcon } from "@/components/ui/bookmark-plus";
 import { Checkbox } from "@/components/ui/checkbox";
+import { CloudDownloadIcon } from "@/components/ui/cloud-download";
 import { Command, type CommandItem } from "@/components/ui/command";
 import { CoverImage } from "@/components/ui/cover-image";
+import { DeleteIcon } from "@/components/ui/delete";
 import { Disc3Icon } from "@/components/ui/disc-3";
+import { DownloadIcon } from "@/components/ui/download";
+import { HeartIcon } from "@/components/ui/heart";
 import {
   Popover,
   PopoverContent,
@@ -26,6 +22,7 @@ import { useTrackCoverUrl } from "@/hooks/use-media";
 import { trackAlbum, trackArtists, trackSubtitle } from "@/lib/track-display";
 import { cn, formatDuration } from "@/lib/utils";
 import { useNavStore } from "@/stores/nav-store";
+import { useIsStreamDownloading } from "@/stores/stream-cache-store";
 
 interface TrackRowProps {
   track: Track;
@@ -44,7 +41,12 @@ interface TrackRowProps {
   onDelete: () => void;
   onDownloadOriginal: () => void;
   onExportWithMetadata: () => void;
+  /** Cache a streamed (online) track to a local blob — shown instead of the export
+   *  popover for streamed tracks that aren't downloaded yet. */
+  onDownloadToDevice?: () => void;
   onAddToSession: (sessionId: string) => void;
+  /** Create a brand-new set named `name` and add this track to it. */
+  onAddToNewSession: (name: string) => void;
 }
 
 /** A clickable artist/album segment in a track's subtitle → opens that entity in
@@ -150,7 +152,9 @@ export const TrackRow = memo(function TrackRow({
   onDelete,
   onDownloadOriginal,
   onExportWithMetadata,
+  onDownloadToDevice,
   onAddToSession,
+  onAddToNewSession,
 }: TrackRowProps) {
   const { t } = useTranslation();
   const disabled = track.status !== "ready";
@@ -289,7 +293,9 @@ export const TrackRow = memo(function TrackRow({
           aria-label={t("track.like")}
           aria-pressed={track.liked}
         >
-          <Heart className={cn("size-4", track.liked && "fill-primary text-primary")} />
+          {/* Liked color goes on the icon (a descendant) so it cleanly overrides the
+              button's inherited muted color instead of fighting it on one element. */}
+          <HeartIcon size={16} className={cn(track.liked && "text-primary [&_svg]:fill-primary")} />
         </button>
         <button
           type="button"
@@ -297,22 +303,78 @@ export const TrackRow = memo(function TrackRow({
           className="grid size-7 place-items-center rounded text-muted-foreground transition-colors hover:bg-accent hover:text-destructive"
           aria-label={t("track.delete")}
         >
-          <Trash2 className="size-4" />
+          <DeleteIcon size={16} />
         </button>
-        <DownloadPopover
-          disabled={track.status !== "ready" || (!track.blobId && !track.remoteMediaUrl)}
-          onDownloadOriginal={onDownloadOriginal}
-          onExportWithMetadata={onExportWithMetadata}
-        />
+        {track.status === "ready" && track.origin === "streamed" && !track.blobId ? (
+          // Online track with no local copy yet → fetch it from the cloud into a
+          // local blob (cloud-download glyph), not a disabled export menu.
+          <DownloadToDeviceButton trackId={track.id} onDownload={onDownloadToDevice} />
+        ) : track.status === "ready" && track.origin === "streamed" ? (
+          // Streamed track now cached locally → one click saves the file straight to
+          // disk (no metadata-vs-original menu; the bytes are the source recording).
+          <DirectDownloadButton onDownload={onDownloadOriginal} />
+        ) : (
+          <DownloadPopover
+            disabled={track.status !== "ready" || (!track.blobId && !track.remoteMediaUrl)}
+            onDownloadOriginal={onDownloadOriginal}
+            onExportWithMetadata={onExportWithMetadata}
+          />
+        )}
         <AddToSetPopover
-          disabled={addTargets.length === 0}
           sessions={addTargets}
           onAddToSession={onAddToSession}
+          onAddToNewSession={onAddToNewSession}
         />
       </div>
     </div>
   );
 });
+
+/** Download-to-device button for a streamed track with no local copy: one click
+ *  fetches its bytes from the cloud into a local blob (offline play + stable cover-
+ *  color extraction). A cloud-download glyph — distinct from the file-export icon —
+ *  marks "fetch the audio first"; once cached the row swaps to the export popover so
+ *  the same row can then save the local file to disk. Spinner while in flight. */
+function DownloadToDeviceButton({
+  trackId,
+  onDownload,
+}: {
+  trackId: string;
+  onDownload?: () => void;
+}) {
+  const { t } = useTranslation();
+  const downloading = useIsStreamDownloading(trackId);
+  return (
+    <button
+      type="button"
+      onClick={onDownload}
+      disabled={downloading || !onDownload}
+      className="grid size-7 place-items-center rounded text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:pointer-events-none disabled:opacity-60"
+      aria-label={t("track.downloadToDevice")}
+      title={t("track.downloadToDevice")}
+    >
+      {downloading ? <Loader2 className="size-4 animate-spin" /> : <CloudDownloadIcon size={16} />}
+    </button>
+  );
+}
+
+/** Direct file-download button for a streamed track already cached to a local blob:
+ *  one click saves the audio file to disk (the cloud→device step is done, so this is
+ *  the plain "download the file" action, no original-vs-metadata menu). */
+function DirectDownloadButton({ onDownload }: { onDownload: () => void }) {
+  const { t } = useTranslation();
+  return (
+    <button
+      type="button"
+      onClick={onDownload}
+      className="grid size-7 place-items-center rounded text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+      aria-label={t("track.download")}
+      title={t("track.download")}
+    >
+      <DownloadIcon size={16} />
+    </button>
+  );
+}
 
 function DownloadPopover({
   disabled,
@@ -336,7 +398,7 @@ function DownloadPopover({
         className="grid size-7 place-items-center rounded text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:pointer-events-none disabled:opacity-40"
         aria-label={t("track.download")}
       >
-        <Download className="size-4" />
+        <DownloadIcon size={16} />
       </PopoverTrigger>
       <PopoverContent className="w-44 p-1" side="left" sideOffset={10}>
         <PopoverTitle className="sr-only">{t("track.download")}</PopoverTitle>
@@ -366,30 +428,50 @@ function DownloadPopover({
   );
 }
 
+/** Sentinel id for the synthetic "create a new set" row in the command list. */
+const CREATE_SET_ITEM_ID = "__muzero_create_set__";
+
 function AddToSetPopover({
-  disabled,
   sessions,
   onAddToSession,
+  onAddToNewSession,
 }: {
-  disabled: boolean;
   sessions: DjSession[];
   onAddToSession: (sessionId: string) => void;
+  onAddToNewSession: (name: string) => void;
 }) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
-  const items = useMemo<CommandItem[]>(
-    () =>
-      sessions.map((session) => ({
-        id: session.id,
-        keywords: [session.name, session.description ?? ""],
-        label: session.name,
-      })),
-    [sessions],
-  );
+  const trimmed = query.trim();
+  const items = useMemo<CommandItem[]>(() => {
+    const existing: CommandItem[] = sessions.map((session) => ({
+      id: session.id,
+      keywords: [session.name, session.description ?? ""],
+      label: session.name,
+    }));
+    // Offer to create a set from the typed name when it doesn't already name one
+    // of the candidate sets (case-insensitive). The query is mirrored into the
+    // keywords so the synthetic row always survives the command's own filter.
+    const namesExisting = sessions.some(
+      (s) => s.name.trim().toLowerCase() === trimmed.toLowerCase(),
+    );
+    if (trimmed && !namesExisting) {
+      existing.push({
+        id: CREATE_SET_ITEM_ID,
+        keywords: [trimmed],
+        label: t("track.createSet", { name: trimmed }),
+      });
+    }
+    return existing;
+  }, [sessions, trimmed, t]);
 
-  function selectSession(sessionId: string) {
-    onAddToSession(sessionId);
+  function handleSelect(id: string) {
+    if (id === CREATE_SET_ITEM_ID) {
+      onAddToNewSession(trimmed);
+    } else {
+      onAddToSession(id);
+    }
     setQuery("");
     setOpen(false);
   }
@@ -404,30 +486,23 @@ function AddToSetPopover({
     >
       <PopoverTrigger
         type="button"
-        disabled={disabled}
-        className="grid size-7 place-items-center rounded text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:pointer-events-none disabled:opacity-40"
+        className="grid size-7 place-items-center rounded text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
         aria-label={t("track.addToSet")}
-        title={disabled ? t("track.noOtherSets") : t("track.addToSet")}
+        title={t("track.addToSet")}
       >
-        <ListPlus className="size-4" />
+        <BookmarkPlusIcon size={16} />
       </PopoverTrigger>
       <PopoverContent className="w-56 p-2" side="left" sideOffset={10}>
         <PopoverTitle className="px-2 py-1.5">{t("track.addToSet")}</PopoverTitle>
-        {sessions.length === 0 ? (
-          <PopoverDescription className="px-2 py-1.5 text-xs">
-            {t("track.noOtherSets")}
-          </PopoverDescription>
-        ) : (
-          <Command
-            className="border-0"
-            empty={t("track.noMatchingSets")}
-            inputValue={query}
-            items={items}
-            onInputChange={setQuery}
-            onSelect={selectSession}
-            placeholder={t("track.searchSets")}
-          />
-        )}
+        <Command
+          className="border-0"
+          empty={t("track.typeToCreateSet")}
+          inputValue={query}
+          items={items}
+          onInputChange={setQuery}
+          onSelect={handleSelect}
+          placeholder={t("track.searchOrCreateSet")}
+        />
       </PopoverContent>
     </Popover>
   );

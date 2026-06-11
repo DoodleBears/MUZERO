@@ -112,7 +112,12 @@
     "clear": "Clear cache",
     "cleared": "Cleared offline cache",
     "downloaded": "Saved for offline",
-    "downloadFailed": "Couldn't download for offline"
+    "downloadSet": "Save all offline",
+    "downloadFailed": "Couldn't download for offline",
+    "downloadedMany_one": "Downloaded {{count}} song for offline",
+    "downloadedMany_other": "Downloaded {{count}} songs for offline",
+    "downloadFailedMany_one": "{{count}} song couldn't be downloaded",
+    "downloadFailedMany_other": "{{count}} songs couldn't be downloaded"
   },
   "playlistImport": {
     "title": "Import playlist",
@@ -123,7 +128,9 @@
     "addButton": "Add",
     "newSet": "New set",
     "cancel": "Cancel",
-    "added": "Added {{added}} new to \"{{name}}\" · {{skipped}} already there"
+    "added": "Added {{added}} new to \"{{name}}\" · {{skipped}} already there",
+    "download": "Download to this device",
+    "downloadHint": "Save every track for offline play. Uses bandwidth and disk."
   },
   "player": {
     "previous": "Previous",
@@ -228,6 +235,7 @@
     "downloadOriginal": "Download original",
     "exportWithMetadata": "Export with metadata",
     "downloadFailed": "Couldn't download track",
+    "downloadToDevice": "Download to device",
     "addToSet": "Add to set",
     "searchOrCreateSet": "Search or create a set…",
     "createSet": "Create “{{name}}”",

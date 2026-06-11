@@ -77,6 +77,7 @@ function renderRow({
   const props = {
     isCurrent,
     isSelected,
+    onAddToNewSession: vi.fn(),
     onAddToSession: vi.fn(),
     onDelete: vi.fn(),
     onDownloadOriginal: vi.fn(),
@@ -111,12 +112,29 @@ describe("TrackRow", () => {
       sessions: [session("ses_lofi", "Lofi Focus"), session("ses_night", "Night Drive")],
     });
 
-    fireEvent.change(screen.getByLabelText("track.searchSets"), { target: { value: "night" } });
+    fireEvent.change(screen.getByLabelText("track.searchOrCreateSet"), {
+      target: { value: "night" },
+    });
 
     expect(screen.queryByRole("option", { name: "Lofi Focus" })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("option", { name: "Night Drive" }));
 
     expect(props.onAddToSession).toHaveBeenCalledWith("ses_night");
+  });
+
+  it("creates a new set from the typed name when nothing matches", () => {
+    const { props } = renderRow({ sessions: [session("ses_lofi", "Lofi Focus")] });
+
+    fireEvent.change(screen.getByLabelText("track.searchOrCreateSet"), {
+      target: { value: "Roadtrip" },
+    });
+
+    // The non-matching existing set drops out, leaving only the create row.
+    expect(screen.queryByRole("option", { name: "Lofi Focus" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("option", { name: "track.createSet" }));
+
+    expect(props.onAddToNewSession).toHaveBeenCalledWith("Roadtrip");
+    expect(props.onAddToSession).not.toHaveBeenCalled();
   });
 
   it("selects an unselected row on click without playing", () => {
