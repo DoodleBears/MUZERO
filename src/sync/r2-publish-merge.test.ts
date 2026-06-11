@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type {
   R2DevicesIndex,
   R2PresenceIndex,
+  R2SetIndex,
   R2SetSummary,
   R2StatsIndex,
 } from "./r2-manifest-schema";
@@ -9,6 +10,7 @@ import {
   mergeDevicesIndex,
   mergeManifestSets,
   mergePresenceIndex,
+  mergeSetIndex,
   mergeStatsIndex,
 } from "./r2-publish-merge";
 
@@ -194,5 +196,118 @@ describe("mergeManifestSets", () => {
 
   it("returns local sets as-is when the remote manifest is empty", () => {
     expect(mergeManifestSets([], [mineLocal], "dvc_b")).toEqual([mineLocal]);
+  });
+});
+
+describe("mergeSetIndex (co-editing, PRD §12.5)", () => {
+  function makeTrack(id: string, title = id): R2SetIndex["tracks"][number] {
+    return {
+      id,
+      title,
+      kind: "audio",
+      origin: "uploaded",
+      provider: "upload",
+      durationSec: 10,
+      createdAt: 1,
+      liked: false,
+      tags: [],
+      media: { url: `objects/media/${id}.mp3`, mime: "audio/mpeg", bytes: 3 },
+      memories: [],
+    };
+  }
+  function makeIndex(over: Partial<R2SetIndex> = {}): R2SetIndex {
+    return {
+      schema: "muzero-r2-set-index-v1",
+      revision: 1,
+      set: {
+        id: "ses_s",
+        name: "Shared",
+        seedPrompt: "",
+        displayMode: "cover",
+        config: {
+          autoExtend: false,
+          refillThreshold: 2,
+          batchSize: 1,
+          targetDurationSec: 60,
+          allowVocals: true,
+        },
+        createdAt: 100,
+        updatedAt: 1000,
+      },
+      tracks: [],
+      ...over,
+    };
+  }
+
+  it("returns the local index (tombstones applied) when there is no remote one", () => {
+    const local = makeIndex({ tracks: [makeTrack("t1"), makeTrack("t2")] });
+    const merged = mergeSetIndex(undefined, local, {
+      localRemovedTracks: [{ id: "t2", removedAt: 2000 }],
+    });
+    expect(merged.tracks.map((t) => t.id)).toEqual(["t1"]);
+    expect(merged.removedTracks).toEqual([{ id: "t2", removedAt: 2000 }]);
+  });
+
+  it("unions adds from both devices, local entry winning for a shared id", () => {
+    const remote = makeIndex({
+      tracks: [makeTrack("shared", "Old title"), makeTrack("theirs")],
+    });
+    const local = makeIndex({
+      set: { ...makeIndex().set, updatedAt: 2000 },
+      tracks: [makeTrack("shared", "New title"), makeTrack("mine")],
+    });
+    const merged = mergeSetIndex(remote, local);
+    expect(merged.tracks.map((t) => t.id)).toEqual(["shared", "theirs", "mine"]);
+    expect(merged.tracks[0]?.title).toBe("New title");
+  });
+
+  it("set metadata is last-write-wins on updatedAt", () => {
+    const remote = makeIndex({
+      set: { ...makeIndex().set, name: "Renamed remotely", updatedAt: 3000 },
+    });
+    const local = makeIndex({ set: { ...makeIndex().set, name: "Local name", updatedAt: 1000 } });
+    expect(mergeSetIndex(remote, local).set.name).toBe("Renamed remotely");
+    const localNewer = makeIndex({
+      set: { ...makeIndex().set, name: "Local newer", updatedAt: 4000 },
+    });
+    expect(mergeSetIndex(remote, localNewer).set.name).toBe("Local newer");
+  });
+
+  it("a remote tombstone removes the local stale copy and persists", () => {
+    const remote = makeIndex({
+      tracks: [makeTrack("keep")],
+      removedTracks: [{ id: "gone", removedAt: 5000 }],
+    });
+    // Local is stale: it still carries "gone" — but it did NOT re-add it (the
+    // pull-merge removed it before this publish merge runs; if the user truly
+    // re-added it after, the local session would have cleared its own record
+    // and re-added the membership, which the re-add exception below covers).
+    const local = makeIndex({ tracks: [makeTrack("mine")] });
+    const merged = mergeSetIndex(remote, local);
+    expect(merged.tracks.map((t) => t.id)).toEqual(["keep", "mine"]);
+    expect(merged.removedTracks).toEqual([{ id: "gone", removedAt: 5000 }]);
+  });
+
+  it("a local tombstone removes the remote entry", () => {
+    const remote = makeIndex({ tracks: [makeTrack("theirs"), makeTrack("victim")] });
+    const local = makeIndex({ tracks: [] });
+    const merged = mergeSetIndex(remote, local, {
+      localRemovedTracks: [{ id: "victim", removedAt: 6000 }],
+    });
+    expect(merged.tracks.map((t) => t.id)).toEqual(["theirs"]);
+    expect(merged.removedTracks).toEqual([{ id: "victim", removedAt: 6000 }]);
+  });
+
+  it("a local re-add (present locally, no local tombstone) revokes the remote tombstone", () => {
+    const remote = makeIndex({ removedTracks: [{ id: "back", removedAt: 5000 }] });
+    const local = makeIndex({ tracks: [makeTrack("back")] });
+    const merged = mergeSetIndex(remote, local);
+    expect(merged.tracks.map((t) => t.id)).toEqual(["back"]);
+    expect(merged.removedTracks).toBeUndefined();
+  });
+
+  it("bumps the revision past the remote one", () => {
+    const remote = makeIndex({ revision: 7 });
+    expect(mergeSetIndex(remote, makeIndex({ revision: 2 })).revision).toBe(8);
   });
 });

@@ -1,6 +1,7 @@
 import type {
   R2DevicesIndex,
   R2PresenceIndex,
+  R2SetIndex,
   R2SetSummary,
   R2StatsIndex,
 } from "./r2-manifest-schema";
@@ -93,4 +94,64 @@ export function mergeManifestSets(
       (selfDeviceId == null || set.publishedBy == null || set.publishedBy !== selfDeviceId),
   );
   return [...preserved, ...localSets];
+}
+
+export interface MergeSetIndexOptions {
+  /** The local session's removal tombstones, mapped to PUBLISHED track ids. */
+  localRemovedTracks?: Array<{ id: string; removedAt: number }>;
+}
+
+const SET_TOMBSTONE_CAP = 200;
+
+/**
+ * Co-editing merge for one set index (PRD §12.5): adds union by track id with
+ * the local entry winning a shared id; set metadata LWW on `set.updatedAt`;
+ * removal tombstones union (local ∪ remote) and delete matching entries —
+ * EXCEPT an id the local side re-added (present locally without a local
+ * tombstone), which revokes the remote tombstone. Revision bumps past the
+ * remote's so readers can observe progression.
+ */
+export function mergeSetIndex(
+  remote: R2SetIndex | undefined,
+  local: R2SetIndex,
+  options: MergeSetIndexOptions = {},
+): R2SetIndex {
+  const localTombstones = new Map(
+    (options.localRemovedTracks ?? []).map((entry) => [entry.id, entry.removedAt]),
+  );
+  const tombstones = new Map(localTombstones);
+  for (const entry of remote?.removedTracks ?? []) {
+    const existing = tombstones.get(entry.id);
+    if (existing == null || entry.removedAt > existing) tombstones.set(entry.id, entry.removedAt);
+  }
+
+  const localById = new Map(local.tracks.map((track) => [track.id, track]));
+  // Re-add intent: locally present without a local tombstone revokes the
+  // remote tombstone (the pull-merge already applied genuine remote removals
+  // to the session before this merge runs).
+  for (const id of localById.keys()) {
+    if (!localTombstones.has(id)) tombstones.delete(id);
+  }
+
+  const merged: R2SetIndex["tracks"] = [];
+  for (const track of remote?.tracks ?? []) {
+    merged.push(localById.get(track.id) ?? track);
+    localById.delete(track.id);
+  }
+  merged.push(...localById.values());
+  const tracks = merged.filter((track) => !tombstones.has(track.id));
+
+  const removedTracks = [...tombstones.entries()]
+    .map(([id, removedAt]) => ({ id, removedAt }))
+    .sort((a, b) => b.removedAt - a.removedAt)
+    .slice(0, SET_TOMBSTONE_CAP);
+
+  const remoteSetNewer = remote != null && remote.set.updatedAt > local.set.updatedAt;
+  return {
+    schema: "muzero-r2-set-index-v1",
+    revision: Math.max(remote?.revision ?? 0, local.revision ?? 0) + 1,
+    set: remoteSetNewer ? remote.set : local.set,
+    tracks,
+    ...(removedTracks.length > 0 ? { removedTracks } : {}),
+  };
 }
