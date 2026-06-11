@@ -14,4 +14,6 @@ contextBridge.exposeInMainWorld("muzero", {
   openExternal: (url) => ipcRenderer.invoke("muzero:openExternal", url),
   openSourceLogin: (request) => ipcRenderer.invoke("muzero:openSourceLogin", request),
   readSourceCookies: (request) => ipcRenderer.invoke("muzero:readSourceCookies", request),
+  evalYoutubeN: (functionSource, n) =>
+    ipcRenderer.invoke("muzero:evalYoutubeN", functionSource, n),
 });

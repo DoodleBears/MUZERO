@@ -16,7 +16,7 @@
 | 1 | 基础设施：muzfetch header 注入 + Range 透传 + StreamSource 抽象 + 数据模型 | ✅ Completed | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | Bilibili 源（架构试金石：WBI + DASH 音轨 + 登录 + 入库 + 播放路由） | ✅ Completed | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | 网易云源（weapi/eapi 纯 TS 加密 + 登录 + 搜索 + 音质降级 + 歌单同步 + 歌词） | ✅ Completed | [Phase 3 Checklist](#phase-3-checklist) |
-| 4 | YouTube 源（InnerTube + EJS sig/n 解密 + PoToken） | 🔲 Pending | [Phase 4 Checklist](#phase-4-checklist) |
+| 4 | YouTube 源（InnerTube + 自研 sig/n 解密 + vm 沙箱）（PoToken 押后） | 🔄 接线完成 / 待手测 | [Phase 4 Checklist](#phase-4-checklist) |
 | 5 | 离线缓存 / 下载持久化（"尽量入库存储"，可选增强） | ✅ Completed | [Phase 5 Checklist](#phase-5-checklist) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
@@ -702,10 +702,15 @@ InnerTube `/youtubei/v1/player` 取流 + EJS `sig`/`n` 解密(隐藏 sandboxed `
 | Y4 | InnerTube 取流编排 `resolveYoutubeAudio`：`WEB_REMIX→TV` 客户端轮询 `/player`(LOGIN/age→下一客户端)→选音轨→`resolveFormatUrl`，注入式(stub http+bootstrap+solvers) | `youtube/youtube-resolve.ts` | ×5 | ✅ green |
 | Y4b | InnerTube `/search` 纯映射：`buildSearchRequestBody` + `parseSearchResults`(递归收 `videoRenderer`，抗结构漂移)+ `parseDurationText` | `youtube/youtube-search.ts` | ×5 | ✅ green |
 | Y7 | `createYoutubeSource`(search via InnerTube `/search` + resolve via Y4；runtime 注入式)：`StreamSourceProvider`，无 runtime→resolve「桌面专属」错误、search 仍可 | `youtube/youtube-source.ts` | ×4(stub http+runtime) | ✅ green |
-| Y5 | 主进程隐藏 `BrowserWindow` 生命周期 + IPC(`solveSig`/`solveN`/`getPoToken`/`getBootstrap`)；渲染层经 bridge | `electron/youtube-engine.cjs` · `lib/desktop/*` | 🔲（运行时） | 🔲 **阻塞** |
-| Y6 | sig/n solver + PoToken：跑 `yt.solver`/BotGuard 资产、按 `playerJsUrl` 缓存 / 6h 缓存 | `youtube/youtube-solver.ts`（bridge 注入）| 🔲（运行时） | 🔲 **阻塞** |
-| Y8 | registry `youtube` 分支接入(去掉 null)+ ⌘F 在线 chips 加 YouTube + StreamSourceDeps 注入 runtime | `registry.ts` · `global-track-search.tsx` | 🔲 | 🔲（待 Y5/Y6） |
+| Y-sig | **签名解扰纯实现**(yt-dlp 法)：从 player.js 解析 helper 对象 reverse/splice/swap → 操作序列 → 纯 TS 应用；`solveSignature`/`extractSignatureTimestamp`。**无需 JS 引擎、无需依赖** | `youtube/youtube-sig.ts` | 合成 player.js fixture ×7 | ✅ green |
+| Y-nsig | **n throttling 函数抽取**(brace-balance)：`findNFunctionName`(含数组下标解析)+`extractFunctionSource`(配对花括号切出可运行源)→ 交 solver 窗口求值 | `youtube/youtube-nsig.ts` | fixture ×7（含 eval 往返）| ✅ green |
+| Y-rt | **运行时编排** `createYoutubeRuntime`：取 iframe_api→player.js URL→base.js，缓存 sig 序列 / n-func 源 / sts；`getBootstrap`(sts+visitorData) + 异步 `solvers`(solveSig 纯应用 / solveN 经注入 `evalN` 沙箱)。`CipherSolvers`/`resolveFormatUrl` 改异步 | `youtube/youtube-runtime.ts` · `youtube-cipher.ts` | stub http+evalN ×5 + 缓存验证 | ✅ green |
+| Y5 | **`evalYoutubeN` 桥**：`DesktopBridge.evalYoutubeN?` + electron 实现；主进程 `node:vm` 沙箱(空 context + 1.5s 超时 + 失败回落原 n)跑抽取的 n-func；preload/IPC 接好。无需 BrowserWindow(n-func 纯字符串/数组运算，vm 即可) | `electron/youtube-engine.cjs` · `electron/{main,preload}.cjs` · `lib/desktop/{bridge,electron}.ts` | 🔲（待 Electron 手测） | ✅ 接线完成 |
+| Y8 | **registry 接入**：`youtube`→`createYoutubeSource`(+`createBridgeYoutubeRuntime` 桥接 evalN，memoize player.js)；⌘F 在线 chips 加 YouTube。web/tauri 无 evalN→runtime null→search 仍可、resolve 提示桌面专属 | `registry.ts` · `youtube/youtube-bridge-runtime.ts` · `global-track-search.tsx` · `registry.test.ts` | registry 测更新；185 streamsrc 全绿 | ✅ 接线完成 |
+| Y6 | PoToken（BotGuard）：暂缓——先靠 sig/n + 客户端轮询；高失败率再引 `bgutils-js`(worktree 可加依赖) | — | — | ⏸ 押后 |
 
 **Y1–Y4 + Y4b + Y7 落地**：YouTube 整条**可注入/可单测架构已完成**(32 测全绿)——音轨选择、InnerTube 请求-响应、密文 URL 组装、多客户端取流编排、`/search` 解析、source provider 全部纯逻辑 + stub 验证。`createYoutubeSource` 已实现 `StreamSourceProvider` 契约（search 不需签名、即可工作；resolve 走注入 runtime）。
 
-**Y5/Y6 阻塞说明**：让 YouTube **真正出声**需要 `sig`/`n` 解密 + BotGuard PoToken 的运行时——这要么**引入 vendored solver 依赖**(`bgutils-js` / `youtubei.js` 等，当前**因 lockfile 被并发 agent 共享、不能加 npm 依赖**而阻塞)，要么**对真实 player.js 手写抽取**(需真实 YT 运行时反复验证，无法盲写即成)。故本轮**不冒充 YouTube 可播**：架构与契约就位、纯逻辑全测，运行时 solver 是独立后续(解依赖封锁后即可接 Y5/Y6/Y8，registry 一行接入)。
+**worktree 解封 + 自研 solver（2026-06-11，branch `feat/youtube-runtime`）**：开独立 worktree/branch 脱离并发 main，**改走「自研 player.js 解析」而非 vendored 依赖**——`sig` 用 yt-dlp 式操作序列在纯 TS 解(零依赖、零 JS 引擎，Y-sig 全测)；`n` 抽取函数源(Y-nsig 全测)在主进程 `node:vm` 沙箱 eval(经 `evalYoutubeN` 桥)；**PoToken 暂不做**(优先客户端轮询；不足再议 `bgutils-js`)。
+
+**Phase 4 接线全部完成（架构 + 运行时桥 + registry）——60 个 YouTube 单测全绿**。registry 已接 `youtube`，⌘F 出现 YouTube chip，resolve 走 `createYoutubeRuntime`(player.js→sig 纯解 + n 经 vm 沙箱)。**唯一剩余 = Electron 真机手测**：真实 player.js 的正则抽取需对当周版本校准（YT 周更 player.js，sig/n 正则可能要微调），PoToken 若被要求则加 `bgutils-js`。**不冒充已手测**：纯逻辑全绿，真机出声待用户起 Electron 验证。

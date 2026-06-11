@@ -45,32 +45,33 @@ export function setQueryParam(url: string, name: string, value: string): string 
 }
 
 export interface CipherSolvers {
-  /** Descramble a scrambled signature (player.js sig function). */
-  solveSig: (s: string) => string;
-  /** Transform the `n` throttling param (player.js n function). */
-  solveN: (n: string) => string;
+  /** Descramble a scrambled signature (pure, after player.js loads). */
+  solveSig: (s: string) => string | Promise<string>;
+  /** Transform the `n` throttling param (player.js n function, run in a sandbox). */
+  solveN: (n: string) => string | Promise<string>;
 }
 
 /**
  * Turn a format into a final playable URL: descramble the signature when ciphered,
  * then transform the `n` param. Returns null when the format has neither a url nor a
- * usable cipher. Pure — the descramble/transform are injected.
+ * usable cipher. The descramble/transform are injected + may be async (player.js load
+ * + sandboxed `n` eval), so this is async.
  */
-export function resolveFormatUrl(
+export async function resolveFormatUrl(
   format: { url?: string; signatureCipher?: string },
   solvers: CipherSolvers,
-): string | null {
+): Promise<string | null> {
   let url: string;
   if (format.signatureCipher) {
     const cipher = parseSignatureCipher(format.signatureCipher);
     if (!cipher) return null;
-    url = setQueryParam(cipher.url, cipher.sp, solvers.solveSig(cipher.s));
+    url = setQueryParam(cipher.url, cipher.sp, await solvers.solveSig(cipher.s));
   } else if (format.url) {
     url = format.url;
   } else {
     return null;
   }
   const n = getQueryParam(url, "n");
-  if (n) url = setQueryParam(url, "n", solvers.solveN(n));
+  if (n) url = setQueryParam(url, "n", await solvers.solveN(n));
   return url;
 }

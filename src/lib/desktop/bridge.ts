@@ -75,6 +75,13 @@ export interface DesktopBridge {
    * the default session by net.fetch). Returns null until the auth cookie is present.
    */
   readSourceCookies?: (request: StreamLoginRequest) => Promise<string | null>;
+  /**
+   * Run YouTube's extracted `n`-throttling function source on a value inside a Node
+   * `vm` sandbox in the main process (never the renderer's own realm). The source is
+   * parsed from player.js by tested TS (`youtube-nsig`); this just evaluates it.
+   * Absent in web/tauri → YouTube playback is desktop-only.
+   */
+  evalYoutubeN?: (functionSource: string, n: string) => Promise<string>;
 }
 
 /** What the desktop auth window needs to drive a source login + capture its cookie. */
