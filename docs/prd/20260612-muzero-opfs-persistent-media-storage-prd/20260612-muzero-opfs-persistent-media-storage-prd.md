@@ -11,7 +11,7 @@
 
 | Phase | Name | Status | Link |
 |-------|------|--------|------|
-| 1 | Storage Adapter + Dual-Read Contract | 🔲 Pending | [Phase 1 Checklist](#phase-1-checklist) |
+| 1 | Storage Adapter + Dual-Read Contract | ✅ Completed | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | Permanent Media Write Path | 🔲 Pending | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | Playback, Export, and Import Consumers | 🔲 Pending | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | Migration, Repair, and Cleanup | 🔲 Pending | [Phase 4 Checklist](#phase-4-checklist) |
@@ -381,21 +381,23 @@ Required UI changes:
 
 **Goal:** introduce a single binary resolver that can read legacy IndexedDB Blob rows, Browser OPFS rows, and Electron disk-file rows without changing playback behavior.
 
+**Status (2026-06-12):** Completed. Phase 1 introduced `MediaStorageProvider`, readable provider storage keys, OPFS/IndexedDB/Electron-file backend identities, and DB-facing helpers for put/resolve/copy/delete. Player and sync consumers are not switched yet; that remains Phase 3.
+
 **Tasks:**
-- [ ] Add `MediaBlob.storageBackend?`, `MediaBlob.storageKey?`, and optional `MediaBlob.blob?` type fields.
-- [ ] Add `MediaStorageProvider` with `electron-file`, `opfs`, and `indexeddb` implementations.
-- [ ] Add shared OPFS helpers with a distinct persistent directory, e.g. `muzero-persistent-media`.
-- [ ] Add `putMediaBlob`, `resolveMediaBlob`, `deleteMediaBlob`, and `copyMediaBlob` helpers.
-- [ ] Reuse or factor common pieces from `src/player/playback-cache.ts` without merging permanent and LRU policies.
-- [ ] Keep legacy rows readable as `storageBackend:"indexeddb"`.
+- [x] Add `MediaBlob.storageBackend?`, `MediaBlob.storageKey?`, and optional `MediaBlob.blob?` type fields.
+- [x] Add `MediaStorageProvider` with `electron-file`, `opfs`, and `indexeddb` implementations.
+- [x] Add shared OPFS helpers with a distinct persistent directory, e.g. `muzero-persistent-media`.
+- [x] Add `putMediaBlob`, `resolveMediaBlob`, `deleteMediaBlob`, and `copyMediaBlob` helpers.
+- [x] Keep permanent-media and playback-cache policies separate while aligning the OPFS + fallback pattern.
+- [x] Keep legacy rows readable as `storageBackend:"indexeddb"`.
 
 ### Phase 1 Checklist
 
-- [ ] Existing `getTrackBlob()` behavior is preserved through the new resolver.
-- [ ] Resolver returns a Blob/File for IndexedDB, OPFS, and Electron disk rows.
-- [ ] File-backed writes verify file size before metadata commit.
-- [ ] OPFS and Electron provider fallback to IndexedDB is covered by tests.
-- [ ] No player UI behavior changes in this phase.
+- [x] Existing `getTrackBlob()` behavior is preserved because consumers are not switched in this phase.
+- [x] Resolver returns a Blob/File for IndexedDB, OPFS, and Electron disk rows.
+- [x] File-backed writes verify file size before metadata commit.
+- [x] OPFS and Electron provider fallback to IndexedDB is covered by tests.
+- [x] No player UI behavior changes in this phase.
 
 ### Phase 2: Permanent Media Write Path + Runtime Selection
 
@@ -586,6 +588,7 @@ Required UI changes:
 | 2026-06-12 | MUZERO | Revised scope from OPFS-only to a runtime storage abstraction: Electron disk files, Browser OPFS, IndexedDB fallback. |
 | 2026-06-12 | MUZERO | Added later image-storage phases: background/gallery provider-backed by default, full-size cover/memory photos provider-backed by threshold, lightweight derivatives stay in IndexedDB. |
 | 2026-06-12 | MUZERO | Resolved storage open questions: staged writes, app-managed Electron default with user-selectable folder, readable local filenames with blob-id suffix, all media rows migrate, and image threshold is 512 KB. |
+| 2026-06-12 | MUZERO | Phase 1 completed: added storage provider abstractions, readable storage key generation, OPFS/IndexedDB/Electron-file backend identities, DB-facing put/resolve/copy/delete helpers, and regression tests for legacy reads, provider-backed rows, fallback, copy, and delete cleanup. |
 
 ---
 

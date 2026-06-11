@@ -202,7 +202,9 @@ export interface MediaBlob {
   role: "media" | "cover" | "background" | "gallery" | "memory" | "avatar";
   mime: string;
   bytes: number;
-  blob: Blob;
+  storageBackend?: "indexeddb" | "opfs" | "electron-file";
+  storageKey?: string;
+  blob?: Blob;
 }
 
 /**
