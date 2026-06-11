@@ -5,6 +5,7 @@ import { CloudDownloadIcon } from "@/components/ui/cloud-download";
 import type { CloudDrive } from "@/db/types";
 import { log } from "@/lib/logger";
 import { useSyncStore } from "@/stores/sync-store";
+import { getLocalDevice } from "@/sync/device-repo";
 import { importRemoteEntityCovers } from "@/sync/r2-import-stream";
 import {
   loadRemoteEntityCovers,
@@ -32,7 +33,22 @@ export function CloudDriveSets({ drive }: { drive: CloudDrive }) {
   const [preview, setPreview] = useState<RemoteLibraryPreview | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [importingSetId, setImportingSetId] = useState<string | null>(null);
+  const [localDevicePublicId, setLocalDevicePublicId] = useState<string | undefined>();
   const autoImportStartedRef = useRef(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    void getLocalDevice()
+      .then((device) => {
+        if (!cancelled) setLocalDevicePublicId(device?.publicId);
+      })
+      .catch((cause) =>
+        log.warn("settings", "failed to read local device for drive import", cause),
+      );
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const importDriveEntityCovers = useCallback(async (result: RemoteLibraryPreview) => {
     try {
@@ -45,22 +61,28 @@ export function CloudDriveSets({ drive }: { drive: CloudDrive }) {
 
   const importSetFromPreview = useCallback(
     async (result: RemoteLibraryPreview, set: RemoteSetPreview) => {
+      const publicId = localDevicePublicId ?? (await getLocalDevice())?.publicId;
+      if (isSelfPublishedSet(set, publicId)) return;
       const remoteSet = await loadRemoteSetIndex(result, set);
       await useSyncStore.getState().pullRemoteSet({ driveId: drive.id, remoteSet });
     },
-    [drive.id],
+    [drive.id, localDevicePublicId],
   );
 
   const importAllSets = useCallback(
     async (result: RemoteLibraryPreview) => {
       setImportingSetId(AUTO_IMPORTING_SET_ID);
       try {
-        for (const set of result.sets) await importSetFromPreview(result, set);
+        const publicId = localDevicePublicId ?? (await getLocalDevice())?.publicId;
+        for (const set of result.sets) {
+          if (isSelfPublishedSet(set, publicId)) continue;
+          await importSetFromPreview(result, set);
+        }
       } finally {
         setImportingSetId(null);
       }
     },
-    [importSetFromPreview],
+    [importSetFromPreview, localDevicePublicId],
   );
 
   const browse = useCallback(
@@ -140,7 +162,11 @@ export function CloudDriveSets({ drive }: { drive: CloudDrive }) {
           <Button
             size="sm"
             variant="outline"
-            disabled={importingSetId === set.id || importingSetId === AUTO_IMPORTING_SET_ID}
+            disabled={
+              isSelfPublishedSet(set, localDevicePublicId) ||
+              importingSetId === set.id ||
+              importingSetId === AUTO_IMPORTING_SET_ID
+            }
             onClick={() => void importSet(set)}
           >
             <CloudDownloadIcon size={16} />
@@ -150,6 +176,13 @@ export function CloudDriveSets({ drive }: { drive: CloudDrive }) {
       ))}
     </div>
   );
+}
+
+function isSelfPublishedSet(
+  set: RemoteSetPreview,
+  localDevicePublicId: string | undefined,
+): boolean {
+  return Boolean(localDevicePublicId && set.publishedBy === localDevicePublicId);
 }
 
 function isMissingManifest(cause: unknown): boolean {

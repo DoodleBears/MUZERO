@@ -20,6 +20,7 @@ export interface RemoteSetPreview {
   updatedAt: string;
   trackCount: number;
   bytes: number;
+  publishedBy?: string;
 }
 
 export interface RemoteLibraryPreview {
@@ -116,6 +117,7 @@ export async function subscribeManifest(
     updatedAt: set.updatedAt,
     trackCount: set.trackCount,
     bytes: set.bytes,
+    publishedBy: set.publishedBy,
   }));
 
   return {

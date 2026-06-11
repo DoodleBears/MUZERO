@@ -33,12 +33,39 @@ describe("diffRemoteSet", () => {
 
   it("recognizes an unchanged imported remote set", async () => {
     await db.sessions.put(localSession({ updatedAt: 1000 }));
+    await db.tracks.put(localTrack());
 
     await expect(
       diffRemoteSet({ driveId: "drv_1", remoteSet: remoteSet({ updatedAt: 1000 }) }, db),
     ).resolves.toMatchObject({
       action: "unchanged",
     });
+  });
+
+  it("re-applies a remote set when the local track row is missing synced metadata", async () => {
+    await db.sessions.put(localSession({ updatedAt: 1000 }));
+    await db.tracks.put({
+      ...localTrack(),
+      title: "Blue",
+      mediaMetadata: undefined,
+    });
+    const remote = remoteSet({ updatedAt: 1000 });
+    remote.tracks[0]!.source.mediaMetadata = {
+      title: "Blue",
+      artists: ["A Device"],
+      album: "Cloud Album",
+      originalFileName: "blue.mp3",
+      originalMime: "audio/mpeg",
+      parser: "music-metadata",
+      parsedAt: 1000,
+    };
+
+    await expect(diffRemoteSet({ driveId: "drv_1", remoteSet: remote }, db)).resolves.toMatchObject(
+      {
+        action: "apply-remote",
+        reasons: ["remote-track-metadata-missing"],
+      },
+    );
   });
 
   it("plans a remote update when there are no local unsynced mutations", async () => {
@@ -173,6 +200,24 @@ function localSession(input: { updatedAt: number }): DjSession {
     displayMode: "cover",
     createdAt: 1000,
     updatedAt: input.updatedAt,
+  };
+}
+
+function localTrack() {
+  return {
+    id: "trk_remote_drv_1_trk_blue",
+    sessionId: "ses_remote_drv_1_ses_tokyo",
+    title: "Blue",
+    kind: "audio" as const,
+    origin: "uploaded" as const,
+    provider: "upload",
+    status: "ready" as const,
+    durationSec: 180,
+    remoteMediaUrl: "https://music.example.com/muzero/objects/media/blue.mp3",
+    createdAt: 1000,
+    playCount: 0,
+    liked: false,
+    tags: [],
   };
 }
 

@@ -98,6 +98,36 @@ describe("R2 pull sync", () => {
     ]);
   });
 
+  it("repairs an existing set shell whose track metadata is incomplete", async () => {
+    await seedLocalImportedSet({ updatedAt: 1000 });
+    await db.tracks.update("trk_remote_drv_1_trk_blue", {
+      title: "Blue",
+      blobId: undefined,
+      mediaMetadata: undefined,
+    });
+    const remote = remoteSet({ updatedAt: 1000 });
+    remote.tracks[0]!.source.mediaMetadata = {
+      title: "Blue",
+      artists: ["A Device"],
+      album: "Cloud Album",
+      originalFileName: "blue.mp3",
+      originalMime: "audio/mpeg",
+      parser: "music-metadata",
+      parsedAt: 1000,
+    };
+
+    const result = await applyRemoteSetPull({ driveId: "drv_1", remoteSet: remote }, db);
+
+    expect(result.action).toBe("apply-remote");
+    await expect(db.sessions.count()).resolves.toBe(1);
+    await expect(db.tracks.get("trk_remote_drv_1_trk_blue")).resolves.toMatchObject({
+      mediaMetadata: {
+        album: "Cloud Album",
+        artists: ["A Device"],
+      },
+    });
+  });
+
   it("marks the run cancelled and never mutates when the pull is aborted (F6)", async () => {
     const controller = new AbortController();
     controller.abort();

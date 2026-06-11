@@ -168,6 +168,19 @@ describe("subscribeManifest", () => {
     );
   });
 
+  it("preserves set publisher identity in the preview for self-import dedupe", async () => {
+    const preview = await subscribeManifest("https://music.example.com/muzero/manifest.json", {
+      fetcher: fetchMap({
+        "https://music.example.com/muzero/manifest.json": {
+          ...manifest,
+          sets: [{ ...manifest.sets[0], publishedBy: "dvc_local" }],
+        },
+      }),
+    });
+
+    expect(preview.sets[0]).toMatchObject({ id: "ses_tokyo", publishedBy: "dvc_local" });
+  });
+
   it("rejects invalid manifests without returning a preview", async () => {
     await expect(
       subscribeManifest("https://music.example.com/muzero/manifest.json", {

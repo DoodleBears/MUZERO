@@ -66,7 +66,8 @@ export async function diffRemoteSet(
 
   const remoteUpdatedAt = input.remoteSet.index.set.updatedAt;
   if (local.updatedAt === remoteUpdatedAt && sameTrackShape(local.trackIds, input)) {
-    return { ...base, action: "unchanged" };
+    if (await sameTrackRows(input, db)) return { ...base, action: "unchanged" };
+    return { ...base, action: "apply-remote", reasons: ["remote-track-metadata-missing"] };
   }
 
   const mutations = await localMutationsForSet(input.driveId, remoteSetId, db);
@@ -186,6 +187,31 @@ function sameTrackShape(localTrackIds: string[], input: DiffRemoteSetInput): boo
     localTrackIds.length === remoteTrackIds.length &&
     localTrackIds.every((trackId, index) => trackId === remoteTrackIds[index])
   );
+}
+
+async function sameTrackRows(input: DiffRemoteSetInput, db: MuzeroDB): Promise<boolean> {
+  for (const remoteTrack of input.remoteSet.tracks) {
+    const localId = remoteLocalId("trk", input.driveId, remoteTrack.id);
+    const local = await db.tracks.get(localId);
+    if (!local) return false;
+    if (local.title !== remoteTrack.source.title) return false;
+    if (local.kind !== remoteTrack.source.kind) return false;
+    if (local.origin !== remoteTrack.source.origin) return false;
+    if (local.provider !== remoteTrack.source.provider) return false;
+    if ((local.providerPreset ?? undefined) !== (remoteTrack.source.providerPreset ?? undefined)) {
+      return false;
+    }
+    if (local.durationSec !== remoteTrack.source.durationSec) return false;
+    if (local.remoteMediaUrl !== remoteTrack.mediaUrl) return false;
+    if ((local.remoteCoverUrl ?? undefined) !== (remoteTrack.coverUrl ?? undefined)) return false;
+    if ((local.brief ?? undefined) !== (remoteTrack.source.brief ?? undefined)) return false;
+    if (!sameJson(local.mediaMetadata, remoteTrack.source.mediaMetadata)) return false;
+  }
+  return true;
+}
+
+function sameJson(a: unknown, b: unknown): boolean {
+  return JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
 }
 
 function setIndexKey(remoteSetId: string): string {

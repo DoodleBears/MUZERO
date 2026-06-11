@@ -12,6 +12,7 @@ const loadRemoteSetIndex = vi.fn();
 const loadRemoteEntityCovers = vi.fn();
 const importRemoteEntityCovers = vi.fn();
 const pullRemoteSet = vi.fn();
+const getLocalDevice = vi.fn();
 
 vi.mock("@/sync/r2-subscription", () => ({
   subscribeManifest: (...args: unknown[]) => subscribeManifest(...args),
@@ -20,6 +21,9 @@ vi.mock("@/sync/r2-subscription", () => ({
 }));
 vi.mock("@/sync/r2-import-stream", () => ({
   importRemoteEntityCovers: (...args: unknown[]) => importRemoteEntityCovers(...args),
+}));
+vi.mock("@/sync/device-repo", () => ({
+  getLocalDevice: (...args: unknown[]) => getLocalDevice(...args),
 }));
 // The import goes through the orchestrated pull (audit F2): dry-run diff gates +
 // pull syncRuns + the per-drive progress pipeline — never the raw importer.
@@ -88,6 +92,7 @@ const multiPreview = {
 describe("CloudDriveSets", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    getLocalDevice.mockResolvedValue(undefined);
   });
 
   it("loads and lists the drive's remote sets on browse", async () => {
@@ -152,6 +157,29 @@ describe("CloudDriveSets", () => {
     expect(loadRemoteSetIndex).toHaveBeenNthCalledWith(2, multiPreview, multiPreview.sets[1]);
     expect(pullRemoteSet).toHaveBeenNthCalledWith(1, { driveId: drive.id, remoteSet: remoteSetA });
     expect(pullRemoteSet).toHaveBeenNthCalledWith(2, { driveId: drive.id, remoteSet: remoteSetB });
+  });
+
+  it("skips self-published sets during automatic import-all to avoid duplicating local sets", async () => {
+    getLocalDevice.mockResolvedValue({ publicId: "dvc_b" });
+    const selfAwarePreview = {
+      ...multiPreview,
+      sets: [
+        { ...multiPreview.sets[0]!, publishedBy: "dvc_a" },
+        { ...multiPreview.sets[1]!, publishedBy: "dvc_b" },
+      ],
+    };
+    subscribeManifest.mockResolvedValueOnce(selfAwarePreview);
+    loadRemoteEntityCovers.mockResolvedValueOnce(undefined);
+    const remoteSetA = { indexUrl: selfAwarePreview.sets[0]!.indexUrl, index: {}, tracks: [] };
+    loadRemoteSetIndex.mockResolvedValueOnce(remoteSetA);
+    pullRemoteSet.mockResolvedValue(undefined);
+
+    render(<CloudDriveSets drive={{ ...drive, autoSyncFrequency: "change-debounce" }} />);
+
+    await waitFor(() => expect(pullRemoteSet).toHaveBeenCalledTimes(1));
+    expect(loadRemoteSetIndex).toHaveBeenCalledWith(selfAwarePreview, selfAwarePreview.sets[0]);
+    expect(loadRemoteSetIndex).not.toHaveBeenCalledWith(selfAwarePreview, selfAwarePreview.sets[1]);
+    expect(pullRemoteSet).toHaveBeenCalledWith({ driveId: drive.id, remoteSet: remoteSetA });
   });
 
   it("treats a missing manifest as an empty unpublished drive", async () => {

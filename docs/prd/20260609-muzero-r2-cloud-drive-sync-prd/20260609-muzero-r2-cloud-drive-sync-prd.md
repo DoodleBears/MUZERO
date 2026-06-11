@@ -28,6 +28,7 @@
 | 13 | Sync Mode UX + Remote Playback Reliability + R2 Setup Flow | ✅ Done | [§12.9](#129-phase-13-sync-mode-ux--remote-playback-reliability--r2-setup-flow) |
 | 14 | Smart sync content fingerprinting | ✅ Done | [§12.10](#1210-phase-14-smart-sync-content-fingerprinting) |
 | 15 | Cloud-to-Local Playlist Cache UX | ✅ Done | [§12.11](#1211-phase-15-cloud-to-local-playlist-cache-ux) |
+| 16 | Pull identity dedupe + metadata integrity | ✅ Done | [§12.12](#1212-phase-16-pull-identity-dedupe--metadata-integrity) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
 
@@ -2372,12 +2373,37 @@ Do not record secrets, full signed URLs, or media content.
 - [x] CL-2 Show cloud-to-device actions on track rows and set headers for R2 remote tracks without local blobs.
 - [x] CL-3 Cache remote R2 tracks through `cacheRemoteTrackMedia` for both single-track and whole-set actions.
 
+### 12.12 Phase 16: Pull Identity Dedupe + Metadata Integrity
+
+**Goal:** make bidirectional multi-device sync idempotent from the user's point of view: a device must not import its own published sets back as duplicated remote sets, and a pull that already has a local set shell must still repair missing or stale track metadata.
+
+**Status (2026-06-11):** Completed. Repro fixed: A has 7 sets, B has 2 sets; after B syncs the shared drive, B imports A's 7 remote sets but skips B's own 2 self-published sets instead of creating `ses_remote_<driveId>_*` duplicates. Pull diff also repairs existing set shells whose track metadata is missing or stale.
+
+**Product requirements:**
+
+1. **Stable remote identity.** Remote set previews must retain `manifest.sets[].publishedBy` so the client can distinguish "from this local device" vs "from another device".
+2. **Self-published set dedupe.** Automatic import-all and manual import from a writable owner/trusted drive must skip sets whose `publishedBy` matches the local `DeviceRecord.publicId`; those sets already exist locally under their normal ids and should be updated by publish/read-merge-write, not re-created as `ses_remote_<driveId>_*`.
+3. **Remote set idempotence remains.** Sets published by other devices still import under deterministic `ses_remote_<driveId>_<remoteSetId>` ids; repeating the import updates the same rows, never creates new rows.
+4. **Track metadata integrity gate.** Pull diff may only call a set `unchanged` when the expected local track rows exist and still match remote-authoritative fields such as title, kind, origin, provider, duration, media URL, cover URL, brief, and `mediaMetadata`.
+5. **Repair partial imports.** If a previous run created a set shell or track ids without complete track metadata, the next pull must apply the remote index even when the set-level `updatedAt` did not change.
+
+**Checklist:**
+
+- [x] PI-1 Preserve `publishedBy` in remote set preview data.
+- [x] PI-2 Skip self-published sets during automatic import-all and manual import.
+- [x] PI-3 Add pull diff integrity checks for missing/stale local track metadata.
+- [x] PI-4 Add regression tests covering self-published import dedupe and metadata repair.
+
+**Outcome (2026-06-11): Phase 16 ✅.** Remote set previews now carry publisher identity, Cloud Drive import-all skips local-device authored sets, and the pull diff's unchanged path verifies track row integrity before suppressing an apply. If metadata is missing, the pull re-runs `importRemoteSetStream` and repairs the local track rows without creating duplicate sessions.
+
 ---
 
 ## 13. Document Change Log
 
 | Date | Author | Changes |
 |------|--------|---------|
+| 2026-06-11 | MUZERO | Phase 16 completed: remote set previews preserve `publishedBy`, Cloud Drive automatic/manual import skips sets published by the local device to prevent `2 + 7 + 2` self-duplication, and pull diff now verifies local track metadata integrity before treating a set as unchanged so partial imports are repaired. |
+| 2026-06-11 | MUZERO | Phase 16 added from QA: avoid B-device self-published set duplication during import-all by preserving `publishedBy`, and strengthen pull diff so an existing set shell without complete track metadata is repaired instead of treated as unchanged. |
 | 2026-06-11 | MUZERO | Phase 15 completed: playlist track rows and set headers now treat R2 `remoteMediaUrl` tracks without local blobs as cacheable-to-device, reusing the existing `mediaBlobs` cache path so both single-track and whole-set "download to local" actions work for cloud-drive media. |
 | 2026-06-11 | MUZERO | Phase 14 completed: JSON publish objects now carry deterministic sha256 fingerprints, publish-sync skips locally recorded key/kind/hash matches with durable skipped-byte accounting, and remote HEAD/concurrency skips remain limited to immutable objects so mutable JSON still respects ordered barriers and conditional writes. Focused sync tests cover JSON hashing, no-PUT repeated publish, and failed-run object reuse. |
 | 2026-06-11 | MUZERO | Phase 14 added for smart sync best practices: deterministic object hashes drive no-op upload suppression, remoteBase/ETag remains the multi-device merge guard, manifest-last atomicity stays intact, and failed runs resume object-by-object instead of making users watch unchanged data upload again. |
