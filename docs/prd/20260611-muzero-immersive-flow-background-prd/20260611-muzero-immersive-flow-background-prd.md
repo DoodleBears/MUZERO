@@ -605,6 +605,7 @@ export function resolveFlowColors(
 | 2026-06-11 | DoodleBear / MUZERO | **Phase 11 ✅ 频谱层也支持混合**（owner：3 层中能支持 blend 的都支持）：频谱 canvas 也支持 `mix-blend-mode`——`visualizerBlendMode` 设置（默认 normal）+ now-playing 频谱 `VisualizerHost style.mixBlendMode` + visualizer-settings 混合 Select（复用 `FLOW_BLEND_MODES`/`flow.blend*`）。**底层背景是基底（下方仅纯色 app bg）→ 不加 blend**。层级：背景图/视频(基底) → 流光(blend) → 频谱(blend) |
 | 2026-06-11 | DoodleBear / MUZERO | **Phase 12 ✅ 流光控件进 Now Playing 悬浮面板**（owner：效果/流光控制可在悬浮 panel 直接调）：把 `FlowSettings` 抽成可复用 `FlowControls`（FlowSettings = Card 包壳），给既有可拖拽 `VisualizerTuningPanel` 加第 3 个「流光」Tab（`Waves` 图标 + `flow.tab` 四语）渲染 `FlowControls`——Now Playing 经 visualizer-mode-button 打开面板即可直接调流光效果/混合/配色/速度。biome/typecheck/JSON 净 |
 | 2026-06-11 | DoodleBear / MUZERO | **默认混合改 overlay(叠加)**（owner）：流光 `FLOW_DEFAULTS.blendMode` screen→`overlay`、频谱 `visualizerBlendMode` 默认 normal→`overlay`（now-playing + visualizer-settings 两处）。两层默认都用「叠加」 |
+| 2026-06-11 | DoodleBear / MUZERO | **频谱叠加模式也进悬浮面板**（owner）：抽出共享 `VisualizerBlendModeSelect`（settings + tuning panel 复用），加进 `VisualizerTuningPanel` 可视化 Tab（`visualizerAsBackground` 时显示）；visualizer-settings 内联 Select 改用共享组件。biome/typecheck 净 |
 
 ---
 

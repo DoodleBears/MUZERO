@@ -2,6 +2,7 @@ import { Grip, Image, SlidersHorizontal, Waves, X } from "lucide-react";
 import type { ReactNode } from "react";
 import { type PointerEvent, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { VisualizerBlendModeSelect } from "@/components/player/visualizer-blend-mode-select";
 import { VisualizerTuningControls } from "@/components/player/visualizer-tuning-controls";
 import { BackgroundEffectControls } from "@/components/settings/background-effect-controls";
 import { FlowControls } from "@/components/settings/flow-settings";
@@ -207,6 +208,8 @@ export function VisualizerTuningPanel() {
                 {t("visualizer.idleOnlyShort")}
               </ToggleButton>
             </div>
+
+            {(settings.visualizerAsBackground ?? false) ? <VisualizerBlendModeSelect /> : null}
 
             <VisualizerTuningControls className="grid gap-3 border-border border-t pt-3" />
           </>
