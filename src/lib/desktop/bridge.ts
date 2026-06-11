@@ -32,6 +32,19 @@ export interface SaveFileInput {
   bytes: Uint8Array;
 }
 
+export interface MediaStorageFileInput {
+  storageKey: string;
+}
+
+export interface WriteMediaStorageFileInput extends MediaStorageFileInput {
+  bytes: Uint8Array;
+  expectedBytes?: number;
+}
+
+export interface MediaStorageFileStat {
+  bytes: number;
+}
+
 export interface DesktopBridge {
   readonly kind: DesktopKind;
   /**
@@ -52,6 +65,14 @@ export interface DesktopBridge {
   grantFolderAccess?: (path: string) => Promise<void>;
   /** Save-as dialog + write. Absent in web → caller falls back to a browser download. */
   saveFile?: (input: SaveFileInput) => Promise<boolean>;
+  /** Write an app-managed persistent media file. Electron only for now. */
+  writeMediaStorageFile?: (input: WriteMediaStorageFileInput) => Promise<void>;
+  /** Read an app-managed persistent media file. Electron only for now. */
+  readMediaStorageFile?: (input: MediaStorageFileInput) => Promise<Uint8Array<ArrayBuffer>>;
+  /** Delete an app-managed persistent media file. Electron only for now. */
+  deleteMediaStorageFile?: (input: MediaStorageFileInput) => Promise<void>;
+  /** Stat an app-managed persistent media file. Electron only for now. */
+  statMediaStorageFile?: (input: MediaStorageFileInput) => Promise<MediaStorageFileStat | null>;
   /** Open an http(s) URL in the system browser. */
   openExternal: (url: string) => Promise<void>;
   /**

@@ -12,8 +12,8 @@
 | Phase | Name | Status | Link |
 |-------|------|--------|------|
 | 1 | Storage Adapter + Dual-Read Contract | ✅ Completed | [Phase 1 Checklist](#phase-1-checklist) |
-| 2 | Permanent Media Write Path | 🔲 Pending | [Phase 2 Checklist](#phase-2-checklist) |
-| 3 | Playback, Export, and Import Consumers | 🔲 Pending | [Phase 3 Checklist](#phase-3-checklist) |
+| 2 | Permanent Media Write Path | ✅ Completed | [Phase 2 Checklist](#phase-2-checklist) |
+| 3 | Playback, Export, and Import Consumers | 🔄 In Progress | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | Migration, Repair, and Cleanup | 🔲 Pending | [Phase 4 Checklist](#phase-4-checklist) |
 | 5 | Settings Visibility + Storage Health | 🔲 Pending | [Phase 5 Checklist](#phase-5-checklist) |
 | 6 | Large Image Asset Storage | 🔲 Pending | [Phase 6 Checklist](#phase-6-checklist) |
@@ -252,7 +252,7 @@ MUZERO has no backend API for this refactor. Required internal APIs:
 
 | API | Location | Description |
 |-----|----------|-------------|
-| `mediaStorageProvider()` | `src/db/media-storage-provider.ts` | Selects Electron disk / OPFS / IndexedDB fallback by runtime and Settings. |
+| `defaultMediaStorageProvider()` | `src/db/media-storage-provider.ts` | Selects Electron disk / OPFS / IndexedDB fallback by runtime and Settings. |
 | `putMediaBlob(input, db)` | `src/db/media-blob-storage.ts` | Writes metadata + bytes. `role:"media"` uses the selected provider; fallback to IndexedDB. |
 | `resolveMediaBlob(rowOrId, db)` | `src/db/media-blob-storage.ts` | Returns `{ id, role, mime, bytes, blob }` regardless of storage backend. |
 | `deleteMediaBlob(id, db)` | `src/db/media-blob-storage.ts` | Deletes metadata and schedules/removes provider-backed bytes. |
@@ -289,11 +289,11 @@ Electron bridge additions:
 
 | Bridge Method | Description |
 |---------------|-------------|
-| `pickMediaStorageFolder()` | Lets the user choose a managed media root. |
-| `writeMediaFile({ relativePath, bytes })` | Writes only under the configured media root. |
-| `readMediaFile({ relativePath })` | Reads only under the configured media root. |
-| `deleteMediaFile({ relativePath })` | Deletes only under the configured media root. |
-| `statMediaFile({ relativePath })` | Verifies existence and byte size. |
+| `writeMediaStorageFile({ storageKey, bytes, expectedBytes })` | Writes only under the app-managed media root. |
+| `readMediaStorageFile({ storageKey })` | Reads only under the app-managed media root. |
+| `deleteMediaStorageFile({ storageKey })` | Deletes only under the app-managed media root. |
+| `statMediaStorageFile({ storageKey })` | Verifies existence and byte size. |
+| `pickMediaStorageFolder()` | Deferred to Phase 5 Settings visibility/move flow so the first rollout defaults to app-managed storage. |
 
 ### 4.2 Request/Response Examples
 
@@ -403,42 +403,47 @@ Required UI changes:
 
 **Goal:** write new large audio/video rows (`role:"media"`) to the best backend for the runtime while keeping small image roles in IndexedDB for the first rollout.
 
+**Status (2026-06-12):** Completed. New uploaded/generated/streamed/R2-cached `role:"media"` rows write through `putMediaBlob`, Electron now has an app-managed media-file IPC backend with staged writes and path validation, Browser can select OPFS, and provider failures still fall back to IndexedDB. User-selected Electron media folders remain a Phase 5 Settings flow.
+
 **Tasks:**
-- [ ] Extend `DesktopBridge` and Electron IPC/preload with managed media-file read/write/delete/stat methods.
-- [ ] Add Settings/default resolution for Electron media root: app-managed default first, user-selected folder optional.
-- [ ] Update `createUploadedTrack` to write the primary media through `putMediaBlob`.
-- [ ] Update `markTrackReady` for generated audio.
-- [ ] Update `cacheStreamedTrackBlob` for streamed offline downloads.
-- [ ] Update `r2-cache.ts` imported remote-media downloads.
-- [ ] Preserve embedded covers as IndexedDB rows in this phase.
+- [x] Extend `DesktopBridge` and Electron IPC/preload with managed media-file read/write/delete/stat methods.
+- [x] Add default Electron media root resolution with an app-managed root; keep user-selected folder/move UI for Phase 5.
+- [x] Update `createUploadedTrack` to write the primary media through `putMediaBlob`.
+- [x] Update `markTrackReady` for generated audio.
+- [x] Update `cacheStreamedTrackBlob` for streamed offline downloads.
+- [x] Update `r2-cache.ts` imported remote-media downloads.
+- [x] Preserve embedded covers as IndexedDB rows in this phase.
 
 ### Phase 2 Checklist
 
-- [ ] Uploaded audio/video gets `Track.blobId` only after bytes are durably written.
-- [ ] Generated tracks become ready only after provider/IndexedDB fallback write succeeds.
-- [ ] Streamed offline cache replacement deletes the previous byte object after commit.
-- [ ] Electron disk backend validates paths against the configured media root and rejects traversal/symlink escape.
-- [ ] Tests cover upload, generated ready, streamed cache, fallback, and replacement cleanup.
-- [ ] Manual downloads remain outside the playback-cache LRU.
+- [x] Uploaded audio/video gets `Track.blobId` only after bytes are durably written.
+- [x] Generated tracks become ready only after provider/IndexedDB fallback write succeeds.
+- [x] Streamed offline cache replacement deletes the previous byte object after commit.
+- [x] Electron disk backend validates paths against the configured media root and rejects traversal/symlink escape.
+- [x] Tests cover upload, generated ready, streamed cache, fallback, and replacement cleanup.
+- [x] Manual downloads remain outside the playback-cache LRU.
 
 ### Phase 3: Playback, Export, and Import Consumers
 
 **Goal:** remove direct assumptions that `MediaBlob.blob` is inline.
 
+**Status (2026-06-12):** In progress. The primary media playback/download resolver (`getTrackBlob` and `useTrackMediaUrl`) and R2 export media hashing/body paths now resolve provider-backed bytes. Image-role consumers remain for later Phase 3/6/7 work because covers/memories/backgrounds/gallery are intentionally still IndexedDB-backed in the first rollout.
+
 **Tasks:**
-- [ ] Update `getTrackBlob`, `getTrackCover`, `getSessionCover`, `getEntityCover`, and `getMemoryPhoto` to use resolver or role-specific wrappers.
-- [ ] Update `useTrackCoverUrl` and `useTrackMediaUrl` to resolve bytes safely.
+- [x] Update `getTrackBlob` and `useTrackMediaUrl` to resolve provider-backed primary media bytes safely.
+- [ ] Update `getTrackCover`, `getSessionCover`, `getEntityCover`, and `getMemoryPhoto` to use resolver or role-specific wrappers.
+- [ ] Update `useTrackCoverUrl` to resolve provider-backed cover bytes once cover roles migrate.
 - [ ] Update `setTrackCoverFromMemory`, `setTrackCoverCrop`, and thumbhash backfill to resolve source blobs.
-- [ ] Update R2 export `createBinaryObject` / `sha256Blob` to resolve the Blob before hashing/uploading.
-- [ ] Update metadata export code to resolve media and cover bytes.
+- [x] Update R2 export `createBinaryObject` / `sha256Blob` to resolve provider-backed media before hashing/uploading.
+- [ ] Update remaining metadata export code for future provider-backed cover/memory/avatar/entity-cover bytes.
 
 ### Phase 3 Checklist
 
-- [ ] Player local-first path still uses `Track.blobId` before remote/cache sources.
-- [ ] R2 export produces identical binary object keys for unchanged bytes.
+- [x] Player local-first path still uses `Track.blobId` before remote/cache sources.
+- [x] R2 export produces identical binary object keys for unchanged media bytes.
 - [ ] Cover color extraction and thumbhash backfill still work for IndexedDB image rows.
 - [ ] No direct `mediaBlob.blob` reads remain outside the storage helper, except transitional tests.
-- [ ] Tests cover sync export hashing/body for provider-backed media.
+- [x] Tests cover sync export hashing/body for provider-backed media.
 
 ### Phase 4: Migration, Repair, and Cleanup
 
@@ -589,6 +594,7 @@ Required UI changes:
 | 2026-06-12 | MUZERO | Added later image-storage phases: background/gallery provider-backed by default, full-size cover/memory photos provider-backed by threshold, lightweight derivatives stay in IndexedDB. |
 | 2026-06-12 | MUZERO | Resolved storage open questions: staged writes, app-managed Electron default with user-selectable folder, readable local filenames with blob-id suffix, all media rows migrate, and image threshold is 512 KB. |
 | 2026-06-12 | MUZERO | Phase 1 completed: added storage provider abstractions, readable storage key generation, OPFS/IndexedDB/Electron-file backend identities, DB-facing put/resolve/copy/delete helpers, and regression tests for legacy reads, provider-backed rows, fallback, copy, and delete cleanup. |
+| 2026-06-12 | MUZERO | Phase 2 completed: routed uploaded/generated/streamed/R2-cached primary media through provider-backed writes, added Electron app-managed media-file IPC with staged writes and path validation, kept embedded covers IndexedDB-backed, and added regression tests for durable writes, fallback, replacement cleanup, and provider-backed R2 export reads. |
 
 ---
 

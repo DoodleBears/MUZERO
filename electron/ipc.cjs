@@ -5,7 +5,8 @@
 // (called when the user picks one, and re-issued each launch from the remembered
 // `importFolders` list). Every read validates the path against the allowlist using
 // the resolved real path, so symlinks can't escape the granted roots.
-const { ipcMain, dialog, shell } = require("electron");
+const { app, ipcMain, dialog, shell } = require("electron");
+const crypto = require("node:crypto");
 const fs = require("node:fs");
 const fsp = require("node:fs/promises");
 const path = require("node:path");
@@ -13,6 +14,7 @@ const { applyAppIcon } = require("./app-icon.cjs");
 
 /** Granted folder roots (real paths). In-memory, not persisted — re-granted on boot. */
 const allowedRoots = new Set();
+let mediaStorageRoot = null;
 
 const isWin = process.platform === "win32";
 const norm = (p) => (isWin ? p.toLowerCase() : p);
@@ -35,6 +37,83 @@ function assertAllowed(target) {
     if (r === nr || r.startsWith(nr + path.sep)) return real;
   }
   throw new Error("EACCES: path outside granted scope");
+}
+
+async function ensureMediaStorageRoot() {
+  if (mediaStorageRoot) return mediaStorageRoot;
+  const root = path.join(app.getPath("userData"), "persistent-media");
+  await fsp.mkdir(root, { recursive: true });
+  mediaStorageRoot = await fsp.realpath(root);
+  return mediaStorageRoot;
+}
+
+function storageKeyParts(storageKey) {
+  if (typeof storageKey !== "string" || storageKey.trim() === "") {
+    throw new Error("Invalid media storage key");
+  }
+  if (storageKey.includes("\0") || path.isAbsolute(storageKey)) {
+    throw new Error("Invalid media storage key");
+  }
+  const normalized = path.normalize(storageKey).replace(/^[/\\]+/, "");
+  if (normalized === "." || normalized.startsWith("..")) {
+    throw new Error("Invalid media storage key");
+  }
+  const parts = normalized.split(/[\\/]+/).filter(Boolean);
+  if (parts.length === 0 || parts.some((part) => part === "." || part === "..")) {
+    throw new Error("Invalid media storage key");
+  }
+  return parts;
+}
+
+function assertPathInsideRoot(candidate, root) {
+  const c = norm(candidate);
+  const r = norm(root);
+  if (c !== r && !c.startsWith(r + path.sep)) {
+    throw new Error("EACCES: media path outside storage root");
+  }
+}
+
+async function ensureMediaStorageParent(parts) {
+  const root = await ensureMediaStorageRoot();
+  let current = root;
+  for (const part of parts.slice(0, -1)) {
+    const next = path.join(current, part);
+    assertPathInsideRoot(next, root);
+    try {
+      const stat = await fsp.lstat(next);
+      if (stat.isSymbolicLink()) throw new Error("EACCES: symlink in media storage path");
+      if (!stat.isDirectory()) throw new Error("ENOTDIR: media storage path component");
+    } catch (error) {
+      if (error?.code !== "ENOENT") throw error;
+      await fsp.mkdir(next);
+    }
+    current = next;
+  }
+  return current;
+}
+
+async function mediaStorageWriteTarget(storageKey) {
+  const parts = storageKeyParts(storageKey);
+  const parent = await ensureMediaStorageParent(parts);
+  const filePath = path.join(parent, parts.at(-1));
+  const root = await ensureMediaStorageRoot();
+  assertPathInsideRoot(filePath, root);
+  try {
+    const stat = await fsp.lstat(filePath);
+    if (stat.isSymbolicLink()) throw new Error("EACCES: symlink in media storage path");
+  } catch (error) {
+    if (error?.code !== "ENOENT") throw error;
+  }
+  return { filePath, parent };
+}
+
+async function mediaStorageExistingTarget(storageKey) {
+  const parts = storageKeyParts(storageKey);
+  const root = await ensureMediaStorageRoot();
+  const candidate = path.join(root, ...parts);
+  const real = await fsp.realpath(candidate);
+  assertPathInsideRoot(real, root);
+  return real;
 }
 
 function registerIpc() {
@@ -71,6 +150,54 @@ function registerIpc() {
     if (res.canceled || !res.filePath) return false;
     await fsp.writeFile(res.filePath, Buffer.from(input.bytes));
     return true;
+  });
+
+  ipcMain.handle("muzero:mediaStorage:write", async (_event, input) => {
+    const storageKey = input?.storageKey;
+    const bytes = Buffer.from(input?.bytes ?? new ArrayBuffer(0));
+    const expectedBytes = Number.isFinite(input?.expectedBytes) ? input.expectedBytes : bytes.length;
+    const { filePath, parent } = await mediaStorageWriteTarget(storageKey);
+    const tempPath = path.join(parent, `.${path.basename(filePath)}.${crypto.randomUUID()}.tmp`);
+    try {
+      await fsp.writeFile(tempPath, bytes);
+      const tempStat = await fsp.stat(tempPath);
+      if (tempStat.size !== expectedBytes) throw new Error("Media storage staged write mismatch");
+      await fsp.rename(tempPath, filePath);
+      const finalStat = await fsp.stat(filePath);
+      if (finalStat.size !== expectedBytes) {
+        await fsp.rm(filePath, { force: true });
+        throw new Error("Media storage final write mismatch");
+      }
+    } catch (error) {
+      await fsp.rm(tempPath, { force: true }).catch(() => {});
+      throw error;
+    }
+  });
+
+  ipcMain.handle("muzero:mediaStorage:read", async (_event, input) => {
+    const filePath = await mediaStorageExistingTarget(input?.storageKey);
+    const buf = await fsp.readFile(filePath);
+    return buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength);
+  });
+
+  ipcMain.handle("muzero:mediaStorage:delete", async (_event, input) => {
+    try {
+      const filePath = await mediaStorageExistingTarget(input?.storageKey);
+      await fsp.rm(filePath, { force: true });
+    } catch (error) {
+      if (error?.code !== "ENOENT") throw error;
+    }
+  });
+
+  ipcMain.handle("muzero:mediaStorage:stat", async (_event, input) => {
+    try {
+      const filePath = await mediaStorageExistingTarget(input?.storageKey);
+      const stat = await fsp.stat(filePath);
+      return { bytes: stat.size };
+    } catch (error) {
+      if (error?.code === "ENOENT") return null;
+      throw error;
+    }
   });
 
   ipcMain.handle("muzero:openExternal", async (_event, url) => {

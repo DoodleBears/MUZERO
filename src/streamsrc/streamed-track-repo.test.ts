@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
+import type { MediaStorageProvider } from "@/db/media-blob-storage";
 import { MuzeroDB } from "@/db/muzero-db";
 import { createSession } from "@/db/repositories";
 import type { StreamSearchHit } from "./provider";
@@ -21,6 +22,27 @@ beforeEach(() => {
   dbName = `streamed-repo-test-${counter++}`;
   db = new MuzeroDB(dbName);
 });
+
+function createMemoryProvider(id: "opfs" | "electron-file" = "electron-file") {
+  const files = new Map<string, Blob>();
+  const provider: MediaStorageProvider & { files: Map<string, Blob> } = {
+    id,
+    userVisible: id === "electron-file",
+    files,
+    async put(input) {
+      const storageKey = `media/${input.id}`;
+      files.set(storageKey, input.blob);
+      return { storageKey };
+    },
+    async get(input) {
+      return input.storageKey ? (files.get(input.storageKey) ?? null) : null;
+    },
+    async delete(input) {
+      if (input.storageKey) files.delete(input.storageKey);
+    },
+  };
+  return provider;
+}
 
 const hit: StreamSearchHit = {
   source: "bili",
@@ -129,6 +151,44 @@ describe("offline cache (Phase 5)", () => {
     expect(second).not.toBe(first);
     expect(await db.mediaBlobs.get(first)).toBeUndefined(); // old one evicted
     expect(await db.mediaBlobs.count()).toBe(1);
+  });
+
+  it("stores streamed cache bytes through the selected provider", async () => {
+    const track = await createStreamedTrack(hitToStreamedInput("ses_1", hit), db);
+    const provider = createMemoryProvider("electron-file");
+
+    const blobId = await cacheStreamedTrackBlob(track.id, audio(1000), "audio/mpeg", db, {
+      provider,
+    });
+
+    const media = await db.mediaBlobs.get(blobId);
+    expect(media).toMatchObject({
+      role: "media",
+      storageBackend: "electron-file",
+      storageKey: `media/${blobId}`,
+      blob: undefined,
+    });
+    expect(provider.files.get(media?.storageKey ?? "")?.size).toBe(1000);
+  });
+
+  it("deletes the previous provider-backed streamed cache after replacement", async () => {
+    const track = await createStreamedTrack(hitToStreamedInput("ses_1", hit), db);
+    const provider = createMemoryProvider("opfs");
+
+    const first = await cacheStreamedTrackBlob(track.id, audio(1000), "audio/mpeg", db, {
+      provider,
+    });
+    const firstKey = (await db.mediaBlobs.get(first))?.storageKey ?? "";
+    const second = await cacheStreamedTrackBlob(track.id, audio(2000), "audio/flac", db, {
+      provider,
+    });
+
+    expect(second).not.toBe(first);
+    expect(await db.mediaBlobs.get(first)).toBeUndefined();
+    expect(provider.files.has(firstKey)).toBe(false);
+    expect(provider.files.get((await db.mediaBlobs.get(second))?.storageKey ?? "")?.size).toBe(
+      2000,
+    );
   });
 
   it("refuses to cache a non-streamed track", async () => {

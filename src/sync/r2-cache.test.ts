@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import type { MediaStorageProvider } from "@/db/media-blob-storage";
 import { MuzeroDB } from "@/db/muzero-db";
 import type { Track } from "@/db/types";
 import { cacheRemoteTrackMedia, type SyncCacheFetch } from "./r2-cache";
@@ -18,6 +19,27 @@ afterEach(async () => {
     req.onsuccess = req.onerror = () => resolve();
   });
 });
+
+function createMemoryProvider(id: "opfs" | "electron-file" = "opfs") {
+  const files = new Map<string, Blob>();
+  const provider: MediaStorageProvider & { files: Map<string, Blob> } = {
+    id,
+    userVisible: id === "electron-file",
+    files,
+    async put(input) {
+      const storageKey = `media/${input.id}`;
+      files.set(storageKey, input.blob);
+      return { storageKey };
+    },
+    async get(input) {
+      return input.storageKey ? (files.get(input.storageKey) ?? null) : null;
+    },
+    async delete(input) {
+      if (input.storageKey) files.delete(input.storageKey);
+    },
+  };
+  return provider;
+}
 
 function remoteTrack(partial: Partial<Track> = {}): Track {
   return {
@@ -58,6 +80,36 @@ describe("cacheRemoteTrackMedia", () => {
       mime: "audio/mpeg",
       bytes: 3,
     });
+  });
+
+  it("stores downloaded remote media through the selected storage provider", async () => {
+    await db.tracks.put(remoteTrack());
+    const provider = createMemoryProvider("opfs");
+    const fetcher: SyncCacheFetch = async () =>
+      new Response(new Uint8Array([1, 2, 3, 4, 5]), {
+        status: 200,
+        headers: { "content-type": "audio/mpeg" },
+      });
+
+    const result = await cacheRemoteTrackMedia(
+      "trk_remote",
+      { fetcher, storage: { provider } },
+      db,
+    );
+
+    const track = await db.tracks.get("trk_remote");
+    expect(track?.blobId).toBe(result.blobId);
+    const media = await db.mediaBlobs.get(result.blobId);
+    expect(media).toMatchObject({
+      trackId: "trk_remote",
+      role: "media",
+      mime: "audio/mpeg",
+      bytes: 5,
+      storageBackend: "opfs",
+      storageKey: `media/${result.blobId}`,
+      blob: undefined,
+    });
+    expect(provider.files.get(media?.storageKey ?? "")?.size).toBe(5);
   });
 
   it("accepts video MIME when caching a remote video track", async () => {

@@ -1,7 +1,14 @@
 import type { DiagnosticEntry } from "@/lib/diagnostics";
 import type { DirEntryLike } from "@/lib/folder-import";
 import { assembleCookieHeader, type StreamCookie } from "@/streamsrc/login";
-import type { DesktopBridge, MediaProxyTrace, SaveFileInput, StreamLoginRequest } from "./bridge";
+import type {
+  DesktopBridge,
+  MediaProxyTrace,
+  MediaStorageFileInput,
+  SaveFileInput,
+  StreamLoginRequest,
+  WriteMediaStorageFileInput,
+} from "./bridge";
 
 type FetchFn = typeof globalThis.fetch;
 
@@ -13,6 +20,12 @@ interface MuzeroApi {
   readFile(path: string): Promise<ArrayBuffer>;
   grantFolderAccess(path: string): Promise<void>;
   saveFile(input: { fileName: string; mime: string; bytes: ArrayBuffer }): Promise<boolean>;
+  writeMediaStorageFile(
+    input: Omit<WriteMediaStorageFileInput, "bytes"> & { bytes: ArrayBuffer },
+  ): Promise<void>;
+  readMediaStorageFile(input: MediaStorageFileInput): Promise<ArrayBuffer>;
+  deleteMediaStorageFile(input: MediaStorageFileInput): Promise<void>;
+  statMediaStorageFile(input: MediaStorageFileInput): Promise<{ bytes: number } | null>;
   openExternal(url: string): Promise<void>;
   setAppIcon(icon: string): Promise<void>;
   /** Main returns the RAW captured cookies (renderer assembles the header). */
@@ -90,6 +103,15 @@ export function createElectronBridge(): DesktopBridge {
     grantFolderAccess: (path) => api.grantFolderAccess(path),
     saveFile: ({ fileName, mime, bytes }: SaveFileInput) =>
       api.saveFile({ fileName, mime, bytes: toStandaloneBuffer(bytes) }),
+    writeMediaStorageFile: ({ storageKey, bytes, expectedBytes }) =>
+      api.writeMediaStorageFile({
+        storageKey,
+        bytes: toStandaloneBuffer(bytes),
+        expectedBytes,
+      }),
+    readMediaStorageFile: async (input) => new Uint8Array(await api.readMediaStorageFile(input)),
+    deleteMediaStorageFile: (input) => api.deleteMediaStorageFile(input),
+    statMediaStorageFile: (input) => api.statMediaStorageFile(input),
     openExternal: (url) => api.openExternal(url),
     setAppIcon: (icon) => api.setAppIcon(icon),
     mediaProxyUrl: electronMediaProxyUrl,

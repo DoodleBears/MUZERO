@@ -1,5 +1,6 @@
 import { useLiveQuery } from "dexie-react-hooks";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { resolveMediaBlob } from "@/db/media-blob-storage";
 import { db } from "@/db/muzero-db";
 import { backfillCoverThumbhashes } from "@/db/repositories";
 import type { Track } from "@/db/types";
@@ -198,7 +199,7 @@ export function useTrackMediaUrl(
   const blobId = track?.blobId;
   const remoteMediaUrl = track?.remoteMediaUrl;
   const blob = useLiveQuery(
-    async () => (blobId ? (await db.mediaBlobs.get(blobId))?.blob : undefined),
+    async () => (blobId ? (await resolveMediaBlob(blobId, db))?.blob : undefined),
     [blobId],
     undefined,
   );

@@ -1,3 +1,4 @@
+import { desktopKind, resolveDesktopBridge } from "@/lib/desktop/bridge";
 import type { MediaBlob } from "./types";
 
 export type MediaStorageBackend = "indexeddb" | "opfs" | "electron-file";
@@ -17,7 +18,7 @@ export interface MediaStorageProvider {
   id: MediaStorageBackend;
   userVisible: boolean;
   put(input: MediaStorageProviderPutInput): Promise<{ storageKey?: string }>;
-  get(input: { storageKey?: string; blob?: Blob }): Promise<Blob | null>;
+  get(input: { storageKey?: string; blob?: Blob; mime?: string }): Promise<Blob | null>;
   delete(input: { storageKey?: string }): Promise<void>;
   estimate?(): Promise<{ bytesUsed?: number; quotaBytes?: number }>;
 }
@@ -77,6 +78,40 @@ export function createOpfsMediaStorageProvider(): MediaStorageProvider {
   };
 }
 
+export function createElectronFileMediaStorageProvider(): MediaStorageProvider {
+  return {
+    id: "electron-file",
+    userVisible: true,
+    async put(input) {
+      const storageKey = mediaStorageKey(input);
+      const bytes = new Uint8Array(await input.blob.arrayBuffer());
+      await requireElectronMediaStorage().writeMediaStorageFile?.({
+        storageKey,
+        bytes,
+        expectedBytes: input.blob.size,
+      });
+      return { storageKey };
+    },
+    async get(input) {
+      if (!input.storageKey) return null;
+      const bytes = await requireElectronMediaStorage().readMediaStorageFile?.({
+        storageKey: input.storageKey,
+      });
+      return bytes ? new Blob([bytes], { type: input.mime ?? "application/octet-stream" }) : null;
+    },
+    async delete(input) {
+      if (input.storageKey) {
+        await requireElectronMediaStorage().deleteMediaStorageFile?.({
+          storageKey: input.storageKey,
+        });
+      }
+    },
+    async estimate() {
+      return {};
+    },
+  };
+}
+
 export function unavailableMediaStorageProvider(id: Exclude<MediaStorageBackend, "indexeddb">) {
   return {
     id,
@@ -93,10 +128,24 @@ export function unavailableMediaStorageProvider(id: Exclude<MediaStorageBackend,
 
 export function defaultMediaStorageProvider(backend?: MediaStorageBackend): MediaStorageProvider {
   if (backend === "indexeddb") return indexedDbMediaStorageProvider;
-  if (backend === "electron-file") return unavailableMediaStorageProvider("electron-file");
+  if (backend === "electron-file") return createElectronFileMediaStorageProvider();
   if (backend === "opfs") return createOpfsMediaStorageProvider();
+  if (desktopKind() === "electron") return createElectronFileMediaStorageProvider();
   if (isOpfsAvailable()) return createOpfsMediaStorageProvider();
   return indexedDbMediaStorageProvider;
+}
+
+function requireElectronMediaStorage() {
+  const bridge = resolveDesktopBridge();
+  if (
+    bridge.kind !== "electron" ||
+    !bridge.writeMediaStorageFile ||
+    !bridge.readMediaStorageFile ||
+    !bridge.deleteMediaStorageFile
+  ) {
+    throw new Error("Electron media storage is unavailable");
+  }
+  return bridge;
 }
 
 function isOpfsAvailable(): boolean {

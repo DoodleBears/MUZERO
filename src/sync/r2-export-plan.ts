@@ -1,3 +1,4 @@
+import { type MediaBlobStorageOptions, resolveMediaBlob } from "@/db/media-blob-storage";
 import type { MuzeroDB } from "@/db/muzero-db";
 import { db as defaultDb } from "@/db/muzero-db";
 import type {
@@ -114,6 +115,8 @@ export interface R2ExportPlanInput {
    * omitted, the plan keeps the legacy single-writer mirror behavior.
    */
   remoteBase?: RemotePublishBase;
+  /** Runtime/test injection for provider-backed local media rows. */
+  mediaStorage?: MediaBlobStorageOptions;
 }
 
 export interface R2PlaybackEventFlushOptions extends Partial<PlaybackEventFlushPolicy> {
@@ -193,15 +196,23 @@ export async function buildR2ExportPlan(input: R2ExportPlanInput): Promise<R2Exp
     // rows) are never re-exported — the remote side of the merge carries them.
     const publishedId = publishedEntityId("ses", input.driveId, session.id);
     const setCover = session.coverBlobId
-      ? await loadOptionalBinaryObject("cover", session.coverBlobId, db, {
-          setId: session.id,
-        })
+      ? await loadOptionalBinaryObject(
+          "cover",
+          session.coverBlobId,
+          db,
+          {
+            setId: session.id,
+          },
+          input.mediaStorage,
+        )
       : undefined;
     if (setCover) binaryObjects.push(setCover.object);
 
     for (const track of tracks) {
       if (publishedEntityId("trk", input.driveId, track.id) !== track.id) continue;
-      const mediaBlob = track.blobId ? await db.mediaBlobs.get(track.blobId) : undefined;
+      const mediaBlob = track.blobId
+        ? await resolveMediaBlob(track.blobId, db, input.mediaStorage)
+        : undefined;
       if (!mediaBlob && track.origin !== "streamed") continue;
       if (!mediaBlob && (!track.streamSourceId || !track.streamExternalId)) continue;
 
@@ -214,10 +225,16 @@ export async function buildR2ExportPlan(input: R2ExportPlanInput): Promise<R2Exp
       if (media) binaryObjects.push(media.object);
 
       const cover = track.coverBlobId
-        ? await loadOptionalBinaryObject("cover", track.coverBlobId, db, {
-            setId: session.id,
-            trackId: track.id,
-          })
+        ? await loadOptionalBinaryObject(
+            "cover",
+            track.coverBlobId,
+            db,
+            {
+              setId: session.id,
+              trackId: track.id,
+            },
+            input.mediaStorage,
+          )
         : undefined;
       if (cover) binaryObjects.push(cover.object);
 
@@ -225,11 +242,17 @@ export async function buildR2ExportPlan(input: R2ExportPlanInput): Promise<R2Exp
       const remoteMemories = [];
       for (const memory of memories) {
         const photo = memory.photoBlobId
-          ? await loadOptionalBinaryObject("memory-photo", memory.photoBlobId, db, {
-              setId: session.id,
-              trackId: track.id,
-              memoryId: memory.id,
-            })
+          ? await loadOptionalBinaryObject(
+              "memory-photo",
+              memory.photoBlobId,
+              db,
+              {
+                setId: session.id,
+                trackId: track.id,
+                memoryId: memory.id,
+              },
+              input.mediaStorage,
+            )
           : undefined;
         if (photo) binaryObjects.push(photo.object);
         remoteMemories.push(toRemoteMemory(memory, photo?.remote));
@@ -328,8 +351,9 @@ export async function buildR2ExportPlan(input: R2ExportPlanInput): Promise<R2Exp
     input.playbackEventFlush,
     input.deviceExport,
     input.remoteBase,
+    input.mediaStorage,
   );
-  const entityCoverObjects = await createEntityCoverObjects(db);
+  const entityCoverObjects = await createEntityCoverObjects(db, input.mediaStorage);
   const manifest = createManifest(
     input,
     setIndexes,
@@ -370,8 +394,9 @@ async function loadOptionalBinaryObject(
   blobId: string,
   db: MuzeroDB,
   refs: Pick<R2ExportObject, "setId" | "trackId" | "memoryId">,
+  mediaStorage?: MediaBlobStorageOptions,
 ): Promise<BinaryObjectResult | undefined> {
-  const blob = await db.mediaBlobs.get(blobId);
+  const blob = await resolveMediaBlob(blobId, db, mediaStorage);
   return blob ? createBinaryObject(kind, blob, refs) : undefined;
 }
 
@@ -467,7 +492,10 @@ async function createSetMutationObjects(driveId: string, db: MuzeroDB): Promise<
  * content hash dedupes unchanged bytes); mutations drive conflict detection on
  * pull, not what gets exported. Returns `[]` (no index) when there are none.
  */
-async function createEntityCoverObjects(db: MuzeroDB): Promise<R2ExportObject[]> {
+async function createEntityCoverObjects(
+  db: MuzeroDB,
+  mediaStorage?: MediaBlobStorageOptions,
+): Promise<R2ExportObject[]> {
   const rows = (await db.entityCovers.toArray()).sort((a, b) => (a.id < b.id ? -1 : 1));
   const binaryObjects: R2ExportObject[] = [];
   const entries: R2EntityCoverEntry[] = [];
@@ -475,7 +503,7 @@ async function createEntityCoverObjects(db: MuzeroDB): Promise<R2ExportObject[]>
     let cover: R2RemoteObject;
     if (row.coverBlobId) {
       // Local cover: content-address the bytes + upload them.
-      const blob = await db.mediaBlobs.get(row.coverBlobId);
+      const blob = await resolveMediaBlob(row.coverBlobId, db, mediaStorage);
       if (!blob) continue;
       const binary = await createBinaryObject("entity-cover", blob, {});
       binaryObjects.push(binary.object);
@@ -802,6 +830,7 @@ async function createDeviceObjects(
   playbackEventFlush?: R2PlaybackEventFlushOptions,
   deviceExport: R2DeviceExportOptions = {},
   remoteBase?: RemotePublishBase,
+  mediaStorage?: MediaBlobStorageOptions,
 ): Promise<R2ExportObject[]> {
   const device = await db.devices.get("dev_local");
   if (!device) return [];
@@ -815,7 +844,7 @@ async function createDeviceObjects(
   const shouldPublishPresence = deviceExport.publishPresence ?? false;
   const avatar =
     shouldPublishProfile && device.avatarBlobId
-      ? await loadOptionalBinaryObject("device-avatar", device.avatarBlobId, db, {})
+      ? await loadOptionalBinaryObject("device-avatar", device.avatarBlobId, db, {}, mediaStorage)
       : undefined;
   if (avatar) objects.push(avatar.object);
 
@@ -1045,8 +1074,8 @@ async function sha256Blob(blob: MediaBlob): Promise<string> {
   const value = blob.blob as Blob & { arrayBuffer?: () => Promise<ArrayBuffer> };
   const bytes =
     typeof value.arrayBuffer === "function"
-      ? await value.arrayBuffer()
-      : new TextEncoder().encode(`${blob.id}:${blob.mime}:${blob.bytes}`).buffer;
+      ? new Uint8Array(await value.arrayBuffer())
+      : new TextEncoder().encode(`${blob.id}:${blob.mime}:${blob.bytes}`);
   const digest = await crypto.subtle.digest("SHA-256", bytes);
   return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
 }

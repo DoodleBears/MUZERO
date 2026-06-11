@@ -8,9 +8,14 @@
  * time (and optionally cached to a blob in Phase 5). The cover is a remote URL.
  */
 
+import {
+  deleteMediaBlob,
+  type MediaBlobStorageOptions,
+  putMediaBlob,
+} from "@/db/media-blob-storage";
 import { db as defaultDb, type MuzeroDB } from "@/db/muzero-db";
 import { prependTrackIds } from "@/db/repositories";
-import type { MediaBlob, StreamSourceId, StreamSourceMeta, Track, TrackKind } from "@/db/types";
+import type { StreamSourceId, StreamSourceMeta, Track, TrackKind } from "@/db/types";
 import { newId } from "@/lib/id";
 import type { StreamSearchHit } from "./provider";
 
@@ -155,25 +160,33 @@ export async function cacheStreamedTrackBlob(
   blob: Blob,
   mime: string,
   db: MuzeroDB = defaultDb,
+  storage: MediaBlobStorageOptions = {},
 ): Promise<string> {
   const track = await db.tracks.get(trackId);
   if (track?.origin !== "streamed") {
     throw new Error(`cacheStreamedTrackBlob: ${trackId} is not a streamed track`);
   }
-  const media: MediaBlob = {
-    id: newId("blb"),
-    trackId,
-    role: "media",
-    mime,
-    bytes: blob.size,
-    blob,
-  };
-  await db.transaction("rw", db.tracks, db.mediaBlobs, async () => {
-    const priorId = track.blobId;
-    await db.mediaBlobs.put(media);
-    if (priorId && priorId !== media.id) await db.mediaBlobs.delete(priorId);
-    await db.tracks.update(trackId, { blobId: media.id });
-  });
+  const media = await putMediaBlob(
+    {
+      id: newId("blb"),
+      trackId,
+      role: "media",
+      mime,
+      bytes: blob.size,
+      blob,
+    },
+    db,
+    storage,
+  );
+  const priorId = track.blobId;
+  try {
+    const updated = await db.tracks.update(trackId, { blobId: media.id });
+    if (updated === 0) throw new Error(`Track not found: ${trackId}`);
+  } catch (error) {
+    await deleteMediaBlob(media.id, db, storage);
+    throw error;
+  }
+  if (priorId && priorId !== media.id) await deleteMediaBlob(priorId, db, storage);
   return media.id;
 }
 

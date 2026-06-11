@@ -14,6 +14,12 @@ import {
 import { clampIndex } from "@/player/queue";
 import { planReorder, ranksAtTop } from "@/player/set-order";
 import type { ShortcutGesture } from "@/shortcuts/registry";
+import {
+  deleteMediaBlob,
+  type MediaBlobStorageOptions,
+  putMediaBlob,
+  resolveMediaBlob,
+} from "./media-blob-storage";
 import { db as defaultDb, type MuzeroDB } from "./muzero-db";
 import {
   type AppSettings,
@@ -594,6 +600,7 @@ export async function createUploadedTrack(
     sourcePath?: string;
   },
   db: MuzeroDB = defaultDb,
+  storage: MediaBlobStorageOptions = {},
 ): Promise<Track> {
   const track: Track = {
     id: newId("trk"),
@@ -613,14 +620,19 @@ export async function createUploadedTrack(
     mediaMetadata: input.mediaMetadata,
     sourcePath: input.sourcePath,
   };
-  const media: MediaBlob = {
-    id: newId("blb"),
-    trackId: track.id,
-    role: "media",
-    mime: input.mime,
-    bytes: input.blob.size,
-    blob: input.blob,
-  };
+  const media = await putMediaBlob(
+    {
+      id: newId("blb"),
+      trackId: track.id,
+      role: "media",
+      mime: input.mime,
+      bytes: input.blob.size,
+      blob: input.blob,
+      suggestedName: input.mediaMetadata?.originalFileName ?? input.title,
+    },
+    db,
+    storage,
+  );
   track.blobId = media.id;
   const cover: MediaBlob | undefined = input.embeddedCover
     ? {
@@ -629,15 +641,20 @@ export async function createUploadedTrack(
         role: "cover",
         mime: input.embeddedCover.mime,
         bytes: input.embeddedCover.blob.size,
+        storageBackend: "indexeddb",
         blob: input.embeddedCover.blob,
       }
     : undefined;
   if (cover) track.coverBlobId = cover.id;
-  await db.transaction("rw", db.tracks, db.mediaBlobs, async () => {
-    await db.mediaBlobs.put(media);
-    if (cover) await db.mediaBlobs.put(cover);
-    await db.tracks.put(track);
-  });
+  try {
+    await db.transaction("rw", db.tracks, db.mediaBlobs, async () => {
+      if (cover) await db.mediaBlobs.put(cover);
+      await db.tracks.put(track);
+    });
+  } catch (error) {
+    await deleteMediaBlob(media.id, db, storage);
+    throw error;
+  }
   return track;
 }
 
@@ -648,25 +665,33 @@ export async function markTrackGenerating(id: string, db: MuzeroDB = defaultDb):
 export async function markTrackReady(
   input: { trackId: string; blob: Blob; mime: string; durationSec: number },
   db: MuzeroDB = defaultDb,
+  storage: MediaBlobStorageOptions = {},
 ): Promise<void> {
-  const media: MediaBlob = {
-    id: newId("blb"),
-    trackId: input.trackId,
-    role: "media",
-    mime: input.mime,
-    bytes: input.blob.size,
-    blob: input.blob,
-  };
-  await db.transaction("rw", db.tracks, db.mediaBlobs, async () => {
-    await db.mediaBlobs.put(media);
-    await db.tracks.update(input.trackId, {
+  const media = await putMediaBlob(
+    {
+      id: newId("blb"),
+      trackId: input.trackId,
+      role: "media",
+      mime: input.mime,
+      bytes: input.blob.size,
+      blob: input.blob,
+    },
+    db,
+    storage,
+  );
+  try {
+    const updated = await db.tracks.update(input.trackId, {
       status: "ready",
       blobId: media.id,
       durationSec: input.durationSec,
       generatedAt: Date.now(),
       error: undefined,
     });
-  });
+    if (updated === 0) throw new Error(`Track not found: ${input.trackId}`);
+  } catch (error) {
+    await deleteMediaBlob(media.id, db, storage);
+    throw error;
+  }
 }
 
 export async function markTrackFailed(
@@ -699,7 +724,7 @@ export async function getTrackBlob(
   db: MuzeroDB = defaultDb,
 ): Promise<MediaBlob | undefined> {
   if (!track.blobId) return undefined;
-  return db.mediaBlobs.get(track.blobId);
+  return resolveMediaBlob(track.blobId, db);
 }
 
 export async function getTrackCover(

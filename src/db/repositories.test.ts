@@ -1,5 +1,6 @@
 import Dexie from "dexie";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import type { MediaStorageProvider } from "./media-blob-storage";
 import { MuzeroDB } from "./muzero-db";
 import {
   addMemory,
@@ -26,6 +27,7 @@ import {
   listAllTracks,
   listMemories,
   listTrackBackgrounds,
+  markTrackReady,
   memoryNotesByTrack,
   playQueueSet,
   prependTrackIds,
@@ -59,6 +61,27 @@ afterEach(async () => {
     req.onsuccess = req.onerror = () => resolve();
   });
 });
+
+function createMemoryProvider(id: "opfs" | "electron-file" = "electron-file") {
+  const files = new Map<string, Blob>();
+  const provider: MediaStorageProvider & { files: Map<string, Blob> } = {
+    id,
+    userVisible: id === "electron-file",
+    files,
+    async put(input) {
+      const storageKey = `media/${input.suggestedName ?? input.id}`;
+      files.set(storageKey, input.blob);
+      return { storageKey };
+    },
+    async get(input) {
+      return input.storageKey ? (files.get(input.storageKey) ?? null) : null;
+    },
+    async delete(input) {
+      if (input.storageKey) files.delete(input.storageKey);
+    },
+  };
+  return provider;
+}
 
 describe("settings", () => {
   it("defaults and persists player repeat/shuffle toggles", async () => {
@@ -301,6 +324,45 @@ describe("createUploadedTrack", () => {
       trackId: track.id,
     });
   });
+
+  it("writes primary media through the selected storage provider while keeping covers in IndexedDB", async () => {
+    const session = await createSession({ seedPrompt: "", config: { autoExtend: false } }, db);
+    const provider = createMemoryProvider("electron-file");
+    const blob = new Blob([new Uint8Array([1, 2, 3])], { type: "audio/mpeg" });
+    const cover = new Blob([new Uint8Array([9, 8, 7])], { type: "image/jpeg" });
+
+    const track = await createUploadedTrack(
+      {
+        sessionId: session.id,
+        title: "Provider Song",
+        kind: "audio",
+        blob,
+        mime: "audio/mpeg",
+        durationSec: 180,
+        mediaMetadata: { originalFileName: "Provider Song.mp3" },
+        embeddedCover: { blob: cover, mime: "image/jpeg" },
+      },
+      db,
+      { provider },
+    );
+
+    const media = await db.mediaBlobs.get(track.blobId!);
+    expect(media).toMatchObject({
+      role: "media",
+      storageBackend: "electron-file",
+      storageKey: "media/Provider Song.mp3",
+      blob: undefined,
+    });
+    expect(provider.files.get(media?.storageKey ?? "")).toBe(blob);
+
+    const coverRow = await db.mediaBlobs.get(track.coverBlobId!);
+    expect(coverRow).toMatchObject({
+      role: "cover",
+      storageBackend: "indexeddb",
+      bytes: 3,
+    });
+    expect(coverRow?.blob).toBeTruthy();
+  });
 });
 
 describe("createPendingTrack provenance", () => {
@@ -330,6 +392,47 @@ describe("createPendingTrack provenance", () => {
     expect(await memoryNotesByTrack([track.id], db)).toEqual(
       new Map([[track.id, ["DJ generated for late rain · mureka:mureka-6 · soft handoff"]]]),
     );
+  });
+});
+
+describe("markTrackReady", () => {
+  it("marks generated tracks ready only after media is stored durably", async () => {
+    const session = await createSession({ seedPrompt: "late rain" }, db);
+    const track = await createPendingTrack(
+      {
+        sessionId: session.id,
+        provider: "mock",
+        brief: {
+          title: "Ready Soon",
+          caption: "rainy garage",
+          lyrics: "",
+          durationSec: 60,
+        },
+      },
+      db,
+    );
+    const provider = createMemoryProvider("opfs");
+
+    await markTrackReady(
+      {
+        trackId: track.id,
+        blob: new Blob(["generated"], { type: "audio/wav" }),
+        mime: "audio/wav",
+        durationSec: 61,
+      },
+      db,
+      { provider },
+    );
+
+    const reloaded = await getTrack(track.id, db);
+    expect(reloaded).toMatchObject({ status: "ready", durationSec: 61 });
+    const media = await db.mediaBlobs.get(reloaded?.blobId ?? "");
+    expect(media).toMatchObject({
+      role: "media",
+      storageBackend: "opfs",
+      blob: undefined,
+    });
+    expect(provider.files.get(media?.storageKey ?? "")).toBeTruthy();
   });
 });
 

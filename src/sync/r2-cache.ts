@@ -1,5 +1,9 @@
+import {
+  deleteMediaBlob,
+  type MediaBlobStorageOptions,
+  putMediaBlob,
+} from "@/db/media-blob-storage";
 import { db as defaultDb, type MuzeroDB } from "@/db/muzero-db";
-import type { MediaBlob } from "@/db/types";
 import { newId } from "@/lib/id";
 import { getAppFetch } from "@/lib/platform";
 
@@ -7,6 +11,7 @@ export type SyncCacheFetch = typeof globalThis.fetch;
 
 export interface CacheRemoteTrackMediaOptions {
   fetcher?: SyncCacheFetch;
+  storage?: MediaBlobStorageOptions;
   /** Abort the in-flight media download (audit F6). */
   signal?: AbortSignal;
 }
@@ -37,19 +42,27 @@ export async function cacheRemoteTrackMedia(
   const blob = await response.blob();
   const mime = response.headers.get("content-type") ?? blob.type ?? "application/octet-stream";
   assertRemoteMediaMatchesTrackKind(track.kind, mime);
-  const media: MediaBlob = {
-    id: newId("blb"),
-    trackId,
-    role: "media",
-    mime,
-    bytes: blob.size,
-    blob,
-  };
+  const media = await putMediaBlob(
+    {
+      id: newId("blb"),
+      trackId,
+      role: "media",
+      mime,
+      bytes: blob.size,
+      blob,
+      suggestedName: track.title,
+    },
+    db,
+    options.storage,
+  );
 
-  await db.transaction("rw", db.tracks, db.mediaBlobs, async () => {
-    await db.mediaBlobs.put(media);
-    await db.tracks.update(trackId, { blobId: media.id });
-  });
+  try {
+    const updated = await db.tracks.update(trackId, { blobId: media.id });
+    if (updated === 0) throw new Error(`Track not found: ${trackId}`);
+  } catch (error) {
+    await deleteMediaBlob(media.id, db, options.storage);
+    throw error;
+  }
 
   return { blobId: media.id, bytes: media.bytes, mime: media.mime };
 }

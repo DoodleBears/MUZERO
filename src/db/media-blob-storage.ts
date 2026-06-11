@@ -96,7 +96,7 @@ export async function resolveMediaBlob(
   if (!row) return undefined;
   const storageBackend = mediaStorageBackend(row);
   const provider = providerFor(storageBackend, options);
-  const blob = await provider.get({ storageKey: row.storageKey, blob: row.blob });
+  const blob = await provider.get({ storageKey: row.storageKey, blob: row.blob, mime: row.mime });
   if (!blob) return undefined;
   return { ...row, storageBackend, blob };
 }
