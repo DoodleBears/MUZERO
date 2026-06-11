@@ -23,6 +23,7 @@ import { QueuePage } from "@/pages/queue-page";
 import { SearchPage } from "@/pages/search-page";
 import { SessionsPage } from "@/pages/sessions-page";
 import { SettingsPage } from "@/pages/settings-page";
+import { startCloudAutoSyncScheduler } from "@/stores/cloud-auto-sync";
 import { useNavStore } from "@/stores/nav-store";
 import { usePlayerStore } from "@/stores/player-store";
 import { startSyncIndicator } from "@/stores/sync-indicator";
@@ -75,6 +76,10 @@ export default function App() {
   useEffect(() => {
     startSyncIndicator();
   }, []);
+
+  // Visible per-drive R2 auto-sync scheduler. It delegates to the same
+  // orchestrated Sync now path and self-guards per drive.
+  useEffect(() => startCloudAutoSyncScheduler(), []);
 
   // Desktop: re-scan remembered local-import folders for new files shortly after
   // boot. Deferred so it never blocks first paint / WKWebView startup; the action

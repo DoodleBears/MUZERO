@@ -901,6 +901,12 @@ export type CloudDriveAutoSyncFrequency =
   | "60min";
 
 export type CloudDriveUploadConcurrency = 1 | 2 | 3;
+export type CloudDriveAutoSyncPauseReason =
+  | "needs-review"
+  | "failed"
+  | "cancelled"
+  | "auth"
+  | "network";
 
 export interface R2LocalCredentials {
   accountId: string;
@@ -924,6 +930,9 @@ export interface CloudDrive {
   autoSyncFrequency?: CloudDriveAutoSyncFrequency;
   /** Max parallel immutable-object uploads. Mutable JSON still writes ordered. Defaults to 2. */
   uploadConcurrency?: CloudDriveUploadConcurrency;
+  /** When set, automatic sync is paused until the user manually retries or changes settings. */
+  autoSyncPausedAt?: number;
+  autoSyncPauseReason?: CloudDriveAutoSyncPauseReason;
   createdAt: number;
   updatedAt: number;
   lastSyncedAt?: number;

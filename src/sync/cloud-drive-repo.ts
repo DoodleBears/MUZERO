@@ -2,6 +2,7 @@ import { db as defaultDb, type MuzeroDB } from "@/db/muzero-db";
 import type {
   CloudDrive,
   CloudDriveAutoSyncFrequency,
+  CloudDriveAutoSyncPauseReason,
   CloudDriveUploadConcurrency,
   CloudShare,
 } from "@/db/types";
@@ -63,6 +64,42 @@ export async function updateCloudDriveSyncPreferences(
     uploadConcurrency: normalizeUploadConcurrency(
       input.uploadConcurrency ?? existing.uploadConcurrency,
     ),
+    autoSyncPausedAt: undefined,
+    autoSyncPauseReason: undefined,
+    updatedAt: Math.max(Date.now(), existing.updatedAt + 1),
+  });
+  await db.cloudDrives.put(row);
+  return row;
+}
+
+export async function pauseCloudDriveAutoSync(
+  driveId: string,
+  reason: CloudDriveAutoSyncPauseReason,
+  db: MuzeroDB = defaultDb,
+): Promise<CloudDrive> {
+  const existing = await db.cloudDrives.get(driveId);
+  if (!existing) throw new Error(`Unknown cloud drive: ${driveId}`);
+  const now = Date.now();
+  const row = normalizeCloudDrive({
+    ...existing,
+    autoSyncPausedAt: now,
+    autoSyncPauseReason: reason,
+    updatedAt: Math.max(now, existing.updatedAt + 1),
+  });
+  await db.cloudDrives.put(row);
+  return row;
+}
+
+export async function clearCloudDriveAutoSyncPause(
+  driveId: string,
+  db: MuzeroDB = defaultDb,
+): Promise<CloudDrive> {
+  const existing = await db.cloudDrives.get(driveId);
+  if (!existing) throw new Error(`Unknown cloud drive: ${driveId}`);
+  const row = normalizeCloudDrive({
+    ...existing,
+    autoSyncPausedAt: undefined,
+    autoSyncPauseReason: undefined,
     updatedAt: Math.max(Date.now(), existing.updatedAt + 1),
   });
   await db.cloudDrives.put(row);

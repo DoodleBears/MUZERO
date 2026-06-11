@@ -1,7 +1,11 @@
 import { create } from "zustand";
 import { getSettings, listSessions } from "@/db/repositories";
 import { log } from "@/lib/logger";
-import { listCloudDrives } from "@/sync/cloud-drive-repo";
+import {
+  clearCloudDriveAutoSyncPause,
+  listCloudDrives,
+  pauseCloudDriveAutoSync,
+} from "@/sync/cloud-drive-repo";
 import { getR2CredentialsForDrive } from "@/sync/cloud-drive-settings";
 import { buildR2ExportPlanForDrive } from "@/sync/r2-export-plan";
 import { publishedEntityId } from "@/sync/r2-import-stream";
@@ -139,12 +143,20 @@ export const useSyncStore = create<SyncStoreState>((set) => ({
         return;
       }
 
-      await getOrchestrator().publish(context, {
+      const result = await getOrchestrator().publish(context, {
         signal: controller.signal,
         onProgress: (progress) => setProgress(set, driveId, progress),
       });
+      if (result.status === "completed") {
+        await clearCloudDriveAutoSyncPause(driveId);
+      } else if (result.status === "needs-review") {
+        await pauseCloudDriveAutoSync(driveId, "needs-review");
+      } else if (result.status === "cancelled") {
+        await pauseCloudDriveAutoSync(driveId, "cancelled");
+      }
     } catch (error) {
       // The orchestrator already emitted a `failed` progress before throwing.
+      await pauseCloudDriveAutoSync(driveId, "failed").catch(() => undefined);
       log.error("sync", "publish failed", { driveId, error });
     } finally {
       controllers.delete(driveId);

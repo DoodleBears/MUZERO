@@ -157,6 +157,41 @@ describe("sync-store publishDrive", () => {
     storeMod.__setSyncOrchestratorForTest(null);
   });
 
+  it("clears an auto-sync pause after a successful publish", async () => {
+    const { db, storeMod, useSyncStore } = await seedWritableDrive();
+    await db.cloudDrives.update("drv_owned", {
+      autoSyncPausedAt: 123,
+      autoSyncPauseReason: "failed",
+    });
+    storeMod.__setSyncOrchestratorForTest({
+      publish: vi.fn(async () => ({ status: "completed" as const, runId: "run_done" })),
+      pull: vi.fn(),
+    });
+
+    await useSyncStore.getState().publishDrive("drv_owned");
+
+    expect(await db.cloudDrives.get("drv_owned")).toMatchObject({
+      autoSyncPausedAt: undefined,
+      autoSyncPauseReason: undefined,
+    });
+    storeMod.__setSyncOrchestratorForTest(null);
+  });
+
+  it("pauses auto-sync when publish needs review", async () => {
+    const { db, storeMod, useSyncStore } = await seedWritableDrive();
+    storeMod.__setSyncOrchestratorForTest({
+      publish: vi.fn(async () => ({ status: "needs-review" as const, conflicts: [] })),
+      pull: vi.fn(),
+    });
+
+    await useSyncStore.getState().publishDrive("drv_owned");
+
+    expect(await db.cloudDrives.get("drv_owned")).toMatchObject({
+      autoSyncPauseReason: "needs-review",
+    });
+    storeMod.__setSyncOrchestratorForTest(null);
+  });
+
   it("marks failed without invoking the orchestrator when credentials are missing", async () => {
     const ctx = await loadStore();
     await ctx.cloudRepo.upsertCloudDrive({
