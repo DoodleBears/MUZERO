@@ -20,6 +20,7 @@
 | 5 | Anonymous device registry + playback stats sync | ✅ Done | [Phase 5 Checklist](#phase-5-checklist) |
 | 6 | Optional low-frequency currently-playing presence | ✅ Done | [Phase 6 Checklist](#phase-6-checklist) |
 | 7 | Sync hardening (2026-06-11 audit follow-ups) | ✅ Done | [§12.3 backlog](#123-phase-7-proposed-sync-hardening) |
+| 8 | Multi-writer library (read-merge-write publish) | 🔄 In Progress | [§12.4](#124-phase-8-multi-writer-library-read-merge-write-publish) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
 
@@ -2121,6 +2122,25 @@ Do not record secrets, full signed URLs, or media content.
 - [x] F8: per-drive operations serialized — `useSyncStore.publishDrive`/`pullRemoteSet` refuse to start while another operation holds the drive's `AbortController` (registered before the async context resolve, so rapid double-clicks can't slip through); the refused call logs a warning and leaves the in-flight op's progress untouched.
 - [x] F11: track `coverCrop` travels in the set index (additive optional `r2CropSchema`); import takes the published crop on fresh imports while a local crop edit wins on re-import (consistent with the F1 merge).
 
+### 12.4 Phase 8: Multi-writer library (read-merge-write publish)
+
+**Goal:** 两台设备都能写回同一个盘 — multiple devices each publish their own sets/stats/profile/presence to ONE drive without erasing each other. This resolves the deferred half of F4 and turns §3.11's multi-writer rules into running code.
+
+**Design:**
+
+1. **Read-merge-write.** Before planning, the publisher fetches the *remote publish base* — `manifest.json` + `devices/stats/presence` indexes — via **signed GETs** (works for public and, later, private buckets), capturing each object's ETag.
+2. **Merge rules** (pure, `r2-publish-merge.ts`): per-device discovery entries upsert by device id with LWW on the entry clock; manifest `sets` is a union keyed by set id with an additive `publishedBy` (device publicId) ownership stamp — the publisher is authoritative for its OWN sets (including deletions), other devices' sets are preserved verbatim, and legacy un-attributed sets are preserved conservatively.
+3. **Conditional writes.** Manifest + the three indexes PUT with `If-Match: <etag>` (or `If-None-Match: *` when absent). A concurrent publish that changed the base since our read yields HTTP 412 → refetch base → re-merge → retry (bounded), so the race loser merges instead of clobbering.
+4. **Out of scope (a later co-editing phase):** two devices editing the SAME set. A set keeps one owning device; other devices' edits to an imported copy stay local (protected by the F1 merge + F2 gates). The dormant mutation machinery (recording on edits, conflict panel) is that phase's foundation.
+
+**Checklist:**
+
+- [x] MW-1 Pure merge layer: `mergeDevicesIndex` / `mergeStatsIndex` / `mergePresenceIndex` / `mergeManifestSets` (+ formalized `r2DevicesIndexSchema`/`r2StatsIndexSchema`, additive `publishedBy` on manifest set summaries).
+- [ ] MW-2 `fetchRemotePublishBase`: signed GETs + ETag capture; 404 → absent; invalid JSON → absent with warning ("GET" added to the signing client).
+- [ ] MW-3 Export plan consumes the base: merged discovery indexes, manifest set-union + `publishedBy` stamping + preserved `createdAt`, and `If-Match`/`If-None-Match` preconditions on the merged JSON writes.
+- [ ] MW-4 Orchestrator fetches the base before planning and, on HTTP 412, refetches → re-merges → retries (≤2 extra attempts); the store injects the real base fetcher.
+- [ ] MW-5 Settings copy: single-writer warning becomes a multi-writer note (same-set co-editing still single-owner); preview-verified; full sync suite green.
+
 ---
 
 ## 13. Document Change Log
@@ -2231,6 +2251,7 @@ Do not record secrets, full signed URLs, or media content.
 | 2026-06-11 | MUZERO | Phase 7 F1 fixed (TDD): re-importing an updated remote set no longer clobbers local track state — `importRemoteSetStream` bulk-gets existing `trk_remote_*` rows and field-merges (remote-authoritative content vs local-wins `blobId`/cover/crop/`liked`/`tags`/`note`/`playCount`/annotation clock), so cached offline media stays linked (no orphaned blobs) and annotation edits survive. Covered by re-import preservation + fresh-import regression tests. |
 | 2026-06-11 | MUZERO | Phase 7 F2 fixed (TDD): the drive-row import (`CloudDriveSets`) now calls the orchestrated `useSyncStore.pullRemoteSet` instead of the raw `importRemoteSetStream` — every UI import gets the dry-run diff gates (keep-local / conflict→needs-review / blocked), a durable pull `syncRun`, and progress through the same per-drive pipeline the publish path uses (`CloudDriveLiveProgress` + sync toast). §12.1's "orchestrated pull has zero UI callers" gap is closed. |
 | 2026-06-11 | MUZERO | Phase 7 F5 fixed (TDD): streamed-origin tracks never publish — the export loop skips on `origin === "streamed"` (not just missing `blobId`, since offline caching sets `blobId` on streamed tracks), keeping platform-derived bytes out of the user's R2; `manifest.sets[].trackCount` now reports the post-skip/post-fold set-index track count so subscriber previews match what they receive; the stale `r2SetTrackSchema` origin comment is refreshed. |
+| 2026-06-11 | MUZERO | Phase 8 (multi-writer) started — §12.4 design recorded (read-merge-write publish: signed-GET base fetch + ETag, per-device LWW index merges, manifest set-union with additive `publishedBy` ownership, If-Match conditional writes with bounded 412 re-merge retry; same-set co-editing explicitly a later phase). MW-1 landed (TDD): pure merge layer `r2-publish-merge.ts` + formalized devices/stats index schemas + `publishedBy` on set summaries. |
 | 2026-06-11 | MUZERO | Phase 7 F4 documented + Phase 7 closed: the Sync & CORS pane now carries a four-locale "one writing device per drive" notice (verified rendering in the preview); merge-on-publish (read-merge-write indexes + manifest set-union + `If-Match`) is named as the future **multi-writer phase** together with F3's mutation recording/panel. The remote search catalog (§3.4.2) is deferred by decision until a too-large-to-import drive exists. All eleven §12.3 items are closed; Phase 7 ✅. |
 | 2026-06-11 | MUZERO | Phase 7 F3 resolved (decision + TDD): the mutation machinery stays — dormant — as the multi-writer foundation; a successful publish now marks the drive's pre-run unsynced mutations `syncedAt` inside the run-bookkeeping transaction (other drives' and mid-run mutations untouched; failed publishes leave them unsynced), defusing the re-fold/re-upload/permanent-needs-review hazard. Recording mutations on set edits + mounting the conflict panel are explicitly deferred to the multi-writer phase. |
 | 2026-06-11 | MUZERO | Phase 7 F11 fixed (TDD): the track cover's non-destructive crop now round-trips — `r2SetTrackSchema.coverCrop` (additive optional, no version bump), exported from `Track.coverCrop`, imported with local-edit-wins on re-import. A cropped cover now renders the same framing on the subscribing device. |

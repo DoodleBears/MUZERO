@@ -21,6 +21,11 @@ export const r2SetSummarySchema = z.object({
   updatedAt: timestampStringSchema,
   trackCount: z.number().int().nonnegative(),
   bytes: z.number().int().nonnegative(),
+  // Which device published this set (additive, multi-writer phase). Lets a
+  // read-merge-write publish keep OTHER devices' sets in the manifest while
+  // staying authoritative for its own (including deletions). Legacy manifests
+  // omit it — those sets are preserved conservatively.
+  publishedBy: z.string().min(1).optional(),
 });
 
 export const r2ManifestSchema = z.object({
@@ -229,6 +234,39 @@ export const r2StatsSchema = z.object({
   aggregates: z.array(r2PlaybackAggregateSchema),
 });
 
+// Owner-maintained discovery indexes, formalized for the multi-writer
+// read-merge-write publish (each writing device upserts its own entry and
+// preserves the others'). Shapes match what export planning always wrote.
+export const r2DeviceIndexEntrySchema = z.object({
+  publicId: z.string().min(1),
+  displayName: z.string().optional(),
+  avatarSeed: z.string().optional(),
+  profile: remotePathSchema.optional(),
+  stats: remotePathSchema.optional(),
+  lastSeenAt: millisSchema.optional(),
+  profileUpdatedAt: millisSchema.optional(),
+});
+
+export const r2DevicesIndexSchema = z.object({
+  schema: z.literal("muzero-r2-devices-v1"),
+  updatedAt: millisSchema,
+  devices: z.array(r2DeviceIndexEntrySchema),
+});
+
+export const r2StatsIndexDeviceSchema = z.object({
+  devicePublicId: z.string().min(1),
+  aggregate: remotePathSchema.optional(),
+  checkpoint: remotePathSchema.optional(),
+  latestSegment: remotePathSchema.optional(),
+  updatedAt: millisSchema,
+});
+
+export const r2StatsIndexSchema = z.object({
+  schema: z.literal("muzero-r2-stats-index-v1"),
+  updatedAt: millisSchema,
+  devices: z.array(r2StatsIndexDeviceSchema),
+});
+
 export const r2PresenceIndexSchema = z.object({
   schema: z.literal("muzero-r2-presence-index-v1"),
   updatedAt: millisSchema,
@@ -242,6 +280,9 @@ export const r2PresenceIndexSchema = z.object({
 });
 
 export type R2Manifest = z.infer<typeof r2ManifestSchema>;
+export type R2SetSummary = z.infer<typeof r2SetSummarySchema>;
+export type R2DevicesIndex = z.infer<typeof r2DevicesIndexSchema>;
+export type R2StatsIndex = z.infer<typeof r2StatsIndexSchema>;
 export type R2EntityCoverEntry = z.infer<typeof r2EntityCoverEntrySchema>;
 export type R2EntityCoversIndex = z.infer<typeof r2EntityCoversIndexSchema>;
 export type R2SetIndex = z.infer<typeof r2SetIndexSchema>;
