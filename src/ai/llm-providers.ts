@@ -171,13 +171,12 @@ export function llmModelForPreset(
   settings: Pick<AppSettings, "modelsByPresetId">,
   preset: LlmProviderPreset,
 ): string {
+  // Trust ANY remembered model: with the live `/models` catalog and free-text
+  // custom ids, a user-picked model legitimately may not be in the preset's
+  // hardcoded list — validating against it would silently snap the picker back
+  // to the default and make model switching look like it had no effect.
   const remembered = settings.modelsByPresetId?.[preset.id]?.trim();
-  if (
-    remembered &&
-    (isCustomLlmProviderId(preset.id) || preset.models.some((m) => m.id === remembered))
-  ) {
-    return remembered;
-  }
+  if (remembered) return remembered;
   return preset.models[0]?.id ?? "gpt-4o-mini";
 }
 

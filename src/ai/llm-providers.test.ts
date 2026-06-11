@@ -3,6 +3,7 @@ import type { AppSettings } from "@/db/types";
 import {
   defaultModelForPreset,
   enabledLlmPresetIds,
+  llmModelForPreset,
   llmSelectionForChatSession,
   llmSelectionFromSettings,
   resolveLlmProviderPreset,
@@ -113,5 +114,17 @@ describe("LLM provider presets", () => {
     for (const id of ["openrouter", "openai", "claude", "gemini", "groq", "deepseek", "custom"]) {
       expect(defaultModelForPreset(id)).toBeTruthy();
     }
+  });
+
+  it("llmModelForPreset keeps a remembered model even if it isn't in the hardcoded list", () => {
+    const preset = resolveLlmProviderPreset("openrouter");
+    // A model picked from the live catalog (not in preset.models) must stick —
+    // this is the model-switch-has-no-effect bug.
+    const settings = {
+      modelsByPresetId: { openrouter: "x-ai/grok-2" as string },
+    } satisfies Pick<AppSettings, "modelsByPresetId">;
+    expect(llmModelForPreset(settings, preset)).toBe("x-ai/grok-2");
+    // No remembered model → the preset's first hardcoded model.
+    expect(llmModelForPreset({ modelsByPresetId: {} }, preset)).toBe(preset.models[0]?.id);
   });
 });
