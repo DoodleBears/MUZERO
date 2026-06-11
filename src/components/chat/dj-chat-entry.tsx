@@ -138,77 +138,85 @@ export function DjChatEntry({
 
   return (
     <div className={cn("relative min-w-0", mode === "chip" ? "flex-1" : "w-fit", className)}>
-      {mode === "icon" && (
-        <motion.button
-          aria-label={t("chat.open")}
+      {mode !== "expanded" && (
+        // One rounded container that collapses from the RIGHT toward the
+        // Sparkles icon on minimize: the icon stays pinned left while the input
+        // + actions clip away (overflow-hidden) as `layout` animates the width —
+        // no whole-box stretch (the old shared-layoutId morph distorted it).
+        <motion.div
           className={cn(
-            "grid size-11 place-items-center rounded-full text-primary outline-none transition-colors",
-            "hover:bg-card focus-visible:ring-2 focus-visible:ring-ring",
+            "flex h-11 min-w-0 items-center overflow-hidden rounded-full",
+            mode === "chip" && "w-full pe-1",
             surface,
           )}
-          layoutId="dj-chat-entry"
-          onClick={() => setMode("chip")}
-          type="button"
+          layout
+          transition={{ type: "spring", stiffness: 420, damping: 36 }}
         >
-          <Sparkles aria-hidden="true" className="size-5" />
-        </motion.button>
-      )}
+          <button
+            aria-label={mode === "chip" ? t("chat.minimize") : t("chat.open")}
+            className="grid size-11 shrink-0 place-items-center rounded-full text-primary outline-none transition-colors hover:bg-accent/40 focus-visible:ring-2 focus-visible:ring-ring"
+            onClick={() => setMode(mode === "chip" ? "icon" : "chip")}
+            type="button"
+          >
+            <Sparkles aria-hidden="true" className="size-5" />
+          </button>
 
-      {mode === "chip" && (
-        <motion.form
-          className={cn("flex h-11 min-w-0 items-center gap-1 rounded-full pe-1 ps-1", surface)}
-          layoutId="dj-chat-entry"
-          onSubmit={handleSubmit}
-        >
-          <button
-            aria-label={t("chat.minimize")}
-            className="grid size-9 shrink-0 place-items-center rounded-full text-primary outline-none transition-colors hover:bg-accent/50 focus-visible:ring-2 focus-visible:ring-ring"
-            onClick={() => setMode("icon")}
-            type="button"
-          >
-            <Sparkles aria-hidden="true" className="size-4.5" />
-          </button>
-          <input
-            className="h-full min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
-            onChange={(e) => setDraft(e.target.value)}
-            placeholder={t("chat.placeholder")}
-            value={draft}
-          />
-          {isRunning && !draft.trim() ? (
-            <button
-              aria-label={t("chat.stop")}
-              className="grid size-9 shrink-0 place-items-center rounded-full text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
-              onClick={() => {
-                if (activeSessionId) void getOrCreateDjChatRuntimeActor(activeSessionId).stop();
-              }}
-              type="button"
-            >
-              <CircleStop aria-hidden="true" className="size-4.5" />
-            </button>
-          ) : (
-            draft.trim() && (
-              <button
-                aria-label={isRunning ? t("chat.queue") : t("chat.send")}
-                className="grid size-9 shrink-0 place-items-center rounded-full bg-primary text-primary-foreground outline-none transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-ring"
-                type="submit"
+          <AnimatePresence initial={false}>
+            {mode === "chip" && (
+              <motion.form
+                animate={{ opacity: 1 }}
+                className="flex min-w-0 flex-1 items-center gap-1"
+                exit={{ opacity: 0 }}
+                initial={{ opacity: 0 }}
+                key="dj-chat-chip-body"
+                onSubmit={handleSubmit}
+                transition={{ duration: 0.12 }}
               >
-                {isRunning ? (
-                  <ListEnd aria-hidden="true" className="size-4.5" />
+                <input
+                  className="h-full min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+                  onChange={(e) => setDraft(e.target.value)}
+                  placeholder={t("chat.placeholder")}
+                  value={draft}
+                />
+                {isRunning && !draft.trim() ? (
+                  <button
+                    aria-label={t("chat.stop")}
+                    className="grid size-9 shrink-0 place-items-center rounded-full text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+                    onClick={() => {
+                      if (activeSessionId)
+                        void getOrCreateDjChatRuntimeActor(activeSessionId).stop();
+                    }}
+                    type="button"
+                  >
+                    <CircleStop aria-hidden="true" className="size-4.5" />
+                  </button>
                 ) : (
-                  <ArrowUp aria-hidden="true" className="size-4.5" />
+                  draft.trim() && (
+                    <button
+                      aria-label={isRunning ? t("chat.queue") : t("chat.send")}
+                      className="grid size-9 shrink-0 place-items-center rounded-full bg-primary text-primary-foreground outline-none transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-ring"
+                      type="submit"
+                    >
+                      {isRunning ? (
+                        <ListEnd aria-hidden="true" className="size-4.5" />
+                      ) : (
+                        <ArrowUp aria-hidden="true" className="size-4.5" />
+                      )}
+                    </button>
+                  )
                 )}
-              </button>
-            )
-          )}
-          <button
-            aria-label={t("chat.expand")}
-            className="grid size-9 shrink-0 place-items-center rounded-full text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
-            onClick={expand}
-            type="button"
-          >
-            <Maximize2 aria-hidden="true" className="size-4" />
-          </button>
-        </motion.form>
+                <button
+                  aria-label={t("chat.expand")}
+                  className="grid size-9 shrink-0 place-items-center rounded-full text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+                  onClick={expand}
+                  type="button"
+                >
+                  <Maximize2 aria-hidden="true" className="size-4" />
+                </button>
+              </motion.form>
+            )}
+          </AnimatePresence>
+        </motion.div>
       )}
 
       {typeof document !== "undefined" && createPortal(<ChatReplyNotification />, document.body)}
