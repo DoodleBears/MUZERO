@@ -20,6 +20,7 @@ import { useTrackSelection } from "@/hooks/use-track-selection";
 import { cn } from "@/lib/utils";
 import { notify } from "@/stores/notification-store";
 import { AddToSetMenu } from "./add-to-set-menu";
+import { useListScrollPreservation } from "./use-list-scroll-preservation";
 
 /**
  * A track list with a "Select" toggle, checkbox multi-select, a batch action bar,
@@ -101,6 +102,9 @@ export function TrackListSection({
   // Drag-to-reorder is offered only in a set's select mode AND when the true
   // curated order is showing (no sort/filter/search) — see SetDetailView.
   const showReorder = sel.mode && !!setId && !!canReorder;
+  // Entering/leaving select mode swaps the list's scroll container — keep the scroll
+  // position across the swap instead of snapping to the top.
+  const sectionRef = useListScrollPreservation(showReorder, tracks.length);
 
   function onReorder(blockIds: string[], insertBeforeId: string | null) {
     if (!setId) return;
@@ -165,7 +169,7 @@ export function TrackListSection({
   );
 
   return (
-    <div className={cn("flex min-h-0 flex-col", className)} {...longPressProps}>
+    <div ref={sectionRef} className={cn("flex min-h-0 flex-col", className)} {...longPressProps}>
       {/* Without `listHeader` the toolbar is pinned above the list (set / detail views).
           With it, the header + toolbar move INTO the scroller so they scroll away with
           the rows (the library wall). */}
