@@ -10,11 +10,18 @@
  * works where that proxy exists (Electron) — same as the rest of the YouTube source.
  */
 
-import { Innertube } from "youtubei.js";
+import { Innertube, Platform } from "youtubei.js";
 import { log } from "@/lib/logger";
 import { getAppFetch } from "@/lib/platform";
 import type { AudioCodec } from "./youtube-formats";
 import type { YoutubeRuntime } from "./youtube-source";
+
+// youtubei.js v17 ships NO JS evaluator (its default throws) — the caller must
+// provide one so it can run player.js's extracted sig/n functions. `data.output`
+// is a self-contained function body ending in `return process(…)` → { sig, n }.
+// Runs in the renderer realm (the same code youtube.com runs in every tab). Set
+// once at import; verified end-to-end (deciphered URL → 206 audio bytes).
+Platform.shim.eval = (data: { output: string }) => new Function(data.output)();
 
 let innertubePromise: Promise<Innertube> | null = null;
 
