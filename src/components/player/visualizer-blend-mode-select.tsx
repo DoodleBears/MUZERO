@@ -23,7 +23,7 @@ export function VisualizerBlendModeSelect() {
     <div className="flex flex-col gap-1.5">
       <span className="text-xs font-medium text-muted-foreground">{t("flow.blend")}</span>
       <Select
-        value={settings.visualizerBlendMode ?? "overlay"}
+        value={settings.visualizerBlendMode ?? "normal"}
         onValueChange={(value) =>
           void saveSettings({ visualizerBlendMode: value as FlowBlendMode })
         }
