@@ -1,6 +1,7 @@
 import { useLiveQuery } from "dexie-react-hooks";
 import { useEffect } from "react";
 import { useShallow } from "zustand/react/shallow";
+import { resolveMediaBlob } from "@/db/media-blob-storage";
 import { db } from "@/db/muzero-db";
 import { useSettings } from "@/hooks/use-app-data";
 import { extractImagePalette, extractImagePaletteFromFetchedUrl } from "@/lib/image-palette";
@@ -35,7 +36,7 @@ export function useVisualizerCoverColorCss(active = true): string | null {
   const cover = useLiveQuery(
     async () =>
       enabled && current?.coverBlobId
-        ? ((await db.mediaBlobs.get(current.coverBlobId)) ?? null)
+        ? ((await resolveMediaBlob(current.coverBlobId, db)) ?? null)
         : null,
     [enabled, current?.coverBlobId],
     undefined,

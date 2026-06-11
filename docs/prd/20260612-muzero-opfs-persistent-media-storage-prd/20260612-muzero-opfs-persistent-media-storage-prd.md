@@ -13,7 +13,7 @@
 |-------|------|--------|------|
 | 1 | Storage Adapter + Dual-Read Contract | ✅ Completed | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | Permanent Media Write Path | ✅ Completed | [Phase 2 Checklist](#phase-2-checklist) |
-| 3 | Playback, Export, and Import Consumers | 🔄 In Progress | [Phase 3 Checklist](#phase-3-checklist) |
+| 3 | Playback, Export, and Import Consumers | ✅ Completed | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | Migration, Repair, and Cleanup | 🔲 Pending | [Phase 4 Checklist](#phase-4-checklist) |
 | 5 | Settings Visibility + Storage Health | 🔲 Pending | [Phase 5 Checklist](#phase-5-checklist) |
 | 6 | Large Image Asset Storage | 🔲 Pending | [Phase 6 Checklist](#phase-6-checklist) |
@@ -427,22 +427,22 @@ Required UI changes:
 
 **Goal:** remove direct assumptions that `MediaBlob.blob` is inline.
 
-**Status (2026-06-12):** In progress. The primary media playback/download resolver (`getTrackBlob` and `useTrackMediaUrl`) and R2 export media hashing/body paths now resolve provider-backed bytes. Image-role consumers remain for later Phase 3/6/7 work because covers/memories/backgrounds/gallery are intentionally still IndexedDB-backed in the first rollout.
+**Status (2026-06-12):** Completed. Playback/download, cover URL hooks, dynamic cover-color extraction, coverflow preloading, memory-photo-to-cover copy, thumbhash backfill, avatar display, metadata export, and R2 export now resolve bytes through the storage helper instead of assuming `MediaBlob.blob` is inline. Background/gallery image-role migration remains Phase 6; cover/memory/avatar writes remain Phase 7.
 
 **Tasks:**
 - [x] Update `getTrackBlob` and `useTrackMediaUrl` to resolve provider-backed primary media bytes safely.
-- [ ] Update `getTrackCover`, `getSessionCover`, `getEntityCover`, and `getMemoryPhoto` to use resolver or role-specific wrappers.
-- [ ] Update `useTrackCoverUrl` to resolve provider-backed cover bytes once cover roles migrate.
-- [ ] Update `setTrackCoverFromMemory`, `setTrackCoverCrop`, and thumbhash backfill to resolve source blobs.
+- [x] Update `getTrackCover`, `getSessionCover`, `getEntityCover`, and `getMemoryPhoto` to use resolver or role-specific wrappers.
+- [x] Update `useTrackCoverUrl` to resolve provider-backed cover bytes once cover roles migrate.
+- [x] Update `setTrackCoverFromMemory`, `setTrackCoverCrop`, and thumbhash backfill to resolve source blobs.
 - [x] Update R2 export `createBinaryObject` / `sha256Blob` to resolve provider-backed media before hashing/uploading.
-- [ ] Update remaining metadata export code for future provider-backed cover/memory/avatar/entity-cover bytes.
+- [x] Update remaining metadata export code for future provider-backed cover/memory/avatar/entity-cover bytes.
 
 ### Phase 3 Checklist
 
 - [x] Player local-first path still uses `Track.blobId` before remote/cache sources.
 - [x] R2 export produces identical binary object keys for unchanged media bytes.
-- [ ] Cover color extraction and thumbhash backfill still work for IndexedDB image rows.
-- [ ] No direct `mediaBlob.blob` reads remain outside the storage helper, except transitional tests.
+- [x] Cover color extraction and thumbhash backfill still work for IndexedDB image rows.
+- [x] No direct `mediaBlob.blob` reads remain outside the storage helper, except transitional tests.
 - [x] Tests cover sync export hashing/body for provider-backed media.
 
 ### Phase 4: Migration, Repair, and Cleanup
@@ -595,6 +595,7 @@ Required UI changes:
 | 2026-06-12 | MUZERO | Resolved storage open questions: staged writes, app-managed Electron default with user-selectable folder, readable local filenames with blob-id suffix, all media rows migrate, and image threshold is 512 KB. |
 | 2026-06-12 | MUZERO | Phase 1 completed: added storage provider abstractions, readable storage key generation, OPFS/IndexedDB/Electron-file backend identities, DB-facing put/resolve/copy/delete helpers, and regression tests for legacy reads, provider-backed rows, fallback, copy, and delete cleanup. |
 | 2026-06-12 | MUZERO | Phase 2 completed: routed uploaded/generated/streamed/R2-cached primary media through provider-backed writes, added Electron app-managed media-file IPC with staged writes and path validation, kept embedded covers IndexedDB-backed, and added regression tests for durable writes, fallback, replacement cleanup, and provider-backed R2 export reads. |
+| 2026-06-12 | MUZERO | Phase 3 completed: switched playback/download, cover hooks, dynamic color extraction, coverflow preloading, memory-photo cover copy, thumbhash backfill, avatar display, metadata export, and R2 export to resolver-backed byte reads, with provider-backed cover/memory regression tests. |
 
 ---
 

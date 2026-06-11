@@ -336,10 +336,11 @@ export async function setSessionCover(
 export async function getSessionCover(
   sessionId: string,
   db: MuzeroDB = defaultDb,
+  storage: MediaBlobStorageOptions = {},
 ): Promise<Blob | undefined> {
   const session = await db.sessions.get(sessionId);
   if (!session?.coverBlobId) return undefined;
-  return (await db.mediaBlobs.get(session.coverBlobId))?.blob;
+  return (await resolveMediaBlob(session.coverBlobId, db, storage))?.blob;
 }
 
 /**
@@ -406,10 +407,11 @@ export async function setEntityCover(
 export async function getEntityCover(
   entityKey: string,
   db: MuzeroDB = defaultDb,
+  storage: MediaBlobStorageOptions = {},
 ): Promise<Blob | undefined> {
   const row = await db.entityCovers.get(entityKey);
   if (!row?.coverBlobId) return undefined;
-  return (await db.mediaBlobs.get(row.coverBlobId))?.blob;
+  return (await resolveMediaBlob(row.coverBlobId, db, storage))?.blob;
 }
 
 /** Remove an entity's custom cover (row + blob); resolution falls back to a track. */
@@ -730,9 +732,10 @@ export async function getTrackBlob(
 export async function getTrackCover(
   track: Track,
   db: MuzeroDB = defaultDb,
+  storage: MediaBlobStorageOptions = {},
 ): Promise<MediaBlob | undefined> {
   if (!track.coverBlobId) return undefined;
-  return db.mediaBlobs.get(track.coverBlobId);
+  return resolveMediaBlob(track.coverBlobId, db, storage);
 }
 
 export async function incrementPlayCount(id: string, db: MuzeroDB = defaultDb): Promise<void> {
@@ -867,12 +870,14 @@ export async function clearTrackCover(trackId: string, db: MuzeroDB = defaultDb)
 export async function setTrackCoverFromMemory(
   memoryId: string,
   db: MuzeroDB = defaultDb,
+  storage: MediaBlobStorageOptions = {},
 ): Promise<boolean> {
+  const memory = await db.memories.get(memoryId);
+  if (!memory?.photoBlobId) return false;
+  const photo = await resolveMediaBlob(memory.photoBlobId, db, storage);
+  if (!photo?.blob) return false;
+
   return db.transaction("rw", db.tracks, db.memories, db.mediaBlobs, async () => {
-    const memory = await db.memories.get(memoryId);
-    if (!memory?.photoBlobId) return false;
-    const photo = await db.mediaBlobs.get(memory.photoBlobId);
-    if (!photo?.blob) return false;
     const track = await db.tracks.get(memory.trackId);
     if (!track) return false;
 
@@ -905,9 +910,12 @@ export async function setTrackCoverCrop(
   id: string,
   crop: CropRect | undefined,
   db: MuzeroDB = defaultDb,
+  storage: MediaBlobStorageOptions = {},
 ): Promise<void> {
   const track = await db.tracks.get(id);
-  const blob = track?.coverBlobId ? (await db.mediaBlobs.get(track.coverBlobId))?.blob : undefined;
+  const blob = track?.coverBlobId
+    ? (await resolveMediaBlob(track.coverBlobId, db, storage))?.blob
+    : undefined;
   const coverThumbhash = blob ? await encodeCoverThumbhash(blob, crop) : undefined;
   await db.tracks.update(id, { coverCrop: crop, coverThumbhash, updatedAt: Date.now() });
 }
@@ -927,7 +935,7 @@ export async function setTrackCoverCrop(
 export async function backfillCoverThumbhashes(
   db: MuzeroDB = defaultDb,
   encode: (blob: Blob, crop?: CropRect) => Promise<string | undefined> = encodeCoverThumbhash,
-  opts: { limit?: number; skip?: ReadonlySet<string> } = {},
+  opts: { limit?: number; skip?: ReadonlySet<string>; storage?: MediaBlobStorageOptions } = {},
 ): Promise<{ updated: number; attempted: string[] }> {
   const limit = opts.limit ?? 12;
   const skip = opts.skip;
@@ -974,7 +982,7 @@ export async function backfillCoverThumbhashes(
     if (skip?.has(c.blobId)) continue;
     processed += 1;
     attempted.push(c.blobId);
-    const blob = (await db.mediaBlobs.get(c.blobId))?.blob;
+    const blob = (await resolveMediaBlob(c.blobId, db, opts.storage))?.blob;
     if (!blob) continue;
     const hash = await encode(blob, c.crop);
     if (!hash) continue;
@@ -1118,10 +1126,10 @@ export async function deleteMemory(id: string, db: MuzeroDB = defaultDb): Promis
 export async function getMemoryPhoto(
   memory: Memory,
   db: MuzeroDB = defaultDb,
+  storage: MediaBlobStorageOptions = {},
 ): Promise<Blob | undefined> {
   if (!memory.photoBlobId) return undefined;
-  const row = await db.mediaBlobs.get(memory.photoBlobId);
-  return row?.blob;
+  return (await resolveMediaBlob(memory.photoBlobId, db, storage))?.blob;
 }
 
 /** All memory notes for a set of tracks, keyed by trackId — for search joins + DJ context. */

@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { type MediaStorageProvider, putMediaBlob } from "./media-blob-storage";
 import { MuzeroDB } from "./muzero-db";
 import { backfillCoverThumbhashes, createSession } from "./repositories";
 
@@ -19,6 +20,26 @@ afterEach(async () => {
 });
 
 const png = () => new Blob([new Uint8Array([1, 2, 3])], { type: "image/png" });
+
+function createMemoryProvider(id: "opfs" | "electron-file" = "opfs") {
+  const files = new Map<string, Blob>();
+  const provider: MediaStorageProvider = {
+    id,
+    userVisible: id === "electron-file",
+    async put(input) {
+      const storageKey = `cover/${input.id}`;
+      files.set(storageKey, input.blob);
+      return { storageKey };
+    },
+    async get(input) {
+      return input.storageKey ? (files.get(input.storageKey) ?? null) : null;
+    },
+    async delete(input) {
+      if (input.storageKey) files.delete(input.storageKey);
+    },
+  };
+  return provider;
+}
 
 /** Add a track that already has a cover blob but no thumbhash (a "legacy" cover). */
 async function addTrackWithCover(id: string, sessionId: string): Promise<string> {
@@ -133,5 +154,45 @@ describe("backfillCoverThumbhashes", () => {
     });
     expect(updated).toBe(0);
     expect(encode).not.toHaveBeenCalled();
+  });
+
+  it("resolves provider-backed covers before encoding thumbhashes", async () => {
+    const session = await createSession({ name: "s", seedPrompt: "", config: {} }, db);
+    const provider = createMemoryProvider("opfs");
+    const cover = await putMediaBlob(
+      {
+        id: "blb_provider_cover",
+        trackId: "trk_provider",
+        role: "cover",
+        mime: "image/png",
+        blob: png(),
+      },
+      db,
+      { provider },
+    );
+    await db.tracks.add({
+      id: "trk_provider",
+      sessionId: session.id,
+      title: "provider",
+      kind: "audio",
+      origin: "uploaded",
+      provider: "upload",
+      status: "ready",
+      durationSec: 1,
+      createdAt: 1,
+      playCount: 0,
+      liked: false,
+      tags: [],
+      coverBlobId: cover.id,
+    });
+
+    const encode = vi.fn(async () => "HASH");
+    const { updated } = await backfillCoverThumbhashes(db, encode, {
+      storage: { providers: [provider] },
+    });
+
+    expect(updated).toBe(1);
+    expect(encode).toHaveBeenCalledWith(expect.any(Blob), undefined);
+    expect((await db.tracks.get("trk_provider"))?.coverThumbhash).toBe("HASH");
   });
 });

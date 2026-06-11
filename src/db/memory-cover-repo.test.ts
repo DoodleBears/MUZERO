@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { type MediaStorageProvider, putMediaBlob } from "./media-blob-storage";
 import { MuzeroDB } from "./muzero-db";
 import {
   addMemory,
@@ -24,6 +25,26 @@ afterEach(async () => {
     req.onsuccess = req.onerror = () => resolve();
   });
 });
+
+function createMemoryProvider(id: "opfs" | "electron-file" = "opfs") {
+  const files = new Map<string, Blob>();
+  const provider: MediaStorageProvider = {
+    id,
+    userVisible: id === "electron-file",
+    async put(input) {
+      const storageKey = `memory/${input.id}`;
+      files.set(storageKey, input.blob);
+      return { storageKey };
+    },
+    async get(input) {
+      return input.storageKey ? (files.get(input.storageKey) ?? null) : null;
+    },
+    async delete(input) {
+      if (input.storageKey) files.delete(input.storageKey);
+    },
+  };
+  return provider;
+}
 
 describe("setTrackCoverFromMemory", () => {
   it("copies a memory photo into a track cover without deleting the memory photo", async () => {
@@ -81,5 +102,47 @@ describe("setTrackCoverFromMemory", () => {
 
     await expect(setTrackCoverFromMemory(memory.id, db)).resolves.toBe(false);
     expect((await getTrack(track.id, db))?.coverBlobId).toBeUndefined();
+  });
+
+  it("copies provider-backed memory photos into a track cover", async () => {
+    const session = await createSession({ seedPrompt: "", config: { autoExtend: false } }, db);
+    const track = await createUploadedTrack(
+      {
+        blob: new Blob([new Uint8Array([1])], { type: "audio/wav" }),
+        durationSec: 12,
+        kind: "audio",
+        mime: "audio/wav",
+        sessionId: session.id,
+        title: "Provider Memory Loop",
+      },
+      db,
+    );
+    const memory = await addMemory({ note: "provider photo", trackId: track.id }, db);
+    const provider = createMemoryProvider("opfs");
+    const photo = await putMediaBlob(
+      {
+        id: "blb_provider_memory_photo",
+        trackId: track.id,
+        role: "memory",
+        mime: "image/png",
+        blob: new Blob(["provider-photo"], { type: "image/png" }),
+      },
+      db,
+      { provider },
+    );
+    await db.memories.update(memory.id, { photoBlobId: photo.id });
+
+    await expect(setTrackCoverFromMemory(memory.id, db, { providers: [provider] })).resolves.toBe(
+      true,
+    );
+
+    const updated = await getTrack(track.id, db);
+    const cover = await db.mediaBlobs.get(updated?.coverBlobId ?? "");
+    expect(cover).toMatchObject({
+      bytes: "provider-photo".length,
+      mime: "image/png",
+      role: "cover",
+      trackId: track.id,
+    });
   });
 });

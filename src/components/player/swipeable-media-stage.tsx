@@ -19,6 +19,7 @@ import {
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { AutoScrollText } from "@/components/ui/auto-scroll-text";
+import { resolveMediaBlob } from "@/db/media-blob-storage";
 import { db } from "@/db/muzero-db";
 import type { Track } from "@/db/types";
 import { useSettings } from "@/hooks/use-app-data";
@@ -999,8 +1000,7 @@ function usePreloadedCoverUrls(tracks: Track[]): Record<string, string> {
         }
         if (!request.coverBlobId) continue;
 
-        const record = await db.mediaBlobs.get(request.coverBlobId);
-        let blob = record?.blob;
+        let blob = (await resolveMediaBlob(request.coverBlobId, db))?.blob;
         if (!blob) continue;
         if (request.crop) {
           blob = await getCroppedBlob(blob, request.crop, blob.type || "image/jpeg");

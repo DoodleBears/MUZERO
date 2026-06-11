@@ -78,7 +78,7 @@ export function useTrackCoverUrl(
   const coverBlobId = track?.coverBlobId;
   const remoteCoverUrl = track?.remoteCoverUrl;
   const blob = useLiveQuery(
-    async () => (coverBlobId ? (await db.mediaBlobs.get(coverBlobId))?.blob : undefined),
+    async () => (coverBlobId ? (await resolveMediaBlob(coverBlobId, db))?.blob : undefined),
     [coverBlobId],
     undefined,
   );

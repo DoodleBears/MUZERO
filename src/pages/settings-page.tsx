@@ -40,6 +40,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
+import { resolveMediaBlob } from "@/db/media-blob-storage";
 import { db } from "@/db/muzero-db";
 import { saveSettings } from "@/db/repositories";
 import type {
@@ -207,7 +208,7 @@ export function SettingsPage() {
   const deviceAvatarBlob = useLiveQuery(
     async () =>
       localDevice?.avatarBlobId
-        ? (await db.mediaBlobs.get(localDevice.avatarBlobId))?.blob
+        ? (await resolveMediaBlob(localDevice.avatarBlobId, db))?.blob
         : undefined,
     [localDevice?.avatarBlobId],
     undefined,

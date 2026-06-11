@@ -1,6 +1,6 @@
 import Dexie from "dexie";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import type { MediaStorageProvider } from "./media-blob-storage";
+import { type MediaStorageProvider, putMediaBlob } from "./media-blob-storage";
 import { MuzeroDB } from "./muzero-db";
 import {
   addMemory,
@@ -17,6 +17,7 @@ import {
   deleteTracks,
   findSessionByStreamPlaylist,
   getAllTags,
+  getEntityCover,
   getMemoryPhoto,
   getPlayQueue,
   getSession,
@@ -171,6 +172,27 @@ describe("setSessionCover / getSessionCover", () => {
     expect(await getSessionCover(s.id, db)).toBeTruthy();
   });
 
+  it("resolves provider-backed set covers", async () => {
+    const provider = createMemoryProvider("opfs");
+    const s = await createSession({ seedPrompt: "", config: { autoExtend: false } }, db);
+    const cover = await putMediaBlob(
+      {
+        id: "blb_session_provider_cover",
+        trackId: s.id,
+        role: "cover",
+        mime: "image/jpeg",
+        blob: new Blob(["set-cover"], { type: "image/jpeg" }),
+      },
+      db,
+      { provider },
+    );
+    await db.sessions.update(s.id, { coverBlobId: cover.id });
+
+    await expect(
+      (await getSessionCover(s.id, db, { providers: [provider] }))?.text(),
+    ).resolves.toBe("set-cover");
+  });
+
   it("stores a non-destructive square crop on the session", async () => {
     const s = await createSession({ seedPrompt: "", config: { autoExtend: false } }, db);
     const blob = new Blob([new Uint8Array([1])], { type: "image/png" });
@@ -201,6 +223,33 @@ describe("setSessionCover / getSessionCover", () => {
     expect(got?.coverCrop).toBeUndefined();
     expect(await db.mediaBlobs.get(blobId)).toBeUndefined();
     expect(await getSessionCover(s.id, db)).toBeUndefined();
+  });
+});
+
+describe("getEntityCover", () => {
+  it("resolves provider-backed custom entity covers", async () => {
+    const provider = createMemoryProvider("opfs");
+    const cover = await putMediaBlob(
+      {
+        id: "blb_entity_provider_cover",
+        trackId: "artist:deidian",
+        role: "cover",
+        mime: "image/png",
+        blob: new Blob(["entity-cover"], { type: "image/png" }),
+      },
+      db,
+      { provider },
+    );
+    await db.entityCovers.put({
+      id: "artist:deidian",
+      kind: "artist",
+      coverBlobId: cover.id,
+      updatedAt: 1,
+    });
+
+    await expect(
+      (await getEntityCover("artist:deidian", db, { providers: [provider] }))?.text(),
+    ).resolves.toBe("entity-cover");
   });
 });
 
@@ -568,6 +617,28 @@ describe("memories (one-to-many)", () => {
     const noteOnly = await addMemory({ trackId: "trk_p", note: "plain" }, db);
     expect(noteOnly.photoBlobId).toBeUndefined();
     expect(await getMemoryPhoto(noteOnly, db)).toBeUndefined();
+  });
+
+  it("resolves provider-backed memory photos", async () => {
+    const provider = createMemoryProvider("opfs");
+    const mem = await addMemory({ trackId: "trk_p", note: "beach" }, db);
+    const photo = await putMediaBlob(
+      {
+        id: "blb_memory_provider_photo",
+        trackId: "trk_p",
+        role: "memory",
+        mime: "image/jpeg",
+        blob: new Blob(["memory-photo"], { type: "image/jpeg" }),
+      },
+      db,
+      { provider },
+    );
+    await db.memories.update(mem.id, { photoBlobId: photo.id });
+    const reloaded = (await db.memories.get(mem.id)) ?? mem;
+
+    await expect(
+      (await getMemoryPhoto(reloaded, db, { providers: [provider] }))?.text(),
+    ).resolves.toBe("memory-photo");
   });
 
   it("stores a memory author snapshot when provided", async () => {
