@@ -533,13 +533,13 @@ src/components/settings/
 **Tasks:**
 - [x] `scripts/check-version-sync.mjs`：读 `package.json` + `tauri.conf.json` + `Cargo.toml` 三处版本，drift 即 exit 1。✅ `collectVersions`/`versionsInSync` + 4 测。
 - [x] `make release-check`（= `changelog-check` + `version-sync`）作为 `release-build` 前置总闸（所有 `release-*` 经由它）；`make release-show` 打印版本 + 三文件一致性 + changelog 就位。✅
-- [ ] `scripts/export-changelog-md.mjs`：把类型化 changelog 渲染成根 `CHANGELOG.md`（en，Keep-a-Changelog 风，按 category 分组）。纯 `renderChangelogMarkdown` + test；`make changelog-md` 重新生成。
+- [x] `scripts/export-changelog-md.mjs`：把类型化 changelog 渲染成根 `CHANGELOG.md`（en，Keep-a-Changelog 风，按 category 分组 + platform 标）。✅ 纯 `renderChangelogMarkdown` + 3 测（含真实 7 版生成）；node 经 esbuild transform + data-URI 加载 .ts 释放（绕开 import.meta.glob）；`make changelog-md` 重新生成。
 - [ ] R2 部署 runbook（[§12](#12-deployment-runbook-r2-分发桶)）：建桶 + 公共读 + CORS + 绑 `assets.mu0.app` + rclone `r2:` remote + 凭证纪律。
 
 ### Phase 6 Checklist
 - [x] `make release-check` 在三文件版本一致且 changelog 就位时通过；任一漂移/缺失即非零 ✅
 - [x] `make release-show` 输出当前版本 + 同步状态 ✅
-- [ ] `make changelog-md` 生成的 `CHANGELOG.md` 含全部 7 版、按 category 分组、版本顺序新→旧
+- [x] `make changelog-md` 生成的 `CHANGELOG.md` 含全部 7 版、按 category 分组、版本顺序新→旧 ✅
 - [ ] runbook 步骤可照单开通 R2 并首发
 
 ---

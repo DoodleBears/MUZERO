@@ -208,6 +208,10 @@ changelog-check:
 version-sync:
 	node scripts/check-version-sync.mjs
 
+# Regenerate the repo-standard CHANGELOG.md from the typed changelog source.
+changelog-md:
+	node scripts/export-changelog-md.mjs
+
 # The total pre-release gate: changelog present + versions in lockstep. A
 # dependency of every release-* build.
 release-check: changelog-check version-sync
