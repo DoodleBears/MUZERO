@@ -64,6 +64,11 @@ describe("manualNextIndex", () => {
     expect(manualNextIndex(3, 1, "one")).toBe(2);
   });
 
+  it("wraps from the last track to the first under repeat-one", () => {
+    // repeat-one only replays on media-end; the next button still loops the queue.
+    expect(manualNextIndex(3, 2, "one")).toBe(0);
+  });
+
   it("keeps repeat-all wrapping for explicit next", () => {
     expect(manualNextIndex(3, 2, "all")).toBe(0);
   });
@@ -76,6 +81,9 @@ describe("prevIndex", () => {
   });
   it("wraps to the end when repeat is all", () => {
     expect(prevIndex(3, 0, "all")).toBe(2);
+  });
+  it("wraps to the end under repeat-one, mirroring manual next", () => {
+    expect(prevIndex(3, 0, "one")).toBe(2);
   });
 });
 
@@ -137,6 +145,13 @@ describe("shuffleNext / shufflePrev", () => {
     expect(shuffleManualNext(order, 4, 0, "one").index).toBe(3);
   });
 
+  it("manual shuffled next wraps at the cycle end under repeat:one", () => {
+    // 1 is last in `order` → repeat-one reshuffles and continues (never null/stuck).
+    const res = shuffleManualNext(order, 4, 1, "one");
+    expect(res.index).not.toBeNull();
+    expect([...res.order].sort((a, b) => a - b)).toEqual([0, 1, 2, 3]);
+  });
+
   it("repeat:all reshuffles and continues at the wrap", () => {
     const res = shuffleNext(order, 4, 1, "all"); // 1 is last in order
     expect(res.index).not.toBeNull();
@@ -152,5 +167,6 @@ describe("shuffleNext / shufflePrev", () => {
     expect(shufflePrev(order, 4, 0, "off").index).toBe(2); // before 0 is 2
     expect(shufflePrev(order, 4, 2, "off").index).toBe(2); // 2 is first → stay
     expect(shufflePrev(order, 4, 2, "all").index).toBe(1); // wrap to last
+    expect(shufflePrev(order, 4, 2, "one").index).toBe(1); // repeat-one wraps too
   });
 });

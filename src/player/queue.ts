@@ -38,17 +38,24 @@ export function nextIndex(length: number, index: number, repeat: RepeatMode): nu
 }
 
 /**
- * Manual next is an explicit user action: repeat-one only affects what happens
- * when media ends, so the next button still walks forward through the queue.
+ * Manual next is an explicit user action: repeat-one only governs what happens
+ * when media *ends* (it replays the current track), so the next button still
+ * walks forward through the queue — and, like repeat-all, wraps from the last
+ * track back to the first. (Mapping "one" → "off" here would wrongly stop at
+ * the end; single-track repeat is still a looping playlist for manual nav.)
  */
 export function manualNextIndex(length: number, index: number, repeat: RepeatMode): number | null {
-  return nextIndex(length, index, repeat === "one" ? "off" : repeat);
+  return nextIndex(length, index, repeat === "one" ? "all" : repeat);
 }
 
-/** Index of the previous track. Symmetric with {@link nextIndex}. */
+/**
+ * Index of the previous track. Symmetric with {@link manualNextIndex}: both
+ * repeat-all and repeat-one wrap (off clamps at the start). prev is always a
+ * manual action, so repeat-one wraps here just like next.
+ */
 export function prevIndex(length: number, index: number, repeat: RepeatMode): number | null {
   if (length <= 0) return null;
-  if (index <= 0) return repeat === "all" ? length - 1 : 0;
+  if (index <= 0) return repeat === "off" ? 0 : length - 1;
   return index - 1;
 }
 
@@ -132,7 +139,7 @@ export function shuffleManualNext(
   repeat: RepeatMode,
   rng: () => number = Math.random,
 ): { index: number | null; order: number[] } {
-  return shuffleNext(order, length, currentIndex, repeat === "one" ? "off" : repeat, rng);
+  return shuffleNext(order, length, currentIndex, repeat === "one" ? "all" : repeat, rng);
 }
 
 /** Step backward through a shuffled order. Symmetric with {@link shuffleNext}. */
@@ -147,6 +154,7 @@ export function shufflePrev(
   const ord = order.length === length ? order : buildShuffleOrder(length, currentIndex, rng);
   const pos = ord.indexOf(currentIndex);
   if (pos - 1 >= 0) return { index: ord[pos - 1], order: ord };
-  if (repeat === "all") return { index: ord[ord.length - 1], order: ord };
+  // repeat-one wraps for manual prev too, mirroring shuffleManualNext.
+  if (repeat !== "off") return { index: ord[ord.length - 1], order: ord };
   return { index: currentIndex, order: ord };
 }
