@@ -16,13 +16,21 @@
 | Phase | Name | Status | Link |
 |-------|------|--------|------|
 | 1 | Chat runtime 地基（Dexie v5 + Runtime Actor + 单 session 流式 + streamdown） | ✅ Completed | §7 |
-| 2 | 三形态显示外壳（FAB / 底部输入条 / Dock 1∕3 → 移动端全屏） | 🔄 组件+breakpoint+测试 ✅；**App.tsx 挂载待 WIP**（CHAT-2b） | §7 |
+| 2 | **Dock 集成对话入口**（minimize 图标 / normal 圆角 chip 输入条 / expand framer-motion widget；gated on LLM+musicgen 已配置） | 🔄 **2026-06-11 重新设计**：旧 FAB/bar/Dock-1∕3 壳作废、改挂 player-dock 上方工具行；runtime/composer/turns/notification 组件复用 | §7 |
 | 3 | DJ 工具调用（search/create/curate/propose/generate + HITL 审批） | 🔄 6 工具+审批桥+折叠 UI+测试 ✅；HITL ask/auto 切换 + i18n 待 | §7 |
 | 4 | 多 Session + 历史列表（搜索）+ branch/regenerate | 🔄 search/branch/regenerate/session-home ✅；列表挂载待 WIP | §7 |
-| 5 | 多 Provider 模型选型（preset 化 + combobox + Settings + key 入 Dexie） | 🔄 7 preset+model picker+dialog/popover/command 原语 ✅；Settings key UI + i18n 待 | §7 |
+| 5 | 多 Provider 模型选型（preset + **自定义 provider，复刻 ClipCombo** + combobox + Settings + key 入 Dexie） | 🔄 7 preset+model picker+dialog/popover/command/scroll-area 原语 ✅；**动态 custom-provider（Dexie）+ Settings provider 面板 + enabled grid + i18n 待** | §7 |
 | 6 | 队列/打断 prompt + 空态 onboarding + 上下文压缩 | 🔄 token/budget/queue-tray/empty/notice ✅；App 挂载 + i18n 待 | §7 |
 
 > Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
+
+> 🔄 **2026-06-11 — Phase 2 外壳重新设计（owner 定）**：放弃旧「FAB / 底部输入条 / Dock 1∕3 侧栏 / 全屏」四形态，改为**集成进 player-dock 上方工具行**的单一对话入口（详见 §5 重写）：
+> - **位置**：dock 卡片**上方的浮动工具行**，置于「切 tab 的 `NavFab` + 记忆 `DockMemoryToggle`」**左侧**，吃掉剩余空间。
+> - **三态**：**minimize**（只一个 icon）→ **normal**（full-rounded 圆角 chip 文字输入框，默认）→ **expand**（framer-motion `layoutId` 过渡成对话 widget）。
+> - **门控（硬性）**：**未配置 LLM API 且未配置 musicgen API 时，入口不可用、且 icon 根本不渲染**（单一纯函数 `canUseDjChat(settings)` 裁决，见 §5.1）。
+> - **Provider 复刻 ClipCombo**：§6 扩成「内置 preset + 用户动态自定义 provider（OpenAI-compatible baseURL，存 Dexie）+ 每 provider key + enabled grid + model 选择器」，逐项对照 ClipCombo `clip-llm-providers.ts` / `EditorSettingsPopover` / `clip-chat-model.ts`。
+>
+> 旧 `chat-launcher-fab` / `chat-input-bar` / `chat-dock` / `use-chat-breakpoint` 壳**作废重做**；**runtime（`src/chat/*`）+ 展示层（composer / turns / session-home / model-picker / queue-tray / empty / notification）+ 工具/会话/provider 后端全部保留**，只换宿主与状态机。
 
 ---
 
@@ -107,15 +115,14 @@ src/
 │   ├── dj-chat-prompt.ts                  # 助手 system prompt（区别于 DJ_SYSTEM_PROMPT）
 │   ├── dj-chat-sessions.ts               # Dexie session CRUD + 节流快照 persist + 标题派生
 │   ├── dj-chat-context-budget.ts          # 上下文预算/压缩（Phase 6，纯函数）
-│   └── dj-chat-tokens.ts                  # 字符≈token 估算（纯函数）
+│   ├── dj-chat-tokens.ts                  # 字符≈token 估算（纯函数）
+│   └── dj-chat-availability.ts            # 【新】canUseDjChat / hasUsableLlm / hasUsableMusicgen 门控（纯函数 + TDD）
 ├── stores/
 │   └── chat-store.ts                      # 新：三形态 mode + 当前 session id + 轻量 runtime meta（Zustand）
 ├── components/chat/                       # 新：UI
 │   ├── chat-panel.tsx                     # mode-agnostic panel body（header + turns + composer）
-│   ├── chat-launcher-fab.tsx             # FAB 形态
-│   ├── chat-input-bar.tsx                 # 底部输入条形态（只一个 composer）
-│   ├── chat-reply-notification.tsx        # 折叠态回复 = 顶部 Notification toast（motion，仿 anysoul MessageToast）
-│   ├── chat-dock.tsx                      # Dock 形态（桌面 1∕3 侧栏 / 移动全屏）宿主
+│   ├── dj-chat-entry.tsx                  # 【2026-06-11 重设计】Dock 工具行集成入口：icon/chip/expanded 三态 + framer-motion layoutId morph（取代 fab/bar/dock 三壳）
+│   ├── chat-reply-notification.tsx        # 折叠态（icon/chip）回复 = 顶部 Notification toast（motion，仿 anysoul MessageToast）
 │   ├── chat-composer.tsx                 # 输入（textarea + 3 态按钮 + @/ 菜单 + 队列）
 │   ├── chat-turns.tsx                     # 消息 turn 列表（streamdown + 工具折叠）
 │   ├── chat-tool-collapsible.tsx          # ToolUIPart 渲染（审批/结果/错误）
@@ -124,6 +131,9 @@ src/
 │   └── chat-model-picker.tsx              # per-session 模型 combobox（Phase 5）
 ├── hooks/use-chat-messages.ts             # useLiveQuery(chatSessions)
 ├── ai/llm-providers.ts                    # 新（Phase 5）：多 provider preset 注册表（仿 musicgen presets）
+├── ai/custom-llm-providers.ts             # 新（Phase 5，§6.1）：动态自定义 provider repo（Dexie llmCustomProviders + normalize，复刻 ClipCombo）
+├── components/settings/llm-provider-settings.tsx  # 新（Phase 5）：provider 面板（enabled grid + api-key-field + 自定义编辑）
+├── components/settings/api-key-field.tsx  # 新（Phase 5）：per-provider key 输入（遮罩 / reveal / apiKeyUrl）
 └── i18n/locales/*/common.json             # 新 `chat` 命名空间（en 先行）
 ```
 
@@ -169,7 +179,7 @@ export interface ChatSession {
 /** 活跃 session id（resume 指针）→ AppSettings.lastChatSessionId?（决议 Open Q1）。
  *  MUZERO 无 project 概念，不像 ClipCombo 需要 per-project 的 chatPrefs 行；复用单例
  *  AppSettings（与既有播放恢复点 lastSessionId/lastTrackIndex 同级），不为一个字段开新表。
- *  纯 UI 的 mode/dockSide 留在 chat-store 的 localStorage（instant boot，无需 Dexie）。 */
+ *  纯 UI 的 mode 留在 chat-store 的 localStorage（instant boot，无需 Dexie）。 */
 ```
 
 **消息形状**：直接用 AI SDK 的 `UIMessage`，扩 metadata（不自建 message 表/类型）——
@@ -197,19 +207,19 @@ export interface DjChatRuntimeMeta {
 }
 ```
 
-### 3.3 三形态状态（[`src/stores/chat-store.ts`](../../../src/stores/chat-store.ts)，persisted 到 localStorage `muzero-chat-ui`）
+### 3.3 显示态状态（[`src/stores/chat-store.ts`](../../../src/stores/chat-store.ts)，persisted 到 localStorage `muzero-chat-ui`）
 
 ```ts
-export type ChatMode = "fab" | "bar" | "dock" | "fullscreen";
+export type ChatMode = "icon" | "chip" | "expanded"; // minimize / normal / expand
 interface ChatUiState {
-  mode: ChatMode;                 // 默认 "bar"（用户说 80% 时间只要一个输入框）
-  dockSide: "left" | "right";     // 桌面 Dock 靠哪侧，默认 right
+  mode: ChatMode;                 // 默认 "chip"（80% 时间只想要一个输入框）；"icon"=minimize、"expanded"=widget
   activeSessionId: string | null; // 当前打开的对话；null = session home
 }
 ```
 
-> 这是**纯 UI 偏好**，放 localStorage 合规（不是行为门控 flag，硬规则 #3 针对的是隐藏后端开关；可见的形态切换控件 + 偏好持久化是 OK 的，与 theme/locale/primary 同模式）。
-> **`activeSessionId`**：chat-store 持 live 值；持久 resume 指针镜像到 `AppSettings.lastChatSessionId?`（决议 Q1），boot 回填——与 ClipCombo「nav store(live)+Dexie(durable)」双写、MUZERO 既有 theme/primary「localStorage+AppSettings」镜像同构。`mode/dockSide` 不入 Dexie。
+> **可见性是派生、不入 store**：入口是否渲染由 `canUseDjChat(settings)`（§5.1）裁决——**未配置 LLM + musicgen 时无论 `mode` 为何都不渲染**（连 icon 都不出）。`mode` 只在「可用」时决定 icon/chip/expanded 形态。
+> 这是**纯 UI 偏好**，放 localStorage 合规（不是行为门控 flag——硬规则 #3 针对隐藏后端开关；可见的形态切换 + 偏好持久化 OK，与 theme/locale/primary 同模式）。
+> **`activeSessionId`**：chat-store 持 live 值；持久 resume 指针镜像到 `AppSettings.lastChatSessionId?`（决议 Q1），boot 回填——与 ClipCombo「nav store(live)+Dexie(durable)」双写、MUZERO 既有 theme/primary 镜像同构。`mode` 不入 Dexie。旧 `dockSide` 字段移除——入口已锚定 dock 工具行、widget 自该处展开。
 
 ### 3.4 Migration
 
@@ -273,26 +283,41 @@ interface ChatUiState {
 
 ---
 
-## 5. Frontend / 三种显示形态
+## 5. Frontend / Dock 集成对话入口（三态：minimize → normal → expand）
 
-同一个 **mode-agnostic panel body**（`chat-panel.tsx`，`flex min-h-0 flex-col`：header + `chat-turns` + `chat-composer`），由 `chat-store.mode` 决定宿主与布局（ClipCombo 已证明 body 可被任意重挂载）。
+同一个 **mode-agnostic panel body**（`chat-panel.tsx`：header + `chat-turns` + `chat-composer`）被三态宿主复用（ClipCombo 已证明 body 可任意重挂载）。**入口锚在 player-dock 上方工具行**，不再有独立 FAB / 侧栏 / 全屏四形态。
 
-### 5.1 形态 1：FAB（minimize）
+**位置**（[`player-dock.tsx`](../../../src/components/shell/player-dock.tsx) 卡片上方的浮动工具行）：该行现为 `[DockMemoryToggle][NavFab]` 右对齐、`w-fit self-end`（左侧 click-through）。改为铺满：
 
-- 右下角浮动圆形按钮（`Sparkles`/`Bot` 图标），未读/streaming 时角标。点击 → 切到上次的展开形态（`bar` 或 `dock`）。
-- 用 `motion` 做展开动画（ClipCombo 没有可抄，自研：scale+fade from FAB origin）。
+```
+[ DjChatEntry —— min-w-0 flex-1，吃掉剩余空间 ]   [ DockMemoryToggle(记忆) ]   [ NavFab(切 tab) ]
+```
 
-### 5.2 形态 2：底部输入条（bar，**默认**）
+chat 入口落在**记忆 icon + 切 tab icon 的左边**、占该行剩余宽度（行 `w-fit self-end` → `w-full`，右两枚 icon `shrink-0`）；`mode==="icon"` 时入口收成 `w-fit` 圆 icon、左侧恢复 click-through。
 
-- 屏幕底部（player-dock 之上）只渲染 **`chat-composer`** 单行输入 + 3 态按钮，不显示历史。回车即把需求发给 DJ。
-- 这是「大多数时候只想跟 DJ 说一句」的主路径。composer 是独立组件，可单独挂载。
-- **回复显示 = 顶部 Notification toast**（见 §5.2.1，决议自 Open Q2）：折叠态（bar / fab）下，DJ 的回复不在原地铺开，而是顶部冒一条轻量通知，点击才展开到 `dock`。
+**门控（硬性，requirement #1）**：单一纯函数 **`canUseDjChat(settings)`**（[`src/chat/dj-chat-availability.ts`](../../../src/chat/dj-chat-availability.ts)，TDD 穷举）= `hasUsableLlm(settings) && hasUsableMusicgen(settings)`：
+- `hasUsableLlm` —— 当前/默认 LLM provider 有可用 key（或显式 keyless-local 的 custom endpoint）；LLM 是 BYOK 无离线兜底 → 没 key 即不可用。
+- `hasUsableMusicgen` —— 选定 music provider 可用（`mock` 永真；`cloud`/Mureka 需 key）。
+- **`false` → 整个入口（连 icon）不渲染**（不是 disabled、是不存在），工具行恢复旧 `[memory][nav]` 右对齐布局。配好缺项后即出现。判定走 `useSettings()` 派生 selector，**别散落 `if(provider===)`**（硬规则 #5/#6）。
+
+### 5.1 形态 1：minimize（只一个 icon）
+
+- 收起态：工具行左侧只一枚圆 icon 按钮（`Sparkles`/`MessageCircleMore`，与 dock 既有圆形控件同款 `h-11 rounded-full bg-card/90 ring-1 backdrop-blur`），不占满宽度。未读/streaming 时角标。
+- 点击 → `mode="chip"`。`motion` 宽度 + 透明度过渡（icon ↔ chip）。
+- 折叠态（icon）收到 DJ 回复 → 顶部通知（§5.2.1），不原地铺开。
+
+### 5.2 形态 2：normal（full-rounded 圆角 chip 输入条，**默认**）
+
+- 默认态：一个 **full-rounded（`rounded-full`）chip** 作单行输入，`min-w-0 flex-1` 吃掉工具行剩余宽度；内含左侧小 DJ icon + **`chat-composer`** 单行输入 + 3 态主按钮（发送/停/入队）+ 右侧「展开」`Maximize2` 钮。回车即把需求发给 DJ，不显示历史。
+- 「大多数时候只想跟 DJ 说一句」的主路径。chip 对齐 dock 卡片视觉（`bg-card/90 backdrop-blur ring-1 ring-border/40 shadow-lg`）、与右侧 memory/nav 控件等高（`h-11`）。
+- 收起 → `mode="icon"`（chip 内最小化钮；v1 手动，不自动收）；展开 → `mode="expanded"`。
+- 折叠态（icon/chip 皆算）DJ 回复 → 顶部通知（§5.2.1）。
 
 ### 5.2.1 DJ 回复通知（`chat-reply-notification.tsx`，折叠态回复显示）
 
-> **决议（Open Q2）**：bar/fab 折叠时收到 DJ 回复 → **顶部居中单条 Notification toast**，仿 anysoul 的 [`MessageToast`](../../../../anysoul/packages/web/src/components/hud/MessageToast.tsx)。不占信息、不打扰；点击展开到 `dock`。多条/错误并发时用堆叠版（仿 anysoul [`NotificationStack`](../../../../anysoul/packages/web/src/components/hud/NotificationStack.tsx)），v1 先单条。
+> **决议（Open Q2）**：icon/chip 折叠态收到 DJ 回复 → **顶部居中单条 Notification toast**，仿 anysoul 的 [`MessageToast`](../../../../anysoul/packages/web/src/components/hud/MessageToast.tsx)。不占信息、不打扰；点击展开到 `expanded` widget。多条/错误并发时用堆叠版（仿 anysoul [`NotificationStack`](../../../../anysoul/packages/web/src/components/hud/NotificationStack.tsx)），v1 先单条。
 
-**何时显示**：`mode ∈ {bar, fab}` 且当前 session 有新 assistant 输出（streaming 或 finish）。`mode === dock/fullscreen`（面板已展开可见）时**不显示**（避免重复）。
+**何时显示**：`mode ∈ {icon, chip}` 且当前 session 有新 assistant 输出（streaming 或 finish）。`mode === "expanded"`（widget 已展开可见）时**不显示**（避免重复）。
 
 **框架与动效**（`motion`，MUZERO 已有，用 `import { AnimatePresence, motion } from "motion/react"`，无需新依赖）：
 - 容器：`fixed inset-x-0 top-0 z-[100] flex flex-col items-center px-4 pointer-events-none`，`paddingTop: calc(env(safe-area-inset-top,0px) + 12px)`（移动端安全区）。
@@ -301,17 +326,19 @@ interface ChatUiState {
   - `transition={{ type:"spring", stiffness:380, damping:28, opacity:{duration:0.18} }}`
 - 卡片：`pointer-events-auto w-full max-w-md`，圆角 + `bg-card/95 backdrop-blur-xl ring-1 ring-border/30 shadow-lg`，`active:scale-[0.98]`。内容一行：DJ 图标（`Sparkles`/`Bot`）+ 标题（"DJ"）+ **一行预览**（assistant 文本截 ~80 字，`truncate`）。
 - **streaming**：预览实时更新（订阅 runtime actor 的最新 assistant 文本），尾部小 pulse/`Loader2`；**finish 后才启动自动消失计时**（~4–6s，参 `DISPLAY_MS`）。期间用户输入新一句则替换当前通知（`mode="wait"` 自然过渡）。
-- **点击**：`dismiss()` + 切 `mode = "dock"`（桌面）/ `"fullscreen"`（移动）+ 打开该 session（`activeSessionId`）——等价 anysoul 的 `handleTap`（展开面板 + 定位 thread）。
+- **点击**：`dismiss()` + 切 `mode = "expanded"` + 打开该 session（`activeSessionId`）——等价 anysoul 的 `handleTap`（展开 widget + 定位 thread）。
 - **错误**：DJ 出错也走这条通知（destructive 配色），点击展开看详情。
 - 纯通知、`pointer-events-none` 包裹不挡操作；无障碍：`role="status"` + 可聚焦点击区。
 
 > 实现参考可逐行对照 anysoul `MessageToast.tsx`（顶部单条、spring、自动消失、tap-to-expand）与 `NotificationStack.tsx`（`mode="popLayout"` + `layout="position"` 堆叠、`@/lib/animations` 的 `springDefault`/`layoutSpring`，留给 v2 多条场景）。
 
-### 5.3 形态 3：Dock（桌面 1∕3 侧栏 / 移动全屏）
+### 5.3 形态 3：expand（framer-motion 过渡成对话 widget）
 
-- **桌面（`lg+`）**：靠 `dockSide`（默认右）固定一个 `w-[33%]`（或 `min(33%, 460px)`）的列，完整 panel body。可选 drag-resize（`react-resizable-panels`，v1 可不做，给固定 1∕3）。player-dock / main 内容相应让位（flex sibling，不是遮挡 overlay；移动端才 overlay）。
-- **移动（`<md`）**：展开到全屏 / 画面剩余空间（`inset-0` 或占满 main），关闭回 FAB。
-- 断点：MUZERO 既定 `md` 为内容桌面/移动分界；用一个 `matchMedia` hook 统一（参考 ClipCombo 的 `useMobileWorkbenchLayout`，但简化为单断点）。
+- 点 chip 右侧「展开」钮 / 点回复通知 → `mode="expanded"`：chip **用 framer-motion `layoutId` 共享布局过渡** morph 成一个对话 widget（同一节点平滑放大，不是淡入另起的新面板），承载完整 panel body（header + `chat-turns` 历史 + `chat-composer` + session 控件 + 模型 picker + 队列托盘）。
+- **桌面（`md+`）**：widget 是一个**从 dock 入口上方长出的浮层卡片**（锚在入口处向上展开），约 `w-[min(36rem,calc(100vw-1.5rem))] h-[min(70vh,40rem)]`，圆角 + `bg-card/95 backdrop-blur-xl ring-1 shadow-2xl`，盖在 main 之上（**不挤** player-dock 布局、**不引入 sidebar**，硬规则 #9；点外侧 / `Esc` 收回）。
+- **移动（`<md`）**：展开成**全屏 sheet**（复用 now-playing sheet 同款 `inset-0` + 安全区），关闭回 chip/icon。断点用统一 `matchMedia` hook（`md` 分界，参考 ClipCombo `useMobileWorkbenchLayout` 简化为单断点）。
+- 收起：`Minimize2` / `Esc` / 点外侧 → 回 `chip`（或上次的 `icon`）；`layoutId` 反向 widget→chip 过渡。
+- reduced-motion：`MotionConfig reducedMotion="user"` 下 morph 退化为即时切换（无缩放/位移），仍正确挂载。
 
 ### 5.4 Composer（`chat-composer.tsx`）
 
@@ -347,7 +374,7 @@ interface ChatUiState {
 > chat 是多 slice、高 re-render 风险区（消息流、runtime status、三形态、队列、模型选择各自变化频率不同）。**状态跨组件解耦做到位，state 更新不得波及无关组件**（硬规则 #6）。沿用 MUZERO 现有范式（[`track-identity-row.tsx`](../../../src/components/player/track-identity-row.tsx) 是模板：`useShallow` + 只取当前曲*标量*，别的歌变动重建数组也不重渲染它）。
 
 - **最小 selector，永不整 store 订阅**：组件订阅它真正用到的最小切片；选对象/数组用 `useShallow`（`zustand/react/shallow`）+ **提取标量字段**（如 `{title, coverBlobId}`），别订阅整个 `messages`/`queue` 对象引用。
-- **chat-store 分 slice**：`uiSlice`（mode/dockSide）、`navSlice`（activeSessionId）、`runtimeMetaSlice`（per-session status/preview/pendingApprovalCount）。各 slice 独立更新，互不牵连。high-frequency 的流式 token **不进 store**——走 runtime actor 的 `useSyncExternalStore` 快照，只让挂载的消息视图重渲染。
+- **chat-store 分 slice**：`uiSlice`（mode）、`navSlice`（activeSessionId）、`runtimeMetaSlice`（per-session status/preview/pendingApprovalCount）。各 slice 独立更新，互不牵连。high-frequency 的流式 token **不进 store**——走 runtime actor 的 `useSyncExternalStore` 快照，只让挂载的消息视图重渲染。
 - **非响应式单例进模块作用域**：`DjChatRuntimeActor` 注册表、`AbortController`、transport 等**不进 store state**（同 `DjEngine`/`MediaEngine`）。
 - **派生用 selector，不冗余存**：`pendingApprovalCount`、`currentTrack` 等是 selector over tool parts / queue，不另立可能与真相分叉的 state。
 - **diff 守卫高频订阅**：liveQuery / 外部订阅推数据前比签名，内容没变不 `set`（参 player-store 的 `queueSig` 守卫），避免数组引用 churn 触发列表全量重渲染。
@@ -365,6 +392,26 @@ interface ChatUiState {
 - **Settings UI**：provider 列表（启用/排序/各自 key）+ **全局默认 provider/model** + **per-session 模型 combobox**（需补 `command`/`combobox` 原语）。provider「有 key 且启用」才进 session 模型选择器。
 - **全局默认 + per-session 覆盖（决议 Q3）**：新建 session **继承全局默认**（存在 `AppSettings` 的 `defaultLlmProviderPresetId`/`defaultLlmModel`，或复用现有 `llmProvider`/`llmModel` 迁移）；用户用 combobox 覆盖时写 `ChatSession.llmProviderPresetId`+`llmModel`（**不存 key**，防陈旧密钥进历史）。解析时 `ChatSession` 有覆盖用覆盖、否则用全局默认。改 settings 即重建 agent、transport 不变。
 - **上下文限制检测**：多级回退（model 元数据 → 静态已知表 → 保守默认 128k，标「估算」），短 TTL 缓存，与 Settings 模型拉取共享。
+
+### 6.1 复刻 ClipCombo 的「内置 preset + 动态自定义 provider」（逐项对照，requirement #2）
+
+> 蓝本：ClipCombo `packages/clipcombo/src/lib/clip-llm-providers.ts`（preset 注册 + 自定义 provider 归一化）、`components/editor/EditorSettingsPopover.tsx`（provider/model picker + 自定义编辑 + enabled grid + `ApiKeyField`）、`lib/clip-chat-model.ts`（AI SDK 装配）。MUZERO 现状已有 `src/ai/llm-providers.ts`（7 preset）、`chat-model-picker.tsx`、`apiKeysByPresetId`——**缺的是「动态自定义 provider 系统 + Settings provider 面板 + enabled grid + ApiKeyField」**。
+
+| ClipCombo | MUZERO 落点 | 状态 |
+|---|---|---|
+| `EditorLlmProviderPreset`（id/label/baseUrl/apiKeyUrl/provider/models[]）| `LlmProviderPreset`（[`src/ai/llm-providers.ts`](../../../src/ai/llm-providers.ts)）| ✅ 已有 7 内置 |
+| `EditorCustomLlmProviderRecord`（`custom:${uuid}`，label/baseUrl/models[]/时间戳）| **新 `CustomLlmProvider` 类型 + Dexie 表 `llmCustomProviders`（bump v6，`&id,createdAt,label`，新表不写 upgrade）** | 🔲 待做 |
+| `list/put/deleteEditorCustomLlmProvider` + `useLiveQuery` + `notify…Changed` 事件 | **`src/ai/custom-llm-providers.ts` repo**（list/put/delete + `useLiveQuery`）；`normalizeCustomProviders()`（去重 / trim / 至少一 model）| 🔲 待做 |
+| `customLlmProviderConfigToPreset()`（custom → preset，恒 `openai-compatible`）| 同名纯函数，merge 进 `resolveProviderPresets(builtins, customProviders)` | 🔲 待做 |
+| `apiKeysByPresetId` / `modelsByPresetId`（per-provider 记 key + 上次 model）| settings 行（key 进 IndexedDB，硬规则 #2）；**补 `modelsByPresetId`** 切 provider 复原上次 model | 🔄 key 有、`modelsByPresetId` 待补 |
+| Provider 选择 = Popover+Command；「+ Add Custom Provider」建 `custom:${uuid}` | `chat-model-picker.tsx`（✅）扩 provider 维度 + Settings「+ 自定义 provider」按钮 | 🔄 |
+| 自定义编辑：label / baseUrl / model 列表 add-remove / delete provider | **Settings provider 面板新组件 `llm-provider-settings.tsx`** | 🔲 待做 |
+| 「Enabled providers」勾选网格 + 每项 key 状态（ready / optional / missing）| 同面板内 grid；纯函数 `isLlmProviderKeyReady(settings, id)` | 🔲 待做 |
+| `ApiKeyField`（遮罩 + reveal + `apiKeyUrl` 链接 + onCommit 提交）| **新 `api-key-field.tsx`**（每 provider 一枚，写 `apiKeysByPresetId[id]`）| 🔲 待做 |
+| `createClipChatLanguageModel(settings)`：anthropic vs openai-compatible / keyless-local 去 auth header / baseURL 归一（补 `/v1`）| `resolveDjModel` 扩（[`src/ai/model.ts`](../../../src/ai/model.ts)）：anthropic 走 `createAnthropic`+浏览器直连 header；其余 `createOpenAI({ baseURL, apiKey, fetch: getAppFetch() })`；无 key 的 local endpoint 用 `fetchWithoutAuthorization` | 🔄 preset 解析有、custom/keyless 分支待补 |
+| 视觉能力推断（`supportsVision` per model/provider）| v1 可省（DJ chat 暂不收图）；留 `models[].supportsVision?` 字段位 | ⏸️ 省 |
+
+**纪律**：custom provider 恒 `openai-compatible`；key **只进 IndexedDB `settings`**（不像 ClipCombo 放 localStorage——硬规则 #2）；HTTP 全程 `getAppFetch()`（桌面 muzfetch 绕 CORS——硬规则 #5/#10）；删 provider/model 走可撤的 repo mutation；`custom:` id 前缀属 codename 层稳定（硬规则 #4）。**`canUseDjChat` 的 `hasUsableLlm` 直接复用 `isLlmProviderKeyReady`**（任一「启用且 key-ready」的 provider 即满足门控）。
 
 ---
 
@@ -385,17 +432,21 @@ interface ChatUiState {
 - [x] provider HTTP 走 `getAppFetch()` via `resolveDjModel`; key 不进日志/历史。
 - [x] `make check` 绿；本 phase 未新增用户可见正文文案（按钮仅 aria-label）。
 
-### Phase 2: 三形态显示外壳
+### Phase 2: Dock 集成对话入口（**2026-06-11 重新设计**）
+> 旧四形态壳（FAB / bar / Dock-1∕3 / 全屏）作废重做；并行 Now Playing redesign 已落地、`App.tsx`/`player-dock.tsx` 不再 WIP-blocked，本 phase 可直接做。
 **Tasks:**
-- [x] `chat-store` 的 `mode`/`dockSide` + persist；`matchMedia` 断点 hook。
-- [x] `chat-launcher-fab.tsx`（FAB + motion 展开）、`chat-input-bar.tsx`（底部 composer-only）、`chat-dock.tsx`（桌面 1∕3 flex sibling / 移动全屏 overlay）。
-- [x] `chat-reply-notification.tsx`（§5.2.1）：折叠态（bar/fab）DJ 回复走顶部 Notification toast（`motion/react`，spring 下滑、一行预览、点击展开到 dock）；dock/fullscreen 时不显示。finish 后自动消失计时留给 App 挂载后的实测收口。
-- [ ] 挂进 [`App.tsx`](../../../src/App.tsx) 外壳（与 `GlobalDropZone` 同级 overlay + Dock 让位 main）；NavRow/player-dock 不重排成 sidebar（硬规则 #9）。**Blocked:** `src/App.tsx` 当前属于并行 Now Playing redesign WIP，待其落地后做 CHAT-2b。
+- [x] `chat-store` 的 `mode` + persist；`matchMedia` 断点 hook（`mode` 改 `icon`/`chip`/`expanded`，移除 `dockSide`）。
+- [~] ~~`chat-launcher-fab` / `chat-input-bar` / `chat-dock`（旧壳）~~ **作废**，逻辑并入新 `dj-chat-entry.tsx`。
+- [ ] **`dj-chat-availability.ts`（纯函数 + TDD）**：`canUseDjChat` / `hasUsableLlm` / `hasUsableMusicgen`；穷举（无 LLM key、无 musicgen、`mock` 永真、keyless-local、两者齐备）。
+- [ ] **`dj-chat-entry.tsx`**：挂进 [`player-dock.tsx`](../../../src/components/shell/player-dock.tsx) 上方工具行（记忆+nav icon **左侧**、`min-w-0 flex-1` 吃满；行 `w-fit self-end` 按可用性切 `w-full`）。`canUseDjChat===false` 整入口不渲染。三态：**icon**（圆钮）/ **chip**（`rounded-full` composer 条，默认）/ **expanded**（`layoutId` morph 成 widget：桌面浮层卡片、移动全屏 sheet）。
+- [x] `chat-reply-notification.tsx`（§5.2.1）：折叠态（icon/chip）DJ 回复走顶部 toast；expanded 时不显示。
+- [ ] reduced-motion（`MotionConfig`）morph 退化为即时切换；`Esc` / 点外侧收回。
 
 **Phase 2 Checklist:**
-- [x] 三形态切换正确、偏好持久化；桌面 Dock 占 1∕3、移动全屏；`MotionConfig` reduced-motion 将由 App 挂载继承。
-- [x] 折叠态收到回复 → 顶部通知出现/streaming 实时预览/点击展开到 dock；dock 态不重复弹。
-- [ ] 浏览器 preview 实测三形态 + 通知 + 暗色 + 响应式，零 console 报错。**Blocked until App挂载(CHAT-2b).**
+- [ ] **门控**：未配 LLM / musicgen → 入口与 icon 都不渲染、工具行恢复右对齐；配齐后出现（`canUseDjChat` 单测穷举 + 组件测）。
+- [ ] 三态切换正确（icon↔chip↔expanded）、偏好持久化；chip 吃满剩余宽度且与 memory/nav 等高；expanded 桌面浮层 / 移动全屏。
+- [x] 折叠态收到回复 → 顶部通知出现 / streaming 实时预览 / 点击展开到 expanded；expanded 态不重复弹。
+- [ ] 浏览器 preview 实测三态 + `layoutId` morph 过渡 + 通知 + 暗色 + 响应式，零 console 报错。
 
 ### Phase 3: DJ 工具调用
 **Tasks:**
@@ -440,7 +491,10 @@ interface ChatUiState {
 - [x] 补 `scroll-area` primitive（Base UI wrapper：root/viewport/content/scrollbar/thumb/corner，默认 keepMounted scrollbar）。
 - [x] 补 `command` primitive（无内置文案：items/placeholder/empty 由调用方传入；label+keywords 搜索过滤；select 回调）。
 - [x] `chat-model-picker.tsx` 展示层（无内置文案，Popover+Command 选择 enabled provider/model，回调 `{presetId, model}`）。
-- [ ] Settings/App/i18n/DB 接线待并行 WIP 落地后补：provider key 管理、全局默认、per-session 覆盖持久化；上下文限制检测。
+- [ ] **动态自定义 provider（复刻 ClipCombo §6.1）**：Dexie 表 `llmCustomProviders`（v6 新表）+ `src/ai/custom-llm-providers.ts` repo（list/put/delete + `useLiveQuery` + `normalizeCustomProviders`）+ `customLlmProviderConfigToPreset` merge 进解析。
+- [ ] **Settings provider 面板 `llm-provider-settings.tsx`**：enabled grid（key ready/optional/missing 状态，`isLlmProviderKeyReady`）+ per-provider `api-key-field.tsx`（遮罩 / reveal / `apiKeyUrl` 链接）+「+ 自定义 provider」建 `custom:${uuid}` + 自定义编辑（label / baseUrl / model add-remove / delete）。
+- [ ] `resolveDjModel` 扩 custom/keyless 分支（openai-compatible baseURL 归一补 `/v1` + 无 key 去 auth header）；补 `modelsByPresetId` 切 provider 记忆上次 model。
+- [ ] Settings/App/i18n/DB 接线：provider key 管理、全局默认、per-session 覆盖持久化；上下文限制检测。
 - [x] `ChatSession.llmProviderPresetId`/`llmModel`（不存 key）字段已随 CHAT-1 落库；Phase 5a 补全全局默认 fields + legacy bridge。
 
 **Phase 5 Checklist:**
@@ -451,7 +505,8 @@ interface ChatUiState {
 - [x] ScrollArea primitive 具备 root/viewport/content/scrollbar/thumb 稳定结构测试覆盖。
 - [x] Command primitive 具备 label/keyword 过滤、empty state、select id 回调测试覆盖。
 - [x] ChatModelPicker 展示层具备选中模型展示、provider/model 搜索过滤、空态与 select 回调测试覆盖。
-- [ ] i18n 4 语全覆盖（provider/model label、combobox 文案）。
+- [ ] 自定义 provider 全链路：建 `custom:${uuid}` → 编辑 baseUrl/model → 选中 → `resolveDjModel` 装配 openai-compatible → 对话可用；删除走可撤 mutation；key 只在 settings、不进 history（单测 + 组件测）。
+- [ ] i18n 4 语全覆盖（provider/model label、combobox 文案、自定义编辑/key 面板）。
 
 ### Phase 6: 队列/打断 + onboarding + 压缩
 **Tasks:**
@@ -512,12 +567,14 @@ interface ChatUiState {
 
 | # | Question | Status | Decision |
 |---|----------|--------|----------|
-| 1 | 活跃 session id 存哪？ | **Resolved** | `AppSettings.lastChatSessionId?`（best practice）——MUZERO 无 project 概念，不需 ClipCombo 的 per-project chatPrefs 行；与既有 `lastSessionId`/`lastTrackIndex` 同级，不为一字段开新表。`mode/dockSide` 留 chat-store localStorage |
-| 2 | `bar` 形态收到回复怎么显示？ | **Resolved** | **顶部 Notification toast**（§5.2.1，仿 anysoul `MessageToast`：spring 下滑、一行预览、自动消失、点击展开到 dock）。折叠态(bar/fab)显示、dock 态不显示。轻量不占信息 |
+| 1 | 活跃 session id 存哪？ | **Resolved** | `AppSettings.lastChatSessionId?`（best practice）——MUZERO 无 project 概念，不需 ClipCombo 的 per-project chatPrefs 行；与既有 `lastSessionId`/`lastTrackIndex` 同级，不为一字段开新表。`mode`（icon/chip/expanded）留 chat-store localStorage |
+| 2 | 折叠态收到回复怎么显示？ | **Resolved** | **顶部 Notification toast**（§5.2.1，仿 anysoul `MessageToast`：spring 下滑、一行预览、自动消失、点击展开到 expanded widget）。折叠态(icon/chip)显示、expanded 态不显示。轻量不占信息 |
 | 3 | per-session 模型 vs 全局模型默认？ | **Resolved** | **两者都要**（best practice，抄 ClipCombo）：新建 session 继承全局默认（`AppSettings.defaultLlm*`），combobox 可覆盖到 `ChatSession.llmProviderPresetId`/`llmModel`（不存 key）。Phase 5 落地 |
 | 4 | `dj_generate_tracks` 与现有自动续歌（`maybeRefill`）的关系？ | **Resolved**（best practice）| 工具是「显式生成」、autoExtend 是「自动续」；**二者都写同一队列、由 store `pump` 统一物化，不开第二个生成循环**（避免双循环打架）。Phase 3 落地 |
 | 5 | streamdown bundle 体积？ | **Resolved** | 用户接受 streamdown bundle 增量；Phase 1 仍跑 `pnpm build` 记录实际增量备查 |
 | 6 | 是否需要 contentEditable chips（@/）v1？ | Resolved | 否，v1 textarea，chips 列后续增强 |
+| 7 | 对话入口形态 + 何时显示？ | **Resolved**（owner 2026-06-11）| 集成进 **player-dock 上方工具行**（记忆 + nav icon 左侧、吃满剩余宽度），三态 **icon / chip / expanded**（framer-motion `layoutId` morph）；**门控**：未配 LLM + musicgen 则连 icon 都不渲染（`canUseDjChat`）。取代旧四形态（FAB/bar/Dock-1∕3/全屏）|
+| 8 | provider 配置范围？ | **Resolved**（owner 2026-06-11）| **逐项复刻 ClipCombo** 多 provider + **动态自定义 provider**（OpenAI-compatible baseURL，存 Dexie `llmCustomProviders`）+ per-provider key（进 `settings`，硬规则 #2）+ enabled grid + ApiKeyField（§6.1）|
 
 ## 12. Document Change Log
 
@@ -559,6 +616,7 @@ interface ChatUiState {
 | 2026-06-07 | Codex | 推进 Phase 5e：新增 Base UI `scroll-area` primitive（root/viewport/content/scrollbar/thumb/corner），默认 keepMounted scrollbar 便于稳定布局与测试；`make check` 通过（60 files / 392 tests）。 |
 | 2026-06-07 | Codex | 推进 Phase 5f：新增无内置文案的 `Command` primitive（items/placeholder/empty 由调用方传入，支持 label+keywords 搜索过滤与 select 回调）；`make check` 通过（61 files / 395 tests）。 |
 | 2026-06-07 | Codex | 推进 Phase 5g：新增无内置文案的 `ChatModelPicker` 展示层，基于 Popover+Command 展示 enabled presets/models，支持选中态、搜索过滤、空态与 `{presetId, model}` 选择回调；Settings/App/i18n/DB 接线继续等待并行 WIP 落地。`make check` 通过（62 files / 398 tests）。 |
+| 2026-06-11 | Claude | **Phase 2 外壳重新设计（owner 定）+ Phase 5 provider 扩展**。① 放弃 FAB / bar / Dock-1∕3 / 全屏四形态，改为**集成进 player-dock 上方工具行**的单一对话入口（落在记忆 + 切 tab icon **左侧**、`flex-1` 吃满剩余宽度），三态 **icon(minimize) → chip(normal，full-rounded 输入条，默认) → expanded(framer-motion `layoutId` morph 成 widget：桌面浮层卡片 / 移动全屏 sheet)**。② 新增**门控** `canUseDjChat`（`hasUsableLlm && hasUsableMusicgen`）：**未配 LLM + musicgen 时连 icon 都不渲染**（纯函数 + TDD）。③ §6.1 扩成**逐项复刻 ClipCombo 动态自定义 provider**（Dexie `llmCustomProviders` 表 + repo + `customLlmProviderConfigToPreset` + Settings provider 面板 enabled grid + `ApiKeyField` + `resolveDjModel` 的 openai-compatible/keyless-local 分支）。重写 §3.3/§5/§6.1 + Phase 2/5 plan + §2.4 结构；旧 `chat-launcher-fab`/`chat-input-bar`/`chat-dock`/`use-chat-breakpoint` 壳作废重做，runtime（`src/chat/*`）+ 展示层组件（composer/turns/session-home/model-picker/queue-tray/empty/notice）全部复用。Now Playing redesign 已并入 main → 本 phase 不再 WIP-blocked。 |
 
 ---
 
