@@ -4,6 +4,7 @@ import { log } from "@/lib/logger";
 import { listCloudDrives } from "@/sync/cloud-drive-repo";
 import { getR2CredentialsForDrive } from "@/sync/cloud-drive-settings";
 import { buildR2ExportPlanForDrive } from "@/sync/r2-export-plan";
+import { publishedEntityId } from "@/sync/r2-import-stream";
 import { fetchRemotePublishBase } from "@/sync/r2-publish-base";
 import { runR2PublishSync } from "@/sync/r2-publish-sync";
 import {
@@ -58,9 +59,14 @@ function getOrchestrator(): SyncOrchestrator {
   });
 }
 
-/** Remote-imported sets keep their `ses_remote_` prefix and are not re-published. */
-function isLocalOriginSet(sessionId: string): boolean {
-  return !sessionId.startsWith("ses_remote_");
+/**
+ * Which sets publish to THIS drive: every local-origin set, plus sets imported
+ * FROM this drive (they write back under their original ids — co-editing, PRD
+ * §12.5). Sets imported from OTHER drives never cross drives.
+ */
+function publishesToDrive(sessionId: string, driveId: string): boolean {
+  if (!sessionId.startsWith("ses_remote_")) return true;
+  return publishedEntityId("ses", driveId, sessionId) !== sessionId;
 }
 
 /** Resolve everything the orchestrator needs to publish a drive, or throw why not. */
@@ -76,7 +82,9 @@ async function resolvePublishContext(driveId: string): Promise<PublishDriveConte
   if (!credentials) throw new Error("No R2 credentials are configured for this drive");
 
   const sessions = await listSessions();
-  const setIds = sessions.map((session) => session.id).filter(isLocalOriginSet);
+  const setIds = sessions
+    .map((session) => session.id)
+    .filter((id) => publishesToDrive(id, driveId));
 
   return {
     drive,

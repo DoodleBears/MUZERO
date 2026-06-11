@@ -6,10 +6,12 @@ import {
   type R2DevicesIndex,
   type R2Manifest,
   type R2PresenceIndex,
+  type R2SetIndex,
   type R2StatsIndex,
   r2DevicesIndexSchema,
   r2ManifestSchema,
   r2PresenceIndexSchema,
+  r2SetIndexSchema,
   r2StatsIndexSchema,
 } from "./r2-manifest-schema";
 import { r2SignedFetch } from "./r2-s3";
@@ -36,10 +38,14 @@ export interface RemotePublishBase {
   devicesIndex?: RemoteBaseObject<R2DevicesIndex>;
   statsIndex?: RemoteBaseObject<R2StatsIndex>;
   presenceIndex?: RemoteBaseObject<R2PresenceIndex>;
+  /** Current remote set indexes by PUBLISHED set id — co-editing merge input (PRD §12.5). */
+  setIndexes?: Record<string, RemoteBaseObject<R2SetIndex>>;
 }
 
 export interface FetchRemotePublishBaseInput {
   credentials: R2LocalCredentials;
+  /** Published set ids whose remote indexes should be fetched for the merge. */
+  setRemoteIds?: string[];
   fetcher?: SyncFetch;
   now?: () => Date;
   signal?: AbortSignal;
@@ -56,7 +62,19 @@ export async function fetchRemotePublishBase(
     readRemoteJson("stats/index.json", r2StatsIndexSchema, ctx),
     readRemoteJson("presence/index.json", r2PresenceIndexSchema, ctx),
   ]);
-  return { manifest, devicesIndex, statsIndex, presenceIndex };
+  let setIndexes: RemotePublishBase["setIndexes"];
+  const setRemoteIds = [...new Set(input.setRemoteIds ?? [])];
+  if (setRemoteIds.length > 0) {
+    const fetched = await Promise.all(
+      setRemoteIds.map((id) => readRemoteJson(`sets/${id}/index.json`, r2SetIndexSchema, ctx)),
+    );
+    setIndexes = {};
+    setRemoteIds.forEach((id, i) => {
+      const value = fetched[i];
+      if (value && setIndexes) setIndexes[id] = value;
+    });
+  }
+  return { manifest, devicesIndex, statsIndex, presenceIndex, setIndexes };
 }
 
 async function readRemoteJson<T>(

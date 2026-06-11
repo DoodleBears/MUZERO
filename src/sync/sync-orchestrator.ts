@@ -5,6 +5,7 @@ import type {
   R2ExportPlan,
   R2ExportPlanForDriveInput,
 } from "./r2-export-plan";
+import { publishedEntityId } from "./r2-import-stream";
 import { isPreconditionFailure } from "./r2-publish";
 import type { fetchRemotePublishBase } from "./r2-publish-base";
 import type { runR2PublishSync } from "./r2-publish-sync";
@@ -118,7 +119,13 @@ export function createSyncOrchestrator(deps: SyncOrchestratorDeps): SyncOrchestr
       const readBase = async () => {
         emit({ phase: "planning" });
         return fetchBase
-          ? await fetchBase({ credentials: ctx.credentials, signal: options.signal })
+          ? await fetchBase({
+              credentials: ctx.credentials,
+              // Remote indexes of the sets we're about to write — co-editing
+              // merge input (PRD §12.5), keyed by published id.
+              setRemoteIds: ctx.setIds.map((id) => publishedEntityId("ses", ctx.drive.id, id)),
+              signal: options.signal,
+            })
           : undefined;
       };
 

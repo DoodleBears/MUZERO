@@ -18,6 +18,7 @@ import {
   type PlaybackEventFlushPolicy,
   shouldFlushPlaybackEventSegment,
 } from "./playback-event-segments";
+import { publishedEntityId } from "./r2-import-stream";
 import {
   type R2DevicesIndex,
   type R2EntityCoverEntry,
@@ -35,6 +36,7 @@ import {
   mergeDevicesIndex,
   mergeManifestSets,
   mergePresenceIndex,
+  mergeSetIndex,
   mergeStatsIndex,
 } from "./r2-publish-merge";
 import { canPublishDeviceProfileToDrive, canWriteStatsToDrive } from "./r2-stats-policy";
@@ -174,7 +176,12 @@ export async function buildR2ExportPlanForDrive(
 export async function buildR2ExportPlan(input: R2ExportPlanInput): Promise<R2ExportPlan> {
   const db = input.db ?? defaultDb;
   const binaryObjects: R2ExportObject[] = [];
-  const setIndexes: Array<{ session: DjSession; trackCount: number; object: R2ExportObject }> = [];
+  const setIndexes: Array<{
+    session: DjSession;
+    publishedId: string;
+    trackCount: number;
+    object: R2ExportObject;
+  }> = [];
   const conflicts: R2ExportConflict[] = [];
 
   for (const setId of input.setIds) {
@@ -183,7 +190,13 @@ export async function buildR2ExportPlan(input: R2ExportPlanInput): Promise<R2Exp
     const tracks = await loadSessionTracks(session, db);
     const setIndexTracks: R2SetIndex["tracks"] = [];
 
+    // Co-editing (PRD §12.5): a set imported from THIS drive publishes back
+    // under its ORIGINAL remote id; other devices' members (`trk_remote_*`
+    // rows) are never re-exported — the remote side of the merge carries them.
+    const publishedId = publishedEntityId("ses", input.driveId, session.id);
+
     for (const track of tracks) {
+      if (publishedEntityId("trk", input.driveId, track.id) !== track.id) continue;
       // Streamed-origin tracks never publish — not even cached ones (their bytes
       // are platform-derived; external-streaming PRD keeps them out of scope).
       // Audit F5: this must be an origin check, because the local cache DOES set
@@ -260,11 +273,19 @@ export async function buildR2ExportPlan(input: R2ExportPlanInput): Promise<R2Exp
       });
     }
 
-    const folded = await foldSetMutationsIntoIndex(
+    // Removal tombstones travel under their PUBLISHED ids (PRD §12.5).
+    const localRemovedTracks = Object.entries(session.removedTracks ?? {}).map(
+      ([trackId, removedAt]) => ({
+        id: publishedEntityId("trk", input.driveId, trackId),
+        removedAt,
+      }),
+    );
+    const merged = mergeSetIndex(
+      input.remoteBase?.setIndexes?.[publishedId]?.value,
       {
         schema: "muzero-r2-set-index-v1",
         set: {
-          id: session.id,
+          id: publishedId,
           name: session.name,
           seedPrompt: session.seedPrompt,
           displayMode: session.displayMode,
@@ -274,18 +295,21 @@ export async function buildR2ExportPlan(input: R2ExportPlanInput): Promise<R2Exp
         },
         tracks: setIndexTracks,
       },
-      input.driveId,
-      db,
+      { localRemovedTracks },
     );
+    const folded = await foldSetMutationsIntoIndex(merged, input.driveId, db);
     conflicts.push(...folded.conflicts);
     setIndexes.push({
       session,
+      publishedId,
       // Manifest trackCount must reflect what subscribers receive (post-skip,
-      // post-fold), not the session's full member list (audit F5).
+      // post-merge, post-fold), not the session's full member list (audit F5).
       trackCount: folded.index.tracks.length,
-      object: createJsonObject("set-index", `sets/${session.id}/index.json`, folded.index, {
+      object: createJsonObject("set-index", `sets/${publishedId}/index.json`, folded.index, {
         setId: session.id,
-        precondition: input.setIndexPreconditions?.[session.id],
+        precondition:
+          basePrecondition(input.remoteBase, input.remoteBase?.setIndexes?.[publishedId]) ??
+          input.setIndexPreconditions?.[session.id],
       }),
     });
   }
@@ -658,7 +682,12 @@ function setMutationKey(mutation: SyncMutation): string {
 
 function createManifest(
   input: R2ExportPlanInput,
-  setIndexes: Array<{ session: DjSession; trackCount: number; object: R2ExportObject }>,
+  setIndexes: Array<{
+    session: DjSession;
+    publishedId: string;
+    trackCount: number;
+    object: R2ExportObject;
+  }>,
   indexObjects: R2ExportObject[] = [],
   selfDeviceId?: string,
 ): R2Manifest {
@@ -677,15 +706,20 @@ function createManifest(
   const entityCoversIndex =
     indexObjects.find((object) => object.kind === "entity-covers-index")?.key ??
     remoteManifest?.entityCoversIndex;
-  const localSets = setIndexes.map(({ session, trackCount, object }) => ({
-    id: session.id,
-    title: session.name,
-    index: object.key,
-    updatedAt: new Date(session.updatedAt).toISOString(),
-    trackCount,
-    bytes: object.bytes,
-    publishedBy: selfDeviceId,
-  }));
+  const localSets = setIndexes.map(({ session, publishedId, trackCount, object }) => {
+    // Co-publishing never steals ownership: a set keeps its original publisher
+    // (deletion semantics hang off `publishedBy === self`, PRD §12.5).
+    const remoteEntry = remoteManifest?.sets.find((set) => set.id === publishedId);
+    return {
+      id: publishedId,
+      title: session.name,
+      index: object.key,
+      updatedAt: new Date(session.updatedAt).toISOString(),
+      trackCount,
+      bytes: object.bytes,
+      publishedBy: remoteEntry?.publishedBy ?? selfDeviceId,
+    };
+  });
   return {
     schema: "muzero-r2-manifest-v1",
     libraryId: input.libraryId,

@@ -126,6 +126,126 @@ describe("buildR2ExportPlan", () => {
     expect(plan.objects.map((object) => object.kind)).toEqual(["set-index", "manifest"]);
   });
 
+  it("an imported set writes back under its original id, merged with the remote index (CE-3)", async () => {
+    await db.sessions.put({
+      id: "ses_remote_drv_1_ses_shared",
+      name: "Shared",
+      seedPrompt: "",
+      trackIds: ["trk_remote_drv_1_trk_a", "trk_mine"],
+      removedTracks: { trk_remote_drv_1_trk_gone: 7000 },
+      status: "idle",
+      config: {
+        autoExtend: false,
+        refillThreshold: 2,
+        batchSize: 1,
+        targetDurationSec: 60,
+        allowVocals: true,
+      },
+      displayMode: "cover",
+      createdAt: 100,
+      updatedAt: 5000,
+    });
+    const base = {
+      kind: "audio" as const,
+      origin: "uploaded" as const,
+      provider: "upload",
+      status: "ready" as const,
+      durationSec: 10,
+      createdAt: 100,
+      playCount: 0,
+      liked: false,
+      tags: [],
+    };
+    await db.tracks.bulkPut([
+      {
+        ...base,
+        id: "trk_remote_drv_1_trk_a",
+        sessionId: "ses_remote_drv_1_ses_shared",
+        title: "Theirs",
+        remoteMediaUrl: "https://pub.example.com/objects/media/a.mp3",
+      },
+      {
+        ...base,
+        id: "trk_mine",
+        sessionId: "ses_remote_drv_1_ses_shared",
+        title: "Mine",
+        blobId: "blb_mine",
+      },
+    ]);
+    await db.mediaBlobs.put({
+      id: "blb_mine",
+      trackId: "trk_mine",
+      role: "media",
+      mime: "audio/mpeg",
+      bytes: 3,
+      blob: new Blob(["abc"], { type: "audio/mpeg" }),
+    });
+    const remoteEntry = {
+      id: "trk_a",
+      title: "Theirs",
+      kind: "audio" as const,
+      origin: "uploaded" as const,
+      provider: "upload",
+      durationSec: 10,
+      createdAt: 100,
+      liked: false,
+      tags: [],
+      media: { url: "objects/media/a.mp3", mime: "audio/mpeg", bytes: 3 },
+      memories: [],
+    };
+    const plan = await buildR2ExportPlan({
+      driveId: "drv_1",
+      libraryId: "lib_1",
+      baseUrl: "https://music.example.com/muzero/",
+      setIds: ["ses_remote_drv_1_ses_shared"],
+      db,
+      remoteBase: {
+        setIndexes: {
+          ses_shared: {
+            etag: '"s1"',
+            value: {
+              schema: "muzero-r2-set-index-v1",
+              revision: 3,
+              set: {
+                id: "ses_shared",
+                name: "Shared",
+                seedPrompt: "",
+                displayMode: "cover",
+                config: {
+                  autoExtend: false,
+                  refillThreshold: 2,
+                  batchSize: 1,
+                  targetDurationSec: 60,
+                  allowVocals: true,
+                },
+                createdAt: 100,
+                updatedAt: 4000,
+              },
+              tracks: [remoteEntry, { ...remoteEntry, id: "trk_gone", title: "Removed here" }],
+            },
+          },
+        },
+      },
+    });
+
+    const setObject = plan.objects.find((object) => object.kind === "set-index");
+    expect(setObject?.key).toBe("sets/ses_shared/index.json");
+    expect(setObject?.precondition).toEqual({ ifMatch: '"s1"' });
+    const index = JSON.parse(String(setObject?.body));
+    expect(index.set.id).toBe("ses_shared");
+    // The other device's member survives via the remote side; my local-only
+    // track joins; the locally-removed member is tombstoned out.
+    expect(index.tracks.map((t: { id: string }) => t.id)).toEqual(["trk_a", "trk_mine"]);
+    expect(index.removedTracks).toEqual([{ id: "trk_gone", removedAt: 7000 }]);
+    expect(index.revision).toBe(4);
+    // Only MY media uploads; the remote-backed member's bytes are not re-sent.
+    expect(plan.objects.filter((object) => object.kind === "media")).toHaveLength(1);
+    const manifest = JSON.parse(
+      String(plan.objects.find((object) => object.kind === "manifest")?.body),
+    );
+    expect(manifest.sets[0]).toMatchObject({ id: "ses_shared", trackCount: 2 });
+  });
+
   it("read-merge-write: preserves the other device's manifest sets/index entries, stamps ownership, writes conditionally (MW-3)", async () => {
     await seedSet();
     await db.devices.put({
@@ -553,7 +673,7 @@ describe("buildR2ExportPlan", () => {
     );
 
     expect(setIndex).toMatchObject({
-      revision: 2,
+      revision: 3, // 1 (merge bump) + 2 folded mutations
       set: {
         name: "Folded Night Drive",
         updatedAt: 320,

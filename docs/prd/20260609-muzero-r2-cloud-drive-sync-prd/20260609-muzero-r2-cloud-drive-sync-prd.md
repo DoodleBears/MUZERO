@@ -2160,7 +2160,7 @@ Do not record secrets, full signed URLs, or media content.
 
 - [x] CE-1 Tombstone data layer: `DjSession.removedTracks` + repo recording on remove/delete-everywhere, cleared on re-add, capped 200; additive `removedTracks` on `muzero-r2-set-index-v1`.
 - [x] CE-2 Pure `mergeSetIndex`: track union (local wins by id, remote order preserved, local-only appended), metadata LWW on `set.updatedAt`, tombstone union (max removedAt, capped 200) applied to the union with the re-add exception, revision bumps past both sides.
-- [ ] CE-3 Publish side: base fetch extended to set indexes (+ ETags); export plan merges each set with its remote index under the published id (imported sets write back; `trk_remote_*`/streamed entries excluded from local export); `If-Match` on set indexes; store includes the target drive's imported sets.
+- [x] CE-3 Publish side: `fetchRemotePublishBase` also fetches the published sets' remote indexes (+ ETags); the export plan merges each set with its remote index under the **published id** (`publishedEntityId` strips the `_remote_<driveId>_` prefix — imported sets write back under their original ids, `trk_remote_*` members and streamed tracks never re-export, tombstones travel under published ids), set indexes write with `If-Match`, the manifest summary keeps the original `publishedBy`, and the store now includes the target drive's imported sets in `setIds`.
 - [ ] CE-4 Pull-merge into local sessions during Sync now (orchestrator step after base fetch): remote-only tracks land as remote-backed rows, remote tombstones remove membership, metadata LWW, ranks for new members.
 - [ ] CE-5 Copy update + PRD close + full sweep + preview verification.
 

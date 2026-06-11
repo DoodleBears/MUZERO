@@ -37,6 +37,20 @@ function remoteTrackIdPrefix(driveId: string): string {
   return `trk_remote_${safeIdPart(driveId)}_`;
 }
 
+/**
+ * The id an entity publishes under on its source drive (PRD §12.5): a
+ * `…_remote_<driveId>_…` local id maps back to the ORIGINAL remote id; any
+ * other id (this device's own entity) publishes as-is.
+ */
+export function publishedEntityId(
+  prefix: "ses" | "trk" | "mem",
+  driveId: string,
+  localId: string,
+): string {
+  const remotePrefix = `${prefix}_remote_${safeIdPart(driveId)}_`;
+  return localId.startsWith(remotePrefix) ? localId.slice(remotePrefix.length) : localId;
+}
+
 function mergeRemoteAndLocalOnlyTrackIds(
   remoteTrackIds: string[],
   existingTrackIds: string[] | undefined,

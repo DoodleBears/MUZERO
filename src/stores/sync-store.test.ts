@@ -69,7 +69,25 @@ async function seedWritableDrive() {
     config: { autoExtend: false },
     displayMode: "cover",
   });
-  // A remote-imported set must NOT be re-published to the owner's own drive.
+  // A set imported from ANOTHER drive must never cross drives; one imported
+  // from THIS drive writes back under its original id (seeded below).
+  await ctx.db.sessions.put({
+    id: "ses_remote_drv_owned_ses_b",
+    name: "Co-edited set",
+    seedPrompt: "",
+    trackIds: [],
+    status: "idle",
+    config: {
+      autoExtend: false,
+      refillThreshold: 2,
+      batchSize: 1,
+      targetDurationSec: 60,
+      allowVocals: true,
+    },
+    displayMode: "cover",
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+  });
   await ctx.db.sessions.put({
     id: "ses_remote_drv_x_ses_a",
     name: "Remote set",
@@ -127,8 +145,9 @@ describe("sync-store publishDrive", () => {
       baseUrl: "https://drive.example.com/muzero/",
       credentials: { bucket: "bucket", accessKeyId: "key" },
     });
-    // Only local-origin sets are published; remote-imported sets are excluded.
-    expect(captured?.setIds.sort()).toEqual([...localSetIds].sort());
+    // Local-origin sets publish, OTHER drives' imports stay out — but a set
+    // imported from THIS drive writes back (co-editing, PRD §12.5).
+    expect(captured?.setIds.sort()).toEqual([...localSetIds, "ses_remote_drv_owned_ses_b"].sort());
     expect(useSyncStore.getState().progressByDrive.drv_owned).toMatchObject({
       phase: "completed",
       objectsDone: 2,
