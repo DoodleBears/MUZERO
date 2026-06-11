@@ -1,4 +1,4 @@
-import { Disc3, Trash2, User } from "lucide-react";
+import { Disc3, User } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import {
   ContextMenu,
@@ -7,6 +7,7 @@ import {
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import { CoverImage } from "@/components/ui/cover-image";
+import { DeleteIcon } from "@/components/ui/delete";
 import type { Track } from "@/db/types";
 import { useTrackCoverUrl } from "@/hooks/use-media";
 import { cn } from "@/lib/utils";
@@ -145,7 +146,8 @@ export function EntityCard({
       <ContextMenuTrigger>{card}</ContextMenuTrigger>
       <ContextMenuContent>
         <ContextMenuItem className="text-destructive-foreground" onClick={onRequestDelete}>
-          <Trash2 /> {kind === "album" ? t("entity.deleteAlbum") : t("entity.deleteArtist")}
+          <DeleteIcon size={16} />{" "}
+          {kind === "album" ? t("entity.deleteAlbum") : t("entity.deleteArtist")}
         </ContextMenuItem>
       </ContextMenuContent>
     </ContextMenu>

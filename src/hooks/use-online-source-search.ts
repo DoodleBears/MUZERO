@@ -27,10 +27,17 @@ export interface OnlineSearchState {
   playlistLink: StreamPlaylist | null;
 }
 
-export function useOnlineSourceSearch(query: string): OnlineSearchState {
+export function useOnlineSourceSearch(
+  query: string,
+  forcedSource?: StreamSourceId,
+): OnlineSearchState {
   const settings = useSettings();
   const streamSources = settings.streamSources;
-  const enabledSources = STREAM_SOURCE_IDS.filter((id) => streamSources?.[id]?.enabled);
+  // A forced source (the ⌘F `@bili` / `@网易云` filter) searches that one source
+  // ad-hoc, regardless of the persisted enable chips; otherwise honor them.
+  const enabledSources = forcedSource
+    ? [forcedSource]
+    : STREAM_SOURCE_IDS.filter((id) => streamSources?.[id]?.enabled);
   // Stable dependency key so the effect doesn't re-run on unrelated settings churn.
   const enabledKey = JSON.stringify(
     enabledSources.map((id) => [

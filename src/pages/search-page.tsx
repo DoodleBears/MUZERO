@@ -1,11 +1,11 @@
 import { useLiveQuery } from "dexie-react-hooks";
-import type { TFunction } from "i18next";
 import {
   ArrowLeft,
   Heart,
   ImagePlus,
   LayoutGrid,
   List,
+  Loader2,
   Play,
   Plus,
   Search,
@@ -28,6 +28,7 @@ import {
 import { CoverCropDialog } from "@/components/track/cover-crop-dialog";
 import { TrackInspectorPanel } from "@/components/track/track-inspector-panel";
 import { Button } from "@/components/ui/button";
+import { CloudDownloadIcon } from "@/components/ui/cloud-download";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
   ContextMenu,
@@ -62,10 +63,13 @@ import { useShortcutMatcher } from "@/hooks/use-shortcut-matcher";
 import { useTransliterationReady } from "@/hooks/use-transliteration-ready";
 import { hasModalDialogOpen, isTypingTarget } from "@/lib/dom-keys";
 import { ENTITY_SORT_DEFAULT_DIR, type EntitySort, sortEntities } from "@/lib/entity-gallery";
+import {
+  albumArtistDisplayLabel,
+  albumDisplayLabel,
+  artistDisplayLabel,
+} from "@/lib/entity-labels";
 import { dragHasFiles, filesFromTransfer, IMAGE_ACCEPT } from "@/lib/file-drop";
 import {
-  type AlbumEntry,
-  type ArtistEntry,
   albumsForArtist,
   buildAlbumIndex,
   buildArtistIndex,
@@ -99,7 +103,9 @@ import { useCoverTargetStore } from "@/stores/cover-target-store";
 import { useNavStore } from "@/stores/nav-store";
 import { notify } from "@/stores/notification-store";
 import { usePlayerStore } from "@/stores/player-store";
+import { useIsSetBulkDownloading } from "@/stores/stream-cache-store";
 import { useUploadTargetStore } from "@/stores/upload-target-store";
+import { isStreamedTrack } from "@/streamsrc/source-detect";
 import { matchesRemoteSearchTrack } from "@/sync/r2-search-catalog";
 
 type GalleryView = "list" | "grid";
@@ -1247,6 +1253,34 @@ export function SearchPage() {
   );
 }
 
+/** Set-header "save all offline" button: caches every streamed track in the set that
+ *  has no local blob yet. Hidden when nothing is pending (a fully-local or generated
+ *  set), so it only appears when there's actually cloud audio to pull down. Spinner +
+ *  disabled while the bulk run is in flight (shared store, survives row remounts). */
+function SetCloudDownloadButton({ setId, tracks }: { setId: string; tracks: Track[] }) {
+  const { t } = useTranslation();
+  const downloading = useIsSetBulkDownloading(setId);
+  const downloadStreamedSet = usePlayerStore((s) => s.downloadStreamedSet);
+  const pending = useMemo(
+    () => tracks.filter((tr) => isStreamedTrack(tr) && !tr.blobId).length,
+    [tracks],
+  );
+  if (pending === 0) return null;
+  return (
+    <Button
+      variant="outline"
+      size="sm"
+      onClick={() => void downloadStreamedSet(setId)}
+      disabled={downloading}
+      title={t("streamCache.downloadSet")}
+    >
+      {downloading ? <Loader2 className="size-4 animate-spin" /> : <CloudDownloadIcon size={16} />}
+      {t("streamCache.downloadSet")}
+      <span className="tabular-nums text-muted-foreground">{pending}</span>
+    </Button>
+  );
+}
+
 /** Level 2 — one set's virtualized track list. */
 function SetDetailView({
   setId,
@@ -1583,6 +1617,7 @@ function SetDetailView({
                   <Play className="size-4" /> {t("gallery.playAll")}
                 </Button>
                 <AddTracksMenu setId={setId} />
+                <SetCloudDownloadButton setId={setId} tracks={tracks} />
               </>
             }
             endActions={
@@ -1682,24 +1717,6 @@ function useSetCoverUrl(
   const setUrl = useTrackCoverUrl(coverBlobId ? { coverBlobId, coverCrop } : undefined);
   const trackUrl = useTrackCoverUrl(fallbackTrack);
   return coverBlobId ? setUrl : trackUrl;
-}
-
-/** Localize a derived artist's label — pseudo-buckets resolve to UI copy. */
-function artistDisplayLabel(entry: ArtistEntry, t: TFunction): string {
-  if (entry.bucket === "generated") return t("gallery.aiGenerated");
-  if (entry.bucket === "unknown") return t("gallery.unknownArtist");
-  return entry.name;
-}
-
-/** Localize a derived album's title — the unknown bucket resolves to UI copy. */
-function albumDisplayLabel(entry: AlbumEntry, t: TFunction): string {
-  return entry.bucket === "unknown" ? t("gallery.unknownAlbum") : entry.name;
-}
-
-/** Localize a derived album's artist line — compilations resolve to "Various Artists". */
-function albumArtistDisplayLabel(entry: AlbumEntry, t: TFunction): string {
-  if (entry.isCompilation) return t("gallery.variousArtists");
-  return entry.artistName ?? t("gallery.unknownArtist");
 }
 
 function ViewToggleGroup({

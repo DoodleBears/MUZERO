@@ -181,6 +181,19 @@ export function VirtualCardGrid<T>({
     virtualizer.measure();
   }, [columns, scrollMargin, virtualizer]);
 
+  // Keep Lenis' cached scroll limit in sync with the virtual content height. Lenis
+  // derives its limit from `wrapper.scrollHeight`, but only recomputes when its
+  // ResizeObserver fires for the wrapper's *firstElementChild* — here the short
+  // sort-chip row, not this deeply-nested virtual spacer. So when the grid grows
+  // (rows measure after mount, or items load in async) Lenis keeps a stale, too-short
+  // limit and clamps scrolling above the true bottom ("can't reach the last cards").
+  // A `resize()` re-reads the dimensions and realigns to the current scroll, no jump.
+  const totalSize = virtualizer.getTotalSize();
+  // biome-ignore lint/correctness/useExhaustiveDependencies: re-sync Lenis when the content height changes
+  useEffect(() => {
+    lenisRef?.current?.resize();
+  }, [totalSize]);
+
   // Restore the wall's saved scroll position once — but only after the grid knows
   // its row height (in grid view that needs the measured content width), otherwise
   // a deep offset clamps against a virtual spacer that's still estimated at the
