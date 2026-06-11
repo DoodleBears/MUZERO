@@ -308,7 +308,7 @@ export async function buildR2ExportPlan(input: R2ExportPlanInput): Promise<R2Exp
       object: createJsonObject("set-index", `sets/${publishedId}/index.json`, folded.index, {
         setId: session.id,
         precondition:
-          basePrecondition(input.remoteBase, input.remoteBase?.setIndexes?.[publishedId]) ??
+          childPrecondition(input.remoteBase, input.remoteBase?.setIndexes?.[publishedId]) ??
           input.setIndexPreconditions?.[session.id],
       }),
     });
@@ -752,6 +752,14 @@ function basePrecondition(
   return baseObject.etag ? { ifMatch: baseObject.etag } : undefined;
 }
 
+function childPrecondition(
+  remoteBase: RemotePublishBase | undefined,
+  baseObject: RemoteBaseObject<unknown> | undefined,
+): R2ObjectWritePrecondition | undefined {
+  if (remoteBase && !remoteBase.manifest && !baseObject) return undefined;
+  return basePrecondition(remoteBase, baseObject);
+}
+
 async function createDeviceObjects(
   db: MuzeroDB,
   playbackEventFlush?: R2PlaybackEventFlushOptions,
@@ -844,7 +852,7 @@ async function createDeviceObjects(
         "devices-index",
         "devices/index.json",
         mergeDevicesIndex(remoteBase?.devicesIndex?.value, localDevicesIndex),
-        { precondition: basePrecondition(remoteBase, remoteBase?.devicesIndex) },
+        { precondition: childPrecondition(remoteBase, remoteBase?.devicesIndex) },
       ),
     );
   }
@@ -869,7 +877,7 @@ async function createDeviceObjects(
         "stats-index",
         "stats/index.json",
         mergeStatsIndex(remoteBase?.statsIndex?.value, localStatsIndex),
-        { precondition: basePrecondition(remoteBase, remoteBase?.statsIndex) },
+        { precondition: childPrecondition(remoteBase, remoteBase?.statsIndex) },
       ),
     );
   }
@@ -891,7 +899,7 @@ async function createDeviceObjects(
         "presence-index",
         "presence/index.json",
         mergePresenceIndex(remoteBase?.presenceIndex?.value, localPresenceIndex),
-        { precondition: basePrecondition(remoteBase, remoteBase?.presenceIndex) },
+        { precondition: childPrecondition(remoteBase, remoteBase?.presenceIndex) },
       ),
     );
   }

@@ -705,6 +705,28 @@ describe("buildR2ExportPlan", () => {
     });
   });
 
+  it("recovers a partial first publish by not guarding child JSON when the manifest is absent", async () => {
+    await seedSet();
+
+    const plan = await buildR2ExportPlan({
+      driveId: "drv_1",
+      libraryId: "lib_1",
+      baseUrl: "https://music.example.com/muzero/",
+      setIds: ["ses_1"],
+      db,
+      remoteBase: {},
+    });
+
+    expect(plan.objects.find((object) => object.kind === "set-index")).toMatchObject({
+      key: "sets/ses_1/index.json",
+      precondition: undefined,
+    });
+    expect(plan.objects.find((object) => object.kind === "manifest")).toMatchObject({
+      key: "manifest.json",
+      precondition: { ifNoneMatch: "*" },
+    });
+  });
+
   it("auto-merges different devices adding tracks and memories to the same set", async () => {
     await seedSet();
     await db.syncMutations.bulkPut([
