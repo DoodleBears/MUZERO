@@ -164,8 +164,12 @@ function reconcileR2(driveId: string, p: SyncProgress): void {
     toastIds.delete(key);
   }
   const label = i18n.t(PHASE_LABEL_KEY[p.phase]);
-  if (p.phase === "completed") notify.success(label);
-  else if (p.phase === "failed") notify.error(label, { detail: p.error });
+  if (p.phase === "completed") {
+    // A completed pull without a runId is the dry-run "unchanged" path. Page
+    // refreshes can trigger many of these; close any transient loading toast but
+    // do not spam one success notification per already-synced set.
+    if (p.runId) notify.success(label);
+  } else if (p.phase === "failed") notify.error(label, { detail: p.error });
   else if (p.phase === "cancelled") notify.info(label);
   else if (p.phase === "needs-review") notify.warning(label);
 }

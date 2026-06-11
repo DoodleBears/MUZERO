@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { setFolderImportProgress } from "./folder-import-store";
 import { notify } from "./notification-store";
 import { startSyncIndicator } from "./sync-indicator";
+import { useSyncStore } from "./sync-store";
 
 const progress = (over: Partial<Parameters<typeof setFolderImportProgress>[0] & object>) =>
   setFolderImportProgress({
@@ -77,5 +78,76 @@ describe("sync indicator — folder import", () => {
     progress({ phase: "importing", done: 0, total: 0 });
     progress({ phase: "completed", done: 0, total: 0, imported: 0 });
     expect(loading).not.toHaveBeenCalled();
+  });
+});
+
+describe("sync indicator — R2", () => {
+  beforeEach(() => {
+    startSyncIndicator(); // idempotent
+    useSyncStore.setState({ progressByDrive: {} });
+    notify.clear();
+  });
+
+  afterEach(() => {
+    useSyncStore.setState({ progressByDrive: {} });
+    vi.restoreAllMocks();
+  });
+
+  it("does not show a success toast for unchanged pull refreshes", () => {
+    const loading = vi.spyOn(notify, "loading");
+    const dismiss = vi.spyOn(notify, "dismiss");
+    const success = vi.spyOn(notify, "success");
+
+    useSyncStore.setState({
+      progressByDrive: {
+        drv_a: {
+          driveId: "drv_a",
+          direction: "pull",
+          phase: "planning",
+          objectsDone: 0,
+          objectsTotal: 0,
+          bytesDone: 0,
+          bytesTotal: 0,
+        },
+      },
+    });
+    useSyncStore.setState({
+      progressByDrive: {
+        drv_a: {
+          driveId: "drv_a",
+          direction: "pull",
+          phase: "completed",
+          objectsDone: 0,
+          objectsTotal: 3,
+          bytesDone: 0,
+          bytesTotal: 300,
+        },
+      },
+    });
+
+    expect(loading).toHaveBeenCalledTimes(1);
+    expect(dismiss).toHaveBeenCalledTimes(1);
+    expect(success).not.toHaveBeenCalled();
+  });
+
+  it("keeps the success toast for completed sync runs with a run id", () => {
+    const success = vi.spyOn(notify, "success");
+
+    useSyncStore.setState({
+      progressByDrive: {
+        drv_a: {
+          driveId: "drv_a",
+          direction: "pull",
+          phase: "completed",
+          objectsDone: 3,
+          objectsTotal: 3,
+          bytesDone: 300,
+          bytesTotal: 300,
+          runId: "run_1",
+        },
+      },
+    });
+
+    expect(success).toHaveBeenCalledTimes(1);
   });
 });

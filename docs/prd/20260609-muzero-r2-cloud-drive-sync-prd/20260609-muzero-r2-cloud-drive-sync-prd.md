@@ -32,6 +32,7 @@
 | 17 | Remote Playback Handoff UX | ✅ Done | [§12.13](#1213-phase-17-remote-playback-handoff-ux) |
 | 18 | Remote Cover Palette Reliability | ✅ Done | [§12.14](#1214-phase-18-remote-cover-palette-reliability) |
 | 19 | Remote Cover MIME + Dock Loading Polish | ✅ Done | [§12.15](#1215-phase-19-remote-cover-mime--dock-loading-polish) |
+| 21 | Sync Notification Quiet Refresh | ✅ Done | [§12.17](#1217-phase-21-sync-notification-quiet-refresh) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
 
@@ -2474,12 +2475,34 @@ Do not record secrets, full signed URLs, or media content.
 - [x] DP-2 Move playback loading UI from a separate Dock row to a cover-slot spinner.
 - [x] DP-3 Add regression tests for octet-stream cover sampling and the Dock cover loading indicator.
 
+### 12.17 Phase 21: Sync Notification Quiet Refresh
+
+**Goal:** keep the Cloud Drive settings page refresh/auto-preview path quiet when it only confirms already-synced remote sets.
+
+**Status (2026-06-12):** Phase 21 is completed. R2 pull refreshes that dry-run to `unchanged` still close any transient progress toast, but no longer emit one "Completed" notification per already-synced set. Completed sync runs with a real `runId` still show the success notification, and failures / cancellations / needs-review remain visible.
+
+**Product requirements:**
+
+1. **No toast spam for unchanged refreshes.**
+   - Auto-sync / preview refresh may check many remote sets.
+   - If a pull emits terminal `completed` without a `runId`, treat it as dry-run unchanged and keep it silent.
+2. **Keep meaningful feedback.**
+   - Completed publish/pull runs that actually created a `syncRun` keep the success notification.
+   - Failed, cancelled, and needs-review terminal states still surface as notifications.
+
+**Checklist:**
+
+- [x] SN-1 Add a regression test proving unchanged pull refreshes dismiss loading without success toast spam.
+- [x] SN-2 Keep completed real sync runs (`runId` present) notifying successfully.
+- [x] SN-3 Update the R2 sync indicator terminal handling.
+
 ---
 
 ## 13. Document Change Log
 
 | Date | Author | Changes |
 |------|--------|---------|
+| 2026-06-12 | MUZERO | Phase 21 completed: Cloud Drive page refresh / auto-preview paths no longer emit one success toast per unchanged remote set. The sync indicator treats completed pull progress without a `runId` as a dry-run unchanged result, while real completed sync runs and terminal errors remain visible. |
 | 2026-06-12 | MUZERO | Phase 19 completed: remote cover palette extraction now infers image MIME from `.jpg`/`.png`/`.webp`/etc. object URLs when R2/proxy responses are generic octet-stream, and remote media loading feedback moved from a separate Dock chip to an accessible spinner over the album-cover slot. |
 | 2026-06-11 | MUZERO | Phase 18 completed: R2 remote covers now feed flow/spectrum cover-color extraction by fetching cover bytes through `getAppFetch()`, sampling a local Blob URL, caching by remote URL, and falling back to the theme primary only on fetch/decode failure. |
 | 2026-06-11 | MUZERO | Phase 17 completed: R2 remote playback now uses a held-current-track handoff when another song is already playing. MUZERO displays a Dock loading indicator while the target object downloads, aborts/invalidates stale loads, and commits `currentIndex` only after the target media is ready. |
