@@ -9,7 +9,8 @@ function res(json: unknown): StreamHttpResponse {
 
 const runtime: YoutubeRuntime = {
   getBootstrap: async () => ({ visitorData: "VD", signatureTimestamp: 1 }),
-  solvers: { solveSig: (s) => s, solveN: (n) => n },
+  // The okPlayer format below carries a direct url; youtubei.js would return it as-is.
+  decipherFormat: async (format) => format.url ?? "",
 };
 
 const searchJson = {

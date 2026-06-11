@@ -1,12 +1,17 @@
 import { describe, expect, it, vi } from "vitest";
 import type { StreamHttp, StreamHttpResponse } from "../http";
-import type { CipherSolvers } from "./youtube-cipher";
+import { type CipherSolvers, resolveFormatUrl } from "./youtube-cipher";
+import type { YoutubeFormat } from "./youtube-formats";
 import { resolveYoutubeAudio } from "./youtube-resolve";
 
+// The prod runtime deciphers via youtubei.js; in tests we reuse the (still-tested)
+// pure cipher helpers with stub solvers so the URL assertions below stay meaningful.
 const solvers: CipherSolvers = {
   solveSig: (s) => s.split("").reverse().join(""),
   solveN: (n) => `${n}_ok`,
 };
+const decipherFormat = (format: YoutubeFormat): Promise<string> =>
+  resolveFormatUrl(format, solvers).then((url) => url ?? "");
 
 function res(json: unknown): StreamHttpResponse {
   const text = JSON.stringify(json);
@@ -34,7 +39,7 @@ describe("resolveYoutubeAudio", () => {
 
   it("resolves the audio URL from the first client that serves", async () => {
     const http: StreamHttp = vi.fn(async () => res(okBody(140)));
-    const out = await resolveYoutubeAudio("v", { http, getBootstrap, solvers });
+    const out = await resolveYoutubeAudio("v", { http, getBootstrap, decipherFormat });
     expect(out).toMatchObject({
       kind: "ok",
       mime: "audio/mp4",
@@ -57,7 +62,7 @@ describe("resolveYoutubeAudio", () => {
         ? res({ playabilityStatus: { status: "LOGIN_REQUIRED" } })
         : res(okBody(140));
     });
-    const out = await resolveYoutubeAudio("v", { http, getBootstrap, solvers });
+    const out = await resolveYoutubeAudio("v", { http, getBootstrap, decipherFormat });
     expect(out.kind).toBe("ok");
     expect(calls).toEqual([0, 1]); // tried WEB_REMIX then TV
   });
@@ -66,7 +71,7 @@ describe("resolveYoutubeAudio", () => {
     const http: StreamHttp = vi.fn(async () =>
       res({ playabilityStatus: { status: "LOGIN_REQUIRED" } }),
     );
-    expect(await resolveYoutubeAudio("v", { http, getBootstrap, solvers })).toEqual({
+    expect(await resolveYoutubeAudio("v", { http, getBootstrap, decipherFormat })).toEqual({
       kind: "login-required",
     });
   });
@@ -78,7 +83,7 @@ describe("resolveYoutubeAudio", () => {
         streamingData: { formats: [{ itag: 18, mimeType: 'video/mp4; codecs="avc1"' }] },
       }),
     );
-    const out = await resolveYoutubeAudio("v", { http, getBootstrap, solvers });
+    const out = await resolveYoutubeAudio("v", { http, getBootstrap, decipherFormat });
     expect(out).toMatchObject({ kind: "unavailable" });
   });
 
@@ -94,7 +99,7 @@ describe("resolveYoutubeAudio", () => {
         },
       }),
     );
-    const out = await resolveYoutubeAudio("v", { http, getBootstrap, solvers });
+    const out = await resolveYoutubeAudio("v", { http, getBootstrap, decipherFormat });
     if (out.kind !== "ok") throw new Error("expected ok");
     expect(new URL(out.url).searchParams.get("sig")).toBe("CBA"); // reversed
   });

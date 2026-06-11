@@ -713,4 +713,10 @@ InnerTube `/youtubei/v1/player` 取流 + EJS `sig`/`n` 解密(隐藏 sandboxed `
 
 **worktree 解封 + 自研 solver（2026-06-11，branch `feat/youtube-runtime`）**：开独立 worktree/branch 脱离并发 main，**改走「自研 player.js 解析」而非 vendored 依赖**——`sig` 用 yt-dlp 式操作序列在纯 TS 解(零依赖、零 JS 引擎，Y-sig 全测)；`n` 抽取函数源(Y-nsig 全测)在主进程 `node:vm` 沙箱 eval(经 `evalYoutubeN` 桥)；**PoToken 暂不做**(优先客户端轮询；不足再议 `bgutils-js`)。
 
-**Phase 4 接线全部完成（架构 + 运行时桥 + registry）——60 个 YouTube 单测全绿**。registry 已接 `youtube`，⌘F 出现 YouTube chip，resolve 走 `createYoutubeRuntime`(player.js→sig 纯解 + n 经 vm 沙箱)。**唯一剩余 = Electron 真机手测**：真实 player.js 的正则抽取需对当周版本校准（YT 周更 player.js，sig/n 正则可能要微调），PoToken 若被要求则加 `bgutils-js`。**不冒充已手测**：纯逻辑全绿，真机出声待用户起 Electron 验证。
+**自研 solver 失败 → 转 youtubei.js（2026-06-11，branch `feat/youtube-youtubei`）**：对**真实** player.js（hash ce74690f）实测，自研正则 `extractSigOperations`/`extractNFunctionSource` **全部返回 null**——2026 player.js 用全局字符串表混淆（`.length`→`T[26]`、helper 方法数组下标化），轻量正则抽取**根本打不动**（这是 yt-dlp 用完整 JS 解释器+周更才扛住的硬问题）。原 403 = sig 没解扰（返回原始 s）。
+
+**PoToken 排雷**：深挖发现 **WEB_REMIX `/player` 直接回 OK + 密文音轨、无需 PoToken**（itag 140，`signatureCipher` 在）；之前以为要 PoToken 是 youtubei `getInfo` 路径的误导（10+ 探针验证：session/content-bound PoToken 都试过，BotGuard 在 jsdom 能跑出 token，但 getInfo 仍空 URL——而我自己的 `/player` 请求 OK 有密文）。**故不需要 bgutils/PoToken**。
+
+**落地方案**：保留我方 InnerTube `/player` 请求 + 选轨（Y2/Y3/Y4 全留），**只把最难的解扰（sig+n）交 youtubei.js**——其 **browser 构建自带 JS evaluator**（`platform/web.js` → `jsruntime/default.js`），在渲染进程跑 player.js 自己的 sig/n 函数（Vite 走 browser 条件，渲染器即有；node 平台无 evaluator 故 CLI 报错，渲染器不报）。`createYtjsRuntime`(`youtube-ytjs.ts`) 提供 `{ getBootstrap(visitorData/sts), decipherFormat(format)→player.decipher }`；`resolveYoutubeAudio` 的 `solvers` 改 `decipherFormat`。**registry 接 `createYtjsRuntime()`**。依赖只加 `youtubei.js`（bgutils/jsdom 已移除）。`getAppFetch`(muzfetch) 注入 youtubei，绕 CORS。
+
+**状态**：整合完成，**Vite 构建通过**（youtubei.js 浏览器构建打包成功，5937 模块）、**57 个 streamsrc/youtube + registry 测全绿**、typecheck/biome 干净。**唯一剩余 = Electron 真机手测**（渲染器真浏览器环境才有 evaluator + muzfetch；CLI 无法验证 decipher 出声）。自研 solver 旧件（`youtube-sig/nsig/runtime/bridge-runtime`、`evalYoutubeN` 桥、`youtube-cipher`）现已废用，待清理 commit。

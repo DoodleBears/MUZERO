@@ -11,9 +11,12 @@
  */
 
 import type { StreamHttp } from "../http";
-import type { CipherSolvers } from "./youtube-cipher";
-import { resolveFormatUrl } from "./youtube-cipher";
-import { type AudioCodec, audioMimeFor, pickAdaptiveAudio } from "./youtube-formats";
+import {
+  type AudioCodec,
+  audioMimeFor,
+  pickAdaptiveAudio,
+  type YoutubeFormat,
+} from "./youtube-formats";
 import {
   buildPlayerRequestBody,
   type InnertubeClient,
@@ -38,8 +41,8 @@ export interface YoutubeResolveDeps {
   http: StreamHttp;
   /** Fetch the current session bootstrap (cached by the runtime). */
   getBootstrap: () => Promise<YoutubeBootstrap>;
-  /** sig/n descramblers from the player.js solver (hidden window in prod). */
-  solvers: CipherSolvers;
+  /** Decipher a chosen format to a final URL (sig + n), via youtubei.js's player. */
+  decipherFormat: (format: YoutubeFormat) => Promise<string>;
   getCookie?: () => string | undefined;
   /** Client fallback order; defaults to WEB_REMIX → TV. */
   clients?: InnertubeClient[];
@@ -129,7 +132,16 @@ export async function resolveYoutubeAudio(
       lastVerdict = { kind: "unavailable", reason: "no audio format" };
       continue;
     }
-    const url = await resolveFormatUrl(picked.format, deps.solvers);
+    let url: string;
+    try {
+      url = await deps.decipherFormat(picked.format);
+    } catch (err) {
+      lastVerdict = {
+        kind: "unavailable",
+        reason: `decipher failed: ${err instanceof Error ? err.message : String(err)}`,
+      };
+      continue;
+    }
     if (!url) {
       lastVerdict = { kind: "unavailable", reason: "unresolved stream url" };
       continue;

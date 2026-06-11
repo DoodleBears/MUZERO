@@ -20,6 +20,8 @@ export interface YoutubeFormat {
   url?: string;
   /** `s=…&sp=sig&url=…` — the signature must be solved + appended (ciphered streams). */
   signatureCipher?: string;
+  /** Older field name for the same ciphered payload (still emitted by some clients). */
+  cipher?: string;
   audioQuality?: string;
   audioSampleRate?: string;
   audioChannels?: number;
