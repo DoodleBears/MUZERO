@@ -6,6 +6,7 @@
  * works. This keeps the provider unit-testable with stubs (CLAUDE.md rule 5).
  */
 
+import { log } from "@/lib/logger";
 import type { StreamHttp } from "../http";
 import type {
   StreamResolveOptions,
@@ -19,7 +20,9 @@ import { YT_CLIENTS } from "./youtube-innertube";
 import { resolveYoutubeAudio, type YoutubeBootstrap } from "./youtube-resolve";
 import { buildSearchRequestBody, parseSearchResults } from "./youtube-search";
 
-const SEARCH_URL = "https://www.youtube.com/youtubei/v1/search?prettyPrint=false";
+// Search uses the WEB client (its response carries `videoRenderer` nodes the parser
+// walks — YouTube Music's WEB_REMIX would return `musicResponsiveListItemRenderer`).
+const SEARCH_URL = `https://www.youtube.com/youtubei/v1/search?key=${YT_CLIENTS.web.apiKey}&prettyPrint=false`;
 const REFERER = "https://www.youtube.com";
 const USER_AGENT =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
@@ -42,10 +45,10 @@ export function createYoutubeSource(deps: YoutubeSourceDeps): StreamSourceProvid
   function headers(): Record<string, string> {
     const h: Record<string, string> = {
       "Content-Type": "application/json",
-      Origin: REFERER,
+      Referer: REFERER,
       "User-Agent": USER_AGENT,
-      "X-Youtube-Client-Name": String(YT_CLIENTS.webRemix.clientId),
-      "X-Youtube-Client-Version": YT_CLIENTS.webRemix.clientVersion,
+      "X-Youtube-Client-Name": String(YT_CLIENTS.web.clientId),
+      "X-Youtube-Client-Version": YT_CLIENTS.web.clientVersion,
     };
     const cookie = deps.getCookie?.();
     if (cookie) h.Cookie = cookie;
@@ -53,7 +56,7 @@ export function createYoutubeSource(deps: YoutubeSourceDeps): StreamSourceProvid
   }
 
   async function search(query: string, opts?: StreamSearchOptions): Promise<StreamSearchHit[]> {
-    const body = buildSearchRequestBody(query, YT_CLIENTS.webRemix);
+    const body = buildSearchRequestBody(query, YT_CLIENTS.web);
     const res = await deps.http({
       url: SEARCH_URL,
       method: "POST",
@@ -61,9 +64,17 @@ export function createYoutubeSource(deps: YoutubeSourceDeps): StreamSourceProvid
       body: JSON.stringify(body),
       signal: opts?.signal,
     });
+    const text = await res.text();
+    if (res.status !== 200) {
+      log.warn("youtube", "search HTTP error", { status: res.status, head: text.slice(0, 300) });
+      return [];
+    }
     try {
-      return parseSearchResults(JSON.parse(await res.text()), opts?.limit ?? 30);
-    } catch {
+      const hits = parseSearchResults(JSON.parse(text), opts?.limit ?? 30);
+      log.info("youtube", "search", { query, hits: hits.length });
+      return hits;
+    } catch (err) {
+      log.warn("youtube", "search parse failed", { err: String(err), head: text.slice(0, 300) });
       return [];
     }
   }

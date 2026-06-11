@@ -15,16 +15,33 @@ export interface InnertubeClient {
   clientVersion: string;
   /** Numeric id for the `X-Youtube-Client-Name` header. */
   clientId: number;
+  /** Public InnerTube API key for this client (sent as `?key=`). */
+  apiKey: string;
 }
 
+// Well-known public InnerTube keys (not secrets — embedded in YouTube's own pages).
+const WEB_KEY = "AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8";
+const WEB_REMIX_KEY = "AIzaSyC9XL3ZjWddXya6X74dJoCTL-WEYFDNX30";
+
 /**
- * The clients we try, in order. WEB_REMIX (YouTube Music) first — it returns audio
- * formats for music; TV embedded is a sig-light fallback. Versions are constants the
- * solver-asset updater can refresh (Phase 4 hot-update).
+ * The clients we use. `web` drives SEARCH (its response carries `videoRenderer`
+ * nodes the parser walks); `webRemix` (YouTube Music) + `tv` drive the PLAYER for
+ * audio formats. Versions are constants the solver-asset updater can refresh.
  */
-export const YT_CLIENTS: Record<"webRemix" | "tv", InnertubeClient> = {
-  webRemix: { clientName: "WEB_REMIX", clientVersion: "1.20240403.01.00", clientId: 67 },
-  tv: { clientName: "TVHTML5_SIMPLY_EMBEDDED_PLAYER", clientVersion: "2.0", clientId: 85 },
+export const YT_CLIENTS: Record<"web" | "webRemix" | "tv", InnertubeClient> = {
+  web: { clientName: "WEB", clientVersion: "2.20240726.00.00", clientId: 1, apiKey: WEB_KEY },
+  webRemix: {
+    clientName: "WEB_REMIX",
+    clientVersion: "1.20240403.01.00",
+    clientId: 67,
+    apiKey: WEB_REMIX_KEY,
+  },
+  tv: {
+    clientName: "TVHTML5_SIMPLY_EMBEDDED_PLAYER",
+    clientVersion: "2.0",
+    clientId: 85,
+    apiKey: WEB_KEY,
+  },
 };
 
 export interface PlayerRequestInput {

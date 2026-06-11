@@ -22,7 +22,7 @@ import {
   YT_CLIENTS,
 } from "./youtube-innertube";
 
-const PLAYER_URL = "https://www.youtube.com/youtubei/v1/player?prettyPrint=false";
+const PLAYER_BASE = "https://www.youtube.com/youtubei/v1/player";
 const ORIGIN = "https://www.youtube.com";
 const USER_AGENT =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
@@ -94,7 +94,7 @@ export async function resolveYoutubeAudio(
     let parsed: ReturnType<typeof parsePlayerResponse>;
     try {
       const res = await deps.http({
-        url: PLAYER_URL,
+        url: `${PLAYER_BASE}?key=${client.apiKey}&prettyPrint=false`,
         method: "POST",
         headers,
         body: JSON.stringify(body),
