@@ -31,6 +31,7 @@
 | 16 | Pull identity dedupe + metadata integrity | ✅ Done | [§12.12](#1212-phase-16-pull-identity-dedupe--metadata-integrity) |
 | 17 | Remote Playback Handoff UX | ✅ Done | [§12.13](#1213-phase-17-remote-playback-handoff-ux) |
 | 18 | Remote Cover Palette Reliability | ✅ Done | [§12.14](#1214-phase-18-remote-cover-palette-reliability) |
+| 19 | Remote Cover MIME + Dock Loading Polish | ✅ Done | [§12.15](#1215-phase-19-remote-cover-mime--dock-loading-polish) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
 
@@ -2402,7 +2403,7 @@ Do not record secrets, full signed URLs, or media content.
 
 **Goal:** make R2-backed playback feel intentional even when media bytes cannot start instantly. Users should never wonder whether their click worked, and active playback should not fall silent merely because the next cloud object is still downloading.
 
-**Status (2026-06-11):** Phase 17 is completed. When a song is already playing and the user selects an uncached R2 remote track, MUZERO now keeps the current track/cursor/metadata active while it downloads the target remote object, shows a Dock-level loading row, and commits the track switch only after the target media bytes are ready to load.
+**Status (2026-06-11):** Phase 17 is completed. When a song is already playing and the user selects an uncached R2 remote track, MUZERO now keeps the current track/cursor/metadata active while it downloads the target remote object, shows a Dock-level loading indicator, and commits the track switch only after the target media bytes are ready to load.
 
 **Product requirements:**
 
@@ -2410,8 +2411,9 @@ Do not record secrets, full signed URLs, or media content.
    - If a track is actively playing, selecting an uncached R2 remote track should keep the current audio, cover, progress, lyrics, and memory context stable until the remote media fetch succeeds.
    - If no track is playing, MUZERO may show the target track as current while preparing it because there is no previous audio context to preserve.
 2. **Visible loading feedback.**
-   - The Dock should show a compact status row above the player card while the target remote media is being requested/downloaded.
-   - The row should name the target track and use localized copy so the delay reads as intentional work, not a broken click.
+   - The Dock should show a compact loading indicator while the target remote media is being requested/downloaded.
+   - The indicator should carry localized accessible copy so the delay reads as intentional work, not a broken click.
+   - Phase 19 refines the visual placement from a separate row/chip to a spinner over the Dock cover slot.
 3. **Race-safe handoff.**
    - Rapidly choosing another track must abort or invalidate the previous remote load; a stale remote fetch must not switch playback after the user has moved on.
    - The persistent play-queue cursor should update only when MUZERO commits the new track handoff.
@@ -2420,7 +2422,7 @@ Do not record secrets, full signed URLs, or media content.
 
 - [x] RH-1 Add playback loading state with request tokens/abort handling for remote loads.
 - [x] RH-2 Defer R2 `currentIndex` handoff while current audio is playing, then commit after bytes are ready.
-- [x] RH-3 Render a Dock loading row with localized remote-preparation copy.
+- [x] RH-3 Render a Dock loading indicator with localized remote-preparation copy.
 - [x] RH-4 Add regression coverage for the held-current-song remote handoff.
 
 ### 12.14 Phase 18: Remote Cover Palette Reliability
@@ -2447,14 +2449,38 @@ Do not record secrets, full signed URLs, or media content.
 - [x] RC-2 Use the helper from the visualizer dynamic color hook for `remoteCoverUrl`, with abort/ignore cleanup.
 - [x] RC-3 Add a regression test proving remote R2 cover palette extraction uses a Blob URL path.
 
+### 12.15 Phase 19: Remote Cover MIME + Dock Loading Polish
+
+**Goal:** close the QA gap where a cloud-drive cover is visible but still fails to drive visualizer colors, and align remote-media loading feedback with the Dock's existing album-art affordance instead of adding another floating chip.
+
+**Status (2026-06-12):** Phase 19 is completed. Remote cover palette extraction now tolerates R2/proxy responses that serve cover bytes as `application/octet-stream` by inferring image MIME from the object URL extension before Blob sampling. The Dock no longer renders a separate playback-loading chip; it overlays an accessible spinner directly on the album cover slot while remote media is preparing.
+
+**Product requirements:**
+
+1. **MIME-tolerant remote cover sampling.**
+   - If a remote cover URL has an image extension but the HTTP response reports a generic content type, MUZERO must still decode and sample it as an image Blob.
+   - MIME inference should be limited to known image extensions so arbitrary remote bytes do not get misclassified as covers.
+2. **Dock loading placement.**
+   - Remote media preparation should not add an extra chip/row above the player card.
+   - The Dock should keep the current album art/title stable and show a spinner overlay in the cover position with localized accessible status text.
+3. **Regression coverage.**
+   - Tests must cover octet-stream R2 cover palette extraction and the Dock cover-spinner UI state.
+
+**Checklist:**
+
+- [x] DP-1 Infer image MIME from remote cover object URLs when R2/proxy returns `application/octet-stream`.
+- [x] DP-2 Move playback loading UI from a separate Dock row to a cover-slot spinner.
+- [x] DP-3 Add regression tests for octet-stream cover sampling and the Dock cover loading indicator.
+
 ---
 
 ## 13. Document Change Log
 
 | Date | Author | Changes |
 |------|--------|---------|
+| 2026-06-12 | MUZERO | Phase 19 completed: remote cover palette extraction now infers image MIME from `.jpg`/`.png`/`.webp`/etc. object URLs when R2/proxy responses are generic octet-stream, and remote media loading feedback moved from a separate Dock chip to an accessible spinner over the album-cover slot. |
 | 2026-06-11 | MUZERO | Phase 18 completed: R2 remote covers now feed flow/spectrum cover-color extraction by fetching cover bytes through `getAppFetch()`, sampling a local Blob URL, caching by remote URL, and falling back to the theme primary only on fetch/decode failure. |
-| 2026-06-11 | MUZERO | Phase 17 completed: R2 remote playback now uses a held-current-track handoff when another song is already playing. MUZERO displays a Dock loading row while the target object downloads, aborts/invalidates stale loads, and commits `currentIndex` only after the target media is ready. |
+| 2026-06-11 | MUZERO | Phase 17 completed: R2 remote playback now uses a held-current-track handoff when another song is already playing. MUZERO displays a Dock loading indicator while the target object downloads, aborts/invalidates stale loads, and commits `currentIndex` only after the target media is ready. |
 | 2026-06-11 | MUZERO | Phase 16 completed: remote set previews preserve `publishedBy`, Cloud Drive automatic/manual import skips sets published by the local device to prevent `2 + 7 + 2` self-duplication, and pull diff now verifies local track metadata integrity before treating a set as unchanged so partial imports are repaired. |
 | 2026-06-11 | MUZERO | Phase 16 added from QA: avoid B-device self-published set duplication during import-all by preserving `publishedBy`, and strengthen pull diff so an existing set shell without complete track metadata is repaired instead of treated as unchanged. |
 | 2026-06-11 | MUZERO | Phase 15 completed: playlist track rows and set headers now treat R2 `remoteMediaUrl` tracks without local blobs as cacheable-to-device, reusing the existing `mediaBlobs` cache path so both single-track and whole-set "download to local" actions work for cloud-drive media. |

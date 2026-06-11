@@ -216,6 +216,28 @@ describe("extractImagePaletteFromUrl — canvas CORS for remote covers", () => {
     expect(loaded.at(-1)).toMatchObject({ src: "blob:remote-cover", crossOrigin: null });
     expect(palette.length).toBeGreaterThan(0);
   });
+
+  it("infers an image mime from the R2 object URL when the response is octet-stream", async () => {
+    const fetchedBlob = new Blob([new Uint8Array([1, 2, 3])], {
+      type: "application/octet-stream",
+    });
+    const fetcher = vi.fn(async () => {
+      return {
+        ok: true,
+        headers: new Headers({ "content-type": "application/octet-stream" }),
+        blob: async () => fetchedBlob,
+      } as Response;
+    });
+
+    const palette = await extractImagePaletteFromFetchedUrl(
+      "https://r2.example/objects/covers/sha256-blue.jpg?download=1",
+      { fetcher },
+    );
+
+    const sampledBlob = vi.mocked(URL.createObjectURL).mock.calls[0]?.[0] as Blob | undefined;
+    expect(sampledBlob?.type).toBe("image/jpeg");
+    expect(palette.length).toBeGreaterThan(0);
+  });
 });
 
 function restoreUrlMethod(name: "createObjectURL" | "revokeObjectURL", value: unknown) {

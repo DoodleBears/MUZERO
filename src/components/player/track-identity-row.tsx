@@ -1,4 +1,4 @@
-import { Pause, Play } from "lucide-react";
+import { Loader2, Pause, Play } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { type ReactNode, useEffect, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
@@ -154,6 +154,12 @@ export function TrackIdentityRow({
     ],
   );
   const coverUrl = useTrackCoverUrl(coverInput);
+  const playbackLoading = usePlayerStore((s) => s.playbackLoading);
+  const loadingLabel = playbackLoading
+    ? playbackLoading.sourceKind === "remote"
+      ? t("player.loadingRemote", { title: playbackLoading.title })
+      : t("player.loadingTrack", { title: playbackLoading.title })
+    : null;
 
   // Dock identity always navigates to the Now Playing tab, including mobile.
   function handleOpen() {
@@ -207,6 +213,17 @@ export function TrackIdentityRow({
               hasCover={trackHasCover(track ?? undefined)}
               fallback={<Disc3Icon className="text-muted-foreground" size={20} />}
             />
+            {loadingLabel && (
+              <span
+                aria-label={loadingLabel}
+                aria-live="polite"
+                className="absolute inset-0 z-10 grid place-items-center bg-background/45 backdrop-blur-[1px]"
+                data-testid="dock-cover-loading"
+                role="status"
+              >
+                <Loader2 aria-hidden="true" className="size-5 animate-spin text-primary" />
+              </span>
+            )}
           </motion.span>
           <span className="relative min-w-0 flex-1">
             {/* Slide + fade the title/artist on track change. */}

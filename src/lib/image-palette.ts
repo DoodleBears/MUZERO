@@ -82,7 +82,10 @@ export async function extractImagePaletteFromFetchedUrl(
     const response = await fetcher(url, { cache, signal });
     if (!response.ok) return [];
     const blob = await response.blob();
-    const contentType = response.headers.get("content-type") ?? blob.type;
+    const contentType =
+      normalizeImageMime(response.headers.get("content-type")) ??
+      normalizeImageMime(blob.type) ??
+      inferImageMimeFromUrl(url);
     const typedBlob =
       contentType && blob.type !== contentType ? blob.slice(0, blob.size, contentType) : blob;
     return extractImagePalette(typedBlob, count);
@@ -226,6 +229,30 @@ function loadImage(src: string): Promise<HTMLImageElement> {
  *  canvas-readable; blob:/data: object URLs are same-origin and left untouched. */
 function needsCrossOrigin(src: string): boolean {
   return /^(https?|muzfetch):/i.test(src);
+}
+
+function normalizeImageMime(value: string | null | undefined): string | undefined {
+  const mime = value?.split(";")[0]?.trim().toLowerCase();
+  if (!mime?.startsWith("image/")) return undefined;
+  return mime === "image/jpg" ? "image/jpeg" : mime;
+}
+
+function inferImageMimeFromUrl(url: string): string | undefined {
+  const path = safeUrlPath(url).toLowerCase();
+  if (path.endsWith(".jpg") || path.endsWith(".jpeg")) return "image/jpeg";
+  if (path.endsWith(".png")) return "image/png";
+  if (path.endsWith(".webp")) return "image/webp";
+  if (path.endsWith(".gif")) return "image/gif";
+  if (path.endsWith(".avif")) return "image/avif";
+  return undefined;
+}
+
+function safeUrlPath(url: string): string {
+  try {
+    return new URL(url).pathname;
+  } catch {
+    return url.split(/[?#]/, 1)[0] ?? url;
+  }
 }
 
 function quantize(value: number): number {

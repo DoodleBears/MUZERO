@@ -4,7 +4,6 @@ import { DjChatEntry } from "@/components/chat/dj-chat-entry";
 import type { Tab } from "@/components/nav/dock-nav";
 import { NavFab } from "@/components/nav/nav-fab";
 import { DockControls } from "@/components/player/dock-controls";
-import { PlaybackLoadingRow } from "@/components/player/playback-loading-row";
 import { ProgressScrubber } from "@/components/player/progress-scrubber";
 import { QueuePanel } from "@/components/player/queue-panel";
 import { TrackIdentityRow } from "@/components/player/track-identity-row";
@@ -65,7 +64,6 @@ export function PlayerDock({
               <NavFab value={tab} onChange={onTabChange} />
             </div>
           </div>
-          <PlaybackLoadingRow className={cn(!hidden && "pointer-events-auto")} />
           <div
             className={cn(
               "flex w-full min-w-0 flex-col gap-2.5 rounded-3xl bg-card/93 p-3 shadow-lg backdrop-blur-md",
