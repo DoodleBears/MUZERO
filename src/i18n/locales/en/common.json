@@ -1066,6 +1066,17 @@
     "upToDate": "You're up to date."
   },
   "chat": {
+    "emptyTitle": "Tell your DJ what to play",
+    "emptyBody": "Describe a vibe, ask for a set, or pull from your library. The DJ writes briefs and queues up songs.",
+    "emptyPresets": "Try",
+    "emptyStartVibe": "Start typing",
+    "emptyUpload": "Upload to your library",
+    "presetFocus": "Late-night focus",
+    "presetFocusPrompt": "Make a late-night focus set — brushed drums, soft piano, low tempo.",
+    "presetChill": "Chill it out",
+    "presetChillPrompt": "Keep it going but more chill and downtempo.",
+    "presetHype": "Hype set",
+    "presetHypePrompt": "Build a high-energy set to get hyped.",
     "modelEmpty": "No providers with a key yet",
     "modelInherited": "Default",
     "modelSearch": "Search models…",

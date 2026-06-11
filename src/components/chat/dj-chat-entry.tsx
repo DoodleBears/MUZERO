@@ -53,7 +53,14 @@ import { useChatStore } from "@/stores/chat-store";
  * is translated (centering transform), which would otherwise make
  * `position: fixed` resolve against the dock instead of the viewport.
  */
-export function DjChatEntry({ className }: { className?: string }) {
+export function DjChatEntry({
+  className,
+  onUploadLibrary,
+}: {
+  className?: string;
+  /** Navigate to the 歌单 gallery (empty-state "upload to your library"). */
+  onUploadLibrary?: () => void;
+}) {
   const { t } = useTranslation();
   const settings = useSettings();
   const available = canUseDjChat(settings);
@@ -357,7 +364,37 @@ export function DjChatEntry({ className }: { className?: string }) {
                   <ChatPanel
                     autoApprove={approvalMode === "auto"}
                     autoDispatchEnabled={autoDispatchEnabled}
+                    emptyState={{
+                      labels: {
+                        body: t("chat.emptyBody"),
+                        presets: t("chat.emptyPresets"),
+                        startWithVibe: t("chat.emptyStartVibe"),
+                        title: t("chat.emptyTitle"),
+                        uploadLibrary: t("chat.emptyUpload"),
+                      },
+                      presets: [
+                        {
+                          id: "focus",
+                          label: t("chat.presetFocus"),
+                          prompt: t("chat.presetFocusPrompt"),
+                        },
+                        {
+                          id: "chill",
+                          label: t("chat.presetChill"),
+                          prompt: t("chat.presetChillPrompt"),
+                        },
+                        {
+                          id: "hype",
+                          label: t("chat.presetHype"),
+                          prompt: t("chat.presetHypePrompt"),
+                        },
+                      ],
+                    }}
                     onAutoDispatchChange={(enabled) => setAutoDispatch(activeSessionId, enabled)}
+                    onUploadLibrary={() => {
+                      setMode("chip");
+                      onUploadLibrary?.();
+                    }}
                     queueLabels={{
                       autoDispatch: t("chat.queueAutoDispatch"),
                       delete: t("chat.queueDelete"),

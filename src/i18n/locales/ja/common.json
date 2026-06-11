@@ -1040,6 +1040,17 @@
     "upToDate": "最新の状態です。"
   },
   "chat": {
+    "emptyTitle": "DJ に聴きたいものを伝えよう",
+    "emptyBody": "雰囲気を伝えたり、セットを頼んだり、ライブラリから選んだり。DJ がブリーフを書いて曲をキューに入れます。",
+    "emptyPresets": "お試し",
+    "emptyStartVibe": "入力を始める",
+    "emptyUpload": "ライブラリにアップロード",
+    "presetFocus": "深夜の集中",
+    "presetFocusPrompt": "深夜の集中セットを作って——ブラシドラム、柔らかいピアノ、スローテンポで。",
+    "presetChill": "もっとチルに",
+    "presetChillPrompt": "続けて、でももっとチルでダウンテンポに。",
+    "presetHype": "ハイテンション",
+    "presetHypePrompt": "テンションが上がる高エネルギーなセットを作って。",
     "modelEmpty": "キー設定済みのプロバイダーがありません",
     "modelInherited": "デフォルト",
     "modelSearch": "モデルを検索…",

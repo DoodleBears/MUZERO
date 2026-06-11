@@ -1040,6 +1040,17 @@
     "upToDate": "已是最新版本。"
   },
   "chat": {
+    "emptyTitle": "告诉 DJ 想听什么",
+    "emptyBody": "描述一种氛围、点一个歌单,或从你的曲库里挑。DJ 会写 brief 并把歌排进队列。",
+    "emptyPresets": "试试",
+    "emptyStartVibe": "开始输入",
+    "emptyUpload": "上传到你的曲库",
+    "presetFocus": "深夜专注",
+    "presetFocusPrompt": "做一个深夜专注歌单——刷子鼓、轻柔钢琴、慢节奏。",
+    "presetChill": "更 chill 一些",
+    "presetChillPrompt": "继续,但更 chill、更慢一些。",
+    "presetHype": "嗨起来",
+    "presetHypePrompt": "来一个高能量的歌单嗨起来。",
     "modelEmpty": "还没有配置 key 的 provider",
     "modelInherited": "默认",
     "modelSearch": "搜索模型…",

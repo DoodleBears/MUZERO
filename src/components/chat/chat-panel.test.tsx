@@ -112,3 +112,30 @@ describe("ChatPanel queued prompt tray", () => {
     });
   });
 });
+
+const emptyState = {
+  labels: {
+    body: "Tell your DJ what to play",
+    presets: "Try",
+    startWithVibe: "Start typing",
+    title: "Empty chat",
+    uploadLibrary: "Upload to your library",
+  },
+  presets: [{ id: "focus", label: "Late-night focus", prompt: "Make a late-night focus set." }],
+};
+
+describe("ChatPanel onboarding empty state", () => {
+  it("shows the empty state with no messages and a preset chip fills the composer", async () => {
+    const session = await createChatSession({ firstUserText: "empty test" }, db);
+    const actor = getOrCreateDjChatRuntimeActor(session.id, { db });
+    await actor.ready;
+
+    render(<ChatPanel db={db} emptyState={emptyState} sessionId={session.id} />);
+
+    expect(await screen.findByText("Empty chat")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Late-night focus/ }));
+
+    const composer = screen.getByRole("textbox") as HTMLTextAreaElement;
+    expect(composer.value).toBe("Make a late-night focus set.");
+  });
+});

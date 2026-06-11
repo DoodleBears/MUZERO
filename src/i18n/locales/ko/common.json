@@ -1039,6 +1039,17 @@
     "upToDate": "최신 상태입니다."
   },
   "chat": {
+    "emptyTitle": "DJ에게 듣고 싶은 걸 알려주세요",
+    "emptyBody": "분위기를 설명하거나 세트를 요청하거나 라이브러리에서 골라보세요. DJ가 브리프를 쓰고 곡을 큐에 넣습니다.",
+    "emptyPresets": "예시",
+    "emptyStartVibe": "입력 시작",
+    "emptyUpload": "라이브러리에 업로드",
+    "presetFocus": "심야 집중",
+    "presetFocusPrompt": "심야 집중 세트를 만들어줘 — 브러시 드럼, 부드러운 피아노, 느린 템포로.",
+    "presetChill": "더 칠하게",
+    "presetChillPrompt": "계속하되 더 칠하고 다운템포로.",
+    "presetHype": "신나는 세트",
+    "presetHypePrompt": "신나는 고에너지 세트를 만들어줘.",
     "modelEmpty": "키가 설정된 프로바이더가 없습니다",
     "modelInherited": "기본값",
     "modelSearch": "모델 검색…",

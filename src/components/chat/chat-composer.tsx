@@ -8,6 +8,9 @@ interface ChatComposerProps {
   disabled?: boolean;
   isRunning?: boolean;
   placeholder?: string;
+  /** Optional controlled draft (so an empty-state chip can inject text). */
+  value?: string;
+  onValueChange?: (value: string) => void;
   onSend: (text: string) => void | Promise<void>;
   onQueue?: (text: string) => void | Promise<void>;
   onInterrupt?: (text: string) => void | Promise<void>;
@@ -18,12 +21,16 @@ export function ChatComposer({
   disabled = false,
   isRunning = false,
   placeholder,
+  value,
+  onValueChange,
   onSend,
   onQueue,
   onInterrupt,
   onStop,
 }: ChatComposerProps) {
-  const [draft, setDraft] = useState("");
+  const [internalDraft, setInternalDraft] = useState("");
+  const draft = value ?? internalDraft;
+  const setDraft = (next: string) => (onValueChange ? onValueChange(next) : setInternalDraft(next));
   const canSend = draft.trim().length > 0 && !disabled;
 
   async function submitDraft(action: "send" | "queue" | "interrupt") {

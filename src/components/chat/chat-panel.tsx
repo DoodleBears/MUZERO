@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
 import { shouldAutoDispatchQueued } from "@/chat/dj-chat-auto-dispatch";
 import { pendingApprovalIds } from "@/chat/dj-chat-runtime-actor";
 import {
@@ -8,6 +8,11 @@ import {
 import type { MuzeroDB } from "@/db/muzero-db";
 import { useChatStore } from "@/stores/chat-store";
 import { ChatComposer } from "./chat-composer";
+import {
+  ChatEmptyState,
+  type ChatEmptyStateLabels,
+  type ChatPromptPreset,
+} from "./chat-empty-state";
 import { ChatQueueTray, type ChatQueueTrayLabels } from "./chat-queue-tray";
 import type { ChatToolLabels } from "./chat-tool-collapsible";
 import { ChatTurns } from "./chat-turns";
@@ -19,6 +24,9 @@ interface ChatPanelProps {
   sessionId: string;
   db?: MuzeroDB;
   onAutoDispatchChange?: (enabled: boolean) => void;
+  /** Onboarding empty state (shown until the session has its first message). */
+  emptyState?: { labels: ChatEmptyStateLabels; presets: ChatPromptPreset[] };
+  onUploadLibrary?: () => void;
   queueLabels?: ChatQueueTrayLabels;
   toolLabels?: ChatToolLabels;
 }
@@ -29,10 +37,14 @@ export function ChatPanel({
   sessionId,
   db,
   onAutoDispatchChange,
+  emptyState,
+  onUploadLibrary,
   queueLabels,
   toolLabels,
 }: ChatPanelProps) {
   const snapshot = useDjChatRuntimeSnapshot(sessionId, db);
+  const [draft, setDraft] = useState("");
+  const panelRef = useRef<HTMLElement>(null);
   const setRuntimeMeta = useChatStore((state) => state.setRuntimeMeta);
 
   useEffect(() => {
@@ -67,14 +79,27 @@ export function ChatPanel({
     if (autoDispatch && queueHeadId) void actor.sendQueuedPrompt(queueHeadId);
   }, [autoDispatch, queueHeadId, actor]);
 
+  const messages = snapshot?.messages ?? [];
+  const showEmptyState = Boolean(emptyState) && messages.length === 0;
+
   return (
-    <section className="flex min-h-0 flex-1 flex-col overflow-hidden bg-background">
-      <ChatTurns
-        messages={snapshot?.messages ?? []}
-        onApproveTool={(approvalId) => actor.respondToToolApproval(approvalId, true)}
-        onRejectTool={(approvalId) => actor.respondToToolApproval(approvalId, false)}
-        toolLabels={toolLabels}
-      />
+    <section className="flex min-h-0 flex-1 flex-col overflow-hidden bg-background" ref={panelRef}>
+      {showEmptyState && emptyState ? (
+        <ChatEmptyState
+          labels={emptyState.labels}
+          onInsertPrompt={(prompt) => setDraft(prompt)}
+          onStartWithVibe={() => panelRef.current?.querySelector("textarea")?.focus()}
+          onUploadLibrary={onUploadLibrary}
+          presets={emptyState.presets}
+        />
+      ) : (
+        <ChatTurns
+          messages={messages}
+          onApproveTool={(approvalId) => actor.respondToToolApproval(approvalId, true)}
+          onRejectTool={(approvalId) => actor.respondToToolApproval(approvalId, false)}
+          toolLabels={toolLabels}
+        />
+      )}
       {queueLabels && (
         <ChatQueueTray
           autoDispatchEnabled={autoDispatchEnabled}
@@ -100,6 +125,8 @@ export function ChatPanel({
         }}
         onSend={(text) => actor.sendMessage(text)}
         onStop={() => actor.stop()}
+        onValueChange={setDraft}
+        value={draft}
       />
     </section>
   );
