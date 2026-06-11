@@ -2629,12 +2629,36 @@ Do not record secrets, full signed URLs, or media content.
 - [x] TC-4 Import `streamMeta.coverUrl` as the display fallback when no R2 `track.cover` exists.
 - [x] TC-5 Add regression coverage for playlist track-cover caching and metadata-only remote-cover fallback.
 
+### 12.22 Phase 26: Bounded Stream Playback Skip Runs
+
+**Goal:** skip over individually unplayable streamed tracks without creating an apparent infinite loop when an entire playlist is VIP / unavailable / region-locked.
+
+**Status (2026-06-12):** Phase 26 is completed. Stream playback resolve failures now track the set of track ids already auto-skipped in the current play-run. MUZERO tries the next queue member while there are untried tracks, but stops cleanly once every current queue member has failed once, with a hard cap of 30 attempts for unusually large queues. A successful media load resets the run. The UI still emits only one warning/error toast per skip run.
+
+**Product requirements:**
+
+1. **Do not loop forever through an all-unplayable queue.**
+   - A playlist where every streamed track is VIP/unavailable should stop after one pass through the current queue.
+   - Repeat-all and repeat-one must not cause the auto-skip path to wrap back indefinitely.
+2. **Keep the happy path smooth.**
+   - If only some tracks fail, auto-skip continues to the next untried track.
+   - Loading any playable track resets the failed-track set.
+   - Notifications remain de-spammed: one toast per skip run.
+
+**Checklist:**
+
+- [x] SK-1 Add a pure skip-run decision helper with queue-length and hard-cap bounds.
+- [x] SK-2 Wire stream resolve failure handling to failed-track-id tracking instead of a raw retry count.
+- [x] SK-3 Keep successful loads and hard stops resetting the skip-run state.
+- [x] SK-4 Add regression tests for partial failure, all-failed queue, and hard cap.
+
 ---
 
 ## 13. Document Change Log
 
 | Date | Author | Changes |
 |------|--------|---------|
+| 2026-06-12 | MUZERO | Phase 26 completed: streamed playback auto-skip now tracks failed track ids per play-run, stops after every current queue member has failed once (or after the 30-track hard cap), resets on successful load/hard stop, and keeps notifications to one warning/error per skip run. |
 | 2026-06-12 | MUZERO | Phase 25 completed: streamed playlist imports now cache each song's cover image as `Track.coverBlobId` so existing R2 `track.cover` export syncs per-track artwork. Incremental playlist syncs do the same, existing local covers are preserved, and imported metadata-only tracks fall back to `streamMeta.coverUrl` when no private R2 cover object exists yet. |
 | 2026-06-12 | MUZERO | Phase 24 completed: streamed playlist imports now best-effort cache playlist covers as set covers; R2 set indexes publish set-level cover/crop/thumbhash metadata and subscribers render remote set covers; cloud metadata-only streamed playback resolve failures now surface as warning-level source-access gaps instead of generic playback errors. |
 | 2026-06-12 | MUZERO | Phase 23 completed: Cloud Drive browse/import now filters historical duplicate empty set previews once a repaired non-empty set exists for the same publisher/title, collapses repeated empty same-title previews to one row, and applies that filter to automatic import-all. Exhausted R2 5xx uploads now throw/log structured `R2PublishHttpError` details including object key, status, and a short response summary. |

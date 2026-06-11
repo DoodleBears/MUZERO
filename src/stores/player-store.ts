@@ -64,6 +64,7 @@ import {
 } from "@/player/playback-cache";
 import {
   isCloudMetadataOnlyStreamTrack,
+  recordStreamSkipFailure,
   streamResolveFailureNotificationLevel,
 } from "@/player/playback-failure";
 import {
@@ -259,11 +260,12 @@ let activePlaybackTrace: PlaybackTraceContext | null = null;
 let playbackLoadSeq = 0;
 let playbackLoadAbort: AbortController | null = null;
 let preparedRemotePlayback: PreparedRemotePlayback | null = null;
-// Consecutive streamed tracks auto-skipped this play-run because they failed to
-// resolve (VIP / unavailable). Reset on any successful load or hard stop; bounds the
-// skip recursion so an all-unplayable queue stops instead of looping.
-let streamSkips = 0;
-const MAX_STREAM_SKIPS = 30;
+// Streamed tracks auto-skipped in this play-run because they failed to resolve
+// (VIP / unavailable). Reset on any successful load or hard stop. Tracking ids
+// instead of a raw counter lets a whole VIP playlist stop after one pass, even
+// when repeat/shuffle would otherwise wrap back to the first failed track.
+let streamSkipRunTrackIds = new Set<string>();
+const MAX_STREAM_SKIP_RUN = 30;
 let lyricsAbort: AbortController | null = null;
 let lyricsTimer: ReturnType<typeof setTimeout> | null = null;
 let playbackSettingsLoaded = false;
@@ -1975,10 +1977,17 @@ async function ensureLoadedAndPlay(
         // plays through, instead of halting on the first gap. Routed through the
         // SAME `next()` a user/transport triggers — so the cover transition, repeat
         // / shuffle, and presence all behave identically (no bespoke skip path that
-        // drifts out of sync). `streamSkips` bounds the run so a queue full of gaps
-        // stops instead of looping; it resets to 0 the moment a track loads (below).
+        // drifts out of sync). The id set bounds the run so a queue full of gaps
+        // stops after one pass instead of looping through repeat-all/repeat-one.
         const { wantPlay: stillWants } = get();
-        if (streamSkips === 0) {
+        const skipDecision = recordStreamSkipFailure(
+          streamSkipRunTrackIds,
+          track.id,
+          get().queue.length,
+          MAX_STREAM_SKIP_RUN,
+        );
+        streamSkipRunTrackIds = skipDecision.failedTrackIds;
+        if (skipDecision.firstFailureInRun) {
           // One toast per skip-run, so a playlist full of gaps doesn't spam.
           const title = i18n.t(
             needsAccess || isCloudMetadataOnlyStreamTrack(track)
@@ -1988,13 +1997,12 @@ async function ensureLoadedAndPlay(
           if (notificationLevel === "warning") notify.warning(title);
           else notify.error(title);
         }
-        if (stillWants && streamSkips < MAX_STREAM_SKIPS) {
-          streamSkips += 1;
+        if (stillWants && skipDecision.shouldTryNext) {
           await get().next(); // unified switch; recurses here if the next is also unplayable
           return;
         }
         // Paused, or scanned the whole queue with nothing playable → give up cleanly.
-        streamSkips = 0;
+        streamSkipRunTrackIds = new Set();
         get().pause();
         set({ isPlaying: false });
         return;
@@ -2047,7 +2055,7 @@ async function ensureLoadedAndPlay(
         void cacheStreamedTrackNow(track, playbackTrace);
     }
     loadedTrackId = track.id;
-    streamSkips = 0; // a track loaded — end any streamed-skip run cleanly
+    streamSkipRunTrackIds = new Set(); // a track loaded — end any streamed-skip run cleanly
     const requestedPosition = Math.max(0, get().positionSec);
     const duration =
       playableDurationSec(get().durationSec) || playableDurationSec(track.durationSec);

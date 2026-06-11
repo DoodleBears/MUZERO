@@ -17,3 +17,27 @@ export function streamResolveFailureNotificationLevel(
 ): "warning" | "error" {
   return needsSourceAccess || isCloudMetadataOnlyStreamTrack(track) ? "warning" : "error";
 }
+
+export interface StreamSkipRunDecision {
+  failedTrackIds: Set<string>;
+  firstFailureInRun: boolean;
+  shouldTryNext: boolean;
+}
+
+export function recordStreamSkipFailure(
+  previousFailedTrackIds: ReadonlySet<string>,
+  trackId: string,
+  queueLength: number,
+  maxSkips: number,
+): StreamSkipRunDecision {
+  const failedTrackIds = new Set(previousFailedTrackIds);
+  const firstFailureInRun = failedTrackIds.size === 0;
+  failedTrackIds.add(trackId);
+  const boundedQueueLength = Math.max(1, queueLength);
+  const scannedWholeQueue = failedTrackIds.size >= Math.min(boundedQueueLength, maxSkips);
+  return {
+    failedTrackIds,
+    firstFailureInRun,
+    shouldTryNext: !scannedWholeQueue,
+  };
+}
