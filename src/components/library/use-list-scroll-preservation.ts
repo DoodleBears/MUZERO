@@ -1,5 +1,4 @@
-import { useEffect, useLayoutEffect, useRef } from "react";
-import { lenisForElement } from "@/lib/smooth-scroll/lenis-driver";
+import { type RefObject, useEffect, useLayoutEffect, useRef } from "react";
 
 /** Both track lists share the same scroll viewport size; their scrollable content
  *  height is `count * pitch`, so `scrollHeight / count` recovers a height-agnostic
@@ -17,17 +16,31 @@ export function scrollTopForRow(index: number, scrollHeight: number, count: numb
 
 /** The two list scroll containers (virtual list / reorder list). */
 const SCROLL_SELECTOR = '[data-testid="virtual-track-list"], [data-reorder-list]';
+/** The non-virtualized reorder list — a plain `scrollTop` write restores it. */
+const REORDER_SELECTOR = "[data-reorder-list]";
+
+export interface ListScrollPreservation {
+  /** Put on the section root that wraps both scroll containers. */
+  rootRef: RefObject<HTMLDivElement | null>;
+  /** Topmost visible row index of whichever list last scrolled (null = unknown).
+   *  Pass to `VirtualTrackList`'s `initialScrollIndex` so it restores via its own
+   *  Lenis-aware virtualizer on mount. */
+  anchorIndexRef: RefObject<number | null>;
+}
 
 /**
  * Preserve the list scroll position across a swap between the two track-list scroll
  * containers — entering/leaving select mode replaces `VirtualTrackList` with
  * `ReorderableTrackList`, and the fresh container would otherwise mount at the top.
- * Remembers the topmost row index from whichever container scrolls (a capture-phase
- * listener, since scroll doesn't bubble) and restores it after `swapKey` flips. Row
- * count is read live so adding/removing tracks never forces a scroll. Returns a ref
- * to put on the section root that wraps both containers.
+ *
+ * A capture-phase listener (scroll doesn't bubble) remembers the topmost row index
+ * of whichever list scrolls. After `swapKey` flips, the now-mounted REORDER list is
+ * restored here with a plain `scrollTop` write; the VIRTUAL list restores itself via
+ * `initialScrollIndex` (through its own virtualizer, which routes via Lenis — a raw
+ * write from out here is reverted on Lenis's next frame). Row count is read live so
+ * adding/removing tracks never forces a scroll.
  */
-export function useListScrollPreservation(swapKey: unknown, count: number) {
+export function useListScrollPreservation(swapKey: unknown, count: number): ListScrollPreservation {
   const rootRef = useRef<HTMLDivElement | null>(null);
   const anchorIndexRef = useRef<number | null>(null);
   const countRef = useRef(count);
@@ -48,25 +61,12 @@ export function useListScrollPreservation(swapKey: unknown, count: number) {
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: restore only on the swap, not on count changes
   useLayoutEffect(() => {
-    const root = rootRef.current;
-    const apply = () => {
-      const index = anchorIndexRef.current;
-      if (index === null || index <= 0) return;
-      const el = root?.querySelector<HTMLElement>(SCROLL_SELECTOR);
-      if (!el) return;
-      const top = scrollTopForRow(index, el.scrollHeight, countRef.current);
-      // The virtual list is Lenis-driven: a raw scrollTop write is reverted on its
-      // next frame, so route through Lenis when present (falls back to native).
-      const lenis = lenisForElement(el);
-      if (lenis) lenis.scrollTo(top, { immediate: true });
-      else el.scrollTop = top;
-    };
-    apply();
-    // Lenis is attached in a passive effect AFTER this layout effect, so re-apply
-    // once it exists — otherwise it starts the fresh container at the top.
-    const raf = requestAnimationFrame(apply);
-    return () => cancelAnimationFrame(raf);
+    const index = anchorIndexRef.current;
+    if (index === null || index <= 0) return;
+    const el = rootRef.current?.querySelector<HTMLElement>(REORDER_SELECTOR);
+    if (!el || el.scrollHeight <= 0) return;
+    el.scrollTop = scrollTopForRow(index, el.scrollHeight, countRef.current);
   }, [swapKey]);
 
-  return rootRef;
+  return { rootRef, anchorIndexRef };
 }

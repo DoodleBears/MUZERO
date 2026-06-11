@@ -54,6 +54,7 @@ export function VirtualTrackList({
   onToggleSelect,
   onDeleteTrack,
   header,
+  initialScrollIndex,
 }: {
   tracks: Track[];
   onPlay?: (track: Track, index: number) => void;
@@ -76,6 +77,10 @@ export function VirtualTrackList({
   /** Context-aware delete for the row's trash button. Falls back to permanent
    *  delete (the historical behavior) when not provided. */
   onDeleteTrack?: (track: Track) => void;
+  /** Scroll to this row index on MOUNT — e.g. returning from select mode's reorder
+   *  list (a different scroll container). Restored through the virtualizer so it
+   *  routes via Lenis. */
+  initialScrollIndex?: number;
 }) {
   const { t } = useTranslation();
   const parentRef = useRef<HTMLDivElement | null>(null);
@@ -126,6 +131,20 @@ export function VirtualTrackList({
       elementScroll(offset, opts, instance);
     },
   });
+
+  // Restore scroll to a row on MOUNT (returning from select mode's reorder list).
+  // Through the virtualizer's scrollToFn so it routes via Lenis; the rAF lets Lenis
+  // attach first (it's created in a passive effect a tick after mount) — otherwise
+  // it would snap the fresh container back to the top. Mount-only.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: mount-only restore
+  useLayoutEffect(() => {
+    if (initialScrollIndex === undefined || initialScrollIndex <= 0) return;
+    rowVirtualizer.scrollToIndex(initialScrollIndex, { align: "start" });
+    const raf = requestAnimationFrame(() =>
+      rowVirtualizer.scrollToIndex(initialScrollIndex, { align: "start" }),
+    );
+    return () => cancelAnimationFrame(raf);
+  }, []);
 
   // Keep `scrollMargin` in sync with the rows container's offset within the scroller
   // (= header height + top padding). Only when a header is present; otherwise 0.

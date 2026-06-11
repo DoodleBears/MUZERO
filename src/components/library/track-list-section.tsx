@@ -104,7 +104,7 @@ export function TrackListSection({
   const showReorder = sel.mode && !!setId && !!canReorder;
   // Entering/leaving select mode swaps the list's scroll container — keep the scroll
   // position across the swap instead of snapping to the top.
-  const sectionRef = useListScrollPreservation(showReorder, tracks.length);
+  const scroll = useListScrollPreservation(showReorder, tracks.length);
 
   function onReorder(blockIds: string[], insertBeforeId: string | null) {
     if (!setId) return;
@@ -169,7 +169,11 @@ export function TrackListSection({
   );
 
   return (
-    <div ref={sectionRef} className={cn("flex min-h-0 flex-col", className)} {...longPressProps}>
+    <div
+      ref={scroll.rootRef}
+      className={cn("flex min-h-0 flex-col", className)}
+      {...longPressProps}
+    >
       {/* Without `listHeader` the toolbar is pinned above the list (set / detail views).
           With it, the header + toolbar move INTO the scroller so they scroll away with
           the rows (the library wall). */}
@@ -209,6 +213,7 @@ export function TrackListSection({
             selectedIds={sel.ids}
             onToggleSelect={sel.toggle}
             onDeleteTrack={onDeleteTrack}
+            initialScrollIndex={scroll.anchorIndexRef.current ?? undefined}
           />
         )}
       </TrackListMenu>
