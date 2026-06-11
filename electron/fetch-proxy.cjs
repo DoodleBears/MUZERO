@@ -26,8 +26,11 @@ function nodeHttpsFetch(target, init, depth = 0) {
     }
     const headers = {};
     for (const [name, value] of init.headers) headers[name] = value;
-    const req = https.request(url, { method: init.method || "GET", headers }, (res) => {
+    // Force IPv4: the googlevideo URL is signed for the IPv4 `ip=` the /player call
+    // saw; if this GET egresses over IPv6 the source IP differs and googlevideo 403s.
+    const req = https.request(url, { method: init.method || "GET", headers, family: 4 }, (res) => {
       const status = res.statusCode || 0;
+      if (status === 403) console.error("[muzfetch] node:https googlevideo 403", url.hostname);
       const location = res.headers.location;
       if (location && status >= 300 && status < 400 && depth < 5) {
         res.resume(); // drain
