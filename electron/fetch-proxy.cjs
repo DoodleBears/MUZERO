@@ -4,72 +4,85 @@
 // renderer CORS / mixed-content applies. Streaming is preserved both ways — DJ SSE
 // and large R2 PUT bodies flow through unbuffered — and SigV4 headers pass verbatim.
 const { net } = require("electron");
-const https = require("node:https");
-const { Readable } = require("node:stream");
+const { spawn } = require("node:child_process");
 
 const TARGET_HEADER = "x-muzero-target";
 
+const MEDIA_UA =
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
+
 /**
- * Fetch via Node's OWN net stack (node:https), bypassing Electron's net.fetch /
- * patched global fetch (both Chromium-backed). googlevideo 403s the Chromium request
- * but serves an identical Node request a 206 — verified against the exact URL + IP.
- * Returns a web `Response` so the caller re-wraps it unchanged. Follows redirects.
+ * Fetch a googlevideo media URL through the system `curl`. Every request from the
+ * Electron process — `net.fetch` AND `node:https`, both on Chromium's BoringSSL —
+ * is fingerprinted by googlevideo and 403'd, while curl's own TLS gets a 206 (proven
+ * against the exact URL + IP: same egress IP, same headers, opposite result). curl
+ * ships on macOS, Windows 10+, and virtually all Linux. We stream curl's stdout as
+ * the Response body and parse the status + headers from its `-i` header block; the
+ * `<audio>` element's Range rides along for 206 seeking.
  */
-function nodeHttpsFetch(target, init, depth = 0) {
+function curlMediaFetch(target, range) {
   return new Promise((resolve, reject) => {
-    let url;
+    const args = ["-sS", "-i", "--connect-timeout", "15", "-A", MEDIA_UA];
+    if (range) args.push("-H", `Range: ${range}`);
+    args.push(target);
+
+    let child;
     try {
-      url = new URL(target);
+      child = spawn("curl", args, { windowsHide: true });
     } catch (err) {
       reject(err);
       return;
     }
-    const headers = {};
-    for (const [name, value] of init.headers) headers[name] = value;
-    // Force IPv4: the googlevideo URL is signed for the IPv4 `ip=` the /player call
-    // saw; if this GET egresses over IPv6 the source IP differs and googlevideo 403s.
-    const req = https.request(url, { method: init.method || "GET", headers, family: 4 }, (res) => {
-      const status = res.statusCode || 0;
-      if (status === 403 && depth === 0) {
-        // Definitive check: what IPv4 does THIS process egress from vs the url's ip lock?
-        https
-          .request("https://api.ipify.org", { family: 4 }, (r) => {
-            let ip = "";
-            r.on("data", (c) => {
-              ip += c;
-            });
-            r.on("end", () =>
-              console.error(
-                "[muzfetch] googlevideo 403 — process egress IP:",
-                ip,
-                "| url ip:",
-                url.searchParams.get("ip"),
-              ),
-            );
-          })
-          .end();
-      }
-      const location = res.headers.location;
-      if (location && status >= 300 && status < 400 && depth < 5) {
-        res.resume(); // drain
-        resolve(nodeHttpsFetch(new URL(location, url).href, init, depth + 1));
+
+    let headerBuf = Buffer.alloc(0);
+    let parsed = false;
+    let controller;
+    const body = new ReadableStream({
+      start(c) {
+        controller = c;
+      },
+      cancel() {
+        child.kill();
+      },
+    });
+
+    child.stdout.on("data", (chunk) => {
+      if (parsed) {
+        controller.enqueue(chunk);
         return;
       }
-      const outHeaders = new Headers();
-      for (const [name, value] of Object.entries(res.headers)) {
-        if (value != null) outHeaders.set(name, Array.isArray(value) ? value.join(", ") : value);
+      headerBuf = Buffer.concat([headerBuf, chunk]);
+      const sep = headerBuf.indexOf("\r\n\r\n");
+      if (sep === -1) return;
+      const lines = headerBuf.subarray(0, sep).toString("latin1").split("\r\n");
+      const rest = headerBuf.subarray(sep + 4);
+      const status = Number.parseInt(lines[0].split(/\s+/)[1], 10) || 200;
+      const respHeaders = new Headers();
+      for (const line of lines.slice(1)) {
+        const i = line.indexOf(":");
+        if (i <= 0) continue;
+        try {
+          respHeaders.set(line.slice(0, i).trim(), line.slice(i + 1).trim());
+        } catch {
+          // skip a header value the Headers ctor rejects (e.g. duplicates curl folds)
+        }
       }
-      resolve(
-        new Response(Readable.toWeb(res), {
-          status,
-          statusText: res.statusMessage,
-          headers: outHeaders,
-        }),
-      );
+      parsed = true;
+      resolve(new Response(body, { status, headers: respHeaders }));
+      if (rest.length) controller.enqueue(rest);
     });
-    req.on("error", reject);
-    if (init.body) Readable.fromWeb(init.body).pipe(req);
-    else req.end();
+    child.stdout.on("end", () => {
+      if (parsed) controller.close();
+    });
+
+    let errText = "";
+    child.stderr.on("data", (c) => {
+      errText += c;
+    });
+    child.on("error", reject);
+    child.on("close", (code) => {
+      if (!parsed) reject(new Error(`curl exited ${code}: ${errText.slice(0, 160)}`));
+    });
   });
 }
 
@@ -94,73 +107,56 @@ async function handleMuzfetch(request) {
       // images inject none, and the CDNs serve with no Referer).
       headers.delete("referer");
       headers.delete("origin");
-      // The <audio crossOrigin> element's cors-intent + client-hint headers
-      // (Sec-Fetch-*, Sec-Ch-Ua*) leak the browser context to the CDN. node/undici
-      // never sends them and googlevideo 403s a cors-mode media GET — so strip them
-      // so the proxied request looks like a plain media fetch (harmless for the
-      // bili/netease CDNs, which ignore them).
-      for (const name of [...headers.keys()]) {
-        if (name.startsWith("sec-fetch-") || name.startsWith("sec-ch-ua")) headers.delete(name);
-      }
       for (const [name, value] of reqUrl.searchParams) {
         if (name.startsWith("__mzh_")) headers.set(name.slice("__mzh_".length), value);
       }
     }
   }
   if (!target) return new Response("missing muzfetch target", { status: 400 });
-  // `host` is managed by net.fetch from the target URL — and SigV4 signs the URL's
-  // host, so they align without us forwarding a (forbidden) Host header.
 
-  // Restore restricted headers the renderer's fetch can't set (Cookie / Referer /
-  // User-Agent / Origin). The bridge sends them as `x-muzero-h-<name>`; net.fetch in
-  // the main process isn't bound by the renderer's forbidden-header list, so the real
-  // names go out to the target. Stream sources (NetEase needs a Referer, etc.) depend
-  // on this; without it the alias headers reach the server as garbage and are ignored.
-  const ALIAS_PREFIX = "x-muzero-h-";
-  for (const [name, value] of [...headers]) {
-    if (name.startsWith(ALIAS_PREFIX)) {
-      headers.set(name.slice(ALIAS_PREFIX.length), value);
-      headers.delete(name);
-    }
-  }
-
-  // googlevideo 403s Chromium's net.fetch but serves an identical Node request a 206
-  // (same URL, same IP, clean headers — verified). So route googlevideo through
-  // node:https; everything else stays on net.fetch for cookies / session / privileged-
-  // scheme CORS bypass. credentials:"include" sends the default session's cookies
-  // cross-origin (MUSIC_U / SESSDATA after a source login unlock VIP); node:https has
-  // no cookie jar (googlevideo wants none anyway).
+  // googlevideo blocks Electron's BoringSSL net stack — route it through curl instead
+  // (see curlMediaFetch). Everything else stays on net.fetch for cookies / session /
+  // privileged-scheme CORS bypass.
   let isGoogleVideo = false;
   try {
     isGoogleVideo = /(^|\.)googlevideo\.com$/i.test(new URL(target).hostname);
   } catch {
     // non-absolute target — treat as a normal proxied request
   }
-  const init = { method: request.method, headers, redirect: "follow", credentials: "include" };
-  if (request.method !== "GET" && request.method !== "HEAD" && request.body) {
-    init.body = request.body;
-    init.duplex = "half";
-  }
 
+  let res;
   if (isGoogleVideo) {
-    // Clean, browser-like minimal headers — what undici sends by default (UA + Accept),
-    // which returned 206. A bare GET with NO User-Agent gets 403'd; the <audio>
-    // element's full forwarded set also 403s. Send only Range + a normal Chrome UA.
-    const clean = new Headers();
-    const range = headers.get("range");
-    if (range) clean.set("range", range);
-    clean.set(
-      "user-agent",
-      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-    );
-    clean.set("accept", "*/*");
-    clean.set("accept-encoding", "identity");
-    init.headers = clean;
+    try {
+      res = await curlMediaFetch(target, headers.get("range"));
+    } catch (err) {
+      return new Response(`youtube media fetch failed: ${err.message}`, { status: 502 });
+    }
+  } else {
+    // `host` is managed by net.fetch from the target URL — and SigV4 signs the URL's
+    // host, so they align without us forwarding a (forbidden) Host header.
+    //
+    // Restore restricted headers the renderer's fetch can't set (Cookie / Referer /
+    // User-Agent / Origin). The bridge sends them as `x-muzero-h-<name>`; net.fetch in
+    // the main process isn't bound by the renderer's forbidden-header list, so the real
+    // names go out to the target. Stream sources (NetEase needs a Referer) depend on it.
+    const ALIAS_PREFIX = "x-muzero-h-";
+    for (const [name, value] of [...headers]) {
+      if (name.startsWith(ALIAS_PREFIX)) {
+        headers.set(name.slice(ALIAS_PREFIX.length), value);
+        headers.delete(name);
+      }
+    }
+    // credentials:"include" so net.fetch sends the default session's cookies even cross-
+    // origin (default "same-origin" would drop them). After a source login, MUSIC_U /
+    // SESSDATA live in the default session — this unlocks VIP / higher quality.
+    const init = { method: request.method, headers, redirect: "follow", credentials: "include" };
+    if (request.method !== "GET" && request.method !== "HEAD" && request.body) {
+      init.body = request.body;
+      init.duplex = "half";
+    }
+    res = await net.fetch(target, init);
   }
 
-  const res = isGoogleVideo
-    ? await nodeHttpsFetch(target, init)
-    : await net.fetch(target, init);
   // Re-emit with permissive CORS so the privileged-scheme renderer can read it,
   // keeping the body a live stream (no buffering).
   const outHeaders = new Headers(res.headers);
