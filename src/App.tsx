@@ -10,6 +10,7 @@ import { GlobalTrackSearch } from "@/components/search/global-track-search";
 import { PlayerDock } from "@/components/shell/player-dock";
 import { GlobalDropZone } from "@/components/upload/global-drop-zone";
 import { useSettings } from "@/hooks/use-app-data";
+import { useDocumentTitle } from "@/hooks/use-document-title";
 import { useIdle } from "@/hooks/use-idle";
 import { useShortcutDispatch } from "@/hooks/use-shortcut-dispatch";
 import { cn } from "@/lib/utils";
@@ -56,6 +57,8 @@ export default function App() {
   // Global keyboard shortcuts (transport + tab nav), resolved through the
   // configurable registry so user overrides take effect live.
   useShortcutDispatch();
+  // Browser tab title tracks the current track: `Title · Artist · Album | MUZERO`.
+  useDocumentTitle();
 
   // Boot only wires the media engine. Auto-cueing the previous track during
   // WKWebView startup can make the full-screen media/background path flicker.
