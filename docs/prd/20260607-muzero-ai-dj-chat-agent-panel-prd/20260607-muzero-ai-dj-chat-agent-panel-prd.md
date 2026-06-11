@@ -435,8 +435,8 @@ chat 入口落在**记忆 icon + 切 tab icon 的左边**、占该行剩余宽�
 ### Phase 2: Dock 集成对话入口（**2026-06-11 重新设计**）
 > 旧四形态壳（FAB / bar / Dock-1∕3 / 全屏）作废重做；并行 Now Playing redesign 已落地、`App.tsx`/`player-dock.tsx` 不再 WIP-blocked，本 phase 可直接做。
 **Tasks:**
-- [x] `chat-store` 的 `mode` + persist；`matchMedia` 断点 hook（`mode` 改 `icon`/`chip`/`expanded`，移除 `dockSide`）。
-- [~] ~~`chat-launcher-fab` / `chat-input-bar` / `chat-dock`（旧壳）~~ **作废**，逻辑并入新 `dj-chat-entry.tsx`。
+- [x] `chat-store` 的 `mode` + persist：`ChatMode` 改 `icon`/`chip`/`expanded`（默认 chip）、移除 `dockSide`；persist `version:1` + `migrateChatUiState`（fab→icon、bar→chip、dock/fullscreen→expanded、丢 dockSide、未知值回 chip，直接单测）。
+- [x] ~~`chat-launcher-fab` / `chat-input-bar` / `chat-dock` / `use-chat-breakpoint`（旧壳）~~ **已删除**（`git rm` + chat-shell.test 重写为 `chat-reply-notification.test.tsx`）；逻辑并入新 `dj-chat-entry.tsx`（CHAT-2c）。`chat-reply-notification` 判定改 `mode !== "expanded"`、点击展开到 `expanded`。
 - [x] **`dj-chat-availability.ts`（纯函数 + TDD）**：`canUseDjChat` / `hasUsableLlm` / `hasUsableMusicgen`（9 测：fresh install false、`apiKeysByPresetId` 任一非空 key、空白 key 忽略、legacy openai/anthropic 字段、`mock` 永真、cloud 无 key false、mureka fixed-endpoint+key true、custom preset 还需 baseUrl、AND 门控矩阵）。keyless-local 留 Phase 5 动态 custom provider 落地时扩。
 - [ ] **`dj-chat-entry.tsx`**：挂进 [`player-dock.tsx`](../../../src/components/shell/player-dock.tsx) 上方工具行（记忆+nav icon **左侧**、`min-w-0 flex-1` 吃满；行 `w-fit self-end` 按可用性切 `w-full`）。`canUseDjChat===false` 整入口不渲染。三态：**icon**（圆钮）/ **chip**（`rounded-full` composer 条，默认）/ **expanded**（`layoutId` morph 成 widget：桌面浮层卡片、移动全屏 sheet）。
 - [x] `chat-reply-notification.tsx`（§5.2.1）：折叠态（icon/chip）DJ 回复走顶部 toast；expanded 时不显示。
