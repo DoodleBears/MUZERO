@@ -61,6 +61,7 @@ export interface ResolvedRemoteTrack {
 export interface RemoteSetIndexResult {
   indexUrl: string;
   index: R2SetIndex;
+  setCoverUrl?: string;
   tracks: ResolvedRemoteTrack[];
 }
 
@@ -224,6 +225,9 @@ export async function loadRemoteSetIndex(
   return {
     indexUrl: set.indexUrl,
     index,
+    setCoverUrl: index.set.cover
+      ? resolveRemoteObjectUrl(preview.baseUrl, index.set.cover.url)
+      : undefined,
     tracks: index.tracks.map((track) => ({
       id: track.id,
       title: track.title,

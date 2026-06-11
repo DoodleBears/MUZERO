@@ -81,6 +81,44 @@ describe("buildR2ExportPlan", () => {
     );
   });
 
+  it("exports set-level covers in the set metadata", async () => {
+    await seedSet();
+    await db.sessions.update("ses_1", {
+      coverBlobId: "blb_set_cover",
+      coverCrop: { x: 4, y: 5, width: 64, height: 64 },
+      coverThumbhash: "SETTH64",
+    });
+    await db.mediaBlobs.put({
+      id: "blb_set_cover",
+      trackId: "ses_1",
+      role: "cover",
+      mime: "image/png",
+      bytes: 3,
+      blob: new Blob(["set"], { type: "image/png" }),
+    });
+
+    const plan = await buildR2ExportPlan({
+      driveId: "drv_1",
+      libraryId: "lib_1",
+      baseUrl: "https://music.example.com/muzero/",
+      setIds: ["ses_1"],
+      db,
+    });
+
+    const setIndex = JSON.parse(
+      String(plan.objects.find((object) => object.kind === "set-index")?.body),
+    );
+    expect(setIndex.set).toMatchObject({
+      cover: {
+        url: expect.stringMatching(/^objects\/covers\/sha256-[a-f0-9]{64}\.png$/),
+        mime: "image/png",
+        bytes: 3,
+      },
+      coverCrop: { x: 4, y: 5, width: 64, height: 64 },
+      thumbhash: "SETTH64",
+    });
+  });
+
   it("adds deterministic content hashes to JSON objects for smart no-op sync", async () => {
     await seedSet();
 

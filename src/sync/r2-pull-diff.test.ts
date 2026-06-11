@@ -68,6 +68,27 @@ describe("diffRemoteSet", () => {
     );
   });
 
+  it("re-applies a remote set when the local session is missing synced cover metadata", async () => {
+    await db.sessions.put(localSession({ updatedAt: 1000 }));
+    await db.tracks.put(localTrack());
+    const remote = remoteSet({ updatedAt: 1000 });
+    remote.setCoverUrl = "https://music.example.com/muzero/objects/covers/set.jpg";
+    remote.index.set.cover = {
+      url: "objects/covers/set.jpg",
+      mime: "image/jpeg",
+      bytes: 512,
+    };
+    remote.index.set.coverCrop = { x: 1, y: 2, width: 64, height: 64 };
+    remote.index.set.thumbhash = "SETTH64";
+
+    await expect(diffRemoteSet({ driveId: "drv_1", remoteSet: remote }, db)).resolves.toMatchObject(
+      {
+        action: "apply-remote",
+        reasons: ["remote-set-metadata-missing"],
+      },
+    );
+  });
+
   it("plans a remote update when there are no local unsynced mutations", async () => {
     await db.sessions.put(localSession({ updatedAt: 1000 }));
 

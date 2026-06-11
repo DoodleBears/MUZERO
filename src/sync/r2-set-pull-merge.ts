@@ -154,6 +154,13 @@ async function mergeRemoteIntoSession(
     next.seedPrompt = remote.set.seedPrompt;
     next.displayMode = remote.set.displayMode === "title" ? "cover" : remote.set.displayMode;
     next.config = remote.set.config;
+    if (!next.coverBlobId) {
+      next.remoteCoverUrl = remote.set.cover
+        ? resolveRemoteObjectUrl(input.baseUrl, remote.set.cover.url)
+        : undefined;
+      next.coverCrop = remote.set.coverCrop;
+      next.coverThumbhash = remote.set.thumbhash;
+    }
     next.updatedAt = remote.set.updatedAt;
     changed = true;
   }

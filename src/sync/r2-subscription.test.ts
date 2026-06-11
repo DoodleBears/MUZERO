@@ -352,6 +352,32 @@ describe("loadRemoteSetIndex", () => {
     });
   });
 
+  it("resolves the set-level cover URL", async () => {
+    const preview = await subscribeManifest("https://music.example.com/muzero/manifest.json", {
+      fetcher: fetchMap({
+        "https://music.example.com/muzero/manifest.json": manifest,
+      }),
+    });
+
+    const remoteSet = await loadRemoteSetIndex(preview, preview.sets[0]!, {
+      fetcher: fetchMap({
+        "https://music.example.com/muzero/sets/ses_tokyo/index.json": {
+          ...setIndex,
+          set: {
+            ...setIndex.set,
+            cover: {
+              url: "objects/covers/set.jpg",
+              mime: "image/jpeg",
+              bytes: 2048,
+            },
+          },
+        },
+      }),
+    });
+
+    expect(remoteSet.setCoverUrl).toBe("https://music.example.com/muzero/objects/covers/set.jpg");
+  });
+
   it("rejects invalid set indexes", async () => {
     const preview = await subscribeManifest("https://music.example.com/muzero/manifest.json", {
       fetcher: fetchMap({

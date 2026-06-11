@@ -84,6 +84,9 @@ export const r2SetSchema = z.object({
   seedPrompt: z.string(),
   displayMode: z.enum(["video", "cover", "title"]),
   config: r2DjConfigSchema,
+  cover: r2RemoteObjectSchema.optional(),
+  coverCrop: r2CropSchema.optional(),
+  thumbhash: z.string().optional(),
   createdAt: millisSchema,
   updatedAt: millisSchema,
 });

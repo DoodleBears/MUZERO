@@ -1,5 +1,5 @@
 import { db as defaultDb, type MuzeroDB } from "@/db/muzero-db";
-import type { SyncMutation } from "@/db/types";
+import type { DjSession, SyncMutation } from "@/db/types";
 import type { RemoteSetIndexResult } from "./r2-subscription";
 import { listUnsyncedMutations } from "./sync-mutation-repo";
 
@@ -66,6 +66,9 @@ export async function diffRemoteSet(
 
   const remoteUpdatedAt = input.remoteSet.index.set.updatedAt;
   if (local.updatedAt === remoteUpdatedAt && sameTrackShape(local.trackIds, input)) {
+    if (!sameSetMetadata(local, input)) {
+      return { ...base, action: "apply-remote", reasons: ["remote-set-metadata-missing"] };
+    }
     if (await sameTrackRows(input, db)) return { ...base, action: "unchanged" };
     return { ...base, action: "apply-remote", reasons: ["remote-track-metadata-missing"] };
   }
@@ -105,6 +108,16 @@ export async function diffRemoteSet(
 function mutationChangedFromRemoteBase(mutation: SyncMutation, input: DiffRemoteSetInput): boolean {
   const baseUpdatedAt = mutation.base?.updatedAt ?? 0;
   return input.remoteSet.index.set.updatedAt > baseUpdatedAt;
+}
+
+function sameSetMetadata(local: DjSession, input: DiffRemoteSetInput): boolean {
+  if (local.coverBlobId) return true;
+  const remoteSet = input.remoteSet.index.set;
+  if ((local.remoteCoverUrl ?? undefined) !== (input.remoteSet.setCoverUrl ?? undefined)) {
+    return false;
+  }
+  if ((local.coverThumbhash ?? undefined) !== (remoteSet.thumbhash ?? undefined)) return false;
+  return sameJson(local.coverCrop, remoteSet.coverCrop);
 }
 
 interface ConflictEntity {

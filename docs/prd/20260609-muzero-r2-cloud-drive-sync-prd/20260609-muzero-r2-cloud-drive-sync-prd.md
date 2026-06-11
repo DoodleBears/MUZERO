@@ -2580,12 +2580,38 @@ Do not record secrets, full signed URLs, or media content.
 - [x] LR-3 Preserve structured publish error context for exhausted R2 5xx uploads.
 - [x] LR-4 Add regression coverage for duplicate empty previews and 5xx error diagnostics.
 
+### 12.20 Phase 24: Playlist Cover Metadata + Metadata-Only Playback Warning
+
+**Goal:** make imported playlist covers travel with the playlist itself, and make a remote metadata-only streamed track failure explainable instead of looking like a broken player.
+
+**Status (2026-06-12):** Phase 24 is completed. Streamed playlist imports now best-effort cache the source playlist cover as the local set cover immediately after creating the MUZERO set. R2 set indexes now carry set-level `cover`, `coverCrop`, and `thumbhash` fields, and subscribers resolve/import that cover onto the remote session so gallery/detail cards can show the playlist cover without relying on the first track. If a cloud-imported streamed track has no local blob and no R2 media URL, playback resolve failures surface as a warning using the source-access wording instead of a generic playback error, matching the product reality that Device A may have synced only metadata because it had not downloaded the audio bytes.
+
+**Product requirements:**
+
+1. **Playlist cover is set metadata, not only a first-track fallback.**
+   - Importing a NetEase/Bilibili/YouTube playlist should cache the playlist cover as `DjSession.coverBlobId` when the image is fetchable.
+   - R2 set indexes should publish the set cover object with crop/thumbhash so another device can display the same playlist identity.
+   - A subscriber should prefer a local custom set cover, then the imported remote set cover, then the existing fallback track cover.
+2. **Metadata-only streamed tracks are valid but not silently playable.**
+   - If Device A publishes streamed track metadata without local audio bytes, Device B should still import the track rows.
+   - If Device B cannot resolve that source track through its own source access, the toast should be warning-level and communicate that source access is needed, not just "Playback error".
+   - The queue may continue auto-skipping unplayable gaps, but should only show one warning per skip run.
+
+**Checklist:**
+
+- [x] PC-1 Cache streamed playlist cover URLs as local set covers during import.
+- [x] PC-2 Extend R2 set indexes with set-level cover object, crop, and thumbhash.
+- [x] PC-3 Resolve/import remote set cover URLs and render them in set cards/detail headers.
+- [x] PC-4 Treat cloud metadata-only streamed playback resolve failures as warning-level source-access failures.
+- [x] PC-5 Add focused regression tests for cover cache, export/import/subscription cover metadata, and warning classification.
+
 ---
 
 ## 13. Document Change Log
 
 | Date | Author | Changes |
 |------|--------|---------|
+| 2026-06-12 | MUZERO | Phase 24 completed: streamed playlist imports now best-effort cache playlist covers as set covers; R2 set indexes publish set-level cover/crop/thumbhash metadata and subscribers render remote set covers; cloud metadata-only streamed playback resolve failures now surface as warning-level source-access gaps instead of generic playback errors. |
 | 2026-06-12 | MUZERO | Phase 23 completed: Cloud Drive browse/import now filters historical duplicate empty set previews once a repaired non-empty set exists for the same publisher/title, collapses repeated empty same-title previews to one row, and applies that filter to automatic import-all. Exhausted R2 5xx uploads now throw/log structured `R2PublishHttpError` details including object key, status, and a short response summary. |
 | 2026-06-12 | MUZERO | Phase 22 completed: streamed-source playlist tracks now sync their source identifiers and display metadata instead of being dropped from set indexes. Cached streamed tracks with concrete local media blobs publish those bytes to the user's private R2 bucket, while metadata-only streamed tracks remain resolvable on another device through its configured source credentials. Generated/uploaded tracks still require media objects, and pull diff checks streamed source metadata. |
 | 2026-06-12 | MUZERO | Phase 21 completed: Cloud Drive page refresh / auto-preview paths no longer emit one success toast per unchanged remote set. The sync indicator treats completed pull progress without a `runId` as a dry-run unchanged result, while real completed sync runs and terminal errors remain visible. |

@@ -139,6 +139,16 @@ export async function importRemoteSetStream(
     status: "idle",
     config: remoteSet.index.set.config,
     displayMode: normalizeDisplayMode(remoteSet.index.set.displayMode),
+    coverBlobId: existingSession?.coverBlobId,
+    coverCrop: existingSession?.coverBlobId
+      ? existingSession.coverCrop
+      : (remoteSet.index.set.coverCrop ?? existingSession?.coverCrop),
+    coverThumbhash: existingSession?.coverBlobId
+      ? existingSession.coverThumbhash
+      : (remoteSet.index.set.thumbhash ?? existingSession?.coverThumbhash),
+    remoteCoverUrl: existingSession?.coverBlobId
+      ? existingSession.remoteCoverUrl
+      : (remoteSet.setCoverUrl ?? existingSession?.remoteCoverUrl),
     cloudSource: input.source ? sanitizeCloudSource(input.source) : existingSession?.cloudSource,
     createdAt: remoteSet.index.set.createdAt,
     updatedAt: remoteSet.index.set.updatedAt,

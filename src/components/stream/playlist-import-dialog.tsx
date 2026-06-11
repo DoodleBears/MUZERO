@@ -62,7 +62,10 @@ export function PlaylistImportDialog({
 
   const createNewSet = () =>
     run(async () => {
-      const count = await importStreamedPlaylist(pl.source, pl.id, pl.name, { download });
+      const count = await importStreamedPlaylist(pl.source, pl.id, pl.name, {
+        coverUrl: pl.coverUrl,
+        download,
+      });
       notify.success(t("streamSources.imported", { count, name: pl.name }));
     });
 

@@ -63,6 +63,10 @@ import {
   putRemotePlaybackCache,
 } from "@/player/playback-cache";
 import {
+  isCloudMetadataOnlyStreamTrack,
+  streamResolveFailureNotificationLevel,
+} from "@/player/playback-failure";
+import {
   buildShuffleOrder,
   clampIndex,
   manualNextIndex,
@@ -79,6 +83,7 @@ import {
 import { notify } from "@/stores/notification-store";
 import { setSetBulkDownloading, setStreamDownloading } from "@/stores/stream-cache-store";
 import { runStreamCache } from "@/streamsrc/cache-stream";
+import { cacheStreamPlaylistCover } from "@/streamsrc/playlist-cover-cache";
 import type { StreamSearchHit } from "@/streamsrc/provider";
 import { createStreamSource } from "@/streamsrc/registry";
 import { resolveStreamedTrackMedia, type StreamPlaybackResult } from "@/streamsrc/resolve-playback";
@@ -161,7 +166,7 @@ interface PlayerState {
     sourceId: StreamSourceId,
     playlistId: string,
     name: string,
-    opts?: { download?: boolean },
+    opts?: { coverUrl?: string; download?: boolean },
   ) => Promise<number>;
   /**
    * Add a source playlist's tracks into an EXISTING set, auto-deduping (incremental
@@ -802,6 +807,9 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       config: { autoExtend: false },
       streamPlaylistRef: { source: sourceId, id: playlistId },
     });
+    if (opts?.coverUrl) {
+      void cacheStreamPlaylistCover({ sessionId: session.id, coverUrl: opts.coverUrl });
+    }
     const { added } = await addHitsToSet(session.id, hits);
     if (opts?.download) void downloadStreamedSetTracks(session.id);
     return added;
@@ -1886,6 +1894,15 @@ async function ensureLoadedAndPlay(
         mime: media.mime,
         transport: "blob",
       });
+      if (!media.blob) {
+        notify.error(i18n.t("player.playbackError"));
+        log.warn("player", "local media blob missing inline bytes", {
+          trackId: track.id,
+          blobId: track.blobId,
+        });
+        set({ isPlaying: false, wantPlay: false });
+        return;
+      }
       await mediaEngine.loadBlob(media.blob, track.kind);
     } else if (sourceKind === "remote") {
       log.debug("player", "loading remote media url", {
@@ -1947,6 +1964,7 @@ async function ensureLoadedAndPlay(
         const needsAccess =
           resolved.kind === "requires-login" ||
           (resolved.kind === "no-permission" && resolved.reason === "vip");
+        const notificationLevel = streamResolveFailureNotificationLevel(track, needsAccess);
         // Auto-skip past un-streamable songs (common in imported playlists: VIP /
         // 付费 / 下架 tracks the account can't play) so the rest of the set still
         // plays through, instead of halting on the first gap. Routed through the
@@ -1957,7 +1975,13 @@ async function ensureLoadedAndPlay(
         const { wantPlay: stillWants } = get();
         if (streamSkips === 0) {
           // One toast per skip-run, so a playlist full of gaps doesn't spam.
-          notify.error(i18n.t(needsAccess ? "player.streamNeedsAccess" : "player.playbackError"));
+          const title = i18n.t(
+            needsAccess || isCloudMetadataOnlyStreamTrack(track)
+              ? "player.streamNeedsAccess"
+              : "player.playbackError",
+          );
+          if (notificationLevel === "warning") notify.warning(title);
+          else notify.error(title);
         }
         if (stillWants && streamSkips < MAX_STREAM_SKIPS) {
           streamSkips += 1;

@@ -1415,7 +1415,12 @@ function SetDetailView({
     const id = ids.find((tid) => trackById.get(tid)?.coverBlobId) ?? ids[0];
     return id ? trackById.get(id) : undefined;
   }, [session, trackById]);
-  const coverUrl = useSetCoverUrl(session?.coverBlobId, coverTrack, session?.coverCrop);
+  const coverUrl = useSetCoverUrl(
+    session?.coverBlobId,
+    coverTrack,
+    session?.coverCrop,
+    session?.remoteCoverUrl,
+  );
   // A pasted/dropped/picked image, queued for the crop dialog. `prefer` decides
   // which confirm button is primary (Enter): the set-cover thumbnail prefers the
   // set cover; a page-wide paste prefers the selected SONG's cover.
@@ -1720,12 +1725,15 @@ function useSetCoverUrl(
   coverBlobId: string | undefined,
   fallbackTrack: Track | undefined,
   coverCrop?: CropRect,
+  remoteCoverUrl?: string,
 ): string | null {
   // Reuse the track cover pipeline (blob resolve + non-destructive square crop)
   // by feeding the set cover through the same shape.
-  const setUrl = useTrackCoverUrl(coverBlobId ? { coverBlobId, coverCrop } : undefined);
+  const setUrl = useTrackCoverUrl(
+    coverBlobId || remoteCoverUrl ? { coverBlobId, coverCrop, remoteCoverUrl } : undefined,
+  );
   const trackUrl = useTrackCoverUrl(fallbackTrack);
-  return coverBlobId ? setUrl : trackUrl;
+  return coverBlobId || remoteCoverUrl ? setUrl : trackUrl;
 }
 
 function ViewToggleGroup({
@@ -1873,12 +1881,18 @@ function SetCard({
   onRequestDelete?: () => void;
 }) {
   const { t } = useTranslation();
-  const coverUrl = useSetCoverUrl(item.session.coverBlobId, coverTrack, item.session.coverCrop);
+  const coverUrl = useSetCoverUrl(
+    item.session.coverBlobId,
+    coverTrack,
+    item.session.coverCrop,
+    item.session.remoteCoverUrl,
+  );
   // Preview hash matching whichever cover is shown: the set's own, else the
   // fallback track's (mirrors useSetCoverUrl's own/fallback choice).
-  const coverThumbhash = item.session.coverBlobId
-    ? item.session.coverThumbhash
-    : coverTrack?.coverThumbhash;
+  const coverThumbhash =
+    item.session.coverBlobId || item.session.remoteCoverUrl
+      ? item.session.coverThumbhash
+      : coverTrack?.coverThumbhash;
   const count = t("gallery.count", { count: item.trackCount });
 
   // The play button overlays the card (sibling, not nested) so a button doesn't

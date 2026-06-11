@@ -355,6 +355,8 @@ export interface DjSession {
   coverCrop?: CropRect;
   /** Base64 thumbhash of the set cover — instant blurred preview (mirrors `Track.coverThumbhash`). */
   coverThumbhash?: string;
+  /** Remote set cover URL from an imported cloud drive; local `coverBlobId` wins when present. */
+  remoteCoverUrl?: string;
   /** Ordered, curated members. Newest is PREPENDED to the front (= the cover). */
   trackIds: string[];
   /**

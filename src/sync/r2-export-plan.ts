@@ -192,6 +192,12 @@ export async function buildR2ExportPlan(input: R2ExportPlanInput): Promise<R2Exp
     // under its ORIGINAL remote id; other devices' members (`trk_remote_*`
     // rows) are never re-exported — the remote side of the merge carries them.
     const publishedId = publishedEntityId("ses", input.driveId, session.id);
+    const setCover = session.coverBlobId
+      ? await loadOptionalBinaryObject("cover", session.coverBlobId, db, {
+          setId: session.id,
+        })
+      : undefined;
+    if (setCover) binaryObjects.push(setCover.object);
 
     for (const track of tracks) {
       if (publishedEntityId("trk", input.driveId, track.id) !== track.id) continue;
@@ -288,6 +294,9 @@ export async function buildR2ExportPlan(input: R2ExportPlanInput): Promise<R2Exp
           seedPrompt: session.seedPrompt,
           displayMode: session.displayMode,
           config: session.config,
+          cover: setCover?.remote,
+          coverCrop: session.coverCrop,
+          thumbhash: session.coverThumbhash,
           createdAt: session.createdAt,
           updatedAt: session.updatedAt,
         },
@@ -371,14 +380,18 @@ async function createBinaryObject(
   blob: MediaBlob,
   refs: Pick<R2ExportObject, "setId" | "trackId" | "memoryId">,
 ): Promise<BinaryObjectResult> {
-  const sha256 = await sha256Blob(blob);
+  const body = blob.blob;
+  if (!body) {
+    throw new Error(`Cannot export ${kind} object without inline blob bytes: ${blob.id}`);
+  }
+  const sha256 = await sha256Blob({ ...blob, blob: body });
   const key = `${binaryDirectory(kind)}/sha256-${sha256}${extensionForMime(blob.mime)}`;
   const object: R2ExportObject = {
     kind,
     key,
     contentType: blob.mime,
     bytes: blob.bytes,
-    body: blob.blob,
+    body,
     sha256,
     ...refs,
   };

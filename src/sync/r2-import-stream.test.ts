@@ -191,6 +191,38 @@ describe("importRemoteSetStream", () => {
     expect(await db.mediaBlobs.count()).toBe(0);
   });
 
+  it("imports a remote set cover onto the local session", async () => {
+    await importRemoteSetStream(
+      {
+        driveId: "drv_cover",
+        remoteSet: {
+          ...remoteSet,
+          setCoverUrl: "https://music.example.com/muzero/objects/covers/set.png",
+          index: {
+            ...remoteSet.index,
+            set: {
+              ...remoteSet.index.set,
+              cover: {
+                url: "objects/covers/set.png",
+                mime: "image/png",
+                bytes: 512,
+              },
+              coverCrop: { x: 2, y: 3, width: 80, height: 80 },
+              thumbhash: "SETTH64",
+            },
+          },
+        },
+      },
+      db,
+    );
+
+    await expect(db.sessions.get("ses_remote_drv_cover_ses_tokyo")).resolves.toMatchObject({
+      remoteCoverUrl: "https://music.example.com/muzero/objects/covers/set.png",
+      coverCrop: { x: 2, y: 3, width: 80, height: 80 },
+      coverThumbhash: "SETTH64",
+    });
+  });
+
   it("imports streamed source metadata so another device can resolve the same playlist", async () => {
     const streamedRemoteSet: RemoteSetIndexResult = {
       ...remoteSet,
