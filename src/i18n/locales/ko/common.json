@@ -600,7 +600,7 @@
     },
     "cloudCorsTitle": "권장 R2 CORS",
     "cloudCorsHint": "브라우저에서 MUZERO를 사용할 때 이 설정을 버킷 CORS에 추가하세요.",
-    "cloudMultiWriterHint": "여러 기기가 같은 드라이브에 동기화할 수 있습니다. 게시할 때 드라이브의 현재 상태와 병합되어 각 기기는 자신의 세트·프로필·통계를 유지하며, 쓰기 충돌은 자동으로 다시 병합·재시도됩니다. 단, 세트는 게시한 기기에 속하므로 다른 기기에서 같은 세트를 편집한 내용은 당분간 로컬에만 유지됩니다.",
+    "cloudMultiWriterHint": "여러 기기가 같은 드라이브에 동기화할 수 있습니다. Sync now는 양방향입니다. 먼저 다른 기기의 세트 편집(추가·삭제·이름 변경)을 로컬로 가져와 병합한 뒤, 병합된 결과를 게시합니다. 양쪽의 추가는 유지되고 삭제는 안전하게 전파되며 쓰기 충돌은 자동으로 다시 병합·재시도됩니다.",
     "cloudCorsCopy": "CORS 복사",
     "cloudCorsCopied": "복사됨",
     "cloudPresenceTitle": "Listening now presence",

@@ -601,7 +601,7 @@
     },
     "cloudCorsTitle": "推荐 R2 CORS",
     "cloudCorsHint": "在浏览器里使用 MUZERO 时，将这段配置放到 bucket CORS。",
-    "cloudMultiWriterHint": "多台设备可以同步到同一个云盘：发布时会与云端当前状态合并——每台设备保留自己的歌单、资料与统计，写入冲突会自动重新合并并重试。注意：歌单仍归发布它的设备所有，另一台设备对同一歌单的编辑暂时只保留在本地。",
+    "cloudMultiWriterHint": "多台设备可以同步到同一个云盘。Sync now 是双向的：先把其他设备对歌单的修改拉取合并到本地（新增歌曲、删除、改名），再发布合并后的结果——双方新增都会保留，删除会安全传播，写入冲突会自动重新合并并重试。",
     "cloudCorsCopy": "复制 CORS",
     "cloudCorsCopied": "已复制",
     "cloudPresenceTitle": "正在听 Presence",

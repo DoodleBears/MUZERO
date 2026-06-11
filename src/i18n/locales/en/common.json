@@ -615,7 +615,7 @@
     },
     "cloudCorsTitle": "Recommended R2 CORS",
     "cloudCorsHint": "Use this on the bucket when running MUZERO in a browser.",
-    "cloudMultiWriterHint": "Multiple devices can sync to this drive: publishing merges with the drive's current state — each device keeps its own sets, profile, and stats, and a conflicting write re-merges and retries automatically. Note: a set still belongs to the device that published it; edits to the same set from another device stay local for now.",
+    "cloudMultiWriterHint": "Multiple devices can sync to this drive. Sync now is bidirectional: it first pulls other devices' edits into your sets (new tracks, removals, renames), then publishes the merged result — both sides' additions are kept, removals propagate safely, and conflicting writes re-merge and retry automatically.",
     "cloudCorsCopy": "Copy CORS",
     "cloudCorsCopied": "Copied",
     "cloudPresenceTitle": "Listening now presence",
