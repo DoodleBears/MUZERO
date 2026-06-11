@@ -74,6 +74,25 @@ export function AboutSettings() {
         <CardTitle>{t("settings.aboutTitle")}</CardTitle>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
+        {/* Brand logo — theme-aware (light tile in light mode, dark tile in dark
+            mode) via the .dark class on <html>, mirroring the favicon swap in
+            index.html. No JS/hook needed; exactly one img is ever displayed. */}
+        <div className="flex flex-col items-center gap-1.5 pb-1">
+          <img
+            src="/muzero-logo-light.png"
+            alt="MUZERO"
+            width={80}
+            height={80}
+            className="size-20 dark:hidden"
+          />
+          <img
+            src="/muzero-logo-dark.png"
+            alt="MUZERO"
+            width={80}
+            height={80}
+            className="hidden size-20 dark:block"
+          />
+        </div>
         <div className="flex items-center justify-between gap-4">
           <span className="text-muted-foreground text-sm">{t("settings.aboutCurrentVersion")}</span>
           <span className="font-medium text-sm tabular-nums">v{APP_VERSION}</span>
