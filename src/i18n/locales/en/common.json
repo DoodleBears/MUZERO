@@ -615,7 +615,7 @@
     },
     "cloudCorsTitle": "Recommended R2 CORS",
     "cloudCorsHint": "Use this on the bucket when running MUZERO in a browser.",
-    "cloudSingleWriterHint": "Sync from one device per drive: publishing rebuilds the drive's manifest and device indexes from this device only, so a second writing device would overwrite the first. Other devices should add the drive as a shared link (read-only) for now.",
+    "cloudMultiWriterHint": "Multiple devices can sync to this drive: publishing merges with the drive's current state — each device keeps its own sets, profile, and stats, and a conflicting write re-merges and retries automatically. Note: a set still belongs to the device that published it; edits to the same set from another device stay local for now.",
     "cloudCorsCopy": "Copy CORS",
     "cloudCorsCopied": "Copied",
     "cloudPresenceTitle": "Listening now presence",
@@ -959,5 +959,15 @@
     "download": "Download",
     "error": "Update check failed.",
     "upToDate": "You're up to date."
+  },
+  "chat": {
+    "title": "AI DJ",
+    "open": "Ask the DJ",
+    "placeholder": "Ask the DJ…",
+    "send": "Send",
+    "queue": "Queue prompt",
+    "stop": "Stop",
+    "expand": "Expand chat",
+    "minimize": "Minimize chat"
   }
 }

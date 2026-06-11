@@ -1062,11 +1062,11 @@ export function SettingsPage() {
                 )}
 
                 {activeItem === "cloud-sync" && (
-                  // Publish rebuilds the manifest + discovery indexes from THIS
-                  // device only (R2 PRD §12.2 F4) — until merge-on-publish lands,
-                  // exactly one device should write a given drive.
+                  // Publish is read-merge-write (R2 PRD §12.4): devices merge into
+                  // the drive's manifest/indexes instead of mirroring over them.
+                  // Same-set co-editing is still single-owner — say so.
                   <p className="rounded-md border border-border bg-muted/40 p-3 text-muted-foreground text-xs">
-                    {t("settings.cloudSingleWriterHint")}
+                    {t("settings.cloudMultiWriterHint")}
                   </p>
                 )}
 
