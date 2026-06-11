@@ -1,7 +1,14 @@
+import { rgbaToThumbHash } from "thumbhash";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { thumbhashToBase64 } from "@/lib/cover-thumbhash";
 import { type MediaStorageProvider, putMediaBlob } from "./media-blob-storage";
 import { MuzeroDB } from "./muzero-db";
-import { backfillCoverThumbhashes, createSession } from "./repositories";
+import {
+  backfillCoverMetadata,
+  backfillCoverThumbhashes,
+  countCoverMetadataBackfillCandidates,
+  createSession,
+} from "./repositories";
 
 let db: MuzeroDB;
 let dbName: string;
@@ -194,5 +201,67 @@ describe("backfillCoverThumbhashes", () => {
     expect(updated).toBe(1);
     expect(encode).toHaveBeenCalledWith(expect.any(Blob), undefined);
     expect((await db.tracks.get("trk_provider"))?.coverThumbhash).toBe("HASH");
+  });
+});
+
+describe("backfillCoverMetadata", () => {
+  it("repairs legacy local track covers with thumbhash and visualizer palette", async () => {
+    const session = await createSession({ name: "s", seedPrompt: "", config: {} }, db);
+    const blobId = await addTrackWithCover("trk_palette", session.id);
+    const palette = [
+      { r: 20, g: 120, b: 220 },
+      { r: 230, g: 140, b: 30 },
+    ];
+    const encode = vi.fn(async () => "HASH");
+    const extract = vi.fn(async () => palette);
+
+    await expect(countCoverMetadataBackfillCandidates(db)).resolves.toBe(1);
+    const { updated, attempted } = await backfillCoverMetadata(db, { encode, extract });
+
+    expect(updated).toBe(1);
+    expect(attempted).toEqual([blobId]);
+    expect(extract).toHaveBeenCalledWith(expect.anything(), undefined, "image/png");
+    const track = await db.tracks.get("trk_palette");
+    expect(track?.coverThumbhash).toBe("HASH");
+    expect(track?.coverPalette).toEqual(palette);
+    expect(track?.coverPaletteSource).toBe(blobId);
+  });
+
+  it("repairs remote-only track cover palettes from thumbhash without fetching bytes", async () => {
+    const session = await createSession({ name: "s", seedPrompt: "", config: {} }, db);
+    const thumbhash = thumbhashToBase64(
+      rgbaToThumbHash(1, 1, new Uint8ClampedArray([20, 120, 220, 255])),
+    );
+    await db.tracks.add({
+      id: "trk_remote",
+      sessionId: session.id,
+      title: "remote",
+      kind: "audio",
+      origin: "uploaded",
+      provider: "upload",
+      status: "ready",
+      durationSec: 1,
+      createdAt: 1,
+      playCount: 0,
+      liked: false,
+      tags: [],
+      coverThumbhash: thumbhash,
+      remoteCoverUrl: "https://pub.example.com/objects/covers/blue.jpg",
+    });
+    const encode = vi.fn(async () => "SHOULD_NOT_RUN");
+    const extract = vi.fn(async () => [{ r: 1, g: 2, b: 3 }]);
+
+    await expect(countCoverMetadataBackfillCandidates(db)).resolves.toBe(1);
+    const { updated, attempted } = await backfillCoverMetadata(db, { encode, extract });
+
+    expect(updated).toBe(1);
+    expect(attempted).toEqual([
+      "remote:trk_remote:https://pub.example.com/objects/covers/blue.jpg",
+    ]);
+    expect(encode).not.toHaveBeenCalled();
+    expect(extract).not.toHaveBeenCalled();
+    const track = await db.tracks.get("trk_remote");
+    expect(track?.coverPalette?.[0]?.b).toBeGreaterThan(track?.coverPalette?.[0]?.r ?? 0);
+    expect(track?.coverPaletteSource).toBe("https://pub.example.com/objects/covers/blue.jpg");
   });
 });

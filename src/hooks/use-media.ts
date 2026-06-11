@@ -2,7 +2,7 @@ import { useLiveQuery } from "dexie-react-hooks";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { resolveMediaBlob } from "@/db/media-blob-storage";
 import { db } from "@/db/muzero-db";
-import { backfillCoverThumbhashes } from "@/db/repositories";
+import { backfillCoverMetadata } from "@/db/repositories";
 import type { Track } from "@/db/types";
 import { useSettings } from "@/hooks/use-app-data";
 import { encodeCoverThumbhash } from "@/lib/cover-thumbhash";
@@ -206,40 +206,46 @@ export function useTrackMediaUrl(
   return useKeyedObjectUrl(blob, blobId) ?? remoteMediaUrl ?? null;
 }
 
-// Session-wide guards for the lazy thumbhash backfill (module scope, not store
+// Session-wide guards for the lazy cover metadata backfill (module scope, not store
 // state — see CLAUDE.md rule 6): run the pass once, and remember which cover
 // blobs we've already attempted so the loop converges (un-encodable ones aren't
 // retried forever).
-let coverThumbhashBackfillStarted = false;
-const coverThumbhashBackfillSkip = new Set<string>();
+let coverMetadataBackfillStarted = false;
+const coverMetadataBackfillSkip = new Set<string>();
 
 /**
- * Lazily generate thumbhashes for legacy/imported covers that predate the feature
- * (instant-cover-thumbnails PRD Phase 3). Runs once per session, a few covers per
- * idle tick, until none remain — so an existing library "fills in" its blurred
- * previews in the background without janking the gallery. Call from a long-lived
- * surface (the gallery page). Off the render path; failures are swallowed.
+ * Lazily generate cover metadata for legacy/imported covers: thumbhash previews
+ * plus persistent palette metadata for visualizers. Runs once per session, a few
+ * covers per idle tick, until none remain — so an existing library fills itself in
+ * without janking the gallery. Call from a long-lived surface (the gallery page).
+ * Off the render path; failures are swallowed.
  */
-export function useCoverThumbhashBackfill(): void {
+export function useCoverMetadataBackfill(): void {
   useEffect(() => {
-    if (coverThumbhashBackfillStarted) return;
-    coverThumbhashBackfillStarted = true;
+    if (coverMetadataBackfillStarted) return;
+    coverMetadataBackfillStarted = true;
     const schedule = (fn: () => void) => {
       if (typeof requestIdleCallback === "function") requestIdleCallback(fn, { timeout: 2000 });
       else setTimeout(fn, 500);
     };
     const tick = async () => {
       try {
-        const { attempted } = await backfillCoverThumbhashes(db, encodeCoverThumbhash, {
+        const { attempted } = await backfillCoverMetadata(db, {
+          encode: encodeCoverThumbhash,
           limit: 6,
-          skip: coverThumbhashBackfillSkip,
+          skip: coverMetadataBackfillSkip,
         });
-        for (const id of attempted) coverThumbhashBackfillSkip.add(id);
+        for (const id of attempted) coverMetadataBackfillSkip.add(id);
         if (attempted.length > 0) schedule(() => void tick()); // more remain → keep going
       } catch (err) {
-        log.debug("cover thumbhash backfill stopped", err);
+        log.debug("cover metadata backfill stopped", err);
       }
     };
     schedule(() => void tick());
   }, []);
+}
+
+/** @deprecated Use {@link useCoverMetadataBackfill}; kept for older imports. */
+export function useCoverThumbhashBackfill(): void {
+  useCoverMetadataBackfill();
 }

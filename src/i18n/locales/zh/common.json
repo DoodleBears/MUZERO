@@ -131,6 +131,7 @@
     "permanentLegacy": "{{count}} 个旧媒体文件",
     "permanentMissing": "{{count}} 个缺失文件",
     "permanentOrphaned": "{{count}} 个孤儿文件",
+    "permanentCoverRepair": "{{count}} 条封面取色待修复",
     "permanentMigrate": "迁移旧媒体",
     "permanentMigrateDone": "已迁移 {{count}} 个媒体文件",
     "permanentMigrateCancelled": "已停止，已迁移 {{count}} 个媒体文件",
@@ -140,6 +141,8 @@
     "permanentCancel": "取消迁移",
     "permanentCleanup": "清理孤儿文件",
     "permanentCleanupDone": "已删除 {{count}} 个孤儿文件",
+    "permanentRepairCovers": "修复封面取色",
+    "permanentRepairCoversDone": "已修复 {{count}} 条封面取色",
     "downloadFailedMany_other": "{{count}} 首下载失败"
   },
   "playlistImport": {

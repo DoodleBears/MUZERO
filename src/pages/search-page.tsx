@@ -59,7 +59,7 @@ import {
 } from "@/db/repositories";
 import type { CropRect, DjSession, Track } from "@/db/types";
 import { useBackGesture } from "@/hooks/use-back-gesture";
-import { useCoverThumbhashBackfill, useTrackCoverUrl } from "@/hooks/use-media";
+import { useCoverMetadataBackfill, useTrackCoverUrl } from "@/hooks/use-media";
 import { useShortcutMatcher } from "@/hooks/use-shortcut-matcher";
 import { useTransliterationReady } from "@/hooks/use-transliteration-ready";
 import { hasModalDialogOpen, isTypingTarget } from "@/lib/dom-keys";
@@ -168,8 +168,8 @@ const GALLERY_CARD_SELECTOR = "[data-gallery-card]";
  */
 export function SearchPage() {
   const { t } = useTranslation();
-  // Backfill blurred previews for legacy/imported covers in the background.
-  useCoverThumbhashBackfill();
+  // Backfill blurred previews + visualizer palettes for legacy/imported covers.
+  useCoverMetadataBackfill();
   const [selectedSetId, setSelectedSetId] = useState<string | null>(null);
   const [mode, setMode] = useState<GalleryMode>(savedGalleryMode);
   const [setQuery, setSetQuery] = useState("");

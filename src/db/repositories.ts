@@ -1,5 +1,9 @@
 import type { TrackBrief } from "@/dj/dj-brief-schema";
-import { coverPaletteFields, extractCoverPalette } from "@/lib/cover-palette";
+import {
+  coverPaletteFields,
+  coverPaletteFromThumbhash,
+  extractCoverPalette,
+} from "@/lib/cover-palette";
 import { encodeCoverThumbhash } from "@/lib/cover-thumbhash";
 import { newId } from "@/lib/id";
 import type { LyricsRecord } from "@/lyrics/provider";
@@ -1094,6 +1098,192 @@ export async function backfillCoverThumbhashes(
     updated += 1;
   }
   return { updated, attempted };
+}
+
+export interface CoverMetadataBackfillProgress {
+  updated: number;
+  attempted: string[];
+}
+
+export async function countCoverMetadataBackfillCandidates(
+  db: MuzeroDB = defaultDb,
+): Promise<number> {
+  let count = 0;
+  count += await db.tracks
+    .filter((track) => {
+      if (track.coverBlobId) return trackNeedsLocalCoverMetadata(track);
+      return trackNeedsRemoteCoverPalette(track);
+    })
+    .count();
+  count += await db.sessions
+    .filter((session) => !!session.coverBlobId && !session.coverThumbhash)
+    .count();
+  count += await db.entityCovers.filter((row) => !!row.coverBlobId && !row.thumbhash).count();
+  return count;
+}
+
+/**
+ * Self-heal cover metadata for legacy libraries:
+ * - local track covers get both thumbhash and persistent visualizer palette;
+ * - remote-only track covers derive a safe one-color palette from thumbhash;
+ * - set/entity covers keep the existing thumbhash backfill behavior.
+ *
+ * This intentionally does not bump `updatedAt`: the values are derived metadata,
+ * not user edits, and should not create sync churn.
+ */
+export async function backfillCoverMetadata(
+  db: MuzeroDB = defaultDb,
+  opts: {
+    limit?: number;
+    skip?: ReadonlySet<string>;
+    storage?: MediaBlobStorageOptions;
+    encode?: (blob: Blob, crop?: CropRect) => Promise<string | undefined>;
+    extract?: (
+      blob: Blob,
+      crop?: CropRect,
+      mime?: string,
+    ) => Promise<Awaited<ReturnType<typeof extractCoverPalette>>>;
+  } = {},
+): Promise<CoverMetadataBackfillProgress> {
+  const limit = opts.limit ?? 12;
+  const encode = opts.encode ?? encodeCoverThumbhash;
+  const extract = opts.extract ?? extractCoverPalette;
+
+  type Candidate = { key: string; run: () => Promise<boolean> };
+  const candidates: Candidate[] = [];
+
+  const tracks = await db.tracks
+    .filter((track) =>
+      track.coverBlobId ? trackNeedsLocalCoverMetadata(track) : trackNeedsRemoteCoverPalette(track),
+    )
+    .toArray();
+  for (const track of tracks) {
+    if (track.coverBlobId) {
+      candidates.push({
+        key: track.coverBlobId,
+        run: () => backfillLocalTrackCoverMetadata(track, db, { ...opts, encode, extract }),
+      });
+      continue;
+    }
+    if (track.remoteCoverUrl) {
+      candidates.push({
+        key: `remote:${track.id}:${track.remoteCoverUrl}`,
+        run: () => backfillRemoteTrackCoverPalette(track, db),
+      });
+    }
+  }
+
+  for (const session of await db.sessions
+    .filter((session) => !!session.coverBlobId && !session.coverThumbhash)
+    .toArray()) {
+    const coverBlobId = session.coverBlobId;
+    if (!coverBlobId) continue;
+    candidates.push({
+      key: coverBlobId,
+      run: async () => {
+        const cover = await resolveMediaBlob(coverBlobId, db, opts.storage);
+        if (!cover?.blob) return false;
+        const hash = await encode(cover.blob, session.coverCrop);
+        if (!hash) return false;
+        await db.sessions.update(session.id, { coverThumbhash: hash });
+        return true;
+      },
+    });
+  }
+
+  for (const row of await db.entityCovers
+    .filter((row) => !!row.coverBlobId && !row.thumbhash)
+    .toArray()) {
+    const coverBlobId = row.coverBlobId;
+    if (!coverBlobId) continue;
+    candidates.push({
+      key: coverBlobId,
+      run: async () => {
+        const cover = await resolveMediaBlob(coverBlobId, db, opts.storage);
+        if (!cover?.blob) return false;
+        const hash = await encode(cover.blob, row.crop);
+        if (!hash) return false;
+        await db.entityCovers.update(row.id, { thumbhash: hash });
+        return true;
+      },
+    });
+  }
+
+  const attempted: string[] = [];
+  let updated = 0;
+  let processed = 0;
+  for (const candidate of candidates) {
+    if (processed >= limit) break;
+    if (opts.skip?.has(candidate.key)) continue;
+    processed += 1;
+    attempted.push(candidate.key);
+    if (await candidate.run()) updated += 1;
+  }
+  return { updated, attempted };
+}
+
+function trackNeedsLocalCoverMetadata(track: Track): boolean {
+  if (!track.coverBlobId) return false;
+  return (
+    !track.coverThumbhash ||
+    !track.coverPalette?.length ||
+    track.coverPaletteSource !== track.coverBlobId
+  );
+}
+
+function trackNeedsRemoteCoverPalette(track: Track): boolean {
+  return (
+    !!track.remoteCoverUrl &&
+    !!track.coverThumbhash &&
+    (!track.coverPalette?.length || track.coverPaletteSource !== track.remoteCoverUrl)
+  );
+}
+
+async function backfillLocalTrackCoverMetadata(
+  track: Track,
+  db: MuzeroDB,
+  opts: {
+    storage?: MediaBlobStorageOptions;
+    encode: (blob: Blob, crop?: CropRect) => Promise<string | undefined>;
+    extract: (
+      blob: Blob,
+      crop?: CropRect,
+      mime?: string,
+    ) => Promise<Awaited<ReturnType<typeof extractCoverPalette>>>;
+  },
+): Promise<boolean> {
+  if (!track.coverBlobId) return false;
+  const cover = await resolveMediaBlob(track.coverBlobId, db, opts.storage);
+  if (!cover?.blob) return false;
+
+  const patch: Partial<Track> = {};
+  if (!track.coverThumbhash) {
+    const hash = await opts.encode(cover.blob, track.coverCrop);
+    if (hash) patch.coverThumbhash = hash;
+  }
+  if (!track.coverPalette?.length || track.coverPaletteSource !== track.coverBlobId) {
+    Object.assign(
+      patch,
+      coverPaletteFields(
+        await opts.extract(cover.blob, track.coverCrop, cover.mime),
+        track.coverBlobId,
+      ),
+    );
+  }
+  if (Object.keys(patch).length === 0) return false;
+  await db.tracks.update(track.id, patch);
+  return true;
+}
+
+async function backfillRemoteTrackCoverPalette(track: Track, db: MuzeroDB): Promise<boolean> {
+  if (!track.remoteCoverUrl) return false;
+  const fields = coverPaletteFields(
+    coverPaletteFromThumbhash(track.coverThumbhash),
+    track.remoteCoverUrl,
+  );
+  if (!fields.coverPalette?.length) return false;
+  await db.tracks.update(track.id, fields);
+  return true;
 }
 
 // ----------------------------------------------------------------- memories ----

@@ -1,5 +1,5 @@
 import { useLiveQuery } from "dexie-react-hooks";
-import { RefreshCw, Trash2, XCircle } from "lucide-react";
+import { Palette, RefreshCw, Trash2, XCircle } from "lucide-react";
 import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
@@ -12,6 +12,7 @@ import {
   type PersistentMediaStorageSummary,
   summarizePersistentMediaStorage,
 } from "@/db/media-blob-storage";
+import { backfillCoverMetadata, countCoverMetadataBackfillCandidates } from "@/db/repositories";
 import type { MediaBlob } from "@/db/types";
 import { notify } from "@/stores/notification-store";
 
@@ -53,7 +54,7 @@ function formatBytes(bytes: number): string {
 
 export function PersistentStorageSettings() {
   const { t } = useTranslation();
-  const [busy, setBusy] = useState<"migrate" | "cleanup" | null>(null);
+  const [busy, setBusy] = useState<"migrate" | "cleanup" | "repair-covers" | null>(null);
   const [migrationProgress, setMigrationProgress] = useState<MediaBlobMigrationProgress | null>(
     null,
   );
@@ -63,6 +64,11 @@ export function PersistentStorageSettings() {
     () => summarizePersistentMediaStorage(undefined, { includeHealth: true }),
     [refreshToken],
     EMPTY_SUMMARY,
+  );
+  const coverRepairCount = useLiveQuery(
+    () => countCoverMetadataBackfillCandidates(),
+    [refreshToken],
+    0,
   );
 
   async function migrateLegacy() {
@@ -114,6 +120,17 @@ export function PersistentStorageSettings() {
     }
   }
 
+  async function repairCoverMetadata() {
+    setBusy("repair-covers");
+    try {
+      const result = await backfillCoverMetadata(undefined, { limit: 500 });
+      notify.success(t("streamCache.permanentRepairCoversDone", { count: result.updated }));
+      setRefreshToken((value) => value + 1);
+    } finally {
+      setBusy(null);
+    }
+  }
+
   const roles = Object.entries(summary.byRole).filter(
     (entry): entry is [MediaBlob["role"], PersistentMediaStorageBucket] => Boolean(entry[1]),
   );
@@ -159,10 +176,11 @@ export function PersistentStorageSettings() {
           </div>
         )}
 
-        <div className="grid gap-2 rounded-md border border-border bg-muted/25 p-3 text-xs sm:grid-cols-3">
+        <div className="grid gap-2 rounded-md border border-border bg-muted/25 p-3 text-xs sm:grid-cols-4">
           <span>{t("streamCache.permanentLegacy", { count: summary.legacyMediaCount })}</span>
           <span>{t("streamCache.permanentMissing", { count: summary.missingCount })}</span>
           <span>{t("streamCache.permanentOrphaned", { count: summary.orphanedCount })}</span>
+          <span>{t("streamCache.permanentCoverRepair", { count: coverRepairCount })}</span>
         </div>
 
         {migrationProgress && (
@@ -231,6 +249,15 @@ export function PersistentStorageSettings() {
             onClick={() => void cleanupOrphans()}
           >
             <Trash2 /> {t("streamCache.permanentCleanup")}
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            disabled={busy !== null || coverRepairCount === 0}
+            onClick={() => void repairCoverMetadata()}
+          >
+            <Palette /> {t("streamCache.permanentRepairCovers")}
           </Button>
         </div>
       </CardContent>

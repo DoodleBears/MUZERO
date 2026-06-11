@@ -1,11 +1,14 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { PersistentStorageSettings } from "./persistent-storage-settings";
 
 const mocks = vi.hoisted(() => ({
   cleanupOrphans: vi.fn(),
+  countCoverMetadataBackfillCandidates: vi.fn(),
+  coverRepairCount: 3,
   migrateWithProgress: vi.fn(),
   notifySuccess: vi.fn(),
+  repairCoverMetadata: vi.fn(),
   summary: {
     count: 2,
     bytes: 12,
@@ -24,7 +27,8 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("dexie-react-hooks", () => ({
-  useLiveQuery: () => mocks.summary,
+  useLiveQuery: (_query: unknown, _deps: unknown, defaultValue: unknown) =>
+    typeof defaultValue === "number" ? mocks.coverRepairCount : mocks.summary,
 }));
 
 vi.mock("react-i18next", () => ({
@@ -40,6 +44,11 @@ vi.mock("@/db/media-blob-storage", () => ({
   summarizePersistentMediaStorage: vi.fn(),
 }));
 
+vi.mock("@/db/repositories", () => ({
+  backfillCoverMetadata: mocks.repairCoverMetadata,
+  countCoverMetadataBackfillCandidates: mocks.countCoverMetadataBackfillCandidates,
+}));
+
 vi.mock("@/stores/notification-store", () => ({
   notify: {
     success: mocks.notifySuccess,
@@ -47,6 +56,15 @@ vi.mock("@/stores/notification-store", () => ({
 }));
 
 describe("PersistentStorageSettings", () => {
+  beforeEach(() => {
+    mocks.cleanupOrphans.mockReset();
+    mocks.countCoverMetadataBackfillCandidates.mockReset();
+    mocks.coverRepairCount = 3;
+    mocks.migrateWithProgress.mockReset();
+    mocks.notifySuccess.mockReset();
+    mocks.repairCoverMetadata.mockReset();
+  });
+
   it("shows migration progress while legacy media is migrating", async () => {
     mocks.migrateWithProgress.mockImplementationOnce(async (_db, options) => {
       await options.onProgress({
@@ -89,6 +107,21 @@ describe("PersistentStorageSettings", () => {
     );
     expect(mocks.notifySuccess).toHaveBeenCalledWith(
       expect.stringContaining("streamCache.permanentMigrateDone"),
+    );
+  });
+
+  it("repairs cover color metadata on demand", async () => {
+    mocks.repairCoverMetadata.mockResolvedValueOnce({ attempted: ["blb_a"], updated: 1 });
+
+    render(<PersistentStorageSettings />);
+
+    fireEvent.click(screen.getByRole("button", { name: /streamCache.permanentRepairCovers/ }));
+
+    await waitFor(() => {
+      expect(mocks.repairCoverMetadata).toHaveBeenCalledWith(undefined, { limit: 500 });
+    });
+    expect(mocks.notifySuccess).toHaveBeenCalledWith(
+      expect.stringContaining("streamCache.permanentRepairCoversDone"),
     );
   });
 });

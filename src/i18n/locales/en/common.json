@@ -140,6 +140,7 @@
     "permanentLegacy": "{{count}} legacy media files",
     "permanentMissing": "{{count}} missing files",
     "permanentOrphaned": "{{count}} orphan files",
+    "permanentCoverRepair": "{{count}} cover color records to repair",
     "permanentMigrate": "Migrate legacy media",
     "permanentMigrateDone": "Migrated {{count}} media files",
     "permanentMigrateCancelled": "Stopped after migrating {{count}} media files",
@@ -149,6 +150,8 @@
     "permanentCancel": "Cancel migration",
     "permanentCleanup": "Clean orphan files",
     "permanentCleanupDone": "Deleted {{count}} orphan files",
+    "permanentRepairCovers": "Repair cover colors",
+    "permanentRepairCoversDone": "Repaired {{count}} cover color records",
     "downloadFailedMany_other": "{{count}} songs couldn't be downloaded"
   },
   "playlistImport": {

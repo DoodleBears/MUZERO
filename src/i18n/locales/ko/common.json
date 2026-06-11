@@ -131,6 +131,7 @@
     "permanentLegacy": "레거시 미디어 파일 {{count}}개",
     "permanentMissing": "누락 파일 {{count}}개",
     "permanentOrphaned": "고아 파일 {{count}}개",
+    "permanentCoverRepair": "복구할 커버 색상 기록 {{count}}개",
     "permanentMigrate": "레거시 미디어 마이그레이션",
     "permanentMigrateDone": "미디어 파일 {{count}}개를 마이그레이션함",
     "permanentMigrateCancelled": "미디어 파일 {{count}}개를 마이그레이션한 뒤 중지함",
@@ -140,6 +141,8 @@
     "permanentCancel": "마이그레이션 취소",
     "permanentCleanup": "고아 파일 정리",
     "permanentCleanupDone": "고아 파일 {{count}}개를 삭제함",
+    "permanentRepairCovers": "커버 색상 복구",
+    "permanentRepairCoversDone": "커버 색상 기록 {{count}}개를 복구함",
     "downloadFailedMany_other": "{{count}}곡을 다운로드하지 못함"
   },
   "playlistImport": {

@@ -131,6 +131,7 @@
     "permanentLegacy": "{{count}} 件の旧メディア",
     "permanentMissing": "{{count}} 件の不足ファイル",
     "permanentOrphaned": "{{count}} 件の孤立ファイル",
+    "permanentCoverRepair": "修復が必要なカバー色 {{count}} 件",
     "permanentMigrate": "旧メディアを移行",
     "permanentMigrateDone": "{{count}} 件のメディアを移行しました",
     "permanentMigrateCancelled": "{{count}} 件を移行したところで停止しました",
@@ -140,6 +141,8 @@
     "permanentCancel": "移行をキャンセル",
     "permanentCleanup": "孤立ファイルを削除",
     "permanentCleanupDone": "{{count}} 件の孤立ファイルを削除しました",
+    "permanentRepairCovers": "カバー色を修復",
+    "permanentRepairCoversDone": "{{count}} 件のカバー色を修復しました",
     "downloadFailedMany_other": "{{count}} 曲をダウンロードできませんでした"
   },
   "playlistImport": {
