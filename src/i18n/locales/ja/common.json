@@ -963,6 +963,17 @@
     "queueMoveUp": "上へ",
     "queueMoveDown": "下へ",
     "queueDragHandle": "並べ替え",
-    "queueAutoDispatch": "キューを自動送信"
+    "queueAutoDispatch": "キューを自動送信",
+    "history": "チャット履歴",
+    "newSession": "新しいチャット",
+    "homeTitle": "チャット",
+    "homeEmpty": "まだチャットがありません",
+    "homeSearch": "チャットを検索…",
+    "homeOpen": "開く",
+    "homeRename": "名前を変更",
+    "homeSave": "保存",
+    "homeCancel": "キャンセル",
+    "homeDelete": "削除",
+    "homeTitleInput": "チャットのタイトル"
   }
 }

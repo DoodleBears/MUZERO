@@ -963,6 +963,17 @@
     "queueMoveUp": "上移",
     "queueMoveDown": "下移",
     "queueDragHandle": "拖拽排序",
-    "queueAutoDispatch": "自动发送排队指令"
+    "queueAutoDispatch": "自动发送排队指令",
+    "history": "历史对话",
+    "newSession": "新对话",
+    "homeTitle": "对话",
+    "homeEmpty": "还没有对话",
+    "homeSearch": "搜索对话…",
+    "homeOpen": "打开",
+    "homeRename": "重命名",
+    "homeSave": "保存",
+    "homeCancel": "取消",
+    "homeDelete": "删除",
+    "homeTitleInput": "对话标题"
   }
 }

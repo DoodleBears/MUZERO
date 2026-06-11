@@ -21,8 +21,16 @@ vi.mock("@/chat/dj-chat-runtime-registry", () => ({
 }));
 
 const createChatSession = vi.fn(async (_input?: unknown) => ({ id: "cht_new" }));
-vi.mock("@/chat/dj-chat-sessions", () => ({
-  createChatSession: (input?: unknown) => createChatSession(input),
+const deleteChatSession = vi.fn(async (_id?: unknown) => undefined);
+const renameChatSession = vi.fn(async (_id?: unknown, _title?: unknown) => undefined);
+vi.mock(import("@/chat/dj-chat-sessions"), async (importOriginal) => ({
+  ...(await importOriginal()),
+  createChatSession: ((input?: unknown) => createChatSession(input)) as never,
+  deleteChatSession: ((id: string) => deleteChatSession(id)) as never,
+  listChatSessions: (async () => [
+    { id: "cht_1", title: "Lofi night", createdAt: 1, updatedAt: 2, messagesJson: "[]" },
+  ]) as never,
+  renameChatSession: ((id: string, title: string) => renameChatSession(id, title)) as never,
 }));
 
 vi.mock("./chat-panel", () => ({
@@ -130,6 +138,32 @@ describe("DjChatEntry — three states", () => {
     expect(useChatStore.getState().approvalMode).toBe("auto");
     fireEvent.click(screen.getByRole("button", { name: "chat.approvalAuto" }));
     expect(useChatStore.getState().approvalMode).toBe("ask");
+  });
+
+  it("history view lists sessions and opening one swaps the panel without disposing it", async () => {
+    asAvailable();
+    useChatStore.setState({ mode: "expanded", activeSessionId: "cht_2" });
+    render(<DjChatEntry />);
+
+    await waitFor(() => expect(screen.getByTestId("chat-panel")).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: "chat.history" }));
+    await waitFor(() => expect(screen.getByText("Lofi night")).toBeInTheDocument());
+    expect(screen.queryByTestId("chat-panel")).toBeNull();
+
+    fireEvent.click(screen.getByText("Lofi night"));
+    await waitFor(() => expect(screen.getByTestId("chat-panel")).toHaveTextContent("cht_1"));
+    expect(useChatStore.getState().activeSessionId).toBe("cht_1");
+  });
+
+  it("the new-chat header button creates a session and opens it", async () => {
+    asAvailable();
+    useChatStore.setState({ mode: "expanded", activeSessionId: "cht_1" });
+    render(<DjChatEntry />);
+
+    await waitFor(() => expect(screen.getByTestId("chat-panel")).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: "chat.newSession" }));
+    await waitFor(() => expect(useChatStore.getState().activeSessionId).toBe("cht_new"));
+    expect(createChatSession).toHaveBeenCalledOnce();
   });
 
   it("backdrop click collapses the widget", async () => {

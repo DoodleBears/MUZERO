@@ -962,6 +962,17 @@
     "queueMoveUp": "위로",
     "queueMoveDown": "아래로",
     "queueDragHandle": "순서 변경",
-    "queueAutoDispatch": "대기열 자동 전송"
+    "queueAutoDispatch": "대기열 자동 전송",
+    "history": "채팅 기록",
+    "newSession": "새 채팅",
+    "homeTitle": "채팅",
+    "homeEmpty": "아직 채팅이 없습니다",
+    "homeSearch": "채팅 검색…",
+    "homeOpen": "열기",
+    "homeRename": "이름 변경",
+    "homeSave": "저장",
+    "homeCancel": "취소",
+    "homeDelete": "삭제",
+    "homeTitleInput": "채팅 제목"
   }
 }

@@ -989,6 +989,17 @@
     "queueMoveUp": "Move up",
     "queueMoveDown": "Move down",
     "queueDragHandle": "Reorder",
-    "queueAutoDispatch": "Auto-send queued prompts"
+    "queueAutoDispatch": "Auto-send queued prompts",
+    "history": "Chat history",
+    "newSession": "New chat",
+    "homeTitle": "Chats",
+    "homeEmpty": "No chats yet",
+    "homeSearch": "Search chats…",
+    "homeOpen": "Open",
+    "homeRename": "Rename",
+    "homeSave": "Save",
+    "homeCancel": "Cancel",
+    "homeDelete": "Delete",
+    "homeTitleInput": "Chat title"
   }
 }

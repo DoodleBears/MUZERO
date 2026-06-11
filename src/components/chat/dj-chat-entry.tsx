@@ -1,12 +1,15 @@
+import { useLiveQuery } from "dexie-react-hooks";
 import {
   ArrowUp,
   CircleStop,
+  History,
   ListEnd,
   Maximize2,
   Minimize2,
   ShieldCheck,
   ShieldQuestion,
   Sparkles,
+  SquarePen,
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { type FormEvent, useEffect, useState } from "react";
@@ -14,9 +17,15 @@ import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { canUseDjChat } from "@/chat/dj-chat-availability";
 import { getOrCreateDjChatRuntimeActor } from "@/chat/dj-chat-runtime-registry";
-import { createChatSession } from "@/chat/dj-chat-sessions";
+import {
+  createChatSession,
+  deleteChatSession,
+  listChatSessions,
+  renameChatSession,
+} from "@/chat/dj-chat-sessions";
 import { ChatPanel } from "@/components/chat/chat-panel";
 import { ChatReplyNotification } from "@/components/chat/chat-reply-notification";
+import { ChatSessionHome } from "@/components/chat/chat-session-home";
 import { useSettings } from "@/hooks/use-app-data";
 import { cn } from "@/lib/utils";
 import { useChatStore } from "@/stores/chat-store";
@@ -50,6 +59,11 @@ export function DjChatEntry({ className }: { className?: string }) {
     s.activeSessionId ? s.runtimeMetaBySessionId[s.activeSessionId]?.status : undefined,
   );
   const [draft, setDraft] = useState("");
+  // History view inside the expanded widget (session home). Switching sessions
+  // only swaps the panel's sessionId — per-session runtime actors are
+  // module-scope, so a streaming session keeps streaming in the background.
+  const [showHome, setShowHome] = useState(false);
+  const sessions = useLiveQuery(() => listChatSessions(), [], []);
   const isRunning = runtimeStatus === "submitted" || runtimeStatus === "streaming";
 
   // Esc collapses the widget back to the chip.
@@ -212,6 +226,31 @@ export function DjChatEntry({ className }: { className?: string }) {
                     {t("chat.title")}
                   </span>
                   <button
+                    aria-label={t("chat.newSession")}
+                    className="grid size-8 place-items-center rounded-full text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+                    onClick={() => {
+                      void createChatSession({}).then((session) => {
+                        setActiveSessionId(session.id);
+                        setShowHome(false);
+                      });
+                    }}
+                    type="button"
+                  >
+                    <SquarePen aria-hidden="true" className="size-4" />
+                  </button>
+                  <button
+                    aria-label={t("chat.history")}
+                    aria-pressed={showHome}
+                    className={cn(
+                      "grid size-8 place-items-center rounded-full outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring",
+                      showHome ? "text-primary" : "text-muted-foreground hover:text-foreground",
+                    )}
+                    onClick={() => setShowHome((v) => !v)}
+                    type="button"
+                  >
+                    <History aria-hidden="true" className="size-4" />
+                  </button>
+                  <button
                     aria-label={
                       approvalMode === "auto" ? t("chat.approvalAuto") : t("chat.approvalAsk")
                     }
@@ -241,7 +280,41 @@ export function DjChatEntry({ className }: { className?: string }) {
                     <Minimize2 aria-hidden="true" className="size-4" />
                   </button>
                 </header>
-                {activeSessionId && (
+                {showHome && (
+                  <ChatSessionHome
+                    activeSessionId={activeSessionId}
+                    className="min-h-0 flex-1 overflow-y-auto p-3"
+                    labels={{
+                      cancel: t("chat.homeCancel"),
+                      delete: t("chat.homeDelete"),
+                      empty: t("chat.homeEmpty"),
+                      itemMeta: ({ messageCount, queuedPromptCount }) =>
+                        queuedPromptCount > 0
+                          ? `${messageCount} · +${queuedPromptCount}`
+                          : `${messageCount}`,
+                      open: t("chat.homeOpen"),
+                      rename: t("chat.homeRename"),
+                      saveRename: t("chat.homeSave"),
+                      searchPlaceholder: t("chat.homeSearch"),
+                      title: t("chat.homeTitle"),
+                      titleInput: t("chat.homeTitleInput"),
+                      updatedAt: (updatedAt) => new Date(updatedAt).toLocaleString(),
+                    }}
+                    onDeleteSession={(sessionId) => {
+                      void deleteChatSession(sessionId);
+                      if (sessionId === activeSessionId) setActiveSessionId(null);
+                    }}
+                    onOpenSession={(sessionId) => {
+                      setActiveSessionId(sessionId);
+                      setShowHome(false);
+                    }}
+                    onRenameSession={(sessionId, title) => {
+                      void renameChatSession(sessionId, title);
+                    }}
+                    sessions={sessions}
+                  />
+                )}
+                {!showHome && activeSessionId && (
                   <ChatPanel
                     autoApprove={approvalMode === "auto"}
                     queueLabels={{

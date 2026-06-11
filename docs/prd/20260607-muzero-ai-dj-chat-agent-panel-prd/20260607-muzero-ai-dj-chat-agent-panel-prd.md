@@ -18,7 +18,7 @@
 | 1 | Chat runtime 地基（Dexie v5 + Runtime Actor + 单 session 流式 + streamdown） | ✅ Completed | §7 |
 | 2 | **Dock 集成对话入口**（minimize 图标 / normal 圆角 chip 输入条 / expand framer-motion widget；gated on LLM+musicgen 已配置） | ✅ Completed（2026-06-11 重设计后落地：`canUseDjChat` 门控 + 三态 `dj-chat-entry` 挂 dock 工具行 + i18n ×4；preview 实测零报错，动效手感待真实窗口） | §7 |
 | 3 | DJ 工具调用（search/create/curate/propose/generate + HITL 审批） | ✅ Completed（6 工具+审批桥+折叠 UI+ask/auto 偏好切换+labels i18n ×4 全接线；余 store-pump E2E 一项见 checklist） | §7 |
-| 4 | 多 Session + 历史列表（搜索）+ branch/regenerate | 🔄 search/branch/regenerate/session-home ✅；列表挂载待 WIP | §7 |
+| 4 | 多 Session + 历史列表（搜索）+ branch/regenerate | ✅ Completed（search/branch/regenerate + session-home 挂进 expanded widget：History 切换 + 新建即开 + 重命名/删除；切换零 dispose） | §7 |
 | 5 | 多 Provider 模型选型（preset + **自定义 provider，复刻 ClipCombo** + combobox + Settings + key 入 Dexie） | 🔄 7 preset+model picker+dialog/popover/command/scroll-area 原语 ✅；**动态 custom-provider（Dexie）+ Settings provider 面板 + enabled grid + i18n 待** | §7 |
 | 6 | 队列/打断 prompt + 空态 onboarding + 上下文压缩 | 🔄 token/budget/queue-tray/empty/notice ✅；App 挂载 + i18n 待 | §7 |
 
@@ -471,12 +471,12 @@ chat 入口落在**记忆 icon + 切 tab icon 的左边**、占该行剩余宽�
 ### Phase 4: 多 Session + 历史 + branch/regenerate
 **Tasks:**
 - [x] `chat-session-home.tsx` 展示层（列表 + 子串搜索标题/user 文本 + 自动标题显示 + 重命名/删除/打开回调，无内置文案）。
-- [ ] Session home App/ChatPanel 切换接线；多 actor 并发（切走仍流）最终 UI 验收待 App WIP 落地后补。
+- [x] Session home App/ChatPanel 切换接线：expanded widget header 加 `History` 切换（home 视图：`ChatSessionHome` + `useLiveQuery(listChatSessions)`，labels 全 i18n）+ `SquarePen` 新建即开；open→`setActiveSessionId`+回 panel、rename/delete 走 repo（删活跃 session 时清 activeSessionId）。**切 session 只换 panel 的 sessionId**——actor 是模块作用域 per-session，流式 session 切走仍在后台继续（组件测覆盖 open/new；并发流式断言已有 runtime 集成测）。i18n `chat.home*` 11 keys ×4。
 - [x] regenerate（edit-resend 复用 messageId）；branch（截断深拷贝 messagesJson → 新 session）。
 
 **Phase 4 Checklist:**
 - [x] 集成测：两 session 不同 model 同时跑、一个审批一个错误互不串。
-- [ ] 切 home 不清流式 session 的 live 消息。**Blocked until session home UI wiring.**
+- [x] 切 home 不清流式 session 的 live 消息（actor 注册表模块作用域，切换零 dispose；open/new 组件测 + 既有双 session 并发集成测）。
 - [x] Runtime 基座：两个 session actor 可并发发送、分别 stream/persist，preview 与 messagesJson 不串线。
 - [x] 空 session 首次持久化 user 消息时自动派生标题，不覆盖手工标题。
 - [x] 搜索命中标题与用户消息（不搜 assistant-only 文本）；branch 后父子独立。
