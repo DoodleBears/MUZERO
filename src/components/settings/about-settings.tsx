@@ -83,14 +83,14 @@ export function AboutSettings() {
             alt="MUZERO"
             width={80}
             height={80}
-            className="size-20 dark:hidden"
+            className="size-20 drop-shadow-[0_10px_28px_rgba(0,0,0,0.22)] dark:hidden"
           />
           <img
             src="/muzero-logo-dark.png"
             alt="MUZERO"
             width={80}
             height={80}
-            className="hidden size-20 dark:block"
+            className="hidden size-20 drop-shadow-[0_10px_28px_rgba(0,0,0,0.5)] dark:block"
           />
         </div>
         <div className="flex items-center justify-between gap-4">
