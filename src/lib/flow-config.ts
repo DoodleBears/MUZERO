@@ -1,4 +1,4 @@
-import type { AppSettings, FlowColorSource, FlowEffectId } from "@/db/types";
+import type { AppSettings, FlowBlendMode, FlowColorSource, FlowEffectId } from "@/db/types";
 import type { Rgb } from "@/lib/visualizer-color";
 
 /**
@@ -54,8 +54,8 @@ export const FLOW_EFFECTS: FlowEffectMeta[] = [
 /** Default flow effect. */
 export const DEFAULT_FLOW_EFFECT: FlowEffectId = "chaos-waves";
 
-/** Default flow tuning (0–100 sliders + effect). Centralized so the resolver,
- *  the Settings panel, and the background layer agree. */
+/** Default flow tuning (0–100 sliders + effect + blend). Centralized so the
+ *  resolver, the Settings panel, and the background layer agree. */
 export const FLOW_DEFAULTS = {
   effect: DEFAULT_FLOW_EFFECT,
   motion: 100,
@@ -63,7 +63,19 @@ export const FLOW_DEFAULTS = {
   reactivity: 75,
   opacity: 50,
   dim: 0,
+  blendMode: "screen" as FlowBlendMode,
 } as const;
+
+/** Blend modes offered for compositing the flow over the background (CSS
+ *  mix-blend-mode values). The compositor does add/multiply natively — no Pixi. */
+export const FLOW_BLEND_MODES: { id: FlowBlendMode; labelKey: string }[] = [
+  { id: "normal", labelKey: "flow.blendNormal" },
+  { id: "screen", labelKey: "flow.blendScreen" },
+  { id: "plus-lighter", labelKey: "flow.blendAdd" },
+  { id: "multiply", labelKey: "flow.blendMultiply" },
+  { id: "overlay", labelKey: "flow.blendOverlay" },
+  { id: "soft-light", labelKey: "flow.blendSoftLight" },
+];
 
 /** Smallest / largest number of flow colors a user can keep. */
 export const FLOW_MIN_COLORS = 2;

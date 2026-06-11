@@ -648,7 +648,29 @@
     "importFolderNeverSynced": "未同期",
     "importFolderSyncNow": "今すぐ同期",
     "importFolderRemove": "監視を停止",
-    "importFolderBoundSet": "セット：{{name}}"
+    "importFolderBoundSet": "セット：{{name}}",
+    "navSecAbout": "情報",
+    "navAbout": "MUZERO について",
+    "navVersionHistory": "バージョン履歴",
+    "aboutTitle": "情報",
+    "aboutCurrentVersion": "現在のバージョン",
+    "aboutBuild": "ビルド",
+    "aboutChannel": "更新チャンネル",
+    "aboutChannelStable": "安定版",
+    "aboutChannelBeta": "ベータ版",
+    "aboutCheckUpdates": "更新を確認",
+    "aboutViewChangelog": "新着情報",
+    "aboutWebOnly": "ウェブ版を使用中です。再読み込みで自動的に更新されます。",
+    "versionHistoryTitle": "バージョン履歴",
+    "versionHistoryLoading": "リリースを読み込み中…",
+    "versionHistoryError": "リリース一覧を読み込めませんでした。",
+    "versionHistoryRetry": "再試行",
+    "versionHistoryEmpty": "公開されたリリースはまだありません。",
+    "dlMacArm64": "macOS（Apple シリコン）",
+    "dlMacX64": "macOS（Intel）",
+    "dlWinX64": "Windows",
+    "dlLinuxAppimage": "Linux（AppImage）",
+    "dlLinuxDeb": "Linux（deb）"
   },
   "gallery": {
     "title": "セット",
@@ -858,5 +880,49 @@
     "deleteTitle": "「{{name}}」を削除しますか？",
     "deleteBody_other": "{{count}} 曲を完全に削除しますか？すべてのセットからも削除され、元に戻せません。",
     "deleteConfirm_other": "{{count}} 曲を削除"
+  },
+  "changelog": {
+    "title": "新着情報",
+    "titleVersion": "v{{version}} の新着情報",
+    "titleCount": "新着情報（{{count}} 件）",
+    "gotIt": "OK",
+    "viewAll": "更新履歴を見る",
+    "empty": "リリースノートはまだありません。",
+    "category": {
+      "highlight": "ハイライト",
+      "feature": "新機能",
+      "improvement": "改善",
+      "fix": "修正",
+      "breaking": "重要な変更"
+    },
+    "platform": {
+      "web": "ウェブ",
+      "desktop": "デスクトップ"
+    },
+    "area": {
+      "dj": "DJ",
+      "player": "プレーヤー",
+      "library": "ライブラリ",
+      "sets": "セット",
+      "memory": "思い出",
+      "lyrics": "歌詞",
+      "visualizer": "ビジュアライザー",
+      "search": "検索",
+      "streaming": "ストリーミング",
+      "sync": "同期",
+      "settings": "設定",
+      "app": "アプリ"
+    }
+  },
+  "update": {
+    "checking": "更新を確認中…",
+    "available": "v{{version}} が利用可能 — ダウンロード中…",
+    "downloading": "ダウンロード中… {{percent}}%",
+    "downloaded": "v{{version}} をインストールできます",
+    "restartToUpdate": "再起動して更新",
+    "manualRequired": "新しいバージョンがあります。",
+    "download": "ダウンロード",
+    "error": "更新の確認に失敗しました。",
+    "upToDate": "最新の状態です。"
   }
 }

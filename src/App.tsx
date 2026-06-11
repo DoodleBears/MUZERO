@@ -2,6 +2,7 @@ import { MotionConfig } from "motion/react";
 import type { ReactNode } from "react";
 import { useEffect, useRef, useState } from "react";
 import { DevPerfPanel } from "@/components/dev/dev-perf-panel";
+import { ChangelogModal } from "@/components/player/changelog-modal";
 import { ImmersiveLyricsOverlay } from "@/components/player/immersive-lyrics-overlay";
 import { ImmersiveMemoryOverlay } from "@/components/player/immersive-memory-overlay";
 import { LyricsTuningPanel } from "@/components/player/lyrics-tuning-panel";
@@ -239,6 +240,8 @@ export default function App() {
 
         {/* Dev-only floating perf HUD (FPS / frame cadence / jank / JS heap). */}
         {import.meta.env.DEV && <DevPerfPanel />}
+        {/* "What's New" — auto-opens for unseen releases; also opens from Settings → About. */}
+        <ChangelogModal />
       </div>
     </MotionConfig>
   );

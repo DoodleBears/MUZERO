@@ -277,6 +277,15 @@ export type FlowEffectId =
   | "triangles-mosaic"
   | "random-cubes"
   | "abstract-shape";
+/** How the flow layer composites with the background below it (CSS mix-blend-mode).
+ *  `screen`/`plus-lighter` ≈ additive glow; `multiply` tints/darkens. */
+export type FlowBlendMode =
+  | "normal"
+  | "screen"
+  | "plus-lighter"
+  | "multiply"
+  | "overlay"
+  | "soft-light";
 export type BackgroundRenderer =
   | "image"
   | "blur"
@@ -540,6 +549,8 @@ export interface AppSettings {
   flowOpacity?: number;
   /** Dim over the flow background layer, 0–100. Default 0. */
   flowDim?: number;
+  /** How the flow layer blends with the background below it. Default "screen". */
+  flowBlendMode?: FlowBlendMode;
   /** Override analyser FFT size for the active visualizer. Defaults to style metadata. */
   visualizerFftSize?: 256 | 512 | 1024 | 2048;
   /** Override analyser smoothing, 0–0.99. Defaults to style metadata. */

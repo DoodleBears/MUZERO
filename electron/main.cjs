@@ -57,7 +57,7 @@ function createWindow() {
     minHeight: 600,
     minWidth: 380,
     show: false,
-    title: "MUZERO Electron Probe",
+    title: "MUZERO",
     titleBarStyle: "hiddenInset",
     width: 1180,
     webPreferences: {
@@ -90,6 +90,7 @@ app.whenReady().then(() => {
   registerIpc();
   require("./source-login.cjs").registerSourceLogin();
   require("./youtube-engine.cjs").registerYoutubeEngine();
+  require("./updater.cjs").initDesktopUpdater();
   createWindow();
   // macOS dock icon (no window icon there). The renderer's use-app-icon hook
   // re-applies the user's saved variant once settings load.

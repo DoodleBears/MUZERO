@@ -1,10 +1,34 @@
+import { execSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { fileURLToPath, URL } from "node:url";
-import { defineConfig } from "vite";
-import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
+import react from "@vitejs/plugin-react";
+import { defineConfig } from "vite";
 
 // @tauri-apps/cli injects TAURI_ENV_* during `tauri dev` / `tauri build`.
 const host = process.env.TAURI_DEV_HOST;
+
+// Build-time version/release identity. package.json `version` is the single
+// source of truth (kept in sync with tauri.conf.json + Cargo.toml by
+// scripts/bump-version.mjs). Injected as __APP_VERSION__ etc. and read only
+// through src/lib/app-version.ts. Keep this identical to vitest.config.ts.
+const pkgVersion = JSON.parse(
+  readFileSync(fileURLToPath(new URL("./package.json", import.meta.url)), "utf8"),
+).version as string;
+function gitSha(): string {
+  try {
+    return execSync("git rev-parse --short HEAD", { stdio: ["ignore", "pipe", "ignore"] })
+      .toString()
+      .trim();
+  } catch {
+    return "unknown";
+  }
+}
+const versionDefine = {
+  __APP_VERSION__: JSON.stringify(pkgVersion),
+  __GIT_SHA__: JSON.stringify(gitSha()),
+  __BUILD_TIME__: JSON.stringify(new Date().toISOString()),
+};
 
 // Dev-server port — configurable so the browser loop (`make dev`, 1420) and the
 // Tauri desktop shell (`make desktop`, 1430) can run at the same time on separate
@@ -15,6 +39,8 @@ const devPort = Number(process.env.MUZERO_DEV_PORT) || 1420;
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react(), tailwindcss()],
+
+  define: versionDefine,
 
   resolve: {
     alias: {

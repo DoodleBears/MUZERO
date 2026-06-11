@@ -17,4 +17,15 @@ contextBridge.exposeInMainWorld("muzero", {
   readSourceCookies: (request) => ipcRenderer.invoke("muzero:readSourceCookies", request),
   evalYoutubeN: (functionSource, n) =>
     ipcRenderer.invoke("muzero:evalYoutubeN", functionSource, n),
+  getAppVersion: () => ipcRenderer.invoke("muzero:getAppVersion"),
+  update: {
+    onStatus: (callback) => {
+      const listener = (_event, status) => callback(status);
+      ipcRenderer.on("muzero:update:status", listener);
+      return () => ipcRenderer.removeListener("muzero:update:status", listener);
+    },
+    check: () => ipcRenderer.invoke("muzero:update:check"),
+    install: () => ipcRenderer.invoke("muzero:update:install"),
+    setChannel: (channel) => ipcRenderer.invoke("muzero:update:setChannel", channel),
+  },
 });
