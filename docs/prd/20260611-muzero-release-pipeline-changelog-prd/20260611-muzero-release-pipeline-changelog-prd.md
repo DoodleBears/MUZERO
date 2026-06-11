@@ -1,6 +1,6 @@
 # PRD: MUZERO 发版流水线 — Changelog 规范 + 多平台构建 + R2 分发 + 应用内版本下载
 
-**Status:** Implemented (Phase 1–6 code + tests on `feat/release-pipeline`; real-machine multi-platform release E2E + R2 桶开通 pending a first live publish — runbook in §12)
+**Status:** Implemented (Phase 1–6 merged to `main`; **R2 分发桶已开通** — bucket + CORS + `assets.mu0.app` 域 + rclone 上传已验证，§12.0; 仅剩真机三平台首发)
 **Created:** 2026-06-11
 **Author:** DoodleBear / Product
 **Module:** Release Engineering — 版本号契约 / Changelog / Electron 打包 / R2 分发清单 / Settings 下载中心
@@ -596,18 +596,17 @@ src/components/settings/
 
 一次性开通（首发前做一遍），之后每次发版只跑 [§4.3](#43-makefile-发布命令用户要求-3--4) 的 `make` 流程。
 
-### 12.0 现状（2026-06-11 已自动完成 / 待手动）
+### 12.0 现状（2026-06-11 — 已全部开通 ✅）
 
-复用 **doodlekuma Cloudflare 账户**（`account_id = 332e72d480d7cb3e60ee671d3ca0cad0`，与 ClipCombo 同账户，决议沿用）：
+复用 **doodlekuma Cloudflare 账户**（`account_id = 332e72d480d7cb3e60ee671d3ca0cad0`，与 ClipCombo 同账户）。经 `wrangler login`(OAuth) + `pnpm dlx wrangler@latest r2 …` 一次性配置：
 
-- ✅ **桶已建**：`muzero-releases`（经已配置的 rclone `r2:` remote `rclone mkdir` 创建，空桶）。
-- ✅ **rclone `r2:` remote 已就绪**（§12.3 已满足）：endpoint 指向该账户，含 Object R/W S3 凭证 → `make release-publish` 可直接上传，无需新建凭证。
-- ✅ **`wrangler.toml` 已加**（仓库根）：仅 `account_id`（非密），供一次性 `pnpm dlx wrangler r2 …` 管理命令（CORS / 自定义域）解析账户；MUZERO 无 Worker/Pages 后端，故**不**含 ClipCombo 的 D1/DO/routes。
-- ⚠️ **待手动**（需 Cloudflare 管理认证——`wrangler login` 缓存已过期，需重新 `wrangler login` 或给 `CLOUDFLARE_API_TOKEN`，或控制台点选）：
-  1. **公共读 + 自定义域 `assets.mu0.app`**（§12.1.3）——前提是 `mu0.app` zone 在本账户。
-  2. **CORS**（§12.2）——仅 web 版需要；桌面走 `muzfetch` 不受限。
+- ✅ **桶**：`muzero-releases`（= Makefile `RELEASE_R2_BUCKET`）。
+- ✅ **CORS**：origins `*` · `GET`/`HEAD`（公共只读资产；策略提交在 [`scripts/r2-release-cors.json`](../../../scripts/r2-release-cors.json)，经 `wrangler r2 bucket cors set --file`）。
+- ✅ **自定义域 `assets.mu0.app`**：`mu0.app` zone（`eb4b68f78e3d2867290fd568412ac6c8`）在本账户；`wrangler r2 bucket domain add`（min-TLS 1.2）已绑 → DNS CNAME + SSL 自动签发（首绑 `ownership/ssl: pending`，几分钟内转 `active`）。`RELEASE_BASE_URL = https://assets.mu0.app/desktop` 即生效。
+- ✅ **rclone `r2:` remote + 上传验证**：`rclone rcat` 写 `desktop/healthcheck.txt` 成功 → `make release-publish` 路径可用。
+- ✅ **`wrangler.toml`**（仓库根，仅 `account_id` 非密）：供管理命令解析账户；无 Worker/Pages 后端，**不**含 ClipCombo 的 D1/DO/routes。
 
-> 即：**核心链路已通**（建桶 + 上传）；剩下「让 `assets.mu0.app/desktop/*` 公网可读」是纯 Cloudflare 控制台/管理 API 动作，rclone 的 S3 凭证无权操作桶级公共访问/域绑定。
+> **核心链路全通**（建桶 + CORS + 公共域 + rclone 上传）。唯一时间窗：`assets.mu0.app` SSL 首签需几分钟，之后 `curl https://assets.mu0.app/desktop/healthcheck.txt` 返回 200。首发即跑 [§4.3](#43-makefile-发布命令用户要求-3--4) 的 `make release-mac/win/linux` + `make release-publish`。
 
 ### 12.1 创建桶 + 公共读
 
@@ -617,20 +616,16 @@ src/components/settings/
 
 ### 12.2 CORS（让 web 版能 `fetch` manifest.json）
 
-桶 → Settings → **CORS policy**（web 版渲染层直接 `fetch(assets.mu0.app/desktop/manifest.json)`，需放行）：
+web 版渲染层直接 `fetch(assets.mu0.app/desktop/manifest.json)`，需放行。**已应用**（R2 `rules` 格式，提交在 [`scripts/r2-release-cors.json`](../../../scripts/r2-release-cors.json)）—— 公共只读资产用 `*` origins 最省心：
 
+```bash
+pnpm dlx wrangler@latest r2 bucket cors set muzero-releases --file scripts/r2-release-cors.json --force
+```
 ```json
-[
-  {
-    "AllowedOrigins": ["https://mu0.app", "http://localhost:1420", "http://localhost:1430"],
-    "AllowedMethods": ["GET", "HEAD"],
-    "AllowedHeaders": ["*"],
-    "MaxAgeSeconds": 86400
-  }
-]
+{ "rules": [ { "allowed": { "origins": ["*"], "methods": ["GET", "HEAD"], "headers": ["*"] }, "maxAgeSeconds": 3600 } ] }
 ```
 
-> 桌面端走 `muzfetch://` 代理不受 CORS 限制；CORS 只为 web/PWA。安装包二进制是浏览器直接下载（`openExternal`/`window.open`），不需要 CORS。
+> 桌面端走 `muzfetch://` 代理不受 CORS 限制；CORS 只为 web/PWA。安装包二进制是浏览器直接下载（`openExternal`/`window.open`），不需要 CORS。内容本就公开，故 `*` origins 安全。
 
 ### 12.3 配置 rclone `r2:` remote（构建机 / CI）
 
