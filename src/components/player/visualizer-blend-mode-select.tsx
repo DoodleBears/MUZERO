@@ -1,4 +1,5 @@
 import { useTranslation } from "react-i18next";
+import { VisualizerHelpLabel } from "@/components/player/visualizer-help-label";
 import {
   Select,
   SelectContent,
@@ -21,7 +22,9 @@ export function VisualizerBlendModeSelect() {
   const settings = useSettings();
   return (
     <div className="flex flex-col gap-1.5">
-      <span className="text-xs font-medium text-muted-foreground">{t("flow.blend")}</span>
+      <VisualizerHelpLabel helpLabel={t("visualizer.help.blendMode")}>
+        {t("flow.blend")}
+      </VisualizerHelpLabel>
       <Select
         value={settings.visualizerBlendMode ?? VISUALIZER_BLEND_DEFAULT}
         onValueChange={(value) =>

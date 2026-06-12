@@ -2,24 +2,12 @@ import { Grip, Image, SlidersHorizontal, Waves, X } from "lucide-react";
 import type { ReactNode } from "react";
 import { type PointerEvent, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { VisualizerBlendModeSelect } from "@/components/player/visualizer-blend-mode-select";
-import { VisualizerTuningControls } from "@/components/player/visualizer-tuning-controls";
+import { VisualizerControls } from "@/components/player/visualizer-controls";
 import { BackgroundEffectControls } from "@/components/settings/background-effect-controls";
 import { FlowControls } from "@/components/settings/flow-settings";
 import { Button } from "@/components/ui/button";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { saveSettings } from "@/db/repositories";
-import { useSettings } from "@/hooks/use-app-data";
 import { cn } from "@/lib/utils";
 import { useVisualizerPanelStore } from "@/stores/visualizer-panel-store";
-import { resolveVisualizerStyle, VISUALIZER_META } from "@/visualizer/registry";
-import type { VisualizerStyleId } from "@/visualizer/types";
 
 const PANEL_W = 360;
 const PANEL_H = 560;
@@ -33,8 +21,6 @@ export function VisualizerTuningPanel() {
   const setOpen = useVisualizerPanelStore((s) => s.setOpen);
   const setPreviewOnly = useVisualizerPanelStore((s) => s.setPreviewOnly);
   const setVisualizerHidden = useVisualizerPanelStore((s) => s.setVisualizerHidden);
-  const settings = useSettings();
-  const style = resolveVisualizerStyle(settings.visualizerStyle);
   const [pos, setPos] = useState({ x: 24, y: 88 });
   const [tab, setTab] = useState<TuningTab>("visualizer");
   const dragRef = useRef<{
@@ -144,75 +130,12 @@ export function VisualizerTuningPanel() {
         </div>
 
         {tab === "visualizer" ? (
-          <>
-            <div className="flex flex-col gap-1.5">
-              <span className="text-xs font-medium text-muted-foreground">
-                {t("visualizer.style")}
-              </span>
-              <Select
-                value={style}
-                onValueChange={(value) =>
-                  void saveSettings({ visualizerStyle: value as VisualizerStyleId })
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue>
-                    {(value) =>
-                      t(
-                        VISUALIZER_META.find((item) => item.id === value)?.labelKey ??
-                          "visualizer.style",
-                      )
-                    }
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  {VISUALIZER_META.map((m) => (
-                    <SelectItem key={m.id} value={m.id}>
-                      {t(m.labelKey)}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <label className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                checked={previewOnly}
-                onChange={(e) => setPreviewOnly(e.target.checked)}
-                className="size-4 accent-[var(--color-primary)]"
-              />
-              {t("visualizer.previewOnly")}
-            </label>
-            <p className="-mt-1 text-xs text-muted-foreground">{t("visualizer.previewOnlyHint")}</p>
-
-            <div className="grid grid-cols-2 gap-2">
-              <ToggleButton
-                active={settings.visualizerAsBackground ?? false}
-                onClick={() =>
-                  void saveSettings({
-                    visualizerAsBackground: !(settings.visualizerAsBackground ?? false),
-                  })
-                }
-              >
-                {t("visualizer.modeBackground")}
-              </ToggleButton>
-              <ToggleButton
-                active={settings.visualizerIdleOnly ?? false}
-                onClick={() =>
-                  void saveSettings({
-                    visualizerIdleOnly: !(settings.visualizerIdleOnly ?? false),
-                  })
-                }
-              >
-                {t("visualizer.idleOnlyShort")}
-              </ToggleButton>
-            </div>
-
-            {(settings.visualizerAsBackground ?? false) ? <VisualizerBlendModeSelect /> : null}
-
-            <VisualizerTuningControls className="grid gap-3 border-border border-t pt-3" />
-          </>
+          <VisualizerControls
+            previewOnly={{
+              checked: previewOnly,
+              onCheckedChange: setPreviewOnly,
+            }}
+          />
         ) : tab === "flow" ? (
           <FlowControls />
         ) : (
@@ -266,31 +189,6 @@ function TabButton({
         active
           ? "bg-background text-foreground shadow-sm"
           : "text-muted-foreground hover:text-foreground",
-      )}
-    >
-      {children}
-    </button>
-  );
-}
-
-function ToggleButton({
-  active,
-  children,
-  onClick,
-}: {
-  active: boolean;
-  children: string;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={cn(
-        "h-9 rounded-md border px-2 text-sm transition-colors",
-        active
-          ? "border-primary/50 bg-primary/12 text-primary"
-          : "border-border bg-transparent text-muted-foreground hover:text-foreground",
       )}
     >
       {children}

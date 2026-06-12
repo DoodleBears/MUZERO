@@ -15,8 +15,8 @@
 |-------|------|--------|------|
 | 1 | Current-State Audit + PRD | ✅ Completed | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | Per-Style Tuning Data Model + Resolver | ✅ Completed | [Phase 2 Checklist](#phase-2-checklist) |
-| 3 | Shared Visualizer Controls UI + Help Icons | 🔄 In Progress | [Phase 3 Checklist](#phase-3-checklist) |
-| 4 | Settings / Now Playing Panel Parity | 🔲 Pending | [Phase 4 Checklist](#phase-4-checklist) |
+| 3 | Shared Visualizer Controls UI + Help Icons | ✅ Completed | [Phase 3 Checklist](#phase-3-checklist) |
+| 4 | Settings / Now Playing Panel Parity | ✅ Completed | [Phase 4 Checklist](#phase-4-checklist) |
 | 5 | Tests, i18n, and Visual QA | 🔲 Pending | [Phase 5 Checklist](#phase-5-checklist) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
@@ -348,7 +348,7 @@ This PRD allows adding one small helper component if it prevents duplicated orde
 **Goal:** Add help icons and remove duplicated ordering logic.
 
 **Tasks:**
-- [ ] Define a canonical control config for visualizer controls.
+- [x] Define a canonical control config for visualizer controls.
 - [x] Add `VisualizerHelpLabel` using lucide Question Circle icon + existing Tooltip primitives.
 - [x] Add help icons to select rows, slider rows, and persistent checkbox/toggle rows.
 - [x] Add a `Reset this style` action to the shared controls, visually grouped with the per-style tuning section.
@@ -368,20 +368,20 @@ This PRD allows adding one small helper component if it prevents duplicated orde
 **Goal:** Make Settings and Now Playing visualizer tab 1 show the same persistent controls in the same order.
 
 **Tasks:**
-- [ ] Refactor `VisualizerSettings` to use the shared controls.
-- [ ] Refactor `VisualizerTuningPanel` visualizer tab to use the same shared controls.
-- [ ] Keep `previewOnly` in Now Playing as an explicit panel-only preview aid.
-- [ ] Add missing persistent checkboxes to Now Playing tab 1: cover color, background, idle-only, memory overlay.
-- [ ] Replace Now Playing background/idle-only toggle buttons with the same checkbox/switch-style rows used by Settings, preserving the compact panel layout.
-- [ ] Align background blend/tuning placement between both surfaces.
+- [x] Refactor `VisualizerSettings` to use the shared controls.
+- [x] Refactor `VisualizerTuningPanel` visualizer tab to use the same shared controls.
+- [x] Keep `previewOnly` in Now Playing as an explicit panel-only preview aid.
+- [x] Add missing persistent checkboxes to Now Playing tab 1: cover color, background, idle-only, memory overlay.
+- [x] Replace Now Playing background/idle-only toggle buttons with the same checkbox/switch-style rows used by Settings, preserving the compact panel layout.
+- [x] Align background blend/tuning placement between both surfaces.
 
 ### Phase 4 Checklist
 
-- [ ] Settings and Now Playing tab 1 have identical persistent control order.
-- [ ] The only intentional difference is Now Playing preview-only behavior.
-- [ ] Controls remain usable in the 360px floating panel.
-- [ ] No checkbox exists in Settings without an equivalent persistent control in Now Playing.
-- [ ] Reset appears in both Settings and Now Playing in the same section position.
+- [x] Settings and Now Playing tab 1 have identical persistent control order.
+- [x] The only intentional difference is Now Playing preview-only behavior.
+- [x] Controls remain usable in the 360px floating panel.
+- [x] No checkbox exists in Settings without an equivalent persistent control in Now Playing.
+- [x] Reset appears in both Settings and Now Playing in the same section position.
 
 ### Phase 5: Tests, i18n, and Visual QA
 
@@ -460,3 +460,4 @@ This PRD allows adding one small helper component if it prevents duplicated orde
 | 2026-06-13 | Codex | Completed Phase 2 data model, resolver, patch, reset, and host resolution work. |
 | 2026-06-13 | Codex | Verified Phase 2 with focused visualizer-effect-settings tests. |
 | 2026-06-13 | Codex | Implemented Phase 3 help icons, reset action, per-style tuning saves, and focused UI tests. |
+| 2026-06-13 | Codex | Completed Phase 4 shared visualizer controls, Settings/Now Playing parity, and focused parity tests. |

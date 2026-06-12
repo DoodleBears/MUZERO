@@ -1,11 +1,7 @@
-import { CircleHelp, RotateCcw } from "lucide-react";
+import { RotateCcw } from "lucide-react";
 import { useId } from "react";
 import { useTranslation } from "react-i18next";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import { VisualizerHelpLabel } from "@/components/player/visualizer-help-label";
 import {
   Select,
   SelectContent,
@@ -73,12 +69,9 @@ export function VisualizerTuningControls({
         </div>
       ) : null}
       <div className="flex flex-col gap-1.5">
-        <div className="flex items-center gap-1.5">
-          <span id={fftSizeLabelId} className="text-xs font-medium text-muted-foreground">
-            {t("visualizer.fftSize")}
-          </span>
-          <HelpButton label={t("visualizer.help.fftSize")} />
-        </div>
+        <VisualizerHelpLabel id={fftSizeLabelId} helpLabel={t("visualizer.help.fftSize")}>
+          {t("visualizer.fftSize")}
+        </VisualizerHelpLabel>
         <Select
           value={String(analyser.fftSize)}
           onValueChange={(value) =>
@@ -314,10 +307,7 @@ function VisualizerSlider({
 }) {
   return (
     <div className="flex flex-col gap-1.5">
-      <div className="flex items-center gap-1.5">
-        <span className="text-xs font-medium text-muted-foreground">{label}</span>
-        <HelpButton label={helpLabel} />
-      </div>
+      <VisualizerHelpLabel helpLabel={helpLabel}>{label}</VisualizerHelpLabel>
       <Slider
         min={min}
         max={max}
@@ -327,27 +317,6 @@ function VisualizerSlider({
         aria-label={label}
       />
     </div>
-  );
-}
-
-function HelpButton({ label }: { label: string }) {
-  return (
-    <Tooltip>
-      <TooltipTrigger
-        render={
-          <button
-            type="button"
-            aria-label={label}
-            className="inline-grid size-8 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-accent/60 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          >
-            <CircleHelp className="size-3.5" />
-          </button>
-        }
-      />
-      <TooltipContent className="max-w-64 whitespace-normal font-normal leading-snug">
-        {label}
-      </TooltipContent>
-    </Tooltip>
   );
 }
 
