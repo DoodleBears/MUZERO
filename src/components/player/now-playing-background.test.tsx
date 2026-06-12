@@ -1,6 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { Track } from "@/db/types";
+import type { CSSProperties } from "react";
+import type { AppSettings, Track } from "@/db/types";
 import { usePlayerStore } from "@/stores/player-store";
 import { NowPlayingBackground } from "./now-playing-background";
 
@@ -10,7 +11,8 @@ const mocks = vi.hoisted(() => ({
     flowEnabled: true,
     visualizerAsBackground: true,
     visualizerStyle: "bars",
-  },
+    visualizerTuningByStyle: undefined,
+  } as Partial<AppSettings>,
 }));
 
 vi.mock("dexie-react-hooks", () => ({
@@ -34,13 +36,14 @@ vi.mock("@/hooks/use-media", () => ({
 }));
 
 vi.mock("@/visualizer/host", () => ({
-  VisualizerHost: ({ styleId }: { styleId?: string }) => (
-    <div data-style-id={styleId ?? "default"} data-testid="visualizer-host" />
+  VisualizerHost: ({ style, styleId }: { style?: CSSProperties; styleId?: string }) => (
+    <div data-style-id={styleId ?? "default"} data-testid="visualizer-host" style={style} />
   ),
 }));
 
 describe("NowPlayingBackground", () => {
   beforeEach(() => {
+    mocks.settings.visualizerTuningByStyle = undefined;
     usePlayerStore.setState({
       currentIndex: -1,
       isPlaying: false,
@@ -69,6 +72,27 @@ describe("NowPlayingBackground", () => {
     expect(screen.getAllByTestId("visualizer-host").map((node) => node.dataset.styleId)).toContain(
       "scene-flow",
     );
+  });
+
+  it("applies per-style no-lyrics visualizer opacity to the background layer", () => {
+    mocks.settings.visualizerTuningByStyle = {
+      bars: {
+        backgroundDim: 20,
+        backgroundOpacity: 32,
+      },
+    };
+    usePlayerStore.setState({
+      currentIndex: 0,
+      queue: [makeTrack("trk_current")],
+    });
+
+    render(<NowPlayingBackground active />);
+
+    const visualizerHost = screen
+      .getAllByTestId("visualizer-host")
+      .find((node) => node.dataset.styleId === "default");
+
+    expect(visualizerHost).toHaveStyle({ opacity: "0.32" });
   });
 });
 

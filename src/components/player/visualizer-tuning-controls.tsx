@@ -16,8 +16,8 @@ import {
   patchVisualizerStyleTuning,
   resetVisualizerStyleTuning,
   resolveVisualizerAnalyserOptions,
+  resolveVisualizerBackgroundCompositeOptions,
   resolveVisualizerRenderOptions,
-  resolveVisualizerStyleTuning,
   VISUALIZER_BANDS_PER_OCTAVE_MAX,
   VISUALIZER_BANDS_PER_OCTAVE_MIN,
   VISUALIZER_FFT_SIZE_OPTIONS,
@@ -47,7 +47,12 @@ export function VisualizerTuningControls({
   const meta = getVisualizerMeta(style);
   const analyser = resolveVisualizerAnalyserOptions(meta, settings, style);
   const tuning = resolveVisualizerRenderOptions(settings, style);
-  const styleTuning = resolveVisualizerStyleTuning(settings, style);
+  const backgroundComposite = resolveVisualizerBackgroundCompositeOptions(settings, style, false);
+  const lyricsBackgroundComposite = resolveVisualizerBackgroundCompositeOptions(
+    settings,
+    style,
+    true,
+  );
   const saveTuning = (patch: Parameters<typeof patchVisualizerStyleTuning>[2]) =>
     saveSettings(patchVisualizerStyleTuning(settings, style, patch));
 
@@ -180,29 +185,29 @@ export function VisualizerTuningControls({
           separate one used WHEN lyrics are shown over it (so you can subdue the
           viz only then, to keep the words readable). Shared by Settings + the
           long-press panel, so both stay in sync. */}
-      {(settings.visualizerAsBackground ?? false) ? (
+      {(settings.visualizerAsBackground ?? true) ? (
         <>
           <span className="text-xs font-medium text-muted-foreground">
             {t("visualizer.bgNoLyrics")}
           </span>
           <VisualizerSlider
             label={t("visualizer.backgroundOpacity", {
-              pct: settings.visualizerBackgroundOpacity ?? 100,
+              pct: backgroundComposite.opacityPct,
             })}
             helpLabel={t("visualizer.help.backgroundOpacity")}
             min={0}
             max={100}
             step={1}
-            value={styleTuning.backgroundOpacity ?? settings.visualizerBackgroundOpacity ?? 100}
+            value={backgroundComposite.opacityPct}
             onChange={(v) => void saveTuning({ backgroundOpacity: v })}
           />
           <VisualizerSlider
-            label={t("visualizer.backgroundDim", { pct: settings.visualizerBackgroundDim ?? 0 })}
+            label={t("visualizer.backgroundDim", { pct: backgroundComposite.dimPct })}
             helpLabel={t("visualizer.help.backgroundDim")}
             min={0}
             max={100}
             step={1}
-            value={styleTuning.backgroundDim ?? settings.visualizerBackgroundDim ?? 0}
+            value={backgroundComposite.dimPct}
             onChange={(v) => void saveTuning({ backgroundDim: v })}
           />
           <span className="mt-1 text-xs font-medium text-muted-foreground">
@@ -210,22 +215,22 @@ export function VisualizerTuningControls({
           </span>
           <VisualizerSlider
             label={t("visualizer.backgroundOpacity", {
-              pct: settings.visualizerBgOpacityLyrics ?? 60,
+              pct: lyricsBackgroundComposite.opacityPct,
             })}
             helpLabel={t("visualizer.help.backgroundOpacity")}
             min={0}
             max={100}
             step={1}
-            value={styleTuning.bgOpacityLyrics ?? settings.visualizerBgOpacityLyrics ?? 60}
+            value={lyricsBackgroundComposite.opacityPct}
             onChange={(v) => void saveTuning({ bgOpacityLyrics: v })}
           />
           <VisualizerSlider
-            label={t("visualizer.backgroundDim", { pct: settings.visualizerBgDimLyrics ?? 40 })}
+            label={t("visualizer.backgroundDim", { pct: lyricsBackgroundComposite.dimPct })}
             helpLabel={t("visualizer.help.backgroundDim")}
             min={0}
             max={100}
             step={1}
-            value={styleTuning.bgDimLyrics ?? settings.visualizerBgDimLyrics ?? 40}
+            value={lyricsBackgroundComposite.dimPct}
             onChange={(v) => void saveTuning({ bgDimLyrics: v })}
           />
         </>

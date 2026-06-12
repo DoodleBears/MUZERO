@@ -589,6 +589,8 @@ export interface AppSettings {
   nowPlayingMemoryRailScrollTop?: number;
   /** Now-Playing visualizer style. Defaults to "bars". */
   visualizerStyle?: VisualizerStyleId;
+  /** Per-style visualizer tuning. Missing style entries fall back to legacy top-level visualizer tuning fields. */
+  visualizerTuningByStyle?: Partial<Record<VisualizerStyleId, VisualizerStyleTuning>>;
   /** Overlay the visualizer on the full Now-Playing background image/slideshow. Default true. */
   visualizerAsBackground?: boolean;
   /** Dim/darken over the background visualizer, 0–100 (foreground legibility). Default 0. */
@@ -831,6 +833,25 @@ export interface CustomLlmProvider {
   models: CustomLlmModel[];
   createdAt: number;
   updatedAt: number;
+}
+
+/** Per-visualizer-style tuning memory. Additive settings shape; legacy top-level
+ *  `visualizer*` tuning fields remain fallback values for existing users. */
+export interface VisualizerStyleTuning {
+  fftSize?: 256 | 512 | 1024 | 2048;
+  smoothing?: number;
+  minDecibels?: number;
+  maxDecibels?: number;
+  intensity?: number;
+  motion?: number;
+  detail?: number;
+  spread?: number;
+  glow?: number;
+  mirror?: number;
+  backgroundOpacity?: number;
+  backgroundDim?: number;
+  bgOpacityLyrics?: number;
+  bgDimLyrics?: number;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {

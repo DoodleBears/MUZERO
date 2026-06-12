@@ -411,6 +411,7 @@ This PRD allows adding one small helper component if it prevents duplicated orde
 - TypeScript validation passed: `node_modules\.bin\tsc.cmd --noEmit`.
 - Edge headless visual check passed for Settings / Visualizer at 1180x780; DOM control order was `style`, `use-cover-color`, `blend-mode`, `idle-only`, `tuning`.
 - Now Playing panel real-entry screenshot was not available in the empty-player state because the visualizer mode button is not rendered without an active track; component parity test covers the same persistent control order with `preview-only` as the only extra panel control.
+- Follow-up bug fix: background opacity/dim controls for both no-lyrics and with-lyrics states now resolve through the same per-style tuning map used by the sliders; the Now Playing background renderer no longer reads only legacy global fields.
 
 ---
 
@@ -473,3 +474,4 @@ This PRD allows adding one small helper component if it prevents duplicated orde
 | 2026-06-13 | Codex | Added localized help text for shared visualizer style, preview, color, background, blend, idle, and memory controls. |
 | 2026-06-13 | Codex | Completed Phase 5 validation with focused Vitest, TypeScript check, and Edge headless Settings visual QA. |
 | 2026-06-13 | Codex | Removed the obsolete visible "Use as Now Playing background" switch from shared visualizer controls and updated parity coverage. |
+| 2026-06-13 | Codex | Fixed no-lyrics / with-lyrics background opacity and dim values so the renderer consumes per-style tuning values instead of stale global settings. |

@@ -74,8 +74,8 @@ function SpectrumCanvas({
     if (!ctx) return; // no 2D support (e.g. jsdom)
 
     const meta = getVisualizerMeta(styleId);
-    const analyserOptions = resolveVisualizerAnalyserOptions(meta, effectSettings);
-    const renderOptions = resolveVisualizerRenderOptions(effectSettings);
+    const analyserOptions = resolveVisualizerAnalyserOptions(meta, effectSettings, styleId);
+    const renderOptions = resolveVisualizerRenderOptions(effectSettings, styleId);
     const viz = createVisualizer(styleId);
     if (!viz) return;
 
@@ -232,8 +232,8 @@ function SceneHost({
   }
 
   const meta = getVisualizerMeta(styleId);
-  const analyserOptions = resolveVisualizerAnalyserOptions(meta, effectSettings);
-  const renderOptions = resolveVisualizerRenderOptions(effectSettings);
+  const analyserOptions = resolveVisualizerAnalyserOptions(meta, effectSettings, styleId);
+  const renderOptions = resolveVisualizerRenderOptions(effectSettings, styleId);
   const paused = !active || !onscreen;
   return (
     <div ref={ref} className={cn("h-full w-full", className)} aria-hidden>
@@ -288,6 +288,7 @@ export function VisualizerHost({
       visualizerMotion: settings.visualizerMotion,
       visualizerSmoothing: settings.visualizerSmoothing,
       visualizerSpread: settings.visualizerSpread,
+      visualizerTuningByStyle: settings.visualizerTuningByStyle,
     }),
     [
       settings.visualizerDetail,
@@ -300,6 +301,7 @@ export function VisualizerHost({
       settings.visualizerMotion,
       settings.visualizerSmoothing,
       settings.visualizerSpread,
+      settings.visualizerTuningByStyle,
     ],
   );
   const flow = useMemo(

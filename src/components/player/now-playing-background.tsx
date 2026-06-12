@@ -15,9 +15,11 @@ import { FLOW_DEFAULTS, VISUALIZER_BLEND_DEFAULT } from "@/lib/flow-config";
 import { nextSlideIndex } from "@/lib/slideshow";
 import { trackHasCover } from "@/lib/track-display";
 import { cn } from "@/lib/utils";
+import { resolveVisualizerBackgroundCompositeOptions } from "@/lib/visualizer-effect-settings";
 import { resolveTrackLyrics } from "@/lyrics/resolve-lyrics";
 import { usePlayerStore } from "@/stores/player-store";
 import { VisualizerHost } from "@/visualizer/host";
+import { resolveVisualizerStyle } from "@/visualizer/registry";
 import { CanvasBlurBackground } from "./canvas-blur-background";
 import { type PixiBackgroundEffect, PixiPixelBackground } from "./pixi-pixel-background";
 
@@ -61,11 +63,12 @@ function NowPlayingBackgroundContent({ hideVisualizer }: { hideVisualizer: boole
   const currentIndex = usePlayerStore((s) => s.currentIndex);
   const isPlaying = usePlayerStore((s) => s.isPlaying);
   const current = currentIndex >= 0 ? queue[currentIndex] : undefined;
+  const visualizerStyle = resolveVisualizerStyle(settings.visualizerStyle);
   const showViz =
     !hideVisualizer &&
     !!current &&
-    (settings.visualizerAsBackground ?? false) &&
-    (settings.visualizerStyle ?? "bars") !== "off";
+    (settings.visualizerAsBackground ?? true) &&
+    visualizerStyle !== "off";
   // "Has lyrics" is decided by the TRACK itself (does it have displayable
   // lyrics?), not the lyrics-display toggle — so the visualizer auto-subdues
   // whenever there are words to read. The 240ms opacity transitions below make
@@ -77,13 +80,13 @@ function NowPlayingBackgroundContent({ hideVisualizer }: { hideVisualizer: boole
   );
   const lyricsMode = resolveTrackLyrics(current, lyricsRow).mode;
   const hasLyrics = lyricsMode === "synced" || lyricsMode === "plain";
-  const visualizerDim =
-    (hasLyrics ? (settings.visualizerBgDimLyrics ?? 40) : (settings.visualizerBackgroundDim ?? 0)) /
-    100;
-  const visualizerOpacity =
-    (hasLyrics
-      ? (settings.visualizerBgOpacityLyrics ?? 60)
-      : (settings.visualizerBackgroundOpacity ?? 100)) / 100;
+  const visualizerComposite = resolveVisualizerBackgroundCompositeOptions(
+    settings,
+    visualizerStyle,
+    hasLyrics,
+  );
+  const visualizerDim = visualizerComposite.dimPct / 100;
+  const visualizerOpacity = visualizerComposite.opacityPct / 100;
   const coverUrl = useTrackCoverUrl(current);
   const trackBackgrounds = useLiveQuery(
     () => (current?.id ? listTrackBackgrounds(current.id) : Promise.resolve([])),

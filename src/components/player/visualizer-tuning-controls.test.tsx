@@ -60,6 +60,37 @@ describe("VisualizerTuningControls", () => {
     });
   });
 
+  it("shows per-style background composite values in slider labels", () => {
+    settings = {
+      ...settings,
+      visualizerTuningByStyle: {
+        bars: {
+          backgroundOpacity: 72,
+          backgroundDim: 18,
+          bgOpacityLyrics: 44,
+          bgDimLyrics: 66,
+        },
+      },
+    };
+
+    render(<VisualizerTuningControls />);
+
+    expect(
+      screen.getAllByRole("slider", { name: "visualizer.backgroundOpacity" })[0],
+    ).toHaveAttribute("aria-valuenow", "72");
+    expect(screen.getAllByRole("slider", { name: "visualizer.backgroundDim" })[0]).toHaveAttribute(
+      "aria-valuenow",
+      "18",
+    );
+    expect(
+      screen.getAllByRole("slider", { name: "visualizer.backgroundOpacity" })[1],
+    ).toHaveAttribute("aria-valuenow", "44");
+    expect(screen.getAllByRole("slider", { name: "visualizer.backgroundDim" })[1]).toHaveAttribute(
+      "aria-valuenow",
+      "66",
+    );
+  });
+
   it("resets only the active style tuning", () => {
     render(<VisualizerTuningControls />);
 
