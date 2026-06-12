@@ -16,14 +16,18 @@ import { type FormEvent, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { canUseDjChat } from "@/chat/dj-chat-availability";
-import { DJ_CHAT_TOOL_METADATA } from "@/chat/dj-chat-tool-metadata";
-import { getOrCreateDjChatRuntimeActor } from "@/chat/dj-chat-runtime-registry";
+import {
+  getOrCreateDjChatRuntimeActor,
+  useDjChatRuntimeSnapshot,
+} from "@/chat/dj-chat-runtime-registry";
 import {
   createChatSession,
   deleteChatSession,
   listChatSessions,
   renameChatSession,
 } from "@/chat/dj-chat-sessions";
+import { DJ_CHAT_TOOL_METADATA } from "@/chat/dj-chat-tool-metadata";
+import { ChatActivityPopover, deriveChatActivity } from "@/components/chat/chat-activity-popover";
 import { ChatPanel } from "@/components/chat/chat-panel";
 import { ChatReplyNotification } from "@/components/chat/chat-reply-notification";
 import { ChatSessionHome } from "@/components/chat/chat-session-home";
@@ -74,12 +78,55 @@ export function DjChatEntry({
     s.activeSessionId ? s.runtimeMetaBySessionId[s.activeSessionId]?.status : undefined,
   );
   const [draft, setDraft] = useState("");
+  const [dismissedActivityKey, setDismissedActivityKey] = useState<string | null>(null);
   // History view inside the expanded widget (session home). Switching sessions
   // only swaps the panel's sessionId — per-session runtime actors are
   // module-scope, so a streaming session keeps streaming in the background.
   const [showHome, setShowHome] = useState(false);
   const sessions = useLiveQuery(() => listChatSessions(), [], []);
   const isRunning = runtimeStatus === "submitted" || runtimeStatus === "streaming";
+  const compactSnapshot = useDjChatRuntimeSnapshot(mode === "expanded" ? null : activeSessionId);
+  const toolLabelMap = Object.fromEntries(
+    DJ_CHAT_TOOL_METADATA.map((tool) => [
+      tool.id,
+      {
+        description: t(tool.descriptionKey),
+        label: t(tool.labelKey),
+      },
+    ]),
+  );
+  const activityLabels = {
+    ariaLabel: t("chat.activityAria"),
+    error: t("chat.activityError"),
+    idle: t("chat.activityIdle"),
+    queued: t("chat.activityQueued"),
+    thinking: t("chat.activityThinking"),
+    waitingApproval: t("chat.activityWaitingApproval"),
+    toolStates: {
+      "approval-requested": t("chat.toolStateApproval"),
+      "approval-responded": t("chat.toolStateResponded"),
+      "input-available": t("chat.toolStateRunning"),
+      "input-streaming": t("chat.toolStateRunning"),
+      "output-available": t("chat.toolStateDone"),
+      "output-denied": t("chat.toolStateDenied"),
+      "output-error": t("chat.toolStateError"),
+    },
+    tools: toolLabelMap,
+  };
+  const compactActivity =
+    mode === "expanded" ? undefined : deriveChatActivity(compactSnapshot, activityLabels);
+  const compactActivityKey =
+    compactSnapshot && compactActivity
+      ? [
+          compactSnapshot.meta.sessionId,
+          compactSnapshot.meta.messageCount,
+          compactSnapshot.meta.status,
+          compactSnapshot.meta.pendingApprovalCount,
+          compactSnapshot.meta.queuedPromptCount,
+        ].join(":")
+      : undefined;
+  const visibleCompactActivity =
+    compactActivityKey === dismissedActivityKey ? undefined : compactActivity;
 
   // Esc collapses the widget back to the chip.
   useEffect(() => {
@@ -149,6 +196,13 @@ export function DjChatEntry({
     // Always flex-1 so the Sparkles icon stays pinned at the SAME far-left spot
     // in both chip and mini (the dock row right-aligns the memory/nav icons).
     <div className={cn("relative flex min-w-0 flex-1", className)}>
+      <ChatActivityPopover
+        activity={visibleCompactActivity}
+        labels={activityLabels}
+        onDismiss={() => {
+          if (compactActivityKey) setDismissedActivityKey(compactActivityKey);
+        }}
+      />
       {mode !== "expanded" && (
         // The Sparkles icon is ONE always-present, fixed element (the same icon
         // in chip + mini). Only the input + actions collapse their WIDTH — no
@@ -455,15 +509,7 @@ export function DjChatEntry({
                         "output-denied": t("chat.toolStateDenied"),
                         "output-error": t("chat.toolStateError"),
                       },
-                      tools: Object.fromEntries(
-                        DJ_CHAT_TOOL_METADATA.map((tool) => [
-                          tool.id,
-                          {
-                            description: t(tool.descriptionKey),
-                            label: t(tool.labelKey),
-                          },
-                        ]),
-                      ),
+                      tools: toolLabelMap,
                     }}
                   />
                 )}

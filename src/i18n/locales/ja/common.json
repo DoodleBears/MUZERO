@@ -1290,6 +1290,12 @@
     "toolStateDone": "完了",
     "toolStateDenied": "却下済み",
     "toolStateError": "失敗",
+    "activityAria": "DJ の動き",
+    "activityError": "問題が発生しました",
+    "activityIdle": "待機中",
+    "activityQueued": "次の指示をキューに追加",
+    "activityThinking": "考え中",
+    "activityWaitingApproval": "承認待ち",
     "toolAvailability": {
       "always": "常に利用可能",
       "online": "オンラインソースが必要",

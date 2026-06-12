@@ -1290,6 +1290,12 @@
     "toolStateDone": "完成",
     "toolStateDenied": "已拒绝",
     "toolStateError": "失败",
+    "activityAria": "DJ 动态",
+    "activityError": "出了点问题",
+    "activityIdle": "已就绪",
+    "activityQueued": "下一条指令已排队",
+    "activityThinking": "思考中",
+    "activityWaitingApproval": "等待批准",
     "toolAvailability": {
       "always": "始终可用",
       "online": "需要启用线上来源",

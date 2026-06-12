@@ -1317,6 +1317,12 @@
     "toolStateDone": "Done",
     "toolStateDenied": "Denied",
     "toolStateError": "Failed",
+    "activityAria": "DJ activity",
+    "activityError": "Something went wrong",
+    "activityIdle": "Ready",
+    "activityQueued": "Queued next prompt",
+    "activityThinking": "Thinking",
+    "activityWaitingApproval": "Waiting for approval",
     "toolAvailability": {
       "always": "Always available",
       "online": "Requires online sources",

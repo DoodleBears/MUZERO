@@ -24,6 +24,17 @@
   }
 }
 
+@keyframes chat-activity-scroll {
+  0%,
+  18% {
+    transform: translateY(0);
+  }
+  82%,
+  100% {
+    transform: translateY(calc(-100% + 2.5rem));
+  }
+}
+
 /* Thin scrollbar with no visible track, for code/log panes that scroll sideways. */
 @utility thin-transparent-scrollbar {
   scrollbar-width: thin;

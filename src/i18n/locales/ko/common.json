@@ -1289,6 +1289,12 @@
     "toolStateDone": "완료",
     "toolStateDenied": "거절됨",
     "toolStateError": "실패",
+    "activityAria": "DJ 활동",
+    "activityError": "문제가 발생했습니다",
+    "activityIdle": "준비됨",
+    "activityQueued": "다음 지시가 대기 중",
+    "activityThinking": "생각 중",
+    "activityWaitingApproval": "승인 대기",
     "toolAvailability": {
       "always": "항상 사용 가능",
       "online": "온라인 소스 필요",

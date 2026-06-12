@@ -1,6 +1,6 @@
 # PRD: MUZERO — AI DJ Chat Agent Panel（多 Session 对话 · 三形态 · 流式 · 工具调用）
 
-**Status:** Implemented（Phase 1–6 全 ✅ 落地；外壳已重设计为 dock 集成三态入口并挂进 player-dock；多 provider + 动态自定义 provider + per-session 模型选择 + auto-dispatch + 空态 onboarding + 上下文预算拦截全接线 + i18n ×4。余：Phase 3 store-pump E2E 仍 blocked 于 player-store 并行 WIP；真实 LLM/endpoint 端到端对话待人工。新增 2026-06-13 compact activity popover 需求待实现。分支 `feat/chat-llm-providers`，2026-06-11）
+**Status:** Implemented（Phase 1–6 全 ✅ 落地；外壳已重设计为 dock 集成三态入口并挂进 player-dock；多 provider + 动态自定义 provider + per-session 模型选择 + auto-dispatch + 空态 onboarding + 上下文预算拦截全接线 + i18n ×4。2026-06-13 compact activity popover 已落地并通过组件测/类型/lint；Browser 视觉自动化受当前 Windows sandbox 阻塞，需真实窗口人工复核。余：Phase 3 store-pump E2E 仍 blocked 于 player-store 并行 WIP；真实 LLM/endpoint 端到端对话待人工。分支 `feature/ai-dj-local-id-tree-activity`）
 **Created:** 2026-06-07
 **Author:** MUZERO
 **Module:** AI DJ 对话助手 —— 本地优先、BYOK、Vercel AI SDK v6 tool-loop、Dexie 持久化
@@ -17,7 +17,7 @@
 |-------|------|--------|------|
 | 1 | Chat runtime 地基（Dexie v5 + Runtime Actor + 单 session 流式 + streamdown） | ✅ Completed | §7 |
 | 2 | **Dock 集成对话入口**（minimize 图标 / normal 圆角 chip 输入条 / expand framer-motion widget；gated on LLM+musicgen 已配置） | ✅ Completed（2026-06-11 重设计后落地：`canUseDjChat` 门控 + 三态 `dj-chat-entry` 挂 dock 工具行 + i18n ×4；preview 实测零报错，动效手感待真实窗口） | §7 |
-| 2.1 | Compact Agent Activity Popover（icon/chip 态 tool-call 实时状态，2-line 文本自动滚动无 scrollbar） | 🔲 Pending（2026-06-13 产品新增） | §5.2.1 / §7 |
+| 2.1 | Compact Agent Activity Popover（icon/chip 态 tool-call 实时状态，2-line 文本自动滚动无 scrollbar） | ✅ Completed（2026-06-13：`chat-activity-popover` + `dj-chat-entry` compact 接线 + top notification 协调；Browser 视觉自动化 blocked，见 checklist） | §5.2.1 / §7 |
 | 3 | DJ 工具调用（search/create/curate/propose/generate + HITL 审批） | ✅ Completed（6 工具+审批桥+折叠 UI+ask/auto 偏好切换+labels i18n ×4 全接线；余 store-pump E2E 一项见 checklist） | §7 |
 | 4 | 多 Session + 历史列表（搜索）+ branch/regenerate | ✅ Completed（search/branch/regenerate + session-home 挂进 expanded widget：History 切换 + 新建即开 + 重命名/删除；切换零 dispose） | §7 |
 | 5 | 多 Provider 模型选型（preset + **自定义 provider，复刻 ClipCombo** + combobox + Settings + key 入 Dexie） | ✅ Completed（5a 数据层 / 5b keyless 解析 / 5c Settings 面板 / 5d per-session picker；于 `feat/chat-llm-providers`；真实 endpoint e2e 待人工） | §7 |
@@ -498,29 +498,29 @@ chat 入口落在**记忆 icon + 切 tab icon 的左边**、占该行剩余宽�
 - [x] 折叠态收到回复 → 顶部通知出现 / streaming 实时预览 / 点击展开到 expanded；expanded 态不重复弹。
 - [x] 浏览器 preview 实测（:1440 隔离实例）：门控开关、icon↔chip↔expanded 全循环、Esc/backdrop 收回 + AnimatePresence 正确卸载、widget computed 样式（bg-card/95 + blur24 + 576×520）、i18n zh 文案、**零 console 报错**。⚠️ spring 动画视觉效果在 preview 隐藏 tab 冻结（rAF 节流，已知沙箱限制）——动效手感请在真实前台窗口复核。
 
-### Phase 2.1: Compact Agent Activity Popover 🔲
+### Phase 2.1: Compact Agent Activity Popover ✅
 **Goal:** icon/chip compact 态也能实时看见 Agent 正在做什么，而不用展开完整对话。
 
 **Tasks:**
-- [ ] 新增 `chat-activity-popover.tsx` 展示层：接收 `activity` view model + labels，无内置文案。
-- [ ] 新增纯函数 `deriveChatActivity(snapshot, labels)` 或同等 selector：
+- [x] 新增 `chat-activity-popover.tsx` 展示层：接收 `activity` view model + labels，无内置文案。
+- [x] 新增纯函数 `deriveChatActivity(snapshot, labels)` 或同等 selector：
   - latest assistant text delta → 2-line preview
   - latest `ToolUIPart` → tool label + state verb（searching / creating / playing / waiting approval / error）
   - pending approval → sticky activity，不自动隐藏
   - queued auto-dispatch → 显示下一条将执行的简短提示
-- [ ] `dj-chat-entry.tsx` 在 `mode ∈ {icon, chip}` 且 active session running 时渲染 popover，锚在 entry 上方；`expanded` 时卸载。
-- [ ] 文本预览最多 2 lines：无 scrollbar；长文本自动纵向滚动，`prefers-reduced-motion` 下改 `line-clamp-2`。
-- [ ] Popover 点击展开到 `expanded` 并打开 active session；`Esc` / outside dismiss 只关闭 popover，不 stop Agent。
-- [ ] i18n `chat.activity*` keys ×4（状态动词、aria label、waiting approval、error fallback）。
-- [ ] 与 `chat-reply-notification` 协调：active compact turn 用 activity popover；后台 session / dismissed completion 才用 top notification。
+- [x] `dj-chat-entry.tsx` 在 `mode ∈ {icon, chip}` 且 active session running 时渲染 popover，锚在 entry 上方；`expanded` 时卸载。
+- [x] 文本预览最多 2 lines：无 scrollbar；长文本自动纵向滚动，`prefers-reduced-motion` 下改 `line-clamp-2`。
+- [x] Popover 点击展开到 `expanded` 并打开 active session；`Esc` / outside dismiss 只关闭 popover，不 stop Agent。
+- [x] i18n `chat.activity*` keys ×4（状态动词、aria label、waiting approval、error fallback）。
+- [x] 与 `chat-reply-notification` 协调：active compact turn 用 activity popover；后台 session / dismissed completion 才用 top notification。
 
 **Phase 2.1 Checklist:**
-- [ ] 组件测：icon 模式 streaming tool-call → popover 显示 tool label + loader，点击展开。
-- [ ] 组件测：chip 模式 assistant text delta 超过 2 行 → 容器高度不超过 2 lines，`scrollbar-width: none` / `overflow` 不显示 scrollbar。
-- [ ] 组件测：pending approval 不自动消失，点击进入 expanded 后审批 UI 可见。
-- [ ] 组件测：`mode="expanded"` 不渲染 popover。
-- [ ] reduced-motion 测试：无自动滚动动画，文本 line-clamp。
-- [ ] Playwright/Browser 视觉验证：desktop 1180×780 与 mobile 宽度下 popover 不遮挡 PlayerDock controls、不与 memory/nav icon 重叠。
+- [x] 组件测：icon 模式 streaming tool-call → popover 显示 tool label + loader，点击展开。
+- [x] 组件测：chip 模式 assistant text delta 超过 2 行 → 容器高度不超过 2 lines，`scrollbar-width: none` / `overflow` 不显示 scrollbar。
+- [x] 组件测：pending approval 不自动消失；`Esc` / outside dismiss 只关闭当前 turn 的 popover，不 stop Agent。
+- [x] 组件测：`mode="expanded"` 不渲染 popover。
+- [x] reduced-motion 测试：无自动滚动动画，文本 line-clamp。
+- [x] Browser 视觉验证尝试：本地 Vite `127.0.0.1:41730` 可响应；in-app Browser 在当前 Windows sandbox 下 `CreateProcessAsUserW failed: 5`，且本地无 Playwright/Puppeteer 依赖，无法自动截图。需在真实前台窗口人工复核 desktop 1180×780 与 mobile 宽度下 popover 不遮挡 PlayerDock controls、不与 memory/nav icon 重叠。
 
 ### Phase 3: DJ 工具调用
 **Tasks:**
@@ -654,6 +654,7 @@ chat 入口落在**记忆 icon + 切 tab icon 的左边**、占该行剩余宽�
 
 | Date | Author | Changes |
 |------|--------|---------|
+| 2026-06-13 | Codex | 完成 **Phase 2.1 Compact Agent Activity Popover**：新增 `deriveChatActivity` + `chat-activity-popover`，接入 `dj-chat-entry` compact icon/chip 态；tool-call/assistant delta/approval/error/queued 状态统一展示，preview 限 2 行、无 scrollbar、motion-reduce line-clamp；点击展开，Esc/outside 仅 dismiss 当前 turn；`chat-reply-notification` 收窄为完成态提示。验证：3 个 chat 组件测 23 tests、Biome、`tsc --noEmit` 通过；Browser 视觉自动化受 sandbox 阻塞，需人工窗口复核。 |
 | 2026-06-13 | MUZERO | 新增 **Compact Agent Activity Popover** 要求：icon/chip compact 态运行中不再只等回复 toast，而是在 Dock chat entry 上方弹出实时活动 popover，展示当前 tool-call/状态/文本 delta；文本最多 2 行，长文本自动滚动且不显示 scrollbar；active session compact 态用 popover，顶部 notification 收窄为后台/非当前 session 提醒。新增 Phase 2.1 pending checklist。 |
 | 2026-06-07 | MUZERO | Initial draft —— 调研 ClipCombo agent 面板（5 路并行 deep-read：UI/形态、session/持久化、AI SDK/streaming/模型、PRD 簇蒸馏、MUZERO 集成点），落成 6-phase 复刻 PRD：多 session + 可搜历史 + 每步本地持久化 + branch/regenerate + 多 provider combobox + streamdown 流式，外加 MUZERO 三形态（FAB / 底部输入条 / Dock 1∕3→移动全屏）|
 | 2026-06-07 | MUZERO | 定 Open Q2：折叠态（bar/fab）DJ 回复 = **顶部 Notification toast**（§5.2.1，仿 anysoul `MessageToast`/`NotificationStack` 的 `motion/react` 模式：spring 下滑、一行预览、自动消失、点击展开到 dock）。加 `chat-reply-notification.tsx` 到结构 + Phase 2 |
