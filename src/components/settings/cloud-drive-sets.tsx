@@ -6,6 +6,7 @@ import { CloudDownloadIcon } from "@/components/ui/cloud-download";
 import type { CloudDrive, CloudSourceAttribution } from "@/db/types";
 import { log } from "@/lib/logger";
 import { useSyncStore } from "@/stores/sync-store";
+import { refreshImportedSetSourceAttributions } from "@/sync/cloud-source-attribution";
 import { getLocalDevice } from "@/sync/device-repo";
 import { importRemoteEntityCovers } from "@/sync/r2-import-stream";
 import {
@@ -65,6 +66,26 @@ export function CloudDriveSets({ drive }: { drive: CloudDrive }) {
     }
   }, []);
 
+  const refreshExistingSourceAttributions = useCallback(
+    async (
+      result: RemoteLibraryPreview,
+      profiles: ReadonlyMap<string, RemoteDeviceProfileSummary>,
+    ) => {
+      try {
+        await refreshImportedSetSourceAttributions(
+          result.sets.map((set) => ({
+            driveId: drive.id,
+            remoteSetId: set.id,
+            source: sourceForRemoteSet(drive, set, profiles),
+          })),
+        );
+      } catch (cause) {
+        log.warn("settings", "failed to refresh imported source attribution", cause);
+      }
+    },
+    [drive],
+  );
+
   const importSetFromPreview = useCallback(
     async (
       result: RemoteLibraryPreview,
@@ -114,6 +135,7 @@ export function CloudDriveSets({ drive }: { drive: CloudDrive }) {
         setPreview(result);
         setStatus("loaded");
         void importDriveEntityCovers(result);
+        void refreshExistingSourceAttributions(result, profiles);
         if (options.importAll) await importAllSets(result, profiles);
       } catch (cause) {
         if (isMissingManifest(cause)) {
@@ -127,7 +149,13 @@ export function CloudDriveSets({ drive }: { drive: CloudDrive }) {
         log.warn("settings", "failed to browse drive sets", cause);
       }
     },
-    [drive.manifestUrl, importAllSets, importDriveEntityCovers, t],
+    [
+      drive.manifestUrl,
+      importAllSets,
+      importDriveEntityCovers,
+      refreshExistingSourceAttributions,
+      t,
+    ],
   );
 
   useEffect(() => {

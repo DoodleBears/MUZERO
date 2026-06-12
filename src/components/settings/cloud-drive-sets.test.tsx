@@ -12,6 +12,7 @@ const loadRemoteSetIndex = vi.fn();
 const loadRemoteEntityCovers = vi.fn();
 const loadRemoteDeviceProfiles = vi.fn();
 const importRemoteEntityCovers = vi.fn();
+const refreshImportedSetSourceAttributions = vi.fn();
 const pullRemoteSet = vi.fn();
 const getLocalDevice = vi.fn();
 
@@ -23,6 +24,10 @@ vi.mock("@/sync/r2-subscription", () => ({
 }));
 vi.mock("@/sync/r2-import-stream", () => ({
   importRemoteEntityCovers: (...args: unknown[]) => importRemoteEntityCovers(...args),
+}));
+vi.mock("@/sync/cloud-source-attribution", () => ({
+  refreshImportedSetSourceAttributions: (...args: unknown[]) =>
+    refreshImportedSetSourceAttributions(...args),
 }));
 vi.mock("@/sync/device-repo", () => ({
   getLocalDevice: (...args: unknown[]) => getLocalDevice(...args),
@@ -96,6 +101,10 @@ describe("CloudDriveSets", () => {
     vi.clearAllMocks();
     getLocalDevice.mockResolvedValue(undefined);
     loadRemoteDeviceProfiles.mockResolvedValue(new Map());
+    refreshImportedSetSourceAttributions.mockResolvedValue({
+      sessionsUpdated: 0,
+      tracksUpdated: 0,
+    });
   });
 
   it("loads and lists the drive's remote sets on browse", async () => {
@@ -211,6 +220,65 @@ describe("CloudDriveSets", () => {
         avatarUrl: "https://pub.example.com/muzero/objects/avatars/friend.jpg",
       },
     });
+  });
+
+  it("refreshes existing imported song source chips after preview loads device profiles", async () => {
+    const attributedPreview = {
+      ...preview,
+      sets: [
+        { ...preview.sets[0]!, publishedBy: "dvc_friend" },
+        {
+          ...preview.sets[0]!,
+          id: "ses_osaka",
+          title: "Osaka Sunrise",
+          publishedBy: "dvc_friend",
+        },
+      ],
+    };
+    const profiles = new Map([
+      [
+        "dvc_friend",
+        {
+          devicePublicId: "dvc_friend",
+          displayName: "Browser",
+          avatarSeed: "green",
+          avatarUrl: "https://pub.example.com/muzero/objects/avatars/browser.jpg",
+        },
+      ],
+    ]);
+    subscribeManifest.mockResolvedValueOnce(attributedPreview);
+    loadRemoteDeviceProfiles.mockResolvedValueOnce(profiles);
+
+    render(<CloudDriveSets drive={drive} />);
+    fireEvent.click(screen.getByRole("button"));
+
+    await waitFor(() => expect(refreshImportedSetSourceAttributions).toHaveBeenCalled());
+    expect(refreshImportedSetSourceAttributions).toHaveBeenCalledWith([
+      {
+        driveId: drive.id,
+        remoteSetId: "ses_tokyo",
+        source: {
+          driveId: drive.id,
+          driveLabel: drive.label,
+          devicePublicId: "dvc_friend",
+          displayName: "Browser",
+          avatarSeed: "green",
+          avatarUrl: "https://pub.example.com/muzero/objects/avatars/browser.jpg",
+        },
+      },
+      {
+        driveId: drive.id,
+        remoteSetId: "ses_osaka",
+        source: {
+          driveId: drive.id,
+          driveLabel: drive.label,
+          devicePublicId: "dvc_friend",
+          displayName: "Browser",
+          avatarSeed: "green",
+          avatarUrl: "https://pub.example.com/muzero/objects/avatars/browser.jpg",
+        },
+      },
+    ]);
   });
 
   it("imports a set via loadRemoteSetIndex + the orchestrated pullRemoteSet keyed by the drive id", async () => {
