@@ -1,4 +1,4 @@
-import { ChevronDown, Cloud, ExternalLink, Link2, ShieldCheck } from "lucide-react";
+import { ChevronDown, ClipboardCopy, Cloud, ExternalLink, Link2, ShieldCheck } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
@@ -9,7 +9,9 @@ import { Stepper } from "@/components/ui/stepper";
 import { saveSettings } from "@/db/repositories";
 import type { AppSettings } from "@/db/types";
 import { newId } from "@/lib/id";
+import { log } from "@/lib/logger";
 import { cn } from "@/lib/utils";
+import { notify } from "@/stores/notification-store";
 import { useSyncStore } from "@/stores/sync-store";
 import { upsertCloudDrive } from "@/sync/cloud-drive-repo";
 import {
@@ -20,7 +22,12 @@ import {
   type TrustedR2DriveSetupPayload,
 } from "@/sync/cloud-drive-settings";
 import { buildOwnerR2Connection } from "@/sync/owner-r2-connection";
-import { checkR2PublicRead, checkR2WriteAccess, maskSecret } from "@/sync/r2-healthcheck";
+import {
+  buildRecommendedR2Cors,
+  checkR2PublicRead,
+  checkR2WriteAccess,
+  maskSecret,
+} from "@/sync/r2-healthcheck";
 import { connectReadOnlyManifest } from "@/sync/r2-shared-link";
 
 /** Owner = your own R2 (read+write keys). Shared = a public link (read-only). */
@@ -122,6 +129,22 @@ export function AddDriveDialog({
     setSelectedBucket(value);
     setStatus("idle");
     setMessage(null);
+  }
+
+  async function copyCorsJson() {
+    if (!navigator.clipboard) {
+      notify.warning(t("notification.copyFail"));
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(
+        JSON.stringify(buildRecommendedR2Cors(browserOrigin()), null, 2),
+      );
+      notify.success(t("notification.copySuccess"));
+    } catch (error) {
+      log.warn("settings", "R2 CORS clipboard write failed", error);
+      notify.warning(t("notification.copyFail"));
+    }
   }
 
   const canValidate =
@@ -323,6 +346,15 @@ export function AddDriveDialog({
                     <p className="text-muted-foreground text-xs">
                       {t("settings.addDrivePublicSectionHint")}
                     </p>
+                    <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border bg-muted/25 p-3">
+                      <p className="text-muted-foreground text-xs">
+                        {t("settings.addDriveGuideCorsBody")}
+                      </p>
+                      <Button variant="outline" size="sm" onClick={() => void copyCorsJson()}>
+                        <ClipboardCopy />
+                        {t("settings.cloudCorsCopy")}
+                      </Button>
+                    </div>
                   </div>
 
                   <div className="rounded-md border border-border">
@@ -570,6 +602,10 @@ function GuideLink({ href, children }: { href: string; children: React.ReactNode
       <ExternalLink className="size-3" />
     </a>
   );
+}
+
+function browserOrigin(): string {
+  return globalThis.location?.origin ?? "http://localhost:41730";
 }
 
 function PostAddOption({

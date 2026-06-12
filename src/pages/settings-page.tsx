@@ -77,7 +77,6 @@ import {
 } from "@/musicgen/presets";
 import { resolveMusicGenProvider } from "@/musicgen/registry";
 import { useNavStore } from "@/stores/nav-store";
-import { notify } from "@/stores/notification-store";
 import { usePlayerStore } from "@/stores/player-store";
 import { useSyncStore } from "@/stores/sync-store";
 import { listCloudDrives, updateCloudDriveSyncPreferences } from "@/sync/cloud-drive-repo";
@@ -93,7 +92,6 @@ import {
 } from "@/sync/device-repo";
 import { summarizePlaybackAggregates } from "@/sync/playback-aggregate-summary";
 import { summarizePlaybackSyncState } from "@/sync/playback-sync-summary";
-import { buildRecommendedR2Cors } from "@/sync/r2-healthcheck";
 import type { SyncPhase, SyncProgress } from "@/sync/sync-orchestrator";
 import {
   type SyncProgressPhase,
@@ -395,20 +393,6 @@ export function SettingsPage() {
     setHealth(ok ? "ok" : "down");
   }
 
-  async function copyCorsJson() {
-    if (!navigator.clipboard) {
-      notify.warning(t("notification.copyFail"));
-      return;
-    }
-    try {
-      await navigator.clipboard.writeText(corsJson);
-      notify.success(t("notification.copySuccess"));
-    } catch (error) {
-      log.warn("settings", "R2 CORS clipboard write failed", error);
-      notify.warning(t("notification.copyFail"));
-    }
-  }
-
   async function changePresenceEnabled(enabled: boolean) {
     patch({ presenceEnabled: enabled });
     await saveSettings({ presenceEnabled: enabled });
@@ -433,11 +417,6 @@ export function SettingsPage() {
     light: settings.primaryLight ?? DEFAULT_PRIMARY.light,
     dark: settings.primaryDark ?? DEFAULT_PRIMARY.dark,
   };
-
-  const corsJson = useMemo(
-    () => JSON.stringify(buildRecommendedR2Cors(browserOrigin()), null, 2),
-    [],
-  );
 
   const cloudPreset = resolveCloudPreset(draft.musicCloudPreset);
   const syncProgress = latestSyncRun ? summarizeSyncRunProgress(latestSyncRun) : undefined;
@@ -1111,20 +1090,6 @@ export function SettingsPage() {
 
                     {syncProgress && <CloudSyncProgress progress={syncProgress} />}
 
-                    <div className="rounded-md border border-border p-3">
-                      <div className="flex flex-wrap items-start justify-between gap-3">
-                        <div>
-                          <p className="font-medium text-sm">{t("settings.cloudCorsTitle")}</p>
-                          <p className="text-muted-foreground text-xs">
-                            {t("settings.cloudCorsHint")}
-                          </p>
-                        </div>
-                        <Button variant="outline" size="sm" onClick={() => void copyCorsJson()}>
-                          <ClipboardCopy />
-                          {t("settings.cloudCorsCopy")}
-                        </Button>
-                      </div>
-                    </div>
                     <AddDriveDialog
                       open={addDriveOpen}
                       onOpenChange={setAddDriveOpen}
@@ -1376,10 +1341,6 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
       {children}
     </label>
   );
-}
-
-function browserOrigin(): string {
-  return globalThis.location?.origin ?? "http://localhost:41730";
 }
 
 function describeSyncObject(key: string): {
