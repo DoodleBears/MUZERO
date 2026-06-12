@@ -277,7 +277,7 @@ export function DjChatEntry({
                 className={cn(
                   "pointer-events-auto fixed z-50 flex origin-bottom flex-col overflow-hidden rounded-3xl bg-card/95 shadow-2xl ring-1 ring-border/40 backdrop-blur-xl",
                   // Desktop: floating card centered above the dock.
-                  "inset-x-0 bottom-[calc(env(safe-area-inset-bottom,0px)+9.5rem)] mx-auto h-[min(65vh,38rem)] w-[min(36rem,calc(100vw-1.5rem))]",
+                  "inset-x-0 bottom-[calc(env(safe-area-inset-bottom,0px)+9.5rem)] mx-auto h-[min(75vh,48rem)] w-[min(40rem,calc(100vw-1.5rem))]",
                   // Mobile: near-fullscreen sheet.
                   "max-md:inset-x-2 max-md:top-[calc(env(safe-area-inset-top,0px)+0.5rem)] max-md:bottom-2 max-md:mx-0 max-md:h-auto max-md:w-auto",
                 )}
