@@ -547,7 +547,7 @@ Deletion behavior:
 
 - `node node_modules/vitest/vitest.mjs run src/pages/library-empty-states.test.tsx src/components/library/system-playlist-cards.test.tsx src/components/library/system-playlist-detail.test.tsx src/components/player/queue-panel.test.tsx src/lib/system-playlists.test.ts` passes: 5 files, 23 tests.
 - `node node_modules/@biomejs/biome/bin/biome check --formatter-enabled=false src/lib/system-playlists.ts src/lib/system-playlists.test.ts src/components/library/system-playlist-cards.tsx src/components/library/system-playlist-cards.test.tsx src/pages/search-page.tsx` passes.
-- Direct `tsc --noEmit` is currently blocked by unrelated visualizer/electron worktree typing errors in `src/components/player/visualizer-blend-mode-select.tsx` and `src/lib/electron-window-appearance.test.ts`.
+- `node node_modules/typescript/bin/tsc --noEmit --pretty false` passes.
 
 ---
 
