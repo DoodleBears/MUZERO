@@ -1,6 +1,6 @@
 # PRD: MUZERO Progressive Bulk Import Playback
 
-**Status:** Final
+**Status:** Completed
 **Created:** 2026-06-12
 **Author:** Codex
 **Module:** Player / Local Folder Import - Bulk media ingestion availability
@@ -14,7 +14,7 @@
 | 1 | PRD + Best Practice Grounding | ✅ Completed | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | TDD Coverage For Progressive Publishing | ✅ Completed | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | Progressive Import Flush Implementation | ✅ Completed | [Phase 3 Checklist](#phase-3-checklist) |
-| 4 | Verification + Completion | 🔲 Pending | [Phase 4 Checklist](#phase-4-checklist) |
+| 4 | Verification + Completion | ✅ Completed | [Phase 4 Checklist](#phase-4-checklist) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
 
@@ -229,16 +229,17 @@ No new UI. Existing import progress remains authoritative.
 **Goal:** Prove the behavior and close the PRD.
 
 **Tasks:**
-- [ ] Run targeted Vitest files.
-- [ ] Run broader check if practical.
-- [ ] Update PRD status to Completed.
-- [ ] Commit final implementation atomically.
+- [x] Run targeted Vitest files.
+- [x] Run broader check if practical.
+- [x] Update PRD status to Completed.
+- [x] Commit final implementation atomically.
 
 ### Phase 4 Checklist
 
-- [ ] Targeted tests pass.
-- [ ] PRD change log records implementation completion.
-- [ ] Atomic commits contain only related files.
+- [x] Targeted tests pass.
+- [x] Full Vitest passes outside sandbox.
+- [x] PRD change log records implementation completion.
+- [x] Atomic commits contain only related files.
 
 ---
 
@@ -287,3 +288,4 @@ No new UI. Existing import progress remains authoritative.
 | 2026-06-12 | Codex | Initial Final PRD with best-practice grounding and phased TDD plan. |
 | 2026-06-12 | Codex | Phase 2 completed: added red tests for folder sync and file upload progressive visibility; targeted tests fail with mid-import `trackIds` still empty. |
 | 2026-06-12 | Codex | Phase 3 completed: added order-preserving progressive flush for upload and folder sync, plus repository tests for chunk insertion and ranked sets. |
+| 2026-06-12 | Codex | Phase 4 completed: targeted tests passed; full `pnpm test` failed in sandbox due `spawnSync node EPERM`, then passed outside sandbox with 304 files / 2135 tests. |
