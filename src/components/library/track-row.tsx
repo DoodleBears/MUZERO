@@ -116,7 +116,7 @@ function TrackThumb({ track }: { track: Track }) {
   const coverUrl = useTrackCoverUrl(track);
   if (track.status !== "ready") {
     return (
-      <div className="grid size-10 shrink-0 place-items-center rounded-md bg-secondary">
+      <div className="grid size-10 shrink-0 place-items-center bg-secondary album-cover-radius album-cover-shadow">
         <StatusBadge status={track.status} />
       </div>
     );
@@ -126,7 +126,7 @@ function TrackThumb({ track }: { track: Track }) {
       url={coverUrl}
       thumbhash={track.coverThumbhash}
       placeholder={track.kind === "video" ? <Video className="size-4" /> : <Disc3Icon size={16} />}
-      className="size-10 shrink-0 rounded-md text-muted-foreground"
+      className="size-10 shrink-0 text-muted-foreground"
     />
   );
 }
@@ -251,7 +251,7 @@ export const TrackRow = memo(function TrackRow({
         <Checkbox checked={checked ?? false} className="pointer-events-none ms-0.5 shrink-0" />
       )}
       <div className="group/thumb relative size-10 shrink-0">
-        <div className="grid size-10 place-items-center rounded-md">
+        <div className="grid size-10 place-items-center album-cover-radius">
           <TrackThumb track={track} />
         </div>
         {track.status === "ready" && (
@@ -262,7 +262,7 @@ export const TrackRow = memo(function TrackRow({
               requestPlay("click");
             }}
             onDoubleClick={(event) => event.stopPropagation()}
-            className="pointer-events-none absolute inset-0 grid place-items-center rounded-md bg-black/45 text-foreground opacity-0 outline-none transition-opacity group-hover/thumb:pointer-events-auto group-hover/thumb:opacity-100 focus-visible:pointer-events-auto focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring"
+            className="pointer-events-none absolute inset-0 grid place-items-center bg-black/45 text-foreground opacity-0 outline-none transition-opacity group-hover/thumb:pointer-events-auto group-hover/thumb:opacity-100 focus-visible:pointer-events-auto focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring album-cover-radius"
             aria-label={t("player.play")}
           >
             <span className="grid size-7 place-items-center rounded-full bg-background shadow-sm">

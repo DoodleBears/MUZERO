@@ -167,7 +167,7 @@ export function EntityDetailView({
                 thumbhash={coverTrack?.coverThumbhash}
                 rounded={round}
                 placeholder={<Placeholder className="size-7 text-muted-foreground" />}
-                className={cn("size-20 shrink-0", !round && "rounded-xl")}
+                className="size-20 shrink-0"
                 style={
                   coverViewTransitionName
                     ? { viewTransitionName: coverViewTransitionName }
@@ -297,7 +297,7 @@ function AlbumStripCard({
         url={coverUrl}
         thumbhash={album.coverTrack?.coverThumbhash}
         placeholder={<Disc3 className="text-muted-foreground" />}
-        className="aspect-square w-full rounded-md"
+        className="aspect-square w-full"
         style={
           coverViewTransitionName ? { viewTransitionName: coverViewTransitionName } : undefined
         }

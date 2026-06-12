@@ -288,7 +288,6 @@ function ReorderRowBody({
       <CoverImage
         url={coverUrl}
         thumbhash={track.coverThumbhash}
-        rounded
         className="size-10 shrink-0"
       />
       <div className="min-w-0 flex-1">

@@ -731,7 +731,7 @@ function GlobalSetRow({
         selected ? "bg-accent text-accent-foreground" : "hover:bg-accent/60",
       )}
     >
-      <div className="grid size-11 shrink-0 place-items-center overflow-hidden rounded-lg bg-secondary text-muted-foreground">
+      <div className="grid size-11 shrink-0 place-items-center overflow-hidden bg-secondary text-muted-foreground album-cover-radius album-cover-shadow">
         {coverUrl ? (
           <img src={coverUrl} alt="" className="size-full object-cover" />
         ) : (
@@ -879,7 +879,7 @@ function GlobalTrackSearchRow({
         onClick={onPlay}
         className="flex min-w-0 flex-1 items-center gap-3 text-left"
       >
-        <div className="grid size-11 shrink-0 place-items-center overflow-hidden rounded-lg bg-secondary text-muted-foreground">
+        <div className="grid size-11 shrink-0 place-items-center overflow-hidden bg-secondary text-muted-foreground album-cover-radius album-cover-shadow">
           {coverUrl ? (
             <img src={coverUrl} alt="" className="size-full object-cover" />
           ) : (
@@ -953,7 +953,7 @@ function GlobalLyricSearchRow({
         onClick={onPlay}
         className="flex min-w-0 flex-1 items-center gap-3 text-left"
       >
-        <div className="relative grid size-11 shrink-0 place-items-center overflow-hidden rounded-lg bg-secondary text-muted-foreground">
+        <div className="relative grid size-11 shrink-0 place-items-center overflow-hidden bg-secondary text-muted-foreground album-cover-radius album-cover-shadow">
           {coverUrl ? (
             <img src={coverUrl} alt="" className="size-full object-cover" />
           ) : (
@@ -1030,7 +1030,7 @@ function GlobalEntityRow({
       <div
         className={cn(
           "grid size-11 shrink-0 place-items-center overflow-hidden bg-secondary text-muted-foreground",
-          kind === "artist" ? "rounded-full" : "rounded-lg",
+          kind === "artist" ? "rounded-full" : "album-cover-radius album-cover-shadow",
         )}
       >
         {coverUrl ? (
@@ -1057,7 +1057,7 @@ function PlaylistLinkCard({ playlist }: { playlist: StreamPlaylist }) {
   return (
     <>
       <div className="flex w-full items-center gap-3 rounded-xl px-3 py-2">
-        <div className="grid size-11 shrink-0 place-items-center overflow-hidden rounded-lg bg-secondary text-muted-foreground">
+        <div className="grid size-11 shrink-0 place-items-center overflow-hidden bg-secondary text-muted-foreground album-cover-radius album-cover-shadow">
           {playlist.coverUrl ? (
             <img
               src={playlist.coverUrl}
@@ -1117,7 +1117,7 @@ function OnlineResultRow({
         selected ? "bg-accent text-accent-foreground" : "hover:bg-accent/60",
       )}
     >
-      <div className="grid size-11 shrink-0 place-items-center overflow-hidden rounded-lg bg-secondary text-muted-foreground">
+      <div className="grid size-11 shrink-0 place-items-center overflow-hidden bg-secondary text-muted-foreground album-cover-radius album-cover-shadow">
         {hit.coverUrl ? (
           // hdslb (bilibili) blocks a foreign Referer but serves with none; netease
           // covers don't care — so no-referrer fixes bili and is safe for both.

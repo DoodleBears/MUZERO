@@ -1693,7 +1693,7 @@ function SetDetailView({
                   openCoverCrop(filesFromTransfer(e.dataTransfer), "set");
                 }}
                 className={cn(
-                  "group relative grid size-20 shrink-0 place-items-center overflow-hidden rounded-xl bg-secondary outline-none transition-shadow focus-visible:ring-2 focus-visible:ring-ring",
+                  "group relative grid size-20 shrink-0 place-items-center overflow-hidden bg-secondary outline-none transition-shadow focus-visible:ring-2 focus-visible:ring-ring album-cover-radius album-cover-shadow",
                   dragOver && "ring-2 ring-primary",
                 )}
                 style={
@@ -2119,7 +2119,7 @@ function SetCard({
             url={coverUrl}
             thumbhash={coverThumbhash}
             placeholder={<Disc3Icon className="text-muted-foreground" size={32} />}
-            className="aspect-square w-full rounded-lg"
+            className="aspect-square w-full"
             style={
               coverViewTransitionName ? { viewTransitionName: coverViewTransitionName } : undefined
             }
@@ -2144,7 +2144,7 @@ function SetCard({
             url={coverUrl}
             thumbhash={coverThumbhash}
             placeholder={<Disc3Icon className="text-muted-foreground" size={20} />}
-            className="size-12 shrink-0 rounded-lg"
+            className="size-12 shrink-0"
             style={
               coverViewTransitionName ? { viewTransitionName: coverViewTransitionName } : undefined
             }

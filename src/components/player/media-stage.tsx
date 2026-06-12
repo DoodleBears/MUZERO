@@ -107,8 +107,8 @@ export function MediaStage({ className }: { className?: string }) {
         showVideo
           ? "w-full overflow-hidden rounded-lg bg-black shadow-md"
           : showCover
-            ? "mx-auto w-full overflow-hidden rounded-lg bg-muted shadow-md"
-            : "mx-auto aspect-square w-full bg-muted rounded-lg overflow-hidden",
+            ? "mx-auto w-full overflow-hidden bg-muted album-cover-radius album-cover-shadow"
+            : "mx-auto aspect-square w-full overflow-hidden bg-muted album-cover-radius album-cover-shadow",
         className,
       )}
     >
@@ -120,7 +120,7 @@ export function MediaStage({ className }: { className?: string }) {
           url={coverUrl}
           hasCover={trackHasCover(current)}
           fallback={<StageTitleFallback track={current} dim={asBgActive} />}
-          className="z-10 rounded-lg"
+          className="z-10 album-cover-radius"
         />
       )}
       {videoBroke && (

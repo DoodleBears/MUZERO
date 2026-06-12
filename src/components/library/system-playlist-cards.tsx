@@ -83,7 +83,7 @@ function SystemPlaylistCard({
         >
           <CoverImage
             alt={item.label}
-            className="size-full rounded-lg"
+            className="size-full"
             placeholder={
               <Icon
                 className={cn(isGrid ? "size-6" : "size-5", item.count > 0 && "text-primary")}

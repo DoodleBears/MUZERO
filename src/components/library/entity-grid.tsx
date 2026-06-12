@@ -101,7 +101,7 @@ export function EntityCard({
       thumbhash={coverTrack?.coverThumbhash}
       rounded={round}
       placeholder={<Placeholder className="text-muted-foreground" />}
-      className={cn("shrink-0", !round && "rounded-lg", size)}
+      className={cn("shrink-0", size)}
       style={coverViewTransitionName ? { viewTransitionName: coverViewTransitionName } : undefined}
     />
   );

@@ -91,14 +91,15 @@ describe("CoverImage", () => {
   it("applies round framing and renders overlay children", () => {
     const round = render(<CoverImage url="blob:a" rounded />);
     expect(round.container.firstElementChild?.className).toContain("rounded-full");
-    // Square covers get their corner radius from className; children layer on top.
+    // Square covers get their corner radius from the global appearance variable.
     const square = render(
-      <CoverImage url="blob:a" className="rounded-md">
+      <CoverImage url="blob:a">
         <span data-testid="overlay" />
       </CoverImage>,
     );
     expect(square.container.firstElementChild?.className).not.toContain("rounded-full");
-    expect(square.container.firstElementChild?.className).toContain("rounded-md");
+    expect(square.container.firstElementChild?.className).toContain("album-cover-radius");
+    expect(square.container.firstElementChild?.className).toContain("album-cover-shadow");
     expect(square.getByTestId("overlay")).toBeInTheDocument();
   });
 });

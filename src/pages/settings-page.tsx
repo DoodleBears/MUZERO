@@ -13,6 +13,7 @@ import { type CSSProperties, useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next";
 import { AboutSettings } from "@/components/settings/about-settings";
 import { AddDriveDialog } from "@/components/settings/add-drive-dialog";
+import { AlbumCoverAppearanceSettings } from "@/components/settings/album-cover-appearance-settings";
 import { BackgroundSettings } from "@/components/settings/background-settings";
 import { CloudDriveSets } from "@/components/settings/cloud-drive-sets";
 import { CloudDriveSyncControls } from "@/components/settings/cloud-drive-sync-controls";
@@ -540,6 +541,7 @@ export function SettingsPage() {
                     )}
                   </span>
                 </div>
+                <AlbumCoverAppearanceSettings />
                 <ElectronWindowAppearanceSettings />
                 <div className="flex flex-col gap-2">
                   <span className="text-xs font-medium text-muted-foreground">

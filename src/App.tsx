@@ -21,6 +21,7 @@ import { useIdle } from "@/hooks/use-idle";
 import { usePlaybackWarmup } from "@/hooks/use-playback-warmup";
 import { useShortcutDispatch } from "@/hooks/use-shortcut-dispatch";
 import { useSystemShortcuts } from "@/hooks/use-system-shortcuts";
+import { albumCoverAppearanceCssVars } from "@/lib/album-cover-appearance";
 import { resolveDesktopBridge } from "@/lib/desktop/bridge";
 import { electronWindowAppearanceCssVars } from "@/lib/electron-window-appearance";
 import { cn } from "@/lib/utils";
@@ -88,7 +89,7 @@ export default function App() {
   // empty cover/background states while local blobs or R2 bytes resolve.
   usePlaybackWarmup();
   useDesktopChromeDataset();
-  useElectronWindowAppearance(settings);
+  useAppearanceCssVars(settings);
 
   // Boot only wires the media engine. Auto-cueing the previous track during
   // WKWebView startup can make the full-screen media/background path flicker.
@@ -313,7 +314,7 @@ function useDesktopChromeDataset() {
   }, []);
 }
 
-function useElectronWindowAppearance(settings: ReturnType<typeof useSettings>) {
+function useAppearanceCssVars(settings: ReturnType<typeof useSettings>) {
   const coverColorCss = useVisualizerCoverColorCss(
     settings.electronWindowBorderColorMode === "cover",
     { respectVisualizerSetting: false },
@@ -321,7 +322,10 @@ function useElectronWindowAppearance(settings: ReturnType<typeof useSettings>) {
 
   useEffect(() => {
     const html = document.documentElement;
-    const vars = electronWindowAppearanceCssVars(settings, { coverColorCss });
+    const vars = {
+      ...electronWindowAppearanceCssVars(settings, { coverColorCss }),
+      ...albumCoverAppearanceCssVars(settings),
+    };
     for (const [name, value] of Object.entries(vars)) {
       html.style.setProperty(name, value);
     }

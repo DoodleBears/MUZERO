@@ -88,7 +88,7 @@ export function PlaylistImportDialog({
       <DialogContent className="z-[100] gap-3">
         <DialogTitle>{t("playlistImport.title")}</DialogTitle>
         <div className="flex items-center gap-3">
-          <div className="grid size-12 shrink-0 place-items-center overflow-hidden rounded-lg bg-secondary text-muted-foreground">
+          <div className="grid size-12 shrink-0 place-items-center overflow-hidden bg-secondary text-muted-foreground album-cover-radius album-cover-shadow">
             {pl.coverUrl ? (
               <img
                 src={pl.coverUrl}

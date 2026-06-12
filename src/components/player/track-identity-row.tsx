@@ -248,7 +248,7 @@ export function TrackIdentityRow({
           >
             <motion.span
               layoutId="now-cover"
-              className="relative grid size-10 shrink-0 place-items-center overflow-hidden rounded-xl bg-secondary"
+              className="relative grid size-10 shrink-0 place-items-center overflow-hidden bg-secondary album-cover-radius album-cover-shadow"
             >
               {/* Crossfades to the next cover only once it has decoded (no flash). */}
               <CoverImage

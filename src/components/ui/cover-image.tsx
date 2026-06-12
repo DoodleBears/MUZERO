@@ -64,10 +64,9 @@ export function CoverImage({
   alt?: string;
   /** Shown only when `url` is null (e.g. a `Disc3` / `User` icon). */
   placeholder?: ReactNode;
-  /** Round (artist/avatar) → `rounded-full`. For square covers pass the corner
-   *  radius in `className` (e.g. `rounded-lg` / `rounded-xl` / `rounded-md`). */
+  /** Round (artist/avatar) → `rounded-full`. Square covers use the global album-cover radius. */
   rounded?: boolean;
-  /** Sizing/layout + square corner radius (e.g. `size-12 rounded-lg`, `aspect-square w-full rounded-md`). */
+  /** Sizing/layout. Square cover radius is applied by default. */
   className?: string;
   imgClassName?: string;
   /** Inline style on the root box — used to set a `view-transition-name` so the
@@ -111,7 +110,7 @@ export function CoverImage({
     <span
       className={cn(
         "relative grid place-items-center overflow-hidden bg-secondary",
-        rounded && "rounded-full",
+        rounded ? "rounded-full" : "album-cover-radius album-cover-shadow",
         className,
       )}
       style={style}

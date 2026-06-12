@@ -143,7 +143,7 @@ function TrackMetadataSummary({ track }: { track: Track }) {
         hasCover={!!track.coverBlobId}
         onRemove={() => void clearTrackCover(track.id)}
       >
-        <div className="grid aspect-square w-full place-items-center overflow-hidden rounded-lg bg-secondary">
+        <div className="grid aspect-square w-full place-items-center overflow-hidden bg-secondary album-cover-radius album-cover-shadow">
           {coverUrl ? (
             <img src={coverUrl} alt="" className="size-full object-cover" />
           ) : (

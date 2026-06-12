@@ -105,7 +105,7 @@ export function EntityCoverButton({
           }}
           className={cn(
             "group relative grid size-20 place-items-center overflow-hidden bg-secondary outline-none transition-shadow focus-visible:ring-2 focus-visible:ring-ring",
-            round ? "rounded-full" : "rounded-xl",
+            round ? "rounded-full" : "album-cover-radius album-cover-shadow",
             dragOver && "ring-2 ring-primary",
           )}
           style={viewTransitionName ? { viewTransitionName } : undefined}

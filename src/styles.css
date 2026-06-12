@@ -94,8 +94,18 @@
   );
 }
 
+@utility album-cover-radius {
+  border-radius: var(--album-cover-radius, 12px);
+}
+
+@utility album-cover-shadow {
+  box-shadow: var(--album-cover-shadow, 0 4px 16px rgb(0 0 0 / 55%));
+}
+
 :root {
   --radius: 0.625rem;
+  --album-cover-radius: 12px;
+  --album-cover-shadow: 0 4px 16px rgb(0 0 0 / 55%);
 
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
