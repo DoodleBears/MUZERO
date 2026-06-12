@@ -1166,6 +1166,8 @@
     "queueAutoDispatch": "대기열 자동 전송",
     "history": "채팅 기록",
     "newSession": "새 채팅",
+    "slashNew": "새 채팅 시작",
+    "slashHistory": "채팅 기록 열기",
     "homeTitle": "채팅",
     "homeEmpty": "아직 채팅이 없습니다",
     "homeSearch": "채팅 검색…",

@@ -15,12 +15,6 @@ import { AnimatePresence, motion } from "motion/react";
 import { type FormEvent, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
-import { useCustomLlmProviders } from "@/ai/custom-llm-providers";
-import {
-  enabledLlmPresetIds,
-  llmSelectionForChatSession,
-  resolveLlmProviderPreset,
-} from "@/ai/llm-providers";
 import { canUseDjChat } from "@/chat/dj-chat-availability";
 import { getOrCreateDjChatRuntimeActor } from "@/chat/dj-chat-runtime-registry";
 import {
@@ -28,9 +22,7 @@ import {
   deleteChatSession,
   listChatSessions,
   renameChatSession,
-  setChatSessionLlm,
 } from "@/chat/dj-chat-sessions";
-import { ChatModelPicker } from "@/components/chat/chat-model-picker";
 import { ChatPanel } from "@/components/chat/chat-panel";
 import { ChatReplyNotification } from "@/components/chat/chat-reply-notification";
 import { ChatSessionHome } from "@/components/chat/chat-session-home";
@@ -86,16 +78,6 @@ export function DjChatEntry({
   const [showHome, setShowHome] = useState(false);
   const sessions = useLiveQuery(() => listChatSessions(), [], []);
   const isRunning = runtimeStatus === "submitted" || runtimeStatus === "streaming";
-
-  // Per-session model override (PRD Q3): the combobox shows the session's
-  // override (or the global default) over the enabled presets; picking writes
-  // only presetId+model to the session row — keys stay in settings.
-  const customProviders = useCustomLlmProviders();
-  const activeSession = sessions.find((s) => s.id === activeSessionId);
-  const sessionSelection = llmSelectionForChatSession(settings, activeSession, customProviders);
-  const enabledPresets = enabledLlmPresetIds(settings, customProviders).map((id) =>
-    resolveLlmProviderPreset(id, customProviders),
-  );
 
   // Esc collapses the widget back to the chip.
   useEffect(() => {
@@ -269,23 +251,6 @@ export function DjChatEntry({
                   <span className="min-w-0 flex-1 truncate text-sm font-semibold">
                     {t("chat.title")}
                   </span>
-                  {!showHome && activeSessionId && (
-                    <ChatModelPicker
-                      className="max-w-44"
-                      labels={{
-                        empty: t("chat.modelEmpty"),
-                        inherited: t("chat.modelInherited"),
-                        searchPlaceholder: t("chat.modelSearch"),
-                        trigger: t("chat.modelPick"),
-                      }}
-                      onSelect={({ presetId, model }) =>
-                        void setChatSessionLlm(activeSessionId, presetId, model)
-                      }
-                      presets={enabledPresets}
-                      selectedModel={sessionSelection.model}
-                      selectedPresetId={sessionSelection.presetId}
-                    />
-                  )}
                   <button
                     aria-label={t("chat.newSession")}
                     className="grid size-8 place-items-center rounded-full text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
@@ -432,6 +397,22 @@ export function DjChatEntry({
                       title: t("chat.queueTitle"),
                     }}
                     sessionId={activeSessionId}
+                    slashCommands={[
+                      {
+                        id: "new",
+                        label: t("chat.slashNew"),
+                        run: async () => {
+                          const session = await createChatSession({});
+                          setActiveSessionId(session.id);
+                          setShowHome(false);
+                        },
+                      },
+                      {
+                        id: "history",
+                        label: t("chat.slashHistory"),
+                        run: () => setShowHome(true),
+                      },
+                    ]}
                     toolLabels={{
                       approve: t("chat.toolApprove"),
                       error: t("chat.toolError"),

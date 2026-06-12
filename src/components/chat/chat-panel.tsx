@@ -8,7 +8,7 @@ import {
 } from "@/chat/dj-chat-runtime-registry";
 import type { MuzeroDB } from "@/db/muzero-db";
 import { useChatStore } from "@/stores/chat-store";
-import { ChatComposer } from "./chat-composer";
+import { ChatComposer, type SlashCommand } from "./chat-composer";
 import {
   ChatContextBudgetNotice,
   type ChatContextBudgetNoticeLabels,
@@ -36,6 +36,8 @@ interface ChatPanelProps {
   budgetLabels?: ChatContextBudgetNoticeLabels;
   queueLabels?: ChatQueueTrayLabels;
   toolLabels?: ChatToolLabels;
+  /** `/`-commands offered in the composer (e.g. start a new session). */
+  slashCommands?: SlashCommand[];
 }
 
 export function ChatPanel({
@@ -49,6 +51,7 @@ export function ChatPanel({
   budgetLabels,
   queueLabels,
   toolLabels,
+  slashCommands,
 }: ChatPanelProps) {
   const snapshot = useDjChatRuntimeSnapshot(sessionId, db);
   const [draft, setDraft] = useState("");
@@ -145,6 +148,7 @@ export function ChatPanel({
       <ChatComposer
         disabled={sendBlocked}
         isRunning={isRunning}
+        slashCommands={slashCommands}
         onInterrupt={(text) => actor.interruptWithMessage(text)}
         onQueue={async (text) => {
           await actor.queuePrompt(text);

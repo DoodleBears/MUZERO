@@ -1167,6 +1167,8 @@
     "queueAutoDispatch": "キューを自動送信",
     "history": "チャット履歴",
     "newSession": "新しいチャット",
+    "slashNew": "新しいチャットを開始",
+    "slashHistory": "チャット履歴を開く",
     "homeTitle": "チャット",
     "homeEmpty": "まだチャットがありません",
     "homeSearch": "チャットを検索…",

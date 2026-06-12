@@ -1167,6 +1167,8 @@
     "queueAutoDispatch": "自动发送排队指令",
     "history": "历史对话",
     "newSession": "新对话",
+    "slashNew": "开始新对话",
+    "slashHistory": "打开历史对话",
     "homeTitle": "对话",
     "homeEmpty": "还没有对话",
     "homeSearch": "搜索对话…",

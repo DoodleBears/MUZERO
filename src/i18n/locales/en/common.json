@@ -1193,6 +1193,8 @@
     "queueAutoDispatch": "Auto-send queued prompts",
     "history": "Chat history",
     "newSession": "New chat",
+    "slashNew": "Start a new chat",
+    "slashHistory": "Open chat history",
     "homeTitle": "Chats",
     "homeEmpty": "No chats yet",
     "homeSearch": "Search chats…",

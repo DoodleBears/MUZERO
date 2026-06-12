@@ -53,3 +53,49 @@ describe("ChatComposer keyboard contract", () => {
     expect(onQueue).not.toHaveBeenCalled();
   });
 });
+
+describe("ChatComposer slash commands", () => {
+  const newCmd = () => ({ id: "new", label: "Start a new chat", run: vi.fn() });
+
+  it("opens the menu on '/' and runs the highlighted command on Enter (not send)", () => {
+    const onSend = vi.fn();
+    const cmd = newCmd();
+    render(<ChatComposer onSend={onSend} slashCommands={[cmd]} />);
+
+    fireEvent.change(draftBox(), { target: { value: "/new" } });
+    expect(screen.getByRole("option", { name: /\/new/ })).toBeInTheDocument();
+
+    fireEvent.keyDown(draftBox(), { key: "Enter" });
+    expect(cmd.run).toHaveBeenCalledTimes(1);
+    expect(onSend).not.toHaveBeenCalled();
+  });
+
+  it("runs a command on click", () => {
+    const cmd = newCmd();
+    render(<ChatComposer onSend={vi.fn()} slashCommands={[cmd]} />);
+
+    fireEvent.change(draftBox(), { target: { value: "/" } });
+    fireEvent.click(screen.getByRole("option", { name: /\/new/ }));
+    expect(cmd.run).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not open for non-slash text or once a space is typed", () => {
+    render(<ChatComposer onSend={vi.fn()} slashCommands={[newCmd()]} />);
+
+    fireEvent.change(draftBox(), { target: { value: "hello" } });
+    expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
+
+    fireEvent.change(draftBox(), { target: { value: "/new playlist" } });
+    expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
+  });
+
+  it("sends normally when no command matches the slash token", () => {
+    const onSend = vi.fn();
+    render(<ChatComposer onSend={onSend} slashCommands={[newCmd()]} />);
+
+    fireEvent.change(draftBox(), { target: { value: "/zzz" } });
+    expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
+    fireEvent.keyDown(draftBox(), { key: "Enter" });
+    expect(onSend).toHaveBeenCalledWith("/zzz");
+  });
+});
