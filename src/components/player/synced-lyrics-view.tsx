@@ -9,6 +9,7 @@ import { db } from "@/db/muzero-db";
 import { getTrackLyrics } from "@/db/repositories";
 import type { Track } from "@/db/types";
 import { useSettings } from "@/hooks/use-app-data";
+import { useSmoothScroll } from "@/lib/smooth-scroll/use-smooth-scroll";
 import { cn } from "@/lib/utils";
 import { activeWordIndex } from "@/lyrics/active-word";
 import { DEFAULT_LYRIC_STYLE, type LyricStyle, resolveLyricStyle } from "@/lyrics/lyric-style";
@@ -179,6 +180,9 @@ export function LyricsScroller({
   showTranslation?: boolean;
   showRomanization?: boolean;
 }) {
+  const plainScrollRef = useRef<HTMLDivElement>(null);
+  useSmoothScroll(plainScrollRef);
+
   return (
     <div className="flex h-full flex-col">
       {/* `relative` + an absolutely-filled scroll child guarantees a definite
@@ -186,7 +190,7 @@ export function LyricsScroller({
           kill scrolling). */}
       <div className="relative min-h-0 flex-1">
         {resolved.mode === "plain" ? (
-          <div className="no-scrollbar absolute inset-0 overflow-y-auto">
+          <div ref={plainScrollRef} className="no-scrollbar absolute inset-0 overflow-y-auto">
             <pre
               className="whitespace-pre-wrap font-sans leading-relaxed"
               style={{
@@ -258,6 +262,7 @@ function SyncedLines({
   const reduce = useReducedMotion();
   const viewportRef = useRef<HTMLDivElement>(null);
   const stackRef = useRef<HTMLDivElement>(null);
+  useSmoothScroll(viewportRef);
   const [following, setFollowing] = useState(true);
   const [viewportH, setViewportH] = useState(0);
   // Live mirror of activeIndex so the (once-created) follow rAF reads the current

@@ -1,10 +1,11 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import type { Track } from "@/db/types";
 import { type LyricsSearch, useLyricsSearch } from "@/hooks/use-lyrics-search";
+import { useSmoothScroll } from "@/lib/smooth-scroll/use-smooth-scroll";
 import type { LyricsHit } from "@/lyrics/provider";
 import { useUiStore } from "@/stores/ui-store";
 
@@ -122,6 +123,8 @@ export function LyricsSearchPanel({
   const chromeHidden = useUiStore((s) => s.chromeHidden);
   const search = useLyricsSearch(track);
   const [open, setOpen] = useState(defaultOpen ?? false);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  useSmoothScroll(scrollRef);
 
   async function choose(hit: LyricsHit) {
     await search.pick(hit);
@@ -146,7 +149,7 @@ export function LyricsSearchPanel({
   }
 
   return (
-    <div className="no-scrollbar flex h-full flex-col gap-3 overflow-y-auto">
+    <div ref={scrollRef} className="no-scrollbar flex h-full flex-col gap-3 overflow-y-auto">
       <div className="flex items-center justify-between gap-2">
         <p className="text-muted-foreground text-sm">{prompt ?? t("lyrics.searchPrompt")}</p>
         <button

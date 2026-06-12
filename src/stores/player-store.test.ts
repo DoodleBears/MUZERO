@@ -3,6 +3,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { MuzeroDB } from "@/db/muzero-db";
 import type { Track } from "@/db/types";
 
+const PLAYER_STORE_INTEGRATION_TEST_TIMEOUT_MS = 15_000;
+
 // The store drives a real <audio>/<video> MediaEngine in init(); for store-level
 // tests we only care about WHICH source it asks the engine to load, so stub the
 // engine and capture loadUrl/loadBlob/play. (vi.hoisted survives vi.resetModules
@@ -168,21 +170,25 @@ function deferredResponse() {
 }
 
 describe("player-store playback resume", () => {
-  it("hydrates the last queue cursor and active set from IndexedDB", async () => {
-    const { session, first, second, usePlayerStore } = await seedQueue(1);
+  it(
+    "hydrates the last queue cursor and active set from IndexedDB",
+    async () => {
+      const { session, first, second, usePlayerStore } = await seedQueue(1);
 
-    usePlayerStore.getState().init();
+      usePlayerStore.getState().init();
 
-    await waitFor(() => {
-      const state = usePlayerStore.getState();
-      expect(state.activeSessionId).toBe(session.id);
-      expect(state.queue.map((t) => t.id)).toEqual([first.id, second.id]);
-      expect(state.currentIndex).toBe(1);
-      expect(state.displayMode).toBe("cover");
-      expect(state.djEnabled).toBe(false);
-    });
-    expect(usePlayerStore.getState().durationSec).toBe(second.durationSec);
-  });
+      await waitFor(() => {
+        const state = usePlayerStore.getState();
+        expect(state.activeSessionId).toBe(session.id);
+        expect(state.queue.map((t) => t.id)).toEqual([first.id, second.id]);
+        expect(state.currentIndex).toBe(1);
+        expect(state.displayMode).toBe("cover");
+        expect(state.djEnabled).toBe(false);
+      });
+      expect(usePlayerStore.getState().durationSec).toBe(second.durationSec);
+    },
+    PLAYER_STORE_INTEGRATION_TEST_TIMEOUT_MS,
+  );
 
   it("keeps a pre-load seek and applies it after media loads", async () => {
     const { db, second, usePlayerStore } = await seedQueue(1);

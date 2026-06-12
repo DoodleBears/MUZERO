@@ -85,6 +85,9 @@ describe("useSmoothScroll — lifecycle", () => {
     expect((lenisInstances[0].opts as { wrapper?: HTMLElement }).wrapper).toBeInstanceOf(
       HTMLElement,
     );
+    expect((lenisInstances[0].opts as { content?: HTMLElement }).content).toBe(
+      (lenisInstances[0].opts as { wrapper?: HTMLElement }).wrapper,
+    );
     expect(result.current.lenisRef.current).toBe(lenisInstances[0]);
     expect(__activeCount()).toBe(1);
   });

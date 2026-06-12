@@ -18,6 +18,10 @@ vi.mock("@/stores/player-store", () => ({
   usePlayerStore: () => undefined,
 }));
 
+vi.mock("@/lib/smooth-scroll/use-smooth-scroll", () => ({
+  useSmoothScroll: () => ({ lenisRef: { current: null } }),
+}));
+
 const synced: ResolvedLyrics = {
   mode: "synced",
   source: "lrclib",

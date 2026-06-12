@@ -48,7 +48,11 @@ export function useSmoothScroll(ref: RefObject<HTMLElement | null>): {
     if (!enabled || !element || typeof ResizeObserver === "undefined") return;
     const lenis = new Lenis({
       wrapper: element,
-      content: element.firstElementChild ?? element,
+      // For element wrappers Lenis reads `wrapper.scrollHeight`; `content` is
+      // mainly the ResizeObserver target. Using the wrapper itself covers
+      // multi-child columns (Settings, Now Playing) instead of watching only the
+      // first card and missing later siblings.
+      content: element,
       autoRaf: false, // shared driver ticks us
       ...optionsRef.current,
     });
