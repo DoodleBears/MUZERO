@@ -56,12 +56,9 @@ const CLOUDFLARE_R2_DASHBOARD_URL = "https://dash.cloudflare.com/?to=/:account/r
 const CLOUDFLARE_R2_TOKEN_DOCS_URL = "https://developers.cloudflare.com/r2/api/s3/tokens/";
 
 /**
- * One place to add any cloud drive, as a two-step stepper modal:
- *  - "My R2" (owner): bucket + keys + public URL (+ optional in-bucket folder
- *    under Advanced) → validate read/write → name.
- *  - "Shared link" (read-only): paste a public manifest/share URL → validate →
- *    name. (V3 will share whole playlists / buckets through the same tab.)
- * Both produce a CloudDrive in the connected-drives list; step 2 names + saves.
+ * One place to add any cloud drive. Owner R2 is deliberately split into small
+ * steps so bucket setup, write credentials, and public read URL never compete
+ * for attention. Link-based setup stays a separate top-level mode.
  */
 export function AddDriveDialog({
   open,
@@ -155,6 +152,13 @@ export function AddDriveDialog({
         !!form.secretAccessKey.trim() &&
         !!form.publicUrl.trim()
       : !!form.publicUrl.trim();
+  const canAdvance =
+    mode === "owner"
+      ? (step === 0 && !!form.endpointOrAccountId.trim() && !!selectedBucket.trim()) ||
+        (step === 1 && !!form.accessKeyId.trim() && !!form.secretAccessKey.trim()) ||
+        (step === 2 && !!form.publicUrl.trim()) ||
+        step >= 3
+      : (step === 0 && !!form.publicUrl.trim()) || step >= 1;
 
   function fail(error: unknown) {
     setStatus("error");
@@ -266,10 +270,31 @@ export function AddDriveDialog({
     setSaving(false);
   }
 
-  const steps = [
-    { id: "connect", label: t("settings.addDriveStepConnect") },
-    { id: "name", label: t("settings.addDriveStepName") },
-  ];
+  function goNext() {
+    if (!canAdvance || step >= steps.length - 1) return;
+    if (mode === "shared" && step === 0) {
+      const setup = parseTrustedR2DriveSetupLink(form.publicUrl);
+      setTrustedSetup(setup ?? undefined);
+      setPreviewTitle(setup?.label ?? sourceHost(form.publicUrl.trim()));
+    }
+    if (mode === "owner" && step === 2 && !previewTitle) {
+      setPreviewTitle(selectedBucket.trim());
+    }
+    setStep((current) => current + 1);
+  }
+
+  const steps =
+    mode === "owner"
+      ? [
+          { id: "bucket", label: t("settings.addDriveStepBucket") },
+          { id: "keys", label: t("settings.addDriveStepKeys") },
+          { id: "public", label: t("settings.addDriveStepPublic") },
+          { id: "name", label: t("settings.addDriveStepName") },
+        ]
+      : [
+          { id: "link", label: t("settings.addDriveStepLink") },
+          { id: "name", label: t("settings.addDriveStepName") },
+        ];
   const isWritableDriveFlow = mode === "owner" || Boolean(trustedSetup);
 
   return (
@@ -278,141 +303,141 @@ export function AddDriveDialog({
         <DialogTitle>{t("settings.addDrive")}</DialogTitle>
         <DialogDescription>{t("settings.addDriveDesc")}</DialogDescription>
 
-        {step === 0 && (
-          <div className="grid grid-cols-2 gap-1 rounded-md bg-muted p-1">
-            <ModeTab active={mode === "owner"} onClick={() => switchMode("owner")}>
-              <Cloud className="size-4" />
-              {t("settings.addDriveModeOwner")}
-            </ModeTab>
-            <ModeTab active={mode === "shared"} onClick={() => switchMode("shared")}>
-              <Link2 className="size-4" />
-              {t("settings.addDriveModeShared")}
-            </ModeTab>
-          </div>
-        )}
+        <div className="grid grid-cols-2 gap-1 rounded-md bg-muted p-1">
+          <ModeTab active={mode === "owner"} onClick={() => switchMode("owner")}>
+            <Cloud className="size-4" />
+            {t("settings.addDriveModeOwner")}
+          </ModeTab>
+          <ModeTab active={mode === "shared"} onClick={() => switchMode("shared")}>
+            <Link2 className="size-4" />
+            {t("settings.addDriveModeShared")}
+          </ModeTab>
+        </div>
 
         <Stepper steps={steps} current={step} />
 
         <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_minmax(15rem,0.75fr)]">
-          {step === 0 && (
+          {mode === "owner" && step === 0 && (
             <div className="flex min-w-0 flex-col gap-3">
-              {mode === "owner" ? (
-                <>
-                  <div className="grid gap-3 rounded-md border border-border p-3">
-                    <p className="font-medium text-sm">{t("settings.addDriveWriteSection")}</p>
-                    <Field label={t("settings.cloudOwnerEndpoint")}>
-                      <Input
-                        value={form.endpointOrAccountId}
-                        onChange={(e) => patch({ endpointOrAccountId: e.target.value })}
-                        placeholder="https://<account>.r2.cloudflarestorage.com"
-                      />
-                    </Field>
-                    <Field label={t("settings.cloudOwnerBucket")}>
-                      <Input
-                        value={selectedBucket}
-                        onChange={(e) => changeBucket(e.target.value)}
-                        placeholder="muzero-r2-sync-test"
-                      />
-                    </Field>
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      <Field label={t("settings.cloudOwnerAccessKey")}>
+              <div className="grid gap-3 rounded-md border border-border p-3">
+                <p className="font-medium text-sm">{t("settings.addDriveBucketSection")}</p>
+                <p className="text-muted-foreground text-xs">
+                  {t("settings.addDriveBucketSectionHint")}
+                </p>
+                <Field label={t("settings.cloudOwnerEndpoint")}>
+                  <Input
+                    value={form.endpointOrAccountId}
+                    onChange={(e) => patch({ endpointOrAccountId: e.target.value })}
+                    placeholder="https://<account>.r2.cloudflarestorage.com"
+                  />
+                </Field>
+                <Field label={t("settings.cloudOwnerBucket")}>
+                  <Input
+                    value={selectedBucket}
+                    onChange={(e) => changeBucket(e.target.value)}
+                    placeholder="muzero-r2-sync-test"
+                  />
+                </Field>
+                <div className="rounded-md border border-border">
+                  <button
+                    type="button"
+                    onClick={() => setShowAdvanced((v) => !v)}
+                    className="flex w-full items-center justify-between px-3 py-2 text-muted-foreground text-sm"
+                  >
+                    <span>{t("settings.addDriveAdvanced")}</span>
+                    <ChevronDown
+                      className={cn("size-4 transition-transform", showAdvanced && "rotate-180")}
+                    />
+                  </button>
+                  {showAdvanced && (
+                    <div className="border-border border-t px-3 py-3">
+                      <Field label={t("settings.addDriveFolder")}>
                         <Input
-                          value={form.accessKeyId}
-                          onChange={(e) => patch({ accessKeyId: e.target.value })}
+                          value={form.folder}
+                          onChange={(e) => patch({ folder: e.target.value })}
+                          placeholder="music/2024"
                         />
                       </Field>
-                      <Field label={t("settings.cloudOwnerSecretKey")}>
-                        <Input
-                          type="password"
-                          value={form.secretAccessKey}
-                          onChange={(e) => patch({ secretAccessKey: e.target.value })}
-                        />
-                      </Field>
-                    </div>
-                    <p className="text-muted-foreground text-xs">
-                      {t("settings.addDriveWriteSectionHint")}
-                    </p>
-                  </div>
-
-                  <div className="grid gap-3 rounded-md border border-border p-3">
-                    <p className="font-medium text-sm">{t("settings.addDrivePublicSection")}</p>
-                    <Field label={t("settings.cloudOwnerPublicUrl")}>
-                      <Input
-                        value={form.publicUrl}
-                        onChange={(e) => patch({ publicUrl: e.target.value })}
-                        placeholder="https://pub-xxxx.r2.dev"
-                      />
-                    </Field>
-                    <p className="text-muted-foreground text-xs">
-                      {t("settings.addDrivePublicSectionHint")}
-                    </p>
-                    <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border bg-muted/25 p-3">
-                      <p className="text-muted-foreground text-xs">
-                        {t("settings.addDriveGuideCorsBody")}
+                      <p className="mt-1.5 text-muted-foreground text-xs">
+                        {t("settings.addDriveFolderHint")}
                       </p>
-                      <Button variant="outline" size="sm" onClick={() => void copyCorsJson()}>
-                        <ClipboardCopy />
-                        {t("settings.cloudCorsCopy")}
-                      </Button>
                     </div>
-                  </div>
+                  )}
+                </div>
+              </div>
+              <StepActions
+                canAdvance={canAdvance}
+                nextLabel={t("settings.addDriveNext")}
+                onNext={goNext}
+              />
+            </div>
+          )}
 
-                  <div className="rounded-md border border-border">
-                    <button
-                      type="button"
-                      onClick={() => setShowAdvanced((v) => !v)}
-                      className="flex w-full items-center justify-between px-3 py-2 text-muted-foreground text-sm"
-                    >
-                      <span>{t("settings.addDriveAdvanced")}</span>
-                      <ChevronDown
-                        className={cn("size-4 transition-transform", showAdvanced && "rotate-180")}
-                      />
-                    </button>
-                    {showAdvanced && (
-                      <div className="border-border border-t px-3 py-3">
-                        <Field label={t("settings.addDriveFolder")}>
-                          <Input
-                            value={form.folder}
-                            onChange={(e) => patch({ folder: e.target.value })}
-                            placeholder="music/2024"
-                          />
-                        </Field>
-                        <p className="mt-1.5 text-muted-foreground text-xs">
-                          {t("settings.addDriveFolderHint")}
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                </>
-              ) : (
-                <Field label={t("settings.addDriveShareUrl")}>
+          {mode === "owner" && step === 1 && (
+            <div className="flex min-w-0 flex-col gap-3">
+              <div className="grid gap-3 rounded-md border border-border p-3">
+                <p className="font-medium text-sm">{t("settings.addDriveWriteSection")}</p>
+                <p className="text-muted-foreground text-xs">
+                  {t("settings.addDriveWriteSectionHint")}
+                </p>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <Field label={t("settings.cloudOwnerAccessKey")}>
+                    <Input
+                      value={form.accessKeyId}
+                      onChange={(e) => patch({ accessKeyId: e.target.value })}
+                    />
+                  </Field>
+                  <Field label={t("settings.cloudOwnerSecretKey")}>
+                    <Input
+                      type="password"
+                      value={form.secretAccessKey}
+                      onChange={(e) => patch({ secretAccessKey: e.target.value })}
+                    />
+                  </Field>
+                </div>
+              </div>
+              <StepActions
+                backLabel={t("settings.addDriveBack")}
+                canAdvance={canAdvance}
+                onBack={() => setStep(0)}
+                onNext={goNext}
+                nextLabel={t("settings.addDriveNext")}
+              />
+            </div>
+          )}
+
+          {mode === "owner" && step === 2 && (
+            <div className="flex min-w-0 flex-col gap-3">
+              <div className="grid gap-3 rounded-md border border-border p-3">
+                <p className="font-medium text-sm">{t("settings.addDrivePublicSection")}</p>
+                <Field label={t("settings.cloudOwnerPublicUrl")}>
                   <Input
                     value={form.publicUrl}
                     onChange={(e) => patch({ publicUrl: e.target.value })}
-                    placeholder="muzero://trusted-r2-drive#v1=…"
+                    placeholder="https://pub-xxxx.r2.dev"
                   />
-                  <span className="text-muted-foreground text-xs">
-                    {t("settings.addDriveSharedHint")}
-                  </span>
                 </Field>
-              )}
-
-              {message && (
-                <p
-                  className={
-                    status === "error"
-                      ? "text-destructive text-xs"
-                      : "text-muted-foreground text-xs"
-                  }
-                >
-                  {message}
+                <p className="text-muted-foreground text-xs">
+                  {t("settings.addDrivePublicSectionHint")}
                 </p>
-              )}
+                <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border bg-muted/25 p-3">
+                  <p className="text-muted-foreground text-xs">
+                    {t("settings.addDriveGuideCorsBody")}
+                  </p>
+                  <Button variant="outline" size="sm" onClick={() => void copyCorsJson()}>
+                    <ClipboardCopy />
+                    {t("settings.cloudCorsCopy")}
+                  </Button>
+                </div>
+              </div>
+              <ValidationStatus status={status} message={message} />
               {status === "ok" && (
                 <p className="text-primary text-xs">{t("settings.addDriveValidated")}</p>
               )}
-
-              <div className="flex items-center justify-end gap-2">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-muted-foreground text-xs">
+                  {t("settings.addDriveValidateOptionalHint")}
+                </p>
                 <Button
                   variant="outline"
                   size="sm"
@@ -424,14 +449,58 @@ export function AddDriveDialog({
                     ? t("settings.cloudOwnerChecking")
                     : t("settings.cloudOwnerValidate")}
                 </Button>
-                <Button size="sm" disabled={status !== "ok"} onClick={() => setStep(1)}>
-                  {t("settings.addDriveNext")}
-                </Button>
               </div>
+              <StepActions
+                backLabel={t("settings.addDriveBack")}
+                canAdvance={canAdvance}
+                onBack={() => setStep(1)}
+                onNext={goNext}
+                nextLabel={t("settings.addDriveNext")}
+              />
             </div>
           )}
 
-          {step === 1 && (
+          {mode === "shared" && step === 0 && (
+            <div className="flex min-w-0 flex-col gap-3">
+              <Field label={t("settings.addDriveShareUrl")}>
+                <Input
+                  value={form.publicUrl}
+                  onChange={(e) => patch({ publicUrl: e.target.value })}
+                  placeholder="muzero://trusted-r2-drive#v1=…"
+                />
+                <span className="text-muted-foreground text-xs">
+                  {t("settings.addDriveSharedHint")}
+                </span>
+              </Field>
+              <ValidationStatus status={status} message={message} />
+              {status === "ok" && (
+                <p className="text-primary text-xs">{t("settings.addDriveValidated")}</p>
+              )}
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-muted-foreground text-xs">
+                  {t("settings.addDriveValidateOptionalHint")}
+                </p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={!canValidate || status === "validating"}
+                  onClick={() => void validate()}
+                >
+                  <ShieldCheck />
+                  {status === "validating"
+                    ? t("settings.cloudOwnerChecking")
+                    : t("settings.cloudOwnerValidate")}
+                </Button>
+              </div>
+              <StepActions
+                canAdvance={canAdvance}
+                nextLabel={t("settings.addDriveNext")}
+                onNext={goNext}
+              />
+            </div>
+          )}
+
+          {((mode === "owner" && step === 3) || (mode === "shared" && step === 1)) && (
             <div className="flex min-w-0 flex-col gap-3">
               <div className="rounded-md border border-border bg-muted/25 p-3 text-muted-foreground text-xs">
                 <p className="flex items-center gap-2 text-foreground text-sm">
@@ -496,7 +565,7 @@ export function AddDriveDialog({
                 </div>
               )}
               <div className="flex items-center justify-between gap-2">
-                <Button variant="ghost" size="sm" onClick={() => setStep(0)}>
+                <Button variant="ghost" size="sm" onClick={() => setStep((current) => current - 1)}>
                   {t("settings.addDriveBack")}
                 </Button>
                 <Button size="sm" disabled={saving} onClick={() => void finish()}>
@@ -527,7 +596,29 @@ function AddDriveGuide({
   return (
     <aside className="flex min-w-0 flex-col gap-3 rounded-md border border-border bg-muted/25 p-3 text-sm">
       <p className="font-medium">{t("settings.addDriveGuideTitle")}</p>
-      {step === 0 && mode === "owner" && (
+      {mode === "owner" && step === 0 && (
+        <>
+          <GuideSection
+            title={t("settings.addDriveBucketSection")}
+            body={t("settings.addDriveBucketSectionHint")}
+          />
+          <GuideLink href={CLOUDFLARE_R2_DASHBOARD_URL}>
+            {t("settings.addDriveGuideDashboardLink")}
+          </GuideLink>
+        </>
+      )}
+      {mode === "owner" && step === 1 && (
+        <>
+          <GuideSection
+            title={t("settings.addDriveGuideWriteTitle")}
+            body={t("settings.addDriveGuideWriteBody")}
+          />
+          <GuideLink href={CLOUDFLARE_R2_TOKEN_DOCS_URL}>
+            {t("settings.addDriveGuideTokenLink")}
+          </GuideLink>
+        </>
+      )}
+      {mode === "owner" && step === 2 && (
         <>
           <GuideSection
             title={t("settings.addDriveGuidePublicReadTitle")}
@@ -537,18 +628,6 @@ function AddDriveGuide({
             title={t("settings.addDriveGuideCorsTitle")}
             body={t("settings.addDriveGuideCorsBody")}
           />
-          <GuideSection
-            title={t("settings.addDriveGuideWriteTitle")}
-            body={t("settings.addDriveGuideWriteBody")}
-          />
-          <div className="flex flex-col gap-2">
-            <GuideLink href={CLOUDFLARE_R2_DASHBOARD_URL}>
-              {t("settings.addDriveGuideDashboardLink")}
-            </GuideLink>
-            <GuideLink href={CLOUDFLARE_R2_TOKEN_DOCS_URL}>
-              {t("settings.addDriveGuideTokenLink")}
-            </GuideLink>
-          </div>
         </>
       )}
       {step === 0 && mode === "shared" && (
@@ -563,7 +642,7 @@ function AddDriveGuide({
           />
         </>
       )}
-      {step === 1 && (
+      {((mode === "owner" && step === 3) || (mode === "shared" && step === 1)) && (
         <>
           <GuideSection
             title={t("settings.addDriveGuideNameTitle")}
@@ -606,6 +685,54 @@ function GuideLink({ href, children }: { href: string; children: React.ReactNode
 
 function browserOrigin(): string {
   return globalThis.location?.origin ?? "http://localhost:41730";
+}
+
+function sourceHost(url: string): string {
+  try {
+    return new URL(url).host;
+  } catch {
+    return url;
+  }
+}
+
+function ValidationStatus({ status, message }: { status: ValidateStatus; message: string | null }) {
+  if (!message) return null;
+  return (
+    <p
+      className={status === "error" ? "text-destructive text-xs" : "text-muted-foreground text-xs"}
+    >
+      {message}
+    </p>
+  );
+}
+
+function StepActions({
+  canAdvance,
+  backLabel,
+  nextLabel,
+  onBack,
+  onNext,
+}: {
+  canAdvance: boolean;
+  backLabel?: string;
+  nextLabel: string;
+  onBack?: () => void;
+  onNext: () => void;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-2">
+      <div>
+        {onBack && (
+          <Button variant="ghost" size="sm" onClick={onBack}>
+            {backLabel}
+          </Button>
+        )}
+      </div>
+      <Button size="sm" disabled={!canAdvance} onClick={onNext}>
+        {nextLabel}
+      </Button>
+    </div>
+  );
 }
 
 function PostAddOption({

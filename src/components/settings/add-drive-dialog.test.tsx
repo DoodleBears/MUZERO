@@ -25,6 +25,7 @@ vi.mock("@/sync/cloud-drive-repo", () => ({
 }));
 
 vi.mock("@/sync/r2-healthcheck", () => ({
+  buildRecommendedR2Cors: () => [{ AllowedOrigins: ["http://localhost:41730"] }],
   checkR2PublicRead: (...args: unknown[]) => mocks.checkR2PublicRead(...args),
   checkR2WriteAccess: (...args: unknown[]) => mocks.checkR2WriteAccess(...args),
   maskSecret: (value: string) => `${value.slice(0, 2)}...`,
@@ -73,15 +74,11 @@ describe("AddDriveDialog", () => {
       />,
     );
 
-    expect(screen.getByText("settings.addDriveGuidePublicReadTitle")).toBeInTheDocument();
-    expect(screen.getByText("settings.addDriveGuideWriteTitle")).toBeInTheDocument();
+    expect(screen.getAllByText("settings.addDriveBucketSection").length).toBeGreaterThan(0);
     expect(
       screen.getByRole("link", { name: "settings.addDriveGuideDashboardLink" }),
     ).toHaveAttribute("href", "https://dash.cloudflare.com/?to=/:account/r2");
-    expect(screen.getByRole("link", { name: "settings.addDriveGuideTokenLink" })).toHaveAttribute(
-      "href",
-      "https://developers.cloudflare.com/r2/api/s3/tokens/",
-    );
+    expect(screen.queryByText("settings.addDriveGuideWriteTitle")).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /settings.addDriveModeShared/ }));
 
@@ -104,19 +101,23 @@ describe("AddDriveDialog", () => {
     fireEvent.change(screen.getByLabelText("settings.cloudOwnerBucket"), {
       target: { value: "muzero" },
     });
+    fireEvent.click(screen.getByRole("button", { name: "settings.addDriveNext" }));
+
     fireEvent.change(screen.getByLabelText("settings.cloudOwnerAccessKey"), {
       target: { value: "key" },
     });
     fireEvent.change(screen.getByLabelText("settings.cloudOwnerSecretKey"), {
       target: { value: "secret" },
     });
+    fireEvent.click(screen.getByRole("button", { name: "settings.addDriveNext" }));
+
     fireEvent.change(screen.getByLabelText("settings.cloudOwnerPublicUrl"), {
       target: { value: "https://pub.example.com/muzero/" },
     });
-
-    fireEvent.click(screen.getByRole("button", { name: /settings.cloudOwnerValidate/ }));
-    await screen.findByText("settings.addDriveValidated");
     fireEvent.click(screen.getByRole("button", { name: "settings.addDriveNext" }));
+
+    expect(mocks.checkR2PublicRead).not.toHaveBeenCalled();
+    expect(mocks.checkR2WriteAccess).not.toHaveBeenCalled();
 
     expect(screen.getByText("settings.addDriveAfterAddTitle")).toBeInTheDocument();
     expect(screen.getByLabelText("settings.addDriveSyncAfterAdd")).toBeChecked();
