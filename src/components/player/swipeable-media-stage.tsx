@@ -26,6 +26,7 @@ import { trackAlbum, trackArtists, trackHasCover, trackSubtitle } from "@/lib/tr
 import { cn } from "@/lib/utils";
 import { useNavStore } from "@/stores/nav-store";
 import { usePlayerStore } from "@/stores/player-store";
+import { CoverBacklightCanvas } from "./cover-backlight";
 import { MediaStage } from "./media-stage";
 import { StageTitleFallback } from "./stage-title-fallback";
 
@@ -121,7 +122,9 @@ export function SwipeableMediaStage({
   const coverEffectMode = resolveNowPlayingCoverEffectMode(settings.nowPlayingCoverEffectMode);
   const backlight = resolveNowPlayingCoverBacklightAppearance(settings);
   const coverEffect: SwipeCoverEffect = {
+    backlightBlur: backlight.blur,
     backlightOpacity: backlight.opacity / 100,
+    backlightSaturation: backlight.saturation,
     mode: coverEffectMode,
   };
   const stageCover = useTrackCoverResource(current);
@@ -150,7 +153,7 @@ export function SwipeableMediaStage({
   const stackVisible = !!stack;
   const stackActive =
     stackVisible && (!!dragDirection || committing || !!settleTarget || handoffFading);
-  const baseCoverBacklightEnabled = (!committing && !settleTarget) || handoffFading;
+  const baseCoverBacklightEnabled = !stackActive || handoffFading;
 
   const travel = Math.max(width, FALLBACK_WIDTH);
   const visualX = useTransform(x, (value) => value * DRAG_GAIN);
@@ -560,6 +563,7 @@ export function SwipeableMediaStage({
               height: overlayRect.height,
               left: overlayRect.left,
               top: overlayRect.top,
+              willChange: "opacity",
               width: overlayRect.width,
             }}
             transition={{ duration: HANDOFF_DURATION_SEC, ease: "easeOut" }}
@@ -668,7 +672,7 @@ export function SwipeableMediaStage({
             style={{
               x,
               opacity: baseHidden ? 0 : 1,
-              willChange: "transform",
+              willChange: "transform, opacity",
             }}
           >
             <MediaStage coverBacklightEnabled={baseCoverBacklightEnabled} />
@@ -706,7 +710,9 @@ type StageOverlayRect = {
 };
 type VisualTrack = { initialCoverUrl: string | null; track: Track };
 type SwipeCoverEffect = {
+  backlightBlur: number;
   backlightOpacity: number;
+  backlightSaturation: number;
   mode: "shadow" | "backlight" | "off";
 };
 type SwipeStack = {
@@ -771,6 +777,7 @@ function CoverflowCard({
         scale: card.scale,
         transformOrigin: "center center",
         transformStyle: "preserve-3d",
+        willChange: "transform, opacity",
       }}
     >
       <TrackVisual
@@ -940,23 +947,14 @@ function TrackVisual({
           aria-hidden
           initial={backlightInitial ? { opacity: 0 } : false}
           animate={{ opacity: coverEffect.backlightOpacity }}
+          style={{ willChange: "opacity" }}
           transition={{ duration: 0.42, ease: "easeOut" }}
           className="pointer-events-none absolute inset-0 z-0 now-playing-cover-backlight-clip"
         >
-          <img
-            src={coverUrl}
-            alt=""
-            aria-hidden
-            referrerPolicy="no-referrer"
-            draggable={false}
-            className="absolute inset-0 size-full object-cover album-cover-radius"
-            style={{
-              transform: "scale(var(--now-playing-cover-backlight-scale, 1.12))",
-              filter: [
-                "blur(var(--now-playing-cover-backlight-blur, 20px))",
-                "saturate(var(--now-playing-cover-backlight-saturation, 400%))",
-              ].join(" "),
-            }}
+          <CoverBacklightCanvas
+            blur={coverEffect.backlightBlur}
+            saturation={coverEffect.backlightSaturation}
+            url={coverUrl}
           />
         </motion.div>
       )}
@@ -965,6 +963,7 @@ function TrackVisual({
           src={coverUrl}
           alt=""
           // Streamed covers come from third-party hosts that 403 a foreign referer.
+          decoding="async"
           referrerPolicy="no-referrer"
           draggable={false}
           className="absolute inset-0 size-full object-cover"
