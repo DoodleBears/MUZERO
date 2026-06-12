@@ -1,4 +1,4 @@
-import { AudioWaveform, EyeOff } from "lucide-react";
+import { Eye, EyeOff, ScanEye } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { ControlTooltip } from "@/components/player/control-tooltip";
 import { Button } from "@/components/ui/button";
@@ -33,7 +33,7 @@ export function VisualizerModeButton({ className }: { className?: string }) {
   const placement = resolveVisualizerPlacement(settings);
   const setPanelOpen = useVisualizerPanelStore((s) => s.setOpen);
   const active = placement !== "off";
-  const Icon = placement === "idle" ? EyeOff : AudioWaveform;
+  const Icon = placement === "off" ? EyeOff : placement === "idle" ? ScanEye : Eye;
   const label = t("visualizer.toggleMode", {
     mode: t(PLACEMENT_LABEL_KEYS[placement]),
   });
