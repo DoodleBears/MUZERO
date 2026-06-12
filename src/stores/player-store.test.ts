@@ -8,6 +8,7 @@ import type { Track } from "@/db/types";
 // engine and capture loadUrl/loadBlob/play. (vi.hoisted survives vi.resetModules
 // because it lives in this test module, not the re-imported store module.)
 const mediaEngineMock = vi.hoisted(() => ({
+  instances: [] as Array<{ callbacks: MediaEngineCallbacksForTest }>,
   loadUrl: vi.fn(() => Promise.resolve()),
   loadBlob: vi.fn(() => Promise.resolve()),
   play: vi.fn(() => Promise.resolve()),
@@ -30,6 +31,7 @@ vi.mock("@/player/media-engine", () => {
     setDiagnosticsContext = mediaEngineMock.setDiagnosticsContext;
     constructor(callbacks: unknown = {}) {
       this.callbacks = callbacks;
+      mediaEngineMock.instances.push(this as unknown as { callbacks: MediaEngineCallbacksForTest });
     }
     setCallbacks(callbacks: unknown) {
       this.callbacks = callbacks;
@@ -56,6 +58,10 @@ vi.mock("@/lib/platform", () => ({
 
 let openedDb: MuzeroDB | null = null;
 
+interface MediaEngineCallbacksForTest {
+  onTimeUpdate?: (positionSec: number, durationSec: number) => void;
+}
+
 async function deleteDefaultDb() {
   await new Promise<void>((resolve) => {
     const req = indexedDB.deleteDatabase("muzero-db");
@@ -70,6 +76,7 @@ beforeEach(async () => {
   mediaEngineMock.play.mockClear();
   mediaEngineMock.seek.mockClear();
   mediaEngineMock.setDiagnosticsContext.mockClear();
+  mediaEngineMock.instances = [];
   platformFetchMock.mockClear();
   platformFetchMock.mockResolvedValue(
     new Response("remote", { headers: { "content-type": "audio/mpeg" } }),
@@ -201,6 +208,46 @@ describe("player-store playback resume", () => {
     expectLoadedBlob("audio", "audio/mpeg");
     expect(mediaEngineMock.seek).toHaveBeenCalledWith(12);
     expect(mediaEngineMock.play).toHaveBeenCalled();
+  });
+
+  it("ignores stale timeupdate events from the previous track during a switch", async () => {
+    const { db, first, second, usePlayerStore } = await seedQueue(0);
+    await db.mediaBlobs.bulkPut([
+      {
+        id: "blb_first_switch",
+        trackId: first.id,
+        role: "media",
+        mime: "audio/mpeg",
+        bytes: 3,
+        blob: new Blob([new Uint8Array([1, 2, 3])], { type: "audio/mpeg" }),
+      },
+      {
+        id: "blb_second_switch",
+        trackId: second.id,
+        role: "media",
+        mime: "audio/mpeg",
+        bytes: 3,
+        blob: new Blob([new Uint8Array([4, 5, 6])], { type: "audio/mpeg" }),
+      },
+    ]);
+    await db.tracks.update(first.id, { status: "ready", blobId: "blb_first_switch" });
+    await db.tracks.update(second.id, { status: "ready", blobId: "blb_second_switch" });
+    usePlayerStore.getState().init();
+
+    await waitFor(() => expect(usePlayerStore.getState().queue).toHaveLength(2));
+    await usePlayerStore.getState().playIndex(0);
+    const engine = mediaEngineMock.instances.at(-1);
+    if (!engine) throw new Error("expected media engine instance");
+    mediaEngineMock.seek.mockClear();
+    mediaEngineMock.loadBlob.mockImplementationOnce(async () => {
+      engine.callbacks.onTimeUpdate?.(42, 120);
+    });
+
+    await usePlayerStore.getState().playIndex(1);
+
+    expect(usePlayerStore.getState().currentIndex).toBe(1);
+    expect(usePlayerStore.getState().positionSec).toBe(0);
+    expect(mediaEngineMock.seek).not.toHaveBeenCalled();
   });
 
   it("loads a remote R2 track from playback cache before showing loading or fetching", async () => {

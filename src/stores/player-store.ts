@@ -525,6 +525,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       },
       onTimeUpdate: (positionSec, durationSec) => {
         const track = currentTrack(get());
+        if (!track || loadedTrackId !== track.id) return;
         const nextDuration =
           playableDurationSec(durationSec) || playableDurationSec(track?.durationSec);
         set({ positionSec, durationSec: nextDuration });
