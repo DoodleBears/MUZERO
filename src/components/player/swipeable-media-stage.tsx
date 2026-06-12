@@ -543,8 +543,12 @@ export function SwipeableMediaStage({
     return () => el.removeEventListener("wheel", onWheel);
   }, []);
 
+  const overlayPortalTarget =
+    typeof document !== "undefined"
+      ? (containerRef.current?.closest("main") ?? document.body)
+      : null;
   const stackOverlay =
-    stackActive && overlayRect && typeof document !== "undefined"
+    stackActive && overlayRect && overlayPortalTarget
       ? createPortal(
           <motion.div
             aria-hidden
@@ -591,7 +595,7 @@ export function SwipeableMediaStage({
               </>
             )}
           </motion.div>,
-          document.body,
+          overlayPortalTarget,
         )
       : null;
 
