@@ -20,7 +20,7 @@ import {
   prependTrackIds,
   updateSession,
 } from "@/db/repositories";
-import type { PlayQueue, Track } from "@/db/types";
+import type { DjSession, PlayQueue, Track } from "@/db/types";
 import { describeBrief, type TrackBrief, trackBriefSchema } from "@/dj/dj-brief-schema";
 import { newId } from "@/lib/id";
 import { searchTracks } from "@/lib/track-search";
@@ -163,6 +163,16 @@ export const setAddBySearchInputSchema = z.object({
 });
 
 export type SetAddBySearchInput = z.input<typeof setAddBySearchInputSchema>;
+
+export const createSetInputSchema = z.object({
+  name: z.string().max(80).optional(),
+  seedPrompt: z.string().default(""),
+  autoExtend: z.boolean().default(false),
+  /** Existing local track ids to seed the new set with, in this order (optional). */
+  trackIds: z.array(z.string().min(1)).max(500).optional(),
+});
+
+export type CreateSetInput = z.input<typeof createSetInputSchema>;
 
 /**
  * Playback side-effects the agent can trigger. Kept behind an interface so the
@@ -403,6 +413,36 @@ export async function executeSetAddBySearch(
 }
 
 /**
+ * Create a set and (optionally) populate it with existing local track ids in one
+ * call — so "make a playlist with these songs" is a single step instead of
+ * create-then-add. Unknown ids are skipped. Returns the new set plus how many
+ * tracks landed. Free / undoable.
+ */
+export async function executeCreateSet(
+  rawInput: CreateSetInput,
+  deps: { db?: MuzeroDB } = {},
+): Promise<DjSession & { addedTrackCount: number }> {
+  const input = createSetInputSchema.parse(rawInput);
+  const db = deps.db ?? defaultDb;
+  const session = await createSession(
+    { name: input.name, seedPrompt: input.seedPrompt, config: { autoExtend: input.autoExtend } },
+    db,
+  );
+  let added = 0;
+  if (input.trackIds?.length) {
+    const present = await getTracksByIds(input.trackIds, db); // skips unknown ids
+    await prependTrackIds(
+      session.id,
+      present.map((t) => t.id),
+      db,
+    );
+    added = present.length;
+  }
+  const final = (await getSession(session.id, db)) ?? session;
+  return { ...final, addedTrackCount: added };
+}
+
+/**
  * Search the user's ENABLED streaming sources (YouTube / Bilibili / NetEase) for
  * songs. Read-only and cheap — the whole point is that search costs nothing
  * (unlike paid generation), so a locally-hosted LLM can curate from real songs.
@@ -500,14 +540,9 @@ export function createDjChatTools(deps: DjChatToolDeps = {}): ToolSet {
     }),
     set_create: tool({
       description:
-        "Create a local set. A seeded DJ set can auto-extend; curated/upload sets should not.",
-      inputSchema: z.object({
-        name: z.string().max(80).optional(),
-        seedPrompt: z.string().default(""),
-        autoExtend: z.boolean().default(false),
-      }),
-      execute: async ({ name, seedPrompt, autoExtend }) =>
-        createSession({ name, seedPrompt, config: { autoExtend } }, db),
+        "Create a local set, optionally seeding it with existing local track ids (in order) so 'make a playlist with these songs' is one call. A seeded DJ set can auto-extend; curated/upload sets should not.",
+      inputSchema: createSetInputSchema,
+      execute: (input) => executeCreateSet(input, { db }),
     }),
     set_update: tool({
       description: "Update free set metadata such as name or seed prompt.",

@@ -52,7 +52,9 @@ export function createDjChatTransport({
         instructions: `${DJ_CHAT_SYSTEM_PROMPT}\n\n${nowPlaying}`,
         stopWhen: stepCountIs(12),
         temperature: 0.7,
-        maxOutputTokens: 1200,
+        // User-tunable (Settings); default generous so multi-step tool runs and
+        // longer replies aren't cut off mid-thought.
+        maxOutputTokens: settings.chatMaxOutputTokens ?? 4096,
       });
       const transport = new DirectChatTransport({ agent });
       return transport.sendMessages(options);

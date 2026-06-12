@@ -15,6 +15,7 @@ import { createDjEngine } from "@/dj/dj-engine";
 import { createMockMusicGenProvider } from "@/musicgen/mock-provider";
 import {
   createDjChatTools,
+  executeCreateSet,
   executeGenerateTracks,
   executeOnlineAddTracks,
   executeOnlineSearchTracks,
@@ -483,5 +484,31 @@ describe("curation + queue clear", () => {
     await tools.play_set.execute?.({ sessionId: "ses_1" }, opts);
     await tools.play_track.execute?.({ trackId: "trk_1" }, opts);
     expect(calls).toEqual(["set:ses_1", "track:trk_1"]);
+  });
+
+  it("set_create seeds the new set with given track ids in order (one call)", async () => {
+    const src = await createSession({ seedPrompt: "src" }, db);
+    const gen = await executeGenerateTracks(
+      { sessionId: src.id, briefs: [brief("A"), brief("B"), brief("C")] },
+      { db, providerId: "mock" },
+    );
+    const [a, b, c] = gen.diff.createdTrackIds;
+
+    const created = await executeCreateSet(
+      { name: "Mix", autoExtend: false, trackIds: [a, b, c, "trk_missing"] },
+      { db },
+    );
+    expect(created.addedTrackCount).toBe(3); // unknown id skipped
+    expect(created.name).toBe("Mix");
+    expect(created.trackIds).toEqual([a, b, c]); // order preserved
+
+    const reloaded = await getSession(created.id, db);
+    expect(reloaded?.trackIds).toEqual([a, b, c]);
+  });
+
+  it("set_create with no track ids makes an empty set", async () => {
+    const created = await executeCreateSet({ name: "Empty" }, { db });
+    expect(created.addedTrackCount).toBe(0);
+    expect(created.trackIds).toEqual([]);
   });
 });

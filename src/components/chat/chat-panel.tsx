@@ -1,6 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { shouldAutoDispatchQueued } from "@/chat/dj-chat-auto-dispatch";
-import { evaluateChatContextBudget } from "@/chat/dj-chat-context-budget";
+import {
+  DEFAULT_CHAT_CONTEXT_BUDGET,
+  evaluateChatContextBudget,
+} from "@/chat/dj-chat-context-budget";
 import { pendingApprovalIds } from "@/chat/dj-chat-runtime-actor";
 import {
   getOrCreateDjChatRuntimeActor,
@@ -38,6 +41,8 @@ interface ChatPanelProps {
   toolLabels?: ChatToolLabels;
   /** `/`-commands offered in the composer (e.g. start a new session). */
   slashCommands?: SlashCommand[];
+  /** Context-window ceiling (tokens) for the warn/block budget. Defaults to 128k. */
+  contextMaxTokens?: number;
 }
 
 export function ChatPanel({
@@ -52,6 +57,7 @@ export function ChatPanel({
   queueLabels,
   toolLabels,
   slashCommands,
+  contextMaxTokens,
 }: ChatPanelProps) {
   const snapshot = useDjChatRuntimeSnapshot(sessionId, db);
   const [draft, setDraft] = useState("");
@@ -98,7 +104,10 @@ export function ChatPanel({
   // explain); compress moves the pointer to the latest user turn (old messages
   // stay visible, never silently truncated).
   const contextStartIndex = snapshot?.meta.contextStartIndex ?? 0;
-  const budgetResult = evaluateChatContextBudget(messages.slice(contextStartIndex));
+  const budgetResult = evaluateChatContextBudget(messages.slice(contextStartIndex), {
+    ...DEFAULT_CHAT_CONTEXT_BUDGET,
+    maxTokens: contextMaxTokens ?? DEFAULT_CHAT_CONTEXT_BUDGET.maxTokens,
+  });
   const sendBlocked = budgetResult.status === "block";
 
   return (

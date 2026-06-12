@@ -596,7 +596,7 @@ export interface AppSettings {
   /** Opacity of the background visualizer layer, 0–100. Default 100. */
   visualizerBackgroundOpacity?: number;
   /** How the background visualizer (spectrum) blends with the layers below it
-   *  (flow + background). CSS mix-blend-mode. Default "normal". */
+   *  (flow + background). CSS mix-blend-mode. Default "screen" (glow). */
   visualizerBlendMode?: FlowBlendMode;
   /** Dim over the background visualizer WHEN lyrics are shown over it. Default 40. */
   visualizerBgDimLyrics?: number;
@@ -739,6 +739,12 @@ export interface AppSettings {
   apiKeysByPresetId?: Partial<Record<LlmProviderPresetId, string>>;
   /** Last selected model per provider preset, restored when switching back (ClipCombo parity). */
   modelsByPresetId?: Partial<Record<LlmProviderPresetId, string>>;
+  /** Max output tokens per DJ-chat generation step. Higher = longer replies / less
+   * truncation on multi-step tool runs; costs more. Defaults to 4096 when unset. */
+  chatMaxOutputTokens?: number;
+  /** Context-window ceiling (tokens) the DJ chat warns/blocks at. Raise it for
+   * big-context models so long chats aren't blocked early. Defaults to 128000. */
+  chatMaxContextTokens?: number;
   /** Default selected cloud drive. R2 credentials remain device-local settings, never synced. */
   defaultCloudDriveId?: string;
   /** R2 write credentials by local drive id. Device-local only; never exported to manifests. */

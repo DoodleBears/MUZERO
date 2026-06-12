@@ -436,6 +436,7 @@ export function DjChatEntry({
                       send: t("chat.queueSend"),
                       title: t("chat.queueTitle"),
                     }}
+                    contextMaxTokens={settings.chatMaxContextTokens}
                     sessionId={activeSessionId}
                     slashCommands={slashCommands}
                     toolLabels={{

@@ -27,6 +27,15 @@ import type { CustomLlmProvider } from "@/db/types";
 import { useSettings } from "@/hooks/use-app-data";
 import { openExternalUrl } from "@/lib/platform";
 
+const DEFAULT_CHAT_MAX_OUTPUT = 4096;
+const DEFAULT_CHAT_MAX_CONTEXT = 128_000;
+
+/** Parse a numeric settings input, falling back when it's blank/invalid. */
+function commitNumber(raw: string, fallback: number): number {
+  const n = Math.round(Number(raw));
+  return Number.isFinite(n) && n > 0 ? n : fallback;
+}
+
 /**
  * Multi-provider LLM settings (chat PRD §6.1, ClipCombo parity): a provider
  * grid showing per-preset key status (click selects for editing), a per-provider
@@ -42,6 +51,8 @@ export function LlmProviderSettings() {
   const presets = allLlmProviderPresets(customProviders);
   const selection = llmSelectionFromSettings(settings, customProviders);
   const [editingId, setEditingId] = useState<LlmProviderPresetId | null>(null);
+  const maxOutputId = useId();
+  const maxContextId = useId();
   const activeId = editingId ?? selection.presetId;
   const activePreset = resolveLlmProviderPreset(activeId, customProviders);
   const activeCustom = isCustomLlmProviderId(activeId)
@@ -151,6 +162,51 @@ export function LlmProviderSettings() {
             ? t("settings.llmModelIsDefault")
             : t("settings.llmModelSetsDefault")}
         </span>
+      </div>
+
+      {/* DJ chat token limits — bigger = longer replies / fewer mid-run cutoffs and
+          later context blocking. Tune for your model. */}
+      <div className="flex flex-col gap-1.5">
+        <span className="text-muted-foreground text-xs">{t("settings.chatLimits")}</span>
+        <div className="flex gap-2">
+          <div className="flex min-w-0 flex-1 flex-col gap-1">
+            <label className="text-muted-foreground text-[11px]" htmlFor={maxOutputId}>
+              {t("settings.chatMaxOutput")}
+            </label>
+            <Input
+              defaultValue={settings.chatMaxOutputTokens ?? DEFAULT_CHAT_MAX_OUTPUT}
+              id={maxOutputId}
+              inputMode="numeric"
+              key={`out-${settings.chatMaxOutputTokens ?? DEFAULT_CHAT_MAX_OUTPUT}`}
+              min={256}
+              onBlur={(e) =>
+                void saveSettings({
+                  chatMaxOutputTokens: commitNumber(e.target.value, DEFAULT_CHAT_MAX_OUTPUT),
+                })
+              }
+              type="number"
+            />
+          </div>
+          <div className="flex min-w-0 flex-1 flex-col gap-1">
+            <label className="text-muted-foreground text-[11px]" htmlFor={maxContextId}>
+              {t("settings.chatMaxContext")}
+            </label>
+            <Input
+              defaultValue={settings.chatMaxContextTokens ?? DEFAULT_CHAT_MAX_CONTEXT}
+              id={maxContextId}
+              inputMode="numeric"
+              key={`ctx-${settings.chatMaxContextTokens ?? DEFAULT_CHAT_MAX_CONTEXT}`}
+              min={4000}
+              onBlur={(e) =>
+                void saveSettings({
+                  chatMaxContextTokens: commitNumber(e.target.value, DEFAULT_CHAT_MAX_CONTEXT),
+                })
+              }
+              type="number"
+            />
+          </div>
+        </div>
+        <span className="text-muted-foreground text-[11px]">{t("settings.chatLimitsHint")}</span>
       </div>
     </div>
   );
