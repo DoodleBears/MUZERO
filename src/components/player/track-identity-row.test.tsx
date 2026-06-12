@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Track } from "@/db/types";
@@ -18,7 +18,6 @@ vi.mock("motion/react", async () => {
         dragElastic,
         dragMomentum,
         dragSnapToOrigin,
-        exit,
         initial,
         layoutId,
         onDragEnd,
@@ -33,7 +32,6 @@ vi.mock("motion/react", async () => {
       void dragElastic;
       void dragMomentum;
       void dragSnapToOrigin;
-      void exit;
       void initial;
       void layoutId;
       void onDragEnd;
@@ -131,9 +129,47 @@ describe("TrackIdentityRow", () => {
 
     expect(screen.queryByTestId("dock-cover-loading")).not.toBeInTheDocument();
   });
+
+  it("updates title and artist line when the current queue cursor changes", () => {
+    act(() => {
+      usePlayerStore.setState({
+        currentIndex: 0,
+        queue: [
+          track("trk_first", "First Song", {
+            mediaMetadata: {
+              artists: ["First Artist"],
+              parsedAt: 1,
+              parser: "manual",
+            },
+          }),
+          track("trk_second", "Second Song", {
+            mediaMetadata: {
+              album: "Second Album",
+              artists: ["Second Artist"],
+              parsedAt: 1,
+              parser: "manual",
+            },
+          }),
+        ],
+      });
+    });
+
+    render(<TrackIdentityRow />);
+
+    expect(screen.getByText("First Song")).toBeInTheDocument();
+    expect(screen.getByText("First Artist")).toBeInTheDocument();
+    act(() => {
+      usePlayerStore.setState({ currentIndex: 1 });
+    });
+
+    expect(screen.getByText("Second Song")).toBeInTheDocument();
+    expect(screen.getByText("Second Artist - Second Album")).toBeInTheDocument();
+    expect(screen.queryByText("First Song")).not.toBeInTheDocument();
+    expect(screen.queryByText("First Artist")).not.toBeInTheDocument();
+  });
 });
 
-function track(id: string, title: string): Track {
+function track(id: string, title: string, overrides: Partial<Track> = {}): Track {
   return {
     id,
     sessionId: "ses_1",
@@ -148,5 +184,6 @@ function track(id: string, title: string): Track {
     liked: false,
     tags: [],
     remoteCoverUrl: "https://cover.example/cover.jpg",
+    ...overrides,
   };
 }

@@ -1,5 +1,5 @@
 import { Loader2, Pause, Play } from "lucide-react";
-import { AnimatePresence, motion } from "motion/react";
+import { motion } from "motion/react";
 import { type ReactNode, useEffect, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { useShallow } from "zustand/react/shallow";
@@ -226,24 +226,20 @@ export function TrackIdentityRow({
             )}
           </motion.span>
           <span className="relative min-w-0 flex-1">
-            {/* Slide + fade the title/artist on track change. */}
-            <AnimatePresence mode="wait" initial={false}>
-              <motion.span
-                key={track?.id ?? "none"}
-                initial={{ opacity: 0, y: 6 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -6 }}
-                transition={{ duration: 0.2 }}
-                className="block min-w-0"
-              >
-                <span className="block truncate text-sm font-semibold">
-                  {track?.title ?? "MUZERO"}
-                </span>
-                <span className="block truncate text-xs text-muted-foreground">
-                  {track ? track.subtitle : t("app.pressPlay")}
-                </span>
-              </motion.span>
-            </AnimatePresence>
+            <motion.span
+              key={track?.id ?? "none"}
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.18 }}
+              className="block min-w-0"
+            >
+              <span className="block truncate text-sm font-semibold">
+                {track?.title ?? "MUZERO"}
+              </span>
+              <span className="block truncate text-xs text-muted-foreground">
+                {track ? track.subtitle : t("app.pressPlay")}
+              </span>
+            </motion.span>
           </span>
         </motion.button>
       </CurrentTrackContextMenu>
