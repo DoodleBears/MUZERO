@@ -114,6 +114,7 @@ import { matchesRemoteSearchTrack } from "@/sync/r2-search-catalog";
 
 type GalleryView = "list" | "grid";
 type GalleryMode = "sets" | "tracks" | "albums" | "artists";
+type GalleryWallMode = Exclude<GalleryMode, "tracks">;
 const GALLERY_MODES: GalleryMode[] = ["sets", "tracks", "albums", "artists"];
 /** Direct-jump shortcut action → gallery tab (bare 1/2/3/4 on the wall). */
 const GALLERY_TAB_ACTIONS: ReadonlyArray<readonly [string, GalleryMode]> = [
@@ -129,7 +130,12 @@ const SEARCH_PLACEHOLDER_KEY = {
   artists: "gallery.searchArtists",
 } as const satisfies Record<GalleryMode, string>;
 const MODE_KEY = "muzero-gallery-mode";
-const VIEW_KEY = "muzero-gallery-view";
+const LEGACY_VIEW_KEY = "muzero-gallery-view";
+const VIEW_KEYS = {
+  sets: "muzero-gallery-view-sets",
+  albums: "muzero-gallery-view-albums",
+  artists: "muzero-gallery-view-artists",
+} as const satisfies Record<GalleryWallMode, string>;
 const EMPTY_MEMORY_NOTES = new Map<string, string[]>();
 const TRACK_ROW_SELECTOR = "[data-muzero-track-row]";
 /** The single shared `view-transition-name` the tapped wall cover and its detail
@@ -141,6 +147,20 @@ function savedGalleryMode(): GalleryMode {
   if (typeof localStorage === "undefined") return "tracks";
   const saved = localStorage.getItem(MODE_KEY);
   return GALLERY_MODES.includes(saved as GalleryMode) ? (saved as GalleryMode) : "tracks";
+}
+
+function isGalleryView(value: string | null): value is GalleryView {
+  return value === "grid" || value === "list";
+}
+
+function savedGalleryView(mode: GalleryWallMode): GalleryView {
+  if (typeof localStorage === "undefined") return "grid";
+  const saved = localStorage.getItem(VIEW_KEYS[mode]) ?? localStorage.getItem(LEGACY_VIEW_KEY);
+  return isGalleryView(saved) ? saved : "grid";
+}
+
+function isGalleryWallMode(mode: GalleryMode): mode is GalleryWallMode {
+  return mode !== "tracks";
 }
 
 function normalizeDescription(value: string): string {
@@ -185,17 +205,17 @@ export function SearchPage() {
   const [trackSort, setTrackSort] = useState<TrackSort>("created");
   const [trackSortDir, setTrackSortDir] = useState<SortDir>(TRACK_SORT_DEFAULT_DIR.created);
   const [likedOnly, setLikedOnly] = useState(false);
-  // 专辑 / 歌手 ordering — one shared sort across both entity walls (like `view`).
+  // 专辑 / 歌手 ordering — one shared sort across both entity walls.
   const [entitySort, setEntitySort] = useState<EntitySort>("name");
   const [entitySortDir, setEntitySortDir] = useState<SortDir>(ENTITY_SORT_DEFAULT_DIR.name);
   const [selectedLibraryTrackId, setSelectedLibraryTrackId] = useState<string | null>(null);
   const [selectedArtistKey, setSelectedArtistKey] = useState<string | null>(null);
   const [selectedAlbumKey, setSelectedAlbumKey] = useState<string | null>(null);
-  const [view, setView] = useState<GalleryView>(() =>
-    (typeof localStorage !== "undefined" && localStorage.getItem(VIEW_KEY)) === "grid"
-      ? "grid"
-      : "list",
-  );
+  const [viewByMode, setViewByMode] = useState<Record<GalleryWallMode, GalleryView>>(() => ({
+    sets: savedGalleryView("sets"),
+    albums: savedGalleryView("albums"),
+    artists: savedGalleryView("artists"),
+  }));
   const [deletingSet, setDeletingSet] = useState<DjSession | null>(null);
   const [deletingEntity, setDeletingEntity] = useState<{
     kind: "album" | "artist";
@@ -258,6 +278,7 @@ export function SearchPage() {
   const deleteSession = usePlayerStore((s) => s.deleteSession);
   const setUploadTarget = useUploadTargetStore((s) => s.setTarget);
   const setCoverTarget = useCoverTargetStore((s) => s.setCoverTarget);
+  const activeWallView = isGalleryWallMode(mode) ? viewByMode[mode] : "list";
 
   // Songs that live ONLY in the set being deleted — shown in the "+ songs" option.
   const deletingExclusiveCount = useMemo(() => {
@@ -596,8 +617,9 @@ export function SearchPage() {
   useEffect(() => () => setCoverTarget(null), [setCoverTarget]);
 
   function setViewPref(next: GalleryView) {
-    setView(next);
-    if (typeof localStorage !== "undefined") localStorage.setItem(VIEW_KEY, next);
+    if (!isGalleryWallMode(mode)) return;
+    setViewByMode((prev) => (prev[mode] === next ? prev : { ...prev, [mode]: next }));
+    if (typeof localStorage !== "undefined") localStorage.setItem(VIEW_KEYS[mode], next);
   }
 
   function setModePref(next: GalleryMode) {
@@ -917,7 +939,7 @@ export function SearchPage() {
               <Plus className="size-4" /> {t("gallery.newSet")}
             </Button>
           )}
-          {mode !== "tracks" && <ViewToggleGroup view={view} onChange={setViewPref} />}
+          {mode !== "tracks" && <ViewToggleGroup view={activeWallView} onChange={setViewPref} />}
         </div>
       </div>
 
@@ -978,7 +1000,7 @@ export function SearchPage() {
                   <VirtualCardGrid
                     gridRef={galleryRef}
                     items={shown}
-                    view={view}
+                    view={activeWallView}
                     getKey={getSetKey}
                     scrollElement={wallScrollEl}
                     lenisRef={wallLenisRef}
@@ -993,7 +1015,7 @@ export function SearchPage() {
                         coverTrack={
                           item.coverTrackId ? trackById.get(item.coverTrackId) : undefined
                         }
-                        view={view}
+                        view={activeWallView}
                         coverViewTransitionName={coverMorphName(`set:${item.session.id}`)}
                         onEnter={() => openSet(item.session.id)}
                         onPlay={() => void playSet(item.session.id)}
@@ -1207,7 +1229,7 @@ export function SearchPage() {
               <VirtualCardGrid
                 gridRef={galleryRef}
                 items={albumItems}
-                view={view}
+                view={activeWallView}
                 getKey={getEntityKey}
                 scrollElement={wallScrollEl}
                 lenisRef={wallLenisRef}
@@ -1220,7 +1242,7 @@ export function SearchPage() {
                   <EntityCard
                     item={item}
                     kind="album"
-                    view={view}
+                    view={activeWallView}
                     coverTrack={item.coverTrackId ? trackById.get(item.coverTrackId) : undefined}
                     coverViewTransitionName={coverMorphName(`album:${item.key}`)}
                     onOpen={() => openAlbum(item.key)}
@@ -1251,7 +1273,7 @@ export function SearchPage() {
               <VirtualCardGrid
                 gridRef={galleryRef}
                 items={artistItems}
-                view={view}
+                view={activeWallView}
                 getKey={getEntityKey}
                 scrollElement={wallScrollEl}
                 lenisRef={wallLenisRef}
@@ -1264,7 +1286,7 @@ export function SearchPage() {
                   <EntityCard
                     item={item}
                     kind="artist"
-                    view={view}
+                    view={activeWallView}
                     coverTrack={item.coverTrackId ? trackById.get(item.coverTrackId) : undefined}
                     coverViewTransitionName={coverMorphName(`artist:${item.key}`)}
                     onOpen={() => openArtist(item.key)}
@@ -1791,8 +1813,8 @@ function ViewToggleGroup({
 
 /**
  * The 专辑 / 歌手 sort row — name / track count / total duration / last played.
- * Both entity walls share one sort (like the grid⇄list view toggle), so this is
- * rendered identically in each. Reuses the existing gallery sort i18n keys.
+ * Both entity walls share one sort, so this is rendered identically in each.
+ * Reuses the existing gallery sort i18n keys.
  */
 function EntitySortRow({
   sort,
