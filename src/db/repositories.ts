@@ -848,6 +848,11 @@ export function getTrackLyrics(
   return db.lyrics.where("trackId").equals(trackId).first();
 }
 
+/** Every stored lyrics row. Used to search tracks by their lyric text. */
+export function listAllLyrics(db: MuzeroDB = defaultDb): Promise<TrackLyrics[]> {
+  return db.lyrics.toArray();
+}
+
 /**
  * Upsert a track's lyrics (auto-fetched or manual). Reuses the existing row id so
  * the 1:1 mapping stays stable. `record.status === "notFound"` is the negative

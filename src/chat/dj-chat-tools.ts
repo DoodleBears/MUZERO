@@ -10,6 +10,7 @@ import {
   getSession,
   getSettings,
   getTracksByIds,
+  listAllLyrics,
   listAllMemories,
   listAllTracks,
   listSessions,
@@ -24,7 +25,7 @@ import {
 import type { DjSession, PlayQueue, Track } from "@/db/types";
 import { describeBrief, type TrackBrief, trackBriefSchema } from "@/dj/dj-brief-schema";
 import { newId } from "@/lib/id";
-import { searchTracks } from "@/lib/track-search";
+import { lyricsSearchFields, searchTracks } from "@/lib/track-search";
 import {
   generatedTrackMemoryNote,
   musicGenProviderPresetKey,
@@ -192,6 +193,31 @@ export const addMemoryInputSchema = z.object({
 });
 
 export type AddMemoryInput = z.input<typeof addMemoryInputSchema>;
+
+export const lyricsSearchInputSchema = z.object({
+  /** Words/phrases to find in song lyrics. */
+  queries: z.array(z.string().min(1)).min(1).max(8),
+  /** "any" = lyrics matching ANY keyword; "all" = ALL keywords. */
+  match: z.enum(["any", "all"]).default("any"),
+  limit: z.number().int().min(1).max(200).default(30),
+  /** Page offset into the matches; pass the previous call's `nextCursor` to page. */
+  cursor: z.number().int().min(0).default(0),
+});
+
+export type LyricsSearchInput = z.input<typeof lyricsSearchInputSchema>;
+
+/** First lyric line containing a term, timestamp tags stripped, truncated. */
+function lyricSnippet(fields: readonly string[], terms: readonly string[]): string | undefined {
+  for (const field of fields) {
+    for (const rawLine of field.split("\n")) {
+      const line = rawLine.replace(/\[[^\]]*\]/g, "").trim(); // drop [mm:ss.xx] / word tags
+      if (line && terms.some((t) => line.toLowerCase().includes(t))) {
+        return line.length > 120 ? `${line.slice(0, 120)}…` : line;
+      }
+    }
+  }
+  return undefined;
+}
 
 /**
  * Playback side-effects the agent can trigger. Kept behind an interface so the
@@ -553,6 +579,52 @@ export async function executeAddMemory(
 }
 
 /**
+ * Find tracks by the WORDS in their lyrics — "the song that goes '...'". Matches
+ * stored lyrics (plain / synced / translation / romanization, timestamps ignored)
+ * plus a generated track's brief lyrics. Returns the track id + title + a matching
+ * lyric snippet so the agent can play or curate it. Read-only; pages via cursor.
+ */
+export async function executeLyricsSearch(
+  rawInput: LyricsSearchInput,
+  deps: { db?: MuzeroDB } = {},
+): Promise<{
+  total: number;
+  returned: number;
+  nextCursor: number | null;
+  tracks: Array<{ trackId: string; title: string; snippet?: string }>;
+}> {
+  const input = lyricsSearchInputSchema.parse(rawInput);
+  const db = deps.db ?? defaultDb;
+  const [tracks, lyricsRows] = await Promise.all([listAllTracks(db), listAllLyrics(db)]);
+  const lyricsByTrack = new Map(lyricsRows.map((row) => [row.trackId, row]));
+  const terms = input.queries.map((q) => q.trim().toLowerCase()).filter(Boolean);
+
+  const hits: Array<{ trackId: string; title: string; snippet?: string }> = [];
+  for (const track of tracks) {
+    const fields = lyricsSearchFields(track, lyricsByTrack.get(track.id) ?? null);
+    if (fields.length === 0) continue;
+    const haystack = fields.join("\n").toLowerCase();
+    const matched =
+      terms.length === 0
+        ? true
+        : input.match === "all"
+          ? terms.every((t) => haystack.includes(t))
+          : terms.some((t) => haystack.includes(t));
+    if (!matched) continue;
+    hits.push({ trackId: track.id, title: track.title, snippet: lyricSnippet(fields, terms) });
+  }
+
+  const page = hits.slice(input.cursor, input.cursor + input.limit);
+  const nextOffset = input.cursor + page.length;
+  return {
+    total: hits.length,
+    returned: page.length,
+    nextCursor: nextOffset < hits.length ? nextOffset : null,
+    tracks: page,
+  };
+}
+
+/**
  * Search the user's ENABLED streaming sources (YouTube / Bilibili / NetEase) for
  * songs. Read-only and cheap — the whole point is that search costs nothing
  * (unlike paid generation), so a locally-hosted LLM can curate from real songs.
@@ -624,6 +696,12 @@ export function createDjChatTools(deps: DjChatToolDeps = {}): ToolSet {
         'Search local tracks by title, caption, tags, legacy note, and Memory notes. Pass multiple keywords as `queries` (match "any" gathers a genre, "all" narrows). Returns are projected to `fields` (default id+title) to keep JSON small; `total` is the full match count, `returned` is this page. Page through large results with `cursor`: pass the previous call\'s `nextCursor` back as `cursor` until it is null. To curate a whole genre into a set without listing every id, prefer set_add_by_search.',
       inputSchema: searchTracksInputSchema,
       execute: (input) => executeSearchTracks(input, { db }),
+    }),
+    lyrics_search: tool({
+      description:
+        "Find tracks by the WORDS in their lyrics (\"the song that goes '…'\"). queries[] + match any/all; timestamps are ignored, generated tracks' brief lyrics are included. Returns trackId + title + a matching lyric snippet; page with cursor/nextCursor.",
+      inputSchema: lyricsSearchInputSchema,
+      execute: (input) => executeLyricsSearch(input, { db }),
     }),
     library_list_tags: tool({
       description: "List distinct local tags with usage counts.",

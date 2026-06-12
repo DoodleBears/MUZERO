@@ -9,6 +9,7 @@ import {
   memoryNotesByTrack,
   playQueueSet,
   saveSettings,
+  setTrackLyrics,
 } from "@/db/repositories";
 import { trackBriefSchema } from "@/dj/dj-brief-schema";
 import { createDjEngine } from "@/dj/dj-engine";
@@ -18,6 +19,7 @@ import {
   executeAddMemory,
   executeCreateSet,
   executeGenerateTracks,
+  executeLyricsSearch,
   executeMemorySearch,
   executeOnlineAddTracks,
   executeOnlineSearchTracks,
@@ -580,5 +582,79 @@ describe("memory search + add", () => {
       { db },
     );
     expect(missing.total).toBe(0);
+  });
+});
+
+describe("lyrics search", () => {
+  function briefWithLyrics(title: string, lyrics: string) {
+    return trackBriefSchema.parse({ title, caption: "c", lyrics, durationSec: 60 });
+  }
+  async function seed() {
+    const src = await createSession({ seedPrompt: "src" }, db);
+    const gen = await executeGenerateTracks(
+      {
+        sessionId: src.id,
+        briefs: [
+          briefWithLyrics("Rainy Day", "walking home in the pouring rain tonight"),
+          briefWithLyrics("Sunshine", "here comes the sun, doo doo doo"),
+        ],
+      },
+      { db, providerId: "mock" },
+    );
+    return gen.diff.createdTrackIds; // [rainy, sunshine]
+  }
+
+  it("finds a track by words in its (brief) lyrics, with a snippet", async () => {
+    const [rainy] = await seed();
+    const hit = await executeLyricsSearch({ queries: ["pouring rain"] }, { db });
+    expect(hit.total).toBe(1);
+    expect(hit.tracks[0].trackId).toBe(rainy);
+    expect(hit.tracks[0].title).toBe("Rainy Day");
+    expect(hit.tracks[0].snippet).toContain("pouring rain");
+  });
+
+  it("matches stored lyrics rows too, ignoring timestamps", async () => {
+    const src = await createSession({ seedPrompt: "s" }, db);
+    const gen = await executeGenerateTracks(
+      { sessionId: src.id, briefs: [briefWithLyrics("Synced", "")] },
+      { db, providerId: "mock" },
+    );
+    const [id] = gen.diff.createdTrackIds;
+    await setTrackLyrics(
+      {
+        trackId: id,
+        record: {
+          source: "manual",
+          status: "found",
+          instrumental: false,
+          synced: "[00:10.00]neon lights across the avenue",
+        },
+      },
+      db,
+    );
+    const hit = await executeLyricsSearch({ queries: ["neon lights"] }, { db });
+    expect(hit.tracks.map((t) => t.trackId)).toEqual([id]);
+    expect(hit.tracks[0].snippet).toBe("neon lights across the avenue"); // timestamp stripped
+  });
+
+  it("match 'any' unions keywords; 'all' intersects; pages via cursor", async () => {
+    await seed();
+    const anyHit = await executeLyricsSearch({ queries: ["rain", "sun"], match: "any" }, { db });
+    expect(anyHit.total).toBe(2);
+    const allHit = await executeLyricsSearch({ queries: ["rain", "sun"], match: "all" }, { db });
+    expect(allHit.total).toBe(0);
+
+    const p1 = await executeLyricsSearch(
+      { queries: ["doo", "rain"], match: "any", limit: 1 },
+      { db },
+    );
+    expect(p1.returned).toBe(1);
+    expect(p1.nextCursor).toBe(1);
+    const p2 = await executeLyricsSearch(
+      { queries: ["doo", "rain"], match: "any", limit: 1, cursor: 1 },
+      { db },
+    );
+    expect(p2.nextCursor).toBeNull();
+    expect(new Set([...p1.tracks, ...p2.tracks].map((t) => t.trackId)).size).toBe(2);
   });
 });
