@@ -1047,6 +1047,7 @@
       "playbackVolumeDown": "音量减小",
       "playbackCycleRepeat": "切换循环模式",
       "playbackToggleShuffle": "切换随机播放",
+      "playbackLike": "红心当前歌曲",
       "playbackToggleFullscreen": "切换全屏",
       "navTabNow": "前往正在播放",
       "navTabLibrary": "前往媒体库",

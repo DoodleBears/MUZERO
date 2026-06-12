@@ -18,6 +18,8 @@ describe("useShortcutHint", () => {
     expect(result.current("play")).toEqual(["Space"]);
     expect(result.current("prev")).toEqual(["Q"]);
     expect(result.current("next")).toEqual(["E"]);
+    expect(result.current("like")).toEqual(["L"]);
+    expect(result.current("queue")).toEqual(["T"]);
     expect(result.current("volume")).toEqual(["↑", "↓"]);
   });
 

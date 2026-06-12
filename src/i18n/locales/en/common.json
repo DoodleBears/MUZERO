@@ -1065,6 +1065,7 @@
       "playbackVolumeDown": "Volume down",
       "playbackCycleRepeat": "Cycle repeat mode",
       "playbackToggleShuffle": "Toggle shuffle",
+      "playbackLike": "Like current track",
       "playbackToggleFullscreen": "Toggle fullscreen",
       "navTabNow": "Go to Now Playing",
       "navTabLibrary": "Go to Library",

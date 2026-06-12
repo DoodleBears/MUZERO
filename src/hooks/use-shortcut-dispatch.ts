@@ -1,6 +1,6 @@
 import { useEffect, useMemo } from "react";
 import type { Tab } from "@/components/nav/dock-nav";
-import { getSettings, saveSettings } from "@/db/repositories";
+import { getSettings, getTrack, saveSettings, setTrackLiked } from "@/db/repositories";
 import { useSettings } from "@/hooks/use-app-data";
 import { isTypingTarget } from "@/lib/dom-keys";
 import { log } from "@/lib/logger";
@@ -47,6 +47,14 @@ async function toggleDocumentFullscreen(): Promise<void> {
   } catch (error) {
     log.warn("shortcuts.fullscreen", "Unable to toggle document fullscreen", error);
   }
+}
+
+async function toggleCurrentTrackLike(): Promise<void> {
+  const s = usePlayerStore.getState();
+  const current = s.currentIndex >= 0 ? s.queue[s.currentIndex] : undefined;
+  if (!current) return;
+  const track = await getTrack(current.id);
+  await setTrackLiked(current.id, !(track?.liked ?? current.liked));
 }
 
 /** Persisted toggle of the lyrics/memory right-rail mode (C). Read-modify-write on settings. */
@@ -133,6 +141,7 @@ const GLOBAL_HANDLERS: Record<string, (ctx: DispatchContext) => void> = {
     const s = usePlayerStore.getState();
     s.setShuffle(!s.shuffle);
   },
+  "playback.like": () => void toggleCurrentTrackLike(),
   "playback.toggleFullscreen": () => void toggleDocumentFullscreen(),
   "nav.tabNow": (ctx) => transitionState(() => ctx.setTab("now")),
   "nav.tabLibrary": (ctx) => transitionState(() => ctx.setTab("search")),

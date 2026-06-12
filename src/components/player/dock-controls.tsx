@@ -30,7 +30,7 @@ export function DockControls({
     <TooltipProvider>
       <div className={cn("flex items-center gap-0.5", className)}>
         {onOpenQueue && (
-          <ControlTooltip label={t("nowPlaying.upNext")}>
+          <ControlTooltip label={t("nowPlaying.upNext")} keys={hint("queue")}>
             <Button
               variant="ghost"
               size="icon"

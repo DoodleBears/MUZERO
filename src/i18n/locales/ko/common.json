@@ -1046,6 +1046,7 @@
       "playbackVolumeDown": "볼륨 낮추기",
       "playbackCycleRepeat": "반복 모드 전환",
       "playbackToggleShuffle": "셔플 전환",
+      "playbackLike": "현재 곡 좋아요",
       "playbackToggleFullscreen": "전체화면 전환",
       "navTabNow": "재생 중으로 이동",
       "navTabLibrary": "라이브러리로 이동",

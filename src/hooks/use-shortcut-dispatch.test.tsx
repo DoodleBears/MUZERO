@@ -14,12 +14,16 @@ const mocks = vi.hoisted(() => ({
     volume: 0.5,
     repeat: "off" as const,
     shuffle: false,
+    currentIndex: -1,
+    queue: [] as Array<{ id: string; liked: boolean }>,
   },
   setTab: vi.fn(),
   lyricsSetOpen: vi.fn(),
   vizSetOpen: vi.fn(),
   saveSettings: vi.fn(async (_patch?: unknown) => {}),
   getSettings: vi.fn(async () => ({}) as Record<string, unknown>),
+  getTrack: vi.fn(async (_id: string) => ({ liked: false }) as Record<string, unknown>),
+  setTrackLiked: vi.fn(async (_id: string, _liked: boolean) => {}),
   state: { overrides: undefined as Record<string, unknown> | undefined },
 }));
 
@@ -39,6 +43,8 @@ vi.mock("@/stores/visualizer-panel-store", () => ({
 vi.mock("@/db/repositories", () => ({
   saveSettings: (...args: unknown[]) => mocks.saveSettings(...args),
   getSettings: () => mocks.getSettings(),
+  getTrack: (id: string) => mocks.getTrack(id),
+  setTrackLiked: (...args: [string, boolean]) => mocks.setTrackLiked(...args),
 }));
 vi.mock("@/lib/view-transition-react", () => ({ transitionState: (fn: () => void) => fn() }));
 
@@ -56,6 +62,8 @@ function release(code: string, key: string) {
 describe("useShortcutDispatch", () => {
   beforeEach(() => {
     mocks.state.overrides = undefined;
+    mocks.player.currentIndex = -1;
+    mocks.player.queue = [];
     vi.clearAllMocks();
   });
 
@@ -69,6 +77,15 @@ describe("useShortcutDispatch", () => {
     expect(mocks.player.togglePlay).toHaveBeenCalledOnce();
     press("ArrowUp", "ArrowUp");
     expect(mocks.player.setVolume).toHaveBeenCalledWith(0.55);
+  });
+
+  it("toggles the current track like with L", async () => {
+    mocks.player.currentIndex = 0;
+    mocks.player.queue = [{ id: "trk_1", liked: false }];
+    mocks.getTrack.mockResolvedValueOnce({ liked: false });
+    renderHook(() => useShortcutDispatch());
+    press("KeyL", "l");
+    await vi.waitFor(() => expect(mocks.setTrackLiked).toHaveBeenCalledWith("trk_1", true));
   });
 
   it("honors a user override (rebinding prev to Z frees Q)", () => {

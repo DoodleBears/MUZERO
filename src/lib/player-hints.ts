@@ -3,7 +3,17 @@
  * the configurable registry via {@link useShortcutHint} (so they reflect the
  * user's rebinds), not a hard-coded table.
  */
-export type HintAction = "play" | "prev" | "next" | "repeat" | "shuffle" | "volume";
+export type HintAction =
+  | "play"
+  | "prev"
+  | "next"
+  | "repeat"
+  | "shuffle"
+  | "volume"
+  | "queue"
+  | "like"
+  | "lyrics"
+  | "visualizer";
 
 /**
  * Map a pointer's Y to a 0–1 volume for a vertical slider whose track spans

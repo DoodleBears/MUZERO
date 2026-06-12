@@ -14,6 +14,10 @@ const HINT_ACTION_TO_ID: Record<Exclude<HintAction, "volume">, string> = {
   next: "playback.next",
   repeat: "playback.cycleRepeat",
   shuffle: "playback.toggleShuffle",
+  queue: "queue.toggle",
+  like: "playback.like",
+  lyrics: "lyrics.toggleStage",
+  visualizer: "visualizer.cycleMode",
 };
 
 /**

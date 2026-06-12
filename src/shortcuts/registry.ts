@@ -175,6 +175,14 @@ export const SHORTCUT_ACTIONS: readonly ShortcutActionDef[] = [
     keywords: ["shuffle", "随机"],
   },
   {
+    id: "playback.like",
+    scope: "global",
+    category: "playback",
+    labelKey: "shortcuts.action.playbackLike",
+    defaultBindings: [key("KeyL", "L")],
+    keywords: ["like", "heart", "favorite", "红心", "喜欢"],
+  },
+  {
     id: "playback.toggleFullscreen",
     scope: "global",
     category: "playback",

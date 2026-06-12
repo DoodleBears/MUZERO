@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { HeartIcon } from "@/components/ui/heart";
 import { db } from "@/db/muzero-db";
 import { setTrackLiked } from "@/db/repositories";
+import { useShortcutHint } from "@/hooks/use-shortcut-hint";
 import { cn } from "@/lib/utils";
 import { usePlayerStore } from "@/stores/player-store";
 
@@ -16,6 +17,7 @@ import { usePlayerStore } from "@/stores/player-store";
  */
 export function FavoriteControlButton({ className }: { className?: string }) {
   const { t } = useTranslation();
+  const hint = useShortcutHint();
   const current = usePlayerStore(
     useShallow((s) => {
       const track = s.currentIndex >= 0 ? s.queue[s.currentIndex] : undefined;
@@ -30,7 +32,7 @@ export function FavoriteControlButton({ className }: { className?: string }) {
     ) ?? false;
 
   return (
-    <ControlTooltip label={t("track.like")}>
+    <ControlTooltip label={t("track.like")} keys={hint("like")}>
       <Button
         variant="ghost"
         size="icon"

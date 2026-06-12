@@ -3,11 +3,13 @@ import { motion } from "motion/react";
 import { type ReactNode, useEffect, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { useShallow } from "zustand/react/shallow";
+import { ControlTooltip } from "@/components/player/control-tooltip";
 import { CoverImage } from "@/components/player/cover-image";
 import { Button } from "@/components/ui/button";
 import { Disc3Icon } from "@/components/ui/disc-3";
 import type { Track } from "@/db/types";
 import { useTrackCoverUrl } from "@/hooks/use-media";
+import { useShortcutHint } from "@/hooks/use-shortcut-hint";
 import { trackHasCover, trackSubtitle } from "@/lib/track-display";
 import { cn } from "@/lib/utils";
 import { transitionState } from "@/lib/view-transition-react";
@@ -42,6 +44,7 @@ export function TrackIdentityRow({
   controls?: ReactNode;
 }) {
   const { t } = useTranslation();
+  const hint = useShortcutHint();
   const track = usePlayerStore(
     useShallow((s) => {
       const c = s.currentIndex >= 0 ? s.queue[s.currentIndex] : undefined;
@@ -244,14 +247,27 @@ export function TrackIdentityRow({
         </motion.button>
       </CurrentTrackContextMenu>
       {controls && <div className="shrink-0">{controls}</div>}
-      <Button
-        size="icon-lg"
-        onClick={togglePlay}
-        aria-label={isPlaying ? t("player.pause") : t("player.play")}
-        className="shrink-0 rounded-full"
+      <ControlTooltip
+        label={isPlaying ? t("player.pause") : t("player.play")}
+        keys={hint("play")}
+        shortcutRows={[
+          { label: t("player.previous"), keys: hint("prev") },
+          { label: t("player.next"), keys: hint("next") },
+          { label: t("track.like"), keys: hint("like") },
+          { label: t("nowPlaying.upNext"), keys: hint("queue") },
+          { label: t("lyrics.toggleStage"), keys: hint("lyrics") },
+          { label: t("visualizer.title"), keys: hint("visualizer") },
+        ].filter((row) => row.keys.length > 0)}
       >
-        {isPlaying ? <Pause /> : <Play />}
-      </Button>
+        <Button
+          size="icon-lg"
+          onClick={togglePlay}
+          aria-label={isPlaying ? t("player.pause") : t("player.play")}
+          className="shrink-0 rounded-full"
+        >
+          {isPlaying ? <Pause /> : <Play />}
+        </Button>
+      </ControlTooltip>
     </div>
   );
 }

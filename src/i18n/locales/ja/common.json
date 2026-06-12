@@ -1047,6 +1047,7 @@
       "playbackVolumeDown": "音量を下げる",
       "playbackCycleRepeat": "リピートモード切替",
       "playbackToggleShuffle": "シャッフル切替",
+      "playbackLike": "再生中の曲にいいね",
       "playbackToggleFullscreen": "全画面切替",
       "navTabNow": "再生中へ移動",
       "navTabLibrary": "ライブラリへ移動",
