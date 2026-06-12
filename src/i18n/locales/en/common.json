@@ -854,6 +854,8 @@
     "importFolderSyncNow": "Sync now",
     "importFolderRemove": "Stop watching",
     "importFolderBoundSet": "Set: {{name}}",
+    "importFolderRecursive": "Include subfolders",
+    "importFolderRecursiveHint": "When off, MUZERO only scans files directly inside this folder.",
     "navSecAbout": "About",
     "navAbout": "About MUZERO",
     "navDesktopDownloads": "Desktop downloads",

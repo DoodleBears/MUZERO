@@ -840,6 +840,8 @@
     "importFolderSyncNow": "立即同步",
     "importFolderRemove": "停止监视",
     "importFolderBoundSet": "歌单：{{name}}",
+    "importFolderRecursive": "包含子文件夹",
+    "importFolderRecursiveHint": "关闭后，MUZERO 只扫描这个文件夹第一层的文件。",
     "navSecAbout": "关于",
     "navAbout": "关于 MUZERO",
     "navDesktopDownloads": "桌面版下载",

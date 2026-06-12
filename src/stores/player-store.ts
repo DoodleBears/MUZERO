@@ -1078,6 +1078,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       path,
       setId,
       displayName: basename(path),
+      recursive: existing?.recursive ?? true,
     });
     await runFolderSync([folderId]);
     return true;
@@ -1098,6 +1099,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       path,
       setId,
       displayName: basename(path),
+      recursive: existing?.recursive ?? true,
     });
     await runFolderSync([folderId]);
     return true;
@@ -1637,7 +1639,9 @@ export async function runFolderSync(
         await upsertImportFolder({ ...folder, setId });
       }
 
-      const scan = await scanFolderForMedia(folder.path, fs).catch((err: unknown) => {
+      const scan = await scanFolderForMedia(folder.path, fs, {
+        recursive: folder.recursive ?? true,
+      }).catch((err: unknown) => {
         log.warn("player", "folder scan failed", { path: folder.path, err: String(err) });
         return null;
       });

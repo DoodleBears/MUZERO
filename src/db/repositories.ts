@@ -154,6 +154,22 @@ export async function upsertImportFolder(
   return id;
 }
 
+/** Patch one remembered import folder without disturbing the rest of settings. */
+export async function updateImportFolder(
+  id: string,
+  patch: Partial<Omit<ImportFolder, "id">>,
+  db: MuzeroDB = defaultDb,
+): Promise<void> {
+  const settings = await getSettings(db);
+  const folders = settings.importFolders ?? [];
+  await saveSettings(
+    {
+      importFolders: folders.map((folder) => (folder.id === id ? { ...folder, ...patch } : folder)),
+    },
+    db,
+  );
+}
+
 /** Stop watching a folder. Imported tracks are kept — only the watch entry drops. */
 export async function removeImportFolder(id: string, db: MuzeroDB = defaultDb): Promise<void> {
   const settings = await getSettings(db);

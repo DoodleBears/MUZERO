@@ -788,6 +788,8 @@ export interface ImportFolder {
   setId: string;
   /** Folder basename, shown in Settings. */
   displayName?: string;
+  /** Whether sync scans nested folders. Defaults to true for existing entries. */
+  recursive?: boolean;
   /** Epoch ms of the most recent successful scan. */
   lastScanAt?: number;
   /** Files imported on the most recent scan (UI hint). */

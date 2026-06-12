@@ -2,7 +2,7 @@ import { FolderInput, FolderX, RefreshCw } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { removeImportFolder } from "@/db/repositories";
+import { removeImportFolder, updateImportFolder } from "@/db/repositories";
 import { useSessions, useSettings } from "@/hooks/use-app-data";
 import { hasFolderAccess } from "@/lib/desktop/bridge";
 import { usePlayerStore } from "@/stores/player-store";
@@ -52,34 +52,54 @@ export function ImportedFoldersSettings() {
         ) : (
           <ul className="flex flex-col gap-2">
             {folders.map((folder) => (
-              <li
-                key={folder.id}
-                className="flex items-center gap-3 rounded-md border border-border p-3"
-              >
+              <li key={folder.id} className="rounded-md border border-border p-3">
                 <div className="min-w-0 flex-1">
-                  <p className="truncate font-medium text-sm">
-                    {folder.displayName ?? folder.path}
-                  </p>
-                  <p className="truncate text-muted-foreground text-xs">{folder.path}</p>
-                  <p className="truncate text-muted-foreground text-xs">
-                    {t("settings.importFolderBoundSet", { name: setName(folder.setId) })}
-                    {" · "}
-                    {folder.lastScanAt
-                      ? t("settings.importFolderLastSynced", {
-                          when: formatWhen(folder.lastScanAt),
+                  <div className="flex items-start gap-3">
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate font-medium text-sm">
+                        {folder.displayName ?? folder.path}
+                      </p>
+                      <p className="truncate text-muted-foreground text-xs">{folder.path}</p>
+                      <p className="truncate text-muted-foreground text-xs">
+                        {t("settings.importFolderBoundSet", { name: setName(folder.setId) })}
+                        {" · "}
+                        {folder.lastScanAt
+                          ? t("settings.importFolderLastSynced", {
+                              when: formatWhen(folder.lastScanAt),
+                            })
+                          : t("settings.importFolderNeverSynced")}
+                      </p>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      aria-label={t("settings.importFolderRemove")}
+                      onClick={() => void removeImportFolder(folder.id)}
+                    >
+                      <FolderX />
+                    </Button>
+                  </div>
+                  <label className="mt-3 flex items-start gap-2 text-xs">
+                    <input
+                      type="checkbox"
+                      className="mt-0.5 size-4 accent-primary"
+                      checked={folder.recursive ?? true}
+                      disabled={isUploading}
+                      onChange={(event) =>
+                        void updateImportFolder(folder.id, {
+                          recursive: event.currentTarget.checked,
                         })
-                      : t("settings.importFolderNeverSynced")}
-                  </p>
+                      }
+                    />
+                    <span className="flex min-w-0 flex-col gap-0.5">
+                      <span className="font-medium">{t("settings.importFolderRecursive")}</span>
+                      <span className="text-muted-foreground">
+                        {t("settings.importFolderRecursiveHint")}
+                      </span>
+                    </span>
+                  </label>
                 </div>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  aria-label={t("settings.importFolderRemove")}
-                  onClick={() => void removeImportFolder(folder.id)}
-                >
-                  <FolderX />
-                </Button>
               </li>
             ))}
           </ul>

@@ -52,6 +52,7 @@ import {
   setTrackCover,
   setTrackNote,
   setTrackTags,
+  updateImportFolder,
   updateMemory,
   updateMemoryNote,
   upsertImportFolder,
@@ -1353,6 +1354,34 @@ describe("import-folder provenance + watch list", () => {
     await removeImportFolder(id1, db);
     folders = (await getSettings(db)).importFolders ?? [];
     expect(folders.map((f) => f.id)).toEqual([id2]);
+  });
+
+  it("updates one remembered folder without replacing the rest", async () => {
+    const id1 = await upsertImportFolder(
+      { path: "/m/one", setId: "ses_1", displayName: "one" },
+      db,
+    );
+    const id2 = await upsertImportFolder(
+      { path: "/m/two", setId: "ses_2", displayName: "two" },
+      db,
+    );
+
+    await updateImportFolder(id1, { recursive: false, displayName: "One" }, db);
+
+    const folders = (await getSettings(db)).importFolders ?? [];
+    expect(folders).toHaveLength(2);
+    expect(folders.find((f) => f.id === id1)).toMatchObject({
+      id: id1,
+      path: "/m/one",
+      setId: "ses_1",
+      displayName: "One",
+      recursive: false,
+    });
+    expect(folders.find((f) => f.id === id2)).toMatchObject({
+      id: id2,
+      path: "/m/two",
+      displayName: "two",
+    });
   });
 });
 

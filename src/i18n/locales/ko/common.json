@@ -839,6 +839,8 @@
     "importFolderSyncNow": "지금 동기화",
     "importFolderRemove": "감시 중지",
     "importFolderBoundSet": "세트: {{name}}",
+    "importFolderRecursive": "하위 폴더 포함",
+    "importFolderRecursiveHint": "끄면 MUZERO가 이 폴더 바로 안의 파일만 검색합니다.",
     "navSecAbout": "정보",
     "navAbout": "MUZERO 정보",
     "navDesktopDownloads": "데스크톱 다운로드",

@@ -54,6 +54,11 @@ export interface FolderScanResult {
   unsupportedCount: number;
 }
 
+export interface FolderScanOptions {
+  /** Defaults to true. When false, only direct child files are scanned. */
+  recursive?: boolean;
+}
+
 // --- encrypted store-format detector -----------------------------------------
 
 // QQ音乐 .qmc0/.qmc3/.qmcflac/.qmcogg/.mflac/.mgg…; 酷狗 .kgm/.kgma; 酷我 .kwm;
@@ -98,17 +103,19 @@ export function mimeFromExtension(name: string, kind: TrackKind): string {
 const MAX_DEPTH = 24;
 
 /**
- * Recursively scan a folder for plaintext media. Symlinks are skipped entirely
+ * Scan a folder for plaintext media. Symlinks are skipped entirely
  * (avoids loops + escaping the granted scope); an unreadable subdirectory is
  * swallowed so one permission error never aborts the whole scan.
  */
 export async function scanFolderForMedia(
   rootPath: string,
   fs: Pick<FolderFs, "readDir" | "join">,
+  options: FolderScanOptions = {},
 ): Promise<FolderScanResult> {
   const media: ScannedFile[] = [];
   let encryptedCount = 0;
   let unsupportedCount = 0;
+  const recursive = options.recursive ?? true;
 
   async function walk(dir: string, depth: number): Promise<void> {
     if (depth > MAX_DEPTH) return;
@@ -122,7 +129,7 @@ export async function scanFolderForMedia(
       if (entry.isSymlink) continue;
       const full = await fs.join(dir, entry.name);
       if (entry.isDirectory) {
-        await walk(full, depth + 1);
+        if (recursive) await walk(full, depth + 1);
         continue;
       }
       if (!entry.isFile) continue;

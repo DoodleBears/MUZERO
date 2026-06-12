@@ -72,6 +72,17 @@ describe("scanFolderForMedia", () => {
     expect(result.encryptedCount).toBe(0);
   });
 
+  it("can scan only direct child files when recursion is disabled", async () => {
+    const fs = fakeFs({
+      "/root": [file("a.mp3"), dir("sub"), file("readme.txt"), file("cover.jpg")],
+      "/root/sub": [file("b.flac")],
+    });
+    const result = await scanFolderForMedia("/root", fs, { recursive: false });
+    expect(result.media.map((m) => m.path)).toEqual(["/root/a.mp3"]);
+    expect(result.unsupportedCount).toBe(1);
+    expect(result.encryptedCount).toBe(0);
+  });
+
   it("skips symlinks entirely (files and directories)", async () => {
     const fs = fakeFs({
       "/root": [symlinkDir("loopback"), symlinkFile("link.mp3"), file("real.mp3")],

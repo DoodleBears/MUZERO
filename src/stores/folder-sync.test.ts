@@ -33,6 +33,12 @@ const file = (name: string): DirEntryLike => ({
   isFile: true,
   isSymlink: false,
 });
+const dir = (name: string): DirEntryLike => ({
+  name,
+  isDirectory: true,
+  isFile: false,
+  isSymlink: false,
+});
 
 /**
  * Fake desktop fs over an in-memory folder; `failPaths` make `readFile` throw,
@@ -136,6 +142,30 @@ describe("runFolderSync", () => {
       expect(result.cancelled).toBe(false);
       const tracks = await db.tracks.where("sessionId").equals(setId).toArray();
       expect(tracks.map((t) => t.sourcePath)).toEqual(["/m/good.mp3"]);
+    },
+    FOLDER_SYNC_TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "honors a remembered folder's non-recursive scan preference",
+    async () => {
+      const { db, repos, runFolderSync } = await load();
+      const session = await repos.createSession({ seedPrompt: "", config: { autoExtend: false } });
+      const folderId = await repos.upsertImportFolder({
+        path: "/m",
+        setId: session.id,
+        recursive: false,
+      });
+      const fs = fakeFs({
+        "/m": [file("top.mp3"), dir("nested")],
+        "/m/nested": [file("hidden.mp3")],
+      });
+
+      const result = await runFolderSync([folderId], fs);
+
+      expect(result.imported).toBe(1);
+      const tracks = await db.tracks.where("sessionId").equals(session.id).toArray();
+      expect(tracks.map((t) => t.sourcePath)).toEqual(["/m/top.mp3"]);
     },
     FOLDER_SYNC_TEST_TIMEOUT_MS,
   );

@@ -589,22 +589,26 @@ Scope:
 **Goal:** Move remembered folders into a dedicated Local Files pane and add recursive scan control.
 
 **Tasks:**
-- [ ] Add `recursive?: boolean` to `ImportFolder`.
-- [ ] Add scanner options to `scanFolderForMedia`.
-- [ ] Update folder scan tests for recursive and non-recursive modes.
-- [ ] Update import/sync orchestration to pass `folder.recursive ?? true`.
-- [ ] Add a repository helper for updating folder settings, or use a narrowly scoped `saveSettings` patch.
-- [ ] Move `ImportedFoldersSettings` out of the Device pane into the new Local Files item.
-- [ ] Add per-folder "Include subfolders" UI and i18n.
+- [x] Add `recursive?: boolean` to `ImportFolder`.
+- [x] Add scanner options to `scanFolderForMedia`.
+- [x] Update folder scan tests for recursive and non-recursive modes.
+- [x] Update import/sync orchestration to pass `folder.recursive ?? true`.
+- [x] Add a repository helper for updating folder settings, or use a narrowly scoped `saveSettings` patch.
+- [x] Move `ImportedFoldersSettings` out of the Device pane into the new Local Files item.
+- [x] Add per-folder "Include subfolders" UI and i18n.
 
 ### Phase 3 Checklist
 
-- [ ] Existing folders continue recursive scanning by default.
-- [ ] New folders default to recursive on.
-- [ ] Recursive off scans only direct child files.
-- [ ] Manual sync respects each folder's recursive preference.
-- [ ] App launch sync respects each folder's recursive preference.
-- [ ] Removing a folder still keeps imported tracks.
+- [x] Existing folders continue recursive scanning by default.
+- [x] New folders default to recursive on.
+- [x] Recursive off scans only direct child files.
+- [x] Manual sync respects each folder's recursive preference.
+- [x] App launch sync respects each folder's recursive preference.
+- [x] Removing a folder still keeps imported tracks.
+
+**Phase 3 Verification:**
+- `node_modules\.bin\vitest.CMD run src\lib\folder-import.test.ts src\stores\folder-sync.test.ts src\db\repositories.test.ts`
+- `node_modules\.bin\tsc.CMD --noEmit --pretty false`
 
 ### Phase 4: Storage Management Section
 
@@ -821,6 +825,7 @@ Scope:
 | 2026-06-13 | Codex | Initial draft from product request. |
 | 2026-06-13 | Codex | Added Storage & cache best-practice page, OPFS/browser quota management, usage progress bar requirements, and complete Listening stats section. |
 | 2026-06-13 | Codex | Completed Phase 2: new Settings IA, icon + label sidebar, stale-id aliases, and routed existing panes to new ids. |
+| 2026-06-13 | Codex | Completed Phase 3: local folder recursive preference, non-recursive scanner behavior, Settings toggle, repository helper, and targeted tests. |
 
 ---
 

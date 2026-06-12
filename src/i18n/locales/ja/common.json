@@ -840,6 +840,8 @@
     "importFolderSyncNow": "今すぐ同期",
     "importFolderRemove": "監視を停止",
     "importFolderBoundSet": "セット：{{name}}",
+    "importFolderRecursive": "サブフォルダを含める",
+    "importFolderRecursiveHint": "オフにすると、MUZERO はこのフォルダ直下のファイルだけをスキャンします。",
     "navSecAbout": "情報",
     "navAbout": "MUZERO について",
     "navDesktopDownloads": "デスクトップ版ダウンロード",
