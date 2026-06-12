@@ -1,4 +1,4 @@
-import { act, fireEvent, render, renderHook, screen } from "@testing-library/react";
+import { act, fireEvent, render, renderHook, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ResolvedLyrics } from "@/lyrics/resolve-lyrics";
 import { LyricsScroller, useActiveLyricLine } from "./synced-lyrics-view";
@@ -75,6 +75,31 @@ describe("LyricsScroller (synced)", () => {
 
     fireEvent.click(back);
     expect(screen.queryByLabelText("lyrics.followCurrent")).toBeNull();
+  });
+
+  it("applies the selected lyrics motion mode to the synced viewport", () => {
+    render(
+      <LyricsScroller resolved={synced} activeIndex={1} onSeek={() => {}} motionMode="inertial" />,
+    );
+
+    expect(screen.getByTestId("lyrics-scroll")).toHaveAttribute("data-motion-mode", "inertial");
+  });
+
+  it("marks nearby rows with cascade delay and initial offset after active changes", async () => {
+    const { rerender } = render(
+      <LyricsScroller resolved={synced} activeIndex={0} onSeek={() => {}} motionMode="cascade" />,
+    );
+
+    rerender(
+      <LyricsScroller resolved={synced} activeIndex={1} onSeek={() => {}} motionMode="cascade" />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("line one")).toHaveAttribute("data-cascade-affected", "true");
+    });
+    expect(screen.getByText("line one")).toHaveAttribute("data-cascade-delay-ms", "26");
+    expect(screen.getByText("line one")).toHaveAttribute("data-cascade-initial-y", "10");
+    expect(screen.getByText("line two")).not.toHaveAttribute("data-cascade-affected");
   });
 });
 

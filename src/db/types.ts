@@ -679,6 +679,12 @@ export interface AppSettings {
   lyricsShowTranslation?: boolean;
   /** Show a romanization sub-line under each lyric line, when the source has one. Default false. */
   lyricsShowRomanization?: boolean;
+  /**
+   * Synced-lyrics motion mode. `undefined` = "classic" (current stable follow).
+   * "inertial" adds spring-follow scrolling; "cascade" adds Apple-Music-like
+   * neighbor delay. Reduced motion resolves to the low-motion classic behavior.
+   */
+  lyricsMotionMode?: "classic" | "inertial" | "cascade";
   /** Legacy mirror for the lyrics/memory rail toggle; layout is driven by nowPlayingRightRailCollapsed. */
   lyricsStageOpen?: boolean;
   /** Lyric text-shadow strength, 0–100 (0 = no shadow). Default 35. */
@@ -931,6 +937,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   lyricsWordByWord: true,
   lyricsShowTranslation: true,
   lyricsShowRomanization: false,
+  lyricsMotionMode: "classic",
   lyricsStageOpen: false,
   lyricsShadowOpacity: 50,
   lyricsShadowBlur: 8,

@@ -12,6 +12,7 @@ import { Slider } from "@/components/ui/slider";
 import { saveSettings } from "@/db/repositories";
 import { useSettings } from "@/hooks/use-app-data";
 import { cn } from "@/lib/utils";
+import { LYRICS_MOTION_MODES, type LyricsMotionMode } from "@/lyrics/lyric-motion";
 
 const COLOR_MODES = [
   { id: "default", labelKey: "lyricsSettings.colorDefault" },
@@ -24,6 +25,18 @@ const ALIGNS = [
   { id: "center", Icon: AlignCenter, labelKey: "lyricsSettings.alignCenter" },
   { id: "right", Icon: AlignRight, labelKey: "lyricsSettings.alignRight" },
 ] as const;
+
+const MOTION_MODE_LABEL_KEYS = {
+  classic: "lyricsSettings.motionClassic",
+  inertial: "lyricsSettings.motionInertial",
+  cascade: "lyricsSettings.motionCascade",
+} as const satisfies Record<LyricsMotionMode, string>;
+
+const MOTION_MODE_HINT_KEYS = {
+  classic: "lyricsSettings.motionClassicHint",
+  inertial: "lyricsSettings.motionInertialHint",
+  cascade: "lyricsSettings.motionCascadeHint",
+} as const satisfies Record<LyricsMotionMode, string>;
 
 // The outline shares the text color's "cover"/"custom" sources (no "default":
 // a stroke needs an explicit contrasting color, not the foreground).
@@ -51,6 +64,7 @@ export function LyricsTuningControls({ className }: { className?: string }) {
   const wordByWord = s.lyricsWordByWord ?? true;
   const showTranslation = s.lyricsShowTranslation ?? true;
   const showRomanization = s.lyricsShowRomanization ?? false;
+  const motionMode = s.lyricsMotionMode ?? "classic";
   const lineGap = s.lyricsLineGap ?? 8;
   const shadowOpacity = s.lyricsShadowOpacity ?? 50;
   const shadowBlur = s.lyricsShadowBlur ?? 8;
@@ -81,6 +95,29 @@ export function LyricsTuningControls({ className }: { className?: string }) {
         value={showRomanization}
         onChange={(v) => void saveSettings({ lyricsShowRomanization: v })}
       />
+      <Field label={t("lyricsSettings.motion")}>
+        <div className="grid grid-cols-3 gap-1">
+          {LYRICS_MOTION_MODES.map((mode) => (
+            <button
+              key={mode}
+              type="button"
+              onClick={() => void saveSettings({ lyricsMotionMode: mode })}
+              aria-pressed={motionMode === mode}
+              aria-label={t(MOTION_MODE_LABEL_KEYS[mode])}
+              title={t(MOTION_MODE_HINT_KEYS[mode])}
+              className={cn(
+                "h-9 rounded-md border px-2 font-medium text-xs transition-colors",
+                motionMode === mode
+                  ? "border-primary bg-primary/10 text-primary"
+                  : "border-border text-muted-foreground hover:text-foreground",
+              )}
+            >
+              {t(MOTION_MODE_LABEL_KEYS[mode])}
+            </button>
+          ))}
+        </div>
+        <p className="text-muted-foreground text-xs">{t(MOTION_MODE_HINT_KEYS[motionMode])}</p>
+      </Field>
       <Field label={t("lyricsSettings.activeFontSize", { px: activeSize })}>
         <Slider
           min={12}
