@@ -40,8 +40,10 @@ export function TrackListSection({
   className,
   startActions,
   endActions,
+  afterToolbar,
   listHeader,
   getTrackSupplement,
+  getTrackColumns,
   canReorder,
 }: {
   tracks: Track[];
@@ -60,11 +62,15 @@ export function TrackListSection({
   startActions?: React.ReactNode;
   /** Content rendered at the right of the toolbar row, after the "Select" toggle. */
   endActions?: React.ReactNode;
+  /** Pinned content rendered between the toolbar and list, e.g. optional column labels. */
+  afterToolbar?: React.ReactNode;
   /** When set, this content + the toolbar row scroll WITH the list (rendered inside the
    *  scroll container as its header) instead of staying pinned above it. */
   listHeader?: React.ReactNode;
   /** Optional per-row secondary metadata shown after the default subtitle. */
   getTrackSupplement?: (track: Track) => React.ReactNode;
+  /** Optional right-side row columns shown before duration. */
+  getTrackColumns?: (track: Track) => React.ReactNode;
 }) {
   const { t } = useTranslation();
   const trackIds = useMemo(() => tracks.map((track) => track.id), [tracks]);
@@ -181,6 +187,7 @@ export function TrackListSection({
           With it, the header + toolbar move INTO the scroller so they scroll away with
           the rows (the library wall). */}
       {listHeader ? null : toolbar}
+      {listHeader ? null : afterToolbar}
       <TrackListMenu
         setId={setId}
         className="min-h-0 flex-1"
@@ -217,6 +224,7 @@ export function TrackListSection({
             onToggleSelect={sel.toggle}
             onDeleteTrack={onDeleteTrack}
             getTrackSupplement={getTrackSupplement}
+            getTrackColumns={getTrackColumns}
             initialScrollIndex={scroll.anchorIndexRef.current ?? undefined}
           />
         )}

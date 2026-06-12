@@ -44,6 +44,7 @@ interface TrackRowProps {
   onToggleSelect?: (shiftKey: boolean) => void;
   listIndex?: number;
   secondaryMeta?: ReactNode;
+  metricColumns?: ReactNode;
   sessions: DjSession[];
   onPlay: () => void;
   onView: () => void;
@@ -156,6 +157,7 @@ export const TrackRow = memo(function TrackRow({
   onToggleSelect,
   listIndex,
   secondaryMeta,
+  metricColumns,
   sessions,
   onPlay,
   onView,
@@ -305,6 +307,9 @@ export const TrackRow = memo(function TrackRow({
         {/* Persistent at-a-glance "liked" hint, left of the duration (the hover
             toolbar carries the actual toggle). */}
         {track.liked && <Heart className="size-3.5 shrink-0 text-primary" aria-hidden="true" />}
+        {metricColumns && (
+          <span className="hidden shrink-0 items-center gap-3 md:inline-flex">{metricColumns}</span>
+        )}
         <span className="w-10 shrink-0 text-right text-xs tabular-nums text-muted-foreground">
           {track.status === "ready" ? formatDuration(track.durationSec) : "—"}
         </span>

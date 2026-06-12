@@ -17,6 +17,7 @@ vi.mock("react-i18next", () => ({
     type: "3rdParty",
   },
   useTranslation: () => ({
+    i18n: { language: "en" },
     t: (key: string, vars?: Record<string, unknown>) =>
       ({
         "gallery.back": "Back",
@@ -29,33 +30,45 @@ vi.mock("react-i18next", () => ({
         "systemPlaylists.hearted": "Hearted",
         "systemPlaylists.mostPlayed": "Most Played",
         "systemPlaylists.listenTime": `${vars?.time ?? ""} listened`,
+        "systemPlaylists.lastPlayedColumn": "Last played",
+        "systemPlaylists.neverPlayed": "Never",
         "systemPlaylists.playCount": `${vars?.count ?? 0} plays`,
+        "systemPlaylists.playCountColumn": "Plays",
         "systemPlaylists.playCount_other": `${vars?.count ?? 0} plays`,
         "systemPlaylists.rangeAll": "All",
         "systemPlaylists.rangeDay": "Day",
         "systemPlaylists.rangeMonth": "Month",
         "systemPlaylists.rangeWeek": "Week",
         "systemPlaylists.recentlyPlayed": "Recently Played",
+        "systemPlaylists.sortDefault": "Default",
+        "systemPlaylists.sortLastPlayed": "Last played",
+        "systemPlaylists.sortPlayCount": "Play count",
       })[key] ?? key,
   }),
 }));
 
 vi.mock("@/components/library/track-list-section", () => ({
   TrackListSection: ({
-    getTrackSupplement,
+    afterToolbar,
+    endActions,
+    getTrackColumns,
     startActions,
     tracks,
   }: {
-    getTrackSupplement?: (track: Track) => React.ReactNode;
+    afterToolbar?: React.ReactNode;
+    endActions?: React.ReactNode;
+    getTrackColumns?: (track: Track) => React.ReactNode;
     startActions?: React.ReactNode;
     tracks: Track[];
   }) => {
     mocks.latestTracks = tracks;
     return (
       <div data-count={tracks.length} data-testid="track-list-section">
+        {endActions}
+        {afterToolbar}
         {tracks.map((item) => (
-          <div key={item.id} data-testid={`track-supplement-${item.id}`}>
-            {getTrackSupplement?.(item)}
+          <div key={item.id} data-testid={`track-columns-${item.id}`}>
+            {getTrackColumns?.(item)}
           </div>
         ))}
         {startActions}
@@ -100,8 +113,12 @@ describe("SystemPlaylistDetail", () => {
     expect(mocks.latestTracks.map((item) => item.id)).toEqual(["trk_week"]);
   });
 
-  it("renders selected range play count and listen time for local Most Played rows", () => {
+  it("renders play count and last played as separate local row columns", () => {
     const tracks = [track("trk_week", "Week")];
+    const expectedLastPlayed = new Intl.DateTimeFormat("en", {
+      dateStyle: "medium",
+      timeStyle: "short",
+    }).format(NOW - DAY);
     render(
       <SystemPlaylistDetail
         events={[event("trk_week", NOW - DAY, { listenedSec: 75 })]}
@@ -116,9 +133,43 @@ describe("SystemPlaylistDetail", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Week" }));
 
-    expect(screen.getByTestId("track-supplement-trk_week")).toHaveTextContent(
-      "1 plays · 1m listened",
+    expect(screen.getByText("Plays")).toBeInTheDocument();
+    expect(screen.getAllByText("Last played")).toHaveLength(2);
+    expect(screen.getByTestId("track-columns-trk_week")).toHaveTextContent("1");
+    expect(screen.getByTestId("track-columns-trk_week")).toHaveTextContent(expectedLastPlayed);
+  });
+
+  it("plays the queue in the selected system sort order", () => {
+    const playSystemPlaylist = vi.fn().mockResolvedValue(undefined);
+    usePlayerStore.setState({ playSystemPlaylist } as Partial<
+      ReturnType<typeof usePlayerStore.getState>
+    >);
+    const recentLow = track("trk_recent_low", "Recent low");
+    const oldHigh = track("trk_old_high", "Old high");
+
+    render(
+      <SystemPlaylistDetail
+        events={[]}
+        now={NOW}
+        onBack={vi.fn()}
+        playlistId="system:most"
+        remoteTracks={[]}
+        stats={[
+          stat("trk_recent_low", 1, { lastPlayedAt: NOW - 1_000 }),
+          stat("trk_old_high", 5, { lastPlayedAt: NOW - DAY }),
+        ]}
+        tracks={[recentLow, oldHigh]}
+      />,
     );
+
+    expect(mocks.latestTracks.map((item) => item.id)).toEqual(["trk_old_high", "trk_recent_low"]);
+
+    fireEvent.click(screen.getByRole("button", { name: "Last played" }));
+    expect(mocks.latestTracks.map((item) => item.id)).toEqual(["trk_recent_low", "trk_old_high"]);
+
+    fireEvent.click(screen.getByRole("button", { name: "Play all" }));
+
+    expect(playSystemPlaylist).toHaveBeenCalledWith("system:most", [recentLow, oldHigh]);
   });
 
   it("plays all currently visible local tracks as a system playlist", () => {
@@ -164,7 +215,11 @@ function track(id: string, title: string, patch: Partial<Track> = {}): Track {
   };
 }
 
-function stat(trackId: string, playCount: number): TrackPlaybackStats {
+function stat(
+  trackId: string,
+  playCount: number,
+  patch: Partial<TrackPlaybackStats> = {},
+): TrackPlaybackStats {
   return {
     devicePublicId: "dvc_1",
     id: `dvc_1:${trackId}`,
@@ -172,6 +227,7 @@ function stat(trackId: string, playCount: number): TrackPlaybackStats {
     playCount,
     trackId,
     updatedAt: NOW,
+    ...patch,
   };
 }
 

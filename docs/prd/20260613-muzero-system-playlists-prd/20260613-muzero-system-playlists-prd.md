@@ -18,6 +18,7 @@
 | 3 | Gallery / Set Detail UI Integration | Completed | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | Playback Stats Range Aggregation | Completed | [Phase 4 Checklist](#phase-4-checklist) |
 | 5 | i18n + Empty States + Tests | Completed | [Phase 5 Checklist](#phase-5-checklist) |
+| 6 | Stats Columns + Sortable Queue Order | Completed | [Phase 6 Checklist](#phase-6-checklist) |
 
 > Status Legend: Completed | In Progress | Pending
 
@@ -498,6 +499,31 @@ Deletion behavior:
 - Direct `tsc --noEmit` is currently blocked by an unrelated existing fixture error in `src/components/settings/listening-stats-summary.test.ts(31,5)` (`DjConfig` fixture missing `refillThreshold`, `batchSize`, `targetDurationSec`, `allowVocals`).
 - Full Biome formatter check is noisy on CRLF line endings in pre-existing TSX files touched by this phase; line-ending normalization was intentionally not bundled into this feature commit.
 
+### Phase 6: Stats Columns + Sortable Queue Order
+
+**Goal:** Make playback stats scannable in the list and let the user choose the play queue order from the system playlist detail.
+
+**Tasks:**
+- [x] Move play count out of subtitle text into a dedicated right-side column.
+- [x] Add a dedicated "Last played" column next to play count.
+- [x] Add top-level sort options for default order, play count, and last played time.
+- [x] Ensure "Play all" sends tracks to the queue in the currently selected sort order.
+- [x] Keep the row-column extension optional so regular library/set rows are unchanged.
+
+### Phase 6 Checklist
+
+- [x] Play count and last played time render as separate columns on system playlist detail rows.
+- [x] Sorting by play count orders rows and queue playback by highest play count first.
+- [x] Sorting by last played orders rows and queue playback by most recent first.
+- [x] Hearted rows can use folded playback stats for sorting instead of zero-only metrics.
+- [x] Four-locale labels cover column headers, "never played", and sort controls.
+
+### Phase 6 Verification Notes
+
+- `node node_modules/vitest/vitest.mjs run src/pages/library-empty-states.test.tsx src/components/library/system-playlist-cards.test.tsx src/components/library/system-playlist-detail.test.tsx src/components/player/queue-panel.test.tsx src/lib/system-playlists.test.ts` passes: 5 files, 20 tests.
+- `node node_modules/@biomejs/biome/bin/biome check --formatter-enabled=false src/lib/system-playlists.ts src/lib/system-playlists.test.ts src/components/library/system-playlist-detail.tsx src/components/library/system-playlist-detail.test.tsx src/components/library/track-row.tsx src/components/library/virtual-track-list.tsx src/components/library/track-list-section.tsx` passes.
+- Direct `tsc --noEmit` is currently blocked by unrelated chat/settings dynamic i18n key typing errors in `src/components/chat/dj-chat-entry.tsx` and `src/components/settings/dj-tool-capabilities.tsx`.
+
 ---
 
 ## 7. Out of Scope
@@ -554,6 +580,7 @@ Deletion behavior:
 | 2026-06-13 | Codex | Resolved product questions: rolling 30 days, unique recently played, Queue pinned sources, folded stats as source of truth, and remote/shared item inclusion. |
 | 2026-06-13 | Codex | Completed Phase 2 pure system playlist selectors with TDD coverage for local and remote playback rows. |
 | 2026-06-13 | Codex | Completed Phases 3-5: Gallery and Queue pinned sources, virtual detail view, Most Played range metrics, four-locale copy, and targeted TDD verification. |
+| 2026-06-13 | Codex | Completed Phase 6: dedicated play-count and last-played columns plus sort controls that feed the selected queue order. |
 
 ---
 
@@ -566,6 +593,8 @@ Deletion behavior:
 - Recently Played orders tracks by latest counted playback time.
 - Most Played supports All / Month / Week / Day range switching.
 - Most Played row metadata includes the selected range play count, including weekly counts.
+- System playlist detail rows show play count and last played time as separate columns.
+- System playlist detail can sort rows and queue playback by play count or last played time.
 - Playing a system playlist loads the currently visible derived order into the play queue.
 - Remote/shared tracks appear in Recently Played and Most Played when their local playback identity and display/playback metadata can be resolved.
 - No new backend, account system, telemetry, or cloud dependency is introduced.

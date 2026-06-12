@@ -938,7 +938,13 @@
     "emptyMostPlayed": "Plays will appear here once listening history builds up.",
     "playCount_one": "{{count}} play",
     "playCount_other": "{{count}} plays",
-    "listenTime": "{{time}} listened"
+    "listenTime": "{{time}} listened",
+    "playCountColumn": "Plays",
+    "lastPlayedColumn": "Last played",
+    "neverPlayed": "Never",
+    "sortDefault": "Default",
+    "sortPlayCount": "Play count",
+    "sortLastPlayed": "Last played"
   },
   "gallery": {
     "title": "Sets",

@@ -5,6 +5,7 @@ import {
   deriveMostPlayedPlaylist,
   deriveRecentlyPlayedPlaylist,
   getMostPlayedRangeStart,
+  sortSystemPlaylistRows,
 } from "./system-playlists";
 
 const NOW = new Date(2026, 0, 15, 15, 30, 0).getTime();
@@ -155,6 +156,25 @@ describe("system playlist selectors", () => {
       }),
     ]);
   });
+
+  it("sorts playable rows by play count or last played time", () => {
+    const rows = [
+      localRow("trk_low_recent", "Low recent", { lastPlayedAt: NOW - 1_000, playCount: 1 }),
+      localRow("trk_high_old", "High old", { lastPlayedAt: NOW - DAY, playCount: 4 }),
+      localRow("trk_mid", "Mid", { lastPlayedAt: NOW - 5_000, playCount: 2 }),
+    ];
+
+    expect(sortSystemPlaylistRows(rows, "play-count").map((row) => row.id)).toEqual([
+      "trk_high_old",
+      "trk_mid",
+      "trk_low_recent",
+    ]);
+    expect(sortSystemPlaylistRows(rows, "last-played").map((row) => row.id)).toEqual([
+      "trk_low_recent",
+      "trk_mid",
+      "trk_high_old",
+    ]);
+  });
 });
 
 function track(input: Partial<Track> & { id: string; title: string }): Track {
@@ -215,5 +235,25 @@ function remote(
     title: input.trackId,
     updatedAt: NOW,
     ...input,
+  };
+}
+
+function localRow(
+  id: string,
+  title: string,
+  metric: { lastPlayedAt: number; playCount: number },
+) {
+  const rowTrack = track({ id, title });
+  return {
+    id,
+    kind: "local-track" as const,
+    metric: {
+      listenedSec: metric.playCount * 30,
+      lastPlayedAt: metric.lastPlayedAt,
+      playCount: metric.playCount,
+      trackId: id,
+    },
+    title,
+    track: rowTrack,
   };
 }

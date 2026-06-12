@@ -6,18 +6,21 @@ import { TrackInspectorPanel } from "@/components/track/track-inspector-panel";
 import { Button } from "@/components/ui/button";
 import type { PlaybackEvent, RemoteSearchTrack, Track, TrackPlaybackStats } from "@/db/types";
 import {
-  deriveHeartedPlaylist,
+  deriveHeartedPlaylistRows,
   deriveMostPlayedPlaylist,
   deriveRecentlyPlayedPlaylist,
   type MostPlayedRange,
   type SystemPlaylistId,
   type SystemPlaylistPlayable,
+  type SystemPlaylistSort,
+  sortSystemPlaylistRows,
 } from "@/lib/system-playlists";
-import { cn, formatListenTime } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 import { usePlayerStore } from "@/stores/player-store";
 import { TrackListSection } from "./track-list-section";
 
 const MOST_PLAYED_RANGES: MostPlayedRange[] = ["all", "month", "week", "day"];
+const SYSTEM_PLAYLIST_SORTS: SystemPlaylistSort[] = ["default", "play-count", "last-played"];
 type CommonT = TFunction<"common", undefined>;
 
 export function SystemPlaylistDetail({
@@ -37,8 +40,9 @@ export function SystemPlaylistDetail({
   now?: number;
   onBack: () => void;
 }) {
-  const { t } = useTranslation();
+  const { i18n, t } = useTranslation();
   const [range, setRange] = useState<MostPlayedRange>("all");
+  const [sort, setSort] = useState<SystemPlaylistSort>("default");
   const [selectedTrackId, setSelectedTrackId] = useState<string | null>(null);
   const play = usePlayerStore((s) => s.play);
   const playTrack = usePlayerStore((s) => s.playTrack);
@@ -48,26 +52,31 @@ export function SystemPlaylistDetail({
     () => deriveRows(playlistId, tracks, stats, events, remoteTracks, range, now),
     [events, now, playlistId, range, remoteTracks, stats, tracks],
   );
+  const sortedRows = useMemo(() => sortSystemPlaylistRows(rows, sort), [rows, sort]);
   const localTracks = useMemo(
-    () => rows.flatMap((row) => (row.kind === "local-track" ? [row.track] : [])),
-    [rows],
+    () => sortedRows.flatMap((row) => (row.kind === "local-track" ? [row.track] : [])),
+    [sortedRows],
   );
   const remoteRows = useMemo(
     () =>
-      rows.filter(
+      sortedRows.filter(
         (row): row is Extract<SystemPlaylistPlayable, { kind: "remote-track" }> =>
           row.kind === "remote-track",
       ),
-    [rows],
+    [sortedRows],
   );
   const metricsByTrackId = useMemo(
     () =>
       new Map(
-        rows.flatMap((row) =>
+        sortedRows.flatMap((row) =>
           row.kind === "local-track" ? ([[row.track.id, row.metric]] as const) : [],
         ),
       ),
-    [rows],
+    [sortedRows],
+  );
+  const lastPlayedFormatter = useMemo(
+    () => new Intl.DateTimeFormat(i18n.language, { dateStyle: "medium", timeStyle: "short" }),
+    [i18n.language],
   );
   const selectedTrack = useMemo(
     () => localTracks.find((track) => track.id === selectedTrackId) ?? localTracks[0],
@@ -123,13 +132,19 @@ export function SystemPlaylistDetail({
             onView={(track) => setSelectedTrackId(track.id)}
             onPlay={(track) => void playTrack(track)}
             emptyHint={emptyHint(playlistId, t)}
-            listClassName="chrome-fade no-scrollbar pt-5 pb-chrome-bottom [--chrome-fade-top:1.25rem]"
+            listClassName="chrome-fade no-scrollbar pt-2 pb-chrome-bottom [--chrome-fade-top:0.75rem]"
             className="min-h-0 flex-1"
-            getTrackSupplement={
-              playlistId === "system:most"
-                ? (track) => metricSupplement(metricsByTrackId.get(track.id), t)
-                : undefined
+            afterToolbar={
+              localTracks.length > 0 ? <MetricColumnHeader t={t} /> : undefined
             }
+            endActions={<SortControls onChange={setSort} sort={sort} t={t} />}
+            getTrackColumns={(track) => (
+              <MetricColumns
+                formatter={lastPlayedFormatter}
+                metric={metricsByTrackId.get(track.id)}
+                t={t}
+              />
+            )}
             startActions={
               <Button size="sm" onClick={() => void playAll()} disabled={localTracks.length === 0}>
                 <Play className="size-4" /> {t("gallery.playAll")}
@@ -141,12 +156,12 @@ export function SystemPlaylistDetail({
               {remoteRows.map((row) => (
                 <div
                   key={row.id}
-                  className="rounded-md border border-border bg-background/70 px-3 py-2"
+                  className="flex items-center justify-between gap-3 rounded-md border border-border bg-background/70 px-3 py-2"
                 >
-                  <p className="truncate text-sm">{row.remote.title}</p>
-                  <p className="truncate text-muted-foreground text-xs">
-                    {metricSupplement(row.metric, t)}
-                  </p>
+                  <p className="min-w-0 truncate text-sm">{row.remote.title}</p>
+                  <span className="hidden shrink-0 items-center gap-3 text-muted-foreground text-xs md:inline-flex">
+                    <MetricColumns formatter={lastPlayedFormatter} metric={row.metric} t={t} />
+                  </span>
                 </div>
               ))}
             </div>
@@ -169,17 +184,7 @@ function deriveRows(
 ): SystemPlaylistPlayable[] {
   switch (playlistId) {
     case "system:liked":
-      return deriveHeartedPlaylist(tracks).map((track) => ({
-        id: track.id,
-        kind: "local-track",
-        metric: {
-          listenedSec: 0,
-          playCount: 0,
-          trackId: track.id,
-        },
-        title: track.title,
-        track,
-      }));
+      return deriveHeartedPlaylistRows(tracks, { stats });
     case "system:recent":
       return deriveRecentlyPlayedPlaylist(tracks, { events, remoteTracks, stats });
     default:
@@ -222,14 +227,72 @@ function emptyHint(id: SystemPlaylistId, t: CommonT) {
   }
 }
 
-function metricSupplement(
-  metric: SystemPlaylistPlayable["metric"] | undefined,
-  t: CommonT,
-) {
-  if (!metric) return undefined;
-  return `${t("systemPlaylists.playCount", {
-    count: metric.playCount,
-  })} · ${t("systemPlaylists.listenTime", {
-    time: formatListenTime(metric.listenedSec),
-  })}`;
+function MetricColumnHeader({ t }: { t: CommonT }) {
+  return (
+    <div className="hidden shrink-0 justify-end gap-3 px-3 pb-1 text-muted-foreground text-xs md:flex">
+      <span className="w-16 text-right">{t("systemPlaylists.playCountColumn")}</span>
+      <span className="w-36 text-right">{t("systemPlaylists.lastPlayedColumn")}</span>
+      <span className="w-10" aria-hidden />
+    </div>
+  );
+}
+
+function SortControls({
+  sort,
+  onChange,
+  t,
+}: {
+  sort: SystemPlaylistSort;
+  onChange: (sort: SystemPlaylistSort) => void;
+  t: CommonT;
+}) {
+  return (
+    <div className="flex rounded-md border border-border p-0.5">
+      {SYSTEM_PLAYLIST_SORTS.map((id) => (
+        <button
+          type="button"
+          key={id}
+          onClick={() => onChange(id)}
+          className={cn(
+            "rounded px-2 py-1 text-xs transition-colors",
+            sort === id ? "bg-accent text-foreground" : "text-muted-foreground",
+          )}
+        >
+          {sortLabel(id, t)}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function MetricColumns({
+  metric,
+  formatter,
+  t,
+}: {
+  metric: SystemPlaylistPlayable["metric"] | undefined;
+  formatter: Intl.DateTimeFormat;
+  t: CommonT;
+}) {
+  return (
+    <>
+      <span className="w-16 text-right tabular-nums">{metric?.playCount ?? 0}</span>
+      <span className="w-36 truncate text-right">
+        {metric?.lastPlayedAt
+          ? formatter.format(metric.lastPlayedAt)
+          : t("systemPlaylists.neverPlayed")}
+      </span>
+    </>
+  );
+}
+
+function sortLabel(sort: SystemPlaylistSort, t: CommonT) {
+  switch (sort) {
+    case "play-count":
+      return t("systemPlaylists.sortPlayCount");
+    case "last-played":
+      return t("systemPlaylists.sortLastPlayed");
+    default:
+      return t("systemPlaylists.sortDefault");
+  }
 }

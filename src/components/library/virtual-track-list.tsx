@@ -54,6 +54,7 @@ export function VirtualTrackList({
   onToggleSelect,
   onDeleteTrack,
   getTrackSupplement,
+  getTrackColumns,
   header,
   initialScrollIndex,
 }: {
@@ -79,6 +80,7 @@ export function VirtualTrackList({
    *  delete (the historical behavior) when not provided. */
   onDeleteTrack?: (track: Track) => void;
   getTrackSupplement?: (track: Track) => ReactNode;
+  getTrackColumns?: (track: Track) => ReactNode;
   /** Scroll to this row index on MOUNT — e.g. returning from select mode's reorder
    *  list (a different scroll container). Restored through the virtualizer so it
    *  routes via Lenis. */
@@ -404,6 +406,7 @@ export function VirtualTrackList({
                 isSelected={track.id === selectedTrackId}
                 listIndex={virtualRow.index}
                 secondaryMeta={getTrackSupplement?.(track)}
+                metricColumns={getTrackColumns?.(track)}
                 sessions={sessions}
                 selectable={selectable}
                 checked={selectedIds?.has(track.id) ?? false}

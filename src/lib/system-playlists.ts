@@ -2,6 +2,7 @@ import type { PlaybackEvent, RemoteSearchTrack, Track, TrackPlaybackStats } from
 
 export type SystemPlaylistId = "system:liked" | "system:recent" | "system:most";
 export type MostPlayedRange = "all" | "month" | "week" | "day";
+export type SystemPlaylistSort = "default" | "play-count" | "last-played";
 
 export interface SystemPlaylistDefinition {
   id: SystemPlaylistId;
@@ -55,6 +56,16 @@ export function deriveHeartedPlaylist(tracks: Track[]): Track[] {
         a.title.localeCompare(b.title) ||
         a.createdAt - b.createdAt,
     );
+}
+
+export function deriveHeartedPlaylistRows(
+  tracks: Track[],
+  input: { stats: TrackPlaybackStats[] },
+): SystemPlaylistPlayable[] {
+  const metricsByTrackId = foldTrackStats(input.stats);
+  return deriveHeartedPlaylist(tracks).map((track) =>
+    toLocalPlayable(track, metricsByTrackId.get(track.id) ?? emptyTrackMetric(track.id)),
+  );
 }
 
 export function deriveRecentlyPlayedPlaylist(
@@ -139,6 +150,20 @@ export function getMostPlayedRangeStart(range: MostPlayedRange, now: number): nu
       return now - 30 * DAY_MS;
     default:
       return undefined;
+  }
+}
+
+export function sortSystemPlaylistRows(
+  rows: SystemPlaylistPlayable[],
+  sort: SystemPlaylistSort,
+): SystemPlaylistPlayable[] {
+  switch (sort) {
+    case "play-count":
+      return [...rows].sort(compareMostPlayed);
+    case "last-played":
+      return [...rows].sort(compareLastPlayed);
+    default:
+      return [...rows];
   }
 }
 
@@ -249,6 +274,14 @@ function toLocalPlayable(track: Track, metric: SystemPlaylistTrackMetric): Syste
   };
 }
 
+function emptyTrackMetric(trackId: string): SystemPlaylistTrackMetric {
+  return {
+    listenedSec: 0,
+    playCount: 0,
+    trackId,
+  };
+}
+
 function toRemotePlayable(
   remote: RemoteSearchTrack,
   metric: SystemPlaylistTrackMetric,
@@ -297,6 +330,16 @@ function compareMostPlayed(a: SystemPlaylistPlayable, b: SystemPlaylistPlayable)
     b.metric.playCount - a.metric.playCount ||
     b.metric.listenedSec - a.metric.listenedSec ||
     (b.metric.lastPlayedAt ?? 0) - (a.metric.lastPlayedAt ?? 0) ||
+    a.title.localeCompare(b.title) ||
+    a.id.localeCompare(b.id)
+  );
+}
+
+function compareLastPlayed(a: SystemPlaylistPlayable, b: SystemPlaylistPlayable): number {
+  return (
+    (b.metric.lastPlayedAt ?? 0) - (a.metric.lastPlayedAt ?? 0) ||
+    b.metric.playCount - a.metric.playCount ||
+    b.metric.listenedSec - a.metric.listenedSec ||
     a.title.localeCompare(b.title) ||
     a.id.localeCompare(b.id)
   );

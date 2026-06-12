@@ -923,7 +923,13 @@
     "emptyRecentlyPlayed": "播放过的歌曲会出现在这里。",
     "emptyMostPlayed": "有播放历史后，这里会显示最常听的歌曲。",
     "playCount_other": "播放 {{count}} 次",
-    "listenTime": "已听 {{time}}"
+    "listenTime": "已听 {{time}}",
+    "playCountColumn": "播放次数",
+    "lastPlayedColumn": "最近播放",
+    "neverPlayed": "未播放",
+    "sortDefault": "默认",
+    "sortPlayCount": "按播放次数",
+    "sortLastPlayed": "按最近播放"
   },
   "gallery": {
     "title": "歌单",

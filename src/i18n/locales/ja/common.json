@@ -923,7 +923,13 @@
     "emptyRecentlyPlayed": "再生した曲がここに表示されます。",
     "emptyMostPlayed": "再生履歴が増えると、よく聴く曲がここに表示されます。",
     "playCount_other": "{{count}} 回再生",
-    "listenTime": "{{time}} 再生"
+    "listenTime": "{{time}} 再生",
+    "playCountColumn": "再生回数",
+    "lastPlayedColumn": "最終再生",
+    "neverPlayed": "未再生",
+    "sortDefault": "デフォルト",
+    "sortPlayCount": "再生回数順",
+    "sortLastPlayed": "最終再生順"
   },
   "gallery": {
     "title": "セット",
