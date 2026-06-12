@@ -25,7 +25,8 @@ import {
 import type { DjSession, PlayQueue, Track } from "@/db/types";
 import { describeBrief, type TrackBrief, trackBriefSchema } from "@/dj/dj-brief-schema";
 import { newId } from "@/lib/id";
-import { lyricsSearchFields, searchTracks } from "@/lib/track-search";
+import { freeTextMatches } from "@/lib/search-core";
+import { findLyricSearchMatch, lyricsSearchFields, searchTracks } from "@/lib/track-search";
 import {
   generatedTrackMemoryNote,
   musicGenProviderPresetKey,
@@ -194,29 +195,86 @@ export const addMemoryInputSchema = z.object({
 
 export type AddMemoryInput = z.input<typeof addMemoryInputSchema>;
 
-export const lyricsSearchInputSchema = z.object({
-  /** Words/phrases to find in song lyrics. */
+export const LIBRARY_SEARCH_TYPES = ["track", "set", "lyrics"] as const;
+export type LibrarySearchType = (typeof LIBRARY_SEARCH_TYPES)[number];
+
+export const librarySearchInputSchema = z.object({
+  /** One or more keywords; combined per `match`. */
   queries: z.array(z.string().min(1)).min(1).max(8),
-  /** "any" = lyrics matching ANY keyword; "all" = ALL keywords. */
+  /** "any" = matching ANY keyword (gather a genre); "all" = ALL keywords. */
   match: z.enum(["any", "all"]).default("any"),
+  /** Result types to include. Default just tracks. "lyrics" finds songs by their words. */
+  types: z.array(z.enum(LIBRARY_SEARCH_TYPES)).min(1).default(["track"]),
+  /** Track-group field projection (default id+title to keep JSON small). */
+  fields: z.array(z.enum(TRACK_RESULT_FIELDS)).optional(),
+  /** Per-group cap; the track group also pages via `cursor` (reports `nextCursor`). */
   limit: z.number().int().min(1).max(200).default(30),
-  /** Page offset into the matches; pass the previous call's `nextCursor` to page. */
   cursor: z.number().int().min(0).default(0),
 });
 
-export type LyricsSearchInput = z.input<typeof lyricsSearchInputSchema>;
+export type LibrarySearchInput = z.input<typeof librarySearchInputSchema>;
 
-/** First lyric line containing a term, timestamp tags stripped, truncated. */
-function lyricSnippet(fields: readonly string[], terms: readonly string[]): string | undefined {
-  for (const field of fields) {
-    for (const rawLine of field.split("\n")) {
-      const line = rawLine.replace(/\[[^\]]*\]/g, "").trim(); // drop [mm:ss.xx] / word tags
-      if (line && terms.some((t) => line.toLowerCase().includes(t))) {
-        return line.length > 120 ? `${line.slice(0, 120)}…` : line;
-      }
-    }
+export interface LyricHit {
+  trackId: string;
+  title: string;
+  snippet?: string;
+  /** Seconds into the song the matching line is at (synced lyrics only). */
+  timeSec?: number;
+}
+
+/**
+ * Tracks whose lyrics match the terms, reusing the SAME engine as the ⌘F overlay:
+ * `freeTextMatches` (transliteration-aware) over the precomputed lyric fields for
+ * the matching decision, then `findLyricSearchMatch` for the matched line snippet
+ * (+ timestamp). Covers stored lyrics (plain/synced/translation/romanization) and
+ * a generated track's brief lyrics; instrumentals are skipped by the matcher.
+ */
+function searchLyricHits(
+  tracks: Track[],
+  lyricsByTrack: ReadonlyMap<string, Parameters<typeof findLyricSearchMatch>[1]>,
+  terms: string[],
+  match: "any" | "all",
+): LyricHit[] {
+  const cleaned = terms.map((t) => t.trim()).filter(Boolean);
+  const hits: LyricHit[] = [];
+  for (const track of tracks) {
+    const lyrics = lyricsByTrack.get(track.id) ?? null;
+    const fields = lyricsSearchFields(track, lyrics);
+    if (fields.length === 0) continue;
+    const matched =
+      cleaned.length === 0
+        ? true
+        : match === "all"
+          ? cleaned.every((t) => freeTextMatches(t, fields))
+          : cleaned.some((t) => freeTextMatches(t, fields));
+    if (!matched) continue;
+    const term = cleaned.find((t) => freeTextMatches(t, fields)) ?? cleaned[0] ?? "";
+    const line = findLyricSearchMatch(track, lyrics, term);
+    hits.push({
+      trackId: track.id,
+      title: track.title,
+      snippet: line?.text,
+      timeSec: line?.timeSec,
+    });
   }
-  return undefined;
+  return hits;
+}
+
+/** Sets whose NAME matches the terms (transliteration-aware), mirroring ⌘F's `@set`. */
+function searchSetHits(
+  sessions: DjSession[],
+  terms: string[],
+  match: "any" | "all",
+): Array<{ id: string; name: string; trackCount: number }> {
+  const cleaned = terms.map((t) => t.trim()).filter(Boolean);
+  return sessions
+    .filter((s) => {
+      if (cleaned.length === 0) return true;
+      return match === "all"
+        ? cleaned.every((t) => freeTextMatches(t, [s.name]))
+        : cleaned.some((t) => freeTextMatches(t, [s.name]));
+    })
+    .map((s) => ({ id: s.id, name: s.name, trackCount: s.trackIds.length }));
 }
 
 /**
@@ -579,49 +637,62 @@ export async function executeAddMemory(
 }
 
 /**
- * Find tracks by the WORDS in their lyrics — "the song that goes '...'". Matches
- * stored lyrics (plain / synced / translation / romanization, timestamps ignored)
- * plus a generated track's brief lyrics. Returns the track id + title + a matching
- * lyric snippet so the agent can play or curate it. Read-only; pages via cursor.
+ * ONE search over the library, filterable by type — the agent equivalent of the
+ * ⌘F overlay. Reuses the exact same matchers: `searchTracks`/`scoreRow` for tracks,
+ * `freeTextMatches` for set names, `findLyricSearchMatch` for lyric lines (all
+ * transliteration-aware). Only the requested `types` groups are returned; the
+ * track group projects to `fields` and pages via `cursor`/`nextCursor`.
  */
-export async function executeLyricsSearch(
-  rawInput: LyricsSearchInput,
+export async function executeLibrarySearch(
+  rawInput: LibrarySearchInput,
   deps: { db?: MuzeroDB } = {},
 ): Promise<{
-  total: number;
-  returned: number;
-  nextCursor: number | null;
-  tracks: Array<{ trackId: string; title: string; snippet?: string }>;
+  tracks?: {
+    total: number;
+    returned: number;
+    nextCursor: number | null;
+    items: Array<Record<string, unknown>>;
+  };
+  sets?: { total: number; items: Array<{ id: string; name: string; trackCount: number }> };
+  lyrics?: { total: number; items: LyricHit[] };
 }> {
-  const input = lyricsSearchInputSchema.parse(rawInput);
+  const input = librarySearchInputSchema.parse(rawInput);
   const db = deps.db ?? defaultDb;
-  const [tracks, lyricsRows] = await Promise.all([listAllTracks(db), listAllLyrics(db)]);
-  const lyricsByTrack = new Map(lyricsRows.map((row) => [row.trackId, row]));
-  const terms = input.queries.map((q) => q.trim().toLowerCase()).filter(Boolean);
+  const wants = new Set(input.types);
+  const out: Awaited<ReturnType<typeof executeLibrarySearch>> = {};
 
-  const hits: Array<{ trackId: string; title: string; snippet?: string }> = [];
-  for (const track of tracks) {
-    const fields = lyricsSearchFields(track, lyricsByTrack.get(track.id) ?? null);
-    if (fields.length === 0) continue;
-    const haystack = fields.join("\n").toLowerCase();
-    const matched =
-      terms.length === 0
-        ? true
-        : input.match === "all"
-          ? terms.every((t) => haystack.includes(t))
-          : terms.some((t) => haystack.includes(t));
-    if (!matched) continue;
-    hits.push({ trackId: track.id, title: track.title, snippet: lyricSnippet(fields, terms) });
+  if (wants.has("track")) {
+    const r = await executeSearchTracks(
+      {
+        queries: input.queries,
+        match: input.match,
+        fields: input.fields,
+        limit: input.limit,
+        cursor: input.cursor,
+      },
+      { db },
+    );
+    out.tracks = {
+      total: r.total,
+      returned: r.returned,
+      nextCursor: r.nextCursor,
+      items: r.tracks,
+    };
   }
 
-  const page = hits.slice(input.cursor, input.cursor + input.limit);
-  const nextOffset = input.cursor + page.length;
-  return {
-    total: hits.length,
-    returned: page.length,
-    nextCursor: nextOffset < hits.length ? nextOffset : null,
-    tracks: page,
-  };
+  if (wants.has("set")) {
+    const hits = searchSetHits(await listSessions(db), input.queries, input.match);
+    out.sets = { total: hits.length, items: hits.slice(0, input.limit) };
+  }
+
+  if (wants.has("lyrics")) {
+    const [tracks, lyricsRows] = await Promise.all([listAllTracks(db), listAllLyrics(db)]);
+    const lyricsByTrack = new Map(lyricsRows.map((row) => [row.trackId, row]));
+    const hits = searchLyricHits(tracks, lyricsByTrack, input.queries, input.match);
+    out.lyrics = { total: hits.length, items: hits.slice(0, input.limit) };
+  }
+
+  return out;
 }
 
 /**
@@ -691,17 +762,11 @@ export async function executeOnlineAddTracks(
 export function createDjChatTools(deps: DjChatToolDeps = {}): ToolSet {
   const db = deps.db ?? defaultDb;
   const tools: ToolSet = {
-    library_search_tracks: tool({
+    library_search: tool({
       description:
-        'Search local tracks by title, caption, tags, legacy note, and Memory notes. Pass multiple keywords as `queries` (match "any" gathers a genre, "all" narrows). Returns are projected to `fields` (default id+title) to keep JSON small; `total` is the full match count, `returned` is this page. Page through large results with `cursor`: pass the previous call\'s `nextCursor` back as `cursor` until it is null. To curate a whole genre into a set without listing every id, prefer set_add_by_search.',
-      inputSchema: searchTracksInputSchema,
-      execute: (input) => executeSearchTracks(input, { db }),
-    }),
-    lyrics_search: tool({
-      description:
-        "Find tracks by the WORDS in their lyrics (\"the song that goes '…'\"). queries[] + match any/all; timestamps are ignored, generated tracks' brief lyrics are included. Returns trackId + title + a matching lyric snippet; page with cursor/nextCursor.",
-      inputSchema: lyricsSearchInputSchema,
-      execute: (input) => executeLyricsSearch(input, { db }),
+        'One search over the library, filtered by `types` (default ["track"]). Keywords go in `queries` (match "any" gathers a genre, "all" narrows). `types` can include: "track" (title/caption/tags/notes/memories), "set" (match playlist NAMES), and "lyrics" (find songs by the WORDS in their lyrics — each hit returns a matching line snippet + timestamp). Only the requested groups come back. The track group projects to `fields` (default id+title) and pages via `cursor`/`nextCursor`. To curate a whole genre into a set without listing every id, prefer set_add_by_search.',
+      inputSchema: librarySearchInputSchema,
+      execute: (input) => executeLibrarySearch(input, { db }),
     }),
     library_list_tags: tool({
       description: "List distinct local tags with usage counts.",

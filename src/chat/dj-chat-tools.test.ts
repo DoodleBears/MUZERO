@@ -19,7 +19,7 @@ import {
   executeAddMemory,
   executeCreateSet,
   executeGenerateTracks,
-  executeLyricsSearch,
+  executeLibrarySearch,
   executeMemorySearch,
   executeOnlineAddTracks,
   executeOnlineSearchTracks,
@@ -52,7 +52,7 @@ describe("DJ chat tools", () => {
     const tools = createDjChatTools({ db });
     expect(tools.dj_generate_tracks.needsApproval).toBe(true);
     expect(tools.dj_propose_briefs.needsApproval).toBeUndefined();
-    expect(tools.library_search_tracks.needsApproval).toBeUndefined();
+    expect(tools.library_search.needsApproval).toBeUndefined();
     expect(tools.set_create.needsApproval).toBeUndefined();
   });
 
@@ -369,7 +369,7 @@ describe("DJ chat tools — conditional tool set", () => {
     const tools = createDjChatTools({ db, includeGenerate: false });
     expect(tools.dj_generate_tracks).toBeUndefined();
     expect(tools.dj_propose_briefs).toBeUndefined();
-    expect(tools.library_search_tracks).toBeDefined(); // base tools stay
+    expect(tools.library_search).toBeDefined(); // base tools stay
   });
 
   it("adds the online tools only when includeOnline is true", () => {
@@ -585,12 +585,12 @@ describe("memory search + add", () => {
   });
 });
 
-describe("lyrics search", () => {
+describe("library_search — unified, type-filtered", () => {
   function briefWithLyrics(title: string, lyrics: string) {
     return trackBriefSchema.parse({ title, caption: "c", lyrics, durationSec: 60 });
   }
   async function seed() {
-    const src = await createSession({ seedPrompt: "src" }, db);
+    const src = await createSession({ name: "Rainy Mix", seedPrompt: "src" }, db);
     const gen = await executeGenerateTracks(
       {
         sessionId: src.id,
@@ -601,19 +601,32 @@ describe("lyrics search", () => {
       },
       { db, providerId: "mock" },
     );
-    return gen.diff.createdTrackIds; // [rainy, sunshine]
+    return { setId: src.id, ids: gen.diff.createdTrackIds }; // ids: [rainy, sunshine]
   }
 
-  it("finds a track by words in its (brief) lyrics, with a snippet", async () => {
-    const [rainy] = await seed();
-    const hit = await executeLyricsSearch({ queries: ["pouring rain"] }, { db });
-    expect(hit.total).toBe(1);
-    expect(hit.tracks[0].trackId).toBe(rainy);
-    expect(hit.tracks[0].title).toBe("Rainy Day");
-    expect(hit.tracks[0].snippet).toContain("pouring rain");
+  it("default types=['track'] returns only the track group", async () => {
+    await seed();
+    const out = await executeLibrarySearch({ queries: ["rainy"] }, { db });
+    expect(out.tracks?.total).toBe(1);
+    expect(out.tracks?.items[0].title).toBe("Rainy Day");
+    expect(out.sets).toBeUndefined();
+    expect(out.lyrics).toBeUndefined();
   });
 
-  it("matches stored lyrics rows too, ignoring timestamps", async () => {
+  it("types=['lyrics'] finds songs by the words in their (brief) lyrics, with a snippet", async () => {
+    const { ids } = await seed();
+    const out = await executeLibrarySearch(
+      { queries: ["pouring rain"], types: ["lyrics"] },
+      { db },
+    );
+    expect(out.lyrics?.total).toBe(1);
+    expect(out.lyrics?.items[0].trackId).toBe(ids[0]);
+    expect(out.lyrics?.items[0].title).toBe("Rainy Day");
+    expect(out.lyrics?.items[0].snippet).toContain("pouring rain");
+    expect(out.tracks).toBeUndefined();
+  });
+
+  it("lyrics matches stored rows too, ignoring timestamps", async () => {
     const src = await createSession({ seedPrompt: "s" }, db);
     const gen = await executeGenerateTracks(
       { sessionId: src.id, briefs: [briefWithLyrics("Synced", "")] },
@@ -632,29 +645,36 @@ describe("lyrics search", () => {
       },
       db,
     );
-    const hit = await executeLyricsSearch({ queries: ["neon lights"] }, { db });
-    expect(hit.tracks.map((t) => t.trackId)).toEqual([id]);
-    expect(hit.tracks[0].snippet).toBe("neon lights across the avenue"); // timestamp stripped
+    const out = await executeLibrarySearch({ queries: ["neon lights"], types: ["lyrics"] }, { db });
+    expect(out.lyrics?.items.map((t) => t.trackId)).toEqual([id]);
+    expect(out.lyrics?.items[0].snippet).toBe("neon lights across the avenue"); // timestamp stripped
   });
 
-  it("match 'any' unions keywords; 'all' intersects; pages via cursor", async () => {
-    await seed();
-    const anyHit = await executeLyricsSearch({ queries: ["rain", "sun"], match: "any" }, { db });
-    expect(anyHit.total).toBe(2);
-    const allHit = await executeLyricsSearch({ queries: ["rain", "sun"], match: "all" }, { db });
-    expect(allHit.total).toBe(0);
+  it("types=['set'] matches playlist names", async () => {
+    const { setId } = await seed();
+    const out = await executeLibrarySearch({ queries: ["rainy"], types: ["set"] }, { db });
+    expect(out.sets?.items.map((s) => s.id)).toEqual([setId]);
+    expect(out.sets?.items[0].trackCount).toBe(2);
+  });
 
-    const p1 = await executeLyricsSearch(
-      { queries: ["doo", "rain"], match: "any", limit: 1 },
+  it("returns multiple groups at once and respects match any/all on lyrics", async () => {
+    await seed();
+    const both = await executeLibrarySearch(
+      { queries: ["rainy"], types: ["track", "set"] },
       { db },
     );
-    expect(p1.returned).toBe(1);
-    expect(p1.nextCursor).toBe(1);
-    const p2 = await executeLyricsSearch(
-      { queries: ["doo", "rain"], match: "any", limit: 1, cursor: 1 },
+    expect(both.tracks?.total).toBe(1);
+    expect(both.sets?.total).toBe(1);
+
+    const anyHit = await executeLibrarySearch(
+      { queries: ["rain", "sun"], match: "any", types: ["lyrics"] },
       { db },
     );
-    expect(p2.nextCursor).toBeNull();
-    expect(new Set([...p1.tracks, ...p2.tracks].map((t) => t.trackId)).size).toBe(2);
+    expect(anyHit.lyrics?.total).toBe(2);
+    const allHit = await executeLibrarySearch(
+      { queries: ["rain", "sun"], match: "all", types: ["lyrics"] },
+      { db },
+    );
+    expect(allHit.lyrics?.total).toBe(0);
   });
 });
