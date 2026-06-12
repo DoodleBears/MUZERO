@@ -62,7 +62,11 @@ describe("mergeBindings", () => {
   it("uses defaults when there is no override", () => {
     const merged = mergeBindings();
     expect(merged["playback.prev"]).toEqual([
-      { gesture: { kind: "key", stroke: { code: "KeyQ", keyLabel: "Q" } }, source: "default" },
+      {
+        gesture: { kind: "key", stroke: { code: "KeyQ", keyLabel: "Q" } },
+        scope: "global",
+        source: "default",
+      },
     ]);
   });
 
@@ -71,7 +75,26 @@ describe("mergeBindings", () => {
       "playback.prev": [{ kind: "key", stroke: { code: "KeyZ", keyLabel: "Z" } }],
     });
     expect(merged["playback.prev"]).toEqual([
-      { gesture: { kind: "key", stroke: { code: "KeyZ", keyLabel: "Z" } }, source: "custom" },
+      {
+        gesture: { kind: "key", stroke: { code: "KeyZ", keyLabel: "Z" } },
+        scope: "global",
+        source: "custom",
+      },
+    ]);
+  });
+
+  it("accepts v2 scoped overrides and preserves the binding scope", () => {
+    const merged = mergeBindings({
+      "playback.prev": [
+        { scope: "now", gesture: { kind: "key", stroke: { code: "ArrowLeft", keyLabel: "←" } } },
+      ],
+    });
+    expect(merged["playback.prev"]).toEqual([
+      {
+        gesture: { kind: "key", stroke: { code: "ArrowLeft", keyLabel: "←" } },
+        scope: "now",
+        source: "custom",
+      },
     ]);
   });
 
@@ -102,6 +125,30 @@ describe("sanitizeOverrides", () => {
     const clean = sanitizeOverrides(raw, "other");
     expect(Object.keys(clean)).toEqual(["playback.prev"]);
     expect(clean["playback.prev"]).toHaveLength(1);
+    expect(clean["playback.prev"][0]).toMatchObject({ scope: "global" });
+  });
+
+  it("sanitizes v2 scoped override bindings and drops unknown scopes", () => {
+    const raw = {
+      "playback.prev": [
+        {
+          scope: "now",
+          gesture: { kind: "key", stroke: { code: "ArrowLeft", keyLabel: "←" } },
+        },
+        {
+          scope: "nope",
+          gesture: { kind: "key", stroke: { code: "ArrowRight", keyLabel: "→" } },
+        },
+      ],
+    };
+    expect(sanitizeOverrides(raw, "other")).toEqual({
+      "playback.prev": [
+        {
+          scope: "now",
+          gesture: { kind: "key", stroke: { code: "ArrowLeft", keyLabel: "←" } },
+        },
+      ],
+    });
   });
 
   it("returns {} for non-object input", () => {
@@ -129,19 +176,25 @@ describe("findConflicts (same-scope only)", () => {
 
   it("flags a same-scope collision (rebinding cycleRepeat to Q hits prev)", () => {
     const q: ShortcutGesture = { kind: "key", stroke: { code: "KeyQ", keyLabel: "Q" } };
-    const conflicts = findConflicts("playback.cycleRepeat", q, bindings, "other");
+    const conflicts = findConflicts("playback.cycleRepeat", "global", q, bindings, "other");
     expect(conflicts.map((c) => c.actionId)).toContain("playback.prev");
   });
 
   it("does NOT flag cross-scope shadowing (↑ in global volume vs library focus)", () => {
     const up: ShortcutGesture = { kind: "key", stroke: { code: "ArrowUp", keyLabel: "↑" } };
     // candidate is a global action; library focus also binds ↑ but is a different scope.
-    expect(findConflicts("playback.volumeUp", up, bindings, "other")).toEqual([]);
+    expect(findConflicts("playback.volumeUp", "global", up, bindings, "other")).toEqual([]);
   });
 
   it("never conflicts on pointer/display gestures", () => {
     expect(
-      findConflicts("library.back", { kind: "pointer", labelKey: "x" }, bindings, "other"),
+      findConflicts(
+        "library.back",
+        "library",
+        { kind: "pointer", labelKey: "x" },
+        bindings,
+        "other",
+      ),
     ).toEqual([]);
   });
 });
@@ -221,6 +274,19 @@ describe("formatGesture / actionBindingChips", () => {
   it("exposes per-action chips skipping pointer gestures", () => {
     const chips = actionBindingChips("library.back", mergeBindings(), "other");
     expect(chips).toEqual([["A"], ["←"]]); // pointer swipe-back is omitted
+  });
+
+  it("can filter display chips by binding scope", () => {
+    const bindings = mergeBindings({
+      "playback.prev": [
+        { scope: "global", gesture: { kind: "key", stroke: { code: "KeyQ", keyLabel: "Q" } } },
+        {
+          scope: "now",
+          gesture: { kind: "key", stroke: { code: "ArrowLeft", keyLabel: "←" } },
+        },
+      ],
+    });
+    expect(actionBindingChips("playback.prev", bindings, "other", "now")).toEqual([["←"]]);
   });
 });
 

@@ -1,6 +1,6 @@
 # PRD: Tab-Scoped Keyboard Shortcuts
 
-**Status:** Draft
+**Status:** In Progress
 **Created:** 2026-06-13
 **Author:** MUZERO
 **Module:** Shortcuts - per-tab / per-surface key ownership for playback, library, queue, and inspector shortcuts
@@ -11,7 +11,7 @@
 
 | Phase | Name | Status | Link |
 |-------|------|--------|------|
-| 1 | Scoped binding model | Pending | [Phase 1 Checklist](#phase-1-checklist) |
+| 1 | Scoped binding model | Completed | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | Now Playing arrow transport | Pending | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | Settings UI by surface | Pending | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | Tooltip and cheat-sheet parity | Pending | [Phase 4 Checklist](#phase-4-checklist) |
@@ -320,18 +320,18 @@ Do not put merged bindings into Zustand. Continue deriving them from Dexie setti
 **Goal:** Extend the shortcut engine to understand per-binding scopes while keeping old keymaps readable.
 
 **Tasks:**
-- [ ] Extend `ShortcutScope` to include `now` and `queue`.
-- [ ] Replace action-level scoped bindings with per-binding scoped bindings.
-- [ ] Add v1 -> v2 sanitizer for stored overrides.
-- [ ] Update conflict detection to compare `(scope, gestureIdentity)`.
-- [ ] Update import/export schema with version handling.
+- [x] Extend `ShortcutScope` to include `now` and `queue`.
+- [x] Replace action-level scoped bindings with per-binding scoped bindings.
+- [x] Add v1 -> v2 sanitizer for stored overrides.
+- [x] Update conflict detection to compare `(scope, gestureIdentity)`.
+- [x] Update import/export schema with version handling.
 
 ### Phase 1 Checklist
 
-- [ ] Existing user overrides still load.
-- [ ] Same key in `now` and `library` is not a conflict.
-- [ ] Same key in the same scope is a conflict.
-- [ ] `registry.test.ts` confirms default bindings are conflict-free per scope.
+- [x] Existing user overrides still load.
+- [x] Same key in `now` and `library` is not a conflict.
+- [x] Same key in the same scope is a conflict.
+- [x] `registry.test.ts` confirms default bindings are conflict-free per scope.
 
 ### Phase 2: Now Playing Arrow Transport
 
@@ -439,3 +439,4 @@ Do not put merged bindings into Zustand. Continue deriving them from Dexie setti
 |------|--------|---------|
 | 2026-06-13 | MUZERO | Initial draft: best-practice plan for per-tab/per-surface shortcut ownership, including Now Playing arrow transport without breaking Library arrow navigation |
 | 2026-06-13 | MUZERO | Resolved Open Questions 1-2: no dedicated Settings scope in v1; queue scope activates while the queue surface is open and not typing. |
+| 2026-06-13 | MUZERO | Completed Phase 1: scoped binding model, v1 import compatibility, per-scope conflict checks, and v2 keymap export schema. |

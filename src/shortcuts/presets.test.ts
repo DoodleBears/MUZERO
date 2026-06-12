@@ -19,9 +19,11 @@ describe("SHORTCUT_PRESETS", () => {
     SHORTCUT_PRESETS.map((p) => [p.id, p] as const),
   )("%s is conflict-free once applied", (_id, preset) => {
     const bindings = mergeBindings(preset.overrides);
-    for (const [actionId, gestures] of Object.entries(preset.overrides)) {
-      for (const gesture of gestures) {
-        expect(findConflicts(actionId, gesture, bindings, "other")).toEqual([]);
+    for (const [actionId, scopedBindings] of Object.entries(preset.overrides)) {
+      for (const binding of scopedBindings) {
+        expect(findConflicts(actionId, binding.scope, binding.gesture, bindings, "other")).toEqual(
+          [],
+        );
       }
     }
   });

@@ -14,6 +14,7 @@ import {
   isEditableAction,
   type Platform,
   SCOPE_PRECEDENCE,
+  type ScopedShortcutBinding,
   SHORTCUT_ACTIONS,
   SHORTCUT_ACTIONS_BY_ID,
   type ShortcutActionDef,
@@ -26,15 +27,18 @@ export type { Platform } from "./registry";
 
 /** A live binding after the override→default merge, tagged with its source. */
 export interface MergedBinding {
+  scope: ShortcutScope;
   gesture: ShortcutGesture;
   source: "custom" | "default";
 }
 
 export type MergedBindings = Record<string, MergedBinding[]>;
+export type ShortcutOverrides = Record<string, ScopedShortcutBinding[]>;
 
 /** A colliding binding found for a candidate chord (same scope, different action). */
 export interface ShortcutConflict {
   actionId: string;
+  scope: ShortcutScope;
   gesture: ShortcutGesture;
 }
 
@@ -94,14 +98,22 @@ export function isModifierKey(key: string): boolean {
  * default. An override of `[]` means "explicitly unbound" (distinct from absent →
  * default). Protected / display-only actions ignore overrides entirely.
  */
-export function mergeBindings(overrides?: Record<string, ShortcutGesture[]>): MergedBindings {
+export function mergeBindings(
+  overrides?: Record<string, unknown> | ShortcutOverrides,
+): MergedBindings {
   const out: MergedBindings = {};
   for (const action of SHORTCUT_ACTIONS) {
     const custom = overrides?.[action.id];
-    if (custom !== undefined && isEditableAction(action)) {
-      out[action.id] = custom.map((gesture) => ({ gesture, source: "custom" }));
+    if (Array.isArray(custom) && isEditableAction(action)) {
+      out[action.id] = custom
+        .map((binding) => normalizeStoredBinding(binding, action.scope))
+        .filter((binding): binding is ScopedShortcutBinding => binding !== null)
+        .map((binding) => ({ ...binding, source: "custom" as const }));
     } else {
-      out[action.id] = action.defaultBindings.map((gesture) => ({ gesture, source: "default" }));
+      out[action.id] = action.defaultBindings.map((binding) => ({
+        ...binding,
+        source: "default" as const,
+      }));
     }
   }
   return out;
@@ -112,20 +124,50 @@ export function mergeBindings(overrides?: Record<string, ShortcutGesture[]>): Me
  * de-dupe each gesture list. Defends against a stored keymap written by a newer/
  * older build (forward/back-compat) or a malformed value.
  */
-export function sanitizeOverrides(
-  raw: unknown,
-  platform: Platform,
-): Record<string, ShortcutGesture[]> {
+export function sanitizeOverrides(raw: unknown, platform: Platform): ShortcutOverrides {
   if (!raw || typeof raw !== "object") return {};
-  const out: Record<string, ShortcutGesture[]> = {};
+  const out: ShortcutOverrides = {};
   for (const [id, value] of Object.entries(raw as Record<string, unknown>)) {
     const action = SHORTCUT_ACTIONS_BY_ID[id];
     if (!action || !isEditableAction(action)) continue;
     if (!Array.isArray(value)) continue;
-    const gestures = value.filter(isKeyGesture);
-    out[id] = dedupeGestures(gestures, platform);
+    const bindings = value
+      .map((item) => normalizeStoredBinding(item, action.scope))
+      .filter(
+        (binding): binding is ScopedShortcutBinding => !!binding && binding.gesture.kind === "key",
+      );
+    out[id] = dedupeScopedBindings(bindings, platform);
   }
   return out;
+}
+
+function normalizeStoredBinding(
+  value: unknown,
+  fallbackScope: ShortcutScope,
+): ScopedShortcutBinding | null {
+  if (isScopedBinding(value)) return value;
+  if (isGesture(value)) return { scope: fallbackScope, gesture: value };
+  return null;
+}
+
+function isScopedBinding(value: unknown): value is ScopedShortcutBinding {
+  if (!value || typeof value !== "object") return false;
+  const maybe = value as { scope?: unknown; gesture?: unknown };
+  return isShortcutScope(maybe.scope) && isGesture(maybe.gesture);
+}
+
+function isShortcutScope(value: unknown): value is ShortcutScope {
+  return (
+    value === "global" ||
+    value === "now" ||
+    value === "library" ||
+    value === "queue" ||
+    value === "inspector"
+  );
+}
+
+function isGesture(value: unknown): value is ShortcutGesture {
+  return isKeyGesture(value) || isPointerGesture(value);
 }
 
 function isKeyGesture(value: unknown): value is ShortcutGesture {
@@ -134,6 +176,15 @@ function isKeyGesture(value: unknown): value is ShortcutGesture {
     typeof value === "object" &&
     (value as { kind?: unknown }).kind === "key" &&
     typeof (value as { stroke?: { code?: unknown } }).stroke?.code === "string"
+  );
+}
+
+function isPointerGesture(value: unknown): value is ShortcutGesture {
+  return (
+    !!value &&
+    typeof value === "object" &&
+    (value as { kind?: unknown }).kind === "pointer" &&
+    typeof (value as { labelKey?: unknown }).labelKey === "string"
   );
 }
 
@@ -150,6 +201,22 @@ export function dedupeGestures(gestures: ShortcutGesture[], platform: Platform):
   return out;
 }
 
+/** Drop duplicate scoped bindings, preserving order. */
+export function dedupeScopedBindings(
+  bindings: ScopedShortcutBinding[],
+  platform: Platform,
+): ScopedShortcutBinding[] {
+  const seen = new Set<string>();
+  const out: ScopedShortcutBinding[] = [];
+  for (const binding of bindings) {
+    const id = `${binding.scope}|${gestureIdentity(binding.gesture, platform)}`;
+    if (seen.has(id)) continue;
+    seen.add(id);
+    out.push(binding);
+  }
+  return out;
+}
+
 // ──────────────────────────────────────────────────────── conflicts ──────────
 
 /**
@@ -160,22 +227,23 @@ export function dedupeGestures(gestures: ShortcutGesture[], platform: Platform):
  */
 export function findConflicts(
   candidateActionId: string,
+  candidateScope: ShortcutScope,
   candidateGesture: ShortcutGesture,
   bindings: MergedBindings,
   platform: Platform,
 ): ShortcutConflict[] {
   if (candidateGesture.kind !== "key") return [];
-  const scope = SHORTCUT_ACTIONS_BY_ID[candidateActionId]?.scope;
-  if (!scope) return [];
+  if (!SHORTCUT_ACTIONS_BY_ID[candidateActionId]) return [];
   const target = gestureIdentity(candidateGesture, platform);
   const conflicts: ShortcutConflict[] = [];
   for (const action of SHORTCUT_ACTIONS) {
-    if (action.id === candidateActionId || action.scope !== scope) continue;
+    if (action.id === candidateActionId) continue;
     if (action.category === "reference") continue; // display-only intrinsic keys
     for (const binding of bindings[action.id] ?? []) {
+      if (binding.scope !== candidateScope) continue;
       if (binding.gesture.kind !== "key") continue;
       if (gestureIdentity(binding.gesture, platform) === target) {
-        conflicts.push({ actionId: action.id, gesture: binding.gesture });
+        conflicts.push({ actionId: action.id, scope: binding.scope, gesture: binding.gesture });
       }
     }
   }
@@ -186,8 +254,8 @@ export function findConflicts(
 
 /**
  * Resolve a live gesture to an action id, honoring scope precedence
- * (`inspector` > `library` > `global`): the most-specific ACTIVE scope that binds
- * the chord wins. Returns null when nothing matches.
+ * (`inspector` > `queue` > `library` > `now` > `global`): the most-specific ACTIVE
+ * scope that binds the chord wins. Returns null when nothing matches.
  */
 export function matchAction(
   gesture: ShortcutGesture,
@@ -200,8 +268,9 @@ export function matchAction(
   for (const scope of SCOPE_PRECEDENCE) {
     if (!activeScopes.has(scope)) continue;
     for (const action of SHORTCUT_ACTIONS) {
-      if (action.scope !== scope || action.category === "reference") continue;
+      if (action.category === "reference") continue;
       for (const binding of bindings[action.id] ?? []) {
+        if (binding.scope !== scope) continue;
         if (binding.gesture.kind !== "key") continue;
         if (gestureIdentity(binding.gesture, platform) === target) return action.id;
       }
@@ -227,11 +296,14 @@ export function eventMatchesAction(
   actionId: string,
   bindings: MergedBindings,
   platform: Platform,
+  scope?: ShortcutScope,
 ): boolean {
   const target = gestureIdentity(gestureFromEvent(event), platform);
   return (bindings[actionId] ?? []).some(
     (binding) =>
-      binding.gesture.kind === "key" && gestureIdentity(binding.gesture, platform) === target,
+      (scope === undefined || binding.scope === scope) &&
+      binding.gesture.kind === "key" &&
+      gestureIdentity(binding.gesture, platform) === target,
   );
 }
 
@@ -257,9 +329,11 @@ export function actionBindingChips(
   actionId: string,
   bindings: MergedBindings,
   platform: Platform,
+  scope?: ShortcutScope,
 ): string[][] {
   return (bindings[actionId] ?? [])
     .filter((binding) => binding.gesture.kind === "key")
+    .filter((binding) => scope === undefined || binding.scope === scope)
     .map((binding) => formatGesture(binding.gesture, platform));
 }
 
@@ -287,5 +361,5 @@ export function currentPlatform(): Platform {
   return isMac() ? "mac" : "other";
 }
 
-export type { ShortcutActionDef, ShortcutGesture, ShortcutScope };
+export type { ScopedShortcutBinding, ShortcutActionDef, ShortcutGesture, ShortcutScope };
 export { isEditableAction, SHORTCUT_ACTIONS, SHORTCUT_ACTIONS_BY_ID };

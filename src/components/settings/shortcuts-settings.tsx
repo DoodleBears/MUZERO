@@ -183,7 +183,7 @@ function ShortcutRow({
   function removeBinding(index: number) {
     void setShortcutOverride(
       row.actionId,
-      row.keyGestures.filter((_, i) => i !== index),
+      row.keyBindings.filter((_, i) => i !== index),
     );
   }
 

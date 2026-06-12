@@ -13,14 +13,17 @@ import { gestureIdentity } from "./engine";
 import {
   isEditableAction,
   type Platform,
+  type ScopedShortcutBinding,
   SHORTCUT_ACTIONS,
   SHORTCUT_ACTIONS_BY_ID,
   type ShortcutGesture,
+  type ShortcutScope,
 } from "./registry";
 
 /** "Give this action this chord." */
 export interface AssignmentDraft {
   actionId: string;
+  scope?: ShortcutScope;
   gesture: ShortcutGesture;
 }
 
@@ -32,7 +35,7 @@ export interface DisplacedAction {
 
 export interface ReassignmentPlan {
   /** Resulting sparse override map (only actions that differ from their default). */
-  overrides: Record<string, ShortcutGesture[]>;
+  overrides: Record<string, ScopedShortcutBinding[]>;
   /** Actions that lost a chord to a draft and still need a replacement (the chain). */
   displaced: DisplacedAction[];
   /** Protected holders / non-editable targets that block saving the assignment. */
@@ -41,9 +44,9 @@ export interface ReassignmentPlan {
 
 /** Live gesture list per action from a sparse override map (override ?? default). */
 function workingFromOverrides(
-  overrides: Record<string, ShortcutGesture[]> | undefined,
-): Map<string, ShortcutGesture[]> {
-  const working = new Map<string, ShortcutGesture[]>();
+  overrides: Record<string, ScopedShortcutBinding[]> | undefined,
+): Map<string, ScopedShortcutBinding[]> {
+  const working = new Map<string, ScopedShortcutBinding[]>();
   for (const action of SHORTCUT_ACTIONS) {
     const custom = overrides?.[action.id];
     working.set(
@@ -54,9 +57,17 @@ function workingFromOverrides(
   return working;
 }
 
-function sameIdentitySeq(a: ShortcutGesture[], b: ShortcutGesture[], platform: Platform): boolean {
+function sameIdentitySeq(
+  a: ScopedShortcutBinding[],
+  b: ScopedShortcutBinding[],
+  platform: Platform,
+): boolean {
   if (a.length !== b.length) return false;
-  return a.every((g, i) => gestureIdentity(g, platform) === gestureIdentity(b[i], platform));
+  return a.every(
+    (binding, i) =>
+      binding.scope === b[i].scope &&
+      gestureIdentity(binding.gesture, platform) === gestureIdentity(b[i].gesture, platform),
+  );
 }
 
 /**
@@ -66,7 +77,7 @@ function sameIdentitySeq(a: ShortcutGesture[], b: ShortcutGesture[], platform: P
  */
 export function planReassignment(
   drafts: AssignmentDraft[],
-  baseOverrides: Record<string, ShortcutGesture[]> | undefined,
+  baseOverrides: Record<string, ScopedShortcutBinding[]> | undefined,
   platform: Platform,
 ): ReassignmentPlan {
   const working = workingFromOverrides(baseOverrides);
@@ -81,22 +92,38 @@ export function planReassignment(
       blocked.push({ actionId: draft.actionId, gesture: draft.gesture });
       continue;
     }
+    const targetScope = draft.scope ?? target.scope;
     const identity = gestureIdentity(draft.gesture, platform);
 
     // Displace the chord off every same-scope holder.
     for (const other of SHORTCUT_ACTIONS) {
-      if (other.id === draft.actionId || other.scope !== target.scope) continue;
+      if (other.id === draft.actionId) continue;
       if (other.category === "reference") continue; // display-only intrinsic keys
       const list = working.get(other.id);
-      if (!list?.some((g) => g.kind === "key" && gestureIdentity(g, platform) === identity))
+      if (
+        !list?.some(
+          (binding) =>
+            binding.scope === targetScope &&
+            binding.gesture.kind === "key" &&
+            gestureIdentity(binding.gesture, platform) === identity,
+        )
+      ) {
         continue;
+      }
       if (!isEditableAction(other)) {
         blocked.push({ actionId: other.id, gesture: draft.gesture });
         continue; // protected holder keeps its chord; assignment can't be saved
       }
       working.set(
         other.id,
-        list.filter((g) => !(g.kind === "key" && gestureIdentity(g, platform) === identity)),
+        list.filter(
+          (binding) =>
+            !(
+              binding.scope === targetScope &&
+              binding.gesture.kind === "key" &&
+              gestureIdentity(binding.gesture, platform) === identity
+            ),
+        ),
       );
       if (!draftTargetIds.has(other.id)) {
         displaced.push({ actionId: other.id, gesture: draft.gesture });
@@ -105,13 +132,20 @@ export function planReassignment(
 
     // Add the chord to the target (de-duped).
     const targetList = working.get(draft.actionId) ?? [];
-    if (!targetList.some((g) => g.kind === "key" && gestureIdentity(g, platform) === identity)) {
-      working.set(draft.actionId, [...targetList, draft.gesture]);
+    if (
+      !targetList.some(
+        (binding) =>
+          binding.scope === targetScope &&
+          binding.gesture.kind === "key" &&
+          gestureIdentity(binding.gesture, platform) === identity,
+      )
+    ) {
+      working.set(draft.actionId, [...targetList, { scope: targetScope, gesture: draft.gesture }]);
     }
   }
 
   // Sparse override map: only actions that now differ from their default.
-  const overrides: Record<string, ShortcutGesture[]> = {};
+  const overrides: Record<string, ScopedShortcutBinding[]> = {};
   for (const action of SHORTCUT_ACTIONS) {
     if (!isEditableAction(action)) continue;
     const list = working.get(action.id) ?? [];
@@ -153,7 +187,7 @@ export interface RecorderReconcile {
  */
 export function reconcileRecorderDrafts(
   drafts: RecorderDraft[],
-  baseOverrides: Record<string, ShortcutGesture[]> | undefined,
+  baseOverrides: Record<string, ScopedShortcutBinding[]> | undefined,
   platform: Platform,
 ): RecorderReconcile {
   const byId = new Map(drafts.map((draft) => [draft.actionId, draft]));

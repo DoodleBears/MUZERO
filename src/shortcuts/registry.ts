@@ -21,10 +21,16 @@ export type Platform = "mac" | "other";
  * may legally appear in more than one scope (e.g. `↑` = volume in `global` AND
  * focus-up in `library`). Conflicts are detected within a SINGLE scope only.
  */
-export type ShortcutScope = "global" | "library" | "inspector";
+export type ShortcutScope = "global" | "now" | "library" | "queue" | "inspector";
 
 /** Dispatch precedence: the most-specific *active* scope that binds a chord wins. */
-export const SCOPE_PRECEDENCE: readonly ShortcutScope[] = ["inspector", "library", "global"];
+export const SCOPE_PRECEDENCE: readonly ShortcutScope[] = [
+  "inspector",
+  "queue",
+  "library",
+  "now",
+  "global",
+];
 
 /** Cheat-sheet grouping. `reference` = read-only intrinsic widget keys / gestures. */
 export type ShortcutCategory =
@@ -62,6 +68,11 @@ export type ShortcutGesture =
   | { kind: "key"; stroke: ShortcutStroke }
   | { kind: "pointer"; labelKey: string };
 
+export interface ScopedShortcutBinding {
+  scope: ShortcutScope;
+  gesture: ShortcutGesture;
+}
+
 export interface ShortcutActionDef {
   /** Stable codename id (e.g. `playback.next`). Never renamed across brand pivots. */
   id: string;
@@ -72,7 +83,7 @@ export interface ShortcutActionDef {
   /** Optional i18n key for a one-line description. */
   descriptionKey?: string;
   /** Built-in default bindings (may be multiple). */
-  defaultBindings: ShortcutGesture[];
+  defaultBindings: ScopedShortcutBinding[];
   /** false = display-only (gestures / reference keys): shown but never rebindable. */
   allowUserBindings?: boolean;
   /** true = cannot be rebound, and cannot be displaced by a conflict chain. */
@@ -83,16 +94,17 @@ export interface ShortcutActionDef {
 
 /** Concise key-gesture builder for the defaults table. */
 function key(
+  scope: ShortcutScope,
   code: string,
   keyLabel: string,
   mods: Omit<ShortcutStroke, "code" | "keyLabel"> = {},
-): ShortcutGesture {
-  return { kind: "key", stroke: { code, keyLabel, ...mods } };
+): ScopedShortcutBinding {
+  return { scope, gesture: { kind: "key", stroke: { code, keyLabel, ...mods } } };
 }
 
 /** Concise display-only pointer-gesture builder. */
-function pointer(labelKey: string): ShortcutGesture {
-  return { kind: "pointer", labelKey };
+function pointer(scope: ShortcutScope, labelKey: string): ScopedShortcutBinding {
+  return { scope, gesture: { kind: "pointer", labelKey } };
 }
 
 /**
@@ -107,7 +119,10 @@ export const SHORTCUT_ACTIONS: readonly ShortcutActionDef[] = [
     scope: "global",
     category: "playback",
     labelKey: "shortcuts.action.playbackToggle",
-    defaultBindings: [key("Space", "Space"), key("KeyP", "P", { primaryKey: true })],
+    defaultBindings: [
+      key("global", "Space", "Space"),
+      key("global", "KeyP", "P", { primaryKey: true }),
+    ],
     keywords: ["play", "pause", "暂停", "播放"],
   },
   {
@@ -115,7 +130,7 @@ export const SHORTCUT_ACTIONS: readonly ShortcutActionDef[] = [
     scope: "global",
     category: "playback",
     labelKey: "shortcuts.action.playbackPrev",
-    defaultBindings: [key("KeyQ", "Q")],
+    defaultBindings: [key("global", "KeyQ", "Q")],
     keywords: ["previous", "上一首"],
   },
   {
@@ -123,7 +138,7 @@ export const SHORTCUT_ACTIONS: readonly ShortcutActionDef[] = [
     scope: "global",
     category: "playback",
     labelKey: "shortcuts.action.playbackNext",
-    defaultBindings: [key("KeyE", "E")],
+    defaultBindings: [key("global", "KeyE", "E")],
     keywords: ["next", "下一首"],
   },
   {
@@ -131,7 +146,7 @@ export const SHORTCUT_ACTIONS: readonly ShortcutActionDef[] = [
     scope: "global",
     category: "playback",
     labelKey: "shortcuts.action.playbackSeekBack",
-    defaultBindings: [key("KeyQ", "Q", { shiftKey: true })],
+    defaultBindings: [key("global", "KeyQ", "Q", { shiftKey: true })],
     keywords: ["seek", "rewind", "快退"],
   },
   {
@@ -139,7 +154,7 @@ export const SHORTCUT_ACTIONS: readonly ShortcutActionDef[] = [
     scope: "global",
     category: "playback",
     labelKey: "shortcuts.action.playbackSeekForward",
-    defaultBindings: [key("KeyE", "E", { shiftKey: true })],
+    defaultBindings: [key("global", "KeyE", "E", { shiftKey: true })],
     keywords: ["seek", "forward", "快进"],
   },
   {
@@ -147,7 +162,10 @@ export const SHORTCUT_ACTIONS: readonly ShortcutActionDef[] = [
     scope: "global",
     category: "playback",
     labelKey: "shortcuts.action.playbackVolumeUp",
-    defaultBindings: [key("ArrowUp", "↑"), key("ArrowUp", "↑", { primaryKey: true })],
+    defaultBindings: [
+      key("global", "ArrowUp", "↑"),
+      key("global", "ArrowUp", "↑", { primaryKey: true }),
+    ],
     keywords: ["volume", "音量"],
   },
   {
@@ -155,7 +173,10 @@ export const SHORTCUT_ACTIONS: readonly ShortcutActionDef[] = [
     scope: "global",
     category: "playback",
     labelKey: "shortcuts.action.playbackVolumeDown",
-    defaultBindings: [key("ArrowDown", "↓"), key("ArrowDown", "↓", { primaryKey: true })],
+    defaultBindings: [
+      key("global", "ArrowDown", "↓"),
+      key("global", "ArrowDown", "↓", { primaryKey: true }),
+    ],
     keywords: ["volume", "音量"],
   },
   {
@@ -163,7 +184,7 @@ export const SHORTCUT_ACTIONS: readonly ShortcutActionDef[] = [
     scope: "global",
     category: "playback",
     labelKey: "shortcuts.action.playbackCycleRepeat",
-    defaultBindings: [key("KeyR", "R")],
+    defaultBindings: [key("global", "KeyR", "R")],
     keywords: ["repeat", "loop", "循环"],
   },
   {
@@ -171,7 +192,7 @@ export const SHORTCUT_ACTIONS: readonly ShortcutActionDef[] = [
     scope: "global",
     category: "playback",
     labelKey: "shortcuts.action.playbackToggleShuffle",
-    defaultBindings: [key("KeyR", "R", { altKey: true })],
+    defaultBindings: [key("global", "KeyR", "R", { altKey: true })],
     keywords: ["shuffle", "随机"],
   },
   {
@@ -179,7 +200,7 @@ export const SHORTCUT_ACTIONS: readonly ShortcutActionDef[] = [
     scope: "global",
     category: "playback",
     labelKey: "shortcuts.action.playbackLike",
-    defaultBindings: [key("KeyL", "L")],
+    defaultBindings: [key("global", "KeyL", "L")],
     keywords: ["like", "heart", "favorite", "红心", "喜欢"],
   },
   {
@@ -187,7 +208,7 @@ export const SHORTCUT_ACTIONS: readonly ShortcutActionDef[] = [
     scope: "global",
     category: "playback",
     labelKey: "shortcuts.action.playbackToggleFullscreen",
-    defaultBindings: [key("KeyF", "F")],
+    defaultBindings: [key("global", "KeyF", "F")],
     keywords: ["fullscreen", "全屏"],
   },
   // ── Navigation (global) ────────────────────────────────────────────────────
@@ -196,28 +217,28 @@ export const SHORTCUT_ACTIONS: readonly ShortcutActionDef[] = [
     scope: "global",
     category: "navigation",
     labelKey: "shortcuts.action.navTabNow",
-    defaultBindings: [key("Digit1", "1", { primaryKey: true })],
+    defaultBindings: [key("global", "Digit1", "1", { primaryKey: true })],
   },
   {
     id: "nav.tabLibrary",
     scope: "global",
     category: "navigation",
     labelKey: "shortcuts.action.navTabLibrary",
-    defaultBindings: [key("Digit2", "2", { primaryKey: true })],
+    defaultBindings: [key("global", "Digit2", "2", { primaryKey: true })],
   },
   {
     id: "nav.tabSettings",
     scope: "global",
     category: "navigation",
     labelKey: "shortcuts.action.navTabSettings",
-    defaultBindings: [key("Digit3", "3", { primaryKey: true })],
+    defaultBindings: [key("global", "Digit3", "3", { primaryKey: true })],
   },
   {
     id: "queue.toggle",
     scope: "global",
     category: "navigation",
     labelKey: "shortcuts.action.queueToggle",
-    defaultBindings: [key("KeyT", "T")],
+    defaultBindings: [key("global", "KeyT", "T")],
     keywords: ["queue", "up next", "drawer", "队列", "歌单", "播放列表"],
   },
   {
@@ -225,7 +246,7 @@ export const SHORTCUT_ACTIONS: readonly ShortcutActionDef[] = [
     scope: "global",
     category: "playback",
     labelKey: "shortcuts.action.lyricsToggleStage",
-    defaultBindings: [key("KeyC", "C")],
+    defaultBindings: [key("global", "KeyC", "C")],
     keywords: ["lyrics", "caption", "歌词", "字幕"],
   },
   {
@@ -233,7 +254,7 @@ export const SHORTCUT_ACTIONS: readonly ShortcutActionDef[] = [
     scope: "global",
     category: "playback",
     labelKey: "shortcuts.action.visualizerCycleMode",
-    defaultBindings: [key("KeyV", "V")],
+    defaultBindings: [key("global", "KeyV", "V")],
     keywords: ["visualizer", "spectrum", "可视化", "频谱"],
   },
   {
@@ -242,7 +263,10 @@ export const SHORTCUT_ACTIONS: readonly ShortcutActionDef[] = [
     category: "navigation",
     labelKey: "shortcuts.action.navCycleGalleryMode",
     // ` next tab · Shift+` previous tab (reverse direction lives in the gallery handler).
-    defaultBindings: [key("Backquote", "`"), key("Backquote", "`", { shiftKey: true })],
+    defaultBindings: [
+      key("global", "Backquote", "`"),
+      key("global", "Backquote", "`", { shiftKey: true }),
+    ],
     keywords: ["gallery", "tab", "模式"],
   },
   // Jump straight to a library tab (bare 1/2/3/4 on the gallery wall). Handled in
@@ -253,7 +277,7 @@ export const SHORTCUT_ACTIONS: readonly ShortcutActionDef[] = [
     scope: "global",
     category: "navigation",
     labelKey: "shortcuts.action.navGalleryTabSets",
-    defaultBindings: [key("Digit1", "1")],
+    defaultBindings: [key("global", "Digit1", "1")],
     keywords: ["gallery", "tab", "sets", "歌单"],
   },
   {
@@ -261,7 +285,7 @@ export const SHORTCUT_ACTIONS: readonly ShortcutActionDef[] = [
     scope: "global",
     category: "navigation",
     labelKey: "shortcuts.action.navGalleryTabTracks",
-    defaultBindings: [key("Digit2", "2")],
+    defaultBindings: [key("global", "Digit2", "2")],
     keywords: ["gallery", "tab", "songs", "全部歌曲"],
   },
   {
@@ -269,7 +293,7 @@ export const SHORTCUT_ACTIONS: readonly ShortcutActionDef[] = [
     scope: "global",
     category: "navigation",
     labelKey: "shortcuts.action.navGalleryTabAlbums",
-    defaultBindings: [key("Digit3", "3")],
+    defaultBindings: [key("global", "Digit3", "3")],
     keywords: ["gallery", "tab", "albums", "专辑"],
   },
   {
@@ -277,7 +301,7 @@ export const SHORTCUT_ACTIONS: readonly ShortcutActionDef[] = [
     scope: "global",
     category: "navigation",
     labelKey: "shortcuts.action.navGalleryTabArtists",
-    defaultBindings: [key("Digit4", "4")],
+    defaultBindings: [key("global", "Digit4", "4")],
     keywords: ["gallery", "tab", "artists", "歌手"],
   },
   {
@@ -285,7 +309,10 @@ export const SHORTCUT_ACTIONS: readonly ShortcutActionDef[] = [
     scope: "global",
     category: "search",
     labelKey: "shortcuts.action.searchOpenGlobal",
-    defaultBindings: [key("Slash", "/"), key("KeyF", "F", { primaryKey: true })],
+    defaultBindings: [
+      key("global", "Slash", "/"),
+      key("global", "KeyF", "F", { primaryKey: true }),
+    ],
     protected: true,
     keywords: ["search", "find", "搜索"],
   },
@@ -295,7 +322,7 @@ export const SHORTCUT_ACTIONS: readonly ShortcutActionDef[] = [
     scope: "library",
     category: "library",
     labelKey: "shortcuts.action.libraryFocusPrev",
-    defaultBindings: [key("KeyW", "W"), key("ArrowUp", "↑")],
+    defaultBindings: [key("library", "KeyW", "W"), key("library", "ArrowUp", "↑")],
     keywords: ["up", "navigate", "上"],
   },
   {
@@ -303,7 +330,7 @@ export const SHORTCUT_ACTIONS: readonly ShortcutActionDef[] = [
     scope: "library",
     category: "library",
     labelKey: "shortcuts.action.libraryFocusNext",
-    defaultBindings: [key("KeyS", "S"), key("ArrowDown", "↓")],
+    defaultBindings: [key("library", "KeyS", "S"), key("library", "ArrowDown", "↓")],
     keywords: ["down", "navigate", "下"],
   },
   {
@@ -311,7 +338,11 @@ export const SHORTCUT_ACTIONS: readonly ShortcutActionDef[] = [
     scope: "library",
     category: "library",
     labelKey: "shortcuts.action.libraryOpen",
-    defaultBindings: [key("KeyD", "D"), key("ArrowRight", "→"), key("Enter", "Enter")],
+    defaultBindings: [
+      key("library", "KeyD", "D"),
+      key("library", "ArrowRight", "→"),
+      key("library", "Enter", "Enter"),
+    ],
     keywords: ["open", "enter", "进入"],
   },
   {
@@ -319,7 +350,7 @@ export const SHORTCUT_ACTIONS: readonly ShortcutActionDef[] = [
     scope: "library",
     category: "library",
     labelKey: "shortcuts.action.libraryBack",
-    defaultBindings: [key("KeyA", "A"), key("ArrowLeft", "←")],
+    defaultBindings: [key("library", "KeyA", "A"), key("library", "ArrowLeft", "←")],
     keywords: ["back", "返回"],
   },
   // ── Memory (inspector) ─────────────────────────────────────────────────────
@@ -329,7 +360,7 @@ export const SHORTCUT_ACTIONS: readonly ShortcutActionDef[] = [
     category: "memory",
     labelKey: "shortcuts.action.memoryQuickAdd",
     // `T` now opens the queue Drawer (queue.toggle); memory keeps `N`.
-    defaultBindings: [key("KeyN", "N")],
+    defaultBindings: [key("inspector", "KeyN", "N")],
     keywords: ["memory", "note", "记忆", "备注"],
   },
   // ── Reference (read-only, Q7) — intrinsic widget keys + gestures. Shown in the
@@ -339,7 +370,7 @@ export const SHORTCUT_ACTIONS: readonly ShortcutActionDef[] = [
     scope: "global",
     category: "reference",
     labelKey: "shortcuts.action.refCloseDialog",
-    defaultBindings: [key("Escape", "Esc")],
+    defaultBindings: [key("global", "Escape", "Esc")],
     allowUserBindings: false,
   },
   {
@@ -347,7 +378,7 @@ export const SHORTCUT_ACTIONS: readonly ShortcutActionDef[] = [
     scope: "global",
     category: "reference",
     labelKey: "shortcuts.action.refCommitField",
-    defaultBindings: [key("Enter", "Enter")],
+    defaultBindings: [key("global", "Enter", "Enter")],
     allowUserBindings: false,
   },
   {
@@ -355,7 +386,7 @@ export const SHORTCUT_ACTIONS: readonly ShortcutActionDef[] = [
     scope: "global",
     category: "reference",
     labelKey: "shortcuts.action.refScrub",
-    defaultBindings: [key("ArrowLeft", "←"), key("ArrowRight", "→")],
+    defaultBindings: [key("global", "ArrowLeft", "←"), key("global", "ArrowRight", "→")],
     allowUserBindings: false,
   },
   {
@@ -363,7 +394,7 @@ export const SHORTCUT_ACTIONS: readonly ShortcutActionDef[] = [
     scope: "global",
     category: "reference",
     labelKey: "shortcuts.action.refSwipeBack",
-    defaultBindings: [pointer("shortcuts.gesture.swipeBack")],
+    defaultBindings: [pointer("global", "shortcuts.gesture.swipeBack")],
     allowUserBindings: false,
   },
   {
@@ -371,7 +402,7 @@ export const SHORTCUT_ACTIONS: readonly ShortcutActionDef[] = [
     scope: "global",
     category: "reference",
     labelKey: "shortcuts.action.refCoverSwipe",
-    defaultBindings: [pointer("shortcuts.gesture.coverSwipeLeft")],
+    defaultBindings: [pointer("global", "shortcuts.gesture.coverSwipeLeft")],
     allowUserBindings: false,
   },
 ];

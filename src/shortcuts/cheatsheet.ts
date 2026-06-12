@@ -10,10 +10,10 @@ import { actionBindingChips, type MergedBindings } from "./engine";
 import {
   isEditableAction,
   type Platform,
+  type ScopedShortcutBinding,
   SHORTCUT_ACTIONS,
   type ShortcutActionDef,
   type ShortcutCategory,
-  type ShortcutGesture,
 } from "./registry";
 
 /** Section order in the cheat-sheet; `reference` (intrinsic keys) always last. */
@@ -34,7 +34,7 @@ export interface CheatSheetRow {
   /** Formatted key-chord chips, one inner array per binding (its modifier+key caps). */
   chips: string[][];
   /** The key gestures behind `chips`, same order — for per-chip remove. */
-  keyGestures: ShortcutGesture[];
+  keyBindings: ScopedShortcutBinding[];
   /** i18n labelKeys for display-only pointer gestures (swipe / cover). */
   gestureLabelKeys: string[];
   keywords: readonly string[];
@@ -56,7 +56,9 @@ function toRow(
     labelKey: action.labelKey,
     editable: isEditableAction(action),
     chips: actionBindingChips(action.id, bindings, platform),
-    keyGestures: list.map((b) => b.gesture).filter((g) => g.kind === "key"),
+    keyBindings: list
+      .filter((binding) => binding.gesture.kind === "key")
+      .map((binding) => ({ scope: binding.scope, gesture: binding.gesture })),
     gestureLabelKeys: list
       .map((b) => b.gesture)
       .filter((g) => g.kind === "pointer")

@@ -5,7 +5,7 @@ import type { AppIconId } from "@/lib/app-icon";
 import type { LyricsProviderId, LyricsRecord } from "@/lyrics/provider";
 import type { CloudPresetId } from "@/musicgen/presets";
 import type { MusicGenProviderId } from "@/musicgen/registry";
-import type { ShortcutGesture } from "@/shortcuts/registry";
+import type { ScopedShortcutBinding } from "@/shortcuts/registry";
 import type { VisualizerStyleId } from "@/visualizer/types";
 
 /** Lifecycle of a single track. Uploaded tracks are born "ready". */
@@ -761,7 +761,7 @@ export interface AppSettings {
    * (vs absent → built-in default). Device-local, never synced. See the
    * configurable-keyboard-shortcuts PRD.
    */
-  shortcutOverrides?: Record<string, ShortcutGesture[]>;
+  shortcutOverrides?: Record<string, ScopedShortcutBinding[]>;
   /**
    * Auto-fetch lyrics from LRCLIB for uploaded/streamed tracks (synced-lyrics
    * PRD). Sends title/artist to lrclib.net; a visible Settings toggle (rule 3),
