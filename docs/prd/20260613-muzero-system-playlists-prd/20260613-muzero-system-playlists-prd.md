@@ -22,6 +22,7 @@
 | 7 | Compact Cards + Latest Cover Art | Completed | [Phase 7 Checklist](#phase-7-checklist) |
 | 8 | Last Played Date/Time Formatting | Completed | [Phase 8 Checklist](#phase-8-checklist) |
 | 9 | Hearted Detail Without Playback Metrics | Completed | [Phase 9 Checklist](#phase-9-checklist) |
+| 10 | Library Back Shortcut on System Details | Completed | [Phase 10 Checklist](#phase-10-checklist) |
 
 > Status Legend: Completed | In Progress | Pending
 
@@ -593,6 +594,28 @@ Deletion behavior:
 - `node node_modules/@biomejs/biome/bin/biome check --formatter-enabled=false src/components/library/system-playlist-detail.tsx src/components/library/system-playlist-detail.test.tsx` passes.
 - Full `node node_modules/typescript/bin/tsc --noEmit --pretty false` is currently blocked by an unrelated tuple spread typing error in `src/hooks/use-shortcut-dispatch.test.tsx`.
 
+### Phase 10: Library Back Shortcut on System Details
+
+**Goal:** Make system playlist details behave like set, artist, and album details for keyboard navigation.
+
+**Tasks:**
+- [x] Wire the existing `useBackGesture(onBack)` behavior into `SystemPlaylistDetail`.
+- [x] Support the configurable `library.back` action instead of hard-coding a physical key.
+- [x] Preserve the default `A` / `ArrowLeft` return behavior for Hearted, Recently Played, and Most Played details.
+
+### Phase 10 Checklist
+
+- [x] Pressing the library back shortcut returns from a system playlist detail to the gallery wall.
+- [x] The handler is ignored while typing or when a modal is open through the shared hook behavior.
+- [x] Existing set/artist/album detail back behavior remains unchanged because they already use the same hook.
+
+### Phase 10 Verification Notes
+
+- `node node_modules/vitest/vitest.mjs run src/pages/library-empty-states.test.tsx src/components/library/system-playlist-cards.test.tsx src/components/library/system-playlist-detail.test.tsx src/components/player/queue-panel.test.tsx src/lib/system-playlists.test.ts` passes: 5 files, 25 tests.
+- `node node_modules/vitest/vitest.mjs run src/components/library/system-playlist-detail.test.tsx` passes: 1 file, 6 tests.
+- `node node_modules/@biomejs/biome/bin/biome check --formatter-enabled=false src/components/library/system-playlist-detail.tsx src/components/library/system-playlist-detail.test.tsx` passes.
+- `node node_modules/typescript/bin/tsc --noEmit --pretty false` passes.
+
 ---
 
 ## 7. Out of Scope
@@ -653,6 +676,7 @@ Deletion behavior:
 | 2026-06-13 | Codex | Completed Phase 7: compact system playlist cards with latest cover art and masked icon overlay. |
 | 2026-06-13 | Codex | Completed Phase 8: compact Last played formatting with same-day 24-hour time and older `yy/MM/dd` dates. |
 | 2026-06-13 | Codex | Completed Phase 9: Hearted detail stays a pure saved-songs list without playback metric columns or metric sorting. |
+| 2026-06-13 | Codex | Completed Phase 10: system playlist details now support the configurable library back shortcut (`A` / `←` by default). |
 
 ---
 
@@ -669,6 +693,7 @@ Deletion behavior:
 - Recently Played and Most Played "Last played" values show same-day plays as 24-hour `HH:mm` and older plays as `yy/MM/dd`.
 - Recently Played and Most Played detail can sort rows and queue playback by play count or last played time.
 - Hearted detail stays a pure saved-song list without play count, last played, or metric sort controls.
+- Hearted, Recently Played, and Most Played detail pages support the existing library back shortcut (`A` / `←` by default, user-rebindable).
 - System playlist cards render as compact pinned rows in grid mode and show the newest available local cover with a dark mask when a covered local track exists.
 - Playing a system playlist loads the currently visible derived order into the play queue.
 - Remote/shared tracks appear in Recently Played and Most Played when their local playback identity and display/playback metadata can be resolved.

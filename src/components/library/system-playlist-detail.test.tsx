@@ -47,6 +47,11 @@ vi.mock("react-i18next", () => ({
   }),
 }));
 
+vi.mock("@/hooks/use-shortcut-matcher", () => ({
+  useShortcutMatcher: () => (event: KeyboardEvent, actionId: string) =>
+    actionId === "library.back" && (event.code === "KeyA" || event.code === "ArrowLeft"),
+}));
+
 vi.mock("@/components/library/track-list-section", () => ({
   TrackListSection: ({
     afterToolbar,
@@ -214,6 +219,26 @@ describe("SystemPlaylistDetail", () => {
     expect(screen.queryByText("Last played")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Play count" })).not.toBeInTheDocument();
     expect(screen.getByTestId("track-columns-trk_1")).toBeEmptyDOMElement();
+  });
+
+  it("goes back from system playlist detail with the library back shortcut", () => {
+    const onBack = vi.fn();
+
+    render(
+      <SystemPlaylistDetail
+        events={[]}
+        now={NOW}
+        onBack={onBack}
+        playlistId="system:recent"
+        remoteTracks={[]}
+        stats={[stat("trk_1", 1, { lastPlayedAt: NOW })]}
+        tracks={[track("trk_1", "One")]}
+      />,
+    );
+
+    fireEvent.keyDown(window, { code: "KeyA", key: "a" });
+
+    expect(onBack).toHaveBeenCalledTimes(1);
   });
 });
 

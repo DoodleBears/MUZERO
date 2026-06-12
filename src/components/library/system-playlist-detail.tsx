@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next";
 import { TrackInspectorPanel } from "@/components/track/track-inspector-panel";
 import { Button } from "@/components/ui/button";
 import type { PlaybackEvent, RemoteSearchTrack, Track, TrackPlaybackStats } from "@/db/types";
+import { useBackGesture } from "@/hooks/use-back-gesture";
 import {
   deriveHeartedPlaylistRows,
   deriveMostPlayedPlaylist,
@@ -83,6 +84,8 @@ export function SystemPlaylistDetail({
     () => localTracks.find((track) => track.id === selectedTrackId) ?? localTracks[0],
     [localTracks, selectedTrackId],
   );
+
+  useBackGesture(onBack);
 
   async function playAll() {
     await playSystemPlaylist(playlistId, localTracks);
