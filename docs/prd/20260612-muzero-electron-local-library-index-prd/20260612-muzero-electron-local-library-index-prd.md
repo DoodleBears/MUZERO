@@ -15,12 +15,13 @@
 |-------|------|--------|------|
 | 1 | PRD + LyciaMusic Reference Grounding | ✅ Completed | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | TDD Contract Coverage | 🔲 Pending | [Phase 2 Checklist](#phase-2-checklist) |
-| 3 | Electron SQLite Library Index | 🔲 Pending | [Phase 3 Checklist](#phase-3-checklist) |
-| 4 | Local-File Track Import Path | 🔲 Pending | [Phase 4 Checklist](#phase-4-checklist) |
-| 5 | Local-File Playback Protocol | 🔲 Pending | [Phase 5 Checklist](#phase-5-checklist) |
-| 6 | R2 Upload-On-Demand From Local File | 🔲 Pending | [Phase 6 Checklist](#phase-6-checklist) |
-| 7 | Lazy Cover Cache + Repair UX | 🔲 Pending | [Phase 7 Checklist](#phase-7-checklist) |
-| 8 | Verification + Completion | 🔲 Pending | [Phase 8 Checklist](#phase-8-checklist) |
+| 3 | First-Run Empty-State Consolidation | 🔲 Pending | [Phase 3 Checklist](#phase-3-checklist) |
+| 4 | Native Library Index Decision Gate | 🔲 Pending | [Phase 4 Checklist](#phase-4-checklist) |
+| 5 | Local-File Track Import Path | 🔲 Pending | [Phase 5 Checklist](#phase-5-checklist) |
+| 6 | Local-File Playback Protocol | 🔲 Pending | [Phase 6 Checklist](#phase-6-checklist) |
+| 7 | R2 Upload-On-Demand From Local File | 🔲 Pending | [Phase 7 Checklist](#phase-7-checklist) |
+| 8 | Lazy Cover Cache + Repair UX | 🔲 Pending | [Phase 8 Checklist](#phase-8-checklist) |
+| 9 | Verification + Completion | 🔲 Pending | [Phase 9 Checklist](#phase-9-checklist) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
 
@@ -41,8 +42,9 @@ For a large existing library this is unnecessary work. A local desktop music pla
 | 1 | Reference local files first; sync to R2 only when upload is needed. | Plaintext local audio/video imports on Electron should not copy bytes into `mediaBlobs` by default. |
 | 2 | Keep progressive publishing reasonable. | Tracks discovered/imported by the native scanner should appear in the set in batches while the scan continues. |
 | 3 | Keep expensive work off the initial critical path. | Metadata parsing, hashing, and cover extraction must be bounded, parallelized, and resumable; first visible/playable rows should not wait for embedded artwork. |
-| 4 | Use an Electron-native approach; SQLite is acceptable. | Add an Electron main-process SQLite library index for high-volume path/metadata/diff state. Dexie remains MUZERO's app state. |
+| 4 | Use an Electron-native approach; SQLite is acceptable only if it earns its keep. | Dexie remains MUZERO's app state. Add SQLite only as a native local-library index/cache when it avoids repeated filesystem scan, hash, cover, or repair work; do not add it merely as a second copy of `Track` data. |
 | 5 | Keep lazy cache behavior. | Covers, R2 uploads, and optional local byte copies happen only on demand or in bounded background jobs. |
+| 6 | Consolidate first-run onboarding into library empty states. | The old first-open landing with DJ on top and upload below should be folded into the Songs empty state; Now Playing also needs an empty-library import affordance. |
 
 ### 1.3 Target Users
 
@@ -57,8 +59,9 @@ For a large existing library this is unnecessary work. A local desktop music pla
 1. **Fast library adoption:** A 6000+ song folder can become browsable/playable from metadata and path references instead of waiting for full media-byte duplication.
 2. **Lower disk and memory pressure:** MUZERO avoids storing a second copy of files that already live on the user's disk.
 3. **Better sync economics:** R2 uploads are explicit and on demand; the first local import does not trigger cloud writes.
-4. **Electron-appropriate architecture:** Main process owns filesystem, SQLite, local streaming, and upload streams; renderer owns UI, Dexie app state, and player orchestration.
-5. **Local-first remains true:** Absolute source paths, SQLite indexes, and credentials remain device-local and are never exported into public R2 manifests.
+4. **Electron-appropriate architecture:** Main process owns filesystem, optional native index/cache, local streaming, and upload streams; renderer owns UI, Dexie app state, and player orchestration.
+5. **Local-first remains true:** Absolute source paths, native indexes/caches, and credentials remain device-local and are never exported into public R2 manifests.
+6. **Cleaner first-run experience:** Importing music becomes the obvious empty-state action in the Songs and Now Playing tabs, instead of living in a separate landing page.
 
 ---
 
@@ -72,8 +75,8 @@ The reference project is fast because it treats import as native library indexin
 |--------|------------------|-----------------|
 | [LyciaMusic `playerLibraryManager.ts`](https://github.com/Billy636/LyciaMusic/blob/main/src/composables/playerLibraryManager.ts) | Frontend adds a folder and calls native scan, rather than reading every file into the web layer. | Electron renderer should call a native scan API and receive batches of metadata rows. |
 | [LyciaMusic scanner orchestrator](https://github.com/Billy636/LyciaMusic/blob/main/src-tauri/src/music/scanner/orchestrator.rs) | Scan work is moved off the UI path with native blocking/parallel work. | MUZERO Electron scanner should run in main process or Worker Thread, not the renderer. |
-| [LyciaMusic scanner diff](https://github.com/Billy636/LyciaMusic/blob/main/src-tauri/src/music/scanner/diff.rs) | Diffing uses path, extension, modified time, and size before deeper parsing. | SQLite should store path + size + mtime fingerprints and skip unchanged files. |
-| [LyciaMusic scanner repository](https://github.com/Billy636/LyciaMusic/blob/main/src-tauri/src/music/scanner/repository.rs) | Database writes are batched and progress is emitted in chunks. | MUZERO should batch SQLite upserts and Dexie set membership updates. |
+| [LyciaMusic scanner diff](https://github.com/Billy636/LyciaMusic/blob/main/src-tauri/src/music/scanner/diff.rs) | Diffing uses path, extension, modified time, and size before deeper parsing. | MUZERO should store path + size + mtime fingerprints in a native index only if repeated rescans need persistent diff state. |
+| [LyciaMusic scanner repository](https://github.com/Billy636/LyciaMusic/blob/main/src-tauri/src/music/scanner/repository.rs) | Database writes are batched and progress is emitted in chunks. | MUZERO should batch native index writes, when present, and Dexie set membership updates. |
 | [LyciaMusic cover cache](https://github.com/Billy636/LyciaMusic/blob/main/src-tauri/src/music/covers.rs) | Cover extraction/cache is lazy and separate from first scan. | MUZERO should not block initial import on embedded cover bytes. |
 | [LyciaMusic player library batch](https://github.com/Billy636/LyciaMusic/blob/main/src/composables/playerLibraryBatch.ts) | UI batches library events instead of rerendering per file. | MUZERO should emit scan/import batches, not one UI mutation per discovered path. |
 
@@ -108,7 +111,7 @@ Use **index first, bytes later**:
 user picks folder/file
   -> Electron main process validates/grants real path
   -> native scanner walks files and diffs path + size + mtime
-  -> SQLite library index stores filesystem metadata + parsed tags
+  -> optional native index stores filesystem metadata + parsed tags
   -> renderer receives scan batches
   -> Dexie creates Track rows with sourcePath/local fingerprint and set membership
   -> player resolves sourceKind "local-file"
@@ -122,16 +125,23 @@ user picks folder/file
 |-----------|------------|-----------|
 | Electron native shell | Existing Electron main/preload/bridge | Current desktop target; main process already owns filesystem allowlists and privileged protocols. |
 | Local app state | Dexie / IndexedDB `muzero-db` | Continues to own tracks, sets, annotations, memories, settings, sync state. |
-| Native library index | SQLite in Electron user data | High-volume path metadata, diffing, scan checkpoints, and lazy derived artifacts belong close to the filesystem. |
+| Native library index | Decision-gated SQLite in Electron user data | Valuable only for persistent scan diffing, lazy hashes/covers, missing-file repair, and repeated library rescans; not valuable as a duplicate app-state store. |
 | Scanner execution | Electron main process Worker Thread or dedicated module | Avoid renderer IPC byte transfer and UI jank. |
 | Metadata parser | `music-metadata` in Electron context where practical | Existing parser, but run against file paths/streams instead of renderer `Blob`s for plaintext files. |
 | Local playback | Electron custom protocol or `muzfetch://local-media` handler | Lets media elements stream local files with Range/206 and no renderer path access. |
 | R2 upload | Existing R2 sync engine plus Electron local-file body resolver | Preserve manifest protocol while avoiding full local file materialization. |
-| Tests | Vitest + fake-indexeddb + mocked Electron scanner/SQLite repos | TDD coverage before implementation. |
+| Tests | Vitest + fake-indexeddb + mocked Electron scanner/native index repos | TDD coverage before implementation. |
 
-### 3.3 SQLite Scope Decision
+### 3.3 Native Index / SQLite Scope Decision
 
-SQLite is approved for Electron, but it must be scoped carefully:
+SQLite is approved for Electron only as an implementation option behind a decision gate. It has value when it acts like a native filesystem index, and little value when it merely duplicates Dexie.
+
+| Question | Answer |
+|----------|--------|
+| Is SQLite required for the first local-file reference prototype? | No. A native scanner can emit batches and Dexie can create `Track.sourcePath` rows first. |
+| When does SQLite become valuable? | When MUZERO needs persistent path diffing, skipped unchanged rescans, lazy content hashes, lazy cover cache refs, missing-file repair, and scan checkpoints across launches. |
+| When is SQLite not worth it? | If it stores the same track title/artist/path data that Dexie already owns, or if it becomes a second source of truth for user annotations. |
+| What is the implementation rule? | Start with tests that prove the desired behavior. Introduce SQLite only when a test/perf target needs persistent native index state that Dexie should not own. |
 
 - **SQLite owns derived filesystem facts:** source path, root folder, size, mtime, scan status, parse status, parsed tags, optional content hash, lazy cover cache path, last seen time.
 - **Dexie owns user-authored app state:** `Track`, `DjSession`, tags, liked state, memories, manual cover, sync mutations, settings, playback stats.
@@ -152,7 +162,7 @@ SQLite package decision:
 electron/
 ├── ipc.cjs                         # add library scan, local-media URL, local-file upload IPC
 ├── main.cjs                        # register local-media protocol
-├── library-index.cjs               # SQLite repository, schema, migrations
+├── library-index.cjs               # optional SQLite repository, schema, migrations
 ├── library-scanner.cjs             # native filesystem walk + metadata parse orchestration
 └── local-media-protocol.cjs        # validated Range streaming from sourcePath
 
@@ -182,7 +192,7 @@ src/
 ### 4.1 Core Concepts
 
 ```
-SQLite local_library_files.path
+Native index file row (SQLite if justified)
   -> Dexie Track.sourcePath
   -> playback source "local-file"
   -> Electron local-media token/protocol
@@ -193,7 +203,7 @@ SQLite local_library_files.path
 
 Current `Track.sourcePath` already stores the absolute on-disk path and is used as a folder-sync dedupe key. This PRD should reuse it before adding schema churn.
 
-Required additive fields, only if implementation needs stale-file detection beyond SQLite:
+Required additive fields, only if implementation needs stale-file detection beyond the native index:
 
 ```typescript
 interface Track {
@@ -215,9 +225,9 @@ Rules:
 - `.ncm` and other containers that must be converted/decrypted before native playback continue through the byte-ingest path and produce `blobId`.
 - Web/Tauri imports continue using the existing `mediaBlobs` path until they get a separate native-file-reference design.
 
-### 4.3 SQLite Schema
+### 4.3 Optional SQLite Schema
 
-SQLite database path: Electron `app.getPath("userData")/library-index.sqlite`.
+If Phase 4 proves SQLite is justified, use this local-only schema. Database path: Electron `app.getPath("userData")/library-index.sqlite`.
 
 ```sql
 CREATE TABLE local_library_files (
@@ -269,11 +279,11 @@ Notes:
 ### 4.4 Relationship Diagram
 
 ```
-Dexie importFolders.path ─────────┐
-                                  ▼
-SQLite local_library_files.root_path
-                                  │
-                                  ▼
+Dexie importFolders.path ──────────────┐
+                                       ▼
+native index root_path (SQLite if used)
+                                       │
+                                       ▼
 Dexie Track.sourcePath ── optional Track.localFile fingerprint
       │
       ├── Track.blobId present      -> mediaBlobs / media storage provider
@@ -284,7 +294,7 @@ Dexie Track.sourcePath ── optional Track.localFile fingerprint
 ### 4.5 Migration Strategy
 
 - Existing tracks with `blobId` remain unchanged.
-- Existing folder-imported tracks that already have `sourcePath` can be backfilled into SQLite during a rescan without deleting their `blobId`.
+- Existing folder-imported tracks that already have `sourcePath` can be backfilled into the native index during a rescan without deleting their `blobId`.
 - New Electron plaintext imports use referenced local files by default.
 - If the original source file is missing, the track remains in Dexie with annotations intact and is surfaced as "needs file repair" rather than deleted.
 - Rollback is `git revert`; no hidden runtime flag. If schema fields were added to Dexie, they are additive and readers must tolerate absence.
@@ -357,13 +367,45 @@ Security requirements:
 | File changed since scan | Re-stat; if size/mtime differs, rescan metadata before playback/upload when practical. |
 | Scanner parse error | Create a playable row if extension/kind is supported and file exists; store parse error for diagnostics. |
 | R2 upload source missing | Skip the media object, show sync item as "needs local file", and do not publish a manifest entry pointing to a missing object. |
-| SQLite unavailable | Fall back to existing byte-ingest path with a visible warning in diagnostics; do not silently discard imports. |
+| Native index unavailable | Fall back to existing byte-ingest path with a visible warning in diagnostics; do not silently discard imports. |
 
 ---
 
 ## 6. Frontend Design
 
-### 6.1 Import UX
+### 6.1 First-Run / Empty-Library UX
+
+The local-file performance work changes the main adoption funnel, so the empty states should be part of this PRD rather than a later polish pass.
+
+Product decisions:
+
+- The first-open landing that shows DJ AI on top and import below is no longer the primary onboarding surface.
+- First empty-library launch should route users to the Songs/All Songs tab empty state, not a separate Sessions landing.
+- The Songs empty state becomes the main import surface: a large dashed drop zone, click-to-upload, folder import, and a smaller secondary "start DJ set" action.
+- The Now Playing tab gets its own empty-library state. If there are no tracks anywhere, the media stage area should show the same dashed upload/drop affordance instead of empty playback chrome.
+- If the library has tracks but the queue is empty, Now Playing should guide the user to play from Songs/sets rather than showing the full empty-library import state.
+- Global drag/drop remains active everywhere, but the empty states make the action visible before a user discovers dragging.
+
+### 6.2 Songs Tab Empty State
+
+Required behavior for the tab-2 Songs/All Songs page:
+
+- Empty library: show an explicit import panel, not only `gallery.tracksEmpty`.
+- The import panel supports click-to-pick files, folder import, and drag/drop copy affordance.
+- DJ generation is secondary copy/action because local music import is the user's likely first task.
+- The panel should reuse the existing `AddTracksMenu` capabilities where possible.
+- When a search/filter returns no results but the library is not empty, keep the normal "no matches" state and do not show the full first-run importer.
+
+### 6.3 Now Playing Empty State
+
+Required behavior for tab-1 Now Playing:
+
+- Empty library: replace the blank stage/control presentation with a centered empty state that lets users click a dashed box to upload, import a folder, or drag files onto the page.
+- Existing image-only drop behavior for setting cover/background applies only when a current track exists. With no current track, media file drops should import tracks.
+- Queue-empty but library-present: show a smaller "choose a song from Songs" state, with a route to the Songs tab.
+- The empty state should not pretend the DJ is playing or ready when there is no playable track.
+
+### 6.4 Import UX
 
 No new import surface is required for v1. Existing folder/file import UI should use the Electron fast path automatically when:
 
@@ -378,9 +420,9 @@ Fallback to current byte-ingest path when:
 - the source file has no stable path,
 - file requires local conversion/decryption,
 - local-file protocol cannot play the container,
-- SQLite/native scanner initialization fails.
+- native scanner/index initialization fails.
 
-### 6.2 Track Row / Playback UX
+### 6.5 Track Row / Playback UX
 
 Existing rows should remain visually simple. Required states:
 
@@ -390,12 +432,12 @@ Existing rows should remain visually simple. Required states:
 
 Do not add hidden settings. If a runtime toggle is needed for users, expose it in Settings as an explicit "Local file references" desktop behavior with clear consequences.
 
-### 6.3 State Management
+### 6.6 State Management
 
 - Dexie `useLiveQuery` continues to drive visible library and set rows.
-- SQLite scan events are batched before Dexie writes.
+- Native scan/index events are batched before Dexie writes.
 - Zustand must not store large scan result arrays or native singletons.
-- Search should consume Dexie track metadata; SQLite remains implementation detail unless a future search PRD explicitly moves high-volume search indexing native.
+- Search should consume Dexie track metadata; any native index remains implementation detail unless a future search PRD explicitly moves high-volume search indexing native.
 
 ---
 
@@ -435,7 +477,7 @@ type R2ExportBody =
 
 Implementation requirements:
 
-- `sha256` may be computed lazily in a streaming pass and cached in SQLite.
+- `sha256` may be computed lazily in a streaming pass and cached in the native index when one exists.
 - `r2-s3` signing must accept a precomputed payload hash so signing does not call `arrayBuffer()` on a whole local file.
 - Electron upload should stream from disk in main process or an Electron-safe streaming bridge.
 - Do not upload source paths or local fingerprints into the R2 manifest.
@@ -477,6 +519,7 @@ Implementation requirements:
 - [ ] Add repository tests for creating uploaded tracks with `sourcePath` and no `blobId`.
 - [ ] Add R2 export-plan tests for local-file media resolution and missing source skip/error behavior.
 - [ ] Add Electron bridge unit tests for local media URL token shape and path redaction.
+- [ ] Add UI tests for empty-library Songs and Now Playing states.
 
 ### Phase 2 Checklist
 
@@ -484,26 +527,46 @@ Implementation requirements:
 - [ ] Tests do not require real user files, real R2, or a GUI Electron window.
 - [ ] PRD is updated before the test commit.
 
-### Phase 3: Electron SQLite Library Index
+### Phase 3: First-Run Empty-State Consolidation
 
-**Goal:** Add the native index and scanner foundation.
+**Goal:** Move first-run import/DJ onboarding into the tabs where users expect it.
 
 **Tasks:**
-- [ ] Add SQLite library index module with migrations and batched upserts.
+- [ ] Replace the Songs/All Songs empty library text with a dashed import panel.
+- [ ] Add a Now Playing empty-library panel with click-to-upload, folder import, and drag/drop guidance.
+- [ ] Route first empty-library launch to the Songs empty state instead of the standalone Sessions landing.
+- [ ] Keep DJ start as a secondary action rather than the first visual block.
+
+### Phase 3 Checklist
+
+- [ ] Users can upload or import a folder from the Songs empty state.
+- [ ] Users can upload or import a folder from the Now Playing empty-library state.
+- [ ] Search-empty and library-empty states are visually distinct.
+- [ ] PRD is updated before commit.
+
+### Phase 4: Native Library Index Decision Gate
+
+**Goal:** Add the native scanner foundation and introduce SQLite only if persistent native index state is justified.
+
+**Tasks:**
+- [ ] Add native scanner tests that prove no full-byte IPC is required.
+- [ ] Decide whether Dexie-only `Track.sourcePath` plus native scan batches can satisfy the first implementation.
+- [ ] If justified, add SQLite library index module with migrations and batched upserts.
 - [ ] Add scanner diff by path, extension, size, mtime, and missing files.
 - [ ] Add metadata parsing from file path/stream without embedded cover extraction on the fast path.
 - [ ] Add cancellation and bounded batch events.
 
-### Phase 3 Checklist
+### Phase 4 Checklist
 
 - [ ] Scanner can index a mocked 6000-file tree without full-byte IPC.
 - [ ] Unchanged files are skipped by fingerprint.
+- [ ] SQLite is either added with a written justification or explicitly deferred.
 - [ ] SQLite errors are surfaced through diagnostics and import UI.
 - [ ] PRD is updated before commit.
 
-### Phase 4: Local-File Track Import Path
+### Phase 5: Local-File Track Import Path
 
-**Goal:** Create ready Dexie tracks from SQLite batches without copying media bytes.
+**Goal:** Create ready Dexie tracks from native scan batches without copying media bytes.
 
 **Tasks:**
 - [ ] Add repository helper for referenced uploaded tracks.
@@ -511,14 +574,14 @@ Implementation requirements:
 - [ ] Keep `.ncm`/conversion-required files on the existing byte-ingest path.
 - [ ] Preserve progressive set membership publishing.
 
-### Phase 4 Checklist
+### Phase 5 Checklist
 
 - [ ] New Electron plaintext tracks have `sourcePath` and no `blobId` by default.
 - [ ] Existing web/Tauri import behavior remains unchanged.
 - [ ] Folder sync dedupe still uses source path correctly.
 - [ ] PRD is updated before commit.
 
-### Phase 5: Local-File Playback Protocol
+### Phase 6: Local-File Playback Protocol
 
 **Goal:** Make referenced local files playable through Electron without exposing arbitrary paths.
 
@@ -528,32 +591,32 @@ Implementation requirements:
 - [ ] Update `MediaEngine` loading path to accept local media URLs.
 - [ ] Surface missing/changed file states.
 
-### Phase 5 Checklist
+### Phase 6 Checklist
 
 - [ ] Audio and video local-file tracks play without `mediaBlobs`.
 - [ ] Seeking works for large files.
 - [ ] Raw absolute paths are not present in media element URLs.
 - [ ] PRD is updated before commit.
 
-### Phase 6: R2 Upload-On-Demand From Local File
+### Phase 7: R2 Upload-On-Demand From Local File
 
 **Goal:** Publish referenced local-file tracks to R2 only when sync is requested.
 
 **Tasks:**
 - [ ] Extend R2 export body model for local files.
-- [ ] Add streaming sha256 computation and SQLite hash cache.
+- [ ] Add streaming sha256 computation and native-index hash cache when available.
 - [ ] Add precomputed payload hash support to R2 signing.
 - [ ] Add Electron local-file uploader or streaming bridge.
 - [ ] Add sync errors for missing local sources.
 
-### Phase 6 Checklist
+### Phase 7 Checklist
 
 - [ ] R2 publish can upload a local-file track without first creating `mediaBlobs`.
 - [ ] Public manifests do not contain absolute paths.
 - [ ] Existing blob-backed generated/uploaded tracks still publish.
 - [ ] PRD is updated before commit.
 
-### Phase 7: Lazy Cover Cache + Repair UX
+### Phase 8: Lazy Cover Cache + Repair UX
 
 **Goal:** Keep initial import fast while giving users artwork and repair tools after the fact.
 
@@ -563,14 +626,14 @@ Implementation requirements:
 - [ ] Add repair/rescan affordance for missing local files.
 - [ ] Ensure manual cover/memory photos still use `mediaBlobs` and sync normally.
 
-### Phase 7 Checklist
+### Phase 8 Checklist
 
 - [ ] Initial scan does not block on embedded artwork.
 - [ ] Cover extraction is bounded and cancellable.
 - [ ] Missing-file repair preserves tags, memories, likes, and set ranks.
 - [ ] PRD is updated before commit.
 
-### Phase 8: Verification + Completion
+### Phase 9: Verification + Completion
 
 **Goal:** Prove the feature against performance, correctness, and sync requirements.
 
@@ -580,7 +643,7 @@ Implementation requirements:
 - [ ] Measure a synthetic 6000-file import in Electron.
 - [ ] Update PRD status to Completed after implementation.
 
-### Phase 8 Checklist
+### Phase 9 Checklist
 
 - [ ] 6000-file import shows playable rows within 5 seconds on a normal desktop SSD-class machine, with full metadata/backfill allowed to continue.
 - [ ] Initial import does not copy all media bytes into `mediaBlobs`.
@@ -606,7 +669,7 @@ Implementation requirements:
 
 - **Authentication:** No account system is introduced.
 - **Authorization:** Files are accessible only after user selection or persisted import-folder re-grant. Main process validates `realpath` against the granted roots.
-- **Data Protection:** Absolute paths and SQLite scan metadata stay device-local. R2 manifests never include source paths.
+- **Data Protection:** Absolute paths and native scan/index metadata stay device-local. R2 manifests never include source paths.
 - **Credential Discipline:** R2 keys remain in local settings and are not logged, embedded in URLs, or sent to any MUZERO server.
 - **Protocol Safety:** Local media URLs are tokenized, short-lived, and pathless.
 - **Logging:** Diagnostics may include track ids, byte counts, MIME, status, and path hashes; avoid raw absolute paths.
@@ -629,11 +692,13 @@ Implementation requirements:
 
 | # | Question | Status | Decision |
 |---|----------|--------|----------|
-| 1 | Should SQLite use `node:sqlite` or `better-sqlite3`? | Open | Evaluate Electron packaged runtime first; default to `better-sqlite3` if built-in SQLite is unavailable or unstable. |
-| 2 | Should local-file source outrank `blobId`? | Resolved | No. `blobId` remains highest priority because it is app-managed and repairable by MUZERO. Local-file comes next. |
-| 3 | Should plaintext imports ever copy bytes automatically? | Resolved | No by default. Copy only for explicit local cache/export/conversion flows or fallback runtimes. |
-| 4 | Should embedded cover bytes be stored as `coverBlobId` automatically? | Resolved | Not on the fast path. Lazy extracted artwork is a derived cache; user-selected memory/cover photos still use `mediaBlobs`. |
-| 5 | Can R2 upload read the whole local file into memory if streaming is hard? | Resolved | No for the Electron fast path. The feature goal requires streaming or bounded chunking. |
+| 1 | Is Electron-side SQLite inherently valuable? | Resolved | Only as a native filesystem index/cache. It is not valuable as a duplicate of Dexie app state, so it is decision-gated. |
+| 2 | If SQLite is justified, should it use `node:sqlite` or `better-sqlite3`? | Open | Evaluate Electron packaged runtime first; default to `better-sqlite3` if built-in SQLite is unavailable or unstable. |
+| 3 | Should local-file source outrank `blobId`? | Resolved | No. `blobId` remains highest priority because it is app-managed and repairable by MUZERO. Local-file comes next. |
+| 4 | Should plaintext imports ever copy bytes automatically? | Resolved | No by default. Copy only for explicit local cache/export/conversion flows or fallback runtimes. |
+| 5 | Should embedded cover bytes be stored as `coverBlobId` automatically? | Resolved | Not on the fast path. Lazy extracted artwork is a derived cache; user-selected memory/cover photos still use `mediaBlobs`. |
+| 6 | Can R2 upload read the whole local file into memory if streaming is hard? | Resolved | No for the Electron fast path. The feature goal requires streaming or bounded chunking. |
+| 7 | Should first-open onboarding remain a separate DJ/import landing? | Resolved | No. Fold import onboarding into the Songs empty state, and add a Now Playing empty-library importer. |
 
 ---
 
@@ -642,3 +707,4 @@ Implementation requirements:
 | Date | Author | Changes |
 |------|--------|---------|
 | 2026-06-12 | Codex | Created PRD documenting Electron local-file references, SQLite index, local playback protocol, and R2 upload-on-demand. |
+| 2026-06-12 | Codex | Clarified SQLite as decision-gated native index/cache, and added first-run Songs / Now Playing empty-state consolidation requirements. |
