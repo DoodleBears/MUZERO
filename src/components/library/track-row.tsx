@@ -173,10 +173,10 @@ export const TrackRow = memo(function TrackRow({
   const disabled = track.status !== "ready";
 
   // Two-tap activation: the first interaction selects the row (revealing its
-  // info in the inspector); interacting again with an already-selected row that
-  // isn't the one playing switches playback to it. Lists without a selection
-  // model (queue / Now Playing) leave `isSelected` undefined, so `onView` is the
-  // play handler there and a single click plays straight away.
+  // info in the inspector); interacting again with an already-selected row
+  // starts or resumes playback. Lists without a selection model (queue / Now
+  // Playing) leave `isSelected` undefined, so `onView` is the play handler there
+  // and a single click plays straight away.
   function requestPlay(actionKind: "click" | "keyboard") {
     recordUserAction("play.click", {
       message: "track play clicked",
@@ -194,7 +194,7 @@ export const TrackRow = memo(function TrackRow({
       onToggleSelect?.(shiftKey);
       return;
     }
-    if (isSelected && !isCurrent && !disabled) {
+    if (isSelected && !disabled) {
       requestPlay(actionKind);
       return;
     }

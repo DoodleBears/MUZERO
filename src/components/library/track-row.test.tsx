@@ -207,14 +207,14 @@ describe("TrackRow", () => {
     expect(props.onView).not.toHaveBeenCalled();
   });
 
-  it("does not replay the currently playing row when it is clicked", () => {
+  it("plays the selected current row so a paused track can resume", () => {
     const { container, props } = renderRow({ isCurrent: true, isSelected: true });
     const row = container.querySelector<HTMLElement>("[data-muzero-track-row]");
 
     fireEvent.click(row as HTMLElement);
 
-    expect(props.onPlay).not.toHaveBeenCalled();
-    expect(props.onView).toHaveBeenCalledTimes(1);
+    expect(props.onPlay).toHaveBeenCalledTimes(1);
+    expect(props.onView).not.toHaveBeenCalled();
   });
 
   it("plays the selected focused row on Enter, but only selects an unselected one", () => {
@@ -232,6 +232,16 @@ describe("TrackRow", () => {
     );
     expect(unselected.props.onView).toHaveBeenCalledTimes(1);
     expect(unselected.props.onPlay).not.toHaveBeenCalled();
+  });
+
+  it("plays the selected current row from the library drill-in key", () => {
+    const { container, props } = renderRow({ isCurrent: true, isSelected: true });
+    const row = container.querySelector<HTMLElement>("[data-muzero-track-row]");
+
+    fireEvent.keyDown(row as HTMLElement, { code: "KeyD", key: "d" });
+
+    expect(props.onPlay).toHaveBeenCalledTimes(1);
+    expect(props.onView).not.toHaveBeenCalled();
   });
 
   it("does not view or play only because the row receives focus", () => {
