@@ -2,14 +2,7 @@ export type DjChatToolAvailability = "always" | "online" | "generation";
 
 export interface DjChatToolMetadata<Id extends string = string> {
   availability: DjChatToolAvailability;
-  category:
-    | "library"
-    | "sets"
-    | "queue"
-    | "player"
-    | "memories"
-    | "online"
-    | "generation";
+  category: "library" | "sets" | "queue" | "player" | "memories" | "online" | "generation";
   descriptionKey: `chat.tools.${Id}.description`;
   id: Id;
   labelKey: `chat.tools.${Id}.label`;
@@ -29,6 +22,7 @@ const tool = <const Id extends string>(
 
 export const DJ_CHAT_TOOL_METADATA = [
   tool("library_search", "library"),
+  tool("library_tree", "library"),
   tool("library_list_tags", "library"),
   tool("now_playing_get", "player"),
   tool("set_list", "sets"),

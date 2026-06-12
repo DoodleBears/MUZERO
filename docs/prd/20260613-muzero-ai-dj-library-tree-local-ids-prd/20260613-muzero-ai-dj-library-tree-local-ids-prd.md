@@ -1,6 +1,6 @@
 # PRD: MUZERO — AI DJ Library Tree 与 Local ID Tool Call 架构
 
-**Status:** In Progress（Phase 1 Local ID registry + chat transport 接线已完成；Phase 2 `library_tree` browse tool 已完成；Phase 3 现有工具输入输出 local-ID 化已完成：search/list/get/memory/queue/play/set/generate tools 统一 encode/decode `#T/#S/#M/#Q/#R`，Phase 4 prompt 与错误恢复待推进。）
+**Status:** Completed（2026-06-13：Phase 1-4 已落地。AI DJ tools 现在支持 session-scoped `#T/#S/#M/#Q/#R` local refs、`library_tree` 曲库树、search/list/get/read result envelopes、多轮 registry 持久化、tool 层 local-ref 错误恢复、prompt/tool description 规则和自动化验收。）
 **Created:** 2026-06-13
 **Author:** MUZERO
 **Module:** AI DJ Chat Agent Tools — 曲库结构可见性、tool-call ID 压缩、上下文预算
@@ -21,7 +21,7 @@
 | 1 | Local ID registry primitive + chat transport 接线 | Completed（2026-06-13：registry/session/context/transport 基础接线 + tests） | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | Library tree / set tree browse tools | Completed（2026-06-13：`library_tree` tool + tests） | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | 现有工具输入输出 local-ID 化 | Completed（2026-06-13：existing read/write/playback tools encode/decode local refs + tests） | [Phase 3 Checklist](#phase-3-checklist) |
-| 4 | Prompt、错误恢复、测试与验收 | Pending | [Phase 4 Checklist](#phase-4-checklist) |
+| 4 | Prompt、错误恢复、测试与验收 | Completed（2026-06-13：prompt/tool descriptions + local-ref recovery + multi-turn/flow tests） | [Phase 4 Checklist](#phase-4-checklist) |
 
 > Status Legend: Completed | In Progress | Pending
 
@@ -718,31 +718,31 @@ Acceptance: `buildNowPlayingContext` tests must assert no `ses_` or `trk_` appea
 
 **Tasks:**
 
-- [ ] Update `DJ_CHAT_SYSTEM_PROMPT` with tree-browse workflow and local-ID rules.
-- [ ] Update tool descriptions to mention local IDs instead of raw IDs.
-- [ ] Add chat transport test proving one hydrated registry is shared by:
+- [x] Update `DJ_CHAT_SYSTEM_PROMPT` with tree-browse workflow and local-ID rules.
+- [x] Update tool descriptions to mention local IDs instead of raw IDs.
+- [x] Add chat transport test proving one hydrated registry is shared by:
   - Now Playing context
   - `library_tree`
   - subsequent write tool call in the same chat session
-- [ ] Add a multi-turn test:
+- [x] Add a multi-turn test:
   - turn 1: `library_tree` returns `#S1/#T1`
   - registry snapshot is persisted
   - turn 2: `play_track({ trackId:"#T1" })` resolves successfully
-- [ ] Add a multi-result disambiguation test:
+- [x] Add a multi-result disambiguation test:
   - `library_search({ queries:["rain"] })` returns `resultRef:"#R1"` and `#T1`
   - `library_search({ queries:["focus"] })` returns `resultRef:"#R2"` and may also include `#T1`
   - action tools use `#T1`; explanatory text can refer to "ordinal 1 in #R2"
   - `resolveTrackRef("#R2")` fails with a wrong-type/result-ref error
-- [ ] Add a curation flow test proving local IDs are universal tool refs:
+- [x] Add a curation flow test proving local IDs are universal tool refs:
   - `library_tree(scope:"unassigned")` returns `#T3/#T8`
   - `set_create({ name, trackIds:["#T3","#T8"] })` creates a real set with real `trk_...` members
   - returned set id is encoded as `#S<n>`
   - `play_set({ sessionId:"#S<n>" })` resolves and plays that real set
-- [ ] Add a playlist growth test:
+- [x] Add a playlist growth test:
   - `set_list` returns an existing set as `#S2`
   - `set_add_tracks({ sessionId:"#S2", trackIds:["#T3"] })` writes the real track into the real session
-- [ ] Add context-budget test ensuring tree pagination prevents unbounded output.
-- [ ] Manual QA with a seeded fake library:
+- [x] Add context-budget test ensuring tree pagination prevents unbounded output.
+- [x] Seeded fake-library QA with automated Vitest coverage:
   - multiple sets
   - overlapping tracks
   - unassigned tracks
@@ -751,13 +751,13 @@ Acceptance: `buildNowPlayingContext` tests must assert no `ses_` or `trk_` appea
 
 ### Phase 4 Checklist
 
-- [ ] Agent can answer「这个歌单有哪些歌」by calling `library_tree(scope:"set")`.
-- [ ] Agent can answer「看看我的整个音乐库」by paging `library_tree(scope:"library")`.
-- [ ] Agent can organize「未分配到歌单的歌曲」via `library_tree(scope:"unassigned")` + `set_create` / `set_add_tracks`.
-- [ ] Agent can use a `#Tn` from any read tool to create a set, add to queue, play a song, or add memory without ever seeing raw `trk_...`.
-- [ ] Agent can use a `#Sn` from any read tool to update, grow, or play a set without ever seeing raw `ses_...`.
-- [ ] No hidden backend flags or localStorage gates.
-- [ ] `make test -- src/chat` or equivalent targeted Vitest suite passes.
+- [x] Agent can answer「这个歌单有哪些歌」by calling `library_tree(scope:"set")`.
+- [x] Agent can answer「看看我的整个音乐库」by paging `library_tree(scope:"library")`.
+- [x] Agent can organize「未分配到歌单的歌曲」via `library_tree(scope:"unassigned")` + `set_create` / `set_add_tracks`.
+- [x] Agent can use a `#Tn` from any read tool to create a set, add to queue, play a song, or add memory without ever seeing raw `trk_...`.
+- [x] Agent can use a `#Sn` from any read tool to update, grow, or play a set without ever seeing raw `ses_...`.
+- [x] No hidden backend flags or localStorage gates.
+- [x] `make test -- src/chat` or equivalent targeted Vitest suite passes.
 
 ---
 
@@ -815,6 +815,7 @@ Acceptance: `buildNowPlayingContext` tests must assert no `ses_` or `trk_` appea
 
 | Date | Author | Changes |
 |------|--------|---------|
+| 2026-06-13 | Codex | Completed Phase 4 and closed the PRD: updated `DJ_CHAT_SYSTEM_PROMPT` with tree-browse/local-ref/resultRef rules; updated tool descriptions to prefer `#T/#S/#M/#Q` entity refs and keep `#R` result windows separate; added structured local-ref recovery results for unknown/wrong-type refs; added `library_tree` tool metadata/i18n; added `dj-chat-phase4.test.ts` covering shared persisted registry across now-playing/tree/next-turn actions, multi-result disambiguation, wrong `#R` recovery, unassigned curation, playlist growth, pagination budget, and seeded fake-library QA across multiple sets/overlap/unassigned/generated/uploaded/streamed/video. Verification: focused chat Vitest suite, Biome, and `tsc --noEmit` passed. |
 | 2026-06-13 | Codex | Completed Phase 3: migrated existing AI DJ chat tools to the shared local-ref layer. `library_search`, `set_list`, `set_get`, `memory_search`, `now_playing_get`, queue tools, playback tools, set mutation tools, memory tools, online import, and DJ generation now encode LLM-facing entity refs as `#T/#S/#M/#Q`, wrap read results with `#R` envelopes, decode local refs before repository/player calls, and preserve raw-ID backward compatibility. Verification: `dj-chat-tools-local-ids.test.ts`, `dj-chat-tools.test.ts`, `dj-chat-library-tree.test.ts`, local-id/context tests, Biome, and `tsc --noEmit` passed. |
 | 2026-06-13 | Codex | Completed Phase 2: added `dj-chat-library-tree.ts` and registered `library_tree` in `createDjChatTools`; supports `scope:"library"`, `scope:"set"`, and `scope:"unassigned"`, flattened cursor pagination, field projection, unassigned-group computation, `orderedSetTrackIds`, stable local entity refs, per-result `#R` refs, and no raw `trk_` / `ses_` output. Verification: `dj-chat-library-tree.test.ts`, existing `dj-chat-tools.test.ts`, Biome, and `tsc --noEmit` passed. |
 | 2026-06-13 | Codex | Completed Phase 1: added `dj-chat-local-ids.ts` with AnySoul-style strict local ID registry (`#T/#S/#M/#Q/#R`), typed unknown/wrong-type errors, encode/decode helpers, and snapshot hydration; added `ChatSession.localIdRegistryJson` plus load/save helpers; updated Now Playing context to emit `#S/#T` when a registry is supplied; hydrated/persisted registry in chat transport and passed `localIds/persistLocalIds` into tools. Verification: local-id/session/context tests + existing chat agent/runtime tests, Biome, and `tsc --noEmit` passed. |

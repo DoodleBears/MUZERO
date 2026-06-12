@@ -47,6 +47,8 @@ import {
   encodeTrackRef,
   resolveSetRef,
   resolveTrackRef,
+  UnknownDjChatLocalIdError,
+  WrongDjChatLocalIdTypeError,
 } from "./dj-chat-local-ids";
 
 export const agentWriteResultSchema = z.object({
@@ -377,6 +379,59 @@ function resultRef(toolName: string, deps: LocalIdDeps, summary?: Record<string,
 
 async function persistLocalIds(deps: LocalIdDeps): Promise<void> {
   await deps.persistLocalIds?.();
+}
+
+function localIdResolutionErrorResult(error: unknown): AgentWriteResult | undefined {
+  if (error instanceof UnknownDjChatLocalIdError) {
+    return {
+      status: "error",
+      commandId: "muzero.local_id.resolve",
+      summary: `${error.localId} is not available in this chat context. Refresh with library_tree, library_search, set_list, set_get, now_playing_get, or memory_search, then use the returned local id.`,
+      diff: { localId: error.localId, reason: "unknown-local-id" },
+      warnings: ["unknown-local-id"],
+    };
+  }
+
+  if (error instanceof WrongDjChatLocalIdTypeError) {
+    const expectedHint =
+      error.expected === "T"
+        ? "#T"
+        : error.expected === "S"
+          ? "#S"
+          : error.expected === "M"
+            ? "#M"
+            : error.expected === "Q"
+              ? "#Q"
+              : "#R";
+    return {
+      status: "error",
+      commandId: "muzero.local_id.resolve",
+      summary: `${error.localId} is a ${error.actual ?? "raw"} ref, but this tool needs ${error.expected}. Use an entity id such as ${expectedHint} from a recent tool result; do not use resultRef ids like #R for entity actions.`,
+      diff: {
+        actual: error.actual,
+        expected: error.expected,
+        localId: error.localId,
+        reason: "wrong-local-id-type",
+      },
+      warnings: ["wrong-local-id-type"],
+    };
+  }
+
+  return undefined;
+}
+
+function withLocalIdErrorHandling<TArgs extends unknown[], TResult>(
+  execute: (...args: TArgs) => Promise<TResult> | TResult,
+): (...args: TArgs) => Promise<TResult | AgentWriteResult> {
+  return async (...args) => {
+    try {
+      return await execute(...args);
+    } catch (error) {
+      const result = localIdResolutionErrorResult(error);
+      if (result) return result;
+      throw error;
+    }
+  };
 }
 
 function withOrdinal<T extends Record<string, unknown>>(
@@ -1020,26 +1075,29 @@ export function createDjChatTools(deps: DjChatToolDeps = {}): ToolSet {
   const tools: ToolSet = {
     library_search: tool({
       description:
-        'One search over the library, filtered by `types` (default ["track"]). Keywords go in `queries` (match "any" gathers a genre, "all" narrows). `types` can include: "track" (title/caption/tags/notes/memories), "set" (match playlist NAMES), and "lyrics" (find songs by the WORDS in their lyrics — each hit returns a matching line snippet + timestamp). Only the requested groups come back. The track group projects to `fields` (default id+title) and pages via `cursor`/`nextCursor`. To curate a whole genre into a set without listing every id, prefer set_add_by_search.',
+        'One search over the library, filtered by `types` (default ["track"]). Results use local ids (#T tracks, #S sets) plus resultRef #R for this result window. Keywords go in `queries` (match "any" gathers a genre, "all" narrows). `types` can include: "track" (title/caption/tags/notes/memories), "set" (match playlist NAMES), and "lyrics" (find songs by lyric words; each hit returns a snippet + timestamp). The track group projects to `fields` (default id+title) and pages via `cursor`/`nextCursor`. To curate a whole genre into a set without listing every id, prefer set_add_by_search.',
       inputSchema: librarySearchInputSchema,
-      execute: (input, options) =>
+      execute: withLocalIdErrorHandling((input, options) =>
         executeLibrarySearch(input, {
           db,
           localIds: deps.localIds,
           persistLocalIds: deps.persistLocalIds,
           resultId: `result:${options.toolCallId}`,
         }),
+      ),
     }),
     library_tree: tool({
       description:
         'Browse the user library as a tree using short local ids. Use scope "library" for all sets plus unassigned songs, scope "set" with a #S id to inspect one set, or scope "unassigned" to organize songs not in any set. Results are paged with cursor/nextCursor and include resultRef plus per-result ordinals; actions should use entity ids like #T1/#S1.',
       inputSchema: libraryTreeInputSchema,
-      execute: (input) =>
+      execute: withLocalIdErrorHandling((input, options) =>
         executeLibraryTree(input, {
           db,
           localIds: deps.localIds,
           persistLocalIds: deps.persistLocalIds,
+          resultId: `result:${options.toolCallId}`,
         }),
+      ),
     }),
     library_list_tags: tool({
       description: "List distinct local tags with usage counts.",
@@ -1047,57 +1105,65 @@ export function createDjChatTools(deps: DjChatToolDeps = {}): ToolSet {
       execute: () => getAllTags(db),
     }),
     now_playing_get: tool({
-      description: "Read the current play queue and playing-from set context.",
+      description:
+        "Read the current play queue and playing-from set context. Returns a resultRef #R plus local #Q queue entries, #T track refs, and #S context set refs.",
       inputSchema: z.object({}),
-      execute: (_input, options) =>
+      execute: withLocalIdErrorHandling((_input, options) =>
         executeNowPlayingGet({
           db,
           localIds: deps.localIds,
           persistLocalIds: deps.persistLocalIds,
           resultId: `result:${options.toolCallId}`,
         }),
+      ),
     }),
     set_list: tool({
-      description: "List local sets, newest updated first.",
+      description:
+        "List local sets, newest updated first. Returns compact #S set refs in a resultRef #R window.",
       inputSchema: z.object({}),
-      execute: (_input, options) =>
+      execute: withLocalIdErrorHandling((_input, options) =>
         executeSetList({
           db,
           localIds: deps.localIds,
           persistLocalIds: deps.persistLocalIds,
           resultId: `result:${options.toolCallId}`,
         }),
+      ),
     }),
     set_get: tool({
-      description: "Read one local set and its ordered tracks.",
+      description:
+        "Read one local set by #S id and its ordered tracks. Returns the set as #S and tracks as #T inside a resultRef #R window.",
       inputSchema: z.object({ sessionId: z.string().min(1) }),
-      execute: (input, options) =>
+      execute: withLocalIdErrorHandling((input, options) =>
         executeSetGet(input, {
           db,
           localIds: deps.localIds,
           persistLocalIds: deps.persistLocalIds,
           resultId: `result:${options.toolCallId}`,
         }),
+      ),
     }),
     set_create: tool({
       description:
-        "Create a local set, optionally seeding it with existing local track ids (in order) so 'make a playlist with these songs' is one call. A seeded DJ set can auto-extend; curated/upload sets should not.",
+        "Create a local set, optionally seeding it with existing #T track ids (in order) so 'make a playlist with these songs' is one call. Returns the new set as #S. A seeded DJ set can auto-extend; curated/upload sets should not.",
       inputSchema: createSetInputSchema,
-      execute: (input) =>
+      execute: withLocalIdErrorHandling((input) =>
         executeCreateSet(input, {
           db,
           localIds: deps.localIds,
           persistLocalIds: deps.persistLocalIds,
         }),
+      ),
     }),
     set_update: tool({
-      description: "Update free set metadata such as name or seed prompt.",
+      description:
+        "Update free set metadata such as name or seed prompt. Pass the target set as #S.",
       inputSchema: z.object({
         sessionId: z.string().min(1),
         name: z.string().max(80).optional(),
         seedPrompt: z.string().optional(),
       }),
-      execute: async ({ sessionId, name, seedPrompt }) => {
+      execute: withLocalIdErrorHandling(async ({ sessionId, name, seedPrompt }) => {
         const realSessionId = resolveMaybeSet(sessionId, deps);
         await updateSession(realSessionId, { name, seedPrompt }, db);
         await persistLocalIds(deps);
@@ -1108,37 +1174,40 @@ export function createDjChatTools(deps: DjChatToolDeps = {}): ToolSet {
           diff: { sessionId: encodeMaybeSet(realSessionId, deps) },
           warnings: [],
         } satisfies AgentWriteResult;
-      },
+      }),
     }),
     set_add_tracks: tool({
       description:
-        "Add existing local track ids to a set — works on ANY set: an existing one (find its id via set_list/set_get) or a freshly created one. Idempotent; only known local tracks are added. Use for a hand-picked few ids.",
+        "Add existing #T track ids to a #S set. Works on ANY set: an existing one from set_list/set_get or a freshly created one. Idempotent; only known local tracks are added. Use for a hand-picked few ids.",
       inputSchema: setAddTracksInputSchema,
-      execute: (input) =>
+      execute: withLocalIdErrorHandling((input) =>
         executeSetAddTracks(input, {
           db,
           localIds: deps.localIds,
           persistLocalIds: deps.persistLocalIds,
         }),
+      ),
     }),
     set_add_by_search: tool({
       description:
-        "Curate in one shot: search the whole library with `queries` (match any/all) and add every match to a set — no need to list track ids. Targets ANY set: pass an existing set's id (from set_list) to grow it, or a new set's id. Returns matched/added/skipped counts.",
+        "Curate in one shot: search the whole library with `queries` (match any/all) and add every match to a #S set. No need to list track ids. Returns matched/added/skipped counts without exposing raw ids.",
       inputSchema: setAddBySearchInputSchema,
-      execute: (input) =>
+      execute: withLocalIdErrorHandling((input) =>
         executeSetAddBySearch(input, {
           db,
           localIds: deps.localIds,
           persistLocalIds: deps.persistLocalIds,
         }),
+      ),
     }),
     set_switch: tool({
-      description: "Load a set's tracks into the playback queue.",
+      description:
+        "Load a #S set's tracks into the playback queue and return an encoded queue summary.",
       inputSchema: z.object({
         sessionId: z.string().min(1),
         currentIndex: z.number().int().min(0).default(0),
       }),
-      execute: async ({ sessionId, currentIndex }) => {
+      execute: withLocalIdErrorHandling(async ({ sessionId, currentIndex }) => {
         const realSessionId = resolveMaybeSet(sessionId, deps);
         const session = await getSession(realSessionId, db);
         if (!session) return undefined;
@@ -1149,25 +1218,28 @@ export function createDjChatTools(deps: DjChatToolDeps = {}): ToolSet {
           persistLocalIds: deps.persistLocalIds,
           resultId: `result:set_switch:${session.id}`,
         });
-      },
+      }),
     }),
     queue_add: tool({
-      description: "Add track ids to the play queue, either next or appended.",
+      description:
+        "Add #T track ids to the play queue, either next or appended, and return an encoded queue summary.",
       inputSchema: z.object({
         trackIds: z.array(z.string().min(1)).min(1).max(50),
         position: z.enum(["next", "append"]).default("append"),
       }),
-      execute: async ({ trackIds, position }) => {
-        const realTrackIds = trackIds.map((id) => resolveMaybeTrack(id, deps));
-        if (position === "next") await playQueuePlayNext(realTrackIds, db);
-        else await playQueueAppend(realTrackIds, db);
-        return executeNowPlayingGet({
-          db,
-          localIds: deps.localIds,
-          persistLocalIds: deps.persistLocalIds,
-          resultId: `result:queue_add:${realTrackIds.join(",")}`,
-        });
-      },
+      execute: withLocalIdErrorHandling(
+        async ({ trackIds, position }: { position: "append" | "next"; trackIds: string[] }) => {
+          const realTrackIds = trackIds.map((id) => resolveMaybeTrack(id, deps));
+          if (position === "next") await playQueuePlayNext(realTrackIds, db);
+          else await playQueueAppend(realTrackIds, db);
+          return executeNowPlayingGet({
+            db,
+            localIds: deps.localIds,
+            persistLocalIds: deps.persistLocalIds,
+            resultId: `result:queue_add:${realTrackIds.join(",")}`,
+          });
+        },
+      ),
     }),
     queue_edit: tool({
       description: "Update play queue repeat mode.",
@@ -1177,7 +1249,7 @@ export function createDjChatTools(deps: DjChatToolDeps = {}): ToolSet {
     queue_clear: tool({
       description: "Empty the play queue (the playlist). Does not delete any set.",
       inputSchema: z.object({}),
-      execute: async () => {
+      execute: withLocalIdErrorHandling(async () => {
         await playQueueSet([], {}, db);
         return executeNowPlayingGet({
           db,
@@ -1185,13 +1257,13 @@ export function createDjChatTools(deps: DjChatToolDeps = {}): ToolSet {
           persistLocalIds: deps.persistLocalIds,
           resultId: "result:queue_clear",
         });
-      },
+      }),
     }),
     play_set: tool({
       description:
-        "Start playing a set now: load its tracks into the play queue (replacing the current playlist) and begin from the top.",
+        "Start playing a #S set now: load its tracks into the play queue (replacing the current playlist) and begin from the top.",
       inputSchema: z.object({ sessionId: z.string().min(1) }),
-      execute: async ({ sessionId }) => {
+      execute: withLocalIdErrorHandling(async ({ sessionId }) => {
         const realSessionId = resolveMaybeSet(sessionId, deps);
         await (deps.player ?? (await defaultPlayerControl(db))).playSet(realSessionId);
         await persistLocalIds(deps);
@@ -1202,12 +1274,12 @@ export function createDjChatTools(deps: DjChatToolDeps = {}): ToolSet {
           diff: { sessionId: encodeMaybeSet(realSessionId, deps) },
           warnings: [],
         } satisfies AgentWriteResult;
-      },
+      }),
     }),
     play_track: tool({
-      description: "Switch the currently playing song to a specific local track and play it now.",
+      description: "Switch the currently playing song to a specific #T track and play it now.",
       inputSchema: z.object({ trackId: z.string().min(1) }),
-      execute: async ({ trackId }) => {
+      execute: withLocalIdErrorHandling(async ({ trackId }) => {
         const realTrackId = resolveMaybeTrack(trackId, deps);
         await (deps.player ?? (await defaultPlayerControl(db))).playTrack(realTrackId);
         await persistLocalIds(deps);
@@ -1218,30 +1290,32 @@ export function createDjChatTools(deps: DjChatToolDeps = {}): ToolSet {
           diff: { trackId: encodeMaybeTrack(realTrackId, deps) },
           warnings: [],
         } satisfies AgentWriteResult;
-      },
+      }),
     }),
     memory_search: tool({
       description:
-        "Search the listener's track memories by keyword(s) (queries[], match any/all). Matches the memory note plus its track's title/tags; each hit includes the trackId + title so you can act on that song.",
+        "Search the listener's track memories by keyword(s) (queries[], match any/all). Returns a resultRef #R; each hit has a #M memory ref and a #T track ref so you can act on that song.",
       inputSchema: memorySearchInputSchema,
-      execute: (input, options) =>
+      execute: withLocalIdErrorHandling((input, options) =>
         executeMemorySearch(input, {
           db,
           localIds: deps.localIds,
           persistLocalIds: deps.persistLocalIds,
           resultId: `result:${options.toolCallId}`,
         }),
+      ),
     }),
     add_memory: tool({
       description:
-        "Attach a Memory note to a track. Omit trackId to put it on whatever is playing right now.",
+        "Attach a Memory note to a #T track. Omit trackId to put it on whatever is playing right now. Returns #M/#T refs.",
       inputSchema: addMemoryInputSchema,
-      execute: (input) =>
+      execute: withLocalIdErrorHandling((input) =>
         executeAddMemory(input, {
           db,
           localIds: deps.localIds,
           persistLocalIds: deps.persistLocalIds,
         }),
+      ),
     }),
   };
 
@@ -1256,14 +1330,15 @@ export function createDjChatTools(deps: DjChatToolDeps = {}): ToolSet {
     });
     tools.online_add_tracks = tool({
       description:
-        "Ingest songs from a prior online search into a local set (does not auto-play). Free and undoable.",
+        "Ingest songs from a prior online search into a #S local set (does not auto-play). Free and undoable.",
       inputSchema: onlineAddInputSchema,
-      execute: (input) =>
+      execute: withLocalIdErrorHandling((input) =>
         executeOnlineAddTracks(input, {
           db,
           localIds: deps.localIds,
           persistLocalIds: deps.persistLocalIds,
         }),
+      ),
     });
   }
 
@@ -1278,16 +1353,17 @@ export function createDjChatTools(deps: DjChatToolDeps = {}): ToolSet {
     });
     tools.dj_generate_tracks = tool({
       description:
-        "Create pending generated tracks from validated TrackBriefs. This spends provider credits.",
+        "Create pending generated tracks from validated TrackBriefs in a #S session. This spends provider credits and returns created #T refs.",
       inputSchema: generateTracksInputSchema,
       needsApproval: true,
-      execute: (input) =>
+      execute: withLocalIdErrorHandling((input) =>
         executeGenerateTracks(input, {
           db,
           localIds: deps.localIds,
           persistLocalIds: deps.persistLocalIds,
           providerId: deps.providerId,
         }),
+      ),
     });
   }
 

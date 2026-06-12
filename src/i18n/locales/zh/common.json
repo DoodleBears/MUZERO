@@ -1315,6 +1315,10 @@
         "label": "搜索曲库",
         "description": "搜索本地歌曲、歌单、歌词、标签、备注和回忆，可用于宽泛发现或精确匹配。"
       },
+      "library_tree": {
+        "label": "浏览曲库树",
+        "description": "按分页树结构读取歌单、顺序歌曲和未分配歌曲，并使用 local ID。"
+      },
       "library_list_tags": {
         "label": "列出标签",
         "description": "读取本地标签和使用次数，让 DJ 理解你整理音乐的方式。"
