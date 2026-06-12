@@ -43,6 +43,7 @@ import {
   scanFolderForMedia,
   selectNewFiles,
 } from "@/lib/folder-import";
+import { yieldForImportBackpressure } from "@/lib/import-backpressure";
 import { createDiagnosticLogger, log } from "@/lib/logger";
 import { fallbackUploadMediaMetadata, parseUploadedMediaMetadata } from "@/lib/media-metadata";
 import { isUnsupportedMediaError, probeMediaFile } from "@/lib/media-probe";
@@ -1298,6 +1299,7 @@ async function ingestNcmBytes(
   bytes: ArrayBuffer,
   sourcePath?: string,
 ): Promise<ScannedIngestResult> {
+  const inputByteLength = bytes.byteLength;
   const input = {
     setId,
     name,
@@ -1308,10 +1310,21 @@ async function ingestNcmBytes(
     decode: "ncm" as const,
   };
   if (!shouldPersistDecodedNcmInRenderer()) {
-    return ingestViaWorker(input);
+    const result = await ingestViaWorker(input);
+    await yieldForImportBackpressure({
+      inputBytes: inputByteLength,
+      decodedContainer: true,
+    });
+    return result;
   }
   const decoded = await decodeNcmViaWorker(input);
-  return persistDecodedNcmTrack(setId, name, decoded, sourcePath);
+  const result = await persistDecodedNcmTrack(setId, name, decoded, sourcePath);
+  await yieldForImportBackpressure({
+    inputBytes: inputByteLength,
+    decodedBytes: decoded.audio.byteLength,
+    decodedContainer: true,
+  });
+  return result;
 }
 
 async function persistDecodedNcmTrack(
@@ -1669,10 +1682,11 @@ async function ingestScannedFileBytes(
   // to the worker for the heavy parse/decrypt + DB write (no UI jank).
   const bytes = await fs.readFile(file.path);
   const inputBytes = arrayBufferFromBytes(bytes);
+  const inputByteLength = inputBytes.byteLength;
   if (file.decode === "ncm") {
     return ingestNcmBytes(setId, file.name, inputBytes, file.path);
   }
-  return ingestViaWorker({
+  const result = await ingestViaWorker({
     setId,
     name: file.name,
     kind: file.kind,
@@ -1680,6 +1694,8 @@ async function ingestScannedFileBytes(
     sourcePath: file.path,
     bytes: inputBytes,
   });
+  await yieldForImportBackpressure({ inputBytes: inputByteLength });
+  return result;
 }
 
 function arrayBufferFromBytes(bytes: Uint8Array<ArrayBuffer>): ArrayBuffer {

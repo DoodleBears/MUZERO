@@ -13,7 +13,7 @@
 |-------|------|--------|------|
 | 1 | PRD + Import Path Audit | ✅ Completed | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | Electron NCM Persist Path | ✅ Completed | [Phase 2 Checklist](#phase-2-checklist) |
-| 3 | Import Memory Budget + Backpressure | 🔲 Pending | [Phase 3 Checklist](#phase-3-checklist) |
+| 3 | Import Memory Budget + Backpressure | ✅ Completed | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | Low-Priority Cover Palette Work | 🔲 Pending | [Phase 4 Checklist](#phase-4-checklist) |
 | 5 | Verification + Profiling Notes | 🔄 In Progress | [Phase 5 Checklist](#phase-5-checklist) |
 
@@ -223,15 +223,15 @@ The existing Storage & cache page remains the place to inspect disk usage.
 **Goal:** Reduce import memory spikes by yielding after large decoded writes and avoiding stacked expensive tasks.
 
 **Tasks:**
-- [ ] Add size-aware backpressure after `.ncm` decode/write and large plaintext byte imports.
-- [ ] Keep progress responsive while yielding.
-- [ ] Add tests around import ordering and cancellation with backpressure hooks.
+- [x] Add size-aware backpressure after `.ncm` decode/write and large plaintext byte imports.
+- [x] Keep progress responsive while yielding.
+- [x] Add tests around import ordering and cancellation with backpressure hooks.
 
 ### Phase 3 Checklist
 
-- [ ] Large `.ncm` imports yield between files.
-- [ ] Cancel still stops between-file work.
-- [ ] Normal referenced-file imports stay fast.
+- [x] Large `.ncm` imports yield between files.
+- [x] Cancel still stops between-file work.
+- [x] Normal referenced-file imports stay fast.
 
 ### Phase 4: Low-Priority Cover Palette Work
 
@@ -328,6 +328,7 @@ The existing Storage & cache page remains the place to inspect disk usage.
 |------|--------|---------|
 | 2026-06-13 | Codex | Initial PRD for `.ncm` import memory/storage optimization. |
 | 2026-06-13 | Codex | Completed Phase 2: decode-only `.ncm` worker path, Electron renderer persistence through `electron-file`, and targeted Vitest/typecheck verification. |
+| 2026-06-13 | Codex | Completed Phase 3: size-aware import backpressure helper and folder import yields after large `.ncm`/plaintext byte writes. |
 
 ---
 
