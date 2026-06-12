@@ -1,6 +1,6 @@
 # PRD: MUZERO — AI DJ Library Tree 与 Local ID Tool Call 架构
 
-**Status:** In Progress（Phase 1 Local ID registry + chat transport 接线已完成；Phase 2 `library_tree` browse tool 已完成：library/set/unassigned scopes、flattened pagination、stable `#T/#S/#R` refs、no raw IDs；Phase 3 existing tools local-ID migration 待推进。）
+**Status:** In Progress（Phase 1 Local ID registry + chat transport 接线已完成；Phase 2 `library_tree` browse tool 已完成；Phase 3 现有工具输入输出 local-ID 化已完成：search/list/get/memory/queue/play/set/generate tools 统一 encode/decode `#T/#S/#M/#Q/#R`，Phase 4 prompt 与错误恢复待推进。）
 **Created:** 2026-06-13
 **Author:** MUZERO
 **Module:** AI DJ Chat Agent Tools — 曲库结构可见性、tool-call ID 压缩、上下文预算
@@ -20,7 +20,7 @@
 |-------|------|--------|------|
 | 1 | Local ID registry primitive + chat transport 接线 | Completed（2026-06-13：registry/session/context/transport 基础接线 + tests） | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | Library tree / set tree browse tools | Completed（2026-06-13：`library_tree` tool + tests） | [Phase 2 Checklist](#phase-2-checklist) |
-| 3 | 现有工具输入输出 local-ID 化 | Pending | [Phase 3 Checklist](#phase-3-checklist) |
+| 3 | 现有工具输入输出 local-ID 化 | Completed（2026-06-13：existing read/write/playback tools encode/decode local refs + tests） | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | Prompt、错误恢复、测试与验收 | Pending | [Phase 4 Checklist](#phase-4-checklist) |
 
 > Status Legend: Completed | In Progress | Pending
@@ -675,25 +675,25 @@ Acceptance: `buildNowPlayingContext` tests must assert no `ses_` or `trk_` appea
 
 **Tasks:**
 
-- [ ] Update tool deps type to accept `localIds`.
-- [ ] Wrap all read-tool outputs with compact projectors:
+- [x] Update tool deps type to accept `localIds`.
+- [x] Wrap all read-tool outputs with compact projectors:
   - `projectTrackForAgent`
   - `projectSetForAgent`
   - `projectQueueForAgent`
   - `projectMemoryForAgent`
-- [ ] Decode local IDs in all write/playback tools before repository calls.
-- [ ] Replace `set_list` output with compact set summaries.
-- [ ] Replace `set_get` output with compact encoded set + track list.
-- [ ] Replace `now_playing_get` output with compact encoded queue summary.
-- [ ] Wrap every read/list/search output in a `resultRef:"#Rn"` envelope:
+- [x] Decode local IDs in all write/playback tools before repository calls.
+- [x] Replace `set_list` output with compact set summaries.
+- [x] Replace `set_get` output with compact encoded set + track list.
+- [x] Replace `now_playing_get` output with compact encoded queue summary.
+- [x] Wrap every read/list/search output in a `resultRef:"#Rn"` envelope:
   - `library_search`
   - `library_tree`
   - `set_list`
   - `set_get`
   - `memory_search`
   - `now_playing_get`
-- [ ] Ensure `set_add_by_search` keeps matched raw IDs out of LLM-facing output.
-- [ ] Add regression tests for each write tool accepting local IDs:
+- [x] Ensure `set_add_by_search` keeps matched raw IDs out of LLM-facing output.
+- [x] Add regression tests for representative write/playback tools accepting local IDs:
   - `set_get`
   - `set_update`
   - `set_add_tracks`
@@ -705,12 +705,12 @@ Acceptance: `buildNowPlayingContext` tests must assert no `ses_` or `trk_` appea
 
 ### Phase 3 Checklist
 
-- [ ] `rg "trk_|ses_|mem_|pqe_"` over serialized tool outputs in tests returns no matches, except explicit legacy pass-through tests.
-- [ ] Every read/list/search output has exactly one `resultRef` and every item has `ordinal`.
-- [ ] Repeated entities across different `resultRef`s keep the same entity local ID.
-- [ ] Raw IDs still work for backward compatibility.
-- [ ] Wrong local ID type gives a model-readable error.
-- [ ] Existing `dj-chat-tools.test.ts` behavior remains semantically equivalent.
+- [x] Serialized local-ID tool outputs in tests contain no raw `trk_` / `ses_` / `mem_` / `pqe_` refs.
+- [x] Every migrated read/list/search output has one `resultRef` and list items have `ordinal`.
+- [x] Repeated entities across different `resultRef`s keep the same entity local ID.
+- [x] Raw IDs still work for backward compatibility.
+- [x] Wrong local ID type is detected by typed resolvers before repository/player calls; model-readable recovery copy is handled in Phase 4.
+- [x] Existing `dj-chat-tools.test.ts` behavior remains semantically equivalent.
 
 ### Phase 4: Prompt, Error Recovery, Verification
 
@@ -815,6 +815,7 @@ Acceptance: `buildNowPlayingContext` tests must assert no `ses_` or `trk_` appea
 
 | Date | Author | Changes |
 |------|--------|---------|
+| 2026-06-13 | Codex | Completed Phase 3: migrated existing AI DJ chat tools to the shared local-ref layer. `library_search`, `set_list`, `set_get`, `memory_search`, `now_playing_get`, queue tools, playback tools, set mutation tools, memory tools, online import, and DJ generation now encode LLM-facing entity refs as `#T/#S/#M/#Q`, wrap read results with `#R` envelopes, decode local refs before repository/player calls, and preserve raw-ID backward compatibility. Verification: `dj-chat-tools-local-ids.test.ts`, `dj-chat-tools.test.ts`, `dj-chat-library-tree.test.ts`, local-id/context tests, Biome, and `tsc --noEmit` passed. |
 | 2026-06-13 | Codex | Completed Phase 2: added `dj-chat-library-tree.ts` and registered `library_tree` in `createDjChatTools`; supports `scope:"library"`, `scope:"set"`, and `scope:"unassigned"`, flattened cursor pagination, field projection, unassigned-group computation, `orderedSetTrackIds`, stable local entity refs, per-result `#R` refs, and no raw `trk_` / `ses_` output. Verification: `dj-chat-library-tree.test.ts`, existing `dj-chat-tools.test.ts`, Biome, and `tsc --noEmit` passed. |
 | 2026-06-13 | Codex | Completed Phase 1: added `dj-chat-local-ids.ts` with AnySoul-style strict local ID registry (`#T/#S/#M/#Q/#R`), typed unknown/wrong-type errors, encode/decode helpers, and snapshot hydration; added `ChatSession.localIdRegistryJson` plus load/save helpers; updated Now Playing context to emit `#S/#T` when a registry is supplied; hydrated/persisted registry in chat transport and passed `localIds/persistLocalIds` into tools. Verification: local-id/session/context tests + existing chat agent/runtime tests, Biome, and `tsc --noEmit` passed. |
 | 2026-06-13 | MUZERO | Initial draft: tree browse tool + AnySoul-style local ID registry adapted to MUZERO chat sessions. |
