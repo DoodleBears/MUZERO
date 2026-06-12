@@ -9,6 +9,7 @@ import {
   saveSettings,
 } from "@/db/repositories";
 import { DEFAULT_AUDIENCE_REQUEST_INTAKE_SETTINGS, type Track } from "@/db/types";
+import type { AudienceRequestAiDjQueue } from "./audience-request-ai-dj";
 import { createAudienceRequestRuntime } from "./audience-request-runtime";
 import type { NormalizedAudienceRequest } from "./audience-request-schema";
 
@@ -161,6 +162,81 @@ describe("AudienceRequestRuntime direct search route", () => {
     expect(queue.entries.map((entry) => entry.trackId)).toEqual([current.id, online!.id, tail.id]);
     expect(item.matchedTrackId).toBe(online!.id);
   });
+
+  it("routes AI DJ requests into the injected AI queue and links the chat session", async () => {
+    await saveSettings(
+      {
+        audienceRequestIntake: {
+          ...DEFAULT_AUDIENCE_REQUEST_INTAKE_SETTINGS,
+          routeMode: "ai-dj",
+        },
+      },
+      db,
+    );
+    const done = deferred<void>();
+    const aiDjQueue: AudienceRequestAiDjQueue = {
+      enqueue: vi.fn(async (input) => {
+        input.onProgress?.({ chatSessionId: "cht_live", status: "queued" });
+        await done.promise;
+        input.onProgress?.({ chatSessionId: "cht_live", status: "completed" });
+        return { chatSessionId: "cht_live" };
+      }),
+    };
+    const runtime = createAudienceRequestRuntime({
+      aiDjQueue,
+      canUseAiDj: () => true,
+      db,
+    });
+
+    const item = await runtime.handle(request("DJ 选一首暖场 city pop"));
+
+    expect(aiDjQueue.enqueue).toHaveBeenCalledWith(
+      expect.objectContaining({
+        playbackAction: "play-next",
+        routeMode: "ai-dj",
+        request: expect.objectContaining({ normalizedQuery: "DJ 选一首暖场 city pop" }),
+      }),
+    );
+    expect(item.status).toBe("queued");
+    expect(item.chatSessionId).toBe("cht_live");
+
+    done.resolve();
+    await flushAsync();
+    expect(item.status).toBe("completed");
+    expect(item.chatSessionId).toBe("cht_live");
+  });
+
+  it("marks AI DJ failures without throwing through playback", async () => {
+    await saveSettings(
+      {
+        audienceRequestIntake: {
+          ...DEFAULT_AUDIENCE_REQUEST_INTAKE_SETTINGS,
+          routeMode: "ai-dj",
+        },
+      },
+      db,
+    );
+    const aiDjQueue: AudienceRequestAiDjQueue = {
+      enqueue: vi.fn(async (input) => {
+        input.onProgress?.({ chatSessionId: "cht_failed", status: "queued" });
+        throw new Error("model unavailable");
+      }),
+    };
+    const runtime = createAudienceRequestRuntime({
+      aiDjQueue,
+      canUseAiDj: () => true,
+      db,
+    });
+
+    const item = await runtime.handle(request("ask the DJ"));
+
+    await flushAsync();
+    expect(item).toMatchObject({
+      chatSessionId: "cht_failed",
+      error: "model unavailable",
+      status: "failed",
+    });
+  });
 });
 
 async function seedQueue() {
@@ -195,4 +271,19 @@ function request(message: string): NormalizedAudienceRequest {
     normalizedQuery: message.replace(/^点歌\s*/, ""),
     receivedAt: Date.now(),
   };
+}
+
+function deferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, reject, resolve };
+}
+
+async function flushAsync() {
+  await Promise.resolve();
+  await Promise.resolve();
 }

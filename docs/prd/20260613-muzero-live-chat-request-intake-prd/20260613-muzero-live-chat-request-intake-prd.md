@@ -18,7 +18,7 @@
 | 2 | Desktop Loopback Intake Server | ✅ Completed（Electron） | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | Settings + Request Inbox UI | ✅ Completed | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | Direct Search Route + Playback Actions | ✅ Completed | [Phase 4 Checklist](#phase-4-checklist) |
-| 5 | AI DJ Route + Prompt Safety | 🔲 Pending | [Phase 5 Checklist](#phase-5-checklist) |
+| 5 | AI DJ Route + Prompt Safety | ✅ Completed | [Phase 5 Checklist](#phase-5-checklist) |
 | 6 | Social Stream Ninja Preset + Docs | 🔲 Pending | [Phase 6 Checklist](#phase-6-checklist) |
 | 7 | Verification + Hardening | 🔲 Pending | [Phase 7 Checklist](#phase-7-checklist) |
 
@@ -624,21 +624,28 @@ The streamer should be able to click a request row and open the matched track in
 
 **Tasks:**
 
-- [ ] Create a fresh chat session per AI-routed live request.
-- [ ] Add a serial in-memory AI request queue so only one live-request chat session runs at a time.
-- [ ] Add `sendAudienceRequestToDjChat` adapter around `DjChatRuntimeActor`.
-- [ ] Add system/policy wrapper for untrusted live messages.
-- [ ] Ensure chat tools are still gated by `canGenerateMusic` and `hasEnabledStreamSources`.
-- [ ] Add tests with a fake chat runtime to verify message formatting and status updates.
+- [x] Create a fresh chat session per AI-routed live request.
+- [x] Add a serial in-memory AI request queue so only one live-request chat session runs at a time.
+- [x] Add `sendAudienceRequestToDjChat` adapter around `DjChatRuntimeActor`.
+- [x] Add system/policy wrapper for untrusted live messages.
+- [x] Ensure chat tools are still gated by `canGenerateMusic` and `hasEnabledStreamSources`.
+- [x] Add tests with a fake chat runtime to verify message formatting and status updates.
 
 ### Phase 5 Checklist
 
-- [ ] AI DJ route does not expose API keys, local paths, endpoint tokens, or raw settings.
-- [ ] Each AI-routed request creates a new chat session.
-- [ ] Concurrent AI-routed requests queue in memory until the current request finishes.
-- [ ] AI DJ route works when generation is disabled, using search/curation tools only.
-- [ ] AI DJ failures do not crash playback.
-- [ ] The transient request row links to the chat session/action result while the app is running.
+- [x] AI DJ route does not expose API keys, local paths, endpoint tokens, or raw settings.
+- [x] Each AI-routed request creates a new chat session.
+- [x] Concurrent AI-routed requests queue in memory until the current request finishes.
+- [x] AI DJ route works when generation is disabled, using search/curation tools only.
+- [x] AI DJ failures do not crash playback.
+- [x] The transient request row links to the chat session/action result while the app is running.
+
+**Phase 5 Verification:**
+
+- `D:\code\project\MUZERO\node_modules\.bin\vitest.CMD run src\live-requests\audience-request-ai-dj.test.ts src\live-requests\audience-request-runtime.test.ts`
+- `D:\code\project\MUZERO\node_modules\.bin\vitest.CMD run src\live-requests\audience-request-schema.test.ts src\live-requests\audience-request-search.test.ts src\live-requests\audience-request-router.test.ts src\live-requests\audience-request-security.test.ts src\live-requests\audience-request-ai-dj.test.ts src\live-requests\audience-request-runtime.test.ts`
+- `D:\code\project\MUZERO\node_modules\.bin\biome.CMD check --write src\live-requests\audience-request-ai-dj.ts src\live-requests\audience-request-ai-dj.test.ts src\live-requests\audience-request-runtime.ts src\live-requests\audience-request-runtime.test.ts`
+- `D:\code\project\MUZERO\node_modules\.bin\tsc.CMD --noEmit --pretty false`
 
 ### Phase 6: Social Stream Ninja Preset + Docs
 
@@ -773,3 +780,4 @@ The streamer should be able to click a request row and open the matched track in
 | 2026-06-13 | Codex | Pivoted Phase 2 to Electron-first per product direction: Electron main-process loopback HTTP intake server, token/query auth, bounded body handling, typed preload/renderer bridge, and Node/Vitest coverage. Tauri listener intentionally removed for v1. |
 | 2026-06-13 | Codex | Completed Phase 3: visible Live requests Settings pane, default local intake settings, Settings IA entry, endpoint/token controls, transient request inbox shell, and en/zh/ja/ko catalog coverage. |
 | 2026-06-13 | Codex | Completed Phase 4: direct Search runtime with transient request rows, duplicate/cooldown/rate-limit guards, active-set/all-library scope, memory/lyrics-aware scoring, play-next/append/approved play-now side effects, and online-source fallback. |
+| 2026-06-13 | Codex | Completed Phase 5: AI DJ route adapter with sanitized untrusted-message wrapper, one fresh chat session per request, serial in-memory live-request queue, runtime chat-session linking, and failure-safe transient row updates. |

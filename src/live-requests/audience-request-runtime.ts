@@ -1,3 +1,4 @@
+import { canUseDjChat } from "@/chat/dj-chat-availability";
 import { db as defaultDb, type MuzeroDB } from "@/db/muzero-db";
 import {
   createSession,
@@ -26,6 +27,12 @@ import { newId } from "@/lib/id";
 import { resolveEnabledStreamSources } from "@/streamsrc/registry";
 import { createStreamHttp } from "@/streamsrc/stream-http";
 import { createStreamedTrack, hitToStreamedInput } from "@/streamsrc/streamed-track-repo";
+import {
+  type AudienceRequestAiDjProgress,
+  type AudienceRequestAiDjQueue,
+  createAudienceRequestAiDjQueue,
+  createDefaultAudienceRequestDjChatAdapter,
+} from "./audience-request-ai-dj";
 import {
   type AudienceRequestRoutePlan,
   type AudienceRouteSearchSummary,
@@ -69,6 +76,7 @@ export interface AudienceRequestRuntimeItem {
   matchedScore?: number;
   secondScore?: number;
   confidence?: "high" | "medium" | "low" | "none";
+  chatSessionId?: string;
   error?: string;
   completedAt?: number;
 }
@@ -94,6 +102,7 @@ export interface AudienceRequestRuntimeDeps {
     input: OnlineAudienceRequestFallbackInput,
   ) => Promise<OnlineAudienceRequestFallbackResult | null>;
   canUseAiDj?: (settings: AppSettings) => boolean;
+  aiDjQueue?: AudienceRequestAiDjQueue;
   playNow?: (track: Track) => Promise<void>;
 }
 
@@ -112,6 +121,11 @@ export function createAudienceRequestRuntime(
   const items: AudienceRequestRuntimeItem[] = [];
   const seenExternalIds = new Map<string, number>();
   const lastAcceptedByRequester = new Map<string, number>();
+  const aiDjQueue =
+    deps.aiDjQueue ??
+    createAudienceRequestAiDjQueue({
+      adapter: createDefaultAudienceRequestDjChatAdapter(db),
+    });
   let recentAcceptedAt: number[] = [];
 
   async function handle(request: NormalizedAudienceRequest): Promise<AudienceRequestRuntimeItem> {
@@ -162,7 +176,7 @@ export function createAudienceRequestRuntime(
         search: toRouteSearchSummary(search),
         onlineFallbackOnLowConfidence: intake.onlineFallbackOnLowConfidence,
         hasConfiguredOnlineSources: hasOnlineSources(settings),
-        canUseAiDj: deps.canUseAiDj?.(settings) ?? false,
+        canUseAiDj: deps.canUseAiDj?.(settings) ?? canUseDjChat(settings),
         requireApprovalForPlayNow: intake.requireApprovalForPlayNow,
       });
       return executePlan({ intake, item, plan, request, settings });
@@ -298,9 +312,65 @@ export function createAudienceRequestRuntime(
       });
     }
     if (plan.kind === "ai-dj") {
-      return finish(item, { status: "queued" });
+      return enqueueAiDj({ intake, item, request });
     }
     return finish(item, { status: "ignored", error: plan.reason });
+  }
+
+  function enqueueAiDj(input: {
+    intake: AudienceRequestIntakeSettings;
+    item: AudienceRequestRuntimeItem;
+    request: NormalizedAudienceRequest;
+  }): AudienceRequestRuntimeItem {
+    const { intake, item, request } = input;
+    item.status = "queued";
+    try {
+      const pending = aiDjQueue.enqueue({
+        onProgress: (progress) => applyAiDjProgress(item, progress),
+        playbackAction: intake.playbackAction,
+        request,
+        routeMode: intake.routeMode,
+      });
+      void pending
+        .then((result) => {
+          finish(item, {
+            chatSessionId: result.chatSessionId,
+            status: "completed",
+          });
+        })
+        .catch((error: unknown) => {
+          finish(item, {
+            status: "failed",
+            error: error instanceof Error ? error.message : String(error),
+          });
+        });
+    } catch (error) {
+      return finish(item, {
+        status: "failed",
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+    return item;
+  }
+
+  function applyAiDjProgress(
+    item: AudienceRequestRuntimeItem,
+    progress: AudienceRequestAiDjProgress,
+  ): void {
+    if (progress.chatSessionId) item.chatSessionId = progress.chatSessionId;
+    if (progress.status === "queued") {
+      item.status = "queued";
+      return;
+    }
+    if (progress.status === "completed") {
+      finish(item, { chatSessionId: progress.chatSessionId, status: "completed" });
+      return;
+    }
+    finish(item, {
+      chatSessionId: progress.chatSessionId,
+      status: "failed",
+      error: progress.error,
+    });
   }
 
   async function executePlayback(action: AudienceRequestPlaybackAction, track: Track) {
