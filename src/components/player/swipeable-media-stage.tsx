@@ -305,7 +305,6 @@ export function SwipeableMediaStage({
       selfSwitchRef.current = targetVisual.track.id;
       setCommitting(true);
       setHandoffFading(false);
-      void action();
       const target = direction === "next" ? -exitTravel / DRAG_GAIN : exitTravel / DRAG_GAIN;
       activeAnimation.current?.stop();
       animationToken.current += 1;
@@ -316,9 +315,14 @@ export function SwipeableMediaStage({
         type: "tween",
       });
       activeAnimation.current = controls;
-      void controls.then(() => {
+      void controls.then(async () => {
         if (animationToken.current !== token) return;
         activeAnimation.current = null;
+        // Keep the release tween transform-only. Switching the player updates
+        // the stage/background and may load media, so defer it until the cover
+        // has parked at the exit.
+        await action().catch(() => undefined);
+        if (animationToken.current !== token) return;
         // Hand off to the settled card while the strip stays parked at the exit
         // (the outgoing cover has already faded to 0 there). Resetting x now
         // would snap the *old* card back to centre — that's the flash. The reset
