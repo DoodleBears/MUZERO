@@ -127,10 +127,10 @@ describe("settings", () => {
 
   it("sets, resets, and clears keyboard-shortcut overrides", async () => {
     const z = { kind: "key" as const, stroke: { code: "KeyZ", keyLabel: "Z" } };
-    await setShortcutOverride("playback.prev", [z], db);
+    await setShortcutOverride("playback.prev", [{ scope: "global", gesture: z }], db);
     await setShortcutOverride("playback.next", [], db); // explicitly unbound
     expect((await getSettings(db)).shortcutOverrides).toEqual({
-      "playback.prev": [z],
+      "playback.prev": [{ scope: "global", gesture: z }],
       "playback.next": [],
     });
 

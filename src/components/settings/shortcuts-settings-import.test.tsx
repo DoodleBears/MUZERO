@@ -37,7 +37,9 @@ describe("ShortcutsSettings — keymap import", () => {
     const json = JSON.stringify({ schema: KEYMAP_SCHEMA, overrides: { "playback.prev": [Z] } });
     fireEvent.change(fileInput(container, json));
     await waitFor(() => expect(repo.setAll).toHaveBeenCalledTimes(1));
-    expect(repo.setAll.mock.calls[0][0]).toEqual({ "playback.prev": [Z] });
+    expect(repo.setAll.mock.calls[0][0]).toEqual({
+      "playback.prev": [{ scope: "global", gesture: Z }],
+    });
   });
 
   it("rejects an invalid file with an error toast and no write", async () => {

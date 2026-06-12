@@ -13,6 +13,7 @@ import { useShortcutHint } from "@/hooks/use-shortcut-hint";
 import { trackHasCover, trackSubtitle } from "@/lib/track-display";
 import { cn } from "@/lib/utils";
 import { transitionState } from "@/lib/view-transition-react";
+import type { ShortcutScope } from "@/shortcuts/registry";
 import { usePlayerStore } from "@/stores/player-store";
 import { CurrentTrackContextMenu } from "./track-context-menu";
 
@@ -38,10 +39,12 @@ export function TrackIdentityRow({
   className,
   onOpen,
   controls,
+  transportHintScope,
 }: {
   className?: string;
   onOpen?: () => void;
   controls?: ReactNode;
+  transportHintScope?: ShortcutScope;
 }) {
   const { t } = useTranslation();
   const hint = useShortcutHint();
@@ -170,16 +173,46 @@ export function TrackIdentityRow({
     if (onOpen) transitionState(onOpen);
   }
 
+  const nowTransportRows =
+    transportHintScope === "now"
+      ? [
+          {
+            label: `${t("player.previous")} · ${t("shortcuts.scope.now")}`,
+            keys: hint("prev", { scope: "now" }),
+          },
+          {
+            label: `${t("player.next")} · ${t("shortcuts.scope.now")}`,
+            keys: hint("next", { scope: "now" }),
+          },
+        ]
+      : [];
+  const globalTransportRows = [
+    {
+      label: `${t("player.previous")} · ${t("shortcuts.scope.global")}`,
+      keys: hint("prev", { scope: "global" }),
+    },
+    {
+      label: `${t("player.next")} · ${t("shortcuts.scope.global")}`,
+      keys: hint("next", { scope: "global" }),
+    },
+  ];
+  const dockTransportRows =
+    transportHintScope === "now"
+      ? [...nowTransportRows, ...globalTransportRows]
+      : [
+          { label: t("player.previous"), keys: hint("prev") },
+          { label: t("player.next"), keys: hint("next") },
+        ];
+  const dragShortcutRows = [
+    { label: t("player.dragPrevious"), keys: ["→", "↓"] },
+    { label: t("player.dragNext"), keys: ["←", "↑"] },
+    ...nowTransportRows,
+  ].filter((row) => row.keys.length > 0);
+
   return (
     <div className={cn("flex items-center gap-2 sm:gap-3", className)}>
       <CurrentTrackContextMenu className="min-w-0 flex-1">
-        <ControlTooltip
-          label={t("player.dragSwitch")}
-          shortcutRows={[
-            { label: t("player.previous"), keys: ["→", "↓"] },
-            { label: t("player.next"), keys: ["←", "↑"] },
-          ]}
-        >
+        <ControlTooltip label={t("player.dragSwitch")} shortcutRows={dragShortcutRows}>
           <motion.button
             ref={songRef}
             type="button"
@@ -259,8 +292,7 @@ export function TrackIdentityRow({
         label={isPlaying ? t("player.pause") : t("player.play")}
         keys={hint("play")}
         shortcutRows={[
-          { label: t("player.previous"), keys: hint("prev") },
-          { label: t("player.next"), keys: hint("next") },
+          ...dockTransportRows,
           { label: t("track.like"), keys: hint("like") },
           { label: t("nowPlaying.upNext"), keys: hint("queue") },
           { label: t("lyrics.toggleStage"), keys: hint("lyrics") },

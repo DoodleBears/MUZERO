@@ -1,6 +1,6 @@
 # PRD: Tab-Scoped Keyboard Shortcuts
 
-**Status:** Draft
+**Status:** Completed
 **Created:** 2026-06-13
 **Author:** MUZERO
 **Module:** Shortcuts - per-tab / per-surface key ownership for playback, library, queue, and inspector shortcuts
@@ -11,10 +11,10 @@
 
 | Phase | Name | Status | Link |
 |-------|------|--------|------|
-| 1 | Scoped binding model | Pending | [Phase 1 Checklist](#phase-1-checklist) |
-| 2 | Now Playing arrow transport | Pending | [Phase 2 Checklist](#phase-2-checklist) |
-| 3 | Settings UI by surface | Pending | [Phase 3 Checklist](#phase-3-checklist) |
-| 4 | Tooltip and cheat-sheet parity | Pending | [Phase 4 Checklist](#phase-4-checklist) |
+| 1 | Scoped binding model | Completed | [Phase 1 Checklist](#phase-1-checklist) |
+| 2 | Now Playing arrow transport | Completed | [Phase 2 Checklist](#phase-2-checklist) |
+| 3 | Settings UI by surface | Completed | [Phase 3 Checklist](#phase-3-checklist) |
+| 4 | Tooltip and cheat-sheet parity | Completed | [Phase 4 Checklist](#phase-4-checklist) |
 
 > Status Legend: Completed | In Progress | Pending
 
@@ -320,70 +320,70 @@ Do not put merged bindings into Zustand. Continue deriving them from Dexie setti
 **Goal:** Extend the shortcut engine to understand per-binding scopes while keeping old keymaps readable.
 
 **Tasks:**
-- [ ] Extend `ShortcutScope` to include `now` and `queue`.
-- [ ] Replace action-level scoped bindings with per-binding scoped bindings.
-- [ ] Add v1 -> v2 sanitizer for stored overrides.
-- [ ] Update conflict detection to compare `(scope, gestureIdentity)`.
-- [ ] Update import/export schema with version handling.
+- [x] Extend `ShortcutScope` to include `now` and `queue`.
+- [x] Replace action-level scoped bindings with per-binding scoped bindings.
+- [x] Add v1 -> v2 sanitizer for stored overrides.
+- [x] Update conflict detection to compare `(scope, gestureIdentity)`.
+- [x] Update import/export schema with version handling.
 
 ### Phase 1 Checklist
 
-- [ ] Existing user overrides still load.
-- [ ] Same key in `now` and `library` is not a conflict.
-- [ ] Same key in the same scope is a conflict.
-- [ ] `registry.test.ts` confirms default bindings are conflict-free per scope.
+- [x] Existing user overrides still load.
+- [x] Same key in `now` and `library` is not a conflict.
+- [x] Same key in the same scope is a conflict.
+- [x] `registry.test.ts` confirms default bindings are conflict-free per scope.
 
 ### Phase 2: Now Playing Arrow Transport
 
 **Goal:** Make `ArrowLeft` / `ArrowRight` previous/next in Now Playing without breaking Library.
 
 **Tasks:**
-- [ ] Add `playback.prev@now = ArrowLeft`.
-- [ ] Add `playback.next@now = ArrowRight`.
-- [ ] Resolve active scopes in `useShortcutDispatch`.
-- [ ] Ensure Search/Library capture handlers still route `ArrowLeft` / `ArrowRight` to back/open.
-- [ ] Update Now Playing/Dock tooltip hints to show scoped arrows.
+- [x] Add `playback.prev@now = ArrowLeft`.
+- [x] Add `playback.next@now = ArrowRight`.
+- [x] Resolve active scopes in `useShortcutDispatch`.
+- [x] Ensure Search/Library capture handlers still route `ArrowLeft` / `ArrowRight` to back/open.
+- [x] Update Now Playing/Dock tooltip hints to show scoped arrows.
 
 ### Phase 2 Checklist
 
-- [ ] On Now Playing, `ArrowLeft` calls `prev`.
-- [ ] On Now Playing, `ArrowRight` calls `next`.
-- [ ] On Library, `ArrowLeft` still calls `library.back`.
-- [ ] On Library, `ArrowRight` still calls `library.open`.
-- [ ] Typing targets and dialogs still suppress global/surface shortcuts.
+- [x] On Now Playing, `ArrowLeft` calls `prev`.
+- [x] On Now Playing, `ArrowRight` calls `next`.
+- [x] On Library, `ArrowLeft` still calls `library.back`.
+- [x] On Library, `ArrowRight` still calls `library.open`.
+- [x] Typing targets and dialogs still suppress global/surface shortcuts.
 
 ### Phase 3: Settings UI By Surface
 
 **Goal:** Let users see and edit shortcuts per surface.
 
 **Tasks:**
-- [ ] Add surface sections to Settings -> Shortcuts.
-- [ ] Let the recorder edit `(actionId, scope)`.
-- [ ] Update reset behavior for action+scope vs whole action.
-- [ ] Update import/export labels and validation messaging.
+- [x] Add surface sections to Settings -> Shortcuts.
+- [x] Let the recorder edit `(actionId, scope)`.
+- [x] Update reset behavior for action+scope vs whole action.
+- [x] Update import/export labels and validation messaging.
 
 ### Phase 3 Checklist
 
-- [ ] A user can rebind `playback.next@now` without changing `playback.next@global`.
-- [ ] Reset on `Now Playing -> Next track` restores only the `now` binding.
-- [ ] Reset all still clears every override.
-- [ ] i18n is complete for en/zh/ja/ko.
+- [x] A user can rebind `playback.next@now` without changing `playback.next@global`.
+- [x] Reset on `Now Playing -> Next track` restores only the `now` binding.
+- [x] Reset all still clears every override.
+- [x] i18n is complete for en/zh/ja/ko.
 
 ### Phase 4: Tooltip And Cheat-Sheet Parity
 
 **Goal:** On-screen hints match the active surface and Settings model.
 
 **Tasks:**
-- [ ] Add scoped hint helpers for Dock and transport controls.
-- [ ] Show Now Playing arrow hints in Now Playing-specific controls.
-- [ ] Keep global `Q/E` hints where the control is not surface-specific.
-- [ ] Update shortcut cheat-sheet search to include surface names.
+- [x] Add scoped hint helpers for Dock and transport controls.
+- [x] Show Now Playing arrow hints in Now Playing-specific controls.
+- [x] Keep global `Q/E` hints where the control is not surface-specific.
+- [x] Update shortcut cheat-sheet search to include surface names.
 
 ### Phase 4 Checklist
 
-- [ ] Dock play tooltip can show both global and Now Playing transport keys when useful.
-- [ ] Track identity hover describes drag switching and arrow switching without contradiction.
-- [ ] Cheat-sheet search finds `now`, `library`, `arrow`, `previous`, `next`, and localized equivalents.
+- [x] Dock play tooltip can show both global and Now Playing transport keys when useful.
+- [x] Track identity hover describes drag switching and arrow switching without contradiction.
+- [x] Cheat-sheet search finds `now`, `library`, `arrow`, `previous`, `next`, and localized equivalents.
 
 ---
 
@@ -439,3 +439,7 @@ Do not put merged bindings into Zustand. Continue deriving them from Dexie setti
 |------|--------|---------|
 | 2026-06-13 | MUZERO | Initial draft: best-practice plan for per-tab/per-surface shortcut ownership, including Now Playing arrow transport without breaking Library arrow navigation |
 | 2026-06-13 | MUZERO | Resolved Open Questions 1-2: no dedicated Settings scope in v1; queue scope activates while the queue surface is open and not typing. |
+| 2026-06-13 | MUZERO | Completed Phase 1: scoped binding model, v1 import compatibility, per-scope conflict checks, and v2 keymap export schema. |
+| 2026-06-13 | MUZERO | Completed Phase 2: Now Playing owns `ArrowLeft`/`ArrowRight` for previous/next, dispatcher derives active scopes from shell state, and Now Playing/Dock tooltips can show scoped arrow hints. |
+| 2026-06-13 | MUZERO | Completed Phase 3: Settings shortcut rows are grouped by surface, recorder targets `(actionId, scope)`, scoped reset preserves sibling scopes, and scope labels are localized in en/zh/ja/ko. |
+| 2026-06-13 | MUZERO | Completed Phase 4: scoped hint parity for Dock/Now Playing, drag-vs-keyboard tooltip labels, and surface-name cheat-sheet search. |

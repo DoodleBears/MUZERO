@@ -186,6 +186,8 @@
     "volume": "Volume",
     "shuffle": "Shuffle",
     "dragSwitch": "Drag to switch tracks",
+    "dragPrevious": "Drag previous",
+    "dragNext": "Drag next",
     "playbackError": "Playback error",
     "loadingRemote": "Downloading from cloud: {{title}}",
     "loadingTrack": "Preparing: {{title}}",
@@ -1071,6 +1073,13 @@
       "search": "Search",
       "memory": "Memory",
       "reference": "Reference"
+    },
+    "scope": {
+      "global": "Global",
+      "now": "Now Playing",
+      "library": "Library",
+      "queue": "Queue",
+      "inspector": "Inspector"
     },
     "action": {
       "playbackToggle": "Play / Pause",

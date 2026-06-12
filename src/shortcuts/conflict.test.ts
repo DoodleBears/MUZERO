@@ -7,6 +7,9 @@ const key = (code: string, keyLabel: string, mods = {}): ShortcutGesture => ({
   stroke: { code, keyLabel, ...mods },
 });
 
+const codes = (bindings: { gesture: ShortcutGesture }[]) =>
+  bindings.map((binding) => (binding.gesture.kind === "key" ? binding.gesture.stroke.code : ""));
+
 describe("planReassignment — cascading displacement", () => {
   it("displaces the chord off its current holder and reports it for replacement", () => {
     // Give Q (held by playback.prev) to playback.cycleRepeat.
@@ -15,11 +18,14 @@ describe("planReassignment — cascading displacement", () => {
       undefined,
       "other",
     );
-    // cycleRepeat now has R + Q; prev lost Q (now unbound).
-    expect(
-      plan.overrides["playback.cycleRepeat"].map((g) => (g.kind === "key" ? g.stroke.code : "")),
-    ).toEqual(["KeyR", "KeyQ"]);
-    expect(plan.overrides["playback.prev"]).toEqual([]);
+    // cycleRepeat now has R + Q; prev lost global Q but keeps its Now Playing arrow.
+    expect(codes(plan.overrides["playback.cycleRepeat"])).toEqual(["KeyR", "KeyQ"]);
+    expect(plan.overrides["playback.prev"]).toEqual([
+      {
+        scope: "now",
+        gesture: { kind: "key", stroke: { code: "ArrowLeft", keyLabel: "←" } },
+      },
+    ]);
     expect(plan.displaced.map((d) => d.actionId)).toEqual(["playback.prev"]);
     expect(plan.blocked).toEqual([]);
   });
@@ -31,12 +37,10 @@ describe("planReassignment — cascading displacement", () => {
     ];
     const plan = planReassignment(drafts, undefined, "other");
     expect(plan.displaced).toEqual([]); // prev was re-bound, no dangling displacement
-    expect(
-      plan.overrides["playback.prev"].map((g) => (g.kind === "key" ? g.stroke.code : "")),
-    ).toEqual(["KeyZ"]);
+    expect(codes(plan.overrides["playback.prev"])).toEqual(["ArrowLeft", "KeyZ"]);
     expect(
       plan.overrides["playback.cycleRepeat"].some(
-        (g) => g.kind === "key" && g.stroke.code === "KeyQ",
+        (binding) => binding.gesture.kind === "key" && binding.gesture.stroke.code === "KeyQ",
       ),
     ).toBe(true);
   });
@@ -52,7 +56,9 @@ describe("planReassignment — cascading displacement", () => {
     expect(plan.blocked).toEqual([]);
     expect(plan.overrides["playback.cycleRepeat"]).toBeUndefined(); // global holder unchanged
     expect(
-      plan.overrides["library.focusNext"].some((g) => g.kind === "key" && g.stroke.code === "KeyR"),
+      plan.overrides["library.focusNext"].some(
+        (binding) => binding.gesture.kind === "key" && binding.gesture.stroke.code === "KeyR",
+      ),
     ).toBe(true);
   });
 

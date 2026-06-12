@@ -177,6 +177,8 @@
     "volume": "볼륨",
     "shuffle": "셔플",
     "dragSwitch": "드래그로 곡 전환",
+    "dragPrevious": "이전 곡으로 드래그",
+    "dragNext": "다음 곡으로 드래그",
     "playbackError": "재생 오류",
     "loadingRemote": "클라우드에서 불러오는 중: {{title}}",
     "loadingTrack": "준비 중: {{title}}",
@@ -1052,6 +1054,13 @@
       "search": "검색",
       "memory": "메모리",
       "reference": "참고"
+    },
+    "scope": {
+      "global": "전역",
+      "now": "재생 중",
+      "library": "라이브러리",
+      "queue": "대기열",
+      "inspector": "인스펙터"
     },
     "action": {
       "playbackToggle": "재생 / 일시정지",

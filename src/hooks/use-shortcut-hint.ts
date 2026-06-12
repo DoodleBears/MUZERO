@@ -7,6 +7,7 @@ import {
   mergeBindings,
   sanitizeOverrides,
 } from "@/shortcuts/engine";
+import type { ShortcutScope } from "@/shortcuts/registry";
 
 const HINT_ACTION_TO_ID: Record<Exclude<HintAction, "volume">, string> = {
   play: "playback.toggle",
@@ -21,12 +22,15 @@ const HINT_ACTION_TO_ID: Record<Exclude<HintAction, "volume">, string> = {
 };
 
 /**
- * Returns `(action) => string[]` — the Kbd caps of a transport tooltip, read from
- * the configurable registry so hints reflect the user's rebinds (live via
- * `useSettings`). Shows the FIRST binding per action; "volume" shows the up + down
- * chords side by side (not a chord).
+ * Returns `(action, options?) => string[]` — the Kbd caps of a transport tooltip,
+ * read from the configurable registry so hints reflect the user's rebinds (live
+ * via `useSettings`). Shows the FIRST binding per action within the optional
+ * scope; "volume" shows the up + down chords side by side (not a chord).
  */
-export function useShortcutHint(): (action: HintAction) => string[] {
+export function useShortcutHint(): (
+  action: HintAction,
+  options?: { scope?: ShortcutScope },
+) => string[] {
   const overrides = useSettings().shortcutOverrides;
   const platform = useMemo(() => currentPlatform(), []);
   const bindings = useMemo(
@@ -34,13 +38,17 @@ export function useShortcutHint(): (action: HintAction) => string[] {
     [overrides, platform],
   );
   return useCallback(
-    (action: HintAction) => {
+    (action: HintAction, options?: { scope?: ShortcutScope }) => {
       if (action === "volume") {
-        const up = actionBindingChips("playback.volumeUp", bindings, platform)[0] ?? [];
-        const down = actionBindingChips("playback.volumeDown", bindings, platform)[0] ?? [];
+        const up =
+          actionBindingChips("playback.volumeUp", bindings, platform, options?.scope)[0] ?? [];
+        const down =
+          actionBindingChips("playback.volumeDown", bindings, platform, options?.scope)[0] ?? [];
         return [...up, ...down];
       }
-      return actionBindingChips(HINT_ACTION_TO_ID[action], bindings, platform)[0] ?? [];
+      return (
+        actionBindingChips(HINT_ACTION_TO_ID[action], bindings, platform, options?.scope)[0] ?? []
+      );
     },
     [bindings, platform],
   );

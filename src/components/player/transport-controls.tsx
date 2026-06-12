@@ -33,7 +33,7 @@ export function TransportControls({ className }: { className?: string }) {
           className,
         )}
       >
-        <ControlTooltip label={t("player.previous")} keys={hint("prev")}>
+        <ControlTooltip label={t("player.previous")} keys={hint("prev", { scope: "now" })}>
           <Button
             variant="ghost"
             size="icon"
@@ -57,7 +57,7 @@ export function TransportControls({ className }: { className?: string }) {
             {isPlaying ? <Pause /> : <Play />}
           </Button>
         </ControlTooltip>
-        <ControlTooltip label={t("player.next")} keys={hint("next")}>
+        <ControlTooltip label={t("player.next")} keys={hint("next", { scope: "now" })}>
           <Button
             variant="ghost"
             size="icon"

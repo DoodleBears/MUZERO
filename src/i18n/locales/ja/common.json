@@ -177,6 +177,8 @@
     "volume": "音量",
     "shuffle": "シャッフル",
     "dragSwitch": "ドラッグで曲を切替",
+    "dragPrevious": "前の曲へドラッグ",
+    "dragNext": "次の曲へドラッグ",
     "playbackError": "再生エラー",
     "loadingRemote": "クラウドから読み込み中：{{title}}",
     "loadingTrack": "準備中：{{title}}",
@@ -1053,6 +1055,13 @@
       "search": "検索",
       "memory": "メモリー",
       "reference": "リファレンス"
+    },
+    "scope": {
+      "global": "グローバル",
+      "now": "再生中",
+      "library": "ライブラリ",
+      "queue": "キュー",
+      "inspector": "インスペクター"
     },
     "action": {
       "playbackToggle": "再生 / 一時停止",

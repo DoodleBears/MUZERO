@@ -19,7 +19,7 @@ import {
 } from "@/player/play-queue";
 import { clampIndex } from "@/player/queue";
 import { orderedSetTrackIds, planReorder, ranksAtTop, rebalance } from "@/player/set-order";
-import type { ShortcutGesture } from "@/shortcuts/registry";
+import type { ScopedShortcutBinding } from "@/shortcuts/registry";
 import {
   deleteMediaBlob,
   type MediaBlobStorageOptions,
@@ -86,12 +86,12 @@ export async function saveSettings(
 /** Set (replace) a user's binding list for one shortcut action. `[]` = unbound. */
 export async function setShortcutOverride(
   actionId: string,
-  gestures: ShortcutGesture[],
+  bindings: ScopedShortcutBinding[],
   db: MuzeroDB = defaultDb,
 ): Promise<void> {
   const settings = await getSettings(db);
   await saveSettings(
-    { shortcutOverrides: { ...(settings.shortcutOverrides ?? {}), [actionId]: gestures } },
+    { shortcutOverrides: { ...(settings.shortcutOverrides ?? {}), [actionId]: bindings } },
     db,
   );
 }
@@ -107,7 +107,7 @@ export async function resetShortcut(actionId: string, db: MuzeroDB = defaultDb):
 
 /** Replace the entire override map (e.g. the resolved plan after a conflict chain). */
 export async function setAllShortcutOverrides(
-  overrides: Record<string, ShortcutGesture[]>,
+  overrides: Record<string, ScopedShortcutBinding[]>,
   db: MuzeroDB = defaultDb,
 ): Promise<void> {
   await saveSettings({ shortcutOverrides: overrides }, db);

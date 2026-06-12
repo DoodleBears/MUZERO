@@ -28,13 +28,18 @@ const SEEK_STEP = 5;
 const HOLD_DELAY_MS = 500;
 
 /**
- * The global keydown dispatcher resolves only `global`-scope actions; the more
- * specific surfaces (`library` / `inspector`) run their own capture-phase handlers
- * and preempt this bubble-phase one (they `stopImmediatePropagation` / set
- * `defaultPrevented`), exactly as before — so bare ↑/↓ stays "move focus" inside a
- * list and "volume" everywhere else without this hook needing to know.
+ * The window keydown dispatcher resolves transport/global actions plus the
+ * player-owned surfaces it can safely derive from shell state. Library/inspector
+ * surfaces run their own capture-phase handlers and preempt this bubble-phase one,
+ * so bare arrows stay "move/open/back" inside lists while Now Playing can own
+ * ←/→ for previous/next.
  */
-const GLOBAL_SCOPES: ReadonlySet<ShortcutScope> = new Set<ShortcutScope>(["global"]);
+export function resolveDispatchScopes(tab: Tab, queueOpen: boolean): ReadonlySet<ShortcutScope> {
+  const scopes = new Set<ShortcutScope>(["global"]);
+  if (tab === "now") scopes.add("now");
+  if (tab === "queue" || queueOpen) scopes.add("queue");
+  return scopes;
+}
 
 async function toggleDocumentFullscreen(): Promise<void> {
   if (!document.fullscreenEnabled) return;
@@ -160,11 +165,14 @@ const GLOBAL_HANDLERS: Record<string, (ctx: DispatchContext) => void> = {
  */
 export function useShortcutDispatch(): void {
   const overrides = useSettings().shortcutOverrides;
+  const tab = useNavStore((s) => s.tab);
   const setTab = useNavStore((s) => s.setTab);
+  const queueOpen = useUiStore((s) => s.queueOpen);
   const bindings = useMemo(
     () => mergeBindings(sanitizeOverrides(overrides, currentPlatform())),
     [overrides],
   );
+  const activeScopes = useMemo(() => resolveDispatchScopes(tab, queueOpen), [tab, queueOpen]);
 
   useEffect(() => {
     // Physical keys (by `code`) currently held that have a hold-twin: the tap
@@ -173,7 +181,7 @@ export function useShortcutDispatch(): void {
 
     const onKeyDown = (e: KeyboardEvent) => {
       if (isTypingTarget(e.target) || e.defaultPrevented) return;
-      const actionId = matchAction(gestureFromEvent(e), GLOBAL_SCOPES, bindings, currentPlatform());
+      const actionId = matchAction(gestureFromEvent(e), activeScopes, bindings, currentPlatform());
       if (!actionId) return;
 
       // Hold-capable action (C / V): defer the tap and arm the hold-twin, so a
@@ -229,5 +237,5 @@ export function useShortcutDispatch(): void {
       window.removeEventListener("blur", cancelAll);
       cancelAll();
     };
-  }, [bindings, setTab]);
+  }, [activeScopes, bindings, setTab]);
 }

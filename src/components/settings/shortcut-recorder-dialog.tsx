@@ -15,7 +15,11 @@ import {
   sanitizeOverrides,
 } from "@/shortcuts/engine";
 import { isModifierOnlyKey, reservedWarning } from "@/shortcuts/recorder";
-import { SHORTCUT_ACTIONS_BY_ID, type ShortcutGesture } from "@/shortcuts/registry";
+import {
+  SHORTCUT_ACTIONS_BY_ID,
+  type ShortcutGesture,
+  type ShortcutScope,
+} from "@/shortcuts/registry";
 
 /**
  * Cascading "press your keys" recorder (PRD Phase 5). Recording an occupied chord
@@ -26,11 +30,13 @@ import { SHORTCUT_ACTIONS_BY_ID, type ShortcutGesture } from "@/shortcuts/regist
  */
 export function ShortcutRecorderDialog({
   actionId,
+  scope,
   actionLabel,
   open,
   onOpenChange,
 }: {
   actionId: string;
+  scope: ShortcutScope;
   actionLabel: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -46,8 +52,8 @@ export function ShortcutRecorderDialog({
   const [focusedId, setFocusedId] = useState<string | null>(null);
 
   useEffect(() => {
-    if (open) setDrafts([{ actionId, gesture: null }]);
-  }, [open, actionId]);
+    if (open) setDrafts([{ actionId, scope, gesture: null }]);
+  }, [open, actionId, scope]);
 
   const base = useMemo(() => sanitizeOverrides(overrides, platform), [overrides, platform]);
   const reconcile = useMemo(
@@ -60,16 +66,16 @@ export function ShortcutRecorderDialog({
   // portaled to <body>, so query the document.
   useEffect(() => {
     if (!open || !firstPendingId) return;
+    const slot = `${firstPendingId}:${reconcile.drafts.find((d) => d.actionId === firstPendingId)?.scope ?? "global"}`;
     const id = requestAnimationFrame(() => {
-      document
-        .querySelector<HTMLElement>(`[data-capture-action="${CSS.escape(firstPendingId)}"]`)
-        ?.focus();
+      document.querySelector<HTMLElement>(`[data-capture-slot="${CSS.escape(slot)}"]`)?.focus();
     });
     return () => cancelAnimationFrame(id);
-  }, [open, firstPendingId]);
+  }, [open, firstPendingId, reconcile.drafts]);
 
   function record(
     slotActionId: string,
+    slotScope: ShortcutScope,
     displacedChord: ShortcutGesture | undefined,
     event: React.KeyboardEvent,
   ) {
@@ -87,21 +93,24 @@ export function ShortcutRecorderDialog({
       shiftKey: event.shiftKey,
     });
     setDrafts((prev) =>
-      prev.some((d) => d.actionId === slotActionId)
-        ? prev.map((d) => (d.actionId === slotActionId ? { ...d, gesture } : d))
-        : [...prev, { actionId: slotActionId, gesture, displacedChord }],
+      prev.some((d) => d.actionId === slotActionId && d.scope === slotScope)
+        ? prev.map((d) =>
+            d.actionId === slotActionId && d.scope === slotScope ? { ...d, gesture } : d,
+          )
+        : [...prev, { actionId: slotActionId, scope: slotScope, gesture, displacedChord }],
     );
   }
 
   /** Clear a slot's recorded chord (→ pending), re-run the cascade, and re-focus it. */
-  function clearSlot(slotActionId: string) {
+  function clearSlot(slotActionId: string, slotScope: ShortcutScope) {
     setDrafts((prev) =>
-      prev.map((d) => (d.actionId === slotActionId ? { ...d, gesture: null } : d)),
+      prev.map((d) =>
+        d.actionId === slotActionId && d.scope === slotScope ? { ...d, gesture: null } : d,
+      ),
     );
+    const slot = `${slotActionId}:${slotScope}`;
     requestAnimationFrame(() => {
-      document
-        .querySelector<HTMLElement>(`[data-capture-action="${CSS.escape(slotActionId)}"]`)
-        ?.focus();
+      document.querySelector<HTMLElement>(`[data-capture-slot="${CSS.escape(slot)}"]`)?.focus();
     });
   }
 
@@ -126,12 +135,14 @@ export function ShortcutRecorderDialog({
 
         <div className="flex flex-col gap-3">
           {reconcile.drafts.map((slot, index) => {
+            const slotScope = slot.scope ?? scope;
+            const slotKey = `${slot.actionId}:${slotScope}`;
             const reserved = slot.gesture ? reservedWarning(slot.gesture, platform) : null;
             const slotLabel =
               index === 0
                 ? actionLabel
                 : td(SHORTCUT_ACTIONS_BY_ID[slot.actionId]?.labelKey ?? slot.actionId);
-            const focused = focusedId === slot.actionId;
+            const focused = focusedId === slotKey;
             // A focused box is "recording" — prompt for a (re)record, hiding the
             // chip; an unfocused filled box shows its chip + a ✕ to clear.
             const showPrompt = focused || !slot.gesture;
@@ -150,9 +161,11 @@ export function ShortcutRecorderDialog({
                     type="button"
                     data-shortcut-capture
                     data-capture-action={slot.actionId}
-                    onKeyDown={(e) => record(slot.actionId, slot.displacedChord, e)}
-                    onFocus={() => setFocusedId(slot.actionId)}
-                    onBlur={() => setFocusedId((id) => (id === slot.actionId ? null : id))}
+                    data-capture-scope={slotScope}
+                    data-capture-slot={slotKey}
+                    onKeyDown={(e) => record(slot.actionId, slotScope, slot.displacedChord, e)}
+                    onFocus={() => setFocusedId(slotKey)}
+                    onBlur={() => setFocusedId((id) => (id === slotKey ? null : id))}
                     className={cn(
                       "grid min-h-12 w-full place-items-center rounded-lg border-2 bg-background/40 px-3 py-3 outline-none transition-colors",
                       focused ? "border-primary border-solid" : "border-input border-dashed",
@@ -175,7 +188,7 @@ export function ShortcutRecorderDialog({
                   {slot.gesture && !focused && (
                     <button
                       type="button"
-                      onClick={() => clearSlot(slot.actionId)}
+                      onClick={() => clearSlot(slot.actionId, slotScope)}
                       aria-label={t("shortcuts.removeBinding")}
                       className="-translate-y-1/2 absolute top-1/2 right-2 grid size-7 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
                     >
