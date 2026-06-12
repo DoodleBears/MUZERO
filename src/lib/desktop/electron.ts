@@ -4,6 +4,8 @@ import { assembleCookieHeader, type StreamCookie } from "@/streamsrc/login";
 import type {
   DesktopBridge,
   DesktopPlatform,
+  DesktopSystemShortcutConfigureResult,
+  DesktopSystemShortcutRegistration,
   DesktopWindowState,
   LocalMediaUrlInput,
   MediaProxyTrace,
@@ -46,6 +48,12 @@ interface MuzeroApi {
   };
   diagnostics?: {
     onEvent(callback: (entry: DiagnosticEntry) => void): () => void;
+  };
+  systemShortcuts?: {
+    configure(
+      registrations: readonly DesktopSystemShortcutRegistration[],
+    ): Promise<DesktopSystemShortcutConfigureResult>;
+    onAction(callback: (actionId: string) => void): () => void;
   };
 }
 
@@ -170,6 +178,14 @@ export function createElectronBridge(): DesktopBridge {
             api.windowControls?.getState() ??
             Promise.resolve({ fullscreen: false, maximized: false }),
           onStateChange: (callback) => api.windowControls?.onStateChange(callback) ?? (() => {}),
+        }
+      : undefined,
+    systemShortcuts: api.systemShortcuts
+      ? {
+          configure: (registrations) =>
+            api.systemShortcuts?.configure([...registrations]) ??
+            Promise.resolve({ supported: false, statuses: [] }),
+          onAction: (callback) => api.systemShortcuts?.onAction(callback) ?? (() => {}),
         }
       : undefined,
   };

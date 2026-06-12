@@ -44,11 +44,14 @@ import {
   removeImportFolder,
   removeTracksFromSession,
   resetAllShortcuts,
+  resetAllSystemShortcuts,
   resetShortcut,
   saveSettings,
   setEntityCover,
   setSessionCover,
   setShortcutOverride,
+  setSystemShortcutBinding,
+  setSystemShortcutsEnabled,
   setTrackCover,
   setTrackNote,
   setTrackTags,
@@ -139,6 +142,35 @@ describe("settings", () => {
 
     await resetAllShortcuts(db);
     expect((await getSettings(db)).shortcutOverrides).toEqual({});
+  });
+
+  it("persists system global shortcut opt-in and per-action bindings", async () => {
+    const chord = {
+      kind: "key" as const,
+      stroke: { code: "KeyL", keyLabel: "L", primaryKey: true },
+    };
+
+    expect(await getSettings(db)).toMatchObject({
+      systemShortcutsEnabled: false,
+      systemShortcutBindings: {},
+    });
+
+    await setSystemShortcutsEnabled(true, db);
+    await setSystemShortcutBinding("playback.like", { enabled: true, gesture: chord }, db);
+    expect(await getSettings(db)).toMatchObject({
+      systemShortcutsEnabled: true,
+      systemShortcutBindings: {
+        "playback.like": { enabled: true, gesture: chord },
+      },
+    });
+
+    await setSystemShortcutBinding("playback.like", { enabled: false }, db);
+    expect((await getSettings(db)).systemShortcutBindings?.["playback.like"]).toEqual({
+      enabled: false,
+    });
+
+    await resetAllSystemShortcuts(db);
+    expect((await getSettings(db)).systemShortcutBindings).toEqual({});
   });
 });
 

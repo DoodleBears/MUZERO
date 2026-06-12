@@ -4,6 +4,7 @@ const { pathToFileURL } = require("node:url");
 const { app, BrowserWindow, Menu, net, protocol, screen, shell } = require("electron");
 const { registerIpc } = require("./ipc.cjs");
 const { handleMuzfetch } = require("./fetch-proxy.cjs");
+const { registerElectronGlobalShortcuts } = require("./global-shortcuts.cjs");
 const { applyAppIcon, appIconPath, DEFAULT_APP_ICON } = require("./app-icon.cjs");
 const { attachDiagnosticsWindow } = require("./diagnostics.cjs");
 
@@ -246,6 +247,7 @@ app.whenReady().then(() => {
   registerDistProtocol();
   protocol.handle("muzfetch", handleMuzfetch);
   registerIpc();
+  registerElectronGlobalShortcuts();
   require("./source-login.cjs").registerSourceLogin();
   require("./youtube-engine.cjs").registerYoutubeEngine();
   require("./updater.cjs").initDesktopUpdater();

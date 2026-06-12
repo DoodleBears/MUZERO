@@ -1119,6 +1119,22 @@
       "arrows": "方向键控制",
       "vim": "Vim 导航"
     },
+    "system": {
+      "title": "系统全局快捷键",
+      "subtitle": "Electron 桌面端快捷键，MUZERO 在后台运行时也可使用。",
+      "unavailable": "仅 Electron 桌面版可用。",
+      "enable": "启用系统全局快捷键",
+      "set": "设置系统快捷键",
+      "clear": "清除系统快捷键",
+      "resetAll": "清除系统快捷键",
+      "record": "按下系统快捷键…",
+      "error": {
+        "unsafeBareKey": "请使用 Ctrl / Cmd / Alt 加按键的组合，或使用专用媒体键。",
+        "pointer": "指针手势不能作为系统快捷键。",
+        "unsupported": "该按键无法注册为系统快捷键。",
+        "duplicate": "已被 {{name}} 使用。"
+      }
+    },
     "recorder": {
       "title": "重新绑定「{{name}}」",
       "hint": "按下你想要的按键组合。",

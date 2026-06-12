@@ -1118,6 +1118,22 @@
       "arrows": "화살표 트랜스포트",
       "vim": "Vim 탐색"
     },
+    "system": {
+      "title": "시스템 전역 단축키",
+      "subtitle": "MUZERO가 백그라운드에서 실행 중일 때도 동작하는 Electron 데스크톱 단축키입니다.",
+      "unavailable": "Electron 데스크톱 빌드에서만 사용할 수 있습니다.",
+      "enable": "시스템 전역 단축키 사용",
+      "set": "시스템 단축키 설정",
+      "clear": "시스템 단축키 지우기",
+      "resetAll": "시스템 단축키 모두 지우기",
+      "record": "시스템 단축키를 누르세요…",
+      "error": {
+        "unsafeBareKey": "Ctrl / Cmd / Alt와 키 조합 또는 전용 미디어 키를 사용하세요.",
+        "pointer": "포인터 제스처는 시스템 단축키로 사용할 수 없습니다.",
+        "unsupported": "이 키는 시스템 단축키로 등록할 수 없습니다.",
+        "duplicate": "{{name}}에서 이미 사용 중입니다."
+      }
+    },
     "recorder": {
       "title": "“{{name}}” 다시 지정",
       "hint": "원하는 키 조합을 누르세요.",

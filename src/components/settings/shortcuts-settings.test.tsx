@@ -1,20 +1,41 @@
-import { fireEvent, render, within } from "@testing-library/react";
+import { fireEvent, render, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const state = vi.hoisted(() => ({
   overrides: undefined as Record<string, unknown> | undefined,
+  systemShortcutsEnabled: false,
+  systemShortcutBindings: {} as Record<string, unknown>,
+  systemShortcutsSupported: true,
 }));
 const repo = vi.hoisted(() => ({
   setAll: vi.fn((_overrides: Record<string, unknown>) => Promise.resolve()),
   resetAll: vi.fn(() => Promise.resolve()),
+  setSystemEnabled: vi.fn((_enabled: boolean) => Promise.resolve()),
+  setSystemBinding: vi.fn((_actionId: string, _binding: unknown) => Promise.resolve()),
+  resetSystemShortcut: vi.fn((_actionId: string) => Promise.resolve()),
+  resetAllSystem: vi.fn(() => Promise.resolve()),
 }));
 
 vi.mock("@/hooks/use-app-data", () => ({
-  useSettings: () => ({ shortcutOverrides: state.overrides }),
+  useSettings: () => ({
+    shortcutOverrides: state.overrides,
+    systemShortcutsEnabled: state.systemShortcutsEnabled,
+    systemShortcutBindings: state.systemShortcutBindings,
+  }),
 }));
 vi.mock("@/db/repositories", () => ({
   setAllShortcutOverrides: repo.setAll,
   resetAllShortcuts: repo.resetAll,
+  setSystemShortcutsEnabled: repo.setSystemEnabled,
+  setSystemShortcutBinding: repo.setSystemBinding,
+  resetSystemShortcut: repo.resetSystemShortcut,
+  resetAllSystemShortcuts: repo.resetAllSystem,
+}));
+vi.mock("@/lib/desktop/bridge", () => ({
+  resolveDesktopBridge: () => ({
+    kind: state.systemShortcutsSupported ? "electron" : "web",
+    systemShortcuts: state.systemShortcutsSupported ? {} : undefined,
+  }),
 }));
 
 import { ShortcutsSettings } from "./shortcuts-settings";
@@ -22,6 +43,9 @@ import { ShortcutsSettings } from "./shortcuts-settings";
 describe("ShortcutsSettings (read-only cheat-sheet)", () => {
   beforeEach(() => {
     state.overrides = undefined;
+    state.systemShortcutsEnabled = false;
+    state.systemShortcutBindings = {};
+    state.systemShortcutsSupported = true;
     vi.clearAllMocks();
   });
 
@@ -67,5 +91,76 @@ describe("ShortcutsSettings (read-only cheat-sheet)", () => {
     if (!nowNext) return;
     fireEvent.click(within(nowNext).getByLabelText("shortcuts.resetAction"));
     expect(repo.setAll).toHaveBeenCalledWith({});
+  });
+
+  it("renders the system global shortcut opt-in separately from in-app shortcuts", () => {
+    const { container } = render(<ShortcutsSettings />);
+    const section = container.querySelector<HTMLElement>("[data-system-shortcuts-section]");
+    expect(section).toBeTruthy();
+    if (!section) return;
+
+    fireEvent.click(within(section).getByRole("checkbox", { name: "shortcuts.system.enable" }));
+    expect(repo.setSystemEnabled).toHaveBeenCalledWith(true);
+    expect(section.querySelector('[data-system-shortcut-row="playback.like"]')).toBeTruthy();
+  });
+
+  it("rejects unsafe bare keys before saving a system global shortcut", async () => {
+    state.systemShortcutsEnabled = true;
+    const { container } = render(<ShortcutsSettings />);
+    const row = container.querySelector<HTMLElement>('[data-system-shortcut-row="playback.like"]');
+    expect(row).toBeTruthy();
+    if (!row) return;
+
+    fireEvent.click(within(row).getByLabelText("shortcuts.system.set"));
+    const capture = container.querySelector<HTMLElement>("[data-system-shortcut-capture]");
+    expect(capture).toBeTruthy();
+    if (!capture) return;
+
+    fireEvent.keyDown(capture, { code: "KeyL", key: "l" });
+    expect(repo.setSystemBinding).not.toHaveBeenCalled();
+    expect(container.textContent).toContain("shortcuts.system.error.unsafeBareKey");
+
+    fireEvent.keyDown(capture, { code: "KeyL", key: "l", ctrlKey: true });
+    await waitFor(() =>
+      expect(repo.setSystemBinding).toHaveBeenCalledWith("playback.like", {
+        enabled: true,
+        gesture: { kind: "key", stroke: { code: "KeyL", keyLabel: "L", ctrlKey: true } },
+      }),
+    );
+  });
+
+  it("blocks duplicate system global accelerators before saving", () => {
+    state.systemShortcutsEnabled = true;
+    state.systemShortcutBindings = {
+      "playback.next": {
+        enabled: true,
+        gesture: { kind: "key", stroke: { code: "KeyL", keyLabel: "L", ctrlKey: true } },
+      },
+    };
+    const { container } = render(<ShortcutsSettings />);
+    const row = container.querySelector<HTMLElement>('[data-system-shortcut-row="playback.like"]');
+    if (!row) throw new Error("no system shortcut row");
+
+    fireEvent.click(within(row).getByLabelText("shortcuts.system.set"));
+    const capture = container.querySelector<HTMLElement>("[data-system-shortcut-capture]");
+    if (!capture) throw new Error("no system shortcut capture");
+
+    fireEvent.keyDown(capture, { code: "KeyL", key: "l", ctrlKey: true });
+
+    expect(repo.setSystemBinding).not.toHaveBeenCalled();
+    expect(container.textContent).toContain("shortcuts.system.error.duplicate");
+  });
+
+  it("shows system global shortcuts as unavailable outside Electron", () => {
+    state.systemShortcutsSupported = false;
+    const { container } = render(<ShortcutsSettings />);
+    const section = container.querySelector<HTMLElement>("[data-system-shortcuts-section]");
+    if (!section) throw new Error("no system shortcut section");
+
+    const toggle = within(section).getByRole("checkbox", {
+      name: "shortcuts.system.enable",
+    }) as HTMLInputElement;
+    expect(toggle.disabled).toBe(true);
+    expect(section.textContent).toContain("shortcuts.system.unavailable");
   });
 });

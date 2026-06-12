@@ -1,11 +1,15 @@
 import { useEffect, useMemo } from "react";
 import type { Tab } from "@/components/nav/dock-nav";
-import { getSettings, getTrack, saveSettings, setTrackLiked } from "@/db/repositories";
 import { useSettings } from "@/hooks/use-app-data";
 import { isTypingTarget } from "@/lib/dom-keys";
-import { log } from "@/lib/logger";
-import { transitionState } from "@/lib/view-transition-react";
-import { nextRepeatMode } from "@/player/transport";
+import {
+  createShortcutActionRunnerContext,
+  isShortcutActionRunnable,
+  openShortcutLyricsPanel,
+  openShortcutVisualizerPanel,
+  runShortcutAction,
+  type ShortcutActionRunnerContext,
+} from "@/shortcuts/actions";
 import {
   currentPlatform,
   gestureFromEvent,
@@ -14,16 +18,9 @@ import {
   sanitizeOverrides,
 } from "@/shortcuts/engine";
 import type { ShortcutScope } from "@/shortcuts/registry";
-import { useLyricsPanelStore } from "@/stores/lyrics-panel-store";
 import { useNavStore } from "@/stores/nav-store";
-import { usePlayerStore } from "@/stores/player-store";
 import { useUiStore } from "@/stores/ui-store";
-import { useVisualizerPanelStore } from "@/stores/visualizer-panel-store";
-import { nextVisualizerPlacementPatch, resolveVisualizerPlacement } from "@/visualizer/placement";
-import { resolveVisualizerStyle } from "@/visualizer/registry";
 
-const VOLUME_STEP = 0.05;
-const SEEK_STEP = 5;
 /** Key-hold threshold — matches the icon buttons' `useLongPress` default. */
 const HOLD_DELAY_MS = 500;
 
@@ -41,119 +38,15 @@ export function resolveDispatchScopes(tab: Tab, queueOpen: boolean): ReadonlySet
   return scopes;
 }
 
-async function toggleDocumentFullscreen(): Promise<void> {
-  if (!document.fullscreenEnabled) return;
-  try {
-    if (document.fullscreenElement) {
-      await document.exitFullscreen();
-      return;
-    }
-    await document.documentElement.requestFullscreen();
-  } catch (error) {
-    log.warn("shortcuts.fullscreen", "Unable to toggle document fullscreen", error);
-  }
-}
-
-async function toggleCurrentTrackLike(): Promise<void> {
-  const s = usePlayerStore.getState();
-  const current = s.currentIndex >= 0 ? s.queue[s.currentIndex] : undefined;
-  if (!current) return;
-  const track = await getTrack(current.id);
-  await setTrackLiked(current.id, !(track?.liked ?? current.liked));
-}
-
-/** Persisted toggle of the lyrics/memory right-rail mode (C). Read-modify-write on settings. */
-async function toggleLyricsVisible(): Promise<void> {
-  const s = await getSettings();
-  const lyricsVisible = !(s.nowPlayingRightRailCollapsed ?? false);
-  await saveSettings({
-    lyricsStageOpen: !lyricsVisible,
-    nowPlayingRightRailCollapsed: lyricsVisible,
-  });
-}
-
-/** Advance the visualizer placement off→background→idle→off (V). */
-async function cycleVisualizerPlacement(): Promise<void> {
-  await saveSettings(nextVisualizerPlacementPatch(await getSettings()));
-}
-
-/** Hold-C: open the Now-Playing lyrics tuning panel (twin of long-pressing its button). */
-function openLyricsPanel(): void {
-  useLyricsPanelStore.getState().setOpen(true);
-}
-
-/**
- * Hold-V: open the visualizer tuning panel and — mirroring the icon button's
- * long-press — switch the visualizer on as a Now-Playing background if it's off.
- * `setOpen` runs first (synchronous) so the panel appears without waiting on the DB.
- */
-function openVisualizerPanel(): void {
-  useVisualizerPanelStore.getState().setOpen(true);
-  void enableVisualizerIfOff();
-}
-async function enableVisualizerIfOff(): Promise<void> {
-  const s = await getSettings();
-  if (resolveVisualizerPlacement(s) !== "off") return;
-  const style = resolveVisualizerStyle(s.visualizerStyle);
-  await saveSettings({
-    visualizerStyle: style === "off" ? "bars" : style,
-    visualizerAsBackground: true,
-    visualizerIdleOnly: false,
-  });
-}
-
 /**
  * Actions whose key, when HELD past {@link HOLD_DELAY_MS} (not tapped), opens a
  * Now-Playing settings panel — the keyboard twin of long-pressing the lyrics /
  * visualizer icon buttons. Keyed by the matched action id, so it follows a user's
  * rebind of C / V. The tap action still fires on a quick press-and-release.
  */
-const HOLD_HANDLERS: Record<string, () => void> = {
-  "lyrics.toggleStage": openLyricsPanel,
-  "visualizer.cycleMode": openVisualizerPanel,
-};
-
-interface DispatchContext {
-  setTab: (tab: Tab) => void;
-}
-
-/** Imperative handler per global action id. Reads the store fresh per keypress. */
-const GLOBAL_HANDLERS: Record<string, (ctx: DispatchContext) => void> = {
-  "playback.toggle": () => usePlayerStore.getState().togglePlay(),
-  "playback.next": () => void usePlayerStore.getState().next(),
-  "playback.prev": () => void usePlayerStore.getState().prev(),
-  "playback.seekForward": () => {
-    const s = usePlayerStore.getState();
-    s.seek(s.positionSec + SEEK_STEP);
-  },
-  "playback.seekBack": () => {
-    const s = usePlayerStore.getState();
-    s.seek(Math.max(0, s.positionSec - SEEK_STEP));
-  },
-  "playback.volumeUp": () => {
-    const s = usePlayerStore.getState();
-    s.setVolume(Math.min(1, s.volume + VOLUME_STEP));
-  },
-  "playback.volumeDown": () => {
-    const s = usePlayerStore.getState();
-    s.setVolume(Math.max(0, s.volume - VOLUME_STEP));
-  },
-  "playback.cycleRepeat": () => {
-    const s = usePlayerStore.getState();
-    s.setRepeat(nextRepeatMode(s.repeat));
-  },
-  "playback.toggleShuffle": () => {
-    const s = usePlayerStore.getState();
-    s.setShuffle(!s.shuffle);
-  },
-  "playback.like": () => void toggleCurrentTrackLike(),
-  "playback.toggleFullscreen": () => void toggleDocumentFullscreen(),
-  "nav.tabNow": (ctx) => transitionState(() => ctx.setTab("now")),
-  "nav.tabLibrary": (ctx) => transitionState(() => ctx.setTab("search")),
-  "nav.tabSettings": (ctx) => transitionState(() => ctx.setTab("settings")),
-  "queue.toggle": () => useUiStore.getState().toggleQueue(),
-  "lyrics.toggleStage": () => void toggleLyricsVisible(),
-  "visualizer.cycleMode": () => void cycleVisualizerPlacement(),
+const HOLD_HANDLERS: Record<string, (ctx: ShortcutActionRunnerContext) => void> = {
+  "lyrics.toggleStage": openShortcutLyricsPanel,
+  "visualizer.cycleMode": openShortcutVisualizerPanel,
 };
 
 /**
@@ -175,6 +68,7 @@ export function useShortcutDispatch(): void {
   const activeScopes = useMemo(() => resolveDispatchScopes(tab, queueOpen), [tab, queueOpen]);
 
   useEffect(() => {
+    const actionCtx = createShortcutActionRunnerContext(setTab);
     // Physical keys (by `code`) currently held that have a hold-twin: the tap
     // fires on release, the hold-twin once the key is held past HOLD_DELAY_MS.
     const holding = new Map<string, { actionId: string; timer: number; fired: boolean }>();
@@ -192,14 +86,13 @@ export function useShortcutDispatch(): void {
         const entry = { actionId, fired: false, timer: 0 };
         entry.timer = window.setTimeout(() => {
           entry.fired = true;
-          HOLD_HANDLERS[actionId]?.();
+          HOLD_HANDLERS[actionId]?.(actionCtx);
         }, HOLD_DELAY_MS);
         holding.set(e.code, entry);
         return;
       }
 
-      const handler = GLOBAL_HANDLERS[actionId];
-      if (!handler) return; // a global action handled elsewhere (search overlay, gallery cycle)
+      if (!isShortcutActionRunnable(actionId)) return; // handled elsewhere (search overlay, gallery)
       // Let a focused button/link handle Space/Enter itself (no double-trigger).
       if (
         (e.key === " " || e.key === "Enter") &&
@@ -209,7 +102,7 @@ export function useShortcutDispatch(): void {
         return;
       }
       e.preventDefault();
-      handler({ setTab });
+      runShortcutAction(actionId, actionCtx);
     };
 
     const onKeyUp = (e: KeyboardEvent) => {
@@ -218,7 +111,7 @@ export function useShortcutDispatch(): void {
       holding.delete(e.code);
       window.clearTimeout(entry.timer);
       if (entry.fired) return; // the hold already opened the panel → suppress the tap
-      GLOBAL_HANDLERS[entry.actionId]?.({ setTab }); // released early → it was a tap
+      runShortcutAction(entry.actionId, actionCtx); // released early → it was a tap
     };
 
     // A held key whose window loses focus never gets a keyup — drop pending timers

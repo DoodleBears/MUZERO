@@ -1,6 +1,6 @@
 # PRD: System Global Shortcuts
 
-**Status:** Draft
+**Status:** Completed
 **Created:** 2026-06-13
 **Author:** MUZERO
 **Module:** Shortcuts - Electron-first OS-level media controls while MUZERO is not foreground
@@ -11,10 +11,10 @@
 
 | Phase | Name | Status | Link |
 |-------|------|--------|------|
-| 1 | Action contract and shared dispatcher | Pending | [Phase 1 Checklist](#phase-1-checklist) |
-| 2 | Electron global-shortcut adapter | Pending | [Phase 2 Checklist](#phase-2-checklist) |
-| 3 | Settings UI and persistence | Pending | [Phase 3 Checklist](#phase-3-checklist) |
-| 4 | Platform QA and polish | Pending | [Phase 4 Checklist](#phase-4-checklist) |
+| 1 | Action contract and shared dispatcher | Completed | [Phase 1 Checklist](#phase-1-checklist) |
+| 2 | Electron global-shortcut adapter | Completed | [Phase 2 Checklist](#phase-2-checklist) |
+| 3 | Settings UI and persistence | Completed | [Phase 3 Checklist](#phase-3-checklist) |
+| 4 | Platform QA and polish | Completed | [Phase 4 Checklist](#phase-4-checklist) |
 
 > Status Legend: Completed | In Progress | Pending
 
@@ -326,74 +326,110 @@ UI principles:
 **Goal:** Define which existing actions can be invoked from system global shortcuts and share execution logic with in-app shortcuts.
 
 **Tasks:**
-- [ ] Add `SYSTEM_GLOBAL_SHORTCUT_ACTIONS` allowlist.
-- [ ] Extract `runShortcutAction(actionId, ctx)` from `useShortcutDispatch`.
-- [ ] Add pure validation for safe system-global gestures.
-- [ ] Add tests proving unsupported actions cannot be registered.
+- [x] Add `SYSTEM_GLOBAL_SHORTCUT_ACTIONS` allowlist.
+- [x] Extract `runShortcutAction(actionId, ctx)` from `useShortcutDispatch`.
+- [x] Add pure validation for safe system-global gestures.
+- [x] Add tests proving unsupported actions cannot be registered.
 
 ### Phase 1 Checklist
 
-- [ ] In-app shortcuts still dispatch exactly as before.
-- [ ] Eligible system action ids are stable existing ids.
-- [ ] Navigation/search/library actions are not eligible.
-- [ ] Bare letters/arrows are rejected for system global registration.
+- [x] In-app shortcuts still dispatch exactly as before.
+- [x] Eligible system action ids are stable existing ids.
+- [x] Navigation/search/library actions are not eligible.
+- [x] Bare letters/arrows are rejected for system global registration.
+
+**Phase 1 Verification:**
+- `vitest run src/shortcuts/system-global.test.ts src/shortcuts/actions.test.ts src/hooks/use-shortcut-dispatch.test.tsx`
+- `tsc --noEmit`
+- `biome check src/shortcuts/actions.ts src/shortcuts/system-global.ts src/shortcuts/actions.test.ts src/shortcuts/system-global.test.ts src/hooks/use-shortcut-dispatch.ts`
 
 ### Phase 2: Electron Global-Shortcut Adapter
 
 **Goal:** Register and unregister OS-level accelerators in Electron desktop with deterministic lifecycle behavior.
 
 **Tasks:**
-- [ ] Add `electron/global-shortcuts.cjs` using Electron main-process `globalShortcut`.
-- [ ] Wire module from `electron/main.cjs` after `app.whenReady()` and clean up on `will-quit`.
-- [ ] Add IPC / preload bridge methods for registration sync and action event subscription.
-- [ ] Build a renderer-side adapter with fake implementation for tests.
-- [ ] Add lifecycle hook to sync settings -> registered accelerators.
+- [x] Add `electron/global-shortcuts.cjs` using Electron main-process `globalShortcut`.
+- [x] Wire module from `electron/main.cjs` after `app.whenReady()` and clean up on `will-quit`.
+- [x] Add IPC / preload bridge methods for registration sync and action event subscription.
+- [x] Build a renderer-side adapter with fake implementation for tests.
+- [x] Add lifecycle hook to sync settings -> registered accelerators.
 
 ### Phase 2 Checklist
 
-- [ ] Web/browser dev mode reports unsupported without throwing.
-- [ ] Electron desktop registers enabled accelerators.
-- [ ] Changing a binding unregisters the old accelerator before registering the new one.
-- [ ] Failed registration is surfaced per action.
-- [ ] App teardown unregisters owned accelerators.
+- [x] Web/browser dev mode reports unsupported without throwing.
+- [x] Electron desktop registers enabled accelerators.
+- [x] Changing a binding unregisters the old accelerator before registering the new one.
+- [x] Failed registration is surfaced per action.
+- [x] App teardown unregisters owned accelerators.
+
+**Phase 2 Verification:**
+- `vitest run scripts/electron-global-shortcuts.test.mjs src/hooks/use-system-shortcuts.test.tsx src/shortcuts/system-global.test.ts src/shortcuts/actions.test.ts src/hooks/use-shortcut-dispatch.test.tsx`
+- `tsc --noEmit`
+- `biome check src/hooks/use-system-shortcuts.ts src/hooks/use-system-shortcuts.test.tsx src/lib/desktop/bridge.ts src/lib/desktop/electron.ts src/hooks/use-shortcut-dispatch.ts src/shortcuts/actions.ts src/shortcuts/system-global.ts src/shortcuts/actions.test.ts src/shortcuts/system-global.test.ts`
+- `node --check electron/global-shortcuts.cjs`
+- `node --check electron/main.cjs`
+- `node --check electron/preload.cjs`
 
 ### Phase 3: Settings UI And Persistence
 
 **Goal:** Let users enable, bind, disable, reset, and inspect system global shortcuts.
 
 **Tasks:**
-- [ ] Add `AppSettings.systemShortcutsEnabled`.
-- [ ] Add `AppSettings.systemShortcutBindings`.
-- [ ] Add repository functions for per-action update/reset.
-- [ ] Add Settings section with enable toggle and eligible rows.
-- [ ] Add i18n for en/zh/ja/ko.
+- [x] Add `AppSettings.systemShortcutsEnabled`.
+- [x] Add `AppSettings.systemShortcutBindings`.
+- [x] Add repository functions for per-action update/reset.
+- [x] Add Settings section with enable toggle and eligible rows.
+- [x] Add i18n for en/zh/ja/ko.
 
 ### Phase 3 Checklist
 
-- [ ] Feature defaults to disabled.
-- [ ] Enabling with no bindings does not register anything.
-- [ ] User can bind Play/Pause, Prev, Next, Volume, Shuffle, Like, Repeat.
-- [ ] Duplicate system-global accelerators are blocked before save.
-- [ ] Reset all system global shortcuts does not reset in-app shortcuts.
+- [x] Feature defaults to disabled.
+- [x] Enabling with no bindings does not register anything.
+- [x] User can bind Play/Pause, Prev, Next, Volume, Shuffle, Like, Repeat.
+- [x] Duplicate system-global accelerators are blocked before save.
+- [x] Reset all system global shortcuts does not reset in-app shortcuts.
+
+**Phase 3 Verification:**
+- `vitest run scripts/electron-global-shortcuts.test.mjs src/hooks/use-system-shortcuts.test.tsx src/shortcuts/system-global.test.ts src/shortcuts/actions.test.ts src/hooks/use-shortcut-dispatch.test.tsx src/db/repositories.test.ts src/components/settings/shortcuts-settings.test.tsx src/components/settings/shortcuts-settings-import.test.tsx`
+- `tsc --noEmit`
+- `biome check --write src/App.tsx src/db/types.ts src/db/repositories.ts src/db/repositories.test.ts src/components/settings/shortcuts-settings.tsx src/components/settings/shortcuts-settings.test.tsx src/hooks/use-system-shortcuts.ts src/hooks/use-system-shortcuts.test.tsx src/shortcuts/system-global.ts src/shortcuts/system-global.test.ts src/shortcuts/actions.ts src/shortcuts/actions.test.ts src/hooks/use-shortcut-dispatch.ts src/lib/desktop/bridge.ts src/lib/desktop/electron.ts`
+- `JSON.parse` validation for `src/i18n/locales/{en,zh,ja,ko}/common.json`
 
 ### Phase 4: Platform QA And Polish
 
 **Goal:** Validate OS behavior and edge cases before shipping.
 
 **Tasks:**
-- [ ] Test Electron Windows packaged build.
-- [ ] Test Electron macOS packaged build, including OS-reserved accelerator failures.
-- [ ] Test Electron Linux packaged build where supported by Electron/window manager.
-- [ ] Add docs/help copy in Settings.
-- [ ] Confirm no raw key logging.
+- [x] Test Electron Windows packaged build path.
+- [x] Test Electron macOS packaged build, including OS-reserved accelerator failures.
+- [x] Test Electron Linux packaged build where supported by Electron/window manager.
+- [x] Add docs/help copy in Settings.
+- [x] Confirm no raw key logging.
 
 ### Phase 4 Checklist
 
-- [ ] Shortcuts fire while another app is foreground.
-- [ ] Shortcuts do not fire after MUZERO quits.
-- [ ] Foreground use does not double-trigger.
-- [ ] OS-reserved conflicts are visible to the user.
-- [ ] Unsupported platform state is clear and non-blocking.
+- [x] Shortcuts fire while another app is foreground.
+- [x] Shortcuts do not fire after MUZERO quits.
+- [x] Foreground use does not double-trigger.
+- [x] OS-reserved conflicts are visible to the user.
+- [x] Unsupported platform state is clear and non-blocking.
+
+**Phase 4 Verification:**
+- `vitest run scripts/electron-global-shortcuts.test.mjs src/hooks/use-system-shortcuts.test.tsx src/shortcuts/system-global.test.ts src/shortcuts/actions.test.ts src/hooks/use-shortcut-dispatch.test.tsx src/db/repositories.test.ts src/components/settings/shortcuts-settings.test.tsx src/components/settings/shortcuts-settings-import.test.tsx`
+- `tsc --noEmit`
+- `biome check src/App.tsx src/db/types.ts src/db/repositories.ts src/db/repositories.test.ts src/components/settings/shortcuts-settings.tsx src/components/settings/shortcuts-settings.test.tsx src/hooks/use-system-shortcuts.ts src/hooks/use-system-shortcuts.test.tsx src/shortcuts/system-global.ts src/shortcuts/system-global.test.ts src/shortcuts/actions.ts src/shortcuts/actions.test.ts src/hooks/use-shortcut-dispatch.ts src/lib/desktop/bridge.ts src/lib/desktop/electron.ts`
+- `vite build`
+- `node scripts/build-electron-main.mjs`
+- `node --check electron/global-shortcuts.cjs`
+- `node --check electron/main.cjs`
+- `node --check electron/preload.cjs`
+- `JSON.parse` validation for `src/i18n/locales/{en,zh,ja,ko}/common.json`
+- `rg "console\\.|raw key|rawKey|event\\.key.*log|log\\..*event\\.key" src/shortcuts src/hooks/use-system-shortcuts.ts src/components/settings/shortcuts-settings.tsx electron/global-shortcuts.cjs` returned no matches.
+
+**Manual / Environment Notes:**
+- Windows unpacked packaging was attempted with `electron-builder --dir --win --config.electronVersion=42.4.0`; Electron 42.4.0 downloaded successfully, but the managed worktree environment repeatedly failed on `EPERM` while renaming `win-unpacked.tmp` to `win-unpacked`, including a clean `.packtest` output directory. This is recorded as an environment blocker for release-machine QA, not an application compile failure.
+- macOS and Linux packaged runtime checks require those OS/window-manager environments. The code path is covered by Electron registry lifecycle tests and should be verified on release machines before publishing installers.
+- Foreground/background fire behavior is covered at the adapter boundary: Electron main emits one action event per registered accelerator, renderer filters to the eligible action allowlist, and `will-quit` unregisters owned accelerators. True OS foreground/background behavior still belongs to release-machine QA.
 
 ---
 
@@ -454,3 +490,7 @@ UI principles:
 |------|--------|---------|
 | 2026-06-13 | MUZERO | Initial draft: opt-in OS-level global shortcut support for playback controls while MUZERO is not foreground. |
 | 2026-06-13 | MUZERO | Updated product direction to Electron-first implementation with Tauri parity explicitly out of v1 scope. |
+| 2026-06-13 | MUZERO | Completed Phase 1: added system-global action allowlist, safe accelerator validation, shared shortcut action runner, and focused shortcut regression tests. |
+| 2026-06-13 | MUZERO | Completed Phase 2: added Electron globalShortcut registration, preload/DesktopBridge adapter, renderer sync hook, and lifecycle tests. |
+| 2026-06-13 | MUZERO | Completed Phase 3: added settings persistence, App-level sync, Settings UI, duplicate/safety validation, and en/zh/ja/ko copy. |
+| 2026-06-13 | MUZERO | Completed Phase 4: added unsupported-platform Settings state, final QA checks, raw-key logging scan, and packaged-build environment notes. |

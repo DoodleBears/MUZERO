@@ -74,6 +74,28 @@ export interface DesktopWindowControls {
   onStateChange?: (callback: (state: DesktopWindowState) => void) => () => void;
 }
 
+export interface DesktopSystemShortcutRegistration {
+  actionId: string;
+  accelerator: string;
+}
+
+export interface DesktopSystemShortcutStatus extends DesktopSystemShortcutRegistration {
+  status: "active" | "failed";
+  reason?: string;
+}
+
+export interface DesktopSystemShortcutConfigureResult {
+  supported: boolean;
+  statuses: DesktopSystemShortcutStatus[];
+}
+
+export interface DesktopSystemShortcuts {
+  configure: (
+    registrations: readonly DesktopSystemShortcutRegistration[],
+  ) => Promise<DesktopSystemShortcutConfigureResult>;
+  onAction: (callback: (actionId: string) => void) => () => void;
+}
+
 export interface DesktopBridge {
   readonly kind: DesktopKind;
   readonly platform?: DesktopPlatform;
@@ -114,6 +136,8 @@ export interface DesktopBridge {
   setAppIcon?: (icon: AppIconId) => Promise<void>;
   /** Frameless desktop shell controls. Electron Windows uses these for custom chrome. */
   windowControls?: DesktopWindowControls;
+  /** Electron OS-level global shortcut registration; absent on web/Tauri v1. */
+  systemShortcuts?: DesktopSystemShortcuts;
   /**
    * Start a native window drag for the current press (frameless window move).
    * Tauri only — Electron drags via `-webkit-app-region` CSS, web has no window —
