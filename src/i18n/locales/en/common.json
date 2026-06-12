@@ -870,6 +870,7 @@
     "importFoldersDesc": "Remembered local folders are re-scanned on launch; new files are added automatically.",
     "importFoldersDesktopOnly": "Folder watching is available in the desktop app.",
     "importFoldersEmpty": "No folders yet.",
+    "importFolderAdd": "Add local folder",
     "importFolderLastSynced": "Last synced {{when}}",
     "importFolderNeverSynced": "Not synced yet",
     "importFolderSyncNow": "Sync now",

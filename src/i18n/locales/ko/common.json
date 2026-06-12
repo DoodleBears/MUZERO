@@ -855,6 +855,7 @@
     "importFoldersDesc": "기억된 로컬 폴더는 시작 시 다시 검색되며 새 파일이 자동으로 추가됩니다.",
     "importFoldersDesktopOnly": "폴더 감시는 데스크톱 앱에서만 사용할 수 있습니다.",
     "importFoldersEmpty": "아직 폴더가 없습니다.",
+    "importFolderAdd": "로컬 폴더 추가",
     "importFolderLastSynced": "마지막 동기화 {{when}}",
     "importFolderNeverSynced": "아직 동기화되지 않음",
     "importFolderSyncNow": "지금 동기화",

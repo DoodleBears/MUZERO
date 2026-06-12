@@ -856,6 +856,7 @@
     "importFoldersDesc": "记住的本地文件夹会在启动时重新扫描，新文件自动加入。",
     "importFoldersDesktopOnly": "文件夹监视仅在桌面端可用。",
     "importFoldersEmpty": "还没有文件夹。",
+    "importFolderAdd": "添加本地文件夹",
     "importFolderLastSynced": "上次同步 {{when}}",
     "importFolderNeverSynced": "尚未同步",
     "importFolderSyncNow": "立即同步",

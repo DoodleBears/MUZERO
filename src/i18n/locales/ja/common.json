@@ -856,6 +856,7 @@
     "importFoldersDesc": "記憶したローカルフォルダは起動時に再スキャンされ、新しいファイルが自動的に追加されます。",
     "importFoldersDesktopOnly": "フォルダの監視はデスクトップアプリでのみ利用できます。",
     "importFoldersEmpty": "フォルダはまだありません。",
+    "importFolderAdd": "ローカルフォルダを追加",
     "importFolderLastSynced": "最終同期 {{when}}",
     "importFolderNeverSynced": "未同期",
     "importFolderSyncNow": "今すぐ同期",

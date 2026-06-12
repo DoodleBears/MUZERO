@@ -744,6 +744,7 @@ Scope:
 - [x] Relevant Vitest suites pass.
 - [x] Desktop Settings sidebar is scan-friendly with icons.
 - [x] Mobile Settings nav remains touch-friendly and does not overlap.
+- [x] Local files page exposes an add-local-folder primary action above the folder list.
 - [x] Storage usage progress is understandable when quota is known and when quota is unavailable.
 - [x] Offline cache toggle defaults to on while remaining visible and user-controlled.
 - [x] Listening stats empty and populated states are clear.
@@ -752,6 +753,7 @@ Scope:
 **Phase 9 Verification:**
 - `node_modules\.bin\vitest.CMD run src\components\settings\settings-nav.test.ts src\lib\folder-import.test.ts src\stores\folder-sync.test.ts src\db\repositories.test.ts src\components\settings\persistent-storage-settings.test.tsx src\components\settings\listening-stats-summary.test.ts src\lib\release-manifest.test.ts`
 - `node_modules\.bin\vitest.CMD run src\db\default-settings.test.ts`
+- `node_modules\.bin\vitest.CMD run src\components\settings\imported-folders-settings.test.tsx`
 - `node_modules\.bin\tsc.CMD --noEmit --pretty false`
 - Browser visual verification attempted but blocked by local Browser plugin sandbox permissions.
 
@@ -856,6 +858,7 @@ Scope:
 | 2026-06-13 | Codex | Completed Phase 7: full Listening stats pane, range controls, ranked lists, Device pane link, i18n, and summary tests. |
 | 2026-06-13 | Codex | Completed Phase 9 automated verification; browser visual check attempted but blocked by local sandbox permissions. |
 | 2026-06-13 | Codex | Set streamed offline cache on by default and added default-settings coverage. |
+| 2026-06-13 | Codex | Surfaced the Local files add-folder action in the card header and covered it with a component test. |
 
 ---
 

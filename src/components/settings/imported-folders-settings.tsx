@@ -1,4 +1,4 @@
-import { FolderInput, FolderX, RefreshCw } from "lucide-react";
+import { FolderPlus, FolderX, RefreshCw } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -41,8 +41,11 @@ export function ImportedFoldersSettings() {
 
   return (
     <Card>
-      <CardHeader>
+      <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-3">
         <CardTitle>{t("settings.importFoldersTitle")}</CardTitle>
+        <Button type="button" size="sm" disabled={isUploading} onClick={() => void importFolder()}>
+          <FolderPlus /> {t("settings.importFolderAdd")}
+        </Button>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
         <p className="text-muted-foreground text-xs">{t("settings.importFoldersDesc")}</p>
@@ -106,14 +109,6 @@ export function ImportedFoldersSettings() {
         )}
 
         <div className="flex flex-wrap gap-2">
-          <Button
-            type="button"
-            size="sm"
-            disabled={isUploading}
-            onClick={() => void importFolder()}
-          >
-            <FolderInput /> {t("folderImport.cta")}
-          </Button>
           {folders.length > 0 && (
             <Button
               type="button"
