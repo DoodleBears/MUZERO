@@ -1,4 +1,12 @@
+import { useId } from "react";
 import { useTranslation } from "react-i18next";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
 import { saveSettings } from "@/db/repositories";
 import { useSettings } from "@/hooks/use-app-data";
@@ -16,6 +24,8 @@ import {
 import { getVisualizerMeta, resolveVisualizerStyle } from "@/visualizer/registry";
 import type { VisualizerStyleId } from "@/visualizer/types";
 
+type VisualizerFftSize = (typeof VISUALIZER_FFT_SIZE_OPTIONS)[number];
+
 export function VisualizerTuningControls({
   className,
   showHeading = true,
@@ -26,6 +36,7 @@ export function VisualizerTuningControls({
   const { t } = useTranslation();
   const settings = useSettings();
   const style = resolveVisualizerStyle(settings.visualizerStyle);
+  const fftSizeLabelId = useId();
   if (style === "off") return null;
 
   const meta = getVisualizerMeta(style);
@@ -37,24 +48,30 @@ export function VisualizerTuningControls({
       {showHeading ? (
         <span className="text-xs font-medium text-muted-foreground">{t("visualizer.tuning")}</span>
       ) : null}
-      <label className="flex flex-col gap-1.5">
-        <span className="text-xs font-medium text-muted-foreground">{t("visualizer.fftSize")}</span>
-        <select
-          value={analyser.fftSize}
-          onChange={(e) =>
+      <div className="flex flex-col gap-1.5">
+        <span id={fftSizeLabelId} className="text-xs font-medium text-muted-foreground">
+          {t("visualizer.fftSize")}
+        </span>
+        <Select
+          value={String(analyser.fftSize)}
+          onValueChange={(value) =>
             void saveSettings({
-              visualizerFftSize: Number(e.target.value) as 256 | 512 | 1024 | 2048,
+              visualizerFftSize: Number(value) as VisualizerFftSize,
             })
           }
-          className="h-10 rounded-md border border-input bg-transparent px-3 text-sm"
         >
-          {VISUALIZER_FFT_SIZE_OPTIONS.map((size) => (
-            <option key={size} value={size}>
-              {size}
-            </option>
-          ))}
-        </select>
-      </label>
+          <SelectTrigger aria-labelledby={fftSizeLabelId}>
+            <SelectValue>{(value) => String(value)}</SelectValue>
+          </SelectTrigger>
+          <SelectContent>
+            {VISUALIZER_FFT_SIZE_OPTIONS.map((size) => (
+              <SelectItem key={size} value={String(size)}>
+                {size}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
       <VisualizerSlider
         label={t("visualizer.smoothing", { value: formatNumber(analyser.smoothing) })}
         min={0}
