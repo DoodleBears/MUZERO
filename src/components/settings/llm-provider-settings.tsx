@@ -27,7 +27,7 @@ import type { CustomLlmProvider } from "@/db/types";
 import { useSettings } from "@/hooks/use-app-data";
 import { openExternalUrl } from "@/lib/platform";
 
-const DEFAULT_CHAT_MAX_OUTPUT = 4096;
+const DEFAULT_CHAT_MAX_OUTPUT = 32_000;
 const DEFAULT_CHAT_MAX_CONTEXT = 128_000;
 
 /** Parse a numeric settings input, falling back when it's blank/invalid. */

@@ -54,7 +54,7 @@ export function createDjChatTransport({
         temperature: 0.7,
         // User-tunable (Settings); default generous so multi-step tool runs and
         // longer replies aren't cut off mid-thought.
-        maxOutputTokens: settings.chatMaxOutputTokens ?? 4096,
+        maxOutputTokens: settings.chatMaxOutputTokens ?? 32_000,
       });
       const transport = new DirectChatTransport({ agent });
       return transport.sendMessages(options);

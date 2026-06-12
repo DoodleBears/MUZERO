@@ -740,7 +740,7 @@ export interface AppSettings {
   /** Last selected model per provider preset, restored when switching back (ClipCombo parity). */
   modelsByPresetId?: Partial<Record<LlmProviderPresetId, string>>;
   /** Max output tokens per DJ-chat generation step. Higher = longer replies / less
-   * truncation on multi-step tool runs; costs more. Defaults to 4096 when unset. */
+   * truncation on multi-step tool runs; costs more. Defaults to 32000 when unset. */
   chatMaxOutputTokens?: number;
   /** Context-window ceiling (tokens) the DJ chat warns/blocks at. Raise it for
    * big-context models so long chats aren't blocked early. Defaults to 128000. */
