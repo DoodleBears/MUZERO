@@ -178,7 +178,10 @@ export function SwipeableMediaStage({
   const updateOverlayRect = useCallback(() => {
     const rect = containerRef.current?.getBoundingClientRect();
     if (!rect) return;
+    const clipBounds = measureVerticalClipBounds(containerRef.current);
     setOverlayRect({
+      clipBottomInset: rect.bottom - clipBounds.bottom,
+      clipTopInset: clipBounds.top - rect.top,
       height: rect.height,
       left: rect.left,
       top: rect.top,
@@ -548,7 +551,13 @@ export function SwipeableMediaStage({
             animate={{ opacity: handoffFading ? 0 : 1 }}
             className="pointer-events-none fixed z-20 overflow-visible [perspective:1200px] [transform-style:preserve-3d]"
             initial={false}
-            style={overlayRect}
+            style={{
+              clipPath: `inset(${overlayRect.clipTopInset}px -100vw ${overlayRect.clipBottomInset}px -100vw)`,
+              height: overlayRect.height,
+              left: overlayRect.left,
+              top: overlayRect.top,
+              width: overlayRect.width,
+            }}
             transition={{ duration: HANDOFF_DURATION_SEC, ease: "easeOut" }}
           >
             {settleTarget ? (
@@ -683,7 +692,14 @@ export function SwipeableMediaStage({
 }
 
 type SwipeDirection = "next" | "prev" | null;
-type StageOverlayRect = { height: number; left: number; top: number; width: number };
+type StageOverlayRect = {
+  clipBottomInset: number;
+  clipTopInset: number;
+  height: number;
+  left: number;
+  top: number;
+  width: number;
+};
 type VisualTrack = { initialCoverUrl: string | null; track: Track };
 type SwipeCoverEffect = {
   backlightOpacity: number;
@@ -718,9 +734,8 @@ type WheelState = {
 type CoverflowMotion = ReturnType<typeof useCoverflowCard>;
 
 /**
- * One cover in the swipe strip plus its title/author block. The cover gets the
- * full coverflow treatment (centre-pivot tilt + scale + fade); the identity
- * block only slides horizontally with it so the text stays flat and readable.
+ * One cover in the swipe strip plus its title/author block. The whole card gets
+ * the same coverflow transform so the cover, glow, and identity move as one.
  */
 function CoverflowCard({
   card,
@@ -739,38 +754,33 @@ function CoverflowCard({
 }) {
   if (!visual) return null;
   return (
-    <>
-      <motion.div
-        className={cn(
-          SWIPE_CARD_BASE,
-          coverEffect.mode === "shadow" && "album-cover-shadow",
-          zClass,
-        )}
-        style={{
-          x: card.screenX,
-          opacity: card.coverOpacity,
-          rotateY: card.rotateY,
-          scale: card.scale,
-          transformOrigin: "center center",
-          transformStyle: "preserve-3d",
-        }}
-      >
-        <TrackVisual
-          backlightInitial={false}
-          coverEffect={coverEffect}
-          hasBacklight={coverHasBacklight}
-          key={visual.track.id}
-          onReady={onReady}
-          visual={visual}
-        />
-      </motion.div>
-      <motion.div
-        className="pointer-events-none absolute inset-x-0 top-full z-[80] mt-2"
-        style={{ x: card.screenX, opacity: card.infoOpacity }}
-      >
+    <motion.div
+      className={cn(
+        SWIPE_CARD_BASE,
+        coverEffect.mode === "shadow" && "album-cover-shadow",
+        zClass,
+      )}
+      style={{
+        x: card.screenX,
+        opacity: card.coverOpacity,
+        rotateY: card.rotateY,
+        scale: card.scale,
+        transformOrigin: "center center",
+        transformStyle: "preserve-3d",
+      }}
+    >
+      <TrackVisual
+        backlightInitial={false}
+        coverEffect={coverEffect}
+        hasBacklight={coverHasBacklight}
+        key={visual.track.id}
+        onReady={onReady}
+        visual={visual}
+      />
+      <div className="pointer-events-none absolute inset-x-0 top-full z-[80] mt-2">
         <StageIdentity track={visual.track} />
-      </motion.div>
-    </>
+      </div>
+    </motion.div>
   );
 }
 
@@ -893,12 +903,7 @@ function useCoverflowCard(
     [-step, -step * 0.55, 0, step * 0.55, step],
     [0, 0.6, 1, 0.6, 0],
   );
-  const infoOpacity = useTransform(
-    screenX,
-    [-step * 0.7, -step * 0.16, 0, step * 0.16, step * 0.7],
-    [0, 0.55, 1, 0.55, 0],
-  );
-  return { coverOpacity, infoOpacity, rotateY, scale, screenX };
+  return { coverOpacity, rotateY, scale, screenX };
 }
 
 function TrackVisual({
@@ -993,6 +998,21 @@ function compactTracks(tracks: Array<Track | undefined>): Track[] {
     out.push(track);
   }
   return out;
+}
+
+function measureVerticalClipBounds(el: HTMLElement | null): { bottom: number; top: number } {
+  let top = 0;
+  let bottom = window.innerHeight;
+  for (let parent = el?.parentElement; parent; parent = parent.parentElement) {
+    const overflowY = window.getComputedStyle(parent).overflowY;
+    if (overflowY !== "auto" && overflowY !== "scroll" && overflowY !== "hidden" && overflowY !== "clip") {
+      continue;
+    }
+    const rect = parent.getBoundingClientRect();
+    top = Math.max(top, rect.top);
+    bottom = Math.min(bottom, rect.bottom);
+  }
+  return bottom > top ? { bottom, top } : { bottom: window.innerHeight, top: 0 };
 }
 
 type PreloadRequest = {
