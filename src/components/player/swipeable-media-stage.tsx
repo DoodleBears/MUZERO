@@ -16,7 +16,7 @@ import { resolveMediaBlob } from "@/db/media-blob-storage";
 import { db } from "@/db/muzero-db";
 import type { Track } from "@/db/types";
 import { useSettings } from "@/hooks/use-app-data";
-import { proxyExternalCover, useTrackCoverUrl } from "@/hooks/use-media";
+import { proxyExternalCover, useTrackCoverResource } from "@/hooks/use-media";
 import { getCroppedBlob } from "@/lib/image-crop";
 import { trackAlbum, trackArtists, trackHasCover, trackSubtitle } from "@/lib/track-display";
 import { cn } from "@/lib/utils";
@@ -113,7 +113,7 @@ export function SwipeableMediaStage({
   const current = currentIndex >= 0 ? queue[currentIndex] : undefined;
   const nextTrack = usePlayerStore((s) => s.peekTrack("next"));
   const prevTrack = usePlayerStore((s) => s.peekTrack("prev"));
-  const stageCoverUrl = useTrackCoverUrl(current);
+  const stageCover = useTrackCoverResource(current);
   const preloadTracks = useMemo(
     () =>
       compactTracks([
@@ -412,7 +412,7 @@ export function SwipeableMediaStage({
       settleTarget.track.coverBlobId &&
       (!preloadedCoverUrls[settleTarget.track.id] ||
         !readyTrackIds[settleTarget.track.id] ||
-        !stageCoverUrl)
+        !stageCover.readyForTrack)
     ) {
       return;
     }
@@ -446,8 +446,8 @@ export function SwipeableMediaStage({
     handoffFading,
     preloadedCoverUrls,
     readyTrackIds,
+    stageCover.readyForTrack,
     settleTarget,
-    stageCoverUrl,
     x,
   ]);
 

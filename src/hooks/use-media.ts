@@ -11,6 +11,22 @@ import { log } from "@/lib/logger";
 import { coverUrlCache } from "@/lib/object-url-cache";
 import { proxyRemoteCover, trackCoverCacheKey } from "@/player/playback-preload";
 
+export interface TrackCoverResource {
+  /**
+   * Display URL with the existing anti-flash behavior: while a local cover is
+   * still resolving, this may temporarily be the previous cover's URL.
+   */
+  url: string | null;
+  /** Stable identity of the current track's desired cover source. */
+  targetKey: string | null;
+  /** Stable identity of the returned URL; differs from targetKey only while stale. */
+  urlKey: string | null;
+  /** True when `url` is the held previous cover while the current local bytes resolve. */
+  staleWhilePending: boolean;
+  /** True when the returned URL belongs to the current track, or the track has no cover. */
+  readyForTrack: boolean;
+}
+
 /**
  * Create an object URL for a Blob and revoke it on change/unmount. Returns null
  * when there's no blob. Centralizes the revoke-before-replace lifecycle so we
@@ -74,6 +90,18 @@ export function useObjectUrls(blobs: Blob[]): string[] {
 export function useTrackCoverUrl(
   track: Pick<Track, "coverBlobId" | "coverCrop" | "remoteCoverUrl"> | undefined,
 ): string | null {
+  return useTrackCoverResource(track).url;
+}
+
+/**
+ * Reactive cover resource for a track. `url` preserves the existing
+ * stale-while-pending behavior used by normal UI, while `readyForTrack` lets
+ * animation handoffs wait until the visible base layer is actually rendering the
+ * new track's cover rather than any truthy previous URL.
+ */
+export function useTrackCoverResource(
+  track: Pick<Track, "coverBlobId" | "coverCrop" | "remoteCoverUrl"> | undefined,
+): TrackCoverResource {
   const settings = useSettings();
   const coverBlobId = track?.coverBlobId;
   const remoteCoverUrl = track?.remoteCoverUrl;
@@ -152,17 +180,32 @@ export function useTrackCoverUrl(
   const cached = cacheKey ? coverUrlCache.peek(cacheKey) : undefined;
   const resolvedUrl = cached ?? (resolved?.key === cacheKey ? resolved.url : undefined);
   const remoteUrl = proxyExternalCover(remoteCoverUrl);
-  const committedUrl = resolvedUrl ?? remoteUrl;
-  const lastCommittedUrl = useRef<string | null>(null);
+  const currentUrl = resolvedUrl ?? remoteUrl;
+  const remoteKey = remoteUrl ? `remote:${remoteUrl}` : null;
+  const currentKey = resolvedUrl ? cacheKey : remoteUrl ? remoteKey : null;
+  const targetKey = cacheKey ?? remoteKey;
+  const lastCommittedUrl = useRef<{ key: string | null; url: string } | null>(null);
   useEffect(() => {
-    if (committedUrl) {
-      lastCommittedUrl.current = committedUrl;
+    if (currentUrl) {
+      lastCommittedUrl.current = { key: currentKey, url: currentUrl };
     } else if (!coverBlobId && !remoteCoverUrl) {
       lastCommittedUrl.current = null;
     }
-  }, [committedUrl, coverBlobId, remoteCoverUrl]);
-  const pendingLocalCover = Boolean(coverBlobId) && blob === undefined && !committedUrl;
-  return committedUrl ?? (pendingLocalCover ? lastCommittedUrl.current : null);
+  }, [currentKey, currentUrl, coverBlobId, remoteCoverUrl]);
+  const pendingLocalCover = Boolean(coverBlobId) && blob === undefined && !currentUrl;
+  const staleFallback = pendingLocalCover ? lastCommittedUrl.current : null;
+  const url = currentUrl ?? staleFallback?.url ?? null;
+  const urlKey = currentKey ?? staleFallback?.key ?? null;
+  const staleWhilePending = !currentUrl && Boolean(staleFallback);
+  const hasCover = Boolean(coverBlobId || remoteCoverUrl);
+
+  return {
+    readyForTrack: !track || !hasCover || Boolean(currentUrl),
+    staleWhilePending,
+    targetKey,
+    url,
+    urlKey,
+  };
 }
 
 /**

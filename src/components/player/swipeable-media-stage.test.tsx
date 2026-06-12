@@ -5,7 +5,9 @@ import { usePlayerStore } from "@/stores/player-store";
 import { SwipeableMediaStage } from "./swipeable-media-stage";
 
 const mocks = vi.hoisted(() => ({
+  coverReadyForTrack: true,
   motionProps: [] as Array<Record<string, unknown>>,
+  objectUrlIndex: 0,
 }));
 
 vi.mock("motion/react", async () => {
@@ -77,7 +79,24 @@ vi.mock("@/hooks/use-app-data", () => ({
 
 vi.mock("@/hooks/use-media", () => ({
   useTrackCoverUrl: () => null,
+  useTrackCoverResource: () => ({
+    readyForTrack: mocks.coverReadyForTrack,
+    staleWhilePending: !mocks.coverReadyForTrack,
+    targetKey: "blb_current",
+    url: mocks.coverReadyForTrack ? "blob:current" : "blob:stale-previous",
+    urlKey: mocks.coverReadyForTrack ? "blb_current" : "blb_previous",
+  }),
   proxyExternalCover: (url: string | undefined) => url ?? null,
+}));
+
+vi.mock("@/db/media-blob-storage", () => ({
+  resolveMediaBlob: async (id: string) => ({
+    blob: new Blob([id], { type: "image/png" }),
+    bytes: id.length,
+    id,
+    mime: "image/png",
+    role: "cover",
+  }),
 }));
 
 vi.mock("./media-stage", () => ({
@@ -93,7 +112,19 @@ vi.mock("./stage-title-fallback", () => ({
 describe("SwipeableMediaStage", () => {
   beforeEach(() => {
     vi.useFakeTimers();
+    mocks.coverReadyForTrack = true;
     mocks.motionProps = [];
+    mocks.objectUrlIndex = 0;
+    Object.defineProperty(URL, "createObjectURL", {
+      configurable: true,
+      value: vi.fn(() => `blob:preload-${++mocks.objectUrlIndex}`),
+      writable: true,
+    });
+    Object.defineProperty(URL, "revokeObjectURL", {
+      configurable: true,
+      value: vi.fn(),
+      writable: true,
+    });
     Object.defineProperty(global, "ResizeObserver", {
       configurable: true,
       value: class ResizeObserver {
@@ -194,6 +225,47 @@ describe("SwipeableMediaStage", () => {
 
     // The incoming track settles through the overlay (not an instant swap).
     expect(screen.getAllByTestId("visual-trk_b").length).toBeGreaterThan(0);
+  });
+
+  it("keeps the settled overlay visible while the base stage still reports a stale previous cover", async () => {
+    const queue = [
+      makeTrack("trk_b", { coverBlobId: "blb_b" }),
+      makeTrack("trk_a", { coverBlobId: "blb_a" }),
+    ];
+    usePlayerStore.setState({
+      currentIndex: 1,
+      peekTrack: (direction) => {
+        const state = usePlayerStore.getState();
+        const offset = direction === "next" ? 1 : -1;
+        return state.queue[state.currentIndex + offset];
+      },
+      queue,
+      skipPrev: async () => {
+        usePlayerStore.setState({ currentIndex: 0 });
+      },
+    });
+    render(<SwipeableMediaStage />);
+
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    mocks.coverReadyForTrack = false;
+    await act(async () => {
+      usePlayerStore.setState({ currentIndex: 0 });
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(document.querySelectorAll('img[src^="blob:preload-"]').length).toBeGreaterThan(0);
+
+    await act(async () => {
+      vi.advanceTimersByTime(2_000);
+      await Promise.resolve();
+    });
+
+    expect(document.querySelectorAll('img[src^="blob:preload-"]').length).toBeGreaterThan(0);
   });
 
   it("never shows a bare title card for a streamed track switch (remote cover preloads)", async () => {

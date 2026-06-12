@@ -14,7 +14,7 @@ const { coverBlob, liveQueryState } = vi.hoisted(() => ({
 vi.mock("dexie-react-hooks", () => ({ useLiveQuery: () => liveQueryState.blob }));
 vi.mock("@/hooks/use-app-data", () => ({ useSettings: () => ({ coverCropped: false }) }));
 
-import { useTrackCoverUrl } from "./use-media";
+import { useTrackCoverResource, useTrackCoverUrl } from "./use-media";
 
 let created = 0;
 
@@ -93,5 +93,28 @@ describe("useTrackCoverUrl — cross-mount object-URL cache (Phase 1)", () => {
     rerender({ track: { coverBlobId: "blb_hold_b" } });
 
     expect(result.current).toBeNull();
+  });
+
+  it("marks the held previous local cover as stale until the current track cover resolves", async () => {
+    const { rerender, result } = renderHook(({ track }) => useTrackCoverResource(track), {
+      initialProps: { track: { coverBlobId: "blb_resource_a" } },
+    });
+
+    await act(async () => {});
+    const first = result.current;
+    expect(first.url).toMatch(/^blob:cover-/);
+    expect(first.readyForTrack).toBe(true);
+    expect(first.staleWhilePending).toBe(false);
+    expect(first.targetKey).toBe("blb_resource_a");
+    expect(first.urlKey).toBe("blb_resource_a");
+
+    liveQueryState.blob = undefined;
+    rerender({ track: { coverBlobId: "blb_resource_b" } });
+
+    expect(result.current.url).toBe(first.url);
+    expect(result.current.readyForTrack).toBe(false);
+    expect(result.current.staleWhilePending).toBe(true);
+    expect(result.current.targetKey).toBe("blb_resource_b");
+    expect(result.current.urlKey).toBe("blb_resource_a");
   });
 });
