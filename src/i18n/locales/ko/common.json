@@ -1037,6 +1037,13 @@
       "memory": "메모리",
       "reference": "참고"
     },
+    "scope": {
+      "global": "전역",
+      "now": "재생 중",
+      "library": "라이브러리",
+      "queue": "대기열",
+      "inspector": "인스펙터"
+    },
     "action": {
       "playbackToggle": "재생 / 일시정지",
       "playbackPrev": "이전 곡",

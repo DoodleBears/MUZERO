@@ -1038,6 +1038,13 @@
       "memory": "メモリー",
       "reference": "リファレンス"
     },
+    "scope": {
+      "global": "グローバル",
+      "now": "再生中",
+      "library": "ライブラリ",
+      "queue": "キュー",
+      "inspector": "インスペクター"
+    },
     "action": {
       "playbackToggle": "再生 / 一時停止",
       "playbackPrev": "前の曲",

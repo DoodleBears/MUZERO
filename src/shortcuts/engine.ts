@@ -217,6 +217,69 @@ export function dedupeScopedBindings(
   return out;
 }
 
+// ───────────────────────────────────────────── scoped override edits ────────
+
+function scopedBindingsEqual(
+  a: readonly ScopedShortcutBinding[],
+  b: readonly ScopedShortcutBinding[],
+  platform: Platform,
+): boolean {
+  if (a.length !== b.length) return false;
+  return a.every(
+    (binding, index) =>
+      binding.scope === b[index].scope &&
+      gestureIdentity(binding.gesture, platform) === gestureIdentity(b[index].gesture, platform),
+  );
+}
+
+function orderActionBindings(
+  action: ShortcutActionDef,
+  bindings: readonly ScopedShortcutBinding[],
+): ScopedShortcutBinding[] {
+  const defaultScopeOrder = [...new Set(action.defaultBindings.map((binding) => binding.scope))];
+  const scopes = [
+    ...defaultScopeOrder,
+    ...bindings
+      .map((binding) => binding.scope)
+      .filter((scope) => !defaultScopeOrder.includes(scope)),
+  ];
+  return scopes.flatMap((scope) => bindings.filter((binding) => binding.scope === scope));
+}
+
+/**
+ * Replace one `(actionId, scope)` binding group inside a sparse override map.
+ * Returns a new sparse map; when the action returns to its full default, the
+ * action override is removed entirely.
+ */
+export function updateShortcutScopeOverride(
+  overrides: ShortcutOverrides | undefined,
+  actionId: string,
+  scope: ShortcutScope,
+  replacement: readonly ScopedShortcutBinding[],
+  bindings: MergedBindings,
+  platform: Platform,
+): ShortcutOverrides {
+  const action = SHORTCUT_ACTIONS_BY_ID[actionId];
+  if (!action || !isEditableAction(action)) return { ...(overrides ?? {}) };
+
+  const current = (bindings[actionId] ?? []).map(({ scope: bindingScope, gesture }) => ({
+    scope: bindingScope,
+    gesture,
+  }));
+  const nextForAction = orderActionBindings(action, [
+    ...current.filter((binding) => binding.scope !== scope),
+    ...replacement.map((binding) => ({ ...binding, scope })),
+  ]);
+
+  const out: ShortcutOverrides = { ...(overrides ?? {}) };
+  if (scopedBindingsEqual(nextForAction, action.defaultBindings, platform)) {
+    delete out[actionId];
+  } else {
+    out[actionId] = dedupeScopedBindings(nextForAction, platform);
+  }
+  return out;
+}
+
 // ──────────────────────────────────────────────────────── conflicts ──────────
 
 /**

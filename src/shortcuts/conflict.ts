@@ -29,6 +29,7 @@ export interface AssignmentDraft {
 
 export interface DisplacedAction {
   actionId: string;
+  scope: ShortcutScope;
   /** The chord it lost (must be replaced, or the action left unbound). */
   gesture: ShortcutGesture;
 }
@@ -81,7 +82,12 @@ export function planReassignment(
   platform: Platform,
 ): ReassignmentPlan {
   const working = workingFromOverrides(baseOverrides);
-  const draftTargetIds = new Set(drafts.map((d) => d.actionId));
+  const draftTargetIds = new Set(
+    drafts.map((draft) => {
+      const action = SHORTCUT_ACTIONS_BY_ID[draft.actionId];
+      return `${draft.actionId}:${draft.scope ?? action?.scope}`;
+    }),
+  );
   const displaced: DisplacedAction[] = [];
   const blocked: DisplacedAction[] = [];
 
@@ -89,7 +95,11 @@ export function planReassignment(
     if (draft.gesture.kind !== "key") continue;
     const target = SHORTCUT_ACTIONS_BY_ID[draft.actionId];
     if (!target || !isEditableAction(target)) {
-      blocked.push({ actionId: draft.actionId, gesture: draft.gesture });
+      blocked.push({
+        actionId: draft.actionId,
+        scope: draft.scope ?? "global",
+        gesture: draft.gesture,
+      });
       continue;
     }
     const targetScope = draft.scope ?? target.scope;
@@ -111,7 +121,7 @@ export function planReassignment(
         continue;
       }
       if (!isEditableAction(other)) {
-        blocked.push({ actionId: other.id, gesture: draft.gesture });
+        blocked.push({ actionId: other.id, scope: targetScope, gesture: draft.gesture });
         continue; // protected holder keeps its chord; assignment can't be saved
       }
       working.set(
@@ -125,8 +135,8 @@ export function planReassignment(
             ),
         ),
       );
-      if (!draftTargetIds.has(other.id)) {
-        displaced.push({ actionId: other.id, gesture: draft.gesture });
+      if (!draftTargetIds.has(`${other.id}:${targetScope}`)) {
+        displaced.push({ actionId: other.id, scope: targetScope, gesture: draft.gesture });
       }
     }
 
@@ -160,6 +170,7 @@ export function planReassignment(
 /** One slot in the cascading recorder: an action + the chord being recorded for it. */
 export interface RecorderDraft {
   actionId: string;
+  scope?: ShortcutScope;
   /** The recorded replacement (null = awaiting capture). */
   gesture: ShortcutGesture | null;
   /** The chord this action LOST (set for displacement slots; absent for the primary). */
@@ -173,6 +184,11 @@ export interface RecorderReconcile {
   plan: ReassignmentPlan;
   /** Every slot is filled and nothing is blocked by a protected holder. */
   canSave: boolean;
+}
+
+function recorderDraftKey(draft: Pick<RecorderDraft, "actionId" | "scope">): string {
+  const action = SHORTCUT_ACTIONS_BY_ID[draft.actionId];
+  return `${draft.actionId}:${draft.scope ?? action?.scope ?? "global"}`;
 }
 
 /**
@@ -190,11 +206,11 @@ export function reconcileRecorderDrafts(
   baseOverrides: Record<string, ScopedShortcutBinding[]> | undefined,
   platform: Platform,
 ): RecorderReconcile {
-  const byId = new Map(drafts.map((draft) => [draft.actionId, draft]));
+  const byId = new Map(drafts.map((draft) => [recorderDraftKey(draft), draft]));
   const primary = drafts.find((draft) => draft.displacedChord === undefined);
 
   const active = new Map<string, RecorderDraft>();
-  if (primary) active.set(primary.actionId, primary);
+  if (primary) active.set(recorderDraftKey(primary), primary);
 
   let plan = planReassignment([], baseOverrides, platform);
   let changed = true;
@@ -202,13 +218,15 @@ export function reconcileRecorderDrafts(
     changed = false;
     const activeFilled = [...active.values()]
       .filter((d): d is RecorderDraft & { gesture: ShortcutGesture } => d.gesture !== null)
-      .map((d) => ({ actionId: d.actionId, gesture: d.gesture }));
+      .map((d) => ({ actionId: d.actionId, scope: d.scope, gesture: d.gesture }));
     plan = planReassignment(activeFilled, baseOverrides, platform);
     for (const displaced of plan.displaced) {
-      if (active.has(displaced.actionId)) continue;
-      const existing = byId.get(displaced.actionId);
-      active.set(displaced.actionId, {
+      const key = `${displaced.actionId}:${displaced.scope}`;
+      if (active.has(key)) continue;
+      const existing = byId.get(key);
+      active.set(key, {
         actionId: displaced.actionId,
+        scope: displaced.scope,
         gesture: existing?.gesture ?? null,
         displacedChord: displaced.gesture,
       });

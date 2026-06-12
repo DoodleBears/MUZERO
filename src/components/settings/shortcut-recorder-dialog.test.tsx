@@ -18,6 +18,7 @@ describe("ShortcutRecorderDialog", () => {
     render(
       <ShortcutRecorderDialog
         actionId="playback.prev"
+        scope="global"
         actionLabel="Previous"
         open
         onOpenChange={() => {}}
@@ -36,8 +37,36 @@ describe("ShortcutRecorderDialog", () => {
     const overrides = repo.setAll.mock.calls[0][0];
     // "+" ADDS a binding: prev keeps its default Q and gains Z (multi-binding).
     expect(overrides["playback.prev"]).toEqual([
-      { kind: "key", stroke: { code: "KeyQ", keyLabel: "Q" } },
-      { kind: "key", stroke: { code: "KeyZ", keyLabel: "Z" } },
+      { scope: "global", gesture: { kind: "key", stroke: { code: "KeyQ", keyLabel: "Q" } } },
+      { scope: "now", gesture: { kind: "key", stroke: { code: "ArrowLeft", keyLabel: "←" } } },
+      { scope: "global", gesture: { kind: "key", stroke: { code: "KeyZ", keyLabel: "Z" } } },
+    ]);
+  });
+
+  it("records into the requested surface scope without changing the global binding", async () => {
+    repo.setAll.mockClear();
+    render(
+      <ShortcutRecorderDialog
+        actionId="playback.next"
+        scope="now"
+        actionLabel="Next · Now Playing"
+        open
+        onOpenChange={() => {}}
+      />,
+    );
+    const capture = document.querySelector('[data-capture-action="playback.next"]');
+    if (!capture) throw new Error("no slot");
+    fireEvent.keyDown(capture, { code: "KeyZ", key: "z" });
+    fireEvent.click(await screen.findByText("shortcuts.recorder.save"));
+
+    expect(repo.setAll).toHaveBeenCalledTimes(1);
+    expect(repo.setAll.mock.calls[0][0]["playback.next"]).toEqual([
+      { scope: "global", gesture: { kind: "key", stroke: { code: "KeyE", keyLabel: "E" } } },
+      {
+        scope: "now",
+        gesture: { kind: "key", stroke: { code: "ArrowRight", keyLabel: "→" } },
+      },
+      { scope: "now", gesture: { kind: "key", stroke: { code: "KeyZ", keyLabel: "Z" } } },
     ]);
   });
 
@@ -45,6 +74,7 @@ describe("ShortcutRecorderDialog", () => {
     render(
       <ShortcutRecorderDialog
         actionId="playback.prev"
+        scope="global"
         actionLabel="Previous"
         open
         onOpenChange={() => {}}
@@ -63,6 +93,7 @@ describe("ShortcutRecorderDialog", () => {
     render(
       <ShortcutRecorderDialog
         actionId="playback.cycleRepeat"
+        scope="global"
         actionLabel="Repeat"
         open
         onOpenChange={() => {}}
@@ -88,11 +119,12 @@ describe("ShortcutRecorderDialog", () => {
     expect(repo.setAll).toHaveBeenCalledTimes(1);
     const overrides = repo.setAll.mock.calls[0][0];
     expect(overrides["playback.cycleRepeat"]).toEqual([
-      { kind: "key", stroke: { code: "KeyR", keyLabel: "R" } },
-      { kind: "key", stroke: { code: "KeyQ", keyLabel: "Q" } },
+      { scope: "global", gesture: { kind: "key", stroke: { code: "KeyR", keyLabel: "R" } } },
+      { scope: "global", gesture: { kind: "key", stroke: { code: "KeyQ", keyLabel: "Q" } } },
     ]);
     expect(overrides["playback.prev"]).toEqual([
-      { kind: "key", stroke: { code: "KeyZ", keyLabel: "Z" } },
+      { scope: "now", gesture: { kind: "key", stroke: { code: "ArrowLeft", keyLabel: "←" } } },
+      { scope: "global", gesture: { kind: "key", stroke: { code: "KeyZ", keyLabel: "Z" } } },
     ]);
   });
 
@@ -100,6 +132,7 @@ describe("ShortcutRecorderDialog", () => {
     render(
       <ShortcutRecorderDialog
         actionId="playback.cycleRepeat"
+        scope="global"
         actionLabel="Repeat"
         open
         onOpenChange={() => {}}
@@ -121,6 +154,7 @@ describe("ShortcutRecorderDialog", () => {
     render(
       <ShortcutRecorderDialog
         actionId="playback.prev"
+        scope="global"
         actionLabel="Previous"
         open
         onOpenChange={() => {}}

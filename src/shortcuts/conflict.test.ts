@@ -18,9 +18,14 @@ describe("planReassignment — cascading displacement", () => {
       undefined,
       "other",
     );
-    // cycleRepeat now has R + Q; prev lost Q (now unbound).
+    // cycleRepeat now has R + Q; prev lost global Q but keeps its Now Playing arrow.
     expect(codes(plan.overrides["playback.cycleRepeat"])).toEqual(["KeyR", "KeyQ"]);
-    expect(plan.overrides["playback.prev"]).toEqual([]);
+    expect(plan.overrides["playback.prev"]).toEqual([
+      {
+        scope: "now",
+        gesture: { kind: "key", stroke: { code: "ArrowLeft", keyLabel: "←" } },
+      },
+    ]);
     expect(plan.displaced.map((d) => d.actionId)).toEqual(["playback.prev"]);
     expect(plan.blocked).toEqual([]);
   });
@@ -32,7 +37,7 @@ describe("planReassignment — cascading displacement", () => {
     ];
     const plan = planReassignment(drafts, undefined, "other");
     expect(plan.displaced).toEqual([]); // prev was re-bound, no dangling displacement
-    expect(codes(plan.overrides["playback.prev"])).toEqual(["KeyZ"]);
+    expect(codes(plan.overrides["playback.prev"])).toEqual(["ArrowLeft", "KeyZ"]);
     expect(
       plan.overrides["playback.cycleRepeat"].some(
         (binding) => binding.gesture.kind === "key" && binding.gesture.stroke.code === "KeyQ",

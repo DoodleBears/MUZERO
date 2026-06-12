@@ -13,7 +13,7 @@
 |-------|------|--------|------|
 | 1 | Scoped binding model | Completed | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | Now Playing arrow transport | Completed | [Phase 2 Checklist](#phase-2-checklist) |
-| 3 | Settings UI by surface | Pending | [Phase 3 Checklist](#phase-3-checklist) |
+| 3 | Settings UI by surface | Completed | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | Tooltip and cheat-sheet parity | Pending | [Phase 4 Checklist](#phase-4-checklist) |
 
 > Status Legend: Completed | In Progress | Pending
@@ -357,17 +357,17 @@ Do not put merged bindings into Zustand. Continue deriving them from Dexie setti
 **Goal:** Let users see and edit shortcuts per surface.
 
 **Tasks:**
-- [ ] Add surface sections to Settings -> Shortcuts.
-- [ ] Let the recorder edit `(actionId, scope)`.
-- [ ] Update reset behavior for action+scope vs whole action.
-- [ ] Update import/export labels and validation messaging.
+- [x] Add surface sections to Settings -> Shortcuts.
+- [x] Let the recorder edit `(actionId, scope)`.
+- [x] Update reset behavior for action+scope vs whole action.
+- [x] Update import/export labels and validation messaging.
 
 ### Phase 3 Checklist
 
-- [ ] A user can rebind `playback.next@now` without changing `playback.next@global`.
-- [ ] Reset on `Now Playing -> Next track` restores only the `now` binding.
-- [ ] Reset all still clears every override.
-- [ ] i18n is complete for en/zh/ja/ko.
+- [x] A user can rebind `playback.next@now` without changing `playback.next@global`.
+- [x] Reset on `Now Playing -> Next track` restores only the `now` binding.
+- [x] Reset all still clears every override.
+- [x] i18n is complete for en/zh/ja/ko.
 
 ### Phase 4: Tooltip And Cheat-Sheet Parity
 
@@ -441,3 +441,4 @@ Do not put merged bindings into Zustand. Continue deriving them from Dexie setti
 | 2026-06-13 | MUZERO | Resolved Open Questions 1-2: no dedicated Settings scope in v1; queue scope activates while the queue surface is open and not typing. |
 | 2026-06-13 | MUZERO | Completed Phase 1: scoped binding model, v1 import compatibility, per-scope conflict checks, and v2 keymap export schema. |
 | 2026-06-13 | MUZERO | Completed Phase 2: Now Playing owns `ArrowLeft`/`ArrowRight` for previous/next, dispatcher derives active scopes from shell state, and Now Playing/Dock tooltips can show scoped arrow hints. |
+| 2026-06-13 | MUZERO | Completed Phase 3: Settings shortcut rows are grouped by surface, recorder targets `(actionId, scope)`, scoped reset preserves sibling scopes, and scope labels are localized in en/zh/ja/ko. |

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildCheatSheet, CHEAT_SHEET_CATEGORY_ORDER, cheatSheetRowMatches } from "./cheatsheet";
+import { buildCheatSheet, CHEAT_SHEET_SCOPE_ORDER, cheatSheetRowMatches } from "./cheatsheet";
 import { mergeBindings } from "./engine";
 import { SHORTCUT_ACTIONS } from "./registry";
 
@@ -9,20 +9,36 @@ describe("buildCheatSheet", () => {
   const sections = buildCheatSheet(bindings, "other");
 
   it("groups every action exactly once, in category order", () => {
-    const order = sections.map((s) => s.category);
-    expect(order).toEqual(CHEAT_SHEET_CATEGORY_ORDER.filter((c) => order.includes(c)));
+    const order = sections.map((s) => s.scope);
+    expect(order).toEqual(CHEAT_SHEET_SCOPE_ORDER.filter((scope) => order.includes(scope)));
     const rowCount = sections.reduce((n, s) => n + s.rows.length, 0);
-    expect(rowCount).toBe(SHORTCUT_ACTIONS.length);
+    expect(rowCount).toBeGreaterThan(SHORTCUT_ACTIONS.length);
   });
 
   it("renders chips for a configurable action and marks it editable", () => {
-    const prev = sections.flatMap((s) => s.rows).find((r) => r.actionId === "playback.prev");
+    const prev = sections
+      .find((s) => s.scope === "global")
+      ?.rows.find((r) => r.actionId === "playback.prev");
     expect(prev?.editable).toBe(true);
     expect(prev?.chips).toEqual([["Q"]]);
+    expect(prev?.scope).toBe("global");
+  });
+
+  it("splits one action into separate surface rows", () => {
+    const nowPrev = sections
+      .find((s) => s.scope === "now")
+      ?.rows.find((r) => r.actionId === "playback.prev");
+    expect(nowPrev?.chips).toEqual([["←"]]);
+    expect(nowPrev?.defaultKeyBindings).toEqual([
+      {
+        scope: "now",
+        gesture: { kind: "key", stroke: { code: "ArrowLeft", keyLabel: "←" } },
+      },
+    ]);
   });
 
   it("surfaces reference rows as non-editable with gesture labels", () => {
-    const ref = sections.find((s) => s.category === "reference");
+    const ref = sections.find((s) => s.scope === "global");
     expect(ref).toBeTruthy();
     const swipe = ref?.rows.find((r) => r.actionId === "ref.swipeBack");
     expect(swipe?.editable).toBe(false);

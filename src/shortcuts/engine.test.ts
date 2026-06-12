@@ -10,6 +10,7 @@ import {
   matchAction,
   mergeBindings,
   sanitizeOverrides,
+  updateShortcutScopeOverride,
 } from "./engine";
 import type { ShortcutGesture, ShortcutScope } from "./registry";
 
@@ -317,5 +318,56 @@ describe("eventMatchesAction", () => {
     });
     expect(eventMatchesAction(ev("KeyB", "b"), "library.back", custom, "other")).toBe(true);
     expect(eventMatchesAction(ev("KeyA", "a"), "library.back", custom, "other")).toBe(false);
+  });
+});
+
+describe("updateShortcutScopeOverride", () => {
+  it("replaces one action/scope group without changing the same action's other scopes", () => {
+    const bindings = mergeBindings();
+    const z = { kind: "key" as const, stroke: { code: "KeyZ", keyLabel: "Z" } };
+    expect(
+      updateShortcutScopeOverride(
+        {},
+        "playback.next",
+        "now",
+        [{ scope: "now", gesture: z }],
+        bindings,
+        "other",
+      ),
+    ).toEqual({
+      "playback.next": [
+        { scope: "global", gesture: { kind: "key", stroke: { code: "KeyE", keyLabel: "E" } } },
+        { scope: "now", gesture: z },
+      ],
+    });
+  });
+
+  it("drops the action override when resetting that scope restores the full default", () => {
+    const z = { kind: "key" as const, stroke: { code: "KeyZ", keyLabel: "Z" } };
+    const overrides = {
+      "playback.next": [
+        {
+          scope: "global" as const,
+          gesture: { kind: "key" as const, stroke: { code: "KeyE", keyLabel: "E" } },
+        },
+        { scope: "now" as const, gesture: z },
+      ],
+    };
+    const bindings = mergeBindings(overrides);
+    expect(
+      updateShortcutScopeOverride(
+        overrides,
+        "playback.next",
+        "now",
+        [
+          {
+            scope: "now",
+            gesture: { kind: "key", stroke: { code: "ArrowRight", keyLabel: "→" } },
+          },
+        ],
+        bindings,
+        "other",
+      ),
+    ).toEqual({});
   });
 });

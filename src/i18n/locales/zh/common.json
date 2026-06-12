@@ -1038,6 +1038,13 @@
       "memory": "记忆",
       "reference": "参考"
     },
+    "scope": {
+      "global": "全局",
+      "now": "正在播放",
+      "library": "媒体库",
+      "queue": "播放队列",
+      "inspector": "检查器"
+    },
     "action": {
       "playbackToggle": "播放 / 暂停",
       "playbackPrev": "上一首",
