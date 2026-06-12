@@ -281,6 +281,58 @@ describe("player-store playback resume", () => {
     await expect(db.playbackCache.count()).resolves.toBe(1);
   });
 
+  it("reuses a prepared cached remote blob during handoff", async () => {
+    const { db, first, second, usePlayerStore, playbackCache } = await seedQueue(0);
+    const trace = await import("@/lib/trace");
+    await db.mediaBlobs.put({
+      id: "blb_first_cached_handoff",
+      trackId: first.id,
+      role: "media",
+      mime: "audio/mpeg",
+      bytes: 3,
+      blob: new Blob([new Uint8Array([1, 2, 3])], { type: "audio/mpeg" }),
+    });
+    await db.tracks.update(first.id, { status: "ready", blobId: "blb_first_cached_handoff" });
+    await db.tracks.update(second.id, {
+      status: "ready",
+      remoteMediaUrl: "https://media.example.com/second.mp3",
+    });
+    const cachedTrack = await db.tracks.get(second.id);
+    if (!cachedTrack) throw new Error("expected seeded track");
+    const cachedBlob = { size: 6, type: "audio/mpeg" } as Blob;
+    await playbackCache.putRemotePlaybackCache(
+      cachedTrack,
+      {
+        blob: cachedBlob,
+        bytes: 6,
+        mime: "audio/mpeg",
+      },
+      { maxBytes: 100, now: () => 1 },
+      db,
+    );
+    usePlayerStore.getState().init();
+
+    await waitFor(() => expect(usePlayerStore.getState().queue).toHaveLength(2));
+    await usePlayerStore.getState().playIndex(0);
+    usePlayerStore.setState({ isPlaying: true });
+    mediaEngineMock.loadBlob.mockClear();
+    mediaEngineMock.play.mockClear();
+    trace.clearTrace();
+
+    await usePlayerStore.getState().playIndex(1);
+
+    expect(platformFetchMock).not.toHaveBeenCalled();
+    expectLoadedBlob("audio", "audio/mpeg");
+    expect(mediaEngineMock.play).toHaveBeenCalled();
+    expect(
+      trace
+        .getTraceEntries()
+        .filter(
+          (entry) => entry.scope === "player.playback" && entry.event === "media.load.remote.cache",
+        ),
+    ).toHaveLength(1);
+  });
+
   it("keeps the current song visible and playing while the next R2 track downloads", async () => {
     const { db, first, second, usePlayerStore } = await seedQueue(0);
     await db.mediaBlobs.put({

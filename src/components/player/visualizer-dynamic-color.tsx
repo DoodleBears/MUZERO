@@ -26,6 +26,7 @@ import {
 
 const colorCache = new Map<string, { rgb: Rgb | null; palette: Rgb[] }>();
 const coverColorLog = createDiagnosticLogger("cover.palette");
+let lastAppliedTarget: { key: string | null; rgb: Rgb | null; palette: Rgb[] } | null = null;
 
 type CurrentCoverState = {
   id: string;
@@ -67,6 +68,36 @@ function cachedTrackPalette(
     return null;
   }
   return entry;
+}
+
+function sameRgb(a: Rgb | null, b: Rgb | null): boolean {
+  return a === b || (!!a && !!b && a.r === b.r && a.g === b.g && a.b === b.b);
+}
+
+function samePalette(a: readonly Rgb[], b: readonly Rgb[]): boolean {
+  return a.length === b.length && a.every((color, index) => sameRgb(color, b[index] ?? null));
+}
+
+function applyVisualizerCoverColorTarget(
+  key: string | null,
+  rgb: Rgb | null,
+  palette: Rgb[] = [],
+): boolean {
+  if (
+    lastAppliedTarget &&
+    lastAppliedTarget.key === key &&
+    sameRgb(lastAppliedTarget.rgb, rgb) &&
+    samePalette(lastAppliedTarget.palette, palette)
+  ) {
+    return false;
+  }
+  lastAppliedTarget = {
+    key,
+    rgb: rgb ? { ...rgb } : null,
+    palette: palette.map((color) => ({ ...color })),
+  };
+  transitionVisualizerCoverColor(key, rgb, palette);
+  return true;
 }
 
 /**
@@ -111,6 +142,8 @@ export function useVisualizerCoverColorCss(active = true): string | null {
     // Feature off, or the track has no cover at all → follow the theme primary.
     if (!coverColorEnabled || (!current?.coverBlobId && !remoteCoverUrl)) {
       void primaryColorVersion;
+      const applied = applyVisualizerCoverColorTarget("theme-primary", readPrimaryRgb());
+      if (!applied) return;
       coverColorLog.debug("cover.palette.fallback", {
         message: "cover color fallback to theme primary",
         trackId: current?.id,
@@ -118,7 +151,6 @@ export function useVisualizerCoverColorCss(active = true): string | null {
         phase: "skip",
         reason: coverColorEnabled ? "no-cover" : "disabled",
       });
-      transitionVisualizerCoverColor("theme-primary", readPrimaryRgb());
       return;
     }
 
@@ -140,6 +172,8 @@ export function useVisualizerCoverColorCss(active = true): string | null {
       });
       const safeUrl = sanitizeUrlForTrace(remoteCoverUrl);
       if (stored) {
+        const applied = applyVisualizerCoverColorTarget(cacheKey, stored.rgb, stored.palette);
+        if (!applied) return;
         coverColorLog.debug("cover.palette.track-metadata", {
           message: "cover palette loaded from track metadata",
           trackId: current.id,
@@ -150,10 +184,15 @@ export function useVisualizerCoverColorCss(active = true): string | null {
           paletteCount: stored.palette.length,
         });
         colorCache.set(cacheKey, stored);
-        transitionVisualizerCoverColor(cacheKey, stored.rgb, stored.palette);
         return;
       }
       if (cached !== undefined) {
+        const applied = applyVisualizerCoverColorTarget(
+          cacheKey,
+          cached.rgb ?? readPrimaryRgb(),
+          cached.palette,
+        );
+        if (!applied) return;
         coverColorLog.debug("cover.palette.cache", {
           message: "cover palette cache hit",
           trackId: current.id,
@@ -163,17 +202,17 @@ export function useVisualizerCoverColorCss(active = true): string | null {
           coverSourceHost: coverSource.host || safeUrl.host || undefined,
           paletteCount: cached.palette.length,
         });
-        transitionVisualizerCoverColor(cacheKey, cached.rgb ?? readPrimaryRgb(), cached.palette);
         return;
       }
-      if (thumbhashFallback) {
-        transitionVisualizerCoverColor(
-          `thumbhash:${current.coverThumbhash}`,
-          thumbhashFallback.rgb,
-          thumbhashFallback.palette,
-        );
-      }
+      const thumbhashApplied = thumbhashFallback
+        ? applyVisualizerCoverColorTarget(
+            `thumbhash:${current.coverThumbhash}`,
+            thumbhashFallback.rgb,
+            thumbhashFallback.palette,
+          )
+        : false;
       if (thumbhashFallback && resolveDesktopBridge().kind === "web") {
+        if (!thumbhashApplied) return;
         coverColorLog.debug("cover.palette.thumbhash-fallback", {
           message: "remote cover palette uses thumbhash fallback in browser",
           trackId: current.id,
@@ -238,7 +277,7 @@ export function useVisualizerCoverColorCss(active = true): string | null {
           paletteCount: resolvedPalette.length,
           fallbackToTheme: resolvedPalette.length === 0,
         });
-        transitionVisualizerCoverColor(cacheKey, rgb ?? readPrimaryRgb(), resolvedPalette);
+        applyVisualizerCoverColorTarget(cacheKey, rgb ?? readPrimaryRgb(), resolvedPalette);
       });
       return () => {
         alive = false;
@@ -249,6 +288,12 @@ export function useVisualizerCoverColorCss(active = true): string | null {
     const stored = cachedTrackPalette(current, current.coverBlobId);
     if (stored && current.coverBlobId) {
       colorCache.set(current.coverBlobId, stored);
+      const applied = applyVisualizerCoverColorTarget(
+        current.coverBlobId,
+        stored.rgb,
+        stored.palette,
+      );
+      if (!applied) return;
       coverColorLog.debug("cover.palette.track-metadata", {
         message: "cover palette loaded from track metadata",
         trackId: current.id,
@@ -258,13 +303,14 @@ export function useVisualizerCoverColorCss(active = true): string | null {
         coverBlobId: current.coverBlobId,
         paletteCount: stored.palette.length,
       });
-      transitionVisualizerCoverColor(current.coverBlobId, stored.rgb, stored.palette);
       return;
     }
 
     if (cover === undefined) return;
     if (!cover?.blob) {
       void primaryColorVersion;
+      const applied = applyVisualizerCoverColorTarget("theme-primary", readPrimaryRgb());
+      if (!applied) return;
       coverColorLog.warn("cover.palette.fallback", {
         message: "local cover palette fallback to theme primary",
         trackId: current?.id,
@@ -273,7 +319,6 @@ export function useVisualizerCoverColorCss(active = true): string | null {
         coverBlobId: current?.coverBlobId,
         reason: cover ? "missing-blob-bytes" : "missing-cover-row",
       });
-      transitionVisualizerCoverColor("theme-primary", readPrimaryRgb());
       return;
     }
 
@@ -282,6 +327,12 @@ export function useVisualizerCoverColorCss(active = true): string | null {
     const cached = colorCache.get(cacheKey);
     const thumbhashFallback = paletteCacheEntry(coverPaletteFromThumbhash(current.coverThumbhash));
     if (cached !== undefined) {
+      const applied = applyVisualizerCoverColorTarget(
+        cacheKey,
+        cached.rgb ?? readPrimaryRgb(),
+        cached.palette,
+      );
+      if (!applied) return;
       coverColorLog.debug("cover.palette.cache", {
         message: "cover palette cache hit",
         trackId: current?.id,
@@ -291,11 +342,10 @@ export function useVisualizerCoverColorCss(active = true): string | null {
         coverBlobId: cover.id,
         paletteCount: cached.palette.length,
       });
-      transitionVisualizerCoverColor(cacheKey, cached.rgb ?? readPrimaryRgb(), cached.palette);
       return;
     }
     if (thumbhashFallback) {
-      transitionVisualizerCoverColor(
+      applyVisualizerCoverColorTarget(
         `thumbhash:${current.coverThumbhash}`,
         thumbhashFallback.rgb,
         thumbhashFallback.palette,
@@ -337,7 +387,7 @@ export function useVisualizerCoverColorCss(active = true): string | null {
           paletteCount: resolvedPalette.length,
           fallbackToTheme: resolvedPalette.length === 0,
         });
-        transitionVisualizerCoverColor(cacheKey, rgb ?? readPrimaryRgb(), resolvedPalette);
+        applyVisualizerCoverColorTarget(cacheKey, rgb ?? readPrimaryRgb(), resolvedPalette);
       })
       .catch((error) => {
         if (!alive) return;
@@ -352,7 +402,7 @@ export function useVisualizerCoverColorCss(active = true): string | null {
           bytes: cover.bytes,
           error,
         });
-        transitionVisualizerCoverColor(cacheKey, readPrimaryRgb(), []);
+        applyVisualizerCoverColorTarget(cacheKey, readPrimaryRgb(), []);
       });
 
     return () => {

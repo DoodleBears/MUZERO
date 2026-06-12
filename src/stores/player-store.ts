@@ -1949,35 +1949,40 @@ async function ensureLoadedAndPlay(
         trackId: track.id,
         kind: track.kind,
       });
-      const cached = await readRemotePlaybackCache(track, playbackTrace);
-      if (cached) {
-        await mediaEngine.loadBlob(cached.blob, track.kind);
+      const prepared = preparedRemotePlayback?.trackId === track.id ? preparedRemotePlayback : null;
+      if (prepared) {
+        preparedRemotePlayback = null;
+        await mediaEngine.loadBlob(prepared.blob, track.kind);
       } else {
-        const request = beginPlaybackLoading(set, track, sourceKind);
-        try {
-          const prepared =
-            preparedRemotePlayback?.trackId === track.id ? preparedRemotePlayback : null;
-          preparedRemotePlayback = null;
-          const media =
-            prepared ??
-            (await fetchRemotePlaybackBlob(track, playbackTrace, request.controller.signal));
-          if (!isPlaybackLoadCurrent(request.id) || currentTrack(get())?.id !== track.id) return;
-          await mediaEngine.loadBlob(media.blob, track.kind);
-          void writeRemotePlaybackCache(track, media);
-        } catch (error) {
-          if (isAbortError(error) || !isPlaybackLoadCurrent(request.id)) return;
-          notify.error(i18n.t("player.playbackError"), {
-            detail: describePlaybackError(error),
-            error,
-          });
-          log.warn("player", "remote media playback fetch failed", {
-            trackId: track.id,
-            error,
-          });
-          set({ isPlaying: false, wantPlay: false });
-          return;
-        } finally {
-          clearPlaybackLoading(set, request.id);
+        const cached = await readRemotePlaybackCache(track, playbackTrace);
+        if (cached) {
+          await mediaEngine.loadBlob(cached.blob, track.kind);
+        } else {
+          const request = beginPlaybackLoading(set, track, sourceKind);
+          try {
+            const media = await fetchRemotePlaybackBlob(
+              track,
+              playbackTrace,
+              request.controller.signal,
+            );
+            if (!isPlaybackLoadCurrent(request.id) || currentTrack(get())?.id !== track.id) return;
+            await mediaEngine.loadBlob(media.blob, track.kind);
+            void writeRemotePlaybackCache(track, media);
+          } catch (error) {
+            if (isAbortError(error) || !isPlaybackLoadCurrent(request.id)) return;
+            notify.error(i18n.t("player.playbackError"), {
+              detail: describePlaybackError(error),
+              error,
+            });
+            log.warn("player", "remote media playback fetch failed", {
+              trackId: track.id,
+              error,
+            });
+            set({ isPlaying: false, wantPlay: false });
+            return;
+          } finally {
+            clearPlaybackLoading(set, request.id);
+          }
         }
       }
     } else if (sourceKind === "stream") {
