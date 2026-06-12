@@ -76,6 +76,14 @@ describe("LyricsScroller (synced)", () => {
     fireEvent.click(back);
     expect(screen.queryByLabelText("lyrics.followCurrent")).toBeNull();
   });
+
+  it("applies the selected lyrics motion mode to the synced viewport", () => {
+    render(
+      <LyricsScroller resolved={synced} activeIndex={1} onSeek={() => {}} motionMode="inertial" />,
+    );
+
+    expect(screen.getByTestId("lyrics-scroll")).toHaveAttribute("data-motion-mode", "inertial");
+  });
 });
 
 describe("LyricsScroller (word-by-word karaoke)", () => {

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   LYRICS_MOTION_MODES,
   type LyricsMotionMode,
+  lyricFollowTargetScrollTop,
   resolveLyricsMotionMode,
 } from "./lyric-motion";
 
@@ -62,5 +63,33 @@ describe("resolveLyricsMotionMode", () => {
     expect(cascade.mode).toBe("classic");
     expect(cascade.row.neighborDelayMs).toBe(0);
     expect(cascade.row.residualYPx).toBe(0);
+  });
+});
+
+describe("lyricFollowTargetScrollTop", () => {
+  it("converts the active line center into a scrollTop target at the anchor", () => {
+    expect(
+      lyricFollowTargetScrollTop({
+        scrollTop: 120,
+        viewportTop: 100,
+        viewportHeight: 500,
+        lineTop: 260,
+        lineHeight: 40,
+        anchorRatio: 0.38,
+      }),
+    ).toBe(110);
+  });
+
+  it("never returns a negative scroll target", () => {
+    expect(
+      lyricFollowTargetScrollTop({
+        scrollTop: 0,
+        viewportTop: 100,
+        viewportHeight: 500,
+        lineTop: 110,
+        lineHeight: 20,
+        anchorRatio: 0.38,
+      }),
+    ).toBe(0);
   });
 });

@@ -1,6 +1,6 @@
 import { useLiveQuery } from "dexie-react-hooks";
 import { LocateFixed } from "lucide-react";
-import { motion } from "motion/react";
+import { animate, motion } from "motion/react";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { LyricsSearchPanel } from "@/components/player/lyrics-search-panel";
@@ -11,7 +11,13 @@ import type { Track } from "@/db/types";
 import { useSettings } from "@/hooks/use-app-data";
 import { useSmoothScroll } from "@/lib/smooth-scroll/use-smooth-scroll";
 import { cn } from "@/lib/utils";
+import { prefersReducedMotion } from "@/lib/view-transition";
 import { activeWordIndex } from "@/lyrics/active-word";
+import {
+  type LyricsMotionMode,
+  lyricFollowTargetScrollTop,
+  resolveLyricsMotionMode,
+} from "@/lyrics/lyric-motion";
 import { DEFAULT_LYRIC_STYLE, type LyricStyle, resolveLyricStyle } from "@/lyrics/lyric-style";
 import type { LyricLine } from "@/lyrics/model";
 import { activeLineIndex } from "@/lyrics/parse-lrc";
@@ -146,6 +152,7 @@ export function SyncedLyricsView({ track }: { track?: Track }) {
       wordByWord={settings.lyricsWordByWord ?? true}
       showTranslation={settings.lyricsShowTranslation ?? true}
       showRomanization={settings.lyricsShowRomanization ?? false}
+      motionMode={settings.lyricsMotionMode}
     />
   );
 }
@@ -169,6 +176,7 @@ export function LyricsScroller({
   wordByWord = true,
   showTranslation = true,
   showRomanization = false,
+  motionMode = "classic",
 }: {
   resolved: ShownLyrics;
   activeIndex: number;
@@ -179,6 +187,7 @@ export function LyricsScroller({
   wordByWord?: boolean;
   showTranslation?: boolean;
   showRomanization?: boolean;
+  motionMode?: LyricsMotionMode;
 }) {
   const plainScrollRef = useRef<HTMLDivElement>(null);
   useSmoothScroll(plainScrollRef);
@@ -216,6 +225,7 @@ export function LyricsScroller({
             wordByWord={wordByWord}
             showTranslation={showTranslation}
             showRomanization={showRomanization}
+            motionMode={motionMode}
           />
         )}
       </div>
@@ -248,6 +258,7 @@ function SyncedLines({
   wordByWord = true,
   showTranslation = true,
   showRomanization = false,
+  motionMode = "classic",
 }: {
   lines: LyricLine[];
   activeIndex: number;
@@ -257,18 +268,17 @@ function SyncedLines({
   wordByWord?: boolean;
   showTranslation?: boolean;
   showRomanization?: boolean;
+  motionMode?: LyricsMotionMode;
 }) {
   const { t } = useTranslation();
   const viewportRef = useRef<HTMLDivElement>(null);
   const stackRef = useRef<HTMLDivElement>(null);
-  useSmoothScroll(viewportRef);
   const [following, setFollowing] = useState(true);
   const [viewportH, setViewportH] = useState(0);
-  // Live mirror of activeIndex so the (once-created) follow rAF reads the current
-  // line without depending on a React ref's attachment timing.
-  const activeIndexRef = useRef(activeIndex);
-  activeIndexRef.current = activeIndex;
-
+  const lyricsMotion = useMemo(
+    () => resolveLyricsMotionMode(motionMode, { reducedMotion: prefersReducedMotion() }),
+    [motionMode],
+  );
   // Karaoke fill colors: the sung part shows the full lyric color; the unsung part
   // sits at the inactive opacity (relative to active, since the whole line already
   // carries activeOpacity) so it reads like the dim lines until it's sung.
@@ -303,41 +313,72 @@ function SyncedLines({
   // biome-ignore lint/correctness/useExhaustiveDependencies: reset follow when the lyric set changes
   useEffect(() => setFollowing(true), [lines]);
 
-  // Follow via a rAF that lerps scrollTop toward the active line's ~38% anchor
-  // every frame. It reads activeRef LIVE (not a React effect keyed on
-  // activeIndex), so it shares the highlight's cadence and can never desync or
-  // miss an update — that's what makes auto-scroll actually reliable. Runs only
-  // while following; a user wheel/touch detaches it.
+  // Follow toward the active line's anchor. Classic keeps the existing per-frame
+  // lerp baseline; inertial/cascade use a Motion spring for a weightier catch-up.
+  // Synced lyrics intentionally do NOT opt into global Lenis smooth-scroll: this
+  // surface owns its own programmatic follow target, and two scroll controllers
+  // would fight over `scrollTop`.
   useEffect(() => {
     if (!following) return;
     let raf = 0;
     let stopped = false;
-    const ease = 0.16;
+    let spring: { stop: () => void } | null = null;
+    const readTarget = () => {
+      const vp = viewportRef.current;
+      const stack = stackRef.current;
+      const idx = activeIndex;
+      const el = stack && idx >= 0 ? (stack.children[idx] as HTMLElement | undefined) : undefined;
+      if (!vp || !el) return null;
+      const vpRect = vp.getBoundingClientRect();
+      const elRect = el.getBoundingClientRect();
+      return lyricFollowTargetScrollTop({
+        scrollTop: vp.scrollTop,
+        viewportTop: vpRect.top,
+        viewportHeight: vp.clientHeight,
+        lineTop: elRect.top,
+        lineHeight: elRect.height,
+        anchorRatio: lyricsMotion.follow.anchorRatio,
+      });
+    };
+    const stopSpring = () => {
+      spring?.stop();
+      spring = null;
+    };
     const tick = () => {
       if (stopped) return;
       const vp = viewportRef.current;
-      const stack = stackRef.current;
-      const idx = activeIndexRef.current;
-      const el = stack && idx >= 0 ? (stack.children[idx] as HTMLElement | undefined) : undefined;
-      if (vp && el) {
-        // Rect-based (immune to offsetParent): where the active line's center
-        // currently sits relative to the viewport top, converted to an absolute
-        // scrollTop target at the ~38% anchor.
-        const vpRect = vp.getBoundingClientRect();
-        const elRect = el.getBoundingClientRect();
-        const elCenterFromTop = elRect.top + elRect.height / 2 - vpRect.top;
-        const target = Math.max(0, vp.scrollTop + elCenterFromTop - vp.clientHeight * 0.38);
+      const target = readTarget();
+      if (vp && target != null) {
         const delta = target - vp.scrollTop;
-        if (Math.abs(delta) > 0.5) vp.scrollTop += delta * ease;
+        if (Math.abs(delta) > 0.5) vp.scrollTop += delta * (lyricsMotion.follow.lerp ?? 0.16);
       }
       raf = requestAnimationFrame(tick);
     };
-    raf = requestAnimationFrame(tick);
+    if (lyricsMotion.follow.kind === "spring") {
+      raf = requestAnimationFrame(() => {
+        if (stopped) return;
+        const vp = viewportRef.current;
+        const target = readTarget();
+        if (!vp || target == null) return;
+        spring = animate(vp.scrollTop, target, {
+          type: "spring",
+          stiffness: lyricsMotion.follow.stiffness,
+          damping: lyricsMotion.follow.damping,
+          mass: lyricsMotion.follow.mass,
+          onUpdate: (value) => {
+            if (!stopped && following && viewportRef.current) viewportRef.current.scrollTop = value;
+          },
+        });
+      });
+    } else {
+      raf = requestAnimationFrame(tick);
+    }
     return () => {
       stopped = true;
       cancelAnimationFrame(raf);
+      stopSpring();
     };
-  }, [following]);
+  }, [following, activeIndex, lyricsMotion]);
 
   // Per-syllable karaoke fill: while the active line has word timings, a single rAF
   // wipes each word as it's sung by writing one CSS var per word span DIRECTLY to
@@ -386,6 +427,7 @@ function SyncedLines({
       <div
         ref={viewportRef}
         data-testid="lyrics-scroll"
+        data-motion-mode={lyricsMotion.mode}
         className="no-scrollbar absolute inset-0 overflow-y-auto overscroll-contain"
         style={EDGE_FADE}
         onWheel={() => setFollowing(false)}

@@ -14,7 +14,7 @@
 | Phase | Name | Status | Link |
 |-------|------|--------|------|
 | 1 | 产品模式 + 设置契约 + 运动参数纯函数 | ✅ Completed | [Phase 1 Checklist](#phase-1-checklist) |
-| 2 | 歌词 follow controller 重构：Classic / Inertial 两种滚动手感 | 🔲 Pending | [Phase 2 Checklist](#phase-2-checklist) |
+| 2 | 歌词 follow controller 重构：Classic / Inertial 两种滚动手感 | ✅ Completed | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | Cascade 模式：active 邻近行级联 delay / residual y / opacity-scale 协调 | 🔲 Pending | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | Settings / tuning panel / i18n / reduced-motion / 真机验收 | 🔲 Pending | [Phase 4 Checklist](#phase-4-checklist) |
 
@@ -301,19 +301,21 @@ The lyrics viewport should remain native `overflow-y-auto overscroll-contain`; g
 **Goal:** Make the current follow behavior explicit and add Inertial mode without breaking user scroll detach.
 
 **Tasks:**
-- [ ] Extract target scroll calculation from `SyncedLines` into a small local helper: active line center → viewport anchor target.
-- [ ] Keep Classic using current lerp behavior as baseline.
-- [ ] Implement Inertial mode using Motion `useMotionValue` / `useSpring` or `animate` with DOM `scrollTop` subscription.
-- [ ] Remove or bypass `useSmoothScroll(viewportRef)` for lyrics auto-follow to avoid Lenis target conflicts.
-- [ ] Preserve follow detach/reattach behavior.
+- [x] Extract target scroll calculation from `SyncedLines` into a small local helper: active line center → viewport anchor target.
+- [x] Keep Classic using current lerp behavior as baseline.
+- [x] Implement Inertial mode using Motion `useMotionValue` / `useSpring` or `animate` with DOM `scrollTop` subscription.
+- [x] Remove or bypass `useSmoothScroll(viewportRef)` for lyrics auto-follow to avoid Lenis target conflicts.
+- [x] Preserve follow detach/reattach behavior.
 
 ### Phase 2 Checklist
 
-- [ ] Classic mode visual behavior matches current baseline.
-- [ ] Inertial mode settles to the same target as Classic, without overshooting into negative scroll.
-- [ ] User wheel/touch cancels follow in all modes.
-- [ ] Clicking a lyric line seeks and reattaches follow.
-- [ ] No React state updates occur every frame.
+- [x] Classic mode visual behavior matches current baseline.
+- [x] Inertial mode settles to the same target as Classic, without overshooting into negative scroll.
+- [x] User wheel/touch cancels follow in all modes.
+- [x] Clicking a lyric line seeks and reattaches follow.
+- [x] No React state updates occur every frame.
+
+> **Phase 2 implementation note (2026-06-13):** Extracted `lyricFollowTargetScrollTop` into `src/lyrics/lyric-motion.ts` and covered the rect-to-anchor math with unit tests. `SyncedLyricsView` now passes `settings.lyricsMotionMode` into `LyricsScroller`; synced lyrics no longer attach the global Lenis smooth-scroll hook, so the lyrics follow controller is the only owner of `scrollTop`. Classic keeps the existing rAF lerp baseline; Inertial uses Motion `animate(..., { type: "spring" })` to spring the viewport toward the same target without React state updates per frame. Verification: `vitest run src/lyrics/lyric-motion.test.ts src/components/player/synced-lyrics-view.test.tsx` (25 tests), touched-file Biome, and `tsc --noEmit` all passed.
 
 ### Phase 3: Cascade Mode
 
@@ -410,6 +412,7 @@ The lyrics viewport should remain native `overflow-y-auto overscroll-contain`; g
 | 2026-06-13 | MUZERO | Initial draft: lyrics motion modes PRD. Recommends Motion-based Classic / Inertial / Cascade; explicitly excludes GSAP v1; captures Lenis conflict and reduced-motion requirements. |
 | 2026-06-13 | MUZERO | Resolved Q3/Q5: UI may explicitly describe Cascade as Apple Music-like in hover tooltip/popover copy; all lyrics surfaces, including immersive overlay, use one global `lyricsMotionMode`. |
 | 2026-06-13 | MUZERO | Phase 1 completed: settings contract, pure motion resolver, shared tuning control, four-locale i18n, resolver/UI tests. |
+| 2026-06-13 | MUZERO | Phase 2 completed: follow target math helper, Classic/Inertial follow controller, Lenis bypass for synced lyrics, mode wiring tests. |
 
 ---
 

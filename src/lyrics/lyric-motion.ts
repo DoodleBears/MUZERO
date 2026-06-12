@@ -20,6 +20,15 @@ export interface ResolvedLyricsMotion {
   };
 }
 
+export interface LyricFollowTargetInput {
+  scrollTop: number;
+  viewportTop: number;
+  viewportHeight: number;
+  lineTop: number;
+  lineHeight: number;
+  anchorRatio: number;
+}
+
 const CLASSIC_MOTION: ResolvedLyricsMotion = {
   mode: "classic",
   follow: {
@@ -88,4 +97,12 @@ export function resolveLyricsMotionMode(
     case "classic":
       return CLASSIC_MOTION;
   }
+}
+
+export function lyricFollowTargetScrollTop(input: LyricFollowTargetInput): number {
+  const lineCenterFromTop = input.lineTop + input.lineHeight / 2 - input.viewportTop;
+  return Math.max(
+    0,
+    input.scrollTop + lineCenterFromTop - input.viewportHeight * input.anchorRatio,
+  );
 }
