@@ -47,12 +47,17 @@ export function SystemPlaylistDetail({
   const play = usePlayerStore((s) => s.play);
   const playTrack = usePlayerStore((s) => s.playTrack);
   const playSystemPlaylist = usePlayerStore((s) => s.playSystemPlaylist);
+  const showPlaybackMetrics = playlistId !== "system:liked";
 
   const rows = useMemo(
     () => deriveRows(playlistId, tracks, stats, events, remoteTracks, range, now),
     [events, now, playlistId, range, remoteTracks, stats, tracks],
   );
-  const sortedRows = useMemo(() => sortSystemPlaylistRows(rows, sort), [rows, sort]);
+  const effectiveSort = showPlaybackMetrics ? sort : "default";
+  const sortedRows = useMemo(
+    () => sortSystemPlaylistRows(rows, effectiveSort),
+    [effectiveSort, rows],
+  );
   const localTracks = useMemo(
     () => sortedRows.flatMap((row) => (row.kind === "local-track" ? [row.track] : [])),
     [sortedRows],
@@ -131,19 +136,29 @@ export function SystemPlaylistDetail({
             listClassName="chrome-fade no-scrollbar pt-2 pb-chrome-bottom [--chrome-fade-top:0.75rem]"
             className="min-h-0 flex-1"
             afterToolbar={
-              localTracks.length > 0 ? <MetricColumnHeader t={t} /> : undefined
+              showPlaybackMetrics && localTracks.length > 0 ? (
+                <MetricColumnHeader t={t} />
+              ) : undefined
             }
-            endActions={<SortControls onChange={setSort} sort={sort} t={t} />}
-            getTrackColumns={(track) => (
-              <MetricColumns metric={metricsByTrackId.get(track.id)} now={now} t={t} />
-            )}
+            endActions={
+              showPlaybackMetrics ? (
+                <SortControls onChange={setSort} sort={sort} t={t} />
+              ) : undefined
+            }
+            getTrackColumns={
+              showPlaybackMetrics
+                ? (track) => (
+                    <MetricColumns metric={metricsByTrackId.get(track.id)} now={now} t={t} />
+                  )
+                : undefined
+            }
             startActions={
               <Button size="sm" onClick={() => void playAll()} disabled={localTracks.length === 0}>
                 <Play className="size-4" /> {t("gallery.playAll")}
               </Button>
             }
           />
-          {remoteRows.length > 0 && (
+          {showPlaybackMetrics && remoteRows.length > 0 && (
             <div className="flex shrink-0 flex-col gap-1 px-1 pb-3">
               {remoteRows.map((row) => (
                 <div

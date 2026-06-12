@@ -194,6 +194,27 @@ describe("SystemPlaylistDetail", () => {
 
     expect(playSystemPlaylist).toHaveBeenCalledWith("system:liked", [tracks[0]]);
   });
+
+  it("hides playback stats and metric sorting on the hearted playlist", () => {
+    const tracks = [track("trk_1", "One", { liked: true })];
+
+    render(
+      <SystemPlaylistDetail
+        events={[]}
+        now={NOW}
+        onBack={vi.fn()}
+        playlistId="system:liked"
+        remoteTracks={[]}
+        stats={[stat("trk_1", 8, { lastPlayedAt: NOW - 1_000 })]}
+        tracks={tracks}
+      />,
+    );
+
+    expect(screen.queryByText("Plays")).not.toBeInTheDocument();
+    expect(screen.queryByText("Last played")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Play count" })).not.toBeInTheDocument();
+    expect(screen.getByTestId("track-columns-trk_1")).toBeEmptyDOMElement();
+  });
 });
 
 function track(id: string, title: string, patch: Partial<Track> = {}): Track {

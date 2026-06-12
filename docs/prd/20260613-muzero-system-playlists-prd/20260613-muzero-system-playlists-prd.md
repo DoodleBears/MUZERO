@@ -21,6 +21,7 @@
 | 6 | Stats Columns + Sortable Queue Order | Completed | [Phase 6 Checklist](#phase-6-checklist) |
 | 7 | Compact Cards + Latest Cover Art | Completed | [Phase 7 Checklist](#phase-7-checklist) |
 | 8 | Last Played Date/Time Formatting | Completed | [Phase 8 Checklist](#phase-8-checklist) |
+| 9 | Hearted Detail Without Playback Metrics | Completed | [Phase 9 Checklist](#phase-9-checklist) |
 
 > Status Legend: Completed | In Progress | Pending
 
@@ -570,6 +571,28 @@ Deletion behavior:
 - `node node_modules/vitest/vitest.mjs run src/components/library/system-playlist-detail.test.tsx` passes: 1 file, 4 tests.
 - `node node_modules/@biomejs/biome/bin/biome check --formatter-enabled=false src/components/library/system-playlist-detail.tsx src/components/library/system-playlist-detail.test.tsx` passes.
 
+### Phase 9: Hearted Detail Without Playback Metrics
+
+**Goal:** Keep the Hearted playlist focused on the user's saved songs instead of playback analytics.
+
+**Tasks:**
+- [x] Hide play count and last played columns on the Hearted playlist detail.
+- [x] Hide playback-metric sort controls on the Hearted playlist detail.
+- [x] Keep Hearted queue playback in the default hearted order.
+- [x] Preserve playback metric columns and sort controls for Recently Played and Most Played.
+
+### Phase 9 Checklist
+
+- [x] Hearted detail renders local rows without metric columns.
+- [x] Hearted detail does not expose "Play count" or "Last played" sort controls.
+- [x] Hearted "Play all" still loads the currently visible hearted tracks.
+
+### Phase 9 Verification Notes
+
+- `node node_modules/vitest/vitest.mjs run src/components/library/system-playlist-detail.test.tsx` passes: 1 file, 5 tests.
+- `node node_modules/@biomejs/biome/bin/biome check --formatter-enabled=false src/components/library/system-playlist-detail.tsx src/components/library/system-playlist-detail.test.tsx` passes.
+- Full `node node_modules/typescript/bin/tsc --noEmit --pretty false` is currently blocked by an unrelated tuple spread typing error in `src/hooks/use-shortcut-dispatch.test.tsx`.
+
 ---
 
 ## 7. Out of Scope
@@ -629,6 +652,7 @@ Deletion behavior:
 | 2026-06-13 | Codex | Completed Phase 6: dedicated play-count and last-played columns plus sort controls that feed the selected queue order. |
 | 2026-06-13 | Codex | Completed Phase 7: compact system playlist cards with latest cover art and masked icon overlay. |
 | 2026-06-13 | Codex | Completed Phase 8: compact Last played formatting with same-day 24-hour time and older `yy/MM/dd` dates. |
+| 2026-06-13 | Codex | Completed Phase 9: Hearted detail stays a pure saved-songs list without playback metric columns or metric sorting. |
 
 ---
 
@@ -641,9 +665,10 @@ Deletion behavior:
 - Recently Played orders tracks by latest counted playback time.
 - Most Played supports All / Month / Week / Day range switching.
 - Most Played row metadata includes the selected range play count, including weekly counts.
-- System playlist detail rows show play count and last played time as separate columns.
-- System playlist detail "Last played" values show same-day plays as 24-hour `HH:mm` and older plays as `yy/MM/dd`.
-- System playlist detail can sort rows and queue playback by play count or last played time.
+- Recently Played and Most Played detail rows show play count and last played time as separate columns.
+- Recently Played and Most Played "Last played" values show same-day plays as 24-hour `HH:mm` and older plays as `yy/MM/dd`.
+- Recently Played and Most Played detail can sort rows and queue playback by play count or last played time.
+- Hearted detail stays a pure saved-song list without play count, last played, or metric sort controls.
 - System playlist cards render as compact pinned rows in grid mode and show the newest available local cover with a dark mask when a covered local track exists.
 - Playing a system playlist loads the currently visible derived order into the play queue.
 - Remote/shared tracks appear in Recently Played and Most Played when their local playback identity and display/playback metadata can be resolved.
