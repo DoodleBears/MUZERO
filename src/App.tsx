@@ -207,17 +207,22 @@ export default function App() {
           // without needing a left inset.
           data-tauri-drag-region
           className={cn(
-            // `-webkit-app-region:drag` makes the header drag the Electron frameless
-            // window; `data-tauri-drag-region` does the same under Tauri (both inert
-            // on the other shell + the web build).
-            "app-titlebar fixed inset-x-0 top-0 z-30 flex items-center justify-center px-4 py-3 transition-opacity duration-500 [-webkit-app-region:drag]",
+            // The transparent drag layer below owns Electron's frameless drag area.
+            // Keeping the header itself no-drag prevents the Windows controls from
+            // being swallowed by Chromium's app-region hit testing.
+            "app-titlebar fixed inset-x-0 top-0 z-30 flex items-center justify-center px-4 py-3 transition-opacity duration-500 [-webkit-app-region:no-drag]",
             ambientActive ? "" : "bg-background/80",
             (chromeHidden || foregroundHidden) && "pointer-events-none opacity-0",
           )}
         >
+          <div
+            aria-hidden="true"
+            className="absolute inset-y-0 left-0 right-36 [-webkit-app-region:drag]"
+            data-tauri-drag-region
+          />
           <button
             aria-label="MUZERO"
-            className="cursor-default border-0 bg-transparent p-0 font-semibold tracking-tight text-inherit [-webkit-app-region:no-drag]"
+            className="relative z-10 cursor-default border-0 bg-transparent p-0 font-semibold tracking-tight text-inherit [-webkit-app-region:no-drag]"
             data-no-drag
             onDoubleClick={() => void toggleDesktopMaximize()}
             type="button"

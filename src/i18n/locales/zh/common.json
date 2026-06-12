@@ -9,7 +9,8 @@
     "minimize": "最小化",
     "maximize": "最大化",
     "restore": "还原",
-    "close": "关闭"
+    "close": "关闭",
+    "fullscreenHint": "全屏快捷键"
   },
   "nav": {
     "now": "正在播放",

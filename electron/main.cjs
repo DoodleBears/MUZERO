@@ -1,7 +1,7 @@
-const { existsSync, statSync } = require("node:fs");
+const { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } = require("node:fs");
 const path = require("node:path");
 const { pathToFileURL } = require("node:url");
-const { app, BrowserWindow, Menu, net, protocol, shell } = require("electron");
+const { app, BrowserWindow, Menu, net, protocol, screen, shell } = require("electron");
 const { registerIpc } = require("./ipc.cjs");
 const { handleMuzfetch } = require("./fetch-proxy.cjs");
 const { applyAppIcon, appIconPath, DEFAULT_APP_ICON } = require("./app-icon.cjs");
@@ -13,6 +13,9 @@ const appOrigin = "app://muzero";
 const distUrl = "app://muzero/index.html";
 const isMac = process.platform === "darwin";
 const isWindows = process.platform === "win32";
+const defaultWindowBounds = { height: 780, width: 1180 };
+const minWindowBounds = { height: 600, width: 380 };
+const windowStateFileName = "window-state.json";
 
 app.setName("MUZERO");
 protocol.registerSchemesAsPrivileged([
@@ -50,7 +53,88 @@ function registerDistProtocol() {
   });
 }
 
+function windowStatePath() {
+  return path.join(app.getPath("userData"), windowStateFileName);
+}
+
+function numberOrNull(value) {
+  return Number.isFinite(value) ? Math.round(value) : null;
+}
+
+function intersectsDisplay(bounds) {
+  return screen.getAllDisplays().some(({ workArea }) => {
+    const right = bounds.x + bounds.width;
+    const bottom = bounds.y + bounds.height;
+    const displayRight = workArea.x + workArea.width;
+    const displayBottom = workArea.y + workArea.height;
+    return bounds.x < displayRight && right > workArea.x && bounds.y < displayBottom && bottom > workArea.y;
+  });
+}
+
+function normalizeWindowState(raw) {
+  if (!raw || typeof raw !== "object") return null;
+  const width = Math.max(minWindowBounds.width, numberOrNull(raw.width) ?? defaultWindowBounds.width);
+  const height = Math.max(
+    minWindowBounds.height,
+    numberOrNull(raw.height) ?? defaultWindowBounds.height,
+  );
+  const x = numberOrNull(raw.x);
+  const y = numberOrNull(raw.y);
+  const bounds = { height, width };
+  if (x != null && y != null && intersectsDisplay({ height, width, x, y })) {
+    bounds.x = x;
+    bounds.y = y;
+  }
+  return { ...bounds, maximized: raw.maximized === true };
+}
+
+function readWindowState() {
+  try {
+    const file = windowStatePath();
+    if (!existsSync(file)) return null;
+    return normalizeWindowState(JSON.parse(readFileSync(file, "utf8")));
+  } catch {
+    return null;
+  }
+}
+
+function writeWindowState(win) {
+  if (win.isDestroyed() || win.isFullScreen()) return;
+  const bounds = win.isMaximized() ? win.getNormalBounds() : win.getBounds();
+  const state = {
+    height: bounds.height,
+    maximized: win.isMaximized(),
+    width: bounds.width,
+    x: bounds.x,
+    y: bounds.y,
+  };
+  try {
+    const file = windowStatePath();
+    mkdirSync(path.dirname(file), { recursive: true });
+    writeFileSync(file, JSON.stringify(state, null, 2));
+  } catch {
+    // Best effort only; a failed write should never block app startup/shutdown.
+  }
+}
+
+function persistWindowState(win) {
+  let timer = null;
+  const schedule = () => {
+    if (timer) clearTimeout(timer);
+    timer = setTimeout(() => writeWindowState(win), 350);
+  };
+  win.on("resize", schedule);
+  win.on("move", schedule);
+  win.on("maximize", schedule);
+  win.on("unmaximize", schedule);
+  win.on("close", () => {
+    if (timer) clearTimeout(timer);
+    writeWindowState(win);
+  });
+}
+
 function createWindow() {
+  const savedWindowState = readWindowState();
   const win = new BrowserWindow({
     autoHideMenuBar: true,
     backgroundColor: isWindows ? "#00000000" : "#09090b",
@@ -58,15 +142,18 @@ function createWindow() {
     // dock icon set in app.whenReady). The renderer refines it to the saved choice.
     icon: appIconPath(DEFAULT_APP_ICON),
     frame: !isWindows,
-    height: 780,
+    height: savedWindowState?.height ?? defaultWindowBounds.height,
     hasShadow: true,
-    minHeight: 600,
-    minWidth: 380,
+    minHeight: minWindowBounds.height,
+    minWidth: minWindowBounds.width,
     show: false,
     title: "MUZERO",
     titleBarStyle: isMac ? "hiddenInset" : undefined,
     transparent: isWindows,
-    width: 1180,
+    width: savedWindowState?.width ?? defaultWindowBounds.width,
+    ...(savedWindowState?.x != null && savedWindowState?.y != null
+      ? { x: savedWindowState.x, y: savedWindowState.y }
+      : {}),
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
@@ -91,8 +178,12 @@ function createWindow() {
   win.on("unmaximize", sendWindowState);
   win.on("enter-full-screen", sendWindowState);
   win.on("leave-full-screen", sendWindowState);
+  persistWindowState(win);
 
-  win.once("ready-to-show", () => win.show());
+  win.once("ready-to-show", () => {
+    if (savedWindowState?.maximized) win.maximize();
+    win.show();
+  });
   attachDiagnosticsWindow(win);
   win.webContents.setWindowOpenHandler(({ url }) => {
     void shell.openExternal(url);
@@ -106,7 +197,9 @@ function createWindow() {
   });
 
   void win.loadURL(devUrl || distUrl);
-  if (devUrl) win.webContents.openDevTools({ mode: "detach" });
+  if (devUrl && process.env.MUZERO_ELECTRON_DEVTOOLS === "1") {
+    win.webContents.openDevTools({ mode: "detach" });
+  }
 }
 
 app.whenReady().then(() => {

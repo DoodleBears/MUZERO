@@ -9,7 +9,8 @@
     "minimize": "最小化",
     "maximize": "最大化",
     "restore": "元に戻す",
-    "close": "閉じる"
+    "close": "閉じる",
+    "fullscreenHint": "フルスクリーンのショートカット"
   },
   "nav": {
     "now": "再生中",

@@ -173,11 +173,29 @@
     isolation: isolate;
   }
 
+  html[data-desktop-shell="electron"][data-desktop-platform="win32"][data-window-maximized="true"],
+  html[data-desktop-shell="electron"][data-desktop-platform="win32"][data-window-maximized="true"]
+    body,
+  html[data-desktop-shell="electron"][data-desktop-platform="win32"][data-window-maximized="true"]
+    #root,
   html[data-desktop-shell="electron"][data-desktop-platform="win32"][data-window-maximized="true"]
     .app-shell {
-    border-radius: 0;
-    box-shadow: none;
-    clip-path: none;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    clip-path: none !important;
+  }
+
+  html[data-desktop-shell="electron"][data-desktop-platform="win32"] .app-titlebar {
+    pointer-events: auto;
+  }
+
+  html[data-desktop-shell="electron"][data-desktop-platform="win32"] .app-titlebar:hover {
+    opacity: 1;
+  }
+
+  html[data-desktop-shell="electron"][data-desktop-platform="win32"] .windows-window-controls,
+  html[data-desktop-shell="electron"][data-desktop-platform="win32"] .windows-window-controls * {
+    -webkit-app-region: no-drag;
   }
 
   .app-titlebar:hover .windows-window-controls__cluster,
@@ -248,6 +266,14 @@
   .overflow-y-scroll,
   .overflow-scroll,
   .overflow-x-auto {
+    -webkit-app-region: no-drag;
+  }
+
+  html[data-desktop-shell="electron"][data-desktop-platform="win32"] .settings-scroll-surface {
+    -webkit-app-region: drag;
+  }
+
+  html[data-desktop-shell="electron"][data-desktop-platform="win32"] .settings-scroll-surface > * {
     -webkit-app-region: no-drag;
   }
 

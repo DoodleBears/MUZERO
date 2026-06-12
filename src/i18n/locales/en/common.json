@@ -9,7 +9,8 @@
     "minimize": "Minimize",
     "maximize": "Maximize",
     "restore": "Restore",
-    "close": "Close"
+    "close": "Close",
+    "fullscreenHint": "Fullscreen shortcut"
   },
   "nav": {
     "now": "Now Playing",

@@ -449,13 +449,13 @@ export function SettingsPage() {
         {/* Left and right columns scroll independently (each owns its overflow). */}
         <div
           ref={navScrollRef}
-          className="no-scrollbar shrink-0 overflow-y-auto pt-chrome-top md:w-52 md:pb-chrome-bottom"
+          className="settings-scroll-surface no-scrollbar shrink-0 overflow-y-auto pt-chrome-top md:w-52 md:pb-chrome-bottom"
         >
           <SettingsSidebar active={activeItem} onSelect={setSettingsItem} />
         </div>
         <div
           ref={contentScrollRef}
-          className="no-scrollbar flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-y-auto pb-chrome-bottom md:pt-chrome-top"
+          className="settings-scroll-surface no-scrollbar flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-y-auto pb-chrome-bottom md:pt-chrome-top"
         >
           {activeItem === "appearance" && (
             <Card>
@@ -839,9 +839,7 @@ export function SettingsPage() {
                 </div>
                 <div className="rounded-md border border-border bg-muted/25 p-3">
                   <p className="text-muted-foreground">{t("settings.deviceUploadedSegments")}</p>
-                  <p className="font-medium text-sm">
-                    {playbackSyncSummary.uploadedSegmentCount}
-                  </p>
+                  <p className="font-medium text-sm">{playbackSyncSummary.uploadedSegmentCount}</p>
                 </div>
               </CardContent>
             </Card>

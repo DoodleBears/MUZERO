@@ -15,6 +15,9 @@ const { registerLocalMedia } = require("./local-media.cjs");
 
 /** Granted folder roots (real paths). In-memory, not persisted — re-granted on boot. */
 const allowedRoots = new Set();
+const windowMaximizedState = new WeakMap();
+const windowNormalBounds = new WeakMap();
+const windowStateTimers = new WeakMap();
 let mediaStorageRoot = null;
 
 const isWin = process.platform === "win32";
@@ -78,6 +81,37 @@ function senderWindow(event) {
   const win = BrowserWindow.fromWebContents(event.sender);
   if (!win) throw new Error("Window is no longer available");
   return win;
+}
+
+function windowState(win) {
+  const cachedMaximized = windowMaximizedState.get(win) === true;
+  return {
+    fullscreen: win.isFullScreen(),
+    maximized: cachedMaximized || win.isMaximized(),
+  };
+}
+
+function sendWindowState(win, state = windowState(win)) {
+  if (win.isDestroyed()) return;
+  win.webContents.send("muzero:window:state", state);
+}
+
+function clearWindowStateTimer(win) {
+  const timer = windowStateTimers.get(win);
+  if (timer) clearTimeout(timer);
+  windowStateTimers.delete(win);
+}
+
+function validBounds(bounds) {
+  return (
+    bounds &&
+    Number.isFinite(bounds.x) &&
+    Number.isFinite(bounds.y) &&
+    Number.isFinite(bounds.width) &&
+    Number.isFinite(bounds.height) &&
+    bounds.width > 0 &&
+    bounds.height > 0
+  );
 }
 
 async function ensureMediaStorageParent(parts) {
@@ -232,12 +266,32 @@ function registerIpc() {
 
   ipcMain.handle("muzero:window:toggleMaximize", (event) => {
     const win = senderWindow(event);
-    if (win.isMaximized()) {
+    clearWindowStateTimer(win);
+    const shouldRestore = windowMaximizedState.get(win) === true || win.isMaximized();
+    const expectedMaximized = !shouldRestore;
+    if (shouldRestore) {
+      const restoreBounds = windowNormalBounds.get(win) ?? win.getNormalBounds();
+      windowMaximizedState.set(win, false);
       win.unmaximize();
+      win.restore();
+      if (validBounds(restoreBounds)) {
+        win.setBounds(restoreBounds, true);
+      }
     } else {
+      windowNormalBounds.set(win, win.getBounds());
+      windowMaximizedState.set(win, true);
       win.maximize();
     }
-    return { fullscreen: win.isFullScreen(), maximized: win.isMaximized() };
+    const state = { fullscreen: win.isFullScreen(), maximized: expectedMaximized };
+    sendWindowState(win, state);
+    const timer = setTimeout(() => {
+      if (win.isDestroyed()) return;
+      windowMaximizedState.set(win, expectedMaximized);
+      sendWindowState(win, { fullscreen: win.isFullScreen(), maximized: expectedMaximized });
+      windowStateTimers.delete(win);
+    }, 120);
+    windowStateTimers.set(win, timer);
+    return state;
   });
 
   ipcMain.handle("muzero:window:close", (event) => {
@@ -246,7 +300,7 @@ function registerIpc() {
 
   ipcMain.handle("muzero:window:getState", (event) => {
     const win = senderWindow(event);
-    return { fullscreen: win.isFullScreen(), maximized: win.isMaximized() };
+    return windowState(win);
   });
 }
 

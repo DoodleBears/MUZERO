@@ -9,7 +9,8 @@
     "minimize": "최소화",
     "maximize": "최대화",
     "restore": "복원",
-    "close": "닫기"
+    "close": "닫기",
+    "fullscreenHint": "전체 화면 단축키"
   },
   "nav": {
     "now": "재생 중",
