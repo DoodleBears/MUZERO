@@ -64,8 +64,12 @@ function createTrayController({ app, iconPath, Menu, platform, Tray }) {
     return true;
   }
 
-  function quitApp() {
+  function markQuitting() {
     isQuitting = true;
+  }
+
+  function quitApp() {
+    markQuitting();
     app.quit();
   }
 
@@ -111,6 +115,7 @@ function createTrayController({ app, iconPath, Menu, platform, Tray }) {
     hasTray,
     hideToTray,
     isQuitting: () => isQuitting,
+    markQuitting,
     onAction,
     quitApp,
     showWindow,

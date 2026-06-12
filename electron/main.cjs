@@ -285,6 +285,9 @@ app.whenReady().then(() => {
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") app.quit();
 });
+app.on("before-quit", () => {
+  trayController.markQuitting();
+});
 app.on("activate", () => {
   const [win] = BrowserWindow.getAllWindows();
   if (win) {

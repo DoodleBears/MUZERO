@@ -87,6 +87,21 @@ describe("createTrayController", () => {
     expect(win.hide).not.toHaveBeenCalled();
   });
 
+  it("lets native app quit close the window after before-quit", () => {
+    const { app, controller } = createHarness("darwin");
+    const win = createFakeWindow();
+    controller.attachWindow(win);
+    controller.ensureTray();
+
+    controller.markQuitting();
+    const event = { preventDefault: vi.fn() };
+    win.emit("close", event);
+
+    expect(app.quit).not.toHaveBeenCalled();
+    expect(event.preventDefault).not.toHaveBeenCalled();
+    expect(win.hide).not.toHaveBeenCalled();
+  });
+
   it("keeps native close recoverable if tray creation fails", () => {
     const app = { quit: vi.fn() };
     const Menu = { buildFromTemplate: vi.fn((template) => ({ template })) };
