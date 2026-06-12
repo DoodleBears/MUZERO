@@ -700,9 +700,8 @@ export interface AppSettings {
   /** Lyric text outline opacity, 0–100. Default 100. */
   lyricsStrokeOpacity?: number;
   /**
-   * Smooth scrolling (Lenis) master toggle. `undefined` = follow the platform
-   * default (`!isMac()`): on for non-macOS, off on macOS where the trackpad is
-   * already smooth. Overridden to off by `prefers-reduced-motion`.
+   * Smooth scrolling (Lenis) master toggle. `undefined` = off. The OS
+   * reduced-motion setting does not override this explicit MUZERO preference.
    */
   smoothScroll?: boolean;
   /**
@@ -718,6 +717,16 @@ export interface AppSettings {
    * {@link AppIconId} + use-app-icon.ts.
    */
   appIcon?: AppIconId;
+  /** Electron frameless-window corner radius in px. */
+  electronWindowRadius?: number;
+  /** Electron frameless-window border width in px. */
+  electronWindowBorderWidth?: number;
+  /** Electron frameless-window border color source. */
+  electronWindowBorderColorMode?: "cover" | "custom";
+  /** Electron frameless-window border color as hex. */
+  electronWindowBorderColor?: string;
+  /** Electron frameless-window border opacity, 0–100. */
+  electronWindowBorderOpacity?: number;
   /** Primary/accent color (hex) for light mode. Mirrors localStorage `muzero-primary-light`. */
   primaryLight?: string;
   /** Primary/accent color (hex) for dark mode. Mirrors localStorage `muzero-primary-dark`. */
@@ -761,15 +770,16 @@ export interface AppSettings {
    */
   shortcutOverrides?: Record<string, ShortcutGesture[]>;
   /**
-   * Auto-fetch lyrics from LRCLIB for uploaded/streamed tracks (synced-lyrics
-   * PRD). Sends title/artist to lrclib.net; a visible Settings toggle (rule 3),
-   * default on. Generated tracks use their own brief.lyrics and never fetch.
+   * Auto-fetch lyrics for uploaded/streamed tracks (synced-lyrics PRD). Sends
+   * title/artist to the visible lyrics source(s) selected below; default on.
+   * Generated tracks use their own brief.lyrics and never fetch.
    */
   autoFetchLyrics?: boolean;
   /**
-   * Which lyrics source to use (visible Settings dropdown, rule 3). Default
-   * `lrclib`. Streamed NetEase tracks always use NetEase regardless (their songId
-   * gives the exact official lyrics) — see `resolveLyricsProviderForTrack`.
+   * Which lyrics source strategy to use (visible Settings dropdown, rule 3).
+   * Default `auto` tries suitable sources in order. Streamed NetEase tracks with
+   * a concrete source choice still use an exact NetEase/AMLL path because their
+   * songId identifies the official lyrics — see `resolveLyricsProviderForTrack`.
    */
   lyricsProviderId?: LyricsProviderId;
 }
@@ -860,9 +870,14 @@ export const DEFAULT_SETTINGS: AppSettings = {
   locale: "en",
   autoFetchLyrics: true,
   autoCacheStreamed: true,
-  lyricsProviderId: "lrclib",
+  lyricsProviderId: "auto",
   theme: "dark",
-  appIcon: "light",
+  appIcon: "dark",
+  electronWindowRadius: 12,
+  electronWindowBorderWidth: 6,
+  electronWindowBorderColorMode: "cover",
+  electronWindowBorderColor: "#ffffff",
+  electronWindowBorderOpacity: 10,
   backgroundMode: "cover",
   backgroundRenderer: "noise",
   backgroundPixelSize: 12,
@@ -926,7 +941,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   lyricsStrokeColorMode: "custom",
   lyricsStrokeColor: "#000000",
   lyricsStrokeOpacity: 100,
-  playerRepeatMode: "off",
+  playerRepeatMode: "all",
   playerShuffle: false,
   presenceEnabled: false,
 };

@@ -3,6 +3,7 @@
 import { motion, useAnimation, type Variants } from "motion/react";
 import type { HTMLAttributes } from "react";
 import { forwardRef, useCallback, useImperativeHandle, useRef } from "react";
+import { IconMotion } from "@/components/ui/icon-motion";
 import { cn } from "@/lib/utils";
 
 export interface BookmarkPlusIconHandle {
@@ -74,48 +75,50 @@ const BookmarkPlusIcon = forwardRef<BookmarkPlusIconHandle, BookmarkPlusIconProp
         onMouseLeave={handleMouseLeave}
         {...props}
       >
-        <svg
-          fill="none"
-          height={size}
-          stroke="currentColor"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          strokeWidth="2"
-          viewBox="0 0 24 24"
-          width={size}
-          xmlns="http://www.w3.org/2000/svg"
-        >
-          <motion.path
-            animate={controls}
-            d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"
-            style={{ originX: 0.5, originY: 0.5 }}
-            variants={BOOKMARK_VARIANTS}
-          />
-          <motion.line
-            animate={controls}
-            custom={0}
-            initial="normal"
-            pathLength="1"
-            strokeDasharray="1 1"
-            variants={PLUS_LINE_VARIANTS}
-            x1="12"
-            x2="12"
-            y1="7"
-            y2="13"
-          />
-          <motion.line
-            animate={controls}
-            custom={1}
-            initial="normal"
-            pathLength="1"
-            strokeDasharray="1 1"
-            variants={PLUS_LINE_VARIANTS}
-            x1="15"
-            x2="9"
-            y1="10"
-            y2="10"
-          />
-        </svg>
+        <IconMotion>
+          <svg
+            fill="none"
+            height={size}
+            stroke="currentColor"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth="2"
+            viewBox="0 0 24 24"
+            width={size}
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <motion.path
+              animate={controls}
+              d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"
+              style={{ originX: 0.5, originY: 0.5 }}
+              variants={BOOKMARK_VARIANTS}
+            />
+            <motion.line
+              animate={controls}
+              custom={0}
+              initial="normal"
+              pathLength="1"
+              strokeDasharray="1 1"
+              variants={PLUS_LINE_VARIANTS}
+              x1="12"
+              x2="12"
+              y1="7"
+              y2="13"
+            />
+            <motion.line
+              animate={controls}
+              custom={1}
+              initial="normal"
+              pathLength="1"
+              strokeDasharray="1 1"
+              variants={PLUS_LINE_VARIANTS}
+              x1="15"
+              x2="9"
+              y1="10"
+              y2="10"
+            />
+          </svg>
+        </IconMotion>
       </div>
     );
   },

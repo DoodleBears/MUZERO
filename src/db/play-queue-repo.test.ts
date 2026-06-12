@@ -37,7 +37,7 @@ describe("playQueue repo", () => {
     expect(pq.id).toBe("main");
     expect(pq.entries).toEqual([]);
     expect(pq.currentIndex).toBe(-1);
-    expect(pq.repeat).toBe("off");
+    expect(pq.repeat).toBe("all");
   });
 
   it("playQueueSet replaces all entries, sets index + context, persists", async () => {

@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { canViewTransition, prefersReducedMotion, startViewTransition } from "./view-transition";
+import { canViewTransition, startViewTransition } from "./view-transition";
 
-// jsdom has neither `document.startViewTransition` nor `window.matchMedia`, so we
-// stub them per-test to exercise each branch of the progressive-enhancement logic.
+// jsdom has no `document.startViewTransition`, so we stub it per-test to exercise
+// each branch of the progressive-enhancement logic.
 // lib.dom types `startViewTransition` as non-optional, so reach it through a loose
 // shape (cast via unknown) to set/clear it freely in tests.
 
@@ -13,18 +13,6 @@ function stubStartViewTransition(impl?: (cb: () => void) => void): void {
     impl?.(cb);
     return { finished: Promise.resolve(), ready: Promise.resolve() };
   });
-}
-
-function stubReducedMotion(matches: boolean): void {
-  vi.stubGlobal(
-    "matchMedia",
-    vi.fn((query: string) => ({
-      matches: query.includes("reduce") ? matches : false,
-      media: query,
-      addEventListener: vi.fn(),
-      removeEventListener: vi.fn(),
-    })),
-  );
 }
 
 const CHROMIUM_UA =
@@ -48,25 +36,31 @@ describe("canViewTransition", () => {
     expect(canViewTransition()).toBe(false);
   });
 
-  it("is true on a Chromium engine when the API exists and motion is allowed", () => {
+  it("is true on a Chromium engine when the API exists", () => {
     stubStartViewTransition();
-    stubReducedMotion(false);
     stubUserAgent(CHROMIUM_UA);
     expect(canViewTransition()).toBe(true);
   });
 
   it("is false on a WebKit shell even when the API exists (WKWebView flicker)", () => {
     stubStartViewTransition();
-    stubReducedMotion(false);
     stubUserAgent(WEBKIT_UA);
     expect(canViewTransition()).toBe(false);
   });
 
-  it("is false when the user prefers reduced motion, even on Chromium", () => {
+  it("ignores reduced-motion preferences on Chromium", () => {
     stubStartViewTransition();
-    stubReducedMotion(true);
+    vi.stubGlobal(
+      "matchMedia",
+      vi.fn((query: string) => ({
+        matches: query.includes("reduce"),
+        media: query,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+      })),
+    );
     stubUserAgent(CHROMIUM_UA);
-    expect(canViewTransition()).toBe(false);
+    expect(canViewTransition()).toBe(true);
   });
 });
 
@@ -79,7 +73,6 @@ describe("startViewTransition", () => {
 
   it("wraps the update in the native API on a Chromium engine", () => {
     stubStartViewTransition((cb) => cb());
-    stubReducedMotion(false);
     stubUserAgent(CHROMIUM_UA);
     const update = vi.fn();
     startViewTransition(update);
@@ -89,7 +82,6 @@ describe("startViewTransition", () => {
 
   it("bypasses the native API on a WebKit shell (runs update directly)", () => {
     stubStartViewTransition((cb) => cb());
-    stubReducedMotion(false);
     stubUserAgent(WEBKIT_UA);
     const update = vi.fn();
     startViewTransition(update);
@@ -97,24 +89,21 @@ describe("startViewTransition", () => {
     expect(update).toHaveBeenCalledTimes(1);
   });
 
-  it("bypasses the native API (runs update directly) under reduced motion", () => {
+  it("wraps the update in the native API under reduced motion on Chromium", () => {
     stubStartViewTransition((cb) => cb());
-    stubReducedMotion(true);
+    vi.stubGlobal(
+      "matchMedia",
+      vi.fn((query: string) => ({
+        matches: query.includes("reduce"),
+        media: query,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+      })),
+    );
     stubUserAgent(CHROMIUM_UA);
     const update = vi.fn();
     startViewTransition(update);
-    expect(doc.startViewTransition).not.toHaveBeenCalled();
+    expect(doc.startViewTransition).toHaveBeenCalledTimes(1);
     expect(update).toHaveBeenCalledTimes(1);
-  });
-});
-
-describe("prefersReducedMotion", () => {
-  it("is false when matchMedia is unavailable", () => {
-    expect(prefersReducedMotion()).toBe(false);
-  });
-
-  it("reflects the reduce media query", () => {
-    stubReducedMotion(true);
-    expect(prefersReducedMotion()).toBe(true);
   });
 });

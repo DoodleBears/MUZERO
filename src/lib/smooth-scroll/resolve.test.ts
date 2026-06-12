@@ -24,7 +24,7 @@ describe("resolveSmoothScroll — enabled decision (PRD §3.2 truth table)", () 
     expect(d.enabled).toBe(false);
   });
 
-  it("undefined preference + reduced-motion → disabled on non-macOS", () => {
+  it("undefined preference remains disabled on non-macOS", () => {
     const d = resolveSmoothScroll({ smoothScroll: undefined }, WIN);
     expect(d.preference).toBe(false);
     expect(d.enabled).toBe(false);
@@ -36,7 +36,7 @@ describe("resolveSmoothScroll — enabled decision (PRD §3.2 truth table)", () 
     expect(d.enabled).toBe(true);
   });
 
-  it("explicit true stays enabled under reduced-motion", () => {
+  it("explicit true stays enabled", () => {
     const d = resolveSmoothScroll({ smoothScroll: true }, WIN);
     expect(d.preference).toBe(true);
     expect(d.enabled).toBe(true);
@@ -47,7 +47,7 @@ describe("resolveSmoothScroll — enabled decision (PRD §3.2 truth table)", () 
     expect(resolveSmoothScroll({ smoothScroll: false }, MAC).enabled).toBe(false);
   });
 
-  it("reduced-motion does not affect the Settings toggle or runtime state", () => {
+  it("keeps the Settings toggle and runtime state aligned", () => {
     const d = resolveSmoothScroll({ smoothScroll: undefined }, WIN);
     expect(d.preference).toBe(false);
     expect(d.enabled).toBe(false);

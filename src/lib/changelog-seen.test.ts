@@ -24,18 +24,16 @@ describe("latestOf", () => {
 });
 
 describe("resolveChangelogAutoOpen", () => {
-  it("first-ever install: seeds lastSeen to latest and does NOT open (no backlog wall)", () => {
+  it("first-ever visit: opens with every release, newest-first", () => {
     const d = resolveChangelogAutoOpen(RELEASES, null);
-    expect(d.open).toBe(false);
-    expect(d.unseen).toEqual([]);
-    expect(d.seedLastSeen).toBe("0.7.0");
+    expect(d.open).toBe(true);
+    expect(d.unseen.map((r) => r.version)).toEqual(["0.7.0", "0.6.0", "0.5.0"]);
   });
 
   it("returning visit with a gap: opens with all unseen releases, newest-first", () => {
     const d = resolveChangelogAutoOpen(RELEASES, "0.5.0");
     expect(d.open).toBe(true);
     expect(d.unseen.map((r) => r.version)).toEqual(["0.7.0", "0.6.0"]);
-    expect(d.seedLastSeen).toBeNull();
   });
 
   it("already up to date: does not open", () => {
@@ -48,7 +46,6 @@ describe("resolveChangelogAutoOpen", () => {
     expect(resolveChangelogAutoOpen([], null)).toEqual({
       open: false,
       unseen: [],
-      seedLastSeen: null,
     });
   });
 });

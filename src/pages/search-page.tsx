@@ -97,6 +97,7 @@ import {
   type SortDir,
   sortSets,
 } from "@/lib/set-gallery";
+import { isMac, modifierSymbol } from "@/lib/shortcuts";
 import { useSmoothScroll } from "@/lib/smooth-scroll/use-smooth-scroll";
 import {
   deriveHeartedPlaylist,
@@ -140,7 +141,7 @@ const GALLERY_TAB_ACTIONS: ReadonlyArray<readonly [string, GalleryMode]> = [
 ];
 const SEARCH_PLACEHOLDER_KEY = {
   sets: "gallery.searchSets",
-  tracks: "gallery.searchTracks",
+  tracks: "gallery.searchTracksGlobalHint",
   albums: "gallery.searchAlbums",
   artists: "gallery.searchArtists",
 } as const satisfies Record<GalleryMode, string>;
@@ -207,6 +208,7 @@ type CommonT = TFunction<"common", undefined>;
  */
 export function SearchPage() {
   const { t } = useTranslation();
+  const globalSearchShortcut = `${modifierSymbol(isMac())}+F`;
   // Backfill blurred previews + visualizer palettes for legacy/imported covers.
   useCoverMetadataBackfill();
   const [selectedSetId, setSelectedSetId] = useState<string | null>(null);
@@ -727,6 +729,7 @@ export function SearchPage() {
       seedPrompt: "",
       config: { autoExtend: false },
     });
+    clearCoverMorphBeforeTransition();
     transitionState(() => setSelectedSetId(s.id));
   }
 
@@ -744,12 +747,15 @@ export function SearchPage() {
     if (canViewTransition()) flushSync(() => setMorphKey(ns));
   }
 
-  // Leaving a detail (back, or hopping artist → album): drop the morph name BEFORE
-  // the snapshot so the detail cover doesn't animate one-sidedly — the returning
-  // wall card is virtualized away at snapshot time, so there's nothing to pair
-  // with, and a plain cross-fade reads cleaner than a lone cover scaling out.
-  function leaveDetail(update: () => void) {
+  function clearCoverMorphBeforeTransition() {
     if (canViewTransition() && morphKey) flushSync(() => setMorphKey(null));
+  }
+
+  // Leaving a detail keeps the current morph key through the transition so the
+  // detail cover can pair with the returning wall card. The wall restores its
+  // scroll position as it mounts; keeping the name is what makes Back mirror Enter
+  // instead of falling back to only the root cross-fade.
+  function leaveDetail(update: () => void) {
     transitionState(update);
   }
 
@@ -762,6 +768,7 @@ export function SearchPage() {
   }
   function openSystemPlaylist(id: SystemPlaylistId) {
     returnFocusKeyRef.current = id;
+    clearCoverMorphBeforeTransition();
     transitionState(() => setSelectedSystemPlaylistId(id));
   }
   function openArtist(key: string) {
@@ -775,15 +782,29 @@ export function SearchPage() {
     transitionState(() => setSelectedAlbumKey(key));
   }
 
+  function openAlbumFromArtist(key: string) {
+    beginCoverMorph(`album:${key}`);
+    transitionState(() => {
+      setSelectedArtistKey(null);
+      setSelectedAlbumKey(key);
+    });
+  }
+
   // Wall scroll container: adopt it as state so the grids re-render with a live
   // scroller the instant it attaches. Scroll-position restore is owned by the grid
   // (`restoreScrollTop`), which waits until its row estimate is known so a deep
   // offset isn't clamped against a not-yet-measured page. Re-focusing the card we
   // came from is owned by the grid too (`initialFocusKey`).
-  const attachWall = useCallback((node: HTMLDivElement | null) => {
-    wallScrollRef.current = node;
-    setWallScrollEl(node);
-  }, []);
+  const attachWall = useCallback(
+    (node: HTMLDivElement | null) => {
+      wallScrollRef.current = node;
+      if (node && mode !== "tracks") {
+        node.scrollTop = wallScrollTops.current[mode] || 0;
+      }
+      setWallScrollEl(node);
+    },
+    [mode],
+  );
 
   // Scroll a wall card into view (it may be virtualized away) and focus it.
   const focusGalleryCard = useCallback((key: string | undefined) => {
@@ -931,12 +952,8 @@ export function SearchPage() {
         lastPlayed={lastPlayedByTrack}
         memoryNotes={memoryNotes}
         coverViewTransitionName={coverMorphName(`artist:${selectedArtist.key}`)}
-        onOpenAlbum={(key) =>
-          leaveDetail(() => {
-            setSelectedArtistKey(null);
-            setSelectedAlbumKey(key);
-          })
-        }
+        albumCoverViewTransitionName={(key) => coverMorphName(`album:${key}`)}
+        onOpenAlbum={openAlbumFromArtist}
         onBack={() => leaveDetail(() => setSelectedArtistKey(null))}
       />
     );
@@ -1012,7 +1029,7 @@ export function SearchPage() {
             <Input
               value={query}
               onChange={(e) => setQueryForMode(e.target.value)}
-              placeholder={t(SEARCH_PLACEHOLDER_KEY[mode])}
+              placeholder={t(SEARCH_PLACEHOLDER_KEY[mode], { shortcut: globalSearchShortcut })}
               className="pl-9"
               data-muzero-search-input
               onKeyDown={onSearchKeyDown}
@@ -1027,6 +1044,7 @@ export function SearchPage() {
               <Plus className="size-4" /> {t("gallery.newSet")}
             </Button>
           )}
+          {mode === "tracks" && <AddTracksMenu size="default" className="h-10 sm:h-10" />}
           {mode !== "tracks" && <ViewToggleGroup view={activeWallView} onChange={setViewPref} />}
         </div>
       </div>
@@ -1185,7 +1203,7 @@ export function SearchPage() {
             facetArtistItems.length === 0 &&
             facetAlbumItems.length === 0 ? (
               isEmptyTrackLibrary ? (
-                <LibraryImportEmptyState className="mt-10" />
+                <LibraryImportEmptyState className="mt-10" showAddTracks={false} />
               ) : (
                 <p className="mt-12 text-center text-sm text-muted-foreground">
                   {t("gallery.tracksEmpty")}
@@ -1205,7 +1223,6 @@ export function SearchPage() {
                       emptyHint={t("gallery.tracksEmpty")}
                       listClassName="chrome-fade no-scrollbar pt-1.5 pb-chrome-bottom [--chrome-fade-top:0.75rem]"
                       className="flex-1"
-                      startActions={<AddTracksMenu />}
                       listHeader={
                         <>
                           {/* Sort + 红心 filter, then any search facets — these scroll
@@ -2106,11 +2123,7 @@ function SetCard({
             style={
               coverViewTransitionName ? { viewTransitionName: coverViewTransitionName } : undefined
             }
-          >
-            {item.likedCount > 0 && (
-              <Heart className="absolute right-2 top-2 size-4 fill-primary text-primary" />
-            )}
-          </CoverImage>
+          />
           <span className="min-w-0">
             <span className="block truncate text-sm font-medium">{item.session.name}</span>
             <span className="block text-xs text-muted-foreground">{count}</span>
@@ -2140,9 +2153,6 @@ function SetCard({
             <span className="block truncate text-sm font-medium">{item.session.name}</span>
             <span className="block truncate text-xs text-muted-foreground">{count}</span>
           </span>
-          {item.likedCount > 0 && (
-            <Heart className="me-8 size-4 shrink-0 fill-primary text-primary" />
-          )}
         </button>
         {playBtn}
       </>

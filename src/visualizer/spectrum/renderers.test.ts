@@ -46,7 +46,6 @@ function makeContext(analyser: AnalyserNode | null, active: boolean): Visualizer
     getAnalyser: () => analyser,
     primary: () => ({ r: 191, g: 131, b: 254 }),
     active: () => active,
-    reducedMotion: () => false,
     options: {
       detail: 1,
       intensity: 1,

@@ -113,7 +113,7 @@ function largeImageBlob(type = "image/jpeg") {
 describe("settings", () => {
   it("defaults and persists player repeat/shuffle toggles", async () => {
     expect(await getSettings(db)).toMatchObject({
-      playerRepeatMode: "off",
+      playerRepeatMode: "all",
       playerShuffle: false,
     });
 

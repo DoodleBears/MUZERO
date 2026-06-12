@@ -11,12 +11,6 @@
  * to the matching elements; local control animations still use Motion.
  */
 
-/** True when the user has asked the OS to reduce motion. */
-export function prefersReducedMotion(): boolean {
-  if (typeof window === "undefined" || typeof window.matchMedia !== "function") return false;
-  return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-}
-
 /**
  * Chromium-class engine sniff. Electron / WebView2 / Chrome / Edge carry a
  * `Chrome/`, `Chromium/`, or `Edg/` product token; WebKit shells (WKWebView,
@@ -30,13 +24,12 @@ function isChromiumEngine(): boolean {
 
 /**
  * Native page / shared-element view transitions are available — the API exists,
- * motion isn't reduced, and we're on a Chromium-class engine (not a WebKit shell).
+ * and we're on a Chromium-class engine (not a WebKit shell).
  */
 export function canViewTransition(): boolean {
   if (typeof document === "undefined" || typeof document.startViewTransition !== "function") {
     return false;
   }
-  if (prefersReducedMotion()) return false;
   return isChromiumEngine();
 }
 

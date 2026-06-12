@@ -33,17 +33,6 @@ vi.mock("@/hooks/use-app-data", () => ({ useSettings: () => state.settings }));
 import { __activeCount, __resetDriver } from "./lenis-driver";
 import { useSmoothScroll } from "./use-smooth-scroll";
 
-function stubMatchMedia(reduced: boolean) {
-  vi.stubGlobal(
-    "matchMedia",
-    vi.fn(() => ({
-      matches: reduced,
-      addEventListener: vi.fn(),
-      removeEventListener: vi.fn(),
-    })),
-  );
-}
-
 /** Render the hook against a real detached element (with a content child). */
 function renderOnElement() {
   const el = document.createElement("div");
@@ -58,7 +47,6 @@ beforeEach(() => {
   lenisInstances.length = 0;
   state.isMac = false;
   state.settings = {};
-  stubMatchMedia(false);
   // The hook requires a real-browser env (ResizeObserver). jsdom lacks it, so
   // stub it here — the mocked Lenis ignores it, we just need the guard to pass.
   vi.stubGlobal(
@@ -100,9 +88,8 @@ describe("useSmoothScroll — lifecycle", () => {
     expect(__activeCount()).toBe(0);
   });
 
-  it("constructs Lenis when explicitly enabled, even when reduced-motion is on", () => {
+  it("constructs Lenis when explicitly enabled", () => {
     state.settings = { smoothScroll: true };
-    stubMatchMedia(true);
     const { result } = renderOnElement();
     expect(lenisInstances).toHaveLength(1);
     expect(result.current.lenisRef.current).toBe(lenisInstances[0]);

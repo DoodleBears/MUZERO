@@ -7,7 +7,7 @@
 export const APP_ICONS = ["light", "dark", "sketch", "monogram", "split"] as const;
 export type AppIconId = (typeof APP_ICONS)[number];
 
-export const DEFAULT_APP_ICON: AppIconId = "light";
+export const DEFAULT_APP_ICON: AppIconId = "dark";
 export const APP_ICON_STORAGE_KEY = "muzero-app-icon";
 
 export function isAppIconId(value: unknown): value is AppIconId {

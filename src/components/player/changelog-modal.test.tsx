@@ -33,12 +33,11 @@ describe("ChangelogModal", () => {
     );
   });
 
-  it("first-ever install: stays closed but seeds lastSeen to the latest version", async () => {
+  it("first-ever visit: opens with the full bundled history and does not seed lastSeen", async () => {
     render(<ChangelogModal />);
-    await waitFor(() => expect(getLastSeenVersion()).toBe(latestVersion));
-    expect(
-      screen.queryByText("Faster imports and a cleaner desktop shell"),
-    ).not.toBeInTheDocument();
+    expect(await screen.findByText("An AI DJ and a player in one")).toBeInTheDocument();
+    expect(screen.getByText("Faster imports and a cleaner desktop shell")).toBeInTheDocument();
+    expect(getLastSeenVersion()).toBeNull();
   });
 
   it("opens the FULL history on the open event", async () => {
@@ -50,11 +49,21 @@ describe("ChangelogModal", () => {
     expect(screen.getByText("Immersive, fluid, and self-updating")).toBeInTheDocument();
   });
 
-  it("acknowledges up to the latest version when dismissed", async () => {
+  it("acknowledges up to the latest version only when closed until next update", async () => {
     localStorage.setItem(SEEN_KEY, "0.5.0");
     render(<ChangelogModal />);
-    const gotIt = await screen.findByRole("button", { name: "Got it" });
-    fireEvent.click(gotIt);
+    const closeUntilNextUpdate = await screen.findByRole("button", {
+      name: "Close until next update",
+    });
+    fireEvent.click(closeUntilNextUpdate);
     await waitFor(() => expect(getLastSeenVersion()).toBe(latestVersion));
+  });
+
+  it("keeps the last-seen version unchanged when closed temporarily", async () => {
+    localStorage.setItem(SEEN_KEY, "0.5.0");
+    render(<ChangelogModal />);
+    const close = await screen.findByRole("button", { name: "Close" });
+    fireEvent.click(close);
+    await waitFor(() => expect(getLastSeenVersion()).toBe("0.5.0"));
   });
 });

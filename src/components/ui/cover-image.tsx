@@ -39,7 +39,7 @@ export function resetDecodedCoverUrls(): void {
  *    `url` at all (never during the brief load window).
  *  - The real `<img>` is layered above and fades `opacity 0→1` on load. The fade
  *    is a **CSS** transition (works when a tab is backgrounded and rAF is
- *    throttled) and is disabled under `prefers-reduced-motion`.
+ *    throttled), so it survives even when app-level rAF work is paused.
  *  - An image the browser already has decoded (a cache hit from the cross-mount
  *    `coverUrlCache`) reports `complete` on mount, so we start `loaded`, skip the
  *    fade, and never even paint the preview — an instant cover doesn't animate.
@@ -138,7 +138,7 @@ export function CoverImage({
             setLoadedUrl(url);
           }}
           className={cn(
-            "relative size-full object-cover transition-opacity duration-200 ease-out motion-reduce:transition-none",
+            "relative size-full object-cover transition-opacity duration-200 ease-out",
             loaded ? "opacity-100" : "opacity-0",
             imgClassName,
           )}

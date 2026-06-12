@@ -512,7 +512,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   positionSec: 0,
   durationSec: 0,
   volume: 0.9,
-  repeat: "off",
+  repeat: "all",
   shuffle: false,
   displayMode: "video",
   djEnabled: true,
@@ -1939,7 +1939,7 @@ async function hydratePlaybackSettings(
   if (playbackSettingsLoaded) return;
   playbackSettingsLoaded = true;
   const settings = await getSettings();
-  const repeat = settings.playerRepeatMode ?? "off";
+  const repeat = settings.playerRepeatMode ?? "all";
   const shuffle = settings.playerShuffle ?? false;
   set({ repeat, shuffle });
   shuffleOrder = shuffle ? buildShuffleOrder(get().queue.length, get().currentIndex) : [];

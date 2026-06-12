@@ -24,7 +24,7 @@ const groups = [
     commands: [
       ["dev", `Web dev in the browser, fastest loop (${devUrl})`],
       ["desktop", `Tauri DESKTOP hot reload — runs alongside 'make dev' (port ${desktopPort})`],
-      ["electron-dev", `Electron (primary shell) against existing Vite dev URL (${devUrl})`],
+      ["electron-dev", `Electron dev shell; starts/reuses Vite at ${devUrl}`],
       ["ios", "Run on iOS simulator/device (needs Xcode; run ios-init once)"],
       ["ios-init", "Generate the iOS project (one-time)"],
       ["android", "Run on Android emulator/device (needs SDK/NDK; run android-init once)"],

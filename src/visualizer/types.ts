@@ -36,8 +36,6 @@ export interface VisualizerContext {
   smoothPrimary?: () => boolean;
   /** Whether audio is currently playing (idle visuals when false). */
   active: () => boolean;
-  /** OS reduced-motion preference (renderers may calm their motion). */
-  reducedMotion: () => boolean;
   /** Where this visualizer is rendered. Background renderers may fill more space. */
   placement?: VisualizerPlacement;
   /** User-tunable visual parameters resolved from Settings. */

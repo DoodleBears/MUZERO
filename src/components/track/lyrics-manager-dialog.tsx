@@ -16,7 +16,7 @@ import { clearTrackLyrics, getTrackLyrics, setTrackLyrics } from "@/db/repositor
 import type { Track } from "@/db/types";
 import { useSettings } from "@/hooks/use-app-data";
 import { useLyricsSearch } from "@/hooks/use-lyrics-search";
-import { lyricsRecordFromHit } from "@/lyrics/auto-fetch";
+import { lyricsRecordFromHit, lyricsSourceForProvider } from "@/lyrics/auto-fetch";
 import { buildLyricsQuery } from "@/lyrics/build-query";
 import { lyricsRecordFromManualText } from "@/lyrics/manual";
 import type { LyricsHit } from "@/lyrics/provider";
@@ -95,7 +95,7 @@ function LyricsManagerBody({ track, onDone }: { track: Track; onDone: () => void
         const hit = await provider.fetch(q);
         await setTrackLyrics({
           trackId: track.id,
-          record: lyricsRecordFromHit(hit, provider.id),
+          record: lyricsRecordFromHit(hit, hit?.source ?? lyricsSourceForProvider(provider.id)),
           matched: hit?.matched,
         });
       } catch {

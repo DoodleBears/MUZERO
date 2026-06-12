@@ -18,17 +18,10 @@ const ReactiveScene = lazy(() => import("./scene/reactive-scene"));
 
 /**
  * Whether the rAF loop should run. We pause when the tab is hidden or when the
- * canvas is scrolled off-screen. OS reduced-motion is intentionally ignored here:
- * the visualizer is a user-toggleable playback surface, not a navigation
- * transition, and it should keep reflecting audio when Windows animation effects
- * are disabled.
+ * canvas is scrolled off-screen. OS reduced-motion is not part of this decision:
+ * the visualizer is a user-toggleable playback surface.
  */
-export function shouldAnimate(s: {
-  active: boolean;
-  hidden: boolean;
-  onscreen: boolean;
-  reducedMotion: boolean;
-}): boolean {
+export function shouldAnimate(s: { active: boolean; hidden: boolean; onscreen: boolean }): boolean {
   return s.active && !s.hidden && s.onscreen;
 }
 
@@ -89,7 +82,6 @@ function SpectrumCanvas({
           : readPrimaryRgb(canvas),
       smoothPrimary: () => coverColor,
       active: () => activeRef.current,
-      reducedMotion: () => false,
       placement,
       options: renderOptions,
     });
@@ -135,7 +127,6 @@ function SpectrumCanvas({
         active: activeRef.current,
         hidden: typeof document !== "undefined" && document.hidden,
         onscreen,
-        reducedMotion: false,
       });
       if (animate && !running) {
         running = true;

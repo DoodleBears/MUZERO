@@ -12,7 +12,13 @@ import { getTrackLyrics, setTrackLyrics } from "@/db/repositories";
 import type { AppSettings, Track, TrackLyrics } from "@/db/types";
 import { log } from "@/lib/logger";
 import { buildLyricsQuery } from "./build-query";
-import type { LyricsHit, LyricsProvider, LyricsRecord, LyricsSource } from "./provider";
+import type {
+  LyricsHit,
+  LyricsProvider,
+  LyricsProviderId,
+  LyricsRecord,
+  LyricsSource,
+} from "./provider";
 
 /** Whether we should hit the network for this track right now. Pure. */
 export function shouldAutoFetchLyrics(
@@ -49,6 +55,10 @@ export function lyricsRecordFromHit(
   };
 }
 
+export function lyricsSourceForProvider(id: LyricsProviderId): LyricsSource {
+  return id === "auto" ? "lrclib" : id;
+}
+
 export interface RunAutoFetchOpts {
   track: Track;
   settings: AppSettings;
@@ -72,7 +82,7 @@ export async function runAutoFetchLyrics(opts: RunAutoFetchOpts): Promise<void> 
     await setTrackLyrics(
       {
         trackId: track.id,
-        record: lyricsRecordFromHit(hit, provider.id),
+        record: lyricsRecordFromHit(hit, hit?.source ?? lyricsSourceForProvider(provider.id)),
         matched: hit?.matched,
         fetchedAt: now,
       },
@@ -84,7 +94,11 @@ export async function runAutoFetchLyrics(opts: RunAutoFetchOpts): Promise<void> 
     // Persist a negative cache so a failed fetch (timeout / network / 5xx) isn't
     // retried automatically on every play. Manual search or "re-fetch" clears it.
     await setTrackLyrics(
-      { trackId: track.id, record: lyricsRecordFromHit(null, provider.id), fetchedAt: now },
+      {
+        trackId: track.id,
+        record: lyricsRecordFromHit(null, lyricsSourceForProvider(provider.id)),
+        fetchedAt: now,
+      },
       db,
     ).catch(() => {});
   }

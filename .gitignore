@@ -50,3 +50,5 @@ coverage/
 # Wrangler local cache (R2 admin commands)
 .wrangler/
 .VSCodeCounter
+.logs
+.worktrees/

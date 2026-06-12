@@ -17,7 +17,7 @@ const ICON_FILES = {
 };
 const LEGACY_ICON_FILES = { dark: "app-icon-dark.png", light: "app-icon-light.png" };
 
-const DEFAULT_APP_ICON = "light";
+const DEFAULT_APP_ICON = "dark";
 
 function iconCandidates(variant) {
   const file = ICON_FILES[variant] ?? ICON_FILES[DEFAULT_APP_ICON];

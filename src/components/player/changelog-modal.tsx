@@ -13,7 +13,6 @@ import {
 } from "@/content/changelog/types";
 import {
   getLastSeenVersion,
-  recordChangelogShownAt,
   resolveChangelogAutoOpen,
   setLastSeenVersion,
 } from "@/lib/changelog-seen";
@@ -60,10 +59,10 @@ function byCategory(
 }
 
 /**
- * "What's New" modal. Auto-opens on mount when there are unseen releases (first
- * install seeds lastSeen and stays closed — no backlog wall), and opens the full
- * history on the CHANGELOG_OPEN_EVENT. Bundled data, no network. Shared by web
- * and desktop. See docs/prd/20260611-muzero-release-pipeline-changelog-prd §5.2.
+ * "What's New" modal. Auto-opens on mount when there are releases newer than
+ * the locally acknowledged version, and opens the full history on the
+ * CHANGELOG_OPEN_EVENT. Bundled data, no network. Shared by web and desktop.
+ * See docs/prd/20260611-muzero-release-pipeline-changelog-prd §5.2.
  */
 export function ChangelogModal() {
   const { t, i18n } = useTranslation();
@@ -73,11 +72,9 @@ export function ChangelogModal() {
 
   useEffect(() => {
     const decision = resolveChangelogAutoOpen(changelog, getLastSeenVersion());
-    if (decision.seedLastSeen) setLastSeenVersion(decision.seedLastSeen);
     if (decision.open) {
       setShown(decision.unseen);
       setOpen(true);
-      recordChangelogShownAt(new Date().toISOString());
     }
   }, []);
 
@@ -92,8 +89,11 @@ export function ChangelogModal() {
 
   const handleOpenChange = useCallback((next: boolean) => {
     setOpen(next);
-    // Acknowledge everything up to the newest release on any close path.
-    if (!next) setLastSeenVersion(latestVersion);
+  }, []);
+
+  const closeUntilNextUpdate = useCallback(() => {
+    setLastSeenVersion(latestVersion);
+    setOpen(false);
   }, []);
 
   const title = useMemo(() => {
@@ -104,9 +104,9 @@ export function ChangelogModal() {
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="w-[min(calc(100vw-2rem),40rem)] gap-3">
-        <DialogTitle className="border-border border-b pb-3">{title}</DialogTitle>
-        <div className="-mr-2 max-h-[60vh] overflow-y-auto pr-2">
+      <DialogContent className="w-[min(calc(100vw-2rem),40rem)] gap-0 overflow-hidden p-0">
+        <DialogTitle className="px-5 pt-5 pb-3">{title}</DialogTitle>
+        <div className="no-scrollbar max-h-[60vh] overflow-y-auto px-5 pb-5">
           {shown.length === 0 ? (
             <p className="text-muted-foreground text-sm">{t("changelog.empty")}</p>
           ) : (
@@ -163,8 +163,11 @@ export function ChangelogModal() {
             ))
           )}
         </div>
-        <div className="flex justify-end">
-          <DialogClose render={<Button>{t("changelog.gotIt")}</Button>} />
+        <div className="flex flex-col-reverse justify-end gap-2 border-border border-t bg-background px-5 py-3 sm:flex-row">
+          <DialogClose render={<Button variant="outline">{t("changelog.close")}</Button>} />
+          <Button onClick={closeUntilNextUpdate}>
+            {t("changelog.closeUntilNextUpdate")}
+          </Button>
         </div>
       </DialogContent>
     </Dialog>

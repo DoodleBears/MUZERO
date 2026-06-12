@@ -1,4 +1,3 @@
-import { useReducedMotion } from "motion/react";
 import { type CSSProperties, type ReactNode, useLayoutEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 
@@ -23,8 +22,8 @@ const MAX_DURATION_SEC = 18;
  * along that rounded edge instead of at a hard rectangle inset from it.
  *
  * Works with rich children (e.g. the clickable artist/album links in the Now
- * Playing subtitle), not just strings. Honors `prefers-reduced-motion` (falls back
- * to a static truncated line), and pausing on hover lets users click a moving link.
+ * Playing subtitle), not just strings. This is a readability affordance rather
+ * than decorative motion. Pausing on hover lets users click a moving link.
  */
 export function AutoScrollText({
   children,
@@ -39,7 +38,6 @@ export function AutoScrollText({
 }) {
   const viewportRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
-  const reduceMotion = useReducedMotion();
   const [overflow, setOverflow] = useState(0);
   const [viewportWidth, setViewportWidth] = useState(0);
 
@@ -75,7 +73,7 @@ export function AutoScrollText({
     return () => observer.disconnect();
   });
 
-  const animate = (overflow > 0 || (forceScroll && viewportWidth > 0)) && !reduceMotion;
+  const animate = overflow > 0 || (forceScroll && viewportWidth > 0);
   const style = animate
     ? ({
         "--auto-scroll-x": overflow > 0 ? `-${overflow}px` : `calc(-100% + ${viewportWidth}px)`,

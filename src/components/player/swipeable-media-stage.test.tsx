@@ -54,7 +54,6 @@ vi.mock("motion/react", async () => {
       div: MotionDiv,
     },
     useMotionValue: () => x,
-    useReducedMotion: () => false,
     useTransform: () => 0,
   };
 });

@@ -18,6 +18,7 @@ import { CloudDriveSets } from "@/components/settings/cloud-drive-sets";
 import { CloudDriveSyncControls } from "@/components/settings/cloud-drive-sync-controls";
 import { DeviceAvatarPicker } from "@/components/settings/device-avatar-picker";
 import { DjToolCapabilities } from "@/components/settings/dj-tool-capabilities";
+import { ElectronWindowAppearanceSettings } from "@/components/settings/electron-window-appearance-settings";
 import { FlowSettings } from "@/components/settings/flow-settings";
 import { ImportedFoldersSettings } from "@/components/settings/imported-folders-settings";
 import {
@@ -61,7 +62,7 @@ import { useSettings } from "@/hooks/use-app-data";
 import { useObjectUrl } from "@/hooks/use-media";
 import { type Locale, locales, persistLocale } from "@/i18n/config";
 import { APP_ICON_OPTIONS, type AppIconId, persistAppIcon, resolveAppIcon } from "@/lib/app-icon";
-import { hasAppIcon, hasStreamingSources } from "@/lib/desktop/bridge";
+import { hasAppIcon } from "@/lib/desktop/bridge";
 import { getCroppedBlob } from "@/lib/image-crop";
 import { log } from "@/lib/logger";
 import { isMac } from "@/lib/shortcuts";
@@ -403,20 +404,12 @@ export function SettingsPage() {
     await saveSettings({ presenceEnabled: enabled });
   }
 
-  async function changeAutoFetchLyrics(enabled: boolean) {
-    await saveSettings({ autoFetchLyrics: enabled });
-  }
-
-  // Smooth scrolling is a visible MUZERO setting. OS reduced-motion affects
-  // navigation/transition effects, not this explicit scroll preference.
+  // Smooth scrolling is a visible MUZERO setting and is not overridden by OS
+  // reduced-motion preferences.
   const smoothScrollPref = resolveSmoothScroll(settings, {
     isMac: isMac(),
   }).preference;
   const smoothScrollLerp = clampLerp(settings.smoothScrollLerp);
-
-  async function changeLyricsProvider(id: AppSettings["lyricsProviderId"]) {
-    await saveSettings({ lyricsProviderId: id });
-  }
 
   const primary: PrimaryColors = {
     light: settings.primaryLight ?? DEFAULT_PRIMARY.light,
@@ -547,6 +540,7 @@ export function SettingsPage() {
                     )}
                   </span>
                 </div>
+                <ElectronWindowAppearanceSettings />
                 <div className="flex flex-col gap-2">
                   <span className="text-xs font-medium text-muted-foreground">
                     {t("settings.primaryColor")}
@@ -657,43 +651,6 @@ export function SettingsPage() {
                     }
                   />
                 </div>
-                <label className="flex items-start gap-3 rounded-md border border-border p-3">
-                  <input
-                    type="checkbox"
-                    checked={settings.autoFetchLyrics ?? true}
-                    onChange={(event) => void changeAutoFetchLyrics(event.currentTarget.checked)}
-                    className="mt-1 size-4 accent-primary"
-                  />
-                  <span className="flex flex-col gap-1">
-                    <span className="font-medium text-sm">{t("settings.autoFetchLyrics")}</span>
-                    <span className="text-muted-foreground text-xs">
-                      {t("settings.autoFetchLyricsHint")}
-                    </span>
-                  </span>
-                </label>
-                {hasStreamingSources() && (
-                  <label className="flex items-center justify-between gap-3 rounded-md border border-border p-3">
-                    <span className="flex flex-col gap-1">
-                      <span className="font-medium text-sm">{t("settings.lyricsSource")}</span>
-                      <span className="text-muted-foreground text-xs">
-                        {t("settings.lyricsSourceHint")}
-                      </span>
-                    </span>
-                    <select
-                      value={settings.lyricsProviderId ?? "lrclib"}
-                      onChange={(event) =>
-                        void changeLyricsProvider(
-                          event.currentTarget.value as AppSettings["lyricsProviderId"],
-                        )
-                      }
-                      className="shrink-0 rounded-md border border-border bg-transparent px-2 py-1.5 text-foreground text-sm"
-                    >
-                      <option value="lrclib">{t("settings.lyricsSourceLrclib")}</option>
-                      <option value="netease">{t("settings.lyricsSourceNetease")}</option>
-                      <option value="amll">{t("settings.lyricsSourceAmll")}</option>
-                    </select>
-                  </label>
-                )}
                 <div className="flex flex-col gap-3 rounded-md border border-border p-3">
                   <label className="flex items-start gap-3">
                     <input
@@ -768,7 +725,7 @@ export function SettingsPage() {
               <CardContent className="flex flex-col gap-3">
                 <Field label={t("player.repeatLabel")}>
                   <Select
-                    value={settings.playerRepeatMode ?? "off"}
+                    value={settings.playerRepeatMode ?? "all"}
                     onValueChange={(value) =>
                       void saveSettings({
                         playerRepeatMode: value as NonNullable<AppSettings["playerRepeatMode"]>,

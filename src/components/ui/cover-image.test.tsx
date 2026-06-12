@@ -22,9 +22,9 @@ function sampleThumbhash(): string {
 /**
  * CoverImage centralizes the cover render (instant-cover-thumbnails PRD Phase 2):
  * a static surface, a layered <img> that fades in on load, and the no-cover icon.
- * The fade is CSS (survives the Preview hidden-tab rAF freeze) and is disabled
- * under `prefers-reduced-motion`. A cache hit (image already decoded) starts
- * loaded so there's no pointless fade on an instant cover.
+ * The fade is CSS (survives the Preview hidden-tab rAF freeze). A cache hit
+ * (image already decoded) starts loaded so there's no pointless fade on an
+ * instant cover.
  */
 describe("CoverImage", () => {
   // The cross-mount "already decoded" memory is module-level and persists across
@@ -53,9 +53,10 @@ describe("CoverImage", () => {
     expect(img.className).toContain("opacity-100");
   });
 
-  it("keeps the fade transition disabled for reduced-motion users", () => {
+  it("keeps the fade transition always enabled", () => {
     const { container } = render(<CoverImage url="blob:cover" />);
-    expect(container.querySelector("img")?.className).toContain("motion-reduce:transition-none");
+    expect(container.querySelector("img")?.className).toContain("transition-opacity");
+    expect(container.querySelector("img")?.className).not.toContain("motion-reduce");
   });
 
   it("resets to loading when the url changes (no stale 'loaded' carryover)", () => {

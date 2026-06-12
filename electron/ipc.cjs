@@ -77,6 +77,20 @@ function assertPathInsideRoot(candidate, root) {
   }
 }
 
+function isCurrentAppOrigin(url) {
+  const devUrl = process.env.MUZERO_ELECTRON_URL;
+  if (!devUrl) return false;
+  const dev = new URL(devUrl);
+  return url.protocol === dev.protocol && url.host === dev.host;
+}
+
+function isDevLoopbackUrl(url) {
+  return (
+    Boolean(process.env.MUZERO_ELECTRON_URL) &&
+    ["localhost", "127.0.0.1", "::1", "[::1]"].includes(url.hostname)
+  );
+}
+
 function senderWindow(event) {
   const win = BrowserWindow.fromWebContents(event.sender);
   if (!win) throw new Error("Window is no longer available");
@@ -251,6 +265,15 @@ function registerIpc() {
     if (u.protocol !== "http:" && u.protocol !== "https:") {
       throw new Error("Unsupported external URL protocol");
     }
+    if (isCurrentAppOrigin(u)) {
+      console.warn(`[muzero:electron] blocked internal ipc openExternal: ${u.toString()}`);
+      return;
+    }
+    if (isDevLoopbackUrl(u)) {
+      console.warn(`[muzero:electron] blocked loopback ipc openExternal: ${u.toString()}`);
+      return;
+    }
+    console.warn(`[muzero:electron] open external from ipc: ${u.toString()}`);
     await shell.openExternal(u.toString());
   });
 

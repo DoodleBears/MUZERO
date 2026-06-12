@@ -267,7 +267,7 @@ function MemoryMasonryItem({
 
   return (
     <li
-      className="absolute transition-[transform,width,height] duration-200 ease-out motion-reduce:transition-none"
+      className="absolute transition-[transform,width,height] duration-200 ease-out"
       data-column={position.column}
       data-memory-masonry-id={id}
       data-y={position.y}

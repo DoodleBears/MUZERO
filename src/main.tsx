@@ -41,9 +41,9 @@ createRoot(root).render(
         <TraceRecorder />
         <App />
       </GlobalErrorBoundary>
-      {/* App has its own MotionConfig; the stack lives outside it, so honor the
-          OS "reduce motion" setting here too. */}
-      <MotionConfig reducedMotion="user">
+      {/* App has its own MotionConfig; the stack lives outside it, so keep
+          notification motion aligned with MUZERO's always-on player motion. */}
+      <MotionConfig reducedMotion="never">
         <NotificationStack />
       </MotionConfig>
       {/* Prod-only perf HUD behind the visible Settings switch; dev builds

@@ -1,7 +1,7 @@
 import { FileMusic, FolderInput, Plus } from "lucide-react";
 import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Button } from "@/components/ui/button";
+import { Button, type ButtonProps } from "@/components/ui/button";
 import {
   Popover,
   PopoverContent,
@@ -24,7 +24,15 @@ import { usePlayerStore } from "@/stores/player-store";
  * it lands uploads in a fresh "upload set" — mirroring the sessions-page flow —
  * so songs still belong somewhere and show up in the library.
  */
-export function AddTracksMenu({ setId }: { setId?: string }) {
+export function AddTracksMenu({
+  setId,
+  className,
+  size = "sm",
+}: {
+  setId?: string;
+  className?: string;
+  size?: ButtonProps["size"];
+}) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -72,7 +80,7 @@ export function AddTracksMenu({ setId }: { setId?: string }) {
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger
           render={
-            <Button size="sm" variant="outline" disabled={isUploading}>
+            <Button size={size} variant="outline" disabled={isUploading} className={className}>
               <Plus className="size-4" /> {t("gallery.addTracks")}
             </Button>
           }

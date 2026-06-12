@@ -16,8 +16,8 @@ const FLOW_MAX_COLORS = 5;
  * Audio-reactive GPU scene — one full-screen fragment shader driven by the shared
  * AnalyserNode, on a hand-rolled WebGL1 canvas via twgl.js (MIT, ~22KB). Default-
  * exported so the host can lazy-load it (keeps twgl out of the main bundle until a
- * scene style is selected). `paused` freezes to a single static frame (off-screen
- * / reduced-motion). Self-authored shaders — MIT (MUZERO).
+ * scene style is selected). `paused` freezes to a single static frame when the
+ * surface is off-screen. Self-authored shaders — MIT (MUZERO).
  */
 type GLState = {
   gl: WebGLRenderingContext;

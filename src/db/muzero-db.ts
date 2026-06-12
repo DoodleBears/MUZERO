@@ -128,7 +128,7 @@ export class MuzeroDB extends Dexie {
           id: "main",
           entries,
           currentIndex,
-          repeat: "off",
+          repeat: "all",
           contextSetId,
           updatedAt: Date.now(),
         } satisfies PlayQueue);
@@ -353,6 +353,25 @@ export class MuzeroDB extends Dexie {
         .modify((s: Partial<AppSettings>) => {
           s.visualizerAsBackground = true;
           s.flowEnabled ??= true;
+        });
+    });
+
+    // v24 — playlist repeat defaults to full-queue looping. Older settings rows
+    // often carry `playerRepeatMode: "off"` because `saveSettings()` persists a
+    // fully merged defaults object, so move inherited old defaults to the current
+    // visible default. Existing repeat-one / repeat-all choices are preserved.
+    this.version(24).upgrade(async (tx) => {
+      await tx
+        .table("settings")
+        .toCollection()
+        .modify((s: Partial<AppSettings>) => {
+          if (s.playerRepeatMode === "off") s.playerRepeatMode = "all";
+        });
+      await tx
+        .table("playQueue")
+        .toCollection()
+        .modify((q: Partial<PlayQueue>) => {
+          if (q.repeat === "off") q.repeat = "all";
         });
     });
   }

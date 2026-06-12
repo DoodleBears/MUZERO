@@ -110,8 +110,8 @@ export function VirtualTrackList({
   const matches = useShortcutMatcher();
   const matchesRef = useRef(matches);
   matchesRef.current = matches;
-  // Opt this scroll container into smooth scrolling (no-op on macOS default /
-  // reduced-motion). `lenisRef` routes programmatic jumps so they don't fight it.
+  // Opt this scroll container into smooth scrolling when enabled. `lenisRef`
+  // routes programmatic jumps so they don't fight it.
   const { lenisRef } = useSmoothScroll(parentRef);
 
   const currentTrackId = currentIndex >= 0 ? queue[currentIndex]?.id : undefined;

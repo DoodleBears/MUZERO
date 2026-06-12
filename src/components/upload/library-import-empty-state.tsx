@@ -6,9 +6,11 @@ import { cn } from "@/lib/utils";
 export function LibraryImportEmptyState({
   className,
   compact = false,
+  showAddTracks = true,
 }: {
   className?: string;
   compact?: boolean;
+  showAddTracks?: boolean;
 }) {
   const { t } = useTranslation();
   return (
@@ -27,9 +29,11 @@ export function LibraryImportEmptyState({
         <h2 className="font-semibold text-base text-foreground">{t("sessions.uploadTitle")}</h2>
         <p className="text-muted-foreground text-sm">{t("sessions.uploadDesc")}</p>
       </div>
-      <div className="flex flex-wrap items-center justify-center gap-2">
-        <AddTracksMenu />
-      </div>
+      {showAddTracks && (
+        <div className="flex flex-wrap items-center justify-center gap-2">
+          <AddTracksMenu />
+        </div>
+      )}
       <p className="max-w-sm text-muted-foreground text-xs">{t("drop.addSubtitle")}</p>
     </section>
   );

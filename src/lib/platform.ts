@@ -39,6 +39,11 @@ export async function openExternalUrl(
   options: OpenExternalUrlOptions = {},
 ): Promise<void> {
   const url = normalizeExternalUrl(rawUrl);
+  const bridge = resolveDesktopBridge();
+  if (bridge.kind === "electron" && !options.openWindow && !options.openUrl) {
+    await bridge.openExternal(url);
+    return;
+  }
   const isTauriRuntime = options.isTauriRuntime ?? isTauri;
   if (isTauriRuntime()) {
     const openUrl = options.openUrl ?? (await loadTauriOpenUrl());

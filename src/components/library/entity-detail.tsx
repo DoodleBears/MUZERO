@@ -51,6 +51,7 @@ export function EntityDetailView({
   lastPlayed,
   memoryNotes,
   coverViewTransitionName,
+  albumCoverViewTransitionName,
   onOpenAlbum,
   onBack,
 }: {
@@ -70,6 +71,8 @@ export function EntityDetailView({
   /** `view-transition-name` for the header cover, so it's the morph counterpart of
    *  the wall card the user tapped (set only when arriving via a cover morph). */
   coverViewTransitionName?: string;
+  /** Per-album strip card `view-transition-name` for artist-detail → album-detail morphs. */
+  albumCoverViewTransitionName?: (key: string) => string | undefined;
   onOpenAlbum?: (key: string) => void;
   onBack: () => void;
 }) {
@@ -202,6 +205,7 @@ export function EntityDetailView({
                 <AlbumStripCard
                   key={album.key}
                   album={album}
+                  coverViewTransitionName={albumCoverViewTransitionName?.(album.key)}
                   onOpen={() => onOpenAlbum(album.key)}
                 />
               ))}
@@ -271,7 +275,15 @@ export function EntityDetailView({
 }
 
 /** One album tile in the artist-detail albums strip. */
-function AlbumStripCard({ album, onOpen }: { album: EntityStripItem; onOpen: () => void }) {
+function AlbumStripCard({
+  album,
+  coverViewTransitionName,
+  onOpen,
+}: {
+  album: EntityStripItem;
+  coverViewTransitionName?: string;
+  onOpen: () => void;
+}) {
   const { t } = useTranslation();
   const coverUrl = useTrackCoverUrl(album.coverTrack);
   return (
@@ -286,6 +298,9 @@ function AlbumStripCard({ album, onOpen }: { album: EntityStripItem; onOpen: () 
         thumbhash={album.coverTrack?.coverThumbhash}
         placeholder={<Disc3 className="text-muted-foreground" />}
         className="aspect-square w-full rounded-md"
+        style={
+          coverViewTransitionName ? { viewTransitionName: coverViewTransitionName } : undefined
+        }
       />
       <span className="block truncate text-xs">{album.label}</span>
     </button>

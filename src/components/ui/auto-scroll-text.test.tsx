@@ -1,10 +1,6 @@
 import { render } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { AutoScrollText } from "./auto-scroll-text";
-
-vi.mock("motion/react", () => ({
-  useReducedMotion: () => false,
-}));
 
 describe("AutoScrollText", () => {
   let clientWidthDescriptor: PropertyDescriptor | undefined;
@@ -130,5 +126,26 @@ describe("AutoScrollText", () => {
     const content = container.querySelector(".auto-scroll-animate");
     expect(content).toBeInTheDocument();
     expect(content).toHaveStyle({ "--auto-scroll-x": "calc(-100% + 180px)" });
+  });
+
+  it("keeps readability scrolling independent of OS motion settings", () => {
+    Object.defineProperty(HTMLElement.prototype, "clientWidth", {
+      configurable: true,
+      get() {
+        return 120;
+      },
+    });
+    Object.defineProperty(HTMLElement.prototype, "scrollWidth", {
+      configurable: true,
+      get() {
+        return (this as HTMLElement).style.width === "max-content" ? 260 : 120;
+      },
+    });
+
+    const { container } = render(
+      <AutoScrollText>Hiroyuki Sawano / Hands Up to the Sky / Very Long Album</AutoScrollText>,
+    );
+
+    expect(container.querySelector(".auto-scroll-animate")).toBeInTheDocument();
   });
 });

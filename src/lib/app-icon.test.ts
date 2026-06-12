@@ -24,7 +24,7 @@ describe("app-icon registry", () => {
     expect(resolveAppIcon("light")).toBe("light");
     expect(resolveAppIcon("nope")).toBe(DEFAULT_APP_ICON);
     expect(resolveAppIcon(undefined)).toBe(DEFAULT_APP_ICON);
-    expect(DEFAULT_APP_ICON).toBe("light");
+    expect(DEFAULT_APP_ICON).toBe("dark");
   });
 
   it("exposes one picker row per icon, in registry order", () => {

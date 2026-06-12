@@ -4,6 +4,7 @@ import type { Variants } from "motion/react";
 import { motion, useAnimation } from "motion/react";
 import type { HTMLAttributes } from "react";
 import { forwardRef, useCallback, useImperativeHandle, useRef } from "react";
+import { IconMotion } from "@/components/ui/icon-motion";
 import { cn } from "@/lib/utils";
 
 export interface MessageCircleMoreIconHandle {
@@ -82,22 +83,24 @@ const MessageCircleMoreIcon = forwardRef<MessageCircleMoreIconHandle, MessageCir
         onMouseLeave={handleMouseLeave}
         {...props}
       >
-        <svg
-          fill="none"
-          height={size}
-          stroke="currentColor"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          strokeWidth="2"
-          viewBox="0 0 24 24"
-          width={size}
-          xmlns="http://www.w3.org/2000/svg"
-        >
-          <path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z" />
-          <motion.path animate={controls} custom={0} d="M8 12h.01" variants={DOT_VARIANTS} />
-          <motion.path animate={controls} custom={1} d="M12 12h.01" variants={DOT_VARIANTS} />
-          <motion.path animate={controls} custom={2} d="M16 12h.01" variants={DOT_VARIANTS} />
-        </svg>
+        <IconMotion>
+          <svg
+            fill="none"
+            height={size}
+            stroke="currentColor"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth="2"
+            viewBox="0 0 24 24"
+            width={size}
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z" />
+            <motion.path animate={controls} custom={0} d="M8 12h.01" variants={DOT_VARIANTS} />
+            <motion.path animate={controls} custom={1} d="M12 12h.01" variants={DOT_VARIANTS} />
+            <motion.path animate={controls} custom={2} d="M16 12h.01" variants={DOT_VARIANTS} />
+          </svg>
+        </IconMotion>
       </div>
     );
   },

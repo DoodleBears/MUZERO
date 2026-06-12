@@ -1774,7 +1774,7 @@ export async function getPlayQueue(db: MuzeroDB = defaultDb): Promise<PlayQueue>
       id: PLAY_QUEUE_ID,
       entries: [],
       currentIndex: -1,
-      repeat: "off",
+      repeat: "all",
       updatedAt: Date.now(),
     }
   );

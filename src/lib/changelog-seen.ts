@@ -9,7 +9,6 @@ import type { ChangelogRelease } from "@/content/changelog/types";
 import { compareSemver, isNewerVersion } from "@/lib/compare-semver";
 
 const LAST_SEEN_KEY = "muzero:changelog:lastSeenVersion";
-const LAST_SHOWN_KEY = "muzero:changelog:lastShownAt";
 
 function safeGet(key: string): string | null {
   try {
@@ -35,10 +34,6 @@ export function setLastSeenVersion(version: string): void {
   safeSet(LAST_SEEN_KEY, version);
 }
 
-export function recordChangelogShownAt(isoTimestamp: string): void {
-  safeSet(LAST_SHOWN_KEY, isoTimestamp);
-}
-
 /** Newest version among the releases, or null if there are none. */
 export function latestOf(releases: ChangelogRelease[]): string | null {
   if (releases.length === 0) return null;
@@ -53,8 +48,6 @@ export interface AutoOpenDecision {
   open: boolean;
   /** Unseen releases, newest-first, to show grouped. */
   unseen: ChangelogRelease[];
-  /** Non-null on a first-ever visit: caller persists this as lastSeen (no backlog wall). */
-  seedLastSeen: string | null;
 }
 
 export function resolveChangelogAutoOpen(
@@ -62,10 +55,9 @@ export function resolveChangelogAutoOpen(
   lastSeen: string | null,
 ): AutoOpenDecision {
   const latest = latestOf(releases);
-  if (!latest) return { open: false, unseen: [], seedLastSeen: null };
-  if (!lastSeen) return { open: false, unseen: [], seedLastSeen: latest };
+  if (!latest) return { open: false, unseen: [] };
   const unseen = releases
     .filter((r) => isNewerVersion(r.version, lastSeen))
     .sort((a, b) => compareSemver(b.version, a.version));
-  return { open: unseen.length > 0, unseen, seedLastSeen: null };
+  return { open: unseen.length > 0, unseen };
 }

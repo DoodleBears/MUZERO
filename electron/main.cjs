@@ -53,6 +53,46 @@ function registerDistProtocol() {
   });
 }
 
+function isAppUrl(rawUrl) {
+  try {
+    const url = new URL(rawUrl);
+    if (url.protocol === "app:" && url.host === "muzero") return true;
+    if (!devUrl) return false;
+    const dev = new URL(devUrl);
+    return url.protocol === dev.protocol && url.host === dev.host;
+  } catch {
+    return false;
+  }
+}
+
+function isLoopbackUrl(url) {
+  return ["localhost", "127.0.0.1", "::1", "[::1]"].includes(url.hostname);
+}
+
+function openExternalFrom(source, rawUrl) {
+  if (isAppUrl(rawUrl)) {
+    console.warn(`[muzero:electron] blocked internal ${source}: ${rawUrl}`);
+    return;
+  }
+  let url;
+  try {
+    url = new URL(rawUrl);
+  } catch {
+    console.warn(`[muzero:electron] blocked invalid ${source}: ${rawUrl}`);
+    return;
+  }
+  if (url.protocol !== "http:" && url.protocol !== "https:") {
+    console.warn(`[muzero:electron] blocked non-http ${source}: ${rawUrl}`);
+    return;
+  }
+  if (devUrl && isLoopbackUrl(url)) {
+    console.warn(`[muzero:electron] blocked loopback ${source}: ${url.toString()}`);
+    return;
+  }
+  console.warn(`[muzero:electron] open external from ${source}: ${url.toString()}`);
+  void shell.openExternal(url.toString());
+}
+
 function windowStatePath() {
   return path.join(app.getPath("userData"), windowStateFileName);
 }
@@ -186,14 +226,13 @@ function createWindow() {
   });
   attachDiagnosticsWindow(win);
   win.webContents.setWindowOpenHandler(({ url }) => {
-    void shell.openExternal(url);
+    openExternalFrom("window.open", url);
     return { action: "deny" };
   });
   win.webContents.on("will-navigate", (event, url) => {
-    if (url === devUrl || url === distUrl) return;
-    if (url.startsWith(appOrigin) && !devUrl) return;
+    if (isAppUrl(url) || url === distUrl) return;
     event.preventDefault();
-    void shell.openExternal(url);
+    openExternalFrom("will-navigate", url);
   });
 
   void win.loadURL(devUrl || distUrl);

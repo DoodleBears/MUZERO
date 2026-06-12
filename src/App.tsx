@@ -7,6 +7,7 @@ import { ImmersiveLyricsOverlay } from "@/components/player/immersive-lyrics-ove
 import { ImmersiveMemoryOverlay } from "@/components/player/immersive-memory-overlay";
 import { LyricsTuningPanel } from "@/components/player/lyrics-tuning-panel";
 import { NowPlayingBackground } from "@/components/player/now-playing-background";
+import { useVisualizerCoverColorCss } from "@/components/player/visualizer-dynamic-color";
 import { VisualizerTuningPanel } from "@/components/player/visualizer-tuning-panel";
 import { GlobalTrackSearch } from "@/components/search/global-track-search";
 import { PlayerDock } from "@/components/shell/player-dock";
@@ -20,6 +21,7 @@ import { useIdle } from "@/hooks/use-idle";
 import { usePlaybackWarmup } from "@/hooks/use-playback-warmup";
 import { useShortcutDispatch } from "@/hooks/use-shortcut-dispatch";
 import { resolveDesktopBridge } from "@/lib/desktop/bridge";
+import { electronWindowAppearanceCssVars } from "@/lib/electron-window-appearance";
 import { cn } from "@/lib/utils";
 import { dragWindowOnEmptyPress } from "@/lib/window-drag";
 import { NowPlayingPage } from "@/pages/now-playing-page";
@@ -73,6 +75,7 @@ export default function App() {
   // empty cover/background states while local blobs or R2 bytes resolve.
   usePlaybackWarmup();
   useDesktopChromeDataset();
+  useElectronWindowAppearance(settings);
 
   // Boot only wires the media engine. Auto-cueing the previous track during
   // WKWebView startup can make the full-screen media/background path flicker.
@@ -181,10 +184,10 @@ export default function App() {
     useUiStore.getState().setChromeHidden(dockHidden);
   }, [dockHidden]);
 
-  // `reducedMotion="user"` makes every motion animation honor the OS
-  // "reduce motion" setting app-wide, matching the view-transition helper.
+  // MUZERO keeps its playback-oriented motion alive regardless of the OS
+  // reduced-motion setting; animation is part of the player feedback model.
   return (
-    <MotionConfig reducedMotion="user">
+    <MotionConfig reducedMotion="never">
       {/* The header + dock are fixed overlays (z-30) that truly float over the
           full-bleed content (and the Now Playing slideshow). `main` fills the
           whole viewport and reserves no band; each page's own scroll region pads
@@ -295,6 +298,26 @@ function useDesktopChromeDataset() {
       delete html.dataset.windowMaximized;
     };
   }, []);
+}
+
+function useElectronWindowAppearance(settings: ReturnType<typeof useSettings>) {
+  const coverColorCss = useVisualizerCoverColorCss(
+    settings.electronWindowBorderColorMode === "cover",
+    { respectVisualizerSetting: false },
+  );
+
+  useEffect(() => {
+    const html = document.documentElement;
+    const vars = electronWindowAppearanceCssVars(settings, { coverColorCss });
+    for (const [name, value] of Object.entries(vars)) {
+      html.style.setProperty(name, value);
+    }
+    return () => {
+      for (const name of Object.keys(vars)) {
+        html.style.removeProperty(name);
+      }
+    };
+  }, [settings, coverColorCss]);
 }
 
 async function toggleDesktopMaximize() {

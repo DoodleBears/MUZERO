@@ -189,10 +189,20 @@
   }
 
   html[data-desktop-shell="electron"][data-desktop-platform="win32"] .app-shell {
-    border-radius: 12px;
-    box-shadow: 0 22px 70px rgb(0 0 0 / 24%);
-    clip-path: inset(0 round 12px);
+    border-radius: var(--electron-window-radius, 12px);
+    clip-path: inset(0 round var(--electron-window-radius, 12px));
     isolation: isolate;
+  }
+
+  html[data-desktop-shell="electron"][data-desktop-platform="win32"] .app-shell::after {
+    pointer-events: none;
+    position: absolute;
+    inset: 0;
+    z-index: 120;
+    border: var(--electron-window-border-width, 6px) solid
+      var(--electron-window-border-color, transparent);
+    border-radius: inherit;
+    content: "";
   }
 
   html[data-desktop-shell="electron"][data-desktop-platform="win32"][data-window-maximized="true"],
@@ -203,8 +213,12 @@
   html[data-desktop-shell="electron"][data-desktop-platform="win32"][data-window-maximized="true"]
     .app-shell {
     border-radius: 0 !important;
-    box-shadow: none !important;
     clip-path: none !important;
+  }
+
+  html[data-desktop-shell="electron"][data-desktop-platform="win32"][data-window-maximized="true"]
+    .app-shell::after {
+    border-width: 0 !important;
   }
 
   html[data-desktop-shell="electron"][data-desktop-platform="win32"] .app-titlebar {
@@ -365,23 +379,13 @@
 /*
  * View Transitions — whole-page tab → tab cross-fade (progressive enhancement).
  * Only browsers that support the native API ever run these; the JS helper
- * (`src/lib/view-transition.ts`) also gates on `prefers-reduced-motion`, and the
- * reduce branch below is a belt-and-suspenders kill switch for any opted-in
- * element. Shared-element transitions are handled by motion `layoutId`, not here.
+ * (`src/lib/view-transition.ts`) gates by engine support. Shared-element
+ * transitions are handled by motion `layoutId`, not here.
  */
-@media (prefers-reduced-motion: no-preference) {
-  ::view-transition-old(root),
-  ::view-transition-new(root) {
-    animation-duration: 200ms;
-    animation-timing-function: ease;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  ::view-transition-old(root),
-  ::view-transition-new(root) {
-    animation: none;
-  }
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 200ms;
+  animation-timing-function: ease;
 }
 
 /*
@@ -389,8 +393,8 @@
  * when their content overflows the pill. `auto-scroll-text.tsx` measures the
  * overflow and feeds the travel distance (`--auto-scroll-x`, negative px) and the
  * round-trip `--auto-scroll-duration`; this keyframe only describes the dwell →
- * scroll-to-end → dwell → scroll-back rhythm. Reduced-motion users never get the
- * class applied (gated in the component), so no kill switch is needed here.
+ * scroll-to-end → dwell → scroll-back rhythm. This is a readability affordance
+ * for long titles/artists, so it intentionally has no reduced-motion kill switch.
  */
 @keyframes auto-scroll-text {
   0%,

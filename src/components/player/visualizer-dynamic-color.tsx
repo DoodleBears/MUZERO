@@ -104,9 +104,13 @@ function applyVisualizerCoverColorTarget(
  * Scoped dynamic visualizer accent. The color is stored outside the component so
  * tab changes do not flash back to the theme primary before the cover re-loads.
  */
-export function useVisualizerCoverColorCss(active = true): string | null {
+export function useVisualizerCoverColorCss(
+  active = true,
+  options: { respectVisualizerSetting?: boolean } = {},
+): string | null {
   const settings = useSettings();
-  const coverColorEnabled = settings.visualizerUseCoverColor ?? true;
+  const coverColorEnabled =
+    options.respectVisualizerSetting === false ? true : (settings.visualizerUseCoverColor ?? true);
   const primaryColorVersion = `${settings.theme ?? ""}:${settings.primaryLight ?? ""}:${settings.primaryDark ?? ""}`;
   const enabled = active && coverColorEnabled;
   const css = useVisualizerCoverColorStore((s) => s.css);

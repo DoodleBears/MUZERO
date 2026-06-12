@@ -12,7 +12,7 @@
 
 import type { LyricFormat } from "./model";
 
-export type LyricsProviderId = "lrclib" | "netease" | "amll";
+export type LyricsProviderId = "auto" | "lrclib" | "netease" | "amll";
 
 /**
  * Every lyrics provenance value. Single source of truth for both the `LyricsSource`
@@ -63,7 +63,7 @@ export interface LyricsRecord {
 
 /** A provider match result. `null` from `fetch` means "no match found". */
 export interface LyricsHit {
-  source: LyricsProviderId;
+  source: LyricsSource;
   sourceId?: string;
   synced?: string;
   /** Format of `synced` (e.g. `"yrc"` for NetEase word-level); defaults to auto-detect. */
