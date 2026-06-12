@@ -15,7 +15,7 @@
 |-------|------|--------|------|
 | 1 | Current-State Audit + PRD | Completed | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | Desktop Pin / Click-Through Bridge | Completed | [Phase 2 Checklist](#phase-2-checklist) |
-| 3 | Header Logo Pin UI + i18n | Pending | [Phase 3 Checklist](#phase-3-checklist) |
+| 3 | Header Logo Pin UI + i18n | Completed | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | Lyrics-Only Visualizer Placement | Pending | [Phase 4 Checklist](#phase-4-checklist) |
 | 5 | OBS-Oriented QA + Regression Tests | Pending | [Phase 5 Checklist](#phase-5-checklist) |
 
@@ -501,21 +501,21 @@ Modify [`src/shortcuts/actions.ts`](../../../src/shortcuts/actions.ts):
 
 **Tasks:**
 
-- [ ] Add a header logo pin button in or near `App.tsx` shell chrome.
-- [ ] Reveal the button on logo/header hover, focus-within, or any active pin state.
-- [ ] Preserve the centered logo position without layout jump.
-- [ ] Add localized labels / hints in `en`, `zh`, `ja`, `ko`.
-- [ ] Add icon mapping and accessible pressed state.
-- [ ] Add tests for supported vs unsupported shell rendering if practical.
+- [x] Add a header logo pin button in or near `App.tsx` shell chrome.
+- [x] Reveal the button on logo/header hover, focus-within, or any active pin state.
+- [x] Preserve the centered logo position without layout jump.
+- [x] Add localized labels / hints in `en`, `zh`, `ja`, `ko`.
+- [x] Add icon mapping and accessible pressed state.
+- [x] Add tests for supported vs unsupported shell rendering if practical.
 
 ### Phase 3 Checklist
 
-- [ ] Pin button appears to the right of the centered MUZERO logo on hover/focus.
-- [ ] Pin button remains visible while pinned.
-- [ ] Button state updates when main-process state events arrive.
-- [ ] Tooltip label matches the current state.
-- [ ] Click-through state includes recovery hint.
-- [ ] No user-visible string is hardcoded in the component.
+- [x] Pin button appears to the right of the centered MUZERO logo on hover/focus.
+- [x] Pin button remains visible while pinned.
+- [x] Button state updates when main-process state events arrive.
+- [x] Tooltip label matches the current state.
+- [x] Click-through state includes recovery hint.
+- [x] No user-visible string is hardcoded in the component.
 
 ### Phase 4: Lyrics-Only Visualizer Placement
 
@@ -652,3 +652,4 @@ Modify [`src/shortcuts/actions.ts`](../../../src/shortcuts/actions.ts):
 | 2026-06-13 | Codex | Initial PRD for Electron pin/click-through and lyrics-only OBS overlay mode. |
 | 2026-06-13 | Codex | Resolved open questions: cross-platform logo-adjacent pin control, no click-through persistence, no-lyrics renders nothing, no dedicated recovery shortcut. |
 | 2026-06-13 | Codex | Completed Phase 2 desktop pin bridge and Electron click-through state machine. |
+| 2026-06-13 | Codex | Completed Phase 3 header logo pin control, i18n labels, and component tests. |

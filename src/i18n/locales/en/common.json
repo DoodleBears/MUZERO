@@ -10,7 +10,12 @@
     "maximize": "Maximize",
     "restore": "Restore",
     "close": "Close",
-    "fullscreenHint": "Fullscreen shortcut"
+    "fullscreenHint": "Fullscreen shortcut",
+    "pinOff": "Keep window on top",
+    "pinOn": "Window pinned on top",
+    "pinClickThrough": "Pinned and click-through",
+    "pinClickThroughHint": "Focus or hover the title area to reveal the pin control again.",
+    "pinAlwaysOnTopUnavailable": "Window pinning is unavailable on this desktop shell."
   },
   "nav": {
     "now": "Now Playing",

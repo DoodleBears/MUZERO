@@ -10,6 +10,7 @@ import { NowPlayingBackground } from "@/components/player/now-playing-background
 import { useVisualizerCoverColorCss } from "@/components/player/visualizer-dynamic-color";
 import { VisualizerTuningPanel } from "@/components/player/visualizer-tuning-panel";
 import { GlobalTrackSearch } from "@/components/search/global-track-search";
+import { HeaderPinButton } from "@/components/shell/header-pin-button";
 import { PlayerDock } from "@/components/shell/player-dock";
 import { WindowsWindowControls } from "@/components/shell/windows-window-controls";
 import { GlobalDropZone } from "@/components/upload/global-drop-zone";
@@ -235,15 +236,21 @@ export default function App() {
             className="absolute inset-y-0 left-0 right-36 [-webkit-app-region:drag]"
             data-tauri-drag-region
           />
-          <button
-            aria-label="MUZERO"
-            className="relative z-10 cursor-default border-0 bg-transparent p-0 font-semibold tracking-tight text-inherit [-webkit-app-region:no-drag]"
+          <div
+            className="group/header-logo relative z-10 flex items-center justify-center [-webkit-app-region:no-drag]"
             data-no-drag
-            onDoubleClick={() => void toggleDesktopMaximize()}
-            type="button"
           >
-            MUZERO
-          </button>
+            <button
+              aria-label="MUZERO"
+              className="cursor-default border-0 bg-transparent p-0 font-semibold tracking-tight text-inherit [-webkit-app-region:no-drag]"
+              data-no-drag
+              onDoubleClick={() => void toggleDesktopMaximize()}
+              type="button"
+            >
+              MUZERO
+            </button>
+            <HeaderPinButton />
+          </div>
           <WindowsWindowControls />
         </header>
 
