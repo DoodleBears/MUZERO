@@ -152,9 +152,15 @@ SQLite package decision:
 
 | Option | Decision |
 |--------|----------|
-| `node:sqlite` | Evaluate first only if the Electron-bundled Node runtime exposes a stable API in the packaged app. |
-| `better-sqlite3` | Default fallback if `node:sqlite` is unavailable or unstable. Run DB access in a Worker Thread or bounded main-process jobs to avoid blocking UI-facing IPC. |
+| `node:sqlite` | Preferred when the native index is justified. Electron 42 bundles Node v24.15.0, and Node v24.15.0 marks `node:sqlite` as release candidate. Use it inside Electron main-process jobs or Worker Threads because `DatabaseSync` APIs are synchronous. |
+| `better-sqlite3` | Fallback only if `node:sqlite` is unavailable or fails in the packaged Electron runtime. It is a native addon, so it brings Electron ABI rebuild/release complexity. |
 | Renderer IndexedDB only | Rejected for the high-volume scanner index because it would keep large scan/diff traffic in the renderer. |
+
+Best-practice sources:
+
+- Electron 42 release notes: https://www.electronjs.org/blog/electron-42-0 — Electron 42 includes Node v24.15.0.
+- Node v24 SQLite docs: https://nodejs.org/docs/latest-v24.x/api/sqlite.html — `node:sqlite` is release candidate in v24.15.0; `DatabaseSync` is synchronous.
+- Electron native modules docs: https://www.electronjs.org/docs/latest/tutorial/using-native-node-modules — native addons need Electron ABI-compatible rebuilds.
 
 ### 3.4 Project Structure
 
@@ -551,7 +557,8 @@ Implementation requirements:
 **Tasks:**
 - [ ] Add native scanner tests that prove no full-byte IPC is required.
 - [ ] Decide whether Dexie-only `Track.sourcePath` plus native scan batches can satisfy the first implementation.
-- [ ] If justified, add SQLite library index module with migrations and batched upserts.
+- [ ] If justified, add a `node:sqlite` library index module with migrations and batched upserts.
+- [ ] Keep `better-sqlite3` out of the default dependency graph unless packaged-runtime testing proves `node:sqlite` cannot serve the index.
 - [ ] Add scanner diff by path, extension, size, mtime, and missing files.
 - [ ] Add metadata parsing from file path/stream without embedded cover extraction on the fast path.
 - [ ] Add cancellation and bounded batch events.
@@ -693,7 +700,7 @@ Implementation requirements:
 | # | Question | Status | Decision |
 |---|----------|--------|----------|
 | 1 | Is Electron-side SQLite inherently valuable? | Resolved | Only as a native filesystem index/cache. It is not valuable as a duplicate of Dexie app state, so it is decision-gated. |
-| 2 | If SQLite is justified, should it use `node:sqlite` or `better-sqlite3`? | Open | Evaluate Electron packaged runtime first; default to `better-sqlite3` if built-in SQLite is unavailable or unstable. |
+| 2 | If SQLite is justified, should it use `node:sqlite` or `better-sqlite3`? | Resolved | Prefer Electron-bundled `node:sqlite` in main/Worker Thread jobs. It avoids native-addon ABI rebuild risk; `better-sqlite3` is fallback only if packaged Electron proves `node:sqlite` unusable. |
 | 3 | Should local-file source outrank `blobId`? | Resolved | No. `blobId` remains highest priority because it is app-managed and repairable by MUZERO. Local-file comes next. |
 | 4 | Should plaintext imports ever copy bytes automatically? | Resolved | No by default. Copy only for explicit local cache/export/conversion flows or fallback runtimes. |
 | 5 | Should embedded cover bytes be stored as `coverBlobId` automatically? | Resolved | Not on the fast path. Lazy extracted artwork is a derived cache; user-selected memory/cover photos still use `mediaBlobs`. |
@@ -708,3 +715,4 @@ Implementation requirements:
 |------|--------|---------|
 | 2026-06-12 | Codex | Created PRD documenting Electron local-file references, SQLite index, local playback protocol, and R2 upload-on-demand. |
 | 2026-06-12 | Codex | Clarified SQLite as decision-gated native index/cache, and added first-run Songs / Now Playing empty-state consolidation requirements. |
+| 2026-06-12 | Codex | Resolved SQLite package decision: prefer Electron-bundled `node:sqlite`, fallback to `better-sqlite3` only if packaged-runtime testing requires it. |
