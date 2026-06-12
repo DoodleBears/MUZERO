@@ -454,6 +454,7 @@ Dev mode is not sufficient for final performance sign-off. Final QA should run a
 | 2026-06-13 | MUZERO | Follow-up: Cascade now uses a wider minimum line gap, removes scroll-mode stack padding, hides native scrolling, and clears stale scroll offsets so the active line anchor stays stable. |
 | 2026-06-13 | MUZERO | Follow-up: Cascade layout now respects the shared lyric tuning controls for line gap, active opacity, inactive opacity, and inactive font size. |
 | 2026-06-13 | MUZERO | Follow-up: added Cascade-only anchor / delay / blur sliders and a readable detached history-scroll state that clears driver blur / transform / opacity until follow is resumed. |
+| 2026-06-13 | MUZERO | Follow-up: fixed Cascade active-line downward drift by measuring row layout height via `offsetHeight` / `scrollHeight` before falling back to transformed bounding boxes. |
 
 ---
 

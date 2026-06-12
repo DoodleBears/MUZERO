@@ -167,6 +167,76 @@ describe("LyricsScroller (synced)", () => {
     });
   });
 
+  it("keeps the cascade active line anchored using untransformed row heights", async () => {
+    const originalOffsetHeight = Object.getOwnPropertyDescriptor(
+      HTMLElement.prototype,
+      "offsetHeight",
+    );
+    const originalClientHeight = Object.getOwnPropertyDescriptor(
+      HTMLElement.prototype,
+      "clientHeight",
+    );
+    const originalRect = HTMLElement.prototype.getBoundingClientRect;
+    Object.defineProperty(HTMLElement.prototype, "offsetHeight", {
+      configurable: true,
+      get() {
+        return 80;
+      },
+    });
+    Object.defineProperty(HTMLElement.prototype, "clientHeight", {
+      configurable: true,
+      get() {
+        return 500;
+      },
+    });
+    HTMLElement.prototype.getBoundingClientRect = function getScaledRect() {
+      return {
+        bottom: 20,
+        height: 20,
+        left: 0,
+        right: 100,
+        top: 0,
+        width: 100,
+        x: 0,
+        y: 0,
+        toJSON: () => ({}),
+      };
+    };
+    engine.currentSec = 5.5;
+    const longSynced: ResolvedLyrics = {
+      mode: "synced",
+      source: "lrclib",
+      lines: Array.from({ length: 6 }, (_, index) => ({
+        timeMs: (index + 1) * 1000,
+        text: `line ${index + 1}`,
+      })),
+    };
+
+    try {
+      render(
+        <LyricsScroller
+          resolved={longSynced}
+          activeIndex={4}
+          onSeek={() => {}}
+          motionMode="cascade"
+        />,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText("line 5").style.transform).toContain("translate3d(0, -182.000px");
+      });
+    } finally {
+      if (originalOffsetHeight) {
+        Object.defineProperty(HTMLElement.prototype, "offsetHeight", originalOffsetHeight);
+      }
+      if (originalClientHeight) {
+        Object.defineProperty(HTMLElement.prototype, "clientHeight", originalClientHeight);
+      }
+      HTMLElement.prototype.getBoundingClientRect = originalRect;
+      engine.currentSec = 0;
+    }
+  });
+
   it("keeps cascade effects enabled when the OS prefers reduced motion", async () => {
     const originalMatchMedia = window.matchMedia;
     Object.defineProperty(window, "matchMedia", {

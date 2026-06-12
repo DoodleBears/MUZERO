@@ -370,7 +370,9 @@ function SyncedLines({
     void measurementKey;
     const measure = () => {
       lineHeightsRef.current = rowRefs.current.map((row) => {
-        const measured = row?.getBoundingClientRect().height ?? row?.offsetHeight ?? 0;
+        const measured = row
+          ? row.offsetHeight || row.scrollHeight || row.getBoundingClientRect().height
+          : 0;
         return measured > 0 ? measured : 48;
       });
     };
