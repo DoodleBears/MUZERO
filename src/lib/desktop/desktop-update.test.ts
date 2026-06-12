@@ -3,7 +3,6 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { type UpdateStatus, useDesktopUpdate } from "./desktop-update";
 
 afterEach(() => {
-  // biome-ignore lint/performance/noDelete: test cleanup of the injected global
   delete (window as { muzero?: unknown }).muzero;
 });
 

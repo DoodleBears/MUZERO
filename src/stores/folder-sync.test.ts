@@ -19,6 +19,12 @@ vi.mock("music-metadata", () => ({
   parseBlob: vi.fn(async () => ({ common: {}, format: {} })),
 }));
 
+// jsdom never settles `<img>` loads, so embedded-cover palette extraction would
+// hang on the object URL. Match the browser failure fallback: no palette.
+vi.mock("@/lib/image-palette", () => ({
+  extractImagePalette: vi.fn(async () => []),
+}));
+
 const file = (name: string): DirEntryLike => ({
   name,
   isDirectory: false,

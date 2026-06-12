@@ -8,6 +8,12 @@ vi.mock("music-metadata", () => ({
   })),
 }));
 
+// jsdom never settles `<img>` loads, so embedded-cover palette extraction would
+// hang on the object URL. Match the browser failure fallback: no palette.
+vi.mock("@/lib/image-palette", () => ({
+  extractImagePalette: vi.fn(async () => []),
+}));
+
 import { encode163KeyComment, encodeNcm } from "@/lib/ncm-fixture";
 import { ingestMediaBytes } from "./ingest-core";
 

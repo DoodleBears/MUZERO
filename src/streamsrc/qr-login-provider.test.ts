@@ -6,7 +6,12 @@ import { createBiliQrApi, type QrSourceApi, qrPollLoop } from "./qr-login-provid
 /** A virtual clock so the poll loop is deterministic (no real sleeping). */
 function virtualClock() {
   let t = 0;
-  return { now: () => t, sleep: async (ms: number) => void (t += ms) };
+  return {
+    now: () => t,
+    sleep: async (ms: number) => {
+      t += ms;
+    },
+  };
 }
 
 function apiFromStatuses(statuses: QrStatus[]): QrSourceApi {

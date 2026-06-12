@@ -140,7 +140,10 @@ describe("VirtualTrackList", () => {
     );
 
     screen.getByTestId("track-row-trk_1").focus();
-    fireEvent.keyDown(screen.getByTestId("virtual-track-list"), { key: "ArrowDown" });
+    fireEvent.keyDown(screen.getByTestId("virtual-track-list"), {
+      code: "ArrowDown",
+      key: "ArrowDown",
+    });
 
     expect(onView).toHaveBeenCalledWith(expect.objectContaining({ id: "trk_2" }), 1);
   });

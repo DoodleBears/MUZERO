@@ -68,7 +68,12 @@ describe("cookieStringHasAuth", () => {
 
 describe("streamSourcesAfterLogin", () => {
   it("stores the cookie, enables the source, keeps existing quality", () => {
-    const out = streamSourcesAfterLogin({ netease: { quality: "lossless" } }, "netease", "MUSIC_U=t", 1234);
+    const out = streamSourcesAfterLogin(
+      { netease: { quality: "lossless" } },
+      "netease",
+      "MUSIC_U=t",
+      1234,
+    );
     expect(out.netease).toEqual({
       quality: "lossless",
       cookie: "MUSIC_U=t",

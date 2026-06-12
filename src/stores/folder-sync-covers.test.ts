@@ -27,6 +27,12 @@ vi.mock("music-metadata", () => ({
   }),
 }));
 
+// jsdom never settles `<img>` loads, so cover palette extraction would hang on
+// object URLs. The production path treats decode failures as an empty palette.
+vi.mock("@/lib/image-palette", () => ({
+  extractImagePalette: vi.fn(async () => []),
+}));
+
 // Distinct image per cover URL: the 4th byte encodes which cover it is, so we can
 // assert each track stored ITS OWN cover (not a neighbour's).
 vi.mock("@/lib/platform", async (orig) => {
