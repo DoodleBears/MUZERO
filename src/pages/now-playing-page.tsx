@@ -1,3 +1,4 @@
+import { useLiveQuery } from "dexie-react-hooks";
 import { Image as ImageIcon, Repeat, Repeat1, Shuffle, Video } from "lucide-react";
 import { type CSSProperties, type RefObject, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -16,6 +17,8 @@ import { VisualizerModeButton } from "@/components/player/visualizer-mode-button
 import { AnnotationEditor } from "@/components/track/annotation-editor";
 import { Button } from "@/components/ui/button";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { LibraryImportEmptyState } from "@/components/upload/library-import-empty-state";
+import { db } from "@/db/muzero-db";
 import { addTrackBackground, saveSettings, setTrackCover } from "@/db/repositories";
 import type { SetDisplayMode } from "@/db/types";
 import { useSettings } from "@/hooks/use-app-data";
@@ -47,6 +50,7 @@ export function NowPlayingPage({ foregroundHidden = false }: { foregroundHidden?
   const queue = usePlayerStore((s) => s.queue);
   const currentIndex = usePlayerStore((s) => s.currentIndex);
   const djEnabled = usePlayerStore((s) => s.djEnabled);
+  const trackCount = useLiveQuery(() => db.tracks.count(), [], 0);
   const settings = useSettings();
   const lyricsVisible = !settings.nowPlayingRightRailCollapsed;
   const toggleLyricsVisible = () =>
@@ -70,6 +74,28 @@ export function NowPlayingPage({ foregroundHidden = false }: { foregroundHidden?
     // Route through Lenis when active so the reset doesn't fight the smoothing.
     if (!lenisScrollTo(lenisRef, 0, { immediate: true })) sectionRef.current?.scrollTo({ top: 0 });
   }, [current?.id]);
+
+  if (!current && trackCount === 0) {
+    return (
+      // biome-ignore lint/a11y/noStaticElementInteractions: passive window-drag surface — no role/keyboard action; it only moves the OS window on desktop.
+      <div onMouseDown={dragWindowOnEmptyPress} className="h-full [-webkit-app-region:drag]">
+        <div
+          className={cn(
+            "grid h-full place-items-center px-4 pt-chrome-top pb-chrome-bottom transition-opacity duration-200 lg:px-6",
+            foregroundHidden && "pointer-events-none opacity-0",
+          )}
+        >
+          <div
+            data-testid="now-playing-empty-library"
+            data-no-drag
+            className="w-full max-w-xl [-webkit-app-region:no-drag]"
+          >
+            <LibraryImportEmptyState compact />
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     // Columns are full-bleed (no top reserve) and pad themselves with

@@ -44,6 +44,7 @@ import { Kbd, KbdGroup } from "@/components/ui/kbd";
 import { Tabs, TabsIndicator, TabsList, TabsTab } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { AddTracksMenu } from "@/components/upload/add-tracks-menu";
+import { LibraryImportEmptyState } from "@/components/upload/library-import-empty-state";
 import { db } from "@/db/muzero-db";
 import {
   clearSessionCover,
@@ -137,9 +138,9 @@ const TRACK_ROW_SELECTOR = "[data-muzero-track-row]";
 const SHARED_COVER_VT = "gallery-cover";
 
 function savedGalleryMode(): GalleryMode {
-  if (typeof localStorage === "undefined") return "sets";
+  if (typeof localStorage === "undefined") return "tracks";
   const saved = localStorage.getItem(MODE_KEY);
-  return GALLERY_MODES.includes(saved as GalleryMode) ? (saved as GalleryMode) : "sets";
+  return GALLERY_MODES.includes(saved as GalleryMode) ? (saved as GalleryMode) : "tracks";
 }
 
 function normalizeDescription(value: string): string {
@@ -554,6 +555,7 @@ export function SearchPage() {
         : [],
     [remoteTracks, trackQuery, transliterationReady],
   );
+  const isEmptyTrackLibrary = allTracks.length === 0 && trackQuery.trim() === "" && !likedOnly;
   const query =
     mode === "sets"
       ? setQuery
@@ -1063,9 +1065,13 @@ export function SearchPage() {
             shownRemoteTracks.length === 0 &&
             facetArtistItems.length === 0 &&
             facetAlbumItems.length === 0 ? (
-              <p className="mt-12 text-center text-sm text-muted-foreground">
-                {t("gallery.tracksEmpty")}
-              </p>
+              isEmptyTrackLibrary ? (
+                <LibraryImportEmptyState className="mt-10" />
+              ) : (
+                <p className="mt-12 text-center text-sm text-muted-foreground">
+                  {t("gallery.tracksEmpty")}
+                </p>
+              )
             ) : (
               <div className="grid min-h-0 flex-1 grid-rows-[minmax(0,1fr)] gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(280px,360px)]">
                 <div className="flex min-h-0 flex-1 flex-col gap-4">

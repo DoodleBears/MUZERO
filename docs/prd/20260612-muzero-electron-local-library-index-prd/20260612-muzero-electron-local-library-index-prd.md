@@ -15,7 +15,7 @@
 |-------|------|--------|------|
 | 1 | PRD + LyciaMusic Reference Grounding | ✅ Completed | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | TDD Contract Coverage | ✅ Completed | [Phase 2 Checklist](#phase-2-checklist) |
-| 3 | First-Run Empty-State Consolidation | 🔲 Pending | [Phase 3 Checklist](#phase-3-checklist) |
+| 3 | First-Run Empty-State Consolidation | ✅ Completed | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | Native Library Index Decision Gate | 🔲 Pending | [Phase 4 Checklist](#phase-4-checklist) |
 | 5 | Local-File Track Import Path | 🔲 Pending | [Phase 5 Checklist](#phase-5-checklist) |
 | 6 | Local-File Playback Protocol | 🔲 Pending | [Phase 6 Checklist](#phase-6-checklist) |
@@ -44,7 +44,7 @@ For a large existing library this is unnecessary work. A local desktop music pla
 | 3 | Keep expensive work off the initial critical path. | Metadata parsing, hashing, and cover extraction must be bounded, parallelized, and resumable; first visible/playable rows should not wait for embedded artwork. |
 | 4 | Use an Electron-native approach; SQLite is acceptable only if it earns its keep. | Dexie remains MUZERO's app state. Add SQLite only as a native local-library index/cache when it avoids repeated filesystem scan, hash, cover, or repair work; do not add it merely as a second copy of `Track` data. |
 | 5 | Keep lazy cache behavior. | Covers, R2 uploads, and optional local byte copies happen only on demand or in bounded background jobs. |
-| 6 | Consolidate first-run onboarding into library empty states. | The old first-open landing with DJ on top and upload below should be folded into the Songs empty state; Now Playing also needs an empty-library import affordance. |
+| 6 | Consolidate first-run onboarding into library empty states. | The old first-open landing with DJ on top and upload below should be folded into the Songs empty state; Now Playing also needs an empty-library import affordance. These empty states should not expose a DJ action; the existing dock-adjacent DJ console remains the DJ entry point. |
 
 ### 1.3 Target Users
 
@@ -387,10 +387,11 @@ Product decisions:
 
 - The first-open landing that shows DJ AI on top and import below is no longer the primary onboarding surface.
 - First empty-library launch should route users to the Songs/All Songs tab empty state, not a separate Sessions landing.
-- The Songs empty state becomes the main import surface: a large dashed drop zone, click-to-upload, folder import, and a smaller secondary "start DJ set" action.
+- The Songs empty state becomes the main import surface: a large dashed drop zone, click-to-upload, and folder import.
 - The Now Playing tab gets its own empty-library state. If there are no tracks anywhere, the media stage area should show the same dashed upload/drop affordance instead of empty playback chrome.
 - If the library has tracks but the queue is empty, Now Playing should guide the user to play from Songs/sets rather than showing the full empty-library import state.
 - Global drag/drop remains active everywhere, but the empty states make the action visible before a user discovers dragging.
+- DJ entry points are intentionally absent from first-run and empty-library import states; the dock-adjacent DJ console is already sufficient.
 
 ### 6.2 Songs Tab Empty State
 
@@ -398,7 +399,7 @@ Required behavior for the tab-2 Songs/All Songs page:
 
 - Empty library: show an explicit import panel, not only `gallery.tracksEmpty`.
 - The import panel supports click-to-pick files, folder import, and drag/drop copy affordance.
-- DJ generation is secondary copy/action because local music import is the user's likely first task.
+- DJ generation is intentionally absent from this empty state because the dock-adjacent DJ console already covers that workflow.
 - The panel should reuse the existing `AddTracksMenu` capabilities where possible.
 - When a search/filter returns no results but the library is not empty, keep the normal "no matches" state and do not show the full first-run importer.
 
@@ -538,17 +539,17 @@ Implementation requirements:
 **Goal:** Move first-run import/DJ onboarding into the tabs where users expect it.
 
 **Tasks:**
-- [ ] Replace the Songs/All Songs empty library text with a dashed import panel.
-- [ ] Add a Now Playing empty-library panel with click-to-upload, folder import, and drag/drop guidance.
-- [ ] Route first empty-library launch to the Songs empty state instead of the standalone Sessions landing.
-- [ ] Keep DJ start as a secondary action rather than the first visual block.
+- [x] Replace the Songs/All Songs empty library text with a dashed import panel.
+- [x] Add a Now Playing empty-library panel with click-to-upload, folder import, and drag/drop guidance.
+- [x] Route first empty-library launch to the Songs empty state instead of the standalone Sessions landing.
+- [x] Remove DJ actions from first-run and empty-library import states.
 
 ### Phase 3 Checklist
 
-- [ ] Users can upload or import a folder from the Songs empty state.
-- [ ] Users can upload or import a folder from the Now Playing empty-library state.
-- [ ] Search-empty and library-empty states are visually distinct.
-- [ ] PRD is updated before commit.
+- [x] Users can upload or import a folder from the Songs empty state.
+- [x] Users can upload or import a folder from the Now Playing empty-library state.
+- [x] Search-empty and library-empty states are visually distinct.
+- [x] PRD is updated before commit.
 
 ### Phase 4: Native Library Index Decision Gate
 
@@ -716,3 +717,4 @@ Implementation requirements:
 | 2026-06-12 | Codex | Created PRD documenting Electron local-file references, SQLite index, local playback protocol, and R2 upload-on-demand. |
 | 2026-06-12 | Codex | Clarified SQLite as decision-gated native index/cache, and added first-run Songs / Now Playing empty-state consolidation requirements. |
 | 2026-06-12 | Codex | Resolved SQLite package decision: prefer Electron-bundled `node:sqlite`, fallback to `better-sqlite3` only if packaged-runtime testing requires it. |
+| 2026-06-12 | Codex | Completed Phase 3 empty-library import states; empty states intentionally omit DJ actions. |
