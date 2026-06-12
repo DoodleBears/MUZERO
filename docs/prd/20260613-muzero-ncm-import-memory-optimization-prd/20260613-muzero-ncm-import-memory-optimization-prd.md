@@ -14,7 +14,7 @@
 | 1 | PRD + Import Path Audit | ✅ Completed | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | Electron NCM Persist Path | ✅ Completed | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | Import Memory Budget + Backpressure | ✅ Completed | [Phase 3 Checklist](#phase-3-checklist) |
-| 4 | Low-Priority Cover Palette Work | 🔲 Pending | [Phase 4 Checklist](#phase-4-checklist) |
+| 4 | Low-Priority Cover Palette Work | ✅ Completed | [Phase 4 Checklist](#phase-4-checklist) |
 | 5 | Verification + Profiling Notes | 🔄 In Progress | [Phase 5 Checklist](#phase-5-checklist) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
@@ -238,15 +238,15 @@ The existing Storage & cache page remains the place to inspect disk usage.
 **Goal:** Keep instant cover previews while moving expensive palette work off the hottest import path.
 
 **Tasks:**
-- [ ] Keep thumbhash generation at cover-set/import time.
-- [ ] Move multi-color palette extraction for imported covers to an idle/background queue when practical.
-- [ ] Ensure Storage repair count does not grow for fresh imports.
+- [x] Keep thumbhash generation at cover-set/import time.
+- [x] Move multi-color palette extraction for imported covers to an idle/background queue when practical.
+- [x] Ensure Storage repair count does not grow for fresh imports.
 
 ### Phase 4 Checklist
 
-- [ ] Fresh imported covers still have immediate blurred previews.
-- [ ] Palette work does not block large import batches unnecessarily.
-- [ ] Storage repair count remains stable for fresh imports.
+- [x] Fresh imported covers still have immediate blurred previews.
+- [x] Palette work does not block large import batches unnecessarily.
+- [x] Storage repair count remains stable for fresh imports.
 
 ### Phase 5: Verification + Profiling Notes
 
@@ -329,6 +329,7 @@ The existing Storage & cache page remains the place to inspect disk usage.
 | 2026-06-13 | Codex | Initial PRD for `.ncm` import memory/storage optimization. |
 | 2026-06-13 | Codex | Completed Phase 2: decode-only `.ncm` worker path, Electron renderer persistence through `electron-file`, and targeted Vitest/typecheck verification. |
 | 2026-06-13 | Codex | Completed Phase 3: size-aware import backpressure helper and folder import yields after large `.ncm`/plaintext byte writes. |
+| 2026-06-13 | Codex | Completed Phase 4: imported embedded covers keep immediate thumbhash/fallback palette while full palette extraction runs in an idle queue. |
 
 ---
 

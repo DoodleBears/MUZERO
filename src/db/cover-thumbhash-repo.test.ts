@@ -1,11 +1,17 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+const VALID_THUMB64 = "XjM9LzMI9wiIh4hwj3CI+AiIcH/494cP";
+
 // Stub the browser-only encoder so the wiring is testable in jsdom: every cover
 // blob "encodes" to a known marker. (The real encoder needs canvas; here we only
 // assert that setting a cover persists whatever thumbhash the encoder returns.)
-vi.mock("@/lib/cover-thumbhash", () => ({
-  encodeCoverThumbhash: vi.fn(async () => "THUMB64"),
-}));
+vi.mock("@/lib/cover-thumbhash", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/cover-thumbhash")>();
+  return {
+    ...actual,
+    encodeCoverThumbhash: vi.fn(async () => VALID_THUMB64),
+  };
+});
 
 const mocks = vi.hoisted(() => ({
   palette: [
@@ -20,8 +26,10 @@ vi.mock("@/lib/image-palette", () => ({
 
 import { MuzeroDB } from "./muzero-db";
 import {
+  countCoverMetadataBackfillCandidates,
   createSession,
   createUploadedTrack,
+  flushQueuedCoverPaletteExtractions,
   setEntityCover,
   setSessionCover,
   setTrackCover,
@@ -64,12 +72,12 @@ describe("cover-set generates + persists a thumbhash on the owner row (Phase 3)"
     });
     await setTrackCover({ trackId: id as string, blob: png(), mime: "image/png" }, db);
     const track = await db.tracks.get("trk_thumb");
-    expect(track?.coverThumbhash).toBe("THUMB64");
+    expect(track?.coverThumbhash).toBe(VALID_THUMB64);
     expect(track?.coverPalette).toEqual(mocks.palette);
     expect(track?.coverPaletteSource).toBe(track?.coverBlobId);
   });
 
-  it("createUploadedTrack stores coverThumbhash for embedded covers during import", async () => {
+  it("createUploadedTrack stores thumbhash immediately and defers full palette for embedded covers", async () => {
     const session = await createSession({ name: "s", seedPrompt: "", config: {} }, db);
 
     const track = await createUploadedTrack(
@@ -87,15 +95,22 @@ describe("cover-set generates + persists a thumbhash on the owner row (Phase 3)"
 
     const stored = await db.tracks.get(track.id);
     expect(stored?.coverBlobId).toBeTruthy();
-    expect(stored?.coverThumbhash).toBe("THUMB64");
-    expect(stored?.coverPalette).toEqual(mocks.palette);
+    expect(stored?.coverThumbhash).toBe(VALID_THUMB64);
+    expect(stored?.coverPalette).toHaveLength(1);
     expect(stored?.coverPaletteSource).toBe(stored?.coverBlobId);
+    expect(await countCoverMetadataBackfillCandidates(db)).toBe(0);
+
+    await flushQueuedCoverPaletteExtractions();
+
+    const updated = await db.tracks.get(track.id);
+    expect(updated?.coverPalette).toEqual(mocks.palette);
+    expect(updated?.coverPaletteSource).toBe(updated?.coverBlobId);
   });
 
   it("setSessionCover stores coverThumbhash on the session", async () => {
     const session = await createSession({ name: "s", seedPrompt: "", config: {} }, db);
     await setSessionCover({ sessionId: session.id, blob: png(), mime: "image/png" }, db);
-    expect((await db.sessions.get(session.id))?.coverThumbhash).toBe("THUMB64");
+    expect((await db.sessions.get(session.id))?.coverThumbhash).toBe(VALID_THUMB64);
   });
 
   it("setEntityCover stores thumbhash on the entity-cover row", async () => {
@@ -103,6 +118,6 @@ describe("cover-set generates + persists a thumbhash on the owner row (Phase 3)"
       { entityKey: "artist::x", kind: "artist", blob: png(), mime: "image/png" },
       db,
     );
-    expect((await db.entityCovers.get("artist::x"))?.thumbhash).toBe("THUMB64");
+    expect((await db.entityCovers.get("artist::x"))?.thumbhash).toBe(VALID_THUMB64);
   });
 });
