@@ -486,6 +486,45 @@ describe("createUploadedTrack", () => {
     expect(media?.bytes).toBe(4);
   });
 
+  it("creates a ready referenced local-file track without writing a media blob", async () => {
+    const session = await createSession({ seedPrompt: "", config: { autoExtend: false } }, db);
+    const repositories = (await import("./repositories")) as typeof import("./repositories") & {
+      createReferencedUploadedTrack?: (
+        input: {
+          sessionId: string;
+          title: string;
+          kind: "audio" | "video";
+          mime: string;
+          durationSec: number;
+          sourcePath: string;
+        },
+        db: MuzeroDB,
+      ) => Promise<ReturnType<typeof createUploadedTrack> extends Promise<infer T> ? T : never>;
+    };
+
+    expect(repositories.createReferencedUploadedTrack).toBeTypeOf("function");
+    const track = await repositories.createReferencedUploadedTrack?.(
+      {
+        sessionId: session.id,
+        title: "Local Reference",
+        kind: "audio",
+        mime: "audio/mpeg",
+        durationSec: 121,
+        sourcePath: "/music/local-reference.mp3",
+      },
+      db,
+    );
+
+    expect(track).toMatchObject({
+      status: "ready",
+      origin: "uploaded",
+      sourcePath: "/music/local-reference.mp3",
+      blobId: undefined,
+    });
+    expect(await db.mediaBlobs.count()).toBe(0);
+    expect(await db.tracks.get(track?.id ?? "")).toMatchObject({ sourcePath: track?.sourcePath });
+  });
+
   it("stores imported media metadata and embedded cover art out of the track row", async () => {
     const session = await createSession({ seedPrompt: "", config: { autoExtend: false } }, db);
     const blob = new Blob([new Uint8Array([1, 2, 3])], { type: "audio/mpeg" });

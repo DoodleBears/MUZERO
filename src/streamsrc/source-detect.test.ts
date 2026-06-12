@@ -74,10 +74,30 @@ describe("playbackSourceKind (local-first priority)", () => {
   it("blob outranks every other source", () => {
     expect(
       playbackSourceKind(
-        track({ ...streamed, blobId: "blb_1", remoteMediaUrl: "https://cdn/x.mp3" }),
+        track({
+          ...streamed,
+          blobId: "blb_1",
+          remoteMediaUrl: "https://cdn/x.mp3",
+          sourcePath: "/music/local.mp3",
+        }),
       ),
     ).toBe("blob");
     expect(playbackSourceKind(track({ origin: "generated", blobId: "blb_2" }))).toBe("blob");
+  });
+
+  it("local-file references outrank remote and stream sources without requiring a blob", () => {
+    expect(
+      playbackSourceKind(
+        track({
+          origin: "uploaded",
+          sourcePath: "/music/blue.mp3",
+          remoteMediaUrl: "https://cdn/x.mp3",
+        }),
+      ),
+    ).toBe("local-file");
+    expect(playbackSourceKind(track({ ...streamed, sourcePath: "/music/stream-cache.mp3" }))).toBe(
+      "local-file",
+    );
   });
 
   it("falls back remote → stream → none in order", () => {
@@ -109,6 +129,9 @@ describe("isTrackCacheableToDevice", () => {
 
   it("excludes tracks that are already local, not ready, or have no fetchable source", () => {
     expect(isTrackCacheableToDevice(track({ ...streamed, blobId: "blb_1" }))).toBe(false);
+    expect(
+      isTrackCacheableToDevice(track({ origin: "uploaded", sourcePath: "/music/a.mp3" })),
+    ).toBe(false);
     expect(
       isTrackCacheableToDevice(
         track({ origin: "uploaded", remoteMediaUrl: "https://cdn/x.mp3", status: "pending" }),

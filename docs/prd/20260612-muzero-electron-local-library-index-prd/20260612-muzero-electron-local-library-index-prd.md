@@ -14,7 +14,7 @@
 | Phase | Name | Status | Link |
 |-------|------|--------|------|
 | 1 | PRD + LyciaMusic Reference Grounding | ✅ Completed | [Phase 1 Checklist](#phase-1-checklist) |
-| 2 | TDD Contract Coverage | 🔲 Pending | [Phase 2 Checklist](#phase-2-checklist) |
+| 2 | TDD Contract Coverage | ✅ Completed | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | First-Run Empty-State Consolidation | 🔲 Pending | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | Native Library Index Decision Gate | 🔲 Pending | [Phase 4 Checklist](#phase-4-checklist) |
 | 5 | Local-File Track Import Path | 🔲 Pending | [Phase 5 Checklist](#phase-5-checklist) |
@@ -521,17 +521,17 @@ Implementation requirements:
 **Goal:** Add failing tests for the new behavior before implementation.
 
 **Tasks:**
-- [ ] Add source selection tests for `blob -> local-file -> remote -> stream -> none`.
-- [ ] Add repository tests for creating uploaded tracks with `sourcePath` and no `blobId`.
-- [ ] Add R2 export-plan tests for local-file media resolution and missing source skip/error behavior.
-- [ ] Add Electron bridge unit tests for local media URL token shape and path redaction.
-- [ ] Add UI tests for empty-library Songs and Now Playing states.
+- [x] Add source selection tests for `blob -> local-file -> remote -> stream -> none`.
+- [x] Add repository tests for creating uploaded tracks with `sourcePath` and no `blobId`.
+- [x] Add R2 export-plan tests for local-file media resolution and missing source skip/error behavior.
+- [x] Add Electron bridge unit tests for local media URL token shape and path redaction.
+- [x] Add UI tests for empty-library Songs and Now Playing states.
 
 ### Phase 2 Checklist
 
-- [ ] Tests fail against current implementation.
-- [ ] Tests do not require real user files, real R2, or a GUI Electron window.
-- [ ] PRD is updated before the test commit.
+- [x] Tests fail against current implementation.
+- [x] Tests do not require real user files, real R2, or a GUI Electron window.
+- [x] PRD is updated before the test commit.
 
 ### Phase 3: First-Run Empty-State Consolidation
 

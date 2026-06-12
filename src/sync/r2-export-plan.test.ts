@@ -182,6 +182,93 @@ describe("buildR2ExportPlan", () => {
     expect(plan.objects.map((object) => object.kind)).toEqual(["set-index", "manifest"]);
   });
 
+  it("exports referenced local-file media through an injected Electron resolver", async () => {
+    const sha256 = "a".repeat(64);
+    await db.sessions.put({
+      id: "ses_local",
+      name: "Local refs",
+      seedPrompt: "",
+      trackIds: ["trk_local"],
+      status: "idle",
+      config: {
+        autoExtend: false,
+        refillThreshold: 2,
+        batchSize: 1,
+        targetDurationSec: 180,
+        allowVocals: true,
+      },
+      displayMode: "cover",
+      createdAt: 100,
+      updatedAt: 200,
+    });
+    await db.tracks.put({
+      id: "trk_local",
+      sessionId: "ses_local",
+      title: "Reference Only",
+      kind: "audio",
+      origin: "uploaded",
+      provider: "upload",
+      status: "ready",
+      durationSec: 180,
+      sourcePath: "/music/reference-only.mp3",
+      createdAt: 100,
+      playCount: 0,
+      liked: false,
+      tags: [],
+      mediaMetadata: {
+        originalFileName: "reference-only.mp3",
+        originalMime: "audio/mpeg",
+        parser: "music-metadata",
+        parsedAt: 100,
+        title: "Reference Only",
+      },
+    });
+    const resolveLocalMedia = async (track: Track) => ({
+      body: {
+        kind: "local-file" as const,
+        path: track.sourcePath ?? "",
+        bytes: 6,
+        mime: "audio/mpeg",
+        sha256,
+      },
+      bytes: 6,
+      mime: "audio/mpeg",
+      sha256,
+    });
+
+    const plan = await buildR2ExportPlan({
+      driveId: "drv_1",
+      libraryId: "lib_1",
+      baseUrl: "https://music.example.com/muzero/",
+      setIds: ["ses_local"],
+      db,
+      localMedia: { resolve: resolveLocalMedia },
+    } as Parameters<typeof buildR2ExportPlan>[0] & {
+      localMedia: { resolve: typeof resolveLocalMedia };
+    });
+
+    const media = plan.objects.find((object) => object.kind === "media");
+    expect(media).toMatchObject({
+      body: {
+        kind: "local-file",
+        path: "/music/reference-only.mp3",
+      },
+      bytes: 6,
+      contentType: "audio/mpeg",
+      key: `objects/media/sha256-${sha256}.mp3`,
+      sha256,
+    });
+    const setIndex = JSON.parse(
+      String(plan.objects.find((object) => object.kind === "set-index")?.body),
+    );
+    expect(setIndex.tracks[0].media).toMatchObject({
+      bytes: 6,
+      mime: "audio/mpeg",
+      sha256,
+      url: `objects/media/sha256-${sha256}.mp3`,
+    });
+  });
+
   it("an imported set writes back under its original id, merged with the remote index (CE-3)", async () => {
     await db.sessions.put({
       id: "ses_remote_drv_1_ses_shared",
