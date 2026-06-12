@@ -829,12 +829,12 @@ function SettleCard({
 function StageIdentity({ track }: { track: Track }) {
   return (
     <div className="flex w-full min-w-0 flex-col items-start gap-1.5">
-      <div className="w-fit min-w-0 max-w-full overflow-hidden rounded-full border border-white/10 bg-black/55 px-4 py-1.5 shadow-lg backdrop-blur-md">
+      <div className="w-fit min-w-0 max-w-full overflow-hidden rounded-full border border-white/10 bg-black/55 px-4 py-1.5 shadow-lg">
         <AutoScrollText className="text-2xl font-bold tracking-normal text-white">
           {track.title}
         </AutoScrollText>
       </div>
-      <div className="w-fit min-w-0 max-w-full overflow-hidden rounded-full border border-white/10 bg-black/50 px-3 py-1 shadow-md backdrop-blur-md">
+      <div className="w-fit min-w-0 max-w-full overflow-hidden rounded-full border border-white/10 bg-black/50 px-3 py-1 shadow-md">
         <AutoScrollText className="text-base font-semibold text-white/85" staticMode="clip">
           <StageSubtitle track={track} />
         </AutoScrollText>
