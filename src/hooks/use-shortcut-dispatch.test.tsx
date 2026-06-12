@@ -18,22 +18,37 @@ const mocks = vi.hoisted(() => ({
     queue: [] as Array<{ id: string; liked: boolean }>,
   },
   setTab: vi.fn(),
+  toggleQueue: vi.fn(),
   lyricsSetOpen: vi.fn(),
   vizSetOpen: vi.fn(),
   saveSettings: vi.fn(async (_patch?: unknown) => {}),
   getSettings: vi.fn(async () => ({}) as Record<string, unknown>),
   getTrack: vi.fn(async (_id: string) => ({ liked: false }) as Record<string, unknown>),
   setTrackLiked: vi.fn(async (_id: string, _liked: boolean) => {}),
-  state: { overrides: undefined as Record<string, unknown> | undefined },
+  state: {
+    overrides: undefined as Record<string, unknown> | undefined,
+    tab: "search" as "now" | "queue" | "search" | "sessions" | "settings",
+    queueOpen: false,
+  },
 }));
 
 vi.mock("@/hooks/use-app-data", () => ({
   useSettings: () => ({ shortcutOverrides: mocks.state.overrides }),
 }));
 vi.mock("@/stores/nav-store", () => ({
-  useNavStore: (sel: (s: { setTab: unknown }) => unknown) => sel({ setTab: mocks.setTab }),
+  useNavStore: (
+    sel: (s: { tab: typeof mocks.state.tab; setTab: typeof mocks.setTab }) => unknown,
+  ) => sel({ tab: mocks.state.tab, setTab: mocks.setTab }),
 }));
 vi.mock("@/stores/player-store", () => ({ usePlayerStore: { getState: () => mocks.player } }));
+vi.mock("@/stores/ui-store", () => {
+  const useUiStore = Object.assign(
+    (sel: (s: { queueOpen: boolean; toggleQueue: typeof mocks.toggleQueue }) => unknown) =>
+      sel({ queueOpen: mocks.state.queueOpen, toggleQueue: mocks.toggleQueue }),
+    { getState: () => ({ toggleQueue: mocks.toggleQueue }) },
+  );
+  return { useUiStore };
+});
 vi.mock("@/stores/lyrics-panel-store", () => ({
   useLyricsPanelStore: { getState: () => ({ setOpen: mocks.lyricsSetOpen }) },
 }));
@@ -62,6 +77,8 @@ function release(code: string, key: string) {
 describe("useShortcutDispatch", () => {
   beforeEach(() => {
     mocks.state.overrides = undefined;
+    mocks.state.tab = "search";
+    mocks.state.queueOpen = false;
     mocks.player.currentIndex = -1;
     mocks.player.queue = [];
     vi.clearAllMocks();
@@ -86,6 +103,24 @@ describe("useShortcutDispatch", () => {
     renderHook(() => useShortcutDispatch());
     press("KeyL", "l");
     await vi.waitFor(() => expect(mocks.setTrackLiked).toHaveBeenCalledWith("trk_1", true));
+  });
+
+  it("uses ←/→ for previous/next only on the Now Playing surface", () => {
+    mocks.state.tab = "now";
+    renderHook(() => useShortcutDispatch());
+    press("ArrowLeft", "ArrowLeft");
+    expect(mocks.player.prev).toHaveBeenCalledOnce();
+    press("ArrowRight", "ArrowRight");
+    expect(mocks.player.next).toHaveBeenCalledOnce();
+  });
+
+  it("does not steal ←/→ on the library surface", () => {
+    mocks.state.tab = "search";
+    renderHook(() => useShortcutDispatch());
+    press("ArrowLeft", "ArrowLeft");
+    press("ArrowRight", "ArrowRight");
+    expect(mocks.player.prev).not.toHaveBeenCalled();
+    expect(mocks.player.next).not.toHaveBeenCalled();
   });
 
   it("honors a user override (rebinding prev to Z frees Q)", () => {

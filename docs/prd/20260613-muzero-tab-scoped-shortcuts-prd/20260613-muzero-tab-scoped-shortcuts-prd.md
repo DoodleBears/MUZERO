@@ -12,7 +12,7 @@
 | Phase | Name | Status | Link |
 |-------|------|--------|------|
 | 1 | Scoped binding model | Completed | [Phase 1 Checklist](#phase-1-checklist) |
-| 2 | Now Playing arrow transport | Pending | [Phase 2 Checklist](#phase-2-checklist) |
+| 2 | Now Playing arrow transport | Completed | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | Settings UI by surface | Pending | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | Tooltip and cheat-sheet parity | Pending | [Phase 4 Checklist](#phase-4-checklist) |
 
@@ -338,19 +338,19 @@ Do not put merged bindings into Zustand. Continue deriving them from Dexie setti
 **Goal:** Make `ArrowLeft` / `ArrowRight` previous/next in Now Playing without breaking Library.
 
 **Tasks:**
-- [ ] Add `playback.prev@now = ArrowLeft`.
-- [ ] Add `playback.next@now = ArrowRight`.
-- [ ] Resolve active scopes in `useShortcutDispatch`.
-- [ ] Ensure Search/Library capture handlers still route `ArrowLeft` / `ArrowRight` to back/open.
-- [ ] Update Now Playing/Dock tooltip hints to show scoped arrows.
+- [x] Add `playback.prev@now = ArrowLeft`.
+- [x] Add `playback.next@now = ArrowRight`.
+- [x] Resolve active scopes in `useShortcutDispatch`.
+- [x] Ensure Search/Library capture handlers still route `ArrowLeft` / `ArrowRight` to back/open.
+- [x] Update Now Playing/Dock tooltip hints to show scoped arrows.
 
 ### Phase 2 Checklist
 
-- [ ] On Now Playing, `ArrowLeft` calls `prev`.
-- [ ] On Now Playing, `ArrowRight` calls `next`.
-- [ ] On Library, `ArrowLeft` still calls `library.back`.
-- [ ] On Library, `ArrowRight` still calls `library.open`.
-- [ ] Typing targets and dialogs still suppress global/surface shortcuts.
+- [x] On Now Playing, `ArrowLeft` calls `prev`.
+- [x] On Now Playing, `ArrowRight` calls `next`.
+- [x] On Library, `ArrowLeft` still calls `library.back`.
+- [x] On Library, `ArrowRight` still calls `library.open`.
+- [x] Typing targets and dialogs still suppress global/surface shortcuts.
 
 ### Phase 3: Settings UI By Surface
 
@@ -440,3 +440,4 @@ Do not put merged bindings into Zustand. Continue deriving them from Dexie setti
 | 2026-06-13 | MUZERO | Initial draft: best-practice plan for per-tab/per-surface shortcut ownership, including Now Playing arrow transport without breaking Library arrow navigation |
 | 2026-06-13 | MUZERO | Resolved Open Questions 1-2: no dedicated Settings scope in v1; queue scope activates while the queue surface is open and not typing. |
 | 2026-06-13 | MUZERO | Completed Phase 1: scoped binding model, v1 import compatibility, per-scope conflict checks, and v2 keymap export schema. |
+| 2026-06-13 | MUZERO | Completed Phase 2: Now Playing owns `ArrowLeft`/`ArrowRight` for previous/next, dispatcher derives active scopes from shell state, and Now Playing/Dock tooltips can show scoped arrow hints. |

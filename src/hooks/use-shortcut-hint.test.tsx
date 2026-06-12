@@ -30,4 +30,12 @@ describe("useShortcutHint", () => {
     const { result } = renderHook(() => useShortcutHint());
     expect(result.current("prev")).toEqual(["Z"]);
   });
+
+  it("can return the binding for a specific surface scope", () => {
+    const { result } = renderHook(() => useShortcutHint());
+    expect(result.current("prev", { scope: "global" })).toEqual(["Q"]);
+    expect(result.current("next", { scope: "global" })).toEqual(["E"]);
+    expect(result.current("prev", { scope: "now" })).toEqual(["←"]);
+    expect(result.current("next", { scope: "now" })).toEqual(["→"]);
+  });
 });

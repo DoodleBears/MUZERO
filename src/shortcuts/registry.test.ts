@@ -62,6 +62,23 @@ describe("SHORTCUT_ACTIONS registry", () => {
     );
   });
 
+  it("adds Now Playing arrow bindings without replacing global Q/E transport", () => {
+    expect(SHORTCUT_ACTIONS_BY_ID["playback.prev"].defaultBindings).toEqual([
+      { scope: "global", gesture: { kind: "key", stroke: { code: "KeyQ", keyLabel: "Q" } } },
+      {
+        scope: "now",
+        gesture: { kind: "key", stroke: { code: "ArrowLeft", keyLabel: "←" } },
+      },
+    ]);
+    expect(SHORTCUT_ACTIONS_BY_ID["playback.next"].defaultBindings).toEqual([
+      { scope: "global", gesture: { kind: "key", stroke: { code: "KeyE", keyLabel: "E" } } },
+      {
+        scope: "now",
+        gesture: { kind: "key", stroke: { code: "ArrowRight", keyLabel: "→" } },
+      },
+    ]);
+  });
+
   it("marks search.openGlobal protected and reference gestures display-only", () => {
     expect(isEditableAction(SHORTCUT_ACTIONS_BY_ID["search.openGlobal"])).toBe(false);
     const swipe = SHORTCUT_ACTIONS_BY_ID["ref.swipeBack"];

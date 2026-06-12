@@ -130,7 +130,7 @@ export const SHORTCUT_ACTIONS: readonly ShortcutActionDef[] = [
     scope: "global",
     category: "playback",
     labelKey: "shortcuts.action.playbackPrev",
-    defaultBindings: [key("global", "KeyQ", "Q")],
+    defaultBindings: [key("global", "KeyQ", "Q"), key("now", "ArrowLeft", "←")],
     keywords: ["previous", "上一首"],
   },
   {
@@ -138,7 +138,7 @@ export const SHORTCUT_ACTIONS: readonly ShortcutActionDef[] = [
     scope: "global",
     category: "playback",
     labelKey: "shortcuts.action.playbackNext",
-    defaultBindings: [key("global", "KeyE", "E")],
+    defaultBindings: [key("global", "KeyE", "E"), key("now", "ArrowRight", "→")],
     keywords: ["next", "下一首"],
   },
   {

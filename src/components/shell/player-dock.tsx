@@ -67,6 +67,7 @@ export function PlayerDock({
                 className="min-w-0 flex-1"
                 onOpen={onOpenNowPlaying}
                 controls={<DockControls className="flex" onOpenQueue={() => setQueueOpen(true)} />}
+                transportHintScope={tab === "now" ? "now" : undefined}
               />
             </div>
             <div className="px-0.5">

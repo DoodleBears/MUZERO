@@ -67,6 +67,11 @@ describe("mergeBindings", () => {
         scope: "global",
         source: "default",
       },
+      {
+        gesture: { kind: "key", stroke: { code: "ArrowLeft", keyLabel: "←" } },
+        scope: "now",
+        source: "default",
+      },
     ]);
   });
 
@@ -214,6 +219,15 @@ describe("matchAction (scope precedence)", () => {
     expect(matchAction(up, scopes("global", "library"), bindings, "other")).toBe(
       "library.focusPrev",
     );
+  });
+
+  it("bare ←/→ are track transport only when the Now Playing scope is active", () => {
+    const left = gestureFromEvent(ev("ArrowLeft", "ArrowLeft"));
+    const right = gestureFromEvent(ev("ArrowRight", "ArrowRight"));
+    expect(matchAction(left, scopes("global"), bindings, "other")).toBeNull();
+    expect(matchAction(right, scopes("global"), bindings, "other")).toBeNull();
+    expect(matchAction(left, scopes("global", "now"), bindings, "other")).toBe("playback.prev");
+    expect(matchAction(right, scopes("global", "now"), bindings, "other")).toBe("playback.next");
   });
 
   it("Cmd/Ctrl+↑ stays volume even with a library surface active", () => {

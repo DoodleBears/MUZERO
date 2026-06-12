@@ -13,6 +13,7 @@ import { useShortcutHint } from "@/hooks/use-shortcut-hint";
 import { trackHasCover, trackSubtitle } from "@/lib/track-display";
 import { cn } from "@/lib/utils";
 import { transitionState } from "@/lib/view-transition-react";
+import type { ShortcutScope } from "@/shortcuts/registry";
 import { usePlayerStore } from "@/stores/player-store";
 import { CurrentTrackContextMenu } from "./track-context-menu";
 
@@ -38,10 +39,12 @@ export function TrackIdentityRow({
   className,
   onOpen,
   controls,
+  transportHintScope,
 }: {
   className?: string;
   onOpen?: () => void;
   controls?: ReactNode;
+  transportHintScope?: ShortcutScope;
 }) {
   const { t } = useTranslation();
   const hint = useShortcutHint();
@@ -259,8 +262,8 @@ export function TrackIdentityRow({
         label={isPlaying ? t("player.pause") : t("player.play")}
         keys={hint("play")}
         shortcutRows={[
-          { label: t("player.previous"), keys: hint("prev") },
-          { label: t("player.next"), keys: hint("next") },
+          { label: t("player.previous"), keys: hint("prev", { scope: transportHintScope }) },
+          { label: t("player.next"), keys: hint("next", { scope: transportHintScope }) },
           { label: t("track.like"), keys: hint("like") },
           { label: t("nowPlaying.upNext"), keys: hint("queue") },
           { label: t("lyrics.toggleStage"), keys: hint("lyrics") },
