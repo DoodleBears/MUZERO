@@ -12,6 +12,7 @@ import { Slider } from "@/components/ui/slider";
 import { saveSettings } from "@/db/repositories";
 import { useSettings } from "@/hooks/use-app-data";
 import { cn } from "@/lib/utils";
+import { DEFAULT_LYRIC_CASCADE_TUNING } from "@/lyrics/lyric-layout-engine";
 import { LYRICS_MOTION_MODES, type LyricsMotionMode } from "@/lyrics/lyric-motion";
 
 const COLOR_MODES = [
@@ -65,6 +66,10 @@ export function LyricsTuningControls({ className }: { className?: string }) {
   const showTranslation = s.lyricsShowTranslation ?? true;
   const showRomanization = s.lyricsShowRomanization ?? false;
   const motionMode = s.lyricsMotionMode ?? "classic";
+  const cascadeAnchorPct =
+    s.lyricsCascadeAnchorPct ?? DEFAULT_LYRIC_CASCADE_TUNING.anchorRatio * 100;
+  const cascadeDelayMs = s.lyricsCascadeDelayMs ?? DEFAULT_LYRIC_CASCADE_TUNING.staggerMs;
+  const cascadeBlurPx = s.lyricsCascadeBlurPx ?? DEFAULT_LYRIC_CASCADE_TUNING.maxBlurPx;
   const lineGap = s.lyricsLineGap ?? 8;
   const shadowOpacity = s.lyricsShadowOpacity ?? 50;
   const shadowBlur = s.lyricsShadowBlur ?? 8;
@@ -118,6 +123,42 @@ export function LyricsTuningControls({ className }: { className?: string }) {
         </div>
         <p className="text-muted-foreground text-xs">{t(MOTION_MODE_HINT_KEYS[motionMode])}</p>
       </Field>
+      {motionMode === "cascade" && (
+        <>
+          <Field label={t("lyricsSettings.cascadeAnchor", { pct: cascadeAnchorPct })}>
+            <Slider
+              min={25}
+              max={60}
+              step={1}
+              value={cascadeAnchorPct}
+              onValueChange={(v) => void saveSettings({ lyricsCascadeAnchorPct: v })}
+              aria-label={t("lyricsSettings.cascadeAnchor", { pct: cascadeAnchorPct })}
+            />
+          </Field>
+          <Field label={t("lyricsSettings.cascadeDelay", { ms: cascadeDelayMs })}>
+            <Slider
+              min={0}
+              max={140}
+              step={1}
+              value={cascadeDelayMs}
+              onValueChange={(v) => void saveSettings({ lyricsCascadeDelayMs: v })}
+              aria-label={t("lyricsSettings.cascadeDelay", { ms: cascadeDelayMs })}
+            />
+          </Field>
+          <Field label={t("lyricsSettings.cascadeBlur", { px: formatPx(cascadeBlurPx) })}>
+            <Slider
+              min={0}
+              max={8}
+              step={0.1}
+              value={cascadeBlurPx}
+              onValueChange={(v) =>
+                void saveSettings({ lyricsCascadeBlurPx: Number(v.toFixed(1)) })
+              }
+              aria-label={t("lyricsSettings.cascadeBlur", { px: formatPx(cascadeBlurPx) })}
+            />
+          </Field>
+        </>
+      )}
       <Field label={t("lyricsSettings.activeFontSize", { px: activeSize })}>
         <Slider
           min={12}
@@ -375,4 +416,8 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
       {children}
     </div>
   );
+}
+
+function formatPx(value: number): string {
+  return Number.isInteger(value) ? String(value) : value.toFixed(1);
 }

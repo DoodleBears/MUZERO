@@ -23,6 +23,17 @@ export interface LyricLayoutResult {
   frames: LyricLayoutFrame[];
 }
 
+export interface LyricCascadeTuning {
+  /** Active line anchor inside the viewport, 0–1. */
+  anchorRatio?: number;
+  /** Maximum blur applied to distant inactive lines. */
+  maxBlurPx?: number;
+  /** Per-row cascade delay multiplier. */
+  staggerMs?: number;
+  /** Upper bound for a far row's delay. */
+  maxDelayMs?: number;
+}
+
 export interface SolveLyricLayoutInput {
   lines: LyricRenderLine[];
   activeIndex: number;
@@ -36,7 +47,15 @@ export interface SolveLyricLayoutInput {
     inactiveOpacity: number;
     inactiveScale: number;
   };
+  cascadeTuning?: LyricCascadeTuning;
 }
+
+export const DEFAULT_LYRIC_CASCADE_TUNING = {
+  anchorRatio: 0.42,
+  maxBlurPx: 4.2,
+  staggerMs: 52,
+  maxDelayMs: 220,
+} as const satisfies Required<LyricCascadeTuning>;
 
 const MIN_LINE_HEIGHT = 36;
 const DISTANT_DISTANCE = 3;
@@ -92,15 +111,36 @@ function scaleFor(
   return distance <= 1 ? 0.96 : 0.93;
 }
 
-function blurFor(state: LyricLayoutState, distance: number, reducedMotion: boolean): number {
+function blurFor(
+  state: LyricLayoutState,
+  distance: number,
+  reducedMotion: boolean,
+  cascadeTuning: LyricCascadeTuning | undefined,
+): number {
   if (reducedMotion || state === "active") return 0;
+  if (cascadeTuning?.maxBlurPx != null) {
+    const maxBlurPx = clamp(cascadeTuning.maxBlurPx, 0, 16);
+    if (state === "distant") return rounded(maxBlurPx);
+    return rounded(Math.min(maxBlurPx, distance * (maxBlurPx / DISTANT_DISTANCE)));
+  }
   if (state === "distant") return 4.2;
   return rounded(Math.min(3.2, distance * 1.2));
 }
 
-function delayFor(index: number, activeIndex: number, reducedMotion: boolean): number {
+function delayFor(
+  index: number,
+  activeIndex: number,
+  reducedMotion: boolean,
+  cascadeTuning: LyricCascadeTuning | undefined,
+): number {
   if (reducedMotion || index === activeIndex) return 0;
   const distance = Math.abs(index - activeIndex);
+  if (cascadeTuning?.staggerMs != null) {
+    const staggerSec = clamp(cascadeTuning.staggerMs, 0, 300) / 1000;
+    const maxDelaySec =
+      clamp(cascadeTuning.maxDelayMs ?? DEFAULT_LYRIC_CASCADE_TUNING.maxDelayMs, 0, 1000) / 1000;
+    return rounded(Math.min(maxDelaySec, distance * staggerSec));
+  }
   return rounded(Math.min(0.22, distance * STAGGER_SEC));
 }
 
@@ -140,8 +180,8 @@ export function solveLyricLayout(input: SolveLyricLayoutInput): LyricLayoutResul
         height: heights[index],
         opacity: opacityFor(state, distance, input.reducedMotion, input.visualStyle),
         scale: scaleFor(state, distance, input.reducedMotion, input.visualStyle),
-        blurPx: blurFor(state, distance, input.reducedMotion),
-        delaySec: delayFor(index, activeIndex, input.reducedMotion),
+        blurPx: blurFor(state, distance, input.reducedMotion, input.cascadeTuning),
+        delaySec: delayFor(index, activeIndex, input.reducedMotion, input.cascadeTuning),
         state,
       };
     }),

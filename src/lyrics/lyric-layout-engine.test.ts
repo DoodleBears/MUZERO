@@ -94,6 +94,28 @@ describe("solveLyricLayout", () => {
     expect(layout.frames[3]).toMatchObject({ opacity: 0.24, scale: 0.5 });
   });
 
+  it("applies caller-provided cascade anchor, blur, and stagger tuning", () => {
+    const layout = solveLyricLayout({
+      lines,
+      activeIndex: 1,
+      lineHeights: [40, 40, 40, 40, 40],
+      viewportHeight: 400,
+      alignPosition: 0.5,
+      lineGapPx: 8,
+      reducedMotion: false,
+      cascadeTuning: {
+        maxBlurPx: 6,
+        staggerMs: 80,
+        maxDelayMs: 300,
+      },
+    });
+
+    expect(layout.anchorY).toBe(200);
+    expect(layout.frames[1]).toMatchObject({ y: 180, blurPx: 0, delaySec: 0 });
+    expect(layout.frames[2]).toMatchObject({ blurPx: 2, delaySec: 0.08 });
+    expect(layout.frames[4]).toMatchObject({ blurPx: 6, delaySec: 0.24 });
+  });
+
   it("uses a calm no-blur layout under reduced motion", () => {
     const layout = solveLyricLayout({
       lines,

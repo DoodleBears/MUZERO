@@ -50,4 +50,38 @@ describe("LyricsTuningControls", () => {
       "lyricsSettings.motionCascadeHint",
     );
   });
+
+  it("shows cascade-only tuning sliders in cascade mode and saves changes", () => {
+    settings = {
+      ...DEFAULT_SETTINGS,
+      lyricsMotionMode: "cascade",
+      lyricsCascadeAnchorPct: 42,
+      lyricsCascadeDelayMs: 52,
+      lyricsCascadeBlurPx: 4.2,
+    };
+
+    render(<LyricsTuningControls />);
+
+    const anchor = screen.getByRole("slider", { name: "lyricsSettings.cascadeAnchor" });
+    const delay = screen.getByRole("slider", { name: "lyricsSettings.cascadeDelay" });
+    const blur = screen.getByRole("slider", { name: "lyricsSettings.cascadeBlur" });
+
+    fireEvent.keyDown(anchor, { key: "ArrowRight" });
+    fireEvent.keyDown(delay, { key: "ArrowRight" });
+    fireEvent.keyDown(blur, { key: "ArrowRight" });
+
+    expect(saveSettings).toHaveBeenCalledWith({ lyricsCascadeAnchorPct: 43 });
+    expect(saveSettings).toHaveBeenCalledWith({ lyricsCascadeDelayMs: 53 });
+    expect(saveSettings).toHaveBeenCalledWith({ lyricsCascadeBlurPx: 4.3 });
+  });
+
+  it("hides cascade-only tuning sliders outside cascade mode", () => {
+    settings = { ...DEFAULT_SETTINGS, lyricsMotionMode: "classic" };
+
+    render(<LyricsTuningControls />);
+
+    expect(screen.queryByRole("slider", { name: "lyricsSettings.cascadeAnchor" })).toBeNull();
+    expect(screen.queryByRole("slider", { name: "lyricsSettings.cascadeDelay" })).toBeNull();
+    expect(screen.queryByRole("slider", { name: "lyricsSettings.cascadeBlur" })).toBeNull();
+  });
 });

@@ -7,12 +7,16 @@ import { LyricsSearchPanel } from "@/components/player/lyrics-search-panel";
 import { useVisualizerCoverColorCss } from "@/components/player/visualizer-dynamic-color";
 import { db } from "@/db/muzero-db";
 import { getTrackLyrics } from "@/db/repositories";
-import type { Track } from "@/db/types";
+import type { AppSettings, Track } from "@/db/types";
 import { useSettings } from "@/hooks/use-app-data";
 import { useSmoothScroll } from "@/lib/smooth-scroll/use-smooth-scroll";
 import { cn } from "@/lib/utils";
 import { activeWordIndex } from "@/lyrics/active-word";
-import { solveLyricLayout } from "@/lyrics/lyric-layout-engine";
+import {
+  DEFAULT_LYRIC_CASCADE_TUNING,
+  type LyricCascadeTuning,
+  solveLyricLayout,
+} from "@/lyrics/lyric-layout-engine";
 import {
   type LyricsMotionMode,
   lyricFollowTargetScrollTop,
@@ -116,6 +120,7 @@ export function SyncedLyricsView({ track }: { track?: Track }) {
     () => resolveLyricStyle(settings, coverColorCss),
     [settings, coverColorCss],
   );
+  const cascadeTuning = useMemo(() => resolveLyricCascadeTuning(settings), [settings]);
   const resolved = useMemo(() => resolveTrackLyrics(track, row), [track, row]);
   const lines = resolved.mode === "synced" ? resolved.lines : null;
   const activeIndex = useActiveLyricLine(lines, isPlaying, pausedPositionSec);
@@ -155,6 +160,7 @@ export function SyncedLyricsView({ track }: { track?: Track }) {
       showTranslation={settings.lyricsShowTranslation ?? true}
       showRomanization={settings.lyricsShowRomanization ?? false}
       motionMode={settings.lyricsMotionMode}
+      cascadeTuning={cascadeTuning}
     />
   );
 }
@@ -165,6 +171,37 @@ function LyricsMessage({ children }: { children: React.ReactNode }) {
       <p className="text-center text-muted-foreground text-sm">{children}</p>
     </div>
   );
+}
+
+function resolveLyricCascadeTuning(settings: AppSettings): Required<LyricCascadeTuning> {
+  const anchorPct = clampSetting(
+    settings.lyricsCascadeAnchorPct,
+    DEFAULT_LYRIC_CASCADE_TUNING.anchorRatio * 100,
+    25,
+    60,
+  );
+  const staggerMs = clampSetting(
+    settings.lyricsCascadeDelayMs,
+    DEFAULT_LYRIC_CASCADE_TUNING.staggerMs,
+    0,
+    140,
+  );
+  return {
+    anchorRatio: anchorPct / 100,
+    staggerMs,
+    maxDelayMs: Math.max(DEFAULT_LYRIC_CASCADE_TUNING.maxDelayMs, staggerMs * 3),
+    maxBlurPx: clampSetting(
+      settings.lyricsCascadeBlurPx,
+      DEFAULT_LYRIC_CASCADE_TUNING.maxBlurPx,
+      0,
+      8,
+    ),
+  };
+}
+
+function clampSetting(value: number | undefined, fallback: number, min: number, max: number) {
+  if (value == null || !Number.isFinite(value)) return fallback;
+  return Math.min(max, Math.max(min, value));
 }
 
 /** Presentational lyrics body — pure props, no store/db/rAF (unit-tested). */
@@ -179,6 +216,7 @@ export function LyricsScroller({
   showTranslation = true,
   showRomanization = false,
   motionMode = "classic",
+  cascadeTuning = DEFAULT_LYRIC_CASCADE_TUNING,
 }: {
   resolved: ShownLyrics;
   activeIndex: number;
@@ -190,6 +228,7 @@ export function LyricsScroller({
   showTranslation?: boolean;
   showRomanization?: boolean;
   motionMode?: LyricsMotionMode;
+  cascadeTuning?: LyricCascadeTuning;
 }) {
   const plainScrollRef = useRef<HTMLDivElement>(null);
   useSmoothScroll(plainScrollRef);
@@ -228,6 +267,7 @@ export function LyricsScroller({
             showTranslation={showTranslation}
             showRomanization={showRomanization}
             motionMode={motionMode}
+            cascadeTuning={cascadeTuning}
           />
         )}
       </div>
@@ -260,6 +300,7 @@ function SyncedLines({
   showTranslation = true,
   showRomanization = false,
   motionMode = "classic",
+  cascadeTuning = DEFAULT_LYRIC_CASCADE_TUNING,
 }: {
   lines: LyricLine[];
   activeIndex: number;
@@ -270,6 +311,7 @@ function SyncedLines({
   showTranslation?: boolean;
   showRomanization?: boolean;
   motionMode?: LyricsMotionMode;
+  cascadeTuning?: LyricCascadeTuning;
 }) {
   const { t } = useTranslation();
   const viewportRef = useRef<HTMLDivElement>(null);
@@ -280,6 +322,8 @@ function SyncedLines({
   const [viewportH, setViewportH] = useState(0);
   const lyricsMotion = useMemo(() => resolveLyricsMotionMode(motionMode), [motionMode]);
   const isAmlStyleEngine = lyricsMotion.mode === "cascade";
+  const cascadeDriverActive = isAmlStyleEngine && following;
+  const cascadeAnchorRatio = cascadeTuning.anchorRatio ?? DEFAULT_LYRIC_CASCADE_TUNING.anchorRatio;
   const layoutLineGap = lyricStyle.lineGap;
   const inactiveScale = lyricStyle.inactiveFontSize / lyricStyle.activeFontSize;
   const renderLines = useMemo(() => toLyricRenderLines(lines), [lines]);
@@ -412,7 +456,7 @@ function SyncedLines({
   }, [following, activeIndex, isAmlStyleEngine, lyricsMotion]);
 
   useEffect(() => {
-    if (!isAmlStyleEngine) return;
+    if (!cascadeDriverActive) return;
     const viewport = viewportRef.current;
     if (!viewport) return;
     viewport.scrollTop = 0;
@@ -466,7 +510,7 @@ function SyncedLines({
         activeIndex: liveActiveIndex,
         lineHeights: lineHeightsRef.current,
         viewportHeight,
-        alignPosition: 0.42,
+        alignPosition: cascadeAnchorRatio,
         lineGapPx: layoutLineGap,
         reducedMotion: false,
         visualStyle: {
@@ -474,6 +518,7 @@ function SyncedLines({
           inactiveOpacity: lyricStyle.inactiveOpacity,
           inactiveScale,
         },
+        cascadeTuning,
       });
 
       for (const frame of layout.frames) {
@@ -574,7 +619,7 @@ function SyncedLines({
       });
     };
   }, [
-    isAmlStyleEngine,
+    cascadeDriverActive,
     lines,
     renderLines,
     layoutLineGap,
@@ -582,6 +627,8 @@ function SyncedLines({
     lyricStyle.activeOpacity,
     lyricStyle.inactiveOpacity,
     inactiveScale,
+    cascadeAnchorRatio,
+    cascadeTuning,
   ]);
 
   // Per-syllable karaoke fill: while the active line has word timings, a single rAF
@@ -635,15 +682,11 @@ function SyncedLines({
         data-layout-engine={isAmlStyleEngine ? "amll-style" : undefined}
         className={cn(
           "no-scrollbar absolute inset-0 overscroll-contain",
-          isAmlStyleEngine ? "overflow-hidden" : "overflow-y-auto",
+          cascadeDriverActive ? "overflow-hidden" : "overflow-y-auto",
         )}
-        style={EDGE_FADE}
-        onWheel={() => {
-          if (!isAmlStyleEngine) setFollowing(false);
-        }}
-        onTouchMove={() => {
-          if (!isAmlStyleEngine) setFollowing(false);
-        }}
+        style={isAmlStyleEngine && !following ? undefined : EDGE_FADE}
+        onWheel={() => setFollowing(false)}
+        onTouchMove={() => setFollowing(false)}
       >
         <div
           key={lyricsSetKey}
@@ -651,8 +694,8 @@ function SyncedLines({
           data-testid="lyrics-stack"
           className="flex flex-col"
           style={{
-            paddingTop: isAmlStyleEngine ? 0 : viewportH * 0.38,
-            paddingBottom: isAmlStyleEngine ? 0 : viewportH * 0.62,
+            paddingTop: cascadeDriverActive ? 0 : viewportH * 0.38,
+            paddingBottom: cascadeDriverActive ? 0 : viewportH * 0.62,
             rowGap: layoutLineGap,
           }}
         >

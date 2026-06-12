@@ -16,6 +16,7 @@
 | 3 | rAF DOM Driver + React Integration | ✅ Completed | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | Word Fill / Secondary Lines / Click Seek Parity | ✅ Completed | [Phase 4 Checklist](#phase-4-checklist) |
 | 5 | Performance QA + Rollout Cleanup | ✅ Completed | [Phase 5 Checklist](#phase-5-checklist) |
+| 6 | Cascade Tuning + Detached Readability | ✅ Completed | [Phase 6 Checklist](#phase-6-checklist) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
 
@@ -174,11 +175,13 @@ LyricLineLayout
 
 ### 4.2 Database Schema
 
-No IndexedDB schema changes.
+No IndexedDB schema version change is required because these are additive settings fields only.
 
-- `AppSettings.lyricsMotionMode` may remain as the visible mode selector.
+- `AppSettings.lyricsMotionMode` remains the visible mode selector.
+- `AppSettings.lyricsCascadeAnchorPct` stores the Cascade active-line anchor in viewport percent.
+- `AppSettings.lyricsCascadeDelayMs` stores the Cascade per-row follow delay in milliseconds.
+- `AppSettings.lyricsCascadeBlurPx` stores the Cascade maximum inactive-line blur in pixels.
 - No hidden localStorage / URL / global flags.
-- If new tuning values become necessary, add visible settings only after a follow-up PRD or a PRD update.
 
 ### 4.3 Type Contracts
 
@@ -353,6 +356,27 @@ React state should not update per frame.
 
 > **Phase 5 implementation note (2026-06-13):** Removed the legacy row-wave helper from [`src/lyrics/lyric-motion.ts`](../../../src/lyrics/lyric-motion.ts) and removed Cascade pulse state / old data attributes from [`SyncedLines`](../../../src/components/player/synced-lyrics-view.tsx). Cascade now has one owner: the AMLL-style layout solver + rAF driver. Added solver stress coverage for 120-line lyric stacks, mixed secondary-line heights, and large seek jumps. Final verification: `vitest run src/lyrics/lyric-render-line.test.ts src/lyrics/lyric-layout-engine.test.ts src/lyrics/lyric-motion.test.ts src/components/player/synced-lyrics-view.test.tsx src/components/player/lyrics-tuning-controls.test.tsx` (44 tests), `tsc --noEmit`, and touched-file Biome all passed.
 
+### Phase 6: Cascade Tuning + Detached Readability
+
+**Goal:** Make Cascade controllable as its own lyrics engine and keep history browsing readable when the user manually scrolls away from the live line.
+
+**Tasks:**
+- [x] Add visible Cascade-only sliders for active-line anchor, row delay, and blur strength.
+- [x] Persist the new tuning in `AppSettings` as additive local settings fields.
+- [x] Thread tuning into the pure layout solver and rAF driver under tests.
+- [x] Stop the Cascade driver when the user wheels / touch-scrolls away from follow mode.
+- [x] Clear blur / scale / opacity driver writes while detached so historical lyrics are readable.
+- [x] Reattach follow with the existing "Back to current line" affordance.
+
+### Phase 6 Checklist
+
+- [x] Cascade tuning has TDD coverage in solver, settings UI, and synced lyrics integration tests.
+- [x] Classic / Inertial settings UI remains unchanged.
+- [x] Detached Cascade uses normal scroll overflow instead of forced `scrollTop = 0`.
+- [x] PRD updated before commit.
+
+> **Phase 6 implementation note (2026-06-13):** Added Cascade-specific sliders in [`LyricsTuningControls`](../../../src/components/player/lyrics-tuning-controls.tsx) for anchor, delay, and blur; persisted them as additive `AppSettings` fields; passed them into [`solveLyricLayout`](../../../src/lyrics/lyric-layout-engine.ts) and the Cascade rAF driver. Manual wheel/touch now detaches Cascade into a readable history-scroll state by stopping the driver and clearing transform/opacity/filter writes; clicking "Back to current line" resumes the AMLL-style engine. Verification: `vitest run src/lyrics/lyric-layout-engine.test.ts src/components/player/lyrics-tuning-controls.test.tsx src/components/player/synced-lyrics-view.test.tsx` (42 tests) passed.
+
 ---
 
 ## 7. Performance Methodology
@@ -410,9 +434,9 @@ Dev mode is not sufficient for final performance sign-off. Final QA should run a
 |---|----------|--------|----------|
 | 1 | Should MUZERO adopt AMLL packages directly instead of clean-room implementation? | Open | Default is clean-room until license/bundle/API review says otherwise. |
 | 2 | Should Classic / Inertial remain visible modes after the new engine lands? | Open | Classic should remain as regression baseline; Inertial may become a parameter preset of the same engine. |
-| 3 | Should user scrolling detach the continuous engine, or should the engine always own the lyric stack? | Open | Needs UX decision after prototype. |
-| 4 | What is the exact anchor ratio? | Open | Start at `0.42` based on LyciaMusic's usage; tune in QA. |
-| 5 | Should line blur be enabled on all lyrics surfaces, including compact mobile sheet? | Open | Reduced-motion and mobile performance must decide. |
+| 3 | Should user scrolling detach the continuous engine, or should the engine always own the lyric stack? | Decided | User wheel/touch scrolling detaches Cascade into normal readable history scrolling; the existing "Back to current line" control reattaches follow. |
+| 4 | What is the exact anchor ratio? | Decided | Default remains `0.42`; users can tune it with the visible Cascade anchor slider. |
+| 5 | Should line blur be enabled on all lyrics surfaces, including compact mobile sheet? | Decided | Cascade blur stays enabled by default, is tunable from `0–8px`, and is cleared while detached for history browsing. |
 
 ---
 
@@ -429,6 +453,7 @@ Dev mode is not sufficient for final performance sign-off. Final QA should run a
 | 2026-06-13 | MUZERO | Follow-up: user-selected lyric motion modes now ignore OS reduced-motion; Cascade always starts the AMLL-style driver and computes full blur / scale / stagger effects. |
 | 2026-06-13 | MUZERO | Follow-up: Cascade now uses a wider minimum line gap, removes scroll-mode stack padding, hides native scrolling, and clears stale scroll offsets so the active line anchor stays stable. |
 | 2026-06-13 | MUZERO | Follow-up: Cascade layout now respects the shared lyric tuning controls for line gap, active opacity, inactive opacity, and inactive font size. |
+| 2026-06-13 | MUZERO | Follow-up: added Cascade-only anchor / delay / blur sliders and a readable detached history-scroll state that clears driver blur / transform / opacity until follow is resumed. |
 
 ---
 

@@ -123,6 +123,50 @@ describe("LyricsScroller (synced)", () => {
     expect(screen.getByText("line one")).not.toHaveAttribute("data-cascade-wave-token");
   });
 
+  it("lets cascade detach into readable history scrolling", async () => {
+    render(
+      <LyricsScroller resolved={synced} activeIndex={0} onSeek={() => {}} motionMode="cascade" />,
+    );
+
+    const viewport = screen.getByTestId("lyrics-scroll");
+    await waitFor(() => {
+      expect(screen.getByText("line two").style.filter).toContain("blur");
+    });
+    expect(viewport).toHaveClass("overflow-hidden");
+
+    fireEvent.wheel(viewport);
+
+    expect(screen.getByLabelText("lyrics.followCurrent")).toBeInTheDocument();
+    expect(viewport).toHaveClass("overflow-y-auto");
+    await waitFor(() => {
+      expect(screen.getByText("line two").style.filter).toBe("");
+    });
+    expect(screen.getByText("line two").style.transform).toBe("");
+
+    fireEvent.click(screen.getByLabelText("lyrics.followCurrent"));
+    expect(screen.queryByLabelText("lyrics.followCurrent")).toBeNull();
+    await waitFor(() => {
+      expect(viewport).toHaveClass("overflow-hidden");
+      expect(screen.getByText("line two").style.filter).toContain("blur");
+    });
+  });
+
+  it("passes cascade tuning to the AMLL-style layout driver", async () => {
+    render(
+      <LyricsScroller
+        resolved={synced}
+        activeIndex={0}
+        onSeek={() => {}}
+        motionMode="cascade"
+        cascadeTuning={{ anchorRatio: 0.5, maxBlurPx: 6, staggerMs: 80 }}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("line two").style.filter).toBe("blur(2.000px)");
+    });
+  });
+
   it("keeps cascade effects enabled when the OS prefers reduced motion", async () => {
     const originalMatchMedia = window.matchMedia;
     Object.defineProperty(window, "matchMedia", {

@@ -689,6 +689,12 @@ export interface AppSettings {
    * neighbor delay. Reduced motion resolves to the low-motion classic behavior.
    */
   lyricsMotionMode?: "classic" | "inertial" | "cascade";
+  /** Cascade active-line anchor in viewport percent, 25–60. Default 42. */
+  lyricsCascadeAnchorPct?: number;
+  /** Cascade per-row follow delay in ms, 0–140. Default 52. */
+  lyricsCascadeDelayMs?: number;
+  /** Cascade maximum inactive-line blur in px, 0–8. Default 4.2. */
+  lyricsCascadeBlurPx?: number;
   /** Legacy mirror for the lyrics/memory rail toggle; layout is driven by nowPlayingRightRailCollapsed. */
   lyricsStageOpen?: boolean;
   /** Lyric text-shadow strength, 0–100 (0 = no shadow). Default 35. */
@@ -945,6 +951,9 @@ export const DEFAULT_SETTINGS: AppSettings = {
   lyricsShowTranslation: true,
   lyricsShowRomanization: false,
   lyricsMotionMode: "classic",
+  lyricsCascadeAnchorPct: 42,
+  lyricsCascadeDelayMs: 52,
+  lyricsCascadeBlurPx: 4.2,
   lyricsStageOpen: false,
   lyricsShadowOpacity: 50,
   lyricsShadowBlur: 8,
