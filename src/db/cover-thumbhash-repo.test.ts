@@ -19,7 +19,13 @@ vi.mock("@/lib/image-palette", () => ({
 }));
 
 import { MuzeroDB } from "./muzero-db";
-import { createSession, setEntityCover, setSessionCover, setTrackCover } from "./repositories";
+import {
+  createSession,
+  createUploadedTrack,
+  setEntityCover,
+  setSessionCover,
+  setTrackCover,
+} from "./repositories";
 
 let db: MuzeroDB;
 let dbName: string;
@@ -61,6 +67,29 @@ describe("cover-set generates + persists a thumbhash on the owner row (Phase 3)"
     expect(track?.coverThumbhash).toBe("THUMB64");
     expect(track?.coverPalette).toEqual(mocks.palette);
     expect(track?.coverPaletteSource).toBe(track?.coverBlobId);
+  });
+
+  it("createUploadedTrack stores coverThumbhash for embedded covers during import", async () => {
+    const session = await createSession({ name: "s", seedPrompt: "", config: {} }, db);
+
+    const track = await createUploadedTrack(
+      {
+        sessionId: session.id,
+        title: "Imported",
+        kind: "audio",
+        blob: new Blob([new Uint8Array([9, 9, 9])], { type: "audio/mpeg" }),
+        mime: "audio/mpeg",
+        durationSec: 12,
+        embeddedCover: { blob: png(), mime: "image/png" },
+      },
+      db,
+    );
+
+    const stored = await db.tracks.get(track.id);
+    expect(stored?.coverBlobId).toBeTruthy();
+    expect(stored?.coverThumbhash).toBe("THUMB64");
+    expect(stored?.coverPalette).toEqual(mocks.palette);
+    expect(stored?.coverPaletteSource).toBe(stored?.coverBlobId);
   });
 
   it("setSessionCover stores coverThumbhash on the session", async () => {

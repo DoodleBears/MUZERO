@@ -804,14 +804,13 @@ export async function createUploadedTrack(
         )
       : undefined;
     if (cover && input.embeddedCover) {
+      const [coverThumbhash, coverPalette] = await Promise.all([
+        encodeCoverThumbhash(input.embeddedCover.blob),
+        extractCoverPalette(input.embeddedCover.blob, undefined, input.embeddedCover.mime),
+      ]);
       track.coverBlobId = cover.id;
-      Object.assign(
-        track,
-        coverPaletteFields(
-          await extractCoverPalette(input.embeddedCover.blob, undefined, input.embeddedCover.mime),
-          cover.id,
-        ),
-      );
+      track.coverThumbhash = coverThumbhash;
+      Object.assign(track, coverPaletteFields(coverPalette, cover.id));
     }
     await db.transaction("rw", db.tracks, async () => {
       await db.tracks.put(track);

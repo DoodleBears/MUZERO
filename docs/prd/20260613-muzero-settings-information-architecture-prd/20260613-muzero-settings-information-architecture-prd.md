@@ -624,6 +624,7 @@ Scope:
 - [x] Add scoped cleanup actions for playback cache, offline stream cache, orphan cleanup, legacy migration, and cover repair.
 - [x] Add i18n for storage quota, OPFS, persistent storage, safe cache clearing, and storage-pressure copy.
 - [x] Add tests for usage progress rendering, quota-unavailable fallback, and clear-cache actions.
+- [x] Ensure newly imported embedded track covers generate cover preview/color metadata immediately so Storage repair counts do not grow for fresh imports.
 
 ### Phase 4 Checklist
 
@@ -632,6 +633,7 @@ Scope:
 - [x] Cache clearing is scoped and does not imply permanent media deletion.
 - [x] OPFS, IndexedDB, and Electron file buckets remain visible.
 - [x] Existing persistent media migration/cleanup/repair actions still work.
+- [x] Fresh imports with embedded covers no longer require a separate cover metadata repair pass for thumbhash/palette fields.
 - [x] No local source paths are exposed in exported diagnostics or remote sync.
 
 **Phase 4 Verification:**
@@ -865,6 +867,7 @@ Scope:
 | 2026-06-13 | Codex | Surfaced the Local files add-folder action in the card header and covered it with a component test. |
 | 2026-06-13 | Codex | Added localized AI DJ tool-call capability chips and localized chat tool-call labels. |
 | 2026-06-13 | Codex | Added a desktop-only action to open MUZERO's local cache/media folder from Storage. |
+| 2026-06-13 | Codex | Fixed embedded-cover imports to persist cover thumbhash metadata at import time and added repository coverage. |
 
 ---
 
