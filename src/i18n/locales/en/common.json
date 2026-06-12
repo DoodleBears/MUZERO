@@ -465,6 +465,13 @@
     "tuning": "Tuning",
     "resetStyle": "Reset this style",
     "help": {
+      "style": "Chooses the visualizer look. Each style remembers its own tuning, so you can switch back without losing the feel you set.",
+      "previewOnly": "Temporarily hides player chrome while this panel is open, so you can judge the effect without changing saved settings.",
+      "useCoverColor": "Lets the current cover art guide the visualizer color. Turn it off when you want the theme accent to stay consistent.",
+      "asBackground": "Places the live visualizer behind Now Playing content. It looks more immersive and may use more power.",
+      "blendMode": "Controls how the background visualizer mixes with the image below it. Try softer modes for readability and brighter modes for glow.",
+      "idleOnly": "Hides the player UI after a few quiet seconds on Now Playing, leaving the background visualizer in focus.",
+      "memoryOverlay": "Shows your saved memories while the player UI is hidden, so notes and timestamped moments can surface without leaving immersive mode.",
       "fftSize": "Controls how much audio detail the visualizer listens to. Higher can feel more precise but may react a little slower.",
       "smoothing": "Controls how quickly the motion settles. Higher feels calmer and smoother; lower reacts faster to beats.",
       "minDecibels": "Sets the quietest sound level the visualizer treats as visible. Lower picks up more quiet details; higher ignores background noise.",

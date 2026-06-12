@@ -461,3 +461,4 @@ This PRD allows adding one small helper component if it prevents duplicated orde
 | 2026-06-13 | Codex | Verified Phase 2 with focused visualizer-effect-settings tests. |
 | 2026-06-13 | Codex | Implemented Phase 3 help icons, reset action, per-style tuning saves, and focused UI tests. |
 | 2026-06-13 | Codex | Completed Phase 4 shared visualizer controls, Settings/Now Playing parity, and focused parity tests. |
+| 2026-06-13 | Codex | Added localized help text for shared visualizer style, preview, color, background, blend, idle, and memory controls. |
