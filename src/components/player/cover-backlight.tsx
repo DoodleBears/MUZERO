@@ -62,22 +62,40 @@ export function CoverBacklightCanvas({
   }, []);
 
   return (
-    <canvas
-      ref={canvasRef}
-      aria-hidden
-      className={cn(
-        "absolute inset-0 size-full object-cover transition-opacity duration-150",
-        ready ? "opacity-100" : "opacity-0",
-        className,
+    <>
+      {!ready && (
+        <img
+          src={url}
+          alt=""
+          aria-hidden
+          decoding="async"
+          referrerPolicy="no-referrer"
+          draggable={false}
+          className={cn("absolute inset-0 size-full object-cover", className)}
+          style={{
+            backfaceVisibility: "hidden",
+            filter: [`blur(${blur}px)`, `saturate(${saturation}%)`].join(" "),
+            transform: `scale(${1 + range / 100})`,
+          }}
+        />
       )}
-      style={{
-        backfaceVisibility: "hidden",
-        height: "190%",
-        left: "-45%",
-        top: "-45%",
-        width: "190%",
-      }}
-    />
+      <canvas
+        ref={canvasRef}
+        aria-hidden
+        className={cn(
+          "absolute inset-0 size-full object-cover transition-opacity duration-150",
+          ready ? "opacity-100" : "opacity-0",
+          className,
+        )}
+        style={{
+          backfaceVisibility: "hidden",
+          height: "190%",
+          left: "-45%",
+          top: "-45%",
+          width: "190%",
+        }}
+      />
+    </>
   );
 }
 
