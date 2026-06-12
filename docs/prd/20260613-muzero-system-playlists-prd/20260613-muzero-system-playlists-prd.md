@@ -14,7 +14,7 @@
 | Phase | Name | Status | Link |
 |-------|------|--------|------|
 | 1 | PRD + Current-State Audit | Completed | [Phase 1 Checklist](#phase-1-checklist) |
-| 2 | System Playlist Model + Selectors | Pending | [Phase 2 Checklist](#phase-2-checklist) |
+| 2 | System Playlist Model + Selectors | Completed | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | Gallery / Set Detail UI Integration | Pending | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | Playback Stats Range Aggregation | Pending | [Phase 4 Checklist](#phase-4-checklist) |
 | 5 | i18n + Empty States + Tests | Pending | [Phase 5 Checklist](#phase-5-checklist) |
@@ -420,18 +420,18 @@ Deletion behavior:
 **Goal:** Build pure, testable derivation logic.
 
 **Tasks:**
-- [ ] Add `src/lib/system-playlists.ts` with stable system ids and range types.
-- [ ] Implement Hearted derivation from `Track.liked`.
-- [ ] Implement Recently Played derivation from folded `TrackPlaybackStats`.
-- [ ] Implement Most Played derivation from `TrackPlaybackStats` and `PlaybackEvent`.
-- [ ] Resolve remote-only playback events into displayable/playable remote entries when local remote metadata exists.
-- [ ] Add range boundary helpers for all/month/week/day.
+- [x] Add `src/lib/system-playlists.ts` with stable system ids and range types.
+- [x] Implement Hearted derivation from `Track.liked`.
+- [x] Implement Recently Played derivation from folded `TrackPlaybackStats`.
+- [x] Implement Most Played derivation from `TrackPlaybackStats` and `PlaybackEvent`.
+- [x] Resolve remote-only playback events into displayable/playable remote entries when local remote metadata exists.
+- [x] Add range boundary helpers for all/month/week/day.
 
 ### Phase 2 Checklist
 
-- [ ] Unit tests cover empty library, deleted-track stats, multi-device folded stats, tie-breaking, and non-ready tracks.
-- [ ] Week/month/day windows use deterministic injected `now`.
-- [ ] Selectors do not mutate input arrays.
+- [x] Unit tests cover empty library, deleted-track stats, multi-device folded stats, tie-breaking, and non-ready tracks.
+- [x] Week/month/day windows use deterministic injected `now`.
+- [x] Selectors do not mutate input arrays.
 
 ### Phase 3: Gallery / Set Detail UI Integration
 
@@ -544,6 +544,7 @@ Deletion behavior:
 |------|--------|---------|
 | 2026-06-13 | Codex | Initial draft for three non-deletable default system playlists. |
 | 2026-06-13 | Codex | Resolved product questions: rolling 30 days, unique recently played, Queue pinned sources, folded stats as source of truth, and remote/shared item inclusion. |
+| 2026-06-13 | Codex | Completed Phase 2 pure system playlist selectors with TDD coverage for local and remote playback rows. |
 
 ---
 
