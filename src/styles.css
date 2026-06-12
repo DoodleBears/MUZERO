@@ -250,6 +250,42 @@
   .overflow-x-auto {
     -webkit-app-region: no-drag;
   }
+
+  /*
+   * Modal scrollbars should stay quiet: visible when needed, but thin and with a
+   * transparent track so they do not draw a second surface inside dialogs.
+   * Explicit immersive `no-scrollbar` panes keep their existing hidden behavior.
+   */
+  [role="dialog"]:not(.no-scrollbar),
+  [role="alertdialog"]:not(.no-scrollbar),
+  [role="dialog"] :where(:not(.no-scrollbar)),
+  [role="alertdialog"] :where(:not(.no-scrollbar)) {
+    scrollbar-width: thin;
+    scrollbar-color: color-mix(in oklch, var(--color-foreground) 32%, transparent) transparent;
+  }
+
+  [role="dialog"]:not(.no-scrollbar)::-webkit-scrollbar,
+  [role="alertdialog"]:not(.no-scrollbar)::-webkit-scrollbar,
+  [role="dialog"] :where(:not(.no-scrollbar))::-webkit-scrollbar,
+  [role="alertdialog"] :where(:not(.no-scrollbar))::-webkit-scrollbar {
+    width: 0.5rem;
+    height: 0.5rem;
+  }
+
+  [role="dialog"]:not(.no-scrollbar)::-webkit-scrollbar-track,
+  [role="alertdialog"]:not(.no-scrollbar)::-webkit-scrollbar-track,
+  [role="dialog"] :where(:not(.no-scrollbar))::-webkit-scrollbar-track,
+  [role="alertdialog"] :where(:not(.no-scrollbar))::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  [role="dialog"]:not(.no-scrollbar)::-webkit-scrollbar-thumb,
+  [role="alertdialog"]:not(.no-scrollbar)::-webkit-scrollbar-thumb,
+  [role="dialog"] :where(:not(.no-scrollbar))::-webkit-scrollbar-thumb,
+  [role="alertdialog"] :where(:not(.no-scrollbar))::-webkit-scrollbar-thumb {
+    border-radius: 9999px;
+    background-color: color-mix(in oklch, var(--color-foreground) 28%, transparent);
+  }
 }
 
 /*
