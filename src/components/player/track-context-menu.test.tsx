@@ -1,9 +1,20 @@
-import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { act, fireEvent, render, screen } from "@testing-library/react";
+import type { ReactNode } from "react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { TrackContextMenuLabels } from "./track-context-menu";
 import { TrackContextMenu } from "./track-context-menu";
 
+vi.mock("@/components/library/track-add-to-set", () => ({
+  TrackAddToSetDialog: ({ open, title }: { open: boolean; title?: ReactNode }) =>
+    open ? <div role="dialog">{title}</div> : null,
+}));
+
+afterEach(() => {
+  vi.useRealTimers();
+});
+
 const labels: TrackContextMenuLabels = {
+  addToSet: "Add to set",
   coverInput: "Cover file",
   displayMode: "Display",
   displayModes: {
@@ -35,6 +46,52 @@ describe("TrackContextMenu", () => {
 
     expect(onDisplayModeChange).toHaveBeenCalledWith("cover");
     expect(screen.queryByRole("menuitemcheckbox", { name: "Audio only" })).not.toBeInTheDocument();
+  });
+
+  it("opens the add-to-set picker from the song menu", async () => {
+    render(
+      <TrackContextMenu
+        displayMode="cover"
+        labels={labels}
+        track={{ coverBlobId: undefined, id: "trk_1", title: "Rain Loop" }}
+      >
+        <div>Rain Loop title</div>
+      </TrackContextMenu>,
+    );
+
+    fireEvent.contextMenu(screen.getByText("Rain Loop title"));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Add to set" }));
+
+    expect(screen.getByRole("dialog")).toHaveTextContent("Add to set");
+  });
+
+  it("opens the song menu on touch long press", async () => {
+    vi.useFakeTimers();
+    try {
+      render(
+        <TrackContextMenu
+          displayMode="cover"
+          labels={labels}
+          track={{ coverBlobId: undefined, id: "trk_1", title: "Rain Loop" }}
+        >
+          <div>Rain Loop cover touch target</div>
+        </TrackContextMenu>,
+      );
+
+      fireEvent.pointerDown(screen.getByText("Rain Loop cover touch target"), {
+        clientX: 12,
+        clientY: 24,
+        pointerType: "touch",
+      });
+      await act(async () => {
+        vi.advanceTimersByTime(520);
+        await Promise.resolve();
+      });
+
+      expect(screen.getByRole("menu", { name: "Track options" })).toHaveTextContent("Add to set");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("routes cover files through the hidden input", async () => {

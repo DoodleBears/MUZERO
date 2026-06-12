@@ -1,11 +1,10 @@
 import { Heart, Loader2, Play, TriangleAlert, Video } from "lucide-react";
-import { Fragment, type KeyboardEvent, type MouseEvent, memo, useMemo, useState } from "react";
+import { Fragment, type KeyboardEvent, type MouseEvent, memo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { SourceAttributionChip } from "@/components/cloud/source-attribution-chip";
-import { BookmarkPlusIcon } from "@/components/ui/bookmark-plus";
+import { TrackAddToSetPopover } from "@/components/library/track-add-to-set";
 import { Checkbox } from "@/components/ui/checkbox";
 import { CloudDownloadIcon } from "@/components/ui/cloud-download";
-import { Command, type CommandItem } from "@/components/ui/command";
 import { CoverImage } from "@/components/ui/cover-image";
 import { DeleteIcon } from "@/components/ui/delete";
 import { Disc3Icon } from "@/components/ui/disc-3";
@@ -161,10 +160,6 @@ export const TrackRow = memo(function TrackRow({
 }: TrackRowProps) {
   const { t } = useTranslation();
   const disabled = track.status !== "ready";
-  const addTargets = useMemo(
-    () => sessions.filter((session) => !session.trackIds.includes(track.id)),
-    [sessions, track.id],
-  );
 
   // Two-tap activation: the first interaction selects the row (revealing its
   // info in the inspector); interacting again with an already-selected row that
@@ -343,8 +338,9 @@ export const TrackRow = memo(function TrackRow({
             onExportWithMetadata={onExportWithMetadata}
           />
         )}
-        <AddToSetPopover
-          sessions={addTargets}
+        <TrackAddToSetPopover
+          trackId={track.id}
+          sessions={sessions}
           onAddToSession={onAddToSession}
           onAddToNewSession={onAddToNewSession}
         />
@@ -446,86 +442,6 @@ function DownloadPopover({
         >
           {t("track.exportWithMetadata")}
         </button>
-      </PopoverContent>
-    </Popover>
-  );
-}
-
-/** Sentinel id for the synthetic "create a new set" row in the command list. */
-const CREATE_SET_ITEM_ID = "__muzero_create_set__";
-
-function AddToSetPopover({
-  sessions,
-  onAddToSession,
-  onAddToNewSession,
-}: {
-  sessions: DjSession[];
-  onAddToSession: (sessionId: string) => void;
-  onAddToNewSession: (name: string) => void;
-}) {
-  const { t } = useTranslation();
-  const [open, setOpen] = useState(false);
-  const [query, setQuery] = useState("");
-  const trimmed = query.trim();
-  const items = useMemo<CommandItem[]>(() => {
-    const existing: CommandItem[] = sessions.map((session) => ({
-      id: session.id,
-      keywords: [session.name, session.description ?? ""],
-      label: session.name,
-    }));
-    // Offer to create a set from the typed name when it doesn't already name one
-    // of the candidate sets (case-insensitive). The query is mirrored into the
-    // keywords so the synthetic row always survives the command's own filter.
-    const namesExisting = sessions.some(
-      (s) => s.name.trim().toLowerCase() === trimmed.toLowerCase(),
-    );
-    if (trimmed && !namesExisting) {
-      existing.push({
-        id: CREATE_SET_ITEM_ID,
-        keywords: [trimmed],
-        label: t("track.createSet", { name: trimmed }),
-      });
-    }
-    return existing;
-  }, [sessions, trimmed, t]);
-
-  function handleSelect(id: string) {
-    if (id === CREATE_SET_ITEM_ID) {
-      onAddToNewSession(trimmed);
-    } else {
-      onAddToSession(id);
-    }
-    setQuery("");
-    setOpen(false);
-  }
-
-  return (
-    <Popover
-      open={open}
-      onOpenChange={(nextOpen) => {
-        setOpen(nextOpen);
-        if (!nextOpen) setQuery("");
-      }}
-    >
-      <PopoverTrigger
-        type="button"
-        className="grid size-7 place-items-center rounded text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-        aria-label={t("track.addToSet")}
-        title={t("track.addToSet")}
-      >
-        <BookmarkPlusIcon size={16} />
-      </PopoverTrigger>
-      <PopoverContent className="w-56 p-2" side="left" sideOffset={10}>
-        <PopoverTitle className="px-2 py-1.5">{t("track.addToSet")}</PopoverTitle>
-        <Command
-          className="border-0"
-          empty={t("track.typeToCreateSet")}
-          inputValue={query}
-          items={items}
-          onInputChange={setQuery}
-          onSelect={handleSelect}
-          placeholder={t("track.searchOrCreateSet")}
-        />
       </PopoverContent>
     </Popover>
   );

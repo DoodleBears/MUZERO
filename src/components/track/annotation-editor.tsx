@@ -2,6 +2,7 @@ import { useLiveQuery } from "dexie-react-hooks";
 import { ImagePlus, Images, Tag, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { CurrentTrackAddToSetButton } from "@/components/library/track-add-to-set";
 import { CoverCropDialog } from "@/components/track/cover-crop-dialog";
 import { LyricsManagerButton } from "@/components/track/lyrics-manager-dialog";
 import { TrackMemoryNotesPanel } from "@/components/track/track-memory-notes-panel";
@@ -151,6 +152,11 @@ export function AnnotationEditor({ track }: { track: Track }) {
             >
               <ImagePlus className="size-3.5" />
             </button>
+            <CurrentTrackAddToSetButton
+              trackId={track.id}
+              buttonClassName="size-8 rounded-md border border-border bg-card/55 hover:bg-card"
+              iconClassName="size-3.5"
+            />
             <TrackBackgroundManager trackId={track.id} />
             <LyricsManagerButton track={track} />
             <input

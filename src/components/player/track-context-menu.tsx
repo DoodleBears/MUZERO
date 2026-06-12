@@ -1,10 +1,18 @@
 "use client";
 
 import { Image as ImageIcon, ImagePlus, Video } from "lucide-react";
-import { type ReactNode, useRef, useState } from "react";
+import {
+  type MouseEvent as ReactMouseEvent,
+  type ReactNode,
+  type PointerEvent as ReactPointerEvent,
+  useRef,
+  useState,
+} from "react";
 import { useTranslation } from "react-i18next";
 import { useShallow } from "zustand/react/shallow";
+import { TrackAddToSetDialog } from "@/components/library/track-add-to-set";
 import { CoverCropDialog } from "@/components/track/cover-crop-dialog";
+import { BookmarkPlusIcon } from "@/components/ui/bookmark-plus";
 import {
   ContextMenu,
   ContextMenuContent,
@@ -25,8 +33,11 @@ const DISPLAY_MODE_OPTIONS: { id: SetDisplayMode; icon: typeof Video }[] = [
   { id: "video", icon: Video },
   { id: "cover", icon: ImageIcon },
 ];
+const LONG_PRESS_MENU_MS = 520;
+const LONG_PRESS_MOVE_PX = 8;
 
 export interface TrackContextMenuLabels {
+  addToSet: string;
   coverInput: string;
   displayMode: string;
   displayModes: Record<SetDisplayMode, string>;
@@ -60,6 +71,10 @@ export function TrackContextMenu({
   track,
 }: TrackContextMenuProps) {
   const fileRef = useRef<HTMLInputElement | null>(null);
+  const longPressTimer = useRef<number | null>(null);
+  const longPressStart = useRef<{ x: number; y: number } | null>(null);
+  const longPressTriggered = useRef(false);
+  const [addToSetOpen, setAddToSetOpen] = useState(false);
 
   function selectCover(event: React.ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
@@ -67,32 +82,95 @@ export function TrackContextMenu({
     if (file) onCoverFileSelect?.(file);
   }
 
+  function clearLongPress() {
+    if (longPressTimer.current != null) {
+      window.clearTimeout(longPressTimer.current);
+      longPressTimer.current = null;
+    }
+    longPressStart.current = null;
+  }
+
+  function scheduleLongPress(event: ReactPointerEvent<HTMLElement>) {
+    if (!track || event.pointerType === "mouse") return;
+    clearLongPress();
+    longPressTriggered.current = false;
+    longPressStart.current = { x: event.clientX, y: event.clientY };
+    const target = event.target instanceof Element ? event.target : event.currentTarget;
+    const { clientX, clientY } = event;
+    longPressTimer.current = window.setTimeout(() => {
+      longPressTimer.current = null;
+      longPressTriggered.current = true;
+      const view = target.ownerDocument.defaultView ?? window;
+      target.dispatchEvent(
+        new view.MouseEvent("contextmenu", {
+          bubbles: true,
+          button: 2,
+          cancelable: true,
+          clientX,
+          clientY,
+        }),
+      );
+    }, LONG_PRESS_MENU_MS);
+  }
+
+  function maybeCancelLongPress(event: ReactPointerEvent<HTMLElement>) {
+    const start = longPressStart.current;
+    if (!start) return;
+    if (Math.hypot(event.clientX - start.x, event.clientY - start.y) > LONG_PRESS_MOVE_PX) {
+      clearLongPress();
+    }
+  }
+
+  function suppressLongPressClick(event: ReactMouseEvent<HTMLElement>) {
+    if (!longPressTriggered.current) return;
+    longPressTriggered.current = false;
+    event.preventDefault();
+    event.stopPropagation();
+  }
+
   return (
-    <ContextMenu>
-      <ContextMenuTrigger className={cn("min-w-0", className)}>{children}</ContextMenuTrigger>
-      {track && (
-        <ContextMenuContent aria-label={labels.menu} className="w-56">
-          <ContextMenuLabel className="truncate text-foreground">{track.title}</ContextMenuLabel>
-          <ContextMenuSeparator />
-          <ContextMenuLabel>{labels.displayMode}</ContextMenuLabel>
-          <ContextMenuRadioGroup
-            value={displayMode}
-            onValueChange={(value) => onDisplayModeChange?.(value as SetDisplayMode)}
-          >
-            {DISPLAY_MODE_OPTIONS.map(({ id, icon: Icon }) => (
-              <ContextMenuRadioItem key={id} value={id}>
-                <Icon aria-hidden="true" />
-                {labels.displayModes[id]}
-              </ContextMenuRadioItem>
-            ))}
-          </ContextMenuRadioGroup>
-          <ContextMenuSeparator />
-          <ContextMenuItem disabled={!onCoverFileSelect} onClick={() => fileRef.current?.click()}>
-            <ImagePlus aria-hidden="true" />
-            {labels.pickCover}
-          </ContextMenuItem>
-        </ContextMenuContent>
-      )}
+    <>
+      <ContextMenu>
+        <ContextMenuTrigger
+          className={cn("min-w-0", className)}
+          data-no-drag
+          onClickCapture={suppressLongPressClick}
+          onContextMenuCapture={clearLongPress}
+          onPointerCancelCapture={clearLongPress}
+          onPointerDownCapture={scheduleLongPress}
+          onPointerMoveCapture={maybeCancelLongPress}
+          onPointerUpCapture={clearLongPress}
+        >
+          {children}
+        </ContextMenuTrigger>
+        {track && (
+          <ContextMenuContent aria-label={labels.menu} className="w-56">
+            <ContextMenuLabel className="truncate text-foreground">{track.title}</ContextMenuLabel>
+            <ContextMenuSeparator />
+            <ContextMenuItem onClick={() => setAddToSetOpen(true)}>
+              <BookmarkPlusIcon aria-hidden="true" />
+              {labels.addToSet}
+            </ContextMenuItem>
+            <ContextMenuItem disabled={!onCoverFileSelect} onClick={() => fileRef.current?.click()}>
+              <ImagePlus aria-hidden="true" />
+              {labels.pickCover}
+            </ContextMenuItem>
+            <ContextMenuSeparator />
+            <ContextMenuLabel>{labels.displayMode}</ContextMenuLabel>
+            <ContextMenuRadioGroup
+              value={displayMode}
+              onValueChange={(value) => onDisplayModeChange?.(value as SetDisplayMode)}
+            >
+              {DISPLAY_MODE_OPTIONS.map(({ id, icon: Icon }) => (
+                <ContextMenuRadioItem key={id} value={id}>
+                  <Icon aria-hidden="true" />
+                  {labels.displayModes[id]}
+                </ContextMenuRadioItem>
+              ))}
+            </ContextMenuRadioGroup>
+          </ContextMenuContent>
+        )}
+      </ContextMenu>
       <input
         accept={IMAGE_ACCEPT}
         aria-label={labels.coverInput}
@@ -101,7 +179,15 @@ export function TrackContextMenu({
         ref={fileRef}
         type="file"
       />
-    </ContextMenu>
+      {track && (
+        <TrackAddToSetDialog
+          onOpenChange={setAddToSetOpen}
+          open={addToSetOpen}
+          title={labels.addToSet}
+          trackId={track.id}
+        />
+      )}
+    </>
   );
 }
 
@@ -142,6 +228,7 @@ export function CurrentTrackContextMenu({
         className={className}
         displayMode={displayMode}
         labels={{
+          addToSet: t("track.addToSet"),
           coverInput: t("annotation.addCover"),
           displayMode: t("nowPlaying.displayMode"),
           displayModes: {
