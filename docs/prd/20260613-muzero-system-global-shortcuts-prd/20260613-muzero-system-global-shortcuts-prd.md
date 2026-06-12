@@ -13,7 +13,7 @@
 |-------|------|--------|------|
 | 1 | Action contract and shared dispatcher | Completed | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | Electron global-shortcut adapter | Completed | [Phase 2 Checklist](#phase-2-checklist) |
-| 3 | Settings UI and persistence | Pending | [Phase 3 Checklist](#phase-3-checklist) |
+| 3 | Settings UI and persistence | Completed | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | Platform QA and polish | Pending | [Phase 4 Checklist](#phase-4-checklist) |
 
 > Status Legend: Completed | In Progress | Pending
@@ -375,19 +375,25 @@ UI principles:
 **Goal:** Let users enable, bind, disable, reset, and inspect system global shortcuts.
 
 **Tasks:**
-- [ ] Add `AppSettings.systemShortcutsEnabled`.
-- [ ] Add `AppSettings.systemShortcutBindings`.
-- [ ] Add repository functions for per-action update/reset.
-- [ ] Add Settings section with enable toggle and eligible rows.
-- [ ] Add i18n for en/zh/ja/ko.
+- [x] Add `AppSettings.systemShortcutsEnabled`.
+- [x] Add `AppSettings.systemShortcutBindings`.
+- [x] Add repository functions for per-action update/reset.
+- [x] Add Settings section with enable toggle and eligible rows.
+- [x] Add i18n for en/zh/ja/ko.
 
 ### Phase 3 Checklist
 
-- [ ] Feature defaults to disabled.
-- [ ] Enabling with no bindings does not register anything.
-- [ ] User can bind Play/Pause, Prev, Next, Volume, Shuffle, Like, Repeat.
-- [ ] Duplicate system-global accelerators are blocked before save.
-- [ ] Reset all system global shortcuts does not reset in-app shortcuts.
+- [x] Feature defaults to disabled.
+- [x] Enabling with no bindings does not register anything.
+- [x] User can bind Play/Pause, Prev, Next, Volume, Shuffle, Like, Repeat.
+- [x] Duplicate system-global accelerators are blocked before save.
+- [x] Reset all system global shortcuts does not reset in-app shortcuts.
+
+**Phase 3 Verification:**
+- `vitest run scripts/electron-global-shortcuts.test.mjs src/hooks/use-system-shortcuts.test.tsx src/shortcuts/system-global.test.ts src/shortcuts/actions.test.ts src/hooks/use-shortcut-dispatch.test.tsx src/db/repositories.test.ts src/components/settings/shortcuts-settings.test.tsx src/components/settings/shortcuts-settings-import.test.tsx`
+- `tsc --noEmit`
+- `biome check --write src/App.tsx src/db/types.ts src/db/repositories.ts src/db/repositories.test.ts src/components/settings/shortcuts-settings.tsx src/components/settings/shortcuts-settings.test.tsx src/hooks/use-system-shortcuts.ts src/hooks/use-system-shortcuts.test.tsx src/shortcuts/system-global.ts src/shortcuts/system-global.test.ts src/shortcuts/actions.ts src/shortcuts/actions.test.ts src/hooks/use-shortcut-dispatch.ts src/lib/desktop/bridge.ts src/lib/desktop/electron.ts`
+- `JSON.parse` validation for `src/i18n/locales/{en,zh,ja,ko}/common.json`
 
 ### Phase 4: Platform QA And Polish
 
@@ -469,3 +475,4 @@ UI principles:
 | 2026-06-13 | MUZERO | Updated product direction to Electron-first implementation with Tauri parity explicitly out of v1 scope. |
 | 2026-06-13 | MUZERO | Completed Phase 1: added system-global action allowlist, safe accelerator validation, shared shortcut action runner, and focused shortcut regression tests. |
 | 2026-06-13 | MUZERO | Completed Phase 2: added Electron globalShortcut registration, preload/DesktopBridge adapter, renderer sync hook, and lifecycle tests. |
+| 2026-06-13 | MUZERO | Completed Phase 3: added settings persistence, App-level sync, Settings UI, duplicate/safety validation, and en/zh/ja/ko copy. |

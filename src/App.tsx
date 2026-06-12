@@ -1,6 +1,6 @@
 import { MotionConfig } from "motion/react";
 import type { ReactNode } from "react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { DevPerfPanel } from "@/components/dev/dev-perf-panel";
 import { ChangelogModal } from "@/components/player/changelog-modal";
 import { ImmersiveLyricsOverlay } from "@/components/player/immersive-lyrics-overlay";
@@ -20,6 +20,7 @@ import { useDocumentTitle } from "@/hooks/use-document-title";
 import { useIdle } from "@/hooks/use-idle";
 import { usePlaybackWarmup } from "@/hooks/use-playback-warmup";
 import { useShortcutDispatch } from "@/hooks/use-shortcut-dispatch";
+import { useSystemShortcuts } from "@/hooks/use-system-shortcuts";
 import { resolveDesktopBridge } from "@/lib/desktop/bridge";
 import { electronWindowAppearanceCssVars } from "@/lib/electron-window-appearance";
 import { cn } from "@/lib/utils";
@@ -29,6 +30,7 @@ import { QueuePage } from "@/pages/queue-page";
 import { SearchPage } from "@/pages/search-page";
 import { SessionsPage } from "@/pages/sessions-page";
 import { SettingsPage } from "@/pages/settings-page";
+import { buildSystemShortcutRegistrations } from "@/shortcuts/system-global";
 import { startCloudAutoSyncScheduler } from "@/stores/cloud-auto-sync";
 import { useNavStore } from "@/stores/nav-store";
 import { usePlayerStore } from "@/stores/player-store";
@@ -64,9 +66,17 @@ export default function App() {
   const [trackSearchOpen, setTrackSearchOpen] = useState(false);
   const fullscreenRestoreRef = useRef<{ element: HTMLElement; until: number } | null>(null);
   const settings = useSettings();
+  const systemShortcutRegistrations = useMemo(
+    () => buildSystemShortcutRegistrations(settings.systemShortcutBindings),
+    [settings.systemShortcutBindings],
+  );
   // Global keyboard shortcuts (transport + tab nav), resolved through the
   // configurable registry so user overrides take effect live.
   useShortcutDispatch();
+  useSystemShortcuts({
+    enabled: settings.systemShortcutsEnabled === true,
+    registrations: systemShortcutRegistrations,
+  });
   // Browser tab title tracks the current track: `Title · Artist · Album | MUZERO`.
   useDocumentTitle();
   // Apply the chosen desktop app icon (Electron only; no-op on web/tauri).

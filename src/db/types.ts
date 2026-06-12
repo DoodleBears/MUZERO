@@ -6,6 +6,10 @@ import type { LyricsProviderId, LyricsRecord } from "@/lyrics/provider";
 import type { CloudPresetId } from "@/musicgen/presets";
 import type { MusicGenProviderId } from "@/musicgen/registry";
 import type { ScopedShortcutBinding } from "@/shortcuts/registry";
+import type {
+  SystemGlobalShortcutActionId,
+  SystemShortcutBinding,
+} from "@/shortcuts/system-global";
 import type { VisualizerStyleId } from "@/visualizer/types";
 
 /** Lifecycle of a single track. Uploaded tracks are born "ready". */
@@ -775,6 +779,9 @@ export interface AppSettings {
    * configurable-keyboard-shortcuts PRD.
    */
   shortcutOverrides?: Record<string, ScopedShortcutBinding[]>;
+  /** OS-level Electron global shortcuts. Disabled by default; separate from in-app `global` scope. */
+  systemShortcutsEnabled?: boolean;
+  systemShortcutBindings?: Partial<Record<SystemGlobalShortcutActionId, SystemShortcutBinding>>;
   /**
    * Auto-fetch lyrics for uploaded/streamed tracks (synced-lyrics PRD). Sends
    * title/artist to the visible lyrics source(s) selected below; default on.
@@ -950,6 +957,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   lyricsStrokeOpacity: 100,
   playerRepeatMode: "all",
   playerShuffle: false,
+  systemShortcutsEnabled: false,
+  systemShortcutBindings: {},
   presenceEnabled: false,
 };
 

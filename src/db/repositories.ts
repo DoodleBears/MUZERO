@@ -21,6 +21,11 @@ import { clampIndex } from "@/player/queue";
 import { orderedSetTrackIds, planReorder, ranksAtTop, rebalance } from "@/player/set-order";
 import type { ScopedShortcutBinding } from "@/shortcuts/registry";
 import {
+  isSystemGlobalShortcutAction,
+  type SystemGlobalShortcutActionId,
+  type SystemShortcutBinding,
+} from "@/shortcuts/system-global";
+import {
   deleteMediaBlob,
   type MediaBlobStorageOptions,
   putMediaBlob,
@@ -116,6 +121,48 @@ export async function setAllShortcutOverrides(
 /** Clear every override → the whole keymap returns to defaults. */
 export async function resetAllShortcuts(db: MuzeroDB = defaultDb): Promise<void> {
   await saveSettings({ shortcutOverrides: {} }, db);
+}
+
+// ------------------------------------------------ system global shortcuts ----
+
+export async function setSystemShortcutsEnabled(
+  enabled: boolean,
+  db: MuzeroDB = defaultDb,
+): Promise<void> {
+  await saveSettings({ systemShortcutsEnabled: enabled }, db);
+}
+
+export async function setSystemShortcutBinding(
+  actionId: SystemGlobalShortcutActionId,
+  binding: SystemShortcutBinding,
+  db: MuzeroDB = defaultDb,
+): Promise<void> {
+  if (!isSystemGlobalShortcutAction(actionId)) return;
+  const settings = await getSettings(db);
+  await saveSettings(
+    {
+      systemShortcutBindings: {
+        ...(settings.systemShortcutBindings ?? {}),
+        [actionId]: binding,
+      },
+    },
+    db,
+  );
+}
+
+export async function resetSystemShortcut(
+  actionId: SystemGlobalShortcutActionId,
+  db: MuzeroDB = defaultDb,
+): Promise<void> {
+  const settings = await getSettings(db);
+  if (!settings.systemShortcutBindings || !(actionId in settings.systemShortcutBindings)) return;
+  const next = { ...settings.systemShortcutBindings };
+  delete next[actionId];
+  await saveSettings({ systemShortcutBindings: next }, db);
+}
+
+export async function resetAllSystemShortcuts(db: MuzeroDB = defaultDb): Promise<void> {
+  await saveSettings({ systemShortcutBindings: {} }, db);
 }
 
 // ----------------------------------------------------------- import folders ----
