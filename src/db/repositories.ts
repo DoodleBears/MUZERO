@@ -18,7 +18,7 @@ import {
   replaceEntries,
 } from "@/player/play-queue";
 import { clampIndex } from "@/player/queue";
-import { planReorder, ranksAtTop } from "@/player/set-order";
+import { orderedSetTrackIds, planReorder, ranksAtTop, rebalance } from "@/player/set-order";
 import type { ShortcutGesture } from "@/shortcuts/registry";
 import {
   deleteMediaBlob,
@@ -270,6 +270,49 @@ export async function prependTrackIds(
         ranks[id] = front[i];
       });
       session.trackRanks = ranks;
+    }
+    session.updatedAt = Date.now();
+    await db.sessions.put(session);
+  });
+}
+
+/**
+ * Add tracks to a set immediately after an existing anchor while preserving the
+ * given id order. Bulk import uses this to progressively reveal chunks without
+ * reversing the final library order across multiple `prependTrackIds` calls.
+ */
+export async function insertTrackIdsAfter(
+  sessionId: string,
+  ids: string[],
+  afterTrackId?: string,
+  db: MuzeroDB = defaultDb,
+): Promise<void> {
+  if (ids.length === 0) return;
+  await db.transaction("rw", db.sessions, async () => {
+    const session = await db.sessions.get(sessionId);
+    if (!session) return;
+    const existing = new Set(session.trackIds);
+    const fresh = ids.filter((id) => !existing.has(id));
+    if (fresh.length === 0) return;
+
+    const insert = (ordered: string[]) => {
+      const index = afterTrackId ? ordered.indexOf(afterTrackId) : -1;
+      const at = index >= 0 ? index + 1 : 0;
+      return [...ordered.slice(0, at), ...fresh, ...ordered.slice(at)];
+    };
+
+    if (session.trackRanks && Object.keys(session.trackRanks).length > 0) {
+      const next = insert(orderedSetTrackIds(session.trackIds, session.trackRanks));
+      session.trackIds = next;
+      session.trackRanks = rebalance(next);
+    } else {
+      session.trackIds = insert(session.trackIds);
+    }
+
+    if (session.removedTracks) {
+      const tombstones = { ...session.removedTracks };
+      for (const id of fresh) delete tombstones[id];
+      session.removedTracks = tombstones;
     }
     session.updatedAt = Date.now();
     await db.sessions.put(session);

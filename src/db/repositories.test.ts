@@ -1,5 +1,6 @@
 import Dexie from "dexie";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { orderedSetTrackIds } from "@/player/set-order";
 import {
   LARGE_IMAGE_PROVIDER_THRESHOLD_BYTES,
   type MediaStorageProvider,
@@ -30,6 +31,7 @@ import {
   getSettings,
   getTrack,
   getTrackCover,
+  insertTrackIdsAfter,
   knownSourcePaths,
   listAllTracks,
   listGalleryImages,
@@ -146,6 +148,38 @@ describe("prependTrackIds", () => {
     await prependTrackIds(s.id, ["c"], db);
     const got = await getSession(s.id, db);
     expect(got?.trackIds).toEqual(["c", "a", "b"]);
+  });
+});
+
+describe("insertTrackIdsAfter", () => {
+  it("reveals bulk import chunks without reversing their final order", async () => {
+    const s = await createSession({ seedPrompt: "", config: { autoExtend: false } }, db);
+    await prependTrackIds(s.id, ["old"], db);
+
+    await insertTrackIdsAfter(s.id, ["a", "b"], undefined, db);
+    await insertTrackIdsAfter(s.id, ["c", "d"], "b", db);
+
+    const got = await getSession(s.id, db);
+    expect(got?.trackIds).toEqual(["a", "b", "c", "d", "old"]);
+  });
+
+  it("keeps ranked sets materialized after inserting a progressive import chunk", async () => {
+    const s = await createSession({ seedPrompt: "", config: { autoExtend: false } }, db);
+    await db.sessions.update(s.id, {
+      trackIds: ["old2", "old1"],
+      trackRanks: { old1: 0, old2: 1024 },
+    });
+
+    await insertTrackIdsAfter(s.id, ["a", "b"], "old1", db);
+
+    const got = await getSession(s.id, db);
+    expect(got?.trackIds).toEqual(["old1", "a", "b", "old2"]);
+    expect(orderedSetTrackIds(got?.trackIds ?? [], got?.trackRanks)).toEqual([
+      "old1",
+      "a",
+      "b",
+      "old2",
+    ]);
   });
 });
 

@@ -497,7 +497,7 @@ describe("player-store bulk upload visibility", () => {
       };
     });
 
-    const { repos, usePlayerStore } = await loadRuntime();
+    const { db, repos, usePlayerStore } = await loadRuntime();
     const session = await repos.createSession({ seedPrompt: "", config: { autoExtend: false } });
     const files = Array.from(
       { length: 26 },
@@ -518,6 +518,10 @@ describe("player-store bulk upload visibility", () => {
 
     const finished = await repos.getSession(session.id);
     expect(finished?.trackIds).toHaveLength(26);
+    const rows = await db.tracks.bulkGet(finished?.trackIds ?? []);
+    expect(rows.map((track) => track?.title)).toEqual(
+      Array.from({ length: 26 }, (_, i) => `song-${String(i + 1).padStart(2, "0")}`),
+    );
   });
 });
 

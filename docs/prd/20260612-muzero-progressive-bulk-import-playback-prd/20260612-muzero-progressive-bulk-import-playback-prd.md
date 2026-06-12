@@ -13,7 +13,7 @@
 |-------|------|--------|------|
 | 1 | PRD + Best Practice Grounding | ✅ Completed | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | TDD Coverage For Progressive Publishing | ✅ Completed | [Phase 2 Checklist](#phase-2-checklist) |
-| 3 | Progressive Import Flush Implementation | 🔲 Pending | [Phase 3 Checklist](#phase-3-checklist) |
+| 3 | Progressive Import Flush Implementation | ✅ Completed | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | Verification + Completion | 🔲 Pending | [Phase 4 Checklist](#phase-4-checklist) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
@@ -142,10 +142,17 @@ const IMPORT_VISIBILITY_FLUSH_SIZE = 25;
 async function flushImportedTrackIds(
   setId: string,
   ids: string[],
-): Promise<number>
+  afterTrackId?: string,
+): Promise<string | undefined>
+
+async function insertTrackIdsAfter(
+  sessionId: string,
+  ids: string[],
+  afterTrackId?: string,
+): Promise<void>
 ```
 
-The helper flushes the current ids through `prependTrackIds`, clears the caller-owned buffer only after success, and returns the number published. It must be local to `player-store.ts` unless reuse pressure appears elsewhere.
+`flushImportedTrackIds` is local to `player-store.ts` and clears the caller-owned buffer only after a successful DB write. `insertTrackIdsAfter` lives in `src/db/repositories.ts` so set membership order/rank invariants stay owned by the repository layer. The store passes the last published track id as the next chunk's anchor, preserving final import order while still making each chunk visible.
 
 ### 5.2 Error Handling
 
@@ -204,17 +211,18 @@ No new UI. Existing import progress remains authoritative.
 **Goal:** Flush imported ids in bounded batches across file-picker/drop upload and folder sync.
 
 **Tasks:**
-- [ ] Add `IMPORT_VISIBILITY_FLUSH_SIZE`.
-- [ ] Add local helper for flushing and clearing imported id buffers.
-- [ ] Update `addUploadsToSet` to flush when the buffer reaches the threshold and once more at the end.
-- [ ] Update `runFolderSync` to flush during each folder plan and once more before folder metadata update.
+- [x] Add `IMPORT_VISIBILITY_FLUSH_SIZE`.
+- [x] Add local helper for flushing and clearing imported id buffers.
+- [x] Add repository helper for order-preserving chunk insertion after an anchor.
+- [x] Update `addUploadsToSet` to flush when the buffer reaches the threshold and once more at the end.
+- [x] Update `runFolderSync` to flush during each folder plan and once more before folder metadata update.
 
 ### Phase 3 Checklist
 
-- [ ] Existing order semantics remain newest-on-top inside each flushed batch.
-- [ ] No media id is published before `createUploadedTrack` / `ingestViaWorker` resolves.
-- [ ] Failed files do not block earlier successful flushes.
-- [ ] PRD updated before commit.
+- [x] Existing order semantics remain stable across flushed batches.
+- [x] No media id is published before `createUploadedTrack` / `ingestViaWorker` resolves.
+- [x] Failed files do not block earlier successful flushes.
+- [x] PRD updated before commit.
 
 ### Phase 4: Verification + Completion
 
@@ -278,3 +286,4 @@ No new UI. Existing import progress remains authoritative.
 |------|--------|---------|
 | 2026-06-12 | Codex | Initial Final PRD with best-practice grounding and phased TDD plan. |
 | 2026-06-12 | Codex | Phase 2 completed: added red tests for folder sync and file upload progressive visibility; targeted tests fail with mid-import `trackIds` still empty. |
+| 2026-06-12 | Codex | Phase 3 completed: added order-preserving progressive flush for upload and folder sync, plus repository tests for chunk insertion and ranked sets. |

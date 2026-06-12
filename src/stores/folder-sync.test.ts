@@ -143,7 +143,7 @@ describe("runFolderSync", () => {
   it(
     "publishes completed folder imports before the entire large folder finishes",
     async () => {
-      const { repos, runFolderSync } = await load();
+      const { db, repos, runFolderSync } = await load();
       const { setId, folderId } = await rememberFolder(repos, "/m");
       const files = Array.from({ length: 26 }, (_, i) =>
         file(`song-${String(i + 1).padStart(2, "0")}.mp3`),
@@ -173,6 +173,10 @@ describe("runFolderSync", () => {
 
       const finished = await repos.getSession(setId);
       expect(finished?.trackIds).toHaveLength(26);
+      const rows = await db.tracks.bulkGet(finished?.trackIds ?? []);
+      expect(rows.map((track) => track?.sourcePath)).toEqual(
+        Array.from({ length: 26 }, (_, i) => `/m/song-${String(i + 1).padStart(2, "0")}.mp3`),
+      );
     },
     FOLDER_SYNC_TEST_TIMEOUT_MS,
   );

@@ -12,6 +12,7 @@ import {
   getTrackBlob,
   getTrackCover,
   getTracksByIds,
+  insertTrackIdsAfter,
   knownSourcePaths,
   playQueueAppend,
   playQueuePlayNext,
@@ -122,6 +123,8 @@ import {
 } from "@/sync/r2-presence-coordinator";
 import { writeR2Presence } from "@/sync/r2-presence-sync";
 import { ingestViaWorker } from "@/workers/heavy-client";
+
+const IMPORT_VISIBILITY_FLUSH_SIZE = 25;
 
 interface PlayerState {
   activeSessionId: string | null;
@@ -1000,20 +1003,26 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     set({ isUploading: true });
     try {
       const ids: string[] = [];
+      let uploaded = 0;
+      let lastPublishedTrackId: string | undefined;
       const unsupported: string[] = [];
       for (const file of list) {
         const r = await ingestMediaFile(setId, file);
-        if (r.trackId) ids.push(r.trackId);
-        else if (r.unsupportedName) unsupported.push(r.unsupportedName);
+        if (r.trackId) {
+          ids.push(r.trackId);
+          uploaded += 1;
+          if (ids.length >= IMPORT_VISIBILITY_FLUSH_SIZE) {
+            lastPublishedTrackId = await flushImportedTrackIds(setId, ids, lastPublishedTrackId);
+          }
+        } else if (r.unsupportedName) unsupported.push(r.unsupportedName);
       }
-      // Newest on top (prepend) — the first added track becomes the set's cover.
-      if (ids.length > 0) await prependTrackIds(setId, ids);
+      lastPublishedTrackId = await flushImportedTrackIds(setId, ids, lastPublishedTrackId);
       if (unsupported.length > 0) {
         notify.warning(i18n.t("drop.skipped", { count: unsupported.length }), {
           detail: `${unsupported.join(", ")} — ${i18n.t("nowPlaying.videoUnsupported")}`,
         });
       }
-      log.info("player", `uploaded ${ids.length} file(s) to ${setId}`);
+      log.info("player", `uploaded ${uploaded} file(s) to ${setId}`);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       set({ djError: msg });
@@ -1142,6 +1151,18 @@ interface IngestResult {
   trackId?: string;
   /** Set when the file decoded as media but this WebView can't play it. */
   unsupportedName?: string;
+}
+
+async function flushImportedTrackIds(
+  setId: string,
+  ids: string[],
+  afterTrackId?: string,
+): Promise<string | undefined> {
+  if (ids.length === 0) return afterTrackId;
+  const batch = [...ids];
+  await insertTrackIdsAfter(setId, batch, afterTrackId);
+  ids.length = 0;
+  return batch.at(-1) ?? afterTrackId;
 }
 
 /**
@@ -1580,6 +1601,8 @@ export async function runFolderSync(
     setFolderImportProgress({ phase: "importing", done, total, imported, encrypted, decodeFailed });
     for (const plan of plans) {
       const ids: string[] = [];
+      let planImported = 0;
+      let lastPublishedTrackId: string | undefined;
       for (const file of plan.fresh) {
         if (signal.aborted) break;
         try {
@@ -1596,7 +1619,15 @@ export async function runFolderSync(
             decode: file.decode,
           });
           ids.push(res.trackId);
+          planImported += 1;
           imported += 1;
+          if (ids.length >= IMPORT_VISIBILITY_FLUSH_SIZE) {
+            lastPublishedTrackId = await flushImportedTrackIds(
+              plan.setId,
+              ids,
+              lastPublishedTrackId,
+            );
+          }
           // No embedded image but a carried cover URL (`.ncm`, or a plaintext mp3
           // with a NetEase "163 key" comment) → queue it for the bounded fetch pass.
           if (!res.hasCover && res.albumPicUrl) {
@@ -1618,12 +1649,12 @@ export async function runFolderSync(
           currentName: file.name,
         });
       }
-      if (ids.length > 0) await prependTrackIds(plan.setId, ids);
+      lastPublishedTrackId = await flushImportedTrackIds(plan.setId, ids, lastPublishedTrackId);
       await upsertImportFolder({
         ...plan.folder,
         setId: plan.setId,
         lastScanAt: Date.now(),
-        lastImportedCount: ids.length,
+        lastImportedCount: planImported,
       });
       if (signal.aborted) break;
     }
