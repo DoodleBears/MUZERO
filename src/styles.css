@@ -24,6 +24,28 @@
   }
 }
 
+/* Thin scrollbar with no visible track, for code/log panes that scroll sideways. */
+@utility thin-transparent-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in oklch, var(--color-foreground) 32%, transparent) transparent;
+
+  &::-webkit-scrollbar {
+    width: 0.375rem;
+    height: 0.375rem;
+    background: transparent;
+  }
+
+  &::-webkit-scrollbar-track,
+  &::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+
+  &::-webkit-scrollbar-thumb {
+    border-radius: 9999px;
+    background-color: color-mix(in oklch, var(--color-foreground) 30%, transparent);
+  }
+}
+
 /*
  * Always-on edge fade for the immersive scroll surfaces. ONE lightweight gradient
  * mask — vs Tailwind's `mask-*` utilities, which compile to a 6-layer

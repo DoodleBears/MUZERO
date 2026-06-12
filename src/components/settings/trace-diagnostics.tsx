@@ -303,12 +303,12 @@ export function TraceDiagnostics() {
           </label>
         </div>
         <div className="grid gap-3 lg:grid-cols-[minmax(0,1.35fr)_minmax(260px,0.65fr)]">
-          <pre className="max-h-72 overflow-auto rounded-lg bg-muted p-3 text-[11px] leading-5 text-muted-foreground">
+          <pre className="thin-transparent-scrollbar max-h-72 overflow-auto rounded-lg bg-muted p-3 text-[11px] leading-5 text-muted-foreground">
             {visibleText || t("settings.traceEmpty")}
           </pre>
           <div className="flex min-h-0 flex-col gap-2">
             <p className="text-xs font-medium text-muted-foreground">{t("settings.traceRepro")}</p>
-            <pre className="max-h-72 overflow-auto rounded-lg bg-muted p-3 text-[11px] leading-5 text-muted-foreground">
+            <pre className="thin-transparent-scrollbar max-h-72 overflow-auto rounded-lg bg-muted p-3 text-[11px] leading-5 text-muted-foreground">
               {formatTraceEntries(reproSteps) || t("settings.traceReproEmpty")}
             </pre>
           </div>
