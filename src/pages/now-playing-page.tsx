@@ -115,7 +115,7 @@ export function NowPlayingPage({ foregroundHidden = false }: { foregroundHidden?
       >
         <section
           ref={sectionRef}
-          className="no-scrollbar flex min-h-0 flex-col gap-3 overflow-y-auto overflow-x-visible pt-chrome-top pb-chrome-bottom"
+          className="no-scrollbar -mx-[var(--now-playing-stage-bleed)] flex min-h-0 flex-col gap-3 overflow-y-auto overflow-x-visible px-[var(--now-playing-stage-bleed)] pt-chrome-top pb-chrome-bottom [--now-playing-stage-bleed:clamp(1.5rem,7vw,4.5rem)]"
         >
           <CurrentTrackContextMenu className="block">
             <div className="flex flex-col gap-2">

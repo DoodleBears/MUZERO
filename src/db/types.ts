@@ -302,6 +302,7 @@ export type BackgroundMode = "cover" | "slideshow" | "none";
 
 /** Flow background color source: follow the cover palette or a fixed custom set. */
 export type FlowColorSource = "cover" | "custom";
+export type NowPlayingCoverEffectMode = "shadow" | "backlight" | "off";
 /** Flow effect variants — the full color4bg style family, each its own
  *  self-authored shader in `flow-shaders.ts` (no color4bg dependency). */
 export type FlowEffectId =
@@ -755,6 +756,16 @@ export interface AppSettings {
   albumCoverShadowOffsetX?: number;
   /** Album/square cover shadow Y offset in px. Default 4. */
   albumCoverShadowOffsetY?: number;
+  /** Now Playing large-cover light effect. Other square covers keep albumCoverShadow. Default "shadow". */
+  nowPlayingCoverEffectMode?: NowPlayingCoverEffectMode;
+  /** Now Playing cover backlight opacity, 0–100. Default 82. */
+  nowPlayingCoverBacklightOpacity?: number;
+  /** Now Playing cover backlight outward range in percent. Default 12. */
+  nowPlayingCoverBacklightRange?: number;
+  /** Now Playing cover backlight blur radius in px. Default 20. */
+  nowPlayingCoverBacklightBlur?: number;
+  /** Now Playing cover backlight saturation, 100–600 percent. Default 400. */
+  nowPlayingCoverBacklightSaturation?: number;
   /** Primary/accent color (hex) for light mode. Mirrors localStorage `muzero-primary-light`. */
   primaryLight?: string;
   /** Primary/accent color (hex) for dark mode. Mirrors localStorage `muzero-primary-dark`. */
@@ -914,6 +925,11 @@ export const DEFAULT_SETTINGS: AppSettings = {
   albumCoverShadowBlur: 16,
   albumCoverShadowOffsetX: 0,
   albumCoverShadowOffsetY: 4,
+  nowPlayingCoverEffectMode: "shadow",
+  nowPlayingCoverBacklightOpacity: 82,
+  nowPlayingCoverBacklightRange: 12,
+  nowPlayingCoverBacklightBlur: 20,
+  nowPlayingCoverBacklightSaturation: 400,
   backgroundMode: "cover",
   backgroundRenderer: "noise",
   backgroundPixelSize: 12,

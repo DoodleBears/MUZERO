@@ -5,14 +5,25 @@ import { saveSettings } from "@/db/repositories";
 import { useSettings } from "@/hooks/use-app-data";
 import {
   albumCoverAppearanceVars,
+  NOW_PLAYING_COVER_EFFECT_MODES,
   resolveAlbumCoverAppearance,
+  resolveNowPlayingCoverBacklightAppearance,
+  resolveNowPlayingCoverEffectMode,
 } from "@/lib/album-cover-appearance";
+import { cn } from "@/lib/utils";
 
 export function AlbumCoverAppearanceSettings() {
   const { t } = useTranslation();
   const settings = useSettings();
   const appearance = resolveAlbumCoverAppearance(settings);
   const { radius, shadowOpacity, shadowBlur, shadowOffsetX, shadowOffsetY } = appearance;
+  const backlight = resolveNowPlayingCoverBacklightAppearance(settings);
+  const nowPlayingEffectMode = resolveNowPlayingCoverEffectMode(settings.nowPlayingCoverEffectMode);
+  const effectLabels = {
+    shadow: t("settings.albumCoverEffectShadow"),
+    backlight: t("settings.albumCoverEffectBacklight"),
+    off: t("settings.albumCoverEffectOff"),
+  };
 
   return (
     <div className="grid gap-4 rounded-md border border-border p-3 sm:grid-cols-[minmax(0,1fr)_10rem]">
@@ -71,6 +82,78 @@ export function AlbumCoverAppearanceSettings() {
             aria-label={t("settings.albumCoverShadowOffsetY", { px: shadowOffsetY })}
           />
         </Field>
+        <Field label={t("settings.albumCoverNowPlayingEffect")}>
+          <div className="grid grid-cols-3 gap-1">
+            {NOW_PLAYING_COVER_EFFECT_MODES.map((mode) => (
+              <button
+                key={mode}
+                type="button"
+                onClick={() => void saveSettings({ nowPlayingCoverEffectMode: mode })}
+                aria-pressed={nowPlayingEffectMode === mode}
+                className={cn(
+                  "h-9 rounded-md border px-2 font-medium text-xs transition-colors",
+                  nowPlayingEffectMode === mode
+                    ? "border-primary bg-primary/10 text-primary"
+                    : "border-border text-muted-foreground hover:text-foreground",
+                )}
+              >
+                {effectLabels[mode]}
+              </button>
+            ))}
+          </div>
+        </Field>
+        {nowPlayingEffectMode === "backlight" && (
+          <>
+            <Field label={t("settings.albumCoverBacklightOpacity", { pct: backlight.opacity })}>
+              <Slider
+                min={0}
+                max={100}
+                step={1}
+                value={backlight.opacity}
+                onValueChange={(v) => void saveSettings({ nowPlayingCoverBacklightOpacity: v })}
+                aria-label={t("settings.albumCoverBacklightOpacity", {
+                  pct: backlight.opacity,
+                })}
+              />
+            </Field>
+            <Field label={t("settings.albumCoverBacklightRange", { pct: backlight.range })}>
+              <Slider
+                min={0}
+                max={40}
+                step={1}
+                value={backlight.range}
+                onValueChange={(v) => void saveSettings({ nowPlayingCoverBacklightRange: v })}
+                aria-label={t("settings.albumCoverBacklightRange", { pct: backlight.range })}
+              />
+            </Field>
+            <Field label={t("settings.albumCoverBacklightBlur", { px: backlight.blur })}>
+              <Slider
+                min={0}
+                max={64}
+                step={1}
+                value={backlight.blur}
+                onValueChange={(v) => void saveSettings({ nowPlayingCoverBacklightBlur: v })}
+                aria-label={t("settings.albumCoverBacklightBlur", { px: backlight.blur })}
+              />
+            </Field>
+            <Field
+              label={t("settings.albumCoverBacklightSaturation", {
+                pct: backlight.saturation,
+              })}
+            >
+              <Slider
+                min={100}
+                max={600}
+                step={10}
+                value={backlight.saturation}
+                onValueChange={(v) => void saveSettings({ nowPlayingCoverBacklightSaturation: v })}
+                aria-label={t("settings.albumCoverBacklightSaturation", {
+                  pct: backlight.saturation,
+                })}
+              />
+            </Field>
+          </>
+        )}
       </div>
 
       <div className="grid min-h-32 place-items-center rounded-lg bg-muted/35 p-5">

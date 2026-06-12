@@ -1,7 +1,12 @@
+import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useSettings } from "@/hooks/use-app-data";
 import { useTrackCoverUrl } from "@/hooks/use-media";
+import {
+  resolveNowPlayingCoverBacklightAppearance,
+  resolveNowPlayingCoverEffectMode,
+} from "@/lib/album-cover-appearance";
 import { resolveStageContent, trackHasCover } from "@/lib/track-display";
 import { cn } from "@/lib/utils";
 import { getMediaEngine, usePlayerStore } from "@/stores/player-store";
@@ -17,7 +22,13 @@ const DEFAULT_VIDEO_ASPECT = 16 / 9;
  * If a video can't be decoded by the WebView (e.g. many .mkv files), we hide the
  * black element and surface a clear "format not playable" note over the visualizer.
  */
-export function MediaStage({ className }: { className?: string }) {
+export function MediaStage({
+  className,
+  coverBacklightEnabled = true,
+}: {
+  className?: string;
+  coverBacklightEnabled?: boolean;
+}) {
   const { t } = useTranslation();
   const queue = usePlayerStore((s) => s.queue);
   const currentIndex = usePlayerStore((s) => s.currentIndex);
@@ -92,6 +103,11 @@ export function MediaStage({ className }: { className?: string }) {
 
   const showCover = content === "cover";
   const showGeneratedBackdrop = content === "title" || videoError;
+  const coverEffectMode = resolveNowPlayingCoverEffectMode(settings.nowPlayingCoverEffectMode);
+  const backlight = resolveNowPlayingCoverBacklightAppearance(settings);
+  const useCoverShadow = coverEffectMode === "shadow";
+  const showCoverBacklight =
+    coverBacklightEnabled && showCover && coverEffectMode === "backlight" && !!coverUrl;
 
   // Video keeps its intrinsic ratio. Covers and title cards stay square like
   // album artwork, which keeps direct switches and swipe handoffs on one stable
@@ -100,34 +116,90 @@ export function MediaStage({ className }: { className?: string }) {
 
   return (
     <div
-      ref={containerRef}
       style={aspect != null ? { aspectRatio: String(aspect) } : undefined}
       className={cn(
-        "relative shrink-0",
+        "relative isolate shrink-0 overflow-visible",
         showVideo
-          ? "w-full overflow-hidden rounded-lg bg-black shadow-md"
+          ? "w-full"
           : showCover
-            ? "mx-auto w-full overflow-hidden bg-muted album-cover-radius album-cover-shadow"
-            : "mx-auto aspect-square w-full overflow-hidden bg-muted album-cover-radius album-cover-shadow",
+            ? "mx-auto w-full"
+            : "mx-auto aspect-square w-full",
         className,
       )}
     >
-      {showGeneratedBackdrop && <StageTitleFallback track={current} dim={asBgActive} />}
-      {/* Crossfades to the next cover only once it has decoded (no flash of the
-          previous track's cover), and reports its aspect for the box ratio. */}
-      {content === "cover" && (
-        <CoverImage
-          url={coverUrl}
-          hasCover={trackHasCover(current)}
-          fallback={<StageTitleFallback track={current} dim={asBgActive} />}
-          className="z-10 album-cover-radius"
-        />
-      )}
-      {videoBroke && (
-        <div className="absolute inset-x-0 top-1/2 z-20 -translate-y-1/2 px-6 text-center text-sm text-muted-foreground">
-          {t("nowPlaying.videoUnsupported")}
-        </div>
-      )}
+      <NowPlayingCoverBacklight
+        active={showCoverBacklight}
+        opacity={backlight.opacity / 100}
+        url={coverUrl}
+      />
+      <div
+        ref={containerRef}
+        className={cn(
+          "relative z-10 size-full",
+          showVideo
+            ? "overflow-hidden rounded-lg bg-black shadow-md"
+            : "overflow-hidden bg-muted album-cover-radius",
+          !showVideo && useCoverShadow && "album-cover-shadow",
+        )}
+      >
+        {showGeneratedBackdrop && <StageTitleFallback track={current} dim={asBgActive} />}
+        {/* Crossfades to the next cover only once it has decoded (no flash of the
+            previous track's cover), and reports its aspect for the box ratio. */}
+        {content === "cover" && (
+          <CoverImage
+            url={coverUrl}
+            hasCover={trackHasCover(current)}
+            fallback={<StageTitleFallback track={current} dim={asBgActive} />}
+            className="z-10 album-cover-radius"
+          />
+        )}
+        {videoBroke && (
+          <div className="absolute inset-x-0 top-1/2 z-20 -translate-y-1/2 px-6 text-center text-sm text-muted-foreground">
+            {t("nowPlaying.videoUnsupported")}
+          </div>
+        )}
+      </div>
     </div>
+  );
+}
+
+function NowPlayingCoverBacklight({
+  active,
+  opacity,
+  url,
+}: {
+  active: boolean;
+  opacity: number;
+  url: string | null;
+}) {
+  return (
+    <AnimatePresence initial={false} mode="wait">
+      {active && url && (
+        <motion.div
+          key={url}
+          aria-hidden
+          initial={{ opacity: 0 }}
+          animate={{ opacity }}
+          exit={{ opacity: 0, transition: { duration: 0.22, ease: "easeIn" } }}
+          transition={{ duration: 0.42, ease: "easeOut" }}
+          className="pointer-events-none absolute inset-0 z-0 now-playing-cover-backlight-clip"
+        >
+          <img
+            src={url}
+            alt=""
+            referrerPolicy="no-referrer"
+            draggable={false}
+            className="absolute inset-0 size-full object-cover album-cover-radius"
+            style={{
+              transform: "scale(var(--now-playing-cover-backlight-scale, 1.12))",
+              filter: [
+                "blur(var(--now-playing-cover-backlight-blur, 20px))",
+                "saturate(var(--now-playing-cover-backlight-saturation, 400%))",
+              ].join(" "),
+            }}
+          />
+        </motion.div>
+      )}
+    </AnimatePresence>
   );
 }
