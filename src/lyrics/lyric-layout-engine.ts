@@ -48,6 +48,10 @@ export interface SolveLyricLayoutInput {
     inactiveScale: number;
   };
   cascadeTuning?: LyricCascadeTuning;
+  frameWindow?: {
+    startIndex: number;
+    endIndex: number;
+  };
 }
 
 export const DEFAULT_LYRIC_CASCADE_TUNING = {
@@ -152,38 +156,51 @@ export function solveLyricLayout(input: SolveLyricLayoutInput): LyricLayoutResul
   const activeIndex = clamp(input.activeIndex, 0, input.lines.length - 1);
   const heights = input.lines.map((_, index) => safeHeight(input.lineHeights[index]));
   const gap = Math.max(0, input.lineGapPx);
-  const naturalY = heights.reduce<number[]>((acc, height, index) => {
-    const previous = acc[index - 1] ?? 0;
-    acc.push(index === 0 ? 0 : previous + heights[index - 1] + gap);
-    void height;
-    return acc;
-  }, []);
-  const totalHeight = heights.reduce((sum, height) => sum + height, 0) + gap * (heights.length - 1);
+  const startIndex = input.frameWindow
+    ? Math.floor(clamp(input.frameWindow.startIndex, 0, input.lines.length - 1))
+    : 0;
+  const endIndex = input.frameWindow
+    ? Math.floor(clamp(input.frameWindow.endIndex, startIndex, input.lines.length - 1))
+    : input.lines.length - 1;
+  const naturalY = new Array<number>(input.lines.length);
+  let activeNaturalY = 0;
+  let cursor = 0;
+  for (let index = 0; index < input.lines.length; index += 1) {
+    if (index >= startIndex && index <= endIndex) naturalY[index] = cursor;
+    if (index === activeIndex) activeNaturalY = cursor;
+    cursor += heights[index] + (index < input.lines.length - 1 ? gap : 0);
+  }
+  const totalHeight = cursor;
   const anchorY = rounded(Math.max(0, input.viewportHeight) * clamp(input.alignPosition, 0, 1));
   const activeY = anchorY - heights[activeIndex] / 2;
-  const offset = activeY - naturalY[activeIndex];
+  const offset = activeY - activeNaturalY;
+  const frames: LyricLayoutFrame[] = [];
+
+  for (let index = startIndex; index <= endIndex; index += 1) {
+    const line = input.lines[index];
+    if (!line) continue;
+    const state = visualState(index, activeIndex);
+    const distance = Math.abs(index - activeIndex);
+    const y = naturalY[index] + offset;
+    frames.push({
+      id: line.id,
+      index,
+      y: rounded(y),
+      naturalY: rounded(naturalY[index]),
+      translateY: rounded(offset),
+      height: heights[index],
+      opacity: opacityFor(state, distance, input.reducedMotion, input.visualStyle),
+      scale: scaleFor(state, distance, input.reducedMotion, input.visualStyle),
+      blurPx: blurFor(state, distance, input.reducedMotion, input.cascadeTuning),
+      delaySec: delayFor(index, activeIndex, input.reducedMotion, input.cascadeTuning),
+      state,
+    });
+  }
 
   return {
     activeIndex,
     anchorY,
     totalHeight: rounded(totalHeight),
-    frames: input.lines.map((line, index) => {
-      const state = visualState(index, activeIndex);
-      const distance = Math.abs(index - activeIndex);
-      const y = naturalY[index] + offset;
-      return {
-        id: line.id,
-        index,
-        y: rounded(y),
-        naturalY: rounded(naturalY[index]),
-        translateY: rounded(offset),
-        height: heights[index],
-        opacity: opacityFor(state, distance, input.reducedMotion, input.visualStyle),
-        scale: scaleFor(state, distance, input.reducedMotion, input.visualStyle),
-        blurPx: blurFor(state, distance, input.reducedMotion, input.cascadeTuning),
-        delaySec: delayFor(index, activeIndex, input.reducedMotion, input.cascadeTuning),
-        state,
-      };
-    }),
+    frames,
   };
 }

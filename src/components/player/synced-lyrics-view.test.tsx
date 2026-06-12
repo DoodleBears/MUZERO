@@ -237,6 +237,40 @@ describe("LyricsScroller (synced)", () => {
     }
   });
 
+  it("limits cascade per-frame DOM writes to the active lyric neighborhood", async () => {
+    engine.currentSec = 21.5;
+    const longSynced: ResolvedLyrics = {
+      mode: "synced",
+      source: "lrclib",
+      lines: Array.from({ length: 40 }, (_, index) => ({
+        timeMs: (index + 1) * 1000,
+        text: `window line ${index + 1}`,
+      })),
+    };
+
+    try {
+      render(
+        <LyricsScroller
+          resolved={longSynced}
+          activeIndex={20}
+          onSeek={() => {}}
+          motionMode="cascade"
+        />,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText("window line 21")).toHaveStyle({
+          willChange: "transform, opacity, filter",
+        });
+      });
+      expect(screen.getByText("window line 1")).toHaveStyle({ visibility: "hidden" });
+      expect(screen.getByText("window line 1").style.willChange).toBe("");
+      expect(screen.getByText("window line 40")).toHaveStyle({ visibility: "hidden" });
+    } finally {
+      engine.currentSec = 0;
+    }
+  });
+
   it("keeps cascade effects enabled when the OS prefers reduced motion", async () => {
     const originalMatchMedia = window.matchMedia;
     Object.defineProperty(window, "matchMedia", {

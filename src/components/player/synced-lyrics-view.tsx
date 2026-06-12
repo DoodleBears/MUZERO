@@ -281,6 +281,7 @@ const EDGE_FADE = {
   WebkitMaskImage:
     "linear-gradient(to bottom, transparent 0%, black 14%, black 86%, transparent 100%)",
 } as const;
+const CASCADE_DRIVER_RADIUS = 12;
 /**
  * Apple-Music-style synced lines on a NATIVE scroll viewport (overflow-y-auto +
  * overscroll-contain — so the gesture never reaches the page behind, and mobile
@@ -484,6 +485,41 @@ function SyncedLines({
     let raf = 0;
     let lastTs = 0;
     let stopped = false;
+    let visibleStart = -1;
+    let visibleEnd = -1;
+
+    const hideRow = (index: number) => {
+      const row = rowRefs.current[index];
+      if (!row) return;
+      row.style.visibility = "hidden";
+      row.style.transform = "";
+      row.style.opacity = "";
+      row.style.filter = "";
+      row.style.willChange = "";
+    };
+
+    const showRow = (index: number) => {
+      const row = rowRefs.current[index];
+      if (!row) return;
+      row.style.visibility = "";
+    };
+
+    const syncVisibleWindow = (startIndex: number, endIndex: number) => {
+      if (startIndex === visibleStart && endIndex === visibleEnd) return;
+      if (visibleStart < 0) {
+        rowRefs.current.forEach((_, index) => {
+          if (index < startIndex || index > endIndex) hideRow(index);
+          else showRow(index);
+        });
+      } else {
+        for (let index = visibleStart; index <= visibleEnd; index += 1) {
+          if (index < startIndex || index > endIndex) hideRow(index);
+        }
+        for (let index = startIndex; index <= endIndex; index += 1) showRow(index);
+      }
+      visibleStart = startIndex;
+      visibleEnd = endIndex;
+    };
 
     const stepSpring = (
       current: number,
@@ -507,6 +543,10 @@ function SyncedLines({
       const timeMs = (getMediaEngine()?.getCurrentTime() ?? 0) * 1000;
       const liveActiveIndex = activeLineIndex(lines, timeMs);
       const viewportHeight = viewport.clientHeight || viewportH || 1;
+      const safeActiveIndex = Math.max(0, Math.min(renderLines.length - 1, liveActiveIndex));
+      const startIndex = Math.max(0, safeActiveIndex - CASCADE_DRIVER_RADIUS);
+      const endIndex = Math.min(renderLines.length - 1, safeActiveIndex + CASCADE_DRIVER_RADIUS);
+      syncVisibleWindow(startIndex, endIndex);
       const layout = solveLyricLayout({
         lines: renderLines,
         activeIndex: liveActiveIndex,
@@ -521,6 +561,7 @@ function SyncedLines({
           inactiveScale,
         },
         cascadeTuning,
+        frameWindow: { startIndex, endIndex },
       });
 
       for (const frame of layout.frames) {
@@ -602,7 +643,9 @@ function SyncedLines({
         row.style.transform = `translate3d(0, ${state.translateY.toFixed(3)}px, 0) scale(${state.scale.toFixed(4)})`;
         row.style.opacity = state.opacity.toFixed(3);
         row.style.filter = `blur(${Math.max(0, state.blurPx).toFixed(3)}px)`;
-        row.style.willChange = "transform, opacity, filter";
+        if (row.style.willChange !== "transform, opacity, filter") {
+          row.style.willChange = "transform, opacity, filter";
+        }
       }
       raf = requestAnimationFrame(write);
     };
@@ -618,6 +661,7 @@ function SyncedLines({
         row.style.opacity = "";
         row.style.filter = "";
         row.style.willChange = "";
+        row.style.visibility = "";
       });
     };
   }, [

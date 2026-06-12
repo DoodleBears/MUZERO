@@ -182,6 +182,36 @@ describe("solveLyricLayout", () => {
     expect(layout.frames[119]?.state).toBe("distant");
   });
 
+  it("can return only a requested frame window without changing active anchoring", () => {
+    const full = solveLyricLayout({
+      lines,
+      activeIndex: 4,
+      lineHeights: [44, 52, 60, 68, 76],
+      viewportHeight: 500,
+      alignPosition: 0.42,
+      lineGapPx: 10,
+      reducedMotion: false,
+    });
+    const windowed = solveLyricLayout({
+      lines,
+      activeIndex: 4,
+      lineHeights: [44, 52, 60, 68, 76],
+      viewportHeight: 500,
+      alignPosition: 0.42,
+      lineGapPx: 10,
+      reducedMotion: false,
+      frameWindow: { startIndex: 3, endIndex: 4 },
+    });
+
+    expect(windowed.frames.map((frame) => frame.index)).toEqual([3, 4]);
+    expect(windowed.totalHeight).toBe(full.totalHeight);
+    expect(windowed.frames[1]).toMatchObject({
+      index: 4,
+      y: full.frames[4].y,
+      translateY: full.frames[4].translateY,
+    });
+  });
+
   it("snaps the newly active row to the anchor after a large seek jump", () => {
     const heights = [44, 52, 60, 68, 76];
     const layout = solveLyricLayout({
