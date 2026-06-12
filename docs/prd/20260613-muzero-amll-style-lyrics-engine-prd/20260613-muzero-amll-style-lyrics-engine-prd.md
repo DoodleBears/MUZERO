@@ -11,7 +11,7 @@
 
 | Phase | Name | Status | Link |
 |-------|------|--------|------|
-| 1 | Research Baseline + Engine Contract | 🔲 Pending | [Phase 1 Checklist](#phase-1-checklist) |
+| 1 | Research Baseline + Engine Contract | ✅ Completed | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | Pure Layout Solver + TDD Fixtures | 🔲 Pending | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | rAF DOM Driver + React Integration | 🔲 Pending | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | Word Fill / Secondary Lines / Click Seek Parity | 🔲 Pending | [Phase 4 Checklist](#phase-4-checklist) |
@@ -255,17 +255,19 @@ React state should not update per frame.
 **Goal:** Freeze the intended behavior and define a testable engine contract before implementation.
 
 **Tasks:**
-- [ ] Document the clean-room interpretation of LyciaMusic / AMLL behavior in this PRD.
-- [ ] Decide whether current `lyricsMotionMode` remains `classic / inertial / cascade` or whether Cascade becomes the only advanced engine.
-- [ ] Define `LyricRenderLine` and `LyricLayoutFrame` contracts.
-- [ ] Add tests for render-line conversion from existing `LyricLine` data.
+- [x] Document the clean-room interpretation of LyciaMusic / AMLL behavior in this PRD.
+- [x] Decide whether current `lyricsMotionMode` remains `classic / inertial / cascade` or whether Cascade becomes the only advanced engine.
+- [x] Define `LyricRenderLine` and `LyricLayoutFrame` contracts.
+- [x] Add tests for render-line conversion from existing `LyricLine` data.
 
 ### Phase 1 Checklist
 
-- [ ] No LyciaMusic AGPL source copied.
-- [ ] Render-line adapter handles plain text, timed words, translation, romanization, and missing end times.
-- [ ] Existing word-fill tests still pass.
-- [ ] PRD updated before commit.
+- [x] No LyciaMusic AGPL source copied.
+- [x] Render-line adapter handles plain text, timed words, translation, romanization, and missing end times.
+- [x] Existing word-fill tests still pass.
+- [x] PRD updated before commit.
+
+> **Phase 1 implementation note (2026-06-13):** Added [`src/lyrics/lyric-render-line.ts`](../../../src/lyrics/lyric-render-line.ts) as the clean-room adapter from existing `LyricLine` data into `LyricRenderLine`. It preserves timed words, translation, and romanization, supplies stable ids, clamps too-short end times, and falls back to bounded final-line duration when no next line exists. Verification: `vitest run src/lyrics/lyric-render-line.test.ts src/components/player/synced-lyrics-view.test.tsx` (23 tests), `tsc --noEmit`, and touched-file Biome all passed.
 
 ### Phase 2: Pure Layout Solver + TDD Fixtures
 
@@ -411,6 +413,7 @@ Dev mode is not sufficient for final performance sign-off. Final QA should run a
 | Date | Author | Changes |
 |------|--------|---------|
 | 2026-06-13 | MUZERO | Initial draft: clean-room AMLL-style lyrics layout engine PRD based on LyciaMusic / AMLL reference research. |
+| 2026-06-13 | MUZERO | Phase 1 completed: added render-line adapter contract and tests for line-level lyrics, timed words, translations, romanization, fallback end times, and monotonic duration clamps. |
 
 ---
 
