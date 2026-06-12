@@ -935,7 +935,9 @@
     "capContext": "Context window",
     "capPrice": "Input {{in}} · output {{out}} per 1M tokens",
     "aiGenEnable": "Enable AI music generation",
-    "aiGenHint": "Off by default. Generation uses a paid cloud API (BYOK). When on, the DJ can generate songs; search & ingest from streaming sources stays free either way."
+    "aiGenHint": "Off by default. Generation uses a paid cloud API (BYOK). When on, the DJ can generate songs; search & ingest from streaming sources stays free either way.",
+    "djCapabilitiesTitle": "AI DJ capabilities",
+    "djCapabilitiesHint": "These chips show the tool calls the DJ can use. Select one to see what it can do and when it is available."
   },
   "systemPlaylists": {
     "hearted": "Hearted",
@@ -1301,6 +1303,106 @@
     "homeSave": "Save",
     "homeCancel": "Cancel",
     "homeDelete": "Delete",
-    "homeTitleInput": "Chat title"
+    "homeTitleInput": "Chat title",
+    "toolAvailability": {
+      "always": "Always available",
+      "online": "Requires online sources",
+      "generation": "Requires AI generation"
+    },
+    "toolCategories": {
+      "library": "Library",
+      "sets": "Sets",
+      "queue": "Queue",
+      "player": "Player",
+      "memories": "Memories",
+      "online": "Online",
+      "generation": "Generation"
+    },
+    "tools": {
+      "library_search": {
+        "label": "Search library",
+        "description": "Find local songs, sets, lyrics, tags, notes, and memories, with filters for broad discovery or precise matching."
+      },
+      "library_list_tags": {
+        "label": "List tags",
+        "description": "Read the local tag vocabulary and usage counts so the DJ can understand how you organize music."
+      },
+      "now_playing_get": {
+        "label": "Read now playing",
+        "description": "Inspect the current queue and playing set so replies can continue the current context."
+      },
+      "set_list": {
+        "label": "List sets",
+        "description": "Browse local sets by recent activity before choosing where to add or play songs."
+      },
+      "set_get": {
+        "label": "Inspect a set",
+        "description": "Read one set and its ordered tracks for playlist-aware curation."
+      },
+      "set_create": {
+        "label": "Create a set",
+        "description": "Create a local set, optionally seeded with existing tracks in order."
+      },
+      "set_update": {
+        "label": "Update a set",
+        "description": "Rename a set or update its seed prompt without changing its songs."
+      },
+      "set_add_tracks": {
+        "label": "Add songs to set",
+        "description": "Add known local song ids to any set, skipping duplicates and missing tracks."
+      },
+      "set_add_by_search": {
+        "label": "Curate by search",
+        "description": "Search the library and add all matching local songs to a set in one step."
+      },
+      "set_switch": {
+        "label": "Switch queue to set",
+        "description": "Load a set into the playback queue at a chosen starting point."
+      },
+      "queue_add": {
+        "label": "Add to queue",
+        "description": "Place local songs next or append them to the current queue."
+      },
+      "queue_edit": {
+        "label": "Edit queue mode",
+        "description": "Change queue playback options such as repeat mode."
+      },
+      "queue_clear": {
+        "label": "Clear queue",
+        "description": "Empty the current queue without deleting any sets or songs."
+      },
+      "play_set": {
+        "label": "Play a set",
+        "description": "Start a set now by loading it into the queue and playing from the top."
+      },
+      "play_track": {
+        "label": "Play a song",
+        "description": "Switch playback to a specific local song immediately."
+      },
+      "memory_search": {
+        "label": "Search memories",
+        "description": "Find songs through your memory notes, track titles, and tags."
+      },
+      "add_memory": {
+        "label": "Add memory",
+        "description": "Attach a memory note to a chosen song or to whatever is playing now."
+      },
+      "online_search_tracks": {
+        "label": "Search online sources",
+        "description": "Search enabled streaming sources such as YouTube, Bilibili, or NetEase without spending generation credits."
+      },
+      "online_add_tracks": {
+        "label": "Add online songs",
+        "description": "Ingest selected online search results into a local set without auto-playing them."
+      },
+      "dj_propose_briefs": {
+        "label": "Draft song briefs",
+        "description": "Validate and summarize proposed TrackBriefs before creating tracks or spending provider credits."
+      },
+      "dj_generate_tracks": {
+        "label": "Generate songs",
+        "description": "Create pending AI-generated tracks from approved TrackBriefs. This can spend provider credits."
+      }
+    }
   }
 }

@@ -16,6 +16,7 @@ import { type FormEvent, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { canUseDjChat } from "@/chat/dj-chat-availability";
+import { DJ_CHAT_TOOL_METADATA } from "@/chat/dj-chat-tool-metadata";
 import { getOrCreateDjChatRuntimeActor } from "@/chat/dj-chat-runtime-registry";
 import {
   createChatSession,
@@ -454,6 +455,15 @@ export function DjChatEntry({
                         "output-denied": t("chat.toolStateDenied"),
                         "output-error": t("chat.toolStateError"),
                       },
+                      tools: Object.fromEntries(
+                        DJ_CHAT_TOOL_METADATA.map((tool) => [
+                          tool.id,
+                          {
+                            description: t(tool.descriptionKey),
+                            label: t(tool.labelKey),
+                          },
+                        ]),
+                      ),
                     }}
                   />
                 )}

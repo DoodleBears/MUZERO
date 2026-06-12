@@ -921,7 +921,9 @@
     "capContext": "コンテキスト長",
     "capPrice": "入力 {{in}} · 出力 {{out}} / 100万トークン",
     "aiGenEnable": "AI 音楽生成を有効化",
-    "aiGenHint": "デフォルトはオフ。生成は有料のクラウド API(BYOK)を使用。オンにすると DJ が曲を生成できます。ストリーミング検索と取り込みは常に無料です。"
+    "aiGenHint": "デフォルトはオフ。生成は有料のクラウド API(BYOK)を使用。オンにすると DJ が曲を生成できます。ストリーミング検索と取り込みは常に無料です。",
+    "djCapabilitiesTitle": "AI DJ の機能",
+    "djCapabilitiesHint": "これらのチップは DJ が使える tool call です。選択すると、その機能と利用条件を確認できます。"
   },
   "systemPlaylists": {
     "hearted": "お気に入り",
@@ -1274,6 +1276,106 @@
     "homeSave": "保存",
     "homeCancel": "キャンセル",
     "homeDelete": "削除",
-    "homeTitleInput": "チャットのタイトル"
+    "homeTitleInput": "チャットのタイトル",
+    "toolAvailability": {
+      "always": "常に利用可能",
+      "online": "オンラインソースが必要",
+      "generation": "AI 生成が必要"
+    },
+    "toolCategories": {
+      "library": "ライブラリ",
+      "sets": "セット",
+      "queue": "キュー",
+      "player": "プレイヤー",
+      "memories": "メモリー",
+      "online": "オンライン",
+      "generation": "生成"
+    },
+    "tools": {
+      "library_search": {
+        "label": "ライブラリ検索",
+        "description": "ローカル曲、セット、歌詞、タグ、メモ、メモリーを検索し、広く探すことも絞り込むこともできます。"
+      },
+      "library_list_tags": {
+        "label": "タグ一覧",
+        "description": "ローカルタグと使用数を読み取り、DJ があなたの整理方法を理解できるようにします。"
+      },
+      "now_playing_get": {
+        "label": "再生中を確認",
+        "description": "現在のキューと再生元セットを読み取り、会話が今の文脈に続くようにします。"
+      },
+      "set_list": {
+        "label": "セット一覧",
+        "description": "最近更新された順にローカルセットを見て、追加先や再生対象を選べます。"
+      },
+      "set_get": {
+        "label": "セットを確認",
+        "description": "1 つのセットと曲順を読み取り、プレイリストを理解します。"
+      },
+      "set_create": {
+        "label": "セット作成",
+        "description": "ローカルセットを作成し、必要なら既存曲を順番付きで入れられます。"
+      },
+      "set_update": {
+        "label": "セット更新",
+        "description": "曲を変えずに、セット名や seed prompt を更新します。"
+      },
+      "set_add_tracks": {
+        "label": "セットに曲を追加",
+        "description": "既知のローカル曲を任意のセットへ追加し、重複や存在しない曲はスキップします。"
+      },
+      "set_add_by_search": {
+        "label": "検索でキュレーション",
+        "description": "ライブラリを検索し、マッチしたローカル曲をまとめてセットに追加します。"
+      },
+      "set_switch": {
+        "label": "セットをキューに読み込む",
+        "description": "セットを再生キューに読み込み、開始位置を選べます。"
+      },
+      "queue_add": {
+        "label": "キューに追加",
+        "description": "ローカル曲を次に再生する位置、またはキュー末尾へ追加します。"
+      },
+      "queue_edit": {
+        "label": "キュー設定を変更",
+        "description": "リピートなどのキュー再生オプションを変更します。"
+      },
+      "queue_clear": {
+        "label": "キューを空にする",
+        "description": "現在のキューを空にします。セットや曲は削除しません。"
+      },
+      "play_set": {
+        "label": "セットを再生",
+        "description": "セットをキューに読み込み、先頭からすぐ再生します。"
+      },
+      "play_track": {
+        "label": "曲を再生",
+        "description": "指定したローカル曲へすぐ切り替えて再生します。"
+      },
+      "memory_search": {
+        "label": "メモリー検索",
+        "description": "メモリー、曲名、タグから関連する曲を見つけます。"
+      },
+      "add_memory": {
+        "label": "メモリー追加",
+        "description": "指定した曲、または現在再生中の曲にメモリーを追加します。"
+      },
+      "online_search_tracks": {
+        "label": "オンラインソース検索",
+        "description": "有効な YouTube、Bilibili、NetEase などを検索します。生成クレジットは使いません。"
+      },
+      "online_add_tracks": {
+        "label": "オンライン曲を追加",
+        "description": "選択したオンライン検索結果をローカルセットに取り込みます。自動再生はしません。"
+      },
+      "dj_propose_briefs": {
+        "label": "曲ブリーフを下書き",
+        "description": "曲を作成したりクレジットを使う前に、TrackBrief の候補を検証して要約します。"
+      },
+      "dj_generate_tracks": {
+        "label": "曲を生成",
+        "description": "承認済みの TrackBrief から AI 生成曲を作成します。プロバイダーのクレジットを消費する場合があります。"
+      }
+    }
   }
 }

@@ -17,6 +17,7 @@ import { BackgroundSettings } from "@/components/settings/background-settings";
 import { CloudDriveSets } from "@/components/settings/cloud-drive-sets";
 import { CloudDriveSyncControls } from "@/components/settings/cloud-drive-sync-controls";
 import { DeviceAvatarPicker } from "@/components/settings/device-avatar-picker";
+import { DjToolCapabilities } from "@/components/settings/dj-tool-capabilities";
 import { FlowSettings } from "@/components/settings/flow-settings";
 import { ImportedFoldersSettings } from "@/components/settings/imported-folders-settings";
 import {
@@ -935,6 +936,7 @@ export function SettingsPage() {
                 <CardTitle>{t("settings.djTitle")}</CardTitle>
               </CardHeader>
               <CardContent className="flex flex-col gap-3">
+                <DjToolCapabilities />
                 {/* Multi-provider presets + dynamic customs + per-provider keys
                     + global default model (chat PRD §6.1). Replaces the legacy
                     two-provider form; legacy llmProvider/llmModel stay in the

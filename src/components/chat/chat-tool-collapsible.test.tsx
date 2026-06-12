@@ -46,6 +46,34 @@ describe("ChatToolCollapsible", () => {
     expect(onReject).toHaveBeenCalledWith("approval_1");
   });
 
+  it("uses localized tool labels when provided", () => {
+    const part = {
+      type: "tool-dj_generate_tracks",
+      toolCallId: "call_1",
+      state: "input-available",
+      input: { sessionId: "ses_1" },
+    } satisfies ToolUIPart;
+
+    render(
+      <ChatToolCollapsible
+        labels={{
+          ...labels,
+          tools: {
+            dj_generate_tracks: {
+              description: "Spends provider credits after approval.",
+              label: "Generate songs",
+            },
+          },
+        }}
+        part={part}
+      />,
+    );
+
+    expect(screen.getByText("Generate songs")).toBeInTheDocument();
+    expect(screen.getByText("Spends provider credits after approval.")).toBeInTheDocument();
+    expect(screen.queryByText("dj_generate_tracks")).not.toBeInTheDocument();
+  });
+
   it("renders tool output and errors without requiring approval actions", () => {
     const outputPart = {
       type: "tool-set_create",

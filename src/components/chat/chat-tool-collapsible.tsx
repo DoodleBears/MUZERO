@@ -14,6 +14,7 @@ export interface ChatToolLabels {
   output: ReactNode;
   reject: string;
   states: Record<ChatToolState, ReactNode>;
+  tools?: Record<string, { description?: ReactNode; label: ReactNode }>;
 }
 
 interface ChatToolCollapsibleProps {
@@ -43,6 +44,9 @@ export function ChatToolCollapsible({
   // or an error to read. An explicit `defaultOpen` overrides.
   const needsAttention = part.state === "approval-requested" || part.state === "output-error";
   const open = defaultOpen ?? needsAttention;
+  const toolName = getToolName(part);
+  const toolLabel = labels.tools?.[toolName]?.label ?? part.title ?? toolName;
+  const toolDescription = labels.tools?.[toolName]?.description;
 
   return (
     <details
@@ -54,8 +58,11 @@ export function ChatToolCollapsible({
           aria-hidden
           className="size-3.5 shrink-0 text-muted-foreground transition-transform group-open:rotate-90"
         />
-        <span className="min-w-0 flex-1 truncate font-medium">
-          {part.title ?? getToolName(part)}
+        <span className="min-w-0 flex-1 truncate">
+          <span className="block truncate font-medium">{toolLabel}</span>
+          {toolDescription ? (
+            <span className="block truncate text-muted-foreground text-xs">{toolDescription}</span>
+          ) : null}
         </span>
         <span className="shrink-0 rounded-md bg-background px-2 py-0.5 text-muted-foreground text-xs">
           {labels.states[part.state]}

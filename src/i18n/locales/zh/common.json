@@ -921,7 +921,9 @@
     "capContext": "上下文窗口",
     "capPrice": "输入 {{in}} · 输出 {{out}} / 每百万 token",
     "aiGenEnable": "启用 AI 音乐生成",
-    "aiGenHint": "默认关闭。生成走付费云 API(BYOK)。开启后 DJ 可生成歌曲;无论开关,从在线源搜索并入库都是免费的。"
+    "aiGenHint": "默认关闭。生成走付费云 API(BYOK)。开启后 DJ 可生成歌曲;无论开关,从在线源搜索并入库都是免费的。",
+    "djCapabilitiesTitle": "AI DJ 能力",
+    "djCapabilitiesHint": "这些 chip 展示 DJ 可调用的工具。点击任意功能即可查看它能做什么、何时可用。"
   },
   "systemPlaylists": {
     "hearted": "红心歌单",
@@ -1274,6 +1276,106 @@
     "homeSave": "保存",
     "homeCancel": "取消",
     "homeDelete": "删除",
-    "homeTitleInput": "对话标题"
+    "homeTitleInput": "对话标题",
+    "toolAvailability": {
+      "always": "始终可用",
+      "online": "需要启用线上来源",
+      "generation": "需要启用 AI 生成"
+    },
+    "toolCategories": {
+      "library": "本地库",
+      "sets": "歌单",
+      "queue": "队列",
+      "player": "播放",
+      "memories": "回忆",
+      "online": "线上",
+      "generation": "生成"
+    },
+    "tools": {
+      "library_search": {
+        "label": "搜索曲库",
+        "description": "搜索本地歌曲、歌单、歌词、标签、备注和回忆，可用于宽泛发现或精确匹配。"
+      },
+      "library_list_tags": {
+        "label": "列出标签",
+        "description": "读取本地标签和使用次数，让 DJ 理解你整理音乐的方式。"
+      },
+      "now_playing_get": {
+        "label": "读取当前播放",
+        "description": "查看当前队列和正在播放的歌单，让回复能延续当下上下文。"
+      },
+      "set_list": {
+        "label": "列出歌单",
+        "description": "按最近活跃浏览本地歌单，方便选择要添加或播放的位置。"
+      },
+      "set_get": {
+        "label": "查看歌单",
+        "description": "读取某个歌单及其歌曲顺序，用于理解歌单结构。"
+      },
+      "set_create": {
+        "label": "创建歌单",
+        "description": "创建本地歌单，也可以按顺序放入已有歌曲作为初始内容。"
+      },
+      "set_update": {
+        "label": "更新歌单",
+        "description": "重命名歌单或更新 seed prompt，不改变其中歌曲。"
+      },
+      "set_add_tracks": {
+        "label": "添加歌曲到歌单",
+        "description": "把已知的本地歌曲加入任意歌单，并跳过重复或不存在的歌曲。"
+      },
+      "set_add_by_search": {
+        "label": "按搜索策划歌单",
+        "description": "搜索曲库并一次性把所有匹配歌曲加入歌单。"
+      },
+      "set_switch": {
+        "label": "切换队列到歌单",
+        "description": "把某个歌单载入播放队列，并可指定起始位置。"
+      },
+      "queue_add": {
+        "label": "加入队列",
+        "description": "把本地歌曲插到下一首或追加到当前队列末尾。"
+      },
+      "queue_edit": {
+        "label": "编辑队列模式",
+        "description": "调整队列播放选项，例如循环模式。"
+      },
+      "queue_clear": {
+        "label": "清空队列",
+        "description": "清空当前队列，但不会删除任何歌单或歌曲。"
+      },
+      "play_set": {
+        "label": "播放歌单",
+        "description": "立即播放某个歌单：载入队列并从开头开始。"
+      },
+      "play_track": {
+        "label": "播放歌曲",
+        "description": "立即切换到指定的本地歌曲并开始播放。"
+      },
+      "memory_search": {
+        "label": "搜索回忆",
+        "description": "通过回忆备注、歌曲标题和标签找到相关歌曲。"
+      },
+      "add_memory": {
+        "label": "添加回忆",
+        "description": "给指定歌曲或当前正在播放的歌曲添加一条回忆备注。"
+      },
+      "online_search_tracks": {
+        "label": "搜索线上来源",
+        "description": "搜索已启用的 YouTube、Bilibili、网易云等线上来源，不消耗生成额度。"
+      },
+      "online_add_tracks": {
+        "label": "加入线上歌曲",
+        "description": "把选中的线上搜索结果导入本地歌单，但不会自动播放。"
+      },
+      "dj_propose_briefs": {
+        "label": "草拟歌曲 brief",
+        "description": "在创建歌曲或消耗额度前，校验并总结拟定的 TrackBrief。"
+      },
+      "dj_generate_tracks": {
+        "label": "生成歌曲",
+        "description": "根据已批准的 TrackBrief 创建待生成歌曲。这可能消耗 provider 额度。"
+      }
+    }
   }
 }
