@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   LYRICS_MOTION_MODES,
   type LyricsMotionMode,
+  lyricCascadeRowMotion,
   lyricFollowTargetScrollTop,
   resolveLyricsMotionMode,
 } from "./lyric-motion";
@@ -91,5 +92,70 @@ describe("lyricFollowTargetScrollTop", () => {
         anchorRatio: 0.38,
       }),
     ).toBe(0);
+  });
+});
+
+describe("lyricCascadeRowMotion", () => {
+  const cascade = resolveLyricsMotionMode("cascade", { reducedMotion: false });
+  const classic = resolveLyricsMotionMode("classic", { reducedMotion: false });
+
+  it("does not move rows outside cascade mode", () => {
+    expect(
+      lyricCascadeRowMotion({
+        rowIndex: 2,
+        activeIndex: 1,
+        direction: 1,
+        motion: classic,
+      }),
+    ).toEqual({ delaySec: 0, initialY: 0, affected: false });
+  });
+
+  it("delays nearby rows by their distance from the active line", () => {
+    expect(
+      lyricCascadeRowMotion({
+        rowIndex: 2,
+        activeIndex: 1,
+        direction: 1,
+        motion: cascade,
+      }),
+    ).toMatchObject({ delaySec: 0.026, initialY: 10, affected: true });
+    expect(
+      lyricCascadeRowMotion({
+        rowIndex: 4,
+        activeIndex: 1,
+        direction: 1,
+        motion: cascade,
+      }),
+    ).toMatchObject({ delaySec: 0.078, initialY: 10, affected: true });
+  });
+
+  it("does not delay the active row or distant rows", () => {
+    expect(
+      lyricCascadeRowMotion({
+        rowIndex: 1,
+        activeIndex: 1,
+        direction: 1,
+        motion: cascade,
+      }),
+    ).toEqual({ delaySec: 0, initialY: 0, affected: false });
+    expect(
+      lyricCascadeRowMotion({
+        rowIndex: 5,
+        activeIndex: 1,
+        direction: 1,
+        motion: cascade,
+      }),
+    ).toEqual({ delaySec: 0, initialY: 0, affected: false });
+  });
+
+  it("flips the initial offset when the active line moves backward", () => {
+    expect(
+      lyricCascadeRowMotion({
+        rowIndex: 0,
+        activeIndex: 1,
+        direction: -1,
+        motion: cascade,
+      }).initialY,
+    ).toBe(-10);
   });
 });

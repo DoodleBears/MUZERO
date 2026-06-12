@@ -15,6 +15,7 @@ import { prefersReducedMotion } from "@/lib/view-transition";
 import { activeWordIndex } from "@/lyrics/active-word";
 import {
   type LyricsMotionMode,
+  lyricCascadeRowMotion,
   lyricFollowTargetScrollTop,
   resolveLyricsMotionMode,
 } from "@/lyrics/lyric-motion";
@@ -275,6 +276,11 @@ function SyncedLines({
   const stackRef = useRef<HTMLDivElement>(null);
   const [following, setFollowing] = useState(true);
   const [viewportH, setViewportH] = useState(0);
+  const previousActiveIndexRef = useRef(activeIndex);
+  const [cascadePulse, setCascadePulse] = useState<{ direction: -1 | 0 | 1; token: number }>({
+    direction: 0,
+    token: 0,
+  });
   const lyricsMotion = useMemo(
     () => resolveLyricsMotionMode(motionMode, { reducedMotion: prefersReducedMotion() }),
     [motionMode],
@@ -312,6 +318,23 @@ function SyncedLines({
   // A new song re-attaches follow.
   // biome-ignore lint/correctness/useExhaustiveDependencies: reset follow when the lyric set changes
   useEffect(() => setFollowing(true), [lines]);
+
+  useEffect(() => {
+    const previous = previousActiveIndexRef.current;
+    previousActiveIndexRef.current = activeIndex;
+    if (
+      lyricsMotion.mode !== "cascade" ||
+      previous < 0 ||
+      activeIndex < 0 ||
+      previous === activeIndex
+    ) {
+      return;
+    }
+    setCascadePulse((pulse) => ({
+      direction: activeIndex > previous ? 1 : -1,
+      token: pulse.token + 1,
+    }));
+  }, [activeIndex, lyricsMotion.mode]);
 
   // Follow toward the active line's anchor. Classic keeps the existing per-frame
   // lerp baseline; inertial/cascade use a Motion spring for a weightier catch-up.
@@ -444,16 +467,37 @@ function SyncedLines({
         >
           {lines.map((line, i) => {
             const isActive = i === activeIndex;
+            const rowMotion = lyricCascadeRowMotion({
+              rowIndex: i,
+              activeIndex,
+              direction: cascadePulse.direction,
+              motion: lyricsMotion,
+            });
+            const transition =
+              lyricsMotion.row.transition === "spring"
+                ? {
+                    type: "spring" as const,
+                    stiffness: lyricsMotion.follow.stiffness,
+                    damping: lyricsMotion.follow.damping,
+                    mass: lyricsMotion.follow.mass,
+                    delay: rowMotion.delaySec,
+                  }
+                : { duration: 0.35, ease: [0.22, 1, 0.36, 1] as const };
             return (
               <motion.button
                 // biome-ignore lint/suspicious/noArrayIndexKey: lyric lines have no stable id; time+index is the natural key
-                key={`${line.timeMs}-${i}`}
+                key={`${line.timeMs}-${i}-${rowMotion.affected ? cascadePulse.token : "stable"}`}
                 type="button"
                 // No mount animation: on a track switch the lines remount and must
                 // appear at their correct size immediately (the active line big,
                 // the rest small) — not grow in from a default.
-                initial={false}
+                initial={rowMotion.affected ? { y: rowMotion.initialY } : false}
                 data-active={isActive || undefined}
+                data-cascade-affected={rowMotion.affected || undefined}
+                data-cascade-delay-ms={
+                  rowMotion.affected ? Math.round(rowMotion.delaySec * 1000) : undefined
+                }
+                data-cascade-initial-y={rowMotion.affected ? rowMotion.initialY : undefined}
                 aria-current={isActive ? "true" : undefined}
                 onClick={() => {
                   onSeek(line.timeMs / 1000);
@@ -466,8 +510,9 @@ function SyncedLines({
                   // line never re-wraps when it becomes active — only a smooth,
                   // layout-free transform changes.
                   scale: isActive ? 1 : lyricStyle.inactiveFontSize / lyricStyle.activeFontSize,
+                  y: 0,
                 }}
-                transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
+                transition={transition}
                 style={{
                   fontSize: lyricStyle.activeFontSize,
                   color: lyricStyle.color,

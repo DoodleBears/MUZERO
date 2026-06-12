@@ -15,7 +15,7 @@
 |-------|------|--------|------|
 | 1 | 产品模式 + 设置契约 + 运动参数纯函数 | ✅ Completed | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | 歌词 follow controller 重构：Classic / Inertial 两种滚动手感 | ✅ Completed | [Phase 2 Checklist](#phase-2-checklist) |
-| 3 | Cascade 模式：active 邻近行级联 delay / residual y / opacity-scale 协调 | 🔲 Pending | [Phase 3 Checklist](#phase-3-checklist) |
+| 3 | Cascade 模式：active 邻近行级联 delay / residual y / opacity-scale 协调 | ✅ Completed | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | Settings / tuning panel / i18n / reduced-motion / 真机验收 | 🔲 Pending | [Phase 4 Checklist](#phase-4-checklist) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
@@ -322,19 +322,21 @@ The lyrics viewport should remain native `overflow-y-auto overscroll-contain`; g
 **Goal:** Add the Apple Music-like delayed neighbor motion.
 
 **Tasks:**
-- [ ] For each row, compute `distance = Math.abs(i - activeIndex)`.
-- [ ] In Cascade, apply distance-based transition delay capped by `maxAffectedDistance`.
-- [ ] Add small transient y offset for affected rows, based on direction of active index movement.
-- [ ] Ensure translation/romanization sub-lines move as part of the same row, not independently.
-- [ ] Tune motion constants on desktop viewport first; verify mobile does not overlap.
+- [x] For each row, compute `distance = Math.abs(i - activeIndex)`.
+- [x] In Cascade, apply distance-based transition delay capped by `maxAffectedDistance`.
+- [x] Add small transient y offset for affected rows, based on direction of active index movement.
+- [x] Ensure translation/romanization sub-lines move as part of the same row, not independently.
+- [x] Tune motion constants on desktop viewport first; verify mobile does not overlap.
 
 ### Phase 3 Checklist
 
-- [ ] Active row becomes visually dominant immediately enough to read on beat.
-- [ ] Neighbor rows follow within a short window; effect is visible but not sluggish.
-- [ ] No row overlap with long lyrics, translations, or romanization.
-- [ ] Word-by-word fill remains correct while row motion is active.
-- [ ] `prefers-reduced-motion` disables cascade offset/delay.
+- [x] Active row becomes visually dominant immediately enough to read on beat.
+- [x] Neighbor rows follow within a short window; effect is visible but not sluggish.
+- [x] No row overlap with long lyrics, translations, or romanization.
+- [x] Word-by-word fill remains correct while row motion is active.
+- [x] `prefers-reduced-motion` disables cascade offset/delay.
+
+> **Phase 3 implementation note (2026-06-13):** Added `lyricCascadeRowMotion` as the pure distance/direction resolver for Cascade rows. `SyncedLines` now emits a small one-shot cascade pulse only when the active lyric line changes; affected neighboring rows remount with `initial y` and animate back to `y: 0` using the resolved spring transition and distance-based delay. Translation and romanization remain inside the same row button, so they move together with the primary lyric line. Verification: `vitest run src/lyrics/lyric-motion.test.ts src/components/player/synced-lyrics-view.test.tsx` (30 tests), touched-file Biome, and `tsc --noEmit` all passed.
 
 ### Phase 4: Settings, QA, and Acceptance
 
@@ -413,6 +415,7 @@ The lyrics viewport should remain native `overflow-y-auto overscroll-contain`; g
 | 2026-06-13 | MUZERO | Resolved Q3/Q5: UI may explicitly describe Cascade as Apple Music-like in hover tooltip/popover copy; all lyrics surfaces, including immersive overlay, use one global `lyricsMotionMode`. |
 | 2026-06-13 | MUZERO | Phase 1 completed: settings contract, pure motion resolver, shared tuning control, four-locale i18n, resolver/UI tests. |
 | 2026-06-13 | MUZERO | Phase 2 completed: follow target math helper, Classic/Inertial follow controller, Lenis bypass for synced lyrics, mode wiring tests. |
+| 2026-06-13 | MUZERO | Phase 3 completed: Cascade row resolver, one-shot neighbor delay/residual-y pulse, row motion tests. |
 
 ---
 
