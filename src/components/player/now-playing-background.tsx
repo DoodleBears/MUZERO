@@ -246,7 +246,7 @@ function NowPlayingBackgroundContent({ hideVisualizer }: { hideVisualizer: boole
           visualizer style — flow and the spectrum coexist. Forces styleId so it
           renders flow regardless of the chosen visualizer. */}
       <AnimatePresence>
-        {(settings.flowEnabled ?? false) && (
+        {!!current && (settings.flowEnabled ?? false) && (
           <motion.div
             // Key by effect so switching effects crossfades (old shader fades out
             // while the new fades in) instead of popping on recompile. Song

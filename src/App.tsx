@@ -146,12 +146,13 @@ export default function App() {
   // tearing it down on every navigation change.
   const isNowTab = tab === "now";
   const ambientActive = isNowTab || hasAmbientTrack;
+  const ambientBackgroundActive = hasAmbientTrack;
   // Global idle still drives Now Playing foreground/visualizer state. The Dock
   // gets its own idle rule below so wide screens can reveal it from a bottom hot
   // zone instead of from any tiny pointer movement.
   const idle = useIdle(isNowTab);
   const visualizerBackgroundActive =
-    ambientActive &&
+    ambientBackgroundActive &&
     (settings.visualizerAsBackground ?? false) &&
     resolveVisualizerStyle(settings.visualizerStyle) !== "off";
   const visualizerIdleOnly =
@@ -191,11 +192,11 @@ export default function App() {
           screen and scrolls *under* the bars instead of being boxed between them. */}
       <div className="app-shell relative h-screen overflow-hidden bg-background text-foreground">
         <NowPlayingBackground
-          active={ambientActive}
+          active={ambientBackgroundActive}
           hideVisualizer={visualizerHidden}
           className={cn(
             "fixed inset-0 z-0 transition-opacity duration-500",
-            ambientActive ? "opacity-100" : "opacity-0",
+            ambientBackgroundActive ? "opacity-100" : "opacity-0",
           )}
         />
 
