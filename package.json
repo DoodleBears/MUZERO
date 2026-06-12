@@ -37,6 +37,10 @@
     "ui:visualizer": "pnpm dlx shadcn@latest add @livekit/agent-audio-visualizer-aura"
   },
   "packageManager": "pnpm@10.18.3",
+  "engines": {
+    "node": ">=24.16.0",
+    "pnpm": ">=10.18.3"
+  },
   "dependencies": {
     "@ai-sdk/anthropic": "^3.0.78",
     "@ai-sdk/openai": "^3.0.65",

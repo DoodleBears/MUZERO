@@ -1,4 +1,4 @@
-.PHONY: help install update
+.PHONY: help install update node-check
 .PHONY: dev web desktop tauri electron-dev electron-preview electron-build ios ios-init android android-init mobile-info tauri-info
 .PHONY: build preview deploy pages-project pages-deploy pages-deploy-preview desktop-build desktop-debug mac win linux ios-build android-build desktop-locate
 .PHONY: version-bump changelog-check version-sync release-check release-show release-build release-mac release-win release-linux release-publish release-publish-dry release-locate changelog-md
@@ -18,15 +18,22 @@ export
 endif
 
 PM ?= pnpm
+REQUIRED_NODE ?= 24.16.0
 # Dev-server ports. The browser loop (make dev) and the Tauri desktop shell
 # (make desktop) use different ports so they can run side by side. Override like
 # `make desktop DESKTOP_PORT=1440`. Vite reads MUZERO_DEV_PORT; Tauri's devUrl is
-# overridden to match via --config (mobile HMR already uses 1421, so desktop=1430).
-WEB_PORT ?= 1420
-DESKTOP_PORT ?= 1430
+# overridden to match via --config (mobile HMR uses 41731, so desktop=41732).
+WEB_PORT ?= 41730
+DESKTOP_PORT ?= 41732
 DEV_URL ?= http://localhost:$(WEB_PORT)
 BUNDLE_DIR := src-tauri/target/release/bundle
+ifeq ($(OS),Windows_NT)
+UNAME := Windows_NT
+SET_ENV = set "$(1)=$(2)"&&
+else
 UNAME := $(shell uname)
+SET_ENV = $(1)=$(2)
+endif
 WRANGLER_LOG_PATH ?= $(CURDIR)/.wrangler/logs
 CLOUDFLARE_ACCOUNT_ID ?= 332e72d480d7cb3e60ee671d3ca0cad0
 export WRANGLER_LOG_PATH CLOUDFLARE_ACCOUNT_ID
@@ -48,6 +55,9 @@ help:
 
 # ---------------------------------------------------------------- Setup ----
 
+node-check:
+	@node -e "const required='$(REQUIRED_NODE)'; const current=process.versions.node.split('.').map(Number); const target=required.split('.').map(Number); const tooOld=current[0]<target[0] || (current[0]===target[0] && (current[1]<target[1] || (current[1]===target[1] && current[2]<target[2]))); if (tooOld) { console.error('ERROR: MUZERO uses Node.js >= ' + required + ' for Electron dev. Current: ' + process.versions.node + '. Run: fnm install && fnm use'); process.exit(1); }"
+
 install:
 	$(PM) install
 
@@ -58,27 +68,27 @@ update:
 
 # Fast browser loop (no Rust). Works with the offline mock music provider.
 dev web:
-	MUZERO_DEV_PORT=$(WEB_PORT) $(PM) dev
+	$(call SET_ENV,MUZERO_DEV_PORT,$(WEB_PORT)) $(PM) dev
 
 # Desktop app with hot reload: Vite HMR drives the WebView, and the Rust shell
 # rebuilds on src-tauri changes. This is the main desktop dev command. Runs its
-# own Vite on DESKTOP_PORT (default 1430) with a matching --config devUrl, so it
-# can run at the same time as `make dev` (port 1420).
+# own Vite on DESKTOP_PORT (default 41732) with a matching --config devUrl, so it
+# can run at the same time as `make dev` (port 41730).
 desktop tauri:
-	MUZERO_DEV_PORT=$(DESKTOP_PORT) $(PM) exec tauri dev --config '{"build":{"devUrl":"http://localhost:$(DESKTOP_PORT)"}}'
+	$(call SET_ENV,MUZERO_DEV_PORT,$(DESKTOP_PORT)) $(PM) exec tauri dev --config '{"build":{"devUrl":"http://localhost:$(DESKTOP_PORT)"}}'
 
 # Electron is the primary desktop shell (WebView2/WKWebView instability pushed us
 # off Tauri's bundled webview). `make desktop` still runs Tauri behind the
 # src/lib/desktop bridge for parity testing.
 # electronmon auto-restarts the main process on changes to its require graph
 # (main/preload/ipc/app-icon/…); the renderer still hot-reloads via Vite.
-electron-dev:
-	MUZERO_ELECTRON_URL=$(DEV_URL) $(PM) exec electronmon electron/main.cjs
+electron-dev: node-check
+	$(call SET_ENV,MUZERO_ELECTRON_URL,$(DEV_URL)) $(PM) exec electronmon electron/main.cjs
 
-electron-preview: build
+electron-preview: node-check build
 	$(PM) exec electron electron/main.cjs
 
-electron-build: build
+electron-build: node-check build
 	$(PM) exec electron-builder
 
 ios-init:
@@ -182,7 +192,7 @@ release-show:
 # Shared: build the renderer (dist/) + bundle the Electron main (dist-electron/).
 # No tsc here — type-safety is a separate gate (make typecheck / lefthook); a
 # release build shouldn't be blocked by unrelated type debt.
-release-build: release-check
+release-build: node-check release-check
 	$(PM) exec vite build
 	node scripts/build-electron-main.mjs
 

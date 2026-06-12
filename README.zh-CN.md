@@ -137,12 +137,16 @@ DJ 续歌循环：
 
 ## 本地运行
 
+需要 Node.js 24.16+ 和 pnpm。使用 fnm 时可直接读取仓库的 `.node-version`：
+
 ```bash
+fnm install
+fnm use
 make install
 make dev
 ```
 
-Web 开发地址是 `http://localhost:1420`。
+Web 开发地址是 `http://localhost:41730`。
 
 桌面端：
 

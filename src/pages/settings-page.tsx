@@ -1375,7 +1375,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 }
 
 function browserOrigin(): string {
-  return globalThis.location?.origin ?? "http://localhost:1420";
+  return globalThis.location?.origin ?? "http://localhost:41730";
 }
 
 function describeSyncObject(key: string): {

@@ -104,12 +104,16 @@ MUZERO は、private music bank、あるいは private museum という発想か
 
 ## ローカル実行
 
+Node.js 24.16+ と pnpm が必要です。fnm を使う場合は、このリポジトリの `.node-version` をそのまま使えます:
+
 ```bash
+fnm install
+fnm use
 make install
 make dev
 ```
 
-Web dev server は `http://localhost:1420` です。
+Web dev server は `http://localhost:41730` です。
 
 デスクトップ:
 

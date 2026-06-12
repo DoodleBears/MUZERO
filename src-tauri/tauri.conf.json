@@ -5,7 +5,7 @@
   "identifier": "app.mu0.muzero",
   "build": {
     "beforeDevCommand": "pnpm dev",
-    "devUrl": "http://localhost:1420",
+    "devUrl": "http://localhost:41730",
     "beforeBuildCommand": "pnpm build",
     "frontendDist": "../dist"
   },

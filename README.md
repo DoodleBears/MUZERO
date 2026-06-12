@@ -142,16 +142,18 @@ memory + vibe + recent tracks
 
 Requirements:
 
-- Node.js and pnpm
+- Node.js 24.16+ and pnpm
 - Rust + Tauri prerequisites for Tauri desktop/mobile builds
 - Xcode for iOS, Android SDK/NDK for Android
 
 ```bash
+fnm install
+fnm use
 make install
 make dev
 ```
 
-Open the web dev server at `http://localhost:1420`.
+Open the web dev server at `http://localhost:41730`.
 
 For the desktop shell:
 

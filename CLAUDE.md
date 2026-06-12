@@ -168,7 +168,7 @@ MUZERO/
 
 ```bash
 make install              # 安装依赖 + git hooks
-make dev                  # Web 浏览器开发，最快迭代（localhost:1420，配 mock provider 即可跑）
+make dev                  # Web 浏览器开发，最快迭代（localhost:41730，配 mock provider 即可跑）
 make desktop              # Tauri 桌面端 hot reload（Vite HMR + Rust 壳，主力桌面开发命令）
 make ios / make android   # 移动端（先 make ios-init / android-init 一次；需 Xcode / Android SDK）
 

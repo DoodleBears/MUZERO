@@ -30,11 +30,12 @@ const versionDefine = {
   __BUILD_TIME__: JSON.stringify(new Date().toISOString()),
 };
 
-// Dev-server port — configurable so the browser loop (`make dev`, 1420) and the
-// Tauri desktop shell (`make desktop`, 1430) can run at the same time on separate
+// Dev-server port — configurable so the browser loop (`make dev`, 41730) and the
+// Tauri desktop shell (`make desktop`, 41732) can run at the same time on separate
 // ports. `make desktop` sets MUZERO_DEV_PORT and passes a matching `--config`
-// devUrl to Tauri (see Makefile). Defaults to 1420 so plain `pnpm dev` is unchanged.
-const devPort = Number(process.env.MUZERO_DEV_PORT) || 1420;
+// devUrl to Tauri (see Makefile). Defaults to a project-specific high port.
+const devPort = Number(process.env.MUZERO_DEV_PORT) || 41730;
+const hmrPort = Number(process.env.MUZERO_HMR_PORT) || 41731;
 
 // https://vite.dev/config/
 export default defineConfig({
@@ -62,7 +63,7 @@ export default defineConfig({
     strictPort: true,
     host: host || false,
     hmr: host
-      ? { protocol: "ws", host, port: 1421 }
+      ? { protocol: "ws", host, port: hmrPort }
       : undefined,
     watch: {
       // Don't watch the Rust side from the Vite dev server.
