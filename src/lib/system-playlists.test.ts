@@ -5,6 +5,7 @@ import {
   deriveMostPlayedPlaylist,
   deriveRecentlyPlayedPlaylist,
   getMostPlayedRangeStart,
+  pickSystemPlaylistCoverTrack,
   sortSystemPlaylistRows,
 } from "./system-playlists";
 
@@ -174,6 +175,18 @@ describe("system playlist selectors", () => {
       "trk_mid",
       "trk_high_old",
     ]);
+  });
+
+  it("picks the newest covered local track for a system playlist card", () => {
+    const rows = [
+      localRow("trk_no_cover", "No Cover", { lastPlayedAt: NOW - 500, playCount: 3 }),
+      localRow("trk_old_cover", "Old Cover", { lastPlayedAt: NOW - 3_000, playCount: 2 }),
+      localRow("trk_new_cover", "New Cover", { lastPlayedAt: NOW - 1_000, playCount: 1 }),
+    ];
+    rows[1].track.coverBlobId = "blb_old_cover";
+    rows[2].track.coverBlobId = "blb_new_cover";
+
+    expect(pickSystemPlaylistCoverTrack(rows)?.id).toBe("trk_new_cover");
   });
 });
 

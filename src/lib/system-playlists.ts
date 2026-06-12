@@ -167,6 +167,15 @@ export function sortSystemPlaylistRows(
   }
 }
 
+export function pickSystemPlaylistCoverTrack(rows: SystemPlaylistPlayable[]): Track | undefined {
+  let selected: Extract<SystemPlaylistPlayable, { kind: "local-track" }> | undefined;
+  for (const row of rows) {
+    if (row.kind !== "local-track" || !hasCover(row.track)) continue;
+    if (!selected || compareCoverCandidate(row, selected) < 0) selected = row;
+  }
+  return selected?.track;
+}
+
 function localDayStart(now: number): number {
   const date = new Date(now);
   return new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
@@ -343,4 +352,23 @@ function compareLastPlayed(a: SystemPlaylistPlayable, b: SystemPlaylistPlayable)
     a.title.localeCompare(b.title) ||
     a.id.localeCompare(b.id)
   );
+}
+
+function compareCoverCandidate(
+  a: Extract<SystemPlaylistPlayable, { kind: "local-track" }>,
+  b: Extract<SystemPlaylistPlayable, { kind: "local-track" }>,
+): number {
+  return (
+    coverCandidateTime(b) - coverCandidateTime(a) ||
+    a.title.localeCompare(b.title) ||
+    a.id.localeCompare(b.id)
+  );
+}
+
+function coverCandidateTime(row: Extract<SystemPlaylistPlayable, { kind: "local-track" }>): number {
+  return row.metric.lastPlayedAt ?? row.track.updatedAt ?? row.track.createdAt;
+}
+
+function hasCover(track: Track): boolean {
+  return Boolean(track.coverBlobId || track.remoteCoverUrl);
 }

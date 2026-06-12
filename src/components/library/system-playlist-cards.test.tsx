@@ -2,6 +2,11 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { type SystemPlaylistCardItem, SystemPlaylistCards } from "./system-playlist-cards";
 
+vi.mock("@/hooks/use-media", () => ({
+  useTrackCoverUrl: (track: { coverBlobId?: string } | undefined) =>
+    track?.coverBlobId ? `blob:${track.coverBlobId}` : null,
+}));
+
 const items: SystemPlaylistCardItem[] = [
   {
     count: 2,
@@ -50,5 +55,44 @@ describe("SystemPlaylistCards", () => {
     fireEvent.click(screen.getByRole("button", { name: "Play Hearted" }));
     expect(onPlay).toHaveBeenCalledWith("system:liked");
     expect(onOpen).toHaveBeenCalledTimes(1);
+  });
+
+  it("renders grid cards in a compact row layout", () => {
+    const { container } = render(
+      <SystemPlaylistCards items={items} onOpen={vi.fn()} onPlay={vi.fn()} view="grid" />,
+    );
+
+    const button = screen.getByRole("button", { name: "Hearted" });
+    expect(button).toHaveClass("items-center");
+    expect(button).not.toHaveClass("flex-col");
+    expect(container.querySelector('[data-system-playlist-art="system:liked"]')).toHaveClass(
+      "size-16",
+    );
+  });
+
+  it("uses the latest track cover with a background mask when available", () => {
+    const { container } = render(
+      <SystemPlaylistCards
+        items={[
+          {
+            ...items[0],
+            coverTrack: {
+              coverBlobId: "blb_latest",
+            },
+          },
+        ]}
+        onOpen={vi.fn()}
+        onPlay={vi.fn()}
+        view="grid"
+      />,
+    );
+
+    expect(screen.getByRole("img", { name: "Hearted" })).toHaveAttribute(
+      "src",
+      "blob:blb_latest",
+    );
+    expect(
+      container.querySelector('[data-system-playlist-cover-mask="system:liked"]'),
+    ).toHaveClass("bg-background/40");
   });
 });

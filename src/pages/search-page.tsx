@@ -102,6 +102,7 @@ import {
   deriveHeartedPlaylist,
   deriveMostPlayedPlaylist,
   deriveRecentlyPlayedPlaylist,
+  pickSystemPlaylistCoverTrack,
   SYSTEM_PLAYLISTS,
   type SystemPlaylistId,
   type SystemPlaylistPlayable,
@@ -570,6 +571,7 @@ export function SearchPage() {
     () =>
       SYSTEM_PLAYLISTS.map((playlist) => ({
         count: systemPlaylistRows[playlist.id].length,
+        coverTrack: pickSystemPlaylistCoverTrack(systemPlaylistRows[playlist.id]),
         icon: playlist.icon,
         id: playlist.id,
         label: systemPlaylistLabel(playlist.id, t),

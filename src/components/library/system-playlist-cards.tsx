@@ -1,4 +1,7 @@
 import { BarChart3, Heart, History, Play } from "lucide-react";
+import { CoverImage } from "@/components/ui/cover-image";
+import type { Track } from "@/db/types";
+import { useTrackCoverUrl } from "@/hooks/use-media";
 import type { SystemPlaylistDefinition, SystemPlaylistId } from "@/lib/system-playlists";
 import { cn } from "@/lib/utils";
 
@@ -12,6 +15,7 @@ export interface SystemPlaylistCardItem {
   subtitle: string;
   count: number;
   icon: SystemPlaylistIcon;
+  coverTrack?: Pick<Track, "coverBlobId" | "coverCrop" | "coverThumbhash" | "remoteCoverUrl">;
 }
 
 export function SystemPlaylistCards({
@@ -59,6 +63,7 @@ function SystemPlaylistCard({
 }) {
   const Icon = iconFor(item.icon);
   const isGrid = view === "grid";
+  const coverUrl = useTrackCoverUrl(item.coverTrack);
   return (
     <div className="group relative">
       <button
@@ -68,17 +73,36 @@ function SystemPlaylistCard({
         data-gallery-card
         data-gallery-card-key={item.id}
         className={cn(
-          "w-full rounded-xl p-2 text-left outline-none transition-colors hover:bg-accent/40 focus-visible:ring-2 focus-visible:ring-ring",
-          isGrid ? "flex flex-col gap-2" : "flex items-center gap-3 pe-12",
+          "flex w-full items-center gap-3 rounded-xl p-2 text-left outline-none transition-colors hover:bg-accent/40 focus-visible:ring-2 focus-visible:ring-ring",
+          isGrid ? "pe-11" : "pe-12",
         )}
       >
         <span
-          className={cn(
-            "grid shrink-0 place-items-center rounded-lg bg-secondary text-muted-foreground",
-            isGrid ? "aspect-square w-full" : "size-12",
-          )}
+          className={cn("shrink-0", isGrid ? "size-16" : "size-12")}
+          data-system-playlist-art={item.id}
         >
-          <Icon className={cn(isGrid ? "size-9" : "size-5", item.count > 0 && "text-primary")} />
+          <CoverImage
+            alt={item.label}
+            className="size-full rounded-lg"
+            placeholder={
+              <Icon
+                className={cn(isGrid ? "size-6" : "size-5", item.count > 0 && "text-primary")}
+              />
+            }
+            thumbhash={item.coverTrack?.coverThumbhash}
+            url={coverUrl}
+          >
+            {coverUrl && (
+              <>
+                <span
+                  aria-hidden
+                  className="absolute inset-0 bg-background/40"
+                  data-system-playlist-cover-mask={item.id}
+                />
+                <Icon className="relative z-10 size-5 text-foreground drop-shadow-sm" />
+              </>
+            )}
+          </CoverImage>
         </span>
         <span className="min-w-0">
           <span className="block truncate font-medium text-sm">{item.label}</span>
@@ -92,10 +116,7 @@ function SystemPlaylistCard({
           onPlay();
         }}
         aria-label={item.playLabel}
-        className={cn(
-          "absolute grid place-items-center rounded-full bg-primary text-primary-foreground opacity-0 shadow-md transition-opacity focus-visible:opacity-100 group-hover:opacity-100",
-          isGrid ? "bottom-3 right-3 size-9" : "right-2 top-1/2 size-8 -translate-y-1/2",
-        )}
+        className="absolute right-2 top-1/2 grid size-8 -translate-y-1/2 place-items-center rounded-full bg-primary text-primary-foreground opacity-0 shadow-md transition-opacity focus-visible:opacity-100 group-hover:opacity-100"
       >
         <Play className="size-4 fill-current" />
       </button>

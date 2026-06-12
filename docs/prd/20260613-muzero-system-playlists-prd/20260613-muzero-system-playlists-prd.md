@@ -19,6 +19,7 @@
 | 4 | Playback Stats Range Aggregation | Completed | [Phase 4 Checklist](#phase-4-checklist) |
 | 5 | i18n + Empty States + Tests | Completed | [Phase 5 Checklist](#phase-5-checklist) |
 | 6 | Stats Columns + Sortable Queue Order | Completed | [Phase 6 Checklist](#phase-6-checklist) |
+| 7 | Compact Cards + Latest Cover Art | Completed | [Phase 7 Checklist](#phase-7-checklist) |
 
 > Status Legend: Completed | In Progress | Pending
 
@@ -524,6 +525,30 @@ Deletion behavior:
 - `node node_modules/@biomejs/biome/bin/biome check --formatter-enabled=false src/lib/system-playlists.ts src/lib/system-playlists.test.ts src/components/library/system-playlist-detail.tsx src/components/library/system-playlist-detail.test.tsx src/components/library/track-row.tsx src/components/library/virtual-track-list.tsx src/components/library/track-list-section.tsx` passes.
 - Direct `tsc --noEmit` is currently blocked by unrelated chat/settings dynamic i18n key typing errors in `src/components/chat/dj-chat-entry.tsx` and `src/components/settings/dj-tool-capabilities.tsx`.
 
+### Phase 7: Compact Cards + Latest Cover Art
+
+**Goal:** Keep the three pinned system playlist cards visually compact in the Sets grid and make them feel like real playlists by showing representative cover art when available.
+
+**Tasks:**
+- [x] Change grid-mode system playlist cards from large square art cards to compact horizontal rows.
+- [x] Select the newest local track with cover art from each derived system playlist as the card cover source.
+- [x] Render the cover via the shared `CoverImage` component so local blob URLs, remote covers, and thumbhash previews follow existing cover lifecycle rules.
+- [x] Overlay `bg-background/40` mask above cover art and keep the system playlist icon visible as the playlist identity marker.
+- [x] Fall back to the existing icon-only placeholder when no covered local track is available.
+
+### Phase 7 Checklist
+
+- [x] Grid-mode system playlist cards use compact `size-16` artwork instead of full-width square artwork.
+- [x] The representative cover is chosen by latest playback/edit timestamp among covered local rows.
+- [x] Cards still expose the same open/play behavior and non-deletable affordance.
+- [x] Existing list-mode cards remain compact and unchanged in behavior.
+
+### Phase 7 Verification Notes
+
+- `node node_modules/vitest/vitest.mjs run src/pages/library-empty-states.test.tsx src/components/library/system-playlist-cards.test.tsx src/components/library/system-playlist-detail.test.tsx src/components/player/queue-panel.test.tsx src/lib/system-playlists.test.ts` passes: 5 files, 23 tests.
+- `node node_modules/@biomejs/biome/bin/biome check --formatter-enabled=false src/lib/system-playlists.ts src/lib/system-playlists.test.ts src/components/library/system-playlist-cards.tsx src/components/library/system-playlist-cards.test.tsx src/pages/search-page.tsx` passes.
+- Direct `tsc --noEmit` is currently blocked by unrelated visualizer/electron worktree typing errors in `src/components/player/visualizer-blend-mode-select.tsx` and `src/lib/electron-window-appearance.test.ts`.
+
 ---
 
 ## 7. Out of Scope
@@ -581,6 +606,7 @@ Deletion behavior:
 | 2026-06-13 | Codex | Completed Phase 2 pure system playlist selectors with TDD coverage for local and remote playback rows. |
 | 2026-06-13 | Codex | Completed Phases 3-5: Gallery and Queue pinned sources, virtual detail view, Most Played range metrics, four-locale copy, and targeted TDD verification. |
 | 2026-06-13 | Codex | Completed Phase 6: dedicated play-count and last-played columns plus sort controls that feed the selected queue order. |
+| 2026-06-13 | Codex | Completed Phase 7: compact system playlist cards with latest cover art and masked icon overlay. |
 
 ---
 
@@ -595,6 +621,7 @@ Deletion behavior:
 - Most Played row metadata includes the selected range play count, including weekly counts.
 - System playlist detail rows show play count and last played time as separate columns.
 - System playlist detail can sort rows and queue playback by play count or last played time.
+- System playlist cards render as compact pinned rows in grid mode and show the newest available local cover with a dark mask when a covered local track exists.
 - Playing a system playlist loads the currently visible derived order into the play queue.
 - Remote/shared tracks appear in Recently Played and Most Played when their local playback identity and display/playback metadata can be resolved.
 - No new backend, account system, telemetry, or cloud dependency is introduced.
