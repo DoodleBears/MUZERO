@@ -196,6 +196,16 @@
     "loadingTrack": "Preparing: {{title}}",
     "streamNeedsAccess": "This song needs you to log in to that source (VIP / members only)"
   },
+  "tray": {
+    "currentPrefix": "Current",
+    "noTrack": "No song playing",
+    "like": "Like current song",
+    "unlike": "Unlike current song",
+    "displayMode": "Display mode",
+    "openApp": "Open MUZERO",
+    "openNowPlaying": "Open Now Playing",
+    "exit": "Exit MUZERO"
+  },
   "dj": {
     "writing": "DJ is writing the next track…",
     "generating": "Generating audio…",

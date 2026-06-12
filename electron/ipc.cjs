@@ -171,7 +171,7 @@ async function mediaStorageExistingTarget(storageKey) {
   return real;
 }
 
-function registerIpc() {
+function registerIpc({ trayController } = {}) {
   ipcMain.handle("muzero:grantFolder", (_event, folderPath) => {
     const real = realOrNull(folderPath);
     if (real) allowedRoots.add(real);
@@ -325,6 +325,24 @@ function registerIpc() {
 
   ipcMain.handle("muzero:window:close", (event) => {
     senderWindow(event).close();
+  });
+
+  ipcMain.handle("muzero:window:hideToTray", (event) => {
+    const win = senderWindow(event);
+    if (!trayController?.hasTray()) return win.close();
+    trayController.hideToTray(win);
+  });
+
+  ipcMain.handle("muzero:window:showFromTray", (event) => {
+    trayController?.showWindow(senderWindow(event));
+  });
+
+  ipcMain.handle("muzero:window:quitApp", () => {
+    trayController?.quitApp();
+  });
+
+  ipcMain.handle("muzero:tray:update", (_event, model) => {
+    trayController?.updateMenu(model);
   });
 
   ipcMain.handle("muzero:window:getState", (event) => {

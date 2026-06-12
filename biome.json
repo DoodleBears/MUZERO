@@ -39,6 +39,10 @@
   },
   "overrides": [
     {
+      "includes": ["src/i18n/locales/**/*.json"],
+      "formatter": { "enabled": false }
+    },
+    {
       "includes": ["src/lib/logger.ts"],
       "linter": { "rules": { "suspicious": { "noConsole": "off" } } }
     },

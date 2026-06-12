@@ -14,6 +14,8 @@
 import type { AppIconId } from "@/lib/app-icon";
 import type { DiagnosticContext } from "@/lib/diagnostics";
 import type { DirEntryLike } from "@/lib/folder-import";
+import type { TrayActionId } from "@/tray/actions";
+import type { TrayMenuModel } from "@/tray/menu-model";
 import { createElectronBridge } from "./electron";
 import { createTauriBridge } from "./tauri";
 import { createWebBridge } from "./web";
@@ -70,6 +72,9 @@ export interface DesktopWindowControls {
   minimize: () => Promise<void>;
   toggleMaximize: () => Promise<DesktopWindowState>;
   close: () => Promise<void>;
+  hideToTray?: () => Promise<void>;
+  showFromTray?: () => Promise<void>;
+  quitApp?: () => Promise<void>;
   getState: () => Promise<DesktopWindowState>;
   onStateChange?: (callback: (state: DesktopWindowState) => void) => () => void;
 }
@@ -94,6 +99,11 @@ export interface DesktopSystemShortcuts {
     registrations: readonly DesktopSystemShortcutRegistration[],
   ) => Promise<DesktopSystemShortcutConfigureResult>;
   onAction: (callback: (actionId: string) => void) => () => void;
+}
+
+export interface DesktopTrayControls {
+  update: (model: TrayMenuModel) => Promise<void>;
+  onAction?: (callback: (actionId: TrayActionId) => void) => () => void;
 }
 
 export interface DesktopBridge {
@@ -140,6 +150,8 @@ export interface DesktopBridge {
   windowControls?: DesktopWindowControls;
   /** Electron OS-level global shortcut registration; absent on web/Tauri v1. */
   systemShortcuts?: DesktopSystemShortcuts;
+  /** Native system tray menu bridge. Electron desktop only for v1. */
+  tray?: DesktopTrayControls;
   /**
    * Start a native window drag for the current press (frameless window move).
    * Tauri only — Electron drags via `-webkit-app-region` CSS, web has no window —

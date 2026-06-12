@@ -37,6 +37,7 @@ import { usePlayerStore } from "@/stores/player-store";
 import { startSyncIndicator } from "@/stores/sync-indicator";
 import { useUiStore } from "@/stores/ui-store";
 import { useVisualizerPanelStore } from "@/stores/visualizer-panel-store";
+import { useTraySync } from "@/tray/use-tray-sync";
 import { resolveVisualizerStyle } from "@/visualizer/registry";
 
 function isTypingTarget(el: EventTarget | null): boolean {
@@ -81,6 +82,8 @@ export default function App() {
   useDocumentTitle();
   // Apply the chosen desktop app icon (Electron only; no-op on web/tauri).
   useAppIcon();
+  // Keep the native tray menu aligned with current playback state (Electron only).
+  useTraySync();
   // Keep the next transport targets warm so keyboard/button skips don't paint
   // empty cover/background states while local blobs or R2 bytes resolve.
   usePlaybackWarmup();

@@ -1,12 +1,13 @@
 const { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } = require("node:fs");
 const path = require("node:path");
 const { pathToFileURL } = require("node:url");
-const { app, BrowserWindow, Menu, net, protocol, screen, shell } = require("electron");
+const { app, BrowserWindow, Menu, net, protocol, screen, shell, Tray } = require("electron");
 const { registerIpc } = require("./ipc.cjs");
 const { handleMuzfetch } = require("./fetch-proxy.cjs");
 const { registerElectronGlobalShortcuts } = require("./global-shortcuts.cjs");
 const { applyAppIcon, appIconPath, DEFAULT_APP_ICON } = require("./app-icon.cjs");
 const { attachDiagnosticsWindow } = require("./diagnostics.cjs");
+const { createTrayController } = require("./tray.cjs");
 
 const devUrl = process.env.MUZERO_ELECTRON_URL;
 const distDir = path.join(__dirname, "..", "dist");
@@ -17,6 +18,13 @@ const isWindows = process.platform === "win32";
 const defaultWindowBounds = { height: 780, width: 1180 };
 const minWindowBounds = { height: 600, width: 380 };
 const windowStateFileName = "window-state.json";
+const trayController = createTrayController({
+  app,
+  iconPath: appIconPath(DEFAULT_APP_ICON),
+  Menu,
+  platform: process.platform,
+  Tray,
+});
 
 app.setName("MUZERO");
 protocol.registerSchemesAsPrivileged([
@@ -240,18 +248,38 @@ function createWindow() {
   if (devUrl && process.env.MUZERO_ELECTRON_DEVTOOLS === "1") {
     win.webContents.openDevTools({ mode: "detach" });
   }
+  trayController.attachWindow(win);
+  return win;
 }
 
 app.whenReady().then(() => {
   if (isWindows) Menu.setApplicationMenu(null);
   registerDistProtocol();
   protocol.handle("muzfetch", handleMuzfetch);
-  registerIpc();
+  registerIpc({ trayController });
   registerElectronGlobalShortcuts();
   require("./source-login.cjs").registerSourceLogin();
   require("./youtube-engine.cjs").registerYoutubeEngine();
   require("./updater.cjs").initDesktopUpdater();
+  trayController.ensureTray();
   createWindow();
+  trayController.onAction((actionId) => {
+    const [win] = BrowserWindow.getAllWindows();
+    switch (actionId) {
+      case "window.show":
+        trayController.showWindow(win);
+        break;
+      case "window.hide":
+        trayController.hideToTray(win);
+        break;
+      case "app.quit":
+        trayController.quitApp();
+        break;
+      default:
+        if (win && !win.isDestroyed()) win.webContents.send("muzero:tray:action", actionId);
+        break;
+    }
+  });
   // macOS dock icon (no window icon there). The renderer's use-app-icon hook
   // re-applies the user's saved variant once settings load.
   applyAppIcon(DEFAULT_APP_ICON);
@@ -259,6 +287,14 @@ app.whenReady().then(() => {
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") app.quit();
 });
+app.on("before-quit", () => {
+  trayController.markQuitting();
+});
 app.on("activate", () => {
-  if (BrowserWindow.getAllWindows().length === 0) createWindow();
+  const [win] = BrowserWindow.getAllWindows();
+  if (win) {
+    trayController.showWindow(win);
+  } else {
+    createWindow();
+  }
 });
