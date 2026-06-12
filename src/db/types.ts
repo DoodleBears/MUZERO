@@ -710,7 +710,7 @@ export interface AppSettings {
    * [0.04, 0.20] at read time: lower = floatier/slower, higher = snappier.
    */
   smoothScrollLerp?: number;
-  /** Global color scheme. Mirrors localStorage `muzero-theme`; defaults to system. */
+  /** Global color scheme. Mirrors localStorage `muzero-theme`; defaults to dark. */
   theme?: "light" | "dark" | "system";
   /**
    * Which alternate desktop app icon to show (Electron only) — swaps the running
@@ -842,7 +842,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   locale: "en",
   autoFetchLyrics: true,
   lyricsProviderId: "lrclib",
-  theme: "system",
+  theme: "dark",
   appIcon: "light",
   backgroundMode: "cover",
   backgroundRenderer: "noise",

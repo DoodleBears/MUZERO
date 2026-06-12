@@ -16,7 +16,7 @@ export type Theme = (typeof THEMES)[number];
 /** The two concrete schemes a theme resolves to. */
 export type ResolvedTheme = "light" | "dark";
 
-export const DEFAULT_THEME: Theme = "system";
+export const DEFAULT_THEME: Theme = "dark";
 export const THEME_STORAGE_KEY = "muzero-theme";
 
 /** theme-color meta values, kept in sync so the mobile chrome matches. */
@@ -46,7 +46,7 @@ export function resolveTheme(theme: Theme): ResolvedTheme {
   return theme;
 }
 
-/** Read the startup theme: stored preference → default ("system"). */
+/** Read the startup theme: stored preference → default ("dark"). */
 export function readStoredTheme(): Theme {
   if (typeof window === "undefined") return DEFAULT_THEME;
   const stored = window.localStorage.getItem(THEME_STORAGE_KEY);
