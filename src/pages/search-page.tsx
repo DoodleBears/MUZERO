@@ -1,4 +1,5 @@
 import { useLiveQuery } from "dexie-react-hooks";
+import type { TFunction } from "i18next";
 import {
   ArrowLeft,
   Heart,
@@ -21,6 +22,11 @@ import { CoverContextMenu } from "@/components/library/cover-context-menu";
 import { EntityDetailView } from "@/components/library/entity-detail";
 import { EntityCard, EntityGrid, type LibraryEntityItem } from "@/components/library/entity-grid";
 import { FilterChip, SortChip } from "@/components/library/sort-chip";
+import {
+  type SystemPlaylistCardItem,
+  SystemPlaylistCards,
+} from "@/components/library/system-playlist-cards";
+import { SystemPlaylistDetail } from "@/components/library/system-playlist-detail";
 import { TrackListSection } from "@/components/library/track-list-section";
 import {
   VirtualCardGrid,
@@ -92,6 +98,14 @@ import {
   sortSets,
 } from "@/lib/set-gallery";
 import { useSmoothScroll } from "@/lib/smooth-scroll/use-smooth-scroll";
+import {
+  deriveHeartedPlaylist,
+  deriveMostPlayedPlaylist,
+  deriveRecentlyPlayedPlaylist,
+  SYSTEM_PLAYLISTS,
+  type SystemPlaylistId,
+  type SystemPlaylistPlayable,
+} from "@/lib/system-playlists";
 import {
   filterLikedTracks,
   sortTracks,
@@ -182,6 +196,7 @@ function entityDurationSec(trackIds: readonly string[], trackById: Map<string, T
 }
 
 const GALLERY_CARD_SELECTOR = "[data-gallery-card]";
+type CommonT = TFunction<"common", undefined>;
 
 /**
  * 歌单 Gallery — a two-level surface. Level 1 browses every set like an album wall
@@ -194,6 +209,9 @@ export function SearchPage() {
   // Backfill blurred previews + visualizer palettes for legacy/imported covers.
   useCoverMetadataBackfill();
   const [selectedSetId, setSelectedSetId] = useState<string | null>(null);
+  const [selectedSystemPlaylistId, setSelectedSystemPlaylistId] = useState<SystemPlaylistId | null>(
+    null,
+  );
   const [mode, setMode] = useState<GalleryMode>(savedGalleryMode);
   const [setQuery, setSetQuery] = useState("");
   const [trackQuery, setTrackQuery] = useState("");
@@ -273,6 +291,7 @@ export function SearchPage() {
     EMPTY_MEMORY_NOTES,
   );
   const setActiveSession = usePlayerStore((s) => s.setActiveSession);
+  const playSystemPlaylist = usePlayerStore((s) => s.playSystemPlaylist);
   const play = usePlayerStore((s) => s.play);
   const playTrack = usePlayerStore((s) => s.playTrack);
   const deleteSession = usePlayerStore((s) => s.deleteSession);
@@ -297,7 +316,7 @@ export function SearchPage() {
   }, [selectedSetId, setUploadTarget]);
 
   useEffect(() => {
-    if (selectedSetId) return;
+    if (selectedSetId || selectedSystemPlaylistId) return;
     const onKeyDown = (event: KeyboardEvent) => {
       if (!matchesRef.current(event, "nav.cycleGalleryMode")) return;
       if (isTypingTarget(event.target) || hasModalDialogOpen()) return;
@@ -311,12 +330,12 @@ export function SearchPage() {
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [mode, selectedSetId]);
+  }, [mode, selectedSetId, selectedSystemPlaylistId]);
 
   // Bare 1/2/3/4 jump straight to a library tab (sets / songs / albums / artists),
   // at the wall only. Resolved through the registry, so the digits are rebindable.
   useEffect(() => {
-    if (selectedSetId || selectedArtistKey || selectedAlbumKey) return;
+    if (selectedSetId || selectedSystemPlaylistId || selectedArtistKey || selectedAlbumKey) return;
     const onKeyDown = (event: KeyboardEvent) => {
       if (isTypingTarget(event.target) || hasModalDialogOpen()) return;
       const hit = GALLERY_TAB_ACTIONS.find(([action]) => matchesRef.current(event, action));
@@ -327,7 +346,7 @@ export function SearchPage() {
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [selectedSetId, selectedArtistKey, selectedAlbumKey]);
+  }, [selectedSetId, selectedSystemPlaylistId, selectedArtistKey, selectedAlbumKey]);
 
   const trackById = useMemo(() => new Map(allTracks.map((tr) => [tr.id, tr])), [allTracks]);
 
@@ -342,7 +361,9 @@ export function SearchPage() {
   // Playback heartbeats write this table every flush DURING playback — coalesce
   // so sitting on this page while music plays doesn't re-scan per flush (F-4).
   const playbackStatsLive = useLiveQuery(() => listTrackPlaybackStats(db), [], []);
+  const playbackEventsLive = useLiveQuery(() => db.playbackEvents.toArray(), [], []);
   const playbackStats = useThrottledValue(playbackStatsLive, LIBRARY_QUERY_COALESCE_MS);
+  const playbackEvents = useThrottledValue(playbackEventsLive, LIBRARY_QUERY_COALESCE_MS);
   const statsByTrackId = useMemo(() => buildTrackStatsMap(playbackStats), [playbackStats]);
   // trackId → last-played epoch ms, for the 最近播放 sort (never-played omitted → 0).
   const lastPlayedByTrack = useMemo(() => {
@@ -527,6 +548,36 @@ export function SearchPage() {
     () => sortSets(filterSets(items, setQuery), sort, sortDir),
     [items, setQuery, sort, sortDir, transliterationReady],
   );
+  const systemPlaylistRows = useMemo(
+    () => ({
+      "system:liked": deriveHeartedPlaylist(allTracks).map(trackToSystemPlayable),
+      "system:recent": deriveRecentlyPlayedPlaylist(allTracks, {
+        events: playbackEvents,
+        remoteTracks,
+        stats: playbackStats,
+      }),
+      "system:most": deriveMostPlayedPlaylist(allTracks, {
+        events: playbackEvents,
+        now: Date.now(),
+        range: "all",
+        remoteTracks,
+        stats: playbackStats,
+      }),
+    }),
+    [allTracks, playbackEvents, playbackStats, remoteTracks],
+  );
+  const systemPlaylistItems = useMemo<SystemPlaylistCardItem[]>(
+    () =>
+      SYSTEM_PLAYLISTS.map((playlist) => ({
+        count: systemPlaylistRows[playlist.id].length,
+        icon: playlist.icon,
+        id: playlist.id,
+        label: systemPlaylistLabel(playlist.id, t),
+        playLabel: t("systemPlaylists.play", { name: systemPlaylistLabel(playlist.id, t) }),
+        subtitle: t("gallery.count", { count: systemPlaylistRows[playlist.id].length }),
+      })),
+    [systemPlaylistRows, t],
+  );
   // Stable key accessors for the virtualized walls (kept stable so the grid's
   // memoized scroll/focus callbacks don't churn every render).
   const getSetKey = useCallback((item: SetGalleryItem) => item.session.id, []);
@@ -534,11 +585,16 @@ export function SearchPage() {
   // The active wall's cards in display order — roving keyboard nav walks these
   // keys (not the DOM) so it can reach cards that virtualization hasn't mounted.
   const galleryKeys = useMemo<string[]>(() => {
-    if (mode === "sets") return shown.map((item) => item.session.id);
+    if (mode === "sets") {
+      return [
+        ...systemPlaylistItems.map((item) => item.id),
+        ...shown.map((item) => item.session.id),
+      ];
+    }
     if (mode === "albums") return albumItems.map((item) => item.key);
     if (mode === "artists") return artistItems.map((item) => item.key);
     return [];
-  }, [mode, shown, albumItems, artistItems]);
+  }, [mode, shown, albumItems, artistItems, systemPlaylistItems]);
   const galleryKeysRef = useRef(galleryKeys);
   galleryKeysRef.current = galleryKeys;
   // Pre-sort + liked-filter, then search: with no query the chosen order shows
@@ -658,6 +714,11 @@ export function SearchPage() {
     void play();
   }
 
+  async function playSystemSet(playlistId: SystemPlaylistId) {
+    await playSystemPlaylist(playlistId, localTracksFromSystemRows(systemPlaylistRows[playlistId]));
+    void play();
+  }
+
   async function createNewSet() {
     const s = await createSession({
       name: t("gallery.newSetName"),
@@ -696,6 +757,10 @@ export function SearchPage() {
     returnFocusKeyRef.current = id;
     beginCoverMorph(`set:${id}`);
     transitionState(() => setSelectedSetId(id));
+  }
+  function openSystemPlaylist(id: SystemPlaylistId) {
+    returnFocusKeyRef.current = id;
+    transitionState(() => setSelectedSystemPlaylistId(id));
   }
   function openArtist(key: string) {
     returnFocusKeyRef.current = key;
@@ -740,7 +805,8 @@ export function SearchPage() {
   // prev, S/↓ next, D/→ open. The 全部歌曲 list keeps its own row nav. Runs in
   // capture so ↑/↓ move focus here rather than changing volume (player shortcuts).
   useEffect(() => {
-    const detailOpen = !!selectedSetId || !!selectedArtistKey || !!selectedAlbumKey;
+    const detailOpen =
+      !!selectedSetId || !!selectedSystemPlaylistId || !!selectedArtistKey || !!selectedAlbumKey;
     if (detailOpen || mode === "tracks") return;
     const onKeyDown = (event: KeyboardEvent) => {
       if (isTypingTarget(event.target) || hasModalDialogOpen()) return;
@@ -781,7 +847,14 @@ export function SearchPage() {
     };
     window.addEventListener("keydown", onKeyDown, { capture: true });
     return () => window.removeEventListener("keydown", onKeyDown, { capture: true });
-  }, [mode, selectedSetId, selectedArtistKey, selectedAlbumKey, focusGalleryCard]);
+  }, [
+    mode,
+    selectedSetId,
+    selectedSystemPlaylistId,
+    selectedArtistKey,
+    selectedAlbumKey,
+    focusGalleryCard,
+  ]);
 
   function focusTrackSearchResult(direction: "first" | "last") {
     if (mode !== "tracks" || shownTracks.length === 0) return;
@@ -805,6 +878,19 @@ export function SearchPage() {
   }
 
   // Level 2: a set's track list.
+  if (selectedSystemPlaylistId) {
+    return (
+      <SystemPlaylistDetail
+        events={playbackEvents}
+        onBack={() => leaveDetail(() => setSelectedSystemPlaylistId(null))}
+        playlistId={selectedSystemPlaylistId}
+        remoteTracks={remoteTracks}
+        stats={playbackStats}
+        tracks={allTracks}
+      />
+    );
+  }
+
   if (selectedSetId) {
     return (
       <SetDetailView
@@ -987,6 +1073,15 @@ export function SearchPage() {
               >
                 {t("gallery.sortSize")}
               </SortChip>
+            </div>
+
+            <div className="mb-4">
+              <SystemPlaylistCards
+                items={systemPlaylistItems}
+                view={activeWallView}
+                onOpen={openSystemPlaylist}
+                onPlay={(id) => void playSystemSet(id)}
+              />
             </div>
 
             {/* Right-click anywhere on the wall (incl. empty space) to start a new set. */}
@@ -1299,6 +1394,35 @@ export function SearchPage() {
       </div>
     </div>
   );
+}
+
+function trackToSystemPlayable(track: Track): SystemPlaylistPlayable {
+  return {
+    id: track.id,
+    kind: "local-track",
+    metric: {
+      listenedSec: 0,
+      playCount: 0,
+      trackId: track.id,
+    },
+    title: track.title,
+    track,
+  };
+}
+
+function localTracksFromSystemRows(rows: SystemPlaylistPlayable[]): Track[] {
+  return rows.flatMap((row) => (row.kind === "local-track" ? [row.track] : []));
+}
+
+function systemPlaylistLabel(id: SystemPlaylistId, t: CommonT): string {
+  switch (id) {
+    case "system:liked":
+      return t("systemPlaylists.hearted");
+    case "system:recent":
+      return t("systemPlaylists.recentlyPlayed");
+    default:
+      return t("systemPlaylists.mostPlayed");
+  }
 }
 
 /** Set-header "save all offline" button: caches every streamed or R2-remote track

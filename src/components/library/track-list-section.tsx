@@ -41,6 +41,7 @@ export function TrackListSection({
   startActions,
   endActions,
   listHeader,
+  getTrackSupplement,
   canReorder,
 }: {
   tracks: Track[];
@@ -62,6 +63,8 @@ export function TrackListSection({
   /** When set, this content + the toolbar row scroll WITH the list (rendered inside the
    *  scroll container as its header) instead of staying pinned above it. */
   listHeader?: React.ReactNode;
+  /** Optional per-row secondary metadata shown after the default subtitle. */
+  getTrackSupplement?: (track: Track) => React.ReactNode;
 }) {
   const { t } = useTranslation();
   const trackIds = useMemo(() => tracks.map((track) => track.id), [tracks]);
@@ -213,6 +216,7 @@ export function TrackListSection({
             selectedIds={sel.ids}
             onToggleSelect={sel.toggle}
             onDeleteTrack={onDeleteTrack}
+            getTrackSupplement={getTrackSupplement}
             initialScrollIndex={scroll.anchorIndexRef.current ?? undefined}
           />
         )}

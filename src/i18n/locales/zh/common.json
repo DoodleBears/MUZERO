@@ -907,6 +907,23 @@
     "aiGenEnable": "启用 AI 音乐生成",
     "aiGenHint": "默认关闭。生成走付费云 API(BYOK)。开启后 DJ 可生成歌曲;无论开关,从在线源搜索并入库都是免费的。"
   },
+  "systemPlaylists": {
+    "hearted": "红心歌单",
+    "recentlyPlayed": "最近听过",
+    "mostPlayed": "最常听",
+    "pinnedSources": "默认歌单",
+    "sourceLabel": "{{name}}",
+    "play": "播放{{name}}",
+    "rangeAll": "所有",
+    "rangeMonth": "月",
+    "rangeWeek": "周",
+    "rangeDay": "日",
+    "emptyHearted": "点红心的歌曲会出现在这里。",
+    "emptyRecentlyPlayed": "播放过的歌曲会出现在这里。",
+    "emptyMostPlayed": "有播放历史后，这里会显示最常听的歌曲。",
+    "playCount_other": "播放 {{count}} 次",
+    "listenTime": "已听 {{time}}"
+  },
   "gallery": {
     "title": "歌单",
     "search": "搜索歌单…",

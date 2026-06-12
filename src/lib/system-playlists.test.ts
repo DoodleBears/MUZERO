@@ -22,6 +22,18 @@ describe("system playlist selectors", () => {
     expect(deriveHeartedPlaylist(tracks).map((item) => item.id)).toEqual(["trk_new", "trk_old"]);
   });
 
+  it("reflects heart toggles from the latest track rows", () => {
+    const tracks = [track({ id: "trk_toggle", title: "Toggle me", liked: false })];
+
+    expect(deriveHeartedPlaylist(tracks)).toEqual([]);
+
+    const updatedTracks = tracks.map((item) =>
+      item.id === "trk_toggle" ? { ...item, liked: true, updatedAt: NOW + 1 } : item,
+    );
+
+    expect(deriveHeartedPlaylist(updatedTracks).map((item) => item.id)).toEqual(["trk_toggle"]);
+  });
+
   it("derives recently played as unique local tracks folded across devices", () => {
     const tracks = [
       track({ id: "trk_a", title: "A" }),

@@ -921,6 +921,24 @@
     "aiGenEnable": "Enable AI music generation",
     "aiGenHint": "Off by default. Generation uses a paid cloud API (BYOK). When on, the DJ can generate songs; search & ingest from streaming sources stays free either way."
   },
+  "systemPlaylists": {
+    "hearted": "Hearted",
+    "recentlyPlayed": "Recently Played",
+    "mostPlayed": "Most Played",
+    "pinnedSources": "Default playlists",
+    "sourceLabel": "{{name}}",
+    "play": "Play {{name}}",
+    "rangeAll": "All",
+    "rangeMonth": "Month",
+    "rangeWeek": "Week",
+    "rangeDay": "Day",
+    "emptyHearted": "Heart songs to collect them here.",
+    "emptyRecentlyPlayed": "Play a song and it will appear here.",
+    "emptyMostPlayed": "Plays will appear here once listening history builds up.",
+    "playCount_one": "{{count}} play",
+    "playCount_other": "{{count}} plays",
+    "listenTime": "{{time}} listened"
+  },
   "gallery": {
     "title": "Sets",
     "search": "Search sets…",

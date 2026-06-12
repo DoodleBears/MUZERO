@@ -10,7 +10,7 @@ vi.mock("react-i18next", () => ({
     type: "3rdParty",
   },
   useTranslation: () => ({
-    t: (key: string) =>
+    t: (key: string, vars?: Record<string, unknown>) =>
       ({
         "displayMode.cover": "Cover",
         "displayMode.video": "Video",
@@ -23,6 +23,7 @@ vi.mock("react-i18next", () => ({
         "gallery.modeArtists": "Artists",
         "gallery.modeSets": "Sets",
         "gallery.modeTracks": "All songs",
+        "gallery.count": `${vars?.count ?? 0} songs`,
         "gallery.searchAlbums": "Search albums…",
         "gallery.searchArtists": "Search artists…",
         "gallery.searchSets": "Search sets…",
@@ -41,6 +42,10 @@ vi.mock("react-i18next", () => ({
         "sessions.startDjSet": "Start DJ set",
         "sessions.uploadDesc": "Add your own audio or video files.",
         "sessions.uploadTitle": "Make a video / upload set",
+        "systemPlaylists.hearted": "Hearted",
+        "systemPlaylists.mostPlayed": "Most Played",
+        "systemPlaylists.play": `Play ${vars?.name ?? ""}`,
+        "systemPlaylists.recentlyPlayed": "Recently Played",
       })[key] ?? key,
   }),
 }));
@@ -150,6 +155,17 @@ describe("empty-library onboarding", () => {
     expect(screen.getByTestId("library-import-empty-state")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Add tracks" })).toBeInTheDocument();
     expect(screen.getByText("Make a video / upload set")).toBeInTheDocument();
+  });
+
+  it("keeps non-deletable system playlists pinned in an empty Sets wall", () => {
+    localStorage.setItem("muzero-gallery-mode", "sets");
+
+    render(<SearchPage />);
+
+    expect(screen.getByRole("button", { name: "Hearted" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Recently Played" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Most Played" })).toBeInTheDocument();
+    expect(screen.queryByText(/delete/i)).not.toBeInTheDocument();
   });
 
   it("shows an import panel on Now Playing when no track exists anywhere", () => {

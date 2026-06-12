@@ -1,5 +1,12 @@
 import { Heart, Loader2, Play, TriangleAlert, Video } from "lucide-react";
-import { Fragment, type KeyboardEvent, type MouseEvent, memo, useState } from "react";
+import {
+  Fragment,
+  type KeyboardEvent,
+  type MouseEvent,
+  memo,
+  type ReactNode,
+  useState,
+} from "react";
 import { useTranslation } from "react-i18next";
 import { SourceAttributionChip } from "@/components/cloud/source-attribution-chip";
 import { TrackAddToSetPopover } from "@/components/library/track-add-to-set";
@@ -36,6 +43,7 @@ interface TrackRowProps {
   checked?: boolean;
   onToggleSelect?: (shiftKey: boolean) => void;
   listIndex?: number;
+  secondaryMeta?: ReactNode;
   sessions: DjSession[];
   onPlay: () => void;
   onView: () => void;
@@ -147,6 +155,7 @@ export const TrackRow = memo(function TrackRow({
   checked,
   onToggleSelect,
   listIndex,
+  secondaryMeta,
   sessions,
   onPlay,
   onView,
@@ -283,7 +292,10 @@ export const TrackRow = memo(function TrackRow({
             {track.status === "failed" ? (
               (track.error ?? t("track.generationFailed"))
             ) : (
-              <TrackSubtitle track={track} />
+              <>
+                <TrackSubtitle track={track} />
+                {secondaryMeta && <span className="ms-1">· {secondaryMeta}</span>}
+              </>
             )}
           </div>
         </div>

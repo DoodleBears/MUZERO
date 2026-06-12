@@ -54,6 +54,7 @@ import {
 } from "@/lib/media-session";
 import { isNcmFile } from "@/lib/ncm-decode";
 import { getAppFetch } from "@/lib/platform";
+import type { SystemPlaylistId } from "@/lib/system-playlists";
 import { describeTrackCoverSource, describeTrackMediaSource } from "@/lib/track-source";
 import { runAutoFetchLyrics } from "@/lyrics/auto-fetch";
 import { resolveLyricsProviderForTrack } from "@/lyrics/registry";
@@ -127,8 +128,14 @@ import { ingestViaWorker } from "@/workers/heavy-client";
 
 const IMPORT_VISIBILITY_FLUSH_SIZE = 25;
 
+export type QueueSource =
+  | { kind: "set"; setId: string }
+  | { kind: "system-playlist"; id: SystemPlaylistId };
+
 interface PlayerState {
   activeSessionId: string | null;
+  /** Non-persisted "playing from" label source. System playlists are not DjSession rows. */
+  queueSource?: QueueSource;
   /** Reactive snapshot of the active set's tracks, in queue order. */
   queue: Track[];
   currentIndex: number;
@@ -153,6 +160,7 @@ interface PlayerState {
 
   init: () => void;
   setActiveSession: (sessionId: string) => Promise<void>;
+  playSystemPlaylist: (playlistId: SystemPlaylistId, tracks: Track[]) => Promise<void>;
   rebuildEngine: () => Promise<void>;
   play: () => Promise<void>;
   pause: () => void;
@@ -495,6 +503,7 @@ function parseUrlParams(url: string): URLSearchParams | null {
 
 export const usePlayerStore = create<PlayerState>((set, get) => ({
   activeSessionId: null,
+  queueSource: undefined,
   queue: [],
   currentIndex: -1,
   isPlaying: false,
@@ -601,9 +610,15 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
         const nextTrack = currentIndex >= 0 ? queue[currentIndex] : undefined;
         const nextTrackId = nextTrack?.id;
         const metadataDuration = playableDurationSec(nextTrack?.durationSec);
+        const queueSource: QueueSource | undefined = contextSetId
+          ? state.queueSource?.kind === "set" && state.queueSource.setId === contextSetId
+            ? state.queueSource
+            : { kind: "set", setId: contextSetId }
+          : state.queueSource;
         const patch: Partial<PlayerState> = {
           activeSessionId: contextSetId,
           currentIndex,
+          queueSource,
           displayMode: session?.displayMode ?? state.displayMode,
           djEnabled: session?.config.autoExtend ?? false,
         };
@@ -620,6 +635,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
         const changed =
           listChanged ||
           state.activeSessionId !== patch.activeSessionId ||
+          state.queueSource !== patch.queueSource ||
           state.currentIndex !== patch.currentIndex ||
           state.displayMode !== patch.displayMode ||
           state.djEnabled !== patch.djEnabled ||
@@ -660,6 +676,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     lastQueueSig = queueSig(initialQueue); // keep the guard in sync with the optimistic seed
     set({
       activeSessionId: sessionId,
+      queueSource: { kind: "set", setId: sessionId },
       queue: initialQueue,
       currentIndex: -1,
       wantPlay: false,
@@ -679,6 +696,35 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
 
     // Seed an empty DJ set with a first batch.
     if (session?.config.autoExtend && trackIds.length === 0) void get().draftNow();
+  },
+
+  async playSystemPlaylist(playlistId, tracks) {
+    log.debug("player", "playSystemPlaylist start", {
+      playlistId,
+      trackCount: tracks.length,
+    });
+    get().init();
+    await get().rebuildEngine();
+    watchSetForAppend(null, [], true);
+
+    const trackIds = tracks.map((track) => track.id);
+    loadedTrackId = null;
+    cancelPlaybackLoading(set);
+    await playQueueSet(trackIds, { currentIndex: -1 });
+    consumedTrackIds = new Set(trackIds);
+    lastQueueSig = queueSig(tracks);
+    set({
+      activeSessionId: null,
+      queueSource: { kind: "system-playlist", id: playlistId },
+      queue: tracks,
+      currentIndex: -1,
+      wantPlay: false,
+      playbackLoading: null,
+      positionSec: 0,
+      durationSec: 0,
+      displayMode: "video",
+      djEnabled: false,
+    });
   },
 
   async play() {
@@ -1124,7 +1170,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       // liveQuery subscription reconciles `queue`/`currentIndex` from that write.
       watchSetForAppend(null, [], true);
       await playQueueSetContext(undefined);
-      set({ activeSessionId: null, djEnabled: false });
+      set({ activeSessionId: null, djEnabled: false, queueSource: undefined });
       await saveSettings({ lastSessionId: undefined });
     }
     return purgedTrackIds.length;

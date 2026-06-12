@@ -907,6 +907,23 @@
     "aiGenEnable": "AI 音楽生成を有効化",
     "aiGenHint": "デフォルトはオフ。生成は有料のクラウド API(BYOK)を使用。オンにすると DJ が曲を生成できます。ストリーミング検索と取り込みは常に無料です。"
   },
+  "systemPlaylists": {
+    "hearted": "お気に入り",
+    "recentlyPlayed": "最近再生",
+    "mostPlayed": "よく聴く曲",
+    "pinnedSources": "デフォルトプレイリスト",
+    "sourceLabel": "{{name}}",
+    "play": "{{name}}を再生",
+    "rangeAll": "すべて",
+    "rangeMonth": "月",
+    "rangeWeek": "週",
+    "rangeDay": "日",
+    "emptyHearted": "お気に入りにした曲がここに表示されます。",
+    "emptyRecentlyPlayed": "再生した曲がここに表示されます。",
+    "emptyMostPlayed": "再生履歴が増えると、よく聴く曲がここに表示されます。",
+    "playCount_other": "{{count}} 回再生",
+    "listenTime": "{{time}} 再生"
+  },
   "gallery": {
     "title": "セット",
     "search": "セットを検索…",
