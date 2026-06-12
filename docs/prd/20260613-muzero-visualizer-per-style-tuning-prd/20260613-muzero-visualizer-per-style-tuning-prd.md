@@ -15,7 +15,7 @@
 |-------|------|--------|------|
 | 1 | Current-State Audit + PRD | ✅ Completed | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | Per-Style Tuning Data Model + Resolver | ✅ Completed | [Phase 2 Checklist](#phase-2-checklist) |
-| 3 | Shared Visualizer Controls UI + Help Icons | 🔲 Pending | [Phase 3 Checklist](#phase-3-checklist) |
+| 3 | Shared Visualizer Controls UI + Help Icons | 🔄 In Progress | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | Settings / Now Playing Panel Parity | 🔲 Pending | [Phase 4 Checklist](#phase-4-checklist) |
 | 5 | Tests, i18n, and Visual QA | 🔲 Pending | [Phase 5 Checklist](#phase-5-checklist) |
 
@@ -349,19 +349,19 @@ This PRD allows adding one small helper component if it prevents duplicated orde
 
 **Tasks:**
 - [ ] Define a canonical control config for visualizer controls.
-- [ ] Add `VisualizerHelpLabel` using lucide Question Circle icon + existing Tooltip primitives.
-- [ ] Add help icons to select rows, slider rows, and persistent checkbox/toggle rows.
-- [ ] Add a `Reset this style` action to the shared controls, visually grouped with the per-style tuning section.
-- [ ] Add i18n keys for every help tooltip in en/zh/ja/ko.
-- [ ] Ensure touch/focus accessibility.
+- [x] Add `VisualizerHelpLabel` using lucide Question Circle icon + existing Tooltip primitives.
+- [x] Add help icons to select rows, slider rows, and persistent checkbox/toggle rows.
+- [x] Add a `Reset this style` action to the shared controls, visually grouped with the per-style tuning section.
+- [x] Add i18n keys for every help tooltip in en/zh/ja/ko.
+- [x] Ensure touch/focus accessibility.
 
 ### Phase 3 Checklist
 
-- [ ] Every visible persistent parameter has a help icon.
-- [ ] Tooltip text avoids implementation-only wording.
-- [ ] Keyboard focus reaches the help control.
-- [ ] Reset action has a clear label, accessible name, and no accidental one-click destructive ambiguity beyond the current style.
-- [ ] No user-visible text is hardcoded outside i18n catalogs.
+- [x] Every visible persistent parameter has a help icon.
+- [x] Tooltip text avoids implementation-only wording.
+- [x] Keyboard focus reaches the help control.
+- [x] Reset action has a clear label, accessible name, and no accidental one-click destructive ambiguity beyond the current style.
+- [x] No user-visible text is hardcoded outside i18n catalogs.
 
 ### Phase 4: Settings / Now Playing Panel Parity
 
@@ -458,3 +458,5 @@ This PRD allows adding one small helper component if it prevents duplicated orde
 | 2026-06-13 | Codex | Initial draft for per-style visualizer tuning, help icons, and Settings/Now Playing parity. |
 | 2026-06-13 | Codex | Resolved UI control pattern and added v1 reset-this-style requirement. |
 | 2026-06-13 | Codex | Completed Phase 2 data model, resolver, patch, reset, and host resolution work. |
+| 2026-06-13 | Codex | Verified Phase 2 with focused visualizer-effect-settings tests. |
+| 2026-06-13 | Codex | Implemented Phase 3 help icons, reset action, per-style tuning saves, and focused UI tests. |
