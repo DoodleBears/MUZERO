@@ -19,6 +19,16 @@ import { createTauriBridge } from "./tauri";
 import { createWebBridge } from "./web";
 
 export type DesktopKind = "tauri" | "electron" | "web";
+export type DesktopPlatform =
+  | "aix"
+  | "darwin"
+  | "freebsd"
+  | "linux"
+  | "openbsd"
+  | "sunos"
+  | "win32"
+  | "cygwin"
+  | "netbsd";
 
 type FetchFn = typeof globalThis.fetch;
 export type MediaProxyTrace = Pick<
@@ -45,8 +55,22 @@ export interface MediaStorageFileStat {
   bytes: number;
 }
 
+export interface DesktopWindowState {
+  fullscreen: boolean;
+  maximized: boolean;
+}
+
+export interface DesktopWindowControls {
+  minimize: () => Promise<void>;
+  toggleMaximize: () => Promise<DesktopWindowState>;
+  close: () => Promise<void>;
+  getState: () => Promise<DesktopWindowState>;
+  onStateChange?: (callback: (state: DesktopWindowState) => void) => () => void;
+}
+
 export interface DesktopBridge {
   readonly kind: DesktopKind;
+  readonly platform?: DesktopPlatform;
   /**
    * A `fetch` that bypasses browser CORS / mixed-content for BYOK + R2 calls.
    * MUST support streaming bodies (DJ SSE, large R2 PUTs). Synchronous to call;
@@ -82,6 +106,8 @@ export interface DesktopBridge {
    * static (baked at build time); this only affects the live process.
    */
   setAppIcon?: (icon: AppIconId) => Promise<void>;
+  /** Frameless desktop shell controls. Electron Windows uses these for custom chrome. */
+  windowControls?: DesktopWindowControls;
   /**
    * Start a native window drag for the current press (frameless window move).
    * Tauri only — Electron drags via `-webkit-app-region` CSS, web has no window —

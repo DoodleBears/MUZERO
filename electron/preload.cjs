@@ -9,6 +9,7 @@ const DIAGNOSTICS_CHANNEL = "muzero:diagnostics:event";
 
 contextBridge.exposeInMainWorld("muzero", {
   kind: "electron",
+  platform: process.platform,
   pickFolder: () => ipcRenderer.invoke("muzero:pickFolder"),
   readDir: (path) => ipcRenderer.invoke("muzero:readDir", path),
   readFile: (path) => ipcRenderer.invoke("muzero:readFile", path),
@@ -25,6 +26,17 @@ contextBridge.exposeInMainWorld("muzero", {
   evalYoutubeN: (functionSource, n) =>
     ipcRenderer.invoke("muzero:evalYoutubeN", functionSource, n),
   getAppVersion: () => ipcRenderer.invoke("muzero:getAppVersion"),
+  windowControls: {
+    minimize: () => ipcRenderer.invoke("muzero:window:minimize"),
+    toggleMaximize: () => ipcRenderer.invoke("muzero:window:toggleMaximize"),
+    close: () => ipcRenderer.invoke("muzero:window:close"),
+    getState: () => ipcRenderer.invoke("muzero:window:getState"),
+    onStateChange: (callback) => {
+      const listener = (_event, state) => callback(state);
+      ipcRenderer.on("muzero:window:state", listener);
+      return () => ipcRenderer.removeListener("muzero:window:state", listener);
+    },
+  },
   update: {
     onStatus: (callback) => {
       const listener = (_event, status) => callback(status);

@@ -4,6 +4,13 @@
     "endlessSet": "你的无限 AI DJ 歌单",
     "pressPlay": "点击播放 —— 接下来交给 AI DJ"
   },
+  "windowControls": {
+    "label": "窗口控制",
+    "minimize": "最小化",
+    "maximize": "最大化",
+    "restore": "还原",
+    "close": "关闭"
+  },
   "nav": {
     "now": "正在播放",
     "queue": "队列",

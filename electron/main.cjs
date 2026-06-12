@@ -1,7 +1,7 @@
 const { existsSync, statSync } = require("node:fs");
 const path = require("node:path");
 const { pathToFileURL } = require("node:url");
-const { app, BrowserWindow, net, protocol, shell } = require("electron");
+const { app, BrowserWindow, Menu, net, protocol, shell } = require("electron");
 const { registerIpc } = require("./ipc.cjs");
 const { handleMuzfetch } = require("./fetch-proxy.cjs");
 const { applyAppIcon, appIconPath, DEFAULT_APP_ICON } = require("./app-icon.cjs");
@@ -11,6 +11,8 @@ const devUrl = process.env.MUZERO_ELECTRON_URL;
 const distDir = path.join(__dirname, "..", "dist");
 const appOrigin = "app://muzero";
 const distUrl = "app://muzero/index.html";
+const isMac = process.platform === "darwin";
+const isWindows = process.platform === "win32";
 
 app.setName("MUZERO");
 protocol.registerSchemesAsPrivileged([
@@ -50,16 +52,20 @@ function registerDistProtocol() {
 
 function createWindow() {
   const win = new BrowserWindow({
-    backgroundColor: "#09090b",
+    autoHideMenuBar: true,
+    backgroundColor: isWindows ? "#00000000" : "#09090b",
     // Default window/taskbar icon (Windows/Linux; ignored on macOS, which uses the
     // dock icon set in app.whenReady). The renderer refines it to the saved choice.
     icon: appIconPath(DEFAULT_APP_ICON),
+    frame: !isWindows,
     height: 780,
+    hasShadow: true,
     minHeight: 600,
     minWidth: 380,
     show: false,
     title: "MUZERO",
-    titleBarStyle: "hiddenInset",
+    titleBarStyle: isMac ? "hiddenInset" : undefined,
+    transparent: isWindows,
     width: 1180,
     webPreferences: {
       contextIsolation: true,
@@ -68,6 +74,23 @@ function createWindow() {
       preload: path.join(__dirname, "preload.cjs"),
     },
   });
+
+  if (isWindows) {
+    win.removeMenu();
+    win.setMenuBarVisibility(false);
+  }
+
+  const sendWindowState = () => {
+    if (win.isDestroyed()) return;
+    win.webContents.send("muzero:window:state", {
+      fullscreen: win.isFullScreen(),
+      maximized: win.isMaximized(),
+    });
+  };
+  win.on("maximize", sendWindowState);
+  win.on("unmaximize", sendWindowState);
+  win.on("enter-full-screen", sendWindowState);
+  win.on("leave-full-screen", sendWindowState);
 
   win.once("ready-to-show", () => win.show());
   attachDiagnosticsWindow(win);
@@ -87,6 +110,7 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
+  if (isWindows) Menu.setApplicationMenu(null);
   registerDistProtocol();
   protocol.handle("muzfetch", handleMuzfetch);
   registerIpc();

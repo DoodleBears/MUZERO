@@ -5,7 +5,7 @@
 // (called when the user picks one, and re-issued each launch from the remembered
 // `importFolders` list). Every read validates the path against the allowlist using
 // the resolved real path, so symlinks can't escape the granted roots.
-const { app, ipcMain, dialog, shell } = require("electron");
+const { app, BrowserWindow, ipcMain, dialog, shell } = require("electron");
 const crypto = require("node:crypto");
 const fs = require("node:fs");
 const fsp = require("node:fs/promises");
@@ -71,6 +71,12 @@ function assertPathInsideRoot(candidate, root) {
   if (c !== r && !c.startsWith(r + path.sep)) {
     throw new Error("EACCES: media path outside storage root");
   }
+}
+
+function senderWindow(event) {
+  const win = BrowserWindow.fromWebContents(event.sender);
+  if (!win) throw new Error("Window is no longer available");
+  return win;
 }
 
 async function ensureMediaStorageParent(parts) {
@@ -212,6 +218,29 @@ function registerIpc() {
   // → a bundled asset, so an unknown/forged value is a silent no-op (never a path).
   ipcMain.handle("muzero:setAppIcon", (_event, icon) => {
     applyAppIcon(icon);
+  });
+
+  ipcMain.handle("muzero:window:minimize", (event) => {
+    senderWindow(event).minimize();
+  });
+
+  ipcMain.handle("muzero:window:toggleMaximize", (event) => {
+    const win = senderWindow(event);
+    if (win.isMaximized()) {
+      win.unmaximize();
+    } else {
+      win.maximize();
+    }
+    return { fullscreen: win.isFullScreen(), maximized: win.isMaximized() };
+  });
+
+  ipcMain.handle("muzero:window:close", (event) => {
+    senderWindow(event).close();
+  });
+
+  ipcMain.handle("muzero:window:getState", (event) => {
+    const win = senderWindow(event);
+    return { fullscreen: win.isFullScreen(), maximized: win.isMaximized() };
   });
 }
 

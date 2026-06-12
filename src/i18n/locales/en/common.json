@@ -4,6 +4,13 @@
     "endlessSet": "Your endless AI DJ set",
     "pressPlay": "Press play — the AI DJ takes it from here"
   },
+  "windowControls": {
+    "label": "Window controls",
+    "minimize": "Minimize",
+    "maximize": "Maximize",
+    "restore": "Restore",
+    "close": "Close"
+  },
   "nav": {
     "now": "Now Playing",
     "queue": "Queue",

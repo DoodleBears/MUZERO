@@ -160,6 +160,33 @@
     overscroll-behavior: none;
   }
 
+  html[data-desktop-shell="electron"][data-desktop-platform="win32"],
+  html[data-desktop-shell="electron"][data-desktop-platform="win32"] body,
+  html[data-desktop-shell="electron"][data-desktop-platform="win32"] #root {
+    background-color: transparent;
+  }
+
+  html[data-desktop-shell="electron"][data-desktop-platform="win32"] .app-shell {
+    border-radius: 12px;
+    box-shadow: 0 22px 70px rgb(0 0 0 / 24%);
+    clip-path: inset(0 round 12px);
+    isolation: isolate;
+  }
+
+  html[data-desktop-shell="electron"][data-desktop-platform="win32"][data-window-maximized="true"]
+    .app-shell {
+    border-radius: 0;
+    box-shadow: none;
+    clip-path: none;
+  }
+
+  .windows-window-controls:hover .windows-window-controls__cluster,
+  .windows-window-controls:focus-within .windows-window-controls__cluster {
+    pointer-events: auto;
+    opacity: 1;
+    transform: translateY(0);
+  }
+
   input,
   textarea {
     -webkit-user-select: text;

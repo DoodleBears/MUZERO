@@ -4,6 +4,13 @@
     "endlessSet": "끝없는 나만의 AI DJ 세트",
     "pressPlay": "재생을 누르면 —— 나머지는 AI DJ에게"
   },
+  "windowControls": {
+    "label": "창 제어",
+    "minimize": "최소화",
+    "maximize": "최대화",
+    "restore": "복원",
+    "close": "닫기"
+  },
   "nav": {
     "now": "재생 중",
     "queue": "대기열",

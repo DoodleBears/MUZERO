@@ -3,6 +3,8 @@ import type { DirEntryLike } from "@/lib/folder-import";
 import { assembleCookieHeader, type StreamCookie } from "@/streamsrc/login";
 import type {
   DesktopBridge,
+  DesktopPlatform,
+  DesktopWindowState,
   MediaProxyTrace,
   MediaStorageFileInput,
   SaveFileInput,
@@ -15,6 +17,7 @@ type FetchFn = typeof globalThis.fetch;
 /** Shape the Electron preload exposes on `window.muzero` (see electron/preload.cjs). */
 interface MuzeroApi {
   kind: "electron";
+  platform?: DesktopPlatform;
   pickFolder(): Promise<string | null>;
   readDir(path: string): Promise<DirEntryLike[]>;
   readFile(path: string): Promise<ArrayBuffer>;
@@ -32,6 +35,13 @@ interface MuzeroApi {
   openSourceLogin(request: StreamLoginRequest): Promise<StreamCookie[] | null>;
   readSourceCookies(request: StreamLoginRequest): Promise<StreamCookie[] | null>;
   evalYoutubeN(functionSource: string, n: string): Promise<string>;
+  windowControls?: {
+    minimize(): Promise<void>;
+    toggleMaximize(): Promise<DesktopWindowState>;
+    close(): Promise<void>;
+    getState(): Promise<DesktopWindowState>;
+    onStateChange(callback: (state: DesktopWindowState) => void): () => void;
+  };
   diagnostics?: {
     onEvent(callback: (entry: DiagnosticEntry) => void): () => void;
   };
@@ -93,6 +103,7 @@ export function createElectronBridge(): DesktopBridge {
   const api = window.muzero as unknown as MuzeroApi;
   return {
     kind: "electron",
+    platform: api.platform,
     fetch: electronFetch,
     pickFolder: () => api.pickFolder(),
     readDir: (path) => api.readDir(path),
@@ -124,6 +135,19 @@ export function createElectronBridge(): DesktopBridge {
       return cookies && cookies.length > 0 ? assembleCookieHeader(cookies) : null;
     },
     evalYoutubeN: (functionSource, n) => api.evalYoutubeN(functionSource, n),
+    windowControls: api.windowControls
+      ? {
+          minimize: () => api.windowControls?.minimize() ?? Promise.resolve(),
+          toggleMaximize: () =>
+            api.windowControls?.toggleMaximize() ??
+            Promise.resolve({ fullscreen: false, maximized: false }),
+          close: () => api.windowControls?.close() ?? Promise.resolve(),
+          getState: () =>
+            api.windowControls?.getState() ??
+            Promise.resolve({ fullscreen: false, maximized: false }),
+          onStateChange: (callback) => api.windowControls?.onStateChange(callback) ?? (() => {}),
+        }
+      : undefined,
   };
 }
 

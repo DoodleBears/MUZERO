@@ -5,12 +5,12 @@
 // renderer over `muzero:update:status`; the channel toggle is a visible Settings
 // control (no hidden flags). See the release PRD §2.6/§4.1.
 const { app, BrowserWindow, ipcMain, shell } = require("electron");
-const { autoUpdater } = require("electron-updater");
 
 const CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000; // 6h
 const DOWNLOAD_PAGE = "https://mu0.app/download";
 const isMac = process.platform === "darwin";
 
+let autoUpdater = null;
 let latest = { kind: "idle" };
 let started = false;
 
@@ -21,9 +21,20 @@ function broadcast(status) {
   }
 }
 
+function isValidSemver(version) {
+  return /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/.test(version);
+}
+
+function getAutoUpdater() {
+  if (!autoUpdater) {
+    ({ autoUpdater } = require("electron-updater"));
+  }
+  return autoUpdater;
+}
+
 // Unsigned macOS and dev builds can't silently apply updates.
 function canAutoApply() {
-  return app.isPackaged && !isMac;
+  return app.isPackaged && !isMac && isValidSemver(app.getVersion());
 }
 
 async function runCheck() {
@@ -37,7 +48,7 @@ async function runCheck() {
   }
   broadcast({ kind: "checking" });
   try {
-    await autoUpdater.checkForUpdates();
+    await getAutoUpdater().checkForUpdates();
   } catch (error) {
     broadcast({ kind: "error", error: String((error && error.message) || error) });
   }
@@ -48,14 +59,6 @@ function initDesktopUpdater() {
   if (started) return;
   started = true;
 
-  autoUpdater.autoDownload = true;
-  autoUpdater.autoInstallOnAppQuit = true;
-  autoUpdater.on("update-available", (info) => broadcast({ kind: "available", version: info.version }));
-  autoUpdater.on("update-not-available", () => broadcast({ kind: "idle" }));
-  autoUpdater.on("download-progress", (p) => broadcast({ kind: "downloading", percent: Math.round(p.percent) }));
-  autoUpdater.on("update-downloaded", (info) => broadcast({ kind: "downloaded", version: info.version }));
-  autoUpdater.on("error", (error) => broadcast({ kind: "error", error: String((error && error.message) || error) }));
-
   ipcMain.handle("muzero:getAppVersion", () => app.getVersion());
   ipcMain.handle("muzero:update:check", () => runCheck());
   ipcMain.handle("muzero:update:install", () => {
@@ -64,14 +67,30 @@ function initDesktopUpdater() {
       return false;
     }
     if (latest.kind !== "downloaded") return false;
-    autoUpdater.quitAndInstall(true, true); // silent + run-after-install
+    getAutoUpdater().quitAndInstall(true, true); // silent + run-after-install
     return true;
   });
   ipcMain.handle("muzero:update:setChannel", (_event, channel) => {
-    autoUpdater.channel = channel === "beta" ? "beta" : "latest";
-    autoUpdater.allowDowngrade = channel !== "beta"; // beta→stable is a "downgrade"
+    if (!canAutoApply()) {
+      broadcast({ kind: "idle" });
+      return latest;
+    }
+    const updater = getAutoUpdater();
+    updater.channel = channel === "beta" ? "beta" : "latest";
+    updater.allowDowngrade = channel !== "beta"; // beta→stable is a "downgrade"
     return runCheck();
   });
+
+  if (canAutoApply()) {
+    const updater = getAutoUpdater();
+    updater.autoDownload = true;
+    updater.autoInstallOnAppQuit = true;
+    updater.on("update-available", (info) => broadcast({ kind: "available", version: info.version }));
+    updater.on("update-not-available", () => broadcast({ kind: "idle" }));
+    updater.on("download-progress", (p) => broadcast({ kind: "downloading", percent: Math.round(p.percent) }));
+    updater.on("update-downloaded", (info) => broadcast({ kind: "downloaded", version: info.version }));
+    updater.on("error", (error) => broadcast({ kind: "error", error: String((error && error.message) || error) }));
+  }
 
   // Startup check (after first paint settles), then every 6h. macOS still runs so
   // it can surface `manual-required`.

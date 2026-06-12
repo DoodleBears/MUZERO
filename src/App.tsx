@@ -10,6 +10,7 @@ import { NowPlayingBackground } from "@/components/player/now-playing-background
 import { VisualizerTuningPanel } from "@/components/player/visualizer-tuning-panel";
 import { GlobalTrackSearch } from "@/components/search/global-track-search";
 import { PlayerDock } from "@/components/shell/player-dock";
+import { WindowsWindowControls } from "@/components/shell/windows-window-controls";
 import { GlobalDropZone } from "@/components/upload/global-drop-zone";
 import { useSettings } from "@/hooks/use-app-data";
 import { useAppIcon } from "@/hooks/use-app-icon";
@@ -18,6 +19,7 @@ import { useDocumentTitle } from "@/hooks/use-document-title";
 import { useIdle } from "@/hooks/use-idle";
 import { usePlaybackWarmup } from "@/hooks/use-playback-warmup";
 import { useShortcutDispatch } from "@/hooks/use-shortcut-dispatch";
+import { resolveDesktopBridge } from "@/lib/desktop/bridge";
 import { cn } from "@/lib/utils";
 import { dragWindowOnEmptyPress } from "@/lib/window-drag";
 import { NowPlayingPage } from "@/pages/now-playing-page";
@@ -70,6 +72,7 @@ export default function App() {
   // Keep the next transport targets warm so keyboard/button skips don't paint
   // empty cover/background states while local blobs or R2 bytes resolve.
   usePlaybackWarmup();
+  useDesktopChromeDataset();
 
   // Boot only wires the media engine. Auto-cueing the previous track during
   // WKWebView startup can make the full-screen media/background path flicker.
@@ -186,7 +189,7 @@ export default function App() {
           whole viewport and reserves no band; each page's own scroll region pads
           itself by the chrome heights (--spacing-chrome-*), so content fills the
           screen and scrolls *under* the bars instead of being boxed between them. */}
-      <div className="relative h-screen overflow-hidden bg-background text-foreground">
+      <div className="app-shell relative h-screen overflow-hidden bg-background text-foreground">
         <NowPlayingBackground
           active={ambientActive}
           hideVisualizer={visualizerHidden}
@@ -213,6 +216,8 @@ export default function App() {
         >
           <span className="font-semibold tracking-tight">MUZERO</span>
         </header>
+
+        <WindowsWindowControls />
 
         <main className="chrome-fade absolute inset-0 z-10 overflow-hidden [--chrome-fade-bottom:calc(var(--spacing-chrome-bottom)/2)] [--chrome-fade-top:3rem]">
           {tab === "now" && <NowPlayingPage foregroundHidden={foregroundHidden} />}
@@ -256,13 +261,27 @@ export default function App() {
         {/* App-wide drag-and-drop + paste: media → import; image → cover/background/gallery. */}
         <GlobalDropZone onMediaUploaded={(createdSet) => createdSet && setTab("queue")} />
 
-        {/* Dev-only floating perf HUD (FPS / frame cadence / jank / JS heap). */}
-        {import.meta.env.DEV && <DevPerfPanel />}
+        {/* Dev perf HUD, behind the same visible Settings switch as prod. */}
+        {import.meta.env.DEV && settings.perfHudEnabled && <DevPerfPanel />}
         {/* "What's New" — auto-opens for unseen releases; also opens from Settings → About. */}
         <ChangelogModal />
       </div>
     </MotionConfig>
   );
+}
+
+function useDesktopChromeDataset() {
+  useEffect(() => {
+    const bridge = resolveDesktopBridge();
+    const html = document.documentElement;
+    html.dataset.desktopShell = bridge.kind;
+    if (bridge.platform) html.dataset.desktopPlatform = bridge.platform;
+    return () => {
+      delete html.dataset.desktopShell;
+      delete html.dataset.desktopPlatform;
+      delete html.dataset.windowMaximized;
+    };
+  }, []);
 }
 
 function AmbientPageOverlay({ active, children }: { active: boolean; children: ReactNode }) {

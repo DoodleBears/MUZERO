@@ -4,6 +4,13 @@
     "endlessSet": "あなたの無限 AI DJ セット",
     "pressPlay": "再生を押して —— あとは AI DJ におまかせ"
   },
+  "windowControls": {
+    "label": "ウィンドウ操作",
+    "minimize": "最小化",
+    "maximize": "最大化",
+    "restore": "元に戻す",
+    "close": "閉じる"
+  },
   "nav": {
     "now": "再生中",
     "queue": "キュー",
