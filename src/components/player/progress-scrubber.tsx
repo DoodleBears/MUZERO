@@ -39,14 +39,6 @@ export function ProgressScrubber() {
   }, [isPlaying]);
 
   useEffect(() => {
-    paintProgress(trackRef.current, positionRef.current, durationRef.current);
-    paintTimeChips(
-      dragTimeRef.current,
-      durationTimeRef.current,
-      positionRef.current,
-      durationRef.current,
-    );
-
     let raf = 0;
     const sync = () => {
       const engine = getMediaEngine();
@@ -73,9 +65,19 @@ export function ProgressScrubber() {
       );
       raf = requestAnimationFrame(sync);
     };
-    raf = requestAnimationFrame(sync);
+
+    const renderPosition = draggingRef.current ? dragPositionRef.current : positionRef.current;
+    paintProgress(trackRef.current, renderPosition, durationRef.current);
+    paintTimeChips(
+      dragTimeRef.current,
+      durationTimeRef.current,
+      renderPosition,
+      durationRef.current,
+    );
+
+    if (isPlaying || dragging) raf = requestAnimationFrame(sync);
     return () => cancelAnimationFrame(raf);
-  }, []);
+  }, [isPlaying, dragging]);
 
   const pct = progressPercent(positionSec, durationSec);
 

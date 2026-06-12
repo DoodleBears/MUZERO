@@ -4,16 +4,29 @@ import { shouldAnimate, VisualizerHost } from "./host";
 
 describe("shouldAnimate", () => {
   it("runs when visible and on-screen", () => {
-    expect(shouldAnimate({ hidden: false, onscreen: true, reducedMotion: false })).toBe(true);
+    expect(
+      shouldAnimate({ active: true, hidden: false, onscreen: true, reducedMotion: false }),
+    ).toBe(true);
+  });
+  it("pauses when inactive", () => {
+    expect(
+      shouldAnimate({ active: false, hidden: false, onscreen: true, reducedMotion: false }),
+    ).toBe(false);
   });
   it("pauses when the tab is hidden", () => {
-    expect(shouldAnimate({ hidden: true, onscreen: true, reducedMotion: false })).toBe(false);
+    expect(
+      shouldAnimate({ active: true, hidden: true, onscreen: true, reducedMotion: false }),
+    ).toBe(false);
   });
   it("pauses when the canvas is off-screen", () => {
-    expect(shouldAnimate({ hidden: false, onscreen: false, reducedMotion: false })).toBe(false);
+    expect(
+      shouldAnimate({ active: true, hidden: false, onscreen: false, reducedMotion: false }),
+    ).toBe(false);
   });
   it("keeps visualizers running under reduced motion", () => {
-    expect(shouldAnimate({ hidden: false, onscreen: true, reducedMotion: true })).toBe(true);
+    expect(
+      shouldAnimate({ active: true, hidden: false, onscreen: true, reducedMotion: true }),
+    ).toBe(true);
   });
 });
 

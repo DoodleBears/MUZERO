@@ -105,6 +105,7 @@ export function PixiPixelBackground({
         }
         if (filter) sprite.filters = [filter];
         nextApp.stage.addChild(sprite);
+        let unsubscribe: (() => void) | undefined;
         if (media.type === "video") {
           const video = media.element;
           const { isPlaying, positionSec } = usePlayerStore.getState();
@@ -123,6 +124,20 @@ export function PixiPixelBackground({
             if (!usePlayerStore.getState().isPlaying) nextApp.render();
           });
           if (isPlaying) void video.play().catch(() => {});
+          unsubscribe = usePlayerStore.subscribe((state, prev) => {
+            if (state.currentIndex !== prev.currentIndex) {
+              syncVideo(video, state.positionSec, true);
+            } else if (state.positionSec !== prev.positionSec) {
+              syncVideo(video, state.positionSec);
+            }
+            if (state.isPlaying !== prev.isPlaying) {
+              if (state.isPlaying) void video.play().catch(() => {});
+              else video.pause();
+              syncLayerTicker({ app: nextApp, media: video }, state.isPlaying);
+              // Pausing freezes the ticker — paint the frame we stopped on.
+              if (!state.isPlaying) nextApp.render();
+            }
+          });
         }
 
         const resize = () => {
@@ -149,6 +164,7 @@ export function PixiPixelBackground({
           canvas,
           media: media.type === "video" ? media.element : undefined,
           resizeObserver,
+          unsubscribe,
           unload: media.unload,
         };
         syncLayerTicker(pendingLayer, usePlayerStore.getState().isPlaying);
@@ -189,23 +205,6 @@ export function PixiPixelBackground({
     };
   }, [src, mediaType, pixelSize, effect, effectOptions]);
 
-  useEffect(() => {
-    return usePlayerStore.subscribe((state, prev) => {
-      const layer = currentLayerRef.current;
-      const video = layer?.media;
-      if (!layer || !video) return;
-      if (state.currentIndex !== prev.currentIndex) syncVideo(video, state.positionSec, true);
-      else syncVideo(video, state.positionSec);
-      if (state.isPlaying !== prev.isPlaying) {
-        if (state.isPlaying) void video.play().catch(() => {});
-        else video.pause();
-        syncLayerTicker(layer, state.isPlaying);
-        // Pausing freezes the ticker — paint the frame we stopped on.
-        if (!state.isPlaying) layer.app.render();
-      }
-    });
-  }, []);
-
   useEffect(
     () => () => {
       if (currentLayerRef.current) {
@@ -242,6 +241,7 @@ type PixiLayer = {
   canvas: HTMLCanvasElement;
   media?: HTMLVideoElement;
   resizeObserver: ResizeObserver;
+  unsubscribe?: () => void;
   unload?: () => void;
 };
 
@@ -267,6 +267,7 @@ export function syncLayerTicker(
 }
 
 function destroyPixiLayer(layer: PixiLayer) {
+  layer.unsubscribe?.();
   layer.resizeObserver.disconnect();
   if (layer.media) destroyVideo(layer.media);
   layer.app.destroy(

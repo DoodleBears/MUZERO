@@ -1,4 +1,4 @@
-import { type KeyboardEvent, type PointerEvent, useEffect, useMemo, useRef } from "react";
+import { type KeyboardEvent, type PointerEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useShallow } from "zustand/react/shallow";
 import { cn, formatDuration } from "@/lib/utils";
@@ -32,6 +32,7 @@ export function PlaybackSpectrum({ className }: { className?: string }) {
   const dragRef = useRef<DragState | null>(null);
   const positionSec = usePlayerStore((s) => s.positionSec);
   const durationSec = usePlayerStore((s) => s.durationSec);
+  const isPlaying = usePlayerStore((s) => s.isPlaying);
   const seek = usePlayerStore((s) => s.seek);
   const current = usePlayerStore(
     useShallow((s) => {
@@ -46,6 +47,8 @@ export function PlaybackSpectrum({ className }: { className?: string }) {
   const peaksRef = useRef(seededPeaks);
   const positionRef = useRef(positionSec);
   const durationRef = useRef(durationSec);
+  const renderFrameRef = useRef<(() => void) | null>(null);
+  const [dragging, setDragging] = useState(false);
 
   positionRef.current = positionSec;
   durationRef.current = durationSec;
@@ -62,7 +65,7 @@ export function PlaybackSpectrum({ className }: { className?: string }) {
     let raf = 0;
     let frame = 0;
     let primary = readPrimaryRgb();
-    const render = () => {
+    const renderFrame = () => {
       if (frame++ % 30 === 0) primary = readPrimaryRgb();
       const dpr = Math.min(window.devicePixelRatio || 1, 2);
       const w = canvas.clientWidth;
@@ -95,12 +98,27 @@ export function PlaybackSpectrum({ className }: { className?: string }) {
         progress: progressPercent(renderPosition, renderDuration) / 100,
         primary,
       });
-      raf = requestAnimationFrame(render);
+    };
+    renderFrameRef.current = renderFrame;
+
+    const loop = () => {
+      renderFrame();
+      raf = requestAnimationFrame(loop);
     };
 
-    raf = requestAnimationFrame(render);
+    renderFrame();
+    if (isPlaying || dragging) raf = requestAnimationFrame(loop);
+    return () => {
+      cancelAnimationFrame(raf);
+      if (renderFrameRef.current === renderFrame) renderFrameRef.current = null;
+    };
+  }, [isPlaying, dragging]);
+
+  useEffect(() => {
+    if (isPlaying || dragging) return;
+    const raf = requestAnimationFrame(() => renderFrameRef.current?.());
     return () => cancelAnimationFrame(raf);
-  }, []);
+  });
 
   function waveformWidth(): number {
     const el = canvasRef.current;
@@ -126,6 +144,7 @@ export function PlaybackSpectrum({ className }: { className?: string }) {
           : positionRef.current,
       waveformWidth: waveformWidth(),
     };
+    setDragging(true);
     e.currentTarget.setPointerCapture(e.pointerId);
   }
 
@@ -135,6 +154,7 @@ export function PlaybackSpectrum({ className }: { className?: string }) {
 
   function onPointerUp() {
     dragRef.current = null;
+    setDragging(false);
   }
 
   function onKeyDown(e: KeyboardEvent<HTMLDivElement>) {

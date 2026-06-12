@@ -24,11 +24,12 @@ const ReactiveScene = lazy(() => import("./scene/reactive-scene"));
  * are disabled.
  */
 export function shouldAnimate(s: {
+  active: boolean;
   hidden: boolean;
   onscreen: boolean;
   reducedMotion: boolean;
 }): boolean {
-  return !s.hidden && s.onscreen;
+  return s.active && !s.hidden && s.onscreen;
 }
 
 function hasWebGL(): boolean {
@@ -63,6 +64,7 @@ function SpectrumCanvas({
 }) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const activeRef = useRef(active);
+  const syncRef = useRef<(() => void) | null>(null);
   activeRef.current = active;
 
   useEffect(() => {
@@ -130,6 +132,7 @@ function SpectrumCanvas({
 
     const sync = () => {
       const animate = shouldAnimate({
+        active: activeRef.current,
         hidden: typeof document !== "undefined" && document.hidden,
         onscreen,
         reducedMotion: false,
@@ -143,6 +146,9 @@ function SpectrumCanvas({
         requestAnimationFrame(drawOne); // leave a static frame, not a blank canvas
       }
     };
+    syncRef.current = sync;
+
+    sync();
 
     const onVisibility = () => sync();
     document.addEventListener("visibilitychange", onVisibility);
@@ -165,11 +171,16 @@ function SpectrumCanvas({
     return () => {
       running = false;
       cancelAnimationFrame(raf);
+      if (syncRef.current === sync) syncRef.current = null;
       document.removeEventListener("visibilitychange", onVisibility);
       io?.disconnect();
       viz.destroy();
     };
   }, [styleId, coverColor, placement, effectSettings]);
+
+  useEffect(() => {
+    syncRef.current?.();
+  });
 
   return <canvas ref={canvasRef} className={cn("h-full w-full", className)} aria-hidden />;
 }
@@ -223,7 +234,7 @@ function SceneHost({
   const meta = getVisualizerMeta(styleId);
   const analyserOptions = resolveVisualizerAnalyserOptions(meta, effectSettings);
   const renderOptions = resolveVisualizerRenderOptions(effectSettings);
-  const paused = !onscreen;
+  const paused = !active || !onscreen;
   return (
     <div ref={ref} className={cn("h-full w-full", className)} aria-hidden>
       <Suspense fallback={null}>
