@@ -241,6 +241,7 @@ const EDGE_FADE = {
   WebkitMaskImage:
     "linear-gradient(to bottom, transparent 0%, black 14%, black 86%, transparent 100%)",
 } as const;
+const CASCADE_MIN_LINE_GAP = 20;
 
 /**
  * Apple-Music-style synced lines on a NATIVE scroll viewport (overflow-y-auto +
@@ -281,6 +282,9 @@ function SyncedLines({
   const [viewportH, setViewportH] = useState(0);
   const lyricsMotion = useMemo(() => resolveLyricsMotionMode(motionMode), [motionMode]);
   const isAmlStyleEngine = lyricsMotion.mode === "cascade";
+  const layoutLineGap = isAmlStyleEngine
+    ? Math.max(CASCADE_MIN_LINE_GAP, lyricStyle.lineGap)
+    : lyricStyle.lineGap;
   const renderLines = useMemo(() => toLyricRenderLines(lines), [lines]);
   const lyricsSetKey = useMemo(() => {
     const first = lines[0];
@@ -289,7 +293,7 @@ function SyncedLines({
       last?.text ?? ""
     }`;
   }, [lines]);
-  const measurementKey = `${lyricsSetKey}:${lyricStyle.activeFontSize}:${lyricStyle.lineGap}`;
+  const measurementKey = `${lyricsSetKey}:${lyricStyle.activeFontSize}:${layoutLineGap}`;
   // Karaoke fill colors: the sung part shows the full lyric color; the unsung part
   // sits at the inactive opacity (relative to active, since the whole line already
   // carries activeOpacity) so it reads like the dim lines until it's sung.
@@ -414,6 +418,7 @@ function SyncedLines({
     if (!isAmlStyleEngine) return;
     const viewport = viewportRef.current;
     if (!viewport) return;
+    viewport.scrollTop = 0;
 
     type RuntimeLine = {
       translateY: number;
@@ -453,6 +458,7 @@ function SyncedLines({
 
     const write = (timestamp: number) => {
       if (stopped) return;
+      if (viewport.scrollTop !== 0) viewport.scrollTop = 0;
       const dt = lastTs ? Math.min(0.05, Math.max(0.001, (timestamp - lastTs) / 1000)) : 1 / 60;
       lastTs = timestamp;
       const timeMs = (getMediaEngine()?.getCurrentTime() ?? 0) * 1000;
@@ -464,7 +470,7 @@ function SyncedLines({
         lineHeights: lineHeightsRef.current,
         viewportHeight,
         alignPosition: 0.42,
-        lineGapPx: lyricStyle.lineGap,
+        lineGapPx: layoutLineGap,
         reducedMotion: false,
       });
 
@@ -565,7 +571,7 @@ function SyncedLines({
         row.style.willChange = "";
       });
     };
-  }, [isAmlStyleEngine, lines, renderLines, lyricStyle.lineGap, viewportH]);
+  }, [isAmlStyleEngine, lines, renderLines, layoutLineGap, viewportH]);
 
   // Per-syllable karaoke fill: while the active line has word timings, a single rAF
   // wipes each word as it's sung by writing one CSS var per word span DIRECTLY to
@@ -616,7 +622,10 @@ function SyncedLines({
         data-testid="lyrics-scroll"
         data-motion-mode={lyricsMotion.mode}
         data-layout-engine={isAmlStyleEngine ? "amll-style" : undefined}
-        className="no-scrollbar absolute inset-0 overflow-y-auto overscroll-contain"
+        className={cn(
+          "no-scrollbar absolute inset-0 overscroll-contain",
+          isAmlStyleEngine ? "overflow-hidden" : "overflow-y-auto",
+        )}
         style={EDGE_FADE}
         onWheel={() => {
           if (!isAmlStyleEngine) setFollowing(false);
@@ -628,11 +637,12 @@ function SyncedLines({
         <div
           key={lyricsSetKey}
           ref={stackRef}
+          data-testid="lyrics-stack"
           className="flex flex-col"
           style={{
-            paddingTop: viewportH * 0.38,
-            paddingBottom: viewportH * 0.62,
-            rowGap: lyricStyle.lineGap,
+            paddingTop: isAmlStyleEngine ? 0 : viewportH * 0.38,
+            paddingBottom: isAmlStyleEngine ? 0 : viewportH * 0.62,
+            rowGap: layoutLineGap,
           }}
         >
           {lines.map((line, i) => {

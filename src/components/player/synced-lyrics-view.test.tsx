@@ -152,6 +152,30 @@ describe("LyricsScroller (synced)", () => {
     }
   });
 
+  it("uses wider stack spacing in cascade mode", () => {
+    render(
+      <LyricsScroller resolved={synced} activeIndex={0} onSeek={() => {}} motionMode="cascade" />,
+    );
+
+    expect(screen.getByTestId("lyrics-stack")).toHaveStyle({ rowGap: "20px" });
+  });
+
+  it("clears old scroll offset when entering cascade mode", async () => {
+    const { rerender } = render(
+      <LyricsScroller resolved={synced} activeIndex={1} onSeek={() => {}} motionMode="classic" />,
+    );
+    const viewport = screen.getByTestId("lyrics-scroll");
+    viewport.scrollTop = 120;
+
+    rerender(
+      <LyricsScroller resolved={synced} activeIndex={1} onSeek={() => {}} motionMode="cascade" />,
+    );
+
+    await waitFor(() => {
+      expect(viewport.scrollTop).toBe(0);
+    });
+  });
+
   it("switches into cascade without the old remount pulse attributes", async () => {
     const { rerender } = render(
       <LyricsScroller resolved={synced} activeIndex={1} onSeek={() => {}} motionMode="classic" />,
