@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { DesktopBridge } from "@/lib/desktop/bridge";
 import type { DirEntryLike, FolderFs } from "@/lib/folder-import";
 import { encodeNcm } from "@/lib/ncm-fixture";
 
@@ -79,6 +80,7 @@ beforeEach(async () => {
   await deleteDefaultDb();
 });
 afterEach(async () => {
+  Object.defineProperty(window, "muzero", { configurable: true, value: undefined });
   await deleteDefaultDb();
 });
 
@@ -244,6 +246,70 @@ describe("runFolderSync", () => {
       expect(cover?.mime).toBe("image/jpeg");
       const media = tracks[0].blobId ? await db.mediaBlobs.get(tracks[0].blobId) : undefined;
       expect(media?.mime).toBe("audio/mpeg");
+    },
+    FOLDER_SYNC_TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "routes Electron .ncm folder imports through renderer media storage",
+    async () => {
+      Object.defineProperty(window, "muzero", {
+        configurable: true,
+        value: { kind: "electron" },
+      });
+
+      const { db } = await import("@/db/muzero-db");
+      const repos = await import("@/db/repositories");
+      const desktop = await import("@/lib/desktop/bridge");
+      const ncm = encodeNcm({
+        audio: new Uint8Array([7, 8, 9, 10]),
+        cover: Uint8Array.from([0xff, 0xd8, 0xff, 0x44]),
+        meta: { musicName: "Electron 解密", artist: [["歌手", 1]], format: "mp3" },
+      });
+      const fs = fakeFs({ "/m": [file("electron.ncm")] }, new Set(), {
+        "/m/electron.ncm": new Uint8Array(ncm),
+      });
+      const writes = new Map<string, Uint8Array<ArrayBuffer>>();
+      const bridge: DesktopBridge = {
+        kind: "electron",
+        fetch: globalThis.fetch.bind(globalThis),
+        openExternal: async () => {},
+        readDir: fs.readDir,
+        readFile: fs.readFile,
+        join: fs.join,
+        grantFolderAccess: async () => {},
+        writeMediaStorageFile: async (input) => {
+          writes.set(input.storageKey, new Uint8Array(input.bytes));
+        },
+        readMediaStorageFile: async (input) =>
+          writes.get(input.storageKey) ?? new Uint8Array(new ArrayBuffer(0)),
+        deleteMediaStorageFile: async (input) => {
+          if (input.storageKey) writes.delete(input.storageKey);
+        },
+        statMediaStorageFile: async (input) => {
+          const bytes = writes.get(input.storageKey)?.byteLength;
+          return bytes == null ? null : { bytes };
+        },
+      };
+      desktop.__setDesktopBridge(bridge);
+      const store = await import("./player-store");
+      const { setId, folderId } = await rememberFolder(repos, "/m");
+
+      const result = await store.runFolderSync([folderId]);
+
+      expect(result.imported).toBe(1);
+      const tracks = await db.tracks.where("sessionId").equals(setId).toArray();
+      expect(tracks).toHaveLength(1);
+      expect(tracks[0].title).toBe("Electron 解密");
+      expect(tracks[0].sourcePath).toBe("/m/electron.ncm");
+      const media = tracks[0].blobId ? await db.mediaBlobs.get(tracks[0].blobId) : undefined;
+      expect(media?.mime).toBe("audio/mpeg");
+      expect(media?.bytes).toBe(4);
+      expect(media?.storageBackend).toBe("electron-file");
+      expect(media?.blob).toBeUndefined();
+      expect(media?.storageKey).toMatch(/^media\//);
+      expect(writes.size).toBe(1);
+      expect(new Uint8Array([...writes.values()][0] ?? [])).toEqual(new Uint8Array([7, 8, 9, 10]));
     },
     FOLDER_SYNC_TEST_TIMEOUT_MS,
   );

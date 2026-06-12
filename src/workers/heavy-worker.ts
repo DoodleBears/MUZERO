@@ -8,17 +8,26 @@
  * the `db-changed` ping is a belt-and-suspenders nudge.
  */
 
-import { type IngestBytesInput, ingestMediaBytes } from "./ingest-core";
+import { decodeNcmMediaBytes, type IngestBytesInput, ingestMediaBytes } from "./ingest-core";
 
 type IngestRequest = { type: "ingest"; reqId: number } & IngestBytesInput;
-type WorkerRequest = IngestRequest;
+type DecodeNcmRequest = { type: "decode-ncm"; reqId: number } & IngestBytesInput;
+type WorkerRequest = IngestRequest | DecodeNcmRequest;
 
 const ctx = self as unknown as DedicatedWorkerGlobalScope;
 
 ctx.onmessage = async (event: MessageEvent<WorkerRequest>) => {
   const msg = event.data;
-  if (msg.type !== "ingest") return;
   try {
+    if (msg.type === "decode-ncm") {
+      const result = await decodeNcmMediaBytes(msg);
+      const transfers = result.embeddedCover
+        ? [result.audio, result.embeddedCover.bytes]
+        : [result.audio];
+      ctx.postMessage({ type: "decoded-ncm", reqId: msg.reqId, ...result }, transfers);
+      return;
+    }
+    if (msg.type !== "ingest") return;
     const result = await ingestMediaBytes(msg);
     ctx.postMessage({ type: "ingested", reqId: msg.reqId, ...result });
     ctx.postMessage({ type: "db-changed" });

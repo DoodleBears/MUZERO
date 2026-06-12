@@ -6,9 +6,16 @@
  * work — just without the off-thread benefit.
  */
 
-import { type IngestBytesInput, type IngestResult, ingestMediaBytes } from "./ingest-core";
+import {
+  type DecodedNcmMedia,
+  decodeNcmMediaBytes,
+  type IngestBytesInput,
+  type IngestResult,
+  ingestMediaBytes,
+} from "./ingest-core";
 
-type Pending = { resolve: (r: IngestResult) => void; reject: (e: Error) => void };
+type WorkerResult = DecodedNcmMedia | IngestResult;
+type Pending = { resolve: (r: WorkerResult) => void; reject: (e: Error) => void };
 
 let worker: Worker | null = null;
 let workerUnavailable = false;
@@ -25,6 +32,18 @@ function getWorker(): Worker | null {
       if (msg?.type === "ingested") {
         pending.get(msg.reqId)?.resolve({
           trackId: msg.trackId,
+          albumPicUrl: msg.albumPicUrl,
+          hasCover: Boolean(msg.hasCover),
+        });
+        pending.delete(msg.reqId);
+      } else if (msg?.type === "decoded-ncm") {
+        pending.get(msg.reqId)?.resolve({
+          title: msg.title,
+          mime: msg.mime,
+          durationSec: msg.durationSec,
+          mediaMetadata: msg.mediaMetadata,
+          audio: msg.audio,
+          embeddedCover: msg.embeddedCover,
           albumPicUrl: msg.albumPicUrl,
           hasCover: Boolean(msg.hasCover),
         });
@@ -55,7 +74,18 @@ export function ingestViaWorker(input: IngestBytesInput): Promise<IngestResult> 
   if (!w) return ingestMediaBytes(input);
   const reqId = nextReqId++;
   return new Promise((resolve, reject) => {
-    pending.set(reqId, { resolve, reject });
+    pending.set(reqId, { resolve: resolve as (r: WorkerResult) => void, reject });
     w.postMessage({ type: "ingest", reqId, ...input }, [input.bytes]);
+  });
+}
+
+/** Decode one `.ncm` in the worker, leaving DB/media persistence to the caller. */
+export function decodeNcmViaWorker(input: IngestBytesInput): Promise<DecodedNcmMedia> {
+  const w = getWorker();
+  if (!w) return decodeNcmMediaBytes(input);
+  const reqId = nextReqId++;
+  return new Promise((resolve, reject) => {
+    pending.set(reqId, { resolve: resolve as (r: WorkerResult) => void, reject });
+    w.postMessage({ type: "decode-ncm", reqId, ...input }, [input.bytes]);
   });
 }

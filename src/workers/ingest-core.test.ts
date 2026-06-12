@@ -15,7 +15,7 @@ vi.mock("@/lib/image-palette", () => ({
 }));
 
 import { encode163KeyComment, encodeNcm } from "@/lib/ncm-fixture";
-import { ingestMediaBytes } from "./ingest-core";
+import { decodeNcmMediaBytes, ingestMediaBytes } from "./ingest-core";
 
 let db: MuzeroDB;
 let dbName: string;
@@ -152,5 +152,44 @@ describe("ingestMediaBytes", () => {
     expect(result.albumPicUrl).toBe("https://p1/cover.jpg");
     const track = await db.tracks.get(result.trackId);
     expect(track?.coverBlobId).toBeUndefined();
+  });
+
+  it("decodes .ncm payloads without writing track or media rows", async () => {
+    const ncm = encodeNcm({
+      audio: new Uint8Array([70, 76, 65, 67, 9]),
+      cover: Uint8Array.from([0xff, 0xd8, 0xff, 0x33]),
+      meta: {
+        musicName: "只解密不落库",
+        artist: [["Worker", 1]],
+        album: "Decode Only",
+        albumPic: "https://p1/cover.jpg",
+        format: "flac",
+        duration: 120000,
+      },
+    });
+
+    const decoded = await decodeNcmMediaBytes({
+      setId: "ses_decode",
+      name: "decode-only.ncm",
+      kind: "audio",
+      mime: "",
+      sourcePath: "/m/decode-only.ncm",
+      bytes: ncm,
+      decode: "ncm",
+    });
+
+    expect(decoded.title).toBe("只解密不落库");
+    expect(decoded.mime).toBe("audio/flac");
+    expect(decoded.durationSec).toBe(120);
+    expect(decoded.mediaMetadata.album).toBe("Decode Only");
+    expect(decoded.mediaMetadata.artists).toEqual(["Worker"]);
+    expect(decoded.mediaMetadata.originalExtension).toBe("ncm");
+    expect(new Uint8Array(decoded.audio)).toEqual(new Uint8Array([70, 76, 65, 67, 9]));
+    expect(decoded.embeddedCover?.mime).toBe("image/jpeg");
+    expect(new Uint8Array(decoded.embeddedCover?.bytes ?? new ArrayBuffer(0))[3]).toBe(0x33);
+    expect(decoded.albumPicUrl).toBe("https://p1/cover.jpg");
+    expect(decoded.hasCover).toBe(true);
+    expect(await db.tracks.count()).toBe(0);
+    expect(await db.mediaBlobs.count()).toBe(0);
   });
 });

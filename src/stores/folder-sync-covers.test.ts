@@ -35,16 +35,19 @@ vi.mock("@/lib/image-palette", () => ({
   extractImagePalette: vi.fn(async () => []),
 }));
 
-// Distinct image per cover URL: the 4th byte encodes which cover it is, so we can
-// assert each track stored ITS OWN cover (not a neighbour's).
+// Distinct image per cover URL: the byte length encodes which cover it is, so we
+// can assert each track stored ITS OWN cover (not a neighbour's).
 vi.mock("@/lib/platform", async (orig) => {
   const actual = (await orig()) as Record<string, unknown>;
   const marker = (url: string) => (url.includes("cover1") ? 1 : url.includes("cover2") ? 2 : 9);
   const fetchFn = async (url: string) =>
-    new Response(new Uint8Array([0xff, 0xd8, 0xff, marker(url)]), {
-      status: 200,
-      headers: { "content-type": "image/jpeg" },
-    });
+    new Response(
+      new Uint8Array(marker(url) === 1 ? [0xff, 0xd8, 0xff, 1] : [0xff, 0xd8, 0xff, 2, 2]),
+      {
+        status: 200,
+        headers: { "content-type": "image/jpeg" },
+      },
+    );
   return { ...actual, getAppFetch: async () => fetchFn, appFetch: fetchFn };
 });
 
@@ -134,14 +137,13 @@ describe("runFolderSync remote covers", () => {
       expect(a?.coverBlobId).toBeTruthy();
       expect(b?.coverBlobId).toBeTruthy();
 
-      const coverMarker = async (blobId: string | undefined) => {
+      const coverSize = async (blobId: string | undefined) => {
         const row = blobId ? await db.mediaBlobs.get(blobId) : undefined;
-        if (!row?.blob) return undefined;
-        return new Uint8Array(await row.blob.arrayBuffer())[3];
+        return row?.bytes;
       };
-      // 歌曲A must carry cover1 (marker 1), 歌曲B must carry cover2 (marker 2).
-      expect(await coverMarker(a?.coverBlobId)).toBe(1);
-      expect(await coverMarker(b?.coverBlobId)).toBe(2);
+      // 歌曲A must carry cover1 (4 bytes), 歌曲B must carry cover2 (5 bytes).
+      expect(await coverSize(a?.coverBlobId)).toBe(4);
+      expect(await coverSize(b?.coverBlobId)).toBe(5);
     },
     FOLDER_SYNC_COVER_TEST_TIMEOUT_MS,
   );

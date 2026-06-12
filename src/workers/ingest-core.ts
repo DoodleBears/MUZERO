@@ -6,9 +6,9 @@
  * duration from `music-metadata` — codec playability is checked at first play
  * (`MediaEngine`), trading reject-on-import for a fast, jank-free import.
  *
- * `.ncm` files take the {@link ingestNcmBytes} branch: decrypt → plaintext audio
- * blob + embedded metadata/cover, with the carried `albumPic` URL returned so the
- * main thread can fetch+store the cover (Workers can't reach the desktop bridge).
+ * `.ncm` files can either take the legacy {@link ingestNcmBytes} branch, or the
+ * decode-only {@link decodeNcmMediaBytes} branch used by Electron so persistence
+ * happens back in the renderer where the desktop media-storage bridge exists.
  */
 
 import { parseBlob } from "music-metadata";
@@ -37,6 +37,20 @@ export interface IngestResult {
   /** Remote cover URL to fetch on the main thread when no image was embedded (`.ncm`). */
   albumPicUrl?: string;
   /** Whether a cover blob was already stored (embedded) — skip the remote fetch. */
+  hasCover: boolean;
+}
+
+export interface DecodedNcmMedia {
+  title: string;
+  mime: string;
+  durationSec: number;
+  mediaMetadata: TrackMediaMetadata;
+  audio: ArrayBuffer;
+  embeddedCover?: {
+    bytes: ArrayBuffer;
+    mime: string;
+  };
+  albumPicUrl?: string;
   hasCover: boolean;
 }
 
@@ -96,7 +110,7 @@ export async function ingestMediaBytes(
  * container's embedded image → the audio's own embedded picture → (returned)
  * `albumPicUrl` for the main thread to download.
  */
-async function ingestNcmBytes(input: IngestBytesInput, db: MuzeroDB): Promise<IngestResult> {
+export async function decodeNcmMediaBytes(input: IngestBytesInput): Promise<DecodedNcmMedia> {
   const decoded = decodeNcm(input.bytes);
   const titleFromName = input.name.replace(/\.[^.]+$/, "") || input.name;
   const audioFile = new File([decoded.audio], input.name, { type: decoded.audioMime });
@@ -104,14 +118,16 @@ async function ingestNcmBytes(input: IngestBytesInput, db: MuzeroDB): Promise<In
   let parsedTitle: string | undefined;
   let durationSec = decoded.meta.durationMs ? decoded.meta.durationMs / 1000 : 0;
   let mediaMetadata: TrackMediaMetadata = fallbackUploadMediaMetadata(audioFile, titleFromName);
-  let embeddedCover: { blob: Blob; mime: string } | undefined;
+  let parsedEmbeddedCover: { blob: Blob; mime: string } | undefined;
   try {
     const metadata = await parseBlob(audioFile, { duration: false, skipCovers: false });
     const parsed = metadataFromParsedAudio(metadata, audioFile);
     parsedTitle = parsed.title;
     mediaMetadata = parsed.mediaMetadata;
-    embeddedCover = parsed.embeddedCover;
-    if (Number.isFinite(metadata.format.duration)) durationSec = Number(metadata.format.duration);
+    parsedEmbeddedCover = parsed.embeddedCover;
+    if (!decoded.meta.durationMs && Number.isFinite(metadata.format.duration)) {
+      durationSec = Number(metadata.format.duration);
+    }
   } catch {
     // Decrypted stream has unreadable tags — rely on the container's JSON metadata.
   }
@@ -124,23 +140,53 @@ async function ingestNcmBytes(input: IngestBytesInput, db: MuzeroDB): Promise<In
   }
   mediaMetadata = { ...mediaMetadata, originalFileName: input.name, originalExtension: "ncm" };
 
+  let embeddedCover: DecodedNcmMedia["embeddedCover"] | undefined = parsedEmbeddedCover
+    ? {
+        bytes: await parsedEmbeddedCover.blob.arrayBuffer(),
+        mime: parsedEmbeddedCover.mime,
+      }
+    : undefined;
   // Embedded container image takes precedence over any picture inside the audio.
   if (decoded.cover) {
     embeddedCover = {
-      blob: new Blob([decoded.cover.bytes], { type: decoded.cover.mime }),
+      bytes: toStandaloneArrayBuffer(decoded.cover.bytes),
       mime: decoded.cover.mime,
     };
   }
 
+  return {
+    title: decoded.meta.musicName ?? parsedTitle ?? titleFromName,
+    mime: decoded.audioMime,
+    durationSec,
+    mediaMetadata,
+    audio: toStandaloneArrayBuffer(decoded.audio),
+    embeddedCover,
+    albumPicUrl: decoded.meta.albumPicUrl,
+    hasCover: Boolean(embeddedCover),
+  };
+}
+
+async function ingestNcmBytes(input: IngestBytesInput, db: MuzeroDB): Promise<IngestResult> {
+  const decoded = await decodeNcmMediaBytes(input);
+  const audioFile = new File([new Uint8Array(decoded.audio)], input.name, { type: decoded.mime });
+  const embeddedCover = decoded.embeddedCover
+    ? {
+        blob: new Blob([new Uint8Array(decoded.embeddedCover.bytes)], {
+          type: decoded.embeddedCover.mime,
+        }),
+        mime: decoded.embeddedCover.mime,
+      }
+    : undefined;
+
   const track = await createUploadedTrack(
     {
       sessionId: input.setId,
-      title: decoded.meta.musicName ?? parsedTitle ?? titleFromName,
+      title: decoded.title,
       kind: "audio",
       blob: audioFile,
-      mime: decoded.audioMime,
-      durationSec,
-      mediaMetadata,
+      mime: decoded.mime,
+      durationSec: decoded.durationSec,
+      mediaMetadata: decoded.mediaMetadata,
       embeddedCover,
       sourcePath: input.sourcePath,
     },
@@ -148,7 +194,12 @@ async function ingestNcmBytes(input: IngestBytesInput, db: MuzeroDB): Promise<In
   );
   return {
     trackId: track.id,
-    albumPicUrl: decoded.meta.albumPicUrl,
-    hasCover: Boolean(embeddedCover),
+    albumPicUrl: decoded.albumPicUrl,
+    hasCover: decoded.hasCover,
   };
+}
+
+function toStandaloneArrayBuffer(bytes: Uint8Array<ArrayBuffer>): ArrayBuffer {
+  if (bytes.byteOffset === 0 && bytes.byteLength === bytes.buffer.byteLength) return bytes.buffer;
+  return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
 }

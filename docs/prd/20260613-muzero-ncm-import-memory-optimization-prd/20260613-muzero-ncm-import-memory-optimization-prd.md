@@ -1,6 +1,6 @@
 # PRD: MUZERO NCM Import Memory Optimization
 
-**Status:** Draft
+**Status:** In Progress
 **Created:** 2026-06-13
 **Author:** Codex
 **Module:** Local Files / Folder Import / NetEase NCM ingest performance
@@ -11,11 +11,11 @@
 
 | Phase | Name | Status | Link |
 |-------|------|--------|------|
-| 1 | PRD + Import Path Audit | 🔄 In Progress | [Phase 1 Checklist](#phase-1-checklist) |
-| 2 | Electron NCM Persist Path | 🔲 Pending | [Phase 2 Checklist](#phase-2-checklist) |
+| 1 | PRD + Import Path Audit | ✅ Completed | [Phase 1 Checklist](#phase-1-checklist) |
+| 2 | Electron NCM Persist Path | ✅ Completed | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | Import Memory Budget + Backpressure | 🔲 Pending | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | Low-Priority Cover Palette Work | 🔲 Pending | [Phase 4 Checklist](#phase-4-checklist) |
-| 5 | Verification + Profiling Notes | 🔲 Pending | [Phase 5 Checklist](#phase-5-checklist) |
+| 5 | Verification + Profiling Notes | 🔄 In Progress | [Phase 5 Checklist](#phase-5-checklist) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
 
@@ -206,17 +206,17 @@ The existing Storage & cache page remains the place to inspect disk usage.
 **Goal:** In Electron, prevent `.ncm` decoded media from being written by the worker into browser storage.
 
 **Tasks:**
-- [ ] Add a decode-only `.ncm` worker request that returns decoded audio, metadata, and embedded cover without DB writes.
-- [ ] Route Electron folder `.ncm` imports through renderer-side `createUploadedTrack`, so default media storage can select `electron-file`.
-- [ ] Preserve `albumPicUrl`, embedded-cover priority, `sourcePath`, metadata, and decode failure behavior.
-- [ ] Add tests for decode-only worker/client contract and Electron `.ncm` folder import persistence path.
+- [x] Add a decode-only `.ncm` worker request that returns decoded audio, metadata, and embedded cover without DB writes.
+- [x] Route Electron folder `.ncm` imports through renderer-side `createUploadedTrack`, so default media storage can select `electron-file`.
+- [x] Preserve `albumPicUrl`, embedded-cover priority, `sourcePath`, metadata, and decode failure behavior.
+- [x] Add tests for decode-only worker/client contract and Electron `.ncm` folder import persistence path.
 
 ### Phase 2 Checklist
 
-- [ ] Electron `.ncm` imports create tracks with `blobId` and `sourcePath`.
-- [ ] Decoded `.ncm` media rows use the renderer storage provider path when available.
-- [ ] Worker no longer writes `.ncm` media DB rows for the Electron folder path.
-- [ ] Existing browser/Tauri fallback continues to import `.ncm`.
+- [x] Electron `.ncm` imports create tracks with `blobId` and `sourcePath`.
+- [x] Decoded `.ncm` media rows use the renderer storage provider path when available.
+- [x] Worker no longer writes `.ncm` media DB rows for the Electron folder path.
+- [x] Existing browser/Tauri fallback continues to import `.ncm`.
 
 ### Phase 3: Import Memory Budget + Backpressure
 
@@ -253,14 +253,14 @@ The existing Storage & cache page remains the place to inspect disk usage.
 **Goal:** Validate behavior with tests and document how to measure real memory improvements.
 
 **Tasks:**
-- [ ] Run targeted Vitest suites for `.ncm`, folder sync, repositories, and storage.
-- [ ] Run TypeScript typecheck.
+- [x] Run targeted Vitest suites for `.ncm`, folder sync, repositories, and storage.
+- [x] Run TypeScript typecheck.
 - [ ] Document manual profiling guidance: compare dev vs production build, watch post-import memory settling, and distinguish `.ncm` from referenced-file imports.
 
 ### Phase 5 Checklist
 
-- [ ] Relevant tests pass.
-- [ ] Typecheck passes.
+- [x] Relevant tests pass.
+- [x] Typecheck passes.
 - [ ] PRD records completed phases and residual risks.
 
 ---
@@ -327,6 +327,7 @@ The existing Storage & cache page remains the place to inspect disk usage.
 | Date | Author | Changes |
 |------|--------|---------|
 | 2026-06-13 | Codex | Initial PRD for `.ncm` import memory/storage optimization. |
+| 2026-06-13 | Codex | Completed Phase 2: decode-only `.ncm` worker path, Electron renderer persistence through `electron-file`, and targeted Vitest/typecheck verification. |
 
 ---
 

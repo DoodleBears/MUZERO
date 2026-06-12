@@ -124,7 +124,8 @@ import {
   type R2PresenceCoordinator,
 } from "@/sync/r2-presence-coordinator";
 import { writeR2Presence } from "@/sync/r2-presence-sync";
-import { ingestViaWorker } from "@/workers/heavy-client";
+import { decodeNcmViaWorker, ingestViaWorker } from "@/workers/heavy-client";
+import type { DecodedNcmMedia } from "@/workers/ingest-core";
 
 const IMPORT_VISIBILITY_FLUSH_SIZE = 25;
 
@@ -1280,15 +1281,7 @@ async function ingestNcmFile(
   sourcePath?: string,
 ): Promise<IngestResult> {
   const bytes = await file.arrayBuffer();
-  const res = await ingestViaWorker({
-    setId,
-    name: file.name,
-    kind: "audio",
-    mime: "",
-    sourcePath,
-    bytes,
-    decode: "ncm",
-  }).catch((err: unknown) => {
+  const res = await ingestNcmBytes(setId, file.name, bytes, sourcePath).catch((err: unknown) => {
     log.warn("player", "ncm decode failed", { name: file.name, err: String(err) });
     return null;
   });
@@ -1297,6 +1290,69 @@ async function ingestNcmFile(
     void fetchAndStoreRemoteCover(res.trackId, res.albumPicUrl);
   }
   return { trackId: res.trackId };
+}
+
+async function ingestNcmBytes(
+  setId: string,
+  name: string,
+  bytes: ArrayBuffer,
+  sourcePath?: string,
+): Promise<ScannedIngestResult> {
+  const input = {
+    setId,
+    name,
+    kind: "audio" as const,
+    mime: "",
+    sourcePath,
+    bytes,
+    decode: "ncm" as const,
+  };
+  if (!shouldPersistDecodedNcmInRenderer()) {
+    return ingestViaWorker(input);
+  }
+  const decoded = await decodeNcmViaWorker(input);
+  return persistDecodedNcmTrack(setId, name, decoded, sourcePath);
+}
+
+async function persistDecodedNcmTrack(
+  setId: string,
+  name: string,
+  decoded: DecodedNcmMedia,
+  sourcePath?: string,
+): Promise<ScannedIngestResult> {
+  const audioBlob = new Blob([new Uint8Array(decoded.audio)], { type: decoded.mime });
+  const embeddedCover = decoded.embeddedCover
+    ? {
+        blob: new Blob([new Uint8Array(decoded.embeddedCover.bytes)], {
+          type: decoded.embeddedCover.mime,
+        }),
+        mime: decoded.embeddedCover.mime,
+      }
+    : undefined;
+  const track = await createUploadedTrack({
+    sessionId: setId,
+    title: decoded.title,
+    kind: "audio",
+    blob: audioBlob,
+    mime: decoded.mime,
+    durationSec: decoded.durationSec,
+    mediaMetadata: {
+      ...decoded.mediaMetadata,
+      originalFileName: decoded.mediaMetadata.originalFileName ?? name,
+      originalExtension: decoded.mediaMetadata.originalExtension ?? "ncm",
+    },
+    embeddedCover,
+    sourcePath,
+  });
+  return {
+    trackId: track.id,
+    albumPicUrl: decoded.albumPicUrl,
+    hasCover: decoded.hasCover,
+  };
+}
+
+function shouldPersistDecodedNcmInRenderer(): boolean {
+  return resolveDesktopBridge().kind === "electron";
 }
 
 /**
@@ -1505,11 +1561,12 @@ async function fetchAndStoreRemoteCover(trackId: string, url: string): Promise<v
     const appFetch = await getAppFetch();
     const resp = await appFetch(url);
     if (!resp.ok) return;
-    const blob = await resp.blob();
-    if (blob.size === 0) return;
+    const rawBlob = await resp.blob();
+    if (rawBlob.size === 0) return;
     const mime =
-      resp.headers.get("content-type")?.split(";")[0]?.trim() || blob.type || "image/jpeg";
+      resp.headers.get("content-type")?.split(";")[0]?.trim() || rawBlob.type || "image/jpeg";
     if (!mime.startsWith("image/")) return;
+    const blob = new Blob([new Uint8Array(await rawBlob.arrayBuffer())], { type: mime });
     await setTrackCover({ trackId, blob, mime });
   } catch (err) {
     log.warn("player", "failed to fetch remote cover", { trackId, err: String(err) });
@@ -1611,15 +1668,23 @@ async function ingestScannedFileBytes(
   // Read on the main thread (async IPC/plugin — off the CPU), then hand the bytes
   // to the worker for the heavy parse/decrypt + DB write (no UI jank).
   const bytes = await fs.readFile(file.path);
+  const inputBytes = arrayBufferFromBytes(bytes);
+  if (file.decode === "ncm") {
+    return ingestNcmBytes(setId, file.name, inputBytes, file.path);
+  }
   return ingestViaWorker({
     setId,
     name: file.name,
     kind: file.kind,
-    mime: file.decode === "ncm" ? "" : mimeFromExtension(file.name, file.kind),
+    mime: mimeFromExtension(file.name, file.kind),
     sourcePath: file.path,
-    bytes: bytes.buffer as ArrayBuffer,
-    decode: file.decode,
+    bytes: inputBytes,
   });
+}
+
+function arrayBufferFromBytes(bytes: Uint8Array<ArrayBuffer>): ArrayBuffer {
+  if (bytes.byteOffset === 0 && bytes.byteLength === bytes.buffer.byteLength) return bytes.buffer;
+  return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
 }
 
 function titleFromFileName(name: string): string {
