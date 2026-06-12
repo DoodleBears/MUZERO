@@ -20,7 +20,7 @@
 | 5 | Local-File Track Import Path | ✅ Completed | [Phase 5 Checklist](#phase-5-checklist) |
 | 6 | Local-File Playback Protocol | ✅ Completed | [Phase 6 Checklist](#phase-6-checklist) |
 | 7 | R2 Upload-On-Demand From Local File | ✅ Completed | [Phase 7 Checklist](#phase-7-checklist) |
-| 8 | Lazy Cover Cache + Repair UX | 🔲 Pending | [Phase 8 Checklist](#phase-8-checklist) |
+| 8 | Lazy Cover Cache + Repair UX | 🔄 In Progress | [Phase 8 Checklist](#phase-8-checklist) |
 | 9 | Verification + Completion | 🔲 Pending | [Phase 9 Checklist](#phase-9-checklist) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
@@ -631,14 +631,14 @@ Implementation requirements:
 **Tasks:**
 - [ ] Add lazy embedded cover extraction into Electron cache.
 - [ ] Store derived cover cache refs separately from user-authored `coverBlobId`.
-- [ ] Add repair/rescan affordance for missing local files.
-- [ ] Ensure manual cover/memory photos still use `mediaBlobs` and sync normally.
+- [x] Add repair/rescan core for missing local files by matching the original filename inside a user-picked folder.
+- [x] Ensure manual cover/memory photos still use `mediaBlobs` and sync normally; local-file repair only updates `Track.sourcePath` and media metadata.
 
 ### Phase 8 Checklist
 
-- [ ] Initial scan does not block on embedded artwork.
+- [x] Initial scan does not block on embedded artwork.
 - [ ] Cover extraction is bounded and cancellable.
-- [ ] Missing-file repair preserves tags, memories, likes, and set ranks.
+- [x] Missing-file repair preserves tags, memories, likes, and set ranks.
 - [ ] PRD is updated before commit.
 
 ### Phase 9: Verification + Completion
@@ -720,3 +720,4 @@ Implementation requirements:
 | 2026-06-12 | Codex | Completed Phase 3 empty-library import states; empty states intentionally omit DJ actions. |
 | 2026-06-12 | Codex | Completed Phases 4-6: SQLite deferred, Electron plaintext folder import creates `sourcePath` tracks, and tokenized local-media playback supports Range. |
 | 2026-06-12 | Codex | Completed Phase 7 R2 upload-on-demand support for referenced local-file tracks with precomputed payload signing, default sync wiring, and tokenized local-media upload bodies. |
+| 2026-06-12 | Codex | Started Phase 8 with source-path repair core and corrected local-file source classification; lazy derived cover cache remains pending. |

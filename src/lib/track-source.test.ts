@@ -6,6 +6,9 @@ describe("describeTrackMediaSource", () => {
     expect(describeTrackMediaSource({ blobId: "blb_1", origin: "uploaded" }).kind).toBe(
       "local-file",
     );
+    expect(describeTrackMediaSource({ sourcePath: "/music/local-reference.mp3" }).kind).toBe(
+      "local-file",
+    );
     expect(describeTrackMediaSource({ blobId: "blb_2", origin: "streamed" }).kind).toBe(
       "local-stream-cache",
     );

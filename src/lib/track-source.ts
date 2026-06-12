@@ -23,6 +23,7 @@ type TrackMediaSourceFields = {
   origin?: Track["origin"];
   provider?: Track["provider"];
   remoteMediaUrl?: Track["remoteMediaUrl"];
+  sourcePath?: Track["sourcePath"];
   streamSourceId?: Track["streamSourceId"];
   streamExternalId?: Track["streamExternalId"];
 };
@@ -39,6 +40,7 @@ export function describeTrackMediaSource(track: TrackMediaSourceFields): TrackSo
       ? { kind: "local-stream-cache", labelKey: "gallery.trackSourceLocalStreamCache" }
       : { kind: "local-file", labelKey: "gallery.trackSourceLocalFile" };
   }
+  if (track.sourcePath) return { kind: "local-file", labelKey: "gallery.trackSourceLocalFile" };
   if (track.remoteMediaUrl) {
     const host = urlHost(track.remoteMediaUrl);
     return isR2BackedUrl(track.remoteMediaUrl, Boolean(track.cloudSource))
