@@ -11,6 +11,7 @@ import { useTranslation } from "react-i18next";
 import { ShortcutRecorderDialog } from "@/components/settings/shortcut-recorder-dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { DownloadIcon } from "@/components/ui/download";
 import { Input } from "@/components/ui/input";
@@ -314,13 +315,15 @@ function SystemGlobalShortcutsSection({
               {t("shortcuts.system.resetAll")}
             </Button>
           )}
-          <label className="flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
+          <label
+            htmlFor="system-shortcuts-enabled"
+            className="flex cursor-pointer items-center gap-2 text-sm"
+          >
+            <Checkbox
+              id="system-shortcuts-enabled"
               checked={enabled}
               disabled={!supported}
-              aria-label={t("shortcuts.system.enable")}
-              onChange={(event) => void setSystemShortcutsEnabled(event.currentTarget.checked)}
+              onCheckedChange={(checked) => void setSystemShortcutsEnabled(checked === true)}
             />
             <span>{t("shortcuts.system.enable")}</span>
           </label>

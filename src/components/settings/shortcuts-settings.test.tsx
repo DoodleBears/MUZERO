@@ -159,8 +159,8 @@ describe("ShortcutsSettings (read-only cheat-sheet)", () => {
 
     const toggle = within(section).getByRole("checkbox", {
       name: "shortcuts.system.enable",
-    }) as HTMLInputElement;
-    expect(toggle.disabled).toBe(true);
+    });
+    expect(toggle.getAttribute("aria-disabled")).toBe("true");
     expect(section.textContent).toContain("shortcuts.system.unavailable");
   });
 });
