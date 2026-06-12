@@ -589,7 +589,7 @@ export interface AppSettings {
   nowPlayingMemoryRailScrollTop?: number;
   /** Now-Playing visualizer style. Defaults to "bars". */
   visualizerStyle?: VisualizerStyleId;
-  /** Overlay the visualizer on the full Now-Playing background image/slideshow. Default false. */
+  /** Overlay the visualizer on the full Now-Playing background image/slideshow. Default true. */
   visualizerAsBackground?: boolean;
   /** Dim/darken over the background visualizer, 0–100 (foreground legibility). Default 0. */
   visualizerBackgroundDim?: number;
@@ -646,9 +646,9 @@ export interface AppSettings {
   visualizerIntensity?: number;
   /** Visualizer motion/speed multiplier. Default 1. */
   visualizerMotion?: number;
-  /** Visualizer detail/count/segment multiplier. Default 1. */
+  /** Visualizer detail/count/segment multiplier. Default 8 (24 octave bands for bars). */
   visualizerDetail?: number;
-  /** Visualizer radius/gap/spread multiplier. Default 1. */
+  /** Visualizer radius/gap/spread multiplier. Default 0.35. */
   visualizerSpread?: number;
   /** Visualizer glow/brightness multiplier. Default 1. */
   visualizerGlow?: number;
@@ -872,7 +872,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   nowPlayingRightRailCollapsed: false,
   nowPlayingMemoryRailScrollTop: 0,
   visualizerStyle: "bars",
-  visualizerAsBackground: false,
+  visualizerAsBackground: true,
   visualizerBackgroundDim: 0,
   visualizerBackgroundOpacity: 100,
   visualizerBgDimLyrics: 40,
@@ -882,8 +882,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   visualizerUseCoverColor: true,
   visualizerIntensity: 1,
   visualizerMotion: 1,
-  visualizerDetail: 1,
-  visualizerSpread: 1,
+  visualizerDetail: 8,
+  visualizerSpread: 0.35,
   visualizerGlow: 1,
   visualizerMirror: 1,
   lyricsActiveFontSize: 30,

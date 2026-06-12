@@ -3,7 +3,7 @@ import { useNavStore } from "./nav-store";
 
 afterEach(() => {
   useNavStore.setState({
-    tab: "sessions",
+    tab: "now",
     settingsItem: "appearance",
     pendingLibraryEntity: null,
   });
@@ -11,8 +11,8 @@ afterEach(() => {
 });
 
 describe("nav-store — persisted active tab", () => {
-  it("defaults to the sessions tab", () => {
-    expect(useNavStore.getState().tab).toBe("sessions");
+  it("defaults to the Now tab", () => {
+    expect(useNavStore.getState().tab).toBe("now");
   });
 
   it("setTab updates the active tab and persists it", () => {

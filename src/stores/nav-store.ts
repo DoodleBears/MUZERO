@@ -41,7 +41,7 @@ interface NavState {
 export const useNavStore = create<NavState>()(
   persist(
     (set, get) => ({
-      tab: "sessions",
+      tab: "now",
       setTab: (tab) => set({ tab }),
       settingsItem: "appearance",
       setSettingsItem: (settingsItem) => set({ settingsItem }),
