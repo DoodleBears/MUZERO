@@ -1,6 +1,6 @@
 import { useLiveQuery } from "dexie-react-hooks";
 import { LocateFixed } from "lucide-react";
-import { motion, useReducedMotion } from "motion/react";
+import { motion } from "motion/react";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { LyricsSearchPanel } from "@/components/player/lyrics-search-panel";
@@ -259,7 +259,6 @@ function SyncedLines({
   showRomanization?: boolean;
 }) {
   const { t } = useTranslation();
-  const reduce = useReducedMotion();
   const viewportRef = useRef<HTMLDivElement>(null);
   const stackRef = useRef<HTMLDivElement>(null);
   useSmoothScroll(viewportRef);
@@ -313,7 +312,7 @@ function SyncedLines({
     if (!following) return;
     let raf = 0;
     let stopped = false;
-    const ease = reduce ? 1 : 0.16;
+    const ease = 0.16;
     const tick = () => {
       if (stopped) return;
       const vp = viewportRef.current;
@@ -338,7 +337,7 @@ function SyncedLines({
       stopped = true;
       cancelAnimationFrame(raf);
     };
-  }, [following, reduce]);
+  }, [following]);
 
   // Per-syllable karaoke fill: while the active line has word timings, a single rAF
   // wipes each word as it's sung by writing one CSS var per word span DIRECTLY to
@@ -426,7 +425,7 @@ function SyncedLines({
                   // layout-free transform changes.
                   scale: isActive ? 1 : lyricStyle.inactiveFontSize / lyricStyle.activeFontSize,
                 }}
-                transition={{ duration: reduce ? 0 : 0.35, ease: [0.22, 1, 0.36, 1] }}
+                transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
                 style={{
                   fontSize: lyricStyle.activeFontSize,
                   color: lyricStyle.color,
