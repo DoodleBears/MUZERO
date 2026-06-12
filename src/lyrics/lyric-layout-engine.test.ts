@@ -103,4 +103,62 @@ describe("solveLyricLayout", () => {
     expect(layout.activeIndex).toBe(0);
     expect(layout.frames[0].state).toBe("active");
   });
+
+  it("keeps a long lyric stack bounded and deterministic", () => {
+    const longLines = Array.from({ length: 120 }, (_, index) => ({
+      id: String(index),
+      index,
+      startMs: index * 1000,
+      endMs: (index + 1) * 1000,
+      text: `line ${index}`,
+      translation: index % 3 === 0 ? `translated ${index}` : undefined,
+      roman: index % 5 === 0 ? `roman ${index}` : undefined,
+    }));
+    const heights = longLines.map((_, index) => (index % 3 === 0 ? 88 : 48));
+    const layout = solveLyricLayout({
+      lines: longLines,
+      activeIndex: 100,
+      lineHeights: heights,
+      viewportHeight: 720,
+      alignPosition: 0.42,
+      lineGapPx: 12,
+      reducedMotion: false,
+    });
+
+    expect(layout.frames).toHaveLength(120);
+    expect(layout.frames.every((frame) => Number.isFinite(frame.y))).toBe(true);
+    expect(layout.frames.every((frame) => frame.delaySec <= 0.22)).toBe(true);
+    expect(layout.frames[100]).toMatchObject({
+      state: "active",
+      opacity: 1,
+      scale: 1,
+      blurPx: 0,
+      delaySec: 0,
+    });
+    expect(layout.frames[0]?.state).toBe("distant");
+    expect(layout.frames[119]?.state).toBe("distant");
+  });
+
+  it("snaps the newly active row to the anchor after a large seek jump", () => {
+    const heights = [44, 52, 60, 68, 76];
+    const layout = solveLyricLayout({
+      lines,
+      activeIndex: 4,
+      lineHeights: heights,
+      viewportHeight: 500,
+      alignPosition: 0.42,
+      lineGapPx: 10,
+      reducedMotion: false,
+    });
+
+    expect(layout.frames[4]).toMatchObject({
+      state: "active",
+      y: 172,
+      translateY: -92,
+      opacity: 1,
+      scale: 1,
+      blurPx: 0,
+      delaySec: 0,
+    });
+  });
 });

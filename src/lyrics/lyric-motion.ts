@@ -29,19 +29,6 @@ export interface LyricFollowTargetInput {
   anchorRatio: number;
 }
 
-export interface LyricCascadeRowMotionInput {
-  rowIndex: number;
-  activeIndex: number;
-  direction: -1 | 0 | 1;
-  motion: ResolvedLyricsMotion;
-}
-
-export interface LyricCascadeRowMotion {
-  delaySec: number;
-  initialY: number;
-  affected: boolean;
-}
-
 const CLASSIC_MOTION: ResolvedLyricsMotion = {
   mode: "classic",
   follow: {
@@ -84,10 +71,10 @@ const CASCADE_MOTION: ResolvedLyricsMotion = {
     mass: 1.3,
   },
   row: {
-    transition: "spring",
-    neighborDelayMs: 55,
-    residualYPx: 24,
-    maxAffectedDistance: 4,
+    transition: "tween",
+    neighborDelayMs: 0,
+    residualYPx: 0,
+    maxAffectedDistance: 0,
   },
 };
 
@@ -118,19 +105,4 @@ export function lyricFollowTargetScrollTop(input: LyricFollowTargetInput): numbe
     0,
     input.scrollTop + lineCenterFromTop - input.viewportHeight * input.anchorRatio,
   );
-}
-
-export function lyricCascadeRowMotion(input: LyricCascadeRowMotionInput): LyricCascadeRowMotion {
-  if (input.motion.mode !== "cascade" || input.direction === 0 || input.activeIndex < 0) {
-    return { delaySec: 0, initialY: 0, affected: false };
-  }
-  const distance = Math.abs(input.rowIndex - input.activeIndex);
-  if (distance === 0 || distance > input.motion.row.maxAffectedDistance) {
-    return { delaySec: 0, initialY: 0, affected: false };
-  }
-  return {
-    delaySec: (input.motion.row.neighborDelayMs * distance) / 1000,
-    initialY: input.motion.row.residualYPx * input.direction,
-    affected: true,
-  };
 }

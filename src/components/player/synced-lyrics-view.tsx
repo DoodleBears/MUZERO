@@ -15,7 +15,6 @@ import { activeWordIndex } from "@/lyrics/active-word";
 import { solveLyricLayout } from "@/lyrics/lyric-layout-engine";
 import {
   type LyricsMotionMode,
-  lyricCascadeRowMotion,
   lyricFollowTargetScrollTop,
   resolveLyricsMotionMode,
 } from "@/lyrics/lyric-motion";
@@ -28,7 +27,6 @@ import { getMediaEngine, usePlayerStore } from "@/stores/player-store";
 import { useUiStore } from "@/stores/ui-store";
 
 type ShownLyrics = Extract<ResolvedLyrics, { mode: "synced" } | { mode: "plain" }>;
-type CascadePulse = { direction: -1 | 0 | 1; token: number };
 type RowElement = HTMLButtonElement | null;
 
 /**
@@ -286,9 +284,6 @@ function SyncedLines({
   const lineHeightsRef = useRef<number[]>([]);
   const [following, setFollowing] = useState(true);
   const [viewportH, setViewportH] = useState(0);
-  const previousActiveIndexRef = useRef(activeIndex);
-  const previousMotionModeRef = useRef<LyricsMotionMode>(motionMode);
-  const [cascadePulse, setCascadePulse] = useState<CascadePulse>({ direction: 0, token: 0 });
   const lyricsMotion = useMemo(
     () => resolveLyricsMotionMode(motionMode, { reducedMotion: prefersReducedMotion() }),
     [motionMode],
@@ -356,23 +351,8 @@ function SyncedLines({
   // biome-ignore lint/correctness/useExhaustiveDependencies: reset follow when the lyric set changes
   useEffect(() => setFollowing(true), [lines]);
 
-  useEffect(() => {
-    const previous = previousActiveIndexRef.current;
-    const previousMode = previousMotionModeRef.current;
-    previousActiveIndexRef.current = activeIndex;
-    previousMotionModeRef.current = lyricsMotion.mode;
-    if (lyricsMotion.mode !== "cascade" || activeIndex < 0) return;
-    const lineChanged = previous >= 0 && previous !== activeIndex;
-    const switchedIntoCascade = previousMode !== "cascade";
-    if (!lineChanged && !switchedIntoCascade) return;
-    setCascadePulse((pulse) => ({
-      direction: lineChanged ? (activeIndex > previous ? 1 : -1) : 1,
-      token: pulse.token + 1,
-    }));
-  }, [activeIndex, lyricsMotion.mode]);
-
-  // Follow toward the active line's anchor. Classic keeps the existing per-frame
-  // lerp baseline; inertial/cascade use a Motion spring for a weightier catch-up.
+  // Follow toward the active line's anchor for the scrollTop-based modes. Cascade
+  // skips this path because the AMLL-style layout driver owns the stack position.
   // Synced lyrics intentionally do NOT opt into global Lenis smooth-scroll: this
   // surface owns its own programmatic follow target, and two scroll controllers
   // would fight over `scrollTop`.
@@ -666,12 +646,6 @@ function SyncedLines({
         >
           {lines.map((line, i) => {
             const isActive = i === activeIndex;
-            const rowMotion = lyricCascadeRowMotion({
-              rowIndex: i,
-              activeIndex,
-              direction: cascadePulse.direction,
-              motion: lyricsMotion,
-            });
             return (
               <LyricLineButton
                 // biome-ignore lint/suspicious/noArrayIndexKey: lyric lines have no stable id; time+index is the natural key
@@ -680,8 +654,6 @@ function SyncedLines({
                 isActive={isActive}
                 lyricStyle={lyricStyle}
                 lyricsMotion={lyricsMotion}
-                rowMotion={rowMotion}
-                cascadePulse={cascadePulse}
                 driverMode={isAmlStyleEngine}
                 rowRef={(row) => {
                   rowRefs.current[i] = row;
@@ -720,8 +692,6 @@ function LyricLineButton({
   isActive,
   lyricStyle,
   lyricsMotion,
-  rowMotion,
-  cascadePulse,
   driverMode = false,
   rowRef,
   wordByWord,
@@ -735,8 +705,6 @@ function LyricLineButton({
   isActive: boolean;
   lyricStyle: LyricStyle;
   lyricsMotion: ReturnType<typeof resolveLyricsMotionMode>;
-  rowMotion: ReturnType<typeof lyricCascadeRowMotion>;
-  cascadePulse: CascadePulse;
   driverMode?: boolean;
   rowRef?: (row: HTMLButtonElement | null) => void;
   wordByWord: boolean;
@@ -750,36 +718,12 @@ function LyricLineButton({
   // Scale inactive lines DOWN instead of animating font-size: the layout (and
   // wrapping) stays fixed at the active size, while Motion owns the visual change.
   const targetScale = isActive ? 1 : lyricStyle.inactiveFontSize / lyricStyle.activeFontSize;
-  const scaleTransition =
-    lyricsMotion.row.transition === "spring"
-      ? {
-          type: "spring" as const,
-          stiffness: lyricsMotion.follow.stiffness,
-          damping: lyricsMotion.follow.damping,
-          mass: lyricsMotion.follow.mass,
-        }
-      : { duration: 0.35, ease: [0.22, 1, 0.36, 1] as const };
-  const waveTransition =
-    lyricsMotion.row.transition === "spring"
-      ? {
-          type: "spring" as const,
-          stiffness: lyricsMotion.follow.stiffness,
-          damping: lyricsMotion.follow.damping,
-          mass: lyricsMotion.follow.mass,
-          delay: rowMotion.delaySec,
-        }
-      : { duration: 0.35, delay: rowMotion.delaySec, ease: [0.22, 1, 0.36, 1] as const };
 
   const commonProps = {
     type: "button" as const,
     ref: rowRef,
     "data-active": isActive || undefined,
     "data-layout-row": driverMode ? "true" : undefined,
-    "data-cascade-affected": !driverMode && rowMotion.affected ? true : undefined,
-    "data-cascade-delay-ms":
-      !driverMode && rowMotion.affected ? Math.round(rowMotion.delaySec * 1000) : undefined,
-    "data-cascade-initial-y": !driverMode && rowMotion.affected ? rowMotion.initialY : undefined,
-    "data-cascade-wave-token": !driverMode && rowMotion.affected ? cascadePulse.token : undefined,
     "aria-current": isActive ? ("true" as const) : undefined,
     onClick,
     style: {
@@ -852,6 +796,16 @@ function LyricLineButton({
     );
   }
 
+  const scaleTransition =
+    lyricsMotion.row.transition === "spring"
+      ? {
+          type: "spring" as const,
+          stiffness: lyricsMotion.follow.stiffness,
+          damping: lyricsMotion.follow.damping,
+          mass: lyricsMotion.follow.mass,
+        }
+      : { duration: 0.35, ease: [0.22, 1, 0.36, 1] as const };
+
   return (
     <motion.button
       {...commonProps}
@@ -859,16 +813,14 @@ function LyricLineButton({
       animate={{
         opacity: targetOpacity,
         scale: targetScale,
-        y: rowMotion.affected ? [rowMotion.initialY, 0] : 0,
-        filter: rowMotion.affected ? ["blur(1.5px)", "blur(0px)"] : "blur(0px)",
+        y: 0,
+        filter: "blur(0px)",
       }}
       transition={{
         opacity: scaleTransition,
         scale: scaleTransition,
-        y: rowMotion.affected ? waveTransition : { duration: 0 },
-        filter: rowMotion.affected
-          ? { duration: 0.24, delay: rowMotion.delaySec }
-          : { duration: 0 },
+        y: { duration: 0 },
+        filter: { duration: 0 },
       }}
     >
       {content}
