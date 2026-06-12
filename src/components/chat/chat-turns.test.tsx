@@ -59,4 +59,34 @@ describe("ChatTurns", () => {
     expect(onApproveTool).toHaveBeenCalledWith("approval_1");
     expect(onRejectTool).toHaveBeenCalledWith("approval_1");
   });
+
+  it("interleaves text and tool parts in emission order (not all text above tools)", () => {
+    const messages = [
+      {
+        id: "asst_2",
+        role: "assistant",
+        parts: [
+          { type: "text", text: "Let me search your library." },
+          {
+            type: "tool-library_search_tracks",
+            toolCallId: "call_s",
+            state: "output-available",
+            input: { query: "lofi" },
+            output: { total: 0 },
+          },
+          { type: "text", text: "Nothing matched — want me to widen it?" },
+        ],
+      } as unknown as DjChatUIMessage,
+    ];
+
+    render(<ChatTurns messages={messages} toolLabels={labels} />);
+
+    const before = screen.getByText("Let me search your library.");
+    const tool = screen.getByText("library_search_tracks");
+    const after = screen.getByText("Nothing matched — want me to widen it?");
+
+    // Document order must be before → tool → after.
+    expect(before.compareDocumentPosition(tool) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(tool.compareDocumentPosition(after) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
 });
