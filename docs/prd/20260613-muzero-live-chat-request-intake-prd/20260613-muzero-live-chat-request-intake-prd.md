@@ -14,7 +14,7 @@
 | Phase | Name | Status | Link |
 |-------|------|--------|------|
 | 0 | PRD + Architecture Decision | ✅ Completed | [Phase 0 Checklist](#phase-0-checklist) |
-| 1 | Contracts + Pure Router | 🔲 Pending | [Phase 1 Checklist](#phase-1-checklist) |
+| 1 | Contracts + Pure Router | ✅ Completed | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | Desktop Loopback Intake Server | 🔲 Pending | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | Settings + Request Inbox UI | 🔲 Pending | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | Direct Search Route + Playback Actions | 🔲 Pending | [Phase 4 Checklist](#phase-4-checklist) |
@@ -511,19 +511,25 @@ The streamer should be able to click a request row and open the matched track in
 
 **Tasks:**
 
-- [ ] Add `AudienceRequest*` shared types to `src/db/types.ts` or `src/live-requests/audience-request-schema.ts` without creating a persisted request table.
-- [ ] Add `audience-request-schema.ts` for generic HTTP/Social Stream Ninja payload normalization.
-- [ ] Add `audience-request-search.ts` with `pickAudienceRequestMatch`.
-- [ ] Add `audience-request-router.ts` that returns action plans, not side effects.
-- [ ] Add tests for command prefix stripping, in-memory duplicate ids, cooldown, no match, tie/low confidence, online fallback decision, and high-confidence match.
+- [x] Add `AudienceRequest*` shared types to `src/live-requests/audience-request-schema.ts` without creating a persisted request table.
+- [x] Add `audience-request-schema.ts` for generic HTTP/Social Stream Ninja payload normalization.
+- [x] Add `audience-request-search.ts` with `pickAudienceRequestMatch`.
+- [x] Add `audience-request-router.ts` that returns action plans, not side effects.
+- [x] Add tests for command prefix stripping, in-memory duplicate ids, cooldown, no match, tie/low confidence, online fallback decision, and high-confidence match.
 
 ### Phase 1 Checklist
 
-- [ ] Router is pure and unit-testable.
-- [ ] Search route reuses `trackSearchScore` / memory notes instead of a new matcher.
-- [ ] Online source lookup is only planned after low local confidence and only when sources are configured.
-- [ ] Low-confidence and tie behavior is deterministic.
-- [ ] No playback, DB, or LLM side effects happen in pure modules.
+- [x] Router is pure and unit-testable.
+- [x] Search route reuses `trackSearchScore` / memory notes instead of a new matcher.
+- [x] Online source lookup is only planned after low local confidence and only when sources are configured.
+- [x] Low-confidence and tie behavior is deterministic.
+- [x] No playback, DB, or LLM side effects happen in pure modules.
+
+**Phase 1 Verification:**
+
+- `D:\code\project\MUZERO\node_modules\.bin\vitest.CMD run src\live-requests\audience-request-schema.test.ts src\live-requests\audience-request-search.test.ts src\live-requests\audience-request-router.test.ts src\live-requests\audience-request-security.test.ts`
+- `D:\code\project\MUZERO\node_modules\.bin\biome.CMD check src\live-requests`
+- `D:\code\project\MUZERO\node_modules\.bin\tsc.CMD --noEmit --pretty false`
 
 ### Phase 2: Desktop Loopback Intake Server
 
@@ -739,3 +745,4 @@ The streamer should be able to click a request row and open the matched track in
 |------|--------|---------|
 | 2026-06-13 | Codex | Initial draft from PM request: live chat/Social Stream Ninja message intake, AI DJ route, search route, local desktop loopback architecture, security defaults, implementation phases. |
 | 2026-06-13 | Codex | Resolved product open questions: Social Stream Ninja Call Webhook POST, default Search/play-next, online fallback only after low local confidence, no LAN, no persisted request history, and serial one-request-one-session AI DJ handling. |
+| 2026-06-13 | Codex | Completed Phase 1: pure request schema normalization, local search match picker, route planner, in-memory duplicate/cooldown helpers, and targeted tests. |
