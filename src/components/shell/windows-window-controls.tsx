@@ -52,11 +52,11 @@ export function WindowsWindowControls() {
   return (
     <div
       aria-label={t("windowControls.label")}
-      className="windows-window-controls fixed top-0 right-0 z-[80] flex h-14 w-48 items-start justify-end bg-transparent px-3 pt-2 [-webkit-app-region:no-drag]"
+      className="windows-window-controls absolute top-1/2 right-2 flex h-10 w-34 -translate-y-1/2 items-center justify-end bg-transparent [-webkit-app-region:no-drag]"
       data-no-drag
       role="toolbar"
     >
-      <div className="windows-window-controls__cluster pointer-events-none flex translate-y-[-4px] items-center gap-1 rounded-full border border-white/12 bg-background/60 p-1 opacity-0 shadow-lg shadow-black/20 backdrop-blur-xl transition duration-150 dark:border-white/10 dark:bg-black/44">
+      <div className="windows-window-controls__cluster pointer-events-none flex translate-y-[-2px] items-center gap-1 rounded-full border border-white/12 bg-background/60 p-1 opacity-0 shadow-lg shadow-black/20 backdrop-blur-xl transition duration-150 dark:border-white/10 dark:bg-black/44">
         <WindowButton label={t("windowControls.minimize")} onClick={() => void controls.minimize()}>
           <Minus />
         </WindowButton>

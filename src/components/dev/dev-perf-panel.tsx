@@ -205,10 +205,9 @@ export function DevPerfPanel() {
 }
 
 /**
- * Prod-build gate for the HUD, mounted in `main.tsx`. Dev builds mount the HUD
- * directly from App.tsx, so this renders nothing there (no double mount); prod
- * builds mount it only behind the visible Settings switch (`perfHudEnabled`,
- * rule 3 — a Settings control, not a hidden flag).
+ * Prod-build gate for the HUD, mounted in `main.tsx`. App.tsx owns the dev-build
+ * mount behind the same visible Settings switch (`perfHudEnabled`, rule 3 — a
+ * Settings control, not a hidden flag), so this renders nothing in dev.
  */
 export function ProdPerfHud() {
   const settings = useSettings();

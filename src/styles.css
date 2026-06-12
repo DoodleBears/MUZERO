@@ -180,7 +180,7 @@
     clip-path: none;
   }
 
-  .windows-window-controls:hover .windows-window-controls__cluster,
+  .app-titlebar:hover .windows-window-controls__cluster,
   .windows-window-controls:focus-within .windows-window-controls__cluster {
     pointer-events: auto;
     opacity: 1;

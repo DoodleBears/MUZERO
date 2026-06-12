@@ -209,15 +209,22 @@ export default function App() {
             // `-webkit-app-region:drag` makes the header drag the Electron frameless
             // window; `data-tauri-drag-region` does the same under Tauri (both inert
             // on the other shell + the web build).
-            "fixed inset-x-0 top-0 z-30 flex items-center justify-center px-4 py-3 transition-opacity duration-500 [-webkit-app-region:drag]",
+            "app-titlebar fixed inset-x-0 top-0 z-30 flex items-center justify-center px-4 py-3 transition-opacity duration-500 [-webkit-app-region:drag]",
             ambientActive ? "" : "bg-background/80",
             (chromeHidden || foregroundHidden) && "pointer-events-none opacity-0",
           )}
         >
-          <span className="font-semibold tracking-tight">MUZERO</span>
+          <button
+            aria-label="MUZERO"
+            className="cursor-default border-0 bg-transparent p-0 font-semibold tracking-tight text-inherit [-webkit-app-region:no-drag]"
+            data-no-drag
+            onDoubleClick={() => void toggleDesktopMaximize()}
+            type="button"
+          >
+            MUZERO
+          </button>
+          <WindowsWindowControls />
         </header>
-
-        <WindowsWindowControls />
 
         <main className="chrome-fade absolute inset-0 z-10 overflow-hidden [--chrome-fade-bottom:calc(var(--spacing-chrome-bottom)/2)] [--chrome-fade-top:3rem]">
           {tab === "now" && <NowPlayingPage foregroundHidden={foregroundHidden} />}
@@ -284,6 +291,12 @@ function useDesktopChromeDataset() {
   }, []);
 }
 
+async function toggleDesktopMaximize() {
+  const state = await resolveDesktopBridge().windowControls?.toggleMaximize();
+  if (!state) return;
+  document.documentElement.dataset.windowMaximized = String(state.maximized || state.fullscreen);
+}
+
 function AmbientPageOverlay({ active, children }: { active: boolean; children: ReactNode }) {
   return (
     // Desktop window drag: the whole page is a drag surface, so any empty space —
@@ -302,7 +315,9 @@ function AmbientPageOverlay({ active, children }: { active: boolean; children: R
       onMouseDown={dragWindowOnEmptyPress}
       className={cn(
         "relative h-full transition-colors duration-500 [-webkit-app-region:drag]",
-        active && "bg-background/45 backdrop-blur-[2px]",
+        // Full-screen backdrop blur over the live Pixi/background stage is very
+        // expensive in Windows WebView/Chromium; keep non-Now pages composited flat.
+        active && "bg-background/45",
       )}
     >
       {children}
