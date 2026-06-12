@@ -685,23 +685,27 @@ Scope:
 **Goal:** Add a complete listening-data page and move stats out of the Device profile card.
 
 **Tasks:**
-- [ ] Create a Listening stats settings pane or equivalent component.
-- [ ] Read totals from existing playback event/stat/aggregate tables.
-- [ ] Add summary cards for plays, listened time, unique listened tracks, active days, pending listens, and uploaded stats segments.
-- [ ] Add ranked lists for top tracks by time, top tracks by plays, top sets, top tags, and recently played.
-- [ ] Add time-range controls for 7 days, 30 days, and all time.
-- [ ] Add sync/accounting status using existing playback sync summary helpers.
-- [ ] Keep the Device pane focused on device identity/profile; link to Listening stats if needed.
-- [ ] Add i18n for all visible stats labels and play-count definition copy.
-- [ ] Add tests for empty state, aggregate totals, pending sync stats, and ranked-list ordering.
+- [x] Create a Listening stats settings pane or equivalent component.
+- [x] Read totals from existing playback event/stat/aggregate tables.
+- [x] Add summary cards for plays, listened time, unique listened tracks, active days, pending listens, and uploaded stats segments.
+- [x] Add ranked lists for top tracks by time, top tracks by plays, top sets, top tags, and recently played.
+- [x] Add time-range controls for 7 days, 30 days, and all time.
+- [x] Add sync/accounting status using existing playback sync summary helpers.
+- [x] Keep the Device pane focused on device identity/profile; link to Listening stats if needed.
+- [x] Add i18n for all visible stats labels and play-count definition copy.
+- [x] Add tests for empty state, aggregate totals, pending sync stats, and ranked-list ordering.
 
 ### Phase 7 Checklist
 
-- [ ] Users can see complete local listening data from Settings.
-- [ ] Device profile no longer carries the main stats surface.
-- [ ] Play-count semantics are clear.
-- [ ] Stats remain local-first and do not require cloud sync.
-- [ ] Large event lists do not make Settings sluggish.
+- [x] Users can see complete local listening data from Settings.
+- [x] Device profile no longer carries the main stats surface.
+- [x] Play-count semantics are clear.
+- [x] Stats remain local-first and do not require cloud sync.
+- [x] Large event lists do not make Settings sluggish.
+
+**Phase 7 Verification:**
+- `node_modules\.bin\vitest.CMD run src\components\settings\listening-stats-summary.test.ts src\components\settings\settings-nav.test.ts`
+- `node_modules\.bin\tsc.CMD --noEmit --pretty false`
 
 ### Phase 8: Desktop Downloads Rename + i18n
 
@@ -841,6 +845,7 @@ Scope:
 | 2026-06-13 | Codex | Completed Phase 3: local folder recursive preference, non-recursive scanner behavior, Settings toggle, repository helper, and targeted tests. |
 | 2026-06-13 | Codex | Advanced Phase 4: Storage & cache title, device usage progress/fallback, refresh action, and shared offline/playback cache controls in Storage. |
 | 2026-06-13 | Codex | Completed Phases 5, 6, and 8: Online Sync grouping, AI grouping, and Desktop downloads title/i18n. |
+| 2026-06-13 | Codex | Completed Phase 7: full Listening stats pane, range controls, ranked lists, Device pane link, i18n, and summary tests. |
 
 ---
 

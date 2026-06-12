@@ -19,6 +19,10 @@ import { CloudDriveSyncControls } from "@/components/settings/cloud-drive-sync-c
 import { DeviceAvatarPicker } from "@/components/settings/device-avatar-picker";
 import { FlowSettings } from "@/components/settings/flow-settings";
 import { ImportedFoldersSettings } from "@/components/settings/imported-folders-settings";
+import {
+  ListeningStatsLink,
+  ListeningStatsSettings,
+} from "@/components/settings/listening-stats-settings";
 import { LlmProviderSettings } from "@/components/settings/llm-provider-settings";
 import { LyricsSettings } from "@/components/settings/lyrics-settings";
 import { PersistentStorageSettings } from "@/components/settings/persistent-storage-settings";
@@ -68,7 +72,6 @@ import {
   resolveSmoothScroll,
 } from "@/lib/smooth-scroll/resolve";
 import { useSmoothScroll } from "@/lib/smooth-scroll/use-smooth-scroll";
-import { formatDuration } from "@/lib/utils";
 import {
   CLOUD_PRESET_IDS,
   type CloudPresetId,
@@ -90,7 +93,6 @@ import {
   setLocalDeviceAvatar,
   updateLocalDeviceProfile,
 } from "@/sync/device-repo";
-import { summarizePlaybackAggregates } from "@/sync/playback-aggregate-summary";
 import { summarizePlaybackSyncState } from "@/sync/playback-sync-summary";
 import type { SyncPhase, SyncProgress } from "@/sync/sync-orchestrator";
 import {
@@ -218,6 +220,8 @@ export function SettingsPage() {
     [],
     [],
   );
+  const tracks = useLiveQuery(() => db.tracks.toArray(), [], []);
+  const sessions = useLiveQuery(() => db.sessions.toArray(), [], []);
   const playbackEventRows = useLiveQuery(
     () =>
       localDevice
@@ -420,10 +424,6 @@ export function SettingsPage() {
 
   const cloudPreset = resolveCloudPreset(draft.musicCloudPreset);
   const syncProgress = latestSyncRun ? summarizeSyncRunProgress(latestSyncRun) : undefined;
-  const playbackSummary = useMemo(
-    () => summarizePlaybackAggregates(playbackAggregateRows ?? [], { scope: "track" }),
-    [playbackAggregateRows],
-  );
   const playbackSyncSummary = useMemo(
     () =>
       summarizePlaybackSyncState({
@@ -815,34 +815,13 @@ export function SettingsPage() {
           )}
 
           {activeItem === "listening-stats" && (
-            <Card>
-              <CardHeader>
-                <CardTitle>{t("settings.navListeningStats")}</CardTitle>
-              </CardHeader>
-              <CardContent className="grid gap-2 text-xs sm:grid-cols-2">
-                <div className="rounded-md border border-border bg-muted/25 p-3">
-                  <p className="text-muted-foreground">{t("settings.deviceTotalPlays")}</p>
-                  <p className="font-medium text-sm">{playbackSummary.playCount}</p>
-                </div>
-                <div className="rounded-md border border-border bg-muted/25 p-3">
-                  <p className="text-muted-foreground">{t("settings.deviceListenedTime")}</p>
-                  <p className="font-medium text-sm">
-                    {formatDuration(playbackSummary.listenedSec)}
-                  </p>
-                </div>
-                <div className="rounded-md border border-border bg-muted/25 p-3">
-                  <p className="text-muted-foreground">{t("settings.devicePendingListens")}</p>
-                  <p className="font-medium text-sm">
-                    {playbackSyncSummary.pendingEventCount} ·{" "}
-                    {formatDuration(playbackSyncSummary.pendingListenedSec)}
-                  </p>
-                </div>
-                <div className="rounded-md border border-border bg-muted/25 p-3">
-                  <p className="text-muted-foreground">{t("settings.deviceUploadedSegments")}</p>
-                  <p className="font-medium text-sm">{playbackSyncSummary.uploadedSegmentCount}</p>
-                </div>
-              </CardContent>
-            </Card>
+            <ListeningStatsSettings
+              tracks={tracks ?? []}
+              sessions={sessions ?? []}
+              aggregates={playbackAggregateRows ?? []}
+              events={playbackEventRows ?? []}
+              sync={playbackSyncSummary}
+            />
           )}
 
           {activeItem === "device-profile" && (
@@ -870,31 +849,7 @@ export function SettingsPage() {
                   onSaveAvatar={saveDeviceAvatar}
                 />
 
-                <div className="grid gap-2 rounded-md border border-border bg-muted/25 p-3 text-xs sm:grid-cols-2">
-                  <div>
-                    <p className="text-muted-foreground">{t("settings.deviceTotalPlays")}</p>
-                    <p className="font-medium text-sm">{playbackSummary.playCount}</p>
-                  </div>
-                  <div>
-                    <p className="text-muted-foreground">{t("settings.deviceListenedTime")}</p>
-                    <p className="font-medium text-sm">
-                      {formatDuration(playbackSummary.listenedSec)}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-muted-foreground">{t("settings.devicePendingListens")}</p>
-                    <p className="font-medium text-sm">
-                      {playbackSyncSummary.pendingEventCount} ·{" "}
-                      {formatDuration(playbackSyncSummary.pendingListenedSec)}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-muted-foreground">{t("settings.deviceUploadedSegments")}</p>
-                    <p className="font-medium text-sm">
-                      {playbackSyncSummary.uploadedSegmentCount}
-                    </p>
-                  </div>
-                </div>
+                <ListeningStatsLink onOpen={() => setSettingsItem("listening-stats")} />
 
                 <div className="grid gap-3 sm:grid-cols-2">
                   <Field label={t("settings.deviceName")}>
