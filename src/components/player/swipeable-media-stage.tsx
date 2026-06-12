@@ -124,6 +124,7 @@ export function SwipeableMediaStage({
   const coverEffect: SwipeCoverEffect = {
     backlightBlur: backlight.blur,
     backlightOpacity: backlight.opacity / 100,
+    backlightRange: backlight.range,
     backlightSaturation: backlight.saturation,
     mode: coverEffectMode,
   };
@@ -712,6 +713,7 @@ type VisualTrack = { initialCoverUrl: string | null; track: Track };
 type SwipeCoverEffect = {
   backlightBlur: number;
   backlightOpacity: number;
+  backlightRange: number;
   backlightSaturation: number;
   mode: "shadow" | "backlight" | "off";
 };
@@ -953,6 +955,7 @@ function TrackVisual({
         >
           <CoverBacklightCanvas
             blur={coverEffect.backlightBlur}
+            range={coverEffect.backlightRange}
             saturation={coverEffect.backlightSaturation}
             url={coverUrl}
           />

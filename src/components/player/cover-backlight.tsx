@@ -4,18 +4,23 @@ import { cn } from "@/lib/utils";
 export function CoverBacklightCanvas({
   blur,
   className,
+  range,
   saturation,
   url,
 }: {
   blur: number;
   className?: string;
+  range: number;
   saturation: number;
   url: string;
 }) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const frameRef = useRef<{ blur: number; image: HTMLImageElement; saturation: number } | null>(
-    null,
-  );
+  const frameRef = useRef<{
+    blur: number;
+    image: HTMLImageElement;
+    range: number;
+    saturation: number;
+  } | null>(null);
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
@@ -27,8 +32,8 @@ export function CoverBacklightCanvas({
     image.referrerPolicy = "no-referrer";
     image.onload = () => {
       if (cancelled) return;
-      frameRef.current = { blur, image, saturation };
-      const drawn = drawBacklightFrame(canvasRef.current, image, blur, saturation);
+      frameRef.current = { blur, image, range, saturation };
+      const drawn = drawBacklightFrame(canvasRef.current, image, blur, range, saturation);
       if (drawn && !cancelled) setReady(true);
     };
     image.onerror = () => {
@@ -39,7 +44,7 @@ export function CoverBacklightCanvas({
     return () => {
       cancelled = true;
     };
-  }, [blur, saturation, url]);
+  }, [blur, range, saturation, url]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -47,7 +52,9 @@ export function CoverBacklightCanvas({
     const redraw = () => {
       const frame = frameRef.current;
       if (!frame) return;
-      if (drawBacklightFrame(canvas, frame.image, frame.blur, frame.saturation)) setReady(true);
+      if (drawBacklightFrame(canvas, frame.image, frame.blur, frame.range, frame.saturation)) {
+        setReady(true);
+      }
     };
     const ro = new ResizeObserver(redraw);
     ro.observe(canvas);
@@ -65,8 +72,10 @@ export function CoverBacklightCanvas({
       )}
       style={{
         backfaceVisibility: "hidden",
-        transform: "scale(var(--now-playing-cover-backlight-scale, 1.12))",
-        willChange: "transform",
+        height: "190%",
+        left: "-45%",
+        top: "-45%",
+        width: "190%",
       }}
     />
   );
@@ -76,6 +85,7 @@ function drawBacklightFrame(
   canvas: HTMLCanvasElement | null,
   image: HTMLImageElement,
   blurPx: number,
+  range: number,
   saturation: number,
 ): boolean {
   if (!canvas || image.naturalWidth <= 0 || image.naturalHeight <= 0) return false;
@@ -99,7 +109,10 @@ function drawBacklightFrame(
 
   const blur = Math.max(0, blurPx * dpr);
   ctx.filter = `blur(${blur}px) saturate(${saturation}%)`;
-  drawImageCover(ctx, image, w, h, Math.ceil(blur * 2));
+  const coverW = w / 1.9;
+  const coverH = h / 1.9;
+  const scale = 1 + range / 100;
+  drawImageCover(ctx, image, w / 2, h / 2, coverW * scale, coverH * scale);
   ctx.filter = "none";
   return true;
 }
@@ -107,17 +120,16 @@ function drawBacklightFrame(
 function drawImageCover(
   ctx: CanvasRenderingContext2D,
   img: HTMLImageElement,
+  centerX: number,
+  centerY: number,
   width: number,
   height: number,
-  bleed = 0,
 ) {
-  const targetW = width + bleed * 2;
-  const targetH = height + bleed * 2;
-  const scale = Math.max(targetW / img.naturalWidth, targetH / img.naturalHeight);
+  const scale = Math.max(width / img.naturalWidth, height / img.naturalHeight);
   const drawW = img.naturalWidth * scale;
   const drawH = img.naturalHeight * scale;
-  const x = (width - drawW) / 2;
-  const y = (height - drawH) / 2;
+  const x = centerX - drawW / 2;
+  const y = centerY - drawH / 2;
   ctx.drawImage(img, x, y, drawW, drawH);
 }
 

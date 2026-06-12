@@ -132,6 +132,7 @@ export function MediaStage({
         active={showCoverBacklight}
         blur={backlight.blur}
         opacity={backlight.opacity / 100}
+        range={backlight.range}
         saturation={backlight.saturation}
         url={coverUrl}
       />
@@ -170,12 +171,14 @@ function NowPlayingCoverBacklight({
   active,
   blur,
   opacity,
+  range,
   saturation,
   url,
 }: {
   active: boolean;
   blur: number;
   opacity: number;
+  range: number;
   saturation: number;
   url: string | null;
 }) {
@@ -192,7 +195,7 @@ function NowPlayingCoverBacklight({
           transition={{ duration: 0.42, ease: "easeOut" }}
           className="pointer-events-none absolute inset-0 z-0 now-playing-cover-backlight-clip"
         >
-          <CoverBacklightCanvas blur={blur} saturation={saturation} url={url} />
+          <CoverBacklightCanvas blur={blur} range={range} saturation={saturation} url={url} />
         </motion.div>
       )}
     </AnimatePresence>
