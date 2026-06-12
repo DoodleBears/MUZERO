@@ -39,7 +39,7 @@ export const SETTINGS_NAV = [
   },
   {
     labelKey: "settings.navSecStorage",
-    items: [{ id: "storage", labelKey: "streamCache.permanentTitle", icon: "hard-drive" }],
+    items: [{ id: "storage", labelKey: "settings.storageTitle", icon: "hard-drive" }],
   },
   {
     labelKey: "settings.navSecCloud",
@@ -57,9 +57,7 @@ export const SETTINGS_NAV = [
   },
   {
     labelKey: "settings.navSecListening",
-    items: [
-      { id: "listening-stats", labelKey: "settings.navListeningStats", icon: "bar-chart-3" },
-    ],
+    items: [{ id: "listening-stats", labelKey: "settings.navListeningStats", icon: "bar-chart-3" }],
   },
   {
     labelKey: "settings.navSecControls",

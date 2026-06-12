@@ -615,24 +615,28 @@ Scope:
 **Goal:** Promote storage/cache management to a dedicated sidebar item that works for browser OPFS, IndexedDB, and desktop storage.
 
 **Tasks:**
-- [ ] Move `PersistentStorageSettings` into the new Storage section.
-- [ ] Add an overall usage summary with a progress bar using `navigator.storage.estimate()` when available.
-- [ ] Keep existing backend buckets: IndexedDB, OPFS, Electron file storage.
-- [ ] Add playback cache and offline stream cache summaries into the same page, or link them from Online Sources with a clear "Manage in Storage" affordance.
-- [ ] Add a "refresh usage" action.
+- [x] Move `PersistentStorageSettings` into the new Storage section.
+- [x] Add an overall usage summary with a progress bar using `navigator.storage.estimate()` when available.
+- [x] Keep existing backend buckets: IndexedDB, OPFS, Electron file storage.
+- [x] Add playback cache and offline stream cache summaries into the same page, or link them from Online Sources with a clear "Manage in Storage" affordance.
+- [x] Add a "refresh usage" action.
 - [ ] Add a browser-only persistent-storage status/action when supported.
-- [ ] Add scoped cleanup actions for playback cache, offline stream cache, orphan cleanup, legacy migration, and cover repair.
-- [ ] Add i18n for storage quota, OPFS, persistent storage, safe cache clearing, and storage-pressure copy.
-- [ ] Add tests for usage progress rendering, quota-unavailable fallback, and clear-cache actions.
+- [x] Add scoped cleanup actions for playback cache, offline stream cache, orphan cleanup, legacy migration, and cover repair.
+- [x] Add i18n for storage quota, OPFS, persistent storage, safe cache clearing, and storage-pressure copy.
+- [x] Add tests for usage progress rendering, quota-unavailable fallback, and clear-cache actions.
 
 ### Phase 4 Checklist
 
-- [ ] Browser/OPFS users can find a dedicated Storage & cache sidebar item.
-- [ ] Usage is visible as bytes and as a progress bar when quota is known.
-- [ ] Cache clearing is scoped and does not imply permanent media deletion.
-- [ ] OPFS, IndexedDB, and Electron file buckets remain visible.
-- [ ] Existing persistent media migration/cleanup/repair actions still work.
-- [ ] No local source paths are exposed in exported diagnostics or remote sync.
+- [x] Browser/OPFS users can find a dedicated Storage & cache sidebar item.
+- [x] Usage is visible as bytes and as a progress bar when quota is known.
+- [x] Cache clearing is scoped and does not imply permanent media deletion.
+- [x] OPFS, IndexedDB, and Electron file buckets remain visible.
+- [x] Existing persistent media migration/cleanup/repair actions still work.
+- [x] No local source paths are exposed in exported diagnostics or remote sync.
+
+**Phase 4 Verification:**
+- `node_modules\.bin\vitest.CMD run src\components\settings\persistent-storage-settings.test.tsx src\components\settings\settings-nav.test.ts`
+- `node_modules\.bin\tsc.CMD --noEmit --pretty false` currently blocked by unrelated worktree error: `src/lib/system-playlists.test.ts(154,5)` duplicate `id` property.
 
 ### Phase 5: Online Sync Section Split
 
@@ -826,6 +830,7 @@ Scope:
 | 2026-06-13 | Codex | Added Storage & cache best-practice page, OPFS/browser quota management, usage progress bar requirements, and complete Listening stats section. |
 | 2026-06-13 | Codex | Completed Phase 2: new Settings IA, icon + label sidebar, stale-id aliases, and routed existing panes to new ids. |
 | 2026-06-13 | Codex | Completed Phase 3: local folder recursive preference, non-recursive scanner behavior, Settings toggle, repository helper, and targeted tests. |
+| 2026-06-13 | Codex | Advanced Phase 4: Storage & cache title, device usage progress/fallback, refresh action, and shared offline/playback cache controls in Storage. |
 
 ---
 

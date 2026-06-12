@@ -1,7 +1,8 @@
 import { useLiveQuery } from "dexie-react-hooks";
 import { Palette, RefreshCw, Trash2, XCircle } from "lucide-react";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { StreamCacheControls } from "@/components/settings/stream-cache-controls";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -40,6 +41,11 @@ const ROLE_LABEL_KEYS = {
   memory: "streamCache.permanentRole_memory",
 } as const satisfies Record<MediaBlob["role"], string>;
 
+interface BrowserStorageEstimate {
+  usage: number;
+  quota?: number;
+}
+
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   const units = ["KB", "MB", "GB", "TB"];
@@ -59,6 +65,8 @@ export function PersistentStorageSettings() {
     null,
   );
   const [refreshToken, setRefreshToken] = useState(0);
+  const [storageRefreshToken, setStorageRefreshToken] = useState(0);
+  const [browserStorage, setBrowserStorage] = useState<BrowserStorageEstimate | null>(null);
   const migrationAbortRef = useRef<AbortController | null>(null);
   const summary = useLiveQuery(
     () => summarizePersistentMediaStorage(undefined, { includeHealth: true }),
@@ -70,6 +78,27 @@ export function PersistentStorageSettings() {
     [refreshToken],
     0,
   );
+
+  useEffect(() => {
+    void storageRefreshToken;
+    let cancelled = false;
+    async function loadBrowserStorage() {
+      const estimate = await navigator.storage?.estimate?.();
+      if (cancelled) return;
+      const usage = Math.max(0, Math.round(estimate?.usage ?? 0));
+      const quota =
+        estimate?.quota && Number.isFinite(estimate.quota) && estimate.quota > 0
+          ? Math.round(estimate.quota)
+          : undefined;
+      setBrowserStorage({ usage, quota });
+    }
+    loadBrowserStorage().catch(() => {
+      if (!cancelled) setBrowserStorage({ usage: 0 });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [storageRefreshToken]);
 
   async function migrateLegacy() {
     setBusy("migrate");
@@ -109,6 +138,11 @@ export function PersistentStorageSettings() {
     migrationAbortRef.current?.abort();
   }
 
+  function refreshUsage() {
+    setRefreshToken((value) => value + 1);
+    setStorageRefreshToken((value) => value + 1);
+  }
+
   async function cleanupOrphans() {
     setBusy("cleanup");
     try {
@@ -142,10 +176,12 @@ export function PersistentStorageSettings() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>{t("streamCache.permanentTitle")}</CardTitle>
+        <CardTitle>{t("settings.storageTitle")}</CardTitle>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
         <p className="text-muted-foreground text-xs">{t("streamCache.permanentHint")}</p>
+        <StorageUsage estimate={browserStorage} onRefresh={refreshUsage} />
+        <StreamCacheControls />
         <p className="font-medium text-sm">
           {t("streamCache.permanentUsage", {
             count: summary.count,
@@ -196,6 +232,10 @@ export function PersistentStorageSettings() {
             </div>
             <div
               role="progressbar"
+              aria-label={t("streamCache.permanentProgress", {
+                processed: migrationProgress.processed,
+                total: migrationProgress.total,
+              })}
               aria-valuemin={0}
               aria-valuemax={100}
               aria-valuenow={migrationPercent}
@@ -262,6 +302,56 @@ export function PersistentStorageSettings() {
         </div>
       </CardContent>
     </Card>
+  );
+}
+
+function StorageUsage({
+  estimate,
+  onRefresh,
+}: {
+  estimate: BrowserStorageEstimate | null;
+  onRefresh: () => void;
+}) {
+  const { t } = useTranslation();
+  const usage = estimate?.usage ?? 0;
+  const quota = estimate?.quota;
+  const percent = quota ? Math.min(100, Math.round((usage / quota) * 100)) : null;
+  const usageText =
+    quota == null
+      ? t("settings.storageUsageUnavailable", { usage: formatBytes(usage) })
+      : t("settings.storageUsageRatio", {
+          percent: percent ?? 0,
+          quota: formatBytes(quota),
+          usage: formatBytes(usage),
+        });
+  return (
+    <div className="rounded-md border border-border bg-muted/25 p-3">
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div className="min-w-0">
+          <p className="font-medium text-sm">{t("settings.storageUsageTitle")}</p>
+          <p className="text-muted-foreground text-xs">{usageText}</p>
+        </div>
+        <Button type="button" variant="outline" size="sm" onClick={onRefresh}>
+          <RefreshCw />
+          {t("settings.storageUsageRefresh")}
+        </Button>
+      </div>
+      {percent != null && (
+        <div
+          role="progressbar"
+          aria-label={t("settings.storageUsageTitle")}
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={percent}
+          className="mt-3 h-2 overflow-hidden rounded-full bg-background"
+        >
+          <div
+            className="h-full rounded-full bg-primary transition-[width]"
+            style={{ width: `${percent}%` }}
+          />
+        </div>
+      )}
+    </div>
   );
 }
 
