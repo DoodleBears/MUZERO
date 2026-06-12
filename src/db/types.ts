@@ -516,7 +516,7 @@ export interface AppSettings {
   streamOnlineSetId?: string;
   /**
    * Auto-download streamed songs to a local blob after they play (offline cache,
-   * Phase 5). Off by default — it's bandwidth + disk heavy and personal-use only.
+   * Phase 5). On by default so online songs become available offline after play.
    * A visible Settings toggle (rule 3); cleared via "clear cache".
    */
   autoCacheStreamed?: boolean;
@@ -841,6 +841,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   musicCloudPreset: "mureka",
   locale: "en",
   autoFetchLyrics: true,
+  autoCacheStreamed: true,
   lyricsProviderId: "lrclib",
   theme: "dark",
   appIcon: "light",
