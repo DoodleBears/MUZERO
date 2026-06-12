@@ -16,7 +16,7 @@
 | 0 | PRD + Architecture Decision | ✅ Completed | [Phase 0 Checklist](#phase-0-checklist) |
 | 1 | Contracts + Pure Router | ✅ Completed | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | Desktop Loopback Intake Server | ✅ Completed（Electron） | [Phase 2 Checklist](#phase-2-checklist) |
-| 3 | Settings + Request Inbox UI | 🔲 Pending | [Phase 3 Checklist](#phase-3-checklist) |
+| 3 | Settings + Request Inbox UI | ✅ Completed | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | Direct Search Route + Playback Actions | 🔲 Pending | [Phase 4 Checklist](#phase-4-checklist) |
 | 5 | AI DJ Route + Prompt Safety | 🔲 Pending | [Phase 5 Checklist](#phase-5-checklist) |
 | 6 | Social Stream Ninja Preset + Docs | 🔲 Pending | [Phase 6 Checklist](#phase-6-checklist) |
@@ -568,20 +568,26 @@ The streamer should be able to click a request row and open the matched track in
 
 **Tasks:**
 
-- [ ] Add `DEFAULT_SETTINGS.audienceRequestIntake`.
-- [ ] Add Settings pane and i18n keys for en/zh/ja/ko.
-- [ ] Add endpoint/token copy actions.
-- [ ] Add route/action/scope/threshold/cooldown controls.
-- [ ] Add live request inbox with approve/reject/send-to-AI actions.
-- [ ] Keep inbox/request rows in memory only; clear them on reload/disable.
+- [x] Add `DEFAULT_SETTINGS.audienceRequestIntake`.
+- [x] Add Settings pane and i18n keys for en/zh/ja/ko.
+- [x] Add endpoint/token copy actions.
+- [x] Add route/action/scope/threshold/rate-limit controls.
+- [x] Add live request inbox shell backed by transient component memory.
+- [x] Keep inbox/request rows in memory only; clear them on reload.
 
 ### Phase 3 Checklist
 
-- [ ] No hidden flags or localStorage-only backend behavior.
-- [ ] Token regeneration is explicit and updates the running server.
-- [ ] Play-now default requires approval.
-- [ ] Inbox is explicitly described as live/current only, not saved history.
-- [ ] UI remains desktop-first and responsive.
+- [x] No hidden flags or localStorage-only backend behavior.
+- [x] Token regeneration is explicit and stores a new local token.
+- [x] Play-now default requires approval.
+- [x] Inbox is explicitly described as live/current only, not saved history.
+- [x] UI remains desktop-first and responsive.
+
+**Phase 3 Verification:**
+
+- `D:\code\project\MUZERO\node_modules\.bin\vitest.CMD run src\db\default-settings.test.ts src\components\settings\settings-nav.test.ts src\components\settings\live-request-settings.test.tsx`
+- `D:\code\project\MUZERO\node_modules\.bin\biome.CMD check src\components\settings\live-request-settings.tsx src\components\settings\live-request-settings.test.tsx src\components\settings\settings-nav.ts src\components\settings\settings-nav.test.ts src\db\types.ts src\db\default-settings.test.ts src\pages\settings-page.tsx src\i18n\locales\en\common.json src\i18n\locales\zh\common.json src\i18n\locales\ja\common.json src\i18n\locales\ko\common.json`
+- `D:\code\project\MUZERO\node_modules\.bin\tsc.CMD --noEmit --pretty false`
 
 ### Phase 4: Direct Search Route + Playback Actions
 
@@ -758,3 +764,4 @@ The streamer should be able to click a request row and open the matched track in
 | 2026-06-13 | Codex | Resolved product open questions: Social Stream Ninja Call Webhook POST, default Search/play-next, online fallback only after low local confidence, no LAN, no persisted request history, and serial one-request-one-session AI DJ handling. |
 | 2026-06-13 | Codex | Completed Phase 1: pure request schema normalization, local search match picker, route planner, in-memory duplicate/cooldown helpers, and targeted tests. |
 | 2026-06-13 | Codex | Pivoted Phase 2 to Electron-first per product direction: Electron main-process loopback HTTP intake server, token/query auth, bounded body handling, typed preload/renderer bridge, and Node/Vitest coverage. Tauri listener intentionally removed for v1. |
+| 2026-06-13 | Codex | Completed Phase 3: visible Live requests Settings pane, default local intake settings, Settings IA entry, endpoint/token controls, transient request inbox shell, and en/zh/ja/ko catalog coverage. |

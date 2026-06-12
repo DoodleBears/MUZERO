@@ -52,6 +52,7 @@ export const SETTINGS_NAV = [
     labelKey: "settings.navSecAi",
     items: [
       { id: "ai-dj-model", labelKey: "settings.navDjModel", icon: "brain-circuit" },
+      { id: "live-requests", labelKey: "settings.liveRequestsTitle", icon: "radio" },
       { id: "ai-music-generation", labelKey: "settings.musicTitle", icon: "sparkles" },
     ],
   },
@@ -84,6 +85,7 @@ const SETTINGS_ITEM_ALIASES: Record<string, string> = {
   "cloud-owner": "cloud",
   "cloud-sync": "cloud",
   device: "device-profile",
+  "audience-requests": "live-requests",
   "playback-dj": "ai-dj-model",
   "playback-music": "ai-music-generation",
   "stream-sources": "online-sources",

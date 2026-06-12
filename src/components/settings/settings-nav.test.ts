@@ -16,6 +16,7 @@ describe("settings-nav", () => {
       "cloud",
       "cloud-presence",
       "ai-dj-model",
+      "live-requests",
       "ai-music-generation",
       "listening-stats",
       "shortcuts",
@@ -60,6 +61,7 @@ describe("settings-nav", () => {
   it("aliases stale settings item ids to the new IA", () => {
     expect(resolveActiveSettingsItem("device")).toBe("device-profile");
     expect(resolveActiveSettingsItem("playback-dj")).toBe("ai-dj-model");
+    expect(resolveActiveSettingsItem("audience-requests")).toBe("live-requests");
     expect(resolveActiveSettingsItem("playback-music")).toBe("ai-music-generation");
     expect(resolveActiveSettingsItem("stream-sources")).toBe("online-sources");
     expect(resolveActiveSettingsItem("version-history")).toBe("desktop-downloads");

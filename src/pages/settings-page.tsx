@@ -26,6 +26,7 @@ import {
   ListeningStatsLink,
   ListeningStatsSettings,
 } from "@/components/settings/listening-stats-settings";
+import { LiveRequestSettings } from "@/components/settings/live-request-settings";
 import { LlmProviderSettings } from "@/components/settings/llm-provider-settings";
 import { LyricsSettings } from "@/components/settings/lyrics-settings";
 import { PersistentStorageSettings } from "@/components/settings/persistent-storage-settings";
@@ -904,6 +905,8 @@ export function SettingsPage() {
               </CardContent>
             </Card>
           )}
+
+          {activeItem === "live-requests" && <LiveRequestSettings />}
 
           {activeItem === "ai-music-generation" && (
             <Card>
