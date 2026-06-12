@@ -13,7 +13,7 @@
 
 | Phase | Name | Status | Link |
 |-------|------|--------|------|
-| 1 | 产品模式 + 设置契约 + 运动参数纯函数 | 🔲 Pending | [Phase 1 Checklist](#phase-1-checklist) |
+| 1 | 产品模式 + 设置契约 + 运动参数纯函数 | ✅ Completed | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | 歌词 follow controller 重构：Classic / Inertial 两种滚动手感 | 🔲 Pending | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | Cascade 模式：active 邻近行级联 delay / residual y / opacity-scale 协调 | 🔲 Pending | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | Settings / tuning panel / i18n / reduced-motion / 真机验收 | 🔲 Pending | [Phase 4 Checklist](#phase-4-checklist) |
@@ -280,19 +280,21 @@ The lyrics viewport should remain native `overflow-y-auto overscroll-contain`; g
 **Goal:** Add the visible product mode and pure config resolver without changing runtime motion yet.
 
 **Tasks:**
-- [ ] Add `lyricsMotionMode?: "classic" | "inertial" | "cascade"` to `AppSettings`.
-- [ ] Add `src/lyrics/lyric-motion.ts` with mode constants, sanitizer, and `resolveLyricsMotionMode`.
-- [ ] Add unit tests for resolver defaults, invalid values, and reduced-motion fallback.
-- [ ] Add i18n keys for en / zh / ja / ko.
-- [ ] Add UI control in shared lyrics tuning controls; default selection displays Classic.
+- [x] Add `lyricsMotionMode?: "classic" | "inertial" | "cascade"` to `AppSettings`.
+- [x] Add `src/lyrics/lyric-motion.ts` with mode constants, sanitizer, and `resolveLyricsMotionMode`.
+- [x] Add unit tests for resolver defaults, invalid values, and reduced-motion fallback.
+- [x] Add i18n keys for en / zh / ja / ko.
+- [x] Add UI control in shared lyrics tuning controls; default selection displays Classic.
 
 ### Phase 1 Checklist
 
-- [ ] Old settings rows render as Classic.
-- [ ] Invalid stored mode resolves to Classic.
-- [ ] Reduced-motion resolver returns low-motion config.
-- [ ] No hidden localStorage / URL / global flags.
-- [ ] Typecheck and Biome pass for touched files.
+- [x] Old settings rows render as Classic.
+- [x] Invalid stored mode resolves to Classic.
+- [x] Reduced-motion resolver returns low-motion config.
+- [x] No hidden localStorage / URL / global flags.
+- [x] Typecheck and Biome pass for touched files.
+
+> **Phase 1 implementation note (2026-06-13):** Added `src/lyrics/lyric-motion.ts` with codename-stable `classic / inertial / cascade` modes and a pure resolver; added `lyricsMotionMode` to `AppSettings` with Classic as the default; exposed a segmented control in shared `LyricsTuningControls` so Settings and the floating tuning panel stay in sync. Cascade's hover `title` uses the i18n hint that explicitly describes the mode as Apple Music-like. Verification: `vitest run src/lyrics/lyric-motion.test.ts src/components/player/lyrics-tuning-controls.test.tsx` (9 tests), touched-file Biome, and `tsc --noEmit` all passed.
 
 ### Phase 2: Follow Controller Refactor
 
@@ -407,6 +409,7 @@ The lyrics viewport should remain native `overflow-y-auto overscroll-contain`; g
 |------|--------|---------|
 | 2026-06-13 | MUZERO | Initial draft: lyrics motion modes PRD. Recommends Motion-based Classic / Inertial / Cascade; explicitly excludes GSAP v1; captures Lenis conflict and reduced-motion requirements. |
 | 2026-06-13 | MUZERO | Resolved Q3/Q5: UI may explicitly describe Cascade as Apple Music-like in hover tooltip/popover copy; all lyrics surfaces, including immersive overlay, use one global `lyricsMotionMode`. |
+| 2026-06-13 | MUZERO | Phase 1 completed: settings contract, pure motion resolver, shared tuning control, four-locale i18n, resolver/UI tests. |
 
 ---
 
