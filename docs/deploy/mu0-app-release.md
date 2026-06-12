@@ -93,6 +93,8 @@ RELEASE_CHANNEL=stable
 
 R2 write credentials stay only in the build machine's rclone config or CI secrets. Do not commit them, put them in the app bundle, or log them.
 
+`make release-mac` intentionally sets `CSC_IDENTITY_AUTO_DISCOVERY=false` so a local `Apple Development` certificate is not picked up accidentally. Without an Apple Developer Program account, macOS artifacts can still be built and uploaded, but they are unsigned/unnotarized test builds. For public Gatekeeper-friendly distribution, build with a `Developer ID Application` certificate and notarize the DMG/ZIP.
+
 ## Verify
 
 ```bash

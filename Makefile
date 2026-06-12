@@ -255,7 +255,7 @@ release-build: release-check
 release-mac:
 	@[ "$(UNAME)" = "Darwin" ] || { echo "ERROR: macOS bundles can only be built on a Mac."; exit 1; }
 	@$(MAKE) --no-print-directory release-build
-	$(PM) exec electron-builder --mac
+	CSC_IDENTITY_AUTO_DISCOVERY=false $(PM) exec electron-builder --mac
 	@$(MAKE) --no-print-directory release-locate
 
 release-win:
