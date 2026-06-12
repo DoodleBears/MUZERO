@@ -63,4 +63,14 @@ describe("cheatSheetRowMatches", () => {
     expect(cheatSheetRowMatches(row, "q", "Previous track")).toBe(true); // chord
     expect(cheatSheetRowMatches(row, "zzz", "Previous track")).toBe(false);
   });
+
+  it("matches the row surface scope and localized surface label", () => {
+    const nowRow = buildCheatSheet(bindings, "other")
+      .find((s) => s.scope === "now")
+      ?.rows.find((r) => r.actionId === "playback.prev");
+    expect(nowRow).toBeTruthy();
+    if (!nowRow) return;
+    expect(cheatSheetRowMatches(nowRow, "now", "Previous track", "Now Playing")).toBe(true);
+    expect(cheatSheetRowMatches(nowRow, "正在播放", "上一首", "正在播放")).toBe(true);
+  });
 });

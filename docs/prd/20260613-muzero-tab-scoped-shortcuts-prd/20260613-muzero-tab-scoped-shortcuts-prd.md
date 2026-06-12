@@ -1,6 +1,6 @@
 # PRD: Tab-Scoped Keyboard Shortcuts
 
-**Status:** In Progress
+**Status:** Completed
 **Created:** 2026-06-13
 **Author:** MUZERO
 **Module:** Shortcuts - per-tab / per-surface key ownership for playback, library, queue, and inspector shortcuts
@@ -14,7 +14,7 @@
 | 1 | Scoped binding model | Completed | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | Now Playing arrow transport | Completed | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | Settings UI by surface | Completed | [Phase 3 Checklist](#phase-3-checklist) |
-| 4 | Tooltip and cheat-sheet parity | Pending | [Phase 4 Checklist](#phase-4-checklist) |
+| 4 | Tooltip and cheat-sheet parity | Completed | [Phase 4 Checklist](#phase-4-checklist) |
 
 > Status Legend: Completed | In Progress | Pending
 
@@ -374,16 +374,16 @@ Do not put merged bindings into Zustand. Continue deriving them from Dexie setti
 **Goal:** On-screen hints match the active surface and Settings model.
 
 **Tasks:**
-- [ ] Add scoped hint helpers for Dock and transport controls.
-- [ ] Show Now Playing arrow hints in Now Playing-specific controls.
-- [ ] Keep global `Q/E` hints where the control is not surface-specific.
-- [ ] Update shortcut cheat-sheet search to include surface names.
+- [x] Add scoped hint helpers for Dock and transport controls.
+- [x] Show Now Playing arrow hints in Now Playing-specific controls.
+- [x] Keep global `Q/E` hints where the control is not surface-specific.
+- [x] Update shortcut cheat-sheet search to include surface names.
 
 ### Phase 4 Checklist
 
-- [ ] Dock play tooltip can show both global and Now Playing transport keys when useful.
-- [ ] Track identity hover describes drag switching and arrow switching without contradiction.
-- [ ] Cheat-sheet search finds `now`, `library`, `arrow`, `previous`, `next`, and localized equivalents.
+- [x] Dock play tooltip can show both global and Now Playing transport keys when useful.
+- [x] Track identity hover describes drag switching and arrow switching without contradiction.
+- [x] Cheat-sheet search finds `now`, `library`, `arrow`, `previous`, `next`, and localized equivalents.
 
 ---
 
@@ -442,3 +442,4 @@ Do not put merged bindings into Zustand. Continue deriving them from Dexie setti
 | 2026-06-13 | MUZERO | Completed Phase 1: scoped binding model, v1 import compatibility, per-scope conflict checks, and v2 keymap export schema. |
 | 2026-06-13 | MUZERO | Completed Phase 2: Now Playing owns `ArrowLeft`/`ArrowRight` for previous/next, dispatcher derives active scopes from shell state, and Now Playing/Dock tooltips can show scoped arrow hints. |
 | 2026-06-13 | MUZERO | Completed Phase 3: Settings shortcut rows are grouped by surface, recorder targets `(actionId, scope)`, scoped reset preserves sibling scopes, and scope labels are localized in en/zh/ja/ko. |
+| 2026-06-13 | MUZERO | Completed Phase 4: scoped hint parity for Dock/Now Playing, drag-vs-keyboard tooltip labels, and surface-name cheat-sheet search. |

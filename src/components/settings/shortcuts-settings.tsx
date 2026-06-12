@@ -121,14 +121,15 @@ export function ShortcutsSettings() {
           ))}
         </div>
         {sections.map((section) => {
+          const scopeLabel = t(`shortcuts.scope.${section.scope}`);
           const rows = section.rows.filter((row) =>
-            cheatSheetRowMatches(row, query, td(row.labelKey)),
+            cheatSheetRowMatches(row, query, td(row.labelKey), scopeLabel),
           );
           if (rows.length === 0) return null;
           return (
             <section key={section.scope} className="flex flex-col gap-0.5">
               <h3 className="px-2 pb-1 font-semibold text-muted-foreground text-xs uppercase tracking-wide">
-                {t(`shortcuts.scope.${section.scope}`)}
+                {scopeLabel}
               </h3>
               {rows.map((row) => (
                 <ShortcutRow

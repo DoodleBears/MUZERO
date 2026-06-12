@@ -133,6 +133,18 @@ export function buildCheatSheet(bindings: MergedBindings, platform: Platform): C
  * action label. Transliteration-aware (Chinese pinyin / Japanese kana↔romaji) via
  * `freeTextMatches`, over the label, action id, keywords, and chord text.
  */
-export function cheatSheetRowMatches(row: CheatSheetRow, query: string, label: string): boolean {
-  return freeTextMatches(query, [label, row.actionId, ...row.keywords, ...row.chips.flat()]);
+export function cheatSheetRowMatches(
+  row: CheatSheetRow,
+  query: string,
+  label: string,
+  scopeLabel: string = row.scope,
+): boolean {
+  return freeTextMatches(query, [
+    label,
+    scopeLabel,
+    row.scope,
+    row.actionId,
+    ...row.keywords,
+    ...row.chips.flat(),
+  ]);
 }

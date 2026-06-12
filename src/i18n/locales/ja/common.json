@@ -177,6 +177,8 @@
     "volume": "音量",
     "shuffle": "シャッフル",
     "dragSwitch": "ドラッグで曲を切替",
+    "dragPrevious": "前の曲へドラッグ",
+    "dragNext": "次の曲へドラッグ",
     "playbackError": "再生エラー",
     "loadingRemote": "クラウドから読み込み中：{{title}}",
     "loadingTrack": "準備中：{{title}}",
