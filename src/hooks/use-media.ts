@@ -268,38 +268,71 @@ export function useTrackMediaUrl(
 // state — see CLAUDE.md rule 6): run the pass once, and remember which cover
 // blobs we've already attempted so the loop converges (un-encodable ones aren't
 // retried forever).
-let coverMetadataBackfillStarted = false;
+let coverMetadataBackfillRunning = false;
 const coverMetadataBackfillSkip = new Set<string>();
+const COVER_METADATA_BACKFILL_BATCH_LIMIT = 2;
+const COVER_METADATA_BACKFILL_INITIAL_DELAY_MS = 2500;
+const COVER_METADATA_BACKFILL_NEXT_DELAY_MS = 2000;
+const COVER_METADATA_BACKFILL_IDLE_TIMEOUT_MS = 5000;
 
 /**
  * Lazily generate cover metadata for legacy/imported covers: thumbhash previews
- * plus persistent palette metadata for visualizers. Runs once per session, a few
- * covers per idle tick, until none remain — so an existing library fills itself in
- * without janking the gallery. Call from a long-lived surface (the gallery page).
- * Off the render path; failures are swallowed.
+ * plus persistent palette metadata for visualizers. Runs only while the gallery
+ * is mounted, in small idle batches, so a legacy library can heal itself without
+ * turning the gallery tab into a background batch job.
  */
 export function useCoverMetadataBackfill(): void {
   useEffect(() => {
-    if (coverMetadataBackfillStarted) return;
-    coverMetadataBackfillStarted = true;
-    const schedule = (fn: () => void) => {
-      if (typeof requestIdleCallback === "function") requestIdleCallback(fn, { timeout: 2000 });
-      else setTimeout(fn, 500);
+    if (coverMetadataBackfillRunning) return;
+    coverMetadataBackfillRunning = true;
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let idleId: number | undefined;
+
+    const schedule = (fn: () => void, delayMs: number) => {
+      timer = setTimeout(() => {
+        timer = undefined;
+        if (cancelled) return;
+        if (typeof requestIdleCallback === "function") {
+          idleId = requestIdleCallback(
+            () => {
+              idleId = undefined;
+              if (!cancelled) fn();
+            },
+            { timeout: COVER_METADATA_BACKFILL_IDLE_TIMEOUT_MS },
+          );
+          return;
+        }
+        fn();
+      }, delayMs);
     };
     const tick = async () => {
       try {
         const { attempted } = await backfillCoverMetadata(db, {
           encode: encodeCoverThumbhash,
-          limit: 6,
+          limit: COVER_METADATA_BACKFILL_BATCH_LIMIT,
           skip: coverMetadataBackfillSkip,
         });
         for (const id of attempted) coverMetadataBackfillSkip.add(id);
-        if (attempted.length > 0) schedule(() => void tick()); // more remain → keep going
+        if (!cancelled && attempted.length > 0) {
+          schedule(() => void tick(), COVER_METADATA_BACKFILL_NEXT_DELAY_MS);
+          return;
+        }
+        coverMetadataBackfillRunning = false;
       } catch (err) {
+        coverMetadataBackfillRunning = false;
         log.debug("cover metadata backfill stopped", err);
       }
     };
-    schedule(() => void tick());
+    schedule(() => void tick(), COVER_METADATA_BACKFILL_INITIAL_DELAY_MS);
+    return () => {
+      cancelled = true;
+      coverMetadataBackfillRunning = false;
+      if (timer) clearTimeout(timer);
+      if (idleId !== undefined && typeof cancelIdleCallback === "function") {
+        cancelIdleCallback(idleId);
+      }
+    };
   }, []);
 }
 

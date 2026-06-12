@@ -1250,11 +1250,22 @@ export async function backfillCoverMetadata(
 
   type Candidate = { key: string; run: () => Promise<boolean> };
   const candidates: Candidate[] = [];
+  const remaining = () => Math.max(0, limit - candidates.length);
+  const skipped = (key: string | undefined) => !!key && (opts.skip?.has(key) ?? false);
 
   const tracks = await db.tracks
-    .filter((track) =>
-      track.coverBlobId ? trackNeedsLocalCoverMetadata(track) : trackNeedsRemoteCoverPalette(track),
-    )
+    .filter((track) => {
+      const key = track.coverBlobId
+        ? track.coverBlobId
+        : track.remoteCoverUrl
+          ? `remote:${track.id}:${track.remoteCoverUrl}`
+          : undefined;
+      if (skipped(key)) return false;
+      return track.coverBlobId
+        ? trackNeedsLocalCoverMetadata(track)
+        : trackNeedsRemoteCoverPalette(track);
+    })
+    .limit(remaining())
     .toArray();
   for (const track of tracks) {
     if (track.coverBlobId) {
@@ -1272,40 +1283,51 @@ export async function backfillCoverMetadata(
     }
   }
 
-  for (const session of await db.sessions
-    .filter((session) => !!session.coverBlobId && !session.coverThumbhash)
-    .toArray()) {
-    const coverBlobId = session.coverBlobId;
-    if (!coverBlobId) continue;
-    candidates.push({
-      key: coverBlobId,
-      run: async () => {
-        const cover = await resolveMediaBlob(coverBlobId, db, opts.storage);
-        if (!cover?.blob) return false;
-        const hash = await encode(cover.blob, session.coverCrop);
-        if (!hash) return false;
-        await db.sessions.update(session.id, { coverThumbhash: hash });
-        return true;
-      },
-    });
+  if (remaining() > 0) {
+    const sessionsToBackfill = await db.sessions
+      .filter(
+        (session) =>
+          !!session.coverBlobId && !session.coverThumbhash && !skipped(session.coverBlobId),
+      )
+      .limit(remaining())
+      .toArray();
+    for (const session of sessionsToBackfill) {
+      const coverBlobId = session.coverBlobId;
+      if (!coverBlobId) continue;
+      candidates.push({
+        key: coverBlobId,
+        run: async () => {
+          const cover = await resolveMediaBlob(coverBlobId, db, opts.storage);
+          if (!cover?.blob) return false;
+          const hash = await encode(cover.blob, session.coverCrop);
+          if (!hash) return false;
+          await db.sessions.update(session.id, { coverThumbhash: hash });
+          return true;
+        },
+      });
+    }
   }
 
-  for (const row of await db.entityCovers
-    .filter((row) => !!row.coverBlobId && !row.thumbhash)
-    .toArray()) {
-    const coverBlobId = row.coverBlobId;
-    if (!coverBlobId) continue;
-    candidates.push({
-      key: coverBlobId,
-      run: async () => {
-        const cover = await resolveMediaBlob(coverBlobId, db, opts.storage);
-        if (!cover?.blob) return false;
-        const hash = await encode(cover.blob, row.crop);
-        if (!hash) return false;
-        await db.entityCovers.update(row.id, { thumbhash: hash });
-        return true;
-      },
-    });
+  if (remaining() > 0) {
+    const entityCoversToBackfill = await db.entityCovers
+      .filter((row) => !!row.coverBlobId && !row.thumbhash && !skipped(row.coverBlobId))
+      .limit(remaining())
+      .toArray();
+    for (const row of entityCoversToBackfill) {
+      const coverBlobId = row.coverBlobId;
+      if (!coverBlobId) continue;
+      candidates.push({
+        key: coverBlobId,
+        run: async () => {
+          const cover = await resolveMediaBlob(coverBlobId, db, opts.storage);
+          if (!cover?.blob) return false;
+          const hash = await encode(cover.blob, row.crop);
+          if (!hash) return false;
+          await db.entityCovers.update(row.id, { thumbhash: hash });
+          return true;
+        },
+      });
+    }
   }
 
   const attempted: string[] = [];
