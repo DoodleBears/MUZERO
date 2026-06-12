@@ -1,5 +1,14 @@
 import { useLiveQuery } from "dexie-react-hooks";
-import { CornerDownLeft, Globe, ListMusic, ListPlus, Search, User, X } from "lucide-react";
+import {
+  Captions,
+  CornerDownLeft,
+  Globe,
+  ListMusic,
+  ListPlus,
+  Search,
+  User,
+  X,
+} from "lucide-react";
 import type { KeyboardEvent } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -8,13 +17,13 @@ import { Disc3Icon } from "@/components/ui/disc-3";
 import { Kbd, KbdGroup } from "@/components/ui/kbd";
 import { db } from "@/db/muzero-db";
 import { listAllTracks, listSessions, memoryNotesByTrack, saveSettings } from "@/db/repositories";
-import type { DjSession, StreamSourceId, Track } from "@/db/types";
+import type { DjSession, StreamSourceId, Track, TrackLyrics } from "@/db/types";
 import { useSettings } from "@/hooks/use-app-data";
 import { useTrackCoverUrl } from "@/hooks/use-media";
 import { useOnlineSourceSearch } from "@/hooks/use-online-source-search";
 import { LIBRARY_QUERY_COALESCE_MS, useThrottledValue } from "@/hooks/use-throttled-value";
 import { useTransliterationReady } from "@/hooks/use-transliteration-ready";
-import { useWorkerTrackSearch } from "@/hooks/use-worker-track-search";
+import { useWorkerRowSearch } from "@/hooks/use-worker-track-search";
 import { hasStreamingSources } from "@/lib/desktop/bridge";
 import {
   albumArtistDisplayLabel,
@@ -34,9 +43,15 @@ import {
   buildAlbumIndex,
   buildArtistIndex,
 } from "@/lib/library-index";
-import { freeTextMatches } from "@/lib/search-core";
+import { freeTextMatches, type IndexableRow } from "@/lib/search-core";
 import { trackSubtitle } from "@/lib/track-display";
-import { searchEntityFacets } from "@/lib/track-search";
+import {
+  findLyricSearchMatch,
+  type LyricSearchMatch,
+  lyricsSearchFields,
+  searchEntityFacets,
+  trackToRow,
+} from "@/lib/track-search";
 import { cn, formatDuration } from "@/lib/utils";
 import { useNavStore } from "@/stores/nav-store";
 import { usePlayerStore } from "@/stores/player-store";
@@ -58,12 +73,16 @@ const SOURCE_LABEL: Partial<Record<StreamSourceId, string>> = {
 const EMPTY_MEMORY_NOTES = new Map<string, string[]>();
 const MAX_SET_RESULTS = 5;
 const MAX_SONG_RESULTS = 8;
+const MAX_LYRIC_RESULTS = 8;
 const MAX_ENTITY_RESULTS = 5;
+const TRACK_HIT_PREFIX = "track:";
+const LYRIC_HIT_PREFIX = "lyrics:";
 
 /** One arrow-navigable result across the sections (the playlist-link card is not). */
 type NavItem =
   | { type: "set"; session: DjSession }
   | { type: "track"; track: Track }
+  | { type: "lyric"; track: Track; match: LyricSearchMatch }
   | { type: "album"; entry: AlbumEntry }
   | { type: "artist"; entry: ArtistEntry }
   | { type: "online"; hit: StreamSearchHit };
@@ -90,6 +109,7 @@ export function GlobalTrackSearch({
   const allTracksLive = useLiveQuery(() => listAllTracks(db), [], []);
   const allTracks = useThrottledValue(allTracksLive, LIBRARY_QUERY_COALESCE_MS);
   const sessions = useLiveQuery(() => listSessions(db), [], []);
+  const lyricsRows = useLiveQuery(() => db.lyrics.toArray(), [], []);
   const memoryNotes = useLiveQuery(
     () =>
       allTracks.length > 0
@@ -120,7 +140,8 @@ export function GlobalTrackSearch({
   // Which sections the active filter shows. No filter → everything; a facet filter
   // narrows to its one section; a source filter shows only that online source.
   const showSets = filter === null || filter.kind === "set";
-  const showSongs = filter === null;
+  const showTrackResults = filter === null;
+  const showLyricResults = filter === null || filter.kind === "lyrics";
   const showAlbums = filter === null || filter.kind === "album";
   const showArtists = filter === null || filter.kind === "artist";
   const showOnline = streamingSupported && (filter === null || filter.kind === "source");
@@ -137,6 +158,18 @@ export function GlobalTrackSearch({
     () => new Map(allTracks.map((track) => [track.id, track])),
     [allTracks],
   );
+  const lyricsByTrackId = useMemo(
+    () => new Map<string, TrackLyrics>(lyricsRows.map((row) => [row.trackId, row])),
+    [lyricsRows],
+  );
+  const lyricFieldsByTrackId = useMemo(() => {
+    const rows = new Map<string, string[]>();
+    for (const track of allTracks) {
+      const fields = lyricsSearchFields(track, lyricsByTrackId.get(track.id) ?? null);
+      if (fields.length > 0) rows.set(track.id, fields);
+    }
+    return rows;
+  }, [allTracks, lyricsByTrackId]);
   // Derived artist/album projections — only while the (always-mounted) overlay is
   // open, so a closed ⌘F doesn't re-project on every library change.
   const artistIndex = useMemo(() => (open ? buildArtistIndex(allTracks) : []), [open, allTracks]);
@@ -156,13 +189,64 @@ export function GlobalTrackSearch({
     return base.slice(0, MAX_SET_RESULTS);
   }, [open, showSets, sessions, searchText, filter, transliterationReady]);
 
-  // Songs — off-thread, transliteration-aware (pinyin / kana / romaji), ranked.
-  const songsQuery = open && showSongs ? searchText : "";
-  const ranked = useWorkerTrackSearch(playable, songsQuery, memoryNotes);
-  const trackResults = useMemo(
-    () => (showSongs ? ranked.slice(0, MAX_SONG_RESULTS) : []),
-    [showSongs, ranked],
+  // Songs + lyrics — one worker index with typed row ids, split back into
+  // sections after ranking so lyric-only matches do not masquerade as song hits.
+  const searchRows = useMemo<IndexableRow[]>(() => {
+    if (!open) return [];
+    const rows: IndexableRow[] = [];
+    if (showTrackResults) {
+      for (const track of playable) {
+        rows.push({
+          ...trackToRow(track, memoryNotes.get(track.id) ?? []),
+          id: `${TRACK_HIT_PREFIX}${track.id}`,
+        });
+      }
+    }
+    if (showLyricResults) {
+      for (const track of playable) {
+        const fields = lyricFieldsByTrackId.get(track.id);
+        if (!fields?.length) continue;
+        rows.push({
+          id: `${LYRIC_HIT_PREFIX}${track.id}`,
+          free: fields,
+          artist: [],
+          album: [],
+          tags: [],
+        });
+      }
+    }
+    return rows;
+  }, [open, showTrackResults, showLyricResults, playable, memoryNotes, lyricFieldsByTrackId]);
+  const rankedHits = useWorkerRowSearch(
+    searchRows,
+    open && (showTrackResults || showLyricResults) ? searchText : "",
   );
+  const trackResults = useMemo(() => {
+    if (!showTrackResults) return [];
+    return rankedHits
+      .filter((hit) => hit.id.startsWith(TRACK_HIT_PREFIX))
+      .map((hit) => trackById.get(hit.id.slice(TRACK_HIT_PREFIX.length)))
+      .filter((track): track is Track => track !== undefined)
+      .slice(0, MAX_SONG_RESULTS);
+  }, [showTrackResults, rankedHits, trackById]);
+  const lyricResults = useMemo(() => {
+    if (!showLyricResults) return [];
+    if (!searchText && filter === null) return [];
+    return rankedHits
+      .filter((hit) => hit.id.startsWith(LYRIC_HIT_PREFIX))
+      .map((hit) => {
+        const track = trackById.get(hit.id.slice(LYRIC_HIT_PREFIX.length));
+        if (!track) return null;
+        const match = findLyricSearchMatch(
+          track,
+          lyricsByTrackId.get(track.id) ?? null,
+          searchText,
+        );
+        return match ? { track, match } : null;
+      })
+      .filter((result): result is { track: Track; match: LyricSearchMatch } => result !== null)
+      .slice(0, MAX_LYRIC_RESULTS);
+  }, [showLyricResults, searchText, filter, rankedHits, trackById, lyricsByTrackId]);
 
   // Artist/album facets — transliteration-aware, honors `artist:`/`album:` scopes.
   // biome-ignore lint/correctness/useExhaustiveDependencies: transliterationReady re-runs once dictionaries load
@@ -193,6 +277,13 @@ export function GlobalTrackSearch({
     return base.slice(0, MAX_ENTITY_RESULTS);
   }, [showArtists, searchText, facets, filter, artistIndex]);
 
+  const showSongsHeader =
+    trackResults.length > 0 &&
+    (setResults.length > 0 ||
+      lyricResults.length > 0 ||
+      albumResults.length > 0 ||
+      artistResults.length > 0);
+
   // Online — a source filter forces that one source ad-hoc; otherwise the enabled chips.
   const onlineQuery = open && showOnline ? searchText : "";
   const {
@@ -209,14 +300,16 @@ export function GlobalTrackSearch({
     () => [
       ...setResults.map((session) => ({ type: "set", session }) as const),
       ...trackResults.map((track) => ({ type: "track", track }) as const),
+      ...lyricResults.map((result) => ({ type: "lyric", ...result }) as const),
       ...albumResults.map((entry) => ({ type: "album", entry }) as const),
       ...artistResults.map((entry) => ({ type: "artist", entry }) as const),
       ...onlineHits.map((hit) => ({ type: "online", hit }) as const),
     ],
-    [setResults, trackResults, albumResults, artistResults, onlineHits],
+    [setResults, trackResults, lyricResults, albumResults, artistResults, onlineHits],
   );
   const trackStart = setResults.length;
-  const albumStart = trackStart + trackResults.length;
+  const lyricStart = trackStart + trackResults.length;
+  const albumStart = lyricStart + lyricResults.length;
   const artistStart = albumStart + albumResults.length;
   const onlineStart = artistStart + artistResults.length;
 
@@ -282,6 +375,7 @@ export function GlobalTrackSearch({
         onOpenChange(false);
         break;
       case "track":
+      case "lyric":
         if (playNext) {
           await playNextTrack(item.track);
         } else {
@@ -367,9 +461,6 @@ export function GlobalTrackSearch({
 
   const showEnableChips = streamingSupported && filter === null;
   const onlineActive = showOnline && (onlineSearching || onlineHits.length > 0 || !!link);
-  const showSongsHeader =
-    trackResults.length > 0 &&
-    (setResults.length > 0 || albumResults.length > 0 || artistResults.length > 0);
   const isEmpty = navItems.length === 0 && !onlineActive;
 
   return (
@@ -451,7 +542,7 @@ export function GlobalTrackSearch({
             </div>
           )}
 
-          {showSongs && trackResults.length > 0 && (
+          {showTrackResults && trackResults.length > 0 && (
             <div>
               {showSongsHeader && <SectionHeader>{t("globalSearch.songs")}</SectionHeader>}
               {trackResults.map((track, i) => (
@@ -463,6 +554,24 @@ export function GlobalTrackSearch({
                   onMouseEnter={() => setSelectedIndex(trackStart + i)}
                   onPlay={() => void activate({ type: "track", track }, false)}
                   onPlayNext={() => void activate({ type: "track", track }, true)}
+                />
+              ))}
+            </div>
+          )}
+
+          {lyricResults.length > 0 && (
+            <div>
+              <SectionHeader>{t("dock.lyrics")}</SectionHeader>
+              {lyricResults.map(({ track, match }, i) => (
+                <GlobalLyricSearchRow
+                  key={track.id}
+                  track={track}
+                  match={match}
+                  index={lyricStart + i}
+                  selected={selectedIndex === lyricStart + i}
+                  onMouseEnter={() => setSelectedIndex(lyricStart + i)}
+                  onPlay={() => void activate({ type: "lyric", track, match }, false)}
+                  onPlayNext={() => void activate({ type: "lyric", track, match }, true)}
                 />
               ))}
             </div>
@@ -647,13 +756,17 @@ function FilterPill({ filter, onClear }: { filter: SearchFilter; onClear: () => 
       ? (SOURCE_LABEL[filter.source] ?? filter.source)
       : filter.kind === "set"
         ? t("gallery.modeSets")
-        : filter.kind === "artist"
-          ? t("gallery.modeArtists")
-          : t("gallery.modeAlbums");
+        : filter.kind === "lyrics"
+          ? t("dock.lyrics")
+          : filter.kind === "artist"
+            ? t("gallery.modeArtists")
+            : t("gallery.modeAlbums");
   return (
     <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-primary bg-accent px-2 py-0.5 text-foreground text-xs">
       {filter.kind === "set" ? (
         <ListMusic className="size-3.5" />
+      ) : filter.kind === "lyrics" ? (
+        <Captions className="size-3.5" />
       ) : filter.kind === "album" ? (
         <Disc3Icon size={13} />
       ) : filter.kind === "artist" ? (
@@ -689,6 +802,7 @@ function FilterMenu({
   const { t } = useTranslation();
   const labelFor = (opt: FilterOption): string => {
     if (opt.id === "set") return t("gallery.modeSets");
+    if (opt.id === "lyrics") return t("dock.lyrics");
     if (opt.id === "artist") return t("gallery.modeArtists");
     if (opt.id === "album") return t("gallery.modeAlbums");
     return opt.filter.kind === "source" ? (SOURCE_LABEL[opt.filter.source] ?? opt.id) : opt.id;
@@ -715,6 +829,8 @@ function FilterMenu({
         >
           {opt.id === "set" ? (
             <ListMusic className="size-4 text-muted-foreground" />
+          ) : opt.id === "lyrics" ? (
+            <Captions className="size-4 text-muted-foreground" />
           ) : opt.id === "artist" ? (
             <User className="size-4 text-muted-foreground" />
           ) : opt.id === "album" ? (
@@ -795,6 +911,83 @@ function GlobalTrackSearchRow({
       </div>
       <span className="w-10 shrink-0 text-right text-muted-foreground text-xs tabular-nums">
         {formatDuration(track.durationSec)}
+      </span>
+    </div>
+  );
+}
+
+function GlobalLyricSearchRow({
+  track,
+  match,
+  index,
+  selected,
+  onMouseEnter,
+  onPlay,
+  onPlayNext,
+}: {
+  track: Track;
+  match: LyricSearchMatch;
+  index: number;
+  selected: boolean;
+  onMouseEnter: () => void;
+  onPlay: () => void;
+  onPlayNext: () => void;
+}) {
+  const { t } = useTranslation();
+  const coverUrl = useTrackCoverUrl(track);
+  const hasTimestamp = match.timeSec != null && Number.isFinite(match.timeSec);
+  return (
+    <div
+      data-nav-index={index}
+      className={cn(
+        "group flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors",
+        selected ? "bg-accent text-accent-foreground" : "hover:bg-accent/60",
+      )}
+      onMouseEnter={onMouseEnter}
+      role="option"
+      aria-selected={selected}
+      tabIndex={-1}
+    >
+      <button
+        type="button"
+        onClick={onPlay}
+        className="flex min-w-0 flex-1 items-center gap-3 text-left"
+      >
+        <div className="relative grid size-11 shrink-0 place-items-center overflow-hidden rounded-lg bg-secondary text-muted-foreground">
+          {coverUrl ? (
+            <img src={coverUrl} alt="" className="size-full object-cover" />
+          ) : (
+            <Disc3Icon size={16} />
+          )}
+          <span className="absolute bottom-0.5 right-0.5 grid size-4 place-items-center rounded bg-background/80 text-foreground shadow-sm">
+            <Captions className="size-3" />
+          </span>
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="truncate font-medium text-sm">{track.title}</div>
+          <div className="truncate text-muted-foreground text-xs">{match.text}</div>
+        </div>
+      </button>
+      <div className="hidden shrink-0 items-center gap-1 sm:flex">
+        <button
+          type="button"
+          onClick={onPlay}
+          aria-label={t("globalSearch.playHint")}
+          className="grid size-8 place-items-center rounded-md text-muted-foreground opacity-0 transition-opacity hover:bg-background/60 hover:text-foreground group-hover:opacity-100 focus-visible:opacity-100"
+        >
+          <CornerDownLeft className="size-4" />
+        </button>
+        <button
+          type="button"
+          onClick={onPlayNext}
+          aria-label={t("globalSearch.playNextHint")}
+          className="grid size-8 place-items-center rounded-md text-muted-foreground opacity-0 transition-opacity hover:bg-background/60 hover:text-foreground group-hover:opacity-100 focus-visible:opacity-100"
+        >
+          <ListPlus className="size-4" />
+        </button>
+      </div>
+      <span className="w-12 shrink-0 text-right text-muted-foreground text-xs tabular-nums">
+        {hasTimestamp ? formatDuration(match.timeSec ?? 0) : t("dock.lyrics")}
       </span>
     </div>
   );

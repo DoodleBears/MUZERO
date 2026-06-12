@@ -3,6 +3,8 @@ import type { Track, TrackMediaMetadata } from "@/db/types";
 import { buildAlbumIndex, buildArtistIndex } from "./library-index";
 import { ensureTransliterationLoaded } from "./search-transliterate";
 import {
+  findLyricSearchMatch,
+  lyricsSearchFields,
   matchesQuery,
   parseSearchTokens,
   searchEntityFacets,
@@ -114,6 +116,67 @@ describe("matchesQuery with memories", () => {
   it("still scopes #tag to tags, never memory notes", () => {
     expect(matchesQuery(song, "#beach", ["beach day in okinawa"])).toBe(false);
     expect(matchesQuery(song, "#chill", ["beach day in okinawa"])).toBe(true);
+  });
+});
+
+describe("lyricsSearchFields", () => {
+  it("indexes generated brief lyrics", () => {
+    const song = track({
+      brief: { title: "T", caption: "c", lyrics: "meet me under the skylight", durationSec: 60 },
+    });
+    expect(lyricsSearchFields(song)).toContain("meet me under the skylight");
+  });
+
+  it("indexes stored plain and parsed synced lyric text", () => {
+    const fields = lyricsSearchFields(neonRain, {
+      status: "found",
+      instrumental: false,
+      plain: "plain chorus line",
+      synced: "[00:12.34]故事的小黄花\n[00:15.00]I feel your breath",
+    });
+    expect(fields).toContain("plain chorus line");
+    expect(fields).toContain("故事的小黄花");
+    expect(fields).toContain("I feel your breath");
+  });
+
+  it("does not index lyrics for instrumental records", () => {
+    const song = track({
+      brief: { title: "T", caption: "c", lyrics: "hidden words", durationSec: 60 },
+    });
+    expect(
+      lyricsSearchFields(song, {
+        status: "instrumental",
+        instrumental: true,
+      }),
+    ).toEqual([]);
+  });
+});
+
+describe("findLyricSearchMatch", () => {
+  it("returns the matching synced line with timestamp", () => {
+    const match = findLyricSearchMatch(
+      neonRain,
+      {
+        status: "found",
+        instrumental: false,
+        synced: "[00:12.34]故事的小黄花\n[00:15.00]I feel your breath",
+      },
+      "breath",
+    );
+    expect(match).toEqual({ text: "I feel your breath", timeSec: 15 });
+  });
+
+  it("returns a plain lyric line when there is no timestamp", () => {
+    const match = findLyricSearchMatch(
+      neonRain,
+      {
+        status: "found",
+        instrumental: false,
+        plain: "first line\nsecond chorus",
+      },
+      "chorus",
+    );
+    expect(match).toEqual({ text: "second chorus" });
   });
 });
 

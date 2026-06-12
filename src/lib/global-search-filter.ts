@@ -12,13 +12,14 @@ import type { StreamSourceId } from "@/db/types";
 /** A chosen scope. `source` forces an ad-hoc search of one online source. */
 export type SearchFilter =
   | { kind: "set" }
+  | { kind: "lyrics" }
   | { kind: "artist" }
   | { kind: "album" }
   | { kind: "source"; source: StreamSourceId };
 
 export interface FilterOption {
   /** Stable id (menu key + label switch). */
-  id: "set" | "artist" | "album" | "bili" | "netease" | "youtube";
+  id: "set" | "lyrics" | "artist" | "album" | "bili" | "netease" | "youtube";
   /** The filter this option produces when chosen. */
   filter: SearchFilter;
   /** Latin + CJK aliases (lowercased) the `@token` prefix-matches against. */
@@ -35,6 +36,11 @@ export const FILTER_OPTIONS: FilterOption[] = [
     id: "set",
     filter: { kind: "set" },
     aliases: ["set", "sets", "playlist", "playlists", "歌单", "列表"],
+  },
+  {
+    id: "lyrics",
+    filter: { kind: "lyrics" },
+    aliases: ["lyrics", "lyric", "lrc", "词", "歌词"],
   },
   {
     id: "artist",

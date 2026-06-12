@@ -40,6 +40,7 @@ describe("matchFilterOptions", () => {
   it("returns every option for an empty partial", () => {
     expect(matchFilterOptions("").map((o) => o.id)).toEqual([
       "set",
+      "lyrics",
       "artist",
       "album",
       "bili",
@@ -51,6 +52,8 @@ describe("matchFilterOptions", () => {
   it("prefix-matches latin aliases", () => {
     expect(matchFilterOptions("set").map((o) => o.id)).toEqual(["set"]);
     expect(matchFilterOptions("play").map((o) => o.id)).toEqual(["set"]);
+    expect(matchFilterOptions("lyr").map((o) => o.id)).toEqual(["lyrics"]);
+    expect(matchFilterOptions("lrc").map((o) => o.id)).toEqual(["lyrics"]);
     expect(matchFilterOptions("art").map((o) => o.id)).toEqual(["artist"]);
     expect(matchFilterOptions("alb").map((o) => o.id)).toEqual(["album"]);
     expect(matchFilterOptions("bil").map((o) => o.id)).toEqual(["bili"]);
@@ -61,7 +64,9 @@ describe("matchFilterOptions", () => {
 
   it("prefix-matches CJK aliases", () => {
     expect(matchFilterOptions("歌单").map((o) => o.id)).toEqual(["set"]);
-    expect(matchFilterOptions("歌").map((o) => o.id)).toEqual(["set", "artist"]);
+    expect(matchFilterOptions("歌词").map((o) => o.id)).toEqual(["lyrics"]);
+    expect(matchFilterOptions("歌").map((o) => o.id)).toEqual(["set", "lyrics", "artist"]);
+    expect(matchFilterOptions("词").map((o) => o.id)).toEqual(["lyrics"]);
     expect(matchFilterOptions("专辑").map((o) => o.id)).toEqual(["album"]);
     expect(matchFilterOptions("网易").map((o) => o.id)).toEqual(["netease"]);
   });
@@ -73,10 +78,11 @@ describe("matchFilterOptions", () => {
   it("respects a pre-filtered option list (e.g. no sources off-desktop)", () => {
     const local = matchFilterOptions("", [
       { id: "set", filter: { kind: "set" }, aliases: ["set"] },
+      { id: "lyrics", filter: { kind: "lyrics" }, aliases: ["lyrics"] },
       { id: "artist", filter: { kind: "artist" }, aliases: ["artist"] },
       { id: "album", filter: { kind: "album" }, aliases: ["album"] },
     ]);
-    expect(local.map((o) => o.id)).toEqual(["set", "artist", "album"]);
+    expect(local.map((o) => o.id)).toEqual(["set", "lyrics", "artist", "album"]);
   });
 
   it("returns nothing for an unmatched partial", () => {

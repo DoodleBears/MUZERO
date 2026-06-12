@@ -1,4 +1,4 @@
-import type { Track } from "@/db/types";
+import type { Track, TrackLyrics } from "@/db/types";
 import type { AlbumEntry, ArtistEntry } from "@/lib/library-index";
 import {
   type IndexableRow,
@@ -7,6 +7,7 @@ import {
   scoreRow,
 } from "@/lib/search-core";
 import { NO_MATCH_SCORE, scoreVariants, searchVariants } from "@/lib/search-transliterate";
+import { parseLyrics } from "@/lyrics/parse";
 
 export type { SearchTokens } from "@/lib/search-core";
 // Re-export the source-agnostic token helpers so existing importers (e.g.
@@ -55,16 +56,130 @@ export function trackSearchFields(track: Track, memoryNotes: readonly string[] =
   ].filter((s): s is string => typeof s === "string" && s.length > 0);
 }
 
+function pushText(fields: string[], value: string | undefined): void {
+  const text = value?.trim();
+  if (text) fields.push(text);
+}
+
+/**
+ * Searchable lyric text for a track. Stored lyrics live in their own table, so
+ * callers join the optional row in only on surfaces that need lyrics search.
+ * Parsed line text is included in addition to raw LRC/yrc/qrc/TTML so timestamp
+ * and word-timing syntax never gets in the way of matching actual words.
+ */
+export function lyricsSearchFields(
+  track: Track,
+  lyrics: Pick<
+    TrackLyrics,
+    "status" | "instrumental" | "synced" | "plain" | "translation" | "romanization" | "format"
+  > | null = null,
+): string[] {
+  const fields: string[] = [];
+  if (lyrics && (lyrics.instrumental || lyrics.status === "instrumental")) return fields;
+
+  if (lyrics) {
+    pushText(fields, lyrics.plain);
+    pushText(fields, lyrics.synced);
+    pushText(fields, lyrics.translation);
+    pushText(fields, lyrics.romanization);
+    if (lyrics.synced?.trim()) {
+      try {
+        for (const line of parseLyrics(lyrics.synced, lyrics.format)) {
+          pushText(fields, line.text);
+          pushText(fields, line.translation);
+          pushText(fields, line.roman);
+          const words = line.words?.map((word) => word.text).join("");
+          pushText(fields, words);
+        }
+      } catch {
+        // Keep raw lyric text searchable even if a future/invalid format fails to parse.
+      }
+    }
+  }
+
+  pushText(fields, track.brief?.lyrics);
+  return fields;
+}
+
+export interface LyricSearchMatch {
+  text: string;
+  timeSec?: number;
+}
+
+function lyricCandidateMatches(query: string, text: string): boolean {
+  if (!query.trim()) return true;
+  return (
+    scoreRow({ id: "", free: [text], artist: [], album: [], tags: [] }, parseSearchTokens(query)) <
+    NO_MATCH_SCORE
+  );
+}
+
+function pushLyricCandidate(
+  candidates: LyricSearchMatch[],
+  text: string | undefined,
+  timeSec?: number,
+): void {
+  const trimmed = text?.trim();
+  if (trimmed) candidates.push({ text: trimmed, timeSec });
+}
+
+export function findLyricSearchMatch(
+  track: Track,
+  lyrics: Pick<
+    TrackLyrics,
+    "status" | "instrumental" | "synced" | "plain" | "translation" | "romanization" | "format"
+  > | null = null,
+  query = "",
+): LyricSearchMatch | null {
+  if (lyrics && (lyrics.instrumental || lyrics.status === "instrumental")) return null;
+
+  const candidates: LyricSearchMatch[] = [];
+  if (lyrics?.synced?.trim()) {
+    try {
+      for (const line of parseLyrics(lyrics.synced, lyrics.format)) {
+        const timeSec = line.timeMs / 1000;
+        pushLyricCandidate(candidates, line.text, timeSec);
+        pushLyricCandidate(candidates, line.translation, timeSec);
+        pushLyricCandidate(candidates, line.roman, timeSec);
+        pushLyricCandidate(candidates, line.words?.map((word) => word.text).join(""), timeSec);
+      }
+    } catch {
+      // Raw text remains searchable/displayable below.
+    }
+  }
+  if (lyrics?.plain) {
+    for (const line of lyrics.plain.split(/\r?\n/)) pushLyricCandidate(candidates, line);
+  }
+  if (lyrics?.translation) {
+    for (const line of lyrics.translation.split(/\r?\n/)) pushLyricCandidate(candidates, line);
+  }
+  if (lyrics?.romanization) {
+    for (const line of lyrics.romanization.split(/\r?\n/)) pushLyricCandidate(candidates, line);
+  }
+  if (lyrics?.synced && candidates.length === 0) {
+    for (const line of lyrics.synced.split(/\r?\n/)) pushLyricCandidate(candidates, line);
+  }
+  if (track.brief?.lyrics) {
+    for (const line of track.brief.lyrics.split(/\r?\n/)) pushLyricCandidate(candidates, line);
+  }
+
+  return candidates.find((candidate) => lyricCandidateMatches(query, candidate.text)) ?? null;
+}
+
 function trackArtistText(track: Track): string {
   const m = track.mediaMetadata;
   return [...(m?.artists ?? []), ...(m?.albumArtists ?? [])].join(" ");
 }
 
 /** Reduce a track (+ its memory notes) to the source-agnostic searchable row. */
-export function trackToRow(track: Track, memoryNotes: readonly string[] = []): IndexableRow {
+export function trackToRow(
+  track: Track,
+  memoryNotes: readonly string[] = [],
+  extraFreeFields: readonly string[] = [],
+): IndexableRow {
   return {
     id: track.id,
-    free: trackSearchFields(track, memoryNotes),
+    free: [...trackSearchFields(track, memoryNotes), ...extraFreeFields],
     artist: [trackArtistText(track)].filter((s) => s.length > 0),
     album: [track.mediaMetadata?.album ?? ""].filter((s) => s.length > 0),
     tags: track.tags,
