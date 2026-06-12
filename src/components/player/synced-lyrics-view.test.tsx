@@ -99,6 +99,7 @@ describe("LyricsScroller (synced)", () => {
     });
     expect(screen.getByText("line one")).toHaveAttribute("data-cascade-delay-ms", "55");
     expect(screen.getByText("line one")).toHaveAttribute("data-cascade-initial-y", "24");
+    expect(screen.getByText("line one")).toHaveAttribute("data-cascade-wave-token", "1");
     expect(screen.getByText("line two")).not.toHaveAttribute("data-cascade-affected");
   });
 
@@ -115,6 +116,7 @@ describe("LyricsScroller (synced)", () => {
       expect(screen.getByText("line one")).toHaveAttribute("data-cascade-affected", "true");
     });
     expect(screen.getByText("line one")).toHaveAttribute("data-cascade-delay-ms", "55");
+    expect(screen.getByText("line one")).toHaveAttribute("data-cascade-wave-token", "1");
     expect(screen.getByText("line three")).toHaveAttribute("data-cascade-initial-y", "24");
     expect(screen.getByTestId("lyrics-scroll")).toHaveAttribute("data-motion-mode", "cascade");
   });

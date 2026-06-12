@@ -1,6 +1,6 @@
 import { useLiveQuery } from "dexie-react-hooks";
 import { LocateFixed } from "lucide-react";
-import { animate, motion } from "motion/react";
+import { animate, motion, useAnimationControls } from "motion/react";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { LyricsSearchPanel } from "@/components/player/lyrics-search-panel";
@@ -26,6 +26,7 @@ import { getMediaEngine, usePlayerStore } from "@/stores/player-store";
 import { useUiStore } from "@/stores/ui-store";
 
 type ShownLyrics = Extract<ResolvedLyrics, { mode: "synced" } | { mode: "plain" }>;
+type CascadePulse = { direction: -1 | 0 | 1; token: number };
 
 /**
  * Track the active synced-lyric line at frame rate. A rAF loop reads the media
@@ -282,10 +283,7 @@ function SyncedLines({
   const [viewportH, setViewportH] = useState(0);
   const previousActiveIndexRef = useRef(activeIndex);
   const previousMotionModeRef = useRef<LyricsMotionMode>(motionMode);
-  const [cascadePulse, setCascadePulse] = useState<{ direction: -1 | 0 | 1; token: number }>({
-    direction: 0,
-    token: 0,
-  });
+  const [cascadePulse, setCascadePulse] = useState<CascadePulse>({ direction: 0, token: 0 });
   const lyricsMotion = useMemo(
     () => resolveLyricsMotionMode(motionMode, { reducedMotion: prefersReducedMotion() }),
     [motionMode],
@@ -476,113 +474,26 @@ function SyncedLines({
               direction: cascadePulse.direction,
               motion: lyricsMotion,
             });
-            const transition =
-              lyricsMotion.row.transition === "spring"
-                ? {
-                    type: "spring" as const,
-                    stiffness: lyricsMotion.follow.stiffness,
-                    damping: lyricsMotion.follow.damping,
-                    mass: lyricsMotion.follow.mass,
-                    delay: rowMotion.delaySec,
-                  }
-                : { duration: 0.35, ease: [0.22, 1, 0.36, 1] as const };
             return (
-              <motion.button
+              <LyricLineButton
                 // biome-ignore lint/suspicious/noArrayIndexKey: lyric lines have no stable id; time+index is the natural key
-                key={`${line.timeMs}-${i}-${rowMotion.affected ? cascadePulse.token : "stable"}`}
-                type="button"
-                // No mount animation: on a track switch the lines remount and must
-                // appear at their correct size immediately (the active line big,
-                // the rest small) — not grow in from a default.
-                initial={rowMotion.affected ? { y: rowMotion.initialY } : false}
-                data-active={isActive || undefined}
-                data-cascade-affected={rowMotion.affected || undefined}
-                data-cascade-delay-ms={
-                  rowMotion.affected ? Math.round(rowMotion.delaySec * 1000) : undefined
-                }
-                data-cascade-initial-y={rowMotion.affected ? rowMotion.initialY : undefined}
-                aria-current={isActive ? "true" : undefined}
+                key={`${line.timeMs}-${i}`}
+                line={line}
+                isActive={isActive}
+                lyricStyle={lyricStyle}
+                lyricsMotion={lyricsMotion}
+                rowMotion={rowMotion}
+                cascadePulse={cascadePulse}
+                wordByWord={wordByWord}
+                showTranslation={showTranslation}
+                showRomanization={showRomanization}
+                sungColor={sungColor}
+                unsungColor={unsungColor}
                 onClick={() => {
                   onSeek(line.timeMs / 1000);
                   setFollowing(true);
                 }}
-                animate={{
-                  opacity: isActive ? lyricStyle.activeOpacity : lyricStyle.inactiveOpacity,
-                  // Scale inactive lines DOWN instead of animating font-size: the
-                  // layout (and line wrapping) is fixed at the active size, so a
-                  // line never re-wraps when it becomes active — only a smooth,
-                  // layout-free transform changes.
-                  scale: isActive ? 1 : lyricStyle.inactiveFontSize / lyricStyle.activeFontSize,
-                  y: 0,
-                }}
-                transition={transition}
-                style={{
-                  fontSize: lyricStyle.activeFontSize,
-                  color: lyricStyle.color,
-                  textShadow: lyricStyle.textShadow,
-                  WebkitTextStroke: lyricStyle.textStroke || undefined,
-                  paintOrder: lyricStyle.textStroke ? "stroke fill" : undefined,
-                  transformOrigin:
-                    lyricStyle.align === "center"
-                      ? "center"
-                      : lyricStyle.align === "right"
-                        ? "right center"
-                        : "left center",
-                }}
-                className={cn(
-                  "block w-full text-pretty rounded-lg px-3 py-2 font-bold leading-[1.45]",
-                  lyricStyle.align === "center"
-                    ? "text-center"
-                    : lyricStyle.align === "right"
-                      ? "text-right"
-                      : "text-left",
-                )}
-              >
-                {isActive && wordByWord && line.words && line.words.length > 0
-                  ? line.words.map((w, j) => (
-                      <span
-                        // biome-ignore lint/suspicious/noArrayIndexKey: word spans are positional within a line
-                        key={j}
-                        data-word
-                        style={
-                          {
-                            "--wfill": "0%",
-                            backgroundImage: `linear-gradient(90deg, ${sungColor} var(--wfill), ${unsungColor} var(--wfill))`,
-                            backgroundOrigin: "border-box",
-                            WebkitBackgroundClip: "text",
-                            WebkitBoxDecorationBreak: "clone",
-                            backgroundClip: "text",
-                            boxDecorationBreak: "clone",
-                            lineHeight: 1.45,
-                            paddingBlock: "0.14em",
-                            // Transparent-ize only the FILL (not `color`) so the
-                            // gradient shows through AND `currentColor` above still
-                            // resolves to the inherited foreground.
-                            WebkitTextFillColor: "transparent",
-                          } as React.CSSProperties
-                        }
-                      >
-                        {w.text}
-                      </span>
-                    ))
-                  : line.text || "♪"}
-                {showRomanization && line.roman && (
-                  <span
-                    className="mt-0.5 block font-medium"
-                    style={{ fontSize: "0.55em", opacity: 0.62 }}
-                  >
-                    {line.roman}
-                  </span>
-                )}
-                {showTranslation && line.translation && (
-                  <span
-                    className="mt-0.5 block font-medium"
-                    style={{ fontSize: "0.6em", opacity: 0.72 }}
-                  >
-                    {line.translation}
-                  </span>
-                )}
-              </motion.button>
+              />
             );
           })}
         </div>
@@ -599,6 +510,159 @@ function SyncedLines({
         </button>
       )}
     </>
+  );
+}
+
+function LyricLineButton({
+  line,
+  isActive,
+  lyricStyle,
+  lyricsMotion,
+  rowMotion,
+  cascadePulse,
+  wordByWord,
+  showTranslation,
+  showRomanization,
+  sungColor,
+  unsungColor,
+  onClick,
+}: {
+  line: LyricLine;
+  isActive: boolean;
+  lyricStyle: LyricStyle;
+  lyricsMotion: ReturnType<typeof resolveLyricsMotionMode>;
+  rowMotion: ReturnType<typeof lyricCascadeRowMotion>;
+  cascadePulse: CascadePulse;
+  wordByWord: boolean;
+  showTranslation: boolean;
+  showRomanization: boolean;
+  sungColor: string;
+  unsungColor: string;
+  onClick: () => void;
+}) {
+  const controls = useAnimationControls();
+  const waveToken = cascadePulse.token;
+  const targetOpacity = isActive ? lyricStyle.activeOpacity : lyricStyle.inactiveOpacity;
+  // Scale inactive lines DOWN instead of animating font-size: the layout (and
+  // wrapping) stays fixed at the active size, while Motion owns the visual change.
+  const targetScale = isActive ? 1 : lyricStyle.inactiveFontSize / lyricStyle.activeFontSize;
+  const baseTransition =
+    lyricsMotion.row.transition === "spring"
+      ? {
+          type: "spring" as const,
+          stiffness: lyricsMotion.follow.stiffness,
+          damping: lyricsMotion.follow.damping,
+          mass: lyricsMotion.follow.mass,
+          delay: rowMotion.delaySec,
+        }
+      : { duration: 0.35, ease: [0.22, 1, 0.36, 1] as const };
+
+  useEffect(() => {
+    void waveToken;
+    if (!rowMotion.affected) {
+      void controls.start({
+        opacity: targetOpacity,
+        scale: targetScale,
+        y: 0,
+        filter: "blur(0px)",
+        transition: baseTransition,
+      });
+      return;
+    }
+    void controls.start({
+      opacity: targetOpacity,
+      scale: targetScale,
+      y: [rowMotion.initialY, 0],
+      filter: ["blur(1.5px)", "blur(0px)"],
+      transition: baseTransition,
+    });
+  }, [
+    baseTransition,
+    controls,
+    rowMotion.affected,
+    rowMotion.initialY,
+    targetOpacity,
+    targetScale,
+    waveToken,
+  ]);
+
+  return (
+    <motion.button
+      type="button"
+      initial={{
+        opacity: targetOpacity,
+        scale: targetScale,
+        y: 0,
+        filter: "blur(0px)",
+      }}
+      data-active={isActive || undefined}
+      data-cascade-affected={rowMotion.affected || undefined}
+      data-cascade-delay-ms={rowMotion.affected ? Math.round(rowMotion.delaySec * 1000) : undefined}
+      data-cascade-initial-y={rowMotion.affected ? rowMotion.initialY : undefined}
+      data-cascade-wave-token={rowMotion.affected ? cascadePulse.token : undefined}
+      aria-current={isActive ? "true" : undefined}
+      onClick={onClick}
+      animate={controls}
+      style={{
+        fontSize: lyricStyle.activeFontSize,
+        color: lyricStyle.color,
+        textShadow: lyricStyle.textShadow,
+        WebkitTextStroke: lyricStyle.textStroke || undefined,
+        paintOrder: lyricStyle.textStroke ? "stroke fill" : undefined,
+        transformOrigin:
+          lyricStyle.align === "center"
+            ? "center"
+            : lyricStyle.align === "right"
+              ? "right center"
+              : "left center",
+      }}
+      className={cn(
+        "block w-full text-pretty rounded-lg px-3 py-2 font-bold leading-[1.45] will-change-transform",
+        lyricStyle.align === "center"
+          ? "text-center"
+          : lyricStyle.align === "right"
+            ? "text-right"
+            : "text-left",
+      )}
+    >
+      {isActive && wordByWord && line.words && line.words.length > 0
+        ? line.words.map((w, j) => (
+            <span
+              // biome-ignore lint/suspicious/noArrayIndexKey: word spans are positional within a line
+              key={j}
+              data-word
+              style={
+                {
+                  "--wfill": "0%",
+                  backgroundImage: `linear-gradient(90deg, ${sungColor} var(--wfill), ${unsungColor} var(--wfill))`,
+                  backgroundOrigin: "border-box",
+                  WebkitBackgroundClip: "text",
+                  WebkitBoxDecorationBreak: "clone",
+                  backgroundClip: "text",
+                  boxDecorationBreak: "clone",
+                  lineHeight: 1.45,
+                  paddingBlock: "0.14em",
+                  // Transparent-ize only the FILL (not `color`) so the gradient
+                  // shows through and `currentColor` above still resolves.
+                  WebkitTextFillColor: "transparent",
+                } as React.CSSProperties
+              }
+            >
+              {w.text}
+            </span>
+          ))
+        : line.text || "♪"}
+      {showRomanization && line.roman && (
+        <span className="mt-0.5 block font-medium" style={{ fontSize: "0.55em", opacity: 0.62 }}>
+          {line.roman}
+        </span>
+      )}
+      {showTranslation && line.translation && (
+        <span className="mt-0.5 block font-medium" style={{ fontSize: "0.6em", opacity: 0.72 }}>
+          {line.translation}
+        </span>
+      )}
+    </motion.button>
   );
 }
 
