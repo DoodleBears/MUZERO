@@ -14,7 +14,7 @@
 | 1 | Research Baseline + Engine Contract | ✅ Completed | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | Pure Layout Solver + TDD Fixtures | ✅ Completed | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | rAF DOM Driver + React Integration | ✅ Completed | [Phase 3 Checklist](#phase-3-checklist) |
-| 4 | Word Fill / Secondary Lines / Click Seek Parity | 🔲 Pending | [Phase 4 Checklist](#phase-4-checklist) |
+| 4 | Word Fill / Secondary Lines / Click Seek Parity | ✅ Completed | [Phase 4 Checklist](#phase-4-checklist) |
 | 5 | Performance QA + Rollout Cleanup | 🔲 Pending | [Phase 5 Checklist](#phase-5-checklist) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
@@ -317,18 +317,20 @@ React state should not update per frame.
 **Goal:** Preserve existing synced lyrics feature parity while the new driver owns layout.
 
 **Tasks:**
-- [ ] Keep word-by-word fill as direct DOM CSS variable updates or move it into the same driver.
-- [ ] Keep translation and romanization in the same row block so transforms apply once per line.
-- [ ] Preserve LRCLIB attribution and "wrong lyrics" search affordance.
-- [ ] Ensure clicking a lyric line seeks and snaps/aligned layout without visual jump.
-- [ ] Add tests for click seek and row attributes under the new driver.
+- [x] Keep word-by-word fill as direct DOM CSS variable updates or move it into the same driver.
+- [x] Keep translation and romanization in the same row block so transforms apply once per line.
+- [x] Preserve LRCLIB attribution and "wrong lyrics" search affordance.
+- [x] Ensure clicking a lyric line seeks and snaps/aligned layout without visual jump.
+- [x] Add tests for click seek and row attributes under the new driver.
 
 ### Phase 4 Checklist
 
-- [ ] Existing `synced-lyrics-view.test.tsx` coverage passes or is updated to the new contract.
-- [ ] Word fill remains visible with default color mode.
-- [ ] Translation / romanization toggles remain correct.
-- [ ] PRD updated before commit.
+- [x] Existing `synced-lyrics-view.test.tsx` coverage passes or is updated to the new contract.
+- [x] Word fill remains visible with default color mode.
+- [x] Translation / romanization toggles remain correct.
+- [x] PRD updated before commit.
+
+> **Phase 4 implementation note (2026-06-13):** Added Cascade layout-engine parity coverage for click-to-seek, word-by-word spans, translation, and romanization. The new driver keeps the existing row content structure intact, so the transform applies once to the full line block while karaoke spans continue to receive CSS fill updates. Verification: `vitest run src/components/player/synced-lyrics-view.test.tsx` (22 tests), `tsc --noEmit`, and touched-file Biome all passed.
 
 ### Phase 5: Performance QA + Rollout Cleanup
 
@@ -420,6 +422,7 @@ Dev mode is not sufficient for final performance sign-off. Final QA should run a
 | 2026-06-13 | MUZERO | Phase 1 completed: added render-line adapter contract and tests for line-level lyrics, timed words, translations, romanization, fallback end times, and monotonic duration clamps. |
 | 2026-06-13 | MUZERO | Phase 2 completed: added pure lyric layout solver with anchor positioning, visual states, opacity/scale/blur/stagger outputs, and reduced-motion behavior. |
 | 2026-06-13 | MUZERO | Phase 3 completed: integrated AMLL-style rAF DOM driver for Cascade mode with row refs, ResizeObserver measurement, spring integration, and transform-only writes. |
+| 2026-06-13 | MUZERO | Phase 4 completed: added Cascade parity tests for click seek, word-by-word karaoke spans, translation, and romanization under the layout-engine path. |
 
 ---
 

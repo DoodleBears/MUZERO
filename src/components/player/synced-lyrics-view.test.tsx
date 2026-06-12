@@ -59,6 +59,15 @@ describe("LyricsScroller (synced)", () => {
     expect(onSeek).toHaveBeenCalledWith(2); // 2000ms / 1000
   });
 
+  it("seeks to a line's start time in cascade layout-engine mode", () => {
+    const onSeek = vi.fn();
+    render(
+      <LyricsScroller resolved={synced} activeIndex={0} onSeek={onSeek} motionMode="cascade" />,
+    );
+    fireEvent.click(screen.getByText("line three"));
+    expect(onSeek).toHaveBeenCalledWith(3);
+  });
+
   it("attributes LRCLIB as the source", () => {
     render(<LyricsScroller resolved={synced} activeIndex={0} onSeek={() => {}} />);
     expect(screen.getByText("Lyrics from LRCLIB")).toBeInTheDocument();
@@ -150,6 +159,22 @@ describe("LyricsScroller (word-by-word karaoke)", () => {
     expect(screen.getByText("next line").querySelectorAll("[data-word]").length).toBe(0);
   });
 
+  it("keeps word spans in cascade layout-engine mode", () => {
+    const { container } = render(
+      <LyricsScroller
+        resolved={wordSynced}
+        activeIndex={0}
+        onSeek={() => {}}
+        wordByWord
+        motionMode="cascade"
+      />,
+    );
+    expect(Array.from(container.querySelectorAll("[data-word]")).map((s) => s.textContent)).toEqual(
+      ["Cause ", "you"],
+    );
+    expect(screen.getByTestId("lyrics-scroll")).toHaveAttribute("data-layout-engine", "amll-style");
+  });
+
   it("fills word spans with a valid color in the default color mode (no invisible text)", () => {
     // Regression: with lyricStyle.color undefined (default mode), the gradient must
     // fall back to the foreground token — never an "undefined" stop, which background-clip:text
@@ -212,6 +237,22 @@ describe("LyricsScroller (translation / romanization)", () => {
     );
     expect(screen.getByText("the little yellow flower")).toBeInTheDocument();
     expect(screen.getByText("gushi")).toBeInTheDocument();
+  });
+
+  it("keeps translation and romanization in cascade layout-engine mode", () => {
+    render(
+      <LyricsScroller
+        resolved={withSubs}
+        activeIndex={0}
+        onSeek={() => {}}
+        showTranslation
+        showRomanization
+        motionMode="cascade"
+      />,
+    );
+    expect(screen.getByText("the little yellow flower")).toBeInTheDocument();
+    expect(screen.getByText("gushi")).toBeInTheDocument();
+    expect(screen.getByTestId("lyrics-scroll")).toHaveAttribute("data-layout-engine", "amll-style");
   });
 
   it("hides each sub-line when its toggle is off", () => {
