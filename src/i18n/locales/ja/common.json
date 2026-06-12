@@ -454,6 +454,7 @@
     "modeOff": "オフ",
     "modeBackground": "背景",
     "modeIdleOnly": "アイドル表示",
+    "modeLyricsOnly": "歌詞オーバーレイ",
     "panelTitle": "エフェクトコントロール",
     "closePanel": "エフェクトコントロールを閉じる",
     "openSettingsHint": "右クリックまたは長押しで設定を開く",

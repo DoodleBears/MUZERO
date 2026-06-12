@@ -468,6 +468,7 @@
     "modeOff": "Off",
     "modeBackground": "Background",
     "modeIdleOnly": "Idle visualizer",
+    "modeLyricsOnly": "Lyrics overlay",
     "panelTitle": "Effect controls",
     "closePanel": "Close effect controls",
     "openSettingsHint": "Right-click or long-press to open settings",

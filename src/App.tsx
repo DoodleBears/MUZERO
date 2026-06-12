@@ -39,7 +39,7 @@ import { usePlayerStore } from "@/stores/player-store";
 import { startSyncIndicator } from "@/stores/sync-indicator";
 import { useUiStore } from "@/stores/ui-store";
 import { useVisualizerPanelStore } from "@/stores/visualizer-panel-store";
-import { resolveVisualizerStyle } from "@/visualizer/registry";
+import { resolveVisualizerPlacement } from "@/visualizer/placement";
 
 function isTypingTarget(el: EventTarget | null): boolean {
   if (!(el instanceof HTMLElement)) return false;
@@ -167,35 +167,39 @@ export default function App() {
   // gets its own idle rule below so wide screens can reveal it from a bottom hot
   // zone instead of from any tiny pointer movement.
   const idle = useIdle(isNowTab);
-  const visualizerBackgroundActive =
-    ambientBackgroundActive &&
-    (settings.visualizerAsBackground ?? false) &&
-    resolveVisualizerStyle(settings.visualizerStyle) !== "off";
-  const visualizerIdleOnly =
-    idle && visualizerBackgroundActive && (settings.visualizerIdleOnly ?? false);
-  const chromeHidden = idle && ((settings.immersiveIdle ?? true) || visualizerIdleOnly);
+  const visualizerPlacement = resolveVisualizerPlacement(settings);
+  const visualizerBackgroundActive = ambientBackgroundActive && visualizerPlacement !== "off";
+  const lyricsOnlyIdle =
+    idle && isNowTab && visualizerBackgroundActive && visualizerPlacement === "lyrics";
+  const visualizerIdleOnly = idle && visualizerBackgroundActive && visualizerPlacement === "idle";
+  const chromeHidden =
+    idle && ((settings.immersiveIdle ?? true) || visualizerIdleOnly || lyricsOnlyIdle);
   const dockIdleEnabled =
     isNowTab &&
     ((settings.immersiveIdle ?? true) ||
-      ((settings.visualizerIdleOnly ?? false) && visualizerBackgroundActive));
+      (visualizerBackgroundActive &&
+        (visualizerPlacement === "idle" || visualizerPlacement === "lyrics")));
   const dockIdleHidden = useDockIdle(dockIdleEnabled);
   const visualizerPreviewOnly = useVisualizerPanelStore((s) => s.previewOnly);
   const visualizerHidden = useVisualizerPanelStore((s) => s.visualizerHidden);
-  const foregroundHidden = visualizerPreviewOnly || visualizerIdleOnly;
+  const foregroundHidden = visualizerPreviewOnly || visualizerIdleOnly || lyricsOnlyIdle;
   const dockHidden = dockIdleHidden || foregroundHidden;
   // In full-immersive (only background + spectrum, foreground rail hidden) surface
   // memories as a top popover instead — see the immersive-memory-moments PRD.
-  const immersiveMemoryActive = visualizerIdleOnly && (settings.immersiveMemoryOverlay ?? true);
+  const immersiveMemoryActive =
+    visualizerIdleOnly && !lyricsOnlyIdle && (settings.immersiveMemoryOverlay ?? true);
   // Lyrics-on + foreground hidden → centered lyrics over the background. The
   // normal visible-page lyrics layout remains cover-left / lyrics-right.
   const lyricsVisible = !settings.nowPlayingRightRailCollapsed;
-  const immersiveLyricsActive = foregroundHidden && lyricsVisible;
+  const immersiveLyricsActive = lyricsOnlyIdle || (foregroundHidden && lyricsVisible);
+  const ambientBackdropActive = ambientBackgroundActive && !lyricsOnlyIdle;
 
   // Mirror the Dock-hidden signal so deep surfaces (e.g. the lyrics search
   // affordance) can fade in sync with the Dock during immersive idle.
   useEffect(() => {
     useUiStore.getState().setChromeHidden(dockHidden);
   }, [dockHidden]);
+  useLyricsOnlyOverlayDataset(lyricsOnlyIdle);
 
   // MUZERO keeps its playback-oriented motion alive regardless of the OS
   // reduced-motion setting; animation is part of the player feedback model.
@@ -208,11 +212,11 @@ export default function App() {
           screen and scrolls *under* the bars instead of being boxed between them. */}
       <div className="app-shell relative h-screen overflow-hidden bg-background text-foreground">
         <NowPlayingBackground
-          active={ambientBackgroundActive}
+          active={ambientBackdropActive}
           hideVisualizer={visualizerHidden}
           className={cn(
             "fixed inset-0 z-0 transition-opacity duration-500",
-            ambientBackgroundActive ? "opacity-100" : "opacity-0",
+            ambientBackdropActive ? "opacity-100" : "opacity-0",
           )}
         />
 
@@ -286,7 +290,7 @@ export default function App() {
         />
 
         {immersiveMemoryActive && <ImmersiveMemoryOverlay />}
-        {immersiveLyricsActive && <ImmersiveLyricsOverlay />}
+        {immersiveLyricsActive && <ImmersiveLyricsOverlay lyricsOnly={lyricsOnlyIdle} />}
 
         <VisualizerTuningPanel />
         <LyricsTuningPanel />
@@ -317,6 +321,17 @@ function useDesktopChromeDataset() {
       delete html.dataset.windowMaximized;
     };
   }, []);
+}
+
+function useLyricsOnlyOverlayDataset(active: boolean) {
+  useEffect(() => {
+    const html = document.documentElement;
+    if (active) html.dataset.muzeroLyricsOverlay = "true";
+    else delete html.dataset.muzeroLyricsOverlay;
+    return () => {
+      delete html.dataset.muzeroLyricsOverlay;
+    };
+  }, [active]);
 }
 
 function useElectronWindowAppearance(settings: ReturnType<typeof useSettings>) {

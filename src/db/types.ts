@@ -610,6 +610,8 @@ export interface AppSettings {
   visualizerBgOpacityLyrics?: number;
   /** Hide all Now-Playing foreground UI after idle, leaving only background + visualizer. Default false. */
   visualizerIdleOnly?: boolean;
+  /** In idle-only mode, hide background/visual effects and keep only lyrics for OBS overlays. Default false. */
+  visualizerLyricsOnlyIdle?: boolean;
   /** Surface memories as a top popover during full-immersive (idle-only) playback. Default true. */
   immersiveMemoryOverlay?: boolean;
   /** Mount the floating performance HUD in prod builds (dev always mounts it).
@@ -936,6 +938,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   visualizerBgDimLyrics: 30,
   visualizerBgOpacityLyrics: 70,
   visualizerIdleOnly: false,
+  visualizerLyricsOnlyIdle: false,
   immersiveMemoryOverlay: true,
   visualizerUseCoverColor: true,
   visualizerIntensity: 1,

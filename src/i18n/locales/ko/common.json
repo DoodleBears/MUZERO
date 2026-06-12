@@ -454,6 +454,7 @@
     "modeOff": "끄기",
     "modeBackground": "배경",
     "modeIdleOnly": "유휴 비주얼라이저",
+    "modeLyricsOnly": "가사 오버레이",
     "panelTitle": "효과 컨트롤",
     "closePanel": "효과 컨트롤 닫기",
     "openSettingsHint": "우클릭 또는 길게 눌러 설정 열기",

@@ -1,4 +1,4 @@
-import { Eye, EyeOff, ScanEye } from "lucide-react";
+import { Eye, EyeOff, ScanEye, ScanText } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { ControlTooltip } from "@/components/player/control-tooltip";
 import { Button } from "@/components/ui/button";
@@ -16,16 +16,20 @@ import { resolveVisualizerStyle } from "@/visualizer/registry";
 
 const PLACEMENT_LABEL_KEYS: Record<
   VisualizerPlacement,
-  "visualizer.modeOff" | "visualizer.modeBackground" | "visualizer.modeIdleOnly"
+  | "visualizer.modeOff"
+  | "visualizer.modeBackground"
+  | "visualizer.modeIdleOnly"
+  | "visualizer.modeLyricsOnly"
 > = {
   off: "visualizer.modeOff",
   background: "visualizer.modeBackground",
   idle: "visualizer.modeIdleOnly",
+  lyrics: "visualizer.modeLyricsOnly",
 };
 
 /**
  * One-click visualizer placement toggle, aligned with Settings (and the `V`
- * shortcut): off -> Now Playing background -> idle-only visualizer -> off.
+ * shortcut): off -> background -> idle-only visualizer -> lyrics-only idle -> off.
  */
 export function VisualizerModeButton({ className }: { className?: string }) {
   const { t } = useTranslation();
@@ -33,7 +37,14 @@ export function VisualizerModeButton({ className }: { className?: string }) {
   const placement = resolveVisualizerPlacement(settings);
   const setPanelOpen = useVisualizerPanelStore((s) => s.setOpen);
   const active = placement !== "off";
-  const Icon = placement === "off" ? EyeOff : placement === "idle" ? ScanEye : Eye;
+  const Icon =
+    placement === "off"
+      ? EyeOff
+      : placement === "idle"
+        ? ScanEye
+        : placement === "lyrics"
+          ? ScanText
+          : Eye;
   const label = t("visualizer.toggleMode", {
     mode: t(PLACEMENT_LABEL_KEYS[placement]),
   });
@@ -50,6 +61,7 @@ export function VisualizerModeButton({ className }: { className?: string }) {
       visualizerStyle: currentStyle === "off" ? "bars" : currentStyle,
       visualizerAsBackground: true,
       visualizerIdleOnly: false,
+      visualizerLyricsOnlyIdle: false,
     });
   }
 

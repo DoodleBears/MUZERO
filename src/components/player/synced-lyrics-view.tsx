@@ -103,7 +103,15 @@ export function useActiveLyricLine(
  * instrumental / fetching message, or — when there are no lyrics — an inline
  * LRCLIB search panel so the empty state IS the way to find them.
  */
-export function SyncedLyricsView({ track }: { track?: Track }) {
+export function SyncedLyricsView({
+  emptyFallback = "search",
+  showFooter = true,
+  track,
+}: {
+  emptyFallback?: "search" | "hidden";
+  showFooter?: boolean;
+  track?: Track;
+}) {
   const { t } = useTranslation();
   const settings = useSettings();
   const trackId = track?.id;
@@ -140,9 +148,11 @@ export function SyncedLyricsView({ track }: { track?: Track }) {
     );
   }
   if (resolved.mode === "instrumental") {
+    if (emptyFallback === "hidden") return null;
     return <LyricsMessage>{t("lyrics.instrumental")}</LyricsMessage>;
   }
   if (resolved.mode === "none") {
+    if (emptyFallback === "hidden") return null;
     if (!track) return <LyricsMessage>{t("nowPlaying.noLyrics")}</LyricsMessage>;
     const fetching = track.origin !== "generated" && (settings.autoFetchLyrics ?? true) && !row;
     if (fetching) return <LyricsMessage>{t("lyrics.fetching")}</LyricsMessage>;
@@ -161,6 +171,7 @@ export function SyncedLyricsView({ track }: { track?: Track }) {
       showRomanization={settings.lyricsShowRomanization ?? false}
       motionMode={settings.lyricsMotionMode}
       cascadeTuning={cascadeTuning}
+      showFooter={showFooter}
     />
   );
 }
@@ -217,6 +228,7 @@ export function LyricsScroller({
   showRomanization = false,
   motionMode = "classic",
   cascadeTuning = DEFAULT_LYRIC_CASCADE_TUNING,
+  showFooter = true,
 }: {
   resolved: ShownLyrics;
   activeIndex: number;
@@ -229,6 +241,7 @@ export function LyricsScroller({
   showRomanization?: boolean;
   motionMode?: LyricsMotionMode;
   cascadeTuning?: LyricCascadeTuning;
+  showFooter?: boolean;
 }) {
   const plainScrollRef = useRef<HTMLDivElement>(null);
   useSmoothScroll(plainScrollRef);
@@ -271,7 +284,7 @@ export function LyricsScroller({
           />
         )}
       </div>
-      <LyricsFooter source={resolved.source} onSearch={onSearch} />
+      {showFooter && <LyricsFooter source={resolved.source} onSearch={onSearch} />}
     </div>
   );
 }

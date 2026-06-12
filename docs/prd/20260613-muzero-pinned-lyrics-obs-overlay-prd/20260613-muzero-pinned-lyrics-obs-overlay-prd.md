@@ -16,7 +16,7 @@
 | 1 | Current-State Audit + PRD | Completed | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | Desktop Pin / Click-Through Bridge | Completed | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | Header Logo Pin UI + i18n | Completed | [Phase 3 Checklist](#phase-3-checklist) |
-| 4 | Lyrics-Only Visualizer Placement | Pending | [Phase 4 Checklist](#phase-4-checklist) |
+| 4 | Lyrics-Only Visualizer Placement | Completed | [Phase 4 Checklist](#phase-4-checklist) |
 | 5 | OBS-Oriented QA + Regression Tests | Pending | [Phase 5 Checklist](#phase-5-checklist) |
 
 > Status Legend: Completed | In Progress | Pending
@@ -37,7 +37,7 @@ MUZERO already has the pieces this feature should compose:
 - The immersive lyrics surface already exists as [`src/components/player/immersive-lyrics-overlay.tsx`](../../../src/components/player/immersive-lyrics-overlay.tsx).
 - Background media, visualizer spectrum, and flow effects are composed inside [`src/components/player/now-playing-background.tsx`](../../../src/components/player/now-playing-background.tsx).
 
-The current `V` cycle is:
+Before this phase, the `V` cycle was:
 
 ```text
 off -> background -> idle-only visualizer -> off
@@ -523,23 +523,23 @@ Modify [`src/shortcuts/actions.ts`](../../../src/shortcuts/actions.ts):
 
 **Tasks:**
 
-- [ ] Add `visualizerLyricsOnlyIdle?: boolean` to `AppSettings` and defaults.
-- [ ] Extend `VisualizerPlacement` and `nextVisualizerPlacementPatch()`.
-- [ ] Update `VisualizerModeButton` with `ScanText` and i18n labels.
-- [ ] Update `App.tsx` idle orchestration to compute `lyricsOnlyIdle`.
-- [ ] Hide `NowPlayingBackground`, foreground, dock, header, flow, spectrum, and memory overlay during lyrics-only idle.
-- [ ] Ensure `ImmersiveLyricsOverlay` is active independent of `nowPlayingRightRailCollapsed`.
-- [ ] Add transparent overlay CSS under a stable dataset.
-- [ ] Suppress interactive lyrics search/footer UI in OBS overlay if it would otherwise appear.
+- [x] Add `visualizerLyricsOnlyIdle?: boolean` to `AppSettings` and defaults.
+- [x] Extend `VisualizerPlacement` and `nextVisualizerPlacementPatch()`.
+- [x] Update `VisualizerModeButton` with `ScanText` and i18n labels.
+- [x] Update `App.tsx` idle orchestration to compute `lyricsOnlyIdle`.
+- [x] Hide `NowPlayingBackground`, foreground, dock, header, flow, spectrum, and memory overlay during lyrics-only idle.
+- [x] Ensure `ImmersiveLyricsOverlay` is active independent of `nowPlayingRightRailCollapsed`.
+- [x] Add transparent overlay CSS under a stable dataset.
+- [x] Suppress interactive lyrics search/footer UI in OBS overlay if it would otherwise appear.
 
 ### Phase 4 Checklist
 
-- [ ] `V` cycles `off -> background -> idle -> lyrics -> off`.
-- [ ] The Now Playing visualizer mode button shows `ScanText` in lyrics mode.
-- [ ] Lyrics-only idle shows lyrics and no background/flow/spectrum.
-- [ ] Moving pointer or pressing a key exits idle and restores normal UI.
-- [ ] Lyrics-only placement does not mutate the user's lyrics rail visibility setting.
-- [ ] No visualizer registry entry is added for lyrics-only mode.
+- [x] `V` cycles `off -> background -> idle -> lyrics -> off`.
+- [x] The Now Playing visualizer mode button shows `ScanText` in lyrics mode.
+- [x] Lyrics-only idle shows lyrics and no background/flow/spectrum.
+- [x] Moving pointer or pressing a key exits idle and restores normal UI.
+- [x] Lyrics-only placement does not mutate the user's lyrics rail visibility setting.
+- [x] No visualizer registry entry is added for lyrics-only mode.
 
 ### Phase 5: OBS-Oriented QA + Regression Tests
 
@@ -653,3 +653,4 @@ Modify [`src/shortcuts/actions.ts`](../../../src/shortcuts/actions.ts):
 | 2026-06-13 | Codex | Resolved open questions: cross-platform logo-adjacent pin control, no click-through persistence, no-lyrics renders nothing, no dedicated recovery shortcut. |
 | 2026-06-13 | Codex | Completed Phase 2 desktop pin bridge and Electron click-through state machine. |
 | 2026-06-13 | Codex | Completed Phase 3 header logo pin control, i18n labels, and component tests. |
+| 2026-06-13 | Codex | Completed Phase 4 lyrics-only visualizer placement, transparent overlay CSS, and OBS-safe lyrics rendering tests. |

@@ -9,7 +9,7 @@ import { usePlayerStore } from "@/stores/player-store";
  * — any input exits immersive (mirrors ImmersiveMemoryOverlay), so it's
  * watch-only; the follow-scroll keeps the active line centered.
  */
-export function ImmersiveLyricsOverlay() {
+export function ImmersiveLyricsOverlay({ lyricsOnly = false }: { lyricsOnly?: boolean }) {
   const queue = usePlayerStore((s) => s.queue);
   const currentIndex = usePlayerStore((s) => s.currentIndex);
   const current = currentIndex >= 0 ? queue[currentIndex] : undefined;
@@ -22,7 +22,11 @@ export function ImmersiveLyricsOverlay() {
       transition={{ duration: 0.4 }}
     >
       <div className="h-[68vh] w-full max-w-2xl">
-        <SyncedLyricsView track={current} />
+        <SyncedLyricsView
+          emptyFallback={lyricsOnly ? "hidden" : "search"}
+          showFooter={!lyricsOnly}
+          track={current}
+        />
       </div>
     </motion.div>
   );
