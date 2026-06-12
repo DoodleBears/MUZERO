@@ -11,7 +11,6 @@ import type { Track } from "@/db/types";
 import { useSettings } from "@/hooks/use-app-data";
 import { useSmoothScroll } from "@/lib/smooth-scroll/use-smooth-scroll";
 import { cn } from "@/lib/utils";
-import { prefersReducedMotion } from "@/lib/view-transition";
 import { activeWordIndex } from "@/lyrics/active-word";
 import {
   type LyricsMotionMode,
@@ -240,6 +239,11 @@ const EDGE_FADE = {
   WebkitMaskImage:
     "linear-gradient(to bottom, transparent 0%, black 14%, black 86%, transparent 100%)",
 } as const;
+
+function prefersReducedMotion(): boolean {
+  if (typeof window === "undefined" || typeof window.matchMedia !== "function") return false;
+  return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
 
 /**
  * Apple-Music-style synced lines on a NATIVE scroll viewport (overflow-y-auto +
