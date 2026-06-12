@@ -420,6 +420,7 @@ The lyrics viewport should remain native `overflow-y-auto overscroll-contain`; g
 | 2026-06-13 | MUZERO | Phase 3 completed: Cascade row resolver, one-shot neighbor delay/residual-y pulse, row motion tests. |
 | 2026-06-13 | MUZERO | Phase 4 completed and PRD status set to Completed: shared settings/tuning control, four-locale i18n, final automated verification. |
 | 2026-06-13 | MUZERO | Post-merge main compatibility fix: lyrics reduced-motion detection now uses a local media-query helper instead of the page view-transition helper, matching main's current view-transition boundary. |
+| 2026-06-13 | MUZERO | Visibility tuning: switching into Cascade now triggers an immediate preview pulse, and Inertial/Cascade spring + neighbor offset parameters were increased so the three modes are visually distinguishable during review. |
 
 ---
 

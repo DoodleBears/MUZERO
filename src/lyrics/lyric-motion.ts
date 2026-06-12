@@ -62,9 +62,9 @@ const INERTIAL_MOTION: ResolvedLyricsMotion = {
   follow: {
     kind: "spring",
     anchorRatio: 0.38,
-    stiffness: 170,
-    damping: 28,
-    mass: 0.9,
+    stiffness: 120,
+    damping: 20,
+    mass: 1.15,
   },
   row: {
     transition: "spring",
@@ -79,15 +79,15 @@ const CASCADE_MOTION: ResolvedLyricsMotion = {
   follow: {
     kind: "spring",
     anchorRatio: 0.38,
-    stiffness: 150,
-    damping: 26,
-    mass: 1,
+    stiffness: 105,
+    damping: 18,
+    mass: 1.3,
   },
   row: {
     transition: "spring",
-    neighborDelayMs: 26,
-    residualYPx: 10,
-    maxAffectedDistance: 3,
+    neighborDelayMs: 55,
+    residualYPx: 24,
+    maxAffectedDistance: 4,
   },
 };
 

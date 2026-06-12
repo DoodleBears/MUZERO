@@ -118,7 +118,7 @@ describe("lyricCascadeRowMotion", () => {
         direction: 1,
         motion: cascade,
       }),
-    ).toMatchObject({ delaySec: 0.026, initialY: 10, affected: true });
+    ).toMatchObject({ delaySec: 0.055, initialY: 24, affected: true });
     expect(
       lyricCascadeRowMotion({
         rowIndex: 4,
@@ -126,7 +126,7 @@ describe("lyricCascadeRowMotion", () => {
         direction: 1,
         motion: cascade,
       }),
-    ).toMatchObject({ delaySec: 0.078, initialY: 10, affected: true });
+    ).toMatchObject({ delaySec: 0.165, initialY: 24, affected: true });
   });
 
   it("does not delay the active row or distant rows", () => {
@@ -140,7 +140,7 @@ describe("lyricCascadeRowMotion", () => {
     ).toEqual({ delaySec: 0, initialY: 0, affected: false });
     expect(
       lyricCascadeRowMotion({
-        rowIndex: 5,
+        rowIndex: 6,
         activeIndex: 1,
         direction: 1,
         motion: cascade,
@@ -156,6 +156,6 @@ describe("lyricCascadeRowMotion", () => {
         direction: -1,
         motion: cascade,
       }).initialY,
-    ).toBe(-10);
+    ).toBe(-24);
   });
 });

@@ -97,9 +97,26 @@ describe("LyricsScroller (synced)", () => {
     await waitFor(() => {
       expect(screen.getByText("line one")).toHaveAttribute("data-cascade-affected", "true");
     });
-    expect(screen.getByText("line one")).toHaveAttribute("data-cascade-delay-ms", "26");
-    expect(screen.getByText("line one")).toHaveAttribute("data-cascade-initial-y", "10");
+    expect(screen.getByText("line one")).toHaveAttribute("data-cascade-delay-ms", "55");
+    expect(screen.getByText("line one")).toHaveAttribute("data-cascade-initial-y", "24");
     expect(screen.getByText("line two")).not.toHaveAttribute("data-cascade-affected");
+  });
+
+  it("previews the cascade row pulse when switching into cascade mode", async () => {
+    const { rerender } = render(
+      <LyricsScroller resolved={synced} activeIndex={1} onSeek={() => {}} motionMode="classic" />,
+    );
+
+    rerender(
+      <LyricsScroller resolved={synced} activeIndex={1} onSeek={() => {}} motionMode="cascade" />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("line one")).toHaveAttribute("data-cascade-affected", "true");
+    });
+    expect(screen.getByText("line one")).toHaveAttribute("data-cascade-delay-ms", "55");
+    expect(screen.getByText("line three")).toHaveAttribute("data-cascade-initial-y", "24");
+    expect(screen.getByTestId("lyrics-scroll")).toHaveAttribute("data-motion-mode", "cascade");
   });
 });
 

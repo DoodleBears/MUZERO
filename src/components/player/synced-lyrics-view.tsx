@@ -281,6 +281,7 @@ function SyncedLines({
   const [following, setFollowing] = useState(true);
   const [viewportH, setViewportH] = useState(0);
   const previousActiveIndexRef = useRef(activeIndex);
+  const previousMotionModeRef = useRef<LyricsMotionMode>(motionMode);
   const [cascadePulse, setCascadePulse] = useState<{ direction: -1 | 0 | 1; token: number }>({
     direction: 0,
     token: 0,
@@ -325,17 +326,15 @@ function SyncedLines({
 
   useEffect(() => {
     const previous = previousActiveIndexRef.current;
+    const previousMode = previousMotionModeRef.current;
     previousActiveIndexRef.current = activeIndex;
-    if (
-      lyricsMotion.mode !== "cascade" ||
-      previous < 0 ||
-      activeIndex < 0 ||
-      previous === activeIndex
-    ) {
-      return;
-    }
+    previousMotionModeRef.current = lyricsMotion.mode;
+    if (lyricsMotion.mode !== "cascade" || activeIndex < 0) return;
+    const lineChanged = previous >= 0 && previous !== activeIndex;
+    const switchedIntoCascade = previousMode !== "cascade";
+    if (!lineChanged && !switchedIntoCascade) return;
     setCascadePulse((pulse) => ({
-      direction: activeIndex > previous ? 1 : -1,
+      direction: lineChanged ? (activeIndex > previous ? 1 : -1) : 1,
       token: pulse.token + 1,
     }));
   }, [activeIndex, lyricsMotion.mode]);
