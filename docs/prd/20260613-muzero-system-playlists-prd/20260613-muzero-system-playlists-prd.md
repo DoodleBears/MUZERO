@@ -20,6 +20,7 @@
 | 5 | i18n + Empty States + Tests | Completed | [Phase 5 Checklist](#phase-5-checklist) |
 | 6 | Stats Columns + Sortable Queue Order | Completed | [Phase 6 Checklist](#phase-6-checklist) |
 | 7 | Compact Cards + Latest Cover Art | Completed | [Phase 7 Checklist](#phase-7-checklist) |
+| 8 | Last Played Date/Time Formatting | Completed | [Phase 8 Checklist](#phase-8-checklist) |
 
 > Status Legend: Completed | In Progress | Pending
 
@@ -549,6 +550,26 @@ Deletion behavior:
 - `node node_modules/@biomejs/biome/bin/biome check --formatter-enabled=false src/lib/system-playlists.ts src/lib/system-playlists.test.ts src/components/library/system-playlist-cards.tsx src/components/library/system-playlist-cards.test.tsx src/pages/search-page.tsx` passes.
 - `node node_modules/typescript/bin/tsc --noEmit --pretty false` passes.
 
+### Phase 8: Last Played Date/Time Formatting
+
+**Goal:** Make the "Last played" column compact while preserving the most useful recency signal.
+
+**Tasks:**
+- [x] Display same-day plays as local 24-hour `HH:mm`.
+- [x] Display older plays as fixed-width `yy/MM/dd`.
+- [x] Use the system playlist detail `now` value for deterministic "today" checks in tests and range views.
+
+### Phase 8 Checklist
+
+- [x] A track played today renders like `10:00`.
+- [x] A track played before today renders like `26/01/14`.
+- [x] The narrower last-played column remains tabular and right-aligned.
+
+### Phase 8 Verification Notes
+
+- `node node_modules/vitest/vitest.mjs run src/components/library/system-playlist-detail.test.tsx` passes: 1 file, 4 tests.
+- `node node_modules/@biomejs/biome/bin/biome check --formatter-enabled=false src/components/library/system-playlist-detail.tsx src/components/library/system-playlist-detail.test.tsx` passes.
+
 ---
 
 ## 7. Out of Scope
@@ -607,6 +628,7 @@ Deletion behavior:
 | 2026-06-13 | Codex | Completed Phases 3-5: Gallery and Queue pinned sources, virtual detail view, Most Played range metrics, four-locale copy, and targeted TDD verification. |
 | 2026-06-13 | Codex | Completed Phase 6: dedicated play-count and last-played columns plus sort controls that feed the selected queue order. |
 | 2026-06-13 | Codex | Completed Phase 7: compact system playlist cards with latest cover art and masked icon overlay. |
+| 2026-06-13 | Codex | Completed Phase 8: compact Last played formatting with same-day 24-hour time and older `yy/MM/dd` dates. |
 
 ---
 
@@ -620,6 +642,7 @@ Deletion behavior:
 - Most Played supports All / Month / Week / Day range switching.
 - Most Played row metadata includes the selected range play count, including weekly counts.
 - System playlist detail rows show play count and last played time as separate columns.
+- System playlist detail "Last played" values show same-day plays as 24-hour `HH:mm` and older plays as `yy/MM/dd`.
 - System playlist detail can sort rows and queue playback by play count or last played time.
 - System playlist cards render as compact pinned rows in grid mode and show the newest available local cover with a dark mask when a covered local track exists.
 - Playing a system playlist loads the currently visible derived order into the play queue.

@@ -40,7 +40,7 @@ export function SystemPlaylistDetail({
   now?: number;
   onBack: () => void;
 }) {
-  const { i18n, t } = useTranslation();
+  const { t } = useTranslation();
   const [range, setRange] = useState<MostPlayedRange>("all");
   const [sort, setSort] = useState<SystemPlaylistSort>("default");
   const [selectedTrackId, setSelectedTrackId] = useState<string | null>(null);
@@ -73,10 +73,6 @@ export function SystemPlaylistDetail({
         ),
       ),
     [sortedRows],
-  );
-  const lastPlayedFormatter = useMemo(
-    () => new Intl.DateTimeFormat(i18n.language, { dateStyle: "medium", timeStyle: "short" }),
-    [i18n.language],
   );
   const selectedTrack = useMemo(
     () => localTracks.find((track) => track.id === selectedTrackId) ?? localTracks[0],
@@ -139,11 +135,7 @@ export function SystemPlaylistDetail({
             }
             endActions={<SortControls onChange={setSort} sort={sort} t={t} />}
             getTrackColumns={(track) => (
-              <MetricColumns
-                formatter={lastPlayedFormatter}
-                metric={metricsByTrackId.get(track.id)}
-                t={t}
-              />
+              <MetricColumns metric={metricsByTrackId.get(track.id)} now={now} t={t} />
             )}
             startActions={
               <Button size="sm" onClick={() => void playAll()} disabled={localTracks.length === 0}>
@@ -160,7 +152,7 @@ export function SystemPlaylistDetail({
                 >
                   <p className="min-w-0 truncate text-sm">{row.remote.title}</p>
                   <span className="hidden shrink-0 items-center gap-3 text-muted-foreground text-xs md:inline-flex">
-                    <MetricColumns formatter={lastPlayedFormatter} metric={row.metric} t={t} />
+                    <MetricColumns metric={row.metric} now={now} t={t} />
                   </span>
                 </div>
               ))}
@@ -231,7 +223,7 @@ function MetricColumnHeader({ t }: { t: CommonT }) {
   return (
     <div className="hidden shrink-0 justify-end gap-3 px-3 pb-1 text-muted-foreground text-xs md:flex">
       <span className="w-16 text-right">{t("systemPlaylists.playCountColumn")}</span>
-      <span className="w-36 text-right">{t("systemPlaylists.lastPlayedColumn")}</span>
+      <span className="w-20 text-right">{t("systemPlaylists.lastPlayedColumn")}</span>
       <span className="w-10" aria-hidden />
     </div>
   );
@@ -267,22 +259,43 @@ function SortControls({
 
 function MetricColumns({
   metric,
-  formatter,
+  now,
   t,
 }: {
   metric: SystemPlaylistPlayable["metric"] | undefined;
-  formatter: Intl.DateTimeFormat;
+  now: number;
   t: CommonT;
 }) {
   return (
     <>
       <span className="w-16 text-right tabular-nums">{metric?.playCount ?? 0}</span>
-      <span className="w-36 truncate text-right">
+      <span className="w-20 truncate text-right tabular-nums">
         {metric?.lastPlayedAt
-          ? formatter.format(metric.lastPlayedAt)
+          ? formatLastPlayedDate(metric.lastPlayedAt, now)
           : t("systemPlaylists.neverPlayed")}
       </span>
     </>
+  );
+}
+
+function formatLastPlayedDate(value: number, now: number): string {
+  const date = new Date(value);
+  if (isSameLocalDate(date, new Date(now))) {
+    const hour = date.getHours().toString().padStart(2, "0");
+    const minute = date.getMinutes().toString().padStart(2, "0");
+    return `${hour}:${minute}`;
+  }
+  const year = date.getFullYear().toString().slice(-2);
+  const month = (date.getMonth() + 1).toString().padStart(2, "0");
+  const day = date.getDate().toString().padStart(2, "0");
+  return `${year}/${month}/${day}`;
+}
+
+function isSameLocalDate(a: Date, b: Date): boolean {
+  return (
+    a.getFullYear() === b.getFullYear() &&
+    a.getMonth() === b.getMonth() &&
+    a.getDate() === b.getDate()
   );
 }
 

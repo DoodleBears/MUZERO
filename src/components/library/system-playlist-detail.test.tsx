@@ -114,29 +114,28 @@ describe("SystemPlaylistDetail", () => {
   });
 
   it("renders play count and last played as separate local row columns", () => {
-    const tracks = [track("trk_week", "Week")];
-    const expectedLastPlayed = new Intl.DateTimeFormat("en", {
-      dateStyle: "medium",
-      timeStyle: "short",
-    }).format(NOW - DAY);
+    const tracks = [track("trk_week", "Week"), track("trk_today", "Today")];
     render(
       <SystemPlaylistDetail
-        events={[event("trk_week", NOW - DAY, { listenedSec: 75 })]}
+        events={[]}
         now={NOW}
         onBack={vi.fn()}
         playlistId="system:most"
         remoteTracks={[]}
-        stats={[stat("trk_week", 9)]}
+        stats={[
+          stat("trk_week", 9, { lastPlayedAt: NOW - DAY }),
+          stat("trk_today", 2, { lastPlayedAt: NOW - 2 * 60 * 60 * 1000 }),
+        ]}
         tracks={tracks}
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Week" }));
-
     expect(screen.getByText("Plays")).toBeInTheDocument();
     expect(screen.getAllByText("Last played")).toHaveLength(2);
-    expect(screen.getByTestId("track-columns-trk_week")).toHaveTextContent("1");
-    expect(screen.getByTestId("track-columns-trk_week")).toHaveTextContent(expectedLastPlayed);
+    expect(screen.getByTestId("track-columns-trk_week")).toHaveTextContent("9");
+    expect(screen.getByTestId("track-columns-trk_week")).toHaveTextContent("26/01/14");
+    expect(screen.getByTestId("track-columns-trk_today")).toHaveTextContent("2");
+    expect(screen.getByTestId("track-columns-trk_today")).toHaveTextContent("10:00");
   });
 
   it("plays the queue in the selected system sort order", () => {
