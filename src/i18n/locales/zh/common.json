@@ -1122,6 +1122,7 @@
     "system": {
       "title": "系统全局快捷键",
       "subtitle": "Electron 桌面端快捷键，MUZERO 在后台运行时也可使用。",
+      "unavailable": "仅 Electron 桌面版可用。",
       "enable": "启用系统全局快捷键",
       "set": "设置系统快捷键",
       "clear": "清除系统快捷键",

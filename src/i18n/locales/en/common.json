@@ -1140,6 +1140,7 @@
     "system": {
       "title": "System global shortcuts",
       "subtitle": "Electron desktop shortcuts that work while MUZERO is running in the background.",
+      "unavailable": "Available in Electron desktop builds only.",
       "enable": "Enable system global shortcuts",
       "set": "Set system shortcut",
       "clear": "Clear system shortcut",

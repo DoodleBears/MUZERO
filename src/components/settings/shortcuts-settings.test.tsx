@@ -5,6 +5,7 @@ const state = vi.hoisted(() => ({
   overrides: undefined as Record<string, unknown> | undefined,
   systemShortcutsEnabled: false,
   systemShortcutBindings: {} as Record<string, unknown>,
+  systemShortcutsSupported: true,
 }));
 const repo = vi.hoisted(() => ({
   setAll: vi.fn((_overrides: Record<string, unknown>) => Promise.resolve()),
@@ -30,6 +31,12 @@ vi.mock("@/db/repositories", () => ({
   resetSystemShortcut: repo.resetSystemShortcut,
   resetAllSystemShortcuts: repo.resetAllSystem,
 }));
+vi.mock("@/lib/desktop/bridge", () => ({
+  resolveDesktopBridge: () => ({
+    kind: state.systemShortcutsSupported ? "electron" : "web",
+    systemShortcuts: state.systemShortcutsSupported ? {} : undefined,
+  }),
+}));
 
 import { ShortcutsSettings } from "./shortcuts-settings";
 
@@ -38,6 +45,7 @@ describe("ShortcutsSettings (read-only cheat-sheet)", () => {
     state.overrides = undefined;
     state.systemShortcutsEnabled = false;
     state.systemShortcutBindings = {};
+    state.systemShortcutsSupported = true;
     vi.clearAllMocks();
   });
 
@@ -141,5 +149,18 @@ describe("ShortcutsSettings (read-only cheat-sheet)", () => {
 
     expect(repo.setSystemBinding).not.toHaveBeenCalled();
     expect(container.textContent).toContain("shortcuts.system.error.duplicate");
+  });
+
+  it("shows system global shortcuts as unavailable outside Electron", () => {
+    state.systemShortcutsSupported = false;
+    const { container } = render(<ShortcutsSettings />);
+    const section = container.querySelector<HTMLElement>("[data-system-shortcuts-section]");
+    if (!section) throw new Error("no system shortcut section");
+
+    const toggle = within(section).getByRole("checkbox", {
+      name: "shortcuts.system.enable",
+    }) as HTMLInputElement;
+    expect(toggle.disabled).toBe(true);
+    expect(section.textContent).toContain("shortcuts.system.unavailable");
   });
 });

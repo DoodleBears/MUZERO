@@ -25,6 +25,7 @@ import {
 } from "@/db/repositories";
 import { useSettings } from "@/hooks/use-app-data";
 import { useTransliterationReady } from "@/hooks/use-transliteration-ready";
+import { resolveDesktopBridge } from "@/lib/desktop/bridge";
 import { saveTextFile } from "@/lib/save-text-file";
 import { buildCheatSheet, type CheatSheetRow, cheatSheetRowMatches } from "@/shortcuts/cheatsheet";
 import {
@@ -79,6 +80,10 @@ export function ShortcutsSettings() {
   );
   const bindings = useMemo(() => mergeBindings(cleanOverrides), [cleanOverrides]);
   const sections = useMemo(() => buildCheatSheet(bindings, platform), [bindings, platform]);
+  const systemShortcutsSupported = useMemo(
+    () => Boolean(resolveDesktopBridge().systemShortcuts),
+    [],
+  );
   const hasAnyOverride = Object.keys(cleanOverrides).length > 0;
   const importRef = useRef<HTMLInputElement>(null);
 
@@ -193,6 +198,7 @@ export function ShortcutsSettings() {
           enabled={settings.systemShortcutsEnabled ?? false}
           bindings={settings.systemShortcutBindings ?? {}}
           platform={platform}
+          supported={systemShortcutsSupported}
         />
       </CardContent>
 
@@ -231,10 +237,12 @@ function SystemGlobalShortcutsSection({
   enabled,
   bindings,
   platform,
+  supported,
 }: {
   enabled: boolean;
   bindings: Partial<Record<SystemGlobalShortcutActionId, SystemShortcutBinding>>;
   platform: ReturnType<typeof currentPlatform>;
+  supported: boolean;
 }) {
   const { t } = useTranslation();
   const td = t as unknown as (key: string) => string;
@@ -296,6 +304,9 @@ function SystemGlobalShortcutsSection({
             {t("shortcuts.system.title")}
           </h3>
           <p className="text-muted-foreground text-xs">{t("shortcuts.system.subtitle")}</p>
+          {!supported && (
+            <p className="text-muted-foreground text-xs">{t("shortcuts.system.unavailable")}</p>
+          )}
         </div>
         <div className="flex shrink-0 items-center gap-2">
           {hasBindings && (
@@ -307,6 +318,7 @@ function SystemGlobalShortcutsSection({
             <input
               type="checkbox"
               checked={enabled}
+              disabled={!supported}
               aria-label={t("shortcuts.system.enable")}
               onChange={(event) => void setSystemShortcutsEnabled(event.currentTarget.checked)}
             />
@@ -350,7 +362,7 @@ function SystemGlobalShortcutsSection({
               )}
               <button
                 type="button"
-                disabled={!enabled}
+                disabled={!enabled || !supported}
                 onClick={() => {
                   setRecording(actionId);
                   setErrorKey(null);
