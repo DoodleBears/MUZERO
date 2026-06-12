@@ -106,6 +106,31 @@ export interface DesktopTrayControls {
   onAction?: (callback: (actionId: TrayActionId) => void) => () => void;
 }
 
+export interface LiveRequestIntakeStartInput {
+  port: number;
+  token: string;
+  maxBodyBytes?: number;
+}
+
+export interface LiveRequestIntakeStatus {
+  supported: boolean;
+  listening: boolean;
+  port?: number;
+  error?: string;
+}
+
+export interface LiveRequestIntakePayload {
+  body: string;
+  receivedAt: number;
+}
+
+export interface DesktopLiveRequestIntakeControls {
+  start: (input: LiveRequestIntakeStartInput) => Promise<LiveRequestIntakeStatus>;
+  stop: () => Promise<LiveRequestIntakeStatus>;
+  status: () => Promise<LiveRequestIntakeStatus>;
+  onMessage: (callback: (payload: LiveRequestIntakePayload) => void) => () => void;
+}
+
 export interface DesktopBridge {
   readonly kind: DesktopKind;
   readonly platform?: DesktopPlatform;
@@ -152,6 +177,8 @@ export interface DesktopBridge {
   systemShortcuts?: DesktopSystemShortcuts;
   /** Native system tray menu bridge. Electron desktop only for v1. */
   tray?: DesktopTrayControls;
+  /** Tauri desktop local loopback HTTP intake for Social Stream Ninja Call Webhook. */
+  liveRequestIntake?: DesktopLiveRequestIntakeControls;
   /**
    * Start a native window drag for the current press (frameless window move).
    * Tauri only — Electron drags via `-webkit-app-region` CSS, web has no window —

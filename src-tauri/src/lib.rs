@@ -7,6 +7,13 @@
 
 use tauri_plugin_fs::FsExt;
 
+mod live_request_intake;
+
+use live_request_intake::{
+    live_request_intake_status, start_live_request_intake, stop_live_request_intake,
+    LiveRequestIntakeState,
+};
+
 /// Grant the app runtime read access to a folder the user picked for local
 /// import (recursive). The static fs scope ships empty, so nothing on disk is
 /// readable until this is called — and the frontend re-issues it each launch
@@ -20,12 +27,18 @@ fn allow_read_path(app: tauri::AppHandle, path: String) {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .manage(LiveRequestIntakeState::default())
         .plugin(tauri_plugin_os::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_http::init())
         .plugin(tauri_plugin_opener::init())
-        .invoke_handler(tauri::generate_handler![allow_read_path])
+        .invoke_handler(tauri::generate_handler![
+            allow_read_path,
+            start_live_request_intake,
+            stop_live_request_intake,
+            live_request_intake_status
+        ])
         .run(tauri::generate_context!())
         .expect("error while running MUZERO");
 }
