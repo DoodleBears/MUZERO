@@ -1,11 +1,14 @@
-# MUZERO ships as a desktop app — NOT a Cloudflare Worker or Pages site. This
-# file exists ONLY so one-time R2 admin commands (`pnpm dlx wrangler r2 ...` for
-# the release bucket's CORS / custom domain) resolve the account without a flag.
+# MUZERO's official web surface is a static Vite build on Cloudflare Pages:
+#   mu0.app -> Pages project "mu0-app" -> dist/
 #
-# The account id is an identifier, not a secret (ClipCombo commits it too). R2
-# *write* credentials live in the local rclone `r2:` remote / CI env — NEVER here.
-# Per-release uploads go through rclone (see scripts/publish-release.mjs); wrangler
-# is only for bucket-level setup. See the release PRD §12.
-name = "muzero-releases"
-account_id = "332e72d480d7cb3e60ee671d3ca0cad0"
-compatibility_date = "2026-06-11"
+# The Cloudflare account id is exported by Makefile as CLOUDFLARE_ACCOUNT_ID
+# because Pages configuration files do not support the Worker-only account_id
+# field. R2 *write* credentials live in the local rclone `r2:` remote / CI env
+# — NEVER here.
+# Desktop release artifact uploads still go through rclone (see
+# scripts/publish-release.mjs); Wrangler is used for Pages deployment and
+# bucket-level R2 setup commands only. See docs/deploy/mu0-app-release.md.
+"$schema" = "./node_modules/wrangler/config-schema.json"
+name = "mu0-app"
+compatibility_date = "2026-06-12"
+pages_build_output_dir = "./dist"

@@ -11,6 +11,9 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
+    "pages:project:create": "wrangler pages project create mu0-app --production-branch=main --compatibility-date=2026-06-12",
+    "pages:deploy": "pnpm build && wrangler pages deploy dist --project-name=mu0-app --branch=main",
+    "pages:deploy:preview": "pnpm build && wrangler pages deploy dist --project-name=mu0-app --branch=preview",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
@@ -170,6 +173,7 @@
     "tailwindcss": "^4.3.0",
     "typescript": "^6.0.3",
     "vite": "^8.0.14",
-    "vitest": "^4.1.7"
+    "vitest": "^4.1.7",
+    "wrangler": "^4.100.0"
   }
 }

@@ -1,6 +1,6 @@
 .PHONY: help install update
 .PHONY: dev web desktop tauri electron-dev electron-preview electron-build ios ios-init android android-init mobile-info tauri-info
-.PHONY: build preview desktop-build desktop-debug mac win linux ios-build android-build desktop-locate
+.PHONY: build preview deploy pages-project pages-deploy pages-deploy-preview desktop-build desktop-debug mac win linux ios-build android-build desktop-locate
 .PHONY: version-bump changelog-check version-sync release-check release-show release-build release-mac release-win release-linux release-publish release-publish-dry release-locate changelog-md
 .PHONY: test test-watch typecheck lint format check
 .PHONY: icons ui ui-coss ui-theme clean clean-dist
@@ -27,6 +27,9 @@ DESKTOP_PORT ?= 1430
 DEV_URL ?= http://localhost:$(WEB_PORT)
 BUNDLE_DIR := src-tauri/target/release/bundle
 UNAME := $(shell uname)
+WRANGLER_LOG_PATH ?= $(CURDIR)/.wrangler/logs
+CLOUDFLARE_ACCOUNT_ID ?= 332e72d480d7cb3e60ee671d3ca0cad0
+export WRANGLER_LOG_PATH CLOUDFLARE_ACCOUNT_ID
 
 # --- Release distribution (Electron → R2). See the release PRD. Decisions Q2/Q3:
 # official public bucket served at assets.mu0.app, transport via rclone. The S3
@@ -61,6 +64,10 @@ help:
 	@echo "Build & package:"
 	@echo "  make build        - Build the web frontend → dist/ (tsc + vite)"
 	@echo "  make preview      - Preview the production web build locally"
+	@echo "  make deploy       - Build + deploy dist/ to Cloudflare Pages production (mu0.app)"
+	@echo "  make pages-project - Create the Cloudflare Pages project mu0-app (one-time)"
+	@echo "  make pages-deploy - Same as make deploy"
+	@echo "  make pages-deploy-preview - Build + deploy dist/ to a Pages preview branch"
 	@echo "  make electron-preview - Build web frontend, then open it in Electron (Chromium)"
 	@echo "  make electron-build - Package desktop installers via electron-builder → release/"
 	@echo "  make desktop-build- Package the desktop app for THIS OS (release)"
@@ -159,6 +166,17 @@ build:
 
 preview: build
 	$(PM) preview
+
+deploy: pages-deploy
+
+pages-project:
+	$(PM) run pages:project:create
+
+pages-deploy:
+	$(PM) run pages:deploy
+
+pages-deploy-preview:
+	$(PM) run pages:deploy:preview
 
 desktop-build:
 	$(PM) tauri build
