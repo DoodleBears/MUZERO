@@ -26,7 +26,6 @@ import { trackAlbum, trackArtists, trackHasCover, trackSubtitle } from "@/lib/tr
 import { cn } from "@/lib/utils";
 import { useNavStore } from "@/stores/nav-store";
 import { usePlayerStore } from "@/stores/player-store";
-import { CoverBacklightCanvas } from "./cover-backlight";
 import { MediaStage } from "./media-stage";
 import { StageTitleFallback } from "./stage-title-fallback";
 
@@ -110,7 +109,6 @@ export function SwipeableMediaStage({
   const [settleTarget, setSettleTarget] = useState<VisualTrack | null>(null);
   const [readyTrackIds, setReadyTrackIds] = useState<Record<string, true>>({});
   const [overlayRect, setOverlayRect] = useState<StageOverlayRect | null>(null);
-  const [stackWarmed, setStackWarmed] = useState(false);
 
   const next = usePlayerStore((s) => s.next);
   const skipPrev = usePlayerStore((s) => s.skipPrev);
@@ -123,10 +121,7 @@ export function SwipeableMediaStage({
   const coverEffectMode = resolveNowPlayingCoverEffectMode(settings.nowPlayingCoverEffectMode);
   const backlight = resolveNowPlayingCoverBacklightAppearance(settings);
   const coverEffect: SwipeCoverEffect = {
-    backlightBlur: backlight.blur,
     backlightOpacity: backlight.opacity / 100,
-    backlightRange: backlight.range,
-    backlightSaturation: backlight.saturation,
     mode: coverEffectMode,
   };
   const stageCover = useTrackCoverResource(current);
@@ -155,6 +150,7 @@ export function SwipeableMediaStage({
   const stackVisible = !!stack;
   const stackActive =
     stackVisible && (!!dragDirection || committing || !!settleTarget || handoffFading);
+  const baseCoverBacklightEnabled = (!committing && !settleTarget) || handoffFading;
 
   const travel = Math.max(width, FALLBACK_WIDTH);
   const visualX = useTransform(x, (value) => value * DRAG_GAIN);
@@ -195,7 +191,6 @@ export function SwipeableMediaStage({
 
   useEffect(() => {
     if (!stackVisible) {
-      setStackWarmed(false);
       setOverlayRect(null);
       return;
     }
@@ -207,19 +202,6 @@ export function SwipeableMediaStage({
       window.removeEventListener("scroll", updateOverlayRect, true);
     };
   }, [stackVisible, updateOverlayRect]);
-
-  useEffect(() => {
-    if (!stackVisible) return;
-    let firstFrame = 0;
-    let secondFrame = 0;
-    firstFrame = window.requestAnimationFrame(() => {
-      secondFrame = window.requestAnimationFrame(() => setStackWarmed(true));
-    });
-    return () => {
-      window.cancelAnimationFrame(firstFrame);
-      window.cancelAnimationFrame(secondFrame);
-    };
-  }, [stackVisible]);
 
   useEffect(() => {
     return () => {
@@ -248,7 +230,6 @@ export function SwipeableMediaStage({
     setHandoffFading(false);
     setSettleTarget(null);
     setReadyTrackIds({});
-    setStackWarmed(false);
     setOverlayRect(null);
     setStack(null);
   }, [x]);
@@ -275,7 +256,6 @@ export function SwipeableMediaStage({
     setHandoffFading(false);
     setSettleTarget(null);
     setReadyTrackIds({});
-    setStackWarmed(false);
     updateOverlayRect();
     setStack({
       current: currentVisual,
@@ -568,11 +548,11 @@ export function SwipeableMediaStage({
       ? (containerRef.current?.closest("main") ?? document.body)
       : null;
   const stackOverlay =
-    stackVisible && overlayRect && overlayPortalTarget
+    stackActive && overlayRect && overlayPortalTarget
       ? createPortal(
           <motion.div
             aria-hidden
-            animate={{ opacity: stackActive && !handoffFading ? 1 : 0 }}
+            animate={{ opacity: handoffFading ? 0 : 1 }}
             className="pointer-events-none fixed z-20 overflow-visible [perspective:1200px] [transform-style:preserve-3d]"
             initial={false}
             style={{
@@ -580,7 +560,6 @@ export function SwipeableMediaStage({
               height: overlayRect.height,
               left: overlayRect.left,
               top: overlayRect.top,
-              willChange: "opacity",
               width: overlayRect.width,
             }}
             transition={{ duration: HANDOFF_DURATION_SEC, ease: "easeOut" }}
@@ -620,7 +599,7 @@ export function SwipeableMediaStage({
         )
       : null;
 
-  const baseHidden = stackActive && stackWarmed && !handoffFading;
+  const baseHidden = stackActive && !handoffFading;
   // The cover cross-fades through the handoff, but the (translucent) title/author
   // pills must NOT — two copies fading over each other darken the background. So
   // the base owns the identity the moment the swipe settles; it's hidden only
@@ -689,10 +668,10 @@ export function SwipeableMediaStage({
             style={{
               x,
               opacity: baseHidden ? 0 : 1,
-              willChange: "transform, opacity",
+              willChange: "transform",
             }}
           >
-            <MediaStage />
+            <MediaStage coverBacklightEnabled={baseCoverBacklightEnabled} />
           </motion.div>
         </div>
         {/* Title + author travel with the cover during an active drag (handled by
@@ -727,10 +706,7 @@ type StageOverlayRect = {
 };
 type VisualTrack = { initialCoverUrl: string | null; track: Track };
 type SwipeCoverEffect = {
-  backlightBlur: number;
   backlightOpacity: number;
-  backlightRange: number;
-  backlightSaturation: number;
   mode: "shadow" | "backlight" | "off";
 };
 type SwipeStack = {
@@ -795,7 +771,6 @@ function CoverflowCard({
         scale: card.scale,
         transformOrigin: "center center",
         transformStyle: "preserve-3d",
-        willChange: "transform, opacity",
       }}
     >
       <TrackVisual
@@ -965,15 +940,23 @@ function TrackVisual({
           aria-hidden
           initial={backlightInitial ? { opacity: 0 } : false}
           animate={{ opacity: coverEffect.backlightOpacity }}
-          style={{ willChange: "opacity" }}
           transition={{ duration: 0.42, ease: "easeOut" }}
           className="pointer-events-none absolute inset-0 z-0 now-playing-cover-backlight-clip"
         >
-          <CoverBacklightCanvas
-            blur={coverEffect.backlightBlur}
-            range={coverEffect.backlightRange}
-            saturation={coverEffect.backlightSaturation}
-            url={coverUrl}
+          <img
+            src={coverUrl}
+            alt=""
+            aria-hidden
+            referrerPolicy="no-referrer"
+            draggable={false}
+            className="absolute inset-0 size-full object-cover album-cover-radius"
+            style={{
+              transform: "scale(var(--now-playing-cover-backlight-scale, 1.12))",
+              filter: [
+                "blur(var(--now-playing-cover-backlight-blur, 20px))",
+                "saturate(var(--now-playing-cover-backlight-saturation, 400%))",
+              ].join(" "),
+            }}
           />
         </motion.div>
       )}
@@ -982,7 +965,6 @@ function TrackVisual({
           src={coverUrl}
           alt=""
           // Streamed covers come from third-party hosts that 403 a foreign referer.
-          decoding="async"
           referrerPolicy="no-referrer"
           draggable={false}
           className="absolute inset-0 size-full object-cover"

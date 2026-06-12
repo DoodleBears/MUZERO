@@ -10,7 +10,6 @@ import {
 import { resolveStageContent, trackHasCover } from "@/lib/track-display";
 import { cn } from "@/lib/utils";
 import { getMediaEngine, usePlayerStore } from "@/stores/player-store";
-import { CoverBacklightCanvas } from "./cover-backlight";
 import { CoverImage } from "./cover-image";
 import { StageTitleFallback } from "./stage-title-fallback";
 
@@ -130,10 +129,7 @@ export function MediaStage({
     >
       <NowPlayingCoverBacklight
         active={showCoverBacklight}
-        blur={backlight.blur}
         opacity={backlight.opacity / 100}
-        range={backlight.range}
-        saturation={backlight.saturation}
         url={coverUrl}
       />
       <div
@@ -169,17 +165,11 @@ export function MediaStage({
 
 function NowPlayingCoverBacklight({
   active,
-  blur,
   opacity,
-  range,
-  saturation,
   url,
 }: {
   active: boolean;
-  blur: number;
   opacity: number;
-  range: number;
-  saturation: number;
   url: string | null;
 }) {
   return (
@@ -191,11 +181,23 @@ function NowPlayingCoverBacklight({
           initial={{ opacity: 0 }}
           animate={{ opacity }}
           exit={{ opacity: 0, transition: { duration: 0.22, ease: "easeIn" } }}
-          style={{ willChange: "opacity" }}
           transition={{ duration: 0.42, ease: "easeOut" }}
           className="pointer-events-none absolute inset-0 z-0 now-playing-cover-backlight-clip"
         >
-          <CoverBacklightCanvas blur={blur} range={range} saturation={saturation} url={url} />
+          <img
+            src={url}
+            alt=""
+            referrerPolicy="no-referrer"
+            draggable={false}
+            className="absolute inset-0 size-full object-cover album-cover-radius"
+            style={{
+              transform: "scale(var(--now-playing-cover-backlight-scale, 1.12))",
+              filter: [
+                "blur(var(--now-playing-cover-backlight-blur, 20px))",
+                "saturate(var(--now-playing-cover-backlight-saturation, 400%))",
+              ].join(" "),
+            }}
+          />
         </motion.div>
       )}
     </AnimatePresence>
