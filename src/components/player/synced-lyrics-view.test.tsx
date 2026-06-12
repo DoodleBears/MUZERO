@@ -85,25 +85,24 @@ describe("LyricsScroller (synced)", () => {
     expect(screen.getByTestId("lyrics-scroll")).toHaveAttribute("data-motion-mode", "inertial");
   });
 
-  it("marks nearby rows with cascade delay and initial offset after active changes", async () => {
-    const { rerender } = render(
+  it("uses the AMLL-style layout driver for cascade mode", async () => {
+    render(
       <LyricsScroller resolved={synced} activeIndex={0} onSeek={() => {}} motionMode="cascade" />,
     );
 
-    rerender(
-      <LyricsScroller resolved={synced} activeIndex={1} onSeek={() => {}} motionMode="cascade" />,
-    );
+    expect(screen.getByTestId("lyrics-scroll")).toHaveAttribute("data-layout-engine", "amll-style");
 
     await waitFor(() => {
-      expect(screen.getByText("line one")).toHaveAttribute("data-cascade-affected", "true");
+      expect(screen.getByText("line one")).toHaveStyle({
+        willChange: "transform, opacity, filter",
+      });
     });
-    expect(screen.getByText("line one")).toHaveAttribute("data-cascade-delay-ms", "55");
-    expect(screen.getByText("line one")).toHaveAttribute("data-cascade-initial-y", "24");
-    expect(screen.getByText("line one")).toHaveAttribute("data-cascade-wave-token", "1");
-    expect(screen.getByText("line two")).not.toHaveAttribute("data-cascade-affected");
+    expect(screen.getByText("line one").style.transform).toContain("translate3d");
+    expect(screen.getByText("line one").style.filter).toContain("blur");
+    expect(screen.getByText("line one")).not.toHaveAttribute("data-cascade-wave-token");
   });
 
-  it("previews the cascade row pulse when switching into cascade mode", async () => {
+  it("switches into cascade without the old remount pulse attributes", async () => {
     const { rerender } = render(
       <LyricsScroller resolved={synced} activeIndex={1} onSeek={() => {}} motionMode="classic" />,
     );
@@ -113,12 +112,13 @@ describe("LyricsScroller (synced)", () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText("line one")).toHaveAttribute("data-cascade-affected", "true");
+      expect(screen.getByTestId("lyrics-scroll")).toHaveAttribute(
+        "data-layout-engine",
+        "amll-style",
+      );
     });
-    expect(screen.getByText("line one")).toHaveAttribute("data-cascade-delay-ms", "55");
-    expect(screen.getByText("line one")).toHaveAttribute("data-cascade-wave-token", "1");
-    expect(screen.getByText("line three")).toHaveAttribute("data-cascade-initial-y", "24");
-    expect(screen.getByTestId("lyrics-scroll")).toHaveAttribute("data-motion-mode", "cascade");
+    expect(screen.getByText("line one")).not.toHaveAttribute("data-cascade-affected");
+    expect(screen.getByText("line three")).not.toHaveAttribute("data-cascade-initial-y");
   });
 });
 

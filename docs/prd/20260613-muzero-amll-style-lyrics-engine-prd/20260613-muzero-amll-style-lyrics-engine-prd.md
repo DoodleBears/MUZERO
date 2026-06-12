@@ -13,7 +13,7 @@
 |-------|------|--------|------|
 | 1 | Research Baseline + Engine Contract | ✅ Completed | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | Pure Layout Solver + TDD Fixtures | ✅ Completed | [Phase 2 Checklist](#phase-2-checklist) |
-| 3 | rAF DOM Driver + React Integration | 🔲 Pending | [Phase 3 Checklist](#phase-3-checklist) |
+| 3 | rAF DOM Driver + React Integration | ✅ Completed | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | Word Fill / Secondary Lines / Click Seek Parity | 🔲 Pending | [Phase 4 Checklist](#phase-4-checklist) |
 | 5 | Performance QA + Rollout Cleanup | 🔲 Pending | [Phase 5 Checklist](#phase-5-checklist) |
 
@@ -295,20 +295,22 @@ React state should not update per frame.
 **Goal:** Replace row-level Motion cascade with a lightweight continuous DOM transform driver.
 
 **Tasks:**
-- [ ] Add a scoped driver in `SyncedLines` that starts/stops with component lifecycle.
-- [ ] Measure row heights via ResizeObserver and update solver inputs only when needed.
-- [ ] On each frame, read media time, compute target frames, integrate spring values, and write styles.
-- [ ] Limit writes to `transform`, `opacity`, `filter`, and `will-change`.
-- [ ] Ensure track changes reset driver state without shrink/grow regression.
-- [ ] Keep classic mode as a simple baseline path.
+- [x] Add a scoped driver in `SyncedLines` that starts/stops with component lifecycle.
+- [x] Measure row heights via ResizeObserver and update solver inputs only when needed.
+- [x] On each frame, read media time, compute target frames, integrate spring values, and write styles.
+- [x] Limit writes to `transform`, `opacity`, `filter`, and `will-change`.
+- [x] Ensure track changes reset driver state without shrink/grow regression.
+- [x] Keep classic mode as a simple baseline path.
 
 ### Phase 3 Checklist
 
-- [ ] No React state updates per frame.
-- [ ] No per-row Motion controllers.
-- [ ] Track switch does not animate every row from a default scale.
-- [ ] Scrolling / touch detach still works or has an explicit replacement behavior.
-- [ ] PRD updated before commit.
+- [x] No React state updates per frame.
+- [x] No per-row Motion controllers.
+- [x] Track switch does not animate every row from a default scale.
+- [x] Scrolling / touch detach still works or has an explicit replacement behavior.
+- [x] PRD updated before commit.
+
+> **Phase 3 implementation note (2026-06-13):** Cascade mode now uses an AMLL-style scoped rAF driver inside [`SyncedLines`](../../../src/components/player/synced-lyrics-view.tsx): it reads live media time, solves the full lyric stack with `solveLyricLayout`, integrates spring values per row, and writes only `transform`, `opacity`, `filter`, and `will-change`. Cascade rows render as plain buttons with refs instead of per-row Motion controllers; Classic/Inertial keep the existing Motion path. Verification: `vitest run src/components/player/synced-lyrics-view.test.tsx src/lyrics/lyric-layout-engine.test.ts src/lyrics/lyric-render-line.test.ts` (28 tests), `tsc --noEmit`, and touched-file Biome all passed.
 
 ### Phase 4: Word Fill / Secondary Lines / Click Seek Parity
 
@@ -417,6 +419,7 @@ Dev mode is not sufficient for final performance sign-off. Final QA should run a
 | 2026-06-13 | MUZERO | Initial draft: clean-room AMLL-style lyrics layout engine PRD based on LyciaMusic / AMLL reference research. |
 | 2026-06-13 | MUZERO | Phase 1 completed: added render-line adapter contract and tests for line-level lyrics, timed words, translations, romanization, fallback end times, and monotonic duration clamps. |
 | 2026-06-13 | MUZERO | Phase 2 completed: added pure lyric layout solver with anchor positioning, visual states, opacity/scale/blur/stagger outputs, and reduced-motion behavior. |
+| 2026-06-13 | MUZERO | Phase 3 completed: integrated AMLL-style rAF DOM driver for Cascade mode with row refs, ResizeObserver measurement, spring integration, and transform-only writes. |
 
 ---
 
