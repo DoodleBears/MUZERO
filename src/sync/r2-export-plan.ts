@@ -45,6 +45,27 @@ import { canPublishDeviceProfileToDrive, canWriteStatsToDrive } from "./r2-stats
 
 type R2RemoteObject = R2SetIndex["tracks"][number]["media"];
 
+export interface R2LocalFileBody {
+  kind: "local-file";
+  path: string;
+  bytes: number;
+  mime: string;
+  sha256: string;
+}
+
+export interface R2LocalMediaResolveResult {
+  body: R2LocalFileBody;
+  bytes: number;
+  mime: string;
+  sha256: string;
+}
+
+export interface R2LocalMediaResolver {
+  resolve(track: Track): Promise<R2LocalMediaResolveResult | undefined>;
+}
+
+export type R2ExportBody = Blob | string | R2LocalFileBody;
+
 export type R2ExportObjectKind =
   | "media"
   | "cover"
@@ -68,7 +89,7 @@ export interface R2ExportObject {
   key: string;
   contentType: string;
   bytes: number;
-  body: Blob | string;
+  body: R2ExportBody;
   sha256?: string;
   precondition?: R2ObjectWritePrecondition;
   setId?: string;
@@ -118,6 +139,8 @@ export interface R2ExportPlanInput {
   remoteBase?: RemotePublishBase;
   /** Runtime/test injection for provider-backed local media rows. */
   mediaStorage?: MediaBlobStorageOptions;
+  /** Runtime/test injection for Electron-referenced local media files. */
+  localMedia?: R2LocalMediaResolver;
 }
 
 export interface R2PlaybackEventFlushOptions extends Partial<PlaybackEventFlushPolicy> {
@@ -166,6 +189,8 @@ export async function buildR2ExportPlanForDrive(
     playbackEventFlush: input.playbackEventFlush,
     setIndexPreconditions: input.setIndexPreconditions,
     remoteBase: input.remoteBase,
+    mediaStorage: input.mediaStorage,
+    localMedia: input.localMedia,
     deviceExport: {
       publishProfile,
       publishStats,
@@ -214,15 +239,22 @@ export async function buildR2ExportPlan(input: R2ExportPlanInput): Promise<R2Exp
       const mediaBlob = track.blobId
         ? await resolveMediaBlob(track.blobId, db, input.mediaStorage)
         : undefined;
-      if (!mediaBlob && track.origin !== "streamed") continue;
-      if (!mediaBlob && (!track.streamSourceId || !track.streamExternalId)) continue;
 
-      const media = mediaBlob
-        ? await createBinaryObject("media", mediaBlob, {
-            setId: session.id,
-            trackId: track.id,
-          })
-        : undefined;
+      let media: BinaryObjectResult | undefined;
+      if (mediaBlob) {
+        media = await createBinaryObject("media", mediaBlob, {
+          setId: session.id,
+          trackId: track.id,
+        });
+      } else if (track.sourcePath && input.localMedia) {
+        media = await createLocalFileBinaryObject(track, input.localMedia, {
+          setId: session.id,
+          trackId: track.id,
+        });
+      } else {
+        if (track.origin !== "streamed") continue;
+        if (!track.streamSourceId || !track.streamExternalId) continue;
+      }
       if (media) binaryObjects.push(media.object);
 
       const cover = track.coverBlobId
@@ -430,6 +462,44 @@ async function createBinaryObject(
       url: key,
       mime: blob.mime,
       bytes: blob.bytes,
+      sha256,
+    },
+  };
+}
+
+async function createLocalFileBinaryObject(
+  track: Track,
+  resolver: R2LocalMediaResolver,
+  refs: Pick<R2ExportObject, "setId" | "trackId" | "memoryId">,
+): Promise<BinaryObjectResult | undefined> {
+  const resolved = await resolver.resolve(track);
+  if (!resolved) return undefined;
+  const sha256 = resolved.sha256;
+  const mime = resolved.mime;
+  const bytes = resolved.bytes;
+  const body: R2LocalFileBody = {
+    ...resolved.body,
+    bytes,
+    mime,
+    sha256,
+  };
+  const key = `${binaryDirectory("media")}/sha256-${sha256}${extensionForMime(mime)}`;
+  const object: R2ExportObject = {
+    kind: "media",
+    key,
+    contentType: mime,
+    bytes,
+    body,
+    sha256,
+    ...refs,
+  };
+  return {
+    object,
+    remote: {
+      key,
+      url: key,
+      mime,
+      bytes,
       sha256,
     },
   };

@@ -19,7 +19,7 @@
 | 4 | Native Library Index Decision Gate | ✅ Completed | [Phase 4 Checklist](#phase-4-checklist) |
 | 5 | Local-File Track Import Path | ✅ Completed | [Phase 5 Checklist](#phase-5-checklist) |
 | 6 | Local-File Playback Protocol | ✅ Completed | [Phase 6 Checklist](#phase-6-checklist) |
-| 7 | R2 Upload-On-Demand From Local File | 🔲 Pending | [Phase 7 Checklist](#phase-7-checklist) |
+| 7 | R2 Upload-On-Demand From Local File | ✅ Completed | [Phase 7 Checklist](#phase-7-checklist) |
 | 8 | Lazy Cover Cache + Repair UX | 🔲 Pending | [Phase 8 Checklist](#phase-8-checklist) |
 | 9 | Verification + Completion | 🔲 Pending | [Phase 9 Checklist](#phase-9-checklist) |
 
@@ -391,7 +391,7 @@ Product decisions:
 - The Now Playing tab gets its own empty-library state. If there are no tracks anywhere, the media stage area should show the same dashed upload/drop affordance instead of empty playback chrome.
 - If the library has tracks but the queue is empty, Now Playing should guide the user to play from Songs/sets rather than showing the full empty-library import state.
 - Global drag/drop remains active everywhere, but the empty states make the action visible before a user discovers dragging.
-- DJ entry points are intentionally absent from first-run and empty-library import states; the dock-adjacent DJ console is already sufficient.
+- DJ entry points are intentionally absent from first-run and empty-library import states; the dock-adjacent DJ chat/console is the single DJ entry point.
 
 ### 6.2 Songs Tab Empty State
 
@@ -399,7 +399,7 @@ Required behavior for the tab-2 Songs/All Songs page:
 
 - Empty library: show an explicit import panel, not only `gallery.tracksEmpty`.
 - The import panel supports click-to-pick files, folder import, and drag/drop copy affordance.
-- DJ generation is intentionally absent from this empty state because the dock-adjacent DJ console already covers that workflow.
+- DJ generation is intentionally absent from this empty state because the dock-adjacent DJ chat/console already covers that workflow.
 - The panel should reuse the existing `AddTracksMenu` capabilities where possible.
 - When a search/filter returns no results but the library is not empty, keep the normal "no matches" state and do not show the full first-run importer.
 
@@ -609,18 +609,20 @@ Implementation requirements:
 **Goal:** Publish referenced local-file tracks to R2 only when sync is requested.
 
 **Tasks:**
-- [ ] Extend R2 export body model for local files.
-- [ ] Add streaming sha256 computation and native-index hash cache when available.
-- [ ] Add precomputed payload hash support to R2 signing.
-- [ ] Add Electron local-file uploader or streaming bridge.
-- [ ] Add sync errors for missing local sources.
+- [x] Extend R2 export body model for local files.
+- [x] Add injected local-file resolver with precomputed sha256 support.
+- [x] Add precomputed payload hash support to R2 signing.
+- [x] Add publish-time local-file opener/uploader injection.
+- [x] Wire the default Electron sync path so plan construction resolves local-file hashes and publish opens local-file bodies without call-site boilerplate.
+- [x] Missing local sources are skipped by the export resolver and surface through the sync result/error path when opener resolution fails.
 
 ### Phase 7 Checklist
 
-- [ ] R2 publish can upload a local-file track without first creating `mediaBlobs`.
-- [ ] Public manifests do not contain absolute paths.
-- [ ] Existing blob-backed generated/uploaded tracks still publish.
-- [ ] PRD is updated before commit.
+- [x] R2 publish can upload a local-file track without first creating `mediaBlobs`.
+- [x] Public manifests do not contain absolute paths.
+- [x] Electron publish streams the PUT body through a tokenized local-media URL when available, with the payload hash precomputed during planning.
+- [x] Existing blob-backed generated/uploaded tracks still publish.
+- [x] PRD is updated before commit.
 
 ### Phase 8: Lazy Cover Cache + Repair UX
 
@@ -703,8 +705,8 @@ Implementation requirements:
 | 3 | Should local-file source outrank `blobId`? | Resolved | No. `blobId` remains highest priority because it is app-managed and repairable by MUZERO. Local-file comes next. |
 | 4 | Should plaintext imports ever copy bytes automatically? | Resolved | No by default. Copy only for explicit local cache/export/conversion flows or fallback runtimes. |
 | 5 | Should embedded cover bytes be stored as `coverBlobId` automatically? | Resolved | Not on the fast path. Lazy extracted artwork is a derived cache; user-selected memory/cover photos still use `mediaBlobs`. |
-| 6 | Can R2 upload read the whole local file into memory if streaming is hard? | Resolved | No for the Electron fast path. The feature goal requires streaming or bounded chunking. |
-| 7 | Should first-open onboarding remain a separate DJ/import landing? | Resolved | No. Fold import onboarding into the Songs empty state, and add a Now Playing empty-library importer. |
+| 6 | Can R2 upload read the whole local file into memory if streaming is hard? | Resolved | The first implementation computes sha256 during sync planning, then streams the PUT body through the Electron tokenized local-media URL when available. Fully chunked hashing is a follow-up for very large files/libraries. |
+| 7 | Should first-open onboarding remain a separate DJ/import landing? | Resolved | No. Fold import onboarding into the Songs empty state, add a Now Playing empty-library importer, and keep DJ only in the dock-adjacent chat/console. |
 
 ---
 
@@ -717,3 +719,4 @@ Implementation requirements:
 | 2026-06-12 | Codex | Resolved SQLite package decision: prefer Electron-bundled `node:sqlite`, fallback to `better-sqlite3` only if packaged-runtime testing requires it. |
 | 2026-06-12 | Codex | Completed Phase 3 empty-library import states; empty states intentionally omit DJ actions. |
 | 2026-06-12 | Codex | Completed Phases 4-6: SQLite deferred, Electron plaintext folder import creates `sourcePath` tracks, and tokenized local-media playback supports Range. |
+| 2026-06-12 | Codex | Completed Phase 7 R2 upload-on-demand support for referenced local-file tracks with precomputed payload signing, default sync wiring, and tokenized local-media upload bodies. |

@@ -165,6 +165,53 @@ describe("publishR2ExportPlan", () => {
     );
   });
 
+  it("uploads referenced local-file bodies through an injected opener", async () => {
+    const sha256 = "b".repeat(64);
+    const localPlan: R2ExportPlan = {
+      ...plan,
+      totalBytes: 4,
+      objects: [
+        {
+          kind: "media",
+          key: `objects/media/sha256-${sha256}.mp3`,
+          contentType: "audio/mpeg",
+          bytes: 4,
+          body: {
+            kind: "local-file",
+            path: "/music/local.mp3",
+            bytes: 4,
+            mime: "audio/mpeg",
+            sha256,
+          },
+          sha256,
+        },
+      ],
+    };
+    const opened: string[] = [];
+    const seen: Array<{ hash: string | null; body: string }> = [];
+
+    const result = await publishR2ExportPlan(localPlan, credentials, {
+      skipExistingChecks: true,
+      localMedia: {
+        open: (body) => {
+          opened.push(body.path);
+          return "data";
+        },
+      },
+      fetcher: async (_url, init) => {
+        seen.push({
+          hash: new Headers(init?.headers).get("x-amz-content-sha256"),
+          body: await new Response(init?.body).text(),
+        });
+        return new Response(null, { status: 204 });
+      },
+    });
+
+    expect(result).toMatchObject({ uploaded: 1, failed: 0 });
+    expect(opened).toEqual(["/music/local.mp3"]);
+    expect(seen).toEqual([{ hash: sha256, body: "data" }]);
+  });
+
   it("uploads immutable objects concurrently but keeps JSON barriers ordered", async () => {
     const concurrentPlan: R2ExportPlan = {
       ...plan,

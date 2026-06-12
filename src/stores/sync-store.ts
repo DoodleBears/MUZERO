@@ -10,6 +10,7 @@ import {
 import { getR2CredentialsForDrive } from "@/sync/cloud-drive-settings";
 import { buildR2ExportPlanForDrive } from "@/sync/r2-export-plan";
 import { publishedEntityId } from "@/sync/r2-import-stream";
+import { createDesktopR2LocalMedia } from "@/sync/r2-local-media";
 import { R2PublishHttpError } from "@/sync/r2-publish";
 import {
   createRemotePublishBaseCache,
@@ -116,6 +117,7 @@ async function resolvePublishContext(driveId: string): Promise<PublishDriveConte
   const setIds = sessions
     .map((session) => session.id)
     .filter((id) => publishesToDrive(id, driveId));
+  const localMedia = createDesktopR2LocalMedia();
 
   return {
     drive,
@@ -125,7 +127,10 @@ async function resolvePublishContext(driveId: string): Promise<PublishDriveConte
     baseUrl,
     setIds,
     // Manual sync flushes a small pending stats segment (PRD §5).
-    planInput: { playbackEventFlush: { mode: "manual", now: Date.now() } },
+    planInput: {
+      playbackEventFlush: { mode: "manual", now: Date.now() },
+      localMedia: localMedia?.resolver,
+    },
   };
 }
 

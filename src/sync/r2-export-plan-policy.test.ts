@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { MuzeroDB } from "@/db/muzero-db";
-import { type AppSettings, type CloudDrive, DEFAULT_SETTINGS } from "@/db/types";
+import { type AppSettings, type CloudDrive, DEFAULT_SETTINGS, type Track } from "@/db/types";
 import { buildR2ExportPlanForDrive } from "./r2-export-plan";
 
 let db: MuzeroDB;
@@ -114,6 +114,71 @@ describe("buildR2ExportPlanForDrive", () => {
     expect(manifestObject?.precondition).toEqual({ ifMatch: '"m1"' });
     const manifest = JSON.parse(String(manifestObject?.body));
     expect(manifest.sets.map((set: { id: string }) => set.id)).toEqual(["ses_theirs"]);
+  });
+
+  it("forwards referenced local-media resolution into drive plans", async () => {
+    const sha256 = "b".repeat(64);
+    await db.sessions.put({
+      id: "ses_local",
+      name: "Local refs",
+      seedPrompt: "",
+      trackIds: ["trk_local"],
+      status: "idle",
+      config: {
+        autoExtend: false,
+        refillThreshold: 2,
+        batchSize: 1,
+        targetDurationSec: 180,
+        allowVocals: true,
+      },
+      displayMode: "cover",
+      createdAt: 100,
+      updatedAt: 200,
+    });
+    await db.tracks.put({
+      id: "trk_local",
+      sessionId: "ses_local",
+      title: "Reference Only",
+      kind: "audio",
+      origin: "uploaded",
+      provider: "upload",
+      status: "ready",
+      durationSec: 180,
+      sourcePath: "/music/reference-only.mp3",
+      createdAt: 100,
+      playCount: 0,
+      liked: false,
+      tags: [],
+    });
+
+    const plan = await buildR2ExportPlanForDrive({
+      drive: ownedDrive,
+      settings: settingsWithCredentials,
+      libraryId: "lib_1",
+      baseUrl: "https://music.example.com/muzero/",
+      setIds: ["ses_local"],
+      db,
+      localMedia: {
+        resolve: async (track: Track) => ({
+          body: {
+            kind: "local-file",
+            path: track.sourcePath ?? "",
+            bytes: 4,
+            mime: "audio/mpeg",
+            sha256,
+          },
+          bytes: 4,
+          mime: "audio/mpeg",
+          sha256,
+        }),
+      },
+    });
+
+    expect(plan.objects.find((object) => object.kind === "media")).toMatchObject({
+      body: { kind: "local-file", path: "/music/reference-only.mp3" },
+      key: `objects/media/sha256-${sha256}.mp3`,
+      sha256,
+    });
   });
 
   it("attaches an observed profile ETag precondition before overwriting the remote profile", async () => {

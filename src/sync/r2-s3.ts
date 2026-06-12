@@ -10,6 +10,7 @@ export interface R2SignedFetchOptions {
   key: string;
   body?: BodyInit;
   contentType?: string;
+  payloadSha256?: string;
   headers?: Record<string, string>;
   now?: () => Date;
   /** Abort the in-flight request itself, not just between requests (audit F6). */
@@ -37,6 +38,7 @@ export async function r2SignedFetch(options: R2SignedFetchOptions): Promise<Resp
     url,
     body: options.body,
     contentType: options.contentType,
+    payloadSha256: options.payloadSha256,
     headers: options.headers,
     accessKeyId: options.credentials.accessKeyId,
     secretAccessKey: options.credentials.secretAccessKey,
@@ -55,6 +57,7 @@ export async function signR2S3Request(input: {
   url: string;
   body?: BodyInit;
   contentType?: string;
+  payloadSha256?: string;
   headers?: Record<string, string>;
   accessKeyId: string;
   secretAccessKey: string;
@@ -64,7 +67,8 @@ export async function signR2S3Request(input: {
   const amzDate = toAmzDate(input.now);
   const date = amzDate.slice(0, 8);
   const payloadHash =
-    input.body == null ? EMPTY_SHA256 : await sha256Hex(await bodyBytes(input.body));
+    input.payloadSha256 ??
+    (input.body == null ? EMPTY_SHA256 : await sha256Hex(await bodyBytes(input.body)));
   const headers: Record<string, string> = {
     "content-type": input.contentType ?? "application/octet-stream",
     ...normalizeExtraHeaders(input.headers),

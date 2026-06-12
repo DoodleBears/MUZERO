@@ -2,6 +2,7 @@ import { db as defaultDb, type MuzeroDB } from "@/db/muzero-db";
 import type { R2LocalCredentials, SyncObject, SyncRun } from "@/db/types";
 import { newId } from "@/lib/id";
 import type { R2ExportObject, R2ExportPlan } from "./r2-export-plan";
+import { createDesktopR2LocalMedia } from "./r2-local-media";
 import { publishR2ExportPlan, type R2PublishOptions } from "./r2-publish";
 
 export interface R2PublishSyncOptions extends R2PublishOptions {
@@ -37,8 +38,10 @@ export async function runR2PublishSync(
 
   try {
     const knownUploadedObjects = await loadKnownUploadedObjects(plan.driveId, db);
+    const localMedia = options.localMedia ?? createDesktopR2LocalMedia()?.publisher;
     const result = await publishR2ExportPlan(plan, credentials, {
       ...options,
+      localMedia,
       isKnownUploaded: (object) =>
         options.isKnownUploaded?.(object) ?? isKnownUploadedObject(object, knownUploadedObjects),
       onObjectSynced: async (object, status) => {

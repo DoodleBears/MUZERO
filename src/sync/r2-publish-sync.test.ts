@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { MuzeroDB } from "@/db/muzero-db";
+import { __setDesktopBridge, type DesktopBridge } from "@/lib/desktop/bridge";
 import type { R2ExportPlan } from "./r2-export-plan";
 import { runR2PublishSync } from "./r2-publish-sync";
 
@@ -35,6 +36,7 @@ beforeEach(() => {
 });
 
 afterEach(async () => {
+  __setDesktopBridge(null);
   db.close();
   await new Promise<void>((resolve) => {
     const req = indexedDB.deleteDatabase(dbName);
@@ -70,6 +72,57 @@ describe("runR2PublishSync", () => {
       key: "manifest.json",
       kind: "manifest",
       lastUploadedRunId: result.runId,
+    });
+  });
+
+  it("opens referenced local-file objects with the desktop bridge by default", async () => {
+    const sha256 = "3a6eb0790f39ac87c94f3856b2dd2c5d110e6811602261a9a923d3bb23adc8b7";
+    const localPlan: R2ExportPlan = {
+      driveId: "drv_1",
+      libraryId: "lib_1",
+      baseUrl: "https://music.example.com/muzero/",
+      totalBytes: 4,
+      objects: [
+        {
+          kind: "media",
+          key: `objects/media/sha256-${sha256}.mp3`,
+          contentType: "audio/mpeg",
+          bytes: 4,
+          sha256,
+          body: {
+            kind: "local-file",
+            path: "/music/local.mp3",
+            bytes: 4,
+            mime: "audio/mpeg",
+            sha256,
+          },
+        },
+      ],
+    };
+    __setDesktopBridge({
+      kind: "electron",
+      fetch: globalThis.fetch,
+      openExternal: async () => {},
+      readFile: async () => new TextEncoder().encode("data"),
+    } as DesktopBridge);
+
+    const seen: Array<{ hash: string | null; body: string }> = [];
+    const result = await runR2PublishSync(localPlan, credentials, {
+      db,
+      skipExistingChecks: true,
+      fetcher: async (_url, init) => {
+        seen.push({
+          hash: new Headers(init?.headers).get("x-amz-content-sha256"),
+          body: await new Response(init?.body).text(),
+        });
+        return new Response(null, { status: 204 });
+      },
+    });
+
+    expect(seen).toEqual([{ hash: sha256, body: "data" }]);
+    await expect(db.syncRuns.get(result.runId)).resolves.toMatchObject({
+      status: "completed",
+      uploaded: 1,
     });
   });
 

@@ -1,7 +1,7 @@
 import type { R2LocalCredentials } from "@/db/types";
 import { log } from "@/lib/logger";
 import { getAppFetch } from "@/lib/platform";
-import type { R2ExportObject, R2ExportPlan } from "./r2-export-plan";
+import type { R2ExportBody, R2ExportObject, R2ExportPlan, R2LocalFileBody } from "./r2-export-plan";
 import { r2SignedFetch } from "./r2-s3";
 import type { SyncFetch } from "./r2-subscription";
 
@@ -64,6 +64,12 @@ export interface R2PublishOptions {
   isKnownUploaded?: (object: R2ExportObject) => boolean;
   /** Max parallel immutable/resumable object uploads. Mutable JSON remains ordered. */
   uploadConcurrency?: number;
+  /** Open a referenced Electron local file body for upload. */
+  localMedia?: R2PublishLocalMediaOptions;
+}
+
+export interface R2PublishLocalMediaOptions {
+  open(body: R2LocalFileBody): BodyInit | Promise<BodyInit>;
 }
 
 /**
@@ -203,7 +209,7 @@ async function putObjectWithRetry(
   object: R2ExportObject,
   credentials: R2LocalCredentials,
   fetcher: SyncFetch,
-  options: Pick<R2PublishOptions, "now" | "signal" | "retry">,
+  options: Pick<R2PublishOptions, "now" | "signal" | "retry" | "localMedia">,
 ): Promise<Response> {
   const attempts = Math.max(1, options.retry?.attempts ?? 3);
   const backoffMs = options.retry?.backoffMs ?? 500;
@@ -218,13 +224,17 @@ async function putObjectWithRetry(
       throwIfAborted(options.signal);
     }
     try {
+      const body = await publishBodyForObject(object.body, options);
       const response = await r2SignedFetch({
         fetcher,
         credentials,
         method: "PUT",
         key: object.key,
-        body: object.body,
+        body,
         contentType: object.contentType,
+        payloadSha256: isLocalFileBody(object.body)
+          ? (object.sha256 ?? object.body.sha256)
+          : undefined,
         headers: preconditionHeaders(object),
         now: options.now,
         signal: options.signal,
@@ -244,6 +254,20 @@ async function putObjectWithRetry(
   throw lastFailure instanceof Error
     ? lastFailure
     : new Error(`Failed to upload ${object.key}: ${String(lastFailure)}`);
+}
+
+async function publishBodyForObject(
+  body: R2ExportBody,
+  options: Pick<R2PublishOptions, "localMedia">,
+): Promise<BodyInit> {
+  if (!isLocalFileBody(body)) return body;
+  const opened = await options.localMedia?.open(body);
+  if (!opened) throw new Error("No local media opener for referenced local file");
+  return opened;
+}
+
+function isLocalFileBody(body: R2ExportBody): body is R2LocalFileBody {
+  return typeof body === "object" && body !== null && "kind" in body && body.kind === "local-file";
 }
 
 async function responseSummary(response: Response): Promise<string | undefined> {
