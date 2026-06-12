@@ -9,7 +9,7 @@ import {
 import { saveSettings } from "@/db/repositories";
 import type { FlowBlendMode } from "@/db/types";
 import { useSettings } from "@/hooks/use-app-data";
-import { FLOW_BLEND_MODES } from "@/lib/flow-config";
+import { FLOW_BLEND_MODES, VISUALIZER_BLEND_DEFAULT } from "@/lib/flow-config";
 
 /**
  * Blend-mode picker for the background visualizer (spectrum) layer — how it
@@ -23,7 +23,7 @@ export function VisualizerBlendModeSelect() {
     <div className="flex flex-col gap-1.5">
       <span className="text-xs font-medium text-muted-foreground">{t("flow.blend")}</span>
       <Select
-        value={settings.visualizerBlendMode ?? "normal"}
+        value={settings.visualizerBlendMode ?? VISUALIZER_BLEND_DEFAULT}
         onValueChange={(value) =>
           void saveSettings({ visualizerBlendMode: value as FlowBlendMode })
         }

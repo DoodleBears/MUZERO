@@ -9,8 +9,9 @@ import {
   resolveBackgroundSource,
   resolvePixiBackgroundMedia,
   settleBackgroundTarget,
+  trackHasBackgroundVideoMedia,
 } from "@/lib/background";
-import { FLOW_DEFAULTS } from "@/lib/flow-config";
+import { FLOW_DEFAULTS, VISUALIZER_BLEND_DEFAULT } from "@/lib/flow-config";
 import { nextSlideIndex } from "@/lib/slideshow";
 import { trackHasCover } from "@/lib/track-display";
 import { cn } from "@/lib/utils";
@@ -118,8 +119,9 @@ function NowPlayingBackgroundContent({ hideVisualizer }: { hideVisualizer: boole
   const blurPx = settings.backgroundBlur ?? 64;
   const pixelSize = settings.backgroundPixelSize ?? 12;
   const pixiEffect = isPixiEffect(renderer) ? renderer : null;
+  const hasBackgroundVideoMedia = trackHasBackgroundVideoMedia(current);
   const currentVideoUrl = useTrackMediaUrl(
-    pixiEffect && current?.kind === "video" && current.status === "ready" ? current : undefined,
+    pixiEffect && hasBackgroundVideoMedia ? current : undefined,
   );
   const effectSettings = useMemo(
     () => ({
@@ -174,7 +176,7 @@ function NowPlayingBackgroundContent({ hideVisualizer }: { hideVisualizer: boole
     mode: settings.backgroundMode,
     trackKind: current?.kind,
     trackStatus: current?.status,
-    hasTrackMedia: !!current?.blobId,
+    hasTrackMedia: hasBackgroundVideoMedia,
   });
   const pixiUrl = pixiMedia.source === "track-video" ? currentVideoUrl : backgroundUrl;
   const hasPendingImageBackground =
@@ -186,7 +188,7 @@ function NowPlayingBackgroundContent({ hideVisualizer }: { hideVisualizer: boole
           ? galleryBlobs.length > 0
           : false;
   const hasPendingBackground =
-    pixiMedia.source === "track-video" ? !!current?.blobId : hasPendingImageBackground;
+    pixiMedia.source === "track-video" ? hasBackgroundVideoMedia : hasPendingImageBackground;
   const imageTarget = useMemo<BackgroundRenderTarget | null>(
     () => (backgroundUrl ? { mediaType: "image", src: backgroundUrl } : null),
     [backgroundUrl],
@@ -299,8 +301,7 @@ function NowPlayingBackgroundContent({ hideVisualizer }: { hideVisualizer: boole
                 opacity: visualizerOpacity,
                 transition: "opacity 240ms ease",
                 // Blend the spectrum (a canvas) with the flow + background below it.
-                // Default "normal" — the spectrum stays crisp unless the user opts in.
-                mixBlendMode: settings.visualizerBlendMode ?? "normal",
+                mixBlendMode: settings.visualizerBlendMode ?? VISUALIZER_BLEND_DEFAULT,
               }}
             />
             {/* Always rendered (opacity 0 when off) so the dim eases in/out smoothly

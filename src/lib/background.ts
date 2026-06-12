@@ -1,4 +1,4 @@
-import type { BackgroundMode, TrackKind, TrackStatus } from "@/db/types";
+import type { BackgroundMode, Track, TrackKind, TrackStatus } from "@/db/types";
 
 /**
  * What the Now-Playing ambient background should pull from. Pure decision so the
@@ -65,6 +65,21 @@ export function resolvePixiBackgroundMedia(opts: {
     return { source: "track-video", mediaType: "video" };
   }
   return { source: opts.imageSource, mediaType: "image" };
+}
+
+/**
+ * Whether the current MV has bytes the ambient Pixi background can texture from.
+ * Device B cloud-share tracks often have no local `blobId` yet; their playable
+ * media is `remoteMediaUrl`, which must still count as background-capable.
+ */
+export function trackHasBackgroundVideoMedia(
+  track: Pick<Track, "blobId" | "kind" | "remoteMediaUrl" | "status"> | undefined,
+): boolean {
+  return (
+    track?.kind === "video" &&
+    track.status === "ready" &&
+    (Boolean(track.blobId) || Boolean(track.remoteMediaUrl))
+  );
 }
 
 /**

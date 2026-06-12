@@ -4,6 +4,7 @@ import {
   resolveBackgroundSource,
   resolvePixiBackgroundMedia,
   settleBackgroundTarget,
+  trackHasBackgroundVideoMedia,
 } from "./background";
 
 describe("resolveBackgroundSource", () => {
@@ -181,6 +182,46 @@ describe("resolvePixiBackgroundMedia", () => {
         hasTrackMedia: false,
       }),
     ).toEqual({ source: "gallery-slideshow", mediaType: "image" });
+  });
+});
+
+describe("trackHasBackgroundVideoMedia", () => {
+  it("treats a remote-only R2 MV as background-capable", () => {
+    expect(
+      trackHasBackgroundVideoMedia({
+        blobId: undefined,
+        kind: "video",
+        remoteMediaUrl: "https://pub.example.com/muzero/objects/media/mv.mp4",
+        status: "ready",
+      }),
+    ).toBe(true);
+  });
+
+  it("requires a ready video track with local or remote media", () => {
+    expect(
+      trackHasBackgroundVideoMedia({
+        blobId: undefined,
+        kind: "video",
+        remoteMediaUrl: undefined,
+        status: "ready",
+      }),
+    ).toBe(false);
+    expect(
+      trackHasBackgroundVideoMedia({
+        blobId: "blb_mv",
+        kind: "video",
+        remoteMediaUrl: undefined,
+        status: "generating",
+      }),
+    ).toBe(false);
+    expect(
+      trackHasBackgroundVideoMedia({
+        blobId: undefined,
+        kind: "audio",
+        remoteMediaUrl: "https://pub.example.com/muzero/objects/media/song.mp3",
+        status: "ready",
+      }),
+    ).toBe(false);
   });
 });
 

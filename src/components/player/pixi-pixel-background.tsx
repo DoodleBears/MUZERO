@@ -4,6 +4,7 @@ import {
   resolvePixiBackgroundEffectOptions,
 } from "@/lib/background-effect-settings";
 import { log } from "@/lib/logger";
+import { getAppFetch } from "@/lib/platform";
 import { cn } from "@/lib/utils";
 import { usePlayerStore } from "@/stores/player-store";
 
@@ -311,7 +312,7 @@ type BackgroundMedia =
       height: number;
       texture?: import("pixi.js").Texture;
       type: "image";
-      unload?: undefined;
+      unload?: () => void;
       width: number;
     }
   | {
@@ -329,13 +330,37 @@ async function loadBackgroundMedia(
   mediaType: BackgroundMediaType,
 ): Promise<BackgroundMedia> {
   if (mediaType === "video") return loadVideo(Pixi, src);
-  const image = await loadImage(src);
+  const resolved = await resolveImageTextureSource(src);
+  const image = await loadImage(resolved.src);
   return {
     element: image,
     height: image.naturalHeight,
     type: "image",
+    unload: resolved.unload,
     width: image.naturalWidth,
   };
+}
+
+async function resolveImageTextureSource(
+  src: string,
+): Promise<{ src: string; unload?: () => void }> {
+  if (!shouldFetchImageTexture(src)) return { src };
+  try {
+    const fetcher = await getAppFetch();
+    // `cache: "no-store"` avoids reusing a prior no-CORS <img> cache entry for
+    // the same public R2 URL. The texture then reads from a same-origin blob URL.
+    const response = await fetcher(src, { cache: "no-store" });
+    if (!response.ok) return { src };
+    const blob = await response.blob();
+    if (!blob.type.startsWith("image/") || blob.size === 0) return { src };
+    const objectUrl = URL.createObjectURL(blob);
+    return {
+      src: objectUrl,
+      unload: () => URL.revokeObjectURL(objectUrl),
+    };
+  } catch {
+    return { src };
+  }
 }
 
 function loadImage(src: string): Promise<HTMLImageElement> {
@@ -399,8 +424,13 @@ export function needsCrossOrigin(src: string): boolean {
   return /^(https?|muzfetch):/i.test(src);
 }
 
+export function shouldFetchImageTexture(src: string): boolean {
+  return /^https?:/i.test(src);
+}
+
 function destroyBackgroundMedia(media: BackgroundMedia) {
   if (media.type === "video") destroyVideo(media.element);
+  media.unload?.();
 }
 
 function destroyVideo(video: HTMLVideoElement) {

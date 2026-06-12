@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
-import { needsCrossOrigin, syncLayerTicker } from "./pixi-pixel-background";
+import {
+  needsCrossOrigin,
+  shouldFetchImageTexture,
+  syncLayerTicker,
+} from "./pixi-pixel-background";
 
 function tickerStub(started = false) {
   const ticker = {
@@ -74,5 +78,20 @@ describe("needsCrossOrigin", () => {
     expect(needsCrossOrigin("blob:http://localhost:1440/9f6a")).toBe(false);
     expect(needsCrossOrigin("data:image/png;base64,iVBORw0KGgo=")).toBe(false);
     expect(needsCrossOrigin("/muzero-logo.png")).toBe(false);
+  });
+});
+
+describe("shouldFetchImageTexture", () => {
+  it("fetches raw http image textures so Pixi samples a local blob URL", () => {
+    expect(shouldFetchImageTexture("https://pub-xxxx.r2.dev/objects/covers/sha256-blue.jpg")).toBe(
+      true,
+    );
+    expect(shouldFetchImageTexture("http://cdn.example.com/cover.jpg")).toBe(true);
+  });
+
+  it("leaves already-local or scheme-proxied sources to the media element loader", () => {
+    expect(shouldFetchImageTexture("blob:http://localhost:1440/9f6a")).toBe(false);
+    expect(shouldFetchImageTexture("data:image/png;base64,iVBORw0KGgo=")).toBe(false);
+    expect(shouldFetchImageTexture("muzfetch://media/?__mzurl=https%3A%2F%2Fx")).toBe(false);
   });
 });

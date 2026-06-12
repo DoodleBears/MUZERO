@@ -66,6 +66,10 @@ export const FLOW_DEFAULTS = {
   blendMode: "overlay" as FlowBlendMode,
 } as const;
 
+/** Default blend for the background visualizer (spectrum) layer. Screen keeps
+ *  the dark canvas transparent so the bands read as glow over the flow/cover. */
+export const VISUALIZER_BLEND_DEFAULT: FlowBlendMode = "screen";
+
 /** Blend modes offered for compositing the flow over the background (CSS
  *  mix-blend-mode values). The compositor does add/multiply natively — no Pixi. */
 export const FLOW_BLEND_MODES: { id: FlowBlendMode; labelKey: string }[] = [
