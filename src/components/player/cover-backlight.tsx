@@ -59,7 +59,7 @@ export function CoverBacklightCanvas({
       ref={canvasRef}
       aria-hidden
       className={cn(
-        "absolute inset-0 size-full object-cover transition-opacity duration-150 album-cover-radius",
+        "absolute inset-0 size-full object-cover transition-opacity duration-150",
         ready ? "opacity-100" : "opacity-0",
         className,
       )}
@@ -97,21 +97,9 @@ function drawBacklightFrame(
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = "high";
 
-  const softness = Math.max(2, Math.min(24, blurPx * 0.55));
-  const sampleW = Math.max(24, Math.round(w / softness));
-  const sampleH = Math.max(24, Math.round(h / softness));
-  const low = document.createElement("canvas");
-  low.width = sampleW;
-  low.height = sampleH;
-  const lowCtx = get2d(low);
-  if (!lowCtx) return false;
-
-  lowCtx.imageSmoothingEnabled = true;
-  lowCtx.imageSmoothingQuality = "high";
-  drawImageCover(lowCtx, image, sampleW, sampleH);
-
-  ctx.filter = `saturate(${saturation}%)`;
-  ctx.drawImage(low, 0, 0, sampleW, sampleH, 0, 0, w, h);
+  const blur = Math.max(0, blurPx * dpr);
+  ctx.filter = `blur(${blur}px) saturate(${saturation}%)`;
+  drawImageCover(ctx, image, w, h, Math.ceil(blur * 2));
   ctx.filter = "none";
   return true;
 }
@@ -121,8 +109,11 @@ function drawImageCover(
   img: HTMLImageElement,
   width: number,
   height: number,
+  bleed = 0,
 ) {
-  const scale = Math.max(width / img.naturalWidth, height / img.naturalHeight);
+  const targetW = width + bleed * 2;
+  const targetH = height + bleed * 2;
+  const scale = Math.max(targetW / img.naturalWidth, targetH / img.naturalHeight);
   const drawW = img.naturalWidth * scale;
   const drawH = img.naturalHeight * scale;
   const x = (width - drawW) / 2;
