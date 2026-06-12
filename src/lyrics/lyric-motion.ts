@@ -86,9 +86,9 @@ function sanitizeLyricsMotionMode(mode: LyricsMotionMode | undefined): LyricsMot
 
 export function resolveLyricsMotionMode(
   mode: LyricsMotionMode | undefined,
-  env: { reducedMotion: boolean },
+  env?: { reducedMotion: boolean },
 ): ResolvedLyricsMotion {
-  if (env.reducedMotion) return CLASSIC_MOTION;
+  void env;
   switch (sanitizeLyricsMotionMode(mode)) {
     case "cascade":
       return CASCADE_MOTION;

@@ -57,14 +57,14 @@ describe("resolveLyricsMotionMode", () => {
     });
   });
 
-  it("softens advanced modes under reduced motion", () => {
+  it("keeps user-selected advanced modes under reduced motion", () => {
     const inertial = resolveLyricsMotionMode("inertial", { reducedMotion: true });
     const cascade = resolveLyricsMotionMode("cascade", { reducedMotion: true });
 
-    expect(inertial.mode).toBe("classic");
-    expect(cascade.mode).toBe("classic");
-    expect(cascade.row.neighborDelayMs).toBe(0);
-    expect(cascade.row.residualYPx).toBe(0);
+    expect(inertial.mode).toBe("inertial");
+    expect(inertial.follow.kind).toBe("spring");
+    expect(cascade.mode).toBe("cascade");
+    expect(cascade.follow.kind).toBe("spring");
   });
 });
 

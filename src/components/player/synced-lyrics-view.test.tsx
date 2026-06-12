@@ -111,6 +111,47 @@ describe("LyricsScroller (synced)", () => {
     expect(screen.getByText("line one")).not.toHaveAttribute("data-cascade-wave-token");
   });
 
+  it("keeps cascade effects enabled when the OS prefers reduced motion", async () => {
+    const originalMatchMedia = window.matchMedia;
+    Object.defineProperty(window, "matchMedia", {
+      configurable: true,
+      writable: true,
+      value: vi.fn().mockReturnValue({
+        matches: true,
+        media: "(prefers-reduced-motion: reduce)",
+        onchange: null,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      }),
+    });
+
+    try {
+      render(
+        <LyricsScroller resolved={synced} activeIndex={0} onSeek={() => {}} motionMode="cascade" />,
+      );
+
+      expect(screen.getByTestId("lyrics-scroll")).toHaveAttribute(
+        "data-layout-engine",
+        "amll-style",
+      );
+      await waitFor(() => {
+        expect(screen.getByText("line one")).toHaveStyle({
+          willChange: "transform, opacity, filter",
+        });
+      });
+      expect(screen.getByText("line one").style.filter).toContain("blur");
+    } finally {
+      Object.defineProperty(window, "matchMedia", {
+        configurable: true,
+        writable: true,
+        value: originalMatchMedia,
+      });
+    }
+  });
+
   it("switches into cascade without the old remount pulse attributes", async () => {
     const { rerender } = render(
       <LyricsScroller resolved={synced} activeIndex={1} onSeek={() => {}} motionMode="classic" />,

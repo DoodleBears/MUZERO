@@ -242,11 +242,6 @@ const EDGE_FADE = {
     "linear-gradient(to bottom, transparent 0%, black 14%, black 86%, transparent 100%)",
 } as const;
 
-function prefersReducedMotion(): boolean {
-  if (typeof window === "undefined" || typeof window.matchMedia !== "function") return false;
-  return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-}
-
 /**
  * Apple-Music-style synced lines on a NATIVE scroll viewport (overflow-y-auto +
  * overscroll-contain — so the gesture never reaches the page behind, and mobile
@@ -284,10 +279,7 @@ function SyncedLines({
   const lineHeightsRef = useRef<number[]>([]);
   const [following, setFollowing] = useState(true);
   const [viewportH, setViewportH] = useState(0);
-  const lyricsMotion = useMemo(
-    () => resolveLyricsMotionMode(motionMode, { reducedMotion: prefersReducedMotion() }),
-    [motionMode],
-  );
+  const lyricsMotion = useMemo(() => resolveLyricsMotionMode(motionMode), [motionMode]);
   const isAmlStyleEngine = lyricsMotion.mode === "cascade";
   const renderLines = useMemo(() => toLyricRenderLines(lines), [lines]);
   const lyricsSetKey = useMemo(() => {
@@ -441,7 +433,6 @@ function SyncedLines({
     };
 
     const states = new Map<string, RuntimeLine>();
-    const reducedMotion = prefersReducedMotion();
     let raf = 0;
     let lastTs = 0;
     let stopped = false;
@@ -474,7 +465,7 @@ function SyncedLines({
         viewportHeight,
         alignPosition: 0.42,
         lineGapPx: lyricStyle.lineGap,
-        reducedMotion,
+        reducedMotion: false,
       });
 
       for (const frame of layout.frames) {
@@ -514,7 +505,7 @@ function SyncedLines({
           state.delayRemaining = state.initialized ? frame.delaySec : 0;
         }
 
-        if (reducedMotion || !state.initialized) {
+        if (!state.initialized) {
           state.translateY = state.targetY;
           state.opacity = state.targetOpacity;
           state.scale = state.targetScale;

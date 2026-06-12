@@ -426,6 +426,7 @@ Dev mode is not sufficient for final performance sign-off. Final QA should run a
 | 2026-06-13 | MUZERO | Phase 3 completed: integrated AMLL-style rAF DOM driver for Cascade mode with row refs, ResizeObserver measurement, spring integration, and transform-only writes. |
 | 2026-06-13 | MUZERO | Phase 4 completed: added Cascade parity tests for click seek, word-by-word karaoke spans, translation, and romanization under the layout-engine path. |
 | 2026-06-13 | MUZERO | Phase 5 completed: removed legacy Motion row-wave cascade code, added long-stack / seek-jump solver coverage, and marked the PRD complete with release QA notes. |
+| 2026-06-13 | MUZERO | Follow-up: user-selected lyric motion modes now ignore OS reduced-motion; Cascade always starts the AMLL-style driver and computes full blur / scale / stagger effects. |
 
 ---
 
