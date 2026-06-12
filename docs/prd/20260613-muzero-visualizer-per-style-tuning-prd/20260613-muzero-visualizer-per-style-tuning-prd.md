@@ -5,7 +5,7 @@
 **Author:** Codex
 **Module:** Player / Settings - visualizer tuning UX, Now Playing tuning panel, i18n help text
 
-> Product request: Visualizer tuning values currently behave like one shared preset across every visualizer style. That feels wrong: users expect Bars, Aura, Waveform, LED, Radial, and Scene styles to remember their own tuning. Every parameter also needs a Question Circle icon with user-friendly guidance. Settings and the Now Playing visualizer panel must expose the same controls in the same order; today a few checkboxes exist in one surface but not the other.
+> Product request: Visualizer tuning values currently behave like one shared preset across every visualizer style. That feels wrong: users expect Bars, Waveform, LED, Radial, and registered scene/layer styles to remember their own tuning. Every parameter also needs a Question Circle icon with user-friendly guidance. Settings and the Now Playing visualizer panel must expose the same controls in the same order; today a few checkboxes exist in one surface but not the other.
 
 ---
 
@@ -30,10 +30,10 @@
 MUZERO already has a pluggable visualizer registry (`src/visualizer/registry.ts`) and a reusable tuning component (`src/components/player/visualizer-tuning-controls.tsx`). The current tuning fields live directly on `AppSettings`:
 
 - analyser parameters: `visualizerFftSize`, `visualizerSmoothing`, `visualizerMinDecibels`, `visualizerMaxDecibels`;
-- render parameters: `visualizerIntensity`, `visualizerMotion`, `visualizerDetail`, `visualizerSpread`, `visualizerGlow`, `visualizerMirror`;
+- render parameters: `visualizerIntensity`, `visualizerMotion`, `visualizerDetail`, `visualizerSpread`, `visualizerMirror`;
 - background composite parameters: `visualizerBackgroundOpacity`, `visualizerBackgroundDim`, `visualizerBgOpacityLyrics`, `visualizerBgDimLyrics`.
 
-This means a user can tune Bars to be dense and bright, switch to Aura, and Aura inherits the same density/glow values even though the visual language is different. Product managers and users perceive this as broken customization: each visualizer style should feel like it has its own memory.
+This means a user can tune Bars to be dense and bright, switch to Waveform, and Waveform inherits the same density values even though the visual language is different. Product managers and users perceive this as broken customization: each visualizer style should feel like it has its own memory.
 
 There is also a UI parity issue. `VisualizerSettings` in Settings and `VisualizerTuningPanel` on Now Playing both edit visualizer behavior, but their order and available checkboxes differ. The same mental model should appear in both places.
 
@@ -118,7 +118,7 @@ VisualizerStyleId
 
 VisualizerTuning
   ├─ analyser: fftSize / smoothing / minDb / maxDb
-  ├─ render: intensity / motion / detail / spread / glow / mirror
+  ├─ render: intensity / motion / detail / spread / mirror
   └─ background composite: opacity / dim / lyrics opacity / lyrics dim
 
 Global visualizer settings
@@ -144,7 +144,6 @@ export interface VisualizerStyleTuning {
   motion?: number;
   detail?: number;
   spread?: number;
-  glow?: number;
   mirror?: number;
   backgroundOpacity?: number;
   backgroundDim?: number;
@@ -171,8 +170,8 @@ Required behavior:
 settings.id = "app"
   ├─ visualizerStyle = "bars"
   └─ visualizerTuningByStyle
-       ├─ bars: { detail: 2, glow: 1.4, smoothing: 0.82 }
-       ├─ aura: { detail: 1, spread: 1.2, glow: 0.8 }
+       ├─ bars: { detail: 2, smoothing: 0.82 }
+       ├─ radial: { intensity: 1.6, spread: 1 }
        └─ waveform: { detail: 3, mirror: 0.5 }
 ```
 
@@ -204,7 +203,7 @@ Acceptance:
 - The resolver clamps values exactly as today.
 - `off` returns no tuning controls.
 - Unknown future ids fall back through `resolveVisualizerStyle()` before lookup.
-- Existing renderers receive the same `VisualizerRenderOptions` / `VisualizerAnalyserOptions` shapes they do today.
+- Existing renderers receive the same `VisualizerAnalyserOptions` shape; `VisualizerRenderOptions` no longer includes the removed glow control.
 
 ### 4.2 Error Handling
 
@@ -239,7 +238,6 @@ Settings and Now Playing visualizer tab must render the same order for shared co
    - Motion, if supported by style
    - Density/detail, if supported by style
    - Spread, if supported by style
-   - Glow
    - Mirror/reflection, if supported by style
    - Background opacity/dim without lyrics, if background is enabled
    - Background opacity/dim with lyrics, if background is enabled
@@ -277,7 +275,6 @@ Suggested English help copy:
 | Motion | "Controls animation speed. Higher feels more energetic; lower feels slower and calmer." |
 | Density | "Controls how many bars, rays, or points are drawn. Higher looks richer; lower is cleaner and lighter." |
 | Spread | "Controls how far the visual opens out from the center. Higher fills more space; lower stays compact." |
-| Glow | "Controls brightness and bloom. Higher looks more luminous; lower keeps edges crisp." |
 | Mirror | "Controls reflection strength. Higher shows more reflection; lower keeps the main shape clearer." |
 | Background opacity | "Controls how visible the visualizer layer is over the background." |
 | Background dim | "Adds darkness over the visualizer so covers, lyrics, and controls stay readable." |
@@ -337,7 +334,7 @@ This PRD allows adding one small helper component if it prevents duplicated orde
 
 ### Phase 2 Checklist
 
-- [x] Bars tuning does not change Aura tuning.
+- [x] Bars tuning does not change Waveform tuning.
 - [x] Waveform density does not reuse Bars bands/octave values unless intentionally copied.
 - [x] Existing users keep their current active-style tuning on first use.
 - [x] Invalid persisted numbers are clamped.
@@ -412,6 +409,9 @@ This PRD allows adding one small helper component if it prevents duplicated orde
 - Edge headless visual check passed for Settings / Visualizer at 1180x780; DOM control order was `style`, `use-cover-color`, `blend-mode`, `idle-only`, `tuning`.
 - Now Playing panel real-entry screenshot was not available in the empty-player state because the visualizer mode button is not rendered without an active track; component parity test covers the same persistent control order with `preview-only` as the only extra panel control.
 - Follow-up bug fix: background opacity/dim controls for both no-lyrics and with-lyrics states now resolve through the same per-style tuning map used by the sliders; the Now Playing background renderer no longer reads only legacy global fields.
+- Follow-up product tuning: all registered styles default to 70% visualizer opacity and 30% visualizer dim for both no-lyrics and with-lyrics states.
+- Follow-up product tuning: Radial defaults to spread `1` and intensity `1.6`; LED + reflection defaults to 5 bands per octave.
+- Follow-up product pruning: Aura/Glow, Liquid, and Aurora are removed from registered/user-selectable visualizer effects. Legacy stored ids resolve through the registry fallback to Bars.
 
 ---
 
@@ -475,3 +475,4 @@ This PRD allows adding one small helper component if it prevents duplicated orde
 | 2026-06-13 | Codex | Completed Phase 5 validation with focused Vitest, TypeScript check, and Edge headless Settings visual QA. |
 | 2026-06-13 | Codex | Removed the obsolete visible "Use as Now Playing background" switch from shared visualizer controls and updated parity coverage. |
 | 2026-06-13 | Codex | Fixed no-lyrics / with-lyrics background opacity and dim values so the renderer consumes per-style tuning values instead of stale global settings. |
+| 2026-06-13 | Codex | Updated visualizer product defaults to opacity 70% / dim 30%, set Radial and LED + reflection defaults, and removed Aura/Glow, Liquid, and Aurora from registered visualizer effects. |

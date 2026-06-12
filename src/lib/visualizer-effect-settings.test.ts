@@ -8,7 +8,6 @@ import {
   resolveVisualizerBackgroundCompositeOptions,
   resolveVisualizerRenderOptions,
   resolveVisualizerStyleTuning,
-  visualizerAuraRayCount,
   visualizerBandsPerOctave,
   visualizerDetailFromBandsPerOctave,
   visualizerWaveformPointCount,
@@ -21,7 +20,7 @@ describe("visualizer density settings", () => {
   });
 
   it("starts the app on dense, tight bars for the Now Playing background", () => {
-    const tuning = resolveVisualizerRenderOptions(DEFAULT_SETTINGS);
+    const tuning = resolveVisualizerRenderOptions(DEFAULT_SETTINGS, "bars");
     expect(DEFAULT_SETTINGS.visualizerStyle).toBe("bars");
     expect(DEFAULT_SETTINGS.visualizerAsBackground).toBe(true);
     expect(visualizerBandsPerOctave(tuning.detail)).toBe(24);
@@ -35,10 +34,7 @@ describe("visualizer density settings", () => {
     expect(visualizerDetailFromBandsPerOctave(99)).toBe(8);
   });
 
-  it("maps detail to aura ray and waveform point density", () => {
-    expect(visualizerAuraRayCount(1)).toBe(64);
-    expect(visualizerAuraRayCount(0)).toBe(8);
-    expect(visualizerAuraRayCount(99)).toBe(512);
+  it("maps detail to waveform point density", () => {
     expect(visualizerWaveformPointCount(1)).toBe(96);
     expect(visualizerWaveformPointCount(0)).toBe(16);
     expect(visualizerWaveformPointCount(99)).toBe(768);
@@ -52,25 +48,23 @@ describe("per-style visualizer tuning", () => {
       visualizerDetail: 8,
       visualizerIntensity: 0.5,
       visualizerTuningByStyle: {
-        aura: { detail: 1.25, intensity: 1.6 },
-        bars: { detail: 7, glow: 0.25 },
+        waveform: { detail: 1.25, intensity: 1.6 },
+        bars: { detail: 7 },
       },
     };
 
-    expect(resolveVisualizerRenderOptions(settings, "aura")).toMatchObject({
+    expect(resolveVisualizerRenderOptions(settings, "waveform")).toMatchObject({
       detail: 1.25,
       intensity: 1.6,
-      glow: 1,
     });
     expect(resolveVisualizerRenderOptions(settings, "bars")).toMatchObject({
       detail: 7,
       intensity: 0.5,
-      glow: 0.25,
     });
     expect(resolveVisualizerRenderOptions(settings, "radial")).toMatchObject({
       detail: 8,
-      intensity: 0.5,
-      glow: 1,
+      intensity: 1.6,
+      spread: 1,
     });
   });
 
@@ -81,7 +75,7 @@ describe("per-style visualizer tuning", () => {
       visualizerSmoothing: 0.2,
       visualizerTuningByStyle: {
         bars: { fftSize: 2048, smoothing: 0.95, minDecibels: -70, maxDecibels: -12 },
-        aura: { fftSize: 256, smoothing: 0.4 },
+        waveform: { fftSize: 256, smoothing: 0.4 },
       },
     };
 
@@ -91,11 +85,13 @@ describe("per-style visualizer tuning", () => {
       minDecibels: -70,
       maxDecibels: -12,
     });
-    expect(resolveVisualizerAnalyserOptions(getVisualizerMeta("aura"), settings, "aura")).toEqual({
+    expect(
+      resolveVisualizerAnalyserOptions(getVisualizerMeta("waveform"), settings, "waveform"),
+    ).toEqual({
       fftSize: 256,
       smoothing: 0.4,
-      minDecibels: -100,
-      maxDecibels: -30,
+      minDecibels: -90,
+      maxDecibels: -10,
     });
   });
 
@@ -103,16 +99,16 @@ describe("per-style visualizer tuning", () => {
     const settings: AppSettings = {
       ...DEFAULT_SETTINGS,
       visualizerTuningByStyle: {
-        aura: { glow: 0.5 },
+        waveform: { detail: 1.5 },
         bars: { detail: 4 },
       },
     };
 
-    const patch = patchVisualizerStyleTuning(settings, "bars", { glow: 1.4, detail: 6 });
+    const patch = patchVisualizerStyleTuning(settings, "bars", { detail: 6, intensity: 1.4 });
 
     expect(patch.visualizerTuningByStyle).toEqual({
-      aura: { glow: 0.5 },
-      bars: { detail: 6, glow: 1.4 },
+      waveform: { detail: 1.5 },
+      bars: { detail: 6, intensity: 1.4 },
     });
     expect(settings.visualizerTuningByStyle?.bars).toEqual({ detail: 4 });
   });
@@ -121,19 +117,19 @@ describe("per-style visualizer tuning", () => {
     const settings: AppSettings = {
       ...DEFAULT_SETTINGS,
       visualizerTuningByStyle: {
-        aura: { glow: 0.5 },
-        bars: { detail: 4, glow: 1.2 },
+        waveform: { detail: 1.5 },
+        bars: { detail: 4, intensity: 1.2 },
       },
     };
 
     const patch = resetVisualizerStyleTuning(settings, "bars");
 
     expect(patch.visualizerTuningByStyle).toEqual({
-      aura: { glow: 0.5 },
+      waveform: { detail: 1.5 },
     });
     expect(resolveVisualizerStyleTuning({ ...settings, ...patch }, "bars")).toMatchObject({
       detail: DEFAULT_SETTINGS.visualizerDetail,
-      glow: DEFAULT_SETTINGS.visualizerGlow,
+      intensity: DEFAULT_SETTINGS.visualizerIntensity,
     });
   });
 
@@ -151,7 +147,7 @@ describe("per-style visualizer tuning", () => {
           bgOpacityLyrics: 30,
           bgDimLyrics: 80,
         },
-        aura: {
+        waveform: {
           backgroundOpacity: 10,
         },
       },
@@ -165,9 +161,33 @@ describe("per-style visualizer tuning", () => {
       dimPct: 80,
       opacityPct: 30,
     });
-    expect(resolveVisualizerBackgroundCompositeOptions(settings, "aura", true)).toEqual({
-      dimPct: 45,
-      opacityPct: 55,
+    expect(resolveVisualizerBackgroundCompositeOptions(settings, "waveform", true)).toEqual({
+      dimPct: 30,
+      opacityPct: 70,
     });
+  });
+
+  it("defaults every style background composite to 70 percent opacity and 30 percent dim", () => {
+    expect(resolveVisualizerBackgroundCompositeOptions(DEFAULT_SETTINGS, "bars", false)).toEqual({
+      dimPct: 30,
+      opacityPct: 70,
+    });
+    expect(resolveVisualizerBackgroundCompositeOptions(DEFAULT_SETTINGS, "bars", true)).toEqual({
+      dimPct: 30,
+      opacityPct: 70,
+    });
+    expect(resolveVisualizerBackgroundCompositeOptions(DEFAULT_SETTINGS, "radial", false)).toEqual({
+      dimPct: 30,
+      opacityPct: 70,
+    });
+  });
+
+  it("uses product defaults for radial and LED Reflex tuning", () => {
+    const radial = resolveVisualizerRenderOptions(DEFAULT_SETTINGS, "radial");
+    const led = resolveVisualizerRenderOptions(DEFAULT_SETTINGS, "led-reflex");
+
+    expect(radial.spread).toBe(1);
+    expect(radial.intensity).toBe(1.6);
+    expect(visualizerBandsPerOctave(led.detail)).toBe(5);
   });
 });

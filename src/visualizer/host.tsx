@@ -187,7 +187,7 @@ function SpectrumCanvas({
 
 /**
  * GPU scene host: lazy-loads the R3F scene (keeps three out of the main bundle),
- * pauses it when off-screen, and falls back to the aura spectrum when WebGL is
+ * pauses it when off-screen, and falls back to the bars spectrum when WebGL is
  * unavailable.
  */
 function SceneHost({
@@ -223,7 +223,7 @@ function SceneHost({
   if (!ok) {
     return (
       <SpectrumCanvas
-        styleId="aura"
+        styleId="bars"
         active={active}
         className={className}
         effectSettings={effectSettings}
@@ -280,7 +280,6 @@ export function VisualizerHost({
     () => ({
       visualizerDetail: settings.visualizerDetail,
       visualizerFftSize: settings.visualizerFftSize,
-      visualizerGlow: settings.visualizerGlow,
       visualizerIntensity: settings.visualizerIntensity,
       visualizerMaxDecibels: settings.visualizerMaxDecibels,
       visualizerMinDecibels: settings.visualizerMinDecibels,
@@ -293,7 +292,6 @@ export function VisualizerHost({
     [
       settings.visualizerDetail,
       settings.visualizerFftSize,
-      settings.visualizerGlow,
       settings.visualizerIntensity,
       settings.visualizerMaxDecibels,
       settings.visualizerMinDecibels,

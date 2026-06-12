@@ -23,8 +23,8 @@ beforeEach(() => {
     visualizerStyle: "bars",
     visualizerAsBackground: true,
     visualizerTuningByStyle: {
-      bars: { intensity: 1, glow: 1.2 },
-      aura: { glow: 0.5 },
+      bars: { intensity: 1 },
+      waveform: { detail: 1.5 },
     },
   };
   saveSettings.mockClear();
@@ -43,6 +43,7 @@ describe("VisualizerTuningControls", () => {
     expect(
       screen.getAllByRole("button", { name: "visualizer.help.backgroundDim" }).length,
     ).toBeGreaterThan(0);
+    expect(screen.queryByRole("slider", { name: "visualizer.glow" })).toBeNull();
   });
 
   it("saves slider changes into the active style tuning entry", () => {
@@ -54,8 +55,8 @@ describe("VisualizerTuningControls", () => {
 
     expect(saveSettings).toHaveBeenCalledWith({
       visualizerTuningByStyle: {
-        bars: { intensity: 1.05, glow: 1.2 },
-        aura: { glow: 0.5 },
+        bars: { intensity: 1.05 },
+        waveform: { detail: 1.5 },
       },
     });
   });
@@ -98,7 +99,7 @@ describe("VisualizerTuningControls", () => {
 
     expect(saveSettings).toHaveBeenCalledWith({
       visualizerTuningByStyle: {
-        aura: { glow: 0.5 },
+        waveform: { detail: 1.5 },
       },
     });
   });

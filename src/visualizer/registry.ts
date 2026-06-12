@@ -1,4 +1,3 @@
-import { createAuraVisualizer } from "./spectrum/aura";
 import { createBarsVisualizer } from "./spectrum/bars";
 import { createLedReflexVisualizer } from "./spectrum/led-reflex";
 import { createRadialVisualizer } from "./spectrum/radial";
@@ -14,13 +13,10 @@ import type { Visualizer, VisualizerBackend, VisualizerKind, VisualizerStyleId }
 /** i18n keys for style display names — extend per phase as styles + en keys land. */
 export type VisualizerLabelKey =
   | "visualizer.styleOff"
-  | "visualizer.styleAura"
   | "visualizer.styleBars"
   | "visualizer.styleRadial"
   | "visualizer.styleLed"
   | "visualizer.styleWaveform"
-  | "visualizer.styleSceneLiquid"
-  | "visualizer.styleSceneAurora"
   | "visualizer.styleSceneFlow";
 
 export interface VisualizerMeta {
@@ -44,7 +40,7 @@ export interface VisualizerMeta {
 /**
  * Registered (implemented) styles, in display order. Grows per phase. The
  * AppSettings `VisualizerStyleId` union may list ids not yet here (forward
- * compat); `resolveVisualizerStyle` falls those back to "aura".
+ * compat); `resolveVisualizerStyle` falls those back to "bars".
  */
 export const VISUALIZER_META: VisualizerMeta[] = [
   {
@@ -52,14 +48,6 @@ export const VISUALIZER_META: VisualizerMeta[] = [
     kind: "spectrum",
     backend: "canvas2d",
     labelKey: "visualizer.styleOff",
-    fftSize: 256,
-    smoothing: 0.8,
-  },
-  {
-    id: "aura",
-    kind: "spectrum",
-    backend: "canvas2d",
-    labelKey: "visualizer.styleAura",
     fftSize: 256,
     smoothing: 0.8,
   },
@@ -104,22 +92,6 @@ export const VISUALIZER_META: VisualizerMeta[] = [
     maxDecibels: -10,
   },
   {
-    id: "scene-liquid",
-    kind: "scene",
-    backend: "webgl",
-    labelKey: "visualizer.styleSceneLiquid",
-    fftSize: 1024,
-    smoothing: 0.85,
-  },
-  {
-    id: "scene-aurora",
-    kind: "scene",
-    backend: "webgl",
-    labelKey: "visualizer.styleSceneAurora",
-    fftSize: 1024,
-    smoothing: 0.85,
-  },
-  {
     id: "scene-flow",
     kind: "scene",
     backend: "webgl",
@@ -143,14 +115,14 @@ export function isRegisteredVisualizerStyle(value: unknown): value is Visualizer
   return typeof value === "string" && META_BY_ID.has(value as VisualizerStyleId);
 }
 
-/** Resolve a stored style value to a renderable id, falling back to "aura". */
+/** Resolve a stored style value to a renderable id, falling back to "bars". */
 export function resolveVisualizerStyle(style: string | undefined): VisualizerStyleId {
-  return isRegisteredVisualizerStyle(style) ? style : "aura";
+  return isRegisteredVisualizerStyle(style) ? style : "bars";
 }
 
-/** Metadata for a registered style (falls back to aura's). */
+/** Metadata for a registered style (falls back to bars). */
 export function getVisualizerMeta(id: VisualizerStyleId): VisualizerMeta {
-  return META_BY_ID.get(id) ?? (META_BY_ID.get("aura") as VisualizerMeta);
+  return META_BY_ID.get(id) ?? (META_BY_ID.get("bars") as VisualizerMeta);
 }
 
 /**
@@ -162,8 +134,6 @@ export function createVisualizer(id: VisualizerStyleId): Visualizer | null {
   switch (id) {
     case "off":
       return null;
-    case "aura":
-      return createAuraVisualizer();
     case "bars":
       return createBarsVisualizer();
     case "radial":
@@ -172,15 +142,13 @@ export function createVisualizer(id: VisualizerStyleId): Visualizer | null {
       return createLedReflexVisualizer();
     case "waveform":
       return createWaveformVisualizer();
-    case "scene-liquid":
-    case "scene-aurora":
     case "scene-flow":
       // GPU scenes are React components (rendered by SceneHost), not canvas-2D
       // renderers — they have no Visualizer instance.
       return null;
     default:
-      // Not yet implemented (milkdrop) — fall back to aura so a stored future id
+      // Not yet implemented (milkdrop) — fall back to bars so a stored future id
       // still renders something.
-      return createAuraVisualizer();
+      return createBarsVisualizer();
   }
 }

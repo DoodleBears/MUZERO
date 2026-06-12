@@ -652,8 +652,6 @@ export interface AppSettings {
   visualizerDetail?: number;
   /** Visualizer radius/gap/spread multiplier. Default 0.35. */
   visualizerSpread?: number;
-  /** Visualizer glow/brightness multiplier. Default 1. */
-  visualizerGlow?: number;
   /** Visualizer mirror/reflection multiplier. Default 1. */
   visualizerMirror?: number;
   // --- Synced-lyrics appearance (synced-lyrics PRD) --------------------------
@@ -846,7 +844,6 @@ export interface VisualizerStyleTuning {
   motion?: number;
   detail?: number;
   spread?: number;
-  glow?: number;
   mirror?: number;
   backgroundOpacity?: number;
   backgroundDim?: number;
@@ -897,10 +894,10 @@ export const DEFAULT_SETTINGS: AppSettings = {
   nowPlayingMemoryRailScrollTop: 0,
   visualizerStyle: "bars",
   visualizerAsBackground: true,
-  visualizerBackgroundDim: 0,
-  visualizerBackgroundOpacity: 100,
-  visualizerBgDimLyrics: 40,
-  visualizerBgOpacityLyrics: 60,
+  visualizerBackgroundDim: 30,
+  visualizerBackgroundOpacity: 70,
+  visualizerBgDimLyrics: 30,
+  visualizerBgOpacityLyrics: 70,
   visualizerIdleOnly: false,
   immersiveMemoryOverlay: true,
   visualizerUseCoverColor: true,
@@ -908,7 +905,6 @@ export const DEFAULT_SETTINGS: AppSettings = {
   visualizerMotion: 1,
   visualizerDetail: 8,
   visualizerSpread: 0.35,
-  visualizerGlow: 1,
   visualizerMirror: 1,
   flowEnabled: true,
   lyricsActiveFontSize: 30,

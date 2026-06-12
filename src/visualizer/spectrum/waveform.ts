@@ -63,10 +63,10 @@ export function createWaveformVisualizer(): Visualizer {
       ctx.lineWidth = Math.max(1.5, h * 0.006);
       ctx.lineJoin = "round";
       ctx.lineCap = "round";
-      ctx.shadowBlur = h * 0.03 * options.glow;
-      ctx.shadowColor = rgba(lighten(primary, 0.2), Math.min(1, 0.6 * options.glow));
-      drawLine(1, Math.min(1, 0.95 * options.glow), lighten(primary, 0.3));
-      drawLine(-1, Math.min(1, 0.4 * options.mirror * options.glow), primary);
+      ctx.shadowBlur = h * 0.03;
+      ctx.shadowColor = rgba(lighten(primary, 0.2), 0.6);
+      drawLine(1, 0.95, lighten(primary, 0.3));
+      drawLine(-1, Math.min(1, 0.4 * options.mirror), primary);
       ctx.shadowBlur = 0;
     },
     destroy() {

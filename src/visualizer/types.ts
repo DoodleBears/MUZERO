@@ -3,7 +3,7 @@ import type { VisualizerRenderOptions } from "@/lib/visualizer-effect-settings";
 
 /**
  * All visualizer style ids (forward-compatible union — some are implemented in
- * later phases; unimplemented stored values fall back to "aura" via the registry).
+ * later phases; unimplemented stored values fall back to "bars" via the registry).
  * `off` = no visualizer. `scene-*` = GPU shader scenes (Phase 3). `milkdrop` =
  * butterchurn (Phase 4, deferred v2). Keep ids stable (codename layer).
  */

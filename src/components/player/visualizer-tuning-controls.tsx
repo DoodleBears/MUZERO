@@ -21,7 +21,6 @@ import {
   VISUALIZER_BANDS_PER_OCTAVE_MAX,
   VISUALIZER_BANDS_PER_OCTAVE_MIN,
   VISUALIZER_FFT_SIZE_OPTIONS,
-  visualizerAuraRayCount,
   visualizerBandsPerOctave,
   visualizerDetailFromBandsPerOctave,
   visualizerWaveformPointCount,
@@ -160,15 +159,6 @@ export function VisualizerTuningControls({
           onChange={(v) => void saveTuning({ spread: v })}
         />
       ) : null}
-      <VisualizerSlider
-        label={t("visualizer.glow", { value: formatNumber(tuning.glow) })}
-        helpLabel={t("visualizer.help.glow")}
-        min={0}
-        max={2}
-        step={0.05}
-        value={tuning.glow}
-        onChange={(v) => void saveTuning({ glow: v })}
-      />
       {showsMirror(style) ? (
         <VisualizerSlider
           label={t("visualizer.mirror", { value: formatNumber(tuning.mirror) })}
@@ -266,20 +256,6 @@ function DensitySlider({
     );
   }
 
-  if (style === "aura") {
-    return (
-      <VisualizerSlider
-        label={t("visualizer.densityRays", { count: visualizerAuraRayCount(detail) })}
-        helpLabel={t("visualizer.help.density")}
-        min={8}
-        max={512}
-        step={8}
-        value={visualizerAuraRayCount(detail)}
-        onChange={(v) => onChange(v / 64)}
-      />
-    );
-  }
-
   return (
     <VisualizerSlider
       label={t("visualizer.densityPoints", { count: visualizerWaveformPointCount(detail) })}
@@ -326,13 +302,11 @@ function VisualizerSlider({
 }
 
 function showsMotion(style: VisualizerStyleId) {
-  return ["bars", "radial", "led-reflex", "waveform", "scene-liquid", "scene-aurora"].includes(
-    style,
-  );
+  return ["bars", "radial", "led-reflex", "waveform"].includes(style);
 }
 
 function showsDensity(style: VisualizerStyleId) {
-  return ["aura", "bars", "radial", "led-reflex", "waveform"].includes(style);
+  return ["bars", "radial", "led-reflex", "waveform"].includes(style);
 }
 
 function usesOctaveBands(style: VisualizerStyleId) {
@@ -340,7 +314,7 @@ function usesOctaveBands(style: VisualizerStyleId) {
 }
 
 function showsSpread(style: VisualizerStyleId) {
-  return ["aura", "bars", "radial", "led-reflex", "scene-liquid", "scene-aurora"].includes(style);
+  return ["bars", "radial", "led-reflex"].includes(style);
 }
 
 function showsMirror(style: VisualizerStyleId) {

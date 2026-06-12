@@ -32,7 +32,7 @@ describe("shouldAnimate", () => {
 
 describe("VisualizerHost", () => {
   it("mounts an aria-hidden canvas for a drawing style", () => {
-    const { container } = render(<VisualizerHost active={false} styleId="aura" />);
+    const { container } = render(<VisualizerHost active={false} styleId="bars" />);
     const canvas = container.querySelector("canvas");
     expect(canvas).not.toBeNull();
     expect(canvas?.getAttribute("aria-hidden")).toBe("true");
@@ -44,7 +44,7 @@ describe("VisualizerHost", () => {
   });
 
   it("falls back to a canvas when a scene is selected but WebGL is unavailable", () => {
-    // jsdom has no WebGL, so SceneHost degrades to the aura spectrum canvas.
+    // Removed scene ids resolve through the registry fallback and still render safely.
     const { container } = render(<VisualizerHost active={false} styleId="scene-liquid" />);
     expect(container.querySelector("canvas")).not.toBeNull();
   });

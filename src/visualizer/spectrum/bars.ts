@@ -91,8 +91,8 @@ export function createBarsVisualizer(): Visualizer {
         const x = i * (bw + gap);
         const y = background ? (h - bh) / 2 : h - bh;
         const g = ctx.createLinearGradient(0, background ? y + bh : h, 0, y);
-        g.addColorStop(0, rgba(primary, Math.min(1, 0.85 * options.glow)));
-        g.addColorStop(1, rgba(tip, Math.min(1, 0.98 * options.glow)));
+        g.addColorStop(0, rgba(primary, 0.85));
+        g.addColorStop(1, rgba(tip, 0.98));
         ctx.fillStyle = g;
         ctx.fillRect(x, y, bw, bh);
       }

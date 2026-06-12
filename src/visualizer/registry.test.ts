@@ -10,9 +10,9 @@ import {
 } from "./registry";
 
 describe("VISUALIZER_META / IDS", () => {
-  it("registers at least off + aura, in order", () => {
+  it("registers at least off + bars, in order", () => {
     expect(VISUALIZER_STYLE_IDS).toContain("off");
-    expect(VISUALIZER_STYLE_IDS).toContain("aura");
+    expect(VISUALIZER_STYLE_IDS).toContain("bars");
   });
   it("every meta entry is complete and valid", () => {
     for (const m of VISUALIZER_META) {
@@ -31,7 +31,7 @@ describe("VISUALIZER_META / IDS", () => {
 
 describe("isRegisteredVisualizerStyle", () => {
   it("accepts registered ids", () => {
-    expect(isRegisteredVisualizerStyle("aura")).toBe(true);
+    expect(isRegisteredVisualizerStyle("bars")).toBe(true);
     expect(isRegisteredVisualizerStyle("off")).toBe(true);
   });
   it("rejects unimplemented union ids and garbage", () => {
@@ -44,19 +44,19 @@ describe("isRegisteredVisualizerStyle", () => {
 
 describe("resolveVisualizerStyle (fallback)", () => {
   it("keeps a registered id", () => {
-    expect(resolveVisualizerStyle("aura")).toBe("aura");
+    expect(resolveVisualizerStyle("bars")).toBe("bars");
     expect(resolveVisualizerStyle("off")).toBe("off");
   });
-  it("falls back to aura for undefined / unknown / not-yet-implemented", () => {
-    expect(resolveVisualizerStyle(undefined)).toBe("aura");
-    expect(resolveVisualizerStyle("garbage")).toBe("aura");
-    expect(resolveVisualizerStyle("milkdrop")).toBe("aura"); // deferred to v2, not registered
+  it("falls back to bars for undefined / unknown / not-yet-implemented", () => {
+    expect(resolveVisualizerStyle(undefined)).toBe("bars");
+    expect(resolveVisualizerStyle("garbage")).toBe("bars");
+    expect(resolveVisualizerStyle("milkdrop")).toBe("bars"); // deferred to v2, not registered
   });
 });
 
 describe("getVisualizerMeta", () => {
   it("returns the matching meta", () => {
-    expect(getVisualizerMeta("aura").kind).toBe("spectrum");
+    expect(getVisualizerMeta("bars").kind).toBe("spectrum");
     expect(getVisualizerMeta("off").id).toBe("off");
   });
 });
@@ -65,27 +65,35 @@ describe("createVisualizer", () => {
   it("returns null for off", () => {
     expect(createVisualizer("off")).toBeNull();
   });
-  it("builds the aura renderer with the Visualizer shape", () => {
-    const v = createVisualizer("aura");
-    expect(v?.id).toBe("aura");
+  it("builds the bars renderer with the Visualizer shape", () => {
+    const v = createVisualizer("bars");
+    expect(v?.id).toBe("bars");
     expect(typeof v?.init).toBe("function");
     expect(typeof v?.render).toBe("function");
     expect(typeof v?.destroy).toBe("function");
   });
-  it("registers + builds the Phase 2 spectrum styles", () => {
+  it("registers + builds the remaining spectrum styles", () => {
     for (const id of ["bars", "radial", "led-reflex", "waveform"] as const) {
       expect(isRegisteredVisualizerStyle(id)).toBe(true);
       expect(resolveVisualizerStyle(id)).toBe(id);
       expect(createVisualizer(id)?.id).toBe(id);
     }
   });
-  it("registers scene styles as kind=scene with no canvas renderer", () => {
-    for (const id of ["scene-liquid", "scene-aurora", "scene-flow"] as const) {
+  it("registers scene-flow as kind=scene with no canvas renderer", () => {
+    for (const id of ["scene-flow"] as const) {
       expect(isRegisteredVisualizerStyle(id)).toBe(true);
       expect(resolveVisualizerStyle(id)).toBe(id);
       expect(getVisualizerMeta(id).kind).toBe("scene");
       expect(getVisualizerMeta(id).backend).toBe("webgl");
       expect(createVisualizer(id)).toBeNull(); // React component, not a canvas renderer
+    }
+  });
+
+  it("removes Aura, Liquid, and Aurora from registered user-selectable styles", () => {
+    for (const id of ["aura", "scene-liquid", "scene-aurora"] as const) {
+      expect(isRegisteredVisualizerStyle(id)).toBe(false);
+      expect(resolveVisualizerStyle(id)).toBe("bars");
+      expect(VISUALIZER_PICKER_META.some((m) => m.id === id)).toBe(false);
     }
   });
 

@@ -7,7 +7,7 @@ import { getMediaEngine } from "@/stores/player-store";
 import { getVisualizerCoverPalette } from "@/stores/visualizer-color-store";
 import { computeAudioUniforms } from "./audio-uniforms";
 import { DEFAULT_FLOW_EFFECT, FLOW_FRAGS } from "./flow-shaders";
-import { AURORA_FRAG, LIQUID_FRAG, SCENE_VERT } from "./scene-shaders";
+import { SCENE_VERT } from "./scene-shaders";
 
 /** Matches `#define FLOW_MAX_COLORS` in the flow shaders. */
 const FLOW_MAX_COLORS = 5;
@@ -85,8 +85,7 @@ export default function ReactiveScene({
   const isFlow = styleId === "scene-flow";
   // Each flow effect is its own shader — selecting one rebuilds the GL program.
   const flowEffect = isFlow && flow ? flow.effect : DEFAULT_FLOW_EFFECT;
-  const frag =
-    styleId === "scene-aurora" ? AURORA_FRAG : isFlow ? FLOW_FRAGS[flowEffect] : LIQUID_FRAG;
+  const frag = FLOW_FRAGS[flowEffect];
 
   // Build the GL program/buffers once per shader (+ analyser bin count).
   useEffect(() => {
@@ -211,7 +210,7 @@ export default function ReactiveScene({
         uBass: bass,
         uMid: mid,
         uTreble: treble,
-        uGlow: options.glow,
+        uGlow: 1,
         uIntensity: options.intensity,
         uPrimary: [p.r / 255, p.g / 255, p.b / 255],
         uSpread: options.spread,

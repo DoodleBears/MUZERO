@@ -5,7 +5,6 @@ export type VisualizerEffectSettings = Pick<
   AppSettings,
   | "visualizerDetail"
   | "visualizerFftSize"
-  | "visualizerGlow"
   | "visualizerIntensity"
   | "visualizerMaxDecibels"
   | "visualizerMinDecibels"
@@ -22,7 +21,6 @@ export type VisualizerEffectSettings = Pick<
 
 export interface VisualizerRenderOptions {
   detail: number;
-  glow: number;
   intensity: number;
   mirror: number;
   motion: number;
@@ -45,7 +43,6 @@ export interface VisualizerAnalyserMeta {
 
 export const VISUALIZER_EFFECT_DEFAULTS: VisualizerRenderOptions = {
   detail: 1,
-  glow: 1,
   intensity: 1,
   mirror: 1,
   motion: 1,
@@ -56,14 +53,17 @@ export const VISUALIZER_BANDS_PER_OCTAVE_DEFAULT = 3;
 export const VISUALIZER_BANDS_PER_OCTAVE_MIN = 1;
 export const VISUALIZER_BANDS_PER_OCTAVE_MAX = 24;
 export const VISUALIZER_FFT_SIZE_OPTIONS = [256, 512, 1024, 2048] as const;
+const VISUALIZER_BACKGROUND_DIM_DEFAULT = 30;
+const VISUALIZER_BACKGROUND_OPACITY_DEFAULT = 70;
 
 export function resolveVisualizerStyleTuning(
   settings: VisualizerEffectSettings,
   style?: VisualizerStyleId,
 ): VisualizerStyleTuning {
   const legacy = legacyVisualizerTuning(settings);
-  if (!style) return legacy;
-  return { ...legacy, ...(settings.visualizerTuningByStyle?.[style] ?? {}) };
+  const defaults = style ? defaultVisualizerTuningForStyle(style) : {};
+  if (!style) return { ...legacy, ...defaults };
+  return { ...legacy, ...defaults, ...(settings.visualizerTuningByStyle?.[style] ?? {}) };
 }
 
 export interface VisualizerBackgroundCompositeOptions {
@@ -103,7 +103,6 @@ export function resolveVisualizerRenderOptions(
   const tuning = resolveVisualizerStyleTuning(settings, style);
   return {
     detail: clamp(tuning.detail ?? VISUALIZER_EFFECT_DEFAULTS.detail, 0.125, 8),
-    glow: clamp(tuning.glow ?? VISUALIZER_EFFECT_DEFAULTS.glow, 0, 2),
     intensity: clamp(tuning.intensity ?? VISUALIZER_EFFECT_DEFAULTS.intensity, 0, 2),
     mirror: clamp(tuning.mirror ?? VISUALIZER_EFFECT_DEFAULTS.mirror, 0, 2),
     motion: clamp(tuning.motion ?? VISUALIZER_EFFECT_DEFAULTS.motion, 0, 2),
@@ -135,12 +134,20 @@ export function resolveVisualizerBackgroundCompositeOptions(
   const tuning = resolveVisualizerStyleTuning(settings, style);
   return hasLyrics
     ? {
-        dimPct: clamp(tuning.bgDimLyrics ?? 40, 0, 100),
-        opacityPct: clamp(tuning.bgOpacityLyrics ?? 60, 0, 100),
+        dimPct: clamp(tuning.bgDimLyrics ?? VISUALIZER_BACKGROUND_DIM_DEFAULT, 0, 100),
+        opacityPct: clamp(
+          tuning.bgOpacityLyrics ?? VISUALIZER_BACKGROUND_OPACITY_DEFAULT,
+          0,
+          100,
+        ),
       }
     : {
-        dimPct: clamp(tuning.backgroundDim ?? 0, 0, 100),
-        opacityPct: clamp(tuning.backgroundOpacity ?? 100, 0, 100),
+        dimPct: clamp(tuning.backgroundDim ?? VISUALIZER_BACKGROUND_DIM_DEFAULT, 0, 100),
+        opacityPct: clamp(
+          tuning.backgroundOpacity ?? VISUALIZER_BACKGROUND_OPACITY_DEFAULT,
+          0,
+          100,
+        ),
       };
 }
 
@@ -159,10 +166,6 @@ export function visualizerDetailFromBandsPerOctave(count: number): number {
   );
 }
 
-export function visualizerAuraRayCount(detail: number): number {
-  return clamp(Math.round(64 * detail), 8, 512);
-}
-
 export function visualizerWaveformPointCount(detail: number): number {
   return clamp(Math.round(96 * detail), 16, 768);
 }
@@ -173,11 +176,27 @@ function normalizeFftSize(value: number) {
     : 1024;
 }
 
+function defaultVisualizerTuningForStyle(style: VisualizerStyleId): VisualizerStyleTuning {
+  const defaults: VisualizerStyleTuning = {
+    backgroundDim: VISUALIZER_BACKGROUND_DIM_DEFAULT,
+    backgroundOpacity: VISUALIZER_BACKGROUND_OPACITY_DEFAULT,
+    bgDimLyrics: VISUALIZER_BACKGROUND_DIM_DEFAULT,
+    bgOpacityLyrics: VISUALIZER_BACKGROUND_OPACITY_DEFAULT,
+  };
+  if (style === "radial") {
+    defaults.intensity = 1.6;
+    defaults.spread = 1;
+  }
+  if (style === "led-reflex") {
+    defaults.detail = 5 / VISUALIZER_BANDS_PER_OCTAVE_DEFAULT;
+  }
+  return defaults;
+}
+
 function legacyVisualizerTuning(settings: VisualizerEffectSettings): VisualizerStyleTuning {
   return {
     detail: settings.visualizerDetail,
     fftSize: settings.visualizerFftSize,
-    glow: settings.visualizerGlow,
     intensity: settings.visualizerIntensity,
     maxDecibels: settings.visualizerMaxDecibels,
     minDecibels: settings.visualizerMinDecibels,

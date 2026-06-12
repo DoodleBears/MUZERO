@@ -90,7 +90,7 @@ export function createRadialVisualizer(): Visualizer {
       const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, coreR);
       grad.addColorStop(
         0,
-        rgba(lighten(primary, 0.5), Math.min(1, (0.5 + energy * 0.4) * options.glow)),
+        rgba(lighten(primary, 0.5), Math.min(1, 0.5 + energy * 0.4)),
       );
       grad.addColorStop(1, rgba(primary, 0));
       ctx.fillStyle = grad;
@@ -109,7 +109,7 @@ export function createRadialVisualizer(): Visualizer {
         const angle = (k / total) * Math.PI * 2 + spin;
         const r0 = inner;
         const r1 = inner + v * reach;
-        ctx.strokeStyle = rgba(tip, Math.min(1, (0.35 + v * 0.6) * options.glow));
+        ctx.strokeStyle = rgba(tip, Math.min(1, 0.35 + v * 0.6));
         ctx.beginPath();
         ctx.moveTo(cx + Math.cos(angle) * r0, cy + Math.sin(angle) * r0);
         ctx.lineTo(cx + Math.cos(angle) * r1, cy + Math.sin(angle) * r1);

@@ -49,7 +49,6 @@ function makeContext(analyser: AnalyserNode | null, active: boolean): Visualizer
     reducedMotion: () => false,
     options: {
       detail: 1,
-      glow: 1,
       intensity: 1,
       mirror: 1,
       motion: 1,
@@ -58,7 +57,7 @@ function makeContext(analyser: AnalyserNode | null, active: boolean): Visualizer
   };
 }
 
-const SPECTRUM_IDS = ["aura", "bars", "radial", "led-reflex", "waveform"] as const;
+const SPECTRUM_IDS = ["bars", "radial", "led-reflex", "waveform"] as const;
 
 describe("spectrum renderers smoke test", () => {
   for (const id of SPECTRUM_IDS) {

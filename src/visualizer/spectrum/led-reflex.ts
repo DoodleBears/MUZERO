@@ -94,7 +94,7 @@ export function createLedReflexVisualizer(): Visualizer {
         for (let s = 0; s <= litUp; s++) {
           const y = baseline - (s + 1) * step + segGap;
           const f = s / Math.max(1, upMax / step); // 0 base → 1 top
-          ctx.fillStyle = rgba(lighten(primary, 0.45 * f), Math.min(1, 0.92 * options.glow));
+          ctx.fillStyle = rgba(lighten(primary, 0.45 * f), 0.92);
           ctx.fillRect(x, y, bw, segH);
         }
         // Reflection (dimmer, shorter).

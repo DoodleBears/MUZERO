@@ -1,7 +1,6 @@
 /**
- * Shared color helpers for the visualizer renderers. Extracted from the original
- * aura visualizer so every spectrum style derives its palette from the live
- * `--primary` accent (see src/theme/primary.ts) the same way. Specific
+ * Shared color helpers for the visualizer renderers. Every spectrum style derives
+ * its palette from the live `--primary` accent (see src/theme/primary.ts). Specific
  * VisualizerHost instances can shadow it with a scoped cover color.
  */
 
