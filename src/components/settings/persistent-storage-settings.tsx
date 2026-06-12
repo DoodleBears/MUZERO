@@ -42,9 +42,18 @@ const ROLE_LABEL_KEYS = {
   memory: "streamCache.permanentRole_memory",
 } as const satisfies Record<MediaBlob["role"], string>;
 
+const COVER_REPAIR_BATCH_SIZE = 25;
+
 interface BrowserStorageEstimate {
   usage: number;
   quota?: number;
+}
+
+interface CoverRepairProgress {
+  failed: number;
+  processed: number;
+  total: number;
+  updated: number;
 }
 
 function formatBytes(bytes: number): string {
@@ -66,6 +75,7 @@ export function PersistentStorageSettings() {
   const [migrationProgress, setMigrationProgress] = useState<MediaBlobMigrationProgress | null>(
     null,
   );
+  const [coverRepairProgress, setCoverRepairProgress] = useState<CoverRepairProgress | null>(null);
   const [refreshToken, setRefreshToken] = useState(0);
   const [storageRefreshToken, setStorageRefreshToken] = useState(0);
   const [browserStorage, setBrowserStorage] = useState<BrowserStorageEstimate | null>(null);
@@ -158,9 +168,29 @@ export function PersistentStorageSettings() {
 
   async function repairCoverMetadata() {
     setBusy("repair-covers");
+    const total = Math.max(0, coverRepairCount);
+    const skipped = new Set<string>();
+    const progress: CoverRepairProgress = { failed: 0, processed: 0, total, updated: 0 };
+    setCoverRepairProgress(progress);
     try {
-      const result = await backfillCoverMetadata(undefined, { limit: 500 });
-      notify.success(t("streamCache.permanentRepairCoversDone", { count: result.updated }));
+      while (progress.processed < total) {
+        const result = await backfillCoverMetadata(undefined, {
+          limit: COVER_REPAIR_BATCH_SIZE,
+          skip: skipped,
+        });
+        if (result.attempted.length === 0) break;
+        for (const key of result.attempted) skipped.add(key);
+        progress.processed = Math.min(total, progress.processed + result.attempted.length);
+        progress.updated += result.updated;
+        progress.failed += Math.max(0, result.attempted.length - result.updated);
+        setCoverRepairProgress({ ...progress });
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      }
+      if (progress.processed < total) {
+        progress.processed = total;
+        setCoverRepairProgress({ ...progress });
+      }
+      notify.success(t("streamCache.permanentRepairCoversDone", { count: progress.updated }));
       setRefreshToken((value) => value + 1);
     } finally {
       setBusy(null);
@@ -173,6 +203,10 @@ export function PersistentStorageSettings() {
   const migrationPercent =
     migrationProgress && migrationProgress.total > 0
       ? Math.round((migrationProgress.processed / migrationProgress.total) * 100)
+      : 0;
+  const coverRepairPercent =
+    coverRepairProgress && coverRepairProgress.total > 0
+      ? Math.round((coverRepairProgress.processed / coverRepairProgress.total) * 100)
       : 0;
 
   return (
@@ -265,6 +299,42 @@ export function PersistentStorageSettings() {
                 </span>
               )}
             </div>
+          </div>
+        )}
+
+        {coverRepairProgress && (
+          <div className="rounded-md border border-border bg-muted/20 p-3">
+            <div className="mb-2 flex items-center justify-between gap-3 text-xs">
+              <span className="font-medium">
+                {t("streamCache.permanentCoverRepairProgress", {
+                  processed: coverRepairProgress.processed,
+                  total: coverRepairProgress.total,
+                })}
+              </span>
+              <span className="text-muted-foreground">{coverRepairPercent}%</span>
+            </div>
+            <div
+              role="progressbar"
+              aria-label={t("streamCache.permanentCoverRepairProgress", {
+                processed: coverRepairProgress.processed,
+                total: coverRepairProgress.total,
+              })}
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={coverRepairPercent}
+              className="h-2 overflow-hidden rounded-full bg-muted"
+            >
+              <div
+                className="h-full rounded-full bg-primary transition-[width]"
+                style={{ width: `${coverRepairPercent}%` }}
+              />
+            </div>
+            <p className="mt-2 text-muted-foreground text-xs">
+              {t("streamCache.permanentCoverRepairDetail", {
+                failed: coverRepairProgress.failed,
+                updated: coverRepairProgress.updated,
+              })}
+            </p>
           </div>
         )}
 

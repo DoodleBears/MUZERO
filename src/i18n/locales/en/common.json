@@ -161,6 +161,8 @@
     "permanentCleanupDone": "Deleted {{count}} orphan files",
     "permanentRepairCovers": "Repair cover colors",
     "permanentRepairCoversDone": "Repaired {{count}} cover color records",
+    "permanentCoverRepairProgress": "Repairing cover colors {{processed}} / {{total}}",
+    "permanentCoverRepairDetail": "Updated {{updated}} · unresolved {{failed}}",
     "downloadFailedMany_other": "{{count}} songs couldn't be downloaded"
   },
   "playlistImport": {

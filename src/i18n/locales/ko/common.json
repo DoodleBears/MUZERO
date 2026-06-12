@@ -152,6 +152,8 @@
     "permanentCleanupDone": "고아 파일 {{count}}개를 삭제함",
     "permanentRepairCovers": "커버 색상 복구",
     "permanentRepairCoversDone": "커버 색상 기록 {{count}}개를 복구함",
+    "permanentCoverRepairProgress": "커버 색상 복구 중 {{processed}} / {{total}}",
+    "permanentCoverRepairDetail": "업데이트 {{updated}} · 미해결 {{failed}}",
     "downloadFailedMany_other": "{{count}}곡을 다운로드하지 못함"
   },
   "playlistImport": {

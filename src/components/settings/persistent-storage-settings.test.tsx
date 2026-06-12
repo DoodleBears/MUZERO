@@ -168,18 +168,32 @@ describe("PersistentStorageSettings", () => {
     );
   });
 
-  it("repairs cover color metadata on demand", async () => {
-    mocks.repairCoverMetadata.mockResolvedValueOnce({ attempted: ["blb_a"], updated: 1 });
+  it("repairs cover color metadata in batches with progress", async () => {
+    mocks.coverRepairCount = 3;
+    mocks.repairCoverMetadata
+      .mockResolvedValueOnce({ attempted: ["blb_a", "blb_b"], updated: 2 })
+      .mockResolvedValueOnce({ attempted: ["blb_c"], updated: 0 });
 
     render(<PersistentStorageSettings />);
 
     fireEvent.click(screen.getByRole("button", { name: /streamCache.permanentRepairCovers/ }));
 
     await waitFor(() => {
-      expect(mocks.repairCoverMetadata).toHaveBeenCalledWith(undefined, { limit: 500 });
+      expect(
+        screen.getByRole("progressbar", { name: /^streamCache\.permanentCoverRepairProgress / }),
+      ).toHaveAttribute("aria-valuenow", "100");
     });
-    expect(mocks.notifySuccess).toHaveBeenCalledWith(
-      expect.stringContaining("streamCache.permanentRepairCoversDone"),
+    expect(screen.getByText(/^streamCache\.permanentCoverRepairDetail /)).toHaveTextContent(
+      '"updated":2',
     );
+    expect(mocks.repairCoverMetadata).toHaveBeenNthCalledWith(1, undefined, {
+      limit: 25,
+      skip: expect.any(Set),
+    });
+    expect(mocks.repairCoverMetadata).toHaveBeenNthCalledWith(2, undefined, {
+      limit: 25,
+      skip: expect.any(Set),
+    });
+    expect(mocks.notifySuccess).toHaveBeenCalledWith(expect.stringContaining('"count":2'));
   });
 });

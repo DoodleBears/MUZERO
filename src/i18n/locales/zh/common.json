@@ -152,6 +152,8 @@
     "permanentCleanupDone": "已删除 {{count}} 个孤儿文件",
     "permanentRepairCovers": "修复封面取色",
     "permanentRepairCoversDone": "已修复 {{count}} 条封面取色",
+    "permanentCoverRepairProgress": "正在修复封面取色 {{processed}} / {{total}}",
+    "permanentCoverRepairDetail": "已更新 {{updated}} · 未解决 {{failed}}",
     "downloadFailedMany_other": "{{count}} 首下载失败"
   },
   "playlistImport": {

@@ -152,6 +152,8 @@
     "permanentCleanupDone": "{{count}} 件の孤立ファイルを削除しました",
     "permanentRepairCovers": "カバー色を修復",
     "permanentRepairCoversDone": "{{count}} 件のカバー色を修復しました",
+    "permanentCoverRepairProgress": "カバー色を修復中 {{processed}} / {{total}}",
+    "permanentCoverRepairDetail": "更新 {{updated}} · 未解決 {{failed}}",
     "downloadFailedMany_other": "{{count}} 曲をダウンロードできませんでした"
   },
   "playlistImport": {

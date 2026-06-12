@@ -626,6 +626,7 @@ Scope:
 - [x] Add tests for usage progress rendering, quota-unavailable fallback, and clear-cache actions.
 - [x] Ensure newly imported embedded track covers generate cover preview/color metadata immediately so Storage repair counts do not grow for fresh imports.
 - [x] Ensure cloud/R2-imported remote covers derive fallback palette metadata from thumbhash when manifests do not carry an explicit palette.
+- [x] Run cover color repair in visible batches with a progress bar, so large legacy libraries show processed/total and unresolved counts instead of a one-shot button.
 
 ### Phase 4 Checklist
 
@@ -636,6 +637,7 @@ Scope:
 - [x] Existing persistent media migration/cleanup/repair actions still work.
 - [x] Fresh imports with embedded covers no longer require a separate cover metadata repair pass for thumbhash/palette fields.
 - [x] Fresh cloud/R2 imports with remote cover thumbhashes no longer require a separate cover palette repair pass.
+- [x] Cover color repair gives progress feedback during batch processing.
 - [x] No local source paths are exposed in exported diagnostics or remote sync.
 
 **Phase 4 Verification:**
