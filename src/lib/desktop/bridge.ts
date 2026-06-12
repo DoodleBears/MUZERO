@@ -125,6 +125,8 @@ export interface DesktopBridge {
   deleteMediaStorageFile?: (input: MediaStorageFileInput) => Promise<void>;
   /** Stat an app-managed persistent media file. Electron only for now. */
   statMediaStorageFile?: (input: MediaStorageFileInput) => Promise<MediaStorageFileStat | null>;
+  /** Reveal the app-managed persistent media/cache folder in the OS file manager. */
+  openMediaStorageFolder?: () => Promise<void>;
   /** Open an http(s) URL in the system browser. */
   openExternal: (url: string) => Promise<void>;
   /**

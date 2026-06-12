@@ -130,6 +130,7 @@
     "permanentBackendIndexedDb": "IndexedDB",
     "permanentBackendOpfs": "OPFS",
     "permanentBackendElectron": "디스크",
+    "permanentOpenFolder": "로컬 캐시 열기",
     "permanentRole_media": "오디오 / 비디오",
     "permanentRole_cover": "커버",
     "permanentRole_memory": "메모리",

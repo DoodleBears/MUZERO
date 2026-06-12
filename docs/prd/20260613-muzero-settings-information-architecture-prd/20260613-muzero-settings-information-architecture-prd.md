@@ -747,6 +747,7 @@ Scope:
 - [x] Local files page exposes an add-local-folder primary action above the folder list.
 - [x] AI DJ page explains supported tool-call capabilities through localized clickable chips.
 - [x] Storage usage progress is understandable when quota is known and when quota is unavailable.
+- [x] Storage page can reveal the local app-managed cache/media folder when the desktop shell supports it.
 - [x] Offline cache toggle defaults to on while remaining visible and user-controlled.
 - [x] Listening stats empty and populated states are clear.
 - [x] No hidden flags, telemetry, or backend behavior are introduced.
@@ -756,6 +757,7 @@ Scope:
 - `node_modules\.bin\vitest.CMD run src\db\default-settings.test.ts`
 - `node_modules\.bin\vitest.CMD run src\components\settings\imported-folders-settings.test.tsx`
 - `node_modules\.bin\vitest.CMD run src\chat\dj-chat-tool-metadata.test.ts src\components\settings\dj-tool-capabilities.test.tsx src\components\chat\chat-tool-collapsible.test.tsx`
+- `node_modules\.bin\vitest.CMD run src\components\settings\persistent-storage-settings.test.tsx`
 - `node_modules\.bin\tsc.CMD --noEmit --pretty false`
 - Browser visual verification attempted but blocked by local Browser plugin sandbox permissions.
 
@@ -862,6 +864,7 @@ Scope:
 | 2026-06-13 | Codex | Set streamed offline cache on by default and added default-settings coverage. |
 | 2026-06-13 | Codex | Surfaced the Local files add-folder action in the card header and covered it with a component test. |
 | 2026-06-13 | Codex | Added localized AI DJ tool-call capability chips and localized chat tool-call labels. |
+| 2026-06-13 | Codex | Added a desktop-only action to open MUZERO's local cache/media folder from Storage. |
 
 ---
 

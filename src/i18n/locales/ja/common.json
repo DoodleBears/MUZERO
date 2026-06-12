@@ -130,6 +130,7 @@
     "permanentBackendIndexedDb": "IndexedDB",
     "permanentBackendOpfs": "OPFS",
     "permanentBackendElectron": "ディスク",
+    "permanentOpenFolder": "ローカルキャッシュを開く",
     "permanentRole_media": "音声 / 動画",
     "permanentRole_cover": "カバー",
     "permanentRole_memory": "メモリー",

@@ -33,6 +33,7 @@ interface MuzeroApi {
   readMediaStorageFile(input: MediaStorageFileInput): Promise<ArrayBuffer>;
   deleteMediaStorageFile(input: MediaStorageFileInput): Promise<void>;
   statMediaStorageFile(input: MediaStorageFileInput): Promise<{ bytes: number } | null>;
+  openMediaStorageFolder(): Promise<void>;
   openExternal(url: string): Promise<void>;
   setAppIcon(icon: string): Promise<void>;
   /** Main returns the RAW captured cookies (renderer assembles the header). */
@@ -151,6 +152,7 @@ export function createElectronBridge(): DesktopBridge {
     readMediaStorageFile: async (input) => new Uint8Array(await api.readMediaStorageFile(input)),
     deleteMediaStorageFile: (input) => api.deleteMediaStorageFile(input),
     statMediaStorageFile: (input) => api.statMediaStorageFile(input),
+    openMediaStorageFolder: () => api.openMediaStorageFolder(),
     openExternal: (url) => api.openExternal(url),
     setAppIcon: (icon) => api.setAppIcon(icon),
     mediaProxyUrl: electronMediaProxyUrl,

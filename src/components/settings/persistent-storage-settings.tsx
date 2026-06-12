@@ -1,5 +1,5 @@
 import { useLiveQuery } from "dexie-react-hooks";
-import { Palette, RefreshCw, Trash2, XCircle } from "lucide-react";
+import { FolderOpen, Palette, RefreshCw, Trash2, XCircle } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { StreamCacheControls } from "@/components/settings/stream-cache-controls";
@@ -15,6 +15,7 @@ import {
 } from "@/db/media-blob-storage";
 import { backfillCoverMetadata, countCoverMetadataBackfillCandidates } from "@/db/repositories";
 import type { MediaBlob } from "@/db/types";
+import { resolveDesktopBridge } from "@/lib/desktop/bridge";
 import { notify } from "@/stores/notification-store";
 
 const EMPTY_BUCKET = { count: 0, bytes: 0 } satisfies PersistentMediaStorageBucket;
@@ -60,6 +61,7 @@ function formatBytes(bytes: number): string {
 
 export function PersistentStorageSettings() {
   const { t } = useTranslation();
+  const openMediaStorageFolder = resolveDesktopBridge().openMediaStorageFolder;
   const [busy, setBusy] = useState<"migrate" | "cleanup" | "repair-covers" | null>(null);
   const [migrationProgress, setMigrationProgress] = useState<MediaBlobMigrationProgress | null>(
     null,
@@ -267,6 +269,16 @@ export function PersistentStorageSettings() {
         )}
 
         <div className="flex flex-wrap gap-2">
+          {openMediaStorageFolder && (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => void openMediaStorageFolder()}
+            >
+              <FolderOpen /> {t("streamCache.permanentOpenFolder")}
+            </Button>
+          )}
           <Button
             type="button"
             size="sm"

@@ -139,6 +139,7 @@
     "permanentBackendIndexedDb": "IndexedDB",
     "permanentBackendOpfs": "OPFS",
     "permanentBackendElectron": "Disk",
+    "permanentOpenFolder": "Open local cache",
     "permanentRole_media": "Audio / video",
     "permanentRole_cover": "Covers",
     "permanentRole_memory": "Memories",

@@ -260,6 +260,12 @@ function registerIpc() {
     }
   });
 
+  ipcMain.handle("muzero:mediaStorage:openRoot", async () => {
+    const root = await ensureMediaStorageRoot();
+    const error = await shell.openPath(root);
+    if (error) throw new Error(error);
+  });
+
   ipcMain.handle("muzero:openExternal", async (_event, url) => {
     const u = new URL(url);
     if (u.protocol !== "http:" && u.protocol !== "https:") {

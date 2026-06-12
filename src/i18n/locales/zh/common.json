@@ -130,6 +130,7 @@
     "permanentBackendIndexedDb": "IndexedDB",
     "permanentBackendOpfs": "OPFS",
     "permanentBackendElectron": "磁盘",
+    "permanentOpenFolder": "打开本地缓存",
     "permanentRole_media": "音频 / 视频",
     "permanentRole_cover": "封面",
     "permanentRole_memory": "回忆",

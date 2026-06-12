@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   coverRepairCount: 3,
   migrateWithProgress: vi.fn(),
   notifySuccess: vi.fn(),
+  openMediaStorageFolder: vi.fn(),
   repairCoverMetadata: vi.fn(),
   summary: {
     count: 2,
@@ -53,6 +54,13 @@ vi.mock("@/db/repositories", () => ({
   countCoverMetadataBackfillCandidates: mocks.countCoverMetadataBackfillCandidates,
 }));
 
+vi.mock("@/lib/desktop/bridge", () => ({
+  resolveDesktopBridge: () => ({
+    kind: "electron",
+    openMediaStorageFolder: mocks.openMediaStorageFolder,
+  }),
+}));
+
 vi.mock("@/stores/notification-store", () => ({
   notify: {
     success: mocks.notifySuccess,
@@ -66,6 +74,8 @@ describe("PersistentStorageSettings", () => {
     mocks.coverRepairCount = 3;
     mocks.migrateWithProgress.mockReset();
     mocks.notifySuccess.mockReset();
+    mocks.openMediaStorageFolder.mockReset();
+    mocks.openMediaStorageFolder.mockResolvedValue(undefined);
     mocks.repairCoverMetadata.mockReset();
     Object.defineProperty(navigator, "storage", {
       configurable: true,
@@ -85,6 +95,14 @@ describe("PersistentStorageSettings", () => {
     expect(progress).toHaveAttribute("aria-valuenow", "50");
     expect(screen.getByText(/^settings\.storageUsageRatio /)).toHaveTextContent('"percent":50');
     expect(screen.getByText("stream-cache-controls")).toBeInTheDocument();
+  });
+
+  it("opens the local cache folder when the desktop bridge supports it", async () => {
+    render(<PersistentStorageSettings />);
+
+    fireEvent.click(screen.getByRole("button", { name: "streamCache.permanentOpenFolder" }));
+
+    await waitFor(() => expect(mocks.openMediaStorageFolder).toHaveBeenCalledTimes(1));
   });
 
   it("falls back without a progress bar when quota is unavailable", async () => {

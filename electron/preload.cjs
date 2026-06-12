@@ -22,6 +22,7 @@ contextBridge.exposeInMainWorld("muzero", {
   readMediaStorageFile: (input) => ipcRenderer.invoke("muzero:mediaStorage:read", input),
   deleteMediaStorageFile: (input) => ipcRenderer.invoke("muzero:mediaStorage:delete", input),
   statMediaStorageFile: (input) => ipcRenderer.invoke("muzero:mediaStorage:stat", input),
+  openMediaStorageFolder: () => ipcRenderer.invoke("muzero:mediaStorage:openRoot"),
   openExternal: (url) => ipcRenderer.invoke("muzero:openExternal", url),
   setAppIcon: (icon) => ipcRenderer.invoke("muzero:setAppIcon", icon),
   openSourceLogin: (request) => ipcRenderer.invoke("muzero:openSourceLogin", request),
