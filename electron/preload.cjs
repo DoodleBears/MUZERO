@@ -8,6 +8,7 @@ const { contextBridge, ipcRenderer } = require("electron");
 const DIAGNOSTICS_CHANNEL = "muzero:diagnostics:event";
 const SYSTEM_SHORTCUT_CONFIGURE_CHANNEL = "muzero:systemShortcuts:configure";
 const SYSTEM_SHORTCUT_ACTION_CHANNEL = "muzero:systemShortcuts:action";
+const LIVE_REQUEST_MESSAGE_CHANNEL = "muzero:liveRequest:message";
 
 contextBridge.exposeInMainWorld("muzero", {
   kind: "electron",
@@ -78,6 +79,16 @@ contextBridge.exposeInMainWorld("muzero", {
       };
       ipcRenderer.on(SYSTEM_SHORTCUT_ACTION_CHANNEL, listener);
       return () => ipcRenderer.removeListener(SYSTEM_SHORTCUT_ACTION_CHANNEL, listener);
+    },
+  },
+  liveRequestIntake: {
+    start: (input) => ipcRenderer.invoke("muzero:liveRequest:start", input),
+    stop: () => ipcRenderer.invoke("muzero:liveRequest:stop"),
+    status: () => ipcRenderer.invoke("muzero:liveRequest:status"),
+    onMessage: (callback) => {
+      const listener = (_event, payload) => callback(payload);
+      ipcRenderer.on(LIVE_REQUEST_MESSAGE_CHANNEL, listener);
+      return () => ipcRenderer.removeListener(LIVE_REQUEST_MESSAGE_CHANNEL, listener);
     },
   },
 });

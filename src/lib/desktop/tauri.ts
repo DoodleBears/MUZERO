@@ -88,37 +88,6 @@ export function createTauriBridge(): DesktopBridge {
       const { getCurrentWindow } = await import("@tauri-apps/api/window");
       await getCurrentWindow().startDragging();
     },
-    liveRequestIntake: {
-      async start(input) {
-        const { invoke } = await loadCore();
-        return invoke("start_live_request_intake", { request: input });
-      },
-      async stop() {
-        const { invoke } = await loadCore();
-        return invoke("stop_live_request_intake");
-      },
-      async status() {
-        const { invoke } = await loadCore();
-        return invoke("live_request_intake_status");
-      },
-      onMessage(callback) {
-        let active = true;
-        const unlisten = import("@tauri-apps/api/event")
-          .then(({ listen }) =>
-            listen("live-request-message", (event) => {
-              callback(event.payload as Parameters<typeof callback>[0]);
-            }),
-          )
-          .then((unsubscribe) => {
-            if (!active) unsubscribe();
-            return unsubscribe;
-          });
-        return () => {
-          active = false;
-          void unlisten.then((unsubscribe) => unsubscribe());
-        };
-      },
-    },
   };
 }
 

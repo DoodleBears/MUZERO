@@ -3,7 +3,7 @@
 **Status:** Draft
 **Created:** 2026-06-13
 **Author:** Codex
-**Module:** AI DJ / Search / Player Queue / Tauri Desktop Local Intake
+**Module:** AI DJ / Search / Player Queue / Electron Desktop Local Intake
 
 > 产品请求：直播间弹幕可通过 Social Stream Ninja 等工具转发到 MUZERO。MUZERO 需要对外暴露一个本地接口接收消息，并可配置把消息交给 AI DJ 处理，或直接走搜索匹配，把最高分曲目加入下一首 / 立即切歌 / 追加队列。
 
@@ -15,7 +15,7 @@
 |-------|------|--------|------|
 | 0 | PRD + Architecture Decision | ✅ Completed | [Phase 0 Checklist](#phase-0-checklist) |
 | 1 | Contracts + Pure Router | ✅ Completed | [Phase 1 Checklist](#phase-1-checklist) |
-| 2 | Desktop Loopback Intake Server | ✅ Completed（Rust test blocked by local Cargo 1.81） | [Phase 2 Checklist](#phase-2-checklist) |
+| 2 | Desktop Loopback Intake Server | ✅ Completed（Electron） | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | Settings + Request Inbox UI | 🔲 Pending | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | Direct Search Route + Playback Actions | 🔲 Pending | [Phase 4 Checklist](#phase-4-checklist) |
 | 5 | AI DJ Route + Prompt Safety | 🔲 Pending | [Phase 5 Checklist](#phase-5-checklist) |
@@ -70,7 +70,7 @@ Social Stream Ninja / OBS / local script
         │  POST http://127.0.0.1:<port>/v1/audience/request
         │  Authorization: Bearer <local intake token>
         ▼
-Tauri Desktop LocalIntakeServer
+Electron Main LocalIntakeServer
         │  validate token / rate limit / normalize payload
         │  emit event to WebView
         ▼
@@ -95,13 +95,13 @@ AudienceRequestRouter
                 └── no confident match -> AI DJ or inbox
 ```
 
-**Key decision:** v1 exposes a **desktop-only HTTP loopback server inside the Tauri shell** for Social Stream Ninja **Call Webhook**. A normal browser tab cannot listen for inbound HTTP requests, and adding a MUZERO cloud relay would violate the local-first product boundary. The local server is not a MUZERO backend; it is a device-local bridge owned by the user.
+**Key decision:** v1 exposes a **desktop-only HTTP loopback server inside the Electron main process** for Social Stream Ninja **Call Webhook**. A normal browser tab cannot listen for inbound HTTP requests, and adding a MUZERO cloud relay would violate the local-first product boundary. The local server is not a MUZERO backend; it is a device-local bridge owned by the user.
 
 ### 2.2 Technology Stack
 
 | Component | Technology | Rationale |
 |-----------|------------|-----------|
-| Local intake server | Tauri Rust command + async loopback HTTP server | Browser cannot accept inbound requests; desktop shell can bind `127.0.0.1`. |
+| Local intake server | Electron main-process Node `http` server + IPC bridge | Browser cannot accept inbound requests; Electron main can bind `127.0.0.1` while keeping renderer code behind `DesktopBridge`. |
 | Frontend runtime | React/TypeScript module-scope singleton | Mirrors existing `DjEngine` / `MediaEngine` pattern; runtime state does not belong in Zustand. |
 | Persistence | Dexie `muzero-db` `AppSettings` fields only | Endpoint settings and token remain local. Request messages/status are transient memory state by default and are not saved. |
 | Validation | Zod schemas in `src/live-requests/` | Accept generic JSON while normalizing to one internal contract. |
@@ -132,8 +132,10 @@ src/
 │   └── player-store.ts                  # optional narrow actions if repo-only queue ops are not enough
 └── i18n/locales/{en,zh,ja,ko}/common.json
 
-src-tauri/
-└── src/lib.rs                           # start/stop local intake server + event emit
+electron/
+├── live-request-intake.cjs              # start/stop local loopback server + event emit
+├── main.cjs                             # registers intake IPC/server
+└── preload.cjs                          # exposes window.muzero.liveRequestIntake
 ```
 
 > Net-new `src/live-requests/` is justified because this is a boundary module: inbound untrusted messages, security/rate-limit rules, pure routing, and playback side effects should not be scattered through chat/store/UI.
@@ -142,9 +144,9 @@ src-tauri/
 
 | Runtime | v1 Behavior |
 |---------|-------------|
-| Tauri desktop | Full feature: start/stop local loopback server and receive HTTP requests. |
+| Electron desktop | Full feature: start/stop local loopback server and receive HTTP requests. |
 | Browser dev server | No inbound server; Settings shows desktop-only unavailable state. Unit tests can call router/runtime directly. |
-| Mobile Tauri | Out of scope for v1; no listening port. Future: deep link / push-free local network receiver if product requires it. |
+| Tauri/mobile shells | Out of scope for v1; no listening port. Future Tauri support can reuse the same `DesktopBridge.liveRequestIntake` contract if product priority returns. |
 
 ---
 
@@ -496,7 +498,7 @@ The streamer should be able to click a request row and open the matched track in
 **Tasks:**
 
 - [x] Read PRD template and related AI DJ/search/player PRDs.
-- [x] Audit existing `dj-chat-tools`, search, queue, and Tauri shell boundaries.
+- [x] Audit existing `dj-chat-tools`, search, queue, and Electron shell boundaries.
 - [x] Decide v1 is desktop loopback only, not MUZERO cloud relay.
 
 ### Phase 0 Checklist
@@ -537,28 +539,28 @@ The streamer should be able to click a request row and open the matched track in
 
 **Tasks:**
 
-- [x] Add Tauri commands to start/stop/status the local intake server.
+- [x] Add Electron main-process IPC handlers to start/stop/status the local intake server.
 - [x] Bind only `127.0.0.1` in v1.
-- [x] Validate bearer token before emitting payload to WebView.
+- [x] Validate bearer/query token before emitting payload to renderer.
 - [x] Add bounded request body size and read timeout guard. Runtime rate-limit remains Phase 4.
-- [x] Emit a typed Tauri event to frontend runtime via `DesktopBridge.liveRequestIntake`.
-- [x] Add Rust-side tests for auth/query parsing; execution is blocked in this environment by Cargo 1.81 vs an edition2024 transitive dependency.
+- [x] Emit a typed Electron IPC event to frontend runtime via `DesktopBridge.liveRequestIntake`.
+- [x] Add Node/Vitest tests for query auth, bearer auth, renderer emit, and bounded body handling.
 
 ### Phase 2 Checklist
 
 - [x] Server is off by default and start/stop are explicit commands.
 - [x] Invalid token cannot reach frontend runtime.
-- [x] Token is never logged by the Rust server.
-- [x] Browser/mobile builds have no `liveRequestIntake` bridge capability, so UI can show unavailable state.
+- [x] Token is never logged by the Electron server.
+- [x] Browser/Tauri/mobile builds have no `liveRequestIntake` bridge capability, so UI can show unavailable state.
 - [x] Port conflict returns a command error for Settings to surface.
 
 **Phase 2 Verification:**
 
-- `C:\Users\admin\.cargo\bin\cargo.exe fmt`
-- `D:\code\project\MUZERO\node_modules\.bin\biome.CMD check src\lib\desktop\bridge.ts src\lib\desktop\tauri.ts src\live-requests`
+- `D:\code\project\MUZERO\node_modules\.bin\vitest.CMD run scripts\electron-live-request-intake.test.mjs`
+- `D:\code\project\MUZERO\node_modules\.bin\biome.CMD check --write src\lib\desktop\electron.ts src\lib\desktop\bridge.ts src\lib\desktop\tauri.ts`
+- `D:\code\project\MUZERO\node_modules\.bin\biome.CMD check electron\live-request-intake.cjs electron\main.cjs electron\preload.cjs scripts\electron-live-request-intake.test.mjs src\lib\desktop\bridge.ts src\lib\desktop\electron.ts src\lib\desktop\tauri.ts`
 - `D:\code\project\MUZERO\node_modules\.bin\tsc.CMD --noEmit --pretty false`
 - `.\node_modules\.bin\vitest.CMD run src\live-requests\audience-request-schema.test.ts src\live-requests\audience-request-search.test.ts src\live-requests\audience-request-router.test.ts src\live-requests\audience-request-security.test.ts`
-- Blocked: `C:\Users\admin\.cargo\bin\cargo.exe test live_request_intake` fails before compiling because Cargo 1.81 cannot parse a downloaded dependency requiring the unstable `edition2024` cargo feature.
 
 ### Phase 3: Settings + Request Inbox UI
 
@@ -651,7 +653,7 @@ The streamer should be able to click a request row and open the matched track in
 
 - [ ] Run targeted Vitest suites for router/search/runtime/settings.
 - [ ] Run `tsc --noEmit`.
-- [ ] Run Tauri desktop manual test with curl/Postman/local script.
+- [ ] Run Electron desktop manual test with curl/Postman/local script.
 - [ ] Verify no `console.*` in `src/**`.
 - [ ] Verify token/raw body redaction in logs.
 - [ ] Verify request flood does not freeze playback UI.
@@ -672,7 +674,7 @@ The streamer should be able to click a request row and open the matched track in
 
 - MUZERO-hosted cloud relay or public webhook endpoint.
 - Scraping livestream chat directly from YouTube/Twitch/Bilibili/Douyin. v1 only receives messages from user-configured forwarding tools.
-- Mobile inbound listener.
+- Tauri/mobile inbound listener.
 - LAN/public network binding. v1 binds loopback only; LAN requires a separate security review.
 - Full moderation AI or toxicity classifier.
 - OBS plugin development.
@@ -709,7 +711,8 @@ The streamer should be able to click a request row and open the matched track in
 | [`src/lib/track-search.ts`](../../../src/lib/track-search.ts) | Existing local search scoring and memory/tag/lyrics surfaces. |
 | [`src/stores/player-store.ts`](../../../src/stores/player-store.ts) | Existing playback actions and queue orchestration. |
 | [`src/player/queue.ts`](../../../src/player/queue.ts) | Existing pure queue math. |
-| [`src-tauri/src/lib.rs`](../../../src-tauri/src/lib.rs) | Current minimal Tauri shell; local intake server belongs here or a small module called from here. |
+| [`electron/live-request-intake.cjs`](../../../electron/live-request-intake.cjs) | Electron main-process local loopback intake server and IPC registration. |
+| [`electron/preload.cjs`](../../../electron/preload.cjs) | Exposes `window.muzero.liveRequestIntake` to the renderer. |
 
 ---
 
@@ -754,4 +757,4 @@ The streamer should be able to click a request row and open the matched track in
 | 2026-06-13 | Codex | Initial draft from PM request: live chat/Social Stream Ninja message intake, AI DJ route, search route, local desktop loopback architecture, security defaults, implementation phases. |
 | 2026-06-13 | Codex | Resolved product open questions: Social Stream Ninja Call Webhook POST, default Search/play-next, online fallback only after low local confidence, no LAN, no persisted request history, and serial one-request-one-session AI DJ handling. |
 | 2026-06-13 | Codex | Completed Phase 1: pure request schema normalization, local search match picker, route planner, in-memory duplicate/cooldown helpers, and targeted tests. |
-| 2026-06-13 | Codex | Completed Phase 2 implementation: Tauri loopback HTTP intake server, token/query auth, bounded body handling, typed frontend bridge, and Rust auth parsing tests; Rust test execution blocked by local Cargo 1.81 vs edition2024 dependency. |
+| 2026-06-13 | Codex | Pivoted Phase 2 to Electron-first per product direction: Electron main-process loopback HTTP intake server, token/query auth, bounded body handling, typed preload/renderer bridge, and Node/Vitest coverage. Tauri listener intentionally removed for v1. |

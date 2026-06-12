@@ -5,6 +5,7 @@ import type { TrayActionId } from "@/tray/actions";
 import type { TrayMenuModel } from "@/tray/menu-model";
 import type {
   DesktopBridge,
+  DesktopLiveRequestIntakeControls,
   DesktopPlatform,
   DesktopSystemShortcutConfigureResult,
   DesktopSystemShortcutRegistration,
@@ -65,6 +66,7 @@ interface MuzeroApi {
     ): Promise<DesktopSystemShortcutConfigureResult>;
     onAction(callback: (actionId: string) => void): () => void;
   };
+  liveRequestIntake?: DesktopLiveRequestIntakeControls;
 }
 
 const PROXY_URL = "muzfetch://proxy/";
@@ -202,6 +204,7 @@ export function createElectronBridge(): DesktopBridge {
           onAction: (callback) => api.systemShortcuts?.onAction(callback) ?? (() => {}),
         }
       : undefined,
+    liveRequestIntake: api.liveRequestIntake,
     tray: api.tray
       ? {
           update: (model) => api.tray?.update(model) ?? Promise.resolve(),

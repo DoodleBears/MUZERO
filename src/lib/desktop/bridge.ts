@@ -177,7 +177,7 @@ export interface DesktopBridge {
   systemShortcuts?: DesktopSystemShortcuts;
   /** Native system tray menu bridge. Electron desktop only for v1. */
   tray?: DesktopTrayControls;
-  /** Tauri desktop local loopback HTTP intake for Social Stream Ninja Call Webhook. */
+  /** Desktop local loopback HTTP intake for Social Stream Ninja Call Webhook. */
   liveRequestIntake?: DesktopLiveRequestIntakeControls;
   /**
    * Start a native window drag for the current press (frameless window move).
