@@ -52,7 +52,7 @@ const WHEEL_END_MS = 140;
 const COVERFLOW_TILT = 34;
 const SIDE_SCALE = 0.86;
 const SWIPE_CARD_BASE =
-  "pointer-events-none absolute inset-0 overflow-hidden rounded-lg bg-muted [backface-visibility:hidden]";
+  "pointer-events-none absolute inset-0 overflow-hidden bg-muted shadow-md [backface-visibility:hidden] album-cover-radius";
 
 export function SwipeableMediaStage({
   className,
@@ -588,7 +588,7 @@ export function SwipeableMediaStage({
       >
         <div
           ref={setStageRef}
-          className="relative w-full overflow-visible rounded-lg shadow-md [perspective:1200px]"
+          className="relative w-full overflow-visible [perspective:1200px] album-cover-radius"
         >
           <motion.div
             drag="x"
@@ -635,7 +635,7 @@ export function SwipeableMediaStage({
               }
             }}
             aria-label={`${t("player.previous")} / ${t("player.next")}`}
-            className="relative z-10 w-full touch-pan-y cursor-grab select-none overflow-visible active:cursor-grabbing [&_*]:select-none [&_img]:pointer-events-none"
+            className="relative z-10 w-full touch-pan-y cursor-grab select-none overflow-visible shadow-md active:cursor-grabbing album-cover-radius [&_*]:select-none [&_img]:pointer-events-none"
             style={{
               x,
               opacity: baseHidden ? 0 : 1,
