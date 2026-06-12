@@ -26,6 +26,15 @@ import { fileURLToPath } from "node:url";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const SCHEMA = "muzero-release-manifest-v1";
+const RCLONE_RETRY_ARGS = ["--retries", "6", "--low-level-retries", "20", "--retries-sleep", "10s", "--contimeout", "30s", "--timeout", "10m"];
+const RCLONE_R2_BINARY_ARGS = [
+  "--s3-upload-cutoff",
+  "16Mi",
+  "--s3-chunk-size",
+  "16Mi",
+  "--s3-upload-concurrency",
+  "2",
+];
 
 export function emptyManifest() {
   return {
@@ -134,6 +143,21 @@ function nowIso() {
   return new Date().toISOString();
 }
 
+function rcloneCopyTo(source, target, { contentType, cacheControl, multipart = false }) {
+  const args = [
+    "copyto",
+    source,
+    target,
+    ...RCLONE_RETRY_ARGS,
+    ...(multipart ? RCLONE_R2_BINARY_ARGS : []),
+    "--header-upload",
+    `Content-Type: ${contentType}`,
+    "--header-upload",
+    `Cache-Control: ${cacheControl}`,
+  ];
+  execFileSync("rclone", args, { stdio: "inherit" });
+}
+
 function main() {
   const dryRun = process.argv.includes("--dry-run");
   const dir = arg("--dir") || join(ROOT, "release");
@@ -185,11 +209,7 @@ function main() {
       ? "no-cache, max-age=0, must-revalidate"
       : "public, max-age=31536000, immutable";
     const contentType = isFeed ? "text/yaml" : "application/octet-stream";
-    execFileSync(
-      "rclone",
-      ["copyto", full, dest(key), "--header-upload", `Content-Type: ${contentType}`, "--header-upload", `Cache-Control: ${cacheControl}`],
-      { stdio: "inherit" },
-    );
+    rcloneCopyTo(full, dest(key), { contentType, cacheControl, multipart: !isFeed });
   }
 
   // 2. Pull current manifest (if any), merge this platform's assets, push back.
@@ -206,11 +226,10 @@ function main() {
     manifest = mergeRelease(manifest, { version, date, channel, notesRef: version, platform, asset }, nowIso());
   }
   writeFileSync(localManifest, `${JSON.stringify(manifest, null, 2)}\n`);
-  execFileSync(
-    "rclone",
-    ["copyto", localManifest, dest("manifest.json"), "--header-upload", "Content-Type: application/json", "--header-upload", "Cache-Control: no-cache, max-age=0, must-revalidate"],
-    { stdio: "inherit" },
-  );
+  rcloneCopyTo(localManifest, dest("manifest.json"), {
+    contentType: "application/json",
+    cacheControl: "no-cache, max-age=0, must-revalidate",
+  });
 
   process.stdout.write(`Published ${version} (${found.map((f) => f.platform).join(", ")}) → ${baseUrl}/\n`);
 }

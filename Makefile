@@ -282,7 +282,8 @@ release-publish-dry:
 
 release-locate:
 	@echo "Electron release artifacts (release/):"
-	@ls -1 release/*.dmg release/*.zip release/*.exe release/*.AppImage release/*.deb release/*.yml 2>/dev/null || echo "  none yet — run 'make release-mac' (or release-win / release-linux)"
+	@find release -maxdepth 1 -type f \( -name '*.dmg' -o -name '*.zip' -o -name '*.exe' -o -name '*.AppImage' -o -name '*.deb' -o -name '*.yml' \) -print 2>/dev/null | sort | sed 's#^\./##' || true
+	@find release -maxdepth 1 -type f \( -name '*.dmg' -o -name '*.zip' -o -name '*.exe' -o -name '*.AppImage' -o -name '*.deb' -o -name '*.yml' \) -print -quit 2>/dev/null | grep -q . || echo "  none yet — run 'make release-mac' (or release-win / release-linux)"
 
 # -------------------------------------------------------------- Quality ----
 
