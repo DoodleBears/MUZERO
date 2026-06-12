@@ -14,7 +14,10 @@ describe("ChangelogModal", () => {
     localStorage.setItem(SEEN_KEY, "0.5.0");
     render(<ChangelogModal />);
 
-    expect(await screen.findByText("Immersive, fluid, and self-updating")).toBeInTheDocument();
+    expect(
+      await screen.findByText("Faster imports and a cleaner desktop shell"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Immersive, fluid, and self-updating")).toBeInTheDocument();
     expect(screen.getByText("Online sources & word-by-word lyrics")).toBeInTheDocument();
     // 0.5.0 and older are already seen → not shown.
     expect(screen.queryByText("A real music library")).not.toBeInTheDocument();
@@ -24,14 +27,18 @@ describe("ChangelogModal", () => {
     localStorage.setItem(SEEN_KEY, latestVersion);
     render(<ChangelogModal />);
     await waitFor(() =>
-      expect(screen.queryByText("Immersive, fluid, and self-updating")).not.toBeInTheDocument(),
+      expect(
+        screen.queryByText("Faster imports and a cleaner desktop shell"),
+      ).not.toBeInTheDocument(),
     );
   });
 
   it("first-ever install: stays closed but seeds lastSeen to the latest version", async () => {
     render(<ChangelogModal />);
     await waitFor(() => expect(getLastSeenVersion()).toBe(latestVersion));
-    expect(screen.queryByText("Immersive, fluid, and self-updating")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("Faster imports and a cleaner desktop shell"),
+    ).not.toBeInTheDocument();
   });
 
   it("opens the FULL history on the open event", async () => {
@@ -39,6 +46,7 @@ describe("ChangelogModal", () => {
     render(<ChangelogModal />);
     act(() => openChangelog());
     expect(await screen.findByText("An AI DJ and a player in one")).toBeInTheDocument();
+    expect(screen.getByText("Faster imports and a cleaner desktop shell")).toBeInTheDocument();
     expect(screen.getByText("Immersive, fluid, and self-updating")).toBeInTheDocument();
   });
 

@@ -2,6 +2,23 @@
 
 All notable changes to MUZERO. Generated from `src/content/changelog` — do not edit by hand (`make changelog-md`).
 
+## v1.0.0 — 2026-06-12 · Faster imports and a cleaner desktop shell
+
+Large imports now become playable while they are still running, Windows gets native-feeling frameless controls, and player identity updates stay in sync.
+
+### Highlights
+- **library** Progressive bulk imports — Large uploads and folder syncs publish tracks in chunks, so the first songs appear and can play before the whole import finishes, without reversing file order.
+
+### Added
+- **app** Frameless Windows desktop chrome — Electron on Windows now uses a rounded transparent shell with custom minimize, maximize, restore, and close controls. _(desktop)_
+
+### Changed
+- **visualizer** Cleaner visualizer tuning — The FFT size control now uses the shared select component, matching the rest of the settings UI.
+
+### Fixed
+- **player** Current track identity stays current — The dock title and artist line now update immediately when the queue cursor changes, and long stage titles fit without forced scrolling.
+- **app** Safer desktop updater startup — The Electron updater only loads when a packaged semver build can apply updates, avoiding noisy checks in development or invalid-version builds. _(desktop)_
+
 ## v0.7.0 — 2026-06-11 · Immersive, fluid, and self-updating
 
 A cover-painted flow background, smooth scrolling, drag-to-reorder, and built-in updates with a version-history download center.
