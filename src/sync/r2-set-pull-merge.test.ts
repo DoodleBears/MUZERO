@@ -1,5 +1,7 @@
+import { rgbaToThumbHash } from "thumbhash";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { MuzeroDB } from "@/db/muzero-db";
+import { thumbhashToBase64 } from "@/lib/cover-thumbhash";
 import type { R2SetIndex } from "./r2-manifest-schema";
 import { applySetPullMerges } from "./r2-set-pull-merge";
 
@@ -82,6 +84,9 @@ const input = (index: R2SetIndex) => ({
   db,
 });
 
+const blueThumbhash = () =>
+  thumbhashToBase64(rgbaToThumbHash(1, 1, new Uint8ClampedArray([20, 120, 220, 255])));
+
 describe("applySetPullMerges (co-editing receive half)", () => {
   it("lands another device's new member as a remote-backed row with its memory", async () => {
     await seedOwnSession();
@@ -118,6 +123,35 @@ describe("applySetPullMerges (co-editing receive half)", () => {
     expect(session?.trackRanks?.trk_remote_drv_1_trk_b).toBe(5);
     const memories = await db.memories.where("trackId").equals("trk_remote_drv_1_trk_b").toArray();
     expect(memories[0]).toMatchObject({ note: "from B" });
+  });
+
+  it("derives a remote cover palette from thumbhash for newly pulled members", async () => {
+    await seedOwnSession();
+    const index = remoteIndex({
+      tracks: [
+        {
+          id: "trk_b",
+          title: "From device B",
+          kind: "audio",
+          origin: "uploaded",
+          provider: "upload",
+          durationSec: 9,
+          createdAt: 200,
+          liked: false,
+          tags: [],
+          media: { url: "objects/media/b.mp3", mime: "audio/mpeg", bytes: 3 },
+          cover: { url: "objects/covers/b.jpg", mime: "image/jpeg", bytes: 4 },
+          thumbhash: blueThumbhash(),
+          memories: [],
+        },
+      ],
+    });
+
+    await applySetPullMerges(input(index));
+
+    const row = await db.tracks.get("trk_remote_drv_1_trk_b");
+    expect(row?.coverPalette?.[0]?.b).toBeGreaterThan(row?.coverPalette?.[0]?.r ?? 0);
+    expect(row?.coverPaletteSource).toBe("https://pub.example.com/muzero/objects/covers/b.jpg");
   });
 
   it("applies a remote removal tombstone to a stale local copy", async () => {

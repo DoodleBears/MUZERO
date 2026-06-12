@@ -1,5 +1,7 @@
+import { rgbaToThumbHash } from "thumbhash";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { MuzeroDB } from "@/db/muzero-db";
+import { thumbhashToBase64 } from "@/lib/cover-thumbhash";
 import { importRemoteSetStream } from "./r2-import-stream";
 import type { RemoteSetIndexResult } from "./r2-subscription";
 
@@ -147,6 +149,9 @@ const remoteSet: RemoteSetIndexResult = {
     },
   ],
 };
+
+const blueThumbhash = () =>
+  thumbhashToBase64(rgbaToThumbHash(1, 1, new Uint8ClampedArray([20, 120, 220, 255])));
 
 describe("importRemoteSetStream", () => {
   it("creates a local playable stream set without downloading media blobs", async () => {
@@ -362,6 +367,24 @@ describe("importRemoteSetStream", () => {
 
     const track = await db.tracks.get("trk_remote_drv_pal_trk_blue");
     expect(track?.coverPalette).toEqual(coverPalette);
+    expect(track?.coverPaletteSource).toBe(
+      "https://music.example.com/muzero/objects/covers/blue.jpg",
+    );
+  });
+
+  it("derives a remote cover palette from thumbhash when the manifest has no palette", async () => {
+    const withThumbhash: RemoteSetIndexResult = {
+      ...remoteSet,
+      tracks: remoteSet.tracks.map((tr) => ({
+        ...tr,
+        source: { ...tr.source, thumbhash: blueThumbhash(), coverPalette: undefined },
+      })),
+    };
+
+    await importRemoteSetStream({ driveId: "drv_thpal", remoteSet: withThumbhash }, db);
+
+    const track = await db.tracks.get("trk_remote_drv_thpal_trk_blue");
+    expect(track?.coverPalette?.[0]?.b).toBeGreaterThan(track?.coverPalette?.[0]?.r ?? 0);
     expect(track?.coverPaletteSource).toBe(
       "https://music.example.com/muzero/objects/covers/blue.jpg",
     );

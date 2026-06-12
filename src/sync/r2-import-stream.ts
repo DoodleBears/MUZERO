@@ -8,7 +8,7 @@ import type {
   Track,
   TrackLyrics,
 } from "@/db/types";
-import { normalizeCoverPalette } from "@/lib/cover-palette";
+import { coverPaletteFromThumbhash, normalizeCoverPalette } from "@/lib/cover-palette";
 import { newId } from "@/lib/id";
 import type { LyricsSource } from "@/lyrics/provider";
 import { RANK_SPACING } from "@/player/set-order";
@@ -170,10 +170,18 @@ export async function importRemoteSetStream(
     const id = remoteLocalId("trk", driveId, remoteTrack.id);
     const existing = existingTracks.get(id);
     const remoteCoverUrl = remoteTrack.coverUrl ?? remoteTrack.source.streamMeta?.coverUrl;
+    const remoteCoverThumbhash = existing?.coverThumbhash ?? remoteTrack.source.thumbhash;
     const remoteCoverPalette = normalizeCoverPalette(remoteTrack.source.coverPalette);
     const existingPaletteMatches =
       existing?.coverPaletteSource === remoteCoverUrl ||
       (!existing?.coverPaletteSource && existing?.remoteCoverUrl === remoteCoverUrl);
+    const fallbackCoverPalette = coverPaletteFromThumbhash(remoteCoverThumbhash);
+    const importedCoverPalette =
+      remoteCoverPalette.length > 0
+        ? remoteCoverPalette
+        : existingPaletteMatches && existing?.coverPalette?.length
+          ? existing.coverPalette
+          : fallbackCoverPalette;
     return {
       id,
       sessionId,
@@ -190,21 +198,17 @@ export async function importRemoteSetStream(
       durationSec: remoteTrack.source.durationSec,
       remoteMediaUrl: remoteTrack.mediaUrl,
       remoteCoverUrl,
-      coverThumbhash: existing?.coverThumbhash ?? remoteTrack.source.thumbhash ?? undefined,
+      coverThumbhash: remoteCoverThumbhash ?? undefined,
       coverPalette: existing?.coverBlobId
         ? existing.coverPalette
-        : remoteCoverPalette.length > 0
-          ? remoteCoverPalette
-          : existingPaletteMatches
-            ? existing?.coverPalette
-            : undefined,
+        : importedCoverPalette.length > 0
+          ? importedCoverPalette
+          : undefined,
       coverPaletteSource: existing?.coverBlobId
         ? existing.coverPaletteSource
-        : remoteCoverPalette.length > 0
+        : importedCoverPalette.length > 0
           ? remoteCoverUrl
-          : existingPaletteMatches
-            ? existing?.coverPaletteSource
-            : undefined,
+          : undefined,
       createdAt: remoteTrack.source.createdAt,
       updatedAt: existing?.updatedAt ?? remoteTrack.source.createdAt,
       generatedAt: remoteTrack.source.generatedAt ?? undefined,

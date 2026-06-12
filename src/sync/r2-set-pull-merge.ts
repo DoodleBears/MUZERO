@@ -1,6 +1,6 @@
 import { db as defaultDb, type MuzeroDB } from "@/db/muzero-db";
 import type { DjSession, Memory, Track } from "@/db/types";
-import { normalizeCoverPalette } from "@/lib/cover-palette";
+import { coverPaletteFromThumbhash, normalizeCoverPalette } from "@/lib/cover-palette";
 import { RANK_SPACING } from "@/player/set-order";
 import type { R2SetIndex } from "./r2-manifest-schema";
 import type { RemotePublishBase } from "./r2-publish-base";
@@ -98,6 +98,9 @@ async function mergeRemoteIntoSession(
         ? resolveRemoteObjectUrl(input.baseUrl, entry.cover.url)
         : entry.streamMeta?.coverUrl;
       const coverPalette = normalizeCoverPalette(entry.coverPalette);
+      const coverThumbhash = entry.thumbhash ?? undefined;
+      const importedCoverPalette =
+        coverPalette.length > 0 ? coverPalette : coverPaletteFromThumbhash(coverThumbhash);
       newTracks.push({
         id: rowId,
         sessionId: localSessionId,
@@ -117,9 +120,9 @@ async function mergeRemoteIntoSession(
           : undefined,
         remoteCoverUrl,
         coverCrop: entry.coverCrop,
-        coverThumbhash: entry.thumbhash ?? undefined,
-        coverPalette: coverPalette.length > 0 ? coverPalette : undefined,
-        coverPaletteSource: coverPalette.length > 0 ? remoteCoverUrl : undefined,
+        coverThumbhash,
+        coverPalette: importedCoverPalette.length > 0 ? importedCoverPalette : undefined,
+        coverPaletteSource: importedCoverPalette.length > 0 ? remoteCoverUrl : undefined,
         createdAt: entry.createdAt,
         updatedAt: entry.createdAt,
         generatedAt: entry.generatedAt ?? undefined,
