@@ -340,6 +340,21 @@ export class MuzeroDB extends Dexie {
     this.version(22).stores({
       playbackCache: "id, sourceUrl, trackId, lastAccessedAt",
     });
+
+    // v23 — the default Now Playing visual stack is live again: flow + spectrum
+    // together. Older settings rows often carry `visualizerAsBackground: false`
+    // from v8/v9 downgrade migrations, while new flow defaults merge in as true,
+    // which leaves users seeing only flow. Move existing rows onto the current
+    // visible default; users can still turn either layer off in Settings.
+    this.version(23).upgrade(async (tx) => {
+      await tx
+        .table("settings")
+        .toCollection()
+        .modify((s: Partial<AppSettings>) => {
+          s.visualizerAsBackground = true;
+          s.flowEnabled ??= true;
+        });
+    });
   }
 }
 

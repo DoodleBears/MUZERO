@@ -1,11 +1,4 @@
-import {
-  animate,
-  type MotionValue,
-  motion,
-  useMotionValue,
-  useReducedMotion,
-  useTransform,
-} from "motion/react";
+import { animate, type MotionValue, motion, useMotionValue, useTransform } from "motion/react";
 import {
   Fragment,
   type ReactNode,
@@ -76,7 +69,6 @@ export function SwipeableMediaStage({
   // Tap-vs-swipe bookkeeping for `onTap` (a swipe sets `moved`, suppressing it).
   const tapStart = useRef<{ x: number; y: number; t: number } | null>(null);
   const tapMoved = useRef(false);
-  const reducedMotion = useReducedMotion();
   const containerRef = useRef<HTMLDivElement | null>(null);
   // The cover box is measured for the overlay portal and also serves as the
   // now-playing image drop target, so forward it to the caller's ref.
@@ -155,8 +147,8 @@ export function SwipeableMediaStage({
   // each cover pivots around its own centre (no door-hinge overlap). One commit
   // moves the strip exactly one step, landing the incoming cover dead-centre.
   const step = exitTravel;
-  const tilt = reducedMotion ? 0 : COVERFLOW_TILT;
-  const sideScale = reducedMotion ? 1 : SIDE_SCALE;
+  const tilt = COVERFLOW_TILT;
+  const sideScale = SIDE_SCALE;
   const currentCard = useCoverflowCard(visualX, 0, step, tilt, sideScale);
   const nextCard = useCoverflowCard(visualX, step, step, tilt, sideScale);
   const prevCard = useCoverflowCard(visualX, -step, step, tilt, sideScale);
@@ -304,7 +296,7 @@ export function SwipeableMediaStage({
       animationToken.current += 1;
       const token = animationToken.current;
       const controls = animate(x, target, {
-        duration: reducedMotion ? 0.2 : COMMIT_DURATION_SEC,
+        duration: COMMIT_DURATION_SEC,
         ease: COMMIT_EASE,
         type: "tween",
       });
@@ -321,17 +313,7 @@ export function SwipeableMediaStage({
         setDragDirection(null);
       });
     },
-    [
-      activeStack.next,
-      activeStack.prev,
-      committing,
-      exitTravel,
-      next,
-      reducedMotion,
-      skipPrev,
-      snapBack,
-      x,
-    ],
+    [activeStack.next, activeStack.prev, committing, exitTravel, next, skipPrev, snapBack, x],
   );
 
   // Animate a switch the stage *didn't* initiate (transport buttons, Q-E,
@@ -364,7 +346,7 @@ export function SwipeableMediaStage({
       });
       const target = direction === "next" ? -exitTravel / DRAG_GAIN : exitTravel / DRAG_GAIN;
       const controls = animate(x, target, {
-        duration: reducedMotion ? 0.2 : SWITCH_DURATION_SEC,
+        duration: SWITCH_DURATION_SEC,
         ease: COMMIT_EASE,
         type: "tween",
       });
@@ -377,7 +359,7 @@ export function SwipeableMediaStage({
         setDragDirection(null);
       });
     },
-    [exitTravel, reducedMotion, updateOverlayRect, x],
+    [exitTravel, updateOverlayRect, x],
   );
 
   useEffect(() => {

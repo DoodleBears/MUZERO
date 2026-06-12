@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { AppSettings } from "@/db/types";
+import { type AppSettings, DEFAULT_SETTINGS } from "@/db/types";
 import type { Rgb } from "@/lib/visualizer-color";
 import {
   DEFAULT_FLOW_EFFECT,
@@ -56,6 +56,10 @@ describe("resolveFlowColors", () => {
 });
 
 describe("resolveFlowConfig", () => {
+  it("enables the flow layer by default", () => {
+    expect(DEFAULT_SETTINGS.flowEnabled).toBe(true);
+  });
+
   it("applies calm defaults for an empty settings row", () => {
     const cfg = resolveFlowConfig({} as AppSettings);
     expect(cfg.source).toBe("cover");

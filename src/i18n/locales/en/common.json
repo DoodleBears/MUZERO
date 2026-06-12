@@ -534,7 +534,6 @@
     "smoothScroll": "Smooth scrolling",
     "smoothScrollHint": "Glide the mouse wheel through long lists, queues, and album pages instead of jumping line by line.",
     "smoothScrollHintMac": "Off by default on macOS — the trackpad already scrolls smoothly. Turn it on if you use an external mouse.",
-    "smoothScrollReducedMotion": "Currently off because your system has Reduce Motion enabled.",
     "smoothScrollStrength": "Scroll smoothness",
     "smoothScrollFloaty": "Floaty",
     "smoothScrollSnappy": "Snappy",

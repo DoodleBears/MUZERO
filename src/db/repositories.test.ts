@@ -1145,8 +1145,8 @@ describe("v6 → v7 migration downgrades inherited Pixi background defaults", ()
   });
 });
 
-describe("v7 → v8 migration disables inherited background visualizer defaults", () => {
-  it("moves previously persisted background visualizers back to off", async () => {
+describe("visual stack migrations", () => {
+  it("lands old visualizer rows on the current flow + spectrum default", async () => {
     const name = `muzero-mig8-${Math.random().toString(36).slice(2)}`;
     const v7 = new Dexie(name);
     v7.version(1).stores({
@@ -1175,7 +1175,8 @@ describe("v7 → v8 migration disables inherited background visualizer defaults"
     const mz = new MuzeroDB(name);
     try {
       const settings = await getSettings(mz);
-      expect(settings.visualizerAsBackground).toBe(false);
+      expect(settings.visualizerAsBackground).toBe(true);
+      expect(settings.flowEnabled).toBe(true);
       expect(settings.visualizerIdleOnly).toBe(false);
     } finally {
       mz.close();

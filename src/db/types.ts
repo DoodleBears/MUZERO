@@ -626,7 +626,7 @@ export interface AppSettings {
   flowAudioReactivity?: number;
   /** Render the flow background as an INDEPENDENT layer — composited above the
    *  Now-Playing background image/video and below the visualizer spectrum (not
-   *  mutually exclusive with the visualizer). Default false. */
+   *  mutually exclusive with the visualizer). Default true. */
   flowEnabled?: boolean;
   /** Opacity of the flow background layer, 0–100. Default 100. */
   flowOpacity?: number;
@@ -886,6 +886,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   visualizerSpread: 0.35,
   visualizerGlow: 1,
   visualizerMirror: 1,
+  flowEnabled: true,
   lyricsActiveFontSize: 30,
   lyricsInactiveFontSize: 24,
   lyricsActiveOpacity: 100,

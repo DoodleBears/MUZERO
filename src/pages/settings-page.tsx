@@ -69,7 +69,6 @@ import {
 } from "@/lib/smooth-scroll/resolve";
 import { useSmoothScroll } from "@/lib/smooth-scroll/use-smooth-scroll";
 import { formatDuration } from "@/lib/utils";
-import { prefersReducedMotion } from "@/lib/view-transition";
 import {
   CLOUD_PRESET_IDS,
   type CloudPresetId,
@@ -412,13 +411,11 @@ export function SettingsPage() {
     await saveSettings({ autoFetchLyrics: enabled });
   }
 
-  // Smooth scrolling — `preference` reflects the stored/platform intent (ignoring
-  // the live reduced-motion override, which we surface as a hint instead).
+  // Smooth scrolling is a visible MUZERO setting. OS reduced-motion affects
+  // navigation/transition effects, not this explicit scroll preference.
   const smoothScrollPref = resolveSmoothScroll(settings, {
     isMac: isMac(),
-    prefersReducedMotion: false,
   }).preference;
-  const smoothScrollReduced = prefersReducedMotion();
   const smoothScrollLerp = clampLerp(settings.smoothScrollLerp);
 
   async function changeLyricsProvider(id: AppSettings["lyricsProviderId"]) {
@@ -727,11 +724,6 @@ export function SettingsPage() {
                           ? t("settings.smoothScrollHintMac")
                           : t("settings.smoothScrollHint")}
                       </span>
-                      {smoothScrollReduced && (
-                        <span className="text-muted-foreground text-xs">
-                          {t("settings.smoothScrollReducedMotion")}
-                        </span>
-                      )}
                     </span>
                   </label>
                   <div className="flex flex-col gap-1.5">

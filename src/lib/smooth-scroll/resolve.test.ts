@@ -8,9 +8,8 @@ import {
   resolveSmoothScroll,
 } from "./resolve";
 
-const WIN = { isMac: false, prefersReducedMotion: false };
-const MAC = { isMac: true, prefersReducedMotion: false };
-const REDUCED = { isMac: false, prefersReducedMotion: true };
+const WIN = { isMac: false };
+const MAC = { isMac: true };
 
 describe("resolveSmoothScroll — enabled decision (PRD §3.2 truth table)", () => {
   it("undefined preference on non-macOS → enabled (default on)", () => {
@@ -25,9 +24,10 @@ describe("resolveSmoothScroll — enabled decision (PRD §3.2 truth table)", () 
     expect(d.enabled).toBe(false);
   });
 
-  it("undefined preference + reduced-motion → disabled (a11y override)", () => {
-    const d = resolveSmoothScroll({ smoothScroll: undefined }, REDUCED);
-    expect(d.enabled).toBe(false);
+  it("undefined preference + reduced-motion → enabled on non-macOS", () => {
+    const d = resolveSmoothScroll({ smoothScroll: undefined }, WIN);
+    expect(d.preference).toBe(true);
+    expect(d.enabled).toBe(true);
   });
 
   it("explicit true overrides the macOS default → enabled", () => {
@@ -36,26 +36,21 @@ describe("resolveSmoothScroll — enabled decision (PRD §3.2 truth table)", () 
     expect(d.enabled).toBe(true);
   });
 
-  it("explicit true is still overridden by reduced-motion → disabled", () => {
-    const d = resolveSmoothScroll(
-      { smoothScroll: true },
-      { isMac: false, prefersReducedMotion: true },
-    );
+  it("explicit true stays enabled under reduced-motion", () => {
+    const d = resolveSmoothScroll({ smoothScroll: true }, WIN);
     expect(d.preference).toBe(true);
-    expect(d.enabled).toBe(false);
+    expect(d.enabled).toBe(true);
   });
 
   it("explicit false → disabled regardless of platform / motion", () => {
     expect(resolveSmoothScroll({ smoothScroll: false }, WIN).enabled).toBe(false);
     expect(resolveSmoothScroll({ smoothScroll: false }, MAC).enabled).toBe(false);
-    expect(resolveSmoothScroll({ smoothScroll: false }, REDUCED).enabled).toBe(false);
   });
 
-  it("preference ignores reduced-motion (used for the Settings toggle display)", () => {
-    // preference reflects the stored/platform intent, not the live a11y override.
-    const d = resolveSmoothScroll({ smoothScroll: undefined }, REDUCED);
+  it("reduced-motion does not affect the Settings toggle or runtime state", () => {
+    const d = resolveSmoothScroll({ smoothScroll: undefined }, WIN);
     expect(d.preference).toBe(true);
-    expect(d.enabled).toBe(false);
+    expect(d.enabled).toBe(true);
   });
 });
 

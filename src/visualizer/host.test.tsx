@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { shouldAnimate, VisualizerHost } from "./host";
 
 describe("shouldAnimate", () => {
-  it("runs only when visible, on-screen, and motion is allowed", () => {
+  it("runs when visible and on-screen", () => {
     expect(shouldAnimate({ hidden: false, onscreen: true, reducedMotion: false })).toBe(true);
   });
   it("pauses when the tab is hidden", () => {
@@ -12,8 +12,8 @@ describe("shouldAnimate", () => {
   it("pauses when the canvas is off-screen", () => {
     expect(shouldAnimate({ hidden: false, onscreen: false, reducedMotion: false })).toBe(false);
   });
-  it("pauses (freezes) under reduced motion", () => {
-    expect(shouldAnimate({ hidden: false, onscreen: true, reducedMotion: true })).toBe(false);
+  it("keeps visualizers running under reduced motion", () => {
+    expect(shouldAnimate({ hidden: false, onscreen: true, reducedMotion: true })).toBe(true);
   });
 });
 

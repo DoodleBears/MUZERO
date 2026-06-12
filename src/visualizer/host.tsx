@@ -17,36 +17,18 @@ import type { VisualizerPlacement, VisualizerStyleId } from "./types";
 const ReactiveScene = lazy(() => import("./scene/reactive-scene"));
 
 /**
- * Whether the rAF loop should run. We pause when the tab is hidden, when the
- * canvas is scrolled off-screen, or under reduced-motion — audio keeps playing
- * regardless (a media-playing tab is exempt from the browser's auto-throttle, so
- * we must pause drawing ourselves). Pure so it's unit-tested.
+ * Whether the rAF loop should run. We pause when the tab is hidden or when the
+ * canvas is scrolled off-screen. OS reduced-motion is intentionally ignored here:
+ * the visualizer is a user-toggleable playback surface, not a navigation
+ * transition, and it should keep reflecting audio when Windows animation effects
+ * are disabled.
  */
 export function shouldAnimate(s: {
   hidden: boolean;
   onscreen: boolean;
   reducedMotion: boolean;
 }): boolean {
-  return !s.hidden && s.onscreen && !s.reducedMotion;
-}
-
-function prefersReducedMotion(): boolean {
-  if (typeof window === "undefined" || !window.matchMedia) return false;
-  return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-}
-
-/** Reactive reduced-motion preference (jsdom-safe; returns false without matchMedia). */
-function usePrefersReducedMotion(): boolean {
-  const [reduce, setReduce] = useState(false);
-  useEffect(() => {
-    if (typeof window === "undefined" || !window.matchMedia) return;
-    const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
-    setReduce(mq.matches);
-    const onChange = () => setReduce(mq.matches);
-    mq.addEventListener?.("change", onChange);
-    return () => mq.removeEventListener?.("change", onChange);
-  }, []);
-  return reduce;
+  return !s.hidden && s.onscreen;
 }
 
 function hasWebGL(): boolean {
@@ -61,8 +43,8 @@ function hasWebGL(): boolean {
 
 /**
  * Canvas-2D spectrum renderer host: owns the <canvas>, the single rAF loop, dpr
- * scaling + clearing, analyser configuration, visibility/offscreen/reduced-motion
- * pausing, and `--primary` injection. `styleId` is always a concrete spectrum id.
+ * scaling + clearing, analyser configuration, visibility/offscreen pausing, and
+ * `--primary` injection. `styleId` is always a concrete spectrum id.
  */
 function SpectrumCanvas({
   styleId,
@@ -105,7 +87,7 @@ function SpectrumCanvas({
           : readPrimaryRgb(canvas),
       smoothPrimary: () => coverColor,
       active: () => activeRef.current,
-      reducedMotion: prefersReducedMotion,
+      reducedMotion: () => false,
       placement,
       options: renderOptions,
     });
@@ -150,7 +132,7 @@ function SpectrumCanvas({
       const animate = shouldAnimate({
         hidden: typeof document !== "undefined" && document.hidden,
         onscreen,
-        reducedMotion: prefersReducedMotion(),
+        reducedMotion: false,
       });
       if (animate && !running) {
         running = true;
@@ -177,13 +159,6 @@ function SpectrumCanvas({
       io.observe(canvas);
     }
 
-    const mq =
-      typeof window !== "undefined" && window.matchMedia
-        ? window.matchMedia("(prefers-reduced-motion: reduce)")
-        : null;
-    const onMq = () => sync();
-    mq?.addEventListener?.("change", onMq);
-
     requestAnimationFrame(drawOne); // always paint at least one frame
     sync();
 
@@ -192,7 +167,6 @@ function SpectrumCanvas({
       cancelAnimationFrame(raf);
       document.removeEventListener("visibilitychange", onVisibility);
       io?.disconnect();
-      mq?.removeEventListener?.("change", onMq);
       viz.destroy();
     };
   }, [styleId, coverColor, placement, effectSettings]);
@@ -202,8 +176,8 @@ function SpectrumCanvas({
 
 /**
  * GPU scene host: lazy-loads the R3F scene (keeps three out of the main bundle),
- * pauses it when off-screen or under reduced-motion, and falls back to the aura
- * spectrum when WebGL is unavailable.
+ * pauses it when off-screen, and falls back to the aura spectrum when WebGL is
+ * unavailable.
  */
 function SceneHost({
   styleId,
@@ -223,7 +197,6 @@ function SceneHost({
   const ok = useMemo(() => hasWebGL(), []);
   const ref = useRef<HTMLDivElement | null>(null);
   const [onscreen, setOnscreen] = useState(true);
-  const reduce = usePrefersReducedMotion();
 
   useEffect(() => {
     const el = ref.current;
@@ -250,7 +223,7 @@ function SceneHost({
   const meta = getVisualizerMeta(styleId);
   const analyserOptions = resolveVisualizerAnalyserOptions(meta, effectSettings);
   const renderOptions = resolveVisualizerRenderOptions(effectSettings);
-  const paused = !onscreen || reduce;
+  const paused = !onscreen;
   return (
     <div ref={ref} className={cn("h-full w-full", className)} aria-hidden>
       <Suspense fallback={null}>

@@ -520,7 +520,6 @@
     "smoothScroll": "平滑滚动",
     "smoothScrollHint": "在长列表、播放队列和专辑页里让鼠标滚轮顺滑滑动，而不是一格一格地跳。",
     "smoothScrollHintMac": "在 macOS 上默认关闭——触控板本身就已平滑。如果用外接鼠标可以打开。",
-    "smoothScrollReducedMotion": "当前已关闭：你的系统开启了「减少动态效果」。",
     "smoothScrollStrength": "滚动平滑度",
     "smoothScrollFloaty": "更飘",
     "smoothScrollSnappy": "更跟手",

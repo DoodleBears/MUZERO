@@ -2,7 +2,6 @@ import Lenis from "lenis";
 import { type RefObject, useEffect, useRef, useState } from "react";
 import { useSettings } from "@/hooks/use-app-data";
 import { isMac } from "@/lib/shortcuts";
-import { prefersReducedMotion } from "@/lib/view-transition";
 import { registerLenis, unregisterLenis } from "./lenis-driver";
 import { resolveSmoothScroll } from "./resolve";
 
@@ -19,10 +18,8 @@ export function useSmoothScroll(ref: RefObject<HTMLElement | null>): {
   lenisRef: RefObject<Lenis | null>;
 } {
   const settings = useSettings();
-  const reduced = useReducedMotion();
   const { enabled, options } = resolveSmoothScroll(settings, {
     isMac: isMac(),
-    prefersReducedMotion: reduced,
   });
 
   const lenisRef = useRef<Lenis | null>(null);
@@ -42,8 +39,8 @@ export function useSmoothScroll(ref: RefObject<HTMLElement | null>): {
   });
 
   // Create / destroy. Keyed on `enabled` + the resolved node: toggling the setting
-  // or reduced-motion flips `enabled`; the node mounting flips `element`. Strength
-  // changes do NOT recreate (applied in place below).
+  // flips `enabled`; the node mounting flips `element`. Strength changes do NOT
+  // recreate (applied in place below).
   useEffect(() => {
     // Lenis needs a real browser layout environment (it observes size via
     // ResizeObserver). Skip in jsdom / SSR / non-DOM contexts where that's
@@ -87,18 +84,4 @@ export function lenisScrollTo(
   if (!lenis) return false;
   lenis.scrollTo(target, { immediate: opts?.immediate ?? true });
   return true;
-}
-
-/** Reactive `prefers-reduced-motion`, so toggling the OS setting takes effect live. */
-function useReducedMotion(): boolean {
-  const [reduced, setReduced] = useState(() => prefersReducedMotion());
-  useEffect(() => {
-    if (typeof window === "undefined" || typeof window.matchMedia !== "function") return;
-    const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
-    const onChange = () => setReduced(mq.matches);
-    onChange();
-    mq.addEventListener?.("change", onChange);
-    return () => mq.removeEventListener?.("change", onChange);
-  }, []);
-  return reduced;
 }

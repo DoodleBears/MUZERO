@@ -520,7 +520,6 @@
     "smoothScroll": "スムーズスクロール",
     "smoothScrollHint": "長いリストやキュー、アルバムページでマウスホイールを 1 行ずつではなく滑らかにスクロールします。",
     "smoothScrollHintMac": "macOS では既定でオフ — トラックパッドは元々滑らかです。外付けマウスを使う場合はオンにしてください。",
-    "smoothScrollReducedMotion": "システムで「視差効果を減らす」が有効なため、現在オフです。",
     "smoothScrollStrength": "スクロールの滑らかさ",
     "smoothScrollFloaty": "ふわり",
     "smoothScrollSnappy": "きびきび",

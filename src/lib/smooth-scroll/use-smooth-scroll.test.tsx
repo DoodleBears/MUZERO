@@ -97,11 +97,11 @@ describe("useSmoothScroll — lifecycle", () => {
     expect(__activeCount()).toBe(0);
   });
 
-  it("does NOT construct Lenis when reduced-motion is on (a11y override)", () => {
+  it("constructs Lenis when reduced-motion is on", () => {
     stubMatchMedia(true); // even on non-mac
     const { result } = renderOnElement();
-    expect(lenisInstances).toHaveLength(0);
-    expect(result.current.lenisRef.current).toBeNull();
+    expect(lenisInstances).toHaveLength(1);
+    expect(result.current.lenisRef.current).toBe(lenisInstances[0]);
   });
 
   it("destroys + unregisters on unmount", () => {

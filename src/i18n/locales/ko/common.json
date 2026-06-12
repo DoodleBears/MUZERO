@@ -519,7 +519,6 @@
     "smoothScroll": "부드러운 스크롤",
     "smoothScrollHint": "긴 목록, 재생 대기열, 앨범 페이지에서 마우스 휠을 한 줄씩 건너뛰지 않고 부드럽게 굴립니다.",
     "smoothScrollHintMac": "macOS에서는 기본적으로 꺼져 있습니다 — 트랙패드가 이미 부드럽습니다. 외장 마우스를 쓰면 켜세요.",
-    "smoothScrollReducedMotion": "시스템에서 '동작 줄이기'가 켜져 있어 현재 꺼져 있습니다.",
     "smoothScrollStrength": "스크롤 부드러움",
     "smoothScrollFloaty": "둥실",
     "smoothScrollSnappy": "민첩",
