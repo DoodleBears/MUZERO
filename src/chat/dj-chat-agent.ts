@@ -13,7 +13,11 @@ import { getSettings } from "@/db/repositories";
 import { canGenerateMusic, hasEnabledStreamSources } from "./dj-chat-availability";
 import { buildNowPlayingContext } from "./dj-chat-context";
 import { DJ_CHAT_SYSTEM_PROMPT } from "./dj-chat-prompt";
-import { getChatSession } from "./dj-chat-sessions";
+import {
+  getChatSession,
+  loadChatLocalIdRegistry,
+  saveChatLocalIdRegistry,
+} from "./dj-chat-sessions";
 import { createDjChatTools } from "./dj-chat-tools";
 import type { DjChatUIMessage } from "./types";
 
@@ -38,14 +42,20 @@ export function createDjChatTransport({
       // tools when generation is enabled + configured; only offer the online
       // search/ingest tools when a streaming source is enabled (PRD §4.2).
       const settings = await getSettings(db);
+      const localIds = await loadChatLocalIdRegistry(options.chatId, db);
+      const persistLocalIds = () =>
+        saveChatLocalIdRegistry(options.chatId, localIds.snapshot(), db);
       const tools = createDjChatTools({
         db,
         includeGenerate: canGenerateMusic(settings),
         includeOnline: hasEnabledStreamSources(settings),
+        localIds,
+        persistLocalIds,
       });
       // Refresh the now-playing snapshot every turn so the DJ always knows the
       // active set + track (with ids) without spending a now_playing_get call.
-      const nowPlaying = await buildNowPlayingContext(db);
+      const nowPlaying = await buildNowPlayingContext(db, localIds);
+      await persistLocalIds();
       const agent = new ToolLoopAgent({
         model,
         tools,

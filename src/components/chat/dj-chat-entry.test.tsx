@@ -1,5 +1,6 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { DjChatRuntimeSnapshot } from "@/chat/types";
 import { type AppSettings, DEFAULT_SETTINGS } from "@/db/types";
 import { useChatStore } from "@/stores/chat-store";
 import { DjChatEntry } from "./dj-chat-entry";
@@ -16,8 +17,10 @@ vi.mock("@/hooks/use-app-data", () => ({
 const sendMessage = vi.fn();
 const stop = vi.fn();
 const queuePrompt = vi.fn();
+let runtimeSnapshot: DjChatRuntimeSnapshot | undefined;
 vi.mock("@/chat/dj-chat-runtime-registry", () => ({
   getOrCreateDjChatRuntimeActor: () => ({ sendMessage, stop, queuePrompt }),
+  useDjChatRuntimeSnapshot: () => runtimeSnapshot,
 }));
 
 const createChatSession = vi.fn(async (_input?: unknown) => ({ id: "cht_new" }));
@@ -51,6 +54,7 @@ afterEach(() => {
   settings = { ...DEFAULT_SETTINGS };
   sendMessage.mockClear();
   createChatSession.mockClear();
+  runtimeSnapshot = undefined;
   useChatStore.setState({ mode: "chip", activeSessionId: null, runtimeMetaBySessionId: {} });
   localStorage.clear();
 });
@@ -169,5 +173,100 @@ describe("DjChatEntry — three states", () => {
     await waitFor(() => expect(screen.getByTestId("chat-panel")).toBeInTheDocument());
     fireEvent.click(screen.getByTestId("dj-chat-backdrop"));
     expect(useChatStore.getState().mode).toBe("chip");
+  });
+
+  it("icon mode shows live agent activity above the dock entry", () => {
+    asAvailable();
+    useChatStore.setState({ mode: "icon", activeSessionId: "cht_1" });
+    runtimeSnapshot = {
+      messages: [
+        {
+          id: "asst_1",
+          role: "assistant",
+          parts: [
+            { type: "text", text: "Checking your rainy tracks." },
+            {
+              type: "tool-library_search",
+              toolCallId: "call_1",
+              state: "input-available",
+              input: { queries: ["rain"] },
+            },
+          ],
+        },
+      ],
+      meta: {
+        sessionId: "cht_1",
+        status: "streaming",
+        messageCount: 1,
+        lastAssistantPreview: "Checking your rainy tracks.",
+        pendingApprovalCount: 0,
+        queuedPromptCount: 0,
+        contextStartIndex: 0,
+      },
+      queuedPrompts: [],
+    } as unknown as DjChatRuntimeSnapshot;
+
+    render(<DjChatEntry />);
+
+    expect(screen.getByRole("button", { name: "chat.activityAria" })).toBeInTheDocument();
+    expect(screen.getByText("chat.tools.library_search.label")).toBeInTheDocument();
+    expect(screen.getByText("Checking your rainy tracks.")).toBeInTheDocument();
+  });
+
+  it("dismisses compact activity for the current turn and shows the next turn", () => {
+    asAvailable();
+    useChatStore.setState({ mode: "chip", activeSessionId: "cht_1" });
+    runtimeSnapshot = {
+      messages: [],
+      meta: {
+        sessionId: "cht_1",
+        status: "streaming",
+        messageCount: 1,
+        lastAssistantPreview: "Working on it.",
+        pendingApprovalCount: 0,
+        queuedPromptCount: 0,
+        contextStartIndex: 0,
+      },
+      queuedPrompts: [],
+    };
+
+    const { rerender } = render(<DjChatEntry />);
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByRole("button", { name: "chat.activityAria" })).toBeNull();
+
+    runtimeSnapshot = {
+      ...runtimeSnapshot,
+      meta: {
+        ...runtimeSnapshot.meta,
+        messageCount: 2,
+        lastAssistantPreview: "Next turn is live.",
+      },
+    };
+    rerender(<DjChatEntry />);
+
+    expect(screen.getByRole("button", { name: "chat.activityAria" })).toBeInTheDocument();
+    expect(screen.getByText("Next turn is live.")).toBeInTheDocument();
+  });
+
+  it("does not show compact activity while expanded", () => {
+    asAvailable();
+    useChatStore.setState({ mode: "expanded", activeSessionId: "cht_1" });
+    runtimeSnapshot = {
+      messages: [],
+      meta: {
+        sessionId: "cht_1",
+        status: "streaming",
+        messageCount: 0,
+        lastAssistantPreview: "Working",
+        pendingApprovalCount: 0,
+        queuedPromptCount: 0,
+        contextStartIndex: 0,
+      },
+      queuedPrompts: [],
+    };
+
+    render(<DjChatEntry />);
+
+    expect(screen.queryByRole("button", { name: "chat.activityAria" })).toBeNull();
   });
 });

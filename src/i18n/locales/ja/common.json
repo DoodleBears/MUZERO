@@ -1322,6 +1322,12 @@
     "toolStateDone": "完了",
     "toolStateDenied": "却下済み",
     "toolStateError": "失敗",
+    "activityAria": "DJ の動き",
+    "activityError": "問題が発生しました",
+    "activityIdle": "待機中",
+    "activityQueued": "次の指示をキューに追加",
+    "activityThinking": "考え中",
+    "activityWaitingApproval": "承認待ち",
     "toolAvailability": {
       "always": "常に利用可能",
       "online": "オンラインソースが必要",
@@ -1340,6 +1346,10 @@
       "library_search": {
         "label": "ライブラリ検索",
         "description": "ローカル曲、セット、歌詞、タグ、メモ、メモリーを検索し、広く探すことも絞り込むこともできます。"
+      },
+      "library_tree": {
+        "label": "ライブラリツリー",
+        "description": "セット、曲順、未分類の曲を local ID 付きのページ分割ツリーで読み取ります。"
       },
       "library_list_tags": {
         "label": "タグ一覧",

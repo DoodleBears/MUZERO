@@ -12,14 +12,14 @@ afterEach(() => {
   localStorage.clear();
 });
 
-function seedReply(mode: "icon" | "chip" | "expanded") {
+function seedReply(mode: "icon" | "chip" | "expanded", status = "idle") {
   useChatStore.setState({
     mode,
     activeSessionId: "cht_1",
     runtimeMetaBySessionId: {
       cht_1: {
         sessionId: "cht_1",
-        status: "idle",
+        status: status as never,
         messageCount: 2,
         pendingApprovalCount: 0,
         queuedPromptCount: 0,
@@ -44,6 +44,12 @@ describe("ChatReplyNotification", () => {
 
   it("stays hidden while the widget is expanded (reply already visible)", () => {
     seedReply("expanded");
+    const { container } = render(<ChatReplyNotification />);
+    expect(container.querySelector("button")).toBeNull();
+  });
+
+  it("stays hidden for active streaming turns because compact activity owns them", () => {
+    seedReply("chip", "streaming");
     const { container } = render(<ChatReplyNotification />);
     expect(container.querySelector("button")).toBeNull();
   });

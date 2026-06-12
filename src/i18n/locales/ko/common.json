@@ -1321,6 +1321,12 @@
     "toolStateDone": "완료",
     "toolStateDenied": "거절됨",
     "toolStateError": "실패",
+    "activityAria": "DJ 활동",
+    "activityError": "문제가 발생했습니다",
+    "activityIdle": "준비됨",
+    "activityQueued": "다음 지시가 대기 중",
+    "activityThinking": "생각 중",
+    "activityWaitingApproval": "승인 대기",
     "toolAvailability": {
       "always": "항상 사용 가능",
       "online": "온라인 소스 필요",
@@ -1339,6 +1345,10 @@
       "library_search": {
         "label": "라이브러리 검색",
         "description": "로컬 곡, 세트, 가사, 태그, 메모, 기억을 검색하며 넓게 찾거나 정밀하게 좁힐 수 있습니다."
+      },
+      "library_tree": {
+        "label": "라이브러리 트리",
+        "description": "세트, 정렬된 곡, 미분류 곡을 local ID가 있는 페이지 트리로 읽습니다."
       },
       "library_list_tags": {
         "label": "태그 목록",

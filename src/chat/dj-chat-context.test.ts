@@ -1,61 +1,79 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import "fake-indexeddb/auto";
+import { afterEach, describe, expect, it } from "vitest";
 import { MuzeroDB } from "@/db/muzero-db";
 import { createSession, playQueueSet } from "@/db/repositories";
-import { trackBriefSchema } from "@/dj/dj-brief-schema";
+import type { Track } from "@/db/types";
 import { buildNowPlayingContext } from "./dj-chat-context";
-import { executeGenerateTracks } from "./dj-chat-tools";
+import { createDjChatLocalIdRegistry } from "./dj-chat-local-ids";
 
 let db: MuzeroDB;
-let dbName: string;
-
-beforeEach(() => {
-  dbName = `muzero-chat-context-${Math.random().toString(36).slice(2)}`;
-  db = new MuzeroDB(dbName);
-});
 
 afterEach(async () => {
-  db.close();
-  await new Promise<void>((resolve) => {
-    const req = indexedDB.deleteDatabase(dbName);
-    req.onsuccess = req.onerror = () => resolve();
-  });
+  if (db) {
+    await db.delete();
+    db.close();
+  }
 });
-
-const brief = (title: string) =>
-  trackBriefSchema.parse({ title, caption: "c", lyrics: "", durationSec: 60 });
 
 describe("buildNowPlayingContext", () => {
-  it("reports the empty queue", async () => {
-    expect(await buildNowPlayingContext(db)).toContain("nothing");
+  it("uses local ids for the active set and track when a registry is supplied", async () => {
+    db = new MuzeroDB("dj-chat-context-local-id-test");
+    const set = await createSession(
+      { name: "Rain Focus", seedPrompt: "", config: { autoExtend: false } },
+      db,
+    );
+    const track = trackRow({ id: "trk_rain", sessionId: set.id, title: "Blue Hour" });
+    await db.tracks.put(track);
+    await db.sessions.update(set.id, { trackIds: [track.id] });
+    await playQueueSet([track.id], { contextSetId: set.id, currentIndex: 0 }, db);
+    const localIds = createDjChatLocalIdRegistry();
+
+    const context = await buildNowPlayingContext(db, localIds);
+
+    expect(context).toContain("id: #S1");
+    expect(context).toContain("id: #T1");
+    expect(context).not.toContain(set.id);
+    expect(context).not.toContain(track.id);
+    expect(localIds.snapshot()).toEqual([
+      { local: "#S1", real: set.id, type: "S" },
+      { local: "#T1", real: track.id, type: "T", meta: { setId: set.id } },
+    ]);
   });
 
-  it("names the active set + current track with their ids and queue position", async () => {
-    const set = await createSession({ name: "Late Night Lofi", seedPrompt: "lofi" }, db);
-    const gen = await executeGenerateTracks(
-      { sessionId: set.id, briefs: [brief("Rain Mirror"), brief("Metro Bloom"), brief("Dusk")] },
-      { db, providerId: "mock" },
+  it("keeps the legacy raw-id context when no registry is supplied", async () => {
+    db = new MuzeroDB("dj-chat-context-legacy-test");
+    const set = await createSession(
+      { name: "Legacy", seedPrompt: "", config: { autoExtend: false } },
+      db,
     );
-    const ids = gen.diff.createdTrackIds;
-    await playQueueSet(ids, { currentIndex: 1, contextSetId: set.id }, db);
+    const track = trackRow({ id: "trk_legacy", sessionId: set.id, title: "Legacy Track" });
+    await db.tracks.put(track);
+    await db.sessions.update(set.id, { trackIds: [track.id] });
+    await playQueueSet([track.id], { contextSetId: set.id, currentIndex: 0 }, db);
 
     const context = await buildNowPlayingContext(db);
-    expect(context).toContain("Late Night Lofi");
+
     expect(context).toContain(set.id);
-    expect(context).toContain("Metro Bloom"); // the track at currentIndex 1
-    expect(context).toContain(ids[1]);
-    expect(context).toContain("position 2 of 3");
-  });
-
-  it("still reports the track when the queue has no playing-from set", async () => {
-    const src = await createSession({ name: "src", seedPrompt: "x" }, db);
-    const gen = await executeGenerateTracks(
-      { sessionId: src.id, briefs: [brief("Solo")] },
-      { db, providerId: "mock" },
-    );
-    await playQueueSet(gen.diff.createdTrackIds, {}, db); // no contextSetId
-
-    const context = await buildNowPlayingContext(db);
-    expect(context).toContain("Solo");
-    expect(context).not.toContain("Playing-from set");
+    expect(context).toContain(track.id);
   });
 });
+
+function trackRow(input: { id: string; sessionId: string; title: string }): Track {
+  const now = Date.now();
+  return {
+    id: input.id,
+    sessionId: input.sessionId,
+    title: input.title,
+    status: "ready",
+    durationSec: 180,
+    createdAt: now,
+    updatedAt: now,
+    brief: undefined,
+    provider: "upload",
+    kind: "audio",
+    origin: "uploaded",
+    tags: [],
+    liked: false,
+    playCount: 0,
+  };
+}

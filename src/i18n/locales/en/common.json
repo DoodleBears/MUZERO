@@ -1349,6 +1349,12 @@
     "toolStateDone": "Done",
     "toolStateDenied": "Denied",
     "toolStateError": "Failed",
+    "activityAria": "DJ activity",
+    "activityError": "Something went wrong",
+    "activityIdle": "Ready",
+    "activityQueued": "Queued next prompt",
+    "activityThinking": "Thinking",
+    "activityWaitingApproval": "Waiting for approval",
     "toolAvailability": {
       "always": "Always available",
       "online": "Requires online sources",
@@ -1367,6 +1373,10 @@
       "library_search": {
         "label": "Search library",
         "description": "Find local songs, sets, lyrics, tags, notes, and memories, with filters for broad discovery or precise matching."
+      },
+      "library_tree": {
+        "label": "Browse library tree",
+        "description": "Read sets, ordered songs, and unassigned songs as a paged local-id tree."
       },
       "library_list_tags": {
         "label": "List tags",

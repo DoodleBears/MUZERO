@@ -462,6 +462,8 @@ export interface ChatSession {
   forkedFromIndex?: number;
   queuedPromptsJson?: string;
   contextStartIndex?: number;
+  /** Per-chat-session local-id registry snapshot for LLM-facing short refs. */
+  localIdRegistryJson?: string;
 }
 
 /** Per-set DJ behavior. */

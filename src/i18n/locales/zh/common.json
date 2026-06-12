@@ -1322,6 +1322,12 @@
     "toolStateDone": "完成",
     "toolStateDenied": "已拒绝",
     "toolStateError": "失败",
+    "activityAria": "DJ 动态",
+    "activityError": "出了点问题",
+    "activityIdle": "已就绪",
+    "activityQueued": "下一条指令已排队",
+    "activityThinking": "思考中",
+    "activityWaitingApproval": "等待批准",
     "toolAvailability": {
       "always": "始终可用",
       "online": "需要启用线上来源",
@@ -1340,6 +1346,10 @@
       "library_search": {
         "label": "搜索曲库",
         "description": "搜索本地歌曲、歌单、歌词、标签、备注和回忆，可用于宽泛发现或精确匹配。"
+      },
+      "library_tree": {
+        "label": "浏览曲库树",
+        "description": "按分页树结构读取歌单、顺序歌曲和未分配歌曲，并使用 local ID。"
       },
       "library_list_tags": {
         "label": "列出标签",

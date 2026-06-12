@@ -10,8 +10,10 @@ export function ChatReplyNotification() {
     activeSessionId ? state.runtimeMetaBySessionId[activeSessionId] : undefined,
   );
   const preview = meta?.lastAssistantPreview?.trim();
-  // Folded states only (icon/chip); the expanded widget already shows the reply.
-  const shouldShow = mode !== "expanded" && Boolean(preview);
+  const isComplete = meta?.status === "idle" || meta?.status === "stopped";
+  // Folded completion hints only. Active streaming/tool-call status is shown by
+  // the dock-anchored activity popover so compact mode does not double-surface.
+  const shouldShow = mode !== "expanded" && isComplete && Boolean(preview);
 
   return (
     <AnimatePresence mode="wait">
