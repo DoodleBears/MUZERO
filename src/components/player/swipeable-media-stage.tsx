@@ -110,6 +110,7 @@ export function SwipeableMediaStage({
   const [settleTarget, setSettleTarget] = useState<VisualTrack | null>(null);
   const [readyTrackIds, setReadyTrackIds] = useState<Record<string, true>>({});
   const [overlayRect, setOverlayRect] = useState<StageOverlayRect | null>(null);
+  const [stackWarmed, setStackWarmed] = useState(false);
 
   const next = usePlayerStore((s) => s.next);
   const skipPrev = usePlayerStore((s) => s.skipPrev);
@@ -154,7 +155,6 @@ export function SwipeableMediaStage({
   const stackVisible = !!stack;
   const stackActive =
     stackVisible && (!!dragDirection || committing || !!settleTarget || handoffFading);
-  const baseCoverBacklightEnabled = !stackActive || handoffFading;
 
   const travel = Math.max(width, FALLBACK_WIDTH);
   const visualX = useTransform(x, (value) => value * DRAG_GAIN);
@@ -195,6 +195,7 @@ export function SwipeableMediaStage({
 
   useEffect(() => {
     if (!stackVisible) {
+      setStackWarmed(false);
       setOverlayRect(null);
       return;
     }
@@ -206,6 +207,19 @@ export function SwipeableMediaStage({
       window.removeEventListener("scroll", updateOverlayRect, true);
     };
   }, [stackVisible, updateOverlayRect]);
+
+  useEffect(() => {
+    if (!stackVisible) return;
+    let firstFrame = 0;
+    let secondFrame = 0;
+    firstFrame = window.requestAnimationFrame(() => {
+      secondFrame = window.requestAnimationFrame(() => setStackWarmed(true));
+    });
+    return () => {
+      window.cancelAnimationFrame(firstFrame);
+      window.cancelAnimationFrame(secondFrame);
+    };
+  }, [stackVisible]);
 
   useEffect(() => {
     return () => {
@@ -234,6 +248,7 @@ export function SwipeableMediaStage({
     setHandoffFading(false);
     setSettleTarget(null);
     setReadyTrackIds({});
+    setStackWarmed(false);
     setOverlayRect(null);
     setStack(null);
   }, [x]);
@@ -260,6 +275,7 @@ export function SwipeableMediaStage({
     setHandoffFading(false);
     setSettleTarget(null);
     setReadyTrackIds({});
+    setStackWarmed(false);
     updateOverlayRect();
     setStack({
       current: currentVisual,
@@ -552,11 +568,11 @@ export function SwipeableMediaStage({
       ? (containerRef.current?.closest("main") ?? document.body)
       : null;
   const stackOverlay =
-    stackActive && overlayRect && overlayPortalTarget
+    stackVisible && overlayRect && overlayPortalTarget
       ? createPortal(
           <motion.div
             aria-hidden
-            animate={{ opacity: handoffFading ? 0 : 1 }}
+            animate={{ opacity: stackActive && !handoffFading ? 1 : 0 }}
             className="pointer-events-none fixed z-20 overflow-visible [perspective:1200px] [transform-style:preserve-3d]"
             initial={false}
             style={{
@@ -604,7 +620,7 @@ export function SwipeableMediaStage({
         )
       : null;
 
-  const baseHidden = stackActive && !handoffFading;
+  const baseHidden = stackActive && stackWarmed && !handoffFading;
   // The cover cross-fades through the handoff, but the (translucent) title/author
   // pills must NOT — two copies fading over each other darken the background. So
   // the base owns the identity the moment the swipe settles; it's hidden only
@@ -676,7 +692,7 @@ export function SwipeableMediaStage({
               willChange: "transform, opacity",
             }}
           >
-            <MediaStage coverBacklightEnabled={baseCoverBacklightEnabled} />
+            <MediaStage />
           </motion.div>
         </div>
         {/* Title + author travel with the cover during an active drag (handled by
