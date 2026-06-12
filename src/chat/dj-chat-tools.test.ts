@@ -53,6 +53,7 @@ describe("DJ chat tools", () => {
     expect(tools.dj_generate_tracks.needsApproval).toBe(true);
     expect(tools.dj_propose_briefs.needsApproval).toBeUndefined();
     expect(tools.library_search.needsApproval).toBeUndefined();
+    expect(tools.library_tree.needsApproval).toBeUndefined();
     expect(tools.set_create.needsApproval).toBeUndefined();
   });
 

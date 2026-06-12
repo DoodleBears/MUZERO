@@ -36,6 +36,7 @@ import type { StreamSearchHit } from "@/streamsrc/provider";
 import { resolveEnabledStreamSources, type StreamSourceDeps } from "@/streamsrc/registry";
 import { createStreamHttp } from "@/streamsrc/stream-http";
 import { addHitsToSet } from "@/streamsrc/streamed-track-repo";
+import { executeLibraryTree, libraryTreeInputSchema } from "./dj-chat-library-tree";
 import type { DjChatLocalIdRegistry } from "./dj-chat-local-ids";
 
 export const agentWriteResultSchema = z.object({
@@ -772,6 +773,17 @@ export function createDjChatTools(deps: DjChatToolDeps = {}): ToolSet {
         'One search over the library, filtered by `types` (default ["track"]). Keywords go in `queries` (match "any" gathers a genre, "all" narrows). `types` can include: "track" (title/caption/tags/notes/memories), "set" (match playlist NAMES), and "lyrics" (find songs by the WORDS in their lyrics — each hit returns a matching line snippet + timestamp). Only the requested groups come back. The track group projects to `fields` (default id+title) and pages via `cursor`/`nextCursor`. To curate a whole genre into a set without listing every id, prefer set_add_by_search.',
       inputSchema: librarySearchInputSchema,
       execute: (input) => executeLibrarySearch(input, { db }),
+    }),
+    library_tree: tool({
+      description:
+        'Browse the user library as a tree using short local ids. Use scope "library" for all sets plus unassigned songs, scope "set" with a #S id to inspect one set, or scope "unassigned" to organize songs not in any set. Results are paged with cursor/nextCursor and include resultRef plus per-result ordinals; actions should use entity ids like #T1/#S1.',
+      inputSchema: libraryTreeInputSchema,
+      execute: (input) =>
+        executeLibraryTree(input, {
+          db,
+          localIds: deps.localIds,
+          persistLocalIds: deps.persistLocalIds,
+        }),
     }),
     library_list_tags: tool({
       description: "List distinct local tags with usage counts.",

@@ -1,6 +1,6 @@
 # PRD: MUZERO — AI DJ Library Tree 与 Local ID Tool Call 架构
 
-**Status:** In Progress（Phase 1 Local ID registry + chat transport 接线已完成：AnySoul-style strict registry、per-chat-session snapshot、Now Playing local refs、tools deps 通道；Phase 2 library_tree 待推进。）
+**Status:** In Progress（Phase 1 Local ID registry + chat transport 接线已完成；Phase 2 `library_tree` browse tool 已完成：library/set/unassigned scopes、flattened pagination、stable `#T/#S/#R` refs、no raw IDs；Phase 3 existing tools local-ID migration 待推进。）
 **Created:** 2026-06-13
 **Author:** MUZERO
 **Module:** AI DJ Chat Agent Tools — 曲库结构可见性、tool-call ID 压缩、上下文预算
@@ -19,7 +19,7 @@
 | Phase | Name | Status | Link |
 |-------|------|--------|------|
 | 1 | Local ID registry primitive + chat transport 接线 | Completed（2026-06-13：registry/session/context/transport 基础接线 + tests） | [Phase 1 Checklist](#phase-1-checklist) |
-| 2 | Library tree / set tree browse tools | Pending | [Phase 2 Checklist](#phase-2-checklist) |
+| 2 | Library tree / set tree browse tools | Completed（2026-06-13：`library_tree` tool + tests） | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | 现有工具输入输出 local-ID 化 | Pending | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | Prompt、错误恢复、测试与验收 | Pending | [Phase 4 Checklist](#phase-4-checklist) |
 
@@ -646,14 +646,14 @@ Acceptance: `buildNowPlayingContext` tests must assert no `ses_` or `trk_` appea
 
 **Tasks:**
 
-- [ ] Add `src/chat/dj-chat-library-tree.ts`.
-- [ ] Implement `executeLibraryTree(input, { db, localIds })`.
-- [ ] Use `orderedSetTrackIds` for set track ordering.
-- [ ] Compute `Unassigned` from tracks not present in any session's `trackIds`.
-- [ ] Add `library_tree` to `createDjChatTools`.
-- [ ] Add cursor pagination over flattened tree nodes.
-- [ ] Add field projection to avoid always returning tags/memory counts.
-- [ ] Add tests:
+- [x] Add `src/chat/dj-chat-library-tree.ts`.
+- [x] Implement `executeLibraryTree(input, { db, localIds })`.
+- [x] Use `orderedSetTrackIds` for set track ordering.
+- [x] Compute `Unassigned` from tracks not present in any session's `trackIds`.
+- [x] Add `library_tree` to `createDjChatTools`.
+- [x] Add cursor pagination over flattened tree nodes.
+- [x] Add field projection to avoid always returning tags/memory counts.
+- [x] Add tests:
   - library tree includes all sets and unassigned group
   - set scope returns all songs across cursor pages
   - same track in two sets uses same `#Tn`
@@ -664,10 +664,10 @@ Acceptance: `buildNowPlayingContext` tests must assert no `ses_` or `trk_` appea
 
 ### Phase 2 Checklist
 
-- [ ] `library_tree({ scope:"library" })` can reveal the whole library via pagination.
-- [ ] `library_tree({ scope:"set", setId:"#S1" })` can reveal one set's complete ordered songs.
-- [ ] `library_tree({ scope:"unassigned" })` returns uncategorized songs.
-- [ ] Tool output is bounded by `limit` and returns `nextCursor`.
+- [x] `library_tree({ scope:"library" })` can reveal the whole library via pagination.
+- [x] `library_tree({ scope:"set", setId:"#S1" })` can reveal one set's complete ordered songs.
+- [x] `library_tree({ scope:"unassigned" })` returns uncategorized songs.
+- [x] Tool output is bounded by `limit` and returns `nextCursor`.
 
 ### Phase 3: Existing Tool Input/Output Local-ID Migration
 
@@ -815,5 +815,6 @@ Acceptance: `buildNowPlayingContext` tests must assert no `ses_` or `trk_` appea
 
 | Date | Author | Changes |
 |------|--------|---------|
+| 2026-06-13 | Codex | Completed Phase 2: added `dj-chat-library-tree.ts` and registered `library_tree` in `createDjChatTools`; supports `scope:"library"`, `scope:"set"`, and `scope:"unassigned"`, flattened cursor pagination, field projection, unassigned-group computation, `orderedSetTrackIds`, stable local entity refs, per-result `#R` refs, and no raw `trk_` / `ses_` output. Verification: `dj-chat-library-tree.test.ts`, existing `dj-chat-tools.test.ts`, Biome, and `tsc --noEmit` passed. |
 | 2026-06-13 | Codex | Completed Phase 1: added `dj-chat-local-ids.ts` with AnySoul-style strict local ID registry (`#T/#S/#M/#Q/#R`), typed unknown/wrong-type errors, encode/decode helpers, and snapshot hydration; added `ChatSession.localIdRegistryJson` plus load/save helpers; updated Now Playing context to emit `#S/#T` when a registry is supplied; hydrated/persisted registry in chat transport and passed `localIds/persistLocalIds` into tools. Verification: local-id/session/context tests + existing chat agent/runtime tests, Biome, and `tsc --noEmit` passed. |
 | 2026-06-13 | MUZERO | Initial draft: tree browse tool + AnySoul-style local ID registry adapted to MUZERO chat sessions. |
