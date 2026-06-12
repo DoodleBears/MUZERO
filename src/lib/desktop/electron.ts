@@ -6,6 +6,7 @@ import type {
   DesktopPlatform,
   DesktopSystemShortcutConfigureResult,
   DesktopSystemShortcutRegistration,
+  DesktopWindowPinMode,
   DesktopWindowState,
   LocalMediaUrlInput,
   MediaProxyTrace,
@@ -43,6 +44,8 @@ interface MuzeroApi {
   windowControls?: {
     minimize(): Promise<void>;
     toggleMaximize(): Promise<DesktopWindowState>;
+    setPinMode(mode: DesktopWindowPinMode): Promise<DesktopWindowState>;
+    cyclePinMode(): Promise<DesktopWindowState>;
     close(): Promise<void>;
     getState(): Promise<DesktopWindowState>;
     onStateChange(callback: (state: DesktopWindowState) => void): () => void;
@@ -174,11 +177,17 @@ export function createElectronBridge(): DesktopBridge {
           minimize: () => api.windowControls?.minimize() ?? Promise.resolve(),
           toggleMaximize: () =>
             api.windowControls?.toggleMaximize() ??
-            Promise.resolve({ fullscreen: false, maximized: false }),
+            Promise.resolve({ fullscreen: false, maximized: false, pinMode: "off" }),
+          setPinMode: (mode) =>
+            api.windowControls?.setPinMode(mode) ??
+            Promise.resolve({ fullscreen: false, maximized: false, pinMode: "off" }),
+          cyclePinMode: () =>
+            api.windowControls?.cyclePinMode() ??
+            Promise.resolve({ fullscreen: false, maximized: false, pinMode: "off" }),
           close: () => api.windowControls?.close() ?? Promise.resolve(),
           getState: () =>
             api.windowControls?.getState() ??
-            Promise.resolve({ fullscreen: false, maximized: false }),
+            Promise.resolve({ fullscreen: false, maximized: false, pinMode: "off" }),
           onStateChange: (callback) => api.windowControls?.onStateChange(callback) ?? (() => {}),
         }
       : undefined,

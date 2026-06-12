@@ -7,6 +7,7 @@ const { handleMuzfetch } = require("./fetch-proxy.cjs");
 const { registerElectronGlobalShortcuts } = require("./global-shortcuts.cjs");
 const { applyAppIcon, appIconPath, DEFAULT_APP_ICON } = require("./app-icon.cjs");
 const { attachDiagnosticsWindow } = require("./diagnostics.cjs");
+const { windowPin } = require("./window-pin.cjs");
 
 const devUrl = process.env.MUZERO_ELECTRON_URL;
 const distDir = path.join(__dirname, "..", "dist");
@@ -213,12 +214,14 @@ function createWindow() {
     win.webContents.send("muzero:window:state", {
       fullscreen: win.isFullScreen(),
       maximized: win.isMaximized(),
+      pinMode: windowPin.getMode(win),
     });
   };
   win.on("maximize", sendWindowState);
   win.on("unmaximize", sendWindowState);
   win.on("enter-full-screen", sendWindowState);
   win.on("leave-full-screen", sendWindowState);
+  windowPin.attachFocusRecovery(win, sendWindowState);
   persistWindowState(win);
 
   win.once("ready-to-show", () => {

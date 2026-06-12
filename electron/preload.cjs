@@ -33,6 +33,8 @@ contextBridge.exposeInMainWorld("muzero", {
   windowControls: {
     minimize: () => ipcRenderer.invoke("muzero:window:minimize"),
     toggleMaximize: () => ipcRenderer.invoke("muzero:window:toggleMaximize"),
+    setPinMode: (mode) => ipcRenderer.invoke("muzero:window:setPinMode", mode),
+    cyclePinMode: () => ipcRenderer.invoke("muzero:window:cyclePinMode"),
     close: () => ipcRenderer.invoke("muzero:window:close"),
     getState: () => ipcRenderer.invoke("muzero:window:getState"),
     onStateChange: (callback) => {

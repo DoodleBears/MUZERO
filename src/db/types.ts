@@ -743,6 +743,8 @@ export interface AppSettings {
   electronWindowBorderColor?: string;
   /** Electron frameless-window border opacity, 0–100. */
   electronWindowBorderOpacity?: number;
+  /** Desktop always-on-top preference. Click-through is session-only and not persisted. */
+  desktopWindowPinMode?: "off" | "pin";
   /** Primary/accent color (hex) for light mode. Mirrors localStorage `muzero-primary-light`. */
   primaryLight?: string;
   /** Primary/accent color (hex) for dark mode. Mirrors localStorage `muzero-primary-dark`. */
@@ -897,6 +899,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   electronWindowBorderColorMode: "cover",
   electronWindowBorderColor: "#ffffff",
   electronWindowBorderOpacity: 10,
+  desktopWindowPinMode: "off",
   backgroundMode: "cover",
   backgroundRenderer: "noise",
   backgroundPixelSize: 12,

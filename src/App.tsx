@@ -23,6 +23,7 @@ import { useShortcutDispatch } from "@/hooks/use-shortcut-dispatch";
 import { useSystemShortcuts } from "@/hooks/use-system-shortcuts";
 import { resolveDesktopBridge } from "@/lib/desktop/bridge";
 import { electronWindowAppearanceCssVars } from "@/lib/electron-window-appearance";
+import { log } from "@/lib/logger";
 import { cn } from "@/lib/utils";
 import { dragWindowOnEmptyPress } from "@/lib/window-drag";
 import { NowPlayingPage } from "@/pages/now-playing-page";
@@ -86,6 +87,7 @@ export default function App() {
   usePlaybackWarmup();
   useDesktopChromeDataset();
   useElectronWindowAppearance(settings);
+  useDesktopWindowPinMode(settings);
 
   // Boot only wires the media engine. Auto-cueing the previous track during
   // WKWebView startup can make the full-screen media/background path flicker.
@@ -328,6 +330,17 @@ function useElectronWindowAppearance(settings: ReturnType<typeof useSettings>) {
       }
     };
   }, [settings, coverColorCss]);
+}
+
+function useDesktopWindowPinMode(settings: ReturnType<typeof useSettings>) {
+  useEffect(() => {
+    const controls = resolveDesktopBridge().windowControls;
+    if (!controls?.setPinMode) return;
+    const mode = settings.desktopWindowPinMode === "pin" ? "pin" : "off";
+    void controls
+      .setPinMode(mode)
+      .catch((error) => log.warn("desktop.windowPin", "Unable to apply pin mode", error));
+  }, [settings.desktopWindowPinMode]);
 }
 
 async function toggleDesktopMaximize() {
