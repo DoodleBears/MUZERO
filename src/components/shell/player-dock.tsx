@@ -1,4 +1,3 @@
-import { useLiveQuery } from "dexie-react-hooks";
 import { useTranslation } from "react-i18next";
 import { DjChatEntry } from "@/components/chat/dj-chat-entry";
 import type { Tab } from "@/components/nav/dock-nav";
@@ -7,14 +6,8 @@ import { DockControls } from "@/components/player/dock-controls";
 import { ProgressScrubber } from "@/components/player/progress-scrubber";
 import { QueuePanel } from "@/components/player/queue-panel";
 import { TrackIdentityRow } from "@/components/player/track-identity-row";
-import { Disc3Icon } from "@/components/ui/disc-3";
 import { Drawer, DrawerHeader, DrawerPopup, DrawerTitle } from "@/components/ui/drawer";
-import { MessageCircleMoreIcon } from "@/components/ui/message-circle-more";
-import { db } from "@/db/muzero-db";
-import { saveSettings } from "@/db/repositories";
-import { useSettings } from "@/hooks/use-app-data";
 import { cn } from "@/lib/utils";
-import { usePlayerStore } from "@/stores/player-store";
 import { useUiStore } from "@/stores/ui-store";
 
 /**
@@ -59,10 +52,6 @@ export function PlayerDock({
               className={cn(!hidden && "pointer-events-auto")}
               onUploadLibrary={() => onTabChange("search")}
             />
-            <DockMemoryToggle
-              className={cn("hidden md:flex", !hidden && "pointer-events-auto")}
-              visible={tab === "now"}
-            />
             <div className={cn("shrink-0", !hidden && "pointer-events-auto")}>
               <NavFab value={tab} onChange={onTabChange} />
             </div>
@@ -98,45 +87,5 @@ export function PlayerDock({
         </DrawerPopup>
       </Drawer>
     </>
-  );
-}
-
-function DockMemoryToggle({ className, visible }: { className?: string; visible: boolean }) {
-  const { t } = useTranslation();
-  const settings = useSettings();
-  const currentTrackId = usePlayerStore((s) =>
-    s.currentIndex >= 0 ? s.queue[s.currentIndex]?.id : undefined,
-  );
-  const memoryCount = useLiveQuery(
-    (): Promise<number> =>
-      currentTrackId
-        ? db.memories.where("trackId").equals(currentTrackId).count()
-        : Promise.resolve(0),
-    [currentTrackId],
-    0,
-  );
-  const collapsed = Boolean(settings.nowPlayingRightRailCollapsed);
-  const canShowMemoryRail = (memoryCount ?? 0) > 0;
-  // Collapsed → memories shown, button returns to lyrics; expanded → lyrics
-  // shown, button switches to the memory timeline.
-  const label = collapsed ? t("dock.lyrics") : t("dock.memory");
-  const Icon = collapsed ? Disc3Icon : MessageCircleMoreIcon;
-
-  if (!visible || (!collapsed && !canShowMemoryRail)) return null;
-
-  return (
-    <button
-      aria-label={label}
-      className={cn(
-        "h-11 w-fit shrink-0 items-center justify-start gap-2 rounded-full bg-card/90 px-4 text-primary shadow-lg ring-1 ring-border/40 outline-none backdrop-blur-md transition-colors hover:bg-card focus-visible:ring-2 focus-visible:ring-ring",
-        className,
-      )}
-      data-testid="dock-memory-toggle"
-      onClick={() => void saveSettings({ nowPlayingRightRailCollapsed: !collapsed })}
-      type="button"
-    >
-      <Icon aria-hidden="true" size={20} />
-      <span className="max-[380px]:hidden whitespace-nowrap text-[15px] font-medium">{label}</span>
-    </button>
   );
 }

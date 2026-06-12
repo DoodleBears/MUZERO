@@ -42,6 +42,12 @@ describe("LyricsScroller (synced)", () => {
     expect(screen.getByText("line two").getAttribute("aria-current")).toBeNull();
   });
 
+  it("gives active-size lyric lines enough line-height for descenders", () => {
+    render(<LyricsScroller resolved={synced} activeIndex={0} onSeek={() => {}} />);
+    const active = screen.getByText("line one");
+    expect(active).toHaveClass("leading-[1.45]");
+  });
+
   it("seeks to a line's start time when clicked", () => {
     const onSeek = vi.fn();
     render(<LyricsScroller resolved={synced} activeIndex={-1} onSeek={onSeek} />);
@@ -98,7 +104,7 @@ describe("LyricsScroller (word-by-word karaoke)", () => {
 
   it("fills word spans with a valid color in the default color mode (no invisible text)", () => {
     // Regression: with lyricStyle.color undefined (default mode), the gradient must
-    // fall back to currentColor — never an "undefined" stop, which background-clip:text
+    // fall back to the foreground token — never an "undefined" stop, which background-clip:text
     // would render as fully invisible text.
     const { container } = render(
       <LyricsScroller resolved={wordSynced} activeIndex={0} onSeek={() => {}} wordByWord />,
@@ -106,10 +112,21 @@ describe("LyricsScroller (word-by-word karaoke)", () => {
     const span = container.querySelector("[data-word]") as HTMLElement;
     const style = (span.getAttribute("style") ?? "").toLowerCase();
     expect(span.style.backgroundImage).not.toContain("undefined");
-    expect(style).toContain("currentcolor");
+    expect(style).toContain("var(--color-foreground)");
     // The FILL is transparent-ized, but `color` itself must keep inheriting so
     // currentColor resolves to the foreground.
     expect(span.style.color).not.toBe("transparent");
+  });
+
+  it("gives karaoke word fill spans vertical bleed so WebKit does not clip glyph paint", () => {
+    const { container } = render(
+      <LyricsScroller resolved={wordSynced} activeIndex={0} onSeek={() => {}} wordByWord />,
+    );
+    const span = container.querySelector("[data-word]") as HTMLElement;
+    expect(span).toHaveStyle({
+      backgroundOrigin: "border-box",
+      paddingBlock: "0.14em",
+    });
   });
 
   it("renders the whole line (no word spans) when word-by-word is off", () => {

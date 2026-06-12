@@ -75,7 +75,7 @@ export function NowPlayingPanel({
   const ToggleIcon = collapsed ? Disc3Icon : MessageCircleMoreIcon;
 
   function setCollapsed(next: boolean) {
-    void saveSettings({ nowPlayingRightRailCollapsed: next });
+    void saveSettings({ lyricsStageOpen: !next, nowPlayingRightRailCollapsed: next });
   }
 
   function setMemoryRailScrollTop(nextScrollTop: number) {

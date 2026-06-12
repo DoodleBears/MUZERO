@@ -155,7 +155,10 @@ describe("NowPlayingPanel collapse", () => {
     expect(toggle).toHaveAttribute("data-testid", "now-playing-panel-floating-toggle");
     fireEvent.click(toggle);
 
-    expect(mocks.saveSettings).toHaveBeenCalledWith({ nowPlayingRightRailCollapsed: true });
+    expect(mocks.saveSettings).toHaveBeenCalledWith({
+      lyricsStageOpen: false,
+      nowPlayingRightRailCollapsed: true,
+    });
   });
 
   it("switches from memory to lyrics with the floating toggle", () => {
@@ -171,7 +174,10 @@ describe("NowPlayingPanel collapse", () => {
     expect(screen.queryByTestId("lyrics-view")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Lyrics" }));
 
-    expect(mocks.saveSettings).toHaveBeenCalledWith({ nowPlayingRightRailCollapsed: false });
+    expect(mocks.saveSettings).toHaveBeenCalledWith({
+      lyricsStageOpen: true,
+      nowPlayingRightRailCollapsed: false,
+    });
   });
 
   it("does not show the memory toggle when the current track has no memories", () => {

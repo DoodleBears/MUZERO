@@ -60,7 +60,7 @@
   },
   "globalSearch": {
     "title": "検索",
-    "placeholder": "曲とセットを検索 — @set でプレイリストだけ…",
+    "placeholder": "曲・歌詞・セットを検索 — @lyrics / @set…",
     "empty": "一致するものがありません。",
     "songs": "曲",
     "filterHint": "絞り込み",
@@ -216,6 +216,8 @@
     "backToLyrics": "歌詞に戻る",
     "collapseSearch": "閉じる",
     "toggleStage": "歌詞",
+    "show": "歌詞を表示",
+    "hideToMemory": "歌詞を閉じてメモリーを表示",
     "openSettingsHint": "長押しで歌詞設定"
   },
   "lyricsSettings": {

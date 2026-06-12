@@ -49,10 +49,14 @@ async function toggleDocumentFullscreen(): Promise<void> {
   }
 }
 
-/** Persisted toggle of the lyrics-on-stage view (C). Read-modify-write on settings. */
-async function toggleLyricsStage(): Promise<void> {
+/** Persisted toggle of the lyrics/memory right-rail mode (C). Read-modify-write on settings. */
+async function toggleLyricsVisible(): Promise<void> {
   const s = await getSettings();
-  await saveSettings({ lyricsStageOpen: !(s.lyricsStageOpen ?? false) });
+  const lyricsVisible = !(s.nowPlayingRightRailCollapsed ?? false);
+  await saveSettings({
+    lyricsStageOpen: !lyricsVisible,
+    nowPlayingRightRailCollapsed: lyricsVisible,
+  });
 }
 
 /** Advance the visualizer placement off→background→idle→off (V). */
@@ -134,7 +138,7 @@ const GLOBAL_HANDLERS: Record<string, (ctx: DispatchContext) => void> = {
   "nav.tabLibrary": (ctx) => transitionState(() => ctx.setTab("search")),
   "nav.tabSettings": (ctx) => transitionState(() => ctx.setTab("settings")),
   "queue.toggle": () => useUiStore.getState().toggleQueue(),
-  "lyrics.toggleStage": () => void toggleLyricsStage(),
+  "lyrics.toggleStage": () => void toggleLyricsVisible(),
   "visualizer.cycleMode": () => void cycleVisualizerPlacement(),
 };
 

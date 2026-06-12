@@ -65,7 +65,7 @@
   },
   "globalSearch": {
     "title": "Search",
-    "placeholder": "Search songs and sets — use @set for playlists…",
+    "placeholder": "Search songs, lyrics, and sets — @lyrics or @set…",
     "empty": "No matches.",
     "songs": "Songs",
     "filterHint": "Filter",
@@ -225,6 +225,8 @@
     "backToLyrics": "Back to lyrics",
     "collapseSearch": "Hide",
     "toggleStage": "Lyrics",
+    "show": "Show lyrics",
+    "hideToMemory": "Hide lyrics, show memories",
     "openSettingsHint": "Long-press for lyrics settings"
   },
   "lyricsSettings": {

@@ -104,7 +104,8 @@ describe("useShortcutDispatch", () => {
   });
 
   describe("press-and-hold C / V open the tuning panels", () => {
-    it("a quick tap of C toggles the lyrics stage on release, not the panel", async () => {
+    it("a quick tap of C toggles the lyrics rail on release, not the panel", async () => {
+      mocks.getSettings.mockResolvedValueOnce({ nowPlayingRightRailCollapsed: true });
       renderHook(() => useShortcutDispatch());
       press("KeyC", "c");
       // Deferred: nothing happens until the key is released or held past threshold.
@@ -112,7 +113,10 @@ describe("useShortcutDispatch", () => {
       expect(mocks.saveSettings).not.toHaveBeenCalled();
       release("KeyC", "c");
       await vi.waitFor(() =>
-        expect(mocks.saveSettings).toHaveBeenCalledWith({ lyricsStageOpen: true }),
+        expect(mocks.saveSettings).toHaveBeenCalledWith({
+          lyricsStageOpen: true,
+          nowPlayingRightRailCollapsed: false,
+        }),
       );
       expect(mocks.lyricsSetOpen).not.toHaveBeenCalled();
     });
@@ -125,8 +129,10 @@ describe("useShortcutDispatch", () => {
         vi.advanceTimersByTime(500);
         expect(mocks.lyricsSetOpen).toHaveBeenCalledWith(true);
         release("KeyC", "c");
-        // The hold already opened the panel — releasing must NOT also toggle.
-        expect(mocks.saveSettings).not.toHaveBeenCalledWith({ lyricsStageOpen: true });
+        // The hold already opened the panel — releasing must NOT also toggle lyrics.
+        expect(mocks.saveSettings).not.toHaveBeenCalledWith(
+          expect.objectContaining({ nowPlayingRightRailCollapsed: expect.any(Boolean) }),
+        );
       } finally {
         vi.useRealTimers();
       }

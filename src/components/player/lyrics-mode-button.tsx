@@ -1,4 +1,4 @@
-import { Captions } from "lucide-react";
+import { Captions, CaptionsOff } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { ControlTooltip } from "@/components/player/control-tooltip";
 import { Button } from "@/components/ui/button";
@@ -9,15 +9,21 @@ import { cn } from "@/lib/utils";
 import { useLyricsPanelStore } from "@/stores/lyrics-panel-store";
 
 /**
- * Lyrics-focus toggle, sibling of the visualizer-mode button: a tap shows lyrics
- * on the Now-Playing stage (and, in immersive idle, centered over the
- * background); a long-press or right-click opens the lyrics settings — mirroring
- * the visualizer button's tap-cycle / hold-to-tune gestures.
+ * Lyrics/memory toggle, sibling of the visualizer-mode button: a tap switches
+ * the Now-Playing right rail between lyrics and memories. When the visualizer
+ * hides foreground panels, the same lyrics-on state is rendered as centered
+ * immersive lyrics instead of a separate stage-only mode.
  */
 export function LyricsModeButton({ className }: { className?: string }) {
   const { t } = useTranslation();
-  const open = useSettings().lyricsStageOpen ?? false;
-  const toggle = () => void saveSettings({ lyricsStageOpen: !open });
+  const lyricsVisible = !useSettings().nowPlayingRightRailCollapsed;
+  const label = lyricsVisible ? t("lyrics.hideToMemory") : t("lyrics.show");
+  const Icon = lyricsVisible ? Captions : CaptionsOff;
+  const toggle = () =>
+    void saveSettings({
+      lyricsStageOpen: !lyricsVisible,
+      nowPlayingRightRailCollapsed: lyricsVisible,
+    });
   const openPanel = useLyricsPanelStore((s) => s.setOpen);
 
   function openSettings() {
@@ -28,7 +34,7 @@ export function LyricsModeButton({ className }: { className?: string }) {
   const { handlers, consumeClick } = useLongPress(openSettings);
 
   return (
-    <ControlTooltip label={t("lyrics.toggleStage")} hint={t("lyrics.openSettingsHint")}>
+    <ControlTooltip label={label} hint={t("lyrics.openSettingsHint")}>
       <Button
         variant="ghost"
         size="icon"
@@ -41,17 +47,17 @@ export function LyricsModeButton({ className }: { className?: string }) {
           openSettings();
         }}
         {...handlers}
-        aria-label={t("lyrics.toggleStage")}
-        aria-pressed={open}
+        aria-label={label}
+        aria-pressed={lyricsVisible}
         className={cn(
           "rounded-full border-0",
-          open
+          lyricsVisible
             ? "bg-black/45 text-white shadow-sm hover:bg-black/50 data-pressed:bg-black/55"
             : "text-white/55 hover:bg-white/10 hover:text-white data-pressed:bg-white/10",
           className,
         )}
       >
-        <Captions />
+        <Icon />
       </Button>
     </ControlTooltip>
   );

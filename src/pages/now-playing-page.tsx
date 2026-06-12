@@ -9,6 +9,7 @@ import { NowPlayingPanel } from "@/components/player/now-playing-panel";
 import { PlaybackSpectrum } from "@/components/player/playback-spectrum";
 import { SwipeableMediaStage } from "@/components/player/swipeable-media-stage";
 import { SyncedLyricsView } from "@/components/player/synced-lyrics-view";
+import { CurrentTrackContextMenu } from "@/components/player/track-context-menu";
 import { TrackInfoCard } from "@/components/player/track-info-card";
 import { TransportControls } from "@/components/player/transport-controls";
 import { VisualizerModeButton } from "@/components/player/visualizer-mode-button";
@@ -46,12 +47,17 @@ export function NowPlayingPage({ foregroundHidden = false }: { foregroundHidden?
   const queue = usePlayerStore((s) => s.queue);
   const currentIndex = usePlayerStore((s) => s.currentIndex);
   const djEnabled = usePlayerStore((s) => s.djEnabled);
-  const lyricsStageOpen = useSettings().lyricsStageOpen ?? false;
-  const toggleLyricsStage = () => void saveSettings({ lyricsStageOpen: !lyricsStageOpen });
+  const settings = useSettings();
+  const lyricsVisible = !settings.nowPlayingRightRailCollapsed;
+  const toggleLyricsVisible = () =>
+    void saveSettings({
+      lyricsStageOpen: !lyricsVisible,
+      nowPlayingRightRailCollapsed: lyricsVisible,
+    });
   const current = currentIndex >= 0 ? queue[currentIndex] : undefined;
-  // The lyrics surface lives in the right rail on md+; on narrow there is no
-  // rail, so it stacks into the scroll flow. Render exactly one (breakpoint-gated)
-  // so only one rAF lyric tracker runs.
+  // The lyrics surface lives in the right rail on md+; on narrow there is no rail,
+  // so the same lyrics-on/off mode stacks it into the scroll flow below the stage.
+  // Centered lyrics are reserved for the global immersive visualizer overlay.
   const isNarrow = useIsNarrow();
 
   // Reset the scroll to the top when the track changes (the new media/info
@@ -77,9 +83,7 @@ export function NowPlayingPage({ foregroundHidden = false }: { foregroundHidden?
       <div
         className={cn(
           "sm:mx-8 lg:mx-12 grid h-full gap-6 px-4 transition-opacity duration-200 lg:px-6",
-          // Lyrics-focus collapses to a single full-width column (no right rail).
-          !lyricsStageOpen &&
-            "md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]",
+          "md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]",
           foregroundHidden && "pointer-events-none opacity-0",
         )}
       >
@@ -87,26 +91,17 @@ export function NowPlayingPage({ foregroundHidden = false }: { foregroundHidden?
           ref={sectionRef}
           className="no-scrollbar flex min-h-0 flex-col gap-3 overflow-y-auto overflow-x-visible pt-chrome-top pb-chrome-bottom"
         >
-          {/* Lyrics-focus: lyrics replace the cover/title stage in place. Else the
-              normal stage — video at its aspect ratio / a square audio cover (the
-              drop target is measured via stageRef). */}
-          {lyricsStageOpen && current ? (
-            // Lyrics own their auto-scroll + overscroll-contain; let them scroll
-            // natively instead of being captured by the column's Lenis instance.
-            <div className="min-h-[60svh] flex-1" data-lenis-prevent>
-              <SyncedLyricsView track={current} />
-            </div>
-          ) : (
-            <>
-              {/* Mobile: a plain tap of the cover flips to lyrics (swipes still
-                  change tracks). Desktop uses the lyrics-mode button. */}
+          <CurrentTrackContextMenu className="block">
+            <div className="flex flex-col gap-2">
+              {/* Mobile: a plain tap of the cover flips the right-rail mode
+                  (swipes still change tracks). Desktop uses the lyrics button. */}
               <SwipeableMediaStage
                 coverRef={stageRef}
-                onTap={isNarrow ? toggleLyricsStage : undefined}
+                onTap={isNarrow ? toggleLyricsVisible : undefined}
               />
               {current && <TrackInfoCard track={current} />}
-            </>
-          )}
+            </div>
+          </CurrentTrackContextMenu>
 
           <NowPlayingActionRow />
 
@@ -117,7 +112,7 @@ export function NowPlayingPage({ foregroundHidden = false }: { foregroundHidden?
 
           {current && <AnnotationEditor key={current.id} track={current} />}
 
-          {isNarrow && current && !lyricsStageOpen && (
+          {isNarrow && current && lyricsVisible && (
             <div className="min-h-[60svh] p-4">
               <SyncedLyricsView track={current} />
             </div>
@@ -128,7 +123,7 @@ export function NowPlayingPage({ foregroundHidden = false }: { foregroundHidden?
           <ListeningNowSection />
         </section>
 
-        {!isNarrow && !lyricsStageOpen && (
+        {!isNarrow && (
           <aside className="min-h-0">
             <NowPlayingPanel collapsible showFloatingToggle={false} />
           </aside>

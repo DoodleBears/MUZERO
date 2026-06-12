@@ -679,7 +679,7 @@ export interface AppSettings {
   lyricsShowTranslation?: boolean;
   /** Show a romanization sub-line under each lyric line, when the source has one. Default false. */
   lyricsShowRomanization?: boolean;
-  /** Whether the Now-Playing stage shows lyrics instead of the cover (persisted toggle). Default false. */
+  /** Legacy mirror for the lyrics/memory rail toggle; layout is driven by nowPlayingRightRailCollapsed. */
   lyricsStageOpen?: boolean;
   /** Lyric text-shadow strength, 0–100 (0 = no shadow). Default 35. */
   lyricsShadowOpacity?: number;

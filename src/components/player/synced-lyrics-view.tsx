@@ -274,7 +274,7 @@ function SyncedLines({
   // rendering the active line invisible (only its shadow showed). The word span
   // keeps its `color` inheriting and transparent-izes only the text FILL, so
   // `currentColor` still resolves to the real foreground.
-  const sungColor = lyricStyle.color ?? "currentColor";
+  const sungColor = lyricStyle.color ?? "var(--color-foreground)";
   const unsungPct = Math.round(
     Math.max(0, Math.min(1, (lyricStyle.inactiveOpacity || 0) / (lyricStyle.activeOpacity || 1))) *
       100,
@@ -436,7 +436,7 @@ function SyncedLines({
                         : "left center",
                 }}
                 className={cn(
-                  "block w-full text-pretty rounded-lg px-3 py-2 font-bold leading-snug",
+                  "block w-full text-pretty rounded-lg px-3 py-2 font-bold leading-[1.45]",
                   lyricStyle.align === "center"
                     ? "text-center"
                     : lyricStyle.align === "right"
@@ -454,8 +454,13 @@ function SyncedLines({
                           {
                             "--wfill": "0%",
                             backgroundImage: `linear-gradient(90deg, ${sungColor} var(--wfill), ${unsungColor} var(--wfill))`,
+                            backgroundOrigin: "border-box",
                             WebkitBackgroundClip: "text",
+                            WebkitBoxDecorationBreak: "clone",
                             backgroundClip: "text",
+                            boxDecorationBreak: "clone",
+                            lineHeight: 1.45,
+                            paddingBlock: "0.14em",
                             // Transparent-ize only the FILL (not `color`) so the
                             // gradient shows through AND `currentColor` above still
                             // resolves to the inherited foreground.

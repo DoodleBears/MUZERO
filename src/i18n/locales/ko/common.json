@@ -60,7 +60,7 @@
   },
   "globalSearch": {
     "title": "검색",
-    "placeholder": "곡과 세트 검색 — @set으로 플레이리스트만…",
+    "placeholder": "곡·가사·세트 검색 — @lyrics / @set…",
     "empty": "일치하는 항목이 없어요.",
     "songs": "노래",
     "filterHint": "필터",
@@ -216,6 +216,8 @@
     "backToLyrics": "가사로 돌아가기",
     "collapseSearch": "접기",
     "toggleStage": "가사",
+    "show": "가사 표시",
+    "hideToMemory": "가사를 닫고 추억 표시",
     "openSettingsHint": "길게 눌러 가사 설정"
   },
   "lyricsSettings": {

@@ -13,6 +13,7 @@ import { PlayerDock } from "@/components/shell/player-dock";
 import { GlobalDropZone } from "@/components/upload/global-drop-zone";
 import { useSettings } from "@/hooks/use-app-data";
 import { useAppIcon } from "@/hooks/use-app-icon";
+import { useDockIdle } from "@/hooks/use-dock-idle";
 import { useDocumentTitle } from "@/hooks/use-document-title";
 import { useIdle } from "@/hooks/use-idle";
 import { usePlaybackWarmup } from "@/hooks/use-playback-warmup";
@@ -142,7 +143,9 @@ export default function App() {
   // tearing it down on every navigation change.
   const isNowTab = tab === "now";
   const ambientActive = isNowTab || hasAmbientTrack;
-  // One idle signal. Chrome-hiding is gated by the immersiveIdle setting.
+  // Global idle still drives Now Playing foreground/visualizer state. The Dock
+  // gets its own idle rule below so wide screens can reveal it from a bottom hot
+  // zone instead of from any tiny pointer movement.
   const idle = useIdle(isNowTab);
   const visualizerBackgroundActive =
     ambientActive &&
@@ -151,22 +154,28 @@ export default function App() {
   const visualizerIdleOnly =
     idle && visualizerBackgroundActive && (settings.visualizerIdleOnly ?? false);
   const chromeHidden = idle && ((settings.immersiveIdle ?? true) || visualizerIdleOnly);
+  const dockIdleEnabled =
+    isNowTab &&
+    ((settings.immersiveIdle ?? true) ||
+      ((settings.visualizerIdleOnly ?? false) && visualizerBackgroundActive));
+  const dockIdleHidden = useDockIdle(dockIdleEnabled);
   const visualizerPreviewOnly = useVisualizerPanelStore((s) => s.previewOnly);
   const visualizerHidden = useVisualizerPanelStore((s) => s.visualizerHidden);
   const foregroundHidden = visualizerPreviewOnly || visualizerIdleOnly;
+  const dockHidden = dockIdleHidden || foregroundHidden;
   // In full-immersive (only background + spectrum, foreground rail hidden) surface
   // memories as a top popover instead — see the immersive-memory-moments PRD.
   const immersiveMemoryActive = visualizerIdleOnly && (settings.immersiveMemoryOverlay ?? true);
-  // Lyrics-focus + foreground hidden → centered lyrics over the background
-  // (takes over from the memory overlay while it's on).
-  const lyricsStageOpen = settings.lyricsStageOpen ?? false;
-  const immersiveLyricsActive = foregroundHidden && lyricsStageOpen;
+  // Lyrics-on + foreground hidden → centered lyrics over the background. The
+  // normal visible-page lyrics layout remains cover-left / lyrics-right.
+  const lyricsVisible = !settings.nowPlayingRightRailCollapsed;
+  const immersiveLyricsActive = foregroundHidden && lyricsVisible;
 
-  // Mirror the chrome-hidden signal so deep surfaces (e.g. the lyrics search
+  // Mirror the Dock-hidden signal so deep surfaces (e.g. the lyrics search
   // affordance) can fade in sync with the Dock during immersive idle.
   useEffect(() => {
-    useUiStore.getState().setChromeHidden(chromeHidden || foregroundHidden);
-  }, [chromeHidden, foregroundHidden]);
+    useUiStore.getState().setChromeHidden(dockHidden);
+  }, [dockHidden]);
 
   // `reducedMotion="user"` makes every motion animation honor the OS
   // "reduce motion" setting app-wide, matching the view-transition helper.
@@ -233,10 +242,10 @@ export default function App() {
           tab={tab}
           onTabChange={setTab}
           onOpenNowPlaying={() => setTab("now")}
-          hidden={chromeHidden || foregroundHidden}
+          hidden={dockHidden}
         />
 
-        {immersiveMemoryActive && !lyricsStageOpen && <ImmersiveMemoryOverlay />}
+        {immersiveMemoryActive && <ImmersiveMemoryOverlay />}
         {immersiveLyricsActive && <ImmersiveLyricsOverlay />}
 
         <VisualizerTuningPanel />

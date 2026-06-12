@@ -272,6 +272,11 @@ export function SwipeableMediaStage({
     });
   }, [x]);
 
+  const cancelTapForContextMenu = useCallback(() => {
+    tapMoved.current = true;
+    if (!dragDirection && !committing && stackVisible) clearStack();
+  }, [clearStack, committing, dragDirection, stackVisible]);
+
   useEffect(() => {
     if (!settleTarget || current?.id === settleTarget.track.id) return;
     clearStack();
@@ -594,7 +599,11 @@ export function SwipeableMediaStage({
     <>
       {/* `data-no-drag`: the stage is a mouse-swipe surface (motion `drag="x"`),
           so it must opt out of the Now Playing window-drag region (both shells). */}
-      <div data-no-drag className={cn("flex flex-col gap-2", className)}>
+      <div
+        data-no-drag
+        className={cn("flex flex-col gap-2", className)}
+        onContextMenuCapture={cancelTapForContextMenu}
+      >
         <div
           ref={setStageRef}
           className="relative w-full overflow-visible rounded-lg shadow-md [perspective:1200px]"

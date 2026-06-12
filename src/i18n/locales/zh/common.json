@@ -60,7 +60,7 @@
   },
   "globalSearch": {
     "title": "搜索",
-    "placeholder": "搜索歌曲和歌单 —— 输入 @歌单 只看歌单…",
+    "placeholder": "搜索歌曲、歌词和歌单 —— @歌词 / @歌单…",
     "empty": "没有匹配项。",
     "songs": "歌曲",
     "filterHint": "筛选",
@@ -216,6 +216,8 @@
     "backToLyrics": "返回歌词",
     "collapseSearch": "收起",
     "toggleStage": "歌词",
+    "show": "显示歌词",
+    "hideToMemory": "关闭歌词，显示记忆",
     "openSettingsHint": "长按打开歌词设置"
   },
   "lyricsSettings": {

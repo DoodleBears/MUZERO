@@ -7,7 +7,6 @@ import { cn } from "@/lib/utils";
 import { getMediaEngine, usePlayerStore } from "@/stores/player-store";
 import { CoverImage } from "./cover-image";
 import { StageTitleFallback } from "./stage-title-fallback";
-import { CurrentTrackContextMenu } from "./track-context-menu";
 
 const DEFAULT_VIDEO_ASPECT = 16 / 9;
 
@@ -100,37 +99,35 @@ export function MediaStage({ className }: { className?: string }) {
   const aspect = showVideo ? (videoAspect ?? DEFAULT_VIDEO_ASPECT) : showCover ? 1 : null;
 
   return (
-    <CurrentTrackContextMenu>
-      <div
-        ref={containerRef}
-        style={aspect != null ? { aspectRatio: String(aspect) } : undefined}
-        className={cn(
-          "relative shrink-0",
-          showVideo
-            ? "w-full overflow-hidden rounded-lg bg-black shadow-md"
-            : showCover
-              ? "mx-auto w-full overflow-hidden rounded-lg bg-muted shadow-md"
-              : "mx-auto aspect-square w-full bg-muted rounded-lg overflow-hidden",
-          className,
-        )}
-      >
-        {showGeneratedBackdrop && <StageTitleFallback track={current} dim={asBgActive} />}
-        {/* Crossfades to the next cover only once it has decoded (no flash of the
+    <div
+      ref={containerRef}
+      style={aspect != null ? { aspectRatio: String(aspect) } : undefined}
+      className={cn(
+        "relative shrink-0",
+        showVideo
+          ? "w-full overflow-hidden rounded-lg bg-black shadow-md"
+          : showCover
+            ? "mx-auto w-full overflow-hidden rounded-lg bg-muted shadow-md"
+            : "mx-auto aspect-square w-full bg-muted rounded-lg overflow-hidden",
+        className,
+      )}
+    >
+      {showGeneratedBackdrop && <StageTitleFallback track={current} dim={asBgActive} />}
+      {/* Crossfades to the next cover only once it has decoded (no flash of the
           previous track's cover), and reports its aspect for the box ratio. */}
-        {content === "cover" && (
-          <CoverImage
-            url={coverUrl}
-            hasCover={trackHasCover(current)}
-            fallback={<StageTitleFallback track={current} dim={asBgActive} />}
-            className="z-10 rounded-lg"
-          />
-        )}
-        {videoBroke && (
-          <div className="absolute inset-x-0 top-1/2 z-20 -translate-y-1/2 px-6 text-center text-sm text-muted-foreground">
-            {t("nowPlaying.videoUnsupported")}
-          </div>
-        )}
-      </div>
-    </CurrentTrackContextMenu>
+      {content === "cover" && (
+        <CoverImage
+          url={coverUrl}
+          hasCover={trackHasCover(current)}
+          fallback={<StageTitleFallback track={current} dim={asBgActive} />}
+          className="z-10 rounded-lg"
+        />
+      )}
+      {videoBroke && (
+        <div className="absolute inset-x-0 top-1/2 z-20 -translate-y-1/2 px-6 text-center text-sm text-muted-foreground">
+          {t("nowPlaying.videoUnsupported")}
+        </div>
+      )}
+    </div>
   );
 }
