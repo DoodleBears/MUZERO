@@ -1,6 +1,11 @@
 import { db as defaultDb, type MuzeroDB } from "@/db/muzero-db";
 import { saveSettings } from "@/db/repositories";
 import { newId } from "@/lib/id";
+import {
+  createDjChatLocalIdRegistry,
+  type DjChatLocalIdRegistry,
+  type DjChatLocalIdSnapshotEntry,
+} from "./dj-chat-local-ids";
 import type { ChatSession, DjChatQueuedPrompt, DjChatUIMessage } from "./types";
 
 const UNTITLED_CHAT = "New DJ chat";
@@ -43,6 +48,39 @@ export function parseQueuedPrompts(queuedPromptsJson: string | undefined): DjCha
   } catch {
     return [];
   }
+}
+
+export function parseChatLocalIdRegistrySnapshot(
+  localIdRegistryJson: string | undefined,
+): DjChatLocalIdSnapshotEntry[] {
+  if (!localIdRegistryJson) return [];
+  try {
+    const parsed = JSON.parse(localIdRegistryJson);
+    return Array.isArray(parsed) ? (parsed as DjChatLocalIdSnapshotEntry[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+export async function loadChatLocalIdRegistry(
+  sessionId: string,
+  db: MuzeroDB = defaultDb,
+): Promise<DjChatLocalIdRegistry> {
+  const session = await getChatSession(sessionId, db);
+  return createDjChatLocalIdRegistry(
+    parseChatLocalIdRegistrySnapshot(session?.localIdRegistryJson),
+  );
+}
+
+export async function saveChatLocalIdRegistry(
+  sessionId: string,
+  snapshot: readonly DjChatLocalIdSnapshotEntry[],
+  db: MuzeroDB = defaultDb,
+): Promise<void> {
+  await db.chatSessions.update(sessionId, {
+    localIdRegistryJson: JSON.stringify(snapshot),
+    updatedAt: Date.now(),
+  } satisfies Partial<ChatSession>);
 }
 
 export async function createChatSession(

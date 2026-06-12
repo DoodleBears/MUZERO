@@ -1,6 +1,6 @@
 # PRD: MUZERO — AI DJ Library Tree 与 Local ID Tool Call 架构
 
-**Status:** Draft
+**Status:** In Progress（Phase 1 Local ID registry + chat transport 接线已完成：AnySoul-style strict registry、per-chat-session snapshot、Now Playing local refs、tools deps 通道；Phase 2 library_tree 待推进。）
 **Created:** 2026-06-13
 **Author:** MUZERO
 **Module:** AI DJ Chat Agent Tools — 曲库结构可见性、tool-call ID 压缩、上下文预算
@@ -18,7 +18,7 @@
 
 | Phase | Name | Status | Link |
 |-------|------|--------|------|
-| 1 | Local ID registry primitive + chat transport 接线 | Pending | [Phase 1 Checklist](#phase-1-checklist) |
+| 1 | Local ID registry primitive + chat transport 接线 | Completed（2026-06-13：registry/session/context/transport 基础接线 + tests） | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | Library tree / set tree browse tools | Pending | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | 现有工具输入输出 local-ID 化 | Pending | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | Prompt、错误恢复、测试与验收 | Pending | [Phase 4 Checklist](#phase-4-checklist) |
@@ -615,15 +615,15 @@ Acceptance: `buildNowPlayingContext` tests must assert no `ses_` or `trk_` appea
 
 **Tasks:**
 
-- [ ] Add `src/chat/dj-chat-local-ids.ts` with registry, errors, encode/decode helpers.
-- [ ] Add `ChatSession.localIdRegistryJson?: string` to `src/db/types.ts`.
-- [ ] Add session helpers in `src/chat/dj-chat-sessions.ts`:
+- [x] Add `src/chat/dj-chat-local-ids.ts` with registry, errors, encode/decode helpers.
+- [x] Add `ChatSession.localIdRegistryJson?: string` to `src/db/types.ts`.
+- [x] Add session helpers in `src/chat/dj-chat-sessions.ts`:
   - `loadChatLocalIdRegistry(sessionId, db)`
   - `saveChatLocalIdRegistry(sessionId, snapshot, db)`
-- [ ] Update `createDjChatTransport` to hydrate registry per `options.chatId`.
-- [ ] Pass `localIds` into `buildNowPlayingContext` and `createDjChatTools`.
-- [ ] Persist registry snapshot after Now Playing context generation and after each tool execution that introduces IDs.
-- [ ] Add pure tests mirroring AnySoul:
+- [x] Update `createDjChatTransport` to hydrate registry per `options.chatId`.
+- [x] Pass `localIds` into `buildNowPlayingContext` and `createDjChatTools`.
+- [x] Persist registry snapshot after Now Playing context generation; pass `persistLocalIds` into tool deps so Phase 2/3 tools can persist after introducing IDs.
+- [x] Add pure tests mirroring AnySoul:
   - idempotent encode
   - per-prefix counters
   - `#R` result refs use an independent counter and do not resolve as track/set/memory
@@ -635,10 +635,10 @@ Acceptance: `buildNowPlayingContext` tests must assert no `ses_` or `trk_` appea
 
 ### Phase 1 Checklist
 
-- [ ] No raw IDs in Now Playing context when localIds is present.
-- [ ] Existing chat tests pass.
-- [ ] New registry tests cover hydration and strict regex.
-- [ ] No direct `console.*`.
+- [x] No raw IDs in Now Playing context when localIds is present.
+- [x] Existing chat tests pass.
+- [x] New registry tests cover hydration and strict regex.
+- [x] No direct `console.*`.
 
 ### Phase 2: Library Tree / Set Tree Browse Tools
 
@@ -815,4 +815,5 @@ Acceptance: `buildNowPlayingContext` tests must assert no `ses_` or `trk_` appea
 
 | Date | Author | Changes |
 |------|--------|---------|
+| 2026-06-13 | Codex | Completed Phase 1: added `dj-chat-local-ids.ts` with AnySoul-style strict local ID registry (`#T/#S/#M/#Q/#R`), typed unknown/wrong-type errors, encode/decode helpers, and snapshot hydration; added `ChatSession.localIdRegistryJson` plus load/save helpers; updated Now Playing context to emit `#S/#T` when a registry is supplied; hydrated/persisted registry in chat transport and passed `localIds/persistLocalIds` into tools. Verification: local-id/session/context tests + existing chat agent/runtime tests, Biome, and `tsc --noEmit` passed. |
 | 2026-06-13 | MUZERO | Initial draft: tree browse tool + AnySoul-style local ID registry adapted to MUZERO chat sessions. |

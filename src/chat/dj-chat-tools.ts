@@ -36,6 +36,7 @@ import type { StreamSearchHit } from "@/streamsrc/provider";
 import { resolveEnabledStreamSources, type StreamSourceDeps } from "@/streamsrc/registry";
 import { createStreamHttp } from "@/streamsrc/stream-http";
 import { addHitsToSet } from "@/streamsrc/streamed-track-repo";
+import type { DjChatLocalIdRegistry } from "./dj-chat-local-ids";
 
 export const agentWriteResultSchema = z.object({
   status: z.enum(["ok", "error"]),
@@ -315,6 +316,10 @@ export interface DjChatToolDeps {
   streamDeps?: StreamSourceDeps;
   /** Playback bridge for play_set / play_track. Defaults to the live player-store. */
   player?: PlayerControl;
+  /** Per-chat-session local-id registry shared by context and tool executions. */
+  localIds?: DjChatLocalIdRegistry;
+  /** Persist the registry after a tool introduces or resolves local refs. */
+  persistLocalIds?: () => Promise<void>;
 }
 
 export async function executeSearchTracks(

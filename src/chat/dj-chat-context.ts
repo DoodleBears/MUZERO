@@ -1,5 +1,6 @@
 import type { MuzeroDB } from "@/db/muzero-db";
 import { getPlayQueue, getSession, getTrack } from "@/db/repositories";
+import { type DjChatLocalIdRegistry, encodeSetRef, encodeTrackRef } from "./dj-chat-local-ids";
 
 /**
  * A compact snapshot of what the listener is playing right now — the active 歌单
@@ -8,7 +9,10 @@ import { getPlayQueue, getSession, getTrack } from "@/db/repositories";
  * current context and can act on it (curate into the set, switch the track,
  * continue the vibe) without burning a `now_playing_get` tool call. Empty-safe.
  */
-export async function buildNowPlayingContext(db: MuzeroDB): Promise<string> {
+export async function buildNowPlayingContext(
+  db: MuzeroDB,
+  localIds?: DjChatLocalIdRegistry,
+): Promise<string> {
   const queue = await getPlayQueue(db);
   const total = queue.entries.length;
   if (total === 0) return "Now playing: nothing — the play queue is empty.";
@@ -22,13 +26,17 @@ export async function buildNowPlayingContext(db: MuzeroDB): Promise<string> {
 
   const lines = ["Now playing (live context — you can reference these ids directly):"];
   if (set) {
+    const setRef = localIds ? encodeSetRef(set.id, localIds) : set.id;
     lines.push(
-      `- Playing-from set (歌单): "${set.name.trim() || "Untitled set"}" (id: ${set.id}, ${set.trackIds.length} tracks).`,
+      `- Playing-from set (歌单): "${set.name.trim() || "Untitled set"}" (id: ${setRef}, ${set.trackIds.length} tracks).`,
     );
   }
   if (track) {
+    const trackRef = localIds
+      ? encodeTrackRef(track.id, localIds, set ? { setId: set.id } : undefined)
+      : track.id;
     lines.push(
-      `- Current track: "${track.title.trim() || "Untitled"}" (id: ${track.id}), position ${index + 1} of ${total} in the queue.`,
+      `- Current track: "${track.title.trim() || "Untitled"}" (id: ${trackRef}), position ${index + 1} of ${total} in the queue.`,
     );
   } else {
     lines.push(`- Queue has ${total} tracks; currently at position ${index + 1}.`);
