@@ -5,31 +5,62 @@ import type Lenis from "lenis";
  *
  * Multiple scroll containers can be smooth-scrolling at once (e.g. Now Playing's
  * left column + a queue, Settings' two columns). Rather than each Lenis running
- * its own rAF (`autoRaf`), they all register here and a *single* loop ticks them
- * per frame. The loop only runs while at least one instance is active — empty
- * set ⇒ no rAF at all (zero idle cost), mirroring the visualizer's
- * "pause-when-invisible" discipline.
+ * its own rAF (`autoRaf`), they all register here and wake a shared loop only
+ * while scrolling is active. Registered-but-still containers sleep at zero rAF
+ * cost, mirroring the visualizer's "pause-when-invisible" discipline.
  *
  * Module-scope singleton on purpose: non-reactive, must not live in a Zustand
  * store (would re-render subscribers every frame). See CLAUDE.md rule 6.
  */
 
 const active = new Set<Lenis>();
+const unsubVirtualScroll = new Map<Lenis, () => void>();
+const idleFrames = new Map<Lenis, number>();
 let frameId = 0;
+const IDLE_FRAME_GRACE = 8;
 
 function tick(time: number): void {
-  for (const lenis of active) lenis.raf(time);
-  // Self-stopping: only reschedule while something is still active.
-  frameId = active.size > 0 ? requestAnimationFrame(tick) : 0;
+  let keepRunning = false;
+  for (const lenis of active) {
+    lenis.raf(time);
+    if (lenis.isScrolling) {
+      idleFrames.set(lenis, 0);
+      keepRunning = true;
+      continue;
+    }
+    const nextIdleFrames = (idleFrames.get(lenis) ?? 0) + 1;
+    idleFrames.set(lenis, nextIdleFrames);
+    if (nextIdleFrames < IDLE_FRAME_GRACE) keepRunning = true;
+  }
+  // Self-stopping: active Lenis instances stay registered, but the shared rAF
+  // sleeps once every instance has settled. New wheel/touch/programmatic scroll
+  // calls wake it through requestLenisTick().
+  frameId = keepRunning && active.size > 0 ? requestAnimationFrame(tick) : 0;
+}
+
+export function requestLenisTick(lenis?: Lenis | null): void {
+  if (lenis && active.has(lenis)) idleFrames.set(lenis, 0);
+  if (frameId === 0 && active.size > 0) frameId = requestAnimationFrame(tick);
 }
 
 export function registerLenis(lenis: Lenis): void {
+  const alreadyActive = active.has(lenis);
   active.add(lenis);
-  if (frameId === 0) frameId = requestAnimationFrame(tick);
+  idleFrames.set(lenis, 0);
+  if (!alreadyActive && typeof lenis.on === "function") {
+    unsubVirtualScroll.set(
+      lenis,
+      lenis.on("virtual-scroll", () => requestLenisTick(lenis)),
+    );
+  }
+  requestLenisTick(lenis);
 }
 
 export function unregisterLenis(lenis: Lenis): void {
   active.delete(lenis);
+  idleFrames.delete(lenis);
+  unsubVirtualScroll.get(lenis)?.();
+  unsubVirtualScroll.delete(lenis);
   if (active.size === 0 && frameId !== 0) {
     cancelAnimationFrame(frameId);
     frameId = 0;

@@ -71,10 +71,11 @@ export interface SmoothScrollDecision {
 
 export function resolveSmoothScroll(
   settings: Pick<AppSettings, "smoothScroll" | "smoothScrollLerp">,
-  env: SmoothScrollEnv,
+  _env: SmoothScrollEnv,
 ): SmoothScrollDecision {
-  // undefined = follow platform default: on everywhere except macOS (trackpad already smooth).
-  const preference = settings.smoothScroll ?? !env.isMac;
+  // undefined = off. Smooth scrolling is opt-in because Lenis owns a scroll rAF
+  // while active, and native scrolling is the lowest-power baseline.
+  const preference = settings.smoothScroll ?? false;
   return {
     preference,
     enabled: preference,

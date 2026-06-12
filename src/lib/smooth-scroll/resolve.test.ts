@@ -12,25 +12,25 @@ const WIN = { isMac: false };
 const MAC = { isMac: true };
 
 describe("resolveSmoothScroll — enabled decision (PRD §3.2 truth table)", () => {
-  it("undefined preference on non-macOS → enabled (default on)", () => {
+  it("undefined preference on non-macOS → disabled (default off)", () => {
     const d = resolveSmoothScroll({ smoothScroll: undefined }, WIN);
-    expect(d.preference).toBe(true);
-    expect(d.enabled).toBe(true);
+    expect(d.preference).toBe(false);
+    expect(d.enabled).toBe(false);
   });
 
-  it("undefined preference on macOS → disabled (trackpad already smooth)", () => {
+  it("undefined preference on macOS → disabled (default off)", () => {
     const d = resolveSmoothScroll({ smoothScroll: undefined }, MAC);
     expect(d.preference).toBe(false);
     expect(d.enabled).toBe(false);
   });
 
-  it("undefined preference + reduced-motion → enabled on non-macOS", () => {
+  it("undefined preference + reduced-motion → disabled on non-macOS", () => {
     const d = resolveSmoothScroll({ smoothScroll: undefined }, WIN);
-    expect(d.preference).toBe(true);
-    expect(d.enabled).toBe(true);
+    expect(d.preference).toBe(false);
+    expect(d.enabled).toBe(false);
   });
 
-  it("explicit true overrides the macOS default → enabled", () => {
+  it("explicit true overrides the platform default → enabled", () => {
     const d = resolveSmoothScroll({ smoothScroll: true }, MAC);
     expect(d.preference).toBe(true);
     expect(d.enabled).toBe(true);
@@ -49,8 +49,8 @@ describe("resolveSmoothScroll — enabled decision (PRD §3.2 truth table)", () 
 
   it("reduced-motion does not affect the Settings toggle or runtime state", () => {
     const d = resolveSmoothScroll({ smoothScroll: undefined }, WIN);
-    expect(d.preference).toBe(true);
-    expect(d.enabled).toBe(true);
+    expect(d.preference).toBe(false);
+    expect(d.enabled).toBe(false);
   });
 });
 

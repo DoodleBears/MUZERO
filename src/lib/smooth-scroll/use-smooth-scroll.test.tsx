@@ -78,7 +78,7 @@ afterEach(() => {
 
 describe("useSmoothScroll — lifecycle", () => {
   it("constructs Lenis on the wrapper element when enabled, and registers it", () => {
-    state.settings = {}; // undefined pref on non-mac → enabled
+    state.settings = { smoothScroll: true };
     const { result } = renderOnElement();
     expect(lenisInstances).toHaveLength(1);
     expect((lenisInstances[0].opts as { autoRaf?: boolean }).autoRaf).toBe(false);
@@ -92,22 +92,24 @@ describe("useSmoothScroll — lifecycle", () => {
     expect(__activeCount()).toBe(1);
   });
 
-  it("does NOT construct Lenis when disabled (macOS default)", () => {
-    state.isMac = true; // undefined pref on mac → disabled
+  it("does NOT construct Lenis when unset (default off)", () => {
+    state.isMac = false;
     const { result } = renderOnElement();
     expect(lenisInstances).toHaveLength(0);
     expect(result.current.lenisRef.current).toBeNull();
     expect(__activeCount()).toBe(0);
   });
 
-  it("constructs Lenis when reduced-motion is on", () => {
-    stubMatchMedia(true); // even on non-mac
+  it("constructs Lenis when explicitly enabled, even when reduced-motion is on", () => {
+    state.settings = { smoothScroll: true };
+    stubMatchMedia(true);
     const { result } = renderOnElement();
     expect(lenisInstances).toHaveLength(1);
     expect(result.current.lenisRef.current).toBe(lenisInstances[0]);
   });
 
   it("destroys + unregisters on unmount", () => {
+    state.settings = { smoothScroll: true };
     const { unmount } = renderOnElement();
     expect(lenisInstances).toHaveLength(1);
     unmount();
@@ -118,12 +120,12 @@ describe("useSmoothScroll — lifecycle", () => {
 
 describe("useSmoothScroll — reactive settings", () => {
   it("updates lerp IN PLACE without recreating the instance (PRD §5.1)", () => {
-    state.settings = { smoothScrollLerp: 0.08 };
+    state.settings = { smoothScroll: true, smoothScrollLerp: 0.08 };
     const { rerender } = renderOnElement();
     expect(lenisInstances).toHaveLength(1);
     expect(lenisInstances[0].options.lerp).toBe(0.08);
 
-    state.settings = { smoothScrollLerp: 0.18 };
+    state.settings = { smoothScroll: true, smoothScrollLerp: 0.18 };
     act(() => rerender());
 
     expect(lenisInstances).toHaveLength(1); // not reconstructed
@@ -132,6 +134,7 @@ describe("useSmoothScroll — reactive settings", () => {
   });
 
   it("destroys the instance when the toggle is turned off", () => {
+    state.settings = { smoothScroll: true };
     const { rerender } = renderOnElement();
     expect(__activeCount()).toBe(1);
 
@@ -144,6 +147,7 @@ describe("useSmoothScroll — reactive settings", () => {
 
   it("attaches once a conditionally-rendered node appears later (empty→non-empty list)", () => {
     // Start with no node (empty list), then the scroll container mounts.
+    state.settings = { smoothScroll: true };
     const ref: { current: HTMLElement | null } = { current: null };
     const { rerender } = renderHook(() => useSmoothScroll(ref as never));
     expect(lenisInstances).toHaveLength(0); // nothing to attach to yet

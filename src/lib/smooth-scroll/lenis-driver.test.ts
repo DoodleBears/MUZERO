@@ -5,12 +5,29 @@ import {
   __resetDriver,
   lenisForElement,
   registerLenis,
+  requestLenisTick,
   unregisterLenis,
 } from "./lenis-driver";
 
 // Minimal fake — the driver only ever calls `.raf(time)`.
 function fakeLenis() {
-  return { raf: vi.fn() } as unknown as Lenis;
+  const listeners = new Map<string, Array<() => void>>();
+  return {
+    isScrolling: false,
+    on: vi.fn((event: string, cb: () => void) => {
+      listeners.set(event, [...(listeners.get(event) ?? []), cb]);
+      return () => {
+        listeners.set(
+          event,
+          (listeners.get(event) ?? []).filter((listener) => listener !== cb),
+        );
+      };
+    }),
+    raf: vi.fn(),
+    trigger(event: string) {
+      for (const listener of listeners.get(event) ?? []) listener();
+    },
+  } as unknown as Lenis & { trigger: (event: string) => void };
 }
 
 let pending: FrameRequestCallback | null = null;
@@ -50,6 +67,28 @@ describe("lenis-driver — one shared rAF for all instances (PRD §4.2)", () => 
     expect(rafCalls).toBe(1); // exactly one loop started
     step(100);
     expect(a.raf).toHaveBeenCalledWith(100);
+  });
+
+  it("sleeps after registered instances settle, then wakes on virtual scroll", () => {
+    const a = fakeLenis();
+    registerLenis(a);
+    for (let i = 0; i < 8; i += 1) step(i * 16);
+    expect(pending).toBeNull();
+
+    a.trigger("virtual-scroll");
+    expect(rafCalls).toBe(9);
+    step(200);
+    expect(a.raf).toHaveBeenLastCalledWith(200);
+  });
+
+  it("can be woken by programmatic scroll helpers", () => {
+    const a = fakeLenis();
+    registerLenis(a);
+    for (let i = 0; i < 8; i += 1) step(i * 16);
+    expect(pending).toBeNull();
+
+    requestLenisTick(a);
+    expect(rafCalls).toBe(9);
   });
 
   it("drives every active instance in a single frame", () => {

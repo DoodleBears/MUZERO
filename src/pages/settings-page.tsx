@@ -720,9 +720,7 @@ export function SettingsPage() {
                     <span className="flex flex-col gap-1">
                       <span className="font-medium text-sm">{t("settings.smoothScroll")}</span>
                       <span className="text-muted-foreground text-xs">
-                        {isMac()
-                          ? t("settings.smoothScrollHintMac")
-                          : t("settings.smoothScrollHint")}
+                        {t("settings.smoothScrollHint")}
                       </span>
                     </span>
                   </label>

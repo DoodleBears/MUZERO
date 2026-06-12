@@ -2,7 +2,7 @@ import Lenis from "lenis";
 import { type RefObject, useEffect, useRef, useState } from "react";
 import { useSettings } from "@/hooks/use-app-data";
 import { isMac } from "@/lib/shortcuts";
-import { registerLenis, unregisterLenis } from "./lenis-driver";
+import { registerLenis, requestLenisTick, unregisterLenis } from "./lenis-driver";
 import { resolveSmoothScroll } from "./resolve";
 
 /**
@@ -87,5 +87,6 @@ export function lenisScrollTo(
   const lenis = lenisRef.current;
   if (!lenis) return false;
   lenis.scrollTo(target, { immediate: opts?.immediate ?? true });
+  requestLenisTick(lenis);
   return true;
 }
