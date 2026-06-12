@@ -424,6 +424,81 @@ describe("LyricsScroller (word-by-word karaoke)", () => {
     expect(screen.getByTestId("lyrics-scroll")).toHaveAttribute("data-layout-engine", "amll-style");
   });
 
+  it("keeps completed word spans after a timed line becomes inactive", () => {
+    const twoTimedLines: ResolvedLyrics = {
+      mode: "synced",
+      source: "lrclib",
+      lines: [
+        {
+          timeMs: 1000,
+          endMs: 2000,
+          text: "old line",
+          words: [
+            { timeMs: 1000, durMs: 500, text: "old " },
+            { timeMs: 1500, durMs: 500, text: "line" },
+          ],
+        },
+        {
+          timeMs: 2000,
+          endMs: 3000,
+          text: "new line",
+          words: [
+            { timeMs: 2000, durMs: 500, text: "new " },
+            { timeMs: 2500, durMs: 500, text: "line" },
+          ],
+        },
+      ],
+    };
+
+    const { container, rerender } = render(
+      <LyricsScroller
+        resolved={twoTimedLines}
+        activeIndex={0}
+        onSeek={() => {}}
+        wordByWord
+        motionMode="cascade"
+      />,
+    );
+
+    rerender(
+      <LyricsScroller
+        resolved={twoTimedLines}
+        activeIndex={1}
+        onSeek={() => {}}
+        wordByWord
+        motionMode="cascade"
+      />,
+    );
+
+    const oldRow = container.querySelectorAll("button")[0];
+    const oldWords = oldRow.querySelectorAll<HTMLElement>("[data-word]");
+    expect(Array.from(oldWords).map((s) => s.textContent)).toEqual(["old ", "line"]);
+    expect(oldWords[0].style.getPropertyValue("--wfill")).toBe("100%");
+  });
+
+  it("draws karaoke shadows with word drop-shadows instead of parent text-shadow", () => {
+    const lyricStyle: LyricStyle = {
+      ...customLyricStyle,
+      textShadow: "0px 2px 8px rgba(0, 0, 0, 0.5)",
+    };
+
+    const { container } = render(
+      <LyricsScroller
+        resolved={wordSynced}
+        activeIndex={0}
+        onSeek={() => {}}
+        wordByWord
+        lyricStyle={lyricStyle}
+        motionMode="cascade"
+      />,
+    );
+
+    const activeRow = container.querySelector("button[aria-current='true']") as HTMLElement;
+    const word = activeRow.querySelector("[data-word]") as HTMLElement;
+    expect(activeRow.style.textShadow).toBe("none");
+    expect(word.style.filter).toBe("drop-shadow(0px 2px 8px rgba(0, 0, 0, 0.5))");
+  });
+
   it("fills word spans with a valid color in the default color mode (no invisible text)", () => {
     // Regression: with lyricStyle.color undefined (default mode), the gradient must
     // fall back to the foreground token — never an "undefined" stop, which background-clip:text

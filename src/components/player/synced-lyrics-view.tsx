@@ -819,6 +819,9 @@ function LyricLineButton({
   // Scale inactive lines DOWN instead of animating font-size: the layout (and
   // wrapping) stays fixed at the active size, while Motion owns the visual change.
   const targetScale = isActive ? 1 : lyricStyle.inactiveFontSize / lyricStyle.activeFontSize;
+  const timedWords = wordByWord && line.words?.length ? line.words : null;
+  const hasTimedWords = timedWords !== null;
+  const wordShadow = textShadowToDropShadow(lyricStyle.textShadow);
 
   const commonProps = {
     type: "button" as const,
@@ -830,7 +833,7 @@ function LyricLineButton({
     style: {
       fontSize: lyricStyle.activeFontSize,
       color: lyricStyle.color,
-      textShadow: lyricStyle.textShadow,
+      textShadow: hasTimedWords ? "none" : lyricStyle.textShadow,
       WebkitTextStroke: lyricStyle.textStroke || undefined,
       paintOrder: lyricStyle.textStroke ? "stroke fill" : undefined,
       transformOrigin:
@@ -850,34 +853,35 @@ function LyricLineButton({
     ),
   };
 
-  const content =
-    isActive && wordByWord && line.words && line.words.length > 0
-      ? line.words.map((w, j) => (
-          <span
-            // biome-ignore lint/suspicious/noArrayIndexKey: word spans are positional within a line
-            key={j}
-            data-word
-            style={
-              {
-                "--wfill": "0%",
-                backgroundImage: `linear-gradient(90deg, ${sungColor} var(--wfill), ${unsungColor} var(--wfill))`,
-                backgroundOrigin: "border-box",
-                WebkitBackgroundClip: "text",
-                WebkitBoxDecorationBreak: "clone",
-                backgroundClip: "text",
-                boxDecorationBreak: "clone",
-                lineHeight: 1.45,
-                paddingBlock: "0.14em",
-                // Transparent-ize only the FILL (not `color`) so the gradient
-                // shows through and `currentColor` above still resolves.
-                WebkitTextFillColor: "transparent",
-              } as React.CSSProperties
-            }
-          >
-            {w.text}
-          </span>
-        ))
-      : line.text || "♪";
+  const content = timedWords
+    ? timedWords.map((w, j) => (
+        <span
+          // biome-ignore lint/suspicious/noArrayIndexKey: word spans are positional within a line
+          key={j}
+          data-word
+          style={
+            {
+              "--wfill": isActive ? "0%" : "100%",
+              backgroundImage: `linear-gradient(90deg, ${sungColor} var(--wfill), ${unsungColor} var(--wfill))`,
+              backgroundOrigin: "border-box",
+              WebkitBackgroundClip: "text",
+              WebkitBoxDecorationBreak: "clone",
+              backgroundClip: "text",
+              boxDecorationBreak: "clone",
+              color: sungColor,
+              filter: wordShadow,
+              lineHeight: 1.45,
+              paddingBlock: "0.14em",
+              // Transparent-ize only the FILL (not `color`) so the gradient
+              // shows through and `currentColor` above still resolves.
+              WebkitTextFillColor: "transparent",
+            } as React.CSSProperties
+          }
+        >
+          {w.text}
+        </span>
+      ))
+    : line.text || "♪";
 
   if (driverMode) {
     return (
@@ -937,6 +941,11 @@ function LyricLineButton({
       )}
     </motion.button>
   );
+}
+
+function textShadowToDropShadow(textShadow: string): string | undefined {
+  const shadow = textShadow.trim();
+  return shadow && shadow !== "none" ? `drop-shadow(${shadow})` : undefined;
 }
 
 /** LRCLIB attribution + a "wrong lyrics? search" affordance. */

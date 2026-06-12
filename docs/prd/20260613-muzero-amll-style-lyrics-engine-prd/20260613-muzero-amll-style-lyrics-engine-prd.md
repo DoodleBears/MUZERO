@@ -456,6 +456,7 @@ Dev mode is not sufficient for final performance sign-off. Final QA should run a
 | 2026-06-13 | MUZERO | Follow-up: added Cascade-only anchor / delay / blur sliders and a readable detached history-scroll state that clears driver blur / transform / opacity until follow is resumed. |
 | 2026-06-13 | MUZERO | Follow-up: fixed Cascade active-line downward drift by measuring row layout height via `offsetHeight` / `scrollHeight` before falling back to transformed bounding boxes. |
 | 2026-06-13 | MUZERO | Follow-up: reduced Cascade switch/playback jank by windowing layout frames and per-frame DOM writes to the active lyric neighborhood while hiding far rows outside the driver window. |
+| 2026-06-13 | MUZERO | Follow-up: fixed word-timed Cascade lyric rendering by keeping timed-word spans stable after active-line changes and moving karaoke shadows from the row text layer to per-word drop-shadows. |
 
 ---
 
