@@ -13,7 +13,7 @@
 |-------|------|--------|------|
 | 1 | Tray action contract and menu model | Completed | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | Native tray icon and close-to-tray lifecycle | Completed | [Phase 2 Checklist](#phase-2-checklist) |
-| 3 | Player-aware tray controls | Pending | [Phase 3 Checklist](#phase-3-checklist) |
+| 3 | Player-aware tray controls | Completed | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | Platform QA and polish | Pending | [Phase 4 Checklist](#phase-4-checklist) |
 
 > Status Legend: Completed | In Progress | Pending
@@ -374,23 +374,23 @@ Tray control behavior:
 **Goal:** Make the tray menu reflect and control current playback state.
 
 **Tasks:**
-- [ ] Mount `useTraySync()` once in the app shell.
-- [ ] Push localized snapshot updates on current track, play/pause, liked, repeat, display mode, and locale changes.
-- [ ] Wire native tray menu items to stable `TrayActionId` events.
-- [ ] Support heart toggle through current track id + Dexie repository.
-- [ ] Support repeat submenu and display mode submenu.
-- [ ] Keep the last known good menu when transient update errors occur.
-- [ ] Ensure every native menu label is supplied from i18n renderer snapshot.
+- [x] Mount `useTraySync()` once in the app shell.
+- [x] Push localized snapshot updates on current track, play/pause, liked, repeat, display mode, and locale changes.
+- [x] Wire native tray menu items to stable `TrayActionId` events.
+- [x] Support heart toggle through current track id + Dexie repository.
+- [x] Support repeat submenu and display mode submenu.
+- [x] Keep the last known good menu when transient update errors occur.
+- [x] Ensure every native menu label is supplied from i18n renderer snapshot.
 
 ### Phase 3 Checklist
 
-- [ ] Tray title/subtitle updates after track changes.
-- [ ] Play/Pause label and action match current state.
-- [ ] Heart state updates after toggling in either tray or main UI.
-- [ ] Repeat mode changes from tray persist and match Now Playing UI.
-- [ ] Display mode changes from tray persist and match media stage behavior.
-- [ ] Tray sync does not run on every progress tick.
-- [ ] Changing app language updates tray menu labels.
+- [x] Tray title/subtitle updates after track changes.
+- [x] Play/Pause label and action match current state.
+- [x] Heart state updates after toggling in either tray or main UI.
+- [x] Repeat mode changes from tray persist and match Now Playing UI.
+- [x] Display mode changes from tray persist and match media stage behavior.
+- [x] Tray sync does not run on every progress tick.
+- [x] Changing app language updates tray menu labels.
 
 ### Phase 4: Platform QA And Polish
 
@@ -480,3 +480,4 @@ Tray control behavior:
 | 2026-06-13 | MUZERO | Resolved open questions: Electron-first v1, left-click restore/right-click menu, no progress modal, native menu before custom popover, always show display mode. Strengthened tray/menu i18n as a hard requirement. |
 | 2026-06-13 | MUZERO | Completed Phase 1: tray action allowlist/dispatcher, pure menu model, four-locale tray labels, and TDD coverage. |
 | 2026-06-13 | MUZERO | Completed Phase 2: Electron tray lifecycle, close-to-tray behavior, restore/quit IPC, DesktopBridge tray/window methods, safe tray failure fallback, and Electron build verification. |
+| 2026-06-13 | MUZERO | Completed Phase 3: renderer tray sync hook, player-aware localized snapshots, liked/repeat/display action routing, and progress-tick-safe TDD coverage. |
