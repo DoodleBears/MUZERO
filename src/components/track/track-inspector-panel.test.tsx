@@ -74,6 +74,20 @@ describe("TrackInspectorPanel", () => {
     expect(screen.getByText("gallery.trackCoverUrl · p1.music.126.net")).toBeInTheDocument();
   });
 
+  it("shows a repair action for referenced local-file tracks", () => {
+    render(
+      <TrackInspectorPanel
+        track={{
+          ...track(),
+          sourcePath: "/music/Moonstone Beach.mp3",
+        }}
+      />,
+    );
+
+    expect(screen.getByText("gallery.trackSourceLocalFile")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "gallery.repairLocalFile" })).toBeInTheDocument();
+  });
+
   it("shows the empty selection state", () => {
     render(<TrackInspectorPanel track={undefined} />);
 

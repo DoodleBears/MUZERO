@@ -1,10 +1,14 @@
+import { FolderSearch, Loader2 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { CoverContextMenu } from "@/components/library/cover-context-menu";
 import { Disc3Icon } from "@/components/ui/disc-3";
 import { clearTrackCover } from "@/db/repositories";
 import type { Track } from "@/db/types";
 import { useTrackCoverUrl } from "@/hooks/use-media";
+import { createFolderFs, grantFolderAccess, pickFolder } from "@/lib/folder-import";
+import { repairTrackSourcePathFromFolder } from "@/lib/local-file-repair";
 import { trackAlbum, trackArtists } from "@/lib/track-display";
 import {
   describeTrackCoverSource,
@@ -13,6 +17,7 @@ import {
 } from "@/lib/track-source";
 import { cn, formatDuration } from "@/lib/utils";
 import { useNavStore } from "@/stores/nav-store";
+import { notify } from "@/stores/notification-store";
 import { AnnotationEditor } from "./annotation-editor";
 
 interface TrackInspectorPanelProps {
@@ -71,6 +76,7 @@ interface MetadataFact {
 
 function TrackMetadataSummary({ track }: { track: Track }) {
   const { t } = useTranslation();
+  const [repairingLocalFile, setRepairingLocalFile] = useState(false);
   const coverUrl = useTrackCoverUrl(track);
   const metadata = track.mediaMetadata;
   const artists = trackArtists(track);
@@ -108,6 +114,27 @@ function TrackMetadataSummary({ track }: { track: Track }) {
       value: sourceLabel(translateSource, coverSource),
     },
   ].filter((fact): fact is MetadataFact => !!fact);
+
+  async function repairLocalFile() {
+    if (repairingLocalFile) return;
+    setRepairingLocalFile(true);
+    try {
+      const folderPath = await pickFolder();
+      if (!folderPath) return;
+      await grantFolderAccess(folderPath);
+      const result = await repairTrackSourcePathFromFolder({
+        folderPath,
+        fs: createFolderFs(),
+        track,
+      });
+      if (result.kind === "repaired") notify.success(t("gallery.repairLocalFileDone"));
+      else notify.error(t("gallery.repairLocalFileNoMatch"));
+    } catch (error) {
+      notify.error(t("gallery.repairLocalFileFailed"), { error });
+    } finally {
+      setRepairingLocalFile(false);
+    }
+  }
 
   return (
     <section className="flex flex-col gap-3">
@@ -154,6 +181,21 @@ function TrackMetadataSummary({ track }: { track: Track }) {
             </div>
           ))}
         </dl>
+      )}
+      {track.sourcePath && (
+        <button
+          type="button"
+          onClick={() => void repairLocalFile()}
+          disabled={repairingLocalFile}
+          className="inline-flex h-8 items-center justify-center gap-2 rounded-md border border-border px-3 text-xs transition-colors hover:bg-accent disabled:pointer-events-none disabled:opacity-60"
+        >
+          {repairingLocalFile ? (
+            <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />
+          ) : (
+            <FolderSearch className="size-3.5" aria-hidden="true" />
+          )}
+          {t("gallery.repairLocalFile")}
+        </button>
       )}
     </section>
   );

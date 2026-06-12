@@ -631,7 +631,7 @@ Implementation requirements:
 **Tasks:**
 - [ ] Add lazy embedded cover extraction into Electron cache.
 - [ ] Store derived cover cache refs separately from user-authored `coverBlobId`.
-- [x] Add repair/rescan core for missing local files by matching the original filename inside a user-picked folder.
+- [x] Add repair/rescan affordance for missing local files: Track Inspector exposes "Locate file", lets the user pick a folder, and relinks by original filename.
 - [x] Ensure manual cover/memory photos still use `mediaBlobs` and sync normally; local-file repair only updates `Track.sourcePath` and media metadata.
 
 ### Phase 8 Checklist
@@ -639,7 +639,7 @@ Implementation requirements:
 - [x] Initial scan does not block on embedded artwork.
 - [ ] Cover extraction is bounded and cancellable.
 - [x] Missing-file repair preserves tags, memories, likes, and set ranks.
-- [ ] PRD is updated before commit.
+- [x] PRD is updated before commit.
 
 ### Phase 9: Verification + Completion
 
@@ -720,4 +720,4 @@ Implementation requirements:
 | 2026-06-12 | Codex | Completed Phase 3 empty-library import states; empty states intentionally omit DJ actions. |
 | 2026-06-12 | Codex | Completed Phases 4-6: SQLite deferred, Electron plaintext folder import creates `sourcePath` tracks, and tokenized local-media playback supports Range. |
 | 2026-06-12 | Codex | Completed Phase 7 R2 upload-on-demand support for referenced local-file tracks with precomputed payload signing, default sync wiring, and tokenized local-media upload bodies. |
-| 2026-06-12 | Codex | Started Phase 8 with source-path repair core and corrected local-file source classification; lazy derived cover cache remains pending. |
+| 2026-06-12 | Codex | Started Phase 8 with source-path repair core, Track Inspector "Locate file" repair UX, and corrected local-file source classification; lazy derived cover cache remains pending. |
