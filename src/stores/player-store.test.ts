@@ -87,6 +87,8 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
+  vi.doUnmock("@/lib/media-probe");
+  vi.doUnmock("@/lib/media-metadata");
   openedDb?.close();
   openedDb = null;
   document.body.innerHTML = "";
@@ -164,6 +166,14 @@ function expectLoadedBlob(kind: Track["kind"], mime: string): Blob {
 function deferredResponse() {
   let resolve!: (response: Response) => void;
   const promise = new Promise<Response>((res) => {
+    resolve = res;
+  });
+  return { promise, resolve };
+}
+
+function deferredVoid() {
+  let resolve!: () => void;
+  const promise = new Promise<void>((res) => {
     resolve = res;
   });
   return { promise, resolve };
@@ -444,6 +454,70 @@ describe("player-store playback resume", () => {
     await waitFor(async () => {
       await expect(repos.getPlayQueue()).resolves.toMatchObject({ currentIndex: 1 });
     });
+  });
+});
+
+describe("player-store bulk upload visibility", () => {
+  it("publishes completed file uploads before the whole large selection finishes", async () => {
+    const reachedLastProbe = deferredVoid();
+    const releaseLastProbe = deferredVoid();
+
+    vi.doMock("@/lib/media-probe", async () => {
+      const actual = await vi.importActual<typeof import("@/lib/media-probe")>("@/lib/media-probe");
+      return {
+        ...actual,
+        probeMediaFile: vi.fn(async (file: File) => {
+          if (file.name === "song-26.mp3") {
+            reachedLastProbe.resolve();
+            await releaseLastProbe.promise;
+          }
+          return {
+            kind: "audio",
+            durationSec: 1,
+            mime: file.type || "audio/mpeg",
+            title: file.name.replace(/\.[^.]+$/, ""),
+          };
+        }),
+      };
+    });
+    vi.doMock("@/lib/media-metadata", async () => {
+      const actual =
+        await vi.importActual<typeof import("@/lib/media-metadata")>("@/lib/media-metadata");
+      return {
+        ...actual,
+        parseUploadedMediaMetadata: vi.fn(async (file: File) => ({
+          embeddedCover: undefined,
+          mediaMetadata: actual.fallbackUploadMediaMetadata(
+            file,
+            file.name.replace(/\.[^.]+$/, ""),
+          ),
+          title: undefined,
+          albumPicUrl: undefined,
+        })),
+      };
+    });
+
+    const { repos, usePlayerStore } = await loadRuntime();
+    const session = await repos.createSession({ seedPrompt: "", config: { autoExtend: false } });
+    const files = Array.from(
+      { length: 26 },
+      (_, i) =>
+        new File([new Uint8Array([i + 1])], `song-${String(i + 1).padStart(2, "0")}.mp3`, {
+          type: "audio/mpeg",
+        }),
+    );
+
+    const upload = usePlayerStore.getState().addUploadsToSet(session.id, files);
+    await reachedLastProbe.promise;
+
+    const midUpload = await repos.getSession(session.id);
+    expect(midUpload?.trackIds).toHaveLength(25);
+
+    releaseLastProbe.resolve();
+    await upload;
+
+    const finished = await repos.getSession(session.id);
+    expect(finished?.trackIds).toHaveLength(26);
   });
 });
 

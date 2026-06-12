@@ -53,6 +53,14 @@ function fakeFs(
   };
 }
 
+function deferred() {
+  let resolve!: () => void;
+  const promise = new Promise<void>((res) => {
+    resolve = res;
+  });
+  return { promise, resolve };
+}
+
 async function deleteDefaultDb() {
   await new Promise<void>((resolve) => {
     const req = indexedDB.deleteDatabase("muzero-db");
@@ -128,6 +136,43 @@ describe("runFolderSync", () => {
       expect(result.cancelled).toBe(false);
       const tracks = await db.tracks.where("sessionId").equals(setId).toArray();
       expect(tracks.map((t) => t.sourcePath)).toEqual(["/m/good.mp3"]);
+    },
+    FOLDER_SYNC_TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "publishes completed folder imports before the entire large folder finishes",
+    async () => {
+      const { repos, runFolderSync } = await load();
+      const { setId, folderId } = await rememberFolder(repos, "/m");
+      const files = Array.from({ length: 26 }, (_, i) =>
+        file(`song-${String(i + 1).padStart(2, "0")}.mp3`),
+      );
+      const reachedLastRead = deferred();
+      const releaseLastRead = deferred();
+      const baseFs = fakeFs({ "/m": files });
+      const fs: FolderFs = {
+        ...baseFs,
+        readFile: async (path) => {
+          if (path.endsWith("song-26.mp3")) {
+            reachedLastRead.resolve();
+            await releaseLastRead.promise;
+          }
+          return baseFs.readFile(path);
+        },
+      };
+
+      const sync = runFolderSync([folderId], fs);
+      await reachedLastRead.promise;
+
+      const midImport = await repos.getSession(setId);
+      expect(midImport?.trackIds).toHaveLength(25);
+
+      releaseLastRead.resolve();
+      await sync;
+
+      const finished = await repos.getSession(setId);
+      expect(finished?.trackIds).toHaveLength(26);
     },
     FOLDER_SYNC_TEST_TIMEOUT_MS,
   );

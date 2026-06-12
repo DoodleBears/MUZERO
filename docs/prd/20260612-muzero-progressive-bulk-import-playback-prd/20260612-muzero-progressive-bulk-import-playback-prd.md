@@ -12,7 +12,7 @@
 | Phase | Name | Status | Link |
 |-------|------|--------|------|
 | 1 | PRD + Best Practice Grounding | ✅ Completed | [Phase 1 Checklist](#phase-1-checklist) |
-| 2 | TDD Coverage For Progressive Publishing | 🔲 Pending | [Phase 2 Checklist](#phase-2-checklist) |
+| 2 | TDD Coverage For Progressive Publishing | ✅ Completed | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | Progressive Import Flush Implementation | 🔲 Pending | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | Verification + Completion | 🔲 Pending | [Phase 4 Checklist](#phase-4-checklist) |
 
@@ -189,15 +189,15 @@ No new UI. Existing import progress remains authoritative.
 **Goal:** Add failing tests that prove imported tracks become visible before a whole large import completes.
 
 **Tasks:**
-- [ ] Add a folder sync test that observes `session.trackIds` during the second file read and expects the first batch to be published.
-- [ ] Add a file upload test that imports more than one flush batch and expects mid-import set visibility.
-- [ ] Run targeted tests and confirm they fail before implementation.
+- [x] Add a folder sync test that observes `session.trackIds` during the second file read and expects the first batch to be published.
+- [x] Add a file upload test that imports more than one flush batch and expects mid-import set visibility.
+- [x] Run targeted tests and confirm they fail before implementation.
 
 ### Phase 2 Checklist
 
-- [ ] Tests fail for the current end-only `prependTrackIds` behavior.
-- [ ] Tests do not rely on timers or network.
-- [ ] PRD updated before commit.
+- [x] Tests fail for the current end-only `prependTrackIds` behavior.
+- [x] Tests do not rely on timers or network.
+- [x] PRD updated before commit.
 
 ### Phase 3: Progressive Import Flush Implementation
 
@@ -277,3 +277,4 @@ No new UI. Existing import progress remains authoritative.
 | Date | Author | Changes |
 |------|--------|---------|
 | 2026-06-12 | Codex | Initial Final PRD with best-practice grounding and phased TDD plan. |
+| 2026-06-12 | Codex | Phase 2 completed: added red tests for folder sync and file upload progressive visibility; targeted tests fail with mid-import `trackIds` still empty. |
