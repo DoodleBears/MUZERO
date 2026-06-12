@@ -12,7 +12,7 @@
 | Phase | Name | Status | Link |
 |-------|------|--------|------|
 | 1 | Tray action contract and menu model | Completed | [Phase 1 Checklist](#phase-1-checklist) |
-| 2 | Native tray icon and close-to-tray lifecycle | Pending | [Phase 2 Checklist](#phase-2-checklist) |
+| 2 | Native tray icon and close-to-tray lifecycle | Completed | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | Player-aware tray controls | Pending | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | Platform QA and polish | Pending | [Phase 4 Checklist](#phase-4-checklist) |
 
@@ -352,22 +352,22 @@ Tray control behavior:
 **Goal:** Ship the core Electron desktop lifecycle: tray exists, close hides, tray restores, Exit quits.
 
 **Tasks:**
-- [ ] Extend `DesktopBridge` with explicit tray and window lifecycle methods.
-- [ ] Implement Electron tray creation for v1.
-- [ ] Intercept native window close requests and hide when tray is available.
-- [ ] Update the custom Windows close button to call hide-to-tray.
-- [ ] Add explicit quit guard so tray Exit and native app Quit really quit.
-- [ ] Add safe fallback if tray creation fails.
+- [x] Extend `DesktopBridge` with explicit tray and window lifecycle methods.
+- [x] Implement Electron tray creation for v1.
+- [x] Intercept native window close requests and hide when tray is available.
+- [x] Update the custom Windows close button to call hide-to-tray.
+- [x] Add explicit quit guard so tray Exit and native app Quit really quit.
+- [x] Add safe fallback if tray creation fails.
 
 ### Phase 2 Checklist
 
-- [ ] Closing the window does not quit the app.
-- [ ] Playback continues while the main window is hidden.
-- [ ] MUZERO disappears from the taskbar after hide-to-tray where supported.
-- [ ] Tray click or "Open MUZERO" restores and focuses the same window.
-- [ ] "Exit MUZERO" quits the app process.
-- [ ] App cannot become unrecoverably hidden if tray creation fails.
-- [ ] Tauri/web report unsupported and keep recoverable window behavior.
+- [x] Closing the window does not quit the app.
+- [x] Playback continues while the main window is hidden.
+- [x] MUZERO disappears from the taskbar after hide-to-tray where supported.
+- [x] Tray click or "Open MUZERO" restores and focuses the same window.
+- [x] "Exit MUZERO" quits the app process.
+- [x] App cannot become unrecoverably hidden if tray creation fails.
+- [x] Tauri/web report unsupported and keep recoverable window behavior.
 
 ### Phase 3: Player-Aware Tray Controls
 
@@ -479,3 +479,4 @@ Tray control behavior:
 | 2026-06-13 | MUZERO | Initial draft: system tray player controls, close-to-tray lifecycle, tray restore, and explicit Exit semantics. |
 | 2026-06-13 | MUZERO | Resolved open questions: Electron-first v1, left-click restore/right-click menu, no progress modal, native menu before custom popover, always show display mode. Strengthened tray/menu i18n as a hard requirement. |
 | 2026-06-13 | MUZERO | Completed Phase 1: tray action allowlist/dispatcher, pure menu model, four-locale tray labels, and TDD coverage. |
+| 2026-06-13 | MUZERO | Completed Phase 2: Electron tray lifecycle, close-to-tray behavior, restore/quit IPC, DesktopBridge tray/window methods, safe tray failure fallback, and Electron build verification. |

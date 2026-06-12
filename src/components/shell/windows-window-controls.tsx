@@ -81,7 +81,7 @@ export function WindowsWindowControls() {
         <WindowButton
           className="hover:border-red-500/70 hover:bg-red-500 hover:text-white focus-visible:border-red-500/70 focus-visible:bg-red-500 focus-visible:text-white"
           label={t("windowControls.close")}
-          onClick={() => void controls.close()}
+          onClick={() => void (controls.hideToTray?.() ?? controls.close())}
         >
           <X />
         </WindowButton>

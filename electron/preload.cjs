@@ -31,6 +31,9 @@ contextBridge.exposeInMainWorld("muzero", {
     minimize: () => ipcRenderer.invoke("muzero:window:minimize"),
     toggleMaximize: () => ipcRenderer.invoke("muzero:window:toggleMaximize"),
     close: () => ipcRenderer.invoke("muzero:window:close"),
+    hideToTray: () => ipcRenderer.invoke("muzero:window:hideToTray"),
+    showFromTray: () => ipcRenderer.invoke("muzero:window:showFromTray"),
+    quitApp: () => ipcRenderer.invoke("muzero:window:quitApp"),
     getState: () => ipcRenderer.invoke("muzero:window:getState"),
     onStateChange: (callback) => {
       const listener = (_event, state) => callback(state);
@@ -47,6 +50,14 @@ contextBridge.exposeInMainWorld("muzero", {
     check: () => ipcRenderer.invoke("muzero:update:check"),
     install: () => ipcRenderer.invoke("muzero:update:install"),
     setChannel: (channel) => ipcRenderer.invoke("muzero:update:setChannel", channel),
+  },
+  tray: {
+    update: (model) => ipcRenderer.invoke("muzero:tray:update", model),
+    onAction: (callback) => {
+      const listener = (_event, actionId) => callback(actionId);
+      ipcRenderer.on("muzero:tray:action", listener);
+      return () => ipcRenderer.removeListener("muzero:tray:action", listener);
+    },
   },
   diagnostics: {
     onEvent: (callback) => {

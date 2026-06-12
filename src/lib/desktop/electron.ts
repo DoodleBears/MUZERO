@@ -1,6 +1,8 @@
 import type { DiagnosticEntry } from "@/lib/diagnostics";
 import type { DirEntryLike } from "@/lib/folder-import";
 import { assembleCookieHeader, type StreamCookie } from "@/streamsrc/login";
+import type { TrayActionId } from "@/tray/actions";
+import type { TrayMenuModel } from "@/tray/menu-model";
 import type {
   DesktopBridge,
   DesktopPlatform,
@@ -41,8 +43,15 @@ interface MuzeroApi {
     minimize(): Promise<void>;
     toggleMaximize(): Promise<DesktopWindowState>;
     close(): Promise<void>;
+    hideToTray(): Promise<void>;
+    showFromTray(): Promise<void>;
+    quitApp(): Promise<void>;
     getState(): Promise<DesktopWindowState>;
     onStateChange(callback: (state: DesktopWindowState) => void): () => void;
+  };
+  tray?: {
+    update(model: TrayMenuModel): Promise<void>;
+    onAction(callback: (actionId: TrayActionId) => void): () => void;
   };
   diagnostics?: {
     onEvent(callback: (entry: DiagnosticEntry) => void): () => void;
@@ -166,10 +175,19 @@ export function createElectronBridge(): DesktopBridge {
             api.windowControls?.toggleMaximize() ??
             Promise.resolve({ fullscreen: false, maximized: false }),
           close: () => api.windowControls?.close() ?? Promise.resolve(),
+          hideToTray: () => api.windowControls?.hideToTray() ?? Promise.resolve(),
+          showFromTray: () => api.windowControls?.showFromTray() ?? Promise.resolve(),
+          quitApp: () => api.windowControls?.quitApp() ?? Promise.resolve(),
           getState: () =>
             api.windowControls?.getState() ??
             Promise.resolve({ fullscreen: false, maximized: false }),
           onStateChange: (callback) => api.windowControls?.onStateChange(callback) ?? (() => {}),
+        }
+      : undefined,
+    tray: api.tray
+      ? {
+          update: (model) => api.tray?.update(model) ?? Promise.resolve(),
+          onAction: (callback) => api.tray?.onAction(callback) ?? (() => {}),
         }
       : undefined,
   };
