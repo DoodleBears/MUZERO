@@ -10,6 +10,7 @@ import {
   getSession,
   getSettings,
   getTracksByIds,
+  listAllMemories,
   listAllTracks,
   listSessions,
   memoryNotesByTrack,
@@ -173,6 +174,24 @@ export const createSetInputSchema = z.object({
 });
 
 export type CreateSetInput = z.input<typeof createSetInputSchema>;
+
+export const memorySearchInputSchema = z.object({
+  /** One or more keywords matched against the memory note + its track title/tags. */
+  queries: z.array(z.string().min(1)).min(1).max(8),
+  /** "any" = a memory matching ANY keyword; "all" = ALL keywords. */
+  match: z.enum(["any", "all"]).default("any"),
+  limit: z.number().int().min(1).max(200).default(50),
+});
+
+export type MemorySearchInput = z.input<typeof memorySearchInputSchema>;
+
+export const addMemoryInputSchema = z.object({
+  /** Target local track. Omit to attach to whatever is playing right now. */
+  trackId: z.string().min(1).optional(),
+  note: z.string().min(1).max(2000),
+});
+
+export type AddMemoryInput = z.input<typeof addMemoryInputSchema>;
 
 /**
  * Playback side-effects the agent can trigger. Kept behind an interface so the
@@ -443,6 +462,97 @@ export async function executeCreateSet(
 }
 
 /**
+ * Search the listener's track memories ("music carries memories") by keyword(s),
+ * matching the memory note plus its track's title/tags. Each hit carries the track
+ * id + title so the agent can act on the song the memory belongs to. Read-only.
+ */
+export async function executeMemorySearch(
+  rawInput: MemorySearchInput,
+  deps: { db?: MuzeroDB } = {},
+): Promise<{
+  total: number;
+  returned: number;
+  memories: Array<{
+    memoryId: string;
+    note: string;
+    createdAt: number;
+    trackId: string;
+    trackTitle?: string;
+  }>;
+}> {
+  const input = memorySearchInputSchema.parse(rawInput);
+  const db = deps.db ?? defaultDb;
+  const [memories, tracks] = await Promise.all([listAllMemories(db), listAllTracks(db)]);
+  const trackById = new Map(tracks.map((t) => [t.id, t]));
+  const terms = input.queries.map((q) => q.trim().toLowerCase()).filter(Boolean);
+  const matched = memories.filter((m) => {
+    const track = trackById.get(m.trackId);
+    const haystack =
+      `${m.note}\n${track?.title ?? ""}\n${(track?.tags ?? []).join(" ")}`.toLowerCase();
+    if (terms.length === 0) return true;
+    return input.match === "all"
+      ? terms.every((t) => haystack.includes(t))
+      : terms.some((t) => haystack.includes(t));
+  });
+  return {
+    total: matched.length,
+    returned: Math.min(matched.length, input.limit),
+    memories: matched.slice(0, input.limit).map((m) => ({
+      memoryId: m.id,
+      note: m.note,
+      createdAt: m.createdAt,
+      trackId: m.trackId,
+      trackTitle: trackById.get(m.trackId)?.title,
+    })),
+  };
+}
+
+/**
+ * Attach a memory note to a track. With no trackId it lands on whatever is playing
+ * right now — so "remember this one: rainy commute" works mid-listen. Free.
+ */
+export async function executeAddMemory(
+  rawInput: AddMemoryInput,
+  deps: { db?: MuzeroDB } = {},
+): Promise<AgentWriteResult & { diff: { memoryId?: string; trackId?: string } }> {
+  const input = addMemoryInputSchema.parse(rawInput);
+  const db = deps.db ?? defaultDb;
+  let trackId = input.trackId;
+  if (!trackId) {
+    const queue = await getPlayQueue(db);
+    const index = Math.min(Math.max(queue.currentIndex, 0), queue.entries.length - 1);
+    trackId = queue.entries[index]?.trackId;
+  }
+  if (!trackId) {
+    return {
+      status: "error",
+      commandId: "muzero.memory.add",
+      summary: "No track to attach the memory to — nothing is playing and no trackId was given.",
+      diff: {},
+      warnings: ["no-track"],
+    };
+  }
+  const [track] = await getTracksByIds([trackId], db);
+  if (!track) {
+    return {
+      status: "error",
+      commandId: "muzero.memory.add",
+      summary: "That track was not found.",
+      diff: { trackId },
+      warnings: ["missing-track"],
+    };
+  }
+  const memory = await addMemory({ trackId, note: input.note }, db);
+  return {
+    status: "ok",
+    commandId: "muzero.memory.add",
+    summary: `Saved a memory on "${track.title}".`,
+    diff: { memoryId: memory.id, trackId },
+    warnings: [],
+  };
+}
+
+/**
  * Search the user's ENABLED streaming sources (YouTube / Bilibili / NetEase) for
  * songs. Read-only and cheap — the whole point is that search costs nothing
  * (unlike paid generation), so a locally-hosted LLM can curate from real songs.
@@ -634,10 +744,17 @@ export function createDjChatTools(deps: DjChatToolDeps = {}): ToolSet {
         } satisfies AgentWriteResult;
       },
     }),
+    memory_search: tool({
+      description:
+        "Search the listener's track memories by keyword(s) (queries[], match any/all). Matches the memory note plus its track's title/tags; each hit includes the trackId + title so you can act on that song.",
+      inputSchema: memorySearchInputSchema,
+      execute: (input) => executeMemorySearch(input, { db }),
+    }),
     add_memory: tool({
-      description: "Attach a Memory note to a local track.",
-      inputSchema: z.object({ trackId: z.string().min(1), note: z.string().min(1).max(2000) }),
-      execute: ({ trackId, note }) => addMemory({ trackId, note }, db),
+      description:
+        "Attach a Memory note to a track. Omit trackId to put it on whatever is playing right now.",
+      inputSchema: addMemoryInputSchema,
+      execute: (input) => executeAddMemory(input, { db }),
     }),
   };
 

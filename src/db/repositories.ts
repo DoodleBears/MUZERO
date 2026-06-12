@@ -1383,6 +1383,11 @@ export function listMemories(trackId: string, db: MuzeroDB = defaultDb): Promise
   return db.memories.where("trackId").equals(trackId).sortBy("createdAt");
 }
 
+/** Every memory across all tracks, newest first. Used by the DJ memory search. */
+export function listAllMemories(db: MuzeroDB = defaultDb): Promise<Memory[]> {
+  return db.memories.orderBy("createdAt").reverse().toArray();
+}
+
 /**
  * Patch a memory's note and/or playback anchor in place.
  *  - `note` (when given) is trimmed.

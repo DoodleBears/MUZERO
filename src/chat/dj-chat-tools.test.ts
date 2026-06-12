@@ -15,8 +15,10 @@ import { createDjEngine } from "@/dj/dj-engine";
 import { createMockMusicGenProvider } from "@/musicgen/mock-provider";
 import {
   createDjChatTools,
+  executeAddMemory,
   executeCreateSet,
   executeGenerateTracks,
+  executeMemorySearch,
   executeOnlineAddTracks,
   executeOnlineSearchTracks,
   executeProposeBriefs,
@@ -510,5 +512,73 @@ describe("curation + queue clear", () => {
     const created = await executeCreateSet({ name: "Empty" }, { db });
     expect(created.addedTrackCount).toBe(0);
     expect(created.trackIds).toEqual([]);
+  });
+});
+
+describe("memory search + add", () => {
+  function brief(title: string) {
+    return trackBriefSchema.parse({ title, caption: "c", lyrics: "", durationSec: 60 });
+  }
+  async function seedTracks() {
+    const src = await createSession({ seedPrompt: "src" }, db);
+    const gen = await executeGenerateTracks(
+      { sessionId: src.id, briefs: [brief("Rain Mirror"), brief("Sun Drive")] },
+      { db, providerId: "mock" },
+    );
+    return gen.diff.createdTrackIds; // [rain, sun]
+  }
+
+  it("add_memory attaches a note to the given track", async () => {
+    const [rain] = await seedTracks();
+    const res = await executeAddMemory({ trackId: rain, note: "coding in the rain" }, { db });
+    expect(res.status).toBe("ok");
+    expect(res.diff.trackId).toBe(rain);
+    expect(res.diff.memoryId).toBeTruthy();
+    expect((await db.memories.where("trackId").equals(rain).count()) > 0).toBe(true);
+  });
+
+  it("add_memory with no trackId targets the currently playing track", async () => {
+    const [rain, sun] = await seedTracks();
+    await playQueueSet([rain, sun], { currentIndex: 1 }, db); // current = sun
+    const res = await executeAddMemory({ note: "summer, windows down" }, { db });
+    expect(res.status).toBe("ok");
+    expect(res.diff.trackId).toBe(sun);
+  });
+
+  it("add_memory errors when nothing is playing and no trackId is given", async () => {
+    const res = await executeAddMemory({ note: "orphan" }, { db });
+    expect(res.status).toBe("error");
+    expect(res.warnings).toContain("no-track");
+  });
+
+  it("memory_search finds memories by keyword, each with its track info", async () => {
+    const [rain, sun] = await seedTracks();
+    await executeAddMemory({ trackId: rain, note: "rainy commute focus" }, { db });
+    await executeAddMemory({ trackId: sun, note: "beach roadtrip 2019" }, { db });
+
+    const hit = await executeMemorySearch({ queries: ["roadtrip"] }, { db });
+    expect(hit.total).toBe(1);
+    expect(hit.memories[0].trackId).toBe(sun);
+    expect(hit.memories[0].trackTitle).toBe("Sun Drive");
+    expect(hit.memories[0].note).toContain("roadtrip");
+  });
+
+  it("memory_search also matches via the track's title", async () => {
+    const [rain] = await seedTracks();
+    await executeAddMemory({ trackId: rain, note: "morning vibes" }, { db }); // note has no 'rain'
+    const hit = await executeMemorySearch({ queries: ["rain"] }, { db }); // matches title 'Rain Mirror'
+    expect(hit.memories.map((m) => m.trackId)).toEqual([rain]);
+  });
+
+  it("memory_search match 'all' requires every keyword", async () => {
+    const [rain] = await seedTracks();
+    await executeAddMemory({ trackId: rain, note: "late night focus coding" }, { db });
+    const both = await executeMemorySearch({ queries: ["focus", "coding"], match: "all" }, { db });
+    expect(both.total).toBe(1);
+    const missing = await executeMemorySearch(
+      { queries: ["focus", "beach"], match: "all" },
+      { db },
+    );
+    expect(missing.total).toBe(0);
   });
 });
