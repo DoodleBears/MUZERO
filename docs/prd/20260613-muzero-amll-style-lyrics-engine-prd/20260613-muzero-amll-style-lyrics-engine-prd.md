@@ -12,7 +12,7 @@
 | Phase | Name | Status | Link |
 |-------|------|--------|------|
 | 1 | Research Baseline + Engine Contract | ✅ Completed | [Phase 1 Checklist](#phase-1-checklist) |
-| 2 | Pure Layout Solver + TDD Fixtures | 🔲 Pending | [Phase 2 Checklist](#phase-2-checklist) |
+| 2 | Pure Layout Solver + TDD Fixtures | ✅ Completed | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | rAF DOM Driver + React Integration | 🔲 Pending | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | Word Fill / Secondary Lines / Click Seek Parity | 🔲 Pending | [Phase 4 Checklist](#phase-4-checklist) |
 | 5 | Performance QA + Rollout Cleanup | 🔲 Pending | [Phase 5 Checklist](#phase-5-checklist) |
@@ -274,19 +274,21 @@ React state should not update per frame.
 **Goal:** Build the deterministic math for positions, opacity, blur, scale, and stagger without DOM or React.
 
 **Tasks:**
-- [ ] Add `src/lyrics/lyric-layout-engine.ts`.
-- [ ] Implement active index / anchor positioning from measured heights and viewport height.
-- [ ] Implement line gap, passed/upcoming/distant state, opacity, blur, scale, and per-line delay.
-- [ ] Add reduced-motion output mode: no blur, no stagger, minimal scale.
-- [ ] Add fixture tests for short lyrics, long lyrics, bilingual lines, seek jumps, and final line.
+- [x] Add `src/lyrics/lyric-layout-engine.ts`.
+- [x] Implement active index / anchor positioning from measured heights and viewport height.
+- [x] Implement line gap, passed/upcoming/distant state, opacity, blur, scale, and per-line delay.
+- [x] Add reduced-motion output mode: no blur, no stagger, minimal scale.
+- [x] Add fixture tests for short lyrics, long lyrics, bilingual lines, seek jumps, and final line.
 
 ### Phase 2 Checklist
 
-- [ ] Solver is pure and deterministic.
-- [ ] No DOM or browser APIs in solver.
-- [ ] Tests cover forward and backward active-line movement.
-- [ ] Tests verify no mount-time animation is required for first render.
-- [ ] PRD updated before commit.
+- [x] Solver is pure and deterministic.
+- [x] No DOM or browser APIs in solver.
+- [x] Tests cover forward and backward active-line movement.
+- [x] Tests verify no mount-time animation is required for first render.
+- [x] PRD updated before commit.
+
+> **Phase 2 implementation note (2026-06-13):** Added [`src/lyrics/lyric-layout-engine.ts`](../../../src/lyrics/lyric-layout-engine.ts), a pure solver that anchors the active line, computes absolute/natural/translated y positions, classifies rows as passed/active/upcoming/distant, and resolves opacity, scale, blur, and stagger delay. Reduced motion returns no blur, no stagger, and neutral scale. Verification: `vitest run src/lyrics/lyric-layout-engine.test.ts src/lyrics/lyric-render-line.test.ts` (9 tests), `tsc --noEmit`, and touched-file Biome all passed.
 
 ### Phase 3: rAF DOM Driver + React Integration
 
@@ -414,6 +416,7 @@ Dev mode is not sufficient for final performance sign-off. Final QA should run a
 |------|--------|---------|
 | 2026-06-13 | MUZERO | Initial draft: clean-room AMLL-style lyrics layout engine PRD based on LyciaMusic / AMLL reference research. |
 | 2026-06-13 | MUZERO | Phase 1 completed: added render-line adapter contract and tests for line-level lyrics, timed words, translations, romanization, fallback end times, and monotonic duration clamps. |
+| 2026-06-13 | MUZERO | Phase 2 completed: added pure lyric layout solver with anchor positioning, visual states, opacity/scale/blur/stagger outputs, and reduced-motion behavior. |
 
 ---
 

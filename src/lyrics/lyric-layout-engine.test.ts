@@ -1,0 +1,106 @@
+import { describe, expect, it } from "vitest";
+import { solveLyricLayout } from "./lyric-layout-engine";
+import type { LyricRenderLine } from "./lyric-render-line";
+
+const lines: LyricRenderLine[] = [
+  { id: "0", index: 0, startMs: 0, endMs: 1000, text: "one" },
+  { id: "1", index: 1, startMs: 1000, endMs: 2000, text: "two" },
+  { id: "2", index: 2, startMs: 2000, endMs: 3000, text: "three" },
+  { id: "3", index: 3, startMs: 3000, endMs: 4000, text: "four" },
+  { id: "4", index: 4, startMs: 4000, endMs: 5000, text: "five" },
+];
+
+describe("solveLyricLayout", () => {
+  it("anchors the active line at the requested viewport position", () => {
+    const layout = solveLyricLayout({
+      lines,
+      activeIndex: 2,
+      lineHeights: [40, 50, 60, 70, 80],
+      viewportHeight: 500,
+      alignPosition: 0.42,
+      lineGapPx: 10,
+      reducedMotion: false,
+    });
+
+    expect(layout.frames[2]).toMatchObject({
+      index: 2,
+      state: "active",
+      y: 180,
+      naturalY: 110,
+      translateY: 70,
+      opacity: 1,
+      scale: 1,
+      blurPx: 0,
+      delaySec: 0,
+    });
+    expect(layout.anchorY).toBe(210);
+  });
+
+  it("positions neighboring lines above and below the active line", () => {
+    const layout = solveLyricLayout({
+      lines,
+      activeIndex: 2,
+      lineHeights: [40, 50, 60, 70, 80],
+      viewportHeight: 500,
+      alignPosition: 0.42,
+      lineGapPx: 10,
+      reducedMotion: false,
+    });
+
+    expect(layout.frames.map((frame) => frame.y)).toEqual([70, 120, 180, 250, 330]);
+    expect(layout.frames.map((frame) => frame.translateY)).toEqual([70, 70, 70, 70, 70]);
+  });
+
+  it("assigns visual state, blur, scale, and stagger by distance", () => {
+    const layout = solveLyricLayout({
+      lines,
+      activeIndex: 1,
+      lineHeights: [40, 40, 40, 40, 40],
+      viewportHeight: 400,
+      alignPosition: 0.42,
+      lineGapPx: 8,
+      reducedMotion: false,
+    });
+
+    expect(layout.frames.map((frame) => frame.state)).toEqual([
+      "passed",
+      "active",
+      "upcoming",
+      "upcoming",
+      "distant",
+    ]);
+    expect(layout.frames[2]).toMatchObject({ opacity: 0.78, scale: 0.96, blurPx: 1.2 });
+    expect(layout.frames[3].delaySec).toBeGreaterThan(layout.frames[2].delaySec);
+  });
+
+  it("uses a calm no-blur layout under reduced motion", () => {
+    const layout = solveLyricLayout({
+      lines,
+      activeIndex: 1,
+      lineHeights: [40, 40, 40, 40, 40],
+      viewportHeight: 400,
+      alignPosition: 0.42,
+      lineGapPx: 8,
+      reducedMotion: true,
+    });
+
+    expect(layout.frames.every((frame) => frame.blurPx === 0)).toBe(true);
+    expect(layout.frames.every((frame) => frame.delaySec === 0)).toBe(true);
+    expect(layout.frames.map((frame) => frame.scale)).toEqual([1, 1, 1, 1, 1]);
+  });
+
+  it("falls back to the first line when active index is unavailable", () => {
+    const layout = solveLyricLayout({
+      lines,
+      activeIndex: -1,
+      lineHeights: [40, 40, 40, 40, 40],
+      viewportHeight: 400,
+      alignPosition: 0.42,
+      lineGapPx: 8,
+      reducedMotion: false,
+    });
+
+    expect(layout.activeIndex).toBe(0);
+    expect(layout.frames[0].state).toBe("active");
+  });
+});
