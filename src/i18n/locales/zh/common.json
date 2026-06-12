@@ -176,6 +176,7 @@
     "repeatLabel": "循环",
     "volume": "音量",
     "shuffle": "随机播放",
+    "dragSwitch": "拖拽切换歌曲",
     "playbackError": "播放出错",
     "loadingRemote": "正在从云端下载：{{title}}",
     "loadingTrack": "正在准备：{{title}}",

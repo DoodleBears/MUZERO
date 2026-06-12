@@ -185,6 +185,7 @@
     "repeatLabel": "Repeat",
     "volume": "Volume",
     "shuffle": "Shuffle",
+    "dragSwitch": "Drag to switch tracks",
     "playbackError": "Playback error",
     "loadingRemote": "Downloading from cloud: {{title}}",
     "loadingTrack": "Preparing: {{title}}",

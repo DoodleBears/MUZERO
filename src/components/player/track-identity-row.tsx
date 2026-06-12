@@ -173,78 +173,86 @@ export function TrackIdentityRow({
   return (
     <div className={cn("flex items-center gap-2 sm:gap-3", className)}>
       <CurrentTrackContextMenu className="min-w-0 flex-1">
-        <motion.button
-          ref={songRef}
-          type="button"
-          onPointerDown={() => {
-            didDrag.current = false;
-          }}
-          onClick={() => {
-            // Swallow the click that trails a drag; a plain tap still opens.
-            if (didDrag.current) return;
-            handleOpen();
-          }}
-          disabled={!track}
-          aria-label={t("nav.now")}
-          drag={!!track}
-          dragConstraints={{ left: 0, right: 0, top: 0, bottom: 0 }}
-          dragElastic={0.16}
-          dragMomentum={false}
-          dragDirectionLock={false}
-          dragSnapToOrigin
-          onDragStart={() => {
-            didDrag.current = true;
-          }}
-          onDragEnd={(_, info) => {
-            // Drag left OR up → next; right OR down → previous. The dominant
-            // axis decides, so a diagonal still resolves cleanly.
-            const horizontal = Math.abs(info.offset.x) >= Math.abs(info.offset.y);
-            const dist = horizontal ? info.offset.x : info.offset.y;
-            const vel = horizontal ? info.velocity.x : info.velocity.y;
-            if (dist <= -DOCK_SWITCH_DISTANCE || vel <= -DOCK_SWITCH_VELOCITY) void next();
-            else if (dist >= DOCK_SWITCH_DISTANCE || vel >= DOCK_SWITCH_VELOCITY) void skipPrev();
-          }}
-          className="flex w-full min-w-0 cursor-grab items-center gap-2.5 rounded-2xl text-left outline-none focus-visible:ring-2 focus-visible:ring-ring active:cursor-grabbing disabled:cursor-default sm:gap-3"
+        <ControlTooltip
+          label={t("player.dragSwitch")}
+          shortcutRows={[
+            { label: t("player.previous"), keys: ["→", "↓"] },
+            { label: t("player.next"), keys: ["←", "↑"] },
+          ]}
         >
-          <motion.span
-            layoutId="now-cover"
-            className="relative grid size-10 shrink-0 place-items-center overflow-hidden rounded-xl bg-secondary"
+          <motion.button
+            ref={songRef}
+            type="button"
+            onPointerDown={() => {
+              didDrag.current = false;
+            }}
+            onClick={() => {
+              // Swallow the click that trails a drag; a plain tap still opens.
+              if (didDrag.current) return;
+              handleOpen();
+            }}
+            disabled={!track}
+            aria-label={t("nav.now")}
+            drag={!!track}
+            dragConstraints={{ left: 0, right: 0, top: 0, bottom: 0 }}
+            dragElastic={0.16}
+            dragMomentum={false}
+            dragDirectionLock={false}
+            dragSnapToOrigin
+            onDragStart={() => {
+              didDrag.current = true;
+            }}
+            onDragEnd={(_, info) => {
+              // Drag left OR up → next; right OR down → previous. The dominant
+              // axis decides, so a diagonal still resolves cleanly.
+              const horizontal = Math.abs(info.offset.x) >= Math.abs(info.offset.y);
+              const dist = horizontal ? info.offset.x : info.offset.y;
+              const vel = horizontal ? info.velocity.x : info.velocity.y;
+              if (dist <= -DOCK_SWITCH_DISTANCE || vel <= -DOCK_SWITCH_VELOCITY) void next();
+              else if (dist >= DOCK_SWITCH_DISTANCE || vel >= DOCK_SWITCH_VELOCITY) void skipPrev();
+            }}
+            className="flex w-full min-w-0 cursor-grab items-center gap-2.5 rounded-2xl text-left outline-none focus-visible:ring-2 focus-visible:ring-ring active:cursor-grabbing disabled:cursor-default sm:gap-3"
           >
-            {/* Crossfades to the next cover only once it has decoded (no flash). */}
-            <CoverImage
-              url={coverUrl}
-              hasCover={trackHasCover(track ?? undefined)}
-              fallback={<Disc3Icon className="text-muted-foreground" size={20} />}
-            />
-            {loadingLabel && (
-              <span
-                aria-label={loadingLabel}
-                aria-live="polite"
-                className="absolute inset-0 z-10 grid place-items-center bg-background/45 backdrop-blur-[1px]"
-                data-testid="dock-cover-loading"
-                role="status"
-              >
-                <Loader2 aria-hidden="true" className="size-5 animate-spin text-primary" />
-              </span>
-            )}
-          </motion.span>
-          <span className="relative min-w-0 flex-1">
             <motion.span
-              key={track?.id ?? "none"}
-              initial={{ opacity: 0, y: 6 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.18 }}
-              className="block min-w-0"
+              layoutId="now-cover"
+              className="relative grid size-10 shrink-0 place-items-center overflow-hidden rounded-xl bg-secondary"
             >
-              <span className="block truncate text-sm font-semibold">
-                {track?.title ?? "MUZERO"}
-              </span>
-              <span className="block truncate text-xs text-muted-foreground">
-                {track ? track.subtitle : t("app.pressPlay")}
-              </span>
+              {/* Crossfades to the next cover only once it has decoded (no flash). */}
+              <CoverImage
+                url={coverUrl}
+                hasCover={trackHasCover(track ?? undefined)}
+                fallback={<Disc3Icon className="text-muted-foreground" size={20} />}
+              />
+              {loadingLabel && (
+                <span
+                  aria-label={loadingLabel}
+                  aria-live="polite"
+                  className="absolute inset-0 z-10 grid place-items-center bg-background/45 backdrop-blur-[1px]"
+                  data-testid="dock-cover-loading"
+                  role="status"
+                >
+                  <Loader2 aria-hidden="true" className="size-5 animate-spin text-primary" />
+                </span>
+              )}
             </motion.span>
-          </span>
-        </motion.button>
+            <span className="relative min-w-0 flex-1">
+              <motion.span
+                key={track?.id ?? "none"}
+                initial={{ opacity: 0, y: 6 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.18 }}
+                className="block min-w-0"
+              >
+                <span className="block truncate text-sm font-semibold">
+                  {track?.title ?? "MUZERO"}
+                </span>
+                <span className="block truncate text-xs text-muted-foreground">
+                  {track ? track.subtitle : t("app.pressPlay")}
+                </span>
+              </motion.span>
+            </span>
+          </motion.button>
+        </ControlTooltip>
       </CurrentTrackContextMenu>
       {controls && <div className="shrink-0">{controls}</div>}
       <ControlTooltip
