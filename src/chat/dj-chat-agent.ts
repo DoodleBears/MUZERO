@@ -11,6 +11,7 @@ import { resolveDjModel } from "@/ai/model";
 import type { MuzeroDB } from "@/db/muzero-db";
 import { getSettings } from "@/db/repositories";
 import { canGenerateMusic, hasEnabledStreamSources } from "./dj-chat-availability";
+import { buildNowPlayingContext } from "./dj-chat-context";
 import { DJ_CHAT_SYSTEM_PROMPT } from "./dj-chat-prompt";
 import { getChatSession } from "./dj-chat-sessions";
 import { createDjChatTools } from "./dj-chat-tools";
@@ -42,10 +43,13 @@ export function createDjChatTransport({
         includeGenerate: canGenerateMusic(settings),
         includeOnline: hasEnabledStreamSources(settings),
       });
+      // Refresh the now-playing snapshot every turn so the DJ always knows the
+      // active set + track (with ids) without spending a now_playing_get call.
+      const nowPlaying = await buildNowPlayingContext(db);
       const agent = new ToolLoopAgent({
         model,
         tools,
-        instructions: DJ_CHAT_SYSTEM_PROMPT,
+        instructions: `${DJ_CHAT_SYSTEM_PROMPT}\n\n${nowPlaying}`,
         stopWhen: stepCountIs(12),
         temperature: 0.7,
         maxOutputTokens: 1200,

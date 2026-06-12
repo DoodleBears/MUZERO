@@ -26,6 +26,7 @@ import {
 import { ChatPanel } from "@/components/chat/chat-panel";
 import { ChatReplyNotification } from "@/components/chat/chat-reply-notification";
 import { ChatSessionHome } from "@/components/chat/chat-session-home";
+import { type SlashCommand, SlashMenu, useSlashCommands } from "@/components/chat/slash-commands";
 import { useSettings } from "@/hooks/use-app-data";
 import { cn } from "@/lib/utils";
 import { useChatStore } from "@/stores/chat-store";
@@ -88,6 +89,29 @@ export function DjChatEntry({
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [mode, setMode]);
+
+  // `/` commands, shared by the chip (below) and the expanded composer (passed to
+  // ChatPanel). `/history` expands first so it's useful from the collapsed chip.
+  const slashCommands: SlashCommand[] = [
+    {
+      id: "new",
+      label: t("chat.slashNew"),
+      run: async () => {
+        const session = await createChatSession({});
+        setActiveSessionId(session.id);
+        setShowHome(false);
+      },
+    },
+    {
+      id: "history",
+      label: t("chat.slashHistory"),
+      run: () => {
+        setMode("expanded");
+        setShowHome(true);
+      },
+    },
+  ];
+  const chipSlash = useSlashCommands(draft, slashCommands, () => setDraft(""));
 
   if (!available) return null;
 
@@ -163,7 +187,13 @@ export function DjChatEntry({
               >
                 <input
                   className="h-9 w-[min(56vw,30rem)] min-w-0 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
-                  onChange={(e) => setDraft(e.target.value)}
+                  onChange={(e) => {
+                    setDraft(e.target.value);
+                    chipSlash.notifyChange();
+                  }}
+                  onKeyDown={(e) => {
+                    chipSlash.onKeyDown(e);
+                  }}
                   placeholder={t("chat.placeholder")}
                   value={draft}
                 />
@@ -206,6 +236,16 @@ export function DjChatEntry({
             )}
           </AnimatePresence>
         </div>
+      )}
+
+      {mode === "chip" && chipSlash.open && (
+        <SlashMenu
+          activeIndex={chipSlash.activeIndex}
+          className="left-11 min-w-[14rem]"
+          matches={chipSlash.matches}
+          onHighlight={chipSlash.setHighlight}
+          onRun={chipSlash.run}
+        />
       )}
 
       {typeof document !== "undefined" && createPortal(<ChatReplyNotification />, document.body)}
@@ -397,22 +437,7 @@ export function DjChatEntry({
                       title: t("chat.queueTitle"),
                     }}
                     sessionId={activeSessionId}
-                    slashCommands={[
-                      {
-                        id: "new",
-                        label: t("chat.slashNew"),
-                        run: async () => {
-                          const session = await createChatSession({});
-                          setActiveSessionId(session.id);
-                          setShowHome(false);
-                        },
-                      },
-                      {
-                        id: "history",
-                        label: t("chat.slashHistory"),
-                        run: () => setShowHome(true),
-                      },
-                    ]}
+                    slashCommands={slashCommands}
                     toolLabels={{
                       approve: t("chat.toolApprove"),
                       error: t("chat.toolError"),
