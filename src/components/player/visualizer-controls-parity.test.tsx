@@ -57,4 +57,14 @@ describe("visualizer controls parity", () => {
     expect(panelIds).toEqual(settingsIds);
     expect(controlIds(panelView.container)).toContain("preview-only");
   });
+
+  it("does not expose the always-on background placement as a settings switch", () => {
+    const settingsView = render(<VisualizerSettings />);
+    const panelView = render(<VisualizerTuningPanel />);
+
+    expect(controlIds(settingsView.container)).not.toContain("as-background");
+    expect(controlIds(panelView.container)).not.toContain("as-background");
+    expect(settingsView.queryByText("visualizer.asBackground")).toBeNull();
+    expect(panelView.queryByText("visualizer.asBackground")).toBeNull();
+  });
 });

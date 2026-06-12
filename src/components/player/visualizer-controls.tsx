@@ -36,7 +36,7 @@ export function VisualizerControls({
   const { t } = useTranslation();
   const settings = useSettings();
   const style = resolveVisualizerStyle(settings.visualizerStyle);
-  const asBackground = settings.visualizerAsBackground ?? false;
+  const asBackground = settings.visualizerAsBackground ?? true;
   const idleOnly = settings.visualizerIdleOnly ?? false;
   const styleLabelId = useId();
 
@@ -48,7 +48,9 @@ export function VisualizerControls({
         </VisualizerHelpLabel>
         <Select
           value={style}
-          onValueChange={(value) => void saveSettings({ visualizerStyle: value as VisualizerStyleId })}
+          onValueChange={(value) =>
+            void saveSettings({ visualizerStyle: value as VisualizerStyleId })
+          }
         >
           <SelectTrigger aria-labelledby={styleLabelId}>
             <SelectValue>
@@ -86,14 +88,6 @@ export function VisualizerControls({
         helpLabel={t("visualizer.help.useCoverColor")}
         label={t("visualizer.useCoverColor")}
         onCheckedChange={(checked) => void saveSettings({ visualizerUseCoverColor: checked })}
-      />
-
-      <CheckboxControl
-        controlId="as-background"
-        checked={asBackground}
-        helpLabel={t("visualizer.help.asBackground")}
-        label={t("visualizer.asBackground")}
-        onCheckedChange={(checked) => void saveSettings({ visualizerAsBackground: checked })}
       />
 
       {asBackground ? (

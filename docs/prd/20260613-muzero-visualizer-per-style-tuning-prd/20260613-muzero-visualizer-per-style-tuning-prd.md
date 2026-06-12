@@ -226,8 +226,8 @@ Settings and Now Playing visualizer tab must render the same order for shared co
    - Settings: do not show `previewOnly` unless a live preview surface is added.
 3. Global behavior toggles
    - Use cover color
-   - Use as Now Playing background
-   - Blend mode, shown only when background is enabled
+   - Background placement is default-on and not exposed as a persistent switch
+   - Blend mode
    - Hide player UI when idle
    - Show memories while immersive, shown only when idle-only is enabled
 4. Per-style tuning controls
@@ -371,9 +371,10 @@ This PRD allows adding one small helper component if it prevents duplicated orde
 - [x] Refactor `VisualizerSettings` to use the shared controls.
 - [x] Refactor `VisualizerTuningPanel` visualizer tab to use the same shared controls.
 - [x] Keep `previewOnly` in Now Playing as an explicit panel-only preview aid.
-- [x] Add missing persistent checkboxes to Now Playing tab 1: cover color, background, idle-only, memory overlay.
+- [x] Add missing persistent checkboxes to Now Playing tab 1: cover color, idle-only, memory overlay.
 - [x] Replace Now Playing background/idle-only toggle buttons with the same checkbox/switch-style rows used by Settings, preserving the compact panel layout.
 - [x] Align background blend/tuning placement between both surfaces.
+- [x] Remove the obsolete "Use as Now Playing background" switch from shared controls; background remains default-on.
 
 ### Phase 4 Checklist
 
@@ -408,7 +409,7 @@ This PRD allows adding one small helper component if it prevents duplicated orde
 
 - Focused Vitest command passed: `node_modules\.bin\vitest.cmd run src\components\player\visualizer-controls-parity.test.tsx src\components\player\visualizer-tuning-controls.test.tsx src\lib\visualizer-effect-settings.test.ts`.
 - TypeScript validation passed: `node_modules\.bin\tsc.cmd --noEmit`.
-- Edge headless visual check passed for Settings / Visualizer at 1180x780; DOM control order was `style`, `use-cover-color`, `as-background`, `blend-mode`, `idle-only`, `tuning`.
+- Edge headless visual check passed for Settings / Visualizer at 1180x780; DOM control order was `style`, `use-cover-color`, `blend-mode`, `idle-only`, `tuning`.
 - Now Playing panel real-entry screenshot was not available in the empty-player state because the visualizer mode button is not rendered without an active track; component parity test covers the same persistent control order with `preview-only` as the only extra panel control.
 
 ---
@@ -455,6 +456,7 @@ This PRD allows adding one small helper component if it prevents duplicated orde
 | 2 | Should "Use cover color" be per-style? | Resolved in this PRD | Keep global; it is a color-source preference, not a style tuning parameter. |
 | 3 | Should Now Playing use checkboxes or segmented/toggle buttons for background/idle? | Resolved | Use checkbox/switch-style rows in both Settings and Now Playing tab 1. Per UI/UX best practice, segmented controls are for mutually exclusive modes; background and idle-only are persistent binary preferences with a dependency, so matching rows are clearer and keep both surfaces aligned. |
 | 4 | Should there be a "Reset this style" action? | Resolved | Yes, include it in v1. Add `Reset this style` beside the tuning section; it resets only the active style's per-style tuning values and leaves global visualizer preferences untouched. |
+| 5 | Should "Use as Now Playing background" remain a visible option? | Resolved | No. Background placement is the default product behavior, so the shared Settings/Now Playing controls no longer expose this switch. Existing placement state remains available to lower-level mode shortcuts. |
 
 ---
 
@@ -470,3 +472,4 @@ This PRD allows adding one small helper component if it prevents duplicated orde
 | 2026-06-13 | Codex | Completed Phase 4 shared visualizer controls, Settings/Now Playing parity, and focused parity tests. |
 | 2026-06-13 | Codex | Added localized help text for shared visualizer style, preview, color, background, blend, idle, and memory controls. |
 | 2026-06-13 | Codex | Completed Phase 5 validation with focused Vitest, TypeScript check, and Edge headless Settings visual QA. |
+| 2026-06-13 | Codex | Removed the obsolete visible "Use as Now Playing background" switch from shared visualizer controls and updated parity coverage. |
