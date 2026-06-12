@@ -5,6 +5,7 @@ import type {
   DesktopBridge,
   DesktopPlatform,
   DesktopWindowState,
+  LocalMediaUrlInput,
   MediaProxyTrace,
   MediaStorageFileInput,
   SaveFileInput,
@@ -22,6 +23,7 @@ interface MuzeroApi {
   readDir(path: string): Promise<DirEntryLike[]>;
   readFile(path: string): Promise<ArrayBuffer>;
   grantFolderAccess(path: string): Promise<void>;
+  localMediaToken(input: { path: string; mime?: string }): Promise<string>;
   saveFile(input: { fileName: string; mime: string; bytes: ArrayBuffer }): Promise<boolean>;
   writeMediaStorageFile(
     input: Omit<WriteMediaStorageFileInput, "bytes"> & { bytes: ArrayBuffer },
@@ -49,6 +51,7 @@ interface MuzeroApi {
 
 const PROXY_URL = "muzfetch://proxy/";
 const MEDIA_PROXY_URL = "muzfetch://media/";
+const LOCAL_MEDIA_URL = "muzfetch://local-media/";
 const TARGET_HEADER = "x-muzero-target";
 
 /**
@@ -76,6 +79,23 @@ export function electronMediaProxyUrl(
     }
   }
   return `${MEDIA_PROXY_URL}?${params.toString()}`;
+}
+
+export function electronLocalMediaUrl(input: {
+  token: string;
+  mime?: string;
+  sourcePath?: string;
+  trace?: string | MediaProxyTrace;
+}): string {
+  const params = new URLSearchParams({ __mztoken: input.token });
+  if (input.mime) params.set("__mzmime", input.mime);
+  const traceContext = typeof input.trace === "string" ? { traceId: input.trace } : input.trace;
+  if (traceContext?.traceId) params.set("__mztrace", traceContext.traceId);
+  if (traceContext?.trackId) params.set("__mztrack", traceContext.trackId);
+  if (traceContext?.sessionId) params.set("__mzsession", traceContext.sessionId);
+  if (traceContext?.sourceId) params.set("__mzsource", traceContext.sourceId);
+  if (traceContext?.videoId) params.set("__mzvideo", traceContext.videoId);
+  return `${LOCAL_MEDIA_URL}?${params.toString()}`;
 }
 
 /**
@@ -126,6 +146,10 @@ export function createElectronBridge(): DesktopBridge {
     openExternal: (url) => api.openExternal(url),
     setAppIcon: (icon) => api.setAppIcon(icon),
     mediaProxyUrl: electronMediaProxyUrl,
+    localMediaUrl: async (input: LocalMediaUrlInput) => {
+      const token = await api.localMediaToken({ path: input.path, mime: input.mime });
+      return electronLocalMediaUrl({ token, mime: input.mime, trace: input.trace });
+    },
     openSourceLogin: async (request) => {
       const cookies = await api.openSourceLogin(request);
       return cookies && cookies.length > 0 ? assembleCookieHeader(cookies) : null;

@@ -2,6 +2,7 @@ import { liveQuery, type Subscription } from "dexie";
 import { create } from "zustand";
 import { db } from "@/db/muzero-db";
 import {
+  createReferencedUploadedTrack,
   createSession,
   createUploadedTrack,
   deleteSession as deleteSessionRepo,
@@ -436,7 +437,7 @@ function tracePlaybackLoad(
     DiagnosticContext,
     "bytes" | "mime" | "sourceId" | "requestHost" | "requestPathHash" | "redactions"
   > & {
-    transport: "blob" | "remote" | "direct" | "media-proxy";
+    transport: "blob" | "local-file" | "remote" | "direct" | "media-proxy";
     safeQuery?: Record<string, string>;
     hasPot?: boolean;
     hasSig?: boolean;
@@ -1522,6 +1523,65 @@ interface FolderPlan {
   fresh: ScannedFile[];
 }
 
+interface ScannedIngestResult {
+  trackId: string;
+  hasCover?: boolean;
+  albumPicUrl?: string;
+}
+
+async function ingestReferencedScannedFile(
+  setId: string,
+  file: ScannedFile,
+): Promise<ScannedIngestResult> {
+  const mime = mimeFromExtension(file.name, file.kind);
+  const now = Date.now();
+  const title = titleFromFileName(file.name);
+  const track = await createReferencedUploadedTrack({
+    sessionId: setId,
+    title,
+    kind: file.kind,
+    mime,
+    durationSec: 0,
+    sourcePath: file.path,
+    mediaMetadata: {
+      originalFileName: file.name,
+      originalMime: mime,
+      originalExtension: extensionFromFileName(file.name),
+      parser: "manual",
+      parsedAt: now,
+      title,
+    },
+  });
+  return { trackId: track.id, hasCover: false };
+}
+
+async function ingestScannedFileBytes(
+  setId: string,
+  file: ScannedFile,
+  fs: Pick<FolderFs, "readFile">,
+): Promise<ScannedIngestResult> {
+  // Read on the main thread (async IPC/plugin — off the CPU), then hand the bytes
+  // to the worker for the heavy parse/decrypt + DB write (no UI jank).
+  const bytes = await fs.readFile(file.path);
+  return ingestViaWorker({
+    setId,
+    name: file.name,
+    kind: file.kind,
+    mime: file.decode === "ncm" ? "" : mimeFromExtension(file.name, file.kind),
+    sourcePath: file.path,
+    bytes: bytes.buffer as ArrayBuffer,
+    decode: file.decode,
+  });
+}
+
+function titleFromFileName(name: string): string {
+  return name.replace(/\.[^.]+$/, "").trim() || name;
+}
+
+function extensionFromFileName(name: string): string | undefined {
+  return name.toLowerCase().match(/\.([^.]+)$/)?.[1];
+}
+
 /**
  * Scan the given remembered folders and import any media not already in the
  * library. Two passes — scan + dedup all folders first (so the total is known),
@@ -1555,6 +1615,7 @@ export async function runFolderSync(
   });
   try {
     const fs = fsOverride ?? createFolderFs();
+    const referencePlaintextLocalFiles = useRealShell && resolveDesktopBridge().kind === "electron";
 
     // Pass 1 — scan + dedup each folder, recreating a deleted bound set as needed.
     const plans: FolderPlan[] = [];
@@ -1606,18 +1667,10 @@ export async function runFolderSync(
       for (const file of plan.fresh) {
         if (signal.aborted) break;
         try {
-          // Read on the main thread (async IPC/plugin — off the CPU), then hand the
-          // bytes to the worker for the heavy parse/decrypt + DB write (no UI jank).
-          const bytes = await fs.readFile(file.path);
-          const res = await ingestViaWorker({
-            setId: plan.setId,
-            name: file.name,
-            kind: file.kind,
-            mime: file.decode === "ncm" ? "" : mimeFromExtension(file.name, file.kind),
-            sourcePath: file.path,
-            bytes: bytes.buffer as ArrayBuffer,
-            decode: file.decode,
-          });
+          const res =
+            referencePlaintextLocalFiles && !file.decode
+              ? await ingestReferencedScannedFile(plan.setId, file)
+              : await ingestScannedFileBytes(plan.setId, file, fs);
           ids.push(res.trackId);
           planImported += 1;
           imported += 1;
@@ -1932,7 +1985,7 @@ async function ensureLoadedAndPlay(
   if (!mediaEngine) return;
   const playbackTrace = ensurePlaybackTrace(track, wantPlay);
   mediaEngine.setDiagnosticsContext(playbackTrace);
-  // Local-first priority: blob (downloaded/offline) → remoteMediaUrl → stream (online).
+  // Local-first priority: blob (downloaded/offline) → local-file → remoteMediaUrl → stream.
   const sourceKind = playbackSourceKind(track);
   if (track.status !== "ready" || sourceKind === "none") {
     log.debug("player", "track is not playable yet", {
@@ -1975,6 +2028,30 @@ async function ensureLoadedAndPlay(
         return;
       }
       await mediaEngine.loadBlob(media.blob, track.kind);
+    } else if (sourceKind === "local-file") {
+      const bridge = resolveDesktopBridge();
+      if (!track.sourcePath || !bridge.localMediaUrl) {
+        notify.error(i18n.t("player.playbackError"));
+        log.warn("player", "local-file playback is unavailable", {
+          trackId: track.id,
+          hasSourcePath: !!track.sourcePath,
+          bridge: bridge.kind,
+        });
+        set({ isPlaying: false, wantPlay: false });
+        return;
+      }
+      const mime =
+        track.mediaMetadata?.originalMime ?? (track.kind === "video" ? "video/mp4" : "audio/mpeg");
+      const src = await bridge.localMediaUrl({
+        path: track.sourcePath,
+        mime,
+        trace: playbackTrace,
+      });
+      tracePlaybackLoad("media.load.local-file", track, playbackTrace, {
+        mime,
+        transport: "local-file",
+      });
+      await mediaEngine.loadUrl(src, track.kind, { crossOrigin: "anonymous" });
     } else if (sourceKind === "remote") {
       log.debug("player", "loading remote media url", {
         trackId: track.id,

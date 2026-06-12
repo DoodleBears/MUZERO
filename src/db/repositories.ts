@@ -761,6 +761,48 @@ export async function createUploadedTrack(
   return track;
 }
 
+/** Create a ready uploaded track that references an Electron-granted local file. */
+export async function createReferencedUploadedTrack(
+  input: {
+    sessionId: string;
+    title: string;
+    kind: TrackKind;
+    mime: string;
+    durationSec: number;
+    sourcePath: string;
+    mediaMetadata?: TrackMediaMetadata;
+  },
+  db: MuzeroDB = defaultDb,
+): Promise<Track> {
+  const now = Date.now();
+  const track: Track = {
+    id: newId("trk"),
+    sessionId: input.sessionId,
+    title: input.title,
+    kind: input.kind,
+    origin: "uploaded",
+    provider: "upload",
+    status: "ready",
+    blobId: undefined,
+    durationSec: input.durationSec,
+    createdAt: now,
+    updatedAt: now,
+    generatedAt: now,
+    playCount: 0,
+    liked: false,
+    tags: [],
+    mediaMetadata: input.mediaMetadata ?? {
+      originalMime: input.mime,
+      parser: "manual",
+      parsedAt: now,
+      title: input.title,
+    },
+    sourcePath: input.sourcePath,
+  };
+  await db.tracks.put(track);
+  return track;
+}
+
 export async function markTrackGenerating(id: string, db: MuzeroDB = defaultDb): Promise<void> {
   await db.tracks.update(id, { status: "generating", error: undefined });
 }

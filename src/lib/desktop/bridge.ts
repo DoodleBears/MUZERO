@@ -51,6 +51,12 @@ export interface WriteMediaStorageFileInput extends MediaStorageFileInput {
   expectedBytes?: number;
 }
 
+export interface LocalMediaUrlInput {
+  path: string;
+  mime?: string;
+  trace?: string | MediaProxyTrace;
+}
+
 export interface MediaStorageFileStat {
   bytes: number;
 }
@@ -126,6 +132,12 @@ export interface DesktopBridge {
     headers?: Record<string, string>,
     trace?: string | MediaProxyTrace,
   ) => string;
+  /**
+   * Build a tokenized local-media URL for an Electron-granted absolute source path.
+   * The returned URL must not contain the raw path; the main process validates and
+   * stores the path behind a short opaque token.
+   */
+  localMediaUrl?: (input: LocalMediaUrlInput) => Promise<string>;
   /**
    * Open a streaming source's real login page in a desktop auth window and resolve
    * the captured `Cookie:` header once the session cookie appears (or null if the

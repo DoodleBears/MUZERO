@@ -28,15 +28,16 @@ export function isStreamedTrack(
 }
 
 /** Which media the player should load, highest-priority first. */
-export type PlaybackSourceKind = "blob" | "remote" | "stream" | "none";
+export type PlaybackSourceKind = "blob" | "local-file" | "remote" | "stream" | "none";
 
-type PlaybackFields = StreamFields & Pick<Track, "blobId" | "remoteMediaUrl">;
+type PlaybackFields = StreamFields & Pick<Track, "blobId" | "remoteMediaUrl" | "sourcePath">;
 
 /** Whether MUZERO can fetch missing media bytes into a local `mediaBlobs` row. */
 export function isTrackCacheableToDevice(track: PlaybackFields & Pick<Track, "status">): boolean {
   return (
     track.status === "ready" &&
     !track.blobId &&
+    !track.sourcePath &&
     (Boolean(track.remoteMediaUrl) || isStreamedTrack(track))
   );
 }
@@ -45,15 +46,17 @@ export function isTrackCacheableToDevice(track: PlaybackFields & Pick<Track, "st
  * Pick a track's playback source in strict priority order — **local first**:
  *  1. `blob`   — locally-stored bytes (`blobId`): generated/uploaded tracks, OR a
  *               downloaded streamed track. Plays offline; NEVER hits the network.
- *  2. `remote` — a `remoteMediaUrl` (read-only cloud share).
- *  3. `stream` — an external source resolved per play (online round-trip).
- *  4. `none`   — nothing playable yet.
+ *  2. `local-file` — an Electron-granted local source path (`sourcePath`).
+ *  3. `remote` — a `remoteMediaUrl` (read-only cloud share).
+ *  4. `stream` — an external source resolved per play (online round-trip).
+ *  5. `none`   — nothing playable yet.
  *
  * `blob` outranking `stream` is the guarantee that a cached streamed track plays
  * from disk and never re-resolves online — see {@link isStreamedTrackCached}.
  */
 export function playbackSourceKind(track: PlaybackFields): PlaybackSourceKind {
   if (track.blobId) return "blob";
+  if (track.sourcePath) return "local-file";
   if (track.remoteMediaUrl) return "remote";
   if (isStreamedTrack(track)) return "stream";
   return "none";

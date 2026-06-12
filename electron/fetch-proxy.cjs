@@ -3,12 +3,18 @@
 // the main process performs it with `net.fetch` (Chromium's network stack), so no
 // renderer CORS / mixed-content applies. Streaming is preserved both ways — DJ SSE
 // and large R2 PUT bodies flow through unbuffered — and SigV4 headers pass verbatim.
+const fs = require("node:fs");
+const { Readable } = require("node:stream");
 const { net } = require("electron");
 const { emitMainDiagnostic } = require("./diagnostics.cjs");
+const { resolveLocalMediaToken } = require("./local-media.cjs");
 
 const TARGET_HEADER = "x-muzero-target";
 
 async function handleMuzfetch(request) {
+  const reqUrl = new URL(request.url);
+  if (reqUrl.hostname === "local-media") return handleLocalMedia(request, reqUrl);
+
   const headers = new Headers(request.headers);
   headers.delete(TARGET_HEADER);
 
@@ -22,7 +28,6 @@ async function handleMuzfetch(request) {
   let isMediaRequest = false;
   let mediaTraceContext = {};
   if (!target) {
-    const reqUrl = new URL(request.url);
     if (reqUrl.searchParams.has("__mzurl")) {
       isMediaRequest = true;
       mediaTraceContext = {
@@ -129,6 +134,86 @@ async function handleMuzfetch(request) {
     statusText: res.statusText,
     headers: outHeaders,
   });
+}
+
+async function handleLocalMedia(request, reqUrl) {
+  const token = reqUrl.searchParams.get("__mztoken");
+  const entry = token ? resolveLocalMediaToken(token) : null;
+  if (!entry) return new Response("missing local media token", { status: 404 });
+
+  let stat;
+  try {
+    stat = await fs.promises.stat(entry.filePath);
+  } catch {
+    return new Response("local media not found", { status: 404 });
+  }
+  if (!stat.isFile()) return new Response("local media is not a file", { status: 404 });
+
+  const size = stat.size;
+  const mime =
+    entry.mime || reqUrl.searchParams.get("__mzmime") || "application/octet-stream";
+  const range = parseRange(request.headers.get("range"), size);
+  if (range?.invalid) {
+    return new Response(null, {
+      status: 416,
+      headers: corsHeaders({
+        "accept-ranges": "bytes",
+        "content-range": `bytes */${size}`,
+      }),
+    });
+  }
+
+  const start = range?.start ?? 0;
+  const end = range?.end ?? Math.max(0, size - 1);
+  const contentLength = size === 0 ? 0 : end - start + 1;
+  const status = range ? 206 : 200;
+  const headers = corsHeaders({
+    "accept-ranges": "bytes",
+    "content-length": String(contentLength),
+    "content-type": mime,
+    ...(range ? { "content-range": `bytes ${start}-${end}/${size}` } : {}),
+  });
+  if (request.method === "HEAD") return new Response(null, { status, headers });
+  const body =
+    size === 0
+      ? null
+      : Readable.toWeb(fs.createReadStream(entry.filePath, { start, end }));
+  return new Response(body, { status, headers });
+}
+
+function parseRange(header, size) {
+  if (!header) return null;
+  const match = /^bytes=(\d*)-(\d*)$/.exec(header.trim());
+  if (!match) return { invalid: true };
+  const [, rawStart, rawEnd] = match;
+  if (!rawStart && !rawEnd) return { invalid: true };
+  let start;
+  let end;
+  if (!rawStart) {
+    const suffix = Number(rawEnd);
+    if (!Number.isFinite(suffix) || suffix <= 0) return { invalid: true };
+    start = Math.max(0, size - suffix);
+    end = Math.max(0, size - 1);
+  } else {
+    start = Number(rawStart);
+    end = rawEnd ? Number(rawEnd) : Math.max(0, size - 1);
+  }
+  if (
+    !Number.isFinite(start) ||
+    !Number.isFinite(end) ||
+    start < 0 ||
+    end < start ||
+    start >= size
+  ) {
+    return { invalid: true };
+  }
+  return { start, end: Math.min(end, Math.max(0, size - 1)) };
+}
+
+function corsHeaders(values) {
+  const headers = new Headers(values);
+  headers.set("access-control-allow-origin", "*");
+  return headers;
 }
 
 function createMediaRequestContext(target, request, headers, traceContext) {

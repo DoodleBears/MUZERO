@@ -11,6 +11,7 @@ const fs = require("node:fs");
 const fsp = require("node:fs/promises");
 const path = require("node:path");
 const { applyAppIcon } = require("./app-icon.cjs");
+const { registerLocalMedia } = require("./local-media.cjs");
 
 /** Granted folder roots (real paths). In-memory, not persisted — re-granted on boot. */
 const allowedRoots = new Set();
@@ -149,6 +150,11 @@ function registerIpc() {
     const buf = await fsp.readFile(real);
     // Return a standalone ArrayBuffer (structured-cloned across IPC).
     return buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength);
+  });
+
+  ipcMain.handle("muzero:localMedia:token", async (_event, input) => {
+    const real = assertAllowed(input?.path);
+    return registerLocalMedia(real, input?.mime);
   });
 
   ipcMain.handle("muzero:saveFile", async (_event, input) => {

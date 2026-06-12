@@ -14,6 +14,7 @@ contextBridge.exposeInMainWorld("muzero", {
   readDir: (path) => ipcRenderer.invoke("muzero:readDir", path),
   readFile: (path) => ipcRenderer.invoke("muzero:readFile", path),
   grantFolderAccess: (path) => ipcRenderer.invoke("muzero:grantFolder", path),
+  localMediaToken: (input) => ipcRenderer.invoke("muzero:localMedia:token", input),
   saveFile: (input) => ipcRenderer.invoke("muzero:saveFile", input),
   writeMediaStorageFile: (input) => ipcRenderer.invoke("muzero:mediaStorage:write", input),
   readMediaStorageFile: (input) => ipcRenderer.invoke("muzero:mediaStorage:read", input),
