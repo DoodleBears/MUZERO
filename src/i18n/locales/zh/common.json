@@ -184,6 +184,16 @@
     "loadingTrack": "正在准备：{{title}}",
     "streamNeedsAccess": "这首歌需要登录该来源才能播放（VIP / 会员专享）"
   },
+  "tray": {
+    "currentPrefix": "当前",
+    "noTrack": "暂无正在播放",
+    "like": "红心当前歌曲",
+    "unlike": "取消红心当前歌曲",
+    "displayMode": "显示方式",
+    "openApp": "打开 MUZERO",
+    "openNowPlaying": "打开正在播放",
+    "exit": "退出 MUZERO"
+  },
   "dj": {
     "writing": "DJ 正在编写下一首……",
     "generating": "正在生成音频……",

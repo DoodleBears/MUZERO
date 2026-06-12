@@ -11,7 +11,7 @@
 
 | Phase | Name | Status | Link |
 |-------|------|--------|------|
-| 1 | Tray action contract and menu model | Pending | [Phase 1 Checklist](#phase-1-checklist) |
+| 1 | Tray action contract and menu model | Completed | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | Native tray icon and close-to-tray lifecycle | Pending | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | Player-aware tray controls | Pending | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | Platform QA and polish | Pending | [Phase 4 Checklist](#phase-4-checklist) |
@@ -333,19 +333,19 @@ Tray control behavior:
 **Goal:** Define stable action ids, a sanitized localized tray snapshot, and a renderer dispatcher without touching native shell behavior yet.
 
 **Tasks:**
-- [ ] Add `src/tray/actions.ts` with allowlisted `TrayActionId` values.
-- [ ] Add `src/tray/menu-model.ts` pure helper for `TraySnapshot`.
-- [ ] Add `dispatchTrayAction()` for renderer-owned actions: playback toggle, prev, next, like, repeat, display mode, Now Playing, Settings.
-- [ ] Add i18n keys for tray labels in en/zh/ja/ko.
-- [ ] Add unit tests for menu model and unknown action rejection.
+- [x] Add `src/tray/actions.ts` with allowlisted `TrayActionId` values.
+- [x] Add `src/tray/menu-model.ts` pure helper for `TraySnapshot`.
+- [x] Add `dispatchTrayAction()` for renderer-owned actions: playback toggle, prev, next, like, repeat, display mode, Now Playing, Settings.
+- [x] Add i18n keys for tray labels in en/zh/ja/ko.
+- [x] Add unit tests for menu model and unknown action rejection.
 
 ### Phase 1 Checklist
 
-- [ ] Snapshot contains no secrets, prompts, file paths, notes, tags, lyrics, or media bytes.
-- [ ] Empty queue disables playback/like items.
-- [ ] Repeat and display mode states render as mutually exclusive choices.
-- [ ] Dispatcher reuses existing player/store/repository behavior.
-- [ ] No `console.*` in `src/**`; use [`src/lib/logger.ts`](../../../src/lib/logger.ts) if needed.
+- [x] Snapshot contains no secrets, prompts, file paths, notes, tags, lyrics, or media bytes.
+- [x] Empty queue disables playback/like items.
+- [x] Repeat and display mode states render as mutually exclusive choices.
+- [x] Dispatcher reuses existing player/store/repository behavior.
+- [x] No `console.*` in `src/**`; use [`src/lib/logger.ts`](../../../src/lib/logger.ts) if needed.
 
 ### Phase 2: Native Tray Icon And Close-To-Tray Lifecycle
 
@@ -478,3 +478,4 @@ Tray control behavior:
 |------|--------|---------|
 | 2026-06-13 | MUZERO | Initial draft: system tray player controls, close-to-tray lifecycle, tray restore, and explicit Exit semantics. |
 | 2026-06-13 | MUZERO | Resolved open questions: Electron-first v1, left-click restore/right-click menu, no progress modal, native menu before custom popover, always show display mode. Strengthened tray/menu i18n as a hard requirement. |
+| 2026-06-13 | MUZERO | Completed Phase 1: tray action allowlist/dispatcher, pure menu model, four-locale tray labels, and TDD coverage. |

@@ -184,6 +184,16 @@
     "loadingTrack": "準備中：{{title}}",
     "streamNeedsAccess": "この曲は再生にそのソースへのログインが必要です（VIP / 会員限定）"
   },
+  "tray": {
+    "currentPrefix": "現在",
+    "noTrack": "再生中の曲はありません",
+    "like": "現在の曲をお気に入り",
+    "unlike": "現在の曲のお気に入りを解除",
+    "displayMode": "表示モード",
+    "openApp": "MUZERO を開く",
+    "openNowPlaying": "再生中を開く",
+    "exit": "MUZERO を終了"
+  },
   "dj": {
     "writing": "DJ が次の曲を書いています…",
     "generating": "音声を生成中…",

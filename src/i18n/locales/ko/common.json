@@ -184,6 +184,16 @@
     "loadingTrack": "준비 중: {{title}}",
     "streamNeedsAccess": "이 곡은 재생하려면 해당 소스에 로그인해야 해요 (VIP / 회원 전용)"
   },
+  "tray": {
+    "currentPrefix": "현재",
+    "noTrack": "재생 중인 곡 없음",
+    "like": "현재 곡 좋아요",
+    "unlike": "현재 곡 좋아요 취소",
+    "displayMode": "표시 모드",
+    "openApp": "MUZERO 열기",
+    "openNowPlaying": "재생 중 열기",
+    "exit": "MUZERO 종료"
+  },
   "dj": {
     "writing": "DJ가 다음 곡을 쓰는 중…",
     "generating": "오디오 생성 중…",
