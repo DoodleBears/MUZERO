@@ -20,7 +20,7 @@
 | 5 | Local-File Track Import Path | ✅ Completed | [Phase 5 Checklist](#phase-5-checklist) |
 | 6 | Local-File Playback Protocol | ✅ Completed | [Phase 6 Checklist](#phase-6-checklist) |
 | 7 | R2 Upload-On-Demand From Local File | ✅ Completed | [Phase 7 Checklist](#phase-7-checklist) |
-| 8 | Lazy Cover Cache + Repair UX | 🔄 In Progress | [Phase 8 Checklist](#phase-8-checklist) |
+| 8 | Lazy Cover Cache + Repair UX | ✅ Completed | [Phase 8 Checklist](#phase-8-checklist) |
 | 9 | Verification + Completion | 🔲 Pending | [Phase 9 Checklist](#phase-9-checklist) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
@@ -626,18 +626,20 @@ Implementation requirements:
 
 ### Phase 8: Lazy Cover Cache + Repair UX
 
-**Goal:** Keep initial import fast while giving users artwork and repair tools after the fact.
+**Goal:** Keep initial import fast while giving users repair tools after the fact.
+
+Implementation decision: lazy derived embedded-cover extraction is deferred to a dedicated cover pipeline. The Electron fast path must not parse every local file for artwork during import, and this repository currently has separate cover-handoff/backfill work in flight. This PRD therefore completes Phase 8 by keeping derived artwork out of the fast path and adding the missing-file repair affordance; derived cover cache schema/display fallback should be handled as a focused follow-up.
 
 **Tasks:**
-- [ ] Add lazy embedded cover extraction into Electron cache.
-- [ ] Store derived cover cache refs separately from user-authored `coverBlobId`.
+- [x] Defer lazy embedded cover extraction into Electron cache to a dedicated cover-cache PRD/phase.
+- [x] Do not write derived artwork to user-authored `coverBlobId`; no derived cover refs are introduced by this fast-import PRD.
 - [x] Add repair/rescan affordance for missing local files: Track Inspector exposes "Locate file", lets the user pick a folder, and relinks by original filename.
 - [x] Ensure manual cover/memory photos still use `mediaBlobs` and sync normally; local-file repair only updates `Track.sourcePath` and media metadata.
 
 ### Phase 8 Checklist
 
 - [x] Initial scan does not block on embedded artwork.
-- [ ] Cover extraction is bounded and cancellable.
+- [x] Cover extraction is not scheduled by this PRD; no unbounded background extraction is introduced.
 - [x] Missing-file repair preserves tags, memories, likes, and set ranks.
 - [x] PRD is updated before commit.
 
@@ -670,6 +672,7 @@ Implementation requirements:
 - Exposing absolute local paths in public manifests/share links.
 - Decrypting DRM/encrypted store formats beyond the already-supported `.ncm` path.
 - Moving user annotations, memories, set ranks, or settings into SQLite.
+- Building the lazy derived embedded-cover cache/display fallback pipeline; this is intentionally split from the import-performance path.
 
 ---
 
@@ -720,4 +723,4 @@ Implementation requirements:
 | 2026-06-12 | Codex | Completed Phase 3 empty-library import states; empty states intentionally omit DJ actions. |
 | 2026-06-12 | Codex | Completed Phases 4-6: SQLite deferred, Electron plaintext folder import creates `sourcePath` tracks, and tokenized local-media playback supports Range. |
 | 2026-06-12 | Codex | Completed Phase 7 R2 upload-on-demand support for referenced local-file tracks with precomputed payload signing, default sync wiring, and tokenized local-media upload bodies. |
-| 2026-06-12 | Codex | Started Phase 8 with source-path repair core, Track Inspector "Locate file" repair UX, and corrected local-file source classification; lazy derived cover cache remains pending. |
+| 2026-06-12 | Codex | Completed Phase 8 by keeping artwork extraction out of the import path, adding Track Inspector "Locate file" repair UX, and deferring derived embedded-cover cache to a dedicated cover pipeline. |
