@@ -1,5 +1,5 @@
 import Dexie from "dexie";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   LARGE_IMAGE_PROVIDER_THRESHOLD_BYTES,
   type MediaStorageProvider,
@@ -54,6 +54,17 @@ import {
   updateMemoryNote,
   upsertImportFolder,
 } from "./repositories";
+
+// jsdom never settles `<img>` loads, so the real cover decode path
+// (extractCoverPalette → getCroppedBlob / extractImagePalette) hangs forever.
+// Stub the leaf decoders to the same graceful fallbacks a failed browser
+// decode produces: the uncropped source blob and an empty palette.
+vi.mock("@/lib/image-crop", () => ({
+  getCroppedBlob: vi.fn(async (source: Blob) => source),
+}));
+vi.mock("@/lib/image-palette", () => ({
+  extractImagePalette: vi.fn(async () => []),
+}));
 
 let db: MuzeroDB;
 let dbName: string;

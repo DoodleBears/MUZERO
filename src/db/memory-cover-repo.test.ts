@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { type MediaStorageProvider, putMediaBlob } from "./media-blob-storage";
 import { MuzeroDB } from "./muzero-db";
 import {
@@ -9,6 +9,13 @@ import {
   listMemories,
   setTrackCoverFromMemory,
 } from "./repositories";
+
+// jsdom never settles `<img>` loads, so the real palette decode behind
+// setTrackCoverFromMemory (extractCoverPalette → extractImagePalette) hangs
+// forever. Stub it to the empty-palette fallback a failed browser decode produces.
+vi.mock("@/lib/image-palette", () => ({
+  extractImagePalette: vi.fn(async () => []),
+}));
 
 let db: MuzeroDB;
 let dbName: string;
