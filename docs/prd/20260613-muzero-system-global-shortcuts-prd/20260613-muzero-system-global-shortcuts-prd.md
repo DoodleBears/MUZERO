@@ -1,6 +1,6 @@
 # PRD: System Global Shortcuts
 
-**Status:** Draft
+**Status:** In Progress
 **Created:** 2026-06-13
 **Author:** MUZERO
 **Module:** Shortcuts - Electron-first OS-level media controls while MUZERO is not foreground
@@ -11,7 +11,7 @@
 
 | Phase | Name | Status | Link |
 |-------|------|--------|------|
-| 1 | Action contract and shared dispatcher | Pending | [Phase 1 Checklist](#phase-1-checklist) |
+| 1 | Action contract and shared dispatcher | Completed | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | Electron global-shortcut adapter | Pending | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | Settings UI and persistence | Pending | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | Platform QA and polish | Pending | [Phase 4 Checklist](#phase-4-checklist) |
@@ -326,17 +326,22 @@ UI principles:
 **Goal:** Define which existing actions can be invoked from system global shortcuts and share execution logic with in-app shortcuts.
 
 **Tasks:**
-- [ ] Add `SYSTEM_GLOBAL_SHORTCUT_ACTIONS` allowlist.
-- [ ] Extract `runShortcutAction(actionId, ctx)` from `useShortcutDispatch`.
-- [ ] Add pure validation for safe system-global gestures.
-- [ ] Add tests proving unsupported actions cannot be registered.
+- [x] Add `SYSTEM_GLOBAL_SHORTCUT_ACTIONS` allowlist.
+- [x] Extract `runShortcutAction(actionId, ctx)` from `useShortcutDispatch`.
+- [x] Add pure validation for safe system-global gestures.
+- [x] Add tests proving unsupported actions cannot be registered.
 
 ### Phase 1 Checklist
 
-- [ ] In-app shortcuts still dispatch exactly as before.
-- [ ] Eligible system action ids are stable existing ids.
-- [ ] Navigation/search/library actions are not eligible.
-- [ ] Bare letters/arrows are rejected for system global registration.
+- [x] In-app shortcuts still dispatch exactly as before.
+- [x] Eligible system action ids are stable existing ids.
+- [x] Navigation/search/library actions are not eligible.
+- [x] Bare letters/arrows are rejected for system global registration.
+
+**Phase 1 Verification:**
+- `vitest run src/shortcuts/system-global.test.ts src/shortcuts/actions.test.ts src/hooks/use-shortcut-dispatch.test.tsx`
+- `tsc --noEmit`
+- `biome check src/shortcuts/actions.ts src/shortcuts/system-global.ts src/shortcuts/actions.test.ts src/shortcuts/system-global.test.ts src/hooks/use-shortcut-dispatch.ts`
 
 ### Phase 2: Electron Global-Shortcut Adapter
 
@@ -454,3 +459,4 @@ UI principles:
 |------|--------|---------|
 | 2026-06-13 | MUZERO | Initial draft: opt-in OS-level global shortcut support for playback controls while MUZERO is not foreground. |
 | 2026-06-13 | MUZERO | Updated product direction to Electron-first implementation with Tauri parity explicitly out of v1 scope. |
+| 2026-06-13 | MUZERO | Completed Phase 1: added system-global action allowlist, safe accelerator validation, shared shortcut action runner, and focused shortcut regression tests. |
