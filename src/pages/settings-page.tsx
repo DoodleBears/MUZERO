@@ -77,6 +77,7 @@ import {
 } from "@/musicgen/presets";
 import { resolveMusicGenProvider } from "@/musicgen/registry";
 import { useNavStore } from "@/stores/nav-store";
+import { notify } from "@/stores/notification-store";
 import { usePlayerStore } from "@/stores/player-store";
 import { useSyncStore } from "@/stores/sync-store";
 import { listCloudDrives, updateCloudDriveSyncPreferences } from "@/sync/cloud-drive-repo";
@@ -239,7 +240,6 @@ export function SettingsPage() {
   const [saved, setSaved] = useState(false);
   const [health, setHealth] = useState<"unknown" | "ok" | "down" | "checking">("unknown");
   const [addDriveOpen, setAddDriveOpen] = useState(false);
-  const [corsCopied, setCorsCopied] = useState(false);
   // Font picker: the combobox input text, plus lazily-loaded system fonts.
   const [fontInput, setFontInput] = useState("");
   const [systemFontItems, setSystemFontItems] = useState<ComboboxItem[]>([]);
@@ -396,10 +396,17 @@ export function SettingsPage() {
   }
 
   async function copyCorsJson() {
-    if (!navigator.clipboard) return;
-    await navigator.clipboard.writeText(corsJson);
-    setCorsCopied(true);
-    window.setTimeout(() => setCorsCopied(false), 1600);
+    if (!navigator.clipboard) {
+      notify.warning(t("notification.copyFail"));
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(corsJson);
+      notify.success(t("notification.copySuccess"));
+    } catch (error) {
+      log.warn("settings", "R2 CORS clipboard write failed", error);
+      notify.warning(t("notification.copyFail"));
+    }
   }
 
   async function changePresenceEnabled(enabled: boolean) {
@@ -1114,12 +1121,9 @@ export function SettingsPage() {
                         </div>
                         <Button variant="outline" size="sm" onClick={() => void copyCorsJson()}>
                           <ClipboardCopy />
-                          {corsCopied ? t("settings.cloudCorsCopied") : t("settings.cloudCorsCopy")}
+                          {t("settings.cloudCorsCopy")}
                         </Button>
                       </div>
-                      <pre className="mt-3 max-h-44 overflow-auto rounded-md bg-muted p-3 text-[11px] leading-5 text-muted-foreground">
-                        {corsJson}
-                      </pre>
                     </div>
                     <AddDriveDialog
                       open={addDriveOpen}
