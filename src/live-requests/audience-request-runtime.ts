@@ -1,0 +1,465 @@
+import { db as defaultDb, type MuzeroDB } from "@/db/muzero-db";
+import {
+  createSession,
+  getPlayQueue,
+  getSession,
+  getSettings,
+  getTrack,
+  getTracksByIds,
+  listAllLyrics,
+  listAllTracks,
+  memoryNotesByTrack,
+  playQueueAppend,
+  playQueuePlayNext,
+  prependTrackIds,
+  saveSettings,
+} from "@/db/repositories";
+import {
+  type AppSettings,
+  type AudienceRequestIntakeSettings,
+  DEFAULT_AUDIENCE_REQUEST_INTAKE_SETTINGS,
+  type Track,
+  type TrackLyrics,
+} from "@/db/types";
+import i18n from "@/i18n/i18n";
+import { newId } from "@/lib/id";
+import { resolveEnabledStreamSources } from "@/streamsrc/registry";
+import { createStreamHttp } from "@/streamsrc/stream-http";
+import { createStreamedTrack, hitToStreamedInput } from "@/streamsrc/streamed-track-repo";
+import {
+  type AudienceRequestRoutePlan,
+  type AudienceRouteSearchSummary,
+  planAudienceRequestRoute,
+} from "./audience-request-router";
+import type {
+  AudienceRequestPlaybackAction,
+  AudienceRequestRouteMode,
+  NormalizedAudienceRequest,
+} from "./audience-request-schema";
+import {
+  type AudienceRequestSearchResult,
+  pickAudienceRequestMatch,
+} from "./audience-request-search";
+import { isDuplicateAudienceRequest, isRequesterCoolingDown } from "./audience-request-security";
+
+export type AudienceRequestStatus =
+  | "received"
+  | "ignored"
+  | "queued"
+  | "needs-approval"
+  | "completed"
+  | "failed";
+
+export interface AudienceRequestRuntimeItem {
+  id: string;
+  externalId?: string;
+  receivedAt: number;
+  sourceKind: NormalizedAudienceRequest["sourceKind"];
+  platform?: string;
+  roomId?: string;
+  requesterDisplayName?: string;
+  requesterKey?: string;
+  requesterRole: NormalizedAudienceRequest["requesterRole"];
+  rawMessage: string;
+  normalizedQuery: string;
+  routeMode: AudienceRequestRouteMode;
+  playbackAction: AudienceRequestPlaybackAction;
+  status: AudienceRequestStatus;
+  matchedTrackId?: string;
+  matchedScore?: number;
+  secondScore?: number;
+  confidence?: "high" | "medium" | "low" | "none";
+  error?: string;
+  completedAt?: number;
+}
+
+export interface OnlineAudienceRequestFallbackInput {
+  db: MuzeroDB;
+  query: string;
+  request: NormalizedAudienceRequest;
+  settings: AppSettings;
+}
+
+export interface OnlineAudienceRequestFallbackResult {
+  trackId: string;
+}
+
+export interface AudienceRequestRuntimeDeps {
+  db?: MuzeroDB;
+  now?: () => number;
+  getCurrentTrackId?: () => string | undefined | Promise<string | undefined>;
+  getActiveSessionId?: () => string | undefined | Promise<string | undefined>;
+  hasConfiguredOnlineSources?: (settings: AppSettings) => boolean;
+  onlineFallback?: (
+    input: OnlineAudienceRequestFallbackInput,
+  ) => Promise<OnlineAudienceRequestFallbackResult | null>;
+  canUseAiDj?: (settings: AppSettings) => boolean;
+  playNow?: (track: Track) => Promise<void>;
+}
+
+export interface AudienceRequestRuntime {
+  handle(request: NormalizedAudienceRequest): Promise<AudienceRequestRuntimeItem>;
+  approve(id: string, action?: AudienceRequestPlaybackAction): Promise<AudienceRequestRuntimeItem>;
+  reject(id: string): AudienceRequestRuntimeItem | undefined;
+  getItems(): AudienceRequestRuntimeItem[];
+}
+
+export function createAudienceRequestRuntime(
+  deps: AudienceRequestRuntimeDeps = {},
+): AudienceRequestRuntime {
+  const db = deps.db ?? defaultDb;
+  const now = deps.now ?? (() => Date.now());
+  const items: AudienceRequestRuntimeItem[] = [];
+  const seenExternalIds = new Map<string, number>();
+  const lastAcceptedByRequester = new Map<string, number>();
+  let recentAcceptedAt: number[] = [];
+
+  async function handle(request: NormalizedAudienceRequest): Promise<AudienceRequestRuntimeItem> {
+    const settings = await getSettings(db);
+    const intake = settings.audienceRequestIntake ?? DEFAULT_AUDIENCE_REQUEST_INTAKE_SETTINGS;
+    const receivedAt = now();
+    const item = createItem(request, intake, receivedAt);
+    remember(item);
+
+    if (!request.normalizedQuery.trim()) {
+      return finish(item, { status: "ignored", confidence: "none" });
+    }
+    if (
+      isDuplicateAudienceRequest({
+        externalId: request.externalId,
+        now: receivedAt,
+        seenExternalIds,
+        dedupeWindowMs: intake.dedupeWindowSec * 1000,
+      })
+    ) {
+      return finish(item, { status: "ignored", confidence: "none", error: "duplicate" });
+    }
+    if (
+      isRequesterCoolingDown({
+        requesterKey: request.requesterKey,
+        now: receivedAt,
+        lastAcceptedByRequester,
+        cooldownMs: intake.requesterCooldownSec * 1000,
+      })
+    ) {
+      return finish(item, { status: "ignored", confidence: "none", error: "cooldown" });
+    }
+    recentAcceptedAt = recentAcceptedAt.filter((at) => receivedAt - at < 60_000);
+    if (recentAcceptedAt.length >= intake.maxRequestsPerMinute) {
+      return finish(item, { status: "ignored", confidence: "none", error: "rate-limited" });
+    }
+
+    if (request.externalId) seenExternalIds.set(request.externalId, receivedAt);
+    if (request.requesterKey) lastAcceptedByRequester.set(request.requesterKey, receivedAt);
+    recentAcceptedAt.push(receivedAt);
+
+    try {
+      const search = await searchLocal(request, intake);
+      applySearchMetadata(item, search);
+      const plan = planAudienceRequestRoute({
+        routeMode: intake.routeMode,
+        playbackAction: intake.playbackAction,
+        search: toRouteSearchSummary(search),
+        onlineFallbackOnLowConfidence: intake.onlineFallbackOnLowConfidence,
+        hasConfiguredOnlineSources: hasOnlineSources(settings),
+        canUseAiDj: deps.canUseAiDj?.(settings) ?? false,
+        requireApprovalForPlayNow: intake.requireApprovalForPlayNow,
+      });
+      return executePlan({ intake, item, plan, request, settings });
+    } catch (error) {
+      return finish(item, {
+        status: "failed",
+        confidence: item.confidence,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  async function approve(
+    id: string,
+    action?: AudienceRequestPlaybackAction,
+  ): Promise<AudienceRequestRuntimeItem> {
+    const item = items.find((candidate) => candidate.id === id);
+    if (!item) throw new Error(`Audience request not found: ${id}`);
+    if (!item.matchedTrackId) return finish(item, { status: "ignored", error: "no-match" });
+    const track = await getTrack(item.matchedTrackId, db);
+    if (!track) return finish(item, { status: "failed", error: "track-not-found" });
+    const playbackAction = action ?? item.playbackAction;
+    await executePlayback(playbackAction, track);
+    item.playbackAction = playbackAction;
+    return finish(item, { status: "completed", matchedTrackId: track.id });
+  }
+
+  function reject(id: string): AudienceRequestRuntimeItem | undefined {
+    const item = items.find((candidate) => candidate.id === id);
+    return item ? finish(item, { status: "ignored", error: "rejected" }) : undefined;
+  }
+
+  async function searchLocal(
+    request: NormalizedAudienceRequest,
+    intake: AudienceRequestIntakeSettings,
+  ): Promise<AudienceRequestSearchResult> {
+    const tracks = await tracksForScope(intake.searchScope);
+    const trackIds = tracks.map((track) => track.id);
+    const notes = trackIds.length > 0 ? await memoryNotesByTrack(trackIds, db) : undefined;
+    const lyrics = intake.includeLyrics ? lyricsByTrackId(await listAllLyrics(db)) : undefined;
+    return pickAudienceRequestMatch({
+      tracks,
+      query: request.normalizedQuery,
+      memoryNotesByTrackId: notes,
+      lyricsByTrackId: lyrics,
+      threshold: intake.confidenceThreshold,
+      margin: intake.scoreMarginThreshold,
+      avoidCurrentTrackId: await currentTrackId(),
+      onlineFallbackOnLowConfidence: intake.onlineFallbackOnLowConfidence,
+      hasConfiguredOnlineSources: hasOnlineSources(await getSettings(db)),
+    });
+  }
+
+  async function tracksForScope(scope: AudienceRequestIntakeSettings["searchScope"]) {
+    if (scope === "all-library") return listAllTracks(db);
+    const activeSessionId = await resolveActiveSessionId();
+    if (!activeSessionId) return [];
+    const session = await getSession(activeSessionId, db);
+    return getTracksByIds(session?.trackIds ?? [], db);
+  }
+
+  async function resolveActiveSessionId(): Promise<string | undefined> {
+    const injected = await deps.getActiveSessionId?.();
+    if (injected) return injected;
+    return (await getPlayQueue(db)).contextSetId;
+  }
+
+  async function currentTrackId(): Promise<string | undefined> {
+    const injected = await deps.getCurrentTrackId?.();
+    if (injected) return injected;
+    const queue = await getPlayQueue(db);
+    return queue.currentIndex >= 0 ? queue.entries[queue.currentIndex]?.trackId : undefined;
+  }
+
+  function hasOnlineSources(settings: AppSettings): boolean {
+    return (
+      deps.hasConfiguredOnlineSources?.(settings) ??
+      Object.values(settings.streamSources ?? {}).some((source) =>
+        Boolean(source?.enabled || source?.cookie || source?.accessToken),
+      )
+    );
+  }
+
+  async function executePlan(input: {
+    intake: AudienceRequestIntakeSettings;
+    item: AudienceRequestRuntimeItem;
+    plan: AudienceRequestRoutePlan;
+    request: NormalizedAudienceRequest;
+    settings: AppSettings;
+  }): Promise<AudienceRequestRuntimeItem> {
+    const { intake, item, plan, request, settings } = input;
+    if (plan.kind === "playback") {
+      const track = await getRequiredTrack(plan.trackId);
+      await executePlayback(plan.action, track);
+      return finish(item, { status: "completed", matchedTrackId: track.id });
+    }
+    if (plan.kind === "needs-approval") {
+      return finish(item, {
+        status: "needs-approval",
+        matchedTrackId: plan.trackId,
+        error: plan.reason,
+      });
+    }
+    if (plan.kind === "online-search") {
+      const online = await (deps.onlineFallback ?? defaultOnlineFallback)({
+        db,
+        query: request.normalizedQuery,
+        request,
+        settings,
+      });
+      if (!online) {
+        return finish(item, {
+          status: "needs-approval",
+          confidence: "low",
+          error: "online-fallback-empty",
+        });
+      }
+      const track = await getRequiredTrack(online.trackId);
+      const fallbackPlan = planPlaybackForMatch(intake, track.id);
+      if (fallbackPlan.kind === "playback") {
+        await executePlayback(fallbackPlan.action, track);
+        return finish(item, {
+          status: "completed",
+          matchedTrackId: track.id,
+          confidence: "medium",
+        });
+      }
+      return finish(item, {
+        status: "needs-approval",
+        matchedTrackId: track.id,
+        confidence: "medium",
+        error: fallbackPlan.reason,
+      });
+    }
+    if (plan.kind === "ai-dj") {
+      return finish(item, { status: "queued" });
+    }
+    return finish(item, { status: "ignored", error: plan.reason });
+  }
+
+  async function executePlayback(action: AudienceRequestPlaybackAction, track: Track) {
+    if (action === "append-queue") {
+      await playQueueAppend([track.id], db);
+      return;
+    }
+    if (action === "play-next") {
+      await playQueuePlayNext([track.id], db);
+      return;
+    }
+    if (action === "play-now") {
+      if (!deps.playNow) throw new Error("play-now requires a player dependency");
+      await deps.playNow(track);
+    }
+  }
+
+  async function getRequiredTrack(trackId: string): Promise<Track> {
+    const track = await getTrack(trackId, db);
+    if (!track) throw new Error(`Track not found: ${trackId}`);
+    return track;
+  }
+
+  async function defaultOnlineFallback(
+    input: OnlineAudienceRequestFallbackInput,
+  ): Promise<OnlineAudienceRequestFallbackResult | null> {
+    const streamDeps = {
+      http: createStreamHttp(),
+      now,
+      getCookie: (id: keyof NonNullable<AppSettings["streamSources"]>) =>
+        input.settings.streamSources?.[id]?.cookie,
+    };
+    const sources = resolveEnabledStreamSources(input.settings, streamDeps);
+    if (sources.length === 0) return null;
+    const results = await Promise.all(
+      sources.map((source) => source.search(input.query, { limit: 1 }).catch(() => [])),
+    );
+    const hit = results.flat()[0];
+    if (!hit) return null;
+    const sessionId = await resolveOnlineTargetSession(input.settings);
+    if (!sessionId) return null;
+    const track = await createStreamedTrack(hitToStreamedInput(sessionId, hit), db);
+    await prependTrackIds(sessionId, [track.id], db);
+    return { trackId: track.id };
+  }
+
+  async function resolveOnlineTargetSession(settings: AppSettings): Promise<string | null> {
+    const activeSessionId = await resolveActiveSessionId();
+    if (activeSessionId) return activeSessionId;
+    if (settings.streamOnlineSetId && (await getSession(settings.streamOnlineSetId, db))) {
+      return settings.streamOnlineSetId;
+    }
+    const session = await createSession(
+      {
+        name: i18n.t("globalSearch.onlineSetName"),
+        seedPrompt: "",
+        config: { autoExtend: false },
+      },
+      db,
+    );
+    await saveSettings({ streamOnlineSetId: session.id }, db);
+    return session.id;
+  }
+
+  return {
+    handle,
+    approve,
+    reject,
+    getItems: () => [...items],
+  };
+
+  function remember(item: AudienceRequestRuntimeItem) {
+    items.unshift(item);
+    if (items.length > 50) items.length = 50;
+  }
+
+  function finish(
+    item: AudienceRequestRuntimeItem,
+    patch: Partial<AudienceRequestRuntimeItem>,
+  ): AudienceRequestRuntimeItem {
+    Object.assign(item, patch);
+    if (item.status === "completed" || item.status === "failed" || item.status === "ignored") {
+      item.completedAt = now();
+    }
+    return item;
+  }
+}
+
+function createItem(
+  request: NormalizedAudienceRequest,
+  intake: AudienceRequestIntakeSettings,
+  receivedAt: number,
+): AudienceRequestRuntimeItem {
+  return {
+    id: newId("arq"),
+    externalId: request.externalId,
+    receivedAt,
+    sourceKind: request.sourceKind,
+    platform: request.platform,
+    roomId: request.roomId,
+    requesterDisplayName: request.requesterDisplayName,
+    requesterKey: request.requesterKey,
+    requesterRole: request.requesterRole,
+    rawMessage: request.rawMessage,
+    normalizedQuery: request.normalizedQuery,
+    routeMode: intake.routeMode,
+    playbackAction: intake.playbackAction,
+    status: "received",
+  };
+}
+
+function toRouteSearchSummary(search: AudienceRequestSearchResult): AudienceRouteSearchSummary {
+  if (search.kind === "match") {
+    return {
+      kind: "match",
+      trackId: search.best.track.id,
+      onlineFallbackRecommended: false,
+    };
+  }
+  if (search.kind === "low-confidence") {
+    return {
+      kind: "low-confidence",
+      trackId: search.best?.track.id,
+      onlineFallbackRecommended: search.onlineFallbackRecommended,
+    };
+  }
+  return {
+    kind: "no-match",
+    onlineFallbackRecommended: search.onlineFallbackRecommended,
+  };
+}
+
+function applySearchMetadata(
+  item: AudienceRequestRuntimeItem,
+  search: AudienceRequestSearchResult,
+) {
+  if (search.kind === "no-match") {
+    item.confidence = "none";
+    return;
+  }
+  item.matchedTrackId = search.best?.track.id;
+  item.matchedScore = search.best?.score;
+  item.secondScore = search.candidates[1]?.score;
+  item.confidence = search.kind === "match" ? "high" : "low";
+}
+
+function planPlaybackForMatch(
+  intake: AudienceRequestIntakeSettings,
+  trackId: string,
+): Extract<AudienceRequestRoutePlan, { kind: "playback" | "needs-approval" }> {
+  if (intake.playbackAction === "manual-review") {
+    return { kind: "needs-approval", reason: "manual-review", trackId };
+  }
+  if (intake.playbackAction === "play-now" && intake.requireApprovalForPlayNow) {
+    return { kind: "needs-approval", reason: "play-now-requires-approval", trackId };
+  }
+  return { kind: "playback", action: intake.playbackAction, trackId };
+}
+
+function lyricsByTrackId(rows: TrackLyrics[]) {
+  return new Map(rows.map((row) => [row.trackId, row]));
+}

@@ -17,7 +17,7 @@
 | 1 | Contracts + Pure Router | ✅ Completed | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | Desktop Loopback Intake Server | ✅ Completed（Electron） | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | Settings + Request Inbox UI | ✅ Completed | [Phase 3 Checklist](#phase-3-checklist) |
-| 4 | Direct Search Route + Playback Actions | 🔲 Pending | [Phase 4 Checklist](#phase-4-checklist) |
+| 4 | Direct Search Route + Playback Actions | ✅ Completed | [Phase 4 Checklist](#phase-4-checklist) |
 | 5 | AI DJ Route + Prompt Safety | 🔲 Pending | [Phase 5 Checklist](#phase-5-checklist) |
 | 6 | Social Stream Ninja Preset + Docs | 🔲 Pending | [Phase 6 Checklist](#phase-6-checklist) |
 | 7 | Verification + Hardening | 🔲 Pending | [Phase 7 Checklist](#phase-7-checklist) |
@@ -595,21 +595,28 @@ The streamer should be able to click a request row and open the matched track in
 
 **Tasks:**
 
-- [ ] Implement runtime side effects for `play-next`, `append-queue`, and approved `play-now`.
-- [ ] Use active set/all library scope correctly.
-- [ ] Join memory notes for scoring.
-- [ ] Optional: include lyrics search when enabled.
-- [ ] If local confidence is too low, try configured online sources before AI/inbox when online fallback is enabled.
-- [ ] Add request status updates: received -> queued/completed/needs-approval/failed.
-- [ ] Add tests with `fake-indexeddb` for queue insertion order and duplicate handling.
+- [x] Implement runtime side effects for `play-next`, `append-queue`, and approved `play-now`.
+- [x] Use active set/all library scope correctly.
+- [x] Join memory notes for scoring.
+- [x] Include lyrics search when enabled.
+- [x] If local confidence is too low, try configured online sources before AI/inbox when online fallback is enabled.
+- [x] Add request status updates: received -> queued/completed/needs-approval/failed.
+- [x] Add tests with `fake-indexeddb` for queue insertion order, active-set scope, play-now approval, and online fallback.
 
 ### Phase 4 Checklist
 
-- [ ] Highest-confidence local result can be queued next.
-- [ ] Low-confidence local result can fall back to configured online sources.
-- [ ] Queue order is stable and does not duplicate current track unexpectedly.
-- [ ] Low-confidence requests do not auto-switch playback.
-- [ ] Direct search works with no LLM key configured.
+- [x] Highest-confidence local result can be queued next.
+- [x] Low-confidence local result can fall back to configured online sources.
+- [x] Queue order is stable and does not duplicate current track unexpectedly.
+- [x] Low-confidence requests do not auto-switch playback.
+- [x] Direct search works with no LLM key configured.
+
+**Phase 4 Verification:**
+
+- `D:\code\project\MUZERO\node_modules\.bin\vitest.CMD run src\live-requests\audience-request-runtime.test.ts`
+- `D:\code\project\MUZERO\node_modules\.bin\vitest.CMD run src\live-requests\audience-request-schema.test.ts src\live-requests\audience-request-search.test.ts src\live-requests\audience-request-router.test.ts src\live-requests\audience-request-security.test.ts src\live-requests\audience-request-runtime.test.ts`
+- `D:\code\project\MUZERO\node_modules\.bin\biome.CMD check --write src\live-requests\audience-request-runtime.ts src\live-requests\audience-request-runtime.test.ts`
+- `D:\code\project\MUZERO\node_modules\.bin\tsc.CMD --noEmit --pretty false`
 
 ### Phase 5: AI DJ Route + Prompt Safety
 
@@ -765,3 +772,4 @@ The streamer should be able to click a request row and open the matched track in
 | 2026-06-13 | Codex | Completed Phase 1: pure request schema normalization, local search match picker, route planner, in-memory duplicate/cooldown helpers, and targeted tests. |
 | 2026-06-13 | Codex | Pivoted Phase 2 to Electron-first per product direction: Electron main-process loopback HTTP intake server, token/query auth, bounded body handling, typed preload/renderer bridge, and Node/Vitest coverage. Tauri listener intentionally removed for v1. |
 | 2026-06-13 | Codex | Completed Phase 3: visible Live requests Settings pane, default local intake settings, Settings IA entry, endpoint/token controls, transient request inbox shell, and en/zh/ja/ko catalog coverage. |
+| 2026-06-13 | Codex | Completed Phase 4: direct Search runtime with transient request rows, duplicate/cooldown/rate-limit guards, active-set/all-library scope, memory/lyrics-aware scoring, play-next/append/approved play-now side effects, and online-source fallback. |
