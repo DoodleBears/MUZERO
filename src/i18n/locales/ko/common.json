@@ -860,7 +860,7 @@
     "aboutCheckUpdates": "업데이트 확인",
     "aboutViewChangelog": "새로운 기능",
     "aboutWebOnly": "웹 앱을 사용 중입니다. 새로고침하면 자동으로 업데이트됩니다.",
-    "versionHistoryTitle": "버전 기록",
+    "versionHistoryTitle": "데스크톱 다운로드",
     "versionHistoryLoading": "릴리스 불러오는 중…",
     "versionHistoryError": "릴리스 목록을 불러오지 못했습니다.",
     "versionHistoryRetry": "다시 시도",

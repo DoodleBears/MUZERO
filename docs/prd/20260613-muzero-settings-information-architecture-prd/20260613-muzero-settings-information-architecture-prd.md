@@ -643,36 +643,42 @@ Scope:
 **Goal:** Make online/cloud behavior a distinct Settings section.
 
 **Tasks:**
-- [ ] Move Cloud Drive setup into Online Sync.
-- [ ] Keep connected drive rows, CORS guidance, sync progress, and per-drive preferences together.
-- [ ] Place presence under Online Sync with clearer copy.
-- [ ] Confirm local file paths and folder settings are not exposed in online sync UI/manifest flows.
-- [ ] Add/update tests for nav routing and aliases.
+- [x] Move Cloud Drive setup into Online Sync.
+- [x] Keep connected drive rows, CORS guidance, sync progress, and per-drive preferences together.
+- [x] Place presence under Online Sync with clearer copy.
+- [x] Confirm local file paths and folder settings are not exposed in online sync UI/manifest flows.
+- [x] Add/update tests for nav routing and aliases.
 
 ### Phase 5 Checklist
 
-- [ ] Users can find cloud drive setup under Online Sync.
-- [ ] Presence is not mixed with local device profile editing.
-- [ ] Cloud sync copy preserves local-first/BYOK wording.
-- [ ] Existing cloud drive functionality remains unchanged.
+- [x] Users can find cloud drive setup under Online Sync.
+- [x] Presence is not mixed with local device profile editing.
+- [x] Cloud sync copy preserves local-first/BYOK wording.
+- [x] Existing cloud drive functionality remains unchanged.
+
+**Phase 5 Verification:**
+- `node_modules\.bin\vitest.CMD run src\components\settings\settings-nav.test.ts`
 
 ### Phase 6: AI Features Section Split
 
 **Goal:** Move DJ/LLM and AI music generation settings into one AI-focused section.
 
 **Tasks:**
-- [ ] Rename sidebar items to DJ model and AI music generation or equivalent localized labels.
-- [ ] Move `LlmProviderSettings` under AI.
-- [ ] Move music generation BYOK config under AI.
-- [ ] Keep save behavior clear.
-- [ ] Ensure key handling still follows BYOK discipline.
+- [x] Rename sidebar items to DJ model and AI music generation or equivalent localized labels.
+- [x] Move `LlmProviderSettings` under AI.
+- [x] Move music generation BYOK config under AI.
+- [x] Keep save behavior clear.
+- [x] Ensure key handling still follows BYOK discipline.
 
 ### Phase 6 Checklist
 
-- [ ] AI settings are no longer grouped under playback.
-- [ ] API keys remain local-only and never logged.
-- [ ] AI music generation remains opt-in.
-- [ ] i18n coverage exists for all new AI labels.
+- [x] AI settings are no longer grouped under playback.
+- [x] API keys remain local-only and never logged.
+- [x] AI music generation remains opt-in.
+- [x] i18n coverage exists for all new AI labels.
+
+**Phase 6 Verification:**
+- `node_modules\.bin\vitest.CMD run src\components\settings\settings-nav.test.ts`
 
 ### Phase 7: Listening Stats Section
 
@@ -702,16 +708,19 @@ Scope:
 **Goal:** Align the old Version History wording with the actual product job: desktop build downloads.
 
 **Tasks:**
-- [ ] Change sidebar label from version history to desktop downloads.
-- [ ] Update `VersionHistorySettings` title/copy where needed.
-- [ ] Keep existing release/download data flow.
-- [ ] Add/update en/zh/ja/ko i18n strings.
+- [x] Change sidebar label from version history to desktop downloads.
+- [x] Update `VersionHistorySettings` title/copy where needed.
+- [x] Keep existing release/download data flow.
+- [x] Add/update en/zh/ja/ko i18n strings.
 
 ### Phase 8 Checklist
 
-- [ ] Sidebar says Desktop downloads / 桌面版下载 / localized equivalents.
-- [ ] Pane title matches the new label.
-- [ ] Existing release history/download tests still pass.
+- [x] Sidebar says Desktop downloads / 桌面版下载 / localized equivalents.
+- [x] Pane title matches the new label.
+- [x] Existing release history/download tests still pass.
+
+**Phase 8 Verification:**
+- `node_modules\.bin\vitest.CMD run src\components\settings\settings-nav.test.ts src\lib\release-manifest.test.ts`
 
 ### Phase 9: Verification + Polish
 
@@ -831,6 +840,7 @@ Scope:
 | 2026-06-13 | Codex | Completed Phase 2: new Settings IA, icon + label sidebar, stale-id aliases, and routed existing panes to new ids. |
 | 2026-06-13 | Codex | Completed Phase 3: local folder recursive preference, non-recursive scanner behavior, Settings toggle, repository helper, and targeted tests. |
 | 2026-06-13 | Codex | Advanced Phase 4: Storage & cache title, device usage progress/fallback, refresh action, and shared offline/playback cache controls in Storage. |
+| 2026-06-13 | Codex | Completed Phases 5, 6, and 8: Online Sync grouping, AI grouping, and Desktop downloads title/i18n. |
 
 ---
 

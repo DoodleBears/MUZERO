@@ -875,7 +875,7 @@
     "aboutCheckUpdates": "Check for updates",
     "aboutViewChangelog": "What's new",
     "aboutWebOnly": "You're on the web app — it updates automatically when you reload.",
-    "versionHistoryTitle": "Version history",
+    "versionHistoryTitle": "Desktop downloads",
     "versionHistoryLoading": "Loading releases…",
     "versionHistoryError": "Couldn't load the release list.",
     "versionHistoryRetry": "Retry",
