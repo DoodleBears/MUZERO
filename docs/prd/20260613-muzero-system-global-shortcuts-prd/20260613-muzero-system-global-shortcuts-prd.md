@@ -12,7 +12,7 @@
 | Phase | Name | Status | Link |
 |-------|------|--------|------|
 | 1 | Action contract and shared dispatcher | Completed | [Phase 1 Checklist](#phase-1-checklist) |
-| 2 | Electron global-shortcut adapter | Pending | [Phase 2 Checklist](#phase-2-checklist) |
+| 2 | Electron global-shortcut adapter | Completed | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | Settings UI and persistence | Pending | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | Platform QA and polish | Pending | [Phase 4 Checklist](#phase-4-checklist) |
 
@@ -348,19 +348,27 @@ UI principles:
 **Goal:** Register and unregister OS-level accelerators in Electron desktop with deterministic lifecycle behavior.
 
 **Tasks:**
-- [ ] Add `electron/global-shortcuts.cjs` using Electron main-process `globalShortcut`.
-- [ ] Wire module from `electron/main.cjs` after `app.whenReady()` and clean up on `will-quit`.
-- [ ] Add IPC / preload bridge methods for registration sync and action event subscription.
-- [ ] Build a renderer-side adapter with fake implementation for tests.
-- [ ] Add lifecycle hook to sync settings -> registered accelerators.
+- [x] Add `electron/global-shortcuts.cjs` using Electron main-process `globalShortcut`.
+- [x] Wire module from `electron/main.cjs` after `app.whenReady()` and clean up on `will-quit`.
+- [x] Add IPC / preload bridge methods for registration sync and action event subscription.
+- [x] Build a renderer-side adapter with fake implementation for tests.
+- [x] Add lifecycle hook to sync settings -> registered accelerators.
 
 ### Phase 2 Checklist
 
-- [ ] Web/browser dev mode reports unsupported without throwing.
-- [ ] Electron desktop registers enabled accelerators.
-- [ ] Changing a binding unregisters the old accelerator before registering the new one.
-- [ ] Failed registration is surfaced per action.
-- [ ] App teardown unregisters owned accelerators.
+- [x] Web/browser dev mode reports unsupported without throwing.
+- [x] Electron desktop registers enabled accelerators.
+- [x] Changing a binding unregisters the old accelerator before registering the new one.
+- [x] Failed registration is surfaced per action.
+- [x] App teardown unregisters owned accelerators.
+
+**Phase 2 Verification:**
+- `vitest run scripts/electron-global-shortcuts.test.mjs src/hooks/use-system-shortcuts.test.tsx src/shortcuts/system-global.test.ts src/shortcuts/actions.test.ts src/hooks/use-shortcut-dispatch.test.tsx`
+- `tsc --noEmit`
+- `biome check src/hooks/use-system-shortcuts.ts src/hooks/use-system-shortcuts.test.tsx src/lib/desktop/bridge.ts src/lib/desktop/electron.ts src/hooks/use-shortcut-dispatch.ts src/shortcuts/actions.ts src/shortcuts/system-global.ts src/shortcuts/actions.test.ts src/shortcuts/system-global.test.ts`
+- `node --check electron/global-shortcuts.cjs`
+- `node --check electron/main.cjs`
+- `node --check electron/preload.cjs`
 
 ### Phase 3: Settings UI And Persistence
 
@@ -460,3 +468,4 @@ UI principles:
 | 2026-06-13 | MUZERO | Initial draft: opt-in OS-level global shortcut support for playback controls while MUZERO is not foreground. |
 | 2026-06-13 | MUZERO | Updated product direction to Electron-first implementation with Tauri parity explicitly out of v1 scope. |
 | 2026-06-13 | MUZERO | Completed Phase 1: added system-global action allowlist, safe accelerator validation, shared shortcut action runner, and focused shortcut regression tests. |
+| 2026-06-13 | MUZERO | Completed Phase 2: added Electron globalShortcut registration, preload/DesktopBridge adapter, renderer sync hook, and lifecycle tests. |

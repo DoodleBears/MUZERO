@@ -6,6 +6,8 @@ const { contextBridge, ipcRenderer } = require("electron");
 // Sandboxed preloads can only require Electron's limited preload modules; keep
 // this in sync with electron/diagnostics.cjs without requiring that local file.
 const DIAGNOSTICS_CHANNEL = "muzero:diagnostics:event";
+const SYSTEM_SHORTCUT_CONFIGURE_CHANNEL = "muzero:systemShortcuts:configure";
+const SYSTEM_SHORTCUT_ACTION_CHANNEL = "muzero:systemShortcuts:action";
 
 contextBridge.exposeInMainWorld("muzero", {
   kind: "electron",
@@ -53,6 +55,17 @@ contextBridge.exposeInMainWorld("muzero", {
       const listener = (_event, entry) => callback(entry);
       ipcRenderer.on(DIAGNOSTICS_CHANNEL, listener);
       return () => ipcRenderer.removeListener(DIAGNOSTICS_CHANNEL, listener);
+    },
+  },
+  systemShortcuts: {
+    configure: (registrations) =>
+      ipcRenderer.invoke(SYSTEM_SHORTCUT_CONFIGURE_CHANNEL, { registrations }),
+    onAction: (callback) => {
+      const listener = (_event, actionId) => {
+        if (typeof actionId === "string") callback(actionId);
+      };
+      ipcRenderer.on(SYSTEM_SHORTCUT_ACTION_CHANNEL, listener);
+      return () => ipcRenderer.removeListener(SYSTEM_SHORTCUT_ACTION_CHANNEL, listener);
     },
   },
 });
