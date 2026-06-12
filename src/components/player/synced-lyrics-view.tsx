@@ -1,6 +1,6 @@
 import { useLiveQuery } from "dexie-react-hooks";
 import { LocateFixed } from "lucide-react";
-import { animate, motion, useAnimationControls } from "motion/react";
+import { animate, motion } from "motion/react";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { LyricsSearchPanel } from "@/components/player/lyrics-search-panel";
@@ -288,6 +288,13 @@ function SyncedLines({
     () => resolveLyricsMotionMode(motionMode, { reducedMotion: prefersReducedMotion() }),
     [motionMode],
   );
+  const lyricsSetKey = useMemo(() => {
+    const first = lines[0];
+    const last = lines[lines.length - 1];
+    return `${lines.length}:${first?.timeMs ?? 0}:${first?.text ?? ""}:${last?.timeMs ?? 0}:${
+      last?.text ?? ""
+    }`;
+  }, [lines]);
   // Karaoke fill colors: the sung part shows the full lyric color; the unsung part
   // sits at the inactive opacity (relative to active, since the whole line already
   // carries activeOpacity) so it reads like the dim lines until it's sung.
@@ -458,6 +465,7 @@ function SyncedLines({
         onTouchMove={() => setFollowing(false)}
       >
         <div
+          key={lyricsSetKey}
           ref={stackRef}
           className="flex flex-col"
           style={{
@@ -540,13 +548,20 @@ function LyricLineButton({
   unsungColor: string;
   onClick: () => void;
 }) {
-  const controls = useAnimationControls();
-  const waveToken = cascadePulse.token;
   const targetOpacity = isActive ? lyricStyle.activeOpacity : lyricStyle.inactiveOpacity;
   // Scale inactive lines DOWN instead of animating font-size: the layout (and
   // wrapping) stays fixed at the active size, while Motion owns the visual change.
   const targetScale = isActive ? 1 : lyricStyle.inactiveFontSize / lyricStyle.activeFontSize;
-  const baseTransition =
+  const scaleTransition =
+    lyricsMotion.row.transition === "spring"
+      ? {
+          type: "spring" as const,
+          stiffness: lyricsMotion.follow.stiffness,
+          damping: lyricsMotion.follow.damping,
+          mass: lyricsMotion.follow.mass,
+        }
+      : { duration: 0.35, ease: [0.22, 1, 0.36, 1] as const };
+  const waveTransition =
     lyricsMotion.row.transition === "spring"
       ? {
           type: "spring" as const,
@@ -555,45 +570,25 @@ function LyricLineButton({
           mass: lyricsMotion.follow.mass,
           delay: rowMotion.delaySec,
         }
-      : { duration: 0.35, ease: [0.22, 1, 0.36, 1] as const };
-
-  useEffect(() => {
-    void waveToken;
-    if (!rowMotion.affected) {
-      void controls.start({
-        opacity: targetOpacity,
-        scale: targetScale,
-        y: 0,
-        filter: "blur(0px)",
-        transition: baseTransition,
-      });
-      return;
-    }
-    void controls.start({
-      opacity: targetOpacity,
-      scale: targetScale,
-      y: [rowMotion.initialY, 0],
-      filter: ["blur(1.5px)", "blur(0px)"],
-      transition: baseTransition,
-    });
-  }, [
-    baseTransition,
-    controls,
-    rowMotion.affected,
-    rowMotion.initialY,
-    targetOpacity,
-    targetScale,
-    waveToken,
-  ]);
+      : { duration: 0.35, delay: rowMotion.delaySec, ease: [0.22, 1, 0.36, 1] as const };
 
   return (
     <motion.button
       type="button"
-      initial={{
+      initial={false}
+      animate={{
         opacity: targetOpacity,
         scale: targetScale,
-        y: 0,
-        filter: "blur(0px)",
+        y: rowMotion.affected ? [rowMotion.initialY, 0] : 0,
+        filter: rowMotion.affected ? ["blur(1.5px)", "blur(0px)"] : "blur(0px)",
+      }}
+      transition={{
+        opacity: scaleTransition,
+        scale: scaleTransition,
+        y: rowMotion.affected ? waveTransition : { duration: 0 },
+        filter: rowMotion.affected
+          ? { duration: 0.24, delay: rowMotion.delaySec }
+          : { duration: 0 },
       }}
       data-active={isActive || undefined}
       data-cascade-affected={rowMotion.affected || undefined}
@@ -602,7 +597,6 @@ function LyricLineButton({
       data-cascade-wave-token={rowMotion.affected ? cascadePulse.token : undefined}
       aria-current={isActive ? "true" : undefined}
       onClick={onClick}
-      animate={controls}
       style={{
         fontSize: lyricStyle.activeFontSize,
         color: lyricStyle.color,
