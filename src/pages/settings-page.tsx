@@ -750,16 +750,104 @@ export function SettingsPage() {
           {activeItem === "flow" && <FlowSettings />}
 
           {activeItem === "lyrics" && <LyricsSettings />}
-          {activeItem === "stream-sources" && <StreamSourcesSettings />}
+          {activeItem === "online-sources" && <StreamSourcesSettings />}
           {activeItem === "storage" && <PersistentStorageSettings />}
 
           {activeItem === "advanced" && <TraceDiagnostics />}
 
           {activeItem === "about" && <AboutSettings />}
 
-          {activeItem === "version-history" && <VersionHistorySettings />}
+          {activeItem === "desktop-downloads" && <VersionHistorySettings />}
 
-          {activeItem === "device" && (
+          {activeItem === "playback" && (
+            <Card>
+              <CardHeader>
+                <CardTitle>{t("settings.navPlayback")}</CardTitle>
+              </CardHeader>
+              <CardContent className="flex flex-col gap-3">
+                <Field label={t("player.repeatLabel")}>
+                  <Select
+                    value={settings.playerRepeatMode ?? "off"}
+                    onValueChange={(value) =>
+                      void saveSettings({
+                        playerRepeatMode: value as NonNullable<AppSettings["playerRepeatMode"]>,
+                      })
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue>
+                        {(value) =>
+                          t(
+                            value === "one"
+                              ? "settings.repeatOne"
+                              : value === "all"
+                                ? "settings.repeatAll"
+                                : "settings.repeatOff",
+                          )
+                        }
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="off">{t("settings.repeatOff")}</SelectItem>
+                      <SelectItem value="one">{t("settings.repeatOne")}</SelectItem>
+                      <SelectItem value="all">{t("settings.repeatAll")}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </Field>
+                <label className="flex items-start gap-3 rounded-md border border-border p-3">
+                  <input
+                    type="checkbox"
+                    checked={settings.playerShuffle ?? false}
+                    onChange={(event) =>
+                      void saveSettings({ playerShuffle: event.currentTarget.checked })
+                    }
+                    className="mt-1 size-4 accent-primary"
+                  />
+                  <span className="flex flex-col gap-1">
+                    <span className="font-medium text-sm">{t("player.shuffle")}</span>
+                    <span className="text-muted-foreground text-xs">
+                      {t("settings.shuffleHint")}
+                    </span>
+                  </span>
+                </label>
+              </CardContent>
+            </Card>
+          )}
+
+          {activeItem === "listening-stats" && (
+            <Card>
+              <CardHeader>
+                <CardTitle>{t("settings.navListeningStats")}</CardTitle>
+              </CardHeader>
+              <CardContent className="grid gap-2 text-xs sm:grid-cols-2">
+                <div className="rounded-md border border-border bg-muted/25 p-3">
+                  <p className="text-muted-foreground">{t("settings.deviceTotalPlays")}</p>
+                  <p className="font-medium text-sm">{playbackSummary.playCount}</p>
+                </div>
+                <div className="rounded-md border border-border bg-muted/25 p-3">
+                  <p className="text-muted-foreground">{t("settings.deviceListenedTime")}</p>
+                  <p className="font-medium text-sm">
+                    {formatDuration(playbackSummary.listenedSec)}
+                  </p>
+                </div>
+                <div className="rounded-md border border-border bg-muted/25 p-3">
+                  <p className="text-muted-foreground">{t("settings.devicePendingListens")}</p>
+                  <p className="font-medium text-sm">
+                    {playbackSyncSummary.pendingEventCount} ·{" "}
+                    {formatDuration(playbackSyncSummary.pendingListenedSec)}
+                  </p>
+                </div>
+                <div className="rounded-md border border-border bg-muted/25 p-3">
+                  <p className="text-muted-foreground">{t("settings.deviceUploadedSegments")}</p>
+                  <p className="font-medium text-sm">
+                    {playbackSyncSummary.uploadedSegmentCount}
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {activeItem === "device-profile" && (
             <Card>
               <CardHeader>
                 <CardTitle>{t("settings.deviceTitle")}</CardTitle>
@@ -886,9 +974,9 @@ export function SettingsPage() {
             </Card>
           )}
 
-          {activeItem === "device" && <ImportedFoldersSettings />}
+          {activeItem === "local-files" && <ImportedFoldersSettings />}
 
-          {activeItem === "playback-dj" && (
+          {activeItem === "ai-dj-model" && (
             <Card>
               <CardHeader>
                 <CardTitle>{t("settings.djTitle")}</CardTitle>
@@ -903,7 +991,7 @@ export function SettingsPage() {
             </Card>
           )}
 
-          {activeItem === "playback-music" && (
+          {activeItem === "ai-music-generation" && (
             <Card>
               <CardHeader>
                 <CardTitle>{t("settings.musicTitle")}</CardTitle>
@@ -1127,7 +1215,7 @@ export function SettingsPage() {
             </Card>
           )}
 
-          {(activeItem === "playback-dj" || activeItem === "playback-music") && (
+          {(activeItem === "ai-dj-model" || activeItem === "ai-music-generation") && (
             <div className="flex items-center gap-3">
               <Button onClick={() => void save()}>{t("settings.save")}</Button>
               {saved && (

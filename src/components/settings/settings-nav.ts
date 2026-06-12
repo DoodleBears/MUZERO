@@ -5,12 +5,13 @@
  * reuse existing card-title i18n keys where possible; section headers add a small
  * set of `navSec*` keys.
  *
- * Cloud Drive stays as one scan-friendly pane; stale split-pane ids are aliased
- * below so a persisted sidebar selection never drops the user into a dead pane.
+ * Stale ids are aliased below so persisted sidebar selections never drop the user
+ * into a dead pane after IA reshuffles.
  */
 export interface SettingsNavItem {
   id: string;
   labelKey: string;
+  icon: string;
 }
 
 export interface SettingsNavSection {
@@ -22,53 +23,73 @@ export const SETTINGS_NAV = [
   {
     labelKey: "settings.navSecAppearance",
     items: [
-      { id: "appearance", labelKey: "settings.appearance" },
-      { id: "background", labelKey: "settings.navBackground" },
-      { id: "visualizer", labelKey: "settings.navVisualizer" },
-      { id: "flow", labelKey: "settings.navFlow" },
-      { id: "lyrics", labelKey: "settings.navLyrics" },
+      { id: "appearance", labelKey: "settings.appearance", icon: "palette" },
+      { id: "background", labelKey: "settings.navBackground", icon: "image" },
+      { id: "visualizer", labelKey: "settings.navVisualizer", icon: "audio-lines" },
+      { id: "flow", labelKey: "settings.navFlow", icon: "waves" },
+      { id: "lyrics", labelKey: "settings.navLyrics", icon: "captions" },
     ],
   },
   {
-    labelKey: "settings.navSecPlayback",
+    labelKey: "settings.navSecFiles",
     items: [
-      { id: "playback-dj", labelKey: "settings.djTitle" },
-      { id: "playback-music", labelKey: "settings.musicTitle" },
-      { id: "stream-sources", labelKey: "streamSources.title" },
-      { id: "storage", labelKey: "streamCache.permanentTitle" },
+      { id: "local-files", labelKey: "settings.navLocalFiles", icon: "folder-open" },
+      { id: "online-sources", labelKey: "streamSources.title", icon: "radio" },
     ],
   },
   {
-    labelKey: "settings.navSecKeyboard",
-    items: [{ id: "shortcuts", labelKey: "settings.navShortcuts" }],
+    labelKey: "settings.navSecStorage",
+    items: [{ id: "storage", labelKey: "streamCache.permanentTitle", icon: "hard-drive" }],
   },
   {
     labelKey: "settings.navSecCloud",
     items: [
-      { id: "cloud", labelKey: "settings.cloudDriveTitle" },
-      { id: "cloud-presence", labelKey: "settings.navCloudPresence" },
+      { id: "cloud", labelKey: "settings.cloudDriveTitle", icon: "cloud" },
+      { id: "cloud-presence", labelKey: "settings.navCloudPresence", icon: "cloud-cog" },
     ],
   },
   {
-    labelKey: "settings.navSecDevice",
-    items: [{ id: "device", labelKey: "settings.deviceTitle" }],
+    labelKey: "settings.navSecAi",
+    items: [
+      { id: "ai-dj-model", labelKey: "settings.navDjModel", icon: "brain-circuit" },
+      { id: "ai-music-generation", labelKey: "settings.musicTitle", icon: "sparkles" },
+    ],
   },
   {
-    labelKey: "settings.navSecAdvanced",
-    items: [{ id: "advanced", labelKey: "settings.traceTitle" }],
+    labelKey: "settings.navSecListening",
+    items: [
+      { id: "listening-stats", labelKey: "settings.navListeningStats", icon: "bar-chart-3" },
+    ],
+  },
+  {
+    labelKey: "settings.navSecControls",
+    items: [
+      { id: "shortcuts", labelKey: "settings.navShortcuts", icon: "keyboard" },
+      { id: "playback", labelKey: "settings.navPlayback", icon: "play-circle" },
+    ],
   },
   {
     labelKey: "settings.navSecAbout",
     items: [
-      { id: "about", labelKey: "settings.navAbout" },
-      { id: "version-history", labelKey: "settings.navVersionHistory" },
+      { id: "device-profile", labelKey: "settings.deviceTitle", icon: "monitor-smartphone" },
+      { id: "desktop-downloads", labelKey: "settings.navDesktopDownloads", icon: "download" },
+      { id: "about", labelKey: "settings.navAbout", icon: "info" },
     ],
+  },
+  {
+    labelKey: "settings.navSecAdvanced",
+    items: [{ id: "advanced", labelKey: "settings.traceTitle", icon: "activity" }],
   },
 ] as const satisfies readonly SettingsNavSection[];
 
 const SETTINGS_ITEM_ALIASES: Record<string, string> = {
   "cloud-owner": "cloud",
   "cloud-sync": "cloud",
+  device: "device-profile",
+  "playback-dj": "ai-dj-model",
+  "playback-music": "ai-music-generation",
+  "stream-sources": "online-sources",
+  "version-history": "desktop-downloads",
 };
 
 export function settingsItemIds(nav: readonly SettingsNavSection[] = SETTINGS_NAV): string[] {

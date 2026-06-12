@@ -1,10 +1,54 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
+import {
+  Activity,
+  AudioLines,
+  BarChart3,
+  BrainCircuit,
+  Captions,
+  Cloud,
+  CloudCog,
+  Download,
+  FolderOpen,
+  HardDrive,
+  ImageIcon,
+  Info,
+  Keyboard,
+  MonitorSmartphone,
+  Palette,
+  PlayCircle,
+  Radio,
+  Sparkles,
+  Waves,
+  type LucideIcon,
+} from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { useTransliterationReady } from "@/hooks/use-transliteration-ready";
 import { freeTextMatches } from "@/lib/search-core";
 import { cn } from "@/lib/utils";
 import { SETTINGS_NAV } from "./settings-nav";
+
+const SETTINGS_ICONS = {
+  activity: Activity,
+  "audio-lines": AudioLines,
+  "bar-chart-3": BarChart3,
+  "brain-circuit": BrainCircuit,
+  captions: Captions,
+  cloud: Cloud,
+  "cloud-cog": CloudCog,
+  download: Download,
+  "folder-open": FolderOpen,
+  "hard-drive": HardDrive,
+  image: ImageIcon,
+  info: Info,
+  keyboard: Keyboard,
+  "monitor-smartphone": MonitorSmartphone,
+  palette: Palette,
+  "play-circle": PlayCircle,
+  radio: Radio,
+  sparkles: Sparkles,
+  waves: Waves,
+} as const satisfies Record<string, LucideIcon>;
 
 /**
  * Left rail for the two-column Settings page: a search box that filters the
@@ -49,22 +93,26 @@ export function SettingsSidebar({
             <p className="hidden px-2 pl-0 pt-3 pb-1 font-medium text-foreground/70 text-xs uppercase tracking-wide md:block">
               {t(section.labelKey)}
             </p>
-            {items.map((item) => (
-              <button
-                key={item.id}
-                type="button"
-                data-settings-item={item.id}
-                onClick={() => onSelect(item.id)}
-                className={cn(
-                  "shrink-0 whitespace-nowrap rounded-md px-3 py-1.5 text-left text-sm transition-colors",
-                  active === item.id
-                    ? "bg-primary/15 font-medium text-primary"
-                    : "text-foreground hover:bg-muted/70 hover:text-primary",
-                )}
-              >
-                {t(item.labelKey)}
-              </button>
-            ))}
+            {items.map((item) => {
+              const Icon = SETTINGS_ICONS[item.icon] ?? Info;
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  data-settings-item={item.id}
+                  onClick={() => onSelect(item.id)}
+                  className={cn(
+                    "inline-flex min-h-9 shrink-0 items-center gap-2 whitespace-nowrap rounded-md px-3 py-1.5 text-left text-sm transition-colors md:w-full",
+                    active === item.id
+                      ? "bg-primary/15 font-medium text-primary"
+                      : "text-foreground hover:bg-muted/70 hover:text-primary",
+                  )}
+                >
+                  <Icon className="size-4 shrink-0" aria-hidden="true" />
+                  <span className="truncate">{t(item.labelKey)}</span>
+                </button>
+              );
+            })}
           </div>
         ))}
         {sections.length === 0 && (

@@ -14,7 +14,7 @@
 | Phase | Name | Status | Link |
 |-------|------|--------|------|
 | 1 | PRD + Current-State Audit | ✅ Completed | [Phase 1 Checklist](#phase-1-checklist) |
-| 2 | Settings Navigation IA + Icon Sidebar | 🔲 Pending | [Phase 2 Checklist](#phase-2-checklist) |
+| 2 | Settings Navigation IA + Icon Sidebar | ✅ Completed | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | Local File Management Section | 🔲 Pending | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | Storage Management Section | 🔲 Pending | [Phase 4 Checklist](#phase-4-checklist) |
 | 5 | Online Sync Section Split | 🔲 Pending | [Phase 5 Checklist](#phase-5-checklist) |
@@ -570,19 +570,19 @@ Scope:
 **Goal:** Reorganize sidebar groups and render icon + label items without changing underlying setting behavior.
 
 **Tasks:**
-- [ ] Extend `SettingsNavItem` with an icon id or icon component mapping.
-- [ ] Rebuild `SETTINGS_NAV` around Appearance, Files, Storage, Online Sync, AI, Listening, Controls, App, Advanced.
-- [ ] Update stale-id aliases in `resolveActiveSettingsItem`.
-- [ ] Update `SettingsSidebar` to render icon + label.
-- [ ] Preserve search/filter behavior and mobile horizontal nav behavior.
-- [ ] Add/update sidebar unit tests for item order, aliases, and icon metadata.
+- [x] Extend `SettingsNavItem` with an icon id or icon component mapping.
+- [x] Rebuild `SETTINGS_NAV` around Appearance, Files, Storage, Online Sync, AI, Listening, Controls, App, Advanced.
+- [x] Update stale-id aliases in `resolveActiveSettingsItem`.
+- [x] Update `SettingsSidebar` to render icon + label.
+- [x] Preserve search/filter behavior and mobile horizontal nav behavior.
+- [x] Add/update sidebar unit tests for item order, aliases, and icon metadata.
 
 ### Phase 2 Checklist
 
-- [ ] Each sidebar item has a visible icon and label.
-- [ ] Existing persisted active item IDs do not dead-end after renames.
-- [ ] Sidebar remains usable at desktop width and mobile width.
-- [ ] All new labels exist in en/zh/ja/ko catalogs.
+- [x] Each sidebar item has a visible icon and label.
+- [x] Existing persisted active item IDs do not dead-end after renames.
+- [x] Sidebar remains usable at desktop width and mobile width.
+- [x] All new labels exist in en/zh/ja/ko catalogs.
 
 ### Phase 3: Local File Management Section
 
@@ -820,6 +820,7 @@ Scope:
 |------|--------|---------|
 | 2026-06-13 | Codex | Initial draft from product request. |
 | 2026-06-13 | Codex | Added Storage & cache best-practice page, OPFS/browser quota management, usage progress bar requirements, and complete Listening stats section. |
+| 2026-06-13 | Codex | Completed Phase 2: new Settings IA, icon + label sidebar, stale-id aliases, and routed existing panes to new ids. |
 
 ---
 
