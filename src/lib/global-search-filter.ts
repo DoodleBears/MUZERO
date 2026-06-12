@@ -1,6 +1,6 @@
 /**
  * `@`-mention filters for the global (⌘/Ctrl+F) search overlay. Typing `@` opens
- * a small menu to scope the search to a facet — artists, albums — or to a single
+ * a small menu to scope the search to a facet — sets, artists, albums — or to a single
  * online source (Bilibili / 网易云). This module is the pure parsing core: it
  * detects the trailing `@token` the user is typing and matches it against the
  * available filter options. Labels live at the UI call site (this lib holds no
@@ -11,13 +11,14 @@ import type { StreamSourceId } from "@/db/types";
 
 /** A chosen scope. `source` forces an ad-hoc search of one online source. */
 export type SearchFilter =
+  | { kind: "set" }
   | { kind: "artist" }
   | { kind: "album" }
   | { kind: "source"; source: StreamSourceId };
 
 export interface FilterOption {
   /** Stable id (menu key + label switch). */
-  id: "artist" | "album" | "bili" | "netease" | "youtube";
+  id: "set" | "artist" | "album" | "bili" | "netease" | "youtube";
   /** The filter this option produces when chosen. */
   filter: SearchFilter;
   /** Latin + CJK aliases (lowercased) the `@token` prefix-matches against. */
@@ -30,6 +31,11 @@ export interface FilterOption {
  * and `@artist` both narrow to the same option.
  */
 export const FILTER_OPTIONS: FilterOption[] = [
+  {
+    id: "set",
+    filter: { kind: "set" },
+    aliases: ["set", "sets", "playlist", "playlists", "歌单", "列表"],
+  },
   {
     id: "artist",
     filter: { kind: "artist" },

@@ -11,11 +11,12 @@ import type { Tab } from "@/components/nav/dock-nav";
 /**
  * An ephemeral "open this derived entity in the library" intent, set from any
  * track surface (rows, inspector — which render outside the library tab) and
- * consumed by the library page once it mounts/activates. Artist resolves by
- * normalized name; album resolves by track membership (compilation-safe), so the
- * caller never needs the derived album key.
+ * consumed by the library page once it mounts/activates. Set resolves by id,
+ * artist by normalized name, and album by track membership (compilation-safe),
+ * so the caller never needs the derived album key.
  */
 export type LibraryEntityTarget =
+  | { kind: "set"; id: string }
   | { kind: "artist"; name: string }
   | { kind: "album"; trackId: string };
 
@@ -27,6 +28,8 @@ interface NavState {
   setSettingsItem: (item: string) => void;
   /** Pending library entity to open; ephemeral, never persisted. */
   pendingLibraryEntity: LibraryEntityTarget | null;
+  /** Switch to the library tab and queue a set to open. */
+  openSet: (id: string) => void;
   /** Switch to the library tab and queue an artist to open. */
   openArtist: (name: string) => void;
   /** Switch to the library tab and queue the album containing a track. */
@@ -43,6 +46,7 @@ export const useNavStore = create<NavState>()(
       settingsItem: "appearance",
       setSettingsItem: (settingsItem) => set({ settingsItem }),
       pendingLibraryEntity: null,
+      openSet: (id) => set({ tab: "search", pendingLibraryEntity: { kind: "set", id } }),
       openArtist: (name) => set({ tab: "search", pendingLibraryEntity: { kind: "artist", name } }),
       openAlbumForTrack: (trackId) =>
         set({ tab: "search", pendingLibraryEntity: { kind: "album", trackId } }),

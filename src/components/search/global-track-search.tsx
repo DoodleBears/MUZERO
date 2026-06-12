@@ -1,5 +1,5 @@
 import { useLiveQuery } from "dexie-react-hooks";
-import { CornerDownLeft, Globe, ListPlus, Search, User, X } from "lucide-react";
+import { CornerDownLeft, Globe, ListMusic, ListPlus, Search, User, X } from "lucide-react";
 import type { KeyboardEvent } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -7,8 +7,8 @@ import { PlaylistImportDialog } from "@/components/stream/playlist-import-dialog
 import { Disc3Icon } from "@/components/ui/disc-3";
 import { Kbd, KbdGroup } from "@/components/ui/kbd";
 import { db } from "@/db/muzero-db";
-import { listAllTracks, memoryNotesByTrack, saveSettings } from "@/db/repositories";
-import type { StreamSourceId, Track } from "@/db/types";
+import { listAllTracks, listSessions, memoryNotesByTrack, saveSettings } from "@/db/repositories";
+import type { DjSession, StreamSourceId, Track } from "@/db/types";
 import { useSettings } from "@/hooks/use-app-data";
 import { useTrackCoverUrl } from "@/hooks/use-media";
 import { useOnlineSourceSearch } from "@/hooks/use-online-source-search";
@@ -34,6 +34,7 @@ import {
   buildAlbumIndex,
   buildArtistIndex,
 } from "@/lib/library-index";
+import { freeTextMatches } from "@/lib/search-core";
 import { trackSubtitle } from "@/lib/track-display";
 import { searchEntityFacets } from "@/lib/track-search";
 import { cn, formatDuration } from "@/lib/utils";
@@ -55,11 +56,13 @@ const SOURCE_LABEL: Partial<Record<StreamSourceId, string>> = {
 };
 
 const EMPTY_MEMORY_NOTES = new Map<string, string[]>();
+const MAX_SET_RESULTS = 5;
 const MAX_SONG_RESULTS = 8;
 const MAX_ENTITY_RESULTS = 5;
 
 /** One arrow-navigable result across the sections (the playlist-link card is not). */
 type NavItem =
+  | { type: "set"; session: DjSession }
   | { type: "track"; track: Track }
   | { type: "album"; entry: AlbumEntry }
   | { type: "artist"; entry: ArtistEntry }
@@ -86,6 +89,7 @@ export function GlobalTrackSearch({
   // most once per interval instead of once per tracks write (PRD F-3).
   const allTracksLive = useLiveQuery(() => listAllTracks(db), [], []);
   const allTracks = useThrottledValue(allTracksLive, LIBRARY_QUERY_COALESCE_MS);
+  const sessions = useLiveQuery(() => listSessions(db), [], []);
   const memoryNotes = useLiveQuery(
     () =>
       allTracks.length > 0
@@ -100,6 +104,7 @@ export function GlobalTrackSearch({
   const playTrack = usePlayerStore((s) => s.playTrack);
   const playNextTrack = usePlayerStore((s) => s.playNextTrack);
   const playStreamedHit = usePlayerStore((s) => s.playStreamedHit);
+  const openSet = useNavStore((s) => s.openSet);
   const openArtist = useNavStore((s) => s.openArtist);
   const openAlbumForTrack = useNavStore((s) => s.openAlbumForTrack);
   const settings = useSettings();
@@ -114,6 +119,7 @@ export function GlobalTrackSearch({
 
   // Which sections the active filter shows. No filter → everything; a facet filter
   // narrows to its one section; a source filter shows only that online source.
+  const showSets = filter === null || filter.kind === "set";
   const showSongs = filter === null;
   const showAlbums = filter === null || filter.kind === "album";
   const showArtists = filter === null || filter.kind === "artist";
@@ -135,6 +141,20 @@ export function GlobalTrackSearch({
   // open, so a closed ⌘F doesn't re-project on every library change.
   const artistIndex = useMemo(() => (open ? buildArtistIndex(allTracks) : []), [open, allTracks]);
   const albumIndex = useMemo(() => (open ? buildAlbumIndex(allTracks) : []), [open, allTracks]);
+
+  // Sets — name-only, transliteration-aware. The full gallery can search inside
+  // set tracks; global ⌘F keeps this result type crisp so `@set` means playlists.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: transliterationReady re-runs once dictionaries load
+  const setResults = useMemo(() => {
+    if (!open || !showSets) return [];
+    const sorted = [...sessions].sort((a, b) => b.updatedAt - a.updatedAt);
+    const base = searchText
+      ? sorted.filter((session) => freeTextMatches(searchText, [session.name]))
+      : filter?.kind === "set"
+        ? sorted
+        : [];
+    return base.slice(0, MAX_SET_RESULTS);
+  }, [open, showSets, sessions, searchText, filter, transliterationReady]);
 
   // Songs — off-thread, transliteration-aware (pinyin / kana / romaji), ranked.
   const songsQuery = open && showSongs ? searchText : "";
@@ -187,14 +207,16 @@ export function GlobalTrackSearch({
   // its own button, so it sits outside keyboard nav).
   const navItems = useMemo<NavItem[]>(
     () => [
+      ...setResults.map((session) => ({ type: "set", session }) as const),
       ...trackResults.map((track) => ({ type: "track", track }) as const),
       ...albumResults.map((entry) => ({ type: "album", entry }) as const),
       ...artistResults.map((entry) => ({ type: "artist", entry }) as const),
       ...onlineHits.map((hit) => ({ type: "online", hit }) as const),
     ],
-    [trackResults, albumResults, artistResults, onlineHits],
+    [setResults, trackResults, albumResults, artistResults, onlineHits],
   );
-  const albumStart = trackResults.length;
+  const trackStart = setResults.length;
+  const albumStart = trackStart + trackResults.length;
   const artistStart = albumStart + albumResults.length;
   const onlineStart = artistStart + artistResults.length;
 
@@ -255,6 +277,10 @@ export function GlobalTrackSearch({
 
   async function activate(item: NavItem, playNext: boolean) {
     switch (item.type) {
+      case "set":
+        openSet(item.session.id);
+        onOpenChange(false);
+        break;
       case "track":
         if (playNext) {
           await playNextTrack(item.track);
@@ -342,7 +368,8 @@ export function GlobalTrackSearch({
   const showEnableChips = streamingSupported && filter === null;
   const onlineActive = showOnline && (onlineSearching || onlineHits.length > 0 || !!link);
   const showSongsHeader =
-    trackResults.length > 0 && (albumResults.length > 0 || artistResults.length > 0);
+    trackResults.length > 0 &&
+    (setResults.length > 0 || albumResults.length > 0 || artistResults.length > 0);
   const isEmpty = navItems.length === 0 && !onlineActive;
 
   return (
@@ -407,6 +434,23 @@ export function GlobalTrackSearch({
         )}
 
         <div className="max-h-[52vh] overflow-y-auto p-2" role="listbox" ref={listRef}>
+          {setResults.length > 0 && (
+            <div>
+              <SectionHeader>{t("gallery.modeSets")}</SectionHeader>
+              {setResults.map((session, i) => (
+                <GlobalSetRow
+                  key={session.id}
+                  session={session}
+                  coverTrack={session.trackIds[0] ? trackById.get(session.trackIds[0]) : undefined}
+                  index={i}
+                  selected={selectedIndex === i}
+                  onMouseEnter={() => setSelectedIndex(i)}
+                  onActivate={() => void activate({ type: "set", session }, false)}
+                />
+              ))}
+            </div>
+          )}
+
           {showSongs && trackResults.length > 0 && (
             <div>
               {showSongsHeader && <SectionHeader>{t("globalSearch.songs")}</SectionHeader>}
@@ -414,9 +458,9 @@ export function GlobalTrackSearch({
                 <GlobalTrackSearchRow
                   key={track.id}
                   track={track}
-                  index={i}
-                  selected={selectedIndex === i}
-                  onMouseEnter={() => setSelectedIndex(i)}
+                  index={trackStart + i}
+                  selected={selectedIndex === trackStart + i}
+                  onMouseEnter={() => setSelectedIndex(trackStart + i)}
                   onPlay={() => void activate({ type: "track", track }, false)}
                   onPlayNext={() => void activate({ type: "track", track }, true)}
                 />
@@ -534,18 +578,83 @@ function SectionHeader({ children }: { children: React.ReactNode }) {
   );
 }
 
+function useSetResultCoverUrl(session: DjSession, fallbackTrack: Track | undefined): string | null {
+  const setUrl = useTrackCoverUrl(
+    session.coverBlobId || session.remoteCoverUrl
+      ? {
+          coverBlobId: session.coverBlobId,
+          coverCrop: session.coverCrop,
+          remoteCoverUrl: session.remoteCoverUrl,
+        }
+      : undefined,
+  );
+  const fallbackUrl = useTrackCoverUrl(fallbackTrack);
+  return session.coverBlobId || session.remoteCoverUrl ? setUrl : fallbackUrl;
+}
+
+function GlobalSetRow({
+  session,
+  coverTrack,
+  index,
+  selected,
+  onMouseEnter,
+  onActivate,
+}: {
+  session: DjSession;
+  coverTrack: Track | undefined;
+  index: number;
+  selected: boolean;
+  onMouseEnter: () => void;
+  onActivate: () => void;
+}) {
+  const { t } = useTranslation();
+  const coverUrl = useSetResultCoverUrl(session, coverTrack);
+  return (
+    <button
+      type="button"
+      data-nav-index={index}
+      onClick={onActivate}
+      onMouseEnter={onMouseEnter}
+      role="option"
+      aria-selected={selected}
+      className={cn(
+        "flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors",
+        selected ? "bg-accent text-accent-foreground" : "hover:bg-accent/60",
+      )}
+    >
+      <div className="grid size-11 shrink-0 place-items-center overflow-hidden rounded-lg bg-secondary text-muted-foreground">
+        {coverUrl ? (
+          <img src={coverUrl} alt="" className="size-full object-cover" />
+        ) : (
+          <ListMusic className="size-4" />
+        )}
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="truncate font-medium text-sm">{session.name}</div>
+        <div className="truncate text-muted-foreground text-xs">
+          {t("gallery.count", { count: session.trackIds.length })}
+        </div>
+      </div>
+    </button>
+  );
+}
+
 /** The active `@` scope, shown as a removable pill left of the input. */
 function FilterPill({ filter, onClear }: { filter: SearchFilter; onClear: () => void }) {
   const { t } = useTranslation();
   const label =
     filter.kind === "source"
       ? (SOURCE_LABEL[filter.source] ?? filter.source)
-      : filter.kind === "artist"
-        ? t("gallery.modeArtists")
-        : t("gallery.modeAlbums");
+      : filter.kind === "set"
+        ? t("gallery.modeSets")
+        : filter.kind === "artist"
+          ? t("gallery.modeArtists")
+          : t("gallery.modeAlbums");
   return (
     <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-primary bg-accent px-2 py-0.5 text-foreground text-xs">
-      {filter.kind === "album" ? (
+      {filter.kind === "set" ? (
+        <ListMusic className="size-3.5" />
+      ) : filter.kind === "album" ? (
         <Disc3Icon size={13} />
       ) : filter.kind === "artist" ? (
         <User className="size-3.5" />
@@ -579,6 +688,7 @@ function FilterMenu({
 }) {
   const { t } = useTranslation();
   const labelFor = (opt: FilterOption): string => {
+    if (opt.id === "set") return t("gallery.modeSets");
     if (opt.id === "artist") return t("gallery.modeArtists");
     if (opt.id === "album") return t("gallery.modeAlbums");
     return opt.filter.kind === "source" ? (SOURCE_LABEL[opt.filter.source] ?? opt.id) : opt.id;
@@ -603,7 +713,9 @@ function FilterMenu({
             i === index ? "bg-accent text-accent-foreground" : "hover:bg-accent/60",
           )}
         >
-          {opt.id === "artist" ? (
+          {opt.id === "set" ? (
+            <ListMusic className="size-4 text-muted-foreground" />
+          ) : opt.id === "artist" ? (
             <User className="size-4 text-muted-foreground" />
           ) : opt.id === "album" ? (
             <Disc3Icon size={16} />

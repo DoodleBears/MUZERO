@@ -64,8 +64,8 @@
     "empty": "No matches. Try a tag or a word from a note."
   },
   "globalSearch": {
-    "title": "Search songs",
-    "placeholder": "Search every song — pinyin (bjhyn), romaji (kimi)…",
+    "title": "Search",
+    "placeholder": "Search songs and sets — use @set for playlists…",
     "empty": "No matches.",
     "songs": "Songs",
     "filterHint": "Filter",

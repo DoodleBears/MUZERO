@@ -59,8 +59,8 @@
     "empty": "一致なし。タグやメモの言葉で試してみて。"
   },
   "globalSearch": {
-    "title": "曲を検索",
-    "placeholder": "すべての曲を検索 — ローマ字（kimi）/ かな…",
+    "title": "検索",
+    "placeholder": "曲とセットを検索 — @set でプレイリストだけ…",
     "empty": "一致するものがありません。",
     "songs": "曲",
     "filterHint": "絞り込み",

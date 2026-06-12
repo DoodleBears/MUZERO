@@ -59,8 +59,8 @@
     "empty": "没有匹配。试试某个标签，或备注里的一个词。"
   },
   "globalSearch": {
-    "title": "搜索歌曲",
-    "placeholder": "搜索全部歌曲 —— 支持拼音 / 首字母（bjhyn）…",
+    "title": "搜索",
+    "placeholder": "搜索歌曲和歌单 —— 输入 @歌单 只看歌单…",
     "empty": "没有匹配项。",
     "songs": "歌曲",
     "filterHint": "筛选",

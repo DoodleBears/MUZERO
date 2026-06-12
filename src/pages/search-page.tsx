@@ -426,7 +426,14 @@ export function SearchPage() {
   const consumeLibraryEntity = useNavStore((s) => s.consumeLibraryEntity);
   useEffect(() => {
     if (!pendingEntity) return;
-    if (pendingEntity.kind === "artist") {
+    if (pendingEntity.kind === "set") {
+      if (!sessions.some((session) => session.id === pendingEntity.id)) return;
+      setMode("sets");
+      if (typeof localStorage !== "undefined") localStorage.setItem(MODE_KEY, "sets");
+      setSelectedArtistKey(null);
+      setSelectedAlbumKey(null);
+      setSelectedSetId(pendingEntity.id);
+    } else if (pendingEntity.kind === "artist") {
       const entry = findArtistByName(artistIndex, pendingEntity.name);
       if (!entry) return;
       setMode("artists");
@@ -444,7 +451,7 @@ export function SearchPage() {
       setSelectedAlbumKey(entry.key);
     }
     consumeLibraryEntity();
-  }, [pendingEntity, artistIndex, albumIndex, consumeLibraryEntity]);
+  }, [pendingEntity, sessions, artistIndex, albumIndex, consumeLibraryEntity]);
 
   // Faceted search: matching artists/albums surfaced above the song list in the
   // tracks ("全部歌曲") mode (honors scoped artist:/album: tokens).
