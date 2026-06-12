@@ -1,5 +1,6 @@
 import { act, fireEvent, render, renderHook, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { LyricStyle } from "@/lyrics/lyric-style";
 import type { ResolvedLyrics } from "@/lyrics/resolve-lyrics";
 import { LyricsScroller, useActiveLyricLine } from "./synced-lyrics-view";
 
@@ -31,6 +32,17 @@ const synced: ResolvedLyrics = {
     { timeMs: 3000, text: "line three" },
   ],
 };
+
+const customLyricStyle = {
+  activeFontSize: 40,
+  inactiveFontSize: 20,
+  activeOpacity: 0.65,
+  inactiveOpacity: 0.22,
+  align: "center",
+  textShadow: "none",
+  textStroke: "",
+  lineGap: 12,
+} satisfies LyricStyle;
 
 describe("LyricsScroller (synced)", () => {
   it("renders every line", () => {
@@ -152,12 +164,36 @@ describe("LyricsScroller (synced)", () => {
     }
   });
 
-  it("uses wider stack spacing in cascade mode", () => {
+  it("respects custom line spacing in cascade mode", () => {
     render(
-      <LyricsScroller resolved={synced} activeIndex={0} onSeek={() => {}} motionMode="cascade" />,
+      <LyricsScroller
+        resolved={synced}
+        activeIndex={0}
+        onSeek={() => {}}
+        motionMode="cascade"
+        lyricStyle={{ ...customLyricStyle, lineGap: 12 }}
+      />,
     );
 
-    expect(screen.getByTestId("lyrics-stack")).toHaveStyle({ rowGap: "20px" });
+    expect(screen.getByTestId("lyrics-stack")).toHaveStyle({ rowGap: "12px" });
+  });
+
+  it("respects custom opacity and inactive font size in cascade mode", async () => {
+    render(
+      <LyricsScroller
+        resolved={synced}
+        activeIndex={0}
+        onSeek={() => {}}
+        motionMode="cascade"
+        lyricStyle={customLyricStyle}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("line one")).toHaveStyle({ opacity: "0.65" });
+    });
+    expect(screen.getByText("line two")).toHaveStyle({ opacity: "0.22" });
+    expect(screen.getByText("line two").style.transform).toContain("scale(0.5000)");
   });
 
   it("clears old scroll offset when entering cascade mode", async () => {

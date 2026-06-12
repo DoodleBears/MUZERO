@@ -241,8 +241,6 @@ const EDGE_FADE = {
   WebkitMaskImage:
     "linear-gradient(to bottom, transparent 0%, black 14%, black 86%, transparent 100%)",
 } as const;
-const CASCADE_MIN_LINE_GAP = 20;
-
 /**
  * Apple-Music-style synced lines on a NATIVE scroll viewport (overflow-y-auto +
  * overscroll-contain — so the gesture never reaches the page behind, and mobile
@@ -282,9 +280,8 @@ function SyncedLines({
   const [viewportH, setViewportH] = useState(0);
   const lyricsMotion = useMemo(() => resolveLyricsMotionMode(motionMode), [motionMode]);
   const isAmlStyleEngine = lyricsMotion.mode === "cascade";
-  const layoutLineGap = isAmlStyleEngine
-    ? Math.max(CASCADE_MIN_LINE_GAP, lyricStyle.lineGap)
-    : lyricStyle.lineGap;
+  const layoutLineGap = lyricStyle.lineGap;
+  const inactiveScale = lyricStyle.inactiveFontSize / lyricStyle.activeFontSize;
   const renderLines = useMemo(() => toLyricRenderLines(lines), [lines]);
   const lyricsSetKey = useMemo(() => {
     const first = lines[0];
@@ -472,6 +469,11 @@ function SyncedLines({
         alignPosition: 0.42,
         lineGapPx: layoutLineGap,
         reducedMotion: false,
+        visualStyle: {
+          activeOpacity: lyricStyle.activeOpacity,
+          inactiveOpacity: lyricStyle.inactiveOpacity,
+          inactiveScale,
+        },
       });
 
       for (const frame of layout.frames) {
@@ -571,7 +573,16 @@ function SyncedLines({
         row.style.willChange = "";
       });
     };
-  }, [isAmlStyleEngine, lines, renderLines, layoutLineGap, viewportH]);
+  }, [
+    isAmlStyleEngine,
+    lines,
+    renderLines,
+    layoutLineGap,
+    viewportH,
+    lyricStyle.activeOpacity,
+    lyricStyle.inactiveOpacity,
+    inactiveScale,
+  ]);
 
   // Per-syllable karaoke fill: while the active line has word timings, a single rAF
   // wipes each word as it's sung by writing one CSS var per word span DIRECTLY to

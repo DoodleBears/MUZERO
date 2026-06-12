@@ -73,6 +73,27 @@ describe("solveLyricLayout", () => {
     expect(layout.frames[3].delaySec).toBeGreaterThan(layout.frames[2].delaySec);
   });
 
+  it("applies caller-provided opacity and inactive scale when supplied", () => {
+    const layout = solveLyricLayout({
+      lines,
+      activeIndex: 1,
+      lineHeights: [40, 40, 40, 40, 40],
+      viewportHeight: 400,
+      alignPosition: 0.42,
+      lineGapPx: 8,
+      reducedMotion: false,
+      visualStyle: {
+        activeOpacity: 0.66,
+        inactiveOpacity: 0.24,
+        inactiveScale: 0.5,
+      },
+    });
+
+    expect(layout.frames[1]).toMatchObject({ opacity: 0.66, scale: 1 });
+    expect(layout.frames[0]).toMatchObject({ opacity: 0.24, scale: 0.5 });
+    expect(layout.frames[3]).toMatchObject({ opacity: 0.24, scale: 0.5 });
+  });
+
   it("uses a calm no-blur layout under reduced motion", () => {
     const layout = solveLyricLayout({
       lines,

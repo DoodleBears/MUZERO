@@ -31,6 +31,11 @@ export interface SolveLyricLayoutInput {
   alignPosition: number;
   lineGapPx: number;
   reducedMotion: boolean;
+  visualStyle?: {
+    activeOpacity: number;
+    inactiveOpacity: number;
+    inactiveScale: number;
+  };
 }
 
 const MIN_LINE_HEIGHT = 36;
@@ -58,14 +63,30 @@ function visualState(index: number, activeIndex: number): LyricLayoutState {
   return index < activeIndex ? "passed" : "upcoming";
 }
 
-function opacityFor(state: LyricLayoutState, distance: number, reducedMotion: boolean): number {
+function opacityFor(
+  state: LyricLayoutState,
+  distance: number,
+  reducedMotion: boolean,
+  visualStyle: SolveLyricLayoutInput["visualStyle"],
+): number {
+  if (visualStyle) {
+    return state === "active" ? visualStyle.activeOpacity : visualStyle.inactiveOpacity;
+  }
   if (state === "active") return 1;
   if (reducedMotion) return state === "distant" ? 0.42 : 0.72;
   if (state === "distant") return 0.28;
   return distance <= 1 ? 0.78 : 0.58;
 }
 
-function scaleFor(state: LyricLayoutState, distance: number, reducedMotion: boolean): number {
+function scaleFor(
+  state: LyricLayoutState,
+  distance: number,
+  reducedMotion: boolean,
+  visualStyle: SolveLyricLayoutInput["visualStyle"],
+): number {
+  if (visualStyle) {
+    return state === "active" ? 1 : visualStyle.inactiveScale;
+  }
   if (reducedMotion || state === "active") return 1;
   if (state === "distant") return 0.9;
   return distance <= 1 ? 0.96 : 0.93;
@@ -117,8 +138,8 @@ export function solveLyricLayout(input: SolveLyricLayoutInput): LyricLayoutResul
         naturalY: rounded(naturalY[index]),
         translateY: rounded(offset),
         height: heights[index],
-        opacity: opacityFor(state, distance, input.reducedMotion),
-        scale: scaleFor(state, distance, input.reducedMotion),
+        opacity: opacityFor(state, distance, input.reducedMotion, input.visualStyle),
+        scale: scaleFor(state, distance, input.reducedMotion, input.visualStyle),
         blurPx: blurFor(state, distance, input.reducedMotion),
         delaySec: delayFor(index, activeIndex, input.reducedMotion),
         state,

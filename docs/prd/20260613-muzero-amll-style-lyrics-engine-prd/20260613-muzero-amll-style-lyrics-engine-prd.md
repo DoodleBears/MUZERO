@@ -428,6 +428,7 @@ Dev mode is not sufficient for final performance sign-off. Final QA should run a
 | 2026-06-13 | MUZERO | Phase 5 completed: removed legacy Motion row-wave cascade code, added long-stack / seek-jump solver coverage, and marked the PRD complete with release QA notes. |
 | 2026-06-13 | MUZERO | Follow-up: user-selected lyric motion modes now ignore OS reduced-motion; Cascade always starts the AMLL-style driver and computes full blur / scale / stagger effects. |
 | 2026-06-13 | MUZERO | Follow-up: Cascade now uses a wider minimum line gap, removes scroll-mode stack padding, hides native scrolling, and clears stale scroll offsets so the active line anchor stays stable. |
+| 2026-06-13 | MUZERO | Follow-up: Cascade layout now respects the shared lyric tuning controls for line gap, active opacity, inactive opacity, and inactive font size. |
 
 ---
 
