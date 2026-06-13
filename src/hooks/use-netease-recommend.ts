@@ -7,7 +7,7 @@
  * docs/prd/20260614-muzero-netease-online-recommendations-prd §4.3.
  */
 
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { StreamSourceId } from "@/db/types";
 import { useSettings } from "@/hooks/use-app-data";
 import { cookieStringHasAuth, STREAM_LOGIN_CONFIGS } from "@/streamsrc/login";
@@ -34,25 +34,35 @@ function neteaseSource(getCookie: (id: StreamSourceId) => string | undefined) {
  * 每日推荐歌曲 — personalized, so it only runs when logged in (`enabled` gated on the
  * MUSIC_U cookie); the UI shows a non-blocking login chip otherwise. The query key
  * carries an auth/anon fingerprint so login/logout invalidates without crossing
- * states. `afresh` forces a reroll ("换一批"); the same key replaces the cached list.
+ * states. The returned `reroll()` forces a fresh personalized list ("换一批", afresh)
+ * into the same cache slot, replacing the visible 30.
  */
-export function useNeteaseDailyTracks(opts?: { afresh?: boolean }) {
+export function useNeteaseDailyTracks() {
   const settings = useSettings();
+  const queryClient = useQueryClient();
   const cookie = settings.streamSources?.netease?.cookie;
   const loggedIn = cookieStringHasAuth(cookie, NETEASE_AUTH_COOKIE);
-  const afresh = opts?.afresh ?? false;
-  return useQuery<StreamSearchHit[]>({
-    queryKey: ["netease", "daily-tracks", loggedIn ? "auth" : "anon"],
-    queryFn: ({ signal }) =>
-      neteaseSource((id) => settings.streamSources?.[id]?.cookie)?.getDailyRecommendedTracks?.({
-        signal,
-        afresh,
-      }) ?? Promise.resolve<StreamSearchHit[]>([]),
+  const queryKey = ["netease", "daily-tracks", loggedIn ? "auth" : "anon"];
+  const fetchDaily = (afresh: boolean, signal?: AbortSignal) =>
+    neteaseSource((id) => settings.streamSources?.[id]?.cookie)?.getDailyRecommendedTracks?.({
+      signal,
+      afresh,
+    }) ?? Promise.resolve<StreamSearchHit[]>([]);
+  const query = useQuery<StreamSearchHit[]>({
+    queryKey,
+    queryFn: ({ signal }) => fetchDaily(false, signal),
     enabled: loggedIn,
     staleTime: RECOMMEND_STALE_TIME,
     gcTime: RECOMMEND_GC_TIME,
     retry: 1,
   });
+  const reroll = () =>
+    queryClient.fetchQuery({
+      queryKey,
+      queryFn: ({ signal }) => fetchDaily(true, signal),
+      staleTime: 0,
+    });
+  return { ...query, reroll };
 }
 
 /**

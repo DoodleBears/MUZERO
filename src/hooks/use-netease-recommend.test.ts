@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { renderHook, waitFor } from "@testing-library/react";
+import { act, renderHook, waitFor } from "@testing-library/react";
 import { createElement, type ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { AppSettings } from "@/db/types";
@@ -47,6 +47,23 @@ describe("useNeteaseDailyTracks", () => {
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(getDaily).toHaveBeenCalledTimes(1);
     expect(result.current.data).toEqual([{ externalId: "1", title: "x", source: "netease" }]);
+  });
+
+  it("reroll fetches with afresh and replaces the cached list ('换一批')", async () => {
+    settingsValue = { streamSources: { netease: { enabled: true, cookie: "MUSIC_U=abc" } } };
+    getDaily
+      .mockReset()
+      .mockResolvedValueOnce([{ externalId: "1", title: "a", source: "netease" }])
+      .mockResolvedValueOnce([{ externalId: "2", title: "b", source: "netease" }]);
+    const { result } = renderHook(() => useNeteaseDailyTracks(), { wrapper: makeWrapper() });
+    await waitFor(() => expect(result.current.data?.[0]?.externalId).toBe("1"));
+    await act(async () => {
+      await result.current.reroll();
+    });
+    await waitFor(() => expect(result.current.data?.[0]?.externalId).toBe("2"));
+    // The initial fetch is afresh:false; the reroll is afresh:true.
+    expect(getDaily).toHaveBeenNthCalledWith(1, expect.objectContaining({ afresh: false }));
+    expect(getDaily).toHaveBeenLastCalledWith(expect.objectContaining({ afresh: true }));
   });
 });
 

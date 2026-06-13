@@ -17,6 +17,8 @@ let dailyState: any;
 let playlistsState: any;
 const setTab = vi.fn();
 const setSettingsItem = vi.fn();
+const playStreamedHit = vi.fn();
+const playStreamedHits = vi.fn();
 
 vi.mock("@/hooks/use-app-data", () => ({ useSettings: () => settingsValue }));
 vi.mock("@/hooks/use-netease-recommend", () => ({
@@ -27,13 +29,31 @@ vi.mock("@/stores/nav-store", () => ({
   // biome-ignore lint/suspicious/noExplicitAny: selector stand-in
   useNavStore: (sel: any) => sel({ setTab, setSettingsItem }),
 }));
+vi.mock("@/stores/player-store", () => ({
+  // biome-ignore lint/suspicious/noExplicitAny: selector stand-in
+  usePlayerStore: (sel: any) => sel({ playStreamedHit, playStreamedHits }),
+}));
+// Stub the heavy import dialog (it pulls the player store + sessions) — we only need
+// to confirm a card opens it with the right playlist.
+vi.mock("@/components/stream/playlist-import-dialog", () => ({
+  // biome-ignore lint/suspicious/noExplicitAny: stub props
+  PlaylistImportDialog: ({ playlist }: any) =>
+    playlist ? <div data-testid="import-dialog">{`dialog:${playlist.id}`}</div> : null,
+}));
 
 import { OnlineDiscoverTab } from "./online-discover-tab";
 
 beforeEach(() => {
   vi.clearAllMocks();
   settingsValue = { streamSources: {} };
-  dailyState = { data: [], isLoading: false, isError: false, isFetching: false, refetch: vi.fn() };
+  dailyState = {
+    data: [],
+    isLoading: false,
+    isError: false,
+    isFetching: false,
+    refetch: vi.fn(),
+    reroll: vi.fn(),
+  };
   playlistsState = { data: [], isLoading: false, isError: false, refetch: vi.fn() };
 });
 
@@ -41,9 +61,8 @@ describe("OnlineDiscoverTab", () => {
   it("shows a non-blocking login chip while still rendering anonymous playlists", () => {
     playlistsState.data = [{ id: "p1", name: "官方歌单", trackCount: 10, source: "netease" }];
     render(<OnlineDiscoverTab />);
-    // Logged out: login chip for the daily section, but the playlist grid is NOT empty.
     expect(screen.getByText("discover.loginToUnlock")).toBeInTheDocument();
-    expect(screen.getByText("官方歌单")).toBeInTheDocument();
+    expect(screen.getByText("官方歌单")).toBeInTheDocument(); // playlists not gated
   });
 
   it("routes the login chip to the Settings streaming section", () => {
@@ -53,12 +72,35 @@ describe("OnlineDiscoverTab", () => {
     expect(setTab).toHaveBeenCalledWith("settings");
   });
 
-  it("renders daily tracks (no login chip) once logged in", () => {
+  it("plays a daily song into the online set on row click (logged in)", () => {
     settingsValue = { streamSources: { netease: { cookie: "MUSIC_U=abc" } } };
-    dailyState.data = [{ source: "netease", externalId: "1", title: "晴天", artist: "周杰伦" }];
+    const hit = { source: "netease", externalId: "1", title: "晴天", artist: "周杰伦" };
+    dailyState.data = [hit];
     render(<OnlineDiscoverTab />);
-    expect(screen.getByText("晴天")).toBeInTheDocument();
     expect(screen.queryByText("discover.loginToUnlock")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByText("晴天"));
+    expect(playStreamedHit).toHaveBeenCalledWith(hit);
+  });
+
+  it("plays the whole daily list via 'play all' and rerolls with afresh", () => {
+    settingsValue = { streamSources: { netease: { cookie: "MUSIC_U=abc" } } };
+    dailyState.data = [
+      { source: "netease", externalId: "1", title: "A" },
+      { source: "netease", externalId: "2", title: "B" },
+    ];
+    render(<OnlineDiscoverTab />);
+    fireEvent.click(screen.getByText("discover.playAll"));
+    expect(playStreamedHits).toHaveBeenCalledWith(dailyState.data);
+    fireEvent.click(screen.getByText("discover.reroll"));
+    expect(dailyState.reroll).toHaveBeenCalled();
+  });
+
+  it("opens the import dialog for a recommended playlist card", () => {
+    playlistsState.data = [{ id: "p1", name: "歌单", trackCount: 3, source: "netease" }];
+    render(<OnlineDiscoverTab />);
+    expect(screen.queryByTestId("import-dialog")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByText("歌单"));
+    expect(screen.getByTestId("import-dialog")).toHaveTextContent("dialog:p1");
   });
 
   it("shows a retry affordance when a section errors", () => {
@@ -67,23 +109,5 @@ describe("OnlineDiscoverTab", () => {
     render(<OnlineDiscoverTab />);
     fireEvent.click(screen.getByText("discover.retry"));
     expect(dailyState.refetch).toHaveBeenCalled();
-  });
-
-  it("wires per-row play and per-card open when handlers are provided", () => {
-    settingsValue = { streamSources: { netease: { cookie: "MUSIC_U=abc" } } };
-    dailyState.data = [{ source: "netease", externalId: "1", title: "晴天" }];
-    playlistsState.data = [{ id: "p1", name: "歌单", trackCount: 3, source: "netease" }];
-    const onPlayTrack = vi.fn();
-    const onOpenPlaylist = vi.fn();
-    render(<OnlineDiscoverTab onPlayTrack={onPlayTrack} onOpenPlaylist={onOpenPlaylist} />);
-    fireEvent.click(screen.getByText("晴天"));
-    fireEvent.click(screen.getByText("歌单"));
-    expect(onPlayTrack).toHaveBeenCalledWith({ source: "netease", externalId: "1", title: "晴天" });
-    expect(onOpenPlaylist).toHaveBeenCalledWith({
-      id: "p1",
-      name: "歌单",
-      trackCount: 3,
-      source: "netease",
-    });
   });
 });

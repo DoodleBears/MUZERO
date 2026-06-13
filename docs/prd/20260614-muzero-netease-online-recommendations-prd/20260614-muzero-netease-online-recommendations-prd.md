@@ -14,7 +14,7 @@
 | 1 | Provider 层：纯解析 + 接口扩展（netease 推荐端点） | ✅ Completed | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | 数据获取层：react-query hooks（不入库、可缓存） | ✅ Completed | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | UI：Gallery 第 5 个「发现」tab + 空态引导登录 | ✅ Completed | [Phase 3 Checklist](#phase-3-checklist) |
-| 4 | 播放 / 保存：复用 playStreamedHit + importStreamedPlaylist | 🔲 Pending | [Phase 4 Checklist](#phase-4-checklist) |
+| 4 | 播放 / 保存：复用 playStreamedHit + importStreamedPlaylist | ✅ Completed | [Phase 4 Checklist](#phase-4-checklist) |
 | 5 | i18n（en/zh/ja/ko）+ 收尾 | 🔲 Pending | [Phase 5 Checklist](#phase-5-checklist) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
@@ -301,14 +301,16 @@ ModeTab value="online" shortcut="5" → {t("gallery.modeOnline")}
 **Goal:** 点播日推歌曲能放；推荐歌单能保存为我的集。
 
 **Tasks:**
-- [ ] 日推歌曲行点播 → `playStreamedHit(hit)`；「播放全部」
-- [ ] 「换一批」→ `afresh` 重取（react-query `refetch` 带新参数）
-- [ ] 推荐歌单卡片「保存为我的集」→ `importStreamedPlaylist`
+- [x] 日推歌曲行点播 → `playStreamedHit(hit)`（既有路径）；「播放全部」→ 新增 `playStreamedHits(hits)` store action（薄封装：尾部 `addHitsToSet` 入 online set + 头部走既有 `playStreamedHit`，保持 [hit0…hitN] 顺序、复用既有激活/watcher 逻辑，**非新播放通路**）
+- [x] 「换一批」→ `useNeteaseDailyTracks().reroll()`：`queryClient.fetchQuery` 以 `afresh:true` 重取写回同一 cache slot（替换可见 30）
+- [x] 推荐歌单卡片「保存为我的集」→ 复用既有 `PlaylistImportDialog`（内部走 `importStreamedPlaylist` / `addStreamedPlaylistToSet`，含「下载到本地」勾选）
+- [x] `OnlineDiscoverTab` 改为自洽组件（内部 `usePlayerStore` + dialog state + hook reroll），search-page 无 props 渲染
 
 ### Phase 4 Checklist
-- [ ] 点播日推 → 进 "online" set 播放，封面懒缓存
-- [ ] 保存推荐歌单 → 新建集，trackIds 正确，可离线下载
-- [ ] 「换一批」拿到不同 30 首
+- [x] 点播日推 → `playStreamedHit` 进 "online" set 播放（既有路径自带播放封面懒缓存）；play-all 额外 `cacheStreamPlaylistTrackCovers` 预热尾部封面（component 单测断言行点播调 `playStreamedHit`、play-all 调 `playStreamedHits`）
+- [x] 保存推荐歌单 → 卡片点击开 `PlaylistImportDialog`（新建集 / 增量同步 / 加入选定集，trackIds 由既有 `importStreamedPlaylist` 保证、可勾「下载到本地」离线）（component 单测断言卡片开 dialog 带正确 playlist）
+- [x] 「换一批」拿到不同 30 首（hook 单测：reroll 以 `afresh:true` 取数并替换 data，初次 `afresh:false`）
+- [ ] 真机联调（登录态 + 网络）：日推点播出声、play-all 队列顺序、保存歌单离线下载 — 随桌面壳冒烟（playStreamedHit 既有路径本仓未做 store 级集成测试，沿用其既证行为）
 
 ### Phase 5: i18n + 收尾
 

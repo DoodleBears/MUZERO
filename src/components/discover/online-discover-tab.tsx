@@ -1,5 +1,7 @@
 import { AlertCircle, ListMusic, LogIn, Play, RotateCw } from "lucide-react";
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
+import { PlaylistImportDialog } from "@/components/stream/playlist-import-dialog";
 import { Button } from "@/components/ui/button";
 import { Disc3Icon } from "@/components/ui/disc-3";
 import { useSettings } from "@/hooks/use-app-data";
@@ -9,6 +11,7 @@ import {
 } from "@/hooks/use-netease-recommend";
 import { formatDuration } from "@/lib/utils";
 import { useNavStore } from "@/stores/nav-store";
+import { usePlayerStore } from "@/stores/player-store";
 import { cookieStringHasAuth, STREAM_LOGIN_CONFIGS } from "@/streamsrc/login";
 import type { StreamPlaylist, StreamSearchHit } from "@/streamsrc/provider";
 
@@ -19,25 +22,13 @@ const STREAM_SETTINGS_ITEM = "stream-sources";
 /**
  * 发现 (Discover) — the Gallery's 5th tab. Two live, online-only sections fed by
  * react-query (never persisted): the personalized 每日推荐歌曲 (login-gated, with a
- * non-blocking login chip otherwise) and the 推荐歌单 grid (works anonymously). This
- * module owns the browse + loading/error/empty/login states; playback + "save as a
- * set" are wired by the parent via the optional row/card handlers.
+ * non-blocking login chip otherwise) and the 推荐歌单 grid (works anonymously). It
+ * reuses the existing play / save paths — a row plays via `playStreamedHit`, "play
+ * all" via `playStreamedHits`, and a playlist card opens the shared
+ * `PlaylistImportDialog` to save it as a set. Nothing here writes IndexedDB until the
+ * user plays or saves.
  */
-export function OnlineDiscoverTab({
-  onPlayTrack,
-  onPlayAll,
-  onReroll,
-  onOpenPlaylist,
-}: {
-  /** Play a single daily-recommended song (Phase 4). */
-  onPlayTrack?: (hit: StreamSearchHit) => void;
-  /** Play the whole daily list (Phase 4). */
-  onPlayAll?: (hits: StreamSearchHit[]) => void;
-  /** Reroll the daily list ("换一批", afresh) (Phase 4). */
-  onReroll?: () => void;
-  /** Open a recommended playlist to save it as a set (Phase 4). */
-  onOpenPlaylist?: (playlist: StreamPlaylist) => void;
-}) {
+export function OnlineDiscoverTab() {
   const { t } = useTranslation();
   const settings = useSettings();
   const loggedIn = cookieStringHasAuth(
@@ -46,6 +37,9 @@ export function OnlineDiscoverTab({
   );
   const daily = useNeteaseDailyTracks();
   const playlists = useNeteaseRecommendedPlaylists();
+  const playStreamedHit = usePlayerStore((s) => s.playStreamedHit);
+  const playStreamedHits = usePlayerStore((s) => s.playStreamedHits);
+  const [importTarget, setImportTarget] = useState<StreamPlaylist | null>(null);
   const dailyHits = daily.data ?? [];
 
   return (
@@ -54,24 +48,20 @@ export function OnlineDiscoverTab({
         <SectionHeader title={t("discover.dailyTracks")}>
           {loggedIn && dailyHits.length > 0 && (
             <div className="flex items-center gap-1.5">
-              {onPlayAll && (
-                <Button size="sm" variant="outline" onClick={() => onPlayAll(dailyHits)}>
-                  <Play className="size-4" />
-                  {t("discover.playAll")}
-                </Button>
-              )}
-              {onReroll && (
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => onReroll()}
-                  disabled={daily.isFetching}
-                  title={t("discover.reroll")}
-                >
-                  <RotateCw className={daily.isFetching ? "size-4 animate-spin" : "size-4"} />
-                  {t("discover.reroll")}
-                </Button>
-              )}
+              <Button size="sm" variant="outline" onClick={() => void playStreamedHits(dailyHits)}>
+                <Play className="size-4" />
+                {t("discover.playAll")}
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => void daily.reroll()}
+                disabled={daily.isFetching}
+                title={t("discover.reroll")}
+              >
+                <RotateCw className={daily.isFetching ? "size-4 animate-spin" : "size-4"} />
+                {t("discover.reroll")}
+              </Button>
             </div>
           )}
         </SectionHeader>
@@ -89,7 +79,7 @@ export function OnlineDiscoverTab({
               <DiscoverTrackRow
                 key={`${hit.source}:${hit.externalId}`}
                 hit={hit}
-                onPlay={onPlayTrack}
+                onPlay={(h) => void playStreamedHit(h)}
               />
             ))}
           </ul>
@@ -107,11 +97,19 @@ export function OnlineDiscoverTab({
         ) : (
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
             {playlists.data?.map((playlist) => (
-              <DiscoverPlaylistCard key={playlist.id} playlist={playlist} onOpen={onOpenPlaylist} />
+              <DiscoverPlaylistCard
+                key={playlist.id}
+                playlist={playlist}
+                onOpen={setImportTarget}
+              />
             ))}
           </div>
         )}
       </section>
+
+      {/* Save a recommended playlist as a set — the same dialog the Settings list and
+          the ⌘F pasted-link card use (new set / re-sync / add to a chosen set). */}
+      <PlaylistImportDialog playlist={importTarget} onClose={() => setImportTarget(null)} />
     </div>
   );
 }
@@ -146,43 +144,15 @@ function LoginChip() {
   );
 }
 
-/** One daily-recommended song. Inert until the parent passes `onPlay` (Phase 4). */
+/** One daily-recommended song; plays into the online set on click. */
 function DiscoverTrackRow({
   hit,
   onPlay,
 }: {
   hit: StreamSearchHit;
-  onPlay?: (hit: StreamSearchHit) => void;
+  onPlay: (hit: StreamSearchHit) => void;
 }) {
   const subtitle = [hit.artist, hit.album].filter(Boolean).join(" · ");
-  const body = (
-    <>
-      <div className="grid size-11 shrink-0 place-items-center overflow-hidden rounded-lg bg-secondary text-muted-foreground">
-        {hit.coverUrl ? (
-          <img
-            src={hit.coverUrl}
-            alt=""
-            referrerPolicy="no-referrer"
-            className="size-full object-cover"
-          />
-        ) : (
-          <Disc3Icon size={16} />
-        )}
-      </div>
-      <div className="min-w-0 flex-1">
-        <div className="truncate font-medium text-sm">{hit.title}</div>
-        <div className="truncate text-muted-foreground text-xs">{subtitle || hit.source}</div>
-      </div>
-      {hit.durationSec ? (
-        <span className="w-10 shrink-0 text-right text-muted-foreground text-xs tabular-nums">
-          {formatDuration(hit.durationSec)}
-        </span>
-      ) : null}
-    </>
-  );
-  if (!onPlay) {
-    return <li className="flex items-center gap-3 rounded-xl px-3 py-2">{body}</li>;
-  }
   return (
     <li>
       <button
@@ -190,23 +160,47 @@ function DiscoverTrackRow({
         onClick={() => onPlay(hit)}
         className="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left transition-colors hover:bg-accent/60"
       >
-        {body}
+        <div className="grid size-11 shrink-0 place-items-center overflow-hidden rounded-lg bg-secondary text-muted-foreground">
+          {hit.coverUrl ? (
+            <img
+              src={hit.coverUrl}
+              alt=""
+              referrerPolicy="no-referrer"
+              className="size-full object-cover"
+            />
+          ) : (
+            <Disc3Icon size={16} />
+          )}
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="truncate font-medium text-sm">{hit.title}</div>
+          <div className="truncate text-muted-foreground text-xs">{subtitle || hit.source}</div>
+        </div>
+        {hit.durationSec ? (
+          <span className="w-10 shrink-0 text-right text-muted-foreground text-xs tabular-nums">
+            {formatDuration(hit.durationSec)}
+          </span>
+        ) : null}
       </button>
     </li>
   );
 }
 
-/** One recommended-playlist card. Inert until the parent passes `onOpen` (Phase 4). */
+/** One recommended-playlist card; opens the import dialog to save it as a set. */
 function DiscoverPlaylistCard({
   playlist,
   onOpen,
 }: {
   playlist: StreamPlaylist;
-  onOpen?: (playlist: StreamPlaylist) => void;
+  onOpen: (playlist: StreamPlaylist) => void;
 }) {
   const { t } = useTranslation();
-  const inner = (
-    <>
+  return (
+    <button
+      type="button"
+      onClick={() => onOpen(playlist)}
+      className="flex flex-col rounded-xl text-left transition-transform hover:scale-[1.02]"
+    >
       <div className="relative aspect-square w-full overflow-hidden rounded-xl bg-secondary text-muted-foreground">
         {playlist.coverUrl ? (
           <img
@@ -225,18 +219,6 @@ function DiscoverPlaylistCard({
       <div className="text-muted-foreground text-xs">
         {t("streamSources.trackCount", { count: playlist.trackCount })}
       </div>
-    </>
-  );
-  if (!onOpen) {
-    return <div className="flex flex-col">{inner}</div>;
-  }
-  return (
-    <button
-      type="button"
-      onClick={() => onOpen(playlist)}
-      className="flex flex-col rounded-xl text-left transition-transform hover:scale-[1.02]"
-    >
-      {inner}
     </button>
   );
 }
