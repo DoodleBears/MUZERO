@@ -19,7 +19,7 @@
 | 3 | Settings + Request Inbox UI | ✅ Completed | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | Direct Search Route + Playback Actions | ✅ Completed | [Phase 4 Checklist](#phase-4-checklist) |
 | 5 | AI DJ Route + Prompt Safety | ✅ Completed | [Phase 5 Checklist](#phase-5-checklist) |
-| 6 | Social Stream Ninja Preset + Docs | 🔲 Pending | [Phase 6 Checklist](#phase-6-checklist) |
+| 6 | Social Stream Ninja Preset + Docs | ✅ Completed | [Phase 6 Checklist](#phase-6-checklist) |
 | 7 | Verification + Hardening | 🔲 Pending | [Phase 7 Checklist](#phase-7-checklist) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
@@ -653,17 +653,25 @@ The streamer should be able to click a request row and open the matched track in
 
 **Tasks:**
 
-- [ ] Add Social Stream Ninja adapter preset for expected payload fields.
-- [ ] Add a generic webhook example for OBS/scripts.
-- [ ] Add localized setup copy with endpoint, auth header, and example JSON.
-- [ ] Validate with the actual Social Stream Ninja forwarding shape before marking Final.
+- [x] Add Social Stream Ninja adapter preset for expected payload fields.
+- [x] Add a generic webhook example for OBS/scripts.
+- [x] Add localized setup copy with endpoint, auth header, and example JSON.
+- [x] Validate with the product-provided Social Stream Ninja Call Webhook forwarding shape before marking Final.
 
 ### Phase 6 Checklist
 
-- [ ] A streamer can copy endpoint + token and configure a forwarding tool.
-- [ ] The primary Social Stream Ninja example uses Call Webhook POST with full JSON body and URL query token.
-- [ ] Header auth remains documented for tools/scripts that can set headers.
-- [ ] Unknown payload shapes fail gracefully with visible schema errors.
+- [x] A streamer can copy endpoint + token and configure a forwarding tool.
+- [x] The primary Social Stream Ninja example uses Call Webhook POST with full JSON body and URL query token.
+- [x] Header auth remains documented for tools/scripts that can set headers.
+- [x] Unknown payload shapes fail gracefully with visible schema errors.
+
+**Phase 6 Verification:**
+
+- `D:\code\project\MUZERO\node_modules\.bin\vitest.CMD run src\live-requests\audience-request-presets.test.ts src\live-requests\audience-request-schema.test.ts src\components\settings\live-request-settings.test.tsx`
+- `D:\code\project\MUZERO\node_modules\.bin\vitest.CMD run src\live-requests\audience-request-schema.test.ts src\live-requests\audience-request-search.test.ts src\live-requests\audience-request-router.test.ts src\live-requests\audience-request-security.test.ts src\live-requests\audience-request-ai-dj.test.ts src\live-requests\audience-request-runtime.test.ts src\live-requests\audience-request-presets.test.ts`
+- `D:\code\project\MUZERO\node_modules\.bin\biome.CMD check --write src\live-requests\audience-request-presets.ts src\live-requests\audience-request-presets.test.ts src\live-requests\audience-request-schema.ts src\components\settings\live-request-settings.tsx src\components\settings\live-request-settings.test.tsx src\i18n\locales\en\common.json src\i18n\locales\zh\common.json src\i18n\locales\ja\common.json src\i18n\locales\ko\common.json`
+- `D:\code\project\MUZERO\node_modules\.bin\tsc.CMD --noEmit --pretty false`
+- Product-provided Social Stream Ninja screenshot validated: Type = Call Webhook, Method = POST, "Include full message object as JSON body" checked, URL token supported for tools that cannot set headers.
 
 ### Phase 7: Verification + Hardening
 
@@ -781,3 +789,4 @@ The streamer should be able to click a request row and open the matched track in
 | 2026-06-13 | Codex | Completed Phase 3: visible Live requests Settings pane, default local intake settings, Settings IA entry, endpoint/token controls, transient request inbox shell, and en/zh/ja/ko catalog coverage. |
 | 2026-06-13 | Codex | Completed Phase 4: direct Search runtime with transient request rows, duplicate/cooldown/rate-limit guards, active-set/all-library scope, memory/lyrics-aware scoring, play-next/append/approved play-now side effects, and online-source fallback. |
 | 2026-06-13 | Codex | Completed Phase 5: AI DJ route adapter with sanitized untrusted-message wrapper, one fresh chat session per request, serial in-memory live-request queue, runtime chat-session linking, and failure-safe transient row updates. |
+| 2026-06-13 | Codex | Completed Phase 6: Social Stream Ninja and generic webhook presets, broader Social Stream Ninja source detection, localized Settings setup snippets, copyable endpoint/header examples, and preset normalization tests. |

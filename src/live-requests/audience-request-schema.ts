@@ -55,7 +55,11 @@ function normalizeRole(value: string | undefined): AudienceRequesterRole {
 }
 
 function sourceKindFor(value: string | undefined): AudienceRequestSourceKind {
-  return value?.trim().toLowerCase() === "social-stream-ninja" ? "social-stream-ninja" : "http";
+  const source = value
+    ?.trim()
+    .toLowerCase()
+    .replace(/[\s_-]+/g, "");
+  return source === "socialstreamninja" ? "social-stream-ninja" : "http";
 }
 
 export function stripAudienceRequestPrefix(

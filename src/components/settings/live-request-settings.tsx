@@ -1,4 +1,4 @@
-import { Copy, KeyRound, RotateCcw, Server, Square } from "lucide-react";
+import { Copy, FileJson, KeyRound, RotateCcw, Server, Square, Webhook } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
@@ -11,6 +11,12 @@ import {
 } from "@/db/types";
 import { useSettings } from "@/hooks/use-app-data";
 import { type LiveRequestIntakePayload, resolveDesktopBridge } from "@/lib/desktop/bridge";
+import {
+  authorizationHeader,
+  examplePayloadJson,
+  GENERIC_WEBHOOK_EXAMPLE,
+  SOCIAL_STREAM_NINJA_WEBHOOK_PRESET,
+} from "@/live-requests/audience-request-presets";
 import type {
   AudienceRequestPlaybackAction,
   AudienceRequestRouteMode,
@@ -44,6 +50,21 @@ export function LiveRequestSettings() {
     [intake.bindHost, intake.port],
   );
   const socialStreamUrl = intake.authToken ? `${endpoint}?token=${intake.authToken}` : endpoint;
+  const visibleSocialStreamUrl = intake.authToken
+    ? `${endpoint}?token=${maskToken(intake.authToken)}`
+    : `${endpoint}?token=<token>`;
+  const authHeader = authorizationHeader(intake.authToken);
+  const visibleAuthHeader = authorizationHeader(
+    intake.authToken ? maskToken(intake.authToken) : undefined,
+  );
+  const socialStreamExample = useMemo(
+    () => examplePayloadJson(SOCIAL_STREAM_NINJA_WEBHOOK_PRESET.examplePayload),
+    [],
+  );
+  const genericExample = useMemo(
+    () => examplePayloadJson(GENERIC_WEBHOOK_EXAMPLE.examplePayload),
+    [],
+  );
 
   useEffect(() => {
     draftRef.current = persistedIntake;
@@ -188,6 +209,60 @@ export function LiveRequestSettings() {
             {t("settings.liveRequestsSocialStreamHint")}
           </p>
         </div>
+
+        <section
+          className="rounded-md border border-border p-3"
+          aria-labelledby="live-request-setup"
+        >
+          <div className="mb-3 flex items-center gap-2">
+            <Webhook className="size-4 text-primary" />
+            <h3 id="live-request-setup" className="font-medium text-sm">
+              {t("settings.liveRequestsSetupTitle")}
+            </h3>
+          </div>
+          <div className="grid gap-3 lg:grid-cols-2">
+            <SetupExample
+              title={t("settings.liveRequestsSocialStreamSetup")}
+              icon={<Webhook className="size-4 text-primary" />}
+            >
+              <SetupLine label={t("settings.liveRequestsSetupMethod")} value="POST" />
+              <SetupCopyLine
+                label={t("settings.liveRequestsSetupUrl")}
+                value={visibleSocialStreamUrl}
+                copyLabel={t("settings.liveRequestsCopySocialUrl")}
+                onCopy={() => void copy(socialStreamUrl)}
+              />
+              <SetupLine
+                label={t("settings.liveRequestsSetupBody")}
+                value={t("settings.liveRequestsSocialStreamBody")}
+              />
+              <SetupJson value={socialStreamExample} />
+            </SetupExample>
+            <SetupExample
+              title={t("settings.liveRequestsGenericWebhookSetup")}
+              icon={<FileJson className="size-4 text-primary" />}
+            >
+              <SetupLine label={t("settings.liveRequestsSetupMethod")} value="POST" />
+              <SetupCopyLine
+                label={t("settings.liveRequestsSetupUrl")}
+                value={endpoint}
+                copyLabel={t("settings.liveRequestsCopyEndpoint")}
+                onCopy={() => void copy(endpoint)}
+              />
+              <SetupCopyLine
+                label={t("settings.liveRequestsSetupHeader")}
+                value={visibleAuthHeader}
+                copyLabel={t("settings.liveRequestsCopyAuthHeader")}
+                onCopy={() => void copy(authHeader)}
+              />
+              <SetupLine
+                label={t("settings.liveRequestsSetupBody")}
+                value={t("settings.liveRequestsGenericWebhookBody")}
+              />
+              <SetupJson value={genericExample} />
+            </SetupExample>
+          </div>
+        </section>
 
         <div className="grid gap-3 sm:grid-cols-2">
           <Field label={t("settings.liveRequestsRoute")}>
@@ -349,6 +424,71 @@ export function LiveRequestSettings() {
         </div>
       </CardContent>
     </Card>
+  );
+}
+
+function SetupExample({
+  children,
+  icon,
+  title,
+}: {
+  children: React.ReactNode;
+  icon: React.ReactNode;
+  title: string;
+}) {
+  return (
+    <div className="min-w-0 rounded-md border border-border bg-muted/10 p-3">
+      <div className="mb-2 flex items-center gap-2">
+        {icon}
+        <h4 className="font-medium text-sm">{title}</h4>
+      </div>
+      <div className="flex min-w-0 flex-col gap-2">{children}</div>
+    </div>
+  );
+}
+
+function SetupLine({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="grid min-w-0 gap-1 text-xs sm:grid-cols-[6rem_1fr]">
+      <span className="text-muted-foreground">{label}</span>
+      <code className="min-w-0 overflow-hidden text-ellipsis rounded bg-muted/40 px-2 py-1">
+        {value}
+      </code>
+    </div>
+  );
+}
+
+function SetupCopyLine({
+  copyLabel,
+  label,
+  onCopy,
+  value,
+}: {
+  copyLabel: string;
+  label: string;
+  onCopy: () => void;
+  value: string;
+}) {
+  return (
+    <div className="grid min-w-0 gap-1 text-xs sm:grid-cols-[6rem_1fr]">
+      <span className="text-muted-foreground">{label}</span>
+      <div className="flex min-w-0 gap-2">
+        <code className="min-w-0 flex-1 overflow-hidden text-ellipsis rounded bg-muted/40 px-2 py-1">
+          {value}
+        </code>
+        <Button variant="outline" size="icon" aria-label={copyLabel} onClick={onCopy}>
+          <Copy />
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function SetupJson({ value }: { value: string }) {
+  return (
+    <pre className="max-h-40 overflow-auto rounded-md bg-muted/40 p-2 text-xs">
+      <code>{value}</code>
+    </pre>
   );
 }
 

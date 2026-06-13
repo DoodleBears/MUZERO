@@ -46,10 +46,17 @@ describe("LiveRequestSettings", () => {
     render(<LiveRequestSettings />);
 
     expect(screen.getByText("settings.liveRequestsTitle")).toBeInTheDocument();
+    expect(screen.getByText("settings.liveRequestsSetupTitle")).toBeInTheDocument();
+    expect(screen.getByText("settings.liveRequestsSocialStreamSetup")).toBeInTheDocument();
+    expect(screen.getByText("settings.liveRequestsGenericWebhookSetup")).toBeInTheDocument();
     expect(screen.getByDisplayValue("41731")).toBeInTheDocument();
     expect(screen.getByLabelText("settings.liveRequestsRoute")).toHaveValue("library-search");
     expect(screen.getByLabelText("settings.liveRequestsPlaybackAction")).toHaveValue("play-next");
-    expect(screen.getByText("http://127.0.0.1:41731/v1/audience/request")).toBeInTheDocument();
+    expect(
+      screen.getAllByText("http://127.0.0.1:41731/v1/audience/request").length,
+    ).toBeGreaterThan(0);
+    expect(screen.getAllByText("POST").length).toBeGreaterThan(0);
+    expect(screen.getByText(/"chatmessage": "点歌 Plastic Love"/)).toBeInTheDocument();
   });
 
   it("saves route and playback changes without enabling the listener implicitly", () => {
