@@ -148,6 +148,28 @@ describe("createPixiBackgroundController", () => {
     expect(module.apps[0].destroy).toHaveBeenCalledTimes(1);
   });
 
+  it("recover() rebuilds the app and re-applies the last source (device-lost path)", async () => {
+    const { module, controller } = makeController();
+    await controller.setSource("a.png", "image");
+    expect(module.apps.length).toBe(1);
+    await controller.recover();
+    // A fresh app is built (the lost GPU context is gone) and the last source is
+    // re-uploaded so the background reappears without a black frame.
+    expect(module.apps.length).toBe(2);
+    expect(controller.stats.appInits).toBe(2);
+    expect(controller.stats.textureSwaps).toBe(2);
+    expect(module.apps[0].destroy).toHaveBeenCalled();
+    controller.destroy();
+  });
+
+  it("recover() is a no-op after destroy()", async () => {
+    const { module, controller } = makeController();
+    await controller.setSource("a.png", "image");
+    controller.destroy();
+    await controller.recover();
+    expect(module.apps.length).toBe(1);
+  });
+
   it("discards a stale source whose load resolves after a newer one", async () => {
     const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
     const deferred = new Map<

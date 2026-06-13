@@ -563,6 +563,10 @@ export interface AppSettings {
   backgroundRenderer?: BackgroundRenderer;
   /** Pixel block size for the pixel background renderer. Default 12. */
   backgroundPixelSize?: number;
+  /** Pixi background GPU backend. "auto" = WebGPU when supported, else WebGL. Default "auto". */
+  backgroundGpuBackend?: "auto" | "webgpu" | "webgl";
+  /** Pixi background GPU power preference. "auto" prefers high-performance. Default "auto". */
+  backgroundGpuPowerPreference?: "auto" | "high-performance" | "low-power";
   /** ASCII renderer character color, used when replaceColor is on. Default #ffffff. */
   backgroundAsciiColor?: string;
   /** ASCII renderer replaces source colors with backgroundAsciiColor. Default false. */
@@ -956,6 +960,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   backgroundMode: "cover",
   backgroundRenderer: "noise",
   backgroundPixelSize: 12,
+  backgroundGpuBackend: "auto",
+  backgroundGpuPowerPreference: "auto",
   backgroundAsciiColor: "#ffffff",
   backgroundAsciiReplaceColor: false,
   backgroundCrtCurvature: 0.54,

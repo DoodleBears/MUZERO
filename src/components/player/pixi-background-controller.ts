@@ -96,9 +96,14 @@ export interface PixiBackgroundController {
   /** Swap the background to `src`. A null src is a transient state — keep the current layer. */
   setSource(src: string | null, mediaType: BackgroundMediaType): Promise<void>;
   resize(): void;
+  /** Rebuild the app and re-apply the last source after a GPU context/device loss. */
+  recover(): Promise<void>;
   destroy(): void;
   readonly stats: { readonly appInits: number; readonly textureSwaps: number };
 }
+
+/** Bounded so a context-loss storm can't spin into an infinite rebuild loop. */
+const MAX_RECOVER_ATTEMPTS = 2;
 
 interface CurrentMedia {
   type: BackgroundMediaType;
@@ -123,6 +128,8 @@ export function createPixiBackgroundController(
   let currentVideoTeardown: (() => void) | undefined;
   let appPromise: Promise<void> | null = null;
   let seq = 0;
+  let lastSource: { src: string; mediaType: BackgroundMediaType } | null = null;
+  let recoverAttempts = 0;
   const stats = { appInits: 0, textureSwaps: 0 };
 
   async function buildApp(): Promise<void> {
@@ -164,6 +171,33 @@ export function createPixiBackgroundController(
     if (typeof ResizeObserver === "function") {
       resizeObserver = new ResizeObserver(() => resize());
       resizeObserver.observe(host);
+    }
+    wireContextLossRecovery(nextApp, view);
+  }
+
+  /**
+   * Best-practice GPU-loss recovery: WebGL fires `webglcontextlost` on the canvas
+   * (preventDefault keeps it recoverable); WebGPU exposes a `device.lost` promise.
+   * Either way we rebuild the app and re-apply the last source. The renderer shape
+   * varies by Pixi backend/version, so the WebGPU probe is defensive. Real GPU loss
+   * can't be exercised in jsdom — `recover()` itself is unit-tested directly.
+   */
+  function wireContextLossRecovery(builtApp: PixiAppLike, view: HTMLCanvasElement): void {
+    view.addEventListener("webglcontextlost", (event) => {
+      event.preventDefault();
+      void recover();
+    });
+    try {
+      const renderer = builtApp.renderer as unknown as {
+        device?: { lost?: Promise<{ reason?: string }> };
+        gpu?: { device?: { lost?: Promise<{ reason?: string }> } };
+      };
+      const device = renderer?.device ?? renderer?.gpu?.device;
+      void device?.lost?.then((info) => {
+        if (!destroyed && info?.reason !== "destroyed") void recover();
+      });
+    } catch {
+      // Renderer internals differ across Pixi backends/versions — skip if absent.
     }
   }
 
@@ -277,9 +311,39 @@ export function createPixiBackgroundController(
     if (previousTexture && previousTexture !== texture) previousTexture.destroy(true);
     if (previousMedia) disposeMedia(previousMedia);
 
+    lastSource = { src, mediaType };
+    recoverAttempts = 0; // a fresh frame landed — allow recovery again
     stats.textureSwaps += 1;
     options.onApplied?.();
     resize();
+  }
+
+  async function recover(): Promise<void> {
+    if (destroyed || recoverAttempts >= MAX_RECOVER_ATTEMPTS) return;
+    recoverAttempts += 1;
+    const source = lastSource;
+    // The lost context took the textures with it — tear the app down and rebuild.
+    currentVideoTeardown?.();
+    currentVideoTeardown = undefined;
+    resizeObserver?.disconnect();
+    resizeObserver = null;
+    if (currentMedia) {
+      disposeMedia(currentMedia);
+      currentMedia = null;
+    }
+    if (app) {
+      try {
+        app.destroy({ removeView: true }, { children: true, context: true });
+      } catch {
+        // The context may already be gone; ignore teardown errors during recovery.
+      }
+      app = null;
+    }
+    sprite = null;
+    filter = null;
+    pixi = null;
+    appPromise = null;
+    if (source) await setSource(source.src, source.mediaType);
   }
 
   function destroy(): void {
@@ -305,6 +369,7 @@ export function createPixiBackgroundController(
   return {
     setSource,
     resize,
+    recover,
     destroy,
     get stats() {
       return stats;

@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useSettings } from "@/hooks/use-app-data";
 import { useSettledValue } from "@/hooks/use-settled-value";
 import { BACKGROUND_EFFECT_SETTLE_MS } from "@/lib/background";
 import {
   type BackgroundEffectSettings,
   resolvePixiBackgroundEffectOptions,
 } from "@/lib/background-effect-settings";
+import { hasWebGpuSupport, resolveGpuBackend, resolveGpuPower } from "@/lib/gpu-backend";
 import { log } from "@/lib/logger";
 import { getAppFetch } from "@/lib/platform";
 import { cn } from "@/lib/utils";
@@ -71,6 +73,12 @@ export function PixiPixelBackground({
   pixelSize: number;
   src: string | null;
 }) {
+  const settings = useSettings();
+  const gpuBackend = useMemo(
+    () => resolveGpuBackend(settings.backgroundGpuBackend, hasWebGpuSupport()),
+    [settings.backgroundGpuBackend],
+  );
+  const gpuPower = resolveGpuPower(settings.backgroundGpuPowerPreference);
   const hostRef = useRef<HTMLDivElement | null>(null);
   const [controller, setController] = useState<PixiBackgroundController | null>(null);
   // The src actually painted onto the Pixi texture. While it lags the current
@@ -99,8 +107,8 @@ export function PixiPixelBackground({
       effect,
       effectOptions,
       pixelSize,
-      preference: "webgl",
-      powerPreference: "low-power",
+      preference: gpuBackend,
+      powerPreference: gpuPower,
       deps: {
         loadPixi: async () => (await import("pixi.js")) as unknown as PixiModuleLike,
         loadMedia: (pixi, source, type) =>
@@ -116,7 +124,7 @@ export function PixiPixelBackground({
       setController(null);
       next.destroy();
     };
-  }, [effect, effectOptions, pixelSize]);
+  }, [effect, effectOptions, pixelSize, gpuBackend, gpuPower]);
 
   // Texture swap: only the SETTLED src reaches the persistent app, so skipped-past
   // songs never upload a texture. Re-runs when the controller is rebuilt so the new

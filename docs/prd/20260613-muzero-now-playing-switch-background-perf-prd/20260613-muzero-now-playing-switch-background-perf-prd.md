@@ -13,7 +13,7 @@
 |-------|------|--------|------|
 | 1 | 持久化 Pixi App + settle 后换纹理(切歌核心修复) | ✅ 代码完成(待 GPU/视觉实测) | [Phase 1](#phase-1-持久化-pixi-app--settle-后换纹理) |
 | 2 | 统一切歌 settle 闸门(封面 `<img>` 即时,重计算 debounce) | ✅ 代码完成(待 GPU/视觉实测) | [Phase 2](#phase-2-统一切歌-settle-闸门) |
-| 3 | GPU 后端 Settings 选项(auto / WebGPU / WebGL) | 🔲 Pending | [Phase 3](#phase-3-gpu-后端-settings-选项) |
+| 3 | GPU 后端 Settings 选项(auto / WebGPU / WebGL) | ✅ 代码完成(待 GPU/视觉实测) | [Phase 3](#phase-3-gpu-后端-settings-选项) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
 
@@ -216,21 +216,15 @@ backgroundGpuPowerPreference?: "auto" | "high-performance" | "low-power"; // DEF
 **Goal:** auto/webgpu/webgl 可选,默认 auto,稳定回退。
 
 **Tasks:**
-- [ ] `AppSettings.backgroundGpuBackend` + `backgroundGpuPowerPreference`,二者 `DEFAULT_SETTINGS: "auto"`(§3.1)。
-- [ ] `resolveGpuBackend(pref)`:`pref==="webgpu"` 或 `auto` 且 `navigator.gpu` 可用 → `"webgpu"`,否则 `"webgl"`;喂 Pixi `init({ preference })`。可单测(注入 `navigator.gpu` 存在与否)。
-- [ ] `resolveGpuPower(pref)`:`auto` → `"high-performance"`(默认优先性能),`"low-power"` 用户显式才用;喂 Pixi `init({ powerPreference })`。可单测。
-- [ ] Settings 背景面板加两个选择器(后端 / 性能档)+ i18n 文案 + 「已回退」副文案。
-- [ ] 改后端/性能档 → 持久 Pixi app 重建一次(复用 Phase 1 的 effect 依赖 `backend`/`power`)。
-- [ ] **device-lost 恢复(best practice):**
-  - WebGPU:`await device.lost` → 若 `reason !== "destroyed"`,判为意外丢失 → 重建 app + 回灌当前 settled 纹理 + `render()` 一次;恢复期间显示常驻 `<img>` 兜底层(§5.1)。
-  - WebGL:监听 `webglcontextlost`(`preventDefault()`)/ `webglcontextrestored` → 重建路径同上(对照现有 [`reactive-scene.tsx:135`](../../../src/visualizer/scene/reactive-scene.tsx#L135) 的处理)。
-  - 重建只尝试有限次(如 1–2 次),仍失败则停留在 `<img>` 兜底,不无限重试、不报错弹窗。
+- [x] `AppSettings.backgroundGpuBackend` + `backgroundGpuPowerPreference`,二者 `DEFAULT_SETTINGS: "auto"`([`db/types.ts`](../../../src/db/types.ts))。
+- [x] 纯解析器 [`gpu-backend.ts`](../../../src/lib/gpu-backend.ts):`resolveGpuBackend(pref, hasWebGpu)`(显式 webgl 不升级;其余可用即 webgpu、否则回退 webgl)、`resolveGpuPower(pref)`(auto/high-performance → high-performance,显式 low-power 才省电)、`hasWebGpuSupport()` 探测;9 例单测。
+- [x] 喂进 Pixi `init({ preference, powerPreference })`([`pixi-pixel-background.tsx`](../../../src/components/player/pixi-pixel-background.tsx) 读 settings → 解析 → 控制器),后端/性能档变化纳入 app 生命周期 effect 依赖 → 改设置重建一次,切歌仍只换纹理。
+- [x] Settings 背景面板([`background-effect-controls.tsx`](../../../src/components/settings/background-effect-controls.tsx))加两个选择器(后端 / 性能档,仅 Pixi 渲染器显示)+ en/zh/ja/ko 文案 + WebGPU 不支持时「已回退」副文案。
+- [x] **device-lost 恢复(best practice):** 控制器 `recover()` —— 重建 app + 回灌 `lastSource`,有限次(`MAX_RECOVER_ATTEMPTS=2`,成功落帧即重置)。事件接线 `wireContextLossRecovery`:WebGL `webglcontextlost`(`preventDefault`)+ WebGPU `device.lost`(`reason !== "destroyed"`)→ `recover()`;恢复期常驻 `<img>` 兜底(Phase 2)。`recover()` 由 2 例单测直接覆盖(真实 GPU 丢失无法在 jsdom 触发)。
 
 **Checklist:**
-- [ ] auto 在支持设备走 WebGPU + high-performance、不支持走 WebGL,均正常出图。
-- [ ] 显式 WebGPU 在 WKWebView 不支持时回退且有提示,不崩。
-- [ ] 切后端/性能档不影响切歌「只换纹理」的行为。
-- [ ] 模拟 device-lost(或切换独显/集显)后能自动恢复出图,恢复期不黑屏。
+- [x] 单测:`resolveGpuBackend`/`resolveGpuPower`(9 例)+ 控制器 `recover()`(2 例)全绿;`src/` 全量 2370 例通过;`tsc`/Biome 通过。
+- [ ] **待实测(桌面)**:auto 在支持设备走 WebGPU + high-performance、不支持走 WebGL 均正常出图;显式 WebGPU 在 WKWebView 回退且有提示不崩;切后端/性能档不影响「只换纹理」;模拟 device-lost(切独显/集显)后自动恢复、恢复期不黑屏。
 
 ---
 
@@ -282,3 +276,4 @@ backgroundGpuPowerPreference?: "auto" | "high-performance" | "low-power"; // DEF
 | 2026-06-13 | Claude | 拍板 4 个 Open Question:独立 settle 常量(不暴露)、`<img>` 常驻底层、新增性能档 auto→高性能、device-lost best-practice 恢复 |
 | 2026-06-13 | Claude | Phase 1 代码完成:`pixi-background-controller`(DI + 持久 app + 纹理热替换)+ 组件重构 + 6 例单测;切歌不再重建 WebGL App。待桌面 GPU/视觉实测 |
 | 2026-06-13 | Claude | Phase 2 代码完成:`useSettledValue` 去抖(纹理上传 debounce)+ 常驻即时 `<img>` + O1 backlight gate;9 例新单测。封面逐张即时、重计算落定才跑 |
+| 2026-06-13 | Claude | Phase 3 代码完成:`gpu-backend` 解析器(9 例)+ `backgroundGpuBackend`/`PowerPreference` 设置(默认 auto=性能优先)+ Settings 双选择器 + en/zh/ja/ko + 控制器 `recover()` device-lost 恢复(2 例)。三个 Phase 代码全部完成,待桌面 GPU/视觉实测 |

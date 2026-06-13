@@ -12,10 +12,25 @@ import { saveSettings } from "@/db/repositories";
 import type { BackgroundMode, BackgroundRenderer } from "@/db/types";
 import { useSettings } from "@/hooks/use-app-data";
 import { BACKGROUND_EFFECT_DEFAULTS, dotScaleDefault } from "@/lib/background-effect-settings";
+import {
+  type GpuBackendPreference,
+  type GpuPowerPreference,
+  hasWebGpuSupport,
+} from "@/lib/gpu-backend";
 import { cn } from "@/lib/utils";
 
 /** Slideshow auto-advance presets, in seconds (5s ... 10min). */
 const SLIDE_INTERVAL_PRESETS = [5, 10, 15, 30, 60, 120, 180, 300, 600];
+
+/** Renderers that go through the Pixi WebGL/WebGPU pipeline (so the GPU controls apply). */
+const PIXI_RENDERERS: BackgroundRenderer[] = [
+  "pixel",
+  "ascii",
+  "cross-hatch",
+  "crt",
+  "dot",
+  "noise",
+];
 
 export function BackgroundEffectControls({ className }: { className?: string }) {
   const { t } = useTranslation();
@@ -37,6 +52,20 @@ export function BackgroundEffectControls({ className }: { className?: string }) 
     { value: "dot", label: t("background.rendererDot") },
     { value: "noise", label: t("background.rendererNoise") },
   ];
+  const gpuBackend = settings.backgroundGpuBackend ?? "auto";
+  const gpuPower = settings.backgroundGpuPowerPreference ?? "auto";
+  const gpuBackendItems: { label: string; value: GpuBackendPreference }[] = [
+    { value: "auto", label: t("background.gpuAuto") },
+    { value: "webgpu", label: t("background.gpuBackendWebgpu") },
+    { value: "webgl", label: t("background.gpuBackendWebgl") },
+  ];
+  const gpuPowerItems: { label: string; value: GpuPowerPreference }[] = [
+    { value: "auto", label: t("background.gpuAuto") },
+    { value: "high-performance", label: t("background.gpuPowerHigh") },
+    { value: "low-power", label: t("background.gpuPowerLow") },
+  ];
+  const usesPixi = PIXI_RENDERERS.includes(renderer);
+  const webgpuUnavailable = gpuBackend === "webgpu" && !hasWebGpuSupport();
   const intervalItems = SLIDE_INTERVAL_PRESETS.map((sec) => ({
     value: String(sec),
     label:
@@ -97,6 +126,71 @@ export function BackgroundEffectControls({ className }: { className?: string }) 
           </SelectContent>
         </Select>
       </div>
+
+      {usesPixi ? (
+        <div className="mt-1 grid gap-3 border-border border-t pt-3">
+          <div className="flex flex-col gap-1.5">
+            <span className="text-xs font-medium text-muted-foreground">
+              {t("background.gpuBackend")}
+            </span>
+            <Select
+              value={gpuBackend}
+              onValueChange={(value) =>
+                void saveSettings({ backgroundGpuBackend: value as GpuBackendPreference })
+              }
+            >
+              <SelectTrigger>
+                <SelectValue>
+                  {(value) =>
+                    gpuBackendItems.find((item) => item.value === value)?.label ??
+                    t("background.gpuBackend")
+                  }
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                {gpuBackendItems.map((item) => (
+                  <SelectItem key={item.value} value={item.value}>
+                    {item.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {webgpuUnavailable ? (
+              <p className="text-xs text-muted-foreground">
+                {t("background.gpuBackendUnsupported")}
+              </p>
+            ) : null}
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <span className="text-xs font-medium text-muted-foreground">
+              {t("background.gpuPower")}
+            </span>
+            <Select
+              value={gpuPower}
+              onValueChange={(value) =>
+                void saveSettings({ backgroundGpuPowerPreference: value as GpuPowerPreference })
+              }
+            >
+              <SelectTrigger>
+                <SelectValue>
+                  {(value) =>
+                    gpuPowerItems.find((item) => item.value === value)?.label ??
+                    t("background.gpuPower")
+                  }
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                {gpuPowerItems.map((item) => (
+                  <SelectItem key={item.value} value={item.value}>
+                    {item.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <p className="-mt-1 text-xs text-muted-foreground">{t("background.gpuHint")}</p>
+        </div>
+      ) : null}
 
       {renderer === "blur" ? (
         <div className="mt-1 flex flex-col gap-1.5">
