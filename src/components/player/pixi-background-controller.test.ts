@@ -170,6 +170,78 @@ describe("createPixiBackgroundController", () => {
     expect(module.apps.length).toBe(1);
   });
 
+  it("uploads an ImageBitmap source directly (no canvas conversion) and closes it when swapped/destroyed", async () => {
+    // Capture what gets handed to Texture.from — for the ImageBitmap path it must
+    // be the bitmap itself, never an <img>/canvas (that's the conversion we're
+    // killing). A bare fakeModule discards from() args, so build one that records.
+    const fromArgs: unknown[] = [];
+    const apps: FakeApp[] = [];
+    const module = {
+      Application: function Application(this: unknown) {
+        const a = fakeApp();
+        apps.push(a);
+        return a as never;
+      },
+      Sprite: function Sprite(this: unknown, texture: unknown) {
+        return {
+          texture,
+          filters: [] as unknown[],
+          scale: { set: vi.fn() },
+          position: { set: vi.fn() },
+        } as never;
+      },
+      Texture: {
+        from: (source: unknown) => {
+          fromArgs.push(source);
+          return fakeTexture();
+        },
+      },
+    } as unknown as PixiModuleLike;
+
+    const bitmapA = { width: 64, height: 48, close: vi.fn() };
+    const bitmapB = { width: 64, height: 48, close: vi.fn() };
+    const media: Record<string, LoadedBackgroundMedia> = {
+      "a.png": {
+        type: "image",
+        element: bitmapA as unknown as ImageBitmap,
+        width: 64,
+        height: 48,
+        unload: () => bitmapA.close(),
+      },
+      "b.png": {
+        type: "image",
+        element: bitmapB as unknown as ImageBitmap,
+        width: 64,
+        height: 48,
+        unload: () => bitmapB.close(),
+      },
+    };
+    const controller = createPixiBackgroundController({
+      host: document.createElement("div"),
+      effect: "noise",
+      effectOptions: {} as never,
+      pixelSize: 12,
+      preference: "webgl",
+      powerPreference: "low-power",
+      deps: {
+        loadPixi: async () => module,
+        loadMedia: async (_pixi, src) => media[src],
+        loadFilter: async () => null,
+      },
+    });
+
+    await controller.setSource("a.png", "image");
+    // The bitmap is uploaded as-is — no HTMLImageElement, no canvas conversion.
+    expect(fromArgs[0]).toBe(bitmapA);
+
+    await controller.setSource("b.png", "image");
+    expect(bitmapA.close).toHaveBeenCalledTimes(1); // previous bitmap freed on swap
+    expect(bitmapB.close).not.toHaveBeenCalled();
+
+    controller.destroy();
+    expect(bitmapB.close).toHaveBeenCalledTimes(1); // current bitmap freed on destroy
+  });
+
   it("discards a stale source whose load resolves after a newer one", async () => {
     const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
     const deferred = new Map<

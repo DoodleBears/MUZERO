@@ -61,7 +61,10 @@ export type BackgroundMediaType = "image" | "video";
 
 export interface LoadedBackgroundMedia {
   type: BackgroundMediaType;
-  element: HTMLImageElement | HTMLVideoElement;
+  // ImageBitmap is a first-class Pixi ImageSource — uploading it skips the
+  // "Image element passed, converting to canvas" main-thread copy an
+  // HTMLImageElement would trigger (PRD Phase 4). `unload` closes it.
+  element: HTMLImageElement | HTMLVideoElement | ImageBitmap;
   texture?: unknown;
   width: number;
   height: number;
@@ -119,7 +122,7 @@ const MAX_RECOVER_ATTEMPTS = 2;
 
 interface CurrentMedia {
   type: BackgroundMediaType;
-  element: HTMLImageElement | HTMLVideoElement;
+  element: HTMLImageElement | HTMLVideoElement | ImageBitmap;
   width: number;
   height: number;
   unload?: () => void;

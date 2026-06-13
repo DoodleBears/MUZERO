@@ -14,7 +14,7 @@
 | 1 | 持久化 Pixi App + settle 后换纹理(切歌核心修复) | ✅ 代码完成(待 GPU/视觉实测) | [Phase 1](#phase-1-持久化-pixi-app--settle-后换纹理) |
 | 2 | 统一切歌 settle 闸门(封面 `<img>` 即时,重计算 debounce) | ✅ 代码完成(待 GPU/视觉实测) | [Phase 2](#phase-2-统一切歌-settle-闸门) |
 | 3 | GPU 后端 Settings 选项(auto / WebGPU / WebGL) | ✅ 代码完成(待 GPU/视觉实测) | [Phase 3](#phase-3-gpu-后端-settings-选项) |
-| 4 | 背景纹理 ImageBitmap 化(线程外解码 + 去 canvas 转换)(#4-A) | 🔲 Pending | [Phase 4](#phase-4-背景纹理-imagebitmap-化) |
+| 4 | 背景纹理 ImageBitmap 化(线程外解码 + 去 canvas 转换)(#4-A) | ✅ 代码完成(待 GPU/视觉实测) | [Phase 4](#phase-4-背景纹理-imagebitmap-化) |
 | 5 | stage/coverflow 封面 `<img>` 异步解码(保持原图,不占 paint 主线程)(#4-B) | 🔲 Pending | [Phase 5](#phase-5-stagecoverflow-封面异步解码) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
@@ -246,18 +246,20 @@ backgroundGpuPowerPreference?: "auto" | "high-performance" | "low-power"; // DEF
 
 **为何不进 Worker:** `createImageBitmap(blob)` 本身就在主线程外解码;GPU 上传必须在持有 WebGL/WebGPU context 的主线程做,Worker 解出 `ImageBitmap` 再 transfer 回来只增加传输开销、不省解码。故主线程 `createImageBitmap` 即满足「解码不占主线程」。视频路径必须用 `<video>` element,不动。
 
-**实现:**
+**为何 ImageBitmap 而非 `Assets.load`(查 Pixi v8 文档后):** Pixi 文档([textures#texture-types](https://pixijs.com/8.x/guides/components/textures#texture-types))明确 `ImageSource` 一类**直接接受 `ImageBitmap`**——这正是「不转 canvas」的路径(而 `HTMLImageElement` 在 WebGPU/部分浏览器无法直传,故 Pixi 在 `render()` 里转 canvas)。[`Assets.load`](https://pixijs.com/8.x/guides/components/assets) 是更高层 loader(内部也用 `createImageBitmap`),但它走 Pixi 自带 fetch(**绕过** `getAppFetch` 桌面 bridge → 远端封面 CORS 会断)、且按 URL 缓存 + `Assets.unload` 自管纹理生命周期(与现有控制器的 `texture.destroy` + `media.unload` 双轨会冲突)。故选「自取字节(走 bridge)→ `createImageBitmap` → 喂 ImageBitmap 给现有控制器」,既拿到线程外解码 + 免 canvas,又不动 CORS 路由与已测的纹理生命周期。
+
+**实现(落地):**
 - 新增可单测纯模块 [`background-texture.ts`](../../../src/lib/background-texture.ts) `loadImageBitmapSource(src, deps)`:注入 `fetchBlob`(取 src→Blob)+ 可选 `createImageBitmap`;成功返回 `{ bitmap, width, height, unload: () => bitmap.close() }`;不支持/取不到/解码抛错 → `null`(调用方回退)。
 - [`pixi-pixel-background.tsx`](../../../src/components/player/pixi-pixel-background.tsx) `loadBackgroundMedia` 图片分支:先试 `loadImageBitmapSource`(注入 `fetchTextureBlob`:blob:/data: 走 `fetch`,其余走 `getAppFetch`),失败回退 `loadImage`(<img>);`element` 联合类型加 `ImageBitmap`。
-- [`pixi-background-controller.ts`](../../../src/components/player/pixi-background-controller.ts):`LoadedBackgroundMedia.element`/`CurrentMedia.element` 联合加 `ImageBitmap`;`Texture.from(media.element)` 直接吃 ImageBitmap;清理沿用 `media.unload`(close bitmap),disposeMedia 逻辑不变。
+- [`pixi-background-controller.ts`](../../../src/components/player/pixi-background-controller.ts):`LoadedBackgroundMedia.element`/`CurrentMedia.element` 联合加 `ImageBitmap`;`Texture.from(media.element)` 直接吃 ImageBitmap(无 canvas 转换);清理沿用 `media.unload`(close bitmap),disposeMedia 逻辑不变。
 
 **Tasks(TDD):**
-- [ ] 先写 [`background-texture.test.ts`](../../../src/lib/background-texture.test.ts):mock `createImageBitmap`+`fetchBlob` → 返回 bitmap 源(width/height/unload→close);解码抛错 → null;不支持 → null;空 blob → null。
-- [ ] 实现 `loadImageBitmapSource` 至测试绿。
-- [ ] `loadBackgroundMedia` 接 ImageBitmap + 回退;控制器类型放宽 + 一例控制器测试(ImageBitmap element 被 `Texture.from` 收到、swap/destroy 调 unload→close)。
+- [x] 先写 [`background-texture.test.ts`](../../../src/lib/background-texture.test.ts)(5 例):mock `createImageBitmap`+`fetchBlob` → 返回 bitmap 源(width/height/unload→close);解码抛错 → null;不支持(不 fetch)→ null;空 blob(不解码)→ null;fetch 失败 → null。
+- [x] 实现 `loadImageBitmapSource` 至测试绿。
+- [x] `loadBackgroundMedia` 接 ImageBitmap + `fetchTextureBlob` + 回退;控制器类型放宽 + 一例控制器测试(ImageBitmap element 被 `Texture.from` 原样收到、swap/destroy 调 unload→close)。
 
 **Checklist:**
-- [ ] 新单测 + 既有控制器/Phase 测试全绿;`tsc`/Biome 通过。
+- [x] 新单测(5)+ 控制器测试(9,含新增 ImageBitmap 1 例)全绿(共 14);`tsc`/Biome 通过。
 - [ ] **待实测(桌面)**:切到带封面的歌不再出 `ImageSource … converting to canvas` 警告;落定 `frameMaxMs` 较修前下降;背景出图正常、无黑屏;远端/streamed(https)封面仍出图。
 
 ### Phase 5: stage/coverflow 封面异步解码
@@ -336,3 +338,4 @@ backgroundGpuPowerPreference?: "auto" | "high-performance" | "low-power"; // DEF
 | 2026-06-14 | Claude | QA#3 二次修正:reveal veil 提到 flow/visualizer 之上的最顶层——之前放 Pixi 子树内仍被 flow/viz 盖住,故「还会跳」 |
 | 2026-06-14 | Claude | **QA trace 实证 + 重定向**:trace 证明 Pixi 无 re-init、settle 生效(Q5/Q6),#1 真因是快切时**每首封面被多消费者解码 → 堆 churn → GC 掉帧**。**移除顶层 reveal veil**(引入封面错位 + 加剧解码)。改为 **ambient 背景按 settledTrack 去抖**:跳过的歌不再解码封面/重渲染,同时修掉封面错位 |
 | 2026-06-14 | Claude | **QA#4 第二轮 trace + 新增 Phase 4/5**:ambient 去抖已稳(burst 仅 1 `textureSwap`/0 `appInit`),但快切仍 120→56 FPS、`longTask 283ms`。定位剩余两处主线程整图解码:(A) coverflow/stage 读实时 index 解码原图、(B) Pixi `Texture.from(<img>)` 转 canvas。用户拍板**保持原图**,新增 Phase 4(背景纹理 ImageBitmap,线程外解码+免 canvas)、Phase 5(stage/coverflow `<img>` 异步解码)。`frameMaxMs 6374.8` 判定为 visibilitychange 空档非卡顿 |
+| 2026-06-14 | Claude | **Phase 4 代码完成**(TDD):新增 `background-texture.ts` `loadImageBitmapSource`(注入 fetchBlob/createImageBitmap,5 例单测先红后绿)+ `pixi-pixel-background` `loadBackgroundMedia` 优先 ImageBitmap(`fetchTextureBlob` 走 bridge,失败回退 `<img>`)+ 控制器 element 联合放宽 + 1 例 ImageBitmap 控制器测试(直传不转 canvas、swap/destroy close)。查 Pixi 文档确认 `ImageSource` 直接吃 ImageBitmap;未用 `Assets.load`(绕过 getAppFetch CORS + 纹理生命周期冲突)。14 例全绿、`tsc`/Biome 通过 |

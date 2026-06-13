@@ -6,6 +6,7 @@ import {
   type BackgroundEffectSettings,
   resolvePixiBackgroundEffectOptions,
 } from "@/lib/background-effect-settings";
+import { loadImageBitmapSource } from "@/lib/background-texture";
 import { hasWebGpuSupport, resolveGpuBackend, resolveGpuPower } from "@/lib/gpu-backend";
 import { log } from "@/lib/logger";
 import { getAppFetch } from "@/lib/platform";
@@ -217,7 +218,7 @@ async function createPixiFilter(
 
 type BackgroundMedia =
   | {
-      element: HTMLImageElement;
+      element: HTMLImageElement | ImageBitmap;
       height: number;
       texture?: import("pixi.js").Texture;
       type: "image";
@@ -239,6 +240,25 @@ async function loadBackgroundMedia(
   mediaType: BackgroundMediaType,
 ): Promise<BackgroundMedia> {
   if (mediaType === "video") return loadVideo(Pixi, src);
+  // Prefer an ImageBitmap texture source: createImageBitmap decodes off the main
+  // thread and Pixi uploads the ImageBitmap directly — no "Image element passed,
+  // converting to canvas and replacing resource" main-thread copy on the landing
+  // frame (PRD Phase 4). Full resolution is kept. Falls back to the <img> path
+  // when createImageBitmap is unavailable or the source can't be decoded.
+  const bitmap = await loadImageBitmapSource(src, {
+    createImageBitmap:
+      typeof createImageBitmap === "function" ? (blob) => createImageBitmap(blob) : undefined,
+    fetchBlob: fetchTextureBlob,
+  });
+  if (bitmap) {
+    return {
+      element: bitmap.bitmap,
+      height: bitmap.height,
+      type: "image",
+      unload: bitmap.unload,
+      width: bitmap.width,
+    };
+  }
   const resolved = await resolveImageTextureSource(src);
   const image = await loadImage(resolved.src);
   return {
@@ -248,6 +268,28 @@ async function loadBackgroundMedia(
     unload: resolved.unload,
     width: image.naturalWidth,
   };
+}
+
+/**
+ * Resolve a background image src to its raw bytes for off-thread decode. Remote
+ * (https / muzfetch) go through the desktop bridge fetch so CORS / mixed-content
+ * is handled like the rest of the app; blob:/data: read directly. Returns null on
+ * any failure so {@link loadBackgroundMedia} falls back to the <img> path.
+ */
+async function fetchTextureBlob(src: string): Promise<Blob | null> {
+  try {
+    if (/^(blob:|data:)/i.test(src)) {
+      const response = await fetch(src);
+      return response.ok ? await response.blob() : null;
+    }
+    const fetcher = await getAppFetch();
+    const response = await fetcher(src, { cache: "no-store" });
+    if (!response.ok) return null;
+    const blob = await response.blob();
+    return blob.size > 0 ? blob : null;
+  } catch {
+    return null;
+  }
 }
 
 async function resolveImageTextureSource(
