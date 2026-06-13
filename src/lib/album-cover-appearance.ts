@@ -130,6 +130,20 @@ export function resolveNowPlayingCoverEffectMode(
     : ALBUM_COVER_APPEARANCE_DEFAULTS.nowPlayingCoverEffectMode;
 }
 
+/**
+ * Whether the now-playing cover backlight derivative is actually needed. Only the
+ * "backlight" effect mode renders it; the default "shadow" (and "off") must NOT
+ * request it — otherwise every track switch fires a worker render + DB write +
+ * blob URL for an image that is never shown (audit O1). Gate the
+ * `useCoverDerivativeUrl(..., "backlight")` call on this so it skips by default.
+ */
+export function shouldRequestCoverBacklightDerivative(
+  mode: (typeof NOW_PLAYING_COVER_EFFECT_MODES)[number],
+  enabled: boolean,
+): boolean {
+  return enabled && mode === "backlight";
+}
+
 function albumCoverShadowCss(appearance: AlbumCoverAppearance): string {
   if (appearance.shadowOpacity <= 0) return "none";
   return [

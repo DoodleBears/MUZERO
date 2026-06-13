@@ -6,6 +6,7 @@ import { useCoverDerivativeUrl, useTrackCoverUrl } from "@/hooks/use-media";
 import {
   resolveNowPlayingCoverBacklightAppearance,
   resolveNowPlayingCoverEffectMode,
+  shouldRequestCoverBacklightDerivative,
 } from "@/lib/album-cover-appearance";
 import { resolveStageContent, trackHasCover } from "@/lib/track-display";
 import { cn } from "@/lib/utils";
@@ -40,7 +41,16 @@ export function MediaStage({
 
   const containerRef = useRef<HTMLDivElement | null>(null);
   const coverUrl = useTrackCoverUrl(current);
-  const coverBacklightUrl = useCoverDerivativeUrl(current, "backlight");
+  const coverEffectMode = resolveNowPlayingCoverEffectMode(settings.nowPlayingCoverEffectMode);
+  // Only the "backlight" effect renders the blurred derivative — gate the request
+  // so the default "shadow" mode no longer fires a worker render + DB write + blob
+  // URL for an image it never shows on every track switch (audit O1).
+  const coverBacklightUrl = useCoverDerivativeUrl(
+    shouldRequestCoverBacklightDerivative(coverEffectMode, coverBacklightEnabled)
+      ? current
+      : undefined,
+    "backlight",
+  );
   const [videoError, setVideoError] = useState(false);
   const [videoAspect, setVideoAspect] = useState<number | null>(null);
   const content = resolveStageContent({
@@ -104,7 +114,6 @@ export function MediaStage({
 
   const showCover = content === "cover";
   const showGeneratedBackdrop = content === "title" || videoError;
-  const coverEffectMode = resolveNowPlayingCoverEffectMode(settings.nowPlayingCoverEffectMode);
   const backlight = resolveNowPlayingCoverBacklightAppearance(settings);
   const useCoverShadow = coverEffectMode === "shadow";
   const showCoverBacklight =

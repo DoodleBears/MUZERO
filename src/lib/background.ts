@@ -1,6 +1,16 @@
 import type { BackgroundMode, Track, TrackKind, TrackStatus } from "@/db/types";
 
 /**
+ * Trailing-debounce window for expensive cover-derived background work (Pixi
+ * texture upload + effect). Deliberately decoupled from the player store's
+ * `LOCAL_BLOB_PLAYBACK_SETTLE_MS` — background-effect settling is a different
+ * concern from audio/blob load settling and can be tuned independently. Not a
+ * user setting: it's an internal timing constant (see PRD §3.2). The plain cover
+ * `<img>` still follows the current track instantly; only the heavy work waits.
+ */
+export const BACKGROUND_EFFECT_SETTLE_MS = 180;
+
+/**
  * What the Now-Playing ambient background should pull from. Pure decision so the
  * priority rules are unit-tested without the DB. `mode` is the *priority* between
  * the track's two own image assets, then the global gallery is an optional last resort:

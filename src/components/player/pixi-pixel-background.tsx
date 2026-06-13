@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useSettledValue } from "@/hooks/use-settled-value";
+import { BACKGROUND_EFFECT_SETTLE_MS } from "@/lib/background";
 import {
   type BackgroundEffectSettings,
   resolvePixiBackgroundEffectOptions,
@@ -71,7 +73,13 @@ export function PixiPixelBackground({
 }) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const [controller, setController] = useState<PixiBackgroundController | null>(null);
-  const [hasLayer, setHasLayer] = useState(false);
+  // The src actually painted onto the Pixi texture. While it lags the current
+  // `src` (during a switch / rapid skip), the plain <img> below stays visible.
+  const [displayedSrc, setDisplayedSrc] = useState<string | null>(null);
+  // Heavy work (texture load + upload + effect) is gated behind a quiet period so a
+  // rapid next/next burst never uploads textures for the songs it skipped past. The
+  // plain <img> still follows the raw `src` every switch. See PRD Phase 2.
+  const settledSrc = useSettledValue(src, BACKGROUND_EFFECT_SETTLE_MS);
   const effectOptions = useMemo(
     () => resolvePixiBackgroundEffectOptions(effectSettings, pixelSize),
     [effectSettings, pixelSize],
@@ -85,7 +93,7 @@ export function PixiPixelBackground({
   useEffect(() => {
     const host = hostRef.current;
     if (!host) return;
-    setHasLayer(false);
+    setDisplayedSrc(null);
     const next = createPixiBackgroundController({
       host,
       effect,
@@ -102,7 +110,6 @@ export function PixiPixelBackground({
         attachVideo,
         onError: (err) => log.warn("background", "Pixi background failed", err),
       },
-      onApplied: () => setHasLayer(true),
     });
     setController(next);
     return () => {
@@ -111,13 +118,19 @@ export function PixiPixelBackground({
     };
   }, [effect, effectOptions, pixelSize]);
 
-  // Texture swap: a song change (new src) only loads the next texture onto the
-  // already-warm app. Re-runs when the controller itself is rebuilt so the new
-  // controller is seeded with the current source.
+  // Texture swap: only the SETTLED src reaches the persistent app, so skipped-past
+  // songs never upload a texture. Re-runs when the controller is rebuilt so the new
+  // controller is seeded. On apply, record displayedSrc to fade out the plain <img>.
   useEffect(() => {
     if (!controller) return;
-    void controller.setSource(src, mediaType);
-  }, [controller, src, mediaType]);
+    let cancelled = false;
+    void controller.setSource(settledSrc, mediaType).then(() => {
+      if (!cancelled) setDisplayedSrc(settledSrc);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [controller, settledSrc, mediaType]);
 
   return (
     <div
@@ -132,7 +145,9 @@ export function PixiPixelBackground({
           decoding="async"
           className={cn(
             "absolute inset-0 h-full w-full object-cover transition-opacity duration-300",
-            hasLayer ? "opacity-0" : "opacity-90",
+            // Resident under the canvas: shows the current cover instantly while the
+            // Pixi texture catches up to it; fades out once they match (PRD Phase 2).
+            src === displayedSrc ? "opacity-0" : "opacity-90",
           )}
         />
       ) : null}

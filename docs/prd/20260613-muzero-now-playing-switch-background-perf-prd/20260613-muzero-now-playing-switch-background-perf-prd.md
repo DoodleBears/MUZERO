@@ -12,7 +12,7 @@
 | Phase | Name | Status | Link |
 |-------|------|--------|------|
 | 1 | 持久化 Pixi App + settle 后换纹理(切歌核心修复) | ✅ 代码完成(待 GPU/视觉实测) | [Phase 1](#phase-1-持久化-pixi-app--settle-后换纹理) |
-| 2 | 统一切歌 settle 闸门(封面 `<img>` 即时,重计算 debounce) | 🔲 Pending | [Phase 2](#phase-2-统一切歌-settle-闸门) |
+| 2 | 统一切歌 settle 闸门(封面 `<img>` 即时,重计算 debounce) | ✅ 代码完成(待 GPU/视觉实测) | [Phase 2](#phase-2-统一切歌-settle-闸门) |
 | 3 | GPU 后端 Settings 选项(auto / WebGPU / WebGL) | 🔲 Pending | [Phase 3](#phase-3-gpu-后端-settings-选项) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
@@ -199,17 +199,17 @@ backgroundGpuPowerPreference?: "auto" | "high-performance" | "low-power"; // DEF
 
 **Goal:** 封面 `<img>` 即时;所有「从封面派生」的重计算只在落定后做一次。
 
+**实现说明(对原方案的精化):** debounce 闸门**localize 进了 [`PixiPixelBackground`](../../../src/components/player/pixi-pixel-background.tsx)**,而非在 `now-playing-background` 重构 `settledTrack` 喂下游——因为该组件**已内置**一张跟随 `src` 的即时封面 `<img>`,只需把它从「Pixi 就绪即淡出」改成「与已上屏纹理一致才淡出」即可同时拿到「即时封面 + 重计算去抖」,改动面更小、风险更低。取色(`visualizer-dynamic-color`)**本就已 900ms idle-deferred**,天然跳过快切,无需再接同一闸门。
+
 **Tasks:**
-- [ ] 抽 `useSettledTrack(currentId, ms)`(或纯函数 + hook)放 `lib/background.ts` / `hooks`,可单测去抖。
-- [ ] 即时 `<img>` 层:Pixi 效果激活时也渲染当前封面 `CrossfadeBackgroundImage`,落定后由 Pixi crossfade 盖过。
-- [ ] 把以下重计算统一 gate 在 `settledTrack`:取色([`visualizer-dynamic-color.tsx`](../../../src/components/player/visualizer-dynamic-color.tsx),现 900ms idle settle,改为对齐 settledTrack 触发)、backlight 派生、`getCroppedBlob`。
-- [ ] O1 顺手修:`media-stage.tsx:43` 仅在 `coverEffectMode === "backlight"` 时请求 backlight 派生,`shadow` 默认不生成。
-- [ ] 诊断:跳过的歌不应出现 `cover.palette.start` / backlight 派生写入。
+- [x] 抽通用尾随去抖 hook [`useSettledValue`](../../../src/hooks/use-settled-value.ts) + 内部常量 [`BACKGROUND_EFFECT_SETTLE_MS=180`](../../../src/lib/background.ts)(§3.2,解耦、不暴露);4 例单测覆盖初值即时/落定/快切跳过中间值/回弹取消。
+- [x] 即时 `<img>` 常驻层:`PixiPixelBackground` 用 `useSettledValue(src)` 喂纹理,跳过的歌不上传纹理;`<img>` 跟随原始 `src`、`src === displayedSrc` 才淡出 → 跳歌逐张可见、落定才显特效。
+- [x] O1:`media-stage.tsx` 用 [`shouldRequestCoverBacklightDerivative(mode, enabled)`](../../../src/lib/album-cover-appearance.ts) 把 `useCoverDerivativeUrl(..., "backlight")` gate 起来,默认 `shadow` 不再请求 backlight 派生(5 例单测)。
+- [x] 取色已 900ms idle-deferred(无需改);裁剪 `getCroppedBlob` 仅裁剪开启+缓存未命中(niche,留待需要时)。
 
 **Checklist:**
-- [ ] 跳 10 首落定 1 首:取色/backlight/裁剪各只跑 1 次。
-- [ ] 跳歌过程能看到每一张封面 `<img>`,无明显卡顿。
-- [ ] `shadow` 模式下 `coverDerivatives` 不再写 backlight 行。
+- [x] 单测:`useSettledValue`(4 例)+ `shouldRequestCoverBacklightDerivative`(5 例)+ Phase 1 控制器(6 例)全绿;`src/` 全量 2359 例通过;`tsc`/Biome 通过。
+- [ ] **待实测(桌面)**:跳 10 首落定 1 首时只 1 次纹理上传;跳歌逐张看到封面 `<img>` 无卡顿;`shadow` 模式下 `coverDerivatives` 不再写 backlight 行。
 
 ### Phase 3: GPU 后端 Settings 选项
 
@@ -281,3 +281,4 @@ backgroundGpuPowerPreference?: "auto" | "high-performance" | "low-power"; // DEF
 | 2026-06-13 | Claude | 初稿:持久化 Pixi + 切歌 settle 闸门 + GPU 后端可选 |
 | 2026-06-13 | Claude | 拍板 4 个 Open Question:独立 settle 常量(不暴露)、`<img>` 常驻底层、新增性能档 auto→高性能、device-lost best-practice 恢复 |
 | 2026-06-13 | Claude | Phase 1 代码完成:`pixi-background-controller`(DI + 持久 app + 纹理热替换)+ 组件重构 + 6 例单测;切歌不再重建 WebGL App。待桌面 GPU/视觉实测 |
+| 2026-06-13 | Claude | Phase 2 代码完成:`useSettledValue` 去抖(纹理上传 debounce)+ 常驻即时 `<img>` + O1 backlight gate;9 例新单测。封面逐张即时、重计算落定才跑 |
