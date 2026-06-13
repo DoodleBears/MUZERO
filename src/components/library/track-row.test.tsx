@@ -9,8 +9,10 @@ vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key }),
 }));
 
+// Counts as a render probe: TrackThumb calls this once per TrackRow render.
+const { coverHook } = vi.hoisted(() => ({ coverHook: vi.fn(() => null) }));
 vi.mock("@/hooks/use-media", () => ({
-  useCoverDerivativeUrl: () => null,
+  useCoverDerivativeUrl: coverHook,
   useTrackCoverUrl: () => null,
 }));
 
@@ -264,6 +266,35 @@ describe("TrackRow", () => {
     // Keyboard focus reveals it too (so tab-to-actions still works).
     fireEvent.focus(row);
     expect(screen.getByLabelText("track.delete")).toBeInTheDocument();
+  });
+
+  it("skips re-render when only callback identities change (memo comparator)", () => {
+    // The virtualized list passes fresh inline-arrow handlers every scroll frame;
+    // the comparator must ignore them so visible rows don't re-render on scroll.
+    coverHook.mockClear();
+    const base = {
+      isCurrent: false,
+      onAddToNewSession: vi.fn(),
+      onAddToSession: vi.fn(),
+      onDelete: vi.fn(),
+      onDownloadOriginal: vi.fn(),
+      onExportWithMetadata: vi.fn(),
+      onPlay: vi.fn(),
+      onToggleLike: vi.fn(),
+      onView: vi.fn(),
+      sessions: [] as DjSession[],
+      track: track(), // one stable object across rerenders
+    };
+    const { rerender } = render(<TrackRow {...base} />);
+    const afterMount = coverHook.mock.calls.length;
+
+    // Same data, brand-new callback identities → comparator skips the re-render.
+    rerender(<TrackRow {...base} onPlay={vi.fn()} onDelete={vi.fn()} onToggleLike={vi.fn()} />);
+    expect(coverHook.mock.calls.length).toBe(afterMount);
+
+    // A real data change (now the current track) DOES re-render the row.
+    rerender(<TrackRow {...base} isCurrent onPlay={vi.fn()} />);
+    expect(coverHook.mock.calls.length).toBeGreaterThan(afterMount);
   });
 
   it("does not view or play only because the row receives focus", () => {

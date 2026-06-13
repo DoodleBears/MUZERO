@@ -385,7 +385,32 @@ export const TrackRow = memo(function TrackRow({
       )}
     </div>
   );
-});
+}, trackRowPropsEqual);
+
+/**
+ * `TrackRow`'s memo comparator. The list passes fresh inline-arrow handlers every
+ * scroll-driven parent render, which would defeat a default `memo` and re-render
+ * every visible row each frame. Those handlers' BEHAVIOR is fully determined by the
+ * data props below (the `track` object, `listIndex`) plus module-stable store
+ * functions, so comparing the data and ignoring callback identity is safe — and on a
+ * pure scroll (no DB change) the `track` objects are stable, so rows stop
+ * re-rendering entirely; only newly-windowed rows mount. A track edit yields a fresh
+ * `track` object, which differs here and re-renders that row with current handlers.
+ */
+function trackRowPropsEqual(prev: TrackRowProps, next: TrackRowProps): boolean {
+  return (
+    prev.track === next.track &&
+    prev.isCurrent === next.isCurrent &&
+    prev.isSelected === next.isSelected &&
+    prev.checked === next.checked &&
+    prev.selectable === next.selectable &&
+    prev.deferCoverLoad === next.deferCoverLoad &&
+    prev.listIndex === next.listIndex &&
+    prev.sessions === next.sessions &&
+    prev.secondaryMeta === next.secondaryMeta &&
+    prev.metricColumns === next.metricColumns
+  );
+}
 
 /** Download-to-device button for a streamed track with no local copy: one click
  *  fetches its bytes from the cloud into a local blob (offline play + stable cover-
