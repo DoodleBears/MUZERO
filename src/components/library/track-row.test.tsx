@@ -142,10 +142,12 @@ describe("TrackRow", () => {
   });
 
   it("searches add-to-set targets before selecting a set", () => {
-    const { props } = renderRow({
+    const { container, props } = renderRow({
       sessions: [session("ses_lofi", "Lofi Focus"), session("ses_night", "Night Drive")],
     });
 
+    // The hover toolbar (incl. the add-to-set popover) is lazy-mounted on hover.
+    fireEvent.mouseEnter(container.querySelector("[data-muzero-track-row]") as HTMLElement);
     fireEvent.change(screen.getByLabelText("track.searchOrCreateSet"), {
       target: { value: "night" },
     });
@@ -157,8 +159,9 @@ describe("TrackRow", () => {
   });
 
   it("creates a new set from the typed name when nothing matches", () => {
-    const { props } = renderRow({ sessions: [session("ses_lofi", "Lofi Focus")] });
+    const { container, props } = renderRow({ sessions: [session("ses_lofi", "Lofi Focus")] });
 
+    fireEvent.mouseEnter(container.querySelector("[data-muzero-track-row]") as HTMLElement);
     fireEvent.change(screen.getByLabelText("track.searchOrCreateSet"), {
       target: { value: "Roadtrip" },
     });
@@ -243,6 +246,24 @@ describe("TrackRow", () => {
 
     expect(props.onPlay).toHaveBeenCalledTimes(1);
     expect(props.onView).not.toHaveBeenCalled();
+  });
+
+  it("lazy-mounts the hover action toolbar only once the row is hovered/focused", () => {
+    const { container } = renderRow();
+    const row = container.querySelector<HTMLElement>("[data-muzero-track-row]") as HTMLElement;
+
+    // Not mounted at rest — this is what keeps the popovers off the scroll path.
+    expect(screen.queryByLabelText("track.delete")).not.toBeInTheDocument();
+
+    fireEvent.mouseEnter(row);
+    expect(screen.getByLabelText("track.delete")).toBeInTheDocument();
+
+    fireEvent.mouseLeave(row);
+    expect(screen.queryByLabelText("track.delete")).not.toBeInTheDocument();
+
+    // Keyboard focus reveals it too (so tab-to-actions still works).
+    fireEvent.focus(row);
+    expect(screen.getByLabelText("track.delete")).toBeInTheDocument();
   });
 
   it("does not view or play only because the row receives focus", () => {

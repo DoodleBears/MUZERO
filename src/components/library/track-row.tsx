@@ -175,6 +175,13 @@ export const TrackRow = memo(function TrackRow({
 }: TrackRowProps) {
   const { t } = useTranslation();
   const disabled = track.status !== "ready";
+  // The hover action toolbar mounts two Base UI Popovers + several buttons. On a
+  // virtualized list those are pure scroll cost — invisible until hover, yet
+  // instantiated for every mounted row. Mount it only once the row is actually
+  // hovered (mouse) or focused (keyboard), so a fast scroll past hundreds of rows
+  // never builds the popover machinery. `onMouseEnter` (not pointer) so a touch tap
+  // doesn't flash it. Matches the smooth entity grids, which carry no per-card popovers.
+  const [showActions, setShowActions] = useState(false);
 
   // Two-tap activation: the first interaction selects the row (revealing its
   // info in the inspector); interacting again with an already-selected row
@@ -248,6 +255,14 @@ export const TrackRow = memo(function TrackRow({
       onClick={handleRowClick}
       onDoubleClick={handleRowDoubleClick}
       onKeyDown={handleRowKeyDown}
+      onMouseEnter={() => setShowActions(true)}
+      onMouseLeave={() => setShowActions(false)}
+      onFocus={() => setShowActions(true)}
+      onBlur={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+          setShowActions(false);
+        }
+      }}
       role="option"
       tabIndex={0}
     >
@@ -318,54 +333,56 @@ export const TrackRow = memo(function TrackRow({
           {track.status === "ready" ? formatDuration(track.durationSec) : "—"}
         </span>
       </div>
-      <div
-        className={cn(
-          "invisible absolute right-3 top-1/2 z-10 flex -translate-y-1/2 items-center gap-0.5 rounded-md border border-border bg-background/95 p-0.5 opacity-0 shadow-sm backdrop-blur transition-opacity",
-          "group-hover:visible group-hover:opacity-100 focus-within:visible focus-within:opacity-100",
-        )}
-        data-muzero-row-actions
-      >
-        <button
-          type="button"
-          onClick={onToggleLike}
-          className="grid size-7 place-items-center rounded text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-          aria-label={t("track.like")}
-          aria-pressed={track.liked}
+      {showActions && (
+        <div
+          className="absolute right-3 top-1/2 z-10 flex -translate-y-1/2 items-center gap-0.5 rounded-md border border-border bg-background/95 p-0.5 shadow-sm backdrop-blur"
+          data-muzero-row-actions
         >
-          {/* Liked color goes on the icon (a descendant) so it cleanly overrides the
+          <button
+            type="button"
+            onClick={onToggleLike}
+            className="grid size-7 place-items-center rounded text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+            aria-label={t("track.like")}
+            aria-pressed={track.liked}
+          >
+            {/* Liked color goes on the icon (a descendant) so it cleanly overrides the
               button's inherited muted color instead of fighting it on one element. */}
-          <HeartIcon size={16} className={cn(track.liked && "text-primary [&_svg]:fill-primary")} />
-        </button>
-        <button
-          type="button"
-          onClick={onDelete}
-          className="grid size-7 place-items-center rounded text-muted-foreground transition-colors hover:bg-accent hover:text-destructive"
-          aria-label={t("track.delete")}
-        >
-          <DeleteIcon size={16} />
-        </button>
-        {isTrackCacheableToDevice(track) ? (
-          // Online/R2 track with no local copy yet → fetch it from the cloud into a
-          // local blob (cloud-download glyph), not a disabled export menu.
-          <DownloadToDeviceButton trackId={track.id} onDownload={onDownloadToDevice} />
-        ) : track.status === "ready" && track.origin === "streamed" ? (
-          // Streamed track now cached locally → one click saves the file straight to
-          // disk (no metadata-vs-original menu; the bytes are the source recording).
-          <DirectDownloadButton onDownload={onDownloadOriginal} />
-        ) : (
-          <DownloadPopover
-            disabled={track.status !== "ready" || (!track.blobId && !track.remoteMediaUrl)}
-            onDownloadOriginal={onDownloadOriginal}
-            onExportWithMetadata={onExportWithMetadata}
+            <HeartIcon
+              size={16}
+              className={cn(track.liked && "text-primary [&_svg]:fill-primary")}
+            />
+          </button>
+          <button
+            type="button"
+            onClick={onDelete}
+            className="grid size-7 place-items-center rounded text-muted-foreground transition-colors hover:bg-accent hover:text-destructive"
+            aria-label={t("track.delete")}
+          >
+            <DeleteIcon size={16} />
+          </button>
+          {isTrackCacheableToDevice(track) ? (
+            // Online/R2 track with no local copy yet → fetch it from the cloud into a
+            // local blob (cloud-download glyph), not a disabled export menu.
+            <DownloadToDeviceButton trackId={track.id} onDownload={onDownloadToDevice} />
+          ) : track.status === "ready" && track.origin === "streamed" ? (
+            // Streamed track now cached locally → one click saves the file straight to
+            // disk (no metadata-vs-original menu; the bytes are the source recording).
+            <DirectDownloadButton onDownload={onDownloadOriginal} />
+          ) : (
+            <DownloadPopover
+              disabled={track.status !== "ready" || (!track.blobId && !track.remoteMediaUrl)}
+              onDownloadOriginal={onDownloadOriginal}
+              onExportWithMetadata={onExportWithMetadata}
+            />
+          )}
+          <TrackAddToSetPopover
+            trackId={track.id}
+            sessions={sessions}
+            onAddToSession={onAddToSession}
+            onAddToNewSession={onAddToNewSession}
           />
-        )}
-        <TrackAddToSetPopover
-          trackId={track.id}
-          sessions={sessions}
-          onAddToSession={onAddToSession}
-          onAddToNewSession={onAddToNewSession}
-        />
-      </div>
+        </div>
+      )}
     </div>
   );
 });
