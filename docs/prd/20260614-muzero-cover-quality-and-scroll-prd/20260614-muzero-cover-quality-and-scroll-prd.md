@@ -95,17 +95,26 @@
 - [x] `tsc`/Biome 通过;`src` 全量 2383 例通过。
 - [ ] **待导入实测**:trace 里每张封面 worker `enqueue` 从 2 次降到 1 次(targets=`["palette","thumbhash"]`)。
 
-### Phase 3: 网格高清封面
+### Phase 3: 响应式封面派生(Pinterest 式)
 
-**Goal:** 专辑/歌手网格卡用足够分辨率派生,桌面 2x 不糊。
+**Goal:** 像 Pinterest 那样「按 显示尺寸×DPR 取刚好够大的那一档」——网格清晰、内存低。**不是用原图、不是一刀切 320。**
+
+**做法(4 招里我们只缺第 1 招):**
+1. **多档预生成尺寸** ← 本 Phase 要做。新增一组缩略派生档(如 `sm=160`(列表行)/ `md=320`(网格卡)/ `lg=512`(大图/详情头)),按 surface + `devicePixelRatio` 选。
+2. **按 URL 直出、浏览器原生解码/缓存** ← 已有(`muzfetch://local-media` 协议,electron-local-media-protocol PRD Phase 1/2)。
+3. **thumbhash blur-up 占位** ← 已有(且 #C 已修不闪)。
+4. **虚拟化** ← 已有(`virtual-card-grid`)。
 
 **Tasks:**
-- [ ] 新增一档更大派生尺寸(如 `card`/`grid` ~320px)或把网格卡专用的派生 max-edge 提到 ~320([`cover-derivative-core.ts`](../../../src/workers/cover-derivative-core.ts) + [`cover-derivatives.ts`](../../../src/db/cover-derivatives.ts) 加 kind / 尺寸)。
-- [ ] `entity-grid.tsx` 网格视图用新档(列表小图仍用 160 缩略,省内存)。
-- [ ] 派生预算/LRU 纳入新尺寸(`enforceCoverDerivativeBudget`)。
+- [ ] [`cover-derivative-core.ts`](../../../src/workers/cover-derivative-core.ts) + [`cover-derivatives.ts`](../../../src/db/cover-derivatives.ts):缩略派生参数化为多档尺寸(`sm/md/lg` 或显式 max-edge),各档独立缓存 + 预算([`enforceCoverDerivativeBudget`](../../../src/db/cover-derivatives.ts))。
+- [ ] 纯选择器 `pickCoverSize(surface, dpr)`(可单测):列表行→160、网格→320、详情头→512,2x 屏取对应更大档。
+- [ ] `useTrackThumbnailUrl` / `useCoverDerivativeUrl` 支持指定尺寸档;[`entity-grid.tsx`](../../../src/components/library/entity-grid.tsx) 网格用 `md`,[`track-row.tsx`](../../../src/components/library/track-row.tsx) 列表用 `sm`。
+- [ ] 派生走协议直出(Electron),保持浏览器原生解码/缓存(对齐 Pinterest 第 2 招)。
+
+**Open Question:** 档位取 `160/320/512` 还是别的?是否要 1x/2x 两套?(默认按 `Math.min(devicePixelRatio,2)` 选一档,不存双份。)
 
 **Checklist:**
-- [ ] 桌面网格卡在 2x DPI 下清晰;新派生进预算管理。
+- [ ] `pickCoverSize` 单测;桌面网格卡 2x DPI 下清晰;各档进预算管理;不上采样、不下载原图。
 - [ ] `tsc`/Biome/`src` 全量通过。
 
 ---
