@@ -1,7 +1,7 @@
 import Lenis from "lenis";
 import { type RefObject, useEffect, useRef, useState } from "react";
 import { useSettings } from "@/hooks/use-app-data";
-import { isMac } from "@/lib/shortcuts";
+import { isMac, isWindows } from "@/lib/shortcuts";
 import { registerLenis, requestLenisTick, unregisterLenis } from "./lenis-driver";
 import { resolveSmoothScroll } from "./resolve";
 
@@ -20,6 +20,7 @@ export function useSmoothScroll(ref: RefObject<HTMLElement | null>): {
   const settings = useSettings();
   const { enabled, options } = resolveSmoothScroll(settings, {
     isMac: isMac(),
+    isWindows: isWindows(),
   });
 
   const lenisRef = useRef<Lenis | null>(null);

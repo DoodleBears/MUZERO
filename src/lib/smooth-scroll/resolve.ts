@@ -12,6 +12,8 @@ import type { AppSettings } from "@/db/types";
 export const LERP_MIN = 0.04;
 export const LERP_MAX = 0.2;
 export const LERP_DEFAULT = 0.1;
+/** Windows default strength — snappier ("跟手"), since smooth scroll defaults ON there. */
+export const WINDOWS_LERP_DEFAULT = 0.18;
 
 /** Coerce a stored/UI lerp into the safe range; `undefined`/`NaN`/out-of-range never break scrolling. */
 export function clampLerp(value: number | undefined): number {
@@ -58,6 +60,8 @@ export const BASE_LENIS_OPTIONS: Omit<LenisInitOptions, "lerp"> = (() => {
 
 export interface SmoothScrollEnv {
   isMac: boolean;
+  /** Windows defaults smooth scroll ON (its native wheel scroll janks heavy lists). */
+  isWindows: boolean;
 }
 
 export interface SmoothScrollDecision {
@@ -71,14 +75,22 @@ export interface SmoothScrollDecision {
 
 export function resolveSmoothScroll(
   settings: Pick<AppSettings, "smoothScroll" | "smoothScrollLerp">,
-  _env: SmoothScrollEnv,
+  env: SmoothScrollEnv,
 ): SmoothScrollDecision {
-  // undefined = off. Smooth scrolling is opt-in because Lenis owns a scroll rAF
-  // while active, and native scrolling is the lowest-power baseline.
-  const preference = settings.smoothScroll ?? false;
+  // Default OFF (Lenis owns a scroll rAF while active) — EXCEPT Windows, where the
+  // self-stopping driver costs nothing idle and native wheel scroll janks heavy
+  // lists (it recomputes the virtual window per raw event; Lenis batches per frame).
+  // An explicit stored `smoothScroll` always wins. Persisted in `settings`, so the
+  // choice survives reloads; the Windows default is computed (no write needed).
+  const preference = settings.smoothScroll ?? env.isWindows;
+  // Windows defaults to a snappier ("跟手") strength; the user-stored lerp overrides.
+  const defaultLerp = env.isWindows ? WINDOWS_LERP_DEFAULT : LERP_DEFAULT;
   return {
     preference,
     enabled: preference,
-    options: { ...DEFAULT_LENIS_OPTIONS, lerp: clampLerp(settings.smoothScrollLerp) },
+    options: {
+      ...DEFAULT_LENIS_OPTIONS,
+      lerp: clampLerp(settings.smoothScrollLerp ?? defaultLerp),
+    },
   };
 }

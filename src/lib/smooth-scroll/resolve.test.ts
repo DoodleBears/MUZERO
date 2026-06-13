@@ -6,16 +6,18 @@ import {
   LERP_MAX,
   LERP_MIN,
   resolveSmoothScroll,
+  WINDOWS_LERP_DEFAULT,
 } from "./resolve";
 
-const WIN = { isMac: false };
-const MAC = { isMac: true };
+const WINDOWS = { isMac: false, isWindows: true };
+const MAC = { isMac: true, isWindows: false };
+const LINUX = { isMac: false, isWindows: false };
 
-describe("resolveSmoothScroll — enabled decision (PRD §3.2 truth table)", () => {
-  it("undefined preference on non-macOS → disabled (default off)", () => {
-    const d = resolveSmoothScroll({ smoothScroll: undefined }, WIN);
-    expect(d.preference).toBe(false);
-    expect(d.enabled).toBe(false);
+describe("resolveSmoothScroll — enabled decision", () => {
+  it("undefined preference on Windows → ENABLED (default on; native wheel janks heavy lists)", () => {
+    const d = resolveSmoothScroll({ smoothScroll: undefined }, WINDOWS);
+    expect(d.preference).toBe(true);
+    expect(d.enabled).toBe(true);
   });
 
   it("undefined preference on macOS → disabled (default off)", () => {
@@ -24,33 +26,21 @@ describe("resolveSmoothScroll — enabled decision (PRD §3.2 truth table)", () 
     expect(d.enabled).toBe(false);
   });
 
-  it("undefined preference remains disabled on non-macOS", () => {
-    const d = resolveSmoothScroll({ smoothScroll: undefined }, WIN);
+  it("undefined preference on Linux → disabled (default off)", () => {
+    const d = resolveSmoothScroll({ smoothScroll: undefined }, LINUX);
     expect(d.preference).toBe(false);
     expect(d.enabled).toBe(false);
   });
 
-  it("explicit true overrides the platform default → enabled", () => {
-    const d = resolveSmoothScroll({ smoothScroll: true }, MAC);
-    expect(d.preference).toBe(true);
-    expect(d.enabled).toBe(true);
-  });
-
-  it("explicit true stays enabled", () => {
-    const d = resolveSmoothScroll({ smoothScroll: true }, WIN);
-    expect(d.preference).toBe(true);
-    expect(d.enabled).toBe(true);
-  });
-
-  it("explicit false → disabled regardless of platform / motion", () => {
-    expect(resolveSmoothScroll({ smoothScroll: false }, WIN).enabled).toBe(false);
-    expect(resolveSmoothScroll({ smoothScroll: false }, MAC).enabled).toBe(false);
-  });
-
-  it("keeps the Settings toggle and runtime state aligned", () => {
-    const d = resolveSmoothScroll({ smoothScroll: undefined }, WIN);
+  it("explicit false overrides the Windows default → disabled (the stored choice wins)", () => {
+    const d = resolveSmoothScroll({ smoothScroll: false }, WINDOWS);
     expect(d.preference).toBe(false);
     expect(d.enabled).toBe(false);
+  });
+
+  it("explicit true → enabled on any platform", () => {
+    expect(resolveSmoothScroll({ smoothScroll: true }, MAC).enabled).toBe(true);
+    expect(resolveSmoothScroll({ smoothScroll: true }, LINUX).enabled).toBe(true);
   });
 });
 
@@ -77,16 +67,27 @@ describe("clampLerp — strength is user-tunable but bounded (PRD Open Q1)", () 
 });
 
 describe("resolveSmoothScroll — options injection", () => {
-  it("injects the clamped user lerp into Lenis options", () => {
-    expect(resolveSmoothScroll({ smoothScrollLerp: 0.06 }, WIN).options.lerp).toBe(0.06);
-    expect(resolveSmoothScroll({ smoothScrollLerp: 5 }, WIN).options.lerp).toBe(LERP_MAX);
-    expect(resolveSmoothScroll({ smoothScrollLerp: undefined }, WIN).options.lerp).toBe(
+  it("injects the clamped user lerp into Lenis options (stored value wins on any platform)", () => {
+    expect(resolveSmoothScroll({ smoothScrollLerp: 0.06 }, LINUX).options.lerp).toBe(0.06);
+    expect(resolveSmoothScroll({ smoothScrollLerp: 5 }, LINUX).options.lerp).toBe(LERP_MAX);
+    expect(resolveSmoothScroll({ smoothScrollLerp: 0.06 }, WINDOWS).options.lerp).toBe(0.06);
+  });
+
+  it("defaults the lerp per platform: snappier on Windows, floaty elsewhere", () => {
+    expect(resolveSmoothScroll({ smoothScrollLerp: undefined }, LINUX).options.lerp).toBe(
       LERP_DEFAULT,
     );
+    expect(resolveSmoothScroll({ smoothScrollLerp: undefined }, MAC).options.lerp).toBe(
+      LERP_DEFAULT,
+    );
+    expect(resolveSmoothScroll({ smoothScrollLerp: undefined }, WINDOWS).options.lerp).toBe(
+      WINDOWS_LERP_DEFAULT,
+    );
+    expect(WINDOWS_LERP_DEFAULT).toBeGreaterThan(LERP_DEFAULT); // snappier = higher
   });
 
   it("keeps mobile native: syncTouch stays false, wheel stays smooth", () => {
-    const { options } = resolveSmoothScroll({}, WIN);
+    const { options } = resolveSmoothScroll({}, LINUX);
     expect(options.smoothWheel).toBe(true);
     expect(options.syncTouch).toBe(false);
     expect(options.orientation).toBe("vertical");

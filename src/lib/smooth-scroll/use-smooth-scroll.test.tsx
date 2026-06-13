@@ -5,7 +5,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 // ── Fakes & controllable inputs ─────────────────────────────────────────────
 const { lenisInstances, state } = vi.hoisted(() => ({
   lenisInstances: [] as Array<{ options: { lerp: number }; destroyed: boolean; opts: unknown }>,
-  state: { isMac: false, settings: {} as { smoothScroll?: boolean; smoothScrollLerp?: number } },
+  state: {
+    isMac: false,
+    isWindows: false,
+    settings: {} as { smoothScroll?: boolean; smoothScrollLerp?: number },
+  },
 }));
 
 vi.mock("lenis", () => {
@@ -27,7 +31,10 @@ vi.mock("lenis", () => {
   return { default: FakeLenis };
 });
 
-vi.mock("@/lib/shortcuts", () => ({ isMac: () => state.isMac }));
+vi.mock("@/lib/shortcuts", () => ({
+  isMac: () => state.isMac,
+  isWindows: () => state.isWindows,
+}));
 vi.mock("@/hooks/use-app-data", () => ({ useSettings: () => state.settings }));
 
 import { __activeCount, __resetDriver } from "./lenis-driver";

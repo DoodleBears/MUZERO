@@ -27,3 +27,10 @@ export function isMac(): boolean {
   const p = navigator.platform || navigator.userAgent || "";
   return /Mac|iPhone|iPad|iPod/.test(p);
 }
+
+/** Best-effort Windows detection — smooth scroll defaults on there (heavy lists). */
+export function isWindows(): boolean {
+  if (typeof navigator === "undefined") return false;
+  const p = navigator.platform || navigator.userAgent || "";
+  return /Win/i.test(p);
+}

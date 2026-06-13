@@ -67,13 +67,13 @@ import { APP_ICON_OPTIONS, type AppIconId, persistAppIcon, resolveAppIcon } from
 import { hasAppIcon } from "@/lib/desktop/bridge";
 import { getCroppedBlob } from "@/lib/image-crop";
 import { log } from "@/lib/logger";
-import { isMac } from "@/lib/shortcuts";
+import { isMac, isWindows } from "@/lib/shortcuts";
 import {
-  clampLerp,
   LERP_DEFAULT,
   LERP_MAX,
   LERP_MIN,
   resolveSmoothScroll,
+  WINDOWS_LERP_DEFAULT,
 } from "@/lib/smooth-scroll/resolve";
 import { useSmoothScroll } from "@/lib/smooth-scroll/use-smooth-scroll";
 import {
@@ -408,10 +408,17 @@ export function SettingsPage() {
 
   // Smooth scrolling is a visible MUZERO setting and is not overridden by OS
   // reduced-motion preferences.
-  const smoothScrollPref = resolveSmoothScroll(settings, {
+  const smoothScroll = resolveSmoothScroll(settings, {
     isMac: isMac(),
-  }).preference;
-  const smoothScrollLerp = clampLerp(settings.smoothScrollLerp);
+    isWindows: isWindows(),
+  });
+  const smoothScrollPref = smoothScroll.preference;
+  // The effective strength (stored value, or the platform default — snappier on Windows).
+  // resolveSmoothScroll always sets a clamped lerp; `?? LERP_DEFAULT` only satisfies the
+  // optional Lenis type.
+  const smoothScrollLerp = smoothScroll.options.lerp ?? LERP_DEFAULT;
+  // "Reset" returns to the platform default, not always the floaty 0.10.
+  const smoothScrollLerpDefault = isWindows() ? WINDOWS_LERP_DEFAULT : LERP_DEFAULT;
 
   const primary: PrimaryColors = {
     light: settings.primaryLight ?? DEFAULT_PRIMARY.light,
@@ -677,7 +684,9 @@ export function SettingsPage() {
                       <button
                         type="button"
                         disabled={!smoothScrollPref}
-                        onClick={() => void saveSettings({ smoothScrollLerp: LERP_DEFAULT })}
+                        onClick={() =>
+                          void saveSettings({ smoothScrollLerp: smoothScrollLerpDefault })
+                        }
                         className="text-muted-foreground text-xs hover:text-foreground disabled:opacity-40"
                       >
                         {t("settings.smoothScrollReset")}
