@@ -7,6 +7,9 @@ interface HoverScrollbarProps {
   scrollRef: RefObject<HTMLElement | null>;
   /** Apply a scrollTop — routed through Lenis when smooth-scroll is active. */
   scrollToTop: (top: number) => void;
+  /** Pixels to inset from the right edge, so the thumb sits to the LEFT of the A–Z
+   *  strip when that's mounted (they share the right gutter). Default 0 (flush). */
+  rightInset?: number;
 }
 
 /**
@@ -16,7 +19,7 @@ interface HoverScrollbarProps {
  * then drag the thumb to coarse-position a big library fast. Pure geometry lives in
  * `scrollbar-thumb.ts`. See the list-scroll-affordances PRD.
  */
-export function HoverScrollbar({ scrollRef, scrollToTop }: HoverScrollbarProps) {
+export function HoverScrollbar({ scrollRef, scrollToTop, rightInset = 0 }: HoverScrollbarProps) {
   const [metrics, setMetrics] = useState({ scrollTop: 0, scrollHeight: 0, clientHeight: 0 });
   const [dragging, setDragging] = useState(false);
   const dragRef = useRef<{ startY: number; startOffset: number; thumbSize: number } | null>(null);
@@ -96,7 +99,7 @@ export function HoverScrollbar({ scrollRef, scrollToTop }: HoverScrollbarProps) 
           "absolute top-0 right-0 w-3 transition-opacity duration-200 group-hover/list:opacity-100",
           dragging ? "opacity-100" : "opacity-0",
         )}
-        style={{ height: trackHeight }}
+        style={{ height: trackHeight, right: rightInset }}
       >
         <button
           type="button"

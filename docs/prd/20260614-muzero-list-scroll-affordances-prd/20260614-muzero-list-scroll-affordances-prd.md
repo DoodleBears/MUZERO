@@ -127,8 +127,11 @@ VirtualTrackList (parentRef scroller + Lenis)
 **QA 跟进(字母条乱序 + 点 Q 显示 K):** 实测字母条不是 A→Z、点一个字母跳到/提示成另一个。**根因:列表排序与标签不同源**——名称排序用 `title.localeCompare`(在 Electron 默认 locale 下按 Han **码点**排,非拼音),而标签是**拼音**首字母 → 两者错位 → `buildAlphabetIndex` 按出现顺序得到一条乱序、彼此不连续的字母带,拖动/点击按比例映射就指错字母。**修法:让名称排序本身转写感知**——新增 [`transliterateSortKey`](../../../src/lib/search-transliterate.ts)(整串读音化:Han→全拼、kana→罗马音、其余 NFKD 折叠小写),[`sortTracks`](../../../src/lib/track-gallery.ts) 名称排序改按它(每 track 预算一次 key,避免比较器里 O(n log n) 调拼音);`transliterateInitial` 重定义为 `firstAlphaLabel(transliterateSortKey(...))` → **标签与排序同源**。于是列表读音 A→Z、字母带连续有序、点/拖精确命中。附带修对混合标题(`iPhone手机`→`I`,旧实现取内部 Han 拼音误判 `S`)。
 
 **Checklist:**
+**QA 跟进(占位/可读性):** 字母条贴最右边、压在封面上且背景花时看不清。**修法:让字母条独占右侧 gutter**——字母条 `right-1` + 半透明 `bg-background/35 backdrop-blur` 圆角 rail(busy 背景也可读),hover 滚动条经新 `rightInset` prop 内移 24px 到字母条**左侧**(`virtual-track-list` 在 `hasAlphabet` 时传),行内容加 `pr-6` 让封面/时长躲开 rail。三者各占其位,不再叠。
+
+**Checklist:**
 - [x] `buildAlphabetIndex` / `transliterateInitial` / `transliterateSortKey`(读音排序键 + 混合标题 + 拼音序)单测全绿;`tsc`/Biome 通过;`src` 全量 2407 例通过。
-- [ ] **待实测**:点字母准确跳到该字母首行;中日韩标题归类正确;触摸滑动跟手 + 大字母提示;与 hover 滚动条同处右缘是否需让位(初版共存,字母条 z 高)。
+- [ ] **待实测**:点字母准确跳到该字母首行;中日韩标题归类正确;触摸滑动跟手 + 大字母提示;字母条 rail 在花背景上可读、与 hover 滚动条不再重叠、行内容不被遮。
 
 ---
 

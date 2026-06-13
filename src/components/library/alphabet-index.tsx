@@ -60,10 +60,10 @@ export function AlphabetIndex({ scrollRef, buckets, onJump }: AlphabetIndexProps
   if (buckets.length < 2 || height <= 0) return null;
 
   return (
-    <div className="pointer-events-none sticky top-0 right-0 z-20 h-0 w-full" aria-hidden="true">
+    <div className="pointer-events-none sticky top-0 right-0 z-30 h-0 w-full" aria-hidden="true">
       <div
         ref={stripRef}
-        className="pointer-events-auto absolute top-0 right-0 flex w-5 touch-none select-none flex-col items-center justify-center"
+        className="pointer-events-auto absolute top-0 right-1 flex w-5 touch-none select-none flex-col items-center justify-center rounded-full bg-background/35 py-1 backdrop-blur-sm"
         style={{ height }}
         onPointerDown={(event) => {
           event.preventDefault();
@@ -90,7 +90,7 @@ export function AlphabetIndex({ scrollRef, buckets, onJump }: AlphabetIndexProps
             tabIndex={-1}
             onClick={() => onJump(bucket.firstIndex)}
             className={cn(
-              "font-medium text-[10px] text-muted-foreground/70 leading-tight transition-colors hover:text-primary",
+              "font-medium text-[10px] text-foreground/55 leading-tight transition-colors hover:text-primary",
               active === bucket.label && "text-primary",
             )}
           >

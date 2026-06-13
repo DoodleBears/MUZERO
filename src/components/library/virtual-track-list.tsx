@@ -161,6 +161,9 @@ export function VirtualTrackList({
     () => (alphabetLetterOf ? buildAlphabetIndex(tracks, alphabetLetterOf) : []),
     [tracks, alphabetLetterOf],
   );
+  // When the A–Z strip is mounted it owns the right gutter: inset the hover
+  // scrollbar to its left, and pad the rows so cover/duration clear the strip.
+  const hasAlphabet = alphabetBuckets.length >= 2;
 
   // Restore scroll to a row on MOUNT (returning from select mode's reorder list).
   // Through the virtualizer's scrollToFn so it routes via Lenis; the rAF lets Lenis
@@ -406,7 +409,11 @@ export function VirtualTrackList({
       ref={parentRef}
       role="listbox"
     >
-      <HoverScrollbar scrollRef={parentRef} scrollToTop={scrollToTop} />
+      <HoverScrollbar
+        scrollRef={parentRef}
+        scrollToTop={scrollToTop}
+        rightInset={hasAlphabet ? 24 : 0}
+      />
       <AlphabetIndex
         scrollRef={parentRef}
         buckets={alphabetBuckets}
@@ -423,7 +430,10 @@ export function VirtualTrackList({
           const track = tracks[virtualRow.index];
           return (
             <div
-              className="absolute left-0 top-0 flex w-full items-center"
+              className={cn(
+                "absolute left-0 top-0 flex w-full items-center",
+                hasAlphabet && "pr-6",
+              )}
               data-index={virtualRow.index}
               data-testid={`virtual-track-row-${track.id}`}
               key={track.id}
