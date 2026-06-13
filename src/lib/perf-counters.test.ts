@@ -5,6 +5,7 @@ import {
   bumpPerfCounter,
   installBlobUrlTracker,
   noteDbRequery,
+  notePerfWork,
   readPerfCounter,
   resetPerfCounters,
   setPerfCountersEnabled,
@@ -89,6 +90,51 @@ describe("perf counters", () => {
       noteDbRequery("listAllTracks");
       noteDbRequery("memoryNotesByTrack");
       expect(getTraceEntries()).toHaveLength(2);
+    });
+  });
+
+  describe("notePerfWork", () => {
+    it("is a no-op while disabled", () => {
+      notePerfWork("lyrics.cascade.frame", 24, { rows: 17 });
+      expect(readPerfCounter("work.lyrics.cascade.frame")).toBe(0);
+      expect(getTraceEntries()).toHaveLength(0);
+    });
+
+    it("coalesces fast work and emits slow spans with summary data", () => {
+      vi.useFakeTimers();
+      try {
+        setPerfCountersEnabled(true);
+        notePerfWork("lyrics.cascade.frame", 2, { rows: 17 });
+        notePerfWork("lyrics.cascade.frame", 3, { rows: 17 });
+        expect(readPerfCounter("work.lyrics.cascade.frame")).toBe(2);
+        expect(getTraceEntries()).toHaveLength(0);
+
+        vi.advanceTimersByTime(1600);
+        notePerfWork("lyrics.cascade.frame", 4, { rows: 19 });
+        let entries = getTraceEntries();
+        expect(entries).toHaveLength(1);
+        expect(entries[0]).toMatchObject({
+          level: "debug",
+          message: "lyrics.cascade.frame",
+          scope: "performance.work",
+        });
+        expect(entries[0].data?.[0]).toMatchObject({
+          count: 3,
+          maxMs: 4,
+          rows: 19,
+        });
+
+        notePerfWork("lyrics.cascade.frame", 12, { rows: 21 });
+        entries = getTraceEntries();
+        expect(entries).toHaveLength(2);
+        expect(entries[1].data?.[0]).toMatchObject({
+          count: 1,
+          maxMs: 12,
+          slowCount: 1,
+        });
+      } finally {
+        vi.useRealTimers();
+      }
     });
   });
 

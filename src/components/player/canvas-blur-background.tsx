@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { arePerfCountersEnabled, notePerfWork } from "@/lib/perf-counters";
 import { cn } from "@/lib/utils";
 
 const scratchCanvasByTarget = new WeakMap<HTMLCanvasElement, HTMLCanvasElement>();
@@ -95,6 +96,8 @@ export function CanvasBlurBackground({
 }
 
 function drawBlurFrame(canvas: HTMLCanvasElement, image: HTMLImageElement, blurPx: number) {
+  const perfEnabled = arePerfCountersEnabled();
+  const startedAt = perfEnabled ? performance.now() : 0;
   const rect = canvas.getBoundingClientRect();
   const cssW = Math.max(1, Math.round(rect.width));
   const cssH = Math.max(1, Math.round(rect.height));
@@ -129,6 +132,16 @@ function drawBlurFrame(canvas: HTMLCanvasElement, image: HTMLImageElement, blurP
   lowCtx.imageSmoothingQuality = "high";
   drawImageCover(lowCtx, image, sampleW, sampleH);
   ctx.drawImage(low, 0, 0, sampleW, sampleH, 0, 0, w, h);
+  if (perfEnabled) {
+    notePerfWork("background.canvasBlur.draw", performance.now() - startedAt, {
+      blurPx,
+      cssH,
+      cssW,
+      dpr,
+      sampleH,
+      sampleW,
+    });
+  }
 }
 
 function drawImageCover(

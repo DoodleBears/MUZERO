@@ -9,6 +9,7 @@ import { db } from "@/db/muzero-db";
 import { getTrackLyrics } from "@/db/repositories";
 import type { AppSettings, Track } from "@/db/types";
 import { useSettings } from "@/hooks/use-app-data";
+import { arePerfCountersEnabled, notePerfWork } from "@/lib/perf-counters";
 import { useSmoothScroll } from "@/lib/smooth-scroll/use-smooth-scroll";
 import { cn } from "@/lib/utils";
 import { activeWordIndex } from "@/lyrics/active-word";
@@ -582,6 +583,8 @@ function SyncedLines({
 
     const write = (timestamp: number) => {
       if (stopped) return;
+      const perfEnabled = arePerfCountersEnabled();
+      const perfStartedAt = perfEnabled ? performance.now() : 0;
       if (viewport.scrollTop !== 0) viewport.scrollTop = 0;
       const dt = lastTs ? Math.min(0.05, Math.max(0.001, (timestamp - lastTs) / 1000)) : 1 / 60;
       lastTs = timestamp;
@@ -692,6 +695,13 @@ function SyncedLines({
           row.style.willChange = "transform, opacity, filter";
         }
       }
+      if (perfEnabled) {
+        notePerfWork("lyrics.cascade.frame", performance.now() - perfStartedAt, {
+          activeIndex: liveActiveIndex,
+          rows: layout.frames.length,
+          viewportHeight,
+        });
+      }
       raf = requestAnimationFrame(write);
     };
 
@@ -735,6 +745,8 @@ function SyncedLines({
     const spans = el?.querySelectorAll<HTMLElement>("[data-word]");
     if (!spans || spans.length === 0) return;
     const paint = () => {
+      const perfEnabled = arePerfCountersEnabled();
+      const perfStartedAt = perfEnabled ? performance.now() : 0;
       const ms = (getMediaEngine()?.getCurrentTime() ?? 0) * 1000;
       const idx = activeWordIndex(words, ms);
       spans.forEach((span, j) => {
@@ -747,6 +759,12 @@ function SyncedLines({
         }
         span.style.setProperty("--wfill", `${pct}%`);
       });
+      if (perfEnabled) {
+        notePerfWork("lyrics.wordFill.paint", performance.now() - perfStartedAt, {
+          activeIndex,
+          words: spans.length,
+        });
+      }
     };
     paint();
     if (!isPlaying) return;

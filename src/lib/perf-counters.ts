@@ -12,6 +12,7 @@ import { traceEvent } from "@/lib/trace";
 
 let enabled = false;
 const counts = new Map<string, number>();
+const perfWorkWindows = new Map<string, PerfWorkWindow>();
 
 export function setPerfCountersEnabled(on: boolean): void {
   enabled = on;
@@ -34,6 +35,7 @@ export function readPerfCounter(name: string): number {
 export function resetPerfCounters(): void {
   counts.clear();
   requeryTraceWindows.clear();
+  perfWorkWindows.clear();
 }
 
 /** Per-query trace window — a Dexie write burst re-runs these queries once per
@@ -65,6 +67,77 @@ export function noteDbRequery(query: string): void {
     "db",
     coalesced > 0 ? `${query} requery (+${coalesced} coalesced)` : `${query} requery`,
   );
+}
+
+// ------------------------------------------------------------ work spans --
+
+const PERF_WORK_TRACE_WINDOW_MS = 1500;
+const PERF_WORK_SLOW_MS = 8;
+
+interface PerfWorkWindow {
+  emittedAt: number;
+  count: number;
+  totalMs: number;
+  maxMs: number;
+  lastMs: number;
+  slowCount: number;
+  lastData?: Record<string, unknown>;
+}
+
+function roundMs(value: number): number {
+  return Math.round(value * 100) / 100;
+}
+
+/**
+ * Record a named UI/rendering work span for trace diagnostics. Hot paths can call
+ * this at frame rate: while disabled it is a no-op, and while enabled it emits a
+ * coalesced trace row per work name instead of one row per frame.
+ */
+export function notePerfWork(
+  name: string,
+  durationMs: number,
+  data?: Record<string, unknown>,
+): void {
+  if (!enabled || !Number.isFinite(durationMs)) return;
+  bumpPerfCounter(`work.${name}`);
+  const now = Date.now();
+  let window = perfWorkWindows.get(name);
+  if (!window) {
+    window = {
+      emittedAt: now,
+      count: 0,
+      totalMs: 0,
+      maxMs: 0,
+      lastMs: 0,
+      slowCount: 0,
+    };
+    perfWorkWindows.set(name, window);
+  }
+  window.count += 1;
+  window.totalMs += durationMs;
+  window.maxMs = Math.max(window.maxMs, durationMs);
+  window.lastMs = durationMs;
+  if (durationMs >= PERF_WORK_SLOW_MS) window.slowCount += 1;
+  window.lastData = data;
+
+  const shouldEmit =
+    durationMs >= PERF_WORK_SLOW_MS || now - window.emittedAt >= PERF_WORK_TRACE_WINDOW_MS;
+  if (!shouldEmit) return;
+
+  traceEvent("debug", "performance.work", name, {
+    avgMs: roundMs(window.totalMs / Math.max(1, window.count)),
+    count: window.count,
+    lastMs: roundMs(window.lastMs),
+    maxMs: roundMs(window.maxMs),
+    slowCount: window.slowCount,
+    ...(window.lastData ?? {}),
+  });
+  window.emittedAt = now;
+  window.count = 0;
+  window.totalMs = 0;
+  window.maxMs = 0;
+  window.lastMs = 0;
+  window.slowCount = 0;
 }
 
 // ----------------------------------------------------------- blob URL census --

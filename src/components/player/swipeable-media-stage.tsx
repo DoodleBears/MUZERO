@@ -22,6 +22,7 @@ import {
   resolveNowPlayingCoverEffectMode,
 } from "@/lib/album-cover-appearance";
 import { getCroppedBlob } from "@/lib/image-crop";
+import { arePerfCountersEnabled, notePerfWork } from "@/lib/perf-counters";
 import { trackAlbum, trackArtists, trackHasCover, trackSubtitle } from "@/lib/track-display";
 import { cn } from "@/lib/utils";
 import { useNavStore } from "@/stores/nav-store";
@@ -1088,6 +1089,11 @@ function usePreloadedCoverUrls(tracks: Track[]): Record<string, string> {
     const created: string[] = [];
 
     const load = async () => {
+      const perfEnabled = arePerfCountersEnabled();
+      const perfStartedAt = perfEnabled ? performance.now() : 0;
+      let cropped = 0;
+      let local = 0;
+      let remote = 0;
       const previous = entriesRef.current;
       const nextEntries: Record<string, PreloadedCover> = {};
 
@@ -1101,15 +1107,18 @@ function usePreloadedCoverUrls(tracks: Track[]): Record<string, string> {
         // Remote cover: the proxied URL is ready synchronously; warm the cache and
         // record it directly (no object URL to own/revoke).
         if (request.remoteUrl) {
+          remote += 1;
           warmImage(request.remoteUrl);
           nextEntries[request.trackId] = { key: request.key, url: request.remoteUrl };
           continue;
         }
         if (!request.coverBlobId) continue;
+        local += 1;
 
         let blob = (await resolveMediaBlob(request.coverBlobId, db))?.blob;
         if (!blob) continue;
         if (request.crop) {
+          cropped += 1;
           blob = await getCroppedBlob(blob, request.crop, blob.type || "image/jpeg");
         }
         if (!alive) break;
@@ -1132,6 +1141,15 @@ function usePreloadedCoverUrls(tracks: Track[]): Record<string, string> {
 
       for (const [trackId, entry] of Object.entries(previous)) {
         if (nextEntries[trackId]?.url !== entry.url) URL.revokeObjectURL(entry.url);
+      }
+      if (perfEnabled) {
+        notePerfWork("cover.preload.batch", performance.now() - perfStartedAt, {
+          created: created.length,
+          cropped,
+          local,
+          remote,
+          requests: requests.length,
+        });
       }
     };
 

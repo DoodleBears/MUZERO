@@ -18,7 +18,7 @@ import {
   readJsHeapBytes,
   summarizePerf,
 } from "@/lib/perf-metrics";
-import { formatTraceEntries, getTraceEntries } from "@/lib/trace";
+import { formatTraceEntries, getTraceEntries, traceEvent } from "@/lib/trace";
 import { cn } from "@/lib/utils";
 import { usePlayerStore } from "@/stores/player-store";
 
@@ -38,6 +38,7 @@ const DB_REQUERY_COUNTERS = [
 
 const COLLAPSED_KEY = "muzero:dev-perf-collapsed";
 const SNAPSHOT_MS = 500;
+const TRACE_SUMMARY_MS = 2500;
 
 interface Snapshot {
   frames: PerfSummary;
@@ -67,6 +68,7 @@ export function DevPerfPanel() {
   const [traceCopied, setTraceCopied] = useState(false);
   const framesRef = useRef(new PerfWindow(180));
   const longTasksRef = useRef(new PerfWindow(60));
+  const lastTraceSummaryRef = useRef(0);
   const queueLength = usePlayerStore((s) => s.queue.length);
 
   // Counters + blob-URL census live only while the HUD is mounted — zero
@@ -113,20 +115,43 @@ export function DevPerfPanel() {
   useEffect(() => {
     const id = window.setInterval(() => {
       const blobs = blobUrlStats();
+      const frames = framesRef.current.summary();
+      const longTasks = longTasksRef.current.summary();
+      const heapBytes = readJsHeapBytes();
+      const dbRequeries = DB_REQUERY_COUNTERS.reduce((sum, name) => sum + readPerfCounter(name), 0);
       setSnap({
-        frames: framesRef.current.summary(),
-        longTaskMax: longTasksRef.current.summary().max,
-        heapBytes: readJsHeapBytes(),
+        frames,
+        longTaskMax: longTasks.max,
+        heapBytes,
         blobsLive: blobs.live,
         blobsCreated: blobs.created,
-        dbRequeries: DB_REQUERY_COUNTERS.reduce((sum, name) => sum + readPerfCounter(name), 0),
+        dbRequeries,
         // Polled, NOT subscribed — a useTraceEntries subscription would re-render
         // this HUD on every log line (PRD F-L5).
         traceCount: getTraceEntries().length,
       });
+      const now = Date.now();
+      const jankyFrame = (frames.max ?? 0) >= 50;
+      const canEmit = now - lastTraceSummaryRef.current >= (jankyFrame ? SNAPSHOT_MS : TRACE_SUMMARY_MS);
+      if (frames.samples > 0 && canEmit) {
+        lastTraceSummaryRef.current = now;
+        traceEvent("debug", "performance.frame", "fps window", {
+          blobsCreated: blobs.created,
+          blobsLive: blobs.live,
+          dbRequeries,
+          fpsAvg: roundMetric(fpsFromIntervalMs(frames.avg)),
+          fpsLow: roundMetric(fpsFromIntervalMs(frames.max)),
+          frameAvgMs: roundMetric(frames.avg),
+          frameMaxMs: roundMetric(frames.max),
+          frameP99Ms: roundMetric(frames.p99),
+          heapMb: heapBytes == null ? null : Math.round(heapBytes / (1024 * 1024)),
+          longTaskMaxMs: roundMetric(longTasks.max),
+          queueLength,
+        });
+      }
     }, SNAPSHOT_MS);
     return () => window.clearInterval(id);
-  }, []);
+  }, [queueLength]);
 
   const toggle = () => {
     setCollapsed((c) => {
@@ -213,6 +238,10 @@ export function ProdPerfHud() {
   const settings = useSettings();
   if (import.meta.env.DEV || !settings.perfHudEnabled) return null;
   return <DevPerfPanel />;
+}
+
+function roundMetric(value: number | null): number | null {
+  return value == null ? null : Math.round(value * 10) / 10;
 }
 
 function Row({ label, value }: { label: string; value: string }) {
