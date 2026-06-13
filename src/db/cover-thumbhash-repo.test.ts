@@ -46,7 +46,6 @@ import {
   countCoverMetadataBackfillCandidates,
   createSession,
   createUploadedTrack,
-  flushQueuedCoverPaletteExtractions,
   setEntityCover,
   setSessionCover,
   setTrackCover,
@@ -94,7 +93,7 @@ describe("cover-set generates + persists a thumbhash on the owner row (Phase 3)"
     expect(track?.coverPaletteSource).toBe(track?.coverBlobId);
   });
 
-  it("createUploadedTrack stores thumbhash immediately and defers full palette for embedded covers", async () => {
+  it("createUploadedTrack stores thumbhash AND the accurate palette in one decode for embedded covers", async () => {
     const session = await createSession({ name: "s", seedPrompt: "", config: {} }, db);
 
     const track = await createUploadedTrack(
@@ -113,15 +112,10 @@ describe("cover-set generates + persists a thumbhash on the owner row (Phase 3)"
     const stored = await db.tracks.get(track.id);
     expect(stored?.coverBlobId).toBeTruthy();
     expect(stored?.coverThumbhash).toBe(VALID_THUMB64);
-    expect(stored?.coverPalette).toHaveLength(1);
+    // The accurate worker palette is set immediately — no second decode / flush.
+    expect(stored?.coverPalette).toEqual(mocks.palette);
     expect(stored?.coverPaletteSource).toBe(stored?.coverBlobId);
     expect(await countCoverMetadataBackfillCandidates(db)).toBe(0);
-
-    await flushQueuedCoverPaletteExtractions();
-
-    const updated = await db.tracks.get(track.id);
-    expect(updated?.coverPalette).toEqual(mocks.palette);
-    expect(updated?.coverPaletteSource).toBe(updated?.coverBlobId);
   });
 
   it("setSessionCover stores coverThumbhash on the session", async () => {

@@ -12,7 +12,7 @@
 | Phase | Name | Status | Link |
 |-------|------|--------|------|
 | 1 | 滚动不再把已加载封面降级成 thumbhash(#C,UX 最痛) | ✅ 代码完成(待实测) | [Phase 1](#phase-1-滚动不闪-thumbhash) |
-| 2 | 导入封面解码去重(palette+thumbhash 合并一次)(#1) | 🔲 Pending | [Phase 2](#phase-2-导入解码去重) |
+| 2 | 导入封面解码去重(palette+thumbhash 合并一次)(#1) | ✅ 代码完成(待导入实测) | [Phase 2](#phase-2-导入解码去重) |
 | 3 | 专辑/歌手网格用更高清封面(#A) | 🔲 Pending | [Phase 3](#phase-3-网格高清封面) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
@@ -85,9 +85,15 @@
 - [ ] 确认 display 侧(`visualizer-dynamic-color`)能命中导入时已存的 palette 派生(避免再解码)。
 - [ ] (可选)`extractCoverMetadataViaWorker` 的 in-flight key 对「子集 targets」也能复用(`["thumbhash"]` 命中正在跑的 `["palette","thumbhash"]`),进一步省。
 
+**实现(落地):** 所有导入(upload / NCM / 文件夹)都汇聚到 `createUploadedTrack`。把它从「`deriveCoverThumbhash`(解码1)+ 近似 palette + 后台 `deriveCoverPalette`(解码2)flush」改为**一次 `deriveCoverMetadata`(`["palette","thumbhash"]`,一次解码出两样)**,直接写精确 palette(worker 无果时回退 thumbhash 近似)。**删掉整套延迟 flush 机制**(`queue/flush/schedule/runQueued` + `scheduleIdleTask`);`deriveCoverPalette` 仍被 backfill 用、保留。更新对应单测。
+
+**Tasks:**
+- [x] `createUploadedTrack` 改 `deriveCoverMetadata` 一次出 thumbhash+精确 palette;移除后台 palette flush 调用 + 整套机制。
+- [x] 更新 `cover-thumbhash-repo.test.ts`:断言导入后**立即**有精确 palette(不再 flush)。
+
 **Checklist:**
-- [ ] 导入 trace:每张封面 worker `enqueue` 从 2 次降到 1 次(targets=`["palette","thumbhash"]`)。
-- [ ] `tsc`/Biome/`src` 全量通过。
+- [x] `tsc`/Biome 通过;`src` 全量 2383 例通过。
+- [ ] **待导入实测**:trace 里每张封面 worker `enqueue` 从 2 次降到 1 次(targets=`["palette","thumbhash"]`)。
 
 ### Phase 3: 网格高清封面
 
@@ -138,3 +144,4 @@
 | 2026-06-14 | Claude | 初稿:#C 滚动不闪(主)+ #1 导入去重 + #A 网格高清;#B 归因虚拟化非主因 |
 | 2026-06-14 | Claude | Phase 1(#C)代码完成:`keepDeferredCover` + `useCoverDerivativeUrl` defer 选项(保留已解析封面、滚动中不启动 worker)+ track-row 改造。`src` 全量 2383 例通过。待实测 |
 | 2026-06-14 | Claude | QA 跟进:修「滚动停下二次闪 thumbhash」——effect 顶部加 `entryRef.forKey === coverKey` 守卫,已解析封面不再重跑 ensure/换 URL。`src` 全量通过 |
+| 2026-06-14 | Claude | Phase 2(#1)代码完成:`createUploadedTrack` 改一次 `deriveCoverMetadata`(thumbhash+精确 palette),删整套延迟 palette flush;每张封面导入解码 2→1 次。`src` 全量 2383 例通过 |

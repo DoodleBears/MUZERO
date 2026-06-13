@@ -911,116 +911,34 @@ export async function createUploadedTrack(
         )
       : undefined;
     if (cover && input.embeddedCover) {
-      const coverThumbhash = await deriveCoverThumbhash(
+      // One decode → thumbhash + accurate palette together. (Previously this
+      // decoded for thumbhash here, then a background flush decoded the SAME cover
+      // again just for the palette — wasteful. The palette quantization on the
+      // already-decoded pixels is cheap, so doing both in one worker pass halves
+      // the per-cover decode at import. Falls back to the thumbhash-derived palette
+      // if the worker returns none.)
+      const coverMetadata = await deriveCoverMetadata(
         input.embeddedCover.blob,
         undefined,
+        input.embeddedCover.mime,
         cover.id,
       );
       track.coverBlobId = cover.id;
-      track.coverThumbhash = coverThumbhash;
-      Object.assign(track, coverPaletteFields(coverPaletteFromThumbhash(coverThumbhash), cover.id));
+      track.coverThumbhash = coverMetadata.thumbhash;
+      const palette = coverMetadata.palette?.length
+        ? coverMetadata.palette
+        : coverPaletteFromThumbhash(coverMetadata.thumbhash);
+      Object.assign(track, coverPaletteFields(palette, cover.id));
     }
     await db.transaction("rw", db.tracks, async () => {
       await db.tracks.put(track);
     });
-    if (cover && input.embeddedCover) {
-      queueTrackCoverPaletteExtraction({
-        trackId: track.id,
-        coverBlobId: cover.id,
-        blob:
-          input.embeddedCover.blob.size <= QUEUED_COVER_PALETTE_INLINE_BLOB_MAX_BYTES
-            ? input.embeddedCover.blob
-            : undefined,
-        mime: input.embeddedCover.mime,
-        db,
-        storage,
-      });
-    }
   } catch (error) {
     await deleteMediaBlob(media.id, db, storage);
     if (cover) await deleteMediaBlob(cover.id, db, storage);
     throw error;
   }
   return track;
-}
-
-interface QueuedTrackCoverPaletteJob {
-  trackId: string;
-  coverBlobId: string;
-  blob?: Blob;
-  mime?: string;
-  db: MuzeroDB;
-  storage: MediaBlobStorageOptions;
-}
-
-const QUEUED_COVER_PALETTE_INLINE_BLOB_MAX_BYTES = 1024 * 1024;
-const queuedTrackCoverPaletteJobs = new Map<string, QueuedTrackCoverPaletteJob>();
-let coverPaletteFlushScheduled = false;
-let coverPaletteFlushPromise: Promise<void> | null = null;
-
-function queueTrackCoverPaletteExtraction(job: QueuedTrackCoverPaletteJob): void {
-  queuedTrackCoverPaletteJobs.set(`${job.trackId}:${job.coverBlobId}`, job);
-  scheduleCoverPaletteFlush();
-}
-
-export async function flushQueuedCoverPaletteExtractions(): Promise<void> {
-  if (coverPaletteFlushPromise) return coverPaletteFlushPromise;
-  coverPaletteFlushScheduled = false;
-  coverPaletteFlushPromise = (async () => {
-    while (queuedTrackCoverPaletteJobs.size > 0) {
-      const jobs = Array.from(queuedTrackCoverPaletteJobs.values());
-      queuedTrackCoverPaletteJobs.clear();
-      for (const job of jobs) {
-        await runQueuedTrackCoverPaletteExtraction(job);
-      }
-    }
-  })().finally(() => {
-    coverPaletteFlushPromise = null;
-    if (queuedTrackCoverPaletteJobs.size > 0) scheduleCoverPaletteFlush();
-  });
-  return coverPaletteFlushPromise;
-}
-
-function scheduleCoverPaletteFlush(): void {
-  if (coverPaletteFlushScheduled || coverPaletteFlushPromise) return;
-  coverPaletteFlushScheduled = true;
-  scheduleIdleTask(() => {
-    coverPaletteFlushScheduled = false;
-    void flushQueuedCoverPaletteExtractions();
-  });
-}
-
-async function runQueuedTrackCoverPaletteExtraction(
-  job: QueuedTrackCoverPaletteJob,
-): Promise<void> {
-  try {
-    const track = await job.db.tracks.get(job.trackId);
-    if (track?.coverBlobId !== job.coverBlobId) return;
-    const cover = job.blob
-      ? { blob: job.blob, mime: job.mime }
-      : await resolveMediaBlob(job.coverBlobId, job.db, job.storage);
-    if (!cover?.blob) return;
-    const fields = coverPaletteFields(
-      await deriveCoverPalette(cover.blob, track.coverCrop, cover.mime, job.coverBlobId),
-      job.coverBlobId,
-    );
-    if (!fields.coverPalette?.length) return;
-    await job.db.tracks.update(job.trackId, fields);
-  } catch {
-    // Best-effort derived metadata. The fallback thumbhash palette stays in place.
-  }
-}
-
-function scheduleIdleTask(callback: () => void): void {
-  type IdleGlobal = typeof globalThis & {
-    requestIdleCallback?: (cb: () => void, options?: { timeout?: number }) => unknown;
-  };
-  const requestIdle = (globalThis as IdleGlobal).requestIdleCallback;
-  if (requestIdle) {
-    requestIdle(callback, { timeout: 2_000 });
-    return;
-  }
-  setTimeout(callback, 32);
 }
 
 /** Create a ready uploaded track that references an Electron-granted local file. */
