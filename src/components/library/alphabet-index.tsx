@@ -71,7 +71,10 @@ export function AlphabetIndex({ scrollRef, buckets, onJump }: AlphabetIndexProps
           className="pointer-events-auto flex touch-none select-none flex-col items-center rounded-full bg-background/35 px-1 py-1 backdrop-blur-sm"
           onPointerDown={(event) => {
             event.preventDefault();
-            (event.target as HTMLElement).setPointerCapture?.(event.pointerId);
+            // Capture on the STRIP, not the pressed letter — otherwise the release
+            // synthesizes a trailing click on the press-position letter, overriding
+            // wherever the drag actually ended.
+            event.currentTarget.setPointerCapture?.(event.pointerId);
             setDragging(true);
             jumpAt(event.clientY);
           }}
@@ -88,18 +91,18 @@ export function AlphabetIndex({ scrollRef, buckets, onJump }: AlphabetIndexProps
           }}
         >
           {buckets.map((bucket) => (
-            <button
+            // Non-interactive labels: the strip's pointer handlers own all jumping
+            // (press + drag), so the letters take no clicks of their own — that's
+            // what avoids the trailing-click-resets-to-press-position bug.
+            <span
               key={bucket.label}
-              type="button"
-              tabIndex={-1}
-              onClick={() => onJump(bucket.firstIndex)}
               className={cn(
-                "font-medium text-[10px] text-foreground/55 leading-tight transition-colors hover:text-primary",
+                "pointer-events-none font-medium text-[10px] text-foreground/55 leading-tight transition-colors",
                 active === bucket.label && "text-primary",
               )}
             >
               {bucket.label}
-            </button>
+            </span>
           ))}
         </div>
       </div>
