@@ -45,6 +45,7 @@ import {
   removeTracksFromSession,
   resetAllShortcuts,
   resetAllSystemShortcuts,
+  resetImportedFolders,
   resetShortcut,
   saveSettings,
   setEntityCover,
@@ -1414,6 +1415,52 @@ describe("import-folder provenance + watch list", () => {
       path: "/m/two",
       displayName: "two",
     });
+  });
+
+  it("resets remembered folders and deletes only their imported tracks", async () => {
+    const session = await createSession({ seedPrompt: "", config: { autoExtend: false } }, db);
+    const make = (title: string, sourcePath?: string) =>
+      createUploadedTrack(
+        {
+          sessionId: session.id,
+          title,
+          kind: "audio",
+          blob: new Blob([new Uint8Array([1])], { type: "audio/mpeg" }),
+          mime: "audio/mpeg",
+          durationSec: 1,
+          sourcePath,
+        },
+        db,
+      );
+    const top = await make("top", "/m/one/top.mp3");
+    const nested = await make("nested", "/m/one/sub/nested.mp3");
+    const directOnly = await make("direct", "/m/two/direct.mp3");
+    const nestedKept = await make("nested kept", "/m/two/sub/nested.mp3");
+    const unrelated = await make("unrelated", "/else/keep.mp3");
+    const manual = await make("manual");
+    await upsertImportFolder({ path: "/m/one", setId: session.id, recursive: true }, db);
+    await upsertImportFolder({ path: "/m/two", setId: session.id, recursive: false }, db);
+    await playQueueSet(
+      [top.id, nested.id, directOnly.id, nestedKept.id, unrelated.id, manual.id],
+      {},
+      db,
+    );
+
+    const result = await resetImportedFolders(db);
+
+    expect(result).toEqual({ foldersRemoved: 2, tracksDeleted: 3 });
+    expect((await getSettings(db)).importFolders ?? []).toEqual([]);
+    expect(await getTrack(top.id, db)).toBeUndefined();
+    expect(await getTrack(nested.id, db)).toBeUndefined();
+    expect(await getTrack(directOnly.id, db)).toBeUndefined();
+    expect(await getTrack(nestedKept.id, db)).toBeDefined();
+    expect(await getTrack(unrelated.id, db)).toBeDefined();
+    expect(await getTrack(manual.id, db)).toBeDefined();
+    expect((await getPlayQueue(db)).entries.map((entry) => entry.trackId)).toEqual([
+      nestedKept.id,
+      unrelated.id,
+      manual.id,
+    ]);
   });
 });
 

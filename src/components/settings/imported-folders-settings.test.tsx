@@ -1,12 +1,15 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ImportedFoldersSettings } from "./imported-folders-settings";
 
 const mocks = vi.hoisted(() => ({
   hasFolderAccess: vi.fn(),
   importFolder: vi.fn(),
+  resetImportedFolders: vi.fn(),
+  settings: { importFolders: [] as Array<{ id: string; path: string; setId: string }> },
   syncImportFolders: vi.fn(),
   isUploading: false,
+  notifySuccess: vi.fn(),
 }));
 
 vi.mock("react-i18next", () => ({
@@ -19,7 +22,7 @@ vi.mock("react-i18next", () => ({
 
 vi.mock("@/hooks/use-app-data", () => ({
   useSessions: () => [],
-  useSettings: () => ({ importFolders: [] }),
+  useSettings: () => mocks.settings,
 }));
 
 vi.mock("@/lib/desktop/bridge", () => ({
@@ -28,7 +31,15 @@ vi.mock("@/lib/desktop/bridge", () => ({
 
 vi.mock("@/db/repositories", () => ({
   removeImportFolder: vi.fn(),
+  resetImportedFolders: mocks.resetImportedFolders,
   updateImportFolder: vi.fn(),
+}));
+
+vi.mock("@/stores/notification-store", () => ({
+  notify: {
+    error: vi.fn(),
+    success: mocks.notifySuccess,
+  },
 }));
 
 vi.mock("@/stores/player-store", () => ({
@@ -45,8 +56,11 @@ describe("ImportedFoldersSettings", () => {
     vi.clearAllMocks();
     mocks.hasFolderAccess.mockReturnValue(true);
     mocks.importFolder.mockResolvedValue(true);
+    mocks.resetImportedFolders.mockResolvedValue({ foldersRemoved: 1, tracksDeleted: 2 });
+    mocks.settings = { importFolders: [] };
     mocks.syncImportFolders.mockResolvedValue(undefined);
     mocks.isUploading = false;
+    mocks.notifySuccess.mockReset();
   });
 
   it("shows a primary add-local-folder action in the local files card header", () => {
@@ -65,5 +79,21 @@ describe("ImportedFoldersSettings", () => {
     expect(
       screen.queryByRole("button", { name: "settings.importFolderAdd" }),
     ).not.toBeInTheDocument();
+  });
+
+  it("resets remembered folder imports after confirmation", async () => {
+    mocks.settings = {
+      importFolders: [{ id: "imf_1", path: "/music", setId: "ses_1" }],
+    };
+
+    render(<ImportedFoldersSettings />);
+
+    fireEvent.click(screen.getByRole("button", { name: "settings.importFoldersReset" }));
+    fireEvent.click(screen.getByRole("button", { name: "settings.importFoldersResetConfirm" }));
+
+    await waitFor(() => expect(mocks.resetImportedFolders).toHaveBeenCalledTimes(1));
+    expect(mocks.notifySuccess).toHaveBeenCalledWith(
+      'settings.importFoldersResetDone {"folders":1,"tracks":2}',
+    );
   });
 });

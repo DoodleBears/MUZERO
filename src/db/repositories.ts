@@ -279,6 +279,48 @@ export async function removeImportFolder(id: string, db: MuzeroDB = defaultDb): 
   );
 }
 
+function normalizedLocalPath(path: string): string {
+  const normalized = path.trim().replaceAll("\\", "/").replace(/\/+/g, "/");
+  if (normalized === "/") return normalized;
+  return normalized.replace(/\/+$/, "").toLowerCase();
+}
+
+function isSourcePathWithinImportFolder(sourcePath: string, folder: ImportFolder): boolean {
+  const source = normalizedLocalPath(sourcePath);
+  const root = normalizedLocalPath(folder.path);
+  if (!root || source === root || !source.startsWith(`${root}/`)) return false;
+  const relative = source.slice(root.length + 1);
+  return (folder.recursive ?? true) || !relative.includes("/");
+}
+
+/**
+ * Reset remembered folder imports for a fresh re-import pass. This clears the
+ * watch list and removes tracks whose provenance is inside those folders. Files
+ * on disk are never touched.
+ */
+export async function resetImportedFolders(
+  db: MuzeroDB = defaultDb,
+): Promise<{ foldersRemoved: number; tracksDeleted: number }> {
+  const settings = await getSettings(db);
+  const folders = settings.importFolders ?? [];
+  if (folders.length === 0) return { foldersRemoved: 0, tracksDeleted: 0 };
+
+  const importedTracks = await db.tracks
+    .filter((track) =>
+      Boolean(
+        track.sourcePath &&
+          folders.some((folder) => isSourcePathWithinImportFolder(track.sourcePath ?? "", folder)),
+      ),
+    )
+    .toArray();
+  await deleteTracks(
+    importedTracks.map((track) => track.id),
+    db,
+  );
+  await saveSettings({ importFolders: [] }, db);
+  return { foldersRemoved: folders.length, tracksDeleted: importedTracks.length };
+}
+
 // ---------------------------------------------------------------- sessions ----
 
 export async function createSession(

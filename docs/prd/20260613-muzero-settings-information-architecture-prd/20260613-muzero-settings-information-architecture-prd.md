@@ -240,6 +240,7 @@ MUZERO has no backend API for this feature.
 | Settings repo | `rememberImportFolder(input)` | Store or update a remembered local folder, including `recursive`. |
 | Settings repo | `updateImportFolder(id, patch)` or equivalent | Toggle recursive scan, change bound set if supported, update display metadata. |
 | Settings repo | `removeImportFolder(id)` | Stop watching a folder while keeping imported tracks. |
+| Settings repo | `resetImportedFolders()` | Clear remembered folder links and delete MUZERO tracks imported from those folders, without deleting files on disk. |
 | Folder scan | `scanFolderForMedia(path, fs, options)` | Scan either one directory level or the full recursive tree. |
 | Player store | `syncImportFolders()` | Re-scan remembered folders using each folder's recursive preference. |
 
@@ -361,7 +362,8 @@ Required content:
   - last imported count if available;
   - recursive toggle;
   - sync now action for the single folder if feasible;
-  - stop watching action.
+  - stop watching action;
+  - reset folder imports action for re-import testing, with a destructive confirmation that states disk files are not deleted.
 
 Recursive control:
 
@@ -596,6 +598,7 @@ Scope:
 - [x] Add a repository helper for updating folder settings, or use a narrowly scoped `saveSettings` patch.
 - [x] Move `ImportedFoldersSettings` out of the Device pane into the new Local Files item.
 - [x] Add per-folder "Include subfolders" UI and i18n.
+- [x] Add a confirmed reset action that clears remembered folders and imported MUZERO tracks while preserving disk files.
 
 ### Phase 3 Checklist
 
@@ -605,9 +608,11 @@ Scope:
 - [x] Manual sync respects each folder's recursive preference.
 - [x] App launch sync respects each folder's recursive preference.
 - [x] Removing a folder still keeps imported tracks.
+- [x] Resetting folder imports removes only tracks whose `sourcePath` belongs to remembered folders and keeps unrelated/manual tracks.
 
 **Phase 3 Verification:**
 - `node_modules\.bin\vitest.CMD run src\lib\folder-import.test.ts src\stores\folder-sync.test.ts src\db\repositories.test.ts`
+- `node_modules\.bin\vitest.CMD run src\components\settings\imported-folders-settings.test.tsx`
 - `node_modules\.bin\tsc.CMD --noEmit --pretty false`
 
 ### Phase 4: Storage Management Section
@@ -852,6 +857,7 @@ Scope:
 11. No API keys, cookies, local paths, signed URLs, or raw listening event details are logged or moved out of local storage.
 12. Targeted tests cover settings nav aliases, recursive scanning, folder setting persistence, storage progress/cleanup, and listening stats totals.
 13. Desktop and mobile Settings layouts show no text overlap or clipped sidebar labels in supported locales.
+14. Local Files offers a confirmed reset path for re-importing remembered folders, and the confirmation clearly says disk files are not deleted.
 
 ---
 
@@ -873,6 +879,7 @@ Scope:
 | 2026-06-13 | Codex | Added a desktop-only action to open MUZERO's local cache/media folder from Storage. |
 | 2026-06-13 | Codex | Fixed embedded-cover imports to persist cover thumbhash metadata at import time and added repository coverage. |
 | 2026-06-13 | Codex | Audited cover import paths and fixed R2 remote-cover imports to derive palette metadata from thumbhash. |
+| 2026-06-13 | Codex | Added a confirmed Local files reset action for clearing remembered folder imports before re-importing. |
 
 ---
 
