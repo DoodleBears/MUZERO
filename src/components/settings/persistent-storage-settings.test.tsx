@@ -196,4 +196,28 @@ describe("PersistentStorageSettings", () => {
     });
     expect(mocks.notifySuccess).toHaveBeenCalledWith(expect.stringContaining('"count":2'));
   });
+
+  it("cancels cover color repair before starting another batch", async () => {
+    mocks.coverRepairCount = 3;
+    let finishFirstBatch: (() => void) | undefined;
+    mocks.repairCoverMetadata.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finishFirstBatch = () => resolve({ attempted: ["blb_a"], updated: 1 });
+        }),
+    );
+
+    render(<PersistentStorageSettings />);
+
+    fireEvent.click(screen.getByRole("button", { name: /streamCache.permanentRepairCovers/ }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "streamCache.permanentCancelRepair" }),
+    );
+    finishFirstBatch?.();
+
+    await waitFor(() => expect(mocks.repairCoverMetadata).toHaveBeenCalledTimes(1));
+    expect(mocks.notifySuccess).toHaveBeenCalledWith(
+      expect.stringContaining("streamCache.permanentRepairCoversCancelled"),
+    );
+  });
 });

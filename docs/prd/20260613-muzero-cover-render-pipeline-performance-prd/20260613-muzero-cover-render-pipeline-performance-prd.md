@@ -537,7 +537,7 @@ Run these scenarios in the Electron/Tauri desktop app with the visible perf HUD 
 - [x] Update `TrackRow` to request thumbnails instead of full covers.
 - [ ] Update set/album/artist cards and reorder lists to request thumbnails where visually appropriate.
 - [x] Keep thumbhash preview visible while derivative is missing.
-- [ ] Add repair count for missing thumbnails.
+- [x] Add repair count for missing thumbnails.
 
 ### Phase 2 Checklist
 
@@ -573,16 +573,16 @@ Run these scenarios in the Electron/Tauri desktop app with the visible perf HUD 
 **Tasks:**
 - [x] Add a derivative metadata table or equivalent registry if Phase 1/2 writes still cause large requery churn.
 - [x] Make `listAllTracks` avoid joining derived binary/repair-only metadata.
-- [x] Keep compatibility snapshots on `Track` where needed; thumbnail/backlight derivatives do not write hot Track rows.
+- [x] Keep compatibility snapshots on `Track` where needed; thumbnail/backlight/palette derivatives do not write hot Track rows.
 - [x] Update Settings repair UI to show per-target counts and progress.
 - [x] Add cleanup for stale derivative blobs when cover/crop changes or track is deleted.
 
 ### Phase 4 Checklist
 
-- [ ] Repairing thousands of cover color metadata records does not cause repeated full `listAllTracks` recomputation.
+- [x] Repairing thousands of cover color metadata records does not cause repeated full `listAllTracks` recomputation.
 - [x] Repairing thumbnail/backlight derivatives writes `coverDerivatives` / `mediaBlobs`, not Track rows.
 - [x] Deleting/replacing covers cleans obsolete derivative blobs.
-- [ ] Settings repair can be cancelled and resumed.
+- [x] Settings repair can be cancelled and resumed.
 - [x] Storage summary accounts for derivative blobs.
 
 ---
@@ -674,3 +674,4 @@ Run these scenarios in the Electron/Tauri desktop app with the visible perf HUD 
 | 2026-06-13 | Codex | Phase 2 partial: added `coverDerivatives` table, `cover-derivative` media role, persistent thumbnail derivative repository, thumbnail worker target, and TrackRow thumbnail derivative hook |
 | 2026-06-13 | Codex | Phase 3 partial: added worker backlight target, persistent backlight derivative reuse, and switched MediaStage/coverflow backlight rendering to derivative URLs |
 | 2026-06-13 | Codex | Phase 4 partial: added Settings counts/actions for thumbnail/backlight derivative repair and cleanup of stale derivatives on cover replace, crop change, and track delete |
+| 2026-06-13 | Codex | Phase 4 hot-table decoupling: persisted local cover palette metadata in `coverDerivatives`, stopped local visualizer palette extraction from updating Track rows, and added cancellable/resumable repair UX |

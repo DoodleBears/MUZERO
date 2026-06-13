@@ -226,7 +226,7 @@ export interface MediaBlob {
   blob?: Blob;
 }
 
-export type CoverDerivativeKind = "thumbnail" | "backlight" | "stage";
+export type CoverDerivativeKind = "thumbnail" | "backlight" | "stage" | "palette";
 
 export interface CoverDerivative {
   id: string;
@@ -242,6 +242,7 @@ export interface CoverDerivative {
   bytes?: number;
   width?: number;
   height?: number;
+  palette?: CoverPaletteRgb[];
   generatedAt: number;
   updatedAt: number;
   error?: string;

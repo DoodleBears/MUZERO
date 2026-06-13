@@ -1,6 +1,7 @@
 import { rgbaToThumbHash } from "thumbhash";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { thumbhashToBase64 } from "@/lib/cover-thumbhash";
+import { resolveCoverPaletteDerivative } from "./cover-derivatives";
 import { type MediaStorageProvider, putMediaBlob } from "./media-blob-storage";
 import { MuzeroDB } from "./muzero-db";
 import {
@@ -205,7 +206,7 @@ describe("backfillCoverThumbhashes", () => {
 });
 
 describe("backfillCoverMetadata", () => {
-  it("repairs legacy local track covers with thumbhash and visualizer palette", async () => {
+  it("repairs legacy local track covers with thumbhash and derived visualizer palette", async () => {
     const session = await createSession({ name: "s", seedPrompt: "", config: {} }, db);
     const blobId = await addTrackWithCover("trk_palette", session.id);
     const palette = [
@@ -223,8 +224,12 @@ describe("backfillCoverMetadata", () => {
     expect(extract).toHaveBeenCalledWith(expect.anything(), undefined, "image/png");
     const track = await db.tracks.get("trk_palette");
     expect(track?.coverThumbhash).toBe("HASH");
-    expect(track?.coverPalette).toEqual(palette);
-    expect(track?.coverPaletteSource).toBe(blobId);
+    expect(track?.coverPalette).toBeUndefined();
+    expect(track?.coverPaletteSource).toBeUndefined();
+    await expect(resolveCoverPaletteDerivative(track!, db)).resolves.toMatchObject({
+      palette,
+      derivative: { kind: "palette", sourceKey: `local:${blobId}` },
+    });
   });
 
   it("can derive thumbhash and palette for a local cover in one decode pass", async () => {
@@ -252,8 +257,12 @@ describe("backfillCoverMetadata", () => {
     expect(derive.mock.calls[0]?.slice(1)).toEqual([undefined, "image/png", blobId]);
     const track = await db.tracks.get("trk_combined");
     expect(track?.coverThumbhash).toBe("HASH");
-    expect(track?.coverPalette).toEqual(palette);
-    expect(track?.coverPaletteSource).toBe(blobId);
+    expect(track?.coverPalette).toBeUndefined();
+    expect(track?.coverPaletteSource).toBeUndefined();
+    await expect(resolveCoverPaletteDerivative(track!, db)).resolves.toMatchObject({
+      palette,
+      derivative: { kind: "palette", sourceKey: `local:${blobId}` },
+    });
   });
 
   it("repairs remote-only track cover palettes from thumbhash without fetching bytes", async () => {

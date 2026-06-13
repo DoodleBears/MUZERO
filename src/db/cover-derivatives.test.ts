@@ -6,8 +6,10 @@ import {
   coverDerivativeSourceForTrack,
   deleteCoverDerivativesForSource,
   ensureCoverBacklightDerivative,
+  ensureCoverPaletteDerivative,
   ensureCoverThumbnailDerivative,
   repairMissingCoverDerivatives,
+  resolveCoverPaletteDerivative,
 } from "./cover-derivatives";
 import { MuzeroDB } from "./muzero-db";
 import { deleteTrack } from "./repositories";
@@ -138,6 +140,36 @@ describe("cover derivatives", () => {
       }),
     );
     expect(await first?.blob.text()).toBe("backlight");
+  });
+
+  it("persists palette metadata without creating a media blob", async () => {
+    const track = await addTrackWithCover("trk_palette");
+    const palette = [{ r: 20, g: 120, b: 220 }];
+    const extract = vi.fn(async () => ({
+      palette,
+      timings: {
+        backlightMs: 0,
+        decodeMs: 1,
+        paletteMs: 2,
+        thumbnailMs: 0,
+        thumbhashMs: 0,
+        totalMs: 3,
+      },
+    }));
+
+    const first = await ensureCoverPaletteDerivative(track, db, { extract });
+    const second = await resolveCoverPaletteDerivative(track, db);
+
+    expect(extract).toHaveBeenCalledTimes(1);
+    expect(first?.palette).toEqual(palette);
+    expect(second?.palette).toEqual(palette);
+    expect(first?.derivative.blobId).toBeUndefined();
+    expect(first?.derivative).toMatchObject({
+      kind: "palette",
+      palette,
+      sourceKind: "local-cover",
+    });
+    expect(await db.mediaBlobs.where("role").equals("cover-derivative").count()).toBe(0);
   });
 
   it("dedupes concurrent thumbnail generation for the same cover source", async () => {

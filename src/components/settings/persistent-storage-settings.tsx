@@ -89,6 +89,7 @@ export function PersistentStorageSettings() {
   const [storageRefreshToken, setStorageRefreshToken] = useState(0);
   const [browserStorage, setBrowserStorage] = useState<BrowserStorageEstimate | null>(null);
   const migrationAbortRef = useRef<AbortController | null>(null);
+  const coverRepairAbortRef = useRef<AbortController | null>(null);
   const summary = useLiveQuery(
     () => summarizePersistentMediaStorage(undefined, { includeHealth: true }),
     [refreshToken],
@@ -187,6 +188,8 @@ export function PersistentStorageSettings() {
 
   async function repairCoverMetadata() {
     setBusy("repair-covers");
+    const controller = new AbortController();
+    coverRepairAbortRef.current = controller;
     const total = Math.max(0, coverRepairCount);
     const skipped = new Set<string>();
     const progress: CoverRepairProgress = {
@@ -198,7 +201,7 @@ export function PersistentStorageSettings() {
     };
     setCoverRepairProgress(progress);
     try {
-      while (progress.processed < total) {
+      while (progress.processed < total && !controller.signal.aborted) {
         const result = await backfillCoverMetadata(undefined, {
           limit: COVER_REPAIR_BATCH_SIZE,
           skip: skipped,
@@ -211,13 +214,21 @@ export function PersistentStorageSettings() {
         setCoverRepairProgress({ ...progress });
         await new Promise((resolve) => setTimeout(resolve, 0));
       }
-      if (progress.processed < total) {
+      if (!controller.signal.aborted && progress.processed < total) {
         progress.processed = total;
         setCoverRepairProgress({ ...progress });
       }
-      notify.success(t("streamCache.permanentRepairCoversDone", { count: progress.updated }));
+      notify.success(
+        t(
+          controller.signal.aborted
+            ? "streamCache.permanentRepairCoversCancelled"
+            : "streamCache.permanentRepairCoversDone",
+          { count: progress.updated },
+        ),
+      );
       setRefreshToken((value) => value + 1);
     } finally {
+      if (coverRepairAbortRef.current === controller) coverRepairAbortRef.current = null;
       setBusy(null);
     }
   }
@@ -225,12 +236,14 @@ export function PersistentStorageSettings() {
   async function repairCoverDerivatives(kind: "backlight" | "thumbnail") {
     const busyKind = kind === "thumbnail" ? "repair-thumbnails" : "repair-backlights";
     setBusy(busyKind);
+    const controller = new AbortController();
+    coverRepairAbortRef.current = controller;
     const total = Math.max(0, kind === "thumbnail" ? thumbnailRepairCount : backlightRepairCount);
     const skipped = new Set<string>();
     const progress: CoverRepairProgress = { failed: 0, kind, processed: 0, total, updated: 0 };
     setCoverRepairProgress(progress);
     try {
-      while (progress.processed < total) {
+      while (progress.processed < total && !controller.signal.aborted) {
         const result = await repairMissingCoverDerivatives(kind, undefined, {
           limit: COVER_DERIVATIVE_REPAIR_BATCH_SIZE,
           skip: skipped,
@@ -243,17 +256,27 @@ export function PersistentStorageSettings() {
         setCoverRepairProgress({ ...progress });
         await new Promise((resolve) => setTimeout(resolve, 0));
       }
-      if (progress.processed < total) {
+      if (!controller.signal.aborted && progress.processed < total) {
         progress.processed = total;
         setCoverRepairProgress({ ...progress });
       }
       notify.success(
-        t("streamCache.permanentRepairCoverDerivativesDone", { count: progress.updated }),
+        t(
+          controller.signal.aborted
+            ? "streamCache.permanentRepairCoverDerivativesCancelled"
+            : "streamCache.permanentRepairCoverDerivativesDone",
+          { count: progress.updated },
+        ),
       );
       setRefreshToken((value) => value + 1);
     } finally {
+      if (coverRepairAbortRef.current === controller) coverRepairAbortRef.current = null;
       setBusy(null);
     }
+  }
+
+  function cancelCoverRepair() {
+    coverRepairAbortRef.current?.abort();
   }
 
   const roles = Object.entries(summary.byRole).filter(
@@ -426,6 +449,11 @@ export function PersistentStorageSettings() {
           {busy === "migrate" && (
             <Button type="button" size="sm" variant="outline" onClick={cancelMigration}>
               <XCircle /> {t("streamCache.permanentCancel")}
+            </Button>
+          )}
+          {busy?.startsWith("repair-") && (
+            <Button type="button" size="sm" variant="outline" onClick={cancelCoverRepair}>
+              <XCircle /> {t("streamCache.permanentCancelRepair")}
             </Button>
           )}
           <Button

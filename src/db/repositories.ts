@@ -25,7 +25,11 @@ import {
   type SystemShortcutBinding,
 } from "@/shortcuts/system-global";
 import { extractCoverMetadataViaWorker } from "@/workers/cover-client";
-import { deleteCoverDerivativesForSource } from "./cover-derivatives";
+import {
+  deleteCoverDerivativesForSource,
+  putCoverPaletteDerivative,
+  resolveCoverPaletteDerivative,
+} from "./cover-derivatives";
 import {
   deleteMediaBlob,
   type MediaBlobStorageOptions,
@@ -1433,12 +1437,15 @@ export async function countCoverMetadataBackfillCandidates(
   db: MuzeroDB = defaultDb,
 ): Promise<number> {
   let count = 0;
-  count += await db.tracks
-    .filter((track) => {
-      if (track.coverBlobId) return trackNeedsLocalCoverMetadata(track);
-      return trackNeedsRemoteCoverPalette(track);
-    })
-    .count();
+  const tracks = await db.tracks
+    .filter((track) => Boolean(track.coverBlobId || track.remoteCoverUrl))
+    .toArray();
+  for (const track of tracks) {
+    const needsMetadata = track.coverBlobId
+      ? await trackNeedsLocalCoverMetadata(track, db)
+      : trackNeedsRemoteCoverPalette(track);
+    if (needsMetadata) count += 1;
+  }
   count += await db.sessions
     .filter((session) => !!session.coverBlobId && !session.coverThumbhash)
     .count();
@@ -1486,21 +1493,13 @@ export async function backfillCoverMetadata(
   const skipped = (key: string | undefined) => !!key && (opts.skip?.has(key) ?? false);
 
   const tracks = await db.tracks
-    .filter((track) => {
-      const key = track.coverBlobId
-        ? track.coverBlobId
-        : track.remoteCoverUrl
-          ? `remote:${track.id}:${track.remoteCoverUrl}`
-          : undefined;
-      if (skipped(key)) return false;
-      return track.coverBlobId
-        ? trackNeedsLocalCoverMetadata(track)
-        : trackNeedsRemoteCoverPalette(track);
-    })
-    .limit(remaining())
+    .filter((track) => Boolean(track.coverBlobId || track.remoteCoverUrl))
     .toArray();
   for (const track of tracks) {
+    if (remaining() <= 0) break;
     if (track.coverBlobId) {
+      if (skipped(track.coverBlobId)) continue;
+      if (!(await trackNeedsLocalCoverMetadata(track, db))) continue;
       candidates.push({
         key: track.coverBlobId,
         run: () => backfillLocalTrackCoverMetadata(track, db, { ...opts, derive, encode, extract }),
@@ -1508,8 +1507,10 @@ export async function backfillCoverMetadata(
       continue;
     }
     if (track.remoteCoverUrl) {
+      const key = `remote:${track.id}:${track.remoteCoverUrl}`;
+      if (skipped(key) || !trackNeedsRemoteCoverPalette(track)) continue;
       candidates.push({
-        key: `remote:${track.id}:${track.remoteCoverUrl}`,
+        key,
         run: () => backfillRemoteTrackCoverPalette(track, db),
       });
     }
@@ -1575,13 +1576,11 @@ export async function backfillCoverMetadata(
   return { updated, attempted };
 }
 
-function trackNeedsLocalCoverMetadata(track: Track): boolean {
+async function trackNeedsLocalCoverMetadata(track: Track, db: MuzeroDB): Promise<boolean> {
   if (!track.coverBlobId) return false;
-  return (
-    !track.coverThumbhash ||
-    !track.coverPalette?.length ||
-    track.coverPaletteSource !== track.coverBlobId
-  );
+  if (!track.coverThumbhash) return true;
+  if (trackHasCurrentPaletteSnapshot(track)) return false;
+  return !(await resolveCoverPaletteDerivative(track, db));
 }
 
 function trackNeedsRemoteCoverPalette(track: Track): boolean {
@@ -1618,29 +1617,26 @@ async function backfillLocalTrackCoverMetadata(
   const patch: Partial<Track> = {};
   const needsThumbhash = !track.coverThumbhash;
   const needsPalette =
-    !track.coverPalette?.length || track.coverPaletteSource !== track.coverBlobId;
+    !trackHasCurrentPaletteSnapshot(track) && !(await resolveCoverPaletteDerivative(track, db));
+  let palette: Awaited<ReturnType<typeof extractCoverPalette>> = [];
   if (opts.derive && needsThumbhash && needsPalette) {
     const metadata = await opts.derive(cover.blob, track.coverCrop, cover.mime, track.coverBlobId);
     if (metadata.thumbhash) patch.coverThumbhash = metadata.thumbhash;
-    Object.assign(patch, coverPaletteFields(metadata.palette, track.coverBlobId));
+    palette = metadata.palette;
   } else {
     if (needsThumbhash) {
       const hash = await opts.encode(cover.blob, track.coverCrop);
       if (hash) patch.coverThumbhash = hash;
     }
     if (needsPalette) {
-      Object.assign(
-        patch,
-        coverPaletteFields(
-          await opts.extract(cover.blob, track.coverCrop, cover.mime),
-          track.coverBlobId,
-        ),
-      );
+      palette = await opts.extract(cover.blob, track.coverCrop, cover.mime);
     }
   }
-  if (Object.keys(patch).length === 0) return false;
-  await db.tracks.update(track.id, patch);
-  return true;
+  const paletteDerivative = needsPalette
+    ? await putCoverPaletteDerivative(track, palette, db)
+    : undefined;
+  if (Object.keys(patch).length > 0) await db.tracks.update(track.id, patch);
+  return Object.keys(patch).length > 0 || Boolean(paletteDerivative);
 }
 
 async function backfillRemoteTrackCoverPalette(track: Track, db: MuzeroDB): Promise<boolean> {
@@ -1652,6 +1648,14 @@ async function backfillRemoteTrackCoverPalette(track: Track, db: MuzeroDB): Prom
   if (!fields.coverPalette?.length) return false;
   await db.tracks.update(track.id, fields);
   return true;
+}
+
+function trackHasCurrentPaletteSnapshot(track: Track): boolean {
+  return !!(
+    track.coverBlobId &&
+    track.coverPalette?.length &&
+    track.coverPaletteSource === track.coverBlobId
+  );
 }
 
 // ----------------------------------------------------------------- memories ----

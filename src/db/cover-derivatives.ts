@@ -5,7 +5,14 @@ import {
   resolveMediaBlob,
 } from "@/db/media-blob-storage";
 import { db as defaultDb, type MuzeroDB } from "@/db/muzero-db";
-import type { CoverDerivative, CoverDerivativeKind, CropRect, Track } from "@/db/types";
+import type {
+  CoverDerivative,
+  CoverDerivativeKind,
+  CoverPaletteRgb,
+  CropRect,
+  Track,
+} from "@/db/types";
+import { normalizeCoverPalette } from "@/lib/cover-palette";
 import { newId } from "@/lib/id";
 import { extractCoverMetadataViaWorker } from "@/workers/cover-client";
 import type { CoverMetadataResult } from "@/workers/cover-derivative-core";
@@ -18,6 +25,11 @@ export interface ResolvedCoverDerivative {
   blob: Blob;
   blobId: string;
   derivative: CoverDerivative;
+}
+
+export interface ResolvedCoverPaletteDerivative {
+  derivative: CoverDerivative;
+  palette: NonNullable<CoverDerivative["palette"]>;
 }
 
 export interface EnsureCoverDerivativeOptions {
@@ -37,6 +49,10 @@ export interface CoverDerivativeRepairProgress {
 }
 
 const imageDerivativeInFlight = new Map<string, Promise<ResolvedCoverDerivative | undefined>>();
+const paletteDerivativeInFlight = new Map<
+  string,
+  Promise<ResolvedCoverPaletteDerivative | undefined>
+>();
 
 export function coverDerivativeSourceForTrack(
   track: Pick<Track, "coverBlobId" | "remoteCoverUrl">,
@@ -88,6 +104,72 @@ export async function ensureCoverBacklightDerivative(
   options: EnsureCoverDerivativeOptions = {},
 ): Promise<ResolvedCoverDerivative | undefined> {
   return ensureCoverImageDerivative(track, "backlight", db, options);
+}
+
+export async function resolveCoverPaletteDerivative(
+  track: Pick<Track, "coverBlobId" | "coverCrop" | "remoteCoverUrl">,
+  db: MuzeroDB = defaultDb,
+): Promise<ResolvedCoverPaletteDerivative | undefined> {
+  const source = coverDerivativeSourceForTrack(track);
+  if (!source) return undefined;
+  const derivative = await db.coverDerivatives.get(
+    coverDerivativeId({
+      cropSig: coverCropSignature(track.coverCrop),
+      kind: "palette",
+      sourceKey: source.sourceKey,
+    }),
+  );
+  const palette = normalizeCoverPalette(derivative?.palette);
+  return derivative && palette.length > 0 ? { derivative, palette } : undefined;
+}
+
+export async function ensureCoverPaletteDerivative(
+  track: Pick<Track, "id" | "coverBlobId" | "coverCrop" | "remoteCoverUrl">,
+  db: MuzeroDB = defaultDb,
+  options: EnsureCoverDerivativeOptions = {},
+): Promise<ResolvedCoverPaletteDerivative | undefined> {
+  const cached = await resolveCoverPaletteDerivative(track, db);
+  if (cached) return cached;
+  const source = coverDerivativeSourceForTrack(track);
+  if (source?.sourceKind !== "local-cover" || !track.coverBlobId) return undefined;
+  const cropSig = coverCropSignature(track.coverCrop);
+  const id = coverDerivativeId({ cropSig, kind: "palette", sourceKey: source.sourceKey });
+  const existing = paletteDerivativeInFlight.get(id);
+  if (existing) return existing;
+  const promise = createPaletteDerivative({ cropSig, id, source, track }, db, options).finally(
+    () => {
+      if (paletteDerivativeInFlight.get(id) === promise) paletteDerivativeInFlight.delete(id);
+    },
+  );
+  paletteDerivativeInFlight.set(id, promise);
+  return promise;
+}
+
+export async function putCoverPaletteDerivative(
+  track: Pick<Track, "coverBlobId" | "coverCrop" | "remoteCoverUrl">,
+  palette: readonly CoverPaletteRgb[],
+  db: MuzeroDB = defaultDb,
+): Promise<ResolvedCoverPaletteDerivative | undefined> {
+  const source = coverDerivativeSourceForTrack(track);
+  if (!source) return undefined;
+  const cleanPalette = normalizeCoverPalette(palette);
+  if (cleanPalette.length === 0) return undefined;
+  const cropSig = coverCropSignature(track.coverCrop);
+  const now = Date.now();
+  const derivative: CoverDerivative = {
+    id: coverDerivativeId({ cropSig, kind: "palette", sourceKey: source.sourceKey }),
+    cropSig,
+    generatedAt: now,
+    kind: "palette",
+    palette: cleanPalette,
+    sourceKey: source.sourceKey,
+    sourceKind: source.sourceKind,
+    sourceRef: source.sourceRef,
+    updatedAt: now,
+    version: COVER_DERIVATIVE_VERSION,
+  };
+  await db.coverDerivatives.put(derivative);
+  return { derivative, palette: cleanPalette };
 }
 
 export async function countMissingCoverDerivatives(
@@ -248,6 +330,30 @@ async function createImageDerivative(
   };
   await db.coverDerivatives.put(derivative);
   return { blob: derivativeBlob, blobId: media.id, derivative };
+}
+
+async function createPaletteDerivative(
+  input: {
+    cropSig: string;
+    id: string;
+    source: CoverDerivativeSource;
+    track: Pick<Track, "id" | "coverBlobId" | "coverCrop">;
+  },
+  db: MuzeroDB,
+  options: EnsureCoverDerivativeOptions,
+): Promise<ResolvedCoverPaletteDerivative | undefined> {
+  if (!input.track.coverBlobId) return undefined;
+  const cover = await resolveMediaBlob(input.track.coverBlobId, db, options.storage);
+  if (!cover?.blob) return undefined;
+  const extract = options.extract ?? extractCoverMetadataViaWorker;
+  const result = await extract({
+    blob: cover.blob,
+    crop: input.track.coverCrop,
+    mime: cover.mime,
+    sourceKey: input.source.sourceKey,
+    targets: ["palette"],
+  });
+  return putCoverPaletteDerivative(input.track, result.palette, db);
 }
 
 function stableHash(input: string): string {

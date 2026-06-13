@@ -1,6 +1,7 @@
 import { useLiveQuery } from "dexie-react-hooks";
 import { useEffect } from "react";
 import { useShallow } from "zustand/react/shallow";
+import { putCoverPaletteDerivative, resolveCoverPaletteDerivative } from "@/db/cover-derivatives";
 import { resolveMediaBlob } from "@/db/media-blob-storage";
 import { db } from "@/db/muzero-db";
 import type { Track } from "@/db/types";
@@ -302,7 +303,14 @@ function getOrStartLocalPaletteExtraction(args: {
     .then((palette) => {
       const result = resolvePalette(palette, args.thumbhashFallback);
       if (result.cleanPalette.length > 0) {
-        void db.tracks.update(args.trackId, coverPaletteFields(result.cleanPalette, args.cover.id));
+        void putCoverPaletteDerivative(
+          {
+            coverBlobId: args.cover.id,
+            coverCrop: args.coverCrop,
+          },
+          result.cleanPalette,
+          db,
+        );
       }
       cachePaletteResult(args.cacheKey, result);
       coverColorLog.info("cover.palette.success", {
@@ -384,6 +392,14 @@ export function useVisualizerCoverColorCss(
         : null,
     [enabled, current?.coverBlobId],
     undefined,
+  );
+  const paletteDerivative = useLiveQuery(
+    async () =>
+      enabled && current?.coverBlobId
+        ? ((await resolveCoverPaletteDerivative(current, db)) ?? null)
+        : null,
+    [enabled, current?.coverBlobId, current?.coverCrop],
+    null,
   );
 
   useEffect(() => {
@@ -515,6 +531,26 @@ export function useVisualizerCoverColorCss(
       });
       return;
     }
+    const derived = paletteCacheEntry(paletteDerivative?.palette);
+    if (derived && current.coverBlobId) {
+      colorCache.set(current.coverBlobId, derived);
+      const applied = applyVisualizerCoverColorTarget(
+        current.coverBlobId,
+        derived.rgb,
+        derived.palette,
+      );
+      if (!applied) return;
+      coverColorLog.debug("cover.palette.derivative", {
+        message: "cover palette loaded from derivative metadata",
+        trackId: current.id,
+        category: "media",
+        phase: "state",
+        coverSourceKind: "local-cover",
+        coverBlobId: current.coverBlobId,
+        paletteCount: derived.palette.length,
+      });
+      return;
+    }
 
     if (cover === undefined) return;
     if (!cover?.blob) {
@@ -587,7 +623,7 @@ export function useVisualizerCoverColorCss(
       alive = false;
       cancelSettledExtraction();
     };
-  }, [active, coverColorEnabled, current, cover, primaryColorVersion]);
+  }, [active, coverColorEnabled, current, cover, paletteDerivative, primaryColorVersion]);
 
   return active ? css : null;
 }
