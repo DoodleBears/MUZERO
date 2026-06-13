@@ -27,6 +27,7 @@ import {
 const colorCache = new Map<string, { rgb: Rgb | null; palette: Rgb[] }>();
 const paletteExtractionInFlight = new Map<string, Promise<PaletteResolution>>();
 const coverColorLog = createDiagnosticLogger("cover.palette");
+const PALETTE_EXTRACTION_SETTLE_MS = 220;
 let lastAppliedTarget: { key: string | null; rgb: Rgb | null; palette: Rgb[] } | null = null;
 
 type PaletteResolution = {
@@ -129,6 +130,24 @@ function palettePhase(result: PaletteResolution): "success" | "state" | "skip" {
 
 function cachePaletteResult(cacheKey: string, result: PaletteResolution): void {
   colorCache.set(cacheKey, { rgb: result.rgb, palette: result.palette });
+}
+
+function runSettledPaletteExtraction(
+  run: () => Promise<PaletteResolution>,
+  apply: (result: PaletteResolution) => void,
+): () => void {
+  let alive = true;
+  const timer = window.setTimeout(() => {
+    if (!alive) return;
+    void run().then((result) => {
+      if (!alive) return;
+      apply(result);
+    });
+  }, PALETTE_EXTRACTION_SETTLE_MS);
+  return () => {
+    alive = false;
+    window.clearTimeout(timer);
+  };
 }
 
 function getOrStartRemotePaletteExtraction(args: {
@@ -422,23 +441,28 @@ export function useVisualizerCoverColorCss(
         colorCache.set(cacheKey, thumbhashFallback);
         return;
       }
-      void getOrStartRemotePaletteExtraction({
-        trackId: current.id,
-        cacheKey,
-        remoteCoverUrl,
-        thumbhashFallback,
-        coverSource,
-        safeUrl,
-      }).then((result) => {
-        if (!alive) return;
-        applyVisualizerCoverColorTarget(
-          cacheKey,
-          result.rgb ?? readPrimaryRgb(),
-          result.palette,
-        );
-      });
+      const cancelSettledExtraction = runSettledPaletteExtraction(
+        () =>
+          getOrStartRemotePaletteExtraction({
+            trackId: current.id,
+            cacheKey,
+            remoteCoverUrl,
+            thumbhashFallback,
+            coverSource,
+            safeUrl,
+          }),
+        (result) => {
+          if (!alive) return;
+          applyVisualizerCoverColorTarget(
+            cacheKey,
+            result.rgb ?? readPrimaryRgb(),
+            result.palette,
+          );
+        },
+      );
       return () => {
         alive = false;
+        cancelSettledExtraction();
       };
     }
 
@@ -509,25 +533,30 @@ export function useVisualizerCoverColorCss(
       );
     }
 
-    void getOrStartLocalPaletteExtraction({
-      trackId: current.id,
-      cacheKey,
-      cover: {
-        id: cover.id,
-        blob: cover.blob,
-        mime: cover.mime,
-        bytes: cover.bytes,
+    const cancelSettledExtraction = runSettledPaletteExtraction(
+      () =>
+        getOrStartLocalPaletteExtraction({
+          trackId: current.id,
+          cacheKey,
+          cover: {
+            id: cover.id,
+            blob: cover.blob,
+            mime: cover.mime,
+            bytes: cover.bytes,
+          },
+          coverCrop: current.coverCrop,
+          thumbhashFallback,
+        }),
+      (result) => {
+        if (!alive) return;
+        void primaryColorVersion;
+        applyVisualizerCoverColorTarget(cacheKey, result.rgb ?? readPrimaryRgb(), result.palette);
       },
-      coverCrop: current.coverCrop,
-      thumbhashFallback,
-    }).then((result) => {
-      if (!alive) return;
-      void primaryColorVersion;
-      applyVisualizerCoverColorTarget(cacheKey, result.rgb ?? readPrimaryRgb(), result.palette);
-    });
+    );
 
     return () => {
       alive = false;
+      cancelSettledExtraction();
     };
   }, [active, coverColorEnabled, current, cover, primaryColorVersion]);
 

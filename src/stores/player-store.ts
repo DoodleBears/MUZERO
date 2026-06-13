@@ -129,6 +129,7 @@ import { decodeNcmViaWorker, ingestViaWorker } from "@/workers/heavy-client";
 import type { DecodedNcmMedia } from "@/workers/ingest-core";
 
 const IMPORT_VISIBILITY_FLUSH_SIZE = 25;
+const LOCAL_BLOB_PLAYBACK_SETTLE_MS = 180;
 
 export type QueueSource =
   | { kind: "set"; setId: string }
@@ -468,6 +469,10 @@ function shouldContinuePlaybackCursor(
 
 function isAbortError(error: unknown): boolean {
   return error instanceof Error && error.name === "AbortError";
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function ensurePlaybackTrace(track: Track, wantPlay: boolean): PlaybackTraceContext | undefined {
@@ -2178,6 +2183,10 @@ async function ensureLoadedAndPlay(
     flushPlaybackListen(Date.now());
     if (sourceKind === "blob") {
       // Cached/downloaded bytes — plays locally, offline, no network round-trip.
+      if (previousLoadedTrackId !== null && activeRequestId !== undefined) {
+        await delay(LOCAL_BLOB_PLAYBACK_SETTLE_MS);
+        if (!continueCurrent("blob-settled")) return;
+      }
       const media = await getTrackBlob(track);
       if (!continueCurrent("blob-resolved")) return;
       if (!media) {
@@ -2410,7 +2419,10 @@ async function ensureLoadedAndPlay(
       set({ durationSec: duration });
     }
     triggerLyricsAutoFetch(track);
-    await updateMediaSessionMetadata(track);
+    if (!continueCurrent("before-metadata")) return;
+    await updateMediaSessionMetadata(track, () =>
+      currentTrack(get())?.id === track.id && isPlaybackRequestSeqCurrent(activeRequestId),
+    );
     if (!continueCurrent("metadata-updated")) return;
   }
   if (wantPlay && get().wantPlay) {
@@ -2435,7 +2447,10 @@ async function ensureLoadedAndPlay(
   }
 }
 
-async function updateMediaSessionMetadata(track: Track): Promise<void> {
+async function updateMediaSessionMetadata(
+  track: Track,
+  isCurrent: () => boolean = () => loadedTrackId === track.id,
+): Promise<void> {
   if (!canSetPlatformMediaSessionMetadata()) {
     revokeMediaSessionArtworkObjectUrl();
     return;
@@ -2455,14 +2470,16 @@ async function updateMediaSessionMetadata(track: Track): Promise<void> {
   if (track.remoteCoverUrl) {
     artwork = { src: track.remoteCoverUrl };
   } else if (track.coverBlobId) {
+    if (!isCurrent()) return;
     const cover = await getTrackCover(track);
+    if (!isCurrent()) return;
     if (cover?.blob) {
       nextArtworkObjectUrl = URL.createObjectURL(cover.blob);
       artwork = { src: nextArtworkObjectUrl, mime: cover.mime };
     }
   }
 
-  if (loadedTrackId !== track.id || seq !== mediaSessionMetadataSeq) {
+  if (!isCurrent() || loadedTrackId !== track.id || seq !== mediaSessionMetadataSeq) {
     if (nextArtworkObjectUrl) URL.revokeObjectURL(nextArtworkObjectUrl);
     return;
   }

@@ -44,6 +44,7 @@ const COMMIT_DURATION_SEC = 1.08;
 const SWITCH_DURATION_SEC = 0.62;
 const HANDOFF_DURATION_SEC = 0.32;
 const COVER_READY_SETTLE_MS = 440;
+const COVER_PRELOAD_LOCAL_SETTLE_MS = 140;
 const COMMIT_EASE = [0.22, 1, 0.36, 1] as const;
 const SNAP_EASE = [0.25, 1, 0.5, 1] as const;
 const EXIT_TRAVEL_FRACTION = 0.92;
@@ -1045,6 +1046,10 @@ function warmImage(url: string): void {
   img.src = url;
 }
 
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+
 type PreloadedCover = {
   cacheKey?: string;
   key: string;
@@ -1104,6 +1109,7 @@ function usePreloadedCoverUrls(tracks: Track[]): Record<string, string> {
       let created = 0;
       const previous = entriesRef.current;
       const nextEntries: Record<string, PreloadedCover> = {};
+      let localMissSettled = false;
 
       for (const request of requests) {
         const reusable = previous[request.trackId];
@@ -1131,6 +1137,12 @@ function usePreloadedCoverUrls(tracks: Track[]): Record<string, string> {
             url: cachedUrl,
           };
           continue;
+        }
+
+        if (!localMissSettled) {
+          localMissSettled = true;
+          await delay(COVER_PRELOAD_LOCAL_SETTLE_MS);
+          if (!alive) break;
         }
 
         let blob = (await resolveMediaBlob(request.coverBlobId, db))?.blob;
