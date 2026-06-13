@@ -161,6 +161,13 @@ const VIEW_KEYS = {
 // benign UI preference, not a behavior gate — same class as `muzero-locale`).
 const TRACK_SORT_KEY = "muzero-gallery-track-sort";
 const TRACK_SORT_DIR_KEY = "muzero-gallery-track-sort-dir";
+// Stable empty rows returned when the sets tab isn't active, so `systemPlaylistRows`
+// keeps a constant identity (downstream memos don't churn) without deriving.
+const EMPTY_SYSTEM_PLAYLIST_ROWS: Record<SystemPlaylistId, SystemPlaylistPlayable[]> = {
+  "system:liked": [],
+  "system:most": [],
+  "system:recent": [],
+};
 const EMPTY_MEMORY_NOTES = new Map<string, string[]>();
 const TRACK_ROW_SELECTOR = "[data-muzero-track-row]";
 /** The single shared `view-transition-name` the tapped wall cover and its detail
@@ -392,7 +399,17 @@ export function SearchPage() {
   const playbackEventsLive = useLiveQuery(() => db.playbackEvents.toArray(), [], []);
   const playbackStats = useThrottledValue(playbackStatsLive, LIBRARY_QUERY_COALESCE_MS);
   const playbackEvents = useThrottledValue(playbackEventsLive, LIBRARY_QUERY_COALESCE_MS);
-  const statsByTrackId = useMemo(() => buildTrackStatsMap(playbackStats), [playbackStats]);
+  // The stats tables are rewritten every playback heartbeat, but the O(N) derivations
+  // they feed (entity stats, recency sort, system playlists) are BACKGROUND relative
+  // to scrolling the visible list. Defer them so a heartbeat re-derivation runs at
+  // transition priority — React keeps it off an active scroll instead of blocking a
+  // frame — mirroring `indexSource = useDeferredValue(allTracks)` above.
+  const deferredPlaybackStats = useDeferredValue(playbackStats);
+  const deferredPlaybackEvents = useDeferredValue(playbackEvents);
+  const statsByTrackId = useMemo(
+    () => buildTrackStatsMap(deferredPlaybackStats),
+    [deferredPlaybackStats],
+  );
   // trackId → last-played epoch ms, for the 最近播放 sort (never-played omitted → 0).
   const lastPlayedByTrack = useMemo(() => {
     const map = new Map<string, number>();
@@ -576,23 +593,30 @@ export function SearchPage() {
     () => sortSets(filterSets(items, setQuery), sort, sortDir),
     [items, setQuery, sort, sortDir, transliterationReady],
   );
+  // Only the sets home shows the system-playlist cards, yet these derive a
+  // recency/most-played sort over the WHOLE library (twice). Gate to the sets tab so
+  // sitting on tracks/artists/albums while music plays doesn't re-sort 6k tracks per
+  // heartbeat for cards that aren't on screen; the stats inputs are deferred too.
   const systemPlaylistRows = useMemo(
-    () => ({
-      "system:liked": deriveHeartedPlaylist(allTracks).map(trackToSystemPlayable),
-      "system:recent": deriveRecentlyPlayedPlaylist(allTracks, {
-        events: playbackEvents,
-        remoteTracks,
-        stats: playbackStats,
-      }),
-      "system:most": deriveMostPlayedPlaylist(allTracks, {
-        events: playbackEvents,
-        now: Date.now(),
-        range: "all",
-        remoteTracks,
-        stats: playbackStats,
-      }),
-    }),
-    [allTracks, playbackEvents, playbackStats, remoteTracks],
+    () =>
+      mode === "sets"
+        ? {
+            "system:liked": deriveHeartedPlaylist(allTracks).map(trackToSystemPlayable),
+            "system:recent": deriveRecentlyPlayedPlaylist(allTracks, {
+              events: deferredPlaybackEvents,
+              remoteTracks,
+              stats: deferredPlaybackStats,
+            }),
+            "system:most": deriveMostPlayedPlaylist(allTracks, {
+              events: deferredPlaybackEvents,
+              now: Date.now(),
+              range: "all",
+              remoteTracks,
+              stats: deferredPlaybackStats,
+            }),
+          }
+        : EMPTY_SYSTEM_PLAYLIST_ROWS,
+    [mode, allTracks, deferredPlaybackEvents, deferredPlaybackStats, remoteTracks],
   );
   const systemPlaylistItems = useMemo<SystemPlaylistCardItem[]>(
     () =>
