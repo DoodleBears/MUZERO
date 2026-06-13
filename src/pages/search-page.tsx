@@ -16,6 +16,7 @@ import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } f
 import { flushSync } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { SourceAttributionChip } from "@/components/cloud/source-attribution-chip";
+import { OnlineDiscoverTab } from "@/components/discover/online-discover-tab";
 import { CollapsibleSearch } from "@/components/library/collapsible-search";
 import { CoverContextMenu } from "@/components/library/cover-context-menu";
 import { EntityDetailView } from "@/components/library/entity-detail";
@@ -65,6 +66,7 @@ import { useCoverMetadataBackfill, useTrackCoverUrl } from "@/hooks/use-media";
 import { useShortcutMatcher } from "@/hooks/use-shortcut-matcher";
 import { LIBRARY_QUERY_COALESCE_MS, useThrottledValue } from "@/hooks/use-throttled-value";
 import { useTransliterationReady } from "@/hooks/use-transliteration-ready";
+import { hasStreamingSources } from "@/lib/desktop/bridge";
 import { hasModalDialogOpen, isTypingTarget } from "@/lib/dom-keys";
 import { ENTITY_SORT_DEFAULT_DIR, type EntitySort, sortEntities } from "@/lib/entity-gallery";
 import {
@@ -113,21 +115,25 @@ import { isTrackCacheableToDevice } from "@/streamsrc/source-detect";
 import { matchesRemoteSearchTrack } from "@/sync/r2-search-catalog";
 
 type GalleryView = "list" | "grid";
-type GalleryMode = "sets" | "tracks" | "albums" | "artists";
-const GALLERY_MODES: GalleryMode[] = ["sets", "tracks", "albums", "artists"];
-/** Direct-jump shortcut action → gallery tab (bare 1/2/3/4 on the wall). */
+// "online" is the 发现 (Discover) tab — desktop + streaming only (see hasStreamingSources).
+type GalleryMode = "sets" | "tracks" | "albums" | "artists" | "online";
+const GALLERY_MODES: GalleryMode[] = ["sets", "tracks", "albums", "artists", "online"];
+/** Direct-jump shortcut action → gallery tab (bare 1/2/3/4/5 on the wall). */
 const GALLERY_TAB_ACTIONS: ReadonlyArray<readonly [string, GalleryMode]> = [
   ["nav.galleryTabSets", "sets"],
   ["nav.galleryTabTracks", "tracks"],
   ["nav.galleryTabAlbums", "albums"],
   ["nav.galleryTabArtists", "artists"],
+  ["nav.galleryTabOnline", "online"],
 ];
+// Discover has no text search box, so it carries no placeholder (the toolbar search
+// row is hidden for it).
 const SEARCH_PLACEHOLDER_KEY = {
   sets: "gallery.searchSets",
   tracks: "gallery.searchTracks",
   albums: "gallery.searchAlbums",
   artists: "gallery.searchArtists",
-} as const satisfies Record<GalleryMode, string>;
+} as const satisfies Record<Exclude<GalleryMode, "online">, string>;
 const MODE_KEY = "muzero-gallery-mode";
 const VIEW_KEY = "muzero-gallery-view";
 const EMPTY_MEMORY_NOTES = new Map<string, string[]>();
@@ -175,6 +181,9 @@ export function SearchPage() {
   useCoverMetadataBackfill();
   const [selectedSetId, setSelectedSetId] = useState<string | null>(null);
   const [mode, setMode] = useState<GalleryMode>(savedGalleryMode);
+  // The 发现 (Discover) tab needs the desktop media proxy (Referer/CORS), like the
+  // Settings streaming section — hidden on web / when no source is configured.
+  const streamingSupported = hasStreamingSources();
   const [setQuery, setSetQuery] = useState("");
   const [trackQuery, setTrackQuery] = useState("");
   const [albumQuery, setAlbumQuery] = useState("");
@@ -275,6 +284,19 @@ export function SearchPage() {
     return () => setUploadTarget({ kind: "active" });
   }, [selectedSetId, setUploadTarget]);
 
+  // Discover is only reachable when streaming is supported; drop it from the cycle /
+  // digit jumps and fall back if a persisted "online" mode lands on an unsupported build.
+  const availableModes = useMemo(
+    () => (streamingSupported ? GALLERY_MODES : GALLERY_MODES.filter((m) => m !== "online")),
+    [streamingSupported],
+  );
+  useEffect(() => {
+    if (mode === "online" && !streamingSupported) {
+      setMode("tracks");
+      if (typeof localStorage !== "undefined") localStorage.setItem(MODE_KEY, "tracks");
+    }
+  }, [mode, streamingSupported]);
+
   useEffect(() => {
     if (selectedSetId) return;
     const onKeyDown = (event: KeyboardEvent) => {
@@ -282,15 +304,15 @@ export function SearchPage() {
       if (isTypingTarget(event.target) || hasModalDialogOpen()) return;
       event.preventDefault();
       // ` cycles forward through the tabs; Shift+` walks back to the previous one.
-      const count = GALLERY_MODES.length;
+      const count = availableModes.length;
       const step = event.shiftKey ? -1 : 1;
-      const next = GALLERY_MODES[(GALLERY_MODES.indexOf(mode) + step + count) % count];
+      const next = availableModes[(availableModes.indexOf(mode) + step + count) % count];
       setMode(next);
       if (typeof localStorage !== "undefined") localStorage.setItem(MODE_KEY, next);
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [mode, selectedSetId]);
+  }, [mode, selectedSetId, availableModes]);
 
   // Bare 1/2/3/4 jump straight to a library tab (sets / songs / albums / artists),
   // at the wall only. Resolved through the registry, so the digits are rebindable.
@@ -300,13 +322,14 @@ export function SearchPage() {
       if (isTypingTarget(event.target) || hasModalDialogOpen()) return;
       const hit = GALLERY_TAB_ACTIONS.find(([action]) => matchesRef.current(event, action));
       if (!hit) return;
+      if (hit[1] === "online" && !streamingSupported) return; // 5 is inert without streaming
       event.preventDefault();
       setMode(hit[1]);
       if (typeof localStorage !== "undefined") localStorage.setItem(MODE_KEY, hit[1]);
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [selectedSetId, selectedArtistKey, selectedAlbumKey]);
+  }, [selectedSetId, selectedArtistKey, selectedAlbumKey, streamingSupported]);
 
   const trackById = useMemo(() => new Map(allTracks.map((tr) => [tr.id, tr])), [allTracks]);
 
@@ -892,33 +915,41 @@ export function SearchPage() {
               <ModeTab value="artists" shortcut="4">
                 {t("gallery.modeArtists")}
               </ModeTab>
+              {streamingSupported && (
+                <ModeTab value="online" shortcut="5">
+                  {t("gallery.modeOnline")}
+                </ModeTab>
+              )}
             </TabsList>
           </Tabs>
         </TooltipProvider>
 
-        <div className="flex items-center gap-2 px-1">
-          <div className="relative flex-1">
-            <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              value={query}
-              onChange={(e) => setQueryForMode(e.target.value)}
-              placeholder={t(SEARCH_PLACEHOLDER_KEY[mode])}
-              className="pl-9"
-              data-muzero-search-input
-              onKeyDown={onSearchKeyDown}
-            />
+        {/* Discover has no text search / view toggle, so the toolbar row is hidden for it. */}
+        {mode !== "online" && (
+          <div className="flex items-center gap-2 px-1">
+            <div className="relative flex-1">
+              <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                value={query}
+                onChange={(e) => setQueryForMode(e.target.value)}
+                placeholder={t(SEARCH_PLACEHOLDER_KEY[mode])}
+                className="pl-9"
+                data-muzero-search-input
+                onKeyDown={onSearchKeyDown}
+              />
+            </div>
+            {mode === "sets" && (
+              <Button
+                variant="outline"
+                onClick={() => void createNewSet()}
+                className="h-10 shrink-0 sm:h-10"
+              >
+                <Plus className="size-4" /> {t("gallery.newSet")}
+              </Button>
+            )}
+            {mode !== "tracks" && <ViewToggleGroup view={view} onChange={setViewPref} />}
           </div>
-          {mode === "sets" && (
-            <Button
-              variant="outline"
-              onClick={() => void createNewSet()}
-              className="h-10 shrink-0 sm:h-10"
-            >
-              <Plus className="size-4" /> {t("gallery.newSet")}
-            </Button>
-          )}
-          {mode !== "tracks" && <ViewToggleGroup view={view} onChange={setViewPref} />}
-        </div>
+        )}
       </div>
 
       {/* Content region. Single-column walls (sets / albums / artists) scroll here and
@@ -1274,6 +1305,7 @@ export function SearchPage() {
             )}
           </>
         )}
+        {mode === "online" && <OnlineDiscoverTab />}
       </div>
     </div>
   );

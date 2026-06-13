@@ -13,7 +13,7 @@
 |-------|------|--------|------|
 | 1 | Provider 层：纯解析 + 接口扩展（netease 推荐端点） | ✅ Completed | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | 数据获取层：react-query hooks（不入库、可缓存） | ✅ Completed | [Phase 2 Checklist](#phase-2-checklist) |
-| 3 | UI：Gallery 第 5 个「发现」tab + 空态引导登录 | 🔲 Pending | [Phase 3 Checklist](#phase-3-checklist) |
+| 3 | UI：Gallery 第 5 个「发现」tab + 空态引导登录 | ✅ Completed | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | 播放 / 保存：复用 playStreamedHit + importStreamedPlaylist | 🔲 Pending | [Phase 4 Checklist](#phase-4-checklist) |
 | 5 | i18n（en/zh/ja/ko）+ 收尾 | 🔲 Pending | [Phase 5 Checklist](#phase-5-checklist) |
 
@@ -284,15 +284,17 @@ ModeTab value="online" shortcut="5" → {t("gallery.modeOnline")}
 **Goal:** Gallery 出现第 5 个 tab，三段内容 + 未登录空态引导。
 
 **Tasks:**
-- [ ] `GALLERY_MODES` / `GALLERY_TAB_ACTIONS` 加 `online`；新增 ModeTab(shortcut 5)
-- [ ] `OnlineDiscoverTab`：三段（日推歌曲 / 日推歌单 / 推荐歌单）+ skeleton + error/empty
-- [ ] 未登录：匿名推荐歌单照常渲染 + 日推区非强制登录 chip（跳 Settings）；`hasStreamingSources()` 门控
+- [x] `GALLERY_MODES` / `GALLERY_TAB_ACTIONS` 加 `online`；新增 ModeTab(shortcut 5)（仅 `streamingSupported` 时渲染）；shortcut registry 加 `nav.galleryTabOnline`(Digit5) + 更新 registry 单测（Digit1–5）
+- [x] `OnlineDiscoverTab`：日推歌曲段 + 推荐歌单段 + skeleton + error/retry + empty（**两段**而非三段：依 §4.2/§4.3 的两方法/两 hook 契约，「每日推荐歌单」由 provider 合并进「推荐歌单」grid 前列，不另起第三段/第三 hook；详见 §2.1 `getRecommendedPlaylists` 合并语义）
+- [x] 未登录：匿名推荐歌单照常渲染 + 日推区非强制登录 chip（`setSettingsItem("stream-sources")` + `setTab("settings")`）；`hasStreamingSources()` 门控（tab 隐藏 + 数字/循环跳过 + 持久化 online 回退 tracks）
+- [x] 推荐歌单卡片用轻量响应式 CSS grid（有界 ~30 项，非 `VirtualCardGrid`，避免嵌套滚动容器复杂度）；播放/保存 handler 以可选 props 预留，Phase 4 由 search-page 注入
 
 ### Phase 3 Checklist
-- [ ] 桌面登录态：三段正常渲染、虚拟化卡片不卡
-- [ ] 未登录：匿名推荐歌单可见可用，日推区显示登录 chip（点击跳 Settings），tab 不变空
-- [ ] web/未启用：tab 不出现
-- [ ] 快捷键 5 切到该 tab；与 1/2/3/4 一致
+- [x] 登录态：日推歌曲行 + 推荐歌单 grid 正常渲染（component 单测 `render` 断言日推标题、无登录 chip）
+- [x] 未登录：匿名推荐歌单可见、日推区显示登录 chip（点击 → setSettingsItem/setTab 路由 Settings streaming），tab 不变空（component 单测覆盖）
+- [x] error → retry（component 单测断言点击 retry 调 `refetch`）
+- [x] web/未启用：tab 不出现（`streamingSupported` 门控 ModeTab + handlers；typecheck 通过；逻辑直读，桌面/web 视觉冒烟随 Phase 4 联调）
+- [x] 快捷键 5 切到该 tab；与 1/2/3/4 一致（registry 加 Digit5 + registry 单测扩到 Digit1–5）
 
 ### Phase 4: 播放 / 保存（复用既有）
 
