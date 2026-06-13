@@ -18,6 +18,7 @@
 | 5 | stage/coverflow 封面 `<img>` 异步解码(保持原图,不占 paint 主线程)(#4-B) | ✅ 代码完成(待 GPU/视觉实测) | [Phase 5](#phase-5-stagecoverflow-封面异步解码) |
 | 6 | 切歌 trace 仪表(逐首叙事:index/sourceKind/hasCover + 统计 flush)(诊断) | ✅ 代码完成(待抓 trace) | [Phase 6](#phase-6-切歌-trace-仪表) |
 | 7 | 切歌限速(长按 next/prev 节流 ~5/s,治 firehose 错位)(#错位) | ✅ 代码完成(待实测) | [Phase 7](#phase-7-切歌限速) |
+| 8 | 单一时钟:封面/背景/背光同源 live index(根治错位,QA#7) | ✅ 代码完成(待实测) | [Phase 8](#phase-8-单一时钟统一) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
 
@@ -328,6 +329,26 @@ backgroundGpuPowerPreference?: "auto" | "high-performance" | "low-power"; // DEF
 
 **后续(未做,本 PRD 跟进):** ① **512px 派生**(用户已拍板)—— 单次切歌仍 +48MB/66ms 整图解码,降采样治本(归 cover-quality PRD Phase 3);② 收紧背景同步(降 settle,让背景与封面**同时**变而非滞后 180ms)。
 
+### Phase 8: 单一时钟统一
+
+**Goal:** 根治「封面 / 背景 / 背光显示不同曲」(QA#7)。根因:now-playing 有 **3+ 个各自独立的「当前曲」时钟**——封面+背光读 store **live** `currentIndex`([media-stage.tsx:35-53](../../../src/components/player/media-stage.tsx#L35));背景走 `useSettledValue`(180ms 延迟);Pixi 再叠一层 `useSettledValue(src)`;coverflow overlay 还有自己的状态机。没有任何机制强制它们「一起切」,所以快切后某一层卡在中间曲 → 错位。**唯一确定性保证 = 全部读同一个 live index,一起切**(throttle 已 bound 速率,跟 live 不再 flood)。用户拍板「类似 live index」。
+
+**实现(落地):**
+- [`now-playing-background.tsx`](../../../src/components/player/now-playing-background.tsx):`currentIndex` 从 `useSettledValue(liveCurrentIndex, …)` 改为直接读 store `currentIndex`(与 stage cover/backlight 同源);删 `useSettledValue`/`BACKGROUND_EFFECT_SETTLE_MS` import。
+- [`pixi-pixel-background.tsx`](../../../src/components/player/pixi-pixel-background.tsx):纹理 effect 从 `setSource(settledSrc)` 改为 `setSource(src)`(跟封面同步换),删第二层 settle。
+- 结果:封面(live)+ 背光(live,同 `current`)+ 背景(现 live)+ Pixi 纹理(现 live)= **全部同一 `currentIndex`** → 结构上不可能显示不同曲。`settleBackgroundTarget`(URL pending 时保留当前帧、防闪)保留 —— 那是 stale-while-pending、按解析自纠,非时钟分叉。
+
+**为何不再需要原 settle:** 原 settle 是为了在 33/s firehose 下不给跳过的歌上传纹理(Phase 2)。Phase 7 throttle 已把速率压到 ~5/s,跟 live 的纹理上传次数 = 每次(节流后的)切歌一次,与原 settle emit 次数相同(throttle 200ms > settle 180ms,原本就每切歌 emit)——**所以去掉 settle 只消除「滞后」、不增加上传频率**(FPS 不变,正确性修好)。
+
+**Tasks:**
+- [x] 背景 + Pixi 改读 live `currentIndex`/`src`;删两处 settle + import。
+- [x] now-playing-background / pixi-controller / swipeable 测试(18)全绿;`tsc`(本改动文件)/Biome 通过。
+
+**Checklist:**
+- [ ] **待实测**:快切 + 松手后,封面 / 背景 / 背光 **始终同曲**(无错位);背景与封面**同时**换(不再滞后 180ms)。
+
+**后续(本 PRD 跟进):** ① **512px 派生**(用户已拍板,下一步)—— QA 实测「全 cache-hit 封面」下 heap 仍 +112MB/FPS→31,因 Pixi 每次切歌对**整图**重跑 `createImageBitmap`(~8–16MB),降采样治本;② (用户提的)切歌时**音频 fade out** 让声音也跟着切(当前音频 debounce、松手才载最终曲)—— 独立 audio transport 改动,后续评估。
+
 ---
 
 ## 7. Out of Scope(交叉引用,本 PRD 不处理)
@@ -391,5 +412,6 @@ backgroundGpuPowerPreference?: "auto" | "high-performance" | "low-power"; // DEF
 | 2026-06-14 | Claude | **Phase 4 代码完成**(TDD):新增 `background-texture.ts` `loadImageBitmapSource`(注入 fetchBlob/createImageBitmap,5 例单测先红后绿)+ `pixi-pixel-background` `loadBackgroundMedia` 优先 ImageBitmap(`fetchTextureBlob` 走 bridge,失败回退 `<img>`)+ 控制器 element 联合放宽 + 1 例 ImageBitmap 控制器测试(直传不转 canvas、swap/destroy close)。查 Pixi 文档确认 `ImageSource` 直接吃 ImageBitmap;未用 `Assets.load`(绕过 getAppFetch CORS + 纹理生命周期冲突)。14 例全绿、`tsc`/Biome 通过 |
 | 2026-06-14 | Claude | **Phase 5 代码完成**(TDD):新增 `cover-warm-decode.ts` `warmDecode`(可注入 Image,4 例先红后绿)替换原 `warmImage`,`usePreloadedCoverUrls` 远端+本地封面均 off-thread 预热解码;coverflow/backlight/`CoverImage` `<img>` 加 `decoding="async"`(保持原图,解码移出 paint 主线程)。player 105 + use-media/cover-image 15 + warmDecode 4 全绿;`tsc`/Biome 通过。**Phase 4/5 代码全部完成,待桌面 GPU/视觉实测** |
 | 2026-06-14 | User+Claude | **Phase 6 切歌 trace 仪表**(诊断):用户提供实测(无封面 120→115/low≈30、带封面 120→60/low 9~20),要更细 trace 看切歌全过程。排查确认 Q2 统计写库异步离帧、非帧开销。新增纯 helper `describeTrackSwitch`(4 例 TDD)→ enrich `player.playIndex`(sourceKind/hasCover/from/to/kind/origin);`flushPlaybackListen` 加 `listen.flush` trace。switch-trace(4)+ player-store(17)全绿,`tsc`/Biome 通过 |
+| 2026-06-14 | User+Claude | **Phase 8 单一时钟 + QA#7**:throttle 后封面/背景/背光仍可错位(松手后其一卡在别的曲)。定位根因 = 3+ 个独立「当前曲」时钟(封面/背光 live、背景 settle、Pixi 再 settle、coverflow 状态机),无机制强制同切。用户拍板「全部 live index 一起切」。背景 + Pixi 改读 live `currentIndex`/`src`(删两层 settle),与封面/背光同源 → 结构上不可能显示不同曲。throttle 已 bound 速率,去 settle 只消滞后、不增上传频率。测试 18 绿。后续:512px(全 cache-hit 仍 heap+112MB 因 Pixi 整图 createImageBitmap)、音频 fade-on-switch |
 | 2026-06-14 | User+Claude | **Phase 7 切歌限速 + QA#6 错位 bug**:用户报「长按快切松手后封面/背景其一与歌对不上」+ 提议设切换速度上限。定位错位根因 = 33/s 远超 180ms settle、多层 async/settle 各卡在不同中间曲。新增 `createTransportThrottle`(leading+trailing,clock 注入,4 例 TDD)接 `shortcuts/actions.ts` next/prev,限速 ~5/s(>settle 窗口)→ 根除错位 + 背景每切歌都跟变 + 封面看得清。`tsc`/Biome + 相关测试全绿。后续:512px 派生(单次切歌成本)+ 收紧背景同步 |
 | 2026-06-14 | User+Claude | **QA#5 + Phase 5 A/B 回退 `warmDecode`**:Phase 6 trace 显示带封面快切真凶是 **heap +227MB(289→516)→ GC 长任务(166ms)→ FPS 104→27**,量化吻合 ~15 张新封面整图解码(~15MB/张)。`warmDecode` 强制每张缓存封面立即整图解码并被保留 → 放大堆。**回退**:改回 `warmImage`(remote 仅 set src)、本地不预热、删 `cover-warm-decode.ts`/test,保留 `decoding="async"`。`tsc`/Biome + swipeable(6)绿。待抓 trace 验证;若不足则重开 512px 派生(cover-quality PRD Phase 3) |

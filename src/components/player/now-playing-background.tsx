@@ -5,9 +5,7 @@ import { getTrackLyrics, listGalleryImages, listTrackBackgrounds } from "@/db/re
 import { useSettings } from "@/hooks/use-app-data";
 import { useLocalCoverUrl } from "@/hooks/use-local-cover";
 import { useObjectUrls, useTrackCoverUrl, useTrackMediaUrl } from "@/hooks/use-media";
-import { useSettledValue } from "@/hooks/use-settled-value";
 import {
-  BACKGROUND_EFFECT_SETTLE_MS,
   type BackgroundRenderTarget,
   resolveBackgroundSource,
   resolvePixiBackgroundMedia,
@@ -63,16 +61,14 @@ function NowPlayingBackgroundContent({ hideVisualizer }: { hideVisualizer: boole
   const settings = useSettings();
   const imageMaskOpacity = (settings.backgroundMaskOpacity ?? 25) / 100;
   const queue = usePlayerStore((s) => s.queue);
-  const liveCurrentIndex = usePlayerStore((s) => s.currentIndex);
+  const currentIndex = usePlayerStore((s) => s.currentIndex);
   const isPlaying = usePlayerStore((s) => s.isPlaying);
-  // Debounce the AMBIENT background to the settled track. During a rapid next/next
-  // burst the background (cover URL + decode, palette, Pixi texture, flow, reveal
-  // veil) must NOT churn through every skipped song — the trace showed that decodes
-  // ~20 covers, climbs the heap ~130MB and GCs into 83ms frame stalls (QA #1). The
-  // center stage cover still follows the live index, so you still see what you skip.
-  // Settling here also stops the background cover/veil from showing a stale,
-  // mismatched cover while a skipped track's blob is still resolving (QA misalign).
-  const currentIndex = useSettledValue(liveCurrentIndex, BACKGROUND_EFFECT_SETTLE_MS);
+  // Single source of truth: the ambient background reads the SAME live index as the
+  // stage cover + backlight, so the three can never show different tracks. The old
+  // per-surface settle debounce intentionally lagged the background onto a different
+  // (skipped/previous) song than the cover — that WAS the QA misalignment. The
+  // transport throttle now bounds the switch rate, so following the live index no
+  // longer floods the cover/Pixi pipeline. See PRD Phase 8 (single-clock).
   const current = currentIndex >= 0 ? queue[currentIndex] : undefined;
   const visualizerStyle = resolveVisualizerStyle(settings.visualizerStyle);
   const showViz =

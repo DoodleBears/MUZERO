@@ -1,7 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSettings } from "@/hooks/use-app-data";
-import { useSettledValue } from "@/hooks/use-settled-value";
-import { BACKGROUND_EFFECT_SETTLE_MS } from "@/lib/background";
 import {
   type BackgroundEffectSettings,
   resolvePixiBackgroundEffectOptions,
@@ -82,13 +80,10 @@ export function PixiPixelBackground({
   const gpuPower = resolveGpuPower(settings.backgroundGpuPowerPreference);
   const hostRef = useRef<HTMLDivElement | null>(null);
   const [controller, setController] = useState<PixiBackgroundController | null>(null);
-  // The src actually painted onto the Pixi texture. While it lags the current
-  // `src` (during a switch / rapid skip), the plain <img> below stays visible.
+  // The src currently painted onto the Pixi texture. Until it catches up to `src`
+  // (the brief load+upload window on a switch), the plain <img> below stays visible
+  // to mask the swap.
   const [displayedSrc, setDisplayedSrc] = useState<string | null>(null);
-  // Heavy work (texture load + upload + effect) is gated behind a quiet period so a
-  // rapid next/next burst never uploads textures for the songs it skipped past. The
-  // plain <img> still follows the raw `src` every switch. See PRD Phase 2.
-  const settledSrc = useSettledValue(src, BACKGROUND_EFFECT_SETTLE_MS);
   const effectOptions = useMemo(
     () => resolvePixiBackgroundEffectOptions(effectSettings, pixelSize),
     [effectSettings, pixelSize],
@@ -127,19 +122,20 @@ export function PixiPixelBackground({
     };
   }, [effect, effectOptions, pixelSize, gpuBackend, gpuPower]);
 
-  // Texture swap: only the SETTLED src reaches the persistent app, so skipped-past
-  // songs never upload a texture. Re-runs when the controller is rebuilt so the new
-  // controller is seeded. On apply, record displayedSrc to fade out the plain <img>.
+  // Texture swap follows `src` directly (no debounce) so the background switches
+  // together with the cover — single source of truth (PRD Phase 8). The transport
+  // throttle bounds the switch rate, so we no longer gate uploads here. Re-runs when
+  // the controller is rebuilt. On apply, record displayedSrc to fade out the <img>.
   useEffect(() => {
     if (!controller) return;
     let cancelled = false;
-    void controller.setSource(settledSrc, mediaType).then(() => {
-      if (!cancelled) setDisplayedSrc(settledSrc);
+    void controller.setSource(src, mediaType).then(() => {
+      if (!cancelled) setDisplayedSrc(src);
     });
     return () => {
       cancelled = true;
     };
-  }, [controller, settledSrc, mediaType]);
+  }, [controller, src, mediaType]);
 
   return (
     <div
