@@ -21,6 +21,7 @@ import { notify } from "@/stores/notification-store";
 import { usePlayerStore } from "@/stores/player-store";
 import { AlphabetIndex } from "./alphabet-index";
 import { HoverScrollbar } from "./hover-scrollbar";
+import { rafObserveElementOffset } from "./raf-scroll-offset";
 import { TrackRow } from "./track-row";
 
 const TRACK_ROW_HEIGHT = 60;
@@ -140,6 +141,9 @@ export function VirtualTrackList({
     estimateSize: () => TRACK_ROW_HEIGHT,
     getItemKey: (index) => tracks[index]?.id ?? index,
     getScrollElement: () => parentRef.current,
+    // Coalesce native wheel-rate scroll into one window recompute per frame (the
+    // batching Lenis does), so the heavy list scrolls smoothly without smooth-scroll on.
+    observeElementOffset: rafObserveElementOffset,
     overscan: 8,
     scrollMargin,
     // Route scrollToIndex through Lenis when active (a raw element.scrollTo
