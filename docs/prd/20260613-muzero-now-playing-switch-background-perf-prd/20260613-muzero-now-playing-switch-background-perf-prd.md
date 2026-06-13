@@ -267,17 +267,26 @@ backgroundGpuPowerPreference?: "auto" | "high-performance" | "low-power"; // DEF
 
 **Goal:** 中央 coverflow/stage 封面**仍用原图**(读实时 index 是设计,要逐张滑过),但把整图解码移出 paint 关键路径:`<img decoding="async">` + 预热解码,快切时 `<img>` 上屏不再同步解码整张原图(QA#4 (A))。
 
-**实现(落地):**
-- coverflow `TrackVisual` 封面 `<img>` + backlight `<img>`([`swipeable-media-stage.tsx`](../../../src/components/player/swipeable-media-stage.tsx)) + 共享 stage/library 封面([`cover-image.tsx`](../../../src/components/ui/cover-image.tsx) `CoverImage`,`MediaStage` 经此渲染)补 `decoding="async"`。
-- 把原 `warmImage`(仅远端、只 set src)替换为可注入的 [`warmDecode(url, createImage?)`](../../../src/lib/cover-warm-decode.ts):`Image` + `decoding="async"` + `img.decode()`(主线程外解码、reject/无 decode 静默、无 `Image` noop);[`usePreloadedCoverUrls`](../../../src/components/player/swipeable-media-stage.tsx) 远端 **和** 本地封面(`createObjectURL` 后)都 warm-decode 一次,使 coverflow `<img>` 命中已解码缓存。**保持原图。**
+**实现(落地,经 QA#5 A/B 修正):**
+- coverflow `TrackVisual` 封面 `<img>` + backlight `<img>`([`swipeable-media-stage.tsx`](../../../src/components/player/swipeable-media-stage.tsx)) + 共享 stage/library 封面([`cover-image.tsx`](../../../src/components/ui/cover-image.tsx) `CoverImage`)补 `decoding="async"`(**保留** —— 浏览器在 paint 时异步解码,廉价、无副作用)。
+- **`warmDecode`(强制 `img.decode()` 预热)已回退**:见 QA#5。快切 burst 中它对每张新进缓存的封面强制整图解码(~939KB→解码 ~8–16MB 并被浏览器保留),~15 张新封面 → 堆 +227MB → GC 长任务 → FPS 104→27。改回原 `warmImage`(仅远端、只 set `src`、**不**强制 decode);本地封面不再预热(对象 URL 已在 `coverUrlCache`,paint 时解码即可)。删 `cover-warm-decode.ts`/test。
 
-**Tasks(TDD):**
-- [x] 先写 [`cover-warm-decode.test.ts`](../../../src/lib/cover-warm-decode.test.ts)(4 例,先红):set src+`decoding=async`+触发 `decode()`;`decode()` reject 不抛;无 `decode()` 仍 warm src;无 factory noop。
-- [x] 实现 `warmDecode` 至绿 + 接入 `usePreloadedCoverUrls`(远端+本地);coverflow/backlight/CoverImage `<img>` 加 `decoding="async"`。
+**Tasks:**
+- [x] coverflow/backlight/`CoverImage` `<img>` 加 `decoding="async"`(**保留**)。
+- [x] ~~`warmDecode` 预热解码~~ **回退**(QA#5):改回 `warmImage`(remote 仅 set src,不强制 decode),本地不预热;删 `cover-warm-decode.ts`/test。
 
 **Checklist:**
-- [x] `cover-warm-decode`(4)绿;player 组件 105 例 + use-media/cover-image 15 例全绿;`tsc`/Biome 通过。
-- [ ] **待实测(桌面)**:连切 6+ 首,coverflow 滑动 `frameMaxMs`/`fpsLow` 较修前改善;封面逐张可见无明显卡顿。
+- [x] `tsc`/Biome 通过;swipeable-media-stage(6)绿;无残留 `cover-warm-decode` 引用。
+- [ ] **待抓 trace 验证(A/B)**:回退后连切带封面歌,堆不再 +200MB 暴涨、`longTask`/`fpsLow` 改善。
+
+### QA#5(2026-06-14 第三轮 trace):heap churn 才是带封面快切的主凶,`warmDecode` 是放大器
+
+带 Phase 4/5/6 的 build 实测连切(`playIndex` 已带 `hasCover:true`/`sourceKind:blob` —— 全是带封面本地 blob):**`fpsAvg 104→27`、`heapMb 289→516`(+227MB)、`longTaskMax 166ms`**,burst 停后回升。signature 是**内存暴涨 → GC 长任务**,非落定单帧。
+
+- **量化吻合**:burst 中 `blobsCreated +15`(~15 张新封面 cache-miss),`cover.render.object-url-miss bytes:939170`(整图 ~939KB → 解码 ~8–16MB/张)→ 15×~15MB ≈ **+225MB**,与 heap +227MB 吻合。多数封面是 `cache-hit`(不重解),代价集中在这 ~15 张**新封面的整图解码 + 保留**。
+- **Phase 4 已生效**:全程**无** `ImageSource … converting to canvas` 警告(对比前几轮)。
+- **`warmDecode` 是放大器**:它对每张新进 `coverUrlCache` 的封面强制 `img.decode()`(整图、立即、浏览器保留解码结果),把「paint 时惰性解码(跳过的歌常常不解)」变成「每张缓存封面都立即整图解码并保留」→ 喂大 heap。**→ A/B 回退**(本 Phase 5 修正)。
+- **根因仍是整图解码内存**:用户此前要求保持原图(不降采样)。但 QA#5 的内存账(~15MB/张 × N)表明**整图解码的内存**已是 binding constraint。回退 `warmDecode` 是第一步;若仍不足,需重开「stage/coverflow 用 512px 派生」(decode 内存 ~16×↓)的决定(归 cover-quality PRD Phase 3,见 Out of Scope)。
 
 ### Phase 6: 切歌 trace 仪表
 
@@ -360,3 +369,4 @@ backgroundGpuPowerPreference?: "auto" | "high-performance" | "low-power"; // DEF
 | 2026-06-14 | Claude | **Phase 4 代码完成**(TDD):新增 `background-texture.ts` `loadImageBitmapSource`(注入 fetchBlob/createImageBitmap,5 例单测先红后绿)+ `pixi-pixel-background` `loadBackgroundMedia` 优先 ImageBitmap(`fetchTextureBlob` 走 bridge,失败回退 `<img>`)+ 控制器 element 联合放宽 + 1 例 ImageBitmap 控制器测试(直传不转 canvas、swap/destroy close)。查 Pixi 文档确认 `ImageSource` 直接吃 ImageBitmap;未用 `Assets.load`(绕过 getAppFetch CORS + 纹理生命周期冲突)。14 例全绿、`tsc`/Biome 通过 |
 | 2026-06-14 | Claude | **Phase 5 代码完成**(TDD):新增 `cover-warm-decode.ts` `warmDecode`(可注入 Image,4 例先红后绿)替换原 `warmImage`,`usePreloadedCoverUrls` 远端+本地封面均 off-thread 预热解码;coverflow/backlight/`CoverImage` `<img>` 加 `decoding="async"`(保持原图,解码移出 paint 主线程)。player 105 + use-media/cover-image 15 + warmDecode 4 全绿;`tsc`/Biome 通过。**Phase 4/5 代码全部完成,待桌面 GPU/视觉实测** |
 | 2026-06-14 | User+Claude | **Phase 6 切歌 trace 仪表**(诊断):用户提供实测(无封面 120→115/low≈30、带封面 120→60/low 9~20),要更细 trace 看切歌全过程。排查确认 Q2 统计写库异步离帧、非帧开销。新增纯 helper `describeTrackSwitch`(4 例 TDD)→ enrich `player.playIndex`(sourceKind/hasCover/from/to/kind/origin);`flushPlaybackListen` 加 `listen.flush` trace。switch-trace(4)+ player-store(17)全绿,`tsc`/Biome 通过 |
+| 2026-06-14 | User+Claude | **QA#5 + Phase 5 A/B 回退 `warmDecode`**:Phase 6 trace 显示带封面快切真凶是 **heap +227MB(289→516)→ GC 长任务(166ms)→ FPS 104→27**,量化吻合 ~15 张新封面整图解码(~15MB/张)。`warmDecode` 强制每张缓存封面立即整图解码并被保留 → 放大堆。**回退**:改回 `warmImage`(remote 仅 set src)、本地不预热、删 `cover-warm-decode.ts`/test,保留 `decoding="async"`。`tsc`/Biome + swipeable(6)绿。待抓 trace 验证;若不足则重开 512px 派生(cover-quality PRD Phase 3) |
