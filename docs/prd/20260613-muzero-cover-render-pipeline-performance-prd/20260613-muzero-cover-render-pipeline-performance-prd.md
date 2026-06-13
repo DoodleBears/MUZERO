@@ -15,7 +15,7 @@
 | 1 | Workerized Cover Metadata Extraction | In Progress | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | Persistent Thumbnail Derivatives | In Progress | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | Precomputed Backlight Derivatives | In Progress | [Phase 3 Checklist](#phase-3-checklist) |
-| 4 | Hot-Table Decoupling and Repair UX | In Progress | [Phase 4 Checklist](#phase-4-checklist) |
+| 4 | Hot-Table Decoupling and Repair UX | Completed | [Phase 4 Checklist](#phase-4-checklist) |
 
 > Status Legend: Completed | In Progress | Pending
 
