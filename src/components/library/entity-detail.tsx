@@ -24,6 +24,7 @@ import { CollapsibleSearch } from "./collapsible-search";
 import { EntityCoverButton } from "./entity-cover-button";
 import { FilterChip, SortChip } from "./sort-chip";
 import { TrackListSection } from "./track-list-section";
+import { DETAIL_ALPHABET_MIN_TRACKS, useTrackAlphabetLetterOf } from "./use-track-alphabet";
 
 /** A pre-resolved album for the artist-detail albums strip. */
 export interface EntityStripItem {
@@ -110,6 +111,13 @@ export function EntityDetailView({
     return searchTracks(ordered, query, memoryNotes);
   }, [tracks, likedOnly, sort, sortDir, lastPlayed, query, memoryNotes, transliterationReady]);
 
+  const alphabetLetterOf = useTrackAlphabetLetterOf(
+    sort === "name" &&
+      query.trim() === "" &&
+      !likedOnly &&
+      shownTracks.length > DETAIL_ALPHABET_MIN_TRACKS,
+    transliterationReady,
+  );
   const selectedTrack = useMemo(
     () => shownTracks.find((track) => track.id === selectedTrackId) ?? shownTracks[0],
     [selectedTrackId, shownTracks],
@@ -256,6 +264,7 @@ export function EntityDetailView({
             selectedTrackId={selectedTrack?.id}
             onView={(track) => transitionState(() => setSelectedTrackId(track.id))}
             onPlay={(track) => void playTrack(track)}
+            alphabetLetterOf={alphabetLetterOf}
             emptyHint={t("gallery.tracksEmpty")}
             listClassName="chrome-fade no-scrollbar pt-5 pb-chrome-bottom [--chrome-fade-top:1.25rem]"
             className="min-h-0 flex-1"

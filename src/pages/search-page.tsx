@@ -31,6 +31,10 @@ import {
 import { SystemPlaylistDetail } from "@/components/library/system-playlist-detail";
 import { TrackListSection } from "@/components/library/track-list-section";
 import {
+  DETAIL_ALPHABET_MIN_TRACKS,
+  useTrackAlphabetLetterOf,
+} from "@/components/library/use-track-alphabet";
+import {
   VirtualCardGrid,
   type VirtualCardGridHandle,
 } from "@/components/library/virtual-card-grid";
@@ -706,19 +710,14 @@ export function SearchPage() {
     [selectedLibraryTrackId, shownTracks],
   );
   // A–Z fast-scroll strip — only on a long, name-sorted, unfiltered, query-free
-  // library (other orders / relevance results don't map to letters). The letter fn
-  // depends on `transliterationReady` so buckets refine from raw initials to
-  // pinyin/kana once the dictionaries load.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: transliterationReady refreshes the letter fn after dictionaries load
-  const trackAlphabetLetterOf = useCallback(
-    (track: Track) => transliterateInitial(track.title),
-    [transliterationReady],
-  );
-  const showTrackAlphabetIndex =
+  // library (other orders / relevance results don't map to letters).
+  const trackAlphabetLetterOf = useTrackAlphabetLetterOf(
     trackSort === "name" &&
-    trackQuery.trim() === "" &&
-    !likedOnly &&
-    shownTracks.length > ALPHABET_INDEX_MIN_TRACKS;
+      trackQuery.trim() === "" &&
+      !likedOnly &&
+      shownTracks.length > ALPHABET_INDEX_MIN_TRACKS,
+    transliterationReady,
+  );
   // biome-ignore lint/correctness/useExhaustiveDependencies: transliterationReady re-runs once dictionaries load
   const shownRemoteTracks = useMemo(
     () =>
@@ -1390,7 +1389,7 @@ export function SearchPage() {
                       selectedTrackId={selectedLibraryTrack?.id}
                       onView={(track) => transitionState(() => setSelectedLibraryTrackId(track.id))}
                       onPlay={(track) => void playTrack(track)}
-                      alphabetLetterOf={showTrackAlphabetIndex ? trackAlphabetLetterOf : undefined}
+                      alphabetLetterOf={trackAlphabetLetterOf}
                       emptyHint={t("gallery.tracksEmpty")}
                       listClassName="chrome-fade no-scrollbar pt-1.5 pb-chrome-bottom [--chrome-fade-top:0.75rem]"
                       className="flex-1"
@@ -1727,6 +1726,13 @@ function SetDetailView({
   // column sort, liked filter, or search query makes drop positions ambiguous
   // (drag-reorder PRD §5.2). `tracks` then equals `shownTracks` in rank order.
   const isManualOrder = !sort && !likedOnly && query.trim() === "";
+  const alphabetLetterOf = useTrackAlphabetLetterOf(
+    sort === "name" &&
+      query.trim() === "" &&
+      !likedOnly &&
+      shownTracks.length > DETAIL_ALPHABET_MIN_TRACKS,
+    transliterationReady,
+  );
   const selectedTrack = useMemo(
     () => shownTracks.find((track) => track.id === selectedTrackId) ?? shownTracks[0],
     [selectedTrackId, shownTracks],
@@ -1985,6 +1991,7 @@ function SetDetailView({
             selectedTrackId={selectedTrack?.id}
             onView={(track) => transitionState(() => setSelectedTrackId(track.id))}
             onPlay={(track) => void playTrack(track)}
+            alphabetLetterOf={alphabetLetterOf}
             emptyHint={t("gallery.empty")}
             listClassName="chrome-fade no-scrollbar pt-5 pb-chrome-bottom [--chrome-fade-top:1.25rem]"
             className="min-h-0 flex-1"
