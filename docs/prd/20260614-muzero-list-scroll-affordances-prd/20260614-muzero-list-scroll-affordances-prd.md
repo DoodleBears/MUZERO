@@ -1,9 +1,9 @@
-# PRD: MUZERO 列表滚动操控(hover 滚动条 + A–Z 快速索引)
+# PRD: MUZERO 列表滚动操控(hover 滚动条 + A–Z 快速索引 + 滚动性能 + 排序持久化)
 
 **Status:** Draft
 **Created:** 2026-06-14
 **Author:** Claude
-**Module:** Library(全部歌曲 / 专辑 / 歌手)虚拟列表 - 大库快速定位/拖拽体验
+**Module:** Library 四个 tab(全部歌曲 / 歌单 / 专辑 / 歌手)虚拟列表/网格 - 大库快速定位 + 滚动性能 + 状态持久化
 
 ---
 
@@ -13,8 +13,25 @@
 |-------|------|--------|------|
 | 1 | Hover 浮层滚动条(可拖拽快速滚动) | ✅ 代码完成(待实测) | [Phase 1](#phase-1-hover-浮层滚动条) |
 | 2 | A–Z 字母快速索引(按名称排序时,拼音/假名感知) | ✅ 代码完成(待实测) | [Phase 2](#phase-2-az-字母快速索引) |
+| 3 | 把「四件套」rollout 到 歌单/专辑/歌手 tab | 🔲 Pending | [Phase 3](#phase-3-rollout-到-歌单专辑歌手) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
+
+---
+
+## 🧰 已固化的「大库列表四件套」最佳实践
+
+「全部歌曲」tab 上已落地并实测有效的一套模式,作为所有大库列表/网格的标准。**Phase 3 把它整套搬到 歌单/专辑/歌手。**
+
+1. **排序 + 方向持久化**(localStorage,与 `MODE_KEY`/`VIEW_KEYS`/`muzero-locale` 同类 UI 偏好,非硬规则 3 的隐藏 flag)。范式见 [`search-page.tsx`](../../../src/pages/search-page.tsx) 的 `TRACK_SORT_KEY`/`savedTrackSort`/`onTrackSortClick`:初始从存储读、改时写回。
+2. **A–Z 快速索引 + hover 浮层滚动条**(仅「按名称排序」时显示 A–Z;**名称排序必须转写感知**,否则字母条与列表错位)。
+   - 纯逻辑:[`alphabet-index.ts`](../../../src/lib/alphabet-index.ts)(`firstAlphaLabel`/`buildAlphabetIndex` 全局去重/`bucketIndexAt` 命中)+ [`transliterateSortKey`/`transliterateInitial`](../../../src/lib/search-transliterate.ts)(整串读音化 + **结果缓存**)。
+   - 组件:[`alphabet-index.tsx`](../../../src/components/library/alphabet-index.tsx)(右 gutter rail)+ [`hover-scrollbar.tsx`](../../../src/components/library/hover-scrollbar.tsx)(`rightInset` 让位)。
+   - 排序键:名称排序按 `transliterateSortKey` 排(标签与行同源)。
+3. **滚动性能**(让原生滚动也每帧只算一次、行不白重渲):
+   - [`rafObserveElementOffset`](../../../src/components/library/raf-scroll-offset.ts):drop-in 替换 TanStack `observeElementOffset`,**按 rAF 合并**原生滚动读取(保留 `isScrolling` 去抖)。
+   - 重行的 **hover 操作条惰性挂载**(滚动时不建 popover)+ **`memo` 比较器忽略回调身份**(纯滚动时行不重渲)。
+4. **派生级「别重复算」**(同一变化别全量重算):per-title `transliterateSortKey` 缓存;播放心跳 cascade 用 `useDeferredValue` 移出滚动关键路径;看不见的派生(`systemPlaylistRows`)按 tab 门控。
 
 ---
 
@@ -132,6 +149,22 @@ VirtualTrackList (parentRef scroller + Lenis)
 **Checklist:**
 - [x] `buildAlphabetIndex` / `transliterateInitial` / `transliterateSortKey`(读音排序键 + 混合标题 + 拼音序)单测全绿;`tsc`/Biome 通过;`src` 全量 2407 例通过。
 - [ ] **待实测**:点字母准确跳到该字母首行;中日韩标题归类正确;触摸滑动跟手 + 大字母提示;字母条 rail 在花背景上可读、与 hover 滚动条不再重叠、行内容不被遮。
+
+### Phase 3: Rollout 到 歌单/专辑/歌手
+
+**Goal:** 把上面的「四件套」整套搬到另外三个 tab。这三个 tab 都走 [`VirtualCardGrid`](../../../src/components/library/virtual-card-grid.tsx)(在共享滚动容器 `wallScrollEl` 内虚拟化,list/grid 两视图),排序状态:歌单 `sort`/`sortDir`(`SetSort`)、专辑+歌手共享 `entitySort`/`entitySortDir`(`EntitySort`)。
+
+**架构差异(对比全部歌曲):** 滚动容器是**外层 `wallScrollEl`**(不是网格自身),网格用 `scrollMargin` 在其内虚拟化;网格视图是**多列**(A–Z 跳转要 flat index → 行,用网格的 `scrollToKey(getKey(item))`)。
+
+**子项(各自原子 commit):**
+- **3a 排序持久化**:歌单 `sort`/`sortDir` + 实体 `entitySort`/`entitySortDir` 各加 localStorage(`savedSetSort`/`savedEntitySort`…),初始读、改时写回。镜像 `savedTrackSort`。
+- **3b 滚动性能**:`VirtualCardGrid` 的 `useVirtualizer` 接 `observeElementOffset: rafObserveElementOffset`(原生滚动每帧一算)。卡片若有重 affordance(set 卡的菜单/popover)按需惰性挂载 + memo。
+- **3c 名称排序转写感知**:`sortSets`(`a.session.name.localeCompare`)+ `sortEntities`(`a.name.localeCompare`)的 `name` case 改按 `transliterateSortKey`(预算键),否则 A–Z 错位。更新其单测。
+- **3d Hover 滚动条 + A–Z**:`wallScrollEl` 上挂 `HoverScrollbar`;`entitySort/sort === "name"` 且条目 `>阈值` 时挂 `AlphabetIndex`(`letterOf = firstAlphaLabel(transliterateSortKey(name))`,`onJump → galleryRef.scrollToKey(getKey(items[i]))`)。`wallScrollEl` 加 `group/list` + 右 gutter 让位。
+
+**Checklist:**
+- [ ] 三 tab 排序选择重载后保留;名称排序读音 A→Z;字母条/滚动条各就位、点字母准确跳;原生滚动顺(每帧一算)。
+- [ ] `sortSets`/`sortEntities` 名称转写单测;`tsc`/Biome/`src` 全量通过。
 
 ---
 
