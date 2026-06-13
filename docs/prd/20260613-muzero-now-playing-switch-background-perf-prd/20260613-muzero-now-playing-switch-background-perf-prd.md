@@ -14,6 +14,8 @@
 | 1 | 持久化 Pixi App + settle 后换纹理(切歌核心修复) | ✅ 代码完成(待 GPU/视觉实测) | [Phase 1](#phase-1-持久化-pixi-app--settle-后换纹理) |
 | 2 | 统一切歌 settle 闸门(封面 `<img>` 即时,重计算 debounce) | ✅ 代码完成(待 GPU/视觉实测) | [Phase 2](#phase-2-统一切歌-settle-闸门) |
 | 3 | GPU 后端 Settings 选项(auto / WebGPU / WebGL) | ✅ 代码完成(待 GPU/视觉实测) | [Phase 3](#phase-3-gpu-后端-settings-选项) |
+| 4 | 背景纹理 ImageBitmap 化(线程外解码 + 去 canvas 转换)(#4-A) | 🔲 Pending | [Phase 4](#phase-4-背景纹理-imagebitmap-化) |
+| 5 | stage/coverflow 封面 `<img>` 异步解码(保持原图,不占 paint 主线程)(#4-B) | 🔲 Pending | [Phase 5](#phase-5-stagecoverflow-封面异步解码) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
 
@@ -227,6 +229,53 @@ backgroundGpuPowerPreference?: "auto" | "high-performance" | "low-power"; // DEF
 - [x] 单测:`resolveGpuBackend`/`resolveGpuPower`(9 例)+ 控制器 `recover()`(2 例)全绿;`src/` 全量 2370 例通过;`tsc`/Biome 通过。
 - [ ] **待实测(桌面)**:auto 在支持设备走 WebGPU + high-performance、不支持走 WebGL 均正常出图;显式 WebGPU 在 WKWebView 回退且有提示不崩;切后端/性能档不影响「只换纹理」;模拟 device-lost(切独显/集显)后自动恢复、恢复期不黑屏。
 
+### QA#4(2026-06-14 第二轮 trace):ambient 已稳,剩 coverflow 原图解码 + Pixi canvas 转换
+
+连切 6 首(index 4572→4577,~0.93s)实测仍 `fpsAvg 120→56`、`longTaskMaxMs 283`、`frameMaxMs 341.8`。trace 定位:
+
+- **Phase 1–3 生效、无回归**:整个 burst 仅 **1 条 `textureSwap`、0 条 `appInit`**;音频只有最后一首落 blob(前 5 首 `discard stale playback load`);[`now-playing-background.tsx:75`](../../../src/components/player/now-playing-background.tsx#L75) 的 ambient 去抖(`useSettledValue`)工作正常。
+- **剩余开销 (A)——中央 coverflow/stage 原图解码**:[`SwipeableMediaStage`](../../../src/components/player/swipeable-media-stage.tsx#L124) 读**实时** `currentIndex`(设计:逐张滑过),[`useTrackCoverResource`](../../../src/hooks/use-media.ts#L222) + [`usePreloadedCoverUrls`](../../../src/components/player/swipeable-media-stage.tsx#L1069) 对每首跳过的歌都 `resolveMediaBlob`→`createObjectURL`**整张原图**(`cover.render.object-url-miss bytes:891699`),`<img>` 主线程解码;coverflow 动画同时挂 prev/current/next 三张原图。
+- **剩余开销 (B)——Pixi 落定 canvas 转换**:[`pixi-background-controller.ts:284`](../../../src/components/player/pixi-background-controller.ts#L284) `Texture.from(HTMLImageElement)` → `render()` 里触发 `ImageSource: Image element passed, converting to canvas and replacing resource`,一次整张原图主线程 canvas 拷贝(叠加 Windows WebGPU 首传)。
+- **非卡顿**:`frameMaxMs 6374.8`(@18:44:07)正好跨 `visibilitychange hidden→visible`(00.906→07.263),rAF 暂停被 FPS 表当成一帧,忽略。
+
+**方向(用户拍板):保持原图**(不降采样派生),但 (A)(B) 的解码移出主线程——Pixi 走 ImageBitmap(免 canvas、线程外解码),stage/coverflow `<img>` 异步解码。→ Phase 4 / Phase 5。
+
+### Phase 4: 背景纹理 ImageBitmap 化
+
+**Goal:** Pixi 图片背景纹理改用 `createImageBitmap` 解出的 `ImageBitmap` 直接作纹理源,**消除** `Texture.from(HTMLImageElement)` 在 `render()` 触发的「`ImageSource: Image element passed, converting to canvas`」——那是落定时一次整张原图的**主线程 canvas 拷贝**(QA#4 (B))。`createImageBitmap` 的解码在主线程外完成。**保持原图分辨率,不降采样。**
+
+**为何不进 Worker:** `createImageBitmap(blob)` 本身就在主线程外解码;GPU 上传必须在持有 WebGL/WebGPU context 的主线程做,Worker 解出 `ImageBitmap` 再 transfer 回来只增加传输开销、不省解码。故主线程 `createImageBitmap` 即满足「解码不占主线程」。视频路径必须用 `<video>` element,不动。
+
+**实现:**
+- 新增可单测纯模块 [`background-texture.ts`](../../../src/lib/background-texture.ts) `loadImageBitmapSource(src, deps)`:注入 `fetchBlob`(取 src→Blob)+ 可选 `createImageBitmap`;成功返回 `{ bitmap, width, height, unload: () => bitmap.close() }`;不支持/取不到/解码抛错 → `null`(调用方回退)。
+- [`pixi-pixel-background.tsx`](../../../src/components/player/pixi-pixel-background.tsx) `loadBackgroundMedia` 图片分支:先试 `loadImageBitmapSource`(注入 `fetchTextureBlob`:blob:/data: 走 `fetch`,其余走 `getAppFetch`),失败回退 `loadImage`(<img>);`element` 联合类型加 `ImageBitmap`。
+- [`pixi-background-controller.ts`](../../../src/components/player/pixi-background-controller.ts):`LoadedBackgroundMedia.element`/`CurrentMedia.element` 联合加 `ImageBitmap`;`Texture.from(media.element)` 直接吃 ImageBitmap;清理沿用 `media.unload`(close bitmap),disposeMedia 逻辑不变。
+
+**Tasks(TDD):**
+- [ ] 先写 [`background-texture.test.ts`](../../../src/lib/background-texture.test.ts):mock `createImageBitmap`+`fetchBlob` → 返回 bitmap 源(width/height/unload→close);解码抛错 → null;不支持 → null;空 blob → null。
+- [ ] 实现 `loadImageBitmapSource` 至测试绿。
+- [ ] `loadBackgroundMedia` 接 ImageBitmap + 回退;控制器类型放宽 + 一例控制器测试(ImageBitmap element 被 `Texture.from` 收到、swap/destroy 调 unload→close)。
+
+**Checklist:**
+- [ ] 新单测 + 既有控制器/Phase 测试全绿;`tsc`/Biome 通过。
+- [ ] **待实测(桌面)**:切到带封面的歌不再出 `ImageSource … converting to canvas` 警告;落定 `frameMaxMs` 较修前下降;背景出图正常、无黑屏;远端/streamed(https)封面仍出图。
+
+### Phase 5: stage/coverflow 封面异步解码
+
+**Goal:** 中央 coverflow/stage 封面**仍用原图**(读实时 index 是设计,要逐张滑过),但把整图解码移出 paint 关键路径:`<img decoding="async">` + 预热解码,快切时 `<img>` 上屏不再同步解码整张原图(QA#4 (A))。
+
+**实现:**
+- coverflow `TrackVisual` 封面 `<img>`([`swipeable-media-stage.tsx`](../../../src/components/player/swipeable-media-stage.tsx)) + stage 封面([`media-stage.tsx`](../../../src/components/player/media-stage.tsx) `CoverImage`)补 `decoding="async"`(缺则加)。
+- 把现有 `warmImage`(仅远端)抽成可注入的 [`warmDecode(url, createImage?)`](../../../src/lib/cover-warm-decode.ts):`new Image()` + `img.decode()`(主线程外解码、失败静默);`usePreloadedCoverUrls` 在本地封面 `createObjectURL` 后也 warm-decode 一次,使 coverflow `<img>` 命中已解码缓存。**保持原图。**
+
+**Tasks(TDD):**
+- [ ] 先写 [`cover-warm-decode.test.ts`](../../../src/lib/cover-warm-decode.test.ts):`decode()` 成功 resolve;`decode()` reject 不抛(吞掉);无 `Image` 环境直接返回 noop。
+- [ ] 实现 `warmDecode` + 接入 `usePreloadedCoverUrls`;coverflow/stage `<img>` 加 `decoding="async"`。
+
+**Checklist:**
+- [ ] 单测绿;`tsc`/Biome 通过。
+- [ ] **待实测(桌面)**:连切 6+ 首,coverflow 滑动 `frameMaxMs`/`fpsLow` 较修前改善;封面逐张可见无明显卡顿。
+
 ---
 
 ## 7. Out of Scope(交叉引用,本 PRD 不处理)
@@ -269,6 +318,8 @@ backgroundGpuPowerPreference?: "auto" | "high-performance" | "low-power"; // DEF
 | 7 | QA:连切后封面与标题错位(放 B 显示 A 封面) | ✅ Resolved | 顶层 reveal veil 渲染了 `useTrackCoverResource` 的 **stale-while-pending** URL(blob 未 resolve 时回退上一张)。已移除 veil;ambient 背景去抖到 settledTrack → 背景只显示落定那首,不再串号。中央 stage 封面仍跟随实时 index(短暂 stale-while-pending 由其 crossfade 吸收) |
 | 3 | auto 是否也把 `powerPreference` 提到 high-performance? | ✅ Resolved | **是**。新增 `backgroundGpuPowerPreference`,auto→`high-performance`;后端与性能档都默认 auto=选性能好的,可手动覆盖(§3.1 / §5.2 / Phase 3) |
 | 4 | WebGPU 的 device-lost 恢复路径? | ✅ Resolved | `device.lost`(非 destroyed)+ `webglcontextlost/restored` → 有限次重建 + 回灌纹理,恢复期回退 `<img>`(Phase 3) |
+| 8 | QA#4:ambient 已稳但快切仍 120→56 FPS(`longTask 283ms`) | 🔲 定位完成,Phase 4/5 修复中 | 剩余两处主线程整图解码:**(A)** coverflow/stage 读实时 index 解码原图(设计);**(B)** Pixi `Texture.from(<img>)` 转 canvas。**保持原图**,Pixi 走 ImageBitmap(线程外、免 canvas)+ `<img>` 异步解码。`frameMaxMs 6374.8` 是 visibilitychange 空档,非卡顿。详见 §6 QA#4 |
+| 9 | #4-A 是否把 coverflow 也降采样到 512px 派生? | ✅ Resolved(用户拍板) | **否**。用户要求**保持原图**;只把解码移出主线程(ImageBitmap / 异步 decode),不引降采样派生(那是 cover-quality PRD 的 Phase 3) |
 
 ---
 
@@ -284,3 +335,4 @@ backgroundGpuPowerPreference?: "auto" | "high-performance" | "low-power"; // DEF
 | 2026-06-13 | Claude | QA 跟进:#3 修正 `<img>` 为上层 reveal+淡出(消除特效 pop);为 #1/#2 加 `background.pixi.appInit/textureSwap(ms)` 诊断 trace(`Settings→Trace`/perf HUD 可见)。#1/#2 根因待 QA 抓 trace 确认(§9 Q5/Q6) |
 | 2026-06-14 | Claude | QA#3 二次修正:reveal veil 提到 flow/visualizer 之上的最顶层——之前放 Pixi 子树内仍被 flow/viz 盖住,故「还会跳」 |
 | 2026-06-14 | Claude | **QA trace 实证 + 重定向**:trace 证明 Pixi 无 re-init、settle 生效(Q5/Q6),#1 真因是快切时**每首封面被多消费者解码 → 堆 churn → GC 掉帧**。**移除顶层 reveal veil**(引入封面错位 + 加剧解码)。改为 **ambient 背景按 settledTrack 去抖**:跳过的歌不再解码封面/重渲染,同时修掉封面错位 |
+| 2026-06-14 | Claude | **QA#4 第二轮 trace + 新增 Phase 4/5**:ambient 去抖已稳(burst 仅 1 `textureSwap`/0 `appInit`),但快切仍 120→56 FPS、`longTask 283ms`。定位剩余两处主线程整图解码:(A) coverflow/stage 读实时 index 解码原图、(B) Pixi `Texture.from(<img>)` 转 canvas。用户拍板**保持原图**,新增 Phase 4(背景纹理 ImageBitmap,线程外解码+免 canvas)、Phase 5(stage/coverflow `<img>` 异步解码)。`frameMaxMs 6374.8` 判定为 visibilitychange 空档非卡顿 |
