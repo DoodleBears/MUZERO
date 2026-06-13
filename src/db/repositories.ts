@@ -25,6 +25,7 @@ import {
   type SystemShortcutBinding,
 } from "@/shortcuts/system-global";
 import { extractCoverMetadataViaWorker } from "@/workers/cover-client";
+import { deleteCoverDerivativesForSource } from "./cover-derivatives";
 import {
   deleteMediaBlob,
   type MediaBlobStorageOptions,
@@ -505,7 +506,10 @@ export async function setSessionCover(
     await deleteMediaBlob(cover.id, db, storage);
     throw error;
   }
-  if (previousCoverId) await deleteMediaBlob(previousCoverId, db, storage);
+  if (previousCoverId) {
+    await deleteCoverDerivativesForSource(`local:${previousCoverId}`, db, storage);
+    await deleteMediaBlob(previousCoverId, db, storage);
+  }
 }
 
 /** Read a 歌单's cover blob (the set-level cover only — not a track cover). */
@@ -539,7 +543,10 @@ export async function clearSessionCover(
     session.updatedAt = Date.now();
     await db.sessions.put(session);
   });
-  if (coverBlobId) await deleteMediaBlob(coverBlobId, db, storage);
+  if (coverBlobId) {
+    await deleteCoverDerivativesForSource(`local:${coverBlobId}`, db, storage);
+    await deleteMediaBlob(coverBlobId, db, storage);
+  }
 }
 
 /**
@@ -592,7 +599,10 @@ export async function setEntityCover(
     await deleteMediaBlob(cover.id, db, storage);
     throw error;
   }
-  if (previousCoverId) await deleteMediaBlob(previousCoverId, db, storage);
+  if (previousCoverId) {
+    await deleteCoverDerivativesForSource(`local:${previousCoverId}`, db, storage);
+    await deleteMediaBlob(previousCoverId, db, storage);
+  }
 }
 
 /** Read an entity's custom cover blob (override only — not the fallback track). */
@@ -619,7 +629,10 @@ export async function clearEntityCover(
     coverBlobId = prev.coverBlobId;
     await db.entityCovers.delete(entityKey);
   });
-  if (coverBlobId) await deleteMediaBlob(coverBlobId, db, storage);
+  if (coverBlobId) {
+    await deleteCoverDerivativesForSource(`local:${coverBlobId}`, db, storage);
+    await deleteMediaBlob(coverBlobId, db, storage);
+  }
 }
 
 export async function removeTrackFromSession(
@@ -1216,7 +1229,10 @@ export async function setTrackCover(
     await deleteMediaBlob(cover.id, db, storage);
     throw error;
   }
-  if (previousCoverId) await deleteMediaBlob(previousCoverId, db, storage);
+  if (previousCoverId) {
+    await deleteCoverDerivativesForSource(`local:${previousCoverId}`, db, storage);
+    await deleteMediaBlob(previousCoverId, db, storage);
+  }
 }
 
 /**
@@ -1243,7 +1259,10 @@ export async function clearTrackCover(
       updatedAt: Date.now(),
     });
   });
-  if (coverBlobId) await deleteMediaBlob(coverBlobId, db, storage);
+  if (coverBlobId) {
+    await deleteCoverDerivativesForSource(`local:${coverBlobId}`, db, storage);
+    await deleteMediaBlob(coverBlobId, db, storage);
+  }
 }
 
 /**
@@ -1295,7 +1314,10 @@ export async function setTrackCoverFromMemory(
     await deleteMediaBlob(cover.id, db, storage);
     throw error;
   }
-  if (previousCoverId) await deleteMediaBlob(previousCoverId, db, storage);
+  if (previousCoverId) {
+    await deleteCoverDerivativesForSource(`local:${previousCoverId}`, db, storage);
+    await deleteMediaBlob(previousCoverId, db, storage);
+  }
   return true;
 }
 
@@ -1325,6 +1347,9 @@ export async function setTrackCoverCrop(
     ...coverPaletteFields(coverPalette, track?.coverBlobId),
     updatedAt: Date.now(),
   });
+  if (track?.coverBlobId) {
+    await deleteCoverDerivativesForSource(`local:${track.coverBlobId}`, db, storage);
+  }
 }
 
 /**
@@ -1918,8 +1943,28 @@ export async function deleteTracks(ids: string[], db: MuzeroDB = defaultDb): Pro
   const idSet = new Set(ids);
   await db.transaction(
     "rw",
-    [db.tracks, db.mediaBlobs, db.sessions, db.memories, db.playQueue],
+    [db.tracks, db.mediaBlobs, db.coverDerivatives, db.sessions, db.memories, db.playQueue],
     async () => {
+      const tracks = await db.tracks.where("id").anyOf(ids).toArray();
+      const coverSourceKeys = tracks
+        .map((track) => track.coverBlobId)
+        .filter((id): id is string => Boolean(id))
+        .map((id) => `local:${id}`);
+      if (coverSourceKeys.length > 0) {
+        const derivatives = await db.coverDerivatives
+          .where("sourceKey")
+          .anyOf(coverSourceKeys)
+          .toArray();
+        const derivativeBlobIds = derivatives
+          .map((row) => row.blobId)
+          .filter((id): id is string => Boolean(id));
+        if (derivatives.length > 0) {
+          await db.coverDerivatives.bulkDelete(derivatives.map((row) => row.id));
+        }
+        if (derivativeBlobIds.length > 0) {
+          await db.mediaBlobs.bulkDelete(derivativeBlobIds);
+        }
+      }
       await db.mediaBlobs.where("trackId").anyOf(ids).delete();
       await db.memories.where("trackId").anyOf(ids).delete();
       await db.tracks.bulkDelete(ids);

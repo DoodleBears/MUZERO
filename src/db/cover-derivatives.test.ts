@@ -1,12 +1,16 @@
 import { waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  countMissingCoverDerivatives,
   coverDerivativeId,
   coverDerivativeSourceForTrack,
+  deleteCoverDerivativesForSource,
   ensureCoverBacklightDerivative,
   ensureCoverThumbnailDerivative,
+  repairMissingCoverDerivatives,
 } from "./cover-derivatives";
 import { MuzeroDB } from "./muzero-db";
+import { deleteTrack } from "./repositories";
 import type { Track } from "./types";
 
 let db: MuzeroDB;
@@ -171,6 +175,97 @@ describe("cover derivatives", () => {
 
     expect(extract).toHaveBeenCalledTimes(1);
     expect(a?.derivative.id).toBe(b?.derivative.id);
+  });
+
+  it("counts and repairs missing thumbnail derivatives in batches", async () => {
+    const track = await addTrackWithCover("trk_repair");
+    const extract = vi.fn(async () => ({
+      palette: [],
+      thumbnail: {
+        bytes: await new Blob(["thumb"], { type: "image/webp" }).arrayBuffer(),
+        height: 96,
+        mime: "image/webp",
+        width: 96,
+      },
+      timings: {
+        backlightMs: 0,
+        decodeMs: 1,
+        paletteMs: 0,
+        thumbnailMs: 2,
+        thumbhashMs: 0,
+        totalMs: 3,
+      },
+    }));
+
+    await expect(countMissingCoverDerivatives("thumbnail", db)).resolves.toBe(1);
+    await expect(
+      repairMissingCoverDerivatives("thumbnail", db, { extract, limit: 1 }),
+    ).resolves.toMatchObject({
+      attempted: [track.coverBlobId],
+      failed: 0,
+      processed: 1,
+      updated: 1,
+    });
+    await expect(countMissingCoverDerivatives("thumbnail", db)).resolves.toBe(0);
+  });
+
+  it("deletes derivative rows and blobs for a replaced cover source", async () => {
+    const track = await addTrackWithCover("trk_delete_source");
+    const resolved = await ensureCoverThumbnailDerivative(track, db, {
+      extract: async () => ({
+        palette: [],
+        thumbnail: {
+          bytes: await new Blob(["thumb"], { type: "image/webp" }).arrayBuffer(),
+          height: 96,
+          mime: "image/webp",
+          width: 96,
+        },
+        timings: {
+          backlightMs: 0,
+          decodeMs: 1,
+          paletteMs: 0,
+          thumbnailMs: 2,
+          thumbhashMs: 0,
+          totalMs: 3,
+        },
+      }),
+    });
+    expect(await db.mediaBlobs.get(resolved?.blobId ?? "")).toBeTruthy();
+
+    await expect(deleteCoverDerivativesForSource(`local:${track.coverBlobId}`, db)).resolves.toBe(
+      1,
+    );
+
+    expect(await db.coverDerivatives.get(resolved?.derivative.id ?? "")).toBeUndefined();
+    expect(await db.mediaBlobs.get(resolved?.blobId ?? "")).toBeUndefined();
+  });
+
+  it("deletes derivative rows and blobs when the owning track is deleted", async () => {
+    const track = await addTrackWithCover("trk_delete_track");
+    const resolved = await ensureCoverThumbnailDerivative(track, db, {
+      extract: async () => ({
+        palette: [],
+        thumbnail: {
+          bytes: await new Blob(["thumb"], { type: "image/webp" }).arrayBuffer(),
+          height: 96,
+          mime: "image/webp",
+          width: 96,
+        },
+        timings: {
+          backlightMs: 0,
+          decodeMs: 1,
+          paletteMs: 0,
+          thumbnailMs: 2,
+          thumbhashMs: 0,
+          totalMs: 3,
+        },
+      }),
+    });
+
+    await deleteTrack(track.id, db);
+
+    expect(await db.coverDerivatives.get(resolved?.derivative.id ?? "")).toBeUndefined();
+    expect(await db.mediaBlobs.get(resolved?.blobId ?? "")).toBeUndefined();
   });
 });
 

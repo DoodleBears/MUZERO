@@ -15,7 +15,7 @@
 | 1 | Workerized Cover Metadata Extraction | In Progress | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | Persistent Thumbnail Derivatives | In Progress | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | Precomputed Backlight Derivatives | In Progress | [Phase 3 Checklist](#phase-3-checklist) |
-| 4 | Hot-Table Decoupling and Repair UX | Pending | [Phase 4 Checklist](#phase-4-checklist) |
+| 4 | Hot-Table Decoupling and Repair UX | In Progress | [Phase 4 Checklist](#phase-4-checklist) |
 
 > Status Legend: Completed | In Progress | Pending
 
@@ -571,18 +571,19 @@ Run these scenarios in the Electron/Tauri desktop app with the visible perf HUD 
 **Goal:** Prevent bulk derived metadata writes from invalidating `listAllTracks` and re-running Tab 2 projections.
 
 **Tasks:**
-- [ ] Add a derivative metadata table or equivalent registry if Phase 1/2 writes still cause large requery churn.
-- [ ] Make `listAllTracks` avoid joining derived binary/repair-only metadata.
-- [ ] Keep compatibility snapshots on `Track` where needed, but batch or defer writes.
-- [ ] Update Settings repair UI to show per-target counts and progress.
-- [ ] Add cleanup for stale derivative blobs when cover/crop changes or track is deleted.
+- [x] Add a derivative metadata table or equivalent registry if Phase 1/2 writes still cause large requery churn.
+- [x] Make `listAllTracks` avoid joining derived binary/repair-only metadata.
+- [x] Keep compatibility snapshots on `Track` where needed; thumbnail/backlight derivatives do not write hot Track rows.
+- [x] Update Settings repair UI to show per-target counts and progress.
+- [x] Add cleanup for stale derivative blobs when cover/crop changes or track is deleted.
 
 ### Phase 4 Checklist
 
-- [ ] Repairing thousands of covers does not cause repeated full `listAllTracks` recomputation.
-- [ ] Deleting/replacing covers cleans obsolete derivative blobs.
+- [ ] Repairing thousands of cover color metadata records does not cause repeated full `listAllTracks` recomputation.
+- [x] Repairing thumbnail/backlight derivatives writes `coverDerivatives` / `mediaBlobs`, not Track rows.
+- [x] Deleting/replacing covers cleans obsolete derivative blobs.
 - [ ] Settings repair can be cancelled and resumed.
-- [ ] Storage summary accounts for derivative blobs.
+- [x] Storage summary accounts for derivative blobs.
 
 ---
 
@@ -672,3 +673,4 @@ Run these scenarios in the Electron/Tauri desktop app with the visible perf HUD 
 | 2026-06-13 | Codex | Phase 1 workerized cover metadata extraction: shared cover worker client/core, visualizer palette fallback through worker, and Settings repair/repository defaults through worker pipeline |
 | 2026-06-13 | Codex | Phase 2 partial: added `coverDerivatives` table, `cover-derivative` media role, persistent thumbnail derivative repository, thumbnail worker target, and TrackRow thumbnail derivative hook |
 | 2026-06-13 | Codex | Phase 3 partial: added worker backlight target, persistent backlight derivative reuse, and switched MediaStage/coverflow backlight rendering to derivative URLs |
+| 2026-06-13 | Codex | Phase 4 partial: added Settings counts/actions for thumbnail/backlight derivative repair and cleanup of stale derivatives on cover replace, crop change, and track delete |

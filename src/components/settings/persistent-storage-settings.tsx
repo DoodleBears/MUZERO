@@ -6,6 +6,10 @@ import { StreamCacheControls } from "@/components/settings/stream-cache-controls
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
+  countMissingCoverDerivatives,
+  repairMissingCoverDerivatives,
+} from "@/db/cover-derivatives";
+import {
   cleanupOrphanedMediaStorageFiles,
   type MediaBlobMigrationProgress,
   migrateLegacyMediaBlobsWithProgress,
@@ -44,6 +48,7 @@ const ROLE_LABEL_KEYS = {
 } as const satisfies Record<MediaBlob["role"], string>;
 
 const COVER_REPAIR_BATCH_SIZE = 25;
+const COVER_DERIVATIVE_REPAIR_BATCH_SIZE = 25;
 
 interface BrowserStorageEstimate {
   usage: number;
@@ -52,6 +57,7 @@ interface BrowserStorageEstimate {
 
 interface CoverRepairProgress {
   failed: number;
+  kind?: "backlight" | "metadata" | "thumbnail";
   processed: number;
   total: number;
   updated: number;
@@ -72,7 +78,9 @@ function formatBytes(bytes: number): string {
 export function PersistentStorageSettings() {
   const { t } = useTranslation();
   const openMediaStorageFolder = resolveDesktopBridge().openMediaStorageFolder;
-  const [busy, setBusy] = useState<"migrate" | "cleanup" | "repair-covers" | null>(null);
+  const [busy, setBusy] = useState<
+    "cleanup" | "migrate" | "repair-backlights" | "repair-covers" | "repair-thumbnails" | null
+  >(null);
   const [migrationProgress, setMigrationProgress] = useState<MediaBlobMigrationProgress | null>(
     null,
   );
@@ -88,6 +96,16 @@ export function PersistentStorageSettings() {
   );
   const coverRepairCount = useLiveQuery(
     () => countCoverMetadataBackfillCandidates(),
+    [refreshToken],
+    0,
+  );
+  const thumbnailRepairCount = useLiveQuery(
+    () => countMissingCoverDerivatives("thumbnail"),
+    [refreshToken],
+    0,
+  );
+  const backlightRepairCount = useLiveQuery(
+    () => countMissingCoverDerivatives("backlight"),
     [refreshToken],
     0,
   );
@@ -171,7 +189,13 @@ export function PersistentStorageSettings() {
     setBusy("repair-covers");
     const total = Math.max(0, coverRepairCount);
     const skipped = new Set<string>();
-    const progress: CoverRepairProgress = { failed: 0, processed: 0, total, updated: 0 };
+    const progress: CoverRepairProgress = {
+      failed: 0,
+      kind: "metadata",
+      processed: 0,
+      total,
+      updated: 0,
+    };
     setCoverRepairProgress(progress);
     try {
       while (progress.processed < total) {
@@ -192,6 +216,40 @@ export function PersistentStorageSettings() {
         setCoverRepairProgress({ ...progress });
       }
       notify.success(t("streamCache.permanentRepairCoversDone", { count: progress.updated }));
+      setRefreshToken((value) => value + 1);
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function repairCoverDerivatives(kind: "backlight" | "thumbnail") {
+    const busyKind = kind === "thumbnail" ? "repair-thumbnails" : "repair-backlights";
+    setBusy(busyKind);
+    const total = Math.max(0, kind === "thumbnail" ? thumbnailRepairCount : backlightRepairCount);
+    const skipped = new Set<string>();
+    const progress: CoverRepairProgress = { failed: 0, kind, processed: 0, total, updated: 0 };
+    setCoverRepairProgress(progress);
+    try {
+      while (progress.processed < total) {
+        const result = await repairMissingCoverDerivatives(kind, undefined, {
+          limit: COVER_DERIVATIVE_REPAIR_BATCH_SIZE,
+          skip: skipped,
+        });
+        if (result.attempted.length === 0) break;
+        for (const key of result.attempted) skipped.add(key);
+        progress.processed = Math.min(total, progress.processed + result.processed);
+        progress.updated += result.updated;
+        progress.failed += result.failed;
+        setCoverRepairProgress({ ...progress });
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      }
+      if (progress.processed < total) {
+        progress.processed = total;
+        setCoverRepairProgress({ ...progress });
+      }
+      notify.success(
+        t("streamCache.permanentRepairCoverDerivativesDone", { count: progress.updated }),
+      );
       setRefreshToken((value) => value + 1);
     } finally {
       setBusy(null);
@@ -254,6 +312,12 @@ export function PersistentStorageSettings() {
           <span>{t("streamCache.permanentMissing", { count: summary.missingCount })}</span>
           <span>{t("streamCache.permanentOrphaned", { count: summary.orphanedCount })}</span>
           <span>{t("streamCache.permanentCoverRepair", { count: coverRepairCount })}</span>
+          <span>
+            {t("streamCache.permanentCoverThumbnailRepair", { count: thumbnailRepairCount })}
+          </span>
+          <span>
+            {t("streamCache.permanentCoverBacklightRepair", { count: backlightRepairCount })}
+          </span>
         </div>
 
         {migrationProgress && (
@@ -381,6 +445,24 @@ export function PersistentStorageSettings() {
             onClick={() => void repairCoverMetadata()}
           >
             <Palette /> {t("streamCache.permanentRepairCovers")}
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            disabled={busy !== null || thumbnailRepairCount === 0}
+            onClick={() => void repairCoverDerivatives("thumbnail")}
+          >
+            <Palette /> {t("streamCache.permanentRepairCoverThumbnails")}
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            disabled={busy !== null || backlightRepairCount === 0}
+            onClick={() => void repairCoverDerivatives("backlight")}
+          >
+            <Palette /> {t("streamCache.permanentRepairCoverBacklights")}
           </Button>
         </div>
       </CardContent>

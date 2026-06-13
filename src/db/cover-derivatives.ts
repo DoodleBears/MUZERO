@@ -1,4 +1,5 @@
 import {
+  deleteMediaBlob,
   type MediaBlobStorageOptions,
   putMediaBlob,
   resolveMediaBlob,
@@ -23,7 +24,16 @@ export interface EnsureCoverDerivativeOptions {
   extract?: (
     input: Parameters<typeof extractCoverMetadataViaWorker>[0],
   ) => Promise<CoverMetadataResult>;
+  limit?: number;
+  skip?: ReadonlySet<string>;
   storage?: MediaBlobStorageOptions;
+}
+
+export interface CoverDerivativeRepairProgress {
+  attempted: string[];
+  failed: number;
+  processed: number;
+  updated: number;
 }
 
 const imageDerivativeInFlight = new Map<string, Promise<ResolvedCoverDerivative | undefined>>();
@@ -78,6 +88,72 @@ export async function ensureCoverBacklightDerivative(
   options: EnsureCoverDerivativeOptions = {},
 ): Promise<ResolvedCoverDerivative | undefined> {
   return ensureCoverImageDerivative(track, "backlight", db, options);
+}
+
+export async function countMissingCoverDerivatives(
+  kind: "backlight" | "thumbnail",
+  db: MuzeroDB = defaultDb,
+): Promise<number> {
+  const tracks = await db.tracks.filter((track) => Boolean(track.coverBlobId)).toArray();
+  let count = 0;
+  for (const track of tracks) {
+    const source = coverDerivativeSourceForTrack(track);
+    if (source?.sourceKind !== "local-cover") continue;
+    const id = coverDerivativeId({
+      cropSig: coverCropSignature(track.coverCrop),
+      kind,
+      sourceKey: source.sourceKey,
+    });
+    const derivative = await db.coverDerivatives.get(id);
+    if (!derivative?.blobId) count += 1;
+  }
+  return count;
+}
+
+export async function repairMissingCoverDerivatives(
+  kind: "backlight" | "thumbnail",
+  db: MuzeroDB = defaultDb,
+  options: EnsureCoverDerivativeOptions = {},
+): Promise<CoverDerivativeRepairProgress> {
+  const limit = options.limit ?? 25;
+  const tracks = await db.tracks.filter((track) => Boolean(track.coverBlobId)).toArray();
+  const attempted: string[] = [];
+  let failed = 0;
+  let updated = 0;
+  for (const track of tracks) {
+    if (attempted.length >= limit) break;
+    const source = coverDerivativeSourceForTrack(track);
+    if (source?.sourceKind !== "local-cover" || !track.coverBlobId) continue;
+    if (options.skip?.has(track.coverBlobId)) continue;
+    const id = coverDerivativeId({
+      cropSig: coverCropSignature(track.coverCrop),
+      kind,
+      sourceKey: source.sourceKey,
+    });
+    const existing = await db.coverDerivatives.get(id);
+    if (existing?.blobId) continue;
+    attempted.push(track.coverBlobId);
+    const resolved =
+      kind === "backlight"
+        ? await ensureCoverBacklightDerivative(track, db, options)
+        : await ensureCoverThumbnailDerivative(track, db, options);
+    if (resolved) updated += 1;
+    else failed += 1;
+  }
+  return { attempted, failed, processed: attempted.length, updated };
+}
+
+export async function deleteCoverDerivativesForSource(
+  sourceKey: string,
+  db: MuzeroDB = defaultDb,
+  storage: MediaBlobStorageOptions = {},
+): Promise<number> {
+  const rows = await db.coverDerivatives.where("sourceKey").equals(sourceKey).toArray();
+  for (const row of rows) {
+    await db.coverDerivatives.delete(row.id);
+    if (row.blobId) await deleteMediaBlob(row.blobId, db, storage);
+  }
+  return rows.length;
 }
 
 async function ensureCoverImageDerivative(
