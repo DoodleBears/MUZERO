@@ -11,7 +11,7 @@
 
 | Phase | Name | Status | Link |
 |-------|------|--------|------|
-| 1 | 持久化 Pixi App + settle 后换纹理(切歌核心修复) | 🔲 Pending | [Phase 1](#phase-1-持久化-pixi-app--settle-后换纹理) |
+| 1 | 持久化 Pixi App + settle 后换纹理(切歌核心修复) | ✅ 代码完成(待 GPU/视觉实测) | [Phase 1](#phase-1-持久化-pixi-app--settle-后换纹理) |
 | 2 | 统一切歌 settle 闸门(封面 `<img>` 即时,重计算 debounce) | 🔲 Pending | [Phase 2](#phase-2-统一切歌-settle-闸门) |
 | 3 | GPU 后端 Settings 选项(auto / WebGPU / WebGL) | 🔲 Pending | [Phase 3](#phase-3-gpu-后端-settings-选项) |
 
@@ -184,15 +184,16 @@ backgroundGpuPowerPreference?: "auto" | "high-performance" | "low-power"; // DEF
 **Goal:** 消除每次切歌的 WebGL App 重建 + shader 重编译;落定后只换纹理。
 
 **Tasks:**
-- [ ] 拆 [`pixi-pixel-background.tsx`](../../../src/components/player/pixi-pixel-background.tsx) 的 `useEffect`:App `init` + filter 编译只依赖 `effect`/`effectOptions`/`backend`;纹理上传走独立 effect 依赖 `src`/`mediaType`,在已存活 app 上 `sprite.texture = next; oldTexture.destroy()`。
-- [ ] 保留现有 `autoStart:false` 的按需渲染与视频 ticker 同步逻辑(`syncLayerTicker`),仅在纹理换上后 `render()` 一次。
-- [ ] 在 `now-playing-background` 用 `settledTrack` 喂 Pixi 的 `src`(而非每帧 current),`currentTrack` 喂即时 `<img>` 层。
-- [ ] 加诊断计数:`bg.pixi.appInit` / `bg.pixi.textureSwap` / `bg.pixi.filterCompile`,确认切歌只有 textureSwap、init/compile 归零。
+- [x] 抽出 [`pixi-background-controller.ts`](../../../src/components/player/pixi-background-controller.ts):注入式 Pixi runtime(`loadPixi`/`loadMedia`/`loadFilter`/`attachVideo`),App+sprite+filter 只建一次,`setSource()` 只 `sprite.texture = next` + 旧纹理 `destroy(true)`;带 stale-token 守卫与 `stats.{appInits,textureSwaps}` 自省。
+- [x] 重构 [`pixi-pixel-background.tsx`](../../../src/components/player/pixi-pixel-background.tsx):App 生命周期 effect 只依赖 `[effect, effectOptions, pixelSize]`(设置级,非切歌);纹理 effect 依赖 `[controller, src, mediaType]`,切歌只调 `controller.setSource`。视频 `attachVideo` 复用原 ticker/seek/订阅逻辑。
+- [x] 保留 `autoStart:false` 的按需渲染;纹理换上后 `resize()` 内 `render()` 一次。
+- [x] 诊断/可测性:`controller.stats`(appInits/textureSwaps)作为「切歌只换纹理、不重建」的可断言不变量,由单测锁定(见下)。
+- [ ] (移交 Phase 2)`now-playing-background` 用 `settledTrack` 喂 Pixi 的 `src`,`currentTrack` 喂即时 `<img>` 层。
 
 **Checklist:**
-- [ ] 连续跳 10 首:`appInit` 不增长,`textureSwap` ≤ 落定次数,`filterCompile` 不随歌增长。
-- [ ] 切歌 `frameMaxMs` 明显下降(目标 < 60ms),`fpsLow` 回升。
-- [ ] WKWebView(Tauri macOS)与 Electron 均不黑屏/不丢背景。
+- [x] 单测 [`pixi-background-controller.test.ts`](../../../src/components/player/pixi-background-controller.test.ts)(注入 fake Pixi,6 例全绿):多次 `setSource` 只 `init` 一次(`appInits===1`)、每次换纹理并销毁旧纹理、传入正确的 backend/power、null src 保持当前层、stale 源被丢弃、`destroy()` 拆 app。
+- [x] `tsc --noEmit` 通过;Biome 通过;`src/` 全量单测 2363 例通过(6 个 `scripts/*.mjs` 失败是既有的 rolldown shebang 转换问题,与本改动无关)。
+- [ ] **待实测(本环境无 GPU,需手动跑桌面)**:连续跳 10 首 `appInits` 不增长;切歌 `frameMaxMs` < 60ms、`fpsLow` 回升;WKWebView(Tauri macOS)与 Electron 均不黑屏/不丢背景;视频背景播放/暂停/seek 跟随正常。
 
 ### Phase 2: 统一切歌 settle 闸门
 
@@ -279,3 +280,4 @@ backgroundGpuPowerPreference?: "auto" | "high-performance" | "low-power"; // DEF
 |------|--------|---------|
 | 2026-06-13 | Claude | 初稿:持久化 Pixi + 切歌 settle 闸门 + GPU 后端可选 |
 | 2026-06-13 | Claude | 拍板 4 个 Open Question:独立 settle 常量(不暴露)、`<img>` 常驻底层、新增性能档 auto→高性能、device-lost best-practice 恢复 |
+| 2026-06-13 | Claude | Phase 1 代码完成:`pixi-background-controller`(DI + 持久 app + 纹理热替换)+ 组件重构 + 6 例单测;切歌不再重建 WebGL App。待桌面 GPU/视觉实测 |

@@ -7,9 +7,52 @@ import { log } from "@/lib/logger";
 import { getAppFetch } from "@/lib/platform";
 import { cn } from "@/lib/utils";
 import { usePlayerStore } from "@/stores/player-store";
+import {
+  type AttachVideo,
+  createPixiBackgroundController,
+  type PixiBackgroundController,
+  type PixiModuleLike,
+} from "./pixi-background-controller";
 
 export type PixiBackgroundEffect = "pixel" | "ascii" | "cross-hatch" | "crt" | "dot" | "noise";
 type BackgroundMediaType = "image" | "video";
+
+/**
+ * Wire a freshly-loaded video texture to playback: seek to the current position,
+ * follow play/pause + scrub from the store, and drive the layer ticker only while
+ * the video is actually progressing. Returns a teardown that unwires the events;
+ * the controller releases the element itself via disposeMedia.
+ */
+const attachVideo: AttachVideo = async ({ app, video, render }) => {
+  const { isPlaying, positionSec } = usePlayerStore.getState();
+  await prepareVideoFrame(video, positionSec);
+  // A paused seek decodes a new frame while the ticker is stopped — repaint once
+  // per decoded frame so the frozen background tracks it.
+  const onSeeked = () => {
+    if (!usePlayerStore.getState().isPlaying) render();
+  };
+  video.addEventListener("seeked", onSeeked);
+  if (isPlaying) void video.play().catch(() => {});
+  syncLayerTicker({ app, media: video }, isPlaying);
+  const unsubscribe = usePlayerStore.subscribe((state, prev) => {
+    if (state.currentIndex !== prev.currentIndex) {
+      syncVideo(video, state.positionSec, true);
+    } else if (state.positionSec !== prev.positionSec) {
+      syncVideo(video, state.positionSec);
+    }
+    if (state.isPlaying !== prev.isPlaying) {
+      if (state.isPlaying) void video.play().catch(() => {});
+      else video.pause();
+      syncLayerTicker({ app, media: video }, state.isPlaying);
+      // Pausing freezes the ticker — paint the frame we stopped on.
+      if (!state.isPlaying) render();
+    }
+  });
+  return () => {
+    unsubscribe();
+    video.removeEventListener("seeked", onSeeked);
+  };
+};
 
 export function PixiPixelBackground({
   className,
@@ -27,193 +70,54 @@ export function PixiPixelBackground({
   src: string | null;
 }) {
   const hostRef = useRef<HTMLDivElement | null>(null);
-  const currentLayerRef = useRef<PixiLayer | null>(null);
+  const [controller, setController] = useState<PixiBackgroundController | null>(null);
   const [hasLayer, setHasLayer] = useState(false);
   const effectOptions = useMemo(
     () => resolvePixiBackgroundEffectOptions(effectSettings, pixelSize),
     [effectSettings, pixelSize],
   );
 
+  // App lifecycle: the persistent Pixi app/sprite/filter is (re)built ONLY when
+  // the effect, its options, or the render block size change — i.e. settings, not
+  // track switches. A song change just swaps the texture (effect below), so we no
+  // longer tear down and recreate the WebGL context + recompile the filter on
+  // every covered switch (the dominant switch-jank cost). See PRD Phase 1.
   useEffect(() => {
     const host = hostRef.current;
     if (!host) return;
-    if (!src) {
-      // A null src can be a transient "next blob URL is still resolving" state
-      // during track changes. Keep the painted layer alive; the parent unmounts
-      // this component when there is genuinely no background source left.
-      return;
-    }
-
-    let disposed = false;
-    let pendingLayer: PixiLayer | null = null;
-
-    void (async () => {
-      try {
-        const Pixi = await import("pixi.js");
-        if (disposed || !hostRef.current) return;
-
-        const nextApp = new Pixi.Application();
-        await nextApp.init({
-          antialias: false,
-          autoDensity: false,
-          // The ticker re-renders every frame — needed only while a video is
-          // progressing. Static covers (noise/CRT) render on demand in resize();
-          // syncLayerTicker starts/stops it with playback (PRD F-6).
-          autoStart: false,
-          backgroundAlpha: 0,
-          height: 1,
-          powerPreference: "low-power",
-          preference: "webgl",
-          resolution: 1,
-          width: 1,
-        });
-        if (disposed || !hostRef.current) {
-          nextApp.destroy({ removeView: true }, { children: true, context: true });
-          return;
-        }
-
-        const canvas = nextApp.canvas;
-        canvas.style.position = "absolute";
-        canvas.style.inset = "0";
-        canvas.style.width = "100%";
-        canvas.style.height = "100%";
-        canvas.style.imageRendering = effect === "pixel" ? "pixelated" : "auto";
-        canvas.style.opacity = "0";
-        canvas.style.transition = "opacity 300ms ease";
-
-        const media = await loadBackgroundMedia(Pixi, src, mediaType);
-        if (disposed || !hostRef.current) {
-          destroyBackgroundMedia(media);
-          nextApp.destroy(
-            { removeView: true },
-            { children: true, context: true, texture: true, textureSource: true },
-          );
-          return;
-        }
-
-        const texture = media.texture ?? Pixi.Texture.from(media.element, true);
-        texture.source.scaleMode = "nearest";
-        const sprite = new Pixi.Sprite(texture);
-        const filter = await createPixiFilter(effect, effectOptions);
-        if (disposed || !hostRef.current) {
-          destroyBackgroundMedia(media);
-          nextApp.destroy(
-            { removeView: true },
-            { children: true, context: true, texture: true, textureSource: true },
-          );
-          return;
-        }
-        if (filter) sprite.filters = [filter];
-        nextApp.stage.addChild(sprite);
-        let unsubscribe: (() => void) | undefined;
-        if (media.type === "video") {
-          const video = media.element;
-          const { isPlaying, positionSec } = usePlayerStore.getState();
-          await prepareVideoFrame(video, positionSec);
-          if (disposed || !hostRef.current) {
-            destroyBackgroundMedia(media);
-            nextApp.destroy(
-              { removeView: true },
-              { children: true, context: true, texture: true, textureSource: true },
-            );
-            return;
-          }
-          // A paused seek decodes a new frame while the ticker is stopped —
-          // repaint once per decoded frame so the frozen background tracks it.
-          video.addEventListener("seeked", () => {
-            if (!usePlayerStore.getState().isPlaying) nextApp.render();
-          });
-          if (isPlaying) void video.play().catch(() => {});
-          unsubscribe = usePlayerStore.subscribe((state, prev) => {
-            if (state.currentIndex !== prev.currentIndex) {
-              syncVideo(video, state.positionSec, true);
-            } else if (state.positionSec !== prev.positionSec) {
-              syncVideo(video, state.positionSec);
-            }
-            if (state.isPlaying !== prev.isPlaying) {
-              if (state.isPlaying) void video.play().catch(() => {});
-              else video.pause();
-              syncLayerTicker({ app: nextApp, media: video }, state.isPlaying);
-              // Pausing freezes the ticker — paint the frame we stopped on.
-              if (!state.isPlaying) nextApp.render();
-            }
-          });
-        }
-
-        const resize = () => {
-          const container = hostRef.current;
-          if (!container || disposed) return;
-          const cssW = Math.max(1, Math.round(container.clientWidth));
-          const cssH = Math.max(1, Math.round(container.clientHeight));
-          const block = Math.max(3, Math.min(48, Math.round(pixelSize)));
-          const dpr = Math.min(window.devicePixelRatio || 1, 2);
-          const renderW =
-            effect === "pixel" ? Math.max(1, Math.round(cssW / block)) : Math.round(cssW * dpr);
-          const renderH =
-            effect === "pixel" ? Math.max(1, Math.round(cssH / block)) : Math.round(cssH * dpr);
-          nextApp.renderer.resize(renderW, renderH);
-          coverSprite(sprite, media.width, media.height, renderW, renderH);
-          nextApp.render();
-        };
-
-        resize();
-        const resizeObserver = new ResizeObserver(resize);
-        resizeObserver.observe(hostRef.current);
-        pendingLayer = {
-          app: nextApp,
-          canvas,
-          media: media.type === "video" ? media.element : undefined,
-          resizeObserver,
-          unsubscribe,
-          unload: media.unload,
-        };
-        syncLayerTicker(pendingLayer, usePlayerStore.getState().isPlaying);
-        const previousLayer = currentLayerRef.current;
-        currentLayerRef.current = pendingLayer;
-        hostRef.current.appendChild(canvas);
-        requestAnimationFrame(() => {
-          if (disposed) return;
-          if (previousLayer && currentLayerRef.current !== previousLayer) {
-            previousLayer.canvas.style.opacity = "0";
-          }
-          canvas.style.opacity = "1";
-        });
-        window.setTimeout(() => {
-          if (previousLayer && currentLayerRef.current !== previousLayer) {
-            destroyPixiLayer(previousLayer);
-          }
-        }, 350);
-        setHasLayer(true);
-      } catch (err) {
-        log.warn("background", "Pixi pixel video background failed", err);
-        if (mediaType === "video") {
-          const currentLayer = currentLayerRef.current;
-          if (currentLayer) {
-            currentLayerRef.current = null;
-            destroyPixiLayer(currentLayer);
-          }
-        }
-        if (!currentLayerRef.current) setHasLayer(false);
-      }
-    })();
-
+    setHasLayer(false);
+    const next = createPixiBackgroundController({
+      host,
+      effect,
+      effectOptions,
+      pixelSize,
+      preference: "webgl",
+      powerPreference: "low-power",
+      deps: {
+        loadPixi: async () => (await import("pixi.js")) as unknown as PixiModuleLike,
+        loadMedia: (pixi, source, type) =>
+          loadBackgroundMedia(pixi as unknown as typeof import("pixi.js"), source, type),
+        loadFilter: (_pixi, fx, opts) =>
+          createPixiFilter(fx, opts as ReturnType<typeof resolvePixiBackgroundEffectOptions>),
+        attachVideo,
+        onError: (err) => log.warn("background", "Pixi background failed", err),
+      },
+      onApplied: () => setHasLayer(true),
+    });
+    setController(next);
     return () => {
-      disposed = true;
-      if (pendingLayer && currentLayerRef.current !== pendingLayer) {
-        destroyPixiLayer(pendingLayer);
-      }
+      setController(null);
+      next.destroy();
     };
-  }, [src, mediaType, pixelSize, effect, effectOptions]);
+  }, [effect, effectOptions, pixelSize]);
 
-  useEffect(
-    () => () => {
-      if (currentLayerRef.current) {
-        destroyPixiLayer(currentLayerRef.current);
-        currentLayerRef.current = null;
-      }
-    },
-    [],
-  );
+  // Texture swap: a song change (new src) only loads the next texture onto the
+  // already-warm app. Re-runs when the controller itself is rebuilt so the new
+  // controller is seeded with the current source.
+  useEffect(() => {
+    if (!controller) return;
+    void controller.setSource(src, mediaType);
+  }, [controller, src, mediaType]);
 
   return (
     <div
@@ -236,15 +140,6 @@ export function PixiPixelBackground({
   );
 }
 
-type PixiLayer = {
-  app: import("pixi.js").Application;
-  canvas: HTMLCanvasElement;
-  media?: HTMLVideoElement;
-  resizeObserver: ResizeObserver;
-  unsubscribe?: () => void;
-  unload?: () => void;
-};
-
 /**
  * Drive the layer's ticker (which re-renders the stage every frame) only while
  * a video is actually progressing. Static covers — the common noise/CRT-over-
@@ -264,17 +159,6 @@ export function syncLayerTicker(
   } else if (ticker.started) {
     ticker.stop();
   }
-}
-
-function destroyPixiLayer(layer: PixiLayer) {
-  layer.unsubscribe?.();
-  layer.resizeObserver.disconnect();
-  if (layer.media) destroyVideo(layer.media);
-  layer.app.destroy(
-    { removeView: true },
-    { children: true, context: true, texture: !layer.unload, textureSource: !layer.unload },
-  );
-  layer.unload?.();
 }
 
 async function createPixiFilter(
@@ -429,17 +313,6 @@ export function shouldFetchImageTexture(src: string): boolean {
   return /^https?:/i.test(src);
 }
 
-function destroyBackgroundMedia(media: BackgroundMedia) {
-  if (media.type === "video") destroyVideo(media.element);
-  media.unload?.();
-}
-
-function destroyVideo(video: HTMLVideoElement) {
-  video.pause();
-  video.removeAttribute("src");
-  video.load();
-}
-
 function syncVideo(video: HTMLVideoElement, positionSec: number, force = false) {
   if (!Number.isFinite(positionSec)) return;
   const drift = Math.abs(video.currentTime - positionSec);
@@ -496,20 +369,4 @@ function waitForEvent(target: EventTarget, event: string) {
 
 function delay(ms: number) {
   return new Promise<void>((resolve) => window.setTimeout(resolve, ms));
-}
-
-function coverSprite(
-  sprite: import("pixi.js").Sprite,
-  textureWidth: number,
-  textureHeight: number,
-  width: number,
-  height: number,
-) {
-  const sourceW = Math.max(1, textureWidth);
-  const sourceH = Math.max(1, textureHeight);
-  const scale = Math.max(width / sourceW, height / sourceH);
-  const drawW = sourceW * scale;
-  const drawH = sourceH * scale;
-  sprite.scale.set(scale);
-  sprite.position.set((width - drawW) / 2, (height - drawH) / 2);
 }
