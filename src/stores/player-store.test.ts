@@ -504,6 +504,22 @@ describe("player-store playback resume", () => {
       await expect(repos.getPlayQueue()).resolves.toMatchObject({ currentIndex: 1 });
     });
   });
+
+  it("coalesces rapid queue cursor persistence to the final picked track", async () => {
+    const { repos, usePlayerStore } = await seedQueue(0);
+    usePlayerStore.getState().init();
+
+    await waitFor(() => expect(usePlayerStore.getState().queue).toHaveLength(2));
+
+    await usePlayerStore.getState().playIndex(1);
+    await usePlayerStore.getState().playIndex(0);
+    await usePlayerStore.getState().playIndex(1);
+
+    await expect(repos.getPlayQueue()).resolves.toMatchObject({ currentIndex: 0 });
+    await waitFor(async () => {
+      await expect(repos.getPlayQueue()).resolves.toMatchObject({ currentIndex: 1 });
+    });
+  });
 });
 
 describe("player-store bulk upload visibility", () => {

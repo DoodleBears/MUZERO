@@ -135,6 +135,7 @@ export function VirtualTrackList({
       elementScroll(offset, opts, instance);
     },
   });
+  const deferRowCoverLoad = rowVirtualizer.isScrolling;
 
   // Restore scroll to a row on MOUNT (returning from select mode's reorder list).
   // Through the virtualizer's scrollToFn so it routes via Lenis; the rAF lets Lenis
@@ -402,6 +403,7 @@ export function VirtualTrackList({
             >
               <TrackRow
                 track={track}
+                deferCoverLoad={deferRowCoverLoad}
                 isCurrent={track.id === currentTrackId}
                 isSelected={track.id === selectedTrackId}
                 listIndex={virtualRow.index}

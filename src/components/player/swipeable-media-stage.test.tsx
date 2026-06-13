@@ -246,6 +246,7 @@ describe("SwipeableMediaStage", () => {
     render(<SwipeableMediaStage />);
 
     await act(async () => {
+      vi.advanceTimersByTime(160);
       await Promise.resolve();
       await Promise.resolve();
     });

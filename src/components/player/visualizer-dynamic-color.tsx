@@ -27,7 +27,8 @@ import {
 const colorCache = new Map<string, { rgb: Rgb | null; palette: Rgb[] }>();
 const paletteExtractionInFlight = new Map<string, Promise<PaletteResolution>>();
 const coverColorLog = createDiagnosticLogger("cover.palette");
-const PALETTE_EXTRACTION_SETTLE_MS = 220;
+const PALETTE_EXTRACTION_SETTLE_MS = 900;
+const PALETTE_EXTRACTION_IDLE_TIMEOUT_MS = 4000;
 let lastAppliedTarget: { key: string | null; rgb: Rgb | null; palette: Rgb[] } | null = null;
 
 type PaletteResolution = {
@@ -137,16 +138,33 @@ function runSettledPaletteExtraction(
   apply: (result: PaletteResolution) => void,
 ): () => void {
   let alive = true;
-  const timer = window.setTimeout(() => {
+  let idleId: number | null = null;
+  let timer: number | null = window.setTimeout(() => {
+    timer = null;
     if (!alive) return;
-    void run().then((result) => {
+    const execute = () => {
       if (!alive) return;
-      apply(result);
-    });
+      void run().then((result) => {
+        if (!alive) return;
+        apply(result);
+      });
+    };
+    if (typeof requestIdleCallback === "function") {
+      idleId = requestIdleCallback(
+        () => {
+          idleId = null;
+          execute();
+        },
+        { timeout: PALETTE_EXTRACTION_IDLE_TIMEOUT_MS },
+      );
+      return;
+    }
+    timer = window.setTimeout(execute, 0);
   }, PALETTE_EXTRACTION_SETTLE_MS);
   return () => {
     alive = false;
-    window.clearTimeout(timer);
+    if (timer != null) window.clearTimeout(timer);
+    if (idleId != null && typeof cancelIdleCallback === "function") cancelIdleCallback(idleId);
   };
 }
 
@@ -453,11 +471,7 @@ export function useVisualizerCoverColorCss(
           }),
         (result) => {
           if (!alive) return;
-          applyVisualizerCoverColorTarget(
-            cacheKey,
-            result.rgb ?? readPrimaryRgb(),
-            result.palette,
-          );
+          applyVisualizerCoverColorTarget(cacheKey, result.rgb ?? readPrimaryRgb(), result.palette);
         },
       );
       return () => {

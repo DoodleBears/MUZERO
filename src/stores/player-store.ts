@@ -300,7 +300,12 @@ let presenceCoordinatorKey = "";
 // doesn't change the rendered list (e.g. a future currentIndex / repeat persist)
 // doesn't churn the `queue` array and re-render every list consumer.
 let lastQueueSig = "";
+let playQueueHydrated = false;
+let queueCursorPersistTimer: number | null = null;
+let queueCursorPersistSeq = 0;
+let lastPersistedQueueIndex = -1;
 const playbackLog = createDiagnosticLogger("player.playback");
+const QUEUE_CURSOR_PERSIST_DEBOUNCE_MS = 900;
 
 type PlaybackTraceContext = Pick<
   DiagnosticContext,
@@ -639,17 +644,21 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
         const listChanged = sig !== lastQueueSig;
         lastQueueSig = sig;
         const persistedIndex = clampIndex(queue.length, pq.currentIndex);
-        // Pin the cursor to the PLAYING track by id only when the queue list
-        // itself changed. Pure currentIndex writes (same list) should follow the
-        // persisted queue cursor so refresh/other writers restore the right song.
-        const currentIndex = listChanged
+        lastPersistedQueueIndex = persistedIndex;
+        const state = get();
+        // Hydrate from persisted cursor on boot, and reconcile by playing track id
+        // when the queue structure changes. During normal playback the in-memory
+        // cursor is authoritative: cursor-only DB writes are debounced resume
+        // state and must not bounce the UI back through stale liveQuery results.
+        const shouldHydrateCursor = !playQueueHydrated || listChanged;
+        playQueueHydrated = true;
+        const currentIndex = shouldHydrateCursor
           ? reconcileCurrentIndex(
               queue.map((tr) => tr.id),
               loadedTrackId,
               persistedIndex,
             )
-          : persistedIndex;
-        const state = get();
+          : clampIndex(queue.length, state.currentIndex);
         const previousTrackId = currentTrack(state)?.id;
         const nextTrack = currentIndex >= 0 ? queue[currentIndex] : undefined;
         const nextTrackId = nextTrack?.id;
@@ -2027,9 +2036,20 @@ async function writeRemotePlaybackCache(
 }
 
 function persistQueueIndex(index: number): void {
-  void playQueueSetIndex(index).catch((err: unknown) =>
-    log.warn("player", "failed to persist queue index", err),
-  );
+  if (index === lastPersistedQueueIndex && queueCursorPersistTimer == null) return;
+  queueCursorPersistSeq += 1;
+  const seq = queueCursorPersistSeq;
+  if (queueCursorPersistTimer != null) {
+    window.clearTimeout(queueCursorPersistTimer);
+  }
+  queueCursorPersistTimer = window.setTimeout(() => {
+    queueCursorPersistTimer = null;
+    if (seq !== queueCursorPersistSeq || index === lastPersistedQueueIndex) return;
+    lastPersistedQueueIndex = index;
+    void playQueueSetIndex(index).catch((error: unknown) => {
+      log.warn("player", "failed to persist play queue cursor", error);
+    });
+  }, QUEUE_CURSOR_PERSIST_DEBOUNCE_MS);
 }
 
 function watchSetForAppend(
@@ -2420,8 +2440,9 @@ async function ensureLoadedAndPlay(
     }
     triggerLyricsAutoFetch(track);
     if (!continueCurrent("before-metadata")) return;
-    await updateMediaSessionMetadata(track, () =>
-      currentTrack(get())?.id === track.id && isPlaybackRequestSeqCurrent(activeRequestId),
+    await updateMediaSessionMetadata(
+      track,
+      () => currentTrack(get())?.id === track.id && isPlaybackRequestSeqCurrent(activeRequestId),
     );
     if (!continueCurrent("metadata-updated")) return;
   }

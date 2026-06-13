@@ -37,6 +37,7 @@ interface TrackRowProps {
   track: Track;
   isCurrent: boolean;
   isSelected?: boolean;
+  deferCoverLoad?: boolean;
   /** Select mode: show a checkbox; activating the row toggles its selection.
    *  `shiftKey` requests a range select from the last-toggled anchor. */
   selectable?: boolean;
@@ -112,8 +113,8 @@ function StatusBadge({ status }: { status: Track["status"] }) {
 }
 
 /** YouTube-Music-style row thumbnail: cover image, else a kind icon / status. */
-function TrackThumb({ track }: { track: Track }) {
-  const coverUrl = useTrackCoverUrl(track);
+function TrackThumb({ deferCoverLoad = false, track }: { deferCoverLoad?: boolean; track: Track }) {
+  const coverUrl = useTrackCoverUrl(deferCoverLoad ? undefined : track);
   if (track.status !== "ready") {
     return (
       <div className="grid size-10 shrink-0 place-items-center bg-secondary album-cover-radius album-cover-shadow">
@@ -152,6 +153,7 @@ export const TrackRow = memo(function TrackRow({
   track,
   isCurrent,
   isSelected,
+  deferCoverLoad,
   selectable,
   checked,
   onToggleSelect,
@@ -252,7 +254,7 @@ export const TrackRow = memo(function TrackRow({
       )}
       <div className="group/thumb relative size-10 shrink-0">
         <div className="grid size-10 place-items-center album-cover-radius">
-          <TrackThumb track={track} />
+          <TrackThumb deferCoverLoad={deferCoverLoad} track={track} />
         </div>
         {track.status === "ready" && (
           <button

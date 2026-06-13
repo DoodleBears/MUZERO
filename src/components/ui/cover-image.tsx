@@ -115,9 +115,9 @@ export function CoverImage({
       )}
       style={style}
     >
-      {!url && placeholder}
-      {/* Blurred preview, behind the real image, only while it's still loading. */}
-      {url && !loaded && preview && (
+      {!url && !preview && placeholder}
+      {/* Blurred preview, behind the real image, while the full cover is deferred or loading. */}
+      {preview && (!url || !loaded) && (
         <img
           src={preview}
           alt=""
