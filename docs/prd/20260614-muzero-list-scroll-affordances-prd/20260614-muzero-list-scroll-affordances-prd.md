@@ -13,7 +13,7 @@
 |-------|------|--------|------|
 | 1 | Hover 浮层滚动条(可拖拽快速滚动) | ✅ 代码完成(待实测) | [Phase 1](#phase-1-hover-浮层滚动条) |
 | 2 | A–Z 字母快速索引(按名称排序时,拼音/假名感知) | ✅ 代码完成(待实测) | [Phase 2](#phase-2-az-字母快速索引) |
-| 3 | 把「四件套」rollout 到 歌单/专辑/歌手 tab | 🔲 Pending | [Phase 3](#phase-3-rollout-到-歌单专辑歌手) |
+| 3 | 把「四件套」rollout 到 歌单/专辑/歌手 tab | ✅ 代码完成(待实测) | [Phase 3](#phase-3-rollout-到-歌单专辑歌手) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
 
@@ -162,9 +162,11 @@ VirtualTrackList (parentRef scroller + Lenis)
 - **3c 名称排序转写感知**:`sortSets`(`a.session.name.localeCompare`)+ `sortEntities`(`a.name.localeCompare`)的 `name` case 改按 `transliterateSortKey`(预算键),否则 A–Z 错位。更新其单测。
 - **3d Hover 滚动条 + A–Z**:`wallScrollEl` 上挂 `HoverScrollbar`;`entitySort/sort === "name"` 且条目 `>阈值` 时挂 `AlphabetIndex`(`letterOf = firstAlphaLabel(transliterateSortKey(name))`,`onJump → galleryRef.scrollToKey(getKey(items[i]))`)。`wallScrollEl` 加 `group/list` + 右 gutter 让位。
 
+**实现(落地):** 3a 排序持久化(`savedSetSort`/`savedEntitySort` + `onSetSortClick`/`onEntitySortClick` 写回)、3b `VirtualCardGrid` 接 `rafObserveElementOffset`、3c `sortSets`/`sortEntities` 名称按 `transliterateSortKey`、3d 共享 `wallScrollEl`(`attachWall`)上挂 `HoverScrollbar`(经 `wallLenisRef` 的 `wallScrollToTop`)+ 名称排序/无 query/`>30` 时挂 `AlphabetIndex`(`letterOf=transliterateInitial(name)`,`onJump→galleryRef.scrollToKey(getKey(items[i]))` 处理 list/grid index→行)。`group/list` + 三个 `VirtualCardGrid` `wallAlphabet?"pr-6"` 让卡片躲开 rail。
+
 **Checklist:**
-- [ ] 三 tab 排序选择重载后保留;名称排序读音 A→Z;字母条/滚动条各就位、点字母准确跳;原生滚动顺(每帧一算)。
-- [ ] `sortSets`/`sortEntities` 名称转写单测;`tsc`/Biome/`src` 全量通过。
+- [x] 3a/3b/3c/3d 代码完成;`sortSets`/`sortEntities` 名称转写 + CJK 拼音序单测;`tsc`/Biome/pages+library 通过(2 个 `player-store` 失败是并发 session WIP)。
+- [ ] **待实测**:三 tab 排序选择重载后保留;名称排序读音 A→Z;字母条/滚动条各就位、点字母准确跳到该字母首卡;原生滚动顺(每帧一算);rail 不压卡片。
 
 ---
 
@@ -222,3 +224,4 @@ VirtualTrackList (parentRef scroller + Lenis)
 | 2026-06-14 | User+Claude | QA 观察:**开 smooth scroll(Lenis)反而更顺**(avg 90/low 20 → 115-120/low 40)。根因:Lenis 把原生 wheel(120Hz)事件**按 rAF 合并**,虚拟列表每帧只重算一次窗口;原生滚动每个事件都重算 = 冗余。用户选「保持 smooth scroll opt-in,转而优化 native」。新增 [`rafObserveElementOffset`](../../../src/components/library/raf-scroll-offset.ts)(drop-in 替换 TanStack `observeElementOffset`,**按 rAF 合并 scroll 读取**、保留 `isScrolling` 去抖给 `deferCoverLoad`),接进 `virtual-track-list` 的 `useVirtualizer`——不开 Lenis 也每帧只重算一次。4 例单测(初值同步/多事件合一/`isScrolling` 复位/cleanup)。library 全绿 |
 | 2026-06-14 | Claude | Phase 3 rollout 3a+3b:歌单 `sort`/`sortDir` + 实体 `entitySort`/`entitySortDir` 各加 localStorage 持久(`muzero-gallery-set-sort`/`-entity-sort`…,镜像 `savedTrackSort`);`VirtualCardGrid` 的 `useVirtualizer` 接 `rafObserveElementOffset`(三个 wall 原生滚动每帧一算)。typecheck/pages 通过(2 个 `player-store` 失败是并发 session 的音量 WIP,非本次) |
 | 2026-06-14 | Claude | Phase 3 rollout 3c:`sortSets`/`sortEntities` 的 `name` case 改按 `transliterateSortKey`(预算键),否则歌单/专辑/歌手字母条与行错位。各加 CJK 拼音序单测(`周杰伦`→Z 在 `Adele`/`北京` 之后);entity-gallery.test 补 `ensureTransliterationLoaded`。gallery 全绿 |
+| 2026-06-14 | Claude | Phase 3 rollout 3d(收尾):共享 `wallScrollEl` 上挂 `HoverScrollbar` + 名称排序时挂 `AlphabetIndex`(三 tab),`onJump` 经 `galleryRef.scrollToKey` 处理 grid 的 index→行;`wallAlphabet` memo 按 mode/sort/query/阈值裁决;`group/list` + 三网格 `pr-6` 让位。**四件套全部覆盖到 全部歌曲/歌单/专辑/歌手**。typecheck + pages+library 通过 |

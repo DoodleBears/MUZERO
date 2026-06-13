@@ -17,10 +17,12 @@ import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } f
 import { flushSync } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { SourceAttributionChip } from "@/components/cloud/source-attribution-chip";
+import { AlphabetIndex } from "@/components/library/alphabet-index";
 import { CollapsibleSearch } from "@/components/library/collapsible-search";
 import { CoverContextMenu } from "@/components/library/cover-context-menu";
 import { EntityDetailView } from "@/components/library/entity-detail";
 import { EntityCard, EntityGrid, type LibraryEntityItem } from "@/components/library/entity-grid";
+import { HoverScrollbar } from "@/components/library/hover-scrollbar";
 import { FilterChip, SortChip } from "@/components/library/sort-chip";
 import {
   type SystemPlaylistCardItem,
@@ -75,6 +77,7 @@ import {
 import { useShortcutMatcher } from "@/hooks/use-shortcut-matcher";
 import { LIBRARY_QUERY_COALESCE_MS, useThrottledValue } from "@/hooks/use-throttled-value";
 import { useTransliterationReady } from "@/hooks/use-transliteration-ready";
+import { buildAlphabetIndex } from "@/lib/alphabet-index";
 import { hasModalDialogOpen, isTypingTarget } from "@/lib/dom-keys";
 import { ENTITY_SORT_DEFAULT_DIR, type EntitySort, sortEntities } from "@/lib/entity-gallery";
 import {
@@ -249,6 +252,8 @@ function entityDurationSec(trackIds: readonly string[], trackById: Map<string, T
 const GALLERY_CARD_SELECTOR = "[data-gallery-card]";
 /** The A–Z fast-scroll strip only earns its place on a long, name-sorted library. */
 const ALPHABET_INDEX_MIN_TRACKS = 50;
+/** Same, for the 歌单/专辑/歌手 card walls (fewer entities than tracks). */
+const WALL_ALPHABET_MIN_ITEMS = 30;
 type CommonT = TFunction<"common", undefined>;
 
 /**
@@ -740,6 +745,48 @@ export function SearchPage() {
     else setArtistQuery(value);
   };
 
+  // Route the wall hover-scrollbar drag through the wall's Lenis (immediate) when
+  // active, else native — mirrors the track list's scrollToTop.
+  const wallScrollToTop = useCallback(
+    (top: number) => {
+      if (wallLenisRef.current) wallLenisRef.current.scrollTo(top, { immediate: true });
+      else wallScrollRef.current?.scrollTo({ top });
+    },
+    [wallLenisRef],
+  );
+  // A–Z fast-scroll buckets + jump for the active wall — only when name-sorted,
+  // unfiltered, and long enough. Items are already name-sorted (reading-aware via
+  // sortSets/sortEntities), so buildAlphabetIndex over them is contiguous; jumps go
+  // through the grid's scrollToKey (handles list AND grid index→row). Recomputes when
+  // the dictionaries load (transliterationReady) so labels refine to pinyin/kana.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: transliterationReady refreshes the labels after dictionaries load
+  const wallAlphabet = useMemo(() => {
+    if (query.trim() !== "") return null;
+    if (mode === "sets") {
+      if (sort !== "name" || shown.length <= WALL_ALPHABET_MIN_ITEMS) return null;
+      return {
+        buckets: buildAlphabetIndex(shown, (item) => transliterateInitial(item.session.name)),
+        jump: (index: number) => {
+          const item = shown[index];
+          if (item) galleryRef.current?.scrollToKey(item.session.id);
+        },
+      };
+    }
+    if (mode === "albums" || mode === "artists") {
+      if (entitySort !== "name") return null;
+      const items = mode === "albums" ? albumItems : artistItems;
+      if (items.length <= WALL_ALPHABET_MIN_ITEMS) return null;
+      return {
+        buckets: buildAlphabetIndex(items, (item) => transliterateInitial(item.label)),
+        jump: (index: number) => {
+          const item = items[index];
+          if (item) galleryRef.current?.scrollToKey(item.key);
+        },
+      };
+    }
+    return null;
+  }, [mode, sort, entitySort, query, shown, albumItems, artistItems, transliterationReady]);
+
   useEffect(() => {
     if (mode !== "tracks") return;
     if (shownTracks.length === 0) {
@@ -1164,7 +1211,7 @@ export function SearchPage() {
           wallScrollTops.current[mode] = e.currentTarget.scrollTop;
         }}
         className={cn(
-          "no-scrollbar flex min-h-0 flex-1 flex-col px-1 pt-3",
+          "group/list no-scrollbar flex min-h-0 flex-1 flex-col px-1 pt-3",
           // Tracks mode: a clipped, non-scrolling frame so the two panes inside are
           // capped to the viewport and scroll themselves. Other walls scroll here.
           mode === "tracks"
@@ -1172,6 +1219,25 @@ export function SearchPage() {
             : "chrome-fade overflow-y-auto pb-chrome-bottom [--chrome-fade-top:1.25rem]",
         )}
       >
+        {/* Hover scrollbar + A–Z fast-jump for the three card walls (the track list
+            carries its own). The A–Z rail shows only when the active wall is
+            name-sorted; the scrollbar insets to its left then. */}
+        {isGalleryWallMode(mode) && (
+          <>
+            <HoverScrollbar
+              scrollRef={wallScrollRef}
+              scrollToTop={wallScrollToTop}
+              rightInset={wallAlphabet ? 24 : 0}
+            />
+            {wallAlphabet ? (
+              <AlphabetIndex
+                scrollRef={wallScrollRef}
+                buckets={wallAlphabet.buckets}
+                onJump={wallAlphabet.jump}
+              />
+            ) : null}
+          </>
+        )}
         {mode === "sets" && (
           <>
             <div className="mb-3 flex flex-wrap items-center gap-1.5 px-1">
@@ -1220,6 +1286,7 @@ export function SearchPage() {
                     items={shown}
                     view={activeWallView}
                     getKey={getSetKey}
+                    className={wallAlphabet ? "pr-6" : undefined}
                     scrollElement={wallScrollEl}
                     lenisRef={wallLenisRef}
                     restoreScrollTop={wallScrollTops.current.sets}
@@ -1449,6 +1516,7 @@ export function SearchPage() {
                 items={albumItems}
                 view={activeWallView}
                 getKey={getEntityKey}
+                className={wallAlphabet ? "pr-6" : undefined}
                 scrollElement={wallScrollEl}
                 lenisRef={wallLenisRef}
                 restoreScrollTop={wallScrollTops.current.albums}
@@ -1493,6 +1561,7 @@ export function SearchPage() {
                 items={artistItems}
                 view={activeWallView}
                 getKey={getEntityKey}
+                className={wallAlphabet ? "pr-6" : undefined}
                 scrollElement={wallScrollEl}
                 lenisRef={wallLenisRef}
                 restoreScrollTop={wallScrollTops.current.artists}
