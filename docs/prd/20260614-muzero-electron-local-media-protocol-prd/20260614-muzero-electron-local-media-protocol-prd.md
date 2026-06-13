@@ -12,7 +12,7 @@
 | Phase | Name | Status | Link |
 |-------|------|--------|------|
 | 1 | storageKey → 本地媒体 URL 基建(复用现有 token 系统) | ✅ 代码完成(待桌面实测) | [Phase 1](#phase-1-storagekey--本地媒体-url-基建复用现有-token-系统) |
-| 2 | Now Playing 背景封面走本地协议 URL(Electron 零 Blob/解码) | 🔲 Pending | [Phase 2](#phase-2-背景封面走协议) |
+| 2 | Now Playing 背景封面走本地协议 URL(Electron 零 Blob/解码) | ✅ 代码完成(待桌面实测) | [Phase 2](#phase-2-背景封面走协议) |
 | 3 | 扩展:stage 封面(裁剪派生文件)+ 音视频(future) | 🔲 Pending | [Phase 3](#phase-3-扩展future) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
@@ -120,9 +120,13 @@ net.fetch(pathToFileURL(filePath))  → 流式返回文件(含 content-type)
 **Goal:** Electron 下 Now Playing **背景**封面用 `muzmedia://` 原图,不再走 blob/object URL;其余环境/裁剪场景回退原路径。
 
 **Tasks:**
-- [ ] `useLocalCoverUrl(track)`:`useLiveQuery` 读该 track cover 的 `mediaBlobs` 行 → 若 `canServeLocalCover` 且 bridge 有 `localMediaUrlForStorageKey` → 异步取 URL(模块级 `Map<storageKey, Promise|string>` 缓存,token 稳定复用)→ 返回;否则 null。
-- [ ] [`now-playing-background.tsx`](../../../src/components/player/now-playing-background.tsx):`backgroundUrl` 在 source==="cover" 时优先用 `useLocalCoverUrl(current) ?? coverUrl`(背景不需要裁剪,原图即可);Pixi/blur/image 三条渲染分支都吃这个 URL。
-- [ ] 保持 stage(`media-stage`)走原裁剪 object URL 不变(Phase 3 再优化)。
+- [x] [`useLocalCoverUrl(track)`](../../../src/hooks/use-local-cover.ts):`useLiveQuery` 读 cover 的 `mediaBlobs` 行 → `canServeLocalCover` 命中 → 异步取 URL(模块级 `Map<storageKey, Promise|string>` 缓存,token 稳定复用,Chromium 按 URL 缓存解码)→ 返回;否则 null。
+- [x] [`now-playing-background.tsx`](../../../src/components/player/now-playing-background.tsx):`localCoverUrl = useLocalCoverUrl(current)`;**有协议 URL 时 `useTrackCoverUrl(undefined)` 跳过 object URL 解析**(`coverUrl = useTrackCoverUrl(localCoverUrl ? undefined : current)`),`backgroundCoverUrl = localCoverUrl ?? coverUrl` 喂 Pixi/blur/image 三分支。Pixi 已支持 `muzfetch:` 纹理(`needsCrossOrigin` 含 muzfetch + 协议回 ACAO:*)。
+- [x] stage(`media-stage`)走原裁剪 object URL 不变(Phase 3 再优化)。
+
+**Checklist:**
+- [x] `tsc`/Biome 通过;player 组件单测通过;`src` 全量通过(player-store 的 debounce 计时测试在满载下偶发 flaky,隔离运行 15/15 全绿,与本改动无关)。
+- [ ] **待桌面实测 + 新 trace**:Electron 切歌时背景封面不再 `object-url-miss`、`blobsLive` image 不随背景增长、heap 峰值下降;协议加载失败时背景仍回退 object URL(`localCoverUrl` 为 null 即回退)。
 
 **Checklist:**
 - [ ] 决策函数单测全绿。
@@ -179,3 +183,4 @@ net.fetch(pathToFileURL(filePath))  → 流式返回文件(含 content-type)
 | 2026-06-14 | Claude | 初稿:`muzmedia://` 本地封面协议,Electron 背景封面零拷贝直出;Phase 3 扩展 stage 裁剪 + 音视频 |
 | 2026-06-14 | Claude | **设计修订(§0)**:实现前发现 Electron 已有等价基建(`muzfetch://local-media` + token + `mediaStorageExistingTarget`)。改为**复用**:给 token IPC 加 storageKey 入口,不建新 scheme。已撤回 `muzmedia://` 代码 |
 | 2026-06-14 | Claude | Phase 1 代码完成:ipc token 加 storageKey 分支 + bridge `localMediaUrlForStorageKey` + electron 实现 + 纯 `canServeLocalCover`(4 例)。`src` 全量 2380 例通过。待桌面实测 |
+| 2026-06-14 | Claude | Phase 2 代码完成:`useLocalCoverUrl` hook(storageKey→协议 URL,缓存)+ now-playing-background 背景封面优先走协议、命中即跳过 object URL,失败优雅回退。两 Phase 代码完成,待桌面实测 |

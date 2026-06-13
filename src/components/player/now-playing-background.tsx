@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useMemo, useState } from "react";
 import { getTrackLyrics, listGalleryImages, listTrackBackgrounds } from "@/db/repositories";
 import { useSettings } from "@/hooks/use-app-data";
+import { useLocalCoverUrl } from "@/hooks/use-local-cover";
 import { useObjectUrls, useTrackCoverUrl, useTrackMediaUrl } from "@/hooks/use-media";
 import { useSettledValue } from "@/hooks/use-settled-value";
 import {
@@ -97,7 +98,14 @@ function NowPlayingBackgroundContent({ hideVisualizer }: { hideVisualizer: boole
   );
   const visualizerDim = visualizerComposite.dimPct / 100;
   const visualizerOpacity = visualizerComposite.opacityPct / 100;
-  const coverUrl = useTrackCoverUrl(current);
+  // Electron + file-backed cover: load the cover via the local-media protocol so
+  // Chromium decodes/caches it natively instead of blob → object URL → a JS-heap
+  // bitmap. The background is full-bleed/blurred, so the raw (uncropped) file is
+  // fine. When it's available we skip resolving the object-URL cover entirely (no
+  // blob load); everywhere else we fall back to it. See the local-media PRD.
+  const localCoverUrl = useLocalCoverUrl(current);
+  const coverUrl = useTrackCoverUrl(localCoverUrl ? undefined : current);
+  const backgroundCoverUrl = localCoverUrl ?? coverUrl;
   const trackBackgrounds = useLiveQuery(
     () => (current?.id ? listTrackBackgrounds(current.id) : Promise.resolve([])),
     [current?.id],
@@ -180,7 +188,7 @@ function NowPlayingBackgroundContent({ hideVisualizer }: { hideVisualizer: boole
   );
   const backgroundUrl =
     source === "cover"
-      ? coverUrl
+      ? backgroundCoverUrl
       : slideshowUrls.length > 0
         ? (slideshowUrls[slideIndex % slideshowUrls.length] ?? null)
         : null;
