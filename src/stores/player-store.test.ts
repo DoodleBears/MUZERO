@@ -443,6 +443,55 @@ describe("player-store playback resume", () => {
     expect(usePlayerStore.getState().playbackLoading).toBeNull();
   });
 
+  it("does not play a stale local blob load after a rapid switch", async () => {
+    const { db, first, second, usePlayerStore } = await seedQueue(0);
+    await db.mediaBlobs.bulkPut([
+      {
+        id: "blb_first_local_stale",
+        trackId: first.id,
+        role: "media",
+        mime: "audio/mpeg",
+        bytes: 3,
+        blob: new Blob([new Uint8Array([1, 2, 3])], { type: "audio/mpeg" }),
+      },
+      {
+        id: "blb_second_local_stale",
+        trackId: second.id,
+        role: "media",
+        mime: "audio/mpeg",
+        bytes: 3,
+        blob: new Blob([new Uint8Array([4, 5, 6])], { type: "audio/mpeg" }),
+      },
+    ]);
+    await db.tracks.update(first.id, { status: "ready", blobId: "blb_first_local_stale" });
+    await db.tracks.update(second.id, { status: "ready", blobId: "blb_second_local_stale" });
+    usePlayerStore.getState().init();
+
+    await waitFor(() => expect(usePlayerStore.getState().queue).toHaveLength(2));
+    const staleLoad = deferredVoid();
+    mediaEngineMock.loadBlob
+      .mockImplementationOnce(async () => {
+        await staleLoad.promise;
+      })
+      .mockImplementationOnce(async () => {});
+
+    const stalePlay = usePlayerStore.getState().playIndex(0);
+    await waitFor(() => expect(mediaEngineMock.loadBlob).toHaveBeenCalledTimes(1));
+
+    const currentPlay = usePlayerStore.getState().playIndex(1);
+    await waitFor(() => expect(mediaEngineMock.loadBlob).toHaveBeenCalledTimes(2));
+    await currentPlay;
+
+    expect(usePlayerStore.getState().currentIndex).toBe(1);
+    expect(mediaEngineMock.play).toHaveBeenCalledTimes(1);
+
+    staleLoad.resolve();
+    await stalePlay;
+
+    expect(usePlayerStore.getState().currentIndex).toBe(1);
+    expect(mediaEngineMock.play).toHaveBeenCalledTimes(1);
+  });
+
   it("persists the queue cursor when the user picks another track", async () => {
     const { repos, usePlayerStore } = await seedQueue(0);
     usePlayerStore.getState().init();

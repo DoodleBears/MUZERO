@@ -22,9 +22,11 @@ import {
   resolveNowPlayingCoverEffectMode,
 } from "@/lib/album-cover-appearance";
 import { getCroppedBlob } from "@/lib/image-crop";
+import { coverUrlCache } from "@/lib/object-url-cache";
 import { arePerfCountersEnabled, notePerfWork } from "@/lib/perf-counters";
 import { trackAlbum, trackArtists, trackHasCover, trackSubtitle } from "@/lib/track-display";
 import { cn } from "@/lib/utils";
+import { trackCoverCacheKey } from "@/player/playback-preload";
 import { useNavStore } from "@/stores/nav-store";
 import { usePlayerStore } from "@/stores/player-store";
 import { MediaStage } from "./media-stage";
@@ -1044,9 +1046,14 @@ function warmImage(url: string): void {
 }
 
 type PreloadedCover = {
+  cacheKey?: string;
   key: string;
   url: string;
 };
+
+function releasePreloadedCover(entry: PreloadedCover | undefined): void {
+  if (entry?.cacheKey) coverUrlCache.release(entry.cacheKey);
+}
 
 function usePreloadedCoverUrls(tracks: Track[]): Record<string, string> {
   const settings = useSettings();
@@ -1058,12 +1065,13 @@ function usePreloadedCoverUrls(tracks: Track[]): Record<string, string> {
       tracks.flatMap((track): PreloadRequest[] => {
         if (track.coverBlobId) {
           const crop = coverCropped ? track.coverCrop : undefined;
-          const cropKey = crop ? `${crop.x},${crop.y},${crop.width},${crop.height}` : "original";
+          const cacheKey = trackCoverCacheKey(track, coverCropped);
+          if (!cacheKey) return [];
           return [
             {
               coverBlobId: track.coverBlobId,
               crop,
-              key: `${track.id}:${track.coverBlobId}:${cropKey}`,
+              key: cacheKey,
               trackId: track.id,
             },
           ];
@@ -1086,7 +1094,6 @@ function usePreloadedCoverUrls(tracks: Track[]): Record<string, string> {
   );
   useEffect(() => {
     let alive = true;
-    const created: string[] = [];
 
     const load = async () => {
       const perfEnabled = arePerfCountersEnabled();
@@ -1094,6 +1101,7 @@ function usePreloadedCoverUrls(tracks: Track[]): Record<string, string> {
       let cropped = 0;
       let local = 0;
       let remote = 0;
+      let created = 0;
       const previous = entriesRef.current;
       const nextEntries: Record<string, PreloadedCover> = {};
 
@@ -1115,20 +1123,41 @@ function usePreloadedCoverUrls(tracks: Track[]): Record<string, string> {
         if (!request.coverBlobId) continue;
         local += 1;
 
+        const cachedUrl = coverUrlCache.acquire(request.key);
+        if (cachedUrl) {
+          nextEntries[request.trackId] = {
+            cacheKey: request.key,
+            key: request.key,
+            url: cachedUrl,
+          };
+          continue;
+        }
+
         let blob = (await resolveMediaBlob(request.coverBlobId, db))?.blob;
-        if (!blob) continue;
+        if (!blob) {
+          coverUrlCache.release(request.key);
+          continue;
+        }
         if (request.crop) {
           cropped += 1;
           blob = await getCroppedBlob(blob, request.crop, blob.type || "image/jpeg");
         }
-        if (!alive) break;
-        const url = URL.createObjectURL(blob);
-        created.push(url);
-        nextEntries[request.trackId] = { key: request.key, url };
+        if (!alive) {
+          coverUrlCache.release(request.key);
+          break;
+        }
+        const createdUrl = URL.createObjectURL(blob);
+        created += 1;
+        const url = coverUrlCache.store(request.key, createdUrl);
+        nextEntries[request.trackId] = {
+          cacheKey: request.key,
+          key: request.key,
+          url,
+        };
       }
 
       if (!alive) {
-        for (const url of created) URL.revokeObjectURL(url);
+        for (const entry of Object.values(nextEntries)) releasePreloadedCover(entry);
         return;
       }
 
@@ -1140,11 +1169,11 @@ function usePreloadedCoverUrls(tracks: Track[]): Record<string, string> {
       );
 
       for (const [trackId, entry] of Object.entries(previous)) {
-        if (nextEntries[trackId]?.url !== entry.url) URL.revokeObjectURL(entry.url);
+        if (nextEntries[trackId]?.key !== entry.key) releasePreloadedCover(entry);
       }
       if (perfEnabled) {
         notePerfWork("cover.preload.batch", performance.now() - perfStartedAt, {
-          created: created.length,
+          created,
           cropped,
           local,
           remote,
@@ -1161,7 +1190,7 @@ function usePreloadedCoverUrls(tracks: Track[]): Record<string, string> {
 
   useEffect(() => {
     return () => {
-      for (const entry of Object.values(entriesRef.current)) URL.revokeObjectURL(entry.url);
+      for (const entry of Object.values(entriesRef.current)) releasePreloadedCover(entry);
       entriesRef.current = {};
     };
   }, []);

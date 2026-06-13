@@ -25,8 +25,16 @@ import {
 } from "@/stores/visualizer-color-store";
 
 const colorCache = new Map<string, { rgb: Rgb | null; palette: Rgb[] }>();
+const paletteExtractionInFlight = new Map<string, Promise<PaletteResolution>>();
 const coverColorLog = createDiagnosticLogger("cover.palette");
 let lastAppliedTarget: { key: string | null; rgb: Rgb | null; palette: Rgb[] } | null = null;
+
+type PaletteResolution = {
+  rgb: Rgb | null;
+  palette: Rgb[];
+  cleanPalette: Rgb[];
+  fallbackKind?: "thumbhash";
+};
 
 type CurrentCoverState = {
   id: string;
@@ -100,6 +108,192 @@ function applyVisualizerCoverColorTarget(
   return true;
 }
 
+function resolvePalette(
+  palette: readonly Rgb[] | undefined,
+  thumbhashFallback: { rgb: Rgb; palette: Rgb[] } | null,
+): PaletteResolution {
+  const cleanPalette = normalizeCoverPalette(palette);
+  const extracted = paletteCacheEntry(cleanPalette) ?? thumbhashFallback;
+  return {
+    rgb: extracted?.rgb ?? null,
+    palette: extracted?.palette ?? [],
+    cleanPalette,
+    fallbackKind: thumbhashFallback && cleanPalette.length === 0 ? "thumbhash" : undefined,
+  };
+}
+
+function palettePhase(result: PaletteResolution): "success" | "state" | "skip" {
+  if (result.cleanPalette.length > 0) return "success";
+  return result.fallbackKind ? "state" : "skip";
+}
+
+function cachePaletteResult(cacheKey: string, result: PaletteResolution): void {
+  colorCache.set(cacheKey, { rgb: result.rgb, palette: result.palette });
+}
+
+function getOrStartRemotePaletteExtraction(args: {
+  trackId: string;
+  cacheKey: string;
+  remoteCoverUrl: string;
+  thumbhashFallback: { rgb: Rgb; palette: Rgb[] } | null;
+  coverSource: ReturnType<typeof describeTrackCoverSource>;
+  safeUrl: ReturnType<typeof sanitizeUrlForTrace>;
+}): Promise<PaletteResolution> {
+  const inFlight = paletteExtractionInFlight.get(args.cacheKey);
+  if (inFlight) {
+    coverColorLog.debug("cover.palette.join", {
+      message: "remote cover palette joined in-flight extraction",
+      trackId: args.trackId,
+      category: "media",
+      phase: "state",
+      coverSourceKind: args.coverSource.kind,
+      coverSourceHost: args.coverSource.host || args.safeUrl.host || undefined,
+    });
+    return inFlight;
+  }
+
+  let promise: Promise<PaletteResolution>;
+  promise = (async () => {
+    try {
+      coverColorLog.debug("cover.palette.start", {
+        message: "remote cover palette extraction started",
+        trackId: args.trackId,
+        category: "media",
+        phase: "start",
+        coverSourceKind: args.coverSource.kind,
+        coverSourceHost: args.coverSource.host || args.safeUrl.host || undefined,
+        requestHost: args.safeUrl.host ?? undefined,
+        requestPathHash: args.safeUrl.pathHash,
+        safeQuery: args.safeUrl.safeQuery,
+        redactions: args.safeUrl.redactions,
+      });
+      const fetcher = await getAppFetch();
+      const palette = await extractImagePaletteFromFetchedUrl(args.remoteCoverUrl, { fetcher });
+      const result = resolvePalette(palette, args.thumbhashFallback);
+      if (result.cleanPalette.length > 0) {
+        void db.tracks.update(
+          args.trackId,
+          coverPaletteFields(result.cleanPalette, args.remoteCoverUrl),
+        );
+      }
+      cachePaletteResult(args.cacheKey, result);
+      coverColorLog.info("cover.palette.success", {
+        message: "remote cover palette extraction finished",
+        trackId: args.trackId,
+        category: "media",
+        phase: palettePhase(result),
+        fallbackKind: result.fallbackKind,
+        coverSourceKind: args.coverSource.kind,
+        coverSourceHost: args.coverSource.host || args.safeUrl.host || undefined,
+        paletteCount: result.palette.length,
+        fallbackToTheme: result.palette.length === 0,
+      });
+      return result;
+    } catch (error) {
+      const result = resolvePalette([], args.thumbhashFallback);
+      cachePaletteResult(args.cacheKey, result);
+      coverColorLog.warn("cover.palette.failed", {
+        message: "remote cover palette extraction failed",
+        trackId: args.trackId,
+        category: "media",
+        phase: "fail",
+        coverSourceKind: args.coverSource.kind,
+        coverSourceHost: args.coverSource.host || args.safeUrl.host || undefined,
+        fallbackKind: result.fallbackKind,
+        error,
+      });
+      return result;
+    }
+  })().finally(() => {
+    if (paletteExtractionInFlight.get(args.cacheKey) === promise) {
+      paletteExtractionInFlight.delete(args.cacheKey);
+    }
+  });
+  paletteExtractionInFlight.set(args.cacheKey, promise);
+  return promise;
+}
+
+function getOrStartLocalPaletteExtraction(args: {
+  trackId: string;
+  cacheKey: string;
+  cover: { id: string; blob: Blob; mime: string; bytes: number };
+  coverCrop: CurrentCoverState["coverCrop"];
+  thumbhashFallback: { rgb: Rgb; palette: Rgb[] } | null;
+}): Promise<PaletteResolution> {
+  const inFlight = paletteExtractionInFlight.get(args.cacheKey);
+  if (inFlight) {
+    coverColorLog.debug("cover.palette.join", {
+      message: "local cover palette joined in-flight extraction",
+      trackId: args.trackId,
+      category: "media",
+      phase: "state",
+      coverSourceKind: "local-cover",
+      coverBlobId: args.cover.id,
+    });
+    return inFlight;
+  }
+
+  let promise: Promise<PaletteResolution>;
+  promise = (async () => {
+    coverColorLog.debug("cover.palette.start", {
+      message: "local cover palette extraction started",
+      trackId: args.trackId,
+      category: "media",
+      phase: "start",
+      coverSourceKind: "local-cover",
+      coverBlobId: args.cover.id,
+      mime: args.cover.mime,
+      bytes: args.cover.bytes,
+    });
+    return await extractCoverPalette(args.cover.blob, args.coverCrop, args.cover.mime);
+  })()
+    .then((palette) => {
+      const result = resolvePalette(palette, args.thumbhashFallback);
+      if (result.cleanPalette.length > 0) {
+        void db.tracks.update(args.trackId, coverPaletteFields(result.cleanPalette, args.cover.id));
+      }
+      cachePaletteResult(args.cacheKey, result);
+      coverColorLog.info("cover.palette.success", {
+        message: "local cover palette extraction finished",
+        trackId: args.trackId,
+        category: "media",
+        phase: palettePhase(result),
+        fallbackKind: result.fallbackKind,
+        coverSourceKind: "local-cover",
+        coverBlobId: args.cover.id,
+        mime: args.cover.mime,
+        bytes: args.cover.bytes,
+        paletteCount: result.palette.length,
+        fallbackToTheme: result.palette.length === 0,
+      });
+      return result;
+    })
+    .catch((error) => {
+      const result = resolvePalette([], args.thumbhashFallback);
+      cachePaletteResult(args.cacheKey, result);
+      coverColorLog.warn("cover.palette.failed", {
+        message: "local cover palette extraction failed",
+        trackId: args.trackId,
+        category: "media",
+        phase: "fail",
+        coverSourceKind: "local-cover",
+        coverBlobId: args.cover.id,
+        mime: args.cover.mime,
+        bytes: args.cover.bytes,
+        fallbackKind: result.fallbackKind,
+        error,
+      });
+      return result;
+    })
+    .finally(() => {
+      if (paletteExtractionInFlight.get(args.cacheKey) === promise) {
+        paletteExtractionInFlight.delete(args.cacheKey);
+      }
+    });
+  paletteExtractionInFlight.set(args.cacheKey, promise);
+  return promise;
+}
+
 /**
  * Scoped dynamic visualizer accent. The color is stored outside the component so
  * tab changes do not flash back to the theme primary before the cover re-loads.
@@ -163,7 +357,6 @@ export function useVisualizerCoverColorCss(
     // Keep the current color while it resolves — no flash to theme.
     if (!current.coverBlobId && remoteCoverUrl) {
       let alive = true;
-      const controller = new AbortController();
       const cacheKey = `remote:${remoteCoverUrl}`;
       const cached = colorCache.get(cacheKey);
       const stored = cachedTrackPalette(current, cacheKey);
@@ -229,63 +422,23 @@ export function useVisualizerCoverColorCss(
         colorCache.set(cacheKey, thumbhashFallback);
         return;
       }
-      void (async () => {
-        try {
-          coverColorLog.debug("cover.palette.start", {
-            message: "remote cover palette extraction started",
-            trackId: current.id,
-            category: "media",
-            phase: "start",
-            coverSourceKind: coverSource.kind,
-            coverSourceHost: coverSource.host || safeUrl.host || undefined,
-            requestHost: safeUrl.host ?? undefined,
-            requestPathHash: safeUrl.pathHash,
-            safeQuery: safeUrl.safeQuery,
-            redactions: safeUrl.redactions,
-          });
-          const fetcher = await getAppFetch();
-          return await extractImagePaletteFromFetchedUrl(remoteCoverUrl, {
-            fetcher,
-            signal: controller.signal,
-          });
-        } catch (error) {
-          coverColorLog.warn("cover.palette.failed", {
-            message: "remote cover palette extraction failed",
-            trackId: current.id,
-            category: "media",
-            phase: "fail",
-            coverSourceKind: coverSource.kind,
-            coverSourceHost: coverSource.host || safeUrl.host || undefined,
-            error,
-          });
-          return [];
-        }
-      })().then((palette) => {
+      void getOrStartRemotePaletteExtraction({
+        trackId: current.id,
+        cacheKey,
+        remoteCoverUrl,
+        thumbhashFallback,
+        coverSource,
+        safeUrl,
+      }).then((result) => {
         if (!alive) return;
-        const clean = normalizeCoverPalette(palette);
-        const extracted = paletteCacheEntry(clean) ?? thumbhashFallback;
-        const rgb = extracted?.rgb ?? null;
-        const resolvedPalette = extracted?.palette ?? [];
-        if (clean.length > 0) {
-          void db.tracks.update(current.id, coverPaletteFields(clean, remoteCoverUrl));
-        }
-        colorCache.set(cacheKey, { rgb, palette: resolvedPalette });
-        coverColorLog.info("cover.palette.success", {
-          message: "remote cover palette extraction finished",
-          trackId: current.id,
-          category: "media",
-          phase: clean.length > 0 ? "success" : thumbhashFallback ? "state" : "skip",
-          fallbackKind: thumbhashFallback && clean.length === 0 ? "thumbhash" : undefined,
-          coverSourceKind: coverSource.kind,
-          coverSourceHost: coverSource.host || safeUrl.host || undefined,
-          paletteCount: resolvedPalette.length,
-          fallbackToTheme: resolvedPalette.length === 0,
-        });
-        applyVisualizerCoverColorTarget(cacheKey, rgb ?? readPrimaryRgb(), resolvedPalette);
+        applyVisualizerCoverColorTarget(
+          cacheKey,
+          result.rgb ?? readPrimaryRgb(),
+          result.palette,
+        );
       });
       return () => {
         alive = false;
-        controller.abort();
       };
     }
 
@@ -356,58 +509,22 @@ export function useVisualizerCoverColorCss(
       );
     }
 
-    coverColorLog.debug("cover.palette.start", {
-      message: "local cover palette extraction started",
-      trackId: current?.id,
-      category: "media",
-      phase: "start",
-      coverSourceKind: "local-cover",
-      coverBlobId: cover.id,
-      mime: cover.mime,
-      bytes: cover.bytes,
+    void getOrStartLocalPaletteExtraction({
+      trackId: current.id,
+      cacheKey,
+      cover: {
+        id: cover.id,
+        blob: cover.blob,
+        mime: cover.mime,
+        bytes: cover.bytes,
+      },
+      coverCrop: current.coverCrop,
+      thumbhashFallback,
+    }).then((result) => {
+      if (!alive) return;
+      void primaryColorVersion;
+      applyVisualizerCoverColorTarget(cacheKey, result.rgb ?? readPrimaryRgb(), result.palette);
     });
-    void extractCoverPalette(cover.blob, current.coverCrop, cover.mime)
-      .then((palette) => {
-        if (!alive) return;
-        const clean = normalizeCoverPalette(palette);
-        const extracted = paletteCacheEntry(clean) ?? thumbhashFallback;
-        const rgb = extracted?.rgb ?? null;
-        const resolvedPalette = extracted?.palette ?? [];
-        if (clean.length > 0) {
-          void db.tracks.update(current.id, coverPaletteFields(clean, cover.id));
-        }
-        colorCache.set(cacheKey, { rgb, palette: resolvedPalette });
-        void primaryColorVersion;
-        coverColorLog.info("cover.palette.success", {
-          message: "local cover palette extraction finished",
-          trackId: current?.id,
-          category: "media",
-          phase: clean.length > 0 ? "success" : thumbhashFallback ? "state" : "skip",
-          fallbackKind: thumbhashFallback && clean.length === 0 ? "thumbhash" : undefined,
-          coverSourceKind: "local-cover",
-          coverBlobId: cover.id,
-          mime: cover.mime,
-          bytes: cover.bytes,
-          paletteCount: resolvedPalette.length,
-          fallbackToTheme: resolvedPalette.length === 0,
-        });
-        applyVisualizerCoverColorTarget(cacheKey, rgb ?? readPrimaryRgb(), resolvedPalette);
-      })
-      .catch((error) => {
-        if (!alive) return;
-        coverColorLog.warn("cover.palette.failed", {
-          message: "local cover palette extraction failed",
-          trackId: current?.id,
-          category: "media",
-          phase: "fail",
-          coverSourceKind: "local-cover",
-          coverBlobId: cover.id,
-          mime: cover.mime,
-          bytes: cover.bytes,
-          error,
-        });
-        applyVisualizerCoverColorTarget(cacheKey, readPrimaryRgb(), []);
-      });
 
     return () => {
       alive = false;

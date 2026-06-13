@@ -429,6 +429,43 @@ function cancelPlaybackLoading(set: (p: Partial<PlayerState>) => void): void {
   set({ playbackLoading: null });
 }
 
+function isPlaybackRequestSeqCurrent(requestId: number | undefined): boolean {
+  return requestId === undefined || isPlaybackLoadCurrent(requestId);
+}
+
+function shouldContinuePlaybackSelection(
+  track: Track,
+  requestId: number | undefined,
+  stage: string,
+): boolean {
+  if (isPlaybackRequestSeqCurrent(requestId)) return true;
+  log.debug("player", "discard stale playback selection", {
+    trackId: track.id,
+    requestId,
+    currentRequestId: playbackLoadSeq,
+    stage,
+  });
+  return false;
+}
+
+function shouldContinuePlaybackCursor(
+  get: () => PlayerState,
+  track: Track,
+  requestId: number | undefined,
+  stage: string,
+): boolean {
+  const activeTrackId = currentTrack(get())?.id;
+  if (activeTrackId === track.id && isPlaybackRequestSeqCurrent(requestId)) return true;
+  log.debug("player", "discard stale playback load", {
+    trackId: track.id,
+    activeTrackId,
+    requestId,
+    currentRequestId: playbackLoadSeq,
+    stage,
+  });
+  return false;
+}
+
 function isAbortError(error: unknown): boolean {
   return error instanceof Error && error.name === "AbortError";
 }
@@ -753,6 +790,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
 
   async playIndex(index) {
     cancelPlaybackLoading(set);
+    const selectionRequestId = playbackLoadSeq;
     const state = get();
     const { queue } = state;
     const clamped = clampIndex(queue.length, index);
@@ -773,11 +811,12 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     ) {
       const playbackTrace = startPlaybackTrace(target);
       const cached = await readRemotePlaybackCache(target, playbackTrace);
+      if (!shouldContinuePlaybackSelection(target, selectionRequestId, "remote-cache")) return;
       if (cached) {
         preparedRemotePlayback = { trackId: target.id, ...cached };
         set(cursorPatch(queue, clamped, true));
         persistQueueIndex(clamped);
-        await ensureLoadedAndPlay(set, get);
+        await ensureLoadedAndPlay(set, get, selectionRequestId);
         void maybeRefill(set, get);
         return;
       }
@@ -793,7 +832,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
         void writeRemotePlaybackCache(target, media);
         set(cursorPatch(queue, clamped, true));
         persistQueueIndex(clamped);
-        await ensureLoadedAndPlay(set, get);
+        await ensureLoadedAndPlay(set, get, request.id);
         void maybeRefill(set, get);
       } catch (error) {
         if (!isAbortError(error) && isPlaybackLoadCurrent(request.id)) {
@@ -814,12 +853,13 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     if (target) startPlaybackTrace(target);
     set(cursorPatch(queue, clamped, true));
     persistQueueIndex(clamped);
-    await ensureLoadedAndPlay(set, get);
+    await ensureLoadedAndPlay(set, get, selectionRequestId);
     void maybeRefill(set, get);
   },
 
   async cueIndex(index) {
     cancelPlaybackLoading(set);
+    const selectionRequestId = playbackLoadSeq;
     const { queue } = get();
     const clamped = clampIndex(queue.length, index);
     // wantPlay:false makes ensureLoadedAndPlay load + show the track but skip
@@ -827,7 +867,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     // the AudioContext before the user has interacted.
     set(cursorPatch(queue, clamped, false));
     persistQueueIndex(clamped);
-    await ensureLoadedAndPlay(set, get);
+    await ensureLoadedAndPlay(set, get, selectionRequestId);
   },
 
   async playTrack(track) {
@@ -2108,12 +2148,17 @@ async function ensureOnlineSet(): Promise<string> {
 async function ensureLoadedAndPlay(
   set: (p: Partial<PlayerState>) => void,
   get: () => PlayerState,
+  requestId?: number,
 ): Promise<void> {
   const { queue, currentIndex, wantPlay } = get();
   log.debug("player", "ensureLoadedAndPlay", { currentIndex, queueLength: queue.length, wantPlay });
   if (currentIndex < 0 || currentIndex >= queue.length) return;
   const track = queue[currentIndex];
   if (!mediaEngine) return;
+  let activeRequestId = requestId;
+  const continueCurrent = (stage: string) =>
+    shouldContinuePlaybackCursor(get, track, activeRequestId, stage);
+  if (!continueCurrent("start")) return;
   const playbackTrace = ensurePlaybackTrace(track, wantPlay);
   mediaEngine.setDiagnosticsContext(playbackTrace);
   // Local-first priority: blob (downloaded/offline) → local-file → remoteMediaUrl → stream.
@@ -2134,6 +2179,7 @@ async function ensureLoadedAndPlay(
     if (sourceKind === "blob") {
       // Cached/downloaded bytes — plays locally, offline, no network round-trip.
       const media = await getTrackBlob(track);
+      if (!continueCurrent("blob-resolved")) return;
       if (!media) {
         log.warn("player", "missing media blob", { trackId: track.id, blobId: track.blobId });
         return;
@@ -2159,6 +2205,7 @@ async function ensureLoadedAndPlay(
         return;
       }
       await mediaEngine.loadBlob(media.blob, track.kind);
+      if (!continueCurrent("blob-loaded")) return;
     } else if (sourceKind === "local-file") {
       const bridge = resolveDesktopBridge();
       if (!track.sourcePath || !bridge.localMediaUrl) {
@@ -2178,11 +2225,13 @@ async function ensureLoadedAndPlay(
         mime,
         trace: playbackTrace,
       });
+      if (!continueCurrent("local-file-url")) return;
       tracePlaybackLoad("media.load.local-file", track, playbackTrace, {
         mime,
         transport: "local-file",
       });
       await mediaEngine.loadUrl(src, track.kind, { crossOrigin: "anonymous" });
+      if (!continueCurrent("local-file-loaded")) return;
     } else if (sourceKind === "remote") {
       log.debug("player", "loading remote media url", {
         trackId: track.id,
@@ -2192,23 +2241,28 @@ async function ensureLoadedAndPlay(
       if (prepared) {
         preparedRemotePlayback = null;
         await mediaEngine.loadBlob(prepared.blob, track.kind);
+        if (!continueCurrent("remote-prepared-loaded")) return;
       } else {
         const cached = await readRemotePlaybackCache(track, playbackTrace);
+        if (!continueCurrent("remote-cache")) return;
         if (cached) {
           await mediaEngine.loadBlob(cached.blob, track.kind);
+          if (!continueCurrent("remote-cache-loaded")) return;
         } else {
           const request = beginPlaybackLoading(set, track, sourceKind);
+          activeRequestId = request.id;
           try {
             const media = await fetchRemotePlaybackBlob(
               track,
               playbackTrace,
               request.controller.signal,
             );
-            if (!isPlaybackLoadCurrent(request.id) || currentTrack(get())?.id !== track.id) return;
+            if (!continueCurrent("remote-fetched")) return;
             await mediaEngine.loadBlob(media.blob, track.kind);
+            if (!continueCurrent("remote-loaded")) return;
             void writeRemotePlaybackCache(track, media);
           } catch (error) {
-            if (isAbortError(error) || !isPlaybackLoadCurrent(request.id)) return;
+            if (isAbortError(error) || !continueCurrent("remote-failed")) return;
             notify.error(i18n.t("player.playbackError"), {
               detail: describePlaybackError(error),
               error,
@@ -2230,6 +2284,7 @@ async function ensureLoadedAndPlay(
       // Referer (returned in `headers`, wired once the proxy lands) — until then a
       // bili stream loads but the CDN GET 403s.
       const settings = await getSettings();
+      if (!continueCurrent("stream-settings")) return;
       const http = createStreamHttp();
       const resolved = await resolveStreamedTrackMedia(track, {
         resolveSource: (id) =>
@@ -2241,6 +2296,7 @@ async function ensureLoadedAndPlay(
         getQuality: (id) => settings.streamSources?.[id]?.quality,
         trace: playbackTrace ? { ...playbackTrace, sourceId: track.streamSourceId } : undefined,
       });
+      if (!continueCurrent("stream-resolved")) return;
       if (resolved.kind !== "ok") {
         log.warn("player", "streamed resolve failed", { trackId: track.id, result: resolved });
         // A VIP/members-only or login-gated track isn't a generic error — tell the user
@@ -2312,6 +2368,7 @@ async function ensureLoadedAndPlay(
       const resolvedBlob = resolved.blob;
       if (resolvedBlob) {
         await mediaEngine.loadBlob(resolvedBlob, track.kind);
+        if (!continueCurrent("stream-blob-loaded")) return;
         // YouTube already paid the full download cost before playback. Persist that
         // same blob so the next play is local-first and does not re-hit YouTube.
         void cacheResolvedStreamBlob(track, { ...resolved, blob: resolvedBlob }, playbackTrace);
@@ -2323,6 +2380,7 @@ async function ensureLoadedAndPlay(
           track.kind,
           proxiedUrl ? { crossOrigin: "anonymous" } : undefined,
         );
+        if (!continueCurrent("stream-url-loaded")) return;
       } else {
         // Contract violation — an ok resolve always carries one of blob/url.
         notify.error(i18n.t("player.playbackError"));
@@ -2338,6 +2396,7 @@ async function ensureLoadedAndPlay(
       if (settings.autoCacheStreamed && !track.blobId && !resolved.blob)
         void cacheStreamedTrackNow(track, playbackTrace);
     }
+    if (!continueCurrent("before-loaded-state")) return;
     loadedTrackId = track.id;
     streamSkipRunTrackIds = new Set(); // a track loaded — end any streamed-skip run cleanly
     const requestedPosition = Math.max(0, get().positionSec);
@@ -2352,8 +2411,10 @@ async function ensureLoadedAndPlay(
     }
     triggerLyricsAutoFetch(track);
     await updateMediaSessionMetadata(track);
+    if (!continueCurrent("metadata-updated")) return;
   }
-  if (wantPlay) {
+  if (wantPlay && get().wantPlay) {
+    if (!continueCurrent("before-play")) return;
     log.debug("player", "playing media", { trackId: track.id });
     playbackLog.info("play.requested", {
       message: "media play requested",
@@ -2362,6 +2423,7 @@ async function ensureLoadedAndPlay(
       phase: "start",
     });
     await mediaEngine.play();
+    if (!continueCurrent("after-play")) return;
     void publishPlaybackPresence(
       previousLoadedTrackId == null
         ? "trackStarted"
