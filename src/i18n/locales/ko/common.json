@@ -133,6 +133,7 @@
     "permanentOpenFolder": "로컬 캐시 열기",
     "permanentRole_media": "오디오 / 비디오",
     "permanentRole_cover": "커버",
+    "permanentRole_coverDerivative": "커버 캐시",
     "permanentRole_memory": "메모리",
     "permanentRole_background": "배경",
     "permanentRole_gallery": "갤러리",

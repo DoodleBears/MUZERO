@@ -234,7 +234,7 @@ describe("backfillCoverMetadata", () => {
     const derive = vi.fn(async () => ({
       palette,
       thumbhash: "HASH",
-      timings: { decodeMs: 1, paletteMs: 1, thumbhashMs: 1, totalMs: 3 },
+      timings: { decodeMs: 1, paletteMs: 1, thumbnailMs: 0, thumbhashMs: 1, totalMs: 3 },
     }));
 
     const { updated, attempted } = await backfillCoverMetadata(db, { derive });

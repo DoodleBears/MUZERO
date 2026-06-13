@@ -133,6 +133,7 @@
     "permanentOpenFolder": "ローカルキャッシュを開く",
     "permanentRole_media": "音声 / 動画",
     "permanentRole_cover": "カバー",
+    "permanentRole_coverDerivative": "カバーキャッシュ",
     "permanentRole_memory": "メモリー",
     "permanentRole_background": "背景",
     "permanentRole_gallery": "ギャラリー",

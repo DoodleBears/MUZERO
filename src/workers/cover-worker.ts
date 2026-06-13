@@ -26,7 +26,8 @@ ctx.onmessage = async (event: MessageEvent<CoverMetadataWorkerRequest>) => {
       sourceKey: msg.sourceKey,
       targets: msg.targets,
     });
-    ctx.postMessage({ reqId: msg.reqId, result, type: "cover-metadata-result" });
+    const transfers = result.thumbnail ? [result.thumbnail.bytes] : [];
+    ctx.postMessage({ reqId: msg.reqId, result, type: "cover-metadata-result" }, transfers);
   } catch (error) {
     ctx.postMessage({
       error: error instanceof Error ? error.message : String(error),

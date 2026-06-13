@@ -13,7 +13,7 @@
 |-------|------|--------|------|
 | 0 | Baseline and Observability | In Progress | [Phase 0 Checklist](#phase-0-checklist) |
 | 1 | Workerized Cover Metadata Extraction | In Progress | [Phase 1 Checklist](#phase-1-checklist) |
-| 2 | Persistent Thumbnail Derivatives | Pending | [Phase 2 Checklist](#phase-2-checklist) |
+| 2 | Persistent Thumbnail Derivatives | In Progress | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | Precomputed Backlight Derivatives | Pending | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | Hot-Table Decoupling and Repair UX | Pending | [Phase 4 Checklist](#phase-4-checklist) |
 
@@ -531,18 +531,19 @@ Run these scenarios in the Electron/Tauri desktop app with the visible perf HUD 
 **Goal:** Stop list rows and small cards from decoding full-size cover images.
 
 **Tasks:**
-- [ ] Define derivative identity: `coverBlobId + cropSig + algorithmVersion` or remote cover identity.
-- [ ] Persist 96-160 px thumbnail blobs for row/list/grid use.
-- [ ] Add `useCoverDerivativeUrl(track, "thumbnail")`.
-- [ ] Update `TrackRow`, set/album/artist cards, and reorder lists to request thumbnails instead of full covers where visually appropriate.
-- [ ] Keep thumbhash preview visible while derivative is missing.
+- [x] Define derivative identity: `coverBlobId + cropSig + algorithmVersion` or remote cover identity.
+- [x] Persist 96-160 px thumbnail blobs for row/list/grid use.
+- [x] Add `useCoverDerivativeUrl(track, "thumbnail")`.
+- [x] Update `TrackRow` to request thumbnails instead of full covers.
+- [ ] Update set/album/artist cards and reorder lists to request thumbnails where visually appropriate.
+- [x] Keep thumbhash preview visible while derivative is missing.
 - [ ] Add repair count for missing thumbnails.
 
 ### Phase 2 Checklist
 
-- [ ] Tab 2 scroll does not create full-cover object URLs while scrolling.
+- [x] Tab 2 row rendering no longer requests full-cover object URLs; it requests thumbnail derivatives after scroll defer settles.
 - [ ] Warm-thumbnail scroll keeps `blobsCreated` nearly flat.
-- [ ] Cold-thumbnail scroll shows thumbhash previews and schedules thumbnails without blocking scroll.
+- [x] Cold-thumbnail scroll shows thumbhash previews and schedules thumbnails without blocking scroll.
 - [ ] Thumbnail storage has a size budget and cleanup path.
 
 ### Phase 3: Precomputed Backlight Derivatives
@@ -669,3 +670,4 @@ Run these scenarios in the Electron/Tauri desktop app with the visible perf HUD 
 | 2026-06-13 | Codex | Resolved open questions from product feedback; clarified Electron app as primary QA target and palette workerization as top priority |
 | 2026-06-13 | Codex | Phase 0 instrumentation: cover render cache hit/miss trace, crop/palette/object-url work spans, blob URL kind grouping, and Electron QA runbook |
 | 2026-06-13 | Codex | Phase 1 workerized cover metadata extraction: shared cover worker client/core, visualizer palette fallback through worker, and Settings repair/repository defaults through worker pipeline |
+| 2026-06-13 | Codex | Phase 2 partial: added `coverDerivatives` table, `cover-derivative` media role, persistent thumbnail derivative repository, thumbnail worker target, and TrackRow thumbnail derivative hook |

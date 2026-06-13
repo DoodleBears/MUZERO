@@ -5,6 +5,7 @@ import type {
   ChatSession,
   CloudDrive,
   CloudShare,
+  CoverDerivative,
   CustomLlmProvider,
   DeviceRecord,
   DjSession,
@@ -56,6 +57,7 @@ export class MuzeroDB extends Dexie {
   lyrics!: EntityTable<TrackLyrics, "id">;
   llmCustomProviders!: EntityTable<CustomLlmProvider, "id">;
   playbackCache!: EntityTable<PlaybackCacheEntry, "id">;
+  coverDerivatives!: EntityTable<CoverDerivative, "id">;
 
   constructor(name = "muzero-db") {
     super(name);
@@ -373,6 +375,13 @@ export class MuzeroDB extends Dexie {
         .modify((q: Partial<PlayQueue>) => {
           if (q.repeat === "off") q.repeat = "all";
         });
+    });
+
+    // v25 — cover derivative registry. Generated thumbnails/backlight/stage
+    // images are keyed by cover source + crop + algorithm version so hot Track
+    // rows do not churn when caches are generated or repaired.
+    this.version(25).stores({
+      coverDerivatives: "id, sourceKey, kind, blobId, generatedAt, [sourceKey+kind]",
     });
   }
 }

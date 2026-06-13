@@ -142,6 +142,7 @@
     "permanentOpenFolder": "Open local cache",
     "permanentRole_media": "Audio / video",
     "permanentRole_cover": "Covers",
+    "permanentRole_coverDerivative": "Cover cache",
     "permanentRole_memory": "Memories",
     "permanentRole_background": "Backgrounds",
     "permanentRole_gallery": "Gallery",

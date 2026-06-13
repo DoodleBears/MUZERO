@@ -10,6 +10,7 @@ vi.mock("react-i18next", () => ({
 }));
 
 vi.mock("@/hooks/use-media", () => ({
+  useCoverDerivativeUrl: () => null,
   useTrackCoverUrl: () => null,
 }));
 

@@ -212,17 +212,39 @@ export interface Memory {
  *    `trackId === GLOBAL_GALLERY_ID` (not bound to any track)
  *  - `memory`  — a photo attached to a {@link Memory} (`trackId` = the song)
  *  - `avatar`  — a local device profile avatar (`trackId` = device record id)
+ *  - `cover-derivative` — generated local cover derivatives (thumbnail/backlight/stage)
  * New roles are additive: existing rows keep their role, so no schema bump.
  */
 export interface MediaBlob {
   id: string;
   trackId: string;
-  role: "media" | "cover" | "background" | "gallery" | "memory" | "avatar";
+  role: "media" | "cover" | "background" | "gallery" | "memory" | "avatar" | "cover-derivative";
   mime: string;
   bytes: number;
   storageBackend?: "indexeddb" | "opfs" | "electron-file";
   storageKey?: string;
   blob?: Blob;
+}
+
+export type CoverDerivativeKind = "thumbnail" | "backlight" | "stage";
+
+export interface CoverDerivative {
+  id: string;
+  kind: CoverDerivativeKind;
+  sourceKey: string;
+  sourceKind: "local-cover" | "remote-cover";
+  sourceRef: string;
+  contentHash?: string;
+  cropSig: string;
+  version: number;
+  blobId?: string;
+  mime?: string;
+  bytes?: number;
+  width?: number;
+  height?: number;
+  generatedAt: number;
+  updatedAt: number;
+  error?: string;
 }
 
 /**

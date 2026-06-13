@@ -1,0 +1,154 @@
+import { waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  coverDerivativeId,
+  coverDerivativeSourceForTrack,
+  ensureCoverThumbnailDerivative,
+} from "./cover-derivatives";
+import { MuzeroDB } from "./muzero-db";
+import type { Track } from "./types";
+
+let db: MuzeroDB;
+let dbName: string;
+
+beforeEach(() => {
+  dbName = `muzero-cover-derivatives-${Math.random().toString(36).slice(2)}`;
+  db = new MuzeroDB(dbName);
+});
+
+afterEach(async () => {
+  db.close();
+  await new Promise<void>((resolve) => {
+    const req = indexedDB.deleteDatabase(dbName);
+    req.onsuccess = req.onerror = () => resolve();
+  });
+});
+
+const png = () => new Blob([new Uint8Array([1, 2, 3])], { type: "image/png" });
+
+describe("cover derivatives", () => {
+  it("builds a stable local-cover derivative id from source, crop, kind, and version", () => {
+    expect(
+      coverDerivativeId({
+        cropSig: "10:20:300:300",
+        kind: "thumbnail",
+        sourceKey: "local:blb_cover",
+        version: 1,
+      }),
+    ).toBe(
+      coverDerivativeId({
+        cropSig: "10:20:300:300",
+        kind: "thumbnail",
+        sourceKey: "local:blb_cover",
+        version: 1,
+      }),
+    );
+    expect(
+      coverDerivativeId({
+        cropSig: "full",
+        kind: "thumbnail",
+        sourceKey: "local:blb_cover",
+        version: 1,
+      }),
+    ).not.toBe(
+      coverDerivativeId({
+        cropSig: "10:20:300:300",
+        kind: "thumbnail",
+        sourceKey: "local:blb_cover",
+        version: 1,
+      }),
+    );
+  });
+
+  it("persists a thumbnail derivative and reuses it on the next request", async () => {
+    const track = await addTrackWithCover("trk_thumb");
+    const extract = vi.fn(async () => ({
+      palette: [],
+      thumbnail: {
+        bytes: await new Blob(["thumb"], { type: "image/webp" }).arrayBuffer(),
+        height: 96,
+        mime: "image/webp",
+        width: 96,
+      },
+      timings: { decodeMs: 1, paletteMs: 0, thumbhashMs: 0, thumbnailMs: 2, totalMs: 3 },
+    }));
+
+    const first = await ensureCoverThumbnailDerivative(track, db, { extract });
+    const second = await ensureCoverThumbnailDerivative(track, db, { extract });
+
+    expect(extract).toHaveBeenCalledTimes(1);
+    expect(first?.derivative.id).toBe(second?.derivative.id);
+    expect(first?.blobId).toBe(second?.blobId);
+    expect(await first?.blob.text()).toBe("thumb");
+    const row = await db.coverDerivatives.get(first?.derivative.id ?? "");
+    expect(row).toMatchObject({
+      blobId: first?.blobId,
+      height: 96,
+      kind: "thumbnail",
+      mime: "image/webp",
+      sourceKind: "local-cover",
+      width: 96,
+    });
+  });
+
+  it("dedupes concurrent thumbnail generation for the same cover source", async () => {
+    const track = await addTrackWithCover("trk_concurrent");
+    let release: (() => void) | undefined;
+    const result = {
+      palette: [],
+      thumbnail: {
+        bytes: await new Blob(["thumb"], { type: "image/webp" }).arrayBuffer(),
+        height: 96,
+        mime: "image/webp",
+        width: 96,
+      },
+      timings: { decodeMs: 1, paletteMs: 0, thumbhashMs: 0, thumbnailMs: 2, totalMs: 3 },
+    };
+    const extract = vi.fn(
+      () =>
+        new Promise<typeof result>((resolve) => {
+          release = () => resolve(result);
+        }),
+    );
+
+    const first = ensureCoverThumbnailDerivative(track, db, { extract });
+    const second = ensureCoverThumbnailDerivative(track, db, { extract });
+    await waitFor(() => expect(extract).toHaveBeenCalledTimes(1));
+    release?.();
+    const [a, b] = await Promise.all([first, second]);
+
+    expect(extract).toHaveBeenCalledTimes(1);
+    expect(a?.derivative.id).toBe(b?.derivative.id);
+  });
+});
+
+async function addTrackWithCover(id: string): Promise<Track> {
+  const coverBlobId = `blb_${id}`;
+  await db.mediaBlobs.add({
+    id: coverBlobId,
+    trackId: id,
+    role: "cover",
+    mime: "image/png",
+    bytes: 3,
+    blob: png(),
+  });
+  const track: Track = {
+    id,
+    sessionId: "ses_1",
+    title: id,
+    kind: "audio",
+    origin: "uploaded",
+    provider: "upload",
+    status: "ready",
+    durationSec: 1,
+    createdAt: 1,
+    playCount: 0,
+    liked: false,
+    tags: [],
+    coverBlobId,
+    coverCrop: { height: 300, width: 300, x: 10, y: 20 },
+  };
+  await db.tracks.add(track);
+  expect(coverDerivativeSourceForTrack(track)?.sourceKey).toBe(`local:${coverBlobId}`);
+  return track;
+}

@@ -1,5 +1,6 @@
 import { useLiveQuery } from "dexie-react-hooks";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { ensureCoverThumbnailDerivative } from "@/db/cover-derivatives";
 import { resolveMediaBlob } from "@/db/media-blob-storage";
 import { db } from "@/db/muzero-db";
 import { backfillCoverMetadata } from "@/db/repositories";
@@ -101,6 +102,59 @@ export function useTrackCoverUrl(
   surface?: CoverRenderSurface,
 ): string | null {
   return useTrackCoverResource(track, surface).url;
+}
+
+export function useCoverDerivativeUrl(
+  track: TrackCoverInput | undefined,
+  kind: "thumbnail",
+): string | null {
+  const settings = useSettings();
+  const trackId = track?.id;
+  const coverBlobId = track?.coverBlobId;
+  const remoteCoverUrl = track?.remoteCoverUrl;
+  const coverCropped = settings.coverCropped ?? true;
+  const cc = track?.coverCrop;
+  // biome-ignore lint/correctness/useExhaustiveDependencies: depend on crop scalars so queue object identity churn does not regenerate derivatives.
+  const crop = useMemo(
+    () =>
+      coverCropped && cc ? { x: cc.x, y: cc.y, width: cc.width, height: cc.height } : undefined,
+    [coverCropped, cc?.x, cc?.y, cc?.width, cc?.height],
+  );
+  const cropX = crop?.x;
+  const cropY = crop?.y;
+  const cropWidth = crop?.width;
+  const cropHeight = crop?.height;
+  const [entry, setEntry] = useState<{ blob: Blob; key: string } | null>(null);
+  useEffect(() => {
+    if ((!trackId && !coverBlobId && !remoteCoverUrl) || kind !== "thumbnail") {
+      setEntry(null);
+      return;
+    }
+    let alive = true;
+    void ensureCoverThumbnailDerivative({
+      id: trackId ?? "",
+      coverBlobId,
+      coverCrop:
+        cropX == null || cropY == null || cropWidth == null || cropHeight == null
+          ? undefined
+          : { height: cropHeight, width: cropWidth, x: cropX, y: cropY },
+      remoteCoverUrl,
+    }).then((resolved) => {
+      if (!alive) return;
+      setEntry(
+        resolved
+          ? {
+              blob: resolved.blob,
+              key: resolved.blobId,
+            }
+          : null,
+      );
+    });
+    return () => {
+      alive = false;
+    };
+  }, [kind, coverBlobId, remoteCoverUrl, trackId, cropX, cropY, cropWidth, cropHeight]);
+  return useKeyedObjectUrl(entry?.blob, entry?.key);
 }
 
 /**

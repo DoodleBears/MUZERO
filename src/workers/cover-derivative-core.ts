@@ -5,9 +5,12 @@ import { selectImagePalette } from "@/lib/image-palette";
 import type { Rgb } from "@/lib/visualizer-color";
 
 const SAMPLE_MAX_EDGE = 96;
+const THUMBNAIL_MAX_EDGE = 160;
+const THUMBNAIL_MIME = "image/webp";
+const ALL_TARGETS = ["palette", "thumbnail", "thumbhash"] as const;
 const DEFAULT_TARGETS = ["palette", "thumbhash"] as const;
 
-export type CoverMetadataTarget = (typeof DEFAULT_TARGETS)[number];
+export type CoverMetadataTarget = (typeof ALL_TARGETS)[number];
 
 export interface CoverMetadataInput {
   blob: Blob;
@@ -20,14 +23,23 @@ export interface CoverMetadataInput {
 export interface CoverMetadataTimings {
   decodeMs: number;
   paletteMs: number;
+  thumbnailMs: number;
   thumbhashMs: number;
   totalMs: number;
 }
 
 export interface CoverMetadataResult {
   palette: Rgb[];
+  thumbnail?: CoverImageDerivativeResult;
   thumbhash?: string;
   timings: CoverMetadataTimings;
+}
+
+export interface CoverImageDerivativeResult {
+  bytes: ArrayBuffer;
+  height: number;
+  mime: string;
+  width: number;
 }
 
 interface DecodedPixels {
@@ -43,6 +55,7 @@ export async function extractCoverMetadataInline(
   const timings: CoverMetadataTimings = {
     decodeMs: 0,
     paletteMs: 0,
+    thumbnailMs: 0,
     thumbhashMs: 0,
     totalMs: 0,
   };
@@ -52,6 +65,7 @@ export async function extractCoverMetadataInline(
   timings.decodeMs = elapsed(decodeStartedAt);
 
   let palette: Rgb[] = [];
+  let thumbnail: CoverImageDerivativeResult | undefined;
   let thumbhash: string | undefined;
 
   if (decoded && targets.has("palette")) {
@@ -66,8 +80,14 @@ export async function extractCoverMetadataInline(
     timings.thumbhashMs = elapsed(thumbhashStartedAt);
   }
 
+  if (targets.has("thumbnail")) {
+    const thumbnailStartedAt = now();
+    thumbnail = await renderCoverBlob(input, THUMBNAIL_MAX_EDGE, THUMBNAIL_MIME);
+    timings.thumbnailMs = elapsed(thumbnailStartedAt);
+  }
+
   timings.totalMs = elapsed(totalStartedAt);
-  return normalizeCoverMetadataResult({ palette, thumbhash, timings });
+  return normalizeCoverMetadataResult({ palette, thumbnail, thumbhash, timings });
 }
 
 export function normalizeCoverMetadataResult(
@@ -77,6 +97,7 @@ export function normalizeCoverMetadataResult(
   const thumbhash = typeof result?.thumbhash === "string" ? result.thumbhash.trim() : "";
   return {
     palette: normalizeCoverPalette(result?.palette),
+    thumbnail: normalizeImageDerivativeResult(result?.thumbnail),
     thumbhash: thumbhash || undefined,
     timings,
   };
@@ -105,6 +126,36 @@ async function decodeCoverPixels(input: CoverMetadataInput): Promise<DecodedPixe
   }
 }
 
+async function renderCoverBlob(
+  input: CoverMetadataInput,
+  maxEdge: number,
+  mime: string,
+): Promise<CoverImageDerivativeResult | undefined> {
+  if (typeof createImageBitmap !== "function") return undefined;
+  const contentType = normalizeImageMime(input.mime) ?? normalizeImageMime(input.blob.type);
+  if (!contentType) return undefined;
+  const blob =
+    input.blob.type === contentType
+      ? input.blob
+      : input.blob.slice(0, input.blob.size, contentType);
+  const bitmap = await createImageBitmap(blob);
+  try {
+    const source = sourceRect(bitmap.width, bitmap.height, input.crop);
+    const scale = Math.min(1, maxEdge / Math.max(source.sw, source.sh));
+    const width = Math.max(1, Math.round(source.sw * scale));
+    const height = Math.max(1, Math.round(source.sh * scale));
+    const canvas = makeCanvas(width, height);
+    const ctx = canvas.getContext("2d", { willReadFrequently: false });
+    if (!ctx) return undefined;
+    ctx.drawImage(bitmap, source.sx, source.sy, source.sw, source.sh, 0, 0, width, height);
+    const out = await canvasToBlob(canvas, mime);
+    if (!out) return undefined;
+    return { bytes: await out.arrayBuffer(), height, mime: out.type || mime, width };
+  } finally {
+    bitmap.close();
+  }
+}
+
 function sourceRect(width: number, height: number, crop?: CropRect) {
   if (!crop) return { sx: 0, sy: 0, sw: width, sh: height };
   const sx = clamp(crop.x, 0, width);
@@ -121,14 +172,32 @@ function make2dContext(
   width: number,
   height: number,
 ): (CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D) | null {
-  if (typeof OffscreenCanvas === "function") {
-    return new OffscreenCanvas(width, height).getContext("2d", { willReadFrequently: true });
+  try {
+    return makeCanvas(width, height).getContext("2d", { willReadFrequently: true });
+  } catch {
+    return null;
   }
-  if (typeof document === "undefined") return null;
+}
+
+function makeCanvas(width: number, height: number): HTMLCanvasElement | OffscreenCanvas {
+  if (typeof OffscreenCanvas === "function") {
+    return new OffscreenCanvas(width, height);
+  }
+  if (typeof document === "undefined") throw new Error("canvas unavailable");
   const canvas = document.createElement("canvas");
   canvas.width = width;
   canvas.height = height;
-  return canvas.getContext("2d", { willReadFrequently: true });
+  return canvas;
+}
+
+async function canvasToBlob(
+  canvas: HTMLCanvasElement | OffscreenCanvas,
+  mime: string,
+): Promise<Blob | null> {
+  if ("convertToBlob" in canvas) {
+    return canvas.convertToBlob({ quality: 0.82, type: mime });
+  }
+  return new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, mime, 0.82));
 }
 
 function normalizeTimings(
@@ -137,8 +206,24 @@ function normalizeTimings(
   return {
     decodeMs: roundMs(timings?.decodeMs),
     paletteMs: roundMs(timings?.paletteMs),
+    thumbnailMs: roundMs(timings?.thumbnailMs),
     thumbhashMs: roundMs(timings?.thumbhashMs),
     totalMs: roundMs(timings?.totalMs),
+  };
+}
+
+function normalizeImageDerivativeResult(
+  value: CoverImageDerivativeResult | undefined,
+): CoverImageDerivativeResult | undefined {
+  if (!value?.bytes || !value.mime) return undefined;
+  const width = Math.max(1, Math.round(value.width || 0));
+  const height = Math.max(1, Math.round(value.height || 0));
+  if (!width || !height) return undefined;
+  return {
+    bytes: value.bytes,
+    height,
+    mime: value.mime,
+    width,
   };
 }
 

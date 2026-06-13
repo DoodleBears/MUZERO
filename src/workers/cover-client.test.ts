@@ -16,7 +16,7 @@ describe("cover metadata worker client", () => {
     const inlineExtract = vi.fn(
       async (): Promise<CoverMetadataResult> => ({
         palette: [{ r: 10, g: 20, b: 30 }],
-        timings: { decodeMs: 0, paletteMs: 0, thumbhashMs: 0, totalMs: 1 },
+        timings: { decodeMs: 0, paletteMs: 0, thumbnailMs: 0, thumbhashMs: 0, totalMs: 1 },
       }),
     );
     const client = createCoverMetadataClient({
@@ -48,7 +48,7 @@ describe("cover metadata worker client", () => {
               { r: 1, g: 255, b: 0 },
             ],
             thumbhash: "   ",
-            timings: { decodeMs: 3, paletteMs: 4, thumbhashMs: 5, totalMs: 12 },
+            timings: { decodeMs: 3, paletteMs: 4, thumbnailMs: 0, thumbhashMs: 5, totalMs: 12 },
           },
           type: "cover-metadata-result",
         },
@@ -68,7 +68,7 @@ describe("cover metadata worker client", () => {
     ).resolves.toEqual({
       palette: [{ r: 1, g: 255, b: 0 }],
       thumbhash: undefined,
-      timings: { decodeMs: 3, paletteMs: 4, thumbhashMs: 5, totalMs: 12 },
+      timings: { decodeMs: 3, paletteMs: 4, thumbnailMs: 0, thumbhashMs: 5, totalMs: 12 },
     });
   });
 
@@ -107,18 +107,18 @@ describe("cover metadata worker client", () => {
     await waitFor(() => expect(fakeWorker.postMessage).toHaveBeenCalledTimes(1));
     release?.({
       palette: [{ r: 20, g: 30, b: 40 }],
-      timings: { decodeMs: 1, paletteMs: 2, thumbhashMs: 0, totalMs: 3 },
+      timings: { decodeMs: 1, paletteMs: 2, thumbnailMs: 0, thumbhashMs: 0, totalMs: 3 },
     });
     await expect(Promise.all([first, second])).resolves.toEqual([
       {
         palette: [{ r: 20, g: 30, b: 40 }],
         thumbhash: undefined,
-        timings: { decodeMs: 1, paletteMs: 2, thumbhashMs: 0, totalMs: 3 },
+        timings: { decodeMs: 1, paletteMs: 2, thumbnailMs: 0, thumbhashMs: 0, totalMs: 3 },
       },
       {
         palette: [{ r: 20, g: 30, b: 40 }],
         thumbhash: undefined,
-        timings: { decodeMs: 1, paletteMs: 2, thumbhashMs: 0, totalMs: 3 },
+        timings: { decodeMs: 1, paletteMs: 2, thumbnailMs: 0, thumbhashMs: 0, totalMs: 3 },
       },
     ]);
   });

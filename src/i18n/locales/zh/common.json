@@ -133,6 +133,7 @@
     "permanentOpenFolder": "打开本地缓存",
     "permanentRole_media": "音频 / 视频",
     "permanentRole_cover": "封面",
+    "permanentRole_coverDerivative": "封面缓存",
     "permanentRole_memory": "回忆",
     "permanentRole_background": "背景",
     "permanentRole_gallery": "图库",

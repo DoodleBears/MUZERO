@@ -37,6 +37,7 @@ const ROLE_LABEL_KEYS = {
   avatar: "streamCache.permanentRole_avatar",
   background: "streamCache.permanentRole_background",
   cover: "streamCache.permanentRole_cover",
+  "cover-derivative": "streamCache.permanentRole_coverDerivative",
   gallery: "streamCache.permanentRole_gallery",
   media: "streamCache.permanentRole_media",
   memory: "streamCache.permanentRole_memory",
