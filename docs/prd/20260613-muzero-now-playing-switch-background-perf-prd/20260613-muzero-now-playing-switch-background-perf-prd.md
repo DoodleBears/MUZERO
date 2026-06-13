@@ -153,9 +153,9 @@ backgroundGpuPowerPreference?: "auto" | "high-performance" | "low-power"; // DEF
 - **Now Playing stage 主封面**:已是 `<img>`([`media-stage.tsx`](../../../src/components/player/media-stage.tsx) `CoverImage`),已即时,无需改;只把它的 backlight 派生纳入 settle 闸门(见 Phase 2)。
 - **环境背景(ambient)**:
   - 高频跳歌中(`currentTrack !== settledTrack`):显示 `CrossfadeBackgroundImage`([`now-playing-background.tsx:336`](../../../src/components/player/now-playing-background.tsx#L336))的**当前封面**,逐张滑过(廉价 `<img>` + 已有 crossfade)。
-  - 落定后(settledTrack 更新):持久 Pixi 把 settled 封面作纹理换上。
-  - **reveal веil 在整个背景组的最顶层(QA#3 二次修正)**:在 [`now-playing-background.tsx`](../../../src/components/player/now-playing-background.tsx) 的 **flow + visualizer 之上**垫一张当前封面 `<img>`(`useSettledValue(backgroundUrl, BACKGROUND_REVEAL_HOLD_MS=260)`)。切歌中 `opacity-100` 遮住下面所有正在更新的特效层;封面稳定 260ms(纹理已在 180ms settle 时换好、flow 颜色已开始 glide)后 `opacity→0`(700ms)淡出,**平滑漏出整套合成特效**。
-    > 两次教训:① 最早把 `<img>` 放 Pixi canvas **之下**,被不透明 canvas 完全遮住、失效;② 第二次放进 `PixiPixelBackground` 内、canvas 之上,但 **flow/visualizer 整体叠在 PixiPixelBackground 之上**(尤其 viz-as-bg + flow 全开时它们才是主视觉),reveal 只盖住了 Pixi 一层、用户仍觉得「在跳」。**必须把 veil 提到 flow/viz 之上的最顶层**才真正「淡出漏出特效」。PixiPixelBackground 内那张 `<img>` 保留作 Pixi 单层兜底,无害。
+  - 落定后(settledTrack 更新):持久 Pixi 把 settled 封面作纹理换上;Pixi 内部那张 `<img>`(z-10 在 canvas z-0 之上)在纹理就绪后淡出 → 漏出 Pixi 特效。**flow / visualizer 本就跟随调色板 900ms 插值 glide,不 pop**(只有 Pixi canvas 纹理是瞬切),所以只需平滑 Pixi 一层。
+  - **真正的修正(QA trace 之后):整个 ambient 背景按 settledTrack 去抖**。见 §5.3 + Q5/Q6。
+    > 教训:试过「顶层全屏 reveal veil」,反而引入**封面错位**(veil 渲染了 `useTrackCoverResource` 的 stale-while-pending URL,放 B 显示 A 的封面)且**每跳一首都解码一张全屏封面**加剧堆churn。已移除。flow/viz 不 pop,无需顶层 veil;Pixi 单层用内部 `<img>` reveal 足矣(半透明 flow/viz 下仍可见)。
   - 视觉:跳歌时看到一串清晰封面快速划过;停下后该首的 noise/pixel 特效「长」出来盖在封面上。用户已确认接受此体验。
 - **GPU 后端切换**:改设置后,持久 Pixi app 以新 `preference` 重建一次(仅这一次,非每切歌)。
 
@@ -173,7 +173,7 @@ backgroundGpuPowerPreference?: "auto" | "high-performance" | "low-power"; // DEF
 
 ### 5.3 State / 信号
 
-- `settledTrack`:在 `now-playing-background`(或一个小 hook `useSettledTrack(currentId, ms)`)里,对 `current?.id` 做尾随去抖。`current` 立即驱动 `<img>`;`settled` 驱动所有重计算。
+- **(QA 后落地)`now-playing-background` 整体按 settledTrack 去抖**:`currentIndex = useSettledValue(liveCurrentIndex, BACKGROUND_EFFECT_SETTLE_MS)`,`current` 由它派生。于是 ambient 背景的**所有**派生(封面 URL+解码、palette、Pixi 纹理、flow、视频背景)只在落定那首跑一次——快切时不再每首解码封面 → 堆不再 churn(QA#1),也不会在 blob 未 resolve 时串号(QA 错位)。中央 stage 封面仍读实时 index。
 - 去抖时长用**独立常量** `BACKGROUND_EFFECT_SETTLE_MS`(初值 180,语义独立于播放落定;见 §3.2),不暴露为用户设置。
 
 ---
@@ -264,8 +264,9 @@ backgroundGpuPowerPreference?: "auto" | "high-performance" | "low-power"; // DEF
 |---|----------|--------|----------|
 | 1 | settle 时长用 180ms 复用还是独立可调? | ✅ Resolved | 独立常量 `BACKGROUND_EFFECT_SETTLE_MS`(初值 180,语义解耦),**不**暴露为用户设置(§3.2) |
 | 2 | 即时 `<img>` 层落定后淡出还是常驻底层? | ✅ Resolved(QA#3 修正) | **上层 reveal + 淡出**:`<img>` `z-10` 在 canvas `z-0` 之上,纹理就绪后淡出漏出特效(不 pop)。早先「常驻底层」会被不透明 canvas 完全遮住,失效(§5.1) |
-| 5 | QA#1:切歌**按键瞬间**就掉帧,且**省电预设(无 Pixi)同样掉**——根因不是背景层? | Open(待 trace) | 假设:`currentIndex` 变化触发的**同步 re-render + motion crossfade 爆发 + 歌词子树 remount**(非 Pixi、非 native VT;`playback.next/prev` 未包 view-transition)。已加 trace,待 QA 抓取确认后再定向修 |
-| 6 | QA#2:落定后 Pixi 仍掉帧——是否 app 反复 re-init? | Open(待 trace) | 推理:控制器生命周期 effect 依赖 `[effect,effectOptions,pixelSize,gpuBackend,gpuPower]`,均不随切歌变 → 不应 re-init;掉帧更可能是**纹理 load+upload**(全尺寸封面上传 GPU)。已加 `background.pixi.appInit/textureSwap(ms)` trace 量化确认 |
+| 5 | QA#1:切歌**按键瞬间**就掉帧,且**省电预设(无 Pixi)同样掉** | ✅ Resolved(trace 实证) | **trace 实测**:`background.pixi` 全程仅 1 条 `textureSwap`(burst 结束后)、**0 条 `appInit`** → 与 Pixi 无关。真因:连切 11 首时每首都被**多个封面消费者解码整张封面**(`cover.render` 6~8×/首 + `object-url-miss` ~860KB/首),`heapMb` 183→311(+128MB)、`longTaskMaxMs` 83ms → **GC 长任务掉帧**;burst 一停 fps 立刻回 120。**修法:ambient 背景按 settledTrack 去抖**(§5.3),跳过的歌不再解码封面/重渲染 |
+| 6 | QA#2:落定后 Pixi 仍掉帧——是否 app 反复 re-init? | ✅ Resolved(trace 否定) | trace 证明**没有 re-init**(0 `appInit`),settle 去抖也生效(1 `textureSwap`)。落定那一刻的小掉帧来自该首封面解码 + 纹理上传(slow cover 见 `cover.preload.batch lastMs 249ms`),非 Pixi 机制问题 |
+| 7 | QA:连切后封面与标题错位(放 B 显示 A 封面) | ✅ Resolved | 顶层 reveal veil 渲染了 `useTrackCoverResource` 的 **stale-while-pending** URL(blob 未 resolve 时回退上一张)。已移除 veil;ambient 背景去抖到 settledTrack → 背景只显示落定那首,不再串号。中央 stage 封面仍跟随实时 index(短暂 stale-while-pending 由其 crossfade 吸收) |
 | 3 | auto 是否也把 `powerPreference` 提到 high-performance? | ✅ Resolved | **是**。新增 `backgroundGpuPowerPreference`,auto→`high-performance`;后端与性能档都默认 auto=选性能好的,可手动覆盖(§3.1 / §5.2 / Phase 3) |
 | 4 | WebGPU 的 device-lost 恢复路径? | ✅ Resolved | `device.lost`(非 destroyed)+ `webglcontextlost/restored` → 有限次重建 + 回灌纹理,恢复期回退 `<img>`(Phase 3) |
 
@@ -281,4 +282,5 @@ backgroundGpuPowerPreference?: "auto" | "high-performance" | "low-power"; // DEF
 | 2026-06-13 | Claude | Phase 2 代码完成:`useSettledValue` 去抖(纹理上传 debounce)+ 常驻即时 `<img>` + O1 backlight gate;9 例新单测。封面逐张即时、重计算落定才跑 |
 | 2026-06-13 | Claude | Phase 3 代码完成:`gpu-backend` 解析器(9 例)+ `backgroundGpuBackend`/`PowerPreference` 设置(默认 auto=性能优先)+ Settings 双选择器 + en/zh/ja/ko + 控制器 `recover()` device-lost 恢复(2 例)。三个 Phase 代码全部完成,待桌面 GPU/视觉实测 |
 | 2026-06-13 | Claude | QA 跟进:#3 修正 `<img>` 为上层 reveal+淡出(消除特效 pop);为 #1/#2 加 `background.pixi.appInit/textureSwap(ms)` 诊断 trace(`Settings→Trace`/perf HUD 可见)。#1/#2 根因待 QA 抓 trace 确认(§9 Q5/Q6) |
-| 2026-06-14 | Claude | QA#3 二次修正:reveal veil 提到 **flow/visualizer 之上的最顶层**(`now-playing-background`,`BACKGROUND_REVEAL_HOLD_MS=260` + 700ms 淡出)——之前放 Pixi 子树内仍被 flow/viz 盖住,故「还会跳」 |
+| 2026-06-14 | Claude | QA#3 二次修正:reveal veil 提到 flow/visualizer 之上的最顶层——之前放 Pixi 子树内仍被 flow/viz 盖住,故「还会跳」 |
+| 2026-06-14 | Claude | **QA trace 实证 + 重定向**:trace 证明 Pixi 无 re-init、settle 生效(Q5/Q6),#1 真因是快切时**每首封面被多消费者解码 → 堆 churn → GC 掉帧**。**移除顶层 reveal veil**(引入封面错位 + 加剧解码)。改为 **ambient 背景按 settledTrack 去抖**:跳过的歌不再解码封面/重渲染,同时修掉封面错位 |
