@@ -345,6 +345,19 @@
     "skipped_other": "未対応のファイル {{count}} 件をスキップしました",
     "pickSetTitle_other": "{{count}} 件のファイルをどのセットに追加しますか？"
   },
+  "performance": {
+    "title": "パフォーマンス",
+    "groupGpu": "ハードウェアアクセラレーション",
+    "gpuHint": "自動では対応デバイスで WebGPU と高パフォーマンス GPU を使用します。一部の WebView は WebGL にフォールバックします。",
+    "groupLayers": "重いレイヤー",
+    "visualizerAsBackground": "ビジュアライザーを背景に",
+    "visualizerAsBackgroundHint": "Now Playing の背後にビジュアライザーを描画します。オフで GPU を節約。",
+    "flow": "フロー背景",
+    "flowHint": "カバーから抽出した多色グローのアニメーション。オフで GPU を節約。",
+    "immersiveIdle": "アイドル時もアニメーション",
+    "immersiveIdleHint": "アイドル中も背景とビジュアライザーを描画します。オフで省電力。",
+    "explainer": "見た目の豪華さとフレームレート／バッテリーのトレードオフです。背景レンダラー(noise/pixel は GPU、image/blur は軽量)は 設定→背景 にあります。"
+  },
   "background": {
     "title": "背景",
     "mode": "再生中の背景",
@@ -608,6 +621,8 @@
     "navSecDevice": "デバイス",
     "navSecAdvanced": "詳細",
     "navBackground": "背景",
+    "navSecPerformance": "パフォーマンス",
+    "navPerformance": "パフォーマンス",
     "navVisualizer": "ビジュアライザー",
     "navFlow": "フロー背景",
     "navLyrics": "歌詞",

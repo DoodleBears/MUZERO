@@ -28,6 +28,7 @@ import {
 } from "@/components/settings/listening-stats-settings";
 import { LlmProviderSettings } from "@/components/settings/llm-provider-settings";
 import { LyricsSettings } from "@/components/settings/lyrics-settings";
+import { PerformanceSettings } from "@/components/settings/performance-settings";
 import { PersistentStorageSettings } from "@/components/settings/persistent-storage-settings";
 import { resolveActiveSettingsItem } from "@/components/settings/settings-nav";
 import { SettingsSidebar } from "@/components/settings/settings-sidebar";
@@ -708,6 +709,8 @@ export function SettingsPage() {
           {activeItem === "visualizer" && <VisualizerSettings />}
 
           {activeItem === "flow" && <FlowSettings />}
+
+          {activeItem === "performance" && <PerformanceSettings />}
 
           {activeItem === "lyrics" && <LyricsSettings />}
           {activeItem === "online-sources" && <StreamSourcesSettings />}

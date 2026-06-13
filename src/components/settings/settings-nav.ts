@@ -31,6 +31,10 @@ export const SETTINGS_NAV = [
     ],
   },
   {
+    labelKey: "settings.navSecPerformance",
+    items: [{ id: "performance", labelKey: "settings.navPerformance", icon: "gauge" }],
+  },
+  {
     labelKey: "settings.navSecFiles",
     items: [
       { id: "local-files", labelKey: "settings.navLocalFiles", icon: "folder-open" },

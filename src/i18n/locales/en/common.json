@@ -357,6 +357,19 @@
     "pickSetTitle_one": "Add {{count}} file to which set?",
     "pickSetTitle_other": "Add {{count}} files to which set?"
   },
+  "performance": {
+    "title": "Performance",
+    "groupGpu": "Hardware acceleration",
+    "gpuHint": "Auto uses WebGPU on capable devices and the high-performance GPU; some WebViews fall back to WebGL.",
+    "groupLayers": "Heavy layers",
+    "visualizerAsBackground": "Visualizer as background",
+    "visualizerAsBackgroundHint": "Render the audio visualizer behind Now Playing. Turn off to save GPU.",
+    "flow": "Flow background",
+    "flowHint": "Animated multi-color glow from the cover art. Turn off to save GPU.",
+    "immersiveIdle": "Keep animating when idle",
+    "immersiveIdleHint": "Keep the background and visualizer rendering while idle. Turn off to save power.",
+    "explainer": "These trade visual richness for frame rate and battery. The background renderer (noise and pixel use the GPU; image and blur are lighter) lives in Settings → Background."
+  },
   "background": {
     "title": "Background",
     "mode": "Now Playing background",
@@ -622,6 +635,8 @@
     "navSecDevice": "Device",
     "navSecAdvanced": "Advanced",
     "navBackground": "Background",
+    "navSecPerformance": "Performance",
+    "navPerformance": "Performance",
     "navVisualizer": "Visualizer",
     "navFlow": "Flow background",
     "navLyrics": "Lyrics",

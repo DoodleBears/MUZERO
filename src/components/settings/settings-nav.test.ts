@@ -10,6 +10,7 @@ describe("settings-nav", () => {
       "visualizer",
       "flow",
       "lyrics",
+      "performance",
       "local-files",
       "online-sources",
       "storage",

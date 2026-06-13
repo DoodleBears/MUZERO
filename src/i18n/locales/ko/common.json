@@ -345,6 +345,19 @@
     "skipped_other": "지원하지 않는 파일 {{count}}개를 건너뛰었습니다",
     "pickSetTitle_other": "{{count}}개 파일을 어느 세트에 추가할까요?"
   },
+  "performance": {
+    "title": "성능",
+    "groupGpu": "하드웨어 가속",
+    "gpuHint": "자동은 지원되는 기기에서 WebGPU와 고성능 GPU를 사용합니다. 일부 WebView는 WebGL로 대체됩니다.",
+    "groupLayers": "무거운 레이어",
+    "visualizerAsBackground": "비주얼라이저를 배경으로",
+    "visualizerAsBackgroundHint": "Now Playing 뒤에 오디오 비주얼라이저를 렌더링합니다. 끄면 GPU를 절약합니다.",
+    "flow": "플로우 배경",
+    "flowHint": "커버에서 추출한 다색 글로우 애니메이션. 끄면 GPU를 절약합니다.",
+    "immersiveIdle": "유휴 시에도 애니메이션 유지",
+    "immersiveIdleHint": "유휴 중에도 배경과 비주얼라이저를 렌더링합니다. 끄면 전력을 절약합니다.",
+    "explainer": "시각적 풍부함과 프레임률/배터리 간의 절충입니다. 배경 렌더러(noise/pixel은 GPU, image/blur는 가벼움)는 설정→배경에 있습니다."
+  },
   "background": {
     "title": "배경",
     "mode": "재생 화면 배경",
@@ -608,6 +621,8 @@
     "navSecDevice": "기기",
     "navSecAdvanced": "고급",
     "navBackground": "배경",
+    "navSecPerformance": "성능",
+    "navPerformance": "성능",
     "navVisualizer": "비주얼라이저",
     "navFlow": "플로우 배경",
     "navCloudOwner": "내 드라이브 (R2)",

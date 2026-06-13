@@ -345,6 +345,19 @@
     "skipped_other": "跳过 {{count}} 个不支持的文件",
     "pickSetTitle_other": "把 {{count}} 个文件加到哪个歌单？"
   },
+  "performance": {
+    "title": "性能",
+    "groupGpu": "硬件加速",
+    "gpuHint": "自动会在支持的设备上使用 WebGPU 与高性能 GPU;部分 WebView 会回退到 WebGL。",
+    "groupLayers": "重负载层",
+    "visualizerAsBackground": "可视化作为背景",
+    "visualizerAsBackgroundHint": "在 Now Playing 背后渲染音频可视化。关闭可省 GPU。",
+    "flow": "流光背景",
+    "flowHint": "由封面取色的多色流光动画。关闭可省 GPU。",
+    "immersiveIdle": "闲置时保持动画",
+    "immersiveIdleHint": "闲置时仍渲染背景与可视化。关闭可省电。",
+    "explainer": "这些用画质换帧率与续航。背景渲染器(noise/pixel 走 GPU,image/blur 更轻)在 设置→背景。"
+  },
   "background": {
     "title": "背景",
     "mode": "Now Playing 背景",
@@ -608,6 +621,8 @@
     "navSecDevice": "设备",
     "navSecAdvanced": "高级",
     "navBackground": "背景",
+    "navSecPerformance": "性能",
+    "navPerformance": "性能",
     "navVisualizer": "可视化",
     "navFlow": "流光背景",
     "navLyrics": "歌词",

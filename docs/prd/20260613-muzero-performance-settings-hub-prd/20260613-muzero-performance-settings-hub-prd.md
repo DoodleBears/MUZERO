@@ -11,7 +11,7 @@
 
 | Phase | Name | Status | Link |
 |-------|------|--------|------|
-| 1 | 「性能」pane(GPU 加速 + 开销开关)+ IA + i18n | 🔲 Pending | [Phase 1](#phase-1-性能-pane) |
+| 1 | 「性能」pane(GPU 加速 + 开销开关)+ IA + i18n | ✅ 代码完成 | [Phase 1](#phase-1-性能-pane) |
 | 2 | 画质预设(省电 / 均衡 / 画质,一键套用) | 🔲 Pending | [Phase 2](#phase-2-画质预设) |
 
 > **定位(已拍板):性能页是「开关」面板——硬件加速(是否/如何用 GPU)+ 重负载层的开/关**,**不放效果调节**(dim/opacity 这类 slider、渲染器风格选择属「效果」,留在背景/可视化页)。
@@ -132,17 +132,15 @@ BackgroundEffect ────┘            (GPU 两项两个 pane 共写同一�
 **Goal:** 新增独立「性能」侧栏项,聚合现有性能开关 + GPU 控件 + 说明;不新增设置字段。
 
 **Tasks:**
-- [ ] `settings-nav.ts` 加 `navSecPerformance` section + `performance` item(icon `gauge`);更新 [`settings-nav.test.ts`](../../../src/components/settings/settings-nav.test.ts)(id 集含 `performance`)。
-- [ ] 抽 `GpuBackendControls` 共享子组件(从 `background-effect-controls.tsx`);背景面板改为引用它(行为不变)。
-- [ ] 新建 `PerformanceSettings` 组件:GPU 组(复用 `GpuBackendControls`)+ 三个开关(viz-as-bg / flow / immersive-idle)+ 说明块。**不含**渲染器下拉、**不含** dim/opacity slider。
-- [ ] `settings-page.tsx` 注册 `{activeItem === "performance" && <PerformanceSettings />}`。
-- [ ] i18n:en 先加全部 key,再 zh/ja/ko;确保 4 语言 key 对齐(现有 i18n 对齐单测会兜)。
-- [ ] 单测:`settings-nav.test.ts`(含 `performance` id);若有「locale key 对齐」单测则自动覆盖文案补齐。
+- [x] `settings-nav.ts` 加 `navSecPerformance` section + `performance` item(icon `gauge`);`settings-sidebar.tsx` 注册 `Gauge` 图标;更新 [`settings-nav.test.ts`](../../../src/components/settings/settings-nav.test.ts) 期望 id 集(`performance` 排在 `lyrics` 后)。
+- [x] 抽 [`GpuBackendControls`](../../../src/components/settings/gpu-backend-controls.tsx) 共享子组件(从 `background-effect-controls.tsx`);背景面板改为引用它(行为不变)。
+- [x] 新建 [`PerformanceSettings`](../../../src/components/settings/performance-settings.tsx):GPU 组(复用 `GpuBackendControls`)+ 三个开关(viz-as-bg / flow / immersive-idle,通用 `PerfToggle`,类型安全的 boolean 字段)+ 说明块。**不含**渲染器下拉、**不含** dim/opacity slider。
+- [x] `settings-page.tsx` 注册 `{activeItem === "performance" && <PerformanceSettings />}`。
+- [x] i18n:en/zh/ja/ko 全部补 `settings.navSecPerformance`/`navPerformance` + 新 `performance` 命名空间。
 
 **Checklist:**
-- [ ] 侧栏出现「性能」项,点开渲染 PerformanceSettings,各控件读写正确(与背景面板/可视化页同字段联动)。
-- [ ] 背景面板 GPU 控件改用共享子组件后行为不变(回归)。
-- [ ] `tsc`/Biome/`src` 全量单测通过。
+- [x] `settings-nav.test.ts`(7 例)通过;`src/` 全量 **2370 例**通过(含 i18n 对齐);`tsc`/Biome 干净。
+- [ ] **待实测(桌面)**:侧栏出现「性能」项,点开各控件读写正确、与背景面板/可视化页同字段联动;背景面板 GPU 控件改用共享子组件后行为不变。
 
 ### Phase 2: 画质预设
 
@@ -203,3 +201,4 @@ BackgroundEffect ────┘            (GPU 两项两个 pane 共写同一�
 |------|--------|---------|
 | 2026-06-13 | Claude | 初稿:独立「性能」pane 聚合现有性能开关 + GPU 控件双置;Phase 2 画质预设可选 |
 | 2026-06-13 | Claude | 拍板:性能页定位为「开关」面板(加速 + 开/关),移除 dim/opacity slider 与渲染器下拉;位置放外观之后;Phase 2 画质预设纳入本期 |
+| 2026-06-13 | Claude | Phase 1 代码完成:新增「性能」侧栏项 + `PerformanceSettings`(GPU + 三开关)+ 抽出共享 `GpuBackendControls`(背景面板复用)+ en/zh/ja/ko;`src` 全量 2370 例通过 |
