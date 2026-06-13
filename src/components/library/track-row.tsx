@@ -114,7 +114,9 @@ function StatusBadge({ status }: { status: Track["status"] }) {
 
 /** YouTube-Music-style row thumbnail: cover image, else a kind icon / status. */
 function TrackThumb({ deferCoverLoad = false, track }: { deferCoverLoad?: boolean; track: Track }) {
-  const coverUrl = useCoverDerivativeUrl(deferCoverLoad ? undefined : track, "thumbnail");
+  // Pass the track even while scrolling, with defer: keep an already-resolved
+  // cover (no flash to thumbhash), just don't START new derivative work mid-scroll.
+  const coverUrl = useCoverDerivativeUrl(track, "thumbnail", { defer: deferCoverLoad });
   if (track.status !== "ready") {
     return (
       <div className="grid size-10 shrink-0 place-items-center bg-secondary album-cover-radius album-cover-shadow">

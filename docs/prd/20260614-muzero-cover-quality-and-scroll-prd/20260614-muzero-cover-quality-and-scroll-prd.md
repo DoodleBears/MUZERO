@@ -11,7 +11,7 @@
 
 | Phase | Name | Status | Link |
 |-------|------|--------|------|
-| 1 | 滚动不再把已加载封面降级成 thumbhash(#C,UX 最痛) | 🔲 Pending | [Phase 1](#phase-1-滚动不闪-thumbhash) |
+| 1 | 滚动不再把已加载封面降级成 thumbhash(#C,UX 最痛) | ✅ 代码完成(待实测) | [Phase 1](#phase-1-滚动不闪-thumbhash) |
 | 2 | 导入封面解码去重(palette+thumbhash 合并一次)(#1) | 🔲 Pending | [Phase 2](#phase-2-导入解码去重) |
 | 3 | 专辑/歌手网格用更高清封面(#A) | 🔲 Pending | [Phase 3](#phase-3-网格高清封面) |
 
@@ -63,14 +63,16 @@
 - (a) **缓存命中即返回**:`useCoverDerivativeUrl(track, kind, { defer })` —— defer=true 时,若派生 URL 已在缓存(同步可取)→ 仍返回它;仅缓存未命中才不启动 worker、返回 null。这样已加载封面(缓存命中)滚动中照常显示,只有没缓存的走 thumbhash。**首选**——精准,不误伤。
 - (b) track-row 记住「本行当前 track 的最后已解析 URL」,defer 时沿用(注意虚拟行复用:必须按 `track.id` 绑定,track 变了立刻失效,避免串图)。
 
+**实现(落地版,比原方案更稳):** 不依赖「缓存同步 peek」,而是**让 hook 保留 state 里已解析的 entry**:`useCoverDerivativeUrl(track, kind, { defer })`,defer=true 时 `setEntry(prev => keepDeferredCover(prev, coverKey))` 并**直接 return 不启动 worker**;`entry` 带 `forKey`(= coverBlobId+crop+remote),只有「本行 track 没变」才保留,虚拟行复用换 track 时 `forKey` 不匹配 → 转 placeholder,绝不串图。
+
 **Tasks:**
-- [ ] 给 `useCoverDerivativeUrl` 加 `defer` 语义:始终传 `track`,内部 defer=true 时只「读缓存不启动 worker」(纯逻辑可单测:`shouldStartDerivative(defer, cached)`)。
-- [ ] `track-row.tsx`:改成 `useCoverDerivativeUrl(track, "thumbnail", { defer: deferRowCoverLoad })`(不再传 undefined)。
-- [ ] 单测:缓存命中 + defer → 返回 URL;缓存未命中 + defer → null(不启动);track 变更 → 立即换。
+- [x] 纯助手 [`keepDeferredCover(resolved, coverKey)`](../../../src/lib/cover-defer.ts)(3 例单测):同 cover 保留、换 cover 丢弃、未解析 null。
+- [x] [`useCoverDerivativeUrl`](../../../src/hooks/use-media.ts) 加 `options.defer`;defer 时保留匹配 entry、不启动 worker;entry 加 `forKey`。默认 `defer=false`,其他调用方不变。
+- [x] [`track-row.tsx`](../../../src/components/library/track-row.tsx):`useCoverDerivativeUrl(track, "thumbnail", { defer: deferCoverLoad })`(不再传 `undefined`)。
 
 **Checklist:**
-- [ ] 单测全绿;`tsc`/Biome/`src` 全量通过。
-- [ ] **待实测**:全部歌曲快滚——已加载封面**保持清晰不闪**,新进视口的未缓存封面才短暂 thumbhash;worker 队列在滚动中不暴涨。
+- [x] `keepDeferredCover` 单测(3 例)+ use-media/library 单测(71)全绿;`tsc`/Biome 通过;`src` 全量 2383 例通过。
+- [ ] **待实测**:全部歌曲快滚——已加载封面**保持清晰不闪**,仅新进视口的未解析封面短暂 thumbhash;滚动中不再启动新 worker 派生。
 
 ### Phase 2: 导入解码去重
 
@@ -132,3 +134,4 @@
 | Date | Author | Changes |
 |------|--------|---------|
 | 2026-06-14 | Claude | 初稿:#C 滚动不闪(主)+ #1 导入去重 + #A 网格高清;#B 归因虚拟化非主因 |
+| 2026-06-14 | Claude | Phase 1(#C)代码完成:`keepDeferredCover` + `useCoverDerivativeUrl` defer 选项(保留已解析封面、滚动中不启动 worker)+ track-row 改造。`src` 全量 2383 例通过。待实测 |

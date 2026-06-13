@@ -9,6 +9,7 @@ import { db } from "@/db/muzero-db";
 import { backfillCoverMetadata } from "@/db/repositories";
 import type { Track } from "@/db/types";
 import { useSettings } from "@/hooks/use-app-data";
+import { keepDeferredCover } from "@/lib/cover-defer";
 import {
   type CoverRenderSurface,
   noteCoverRenderCache,
@@ -110,7 +111,9 @@ export function useTrackCoverUrl(
 export function useCoverDerivativeUrl(
   track: TrackCoverInput | undefined,
   kind: "backlight" | "thumbnail",
+  options?: { defer?: boolean },
 ): string | null {
+  const defer = options?.defer ?? false;
   const settings = useSettings();
   const trackId = track?.id;
   const coverBlobId = track?.coverBlobId;
@@ -127,10 +130,21 @@ export function useCoverDerivativeUrl(
   const cropY = crop?.y;
   const cropWidth = crop?.width;
   const cropHeight = crop?.height;
-  const [entry, setEntry] = useState<{ blob: Blob; key: string } | null>(null);
+  const [entry, setEntry] = useState<{ blob: Blob; key: string; forKey: string } | null>(null);
   useEffect(() => {
     if (!trackId && !coverBlobId && !remoteCoverUrl) {
       setEntry(null);
+      return;
+    }
+    // Identifies THIS track's cover so we can tell whether an already-resolved
+    // entry still matches (the virtual row may have recycled to another track).
+    const coverKey = `${coverBlobId ?? ""}|${cropX}:${cropY}:${cropWidth}:${cropHeight}|${remoteCoverUrl ?? ""}`;
+    // While deferring (the list is scrolling) DON'T start new derivative work —
+    // but keep an already-resolved cover for this same track so it doesn't flash
+    // to the thumbhash placeholder mid-scroll. A fresh track shows the placeholder
+    // until the scroll settles. See keepDeferredCover.
+    if (defer) {
+      setEntry((prev) => keepDeferredCover(prev, coverKey));
       return;
     }
     let alive = true;
@@ -151,6 +165,7 @@ export function useCoverDerivativeUrl(
           ? {
               blob: resolved.blob,
               key: resolved.blobId,
+              forKey: coverKey,
             }
           : null,
       );
@@ -158,7 +173,7 @@ export function useCoverDerivativeUrl(
     return () => {
       alive = false;
     };
-  }, [kind, coverBlobId, remoteCoverUrl, trackId, cropX, cropY, cropWidth, cropHeight]);
+  }, [kind, coverBlobId, remoteCoverUrl, trackId, cropX, cropY, cropWidth, cropHeight, defer]);
   return useKeyedObjectUrl(entry?.blob, entry?.key);
 }
 
