@@ -157,10 +157,21 @@ const VIEW_KEYS = {
   albums: "muzero-gallery-view-albums",
   artists: "muzero-gallery-view-artists",
 } as const satisfies Record<GalleryWallMode, string>;
-// 全部歌曲 sort field + direction, persisted like the mode/view prefs above (a
-// benign UI preference, not a behavior gate — same class as `muzero-locale`).
+// Sort field + direction per wall, persisted like the mode/view prefs above (benign
+// UI preferences, not behavior gates — same class as `muzero-locale`). 全部歌曲 /
+// 歌单 / (专辑+歌手 share one).
 const TRACK_SORT_KEY = "muzero-gallery-track-sort";
 const TRACK_SORT_DIR_KEY = "muzero-gallery-track-sort-dir";
+const SET_SORT_KEY = "muzero-gallery-set-sort";
+const SET_SORT_DIR_KEY = "muzero-gallery-set-sort-dir";
+const ENTITY_SORT_KEY = "muzero-gallery-entity-sort";
+const ENTITY_SORT_DIR_KEY = "muzero-gallery-entity-sort-dir";
+
+function savedSortDir(key: string, fallback: SortDir): SortDir {
+  if (typeof localStorage === "undefined") return fallback;
+  const saved = localStorage.getItem(key);
+  return saved === "asc" || saved === "desc" ? saved : fallback;
+}
 // Stable empty rows returned when the sets tab isn't active, so `systemPlaylistRows`
 // keeps a constant identity (downstream memos don't churn) without deriving.
 const EMPTY_SYSTEM_PLAYLIST_ROWS: Record<SystemPlaylistId, SystemPlaylistPlayable[]> = {
@@ -202,9 +213,19 @@ function savedTrackSort(): TrackSort {
 }
 
 function savedTrackSortDir(fallback: SortDir): SortDir {
-  if (typeof localStorage === "undefined") return fallback;
-  const saved = localStorage.getItem(TRACK_SORT_DIR_KEY);
-  return saved === "asc" || saved === "desc" ? saved : fallback;
+  return savedSortDir(TRACK_SORT_DIR_KEY, fallback);
+}
+
+function savedSetSort(): SetSort {
+  if (typeof localStorage === "undefined") return "recent";
+  const saved = localStorage.getItem(SET_SORT_KEY);
+  return saved && saved in SET_SORT_DEFAULT_DIR ? (saved as SetSort) : "recent";
+}
+
+function savedEntitySort(): EntitySort {
+  if (typeof localStorage === "undefined") return "name";
+  const saved = localStorage.getItem(ENTITY_SORT_KEY);
+  return saved && saved in ENTITY_SORT_DEFAULT_DIR ? (saved as EntitySort) : "name";
 }
 
 function normalizeDescription(value: string): string {
@@ -250,8 +271,10 @@ export function SearchPage() {
   const [trackQuery, setTrackQuery] = useState("");
   const [albumQuery, setAlbumQuery] = useState("");
   const [artistQuery, setArtistQuery] = useState("");
-  const [sort, setSort] = useState<SetSort>("recent");
-  const [sortDir, setSortDir] = useState<SortDir>(SET_SORT_DEFAULT_DIR.recent);
+  const [sort, setSort] = useState<SetSort>(savedSetSort);
+  const [sortDir, setSortDir] = useState<SortDir>(() =>
+    savedSortDir(SET_SORT_DIR_KEY, SET_SORT_DEFAULT_DIR[savedSetSort()]),
+  );
   // 全部歌曲 ordering: a single-select sort field + its direction, plus a 红心 filter.
   const [trackSort, setTrackSort] = useState<TrackSort>(savedTrackSort);
   const [trackSortDir, setTrackSortDir] = useState<SortDir>(() =>
@@ -259,8 +282,10 @@ export function SearchPage() {
   );
   const [likedOnly, setLikedOnly] = useState(false);
   // 专辑 / 歌手 ordering — one shared sort across both entity walls.
-  const [entitySort, setEntitySort] = useState<EntitySort>("name");
-  const [entitySortDir, setEntitySortDir] = useState<SortDir>(ENTITY_SORT_DEFAULT_DIR.name);
+  const [entitySort, setEntitySort] = useState<EntitySort>(savedEntitySort);
+  const [entitySortDir, setEntitySortDir] = useState<SortDir>(() =>
+    savedSortDir(ENTITY_SORT_DIR_KEY, ENTITY_SORT_DEFAULT_DIR[savedEntitySort()]),
+  );
   const [selectedLibraryTrackId, setSelectedLibraryTrackId] = useState<string | null>(null);
   const [selectedArtistKey, setSelectedArtistKey] = useState<string | null>(null);
   const [selectedAlbumKey, setSelectedAlbumKey] = useState<string | null>(null);
@@ -753,10 +778,13 @@ export function SearchPage() {
   // Sort chips: re-clicking the active field flips direction; picking a new field
   // selects it at its natural orientation (newest/longest first, names A→Z).
   function onSetSortClick(next: SetSort) {
-    if (sort === next) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
-    else {
-      setSort(next);
-      setSortDir(SET_SORT_DEFAULT_DIR[next]);
+    const dir: SortDir =
+      sort === next ? (sortDir === "asc" ? "desc" : "asc") : SET_SORT_DEFAULT_DIR[next];
+    setSort(next);
+    setSortDir(dir);
+    if (typeof localStorage !== "undefined") {
+      localStorage.setItem(SET_SORT_KEY, next);
+      localStorage.setItem(SET_SORT_DIR_KEY, dir);
     }
   }
 
@@ -774,10 +802,17 @@ export function SearchPage() {
   }
 
   function onEntitySortClick(next: EntitySort) {
-    if (entitySort === next) setEntitySortDir((d) => (d === "asc" ? "desc" : "asc"));
-    else {
-      setEntitySort(next);
-      setEntitySortDir(ENTITY_SORT_DEFAULT_DIR[next]);
+    const dir: SortDir =
+      entitySort === next
+        ? entitySortDir === "asc"
+          ? "desc"
+          : "asc"
+        : ENTITY_SORT_DEFAULT_DIR[next];
+    setEntitySort(next);
+    setEntitySortDir(dir);
+    if (typeof localStorage !== "undefined") {
+      localStorage.setItem(ENTITY_SORT_KEY, next);
+      localStorage.setItem(ENTITY_SORT_DIR_KEY, dir);
     }
   }
 

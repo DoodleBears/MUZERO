@@ -20,6 +20,7 @@ import {
   galleryRowEstimate,
 } from "@/lib/gallery-grid";
 import { cn } from "@/lib/utils";
+import { rafObserveElementOffset } from "./raf-scroll-offset";
 
 const GRID_GAP = 12; // matches `gap-3` (0.75rem)
 const LIST_ROW_HEIGHT = 60; // matches the virtual track row height
@@ -112,6 +113,9 @@ export function VirtualCardGrid<T>({
     count: rowCount,
     getScrollElement: () => scrollElement,
     estimateSize: () => rowEstimate,
+    // Coalesce native wheel-rate scroll to one window recompute per frame (same as
+    // the track list) — smoother heavy walls without smooth-scroll on.
+    observeElementOffset: rafObserveElementOffset,
     overscan: view === "grid" ? 3 : 8,
     scrollMargin,
     getItemKey: (rowIndex) => {
