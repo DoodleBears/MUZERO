@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
   neteaseSongToHit,
+  parseNeteaseDailySongs,
   parseNeteasePlaylistMeta,
   parseNeteasePlaylistTrackIds,
+  parseNeteaseRecommendedPlaylists,
   parseNeteaseSongDetailHits,
   parseNeteaseUserId,
   parseNeteaseUserPlaylists,
@@ -106,5 +108,87 @@ describe("neteaseSongToHit / parseNeteaseSongDetailHits", () => {
   it("parses song/detail songs[] into hits", () => {
     expect(parseNeteaseSongDetailHits({ songs: [song] })).toHaveLength(1);
     expect(parseNeteaseSongDetailHits({ code: 200 })).toEqual([]);
+  });
+});
+
+describe("parseNeteaseDailySongs", () => {
+  const song = {
+    id: 33894312,
+    name: "晴天",
+    ar: [{ name: "周杰伦" }],
+    al: { name: "叶惠美", picUrl: "https://p1/cover.jpg" },
+    dt: 269000,
+  };
+
+  it("maps data.dailySongs[] into hits", () => {
+    expect(parseNeteaseDailySongs({ code: 200, data: { dailySongs: [song] } })).toEqual([
+      {
+        source: "netease",
+        externalId: "33894312",
+        title: "晴天",
+        artist: "周杰伦",
+        album: "叶惠美",
+        durationSec: 269,
+        coverUrl: "https://p1/cover.jpg",
+      },
+    ]);
+  });
+
+  it("returns [] for not-logged-in / anti-bot / non-object json", () => {
+    expect(parseNeteaseDailySongs({ code: 301 })).toEqual([]); // needs login
+    expect(parseNeteaseDailySongs({ code: 200, data: {} })).toEqual([]);
+    expect(parseNeteaseDailySongs(null)).toEqual([]);
+    expect(parseNeteaseDailySongs("<html>nope</html>")).toEqual([]);
+  });
+});
+
+describe("parseNeteaseRecommendedPlaylists", () => {
+  it("maps recommend[] (logged-in daily playlists) via picUrl→coverUrl", () => {
+    expect(
+      parseNeteaseRecommendedPlaylists({
+        code: 200,
+        recommend: [{ id: 11, name: "每日30首", picUrl: "https://p/r.jpg", trackCount: 30 }],
+      }),
+    ).toEqual([
+      {
+        id: "11",
+        name: "每日30首",
+        coverUrl: "https://p/r.jpg",
+        trackCount: 30,
+        source: "netease",
+      },
+    ]);
+  });
+
+  it("maps personalized result[] (anonymous) via picUrl→coverUrl", () => {
+    expect(
+      parseNeteaseRecommendedPlaylists({
+        code: 200,
+        result: [
+          { id: 22, name: "官方歌单", picUrl: "https://p/p.jpg", trackCount: 50, playCount: 12345 },
+        ],
+      }),
+    ).toEqual([
+      {
+        id: "22",
+        name: "官方歌单",
+        coverUrl: "https://p/p.jpg",
+        trackCount: 50,
+        source: "netease",
+      },
+    ]);
+  });
+
+  it("reads picUrl — NOT coverImgUrl (guards against reusing the user-library mapper)", () => {
+    const out = parseNeteaseRecommendedPlaylists({
+      result: [{ id: 9, name: "x", coverImgUrl: "https://p/wrong.jpg", trackCount: 1 }],
+    });
+    expect(out[0].coverUrl).toBeUndefined();
+  });
+
+  it("returns [] for empty / error / non-object json", () => {
+    expect(parseNeteaseRecommendedPlaylists({ code: 301 })).toEqual([]);
+    expect(parseNeteaseRecommendedPlaylists(null)).toEqual([]);
+    expect(parseNeteaseRecommendedPlaylists("not json")).toEqual([]);
   });
 });

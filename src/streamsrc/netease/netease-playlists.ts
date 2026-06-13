@@ -97,3 +97,53 @@ export function parseNeteaseSongDetailHits(json: unknown): StreamSearchHit[] {
   const songs = (json as { songs?: unknown[] } | null)?.songs ?? [];
   return songs.map(neteaseSongToHit);
 }
+
+/**
+ * `/api/v3/discovery/recommend/songs` → the personalized "每日推荐歌曲" (day list).
+ * The songs sit under `data.dailySongs[]` and share the standard song shape, so they
+ * reuse `neteaseSongToHit`. Returns [] when not logged in / anti-bot (no dailySongs).
+ */
+export function parseNeteaseDailySongs(json: unknown): StreamSearchHit[] {
+  const songs = (json as { data?: { dailySongs?: unknown[] } } | null)?.data?.dailySongs;
+  return Array.isArray(songs) ? songs.map(neteaseSongToHit) : [];
+}
+
+interface RawRecommendedPlaylist {
+  id?: unknown;
+  name?: unknown;
+  picUrl?: unknown;
+  trackCount?: unknown;
+}
+
+/**
+ * Map one recommended-playlist record to meta. Unlike the user-library shape
+ * ({@link neteasePlaylistToMeta} reads `coverImgUrl`), the recommend/personalized
+ * records carry the cover as **`picUrl`** — reusing the wrong mapper would drop it.
+ */
+function neteaseRecommendedToMeta(raw: unknown): StreamPlaylist | null {
+  if (!raw || typeof raw !== "object") return null;
+  const p = raw as RawRecommendedPlaylist;
+  const id = String(p.id ?? "");
+  if (!id) return null;
+  return {
+    id,
+    name: typeof p.name === "string" ? p.name : "",
+    coverUrl: typeof p.picUrl === "string" ? p.picUrl : undefined,
+    trackCount: typeof p.trackCount === "number" ? p.trackCount : 0,
+    source: "netease",
+  };
+}
+
+/**
+ * Recommended playlists from either endpoint:
+ * - `/api/v1/discovery/recommend/resource` → `recommend[]` (logged-in 每日推荐歌单)
+ * - `/api/personalized/playlist`           → `result[]`    (anonymous 推荐歌单)
+ * Both element shapes use `picUrl` for the cover (see {@link neteaseRecommendedToMeta}).
+ */
+export function parseNeteaseRecommendedPlaylists(json: unknown): StreamPlaylist[] {
+  const j = json as { recommend?: unknown[]; result?: unknown[] } | null;
+  const list = j?.recommend ?? j?.result ?? [];
+  return (Array.isArray(list) ? list : [])
+    .map(neteaseRecommendedToMeta)
+    .filter((p): p is StreamPlaylist => p !== null);
+}

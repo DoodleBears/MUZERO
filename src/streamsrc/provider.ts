@@ -89,6 +89,20 @@ export interface StreamSourceProvider {
   ): Promise<StreamPlaylist | null>;
   /** Import a source playlist/favlist/collection into hits (optional per source). */
   importPlaylist?(playlistRef: string, opts?: { signal?: AbortSignal }): Promise<StreamSearchHit[]>;
+  /**
+   * The personalized "每日推荐歌曲" (daily-recommended songs) as flat hits. Requires
+   * login; `afresh` rerolls the list ("换一批"). Online-discover feature; optional per
+   * source (only netease implements it for now).
+   */
+  getDailyRecommendedTracks?(opts?: {
+    signal?: AbortSignal;
+    afresh?: boolean;
+  }): Promise<StreamSearchHit[]>;
+  /**
+   * Recommended playlists: the anonymous personalized list as the base, with the
+   * logged-in user's "每日推荐歌单" merged ahead when authed. Works without login.
+   */
+  getRecommendedPlaylists?(opts?: { signal?: AbortSignal }): Promise<StreamPlaylist[]>;
   /** Best-effort reachability check for Settings. */
   health?(): Promise<boolean>;
 }

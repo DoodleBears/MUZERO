@@ -22,8 +22,10 @@ import type {
 import { eapiEncrypt } from "./netease-crypto";
 import {
   neteaseSongToHit,
+  parseNeteaseDailySongs,
   parseNeteasePlaylistMeta,
   parseNeteasePlaylistTrackIds,
+  parseNeteaseRecommendedPlaylists,
   parseNeteaseSongDetailHits,
   parseNeteaseUserId,
   parseNeteaseUserPlaylists,
@@ -50,6 +52,16 @@ const PLAYLIST_DETAIL_PATH = "/api/v6/playlist/detail";
 const SONG_DETAIL_URL = "https://interface.music.163.com/eapi/v3/song/detail";
 const SONG_DETAIL_PATH = "/api/v3/song/detail";
 const SONG_DETAIL_CHUNK = 500;
+// Online discover (no library write): daily-recommended songs + recommended playlists.
+// eapi URL = .../eapi/<path without the /api/ prefix>, same as the lines above.
+const DAILY_SONGS_URL = "https://interface.music.163.com/eapi/v3/discovery/recommend/songs";
+const DAILY_SONGS_PATH = "/api/v3/discovery/recommend/songs";
+const RECOMMEND_RESOURCE_URL =
+  "https://interface.music.163.com/eapi/v1/discovery/recommend/resource";
+const RECOMMEND_RESOURCE_PATH = "/api/v1/discovery/recommend/resource";
+const PERSONALIZED_PLAYLIST_URL = "https://interface.music.163.com/eapi/personalized/playlist";
+const PERSONALIZED_PLAYLIST_PATH = "/api/personalized/playlist";
+const PERSONALIZED_PLAYLIST_LIMIT = "30";
 const USER_AGENT =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
 const REFERER = "https://music.163.com";
@@ -218,6 +230,51 @@ export function createNeteaseSource(deps: NeteaseSourceDeps): StreamSourceProvid
     return songDetailHits(parseNeteasePlaylistTrackIds(detail), opts?.signal);
   }
 
+  /** 每日推荐歌曲 — needs login; `afresh` rerolls the 30. */
+  async function getDailyRecommendedTracks(opts?: {
+    signal?: AbortSignal;
+    afresh?: boolean;
+  }): Promise<StreamSearchHit[]> {
+    const json = await postEapiJson(
+      DAILY_SONGS_URL,
+      DAILY_SONGS_PATH,
+      opts?.afresh ? { afresh: "true" } : {},
+      opts?.signal,
+    );
+    return parseNeteaseDailySongs(json);
+  }
+
+  /**
+   * 推荐歌单 — anonymous `personalized/playlist` is the base (works logged-out); when
+   * authed, the personalized "每日推荐歌单" (`recommend/resource`) is merged in front,
+   * deduped by id. The resource leg degrades to [] on failure so the base still shows.
+   */
+  async function getRecommendedPlaylists(opts?: {
+    signal?: AbortSignal;
+  }): Promise<StreamPlaylist[]> {
+    const personalized = parseNeteaseRecommendedPlaylists(
+      await postEapiJson(
+        PERSONALIZED_PLAYLIST_URL,
+        PERSONALIZED_PLAYLIST_PATH,
+        { limit: PERSONALIZED_PLAYLIST_LIMIT },
+        opts?.signal,
+      ),
+    );
+    if (!deps.getCookie?.()) return personalized;
+    let daily: StreamPlaylist[] = [];
+    try {
+      daily = parseNeteaseRecommendedPlaylists(
+        await postEapiJson(RECOMMEND_RESOURCE_URL, RECOMMEND_RESOURCE_PATH, {}, opts?.signal),
+      );
+    } catch (err) {
+      log.warn("netease", "recommend/resource failed; using personalized only", {
+        message: err instanceof Error ? err.message : String(err),
+      });
+    }
+    const seen = new Set(daily.map((p) => p.id));
+    return [...daily, ...personalized.filter((p) => !seen.has(p.id))];
+  }
+
   return {
     id: "netease",
     label: "网易云音乐",
@@ -229,6 +286,8 @@ export function createNeteaseSource(deps: NeteaseSourceDeps): StreamSourceProvid
     getTracksByIds,
     getPlaylistMeta,
     importPlaylist,
+    getDailyRecommendedTracks,
+    getRecommendedPlaylists,
   };
 }
 

@@ -11,7 +11,7 @@
 
 | Phase | Name | Status | Link |
 |-------|------|--------|------|
-| 1 | Provider 层：纯解析 + 接口扩展（netease 推荐端点） | 🔲 Pending | [Phase 1 Checklist](#phase-1-checklist) |
+| 1 | Provider 层：纯解析 + 接口扩展（netease 推荐端点） | ✅ Completed | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | 数据获取层：react-query hooks（不入库、可缓存） | 🔲 Pending | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | UI：Gallery 第 5 个「发现」tab + 空态引导登录 | 🔲 Pending | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | 播放 / 保存：复用 playStreamedHit + importStreamedPlaylist | 🔲 Pending | [Phase 4 Checklist](#phase-4-checklist) |
@@ -255,14 +255,15 @@ ModeTab value="online" shortcut="5" → {t("gallery.modeOnline")}
 **Goal:** 网易云推荐端点可调、可解析，纯函数有单测。
 
 **Tasks:**
-- [ ] `provider.ts` 加 `getDailyRecommendedTracks?` / `getRecommendedPlaylists?`
-- [ ] `netease-playlists.ts` 加 `parseNeteaseDailySongs` / `parseNeteaseRecommendedPlaylists`（picUrl→coverUrl）
-- [ ] `netease-source.ts` 加 URL/PATH 常量 + 两方法实现（复用 `postEapiJson`）
+- [x] `provider.ts` 加 `getDailyRecommendedTracks?`（带可选 `afresh`）/ `getRecommendedPlaylists?`
+- [x] `netease-playlists.ts` 加 `parseNeteaseDailySongs` / `parseNeteaseRecommendedPlaylists`（picUrl→coverUrl，独立 `neteaseRecommendedToMeta`，不复用读 `coverImgUrl` 的旧 mapper）
+- [x] `netease-source.ts` 加 URL/PATH 常量 + 两方法实现（复用 `postEapiJson`；`getRecommendedPlaylists` 匿名 personalized 基底 + 登录态 resource 合并去重，resource 失败降级仅 personalized）
 
 ### Phase 1 Checklist
-- [ ] `parseNeteaseDailySongs` / `parseNeteaseRecommendedPlaylists` 单测（含字段坑 picUrl、空/异常 JSON）
-- [ ] 两方法在登录态本机冒烟通过（日推非空、推荐歌单非空）
-- [ ] 匿名态 `getRecommendedPlaylists` 仍返回 personalized 结果
+- [x] `parseNeteaseDailySongs` / `parseNeteaseRecommendedPlaylists` 单测（含字段坑 picUrl、空/异常 JSON、防误用 `coverImgUrl`）
+- [x] 两方法 source 层单测（注入 mock http）：日推映射 `data.dailySongs[]`、`afresh` 触发请求、登录态 resource 合并在 personalized 前、resource 失败仍出 personalized
+- [x] 匿名态 `getRecommendedPlaylists` 仍返回 personalized 结果，且**不**打 login-gated `recommend/resource`
+- [ ] 登录态本机冒烟（真 cookie + 网络）：日推/推荐歌单非空 — 待 Phase 4 联调时在桌面壳验证
 
 ### Phase 2: 数据获取层（react-query，不入库）
 
