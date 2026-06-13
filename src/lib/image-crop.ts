@@ -1,4 +1,5 @@
 import type { CropRect } from "@/db/types";
+import { arePerfCountersEnabled, notePerfWork } from "@/lib/perf-counters";
 
 /** Load an object-URL into an HTMLImageElement. */
 function loadImage(src: string): Promise<HTMLImageElement> {
@@ -17,6 +18,8 @@ function loadImage(src: string): Promise<HTMLImageElement> {
  */
 export async function getCroppedBlob(source: Blob, rect: CropRect, mime?: string): Promise<Blob> {
   if (typeof document === "undefined") return source;
+  const shouldTrace = arePerfCountersEnabled();
+  const startedAt = shouldTrace ? performance.now() : 0;
   const url = URL.createObjectURL(source);
   try {
     const img = await loadImage(url);
@@ -33,6 +36,13 @@ export async function getCroppedBlob(source: Blob, rect: CropRect, mime?: string
   } catch {
     return source;
   } finally {
+    if (shouldTrace) {
+      notePerfWork("cover.crop.canvas", performance.now() - startedAt, {
+        bytes: source.size,
+        mime: mime || source.type || "image/jpeg",
+        output: `${Math.round(rect.width)}x${Math.round(rect.height)}`,
+      });
+    }
     URL.revokeObjectURL(url);
   }
 }

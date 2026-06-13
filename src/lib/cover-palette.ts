@@ -3,6 +3,7 @@ import type { CropRect } from "@/db/types";
 import { base64ToThumbhash } from "@/lib/cover-thumbhash";
 import { getCroppedBlob } from "@/lib/image-crop";
 import { extractImagePalette } from "@/lib/image-palette";
+import { arePerfCountersEnabled, notePerfWork } from "@/lib/perf-counters";
 import type { Rgb } from "@/lib/visualizer-color";
 
 const COVER_PALETTE_MAX_COLORS = 4;
@@ -17,14 +18,25 @@ export async function extractCoverPalette(
   crop?: CropRect,
   mime = blob.type,
 ): Promise<Rgb[]> {
+  const shouldTrace = arePerfCountersEnabled();
+  const startedAt = shouldTrace ? performance.now() : 0;
+  let contentType: string | undefined;
   try {
-    const contentType = normalizeImageMime(mime);
+    contentType = normalizeImageMime(mime);
     if (!contentType) return [];
     const typedBlob = blob.type === contentType ? blob : blob.slice(0, blob.size, contentType);
     const sampled = crop ? await getCroppedBlob(typedBlob, crop, contentType) : typedBlob;
     return normalizeCoverPalette(await extractImagePalette(sampled, COVER_PALETTE_MAX_COLORS));
   } catch {
     return [];
+  } finally {
+    if (shouldTrace) {
+      notePerfWork("cover.palette.extract", performance.now() - startedAt, {
+        bytes: blob.size,
+        cropped: Boolean(crop),
+        mime: contentType ?? normalizeImageMime(mime) ?? "unsupported",
+      });
+    }
   }
 }
 

@@ -132,12 +132,15 @@ export function DevPerfPanel() {
       });
       const now = Date.now();
       const jankyFrame = (frames.max ?? 0) >= 50;
-      const canEmit = now - lastTraceSummaryRef.current >= (jankyFrame ? SNAPSHOT_MS : TRACE_SUMMARY_MS);
+      const canEmit =
+        now - lastTraceSummaryRef.current >= (jankyFrame ? SNAPSHOT_MS : TRACE_SUMMARY_MS);
       if (frames.samples > 0 && canEmit) {
         lastTraceSummaryRef.current = now;
         traceEvent("debug", "performance.frame", "fps window", {
           blobsCreated: blobs.created,
+          blobsCreatedByKind: blobs.createdByKind,
           blobsLive: blobs.live,
+          blobsLiveByKind: blobs.liveByKind,
           dbRequeries,
           fpsAvg: roundMetric(fpsFromIntervalMs(frames.avg)),
           fpsLow: roundMetric(fpsFromIntervalMs(frames.max)),

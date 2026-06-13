@@ -5,10 +5,16 @@ import { db } from "@/db/muzero-db";
 import { backfillCoverMetadata } from "@/db/repositories";
 import type { Track } from "@/db/types";
 import { useSettings } from "@/hooks/use-app-data";
+import {
+  type CoverRenderSurface,
+  noteCoverRenderCache,
+  noteCoverWork,
+} from "@/lib/cover-performance";
 import { encodeCoverThumbhash } from "@/lib/cover-thumbhash";
 import { getCroppedBlob } from "@/lib/image-crop";
 import { log } from "@/lib/logger";
 import { coverUrlCache } from "@/lib/object-url-cache";
+import { arePerfCountersEnabled } from "@/lib/perf-counters";
 import { proxyRemoteCover, trackCoverCacheKey } from "@/player/playback-preload";
 
 export interface TrackCoverResource {
@@ -26,6 +32,9 @@ export interface TrackCoverResource {
   /** True when the returned URL belongs to the current track, or the track has no cover. */
   readyForTrack: boolean;
 }
+
+type TrackCoverInput = Pick<Track, "coverBlobId" | "coverCrop" | "remoteCoverUrl"> &
+  Partial<Pick<Track, "id">>;
 
 /**
  * Create an object URL for a Blob and revoke it on change/unmount. Returns null
@@ -88,9 +97,10 @@ export function useObjectUrls(blobs: Blob[]): string[] {
  * rendered via canvas at display time, so the original blob is never modified.
  */
 export function useTrackCoverUrl(
-  track: Pick<Track, "coverBlobId" | "coverCrop" | "remoteCoverUrl"> | undefined,
+  track: TrackCoverInput | undefined,
+  surface?: CoverRenderSurface,
 ): string | null {
-  return useTrackCoverResource(track).url;
+  return useTrackCoverResource(track, surface).url;
 }
 
 /**
@@ -100,7 +110,8 @@ export function useTrackCoverUrl(
  * new track's cover rather than any truthy previous URL.
  */
 export function useTrackCoverResource(
-  track: Pick<Track, "coverBlobId" | "coverCrop" | "remoteCoverUrl"> | undefined,
+  track: TrackCoverInput | undefined,
+  surface: CoverRenderSurface = "cover",
 ): TrackCoverResource {
   const settings = useSettings();
   const coverBlobId = track?.coverBlobId;
@@ -154,6 +165,12 @@ export function useTrackCoverResource(
     }
     const hit = coverUrlCache.get(cacheKey);
     if (hit) {
+      noteCoverRenderCache("cache-hit", surface, {
+        cropped: Boolean(crop),
+        sourceKey: cacheKey,
+        sourceKind: "local-cover",
+        trackId: track?.id,
+      });
       setResolved({ key: cacheKey, url: hit });
       return;
     }
@@ -162,18 +179,34 @@ export function useTrackCoverResource(
       setResolved(null);
       return;
     }
+    noteCoverRenderCache("cache-miss", surface, {
+      cropped: Boolean(crop),
+      sourceKey: cacheKey,
+      sourceKind: "local-cover",
+      trackId: track?.id,
+    });
     let alive = true;
     void (async () => {
+      const shouldTrace = arePerfCountersEnabled();
+      const startedAt = shouldTrace ? performance.now() : 0;
       const out = crop ? await getCroppedBlob(blob, crop, blob.type || "image/jpeg") : blob;
       if (!alive) return;
       const created = URL.createObjectURL(out);
       const url = coverUrlCache.store(cacheKey, created); // dedupes + revokes a late dup
+      if (shouldTrace) {
+        noteCoverWork("cover.render.object-url-miss", startedAt, {
+          bytes: out.size,
+          cropped: Boolean(crop),
+          mime: out.type || blob.type || "image/jpeg",
+          surface,
+        });
+      }
       setResolved({ key: cacheKey, url });
     })();
     return () => {
       alive = false;
     };
-  }, [cacheKey, blob, crop]);
+  }, [cacheKey, blob, crop, surface, track?.id]);
 
   // Synchronous read: a cache hit returns the URL on frame 0 — instant on a
   // re-mount, zero placeholder flash. `peek` doesn't mutate, so it's render-safe.

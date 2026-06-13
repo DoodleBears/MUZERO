@@ -1,5 +1,7 @@
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { readPerfCounter, resetPerfCounters, setPerfCountersEnabled } from "@/lib/perf-counters";
+import { clearTrace, getTraceEntries } from "@/lib/trace";
 
 // A stable blob the mocked liveQuery hands back (as if mediaBlobs.get resolved).
 const { coverBlob, liveQueryState } = vi.hoisted(() => ({
@@ -20,12 +22,16 @@ let created = 0;
 
 beforeEach(() => {
   created = 0;
+  clearTrace();
+  resetPerfCounters();
   vi.spyOn(URL, "createObjectURL").mockImplementation(() => `blob:cover-${++created}`);
   vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
   liveQueryState.blob = coverBlob;
 });
 
 afterEach(() => {
+  setPerfCountersEnabled(false);
+  resetPerfCounters();
   vi.restoreAllMocks();
 });
 
@@ -116,5 +122,26 @@ describe("useTrackCoverUrl — cross-mount object-URL cache (Phase 1)", () => {
     expect(result.current.staleWhilePending).toBe(true);
     expect(result.current.targetKey).toBe("blb_resource_b");
     expect(result.current.urlKey).toBe("blb_resource_a");
+  });
+
+  it("records cover render cache miss and hit diagnostics by surface when enabled", async () => {
+    setPerfCountersEnabled(true);
+    const track = { id: "trk_cover_trace", coverBlobId: "blb_cover_trace" };
+
+    const first = renderHook(() => useTrackCoverUrl(track, "row"));
+    await act(async () => {});
+    expect(first.result.current).toMatch(/^blob:cover-/);
+    expect(readPerfCounter("cover.render.row.cache-miss")).toBe(1);
+    first.unmount();
+
+    const second = renderHook(() => useTrackCoverUrl(track, "row"));
+    await act(async () => {});
+    expect(second.result.current).toBe(first.result.current);
+    expect(readPerfCounter("cover.render.row.cache-hit")).toBe(1);
+    expect(getTraceEntries().map((entry) => [entry.scope, entry.message])).toContainEqual([
+      "cover.render",
+      "cache-hit",
+    ]);
+    second.unmount();
   });
 });

@@ -114,7 +114,7 @@ function StatusBadge({ status }: { status: Track["status"] }) {
 
 /** YouTube-Music-style row thumbnail: cover image, else a kind icon / status. */
 function TrackThumb({ deferCoverLoad = false, track }: { deferCoverLoad?: boolean; track: Track }) {
-  const coverUrl = useTrackCoverUrl(deferCoverLoad ? undefined : track);
+  const coverUrl = useTrackCoverUrl(deferCoverLoad ? undefined : track, "row");
   if (track.status !== "ready") {
     return (
       <div className="grid size-10 shrink-0 place-items-center bg-secondary album-cover-radius album-cover-shadow">

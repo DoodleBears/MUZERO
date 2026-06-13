@@ -158,15 +158,34 @@ describe("perf counters", () => {
       URL.revokeObjectURL = originalRevoke;
     });
 
-    it("counts live (created − revoked) and total created while installed", () => {
+    it("counts live (created − revoked), total created, and blob kind groups while installed", () => {
       const uninstall = installBlobUrlTracker();
-      const a = URL.createObjectURL(new Blob(["a"]));
-      const b = URL.createObjectURL(new Blob(["b"]));
-      expect(blobUrlStats()).toEqual({ live: 2, created: 2 });
+      const a = URL.createObjectURL(new Blob(["a"], { type: "image/png" }));
+      const b = URL.createObjectURL(new Blob(["b"], { type: "audio/mpeg" }));
+      const c = URL.createObjectURL(new Blob(["c"], { type: "video/mp4" }));
+      const d = URL.createObjectURL(new Blob(["d"], { type: "application/octet-stream" }));
+      expect(blobUrlStats()).toEqual({
+        created: 4,
+        createdByKind: { audio: 1, image: 1, other: 1, video: 1 },
+        live: 4,
+        liveByKind: { audio: 1, image: 1, other: 1, video: 1 },
+      });
       URL.revokeObjectURL(a);
-      expect(blobUrlStats()).toEqual({ live: 1, created: 2 });
+      expect(blobUrlStats()).toEqual({
+        created: 4,
+        createdByKind: { audio: 1, image: 1, other: 1, video: 1 },
+        live: 3,
+        liveByKind: { audio: 1, image: 0, other: 1, video: 1 },
+      });
       URL.revokeObjectURL(b);
-      expect(blobUrlStats()).toEqual({ live: 0, created: 2 });
+      URL.revokeObjectURL(c);
+      URL.revokeObjectURL(d);
+      expect(blobUrlStats()).toEqual({
+        created: 4,
+        createdByKind: { audio: 1, image: 1, other: 1, video: 1 },
+        live: 0,
+        liveByKind: { audio: 0, image: 0, other: 0, video: 0 },
+      });
       uninstall();
     });
 

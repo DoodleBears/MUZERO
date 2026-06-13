@@ -11,7 +11,7 @@
 
 | Phase | Name | Status | Link |
 |-------|------|--------|------|
-| 0 | Baseline and Observability | Pending | [Phase 0 Checklist](#phase-0-checklist) |
+| 0 | Baseline and Observability | In Progress | [Phase 0 Checklist](#phase-0-checklist) |
 | 1 | Workerized Cover Metadata Extraction | Pending | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | Persistent Thumbnail Derivatives | Pending | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | Precomputed Backlight Derivatives | Pending | [Phase 3 Checklist](#phase-3-checklist) |
@@ -464,6 +464,27 @@ Do not include:
 - user note text
 - image bytes
 
+### 7.4 Electron QA Runbook
+
+Run these scenarios in the Electron/Tauri desktop app with the visible perf HUD enabled, then copy the full trace from the HUD.
+
+1. Covered single switch:
+   - Start playback on a covered track.
+   - Wait until `performance.frame` reports stable 118-120 FPS.
+   - Switch once to a covered track with missing palette/derivatives.
+   - Save the trace window around `cover.render.cache-miss`, `cover.palette.extract`, and any `longTaskMaxMs >= 50`.
+2. Covered warm switch:
+   - Repeat the same switch after metadata/derivatives are warm.
+   - Confirm `cover.render.cache-hit` replaces cache misses where expected.
+3. Coverless switch control:
+   - Switch between tracks with no cover and compare frame cadence.
+4. Tab 2 large-list scroll:
+   - Scroll continuously through covered rows.
+   - Compare `blobsCreatedByKind.image`, `cover.render.row.cache-miss`, and `cover.render.row.cache-hit`.
+5. Settings repair under playback:
+   - Run cover metadata repair while playback continues.
+   - Capture `cover.palette.extract`, `cover.crop.canvas`, and `performance.frame`.
+
 ---
 
 ## 8. Implementation Plan
@@ -473,17 +494,17 @@ Do not include:
 **Goal:** Make cover-related work visible enough to prove before/after changes.
 
 **Tasks:**
-- [ ] Add trace counters for cover URL cache hits/misses by surface (`row`, `now-playing`, `background`, `coverflow`).
-- [ ] Add work spans around `getCroppedBlob`, `extractCoverPalette`, and `useTrackCoverResource` cache misses.
-- [ ] Add a trace summary that groups object URL creation by cover/media/background role when the perf HUD is enabled.
-- [ ] Add a reproducible QA script for the five scenarios in section 7.1.
+- [x] Add trace counters for cover URL cache hits/misses by surface (`row`, `now-playing`, `background`, `coverflow`).
+- [x] Add work spans around `getCroppedBlob`, `extractCoverPalette`, and `useTrackCoverResource` cache misses.
+- [x] Add a trace summary that groups object URL creation by image/audio/video/other kind when the perf HUD is enabled.
+- [x] Add a reproducible QA script for the five scenarios in section 7.1.
 - [ ] Capture baseline logs in Electron/Tauri desktop app, not only dev server.
 
 ### Phase 0 Checklist
 
 - [ ] Baseline trace is captured from the Electron/Tauri desktop app and includes frame cadence, long tasks, blob URL stats, DB requery stats, and cover work timings.
 - [ ] Baseline includes covered switch, coverless switch, Tab 2 scroll, Settings repair.
-- [ ] No new hidden flags.
+- [x] No new hidden flags.
 
 ### Phase 1: Workerized Cover Metadata Extraction
 
@@ -646,3 +667,4 @@ Do not include:
 |------|--------|---------|
 | 2026-06-13 | Codex | Initial draft based on covered-switch and Tab 2 scroll performance investigation |
 | 2026-06-13 | Codex | Resolved open questions from product feedback; clarified Electron app as primary QA target and palette workerization as top priority |
+| 2026-06-13 | Codex | Phase 0 instrumentation: cover render cache hit/miss trace, crop/palette/object-url work spans, blob URL kind grouping, and Electron QA runbook |

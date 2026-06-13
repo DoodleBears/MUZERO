@@ -142,15 +142,38 @@ export function notePerfWork(
 
 // ----------------------------------------------------------- blob URL census --
 
-const liveBlobUrls = new Set<string>();
+type BlobUrlKind = "audio" | "image" | "other" | "video";
+type BlobUrlKindCounts = Record<BlobUrlKind, number>;
+
+const EMPTY_BLOB_KIND_COUNTS: BlobUrlKindCounts = {
+  audio: 0,
+  image: 0,
+  other: 0,
+  video: 0,
+};
+
+const liveBlobUrls = new Map<string, BlobUrlKind>();
 let createdBlobUrls = 0;
+let createdBlobUrlKinds: BlobUrlKindCounts = { ...EMPTY_BLOB_KIND_COUNTS };
 let trackerRefs = 0;
 let originalCreate: typeof URL.createObjectURL | null = null;
 let originalRevoke: typeof URL.revokeObjectURL | null = null;
 
 /** Live (created − revoked) and total-created object URLs while the tracker is on. */
-export function blobUrlStats(): { live: number; created: number } {
-  return { live: liveBlobUrls.size, created: createdBlobUrls };
+export function blobUrlStats(): {
+  live: number;
+  created: number;
+  liveByKind: BlobUrlKindCounts;
+  createdByKind: BlobUrlKindCounts;
+} {
+  const liveByKind = { ...EMPTY_BLOB_KIND_COUNTS };
+  for (const kind of liveBlobUrls.values()) liveByKind[kind] += 1;
+  return {
+    live: liveBlobUrls.size,
+    created: createdBlobUrls,
+    liveByKind,
+    createdByKind: { ...createdBlobUrlKinds },
+  };
 }
 
 /**
@@ -168,14 +191,17 @@ export function installBlobUrlTracker(): () => void {
   if (trackerRefs === 0) {
     liveBlobUrls.clear();
     createdBlobUrls = 0;
+    createdBlobUrlKinds = { ...EMPTY_BLOB_KIND_COUNTS };
     const create = URL.createObjectURL;
     const revoke = URL.revokeObjectURL;
     originalCreate = create;
     originalRevoke = revoke;
     URL.createObjectURL = ((blob: Blob | MediaSource) => {
       const url = create.call(URL, blob);
-      liveBlobUrls.add(url);
+      const kind = classifyBlobUrlKind(blob);
+      liveBlobUrls.set(url, kind);
       createdBlobUrls += 1;
+      createdBlobUrlKinds[kind] += 1;
       return url;
     }) as typeof URL.createObjectURL;
     URL.revokeObjectURL = ((url: string) => {
@@ -197,4 +223,14 @@ export function installBlobUrlTracker(): () => void {
     originalRevoke = null;
     liveBlobUrls.clear();
   };
+}
+
+function classifyBlobUrlKind(blob: Blob | MediaSource): BlobUrlKind {
+  if (typeof Blob !== "undefined" && blob instanceof Blob) {
+    const mime = blob.type.toLowerCase();
+    if (mime.startsWith("image/")) return "image";
+    if (mime.startsWith("audio/")) return "audio";
+    if (mime.startsWith("video/")) return "video";
+  }
+  return "other";
 }
