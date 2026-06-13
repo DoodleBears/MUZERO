@@ -12,7 +12,7 @@
 | Phase | Name | Status | Link |
 |-------|------|--------|------|
 | 1 | 「性能」pane(GPU 加速 + 开销开关)+ IA + i18n | ✅ 代码完成 | [Phase 1](#phase-1-性能-pane) |
-| 2 | 画质预设(省电 / 均衡 / 画质,一键套用) | 🔲 Pending | [Phase 2](#phase-2-画质预设) |
+| 2 | 画质预设(省电 / 均衡 / 画质,一键套用) | ✅ 代码完成 | [Phase 2](#phase-2-画质预设) |
 
 > **定位(已拍板):性能页是「开关」面板——硬件加速(是否/如何用 GPU)+ 重负载层的开/关**,**不放效果调节**(dim/opacity 这类 slider、渲染器风格选择属「效果」,留在背景/可视化页)。
 
@@ -89,11 +89,11 @@ BackgroundEffect ────┘            (GPU 两项两个 pane 共写同一�
 | `immersiveIdle` | true | 闲置时是否继续沉浸渲染 |
 | `visualizerStyle` | "bars" | "off" 最省 |
 
-### 3.2 Phase 2(可选):画质预设
+### 3.2 Phase 2:画质预设(**改为 derive,不存字段**)
 
-- 新增可选字段 `graphicsQualityPreset?: "battery" | "balanced" | "quality" | "custom"`,默认 `"custom"`(= 现状,不强加)。
-- 选某预设 = 一键 `saveSettings({...bundle})` 写上面多个字段;用户事后手动改任一项 → 自动转 `"custom"`。
-- 预设映射是**纯函数** `resolveQualityPresetSettings(preset)`(可单测),不散落。
+- **不新增 DB 字段**——实现时改为**从现有设置派生**活动预设([`graphics-quality.ts`](../../../src/lib/graphics-quality.ts) `matchActiveQualityPreset`),比存 `graphicsQualityPreset` 更稳:手动改任一开关(本页或背景/可视化页)自然读回 `"custom"`,**没有需要同步的字段**。App 默认值正好匹配 `"quality"`。
+- 选某预设 = `saveSettings(resolveQualityPresetSettings(preset))` 写一组字段(纯函数 bundle);选择器的当前值 = `matchActiveQualityPreset(settings)`。
+- 预设梯度:battery(`image`/全关/low-power)→ balanced(`blur`/viz 开 flow 关)→ quality(`noise`/全开,= 默认)。
 
 ---
 
@@ -147,15 +147,13 @@ BackgroundEffect ────┘            (GPU 两项两个 pane 共写同一�
 **Goal:** 一键「省电 / 均衡 / 画质」,套用一组字段;手动改任一项转 custom。
 
 **Tasks:**
-- [ ] `AppSettings.graphicsQualityPreset?`(默认 "custom",增量可选,不 bump DB)。
-- [ ] 纯函数 `resolveQualityPresetSettings(preset)` 映射(可单测):
-  - battery:`backgroundRenderer:"image"` 或 `"blur"`、`visualizerAsBackground:false`、`flowEnabled:false`、`backgroundGpuPowerPreference:"low-power"`。
-  - balanced:接近现默认。
-  - quality:`backgroundGpuPowerPreference:"high-performance"`、特效全开。
-- [ ] PerformanceSettings 顶部加预设三选一;选中即套用;监听后续手动改 → 标 custom。
+- [x] **不加 DB 字段**——[`graphics-quality.ts`](../../../src/lib/graphics-quality.ts):`QUALITY_PRESET_BUNDLES`(battery/balanced/quality 三组 bundle)+ `resolveQualityPresetSettings(preset)` + `matchActiveQualityPreset(settings)`(派生活动预设,默认匹配 quality);6 例单测。
+- [x] `PerformanceSettings` 顶部加预设选择器:value=`matchActiveQualityPreset(settings)`,选 battery/balanced/quality 即 `saveSettings(bundle)`;`custom` 为派生态(disabled,手动改任一开关自然回落)。
+- [x] i18n:en/zh/ja/ko 加 `performance.preset*`。
 
 **Checklist:**
-- [ ] 预设映射纯函数单测;选预设后相关字段一致变化;手动改任一项回落 custom。
+- [x] 预设纯函数单测(6 例:bundle 取值、默认=quality、混搭=custom、undefined 用默认匹配);`src/` 全量 **2376 例**通过;`tsc`/Biome 干净。
+- [ ] **待实测(桌面)**:选预设后相关开关一致变化;手动改任一项选择器回落 custom。
 
 ---
 
@@ -202,3 +200,4 @@ BackgroundEffect ────┘            (GPU 两项两个 pane 共写同一�
 | 2026-06-13 | Claude | 初稿:独立「性能」pane 聚合现有性能开关 + GPU 控件双置;Phase 2 画质预设可选 |
 | 2026-06-13 | Claude | 拍板:性能页定位为「开关」面板(加速 + 开/关),移除 dim/opacity slider 与渲染器下拉;位置放外观之后;Phase 2 画质预设纳入本期 |
 | 2026-06-13 | Claude | Phase 1 代码完成:新增「性能」侧栏项 + `PerformanceSettings`(GPU + 三开关)+ 抽出共享 `GpuBackendControls`(背景面板复用)+ en/zh/ja/ko;`src` 全量 2370 例通过 |
+| 2026-06-13 | Claude | Phase 2 代码完成:`graphics-quality`(battery/balanced/quality bundle + 派生活动预设,**不存字段**)+ 预设选择器 + en/zh/ja/ko;6 例新单测,`src` 全量 2376 例通过 |

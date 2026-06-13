@@ -359,6 +359,12 @@
   },
   "performance": {
     "title": "Performance",
+    "preset": "Quality preset",
+    "presetBattery": "Battery saver",
+    "presetBalanced": "Balanced",
+    "presetQuality": "Full quality",
+    "presetCustom": "Custom",
+    "presetHint": "A one-tap preset sets the switches below; tweak any of them to go Custom.",
     "groupGpu": "Hardware acceleration",
     "gpuHint": "Auto uses WebGPU on capable devices and the high-performance GPU; some WebViews fall back to WebGL.",
     "groupLayers": "Heavy layers",

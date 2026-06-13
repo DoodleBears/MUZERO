@@ -347,6 +347,12 @@
   },
   "performance": {
     "title": "성능",
+    "preset": "화질 프리셋",
+    "presetBattery": "절전",
+    "presetBalanced": "균형",
+    "presetQuality": "고화질",
+    "presetCustom": "사용자 지정",
+    "presetHint": "원탭 프리셋이 아래 스위치를 설정합니다. 항목을 변경하면 사용자 지정이 됩니다.",
     "groupGpu": "하드웨어 가속",
     "gpuHint": "자동은 지원되는 기기에서 WebGPU와 고성능 GPU를 사용합니다. 일부 WebView는 WebGL로 대체됩니다.",
     "groupLayers": "무거운 레이어",

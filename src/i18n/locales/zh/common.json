@@ -347,6 +347,12 @@
   },
   "performance": {
     "title": "性能",
+    "preset": "画质预设",
+    "presetBattery": "省电",
+    "presetBalanced": "均衡",
+    "presetQuality": "画质优先",
+    "presetCustom": "自定义",
+    "presetHint": "一键预设会设置下面的开关;手动改任一项即变为自定义。",
     "groupGpu": "硬件加速",
     "gpuHint": "自动会在支持的设备上使用 WebGPU 与高性能 GPU;部分 WebView 会回退到 WebGL。",
     "groupLayers": "重负载层",

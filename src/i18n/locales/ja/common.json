@@ -347,6 +347,12 @@
   },
   "performance": {
     "title": "パフォーマンス",
+    "preset": "画質プリセット",
+    "presetBattery": "省電力",
+    "presetBalanced": "バランス",
+    "presetQuality": "高画質",
+    "presetCustom": "カスタム",
+    "presetHint": "ワンタップのプリセットで下のスイッチを設定します。いずれかを変更するとカスタムになります。",
     "groupGpu": "ハードウェアアクセラレーション",
     "gpuHint": "自動では対応デバイスで WebGPU と高パフォーマンス GPU を使用します。一部の WebView は WebGL にフォールバックします。",
     "groupLayers": "重いレイヤー",

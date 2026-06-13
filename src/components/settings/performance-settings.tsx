@@ -1,9 +1,22 @@
 import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { saveSettings } from "@/db/repositories";
 import type { AppSettings } from "@/db/types";
 import { useSettings } from "@/hooks/use-app-data";
+import {
+  type ActiveQualityPreset,
+  type GraphicsQualityPreset,
+  matchActiveQualityPreset,
+  resolveQualityPresetSettings,
+} from "@/lib/graphics-quality";
 import { GpuBackendControls } from "./gpu-backend-controls";
 
 /**
@@ -16,13 +29,50 @@ import { GpuBackendControls } from "./gpu-backend-controls";
 export function PerformanceSettings() {
   const { t } = useTranslation();
   const settings = useSettings();
+  const activePreset = matchActiveQualityPreset(settings);
+  const presetItems: { value: ActiveQualityPreset; label: string }[] = [
+    { value: "battery", label: t("performance.presetBattery") },
+    { value: "balanced", label: t("performance.presetBalanced") },
+    { value: "quality", label: t("performance.presetQuality") },
+    { value: "custom", label: t("performance.presetCustom") },
+  ];
   return (
     <Card>
       <CardHeader>
         <CardTitle>{t("performance.title")}</CardTitle>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
-        <span className="text-xs font-medium text-muted-foreground">
+        <div className="flex flex-col gap-1.5">
+          <span className="text-xs font-medium text-muted-foreground">
+            {t("performance.preset")}
+          </span>
+          <Select
+            value={activePreset}
+            onValueChange={(value) => {
+              if (value !== "custom") {
+                void saveSettings(resolveQualityPresetSettings(value as GraphicsQualityPreset));
+              }
+            }}
+          >
+            <SelectTrigger>
+              <SelectValue>
+                {(value) =>
+                  presetItems.find((item) => item.value === value)?.label ?? t("performance.preset")
+                }
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              {presetItems.map((item) => (
+                <SelectItem key={item.value} value={item.value} disabled={item.value === "custom"}>
+                  {item.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <p className="text-xs text-muted-foreground">{t("performance.presetHint")}</p>
+        </div>
+
+        <span className="mt-1 border-border border-t pt-3 text-xs font-medium text-muted-foreground">
           {t("performance.groupGpu")}
         </span>
         <GpuBackendControls />
