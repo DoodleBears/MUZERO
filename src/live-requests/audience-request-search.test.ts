@@ -74,4 +74,46 @@ describe("audience request search", () => {
     if (result.kind === "no-match") throw new Error("expected a candidate");
     expect(result.best?.track.id).toBe("trk_2");
   });
+
+  it("can restrict direct library search to song title fields", () => {
+    const result = pickAudienceRequestMatch({
+      tracks: [
+        track("trk_1", "Blue Hour", { note: "Plastic Love memory", tags: ["plastic-love"] }),
+        track("trk_2", "Plastic Love"),
+      ],
+      query: "Plastic Love",
+      threshold: 80,
+      margin: 20,
+      matchFields: "song-title",
+    });
+
+    expect(result.kind).toBe("match");
+    if (result.kind !== "match") throw new Error("expected match");
+    expect(result.best.track.id).toBe("trk_2");
+    expect(result.candidates.map((hit) => hit.track.id)).toEqual(["trk_2"]);
+  });
+
+  it("does not treat memories or lyrics as title matches in song-title mode", () => {
+    const result = pickAudienceRequestMatch({
+      tracks: [track("trk_1", "Blue Hour")],
+      query: "Plastic Love",
+      threshold: 80,
+      margin: 20,
+      matchFields: "song-title",
+      memoryNotesByTrackId: new Map([["trk_1", ["Plastic Love memory"]]]),
+      lyricsByTrackId: new Map([
+        [
+          "trk_1",
+          {
+            format: "plain",
+            instrumental: false,
+            plain: "Plastic Love",
+            status: "found",
+          },
+        ],
+      ]),
+    });
+
+    expect(result.kind).toBe("no-match");
+  });
 });

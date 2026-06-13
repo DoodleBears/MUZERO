@@ -7,6 +7,7 @@ import {
   playQueueSet,
   prependTrackIds,
   saveSettings,
+  setTrackNote,
 } from "@/db/repositories";
 import { DEFAULT_AUDIENCE_REQUEST_INTAKE_SETTINGS, type Track } from "@/db/types";
 import type { AudienceRequestAiDjQueue } from "./audience-request-ai-dj";
@@ -129,6 +130,21 @@ describe("AudienceRequestRuntime direct search route", () => {
     const queue = await getPlayQueue(db);
     expect(queue.entries.map((entry) => entry.trackId)).toEqual([current.id, tail.id]);
     expect(item.status).toBe("ignored");
+  });
+
+  it("matches direct library-search requests by song title instead of notes", async () => {
+    const { current, tail } = await seedQueue();
+    await setTrackNote(tail.id, "Plastic Love memory", db);
+    const runtime = createAudienceRequestRuntime({ db });
+
+    const item = await runtime.handle(request("Plastic Love"));
+
+    const queue = await getPlayQueue(db);
+    expect(queue.entries.map((entry) => entry.trackId)).toEqual([current.id, tail.id]);
+    expect(item).toMatchObject({
+      confidence: "none",
+      status: "ignored",
+    });
   });
 
   it("tries an injected online fallback when local confidence is too low", async () => {

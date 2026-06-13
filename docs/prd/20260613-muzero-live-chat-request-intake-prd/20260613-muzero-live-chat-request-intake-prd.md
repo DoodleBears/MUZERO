@@ -86,7 +86,7 @@ AudienceRequestRouter
         │                         └── existing tools: library_search / play_track / set_add_by_search / generate...
         │
         ├── route: "library-search"
-        │       └── trackSearchScore + memory notes + lyrics option
+        │       └── song-title match (track title / media metadata title)
         │             └── action: play-next / append / play-now / manual-review
         │
         └── route: "hybrid"
@@ -106,7 +106,7 @@ AudienceRequestRouter
 | Persistence | Dexie `muzero-db` `AppSettings` fields only | Endpoint settings and token remain local. Request messages/status are transient memory state by default and are not saved. |
 | Validation | Zod schemas in `src/live-requests/` | Accept generic JSON while normalizing to one internal contract. |
 | AI route | Existing `DjChatRuntimeActor` + `createDjChatTools` | Reuse existing tool loop and BYOK LLM gating. |
-| Search route | `trackSearchScore`, `searchTracks`, `memoryNotesByTrack`, optional lyrics helpers | Same scoring semantics as UI search and chat `library_search`. |
+| Search route | `pickAudienceRequestMatch` with `matchFields: "song-title"` for direct `library-search` | Direct live点歌 should primarily match song names, not notes/tags/memories/lyrics. Broader context remains available to AI DJ / hybrid routing. |
 | Playback actions | `playQueuePlayNext`, `playQueueAppend`, `usePlayerStore.getState().playTrack` | Avoid new queue model; use existing play queue surface. |
 | UI | Settings pane + request inbox popover/table | Visible runtime toggle; no hidden backend flags. |
 | Logging | `src/lib/logger.ts` | No `console.*`; token/message redaction. |
@@ -263,6 +263,7 @@ Direct search route must use one pure selector:
 pickAudienceRequestMatch({
   tracks,
   query,
+  matchFields,
   memoryNotesByTrackId,
   lyricsByTrackId,
   threshold,
@@ -274,6 +275,8 @@ pickAudienceRequestMatch({
 Rules:
 
 - Lower score is better, following `scoreRow` / `trackSearchScore`.
+- Direct `routeMode: "library-search"` uses `matchFields: "song-title"` and only matches `track.title` / media metadata title. Notes, tags, memory notes, captions, artists, albums, and lyrics must not create a high-confidence direct queue action.
+- `routeMode: "hybrid"` and AI DJ flows may still use broader library context before falling back to AI DJ / review.
 - `NO_MATCH_SCORE` is always a hard reject.
 - If best and second-best are too close, mark `needs-approval` instead of guessing.
 - If current track is the best match and `playbackAction !== "play-now"`, prefer next confident match or mark duplicate.
@@ -799,3 +802,4 @@ The streamer should be able to click a request row and open the matched track in
 | 2026-06-13 | Codex | Completed Phase 5: AI DJ route adapter with sanitized untrusted-message wrapper, one fresh chat session per request, serial in-memory live-request queue, runtime chat-session linking, and failure-safe transient row updates. |
 | 2026-06-13 | Codex | Completed Phase 6: Social Stream Ninja and generic webhook presets, broader Social Stream Ninja source detection, localized Settings setup snippets, copyable endpoint/header examples, and preset normalization tests. |
 | 2026-06-13 | Codex | Completed Phase 7: targeted verification gate, Electron loopback stop test, Settings disable-stop test, runtime flood rate-limit test, console/log/hidden-flag grep checks, and final PRD checklist closure. |
+| 2026-06-13 | Codex | Clarified direct library-search product behavior: live点歌 Search should match song titles first/only, avoiding accidental direct playback from notes, tags, memories, captions, artists, albums, or lyrics. |

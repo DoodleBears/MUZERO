@@ -220,6 +220,7 @@ export function createAudienceRequestRuntime(
     return pickAudienceRequestMatch({
       tracks,
       query: request.normalizedQuery,
+      matchFields: intake.routeMode === "library-search" ? "song-title" : "broad",
       memoryNotesByTrackId: notes,
       lyricsByTrackId: lyrics,
       threshold: intake.confidenceThreshold,

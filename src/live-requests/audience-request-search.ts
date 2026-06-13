@@ -1,5 +1,6 @@
 import type { Track, TrackLyrics } from "@/db/types";
-import { NO_MATCH_SCORE } from "@/lib/search-transliterate";
+import { parseSearchTokens, scoreRow } from "@/lib/search-core";
+import { NO_MATCH_SCORE, scoreVariants, searchVariants } from "@/lib/search-transliterate";
 import { lyricsSearchFields, trackSearchScore } from "@/lib/track-search";
 
 export interface AudienceRequestSearchHit {
@@ -29,6 +30,7 @@ export type AudienceRequestSearchResult =
 export interface PickAudienceRequestMatchInput {
   tracks: readonly Track[];
   query: string;
+  matchFields?: "broad" | "song-title";
   memoryNotesByTrackId?: ReadonlyMap<string, readonly string[]>;
   lyricsByTrackId?: ReadonlyMap<
     string,
@@ -49,6 +51,7 @@ function shouldTryOnlineFallback(input: PickAudienceRequestMatchInput): boolean 
 }
 
 function scoreTrack(input: PickAudienceRequestMatchInput, track: Track): number {
+  if (input.matchFields === "song-title") return songTitleScore(track, input.query);
   const memoryNotes = input.memoryNotesByTrackId?.get(track.id) ?? [];
   const lyrics = input.lyricsByTrackId?.get(track.id) ?? null;
   const lyricFields = lyrics ? lyricsSearchFields(track, lyrics) : [];
@@ -61,6 +64,35 @@ function scoreTrack(input: PickAudienceRequestMatchInput, track: Track): number 
       memoryNotes,
     ),
   );
+}
+
+function songTitleScore(track: Track, query: string): number {
+  const fields = [track.title, track.mediaMetadata?.title].filter(
+    (value): value is string => typeof value === "string" && value.trim().length > 0,
+  );
+  const phraseScore = phraseMatchScore(query, fields);
+  const tokenScore = scoreRow(
+    {
+      album: [],
+      artist: [],
+      free: fields,
+      id: track.id,
+      tags: [],
+    },
+    parseSearchTokens(query),
+  );
+  return Math.min(phraseScore, tokenScore);
+}
+
+function phraseMatchScore(query: string, fields: readonly string[]): number {
+  const queryVariants = searchVariants(query.trim());
+  let best = NO_MATCH_SCORE;
+  for (const field of fields) {
+    const score = scoreVariants(queryVariants, searchVariants(field));
+    if (score < best) best = score;
+    if (best === 0) break;
+  }
+  return best;
 }
 
 export function pickAudienceRequestMatch(
