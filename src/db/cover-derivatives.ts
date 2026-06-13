@@ -98,6 +98,29 @@ export function coverCropSignature(crop?: CropRect): string {
   return [crop.x, crop.y, crop.width, crop.height].map((value) => Math.round(value)).join(":");
 }
 
+/**
+ * The cross-mount object-URL cache key for a cover IMAGE derivative — the very
+ * `cvd_…` id `ensureCover{Thumbnail,Backlight}Derivative` resolves to, computed
+ * synchronously from row fields. `useCoverDerivativeUrl` peeks the cache with this
+ * on frame 0 so a re-mount (back from a detail page, tab switch) paints the cached
+ * thumbnail immediately instead of flashing the thumbhash placeholder. Returns null
+ * for sources with no local derivative (remote-only covers), matching
+ * `ensureCoverImageDerivative`'s early-out. Pass the SAME (crop-setting–gated) crop
+ * the resolver receives so the signatures match.
+ */
+export function coverImageDerivativeKey(
+  track: Pick<Track, "coverBlobId" | "coverCrop" | "remoteCoverUrl">,
+  kind: "backlight" | "thumbnail",
+): string | null {
+  const source = coverDerivativeSourceForTrack(track);
+  if (source?.sourceKind !== "local-cover") return null;
+  return coverDerivativeId({
+    cropSig: coverCropSignature(track.coverCrop),
+    kind,
+    sourceKey: source.sourceKey,
+  });
+}
+
 export async function ensureCoverThumbnailDerivative(
   track: Pick<Track, "id" | "coverBlobId" | "coverCrop" | "remoteCoverUrl">,
   db: MuzeroDB = defaultDb,

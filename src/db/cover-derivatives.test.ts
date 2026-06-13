@@ -4,6 +4,7 @@ import {
   countMissingCoverDerivatives,
   coverDerivativeId,
   coverDerivativeSourceForTrack,
+  coverImageDerivativeKey,
   deleteCoverDerivativesForSource,
   enforceCoverDerivativeBudget,
   ensureCoverBacklightDerivative,
@@ -66,6 +67,34 @@ describe("cover derivatives", () => {
         version: 1,
       }),
     );
+  });
+
+  it("coverImageDerivativeKey matches the resolved id and is null for non-local sources", () => {
+    // The synchronous render-time key MUST equal the id ensure…() lands on, else the
+    // cross-mount peek misses and the cover flashes the placeholder on re-mount.
+    expect(coverImageDerivativeKey({ coverBlobId: "blb_cover" }, "thumbnail")).toBe(
+      coverDerivativeId({ cropSig: "full", kind: "thumbnail", sourceKey: "local:blb_cover" }),
+    );
+    // Crop + kind both partition the key.
+    const cropped = coverImageDerivativeKey(
+      { coverBlobId: "blb_cover", coverCrop: { x: 10, y: 20, width: 300, height: 300 } },
+      "thumbnail",
+    );
+    expect(cropped).toBe(
+      coverDerivativeId({
+        cropSig: "10:20:300:300",
+        kind: "thumbnail",
+        sourceKey: "local:blb_cover",
+      }),
+    );
+    expect(coverImageDerivativeKey({ coverBlobId: "blb_cover" }, "backlight")).not.toBe(
+      coverImageDerivativeKey({ coverBlobId: "blb_cover" }, "thumbnail"),
+    );
+    // Remote-only / coverless rows have no local derivative → no cache key.
+    expect(
+      coverImageDerivativeKey({ remoteCoverUrl: "https://example.com/c.jpg" }, "thumbnail"),
+    ).toBeNull();
+    expect(coverImageDerivativeKey({}, "thumbnail")).toBeNull();
   });
 
   it("persists a thumbnail derivative and reuses it on the next request", async () => {

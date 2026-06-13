@@ -1,6 +1,7 @@
 import { useLiveQuery } from "dexie-react-hooks";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  coverImageDerivativeKey,
   ensureCoverBacklightDerivative,
   ensureCoverThumbnailDerivative,
 } from "@/db/cover-derivatives";
@@ -9,7 +10,6 @@ import { db } from "@/db/muzero-db";
 import { backfillCoverMetadata } from "@/db/repositories";
 import type { Track } from "@/db/types";
 import { useSettings } from "@/hooks/use-app-data";
-import { keepDeferredCover } from "@/lib/cover-defer";
 import {
   type CoverRenderSurface,
   noteCoverRenderCache,
@@ -18,7 +18,7 @@ import {
 import { encodeCoverThumbhash } from "@/lib/cover-thumbhash";
 import { getCroppedBlob } from "@/lib/image-crop";
 import { log } from "@/lib/logger";
-import { coverUrlCache } from "@/lib/object-url-cache";
+import { coverDerivativeUrlCache, coverUrlCache } from "@/lib/object-url-cache";
 import { arePerfCountersEnabled } from "@/lib/perf-counters";
 import { proxyRemoteCover, trackCoverCacheKey } from "@/player/playback-preload";
 
@@ -130,34 +130,39 @@ export function useCoverDerivativeUrl(
   const cropY = crop?.y;
   const cropWidth = crop?.width;
   const cropHeight = crop?.height;
-  const [entry, setEntry] = useState<{ blob: Blob; key: string; forKey: string } | null>(null);
-  // Mirror of `entry` so the effect can read the latest WITHOUT depending on it
-  // (depending would re-run + re-resolve on every entry change).
-  const entryRef = useRef(entry);
-  entryRef.current = entry;
+  // Row-derived, synchronous cache key = the `cvd_…` id the resolver lands on.
+  // Lets a re-mount peek the cross-mount cache on frame 0 (no placeholder flash),
+  // exactly like useTrackCoverResource does for full covers. Null for remote-only
+  // covers (no local derivative) — those fall through to proxyExternalCover above.
+  const cacheKey = useMemo(
+    () => coverImageDerivativeKey({ coverBlobId, coverCrop: crop, remoteCoverUrl }, kind),
+    [coverBlobId, crop, remoteCoverUrl, kind],
+  );
+
+  // Ref-count for the mount's lifetime so the cache never revokes a URL a visible
+  // <img> still points at; the URL outlives unmount, ready for the next mount.
   useEffect(() => {
-    if (!trackId && !coverBlobId && !remoteCoverUrl) {
-      setEntry(null);
+    if (!cacheKey) return;
+    coverDerivativeUrlCache.acquire(cacheKey);
+    return () => coverDerivativeUrlCache.release(cacheKey);
+  }, [cacheKey]);
+
+  // Re-render trigger after the async resolve+store. The cache is the source of
+  // truth (read via peek below); this just nudges the commit on a miss→hit.
+  const [resolved, setResolved] = useState<{ key: string; url: string } | null>(null);
+  useEffect(() => {
+    if (!cacheKey) {
+      setResolved(null);
       return;
     }
-    // Identifies THIS track's cover so we can tell whether an already-resolved
-    // entry still matches (the virtual row may have recycled to another track).
-    const coverKey = `${coverBlobId ?? ""}|${cropX}:${cropY}:${cropWidth}:${cropHeight}|${remoteCoverUrl ?? ""}`;
-    // Already resolved THIS exact cover? Do nothing — no re-resolve, no object-URL
-    // churn. This is what stops the flash when scrolling STOPS (defer flips back to
-    // false): without it the effect would re-run ensure() for a cover already on
-    // screen, swap to a fresh URL, and CoverImage would blink the thumbhash.
-    if (entryRef.current?.forKey === coverKey) {
-      return;
-    }
-    // While deferring (the list is scrolling) DON'T start new derivative work —
-    // but keep an already-resolved cover for this same track so it doesn't flash
-    // to the thumbhash placeholder mid-scroll. A fresh track shows the placeholder
-    // until the scroll settles. See keepDeferredCover.
-    if (defer) {
-      setEntry((prev) => keepDeferredCover(prev, coverKey));
-      return;
-    }
+    // Already cached (a prior mount, or a sibling consumer that shared the in-flight
+    // resolve)? The render-time peek returns it — nothing to do, no re-decode. This
+    // is also what makes a scroll STOP (defer flips false) a no-op for on-screen
+    // covers instead of re-running ensure() and blinking the thumbhash.
+    if (coverDerivativeUrlCache.peek(cacheKey)) return;
+    // While the list is scrolling, don't start expensive derivative work for a
+    // freshly-recycled row — it shows its thumbhash placeholder until scroll settles.
+    if (defer) return;
     let alive = true;
     const ensure =
       kind === "backlight" ? ensureCoverBacklightDerivative : ensureCoverThumbnailDerivative;
@@ -169,23 +174,33 @@ export function useCoverDerivativeUrl(
           ? undefined
           : { height: cropHeight, width: cropWidth, x: cropX, y: cropY },
       remoteCoverUrl,
-    }).then((resolved) => {
-      if (!alive) return;
-      setEntry(
-        resolved
-          ? {
-              blob: resolved.blob,
-              key: resolved.blobId,
-              forKey: coverKey,
-            }
-          : null,
-      );
+    }).then((res) => {
+      if (!alive || !res) return;
+      // Publish to the cache (dedupes + revokes a late duplicate). Never revoked on
+      // cleanup — the cache owns each URL's lifetime, which is what survives unmount.
+      const url = coverDerivativeUrlCache.store(cacheKey, URL.createObjectURL(res.blob));
+      setResolved({ key: cacheKey, url });
     });
     return () => {
       alive = false;
     };
-  }, [kind, coverBlobId, remoteCoverUrl, trackId, cropX, cropY, cropWidth, cropHeight, defer]);
-  return useKeyedObjectUrl(entry?.blob, entry?.key);
+  }, [
+    cacheKey,
+    defer,
+    kind,
+    coverBlobId,
+    remoteCoverUrl,
+    trackId,
+    cropX,
+    cropY,
+    cropWidth,
+    cropHeight,
+  ]);
+
+  // Synchronous read: a cache hit returns the URL on frame 0 — instant on re-mount,
+  // zero placeholder flash. peek doesn't mutate, so it's render-safe.
+  const cached = cacheKey ? coverDerivativeUrlCache.peek(cacheKey) : undefined;
+  return cached ?? (resolved?.key === cacheKey ? resolved.url : null);
 }
 
 export function useTrackThumbnailUrl(track: TrackCoverInput | undefined): string | null {

@@ -144,5 +144,13 @@ export class ObjectUrlCache {
   }
 }
 
-/** App-wide singleton for cover/thumbnail object URLs (see `useTrackCoverUrl`). */
+/** App-wide singleton for full cover object URLs (see `useTrackCoverUrl`). */
 export const coverUrlCache = new ObjectUrlCache();
+
+/**
+ * Separate pool for cover IMAGE derivative URLs (thumbnails / backlights, see
+ * `useCoverDerivativeUrl`). Kept apart from {@link coverUrlCache} so the many small
+ * grid/row thumbnails can't evict the warm full-cover the dock is showing, and vice
+ * versa. Larger capacity — thumbnails are tiny and numerous (a big library wall).
+ */
+export const coverDerivativeUrlCache = new ObjectUrlCache({ capacity: 128 });

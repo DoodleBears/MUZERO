@@ -4,10 +4,15 @@ import { readPerfCounter, resetPerfCounters, setPerfCountersEnabled } from "@/li
 import { clearTrace, getTraceEntries } from "@/lib/trace";
 
 // A stable blob the mocked liveQuery hands back (as if mediaBlobs.get resolved).
-const { coverBlob, liveQueryState } = vi.hoisted(() => ({
+const { coverBlob, liveQueryState, derivState } = vi.hoisted(() => ({
   coverBlob: new Blob([new Uint8Array([1, 2, 3])], { type: "image/png" }),
   liveQueryState: {
     blob: undefined as Blob | null | undefined,
+  },
+  // What the mocked derivative resolver returns (the hook only reads `.blob`).
+  derivState: {
+    // biome-ignore lint/suspicious/noExplicitAny: minimal canned ResolvedCoverDerivative
+    resolved: undefined as any,
   },
 }));
 
@@ -15,8 +20,16 @@ const { coverBlob, liveQueryState } = vi.hoisted(() => ({
 // covers render uncropped so no canvas (jsdom has none) is touched.
 vi.mock("dexie-react-hooks", () => ({ useLiveQuery: () => liveQueryState.blob }));
 vi.mock("@/hooks/use-app-data", () => ({ useSettings: () => ({ coverCropped: false }) }));
+// Keep the real key helpers (the synchronous cache key must stay accurate); only the
+// async resolver is canned so no worker/canvas runs in jsdom.
+vi.mock("@/db/cover-derivatives", async (importActual) => ({
+  ...(await importActual<typeof import("@/db/cover-derivatives")>()),
+  ensureCoverThumbnailDerivative: vi.fn(async () => derivState.resolved),
+  ensureCoverBacklightDerivative: vi.fn(async () => derivState.resolved),
+}));
 
-import { useTrackCoverResource, useTrackCoverUrl } from "./use-media";
+import { ensureCoverThumbnailDerivative } from "@/db/cover-derivatives";
+import { useCoverDerivativeUrl, useTrackCoverResource, useTrackCoverUrl } from "./use-media";
 
 let created = 0;
 
@@ -143,5 +156,59 @@ describe("useTrackCoverUrl — cross-mount object-URL cache (Phase 1)", () => {
       "cache-hit",
     ]);
     second.unmount();
+  });
+});
+
+describe("useCoverDerivativeUrl — cross-mount derivative cache (back-nav flash fix)", () => {
+  it("resolves once, returns the URL synchronously on re-mount, never revoked on unmount", async () => {
+    derivState.resolved = {
+      blob: new Blob([new Uint8Array([9])], { type: "image/webp" }),
+      blobId: "blb_dv_a",
+      derivative: {},
+    };
+    const track = { id: "trk_dv_a", coverBlobId: "blb_grid_a" };
+
+    const first = renderHook(() => useCoverDerivativeUrl(track, "thumbnail"));
+    // Frame 0 is a cache miss → null (CoverImage shows the thumbhash placeholder).
+    expect(first.result.current).toBeNull();
+    await act(async () => {}); // flush ensure() → store
+    const url = first.result.current;
+    expect(url).toMatch(/^blob:cover-/);
+    expect(URL.createObjectURL).toHaveBeenCalledTimes(1);
+
+    first.unmount();
+    // The cache owns the URL now — unmount must NOT revoke a still-cached thumbnail.
+    expect(URL.revokeObjectURL).not.toHaveBeenCalled();
+
+    // Re-mount (returning from a detail page): the URL is there on the very FIRST
+    // render, with no second decode — this is what removes the placeholder flash.
+    const second = renderHook(() => useCoverDerivativeUrl(track, "thumbnail"));
+    expect(second.result.current).toBe(url);
+    expect(URL.createObjectURL).toHaveBeenCalledTimes(1);
+    second.unmount();
+  });
+
+  it("does not start derivative work while deferring (scrolling); resolves once settled", async () => {
+    derivState.resolved = {
+      blob: new Blob([new Uint8Array([7])], { type: "image/webp" }),
+      blobId: "blb_dv_b",
+      derivative: {},
+    };
+    const ensure = vi.mocked(ensureCoverThumbnailDerivative);
+    ensure.mockClear();
+    const track = { id: "trk_dv_b", coverBlobId: "blb_grid_b" };
+
+    const { rerender, result } = renderHook(
+      ({ defer }) => useCoverDerivativeUrl(track, "thumbnail", { defer }),
+      { initialProps: { defer: true } },
+    );
+    await act(async () => {});
+    expect(result.current).toBeNull();
+    expect(ensure).not.toHaveBeenCalled(); // scrolling: no expensive decode
+
+    rerender({ defer: false }); // scroll settled
+    await act(async () => {});
+    expect(ensure).toHaveBeenCalledTimes(1);
+    expect(result.current).toMatch(/^blob:cover-/);
   });
 });

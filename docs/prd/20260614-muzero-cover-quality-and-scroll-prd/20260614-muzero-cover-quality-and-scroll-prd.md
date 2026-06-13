@@ -14,6 +14,7 @@
 | 1 | 滚动不再把已加载封面降级成 thumbhash(#C,UX 最痛) | ✅ 代码完成(待实测) | [Phase 1](#phase-1-滚动不闪-thumbhash) |
 | 2 | 导入封面解码去重(palette+thumbhash 合并一次)(#1) | ✅ 代码完成(待导入实测) | [Phase 2](#phase-2-导入解码去重) |
 | 3 | 专辑/歌手网格用更高清封面(#A) | 🔲 Pending | [Phase 3](#phase-3-网格高清封面) |
+| 4 | 详情页返回网格不再重解码闪 thumbhash(#D,跨挂载缓存) | ✅ 代码完成(待实测) | [Phase 4](#phase-4-返回不闪派生缓存) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
 
@@ -50,6 +51,11 @@
 
 ### #A 网格糊
 - 网格卡 [`entity-grid.tsx:94`](../../../src/components/library/entity-grid.tsx#L94) `useTrackThumbnailUrl` → 160px 缩略派生([`cover-derivative-core.ts:9`](../../../src/workers/cover-derivative-core.ts#L9) `THUMBNAIL_MAX_EDGE=160`)。桌面网格卡渲染宽 ~90px@1x → 180px@2x > 160px → 放大糊。无更大尺寸派生。
+
+### #D 返回网格重解码闪 thumbhash(QA 追加)
+- **现象**:从专辑/歌手点进详情、再返回网格,封面整体重新加载——先现 thumbhash 再切真图。
+- **根因:派生封面路径缺「跨挂载 URL 缓存」**。整图封面走 [`useTrackCoverResource`](../../../src/hooks/use-media.ts),有 `coverUrlCache.peek()` **同步**命中(re-mount 帧 0 即拿到 URL,零闪);但**缩略/backlight 派生**走 [`useCoverDerivativeUrl`](../../../src/hooks/use-media.ts),旧实现:`entry` 初始 `null` → effect 里 `await ensureCoverThumbnailDerivative()`(Promise,即便命中 DB 也是异步)→ `useKeyedObjectUrl` **每次挂载新建 object URL、卸载即 revoke**。
+- 网格卡 [`entity-grid.tsx`](../../../src/components/library/entity-grid.tsx) / 列表行 [`track-row.tsx`](../../../src/components/library/track-row.tsx) 都用派生路径 → 每次返回重挂 = `null`(帧 0)→ thumbhash → 异步解析 → fade。URL 串还每次变 → [`cover-image.tsx`](../../../src/components/ui/cover-image.tsx) 的 `decodedCoverUrls` 防闪也失效(新 URL 不在集合里 → 重放 fade)。**双重闪因**。
 
 ---
 
@@ -117,6 +123,25 @@
 - [ ] `pickCoverSize` 单测;桌面网格卡 2x DPI 下清晰;各档进预算管理;不上采样、不下载原图。
 - [ ] `tsc`/Biome/`src` 全量通过。
 
+### Phase 4: 返回不闪(派生封面跨挂载缓存)
+
+**Goal:** 让派生(缩略/backlight)路径和整图路径**同等待遇**——re-mount 帧 0 同步命中缓存 URL,返回网格不再重解码、不闪 thumbhash。
+
+**实现(落地):**
+- 新增 [`coverDerivativeUrlCache`](../../../src/lib/object-url-cache.ts):独立于 `coverUrlCache` 的第二个 `ObjectUrlCache`(cap 128)——网格大量小缩略不会挤掉 dock 正在显示的整图,反之亦然。
+- 新增同步键 [`coverImageDerivativeKey(track, kind)`](../../../src/db/cover-derivatives.ts):由行字段直接算出 `ensureCover*Derivative` 最终落的那个 `cvd_…` id(remote-only 返回 null)。
+- 重写 [`useCoverDerivativeUrl`](../../../src/hooks/use-media.ts):`acquire/release` 引用计数 + **渲染期 `peek` 同步读**(命中即帧 0 返回 URL)+ miss 时异步 `ensure→createObjectURL→store`(缓存拥有生命周期,**卸载不 revoke**)。退役 `keepDeferredCover`(缓存 peek 天然在 defer 翻转时保住同一封面),删 [`cover-defer.ts`] + 其测试。
+- 受益面:[`entity-grid`](../../../src/components/library/entity-grid.tsx)(专辑/歌手网格)、[`track-row`](../../../src/components/library/track-row.tsx)(列表行)、[`media-stage`](../../../src/components/player/media-stage.tsx)/[`swipeable-media-stage`](../../../src/components/player/swipeable-media-stage.tsx)(now-playing backlight)全部走派生路径,一并不闪。
+
+**Tasks:**
+- [x] `coverDerivativeUrlCache` 单例 + `coverImageDerivativeKey` 纯键(单测:与 `coverDerivativeId` 一致、crop/kind 分区、remote/coverless 返回 null)。
+- [x] `useCoverDerivativeUrl` 改走缓存(帧 0 `peek`、miss 异步 store、defer 仍不启动解码);删 `cover-defer`。
+- [x] 跨挂载 hook 回归测试([`use-media.test.tsx`](../../../src/hooks/use-media.test.tsx)):一次解析 → 卸载不 revoke → re-mount **首帧**同步返回同一 URL、不二次解码;defer 期间不解码、settle 后解一次。
+
+**Checklist:**
+- [x] 上述单测全绿;`tsc`/Biome 通过;`src` 全量 2403 例通过。
+- [ ] **待实测**:从专辑/歌手详情返回网格,封面**不再**先 thumbhash 再切真图;列表行、now-playing backlight 同样不闪;长时间浏览大库内存有界(派生缓存 cap 128 + 预算)。
+
 ---
 
 ## 4. Out of Scope / 说明
@@ -155,3 +180,5 @@
 | 2026-06-14 | Claude | QA 跟进:修「滚动停下二次闪 thumbhash」——effect 顶部加 `entryRef.forKey === coverKey` 守卫,已解析封面不再重跑 ensure/换 URL。`src` 全量通过 |
 | 2026-06-14 | Claude | Phase 2(#1)代码完成:`createUploadedTrack` 改一次 `deriveCoverMetadata`(thumbhash+精确 palette),删整套延迟 palette flush;每张封面导入解码 2→1 次。`src` 全量 2383 例通过 |
 | 2026-06-14 | User+Claude | Phase 3 尺寸拍板:列表 `sm=160` / 网格 `lg=512`(用户「可以用 512 px」)。Phase 3 由用户另开 session 实现 |
+| 2026-06-14 | Claude | QA 追加 #D:详情返回网格重解码闪 thumbhash。根因=派生路径缺整图那套跨挂载 URL 缓存 |
+| 2026-06-14 | Claude | Phase 4(#D)代码完成:新增 `coverDerivativeUrlCache` + 同步键 `coverImageDerivativeKey`,`useCoverDerivativeUrl` 改帧 0 `peek`/异步 `store`(卸载不 revoke);**退役 Phase 1 的 `keepDeferredCover`/`forKey` 守卫**(缓存 peek 已天然覆盖,删 `cover-defer.ts`)。新增跨挂载 hook 回归测试 + 键单测。`src` 全量 2403 例通过 |
