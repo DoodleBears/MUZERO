@@ -147,6 +147,7 @@ async function enableVisualizerIfOff(ctx: ShortcutActionRunnerContext): Promise<
     visualizerStyle: style === "off" ? "bars" : style,
     visualizerAsBackground: true,
     visualizerIdleOnly: false,
+    visualizerLyricsOnlyIdle: false,
   });
 }
 

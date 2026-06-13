@@ -135,6 +135,13 @@ export async function saveSettings(
 ): Promise<AppSettings> {
   const current = await getSettings(db);
   const next: AppSettings = { ...current, ...patch, id: "app" };
+  if (
+    next.visualizerStyle === "off" ||
+    !(next.visualizerAsBackground ?? false) ||
+    !(next.visualizerIdleOnly ?? false)
+  ) {
+    next.visualizerLyricsOnlyIdle = false;
+  }
   await db.settings.put(next);
   return next;
 }

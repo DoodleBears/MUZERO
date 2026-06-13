@@ -10,6 +10,7 @@ import { NowPlayingBackground } from "@/components/player/now-playing-background
 import { useVisualizerCoverColorCss } from "@/components/player/visualizer-dynamic-color";
 import { VisualizerTuningPanel } from "@/components/player/visualizer-tuning-panel";
 import { GlobalTrackSearch } from "@/components/search/global-track-search";
+import { HeaderPinButton } from "@/components/shell/header-pin-button";
 import { PlayerDock } from "@/components/shell/player-dock";
 import { WindowsWindowControls } from "@/components/shell/windows-window-controls";
 import { GlobalDropZone } from "@/components/upload/global-drop-zone";
@@ -24,6 +25,7 @@ import { useSystemShortcuts } from "@/hooks/use-system-shortcuts";
 import { albumCoverAppearanceCssVars } from "@/lib/album-cover-appearance";
 import { resolveDesktopBridge } from "@/lib/desktop/bridge";
 import { electronWindowAppearanceCssVars } from "@/lib/electron-window-appearance";
+import { log } from "@/lib/logger";
 import { cn } from "@/lib/utils";
 import { dragWindowOnEmptyPress } from "@/lib/window-drag";
 import { NowPlayingPage } from "@/pages/now-playing-page";
@@ -39,7 +41,7 @@ import { startSyncIndicator } from "@/stores/sync-indicator";
 import { useUiStore } from "@/stores/ui-store";
 import { useVisualizerPanelStore } from "@/stores/visualizer-panel-store";
 import { useTraySync } from "@/tray/use-tray-sync";
-import { resolveVisualizerStyle } from "@/visualizer/registry";
+import { resolveVisualizerPlacement } from "@/visualizer/placement";
 
 function isTypingTarget(el: EventTarget | null): boolean {
   if (!(el instanceof HTMLElement)) return false;
@@ -90,6 +92,7 @@ export default function App() {
   usePlaybackWarmup();
   useDesktopChromeDataset();
   useAppearanceCssVars(settings);
+  useDesktopWindowPinMode(settings);
 
   // Boot only wires the media engine. Auto-cueing the previous track during
   // WKWebView startup can make the full-screen media/background path flicker.
@@ -168,35 +171,39 @@ export default function App() {
   // gets its own idle rule below so wide screens can reveal it from a bottom hot
   // zone instead of from any tiny pointer movement.
   const idle = useIdle(isNowTab);
-  const visualizerBackgroundActive =
-    ambientBackgroundActive &&
-    (settings.visualizerAsBackground ?? false) &&
-    resolveVisualizerStyle(settings.visualizerStyle) !== "off";
-  const visualizerIdleOnly =
-    idle && visualizerBackgroundActive && (settings.visualizerIdleOnly ?? false);
-  const chromeHidden = idle && ((settings.immersiveIdle ?? true) || visualizerIdleOnly);
+  const visualizerPlacement = resolveVisualizerPlacement(settings);
+  const visualizerBackgroundActive = ambientBackgroundActive && visualizerPlacement !== "off";
+  const lyricsOnlyIdle =
+    idle && isNowTab && visualizerBackgroundActive && visualizerPlacement === "lyrics";
+  const visualizerIdleOnly = idle && visualizerBackgroundActive && visualizerPlacement === "idle";
+  const chromeHidden =
+    idle && ((settings.immersiveIdle ?? true) || visualizerIdleOnly || lyricsOnlyIdle);
   const dockIdleEnabled =
     isNowTab &&
     ((settings.immersiveIdle ?? true) ||
-      ((settings.visualizerIdleOnly ?? false) && visualizerBackgroundActive));
+      (visualizerBackgroundActive &&
+        (visualizerPlacement === "idle" || visualizerPlacement === "lyrics")));
   const dockIdleHidden = useDockIdle(dockIdleEnabled);
   const visualizerPreviewOnly = useVisualizerPanelStore((s) => s.previewOnly);
   const visualizerHidden = useVisualizerPanelStore((s) => s.visualizerHidden);
-  const foregroundHidden = visualizerPreviewOnly || visualizerIdleOnly;
+  const foregroundHidden = visualizerPreviewOnly || visualizerIdleOnly || lyricsOnlyIdle;
   const dockHidden = dockIdleHidden || foregroundHidden;
   // In full-immersive (only background + spectrum, foreground rail hidden) surface
   // memories as a top popover instead — see the immersive-memory-moments PRD.
-  const immersiveMemoryActive = visualizerIdleOnly && (settings.immersiveMemoryOverlay ?? true);
+  const immersiveMemoryActive =
+    visualizerIdleOnly && !lyricsOnlyIdle && (settings.immersiveMemoryOverlay ?? true);
   // Lyrics-on + foreground hidden → centered lyrics over the background. The
   // normal visible-page lyrics layout remains cover-left / lyrics-right.
   const lyricsVisible = !settings.nowPlayingRightRailCollapsed;
-  const immersiveLyricsActive = foregroundHidden && lyricsVisible;
+  const immersiveLyricsActive = lyricsOnlyIdle || (foregroundHidden && lyricsVisible);
+  const ambientBackdropActive = ambientBackgroundActive && !lyricsOnlyIdle;
 
   // Mirror the Dock-hidden signal so deep surfaces (e.g. the lyrics search
   // affordance) can fade in sync with the Dock during immersive idle.
   useEffect(() => {
     useUiStore.getState().setChromeHidden(dockHidden);
   }, [dockHidden]);
+  useLyricsOnlyOverlayDataset(lyricsOnlyIdle);
 
   // MUZERO keeps its playback-oriented motion alive regardless of the OS
   // reduced-motion setting; animation is part of the player feedback model.
@@ -209,11 +216,11 @@ export default function App() {
           screen and scrolls *under* the bars instead of being boxed between them. */}
       <div className="app-shell relative h-screen overflow-hidden bg-background text-foreground">
         <NowPlayingBackground
-          active={ambientBackgroundActive}
+          active={ambientBackdropActive}
           hideVisualizer={visualizerHidden}
           className={cn(
             "fixed inset-0 z-0 transition-opacity duration-500",
-            ambientBackgroundActive ? "opacity-100" : "opacity-0",
+            ambientBackdropActive ? "opacity-100" : "opacity-0",
           )}
         />
 
@@ -237,15 +244,21 @@ export default function App() {
             className="absolute inset-y-0 left-0 right-36 [-webkit-app-region:drag]"
             data-tauri-drag-region
           />
-          <button
-            aria-label="MUZERO"
-            className="relative z-10 cursor-default border-0 bg-transparent p-0 font-semibold tracking-tight text-inherit [-webkit-app-region:no-drag]"
+          <div
+            className="group/header-logo relative z-10 flex items-center justify-center [-webkit-app-region:no-drag]"
             data-no-drag
-            onDoubleClick={() => void toggleDesktopMaximize()}
-            type="button"
           >
-            MUZERO
-          </button>
+            <button
+              aria-label="MUZERO"
+              className="cursor-default border-0 bg-transparent p-0 font-semibold tracking-tight text-inherit [-webkit-app-region:no-drag]"
+              data-no-drag
+              onDoubleClick={() => void toggleDesktopMaximize()}
+              type="button"
+            >
+              MUZERO
+            </button>
+            <HeaderPinButton />
+          </div>
           <WindowsWindowControls />
         </header>
 
@@ -281,7 +294,7 @@ export default function App() {
         />
 
         {immersiveMemoryActive && <ImmersiveMemoryOverlay />}
-        {immersiveLyricsActive && <ImmersiveLyricsOverlay />}
+        {immersiveLyricsActive && <ImmersiveLyricsOverlay lyricsOnly={lyricsOnlyIdle} />}
 
         <VisualizerTuningPanel />
         <LyricsTuningPanel />
@@ -314,6 +327,17 @@ function useDesktopChromeDataset() {
   }, []);
 }
 
+function useLyricsOnlyOverlayDataset(active: boolean) {
+  useEffect(() => {
+    const html = document.documentElement;
+    if (active) html.dataset.muzeroLyricsOverlay = "true";
+    else delete html.dataset.muzeroLyricsOverlay;
+    return () => {
+      delete html.dataset.muzeroLyricsOverlay;
+    };
+  }, [active]);
+}
+
 function useAppearanceCssVars(settings: ReturnType<typeof useSettings>) {
   const coverColorCss = useVisualizerCoverColorCss(
     settings.electronWindowBorderColorMode === "cover",
@@ -335,6 +359,17 @@ function useAppearanceCssVars(settings: ReturnType<typeof useSettings>) {
       }
     };
   }, [settings, coverColorCss]);
+}
+
+function useDesktopWindowPinMode(settings: ReturnType<typeof useSettings>) {
+  useEffect(() => {
+    const controls = resolveDesktopBridge().windowControls;
+    if (!controls?.setPinMode) return;
+    const mode = settings.desktopWindowPinMode === "pin" ? "pin" : "off";
+    void controls
+      .setPinMode(mode)
+      .catch((error) => log.warn("desktop.windowPin", "Unable to apply pin mode", error));
+  }, [settings.desktopWindowPinMode]);
 }
 
 async function toggleDesktopMaximize() {

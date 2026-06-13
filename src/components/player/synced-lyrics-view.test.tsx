@@ -1,8 +1,9 @@
 import { act, fireEvent, render, renderHook, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { Track } from "@/db/types";
 import type { LyricStyle } from "@/lyrics/lyric-style";
 import type { ResolvedLyrics } from "@/lyrics/resolve-lyrics";
-import { LyricsScroller, useActiveLyricLine } from "./synced-lyrics-view";
+import { LyricsScroller, SyncedLyricsView, useActiveLyricLine } from "./synced-lyrics-view";
 
 const engine = vi.hoisted(() => ({ currentSec: 0 }));
 
@@ -19,8 +20,25 @@ vi.mock("@/stores/player-store", () => ({
   usePlayerStore: () => undefined,
 }));
 
+vi.mock("dexie-react-hooks", () => ({
+  useLiveQuery: (_query: unknown, _deps: unknown[], defaultValue: unknown) => defaultValue,
+}));
+
+vi.mock("@/hooks/use-app-data", () => ({
+  useSettings: () => ({
+    autoFetchLyrics: false,
+    lyricsWordByWord: true,
+    lyricsShowTranslation: true,
+    lyricsShowRomanization: false,
+  }),
+}));
+
 vi.mock("@/lib/smooth-scroll/use-smooth-scroll", () => ({
   useSmoothScroll: () => ({ lenisRef: { current: null } }),
+}));
+
+vi.mock("@/components/player/visualizer-dynamic-color", () => ({
+  useVisualizerCoverColorCss: () => undefined,
 }));
 
 const synced: ResolvedLyrics = {
@@ -43,6 +61,21 @@ const customLyricStyle = {
   textStroke: "",
   lineGap: 12,
 } satisfies LyricStyle;
+
+const trackWithoutLyrics: Track = {
+  id: "trk_no_lyrics",
+  sessionId: "ses_1",
+  title: "No Lyrics",
+  kind: "audio",
+  origin: "uploaded",
+  provider: "upload",
+  status: "ready",
+  durationSec: 120,
+  createdAt: 1,
+  playCount: 0,
+  liked: false,
+  tags: [],
+};
 
 describe("LyricsScroller (synced)", () => {
   it("renders every line", () => {
@@ -83,6 +116,21 @@ describe("LyricsScroller (synced)", () => {
   it("attributes LRCLIB as the source", () => {
     render(<LyricsScroller resolved={synced} activeIndex={0} onSeek={() => {}} />);
     expect(screen.getByText("Lyrics from LRCLIB")).toBeInTheDocument();
+  });
+
+  it("can hide footer affordances for lyrics-only overlays", () => {
+    render(
+      <LyricsScroller
+        resolved={synced}
+        activeIndex={0}
+        onSeek={() => {}}
+        onSearch={() => {}}
+        showFooter={false}
+      />,
+    );
+
+    expect(screen.queryByText("Lyrics from LRCLIB")).toBeNull();
+    expect(screen.queryByText("lyrics.wrongLyrics")).toBeNull();
   });
 
   it("detaches follow on wheel and re-attaches via the return button", () => {
@@ -600,6 +648,16 @@ describe("LyricsScroller (plain)", () => {
     render(<LyricsScroller resolved={plain} activeIndex={-1} onSeek={() => {}} />);
     expect(screen.getByText("hello world")).toBeInTheDocument();
     expect(screen.queryByText(/Lyrics from/)).toBeNull();
+  });
+});
+
+describe("SyncedLyricsView (lyrics-only overlay)", () => {
+  it("renders nothing when empty lyrics should be hidden", () => {
+    const { container } = render(
+      <SyncedLyricsView emptyFallback="hidden" track={trackWithoutLyrics} />,
+    );
+
+    expect(container).toBeEmptyDOMElement();
   });
 });
 

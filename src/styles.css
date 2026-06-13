@@ -258,6 +258,20 @@
     opacity: 1;
   }
 
+  html[data-muzero-lyrics-overlay="true"],
+  html[data-muzero-lyrics-overlay="true"] body,
+  html[data-muzero-lyrics-overlay="true"] #root {
+    background-color: transparent;
+  }
+
+  html[data-muzero-lyrics-overlay="true"] .app-shell {
+    background-color: transparent !important;
+  }
+
+  html[data-muzero-lyrics-overlay="true"] .app-shell::after {
+    border-color: transparent !important;
+  }
+
   html[data-desktop-shell="electron"][data-desktop-platform="win32"] .windows-window-controls,
   html[data-desktop-shell="electron"][data-desktop-platform="win32"] .windows-window-controls * {
     -webkit-app-region: no-drag;

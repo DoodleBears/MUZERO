@@ -640,6 +640,8 @@ export interface AppSettings {
   visualizerBgOpacityLyrics?: number;
   /** Hide all Now-Playing foreground UI after idle, leaving only background + visualizer. Default false. */
   visualizerIdleOnly?: boolean;
+  /** In idle-only mode, hide background/visual effects and keep only lyrics for OBS overlays. Default false. */
+  visualizerLyricsOnlyIdle?: boolean;
   /** Surface memories as a top popover during full-immersive (idle-only) playback. Default true. */
   immersiveMemoryOverlay?: boolean;
   /** Mount the floating performance HUD in prod builds (dev always mounts it).
@@ -793,6 +795,8 @@ export interface AppSettings {
   nowPlayingCoverBacklightBlur?: number;
   /** Now Playing cover backlight saturation, 100–600 percent. Default 400. */
   nowPlayingCoverBacklightSaturation?: number;
+  /** Desktop always-on-top preference. Click-through is session-only and not persisted. */
+  desktopWindowPinMode?: "off" | "pin";
   /** Primary/accent color (hex) for light mode. Mirrors localStorage `muzero-primary-light`. */
   primaryLight?: string;
   /** Primary/accent color (hex) for dark mode. Mirrors localStorage `muzero-primary-dark`. */
@@ -957,6 +961,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   nowPlayingCoverBacklightRange: 12,
   nowPlayingCoverBacklightBlur: 20,
   nowPlayingCoverBacklightSaturation: 400,
+  desktopWindowPinMode: "off",
   backgroundMode: "cover",
   backgroundRenderer: "noise",
   backgroundPixelSize: 12,
@@ -995,6 +1000,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   visualizerBgDimLyrics: 30,
   visualizerBgOpacityLyrics: 70,
   visualizerIdleOnly: false,
+  visualizerLyricsOnlyIdle: false,
   immersiveMemoryOverlay: true,
   visualizerUseCoverColor: true,
   visualizerIntensity: 1,

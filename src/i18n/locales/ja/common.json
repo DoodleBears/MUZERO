@@ -10,7 +10,12 @@
     "maximize": "最大化",
     "restore": "元に戻す",
     "close": "閉じる",
-    "fullscreenHint": "フルスクリーンのショートカット"
+    "fullscreenHint": "フルスクリーンのショートカット",
+    "pinOff": "ウィンドウを常に手前に表示",
+    "pinOn": "ウィンドウは固定表示中",
+    "pinClickThrough": "固定表示 + クリック透過",
+    "pinClickThroughHint": "タイトル領域にフォーカスまたはホバーすると、pin コントロールが再表示されます。",
+    "pinAlwaysOnTopUnavailable": "このデスクトップシェルではウィンドウ固定を利用できません。"
   },
   "nav": {
     "now": "再生中",
@@ -496,6 +501,7 @@
     "modeOff": "オフ",
     "modeBackground": "背景",
     "modeIdleOnly": "アイドル表示",
+    "modeLyricsOnly": "歌詞オーバーレイ",
     "panelTitle": "エフェクトコントロール",
     "closePanel": "エフェクトコントロールを閉じる",
     "openSettingsHint": "右クリックまたは長押しで設定を開く",

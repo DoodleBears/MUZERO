@@ -12,6 +12,7 @@ const fsp = require("node:fs/promises");
 const path = require("node:path");
 const { applyAppIcon } = require("./app-icon.cjs");
 const { registerLocalMedia } = require("./local-media.cjs");
+const { windowPin } = require("./window-pin.cjs");
 
 /** Granted folder roots (real paths). In-memory, not persisted — re-granted on boot. */
 const allowedRoots = new Set();
@@ -102,6 +103,7 @@ function windowState(win) {
   return {
     fullscreen: win.isFullScreen(),
     maximized: cachedMaximized || win.isMaximized(),
+    pinMode: windowPin.getMode(win),
   };
 }
 
@@ -317,12 +319,20 @@ function registerIpc({ trayController } = {}) {
       windowMaximizedState.set(win, true);
       win.maximize();
     }
-    const state = { fullscreen: win.isFullScreen(), maximized: expectedMaximized };
+    const state = {
+      fullscreen: win.isFullScreen(),
+      maximized: expectedMaximized,
+      pinMode: windowPin.getMode(win),
+    };
     sendWindowState(win, state);
     const timer = setTimeout(() => {
       if (win.isDestroyed()) return;
       windowMaximizedState.set(win, expectedMaximized);
-      sendWindowState(win, { fullscreen: win.isFullScreen(), maximized: expectedMaximized });
+      sendWindowState(win, {
+        fullscreen: win.isFullScreen(),
+        maximized: expectedMaximized,
+        pinMode: windowPin.getMode(win),
+      });
       windowStateTimers.delete(win);
     }, 120);
     windowStateTimers.set(win, timer);
@@ -349,6 +359,22 @@ function registerIpc({ trayController } = {}) {
 
   ipcMain.handle("muzero:tray:update", (_event, model) => {
     trayController?.updateMenu(model);
+  });
+
+  ipcMain.handle("muzero:window:setPinMode", (event, mode) => {
+    const win = senderWindow(event);
+    windowPin.applyMode(win, mode);
+    const state = windowState(win);
+    sendWindowState(win, state);
+    return state;
+  });
+
+  ipcMain.handle("muzero:window:cyclePinMode", (event) => {
+    const win = senderWindow(event);
+    windowPin.cycleMode(win);
+    const state = windowState(win);
+    sendWindowState(win, state);
+    return state;
   });
 
   ipcMain.handle("muzero:window:getState", (event) => {

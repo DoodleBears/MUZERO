@@ -105,7 +105,15 @@ export function useActiveLyricLine(
  * instrumental / fetching message, or — when there are no lyrics — an inline
  * LRCLIB search panel so the empty state IS the way to find them.
  */
-export function SyncedLyricsView({ track }: { track?: Track }) {
+export function SyncedLyricsView({
+  emptyFallback = "search",
+  showFooter = true,
+  track,
+}: {
+  emptyFallback?: "search" | "hidden";
+  showFooter?: boolean;
+  track?: Track;
+}) {
   const { t } = useTranslation();
   const settings = useSettings();
   const incomingTrackId = track?.id;
@@ -161,9 +169,13 @@ export function SyncedLyricsView({ track }: { track?: Track }) {
       />
     );
   } else if (resolved.mode === "instrumental") {
-    content = <LyricsMessage>{t("lyrics.instrumental")}</LyricsMessage>;
+    // emptyFallback "hidden" → render nothing (pinned lyrics-only OBS overlay).
+    content =
+      emptyFallback === "hidden" ? null : <LyricsMessage>{t("lyrics.instrumental")}</LyricsMessage>;
   } else if (resolved.mode === "none") {
-    if (!displayTrack) {
+    if (emptyFallback === "hidden") {
+      content = null;
+    } else if (!displayTrack) {
       content = <LyricsMessage>{t("nowPlaying.noLyrics")}</LyricsMessage>;
     } else {
       const fetching =
@@ -189,9 +201,15 @@ export function SyncedLyricsView({ track }: { track?: Track }) {
         motionMode={settings.lyricsMotionMode}
         cascadeTuning={cascadeTuning}
         suspendMotion={!motionActive}
+        showFooter={showFooter}
       />
     );
   }
+
+  // Lyrics-only OBS overlay (emptyFallback "hidden"): when there's nothing to
+  // show, render truly nothing — an empty wrapper would still occupy the stage
+  // and intercept pointer events, leaving a stray box in the capture.
+  if (content === null) return null;
 
   return (
     <motion.div
@@ -259,6 +277,7 @@ export function LyricsScroller({
   motionMode = "classic",
   cascadeTuning = DEFAULT_LYRIC_CASCADE_TUNING,
   suspendMotion = false,
+  showFooter = true,
 }: {
   resolved: ShownLyrics;
   activeIndex: number;
@@ -272,6 +291,7 @@ export function LyricsScroller({
   motionMode?: LyricsMotionMode;
   cascadeTuning?: LyricCascadeTuning;
   suspendMotion?: boolean;
+  showFooter?: boolean;
 }) {
   const plainScrollRef = useRef<HTMLDivElement>(null);
   useSmoothScroll(plainScrollRef);
@@ -315,7 +335,7 @@ export function LyricsScroller({
           />
         )}
       </div>
-      <LyricsFooter source={resolved.source} onSearch={onSearch} />
+      {showFooter && <LyricsFooter source={resolved.source} onSearch={onSearch} />}
     </div>
   );
 }

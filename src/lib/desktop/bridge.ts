@@ -69,14 +69,19 @@ export interface MediaStorageFileStat {
   bytes: number;
 }
 
+export type DesktopWindowPinMode = "off" | "pin" | "pin-click-through";
+
 export interface DesktopWindowState {
   fullscreen: boolean;
   maximized: boolean;
+  pinMode?: DesktopWindowPinMode;
 }
 
 export interface DesktopWindowControls {
   minimize: () => Promise<void>;
   toggleMaximize: () => Promise<DesktopWindowState>;
+  setPinMode?: (mode: DesktopWindowPinMode) => Promise<DesktopWindowState>;
+  cyclePinMode?: () => Promise<DesktopWindowState>;
   close: () => Promise<void>;
   hideToTray?: () => Promise<void>;
   showFromTray?: () => Promise<void>;
