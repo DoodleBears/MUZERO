@@ -179,3 +179,5 @@ VirtualTrackList (parentRef scroller + Lenis)
 | 2026-06-14 | Claude | Phase 1 代码完成:`scrollbar-thumb.ts`(纯几何,5 例)+ `hover-scrollbar.tsx`(sticky 浮层 thumb,拖拽经 Lenis)接进 `virtual-track-list`。commit `ee8bd23` |
 | 2026-06-14 | Claude | Phase 2 代码完成:`alphabet-index.ts`(`firstAlphaLabel`+`buildAlphabetIndex` 全局去重)+ `transliterateInitial`(复用 pinyin/wanakana)+ `alphabet-index.tsx` 浮层字母条;接线 `virtual-track-list`→`track-list-section`→`search-page`(名称排序+无 query+非红心+>50)。`src` 全量 2401 例通过 |
 | 2026-06-14 | Claude | QA 修(字母条乱序/点 Q 显示 K):名称排序与拼音标签不同源致错位。新增 `transliterateSortKey`(整串读音化),`sortTracks` 名称排序改按它(预算键),`transliterateInitial` 重定义为同源 `firstAlphaLabel(sortKey)`;附带修混合标题 `iPhone手机→I`。`src` 全量 2407 例通过 |
+| 2026-06-14 | Claude | QA 修(占位/可读性):字母条独占右 gutter——`bg-background/35 backdrop-blur` 圆角 rail + hover 滚动条 `rightInset` 内移到其左 + 行 `pr-6` 让内容躲开。`src` 全量 2407 例通过 |
+| 2026-06-14 | Claude | QA 修(全部歌曲排序不持久化):`trackSort`/`trackSortDir` 改 localStorage 持久(`muzero-gallery-track-sort`/`-dir`,同 `MODE_KEY`/`VIEW_KEYS` 一类 UI 偏好),初始从存储读、`onTrackSortClick` 写回。`src` 全量 2408 例通过 |

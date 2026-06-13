@@ -157,6 +157,10 @@ const VIEW_KEYS = {
   albums: "muzero-gallery-view-albums",
   artists: "muzero-gallery-view-artists",
 } as const satisfies Record<GalleryWallMode, string>;
+// 全部歌曲 sort field + direction, persisted like the mode/view prefs above (a
+// benign UI preference, not a behavior gate — same class as `muzero-locale`).
+const TRACK_SORT_KEY = "muzero-gallery-track-sort";
+const TRACK_SORT_DIR_KEY = "muzero-gallery-track-sort-dir";
 const EMPTY_MEMORY_NOTES = new Map<string, string[]>();
 const TRACK_ROW_SELECTOR = "[data-muzero-track-row]";
 /** The single shared `view-transition-name` the tapped wall cover and its detail
@@ -182,6 +186,18 @@ function savedGalleryView(mode: GalleryWallMode): GalleryView {
 
 function isGalleryWallMode(mode: GalleryMode): mode is GalleryWallMode {
   return mode !== "tracks";
+}
+
+function savedTrackSort(): TrackSort {
+  if (typeof localStorage === "undefined") return "created";
+  const saved = localStorage.getItem(TRACK_SORT_KEY);
+  return saved && saved in TRACK_SORT_DEFAULT_DIR ? (saved as TrackSort) : "created";
+}
+
+function savedTrackSortDir(fallback: SortDir): SortDir {
+  if (typeof localStorage === "undefined") return fallback;
+  const saved = localStorage.getItem(TRACK_SORT_DIR_KEY);
+  return saved === "asc" || saved === "desc" ? saved : fallback;
 }
 
 function normalizeDescription(value: string): string {
@@ -230,8 +246,10 @@ export function SearchPage() {
   const [sort, setSort] = useState<SetSort>("recent");
   const [sortDir, setSortDir] = useState<SortDir>(SET_SORT_DEFAULT_DIR.recent);
   // 全部歌曲 ordering: a single-select sort field + its direction, plus a 红心 filter.
-  const [trackSort, setTrackSort] = useState<TrackSort>("created");
-  const [trackSortDir, setTrackSortDir] = useState<SortDir>(TRACK_SORT_DEFAULT_DIR.created);
+  const [trackSort, setTrackSort] = useState<TrackSort>(savedTrackSort);
+  const [trackSortDir, setTrackSortDir] = useState<SortDir>(() =>
+    savedTrackSortDir(TRACK_SORT_DEFAULT_DIR[savedTrackSort()]),
+  );
   const [likedOnly, setLikedOnly] = useState(false);
   // 专辑 / 歌手 ordering — one shared sort across both entity walls.
   const [entitySort, setEntitySort] = useState<EntitySort>("name");
@@ -719,10 +737,15 @@ export function SearchPage() {
   }
 
   function onTrackSortClick(next: TrackSort) {
-    if (trackSort === next) setTrackSortDir((d) => (d === "asc" ? "desc" : "asc"));
-    else {
-      setTrackSort(next);
-      setTrackSortDir(TRACK_SORT_DEFAULT_DIR[next]);
+    // Re-clicking the active field flips direction; a new field selects it at its
+    // natural orientation. Persist both so the choice survives a reload.
+    const dir: SortDir =
+      trackSort === next ? (trackSortDir === "asc" ? "desc" : "asc") : TRACK_SORT_DEFAULT_DIR[next];
+    setTrackSort(next);
+    setTrackSortDir(dir);
+    if (typeof localStorage !== "undefined") {
+      localStorage.setItem(TRACK_SORT_KEY, next);
+      localStorage.setItem(TRACK_SORT_DIR_KEY, dir);
     }
   }
 
