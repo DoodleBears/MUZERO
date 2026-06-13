@@ -12,7 +12,7 @@
 | Phase | Name | Status | Link |
 |-------|------|--------|------|
 | 1 | Provider 层：纯解析 + 接口扩展（netease 推荐端点） | ✅ Completed | [Phase 1 Checklist](#phase-1-checklist) |
-| 2 | 数据获取层：react-query hooks（不入库、可缓存） | 🔲 Pending | [Phase 2 Checklist](#phase-2-checklist) |
+| 2 | 数据获取层：react-query hooks（不入库、可缓存） | ✅ Completed | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | UI：Gallery 第 5 个「发现」tab + 空态引导登录 | 🔲 Pending | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | 播放 / 保存：复用 playStreamedHit + importStreamedPlaylist | 🔲 Pending | [Phase 4 Checklist](#phase-4-checklist) |
 | 5 | i18n（en/zh/ja/ko）+ 收尾 | 🔲 Pending | [Phase 5 Checklist](#phase-5-checklist) |
@@ -270,13 +270,14 @@ ModeTab value="online" shortcut="5" → {t("gallery.modeOnline")}
 **Goal:** hooks 提供缓存的联网读，登录态正确门控，零 DB 写。
 
 **Tasks:**
-- [ ] `use-netease-recommend.ts`：`useNeteaseDailyTracks` / `useNeteaseRecommendedPlaylists`
-- [ ] queryKey 含登录指纹；`staleTime`/`gcTime`/`enabled`/`retry` 按 §4.3
+- [x] `use-netease-recommend.ts`：`useNeteaseDailyTracks`（带可选 `afresh`）/ `useNeteaseRecommendedPlaylists`
+- [x] queryKey 含登录指纹（`auth`/`anon`）；`staleTime` 1h / `gcTime` 6h / `enabled`（日推门控登录、推荐歌单恒开）/ `retry` 1，按 §4.3
 
 ### Phase 2 Checklist
-- [ ] 登出 → 日推 query 失效、不发请求
-- [ ] 登录 → 自动取数；切走切回命中缓存不重打
-- [ ] 全程无 Dexie 写（grep 确认浏览路径不调 `createStreamedTrack`）
+- [x] 登出 → 日推 query `enabled:false`、`fetchStatus==="idle"`、不调 provider（renderHook 单测）
+- [x] 登录 → 自动取数（renderHook 单测断言 `getDailyRecommendedTracks` 被调一次、data 落地）；queryKey 含 auth/anon 指纹 → 切走切回命中缓存不重打（react-query staleTime 行为）
+- [x] 匿名 → 推荐歌单仍取数（`enabled:true`）
+- [x] 全程无 Dexie 写（grep `src/hooks/use-netease-recommend.ts` 无 `createStreamedTrack`/`db.`/`saveSettings`）
 
 ### Phase 3: UI（第 5 个「发现」tab + 空态）
 
