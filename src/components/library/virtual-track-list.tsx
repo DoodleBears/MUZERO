@@ -1,7 +1,7 @@
 import { elementScroll, useVirtualizer } from "@tanstack/react-virtual";
 import { motion, useMotionValue, useSpring } from "motion/react";
 import type { KeyboardEvent as ReactKeyboardEvent, ReactNode } from "react";
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   createSession,
@@ -12,12 +12,14 @@ import {
 import type { Track } from "@/db/types";
 import { useSessions } from "@/hooks/use-app-data";
 import { useShortcutMatcher } from "@/hooks/use-shortcut-matcher";
+import { buildAlphabetIndex } from "@/lib/alphabet-index";
 import { hasModalDialogOpen, isTypingTarget } from "@/lib/dom-keys";
 import { downloadTrackMedia } from "@/lib/download-track";
 import { useSmoothScroll } from "@/lib/smooth-scroll/use-smooth-scroll";
 import { cn } from "@/lib/utils";
 import { notify } from "@/stores/notification-store";
 import { usePlayerStore } from "@/stores/player-store";
+import { AlphabetIndex } from "./alphabet-index";
 import { HoverScrollbar } from "./hover-scrollbar";
 import { TrackRow } from "./track-row";
 
@@ -58,6 +60,7 @@ export function VirtualTrackList({
   getTrackColumns,
   header,
   initialScrollIndex,
+  alphabetLetterOf,
 }: {
   tracks: Track[];
   onPlay?: (track: Track, index: number) => void;
@@ -86,6 +89,10 @@ export function VirtualTrackList({
    *  list (a different scroll container). Restored through the virtualizer so it
    *  routes via Lenis. */
   initialScrollIndex?: number;
+  /** When provided (name-sorted lists only), mounts the right-edge A–Z fast-scroll
+   *  strip. Returns each track's bucket letter — the caller transliterates CJK
+   *  titles (pinyin/kana) before bucketing. `tracks` must already be name-sorted. */
+  alphabetLetterOf?: (track: Track) => string;
 }) {
   const { t } = useTranslation();
   const parentRef = useRef<HTMLDivElement | null>(null);
@@ -146,6 +153,14 @@ export function VirtualTrackList({
     },
   });
   const deferRowCoverLoad = rowVirtualizer.isScrolling;
+
+  // A–Z fast-scroll buckets — only when the caller opts in (name-sorted lists).
+  // `tracks` is already sorted, so buildAlphabetIndex walks it once for the first
+  // row of each letter group; jumps route through the virtualizer (→ Lenis).
+  const alphabetBuckets = useMemo(
+    () => (alphabetLetterOf ? buildAlphabetIndex(tracks, alphabetLetterOf) : []),
+    [tracks, alphabetLetterOf],
+  );
 
   // Restore scroll to a row on MOUNT (returning from select mode's reorder list).
   // Through the virtualizer's scrollToFn so it routes via Lenis; the rAF lets Lenis
@@ -392,6 +407,11 @@ export function VirtualTrackList({
       role="listbox"
     >
       <HoverScrollbar scrollRef={parentRef} scrollToTop={scrollToTop} />
+      <AlphabetIndex
+        scrollRef={parentRef}
+        buckets={alphabetBuckets}
+        onJump={(index) => rowVirtualizer.scrollToIndex(index, { align: "start" })}
+      />
       {header ? <div ref={headerRef}>{header}</div> : null}
       <motion.div
         className="relative w-full"

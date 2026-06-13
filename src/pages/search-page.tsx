@@ -93,6 +93,7 @@ import {
 import { rovingIndex } from "@/lib/library-nav";
 import { buildTrackStatsMap, deriveEntityStats, statFor } from "@/lib/library-stats";
 import { freeTextMatches } from "@/lib/search-core";
+import { transliterateInitial } from "@/lib/search-transliterate";
 import {
   filterSets,
   SET_SORT_DEFAULT_DIR,
@@ -202,6 +203,8 @@ function entityDurationSec(trackIds: readonly string[], trackById: Map<string, T
 }
 
 const GALLERY_CARD_SELECTOR = "[data-gallery-card]";
+/** The A–Z fast-scroll strip only earns its place on a long, name-sorted library. */
+const ALPHABET_INDEX_MIN_TRACKS = 50;
 type CommonT = TFunction<"common", undefined>;
 
 /**
@@ -630,6 +633,20 @@ export function SearchPage() {
     () => shownTracks.find((track) => track.id === selectedLibraryTrackId) ?? shownTracks[0],
     [selectedLibraryTrackId, shownTracks],
   );
+  // A–Z fast-scroll strip — only on a long, name-sorted, unfiltered, query-free
+  // library (other orders / relevance results don't map to letters). The letter fn
+  // depends on `transliterationReady` so buckets refine from raw initials to
+  // pinyin/kana once the dictionaries load.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: transliterationReady refreshes the letter fn after dictionaries load
+  const trackAlphabetLetterOf = useCallback(
+    (track: Track) => transliterateInitial(track.title),
+    [transliterationReady],
+  );
+  const showTrackAlphabetIndex =
+    trackSort === "name" &&
+    trackQuery.trim() === "" &&
+    !likedOnly &&
+    shownTracks.length > ALPHABET_INDEX_MIN_TRACKS;
   // biome-ignore lint/correctness/useExhaustiveDependencies: transliterationReady re-runs once dictionaries load
   const shownRemoteTracks = useMemo(
     () =>
@@ -1224,6 +1241,7 @@ export function SearchPage() {
                       selectedTrackId={selectedLibraryTrack?.id}
                       onView={(track) => transitionState(() => setSelectedLibraryTrackId(track.id))}
                       onPlay={(track) => void playTrack(track)}
+                      alphabetLetterOf={showTrackAlphabetIndex ? trackAlphabetLetterOf : undefined}
                       emptyHint={t("gallery.tracksEmpty")}
                       listClassName="chrome-fade no-scrollbar pt-1.5 pb-chrome-bottom [--chrome-fade-top:0.75rem]"
                       className="flex-1"

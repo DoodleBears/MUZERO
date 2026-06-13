@@ -5,6 +5,7 @@ import {
   normalizeSearchText,
   scoreVariants,
   searchVariants,
+  transliterateInitial,
 } from "./search-transliterate";
 
 // The pinyin/wanakana libs load lazily (Worker chunk / dynamic import). Tests
@@ -117,5 +118,34 @@ describe("edge cases", () => {
     const v = searchVariants("Hello World");
     expect(v).toContain("hello world");
     expect(v).toContain("helloworld");
+  });
+});
+
+describe("transliterateInitial — A–Z fast-scroll bucket", () => {
+  it("takes the latin first letter directly", () => {
+    expect(transliterateInitial("Adele")).toBe("A");
+    expect(transliterateInitial("  the strokes")).toBe("T");
+  });
+
+  it("buckets Chinese Han under its pinyin initial", () => {
+    expect(transliterateInitial("周杰伦")).toBe("Z"); // zhōu
+    expect(transliterateInitial("北京欢迎你")).toBe("B"); // běi
+  });
+
+  it("buckets kana-leading Japanese under its romaji initial", () => {
+    expect(transliterateInitial("ナルト")).toBe("N"); // naruto
+    expect(transliterateInitial("さくら")).toBe("S"); // sakura
+  });
+
+  it("buckets digits / symbols / empty under #", () => {
+    expect(transliterateInitial("1979")).toBe("#");
+    expect(transliterateInitial("")).toBe("#");
+  });
+
+  it("leaves a kanji-leading title under # (no JP kanji reading; avoids wrong pinyin)", () => {
+    // wanakana romanizes kana only; the leading 君 stays, so it buckets to #. Reading
+    // it would need a JP dictionary — out of scope, and the kana-first gate rightly
+    // keeps it off the Chinese pinyin path.
+    expect(transliterateInitial("君の名は")).toBe("#");
   });
 });

@@ -12,7 +12,7 @@
 | Phase | Name | Status | Link |
 |-------|------|--------|------|
 | 1 | Hover 浮层滚动条(可拖拽快速滚动) | ✅ 代码完成(待实测) | [Phase 1](#phase-1-hover-浮层滚动条) |
-| 2 | A–Z 字母快速索引(按名称排序时,拼音/假名感知) | 🔲 Pending | [Phase 2](#phase-2-az-字母快速索引) |
+| 2 | A–Z 字母快速索引(按名称排序时,拼音/假名感知) | ✅ 代码完成(待实测) | [Phase 2](#phase-2-az-字母快速索引) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
 
@@ -113,14 +113,20 @@ VirtualTrackList (parentRef scroller + Lenis)
 
 **Goal:** 按名称排序时右缘字母条,点/滑直达;中日韩按拼音/假名归字母。
 
+**实现(落地):**
+- 纯 [`alphabet-index.ts`](../../../src/lib/alphabet-index.ts):`firstAlphaLabel`(NFKD 去音标取首字母,非字母归 `#`)+ `buildAlphabetIndex(rows, letterOf)` → 有序 `{label, firstIndex}[]`,**全局去重**(`seen` set,首次出现胜)——即便运行时 `localeCompare` 按 Han 码点排(而非读音)致同字母不连续,字母条也只出一条、跳第一处,不出现重复字母。
+- 转写首字母 [`transliterateInitial`](../../../src/lib/search-transliterate.ts)(**复用搜索引擎**的 pinyin-pro / wanakana,kana-first 检测同 `searchVariants`):中文 Han→拼音首字母、日文 kana→罗马音首字母、拉丁→自身、其它→`#`;字典未载入前退化为原始首字母(载入后 `transliterationReady` 触发重算)。**已知边界**:kanji 起头的日文标题(wanakana 不读 kanji)归 `#`——读它需 JP 词典,超范围,kana-first 门也刻意不让它走中文拼音。
+- [`alphabet-index.tsx`](../../../src/components/library/alphabet-index.tsx):`sticky top-0 h-0` 浮层右缘竖排字母条(高度 = scrollport `clientHeight`,不重构列表);点字母 / 沿条拖动 → `rowVirtualizer.scrollToIndex(firstIndex,{align:"start"})`(经 Lenis)+ 拖动时中央大字母浮层。`buckets<2` 或测得高度为 0(jsdom)时不渲染。
+- 接线:[`virtual-track-list.tsx`](../../../src/components/library/virtual-track-list.tsx) 加 `alphabetLetterOf?` prop(memo 出 buckets + 挂 `<AlphabetIndex>`)→ [`track-list-section.tsx`](../../../src/components/library/track-list-section.tsx) 透传 → [`search-page.tsx`](../../../src/pages/search-page.tsx) **仅** `trackSort==="name"` 且 无搜索词 且 非红心过滤 且 `shownTracks > 50`(`ALPHABET_INDEX_MIN_TRACKS`)时传入。
+
 **Tasks:**
-- [ ] 纯 `buildAlphabetIndex(sortedRows, getTitle, transliterate)` → `{label, firstIndex}[]`(复用转写);**单测**穷举英/数/`#`/中(拼音)/日(假名)。
-- [ ] `alphabet-index.tsx`:字母条 + 点击/拖动跳 `scrollToIndex`(经 Lenis)+ 拖动大字母浮层;窄屏抽稀。
-- [ ] 接进 `virtual-track-list`:仅 `sort === "name/title"` 且 `rows > 阈值` 时挂载;`sortedRows` 变化时重算索引(memo)。
+- [x] 纯 `buildAlphabetIndex` + `firstAlphaLabel`(单测穷举英/数/`#`/去音标/CJK 注入字母/去重);`transliterateInitial`(单测英/中拼音/日假名/数字/kanji 边界)。
+- [x] [`alphabet-index.tsx`](../../../src/components/library/alphabet-index.tsx):字母条 + 点击/拖动跳 `scrollToIndex`(经 Lenis)+ 拖动大字母浮层。
+- [x] 接进 `virtual-track-list` → `track-list-section` → `search-page`:仅名称排序 + 无 query + 非红心 + `>50` 时挂载;`sortedRows`/`transliterationReady` 变化重算(memo)。
 
 **Checklist:**
-- [ ] `buildAlphabetIndex` 单测全绿;`tsc`/Biome/`src` 全量通过。
-- [ ] **待实测**:点字母准确跳到该字母首行;中日韩标题归类正确;触摸滑动跟手 + 大字母提示。
+- [x] `buildAlphabetIndex` / `transliterateInitial` 单测全绿;`tsc`/Biome 通过;`src` 全量 2401 例通过。
+- [ ] **待实测**:点字母准确跳到该字母首行;中日韩标题归类正确;触摸滑动跟手 + 大字母提示;与 hover 滚动条同处右缘是否需让位(初版共存,字母条 z 高)。
 
 ---
 
@@ -154,8 +160,8 @@ VirtualTrackList (parentRef scroller + Lenis)
 | # | Question | Status | Decision |
 |---|----------|--------|----------|
 | 1 | hover 滚动条用自研浮层 thumb,还是 CSS 美化原生 `::-webkit-scrollbar`? | Open | 倾向自研浮层(可控 + 跟 Lenis 协同 + 跨平台一致);CSS 原生难和 Lenis 协调 |
-| 2 | A–Z 仅按名称排序显示,其他排序(最近/时长)隐藏? | Open | 是,仅名称排序有意义;其他排序隐藏字母条 |
-| 3 | 中日韩首字母:拼音/假名首字母还是按 Unicode 段归「#/中/日」? | Open | 复用 ⌘F 的转写取拼音/罗马音首字母(A–Z 内);取不到归 `#` |
+| 2 | A–Z 仅按名称排序显示,其他排序(最近/时长)隐藏? | ✅ Resolved | 是:`search-page` 仅 `trackSort==="name"` 且无 query/红心/`>50` 时传 `alphabetLetterOf` |
+| 3 | 中日韩首字母:拼音/假名首字母还是按 Unicode 段归「#/中/日」? | ✅ Resolved | `transliterateInitial` 复用搜索 pinyin/kana 取首字母,取不到归 `#`;kanji 起头日文标题归 `#`(无 JP 词典,已知边界) |
 | 4 | 触摸端是否两个都上,还是移动端只上字母条? | Open | 移动端字母条为主;hover 滚动条桌面为主(触摸隐藏) |
 
 ---
@@ -165,3 +171,5 @@ VirtualTrackList (parentRef scroller + Lenis)
 | Date | Author | Changes |
 |------|--------|---------|
 | 2026-06-14 | Claude | 初稿:hover 浮层滚动条(Phase 1)+ A–Z 字母快速索引(Phase 2,拼音/假名感知);复用 `scrollToIndex` + Lenis + 转写 |
+| 2026-06-14 | Claude | Phase 1 代码完成:`scrollbar-thumb.ts`(纯几何,5 例)+ `hover-scrollbar.tsx`(sticky 浮层 thumb,拖拽经 Lenis)接进 `virtual-track-list`。commit `ee8bd23` |
+| 2026-06-14 | Claude | Phase 2 代码完成:`alphabet-index.ts`(`firstAlphaLabel`+`buildAlphabetIndex` 全局去重)+ `transliterateInitial`(复用 pinyin/wanakana)+ `alphabet-index.tsx` 浮层字母条;接线 `virtual-track-list`→`track-list-section`→`search-page`(名称排序+无 query+非红心+>50)。`src` 全量 2401 例通过 |

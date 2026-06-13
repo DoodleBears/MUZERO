@@ -45,6 +45,7 @@ export function TrackListSection({
   getTrackSupplement,
   getTrackColumns,
   canReorder,
+  alphabetLetterOf,
 }: {
   tracks: Track[];
   /** Set context. Omit for the global library list (permanent delete only). */
@@ -71,6 +72,10 @@ export function TrackListSection({
   getTrackSupplement?: (track: Track) => React.ReactNode;
   /** Optional right-side row columns shown before duration. */
   getTrackColumns?: (track: Track) => React.ReactNode;
+  /** Forwarded to VirtualTrackList — mounts the A–Z fast-scroll strip (name-sorted
+   *  lists only). Returns each track's bucket letter; `tracks` must already be sorted
+   *  consistently. Ignored in reorder mode (the curated drag list has no sort). */
+  alphabetLetterOf?: (track: Track) => string;
 }) {
   const { t } = useTranslation();
   const trackIds = useMemo(() => tracks.map((track) => track.id), [tracks]);
@@ -226,6 +231,7 @@ export function TrackListSection({
             getTrackSupplement={getTrackSupplement}
             getTrackColumns={getTrackColumns}
             initialScrollIndex={scroll.anchorIndexRef.current ?? undefined}
+            alphabetLetterOf={alphabetLetterOf}
           />
         )}
       </TrackListMenu>
