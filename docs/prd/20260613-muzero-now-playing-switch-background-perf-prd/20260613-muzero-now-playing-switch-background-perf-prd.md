@@ -16,6 +16,7 @@
 | 3 | GPU 后端 Settings 选项(auto / WebGPU / WebGL) | ✅ 代码完成(待 GPU/视觉实测) | [Phase 3](#phase-3-gpu-后端-settings-选项) |
 | 4 | 背景纹理 ImageBitmap 化(线程外解码 + 去 canvas 转换)(#4-A) | ✅ 代码完成(待 GPU/视觉实测) | [Phase 4](#phase-4-背景纹理-imagebitmap-化) |
 | 5 | stage/coverflow 封面 `<img>` 异步解码(保持原图,不占 paint 主线程)(#4-B) | ✅ 代码完成(待 GPU/视觉实测) | [Phase 5](#phase-5-stagecoverflow-封面异步解码) |
+| 6 | 切歌 trace 仪表(逐首叙事:index/sourceKind/hasCover + 统计 flush)(诊断) | ✅ 代码完成(待抓 trace) | [Phase 6](#phase-6-切歌-trace-仪表) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
 
@@ -278,6 +279,24 @@ backgroundGpuPowerPreference?: "auto" | "high-performance" | "low-power"; // DEF
 - [x] `cover-warm-decode`(4)绿;player 组件 105 例 + use-media/cover-image 15 例全绿;`tsc`/Biome 通过。
 - [ ] **待实测(桌面)**:连切 6+ 首,coverflow 滑动 `frameMaxMs`/`fpsLow` 较修前改善;封面逐张可见无明显卡顿。
 
+### Phase 6: 切歌 trace 仪表
+
+**Goal:** 让一次切歌在 trace 里读成「逐首叙事」,把用户实测(**无背景特效** 120→115 / low≈30;**带封面** 120→60 / low 9~20)拆到每次切歌,确认开销归属。诊断性改动(不改性能行为),用现有 prod-silent 的 `log.debug` / `createDiagnosticLogger`,无隐藏 flag。
+
+**归因(现有 + 新增 trace 实证):**
+- **Q1 play index**:[`player.playIndex`](../../../src/stores/player-store.ts) 现补 `sourceKind`/`hasCover`/`from`/`to`/`kind`/`origin`(纯 helper [`describeTrackSwitch`](../../../src/player/switch-trace.ts))。一眼区分「**带封面**切歌(走解码/上传管线 → 掉帧)」vs「**无封面**切歌(廉价基线)」。
+- **Q2 播放统计**:[`flushPlaybackListen`](../../../src/stores/player-store.ts) 现 emit `player.playback listen.flush`(trackId / listenedSec / counts)。证实统计写库**异步、离帧**:`flush` 是内存累加,`recordPlaybackListen` 被 `void` 掉(异步);快切时中间歌 `listenedSec≈0` → 不计 play、不写库(trace `dbRequeries:0` 佐证)→ **非切歌帧开销**。
+- **Q3 背景/封面**:已有 `cover.render`(cache-hit/miss + `object-url-miss` bytes)、`cover.preload.batch`、`background.pixi textureSwap` 覆盖,无需新增。
+- **基线(无封面 low≈30)**:来自切歌时 now-playing 树(歌词 / identity / coverflow 脚手架)的一次 React 重渲染(单帧 ~33ms),非 store / 统计;`performance.frame frameMaxMs` 已可见。Phase 4/5 落地后,带封面那档的 AVG/low 应向无封面档收敛。
+
+**Tasks(TDD):**
+- [x] 纯 helper [`describeTrackSwitch`](../../../src/player/switch-trace.ts)(4 例先红后绿:带 blob 封面 / 仅远端封面 / 无封面 / 空选区)。
+- [x] `playIndex` 用其 enrich 日志;`flushPlaybackListen` 加 `listen.flush` trace。
+
+**Checklist:**
+- [x] `tsc`/Biome + switch-trace(4)+ player-store(17)全绿。
+- [ ] **待抓 trace 验证**:带封面切歌行 `hasCover:true` 与紧随的 `cover.preload.batch`/`textureSwap` 大 ms + fps 掉帧对齐;无封面切歌 `hasCover:false` 仅基线小掉;快切时 `listen.flush counts:false` 且 `dbRequeries:0`。
+
 ---
 
 ## 7. Out of Scope(交叉引用,本 PRD 不处理)
@@ -340,3 +359,4 @@ backgroundGpuPowerPreference?: "auto" | "high-performance" | "low-power"; // DEF
 | 2026-06-14 | Claude | **QA#4 第二轮 trace + 新增 Phase 4/5**:ambient 去抖已稳(burst 仅 1 `textureSwap`/0 `appInit`),但快切仍 120→56 FPS、`longTask 283ms`。定位剩余两处主线程整图解码:(A) coverflow/stage 读实时 index 解码原图、(B) Pixi `Texture.from(<img>)` 转 canvas。用户拍板**保持原图**,新增 Phase 4(背景纹理 ImageBitmap,线程外解码+免 canvas)、Phase 5(stage/coverflow `<img>` 异步解码)。`frameMaxMs 6374.8` 判定为 visibilitychange 空档非卡顿 |
 | 2026-06-14 | Claude | **Phase 4 代码完成**(TDD):新增 `background-texture.ts` `loadImageBitmapSource`(注入 fetchBlob/createImageBitmap,5 例单测先红后绿)+ `pixi-pixel-background` `loadBackgroundMedia` 优先 ImageBitmap(`fetchTextureBlob` 走 bridge,失败回退 `<img>`)+ 控制器 element 联合放宽 + 1 例 ImageBitmap 控制器测试(直传不转 canvas、swap/destroy close)。查 Pixi 文档确认 `ImageSource` 直接吃 ImageBitmap;未用 `Assets.load`(绕过 getAppFetch CORS + 纹理生命周期冲突)。14 例全绿、`tsc`/Biome 通过 |
 | 2026-06-14 | Claude | **Phase 5 代码完成**(TDD):新增 `cover-warm-decode.ts` `warmDecode`(可注入 Image,4 例先红后绿)替换原 `warmImage`,`usePreloadedCoverUrls` 远端+本地封面均 off-thread 预热解码;coverflow/backlight/`CoverImage` `<img>` 加 `decoding="async"`(保持原图,解码移出 paint 主线程)。player 105 + use-media/cover-image 15 + warmDecode 4 全绿;`tsc`/Biome 通过。**Phase 4/5 代码全部完成,待桌面 GPU/视觉实测** |
+| 2026-06-14 | User+Claude | **Phase 6 切歌 trace 仪表**(诊断):用户提供实测(无封面 120→115/low≈30、带封面 120→60/low 9~20),要更细 trace 看切歌全过程。排查确认 Q2 统计写库异步离帧、非帧开销。新增纯 helper `describeTrackSwitch`(4 例 TDD)→ enrich `player.playIndex`(sourceKind/hasCover/from/to/kind/origin);`flushPlaybackListen` 加 `listen.flush` trace。switch-trace(4)+ player-store(17)全绿,`tsc`/Biome 通过 |

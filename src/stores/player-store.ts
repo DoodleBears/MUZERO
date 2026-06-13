@@ -82,6 +82,7 @@ import {
   shufflePrev,
   upcomingManualIndices,
 } from "@/player/queue";
+import { describeTrackSwitch } from "@/player/switch-trace";
 import {
   beginFolderImport,
   endFolderImport,
@@ -810,11 +811,13 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     const clamped = clampIndex(queue.length, index);
     const target = clamped >= 0 ? queue[clamped] : undefined;
     const sourceKind = target ? playbackSourceKind(target) : "none";
+    // Switch-by-switch narrative for the perf trace: `hasCover` flags the
+    // cover-bearing switches that run the decode/upload pipeline (the ones that
+    // tank FPS), `sourceKind` whether the audio load also did network/IPC work.
     log.debug("player", "playIndex", {
       requestedIndex: index,
-      clamped,
       queueLength: queue.length,
-      trackId: clamped >= 0 ? queue[clamped]?.id : null,
+      ...describeTrackSwitch({ from: state.currentIndex, to: clamped, track: target, sourceKind }),
     });
     if (
       target &&
@@ -2536,7 +2539,20 @@ function observePlaybackListen(state: PlayerState, positionSec: number, duration
 
 function flushPlaybackListen(now: number): void {
   const flushed = playbackListenTracker.flush(now);
-  if (flushed) persistPlaybackListen(flushed);
+  if (!flushed) return;
+  // Per-switch stats visibility: shows whether the OUTGOING track logged any
+  // listen seconds (so whether a play is counted + a stats DB write queued). The
+  // write itself is async/off the switch frame — rapid skips log ~0s and never
+  // touch the DB, which this confirms in a captured trace (user Q2).
+  playbackLog.debug("listen.flush", {
+    category: "media",
+    phase: "state",
+    trackId: flushed.trackId,
+    listenedSec: Math.round(flushed.listenedSec * 100) / 100,
+    durationSec: flushed.durationSec,
+    counts: flushed.listenedSec > 0,
+  });
+  persistPlaybackListen(flushed);
 }
 
 function persistPlaybackListen(flush: PlaybackListenFlush): void {
