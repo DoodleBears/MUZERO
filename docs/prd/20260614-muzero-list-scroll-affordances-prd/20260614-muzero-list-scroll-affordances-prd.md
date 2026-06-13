@@ -11,7 +11,7 @@
 
 | Phase | Name | Status | Link |
 |-------|------|--------|------|
-| 1 | Hover 浮层滚动条(可拖拽快速滚动) | 🔲 Pending | [Phase 1](#phase-1-hover-浮层滚动条) |
+| 1 | Hover 浮层滚动条(可拖拽快速滚动) | ✅ 代码完成(待实测) | [Phase 1](#phase-1-hover-浮层滚动条) |
 | 2 | A–Z 字母快速索引(按名称排序时,拼音/假名感知) | 🔲 Pending | [Phase 2](#phase-2-az-字母快速索引) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
@@ -98,13 +98,15 @@ VirtualTrackList (parentRef scroller + Lenis)
 
 **Goal:** 大库 hover 出可拖拽滚动条,一把粗定位;不破坏 Lenis 平滑滚动。
 
+**实现(落地):** [`hover-scrollbar.tsx`](../../../src/components/library/hover-scrollbar.tsx) 用 `sticky top-0 h-0` 浮层贴右缘(不随内容滚、不重构列表),`group-hover/list:` 显隐;thumb 拖拽经 `scrollToTop`(Lenis immediate / 原生回退)。位置由纯 [`scrollbar-thumb.ts`](../../../src/lib/scrollbar-thumb.ts) 算,scroll+resize 经 rAF 节流(ResizeObserver 守卫 jsdom)。
+
 **Tasks:**
-- [ ] `hover-scrollbar.tsx`:浮层 thumb + hover 淡入 + 拖拽 → Lenis/原生 `scrollTo`;rAF 节流更新位置。
-- [ ] 接进 `virtual-track-list.tsx`(以及可选 `virtual-card-grid.tsx`)滚动容器。
-- [ ] 纯助手 `scrollbarThumb(scrollTop, scrollHeight, clientHeight, trackHeight)` → `{ size, offset }`,可单测(含边界:内容不足、超长)。
+- [x] 纯助手 [`scrollbarThumb`](../../../src/lib/scrollbar-thumb.ts) + `scrollTopForThumbOffset`(5 例单测,含内容不足/超长/min-thumb 钳制/拖拽反解)。
+- [x] [`hover-scrollbar.tsx`](../../../src/components/library/hover-scrollbar.tsx):sticky 浮层 thumb + hover 淡入 + 拖拽 → Lenis/原生 `scrollTo`。
+- [x] 接进 [`virtual-track-list.tsx`](../../../src/components/library/virtual-track-list.tsx)(scroller 加 `group/list` + 挂 `<HoverScrollbar>` + `scrollToTop` 经 Lenis)。
 
 **Checklist:**
-- [ ] `scrollbarThumb` 单测;`tsc`/Biome/`src` 全量通过。
+- [x] `scrollbarThumb` 单测(5)全绿;`tsc`/Biome 通过;`src` 全量 2388 例通过。
 - [ ] **待实测**:hover 出条、拖动跟手、与 Lenis 惯性不打架;触摸不误触。
 
 ### Phase 2: A–Z 字母快速索引

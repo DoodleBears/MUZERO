@@ -1,7 +1,7 @@
 import { elementScroll, useVirtualizer } from "@tanstack/react-virtual";
 import { motion, useMotionValue, useSpring } from "motion/react";
 import type { KeyboardEvent as ReactKeyboardEvent, ReactNode } from "react";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   createSession,
@@ -18,6 +18,7 @@ import { useSmoothScroll } from "@/lib/smooth-scroll/use-smooth-scroll";
 import { cn } from "@/lib/utils";
 import { notify } from "@/stores/notification-store";
 import { usePlayerStore } from "@/stores/player-store";
+import { HoverScrollbar } from "./hover-scrollbar";
 import { TrackRow } from "./track-row";
 
 const TRACK_ROW_HEIGHT = 60;
@@ -117,6 +118,15 @@ export function VirtualTrackList({
   const currentTrackId = currentIndex >= 0 ? queue[currentIndex]?.id : undefined;
   const handlePlay = onPlay ?? ((_track: Track, index: number) => void playIndex(index));
   const handleView = onView ?? handlePlay;
+  // Route the hover-scrollbar drag through Lenis (immediate, no smoothing) so it
+  // doesn't fight the smooth scroll; fall back to raw scrollTo when Lenis is off.
+  const scrollToTop = useCallback(
+    (top: number) => {
+      if (lenisRef.current) lenisRef.current.scrollTo(top, { immediate: true });
+      else parentRef.current?.scrollTo({ top });
+    },
+    [lenisRef],
+  );
 
   const rowVirtualizer = useVirtualizer({
     count: tracks.length,
@@ -373,7 +383,7 @@ export function VirtualTrackList({
 
   return (
     <div
-      className={cn("relative h-full overflow-y-auto", className)}
+      className={cn("group/list relative h-full overflow-y-auto", className)}
       data-testid="virtual-track-list"
       data-virtualized="fixed-size"
       onKeyDown={onKeyDown}
@@ -381,6 +391,7 @@ export function VirtualTrackList({
       ref={parentRef}
       role="listbox"
     >
+      <HoverScrollbar scrollRef={parentRef} scrollToTop={scrollToTop} />
       {header ? <div ref={headerRef}>{header}</div> : null}
       <motion.div
         className="relative w-full"

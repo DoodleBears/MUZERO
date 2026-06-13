@@ -111,7 +111,7 @@
 - [ ] `useTrackThumbnailUrl` / `useCoverDerivativeUrl` 支持指定尺寸档;[`entity-grid.tsx`](../../../src/components/library/entity-grid.tsx) 网格用 `md`,[`track-row.tsx`](../../../src/components/library/track-row.tsx) 列表用 `sm`。
 - [ ] 派生走协议直出(Electron),保持浏览器原生解码/缓存(对齐 Pinterest 第 2 招)。
 
-**Open Question:** 档位取 `160/320/512` 还是别的?是否要 1x/2x 两套?(默认按 `Math.min(devicePixelRatio,2)` 选一档,不存双份。)
+**尺寸(用户已拍板 2026-06-14):列表行 `sm=160`,网格卡 `lg=512`**(用户:「可以用 512 px」——网格直接用 512 而非 320,更清晰)。按 `Math.min(devicePixelRatio,2)` 选一档,不存双份。详情大图也可复用 512。
 
 **Checklist:**
 - [ ] `pickCoverSize` 单测;桌面网格卡 2x DPI 下清晰;各档进预算管理;不上采样、不下载原图。
@@ -154,3 +154,4 @@
 | 2026-06-14 | Claude | Phase 1(#C)代码完成:`keepDeferredCover` + `useCoverDerivativeUrl` defer 选项(保留已解析封面、滚动中不启动 worker)+ track-row 改造。`src` 全量 2383 例通过。待实测 |
 | 2026-06-14 | Claude | QA 跟进:修「滚动停下二次闪 thumbhash」——effect 顶部加 `entryRef.forKey === coverKey` 守卫,已解析封面不再重跑 ensure/换 URL。`src` 全量通过 |
 | 2026-06-14 | Claude | Phase 2(#1)代码完成:`createUploadedTrack` 改一次 `deriveCoverMetadata`(thumbhash+精确 palette),删整套延迟 palette flush;每张封面导入解码 2→1 次。`src` 全量 2383 例通过 |
+| 2026-06-14 | User+Claude | Phase 3 尺寸拍板:列表 `sm=160` / 网格 `lg=512`(用户「可以用 512 px」)。Phase 3 由用户另开 session 实现 |
