@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildAlphabetIndex, firstAlphaLabel } from "./alphabet-index";
+import { bucketIndexAt, buildAlphabetIndex, firstAlphaLabel } from "./alphabet-index";
 
 describe("firstAlphaLabel", () => {
   it("uppercases the first latin letter", () => {
@@ -65,5 +65,29 @@ describe("buildAlphabetIndex", () => {
 
   it("is empty for an empty list", () => {
     expect(buildAlphabetIndex([], letter)).toEqual([]);
+  });
+});
+
+describe("bucketIndexAt", () => {
+  // A tight 27-letter block, 270px tall (10px per letter), starting at y=100.
+  const TOP = 100;
+  const HEIGHT = 270;
+  const COUNT = 27;
+
+  it("maps the pointer to the letter directly under it (no full-height gap overshoot)", () => {
+    // Holding the 3rd letter (index 2) — its band is y∈[120,130). This is the
+    // B-not-G regression: the finger on B must resolve to B, not a later letter.
+    expect(bucketIndexAt(125, TOP, HEIGHT, COUNT)).toBe(2);
+    expect(bucketIndexAt(TOP, TOP, HEIGHT, COUNT)).toBe(0); // top edge → first
+  });
+
+  it("clamps above the top and below the bottom", () => {
+    expect(bucketIndexAt(20, TOP, HEIGHT, COUNT)).toBe(0);
+    expect(bucketIndexAt(9999, TOP, HEIGHT, COUNT)).toBe(COUNT - 1);
+    expect(bucketIndexAt(TOP + HEIGHT, TOP, HEIGHT, COUNT)).toBe(COUNT - 1);
+  });
+
+  it("returns 0 for an empty strip", () => {
+    expect(bucketIndexAt(150, TOP, HEIGHT, 0)).toBe(0);
   });
 });

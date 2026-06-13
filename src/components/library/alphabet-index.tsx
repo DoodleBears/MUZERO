@@ -1,5 +1,5 @@
 import { type RefObject, useEffect, useRef, useState } from "react";
-import type { AlphabetBucket } from "@/lib/alphabet-index";
+import { type AlphabetBucket, bucketIndexAt } from "@/lib/alphabet-index";
 import { cn } from "@/lib/utils";
 
 interface AlphabetIndexProps {
@@ -47,10 +47,10 @@ export function AlphabetIndex({ scrollRef, buckets, onJump }: AlphabetIndexProps
   const jumpAt = (clientY: number) => {
     const strip = stripRef.current;
     if (!strip || buckets.length === 0) return;
+    // Hit-test against the tight letters block (stripRef), not the full-height
+    // centering container — otherwise the top gap pushes the map onto a later letter.
     const rect = strip.getBoundingClientRect();
-    const ratio = (clientY - rect.top) / Math.max(1, rect.height);
-    const idx = Math.min(buckets.length - 1, Math.max(0, Math.floor(ratio * buckets.length)));
-    const bucket = buckets[idx];
+    const bucket = buckets[bucketIndexAt(clientY, rect.top, rect.height, buckets.length)];
     if (bucket) {
       setActive(bucket.label);
       onJump(bucket.firstIndex);
@@ -61,42 +61,47 @@ export function AlphabetIndex({ scrollRef, buckets, onJump }: AlphabetIndexProps
 
   return (
     <div className="pointer-events-none sticky top-0 right-0 z-30 h-0 w-full" aria-hidden="true">
+      {/* Full-height container only centers the letters block in the scrollport. */}
       <div
-        ref={stripRef}
-        className="pointer-events-auto absolute top-0 right-1 flex w-5 touch-none select-none flex-col items-center justify-center rounded-full bg-background/35 py-1 backdrop-blur-sm"
+        className="absolute top-0 right-1 flex w-5 flex-col items-center justify-center"
         style={{ height }}
-        onPointerDown={(event) => {
-          event.preventDefault();
-          (event.target as HTMLElement).setPointerCapture?.(event.pointerId);
-          setDragging(true);
-          jumpAt(event.clientY);
-        }}
-        onPointerMove={(event) => {
-          if (dragging) jumpAt(event.clientY);
-        }}
-        onPointerUp={() => {
-          setDragging(false);
-          setActive(null);
-        }}
-        onPointerCancel={() => {
-          setDragging(false);
-          setActive(null);
-        }}
       >
-        {buckets.map((bucket) => (
-          <button
-            key={bucket.label}
-            type="button"
-            tabIndex={-1}
-            onClick={() => onJump(bucket.firstIndex)}
-            className={cn(
-              "font-medium text-[10px] text-foreground/55 leading-tight transition-colors hover:text-primary",
-              active === bucket.label && "text-primary",
-            )}
-          >
-            {bucket.label}
-          </button>
-        ))}
+        <div
+          ref={stripRef}
+          className="pointer-events-auto flex touch-none select-none flex-col items-center rounded-full bg-background/35 px-1 py-1 backdrop-blur-sm"
+          onPointerDown={(event) => {
+            event.preventDefault();
+            (event.target as HTMLElement).setPointerCapture?.(event.pointerId);
+            setDragging(true);
+            jumpAt(event.clientY);
+          }}
+          onPointerMove={(event) => {
+            if (dragging) jumpAt(event.clientY);
+          }}
+          onPointerUp={() => {
+            setDragging(false);
+            setActive(null);
+          }}
+          onPointerCancel={() => {
+            setDragging(false);
+            setActive(null);
+          }}
+        >
+          {buckets.map((bucket) => (
+            <button
+              key={bucket.label}
+              type="button"
+              tabIndex={-1}
+              onClick={() => onJump(bucket.firstIndex)}
+              className={cn(
+                "font-medium text-[10px] text-foreground/55 leading-tight transition-colors hover:text-primary",
+                active === bucket.label && "text-primary",
+              )}
+            >
+              {bucket.label}
+            </button>
+          ))}
+        </div>
       </div>
       {dragging && active ? (
         <div

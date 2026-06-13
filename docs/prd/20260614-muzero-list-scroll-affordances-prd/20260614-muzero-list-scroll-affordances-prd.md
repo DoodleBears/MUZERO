@@ -181,3 +181,4 @@ VirtualTrackList (parentRef scroller + Lenis)
 | 2026-06-14 | Claude | QA 修(字母条乱序/点 Q 显示 K):名称排序与拼音标签不同源致错位。新增 `transliterateSortKey`(整串读音化),`sortTracks` 名称排序改按它(预算键),`transliterateInitial` 重定义为同源 `firstAlphaLabel(sortKey)`;附带修混合标题 `iPhone手机→I`。`src` 全量 2407 例通过 |
 | 2026-06-14 | Claude | QA 修(占位/可读性):字母条独占右 gutter——`bg-background/35 backdrop-blur` 圆角 rail + hover 滚动条 `rightInset` 内移到其左 + 行 `pr-6` 让内容躲开。`src` 全量 2407 例通过 |
 | 2026-06-14 | Claude | QA 修(全部歌曲排序不持久化):`trackSort`/`trackSortDir` 改 localStorage 持久(`muzero-gallery-track-sort`/`-dir`,同 `MODE_KEY`/`VIEW_KEYS` 一类 UI 偏好),初始从存储读、`onTrackSortClick` 写回。`src` 全量 2408 例通过 |
+| 2026-06-14 | Claude | QA 修(按 B 显示 G):拖动命中错位。根因——字母条容器是满屏高 `justify-center`,字母挤在中间留大空隙,但 `jumpAt` 按**整高**比例映射 → 顶部空隙把指针推到靠后字母。修法:把命中测试改到**贴合字母的内层块**(stripRef 移到内层 tight block,外层满高容器只负责居中),并抽纯函数 `bucketIndexAt`(单测含 B-not-G 回归)。`src` 全量 2412 例通过 |
