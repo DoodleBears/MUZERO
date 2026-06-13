@@ -8,12 +8,10 @@ import { useSettings } from "@/hooks/use-app-data";
 import {
   coverPaletteFields,
   coverPaletteFromThumbhash,
-  extractCoverPalette,
   normalizeCoverPalette,
 } from "@/lib/cover-palette";
 import { resolveDesktopBridge } from "@/lib/desktop/bridge";
 import { sanitizeUrlForTrace } from "@/lib/diagnostics";
-import { extractImagePaletteFromFetchedUrl } from "@/lib/image-palette";
 import { createDiagnosticLogger } from "@/lib/logger";
 import { getAppFetch } from "@/lib/platform";
 import { describeTrackCoverSource } from "@/lib/track-source";
@@ -23,6 +21,7 @@ import {
   transitionVisualizerCoverColor,
   useVisualizerCoverColorStore,
 } from "@/stores/visualizer-color-store";
+import { extractCoverMetadataViaWorker } from "@/workers/cover-client";
 
 const colorCache = new Map<string, { rgb: Rgb | null; palette: Rgb[] }>();
 const paletteExtractionInFlight = new Map<string, Promise<PaletteResolution>>();
@@ -205,7 +204,15 @@ function getOrStartRemotePaletteExtraction(args: {
         redactions: args.safeUrl.redactions,
       });
       const fetcher = await getAppFetch();
-      const palette = await extractImagePaletteFromFetchedUrl(args.remoteCoverUrl, { fetcher });
+      const response = await fetcher(args.remoteCoverUrl, { cache: "force-cache" });
+      if (!response.ok) throw new Error(`remote cover fetch failed: ${response.status}`);
+      const blob = await response.blob();
+      const { palette } = await extractCoverMetadataViaWorker({
+        blob,
+        mime: response.headers.get("content-type") ?? blob.type,
+        sourceKey: args.cacheKey,
+        targets: ["palette"],
+      });
       const result = resolvePalette(palette, args.thumbhashFallback);
       if (result.cleanPalette.length > 0) {
         void db.tracks.update(
@@ -282,7 +289,15 @@ function getOrStartLocalPaletteExtraction(args: {
       mime: args.cover.mime,
       bytes: args.cover.bytes,
     });
-    return await extractCoverPalette(args.cover.blob, args.coverCrop, args.cover.mime);
+    return (
+      await extractCoverMetadataViaWorker({
+        blob: args.cover.blob,
+        crop: args.coverCrop,
+        mime: args.cover.mime,
+        sourceKey: args.cover.id,
+        targets: ["palette"],
+      })
+    ).palette;
   })()
     .then((palette) => {
       const result = resolvePalette(palette, args.thumbhashFallback);

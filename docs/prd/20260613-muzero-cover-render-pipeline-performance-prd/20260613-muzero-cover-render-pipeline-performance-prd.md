@@ -12,7 +12,7 @@
 | Phase | Name | Status | Link |
 |-------|------|--------|------|
 | 0 | Baseline and Observability | In Progress | [Phase 0 Checklist](#phase-0-checklist) |
-| 1 | Workerized Cover Metadata Extraction | Pending | [Phase 1 Checklist](#phase-1-checklist) |
+| 1 | Workerized Cover Metadata Extraction | In Progress | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | Persistent Thumbnail Derivatives | Pending | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | Precomputed Backlight Derivatives | Pending | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | Hot-Table Decoupling and Repair UX | Pending | [Phase 4 Checklist](#phase-4-checklist) |
@@ -511,20 +511,20 @@ Run these scenarios in the Electron/Tauri desktop app with the visible perf HUD 
 **Goal:** Move palette/thumbhash extraction out of the main UI thread and make Settings repair use the same worker queue.
 
 **Tasks:**
-- [ ] Add `src/workers/cover-worker.ts` and `src/workers/cover-client.ts`.
-- [ ] Move pixel sampling for palette into worker using `createImageBitmap` + `OffscreenCanvas`.
-- [ ] Move thumbhash generation into worker where browser support allows.
-- [ ] Keep `selectImagePalette` pure and shared/tested.
-- [ ] Replace live `visualizer-dynamic-color` extraction with worker queue request.
-- [ ] Replace `backfillCoverMetadata` direct extraction path or wrap it through the cover worker client.
-- [ ] Preserve fallback to idle main-thread path when Worker/OffscreenCanvas is unavailable.
+- [x] Add `src/workers/cover-worker.ts` and `src/workers/cover-client.ts`.
+- [x] Move pixel sampling for palette into worker using `createImageBitmap` + `OffscreenCanvas`.
+- [x] Move thumbhash generation into worker where browser support allows.
+- [x] Keep `selectImagePalette` pure and shared/tested.
+- [x] Replace live `visualizer-dynamic-color` extraction with worker queue request.
+- [x] Replace `backfillCoverMetadata` direct extraction path or wrap it through the cover worker client.
+- [x] Preserve fallback to inline extraction in the same scheduled caller context when Worker/OffscreenCanvas is unavailable.
 
 ### Phase 1 Checklist
 
-- [ ] Switching to a cover with missing palette does not run canvas/getImageData on main thread.
+- [x] Switching to a cover with missing palette does not run canvas/getImageData on main thread in the Electron worker path.
 - [ ] Settings repair can run while music plays without repeated long tasks.
-- [ ] Existing `Track.coverThumbhash` / `Track.coverPalette` readers continue to work.
-- [ ] Unit tests cover worker fallback and result normalization.
+- [x] Existing `Track.coverThumbhash` / `Track.coverPalette` readers continue to work.
+- [x] Unit tests cover worker fallback, in-flight dedupe, and result normalization.
 
 ### Phase 2: Persistent Thumbnail Derivatives
 
@@ -668,3 +668,4 @@ Run these scenarios in the Electron/Tauri desktop app with the visible perf HUD 
 | 2026-06-13 | Codex | Initial draft based on covered-switch and Tab 2 scroll performance investigation |
 | 2026-06-13 | Codex | Resolved open questions from product feedback; clarified Electron app as primary QA target and palette workerization as top priority |
 | 2026-06-13 | Codex | Phase 0 instrumentation: cover render cache hit/miss trace, crop/palette/object-url work spans, blob URL kind grouping, and Electron QA runbook |
+| 2026-06-13 | Codex | Phase 1 workerized cover metadata extraction: shared cover worker client/core, visualizer palette fallback through worker, and Settings repair/repository defaults through worker pipeline |

@@ -2,9 +2,8 @@ import type { TrackBrief } from "@/dj/dj-brief-schema";
 import {
   coverPaletteFields,
   coverPaletteFromThumbhash,
-  extractCoverPalette,
+  type extractCoverPalette,
 } from "@/lib/cover-palette";
-import { encodeCoverThumbhash } from "@/lib/cover-thumbhash";
 import { newId } from "@/lib/id";
 import { noteDbRequery } from "@/lib/perf-counters";
 import type { LyricsRecord } from "@/lyrics/provider";
@@ -25,6 +24,7 @@ import {
   type SystemGlobalShortcutActionId,
   type SystemShortcutBinding,
 } from "@/shortcuts/system-global";
+import { extractCoverMetadataViaWorker } from "@/workers/cover-client";
 import {
   deleteMediaBlob,
   type MediaBlobStorageOptions,
@@ -55,6 +55,54 @@ import {
   type TrackMediaMetadata,
   type TrackPlaybackStats,
 } from "./types";
+
+async function deriveCoverMetadata(
+  blob: Blob,
+  crop?: CropRect,
+  mime = blob.type,
+  sourceKey?: string,
+) {
+  return extractCoverMetadataViaWorker({
+    blob,
+    crop,
+    mime,
+    sourceKey,
+    targets: ["palette", "thumbhash"],
+  });
+}
+
+async function deriveCoverThumbhash(
+  blob: Blob,
+  crop?: CropRect,
+  sourceKey?: string,
+): Promise<string | undefined> {
+  return (
+    await extractCoverMetadataViaWorker({
+      blob,
+      crop,
+      mime: blob.type,
+      sourceKey,
+      targets: ["thumbhash"],
+    })
+  ).thumbhash;
+}
+
+async function deriveCoverPalette(
+  blob: Blob,
+  crop?: CropRect,
+  mime = blob.type,
+  sourceKey?: string,
+): Promise<Awaited<ReturnType<typeof extractCoverPalette>>> {
+  return (
+    await extractCoverMetadataViaWorker({
+      blob,
+      crop,
+      mime,
+      sourceKey,
+      targets: ["palette"],
+    })
+  ).palette;
+}
 
 /**
  * Thin repository functions over Dexie. Every function takes the DB instance
@@ -425,7 +473,7 @@ export async function setSessionCover(
 ): Promise<void> {
   // Encode the blurred preview before the transaction (canvas decode is async and
   // must not run inside a Dexie tx); undefined on failure / non-browser.
-  const coverThumbhash = await encodeCoverThumbhash(input.blob, input.crop);
+  const coverThumbhash = await deriveCoverThumbhash(input.blob, input.crop);
   const existing = await db.sessions.get(input.sessionId);
   if (!existing) return;
   const cover = await putSizeAwareImageBlob(
@@ -512,7 +560,7 @@ export async function setEntityCover(
   db: MuzeroDB = defaultDb,
   storage: MediaBlobStorageOptions = {},
 ): Promise<void> {
-  const thumbhash = await encodeCoverThumbhash(input.blob, input.crop);
+  const thumbhash = await deriveCoverThumbhash(input.blob, input.crop);
   const cover = await putSizeAwareImageBlob(
     {
       id: newId("blb"),
@@ -804,7 +852,11 @@ export async function createUploadedTrack(
         )
       : undefined;
     if (cover && input.embeddedCover) {
-      const coverThumbhash = await encodeCoverThumbhash(input.embeddedCover.blob);
+      const coverThumbhash = await deriveCoverThumbhash(
+        input.embeddedCover.blob,
+        undefined,
+        cover.id,
+      );
       track.coverBlobId = cover.id;
       track.coverThumbhash = coverThumbhash;
       Object.assign(track, coverPaletteFields(coverPaletteFromThumbhash(coverThumbhash), cover.id));
@@ -890,7 +942,7 @@ async function runQueuedTrackCoverPaletteExtraction(
       : await resolveMediaBlob(job.coverBlobId, job.db, job.storage);
     if (!cover?.blob) return;
     const fields = coverPaletteFields(
-      await extractCoverPalette(cover.blob, track.coverCrop, cover.mime),
+      await deriveCoverPalette(cover.blob, track.coverCrop, cover.mime, job.coverBlobId),
       job.coverBlobId,
     );
     if (!fields.coverPalette?.length) return;
@@ -1128,10 +1180,9 @@ export async function setTrackCover(
   db: MuzeroDB = defaultDb,
   storage: MediaBlobStorageOptions = {},
 ): Promise<void> {
-  const [coverThumbhash, coverPalette] = await Promise.all([
-    encodeCoverThumbhash(input.blob, input.crop),
-    extractCoverPalette(input.blob, input.crop, input.mime),
-  ]);
+  const coverMetadata = await deriveCoverMetadata(input.blob, input.crop, input.mime);
+  const coverThumbhash = coverMetadata.thumbhash;
+  const coverPalette = coverMetadata.palette;
   const existing = await db.tracks.get(input.trackId);
   if (!existing) return;
   const cover = await putSizeAwareImageBlob(
@@ -1210,10 +1261,9 @@ export async function setTrackCoverFromMemory(
   if (!photo?.blob) return false;
   const track = await db.tracks.get(memory.trackId);
   if (!track) return false;
-  const [coverThumbhash, coverPalette] = await Promise.all([
-    encodeCoverThumbhash(photo.blob),
-    extractCoverPalette(photo.blob, undefined, photo.mime),
-  ]);
+  const coverMetadata = await deriveCoverMetadata(photo.blob, undefined, photo.mime);
+  const coverThumbhash = coverMetadata.thumbhash;
+  const coverPalette = coverMetadata.palette;
   const cover = await putSizeAwareImageBlob(
     {
       id: newId("blb"),
@@ -1265,10 +1315,9 @@ export async function setTrackCoverCrop(
   let coverThumbhash: string | undefined;
   let coverPalette: Awaited<ReturnType<typeof extractCoverPalette>> = [];
   if (blob) {
-    [coverThumbhash, coverPalette] = await Promise.all([
-      encodeCoverThumbhash(blob, crop),
-      extractCoverPalette(blob, crop, cover.mime),
-    ]);
+    const coverMetadata = await deriveCoverMetadata(blob, crop, cover.mime, track?.coverBlobId);
+    coverThumbhash = coverMetadata.thumbhash;
+    coverPalette = coverMetadata.palette;
   }
   await db.tracks.update(id, {
     coverCrop: crop,
@@ -1292,7 +1341,7 @@ export async function setTrackCoverCrop(
  */
 export async function backfillCoverThumbhashes(
   db: MuzeroDB = defaultDb,
-  encode: (blob: Blob, crop?: CropRect) => Promise<string | undefined> = encodeCoverThumbhash,
+  encode: (blob: Blob, crop?: CropRect) => Promise<string | undefined> = deriveCoverThumbhash,
   opts: { limit?: number; skip?: ReadonlySet<string>; storage?: MediaBlobStorageOptions } = {},
 ): Promise<{ updated: number; attempted: string[] }> {
   const limit = opts.limit ?? 12;
@@ -1393,11 +1442,18 @@ export async function backfillCoverMetadata(
       crop?: CropRect,
       mime?: string,
     ) => Promise<Awaited<ReturnType<typeof extractCoverPalette>>>;
+    derive?: (
+      blob: Blob,
+      crop?: CropRect,
+      mime?: string,
+      sourceKey?: string,
+    ) => Promise<Awaited<ReturnType<typeof deriveCoverMetadata>>>;
   } = {},
 ): Promise<CoverMetadataBackfillProgress> {
   const limit = opts.limit ?? 12;
-  const encode = opts.encode ?? encodeCoverThumbhash;
-  const extract = opts.extract ?? extractCoverPalette;
+  const encode = opts.encode ?? deriveCoverThumbhash;
+  const extract = opts.extract ?? deriveCoverPalette;
+  const derive = opts.derive ?? (!opts.encode && !opts.extract ? deriveCoverMetadata : undefined);
 
   type Candidate = { key: string; run: () => Promise<boolean> };
   const candidates: Candidate[] = [];
@@ -1422,7 +1478,7 @@ export async function backfillCoverMetadata(
     if (track.coverBlobId) {
       candidates.push({
         key: track.coverBlobId,
-        run: () => backfillLocalTrackCoverMetadata(track, db, { ...opts, encode, extract }),
+        run: () => backfillLocalTrackCoverMetadata(track, db, { ...opts, derive, encode, extract }),
       });
       continue;
     }
@@ -1522,6 +1578,12 @@ async function backfillLocalTrackCoverMetadata(
       crop?: CropRect,
       mime?: string,
     ) => Promise<Awaited<ReturnType<typeof extractCoverPalette>>>;
+    derive?: (
+      blob: Blob,
+      crop?: CropRect,
+      mime?: string,
+      sourceKey?: string,
+    ) => Promise<Awaited<ReturnType<typeof deriveCoverMetadata>>>;
   },
 ): Promise<boolean> {
   if (!track.coverBlobId) return false;
@@ -1529,18 +1591,27 @@ async function backfillLocalTrackCoverMetadata(
   if (!cover?.blob) return false;
 
   const patch: Partial<Track> = {};
-  if (!track.coverThumbhash) {
-    const hash = await opts.encode(cover.blob, track.coverCrop);
-    if (hash) patch.coverThumbhash = hash;
-  }
-  if (!track.coverPalette?.length || track.coverPaletteSource !== track.coverBlobId) {
-    Object.assign(
-      patch,
-      coverPaletteFields(
-        await opts.extract(cover.blob, track.coverCrop, cover.mime),
-        track.coverBlobId,
-      ),
-    );
+  const needsThumbhash = !track.coverThumbhash;
+  const needsPalette =
+    !track.coverPalette?.length || track.coverPaletteSource !== track.coverBlobId;
+  if (opts.derive && needsThumbhash && needsPalette) {
+    const metadata = await opts.derive(cover.blob, track.coverCrop, cover.mime, track.coverBlobId);
+    if (metadata.thumbhash) patch.coverThumbhash = metadata.thumbhash;
+    Object.assign(patch, coverPaletteFields(metadata.palette, track.coverBlobId));
+  } else {
+    if (needsThumbhash) {
+      const hash = await opts.encode(cover.blob, track.coverCrop);
+      if (hash) patch.coverThumbhash = hash;
+    }
+    if (needsPalette) {
+      Object.assign(
+        patch,
+        coverPaletteFields(
+          await opts.extract(cover.blob, track.coverCrop, cover.mime),
+          track.coverBlobId,
+        ),
+      );
+    }
   }
   if (Object.keys(patch).length === 0) return false;
   await db.tracks.update(track.id, patch);

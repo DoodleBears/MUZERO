@@ -24,6 +24,16 @@ vi.mock("@/lib/image-palette", () => ({
   extractImagePalette: vi.fn(async () => mocks.palette),
 }));
 
+vi.mock("@/workers/cover-client", () => ({
+  extractCoverMetadataViaWorker: vi.fn(
+    async ({ targets }: { targets?: readonly ("palette" | "thumbhash")[] }) => ({
+      palette: targets?.includes("palette") ? mocks.palette : [],
+      thumbhash: targets?.includes("thumbhash") ? VALID_THUMB64 : undefined,
+      timings: { decodeMs: 0, paletteMs: 0, thumbhashMs: 0, totalMs: 0 },
+    }),
+  ),
+}));
+
 import { MuzeroDB } from "./muzero-db";
 import {
   countCoverMetadataBackfillCandidates,

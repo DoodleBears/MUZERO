@@ -227,6 +227,28 @@ describe("backfillCoverMetadata", () => {
     expect(track?.coverPaletteSource).toBe(blobId);
   });
 
+  it("can derive thumbhash and palette for a local cover in one decode pass", async () => {
+    const session = await createSession({ name: "s", seedPrompt: "", config: {} }, db);
+    const blobId = await addTrackWithCover("trk_combined", session.id);
+    const palette = [{ r: 30, g: 140, b: 210 }];
+    const derive = vi.fn(async () => ({
+      palette,
+      thumbhash: "HASH",
+      timings: { decodeMs: 1, paletteMs: 1, thumbhashMs: 1, totalMs: 3 },
+    }));
+
+    const { updated, attempted } = await backfillCoverMetadata(db, { derive });
+
+    expect(updated).toBe(1);
+    expect(attempted).toEqual([blobId]);
+    expect(derive).toHaveBeenCalledTimes(1);
+    expect(derive.mock.calls[0]?.slice(1)).toEqual([undefined, "image/png", blobId]);
+    const track = await db.tracks.get("trk_combined");
+    expect(track?.coverThumbhash).toBe("HASH");
+    expect(track?.coverPalette).toEqual(palette);
+    expect(track?.coverPaletteSource).toBe(blobId);
+  });
+
   it("repairs remote-only track cover palettes from thumbhash without fetching bytes", async () => {
     const session = await createSession({ name: "s", seedPrompt: "", config: {} }, db);
     const thumbhash = thumbhashToBase64(
