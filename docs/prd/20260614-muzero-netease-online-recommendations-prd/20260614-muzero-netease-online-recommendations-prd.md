@@ -367,7 +367,7 @@ ModeTab value="online" shortcut="5" → {t("gallery.modeOnline")}
 | 1 | tab 显隐：「登录才显示」vs「常驻 + 未登录空态引导」 | Resolved | 采「**常驻 + 空态引导登录**」（用户倾向，更可发现）；登录后内容自动填充 |
 | 2 | tab 命名：发现 / 在线 / 推荐 | ✅ Resolved | 「**发现**」（Discover）；en `Discover` / zh 发现 / ja 発見 / ko 발견 |
 | 3 | 未登录时「推荐歌单」（匿名 personalized/playlist）是否照常展示 | ✅ Resolved | **照常展示**匿名推荐歌单（可点播/保存，不强制登录）；「每日推荐」两段挂**非阻断登录 chip**，不整 tab 引导、不登录才显示 tab |
-| 4 | 「换一批」用 `afresh` 强刷 vs 仅 `refetch` | Open | 倾向 `afresh=true` 真换一批；Phase 4 确认网易云对频繁 afresh 是否限流（纯实现细节，不阻断定稿）|
+| 4 | 「换一批」用 `afresh` 强刷 vs 仅 `refetch` | ✅ Resolved | 采 `afresh=true`：hook `reroll()` 走 `queryClient.fetchQuery({afresh:true, staleTime:0})` 写回同 cache slot（替换可见 30）。频繁 afresh 限流为运行时观察项，非阻断 |
 | 5 | eapi vs weapi 调这三端点 | ✅ Resolved | **eapi**（best practice：与现有栈一致、匿名不被反爬门控）；Phase 1 冒烟若 eapi 对某端点异常，再按需将该端点回退 weapi |
 
 ---
