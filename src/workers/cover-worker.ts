@@ -26,7 +26,9 @@ ctx.onmessage = async (event: MessageEvent<CoverMetadataWorkerRequest>) => {
       sourceKey: msg.sourceKey,
       targets: msg.targets,
     });
-    const transfers = result.thumbnail ? [result.thumbnail.bytes] : [];
+    const transfers = [result.backlight?.bytes, result.thumbnail?.bytes].filter(
+      (bytes): bytes is ArrayBuffer => Boolean(bytes),
+    );
     ctx.postMessage({ reqId: msg.reqId, result, type: "cover-metadata-result" }, transfers);
   } catch (error) {
     ctx.postMessage({

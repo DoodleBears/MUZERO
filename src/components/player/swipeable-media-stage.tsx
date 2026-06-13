@@ -16,7 +16,11 @@ import { resolveMediaBlob } from "@/db/media-blob-storage";
 import { db } from "@/db/muzero-db";
 import type { Track } from "@/db/types";
 import { useSettings } from "@/hooks/use-app-data";
-import { proxyExternalCover, useTrackCoverResource } from "@/hooks/use-media";
+import {
+  proxyExternalCover,
+  useCoverDerivativeUrl,
+  useTrackCoverResource,
+} from "@/hooks/use-media";
 import {
   resolveNowPlayingCoverBacklightAppearance,
   resolveNowPlayingCoverEffectMode,
@@ -575,7 +579,11 @@ export function SwipeableMediaStage({
             {settleTarget ? (
               // Once settled, only the new cover is on screen — the coverflow
               // cards (incl. the outgoing one) are gone, so nothing stacks under it.
-              <SettleCard coverEffect={coverEffect} onReady={markVisualReady} visual={settleTarget} />
+              <SettleCard
+                coverEffect={coverEffect}
+                onReady={markVisualReady}
+                visual={settleTarget}
+              />
             ) : (
               <>
                 <CoverflowCard
@@ -767,11 +775,7 @@ function CoverflowCard({
   if (!visual) return null;
   return (
     <motion.div
-      className={cn(
-        SWIPE_CARD_BASE,
-        coverEffect.mode === "shadow" && "album-cover-shadow",
-        zClass,
-      )}
+      className={cn(SWIPE_CARD_BASE, coverEffect.mode === "shadow" && "album-cover-shadow", zClass)}
       style={{
         x: card.screenX,
         opacity: card.coverOpacity,
@@ -812,11 +816,7 @@ function SettleCard({
 }) {
   return (
     <motion.div
-      className={cn(
-        SWIPE_CARD_BASE,
-        coverEffect.mode === "shadow" && "album-cover-shadow",
-        "z-40",
-      )}
+      className={cn(SWIPE_CARD_BASE, coverEffect.mode === "shadow" && "album-cover-shadow", "z-40")}
       initial={false}
     >
       <TrackVisual
@@ -934,12 +934,13 @@ function TrackVisual({
   const [initialFailed, setInitialFailed] = useState(false);
   const hasCover = trackHasCover(visual.track);
   const coverUrl = hasCover && !initialFailed ? visual.initialCoverUrl : null;
+  const backlightUrl = useCoverDerivativeUrl(visual.track, "backlight");
 
   useEffect(() => {
     if (!hasCover || coverUrl) onReady?.(visual.track.id);
   }, [coverUrl, hasCover, onReady, visual.track.id]);
 
-  const showBacklight = coverEffect.mode === "backlight" && hasBacklight && !!coverUrl;
+  const showBacklight = coverEffect.mode === "backlight" && hasBacklight && !!backlightUrl;
 
   return coverUrl ? (
     <>
@@ -952,7 +953,7 @@ function TrackVisual({
           className="pointer-events-none absolute inset-0 z-0 now-playing-cover-backlight-clip"
         >
           <img
-            src={coverUrl}
+            src={backlightUrl ?? undefined}
             alt=""
             aria-hidden
             referrerPolicy="no-referrer"
@@ -1017,7 +1018,12 @@ function measureVerticalClipBounds(el: HTMLElement | null): { bottom: number; to
   let bottom = window.innerHeight;
   for (let parent = el?.parentElement; parent; parent = parent.parentElement) {
     const overflowY = window.getComputedStyle(parent).overflowY;
-    if (overflowY !== "auto" && overflowY !== "scroll" && overflowY !== "hidden" && overflowY !== "clip") {
+    if (
+      overflowY !== "auto" &&
+      overflowY !== "scroll" &&
+      overflowY !== "hidden" &&
+      overflowY !== "clip"
+    ) {
       continue;
     }
     const rect = parent.getBoundingClientRect();

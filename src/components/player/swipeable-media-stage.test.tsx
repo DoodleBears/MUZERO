@@ -77,6 +77,7 @@ vi.mock("@/hooks/use-app-data", () => ({
 }));
 
 vi.mock("@/hooks/use-media", () => ({
+  useCoverDerivativeUrl: () => "blob:backlight",
   useTrackCoverUrl: () => null,
   useTrackCoverResource: () => ({
     readyForTrack: mocks.coverReadyForTrack,

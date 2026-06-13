@@ -2,7 +2,7 @@ import { motion } from "motion/react";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useSettings } from "@/hooks/use-app-data";
-import { useTrackCoverUrl } from "@/hooks/use-media";
+import { useCoverDerivativeUrl, useTrackCoverUrl } from "@/hooks/use-media";
 import {
   resolveNowPlayingCoverBacklightAppearance,
   resolveNowPlayingCoverEffectMode,
@@ -40,6 +40,7 @@ export function MediaStage({
 
   const containerRef = useRef<HTMLDivElement | null>(null);
   const coverUrl = useTrackCoverUrl(current);
+  const coverBacklightUrl = useCoverDerivativeUrl(current, "backlight");
   const [videoError, setVideoError] = useState(false);
   const [videoAspect, setVideoAspect] = useState<number | null>(null);
   const content = resolveStageContent({
@@ -107,7 +108,7 @@ export function MediaStage({
   const backlight = resolveNowPlayingCoverBacklightAppearance(settings);
   const useCoverShadow = coverEffectMode === "shadow";
   const showCoverBacklight =
-    coverBacklightEnabled && showCover && coverEffectMode === "backlight" && !!coverUrl;
+    coverBacklightEnabled && showCover && coverEffectMode === "backlight" && !!coverBacklightUrl;
 
   // Video keeps its intrinsic ratio. Covers and title cards stay square like
   // album artwork, which keeps direct switches and swipe handoffs on one stable
@@ -119,18 +120,14 @@ export function MediaStage({
       style={aspect != null ? { aspectRatio: String(aspect) } : undefined}
       className={cn(
         "relative isolate shrink-0 overflow-visible",
-        showVideo
-          ? "w-full"
-          : showCover
-            ? "mx-auto w-full"
-            : "mx-auto aspect-square w-full",
+        showVideo ? "w-full" : showCover ? "mx-auto w-full" : "mx-auto aspect-square w-full",
         className,
       )}
     >
       <NowPlayingCoverBacklight
         active={showCoverBacklight}
         opacity={backlight.opacity / 100}
-        url={coverUrl}
+        url={coverBacklightUrl}
       />
       <div
         ref={containerRef}

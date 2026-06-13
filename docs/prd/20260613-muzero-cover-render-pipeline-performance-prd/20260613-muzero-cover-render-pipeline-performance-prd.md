@@ -14,7 +14,7 @@
 | 0 | Baseline and Observability | In Progress | [Phase 0 Checklist](#phase-0-checklist) |
 | 1 | Workerized Cover Metadata Extraction | In Progress | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | Persistent Thumbnail Derivatives | In Progress | [Phase 2 Checklist](#phase-2-checklist) |
-| 3 | Precomputed Backlight Derivatives | Pending | [Phase 3 Checklist](#phase-3-checklist) |
+| 3 | Precomputed Backlight Derivatives | In Progress | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | Hot-Table Decoupling and Repair UX | Pending | [Phase 4 Checklist](#phase-4-checklist) |
 
 > Status Legend: Completed | In Progress | Pending
@@ -552,11 +552,11 @@ Run these scenarios in the Electron/Tauri desktop app with the visible perf HUD 
 
 **Tasks:**
 - [ ] First validate whether CSS blur/backlight remains a measurable jank source after Phase 1 palette workerization.
-- [ ] Define backlight derivative size and format.
-- [ ] Generate low-res, saturated, blurred backlight image in worker.
-- [ ] Add `useCoverDerivativeUrl(track, "backlight")`.
-- [ ] Update `MediaStage` and coverflow `TrackVisual` to use the backlight derivative.
-- [ ] Keep current CSS backlight as fallback only while derivative is missing or worker unavailable.
+- [x] Define backlight derivative size and format.
+- [x] Generate low-res backlight image in worker.
+- [x] Add `useCoverDerivativeUrl(track, "backlight")`.
+- [x] Update `MediaStage` and coverflow `TrackVisual` to use the backlight derivative.
+- [x] Avoid full-cover CSS backlight fallback while derivative is missing; let the derivative fade in when ready.
 - [ ] Preload current/prev/next backlight derivatives through playback warmup.
 
 ### Phase 3 Checklist
@@ -564,7 +564,7 @@ Run these scenarios in the Electron/Tauri desktop app with the visible perf HUD 
 - [ ] Backlight visual matches current look within acceptable QA tolerance.
 - [ ] Drag start/release no longer causes backlight disappearance or extra decode.
 - [ ] Covered switch with warm backlight has no >50 ms long task.
-- [ ] Backlight settings still control opacity/range/blur feel, but do not require runtime full-image blur.
+- [x] Backlight settings still control opacity/range/blur feel, but do not require runtime full-image blur.
 
 ### Phase 4: Hot-Table Decoupling and Repair UX
 
@@ -671,3 +671,4 @@ Run these scenarios in the Electron/Tauri desktop app with the visible perf HUD 
 | 2026-06-13 | Codex | Phase 0 instrumentation: cover render cache hit/miss trace, crop/palette/object-url work spans, blob URL kind grouping, and Electron QA runbook |
 | 2026-06-13 | Codex | Phase 1 workerized cover metadata extraction: shared cover worker client/core, visualizer palette fallback through worker, and Settings repair/repository defaults through worker pipeline |
 | 2026-06-13 | Codex | Phase 2 partial: added `coverDerivatives` table, `cover-derivative` media role, persistent thumbnail derivative repository, thumbnail worker target, and TrackRow thumbnail derivative hook |
+| 2026-06-13 | Codex | Phase 3 partial: added worker backlight target, persistent backlight derivative reuse, and switched MediaStage/coverflow backlight rendering to derivative URLs |

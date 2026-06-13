@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   coverDerivativeId,
   coverDerivativeSourceForTrack,
+  ensureCoverBacklightDerivative,
   ensureCoverThumbnailDerivative,
 } from "./cover-derivatives";
 import { MuzeroDB } from "./muzero-db";
@@ -70,7 +71,14 @@ describe("cover derivatives", () => {
         mime: "image/webp",
         width: 96,
       },
-      timings: { decodeMs: 1, paletteMs: 0, thumbhashMs: 0, thumbnailMs: 2, totalMs: 3 },
+      timings: {
+        backlightMs: 0,
+        decodeMs: 1,
+        paletteMs: 0,
+        thumbnailMs: 2,
+        thumbhashMs: 0,
+        totalMs: 3,
+      },
     }));
 
     const first = await ensureCoverThumbnailDerivative(track, db, { extract });
@@ -91,6 +99,43 @@ describe("cover derivatives", () => {
     });
   });
 
+  it("persists a backlight derivative separately from the thumbnail derivative", async () => {
+    const track = await addTrackWithCover("trk_backlight");
+    const extract = vi.fn(async () => ({
+      backlight: {
+        bytes: await new Blob(["backlight"], { type: "image/webp" }).arrayBuffer(),
+        height: 192,
+        mime: "image/webp",
+        width: 192,
+      },
+      palette: [],
+      timings: {
+        backlightMs: 2,
+        decodeMs: 1,
+        paletteMs: 0,
+        thumbnailMs: 0,
+        thumbhashMs: 0,
+        totalMs: 3,
+      },
+    }));
+
+    const first = await ensureCoverBacklightDerivative(track, db, { extract });
+    const second = await ensureCoverBacklightDerivative(track, db, { extract });
+
+    expect(extract).toHaveBeenCalledTimes(1);
+    expect(first?.derivative.kind).toBe("backlight");
+    expect(first?.derivative.id).toBe(second?.derivative.id);
+    expect(first?.derivative.id).not.toBe(
+      coverDerivativeId({
+        cropSig: "10:20:300:300",
+        kind: "thumbnail",
+        sourceKey: `local:${track.coverBlobId}`,
+        version: 1,
+      }),
+    );
+    expect(await first?.blob.text()).toBe("backlight");
+  });
+
   it("dedupes concurrent thumbnail generation for the same cover source", async () => {
     const track = await addTrackWithCover("trk_concurrent");
     let release: (() => void) | undefined;
@@ -102,7 +147,14 @@ describe("cover derivatives", () => {
         mime: "image/webp",
         width: 96,
       },
-      timings: { decodeMs: 1, paletteMs: 0, thumbhashMs: 0, thumbnailMs: 2, totalMs: 3 },
+      timings: {
+        backlightMs: 0,
+        decodeMs: 1,
+        paletteMs: 0,
+        thumbnailMs: 2,
+        thumbhashMs: 0,
+        totalMs: 3,
+      },
     };
     const extract = vi.fn(
       () =>

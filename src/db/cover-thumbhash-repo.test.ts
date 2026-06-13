@@ -29,7 +29,14 @@ vi.mock("@/workers/cover-client", () => ({
     async ({ targets }: { targets?: readonly ("palette" | "thumbhash")[] }) => ({
       palette: targets?.includes("palette") ? mocks.palette : [],
       thumbhash: targets?.includes("thumbhash") ? VALID_THUMB64 : undefined,
-      timings: { decodeMs: 0, paletteMs: 0, thumbnailMs: 0, thumbhashMs: 0, totalMs: 0 },
+      timings: {
+        backlightMs: 0,
+        decodeMs: 0,
+        paletteMs: 0,
+        thumbnailMs: 0,
+        thumbhashMs: 0,
+        totalMs: 0,
+      },
     }),
   ),
 }));

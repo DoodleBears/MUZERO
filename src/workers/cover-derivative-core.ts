@@ -5,9 +5,10 @@ import { selectImagePalette } from "@/lib/image-palette";
 import type { Rgb } from "@/lib/visualizer-color";
 
 const SAMPLE_MAX_EDGE = 96;
+const BACKLIGHT_MAX_EDGE = 192;
 const THUMBNAIL_MAX_EDGE = 160;
 const THUMBNAIL_MIME = "image/webp";
-const ALL_TARGETS = ["palette", "thumbnail", "thumbhash"] as const;
+const ALL_TARGETS = ["backlight", "palette", "thumbnail", "thumbhash"] as const;
 const DEFAULT_TARGETS = ["palette", "thumbhash"] as const;
 
 export type CoverMetadataTarget = (typeof ALL_TARGETS)[number];
@@ -21,6 +22,7 @@ export interface CoverMetadataInput {
 }
 
 export interface CoverMetadataTimings {
+  backlightMs: number;
   decodeMs: number;
   paletteMs: number;
   thumbnailMs: number;
@@ -29,6 +31,7 @@ export interface CoverMetadataTimings {
 }
 
 export interface CoverMetadataResult {
+  backlight?: CoverImageDerivativeResult;
   palette: Rgb[];
   thumbnail?: CoverImageDerivativeResult;
   thumbhash?: string;
@@ -53,6 +56,7 @@ export async function extractCoverMetadataInline(
 ): Promise<CoverMetadataResult> {
   const totalStartedAt = now();
   const timings: CoverMetadataTimings = {
+    backlightMs: 0,
     decodeMs: 0,
     paletteMs: 0,
     thumbnailMs: 0,
@@ -64,6 +68,7 @@ export async function extractCoverMetadataInline(
   const decoded = await decodeCoverPixels(input);
   timings.decodeMs = elapsed(decodeStartedAt);
 
+  let backlight: CoverImageDerivativeResult | undefined;
   let palette: Rgb[] = [];
   let thumbnail: CoverImageDerivativeResult | undefined;
   let thumbhash: string | undefined;
@@ -80,6 +85,12 @@ export async function extractCoverMetadataInline(
     timings.thumbhashMs = elapsed(thumbhashStartedAt);
   }
 
+  if (targets.has("backlight")) {
+    const backlightStartedAt = now();
+    backlight = await renderCoverBlob(input, BACKLIGHT_MAX_EDGE, THUMBNAIL_MIME);
+    timings.backlightMs = elapsed(backlightStartedAt);
+  }
+
   if (targets.has("thumbnail")) {
     const thumbnailStartedAt = now();
     thumbnail = await renderCoverBlob(input, THUMBNAIL_MAX_EDGE, THUMBNAIL_MIME);
@@ -87,7 +98,7 @@ export async function extractCoverMetadataInline(
   }
 
   timings.totalMs = elapsed(totalStartedAt);
-  return normalizeCoverMetadataResult({ palette, thumbnail, thumbhash, timings });
+  return normalizeCoverMetadataResult({ backlight, palette, thumbnail, thumbhash, timings });
 }
 
 export function normalizeCoverMetadataResult(
@@ -96,6 +107,7 @@ export function normalizeCoverMetadataResult(
   const timings = normalizeTimings(result?.timings);
   const thumbhash = typeof result?.thumbhash === "string" ? result.thumbhash.trim() : "";
   return {
+    backlight: normalizeImageDerivativeResult(result?.backlight),
     palette: normalizeCoverPalette(result?.palette),
     thumbnail: normalizeImageDerivativeResult(result?.thumbnail),
     thumbhash: thumbhash || undefined,
@@ -204,6 +216,7 @@ function normalizeTimings(
   timings: Partial<CoverMetadataTimings> | undefined,
 ): CoverMetadataTimings {
   return {
+    backlightMs: roundMs(timings?.backlightMs),
     decodeMs: roundMs(timings?.decodeMs),
     paletteMs: roundMs(timings?.paletteMs),
     thumbnailMs: roundMs(timings?.thumbnailMs),

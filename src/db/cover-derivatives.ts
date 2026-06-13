@@ -26,7 +26,7 @@ export interface EnsureCoverDerivativeOptions {
   storage?: MediaBlobStorageOptions;
 }
 
-const thumbnailInFlight = new Map<string, Promise<ResolvedCoverDerivative | undefined>>();
+const imageDerivativeInFlight = new Map<string, Promise<ResolvedCoverDerivative | undefined>>();
 
 export function coverDerivativeSourceForTrack(
   track: Pick<Track, "coverBlobId" | "remoteCoverUrl">,
@@ -69,20 +69,37 @@ export async function ensureCoverThumbnailDerivative(
   db: MuzeroDB = defaultDb,
   options: EnsureCoverDerivativeOptions = {},
 ): Promise<ResolvedCoverDerivative | undefined> {
+  return ensureCoverImageDerivative(track, "thumbnail", db, options);
+}
+
+export async function ensureCoverBacklightDerivative(
+  track: Pick<Track, "id" | "coverBlobId" | "coverCrop" | "remoteCoverUrl">,
+  db: MuzeroDB = defaultDb,
+  options: EnsureCoverDerivativeOptions = {},
+): Promise<ResolvedCoverDerivative | undefined> {
+  return ensureCoverImageDerivative(track, "backlight", db, options);
+}
+
+async function ensureCoverImageDerivative(
+  track: Pick<Track, "id" | "coverBlobId" | "coverCrop" | "remoteCoverUrl">,
+  kind: "backlight" | "thumbnail",
+  db: MuzeroDB,
+  options: EnsureCoverDerivativeOptions,
+): Promise<ResolvedCoverDerivative | undefined> {
   const source = coverDerivativeSourceForTrack(track);
   if (source?.sourceKind !== "local-cover" || !track.coverBlobId) return undefined;
   const cropSig = coverCropSignature(track.coverCrop);
-  const id = coverDerivativeId({ cropSig, kind: "thumbnail", sourceKey: source.sourceKey });
+  const id = coverDerivativeId({ cropSig, kind, sourceKey: source.sourceKey });
   const cached = await resolveCoverDerivative(id, db, options.storage);
   if (cached) return cached;
-  const existing = thumbnailInFlight.get(id);
+  const existing = imageDerivativeInFlight.get(id);
   if (existing) return existing;
-  const promise = createThumbnailDerivative({ cropSig, id, source, track }, db, options).finally(
+  const promise = createImageDerivative({ cropSig, id, kind, source, track }, db, options).finally(
     () => {
-      if (thumbnailInFlight.get(id) === promise) thumbnailInFlight.delete(id);
+      if (imageDerivativeInFlight.get(id) === promise) imageDerivativeInFlight.delete(id);
     },
   );
-  thumbnailInFlight.set(id, promise);
+  imageDerivativeInFlight.set(id, promise);
   return promise;
 }
 
@@ -98,10 +115,11 @@ async function resolveCoverDerivative(
   return { blob: resolved.blob, blobId: derivative.blobId, derivative };
 }
 
-async function createThumbnailDerivative(
+async function createImageDerivative(
   input: {
     cropSig: string;
     id: string;
+    kind: "backlight" | "thumbnail";
     source: CoverDerivativeSource;
     track: Pick<Track, "id" | "coverBlobId" | "coverCrop">;
   },
@@ -117,19 +135,20 @@ async function createThumbnailDerivative(
     crop: input.track.coverCrop,
     mime: cover.mime,
     sourceKey: input.source.sourceKey,
-    targets: ["thumbnail"],
+    targets: [input.kind],
   });
-  if (!result.thumbnail) return undefined;
-  const thumbnailBlob = new Blob([result.thumbnail.bytes], { type: result.thumbnail.mime });
+  const image = input.kind === "backlight" ? result.backlight : result.thumbnail;
+  if (!image) return undefined;
+  const derivativeBlob = new Blob([image.bytes], { type: image.mime });
   const media = await putMediaBlob(
     {
       id: newId("blb"),
       trackId: input.source.sourceKey,
       role: "cover-derivative",
-      mime: result.thumbnail.mime,
-      bytes: thumbnailBlob.size,
-      blob: thumbnailBlob,
-      suggestedName: "Cover thumbnail",
+      mime: image.mime,
+      bytes: derivativeBlob.size,
+      blob: derivativeBlob,
+      suggestedName: input.kind === "backlight" ? "Cover backlight" : "Cover thumbnail",
     },
     db,
     options.storage,
@@ -141,18 +160,18 @@ async function createThumbnailDerivative(
     bytes: media.bytes,
     cropSig: input.cropSig,
     generatedAt: now,
-    height: result.thumbnail.height,
-    kind: "thumbnail",
-    mime: result.thumbnail.mime,
+    height: image.height,
+    kind: input.kind,
+    mime: image.mime,
     sourceKey: input.source.sourceKey,
     sourceKind: input.source.sourceKind,
     sourceRef: input.source.sourceRef,
     updatedAt: now,
     version: COVER_DERIVATIVE_VERSION,
-    width: result.thumbnail.width,
+    width: image.width,
   };
   await db.coverDerivatives.put(derivative);
-  return { blob: thumbnailBlob, blobId: media.id, derivative };
+  return { blob: derivativeBlob, blobId: media.id, derivative };
 }
 
 function stableHash(input: string): string {

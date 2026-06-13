@@ -1,6 +1,9 @@
 import { useLiveQuery } from "dexie-react-hooks";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ensureCoverThumbnailDerivative } from "@/db/cover-derivatives";
+import {
+  ensureCoverBacklightDerivative,
+  ensureCoverThumbnailDerivative,
+} from "@/db/cover-derivatives";
 import { resolveMediaBlob } from "@/db/media-blob-storage";
 import { db } from "@/db/muzero-db";
 import { backfillCoverMetadata } from "@/db/repositories";
@@ -106,7 +109,7 @@ export function useTrackCoverUrl(
 
 export function useCoverDerivativeUrl(
   track: TrackCoverInput | undefined,
-  kind: "thumbnail",
+  kind: "backlight" | "thumbnail",
 ): string | null {
   const settings = useSettings();
   const trackId = track?.id;
@@ -126,12 +129,14 @@ export function useCoverDerivativeUrl(
   const cropHeight = crop?.height;
   const [entry, setEntry] = useState<{ blob: Blob; key: string } | null>(null);
   useEffect(() => {
-    if ((!trackId && !coverBlobId && !remoteCoverUrl) || kind !== "thumbnail") {
+    if (!trackId && !coverBlobId && !remoteCoverUrl) {
       setEntry(null);
       return;
     }
     let alive = true;
-    void ensureCoverThumbnailDerivative({
+    const ensure =
+      kind === "backlight" ? ensureCoverBacklightDerivative : ensureCoverThumbnailDerivative;
+    void ensure({
       id: trackId ?? "",
       coverBlobId,
       coverCrop:
