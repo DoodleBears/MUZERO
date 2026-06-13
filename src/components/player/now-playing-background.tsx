@@ -4,7 +4,9 @@ import { useEffect, useMemo, useState } from "react";
 import { getTrackLyrics, listGalleryImages, listTrackBackgrounds } from "@/db/repositories";
 import { useSettings } from "@/hooks/use-app-data";
 import { useObjectUrls, useTrackCoverUrl, useTrackMediaUrl } from "@/hooks/use-media";
+import { useSettledValue } from "@/hooks/use-settled-value";
 import {
+  BACKGROUND_REVEAL_HOLD_MS,
   type BackgroundRenderTarget,
   resolveBackgroundSource,
   resolvePixiBackgroundMedia,
@@ -203,6 +205,11 @@ function NowPlayingBackgroundContent({ hideVisualizer }: { hideVisualizer: boole
   const renderImageTarget = useSettledBackgroundTarget(imageTarget, hasPendingImageBackground);
   const renderPixiTarget = useSettledBackgroundTarget(pixiTarget, hasPendingBackground);
   const slideshowResetKey = `${current?.id ?? ""}:${source}:${slideshowUrls.length}`;
+  // Plain-cover reveal veil source: the still-image background only (video has its
+  // own crossfade). It sits above every effect layer and fades after the effects
+  // settle — see the veil at the end of the group (QA #3).
+  const revealVeilSrc = pixiMedia.source === "track-video" ? null : backgroundUrl;
+  const revealHidden = useSettledValue(revealVeilSrc, BACKGROUND_REVEAL_HOLD_MS) === revealVeilSrc;
 
   useEffect(() => {
     if (slideshowResetKey) setSlideIndex(Math.max(0, slideshowUrls.length - 1));
@@ -316,6 +323,23 @@ function NowPlayingBackgroundContent({ hideVisualizer }: { hideVisualizer: boole
           </motion.div>
         )}
       </AnimatePresence>
+      {/* Reveal veil: the plain current cover ON TOP of every effect layer (Pixi +
+          flow + visualizer). Held opaque through the switch, then faded out once
+          the effects have settled underneath — so they're revealed, not popped in
+          (QA #3). The settle gate keeps the heavy work debounced; this just makes
+          the hand-off smooth. */}
+      {revealVeilSrc ? (
+        <img
+          src={revealVeilSrc}
+          alt=""
+          aria-hidden="true"
+          decoding="async"
+          className={cn(
+            "pointer-events-none absolute inset-0 h-full w-full object-cover transition-opacity duration-700 ease-out",
+            revealHidden ? "opacity-0" : "opacity-100",
+          )}
+        />
+      ) : null}
     </>
   );
 }

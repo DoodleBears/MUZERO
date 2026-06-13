@@ -154,8 +154,8 @@ backgroundGpuPowerPreference?: "auto" | "high-performance" | "low-power"; // DEF
 - **环境背景(ambient)**:
   - 高频跳歌中(`currentTrack !== settledTrack`):显示 `CrossfadeBackgroundImage`([`now-playing-background.tsx:336`](../../../src/components/player/now-playing-background.tsx#L336))的**当前封面**,逐张滑过(廉价 `<img>` + 已有 crossfade)。
   - 落定后(settledTrack 更新):持久 Pixi 把 settled 封面作纹理换上。
-  - **即时 `<img>` 层在 canvas 之上(reveal 层,QA#3 修正)**:canvas `z-0`、`<img>` `z-10` 盖在其上。跳歌中 `<img>`(`opacity-100`)显当前封面、遮住下层旧特效;纹理换好后(`src === displayedSrc`)`<img>` 在 500ms 内 `opacity-100→0` 淡出,**平滑漏出新特效,而不是瞬间 pop**。
-    > 早先误设计成「`<img>` 常驻 canvas 之下」——但 Pixi canvas 不透明且在上层,`<img>` 被完全遮住、根本不可见,纹理一换就 pop(QA#3 现象)。改为「上层 reveal + 淡出」后才真正平滑。device-lost 升温期同样靠这层兜底。
+  - **reveal веil 在整个背景组的最顶层(QA#3 二次修正)**:在 [`now-playing-background.tsx`](../../../src/components/player/now-playing-background.tsx) 的 **flow + visualizer 之上**垫一张当前封面 `<img>`(`useSettledValue(backgroundUrl, BACKGROUND_REVEAL_HOLD_MS=260)`)。切歌中 `opacity-100` 遮住下面所有正在更新的特效层;封面稳定 260ms(纹理已在 180ms settle 时换好、flow 颜色已开始 glide)后 `opacity→0`(700ms)淡出,**平滑漏出整套合成特效**。
+    > 两次教训:① 最早把 `<img>` 放 Pixi canvas **之下**,被不透明 canvas 完全遮住、失效;② 第二次放进 `PixiPixelBackground` 内、canvas 之上,但 **flow/visualizer 整体叠在 PixiPixelBackground 之上**(尤其 viz-as-bg + flow 全开时它们才是主视觉),reveal 只盖住了 Pixi 一层、用户仍觉得「在跳」。**必须把 veil 提到 flow/viz 之上的最顶层**才真正「淡出漏出特效」。PixiPixelBackground 内那张 `<img>` 保留作 Pixi 单层兜底,无害。
   - 视觉:跳歌时看到一串清晰封面快速划过;停下后该首的 noise/pixel 特效「长」出来盖在封面上。用户已确认接受此体验。
 - **GPU 后端切换**:改设置后,持久 Pixi app 以新 `preference` 重建一次(仅这一次,非每切歌)。
 
@@ -281,3 +281,4 @@ backgroundGpuPowerPreference?: "auto" | "high-performance" | "low-power"; // DEF
 | 2026-06-13 | Claude | Phase 2 代码完成:`useSettledValue` 去抖(纹理上传 debounce)+ 常驻即时 `<img>` + O1 backlight gate;9 例新单测。封面逐张即时、重计算落定才跑 |
 | 2026-06-13 | Claude | Phase 3 代码完成:`gpu-backend` 解析器(9 例)+ `backgroundGpuBackend`/`PowerPreference` 设置(默认 auto=性能优先)+ Settings 双选择器 + en/zh/ja/ko + 控制器 `recover()` device-lost 恢复(2 例)。三个 Phase 代码全部完成,待桌面 GPU/视觉实测 |
 | 2026-06-13 | Claude | QA 跟进:#3 修正 `<img>` 为上层 reveal+淡出(消除特效 pop);为 #1/#2 加 `background.pixi.appInit/textureSwap(ms)` 诊断 trace(`Settings→Trace`/perf HUD 可见)。#1/#2 根因待 QA 抓 trace 确认(§9 Q5/Q6) |
+| 2026-06-14 | Claude | QA#3 二次修正:reveal veil 提到 **flow/visualizer 之上的最顶层**(`now-playing-background`,`BACKGROUND_REVEAL_HOLD_MS=260` + 700ms 淡出)——之前放 Pixi 子树内仍被 flow/viz 盖住,故「还会跳」 |

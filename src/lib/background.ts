@@ -11,6 +11,16 @@ import type { BackgroundMode, Track, TrackKind, TrackStatus } from "@/db/types";
 export const BACKGROUND_EFFECT_SETTLE_MS = 180;
 
 /**
+ * How long the plain-cover reveal veil stays opaque over the background after a
+ * switch before fading out. Slightly longer than `BACKGROUND_EFFECT_SETTLE_MS` so
+ * the Pixi texture has already swapped (and flow colors begun gliding) UNDER the
+ * veil — then fading the veil reveals the composed effect smoothly instead of the
+ * effect popping in (QA #3). The veil sits ABOVE flow + visualizer, so it covers
+ * every effect layer, not just the Pixi canvas.
+ */
+export const BACKGROUND_REVEAL_HOLD_MS = 260;
+
+/**
  * What the Now-Playing ambient background should pull from. Pure decision so the
  * priority rules are unit-tested without the DB. `mode` is the *priority* between
  * the track's two own image assets, then the global gallery is an optional last resort:
