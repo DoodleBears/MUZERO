@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 
+const scratchCanvasByTarget = new WeakMap<HTMLCanvasElement, HTMLCanvasElement>();
+
 export function CanvasBlurBackground({
   blurPx,
   className,
@@ -113,7 +115,11 @@ function drawBlurFrame(canvas: HTMLCanvasElement, image: HTMLImageElement, blurP
   const softness = Math.max(2, Math.min(18, blurPx * 0.45));
   const sampleW = Math.max(32, Math.round(w / softness));
   const sampleH = Math.max(32, Math.round(h / softness));
-  const low = document.createElement("canvas");
+  let low = scratchCanvasByTarget.get(canvas);
+  if (!low) {
+    low = document.createElement("canvas");
+    scratchCanvasByTarget.set(canvas, low);
+  }
   low.width = sampleW;
   low.height = sampleH;
   const lowCtx = low.getContext("2d");

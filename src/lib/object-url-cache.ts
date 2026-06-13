@@ -37,7 +37,7 @@ export interface ObjectUrlCacheOptions {
   revoke?: (url: string) => void;
 }
 
-const DEFAULT_CAPACITY = 256;
+const DEFAULT_CAPACITY = 64;
 
 export class ObjectUrlCache {
   /** Insertion order doubles as LRU recency: touch = delete + re-set (moves to the back). */

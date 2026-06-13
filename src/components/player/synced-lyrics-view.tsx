@@ -32,6 +32,7 @@ import { useUiStore } from "@/stores/ui-store";
 
 type ShownLyrics = Extract<ResolvedLyrics, { mode: "synced" } | { mode: "plain" }>;
 type RowElement = HTMLButtonElement | null;
+const TRACK_LYRICS_FADE_MS = 180;
 
 /**
  * Track the active synced-lyric line at frame rate. A rAF loop reads the media
@@ -106,7 +107,25 @@ export function useActiveLyricLine(
 export function SyncedLyricsView({ track }: { track?: Track }) {
   const { t } = useTranslation();
   const settings = useSettings();
-  const trackId = track?.id;
+  const incomingTrackId = track?.id;
+  const [displayTrack, setDisplayTrack] = useState(track);
+  const [visible, setVisible] = useState(true);
+  const trackId = displayTrack?.id;
+
+  useEffect(() => {
+    if (incomingTrackId === trackId) {
+      setVisible(true);
+      if (displayTrack !== track) setDisplayTrack(track);
+      return;
+    }
+    setVisible(false);
+    const timer = window.setTimeout(() => {
+      setDisplayTrack(track);
+      requestAnimationFrame(() => setVisible(true));
+    }, TRACK_LYRICS_FADE_MS);
+    return () => window.clearTimeout(timer);
+  }, [displayTrack, incomingTrackId, track, trackId]);
+
   const row = useLiveQuery(
     () => (trackId ? getTrackLyrics(trackId, db) : Promise.resolve(undefined)),
     [trackId],
@@ -121,47 +140,68 @@ export function SyncedLyricsView({ track }: { track?: Track }) {
     [settings, coverColorCss],
   );
   const cascadeTuning = useMemo(() => resolveLyricCascadeTuning(settings), [settings]);
-  const resolved = useMemo(() => resolveTrackLyrics(track, row), [track, row]);
+  const motionActive = visible && incomingTrackId === trackId;
+  const resolved = useMemo(() => resolveTrackLyrics(displayTrack, row), [displayTrack, row]);
   const lines = resolved.mode === "synced" ? resolved.lines : null;
-  const activeIndex = useActiveLyricLine(lines, isPlaying, pausedPositionSec);
+  const activeIndex = useActiveLyricLine(lines, isPlaying && motionActive, pausedPositionSec);
 
   const [searchOpen, setSearchOpen] = useState(false);
   // biome-ignore lint/correctness/useExhaustiveDependencies: reset the search panel when the track changes
-  useEffect(() => setSearchOpen(false), [trackId]);
+  useEffect(() => setSearchOpen(false), [incomingTrackId]);
 
-  if (searchOpen && track) {
-    return (
+  let content: React.ReactNode;
+  if (searchOpen && displayTrack) {
+    content = (
       <LyricsSearchPanel
-        track={track}
+        track={displayTrack}
         defaultOpen
         onCancel={() => setSearchOpen(false)}
         onPicked={() => setSearchOpen(false)}
       />
     );
+  } else if (resolved.mode === "instrumental") {
+    content = <LyricsMessage>{t("lyrics.instrumental")}</LyricsMessage>;
+  } else if (resolved.mode === "none") {
+    if (!displayTrack) {
+      content = <LyricsMessage>{t("nowPlaying.noLyrics")}</LyricsMessage>;
+    } else {
+      const fetching =
+        displayTrack.origin !== "generated" && (settings.autoFetchLyrics ?? true) && !row;
+      content = fetching ? (
+        <LyricsMessage>{t("lyrics.fetching")}</LyricsMessage>
+      ) : (
+        <LyricsSearchPanel track={displayTrack} />
+      );
+    }
+  } else {
+    content = (
+      <LyricsScroller
+        resolved={resolved}
+        activeIndex={activeIndex}
+        onSeek={seek}
+        onSearch={displayTrack ? () => setSearchOpen(true) : undefined}
+        lyricStyle={lyricStyle}
+        isPlaying={isPlaying}
+        wordByWord={settings.lyricsWordByWord ?? true}
+        showTranslation={settings.lyricsShowTranslation ?? true}
+        showRomanization={settings.lyricsShowRomanization ?? false}
+        motionMode={settings.lyricsMotionMode}
+        cascadeTuning={cascadeTuning}
+        suspendMotion={!motionActive}
+      />
+    );
   }
-  if (resolved.mode === "instrumental") {
-    return <LyricsMessage>{t("lyrics.instrumental")}</LyricsMessage>;
-  }
-  if (resolved.mode === "none") {
-    if (!track) return <LyricsMessage>{t("nowPlaying.noLyrics")}</LyricsMessage>;
-    const fetching = track.origin !== "generated" && (settings.autoFetchLyrics ?? true) && !row;
-    if (fetching) return <LyricsMessage>{t("lyrics.fetching")}</LyricsMessage>;
-    return <LyricsSearchPanel track={track} />;
-  }
+
   return (
-    <LyricsScroller
-      resolved={resolved}
-      activeIndex={activeIndex}
-      onSeek={seek}
-      onSearch={track ? () => setSearchOpen(true) : undefined}
-      lyricStyle={lyricStyle}
-      isPlaying={isPlaying}
-      wordByWord={settings.lyricsWordByWord ?? true}
-      showTranslation={settings.lyricsShowTranslation ?? true}
-      showRomanization={settings.lyricsShowRomanization ?? false}
-      motionMode={settings.lyricsMotionMode}
-      cascadeTuning={cascadeTuning}
-    />
+    <motion.div
+      animate={{ opacity: visible ? 1 : 0 }}
+      className="h-full min-h-0"
+      initial={false}
+      style={{ pointerEvents: visible ? "auto" : "none" }}
+      transition={{ duration: TRACK_LYRICS_FADE_MS / 1000, ease: "easeOut" }}
+    >
+      {content}
+    </motion.div>
   );
 }
 
@@ -217,6 +257,7 @@ export function LyricsScroller({
   showRomanization = false,
   motionMode = "classic",
   cascadeTuning = DEFAULT_LYRIC_CASCADE_TUNING,
+  suspendMotion = false,
 }: {
   resolved: ShownLyrics;
   activeIndex: number;
@@ -229,6 +270,7 @@ export function LyricsScroller({
   showRomanization?: boolean;
   motionMode?: LyricsMotionMode;
   cascadeTuning?: LyricCascadeTuning;
+  suspendMotion?: boolean;
 }) {
   const plainScrollRef = useRef<HTMLDivElement>(null);
   useSmoothScroll(plainScrollRef);
@@ -268,6 +310,7 @@ export function LyricsScroller({
             showRomanization={showRomanization}
             motionMode={motionMode}
             cascadeTuning={cascadeTuning}
+            suspendMotion={suspendMotion}
           />
         )}
       </div>
@@ -302,6 +345,7 @@ function SyncedLines({
   showRomanization = false,
   motionMode = "classic",
   cascadeTuning = DEFAULT_LYRIC_CASCADE_TUNING,
+  suspendMotion = false,
 }: {
   lines: LyricLine[];
   activeIndex: number;
@@ -313,6 +357,7 @@ function SyncedLines({
   showRomanization?: boolean;
   motionMode?: LyricsMotionMode;
   cascadeTuning?: LyricCascadeTuning;
+  suspendMotion?: boolean;
 }) {
   const { t } = useTranslation();
   const viewportRef = useRef<HTMLDivElement>(null);
@@ -323,7 +368,7 @@ function SyncedLines({
   const [viewportH, setViewportH] = useState(0);
   const lyricsMotion = useMemo(() => resolveLyricsMotionMode(motionMode), [motionMode]);
   const isAmlStyleEngine = lyricsMotion.mode === "cascade";
-  const cascadeDriverActive = isAmlStyleEngine && following;
+  const cascadeDriverActive = isAmlStyleEngine && following && !suspendMotion;
   const cascadeAnchorRatio = cascadeTuning.anchorRatio ?? DEFAULT_LYRIC_CASCADE_TUNING.anchorRatio;
   const layoutLineGap = lyricStyle.lineGap;
   const inactiveScale = lyricStyle.inactiveFontSize / lyricStyle.activeFontSize;
@@ -397,7 +442,7 @@ function SyncedLines({
   // surface owns its own programmatic follow target, and two scroll controllers
   // would fight over `scrollTop`.
   useEffect(() => {
-    if (!following || isAmlStyleEngine) return;
+    if (!following || isAmlStyleEngine || suspendMotion) return;
     let raf = 0;
     let stopped = false;
     let spring: { stop: () => void } | null = null;
@@ -456,7 +501,7 @@ function SyncedLines({
       cancelAnimationFrame(raf);
       stopSpring();
     };
-  }, [following, activeIndex, isAmlStyleEngine, lyricsMotion]);
+  }, [following, activeIndex, isAmlStyleEngine, lyricsMotion, suspendMotion]);
 
   useEffect(() => {
     if (!cascadeDriverActive) return;
@@ -683,7 +728,7 @@ function SyncedLines({
   // useLayoutEffect paints once before the browser paints (no flash of unfilled
   // text on a line/track switch); it then loops only while playing.
   useLayoutEffect(() => {
-    if (!wordByWord || activeIndex < 0) return;
+    if (suspendMotion || !wordByWord || activeIndex < 0) return;
     const words = lines[activeIndex]?.words;
     if (!words || words.length === 0) return;
     const el = stackRef.current?.children[activeIndex] as HTMLElement | undefined;
@@ -717,7 +762,7 @@ function SyncedLines({
       stopped = true;
       cancelAnimationFrame(raf);
     };
-  }, [wordByWord, activeIndex, isPlaying, lines]);
+  }, [wordByWord, activeIndex, isPlaying, lines, suspendMotion]);
 
   return (
     <>

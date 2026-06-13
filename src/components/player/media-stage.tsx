@@ -1,4 +1,4 @@
-import { AnimatePresence, motion } from "motion/react";
+import { motion } from "motion/react";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useSettings } from "@/hooks/use-app-data";
@@ -172,34 +172,29 @@ function NowPlayingCoverBacklight({
   opacity: number;
   url: string | null;
 }) {
-  return (
-    <AnimatePresence initial={false} mode="wait">
-      {active && url && (
-        <motion.div
-          key={url}
-          aria-hidden
-          initial={{ opacity: 0 }}
-          animate={{ opacity }}
-          exit={{ opacity: 0, transition: { duration: 0.22, ease: "easeIn" } }}
-          transition={{ duration: 0.42, ease: "easeOut" }}
-          className="pointer-events-none absolute inset-0 z-0 now-playing-cover-backlight-clip"
-        >
-          <img
-            src={url}
-            alt=""
-            referrerPolicy="no-referrer"
-            draggable={false}
-            className="absolute inset-0 size-full object-cover album-cover-radius"
-            style={{
-              transform: "scale(var(--now-playing-cover-backlight-scale, 1.12))",
-              filter: [
-                "blur(var(--now-playing-cover-backlight-blur, 20px))",
-                "saturate(var(--now-playing-cover-backlight-saturation, 400%))",
-              ].join(" "),
-            }}
-          />
-        </motion.div>
-      )}
-    </AnimatePresence>
-  );
+  return active && url ? (
+    <motion.div
+      key={url}
+      aria-hidden
+      initial={{ opacity: 0 }}
+      animate={{ opacity }}
+      transition={{ duration: 0.42, ease: "easeOut" }}
+      className="pointer-events-none absolute inset-0 z-0 now-playing-cover-backlight-clip"
+    >
+      <img
+        src={url}
+        alt=""
+        referrerPolicy="no-referrer"
+        draggable={false}
+        className="absolute inset-0 size-full object-cover album-cover-radius"
+        style={{
+          transform: "scale(var(--now-playing-cover-backlight-scale, 1.12))",
+          filter: [
+            "blur(var(--now-playing-cover-backlight-blur, 20px))",
+            "saturate(var(--now-playing-cover-backlight-saturation, 400%))",
+          ].join(" "),
+        }}
+      />
+    </motion.div>
+  ) : null;
 }

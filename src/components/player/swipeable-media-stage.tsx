@@ -828,7 +828,7 @@ function SettleCard({
 /** Poweramp-style title + author pills shown directly below the stage cover. */
 function StageIdentity({ track }: { track: Track }) {
   return (
-    <div className="flex w-full min-w-0 flex-col items-start gap-1.5">
+    <div className="relative z-[90] flex w-full min-w-0 flex-col items-start gap-1.5">
       <div className="w-fit min-w-0 max-w-full overflow-hidden rounded-full border border-white/10 bg-black/55 px-4 py-1.5 shadow-lg">
         <AutoScrollText className="text-2xl font-bold tracking-normal text-white">
           {track.title}
