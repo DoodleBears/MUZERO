@@ -9,6 +9,7 @@ import type {
   DesktopSystemShortcutConfigureResult,
   DesktopSystemShortcutRegistration,
   DesktopWindowState,
+  LocalMediaStorageUrlInput,
   LocalMediaUrlInput,
   MediaProxyTrace,
   MediaStorageFileInput,
@@ -27,7 +28,7 @@ interface MuzeroApi {
   readDir(path: string): Promise<DirEntryLike[]>;
   readFile(path: string): Promise<ArrayBuffer>;
   grantFolderAccess(path: string): Promise<void>;
-  localMediaToken(input: { path: string; mime?: string }): Promise<string>;
+  localMediaToken(input: { path?: string; storageKey?: string; mime?: string }): Promise<string>;
   saveFile(input: { fileName: string; mime: string; bytes: ArrayBuffer }): Promise<boolean>;
   writeMediaStorageFile(
     input: Omit<WriteMediaStorageFileInput, "bytes"> & { bytes: ArrayBuffer },
@@ -168,6 +169,10 @@ export function createElectronBridge(): DesktopBridge {
     localMediaUrl: async (input: LocalMediaUrlInput) => {
       const token = await api.localMediaToken({ path: input.path, mime: input.mime });
       return electronLocalMediaUrl({ token, mime: input.mime, trace: input.trace });
+    },
+    localMediaUrlForStorageKey: async (input: LocalMediaStorageUrlInput) => {
+      const token = await api.localMediaToken({ storageKey: input.storageKey, mime: input.mime });
+      return electronLocalMediaUrl({ token, mime: input.mime });
     },
     openSourceLogin: async (request) => {
       const cookies = await api.openSourceLogin(request);

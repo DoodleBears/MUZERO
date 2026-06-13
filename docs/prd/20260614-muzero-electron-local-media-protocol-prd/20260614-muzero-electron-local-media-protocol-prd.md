@@ -11,11 +11,24 @@
 
 | Phase | Name | Status | Link |
 |-------|------|--------|------|
-| 1 | `muzmedia://` 协议基建(纯 URL 工具 + bridge + Electron scheme/handler) | 🔲 Pending | [Phase 1](#phase-1-muzmedia-协议基建) |
-| 2 | Now Playing 背景封面走 `muzmedia://`(Electron 零 Blob/解码) | 🔲 Pending | [Phase 2](#phase-2-背景封面走协议) |
+| 1 | storageKey → 本地媒体 URL 基建(复用现有 token 系统) | ✅ 代码完成(待桌面实测) | [Phase 1](#phase-1-storagekey--本地媒体-url-基建复用现有-token-系统) |
+| 2 | Now Playing 背景封面走本地协议 URL(Electron 零 Blob/解码) | 🔲 Pending | [Phase 2](#phase-2-背景封面走协议) |
 | 3 | 扩展:stage 封面(裁剪派生文件)+ 音视频(future) | 🔲 Pending | [Phase 3](#phase-3-扩展future) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
+
+---
+
+## 0. 设计修订(2026-06-14,实现前发现现有基建)
+
+**不新建 `muzmedia://` scheme。** 实现 Phase 1 时发现 Electron **已有**一套等价基建,直接复用即可:
+
+- [`electron/local-media.cjs`](../../../electron/local-media.cjs):token 注册表(`registerLocalMedia(path, mime)` → `lm_…` token,TTL 6h)。
+- [`electron/fetch-proxy.cjs`](../../../electron/fetch-proxy.cjs) `handleLocalMedia`:`muzfetch://local-media/?__mztoken=…` → 解析 token → 流式返回文件(已支持 Range/206)。
+- [`electron/ipc.cjs`](../../../electron/ipc.cjs) `mediaStorageExistingTarget(storageKey)`:**已有**安全 storageKey→绝对路径解析(防穿越/软链/越界)。
+- bridge 已有 `localMediaUrl({path, mime, trace})`(异步:`localMediaToken` IPC → token → URL),用于**导入文件夹的本地媒体播放**([`player-store.ts`](../../../src/stores/player-store.ts) sourcePath)。
+
+**修订后的做法**:给「拿 token」的 IPC 加一个 **storageKey 入口**(`localMediaToken({storageKey, mime})` → `mediaStorageExistingTarget` 解析 → `registerLocalMedia`),渲染端就能把**封面 storageKey** 换成 `muzfetch://local-media/?__mztoken=…` URL,`<img>` 原生加载——**复用现有协议/handler/token,无新 scheme**。渲染端按 storageKey 缓存 URL(token 稳定复用,Chromium 按 URL 缓存解码)。下面 §2/§4/§5 以此为准(原 `muzmedia://` 段落作废)。
 
 ---
 
@@ -89,26 +102,25 @@ net.fetch(pathToFileURL(filePath))  → 流式返回文件(含 content-type)
 
 ## 5. Implementation Plan
 
-### Phase 1: `muzmedia://` 协议基建
+### Phase 1: storageKey → 本地媒体 URL 基建(复用现有 token 系统)
 
-**Goal:** 协议能在 Electron 把 `persistent-media` 文件安全直出;渲染端有拼/解 URL 的纯工具 + bridge 能力。尚不改任何封面显示。
+**Goal:** 渲染端能把封面 `storageKey` 换成现有 `muzfetch://local-media` URL(经 token),`<img>` 原生加载。复用现有协议/handler,无新 scheme。
 
 **Tasks:**
-- [ ] `local-media-url.ts`:`LOCAL_MEDIA_PROTOCOL="muzmedia"`、`buildLocalMediaUrl(storageKey)`=`muzmedia://media/?k=<enc>`、`parseLocalMediaStorageKey(url)`(round-trip)。**单测**:round-trip、含 `/ 空格 unicode` 的 key、非法 url 返回 null。
-- [ ] `DesktopBridge.localMediaUrl?` + electron 实现(`buildLocalMediaUrl`)+ web/tauri 不实现;`resolveLocalMediaUrl(storageKey)` helper。
-- [ ] electron:`muzmedia` 注册 privileged scheme + `media-protocol.cjs` handler(`new URL(req.url).searchParams.get("k")` → storageKey → 安全 path → `net.fetch(file://)`;非法 → 400/404)。
-- [ ] 安全:复用 ipc 同款 `storageKeyParts` + `assertPathInsideRoot` + realpath + 拒软链。
+- [x] [`electron/ipc.cjs`](../../../electron/ipc.cjs):`muzero:localMedia:token` 处理器加 `{storageKey, mime}` 分支 → `mediaStorageExistingTarget(storageKey)`(复用现有 traversal/软链安全解析)→ `registerLocalMedia`;`{path}` 老路径不变。preload 透传 input,无需改。
+- [x] [`bridge.ts`](../../../src/lib/desktop/bridge.ts)(`LocalMediaStorageUrlInput` + `localMediaUrlForStorageKey?`)+ [electron 实现](../../../src/lib/desktop/electron.ts)(`api.localMediaToken({storageKey, mime})` → `electronLocalMediaUrl`);web/tauri 不实现。
+- [x] 纯决策 [`canServeLocalCover`](../../../src/lib/local-cover.ts)(`storageBackend==="electron-file" && !!storageKey`,带类型守卫);4 例单测。
 
 **Checklist:**
-- [ ] `buildLocalMediaUrl`/`parseLocalMediaStorageKey` 单测全绿;`tsc`/Biome 通过;`src` 全量通过。
-- [ ] **待桌面实测**:DevTools 手动 `img.src="muzmedia://media/?k=<某 cover storageKey>"` 能出图;穿越/软链 key 被拒。
+- [x] `canServeLocalCover` 单测全绿;`tsc`/Biome 通过;`src` 全量 2380 例通过。
+- [ ] **待桌面实测**:`bridge.localMediaUrlForStorageKey({storageKey})` 返回的 URL 能被 `<img>` 加载出图;非法 storageKey 被 ipc 安全层拒。
 
 ### Phase 2: 背景封面走协议
 
 **Goal:** Electron 下 Now Playing **背景**封面用 `muzmedia://` 原图,不再走 blob/object URL;其余环境/裁剪场景回退原路径。
 
 **Tasks:**
-- [ ] `useLocalCoverUrl(track)`:`useLiveQuery` 读该 track cover 的 `mediaBlobs` 行 → 若 `storageBackend==="electron-file" && storageKey` 且 `resolveLocalMediaUrl` 可用 → 返回协议 URL,否则 null。**单测**纯决策函数 `pickLocalCoverUrl({storageBackend, storageKey}, resolve)`。
+- [ ] `useLocalCoverUrl(track)`:`useLiveQuery` 读该 track cover 的 `mediaBlobs` 行 → 若 `canServeLocalCover` 且 bridge 有 `localMediaUrlForStorageKey` → 异步取 URL(模块级 `Map<storageKey, Promise|string>` 缓存,token 稳定复用)→ 返回;否则 null。
 - [ ] [`now-playing-background.tsx`](../../../src/components/player/now-playing-background.tsx):`backgroundUrl` 在 source==="cover" 时优先用 `useLocalCoverUrl(current) ?? coverUrl`(背景不需要裁剪,原图即可);Pixi/blur/image 三条渲染分支都吃这个 URL。
 - [ ] 保持 stage(`media-stage`)走原裁剪 object URL 不变(Phase 3 再优化)。
 
@@ -165,3 +177,5 @@ net.fetch(pathToFileURL(filePath))  → 流式返回文件(含 content-type)
 | Date | Author | Changes |
 |------|--------|---------|
 | 2026-06-14 | Claude | 初稿:`muzmedia://` 本地封面协议,Electron 背景封面零拷贝直出;Phase 3 扩展 stage 裁剪 + 音视频 |
+| 2026-06-14 | Claude | **设计修订(§0)**:实现前发现 Electron 已有等价基建(`muzfetch://local-media` + token + `mediaStorageExistingTarget`)。改为**复用**:给 token IPC 加 storageKey 入口,不建新 scheme。已撤回 `muzmedia://` 代码 |
+| 2026-06-14 | Claude | Phase 1 代码完成:ipc token 加 storageKey 分支 + bridge `localMediaUrlForStorageKey` + electron 实现 + 纯 `canServeLocalCover`(4 例)。`src` 全量 2380 例通过。待桌面实测 |

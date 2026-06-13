@@ -59,6 +59,12 @@ export interface LocalMediaUrlInput {
   trace?: string | MediaProxyTrace;
 }
 
+export interface LocalMediaStorageUrlInput {
+  /** A `MediaBlob.storageKey` for an app-managed persistent-media file. */
+  storageKey: string;
+  mime?: string;
+}
+
 export interface MediaStorageFileStat {
   bytes: number;
 }
@@ -176,6 +182,14 @@ export interface DesktopBridge {
    * stores the path behind a short opaque token.
    */
   localMediaUrl?: (input: LocalMediaUrlInput) => Promise<string>;
+  /**
+   * Like {@link localMediaUrl} but for an app-managed persistent-media file
+   * addressed by its `MediaBlob.storageKey` (covers/media) — the main process
+   * resolves the key to a file under the media root with the same traversal-safe
+   * mapping as fs IPC, behind a token. Lets an `<img>`/`<video>` load it natively
+   * instead of `blob → object URL → a JS-heap bitmap`. Electron only.
+   */
+  localMediaUrlForStorageKey?: (input: LocalMediaStorageUrlInput) => Promise<string>;
   /**
    * Open a streaming source's real login page in a desktop auth window and resolve
    * the captured `Cookie:` header once the session cookie appears (or null if the

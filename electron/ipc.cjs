@@ -201,7 +201,13 @@ function registerIpc({ trayController } = {}) {
   });
 
   ipcMain.handle("muzero:localMedia:token", async (_event, input) => {
-    const real = assertAllowed(input?.path);
+    // storageKey: an app-managed persistent-media file (covers/media). Resolve it
+    // through the same traversal/symlink-safe mapping as fs IPC — no allowlist
+    // needed since the key is confined to our media root. Otherwise it's an
+    // absolute path from an imported folder, gated by the granted-folder allowlist.
+    const real = input?.storageKey
+      ? await mediaStorageExistingTarget(input.storageKey)
+      : assertAllowed(input?.path);
     return registerLocalMedia(real, input?.mime);
   });
 
