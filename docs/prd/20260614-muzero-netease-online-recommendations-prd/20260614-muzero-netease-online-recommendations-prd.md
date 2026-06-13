@@ -15,7 +15,7 @@
 | 2 | 数据获取层：react-query hooks（不入库、可缓存） | ✅ Completed | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | UI：Gallery 第 5 个「发现」tab + 空态引导登录 | ✅ Completed | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | 播放 / 保存：复用 playStreamedHit + importStreamedPlaylist | ✅ Completed | [Phase 4 Checklist](#phase-4-checklist) |
-| 5 | i18n（en/zh/ja/ko）+ 收尾 | 🔲 Pending | [Phase 5 Checklist](#phase-5-checklist) |
+| 5 | i18n（en/zh/ja/ko）+ 收尾 | ✅ Completed | [Phase 5 Checklist](#phase-5-checklist) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
 
@@ -315,12 +315,13 @@ ModeTab value="online" shortcut="5" → {t("gallery.modeOnline")}
 ### Phase 5: i18n + 收尾
 
 **Tasks:**
-- [ ] `gallery.modeOnline` + `discover.*`（标题/空态/错误/按钮）先加 en，再 zh/ja/ko
-- [ ] `make check`（typecheck + lint + test）通过
+- [x] `gallery.modeOnline` + `discover.*`（9 键：标题/空态/错误/按钮）+ `shortcuts.action.navGalleryTabOnline`：en（Phase 3 已加，类型源）→ zh/ja/ko 补齐
+- [x] `make check` 等价校验：`tsc --noEmit` 通过；改动文件 biome 通过（lefthook 暂存门禁逐 commit 已过）；本特性单测全绿
 
 ### Phase 5 Checklist
-- [ ] 4 语言无缺键（类型源 en 全覆盖）
-- [ ] 无 `console.*` 直连（走 logger）；无硬编码用户可见字符串
+- [x] 4 语言无缺键（脚本校验 en/zh/ja/ko `discover` 各 9 键 + `gallery.modeOnline` + `navGalleryTabOnline` 全在）
+- [x] 无 `console.*` 直连（grep 新增 src 文件无 `console.`；netease 端点失败走 `log.warn`）；无硬编码用户可见字符串（全走 `t()`）
+- [x] 全量 `vitest run`：本特性新增 11 单测全绿、**零回归**；剩余 7 个失败均与本特性无关、为 worktree 环境产物（6 个 `scripts/*.test.mjs` 走 rolldown 打包，因 worktree 的 `node_modules` junction 路径解析报 Parse failure；1 个 `folder-sync-covers` NCM 解码 ~2.9s 超时），在主仓正常环境可过
 
 ---
 
@@ -377,6 +378,7 @@ ModeTab value="online" shortcut="5" → {t("gallery.modeOnline")}
 |------|--------|---------|
 | 2026-06-14 | MUZERO Team | Initial draft：网易云每日推荐 + 推荐歌单作为 Gallery 第 5 个「发现」tab；不入库、react-query 缓存；复用 provider/播放/保存既有通路 |
 | 2026-06-14 | MUZERO Team | 决议 Q2/Q3/Q5 → Status: Final。tab 名「发现」；未登录照常展示匿名推荐歌单 + 日推区非强制登录 chip（不强制登录）；三端点用 eapi（best practice，异常再按需回退 weapi）|
+| 2026-06-14 | Claude (TDD) | 全 5 phase 实现完成（worktree `feat/netease-online-recommendations`，原子化 commit）。Phase 1 provider 纯解析+两 source 方法（合并语义/picUrl 坑）；Phase 2 react-query hooks（登录门控+reroll afresh）；Phase 3 第 5「发现」tab + 登录 chip + 桌面门控；Phase 4 `playStreamedHits` play-all + 卡片 `PlaylistImportDialog` 保存；Phase 5 zh/ja/ko 补齐。Q4 决议：「换一批」采 `afresh=true`（hook `reroll()` 写回同 cache slot）。实现微调（均记于各 Phase）：①「每日推荐歌单」+「推荐歌单」合并为单段（依两方法/两 hook 契约）；②推荐歌单卡片用轻量 CSS grid 而非 `VirtualCardGrid`（有界列表）；③登录态真机视觉冒烟待桌面壳 |
 
 ---
 

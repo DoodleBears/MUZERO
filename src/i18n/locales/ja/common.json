@@ -922,6 +922,7 @@
     "noTrackSelected": "曲を選択",
     "modeAlbums": "アルバム",
     "modeArtists": "アーティスト",
+    "modeOnline": "発見",
     "searchAlbums": "アルバムを検索…",
     "searchArtists": "アーティストを検索…",
     "searchInSet": "このセット内を検索…",
@@ -935,6 +936,17 @@
     "aiGenerated": "AI 生成",
     "albumCount_other": "{{count}} 枚のアルバム",
     "openEntity": "{{name}} を開く"
+  },
+  "discover": {
+    "dailyTracks": "デイリーおすすめ",
+    "recommendedPlaylists": "おすすめプレイリスト",
+    "playAll": "すべて再生",
+    "reroll": "別のおすすめ",
+    "loginToUnlock": "NetEase Music にログインしてデイリーおすすめを表示",
+    "error": "おすすめを取得できませんでした。",
+    "retry": "再試行",
+    "dailyEmpty": "デイリーおすすめはまだありません。",
+    "playlistsEmpty": "おすすめプレイリストはありません。"
   },
   "shortcuts": {
     "category": {
@@ -967,6 +979,7 @@
       "navGalleryTabTracks": "ライブラリタブ：すべての曲",
       "navGalleryTabAlbums": "ライブラリタブ：アルバム",
       "navGalleryTabArtists": "ライブラリタブ：アーティスト",
+      "navGalleryTabOnline": "ライブラリタブ：発見",
       "searchOpenGlobal": "検索を開く",
       "libraryFocusPrev": "フォーカスを上へ",
       "libraryFocusNext": "フォーカスを下へ",

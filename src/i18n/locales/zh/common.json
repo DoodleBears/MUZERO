@@ -922,6 +922,7 @@
     "noTrackSelected": "选择一首歌",
     "modeAlbums": "专辑",
     "modeArtists": "歌手",
+    "modeOnline": "发现",
     "searchAlbums": "搜索专辑…",
     "searchArtists": "搜索歌手…",
     "searchInSet": "在此歌单中搜索…",
@@ -935,6 +936,17 @@
     "aiGenerated": "AI 生成",
     "albumCount_other": "{{count}} 张专辑",
     "openEntity": "打开 {{name}}"
+  },
+  "discover": {
+    "dailyTracks": "每日推荐",
+    "recommendedPlaylists": "推荐歌单",
+    "playAll": "播放全部",
+    "reroll": "换一批",
+    "loginToUnlock": "登录网易云音乐，解锁每日推荐",
+    "error": "暂时拿不到推荐，请稍后重试。",
+    "retry": "重试",
+    "dailyEmpty": "暂无每日推荐，过会儿再来看看。",
+    "playlistsEmpty": "暂无推荐歌单。"
   },
   "shortcuts": {
     "category": {
@@ -967,6 +979,7 @@
       "navGalleryTabTracks": "媒体库标签：全部歌曲",
       "navGalleryTabAlbums": "媒体库标签：专辑",
       "navGalleryTabArtists": "媒体库标签：歌手",
+      "navGalleryTabOnline": "媒体库标签：发现",
       "searchOpenGlobal": "打开搜索",
       "libraryFocusPrev": "上移焦点",
       "libraryFocusNext": "下移焦点",
