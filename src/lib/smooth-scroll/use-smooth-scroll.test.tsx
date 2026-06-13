@@ -4,7 +4,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // ── Fakes & controllable inputs ─────────────────────────────────────────────
 const { lenisInstances, state } = vi.hoisted(() => ({
-  lenisInstances: [] as Array<{ options: { lerp: number }; destroyed: boolean; opts: unknown }>,
+  lenisInstances: [] as Array<{
+    options: { lerp: number };
+    destroyed: boolean;
+    opts: unknown;
+    resize: ReturnType<typeof vi.fn>;
+  }>,
   state: {
     isMac: false,
     isWindows: false,
@@ -19,6 +24,7 @@ vi.mock("lenis", () => {
     opts: unknown;
     scrollTo = vi.fn();
     raf = vi.fn();
+    resize = vi.fn();
     constructor(opts: { lerp?: number }) {
       this.opts = opts;
       this.options = { lerp: opts.lerp ?? 0.1 };
@@ -109,6 +115,30 @@ describe("useSmoothScroll — lifecycle", () => {
     unmount();
     expect(lenisInstances[0].destroyed).toBe(true);
     expect(__activeCount()).toBe(0);
+  });
+
+  it("re-measures Lenis when the column's content grows (the can't-scroll-down fix)", async () => {
+    state.settings = { smoothScroll: true };
+    // Render against a real element so the MutationObserver fires; capture it.
+    const el = document.createElement("div");
+    el.appendChild(document.createElement("div"));
+    const { unmount } = renderHook(() => {
+      const ref = useRef<HTMLDivElement | null>(el);
+      return useSmoothScroll(ref);
+    });
+    const lenis = lenisInstances[0];
+    // Measured once on attach (a fresh column needs its initial limit).
+    expect(lenis.resize).toHaveBeenCalled();
+
+    lenis.resize.mockClear();
+    // Content appears later (lyrics / DJ console / async cover) → re-measure so the
+    // new height is scrollable instead of clamped to the old, shorter limit.
+    await act(async () => {
+      el.appendChild(document.createElement("div"));
+      await Promise.resolve(); // flush the MutationObserver microtask
+    });
+    expect(lenis.resize).toHaveBeenCalled();
+    unmount();
   });
 });
 

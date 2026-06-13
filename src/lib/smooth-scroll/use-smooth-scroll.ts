@@ -59,7 +59,32 @@ export function useSmoothScroll(ref: RefObject<HTMLElement | null>): {
     });
     lenisRef.current = lenis;
     registerLenis(lenis);
+
+    // Re-measure on CONTENT growth. Lenis derives its scroll limit from
+    // `wrapper.scrollHeight`, but its autoResize only watches the wrapper's own box —
+    // which is fixed for a flex/grid column — so content that grows AFTER attach (a
+    // cover image loading, lyrics / DJ console / annotation expanding, a virtual list
+    // appending rows) leaves the limit stale and too-short: the column "can't scroll
+    // down" past the old height. Watch the wrapper's CHILDREN (their boxes reflect the
+    // content height) plus child add/remove, and re-measure. `resize()` is a cheap
+    // read; the observers already batch (RO per frame, MO per microtask).
+    const remeasure = () => lenis.resize();
+    const contentObserver = new ResizeObserver(remeasure);
+    const observeChildren = () => {
+      contentObserver.disconnect();
+      for (const child of element.children) contentObserver.observe(child);
+    };
+    observeChildren();
+    const childListObserver = new MutationObserver(() => {
+      observeChildren();
+      remeasure();
+    });
+    childListObserver.observe(element, { childList: true });
+    remeasure();
+
     return () => {
+      contentObserver.disconnect();
+      childListObserver.disconnect();
       unregisterLenis(lenis);
       lenis.destroy();
       lenisRef.current = null;
