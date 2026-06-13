@@ -131,6 +131,10 @@ export function useCoverDerivativeUrl(
   const cropWidth = crop?.width;
   const cropHeight = crop?.height;
   const [entry, setEntry] = useState<{ blob: Blob; key: string; forKey: string } | null>(null);
+  // Mirror of `entry` so the effect can read the latest WITHOUT depending on it
+  // (depending would re-run + re-resolve on every entry change).
+  const entryRef = useRef(entry);
+  entryRef.current = entry;
   useEffect(() => {
     if (!trackId && !coverBlobId && !remoteCoverUrl) {
       setEntry(null);
@@ -139,6 +143,13 @@ export function useCoverDerivativeUrl(
     // Identifies THIS track's cover so we can tell whether an already-resolved
     // entry still matches (the virtual row may have recycled to another track).
     const coverKey = `${coverBlobId ?? ""}|${cropX}:${cropY}:${cropWidth}:${cropHeight}|${remoteCoverUrl ?? ""}`;
+    // Already resolved THIS exact cover? Do nothing — no re-resolve, no object-URL
+    // churn. This is what stops the flash when scrolling STOPS (defer flips back to
+    // false): without it the effect would re-run ensure() for a cover already on
+    // screen, swap to a fresh URL, and CoverImage would blink the thumbhash.
+    if (entryRef.current?.forKey === coverKey) {
+      return;
+    }
     // While deferring (the list is scrolling) DON'T start new derivative work —
     // but keep an already-resolved cover for this same track so it doesn't flash
     // to the thumbhash placeholder mid-scroll. A fresh track shows the placeholder

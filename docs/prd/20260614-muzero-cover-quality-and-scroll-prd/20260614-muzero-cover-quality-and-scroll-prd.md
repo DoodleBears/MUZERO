@@ -70,9 +70,11 @@
 - [x] [`useCoverDerivativeUrl`](../../../src/hooks/use-media.ts) 加 `options.defer`;defer 时保留匹配 entry、不启动 worker;entry 加 `forKey`。默认 `defer=false`,其他调用方不变。
 - [x] [`track-row.tsx`](../../../src/components/library/track-row.tsx):`useCoverDerivativeUrl(track, "thumbnail", { defer: deferCoverLoad })`(不再传 `undefined`)。
 
+**QA 跟进(滚动停下的二次闪):** 实测滚动中已不闪,但**停下瞬间会闪一下 thumbhash 再回来**。根因:`defer` 翻回 false 时,effect 对**已解析的封面也重跑 `ensure()`** → 换了新 object URL → `CoverImage` 的 `loaded` 复位 → 闪一帧。修法:effect 顶部加守卫——**`entryRef.current.forKey === coverKey` 即已解析过该封面 → 直接 return,不重解析、不换 URL**(用 ref 读最新 entry,避免把 entry 设成依赖导致每次变更都重跑)。已解析的封面停下时不再重解码 → 不闪。
+
 **Checklist:**
-- [x] `keepDeferredCover` 单测(3 例)+ use-media/library 单测(71)全绿;`tsc`/Biome 通过;`src` 全量 2383 例通过。
-- [ ] **待实测**:全部歌曲快滚——已加载封面**保持清晰不闪**,仅新进视口的未解析封面短暂 thumbhash;滚动中不再启动新 worker 派生。
+- [x] `keepDeferredCover` 单测(3 例)+ use-media/library 单测(71)全绿;`tsc`/Biome 通过;`src` 全量 2383 例通过(player-store debounce 计时测试满载下偶发 flaky,re-run 全绿)。
+- [ ] **待实测**:全部歌曲滚动中 + **停下** 都不再闪 thumbhash;仅真没解析过的封面短暂 thumbhash。
 
 ### Phase 2: 导入解码去重
 
@@ -135,3 +137,4 @@
 |------|--------|---------|
 | 2026-06-14 | Claude | 初稿:#C 滚动不闪(主)+ #1 导入去重 + #A 网格高清;#B 归因虚拟化非主因 |
 | 2026-06-14 | Claude | Phase 1(#C)代码完成:`keepDeferredCover` + `useCoverDerivativeUrl` defer 选项(保留已解析封面、滚动中不启动 worker)+ track-row 改造。`src` 全量 2383 例通过。待实测 |
+| 2026-06-14 | Claude | QA 跟进:修「滚动停下二次闪 thumbhash」——effect 顶部加 `entryRef.forKey === coverKey` 守卫,已解析封面不再重跑 ensure/换 URL。`src` 全量通过 |
