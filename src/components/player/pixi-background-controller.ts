@@ -15,7 +15,19 @@
  * component wires the real `pixi.js` import while tests inject a fake — mirroring
  * the DjBrain / MusicGenProvider DI pattern used elsewhere in the codebase.
  */
+import { createDiagnosticLogger } from "@/lib/logger";
 import type { PixiBackgroundEffect } from "./pixi-pixel-background";
+
+/**
+ * Diagnostics for the switch-jank investigation: `appInit` should fire ONCE per
+ * controller (re-init = a regression), `textureSwap` once per landed song with
+ * its load+upload cost in ms. Visible in Settings → Trace / the perf HUD.
+ */
+const bgPixiLog = createDiagnosticLogger("background.pixi");
+
+function nowMs(): number {
+  return typeof performance !== "undefined" ? performance.now() : 0;
+}
 
 export interface PixiTextureLike {
   source: { scaleMode: string };
@@ -133,6 +145,7 @@ export function createPixiBackgroundController(
   const stats = { appInits: 0, textureSwaps: 0 };
 
   async function buildApp(): Promise<void> {
+    const startedAt = nowMs();
     const module = await deps.loadPixi();
     if (destroyed) return;
     pixi = module;
@@ -160,6 +173,9 @@ export function createPixiBackgroundController(
     view.style.width = "100%";
     view.style.height = "100%";
     view.style.imageRendering = effect === "pixel" ? "pixelated" : "auto";
+    // Keep the canvas BELOW the plain <img> reveal layer so a freshly-swapped
+    // texture is uncovered by fading the img out, not popped in (PRD Phase 2 / #3).
+    view.style.zIndex = "0";
     filter = await deps.loadFilter(module, effect, effectOptions);
     if (destroyed) {
       nextApp.destroy({ removeView: true }, { children: true, context: true });
@@ -173,6 +189,12 @@ export function createPixiBackgroundController(
       resizeObserver.observe(host);
     }
     wireContextLossRecovery(nextApp, view);
+    bgPixiLog.debug("appInit", {
+      backend: preference,
+      power: powerPreference,
+      effect,
+      ms: Math.round(nowMs() - startedAt),
+    });
   }
 
   /**
@@ -249,6 +271,7 @@ export function createPixiBackgroundController(
     }
     if (destroyed || !app || !pixi) return;
 
+    const swapStart = nowMs();
     let media: LoadedBackgroundMedia;
     try {
       media = await deps.loadMedia(pixi, src, mediaType);
@@ -269,6 +292,7 @@ export function createPixiBackgroundController(
         height: media.height,
         unload: media.unload,
       });
+      bgPixiLog.debug("textureSwap.stale", { mediaType, ms: Math.round(nowMs() - swapStart) });
       return;
     }
 
@@ -316,11 +340,18 @@ export function createPixiBackgroundController(
     stats.textureSwaps += 1;
     options.onApplied?.();
     resize();
+    bgPixiLog.debug("textureSwap", {
+      mediaType,
+      ms: Math.round(nowMs() - swapStart),
+      appInits: stats.appInits,
+      textureSwaps: stats.textureSwaps,
+    });
   }
 
   async function recover(): Promise<void> {
     if (destroyed || recoverAttempts >= MAX_RECOVER_ATTEMPTS) return;
     recoverAttempts += 1;
+    bgPixiLog.warn("recover", { attempt: recoverAttempts, backend: preference });
     const source = lastSource;
     // The lost context took the textures with it — tear the app down and rebuild.
     currentVideoTeardown?.();

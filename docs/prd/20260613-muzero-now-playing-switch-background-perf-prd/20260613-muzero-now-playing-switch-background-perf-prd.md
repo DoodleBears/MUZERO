@@ -153,8 +153,9 @@ backgroundGpuPowerPreference?: "auto" | "high-performance" | "low-power"; // DEF
 - **Now Playing stage 主封面**:已是 `<img>`([`media-stage.tsx`](../../../src/components/player/media-stage.tsx) `CoverImage`),已即时,无需改;只把它的 backlight 派生纳入 settle 闸门(见 Phase 2)。
 - **环境背景(ambient)**:
   - 高频跳歌中(`currentTrack !== settledTrack`):显示 `CrossfadeBackgroundImage`([`now-playing-background.tsx:336`](../../../src/components/player/now-playing-background.tsx#L336))的**当前封面**,逐张滑过(廉价 `<img>` + 已有 crossfade)。
-  - 落定后(settledTrack 更新):持久 Pixi 把 settled 封面作纹理换上,crossfade 盖过即时 `<img>` 层。
-  - **即时 `<img>` 层常驻底层(不淡出)**:单张已解码封面只是合成器里的一张静态纹理、无每帧开销,占用极低 → 让它常驻在 Pixi canvas 之下。好处:① 跳歌时永远有封面可看;② 充当 Pixi 还在升温 / WebGPU device-lost 恢复期的**兜底层**(见 §6 Phase 3 device-lost),用户永不见黑屏。
+  - 落定后(settledTrack 更新):持久 Pixi 把 settled 封面作纹理换上。
+  - **即时 `<img>` 层在 canvas 之上(reveal 层,QA#3 修正)**:canvas `z-0`、`<img>` `z-10` 盖在其上。跳歌中 `<img>`(`opacity-100`)显当前封面、遮住下层旧特效;纹理换好后(`src === displayedSrc`)`<img>` 在 500ms 内 `opacity-100→0` 淡出,**平滑漏出新特效,而不是瞬间 pop**。
+    > 早先误设计成「`<img>` 常驻 canvas 之下」——但 Pixi canvas 不透明且在上层,`<img>` 被完全遮住、根本不可见,纹理一换就 pop(QA#3 现象)。改为「上层 reveal + 淡出」后才真正平滑。device-lost 升温期同样靠这层兜底。
   - 视觉:跳歌时看到一串清晰封面快速划过;停下后该首的 noise/pixel 特效「长」出来盖在封面上。用户已确认接受此体验。
 - **GPU 后端切换**:改设置后,持久 Pixi app 以新 `preference` 重建一次(仅这一次,非每切歌)。
 
@@ -262,7 +263,9 @@ backgroundGpuPowerPreference?: "auto" | "high-performance" | "low-power"; // DEF
 | # | Question | Status | Decision |
 |---|----------|--------|----------|
 | 1 | settle 时长用 180ms 复用还是独立可调? | ✅ Resolved | 独立常量 `BACKGROUND_EFFECT_SETTLE_MS`(初值 180,语义解耦),**不**暴露为用户设置(§3.2) |
-| 2 | 即时 `<img>` 层落定后淡出还是常驻底层? | ✅ Resolved | **常驻底层**——单张静态封面合成开销极低,且充当 device-lost/升温期兜底(§5.1) |
+| 2 | 即时 `<img>` 层落定后淡出还是常驻底层? | ✅ Resolved(QA#3 修正) | **上层 reveal + 淡出**:`<img>` `z-10` 在 canvas `z-0` 之上,纹理就绪后淡出漏出特效(不 pop)。早先「常驻底层」会被不透明 canvas 完全遮住,失效(§5.1) |
+| 5 | QA#1:切歌**按键瞬间**就掉帧,且**省电预设(无 Pixi)同样掉**——根因不是背景层? | Open(待 trace) | 假设:`currentIndex` 变化触发的**同步 re-render + motion crossfade 爆发 + 歌词子树 remount**(非 Pixi、非 native VT;`playback.next/prev` 未包 view-transition)。已加 trace,待 QA 抓取确认后再定向修 |
+| 6 | QA#2:落定后 Pixi 仍掉帧——是否 app 反复 re-init? | Open(待 trace) | 推理:控制器生命周期 effect 依赖 `[effect,effectOptions,pixelSize,gpuBackend,gpuPower]`,均不随切歌变 → 不应 re-init;掉帧更可能是**纹理 load+upload**(全尺寸封面上传 GPU)。已加 `background.pixi.appInit/textureSwap(ms)` trace 量化确认 |
 | 3 | auto 是否也把 `powerPreference` 提到 high-performance? | ✅ Resolved | **是**。新增 `backgroundGpuPowerPreference`,auto→`high-performance`;后端与性能档都默认 auto=选性能好的,可手动覆盖(§3.1 / §5.2 / Phase 3) |
 | 4 | WebGPU 的 device-lost 恢复路径? | ✅ Resolved | `device.lost`(非 destroyed)+ `webglcontextlost/restored` → 有限次重建 + 回灌纹理,恢复期回退 `<img>`(Phase 3) |
 
@@ -277,3 +280,4 @@ backgroundGpuPowerPreference?: "auto" | "high-performance" | "low-power"; // DEF
 | 2026-06-13 | Claude | Phase 1 代码完成:`pixi-background-controller`(DI + 持久 app + 纹理热替换)+ 组件重构 + 6 例单测;切歌不再重建 WebGL App。待桌面 GPU/视觉实测 |
 | 2026-06-13 | Claude | Phase 2 代码完成:`useSettledValue` 去抖(纹理上传 debounce)+ 常驻即时 `<img>` + O1 backlight gate;9 例新单测。封面逐张即时、重计算落定才跑 |
 | 2026-06-13 | Claude | Phase 3 代码完成:`gpu-backend` 解析器(9 例)+ `backgroundGpuBackend`/`PowerPreference` 设置(默认 auto=性能优先)+ Settings 双选择器 + en/zh/ja/ko + 控制器 `recover()` device-lost 恢复(2 例)。三个 Phase 代码全部完成,待桌面 GPU/视觉实测 |
+| 2026-06-13 | Claude | QA 跟进:#3 修正 `<img>` 为上层 reveal+淡出(消除特效 pop);为 #1/#2 加 `background.pixi.appInit/textureSwap(ms)` 诊断 trace(`Settings→Trace`/perf HUD 可见)。#1/#2 根因待 QA 抓 trace 确认(§9 Q5/Q6) |

@@ -152,10 +152,11 @@ export function PixiPixelBackground({
           alt=""
           decoding="async"
           className={cn(
-            "absolute inset-0 h-full w-full object-cover transition-opacity duration-300",
-            // Resident under the canvas: shows the current cover instantly while the
-            // Pixi texture catches up to it; fades out once they match (PRD Phase 2).
-            src === displayedSrc ? "opacity-0" : "opacity-90",
+            // Reveal layer ON TOP of the canvas (z-10 vs the canvas's z-0): the plain
+            // cover shows instantly on a switch while the heavy effect computes below,
+            // then fades out to reveal the effect instead of popping it in (#3).
+            "absolute inset-0 z-10 h-full w-full object-cover transition-opacity duration-500",
+            src === displayedSrc ? "opacity-0" : "opacity-100",
           )}
         />
       ) : null}
