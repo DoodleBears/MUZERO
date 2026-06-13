@@ -124,8 +124,10 @@ VirtualTrackList (parentRef scroller + Lenis)
 - [x] [`alphabet-index.tsx`](../../../src/components/library/alphabet-index.tsx):字母条 + 点击/拖动跳 `scrollToIndex`(经 Lenis)+ 拖动大字母浮层。
 - [x] 接进 `virtual-track-list` → `track-list-section` → `search-page`:仅名称排序 + 无 query + 非红心 + `>50` 时挂载;`sortedRows`/`transliterationReady` 变化重算(memo)。
 
+**QA 跟进(字母条乱序 + 点 Q 显示 K):** 实测字母条不是 A→Z、点一个字母跳到/提示成另一个。**根因:列表排序与标签不同源**——名称排序用 `title.localeCompare`(在 Electron 默认 locale 下按 Han **码点**排,非拼音),而标签是**拼音**首字母 → 两者错位 → `buildAlphabetIndex` 按出现顺序得到一条乱序、彼此不连续的字母带,拖动/点击按比例映射就指错字母。**修法:让名称排序本身转写感知**——新增 [`transliterateSortKey`](../../../src/lib/search-transliterate.ts)(整串读音化:Han→全拼、kana→罗马音、其余 NFKD 折叠小写),[`sortTracks`](../../../src/lib/track-gallery.ts) 名称排序改按它(每 track 预算一次 key,避免比较器里 O(n log n) 调拼音);`transliterateInitial` 重定义为 `firstAlphaLabel(transliterateSortKey(...))` → **标签与排序同源**。于是列表读音 A→Z、字母带连续有序、点/拖精确命中。附带修对混合标题(`iPhone手机`→`I`,旧实现取内部 Han 拼音误判 `S`)。
+
 **Checklist:**
-- [x] `buildAlphabetIndex` / `transliterateInitial` 单测全绿;`tsc`/Biome 通过;`src` 全量 2401 例通过。
+- [x] `buildAlphabetIndex` / `transliterateInitial` / `transliterateSortKey`(读音排序键 + 混合标题 + 拼音序)单测全绿;`tsc`/Biome 通过;`src` 全量 2407 例通过。
 - [ ] **待实测**:点字母准确跳到该字母首行;中日韩标题归类正确;触摸滑动跟手 + 大字母提示;与 hover 滚动条同处右缘是否需让位(初版共存,字母条 z 高)。
 
 ---
@@ -173,3 +175,4 @@ VirtualTrackList (parentRef scroller + Lenis)
 | 2026-06-14 | Claude | 初稿:hover 浮层滚动条(Phase 1)+ A–Z 字母快速索引(Phase 2,拼音/假名感知);复用 `scrollToIndex` + Lenis + 转写 |
 | 2026-06-14 | Claude | Phase 1 代码完成:`scrollbar-thumb.ts`(纯几何,5 例)+ `hover-scrollbar.tsx`(sticky 浮层 thumb,拖拽经 Lenis)接进 `virtual-track-list`。commit `ee8bd23` |
 | 2026-06-14 | Claude | Phase 2 代码完成:`alphabet-index.ts`(`firstAlphaLabel`+`buildAlphabetIndex` 全局去重)+ `transliterateInitial`(复用 pinyin/wanakana)+ `alphabet-index.tsx` 浮层字母条;接线 `virtual-track-list`→`track-list-section`→`search-page`(名称排序+无 query+非红心+>50)。`src` 全量 2401 例通过 |
+| 2026-06-14 | Claude | QA 修(字母条乱序/点 Q 显示 K):名称排序与拼音标签不同源致错位。新增 `transliterateSortKey`(整串读音化),`sortTracks` 名称排序改按它(预算键),`transliterateInitial` 重定义为同源 `firstAlphaLabel(sortKey)`;附带修混合标题 `iPhone手机→I`。`src` 全量 2407 例通过 |

@@ -14,6 +14,7 @@
  */
 
 import type { Track } from "@/db/types";
+import { transliterateSortKey } from "@/lib/search-transliterate";
 import type { SortDir } from "@/lib/set-gallery";
 
 export type { SortDir } from "@/lib/set-gallery";
@@ -35,7 +36,8 @@ export const TRACK_SORT_DEFAULT_DIR: Record<TrackSort, SortDir> = {
 /** trackId → last-played epoch ms (folded from per-device playback stats). */
 export type LastPlayedMap = ReadonlyMap<string, number>;
 
-/** Ascending comparison for a sort field; callers apply the direction sign. */
+/** Ascending comparison for a sort field; callers apply the direction sign. The
+ *  name case is handled in {@link sortTracks} via precomputed transliteration keys. */
 function compareTracksAsc(a: Track, b: Track, sort: TrackSort, lastPlayed?: LastPlayedMap): number {
   switch (sort) {
     case "name":
@@ -63,12 +65,22 @@ export function sortTracks(
   lastPlayed?: LastPlayedMap,
 ): Track[] {
   const sign = dir === "asc" ? 1 : -1;
-  return [...tracks].sort(
-    (a, b) =>
-      sign * compareTracksAsc(a, b, sort, lastPlayed) ||
-      a.title.localeCompare(b.title) ||
-      a.createdAt - b.createdAt,
-  );
+  // Precompute the transliteration-aware name key ONCE per track (avoid O(n log n)
+  // pinyin calls inside the comparator). The name sort orders by reading so a CJK
+  // library reads A→Z and the A–Z fast-scroll index aligns with the row order.
+  const nameKey =
+    sort === "name" ? new Map(tracks.map((t) => [t, transliterateSortKey(t.title)])) : null;
+  return [...tracks].sort((a, b) => {
+    const primary = nameKey
+      ? compareStrings(nameKey.get(a) ?? "", nameKey.get(b) ?? "")
+      : compareTracksAsc(a, b, sort, lastPlayed);
+    return sign * primary || a.title.localeCompare(b.title) || a.createdAt - b.createdAt;
+  });
+}
+
+/** Lexicographic compare returning -1 / 0 / 1 (callers apply the direction sign). */
+function compareStrings(a: string, b: string): number {
+  return a < b ? -1 : a > b ? 1 : 0;
 }
 
 /** Keep only liked tracks when the 红心 filter is on; otherwise pass through. */

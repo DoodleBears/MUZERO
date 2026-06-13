@@ -6,6 +6,7 @@ import {
   scoreVariants,
   searchVariants,
   transliterateInitial,
+  transliterateSortKey,
 } from "./search-transliterate";
 
 // The pinyin/wanakana libs load lazily (Worker chunk / dynamic import). Tests
@@ -147,5 +148,32 @@ describe("transliterateInitial — A–Z fast-scroll bucket", () => {
     // it would need a JP dictionary — out of scope, and the kana-first gate rightly
     // keeps it off the Chinese pinyin path.
     expect(transliterateInitial("君の名は")).toBe("#");
+  });
+
+  it("buckets a latin-leading mixed title by its first character (not the inner Han)", () => {
+    // Whole-string transliteration keeps the leading latin run → "iphoneshouji" → I.
+    expect(transliterateInitial("iPhone手机")).toBe("I");
+  });
+});
+
+describe("transliterateSortKey — reading-order comparable", () => {
+  it("romanizes the whole string so a name sort reads A→Z", () => {
+    expect(transliterateSortKey("周杰伦")).toBe("zhoujielun");
+    expect(transliterateSortKey("北京欢迎你")).toBe("beijinghuanyingni");
+    expect(transliterateSortKey("ナルト")).toBe("naruto");
+    expect(transliterateSortKey("Adele")).toBe("adele");
+  });
+
+  it("keeps latin runs in mixed text and folds diacritics", () => {
+    expect(transliterateSortKey("iPhone手机")).toBe("iphoneshouji");
+    expect(transliterateSortKey("Café")).toBe("cafe");
+  });
+
+  it("orders pinyin before a later-initial Han title (Adele < 周杰伦)", () => {
+    const titles = ["周杰伦", "Adele", "北京"];
+    const sorted = [...titles].sort((a, b) =>
+      transliterateSortKey(a).localeCompare(transliterateSortKey(b)),
+    );
+    expect(sorted).toEqual(["Adele", "北京", "周杰伦"]); // adele < beijing < zhoujielun
   });
 });
