@@ -6,6 +6,7 @@
 
 import type { DjSession } from "@/db/types";
 import { freeTextMatches } from "@/lib/search-core";
+import { transliterateSortKey } from "@/lib/search-transliterate";
 
 /** A 歌单 augmented with the stats the gallery filters / sorts / renders on. */
 export interface SetGalleryItem {
@@ -79,7 +80,21 @@ export function sortSets(
   dir: SortDir = SET_SORT_DEFAULT_DIR[sort],
 ): SetGalleryItem[] {
   const sign = dir === "asc" ? 1 : -1;
-  return [...items].sort(
-    (a, b) => sign * compareSetsAsc(a, b, sort) || a.session.name.localeCompare(b.session.name),
-  );
+  // Precompute the transliteration-aware name key ONCE per set (a CJK library reads
+  // A→Z, and the A–Z fast-scroll index aligns with the row order).
+  const nameKey =
+    sort === "name"
+      ? new Map(items.map((item) => [item, transliterateSortKey(item.session.name)]))
+      : null;
+  return [...items].sort((a, b) => {
+    const primary = nameKey
+      ? compareStrings(nameKey.get(a) ?? "", nameKey.get(b) ?? "")
+      : compareSetsAsc(a, b, sort);
+    return sign * primary || a.session.name.localeCompare(b.session.name);
+  });
+}
+
+/** Lexicographic compare returning -1 / 0 / 1 (callers apply the direction sign). */
+function compareStrings(a: string, b: string): number {
+  return a < b ? -1 : a > b ? 1 : 0;
 }

@@ -15,6 +15,7 @@
  * mirroring the index's `sortWithBucketsLast` so they never float to the top.
  */
 
+import { transliterateSortKey } from "@/lib/search-transliterate";
 import type { SortDir } from "@/lib/set-gallery";
 
 export type { SortDir } from "@/lib/set-gallery";
@@ -71,8 +72,20 @@ export function sortEntities<T extends SortableEntity>(
   dir: SortDir = ENTITY_SORT_DEFAULT_DIR[sort],
 ): T[] {
   const sign = dir === "asc" ? 1 : -1;
+  // Precompute the transliteration-aware name key ONCE per entity (a CJK library
+  // reads A→Z, and the A–Z fast-scroll index aligns with the row order).
+  const nameKey =
+    sort === "name" ? new Map(items.map((item) => [item, transliterateSortKey(item.name)])) : null;
   return [...items].sort((a, b) => {
     if (a.isBucket !== b.isBucket) return a.isBucket ? 1 : -1;
-    return sign * compareEntitiesAsc(a, b, sort) || a.name.localeCompare(b.name);
+    const primary = nameKey
+      ? compareStrings(nameKey.get(a) ?? "", nameKey.get(b) ?? "")
+      : compareEntitiesAsc(a, b, sort);
+    return sign * primary || a.name.localeCompare(b.name);
   });
+}
+
+/** Lexicographic compare returning -1 / 0 / 1 (callers apply the direction sign). */
+function compareStrings(a: string, b: string): number {
+  return a < b ? -1 : a > b ? 1 : 0;
 }

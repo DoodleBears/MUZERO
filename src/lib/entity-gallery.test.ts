@@ -1,10 +1,16 @@
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 import {
   ENTITY_SORT_DEFAULT_DIR,
   type EntitySort,
   type SortableEntity,
   sortEntities,
 } from "./entity-gallery";
+import { ensureTransliterationLoaded } from "./search-transliterate";
+
+// The name sort is transliteration-aware; warm the dictionaries so pinyin is full.
+beforeAll(async () => {
+  await ensureTransliterationLoaded();
+});
 
 function ent(over: Partial<SortableEntity> & { name: string }): SortableEntity {
   return {
@@ -27,6 +33,15 @@ describe("sortEntities", () => {
 
   it("name → alphabetical (A→Z) by default", () => {
     expect(names(sortEntities(items, "name"))).toEqual(["Alpha", "Beta", "Gamma"]);
+  });
+
+  it("name → reading order for CJK (pinyin), so the A–Z index aligns", () => {
+    const cjk = [
+      ent({ name: "周杰伦" }), // zhōu → Z
+      ent({ name: "Adele" }), // A
+      ent({ name: "北京" }), // běi → B
+    ];
+    expect(names(sortEntities(cjk, "name"))).toEqual(["Adele", "北京", "周杰伦"]);
   });
 
   it("count → most tracks first by default", () => {

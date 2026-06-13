@@ -109,6 +109,15 @@ describe("sortSets", () => {
     expect(names(sortSets(items, "name"))).toEqual(["Alpha", "Beta", "Gamma"]);
   });
 
+  it("name → reading order for CJK (pinyin), so the A–Z index aligns", () => {
+    const cjk = [
+      makeItem({ name: "周杰伦" }), // zhōu → Z
+      makeItem({ name: "Adele" }), // A
+      makeItem({ name: "北京" }), // běi → B
+    ];
+    expect(names(sortSets(cjk, "name"))).toEqual(["Adele", "北京", "周杰伦"]);
+  });
+
   it("size → by track count desc", () => {
     expect(names(sortSets(items, "size"))).toEqual(["Alpha", "Beta", "Gamma"]);
   });
