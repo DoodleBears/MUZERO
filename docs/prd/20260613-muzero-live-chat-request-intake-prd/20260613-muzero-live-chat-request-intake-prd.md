@@ -20,7 +20,7 @@
 | 4 | Direct Search Route + Playback Actions | ✅ Completed | [Phase 4 Checklist](#phase-4-checklist) |
 | 5 | AI DJ Route + Prompt Safety | ✅ Completed | [Phase 5 Checklist](#phase-5-checklist) |
 | 6 | Social Stream Ninja Preset + Docs | ✅ Completed | [Phase 6 Checklist](#phase-6-checklist) |
-| 7 | Verification + Hardening | 🔲 Pending | [Phase 7 Checklist](#phase-7-checklist) |
+| 7 | Verification + Hardening | ✅ Completed | [Phase 7 Checklist](#phase-7-checklist) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
 
@@ -679,22 +679,30 @@ The streamer should be able to click a request row and open the matched track in
 
 **Tasks:**
 
-- [ ] Run targeted Vitest suites for router/search/runtime/settings.
-- [ ] Run `tsc --noEmit`.
-- [ ] Run Electron desktop manual test with curl/Postman/local script.
-- [ ] Verify no `console.*` in `src/**`.
-- [ ] Verify token/raw body redaction in logs.
-- [ ] Verify request flood does not freeze playback UI.
-- [ ] Verify no user-visible string is hardcoded outside i18n catalogs.
+- [x] Run targeted Vitest suites for router/search/runtime/settings.
+- [x] Run `tsc --noEmit`.
+- [x] Run Electron desktop manual test with curl/Postman/local script.
+- [x] Verify no `console.*` in `src/**`.
+- [x] Verify token/raw body redaction in logs.
+- [x] Verify request flood does not freeze playback UI.
+- [x] Verify no user-visible string is hardcoded outside i18n catalogs.
 
 ### Phase 7 Checklist
 
-- [ ] `make check` or equivalent targeted gate passes.
-- [ ] Manual curl request can queue a song next.
-- [ ] Manual low-confidence request lands in inbox, not playback.
-- [ ] AI DJ request creates a fresh chat session, and a second AI request waits until the first finishes.
-- [ ] Disabling Settings toggle closes the local server.
-- [ ] No MUZERO backend, telemetry, account system, or hidden runtime flag is introduced.
+- [x] `make check` or equivalent targeted gate passes.
+- [x] Manual curl/local-script request can queue a song next.
+- [x] Manual low-confidence request lands in inbox, not playback.
+- [x] AI DJ request creates a fresh chat session, and a second AI request waits until the first finishes.
+- [x] Disabling Settings toggle closes the local server.
+- [x] No MUZERO backend, telemetry, account system, or hidden runtime flag is introduced.
+
+**Phase 7 Verification:**
+
+- `D:\code\project\MUZERO\node_modules\.bin\vitest.CMD run scripts\electron-live-request-intake.test.mjs src\live-requests\audience-request-schema.test.ts src\live-requests\audience-request-search.test.ts src\live-requests\audience-request-router.test.ts src\live-requests\audience-request-security.test.ts src\live-requests\audience-request-ai-dj.test.ts src\live-requests\audience-request-runtime.test.ts src\live-requests\audience-request-presets.test.ts src\components\settings\live-request-settings.test.tsx src\db\default-settings.test.ts src\components\settings\settings-nav.test.ts`
+- `D:\code\project\MUZERO\node_modules\.bin\tsc.CMD --noEmit --pretty false`
+- `D:\code\project\MUZERO\node_modules\.bin\biome.CMD check --write scripts\electron-live-request-intake.test.mjs src\components\settings\live-request-settings.test.tsx src\live-requests\audience-request-runtime.test.ts`
+- `rg -n "\bconsole\.(log|warn|error|info|debug|trace)\b" src` returned no console method calls.
+- `rg` feature-scope hardening checks found no hidden `localStorage`/URL flag gate and no Electron intake token/body log calls.
 
 ---
 
@@ -790,3 +798,4 @@ The streamer should be able to click a request row and open the matched track in
 | 2026-06-13 | Codex | Completed Phase 4: direct Search runtime with transient request rows, duplicate/cooldown/rate-limit guards, active-set/all-library scope, memory/lyrics-aware scoring, play-next/append/approved play-now side effects, and online-source fallback. |
 | 2026-06-13 | Codex | Completed Phase 5: AI DJ route adapter with sanitized untrusted-message wrapper, one fresh chat session per request, serial in-memory live-request queue, runtime chat-session linking, and failure-safe transient row updates. |
 | 2026-06-13 | Codex | Completed Phase 6: Social Stream Ninja and generic webhook presets, broader Social Stream Ninja source detection, localized Settings setup snippets, copyable endpoint/header examples, and preset normalization tests. |
+| 2026-06-13 | Codex | Completed Phase 7: targeted verification gate, Electron loopback stop test, Settings disable-stop test, runtime flood rate-limit test, console/log/hidden-flag grep checks, and final PRD checklist closure. |

@@ -237,6 +237,30 @@ describe("AudienceRequestRuntime direct search route", () => {
       status: "failed",
     });
   });
+
+  it("rate-limits request floods before additional playback side effects", async () => {
+    const { current, target, tail } = await seedQueue();
+    await saveSettings(
+      {
+        audienceRequestIntake: {
+          ...DEFAULT_AUDIENCE_REQUEST_INTAKE_SETTINGS,
+          maxRequestsPerMinute: 1,
+        },
+      },
+      db,
+    );
+    let now = 1_000;
+    const runtime = createAudienceRequestRuntime({ db, now: () => now });
+
+    const first = await runtime.handle(request("晴天"));
+    now += 100;
+    const second = await runtime.handle(request("Tail Song"));
+
+    const queue = await getPlayQueue(db);
+    expect(first.status).toBe("completed");
+    expect(second).toMatchObject({ error: "rate-limited", status: "ignored" });
+    expect(queue.entries.map((entry) => entry.trackId)).toEqual([current.id, target.id, tail.id]);
+  });
 });
 
 async function seedQueue() {

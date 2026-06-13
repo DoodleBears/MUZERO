@@ -67,6 +67,23 @@ describe("Electron live request intake", () => {
     });
     expect(emitted).toEqual([]);
   });
+
+  it("closes the loopback listener when stopped", async () => {
+    const intake = createLiveRequestIntake({ emit: () => undefined });
+    running.push(intake);
+    const status = await intake.start({ port: 0, token: "secret" });
+
+    const stopped = await intake.stop();
+
+    expect(stopped).toEqual({ supported: true, listening: false });
+    await expect(
+      postJson({
+        body: JSON.stringify({ message: "点歌 晴天" }),
+        path: "/v1/audience/request?token=secret",
+        port: status.port,
+      }),
+    ).rejects.toThrow();
+  });
 });
 
 function postJson({ body, headers = {}, path, port }) {

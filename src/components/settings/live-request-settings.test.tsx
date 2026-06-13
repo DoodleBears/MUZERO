@@ -1,6 +1,6 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { DEFAULT_SETTINGS } from "@/db/types";
+import { DEFAULT_AUDIENCE_REQUEST_INTAKE_SETTINGS, DEFAULT_SETTINGS } from "@/db/types";
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key }),
@@ -88,5 +88,25 @@ describe("LiveRequestSettings", () => {
       }),
     });
     expect(screen.getByText("settings.liveRequestsInboxEmpty")).toBeInTheDocument();
+  });
+
+  it("stops the Electron listener when the visible setting is disabled", async () => {
+    settings = {
+      ...DEFAULT_SETTINGS,
+      audienceRequestIntake: {
+        ...DEFAULT_AUDIENCE_REQUEST_INTAKE_SETTINGS,
+        authToken: "muz_live_token",
+        enabled: true,
+      },
+    };
+    bridge.liveRequestIntake.stop.mockResolvedValue({ supported: true, listening: false });
+    render(<LiveRequestSettings />);
+
+    fireEvent.click(screen.getAllByRole("checkbox")[0]);
+
+    await waitFor(() => expect(bridge.liveRequestIntake.stop).toHaveBeenCalled());
+    expect(saveSettings).toHaveBeenCalledWith({
+      audienceRequestIntake: expect.objectContaining({ enabled: false }),
+    });
   });
 });
