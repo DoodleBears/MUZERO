@@ -11,9 +11,20 @@ import { useUiStore } from "@/stores/ui-store";
 import { useVisualizerPanelStore } from "@/stores/visualizer-panel-store";
 import { nextVisualizerPlacementPatch, resolveVisualizerPlacement } from "@/visualizer/placement";
 import { resolveVisualizerStyle } from "@/visualizer/registry";
+import { createTransportThrottle, TRANSPORT_SWITCH_MIN_INTERVAL_MS } from "./transport-throttle";
 
 const VOLUME_STEP = 0.05;
 const SEEK_STEP = 5;
+
+// Holding the next/prev key repeats at the OS rate (~30/s). Cap it so the cover +
+// background pipeline keeps up (no desync, no decode churn) and each cover is
+// actually readable — leading edge keeps a single press instant, trailing edge
+// makes the release always land. See transport-throttle.
+const transportSwitchThrottle = createTransportThrottle(TRANSPORT_SWITCH_MIN_INTERVAL_MS, {
+  now: () => Date.now(),
+  setTimer: (fn, ms) => window.setTimeout(fn, ms),
+  clearTimer: (id) => window.clearTimeout(id),
+});
 
 type ShortcutSettings = Partial<AppSettings>;
 
@@ -142,8 +153,8 @@ async function enableVisualizerIfOff(ctx: ShortcutActionRunnerContext): Promise<
 /** Imperative handler per shortcut action id. Reads state fresh per invocation. */
 const SHORTCUT_ACTION_HANDLERS: Record<string, ShortcutActionHandler> = {
   "playback.toggle": (ctx) => ctx.getPlayerState().togglePlay(),
-  "playback.next": (ctx) => void ctx.getPlayerState().next(),
-  "playback.prev": (ctx) => void ctx.getPlayerState().prev(),
+  "playback.next": (ctx) => transportSwitchThrottle(() => void ctx.getPlayerState().next()),
+  "playback.prev": (ctx) => transportSwitchThrottle(() => void ctx.getPlayerState().prev()),
   "playback.seekForward": (ctx) => {
     const s = ctx.getPlayerState();
     s.seek(s.positionSec + SEEK_STEP);

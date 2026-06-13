@@ -17,6 +17,7 @@
 | 4 | 背景纹理 ImageBitmap 化(线程外解码 + 去 canvas 转换)(#4-A) | ✅ 代码完成(待 GPU/视觉实测) | [Phase 4](#phase-4-背景纹理-imagebitmap-化) |
 | 5 | stage/coverflow 封面 `<img>` 异步解码(保持原图,不占 paint 主线程)(#4-B) | ✅ 代码完成(待 GPU/视觉实测) | [Phase 5](#phase-5-stagecoverflow-封面异步解码) |
 | 6 | 切歌 trace 仪表(逐首叙事:index/sourceKind/hasCover + 统计 flush)(诊断) | ✅ 代码完成(待抓 trace) | [Phase 6](#phase-6-切歌-trace-仪表) |
+| 7 | 切歌限速(长按 next/prev 节流 ~5/s,治 firehose 错位)(#错位) | ✅ 代码完成(待实测) | [Phase 7](#phase-7-切歌限速) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
 
@@ -306,6 +307,27 @@ backgroundGpuPowerPreference?: "auto" | "high-performance" | "low-power"; // DEF
 - [x] `tsc`/Biome + switch-trace(4)+ player-store(17)全绿。
 - [ ] **待抓 trace 验证**:带封面切歌行 `hasCover:true` 与紧随的 `cover.preload.batch`/`textureSwap` 大 ms + fps 掉帧对齐;无封面切歌 `hasCover:false` 仅基线小掉;快切时 `listen.flush counts:false` 且 `dbRequeries:0`。
 
+### Phase 7: 切歌限速
+
+**Goal:** 长按 next/prev(OS key-repeat ~30/s)远超 ~180ms 的 settle 窗口 → 封面与背景各自 settle 到**不同的中间曲** = QA#6 错位 bug;且每次按键都付一次封面解码。限速到 **~5/s** 让管线追得上(封面+背景同步、不错位)、每张封面**看得清**(用户靠封面认歌)、按键开销坍缩一个量级。用户拍板「设切换速度上限」。
+
+**QA#6(错位 bug)根因:** 多层 async/settle 各自按自己的时钟收敛——`useSettledValue(currentIndex)`(180ms)→ `useLocalCoverUrl`/`useTrackCoverUrl`(async,stale-while-pending)→ `settleBackgroundTarget`(pending 时保留当前帧)→ Pixi 再 `useSettledValue(src)`(180ms)。每层 guard 单独正确,但 33/s 远快于 180ms,松手时某一层会卡在**中间曲**的 URL,另一层已到最终曲 → 封面/背景其一对不上。**限速到切歌间隔 > settle 窗口**即根除(管线每次都收敛完才接下一次)。
+
+**实现(落地):**
+- 纯 throttle 工厂 [`createTransportThrottle(minMs, clock)`](../../../src/shortcuts/transport-throttle.ts):**leading + trailing**——首按即发(单次切歌零延迟),冷却内的连按合并、**trailing 保证松手那次必落**(不会早停一首);clock 注入,确定性单测(4 例)。`TRANSPORT_SWITCH_MIN_INTERVAL_MS=200`(~5/s,> 180ms settle)。
+- 接进 [`shortcuts/actions.ts`](../../../src/shortcuts/actions.ts):`playback.next`/`playback.prev` 走 throttle(只节流**键盘** firehose;swipe/按钮/托盘/programmatic 的 `next()` 契约不动 —— 选这里而非 store,既避开 `player-store` 又不改 async 契约)。
+- 副作用红利:200ms 间隔 > 180ms 背景 settle → 背景 settle 现在**每次切歌都 emit**(而非只在停下时)→ 背景跟着切了(用户诉求);只是仍滞后 ~180ms,**收紧同步留作后续**(throttle 已 bound 速率,可降 settle)。
+
+**Tasks(TDD):**
+- [x] `transport-throttle.test.ts`(4 例先红后绿):首call即发、burst 合并为 leading+trailing(最后一次)、冷却后再即发、30Hz key-repeat 坍缩到 ~5 次。
+- [x] 接 `actions.ts` next/prev;`actions.test.ts`(单次 dispatch 走 leading 即发)仍绿。
+
+**Checklist:**
+- [x] `tsc`/Biome 通过;transport-throttle(4)+ actions + system-shortcuts 全绿。
+- [ ] **待实测**:长按 E 以 ~5/s 平稳切歌、每张封面可见、背景跟着变、松手后封面/背景与歌一致(无错位)。
+
+**后续(未做,本 PRD 跟进):** ① **512px 派生**(用户已拍板)—— 单次切歌仍 +48MB/66ms 整图解码,降采样治本(归 cover-quality PRD Phase 3);② 收紧背景同步(降 settle,让背景与封面**同时**变而非滞后 180ms)。
+
 ---
 
 ## 7. Out of Scope(交叉引用,本 PRD 不处理)
@@ -369,4 +391,5 @@ backgroundGpuPowerPreference?: "auto" | "high-performance" | "low-power"; // DEF
 | 2026-06-14 | Claude | **Phase 4 代码完成**(TDD):新增 `background-texture.ts` `loadImageBitmapSource`(注入 fetchBlob/createImageBitmap,5 例单测先红后绿)+ `pixi-pixel-background` `loadBackgroundMedia` 优先 ImageBitmap(`fetchTextureBlob` 走 bridge,失败回退 `<img>`)+ 控制器 element 联合放宽 + 1 例 ImageBitmap 控制器测试(直传不转 canvas、swap/destroy close)。查 Pixi 文档确认 `ImageSource` 直接吃 ImageBitmap;未用 `Assets.load`(绕过 getAppFetch CORS + 纹理生命周期冲突)。14 例全绿、`tsc`/Biome 通过 |
 | 2026-06-14 | Claude | **Phase 5 代码完成**(TDD):新增 `cover-warm-decode.ts` `warmDecode`(可注入 Image,4 例先红后绿)替换原 `warmImage`,`usePreloadedCoverUrls` 远端+本地封面均 off-thread 预热解码;coverflow/backlight/`CoverImage` `<img>` 加 `decoding="async"`(保持原图,解码移出 paint 主线程)。player 105 + use-media/cover-image 15 + warmDecode 4 全绿;`tsc`/Biome 通过。**Phase 4/5 代码全部完成,待桌面 GPU/视觉实测** |
 | 2026-06-14 | User+Claude | **Phase 6 切歌 trace 仪表**(诊断):用户提供实测(无封面 120→115/low≈30、带封面 120→60/low 9~20),要更细 trace 看切歌全过程。排查确认 Q2 统计写库异步离帧、非帧开销。新增纯 helper `describeTrackSwitch`(4 例 TDD)→ enrich `player.playIndex`(sourceKind/hasCover/from/to/kind/origin);`flushPlaybackListen` 加 `listen.flush` trace。switch-trace(4)+ player-store(17)全绿,`tsc`/Biome 通过 |
+| 2026-06-14 | User+Claude | **Phase 7 切歌限速 + QA#6 错位 bug**:用户报「长按快切松手后封面/背景其一与歌对不上」+ 提议设切换速度上限。定位错位根因 = 33/s 远超 180ms settle、多层 async/settle 各卡在不同中间曲。新增 `createTransportThrottle`(leading+trailing,clock 注入,4 例 TDD)接 `shortcuts/actions.ts` next/prev,限速 ~5/s(>settle 窗口)→ 根除错位 + 背景每切歌都跟变 + 封面看得清。`tsc`/Biome + 相关测试全绿。后续:512px 派生(单次切歌成本)+ 收紧背景同步 |
 | 2026-06-14 | User+Claude | **QA#5 + Phase 5 A/B 回退 `warmDecode`**:Phase 6 trace 显示带封面快切真凶是 **heap +227MB(289→516)→ GC 长任务(166ms)→ FPS 104→27**,量化吻合 ~15 张新封面整图解码(~15MB/张)。`warmDecode` 强制每张缓存封面立即整图解码并被保留 → 放大堆。**回退**:改回 `warmImage`(remote 仅 set src)、本地不预热、删 `cover-warm-decode.ts`/test,保留 `decoding="async"`。`tsc`/Biome + swipeable(6)绿。待抓 trace 验证;若不足则重开 512px 派生(cover-quality PRD Phase 3) |
