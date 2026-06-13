@@ -133,7 +133,7 @@ desktop-debug:
 	$(PM) tauri build --debug
 
 mac:
-	@[ "$(UNAME)" = "Darwin" ] || { echo "ERROR: macOS bundles can only be built on a Mac."; exit 1; }
+	@node -e "if (process.platform !== 'darwin') { console.error('ERROR: macOS bundles can only be built on a Mac.'); process.exit(1) }"
 	$(PM) tauri build --bundles app,dmg
 
 win:
@@ -143,7 +143,7 @@ linux:
 	$(PM) tauri build --bundles appimage,deb
 
 ios-build:
-	@[ "$(UNAME)" = "Darwin" ] || { echo "ERROR: iOS builds require macOS + Xcode."; exit 1; }
+	@node -e "if (process.platform !== 'darwin') { console.error('ERROR: iOS builds require macOS + Xcode.'); process.exit(1) }"
 	$(PM) tauri ios build
 
 android-build:
@@ -200,13 +200,13 @@ release-build: node-check release-check
 # (win native, linux in WSL2 — decision Q1). Each emits its own latest*.yml feed
 # (per-platform, no cross-OS collision) into release/.
 release-mac:
-	@[ "$(UNAME)" = "Darwin" ] || { echo "ERROR: macOS bundles can only be built on a Mac."; exit 1; }
+	@node -e "if (process.platform !== 'darwin') { console.error('ERROR: macOS bundles can only be built on a Mac.'); process.exit(1) }"
 	@$(MAKE) --no-print-directory release-build
 	CSC_IDENTITY_AUTO_DISCOVERY=false $(PM) exec electron-builder --mac
 	@$(MAKE) --no-print-directory release-locate
 
 release-win:
-	@[ "$(UNAME)" != "Darwin" ] || echo "WARN: building Windows on macOS is unreliable — run on Windows (or WSL2 + Wine)."
+	@node -e "if (process.platform === 'darwin') console.warn('WARN: building Windows on macOS is unreliable — run on Windows (or WSL2 + Wine).')"
 	@$(MAKE) --no-print-directory release-build
 	$(PM) exec electron-builder --win
 	@$(MAKE) --no-print-directory release-locate
@@ -228,9 +228,7 @@ release-publish-dry:
 	node scripts/publish-release.mjs --dry-run
 
 release-locate:
-	@echo "Electron release artifacts (release/):"
-	@find release -maxdepth 1 -type f \( -name '*.dmg' -o -name '*.zip' -o -name '*.exe' -o -name '*.AppImage' -o -name '*.deb' -o -name '*.yml' \) -print 2>/dev/null | sort | sed 's#^\./##' || true
-	@find release -maxdepth 1 -type f \( -name '*.dmg' -o -name '*.zip' -o -name '*.exe' -o -name '*.AppImage' -o -name '*.deb' -o -name '*.yml' \) -print -quit 2>/dev/null | grep -q . || echo "  none yet — run 'make release-mac' (or release-win / release-linux)"
+	@node scripts/locate-release-artifacts.mjs
 
 # -------------------------------------------------------------- Quality ----
 
@@ -256,7 +254,7 @@ format:
 
 # Add a single COSS UI component: `make ui C=card` → shadcn add @coss/card.
 ui:
-	@[ -n "$(C)" ] || { echo "Usage: make ui C=<component>   (e.g. make ui C=button)"; exit 1; }
+	@node -e "if (!'$(C)') { console.error('Usage: make ui C=<component>   (e.g. make ui C=button)'); process.exit(1) }"
 	$(PM) dlx shadcn@latest add @coss/$(C)
 
 ui-coss:
