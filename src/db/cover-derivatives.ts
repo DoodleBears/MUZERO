@@ -18,6 +18,7 @@ import { extractCoverMetadataViaWorker } from "@/workers/cover-client";
 import type { CoverMetadataResult } from "@/workers/cover-derivative-core";
 
 export const COVER_DERIVATIVE_VERSION = 1;
+export const COVER_THUMBNAIL_DERIVATIVE_BUDGET_BYTES = 64 * 1024 * 1024;
 
 type CoverDerivativeSource = Pick<CoverDerivative, "sourceKey" | "sourceKind" | "sourceRef">;
 
@@ -39,6 +40,7 @@ export interface EnsureCoverDerivativeOptions {
   limit?: number;
   skip?: ReadonlySet<string>;
   storage?: MediaBlobStorageOptions;
+  thumbnailBudgetBytes?: number;
 }
 
 export interface CoverDerivativeRepairProgress {
@@ -46,6 +48,12 @@ export interface CoverDerivativeRepairProgress {
   failed: number;
   processed: number;
   updated: number;
+}
+
+export interface CoverDerivativeBudgetResult {
+  bytesFreed: number;
+  deleted: number;
+  keptBytes: number;
 }
 
 const imageDerivativeInFlight = new Map<string, Promise<ResolvedCoverDerivative | undefined>>();
@@ -238,6 +246,33 @@ export async function deleteCoverDerivativesForSource(
   return rows.length;
 }
 
+export async function enforceCoverDerivativeBudget(
+  kind: "thumbnail",
+  maxBytes: number,
+  db: MuzeroDB = defaultDb,
+  storage: MediaBlobStorageOptions = {},
+  options: { preserveIds?: ReadonlySet<string> } = {},
+): Promise<CoverDerivativeBudgetResult> {
+  const rows = (await db.coverDerivatives.where("kind").equals(kind).toArray()).filter(
+    (row) => row.blobId,
+  );
+  let total = rows.reduce((sum, row) => sum + (row.bytes ?? 0), 0);
+  let bytesFreed = 0;
+  let deleted = 0;
+  const targetBytes = Math.max(0, maxBytes);
+  for (const row of rows.sort((a, b) => a.updatedAt - b.updatedAt)) {
+    if (total <= targetBytes) break;
+    if (options.preserveIds?.has(row.id) || !row.blobId) continue;
+    await db.coverDerivatives.delete(row.id);
+    await deleteMediaBlob(row.blobId, db, storage);
+    const bytes = row.bytes ?? 0;
+    total = Math.max(0, total - bytes);
+    bytesFreed += bytes;
+    deleted += 1;
+  }
+  return { bytesFreed, deleted, keptBytes: total };
+}
+
 async function ensureCoverImageDerivative(
   track: Pick<Track, "id" | "coverBlobId" | "coverCrop" | "remoteCoverUrl">,
   kind: "backlight" | "thumbnail",
@@ -329,6 +364,15 @@ async function createImageDerivative(
     width: image.width,
   };
   await db.coverDerivatives.put(derivative);
+  if (input.kind === "thumbnail") {
+    await enforceCoverDerivativeBudget(
+      "thumbnail",
+      options.thumbnailBudgetBytes ?? COVER_THUMBNAIL_DERIVATIVE_BUDGET_BYTES,
+      db,
+      options.storage,
+      { preserveIds: new Set([input.id]) },
+    );
+  }
   return { blob: derivativeBlob, blobId: media.id, derivative };
 }
 

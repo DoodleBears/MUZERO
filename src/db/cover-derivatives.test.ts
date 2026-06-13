@@ -5,6 +5,7 @@ import {
   coverDerivativeId,
   coverDerivativeSourceForTrack,
   deleteCoverDerivativesForSource,
+  enforceCoverDerivativeBudget,
   ensureCoverBacklightDerivative,
   ensureCoverPaletteDerivative,
   ensureCoverThumbnailDerivative,
@@ -299,6 +300,26 @@ describe("cover derivatives", () => {
     expect(await db.coverDerivatives.get(resolved?.derivative.id ?? "")).toBeUndefined();
     expect(await db.mediaBlobs.get(resolved?.blobId ?? "")).toBeUndefined();
   });
+
+  it("trims oldest thumbnail derivatives when the size budget is exceeded", async () => {
+    await addDerivativeBlob("cvd_old", "blb_old", 5, 1);
+    await addDerivativeBlob("cvd_new", "blb_new", 5, 2);
+
+    await expect(
+      enforceCoverDerivativeBudget("thumbnail", 5, db, undefined, {
+        preserveIds: new Set(["cvd_new"]),
+      }),
+    ).resolves.toMatchObject({
+      bytesFreed: 5,
+      deleted: 1,
+      keptBytes: 5,
+    });
+
+    expect(await db.coverDerivatives.get("cvd_old")).toBeUndefined();
+    expect(await db.mediaBlobs.get("blb_old")).toBeUndefined();
+    expect(await db.coverDerivatives.get("cvd_new")).toBeTruthy();
+    expect(await db.mediaBlobs.get("blb_new")).toBeTruthy();
+  });
 });
 
 async function addTrackWithCover(id: string): Promise<Track> {
@@ -330,4 +351,34 @@ async function addTrackWithCover(id: string): Promise<Track> {
   await db.tracks.add(track);
   expect(coverDerivativeSourceForTrack(track)?.sourceKey).toBe(`local:${coverBlobId}`);
   return track;
+}
+
+async function addDerivativeBlob(
+  derivativeId: string,
+  blobId: string,
+  bytes: number,
+  updatedAt: number,
+) {
+  await db.mediaBlobs.add({
+    id: blobId,
+    trackId: "local:blb_cover",
+    role: "cover-derivative",
+    mime: "image/webp",
+    bytes,
+    blob: new Blob(["x".repeat(bytes)], { type: "image/webp" }),
+  });
+  await db.coverDerivatives.add({
+    id: derivativeId,
+    blobId,
+    bytes,
+    cropSig: "full",
+    generatedAt: updatedAt,
+    kind: "thumbnail",
+    mime: "image/webp",
+    sourceKey: `local:${blobId}`,
+    sourceKind: "local-cover",
+    sourceRef: blobId,
+    updatedAt,
+    version: 1,
+  });
 }

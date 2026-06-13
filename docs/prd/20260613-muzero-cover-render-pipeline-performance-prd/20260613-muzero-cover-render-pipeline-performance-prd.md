@@ -544,7 +544,7 @@ Run these scenarios in the Electron/Tauri desktop app with the visible perf HUD 
 - [x] Tab 2 row rendering no longer requests full-cover object URLs; it requests thumbnail derivatives after scroll defer settles.
 - [ ] Warm-thumbnail scroll keeps `blobsCreated` nearly flat.
 - [x] Cold-thumbnail scroll shows thumbhash previews and schedules thumbnails without blocking scroll.
-- [ ] Thumbnail storage has a size budget and cleanup path.
+- [x] Thumbnail storage has a size budget and cleanup path.
 
 ### Phase 3: Precomputed Backlight Derivatives
 
@@ -676,3 +676,4 @@ Run these scenarios in the Electron/Tauri desktop app with the visible perf HUD 
 | 2026-06-13 | Codex | Phase 4 partial: added Settings counts/actions for thumbnail/backlight derivative repair and cleanup of stale derivatives on cover replace, crop change, and track delete |
 | 2026-06-13 | Codex | Phase 4 hot-table decoupling: persisted local cover palette metadata in `coverDerivatives`, stopped local visualizer palette extraction from updating Track rows, and added cancellable/resumable repair UX |
 | 2026-06-13 | Codex | Phase 2/3 follow-up: switched set/artist/album cards, global search rows, and reorder rows to thumbnail derivatives; warmed current/prev/next backlight derivatives from playback preload when backlight mode is active |
+| 2026-06-13 | Codex | Phase 2 storage budget: added thumbnail derivative cache budget enforcement that trims oldest thumbnail blobs while preserving the newly generated derivative |
