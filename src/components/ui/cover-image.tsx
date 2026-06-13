@@ -131,6 +131,9 @@ export function CoverImage({
           ref={ref}
           src={url}
           alt={alt}
+          // Decode off the main thread so the full-res cover doesn't decode
+          // synchronously on the paint path during a switch (PRD Phase 5).
+          decoding="async"
           data-state={loaded ? "loaded" : "loading"}
           onLoad={() => {
             decodedCoverUrls.add(url);

@@ -25,6 +25,7 @@ import {
   resolveNowPlayingCoverBacklightAppearance,
   resolveNowPlayingCoverEffectMode,
 } from "@/lib/album-cover-appearance";
+import { warmDecode } from "@/lib/cover-warm-decode";
 import { getCroppedBlob } from "@/lib/image-crop";
 import { coverUrlCache } from "@/lib/object-url-cache";
 import { arePerfCountersEnabled, notePerfWork } from "@/lib/perf-counters";
@@ -956,6 +957,7 @@ function TrackVisual({
             src={backlightUrl ?? undefined}
             alt=""
             aria-hidden
+            decoding="async"
             referrerPolicy="no-referrer"
             draggable={false}
             className="absolute inset-0 size-full object-cover album-cover-radius"
@@ -973,6 +975,9 @@ function TrackVisual({
         <img
           src={coverUrl}
           alt=""
+          // Decode off the main thread so a fast switch doesn't decode the
+          // full-res cover synchronously on the paint path (PRD Phase 5).
+          decoding="async"
           // Streamed covers come from third-party hosts that 403 a foreign referer.
           referrerPolicy="no-referrer"
           draggable={false}
@@ -1041,16 +1046,6 @@ type PreloadRequest = {
   key: string;
   trackId: string;
 };
-
-/** Prime the browser cache for a remote cover so the coverflow <img> paints
- *  without a fetch round-trip. Fire-and-forget — failures are harmless. */
-function warmImage(url: string): void {
-  if (typeof Image === "undefined") return;
-  const img = new Image();
-  img.decoding = "async";
-  img.referrerPolicy = "no-referrer";
-  img.src = url;
-}
 
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => window.setTimeout(resolve, ms));
@@ -1128,7 +1123,7 @@ function usePreloadedCoverUrls(tracks: Track[]): Record<string, string> {
         // record it directly (no object URL to own/revoke).
         if (request.remoteUrl) {
           remote += 1;
-          warmImage(request.remoteUrl);
+          warmDecode(request.remoteUrl);
           nextEntries[request.trackId] = { key: request.key, url: request.remoteUrl };
           continue;
         }
@@ -1167,6 +1162,9 @@ function usePreloadedCoverUrls(tracks: Track[]): Record<string, string> {
         const createdUrl = URL.createObjectURL(blob);
         created += 1;
         const url = coverUrlCache.store(request.key, createdUrl);
+        // Warm the decode off the main thread so the coverflow <img> paints this
+        // (full-resolution) cover without a synchronous decode on the next switch.
+        warmDecode(url);
         nextEntries[request.trackId] = {
           cacheKey: request.key,
           key: request.key,

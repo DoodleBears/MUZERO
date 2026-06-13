@@ -15,7 +15,7 @@
 | 2 | 统一切歌 settle 闸门(封面 `<img>` 即时,重计算 debounce) | ✅ 代码完成(待 GPU/视觉实测) | [Phase 2](#phase-2-统一切歌-settle-闸门) |
 | 3 | GPU 后端 Settings 选项(auto / WebGPU / WebGL) | ✅ 代码完成(待 GPU/视觉实测) | [Phase 3](#phase-3-gpu-后端-settings-选项) |
 | 4 | 背景纹理 ImageBitmap 化(线程外解码 + 去 canvas 转换)(#4-A) | ✅ 代码完成(待 GPU/视觉实测) | [Phase 4](#phase-4-背景纹理-imagebitmap-化) |
-| 5 | stage/coverflow 封面 `<img>` 异步解码(保持原图,不占 paint 主线程)(#4-B) | 🔲 Pending | [Phase 5](#phase-5-stagecoverflow-封面异步解码) |
+| 5 | stage/coverflow 封面 `<img>` 异步解码(保持原图,不占 paint 主线程)(#4-B) | ✅ 代码完成(待 GPU/视觉实测) | [Phase 5](#phase-5-stagecoverflow-封面异步解码) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
 
@@ -266,16 +266,16 @@ backgroundGpuPowerPreference?: "auto" | "high-performance" | "low-power"; // DEF
 
 **Goal:** 中央 coverflow/stage 封面**仍用原图**(读实时 index 是设计,要逐张滑过),但把整图解码移出 paint 关键路径:`<img decoding="async">` + 预热解码,快切时 `<img>` 上屏不再同步解码整张原图(QA#4 (A))。
 
-**实现:**
-- coverflow `TrackVisual` 封面 `<img>`([`swipeable-media-stage.tsx`](../../../src/components/player/swipeable-media-stage.tsx)) + stage 封面([`media-stage.tsx`](../../../src/components/player/media-stage.tsx) `CoverImage`)补 `decoding="async"`(缺则加)。
-- 把现有 `warmImage`(仅远端)抽成可注入的 [`warmDecode(url, createImage?)`](../../../src/lib/cover-warm-decode.ts):`new Image()` + `img.decode()`(主线程外解码、失败静默);`usePreloadedCoverUrls` 在本地封面 `createObjectURL` 后也 warm-decode 一次,使 coverflow `<img>` 命中已解码缓存。**保持原图。**
+**实现(落地):**
+- coverflow `TrackVisual` 封面 `<img>` + backlight `<img>`([`swipeable-media-stage.tsx`](../../../src/components/player/swipeable-media-stage.tsx)) + 共享 stage/library 封面([`cover-image.tsx`](../../../src/components/ui/cover-image.tsx) `CoverImage`,`MediaStage` 经此渲染)补 `decoding="async"`。
+- 把原 `warmImage`(仅远端、只 set src)替换为可注入的 [`warmDecode(url, createImage?)`](../../../src/lib/cover-warm-decode.ts):`Image` + `decoding="async"` + `img.decode()`(主线程外解码、reject/无 decode 静默、无 `Image` noop);[`usePreloadedCoverUrls`](../../../src/components/player/swipeable-media-stage.tsx) 远端 **和** 本地封面(`createObjectURL` 后)都 warm-decode 一次,使 coverflow `<img>` 命中已解码缓存。**保持原图。**
 
 **Tasks(TDD):**
-- [ ] 先写 [`cover-warm-decode.test.ts`](../../../src/lib/cover-warm-decode.test.ts):`decode()` 成功 resolve;`decode()` reject 不抛(吞掉);无 `Image` 环境直接返回 noop。
-- [ ] 实现 `warmDecode` + 接入 `usePreloadedCoverUrls`;coverflow/stage `<img>` 加 `decoding="async"`。
+- [x] 先写 [`cover-warm-decode.test.ts`](../../../src/lib/cover-warm-decode.test.ts)(4 例,先红):set src+`decoding=async`+触发 `decode()`;`decode()` reject 不抛;无 `decode()` 仍 warm src;无 factory noop。
+- [x] 实现 `warmDecode` 至绿 + 接入 `usePreloadedCoverUrls`(远端+本地);coverflow/backlight/CoverImage `<img>` 加 `decoding="async"`。
 
 **Checklist:**
-- [ ] 单测绿;`tsc`/Biome 通过。
+- [x] `cover-warm-decode`(4)绿;player 组件 105 例 + use-media/cover-image 15 例全绿;`tsc`/Biome 通过。
 - [ ] **待实测(桌面)**:连切 6+ 首,coverflow 滑动 `frameMaxMs`/`fpsLow` 较修前改善;封面逐张可见无明显卡顿。
 
 ---
@@ -339,3 +339,4 @@ backgroundGpuPowerPreference?: "auto" | "high-performance" | "low-power"; // DEF
 | 2026-06-14 | Claude | **QA trace 实证 + 重定向**:trace 证明 Pixi 无 re-init、settle 生效(Q5/Q6),#1 真因是快切时**每首封面被多消费者解码 → 堆 churn → GC 掉帧**。**移除顶层 reveal veil**(引入封面错位 + 加剧解码)。改为 **ambient 背景按 settledTrack 去抖**:跳过的歌不再解码封面/重渲染,同时修掉封面错位 |
 | 2026-06-14 | Claude | **QA#4 第二轮 trace + 新增 Phase 4/5**:ambient 去抖已稳(burst 仅 1 `textureSwap`/0 `appInit`),但快切仍 120→56 FPS、`longTask 283ms`。定位剩余两处主线程整图解码:(A) coverflow/stage 读实时 index 解码原图、(B) Pixi `Texture.from(<img>)` 转 canvas。用户拍板**保持原图**,新增 Phase 4(背景纹理 ImageBitmap,线程外解码+免 canvas)、Phase 5(stage/coverflow `<img>` 异步解码)。`frameMaxMs 6374.8` 判定为 visibilitychange 空档非卡顿 |
 | 2026-06-14 | Claude | **Phase 4 代码完成**(TDD):新增 `background-texture.ts` `loadImageBitmapSource`(注入 fetchBlob/createImageBitmap,5 例单测先红后绿)+ `pixi-pixel-background` `loadBackgroundMedia` 优先 ImageBitmap(`fetchTextureBlob` 走 bridge,失败回退 `<img>`)+ 控制器 element 联合放宽 + 1 例 ImageBitmap 控制器测试(直传不转 canvas、swap/destroy close)。查 Pixi 文档确认 `ImageSource` 直接吃 ImageBitmap;未用 `Assets.load`(绕过 getAppFetch CORS + 纹理生命周期冲突)。14 例全绿、`tsc`/Biome 通过 |
+| 2026-06-14 | Claude | **Phase 5 代码完成**(TDD):新增 `cover-warm-decode.ts` `warmDecode`(可注入 Image,4 例先红后绿)替换原 `warmImage`,`usePreloadedCoverUrls` 远端+本地封面均 off-thread 预热解码;coverflow/backlight/`CoverImage` `<img>` 加 `decoding="async"`(保持原图,解码移出 paint 主线程)。player 105 + use-media/cover-image 15 + warmDecode 4 全绿;`tsc`/Biome 通过。**Phase 4/5 代码全部完成,待桌面 GPU/视觉实测** |
