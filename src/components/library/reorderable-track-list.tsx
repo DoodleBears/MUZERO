@@ -23,7 +23,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { CoverImage } from "@/components/ui/cover-image";
 import type { Track } from "@/db/types";
-import { useTrackCoverUrl } from "@/hooks/use-media";
+import { useTrackThumbnailUrl } from "@/hooks/use-media";
 import { trackSubtitle } from "@/lib/track-display";
 import { cn } from "@/lib/utils";
 import { applyBlockMove, resolveDropTarget } from "./reorder-drop";
@@ -267,7 +267,7 @@ function ReorderRowBody({
   overlay?: boolean;
   badge?: string;
 }) {
-  const coverUrl = useTrackCoverUrl(track);
+  const coverUrl = useTrackThumbnailUrl(track);
   return (
     <div
       className={cn(
@@ -285,11 +285,7 @@ function ReorderRowBody({
       >
         {checked ? "✓" : ""}
       </span>
-      <CoverImage
-        url={coverUrl}
-        thumbhash={track.coverThumbhash}
-        className="size-10 shrink-0"
-      />
+      <CoverImage url={coverUrl} thumbhash={track.coverThumbhash} className="size-10 shrink-0" />
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-medium">{track.title}</p>
         <p className="truncate text-xs text-muted-foreground">{trackSubtitle(track)}</p>

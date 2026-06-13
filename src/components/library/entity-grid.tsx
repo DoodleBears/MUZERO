@@ -9,7 +9,7 @@ import {
 import { CoverImage } from "@/components/ui/cover-image";
 import { DeleteIcon } from "@/components/ui/delete";
 import type { Track } from "@/db/types";
-import { useTrackCoverUrl } from "@/hooks/use-media";
+import { useTrackThumbnailUrl } from "@/hooks/use-media";
 import { cn } from "@/lib/utils";
 
 /** A derived library entity (artist or album) flattened for display. Labels are
@@ -91,7 +91,7 @@ export function EntityCard({
   onRequestDelete?: () => void;
 }) {
   const { t } = useTranslation();
-  const coverUrl = useTrackCoverUrl(coverTrack);
+  const coverUrl = useTrackThumbnailUrl(coverTrack);
   const round = kind === "artist";
   const Placeholder = kind === "artist" ? User : Disc3;
 

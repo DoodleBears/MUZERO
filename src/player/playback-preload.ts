@@ -1,3 +1,4 @@
+import { ensureCoverBacklightDerivative } from "@/db/cover-derivatives";
 import { resolveMediaBlob } from "@/db/media-blob-storage";
 import { db as defaultDb, type MuzeroDB } from "@/db/muzero-db";
 import { getSettings } from "@/db/repositories";
@@ -18,6 +19,8 @@ import { playbackSourceKind } from "@/streamsrc/source-detect";
 export const PLAYBACK_PRELOAD_AHEAD = 2;
 
 const remoteMediaWarmups = new Map<string, Promise<void>>();
+type CoverPreloadTrack = Pick<Track, "coverBlobId" | "coverCrop" | "remoteCoverUrl"> &
+  Partial<Pick<Track, "id">>;
 
 export function trackCoverCacheKey(
   track: Pick<Track, "coverBlobId" | "coverCrop"> | undefined,
@@ -37,7 +40,7 @@ export function proxyRemoteCover(url: string | undefined): string | null {
 }
 
 export async function warmTrackCover(
-  track: Pick<Track, "coverBlobId" | "coverCrop" | "remoteCoverUrl"> | undefined,
+  track: CoverPreloadTrack | undefined,
   options: {
     coverCropped?: boolean;
     db?: MuzeroDB;
@@ -64,6 +67,31 @@ export async function warmTrackCover(
   coverUrlCache.store(key, url);
 }
 
+export async function warmTrackBacklightDerivative(
+  track: CoverPreloadTrack | undefined,
+  options: {
+    coverCropped?: boolean;
+    db?: MuzeroDB;
+    ensureBacklightDerivative?: typeof ensureCoverBacklightDerivative;
+    signal?: AbortSignal;
+  } = {},
+): Promise<void> {
+  if (!track?.coverBlobId || options.signal?.aborted) return;
+  const coverCropped = options.coverCropped ?? true;
+  const ensureBacklightDerivative =
+    options.ensureBacklightDerivative ?? ensureCoverBacklightDerivative;
+  await ensureBacklightDerivative(
+    {
+      coverBlobId: track.coverBlobId,
+      coverCrop: coverCropped ? track.coverCrop : undefined,
+      id: track.id ?? "",
+      remoteCoverUrl: track.remoteCoverUrl,
+    },
+    options.db ?? defaultDb,
+    {},
+  );
+}
+
 export async function warmTrackMedia(
   track: Track | undefined,
   options: {
@@ -86,15 +114,17 @@ export async function warmTrackMedia(
 
 export async function warmPlaybackPreload(
   input: {
-    coverTracks: ReadonlyArray<Pick<Track, "coverBlobId" | "coverCrop" | "remoteCoverUrl">>;
+    coverTracks: ReadonlyArray<CoverPreloadTrack>;
     mediaTracks: ReadonlyArray<Track>;
   },
   options: {
     cacheMaxBytes?: number;
     coverCropped?: boolean;
     db?: MuzeroDB;
+    ensureBacklightDerivative?: typeof ensureCoverBacklightDerivative;
     fetcher?: typeof fetch;
     signal?: AbortSignal;
+    warmBacklight?: boolean;
   } = {},
 ): Promise<void> {
   await Promise.all([
@@ -105,6 +135,16 @@ export async function warmPlaybackPreload(
         signal: options.signal,
       }),
     ),
+    ...(options.warmBacklight
+      ? input.coverTracks.map((track) =>
+          warmTrackBacklightDerivative(track, {
+            coverCropped: options.coverCropped,
+            db: options.db,
+            ensureBacklightDerivative: options.ensureBacklightDerivative,
+            signal: options.signal,
+          }),
+        )
+      : []),
     warmMediaTracks(input.mediaTracks, options),
   ]);
 }

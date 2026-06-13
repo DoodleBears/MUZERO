@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Track } from "@/db/types";
 import { ReorderableTrackList } from "./reorderable-track-list";
 
-vi.mock("@/hooks/use-media", () => ({ useTrackCoverUrl: () => undefined }));
+vi.mock("@/hooks/use-media", () => ({ useTrackThumbnailUrl: () => undefined }));
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key }),
 }));

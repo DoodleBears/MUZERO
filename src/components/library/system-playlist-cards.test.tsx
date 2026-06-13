@@ -3,8 +3,8 @@ import { describe, expect, it, vi } from "vitest";
 import { type SystemPlaylistCardItem, SystemPlaylistCards } from "./system-playlist-cards";
 
 vi.mock("@/hooks/use-media", () => ({
-  useTrackCoverUrl: (track: { coverBlobId?: string } | undefined) =>
-    track?.coverBlobId ? `blob:${track.coverBlobId}` : null,
+  useTrackThumbnailUrl: (track: { coverBlobId?: string } | undefined) =>
+    track?.coverBlobId ? `blob:thumb-${track.coverBlobId}` : null,
 }));
 
 const items: SystemPlaylistCardItem[] = [
@@ -89,10 +89,10 @@ describe("SystemPlaylistCards", () => {
 
     expect(screen.getByRole("img", { name: "Hearted" })).toHaveAttribute(
       "src",
-      "blob:blb_latest",
+      "blob:thumb-blb_latest",
     );
-    expect(
-      container.querySelector('[data-system-playlist-cover-mask="system:liked"]'),
-    ).toHaveClass("bg-background/40");
+    expect(container.querySelector('[data-system-playlist-cover-mask="system:liked"]')).toHaveClass(
+      "bg-background/40",
+    );
   });
 });

@@ -20,6 +20,7 @@ export function usePlaybackWarmup(): void {
   );
   const coverCropped = settings.coverCropped ?? true;
   const cacheMaxBytes = playbackCacheLimitBytes(settings);
+  const warmBacklight = settings.nowPlayingCoverEffectMode === "backlight";
   const playbackModeKey = `${repeat}:${shuffle}`;
 
   useEffect(() => {
@@ -42,6 +43,7 @@ export function usePlaybackWarmup(): void {
           cacheMaxBytes,
           coverCropped,
           signal: controller.signal,
+          warmBacklight,
         },
       );
     }, PLAYBACK_WARMUP_DELAY_MS);
@@ -50,5 +52,5 @@ export function usePlaybackWarmup(): void {
       window.clearTimeout(timer);
       controller.abort();
     };
-  }, [currentIndex, queue, playbackModeKey, cacheMaxBytes, coverCropped]);
+  }, [currentIndex, queue, playbackModeKey, cacheMaxBytes, coverCropped, warmBacklight]);
 }

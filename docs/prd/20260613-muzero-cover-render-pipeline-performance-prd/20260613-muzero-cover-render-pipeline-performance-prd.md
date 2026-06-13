@@ -535,7 +535,7 @@ Run these scenarios in the Electron/Tauri desktop app with the visible perf HUD 
 - [x] Persist 96-160 px thumbnail blobs for row/list/grid use.
 - [x] Add `useCoverDerivativeUrl(track, "thumbnail")`.
 - [x] Update `TrackRow` to request thumbnails instead of full covers.
-- [ ] Update set/album/artist cards and reorder lists to request thumbnails where visually appropriate.
+- [x] Update set/album/artist cards and reorder lists to request thumbnails where visually appropriate.
 - [x] Keep thumbhash preview visible while derivative is missing.
 - [x] Add repair count for missing thumbnails.
 
@@ -557,7 +557,7 @@ Run these scenarios in the Electron/Tauri desktop app with the visible perf HUD 
 - [x] Add `useCoverDerivativeUrl(track, "backlight")`.
 - [x] Update `MediaStage` and coverflow `TrackVisual` to use the backlight derivative.
 - [x] Avoid full-cover CSS backlight fallback while derivative is missing; let the derivative fade in when ready.
-- [ ] Preload current/prev/next backlight derivatives through playback warmup.
+- [x] Preload current/prev/next backlight derivatives through playback warmup.
 
 ### Phase 3 Checklist
 
@@ -675,3 +675,4 @@ Run these scenarios in the Electron/Tauri desktop app with the visible perf HUD 
 | 2026-06-13 | Codex | Phase 3 partial: added worker backlight target, persistent backlight derivative reuse, and switched MediaStage/coverflow backlight rendering to derivative URLs |
 | 2026-06-13 | Codex | Phase 4 partial: added Settings counts/actions for thumbnail/backlight derivative repair and cleanup of stale derivatives on cover replace, crop change, and track delete |
 | 2026-06-13 | Codex | Phase 4 hot-table decoupling: persisted local cover palette metadata in `coverDerivatives`, stopped local visualizer palette extraction from updating Track rows, and added cancellable/resumable repair UX |
+| 2026-06-13 | Codex | Phase 2/3 follow-up: switched set/artist/album cards, global search rows, and reorder rows to thumbnail derivatives; warmed current/prev/next backlight derivatives from playback preload when backlight mode is active |

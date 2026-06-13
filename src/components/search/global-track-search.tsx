@@ -19,7 +19,7 @@ import { db } from "@/db/muzero-db";
 import { listAllTracks, listSessions, memoryNotesByTrack, saveSettings } from "@/db/repositories";
 import type { DjSession, StreamSourceId, Track, TrackLyrics } from "@/db/types";
 import { useSettings } from "@/hooks/use-app-data";
-import { useTrackCoverUrl } from "@/hooks/use-media";
+import { useTrackThumbnailUrl } from "@/hooks/use-media";
 import { useOnlineSourceSearch } from "@/hooks/use-online-source-search";
 import { LIBRARY_QUERY_COALESCE_MS, useThrottledValue } from "@/hooks/use-throttled-value";
 import { useTransliterationReady } from "@/hooks/use-transliteration-ready";
@@ -688,7 +688,7 @@ function SectionHeader({ children }: { children: React.ReactNode }) {
 }
 
 function useSetResultCoverUrl(session: DjSession, fallbackTrack: Track | undefined): string | null {
-  const setUrl = useTrackCoverUrl(
+  const setUrl = useTrackThumbnailUrl(
     session.coverBlobId || session.remoteCoverUrl
       ? {
           coverBlobId: session.coverBlobId,
@@ -697,7 +697,7 @@ function useSetResultCoverUrl(session: DjSession, fallbackTrack: Track | undefin
         }
       : undefined,
   );
-  const fallbackUrl = useTrackCoverUrl(fallbackTrack);
+  const fallbackUrl = useTrackThumbnailUrl(fallbackTrack);
   return session.coverBlobId || session.remoteCoverUrl ? setUrl : fallbackUrl;
 }
 
@@ -861,7 +861,7 @@ function GlobalTrackSearchRow({
   onPlayNext: () => void;
 }) {
   const { t } = useTranslation();
-  const coverUrl = useTrackCoverUrl(track);
+  const coverUrl = useTrackThumbnailUrl(track);
   return (
     <div
       data-nav-index={index}
@@ -934,7 +934,7 @@ function GlobalLyricSearchRow({
   onPlayNext: () => void;
 }) {
   const { t } = useTranslation();
-  const coverUrl = useTrackCoverUrl(track);
+  const coverUrl = useTrackThumbnailUrl(track);
   const hasTimestamp = match.timeSec != null && Number.isFinite(match.timeSec);
   return (
     <div
@@ -1013,7 +1013,7 @@ function GlobalEntityRow({
   onMouseEnter: () => void;
   onActivate: () => void;
 }) {
-  const coverUrl = useTrackCoverUrl(coverTrack);
+  const coverUrl = useTrackThumbnailUrl(coverTrack);
   return (
     <button
       type="button"

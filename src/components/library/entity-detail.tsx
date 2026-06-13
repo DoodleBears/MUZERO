@@ -6,7 +6,7 @@ import { TrackInspectorPanel } from "@/components/track/track-inspector-panel";
 import { CoverImage } from "@/components/ui/cover-image";
 import type { Track } from "@/db/types";
 import { useBackGesture } from "@/hooks/use-back-gesture";
-import { useTrackCoverUrl } from "@/hooks/use-media";
+import { useTrackCoverUrl, useTrackThumbnailUrl } from "@/hooks/use-media";
 import { useTransliterationReady } from "@/hooks/use-transliteration-ready";
 import type { EntityStat } from "@/lib/library-stats";
 import type { SortDir } from "@/lib/set-gallery";
@@ -285,7 +285,7 @@ function AlbumStripCard({
   onOpen: () => void;
 }) {
   const { t } = useTranslation();
-  const coverUrl = useTrackCoverUrl(album.coverTrack);
+  const coverUrl = useTrackThumbnailUrl(album.coverTrack);
   return (
     <button
       type="button"

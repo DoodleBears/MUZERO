@@ -162,6 +162,16 @@ export function useCoverDerivativeUrl(
   return useKeyedObjectUrl(entry?.blob, entry?.key);
 }
 
+export function useTrackThumbnailUrl(track: TrackCoverInput | undefined): string | null {
+  const localThumbnailUrl = useCoverDerivativeUrl(
+    track?.coverBlobId ? track : undefined,
+    "thumbnail",
+  );
+  if (!track) return null;
+  if (track.coverBlobId) return localThumbnailUrl;
+  return proxyExternalCover(track.remoteCoverUrl);
+}
+
 /**
  * Reactive cover resource for a track. `url` preserves the existing
  * stale-while-pending behavior used by normal UI, while `readyForTrack` lets

@@ -67,7 +67,11 @@ import {
 } from "@/db/repositories";
 import type { CropRect, DjSession, Track } from "@/db/types";
 import { useBackGesture } from "@/hooks/use-back-gesture";
-import { useCoverMetadataBackfill, useTrackCoverUrl } from "@/hooks/use-media";
+import {
+  useCoverMetadataBackfill,
+  useTrackCoverUrl,
+  useTrackThumbnailUrl,
+} from "@/hooks/use-media";
 import { useShortcutMatcher } from "@/hooks/use-shortcut-matcher";
 import { LIBRARY_QUERY_COALESCE_MS, useThrottledValue } from "@/hooks/use-throttled-value";
 import { useTransliterationReady } from "@/hooks/use-transliteration-ready";
@@ -1926,6 +1930,19 @@ function useSetCoverUrl(
   return coverBlobId || remoteCoverUrl ? setUrl : trackUrl;
 }
 
+function useSetThumbnailUrl(
+  coverBlobId: string | undefined,
+  fallbackTrack: Track | undefined,
+  coverCrop?: CropRect,
+  remoteCoverUrl?: string,
+): string | null {
+  const setUrl = useTrackThumbnailUrl(
+    coverBlobId || remoteCoverUrl ? { coverBlobId, coverCrop, remoteCoverUrl } : undefined,
+  );
+  const trackUrl = useTrackThumbnailUrl(fallbackTrack);
+  return coverBlobId || remoteCoverUrl ? setUrl : trackUrl;
+}
+
 function ViewToggleGroup({
   view,
   onChange,
@@ -2071,7 +2088,7 @@ function SetCard({
   onRequestDelete?: () => void;
 }) {
   const { t } = useTranslation();
-  const coverUrl = useSetCoverUrl(
+  const coverUrl = useSetThumbnailUrl(
     item.session.coverBlobId,
     coverTrack,
     item.session.coverCrop,

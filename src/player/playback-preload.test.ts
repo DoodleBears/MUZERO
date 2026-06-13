@@ -3,7 +3,12 @@ import { MuzeroDB } from "@/db/muzero-db";
 import type { Track } from "@/db/types";
 import { coverUrlCache } from "@/lib/object-url-cache";
 import { getCachedRemotePlayback } from "@/player/playback-cache";
-import { trackCoverCacheKey, warmTrackCover, warmTrackMedia } from "@/player/playback-preload";
+import {
+  trackCoverCacheKey,
+  warmPlaybackPreload,
+  warmTrackCover,
+  warmTrackMedia,
+} from "@/player/playback-preload";
 
 let db: MuzeroDB;
 let created = 0;
@@ -97,6 +102,35 @@ describe("playback preload", () => {
     await warmTrackMedia(track, { cacheMaxBytes: 1024, db, fetcher });
 
     expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+
+  it("warms backlight derivatives for cover tracks when requested", async () => {
+    const track = makeTrack("trk_backlight", {
+      coverBlobId: "blb_backlight",
+      coverCrop: { height: 100, width: 100, x: 1, y: 2 },
+    });
+    const ensureBacklightDerivative = vi.fn(async () => undefined);
+
+    await warmPlaybackPreload(
+      { coverTracks: [track], mediaTracks: [] },
+      {
+        coverCropped: true,
+        db,
+        ensureBacklightDerivative,
+        warmBacklight: true,
+      },
+    );
+
+    expect(ensureBacklightDerivative).toHaveBeenCalledExactlyOnceWith(
+      {
+        coverBlobId: "blb_backlight",
+        coverCrop: { height: 100, width: 100, x: 1, y: 2 },
+        id: "trk_backlight",
+        remoteCoverUrl: undefined,
+      },
+      db,
+      {},
+    );
   });
 });
 
