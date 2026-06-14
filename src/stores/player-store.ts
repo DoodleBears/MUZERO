@@ -134,7 +134,6 @@ import type { DecodedNcmMedia } from "@/workers/ingest-core";
 const IMPORT_VISIBILITY_FLUSH_SIZE = 25;
 const LOCAL_BLOB_PLAYBACK_SETTLE_MS = 180;
 const MEDIA_SESSION_METADATA_SETTLE_MS = 650;
-const MEDIA_SESSION_ARTWORK_CACHE_LIMIT = 8;
 const MEDIA_SOURCE_RELOAD_BISECT_MODE:
   | "off"
   | "skip"
@@ -275,14 +274,6 @@ interface PlayerState {
 // Non-reactive singletons (never selected by components → no rerenders).
 let mediaEngine: MediaEngine | null = null;
 let mediaSessionArtworkObjectUrl: string | null = null;
-const mediaSessionArtworkCache = new Map<
-  string,
-  {
-    src: string;
-    mime?: string;
-    bytes: number;
-  }
->();
 /** Monotonic token discarding stale async metadata updates (PRD F-12). */
 let mediaSessionMetadataSeq = 0;
 let mediaSessionMetadataTimer: ReturnType<typeof setTimeout> | null = null;
@@ -2512,10 +2503,11 @@ async function ensureLoadedAndPlay(
     }
     triggerLyricsAutoFetch(track);
     if (!continueCurrent("before-metadata")) return;
-    scheduleMediaSessionMetadata(
+    await updateMediaSessionMetadata(
       track,
       () => currentTrack(get())?.id === track.id && isPlaybackRequestSeqCurrent(activeRequestId),
     );
+    if (!continueCurrent("metadata-updated")) return;
   }
   if (wantPlay && get().wantPlay) {
     if (!continueCurrent("before-play")) return;
@@ -2567,7 +2559,6 @@ async function updateMediaSessionMetadata(
   // (PRD F-12).
   const seq = ++mediaSessionMetadataSeq;
   let nextArtworkObjectUrl: string | null = null;
-  let createdArtworkObjectUrl: string | null = null;
   let artwork:
     | {
         src: string;
@@ -2581,57 +2572,36 @@ async function updateMediaSessionMetadata(
       finish("skip", { reason: "stale-before-cover" });
       return;
     }
-    const cacheStartedAt = performance.now();
-    const cachedArtwork = getCachedMediaSessionArtwork(track.coverBlobId);
-    if (cachedArtwork) {
-      nextArtworkObjectUrl = cachedArtwork.src;
-      artwork = { src: cachedArtwork.src, mime: cachedArtwork.mime };
-      notePerfWork("player.mediaSession.artwork.cache-hit", performance.now() - cacheStartedAt, {
-        ...baseTrace,
-        bytes: cachedArtwork.bytes,
-        mime: cachedArtwork.mime,
-      });
-    } else {
-      const coverStartedAt = performance.now();
-      const cover = await getTrackCover(track);
-      notePerfWork("player.mediaSession.artwork.fetch", performance.now() - coverStartedAt, {
-        ...baseTrace,
-        hasBlob: Boolean(cover?.blob),
-        bytes: cover?.blob?.size ?? 0,
-        mime: cover?.mime,
-      });
-      if (!isCurrent()) {
-        finish("skip", { reason: "stale-after-cover", hasCoverBlob: Boolean(cover?.blob) });
-        return;
-      }
-      if (cover?.blob) {
-        const objectUrlStartedAt = performance.now();
-        nextArtworkObjectUrl = URL.createObjectURL(cover.blob);
-        createdArtworkObjectUrl = nextArtworkObjectUrl;
-        rememberMediaSessionArtwork(track.coverBlobId, {
-          src: nextArtworkObjectUrl,
-          mime: cover.mime,
+    const coverStartedAt = performance.now();
+    const cover = await getTrackCover(track);
+    notePerfWork("player.mediaSession.artwork.fetch", performance.now() - coverStartedAt, {
+      ...baseTrace,
+      hasBlob: Boolean(cover?.blob),
+      bytes: cover?.blob?.size ?? 0,
+      mime: cover?.mime,
+    });
+    if (!isCurrent()) {
+      finish("skip", { reason: "stale-after-cover", hasCoverBlob: Boolean(cover?.blob) });
+      return;
+    }
+    if (cover?.blob) {
+      const objectUrlStartedAt = performance.now();
+      nextArtworkObjectUrl = URL.createObjectURL(cover.blob);
+      notePerfWork(
+        "player.mediaSession.artwork.objectUrl",
+        performance.now() - objectUrlStartedAt,
+        {
+          ...baseTrace,
           bytes: cover.blob.size,
-        });
-        notePerfWork(
-          "player.mediaSession.artwork.objectUrl",
-          performance.now() - objectUrlStartedAt,
-          {
-            ...baseTrace,
-            bytes: cover.blob.size,
-            mime: cover.mime,
-          },
-        );
-        artwork = { src: nextArtworkObjectUrl, mime: cover.mime };
-      }
+          mime: cover.mime,
+        },
+      );
+      artwork = { src: nextArtworkObjectUrl, mime: cover.mime };
     }
   }
 
   if (!isCurrent() || loadedTrackId !== track.id || seq !== mediaSessionMetadataSeq) {
-    if (createdArtworkObjectUrl) {
-      forgetMediaSessionArtwork(createdArtworkObjectUrl);
-      URL.revokeObjectURL(createdArtworkObjectUrl);
-    }
+    if (nextArtworkObjectUrl) URL.revokeObjectURL(nextArtworkObjectUrl);
     finish("skip", {
       reason: "stale-final",
       hasArtwork: Boolean(artwork?.src),
@@ -2648,62 +2618,11 @@ async function updateMediaSessionMetadata(
     didSet,
     hasArtwork: Boolean(artwork?.src),
   });
+  if (mediaSessionArtworkObjectUrl && mediaSessionArtworkObjectUrl !== nextArtworkObjectUrl) {
+    URL.revokeObjectURL(mediaSessionArtworkObjectUrl);
+  }
   mediaSessionArtworkObjectUrl = nextArtworkObjectUrl;
   finish("success", { didSet, hasArtwork: Boolean(artwork?.src) });
-}
-
-function getCachedMediaSessionArtwork(coverBlobId: string): {
-  src: string;
-  mime?: string;
-  bytes: number;
-} | null {
-  const cached = mediaSessionArtworkCache.get(coverBlobId);
-  if (!cached) return null;
-  mediaSessionArtworkCache.delete(coverBlobId);
-  mediaSessionArtworkCache.set(coverBlobId, cached);
-  return cached;
-}
-
-function rememberMediaSessionArtwork(
-  coverBlobId: string,
-  artwork: {
-    src: string;
-    mime?: string;
-    bytes: number;
-  },
-): void {
-  mediaSessionArtworkCache.set(coverBlobId, artwork);
-  while (mediaSessionArtworkCache.size > MEDIA_SESSION_ARTWORK_CACHE_LIMIT) {
-    const oldest = mediaSessionArtworkCache.entries().next().value;
-    if (!oldest) break;
-    const [oldestCoverBlobId, oldestArtwork] = oldest;
-    mediaSessionArtworkCache.delete(oldestCoverBlobId);
-    if (oldestArtwork.src !== mediaSessionArtworkObjectUrl) {
-      URL.revokeObjectURL(oldestArtwork.src);
-    }
-  }
-}
-
-function forgetMediaSessionArtwork(src: string): void {
-  for (const [coverBlobId, artwork] of mediaSessionArtworkCache) {
-    if (artwork.src === src) {
-      mediaSessionArtworkCache.delete(coverBlobId);
-      return;
-    }
-  }
-}
-
-function revokeMediaSessionArtworkObjectUrl(): void {
-  const objectUrls = new Set<string>();
-  if (mediaSessionArtworkObjectUrl) objectUrls.add(mediaSessionArtworkObjectUrl);
-  for (const artwork of mediaSessionArtworkCache.values()) {
-    objectUrls.add(artwork.src);
-  }
-  for (const objectUrl of objectUrls) {
-    URL.revokeObjectURL(objectUrl);
-  }
-  mediaSessionArtworkCache.clear();
-  mediaSessionArtworkObjectUrl = null;
 }
 
 function scheduleMediaSessionMetadata(
@@ -2748,6 +2667,12 @@ function scheduleMediaSessionMetadata(
       () => seq === mediaSessionMetadataScheduleSeq && isCurrent(),
     );
   }, delayMs);
+}
+
+function revokeMediaSessionArtworkObjectUrl(): void {
+  if (!mediaSessionArtworkObjectUrl) return;
+  URL.revokeObjectURL(mediaSessionArtworkObjectUrl);
+  mediaSessionArtworkObjectUrl = null;
 }
 
 function observePlaybackListen(state: PlayerState, positionSec: number, durationSec: number): void {

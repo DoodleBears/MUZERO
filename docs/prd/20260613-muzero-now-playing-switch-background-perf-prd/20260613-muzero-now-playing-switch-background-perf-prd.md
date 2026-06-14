@@ -962,9 +962,9 @@ QA 观察到 `Ctrl+1`/`Ctrl+2` 在 Now Playing 与 Tab 2 全部歌曲列表之�
 | A6g | `e0dfe43` | Keep CSS/rAF/palette disabled and freeze `rgb` too | 基本恢复;rgb/spectrum primary consumer 是剩余放大器,但仍需拆 coverBlobId store update |
 | A6h | `67cc03c` | Keep all color outputs frozen and skip color-store `setState` entirely | 未进一步改善;单次 cover color store update 不是剩余主因 |
 | A7 | `1866196` | Restore normal playback post-load work | 已验证;normal post-load 不是独立主因 |
-| P1 | `510f7c9` | Replace diagnostic cover-color freezes with a production settled/discrete color update | 已验证;主因收口,剩余为 MediaSession/Pixi 队列小峰值 |
-| P2 | `17941b3` | Cache MediaSession artwork object URLs by coverBlobId | 已验证 cache-hit,但不充分;首次封面仍同步卡在 play 前 |
-| P3 | Current fix | Schedule normal MediaSession metadata/artwork instead of awaiting before play | 避免首次 cover fetch 阻塞播放热路径 |
+| P1 | `510f7c9` | Replace diagnostic cover-color freezes with a production settled/discrete color update | 当前稳定基线;P2/P3 未改善主观流畅度,已回滚 |
+| P2 | `17941b3` / reverted | Cache MediaSession artwork object URLs by coverBlobId | cache-hit 生效但主观流畅度未改善 |
+| P3 | `93a54d9` / reverted | Schedule normal MediaSession metadata/artwork instead of awaiting before play | trace 显示 schedule 生效但仍不流畅 |
 
 **Tasks:**
 - [x] A0-A4 media reload ladder exists in `diag/switch-fps-bisect`.
@@ -978,9 +978,8 @@ QA 观察到 `Ctrl+1`/`Ctrl+2` 在 Now Playing 与 Tab 2 全部歌曲列表之�
 - [x] A6g code:keep CSS/rAF/palette disabled and freeze store `rgb`;QA trace basically recovers but leaves a small gap vs A6c.
 - [x] A6h code:keep cover color hook active,log transition,then skip color-store `setState` entirely;QA trace does not improve vs A6g.
 - [x] A7 code:remove diagnostic media reload mode and restore normal post-load path;QA trace stays acceptable.
-- [x] P1 production fix:remove diagnostic color freezes and implement settled/discrete cover color updates;QA trace confirms settle path.
-- [x] P2 production fix:cache MediaSession artwork object URLs by coverBlobId;QA trace confirms cache-hit but shows remaining first-hit cost.
-- [x] P3 production fix:schedule normal MediaSession metadata/artwork,do not await it before `mediaEngine.play()`;QA trace pending.
+- [x] P1 production fix:remove diagnostic color freezes and implement settled/discrete cover color updates;current baseline restored to `510f7c9`.
+- [x] P2/P3 rollback:revert MediaSession artwork cache/schedule changes after QA trace showed no subjective smoothness improvement.
 - [ ] Final production fix must be rebuilt from the isolated cause,not by merging diagnostic commits.
 
 ### QA#32(2026-06-14 A5 trace):Pixi `src` add-back 未恶化,但未真正触发 texture load
@@ -1093,30 +1092,14 @@ QA 观察到 `Ctrl+1`/`Ctrl+2` 在 Now Playing 与 Tab 2 全部歌曲列表之�
 - 删除 `visualizer-dynamic-color` 里的 bisect 常量分支,避免 hidden flag/诊断代码假装产品行为。
 - TDD 覆盖:切歌当帧 store 不变;settle 前不写;连续切歌只应用最后一个 target。
 
-### QA#42(2026-06-14 P1 trace):cover color 收口,剩余为 MediaSession/Pixi 队列小峰值
+### QA#44(2026-06-14 P3 trace):MediaSession 延后仍不流畅,回滚到 `510f7c9`
 
-18:18 trace 是 `510f7c9 fix(perf): settle cover color updates on switch` 的结果:
+18:32 trace 是 `93a54d9 fix(perf): schedule media session artwork` + `17941b3 fix(perf): cache media session artwork` 之后的新结果;QA 反馈“还是没有更流畅”,建议回到 `510f7c9c642fea75f06b41aa0045f5a8f92f7a25`。
 
-- **P1 生效**:`cover.palette.settle phase=start` 在切歌当帧出现,`phase=success` 只在 `650ms` 后出现;没有 `cover.palette.css/rgb/palette` rAF 式连续输出。
-- **FPS 已明显好于 A6b**:窗口从静态 `fpsAvg≈109` 到切歌中 `93.1 -> 87.8 -> 83.4 -> 90.4 -> 96.9`, `fpsLow≈10.9~15`。这不再是 A6b 的 `55~79` 回退,但仍有小低帧。
-- **剩余峰值 1:MediaSession artwork**:`player.mediaSession.metadata/artwork.fetch` 可到 `69.8/69.3ms`,后续还有 `26.7ms`, `17.4ms`, `16ms`, `26.8ms`。当前实现每首都重新读 cover blob 并创建 object URL,没有按 `coverBlobId` 复用。
-- **剩余峰值 2:Pixi 192px texture 队列偶发慢**:大多数 `background.texture fetch/decode≈0.8/1ms`,但一次 `fetch=106ms`, `decode=30.4ms`, `media.load=330.2ms`。这像是浏览器解码/任务队列拥塞,不是 GPU upload(`textureSwap.apply=1.1ms`)。
-- **次要噪声**:同一窗口有 `dbRequeries=2` (`listAllTracks`, `memoryNotesByTrack`),可能来自播放统计/备注 liveQuery,但当前 trace 中没有显示为最大 span。
-- **下一步(P2)**:先缓存 MediaSession artwork object URL,避免重复读封面 blob;这条稳定、低风险、可用 trace 验证 `artwork.cache-hit` 和 `artwork.fetch` 峰值下降。
-
-**P2 implementation:** `player-store` 给 MediaSession artwork 增加一个小型 `coverBlobId -> object URL` LRU cache(8 entries)。同一个本地 cover 再次进入 OS now-playing metadata 时先命中 `player.mediaSession.artwork.cache-hit`,避免重复 `getTrackCover()` IndexedDB 读和 `URL.createObjectURL()`;stale async metadata 仍按原 seq 保护撤销自己刚创建的 URL,unsupported MediaSession 会清空缓存。TDD 新增 `reuses MediaSession artwork object URLs for the same cover`,先红后绿,覆盖同 coverBlobId 连续播放只创建一次 object URL。
-
-### QA#43(2026-06-14 P2 trace):cache-hit 生效但 FPS 更低,说明首次 MediaSession 仍在热路径
-
-18:26 trace 是 `17941b3 fix(perf): cache media session artwork` 的结果:
-
-- **P2 生效但不充分**:后半段出现 `player.mediaSession.artwork.cache-hit count=4 lastMs=0`,同 cover 再次进入 OS metadata 不再读封面 blob。这证明 P2 缓存逻辑正确。
-- **FPS 仍更差**:窗口出现 `fpsAvg=87.1 -> 72.2 -> 63.9 -> 72`, `fpsLow≈10.9~12`, `frameMax≈83~91ms`, `longTaskMaxMs=264`。QA 观察“更低”成立。
-- **关键剩余问题**:首次遇到 cover 时仍有 `player.mediaSession.artwork.fetch≈28.7ms`, `18.4ms`;更重要的是 normal path 仍 `await updateMediaSessionMetadata(...)` 后才 `mediaEngine.play()`。所以 P2 cache 命中前的 first-hit artwork 依然卡在播放热路径。
-- **Pixi 数字需要重读**:`background.pixi media.load≈182~200ms` 主要包含 `loadDelayMs` settle 等待;真实 `background.texture fetch/decode≈1~5ms`, `texture.create/apply≈0~1.3ms`。这条 trace 不能把 185ms 解读为 Pixi/192px 图片本身慢。
-- **P3 决策**:把 normal path 改成 `scheduleMediaSessionMetadata(...,650ms)` 而不是 `await updateMediaSessionMetadata(...)`。TDD 要求 `playIndex()` 返回时已经调用 `mediaEngine.play()`,但还没有创建 MediaSession artwork object URL;settle 后再创建/命中缓存。
-
-**P3 implementation:** normal playback path now schedules MediaSession metadata/artwork with the existing 650ms settle gate and continues to `mediaEngine.play()` immediately. This ports the previously validated Experiment J behavior into production normal playback instead of only diagnostic modes. TDD adds `schedules MediaSession artwork without blocking play` and updates the P2 cache test so MediaSession object URL creation happens after settle.
+- **P3 机制生效但主观收益不足**:trace 里 `player.mediaSession metadata.schedule phase=start/skip/success` 可见,说明 normal path 已经不再立即 await MediaSession artwork。但窗口仍有 `fpsAvg≈99.1 -> 86.4 -> 80.6 -> 82.8 -> 96.4`, `fpsLow≈12~13.3`。
+- **MediaSession 已不是本轮主要阻塞点**:最终 `metadata.schedule phase=success` 后才出现 `player.mediaSession.artwork.fetch≈19.8ms`,位置已在切歌窗口后段;但切歌窗口仍不够顺。
+- **Pixi 数字仍需按 settle 解读**:`background.pixi media.load≈190~223ms` 包含已有 settle delay;真实 `background.texture fetch/decode` 多数为 `≈1~5ms`,个别 `fetch≈27.4ms`, `decode≈17ms`;`textureSwap.apply≈0.6~0.9ms`。
+- **回滚决策**:P2/P3 属于“机制正确但没有提升体验”的修补,继续叠加会污染基线。执行 revert,代码回到 `510f7c9` 的 P1 stable baseline,后续优化应从该点重新开分支/重新二分,优先关注全局背景合成/cover preload cadence,而不是继续扩展 MediaSession 路径。
 
 ---
 
