@@ -59,6 +59,9 @@ vi.mock("@/lib/platform", () => ({
 }));
 
 let openedDb: MuzeroDB | null = null;
+const originalCreateObjectURL = URL.createObjectURL;
+const originalRevokeObjectURL = URL.revokeObjectURL;
+const originalMediaSessionDescriptor = Object.getOwnPropertyDescriptor(navigator, "mediaSession");
 
 interface MediaEngineCallbacksForTest {
   onTimeUpdate?: (positionSec: number, durationSec: number) => void;
@@ -89,6 +92,20 @@ beforeEach(async () => {
 afterEach(async () => {
   vi.doUnmock("@/lib/media-probe");
   vi.doUnmock("@/lib/media-metadata");
+  vi.unstubAllGlobals();
+  Object.defineProperty(URL, "createObjectURL", {
+    configurable: true,
+    value: originalCreateObjectURL,
+  });
+  Object.defineProperty(URL, "revokeObjectURL", {
+    configurable: true,
+    value: originalRevokeObjectURL,
+  });
+  if (originalMediaSessionDescriptor) {
+    Object.defineProperty(navigator, "mediaSession", originalMediaSessionDescriptor);
+  } else {
+    Reflect.deleteProperty(navigator, "mediaSession");
+  }
   openedDb?.close();
   openedDb = null;
   document.body.innerHTML = "";
@@ -224,6 +241,66 @@ describe("player-store playback resume", () => {
     expectLoadedBlob("audio", "audio/mpeg");
     expect(mediaEngineMock.seek).toHaveBeenCalledWith(12);
     expect(mediaEngineMock.play).toHaveBeenCalled();
+  });
+
+  it("reuses MediaSession artwork object URLs for the same cover", async () => {
+    const { db, first, second, usePlayerStore } = await seedQueue(0);
+    const mediaBlob = (id: string, trackId: string) => ({
+      id,
+      trackId,
+      role: "media" as const,
+      mime: "audio/mpeg",
+      bytes: 3,
+      blob: new Blob([new Uint8Array([1, 2, 3])], { type: "audio/mpeg" }),
+    });
+    await db.mediaBlobs.bulkPut([
+      mediaBlob("blb_first_media_session", first.id),
+      mediaBlob("blb_second_media_session", second.id),
+      {
+        id: "blb_shared_cover_media_session",
+        trackId: first.id,
+        role: "cover",
+        mime: "image/jpeg",
+        bytes: 3,
+        blob: new Blob([new Uint8Array([4, 5, 6])], { type: "image/jpeg" }),
+      },
+    ]);
+    await db.tracks.update(first.id, {
+      status: "ready",
+      blobId: "blb_first_media_session",
+      coverBlobId: "blb_shared_cover_media_session",
+    });
+    await db.tracks.update(second.id, {
+      status: "ready",
+      blobId: "blb_second_media_session",
+      coverBlobId: "blb_shared_cover_media_session",
+    });
+    const createObjectUrl = vi.fn((blob: Blob) => `blob:media-session-${blob.size}`);
+    const revokeObjectUrl = vi.fn();
+    Object.defineProperty(URL, "createObjectURL", { configurable: true, value: createObjectUrl });
+    Object.defineProperty(URL, "revokeObjectURL", { configurable: true, value: revokeObjectUrl });
+    Object.defineProperty(navigator, "mediaSession", {
+      configurable: true,
+      value: { metadata: null },
+    });
+    vi.stubGlobal(
+      "MediaMetadata",
+      class {
+        init: MediaMetadataInit | undefined;
+        constructor(init?: MediaMetadataInit) {
+          this.init = init;
+        }
+      },
+    );
+    usePlayerStore.getState().init();
+
+    await waitFor(() => expect(usePlayerStore.getState().queue).toHaveLength(2));
+    await usePlayerStore.getState().playIndex(0);
+    await usePlayerStore.getState().playIndex(1);
+
+    expect(createObjectUrl).toHaveBeenCalledTimes(1);
+    expect(revokeObjectUrl).not.toHaveBeenCalled();
+    expect(navigator.mediaSession?.metadata).toBeTruthy();
   });
 
   it("ignores stale timeupdate events from the previous track during a switch", async () => {

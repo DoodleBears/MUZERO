@@ -962,7 +962,8 @@ QA 观察到 `Ctrl+1`/`Ctrl+2` 在 Now Playing 与 Tab 2 全部歌曲列表之�
 | A6g | `e0dfe43` | Keep CSS/rAF/palette disabled and freeze `rgb` too | 基本恢复;rgb/spectrum primary consumer 是剩余放大器,但仍需拆 coverBlobId store update |
 | A6h | `67cc03c` | Keep all color outputs frozen and skip color-store `setState` entirely | 未进一步改善;单次 cover color store update 不是剩余主因 |
 | A7 | `1866196` | Restore normal playback post-load work | 已验证;normal post-load 不是独立主因 |
-| P1 | Current fix | Replace diagnostic cover-color freezes with a production settled/discrete color update | 代码完成,待 QA trace;切歌热路径只 schedule,落定后一次性更新 |
+| P1 | `510f7c9` | Replace diagnostic cover-color freezes with a production settled/discrete color update | 已验证;主因收口,剩余为 MediaSession/Pixi 队列小峰值 |
+| P2 | Current fix | Cache MediaSession artwork object URLs by coverBlobId | 代码完成,待 QA trace;重复封面应走 `artwork.cache-hit` |
 
 **Tasks:**
 - [x] A0-A4 media reload ladder exists in `diag/switch-fps-bisect`.
@@ -976,7 +977,8 @@ QA 观察到 `Ctrl+1`/`Ctrl+2` 在 Now Playing 与 Tab 2 全部歌曲列表之�
 - [x] A6g code:keep CSS/rAF/palette disabled and freeze store `rgb`;QA trace basically recovers but leaves a small gap vs A6c.
 - [x] A6h code:keep cover color hook active,log transition,then skip color-store `setState` entirely;QA trace does not improve vs A6g.
 - [x] A7 code:remove diagnostic media reload mode and restore normal post-load path;QA trace stays acceptable.
-- [x] P1 production fix:remove diagnostic color freezes and implement settled/discrete cover color updates;QA trace pending.
+- [x] P1 production fix:remove diagnostic color freezes and implement settled/discrete cover color updates;QA trace confirms settle path.
+- [x] P2 production fix:cache MediaSession artwork object URLs by coverBlobId;QA trace pending.
 - [ ] Final production fix must be rebuilt from the isolated cause,not by merging diagnostic commits.
 
 ### QA#32(2026-06-14 A5 trace):Pixi `src` add-back 未恶化,但未真正触发 texture load
@@ -1088,6 +1090,19 @@ QA 观察到 `Ctrl+1`/`Ctrl+2` 在 Now Playing 与 Tab 2 全部歌曲列表之�
 - 只有最后稳定的 target 会 `phase=success` 后一次性写入 Zustand store (`rgb/css/palette`)。
 - 删除 `visualizer-dynamic-color` 里的 bisect 常量分支,避免 hidden flag/诊断代码假装产品行为。
 - TDD 覆盖:切歌当帧 store 不变;settle 前不写;连续切歌只应用最后一个 target。
+
+### QA#42(2026-06-14 P1 trace):cover color 收口,剩余为 MediaSession/Pixi 队列小峰值
+
+18:18 trace 是 `510f7c9 fix(perf): settle cover color updates on switch` 的结果:
+
+- **P1 生效**:`cover.palette.settle phase=start` 在切歌当帧出现,`phase=success` 只在 `650ms` 后出现;没有 `cover.palette.css/rgb/palette` rAF 式连续输出。
+- **FPS 已明显好于 A6b**:窗口从静态 `fpsAvg≈109` 到切歌中 `93.1 -> 87.8 -> 83.4 -> 90.4 -> 96.9`, `fpsLow≈10.9~15`。这不再是 A6b 的 `55~79` 回退,但仍有小低帧。
+- **剩余峰值 1:MediaSession artwork**:`player.mediaSession.metadata/artwork.fetch` 可到 `69.8/69.3ms`,后续还有 `26.7ms`, `17.4ms`, `16ms`, `26.8ms`。当前实现每首都重新读 cover blob 并创建 object URL,没有按 `coverBlobId` 复用。
+- **剩余峰值 2:Pixi 192px texture 队列偶发慢**:大多数 `background.texture fetch/decode≈0.8/1ms`,但一次 `fetch=106ms`, `decode=30.4ms`, `media.load=330.2ms`。这像是浏览器解码/任务队列拥塞,不是 GPU upload(`textureSwap.apply=1.1ms`)。
+- **次要噪声**:同一窗口有 `dbRequeries=2` (`listAllTracks`, `memoryNotesByTrack`),可能来自播放统计/备注 liveQuery,但当前 trace 中没有显示为最大 span。
+- **下一步(P2)**:先缓存 MediaSession artwork object URL,避免重复读封面 blob;这条稳定、低风险、可用 trace 验证 `artwork.cache-hit` 和 `artwork.fetch` 峰值下降。
+
+**P2 implementation:** `player-store` 给 MediaSession artwork 增加一个小型 `coverBlobId -> object URL` LRU cache(8 entries)。同一个本地 cover 再次进入 OS now-playing metadata 时先命中 `player.mediaSession.artwork.cache-hit`,避免重复 `getTrackCover()` IndexedDB 读和 `URL.createObjectURL()`;stale async metadata 仍按原 seq 保护撤销自己刚创建的 URL,unsupported MediaSession 会清空缓存。TDD 新增 `reuses MediaSession artwork object URLs for the same cover`,先红后绿,覆盖同 coverBlobId 连续播放只创建一次 object URL。
 
 ---
 
