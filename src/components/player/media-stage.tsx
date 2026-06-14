@@ -201,7 +201,7 @@ function NowPlayingCoverBacklight({
   url: string | null;
 }) {
   const rect = useViewportRect(anchorRef, active && !!url);
-  const target = typeof document !== "undefined" ? document.body : null;
+  const target = typeof document !== "undefined" ? anchorRef.current?.closest("main") : null;
 
   return active && url && rect && target
     ? createPortal(
@@ -211,7 +211,7 @@ function NowPlayingCoverBacklight({
           initial={{ opacity: 0 }}
           animate={{ opacity }}
           transition={{ duration: 0.42, ease: "easeOut" }}
-          className="pointer-events-none fixed z-[5] now-playing-cover-backlight-clip"
+          className="pointer-events-none fixed -z-10 now-playing-cover-backlight-clip"
           style={rect}
         >
           <img
