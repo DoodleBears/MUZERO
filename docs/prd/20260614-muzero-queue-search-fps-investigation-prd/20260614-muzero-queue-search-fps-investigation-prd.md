@@ -378,7 +378,8 @@ This work is local frontend only. There are no HTTP endpoints and no backend cha
 
 | Span / Event | Source | Description |
 |--------------|--------|-------------|
-| `queuePanel.systemPlaylist.derive` | Phase 1 | Duration and selected playlist id for lazy system playlist derivation |
+| `queuePanel.systemPlaylist.derive` | Phase 1 | Perf HUD work span for lazy system playlist derivation when counters are enabled |
+| `queuePanel.systemPlaylist derive` | Phase 1 | Always-on trace ring diagnostic for a pinned system playlist click; includes playlist id, track count, and duration |
 | `nav.tabSwitch` | Phase 2 | Source tab, target tab, and total transition duration |
 | `nav.viewTransition.update` | Phase 2 | Duration of the state update callback inside native ViewTransition |
 | `nav.viewTransition.finished` | Phase 2 | Total native ViewTransition duration, including skipped/failed state |
@@ -495,11 +496,14 @@ Target:
 - [x] Add lazy `loadSystemPlaylistTracks(playlistId)` for pinned playlist clicks.
 - [x] Derive only the selected system playlist on click.
 - [x] Add `notePerfWork("queuePanel.systemPlaylist.derive", ...)`.
+- [x] Add direct trace-ring diagnostic `queuePanel.systemPlaylist derive` so QA can see click-time derivation even when the perf work window does not emit.
 - [x] Update QueuePanel tests for async pinned playlist playback.
+- [x] Add regression tests proving QueuePanel render/cursor-only song switching does not read full-library system playlist data.
+- [x] Add regression tests proving liked playlist clicks avoid playback stats/events and pinned clicks write the trace row.
 
 **Verification:**
 
-- [x] `node_modules\.bin\vitest.CMD run src/components/player/queue-panel.test.tsx`
+- [x] `node_modules\.bin\vitest.CMD run src/components/player/queue-panel.test.tsx` (5 tests)
 - [x] `node_modules\.bin\tsc.CMD --noEmit --pretty false`
 - [x] `node_modules\.bin\biome.CMD check src/components/player/queue-panel.tsx src/components/player/queue-panel.test.tsx`
 
@@ -617,3 +621,4 @@ Target:
 |------|--------|---------|
 | 2026-06-14 | Codex | Initial draft: recorded QueuePanel root cause, Phase 1 hotfix, SearchPage/ViewTransition hypotheses, trace blind spots, and follow-up plan |
 | 2026-06-14 | Codex | Incorporated architecture review: SearchPage remounts on every tab return, symptom 2 gesture is ambiguous, ViewTransition `flushSync` can fight first-frame deferral, ProdPerfHud already supports prod counters, and QueuePanel verification needs drawer-open vs drawer-closed comparison |
+| 2026-06-14 | Codex | Phase 1 implementation update: added always-on QueuePanel system playlist trace diagnostic and TDD coverage for render-time no full-library reads, click-time derivation, trace output, and liked-playlist minimal reads |

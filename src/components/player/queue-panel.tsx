@@ -1,10 +1,12 @@
-import { useLiveQuery } from "dexie-react-hooks";
 import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 import { VirtualTrackList } from "@/components/library/virtual-track-list";
 import { db } from "@/db/muzero-db";
 import { listAllTracks, listTrackPlaybackStats } from "@/db/repositories";
+import type { Track } from "@/db/types";
 import { useSession } from "@/hooks/use-app-data";
+import { createDiagnosticLogger } from "@/lib/logger";
+import { arePerfCountersEnabled, notePerfWork } from "@/lib/perf-counters";
 import {
   deriveHeartedPlaylist,
   deriveMostPlayedPlaylist,
@@ -17,6 +19,8 @@ import { cn } from "@/lib/utils";
 import { usePlayerStore } from "@/stores/player-store";
 
 type CommonT = TFunction<"common", undefined>;
+
+const systemPlaylistLog = createDiagnosticLogger("queuePanel.systemPlaylist");
 
 /**
  * The up-next queue (歌单列表) — a "playing from <set>" header + the virtualized
@@ -31,27 +35,16 @@ export function QueuePanel({ className }: { className?: string }) {
   const playSystemPlaylist = usePlayerStore((s) => s.playSystemPlaylist);
   const play = usePlayerStore((s) => s.play);
   const session = useSession(activeSessionId);
-  const allTracks = useLiveQuery(() => listAllTracks(db), [], []);
-  const playbackStats = useLiveQuery(() => listTrackPlaybackStats(db), [], []);
-  const playbackEvents = useLiveQuery(() => db.playbackEvents.toArray(), [], []);
-  const systemTracks = {
-    "system:liked": deriveHeartedPlaylist(allTracks),
-    "system:recent": localTracksFromPlayables(
-      deriveRecentlyPlayedPlaylist(allTracks, { events: playbackEvents, stats: playbackStats }),
-    ),
-    "system:most": localTracksFromPlayables(
-      deriveMostPlayedPlaylist(allTracks, {
-        events: playbackEvents,
-        now: Date.now(),
-        range: "all",
-        stats: playbackStats,
-      }),
-    ),
-  } satisfies Record<SystemPlaylistId, typeof allTracks>;
   const sourceLabel =
     queueSource?.kind === "system-playlist"
       ? t("systemPlaylists.sourceLabel", { name: systemPlaylistLabel(queueSource.id, t) })
       : undefined;
+
+  async function playPinnedPlaylist(playlistId: SystemPlaylistId) {
+    const tracks = await loadSystemPlaylistTracks(playlistId);
+    await playSystemPlaylist(playlistId, tracks);
+    void play();
+  }
 
   return (
     <div className={cn("flex h-full min-h-0 flex-col", className)}>
@@ -71,7 +64,7 @@ export function QueuePanel({ className }: { className?: string }) {
               type="button"
               key={playlist.id}
               onClick={() => {
-                void playSystemPlaylist(playlist.id, systemTracks[playlist.id]).then(play);
+                void playPinnedPlaylist(playlist.id);
               }}
               className={cn(
                 "min-w-0 rounded-md border border-border px-2 py-1.5 text-xs transition-colors hover:bg-accent",
@@ -90,6 +83,50 @@ export function QueuePanel({ className }: { className?: string }) {
       </div>
     </div>
   );
+}
+
+async function loadSystemPlaylistTracks(playlistId: SystemPlaylistId): Promise<Track[]> {
+  const perfEnabled = arePerfCountersEnabled();
+  const startedAt = performance.now();
+  let trackCount = 0;
+  try {
+    const allTracks = await listAllTracks(db);
+    trackCount = allTracks.length;
+    if (playlistId === "system:liked") {
+      return deriveHeartedPlaylist(allTracks);
+    }
+
+    const [stats, events] = await Promise.all([
+      listTrackPlaybackStats(db),
+      db.playbackEvents.toArray(),
+    ]);
+    const rows =
+      playlistId === "system:recent"
+        ? deriveRecentlyPlayedPlaylist(allTracks, { events, stats })
+        : deriveMostPlayedPlaylist(allTracks, {
+            events,
+            now: Date.now(),
+            range: "all",
+            stats,
+          });
+    return localTracksFromPlayables(rows);
+  } finally {
+    const durationMs = performance.now() - startedAt;
+    if (perfEnabled) {
+      notePerfWork("queuePanel.systemPlaylist.derive", durationMs, {
+        playlistId,
+        tracks: trackCount,
+      });
+    }
+    systemPlaylistLog.debug("derive", {
+      category: "performance",
+      durationMs: Math.round(durationMs),
+      message: "system playlist derived from QueuePanel pinned source",
+      phase: "success",
+      playlistId,
+      tracks: trackCount,
+    });
+  }
 }
 
 function localTracksFromPlayables(rows: SystemPlaylistPlayable[]) {
