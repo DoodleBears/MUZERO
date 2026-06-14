@@ -97,9 +97,11 @@ export async function ingestMediaBytes(
   );
   return {
     trackId: track.id,
-    // Only surface the remote cover when no image was embedded — else skip the fetch.
-    albumPicUrl: embeddedCover ? undefined : albumPicUrl,
-    hasCover: Boolean(embeddedCover),
+    // Surface the remote cover unless one was actually persisted — an embedded
+    // image that failed to decode is dropped by createUploadedTrack (coverBlobId
+    // stays empty), so we still fall back to fetching the remote albumPic.
+    albumPicUrl: track.coverBlobId ? undefined : albumPicUrl,
+    hasCover: Boolean(track.coverBlobId),
   };
 }
 
@@ -195,7 +197,9 @@ async function ingestNcmBytes(input: IngestBytesInput, db: MuzeroDB): Promise<In
   return {
     trackId: track.id,
     albumPicUrl: decoded.albumPicUrl,
-    hasCover: decoded.hasCover,
+    // An undecodable embedded cover is dropped by createUploadedTrack, so trust the
+    // persisted coverBlobId — keeps the remote albumPic fallback alive (see above).
+    hasCover: Boolean(track.coverBlobId),
   };
 }
 

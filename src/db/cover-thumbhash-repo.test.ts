@@ -41,6 +41,7 @@ vi.mock("@/workers/cover-client", () => ({
   ),
 }));
 
+import { extractCoverMetadataViaWorker } from "@/workers/cover-client";
 import { MuzeroDB } from "./muzero-db";
 import {
   countCoverMetadataBackfillCandidates,
@@ -116,6 +117,43 @@ describe("cover-set generates + persists a thumbhash on the owner row (Phase 3)"
     expect(stored?.coverPalette).toEqual(mocks.palette);
     expect(stored?.coverPaletteSource).toBe(stored?.coverBlobId);
     expect(await countCoverMetadataBackfillCandidates(db)).toBe(0);
+  });
+
+  it("imports the track WITHOUT a cover when the embedded image can't be decoded (no rollback)", async () => {
+    const session = await createSession({ name: "s", seedPrompt: "", config: {} }, db);
+
+    // An undecodable embedded image: the worker AND its inline fallback reject with
+    // InvalidStateError — exactly how `createImageBitmap` fails on the corrupt VIP
+    // `.ncm` covers seen in the field. This must NOT sink the whole import.
+    const decodeError = new Error("The source image could not be decoded.");
+    decodeError.name = "InvalidStateError";
+    vi.mocked(extractCoverMetadataViaWorker).mockRejectedValueOnce(decodeError);
+
+    const track = await createUploadedTrack(
+      {
+        sessionId: session.id,
+        title: "Bad cover",
+        kind: "audio",
+        blob: new Blob([new Uint8Array([9, 9, 9])], { type: "audio/mpeg" }),
+        mime: "audio/mpeg",
+        durationSec: 7,
+        embeddedCover: { blob: png(), mime: "image/png" },
+      },
+      db,
+    );
+
+    // The track still landed — audio intact, just cover-less (no thumbhash/palette).
+    const stored = await db.tracks.get(track.id);
+    expect(stored).toBeTruthy();
+    expect(stored?.status).toBe("ready");
+    expect(stored?.blobId).toBeTruthy();
+    expect(stored?.coverBlobId).toBeUndefined();
+    expect(stored?.coverThumbhash).toBeUndefined();
+
+    // Audio media blob retained; the unrenderable cover blob was cleaned up (not orphaned).
+    const blobs = await db.mediaBlobs.toArray();
+    expect(blobs.filter((b) => b.role === "media")).toHaveLength(1);
+    expect(blobs.filter((b) => b.role === "cover")).toHaveLength(0);
   });
 
   it("setSessionCover stores coverThumbhash on the session", async () => {

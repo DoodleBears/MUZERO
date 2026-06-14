@@ -35,6 +35,38 @@ vi.mock("@/lib/image-palette", () => ({
   extractImagePalette: vi.fn(async () => []),
 }));
 
+// An embedded cover whose 1st byte is 0xBA is "undecodable": the worker + its
+// inline fallback reject with InvalidStateError, mirroring how `createImageBitmap`
+// fails on corrupt VIP `.ncm` covers. Everything else resolves to an empty result,
+// matching the real worker's jsdom behaviour (no createImageBitmap → empty).
+vi.mock("@/workers/cover-client", async (orig) => {
+  const actual = (await orig()) as Record<string, unknown>;
+  const empty = {
+    palette: [],
+    thumbhash: undefined,
+    timings: {
+      backlightMs: 0,
+      decodeMs: 0,
+      paletteMs: 0,
+      thumbnailMs: 0,
+      thumbhashMs: 0,
+      totalMs: 0,
+    },
+  };
+  return {
+    ...actual,
+    extractCoverMetadataViaWorker: vi.fn(async ({ blob }: { blob: Blob }) => {
+      const bytes = new Uint8Array(await blob.arrayBuffer());
+      if (bytes[0] === 0xba) {
+        const err = new Error("The source image could not be decoded.");
+        err.name = "InvalidStateError";
+        throw err;
+      }
+      return empty;
+    }),
+  };
+});
+
 // Distinct image per cover URL: the byte length encodes which cover it is, so we
 // can assert each track stored ITS OWN cover (not a neighbour's).
 vi.mock("@/lib/platform", async (orig) => {
@@ -95,6 +127,16 @@ const ncm = (musicName: string, albumPic: string) =>
   new Uint8Array(
     encodeNcm({
       audio: new Uint8Array([7, 7, 7, 7]),
+      meta: { musicName, artist: [["歌手", 1]], album: "专辑", format: "mp3", albumPic },
+    }),
+  );
+
+// Like `ncm`, but WITH an embedded cover the decoder rejects (1st byte 0xBA).
+const ncmWithBadCover = (musicName: string, albumPic: string) =>
+  new Uint8Array(
+    encodeNcm({
+      audio: new Uint8Array([7, 7, 7, 7]),
+      cover: new Uint8Array([0xba, 0xd0, 0xca, 0xfe]),
       meta: { musicName, artist: [["歌手", 1]], album: "专辑", format: "mp3", albumPic },
     }),
   );
@@ -178,6 +220,52 @@ describe("runFolderSync remote covers", () => {
       // Embedded covers land atomically with createUploadedTrack — each on its own track.
       expect(await coverSize(a?.coverBlobId)).toBe(11);
       expect(await coverSize(b?.coverBlobId)).toBe(22);
+    },
+    FOLDER_SYNC_COVER_TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "drops an undecodable embedded cover, falls back to the remote albumPic, and never retries (#E)",
+    async () => {
+      const { db, repos, runFolderSync } = await load();
+      const session = await repos.createSession({ seedPrompt: "", config: { autoExtend: false } });
+      const folderId = await repos.upsertImportFolder({ path: "/m", setId: session.id });
+
+      const fs = fakeFs(
+        { "/m": [file("bad.ncm")] },
+        { "/m/bad.ncm": ncmWithBadCover("歌曲坏封面", "https://cdn/cover1.jpg") },
+      );
+
+      // The audio imports even though its embedded cover can't be decoded — the bug
+      // was that the decode error rolled back the whole track (audio included).
+      const result = await runFolderSync([folderId], fs);
+      expect(result.imported).toBe(1);
+
+      const badTrack = async () => {
+        const rows = await db.tracks.where("sessionId").equals(session.id).toArray();
+        return rows.find((t) => t.sourcePath === "/m/bad.ncm");
+      };
+
+      // Undecodable embedded image dropped → hasCover=false → the remote albumPic
+      // (cover1 = 4 bytes) is fetched and stored instead.
+      let track = await badTrack();
+      for (let i = 0; i < 100 && !track?.coverBlobId; i += 1) {
+        await new Promise((r) => setTimeout(r, 10));
+        track = await badTrack();
+      }
+      expect(track?.coverBlobId).toBeTruthy();
+      const coverRow = track?.coverBlobId ? await db.mediaBlobs.get(track.coverBlobId) : undefined;
+      expect(coverRow?.bytes).toBe(4);
+
+      // Exactly one cover blob — the dropped embedded one was cleaned up, not orphaned.
+      const coverBlobs = (await db.mediaBlobs.toArray()).filter((b) => b.role === "cover");
+      expect(coverBlobs).toHaveLength(1);
+
+      // The track persisted → its sourcePath is "known" → a second sync (what the boot
+      // folder-sync does on every launch) re-imports nothing. The pre-fix bug never
+      // persisted the track, so it was re-attempted (and re-failed) forever.
+      const second = await runFolderSync([folderId], fs);
+      expect(second.imported).toBe(0);
     },
     FOLDER_SYNC_COVER_TEST_TIMEOUT_MS,
   );

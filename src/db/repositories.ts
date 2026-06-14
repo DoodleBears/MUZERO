@@ -5,6 +5,7 @@ import {
   type extractCoverPalette,
 } from "@/lib/cover-palette";
 import { newId } from "@/lib/id";
+import { log } from "@/lib/logger";
 import { noteDbRequery } from "@/lib/perf-counters";
 import type { LyricsRecord } from "@/lyrics/provider";
 import {
@@ -900,30 +901,38 @@ export async function createUploadedTrack(
     storage,
   );
   track.blobId = media.id;
+
+  // Cover is best-effort: a cover that can't be stored or decoded must NEVER sink
+  // the whole import. An undecodable embedded image (e.g. some VIP `.ncm` covers
+  // that `createImageBitmap` rejects with InvalidStateError) used to throw out of
+  // the metadata derivation, hit the rollback below, delete the freshly-stored
+  // AUDIO blob and rethrow — so the track never persisted, its sourcePath never
+  // became "known", and the boot folder-sync re-attempted (and re-failed) it on
+  // every launch. Now the cover is stored + derived OUTSIDE the track transaction;
+  // on any failure we drop the (possibly stored, almost certainly unrenderable)
+  // cover blob and keep the track coverless. Display falls back thumbhash→title;
+  // NCM import retries the remote albumPic because `coverBlobId` stays empty (see
+  // callers' `hasCover` = Boolean(track.coverBlobId)).
   let cover: MediaBlob | undefined;
-  try {
-    cover = input.embeddedCover
-      ? await putSizeAwareImageBlob(
-          {
-            id: newId("blb"),
-            trackId: track.id,
-            role: "cover",
-            mime: input.embeddedCover.mime,
-            bytes: input.embeddedCover.blob.size,
-            blob: input.embeddedCover.blob,
-            suggestedName: "Cover",
-          },
-          db,
-          storage,
-        )
-      : undefined;
-    if (cover && input.embeddedCover) {
-      // One decode → thumbhash + accurate palette together. (Previously this
-      // decoded for thumbhash here, then a background flush decoded the SAME cover
-      // again just for the palette — wasteful. The palette quantization on the
-      // already-decoded pixels is cheap, so doing both in one worker pass halves
-      // the per-cover decode at import. Falls back to the thumbhash-derived palette
-      // if the worker returns none.)
+  if (input.embeddedCover) {
+    try {
+      cover = await putSizeAwareImageBlob(
+        {
+          id: newId("blb"),
+          trackId: track.id,
+          role: "cover",
+          mime: input.embeddedCover.mime,
+          bytes: input.embeddedCover.blob.size,
+          blob: input.embeddedCover.blob,
+          suggestedName: "Cover",
+        },
+        db,
+        storage,
+      );
+      // One decode → thumbhash + accurate palette together (the palette
+      // quantization rides on the already-decoded pixels, so both come from a
+      // single worker pass). Falls back to the thumbhash-derived palette if the
+      // worker returns none.
       const coverMetadata = await deriveCoverMetadata(
         input.embeddedCover.blob,
         undefined,
@@ -936,13 +945,29 @@ export async function createUploadedTrack(
         ? coverMetadata.palette
         : coverPaletteFromThumbhash(coverMetadata.thumbhash);
       Object.assign(track, coverPaletteFields(palette, cover.id));
+    } catch (error) {
+      // Undecodable / unstorable embedded cover — keep the audio, drop the cover.
+      if (cover) {
+        await deleteMediaBlob(cover.id, db, storage).catch(() => {});
+        cover = undefined;
+      }
+      track.coverBlobId = undefined;
+      log.warn("repositories", "embedded cover unusable; importing track without it", {
+        trackId: track.id,
+        err: String(error),
+      });
     }
+  }
+
+  try {
     await db.transaction("rw", db.tracks, async () => {
       await db.tracks.put(track);
     });
   } catch (error) {
-    await deleteMediaBlob(media.id, db, storage);
-    if (cover) await deleteMediaBlob(cover.id, db, storage);
+    // The track row is the anchor — without it the media blobs are orphaned, so a
+    // genuine persist failure still rolls everything back.
+    await deleteMediaBlob(media.id, db, storage).catch(() => {});
+    if (cover) await deleteMediaBlob(cover.id, db, storage).catch(() => {});
     throw error;
   }
   return track;

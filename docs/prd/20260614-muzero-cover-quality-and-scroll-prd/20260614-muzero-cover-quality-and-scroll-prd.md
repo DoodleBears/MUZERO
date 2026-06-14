@@ -15,6 +15,7 @@
 | 2 | 导入封面解码去重(palette+thumbhash 合并一次)(#1) | ✅ 代码完成(待导入实测) | [Phase 2](#phase-2-导入解码去重) |
 | 3 | 专辑/歌手网格用更高清封面(#A) | 🔲 Pending | [Phase 3](#phase-3-网格高清封面) |
 | 4 | 详情页返回网格不再重解码闪 thumbhash(#D,跨挂载缓存) | ✅ 代码完成(待实测) | [Phase 4](#phase-4-返回不闪派生缓存) |
+| 5 | 坏封面不连累音频导入(#E,启动即刷 `InvalidStateError`,每次重试) | ✅ 代码完成(待实测) | [Phase 5](#phase-5-导入封面解码失败优雅降级) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
 
@@ -28,12 +29,14 @@
 - **#1:导入时每张封面被 worker 解码两次**(`["thumbhash"]` 和 `["palette"]` 分别一次,各解码整图)——本可一次 `["palette","thumbhash"]` 出两样。worker 侧、一次性,但白花一倍解码。
 - **#A:专辑/歌手网格封面偏糊**——网格卡片用的是 160px 缩略派生,桌面 4 列网格在 2x DPI 下渲染宽 ~180px > 160px → 糊。
 - **#B:虚拟列表滚动卡顿**——虚拟化本身必要(大库);卡顿来自滚动时大量行进视口触发 worker 派生 + ResizeObserver 频繁重测。**#C 修好后churn 大降**。
+- **#E(新,每次开机即刷):导入时 NCM 嵌入封面无法被 `createImageBitmap` 解码,整首歌导入失败——音频 blob 被一并删除、track 从不落库。** track 从不落库 → 其 `sourcePath` 永不进「已知」集合 → 启动 2.5s 后的 `syncImportFolders` 每次都把它当新文件重扫重试 → 这批 `cover.worker failed / fallback` + `Uncaught InvalidStateError: The source image could not be decoded.` + `failed to import folder file …ncm` **每次启动都刷一遍**(同一批 VIP `.ncm`)。
 
 ### 1.1 Core Value
 
 1. **滚动丝滑不闪**:已加载封面在滚动中保持,不再降级 thumbhash(#C)。
 2. **导入更快**:每张封面只解码一次(#1)。
 3. **网格更清晰**:网格卡片用足够分辨率的派生(#A)。
+4. **导入更稳**:坏封面绝不连累音频——封面解不了就降级(回退远端 albumPic → thumbhash → 标题),音频照常入库、track 落库,不再每次启动无谓重试(#E)。
 
 ---
 
@@ -57,7 +60,22 @@
 - **根因:派生封面路径缺「跨挂载 URL 缓存」**。整图封面走 [`useTrackCoverResource`](../../../src/hooks/use-media.ts),有 `coverUrlCache.peek()` **同步**命中(re-mount 帧 0 即拿到 URL,零闪);但**缩略/backlight 派生**走 [`useCoverDerivativeUrl`](../../../src/hooks/use-media.ts),旧实现:`entry` 初始 `null` → effect 里 `await ensureCoverThumbnailDerivative()`(Promise,即便命中 DB 也是异步)→ `useKeyedObjectUrl` **每次挂载新建 object URL、卸载即 revoke**。
 - 网格卡 [`entity-grid.tsx`](../../../src/components/library/entity-grid.tsx) / 列表行 [`track-row.tsx`](../../../src/components/library/track-row.tsx) 都用派生路径 → 每次返回重挂 = `null`(帧 0)→ thumbhash → 异步解析 → fade。URL 串还每次变 → [`cover-image.tsx`](../../../src/components/ui/cover-image.tsx) 的 `decodedCoverUrls` 防闪也失效(新 URL 不在集合里 → 重放 fade)。**双重闪因**。
 
----
+### #E 坏封面解码失败连锁中止整曲导入(QA 追加,启动即现、每次重试)
+
+**现象**:开机 ~2.5s 后日志连刷三连——`cover.worker failed … errorKind: media_decode` → `cover.worker fallback … phase: retry` → `Uncaught (in promise) InvalidStateError: The source image could not be decoded.` → `player failed to import folder file …ncm`,**每次启动都重复**同一批 VIP `.ncm`(`You Are The Jumpmaster` / `κ` / `想い出は遠くの日々` / `雛鳥` …)。
+
+**解码链(带 file:line)**:
+- [`App.tsx:113`](../../../src/App.tsx#L113):启动 2.5s 后 `syncImportFolders()` → [`runFolderSync`](../../../src/stores/player-store.ts#L1780)。
+- [`player-store.ts:1861`](../../../src/stores/player-store.ts#L1861) `ingestScannedFileBytes` → [`:1744`](../../../src/stores/player-store.ts#L1744) `ingestNcmBytes` → [`:1402`](../../../src/stores/player-store.ts#L1402) `persistDecodedNcmTrack` → [`createUploadedTrack`(repositories.ts:920)](../../../src/db/repositories.ts#L920) → [`deriveCoverMetadata`(:64)](../../../src/db/repositories.ts#L64)。
+- worker 解码失败 → [`cover-client.ts:179`](../../../src/workers/cover-client.ts#L179) `.catch` 回退主线程 `inlineExtract` → [`cover-derivative-core.ts:126`](../../../src/workers/cover-derivative-core.ts#L126) `await createImageBitmap(blob)` **再次** 抛 `InvalidStateError`。这次 `extractFresh` 的 `.catch` 没有第二层兜底(直接 `await inlineExtract`)→ 异常冒泡出 `deriveCoverMetadata`。
+
+**致命点**:[`createUploadedTrack` 的 catch(repositories.ts:936-940)](../../../src/db/repositories.ts#L936) 把刚存进去的**音频 media blob + 封面 blob 一起 `deleteMediaBlob` 并 `throw`**——封面派生被当成**强依赖**,一个解不了的封面让整首歌(连同好端端的音频)整体回滚,track 从不落库。
+
+**连锁(为何每次开机都刷)**:track 不落库 → [`knownSourcePaths`](../../../src/stores/player-store.ts) 永远不含它 → [`selectNewFiles`](../../../src/stores/player-store.ts) 每次都把它当「新文件」→ `syncImportFolders` 每次启动重试同一批 → **永久循环、永久刷错**。这正是「首次载入画面就会出现」的成因——不是首次,是**每次**。
+
+**雪上加霜(连远端封面也丢了)**:[`ingest-core.ts:101`](../../../src/workers/ingest-core.ts#L101) `albumPicUrl: embeddedCover ? undefined : albumPicUrl`——只要**存在**嵌入封面就抑制远端 URL。于是嵌入封面「存在但解不了」时,既丢了 thumbhash/palette,又**主动放弃了本可用的 CDN 封面**(这批 VIP 文件恰恰带 `albumPic`)。
+
+**封面是否「处理一次就持久」?是,设计本就如此——是 #E 的回滚让它失效**:封面 blob 经 [`putSizeAwareImageBlob`(media-blob-storage.ts:140)](../../../src/db/media-blob-storage.ts#L140) 落 `mediaBlobs`(<512KB→IndexedDB;≥512KB→默认 provider,可 **OPFS** / electron-file),thumbhash+palette 落 track 行。**处理一次即持久化、下次不再解码**本就是现有设计;问题不在缺缓存,而在 #E 把整笔事务回滚了 → 什么都没存下 → 每次重来。修好 #E 后,持久化自然生效。
 
 ## 3. Implementation Plan
 
@@ -142,6 +160,28 @@
 - [x] 上述单测全绿;`tsc`/Biome 通过;`src` 全量 2403 例通过。
 - [ ] **待实测**:从专辑/歌手详情返回网格,封面**不再**先 thumbhash 再切真图;列表行、now-playing backlight 同样不闪;长时间浏览大库内存有界(派生缓存 cap 128 + 预算)。
 
+### Phase 5: 导入封面解码失败优雅降级
+
+**Goal:** 坏封面绝不连累音频——`createUploadedTrack` 把封面派生当**尽力而为(best-effort)**:解不了就降级,音频 media blob 保留、track 必落库 → 不再每次启动重试;能回退远端 `albumPic` 的就补上一张能用的封面。
+
+**根因复述(详见 [#E](#e-坏封面解码失败连锁中止整曲导入qa-追加启动即现每次重试)):** 封面派生现为整曲导入的**强依赖**——`deriveCoverMetadata` 抛 `InvalidStateError` → `createUploadedTrack` catch 删音频+rethrow → track 从不落库 → `syncImportFolders` 每次启动重试。
+
+**实现(落地):**
+- **保音频、落 track**:[`createUploadedTrack`(repositories.ts:864)](../../../src/db/repositories.ts#L864) 把封面拆成两段——封面(`putSizeAwareImageBlob` + `deriveCoverMetadata`)单独 try/catch、**在 track 事务之外**;解码/存储失败时**不**删音频、**不** rethrow,只 `coverBlobId=undefined` + 清掉坏 blob。track 落库改为单独事务:**仅当 track 行本身写失败**才回滚音频+封面(真孤儿才回滚)。
+- **清掉坏 cover blob**:`createImageBitmap` 都解不了 → `<img>` 也渲染不了 → catch 里 `deleteMediaBlob(cover.id)`(别留裂图引用),显示链自然回退 thumbhash → 标题。
+- **回退远端 albumPic**:封面无效即视作「无封面」——两条 NCM/导入路径都把 `hasCover` 改成 **`Boolean(track.coverBlobId)`**(而非「是否有嵌入封面」),并据此透出 `albumPicUrl`:[`ingest-core.ts:101/200`](../../../src/workers/ingest-core.ts#L101)(worker/inline 路径)+ [`player-store.ts persistDecodedNcmTrack`](../../../src/stores/player-store.ts#L1417)(Electron renderer 路径)。于是 [`runFolderSync`](../../../src/stores/player-store.ts#L1874) 的 bounded 远端 fetch pass 用 CDN 封面补上。
+- **(未做,可选治本)** 让 `extractCoverMetadataInline`/worker 在解码失败时返回空结果而非 throw,以消掉 `Uncaught (in promise) InvalidStateError` 并免去各处 try/catch——留作后续(见 Open Q5)。
+
+**Tasks:**
+- [x] `createUploadedTrack`:封面派生失败 → 保音频、落 track、清坏 cover blob、`coverBlobId` 置空;**不 rethrow**(仅 track 行写失败才回滚)。
+- [x] NCM/导入两路径:`hasCover = Boolean(track.coverBlobId)` + 据此透出 `albumPicUrl`,坏嵌入封面回退远端。
+- [x] 单测([`cover-thumbhash-repo.test.ts`](../../../src/db/cover-thumbhash-repo.test.ts)):注入「派生抛 `InvalidStateError`」→ track 仍落库(`ready`、音频 blob 在)、无 thumbhash/palette、坏 cover blob 已清(无孤儿)。
+- [x] 端到端([`folder-sync-covers.test.ts`](../../../src/stores/folder-sync-covers.test.ts)):坏嵌入封面 `.ncm` → 导入成功 → 回退远端 albumPic(4 bytes)→ **第二次 `runFolderSync` 导入 0**(不再重试)。
+
+**Checklist:**
+- [x] `tsc` / Biome 通过;相关测试全绿(cover-thumbhash 单测 + folder-sync-covers e2e + ingest-core + player-store)。
+- [ ] **待实测**:导入这批 VIP `.ncm` → 音频入库可播;带 `albumPic` 的补上 CDN 图、没有的回退标题;**重启后不再刷** `failed to import folder file` / `InvalidStateError`(同一文件不再被反复重试)。
+
 ---
 
 ## 4. Out of Scope / 说明
@@ -149,6 +189,9 @@
 - **#B 虚拟化本身**:保留(大库必需)。#C 修好 + 派生不在滚动中暴涨后,卡顿应大降;若仍有,再单独看 ResizeObserver 节流 / overscan。
 - 不动存储后端、不动协议(本地媒体协议是另一 PRD)。
 - 远端封面走 muzfetch 不变。
+- **本次日志里的非封面噪声(均与本 PRD 无关,记录以免误判)**:
+  - `Electron Security Warning (Insecure Content-Security-Policy / unsafe-eval)` —— **dev-only**:Vite HMR 需 `unsafe-eval`;Electron 自己也提示「once the app is packaged 不再出现」。打包构建无此问题,不在本 PRD 处理。
+  - `pixi-background-controller.ts:153 The powerPreference option is currently ignored … on Windows` + `PixiJS Warning: ImageSource: Image element passed, converting to canvas` —— 来自**像素背景(pixi)**,属另一功能/PRD:前者是 Chromium WebGPU 的无害提示(crbug 369219127),后者是 pixi 把 `HTMLImageElement` 转 canvas 的轻微一次性开销。本 PRD 不动。
 
 ---
 
@@ -168,6 +211,9 @@
 | 1 | #C 用「缓存命中即返回」还是「track-row 记住上次 URL」? | Open | 首选 (a) 缓存命中即返回(精准、不串图);实现时确认缓存可同步 peek |
 | 2 | #A 新派生尺寸取多大?(256 / 320 / 跟随最大网格列宽) | Open | 默认 ~320px(覆盖桌面 2x 网格);实测再调 |
 | 3 | #1 合并是否影响已导入库(老封面已分开存)? | Open | 仅改新导入路径;老库走 Phase 3 的派生重算或保持现状 |
+| 4 | #E 坏嵌入封面:删 cover blob + 回退远端,还是保留 blob 仅跳过派生? | Open | 倾向删坏 blob + 回退 `albumPic`(裂图无意义;这批 VIP 都带 albumPic) |
+| 5 | #E 治本是否改 `extractCoverMetadataInline` 解码失败「返回空」而非 throw? | Open | 可选;先在 `createUploadedTrack` 局部兜底保导入,治本(消 `Uncaught` + 各处免 try)另议 |
+| 6 | #E 这批 VIP `.ncm` 嵌入封面为何 `createImageBitmap` 都解不了(格式/截断/非图数据)? | Open | 不阻塞修复(降级即可);可另起排查 dump 几张坏封面字节确认真因 |
 
 ---
 
@@ -182,3 +228,5 @@
 | 2026-06-14 | User+Claude | Phase 3 尺寸拍板:列表 `sm=160` / 网格 `lg=512`(用户「可以用 512 px」)。Phase 3 由用户另开 session 实现 |
 | 2026-06-14 | Claude | QA 追加 #D:详情返回网格重解码闪 thumbhash。根因=派生路径缺整图那套跨挂载 URL 缓存 |
 | 2026-06-14 | Claude | Phase 4(#D)代码完成:新增 `coverDerivativeUrlCache` + 同步键 `coverImageDerivativeKey`,`useCoverDerivativeUrl` 改帧 0 `peek`/异步 `store`(卸载不 revoke);**退役 Phase 1 的 `keepDeferredCover`/`forKey` 守卫**(缓存 peek 已天然覆盖,删 `cover-defer.ts`)。新增跨挂载 hook 回归测试 + 键单测。`src` 全量 2403 例通过 |
+| 2026-06-14 | User+Claude | QA 追加 #E(排查启动日志):导入 NCM 嵌入封面 `createImageBitmap` 解码失败 → [`createUploadedTrack` catch(repositories.ts:936)](../../../src/db/repositories.ts#L936) 删音频 blob + rethrow → track 从不落库 → [`App.tsx:113`](../../../src/App.tsx#L113) 启动 `syncImportFolders` 每次把它当新文件重试(每开机刷 `InvalidStateError` / `failed to import folder file`)。新增 **Phase 5**:封面派生改 best-effort(保音频、落 track、清坏 cover blob、回退 `albumPic`)。澄清日志里 CSP(dev-only)/ pixi(他 PRD)噪声不在本范围。澄清封面「处理一次即持久」本就是设计(小图→IndexedDB / ≥512KB→OPFS·electron-file + thumbhash/palette 落 track),是 #E 的整笔回滚让持久化失效 |
+| 2026-06-14 | Claude | Phase 5(#E)代码完成:`createUploadedTrack` 封面拆为事务外 best-effort 段(解码/存储失败 → 清坏 blob、`coverBlobId=undefined`、不删音频、不 rethrow;仅 track 行写失败才回滚孤儿);NCM/导入两路径 `hasCover=Boolean(track.coverBlobId)` 据此回退远端 albumPic([`ingest-core.ts`](../../../src/workers/ingest-core.ts) worker/inline + [`player-store.ts`](../../../src/stores/player-store.ts) renderer)。新增单测(派生抛 `InvalidStateError` → track 仍落库、坏 blob 已清)+ 端到端(坏嵌入封面 `.ncm` → 回退远端 → 第二次 sync 导入 0,不再重试)。`tsc`/Biome 通过、相关测试全绿。待实测 |
