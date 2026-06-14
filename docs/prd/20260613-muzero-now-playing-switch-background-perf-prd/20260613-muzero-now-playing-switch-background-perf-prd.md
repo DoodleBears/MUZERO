@@ -31,6 +31,9 @@
 | 18 | Abort stale Pixi background texture loads | ✅ Completed(trace verified) | [Phase 18](#phase-18-abort-stale-pixi-background-texture-loads) |
 | 19 | Pixi texture load settle gate before fetch/decode | ✅ Completed(trace verified) | [Phase 19](#phase-19-pixi-texture-load-settle-gate-before-fetchdecode) |
 | 20 | Delay non-current local cover preload reads during switch bursts | ✅ 代码完成(待 QA trace) | [Phase 20](#phase-20-delay-non-current-local-cover-preload-reads-during-switch-bursts) |
+| 21 | Feed Pixi ambient cover from small derivative | ✅ 代码完成(trace verified) | [Phase 21](#phase-21-feed-pixi-ambient-cover-from-a-small-derivative-instead-of-the-local-original) |
+| 22 | Stop active full-cover decode on Now Playing stage | ✅ 代码完成(trace verified) | [Phase 22](#phase-22-stop-active-full-cover-decode-on-the-now-playing-stage-and-trace-image-loaddecode) |
+| 23 | Skip unused full-cover background decode when Pixi uses derivative | ✅ 代码完成(待 QA trace) | [Phase 23](#phase-23-skip-unused-full-cover-background-decode-when-pixi-uses-derivative) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
 
@@ -733,7 +736,27 @@ backgroundGpuPowerPreference?: "auto" | "high-performance" | "low-power"; // DEF
 - [x] 新增 `use-image-load.test.tsx`:显式 `decode:false` 时 onload 后 expose display URL,且不调用 `decode()`。
 - [x] 新增 `use-image-load.test.tsx`:load-only cache 不满足后续 decode-required 请求。
 - [x] 受影响测试: `use-image-load`, `cover-image`, `now-playing-background`, `swipeable-media-stage` 共 22 例通过;`typecheck` 与 touched-file Biome 通过。
-- [ ] QA trace 验收:切歌窗口应出现 `performance.work image.load surface=now-playing decode=false`;不应出现对应 `image.decode surface=now-playing`。若 FPS 仍低,继续看是否是 browser paint/composite 或 audio blob load。
+- [x] QA trace 验收:13:57 trace 未再出现 `image.decode surface=now-playing`;Phase 22 排除了 active stage 主动 decode。
+
+### QA#22(2026-06-14 Phase 22 trace):active stage decode 已排除,剩余浪费是 Pixi derivative 模式下未使用的 ambient full-cover decode
+
+13:57 trace 把问题继续收窄:
+
+- **Phase 22 生效**:trace 中不再出现 `image.decode surface=now-playing`,说明 Now Playing stage 已不再主动等待 full-res cover decode。
+- **Pixi derivative 路径继续生效**:`pixiCover.derivative` 仍带 `fallbackToOriginal=false`;Pixi texture source 仍是 192px/几 KB derivative,不是本地原图。
+- **剩余可归因开销**:同一切歌窗口仍出现多条 `image.load/decode surface=background decode=true`,且尺寸为 800/1024/1500px,例如 `image.decode surface=background height=1500 lastMs=54`、`height=800 lastMs=54.5`。
+- **结构性原因**:[`now-playing-background.tsx`](../../../src/components/player/now-playing-background.tsx) 已经把 Pixi `pixiUrl` 切到 `backlight` derivative,但更早仍执行 `useLoadedImageUrl(backgroundCoverUrl, decode=true)`。在 Pixi cover derivative 模式下,这个 full-cover `backgroundUrl` 不会被 `PixiPixelBackground` 使用,也不会被 `CanvasBlurBackground`/`CrossfadeBackgroundImage` 渲染,但它仍会创建 `Image` 并主动 decode。
+- **结论**:这不是 Pixi 纹理输入的问题,也不是 active stage 的问题,而是一个未使用 render path 的冗余工作。Phase 23 应只在 full-cover background 确实会被 image/blur renderer 消费时才调用 `useLoadedImageUrl`;Pixi derivative cover 分支应跳过这条 full-cover load/decode。
+
+### Phase 23: Skip unused full-cover background decode when Pixi uses derivative
+
+**Goal:** 当背景 renderer 是 Pixi effect 且 cover source 能使用 `backlight` derivative 时,不要再为未渲染的 full-cover ambient background 创建 `Image`/执行 `image.decode()`。保留 image/blur renderer 的原图背景行为;保留 Pixi derivative pending 时 hidden shell、不回退原图的规则。
+
+**Tasks(TDD):**
+- [x] 先加红灯断言:`now-playing-background.test.tsx` 中 derivative ready 时,Pixi `data-src` 是 derivative URL,且 `images.length===0`。
+- [x] 调整 `now-playing-background.tsx` 的派生顺序,先计算 `pixiMedia` / `shouldUsePixiCoverDerivative`,再把 `null` 传给 ambient full-cover `useLoadedImageUrl`。
+- [x] 更新 pending derivative / local protocol URL 相关测试,确认 hidden Pixi shell 不创建 full-cover `Image`。
+- [ ] QA trace 验收:Pixi cover derivative 切歌窗口不应再出现 `performance.work image.load/decode surface=background decode=true`;若 FPS 仍低,下一步看 browser compositor/audio blob load/flow+visualizer 合成。
 
 ---
 
@@ -793,6 +816,7 @@ backgroundGpuPowerPreference?: "auto" | "high-performance" | "low-power"; // DEF
 | 21 | QA#19:Phase 19 后为什么仍 `fpsAvg≈46/fpsLow=4.4`? | 🔲 Phase 20 code done, QA trace pending | 废弃 Pixi decode 已挡住,剩余为两个整图读:non-current `cover.preload.batch` stale/canceled 仍读 16.5MB,以及最终落地 Pixi 成功 `muzfetch fetch=876ms/decode=178ms`。Phase 20 先砍纯 wasted work:non-current 本地预加载延后 420ms,stale batch 不读 blob。 |
 | 22 | QA#20:Phase 20 后为什么仍 `fpsLow≈5`? | 🔲 Phase 21 code done, QA trace pending | 13:32 trace 验证 non-current preload 已收敛(`requests=1/roleCurrent=1/maxSourceBytes=0`),剩余大头是最终成功 Pixi 仍读本地原图:`muzfetch bytes=13.36MB/fetch=846.6ms/decode=189.1ms/media.load=1323.3ms`,而 `texture.create/render` 只有 0.1/2.1ms。Phase 21 让 Pixi ambient cover 使用 `backlight` derivative,derivative pending 时 hidden 且 `fallbackToOriginal:false`。 |
 | 23 | QA#21:Phase 21 后为什么仍 `fpsLow=3.3`? | 🔲 Phase 22 code done, QA trace pending | Pixi 原图输入已消失(成功 texture 为 192px WebP,6~14KB),但 `frameMax=299.9/heapMb 198→376` 仍出现,且当前 trace 没记录 full-cover `<img>` 实际 decode/paint。Stage `CoverImage` 会主动 `image.decode()` full-res cover 后再渲染。Phase 22 保留原图但 stage 改 `decode:false`,并补 `image.load/decode` trace。 |
+| 24 | QA#22:Phase 22 后为什么仍 `image.decode surface=background`? | 🔲 Phase 23 code done, QA trace pending | active stage decode 已排除,Pixi 也只消费 192px derivative;剩余是 `now-playing-background` 在 Pixi derivative 分支仍为未渲染的 full-cover background 调 `useLoadedImageUrl(... decode=true)`。Phase 23 跳过这条冗余 load/decode。 |
 
 ---
 
@@ -833,3 +857,4 @@ backgroundGpuPowerPreference?: "auto" | "high-performance" | "low-power"; // DEF
 | 2026-06-14 | User+Codex | **QA#19 trace + Phase 20 代码完成(TDD)**:13:15 trace 验证 Phase 19 生效(旧 `swapSeq=30/32/34/36/40/42` 均 abort 且无 `background.texture fetch/decode`),但 `cover.preload.batch canceled=1/stale=1` 仍读 16.5MB 并耗时 291-583ms。Phase 20 将 current 与 non-current 本地 preload settle 分离:current 仍 140ms,previous/next/stack/settle 延后 420ms,stale batch 在读 blob 前 cancel。TDD:cover-preload + swipeable stage 共 10 例通过。 |
 | 2026-06-14 | User+Codex | **QA#20 trace + Phase 21 代码完成(TDD)**:13:32 trace 验证 Phase 20 生效(`cover.preload.batch requests=1/roleCurrent=1/maxSourceBytes=0`),剩余低帧对齐最终 Pixi 成功 `muzfetch` 原图输入(13.36MB/3874px,`fetch=846.6ms`,`decode=189.1ms`,`media.load=1323.3ms`)。Phase 21 让 Pixi ambient cover 改用现有 `backlight` derivative object URL;derivative pending 时 Pixi shell hidden、`fallbackToOriginal:false`,并新增 `background.cover pixiCover.derivative` trace。TDD:`now-playing-background` 11 例 + 相关 cover/Pixi 21 例通过,`typecheck` 与 touched-file Biome 通过。 |
 | 2026-06-14 | User+Codex | **QA#21 trace + Phase 22 代码完成(TDD)**:13:45 trace 验证 Phase 21 生效(成功 Pixi texture 已变 `image/webp 192×192`,6~14KB,无原图 `muzfetch`),但 `fpsLow=3.3/frameMax=299.9/heapMb 198→376` 仍在,且发生在 Pixi 小图之外。定位 trace 缺口:stage full-cover `<img>` 的主动 `useLoadedImageUrl()->image.decode()` 未被记录。Phase 22 为 `useLoadedImageUrl` 增加 `decode:false` 与 `image.load/decode` spans;Now Playing stage 保留原图但不主动 decode。TDD:use-image-load 3 例新增 + 受影响测试 22 例通过,`typecheck`/touched-file Biome 通过。 |
+| 2026-06-14 | User+Codex | **QA#22 trace + Phase 23 代码完成(TDD)**:13:57 trace 验证 stage decode 已排除,但仍有 `image.load/decode surface=background decode=true` 800/1024/1500px。定位到 Pixi derivative 分支虽然使用 192px backlight,仍提前为未渲染的 full-cover background 调 `useLoadedImageUrl`。Phase 23 先红灯锁定 derivative ready/pending 不创建 `Image`,再把 `pixiMedia/shouldUsePixiCoverDerivative` 前置并传 `null` 给 full-cover loader。`now-playing-background` 11 例通过;待 QA trace 验证 `surface=background` decode 消失。 |

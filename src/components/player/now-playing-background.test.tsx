@@ -436,6 +436,7 @@ describe("NowPlayingBackground", () => {
       kind: "backlight",
       trackId: "trk_local",
     });
+    expect(images).toHaveLength(0);
     expect(mocks.pixiSrcs).not.toContain("muzfetch://local-media/original-cover");
     expect(getTraceEntries()).toEqual(
       expect.arrayContaining([
@@ -471,11 +472,10 @@ describe("NowPlayingBackground", () => {
     usePlayerStore.setState({ currentIndex: 0, queue });
     render(<NowPlayingBackground active />);
 
-    await loadImage(0);
-
     const shell = screen.getByTestId("pixi-background");
     expect(shell).toHaveAttribute("data-src", "");
     expect(shell).toHaveClass("opacity-0");
+    expect(images).toHaveLength(0);
     expect(mocks.pixiSrcs).not.toContain("muzfetch://local-media/original-cover");
     expect(getTraceEntries()).toEqual(
       expect.arrayContaining([

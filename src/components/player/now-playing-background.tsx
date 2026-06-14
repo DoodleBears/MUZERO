@@ -151,6 +151,22 @@ function NowPlayingBackgroundContent({ hideVisualizer }: { hideVisualizer: boole
       coverResource.staleWhilePending ||
       !coverResourceMatchesTrack);
   const holdCoverBackgroundWhileLoading = !clearCoverBackgroundWhileLoading;
+  const renderer = settings.backgroundRenderer ?? "noise";
+  const blurPx = settings.backgroundBlur ?? 64;
+  const pixelSize = settings.backgroundPixelSize ?? 12;
+  const pixiEffect = isPixiEffect(renderer) ? renderer : null;
+  const hasBackgroundVideoMedia = trackHasBackgroundVideoMedia(current);
+  const pixiMedia = resolvePixiBackgroundMedia({
+    imageSource: source,
+    mode: settings.backgroundMode,
+    trackKind: current?.kind,
+    trackStatus: current?.status,
+    hasTrackMedia: hasBackgroundVideoMedia,
+  });
+  const shouldUsePixiCoverDerivative = Boolean(
+    pixiEffect && source === "cover" && pixiMedia.source === "cover" && current?.coverBlobId,
+  );
+  const coverBackgroundLoadUrl = shouldUsePixiCoverDerivative ? null : backgroundCoverUrl;
 
   useEffect(() => {
     if (source !== "cover" || !waitForLocalCoverUrl || !current?.coverBlobId) return;
@@ -205,7 +221,7 @@ function NowPlayingBackgroundContent({ hideVisualizer }: { hideVisualizer: boole
     localCover.canServe,
     localCoverFallbackReason,
   ]);
-  const loadedCoverBackground = useLoadedImageUrl(backgroundCoverUrl, {
+  const loadedCoverBackground = useLoadedImageUrl(coverBackgroundLoadUrl, {
     holdPreviousWhileLoading: holdCoverBackgroundWhileLoading,
     trace: {
       source,
@@ -220,11 +236,6 @@ function NowPlayingBackgroundContent({ hideVisualizer }: { hideVisualizer: boole
         ? galleryUrls
         : [];
   const [slideIndex, setSlideIndex] = useState(0);
-  const renderer = settings.backgroundRenderer ?? "noise";
-  const blurPx = settings.backgroundBlur ?? 64;
-  const pixelSize = settings.backgroundPixelSize ?? 12;
-  const pixiEffect = isPixiEffect(renderer) ? renderer : null;
-  const hasBackgroundVideoMedia = trackHasBackgroundVideoMedia(current);
   const currentVideoUrl = useTrackMediaUrl(
     pixiEffect && hasBackgroundVideoMedia ? current : undefined,
   );
@@ -276,16 +287,6 @@ function NowPlayingBackgroundContent({ hideVisualizer }: { hideVisualizer: boole
       : slideshowUrls.length > 0
         ? (slideshowUrls[slideIndex % slideshowUrls.length] ?? null)
         : null;
-  const pixiMedia = resolvePixiBackgroundMedia({
-    imageSource: source,
-    mode: settings.backgroundMode,
-    trackKind: current?.kind,
-    trackStatus: current?.status,
-    hasTrackMedia: hasBackgroundVideoMedia,
-  });
-  const shouldUsePixiCoverDerivative = Boolean(
-    pixiEffect && source === "cover" && pixiMedia.source === "cover" && current?.coverBlobId,
-  );
   const pixiCoverDerivativeUrl = useCoverDerivativeUrl(
     shouldUsePixiCoverDerivative ? current : undefined,
     "backlight",
