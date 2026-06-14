@@ -2,12 +2,7 @@ import { create } from "zustand";
 import { createDiagnosticLogger } from "@/lib/logger";
 import { type Rgb, rgba } from "@/lib/visualizer-color";
 
-const TRANSITION_MS = 900;
-const DISABLE_COVER_COLOR_CSS_FOR_BISECT = true;
-const DISABLE_COVER_COLOR_RAF_FOR_BISECT = true;
-const DISABLE_COVER_COLOR_PALETTE_FOR_BISECT = true;
-const DISABLE_COVER_COLOR_RGB_FOR_BISECT = true;
-const DISABLE_COVER_COLOR_STORE_SET_FOR_BISECT = true;
+export const COVER_COLOR_APPLY_SETTLE_MS = 650;
 const coverColorLog = createDiagnosticLogger("cover.palette");
 
 interface VisualizerCoverColorState {
@@ -28,7 +23,9 @@ export const useVisualizerCoverColorStore = create<VisualizerCoverColorState>(()
 export const getVisualizerCoverColorRgb = () => useVisualizerCoverColorStore.getState().rgb;
 export const getVisualizerCoverPalette = () => useVisualizerCoverColorStore.getState().palette;
 
-let raf = 0;
+let settleTimer: ReturnType<typeof setTimeout> | null = null;
+let settleSeq = 0;
+let pendingTarget: { coverBlobId: string | null; rgb: Rgb | null; palette: Rgb[] } | null = null;
 
 export function transitionVisualizerCoverColor(
   coverBlobId: string | null,
@@ -36,138 +33,77 @@ export function transitionVisualizerCoverColor(
   nextPalette: Rgb[] = [],
 ) {
   const current = useVisualizerCoverColorStore.getState();
+  const palette = nextPalette.map((color) => ({ ...color }));
   if (
-    current.coverBlobId === coverBlobId &&
-    sameRgb(current.rgb, next) &&
-    samePalette(current.palette, nextPalette)
+    (current.coverBlobId === coverBlobId &&
+      sameRgb(current.rgb, next) &&
+      samePalette(current.palette, palette)) ||
+    (pendingTarget?.coverBlobId === coverBlobId &&
+      sameRgb(pendingTarget.rgb, next) &&
+      samePalette(pendingTarget.palette, palette))
   ) {
     return;
   }
 
-  if (raf) {
-    cancelAnimationFrame(raf);
-    raf = 0;
+  if (settleTimer) {
+    clearTimeout(settleTimer);
+    settleTimer = null;
   }
 
-  if (DISABLE_COVER_COLOR_CSS_FOR_BISECT) {
-    coverColorLog.debug("cover.palette.css", {
-      message: "cover palette css output skipped for diagnostic bisect",
-      category: "media",
-      phase: "skip",
-      reason: "diag-bisect",
-      targetKey: coverBlobId ?? undefined,
-      paletteCount: nextPalette.length,
-      fallbackToTheme: !next,
-    });
-  }
-  if (DISABLE_COVER_COLOR_PALETTE_FOR_BISECT) {
-    coverColorLog.debug("cover.palette.palette", {
-      message: "cover palette store output skipped for diagnostic bisect",
-      category: "media",
-      phase: "skip",
-      reason: "diag-bisect",
-      targetKey: coverBlobId ?? undefined,
-      paletteCount: nextPalette.length,
-    });
-  }
-  if (DISABLE_COVER_COLOR_RGB_FOR_BISECT) {
-    coverColorLog.debug("cover.palette.rgb", {
-      message: "cover palette rgb output skipped for diagnostic bisect",
-      category: "media",
-      phase: "skip",
-      reason: "diag-bisect",
-      targetKey: coverBlobId ?? undefined,
-      fallbackToTheme: !next,
-    });
-  }
-  if (DISABLE_COVER_COLOR_STORE_SET_FOR_BISECT) {
-    coverColorLog.debug("cover.palette.store", {
-      message: "cover palette store update skipped for diagnostic bisect",
-      category: "media",
-      phase: "skip",
-      reason: "diag-bisect",
-      targetKey: coverBlobId ?? undefined,
-      paletteCount: nextPalette.length,
-      fallbackToTheme: !next,
-    });
+  const seq = ++settleSeq;
+  pendingTarget = { coverBlobId, rgb: next ? { ...next } : null, palette };
+  coverColorLog.debug("cover.palette.settle", {
+    message: "cover palette color apply scheduled after switch settle",
+    category: "media",
+    phase: "start",
+    targetKey: coverBlobId ?? undefined,
+    paletteCount: palette.length,
+    fallbackToTheme: !next,
+    delayMs: COVER_COLOR_APPLY_SETTLE_MS,
+  });
+  settleTimer = setTimeout(() => {
+    if (settleSeq !== seq || !pendingTarget) return;
+    const target = pendingTarget;
+    pendingTarget = null;
+    settleTimer = null;
+    applySettledCoverColor(target.coverBlobId, target.rgb, target.palette);
+  }, COVER_COLOR_APPLY_SETTLE_MS);
+}
+
+function applySettledCoverColor(coverBlobId: string | null, rgb: Rgb | null, palette: Rgb[]) {
+  const current = useVisualizerCoverColorStore.getState();
+  if (
+    current.coverBlobId === coverBlobId &&
+    sameRgb(current.rgb, rgb) &&
+    samePalette(current.palette, palette)
+  ) {
     return;
   }
 
-  if (!coverBlobId || !next) {
-    useVisualizerCoverColorStore.setState({
-      coverBlobId,
-      rgb: coverColorRgbValue(null, current.rgb),
-      css: DISABLE_COVER_COLOR_CSS_FOR_BISECT ? current.css : null,
-      palette: coverColorPaletteValue([], current.palette),
-    });
-    return;
-  }
-
-  const from = current.rgb ?? next;
-  const fromPalette = current.palette;
-  if (sameRgb(from, next) && samePalette(fromPalette, nextPalette)) {
-    useVisualizerCoverColorStore.setState({
-      coverBlobId,
-      rgb: coverColorRgbValue(next, current.rgb),
-      css: coverColorCssValue(next, current.css),
-      palette: coverColorPaletteValue(nextPalette, current.palette),
-    });
-    return;
-  }
-
-  if (DISABLE_COVER_COLOR_RAF_FOR_BISECT) {
-    coverColorLog.debug("cover.palette.transition", {
-      message: "cover palette raf transition skipped for diagnostic bisect",
-      category: "media",
-      phase: "skip",
-      reason: "diag-bisect",
-      targetKey: coverBlobId,
-      paletteCount: nextPalette.length,
-    });
-    useVisualizerCoverColorStore.setState({
-      coverBlobId,
-      rgb: coverColorRgbValue(next, current.rgb),
-      css: coverColorCssValue(next, current.css),
-      palette: coverColorPaletteValue(nextPalette, current.palette),
-    });
-    return;
-  }
-
-  const started = performance.now();
-  const tick = (now: number) => {
-    const t = Math.min(1, (now - started) / TRANSITION_MS);
-    const eased = easeInOutCubic(t);
-    const rgb = mixRgb(from, next, eased);
-    useVisualizerCoverColorStore.setState({
-      coverBlobId,
-      rgb: coverColorRgbValue(rgb, current.rgb),
-      css: coverColorCssValue(rgb, current.css),
-      palette: coverColorPaletteValue(mixPalette(fromPalette, nextPalette, eased), current.palette),
-    });
-    if (t < 1) raf = requestAnimationFrame(tick);
-    else raf = 0;
-  };
-  raf = requestAnimationFrame(tick);
-}
-
-function coverColorCssValue(rgb: Rgb, currentCss: string | null): string | null {
-  return DISABLE_COVER_COLOR_CSS_FOR_BISECT ? currentCss : rgba(rgb, 1);
-}
-
-function coverColorPaletteValue(nextPalette: Rgb[], currentPalette: Rgb[]): Rgb[] {
-  return DISABLE_COVER_COLOR_PALETTE_FOR_BISECT ? currentPalette : nextPalette;
-}
-
-function coverColorRgbValue(next: Rgb | null, current: Rgb | null): Rgb | null {
-  return DISABLE_COVER_COLOR_RGB_FOR_BISECT ? current : next;
-}
-
-function mixRgb(a: Rgb, b: Rgb, t: number): Rgb {
-  return {
-    r: Math.round(a.r + (b.r - a.r) * t),
-    g: Math.round(a.g + (b.g - a.g) * t),
-    b: Math.round(a.b + (b.b - a.b) * t),
-  };
+  useVisualizerCoverColorStore.setState(
+    rgb
+      ? {
+          coverBlobId,
+          rgb,
+          css: rgba(rgb, 1),
+          palette,
+        }
+      : {
+          coverBlobId,
+          rgb: null,
+          css: null,
+          palette: [],
+        },
+  );
+  coverColorLog.debug("cover.palette.settle", {
+    message: "cover palette color applied after switch settle",
+    category: "media",
+    phase: "success",
+    targetKey: coverBlobId ?? undefined,
+    paletteCount: palette.length,
+    fallbackToTheme: !rgb,
+    delayMs: COVER_COLOR_APPLY_SETTLE_MS,
+  });
 }
 
 /**
@@ -185,14 +121,18 @@ export function mixPalette(from: Rgb[], to: Rgb[], t: number): Rgb[] {
   return out;
 }
 
+function mixRgb(a: Rgb, b: Rgb, t: number): Rgb {
+  return {
+    r: Math.round(a.r + (b.r - a.r) * t),
+    g: Math.round(a.g + (b.g - a.g) * t),
+    b: Math.round(a.b + (b.b - a.b) * t),
+  };
+}
+
 function sameRgb(a: Rgb | null, b: Rgb | null): boolean {
   return a === b || (!!a && !!b && a.r === b.r && a.g === b.g && a.b === b.b);
 }
 
 function samePalette(a: Rgb[], b: Rgb[]): boolean {
   return a.length === b.length && a.every((c, i) => sameRgb(c, b[i] ?? null));
-}
-
-function easeInOutCubic(t: number): number {
-  return t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2;
 }

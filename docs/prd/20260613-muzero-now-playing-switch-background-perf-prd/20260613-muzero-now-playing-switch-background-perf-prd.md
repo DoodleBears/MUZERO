@@ -961,7 +961,8 @@ QA 观察到 `Ctrl+1`/`Ctrl+2` 在 Now Playing 与 Tab 2 全部歌曲列表之�
 | A6f | `795b9a3` | Keep CSS/rAF disabled,update `rgb` only and freeze `palette` | 部分改善但未恢复;flow palette 不是唯一问题 |
 | A6g | `e0dfe43` | Keep CSS/rAF/palette disabled and freeze `rgb` too | 基本恢复;rgb/spectrum primary consumer 是剩余放大器,但仍需拆 coverBlobId store update |
 | A6h | `67cc03c` | Keep all color outputs frozen and skip color-store `setState` entirely | 未进一步改善;单次 cover color store update 不是剩余主因 |
-| A7 | Current add-back | Restore normal playback post-load work | 代码完成,待 QA trace;若变差,normal post-load 是独立放大器 |
+| A7 | `1866196` | Restore normal playback post-load work | 已验证;normal post-load 不是独立主因 |
+| P1 | Current fix | Replace diagnostic cover-color freezes with a production settled/discrete color update | 代码完成,待 QA trace;切歌热路径只 schedule,落定后一次性更新 |
 
 **Tasks:**
 - [x] A0-A4 media reload ladder exists in `diag/switch-fps-bisect`.
@@ -974,7 +975,8 @@ QA 观察到 `Ctrl+1`/`Ctrl+2` 在 Now Playing 与 Tab 2 全部歌曲列表之�
 - [x] A6f code:keep CSS/rAF disabled and freeze store `palette`;QA trace partially improves but does not recover.
 - [x] A6g code:keep CSS/rAF/palette disabled and freeze store `rgb`;QA trace basically recovers but leaves a small gap vs A6c.
 - [x] A6h code:keep cover color hook active,log transition,then skip color-store `setState` entirely;QA trace does not improve vs A6g.
-- [x] A7 code:remove diagnostic media reload mode and restore normal post-load path;QA trace pending.
+- [x] A7 code:remove diagnostic media reload mode and restore normal post-load path;QA trace stays acceptable.
+- [x] P1 production fix:remove diagnostic color freezes and implement settled/discrete cover color updates;QA trace pending.
 - [ ] Final production fix must be rebuilt from the isolated cause,not by merging diagnostic commits.
 
 ### QA#32(2026-06-14 A5 trace):Pixi `src` add-back 未恶化,但未真正触发 texture load
@@ -1066,6 +1068,26 @@ QA 观察到 `Ctrl+1`/`Ctrl+2` 在 Now Playing 与 Tab 2 全部歌曲列表之�
 - **Pixi 与 cover preload 继续被排除**:所有成功 Pixi texture 都是 `192×192 image/webp`, `fetch/decode≈0.6~0.9ms`, `textureSwap.apply≈0.3~0.6ms`;`cover.preload.batch max≈14.9~23.6ms`, `created=0`, `maxSourceBytes=0`。
 - **当前诊断模式仍未恢复 normal post-load**:trace 里的媒体事件仍是 `media.load.attach-play-media-session-settled source=diag-bisect:blob-read`,说明播放 attach/play 已恢复,但正常路径里的 `flushPlaybackListen`、正式 `media.load.blob` 分支和后续 post-load 仍被诊断短路。
 - **结论**:cover color 侧的正式修复应避免在切歌热路径更新 `css/rgb/palette` 或让消费者在同一窗口做全屏合成;单次 key update 不需要重点处理。下一刀 A7 恢复 normal playback post-load,看 color 修掉后播放后处理是否还会造成额外回退。
+
+### QA#41(2026-06-14 A7 trace):normal playback post-load 恢复后仍可接受
+
+18:10 trace 是 `1866196 diag(perf): restore playback post-load work` 的结果:
+
+- **normal path 已恢复**:trace 出现正式 `media.load.blob`, `listen.flush`, `player.mediaSession.*`;不再是 `source=diag-bisect:blob-read`。这说明 A7 已经把媒体 attach/play 之后的正常播放后处理放回来了。
+- **FPS 没有重新塌陷**:窗口为 `fpsAvg≈93.9/94.7/101.4/101.9`, `fpsLow≈17.1~20`, `frameMax≈50~58.4ms`。后半段稳定回到 `101+ / low 20`。
+- **MediaSession 是可见但非主因的小峰值**:`player.mediaSession.metadata` 可到 `31.5ms`, `19.5ms`;但对应 FPS 窗口仍是 `93.9~101.9`,不是 A6b 那种 `55~79` 回退。
+- **Pixi 仍被排除**:成功 texture 仍是 `192×192 image/webp`, `textureSwap.apply≈0.4~0.6ms`;一次 `background.texture fetch=17.5ms` 仍不解释整体窗口。
+- **结论**:color 输出冻结后,恢复 normal playback post-load 不会重现主要掉帧。正式修复可以聚焦 cover color:不要在切歌热路径连续更新 `css/rgb/palette`,尤其避免 rAF 内多次 Zustand setState + CSS var/flow/spectrum 全屏消费者同步响应。
+
+### P1 Production Fix(2026-06-15):cover color 改为 settled/discrete update
+
+诊断结论不直接以 freeze 常量合入。正式修复采用:
+
+- `transitionVisualizerCoverColor()` 不再执行 900ms rAF 插值,也不在切歌当帧写 `css/rgb/palette`。
+- 每次新目标色只 schedule 一次 `cover.palette.settle phase=start`,延迟 `650ms`;如果期间切到另一首,旧 target 被取消。
+- 只有最后稳定的 target 会 `phase=success` 后一次性写入 Zustand store (`rgb/css/palette`)。
+- 删除 `visualizer-dynamic-color` 里的 bisect 常量分支,避免 hidden flag/诊断代码假装产品行为。
+- TDD 覆盖:切歌当帧 store 不变;settle 前不写;连续切歌只应用最后一个 target。
 
 ---
 
