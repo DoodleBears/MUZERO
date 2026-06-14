@@ -1,6 +1,6 @@
 # PRD: MUZERO Tab 切换 View Transition 掉帧(root 快照不裁剪持久背景)
 
-**Status:** Draft
+**Status:** Completed(核心:tab 切换不掉帧 + 无回归,QA#4 确认)
 **Created:** 2026-06-15
 **Author:** Claude
 **Module:** Shell / Navigation - tab↔tab 切换的 View Transition 性能(root 快照范围)
@@ -14,7 +14,7 @@
 | 1 | 观测:tab-switch VT 标记(`shell.transition` used/skip/suppressed) | ✅ Completed(QA#1:正是它揪出了误诊) | [Phase 1](#phase-1-观测tab-switch-vt-计时--framelongtask-标记) |
 | 2 | ambient 活跃时跳过 root VT | ✅ 代码完成(QA#1:VT 确认被抑制,但**不是掉帧主因**) | [Phase 2](#phase-2-ambient-活跃时跳过-root-vt) |
 | 3 | (可选)非 ambient 时把 VT 裁剪到内容区 / 持久层命名 | ⏸️ 暂缓(VT 非主因,优先级降) | [Phase 3](#phase-3-可选非-ambient-时把-vt-裁剪到内容区) |
-| 4 | **真因:tab 切换 page remount → liveQuery 重查 + 封面重渲染 → GC** | ✅ Completed(QA#2 验证:切 tab 不卡了) | [Phase 4](#phase-4真因page-remount--livequery-重查--封面重渲染) |
+| 4 | **真因:tab 切换 page remount → liveQuery 重查 + 封面重渲染 → GC** | ✅ Completed(QA#2 切 tab 收敛;QA#3 改 hybrid 修回归) | [Phase 4](#phase-4真因page-remount--livequery-重查--封面重渲染) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending | ⏸️ 暂缓
 >
@@ -251,6 +251,29 @@ trace 见 [`.logs/commit-…/tab-1-tab-2-switch.log`](../../../.logs/commit-afff
 - VT 仍被 Phase 2 抑制(`suppressed=true used=false`),与本修复正交。
 - **小观察(非阻塞):**隐藏的 Now Playing `SyncedLyricsView` 仍每帧跑 `lyrics.cascade.frame`(`viewportHeight:1`,即被 `display:none` 折叠),但 `avgMs≈0.08`——可忽略。若日后想更干净,可给歌词 cascade 也加 onscreen 门(与 spectrum 同模式)。归入 §7 Out of Scope 的「后续微优化」。
 
+### QA#3(2026-06-15):回归 —— 全量 keep-mount 让隐藏的 Now Playing 在切歌时仍重渲染;改 hybrid
+
+用户报回归:全量 keep-mount 后,**在 tab 1 或 tab 2 切歌时**之前的严重掉帧回来了。trace [`tab-1-tab-2-switch-song-low-fps.log`](../../../.logs/commit-afff3201fa47cf84792181199d04565942f93069/tab-1-tab-2-switch-song-low-fps.log):4 次切歌时 `fpsAvg 116→93→70→56`、`frameMax 175`、**`heapMb 293→529`(+236MB)**;channels 里 `cover.render 24(~6/切)`+`player.media`+`cover.palette`+`background.cover` 全在烧。
+
+**根因:**Now Playing **高度随当前歌变化**(stage 封面解码、coverflow、注释)。全量 keep-mount 后,即使它被 `display:none` 藏在 tab 2 之后,**每次切歌仍触发它整棵前台重渲染 + 重新解码封面** → heap churn → GC ——正是切歌掉帧(那是 [switch-background PRD](../20260613-muzero-now-playing-switch-background-perf-prd/) 的 P1–P4 治理对象),现在还**在你看不见的时候**烧。`PlaybackSpectrum` 的 IO 门挡住了它的 rAF,但挡不住「currentIndex 变 → 封面组件重渲染/重解码」。
+
+**判据(本案的 keep-mount 适用性原则):**一个页面只有在「**不随隐藏期间会变的状态而做重活**」时才适合 keep-mount。list 页(search/queue/sessions/settings)与当前歌无关 → 适合;Now Playing 随歌剧烈变化 → **不适合**。
+
+**修复(hybrid):**[`App.tsx`](../../../src/App.tsx) 把 Now Playing 改回**条件挂载**(`{isNowTab && <NowPlayingPage/>}`),list 四页仍 keep-mounted(`<TabPanel>`)。于是:
+- 在 tab 2 切歌:Now 未挂载 → 不再重渲染/解码隐藏 stage,切歌成本回到 keep-mount 之前(只剩全局背景的封面派生,已由 switch-background PRD 优化)。✓ 回归消除。
+- tab 间(list↔list)切换:仍 keep-mounted、无 liveQuery 重查。✓ 保住 QA#2 的收益。
+- 代价:进入 Now 时它仍挂载一次(其 `ListeningNowSection`/`AnnotationEditor` liveQuery 重订阅 + 首帧封面渲染)——这是单次刻意操作,且归 switch-background PRD;比「隐形切歌掉帧」可接受得多。
+
+`tsc`/Biome 通过;`src/pages` 测试(含渲染 NowPlayingPage 的 library-empty-states)绿。待 QA 复测:tab 2 切歌不再掉帧、tab 间切换仍顺。
+
+### QA#4(2026-06-15):hybrid 确认 —— tab 切换 + tab-2 切歌都好
+
+用户复测:tab 2 切歌已修;且 tab1↔tab2 切换**两个方向都顺**,即便 Now Playing 现在是条件挂载。
+
+**因果澄清(回答「为什么不 keep-mount Now 也不卡」):**QA#1 的 tab 切换掉帧**主因是 list 页 remount**——每次切 tab 目标页重挂 → `listAllTracks`/`trackPlaybackStats` 重订阅重查(整库读 + 反序列化)+ 列表封面缩略图重渲染,**双向每次都付**。**list 四页 keep-mount 把这块整段消除**,这才是修好 tab 切换的那一刀。Now Playing 改回条件挂载后只在 **now-entry** 重挂一次,且当前歌封面已被全局背景解码(缓存命中)、其 mount 成本又经 switch-background PRD P1–P4 削减,故 now-entry 不掉帧。
+
+**结论:修好 tab 切换的是「list 页 keep-mount」;keep-mount Now Playing 非必需、且会引入 QA#3 隐形切歌回归。** hybrid 是最小且正确的解。本 PRD 核心目标(tab 切换不掉帧 + 不引回归)达成。
+
 ---
 
 ## 7. Out of Scope
@@ -287,7 +310,7 @@ trace 见 [`.logs/commit-…/tab-1-tab-2-switch.log`](../../../.logs/commit-afff
 | 1 | ambient 活跃时:整体跳过 VT(Phase 2)还是裁剪到内容区(Phase 3)? | 🔲 待拍板 | 倾向 Phase 2(跳过 + 便宜内容 fade):最低风险、与「重层不进快照」既有判断一致;Phase 3 仅当确认命名层不被快照才值得 |
 | 2 | 内容层是否保留过渡 fade,还是 ambient 活跃时直接瞬切? | 🔲 待拍板 | 倾向保留一个 ~120ms opacity fade(只动内容);若实测仍有成本则瞬切 |
 | 3 | 非 ambient(无播放)时是否也统一走内容 fade,去掉 root VT? | ⏸️ 优先级降 | VT 经 QA#1 证伪为非主因;此问随 Phase 3 一起暂缓 |
-| 4 | **Phase 4 真因修复:keep-mounted 页面(A)还是 liveQuery 结果缓存(B)?** | ✅ Resolved(用户拍板 A) | **keep-mounted**:五页常驻 + `hidden` 切显隐;rAF 子项靠各自可见性门暂停(spectrum IO、visualizer IO、Lenis 自停)。若 QA 测出内存/boot 成本过高,回退混合(重页保活、Now/settings 条件挂) |
+| 4 | **Phase 4 真因修复:keep-mounted 页面(A)还是 liveQuery 结果缓存(B)?** | ✅ Resolved(A,**修订为 hybrid**) | 初版全量 keep-mount(QA#2 修好切 tab),但 QA#3 暴露回归:keep-mount 的 Now Playing 随歌重渲染。**最终:list 四页 keep-mounted,Now Playing 条件挂载**(它随当前歌剧烈变化,不是 keep-mount 安全对象)。原则:只 keep-mount「不随隐藏期变化的状态做重活」的页 |
 
 ---
 
@@ -297,6 +320,8 @@ trace 见 [`.logs/commit-…/tab-1-tab-2-switch.log`](../../../.logs/commit-afff
 |------|--------|---------|
 | 2026-06-15 | Claude | 初稿:排查确认 tab↔tab 掉帧 = root View Transition 快照持久重 ambient 背景(Pixi/canvas/video);三入口(NavFab + Ctrl+1/2 shortcut)。落地方案:Phase 1 观测、Phase 2 ambient 活跃跳过 root VT + 内容层 fade、Phase 3(可选)命名裁剪。仅文档,未改代码。 |
 | 2026-06-15 | Claude | **Phase 1 + Phase 2 代码完成(TDD)**:`view-transition.ts` 加模块级抑制(`setViewTransitionSuppressed`)+ `shell.transition` trace(`phase=start|skip`/`used`/`suppressed`);`App.tsx` 跟 `ambientBackdropActive` 驱动抑制。抑制为全局(所有 root VT 在重背景下同跳过),shared-element morph 走 Motion 不受影响。**未加内容层 fade**(暂定瞬切,Open Question #2)。`view-transition.test.ts` 13 例绿;`tsc`/Biome 通过。待 QA 抓 ambient-active 切 tab trace 验证 `fpsAvg` 回 ~120 + `shell.transition phase=skip`。 |
+| 2026-06-15 | User+Claude | **QA#4 确认 + 收尾**:用户复测 tab 切换两个方向 + tab-2 切歌都顺。澄清因果:修好 tab 切换的是 **list 页 keep-mount**(消除 `listAllTracks`/`trackPlaybackStats` 重查 + 列表封面重渲染,QA#1 的双向大头);Now Playing 条件挂载只在 now-entry 单次便宜重挂(封面缓存命中 + switch-background P1–P4 已削)。keep-mount Now 非必需且引回归。Status → Completed。 |
+| 2026-06-15 | User+Claude | **QA#3 回归 + hybrid 修复**:全量 keep-mount 后,在 tab 1/2 **切歌**时严重掉帧回来(`fpsAvg 116→56`、`frameMax 175`、`heap 293→529`)——隐藏的 Now Playing 随当前歌重渲染 + 重解码封面。根因:Now Playing 高度 song-reactive,不是 keep-mount 安全对象。改 **hybrid**:`App.tsx` Now Playing 改回条件挂载,list 四页仍 keep-mounted。tab 2 切歌不再碰 Now;tab 间切换仍无重查。`tsc`/Biome + `src/pages` 测试通过。 |
 | 2026-06-15 | User+Claude | **QA#2 验证:Phase 4 解决问题**。7ec4a58 prod build,用户确认「切换完全不卡了」。关键证据 `dbRequeries` 整段平在 2(QA#1 每切 +30);`fpsAvg 119/109`(QA#1 60)、`frameMax 16.6/33.4`(QA#1 166)、heap 平在 ~190(QA#1 →238→GC)。VT 仍被 Phase 2 抑制(正交)。Phase 4 标 ✅ Completed。小观察:隐藏的 `SyncedLyricsView` 仍每帧跑 `lyrics.cascade.frame`(`avgMs≈0.08`,可忽略)→ 后续可加 onscreen 门。 |
 | 2026-06-15 | User+Claude | **Phase 4 代码完成(keep-mounted,TDD)**:用户拍板方案 A。`App.tsx` 五页改常驻挂载 + `<TabPanel hidden>` 切显隐(删条件渲染)→ liveQuery 订阅不断、切 tab 不重查、封面不重渲染。防 rAF-while-hidden:`PlaybackSpectrum` 加 `IntersectionObserver` `onscreen` 门(顺带补 P1「滚出视口暂停」);visualizer host 本就 IO 暂停、Lenis 自停 driver 空闲 0 rAF。`shouldAnimateSpectrum` 加 `onscreen` 参数 + 测试;player/pages/lib 全量 751 例绿、`tsc`/Biome 通过。待 QA 抓 trace 验证 `db …requery` 不再每切出现 + `fpsAvg≈120`。 |
 | 2026-06-15 | User+Claude | **QA#1 方向修正:VT 被证伪为非主因**。第一份 trace(Phase 1/2 代码)显示 `shell.transition` 全 `suppressed=true used=false`(VT 没跑),但切 tab 仍 `fpsAvg 115→60`/`frameMax 166`/heap 107→238/`longTask 150`,停手即回稳 120。真因 = `tab===x && <Page>` 条件渲染导致**切 tab 整页卸载/重挂 → `useLiveQuery` 重订阅重查(`listAllTracks`/`trackPlaybackStats`/`memoryNotesByTrack`)+ 封面 surface 重渲染 → IndexedDB 反序列化 + GC 长任务**。Phase 3 暂缓、VT 抑制(Phase 2)保留为次要省成本;新增 Phase 4(真因):keep-mounted 页面 或 liveQuery 结果缓存(Open Question #4)。Phase 1 观测先行正是它一举证伪 VT。 |
