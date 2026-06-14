@@ -860,9 +860,11 @@ backgroundGpuPowerPreference?: "auto" | "high-performance" | "low-power"; // DEF
 | H | `diag(perf): defer media source load after switch settle` | 真实播放路径,但 source load 延后到切歌停止后 | 若 H 恢复,正式修复应做 switch-settle/debounce + cancel stale media load |
 
 **Tasks:**
-- [ ] Commit F:保留 blob/stream resolve,不 attach media element。
+- [x] Commit F:保留 blob read,不 attach media element。
 - [ ] Commit G:attach media source,但不调用 `play()`。
 - [ ] Commit H:把真实 media source load 延后到切歌 settle 后,验证是否能保留播放语义同时恢复 FPS。
+
+**Experiment F implementation:** 在 `3153bf9` 的“大跳过”基础上,把 media reload 诊断 mode 调整为 `read`:当 `sourceKind==="blob"` 时执行 `getTrackBlob(track)`,并 emit `media.load.read-only sourceId=diag-bisect:blob-read bytes/mime`;随后仍不调用 `mediaEngine.loadBlob/loadUrl` 或 `play()`。若 F 仍接近 E 的 FPS,说明 IndexedDB/blob read 不是主因;若 F 重新掉帧,主因在 blob 读取/structured clone/内存分配。
 
 ---
 

@@ -132,7 +132,7 @@ import type { DecodedNcmMedia } from "@/workers/ingest-core";
 
 const IMPORT_VISIBILITY_FLUSH_SIZE = 25;
 const LOCAL_BLOB_PLAYBACK_SETTLE_MS = 180;
-const DISABLE_MEDIA_SOURCE_RELOAD_FOR_BISECT = true;
+const MEDIA_SOURCE_RELOAD_BISECT_MODE: "off" | "skip" | "read" | "attach-no-play" = "read";
 const DEFAULT_PLAYER_VOLUME = 0.9;
 
 export type QueueSource =
@@ -2177,11 +2177,29 @@ async function ensureLoadedAndPlay(
     void pump(set, get);
     return;
   }
-  if (DISABLE_MEDIA_SOURCE_RELOAD_FOR_BISECT) {
-    tracePlaybackLoad("media.load.skip", track, playbackTrace, {
-      sourceId: `diag-bisect:${sourceKind}`,
-      transport: "blob",
-    });
+  if (MEDIA_SOURCE_RELOAD_BISECT_MODE !== "off") {
+    if (MEDIA_SOURCE_RELOAD_BISECT_MODE === "read" && sourceKind === "blob") {
+      const media = await getTrackBlob(track);
+      if (!continueCurrent("diag-blob-read")) return;
+      if (media?.blob) {
+        tracePlaybackLoad("media.load.read-only", track, playbackTrace, {
+          bytes: media.bytes,
+          mime: media.mime,
+          sourceId: "diag-bisect:blob-read",
+          transport: "blob",
+        });
+      } else {
+        tracePlaybackLoad("media.load.skip", track, playbackTrace, {
+          sourceId: "diag-bisect:blob-missing",
+          transport: "blob",
+        });
+      }
+    } else {
+      tracePlaybackLoad("media.load.skip", track, playbackTrace, {
+        sourceId: `diag-bisect:${sourceKind}`,
+        transport: "blob",
+      });
+    }
     loadedTrackId = track.id;
     const duration = playableDurationSec(track.durationSec);
     set({
