@@ -5,6 +5,7 @@ import { type Rgb, rgba } from "@/lib/visualizer-color";
 const TRANSITION_MS = 900;
 const DISABLE_COVER_COLOR_CSS_FOR_BISECT = true;
 const DISABLE_COVER_COLOR_RAF_FOR_BISECT = true;
+const DISABLE_COVER_COLOR_PALETTE_FOR_BISECT = true;
 const coverColorLog = createDiagnosticLogger("cover.palette");
 
 interface VisualizerCoverColorState {
@@ -57,13 +58,23 @@ export function transitionVisualizerCoverColor(
       fallbackToTheme: !next,
     });
   }
+  if (DISABLE_COVER_COLOR_PALETTE_FOR_BISECT) {
+    coverColorLog.debug("cover.palette.palette", {
+      message: "cover palette store output skipped for diagnostic bisect",
+      category: "media",
+      phase: "skip",
+      reason: "diag-bisect",
+      targetKey: coverBlobId ?? undefined,
+      paletteCount: nextPalette.length,
+    });
+  }
 
   if (!coverBlobId || !next) {
     useVisualizerCoverColorStore.setState({
       coverBlobId,
       rgb: null,
       css: DISABLE_COVER_COLOR_CSS_FOR_BISECT ? current.css : null,
-      palette: [],
+      palette: coverColorPaletteValue([], current.palette),
     });
     return;
   }
@@ -75,7 +86,7 @@ export function transitionVisualizerCoverColor(
       coverBlobId,
       rgb: next,
       css: coverColorCssValue(next, current.css),
-      palette: nextPalette,
+      palette: coverColorPaletteValue(nextPalette, current.palette),
     });
     return;
   }
@@ -93,7 +104,7 @@ export function transitionVisualizerCoverColor(
       coverBlobId,
       rgb: next,
       css: coverColorCssValue(next, current.css),
-      palette: nextPalette,
+      palette: coverColorPaletteValue(nextPalette, current.palette),
     });
     return;
   }
@@ -107,7 +118,7 @@ export function transitionVisualizerCoverColor(
       coverBlobId,
       rgb,
       css: coverColorCssValue(rgb, current.css),
-      palette: mixPalette(fromPalette, nextPalette, eased),
+      palette: coverColorPaletteValue(mixPalette(fromPalette, nextPalette, eased), current.palette),
     });
     if (t < 1) raf = requestAnimationFrame(tick);
     else raf = 0;
@@ -117,6 +128,10 @@ export function transitionVisualizerCoverColor(
 
 function coverColorCssValue(rgb: Rgb, currentCss: string | null): string | null {
   return DISABLE_COVER_COLOR_CSS_FOR_BISECT ? currentCss : rgba(rgb, 1);
+}
+
+function coverColorPaletteValue(nextPalette: Rgb[], currentPalette: Rgb[]): Rgb[] {
+  return DISABLE_COVER_COLOR_PALETTE_FOR_BISECT ? currentPalette : nextPalette;
 }
 
 function mixRgb(a: Rgb, b: Rgb, t: number): Rgb {

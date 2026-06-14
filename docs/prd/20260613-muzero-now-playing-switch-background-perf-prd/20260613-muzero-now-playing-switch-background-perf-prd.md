@@ -957,7 +957,8 @@ QA 观察到 `Ctrl+1`/`Ctrl+2` 在 Now Playing 与 Tab 2 全部歌曲列表之�
 | A6b | `9eb619b` / tag `qa/fps-drop-cover-color-20260614` | Restore cover color / palette hook only | 已变差;cover color hook 是回归放大器,但需再拆 read/log vs color apply |
 | A6c | `5f62787` | Keep cover color hook reads/logs,skip `transitionVisualizerCoverColor` apply/store | 已恢复;palette read/log 不是主因 |
 | A6d | `9c69df2` | Restore `transitionVisualizerCoverColor`,but freeze `css` output | 部分回退;CSS subscribers 不是唯一问题,per-frame store rgb/palette updates 仍有成本 |
-| A6e | Current add-back | Keep CSS frozen and skip 900ms rAF interpolation;set final `rgb/palette` once | 若恢复,主因是 per-frame Zustand updates;若仍差,单次 color-store update 也需移出切歌热路径 |
+| A6e | `5de774e` | Keep CSS frozen and skip 900ms rAF interpolation;set final `rgb/palette` once | 仍回退;单次 rgb/palette store update 或其 consumers 仍有成本 |
+| A6f | Current add-back | Keep CSS/rAF disabled,update `rgb` only and freeze `palette` | 若恢复,主因在 flow cover-palette consumer;若仍差,主因在 rgb/spectrum or store update |
 | A7 | Next | Restore normal playback post-load work | 若变差,lyrics/presence/listen flush/normal store fan-out 是独立放大器 |
 
 **Tasks:**
@@ -967,7 +968,8 @@ QA 观察到 `Ctrl+1`/`Ctrl+2` 在 Now Playing 与 Tab 2 全部歌曲列表之�
 - [x] A6b code:restore cover color/palette hook only;QA trace shows FPS regression and has been tagged `qa/fps-drop-cover-color-20260614`.
 - [x] A6c code:keep cover color hook active but skip visualizer color apply/store;QA trace recovers FPS.
 - [x] A6d code:restore transition store updates but freeze `css` output;QA trace partially regresses.
-- [x] A6e code:keep CSS frozen and disable per-frame rAF interpolation;QA trace pending.
+- [x] A6e code:keep CSS frozen and disable per-frame rAF interpolation;QA trace still regresses.
+- [x] A6f code:keep CSS/rAF disabled and freeze store `palette`;QA trace pending.
 - [ ] A7:if A6 remains acceptable,remove diagnostic media reload mode and restore normal post-load path.
 - [ ] Final production fix must be rebuilt from the isolated cause,not by merging diagnostic commits.
 
@@ -1020,6 +1022,16 @@ QA 观察到 `Ctrl+1`/`Ctrl+2` 在 Now Playing 与 Tab 2 全部歌曲列表之�
 - **MediaSession 不是主因**:settled metadata 只在最后触发一次,`player.mediaSession.metadata≈4.7ms`,不解释持续 `fpsAvg≈90`。
 - **结论**:CSS subscribers/compositor 是一部分,但不是唯一问题。剩余差异来自 `transitionVisualizerCoverColor` 的 900ms rAF 每帧 `setState({ rgb, palette })`,即使 `css` 不变,也会通知 palette/rgb 订阅者和非响应式 getter 消费侧在同一时间窗内做额外工作。
 - **下一刀(A6e)**:保留 CSS freeze,同时跳过 900ms rAF 插值,把 `rgb/palette` 一次性 set 到最终值。若恢复到 A6c 水平,正式修复应改为离散/落定更新或把动画移出 Zustand/React 热路径。
+
+### QA#37(2026-06-14 A6e trace):跳过 rAF 后仍未恢复
+
+17:54 trace 是 `5de774e diag(perf): isolate cover color raf updates` 的结果:
+
+- **rAF 插值确实被跳过**:每次切歌都有 `cover.palette.css phase=skip reason=diag-bisect` 和 `cover.palette.transition phase=skip reason=diag-bisect`,同时仍有 `cover.palette.track-metadata paletteCount=4`。
+- **FPS 仍回退**:开始窗口可达 `fpsAvg≈110.2~115.5`,但 rapid switch 中降到 `95.6 -> 87.8 -> 81.2 -> 86.1 -> 93.5`,`fpsLow≈10.9~15`;结束窗口回到 `106.9/fpsLow=17.1`。这仍弱于 A6c 的稳定 `105.9~116.1/fpsLow≈17~20`。
+- **Pixi 小图仍不是瓶颈**:texture 仍是 `192×192 image/webp`,大多数 `fetch≈0.9~1ms`, `decode≈0.9~1.2ms`, `apply≈0.7~0.9ms`。首个 `apply≈4.7ms` 仍远低于 frameMax `91.6ms`,不解释整体窗口下沉。
+- **结论**:即便没有 CSS 输出和 900ms per-frame store updates,单次 `setState({ rgb, palette })` 后的消费者行为仍足以造成回退。当前最可疑的是 flow 背景每帧通过 `getVisualizerCoverPalette()` 读 palette 并上传 `uColors`;spectrum 则通过 `getVisualizerCoverColorRgb()` 读 rgb。
+- **下一刀(A6f)**:继续冻结 CSS/rAF,但只更新 `rgb`,冻结 `palette`。若 A6f 恢复,正式修复应优先让 flow palette 离开切歌热路径或在落定/低频更新;若仍回退,再拆 rgb/spectrum 或 color-store update 本身。
 
 ---
 
