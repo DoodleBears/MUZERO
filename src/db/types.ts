@@ -2,6 +2,10 @@ import type { UIMessage } from "ai";
 import type { LlmProviderPresetId } from "@/ai/llm-providers";
 import type { TrackBrief } from "@/dj/dj-brief-schema";
 import type { AppIconId } from "@/lib/app-icon";
+import type {
+  AudienceRequestPlaybackAction,
+  AudienceRequestRouteMode,
+} from "@/live-requests/audience-request-schema";
 import type { LyricsProviderId, LyricsRecord } from "@/lyrics/provider";
 import type { CloudPresetId } from "@/musicgen/presets";
 import type { MusicGenProviderId } from "@/musicgen/registry";
@@ -513,6 +517,44 @@ export const DEFAULT_DJ_CONFIG: DjConfig = {
 };
 
 export type LlmProviderId = "openai" | "anthropic";
+export type AudienceRequestSearchScope = "active-set" | "all-library";
+
+export interface AudienceRequestIntakeSettings {
+  enabled: boolean;
+  bindHost: "127.0.0.1";
+  port: number;
+  authToken?: string;
+  routeMode: AudienceRequestRouteMode;
+  playbackAction: AudienceRequestPlaybackAction;
+  searchScope: AudienceRequestSearchScope;
+  includeLyrics?: boolean;
+  onlineFallbackOnLowConfidence?: boolean;
+  confidenceThreshold: number;
+  scoreMarginThreshold: number;
+  commandPrefixes: string[];
+  dedupeWindowSec: number;
+  requesterCooldownSec: number;
+  maxRequestsPerMinute: number;
+  requireApprovalForPlayNow: boolean;
+}
+
+export const DEFAULT_AUDIENCE_REQUEST_INTAKE_SETTINGS: AudienceRequestIntakeSettings = {
+  enabled: false,
+  bindHost: "127.0.0.1",
+  port: 41731,
+  routeMode: "library-search",
+  playbackAction: "play-next",
+  searchScope: "all-library",
+  includeLyrics: false,
+  onlineFallbackOnLowConfidence: true,
+  confidenceThreshold: 1.5,
+  scoreMarginThreshold: 0.25,
+  commandPrefixes: ["点歌", "!sr", "song:"],
+  dedupeWindowSec: 30,
+  requesterCooldownSec: 10,
+  maxRequestsPerMinute: 30,
+  requireApprovalForPlayNow: true,
+};
 
 /** Singleton app settings (id = "app"). BYOK keys stay on-device, never bundled. */
 export interface AppSettings {
@@ -819,6 +861,8 @@ export interface AppSettings {
   playerVolume?: number;
   /** Persisted resume pointer for the AI DJ chat runtime. */
   lastChatSessionId?: string;
+  /** Local Electron loopback intake for Social Stream Ninja / OBS audience requests. */
+  audienceRequestIntake?: AudienceRequestIntakeSettings;
   /** Global default chat/DJ model preset. Keys stay in apiKeysByPresetId. */
   defaultLlmProviderPresetId?: LlmProviderPresetId;
   defaultLlmModel?: string;
@@ -1045,6 +1089,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   playerVolume: 0.9,
   systemShortcutsEnabled: false,
   systemShortcutBindings: {},
+  audienceRequestIntake: DEFAULT_AUDIENCE_REQUEST_INTAKE_SETTINGS,
   presenceEnabled: false,
 };
 

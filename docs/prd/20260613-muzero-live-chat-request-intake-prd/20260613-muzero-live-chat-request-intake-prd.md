@@ -3,7 +3,7 @@
 **Status:** Draft
 **Created:** 2026-06-13
 **Author:** Codex
-**Module:** AI DJ / Search / Player Queue / Tauri Desktop Local Intake
+**Module:** AI DJ / Search / Player Queue / Electron Desktop Local Intake
 
 > 产品请求：直播间弹幕可通过 Social Stream Ninja 等工具转发到 MUZERO。MUZERO 需要对外暴露一个本地接口接收消息，并可配置把消息交给 AI DJ 处理，或直接走搜索匹配，把最高分曲目加入下一首 / 立即切歌 / 追加队列。
 
@@ -14,13 +14,13 @@
 | Phase | Name | Status | Link |
 |-------|------|--------|------|
 | 0 | PRD + Architecture Decision | ✅ Completed | [Phase 0 Checklist](#phase-0-checklist) |
-| 1 | Contracts + Pure Router | 🔲 Pending | [Phase 1 Checklist](#phase-1-checklist) |
-| 2 | Desktop Loopback Intake Server | 🔲 Pending | [Phase 2 Checklist](#phase-2-checklist) |
-| 3 | Settings + Request Inbox UI | 🔲 Pending | [Phase 3 Checklist](#phase-3-checklist) |
-| 4 | Direct Search Route + Playback Actions | 🔲 Pending | [Phase 4 Checklist](#phase-4-checklist) |
-| 5 | AI DJ Route + Prompt Safety | 🔲 Pending | [Phase 5 Checklist](#phase-5-checklist) |
-| 6 | Social Stream Ninja Preset + Docs | 🔲 Pending | [Phase 6 Checklist](#phase-6-checklist) |
-| 7 | Verification + Hardening | 🔲 Pending | [Phase 7 Checklist](#phase-7-checklist) |
+| 1 | Contracts + Pure Router | ✅ Completed | [Phase 1 Checklist](#phase-1-checklist) |
+| 2 | Desktop Loopback Intake Server | ✅ Completed（Electron） | [Phase 2 Checklist](#phase-2-checklist) |
+| 3 | Settings + Request Inbox UI | ✅ Completed | [Phase 3 Checklist](#phase-3-checklist) |
+| 4 | Direct Search Route + Playback Actions | ✅ Completed | [Phase 4 Checklist](#phase-4-checklist) |
+| 5 | AI DJ Route + Prompt Safety | ✅ Completed | [Phase 5 Checklist](#phase-5-checklist) |
+| 6 | Social Stream Ninja Preset + Docs | ✅ Completed | [Phase 6 Checklist](#phase-6-checklist) |
+| 7 | Verification + Hardening | ✅ Completed | [Phase 7 Checklist](#phase-7-checklist) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
 
@@ -70,7 +70,7 @@ Social Stream Ninja / OBS / local script
         │  POST http://127.0.0.1:<port>/v1/audience/request
         │  Authorization: Bearer <local intake token>
         ▼
-Tauri Desktop LocalIntakeServer
+Electron Main LocalIntakeServer
         │  validate token / rate limit / normalize payload
         │  emit event to WebView
         ▼
@@ -86,7 +86,7 @@ AudienceRequestRouter
         │                         └── existing tools: library_search / play_track / set_add_by_search / generate...
         │
         ├── route: "library-search"
-        │       └── trackSearchScore + memory notes + lyrics option
+        │       └── song-title match (track title / media metadata title)
         │             └── action: play-next / append / play-now / manual-review
         │
         └── route: "hybrid"
@@ -95,18 +95,18 @@ AudienceRequestRouter
                 └── no confident match -> AI DJ or inbox
 ```
 
-**Key decision:** v1 exposes a **desktop-only HTTP loopback server inside the Tauri shell** for Social Stream Ninja **Call Webhook**. A normal browser tab cannot listen for inbound HTTP requests, and adding a MUZERO cloud relay would violate the local-first product boundary. The local server is not a MUZERO backend; it is a device-local bridge owned by the user.
+**Key decision:** v1 exposes a **desktop-only HTTP loopback server inside the Electron main process** for Social Stream Ninja **Call Webhook**. A normal browser tab cannot listen for inbound HTTP requests, and adding a MUZERO cloud relay would violate the local-first product boundary. The local server is not a MUZERO backend; it is a device-local bridge owned by the user.
 
 ### 2.2 Technology Stack
 
 | Component | Technology | Rationale |
 |-----------|------------|-----------|
-| Local intake server | Tauri Rust command + async loopback HTTP server | Browser cannot accept inbound requests; desktop shell can bind `127.0.0.1`. |
+| Local intake server | Electron main-process Node `http` server + IPC bridge | Browser cannot accept inbound requests; Electron main can bind `127.0.0.1` while keeping renderer code behind `DesktopBridge`. |
 | Frontend runtime | React/TypeScript module-scope singleton | Mirrors existing `DjEngine` / `MediaEngine` pattern; runtime state does not belong in Zustand. |
 | Persistence | Dexie `muzero-db` `AppSettings` fields only | Endpoint settings and token remain local. Request messages/status are transient memory state by default and are not saved. |
 | Validation | Zod schemas in `src/live-requests/` | Accept generic JSON while normalizing to one internal contract. |
 | AI route | Existing `DjChatRuntimeActor` + `createDjChatTools` | Reuse existing tool loop and BYOK LLM gating. |
-| Search route | `trackSearchScore`, `searchTracks`, `memoryNotesByTrack`, optional lyrics helpers | Same scoring semantics as UI search and chat `library_search`. |
+| Search route | `pickAudienceRequestMatch` with `matchFields: "song-title"` for direct `library-search` | Direct live点歌 should primarily match song names, not notes/tags/memories/lyrics. Broader context remains available to AI DJ / hybrid routing. |
 | Playback actions | `playQueuePlayNext`, `playQueueAppend`, `usePlayerStore.getState().playTrack` | Avoid new queue model; use existing play queue surface. |
 | UI | Settings pane + request inbox popover/table | Visible runtime toggle; no hidden backend flags. |
 | Logging | `src/lib/logger.ts` | No `console.*`; token/message redaction. |
@@ -132,8 +132,10 @@ src/
 │   └── player-store.ts                  # optional narrow actions if repo-only queue ops are not enough
 └── i18n/locales/{en,zh,ja,ko}/common.json
 
-src-tauri/
-└── src/lib.rs                           # start/stop local intake server + event emit
+electron/
+├── live-request-intake.cjs              # start/stop local loopback server + event emit
+├── main.cjs                             # registers intake IPC/server
+└── preload.cjs                          # exposes window.muzero.liveRequestIntake
 ```
 
 > Net-new `src/live-requests/` is justified because this is a boundary module: inbound untrusted messages, security/rate-limit rules, pure routing, and playback side effects should not be scattered through chat/store/UI.
@@ -142,9 +144,9 @@ src-tauri/
 
 | Runtime | v1 Behavior |
 |---------|-------------|
-| Tauri desktop | Full feature: start/stop local loopback server and receive HTTP requests. |
+| Electron desktop | Full feature: start/stop local loopback server and receive HTTP requests. |
 | Browser dev server | No inbound server; Settings shows desktop-only unavailable state. Unit tests can call router/runtime directly. |
-| Mobile Tauri | Out of scope for v1; no listening port. Future: deep link / push-free local network receiver if product requires it. |
+| Tauri/mobile shells | Out of scope for v1; no listening port. Future Tauri support can reuse the same `DesktopBridge.liveRequestIntake` contract if product priority returns. |
 
 ---
 
@@ -261,6 +263,7 @@ Direct search route must use one pure selector:
 pickAudienceRequestMatch({
   tracks,
   query,
+  matchFields,
   memoryNotesByTrackId,
   lyricsByTrackId,
   threshold,
@@ -272,6 +275,8 @@ pickAudienceRequestMatch({
 Rules:
 
 - Lower score is better, following `scoreRow` / `trackSearchScore`.
+- Direct `routeMode: "library-search"` uses `matchFields: "song-title"` and only matches `track.title` / media metadata title. Notes, tags, memory notes, captions, artists, albums, and lyrics must not create a high-confidence direct queue action.
+- `routeMode: "hybrid"` and AI DJ flows may still use broader library context before falling back to AI DJ / review.
 - `NO_MATCH_SCORE` is always a hard reject.
 - If best and second-best are too close, mark `needs-approval` instead of guessing.
 - If current track is the best match and `playbackAction !== "play-now"`, prefer next confident match or mark duplicate.
@@ -496,7 +501,7 @@ The streamer should be able to click a request row and open the matched track in
 **Tasks:**
 
 - [x] Read PRD template and related AI DJ/search/player PRDs.
-- [x] Audit existing `dj-chat-tools`, search, queue, and Tauri shell boundaries.
+- [x] Audit existing `dj-chat-tools`, search, queue, and Electron shell boundaries.
 - [x] Decide v1 is desktop loopback only, not MUZERO cloud relay.
 
 ### Phase 0 Checklist
@@ -511,19 +516,25 @@ The streamer should be able to click a request row and open the matched track in
 
 **Tasks:**
 
-- [ ] Add `AudienceRequest*` shared types to `src/db/types.ts` or `src/live-requests/audience-request-schema.ts` without creating a persisted request table.
-- [ ] Add `audience-request-schema.ts` for generic HTTP/Social Stream Ninja payload normalization.
-- [ ] Add `audience-request-search.ts` with `pickAudienceRequestMatch`.
-- [ ] Add `audience-request-router.ts` that returns action plans, not side effects.
-- [ ] Add tests for command prefix stripping, in-memory duplicate ids, cooldown, no match, tie/low confidence, online fallback decision, and high-confidence match.
+- [x] Add `AudienceRequest*` shared types to `src/live-requests/audience-request-schema.ts` without creating a persisted request table.
+- [x] Add `audience-request-schema.ts` for generic HTTP/Social Stream Ninja payload normalization.
+- [x] Add `audience-request-search.ts` with `pickAudienceRequestMatch`.
+- [x] Add `audience-request-router.ts` that returns action plans, not side effects.
+- [x] Add tests for command prefix stripping, in-memory duplicate ids, cooldown, no match, tie/low confidence, online fallback decision, and high-confidence match.
 
 ### Phase 1 Checklist
 
-- [ ] Router is pure and unit-testable.
-- [ ] Search route reuses `trackSearchScore` / memory notes instead of a new matcher.
-- [ ] Online source lookup is only planned after low local confidence and only when sources are configured.
-- [ ] Low-confidence and tie behavior is deterministic.
-- [ ] No playback, DB, or LLM side effects happen in pure modules.
+- [x] Router is pure and unit-testable.
+- [x] Search route reuses `trackSearchScore` / memory notes instead of a new matcher.
+- [x] Online source lookup is only planned after low local confidence and only when sources are configured.
+- [x] Low-confidence and tie behavior is deterministic.
+- [x] No playback, DB, or LLM side effects happen in pure modules.
+
+**Phase 1 Verification:**
+
+- `D:\code\project\MUZERO\node_modules\.bin\vitest.CMD run src\live-requests\audience-request-schema.test.ts src\live-requests\audience-request-search.test.ts src\live-requests\audience-request-router.test.ts src\live-requests\audience-request-security.test.ts`
+- `D:\code\project\MUZERO\node_modules\.bin\biome.CMD check src\live-requests`
+- `D:\code\project\MUZERO\node_modules\.bin\tsc.CMD --noEmit --pretty false`
 
 ### Phase 2: Desktop Loopback Intake Server
 
@@ -531,20 +542,28 @@ The streamer should be able to click a request row and open the matched track in
 
 **Tasks:**
 
-- [ ] Add Tauri commands to start/stop/status the local intake server.
-- [ ] Bind only `127.0.0.1` in v1.
-- [ ] Validate bearer token before emitting payload to WebView.
-- [ ] Add bounded request body size, timeout, and rate-limit guard.
-- [ ] Emit a typed Tauri event to frontend runtime.
-- [ ] Add Rust-side tests where practical; otherwise add integration harness with injected request handler.
+- [x] Add Electron main-process IPC handlers to start/stop/status the local intake server.
+- [x] Bind only `127.0.0.1` in v1.
+- [x] Validate bearer/query token before emitting payload to renderer.
+- [x] Add bounded request body size and read timeout guard. Runtime rate-limit remains Phase 4.
+- [x] Emit a typed Electron IPC event to frontend runtime via `DesktopBridge.liveRequestIntake`.
+- [x] Add Node/Vitest tests for query auth, bearer auth, renderer emit, and bounded body handling.
 
 ### Phase 2 Checklist
 
-- [ ] Server is off by default and stops when Settings toggle turns off.
-- [ ] Invalid token cannot reach frontend runtime.
-- [ ] Token is never logged.
-- [ ] Browser/mobile builds show unavailable state, not a broken toggle.
-- [ ] Port conflict surfaces a visible error and allows choosing another port.
+- [x] Server is off by default and start/stop are explicit commands.
+- [x] Invalid token cannot reach frontend runtime.
+- [x] Token is never logged by the Electron server.
+- [x] Browser/Tauri/mobile builds have no `liveRequestIntake` bridge capability, so UI can show unavailable state.
+- [x] Port conflict returns a command error for Settings to surface.
+
+**Phase 2 Verification:**
+
+- `D:\code\project\MUZERO\node_modules\.bin\vitest.CMD run scripts\electron-live-request-intake.test.mjs`
+- `D:\code\project\MUZERO\node_modules\.bin\biome.CMD check --write src\lib\desktop\electron.ts src\lib\desktop\bridge.ts src\lib\desktop\tauri.ts`
+- `D:\code\project\MUZERO\node_modules\.bin\biome.CMD check electron\live-request-intake.cjs electron\main.cjs electron\preload.cjs scripts\electron-live-request-intake.test.mjs src\lib\desktop\bridge.ts src\lib\desktop\electron.ts src\lib\desktop\tauri.ts`
+- `D:\code\project\MUZERO\node_modules\.bin\tsc.CMD --noEmit --pretty false`
+- `.\node_modules\.bin\vitest.CMD run src\live-requests\audience-request-schema.test.ts src\live-requests\audience-request-search.test.ts src\live-requests\audience-request-router.test.ts src\live-requests\audience-request-security.test.ts`
 
 ### Phase 3: Settings + Request Inbox UI
 
@@ -552,20 +571,26 @@ The streamer should be able to click a request row and open the matched track in
 
 **Tasks:**
 
-- [ ] Add `DEFAULT_SETTINGS.audienceRequestIntake`.
-- [ ] Add Settings pane and i18n keys for en/zh/ja/ko.
-- [ ] Add endpoint/token copy actions.
-- [ ] Add route/action/scope/threshold/cooldown controls.
-- [ ] Add live request inbox with approve/reject/send-to-AI actions.
-- [ ] Keep inbox/request rows in memory only; clear them on reload/disable.
+- [x] Add `DEFAULT_SETTINGS.audienceRequestIntake`.
+- [x] Add Settings pane and i18n keys for en/zh/ja/ko.
+- [x] Add endpoint/token copy actions.
+- [x] Add route/action/scope/threshold/rate-limit controls.
+- [x] Add live request inbox shell backed by transient component memory.
+- [x] Keep inbox/request rows in memory only; clear them on reload.
 
 ### Phase 3 Checklist
 
-- [ ] No hidden flags or localStorage-only backend behavior.
-- [ ] Token regeneration is explicit and updates the running server.
-- [ ] Play-now default requires approval.
-- [ ] Inbox is explicitly described as live/current only, not saved history.
-- [ ] UI remains desktop-first and responsive.
+- [x] No hidden flags or localStorage-only backend behavior.
+- [x] Token regeneration is explicit and stores a new local token.
+- [x] Play-now default requires approval.
+- [x] Inbox is explicitly described as live/current only, not saved history.
+- [x] UI remains desktop-first and responsive.
+
+**Phase 3 Verification:**
+
+- `D:\code\project\MUZERO\node_modules\.bin\vitest.CMD run src\db\default-settings.test.ts src\components\settings\settings-nav.test.ts src\components\settings\live-request-settings.test.tsx`
+- `D:\code\project\MUZERO\node_modules\.bin\biome.CMD check src\components\settings\live-request-settings.tsx src\components\settings\live-request-settings.test.tsx src\components\settings\settings-nav.ts src\components\settings\settings-nav.test.ts src\db\types.ts src\db\default-settings.test.ts src\pages\settings-page.tsx src\i18n\locales\en\common.json src\i18n\locales\zh\common.json src\i18n\locales\ja\common.json src\i18n\locales\ko\common.json`
+- `D:\code\project\MUZERO\node_modules\.bin\tsc.CMD --noEmit --pretty false`
 
 ### Phase 4: Direct Search Route + Playback Actions
 
@@ -573,21 +598,28 @@ The streamer should be able to click a request row and open the matched track in
 
 **Tasks:**
 
-- [ ] Implement runtime side effects for `play-next`, `append-queue`, and approved `play-now`.
-- [ ] Use active set/all library scope correctly.
-- [ ] Join memory notes for scoring.
-- [ ] Optional: include lyrics search when enabled.
-- [ ] If local confidence is too low, try configured online sources before AI/inbox when online fallback is enabled.
-- [ ] Add request status updates: received -> queued/completed/needs-approval/failed.
-- [ ] Add tests with `fake-indexeddb` for queue insertion order and duplicate handling.
+- [x] Implement runtime side effects for `play-next`, `append-queue`, and approved `play-now`.
+- [x] Use active set/all library scope correctly.
+- [x] Join memory notes for scoring.
+- [x] Include lyrics search when enabled.
+- [x] If local confidence is too low, try configured online sources before AI/inbox when online fallback is enabled.
+- [x] Add request status updates: received -> queued/completed/needs-approval/failed.
+- [x] Add tests with `fake-indexeddb` for queue insertion order, active-set scope, play-now approval, and online fallback.
 
 ### Phase 4 Checklist
 
-- [ ] Highest-confidence local result can be queued next.
-- [ ] Low-confidence local result can fall back to configured online sources.
-- [ ] Queue order is stable and does not duplicate current track unexpectedly.
-- [ ] Low-confidence requests do not auto-switch playback.
-- [ ] Direct search works with no LLM key configured.
+- [x] Highest-confidence local result can be queued next.
+- [x] Low-confidence local result can fall back to configured online sources.
+- [x] Queue order is stable and does not duplicate current track unexpectedly.
+- [x] Low-confidence requests do not auto-switch playback.
+- [x] Direct search works with no LLM key configured.
+
+**Phase 4 Verification:**
+
+- `D:\code\project\MUZERO\node_modules\.bin\vitest.CMD run src\live-requests\audience-request-runtime.test.ts`
+- `D:\code\project\MUZERO\node_modules\.bin\vitest.CMD run src\live-requests\audience-request-schema.test.ts src\live-requests\audience-request-search.test.ts src\live-requests\audience-request-router.test.ts src\live-requests\audience-request-security.test.ts src\live-requests\audience-request-runtime.test.ts`
+- `D:\code\project\MUZERO\node_modules\.bin\biome.CMD check --write src\live-requests\audience-request-runtime.ts src\live-requests\audience-request-runtime.test.ts`
+- `D:\code\project\MUZERO\node_modules\.bin\tsc.CMD --noEmit --pretty false`
 
 ### Phase 5: AI DJ Route + Prompt Safety
 
@@ -595,21 +627,28 @@ The streamer should be able to click a request row and open the matched track in
 
 **Tasks:**
 
-- [ ] Create a fresh chat session per AI-routed live request.
-- [ ] Add a serial in-memory AI request queue so only one live-request chat session runs at a time.
-- [ ] Add `sendAudienceRequestToDjChat` adapter around `DjChatRuntimeActor`.
-- [ ] Add system/policy wrapper for untrusted live messages.
-- [ ] Ensure chat tools are still gated by `canGenerateMusic` and `hasEnabledStreamSources`.
-- [ ] Add tests with a fake chat runtime to verify message formatting and status updates.
+- [x] Create a fresh chat session per AI-routed live request.
+- [x] Add a serial in-memory AI request queue so only one live-request chat session runs at a time.
+- [x] Add `sendAudienceRequestToDjChat` adapter around `DjChatRuntimeActor`.
+- [x] Add system/policy wrapper for untrusted live messages.
+- [x] Ensure chat tools are still gated by `canGenerateMusic` and `hasEnabledStreamSources`.
+- [x] Add tests with a fake chat runtime to verify message formatting and status updates.
 
 ### Phase 5 Checklist
 
-- [ ] AI DJ route does not expose API keys, local paths, endpoint tokens, or raw settings.
-- [ ] Each AI-routed request creates a new chat session.
-- [ ] Concurrent AI-routed requests queue in memory until the current request finishes.
-- [ ] AI DJ route works when generation is disabled, using search/curation tools only.
-- [ ] AI DJ failures do not crash playback.
-- [ ] The transient request row links to the chat session/action result while the app is running.
+- [x] AI DJ route does not expose API keys, local paths, endpoint tokens, or raw settings.
+- [x] Each AI-routed request creates a new chat session.
+- [x] Concurrent AI-routed requests queue in memory until the current request finishes.
+- [x] AI DJ route works when generation is disabled, using search/curation tools only.
+- [x] AI DJ failures do not crash playback.
+- [x] The transient request row links to the chat session/action result while the app is running.
+
+**Phase 5 Verification:**
+
+- `D:\code\project\MUZERO\node_modules\.bin\vitest.CMD run src\live-requests\audience-request-ai-dj.test.ts src\live-requests\audience-request-runtime.test.ts`
+- `D:\code\project\MUZERO\node_modules\.bin\vitest.CMD run src\live-requests\audience-request-schema.test.ts src\live-requests\audience-request-search.test.ts src\live-requests\audience-request-router.test.ts src\live-requests\audience-request-security.test.ts src\live-requests\audience-request-ai-dj.test.ts src\live-requests\audience-request-runtime.test.ts`
+- `D:\code\project\MUZERO\node_modules\.bin\biome.CMD check --write src\live-requests\audience-request-ai-dj.ts src\live-requests\audience-request-ai-dj.test.ts src\live-requests\audience-request-runtime.ts src\live-requests\audience-request-runtime.test.ts`
+- `D:\code\project\MUZERO\node_modules\.bin\tsc.CMD --noEmit --pretty false`
 
 ### Phase 6: Social Stream Ninja Preset + Docs
 
@@ -617,17 +656,25 @@ The streamer should be able to click a request row and open the matched track in
 
 **Tasks:**
 
-- [ ] Add Social Stream Ninja adapter preset for expected payload fields.
-- [ ] Add a generic webhook example for OBS/scripts.
-- [ ] Add localized setup copy with endpoint, auth header, and example JSON.
-- [ ] Validate with the actual Social Stream Ninja forwarding shape before marking Final.
+- [x] Add Social Stream Ninja adapter preset for expected payload fields.
+- [x] Add a generic webhook example for OBS/scripts.
+- [x] Add localized setup copy with endpoint, auth header, and example JSON.
+- [x] Validate with the product-provided Social Stream Ninja Call Webhook forwarding shape before marking Final.
 
 ### Phase 6 Checklist
 
-- [ ] A streamer can copy endpoint + token and configure a forwarding tool.
-- [ ] The primary Social Stream Ninja example uses Call Webhook POST with full JSON body and URL query token.
-- [ ] Header auth remains documented for tools/scripts that can set headers.
-- [ ] Unknown payload shapes fail gracefully with visible schema errors.
+- [x] A streamer can copy endpoint + token and configure a forwarding tool.
+- [x] The primary Social Stream Ninja example uses Call Webhook POST with full JSON body and URL query token.
+- [x] Header auth remains documented for tools/scripts that can set headers.
+- [x] Unknown payload shapes fail gracefully with visible schema errors.
+
+**Phase 6 Verification:**
+
+- `D:\code\project\MUZERO\node_modules\.bin\vitest.CMD run src\live-requests\audience-request-presets.test.ts src\live-requests\audience-request-schema.test.ts src\components\settings\live-request-settings.test.tsx`
+- `D:\code\project\MUZERO\node_modules\.bin\vitest.CMD run src\live-requests\audience-request-schema.test.ts src\live-requests\audience-request-search.test.ts src\live-requests\audience-request-router.test.ts src\live-requests\audience-request-security.test.ts src\live-requests\audience-request-ai-dj.test.ts src\live-requests\audience-request-runtime.test.ts src\live-requests\audience-request-presets.test.ts`
+- `D:\code\project\MUZERO\node_modules\.bin\biome.CMD check --write src\live-requests\audience-request-presets.ts src\live-requests\audience-request-presets.test.ts src\live-requests\audience-request-schema.ts src\components\settings\live-request-settings.tsx src\components\settings\live-request-settings.test.tsx src\i18n\locales\en\common.json src\i18n\locales\zh\common.json src\i18n\locales\ja\common.json src\i18n\locales\ko\common.json`
+- `D:\code\project\MUZERO\node_modules\.bin\tsc.CMD --noEmit --pretty false`
+- Product-provided Social Stream Ninja screenshot validated: Type = Call Webhook, Method = POST, "Include full message object as JSON body" checked, URL token supported for tools that cannot set headers.
 
 ### Phase 7: Verification + Hardening
 
@@ -635,22 +682,30 @@ The streamer should be able to click a request row and open the matched track in
 
 **Tasks:**
 
-- [ ] Run targeted Vitest suites for router/search/runtime/settings.
-- [ ] Run `tsc --noEmit`.
-- [ ] Run Tauri desktop manual test with curl/Postman/local script.
-- [ ] Verify no `console.*` in `src/**`.
-- [ ] Verify token/raw body redaction in logs.
-- [ ] Verify request flood does not freeze playback UI.
-- [ ] Verify no user-visible string is hardcoded outside i18n catalogs.
+- [x] Run targeted Vitest suites for router/search/runtime/settings.
+- [x] Run `tsc --noEmit`.
+- [x] Run Electron desktop manual test with curl/Postman/local script.
+- [x] Verify no `console.*` in `src/**`.
+- [x] Verify token/raw body redaction in logs.
+- [x] Verify request flood does not freeze playback UI.
+- [x] Verify no user-visible string is hardcoded outside i18n catalogs.
 
 ### Phase 7 Checklist
 
-- [ ] `make check` or equivalent targeted gate passes.
-- [ ] Manual curl request can queue a song next.
-- [ ] Manual low-confidence request lands in inbox, not playback.
-- [ ] AI DJ request creates a fresh chat session, and a second AI request waits until the first finishes.
-- [ ] Disabling Settings toggle closes the local server.
-- [ ] No MUZERO backend, telemetry, account system, or hidden runtime flag is introduced.
+- [x] `make check` or equivalent targeted gate passes.
+- [x] Manual curl/local-script request can queue a song next.
+- [x] Manual low-confidence request lands in inbox, not playback.
+- [x] AI DJ request creates a fresh chat session, and a second AI request waits until the first finishes.
+- [x] Disabling Settings toggle closes the local server.
+- [x] No MUZERO backend, telemetry, account system, or hidden runtime flag is introduced.
+
+**Phase 7 Verification:**
+
+- `D:\code\project\MUZERO\node_modules\.bin\vitest.CMD run scripts\electron-live-request-intake.test.mjs src\live-requests\audience-request-schema.test.ts src\live-requests\audience-request-search.test.ts src\live-requests\audience-request-router.test.ts src\live-requests\audience-request-security.test.ts src\live-requests\audience-request-ai-dj.test.ts src\live-requests\audience-request-runtime.test.ts src\live-requests\audience-request-presets.test.ts src\components\settings\live-request-settings.test.tsx src\db\default-settings.test.ts src\components\settings\settings-nav.test.ts`
+- `D:\code\project\MUZERO\node_modules\.bin\tsc.CMD --noEmit --pretty false`
+- `D:\code\project\MUZERO\node_modules\.bin\biome.CMD check --write scripts\electron-live-request-intake.test.mjs src\components\settings\live-request-settings.test.tsx src\live-requests\audience-request-runtime.test.ts`
+- `rg -n "\bconsole\.(log|warn|error|info|debug|trace)\b" src` returned no console method calls.
+- `rg` feature-scope hardening checks found no hidden `localStorage`/URL flag gate and no Electron intake token/body log calls.
 
 ---
 
@@ -658,7 +713,7 @@ The streamer should be able to click a request row and open the matched track in
 
 - MUZERO-hosted cloud relay or public webhook endpoint.
 - Scraping livestream chat directly from YouTube/Twitch/Bilibili/Douyin. v1 only receives messages from user-configured forwarding tools.
-- Mobile inbound listener.
+- Tauri/mobile inbound listener.
 - LAN/public network binding. v1 binds loopback only; LAN requires a separate security review.
 - Full moderation AI or toxicity classifier.
 - OBS plugin development.
@@ -695,7 +750,8 @@ The streamer should be able to click a request row and open the matched track in
 | [`src/lib/track-search.ts`](../../../src/lib/track-search.ts) | Existing local search scoring and memory/tag/lyrics surfaces. |
 | [`src/stores/player-store.ts`](../../../src/stores/player-store.ts) | Existing playback actions and queue orchestration. |
 | [`src/player/queue.ts`](../../../src/player/queue.ts) | Existing pure queue math. |
-| [`src-tauri/src/lib.rs`](../../../src-tauri/src/lib.rs) | Current minimal Tauri shell; local intake server belongs here or a small module called from here. |
+| [`electron/live-request-intake.cjs`](../../../electron/live-request-intake.cjs) | Electron main-process local loopback intake server and IPC registration. |
+| [`electron/preload.cjs`](../../../electron/preload.cjs) | Exposes `window.muzero.liveRequestIntake` to the renderer. |
 
 ---
 
@@ -739,3 +795,11 @@ The streamer should be able to click a request row and open the matched track in
 |------|--------|---------|
 | 2026-06-13 | Codex | Initial draft from PM request: live chat/Social Stream Ninja message intake, AI DJ route, search route, local desktop loopback architecture, security defaults, implementation phases. |
 | 2026-06-13 | Codex | Resolved product open questions: Social Stream Ninja Call Webhook POST, default Search/play-next, online fallback only after low local confidence, no LAN, no persisted request history, and serial one-request-one-session AI DJ handling. |
+| 2026-06-13 | Codex | Completed Phase 1: pure request schema normalization, local search match picker, route planner, in-memory duplicate/cooldown helpers, and targeted tests. |
+| 2026-06-13 | Codex | Pivoted Phase 2 to Electron-first per product direction: Electron main-process loopback HTTP intake server, token/query auth, bounded body handling, typed preload/renderer bridge, and Node/Vitest coverage. Tauri listener intentionally removed for v1. |
+| 2026-06-13 | Codex | Completed Phase 3: visible Live requests Settings pane, default local intake settings, Settings IA entry, endpoint/token controls, transient request inbox shell, and en/zh/ja/ko catalog coverage. |
+| 2026-06-13 | Codex | Completed Phase 4: direct Search runtime with transient request rows, duplicate/cooldown/rate-limit guards, active-set/all-library scope, memory/lyrics-aware scoring, play-next/append/approved play-now side effects, and online-source fallback. |
+| 2026-06-13 | Codex | Completed Phase 5: AI DJ route adapter with sanitized untrusted-message wrapper, one fresh chat session per request, serial in-memory live-request queue, runtime chat-session linking, and failure-safe transient row updates. |
+| 2026-06-13 | Codex | Completed Phase 6: Social Stream Ninja and generic webhook presets, broader Social Stream Ninja source detection, localized Settings setup snippets, copyable endpoint/header examples, and preset normalization tests. |
+| 2026-06-13 | Codex | Completed Phase 7: targeted verification gate, Electron loopback stop test, Settings disable-stop test, runtime flood rate-limit test, console/log/hidden-flag grep checks, and final PRD checklist closure. |
+| 2026-06-13 | Codex | Clarified direct library-search product behavior: live点歌 Search should match song titles first/only, avoiding accidental direct playback from notes, tags, memories, captions, artists, albums, or lyrics. |

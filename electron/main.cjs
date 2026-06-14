@@ -5,6 +5,7 @@ const { app, BrowserWindow, Menu, net, protocol, screen, shell, Tray } = require
 const { registerIpc } = require("./ipc.cjs");
 const { handleMuzfetch } = require("./fetch-proxy.cjs");
 const { registerElectronGlobalShortcuts } = require("./global-shortcuts.cjs");
+const { registerLiveRequestIntake } = require("./live-request-intake.cjs");
 const { applyAppIcon, appIconPath, DEFAULT_APP_ICON } = require("./app-icon.cjs");
 const { attachDiagnosticsWindow } = require("./diagnostics.cjs");
 const { createTrayController } = require("./tray.cjs");
@@ -273,6 +274,7 @@ app.whenReady().then(() => {
   protocol.handle("muzfetch", handleMuzfetch);
   registerIpc({ trayController });
   registerElectronGlobalShortcuts();
+  registerLiveRequestIntake({ BrowserWindow });
   require("./source-login.cjs").registerSourceLogin();
   require("./youtube-engine.cjs").registerYoutubeEngine();
   require("./updater.cjs").initDesktopUpdater();

@@ -13,6 +13,12 @@ export function createTauriBridge(): DesktopBridge {
   let fsMod: typeof import("@tauri-apps/plugin-fs") | null = null;
   let pathMod: typeof import("@tauri-apps/api/path") | null = null;
   let realFetch: FetchFn | null = null;
+  let coreMod: typeof import("@tauri-apps/api/core") | null = null;
+
+  const loadCore = async () => {
+    if (!coreMod) coreMod = await import("@tauri-apps/api/core");
+    return coreMod;
+  };
 
   const loadFs = async () => {
     if (!fsMod) fsMod = await import("@tauri-apps/plugin-fs");
@@ -55,7 +61,7 @@ export function createTauriBridge(): DesktopBridge {
       return join(base, name);
     },
     async grantFolderAccess(path) {
-      const { invoke } = await import("@tauri-apps/api/core");
+      const { invoke } = await loadCore();
       await invoke("allow_read_path", { path });
     },
     async saveFile({ fileName, mime, bytes }: SaveFileInput) {
