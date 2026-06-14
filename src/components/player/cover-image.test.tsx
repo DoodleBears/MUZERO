@@ -84,6 +84,29 @@ describe("CoverImage", () => {
     expect(container.querySelector("img")).toBeNull();
     expect(screen.getByTestId("fallback")).toBeInTheDocument();
   });
+
+  it("can gate the crossfade on the DOM image without creating a preload Image", async () => {
+    const { container, rerender } = render(
+      <CoverImage url="blob:stage-a" hasCover loadStrategy="dom" fallback={<Fallback />} />,
+    );
+
+    expect(images).toHaveLength(0);
+    const firstImg = container.querySelector('img[src="blob:stage-a"]');
+    expect(firstImg).not.toBeNull();
+
+    await act(async () => {
+      firstImg?.dispatchEvent(new Event("load", { bubbles: true }));
+      await Promise.resolve();
+    });
+    expect(container.querySelector('img[src="blob:stage-a"]')).not.toBeNull();
+
+    rerender(<CoverImage url="blob:stage-b" hasCover loadStrategy="dom" fallback={<Fallback />} />);
+
+    expect(images).toHaveLength(0);
+    expect(container.querySelector('img[src="blob:stage-a"]')).not.toBeNull();
+    const nextImg = container.querySelector('img[src="blob:stage-b"]');
+    expect(nextImg).not.toBeNull();
+  });
 });
 
 function Fallback() {

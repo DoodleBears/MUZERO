@@ -158,6 +158,7 @@ export function MediaStage({
             holdPreviousWhileLoading={Boolean(current?.coverBlobId && !current.remoteCoverUrl)}
             fallback={<StageTitleFallback track={current} dim={asBgActive} />}
             className="z-10 album-cover-radius"
+            loadStrategy="dom"
             trackId={current?.id}
           />
         )}
