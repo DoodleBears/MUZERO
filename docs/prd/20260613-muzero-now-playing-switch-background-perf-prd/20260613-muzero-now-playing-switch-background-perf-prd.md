@@ -48,6 +48,8 @@
 > **QA#46 验证(2026-06-15,afff320 prod build):**P1 达成(连续基线差距消除);P2/P3 各自目标达成(coverflow churn 除、remount 去),但 **burst `fpsAvg` 仍 ~90 vs tab-2 ~105、`frameMax 133`**,真因转向**前台整树每首重渲染 → GC**(`cover.preload created:0` 排除封面解码)→ Phase 31(P4)。
 >
 > **QA#47 验证(2026-06-15,de889f1 prod build):**P4 后 **tab-1 与 tab-2 收敛**(`fpsAvg 108` vs ~110,`frameMax 41.7 < 74.9`,`fpsLow 24 > 13.4`)。本轮 cadence ~587ms(多数 < 600ms)→ P2 coverflow-skip 真正触发,是主驱动;P4 memo 为辅。**剩余边界:cadence > ~600ms 中速点击仍播完整 coverflow → 单帧尖峰**(Open Question #27)。
+>
+> **⚠️ QA#48 修正(2026-06-15,b6dfcf7):QA#47 收敛被高估。**它只采到 1 个 window;tab-1 持续狂切的更充分采样(13 windows)显示 worst-case 仍 `fpsLow 6`/`frameMax 183`/`longTask 226`/heap→888 GC。这是贯穿本 PRD 的深层残留(同 QA#24),P1–P4 改了均值但没消单帧 GC 停顿。**非 keep-mount 引入**(`dbRequeries:0`、heap floor 正常)。下一步 = DevTools GC 火焰图归因(§4),再定 Phase 32。详见 §6 QA#48。
 
 ---
 
@@ -1263,6 +1265,27 @@ commit `de889f1` 桌面 prod build,两 tab 各 6 次切歌,cadence 可比(tab-1 
 
 **后续决策(见 Open Question #27):**接受现状(狂按已平,中速点击仅单帧 hitch),或 (a) 调高 `COVERFLOW_BURST_SKIP_MS`(改变 coverflow 触发观感),或 (b) P5 直接降 coverflow 单次合成成本(模糊背光预算)。
 
+### QA#48(2026-06-15 b6dfcf7 prod build,tab-1 持续狂切):QA#47 收敛被高估 —— worst-case mash 仍 GC 卡顿
+
+用户给出 tab-1 切歌的**更充分**采样 [`tab-1-switch-song-low-fps.log`](../../../.logs/commit-afff3201fa47cf84792181199d04565942f93069/tab-1-switch-song-low-fps.log):6 次切歌,cadence ~505ms(566/482/501/499…,与 QA#47 同档),但这次有 **13 个 fps window**,显示持续下陷:
+
+| 指标 | QA#47(1 window) | QA#48(13 windows,同档 cadence) |
+|---|---|---|
+| `fpsAvg` | 108 | **46–70**(谷底),停手后回 120 |
+| `fpsLow` | 24 | **5.5–6.3** |
+| `frameMaxMs` | 41.7 | **158–183** |
+| `longTaskMaxMs` | — | **226** |
+| `heapMb` | 359 | **503→888**(切歌中)→ GC → 270(停手) |
+
+**结论(诚实修正):**
+
+1. **QA#47 的「收敛」被高估**——它只落 **1 个 window**(且可能在 burst 间隙),oversold 了。持续狂切的更充分采样显示 **worst-case 仍严重卡顿**(`fpsLow 6`、`frameMax 183`、`longTask 226`)。这与早期 **QA#24** 一致(彼时移除 stage decode 后 `frameMax` 仍 66–183)——说明这是**贯穿本 PRD 的深层残留**,P1–P4 改善了**均值**但没消掉 worst-case 的**单帧 GC 停顿**。
+2. **不是 tab-switch/keep-mount 引入的回归(已排除)**:`dbRequeries:0`(隐藏 keep-mounted 页切歌时不重查)、heap **floor 正常(停手回 270)**、Pixi 背景只吃 6KB derivative、audio blob 7MB(tracked)。tab-switch PRD([20260615](../20260615-muzero-tab-switch-view-transition-perf-prd/))与此无关。
+3. **真因 = 每次切歌 ~64MB 瞬时 JS 分配 → major GC(`longTask 226` = `frameMax 183`)**,且 `cover.preload created:0`、`cover.render` 全 cache-hit、`dbRequeries:0` —— 不是 DB、不是 cover 解码管线(preload)、不是 Pixi。剩余嫌疑:stage 全分辨率封面 `<img>` decode × crossfade(Phase 22–24 曾移除但已随 baseline revert 回来;但 QA#24 表明移除后 frameMax 仍 183,故非唯一)、Now 整树 reconcile + Motion 对象分配、audio 读节奏。
+4. **日志已到极限**:逐字段已排除显而易见嫌疑;按 prd-create §4,GC 归因的下一步是 **Chrome DevTools Performance 火焰图**(长帧着色 = 🟢 GC/script)定位那 ~64MB/切的分配点,而不是再凭猜改渲染路径。
+
+**Reopen:**本 PRD 的「tab-1 切歌 worst-case」未真正收敛(QA#44 已预告需「重新二分,优先全局背景合成/cover preload cadence」)。下一步 = **观测先行**:DevTools GC 火焰图归因,或重加针对性分配 trace(如 Phase 22 的 `image.load/decode` span,确认 stage decode 字节/尺寸),确认主分配点后再定 Phase 32(候选:stage 封面改用上限尺寸 derivative / 线程外 decode;Now 树进一步 memo;audio 读去抖)。
+
 ---
 
 ## 7. Out of Scope(交叉引用,本 PRD 不处理)
@@ -1368,6 +1391,7 @@ commit `de889f1` 桌面 prod build,两 tab 各 6 次切歌,cadence 可比(tab-1 
 | 2026-06-14 | User+Codex | **QA#22 trace + Phase 23 代码完成(TDD)**:13:57 trace 验证 stage decode 已排除,但仍有 `image.load/decode surface=background decode=true` 800/1024/1500px。定位到 Pixi derivative 分支虽然使用 192px backlight,仍提前为未渲染的 full-cover background 调 `useLoadedImageUrl`。Phase 23 先红灯锁定 derivative ready/pending 不创建 `Image`,再把 `pixiMedia/shouldUsePixiCoverDerivative` 前置并传 `null` 给 full-cover loader。`now-playing-background` 11 例通过;待 QA trace 验证 `surface=background` decode 消失。 |
 | 2026-06-14 | User+Codex | **QA#23 trace + Phase 24 代码完成(TDD)**:14:06 trace 验证 Phase 23 生效(无 `surface=background` load/decode),剩余 `image.load surface=now-playing decode=false` 仍为 1400~2000px full-cover。Phase 24 给 player `CoverImage` 增加 DOM-load strategy,stage/dock 用真实 `<img onLoad>` gate crossfade,不再创建额外 JS `Image`。TDD:`cover-image` 新红灯转绿;待 QA trace 验证 `surface=now-playing` image.load 消失。 |
 | 2026-06-14 | User+Codex | **QA#24 trace + Phase 25 二分开始**:14:15 trace 验证 Phase 24 生效(`surface=now-playing/background` 的 `image.load/decode` 均消失),但仍有 `fpsLow≈5~15/frameMax≈66~183ms/longTaskMax≈214ms`。剩余可疑层转向全局背景合成、Pixi 192px derivative 的浏览器 decode/fetch queue、flow/visualizer mix-blend-mode、audio blob load。创建临时诊断分支 `diag/switch-fps-bisect`,按大块禁用 commit 做 QA 二分,诊断代码不合入产品分支。 |
+| 2026-06-15 | User+Claude | **QA#48:QA#47 收敛被高估,tab-1 worst-case 仍 GC 卡顿**。b6dfcf7 tab-1 持续狂切的更充分采样(13 windows)显示 `fpsAvg 46–70`/`fpsLow 6`/`frameMax 183`/`longTask 226`/heap 503→888→GC→270(停手回 120)。QA#47 只 1 window,oversold。与 QA#24 一致(移除 stage decode 后 frameMax 仍 183)→ 深层残留,P1–P4 改均值不消单帧 GC 停顿。**已排除** tab-switch/keep-mount(`dbRequeries:0`、heap floor 正常、Pixi 6KB derivative)。真因 = ~64MB/切瞬时分配 → major GC;日志到极限,下一步按 §4 用 DevTools 火焰图归因,再定 Phase 32(候选:stage 封面上限尺寸 derivative/线程外 decode、Now 树 memo、audio 读去抖)。 |
 | 2026-06-15 | User+Claude | **QA#47 验证:P4 后 burst 收敛**:de889f1 prod build,tab-1 `fpsAvg 108` ≈ tab-2 ~110,`frameMax 41.7 < 74.9`、`fpsLow 24 > 13.4`——tab-1 已收敛且略优。本轮 cadence ~587ms(566/642/542/642/541)多数 < `COVERFLOW_BURST_SKIP_MS=600` → P2 coverflow-skip 真正触发为主驱动,P4 memo 为辅。`cover.render` 仍 42(全 cache-hit)→ 该指标作废(cache-hit 廉价、非瓶颈)。Phase 28/31 标 ✅。剩余边界:cadence > ~600ms 中速点击仍播完整 coverflow → 单帧尖峰(Open Question #27:接受 / 调阈值 / P5 降 coverflow 合成成本)。 |
 | 2026-06-15 | User+Claude | **QA#46 验证 + Phase 31(P4)**:afff320 桌面 prod build,tab-1 vs tab-2 可比 burst。**P1 达成**——tab-1 静止/间隙 `fpsAvg` 103–115 与 tab-2 102–107 重合,原始「持续低 ~10」消除。**P2/P3 各自目标达成**(`textureSwap` 5/6 持平 → coverflow churn 除;`AnnotationEditor` remount 去)。但 **burst 仍 ~90 vs ~105、`frameMax 133`/`heap 369`**;`cover.preload created:0`+36 条 `cover.render` 全 cache-hit → **排除封面解码**,真因 = 前台整树每首重渲染 + Motion 分配 → GC。新增 Phase 31(P4):前台 stage 标识/信息按 settledTrack 去抖(复刻 QA#5 ambient 去抖)+ `memo` 收敛整树 reconcile。 |
 | 2026-06-15 | User+Claude | **QA#45 方向修正 + §6bis 落地方案(P1/P2/P3)**:用户提供同 commit(`be2462c`)tab-1(Now Playing)vs tab-2(队列/库)两份切歌 trace。对比证明:`frameMax`/`longTask` 两边同量级(58ms/166ms,来自前 27 Phase 处理的**全局共享背景**),但 tab-1 `fpsAvg` 持续低 ~10(~99 vs ~106–110)。该平均差距是**贯穿全程的连续开销**,来自**仅 Now Playing 挂载的前台组件**——前 27 Phase 从未触及。定位三处(按对 `fpsAvg` 贡献排序):P1 `PlaybackSpectrum` 常驻 rAF([`playback-spectrum.tsx:104`](../../../src/components/player/playback-spectrum.tsx#L104));P2 `SwipeableMediaStage` coverflow 0.62s 动画 + 3 卡 `blur(20px) saturate(400%)` 3D 背光,狂切时 overlay 从不空闲([`swipeable-media-stage.tsx:403`](../../../src/components/player/swipeable-media-stage.tsx#L403) / [`:966`](../../../src/components/player/swipeable-media-stage.tsx#L966));P3 `AnnotationEditor key` 重挂 + scroll/resize layout thrash + Lenis 复位。新增 Phase 28(P1 rAF 节流/可见性暂停)、29(P2 coverflow 快切降级 + 背光预算)、30(P3 前台重挂/reflow 收尾),验收锚定 tab-1 `fpsAvg` 向 tab-2 靠拢。**仅文档,未改产品代码。** |
