@@ -131,6 +131,7 @@ import type { DecodedNcmMedia } from "@/workers/ingest-core";
 
 const IMPORT_VISIBILITY_FLUSH_SIZE = 25;
 const LOCAL_BLOB_PLAYBACK_SETTLE_MS = 180;
+const DEFAULT_PLAYER_VOLUME = 0.9;
 
 export type QueueSource =
   | { kind: "set"; setId: string }
@@ -1073,8 +1074,12 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   },
 
   setVolume(v) {
-    mediaEngine?.setVolume(v);
-    set({ volume: v });
+    const volume = clampVolume(v);
+    mediaEngine?.setVolume(volume);
+    set({ volume });
+    void saveSettings({ playerVolume: volume }).catch((err: unknown) =>
+      log.warn("player", "failed to persist volume", err),
+    );
   },
 
   setRepeat(mode) {
@@ -2090,8 +2095,15 @@ async function hydratePlaybackSettings(
   const settings = await getSettings();
   const repeat = settings.playerRepeatMode ?? "all";
   const shuffle = settings.playerShuffle ?? false;
-  set({ repeat, shuffle });
+  const volume = clampVolume(settings.playerVolume);
+  set({ repeat, shuffle, volume });
+  mediaEngine?.setVolume(volume);
   shuffleOrder = shuffle ? buildShuffleOrder(get().queue.length, get().currentIndex) : [];
+}
+
+function clampVolume(value: number | undefined): number {
+  if (value == null || !Number.isFinite(value)) return DEFAULT_PLAYER_VOLUME;
+  return Math.min(1, Math.max(0, value));
 }
 
 /**

@@ -520,6 +520,26 @@ describe("player-store playback resume", () => {
       await expect(repos.getPlayQueue()).resolves.toMatchObject({ currentIndex: 1 });
     });
   });
+
+  it("persists the volume when the user changes it", async () => {
+    const { repos, usePlayerStore } = await seedQueue(0);
+    usePlayerStore.getState().init();
+
+    usePlayerStore.getState().setVolume(0.42);
+
+    await waitFor(async () => {
+      await expect(repos.getSettings()).resolves.toMatchObject({ playerVolume: 0.42 });
+    });
+  });
+
+  it("hydrates the persisted volume on init", async () => {
+    const { repos, usePlayerStore } = await seedQueue(0);
+    await repos.saveSettings({ playerVolume: 0.3 });
+
+    usePlayerStore.getState().init();
+
+    await waitFor(() => expect(usePlayerStore.getState().volume).toBe(0.3));
+  });
 });
 
 describe("player-store bulk upload visibility", () => {

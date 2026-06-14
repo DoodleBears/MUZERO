@@ -809,6 +809,8 @@ export interface AppSettings {
   /** Persisted global transport toggles. */
   playerRepeatMode?: "off" | "one" | "all";
   playerShuffle?: boolean;
+  /** Persisted playback volume (0–1). */
+  playerVolume?: number;
   /** Persisted resume pointer for the AI DJ chat runtime. */
   lastChatSessionId?: string;
   /** Global default chat/DJ model preset. Keys stay in apiKeysByPresetId. */
@@ -1034,6 +1036,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   lyricsStrokeOpacity: 100,
   playerRepeatMode: "all",
   playerShuffle: false,
+  playerVolume: 0.9,
   systemShortcutsEnabled: false,
   systemShortcutBindings: {},
   presenceEnabled: false,
