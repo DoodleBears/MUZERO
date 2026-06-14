@@ -12,7 +12,8 @@
   - gate 内容:`useState(true)` 的 `onscreen` + canvas 上的 `IntersectionObserver`,喂给 `shouldAnimateSpectrum({…, onscreen})` 与 idle-paint effect(`!onscreen` 时跳过绘制)。
   - 原意:Now Playing 被 keep-mount-but-hidden(`display:none`)时停掉 spectrum 的 rAF。但 Now Playing 现在又是按需挂载(hybrid,`73f40fc`/QA#3),gate 基本多余且得不偿失。
   - **修法**:直接去掉 IntersectionObserver gate,或换成切歌时不 churn 的更廉价可见性判断;改完重测 tab-1/tab-2 切歌 FPS。
-- [ ] **逐 commit 排查 `f67ece8..1948692` 其余 commit 是否还有 regression**(`diag/fps-stepwise` 每 pick 一个测一个,最终排除每一个 regression)。
+- [x] **排除 `73f40fc`(conditionally mount Now Playing / QA#3)** —— bisect 反转结论。`73f40fc` 当初是为了修「full keep-mount 导致 hidden Now Playing 每次切歌重渲染」,但那是 **spectrum gate 存在时** 的现象。去掉 spectrum gate 后:step 1(full keep-mount)= smooth;step 2(conditional mount)= regression(tab-1 切歌 fpsAvg 50–64 / fpsLow 5.7 / frameMax 175,`.logs/20260615-2-…/tab-1-switch-song-low-fps.log`)。结论:gate 才是元凶,`73f40fc` 的 conditional-mount 现在反而有害 → **skip,保留 full keep-mount**。
+- [ ] **逐 commit 排查 `f67ece8..1948692` 其余 commit 是否还有 regression**(`diag/fps-stepwise` 每 pick 一个测一个,最终排除每一个 regression)。已排除:spectrum gate(`7ec4a58` 的一部分)、`73f40fc`。
 
 ## 当前主线:存储抽象 + 分享(2026-06-12 起)
 
