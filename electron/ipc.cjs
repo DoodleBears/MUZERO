@@ -377,6 +377,17 @@ function registerIpc({ trayController } = {}) {
     return state;
   });
 
+  // Pause/restore click-through so a hovered control can be clicked without
+  // leaving the always-on-top click-through mode. No state broadcast: the stored
+  // pin mode is unchanged (no-op unless currently pin-click-through).
+  ipcMain.handle("muzero:window:setClickThroughPaused", (event, paused) => {
+    windowPin.setPassthroughPaused(senderWindow(event), paused === true);
+  });
+
+  ipcMain.handle("muzero:window:setClickThroughRegions", (event, regions) => {
+    windowPin.setInteractiveRegions(senderWindow(event), regions);
+  });
+
   ipcMain.handle("muzero:window:getState", (event) => {
     const win = senderWindow(event);
     return windowState(win);

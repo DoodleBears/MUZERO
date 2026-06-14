@@ -10,7 +10,6 @@ import { NowPlayingBackground } from "@/components/player/now-playing-background
 import { useVisualizerCoverColorCss } from "@/components/player/visualizer-dynamic-color";
 import { VisualizerTuningPanel } from "@/components/player/visualizer-tuning-panel";
 import { GlobalTrackSearch } from "@/components/search/global-track-search";
-import { HeaderPinButton } from "@/components/shell/header-pin-button";
 import { PlayerDock } from "@/components/shell/player-dock";
 import { WindowsWindowControls } from "@/components/shell/windows-window-controls";
 import { GlobalDropZone } from "@/components/upload/global-drop-zone";
@@ -25,7 +24,6 @@ import { useSystemShortcuts } from "@/hooks/use-system-shortcuts";
 import { albumCoverAppearanceCssVars } from "@/lib/album-cover-appearance";
 import { resolveDesktopBridge } from "@/lib/desktop/bridge";
 import { electronWindowAppearanceCssVars } from "@/lib/electron-window-appearance";
-import { log } from "@/lib/logger";
 import { cn } from "@/lib/utils";
 import { dragWindowOnEmptyPress } from "@/lib/window-drag";
 import { NowPlayingPage } from "@/pages/now-playing-page";
@@ -35,6 +33,7 @@ import { SessionsPage } from "@/pages/sessions-page";
 import { SettingsPage } from "@/pages/settings-page";
 import { buildSystemShortcutRegistrations } from "@/shortcuts/system-global";
 import { startCloudAutoSyncScheduler } from "@/stores/cloud-auto-sync";
+import { useDesktopWindowStore } from "@/stores/desktop-window-store";
 import { useNavStore } from "@/stores/nav-store";
 import { usePlayerStore } from "@/stores/player-store";
 import { startSyncIndicator } from "@/stores/sync-indicator";
@@ -64,6 +63,8 @@ export default function App() {
   const tab = useNavStore((s) => s.tab);
   const setTab = useNavStore((s) => s.setTab);
   const init = usePlayerStore((s) => s.init);
+  const clickThroughHover = useDesktopWindowStore((s) => s.clickThroughHover);
+  const initDesktopWindow = useDesktopWindowStore((s) => s.init);
   const hasAmbientTrack = usePlayerStore(
     (s) => s.currentIndex >= 0 && Boolean(s.queue[s.currentIndex]),
   );
@@ -93,6 +94,10 @@ export default function App() {
   useDesktopChromeDataset();
   useAppearanceCssVars(settings);
   useDesktopWindowPinMode(settings);
+
+  useEffect(() => {
+    initDesktopWindow();
+  }, [initDesktopWindow]);
 
   // Boot only wires the media engine. Auto-cueing the previous track during
   // WKWebView startup can make the full-screen media/background path flicker.
@@ -173,8 +178,13 @@ export default function App() {
   const idle = useIdle(isNowTab);
   const visualizerPlacement = resolveVisualizerPlacement(settings);
   const visualizerBackgroundActive = ambientBackgroundActive && visualizerPlacement !== "off";
-  const lyricsOnlyIdle =
-    idle && isNowTab && visualizerBackgroundActive && visualizerPlacement === "lyrics";
+  // Pinned lyrics-only overlay (OBS): once pinned, the window is always-on-top
+  // and the lyrics capture stays clean. Pointer click-through is a separate
+  // session-only Lock action from the lyrics overlay, not the default pin state.
+  const lyricsPlacementActive =
+    isNowTab && visualizerBackgroundActive && visualizerPlacement === "lyrics";
+  const lyricsOverlayPinned = lyricsPlacementActive && settings.desktopWindowPinMode === "pin";
+  const lyricsOnlyIdle = lyricsPlacementActive && (idle || lyricsOverlayPinned);
   const visualizerIdleOnly = idle && visualizerBackgroundActive && visualizerPlacement === "idle";
   const chromeHidden =
     idle && ((settings.immersiveIdle ?? true) || visualizerIdleOnly || lyricsOnlyIdle);
@@ -187,6 +197,10 @@ export default function App() {
   const visualizerPreviewOnly = useVisualizerPanelStore((s) => s.previewOnly);
   const visualizerHidden = useVisualizerPanelStore((s) => s.visualizerHidden);
   const foregroundHidden = visualizerPreviewOnly || visualizerIdleOnly || lyricsOnlyIdle;
+  // While pinned as a lyrics overlay the background/foreground stay hidden
+  // (lyricsOnlyIdle is latched above), but the titlebar should still reveal on
+  // hover. So the header follows raw pointer idle here instead of the latch.
+  const headerHidden = lyricsOverlayPinned ? idle : chromeHidden || foregroundHidden;
   const dockHidden = dockIdleHidden || foregroundHidden;
   // In full-immersive (only background + spectrum, foreground rail hidden) surface
   // memories as a top popover instead — see the immersive-memory-moments PRD.
@@ -236,7 +250,7 @@ export default function App() {
             // being swallowed by Chromium's app-region hit testing.
             "app-titlebar fixed inset-x-0 top-0 z-30 flex items-center justify-center px-4 py-3 transition-opacity duration-500 [-webkit-app-region:no-drag]",
             ambientActive ? "" : "bg-background/80",
-            (chromeHidden || foregroundHidden) && "pointer-events-none opacity-0",
+            headerHidden && "pointer-events-none opacity-0",
           )}
         >
           <div
@@ -245,7 +259,7 @@ export default function App() {
             data-tauri-drag-region
           />
           <div
-            className="group/header-logo relative z-10 flex items-center justify-center [-webkit-app-region:no-drag]"
+            className="group/header-logo relative z-10 flex items-center justify-center gap-2 [-webkit-app-region:no-drag]"
             data-no-drag
           >
             <button
@@ -257,7 +271,6 @@ export default function App() {
             >
               MUZERO
             </button>
-            <HeaderPinButton />
           </div>
           <WindowsWindowControls />
         </header>
@@ -294,7 +307,13 @@ export default function App() {
         />
 
         {immersiveMemoryActive && <ImmersiveMemoryOverlay />}
-        {immersiveLyricsActive && <ImmersiveLyricsOverlay lyricsOnly={lyricsOnlyIdle} />}
+        {immersiveLyricsActive && (
+          <ImmersiveLyricsOverlay
+            lyricsOnly={lyricsOnlyIdle}
+            pinned={lyricsOverlayPinned}
+            revealed={!idle || clickThroughHover}
+          />
+        )}
 
         <VisualizerTuningPanel />
         <LyricsTuningPanel />
@@ -362,20 +381,16 @@ function useAppearanceCssVars(settings: ReturnType<typeof useSettings>) {
 }
 
 function useDesktopWindowPinMode(settings: ReturnType<typeof useSettings>) {
+  const setPinMode = useDesktopWindowStore((s) => s.setPinMode);
+
   useEffect(() => {
-    const controls = resolveDesktopBridge().windowControls;
-    if (!controls?.setPinMode) return;
     const mode = settings.desktopWindowPinMode === "pin" ? "pin" : "off";
-    void controls
-      .setPinMode(mode)
-      .catch((error) => log.warn("desktop.windowPin", "Unable to apply pin mode", error));
-  }, [settings.desktopWindowPinMode]);
+    void setPinMode(mode);
+  }, [settings.desktopWindowPinMode, setPinMode]);
 }
 
 async function toggleDesktopMaximize() {
-  const state = await resolveDesktopBridge().windowControls?.toggleMaximize();
-  if (!state) return;
-  document.documentElement.dataset.windowMaximized = String(state.maximized || state.fullscreen);
+  await useDesktopWindowStore.getState().toggleMaximize();
 }
 
 function AmbientPageOverlay({ active, children }: { active: boolean; children: ReactNode }) {

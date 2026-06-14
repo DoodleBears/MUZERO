@@ -348,6 +348,16 @@
     -webkit-app-region: no-drag;
   }
 
+  /*
+   * The pinned lyrics overlay is a special case: its lyrics pane doubles as the
+   * frameless-window drag handle. Interactive descendants still opt out via the
+   * global button/control rule above.
+   */
+  html[data-desktop-shell="electron"] .lyrics-window-drag-surface,
+  html[data-desktop-shell="electron"] .lyrics-window-drag-scroll {
+    -webkit-app-region: drag;
+  }
+
   html[data-desktop-shell="electron"][data-desktop-platform="win32"] .settings-scroll-surface {
     -webkit-app-region: drag;
   }

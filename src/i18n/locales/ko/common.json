@@ -15,6 +15,10 @@
     "pinOn": "창 고정됨",
     "pinClickThrough": "고정 및 클릭 통과",
     "pinClickThroughHint": "제목 영역에 포커스하거나 마우스를 올리면 pin 컨트롤이 다시 표시됩니다.",
+    "unpin": "창 고정 해제",
+    "lyricsOverlayControls": "가사 오버레이 제어",
+    "lockClickThrough": "위치를 잠그고 클릭 통과",
+    "unlockClickThrough": "클릭 통과 해제",
     "pinAlwaysOnTopUnavailable": "이 데스크톱 셸에서는 창 고정을 사용할 수 없습니다."
   },
   "nav": {

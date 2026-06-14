@@ -15,6 +15,10 @@
     "pinOn": "Window pinned on top",
     "pinClickThrough": "Pinned and click-through",
     "pinClickThroughHint": "Focus or hover the title area to reveal the pin control again.",
+    "unpin": "Unpin window",
+    "lyricsOverlayControls": "Lyrics overlay controls",
+    "lockClickThrough": "Lock position and click-through",
+    "unlockClickThrough": "Unlock click-through",
     "pinAlwaysOnTopUnavailable": "Window pinning is unavailable on this desktop shell."
   },
   "nav": {

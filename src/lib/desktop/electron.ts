@@ -5,6 +5,7 @@ import type { TrayActionId } from "@/tray/actions";
 import type { TrayMenuModel } from "@/tray/menu-model";
 import type {
   DesktopBridge,
+  DesktopClickThroughRegion,
   DesktopPlatform,
   DesktopSystemShortcutConfigureResult,
   DesktopSystemShortcutRegistration,
@@ -49,11 +50,14 @@ interface MuzeroApi {
     toggleMaximize(): Promise<DesktopWindowState>;
     setPinMode(mode: DesktopWindowPinMode): Promise<DesktopWindowState>;
     cyclePinMode(): Promise<DesktopWindowState>;
+    setClickThroughPaused(paused: boolean): Promise<void>;
+    setClickThroughRegions(regions: readonly DesktopClickThroughRegion[]): Promise<void>;
     close(): Promise<void>;
     hideToTray(): Promise<void>;
     showFromTray(): Promise<void>;
     quitApp(): Promise<void>;
     getState(): Promise<DesktopWindowState>;
+    onClickThroughHover(callback: (hovered: boolean) => void): () => void;
     onStateChange(callback: (state: DesktopWindowState) => void): () => void;
   };
   tray?: {
@@ -198,6 +202,10 @@ export function createElectronBridge(): DesktopBridge {
           cyclePinMode: () =>
             api.windowControls?.cyclePinMode() ??
             Promise.resolve({ fullscreen: false, maximized: false, pinMode: "off" }),
+          setClickThroughPaused: (paused) =>
+            api.windowControls?.setClickThroughPaused(paused) ?? Promise.resolve(),
+          setClickThroughRegions: (regions) =>
+            api.windowControls?.setClickThroughRegions(regions) ?? Promise.resolve(),
           close: () => api.windowControls?.close() ?? Promise.resolve(),
           hideToTray: () => api.windowControls?.hideToTray() ?? Promise.resolve(),
           showFromTray: () => api.windowControls?.showFromTray() ?? Promise.resolve(),
@@ -205,6 +213,8 @@ export function createElectronBridge(): DesktopBridge {
           getState: () =>
             api.windowControls?.getState() ??
             Promise.resolve({ fullscreen: false, maximized: false, pinMode: "off" }),
+          onClickThroughHover: (callback) =>
+            api.windowControls?.onClickThroughHover(callback) ?? (() => {}),
           onStateChange: (callback) => api.windowControls?.onStateChange(callback) ?? (() => {}),
         }
       : undefined,

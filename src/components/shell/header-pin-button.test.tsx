@@ -2,10 +2,11 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const state = vi.hoisted(() => ({
-  cyclePinMode: vi.fn(),
   getState: vi.fn(),
   onStateChange: vi.fn(),
   saveSettings: vi.fn(),
+  setClickThroughPaused: vi.fn(),
+  setPinMode: vi.fn(),
   supported: true,
 }));
 
@@ -22,29 +23,35 @@ vi.mock("@/db/repositories", () => ({
 vi.mock("@/lib/desktop/bridge", () => ({
   resolveDesktopBridge: () => ({
     kind: state.supported ? "electron" : "web",
+    platform: "win32",
     windowControls: state.supported
       ? {
-          cyclePinMode: state.cyclePinMode,
           getState: state.getState,
           onStateChange: state.onStateChange,
+          setClickThroughPaused: state.setClickThroughPaused,
+          setPinMode: state.setPinMode,
         }
       : undefined,
   }),
 }));
 
+import { __resetDesktopWindowStoreForTest } from "@/stores/desktop-window-store";
 import { HeaderPinButton } from "./header-pin-button";
 
 describe("HeaderPinButton", () => {
   beforeEach(() => {
+    __resetDesktopWindowStoreForTest();
     state.supported = true;
     state.getState.mockReset();
     state.getState.mockResolvedValue({ fullscreen: false, maximized: false, pinMode: "off" });
-    state.cyclePinMode.mockReset();
-    state.cyclePinMode.mockResolvedValue({ fullscreen: false, maximized: false, pinMode: "pin" });
     state.onStateChange.mockReset();
     state.onStateChange.mockReturnValue(() => undefined);
     state.saveSettings.mockReset();
     state.saveSettings.mockResolvedValue(undefined);
+    state.setClickThroughPaused.mockReset();
+    state.setClickThroughPaused.mockResolvedValue(undefined);
+    state.setPinMode.mockReset();
+    state.setPinMode.mockResolvedValue({ fullscreen: false, maximized: false, pinMode: "pin" });
   });
 
   it("does not render when the desktop bridge has no pin controls", () => {
@@ -55,7 +62,7 @@ describe("HeaderPinButton", () => {
     expect(screen.queryByRole("button")).toBeNull();
   });
 
-  it("reads the current pin state from the desktop bridge", async () => {
+  it("reads click-through as pinned without making pin itself a click-through control", async () => {
     state.getState.mockResolvedValue({
       fullscreen: false,
       maximized: false,
@@ -65,27 +72,35 @@ describe("HeaderPinButton", () => {
     render(<HeaderPinButton />);
 
     const button = await screen.findByRole("button", {
-      name: "windowControls.pinClickThrough",
+      name: "windowControls.pinOn",
     });
     expect(button).toHaveAttribute("aria-pressed", "true");
   });
 
-  it("cycles pin mode and persists only restart-safe states", async () => {
-    state.cyclePinMode.mockResolvedValue({
-      fullscreen: false,
-      maximized: false,
-      pinMode: "pin-click-through",
-    });
-
+  it("toggles pin mode on and persists only restart-safe states", async () => {
     render(<HeaderPinButton />);
 
     fireEvent.click(await screen.findByRole("button", { name: "windowControls.pinOff" }));
 
-    await waitFor(() => expect(state.cyclePinMode).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(state.setPinMode).toHaveBeenCalledWith("pin"));
     expect(state.saveSettings).toHaveBeenCalledWith({ desktopWindowPinMode: "pin" });
-    expect(
-      await screen.findByRole("button", { name: "windowControls.pinClickThrough" }),
-    ).toBeTruthy();
+    expect(await screen.findByRole("button", { name: "windowControls.pinOn" })).toBeTruthy();
+  });
+
+  it("turns pin off instead of cycling from pinned into click-through", async () => {
+    state.getState.mockResolvedValue({
+      fullscreen: false,
+      maximized: false,
+      pinMode: "pin",
+    });
+    state.setPinMode.mockResolvedValue({ fullscreen: false, maximized: false, pinMode: "off" });
+
+    render(<HeaderPinButton />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "windowControls.pinOn" }));
+
+    await waitFor(() => expect(state.setPinMode).toHaveBeenCalledWith("off"));
+    expect(state.saveSettings).toHaveBeenCalledWith({ desktopWindowPinMode: "off" });
   });
 
   it("subscribes to shell state changes", async () => {

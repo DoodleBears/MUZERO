@@ -6,6 +6,7 @@ const { contextBridge, ipcRenderer } = require("electron");
 // Sandboxed preloads can only require Electron's limited preload modules; keep
 // this in sync with electron/diagnostics.cjs without requiring that local file.
 const DIAGNOSTICS_CHANNEL = "muzero:diagnostics:event";
+const CLICK_THROUGH_HOVER_CHANNEL = "muzero:window:clickThroughHover";
 const SYSTEM_SHORTCUT_CONFIGURE_CHANNEL = "muzero:systemShortcuts:configure";
 const SYSTEM_SHORTCUT_ACTION_CHANNEL = "muzero:systemShortcuts:action";
 
@@ -35,11 +36,20 @@ contextBridge.exposeInMainWorld("muzero", {
     toggleMaximize: () => ipcRenderer.invoke("muzero:window:toggleMaximize"),
     setPinMode: (mode) => ipcRenderer.invoke("muzero:window:setPinMode", mode),
     cyclePinMode: () => ipcRenderer.invoke("muzero:window:cyclePinMode"),
+    setClickThroughPaused: (paused) =>
+      ipcRenderer.invoke("muzero:window:setClickThroughPaused", paused),
+    setClickThroughRegions: (regions) =>
+      ipcRenderer.invoke("muzero:window:setClickThroughRegions", regions),
     close: () => ipcRenderer.invoke("muzero:window:close"),
     hideToTray: () => ipcRenderer.invoke("muzero:window:hideToTray"),
     showFromTray: () => ipcRenderer.invoke("muzero:window:showFromTray"),
     quitApp: () => ipcRenderer.invoke("muzero:window:quitApp"),
     getState: () => ipcRenderer.invoke("muzero:window:getState"),
+    onClickThroughHover: (callback) => {
+      const listener = (_event, hovered) => callback(hovered === true);
+      ipcRenderer.on(CLICK_THROUGH_HOVER_CHANNEL, listener);
+      return () => ipcRenderer.removeListener(CLICK_THROUGH_HOVER_CHANNEL, listener);
+    },
     onStateChange: (callback) => {
       const listener = (_event, state) => callback(state);
       ipcRenderer.on("muzero:window:state", listener);

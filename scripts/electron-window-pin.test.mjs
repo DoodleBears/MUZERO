@@ -11,6 +11,10 @@ function createFakeWindow({ ignoreMouseEvents = true } = {}) {
     on: vi.fn((event, callback) => {
       listeners.set(event, callback);
     }),
+    getBounds: vi.fn(() => ({ height: 400, width: 600, x: 100, y: 100 })),
+    webContents: {
+      send: vi.fn(),
+    },
     setAlwaysOnTop: vi.fn(),
     ...(ignoreMouseEvents
       ? {
@@ -40,12 +44,11 @@ describe("electron window pin controller", () => {
     expect(win.setIgnoreMouseEvents).toHaveBeenCalledWith(true, { forward: true });
   });
 
-  it("cycles off to pin to click-through to off", () => {
+  it("cycles only between off and normal pin", () => {
     const { win } = createFakeWindow();
     const controller = createWindowPinController();
 
     expect(controller.cycleMode(win)).toBe("pin");
-    expect(controller.cycleMode(win)).toBe("pin-click-through");
     expect(controller.cycleMode(win)).toBe("off");
     expect(controller.getMode(win)).toBe("off");
     expect(win.setAlwaysOnTop).toHaveBeenLastCalledWith(false);
@@ -61,7 +64,7 @@ describe("electron window pin controller", () => {
     expect(win.setAlwaysOnTop).toHaveBeenCalledWith(true);
   });
 
-  it("downgrades click-through to pin when the window regains focus", () => {
+  it("keeps click-through locked until an explicit mode change", () => {
     const { listeners, win } = createFakeWindow();
     const onRecovered = vi.fn();
     const controller = createWindowPinController();
@@ -70,8 +73,34 @@ describe("electron window pin controller", () => {
     controller.applyMode(win, "pin-click-through");
     listeners.get("focus")?.();
 
-    expect(controller.getMode(win)).toBe("pin");
+    expect(controller.getMode(win)).toBe("pin-click-through");
+    expect(win.setIgnoreMouseEvents).toHaveBeenLastCalledWith(true, { forward: true });
+    expect(onRecovered).not.toHaveBeenCalled();
+  });
+
+  it("temporarily disables passthrough over registered interactive regions", () => {
+    let cursor = { x: 150, y: 130 };
+    let poll = () => undefined;
+    const { win } = createFakeWindow();
+    const controller = createWindowPinController({
+      getCursorScreenPoint: () => cursor,
+      setIntervalFn: (callback) => {
+        poll = callback;
+        return 1;
+      },
+      clearIntervalFn: vi.fn(),
+    });
+
+    controller.setInteractiveRegions(win, [{ height: 40, width: 80, x: 40, y: 20 }]);
+    controller.applyMode(win, "pin-click-through");
+
     expect(win.setIgnoreMouseEvents).toHaveBeenLastCalledWith(false);
-    expect(onRecovered).toHaveBeenCalledWith("pin");
+    expect(win.webContents.send).toHaveBeenLastCalledWith("muzero:window:clickThroughHover", true);
+
+    cursor = { x: 10, y: 10 };
+    poll();
+
+    expect(win.setIgnoreMouseEvents).toHaveBeenLastCalledWith(true, { forward: true });
+    expect(win.webContents.send).toHaveBeenLastCalledWith("muzero:window:clickThroughHover", false);
   });
 });

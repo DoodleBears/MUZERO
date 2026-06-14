@@ -15,6 +15,10 @@
     "pinOn": "ウィンドウは固定表示中",
     "pinClickThrough": "固定表示 + クリック透過",
     "pinClickThroughHint": "タイトル領域にフォーカスまたはホバーすると、pin コントロールが再表示されます。",
+    "unpin": "ウィンドウの固定を解除",
+    "lyricsOverlayControls": "歌詞オーバーレイ操作",
+    "lockClickThrough": "位置をロックしてクリック透過",
+    "unlockClickThrough": "クリック透過を解除",
     "pinAlwaysOnTopUnavailable": "このデスクトップシェルではウィンドウ固定を利用できません。"
   },
   "nav": {

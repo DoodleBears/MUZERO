@@ -71,6 +71,13 @@ export interface MediaStorageFileStat {
 
 export type DesktopWindowPinMode = "off" | "pin" | "pin-click-through";
 
+export interface DesktopClickThroughRegion {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
 export interface DesktopWindowState {
   fullscreen: boolean;
   maximized: boolean;
@@ -82,11 +89,19 @@ export interface DesktopWindowControls {
   toggleMaximize: () => Promise<DesktopWindowState>;
   setPinMode?: (mode: DesktopWindowPinMode) => Promise<DesktopWindowState>;
   cyclePinMode?: () => Promise<DesktopWindowState>;
+  /**
+   * Pause/restore OS mouse-passthrough WITHOUT changing the pin mode, so a hovered
+   * control (the unpin button) can be clicked while a pin-click-through window
+   * otherwise stays click-through. No-op unless currently pin-click-through.
+   */
+  setClickThroughPaused?: (paused: boolean) => Promise<void>;
+  setClickThroughRegions?: (regions: readonly DesktopClickThroughRegion[]) => Promise<void>;
   close: () => Promise<void>;
   hideToTray?: () => Promise<void>;
   showFromTray?: () => Promise<void>;
   quitApp?: () => Promise<void>;
   getState: () => Promise<DesktopWindowState>;
+  onClickThroughHover?: (callback: (hovered: boolean) => void) => () => void;
   onStateChange?: (callback: (state: DesktopWindowState) => void) => () => void;
 }
 

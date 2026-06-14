@@ -15,6 +15,10 @@
     "pinOn": "窗口已置顶",
     "pinClickThrough": "置顶并窗口穿透",
     "pinClickThroughHint": "聚焦或悬停标题区域即可重新显示 pin 控件。",
+    "unpin": "取消窗口置顶",
+    "lyricsOverlayControls": "歌词浮层控制",
+    "lockClickThrough": "锁定位置并窗口穿透",
+    "unlockClickThrough": "解除窗口穿透",
     "pinAlwaysOnTopUnavailable": "当前桌面壳不支持窗口置顶。"
   },
   "nav": {

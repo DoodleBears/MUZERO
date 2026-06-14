@@ -109,10 +109,12 @@ export function SyncedLyricsView({
   emptyFallback = "search",
   showFooter = true,
   track,
+  windowDragEnabled = false,
 }: {
   emptyFallback?: "search" | "hidden";
   showFooter?: boolean;
   track?: Track;
+  windowDragEnabled?: boolean;
 }) {
   const { t } = useTranslation();
   const settings = useSettings();
@@ -202,6 +204,7 @@ export function SyncedLyricsView({
         cascadeTuning={cascadeTuning}
         suspendMotion={!motionActive}
         showFooter={showFooter}
+        windowDragEnabled={windowDragEnabled}
       />
     );
   }
@@ -214,7 +217,7 @@ export function SyncedLyricsView({
   return (
     <motion.div
       animate={{ opacity: visible ? 1 : 0 }}
-      className="h-full min-h-0"
+      className={cn("h-full min-h-0", windowDragEnabled && "lyrics-window-drag-surface")}
       initial={false}
       style={{ pointerEvents: visible ? "auto" : "none" }}
       transition={{ duration: TRACK_LYRICS_FADE_MS / 1000, ease: "easeOut" }}
@@ -278,6 +281,7 @@ export function LyricsScroller({
   cascadeTuning = DEFAULT_LYRIC_CASCADE_TUNING,
   suspendMotion = false,
   showFooter = true,
+  windowDragEnabled = false,
 }: {
   resolved: ShownLyrics;
   activeIndex: number;
@@ -292,18 +296,25 @@ export function LyricsScroller({
   cascadeTuning?: LyricCascadeTuning;
   suspendMotion?: boolean;
   showFooter?: boolean;
+  windowDragEnabled?: boolean;
 }) {
   const plainScrollRef = useRef<HTMLDivElement>(null);
   useSmoothScroll(plainScrollRef);
 
   return (
-    <div className="flex h-full flex-col">
+    <div className={cn("flex h-full flex-col", windowDragEnabled && "lyrics-window-drag-surface")}>
       {/* `relative` + an absolutely-filled scroll child guarantees a definite
           pixel height (a plain h-full chain through nested flex can collapse and
           kill scrolling). */}
       <div className="relative min-h-0 flex-1">
         {resolved.mode === "plain" ? (
-          <div ref={plainScrollRef} className="no-scrollbar absolute inset-0 overflow-y-auto">
+          <div
+            ref={plainScrollRef}
+            className={cn(
+              "no-scrollbar absolute inset-0 overflow-y-auto",
+              windowDragEnabled && "lyrics-window-drag-scroll",
+            )}
+          >
             <pre
               className="whitespace-pre-wrap font-sans leading-relaxed"
               style={{
@@ -332,6 +343,7 @@ export function LyricsScroller({
             motionMode={motionMode}
             cascadeTuning={cascadeTuning}
             suspendMotion={suspendMotion}
+            windowDragEnabled={windowDragEnabled}
           />
         )}
       </div>
@@ -367,6 +379,7 @@ function SyncedLines({
   motionMode = "classic",
   cascadeTuning = DEFAULT_LYRIC_CASCADE_TUNING,
   suspendMotion = false,
+  windowDragEnabled = false,
 }: {
   lines: LyricLine[];
   activeIndex: number;
@@ -379,6 +392,7 @@ function SyncedLines({
   motionMode?: LyricsMotionMode;
   cascadeTuning?: LyricCascadeTuning;
   suspendMotion?: boolean;
+  windowDragEnabled?: boolean;
 }) {
   const { t } = useTranslation();
   const viewportRef = useRef<HTMLDivElement>(null);
@@ -812,6 +826,7 @@ function SyncedLines({
         className={cn(
           "no-scrollbar absolute inset-0 overscroll-contain",
           cascadeDriverActive ? "overflow-hidden" : "overflow-y-auto",
+          windowDragEnabled && "lyrics-window-drag-scroll",
         )}
         style={isAmlStyleEngine && !following ? undefined : EDGE_FADE}
         onWheel={() => setFollowing(false)}
