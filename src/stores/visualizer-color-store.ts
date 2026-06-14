@@ -1,7 +1,10 @@
 import { create } from "zustand";
+import { createDiagnosticLogger } from "@/lib/logger";
 import { type Rgb, rgba } from "@/lib/visualizer-color";
 
 const TRANSITION_MS = 900;
+const DISABLE_COVER_COLOR_CSS_FOR_BISECT = true;
+const coverColorLog = createDiagnosticLogger("cover.palette");
 
 interface VisualizerCoverColorState {
   coverBlobId: string | null;
@@ -42,8 +45,25 @@ export function transitionVisualizerCoverColor(
     raf = 0;
   }
 
+  if (DISABLE_COVER_COLOR_CSS_FOR_BISECT) {
+    coverColorLog.debug("cover.palette.css", {
+      message: "cover palette css output skipped for diagnostic bisect",
+      category: "media",
+      phase: "skip",
+      reason: "diag-bisect",
+      targetKey: coverBlobId ?? undefined,
+      paletteCount: nextPalette.length,
+      fallbackToTheme: !next,
+    });
+  }
+
   if (!coverBlobId || !next) {
-    useVisualizerCoverColorStore.setState({ coverBlobId, rgb: null, css: null, palette: [] });
+    useVisualizerCoverColorStore.setState({
+      coverBlobId,
+      rgb: null,
+      css: DISABLE_COVER_COLOR_CSS_FOR_BISECT ? current.css : null,
+      palette: [],
+    });
     return;
   }
 
@@ -53,7 +73,7 @@ export function transitionVisualizerCoverColor(
     useVisualizerCoverColorStore.setState({
       coverBlobId,
       rgb: next,
-      css: rgba(next, 1),
+      css: coverColorCssValue(next, current.css),
       palette: nextPalette,
     });
     return;
@@ -67,13 +87,17 @@ export function transitionVisualizerCoverColor(
     useVisualizerCoverColorStore.setState({
       coverBlobId,
       rgb,
-      css: rgba(rgb, 1),
+      css: coverColorCssValue(rgb, current.css),
       palette: mixPalette(fromPalette, nextPalette, eased),
     });
     if (t < 1) raf = requestAnimationFrame(tick);
     else raf = 0;
   };
   raf = requestAnimationFrame(tick);
+}
+
+function coverColorCssValue(rgb: Rgb, currentCss: string | null): string | null {
+  return DISABLE_COVER_COLOR_CSS_FOR_BISECT ? currentCss : rgba(rgb, 1);
 }
 
 function mixRgb(a: Rgb, b: Rgb, t: number): Rgb {

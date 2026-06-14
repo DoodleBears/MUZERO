@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import type { Rgb } from "@/lib/visualizer-color";
-import { mixPalette } from "./visualizer-color-store";
+import {
+  mixPalette,
+  transitionVisualizerCoverColor,
+  useVisualizerCoverColorStore,
+} from "./visualizer-color-store";
 
 const rgb = (r: number, g: number, b: number): Rgb => ({ r, g, b });
 
@@ -43,5 +47,25 @@ describe("mixPalette", () => {
 
   it("returns an empty palette when the target is empty", () => {
     expect(mixPalette([rgb(1, 2, 3)], [], 0.5)).toEqual([]);
+  });
+});
+
+describe("transitionVisualizerCoverColor diagnostic css freeze", () => {
+  it("updates the cover color state while keeping css unchanged", () => {
+    useVisualizerCoverColorStore.setState({
+      coverBlobId: null,
+      css: null,
+      palette: [],
+      rgb: null,
+    });
+
+    transitionVisualizerCoverColor("cover-1", rgb(10, 20, 30), []);
+
+    expect(useVisualizerCoverColorStore.getState()).toEqual({
+      coverBlobId: "cover-1",
+      css: null,
+      palette: [],
+      rgb: rgb(10, 20, 30),
+    });
   });
 });
