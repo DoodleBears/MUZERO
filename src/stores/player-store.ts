@@ -180,6 +180,9 @@ interface PlayerState {
   playNextTrack: (track: Track) => Promise<void>;
   /** Play a song from an online source (global search): import it into the online set, then play. */
   playStreamedHit: (hit: StreamSearchHit) => Promise<void>;
+  /** Play a batch of online hits in order (Discover "play all"): queue the tail into the
+   *  online set, then play the head via the same single-play path. */
+  playStreamedHits: (hits: StreamSearchHit[]) => Promise<void>;
   /**
    * Import a source playlist into a NEW set of streamed tracks (tagged with the
    * playlist ref for later incremental re-sync); returns how many were added.
@@ -930,6 +933,19 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     if (!alreadyActive) await get().setActiveSession(setId);
     const idx = await waitForQueueIndex(get, track.id);
     if (idx >= 0) await get().playIndex(idx);
+  },
+
+  async playStreamedHits(hits) {
+    if (hits.length === 0) return;
+    // Queue the tail into the online set first (in order, deduped), then play the head
+    // via the proven single-play path — which handles set creation/activation + the
+    // active-set watcher race exactly once, so order ends up [hit0, hit1, …, hitN].
+    if (hits.length > 1) {
+      const setId = await ensureOnlineSet();
+      await addHitsToSet(setId, hits.slice(1));
+      void cacheStreamPlaylistTrackCovers({ sessionId: setId, hits: hits.slice(1) });
+    }
+    await get().playStreamedHit(hits[0]);
   },
 
   async importStreamedPlaylist(sourceId, playlistId, name, opts) {

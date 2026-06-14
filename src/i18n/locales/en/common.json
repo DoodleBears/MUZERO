@@ -1137,6 +1137,7 @@
     "noTrackSelected": "Select a song",
     "modeAlbums": "Albums",
     "modeArtists": "Artists",
+    "modeOnline": "Discover",
     "searchAlbums": "Search albums…",
     "searchArtists": "Search artists…",
     "searchInSet": "Search in this set…",
@@ -1151,6 +1152,17 @@
     "albumCount_one": "{{count}} album",
     "albumCount_other": "{{count}} albums",
     "openEntity": "Open {{name}}"
+  },
+  "discover": {
+    "dailyTracks": "Daily picks",
+    "recommendedPlaylists": "Recommended playlists",
+    "playAll": "Play all",
+    "reroll": "Refresh",
+    "loginToUnlock": "Log in to NetEase Music to unlock your daily picks",
+    "error": "Couldn't load recommendations right now.",
+    "retry": "Retry",
+    "dailyEmpty": "No daily picks yet — check back later.",
+    "playlistsEmpty": "No recommended playlists right now."
   },
   "shortcuts": {
     "category": {
@@ -1191,6 +1203,7 @@
       "navGalleryTabTracks": "Library tab: All songs",
       "navGalleryTabAlbums": "Library tab: Albums",
       "navGalleryTabArtists": "Library tab: Artists",
+      "navGalleryTabOnline": "Library tab: Discover",
       "searchOpenGlobal": "Open search",
       "libraryFocusPrev": "Move focus up",
       "libraryFocusNext": "Move focus down",

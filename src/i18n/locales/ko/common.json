@@ -1119,6 +1119,7 @@
     "noTrackSelected": "곡 선택",
     "modeAlbums": "앨범",
     "modeArtists": "아티스트",
+    "modeOnline": "발견",
     "searchAlbums": "앨범 검색…",
     "searchArtists": "아티스트 검색…",
     "searchInSet": "이 세트에서 검색…",
@@ -1132,6 +1133,17 @@
     "aiGenerated": "AI 생성",
     "albumCount_other": "{{count}}개 앨범",
     "openEntity": "{{name}} 열기"
+  },
+  "discover": {
+    "dailyTracks": "데일리 추천",
+    "recommendedPlaylists": "추천 플레이리스트",
+    "playAll": "전체 재생",
+    "reroll": "새로고침",
+    "loginToUnlock": "NetEase Music에 로그인하여 데일리 추천 잠금 해제",
+    "error": "지금은 추천을 불러올 수 없습니다.",
+    "retry": "다시 시도",
+    "dailyEmpty": "아직 데일리 추천이 없습니다.",
+    "playlistsEmpty": "추천 플레이리스트가 없습니다."
   },
   "shortcuts": {
     "category": {
@@ -1172,6 +1184,7 @@
       "navGalleryTabTracks": "라이브러리 탭: 전체 곡",
       "navGalleryTabAlbums": "라이브러리 탭: 앨범",
       "navGalleryTabArtists": "라이브러리 탭: 아티스트",
+      "navGalleryTabOnline": "라이브러리 탭: 발견",
       "searchOpenGlobal": "검색 열기",
       "libraryFocusPrev": "포커스 위로",
       "libraryFocusNext": "포커스 아래로",

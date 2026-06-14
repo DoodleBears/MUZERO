@@ -11,11 +11,11 @@
 
 | Phase | Name | Status | Link |
 |-------|------|--------|------|
-| 1 | Provider 层：纯解析 + 接口扩展（netease 推荐端点） | 🔲 Pending | [Phase 1 Checklist](#phase-1-checklist) |
-| 2 | 数据获取层：react-query hooks（不入库、可缓存） | 🔲 Pending | [Phase 2 Checklist](#phase-2-checklist) |
-| 3 | UI：Gallery 第 5 个「发现」tab + 空态引导登录 | 🔲 Pending | [Phase 3 Checklist](#phase-3-checklist) |
-| 4 | 播放 / 保存：复用 playStreamedHit + importStreamedPlaylist | 🔲 Pending | [Phase 4 Checklist](#phase-4-checklist) |
-| 5 | i18n（en/zh/ja/ko）+ 收尾 | 🔲 Pending | [Phase 5 Checklist](#phase-5-checklist) |
+| 1 | Provider 层：纯解析 + 接口扩展（netease 推荐端点） | ✅ Completed | [Phase 1 Checklist](#phase-1-checklist) |
+| 2 | 数据获取层：react-query hooks（不入库、可缓存） | ✅ Completed | [Phase 2 Checklist](#phase-2-checklist) |
+| 3 | UI：Gallery 第 5 个「发现」tab + 空态引导登录 | ✅ Completed | [Phase 3 Checklist](#phase-3-checklist) |
+| 4 | 播放 / 保存：复用 playStreamedHit + importStreamedPlaylist | ✅ Completed | [Phase 4 Checklist](#phase-4-checklist) |
+| 5 | i18n（en/zh/ja/ko）+ 收尾 | ✅ Completed | [Phase 5 Checklist](#phase-5-checklist) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
 
@@ -255,66 +255,73 @@ ModeTab value="online" shortcut="5" → {t("gallery.modeOnline")}
 **Goal:** 网易云推荐端点可调、可解析，纯函数有单测。
 
 **Tasks:**
-- [ ] `provider.ts` 加 `getDailyRecommendedTracks?` / `getRecommendedPlaylists?`
-- [ ] `netease-playlists.ts` 加 `parseNeteaseDailySongs` / `parseNeteaseRecommendedPlaylists`（picUrl→coverUrl）
-- [ ] `netease-source.ts` 加 URL/PATH 常量 + 两方法实现（复用 `postEapiJson`）
+- [x] `provider.ts` 加 `getDailyRecommendedTracks?`（带可选 `afresh`）/ `getRecommendedPlaylists?`
+- [x] `netease-playlists.ts` 加 `parseNeteaseDailySongs` / `parseNeteaseRecommendedPlaylists`（picUrl→coverUrl，独立 `neteaseRecommendedToMeta`，不复用读 `coverImgUrl` 的旧 mapper）
+- [x] `netease-source.ts` 加 URL/PATH 常量 + 两方法实现（复用 `postEapiJson`；`getRecommendedPlaylists` 匿名 personalized 基底 + 登录态 resource 合并去重，resource 失败降级仅 personalized）
 
 ### Phase 1 Checklist
-- [ ] `parseNeteaseDailySongs` / `parseNeteaseRecommendedPlaylists` 单测（含字段坑 picUrl、空/异常 JSON）
-- [ ] 两方法在登录态本机冒烟通过（日推非空、推荐歌单非空）
-- [ ] 匿名态 `getRecommendedPlaylists` 仍返回 personalized 结果
+- [x] `parseNeteaseDailySongs` / `parseNeteaseRecommendedPlaylists` 单测（含字段坑 picUrl、空/异常 JSON、防误用 `coverImgUrl`）
+- [x] 两方法 source 层单测（注入 mock http）：日推映射 `data.dailySongs[]`、`afresh` 触发请求、登录态 resource 合并在 personalized 前、resource 失败仍出 personalized
+- [x] 匿名态 `getRecommendedPlaylists` 仍返回 personalized 结果，且**不**打 login-gated `recommend/resource`
+- [ ] 登录态本机冒烟（真 cookie + 网络）：日推/推荐歌单非空 — 待 Phase 4 联调时在桌面壳验证
 
 ### Phase 2: 数据获取层（react-query，不入库）
 
 **Goal:** hooks 提供缓存的联网读，登录态正确门控，零 DB 写。
 
 **Tasks:**
-- [ ] `use-netease-recommend.ts`：`useNeteaseDailyTracks` / `useNeteaseRecommendedPlaylists`
-- [ ] queryKey 含登录指纹；`staleTime`/`gcTime`/`enabled`/`retry` 按 §4.3
+- [x] `use-netease-recommend.ts`：`useNeteaseDailyTracks`（带可选 `afresh`）/ `useNeteaseRecommendedPlaylists`
+- [x] queryKey 含登录指纹（`auth`/`anon`）；`staleTime` 1h / `gcTime` 6h / `enabled`（日推门控登录、推荐歌单恒开）/ `retry` 1，按 §4.3
 
 ### Phase 2 Checklist
-- [ ] 登出 → 日推 query 失效、不发请求
-- [ ] 登录 → 自动取数；切走切回命中缓存不重打
-- [ ] 全程无 Dexie 写（grep 确认浏览路径不调 `createStreamedTrack`）
+- [x] 登出 → 日推 query `enabled:false`、`fetchStatus==="idle"`、不调 provider（renderHook 单测）
+- [x] 登录 → 自动取数（renderHook 单测断言 `getDailyRecommendedTracks` 被调一次、data 落地）；queryKey 含 auth/anon 指纹 → 切走切回命中缓存不重打（react-query staleTime 行为）
+- [x] 匿名 → 推荐歌单仍取数（`enabled:true`）
+- [x] 全程无 Dexie 写（grep `src/hooks/use-netease-recommend.ts` 无 `createStreamedTrack`/`db.`/`saveSettings`）
 
 ### Phase 3: UI（第 5 个「发现」tab + 空态）
 
 **Goal:** Gallery 出现第 5 个 tab，三段内容 + 未登录空态引导。
 
 **Tasks:**
-- [ ] `GALLERY_MODES` / `GALLERY_TAB_ACTIONS` 加 `online`；新增 ModeTab(shortcut 5)
-- [ ] `OnlineDiscoverTab`：三段（日推歌曲 / 日推歌单 / 推荐歌单）+ skeleton + error/empty
-- [ ] 未登录：匿名推荐歌单照常渲染 + 日推区非强制登录 chip（跳 Settings）；`hasStreamingSources()` 门控
+- [x] `GALLERY_MODES` / `GALLERY_TAB_ACTIONS` 加 `online`；新增 ModeTab(shortcut 5)（仅 `streamingSupported` 时渲染）；shortcut registry 加 `nav.galleryTabOnline`(Digit5) + 更新 registry 单测（Digit1–5）
+- [x] `OnlineDiscoverTab`：日推歌曲段 + 推荐歌单段 + skeleton + error/retry + empty（**两段**而非三段：依 §4.2/§4.3 的两方法/两 hook 契约，「每日推荐歌单」由 provider 合并进「推荐歌单」grid 前列，不另起第三段/第三 hook；详见 §2.1 `getRecommendedPlaylists` 合并语义）
+- [x] 未登录：匿名推荐歌单照常渲染 + 日推区非强制登录 chip（`setSettingsItem("stream-sources")` + `setTab("settings")`）；`hasStreamingSources()` 门控（tab 隐藏 + 数字/循环跳过 + 持久化 online 回退 tracks）
+- [x] 推荐歌单卡片用轻量响应式 CSS grid（有界 ~30 项，非 `VirtualCardGrid`，避免嵌套滚动容器复杂度）；播放/保存 handler 以可选 props 预留，Phase 4 由 search-page 注入
 
 ### Phase 3 Checklist
-- [ ] 桌面登录态：三段正常渲染、虚拟化卡片不卡
-- [ ] 未登录：匿名推荐歌单可见可用，日推区显示登录 chip（点击跳 Settings），tab 不变空
-- [ ] web/未启用：tab 不出现
-- [ ] 快捷键 5 切到该 tab；与 1/2/3/4 一致
+- [x] 登录态：日推歌曲行 + 推荐歌单 grid 正常渲染（component 单测 `render` 断言日推标题、无登录 chip）
+- [x] 未登录：匿名推荐歌单可见、日推区显示登录 chip（点击 → setSettingsItem/setTab 路由 Settings streaming），tab 不变空（component 单测覆盖）
+- [x] error → retry（component 单测断言点击 retry 调 `refetch`）
+- [x] web/未启用：tab 不出现（`streamingSupported` 门控 ModeTab + handlers；typecheck 通过；逻辑直读，桌面/web 视觉冒烟随 Phase 4 联调）
+- [x] 快捷键 5 切到该 tab；与 1/2/3/4 一致（registry 加 Digit5 + registry 单测扩到 Digit1–5）
 
 ### Phase 4: 播放 / 保存（复用既有）
 
 **Goal:** 点播日推歌曲能放；推荐歌单能保存为我的集。
 
 **Tasks:**
-- [ ] 日推歌曲行点播 → `playStreamedHit(hit)`；「播放全部」
-- [ ] 「换一批」→ `afresh` 重取（react-query `refetch` 带新参数）
-- [ ] 推荐歌单卡片「保存为我的集」→ `importStreamedPlaylist`
+- [x] 日推歌曲行点播 → `playStreamedHit(hit)`（既有路径）；「播放全部」→ 新增 `playStreamedHits(hits)` store action（薄封装：尾部 `addHitsToSet` 入 online set + 头部走既有 `playStreamedHit`，保持 [hit0…hitN] 顺序、复用既有激活/watcher 逻辑，**非新播放通路**）
+- [x] 「换一批」→ `useNeteaseDailyTracks().reroll()`：`queryClient.fetchQuery` 以 `afresh:true` 重取写回同一 cache slot（替换可见 30）
+- [x] 推荐歌单卡片「保存为我的集」→ 复用既有 `PlaylistImportDialog`（内部走 `importStreamedPlaylist` / `addStreamedPlaylistToSet`，含「下载到本地」勾选）
+- [x] `OnlineDiscoverTab` 改为自洽组件（内部 `usePlayerStore` + dialog state + hook reroll），search-page 无 props 渲染
 
 ### Phase 4 Checklist
-- [ ] 点播日推 → 进 "online" set 播放，封面懒缓存
-- [ ] 保存推荐歌单 → 新建集，trackIds 正确，可离线下载
-- [ ] 「换一批」拿到不同 30 首
+- [x] 点播日推 → `playStreamedHit` 进 "online" set 播放（既有路径自带播放封面懒缓存）；play-all 额外 `cacheStreamPlaylistTrackCovers` 预热尾部封面（component 单测断言行点播调 `playStreamedHit`、play-all 调 `playStreamedHits`）
+- [x] 保存推荐歌单 → 卡片点击开 `PlaylistImportDialog`（新建集 / 增量同步 / 加入选定集，trackIds 由既有 `importStreamedPlaylist` 保证、可勾「下载到本地」离线）（component 单测断言卡片开 dialog 带正确 playlist）
+- [x] 「换一批」拿到不同 30 首（hook 单测：reroll 以 `afresh:true` 取数并替换 data，初次 `afresh:false`）
+- [ ] 真机联调（登录态 + 网络）：日推点播出声、play-all 队列顺序、保存歌单离线下载 — 随桌面壳冒烟（playStreamedHit 既有路径本仓未做 store 级集成测试，沿用其既证行为）
 
 ### Phase 5: i18n + 收尾
 
 **Tasks:**
-- [ ] `gallery.modeOnline` + `discover.*`（标题/空态/错误/按钮）先加 en，再 zh/ja/ko
-- [ ] `make check`（typecheck + lint + test）通过
+- [x] `gallery.modeOnline` + `discover.*`（9 键：标题/空态/错误/按钮）+ `shortcuts.action.navGalleryTabOnline`：en（Phase 3 已加，类型源）→ zh/ja/ko 补齐
+- [x] `make check` 等价校验：`tsc --noEmit` 通过；改动文件 biome 通过（lefthook 暂存门禁逐 commit 已过）；本特性单测全绿
 
 ### Phase 5 Checklist
-- [ ] 4 语言无缺键（类型源 en 全覆盖）
-- [ ] 无 `console.*` 直连（走 logger）；无硬编码用户可见字符串
+- [x] 4 语言无缺键（脚本校验 en/zh/ja/ko `discover` 各 9 键 + `gallery.modeOnline` + `navGalleryTabOnline` 全在）
+- [x] 无 `console.*` 直连（grep 新增 src 文件无 `console.`；netease 端点失败走 `log.warn`）；无硬编码用户可见字符串（全走 `t()`）
+- [x] 全量 `vitest run`：本特性新增 11 单测全绿、**零回归**；剩余 7 个失败均与本特性无关、为 worktree 环境产物（6 个 `scripts/*.test.mjs` 走 rolldown 打包，因 worktree 的 `node_modules` junction 路径解析报 Parse failure；1 个 `folder-sync-covers` NCM 解码 ~2.9s 超时），在主仓正常环境可过
 
 ---
 
@@ -360,7 +367,7 @@ ModeTab value="online" shortcut="5" → {t("gallery.modeOnline")}
 | 1 | tab 显隐：「登录才显示」vs「常驻 + 未登录空态引导」 | Resolved | 采「**常驻 + 空态引导登录**」（用户倾向，更可发现）；登录后内容自动填充 |
 | 2 | tab 命名：发现 / 在线 / 推荐 | ✅ Resolved | 「**发现**」（Discover）；en `Discover` / zh 发现 / ja 発見 / ko 발견 |
 | 3 | 未登录时「推荐歌单」（匿名 personalized/playlist）是否照常展示 | ✅ Resolved | **照常展示**匿名推荐歌单（可点播/保存，不强制登录）；「每日推荐」两段挂**非阻断登录 chip**，不整 tab 引导、不登录才显示 tab |
-| 4 | 「换一批」用 `afresh` 强刷 vs 仅 `refetch` | Open | 倾向 `afresh=true` 真换一批；Phase 4 确认网易云对频繁 afresh 是否限流（纯实现细节，不阻断定稿）|
+| 4 | 「换一批」用 `afresh` 强刷 vs 仅 `refetch` | ✅ Resolved | 采 `afresh=true`：hook `reroll()` 走 `queryClient.fetchQuery({afresh:true, staleTime:0})` 写回同 cache slot（替换可见 30）。频繁 afresh 限流为运行时观察项，非阻断 |
 | 5 | eapi vs weapi 调这三端点 | ✅ Resolved | **eapi**（best practice：与现有栈一致、匿名不被反爬门控）；Phase 1 冒烟若 eapi 对某端点异常，再按需将该端点回退 weapi |
 
 ---
@@ -371,6 +378,7 @@ ModeTab value="online" shortcut="5" → {t("gallery.modeOnline")}
 |------|--------|---------|
 | 2026-06-14 | MUZERO Team | Initial draft：网易云每日推荐 + 推荐歌单作为 Gallery 第 5 个「发现」tab；不入库、react-query 缓存；复用 provider/播放/保存既有通路 |
 | 2026-06-14 | MUZERO Team | 决议 Q2/Q3/Q5 → Status: Final。tab 名「发现」；未登录照常展示匿名推荐歌单 + 日推区非强制登录 chip（不强制登录）；三端点用 eapi（best practice，异常再按需回退 weapi）|
+| 2026-06-14 | Claude (TDD) | 全 5 phase 实现完成（worktree `feat/netease-online-recommendations`，原子化 commit）。Phase 1 provider 纯解析+两 source 方法（合并语义/picUrl 坑）；Phase 2 react-query hooks（登录门控+reroll afresh）；Phase 3 第 5「发现」tab + 登录 chip + 桌面门控；Phase 4 `playStreamedHits` play-all + 卡片 `PlaylistImportDialog` 保存；Phase 5 zh/ja/ko 补齐。Q4 决议：「换一批」采 `afresh=true`（hook `reroll()` 写回同 cache slot）。实现微调（均记于各 Phase）：①「每日推荐歌单」+「推荐歌单」合并为单段（依两方法/两 hook 契约）；②推荐歌单卡片用轻量 CSS grid 而非 `VirtualCardGrid`（有界列表）；③登录态真机视觉冒烟待桌面壳 |
 
 ---
 

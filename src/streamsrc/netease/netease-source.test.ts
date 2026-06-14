@@ -89,4 +89,78 @@ describe("createNeteaseSource", () => {
     const res = await source.resolve("1");
     expect(res).toEqual({ kind: "no-permission", reason: "vip" });
   });
+
+  const DAILY = {
+    code: 200,
+    data: {
+      dailySongs: [
+        {
+          id: 33894312,
+          name: "晴天",
+          ar: [{ name: "周杰伦" }],
+          al: { name: "叶惠美", picUrl: "https://p1.music.126.net/cover.jpg" },
+          dt: 269000,
+        },
+      ],
+    },
+  };
+  const RESOURCE = {
+    code: 200,
+    recommend: [{ id: 11, name: "每日推荐歌单", picUrl: "https://p/r.jpg", trackCount: 30 }],
+  };
+  const PERSONALIZED = {
+    code: 200,
+    result: [{ id: 22, name: "官方推荐", picUrl: "https://p/p.jpg", trackCount: 50 }],
+  };
+
+  it("getDailyRecommendedTracks maps data.dailySongs[] (eapi, no encSecKey)", async () => {
+    const { source, calls } = deps([["/eapi/v3/discovery/recommend/songs", DAILY]], "MUSIC_U=abc");
+    const hits = await source.getDailyRecommendedTracks?.();
+    expect(hits?.[0]).toMatchObject({ externalId: "33894312", title: "晴天", durationSec: 269 });
+    const body = calls.find((c) => c.url.includes("recommend/songs"))?.body ?? "";
+    expect(body).toContain("params=");
+    expect(body).not.toContain("encSecKey=");
+  });
+
+  it("getDailyRecommendedTracks passes afresh=true when asked to reroll", async () => {
+    const { source, calls } = deps([["/eapi/v3/discovery/recommend/songs", DAILY]], "MUSIC_U=abc");
+    await source.getDailyRecommendedTracks?.({ afresh: true });
+    // afresh rides inside the encrypted params; assert the request fired (1 call).
+    expect(calls.filter((c) => c.url.includes("recommend/songs"))).toHaveLength(1);
+  });
+
+  it("getRecommendedPlaylists returns personalized result[] when anonymous (no resource call)", async () => {
+    const { source, calls } = deps([["/eapi/personalized/playlist", PERSONALIZED]]);
+    const playlists = await source.getRecommendedPlaylists?.();
+    expect(playlists).toEqual([
+      {
+        id: "22",
+        name: "官方推荐",
+        coverUrl: "https://p/p.jpg",
+        trackCount: 50,
+        source: "netease",
+      },
+    ]);
+    // Anonymous must not hit the login-gated recommend/resource endpoint.
+    expect(calls.some((c) => c.url.includes("recommend/resource"))).toBe(false);
+  });
+
+  it("getRecommendedPlaylists merges daily resource ahead of personalized when logged in", async () => {
+    const { source } = deps(
+      [
+        ["/eapi/v1/discovery/recommend/resource", RESOURCE],
+        ["/eapi/personalized/playlist", PERSONALIZED],
+      ],
+      "MUSIC_U=abc",
+    );
+    const playlists = await source.getRecommendedPlaylists?.();
+    expect(playlists?.map((p) => p.id)).toEqual(["11", "22"]);
+  });
+
+  it("getRecommendedPlaylists still yields personalized if the resource call fails", async () => {
+    // recommend/resource is unmatched → mock returns { code: -460 } (no recommend[]).
+    const { source } = deps([["/eapi/personalized/playlist", PERSONALIZED]], "MUSIC_U=abc");
+    const playlists = await source.getRecommendedPlaylists?.();
+    expect(playlists?.map((p) => p.id)).toEqual(["22"]);
+  });
 });
