@@ -3,6 +3,17 @@
 > **当前主线 = 云盘分享双 PRD**(下方 P0–P3)。既有工作流(数据模型/chat/手动验证)的未完成项保留在文末,不丢状态。
 > 维护:做完一项勾选 + 更新对应 PRD 的 Phase 状态 + changelog。新需求先进 PRD,再回填本表。
 
+## 🩺 Perf — switch-song jank(FPS bisect,进行中)
+
+> 高 FPS 基线 = `1facadc`(tab-1/tab-2 切歌 ~100–110 FPS)。`f67ece8..1948692` 这段(rebase 损坏过,已修复重排)某些 commit 带回掉帧。逐 commit bisect 中,见分支 `diag/fps-stepwise`(逐个 cherry-pick + 每步测试)。
+
+- [ ] **移除 / 替换 PlaybackSpectrum 的 `onscreen` IntersectionObserver gate**(`7ec4a58` "keep tab pages mounted" / Phase 4 引入)。
+  - **已确认 regression**:这个 spectrum 改动会带回严重切歌掉帧。把 `playback-spectrum.tsx` + test 回退到高 FPS 基线(`1facadc`)版本后掉帧消失(`diag/fps-bisect-no-spectrum` 验证;`diag/fps-stepwise` step 1 起即排除此 gate)。
+  - gate 内容:`useState(true)` 的 `onscreen` + canvas 上的 `IntersectionObserver`,喂给 `shouldAnimateSpectrum({…, onscreen})` 与 idle-paint effect(`!onscreen` 时跳过绘制)。
+  - 原意:Now Playing 被 keep-mount-but-hidden(`display:none`)时停掉 spectrum 的 rAF。但 Now Playing 现在又是按需挂载(hybrid,`73f40fc`/QA#3),gate 基本多余且得不偿失。
+  - **修法**:直接去掉 IntersectionObserver gate,或换成切歌时不 churn 的更廉价可见性判断;改完重测 tab-1/tab-2 切歌 FPS。
+- [ ] **逐 commit 排查 `f67ece8..1948692` 其余 commit 是否还有 regression**(`diag/fps-stepwise` 每 pick 一个测一个,最终排除每一个 regression)。
+
 ## 当前主线:存储抽象 + 分享(2026-06-12 起)
 
 > 排序依据:**存储抽象先行**(share PRD Phase 1 的投影发布必须走 `CloudObjectStore`,避免在 S3 直连代码上继续堆量);broker 线与 WebDAV 线在抽象落地后**可并行**;分享功能按 Q1 决议整批 ship。
