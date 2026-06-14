@@ -820,7 +820,7 @@ backgroundGpuPowerPreference?: "auto" | "high-performance" | "low-power"; // DEF
 - [x] Commit B:在 A 的反向路径之外,禁用 Pixi ambient layer。
 - [x] Commit C:保留 Pixi shell 但强制 `src=null`,不启动 texture source。
 - [x] Commit D:禁用 cover resource hooks 与 cover-color/palette hook。
-- [ ] Commit E:若 D 仍掉,跳过 audio media source reload。
+- [x] Commit E:跳过 audio media source reload。
 - [ ] 最终修复必须回到产品分支实现,不得直接合并诊断 commit。
 
 **Experiment A implementation:** [`App.tsx`](../../../src/App.tsx) 不再挂载 `NowPlayingBackground`;页面、dock、播放 transport、foreground stage、trace recorder/HUD 保持原样。若本 commit 下 `fpsLow/frameMaxMs` 明显恢复,则剩余主因位于全局背景层(包括 Pixi/flow/visualizer/compositor)。若仍不恢复,则应转向 audio blob load、foreground cover surfaces 或 React render churn。
@@ -830,6 +830,8 @@ backgroundGpuPowerPreference?: "auto" | "high-performance" | "low-power"; // DEF
 **Experiment C implementation:** 在 B 之后重新启用 `PixiPixelBackground` 组件挂载,但强制传入 `src=null`。这会保留 Pixi app/canvas/filter/shell 与背景层合成成本,同时阻断图片 `background.texture fetch/header/decode` 和 texture swap 输入。若 B 恢复但 C 又掉,说明 Pixi 稳态 canvas/filter/compositor 本身是必要放大器;若 B/C 都恢复,说明主因在 Pixi texture source 的 fetch/decode/swap 队列。
 
 **Experiment D implementation:** 在 C 之后短路 [`use-media.ts`](../../../src/hooks/use-media.ts) 的 full-cover URL、thumbnail/backlight derivative、entity cover URL,并短路 [`visualizer-dynamic-color.tsx`](../../../src/components/player/visualizer-dynamic-color.tsx) 的 cover-color/palette hook。目标是让 `cover.render`, `cover.render.object-url-miss`, full cover DOM `<img>`, cover derivative worker/object URL、palette liveQuery 都不再随切歌启动。若 D 恢复,下一步正式修复应集中在“封面消费者去重/延后/按可见性禁用”,而不是 Pixi 或 audio。
+
+**Experiment E implementation:** 在 D 之后短路 [`ensureLoadedAndPlay`](../../../src/stores/player-store.ts),保留 `playIndex`/store currentIndex 更新,但跳过 `getTrackBlob`, `mediaEngine.loadBlob/loadUrl`, `stream.resolve`, `mediaEngine.play`。trace 会出现 `player.playback media.load.skip sourceId=diag-bisect:*`,不会出现 `media.load.blob/stream/local-file`。若 E 恢复而 D 不恢复,主因在每首媒体源重新装载/音频 decoder pipeline;若 E 仍掉,剩余要转向 React render churn、trace recorder/HUD、页面列表或 transport state fan-out。
 
 ---
 

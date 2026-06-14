@@ -132,6 +132,7 @@ import type { DecodedNcmMedia } from "@/workers/ingest-core";
 
 const IMPORT_VISIBILITY_FLUSH_SIZE = 25;
 const LOCAL_BLOB_PLAYBACK_SETTLE_MS = 180;
+const DISABLE_MEDIA_SOURCE_RELOAD_FOR_BISECT = true;
 const DEFAULT_PLAYER_VOLUME = 0.9;
 
 export type QueueSource =
@@ -2174,6 +2175,20 @@ async function ensureLoadedAndPlay(
       hasRemoteMedia: !!track.remoteMediaUrl,
     });
     void pump(set, get);
+    return;
+  }
+  if (DISABLE_MEDIA_SOURCE_RELOAD_FOR_BISECT) {
+    tracePlaybackLoad("media.load.skip", track, playbackTrace, {
+      sourceId: `diag-bisect:${sourceKind}`,
+      transport: "blob",
+    });
+    loadedTrackId = track.id;
+    const duration = playableDurationSec(track.durationSec);
+    set({
+      durationSec: duration || get().durationSec,
+      isPlaying: wantPlay,
+      positionSec: 0,
+    });
     return;
   }
   const previousLoadedTrackId = loadedTrackId;
