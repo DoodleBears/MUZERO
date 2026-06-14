@@ -13,7 +13,12 @@
   - 原意:Now Playing 被 keep-mount-but-hidden(`display:none`)时停掉 spectrum 的 rAF。但 Now Playing 现在又是按需挂载(hybrid,`73f40fc`/QA#3),gate 基本多余且得不偿失。
   - **修法**:直接去掉 IntersectionObserver gate,或换成切歌时不 churn 的更廉价可见性判断;改完重测 tab-1/tab-2 切歌 FPS。
 - [x] **排除 `73f40fc`(conditionally mount Now Playing / QA#3)** —— bisect 反转结论。`73f40fc` 当初是为了修「full keep-mount 导致 hidden Now Playing 每次切歌重渲染」,但那是 **spectrum gate 存在时** 的现象。去掉 spectrum gate 后:step 1(full keep-mount)= smooth;step 2(conditional mount)= regression(tab-1 切歌 fpsAvg 50–64 / fpsLow 5.7 / frameMax 175,`.logs/20260615-2-…/tab-1-switch-song-low-fps.log`)。结论:gate 才是元凶,`73f40fc` 的 conditional-mount 现在反而有害 → **skip,保留 full keep-mount**。
-- [ ] **逐 commit 排查 `f67ece8..1948692` 其余 commit 是否还有 regression**(`diag/fps-stepwise` 每 pick 一个测一个,最终排除每一个 regression)。已排除:spectrum gate(`7ec4a58` 的一部分)、`73f40fc`。
+- [x] **逐 commit 排查 `f67ece8..1948692` 其余 commit 是否还有 regression**(`diag/fps-stepwise` 每 pick 一个测一个)。**已完成**:全 12 步逐个真机测试,**只有 2 个 regression**,均已排除:
+  1. **spectrum `onscreen` IntersectionObserver gate**(`7ec4a58` Phase 4 的一部分)。
+  2. **conditional-mount Now Playing**(`73f40fc`)—— gate 去掉后它反而有害。
+  其余所有 commit(mode controls / configurable shortcuts / control popovers / cover appearance sliders / backlight clipping & behind-stage / lyric cover color / AutoScrollText Phase 32-A / hide stage portals / polish header)逐个测试 **全部 smooth**。
+  - **结论**:`diag/fps-stepwise` = 全链路高 FPS 版本(full keep-mount + 无 spectrum gate + 无 conditional-mount)。
+  - **落地 TODO**:把这两处排除整理成正式 fix 合进 `main`(去掉 spectrum gate + 保持 full keep-mount,而非 `73f40fc` 的 hybrid)。
 
 ## 当前主线:存储抽象 + 分享(2026-06-12 起)
 
