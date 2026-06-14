@@ -27,6 +27,7 @@ import { usePlayerStore } from "@/stores/player-store";
 import {
   buildCoverPreloadRequests,
   type CoverPreloadCandidate,
+  filterCoverPreloadRequestsForBurst,
   type PreloadedCover,
   preloadCoverBatch,
   releasePreloadedCover,
@@ -47,6 +48,7 @@ const SWITCH_DURATION_SEC = 0.62;
 const HANDOFF_DURATION_SEC = 0.32;
 const COVER_READY_SETTLE_MS = 440;
 const COVER_PRELOAD_LOCAL_SETTLE_MS = 140;
+const COVER_PRELOAD_NON_CURRENT_LOCAL_SETTLE_MS = 420;
 const COMMIT_EASE = [0.22, 1, 0.36, 1] as const;
 const SNAP_EASE = [0.25, 1, 0.5, 1] as const;
 const EXIT_TRAVEL_FRACTION = 0.92;
@@ -1052,11 +1054,30 @@ function usePreloadedCoverUrls(candidates: CoverPreloadCandidate[]): Record<stri
   const coverCropped = settings.coverCropped ?? true;
   const entriesRef = useRef<Record<string, PreloadedCover>>({});
   const batchSeqRef = useRef(0);
+  const [nonCurrentLocalReadyKey, setNonCurrentLocalReadyKey] = useState<string | null>(null);
   const [urls, setUrls] = useState<Record<string, string>>({});
   const requests = useMemo(
     () => buildCoverPreloadRequests(candidates, coverCropped),
     [candidates, coverCropped],
   );
+  const requestsKey = useMemo(
+    () => requests.map((request) => `${request.role}:${request.trackId}:${request.key}`).join("|"),
+    [requests],
+  );
+  const includeNonCurrentLocal = nonCurrentLocalReadyKey === requestsKey;
+  const activeRequests = useMemo(
+    () => filterCoverPreloadRequestsForBurst(requests, includeNonCurrentLocal),
+    [includeNonCurrentLocal, requests],
+  );
+
+  useEffect(() => {
+    const timer = window.setTimeout(
+      () => setNonCurrentLocalReadyKey(requestsKey),
+      COVER_PRELOAD_NON_CURRENT_LOCAL_SETTLE_MS,
+    );
+    return () => window.clearTimeout(timer);
+  }, [requestsKey]);
+
   useEffect(() => {
     let alive = true;
     batchSeqRef.current += 1;
@@ -1071,8 +1092,9 @@ function usePreloadedCoverUrls(candidates: CoverPreloadCandidate[]): Record<stri
       const result = await preloadCoverBatch({
         isCurrent,
         localSettleMs: COVER_PRELOAD_LOCAL_SETTLE_MS,
+        nonCurrentLocalSettleMs: 0,
         previous,
-        requests,
+        requests: activeRequests,
       });
       if (!isCurrent() || result.canceled) {
         if (perfEnabled) {
@@ -1101,7 +1123,7 @@ function usePreloadedCoverUrls(candidates: CoverPreloadCandidate[]): Record<stri
     return () => {
       alive = false;
     };
-  }, [requests]);
+  }, [activeRequests]);
 
   useEffect(() => {
     return () => {

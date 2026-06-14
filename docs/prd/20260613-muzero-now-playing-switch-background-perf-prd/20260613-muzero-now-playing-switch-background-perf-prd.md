@@ -29,7 +29,8 @@
 | 16 | Pixi ImageBitmap load substage trace | ✅ Completed(trace verified) | [Phase 16](#phase-16-pixi-imagebitmap-load-分段归因-trace) |
 | 17 | Reuse fetched texture bytes for ImageBitmap header sizing | ✅ 代码完成(待 QA trace) | [Phase 17](#phase-17-reuse-fetched-texture-bytes-for-imagebitmap-header-sizing) |
 | 18 | Abort stale Pixi background texture loads | ✅ Completed(trace verified) | [Phase 18](#phase-18-abort-stale-pixi-background-texture-loads) |
-| 19 | Pixi texture load settle gate before fetch/decode | ✅ 代码完成(待 QA trace) | [Phase 19](#phase-19-pixi-texture-load-settle-gate-before-fetchdecode) |
+| 19 | Pixi texture load settle gate before fetch/decode | ✅ Completed(trace verified) | [Phase 19](#phase-19-pixi-texture-load-settle-gate-before-fetchdecode) |
+| 20 | Delay non-current local cover preload reads during switch bursts | ✅ 代码完成(待 QA trace) | [Phase 20](#phase-20-delay-non-current-local-cover-preload-reads-during-switch-bursts) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
 
@@ -651,7 +652,33 @@ backgroundGpuPowerPreference?: "auto" | "high-performance" | "low-power"; // DEF
 - [x] `pixi-background-controller.test.ts`:先加红灯用例,锁定配置 `loadDelayMs=180` 时 `loadMedia` 不会立即调用,179ms 前仍不启动,180ms 后才启动。
 - [x] `pixi-background-controller.test.ts`:新增 supersede 用例,锁定旧 source 在 delay 窗口内被新 source 取代时,旧 source 根本不进入 `loadMedia` / decode。
 - [x] 相关测试通过:`pixi-background-controller.test.ts` 13 例。
-- [ ] QA trace 验收:快速切歌时,被 180ms 窗口内 supersede 的旧 `swapSeq` 应只出现 `media.load phase=skip reason=aborted`,不再出现对应的 `background.texture fetch/header/decode`;成功落地的 `textureSwap` 会比 `textureSwap.start` 晚约 180ms 开始 load,但 `<img>` reveal 应已即时显示当前封面。
+- [x] QA trace 验收:13:15 trace 中快速切歌的旧 `swapSeq=30/32/34/36/40/42` 均只出现 `media.load phase=skip reason=aborted`,且没有对应 `background.texture fetch/header/decode`。Phase 19 成功阻断废弃 Pixi texture load 进入 fetch/decode。
+
+### QA#19(2026-06-14 Phase 19 trace):废弃 Pixi decode 已挡住,剩余大头转到 non-current cover preload 与最终 16.5MB 成功落地
+
+13:15 trace 证明 Phase 19 生效,但也把剩余问题缩小到两条仍读整图的路径:
+
+- **Phase 19 生效**:`swapSeq=30/32/34/36/40/42` 在 `34.2ms~184.5ms` 内 `phase=skip reason=aborted`,没有任何对应的 `background.texture fetch/header/decode`。这说明 180ms gate 确实让快速 supersede 的 Pixi source 不再启动图片管线。
+- **cover preload 仍会为 stale batch 读大封面**:同一轮里 `cover.preload.batch` 出现 `canceled=1/stale=1/created=0`,但 `maxSourceBytes=16569025`,耗时 `291.8ms` / `583.4ms`。这不是 object URL 创建问题,而是 stale batch 在知道自己 stale 前已经 `resolveMediaBlob()` 读完 16.5MB 本地封面。
+- **同一张图又被最终 Pixi 成功加载**:最终落地的 `swapSeq=44` 是 3000×3000 / 16.5MB `muzfetch`,其中 `fetch=876.3ms`, `decode=178.6ms`, `media.load=1477.4ms`,但 `texture.create=0.1ms`, `renderMs=1.7ms`;GPU/Pixi render 仍不是主因。
+- **同窗还有音频 source 切换**:最终曲 audio blob `7.29MB` 在 13:15:59.905 开始 load,13:16:00.369-00.370 连续触发 `loadedmetadata/loadeddata/canplay/playing/play.resolved`;FPS window 同期跌到 `fpsAvg=54`,随后 Pixi 成功上屏窗口跌到 `fpsAvg=46.3/fpsLow=4.4/frameMax=225.1`。
+- **结论**:Phase 19 只剩“成功落地的大封面”和“非 current 预加载读整图”两类成本。先处理后者,因为它是纯 wasted work,且 Phase 14 原本就留有“快速切歌时 prev/next 延后”的待办。
+
+### Phase 20: Delay non-current local cover preload reads during switch bursts
+
+**Goal:** 快速切歌期间,只允许当前歌曲封面继续走较短 preload settle;`previous` / `next` / `stack-*` / `settle` 这些 coverflow 预加载在更长稳定窗口后才读取本地 cover blob。这样 stale batch 在窗口内被新 current supersede 时,不会先读完 16.5MB 再发现 stale。
+
+**实现(落地):**
+- [`cover-preload.ts`](../../../src/components/player/cover-preload.ts):`preloadCoverBatch` 新增 `nonCurrentLocalSettleMs`,并把 local miss settle 拆成 current / non-current 两个桶。non-current local miss 在读取 `resolveMediaBlob()` 前等待该窗口;若 batch 已 stale,直接 cancel 且释放占位 ref。`settleMs=0` 时不再额外排 `delay(0)` 宏任务。
+- [`cover-preload.ts`](../../../src/components/player/cover-preload.ts):新增 `filterCoverPreloadRequestsForBurst()`,在 burst 期间过滤掉 non-current local 请求,但保留 current local 与 remote cover。
+- [`swipeable-media-stage.tsx`](../../../src/components/player/swipeable-media-stage.tsx):保留 `COVER_PRELOAD_LOCAL_SETTLE_MS=140` 给 current,新增 `COVER_PRELOAD_NON_CURRENT_LOCAL_SETTLE_MS=420` 作为邻近/stack/settle 本地预加载放行窗口。hook 先发 current/remote 轻量批,420ms 后再放开 previous/next/stack 本地预加载,避免 current overlay 被 non-current 等待阻塞。主封面仍由 `useTrackCoverResource(current)` 负责,不影响当前曲可见性。
+
+**Tasks(TDD):**
+- [x] `cover-preload.test.ts`:先加红灯用例,锁定 non-current local cover 在 420ms 前不会调用 `resolveMediaBlob`;若 batch 在窗口内 stale,结果 `canceled=1`, `maxSourceBytes=0`,且 cache ref 释放。
+- [x] 新增 burst filter 测试,锁定 burst 期间保留 current/remote、过滤 non-current local;更新 `swipeable-media-stage.test.tsx` 表达新的稳定窗口语义。
+- [x] 实现 `nonCurrentLocalSettleMs`、burst filter 与 stage 两批接线。
+- [x] `cover-preload.test.ts` + `swipeable-media-stage.test.tsx` 共 10 例通过。
+- [ ] QA trace 验收:快速切歌时 stale/canceled 的 `cover.preload.batch` 不应再出现 `maxSourceBytes=16569025` 或 `lastMs>250ms`;预期非 current 大封面 batch 在窗口内 stale 时 `maxSourceBytes=0`,且 image blob 计数不因邻近预加载增长。
 
 ---
 
@@ -707,7 +734,8 @@ backgroundGpuPowerPreference?: "auto" | "high-performance" | "low-power"; // DEF
 | 17 | QA#15:Phase 15 后为什么 `media.load` 仍 232-415ms? | ✅ Resolved(trace split) | Phase 16 已拆出 `fetch/header/decode`;11:59 trace 显示 `header` 与 `fetch` 也会到 80-120ms,不是单纯 decode。 |
 | 18 | QA#16:为什么只读 64KB header 仍会 84-121ms? | ✅ Resolved(trace verified) | Phase 17 改为 fetch response `arrayBuffer()` 一次,复用前 64KB 做尺寸探测;12:16 trace 显示 `headerSource=fetched-bytes` 且 `header=0~0.1ms`。 |
 | 19 | QA#17:为什么 Phase 17 后仍 `fpsLow=3.6/frameMax=275ms`? | ✅ Resolved(trace verified) | 最大掉帧来自 stale 16.5MB `muzfetch`:用户已切到下一首,旧 `swapSeq=14` 仍 fetch/decode 2s 后才 stale。Phase 18 加 `AbortSignal`;12:28 trace 已看到旧 `swapSeq=16/18` 以 `phase=skip reason=aborted` 退出,不再有 2s stale fetch。 |
-| 20 | QA#18:Phase 18 abort 后为什么仍 `fpsLow=3.6/frameMax=275ms`? | 🔲 Phase 19 code done, QA trace pending | Abort 已取消旧长尾,但旧 load 在切歌后立即启动,用户 200-300ms 内再切时浏览器可能已进入不可立即抢占的 ImageBitmap/fetch 管线。Phase 19 在 Pixi texture `loadMedia` 前加 180ms abortable settle gate,让快速 supersede 的旧 source 不进 fetch/decode。 |
+| 20 | QA#18:Phase 18 abort 后为什么仍 `fpsLow=3.6/frameMax=275ms`? | ✅ Resolved(trace verified) | Abort 已取消旧长尾,但旧 load 在切歌后立即启动,用户 200-300ms 内再切时浏览器可能已进入不可立即抢占的 ImageBitmap/fetch 管线。Phase 19 在 Pixi texture `loadMedia` 前加 180ms abortable settle gate;13:15 trace 已验证旧 `swapSeq=30/32/34/36/40/42` 不再进入 `background.texture fetch/decode`。 |
+| 21 | QA#19:Phase 19 后为什么仍 `fpsAvg≈46/fpsLow=4.4`? | 🔲 Phase 20 code done, QA trace pending | 废弃 Pixi decode 已挡住,剩余为两个整图读:non-current `cover.preload.batch` stale/canceled 仍读 16.5MB,以及最终落地 Pixi 成功 `muzfetch fetch=876ms/decode=178ms`。Phase 20 先砍纯 wasted work:non-current 本地预加载延后 420ms,stale batch 不读 blob。 |
 
 ---
 
@@ -745,3 +773,4 @@ backgroundGpuPowerPreference?: "auto" | "high-performance" | "low-power"; // DEF
 | 2026-06-14 | User+Codex | **QA#16 trace + Phase 17 代码完成(TDD)**:11:59 trace 显示 `header` 与 `fetch` 也会成为长帧来源(`header=84.2/121.3ms`,`fetch=106.9ms`),Pixi GPU 侧仍仅 0-2ms。`loadImageBitmapSource` 支持 `{ blob, headerBytes }`,优先复用 fetch bytes 做尺寸探测并 trace `headerSource`;`pixi-pixel-background` 改为 response `arrayBuffer()` 一次生成 Blob + header bytes,避免 `blob.slice(...).arrayBuffer()` 二次读。TDD:background-texture 8 例、pixi-pixel-background 11 例通过。 |
 | 2026-06-14 | User+Codex | **QA#17 trace + Phase 18 代码完成(TDD)**:12:16 trace 验证 Phase 17 生效(`headerSource=fetched-bytes`,`header=0~0.1ms`),但发现 stale 16.5MB `muzfetch` 旧 `swapSeq=14` 在用户切到下一首后仍 `fetch=1830ms/decode=181ms`,最后才 `textureSwap.stale`,同时 `fpsLow=3.6/frameMax=275ms/heapMb=366`。Phase 18 给 Pixi texture load 加 `AbortSignal`:新 source/null/destroy/recover 取消旧 load;AbortError 记 `phase=skip reason=aborted` 且不触发 `onError`。TDD:pixi-controller/background-texture/pixi-pixel-background 31 例通过。 |
 | 2026-06-14 | User+Codex | **QA#18 trace + Phase 19 代码完成(TDD)**:12:28 trace 验证 Phase 18 生效(旧 `swapSeq=16/18` 已 `phase=skip reason=aborted`,无 2s stale `muzfetch`),但剩余窗口仍跌到 `fpsAvg≈49-67/fpsLow=3.6/frameMax=274.9`,因为 Pixi texture load 仍在切歌后立即启动,被 200-300ms 内的新歌覆盖时可能已进入 fetch/ImageBitmap decode。Phase 19 在 controller `loadMedia` 前加入 180ms abortable settle gate;`PixiPixelBackground` 只对环境背景特效启用。TDD:pixi-background-controller 13 例通过。 |
+| 2026-06-14 | User+Codex | **QA#19 trace + Phase 20 代码完成(TDD)**:13:15 trace 验证 Phase 19 生效(旧 `swapSeq=30/32/34/36/40/42` 均 abort 且无 `background.texture fetch/decode`),但 `cover.preload.batch canceled=1/stale=1` 仍读 16.5MB 并耗时 291-583ms。Phase 20 将 current 与 non-current 本地 preload settle 分离:current 仍 140ms,previous/next/stack/settle 延后 420ms,stale batch 在读 blob 前 cancel。TDD:cover-preload + swipeable stage 共 10 例通过。 |

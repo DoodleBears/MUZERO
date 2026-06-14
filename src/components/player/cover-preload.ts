@@ -105,12 +105,21 @@ export function buildCoverPreloadRequests(
   return out;
 }
 
+export function filterCoverPreloadRequestsForBurst(
+  requests: CoverPreloadRequest[],
+  includeNonCurrentLocal: boolean,
+): CoverPreloadRequest[] {
+  if (includeNonCurrentLocal) return requests;
+  return requests.filter((request) => request.role === "current" || !request.coverBlobId);
+}
+
 export async function preloadCoverBatch({
   cache = coverUrlCache,
   createObjectURL = (blob) => URL.createObjectURL(blob),
   delay = defaultDelay,
   isCurrent,
   localSettleMs = 0,
+  nonCurrentLocalSettleMs = localSettleMs,
   previous,
   requests,
   resolveMediaBlob: resolveMediaBlobImpl = (id) => resolveMediaBlob(id, db),
@@ -121,6 +130,7 @@ export async function preloadCoverBatch({
   delay?: (ms: number) => Promise<void>;
   isCurrent: () => boolean;
   localSettleMs?: number;
+  nonCurrentLocalSettleMs?: number;
   previous: Record<string, PreloadedCover>;
   requests: CoverPreloadRequest[];
   resolveMediaBlob?: ResolveMediaBlob;
@@ -129,7 +139,8 @@ export async function preloadCoverBatch({
   const stats = initialStats(requests);
   const nextEntries: Record<string, PreloadedCover> = {};
   const acquiredKeys = new Set<string>();
-  let localMissSettled = false;
+  let currentLocalMissSettled = false;
+  let nonCurrentLocalMissSettled = false;
 
   const cancel = (): CoverPreloadBatchResult => {
     stats.canceled = 1;
@@ -167,9 +178,13 @@ export async function preloadCoverBatch({
       continue;
     }
 
+    const isCurrentRole = request.role === "current";
+    const settleMs = isCurrentRole ? localSettleMs : nonCurrentLocalSettleMs;
+    const localMissSettled = isCurrentRole ? currentLocalMissSettled : nonCurrentLocalMissSettled;
     if (!localMissSettled) {
-      localMissSettled = true;
-      await delay(localSettleMs);
+      if (isCurrentRole) currentLocalMissSettled = true;
+      else nonCurrentLocalMissSettled = true;
+      if (settleMs > 0) await delay(settleMs);
       if (!isCurrent()) return cancel();
     }
 
