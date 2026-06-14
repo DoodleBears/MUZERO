@@ -109,6 +109,12 @@ export interface PixiBackgroundControllerOptions {
   host: HTMLElement;
   effect: PixiBackgroundEffect;
   effectOptions: unknown;
+  /**
+   * Optional switch-settle gate before the expensive media fetch/decode starts.
+   * The plain <img> reveal layer can follow the current cover immediately while
+   * the Pixi effect waits briefly to avoid decoding covers that are superseded.
+   */
+  loadDelayMs?: number;
   pixelSize: number;
   preference: "webgl" | "webgpu";
   powerPreference: "high-performance" | "low-power";
@@ -141,7 +147,16 @@ interface CurrentMedia {
 export function createPixiBackgroundController(
   options: PixiBackgroundControllerOptions,
 ): PixiBackgroundController {
-  const { host, effect, effectOptions, pixelSize, preference, powerPreference, deps } = options;
+  const {
+    host,
+    effect,
+    effectOptions,
+    loadDelayMs = 0,
+    pixelSize,
+    preference,
+    powerPreference,
+    deps,
+  } = options;
 
   let destroyed = false;
   let pixi: PixiModuleLike | null = null;
@@ -303,9 +318,11 @@ export function createPixiBackgroundController(
     const mediaLoadStart = nowMs();
     let media: LoadedBackgroundMedia;
     try {
+      await delayOrAbort(loadDelayMs, loadAbort.signal);
       media = await deps.loadMedia(pixi, src, mediaType, { signal: loadAbort.signal });
     } catch (error) {
       const aborted = loadAbort.signal.aborted || isAbortError(error);
+      if (pendingLoadAbort === loadAbort) pendingLoadAbort = null;
       bgPixiLog[aborted ? "debug" : "warn"]("media.load", {
         category: "performance",
         phase: aborted ? "skip" : "fail",
@@ -502,6 +519,32 @@ function isAbortError(error: unknown): boolean {
   return error instanceof DOMException
     ? error.name === "AbortError"
     : error instanceof Error && error.name === "AbortError";
+}
+
+function delayOrAbort(ms: number, signal: AbortSignal): Promise<void> {
+  if (ms <= 0) {
+    if (signal.aborted) return Promise.reject(createAbortError());
+    return Promise.resolve();
+  }
+  return new Promise((resolve, reject) => {
+    if (signal.aborted) {
+      reject(createAbortError());
+      return;
+    }
+    const timeout = setTimeout(() => {
+      signal.removeEventListener("abort", abort);
+      resolve();
+    }, ms);
+    const abort = () => {
+      clearTimeout(timeout);
+      reject(createAbortError());
+    };
+    signal.addEventListener("abort", abort, { once: true });
+  });
+}
+
+function createAbortError(): DOMException {
+  return new DOMException("Background texture load aborted", "AbortError");
 }
 
 function coverSprite(

@@ -59,6 +59,7 @@ function fakeModule() {
 }
 
 function makeController(overrides?: {
+  loadDelayMs?: number;
   preference?: "webgl" | "webgpu";
   powerPreference?: "high-performance" | "low-power";
   loadMedia?: (src: string, signal: AbortSignal) => Promise<LoadedBackgroundMedia>;
@@ -88,6 +89,7 @@ function makeController(overrides?: {
     pixelSize: 12,
     preference: overrides?.preference ?? "webgl",
     powerPreference: overrides?.powerPreference ?? "low-power",
+    loadDelayMs: overrides?.loadDelayMs,
     deps: {
       loadPixi: async () => module,
       loadMedia: async (_pixi, src, _mediaType, { signal }) => loadMedia(src, signal),
@@ -100,6 +102,7 @@ function makeController(overrides?: {
 
 describe("createPixiBackgroundController", () => {
   afterEach(() => {
+    vi.useRealTimers();
     clearTrace();
   });
 
@@ -375,5 +378,63 @@ describe("createPixiBackgroundController", () => {
     await Promise.all([pA, pB]);
     expect(signals[1].signal.aborted).toBe(true);
     expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("can delay starting media load so rapid switches can settle first", async () => {
+    vi.useFakeTimers();
+    const loadMedia = vi.fn(
+      async (): Promise<LoadedBackgroundMedia> => ({
+        type: "image",
+        element: document.createElement("img"),
+        texture: fakeTexture() as never,
+        width: 100,
+        height: 100,
+      }),
+    );
+    const { controller } = makeController({ loadDelayMs: 180, loadMedia });
+
+    const pending = controller.setSource("a.png", "image");
+    await vi.advanceTimersByTimeAsync(0);
+    expect(loadMedia).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(179);
+    expect(loadMedia).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(1);
+    await pending;
+    expect(loadMedia).toHaveBeenCalledTimes(1);
+    expect(loadMedia).toHaveBeenCalledWith("a.png", expect.any(AbortSignal));
+    controller.destroy();
+  });
+
+  it("skips a delayed media load when a newer source supersedes it before decode starts", async () => {
+    vi.useFakeTimers();
+    const loadMedia = vi.fn(
+      async (src: string): Promise<LoadedBackgroundMedia> => ({
+        type: "image",
+        element: document.createElement("img"),
+        texture: fakeTexture() as never,
+        width: src === "b.png" ? 200 : 100,
+        height: src === "b.png" ? 200 : 100,
+      }),
+    );
+    const { controller, onError } = makeController({ loadDelayMs: 180, loadMedia });
+
+    const stale = controller.setSource("a.png", "image");
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(100);
+    const landed = controller.setSource("b.png", "image");
+    await vi.advanceTimersByTimeAsync(0);
+
+    await stale;
+    expect(loadMedia).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(180);
+    await landed;
+    expect(loadMedia).toHaveBeenCalledTimes(1);
+    expect(loadMedia).toHaveBeenCalledWith("b.png", expect.any(AbortSignal));
+    expect(controller.stats.textureSwaps).toBe(1);
+    expect(onError).not.toHaveBeenCalled();
+    controller.destroy();
   });
 });

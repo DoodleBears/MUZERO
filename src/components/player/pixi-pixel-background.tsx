@@ -20,6 +20,7 @@ import {
 export type PixiBackgroundEffect = "pixel" | "ascii" | "cross-hatch" | "crt" | "dot" | "noise";
 type BackgroundMediaType = "image" | "video";
 const BACKGROUND_IMAGE_BITMAP_MAX_DIMENSION = 1024;
+const BACKGROUND_TEXTURE_LOAD_DELAY_MS = 180;
 const TEXTURE_HEADER_BYTES = 64 * 1024;
 const bgTextureLog = createDiagnosticLogger("background.texture");
 
@@ -105,6 +106,7 @@ export function PixiPixelBackground({
       host,
       effect,
       effectOptions,
+      loadDelayMs: BACKGROUND_TEXTURE_LOAD_DELAY_MS,
       pixelSize,
       preference: gpuBackend,
       powerPreference: gpuPower,

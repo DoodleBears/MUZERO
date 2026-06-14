@@ -28,7 +28,8 @@
 | 15 | Pixi background texture downsample / decode budget | ✅ 代码完成(待 QA trace) | [Phase 15](#phase-15-pixi-background-texture-降采样预算) |
 | 16 | Pixi ImageBitmap load substage trace | ✅ Completed(trace verified) | [Phase 16](#phase-16-pixi-imagebitmap-load-分段归因-trace) |
 | 17 | Reuse fetched texture bytes for ImageBitmap header sizing | ✅ 代码完成(待 QA trace) | [Phase 17](#phase-17-reuse-fetched-texture-bytes-for-imagebitmap-header-sizing) |
-| 18 | Abort stale Pixi background texture loads | ✅ 代码完成(待 QA trace) | [Phase 18](#phase-18-abort-stale-pixi-background-texture-loads) |
+| 18 | Abort stale Pixi background texture loads | ✅ Completed(trace verified) | [Phase 18](#phase-18-abort-stale-pixi-background-texture-loads) |
+| 19 | Pixi texture load settle gate before fetch/decode | ✅ 代码完成(待 QA trace) | [Phase 19](#phase-19-pixi-texture-load-settle-gate-before-fetchdecode) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
 
@@ -626,7 +627,31 @@ backgroundGpuPowerPreference?: "auto" | "high-performance" | "low-power"; // DEF
 - [x] `pixi-background-controller.test.ts`:新增用例锁定新 source supersede 会 abort 旧 signal;destroy 会 abort 当前 signal;AbortError 不触发 `onError`。
 - [x] `background-texture.test.ts`:新增用例锁定 pre-aborted signal 会 reject `AbortError`,且不会 fallback/继续 fetch stale source。
 - [x] 相关测试通过:`pixi-background-controller.test.ts`、`background-texture.test.ts`、`pixi-pixel-background.test.ts` 共 31 例。
-- [ ] QA trace 验收:下一份 trace 中快速切歌后不应再看到旧 `swapSeq` 的 `muzfetch fetch=1000ms+` 后接 `textureSwap.stale`;应看到 `background.pixi media.load phase=skip reason=aborted`,且 `heapMb/frameMaxMs` 不再因 stale 16.5MB 封面升高。
+- [x] QA trace 验收:12:28 trace 中旧 `swapSeq=16/18` 已出现 `background.pixi media.load phase=skip reason=aborted`,且没有再看到 16.5MB `muzfetch fetch=1000ms+` 后才 stale。Phase 18 成功取消 stale fetch/load;剩余掉帧转到“load 启动过早 + audio/cover preload 同窗叠加”。
+
+### QA#18(2026-06-14 Phase 18 trace):abort 生效,但快速切歌仍会过早启动 ImageBitmap 管线
+
+12:28 trace 验证 Phase 18 方向正确,也暴露出下一层问题:
+
+- **stale load 已能取消**:`swapSeq=16` / `swapSeq=18` 都出现 `background.pixi media.load phase=skip reason=aborted durationMs≈316ms`,同一份 trace 不再有 Phase 17 那种旧 16.5MB `muzfetch fetch=1830ms/decode=181ms` 完成后才 stale 的长尾。
+- **但 abort 来得仍偏晚**:`swapSeq=16` 在 `fetch=80.5ms/header=0.1ms` 后,用户约 225ms 后切到下一首,最终 316ms 才 `aborted`;说明浏览器已进入后续 decode/bitmap 管线,不是每个阶段都能立即抢占。`swapSeq=18` 则在新歌到来后能 abort fetch,但也已经占用了约 316ms 的 load 窗口。
+- **成功落地的 Pixi 仍是可见成本**:`swapSeq=20` 为 1500×1500→1024,`fetch=141.9ms`,`decode=200.3ms`,`media.load=342.7ms`,而 `texture.create=0.1ms`,`apply/render≈2.4ms`;瓶颈继续在 fetch/decode,不是 GPU upload / Pixi render。
+- **FPS 仍有主线程尖峰**:窗口从基线 `fpsAvg=120/fpsLow=117.6` 跌到 `fpsAvg=67.5→50.5→49.4`,`fpsLow=3.6`,`frameMaxMs=274.9`,`heapMb=136→283`。尖峰与 Pixi load、音频 `loadedmetadata/loadeddata/canplay/playing` 事件、以及一次 `cover.preload.batch created=1 lastMs=273.7` 同窗叠加。
+- **结论**:Phase 18 解决的是“旧任务不取消”;下一步要解决“任务太早启动”。因为 Pixi 子树上方已有即时 `<img>` reveal layer,背景特效可以晚 180ms 再开始昂贵 texture load,不影响主封面与标题同步。
+
+### Phase 19: Pixi texture load settle gate before fetch/decode
+
+**Goal:** 在 Pixi 背景 texture load 开始 fetch / `createImageBitmap` 前增加一个 abortable 的短稳定窗口。快速连切时,旧 source 在进入昂贵图片管线前就被新 source abort;正常单次切歌则由即时 `<img>` 先显示当前封面,Pixi 特效稍后接上。
+
+**实现(落地):**
+- [`pixi-background-controller.ts`](../../../src/components/player/pixi-background-controller.ts):新增 `loadDelayMs` controller option;`setSource()` 在 `media.load` 前调用 abortable delay。delay 被新 source/null/destroy/recover abort 时,记录 `background.pixi media.load phase=skip reason=aborted`,不触发 `onError`,也不调用 `loadMedia`。
+- [`pixi-pixel-background.tsx`](../../../src/components/player/pixi-pixel-background.tsx):为 Pixi 背景纹理配置 `BACKGROUND_TEXTURE_LOAD_DELAY_MS=180`。这不是隐藏 flag,也不是用户设置;它只作用于环境背景特效层,中央 stage/coverflow 封面继续实时跟随当前歌。
+
+**Tasks(TDD):**
+- [x] `pixi-background-controller.test.ts`:先加红灯用例,锁定配置 `loadDelayMs=180` 时 `loadMedia` 不会立即调用,179ms 前仍不启动,180ms 后才启动。
+- [x] `pixi-background-controller.test.ts`:新增 supersede 用例,锁定旧 source 在 delay 窗口内被新 source 取代时,旧 source 根本不进入 `loadMedia` / decode。
+- [x] 相关测试通过:`pixi-background-controller.test.ts` 13 例。
+- [ ] QA trace 验收:快速切歌时,被 180ms 窗口内 supersede 的旧 `swapSeq` 应只出现 `media.load phase=skip reason=aborted`,不再出现对应的 `background.texture fetch/header/decode`;成功落地的 `textureSwap` 会比 `textureSwap.start` 晚约 180ms 开始 load,但 `<img>` reveal 应已即时显示当前封面。
 
 ---
 
@@ -681,7 +706,8 @@ backgroundGpuPowerPreference?: "auto" | "high-performance" | "low-power"; // DEF
 | 16 | QA#14:Phase 14 后为什么仍 `fpsAvg≈62-75`? | ✅ Phase 15 code done, QA trace pending | 剩余低 FPS 与 Pixi `media.load loader=imageBitmap` 对齐:1500px/800px 图片仍需 172-254ms 准备,而 `texture.create/renderMs` 仍仅 0-3ms。Phase 15 已给 Pixi 背景纹理加独立 decode budget(1024 max side)与 source/decoded 尺寸 trace;下一份 trace 判断像素预算是否足够,若 800px 仍慢则转查 fetch/bridge/decoder queue。 |
 | 17 | QA#15:Phase 15 后为什么 `media.load` 仍 232-415ms? | ✅ Resolved(trace split) | Phase 16 已拆出 `fetch/header/decode`;11:59 trace 显示 `header` 与 `fetch` 也会到 80-120ms,不是单纯 decode。 |
 | 18 | QA#16:为什么只读 64KB header 仍会 84-121ms? | ✅ Resolved(trace verified) | Phase 17 改为 fetch response `arrayBuffer()` 一次,复用前 64KB 做尺寸探测;12:16 trace 显示 `headerSource=fetched-bytes` 且 `header=0~0.1ms`。 |
-| 19 | QA#17:为什么 Phase 17 后仍 `fpsLow=3.6/frameMax=275ms`? | 🔲 Phase 18 code done, QA trace pending | 最大掉帧来自 stale 16.5MB `muzfetch`:用户已切到下一首,旧 `swapSeq=14` 仍 fetch/decode 2s 后才 stale。Phase 18 加 `AbortSignal`,新 source/null/destroy/recover 立即取消旧 texture load。 |
+| 19 | QA#17:为什么 Phase 17 后仍 `fpsLow=3.6/frameMax=275ms`? | ✅ Resolved(trace verified) | 最大掉帧来自 stale 16.5MB `muzfetch`:用户已切到下一首,旧 `swapSeq=14` 仍 fetch/decode 2s 后才 stale。Phase 18 加 `AbortSignal`;12:28 trace 已看到旧 `swapSeq=16/18` 以 `phase=skip reason=aborted` 退出,不再有 2s stale fetch。 |
+| 20 | QA#18:Phase 18 abort 后为什么仍 `fpsLow=3.6/frameMax=275ms`? | 🔲 Phase 19 code done, QA trace pending | Abort 已取消旧长尾,但旧 load 在切歌后立即启动,用户 200-300ms 内再切时浏览器可能已进入不可立即抢占的 ImageBitmap/fetch 管线。Phase 19 在 Pixi texture `loadMedia` 前加 180ms abortable settle gate,让快速 supersede 的旧 source 不进 fetch/decode。 |
 
 ---
 
@@ -718,3 +744,4 @@ backgroundGpuPowerPreference?: "auto" | "high-performance" | "low-power"; // DEF
 | 2026-06-14 | User+Codex | **QA#15 trace + Phase 16 代码完成(TDD)**:11:53 trace 证明 1500px 源图已降到 1024px,但 `media.load` 仍 355-415ms,1024px 源图也 232ms;瓶颈不是单纯像素边长。新增 `background.texture fetch/header/decode` 分段 trace,并补 `background.cover localCover.fallback` 解释 wait 后合法回退 object URL 的原因。TDD:background-texture 7 例、now-playing-background 9 例通过。 |
 | 2026-06-14 | User+Codex | **QA#16 trace + Phase 17 代码完成(TDD)**:11:59 trace 显示 `header` 与 `fetch` 也会成为长帧来源(`header=84.2/121.3ms`,`fetch=106.9ms`),Pixi GPU 侧仍仅 0-2ms。`loadImageBitmapSource` 支持 `{ blob, headerBytes }`,优先复用 fetch bytes 做尺寸探测并 trace `headerSource`;`pixi-pixel-background` 改为 response `arrayBuffer()` 一次生成 Blob + header bytes,避免 `blob.slice(...).arrayBuffer()` 二次读。TDD:background-texture 8 例、pixi-pixel-background 11 例通过。 |
 | 2026-06-14 | User+Codex | **QA#17 trace + Phase 18 代码完成(TDD)**:12:16 trace 验证 Phase 17 生效(`headerSource=fetched-bytes`,`header=0~0.1ms`),但发现 stale 16.5MB `muzfetch` 旧 `swapSeq=14` 在用户切到下一首后仍 `fetch=1830ms/decode=181ms`,最后才 `textureSwap.stale`,同时 `fpsLow=3.6/frameMax=275ms/heapMb=366`。Phase 18 给 Pixi texture load 加 `AbortSignal`:新 source/null/destroy/recover 取消旧 load;AbortError 记 `phase=skip reason=aborted` 且不触发 `onError`。TDD:pixi-controller/background-texture/pixi-pixel-background 31 例通过。 |
+| 2026-06-14 | User+Codex | **QA#18 trace + Phase 19 代码完成(TDD)**:12:28 trace 验证 Phase 18 生效(旧 `swapSeq=16/18` 已 `phase=skip reason=aborted`,无 2s stale `muzfetch`),但剩余窗口仍跌到 `fpsAvg≈49-67/fpsLow=3.6/frameMax=274.9`,因为 Pixi texture load 仍在切歌后立即启动,被 200-300ms 内的新歌覆盖时可能已进入 fetch/ImageBitmap decode。Phase 19 在 controller `loadMedia` 前加入 180ms abortable settle gate;`PixiPixelBackground` 只对环境背景特效启用。TDD:pixi-background-controller 13 例通过。 |
