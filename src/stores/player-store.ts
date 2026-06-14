@@ -132,7 +132,8 @@ import type { DecodedNcmMedia } from "@/workers/ingest-core";
 
 const IMPORT_VISIBILITY_FLUSH_SIZE = 25;
 const LOCAL_BLOB_PLAYBACK_SETTLE_MS = 180;
-const MEDIA_SOURCE_RELOAD_BISECT_MODE: "off" | "skip" | "read" | "attach-no-play" = "read";
+const MEDIA_SOURCE_RELOAD_BISECT_MODE: "off" | "skip" | "read" | "attach-no-play" =
+  "attach-no-play";
 const DEFAULT_PLAYER_VOLUME = 0.9;
 
 export type QueueSource =
@@ -2178,16 +2179,28 @@ async function ensureLoadedAndPlay(
     return;
   }
   if (MEDIA_SOURCE_RELOAD_BISECT_MODE !== "off") {
-    if (MEDIA_SOURCE_RELOAD_BISECT_MODE === "read" && sourceKind === "blob") {
+    if (
+      (MEDIA_SOURCE_RELOAD_BISECT_MODE === "read" ||
+        MEDIA_SOURCE_RELOAD_BISECT_MODE === "attach-no-play") &&
+      sourceKind === "blob"
+    ) {
       const media = await getTrackBlob(track);
       if (!continueCurrent("diag-blob-read")) return;
       if (media?.blob) {
-        tracePlaybackLoad("media.load.read-only", track, playbackTrace, {
+        const event =
+          MEDIA_SOURCE_RELOAD_BISECT_MODE === "attach-no-play"
+            ? "media.load.attach-only"
+            : "media.load.read-only";
+        tracePlaybackLoad(event, track, playbackTrace, {
           bytes: media.bytes,
           mime: media.mime,
           sourceId: "diag-bisect:blob-read",
           transport: "blob",
         });
+        if (MEDIA_SOURCE_RELOAD_BISECT_MODE === "attach-no-play") {
+          await mediaEngine.loadBlob(media.blob, track.kind);
+          if (!continueCurrent("diag-blob-attached")) return;
+        }
       } else {
         tracePlaybackLoad("media.load.skip", track, playbackTrace, {
           sourceId: "diag-bisect:blob-missing",

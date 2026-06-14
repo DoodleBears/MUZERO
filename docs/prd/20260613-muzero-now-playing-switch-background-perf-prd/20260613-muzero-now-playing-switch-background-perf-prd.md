@@ -861,10 +861,12 @@ backgroundGpuPowerPreference?: "auto" | "high-performance" | "low-power"; // DEF
 
 **Tasks:**
 - [x] Commit F:保留 blob read,不 attach media element。
-- [ ] Commit G:attach media source,但不调用 `play()`。
+- [x] Commit G:attach media source,但不调用 `play()`。
 - [ ] Commit H:把真实 media source load 延后到切歌 settle 后,验证是否能保留播放语义同时恢复 FPS。
 
 **Experiment F implementation:** 在 `3153bf9` 的“大跳过”基础上,把 media reload 诊断 mode 调整为 `read`:当 `sourceKind==="blob"` 时执行 `getTrackBlob(track)`,并 emit `media.load.read-only sourceId=diag-bisect:blob-read bytes/mime`;随后仍不调用 `mediaEngine.loadBlob/loadUrl` 或 `play()`。若 F 仍接近 E 的 FPS,说明 IndexedDB/blob read 不是主因;若 F 重新掉帧,主因在 blob 读取/structured clone/内存分配。
+
+**Experiment G implementation:** 在 F 之后把 media reload 诊断 mode 调整为 `attach-no-play`:当 `sourceKind==="blob"` 时执行 `getTrackBlob(track)`,emit `media.load.attach-only`,再调用 `mediaEngine.loadBlob(media.blob, track.kind)`,但仍不调用 `mediaEngine.play()`。若 G 重新掉帧,主因在 media element source replacement / `audio.load()` / decoder/event pipeline;若 G 仍恢复,主因更偏 `play()` 与播放态事件。
 
 ---
 
