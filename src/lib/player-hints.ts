@@ -13,7 +13,8 @@ export type HintAction =
   | "queue"
   | "like"
   | "lyrics"
-  | "visualizer";
+  | "visualizer"
+  | "memory";
 
 /**
  * Map a pointer's Y to a 0–1 volume for a vertical slider whose track spans

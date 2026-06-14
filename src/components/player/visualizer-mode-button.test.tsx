@@ -41,7 +41,7 @@ describe("VisualizerModeButton", () => {
     state.settings = { ...DEFAULT_SETTINGS };
   });
 
-  it("labels the lyrics-only placement and cycles it back to off", () => {
+  it("labels the lyrics-only placement and can switch it off from the menu", async () => {
     state.settings = {
       ...DEFAULT_SETTINGS,
       visualizerStyle: "bars",
@@ -58,6 +58,7 @@ describe("VisualizerModeButton", () => {
     expect(button).toHaveAttribute("aria-pressed", "true");
 
     fireEvent.click(button);
+    fireEvent.click(await screen.findByRole("button", { name: /visualizer.modeOff/ }));
 
     expect(state.saveSettings).toHaveBeenCalledWith({
       visualizerAsBackground: false,

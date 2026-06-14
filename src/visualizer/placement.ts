@@ -17,10 +17,17 @@ export function resolveVisualizerPlacement(settings: AppSettings): VisualizerPla
 export function nextVisualizerPlacementPatch(settings: AppSettings): Partial<AppSettings> {
   const idx = PLACEMENTS.indexOf(resolveVisualizerPlacement(settings));
   const next = PLACEMENTS[(idx + 1) % PLACEMENTS.length] ?? "off";
+  return visualizerPlacementPatch(settings, next);
+}
+
+export function visualizerPlacementPatch(
+  settings: AppSettings,
+  placement: VisualizerPlacement,
+): Partial<AppSettings> {
   // Turning OFF only clears `visualizerAsBackground` — we KEEP the style (not
   // set "off") so the spectrum keeps drawing through its fade-out exit instead of
   // blanking instantly, and the chosen style is remembered for re-enabling.
-  if (next === "off") {
+  if (placement === "off") {
     return {
       visualizerAsBackground: false,
       visualizerIdleOnly: false,
@@ -32,7 +39,7 @@ export function nextVisualizerPlacementPatch(settings: AppSettings): Partial<App
   return {
     visualizerStyle: enabledStyle,
     visualizerAsBackground: true,
-    visualizerIdleOnly: next === "idle" || next === "lyrics",
-    visualizerLyricsOnlyIdle: next === "lyrics",
+    visualizerIdleOnly: placement === "idle" || placement === "lyrics",
+    visualizerLyricsOnlyIdle: placement === "lyrics",
   };
 }

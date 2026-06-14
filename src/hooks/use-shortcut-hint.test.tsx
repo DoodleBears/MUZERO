@@ -20,6 +20,7 @@ describe("useShortcutHint", () => {
     expect(result.current("next")).toEqual(["E"]);
     expect(result.current("like")).toEqual(["L"]);
     expect(result.current("queue")).toEqual(["T"]);
+    expect(result.current("memory", { scope: "inspector" })).toEqual(["N"]);
     expect(result.current("volume")).toEqual(["↑", "↓"]);
   });
 

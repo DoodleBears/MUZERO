@@ -1,11 +1,20 @@
 import { useLiveQuery } from "dexie-react-hooks";
-import { Image as ImageIcon, Repeat, Repeat1, Shuffle, Video } from "lucide-react";
+import { Check, Image as ImageIcon, Repeat, Repeat1, Shuffle, Video } from "lucide-react";
 import { type CSSProperties, memo, type RefObject, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { DjConsole } from "@/components/dj/dj-console";
 import { ControlTooltip } from "@/components/player/control-tooltip";
 import { ListeningNowSection } from "@/components/player/listening-now-section";
 import { LyricsModeButton } from "@/components/player/lyrics-mode-button";
+import {
+  MODE_ICON_BUTTON,
+  MODE_ICON_BUTTON_ACTIVE,
+  MODE_MENU_OPTION,
+  MODE_MENU_OPTION_DESCRIPTION,
+  MODE_MENU_OPTION_ICON,
+  MODE_MENU_OPTION_LABEL,
+  MODE_MENU_OPTION_TEXT,
+} from "@/components/player/mode-chip-styles";
 import { NowPlayingPanel } from "@/components/player/now-playing-panel";
 import { PlaybackSpectrum } from "@/components/player/playback-spectrum";
 import { SwipeableMediaStage } from "@/components/player/swipeable-media-stage";
@@ -16,6 +25,7 @@ import { TransportControls } from "@/components/player/transport-controls";
 import { VisualizerModeButton } from "@/components/player/visualizer-mode-button";
 import { AnnotationEditor } from "@/components/track/annotation-editor";
 import { Button } from "@/components/ui/button";
+import { Popover, PopoverContent, PopoverTitle, PopoverTrigger } from "@/components/ui/popover";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { LibraryImportEmptyState } from "@/components/upload/library-import-empty-state";
 import { db } from "@/db/muzero-db";
@@ -30,10 +40,14 @@ import { dragWindowOnEmptyPress } from "@/lib/window-drag";
 import { nextRepeatMode } from "@/player/transport";
 import { usePlayerStore } from "@/stores/player-store";
 
-const DISPLAY_MODES: { id: SetDisplayMode; icon: typeof Video }[] = [
-  { id: "video", icon: Video },
-  { id: "cover", icon: ImageIcon },
-];
+const DISPLAY_MODE_ICONS: Record<SetDisplayMode, typeof Video> = {
+  video: Video,
+  cover: ImageIcon,
+};
+const NEXT_DISPLAY_MODE: Record<SetDisplayMode, SetDisplayMode> = {
+  video: "cover",
+  cover: "video",
+};
 const GLASS_CONTROL_GROUP =
   "rounded-full border border-white/10 bg-black/35 p-1 shadow-lg backdrop-blur-md";
 const GLASS_CONTROL_ACTIVE =
@@ -343,41 +357,35 @@ const NowPlayingActionRow = memo(function NowPlayingActionRow() {
   const displayMode = usePlayerStore((s) => s.displayMode);
   const repeat = usePlayerStore((s) => s.repeat);
   const shuffle = usePlayerStore((s) => s.shuffle);
+  const currentTrackId = usePlayerStore((s) =>
+    s.currentIndex >= 0 ? s.queue[s.currentIndex]?.id : undefined,
+  );
   const setDisplayMode = usePlayerStore((s) => s.setDisplayMode);
   const setRepeat = usePlayerStore((s) => s.setRepeat);
   const setShuffle = usePlayerStore((s) => s.setShuffle);
   const hint = useShortcutHint();
+  const memoryCount = useLiveQuery(
+    () =>
+      currentTrackId
+        ? db.memories.where("trackId").equals(currentTrackId).count()
+        : Promise.resolve(0),
+    [currentTrackId],
+    0,
+  );
 
   return (
     <TooltipProvider>
       <div className="mx-auto flex w-full flex-wrap items-center justify-between gap-2">
-        <div className={cn("flex", GLASS_CONTROL_GROUP)}>
-          {DISPLAY_MODES.map(({ id, icon: Icon }) => {
-            const label = t(`displayMode.${id}`);
-            return (
-              <ControlTooltip key={id} label={t("nowPlaying.modeTitle", { mode: label })}>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => void setDisplayMode(id)}
-                  aria-label={t("nowPlaying.modeTitle", { mode: label })}
-                  aria-pressed={displayMode === id}
-                  className={cn(
-                    "rounded-full border-0 px-2.5 shadow-none",
-                    displayMode === id ? GLASS_CONTROL_ACTIVE : GLASS_CONTROL_IDLE,
-                  )}
-                >
-                  <Icon className="size-4" />
-                  <span className="hidden sm:inline">{label}</span>
-                </Button>
-              </ControlTooltip>
-            );
-          })}
+        <div className={cn("flex items-center gap-1", GLASS_CONTROL_GROUP)}>
+          <DisplayModeButton displayMode={displayMode} onChange={setDisplayMode} />
+          <LyricsModeButton
+            hasMemory={(memoryCount ?? 0) > 0}
+            memoryShortcutKeys={hint("memory", { scope: "inspector" })}
+          />
+          <VisualizerModeButton />
         </div>
 
         <div className={cn("flex items-center gap-1", GLASS_CONTROL_GROUP)}>
-          <LyricsModeButton className="size-9" />
-          <VisualizerModeButton className="size-9" />
           <ControlTooltip label={t("player.repeatLabel")} keys={hint("repeat")}>
             <Button
               variant="ghost"
@@ -413,3 +421,70 @@ const NowPlayingActionRow = memo(function NowPlayingActionRow() {
     </TooltipProvider>
   );
 });
+
+function DisplayModeButton({
+  displayMode,
+  onChange,
+}: {
+  displayMode: SetDisplayMode;
+  onChange: (mode: SetDisplayMode) => Promise<void>;
+}) {
+  const { t } = useTranslation();
+  const [open, setOpen] = useState(false);
+  const nextDisplayMode = NEXT_DISPLAY_MODE[displayMode];
+  const DisplayModeIcon = DISPLAY_MODE_ICONS[displayMode];
+  const nextDisplayModeLabel = t(`displayMode.${nextDisplayMode}`);
+  const displayModeTooltip = t("nowPlaying.switchDisplayMode", {
+    mode: nextDisplayModeLabel,
+  });
+
+  return (
+    <Popover onOpenChange={setOpen} open={open}>
+      <ControlTooltip label={displayModeTooltip}>
+        <PopoverTrigger
+          render={
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label={displayModeTooltip}
+              className={cn(MODE_ICON_BUTTON, MODE_ICON_BUTTON_ACTIVE)}
+            >
+              <DisplayModeIcon className="size-4" />
+            </Button>
+          }
+        />
+      </ControlTooltip>
+      <PopoverContent className="w-60 p-2" side="top" sideOffset={10}>
+        <PopoverTitle className="px-2 pt-1 pb-1">{t("nowPlaying.displayMode")}</PopoverTitle>
+        {(["video", "cover"] as const).map((mode) => {
+          const Icon = DISPLAY_MODE_ICONS[mode];
+          const label = t(`displayMode.${mode}`);
+          const selected = mode === displayMode;
+          return (
+            <button
+              type="button"
+              aria-pressed={selected}
+              className={MODE_MENU_OPTION}
+              key={mode}
+              onClick={() => {
+                void onChange(mode);
+                setOpen(false);
+              }}
+            >
+              <Icon className={MODE_MENU_OPTION_ICON} />
+              <span className={MODE_MENU_OPTION_TEXT}>
+                <span className={MODE_MENU_OPTION_LABEL}>{label}</span>
+                <span className={MODE_MENU_OPTION_DESCRIPTION}>
+                  {selected
+                    ? t("nowPlaying.modeTitle", { mode: label })
+                    : t("nowPlaying.switchDisplayMode", { mode: label })}
+                </span>
+              </span>
+              {selected && <Check aria-hidden="true" className="mt-0.5 size-4 shrink-0" />}
+            </button>
+          );
+        })}
+      </PopoverContent>
+    </Popover>
+  );
+}

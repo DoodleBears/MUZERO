@@ -19,6 +19,7 @@ const HINT_ACTION_TO_ID: Record<Exclude<HintAction, "volume">, string> = {
   like: "playback.like",
   lyrics: "lyrics.toggleStage",
   visualizer: "visualizer.cycleMode",
+  memory: "memory.quickAdd",
 };
 
 /**
