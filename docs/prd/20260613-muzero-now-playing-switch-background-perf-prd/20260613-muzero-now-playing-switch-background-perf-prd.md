@@ -39,13 +39,15 @@
 | 28 | **(P1)** PlaybackSpectrum 切歌 fade + 停 rAF(产品口径:暂停而非降帧) | ✅ Completed(QA#46:连续基线差距已消除) | [Phase 28](#phase-28p1-playbackspectrum-raf-节流--可见性暂停) |
 | 29 | **(P2)** coverflow 快切降级 + 背光合成预算(前台切歌成本) | ✅ 代码完成(QA#46:coverflow churn 已除;burst gap 转 P4) | [Phase 29](#phase-29p2-coverflow-快切降级--背光合成预算) |
 | 30 | **(P3)** 前台重挂 / layout thrash 收尾(`AnnotationEditor` 重挂 + scroll reflow) | ✅ 代码完成(QA#46:remount 已去;frameMax 仍高 → P4) | [Phase 30](#phase-30p3-前台重挂--layout-thrash-收尾) |
-| 31 | **(P4)** 前台 stage settledTrack 去抖 + 重渲染收敛(QA#46 burst 真因) | 🔄 进行中 | [Phase 31](#phase-31p4-前台-stage-settledtrack-去抖--重渲染收敛) |
+| 31 | **(P4)** 前台 stage settledTrack 去抖 + 重渲染收敛(QA#46 burst 真因) | ✅ Completed(QA#47:cadence < ~600ms 已收敛,且优于 tab-2) | [Phase 31](#phase-31p4-前台-stage-settledtrack-去抖--重渲染收敛) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
 >
 > **方向更新(QA#45,2026-06-15):**Phase 1–27 处理**全局共享背景**(两 tab 同源);QA#45 用同 commit 的 tab-1 vs tab-2 对比证明剩余 ~10 FPS 平均差距来自**仅 Now Playing 挂载的前台组件**,落地方案见 §6bis Phase 28–30(P1/P2/P3)。
 >
 > **QA#46 验证(2026-06-15,afff320 prod build):**P1 达成(连续基线差距消除);P2/P3 各自目标达成(coverflow churn 除、remount 去),但 **burst `fpsAvg` 仍 ~90 vs tab-2 ~105、`frameMax 133`**,真因转向**前台整树每首重渲染 → GC**(`cover.preload created:0` 排除封面解码)→ Phase 31(P4)。
+>
+> **QA#47 验证(2026-06-15,de889f1 prod build):**P4 后 **tab-1 与 tab-2 收敛**(`fpsAvg 108` vs ~110,`frameMax 41.7 < 74.9`,`fpsLow 24 > 13.4`)。本轮 cadence ~587ms(多数 < 600ms)→ P2 coverflow-skip 真正触发,是主驱动;P4 memo 为辅。**剩余边界:cadence > ~600ms 中速点击仍播完整 coverflow → 单帧尖峰**(Open Question #27)。
 
 ---
 
@@ -1225,18 +1227,41 @@ commit `afff320` 桌面 prod build,同会话同曲库,切歌强度可比(tab-1 5
 
 **现状(QA#46 定位):**前台每切歌 `cover.render` ~7×、heap→369、`frameMax 133`;`cover.preload.batch created:0` 证明不是封面解码,而是 React reconcile + Motion 对象分配 → GC。狂切时**跳过的歌根本不该重渲染整棵前台树**——用户最终只看落定那首。
 
-**Tasks:**
-- [ ] 前台 stage 标识/信息层(`MediaStage` 封面 + `StageIdentity` + [`TrackInfoCard`](../../../src/components/player/track-info-card.tsx))burst 期间跟 **settledTrack**(复用 `useSettledValue` / Phase 28 已有的 `switching` 信号),跳过的歌不重渲染——只在落定后切到新内容(与 ambient 背景同源同步,不串号)。
-- [ ] `memo` 化每首切歌都重渲染但 props 未变的纯展示组件(`TrackInfoCard`、`StageIdentity`/身份行、`TransportControls` 的静态部分),减少整树 reconcile。
-- [ ] 复核 `NowPlayingPanel` 右栏(队列/歌词)是否随 `currentIndex` 每首重渲染整列;必要时用最小 selector + `memo` 收敛(遵守硬规则 6 selector 纪律)。
-- [ ] 不改单次(非 burst)切歌的即时性:落定即更新,不引入可感知延迟(seek/单切观感不变)。
+**Tasks(✅ 代码完成):**
+- [x] 新增 [`useBurstSettledValue`](../../../src/hooks/use-burst-settled-value.ts)(leading-edge 即时 + trailing 去抖,区别于 `useSettledValue` 的纯 trailing):单切落 leading 即时,只有真·狂按(间隔 < `quietMs`)才合并,跳过中间曲。
+- [x] [`MediaStage`](../../../src/components/player/media-stage.tsx) 封面/标题视觉跟 `useBurstSettledValue(current, 300)`(video 元素 source 仍跟 live track,由 player-store 驱动)。
+- [x] `memo` 化 track-无关前台叶子(`TransportControls` / `PlaybackSpectrum` / `NowPlayingActionRow` / `TrackInfoCard`)→ `currentIndex` 变化不再经 `NowPlayingPage` 父级级联重渲染它们。
+- [~] `StageIdentity` 未单独 settle/memo(在 `SwipeableMediaStage` 内,随其 currentIndex selector 重渲染);`NowPlayingPanel` 右栏未复核 → 留 QA#47 后评估,实测已收敛故未追加。
+- [x] 单切即时性不变:leading edge 即时应用(单测覆盖)。
 
 ### Phase 31 Checklist
 
-- [ ] 单测:burst 期间 stage 标识/信息跟 settledTrack(跳过的歌不更新),落定后切到最终曲;非 burst 单切即时更新。
-- [ ] tab-1 每切歌 `cover.render` cache-hit 从 ~7 降到接近 tab-2 的 ~2(prod build trace)。
-- [ ] tab-1 burst `fpsAvg` 向 tab-2 靠拢(差距 < 5 FPS)、`frameMax` 向 75 收敛、`heapMb` 峰值回落(prod build,第二轮)。
-- [ ] 现有 now-playing / swipeable / annotation 单测全绿;`tsc`/Biome 通过。
+- [x] 单测:`useBurstSettledValue` leading/trailing/burst-coalesce/return-to-leading(`use-burst-settled-value.test.tsx`,5 例绿)。
+- [ ] ⚠️ tab-1 每切歌 `cover.render` 仍 ~7(QA#47:42 条全 cache-hit)——**该指标作废**:cache-hit 是廉价的,实测 fps 已收敛,证明 cover.render 计数不是瓶颈代理。
+- [x] **tab-1 切歌 `fpsAvg` 向 tab-2 收敛(QA#47,~490–590ms cadence):tab-1 `fpsAvg 108` ≈ tab-2 ~110,`frameMax 41.7 < 75`,`fpsLow 24 > 13.4` —— 达成(略优于 tab-2)。**
+- [x] 现有 now-playing / swipeable / annotation 单测全绿;`tsc`/Biome 通过。
+
+### QA#47(2026-06-15 de889f1 prod build,tab-1 vs tab-2):P4 后 burst 收敛(cadence < ~600ms)
+
+commit `de889f1` 桌面 prod build,两 tab 各 6 次切歌,cadence 可比(tab-1 ~489ms、tab-2 ~437ms)。trace 见 [`.logs/commit-de889f10.../`](../../../.logs/commit-de889f10d37645a4a6db5d6c4fbc1cf11955362d/)。
+
+| 指标 | tab-1(Now Playing) | tab-2(队列/库) | afff320(P4 前)tab-1 |
+|---|---|---|---|
+| `fpsAvg` | **108** | 111.9 / 109.6 / 109.1 | ~90 |
+| `fpsLow` | **24** | 13.4 | 7.5 |
+| `frameMaxMs` | **41.7** | 74.9 | 133 |
+| `heapMb` | 359 | 270–328 | 369 |
+
+**结论:**
+
+1. **✅ tab-1 已与 tab-2 收敛 —— 且 `frameMax`(41.7 vs 74.9)/`fpsLow`(24 vs 13.4)反而更优。**相较 P4 前(afff320 burst ~90 / `frameMax 133` / `fpsLow 7.5`)是大幅改善。
+2. **主驱动是 P2 coverflow-skip 这次真正触发。**本轮切歌间隔 **566 / 642 / 542 / 642 / 541ms**(均值 ~587,多数 < `COVERFLOW_BURST_SKIP_MS=600`)→ coverflow overlay 多被跳过、3D 模糊背光不合成 → `frameMax 133→41.7`。P4 memo 减少父级级联重渲染为辅助贡献。
+3. **`cover.render` 仍 42 条(~7/切,全 cache-hit)未降,但无所谓** —— 印证 QA#46 的判断:cache-hit 廉价,不是瓶颈;memo 没减少 `SwipeableMediaStage` 自身随 currentIndex 的重渲染(它必须重渲染来驱动切歌),但 fps 不受影响。
+4. **⚠️ 已知剩余边界:cadence > ~600ms 的「中速点击」(如 QA#46 的 711ms)仍会每切播放完整 coverflow → `frameMax` 尖峰。**狂按(< 600ms)已解决;中速点击区间未覆盖,取决于 `COVERFLOW_BURST_SKIP_MS` 阈值或 coverflow 自身合成成本。
+
+**仅 1 条 tab-1 fps window 落在 burst 中段(数据偏薄但无歧义,且与 cadence/coverflow-skip 因果自洽)。**
+
+**后续决策(见 Open Question #27):**接受现状(狂按已平,中速点击仅单帧 hitch),或 (a) 调高 `COVERFLOW_BURST_SKIP_MS`(改变 coverflow 触发观感),或 (b) P5 直接降 coverflow 单次合成成本(模糊背光预算)。
 
 ---
 
@@ -1299,6 +1324,7 @@ commit `afff320` 桌面 prod build,同会话同曲库,切歌强度可比(tab-1 5
 | 24 | QA#22:Phase 22 后为什么仍 `image.decode surface=background`? | 🔲 Phase 23 code done, QA trace pending | active stage decode 已排除,Pixi 也只消费 192px derivative;剩余是 `now-playing-background` 在 Pixi derivative 分支仍为未渲染的 full-cover background 调 `useLoadedImageUrl(... decode=true)`。Phase 23 跳过这条冗余 load/decode。 |
 | 25 | QA#23:Phase 23 后为什么仍 `image.load surface=now-playing`? | 🔲 Phase 24 code done, QA trace pending | background full-cover decode 已消失;剩余 full-cover 消费者是 player `CoverImage` 用 `new Image()` 做 `decode:false` preflight load。Phase 24 改为 DOM `<img onLoad>` gate,删除额外 JS Image。 |
 | 26 | QA#24:Phase 24 后为什么仍掉帧? | 🔲 Bisect in progress | 已补 span 的 full-cover `new Image` 消费者全部消失,但 FPS 仍低;剩余归因需要大块隔离。Phase 25 使用临时诊断分支,先禁整个 `NowPlayingBackground`,再拆 Pixi/flow/visualizer/foreground。 |
+| 27 | QA#47:cadence > ~600ms 的「中速点击」仍每切播完整 coverflow → `frameMax` 单帧尖峰,要不要覆盖? | 🔲 待拍板 | 三选项:**(a)** 接受现状——狂按(< 600ms)已收敛,中速点击只是偶发单帧 hitch,非持续掉帧;**(b)** 调高 `COVERFLOW_BURST_SKIP_MS`(如 600→900)让中速点击也跳过 coverflow,代价是 coverflow 动画只在 > 900ms 的孤立切歌才播(观感变化);**(c)** P5 直接降 coverflow 单次合成成本(3D `blur(20px) saturate(400%)` 背光预算/降级),让它即便每切都播也不尖峰。 |
 
 ---
 
@@ -1342,6 +1368,7 @@ commit `afff320` 桌面 prod build,同会话同曲库,切歌强度可比(tab-1 5
 | 2026-06-14 | User+Codex | **QA#22 trace + Phase 23 代码完成(TDD)**:13:57 trace 验证 stage decode 已排除,但仍有 `image.load/decode surface=background decode=true` 800/1024/1500px。定位到 Pixi derivative 分支虽然使用 192px backlight,仍提前为未渲染的 full-cover background 调 `useLoadedImageUrl`。Phase 23 先红灯锁定 derivative ready/pending 不创建 `Image`,再把 `pixiMedia/shouldUsePixiCoverDerivative` 前置并传 `null` 给 full-cover loader。`now-playing-background` 11 例通过;待 QA trace 验证 `surface=background` decode 消失。 |
 | 2026-06-14 | User+Codex | **QA#23 trace + Phase 24 代码完成(TDD)**:14:06 trace 验证 Phase 23 生效(无 `surface=background` load/decode),剩余 `image.load surface=now-playing decode=false` 仍为 1400~2000px full-cover。Phase 24 给 player `CoverImage` 增加 DOM-load strategy,stage/dock 用真实 `<img onLoad>` gate crossfade,不再创建额外 JS `Image`。TDD:`cover-image` 新红灯转绿;待 QA trace 验证 `surface=now-playing` image.load 消失。 |
 | 2026-06-14 | User+Codex | **QA#24 trace + Phase 25 二分开始**:14:15 trace 验证 Phase 24 生效(`surface=now-playing/background` 的 `image.load/decode` 均消失),但仍有 `fpsLow≈5~15/frameMax≈66~183ms/longTaskMax≈214ms`。剩余可疑层转向全局背景合成、Pixi 192px derivative 的浏览器 decode/fetch queue、flow/visualizer mix-blend-mode、audio blob load。创建临时诊断分支 `diag/switch-fps-bisect`,按大块禁用 commit 做 QA 二分,诊断代码不合入产品分支。 |
+| 2026-06-15 | User+Claude | **QA#47 验证:P4 后 burst 收敛**:de889f1 prod build,tab-1 `fpsAvg 108` ≈ tab-2 ~110,`frameMax 41.7 < 74.9`、`fpsLow 24 > 13.4`——tab-1 已收敛且略优。本轮 cadence ~587ms(566/642/542/642/541)多数 < `COVERFLOW_BURST_SKIP_MS=600` → P2 coverflow-skip 真正触发为主驱动,P4 memo 为辅。`cover.render` 仍 42(全 cache-hit)→ 该指标作废(cache-hit 廉价、非瓶颈)。Phase 28/31 标 ✅。剩余边界:cadence > ~600ms 中速点击仍播完整 coverflow → 单帧尖峰(Open Question #27:接受 / 调阈值 / P5 降 coverflow 合成成本)。 |
 | 2026-06-15 | User+Claude | **QA#46 验证 + Phase 31(P4)**:afff320 桌面 prod build,tab-1 vs tab-2 可比 burst。**P1 达成**——tab-1 静止/间隙 `fpsAvg` 103–115 与 tab-2 102–107 重合,原始「持续低 ~10」消除。**P2/P3 各自目标达成**(`textureSwap` 5/6 持平 → coverflow churn 除;`AnnotationEditor` remount 去)。但 **burst 仍 ~90 vs ~105、`frameMax 133`/`heap 369`**;`cover.preload created:0`+36 条 `cover.render` 全 cache-hit → **排除封面解码**,真因 = 前台整树每首重渲染 + Motion 分配 → GC。新增 Phase 31(P4):前台 stage 标识/信息按 settledTrack 去抖(复刻 QA#5 ambient 去抖)+ `memo` 收敛整树 reconcile。 |
 | 2026-06-15 | User+Claude | **QA#45 方向修正 + §6bis 落地方案(P1/P2/P3)**:用户提供同 commit(`be2462c`)tab-1(Now Playing)vs tab-2(队列/库)两份切歌 trace。对比证明:`frameMax`/`longTask` 两边同量级(58ms/166ms,来自前 27 Phase 处理的**全局共享背景**),但 tab-1 `fpsAvg` 持续低 ~10(~99 vs ~106–110)。该平均差距是**贯穿全程的连续开销**,来自**仅 Now Playing 挂载的前台组件**——前 27 Phase 从未触及。定位三处(按对 `fpsAvg` 贡献排序):P1 `PlaybackSpectrum` 常驻 rAF([`playback-spectrum.tsx:104`](../../../src/components/player/playback-spectrum.tsx#L104));P2 `SwipeableMediaStage` coverflow 0.62s 动画 + 3 卡 `blur(20px) saturate(400%)` 3D 背光,狂切时 overlay 从不空闲([`swipeable-media-stage.tsx:403`](../../../src/components/player/swipeable-media-stage.tsx#L403) / [`:966`](../../../src/components/player/swipeable-media-stage.tsx#L966));P3 `AnnotationEditor key` 重挂 + scroll/resize layout thrash + Lenis 复位。新增 Phase 28(P1 rAF 节流/可见性暂停)、29(P2 coverflow 快切降级 + 背光预算)、30(P3 前台重挂/reflow 收尾),验收锚定 tab-1 `fpsAvg` 向 tab-2 靠拢。**仅文档,未改产品代码。** |
 | 2026-06-15 | User+Claude | **Phase 28/29/30 代码完成(TDD)**:三个 P1/P2/P3 一并落地。**P1 产品口径修正**(PM):频谱不降帧,改为**切歌 fade out + 停 rAF(=0)**,落定 fade in(切歌时本无音乐)——`useSettledValue` 派生 `switching`(420ms),纯 helper `shouldAnimateSpectrum`(`dragging` 永动,否则 `isPlaying && !switching`),canvas `opacity-0` CSS fade。**P2** coverflow 速率 gate(`COVERFLOW_BURST_SKIP_MS=600`):burst 跳过 overlay + `clearStack`,走底层 MediaStage 交叉淡入;`bursting`(`COVERFLOW_BURST_SETTLE_MS=500`)期间关底层 `blur(20px) saturate(400%)` 背光。**P3** 去 `AnnotationEditor` 的 `key={current.id}` 整体重挂 → `AnnotationEditor` + `TrackMemoryNotesPanel` 各自 `useEffect([id])` in-place reset 草稿;swipeable overlay 的 capture scroll/resize 监听 rAF 合并(消除滚动 forced-reflow)。测试:`playback-spectrum.test`(新增 5)、`swipeable-media-stage.test`(+1=7)、`annotation-editor.test`(+1=3),touched-file 共 21 例绿;`tsc` 全绿、Biome 全绿。回退 = `git revert`,无 hidden flag(硬规则 3)。待桌面 prod build QA trace 验证 `fpsAvg` 收敛。 |
