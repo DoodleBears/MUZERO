@@ -14,7 +14,7 @@
 | 1 | 观测:tab-switch VT 标记(`shell.transition` used/skip/suppressed) | ✅ Completed(QA#1:正是它揪出了误诊) | [Phase 1](#phase-1-观测tab-switch-vt-计时--framelongtask-标记) |
 | 2 | ambient 活跃时跳过 root VT | ✅ 代码完成(QA#1:VT 确认被抑制,但**不是掉帧主因**) | [Phase 2](#phase-2-ambient-活跃时跳过-root-vt) |
 | 3 | (可选)非 ambient 时把 VT 裁剪到内容区 / 持久层命名 | ⏸️ 暂缓(VT 非主因,优先级降) | [Phase 3](#phase-3-可选非-ambient-时把-vt-裁剪到内容区) |
-| 4 | **真因:tab 切换 page remount → liveQuery 重查 + 封面重渲染 → GC** | 🔲 进行中(QA#1 定位) | [Phase 4](#phase-4真因page-remount--livequery-重查--封面重渲染) |
+| 4 | **真因:tab 切换 page remount → liveQuery 重查 + 封面重渲染 → GC** | ✅ 代码完成(keep-mounted,待 QA trace) | [Phase 4](#phase-4真因page-remount--livequery-重查--封面重渲染) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending | ⏸️ 暂缓
 >
@@ -220,19 +220,20 @@ trace 见 [`.logs/commit-…/tab-1-tab-2-switch.log`](../../../.logs/commit-afff
 - **(B) 缓存 liveQuery 结果**:让 `listAllTracks`/`trackPlaybackStats`/`memoryNotesByTrack` 走共享缓存层(模块级单例订阅 + 组件读快照),重挂时立即拿缓存、不空查。符合 CLAUDE.md 规则 6(集合用 liveQuery 读但别每次重订阅重算)。
 - **(C) 推迟/合并 requery**:切 tab 时把非可见页的 liveQuery 订阅 defer 到 idle;但这是缓解非根治。
 
-**倾向 (A) 或 (B)**:(A) 最直接(背景已是持久层,页面层比照);(B) 改动更聚焦在数据层、内存占用更省。需先量一页保活的内存/初始化成本再定。
+**决策(用户拍板,Open Question #4):采用 (A) keep-mounted。**
 
-**Tasks(待拍板后实现):**
-- [ ] 选定 keep-mounted vs liveQuery 缓存(Open Question #4)。
-- [ ] 观测验证:切 tab 后 `db …requery` 不再每切都出现;`cover.render` 不再每切爆发;`fpsAvg≈120`、`frameMax<50`、`longTaskMax` 无 150ms 尖峰(prod build,第二轮)。
-- [ ] 不回归:切 tab 内容正确、滚动位置/编辑态按预期保留或重置;内存峰值可接受。
+**Tasks(✅ 代码完成):**
+- [x] [`App.tsx`](../../../src/App.tsx) `<main>` 五个 tab 页改为常驻挂载 + `<TabPanel active>`(非活跃 `hidden`/`display:none`);删除 `tab===x && <Page>` 条件渲染。liveQuery 订阅常驻 → 切 tab 不再重查;封面不再重渲染。
+- [x] 防 rAF-while-hidden:`PlaybackSpectrum` 加 `IntersectionObserver` `onscreen` 门(`display:none` → 不相交 → 暂停 rAF;也顺带关掉 P1 遗留的「滚出视口不停」项)。可视化 host(背景 + Settings 预览)本就 IO + `document.hidden` 暂停;Lenis 是自停共享 driver(空闲 0 rAF)——三类 rAF 在隐藏页都不空转。
+- [x] 不引入新信号:`TabPanel` 纯 `hidden` 切换;`onscreen` 自包含在 spectrum 内,无 prop 穿线。
 
 ### Phase 4 Checklist
 
-- [ ] 切 tab 不再触发 `listAllTracks`/`trackPlaybackStats`/`memoryNotesByTrack` 重查(trace 验证)。
-- [ ] tab 切换 `fpsAvg` 稳 ~120、`frameMax`/`longtask` 无 GC 尖峰(prod build,第二轮)。
-- [ ] 内存峰值在可接受范围(keep-mounted 的代价已量化)。
-- [ ] `tsc`/Biome/相关单测通过。
+- [x] 单测:`shouldAnimateSpectrum` 加 `onscreen` 门(off-screen 永不动,即便 playing/dragging);`view-transition`/`playback-spectrum` 共 17 例绿;player/pages/lib 全量 751 例绿(无回归)。
+- [ ] (QA)切 tab 不再触发 `listAllTracks`/`trackPlaybackStats`/`memoryNotesByTrack` 重查(trace:`db …requery` 不再每切出现)。
+- [ ] (QA)tab 切换 `fpsAvg` 稳 ~120、`frameMax<50`、`longtask` 无 150ms GC 尖峰(prod build,第二轮)。
+- [ ] (QA)内存峰值在可接受范围(keep-mounted 代价已量化);若过高则回退混合(重页保活、Now/settings 条件挂)。
+- [x] `tsc`/Biome 通过。
 
 ---
 
@@ -270,7 +271,7 @@ trace 见 [`.logs/commit-…/tab-1-tab-2-switch.log`](../../../.logs/commit-afff
 | 1 | ambient 活跃时:整体跳过 VT(Phase 2)还是裁剪到内容区(Phase 3)? | 🔲 待拍板 | 倾向 Phase 2(跳过 + 便宜内容 fade):最低风险、与「重层不进快照」既有判断一致;Phase 3 仅当确认命名层不被快照才值得 |
 | 2 | 内容层是否保留过渡 fade,还是 ambient 活跃时直接瞬切? | 🔲 待拍板 | 倾向保留一个 ~120ms opacity fade(只动内容);若实测仍有成本则瞬切 |
 | 3 | 非 ambient(无播放)时是否也统一走内容 fade,去掉 root VT? | ⏸️ 优先级降 | VT 经 QA#1 证伪为非主因;此问随 Phase 3 一起暂缓 |
-| 4 | **Phase 4 真因修复:keep-mounted 页面(A)还是 liveQuery 结果缓存(B)?** | 🔲 待拍板 | 倾向先量化一页保活的内存/初始化成本:若可接受用 (A)(背景已是持久层,页面比照,最直接);否则 (B)(数据层缓存,内存更省、改动更聚焦)。可混合:重页(search/queue)保活,Now/settings 仍条件挂 |
+| 4 | **Phase 4 真因修复:keep-mounted 页面(A)还是 liveQuery 结果缓存(B)?** | ✅ Resolved(用户拍板 A) | **keep-mounted**:五页常驻 + `hidden` 切显隐;rAF 子项靠各自可见性门暂停(spectrum IO、visualizer IO、Lenis 自停)。若 QA 测出内存/boot 成本过高,回退混合(重页保活、Now/settings 条件挂) |
 
 ---
 
@@ -280,4 +281,5 @@ trace 见 [`.logs/commit-…/tab-1-tab-2-switch.log`](../../../.logs/commit-afff
 |------|--------|---------|
 | 2026-06-15 | Claude | 初稿:排查确认 tab↔tab 掉帧 = root View Transition 快照持久重 ambient 背景(Pixi/canvas/video);三入口(NavFab + Ctrl+1/2 shortcut)。落地方案:Phase 1 观测、Phase 2 ambient 活跃跳过 root VT + 内容层 fade、Phase 3(可选)命名裁剪。仅文档,未改代码。 |
 | 2026-06-15 | Claude | **Phase 1 + Phase 2 代码完成(TDD)**:`view-transition.ts` 加模块级抑制(`setViewTransitionSuppressed`)+ `shell.transition` trace(`phase=start|skip`/`used`/`suppressed`);`App.tsx` 跟 `ambientBackdropActive` 驱动抑制。抑制为全局(所有 root VT 在重背景下同跳过),shared-element morph 走 Motion 不受影响。**未加内容层 fade**(暂定瞬切,Open Question #2)。`view-transition.test.ts` 13 例绿;`tsc`/Biome 通过。待 QA 抓 ambient-active 切 tab trace 验证 `fpsAvg` 回 ~120 + `shell.transition phase=skip`。 |
+| 2026-06-15 | User+Claude | **Phase 4 代码完成(keep-mounted,TDD)**:用户拍板方案 A。`App.tsx` 五页改常驻挂载 + `<TabPanel hidden>` 切显隐(删条件渲染)→ liveQuery 订阅不断、切 tab 不重查、封面不重渲染。防 rAF-while-hidden:`PlaybackSpectrum` 加 `IntersectionObserver` `onscreen` 门(顺带补 P1「滚出视口暂停」);visualizer host 本就 IO 暂停、Lenis 自停 driver 空闲 0 rAF。`shouldAnimateSpectrum` 加 `onscreen` 参数 + 测试;player/pages/lib 全量 751 例绿、`tsc`/Biome 通过。待 QA 抓 trace 验证 `db …requery` 不再每切出现 + `fpsAvg≈120`。 |
 | 2026-06-15 | User+Claude | **QA#1 方向修正:VT 被证伪为非主因**。第一份 trace(Phase 1/2 代码)显示 `shell.transition` 全 `suppressed=true used=false`(VT 没跑),但切 tab 仍 `fpsAvg 115→60`/`frameMax 166`/heap 107→238/`longTask 150`,停手即回稳 120。真因 = `tab===x && <Page>` 条件渲染导致**切 tab 整页卸载/重挂 → `useLiveQuery` 重订阅重查(`listAllTracks`/`trackPlaybackStats`/`memoryNotesByTrack`)+ 封面 surface 重渲染 → IndexedDB 反序列化 + GC 长任务**。Phase 3 暂缓、VT 抑制(Phase 2)保留为次要省成本;新增 Phase 4(真因):keep-mounted 页面 或 liveQuery 结果缓存(Open Question #4)。Phase 1 观测先行正是它一举证伪 VT。 |

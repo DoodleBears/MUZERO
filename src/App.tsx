@@ -283,28 +283,40 @@ export default function App() {
           <WindowsWindowControls />
         </header>
 
+        {/* Tabs are kept MOUNTED and toggled with `hidden` (display:none) rather
+            than conditionally rendered. Remounting a page on every switch tore
+            down + re-subscribed its Dexie `useLiveQuery`s (listAllTracks /
+            trackPlaybackStats / memoryNotesByTrack) and re-rendered every cover
+            surface → IndexedDB deserialization + GC long task = the tab-switch
+            FPS dip (PRD 20260615-…-view-transition-perf Phase 4 / QA#1). Keeping
+            them mounted holds the subscriptions live so a switch is a pure CSS
+            show/hide. rAF-driven children pause while hidden on their own:
+            PlaybackSpectrum (IntersectionObserver), the visualizer host (IO +
+            document.hidden), and the shared Lenis driver (self-stops when idle). */}
         <main className="chrome-fade absolute inset-0 z-10 overflow-hidden [--chrome-fade-bottom:calc(var(--spacing-chrome-bottom)/2)] [--chrome-fade-top:3rem]">
-          {tab === "now" && <NowPlayingPage foregroundHidden={foregroundHidden} />}
-          {tab === "queue" && (
+          <TabPanel active={tab === "now"}>
+            <NowPlayingPage foregroundHidden={foregroundHidden} />
+          </TabPanel>
+          <TabPanel active={tab === "queue"}>
             <AmbientPageOverlay active={ambientActive}>
               <QueuePage />
             </AmbientPageOverlay>
-          )}
-          {tab === "search" && (
+          </TabPanel>
+          <TabPanel active={tab === "search"}>
             <AmbientPageOverlay active={ambientActive}>
               <SearchPage />
             </AmbientPageOverlay>
-          )}
-          {tab === "sessions" && (
+          </TabPanel>
+          <TabPanel active={tab === "sessions"}>
             <AmbientPageOverlay active={ambientActive}>
               <SessionsPage onStarted={() => setTab("now")} />
             </AmbientPageOverlay>
-          )}
-          {tab === "settings" && (
+          </TabPanel>
+          <TabPanel active={tab === "settings"}>
             <AmbientPageOverlay active={ambientActive}>
               <SettingsPage />
             </AmbientPageOverlay>
-          )}
+          </TabPanel>
         </main>
 
         <PlayerDock
@@ -399,6 +411,16 @@ function useDesktopWindowPinMode(settings: ReturnType<typeof useSettings>) {
 
 async function toggleDesktopMaximize() {
   await useDesktopWindowStore.getState().toggleMaximize();
+}
+
+/**
+ * One kept-mounted tab page. Inactive panels stay in the React tree (so their
+ * liveQuery subscriptions and scroll/edit state persist) but go `display:none`
+ * via `hidden`, which also drops them from layout, paint, focus order, and the
+ * a11y tree. See the `<main>` comment + PRD Phase 4.
+ */
+function TabPanel({ active, children }: { active: boolean; children: ReactNode }) {
+  return <div className={cn("h-full", !active && "hidden")}>{children}</div>;
 }
 
 function AmbientPageOverlay({ active, children }: { active: boolean; children: ReactNode }) {
