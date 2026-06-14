@@ -10,6 +10,7 @@ import { NowPlayingBackground } from "@/components/player/now-playing-background
 import { useVisualizerCoverColorCss } from "@/components/player/visualizer-dynamic-color";
 import { VisualizerTuningPanel } from "@/components/player/visualizer-tuning-panel";
 import { GlobalTrackSearch } from "@/components/search/global-track-search";
+import { HeaderNavTabs } from "@/components/shell/header-nav-tabs";
 import { PlayerDock } from "@/components/shell/player-dock";
 import { WindowsWindowControls } from "@/components/shell/windows-window-controls";
 import { GlobalDropZone } from "@/components/upload/global-drop-zone";
@@ -25,6 +26,7 @@ import { albumCoverAppearanceCssVars } from "@/lib/album-cover-appearance";
 import { resolveDesktopBridge } from "@/lib/desktop/bridge";
 import { electronWindowAppearanceCssVars } from "@/lib/electron-window-appearance";
 import { cn } from "@/lib/utils";
+import { setViewTransitionSuppressed } from "@/lib/view-transition";
 import { dragWindowOnEmptyPress } from "@/lib/window-drag";
 import { NowPlayingPage } from "@/pages/now-playing-page";
 import { QueuePage } from "@/pages/queue-page";
@@ -217,6 +219,13 @@ export default function App() {
   useEffect(() => {
     useUiStore.getState().setChromeHidden(dockHidden);
   }, [dockHidden]);
+  // Suppress whole-page View Transitions while the heavy ambient backdrop is live:
+  // a `root` transition would snapshot + cross-fade that full-screen Pixi/video/
+  // visualizer layer (unchanged between tabs) and dip FPS on tab switches. See PRD
+  // 20260615-…-view-transition-perf Phase 2.
+  useEffect(() => {
+    setViewTransitionSuppressed(ambientBackdropActive);
+  }, [ambientBackdropActive]);
   useLyricsOnlyOverlayDataset(lyricsOnlyIdle);
 
   // MUZERO keeps its playback-oriented motion alive regardless of the OS
@@ -258,20 +267,11 @@ export default function App() {
             className="absolute inset-y-0 left-0 right-36 [-webkit-app-region:drag]"
             data-tauri-drag-region
           />
-          <div
-            className="group/header-logo relative z-10 flex items-center justify-center gap-2 [-webkit-app-region:no-drag]"
-            data-no-drag
-          >
-            <button
-              aria-label="MUZERO"
-              className="cursor-default border-0 bg-transparent p-0 font-semibold tracking-tight text-inherit [-webkit-app-region:no-drag]"
-              data-no-drag
-              onDoubleClick={() => void toggleDesktopMaximize()}
-              type="button"
-            >
-              MUZERO
-            </button>
-          </div>
+          <HeaderNavTabs
+            value={tab}
+            onChange={setTab}
+            onDoubleClick={() => void toggleDesktopMaximize()}
+          />
           <WindowsWindowControls />
         </header>
 

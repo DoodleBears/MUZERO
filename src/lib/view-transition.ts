@@ -11,6 +11,10 @@
  * to the matching elements; local control animations still use Motion.
  */
 
+import { createDiagnosticLogger } from "@/lib/logger";
+
+const viewTransitionLog = createDiagnosticLogger("shell.transition");
+
 /**
  * Chromium-class engine sniff. Electron / WebView2 / Chrome / Edge carry a
  * `Chrome/`, `Chromium/`, or `Edg/` product token; WebKit shells (WKWebView,
@@ -20,6 +24,26 @@
 function isChromiumEngine(): boolean {
   if (typeof navigator === "undefined") return false;
   return /\b(?:Chrome|Chromium|Edg)\//.test(navigator.userAgent);
+}
+
+/**
+ * When a heavy full-screen compositor layer is live (the ambient Pixi/visualizer/
+ * video backdrop), a `root` View Transition would rasterize that whole layer into
+ * `::view-transition-old/new(root)` snapshots and cross-fade two copies of it for
+ * the transition duration — for a layer that doesn't even change between tabs.
+ * That snapshot is the tab-switch FPS dip (PRD 20260615-…-view-transition-perf,
+ * Phase 2). While suppressed, `startViewTransition` runs the update synchronously
+ * (same as a WebKit shell), so the swap is instant and the backdrop is untouched.
+ */
+let suppressed = false;
+
+/** App shell toggles this from the ambient-backdrop-active signal. */
+export function setViewTransitionSuppressed(value: boolean): void {
+  suppressed = value;
+}
+
+export function isViewTransitionSuppressed(): boolean {
+  return suppressed;
 }
 
 /**
@@ -41,7 +65,17 @@ export function canViewTransition(): boolean {
  * snapshots it (see `transitionState`).
  */
 export function startViewTransition(update: () => void): void {
-  if (canViewTransition()) {
+  const canVt = canViewTransition();
+  const used = canVt && !suppressed;
+  viewTransitionLog.debug("transition", {
+    message: "shell view transition",
+    category: "performance",
+    phase: used ? "start" : "skip",
+    used,
+    canViewTransition: canVt,
+    suppressed,
+  });
+  if (used) {
     document.startViewTransition(update);
     return;
   }

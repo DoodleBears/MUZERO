@@ -1,5 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { canViewTransition, startViewTransition } from "./view-transition";
+import {
+  canViewTransition,
+  isViewTransitionSuppressed,
+  setViewTransitionSuppressed,
+  startViewTransition,
+} from "./view-transition";
 
 // jsdom has no `document.startViewTransition`, so we stub it per-test to exercise
 // each branch of the progressive-enhancement logic.
@@ -27,6 +32,7 @@ function stubUserAgent(ua: string): void {
 
 afterEach(() => {
   doc.startViewTransition = undefined;
+  setViewTransitionSuppressed(false);
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
@@ -105,5 +111,36 @@ describe("startViewTransition", () => {
     startViewTransition(update);
     expect(doc.startViewTransition).toHaveBeenCalledTimes(1);
     expect(update).toHaveBeenCalledTimes(1);
+  });
+
+  it("bypasses the native API when suppressed, even on a supported Chromium engine", () => {
+    stubStartViewTransition((cb) => cb());
+    stubUserAgent(CHROMIUM_UA);
+    setViewTransitionSuppressed(true);
+    const update = vi.fn();
+    startViewTransition(update);
+    expect(doc.startViewTransition).not.toHaveBeenCalled();
+    expect(update).toHaveBeenCalledTimes(1);
+  });
+
+  it("resumes wrapping in the native API once suppression is cleared", () => {
+    stubStartViewTransition((cb) => cb());
+    stubUserAgent(CHROMIUM_UA);
+    setViewTransitionSuppressed(true);
+    setViewTransitionSuppressed(false);
+    const update = vi.fn();
+    startViewTransition(update);
+    expect(doc.startViewTransition).toHaveBeenCalledTimes(1);
+    expect(update).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("setViewTransitionSuppressed / isViewTransitionSuppressed", () => {
+  it("reflects the latest suppression state", () => {
+    expect(isViewTransitionSuppressed()).toBe(false);
+    setViewTransitionSuppressed(true);
+    expect(isViewTransitionSuppressed()).toBe(true);
+    setViewTransitionSuppressed(false);
+    expect(isViewTransitionSuppressed()).toBe(false);
   });
 });

@@ -11,11 +11,13 @@
 
 | Phase | Name | Status | Link |
 |-------|------|--------|------|
-| 1 | 观测:tab-switch VT 计时 + frame/longtask 标记(before/after ground truth) | 🔲 Pending | [Phase 1](#phase-1-观测tab-switch-vt-计时--framelongtask-标记) |
-| 2 | ambient 活跃时跳过 root VT,只做内容层 fade(主修复) | 🔲 Pending | [Phase 2](#phase-2-ambient-活跃时跳过-root-vt) |
-| 3 | (可选)非 ambient 时把 VT 裁剪到内容区 / 持久层命名 | 🔲 Pending | [Phase 3](#phase-3-可选非-ambient-时把-vt-裁剪到内容区) |
+| 1 | 观测:tab-switch VT 标记(`shell.transition` used/skip/suppressed) | ✅ 代码完成(待 QA trace) | [Phase 1](#phase-1-观测tab-switch-vt-计时--framelongtask-标记) |
+| 2 | ambient 活跃时跳过 root VT(主修复) | ✅ 代码完成(待 QA trace) | [Phase 2](#phase-2-ambient-活跃时跳过-root-vt) |
+| 3 | (可选)非 ambient 时把 VT 裁剪到内容区 / 持久层命名 | 🔲 Pending(QA 后定) | [Phase 3](#phase-3-可选非-ambient-时把-vt-裁剪到内容区) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
+>
+> **实现说明(2026-06-15):**Phase 2 采用「ambient backdrop 活跃 → 全局抑制 root VT」(模块级 `setViewTransitionSuppressed`,由 App.tsx 跟 `ambientBackdropActive` 驱动),抑制时 `startViewTransition` 直接同步更新(等同 WebKit 壳)。**未加内容层 fade**(Open Question #2 暂定瞬切:连续背景已是视觉锚点,瞬切 tab 不突兀);如 QA 觉得太硬可再加便宜 opacity fade。抑制是**全局**的(不止 tab 切换)——所有 root VT 在重背景下都付同样快照成本,一并跳过更一致;shared-element morph 走 Motion 不受影响。
 
 ---
 
@@ -139,32 +141,34 @@ transitionState(() => setTab(x))
 
 **Goal:** 让 tab↔tab 切换的掉帧有可归因的 before/after 信号,而不是只凭「感觉 120→100」。
 
-**Tasks:**
-- [ ] 在 `transitionState` / tab 切换调用点埋一条 trace(`nav.tab.transition` start/end + `usedViewTransition: bool` + `ambientActive: bool`),并记录 `viewTransition.ready`/`finished` 的耗时(Chromium 提供 `ViewTransition.ready` Promise)。
-- [ ] 复用既有 `performance.frame` fps window + `longtask` 观测(切歌 PRD 已建),抓一份「连续切 tab(ambient 活跃)」的 trace,确立基线:`fpsAvg`/`fpsLow`/`frameMaxMs`/`longTaskMaxMs`。
-- [ ] 对照「ambient 不活跃(无播放)」切 tab 的 trace,验证掉帧确实与背景快照相关。
+**Tasks(✅ 代码完成):**
+- [x] [`view-transition.ts`](../../../src/lib/view-transition.ts) `startViewTransition` 每次发 `shell.transition transition` trace:`phase=start|skip`、`used`、`canViewTransition`、`suppressed` —— 一条日志即可区分「跑了 root VT」vs「被引擎/抑制跳过」。
+- [ ] (QA)复用既有 `performance.frame` fps window + `longtask`,抓一份「连续切 tab(ambient 活跃)」trace,确立基线:`fpsAvg`/`fpsLow`/`frameMaxMs`/`longTaskMaxMs`。
+- [ ] (QA)对照「ambient 不活跃」切 tab 的 trace,验证掉帧确实与背景快照相关。
 
 ### Phase 1 Checklist
 
-- [ ] trace 能区分 `usedViewTransition` true/false 两条路径。
-- [ ] 抓到 ambient-active 切 tab 的基线窗口(`fpsAvg≈100`、`frameMax` 尖峰)。
-- [ ] 纯 observability,低风险,可独立先 ship。
+- [x] trace 能区分 `used` true/false(`shell.transition` 的 `phase=start|skip` + `suppressed` 字段)。
+- [ ] (QA)抓到 ambient-active 切 tab 的基线窗口(`fpsAvg≈100`、`frameMax` 尖峰)。
+- [x] 纯 observability,低风险,随 Phase 2 一起 ship。
 
 ### Phase 2: ambient 活跃时跳过 root VT
 
 **Goal:** ambient 背景活跃时不再快照/cross-fade 整个 viewport,消除 tab 切换掉帧。
 
-**Tasks:**
-- [ ] `startViewTransition` / `transitionState` 支持「跳过条件」:`ambientBackgroundActive` 为真时直接 `flushSync(update)`,不 `document.startViewTransition`。
-- [ ] (可选,保留观感)给换页内容层(`AmbientPageOverlay` / `<main>` 内容)加一个便宜的 opacity fade(Motion `initial/animate` 或 CSS),**只动内容、不碰背景**。
-- [ ] 验证 video / Pixi / 可视化在切 tab 时不被打断(与 WebKit 禁用 VT 的初衷一致)。
+**Tasks(✅ 代码完成):**
+- [x] [`view-transition.ts`](../../../src/lib/view-transition.ts) 加模块级 `suppressed` + `setViewTransitionSuppressed()` / `isViewTransitionSuppressed()`;`startViewTransition` 在 `canViewTransition() && !suppressed` 才走 native,否则直接同步 `update()`(等同 WebKit 壳)。透传到 `transitionState`(无需改调用点签名)。
+- [x] [`App.tsx`](../../../src/App.tsx) `useEffect([ambientBackdropActive])` → `setViewTransitionSuppressed(ambientBackdropActive)`;复用既有 `ambientBackdropActive`(=`hasAmbientTrack && !lyricsOnlyIdle`,即重背景实际在渲染的信号),不造平行信号。
+- [~] 内容层 opacity fade:**未实现**(Open Question #2 暂定瞬切;连续背景已是锚点)。如 QA 要求再加。
+- [x] 抑制是全局的 → video / Pixi / 可视化在切 tab 时完全不进 VT 快照,不被打断(与 WebKit 禁用初衷一致)。
 
 ### Phase 2 Checklist
 
-- [ ] ambient 活跃时切 tab:`fpsAvg` 回到接近 ~120、`frameMax`/`longtask` 不再出现 VT 快照尖峰(prod build,第二轮 trace)。
-- [ ] 切 tab 仍有轻过渡观感(内容淡入),背景无 shimmer / 无媒体打断。
-- [ ] ambient 不活跃时行为不变(仍可走 root VT 或同样的内容 fade)。
-- [ ] `tsc`/Biome/相关单测通过。
+- [x] 单测:抑制时即便 Chromium + API 在也走同步更新;清除后恢复 native(`view-transition.test.ts`,13 例绿)。
+- [ ] (QA)ambient 活跃时切 tab:`fpsAvg` 回到接近 ~120、`frameMax`/`longtask` 不再出现 VT 快照尖峰(prod build,第二轮 trace);`shell.transition phase=skip suppressed=true` 可见。
+- [ ] (QA)切 tab 背景无 shimmer / 无媒体打断;瞬切观感可接受(否则加内容 fade)。
+- [x] ambient 不活跃时行为不变(`suppressed=false` → 仍走 root VT)。
+- [x] `tsc`/Biome/相关单测通过。
 
 ### Phase 3:(可选)非 ambient 时把 VT 裁剪到内容区
 
@@ -223,3 +227,4 @@ transitionState(() => setTab(x))
 | Date | Author | Changes |
 |------|--------|---------|
 | 2026-06-15 | Claude | 初稿:排查确认 tab↔tab 掉帧 = root View Transition 快照持久重 ambient 背景(Pixi/canvas/video);三入口(NavFab + Ctrl+1/2 shortcut)。落地方案:Phase 1 观测、Phase 2 ambient 活跃跳过 root VT + 内容层 fade、Phase 3(可选)命名裁剪。仅文档,未改代码。 |
+| 2026-06-15 | Claude | **Phase 1 + Phase 2 代码完成(TDD)**:`view-transition.ts` 加模块级抑制(`setViewTransitionSuppressed`)+ `shell.transition` trace(`phase=start|skip`/`used`/`suppressed`);`App.tsx` 跟 `ambientBackdropActive` 驱动抑制。抑制为全局(所有 root VT 在重背景下同跳过),shared-element morph 走 Motion 不受影响。**未加内容层 fade**(暂定瞬切,Open Question #2)。`view-transition.test.ts` 13 例绿;`tsc`/Biome 通过。待 QA 抓 ambient-active 切 tab trace 验证 `fpsAvg` 回 ~120 + `shell.transition phase=skip`。 |
