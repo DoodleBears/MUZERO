@@ -24,7 +24,8 @@
 | 11 | local-cover 协议 URL pending 时跳过 blob fallback | ✅ 代码完成(待 trace 验证) | [Phase 11](#phase-11-local-cover-协议-url-pending-时跳过-blob-fallback) |
 | 12 | local-cover pending 时硬阻断上一帧 settled Pixi target | ✅ 代码完成(待 trace 验证) | [Phase 12](#phase-12-local-cover-pending-时硬阻断上一帧-settled-pixi-target) |
 | 13 | local-cover liveQuery stale row guard | ✅ Completed(trace verified) | [Phase 13](#phase-13-local-cover-livequery-stale-row-guard) |
-| 14 | coverflow/local cover preload burst jank | ✅ 代码完成(待 trace 验证) | [Phase 14](#phase-14-coverflowlocal-cover-preload-去抖与可归因) |
+| 14 | coverflow/local cover preload burst jank | ✅ Completed(trace verified) | [Phase 14](#phase-14-coverflowlocal-cover-preload-去抖与可归因) |
+| 15 | Pixi background texture downsample / decode budget | 🔲 Pending | [Phase 15](#phase-15-pixi-background-texture-降采样预算) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
 
@@ -519,7 +520,27 @@ backgroundGpuPowerPreference?: "auto" | "high-performance" | "low-power"; // DEF
 - [x] 补 `cover.preload.batch` context:`stale/canceled`、`cacheHits`、`inflightHits`、`current/previous/next/stack/settle` request 分布、`maxSourceBytes`。✅ 不记录 raw cover key,只记录计数与最大源字节。
 - [x] 评估并实现最小修复:✅ 抽出 `cover-preload.ts`;本地 cover preload 按 key 做 in-flight dedupe,相同 key 并发 batch 只 resolve/create 一次;hook 增加 batch sequence,stale batch 不再 set state 或创建 object URL。
 - [ ] 如下一份 trace 证明 unique prev/next 才是主因:快速切歌窗口只预加载 current,prev/next 延后到 settle 后。
-- [ ] QA trace 验收:Phase 13 后的本地封面快切不再出现 `cover.preload.batch lastMs>300ms` 与 image `blobsCreated/live` 快速爬升;`fpsLow` 相对 Phase 13 trace 明显回升。
+- [x] QA trace 验收:Phase 13 后的本地封面快切不再出现 `cover.preload.batch lastMs>300ms` 与 image `blobsCreated/live` 快速爬升;`fpsLow` 相对 Phase 13 trace 明显回升。✅ 11:35 trace 中 `cover.preload.batch` 为 `created=0`, `maxSourceBytes=0`, `cacheHits=0..3`, `lastMs≈14.8..27.6`;image blob 数稳定在 16 live。
+
+### QA#14(2026-06-14 Phase 14 trace):preload 已收敛,剩余掉帧回到 Pixi ImageBitmap decode
+
+11:35:20-11:35:25 最新 trace 证明 Phase 14 修复方向正确,但也把剩余大头推回 Pixi 背景纹理:
+
+- **coverflow preload 已不再创建新 image blob**:`cover.preload.batch` 多次出现但均 `created=0`, `cropped=0`, `maxSourceBytes=0`;典型窗口为 `lastMs=14.8/23.4/27.6`,不再有上一轮 `lastMs=503 created=2 local=3`。image blob 计数也稳定:`blobsCreatedByKind.image=16`, `blobsLiveByKind.image=15`。
+- **local-cover pending guard 仍有效**:每次 `playIndex` 后约 26-31ms 出现 `background.cover localCover.wait pendingReason=row`,没有回到“wait 晚于 blob start”的旧问题。
+- **Pixi app 生命周期仍稳定**:`background.pixi textureSwap` summary 里 `appInits=1`, `swapSeq=11/12` 连续递增。`texture.create=0.1ms`, `renderMs=1.3-1.9ms`,所以不是 GPU app init / Pixi Texture.from / render 阶段。
+- **剩余耗时集中在 `media.load`**:两次切歌分别 `media.load loader=imageBitmap bytes=257377 width=1500 height=1500 durationMs=172.1` 与 `bytes=70018 width=800 height=800 durationMs=254.3`。这说明即使压缩字节不大,ImageBitmap decode/bitmap 源准备仍可能跨过多个 120Hz frame budget,并与音频 blob load 同窗口叠加。对应 FPS window 仍有 `fpsAvg=75/62.3`, `fpsLow=15`, `frameMaxMs=66.7`。
+- **结论**:Phase 14 排除了 coverflow preload 作为主因;下一步不应继续改 QueuePanel 或 preload,而应给 Pixi 背景纹理建立独立 decode budget/降采样策略。主 stage/coverflow 仍可保持原图;环境背景特效可以使用较小 bitmap,因为它经过 blur/noise/pixel/filter 合成,不是用户检查封面的主图。
+
+### Phase 15: Pixi background texture 降采样预算
+
+**Goal:** 只对 Pixi 环境背景纹理设定 decode/upload 预算,避免每次切歌为全屏特效解码 800-1500px+ 的整图 ImageBitmap。中央 stage / coverflow 封面仍保持原图显示。
+
+**Tasks(TDD):**
+- [ ] 为 `loadImageBitmapSource` 增加可注入 `maxDimension` / resize option 测试:当调用方给背景预算时,应向 `createImageBitmap` 传入保持宽高比的 `resizeWidth/resizeHeight`。
+- [ ] 增加轻量图片尺寸探测(至少 JPEG/PNG/WebP 常见路径)或复用已有 cover metadata,避免先解整图再降采样。
+- [ ] `pixi-pixel-background` 图片分支传入背景纹理预算(初值建议 768 或 1024,以 QA trace 对比为准),trace 增加 `decodedWidth/decodedHeight` 或 `resizeMaxDimension`。
+- [ ] QA trace 验收:`background.pixi media.load` 的 `width/height` 被预算限制,`loadMs` 下降且 `fpsAvg/fpsLow` 接近 120Hz 稳态;`texture.create/renderMs` 仍保持低值。
 
 ---
 
@@ -570,7 +591,8 @@ backgroundGpuPowerPreference?: "auto" | "high-performance" | "low-power"; // DEF
 | 12 | QA#10:Phase 10 后为什么仍 `fpsLow=2.4`? | 🔲 Root cause found | Pixi 不再重建后,剩余大头是 local-cover 协议 URL pending 期间先启 `blob:` fallback,随后 `muzfetch:` ready 又二次解码同一张 16.5MB/3000px 封面。Phase 11 让 pending 成为显式状态,跳过 blob fallback 并补 `background.cover localCover.wait` trace。 |
 | 13 | QA#11:3000×3000 本身是否足以解释掉帧? | 🔲 Root cause refined | 不应只归因到尺寸。新 trace 显示 `localCover.wait` 前仍有一帧旧 settled `blob:` target 进入 Pixi,且 stale ImageBitmap decode 无法取消,把 3000px 图的旧 decode、muzfetch decode、下一首 decode 排到一起。Phase 12 硬阻断 pending 首帧的 settled target。 |
 | 14 | QA#12:Phase 12 后为什么仍 wait 晚于 blob start? | 🔲 Root cause found | `useLiveQuery` 在 `coverBlobId` 切换后会短暂返回上一条 mediaBlob row;旧 hook 没校验 `row.id`,导致当前 cover 首帧误判并走 blob。Phase 13 只接受 id 匹配当前 cover 的 row,否则视为 row pending。 |
-| 15 | QA#13:Phase 13 后为什么仍 `fpsLow≈7.5`? | 🔲 Phase 14 code landed | local-cover wait 已在首帧发生,Pixi app 也稳定(`appInits=1`),16.5MB 重复 decode 未复现。剩余低 FPS 与 `cover.preload.batch lastMs=503 created=2 local=3 requests=3`、image blob 数增长对齐;Phase 14 已补 coverflow/local cover preload 的 in-flight dedupe、stale batch guard 与可归因 trace,待新 trace 验证。 |
+| 15 | QA#13:Phase 13 后为什么仍 `fpsLow≈7.5`? | ✅ Resolved(trace verified) | local-cover wait 已在首帧发生,Pixi app 也稳定(`appInits=1`),16.5MB 重复 decode 未复现。Phase 14 后新 trace 显示 `cover.preload.batch created=0 maxSourceBytes=0`,image blob 数稳定,preload 已收敛。 |
+| 16 | QA#14:Phase 14 后为什么仍 `fpsAvg≈62-75`? | 🔲 New root cause found | 剩余低 FPS 与 Pixi `media.load loader=imageBitmap` 对齐:1500px/800px 图片仍需 172-254ms 准备,而 `texture.create/renderMs` 仍仅 0-3ms。下一步是 Pixi 背景纹理独立 decode budget / 降采样,不再继续追 QueuePanel 或 coverflow preload。 |
 
 ---
 
@@ -602,3 +624,4 @@ backgroundGpuPowerPreference?: "auto" | "high-performance" | "low-power"; // DEF
 | 2026-06-14 | User+Codex | **QA#12 + Phase 13**:10:59 trace 显示 `localCover.wait` 仍会晚于 `sourceKind=blob` start。定位到 `useLocalCoverResource` 的 Dexie `useLiveQuery` deps 切换窗口:可能暂返上一张 mediaBlob row,旧 hook 未校验 `row.id === coverBlobId`,导致首帧误走 blob fallback。新增 row-id guard 与 hook 测试,stale row 现在返回 `pendingReason=row` 且不请求协议 URL。 |
 | 2026-06-14 | User+Codex | **QA#13 trace 记录 + Phase 14 待办**:11:03 trace 验证 Phase 13 生效(`localCover.wait` 首帧出现,16.5MB blob→muzfetch 重复 decode 未复现,Pixi `appInits=1`)。剩余 `fpsAvg=46.9/fpsLow=7.5` 与 `cover.preload.batch lastMs=503 created=2 local=3 requests=3`、image blob live 增长对齐。新增 Phase 14:coverflow/local cover preload latest-only、in-flight dedupe 与 stale/cancel trace。 |
 | 2026-06-14 | User+Codex | **Phase 14 代码完成(TDD)**:新增 `cover-preload.ts` 把 coverflow preload 从组件内联 effect 抽成可测 helper;本地 cover preload 按 cache key 做 in-flight dedupe,并用 batch sequence 阻止 stale batch 创建 object URL / 写 state;修复 stale 后 `coverUrlCache.acquire()` 占位 ref 泄漏。`cover.preload.batch` trace 现在带 `cacheHits/inflightHits/stale/canceled/maxSourceBytes` 与 current/previous/next/stack/settle 分布。新增 2 例 helper 测试 + 原 swipeable stage 6 例全绿;`typecheck`/Biome 通过。 |
+| 2026-06-14 | User+Codex | **QA#14 Phase 14 trace 验证 + Phase 15 待办**:11:35 trace 显示 Phase 14 生效(`cover.preload.batch created=0 maxSourceBytes=0`,image blob live 稳定),local-cover wait 与 Pixi app lifecycle 也稳定。剩余掉帧对齐 Pixi `media.load loader=imageBitmap`:1500px 图 `loadMs=172.1`,800px 图 `loadMs=254.3`,而 `texture.create/renderMs` 仍 0-3ms。新增 Phase 15:Pixi 背景纹理独立 decode budget/降采样,stage/coverflow 仍保原图。 |
