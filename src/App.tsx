@@ -6,7 +6,6 @@ import { ChangelogModal } from "@/components/player/changelog-modal";
 import { ImmersiveLyricsOverlay } from "@/components/player/immersive-lyrics-overlay";
 import { ImmersiveMemoryOverlay } from "@/components/player/immersive-memory-overlay";
 import { LyricsTuningPanel } from "@/components/player/lyrics-tuning-panel";
-import { NowPlayingBackground } from "@/components/player/now-playing-background";
 import { useVisualizerCoverColorCss } from "@/components/player/visualizer-dynamic-color";
 import { VisualizerTuningPanel } from "@/components/player/visualizer-tuning-panel";
 import { GlobalTrackSearch } from "@/components/search/global-track-search";
@@ -195,7 +194,6 @@ export default function App() {
         (visualizerPlacement === "idle" || visualizerPlacement === "lyrics")));
   const dockIdleHidden = useDockIdle(dockIdleEnabled);
   const visualizerPreviewOnly = useVisualizerPanelStore((s) => s.previewOnly);
-  const visualizerHidden = useVisualizerPanelStore((s) => s.visualizerHidden);
   const foregroundHidden = visualizerPreviewOnly || visualizerIdleOnly || lyricsOnlyIdle;
   // While pinned as a lyrics overlay the background/foreground stay hidden
   // (lyricsOnlyIdle is latched above), but the titlebar should still reveal on
@@ -210,7 +208,6 @@ export default function App() {
   // normal visible-page lyrics layout remains cover-left / lyrics-right.
   const lyricsVisible = !settings.nowPlayingRightRailCollapsed;
   const immersiveLyricsActive = lyricsOnlyIdle || (foregroundHidden && lyricsVisible);
-  const ambientBackdropActive = ambientBackgroundActive && !lyricsOnlyIdle;
 
   // Mirror the Dock-hidden signal so deep surfaces (e.g. the lyrics search
   // affordance) can fade in sync with the Dock during immersive idle.
@@ -229,15 +226,6 @@ export default function App() {
           itself by the chrome heights (--spacing-chrome-*), so content fills the
           screen and scrolls *under* the bars instead of being boxed between them. */}
       <div className="app-shell relative h-screen overflow-hidden bg-background text-foreground">
-        <NowPlayingBackground
-          active={ambientBackdropActive}
-          hideVisualizer={visualizerHidden}
-          className={cn(
-            "fixed inset-0 z-0 transition-opacity duration-500",
-            ambientBackdropActive ? "opacity-100" : "opacity-0",
-          )}
-        />
-
         <header
           // Draggable on desktop (Tauri overlay titlebar); transparent over the
           // ambient playback stage, translucent only on the plain app background.

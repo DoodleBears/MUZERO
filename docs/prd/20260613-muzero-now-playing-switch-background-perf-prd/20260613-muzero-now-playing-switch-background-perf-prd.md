@@ -814,11 +814,13 @@ backgroundGpuPowerPreference?: "auto" | "high-performance" | "low-power"; // DEF
 
 **Tasks:**
 - [x] 创建临时诊断分支 `diag/switch-fps-bisect`。
-- [ ] Commit 0:记录本 Phase 与 QA 操作矩阵。
-- [ ] Commit A:禁用整个全局 `NowPlayingBackground`。
+- [x] Commit 0:记录本 Phase 与 QA 操作矩阵。
+- [x] Commit A:禁用整个全局 `NowPlayingBackground`。
 - [ ] Commit B:在 A 的反向路径之外,禁用 Pixi ambient layer。
 - [ ] Commit C/D/E:根据 A/B 的 QA 结果继续,避免无意义地堆叠过多诊断改动。
 - [ ] 最终修复必须回到产品分支实现,不得直接合并诊断 commit。
+
+**Experiment A implementation:** [`App.tsx`](../../../src/App.tsx) 不再挂载 `NowPlayingBackground`;页面、dock、播放 transport、foreground stage、trace recorder/HUD 保持原样。若本 commit 下 `fpsLow/frameMaxMs` 明显恢复,则剩余主因位于全局背景层(包括 Pixi/flow/visualizer/compositor)。若仍不恢复,则应转向 audio blob load、foreground cover surfaces 或 React render churn。
 
 ---
 
