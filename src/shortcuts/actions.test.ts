@@ -22,6 +22,7 @@ function createContext(
 
   return {
     getPlayerState: () => player,
+    getTab: () => "now",
     setTab: vi.fn(),
     transitionState: (fn) => fn(),
     toggleQueue: vi.fn(),
@@ -75,6 +76,16 @@ describe("runShortcutAction", () => {
 
     expect(runShortcutAction("queue.toggle", ctx)).toBe(true);
     expect(ctx.toggleQueue).toHaveBeenCalledOnce();
+  });
+
+  it("cycles primary navigation tabs in both directions", () => {
+    const ctx = createContext({ getTab: () => "settings" });
+
+    expect(runShortcutAction("nav.tabNext", ctx)).toBe(true);
+    expect(ctx.setTab).toHaveBeenCalledWith("now");
+
+    expect(runShortcutAction("nav.tabPrev", ctx)).toBe(true);
+    expect(ctx.setTab).toHaveBeenCalledWith("search");
   });
 
   it("returns false for actions owned by other surfaces", () => {

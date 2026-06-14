@@ -1203,6 +1203,8 @@
       "navTabNow": "前往正在播放",
       "navTabLibrary": "前往媒体库",
       "navTabSettings": "前往设置",
+      "navTabNext": "前往下一个主标签",
+      "navTabPrev": "前往上一个主标签",
       "queueToggle": "开关播放队列",
       "lyricsToggleStage": "开关歌词",
       "visualizerCycleMode": "切换可视化模式",

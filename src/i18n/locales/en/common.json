@@ -1221,6 +1221,8 @@
       "navTabNow": "Go to Now Playing",
       "navTabLibrary": "Go to Library",
       "navTabSettings": "Go to Settings",
+      "navTabNext": "Go to next main tab",
+      "navTabPrev": "Go to previous main tab",
       "queueToggle": "Toggle up-next queue",
       "lyricsToggleStage": "Toggle lyrics",
       "visualizerCycleMode": "Cycle visualizer mode",

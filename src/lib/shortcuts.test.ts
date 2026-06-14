@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { modifierSymbol, SHORTCUT_TABS, tabForShortcutKey } from "./shortcuts";
+import { modifierSymbol, SHORTCUT_TABS, tabForCycleShortcut, tabForShortcutKey } from "./shortcuts";
 
 describe("tabForShortcutKey", () => {
   it("maps digits 1–3 to the nav tabs in order", () => {
@@ -20,6 +20,25 @@ describe("modifierSymbol", () => {
   it("is ⌘ on mac, Ctrl elsewhere", () => {
     expect(modifierSymbol(true)).toBe("⌘");
     expect(modifierSymbol(false)).toBe("Ctrl");
+  });
+});
+
+describe("tabForCycleShortcut", () => {
+  it("cycles forward through the three shortcut tabs", () => {
+    expect(tabForCycleShortcut("now", 1)).toBe("search");
+    expect(tabForCycleShortcut("search", 1)).toBe("settings");
+    expect(tabForCycleShortcut("settings", 1)).toBe("now");
+  });
+
+  it("cycles backward through the three shortcut tabs", () => {
+    expect(tabForCycleShortcut("now", -1)).toBe("settings");
+    expect(tabForCycleShortcut("settings", -1)).toBe("search");
+    expect(tabForCycleShortcut("search", -1)).toBe("now");
+  });
+
+  it("recovers from legacy hidden tabs by entering the shortcut cycle", () => {
+    expect(tabForCycleShortcut("queue", 1)).toBe("now");
+    expect(tabForCycleShortcut("sessions", -1)).toBe("settings");
   });
 });
 

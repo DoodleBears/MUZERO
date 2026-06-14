@@ -1202,6 +1202,8 @@
       "navTabNow": "재생 중으로 이동",
       "navTabLibrary": "라이브러리로 이동",
       "navTabSettings": "설정으로 이동",
+      "navTabNext": "다음 메인 탭으로 이동",
+      "navTabPrev": "이전 메인 탭으로 이동",
       "queueToggle": "재생 대기열 열기/닫기",
       "lyricsToggleStage": "가사 켜기/끄기",
       "visualizerCycleMode": "비주얼라이저 모드 전환",

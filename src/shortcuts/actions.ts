@@ -2,10 +2,12 @@ import type { Tab } from "@/components/nav/dock-nav";
 import { getSettings, getTrack, saveSettings, setTrackLiked } from "@/db/repositories";
 import type { AppSettings } from "@/db/types";
 import { log } from "@/lib/logger";
+import { tabForCycleShortcut } from "@/lib/shortcuts";
 import { transitionState } from "@/lib/view-transition-react";
 import type { RepeatMode } from "@/player/queue";
 import { nextRepeatMode } from "@/player/transport";
 import { useLyricsPanelStore } from "@/stores/lyrics-panel-store";
+import { useNavStore } from "@/stores/nav-store";
 import { usePlayerStore } from "@/stores/player-store";
 import { useUiStore } from "@/stores/ui-store";
 import { useVisualizerPanelStore } from "@/stores/visualizer-panel-store";
@@ -51,6 +53,7 @@ export interface ShortcutPlayerActionState {
 
 export interface ShortcutActionRunnerContext {
   getPlayerState: () => ShortcutPlayerActionState;
+  getTab: () => Tab;
   setTab: (tab: Tab) => void;
   transitionState: (fn: () => void) => void;
   toggleQueue: () => void;
@@ -70,6 +73,7 @@ export function createShortcutActionRunnerContext(
 ): ShortcutActionRunnerContext {
   return {
     getPlayerState: usePlayerStore.getState,
+    getTab: () => useNavStore.getState().tab,
     setTab,
     transitionState,
     toggleQueue: () => useUiStore.getState().toggleQueue(),
@@ -185,6 +189,10 @@ const SHORTCUT_ACTION_HANDLERS: Record<string, ShortcutActionHandler> = {
   "nav.tabNow": (ctx) => ctx.transitionState(() => ctx.setTab("now")),
   "nav.tabLibrary": (ctx) => ctx.transitionState(() => ctx.setTab("search")),
   "nav.tabSettings": (ctx) => ctx.transitionState(() => ctx.setTab("settings")),
+  "nav.tabNext": (ctx) =>
+    ctx.transitionState(() => ctx.setTab(tabForCycleShortcut(ctx.getTab(), 1))),
+  "nav.tabPrev": (ctx) =>
+    ctx.transitionState(() => ctx.setTab(tabForCycleShortcut(ctx.getTab(), -1))),
   "queue.toggle": (ctx) => ctx.toggleQueue(),
   "lyrics.toggleStage": (ctx) => void toggleLyricsVisible(ctx),
   "visualizer.cycleMode": (ctx) => void cycleVisualizerPlacement(ctx),

@@ -120,4 +120,24 @@ describe("SHORTCUT_ACTIONS registry", () => {
       ]);
     }
   });
+
+  it("registers editable primary-tab cycling shortcuts for Settings", () => {
+    expect(SHORTCUT_ACTIONS_BY_ID["nav.tabNext"].defaultBindings).toEqual([
+      {
+        scope: "global",
+        gesture: { kind: "key", stroke: { code: "Tab", keyLabel: "Tab", ctrlKey: true } },
+      },
+    ]);
+    expect(SHORTCUT_ACTIONS_BY_ID["nav.tabPrev"].defaultBindings).toEqual([
+      {
+        scope: "global",
+        gesture: {
+          kind: "key",
+          stroke: { code: "Tab", keyLabel: "Tab", ctrlKey: true, shiftKey: true },
+        },
+      },
+    ]);
+    expect(isEditableAction(SHORTCUT_ACTIONS_BY_ID["nav.tabNext"])).toBe(true);
+    expect(isEditableAction(SHORTCUT_ACTIONS_BY_ID["nav.tabPrev"])).toBe(true);
+  });
 });

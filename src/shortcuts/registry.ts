@@ -234,6 +234,22 @@ export const SHORTCUT_ACTIONS: readonly ShortcutActionDef[] = [
     defaultBindings: [key("global", "Digit3", "3", { primaryKey: true })],
   },
   {
+    id: "nav.tabNext",
+    scope: "global",
+    category: "navigation",
+    labelKey: "shortcuts.action.navTabNext",
+    defaultBindings: [key("global", "Tab", "Tab", { ctrlKey: true })],
+    keywords: ["tab", "next", "navigation", "切换", "下一个"],
+  },
+  {
+    id: "nav.tabPrev",
+    scope: "global",
+    category: "navigation",
+    labelKey: "shortcuts.action.navTabPrev",
+    defaultBindings: [key("global", "Tab", "Tab", { ctrlKey: true, shiftKey: true })],
+    keywords: ["tab", "previous", "navigation", "切换", "上一个"],
+  },
+  {
     id: "queue.toggle",
     scope: "global",
     category: "navigation",

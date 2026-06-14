@@ -1203,6 +1203,8 @@
       "navTabNow": "再生中へ移動",
       "navTabLibrary": "ライブラリへ移動",
       "navTabSettings": "設定へ移動",
+      "navTabNext": "次のメインタブへ移動",
+      "navTabPrev": "前のメインタブへ移動",
       "queueToggle": "再生キューを開閉",
       "lyricsToggleStage": "歌詞を開閉",
       "visualizerCycleMode": "ビジュアライザー切替",

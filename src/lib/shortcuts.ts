@@ -16,6 +16,18 @@ export function tabForShortcutKey(key: string): Tab | null {
     : null;
 }
 
+export type TabCycleDirection = 1 | -1;
+
+/** Resolve the next/previous primary nav tab, wrapping around the shortcut order. */
+export function tabForCycleShortcut(current: Tab, direction: TabCycleDirection): Tab {
+  const index = SHORTCUT_TABS.indexOf(current as (typeof SHORTCUT_TABS)[number]);
+  if (index < 0) {
+    return direction > 0 ? SHORTCUT_TABS[0] : SHORTCUT_TABS[SHORTCUT_TABS.length - 1];
+  }
+  const nextIndex = (index + direction + SHORTCUT_TABS.length) % SHORTCUT_TABS.length;
+  return SHORTCUT_TABS[nextIndex];
+}
+
 /** macOS shows ⌘; every other platform shows Ctrl. */
 export function modifierSymbol(mac: boolean): string {
   return mac ? "⌘" : "Ctrl";

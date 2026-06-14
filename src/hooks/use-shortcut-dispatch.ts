@@ -49,6 +49,13 @@ const HOLD_HANDLERS: Record<string, (ctx: ShortcutActionRunnerContext) => void> 
   "visualizer.cycleMode": openShortcutVisualizerPanel,
 };
 
+function shouldRunShortcutWhileTyping(actionId: string, event: KeyboardEvent): boolean {
+  return (
+    (actionId === "nav.tabNext" || actionId === "nav.tabPrev") &&
+    (event.ctrlKey || event.metaKey || event.altKey)
+  );
+}
+
 /**
  * Global keyboard-shortcut dispatch — transport + tab navigation, resolved through
  * the configurable registry (so user overrides take effect live). Wired once from
@@ -74,9 +81,11 @@ export function useShortcutDispatch(): void {
     const holding = new Map<string, { actionId: string; timer: number; fired: boolean }>();
 
     const onKeyDown = (e: KeyboardEvent) => {
-      if (isTypingTarget(e.target) || e.defaultPrevented) return;
+      if (e.defaultPrevented) return;
+
       const actionId = matchAction(gestureFromEvent(e), activeScopes, bindings, currentPlatform());
       if (!actionId) return;
+      if (isTypingTarget(e.target) && !shouldRunShortcutWhileTyping(actionId, e)) return;
 
       // Hold-capable action (C / V): defer the tap and arm the hold-twin, so a
       // quick press toggles/cycles while a press-and-hold opens the settings panel.

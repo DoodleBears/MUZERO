@@ -36,9 +36,11 @@ vi.mock("@/hooks/use-app-data", () => ({
   useSettings: () => ({ shortcutOverrides: mocks.state.overrides }),
 }));
 vi.mock("@/stores/nav-store", () => ({
-  useNavStore: (
-    sel: (s: { tab: typeof mocks.state.tab; setTab: typeof mocks.setTab }) => unknown,
-  ) => sel({ tab: mocks.state.tab, setTab: mocks.setTab }),
+  useNavStore: Object.assign(
+    (sel: (s: { tab: typeof mocks.state.tab; setTab: typeof mocks.setTab }) => unknown) =>
+      sel({ tab: mocks.state.tab, setTab: mocks.setTab }),
+    { getState: () => ({ tab: mocks.state.tab, setTab: mocks.setTab }) },
+  ),
 }));
 vi.mock("@/stores/player-store", () => ({ usePlayerStore: { getState: () => mocks.player } }));
 vi.mock("@/stores/ui-store", () => {
@@ -62,6 +64,10 @@ vi.mock("@/db/repositories", () => ({
   setTrackLiked: (...args: [string, boolean]) => mocks.setTrackLiked(...args),
 }));
 vi.mock("@/lib/view-transition-react", () => ({ transitionState: (fn: () => void) => fn() }));
+vi.mock("@/shortcuts/transport-throttle", () => ({
+  TRANSPORT_SWITCH_MIN_INTERVAL_MS: 200,
+  createTransportThrottle: () => (run: () => void) => run(),
+}));
 
 import { useShortcutDispatch } from "./use-shortcut-dispatch";
 
@@ -79,6 +85,9 @@ describe("useShortcutDispatch", () => {
     mocks.state.overrides = undefined;
     mocks.state.tab = "search";
     mocks.state.queueOpen = false;
+    mocks.setTab.mockImplementation((tab) => {
+      mocks.state.tab = tab;
+    });
     mocks.player.currentIndex = -1;
     mocks.player.queue = [];
     vi.clearAllMocks();
@@ -138,6 +147,50 @@ describe("useShortcutDispatch", () => {
     renderHook(() => useShortcutDispatch());
     press("Digit2", "2", { ctrlKey: true });
     expect(mocks.setTab).toHaveBeenCalledWith("search");
+  });
+
+  it("cycles primary tabs with Ctrl+Tab and reverses with Ctrl+Shift+Tab", () => {
+    mocks.state.tab = "now";
+    const { rerender } = renderHook(() => useShortcutDispatch());
+    press("Tab", "Tab", { ctrlKey: true });
+    expect(mocks.setTab).toHaveBeenCalledWith("search");
+
+    mocks.setTab.mockClear();
+    mocks.state.tab = "search";
+    rerender();
+    press("Tab", "Tab", { ctrlKey: true, shiftKey: true });
+    expect(mocks.setTab).toHaveBeenCalledWith("now");
+  });
+
+  it("lets Settings overrides replace the Ctrl+Tab tab-cycle default", () => {
+    mocks.state.tab = "now";
+    mocks.state.overrides = {
+      "nav.tabNext": [{ kind: "key", stroke: { code: "KeyY", keyLabel: "Y" } }],
+    };
+    renderHook(() => useShortcutDispatch());
+    press("Tab", "Tab", { ctrlKey: true });
+    expect(mocks.setTab).not.toHaveBeenCalled();
+
+    press("KeyY", "y");
+    expect(mocks.setTab).toHaveBeenCalledWith("search");
+  });
+
+  it("keeps Ctrl+Tab available while a text field is focused", () => {
+    mocks.state.tab = "settings";
+    renderHook(() => useShortcutDispatch());
+    const input = document.createElement("input");
+    document.body.appendChild(input);
+    input.dispatchEvent(
+      new KeyboardEvent("keydown", {
+        code: "Tab",
+        key: "Tab",
+        ctrlKey: true,
+        bubbles: true,
+        cancelable: true,
+      }),
+    );
+    expect(mocks.setTab).toHaveBeenCalledWith("now");
+    input.remove();
   });
 
   it("stands down while typing in a text field", () => {
