@@ -147,7 +147,7 @@ export function EntityDetailView({
       initial={{ opacity: 0, x: 24 }}
       animate={{ opacity: 1, x: 0 }}
       transition={{ duration: 0.2, ease: "easeOut" }}
-      className="mx-auto flex h-full w-full max-w-6xl flex-col px-4 pt-14 lg:px-6"
+      className="mx-auto flex h-full w-full max-w-6xl flex-col "
     >
       <button
         type="button"

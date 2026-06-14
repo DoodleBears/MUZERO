@@ -1199,7 +1199,7 @@ export function SearchPage() {
   return (
     <div
       className={cn(
-        "mx-auto flex h-full w-full flex-col px-4 pt-chrome-top lg:px-6",
+        "mx-auto flex h-full w-full flex-col pt-chrome-top",
         mode === "tracks" ? "max-w-6xl" : "max-w-4xl",
       )}
     >
@@ -1238,7 +1238,7 @@ export function SearchPage() {
 
         {/* Discover has no text search / view toggle, so the toolbar row is hidden for it. */}
         {mode !== "online" && (
-          <div className="flex items-center gap-2 px-1">
+          <div className="flex items-center gap-2 px-4">
             <div className="relative flex-1">
               <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
               <Input
@@ -1306,7 +1306,7 @@ export function SearchPage() {
         )}
         {mode === "sets" && (
           <>
-            <div className="mb-3 flex flex-wrap items-center gap-1.5 px-1">
+            <div className="mb-3 flex flex-wrap items-center gap-1.5 px-4">
               <SortChip
                 active={sort === "recent"}
                 dir={sortDir}
@@ -1330,7 +1330,7 @@ export function SearchPage() {
               </SortChip>
             </div>
 
-            <div className="mb-4">
+            <div className="mb-4 px-3">
               <SystemPlaylistCards
                 items={systemPlaylistItems}
                 view={activeWallView}
@@ -1341,7 +1341,7 @@ export function SearchPage() {
 
             {/* Right-click anywhere on the wall (incl. empty space) to start a new set. */}
             <ContextMenu>
-              <ContextMenuTrigger className="block min-h-[40vh]">
+              <ContextMenuTrigger className="block min-h-[40vh] px-3">
                 {shown.length === 0 ? (
                   <p className="mt-12 text-center text-sm text-muted-foreground">
                     {t("gallery.empty")}
@@ -1902,7 +1902,7 @@ function SetDetailView({
       initial={{ opacity: 0, x: 24 }}
       animate={{ opacity: 1, x: 0 }}
       transition={{ duration: 0.2, ease: "easeOut" }}
-      className="mx-auto flex h-full w-full max-w-6xl flex-col px-4 pt-14 lg:px-6"
+      className="mx-auto flex h-full w-full max-w-6xl flex-col "
     >
       <button
         type="button"
@@ -2231,7 +2231,7 @@ function EntitySortRow({
 }) {
   const { t } = useTranslation();
   return (
-    <div className="mb-3 flex flex-wrap items-center gap-1.5 pt-1">
+    <div className="mb-3 flex flex-wrap items-center gap-1.5 pt-1 px-3">
       <SortChip active={sort === "name"} dir={dir} onClick={() => onSort("name")}>
         {t("gallery.sortName")}
       </SortChip>

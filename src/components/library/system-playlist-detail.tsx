@@ -93,7 +93,7 @@ export function SystemPlaylistDetail({
   }
 
   return (
-    <div className="mx-auto flex h-full w-full max-w-6xl flex-col px-4 pt-14 lg:px-6">
+    <div className="mx-auto flex h-full w-full max-w-6xl flex-col ">
       <button
         type="button"
         onClick={onBack}
