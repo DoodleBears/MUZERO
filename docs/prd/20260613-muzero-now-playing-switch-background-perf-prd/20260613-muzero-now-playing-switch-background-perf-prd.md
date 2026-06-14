@@ -779,6 +779,47 @@ backgroundGpuPowerPreference?: "auto" | "high-performance" | "low-power"; // DEF
 - [x] `media-stage.tsx` 与 `track-identity-row.tsx` 对 player 主封面启用 `loadStrategy="dom"`。
 - [ ] QA trace 验收:切歌窗口不应再出现 `performance.work image.load surface=now-playing`;若 FPS 仍低,下一步集中看 browser compositor/audio blob load/Pixi 192px ImageBitmap decode queue。
 
+### QA#24(2026-06-14 Phase 24 trace):主动 full-cover Image 消费者已排除,剩余掉帧需要用大块二分隔离
+
+14:15 trace 继续收窄问题:
+
+- **Phase 24 生效**:trace 中不再出现 `image.load/decode surface=now-playing` 或 `surface=background`,说明 active stage/dock/background 这三条过去可见的额外 `new Image()` full-cover 消费者已经移除。
+- **Pixi 输入仍是小 derivative**:`background.texture` 成功路径继续是 `192×192 image/webp`,通常只有 `5~15KB`;`texture.create=0~0.2ms`,`applyMs/renderMs≈1ms`,`appInits=1`。这排除了 WebGL app 重建、shader 重编译、GPU texture apply 作为主因。
+- **但 FPS 仍低**:同窗仍可见 `fpsAvg≈36~91`,`fpsLow≈5~15`,`frameMaxMs≈66~183ms`,`longTaskMaxMs≈214ms`,说明剩余主因已不在已补 span 的 full-cover JS Image decode。
+- **剩余可疑层**:
+  - Pixi derivative 的 `fetch/decode/media.load` wall time 偶发很高,例如 192px/几 KB 仍可出现 `decode≈49~299ms`,`media.load≈407~787ms`。这可能是浏览器 decoder/fetch queue 或 object URL 读取,不是像素/字节预算。
+  - 快切时仍会启动并 abort 多个 Pixi load (`media.load phase=skip reason=aborted`),虽然不会 apply,但可能占用浏览器内部解码/IO 队列。
+  - 全局背景的 flow / visualizer 是全屏 canvas/WebGL + `mix-blend-mode`,即使不切 texture,也可能让任何主线程/媒体事件更容易表现成 FPS low。
+  - 音频 `media.load.blob` 每首仍加载 5~9MB audio blob;若背景层完全禁用后仍掉,需要转向 player/media load 与前景 React render。
+- **结论**:继续微优化会变成猜。Phase 25 改用临时诊断分支做大块二分:一次移除一层功能,用同一 QA 手势测 `fpsAvg/fpsLow/frameMaxMs/frameP99Ms/longTaskMaxMs` 和关键 spans 是否消失。
+
+### Phase 25: Temporary bisection branch for switch-jank isolation
+
+**Goal:** 不引入 hidden flag,不把临时诊断代码合入产品分支。创建 `diag/switch-fps-bisect`,按原子 commit 大块禁用功能,让 QA 可逐个 checkout commit 复现同一切歌动作,用 FPS 是否恢复来确定剩余主因层级。
+
+**测量纪律:**
+- 每个实验从同一队列、同一播放状态、同一连续切歌节奏开始。
+- 每次至少记录 3 个连续 `performance.frame` window,并保留 `background.texture`, `background.pixi`, `cover.render`, `cover.preload.batch`, `player.playback/media.load.blob` spans。
+- 判定优先看差值:若某实验让 `fpsLow` 从个位数/十几恢复到接近 baseline,且 `frameMaxMs/frameP99Ms/longTaskMaxMs` 同步收敛,则该实验禁用的层就是主因或必要放大器。
+
+**实验矩阵(临时 commit,不作为最终修复):**
+
+| Experiment | Commit intent | Disabled surface | Expected signal |
+|------------|---------------|------------------|-----------------|
+| A | `diag(perf): disable ambient background` | 整个 `NowPlayingBackground` | 若 FPS 恢复,剩余主因在全局背景层;若不恢复,转查 audio/player/foreground |
+| B | `diag(perf): disable pixi ambient layer` | 只禁 `PixiPixelBackground`,保留背景容器、flow、visualizer | 若 FPS 恢复,主因在 Pixi texture/decode/swap 或 Pixi canvas 合成 |
+| C | `diag(perf): keep pixi shell but skip texture source` | Pixi app/shell 保留,`src=null`,不发 texture swap | 若 B 恢复且 C 恢复,锁定 texture load/decode/swap;若 C 仍掉,锁定 Pixi steady compositor/filter |
+| D | `diag(perf): disable flow and visualizer layers` | flow + background visualizer | 若 A 恢复但 B/C 不恢复,优先查全屏 canvas/WebGL + mix-blend-mode 合成 |
+| E | `diag(perf): disable foreground cover surfaces` | stage/dock/coverflow 封面显示 | 仅在 A-D 不能解释时使用,验证前景 DOM image/React render |
+
+**Tasks:**
+- [x] 创建临时诊断分支 `diag/switch-fps-bisect`。
+- [ ] Commit 0:记录本 Phase 与 QA 操作矩阵。
+- [ ] Commit A:禁用整个全局 `NowPlayingBackground`。
+- [ ] Commit B:在 A 的反向路径之外,禁用 Pixi ambient layer。
+- [ ] Commit C/D/E:根据 A/B 的 QA 结果继续,避免无意义地堆叠过多诊断改动。
+- [ ] 最终修复必须回到产品分支实现,不得直接合并诊断 commit。
+
 ---
 
 ## 7. Out of Scope(交叉引用,本 PRD 不处理)
@@ -839,6 +880,7 @@ backgroundGpuPowerPreference?: "auto" | "high-performance" | "low-power"; // DEF
 | 23 | QA#21:Phase 21 后为什么仍 `fpsLow=3.3`? | 🔲 Phase 22 code done, QA trace pending | Pixi 原图输入已消失(成功 texture 为 192px WebP,6~14KB),但 `frameMax=299.9/heapMb 198→376` 仍出现,且当前 trace 没记录 full-cover `<img>` 实际 decode/paint。Stage `CoverImage` 会主动 `image.decode()` full-res cover 后再渲染。Phase 22 保留原图但 stage 改 `decode:false`,并补 `image.load/decode` trace。 |
 | 24 | QA#22:Phase 22 后为什么仍 `image.decode surface=background`? | 🔲 Phase 23 code done, QA trace pending | active stage decode 已排除,Pixi 也只消费 192px derivative;剩余是 `now-playing-background` 在 Pixi derivative 分支仍为未渲染的 full-cover background 调 `useLoadedImageUrl(... decode=true)`。Phase 23 跳过这条冗余 load/decode。 |
 | 25 | QA#23:Phase 23 后为什么仍 `image.load surface=now-playing`? | 🔲 Phase 24 code done, QA trace pending | background full-cover decode 已消失;剩余 full-cover 消费者是 player `CoverImage` 用 `new Image()` 做 `decode:false` preflight load。Phase 24 改为 DOM `<img onLoad>` gate,删除额外 JS Image。 |
+| 26 | QA#24:Phase 24 后为什么仍掉帧? | 🔲 Bisect in progress | 已补 span 的 full-cover `new Image` 消费者全部消失,但 FPS 仍低;剩余归因需要大块隔离。Phase 25 使用临时诊断分支,先禁整个 `NowPlayingBackground`,再拆 Pixi/flow/visualizer/foreground。 |
 
 ---
 
@@ -881,3 +923,4 @@ backgroundGpuPowerPreference?: "auto" | "high-performance" | "low-power"; // DEF
 | 2026-06-14 | User+Codex | **QA#21 trace + Phase 22 代码完成(TDD)**:13:45 trace 验证 Phase 21 生效(成功 Pixi texture 已变 `image/webp 192×192`,6~14KB,无原图 `muzfetch`),但 `fpsLow=3.3/frameMax=299.9/heapMb 198→376` 仍在,且发生在 Pixi 小图之外。定位 trace 缺口:stage full-cover `<img>` 的主动 `useLoadedImageUrl()->image.decode()` 未被记录。Phase 22 为 `useLoadedImageUrl` 增加 `decode:false` 与 `image.load/decode` spans;Now Playing stage 保留原图但不主动 decode。TDD:use-image-load 3 例新增 + 受影响测试 22 例通过,`typecheck`/touched-file Biome 通过。 |
 | 2026-06-14 | User+Codex | **QA#22 trace + Phase 23 代码完成(TDD)**:13:57 trace 验证 stage decode 已排除,但仍有 `image.load/decode surface=background decode=true` 800/1024/1500px。定位到 Pixi derivative 分支虽然使用 192px backlight,仍提前为未渲染的 full-cover background 调 `useLoadedImageUrl`。Phase 23 先红灯锁定 derivative ready/pending 不创建 `Image`,再把 `pixiMedia/shouldUsePixiCoverDerivative` 前置并传 `null` 给 full-cover loader。`now-playing-background` 11 例通过;待 QA trace 验证 `surface=background` decode 消失。 |
 | 2026-06-14 | User+Codex | **QA#23 trace + Phase 24 代码完成(TDD)**:14:06 trace 验证 Phase 23 生效(无 `surface=background` load/decode),剩余 `image.load surface=now-playing decode=false` 仍为 1400~2000px full-cover。Phase 24 给 player `CoverImage` 增加 DOM-load strategy,stage/dock 用真实 `<img onLoad>` gate crossfade,不再创建额外 JS `Image`。TDD:`cover-image` 新红灯转绿;待 QA trace 验证 `surface=now-playing` image.load 消失。 |
+| 2026-06-14 | User+Codex | **QA#24 trace + Phase 25 二分开始**:14:15 trace 验证 Phase 24 生效(`surface=now-playing/background` 的 `image.load/decode` 均消失),但仍有 `fpsLow≈5~15/frameMax≈66~183ms/longTaskMax≈214ms`。剩余可疑层转向全局背景合成、Pixi 192px derivative 的浏览器 decode/fetch queue、flow/visualizer mix-blend-mode、audio blob load。创建临时诊断分支 `diag/switch-fps-bisect`,按大块禁用 commit 做 QA 二分,诊断代码不合入产品分支。 |
