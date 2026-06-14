@@ -1,4 +1,12 @@
-import { type KeyboardEvent, type PointerEvent, useEffect, useMemo, useRef, useState } from "react";
+import {
+  type KeyboardEvent,
+  memo,
+  type PointerEvent,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useTranslation } from "react-i18next";
 import { useShallow } from "zustand/react/shallow";
 import { useSettledValue } from "@/hooks/use-settled-value";
@@ -52,7 +60,11 @@ type DragState = {
  * or call decodeAudioData() during Now Playing mount. The seeded overview is
  * refined from the live analyser while playback runs.
  */
-export function PlaybackSpectrum({ className }: { className?: string }) {
+export const PlaybackSpectrum = memo(function PlaybackSpectrum({
+  className,
+}: {
+  className?: string;
+}) {
   const { t } = useTranslation();
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const dragRef = useRef<DragState | null>(null);
@@ -248,7 +260,7 @@ export function PlaybackSpectrum({ className }: { className?: string }) {
       </div>
     </div>
   );
-}
+});
 
 function fallbackPeaks(count: number, seed: string): number[] {
   let hash = 2166136261;

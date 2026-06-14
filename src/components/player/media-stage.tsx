@@ -2,6 +2,7 @@ import { motion } from "motion/react";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useSettings } from "@/hooks/use-app-data";
+import { useBurstSettledValue } from "@/hooks/use-burst-settled-value";
 import { useCoverDerivativeUrl, useTrackCoverUrl } from "@/hooks/use-media";
 import {
   resolveNowPlayingCoverBacklightAppearance,
@@ -15,6 +16,10 @@ import { CoverImage } from "./cover-image";
 import { StageTitleFallback } from "./stage-title-fallback";
 
 const DEFAULT_VIDEO_ASPECT = 16 / 9;
+// Quiet window before the cover/title visual adopts a new track during a rapid
+// next/prev burst. A single switch lands on the leading edge (instant); only a
+// genuine mash coalesces, so deliberate clicks never feel delayed.
+const STAGE_DISPLAY_SETTLE_MS = 300;
 
 /**
  * The now-playing "stage". Owns the spot where the shared <video> element is
@@ -35,30 +40,35 @@ export function MediaStage({
   const currentIndex = usePlayerStore((s) => s.currentIndex);
   const displayMode = usePlayerStore((s) => s.displayMode);
   const current = currentIndex >= 0 ? queue[currentIndex] : undefined;
+  // The cover/title visual follows a burst-settled track: an isolated switch is
+  // instant (leading edge), but a rapid next/prev burst skips the songs it flies
+  // past instead of decoding + reconciling the stage subtree for each (PRD Phase
+  // 31). Video element logic stays on the live `current` so playback never lags.
+  const displayTrack = useBurstSettledValue(current, STAGE_DISPLAY_SETTLE_MS);
   const settings = useSettings();
   const asBgActive =
     (settings.visualizerAsBackground ?? false) && (settings.visualizerStyle ?? "bars") !== "off";
 
   const containerRef = useRef<HTMLDivElement | null>(null);
-  const coverUrl = useTrackCoverUrl(current);
+  const coverUrl = useTrackCoverUrl(displayTrack);
   const coverEffectMode = resolveNowPlayingCoverEffectMode(settings.nowPlayingCoverEffectMode);
   // Only the "backlight" effect renders the blurred derivative — gate the request
   // so the default "shadow" mode no longer fires a worker render + DB write + blob
   // URL for an image it never shows on every track switch (audit O1).
   const coverBacklightUrl = useCoverDerivativeUrl(
     shouldRequestCoverBacklightDerivative(coverEffectMode, coverBacklightEnabled)
-      ? current
+      ? displayTrack
       : undefined,
     "backlight",
   );
   const [videoError, setVideoError] = useState(false);
   const [videoAspect, setVideoAspect] = useState<number | null>(null);
   const content = resolveStageContent({
-    track: current,
+    track: displayTrack,
     displayMode,
     // Whether a cover *exists* (sync) — not whether its URL has resolved yet — so
     // the stage doesn't flip to the visualizer during a track change.
-    hasCover: trackHasCover(current),
+    hasCover: trackHasCover(displayTrack),
   });
   const showVideo = content === "video";
   // A video track the WebView accepted as "video" but failed to decode.
@@ -74,11 +84,12 @@ export function MediaStage({
   }, []);
 
   // Reset per-track view state (decode failure + intrinsic aspect) on track change.
+  // Keyed to the displayed track so it stays in lockstep with the shown content.
   // biome-ignore lint/correctness/useExhaustiveDependencies: id is the reset trigger, not used in the body
   useEffect(() => {
     setVideoError(false);
     setVideoAspect(null);
-  }, [current?.id]);
+  }, [displayTrack?.id]);
   useEffect(() => {
     const el = getMediaEngine()?.element;
     if (!el) return;
@@ -148,18 +159,20 @@ export function MediaStage({
           !showVideo && useCoverShadow && "album-cover-shadow",
         )}
       >
-        {showGeneratedBackdrop && <StageTitleFallback track={current} dim={asBgActive} />}
+        {showGeneratedBackdrop && <StageTitleFallback track={displayTrack} dim={asBgActive} />}
         {/* Crossfades to the next cover only once it has decoded (no flash of the
             previous track's cover), and reports its aspect for the box ratio. */}
         {content === "cover" && (
           <CoverImage
             url={coverUrl}
-            hasCover={trackHasCover(current)}
-            holdPreviousWhileLoading={Boolean(current?.coverBlobId && !current.remoteCoverUrl)}
-            fallback={<StageTitleFallback track={current} dim={asBgActive} />}
+            hasCover={trackHasCover(displayTrack)}
+            holdPreviousWhileLoading={Boolean(
+              displayTrack?.coverBlobId && !displayTrack.remoteCoverUrl,
+            )}
+            fallback={<StageTitleFallback track={displayTrack} dim={asBgActive} />}
             className="z-10 album-cover-radius"
             loadStrategy="dom"
-            trackId={current?.id}
+            trackId={displayTrack?.id}
           />
         )}
         {videoBroke && (

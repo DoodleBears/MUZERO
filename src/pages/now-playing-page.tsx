@@ -1,6 +1,6 @@
 import { useLiveQuery } from "dexie-react-hooks";
 import { Image as ImageIcon, Repeat, Repeat1, Shuffle, Video } from "lucide-react";
-import { type CSSProperties, type RefObject, useEffect, useRef, useState } from "react";
+import { type CSSProperties, memo, type RefObject, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { DjConsole } from "@/components/dj/dj-console";
 import { ControlTooltip } from "@/components/player/control-tooltip";
@@ -338,7 +338,7 @@ function useIsNarrow(): boolean {
   return narrow;
 }
 
-function NowPlayingActionRow() {
+const NowPlayingActionRow = memo(function NowPlayingActionRow() {
   const { t } = useTranslation();
   const displayMode = usePlayerStore((s) => s.displayMode);
   const repeat = usePlayerStore((s) => s.repeat);
@@ -412,4 +412,4 @@ function NowPlayingActionRow() {
       </div>
     </TooltipProvider>
   );
-}
+});

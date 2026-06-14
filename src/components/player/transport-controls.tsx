@@ -1,4 +1,5 @@
 import { Pause, Play, SkipBack, SkipForward } from "lucide-react";
+import { memo } from "react";
 import { useTranslation } from "react-i18next";
 import { ControlTooltip } from "@/components/player/control-tooltip";
 import { Button } from "@/components/ui/button";
@@ -17,7 +18,11 @@ const PLAY_BUTTON = `${TRANSPORT_BUTTON} size-16 shadow-xl sm:size-20 [&_svg]:si
  * Poweramp-style action row and the dock, so this stays focused on motion:
  * previous · play/pause · next.
  */
-export function TransportControls({ className }: { className?: string }) {
+export const TransportControls = memo(function TransportControls({
+  className,
+}: {
+  className?: string;
+}) {
   const { t } = useTranslation();
   const isPlaying = usePlayerStore((s) => s.isPlaying);
   const togglePlay = usePlayerStore((s) => s.togglePlay);
@@ -71,4 +76,4 @@ export function TransportControls({ className }: { className?: string }) {
       </div>
     </TooltipProvider>
   );
-}
+});

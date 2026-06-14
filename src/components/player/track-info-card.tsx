@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { memo, type ReactNode } from "react";
 import type { Track } from "@/db/types";
 
 /**
@@ -6,7 +6,7 @@ import type { Track } from "@/db/types";
  * the stage itself (they travel with the cover during a swipe); this row carries
  * the BPM/key/provider chips and the DJ note. Renders nothing for plain uploads.
  */
-export function TrackInfoCard({ track }: { track: Track }) {
+export const TrackInfoCard = memo(function TrackInfoCard({ track }: { track: Track }) {
   const hasChips = !!track.brief;
   const hasNote = !!track.brief?.djNote;
   if (!hasChips && !hasNote) return null;
@@ -26,7 +26,7 @@ export function TrackInfoCard({ track }: { track: Track }) {
       )}
     </div>
   );
-}
+});
 
 function Chip({ children }: { children: ReactNode }) {
   return <span className="rounded-[0.7rem] bg-card/70 px-2.5 py-1">{children}</span>;
