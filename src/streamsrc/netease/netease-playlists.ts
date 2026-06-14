@@ -12,10 +12,16 @@ interface RawSong {
   name?: string;
   ar?: Array<{ name?: string }>;
   artists?: Array<{ name?: string }>;
-  al?: { name?: string; picUrl?: string };
-  album?: { name?: string; picUrl?: string };
+  al?: { name?: string; picUrl?: unknown; coverUrl?: unknown; blurPicUrl?: unknown };
+  album?: { name?: string; picUrl?: unknown; coverUrl?: unknown; blurPicUrl?: unknown };
+  picUrl?: unknown;
+  coverUrl?: unknown;
   dt?: number;
   duration?: number;
+}
+
+function firstString(...values: unknown[]): string | undefined {
+  return values.find((value): value is string => typeof value === "string" && value.length > 0);
 }
 
 /** Map one NetEase song record (cloudsearch / song-detail share this shape) to a hit. */
@@ -35,7 +41,13 @@ export function neteaseSongToHit(raw: unknown): StreamSearchHit {
         .join("/") || undefined,
     album: album?.name,
     durationSec: typeof durationMs === "number" ? Math.round(durationMs / 1000) : undefined,
-    coverUrl: album?.picUrl,
+    coverUrl: firstString(
+      album?.picUrl,
+      album?.coverUrl,
+      album?.blurPicUrl,
+      song.picUrl,
+      song.coverUrl,
+    ),
   };
 }
 
@@ -50,6 +62,8 @@ interface RawPlaylist {
   id?: unknown;
   name?: unknown;
   coverImgUrl?: unknown;
+  coverUrl?: unknown;
+  picUrl?: unknown;
   trackCount?: unknown;
   trackIds?: unknown[];
 }
@@ -63,7 +77,7 @@ function neteasePlaylistToMeta(raw: unknown): StreamPlaylist | null {
   return {
     id,
     name: typeof p.name === "string" ? p.name : "",
-    coverUrl: typeof p.coverImgUrl === "string" ? p.coverImgUrl : undefined,
+    coverUrl: firstString(p.coverImgUrl, p.coverUrl, p.picUrl),
     trackCount:
       typeof p.trackCount === "number"
         ? p.trackCount
@@ -94,7 +108,8 @@ export function parseNeteasePlaylistTrackIds(json: unknown): string[] {
 
 /** `/api/v3/song/detail` → hits for a batch of ids. */
 export function parseNeteaseSongDetailHits(json: unknown): StreamSearchHit[] {
-  const songs = (json as { songs?: unknown[] } | null)?.songs ?? [];
+  const j = json as { songs?: unknown[]; data?: { songs?: unknown[] } } | null;
+  const songs = j?.songs ?? j?.data?.songs ?? [];
   return songs.map(neteaseSongToHit);
 }
 
@@ -112,13 +127,27 @@ interface RawRecommendedPlaylist {
   id?: unknown;
   name?: unknown;
   picUrl?: unknown;
+  coverImgUrl?: unknown;
+  coverUrl?: unknown;
+  resourceExtInfo?: {
+    picUrl?: unknown;
+    coverImgUrl?: unknown;
+    coverUrl?: unknown;
+  };
+  uiElement?: {
+    image?: {
+      picUrl?: unknown;
+      imageUrl?: unknown;
+      coverImgUrl?: unknown;
+      coverUrl?: unknown;
+    };
+  };
   trackCount?: unknown;
 }
 
 /**
- * Map one recommended-playlist record to meta. Unlike the user-library shape
- * ({@link neteasePlaylistToMeta} reads `coverImgUrl`), the recommend/personalized
- * records carry the cover as **`picUrl`** — reusing the wrong mapper would drop it.
+ * Map one recommended-playlist record to meta. NetEase returns different cover slots
+ * for anonymous personalized cards, logged-in resource cards, and user playlists.
  */
 function neteaseRecommendedToMeta(raw: unknown): StreamPlaylist | null {
   if (!raw || typeof raw !== "object") return null;
@@ -128,7 +157,18 @@ function neteaseRecommendedToMeta(raw: unknown): StreamPlaylist | null {
   return {
     id,
     name: typeof p.name === "string" ? p.name : "",
-    coverUrl: typeof p.picUrl === "string" ? p.picUrl : undefined,
+    coverUrl: firstString(
+      p.picUrl,
+      p.coverImgUrl,
+      p.coverUrl,
+      p.resourceExtInfo?.picUrl,
+      p.resourceExtInfo?.coverImgUrl,
+      p.resourceExtInfo?.coverUrl,
+      p.uiElement?.image?.picUrl,
+      p.uiElement?.image?.imageUrl,
+      p.uiElement?.image?.coverImgUrl,
+      p.uiElement?.image?.coverUrl,
+    ),
     trackCount: typeof p.trackCount === "number" ? p.trackCount : 0,
     source: "netease",
   };
@@ -138,7 +178,8 @@ function neteaseRecommendedToMeta(raw: unknown): StreamPlaylist | null {
  * Recommended playlists from either endpoint:
  * - `/api/v1/discovery/recommend/resource` → `recommend[]` (logged-in 每日推荐歌单)
  * - `/api/personalized/playlist`           → `result[]`    (anonymous 推荐歌单)
- * Both element shapes use `picUrl` for the cover (see {@link neteaseRecommendedToMeta}).
+ * Their cover field is not perfectly stable, so {@link neteaseRecommendedToMeta}
+ * probes the known top-level and nested image slots.
  */
 export function parseNeteaseRecommendedPlaylists(json: unknown): StreamPlaylist[] {
   const j = json as { recommend?: unknown[]; result?: unknown[] } | null;

@@ -1,13 +1,15 @@
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { StreamCacheControls } from "@/components/settings/stream-cache-controls";
 import { PlaylistImportDialog } from "@/components/stream/playlist-import-dialog";
+import { QrLoginDialog } from "@/components/stream/qr-login-dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { saveSettings } from "@/db/repositories";
 import type { StreamSourceId } from "@/db/types";
 import { useSettings } from "@/hooks/use-app-data";
 import { hasStreamingSources, resolveDesktopBridge } from "@/lib/desktop/bridge";
+import { useNavStore } from "@/stores/nav-store";
 import { notify } from "@/stores/notification-store";
 import {
   cookieStringHasAuth,
@@ -34,6 +36,16 @@ export function StreamSourcesSettings() {
   const { t } = useTranslation();
   const settings = useSettings();
   const [busy, setBusy] = useState<StreamSourceId | null>(null);
+  const [qrSource, setQrSource] = useState<StreamSourceId | null>(null);
+
+  const onQrSuccess = useCallback(
+    async (source: StreamSourceId, cookie: string) => {
+      await saveSettings({
+        streamSources: streamSourcesAfterLogin(settings.streamSources, source, cookie, Date.now()),
+      });
+    },
+    [settings.streamSources],
+  );
 
   if (!hasStreamingSources()) {
     return (
@@ -48,7 +60,7 @@ export function StreamSourcesSettings() {
     );
   }
 
-  async function login(source: StreamSourceId) {
+  async function externalLogin(source: StreamSourceId) {
     const config = STREAM_LOGIN_CONFIGS[source];
     const bridge = resolveDesktopBridge();
     if (!config || !bridge.openSourceLogin) return;
@@ -68,6 +80,7 @@ export function StreamSourcesSettings() {
             Date.now(),
           ),
         });
+        setQrSource(null);
       }
     } finally {
       setBusy(null);
@@ -86,86 +99,101 @@ export function StreamSourcesSettings() {
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>{t("streamSources.title")}</CardTitle>
-        <p className="text-muted-foreground text-sm">{t("streamSources.redline")}</p>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        {SOURCES.map(({ id, label, qualities }) => {
-          const config = STREAM_LOGIN_CONFIGS[id];
-          const loggedIn = cookieStringHasAuth(
-            settings.streamSources?.[id]?.cookie,
-            config?.authCookie ?? "",
-          );
-          const quality = settings.streamSources?.[id]?.quality ?? qualities[1] ?? qualities[0];
-          return (
-            <div key={id} className="space-y-3 rounded-lg border border-border p-3">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div className="flex items-center gap-2">
-                  <span className="font-medium text-sm">{label}</span>
-                  <span
-                    className={
-                      loggedIn ? "text-green-500 text-xs" : "text-muted-foreground text-xs"
-                    }
-                  >
-                    {loggedIn ? t("streamSources.loggedIn") : t("streamSources.notLoggedIn")}
-                  </span>
+    <>
+      <Card>
+        <CardHeader>
+          <CardTitle>{t("streamSources.title")}</CardTitle>
+          <p className="text-muted-foreground text-sm">{t("streamSources.redline")}</p>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {SOURCES.map(({ id, label, qualities }) => {
+            const config = STREAM_LOGIN_CONFIGS[id];
+            const loggedIn = cookieStringHasAuth(
+              settings.streamSources?.[id]?.cookie,
+              config?.authCookie ?? "",
+            );
+            const quality = settings.streamSources?.[id]?.quality ?? qualities[1] ?? qualities[0];
+            return (
+              <div key={id} className="space-y-3 rounded-lg border border-border p-3">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium text-sm">{label}</span>
+                    <span
+                      className={
+                        loggedIn ? "text-green-500 text-xs" : "text-muted-foreground text-xs"
+                      }
+                    >
+                      {loggedIn ? t("streamSources.loggedIn") : t("streamSources.notLoggedIn")}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <label className="flex items-center gap-1.5 text-muted-foreground text-xs">
+                      {t("streamSources.quality")}
+                      <select
+                        value={quality}
+                        onChange={(e) => void setQuality(id, e.target.value)}
+                        className="rounded-md border border-border bg-transparent px-1.5 py-1 text-foreground text-xs"
+                      >
+                        {qualities.map((q) => (
+                          <option key={q} value={q}>
+                            {q}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    {loggedIn ? (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => void logout(id)}
+                      >
+                        {t("streamSources.logout")}
+                      </Button>
+                    ) : (
+                      <Button
+                        type="button"
+                        size="sm"
+                        disabled={busy === id}
+                        onClick={() =>
+                          id === "netease" ? setQrSource(id) : void externalLogin(id)
+                        }
+                      >
+                        {busy === id ? t("streamSources.loggingIn") : t("streamSources.login")}
+                      </Button>
+                    )}
+                  </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <label className="flex items-center gap-1.5 text-muted-foreground text-xs">
-                    {t("streamSources.quality")}
-                    <select
-                      value={quality}
-                      onChange={(e) => void setQuality(id, e.target.value)}
-                      className="rounded-md border border-border bg-transparent px-1.5 py-1 text-foreground text-xs"
-                    >
-                      {qualities.map((q) => (
-                        <option key={q} value={q}>
-                          {q}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  {loggedIn ? (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => void logout(id)}
-                    >
-                      {t("streamSources.logout")}
-                    </Button>
-                  ) : (
-                    <Button
-                      type="button"
-                      size="sm"
-                      disabled={busy === id}
-                      onClick={() => void login(id)}
-                    >
-                      {busy === id ? t("streamSources.loggingIn") : t("streamSources.login")}
-                    </Button>
-                  )}
-                </div>
+                {loggedIn && <SourcePlaylists sourceId={id} />}
               </div>
-              {loggedIn && <SourcePlaylists sourceId={id} />}
-            </div>
-          );
-        })}
-        <StreamCacheControls />
-      </CardContent>
-    </Card>
+            );
+          })}
+          <StreamCacheControls />
+        </CardContent>
+      </Card>
+      {qrSource && STREAM_LOGIN_CONFIGS[qrSource] && (
+        <QrLoginDialog
+          source={qrSource}
+          label={SOURCES.find((s) => s.id === qrSource)?.label ?? qrSource}
+          config={STREAM_LOGIN_CONFIGS[qrSource]}
+          onClose={() => setQrSource(null)}
+          onExternalLogin={() => void externalLogin(qrSource)}
+          onSuccess={(cookie) => onQrSuccess(qrSource, cookie)}
+        />
+      )}
+    </>
   );
 }
 
 /**
  * The logged-in user's playlists for one source, loaded on demand. Each row opens the
- * {@link PlaylistImportDialog} (new set / incremental re-sync / add to a chosen set);
- * only metadata is persisted, tracks re-resolve on play.
+ * shared online detail page; the import shortcut still opens {@link PlaylistImportDialog}.
+ * Only metadata is persisted, tracks re-resolve on play.
  */
 function SourcePlaylists({ sourceId }: { sourceId: StreamSourceId }) {
   const { t } = useTranslation();
   const settings = useSettings();
+  const openOnlinePlaylist = useNavStore((s) => s.openOnlinePlaylist);
   const [playlists, setPlaylists] = useState<StreamPlaylist[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [importTarget, setImportTarget] = useState<StreamPlaylist | null>(null);
@@ -214,11 +242,20 @@ function SourcePlaylists({ sourceId }: { sourceId: StreamSourceId }) {
     <>
       <div className="space-y-1 border-border border-t pt-2">
         {playlists.map((pl) => (
-          <div key={pl.id} className="flex items-center gap-2 text-sm">
-            <span className="min-w-0 flex-1 truncate">{pl.name}</span>
-            <span className="shrink-0 text-muted-foreground text-xs">
-              {t("streamSources.trackCount", { count: pl.trackCount })}
-            </span>
+          <div
+            key={pl.id}
+            className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors hover:bg-accent/60"
+          >
+            <button
+              type="button"
+              onClick={() => openOnlinePlaylist(pl)}
+              className="min-w-0 flex-1 text-left"
+            >
+              <span className="block truncate font-medium">{pl.name}</span>
+              <span className="block truncate text-muted-foreground text-xs">
+                {t("streamSources.trackCount", { count: pl.trackCount })}
+              </span>
+            </button>
             <Button type="button" variant="ghost" size="sm" onClick={() => setImportTarget(pl)}>
               {t("streamSources.import")}
             </Button>

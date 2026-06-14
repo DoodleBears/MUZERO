@@ -118,7 +118,22 @@
     "import": "Import",
     "importing": "Importing…",
     "imported": "Imported {{count}} into \"{{name}}\"",
-    "importError": "Import failed"
+    "importError": "Import failed",
+    "loadingTracks": "Loading tracks…",
+    "playlistTracksError": "Couldn't load this playlist",
+    "playlistEmpty": "This playlist has no playable tracks.",
+    "qrTitle": "Log in to {{source}}",
+    "qrSubtitle": "Scan with the mobile app. The session cookie stays on this device.",
+    "qrAlt": "{{source}} login QR code",
+    "qrLoading": "Preparing QR code…",
+    "qrWaiting": "Waiting for scan…",
+    "qrScanned": "Scanned. Confirm on your phone.",
+    "qrSuccess": "Logged in.",
+    "qrExpired": "QR code expired.",
+    "qrTimeout": "Login timed out.",
+    "qrCancelled": "Login cancelled.",
+    "qrError": "QR login failed.",
+    "externalLogin": "Open window"
   },
   "streamCache": {
     "title": "Offline cache",

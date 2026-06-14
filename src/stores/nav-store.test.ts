@@ -36,4 +36,15 @@ describe("nav-store — persisted active tab", () => {
     expect(useNavStore.getState().pendingLibraryEntity).toBeNull();
     expect(localStorage.getItem("muzero-nav")).not.toContain("ses_1");
   });
+
+  it("queues an online playlist intent without persisting it", () => {
+    const playlist = { id: "p1", name: "Online", source: "netease" as const, trackCount: 3 };
+    useNavStore.getState().openOnlinePlaylist(playlist);
+    expect(useNavStore.getState().tab).toBe("search");
+    expect(useNavStore.getState().consumeLibraryEntity()).toEqual({
+      kind: "online-playlist",
+      playlist,
+    });
+    expect(localStorage.getItem("muzero-nav")).not.toContain("p1");
+  });
 });

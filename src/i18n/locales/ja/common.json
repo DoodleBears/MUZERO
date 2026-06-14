@@ -111,7 +111,22 @@
     "import": "インポート",
     "importing": "インポート中…",
     "imported": "{{count}} 曲を「{{name}}」にインポートしました",
-    "importError": "インポートに失敗しました"
+    "importError": "インポートに失敗しました",
+    "loadingTracks": "曲を読み込み中…",
+    "playlistTracksError": "このプレイリストを読み込めませんでした",
+    "playlistEmpty": "このプレイリストには再生できる曲がありません。",
+    "qrTitle": "{{source}}にログイン",
+    "qrSubtitle": "モバイルアプリでスキャンしてください。セッション Cookie はこの端末だけに保存されます。",
+    "qrAlt": "{{source}} ログイン QR コード",
+    "qrLoading": "QR コードを準備中…",
+    "qrWaiting": "スキャン待ち…",
+    "qrScanned": "スキャン済み。スマートフォンで確認してください。",
+    "qrSuccess": "ログインしました。",
+    "qrExpired": "QR コードの有効期限が切れました。",
+    "qrTimeout": "ログインがタイムアウトしました。",
+    "qrCancelled": "ログインをキャンセルしました。",
+    "qrError": "QR ログインに失敗しました。",
+    "externalLogin": "ウィンドウで開く"
   },
   "streamCache": {
     "title": "オフラインキャッシュ",

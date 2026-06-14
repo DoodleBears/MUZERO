@@ -18,6 +18,7 @@ import { flushSync } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { SourceAttributionChip } from "@/components/cloud/source-attribution-chip";
 import { OnlineDiscoverTab } from "@/components/discover/online-discover-tab";
+import { OnlinePlaylistDetail } from "@/components/discover/online-playlist-detail";
 import { AlphabetIndex } from "@/components/library/alphabet-index";
 import { CollapsibleSearch } from "@/components/library/collapsible-search";
 import { CoverContextMenu } from "@/components/library/cover-context-menu";
@@ -139,6 +140,7 @@ import { notify } from "@/stores/notification-store";
 import { usePlayerStore } from "@/stores/player-store";
 import { useIsSetBulkDownloading } from "@/stores/stream-cache-store";
 import { useUploadTargetStore } from "@/stores/upload-target-store";
+import type { StreamPlaylist } from "@/streamsrc/provider";
 import { isTrackCacheableToDevice } from "@/streamsrc/source-detect";
 import { matchesRemoteSearchTrack } from "@/sync/r2-search-catalog";
 
@@ -283,6 +285,7 @@ export function SearchPage() {
   const [selectedSystemPlaylistId, setSelectedSystemPlaylistId] = useState<SystemPlaylistId | null>(
     null,
   );
+  const [selectedOnlinePlaylist, setSelectedOnlinePlaylist] = useState<StreamPlaylist | null>(null);
   const [mode, setMode] = useState<GalleryMode>(savedGalleryMode);
   // The 发现 (Discover) tab needs the desktop media proxy (Referer/CORS), like the
   // Settings streaming section — hidden on web / when no source is configured.
@@ -583,6 +586,7 @@ export function SearchPage() {
       if (!sessions.some((session) => session.id === pendingEntity.id)) return;
       setMode("sets");
       if (typeof localStorage !== "undefined") localStorage.setItem(MODE_KEY, "sets");
+      setSelectedOnlinePlaylist(null);
       setSelectedArtistKey(null);
       setSelectedAlbumKey(null);
       setSelectedSetId(pendingEntity.id);
@@ -591,17 +595,27 @@ export function SearchPage() {
       if (!entry) return;
       setMode("artists");
       if (typeof localStorage !== "undefined") localStorage.setItem(MODE_KEY, "artists");
+      setSelectedOnlinePlaylist(null);
       setSelectedSetId(null);
       setSelectedAlbumKey(null);
       setSelectedArtistKey(entry.key);
-    } else {
+    } else if (pendingEntity.kind === "album") {
       const entry = findAlbumForTrack(albumIndex, pendingEntity.trackId);
       if (!entry) return;
       setMode("albums");
       if (typeof localStorage !== "undefined") localStorage.setItem(MODE_KEY, "albums");
+      setSelectedOnlinePlaylist(null);
       setSelectedSetId(null);
       setSelectedArtistKey(null);
       setSelectedAlbumKey(entry.key);
+    } else {
+      setMode("online");
+      if (typeof localStorage !== "undefined") localStorage.setItem(MODE_KEY, "online");
+      setSelectedSetId(null);
+      setSelectedSystemPlaylistId(null);
+      setSelectedArtistKey(null);
+      setSelectedAlbumKey(null);
+      setSelectedOnlinePlaylist(pendingEntity.playlist);
     }
     consumeLibraryEntity();
   }, [pendingEntity, sessions, artistIndex, albumIndex, consumeLibraryEntity]);
@@ -1009,7 +1023,11 @@ export function SearchPage() {
   // capture so ↑/↓ move focus here rather than changing volume (player shortcuts).
   useEffect(() => {
     const detailOpen =
-      !!selectedSetId || !!selectedSystemPlaylistId || !!selectedArtistKey || !!selectedAlbumKey;
+      !!selectedSetId ||
+      !!selectedSystemPlaylistId ||
+      !!selectedOnlinePlaylist ||
+      !!selectedArtistKey ||
+      !!selectedAlbumKey;
     if (detailOpen || mode === "tracks") return;
     const onKeyDown = (event: KeyboardEvent) => {
       if (isTypingTarget(event.target) || hasModalDialogOpen()) return;
@@ -1054,6 +1072,7 @@ export function SearchPage() {
     mode,
     selectedSetId,
     selectedSystemPlaylistId,
+    selectedOnlinePlaylist,
     selectedArtistKey,
     selectedAlbumKey,
     focusGalleryCard,
@@ -1103,6 +1122,15 @@ export function SearchPage() {
         coverViewTransitionName={coverMorphName(`set:${selectedSetId}`)}
         onBack={() => leaveDetail(() => setSelectedSetId(null))}
         onPlayAll={() => void playSet(selectedSetId)}
+      />
+    );
+  }
+
+  if (selectedOnlinePlaylist) {
+    return (
+      <OnlinePlaylistDetail
+        playlist={selectedOnlinePlaylist}
+        onBack={() => leaveDetail(() => setSelectedOnlinePlaylist(null))}
       />
     );
   }
@@ -1621,7 +1649,7 @@ export function SearchPage() {
             )}
           </>
         )}
-        {mode === "online" && <OnlineDiscoverTab />}
+        {mode === "online" && <OnlineDiscoverTab onOpenPlaylist={setSelectedOnlinePlaylist} />}
       </div>
     </div>
   );

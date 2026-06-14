@@ -127,6 +127,7 @@ export function GlobalTrackSearch({
   const openSet = useNavStore((s) => s.openSet);
   const openArtist = useNavStore((s) => s.openArtist);
   const openAlbumForTrack = useNavStore((s) => s.openAlbumForTrack);
+  const openOnlinePlaylist = useNavStore((s) => s.openOnlinePlaylist);
   const settings = useSettings();
   // Online sources need the desktop media proxy (Referer/CORS). Hidden on web/tauri.
   const streamingSupported = hasStreamingSources();
@@ -629,7 +630,15 @@ export function GlobalTrackSearch({
                 {t(link ? "globalSearch.linkResult" : "globalSearch.online")}
                 {onlineSearching ? ` · ${t("globalSearch.onlineSearching")}` : ""}
               </p>
-              {playlistLink && <PlaylistLinkCard playlist={playlistLink} />}
+              {playlistLink && (
+                <PlaylistLinkCard
+                  playlist={playlistLink}
+                  onOpen={() => {
+                    openOnlinePlaylist(playlistLink);
+                    onOpenChange(false);
+                  }}
+                />
+              )}
               {onlineHits.map((hit, i) => (
                 <OnlineResultRow
                   key={`${hit.source}:${hit.externalId}`}
@@ -1049,15 +1058,19 @@ function GlobalEntityRow({
   );
 }
 
-/** A pasted playlist link → opens the import modal (new set / incremental sync / add to set). */
-function PlaylistLinkCard({ playlist }: { playlist: StreamPlaylist }) {
+/** A pasted playlist link → enters detail; import remains available as a shortcut. */
+function PlaylistLinkCard({ playlist, onOpen }: { playlist: StreamPlaylist; onOpen: () => void }) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
 
   return (
     <>
       <div className="flex w-full items-center gap-3 rounded-xl px-3 py-2">
-        <div className="grid size-11 shrink-0 place-items-center overflow-hidden bg-secondary text-muted-foreground album-cover-radius album-cover-shadow">
+        <button
+          type="button"
+          onClick={onOpen}
+          className="grid size-11 shrink-0 place-items-center overflow-hidden bg-secondary text-muted-foreground album-cover-radius album-cover-shadow"
+        >
           {playlist.coverUrl ? (
             <img
               src={playlist.coverUrl}
@@ -1068,13 +1081,13 @@ function PlaylistLinkCard({ playlist }: { playlist: StreamPlaylist }) {
           ) : (
             <Disc3Icon size={16} />
           )}
-        </div>
-        <div className="min-w-0 flex-1">
+        </button>
+        <button type="button" onClick={onOpen} className="min-w-0 flex-1 text-left">
           <div className="truncate font-medium text-sm">{playlist.name}</div>
           <div className="truncate text-muted-foreground text-xs">
             {t("streamSources.trackCount", { count: playlist.trackCount })} · {playlist.source}
           </div>
-        </div>
+        </button>
         <button
           type="button"
           onClick={() => setOpen(true)}

@@ -111,7 +111,22 @@
     "import": "导入",
     "importing": "导入中…",
     "imported": "已导入 {{count}} 首到「{{name}}」",
-    "importError": "导入失败"
+    "importError": "导入失败",
+    "loadingTracks": "正在加载歌曲…",
+    "playlistTracksError": "无法加载这个歌单",
+    "playlistEmpty": "这个歌单里暂无可播放歌曲。",
+    "qrTitle": "登录{{source}}",
+    "qrSubtitle": "用手机 App 扫码。会话 Cookie 只保存在这台设备上。",
+    "qrAlt": "{{source}} 登录二维码",
+    "qrLoading": "正在准备二维码…",
+    "qrWaiting": "等待扫码…",
+    "qrScanned": "已扫码，请在手机上确认。",
+    "qrSuccess": "登录成功。",
+    "qrExpired": "二维码已过期。",
+    "qrTimeout": "登录超时。",
+    "qrCancelled": "已取消登录。",
+    "qrError": "扫码登录失败。",
+    "externalLogin": "打开窗口"
   },
   "streamCache": {
     "title": "离线缓存",

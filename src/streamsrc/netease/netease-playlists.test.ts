@@ -109,6 +109,34 @@ describe("neteaseSongToHit / parseNeteaseSongDetailHits", () => {
     expect(parseNeteaseSongDetailHits({ songs: [song] })).toHaveLength(1);
     expect(parseNeteaseSongDetailHits({ code: 200 })).toEqual([]);
   });
+
+  it("accepts alternate song/detail and cover field shapes", () => {
+    expect(
+      parseNeteaseSongDetailHits({
+        data: {
+          songs: [
+            {
+              id: 1,
+              name: "Alt",
+              artists: [{ name: "Artist" }],
+              album: { name: "Album", blurPicUrl: "https://p/blur.jpg" },
+              duration: 1000,
+            },
+          ],
+        },
+      }),
+    ).toEqual([
+      {
+        source: "netease",
+        externalId: "1",
+        title: "Alt",
+        artist: "Artist",
+        album: "Album",
+        durationSec: 1,
+        coverUrl: "https://p/blur.jpg",
+      },
+    ]);
+  });
 });
 
 describe("parseNeteaseDailySongs", () => {
@@ -179,11 +207,32 @@ describe("parseNeteaseRecommendedPlaylists", () => {
     ]);
   });
 
-  it("reads picUrl — NOT coverImgUrl (guards against reusing the user-library mapper)", () => {
+  it("keeps coverUrl when logged-in recommended resources use playlist-style cover fields", () => {
     const out = parseNeteaseRecommendedPlaylists({
       result: [{ id: 9, name: "x", coverImgUrl: "https://p/wrong.jpg", trackCount: 1 }],
     });
-    expect(out[0].coverUrl).toBeUndefined();
+    expect(out[0].coverUrl).toBe("https://p/wrong.jpg");
+  });
+
+  it("reads nested image fields from logged-in resource cards", () => {
+    const out = parseNeteaseRecommendedPlaylists({
+      recommend: [
+        {
+          id: 10,
+          name: "resource",
+          resourceExtInfo: { coverUrl: "https://p/resource.jpg" },
+          uiElement: { image: { imageUrl: "https://p/ui.jpg" } },
+          trackCount: 2,
+        },
+      ],
+    });
+    expect(out[0]).toEqual({
+      id: "10",
+      name: "resource",
+      coverUrl: "https://p/resource.jpg",
+      trackCount: 2,
+      source: "netease",
+    });
   });
 
   it("returns [] for empty / error / non-object json", () => {

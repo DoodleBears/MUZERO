@@ -111,7 +111,22 @@
     "import": "가져오기",
     "importing": "가져오는 중…",
     "imported": "{{count}}곡을 \"{{name}}\"에 가져왔습니다",
-    "importError": "가져오기 실패"
+    "importError": "가져오기 실패",
+    "loadingTracks": "곡을 불러오는 중…",
+    "playlistTracksError": "이 플레이리스트를 불러올 수 없습니다",
+    "playlistEmpty": "이 플레이리스트에는 재생 가능한 곡이 없습니다.",
+    "qrTitle": "{{source}} 로그인",
+    "qrSubtitle": "모바일 앱으로 스캔하세요. 세션 쿠키는 이 기기에만 저장됩니다.",
+    "qrAlt": "{{source}} 로그인 QR 코드",
+    "qrLoading": "QR 코드를 준비하는 중…",
+    "qrWaiting": "스캔 대기 중…",
+    "qrScanned": "스캔되었습니다. 휴대폰에서 확인하세요.",
+    "qrSuccess": "로그인되었습니다.",
+    "qrExpired": "QR 코드가 만료되었습니다.",
+    "qrTimeout": "로그인 시간이 초과되었습니다.",
+    "qrCancelled": "로그인이 취소되었습니다.",
+    "qrError": "QR 로그인에 실패했습니다.",
+    "externalLogin": "창 열기"
   },
   "streamCache": {
     "title": "오프라인 캐시",
