@@ -41,12 +41,19 @@ export function AutoScrollText({
   const [overflow, setOverflow] = useState(0);
   const [viewportWidth, setViewportWidth] = useState(0);
 
-  // Re-measure after every commit and on resize. The commit pass catches track
-  // changes; the observer catches the pill/window resizing. Measure against the
-  // natural inline width instead of the currently-rendered width, because the
-  // static state uses `truncate` and some layouts report that clipped width as
-  // the scroll width. That would make an overflowing line look like it fits and
-  // leave it stuck as an ellipsis.
+  // Measure once on mount, then only when the content text or the available
+  // width actually changes — driven by observers, NOT re-run on every render.
+  //
+  // The old version had no dependency array, so it re-measured AND rebuilt the
+  // ResizeObserver on every commit. A song switch re-renders the whole Now
+  // Playing tree and the coverflow stacks several of these (title + subtitle per
+  // card), turning each switch into a clone-to-body + forced-reflow storm — the
+  // top main-thread cost in the tab-1 switch profile (PRD Phase 32 / QA#49).
+  //
+  // ResizeObserver catches pill/window resizes; a MutationObserver catches track
+  // changes, because the static `truncate` box's *rendered* width doesn't change
+  // when the text does (so RO alone would miss it). We still measure against the
+  // natural inline width (the clone) so an overflowing line isn't read as fitting.
   useLayoutEffect(() => {
     const viewport = viewportRef.current;
     const content = contentRef.current;
@@ -65,13 +72,21 @@ export function AutoScrollText({
     };
     measure();
 
-    const observer = new ResizeObserver(measure);
-    observer.observe(viewport);
-    observer.observe(content);
+    const resizeObserver = new ResizeObserver(measure);
+    resizeObserver.observe(viewport);
+    resizeObserver.observe(content);
     const clip = findHorizontalClipElement(viewport);
-    if (clip) observer.observe(clip);
-    return () => observer.disconnect();
-  });
+    if (clip) resizeObserver.observe(clip);
+
+    const mutationObserver =
+      typeof MutationObserver !== "undefined" ? new MutationObserver(measure) : null;
+    mutationObserver?.observe(content, { characterData: true, childList: true, subtree: true });
+
+    return () => {
+      resizeObserver.disconnect();
+      mutationObserver?.disconnect();
+    };
+  }, []);
 
   const animate = overflow > 0 || (forceScroll && viewportWidth > 0);
   const style = animate

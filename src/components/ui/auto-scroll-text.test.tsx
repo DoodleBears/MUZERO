@@ -128,6 +128,36 @@ describe("AutoScrollText", () => {
     expect(content).toHaveStyle({ "--auto-scroll-x": "calc(-100% + 180px)" });
   });
 
+  it("does not re-measure on a re-render when the text is unchanged (Phase 32)", () => {
+    let naturalMeasures = 0;
+    Object.defineProperty(HTMLElement.prototype, "clientWidth", {
+      configurable: true,
+      get() {
+        return 120;
+      },
+    });
+    Object.defineProperty(HTMLElement.prototype, "scrollWidth", {
+      configurable: true,
+      get() {
+        // The clone (measureNaturalWidth) sets width:max-content — count those reads.
+        if ((this as HTMLElement).style.width === "max-content") {
+          naturalMeasures += 1;
+          return 260;
+        }
+        return 120;
+      },
+    });
+
+    const { rerender } = render(<AutoScrollText className="a">Same Title</AutoScrollText>);
+    const afterMount = naturalMeasures;
+    expect(afterMount).toBeGreaterThan(0); // measured once on mount
+
+    // Re-render (a prop change, same text) must NOT trigger another measure — the
+    // old no-deps effect re-measured on every commit (the switch reflow storm).
+    rerender(<AutoScrollText className="b">Same Title</AutoScrollText>);
+    expect(naturalMeasures).toBe(afterMount);
+  });
+
   it("keeps readability scrolling independent of OS motion settings", () => {
     Object.defineProperty(HTMLElement.prototype, "clientWidth", {
       configurable: true,

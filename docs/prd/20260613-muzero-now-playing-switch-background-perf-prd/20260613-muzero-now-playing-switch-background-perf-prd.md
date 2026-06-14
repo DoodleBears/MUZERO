@@ -1308,6 +1308,18 @@ commit `de889f1` 桌面 prod build,两 tab 各 6 次切歌,cadence 可比(tab-1 
 - **B:clean 复测** —— prod build、debug 静默、关 React DevTools,确认 createTask/run/日志污染剥离后的真实基线,避免在观测开销上调参。
 - **C(次要):** SearchPage gallery `useMemo`/隐藏时跳过重算。
 
+### Phase 32-A: AutoScrollText 只在内容/尺寸变化时重测(✅ 代码完成)
+
+**Goal:** 消除 QA#49 定位的 ~1.4s 强制回流风暴(每次切歌每个 AutoScrollText 都 clone→appendChild→reflow→remove)。
+
+**改动([`auto-scroll-text.tsx`](../../../src/components/ui/auto-scroll-text.tsx)):**
+- [x] `useLayoutEffect` 从**无依赖(每 render 重测 + 重建 ResizeObserver)**改为 **`[]` 只 setup 一次**;`measure()` 在 mount 跑一次,之后由 observer 驱动。
+- [x] `ResizeObserver` 捕获 pill/窗口 resize(只建一次,不再每 render 重建);新增 **`MutationObserver`**(`characterData`/`childList`/`subtree`)捕获**文本变化**——因为静态 `truncate` 盒的*渲染*宽度在换歌时不变,RO 单独会漏(这正是原来用「每 render 重测」兜底的原因,现在改为精确触发)。
+- [x] **保留** `measureNaturalWidth` 的 clone-to-body(它是 natural-width 测量的关键、且被单测覆盖),只是从「每 render」降到「每次真实变化」。clone(coverflow 过场卡跳过测量)留待后续,本次频率修复已覆盖主成本。
+- [x] 单测:新增「同文本 re-render 不重测」(`auto-scroll-text.test.tsx`,6 例绿;旧 5 例回归 + swipeable/ui 共 35 例绿);`tsc`/Biome 通过。
+
+**预期:**切歌时 AutoScrollText 的 measure 从「实例数 × 每首多次 render」降到「实例数 × 每首 ~1 次文本变化」,削掉 `get scrollWidth`/`remove`/`appendChild`/`measure` 那 ~1.4s 的大部分。待 QA clean prod 复测(Phase 32-B)确认 `frameMax`/heap churn 下降。
+
 ---
 
 ## 7. Out of Scope(交叉引用,本 PRD 不处理)
@@ -1413,6 +1425,7 @@ commit `de889f1` 桌面 prod build,两 tab 各 6 次切歌,cadence 可比(tab-1 
 | 2026-06-14 | User+Codex | **QA#22 trace + Phase 23 代码完成(TDD)**:13:57 trace 验证 stage decode 已排除,但仍有 `image.load/decode surface=background decode=true` 800/1024/1500px。定位到 Pixi derivative 分支虽然使用 192px backlight,仍提前为未渲染的 full-cover background 调 `useLoadedImageUrl`。Phase 23 先红灯锁定 derivative ready/pending 不创建 `Image`,再把 `pixiMedia/shouldUsePixiCoverDerivative` 前置并传 `null` 给 full-cover loader。`now-playing-background` 11 例通过;待 QA trace 验证 `surface=background` decode 消失。 |
 | 2026-06-14 | User+Codex | **QA#23 trace + Phase 24 代码完成(TDD)**:14:06 trace 验证 Phase 23 生效(无 `surface=background` load/decode),剩余 `image.load surface=now-playing decode=false` 仍为 1400~2000px full-cover。Phase 24 给 player `CoverImage` 增加 DOM-load strategy,stage/dock 用真实 `<img onLoad>` gate crossfade,不再创建额外 JS `Image`。TDD:`cover-image` 新红灯转绿;待 QA trace 验证 `surface=now-playing` image.load 消失。 |
 | 2026-06-14 | User+Codex | **QA#24 trace + Phase 25 二分开始**:14:15 trace 验证 Phase 24 生效(`surface=now-playing/background` 的 `image.load/decode` 均消失),但仍有 `fpsLow≈5~15/frameMax≈66~183ms/longTaskMax≈214ms`。剩余可疑层转向全局背景合成、Pixi 192px derivative 的浏览器 decode/fetch queue、flow/visualizer mix-blend-mode、audio blob load。创建临时诊断分支 `diag/switch-fps-bisect`,按大块禁用 commit 做 QA 二分,诊断代码不合入产品分支。 |
+| 2026-06-15 | User+Claude | **Phase 32-A 代码完成:AutoScrollText 只在内容/尺寸变化时重测**。`useLayoutEffect` 从无依赖(每 render 重测 + 重建 RO)改为 `[]` setup-once + `ResizeObserver`(resize)+ `MutationObserver`(文本变化,catch 换歌——truncate 盒渲染宽度不变 RO 会漏)。保留 clone-to-body(natural-width 关键 + 被测)但频率从「每 render」降到「每次真实变化」。新增「同文本 re-render 不重测」单测;auto-scroll-text 6 + swipeable/ui 35 例绿,`tsc`/Biome 通过。预期削掉 QA#49 的 ~1.4s 回流大部分,待 clean prod 复测(32-B)。 |
 | 2026-06-15 | User+Claude | **QA#49:DevTools 火焰图归因 → AutoScrollText 每帧重测 + 仪表污染**。主线程 self-time 两类大头:(1)仪表污染 `createTask 3196ms`+`run 3897ms`(React Scheduler/Components 轨)+`dev-perf-panel tick 296ms`+诊断日志格式化 ~90ms —— 因抓 .log/开 RDT 才存在,prod 会轻;(2)真实热点 ~1.4s 强制回流全指向 [`auto-scroll-text.tsx`](../../../src/components/ui/auto-scroll-text.tsx):`useLayoutEffect` 无依赖→每 render 重测、`measureNaturalWidth` clone→appendChild→scrollWidth→remove、父链 getComputedStyle;coverflow 多张 StageIdentity ×2 AutoScrollText 同时测 → `Listeners 1739→7017`/`Nodes→5112`。次要:keep-mounted SearchPage gallery 重算 ~140ms。Phase 32:A 修 AutoScrollText(加依赖 + 去 clone-to-body + 过场卡跳过测量);B clean prod 复测剥离仪表;C SearchPage memo。 |
 | 2026-06-15 | User+Claude | **QA#48:QA#47 收敛被高估,tab-1 worst-case 仍 GC 卡顿**。b6dfcf7 tab-1 持续狂切的更充分采样(13 windows)显示 `fpsAvg 46–70`/`fpsLow 6`/`frameMax 183`/`longTask 226`/heap 503→888→GC→270(停手回 120)。QA#47 只 1 window,oversold。与 QA#24 一致(移除 stage decode 后 frameMax 仍 183)→ 深层残留,P1–P4 改均值不消单帧 GC 停顿。**已排除** tab-switch/keep-mount(`dbRequeries:0`、heap floor 正常、Pixi 6KB derivative)。真因 = ~64MB/切瞬时分配 → major GC;日志到极限,下一步按 §4 用 DevTools 火焰图归因,再定 Phase 32(候选:stage 封面上限尺寸 derivative/线程外 decode、Now 树 memo、audio 读去抖)。 |
 | 2026-06-15 | User+Claude | **QA#47 验证:P4 后 burst 收敛**:de889f1 prod build,tab-1 `fpsAvg 108` ≈ tab-2 ~110,`frameMax 41.7 < 74.9`、`fpsLow 24 > 13.4`——tab-1 已收敛且略优。本轮 cadence ~587ms(566/642/542/642/541)多数 < `COVERFLOW_BURST_SKIP_MS=600` → P2 coverflow-skip 真正触发为主驱动,P4 memo 为辅。`cover.render` 仍 42(全 cache-hit)→ 该指标作废(cache-hit 廉价、非瓶颈)。Phase 28/31 标 ✅。剩余边界:cadence > ~600ms 中速点击仍播完整 coverflow → 单帧尖峰(Open Question #27:接受 / 调阈值 / P5 降 coverflow 合成成本)。 |
