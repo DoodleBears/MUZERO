@@ -45,6 +45,15 @@ const COMMIT_DURATION_SEC = 1.08;
 // from 0 (a drag only animates the remaining distance), so they use a snappier
 // duration to feel responsive while keeping the same coverflow look.
 const SWITCH_DURATION_SEC = 0.62;
+// A programmatic switch arriving within this window of the previous one is part
+// of a rapid next/prev burst: it can't finish the 0.62s coverflow before the
+// next one, so we skip the overlay (and its blurred 3D backlight cards) and let
+// the base MediaStage crossfade carry it — mashing next no longer composites a
+// fresh blur(20px) saturate(400%) layer per song (PRD Phase 29 / P2).
+const COVERFLOW_BURST_SKIP_MS = 600;
+// How long after the last burst switch before the stage counts as settled again
+// (re-enables the base cover backlight and lets the next switch animate).
+const COVERFLOW_BURST_SETTLE_MS = 500;
 const HANDOFF_DURATION_SEC = 0.32;
 const COVER_READY_SETTLE_MS = 440;
 const COVER_PRELOAD_LOCAL_SETTLE_MS = 140;
@@ -117,6 +126,12 @@ export function SwipeableMediaStage({
   const [settleTarget, setSettleTarget] = useState<VisualTrack | null>(null);
   const [readyTrackIds, setReadyTrackIds] = useState<Record<string, true>>({});
   const [overlayRect, setOverlayRect] = useState<StageOverlayRect | null>(null);
+  // Rapid next/prev burst gate (PRD Phase 29 / P2): while bursting, the coverflow
+  // overlay is skipped and the base cover backlight is suppressed so each skipped
+  // song doesn't composite a blurred 3D layer. Cleared once the burst goes quiet.
+  const [bursting, setBursting] = useState(false);
+  const lastSwitchAtRef = useRef(0);
+  const burstSettleTimer = useRef<number | null>(null);
 
   const next = usePlayerStore((s) => s.next);
   const skipPrev = usePlayerStore((s) => s.skipPrev);
@@ -214,11 +229,24 @@ export function SwipeableMediaStage({
       return;
     }
     updateOverlayRect();
-    window.addEventListener("resize", updateOverlayRect);
-    window.addEventListener("scroll", updateOverlayRect, true);
+    // Coalesce capture-phase scroll bursts (Lenis emits many per frame) into one
+    // measurement per frame: a raw listener would run getBoundingClientRect +
+    // measureVerticalClipBounds (a parent-chain getComputedStyle walk) on every
+    // event = forced sync layout thrash during a switch scroll (PRD Phase 30).
+    let raf = 0;
+    const onViewportChange = () => {
+      if (raf) return;
+      raf = window.requestAnimationFrame(() => {
+        raf = 0;
+        updateOverlayRect();
+      });
+    };
+    window.addEventListener("resize", onViewportChange);
+    window.addEventListener("scroll", onViewportChange, true);
     return () => {
-      window.removeEventListener("resize", updateOverlayRect);
-      window.removeEventListener("scroll", updateOverlayRect, true);
+      if (raf) window.cancelAnimationFrame(raf);
+      window.removeEventListener("resize", onViewportChange);
+      window.removeEventListener("scroll", onViewportChange, true);
     };
   }, [stackVisible, updateOverlayRect]);
 
@@ -228,6 +256,7 @@ export function SwipeableMediaStage({
       if (clearTimer.current != null) window.clearTimeout(clearTimer.current);
       if (handoffTimer.current != null) window.clearTimeout(handoffTimer.current);
       if (wheelEndTimer.current != null) window.clearTimeout(wheelEndTimer.current);
+      if (burstSettleTimer.current != null) window.clearTimeout(burstSettleTimer.current);
     };
   }, []);
 
@@ -255,6 +284,18 @@ export function SwipeableMediaStage({
 
   const markVisualReady = useCallback((trackId: string) => {
     setReadyTrackIds((ready) => (ready[trackId] ? ready : { ...ready, [trackId]: true }));
+  }, []);
+
+  // Enter the burst state and (re)arm the quiet-period timer that exits it. Each
+  // rapid switch pushes the exit out, so the base backlight only returns once the
+  // user stops mashing (PRD Phase 29 / P2).
+  const markBursting = useCallback(() => {
+    setBursting(true);
+    if (burstSettleTimer.current != null) window.clearTimeout(burstSettleTimer.current);
+    burstSettleTimer.current = window.setTimeout(() => {
+      setBursting(false);
+      burstSettleTimer.current = null;
+    }, COVERFLOW_BURST_SETTLE_MS);
   }, []);
 
   const beginGesture = useCallback(() => {
@@ -407,7 +448,17 @@ export function SwipeableMediaStage({
       if (selfSwitchRef.current === newId) {
         // Our own drag/wheel commit is already animating this exact switch.
         selfSwitchRef.current = null;
+      } else if (Date.now() - lastSwitchAtRef.current < COVERFLOW_BURST_SKIP_MS) {
+        // Burst: the previous switch is still mid-flight, so animating this one
+        // would just be torn down. Skip the coverflow overlay (and its blurred 3D
+        // backlight cards), tear down any running one, and let the base MediaStage
+        // crossfade carry the switch. `bursting` also suppresses the base backlight
+        // until the user stops mashing (PRD Phase 29 / P2).
+        lastSwitchAtRef.current = Date.now();
+        markBursting();
+        if (stackVisible) clearStack();
       } else {
+        lastSwitchAtRef.current = Date.now();
         const outgoing = makeVisualTrack(prev.track, preloadedCoverUrls);
         const incoming = makeVisualTrack(current, preloadedCoverUrls);
         // Skip the slide if the incoming cover isn't loaded yet (a jump to a
@@ -442,6 +493,9 @@ export function SwipeableMediaStage({
     prevTrack?.id,
     preloadedCoverUrls,
     playProgrammaticSwitch,
+    clearStack,
+    markBursting,
+    stackVisible,
   ]);
 
   useEffect(() => {
@@ -698,7 +752,7 @@ export function SwipeableMediaStage({
               willChange: "transform",
             }}
           >
-            <MediaStage coverBacklightEnabled={baseCoverBacklightEnabled} />
+            <MediaStage coverBacklightEnabled={baseCoverBacklightEnabled && !bursting} />
           </motion.div>
         </div>
         {/* Title + author travel with the cover during an active drag (handled by

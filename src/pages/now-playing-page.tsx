@@ -136,7 +136,10 @@ export function NowPlayingPage({ foregroundHidden = false }: { foregroundHidden?
             <TransportControls className="relative z-10 py-4 " />
           </div>
 
-          {current && <AnnotationEditor key={current.id} track={current} />}
+          {/* No key={current.id}: AnnotationEditor + its memory panel reset their
+              per-track draft state in place, so a switch no longer tears down and
+              rebuilds the whole subtree (PRD Phase 30). */}
+          {current && <AnnotationEditor track={current} />}
 
           {isNarrow && current && lyricsVisible && (
             <div className="min-h-[60svh] p-4">

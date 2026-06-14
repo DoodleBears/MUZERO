@@ -66,6 +66,18 @@ export function TrackMemoryNotesPanel({
   const matchesRef = useRef(matches);
   matchesRef.current = matches;
 
+  // Reset the composer/editing draft on track change. The parent no longer forces
+  // a `key=` remount of this subtree every switch (PRD Phase 30), so clear the
+  // in-place draft here to preserve the previous "fresh per track" behavior.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: trackId is the reset trigger, not read in the body
+  useEffect(() => {
+    setEditingMemory(undefined);
+    setIsCreating(false);
+    setPhotoFile(undefined);
+    setQuickCreateOpen(false);
+    setQuickPhotoFile(undefined);
+  }, [trackId]);
+
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
       if (event.defaultPrevented || isTypingTarget(event.target) || hasModalDialogOpen()) return;

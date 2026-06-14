@@ -227,6 +227,26 @@ describe("SwipeableMediaStage", () => {
     expect(screen.getAllByTestId("visual-trk_b").length).toBeGreaterThan(0);
   });
 
+  it("skips the coverflow during a rapid burst and lets the base stage carry it (Phase 29)", async () => {
+    render(<SwipeableMediaStage />);
+
+    // First switch after an idle gap animates the coverflow (incoming card mounts).
+    await act(async () => {
+      usePlayerStore.setState({ currentIndex: 1 });
+      await Promise.resolve();
+    });
+    expect(screen.getAllByTestId("visual-trk_b").length).toBeGreaterThan(0);
+
+    // A second switch in the same instant (no time advanced) is part of a burst:
+    // no coverflow overlay for the skipped song — the base MediaStage carries it.
+    await act(async () => {
+      usePlayerStore.setState({ currentIndex: 2 });
+      await Promise.resolve();
+    });
+    expect(screen.queryByTestId("visual-trk_c")).not.toBeInTheDocument();
+    expect(screen.getByTestId("media-stage")).toBeInTheDocument();
+  });
+
   it("keeps the settled overlay visible while the base stage still reports a stale previous cover", async () => {
     const queue = [
       makeTrack("trk_b", { coverBlobId: "blb_b" }),

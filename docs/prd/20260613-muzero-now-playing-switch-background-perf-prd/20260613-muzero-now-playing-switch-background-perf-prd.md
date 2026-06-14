@@ -35,8 +35,14 @@
 | 22 | Stop active full-cover decode on Now Playing stage | ✅ 代码完成(trace verified) | [Phase 22](#phase-22-stop-active-full-cover-decode-on-the-now-playing-stage-and-trace-image-loaddecode) |
 | 23 | Skip unused full-cover background decode when Pixi uses derivative | ✅ 代码完成(待 QA trace) | [Phase 23](#phase-23-skip-unused-full-cover-background-decode-when-pixi-uses-derivative) |
 | 24 | Replace stage/dock preflight Image with DOM image load gate | ✅ 代码完成(待 QA trace) | [Phase 24](#phase-24-replace-stagedock-preflight-image-with-dom-image-load-gate) |
+| 25–27 | 二分隔离 / media source reload 拆段 / `3153bf9` baseline add-back(详见 §6 QA#25–#44) | 🔄 见 §6 各 QA | [§6](#6-implementation-plan) |
+| 28 | **(P1)** PlaybackSpectrum 切歌 fade + 停 rAF(产品口径:暂停而非降帧) | ✅ 代码完成(待 QA trace) | [Phase 28](#phase-28p1-playbackspectrum-raf-节流--可见性暂停) |
+| 29 | **(P2)** coverflow 快切降级 + 背光合成预算(前台切歌成本) | ✅ 代码完成(待 QA trace) | [Phase 29](#phase-29p2-coverflow-快切降级--背光合成预算) |
+| 30 | **(P3)** 前台重挂 / layout thrash 收尾(`AnnotationEditor` 重挂 + scroll reflow) | ✅ 代码完成(待 QA trace) | [Phase 30](#phase-30p3-前台重挂--layout-thrash-收尾) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
+>
+> **方向更新(QA#45,2026-06-15):**Phase 1–27 处理**全局共享背景**(两 tab 同源);QA#45 用同 commit 的 tab-1 vs tab-2 对比证明剩余 ~10 FPS 平均差距来自**仅 Now Playing 挂载的前台组件**,落地方案见 §6bis Phase 28–30(P1/P2/P3)。
 
 ---
 
@@ -1101,6 +1107,91 @@ QA 观察到 `Ctrl+1`/`Ctrl+2` 在 Now Playing 与 Tab 2 全部歌曲列表之�
 - **Pixi 数字仍需按 settle 解读**:`background.pixi media.load≈190~223ms` 包含已有 settle delay;真实 `background.texture fetch/decode` 多数为 `≈1~5ms`,个别 `fetch≈27.4ms`, `decode≈17ms`;`textureSwap.apply≈0.6~0.9ms`。
 - **回滚决策**:P2/P3 属于“机制正确但没有提升体验”的修补,继续叠加会污染基线。执行 revert,代码回到 `510f7c9` 的 P1 stable baseline,后续优化应从该点重新开分支/重新二分,优先关注全局背景合成/cover preload cadence,而不是继续扩展 MediaSession 路径。
 
+### QA#45(2026-06-15 tab-1 vs tab-2 切歌对比):剩余差距在 Now Playing 前台,不在全局背景
+
+用户提供同一 commit(`be2462c`)、同一会话、同一批歌、同样狂按 next/prev 的两份 trace,只差「停在哪个 tab」:
+
+- **tab-2(队列/库,Dock 或快捷键切歌)**:[`.logs/commit-be2462c.../tab-2-switch-song.log`](../../../.logs/commit-be2462c3b09aa91b978143156f36747215a12c96/tab-2-switch-song.log)
+- **tab-1(Now Playing,页内切歌)**:[`.logs/commit-be2462c.../tab-1-switch-song.log`](../../../.logs/commit-be2462c3b09aa91b978143156f36747215a12c96/tab-1-switch-song.log)
+
+**关键数据(`performance.frame` 窗口):**
+
+| 指标 | tab-2(其它 tab) | tab-1(Now Playing) | 解读 |
+|---|---|---|---|
+| `fpsAvg`(切歌中) | **~106–110**(109.1 / 105.4 / 111.9 / 106.4) | **~99**(112.5 → 99.1 → 98.6) | tab-1 平均**持续低 ~10 FPS** |
+| `frameMaxMs` | 58.4(个别 116.6) | 50–58.3 | **两边同量级**(尖峰来自共享路径) |
+| `longTaskMaxMs` | 166 | 166 | 完全相同(共享路径残留) |
+
+**结论(本 PRD 的方向修正):**前 27 个 Phase 全部在追**全局共享的背景/Pixi/cover 管线**(挂在 [`App.tsx:232`](../../../src/App.tsx#L232) `NowPlayingBackground`,两个 tab 同一份)。本对比证明:
+
+1. **尖峰(`frameMax`/`longTask`)两边相等** → 那次最重的单帧确实来自共享背景,与 tab 无关(印证前 27 Phase 的工作对象);
+2. **但 `fpsAvg` 持续低 ~10 不是尖峰**,而是 tab-1 多了一份**贯穿全程、每帧都在花**的开销 → 只可能来自 **Now Playing 前台组件**(仅 tab-1 挂载),这是前 27 Phase **从未触及**的层。
+3. `cover.palette.settle` 已是 650ms 防抖 + seq 去重([`visualizer-color-store.ts:64`](../../../src/stores/visualizer-color-store.ts#L64)),狂切只落最后一次,**不是元凶**(已排除)。
+
+**前台开销定位(按对 `fpsAvg` 的贡献排序):**
+
+- **P1 — `PlaybackSpectrum` 常驻 rAF(连续成本,因果最干净)**:仅在 Now Playing 挂载([`now-playing-page.tsx:135`](../../../src/pages/now-playing-page.tsx#L135));播放期间每帧 canvas 画几百个圆角矩形([`playback-spectrum.tsx:104-110`](../../../src/components/player/playback-spectrum.tsx#L104-L110)),即使不切歌也在跑。这是把基线从 ~110 压到 ~105 的稳定连续开销。
+- **P2 — `SwipeableMediaStage` coverflow 切歌动画(连续 + 尖峰)**:每次外部切歌触发 [`swipeable-media-stage.tsx:403`](../../../src/components/player/swipeable-media-stage.tsx#L403) `playProgrammaticSwitch`,跑 0.62s Motion 动画 + portal 挂出 3 张 coverflow 卡(prev/current/next),每卡含全分辨率封面 `<img>` + 一张 `filter: blur(20px) saturate(400%)` `scale(1.12)` 背光图([`swipeable-media-stage.tsx:966-980`](../../../src/components/player/swipeable-media-stage.tsx#L966-L980)),跑在 `[perspective:1200px]` + `preserve-3d` + `rotateY/scale/opacity` 的 3D 合成层。日志里 tab-1 每次切歌的 `cover.render cache-hit` 明显多于 tab-2(6~7 vs 4),正是这 3 卡。**狂切间隔 ~0.5s < 动画 0.62s → overlay 从不空闲**,模糊+400% 饱和背光在 3D layer 上持续合成 = 既拉低平均、又是切歌尖峰来源。
+- **P3 — 前台重挂 + 布局抖动(尖峰)**:`AnnotationEditor key={current.id}` 每首整体卸载重建([`now-playing-page.tsx:139`](../../../src/pages/now-playing-page.tsx#L139));overlay 可见时的 capture 阶段 `scroll`/`resize` 监听 → `updateOverlayRect` → `getBoundingClientRect` + `measureVerticalClipBounds`(向上遍历父节点读 `getComputedStyle`,[`swipeable-media-stage.tsx:218`](../../../src/components/player/swipeable-media-stage.tsx#L218) / [`:1032`](../../../src/components/player/swipeable-media-stage.tsx#L1032));叠加 Lenis 切歌滚动复位([`now-playing-page.tsx:73-76`](../../../src/pages/now-playing-page.tsx#L73-L76))= 强制同步布局(layout thrash)。
+
+**测量方法学(沿用 §4 + 本 PRD 既有仪表):**目标指标 = `fpsAvg`(平均,本轮主信号)+ `frameP99/frameMax` + `longTaskMaxMs`;基线对比锚点 = 同 commit 的 tab-1 vs tab-2 两份 trace(消除会话/曲库差异);**每个 Phase 验收 = tab-1 切歌窗口 `fpsAvg` 向 tab-2 靠拢,且 `frameMax/longTask` 不恶化**。prod build(`make build` / 桌面)复测、第二轮取数(首轮 warmup 不算)。回退 = `git revert`,不藏 flag(硬规则 3)。
+
+---
+
+## 6bis. 落地方案(按 priority,QA#45 后续)
+
+> 三个 Phase 互相独立、可分别 ship/验证;建议按 P1 → P2 → P3 顺序,因为 P1 改动最小、对 `fpsAvg` 的因果最干净,能先把"连续基线"差距证伪/坐实,再处理切歌瞬间的 P2/P3。
+
+### Phase 28(P1): PlaybackSpectrum 切歌 fade + 停 rAF
+
+**产品口径修正(2026-06-15,PM):**不做「降帧率」。改为**切歌时频谱 fade out 并完全停 rAF(rAF = 0)**,落定后再 fade in 恢复——「切歌过程中本来也没有音乐」,所以暂停比降帧更合理、收益更干净。
+
+**Goal:** 切歌(尤其狂切 burst)期间彻底消除频谱的每帧 canvas 重画(连续成本),落定后无缝恢复。
+
+**现状:** [`playback-spectrum.tsx`](../../../src/components/player/playback-spectrum.tsx) 的 rAF loop 在 `isPlaying || dragging` 时**每个浏览器帧**(~120Hz)都 `renderFrame()`,画数百个 `roundRect`,切歌期间照跑。
+
+**Tasks(✅ 代码完成):**
+- [x] 用 [`useSettledValue`](../../../src/hooks/use-settled-value.ts) 派生 `switching = current.id !== settledTrackId`(settle `SPECTRUM_SWITCH_SETTLE_MS=420`),狂切 burst 期间持续为 true。
+- [x] 纯 helper `shouldAnimateSpectrum({isPlaying,dragging,switching})`:`dragging` 永远动(seek 跟手),否则 `isPlaying && !switching`;`switching` 时 **rAF 完全不调度**。
+- [x] canvas `switching` 时 `opacity-0`(CSS `transition-opacity duration-300` fade out),落定 fade in;暂停态(settled)仍画单帧静态波形。
+
+### Phase 28 Checklist
+
+- [x] 单测:`shouldAnimateSpectrum` 四态 + 组件「切歌 fade out → settle fade in」(`playback-spectrum.test.tsx`,5 例绿)。
+- [ ] tab-1 切歌窗口 `fpsAvg` 向 tab-2 靠拢(prod build,第二轮 trace)。
+- [ ] seek 拖拽仍跟手(主观 + `frameMax` 不恶化)。
+
+### Phase 29(P2): coverflow 快切降级 + 背光合成预算
+
+**Goal:** 狂切 burst 时不再让 coverflow overlay 持续合成 3D 模糊背光,把切歌窗口的 `fpsAvg` 拉回。
+
+**现状:** [`playProgrammaticSwitch`](../../../src/components/player/swipeable-media-stage.tsx#L360) 每次切歌都全量播放 0.62s coverflow;`incomingReady` 只 gate 封面是否就绪([`:420`](../../../src/components/player/swipeable-media-stage.tsx#L420)),**不 gate 切歌速率**。背光层 `blur(20px) saturate(400%)` 是 compositor 重负。
+
+**Tasks(✅ 代码完成):**
+- [x] 外部切歌效果加**速率 gate**:`Date.now() - lastSwitchAtRef < COVERFLOW_BURST_SKIP_MS(600)` 即判 burst → 跳过 coverflow overlay + `clearStack()`,直接走底层 [`MediaStage`](../../../src/components/player/media-stage.tsx) 交叉淡入(`baseHidden` 本就切换)。非 burst(空闲后首切)仍播完整 coverflow。
+- [x] burst 期间 `bursting` 状态把底层 stage 背光关掉(`coverBacklightEnabled={baseCoverBacklightEnabled && !bursting}`),`COVERFLOW_BURST_SETTLE_MS(500)` 静默后恢复 → 不再每首合成 `blur(20px) saturate(400%)`。
+- [x] 不改单次(非 burst)切歌的 coverflow 观感(现有 6 例回归全绿)。
+
+### Phase 29 Checklist
+
+- [x] 单测:「rapid burst 跳过 coverflow、base stage 接管」+ 原 6 例回归(`swipeable-media-stage.test.tsx`,7 例绿)。
+- [ ] 狂切 burst 时 tab-1 `fpsAvg` 向 tab-2 靠拢(差距 < 5 FPS),`frameMax/longTask` 不恶化(prod build trace)。
+
+### Phase 30(P3): 前台重挂 / layout thrash 收尾
+
+**Goal:** 去掉切歌瞬间的 React 重挂与强制同步布局,削平 tab-1 切歌尖峰。
+
+**Tasks(✅ 代码完成):**
+- [x] `AnnotationEditor` 去 `key={current.id}` 整体重挂([`now-playing-page.tsx`](../../../src/pages/now-playing-page.tsx));改为 `useEffect([track.id])` in-place reset 草稿(`tagInput`/`tagInputOpen`/`cropFile`),子组件 [`TrackMemoryNotesPanel`](../../../src/components/track/track-memory-notes-panel.tsx) 同样 `useEffect([trackId])` reset composer 草稿 → 保留「每首 fresh」UX,不再拆/建整棵子树 + masonry 重排。
+- [x] `updateOverlayRect` 的 capture `scroll`/`resize` 监听 rAF 合并(一帧最多测一次 `getBoundingClientRect` + `measureVerticalClipBounds`),消除滚动期间的强制同步布局。
+- [x] Lenis 切歌滚动复位确认仍 `immediate: true`([`now-playing-page.tsx`](../../../src/pages/now-playing-page.tsx)),且 overlay rect 测量已 rAF 合并,不再每个 scroll 事件同步 layout — 无需额外错峰。
+
+### Phase 30 Checklist
+
+- [x] 单测:「切歌 in-place reset tag 草稿(无 remount key)」(`annotation-editor.test.tsx`,3 例绿);swipeable 7 例 + 受影响组件共 21 例绿。
+- [ ] scroll 期间无 forced-reflow 长任务(DevTools Performance "Recalculate Style/Layout" 归因,prod build)。
+- [ ] tab-1 切歌 `frameMax` 向 tab-2 收敛(prod build trace)。
+
 ---
 
 ## 7. Out of Scope(交叉引用,本 PRD 不处理)
@@ -1205,3 +1296,5 @@ QA 观察到 `Ctrl+1`/`Ctrl+2` 在 Now Playing 与 Tab 2 全部歌曲列表之�
 | 2026-06-14 | User+Codex | **QA#22 trace + Phase 23 代码完成(TDD)**:13:57 trace 验证 stage decode 已排除,但仍有 `image.load/decode surface=background decode=true` 800/1024/1500px。定位到 Pixi derivative 分支虽然使用 192px backlight,仍提前为未渲染的 full-cover background 调 `useLoadedImageUrl`。Phase 23 先红灯锁定 derivative ready/pending 不创建 `Image`,再把 `pixiMedia/shouldUsePixiCoverDerivative` 前置并传 `null` 给 full-cover loader。`now-playing-background` 11 例通过;待 QA trace 验证 `surface=background` decode 消失。 |
 | 2026-06-14 | User+Codex | **QA#23 trace + Phase 24 代码完成(TDD)**:14:06 trace 验证 Phase 23 生效(无 `surface=background` load/decode),剩余 `image.load surface=now-playing decode=false` 仍为 1400~2000px full-cover。Phase 24 给 player `CoverImage` 增加 DOM-load strategy,stage/dock 用真实 `<img onLoad>` gate crossfade,不再创建额外 JS `Image`。TDD:`cover-image` 新红灯转绿;待 QA trace 验证 `surface=now-playing` image.load 消失。 |
 | 2026-06-14 | User+Codex | **QA#24 trace + Phase 25 二分开始**:14:15 trace 验证 Phase 24 生效(`surface=now-playing/background` 的 `image.load/decode` 均消失),但仍有 `fpsLow≈5~15/frameMax≈66~183ms/longTaskMax≈214ms`。剩余可疑层转向全局背景合成、Pixi 192px derivative 的浏览器 decode/fetch queue、flow/visualizer mix-blend-mode、audio blob load。创建临时诊断分支 `diag/switch-fps-bisect`,按大块禁用 commit 做 QA 二分,诊断代码不合入产品分支。 |
+| 2026-06-15 | User+Claude | **QA#45 方向修正 + §6bis 落地方案(P1/P2/P3)**:用户提供同 commit(`be2462c`)tab-1(Now Playing)vs tab-2(队列/库)两份切歌 trace。对比证明:`frameMax`/`longTask` 两边同量级(58ms/166ms,来自前 27 Phase 处理的**全局共享背景**),但 tab-1 `fpsAvg` 持续低 ~10(~99 vs ~106–110)。该平均差距是**贯穿全程的连续开销**,来自**仅 Now Playing 挂载的前台组件**——前 27 Phase 从未触及。定位三处(按对 `fpsAvg` 贡献排序):P1 `PlaybackSpectrum` 常驻 rAF([`playback-spectrum.tsx:104`](../../../src/components/player/playback-spectrum.tsx#L104));P2 `SwipeableMediaStage` coverflow 0.62s 动画 + 3 卡 `blur(20px) saturate(400%)` 3D 背光,狂切时 overlay 从不空闲([`swipeable-media-stage.tsx:403`](../../../src/components/player/swipeable-media-stage.tsx#L403) / [`:966`](../../../src/components/player/swipeable-media-stage.tsx#L966));P3 `AnnotationEditor key` 重挂 + scroll/resize layout thrash + Lenis 复位。新增 Phase 28(P1 rAF 节流/可见性暂停)、29(P2 coverflow 快切降级 + 背光预算)、30(P3 前台重挂/reflow 收尾),验收锚定 tab-1 `fpsAvg` 向 tab-2 靠拢。**仅文档,未改产品代码。** |
+| 2026-06-15 | User+Claude | **Phase 28/29/30 代码完成(TDD)**:三个 P1/P2/P3 一并落地。**P1 产品口径修正**(PM):频谱不降帧,改为**切歌 fade out + 停 rAF(=0)**,落定 fade in(切歌时本无音乐)——`useSettledValue` 派生 `switching`(420ms),纯 helper `shouldAnimateSpectrum`(`dragging` 永动,否则 `isPlaying && !switching`),canvas `opacity-0` CSS fade。**P2** coverflow 速率 gate(`COVERFLOW_BURST_SKIP_MS=600`):burst 跳过 overlay + `clearStack`,走底层 MediaStage 交叉淡入;`bursting`(`COVERFLOW_BURST_SETTLE_MS=500`)期间关底层 `blur(20px) saturate(400%)` 背光。**P3** 去 `AnnotationEditor` 的 `key={current.id}` 整体重挂 → `AnnotationEditor` + `TrackMemoryNotesPanel` 各自 `useEffect([id])` in-place reset 草稿;swipeable overlay 的 capture scroll/resize 监听 rAF 合并(消除滚动 forced-reflow)。测试:`playback-spectrum.test`(新增 5)、`swipeable-media-stage.test`(+1=7)、`annotation-editor.test`(+1=3),touched-file 共 21 例绿;`tsc` 全绿、Biome 全绿。回退 = `git revert`,无 hidden flag(硬规则 3)。待桌面 prod build QA trace 验证 `fpsAvg` 收敛。 |

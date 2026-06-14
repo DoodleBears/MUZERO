@@ -51,6 +51,17 @@ export function AnnotationEditor({ track }: { track: Track }) {
     setVisibleTags(track.tags);
   }, [track.tags]);
 
+  // Reset per-track draft UI on track change. The Now Playing page used to force
+  // a full `key={track.id}` remount of this whole subtree (incl. the memory
+  // waterfall) on every switch — an expensive reconcile + re-layout. Resetting in
+  // place keeps the same "fresh per track" UX without that churn (PRD Phase 30).
+  // biome-ignore lint/correctness/useExhaustiveDependencies: track.id is the reset trigger, not read in the body
+  useEffect(() => {
+    setTagInput("");
+    setTagInputOpen(false);
+    setCropFile(null);
+  }, [track.id]);
+
   useEffect(() => {
     if (tagInputOpen) tagInputRef.current?.focus();
   }, [tagInputOpen]);

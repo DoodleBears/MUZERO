@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import type { Track } from "@/db/types";
 import { AnnotationEditor } from "./annotation-editor";
@@ -60,5 +60,18 @@ describe("AnnotationEditor", () => {
       screen.getByTestId("memory-panel").parentElement?.className ?? "";
 
     expect(memoryPanelParentClass).not.toContain("bg-card/80");
+  });
+
+  it("resets the open tag draft in place when the track changes (no remount key)", () => {
+    const { rerender } = render(<AnnotationEditor track={track} />);
+
+    // Open the tag input draft.
+    fireEvent.click(screen.getByLabelText("annotation.addTag"));
+    expect(screen.getByPlaceholderText("annotation.addTag")).toBeInTheDocument();
+
+    // Switching the track prop (the parent no longer forces a key= remount) must
+    // still clear the draft — the in-place reset effect closes the input.
+    rerender(<AnnotationEditor track={{ ...track, id: "trk_other", tags: [] }} />);
+    expect(screen.queryByPlaceholderText("annotation.addTag")).not.toBeInTheDocument();
   });
 });

@@ -1,6 +1,7 @@
 import { type KeyboardEvent, type PointerEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useShallow } from "zustand/react/shallow";
+import { useSettledValue } from "@/hooks/use-settled-value";
 import { cn, formatDuration } from "@/lib/utils";
 import { type Rgb, readPrimaryRgb, rgba } from "@/lib/visualizer-color";
 import { progressPercent } from "@/player/transport";
@@ -10,6 +11,31 @@ const PEAK_COUNT = 1440;
 const WAVEFORM_VIEWPORT_SCALE = 1;
 const BAR_GAP = 1.25;
 const BAR_WIDTH = 3;
+/**
+ * How long the current track id must hold steady before the spectrum resumes
+ * animating. During a switch (and a rapid next/prev burst) there is no audible
+ * music yet, so the waveform fades out and its rAF loop fully stops (PRD Phase
+ * 28 / P1) — product chose "pause + fade" over running a throttled animation.
+ */
+const SPECTRUM_SWITCH_SETTLE_MS = 420;
+
+/**
+ * Whether the spectrum should run its rAF loop. An active seek drag always
+ * animates (the user is scrubbing); otherwise it animates only while playing AND
+ * not mid-switch. When this is false the loop is not scheduled at all (rAF = 0).
+ */
+export function shouldAnimateSpectrum({
+  isPlaying,
+  dragging,
+  switching,
+}: {
+  isPlaying: boolean;
+  dragging: boolean;
+  switching: boolean;
+}): boolean {
+  if (dragging) return true;
+  return isPlaying && !switching;
+}
 
 type DragState = {
   startX: number;
@@ -49,6 +75,11 @@ export function PlaybackSpectrum({ className }: { className?: string }) {
   const durationRef = useRef(durationSec);
   const renderFrameRef = useRef<(() => void) | null>(null);
   const [dragging, setDragging] = useState(false);
+  // A switch (and any rapid next/prev burst) holds the spectrum idle until the
+  // track id has been steady for SPECTRUM_SWITCH_SETTLE_MS — see the constant.
+  const settledTrackId = useSettledValue(current?.id ?? null, SPECTRUM_SWITCH_SETTLE_MS);
+  const switching = (current?.id ?? null) !== settledTrackId;
+  const animating = shouldAnimateSpectrum({ isPlaying, dragging, switching });
 
   positionRef.current = positionSec;
   durationRef.current = durationSec;
@@ -106,16 +137,22 @@ export function PlaybackSpectrum({ className }: { className?: string }) {
       raf = requestAnimationFrame(loop);
     };
 
-    renderFrame();
-    if (isPlaying || dragging) raf = requestAnimationFrame(loop);
+    // While switching, leave the canvas on its last (fading-out) frame and run
+    // no rAF at all (PRD Phase 28): paint + loop only when actually animating.
+    if (animating) {
+      renderFrame();
+      raf = requestAnimationFrame(loop);
+    }
     return () => {
       cancelAnimationFrame(raf);
       if (renderFrameRef.current === renderFrame) renderFrameRef.current = null;
     };
-  }, [isPlaying, dragging]);
+  }, [animating]);
 
+  // When idle but settled (paused at rest), paint a single static frame so the
+  // waveform stays visible. Skipped while switching — the canvas is fading out.
   useEffect(() => {
-    if (isPlaying || dragging) return;
+    if (animating || switching) return;
     const raf = requestAnimationFrame(() => renderFrameRef.current?.());
     return () => cancelAnimationFrame(raf);
   });
@@ -195,7 +232,10 @@ export function PlaybackSpectrum({ className }: { className?: string }) {
     >
       <canvas
         ref={canvasRef}
-        className="absolute inset-0 z-0 h-full w-full [mask-image:linear-gradient(90deg,transparent,black_8%,black_92%,transparent)]"
+        className={cn(
+          "absolute inset-0 z-0 h-full w-full transition-opacity duration-300 mask-[linear-gradient(90deg,transparent,black_8%,black_92%,transparent)]",
+          switching ? "opacity-0" : "opacity-100",
+        )}
       />
       <div className="pointer-events-none absolute inset-y-[18%] left-1/2 z-10 w-0.5 -translate-x-1/2 rounded-full bg-primary/90 shadow-[0_0_18px_color-mix(in_srgb,var(--primary)_70%,transparent)]" />
       <div className="pointer-events-none absolute inset-x-4 bottom-2 z-20 flex items-center justify-between text-[11px] font-semibold tabular-nums">
