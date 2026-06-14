@@ -1,5 +1,6 @@
 import { motion } from "motion/react";
-import { useEffect, useRef, useState } from "react";
+import { type RefObject, useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { useSettings } from "@/hooks/use-app-data";
 import { useBurstSettledValue } from "@/hooks/use-burst-settled-value";
@@ -49,6 +50,7 @@ export function MediaStage({
   const asBgActive =
     (settings.visualizerAsBackground ?? false) && (settings.visualizerStyle ?? "bars") !== "off";
 
+  const stageRef = useRef<HTMLDivElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const coverUrl = useTrackCoverUrl(displayTrack);
   const coverEffectMode = resolveNowPlayingCoverEffectMode(settings.nowPlayingCoverEffectMode);
@@ -137,6 +139,7 @@ export function MediaStage({
 
   return (
     <div
+      ref={stageRef}
       style={aspect != null ? { aspectRatio: String(aspect) } : undefined}
       className={cn(
         "relative isolate shrink-0 overflow-visible",
@@ -146,6 +149,7 @@ export function MediaStage({
     >
       <NowPlayingCoverBacklight
         active={showCoverBacklight}
+        anchorRef={stageRef}
         opacity={backlight.opacity / 100}
         url={coverBacklightUrl}
       />
@@ -187,36 +191,111 @@ export function MediaStage({
 
 function NowPlayingCoverBacklight({
   active,
+  anchorRef,
   opacity,
   url,
 }: {
   active: boolean;
+  anchorRef: RefObject<HTMLElement | null>;
   opacity: number;
   url: string | null;
 }) {
-  return active && url ? (
-    <motion.div
-      key={url}
-      aria-hidden
-      initial={{ opacity: 0 }}
-      animate={{ opacity }}
-      transition={{ duration: 0.42, ease: "easeOut" }}
-      className="pointer-events-none absolute inset-0 z-0 now-playing-cover-backlight-clip"
-    >
-      <img
-        src={url}
-        alt=""
-        referrerPolicy="no-referrer"
-        draggable={false}
-        className="absolute inset-0 size-full object-cover album-cover-radius"
-        style={{
-          transform: "scale(var(--now-playing-cover-backlight-scale, 1.12))",
-          filter: [
-            "blur(var(--now-playing-cover-backlight-blur, 20px))",
-            "saturate(var(--now-playing-cover-backlight-saturation, 400%))",
-          ].join(" "),
-        }}
-      />
-    </motion.div>
-  ) : null;
+  const rect = useViewportRect(anchorRef, active && !!url);
+  const target = typeof document !== "undefined" ? document.body : null;
+
+  return active && url && rect && target
+    ? createPortal(
+        <motion.div
+          key={url}
+          aria-hidden
+          initial={{ opacity: 0 }}
+          animate={{ opacity }}
+          transition={{ duration: 0.42, ease: "easeOut" }}
+          className="pointer-events-none fixed z-[5] now-playing-cover-backlight-clip"
+          style={rect}
+        >
+          <img
+            src={url}
+            alt=""
+            referrerPolicy="no-referrer"
+            draggable={false}
+            className="absolute inset-0 size-full object-cover album-cover-radius"
+            style={{
+              transform: "scale(var(--now-playing-cover-backlight-scale, 1.12))",
+              filter: [
+                "blur(var(--now-playing-cover-backlight-blur, 20px))",
+                "saturate(var(--now-playing-cover-backlight-saturation, 400%))",
+              ].join(" "),
+            }}
+          />
+        </motion.div>,
+        target,
+      )
+    : null;
+}
+
+type ViewportRect = {
+  height: number;
+  left: number;
+  top: number;
+  width: number;
+};
+
+function useViewportRect(ref: RefObject<HTMLElement | null>, active: boolean) {
+  const [rect, setRect] = useState<ViewportRect | null>(null);
+  const update = useCallback(() => {
+    const el = ref.current;
+    if (!el) {
+      setRect(null);
+      return;
+    }
+    const next = toViewportRect(el.getBoundingClientRect());
+    setRect((current) => (sameViewportRect(current, next) ? current : next));
+  }, [ref]);
+
+  useEffect(() => {
+    if (!active) {
+      setRect(null);
+      return;
+    }
+    update();
+    let raf = 0;
+    const schedule = () => {
+      if (raf) return;
+      raf = window.requestAnimationFrame(() => {
+        raf = 0;
+        update();
+      });
+    };
+    const el = ref.current;
+    let ro: ResizeObserver | null = null;
+    if (typeof ResizeObserver !== "undefined" && el) {
+      ro = new ResizeObserver(schedule);
+      ro.observe(el);
+    }
+    window.addEventListener("resize", schedule);
+    window.addEventListener("scroll", schedule, true);
+    return () => {
+      if (raf) window.cancelAnimationFrame(raf);
+      ro?.disconnect();
+      window.removeEventListener("resize", schedule);
+      window.removeEventListener("scroll", schedule, true);
+    };
+  }, [active, ref, update]);
+
+  return rect;
+}
+
+function toViewportRect(rect: DOMRect): ViewportRect {
+  return {
+    height: rect.height,
+    left: rect.left,
+    top: rect.top,
+    width: rect.width,
+  };
+}
+
+function sameViewportRect(a: ViewportRect | null, b: ViewportRect) {
+  if (!a) return false;
+  return a.height === b.height && a.left === b.left && a.top === b.top && a.width === b.width;
 }

@@ -624,6 +624,7 @@ export function SwipeableMediaStage({
     typeof document !== "undefined"
       ? (containerRef.current?.closest("main") ?? document.body)
       : null;
+  const baseHidden = stackActive && !handoffFading;
   const stackOverlay =
     stackActive && overlayRect && overlayPortalTarget
       ? createPortal(
@@ -679,8 +680,6 @@ export function SwipeableMediaStage({
           overlayPortalTarget,
         )
       : null;
-
-  const baseHidden = stackActive && !handoffFading;
   // The cover cross-fades through the handoff, but the (translucent) title/author
   // pills must NOT — two copies fading over each other darken the background. So
   // the base owns the identity the moment the swipe settles; it's hidden only
@@ -752,7 +751,9 @@ export function SwipeableMediaStage({
               willChange: "transform",
             }}
           >
-            <MediaStage coverBacklightEnabled={baseCoverBacklightEnabled && !bursting} />
+            <MediaStage
+              coverBacklightEnabled={!baseHidden && baseCoverBacklightEnabled && !bursting}
+            />
           </motion.div>
         </div>
         {/* Title + author travel with the cover during an active drag (handled by
