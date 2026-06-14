@@ -51,7 +51,7 @@ describe("mixPalette", () => {
 });
 
 describe("transitionVisualizerCoverColor diagnostic freezes", () => {
-  it("updates the cover rgb while keeping css and palette unchanged", () => {
+  it("updates the cover key while keeping css, rgb, and palette unchanged", () => {
     useVisualizerCoverColorStore.setState({
       coverBlobId: null,
       css: null,
@@ -65,7 +65,7 @@ describe("transitionVisualizerCoverColor diagnostic freezes", () => {
       coverBlobId: "cover-1",
       css: null,
       palette: [],
-      rgb: rgb(10, 20, 30),
+      rgb: null,
     });
   });
 
@@ -83,7 +83,7 @@ describe("transitionVisualizerCoverColor diagnostic freezes", () => {
       coverBlobId: "cover-2",
       css: null,
       palette: [rgb(10, 20, 30)],
-      rgb: rgb(100, 110, 120),
+      rgb: rgb(10, 20, 30),
     });
   });
 });

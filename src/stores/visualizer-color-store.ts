@@ -6,6 +6,7 @@ const TRANSITION_MS = 900;
 const DISABLE_COVER_COLOR_CSS_FOR_BISECT = true;
 const DISABLE_COVER_COLOR_RAF_FOR_BISECT = true;
 const DISABLE_COVER_COLOR_PALETTE_FOR_BISECT = true;
+const DISABLE_COVER_COLOR_RGB_FOR_BISECT = true;
 const coverColorLog = createDiagnosticLogger("cover.palette");
 
 interface VisualizerCoverColorState {
@@ -68,11 +69,21 @@ export function transitionVisualizerCoverColor(
       paletteCount: nextPalette.length,
     });
   }
+  if (DISABLE_COVER_COLOR_RGB_FOR_BISECT) {
+    coverColorLog.debug("cover.palette.rgb", {
+      message: "cover palette rgb output skipped for diagnostic bisect",
+      category: "media",
+      phase: "skip",
+      reason: "diag-bisect",
+      targetKey: coverBlobId ?? undefined,
+      fallbackToTheme: !next,
+    });
+  }
 
   if (!coverBlobId || !next) {
     useVisualizerCoverColorStore.setState({
       coverBlobId,
-      rgb: null,
+      rgb: coverColorRgbValue(null, current.rgb),
       css: DISABLE_COVER_COLOR_CSS_FOR_BISECT ? current.css : null,
       palette: coverColorPaletteValue([], current.palette),
     });
@@ -84,7 +95,7 @@ export function transitionVisualizerCoverColor(
   if (sameRgb(from, next) && samePalette(fromPalette, nextPalette)) {
     useVisualizerCoverColorStore.setState({
       coverBlobId,
-      rgb: next,
+      rgb: coverColorRgbValue(next, current.rgb),
       css: coverColorCssValue(next, current.css),
       palette: coverColorPaletteValue(nextPalette, current.palette),
     });
@@ -102,7 +113,7 @@ export function transitionVisualizerCoverColor(
     });
     useVisualizerCoverColorStore.setState({
       coverBlobId,
-      rgb: next,
+      rgb: coverColorRgbValue(next, current.rgb),
       css: coverColorCssValue(next, current.css),
       palette: coverColorPaletteValue(nextPalette, current.palette),
     });
@@ -116,7 +127,7 @@ export function transitionVisualizerCoverColor(
     const rgb = mixRgb(from, next, eased);
     useVisualizerCoverColorStore.setState({
       coverBlobId,
-      rgb,
+      rgb: coverColorRgbValue(rgb, current.rgb),
       css: coverColorCssValue(rgb, current.css),
       palette: coverColorPaletteValue(mixPalette(fromPalette, nextPalette, eased), current.palette),
     });
@@ -132,6 +143,10 @@ function coverColorCssValue(rgb: Rgb, currentCss: string | null): string | null 
 
 function coverColorPaletteValue(nextPalette: Rgb[], currentPalette: Rgb[]): Rgb[] {
   return DISABLE_COVER_COLOR_PALETTE_FOR_BISECT ? currentPalette : nextPalette;
+}
+
+function coverColorRgbValue(next: Rgb | null, current: Rgb | null): Rgb | null {
+  return DISABLE_COVER_COLOR_RGB_FOR_BISECT ? current : next;
 }
 
 function mixRgb(a: Rgb, b: Rgb, t: number): Rgb {
