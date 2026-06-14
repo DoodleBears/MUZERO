@@ -958,10 +958,19 @@ QA 观察到 `Ctrl+1`/`Ctrl+2` 在 Now Playing 与 Tab 2 全部歌曲列表之�
 
 **Tasks:**
 - [x] A0-A4 media reload ladder exists in `diag/switch-fps-bisect`.
-- [x] A5 code:re-enable Pixi texture source only;QA trace pending.
-- [ ] A6:if A5 remains acceptable,restore cover resource hooks only.
+- [x] A5 code:re-enable Pixi texture source only;QA trace shows no regression but also no Pixi texture spans because cover resources remained disabled.
+- [x] A6 code:restore cover resource hooks only;cover color/palette still disabled;QA trace pending.
 - [ ] A7:if A6 remains acceptable,remove diagnostic media reload mode and restore normal post-load path.
 - [ ] Final production fix must be rebuilt from the isolated cause,not by merging diagnostic commits.
+
+### QA#32(2026-06-14 A5 trace):Pixi `src` add-back 未恶化,但未真正触发 texture load
+
+17:21 trace 是 `1e9491a diag(perf): add back pixi texture source` 的结果:
+
+- **FPS 未回退**:切歌窗口维持 `fpsAvg≈110.2~115.5`,最终窗口 `fpsAvg=114.3/fpsLow=20/frameMaxMs=50/frameP99Ms=33.4`。相比正式路径 `fpsAvg≈38.9~73.2/fpsLow≈8`,A5 仍明显更稳。
+- **MediaSession settle 继续有效**:rapid skip 期间每首只 `metadata.schedule phase=start`,旧 track 以 `reason=stale` 跳过;最终落定 track 只执行一次 artwork,且 `player.mediaSession.metadata=0.7ms`, `artwork.fetch=0.3ms`。
+- **关键缺口**:trace 中没有任何 `background.pixi`, `background.texture`, `textureSwap` span;只有 `pixiCover.derivative phase=skip/state derivativeState=deferred/pending derivativeReady=false`。因此 A5 只是恢复了 `PixiPixelBackground src` 的接线,但 `useCoverDerivativeUrl` 仍被 `DISABLE_COVER_RESOURCES_FOR_BISECT=true` 挡住,没有实际 texture fetch/decode/swap。
+- **结论**:A5 不支持“Pixi 192px texture 是主因”,因为它没有真正加载 texture。下一步 A6 必须先恢复 cover resource hooks,仍保持 cover color/palette 禁用,让 derivative 可以 ready 并触发 `background.pixi` spans。若 A6 掉帧,再拆 derivative/resource vs Pixi texture;若 A6 仍稳,继续恢复 normal post-load work。
 
 ---
 

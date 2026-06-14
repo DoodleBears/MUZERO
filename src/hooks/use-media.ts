@@ -23,7 +23,7 @@ import { coverDerivativeUrlCache, coverUrlCache } from "@/lib/object-url-cache";
 import { arePerfCountersEnabled } from "@/lib/perf-counters";
 import { proxyRemoteCover, trackCoverCacheKey } from "@/player/playback-preload";
 
-const DISABLE_COVER_RESOURCES_FOR_BISECT = true;
+const DISABLE_COVER_RESOURCES_FOR_BISECT = false;
 
 export interface TrackCoverResource {
   /**
