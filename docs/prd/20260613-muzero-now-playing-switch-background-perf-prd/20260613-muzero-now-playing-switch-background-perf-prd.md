@@ -953,13 +953,15 @@ QA 观察到 `Ctrl+1`/`Ctrl+2` 在 Now Playing 与 Tab 2 全部歌曲列表之�
 | A3 | `e8c9bfc` | Attach + `play()` without post-load work | 若变差,`play()` / audio output start 是主因 |
 | A4 | `bb7bc64` | Settled MediaSession metadata/artwork | 若变差,落定后的 OS artwork 仍需降级或进一步延迟 |
 | A5 | Current add-back | Re-enable Pixi texture source while cover hooks stay disabled | 若变差,`background.pixi` 192px derivative fetch/decode/compositor 是独立放大器 |
-| A6 | Next | Restore cover resource hooks / cover-color path | 若变差,封面资源 hook 或 palette/color liveQuery 是独立放大器 |
+| A6a | `0c390b1` | Restore cover resource hooks only | 若变差,封面 URL/derivative/object URL hook 是独立放大器 |
+| A6b | Current add-back | Restore cover color / palette hook only | 若变差,palette liveQuery/worker/color store 是独立放大器 |
 | A7 | Next | Restore normal playback post-load work | 若变差,lyrics/presence/listen flush/normal store fan-out 是独立放大器 |
 
 **Tasks:**
 - [x] A0-A4 media reload ladder exists in `diag/switch-fps-bisect`.
 - [x] A5 code:re-enable Pixi texture source only;QA trace shows no regression but also no Pixi texture spans because cover resources remained disabled.
-- [x] A6 code:restore cover resource hooks only;cover color/palette still disabled;QA trace pending.
+- [x] A6a code:restore cover resource hooks only;cover color/palette still disabled;QA trace stays stable with real `background.pixi` spans.
+- [x] A6b code:restore cover color/palette hook only;QA trace pending.
 - [ ] A7:if A6 remains acceptable,remove diagnostic media reload mode and restore normal post-load path.
 - [ ] Final production fix must be rebuilt from the isolated cause,not by merging diagnostic commits.
 
@@ -971,6 +973,16 @@ QA 观察到 `Ctrl+1`/`Ctrl+2` 在 Now Playing 与 Tab 2 全部歌曲列表之�
 - **MediaSession settle 继续有效**:rapid skip 期间每首只 `metadata.schedule phase=start`,旧 track 以 `reason=stale` 跳过;最终落定 track 只执行一次 artwork,且 `player.mediaSession.metadata=0.7ms`, `artwork.fetch=0.3ms`。
 - **关键缺口**:trace 中没有任何 `background.pixi`, `background.texture`, `textureSwap` span;只有 `pixiCover.derivative phase=skip/state derivativeState=deferred/pending derivativeReady=false`。因此 A5 只是恢复了 `PixiPixelBackground src` 的接线,但 `useCoverDerivativeUrl` 仍被 `DISABLE_COVER_RESOURCES_FOR_BISECT=true` 挡住,没有实际 texture fetch/decode/swap。
 - **结论**:A5 不支持“Pixi 192px texture 是主因”,因为它没有真正加载 texture。下一步 A6 必须先恢复 cover resource hooks,仍保持 cover color/palette 禁用,让 derivative 可以 ready 并触发 `background.pixi` spans。若 A6 掉帧,再拆 derivative/resource vs Pixi texture;若 A6 仍稳,继续恢复 normal post-load work。
+
+### QA#33(2026-06-14 A6a trace):cover resources + real Pixi texture swap 仍稳
+
+17:27 trace 是 `0c390b1 diag(perf): add back cover resource hooks` 的结果:
+
+- **FPS 维持住**:关键窗口 `fpsAvg≈102.9~113.7`, `fpsLow≈17.1~20`, `frameMaxMs≈50~58.4ms`。没有回到正式路径的 `fpsAvg≈38.9~73.2/fpsLow≈8`。
+- **Pixi texture 确实被测到**:trace 出现 `background.pixi textureSwap.start`, `background.texture fetch/header/decode`, `media.load`, `texture.create`, `textureSwap.apply`,且 `appInits=1`。这次不是 A5 那种“接线恢复但 derivative 永远 pending”的空测。
+- **Pixi 小图成本可接受**:每次成功 texture 都是 `192×192 image/webp`,约 `2.8~12KB`;`fetch≈0.9~1.7ms`, `decode≈0.6~1.1ms`, `texture.create≈0~0.1ms`, `apply/render≈0.5~0.7ms`。`media.load≈182~189ms` 主要包含已有 180ms settle gate,不是实际 decode/GPU upload。
+- **cover render/preload 收敛**:`cover.render` 全部 cache-hit;`cover.preload.batch max≈18~25ms`, `created=0`, `maxSourceBytes=0`,没有重新引入整图读取。
+- **结论**:cover URL/derivative/object URL hooks 与 Pixi 192px derivative texture swap 都不是当前回退点。下一步只恢复 cover color / palette hook,继续保持 normal playback post-load diagnostic mode。
 
 ---
 

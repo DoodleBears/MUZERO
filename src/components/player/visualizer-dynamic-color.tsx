@@ -29,7 +29,7 @@ const paletteExtractionInFlight = new Map<string, Promise<PaletteResolution>>();
 const coverColorLog = createDiagnosticLogger("cover.palette");
 const PALETTE_EXTRACTION_SETTLE_MS = 900;
 const PALETTE_EXTRACTION_IDLE_TIMEOUT_MS = 4000;
-const DISABLE_COVER_COLOR_FOR_BISECT = true;
+const DISABLE_COVER_COLOR_FOR_BISECT = false;
 let lastAppliedTarget: { key: string | null; rgb: Rgb | null; palette: Rgb[] } | null = null;
 
 type PaletteResolution = {
