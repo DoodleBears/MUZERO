@@ -1,5 +1,13 @@
 import { useLiveQuery } from "dexie-react-hooks";
-import { Check, Image as ImageIcon, Repeat, Repeat1, Shuffle, Video } from "lucide-react";
+import {
+  Check,
+  Image as ImageIcon,
+  ListMusic,
+  Repeat,
+  Repeat1,
+  Shuffle,
+  Video,
+} from "lucide-react";
 import { type CSSProperties, memo, type RefObject, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { DjConsole } from "@/components/dj/dj-console";
@@ -9,6 +17,7 @@ import { LyricsModeButton } from "@/components/player/lyrics-mode-button";
 import {
   MODE_ICON_BUTTON,
   MODE_ICON_BUTTON_ACTIVE,
+  MODE_ICON_BUTTON_IDLE,
   MODE_MENU_OPTION,
   MODE_MENU_OPTION_DESCRIPTION,
   MODE_MENU_OPTION_ICON,
@@ -32,12 +41,14 @@ import { db } from "@/db/muzero-db";
 import { addTrackBackground, saveSettings, setTrackCover } from "@/db/repositories";
 import type { SetDisplayMode } from "@/db/types";
 import { useSettings } from "@/hooks/use-app-data";
+import { useLongPress } from "@/hooks/use-long-press";
 import { useShortcutHint } from "@/hooks/use-shortcut-hint";
 import { classifyDrop, dragHasFiles, filesFromTransfer, summarizeDragItems } from "@/lib/file-drop";
 import { lenisScrollTo, useSmoothScroll } from "@/lib/smooth-scroll/use-smooth-scroll";
 import { cn } from "@/lib/utils";
 import { dragWindowOnEmptyPress } from "@/lib/window-drag";
-import { nextRepeatMode } from "@/player/transport";
+import type { RepeatMode } from "@/player/queue";
+import { useCoverAppearancePanelStore } from "@/stores/cover-appearance-panel-store";
 import { usePlayerStore } from "@/stores/player-store";
 
 const DISPLAY_MODE_ICONS: Record<SetDisplayMode, typeof Video> = {
@@ -48,12 +59,9 @@ const NEXT_DISPLAY_MODE: Record<SetDisplayMode, SetDisplayMode> = {
   video: "cover",
   cover: "video",
 };
+const REPEAT_OPTIONS: RepeatMode[] = ["off", "all", "one"];
 const GLASS_CONTROL_GROUP =
   "rounded-full border border-white/10 bg-black/35 p-1 shadow-lg backdrop-blur-md";
-const GLASS_CONTROL_ACTIVE =
-  "bg-black/45 text-white shadow-sm hover:bg-black/50 data-pressed:bg-black/55";
-const GLASS_CONTROL_IDLE =
-  "text-white/55 hover:bg-white/10 hover:text-white data-pressed:bg-white/10";
 
 /**
  * Now Playing, YouTube-Music style: a wide media area (16:9 for video, a square
@@ -353,7 +361,6 @@ function useIsNarrow(): boolean {
 }
 
 const NowPlayingActionRow = memo(function NowPlayingActionRow() {
-  const { t } = useTranslation();
   const displayMode = usePlayerStore((s) => s.displayMode);
   const repeat = usePlayerStore((s) => s.repeat);
   const shuffle = usePlayerStore((s) => s.shuffle);
@@ -386,36 +393,12 @@ const NowPlayingActionRow = memo(function NowPlayingActionRow() {
         </div>
 
         <div className={cn("flex items-center gap-1", GLASS_CONTROL_GROUP)}>
-          <ControlTooltip label={t("player.repeatLabel")} keys={hint("repeat")}>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => setRepeat(nextRepeatMode(repeat))}
-              aria-label={t("player.repeat", { mode: repeat })}
-              aria-pressed={repeat !== "off"}
-              className={cn(
-                "size-9 rounded-full border-0",
-                repeat !== "off" ? GLASS_CONTROL_ACTIVE : GLASS_CONTROL_IDLE,
-              )}
-            >
-              {repeat === "one" ? <Repeat1 /> : <Repeat />}
-            </Button>
-          </ControlTooltip>
-          <ControlTooltip label={t("player.shuffle")} keys={hint("shuffle")}>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => setShuffle(!shuffle)}
-              aria-label={t("player.shuffle")}
-              aria-pressed={shuffle}
-              className={cn(
-                "size-9 rounded-full border-0",
-                shuffle ? GLASS_CONTROL_ACTIVE : GLASS_CONTROL_IDLE,
-              )}
-            >
-              <Shuffle />
-            </Button>
-          </ControlTooltip>
+          <RepeatModeButton onChange={setRepeat} repeat={repeat} shortcutKeys={hint("repeat")} />
+          <ShuffleModeButton
+            onChange={setShuffle}
+            shortcutKeys={hint("shuffle")}
+            shuffle={shuffle}
+          />
         </div>
       </div>
     </TooltipProvider>
@@ -431,21 +414,37 @@ function DisplayModeButton({
 }) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
+  const setCoverAppearancePanelOpen = useCoverAppearancePanelStore((s) => s.setOpen);
   const nextDisplayMode = NEXT_DISPLAY_MODE[displayMode];
   const DisplayModeIcon = DISPLAY_MODE_ICONS[displayMode];
   const nextDisplayModeLabel = t(`displayMode.${nextDisplayMode}`);
   const displayModeTooltip = t("nowPlaying.switchDisplayMode", {
     mode: nextDisplayModeLabel,
   });
+  const openAppearanceSettings = () => {
+    setOpen(false);
+    setCoverAppearancePanelOpen(true);
+  };
+  const { handlers, consumeClick } = useLongPress(openAppearanceSettings);
 
   return (
     <Popover onOpenChange={setOpen} open={open}>
-      <ControlTooltip label={displayModeTooltip}>
+      <ControlTooltip label={displayModeTooltip} hint={t("nowPlaying.coverAppearanceSettingsHint")}>
         <PopoverTrigger
           render={
             <Button
               variant="ghost"
               size="icon"
+              onClick={(e) => {
+                if (!consumeClick()) return;
+                e.preventDefault();
+                e.stopPropagation();
+              }}
+              onContextMenu={(e) => {
+                e.preventDefault();
+                openAppearanceSettings();
+              }}
+              {...handlers}
               aria-label={displayModeTooltip}
               className={cn(MODE_ICON_BUTTON, MODE_ICON_BUTTON_ACTIVE)}
             >
@@ -486,5 +485,167 @@ function DisplayModeButton({
         })}
       </PopoverContent>
     </Popover>
+  );
+}
+
+const REPEAT_LABEL_KEYS: Record<
+  RepeatMode,
+  "player.repeatOff" | "player.repeatAll" | "player.repeatOne"
+> = {
+  off: "player.repeatOff",
+  all: "player.repeatAll",
+  one: "player.repeatOne",
+};
+
+const REPEAT_DESCRIPTION_KEYS: Record<
+  RepeatMode,
+  "player.repeatOffDescription" | "player.repeatAllDescription" | "player.repeatOneDescription"
+> = {
+  off: "player.repeatOffDescription",
+  all: "player.repeatAllDescription",
+  one: "player.repeatOneDescription",
+};
+
+function RepeatModeButton({
+  onChange,
+  repeat,
+  shortcutKeys,
+}: {
+  onChange: (mode: RepeatMode) => void;
+  repeat: RepeatMode;
+  shortcutKeys: string[];
+}) {
+  const { t } = useTranslation();
+  const [open, setOpen] = useState(false);
+  const RepeatIcon = repeat === "one" ? Repeat1 : Repeat;
+  const currentLabel = t(REPEAT_LABEL_KEYS[repeat]);
+  const tooltip = t("player.repeat", { mode: currentLabel });
+
+  return (
+    <Popover onOpenChange={setOpen} open={open}>
+      <ControlTooltip label={tooltip} keys={shortcutKeys}>
+        <PopoverTrigger
+          render={
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label={tooltip}
+              aria-pressed={repeat !== "off"}
+              className={cn(
+                MODE_ICON_BUTTON,
+                repeat !== "off" ? MODE_ICON_BUTTON_ACTIVE : MODE_ICON_BUTTON_IDLE,
+              )}
+            >
+              <RepeatIcon className="size-4" />
+            </Button>
+          }
+        />
+      </ControlTooltip>
+      <PopoverContent className="w-60 p-2" side="top" sideOffset={10}>
+        <PopoverTitle className="px-2 pt-1 pb-1">{t("player.repeatLabel")}</PopoverTitle>
+        {REPEAT_OPTIONS.map((mode) => {
+          const Icon = mode === "one" ? Repeat1 : Repeat;
+          return (
+            <PlaybackMenuOption
+              active={mode === repeat}
+              description={t(REPEAT_DESCRIPTION_KEYS[mode])}
+              icon={Icon}
+              key={mode}
+              label={t(REPEAT_LABEL_KEYS[mode])}
+              onClick={() => {
+                onChange(mode);
+                setOpen(false);
+              }}
+            />
+          );
+        })}
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+function ShuffleModeButton({
+  onChange,
+  shortcutKeys,
+  shuffle,
+}: {
+  onChange: (shuffle: boolean) => void;
+  shortcutKeys: string[];
+  shuffle: boolean;
+}) {
+  const { t } = useTranslation();
+  const [open, setOpen] = useState(false);
+  const currentLabel = shuffle ? t("player.shuffleOn") : t("player.shuffleOff");
+  const tooltip = t("player.shuffleMode", { mode: currentLabel });
+
+  return (
+    <Popover onOpenChange={setOpen} open={open}>
+      <ControlTooltip label={tooltip} keys={shortcutKeys}>
+        <PopoverTrigger
+          render={
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label={tooltip}
+              aria-pressed={shuffle}
+              className={cn(
+                MODE_ICON_BUTTON,
+                shuffle ? MODE_ICON_BUTTON_ACTIVE : MODE_ICON_BUTTON_IDLE,
+              )}
+            >
+              <Shuffle className="size-4" />
+            </Button>
+          }
+        />
+      </ControlTooltip>
+      <PopoverContent className="w-60 p-2" side="top" sideOffset={10}>
+        <PopoverTitle className="px-2 pt-1 pb-1">{t("player.shuffle")}</PopoverTitle>
+        <PlaybackMenuOption
+          active={!shuffle}
+          description={t("player.shuffleOffDescription")}
+          icon={ListMusic}
+          label={t("player.shuffleOff")}
+          onClick={() => {
+            onChange(false);
+            setOpen(false);
+          }}
+        />
+        <PlaybackMenuOption
+          active={shuffle}
+          description={t("player.shuffleOnDescription")}
+          icon={Shuffle}
+          label={t("player.shuffleOn")}
+          onClick={() => {
+            onChange(true);
+            setOpen(false);
+          }}
+        />
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+function PlaybackMenuOption({
+  active,
+  description,
+  icon: Icon,
+  label,
+  onClick,
+}: {
+  active: boolean;
+  description: string;
+  icon: typeof Repeat;
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <button type="button" aria-pressed={active} className={MODE_MENU_OPTION} onClick={onClick}>
+      <Icon className={MODE_MENU_OPTION_ICON} />
+      <span className={MODE_MENU_OPTION_TEXT}>
+        <span className={MODE_MENU_OPTION_LABEL}>{label}</span>
+        <span className={MODE_MENU_OPTION_DESCRIPTION}>{description}</span>
+      </span>
+      {active && <Check aria-hidden="true" className="mt-0.5 size-4 shrink-0" />}
+    </button>
   );
 }

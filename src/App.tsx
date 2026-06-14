@@ -2,6 +2,7 @@ import { MotionConfig } from "motion/react";
 import type { ReactNode } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { DevPerfPanel } from "@/components/dev/dev-perf-panel";
+import { AlbumCoverAppearancePanel } from "@/components/player/album-cover-appearance-panel";
 import { ChangelogModal } from "@/components/player/changelog-modal";
 import { ImmersiveLyricsOverlay } from "@/components/player/immersive-lyrics-overlay";
 import { ImmersiveMemoryOverlay } from "@/components/player/immersive-memory-overlay";
@@ -337,6 +338,7 @@ export default function App() {
 
         <VisualizerTuningPanel />
         <LyricsTuningPanel />
+        <AlbumCoverAppearancePanel />
 
         <GlobalTrackSearch open={trackSearchOpen} onOpenChange={setTrackSearchOpen} />
 

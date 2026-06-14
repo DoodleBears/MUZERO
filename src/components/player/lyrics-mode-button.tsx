@@ -110,6 +110,7 @@ export function LyricsModeButton({
       </ControlTooltip>
       <PopoverContent className="w-60 p-2" side="top" sideOffset={10}>
         <PopoverTitle className="px-2 pt-1 pb-1">{t("lyrics.modeMenu")}</PopoverTitle>
+        <p className="px-2 pb-2 text-muted-foreground text-xs">{t("lyrics.openSettingsHint")}</p>
         <ModeOption
           active={!showingMemory}
           description={t("lyrics.switchToLyrics")}
