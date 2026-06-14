@@ -46,6 +46,7 @@ coverage/
 
 # local-only scheduled-task lock written by Claude Code skills
 .claude/scheduled_tasks.lock
+.claude/worktrees/
 
 # Wrangler local cache (R2 admin commands)
 .wrangler/
