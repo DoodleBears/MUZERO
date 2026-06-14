@@ -94,7 +94,7 @@ export function AlbumCoverAppearancePanel() {
       </div>
 
       <div className="no-scrollbar min-h-0 overflow-y-auto p-3">
-        <AlbumCoverAppearanceSettings />
+        <AlbumCoverAppearanceSettings showPreview={false} />
       </div>
     </section>
   );

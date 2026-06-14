@@ -5,6 +5,7 @@ import {
   type KeyboardEvent,
   type PointerEvent,
   type Ref,
+  useEffect,
   useRef,
   useState,
 } from "react";
@@ -15,6 +16,7 @@ type SliderNumber = number | `${number}`;
 export interface SliderProps extends Omit<HTMLAttributes<HTMLDivElement>, "onChange"> {
   value: number;
   onValueChange?: (value: number) => void;
+  onValueCommit?: (value: number) => void;
   min?: SliderNumber;
   max?: SliderNumber;
   step?: SliderNumber;
@@ -67,12 +69,14 @@ export function Slider({
   onPointerDown,
   onPointerMove,
   onPointerUp,
+  onValueCommit,
   onValueChange,
   step = 1,
   value,
   ...props
 }: SliderProps) {
   const laneRef = useRef<HTMLDivElement | null>(null);
+  const latestValueRef = useRef(value);
   const [dragging, setDragging] = useState(false);
   const minValue = toNumber(min, 0);
   const maxValue = toNumber(max, 100);
@@ -84,9 +88,9 @@ export function Slider({
     if (!el || disabled) return;
     const rect = el.getBoundingClientRect();
     const ratio = Math.min(1, Math.max(0, (clientX - rect.left) / Math.max(1, rect.width)));
-    onValueChange?.(
-      snapValue(minValue + ratio * (maxValue - minValue), minValue, maxValue, stepValue),
-    );
+    const next = snapValue(minValue + ratio * (maxValue - minValue), minValue, maxValue, stepValue);
+    latestValueRef.current = next;
+    onValueChange?.(next);
   }
 
   function handlePointerDown(e: PointerEvent<HTMLDivElement>) {
@@ -109,6 +113,7 @@ export function Slider({
       e.currentTarget.releasePointerCapture(e.pointerId);
     }
     setDragging(false);
+    if (!disabled) onValueCommit?.(latestValueRef.current);
   }
 
   function handlePointerCancel(e: PointerEvent<HTMLDivElement>) {
@@ -117,6 +122,7 @@ export function Slider({
       e.currentTarget.releasePointerCapture(e.pointerId);
     }
     setDragging(false);
+    if (!disabled) onValueCommit?.(latestValueRef.current);
   }
 
   function handleKeyDown(e: KeyboardEvent<HTMLDivElement>) {
@@ -135,9 +141,16 @@ export function Slider({
     }
     if (next !== null) {
       e.preventDefault();
-      onValueChange?.(snapValue(next, minValue, maxValue, stepValue));
+      const snapped = snapValue(next, minValue, maxValue, stepValue);
+      latestValueRef.current = snapped;
+      onValueChange?.(snapped);
+      onValueCommit?.(snapped);
     }
   }
+
+  useEffect(() => {
+    latestValueRef.current = value;
+  }, [value]);
 
   return (
     <SliderChrome
