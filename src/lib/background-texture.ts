@@ -24,6 +24,27 @@ export interface ImageBitmapTextureSource {
   unload: () => void;
 }
 
+export type ImageBitmapLoadStage = "fetch" | "header" | "decode";
+
+export interface ImageBitmapLoadStageContext {
+  category: "performance";
+  durationMs: number;
+  phase: "success" | "skip" | "fail";
+  bytes?: number;
+  errorKind?: "network_error" | "media_decode" | "unknown";
+  height?: number;
+  mime?: string;
+  reason?: string;
+  resizeAttempted?: boolean;
+  resizeHeight?: number;
+  resizeMaxDimension?: number;
+  resizeWidth?: number;
+  retryWithoutResize?: boolean;
+  sourceHeight?: number;
+  sourceWidth?: number;
+  width?: number;
+}
+
 export interface LoadImageBitmapDeps {
   /** Resolve the source URL to its raw bytes (remote via app fetch; blob:/data: via fetch). */
   fetchBlob: (src: string) => Promise<Blob | null>;
@@ -31,6 +52,10 @@ export interface LoadImageBitmapDeps {
   createImageBitmap?: (blob: Blob, options?: ImageBitmapOptions) => Promise<ImageBitmap>;
   /** Optional background texture budget; oversized image sources decode to this max side. */
   maxDimension?: number;
+  /** Optional trace hook; the Pixi caller wires this to diagnostic logs. */
+  onStage?: (stage: ImageBitmapLoadStage, context: ImageBitmapLoadStageContext) => void;
+  /** Injected clock for deterministic timing tests. */
+  now?: () => number;
 }
 
 interface ImageDimensions {
@@ -48,22 +73,113 @@ export async function loadImageBitmapSource(
   const create = deps.createImageBitmap;
   // No off-thread decoder available → let the caller fall back to the <img> path.
   if (typeof create !== "function") return null;
+  const now = deps.now ?? nowMs;
+  const emitStage = (
+    stage: ImageBitmapLoadStage,
+    startedAt: number,
+    context: Omit<ImageBitmapLoadStageContext, "category" | "durationMs">,
+  ) => {
+    deps.onStage?.(stage, {
+      category: "performance",
+      durationMs: roundMs(now() - startedAt),
+      ...context,
+    });
+  };
   try {
-    const blob = await deps.fetchBlob(src);
-    if (!blob || blob.size === 0) return null;
+    const fetchStartedAt = now();
+    let blob: Blob | null;
+    try {
+      blob = await deps.fetchBlob(src);
+    } catch (error) {
+      emitStage("fetch", fetchStartedAt, {
+        errorKind: "network_error",
+        phase: "fail",
+      });
+      throw error;
+    }
+    if (!blob || blob.size === 0) {
+      emitStage("fetch", fetchStartedAt, {
+        bytes: blob?.size ?? 0,
+        mime: blob?.type || undefined,
+        phase: "skip",
+        reason: blob ? "empty-blob" : "missing-blob",
+      });
+      return null;
+    }
+    emitStage("fetch", fetchStartedAt, {
+      bytes: blob.size,
+      mime: blob.type || undefined,
+      phase: "success",
+    });
+
+    const headerStartedAt = now();
     const sourceDimensions = await readImageDimensions(blob).catch(() => null);
     const resize = resolveResizeOptions(sourceDimensions, deps.maxDimension);
+    emitStage("header", headerStartedAt, {
+      bytes: blob.size,
+      mime: blob.type || undefined,
+      phase: sourceDimensions ? "success" : "skip",
+      reason: sourceDimensions ? undefined : "unknown-dimensions",
+      resizeHeight: resize?.options.resizeHeight,
+      resizeMaxDimension: resize?.maxDimension,
+      resizeWidth: resize?.options.resizeWidth,
+      sourceHeight: sourceDimensions?.height,
+      sourceWidth: sourceDimensions?.width,
+    });
+
     let appliedResize = resize;
     let bitmap: ImageBitmap;
+    const decodeStartedAt = now();
+    let retryWithoutResize = false;
     try {
-      bitmap = await create(blob, resize?.options);
+      bitmap = resize ? await create(blob, resize.options) : await create(blob);
     } catch (error) {
-      if (!resize) throw error;
+      if (!resize) {
+        emitStage("decode", decodeStartedAt, {
+          bytes: blob.size,
+          errorKind: "media_decode",
+          mime: blob.type || undefined,
+          phase: "fail",
+          resizeAttempted: false,
+          sourceHeight: sourceDimensions?.height,
+          sourceWidth: sourceDimensions?.width,
+        });
+        throw error;
+      }
       // Some WebViews expose createImageBitmap but not resize options. Preserve
       // the off-thread ImageBitmap path by retrying without the optional budget.
-      bitmap = await create(blob);
+      retryWithoutResize = true;
+      try {
+        bitmap = await create(blob);
+      } catch (retryError) {
+        emitStage("decode", decodeStartedAt, {
+          bytes: blob.size,
+          errorKind: "media_decode",
+          mime: blob.type || undefined,
+          phase: "fail",
+          resizeAttempted: true,
+          retryWithoutResize,
+          sourceHeight: sourceDimensions?.height,
+          sourceWidth: sourceDimensions?.width,
+        });
+        throw retryError;
+      }
       appliedResize = null;
     }
+    emitStage("decode", decodeStartedAt, {
+      bytes: blob.size,
+      height: bitmap.height,
+      mime: blob.type || undefined,
+      phase: "success",
+      resizeAttempted: Boolean(resize),
+      resizeHeight: appliedResize?.options.resizeHeight,
+      resizeMaxDimension: appliedResize?.maxDimension,
+      resizeWidth: appliedResize?.options.resizeWidth,
+      retryWithoutResize,
+      sourceHeight: sourceDimensions?.height,
+      sourceWidth: sourceDimensions?.width,
+      width: bitmap.width,
+    });
     return {
       bitmap,
       bytes: blob.size,
@@ -79,6 +195,14 @@ export async function loadImageBitmapSource(
     // Corrupt/undecodable source or fetch failure — fall back to the <img> path.
     return null;
   }
+}
+
+function nowMs(): number {
+  return typeof performance !== "undefined" ? performance.now() : 0;
+}
+
+function roundMs(value: number): number {
+  return Math.round(value * 100) / 100;
 }
 
 function resolveResizeOptions(

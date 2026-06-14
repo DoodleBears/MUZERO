@@ -6,7 +6,7 @@ import {
 } from "@/lib/background-effect-settings";
 import { loadImageBitmapSource } from "@/lib/background-texture";
 import { hasWebGpuSupport, resolveGpuBackend, resolveGpuPower } from "@/lib/gpu-backend";
-import { log } from "@/lib/logger";
+import { createDiagnosticLogger, log } from "@/lib/logger";
 import { getAppFetch } from "@/lib/platform";
 import { cn } from "@/lib/utils";
 import { usePlayerStore } from "@/stores/player-store";
@@ -20,6 +20,7 @@ import {
 export type PixiBackgroundEffect = "pixel" | "ascii" | "cross-hatch" | "crt" | "dot" | "noise";
 type BackgroundMediaType = "image" | "video";
 const BACKGROUND_IMAGE_BITMAP_MAX_DIMENSION = 1024;
+const bgTextureLog = createDiagnosticLogger("background.texture");
 
 /**
  * Wire a freshly-loaded video texture to playback: seek to the current position,
@@ -243,6 +244,7 @@ async function loadBackgroundMedia(
   mediaType: BackgroundMediaType,
 ): Promise<BackgroundMedia> {
   if (mediaType === "video") return loadVideo(Pixi, src);
+  const sourceKind = classifyTextureSource(src);
   // Prefer an ImageBitmap texture source: createImageBitmap decodes off the main
   // thread and Pixi uploads the ImageBitmap directly — no "Image element passed,
   // converting to canvas and replacing resource" main-thread copy on the landing
@@ -255,6 +257,12 @@ async function loadBackgroundMedia(
         : undefined,
     fetchBlob: fetchTextureBlob,
     maxDimension: BACKGROUND_IMAGE_BITMAP_MAX_DIMENSION,
+    onStage: (stage, context) =>
+      bgTextureLog.debug(stage, {
+        ...context,
+        mediaType: "image",
+        sourceKind,
+      }),
   });
   if (bitmap) {
     return {
@@ -390,6 +398,14 @@ export function needsCrossOrigin(src: string): boolean {
 
 export function shouldFetchImageTexture(src: string): boolean {
   return /^https?:/i.test(src);
+}
+
+function classifyTextureSource(src: string): "blob" | "data" | "http" | "muzfetch" | "other" {
+  if (/^blob:/i.test(src)) return "blob";
+  if (/^data:/i.test(src)) return "data";
+  if (/^https?:/i.test(src)) return "http";
+  if (/^muzfetch:/i.test(src)) return "muzfetch";
+  return "other";
 }
 
 function syncVideo(video: HTMLVideoElement, positionSec: number, force = false) {

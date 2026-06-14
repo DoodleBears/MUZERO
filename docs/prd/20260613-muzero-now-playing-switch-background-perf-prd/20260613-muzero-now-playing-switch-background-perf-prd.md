@@ -26,6 +26,7 @@
 | 13 | local-cover liveQuery stale row guard | ✅ Completed(trace verified) | [Phase 13](#phase-13-local-cover-livequery-stale-row-guard) |
 | 14 | coverflow/local cover preload burst jank | ✅ Completed(trace verified) | [Phase 14](#phase-14-coverflowlocal-cover-preload-去抖与可归因) |
 | 15 | Pixi background texture downsample / decode budget | ✅ 代码完成(待 QA trace) | [Phase 15](#phase-15-pixi-background-texture-降采样预算) |
+| 16 | Pixi ImageBitmap load substage trace | ✅ 代码完成(待 QA trace) | [Phase 16](#phase-16-pixi-imagebitmap-load-分段归因-trace) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
 
@@ -553,6 +554,30 @@ backgroundGpuPowerPreference?: "auto" | "high-performance" | "low-power"; // DEF
 - [x] 相关测试通过:`background-texture.test.ts` + `pixi-background-controller.test.ts` + `pixi-pixel-background.test.ts` 共 25 例;`typecheck`/Biome 通过。
 - [ ] QA trace 验收:`background.pixi media.load` 中 1500px/3000px 源图应出现 `sourceWidth/sourceHeight > width/height`,且 `resizeMaxDimension=1024`;`loadMs` 应下降。若 800px 图仍高 `loadMs`,说明瓶颈偏 fetch/bridge/decoder queue,不是像素预算。
 
+### QA#15(2026-06-14 Phase 15 trace):1024 预算生效,但 `media.load` 仍是黑盒大头
+
+11:53 trace 给出 Phase 15 的第一轮验证:
+
+- **Phase 15 生效**:`background.pixi media.load` 已出现 `resizeMaxDimension=1024`,1500×1500 源图被 decode 成 1024×1024(`sourceWidth/sourceHeight=1500`,`width/height=1024`)。Pixi app lifecycle 仍稳定(`appInits=1`),`texture.create=0~0.1ms`,`renderMs=0.9~1.4ms`。
+- **但 FPS 未改善**:窗口从 `fpsAvg=109 → 91.9 → 72.5 → 56.8/51.2`,`fpsLow≈10.9-17.2`,`frameMaxMs≈58-92ms`,并有历史 `longTaskMaxMs=320ms`。这说明“像素边长”不是主因,至少不是唯一主因。
+- **剩余大头仍在 `media.load` 黑盒**:1500→1024 的两次仍 `loadMs=415.3/355ms`;一张原本 1024×1024 的图也 `loadMs=232ms`。当前 `media.load` 同时包含 `fetchTextureBlob(blob:)`、头部探测、`createImageBitmap` resize/decode,无法判断谁主导。
+- **local-cover 路径仍有解释缺口**:每次 `playIndex` 后先 `background.cover localCover.wait pendingReason=row`,但随后 Pixi 仍 `textureSwap.start sourceKind=blob`。代码推断:row pending 结束后该 cover 不能走 local-media 协议 URL,于是合法回退 object URL;但 trace 没有记录“为什么 fallback”,容易误判为 Phase 11/12 回归。
+
+### Phase 16: Pixi ImageBitmap load 分段归因 trace
+
+**Goal:** 把 `background.pixi media.load` 拆成可归因子阶段,下一份 QA trace 能判断 200-400ms 是 blob fetch、图片头部探测、还是 `createImageBitmap` decode/resize。同步记录 local-cover object URL fallback 的原因。
+
+**实现(落地):**
+- [`background-texture.ts`](../../../src/lib/background-texture.ts):`loadImageBitmapSource` 增加可注入 `onStage` / `now`,分别 emit `fetch` / `header` / `decode` 阶段,携带 `durationMs/bytes/mime/sourceWidth/sourceHeight/resizeWidth/resizeHeight/resizeMaxDimension/width/height/retryWithoutResize`。
+- [`pixi-pixel-background.tsx`](../../../src/components/player/pixi-pixel-background.tsx):把 `onStage` 接到 `background.texture` diagnostic scope,补 `sourceKind` 与 `mediaType=image`。下一份 trace 应出现 `DEBUG [background.texture] fetch/header/decode ...`。
+- [`now-playing-background.tsx`](../../../src/components/player/now-playing-background.tsx):当 local-cover pending 结束但不能走协议 URL 时 emit `background.cover localCover.fallback`,记录 `reason=unservable-row|protocol-url-failed|unknown` 与 `fallback=object-url`,不记录 raw URL/path。
+
+**Tasks(TDD):**
+- [x] `background-texture.test.ts`:新增分段 trace 用例,用注入 clock 断言 `fetch/header/decode` 三段都有 context。
+- [x] `now-playing-background.test.tsx`:新增 local-cover fallback 用例,确保不能走协议 URL时 emit `localCover.fallback reason=unservable-row`。
+- [x] 相关测试通过:`background-texture.test.ts` 7 例、`now-playing-background.test.tsx` 9 例。
+- [ ] QA trace 验收:若 `fetch` 高,下一步优化 object URL → Blob 获取或直接传 Blob;若 `decode` 高,继续调低背景预算/预解码/取消 stale decode;若 `header` 高则尺寸探测实现需收敛。
+
 ---
 
 ## 7. Out of Scope(交叉引用,本 PRD 不处理)
@@ -604,6 +629,7 @@ backgroundGpuPowerPreference?: "auto" | "high-performance" | "low-power"; // DEF
 | 14 | QA#12:Phase 12 后为什么仍 wait 晚于 blob start? | 🔲 Root cause found | `useLiveQuery` 在 `coverBlobId` 切换后会短暂返回上一条 mediaBlob row;旧 hook 没校验 `row.id`,导致当前 cover 首帧误判并走 blob。Phase 13 只接受 id 匹配当前 cover 的 row,否则视为 row pending。 |
 | 15 | QA#13:Phase 13 后为什么仍 `fpsLow≈7.5`? | ✅ Resolved(trace verified) | local-cover wait 已在首帧发生,Pixi app 也稳定(`appInits=1`),16.5MB 重复 decode 未复现。Phase 14 后新 trace 显示 `cover.preload.batch created=0 maxSourceBytes=0`,image blob 数稳定,preload 已收敛。 |
 | 16 | QA#14:Phase 14 后为什么仍 `fpsAvg≈62-75`? | ✅ Phase 15 code done, QA trace pending | 剩余低 FPS 与 Pixi `media.load loader=imageBitmap` 对齐:1500px/800px 图片仍需 172-254ms 准备,而 `texture.create/renderMs` 仍仅 0-3ms。Phase 15 已给 Pixi 背景纹理加独立 decode budget(1024 max side)与 source/decoded 尺寸 trace;下一份 trace 判断像素预算是否足够,若 800px 仍慢则转查 fetch/bridge/decoder queue。 |
+| 17 | QA#15:Phase 15 后为什么 `media.load` 仍 232-415ms? | 🔲 Root cause needs substage trace | 1024 budget 已生效但未降 `loadMs`;一张源图本身 1024 仍 232ms。`media.load` 目前混合 blob fetch、header、ImageBitmap decode/resize。Phase 16 已补 `background.texture fetch/header/decode` 分段 trace 与 `localCover.fallback` 原因,下一份 trace 决定优化方向。 |
 
 ---
 
@@ -637,3 +663,4 @@ backgroundGpuPowerPreference?: "auto" | "high-performance" | "low-power"; // DEF
 | 2026-06-14 | User+Codex | **Phase 14 代码完成(TDD)**:新增 `cover-preload.ts` 把 coverflow preload 从组件内联 effect 抽成可测 helper;本地 cover preload 按 cache key 做 in-flight dedupe,并用 batch sequence 阻止 stale batch 创建 object URL / 写 state;修复 stale 后 `coverUrlCache.acquire()` 占位 ref 泄漏。`cover.preload.batch` trace 现在带 `cacheHits/inflightHits/stale/canceled/maxSourceBytes` 与 current/previous/next/stack/settle 分布。新增 2 例 helper 测试 + 原 swipeable stage 6 例全绿;`typecheck`/Biome 通过。 |
 | 2026-06-14 | User+Codex | **QA#14 Phase 14 trace 验证 + Phase 15 待办**:11:35 trace 显示 Phase 14 生效(`cover.preload.batch created=0 maxSourceBytes=0`,image blob live 稳定),local-cover wait 与 Pixi app lifecycle 也稳定。剩余掉帧对齐 Pixi `media.load loader=imageBitmap`:1500px 图 `loadMs=172.1`,800px 图 `loadMs=254.3`,而 `texture.create/renderMs` 仍 0-3ms。新增 Phase 15:Pixi 背景纹理独立 decode budget/降采样,stage/coverflow 仍保原图。 |
 | 2026-06-14 | User+Codex | **Phase 15 代码完成(TDD)**:`background-texture.ts` 为 ImageBitmap loader 增加 `maxDimension`、PNG/JPEG/WebP 头部尺寸探测、`createImageBitmap(...,{ resizeWidth, resizeHeight, resizeQuality:"high" })` 与 resize option 不支持时的无 resize retry;Pixi 背景图片分支传 `BACKGROUND_IMAGE_BITMAP_MAX_DIMENSION=1024`,只降 ambient texture,stage/coverflow 仍保原图。`background.pixi` trace 增加 `sourceWidth/sourceHeight/resizeMaxDimension`。相关 25 例测试 + `typecheck`/Biome 通过。 |
+| 2026-06-14 | User+Codex | **QA#15 trace + Phase 16 代码完成(TDD)**:11:53 trace 证明 1500px 源图已降到 1024px,但 `media.load` 仍 355-415ms,1024px 源图也 232ms;瓶颈不是单纯像素边长。新增 `background.texture fetch/header/decode` 分段 trace,并补 `background.cover localCover.fallback` 解释 wait 后合法回退 object URL 的原因。TDD:background-texture 7 例、now-playing-background 9 例通过。 |

@@ -166,6 +166,40 @@ function NowPlayingBackgroundContent({ hideVisualizer }: { hideVisualizer: boole
     source,
     waitForLocalCoverUrl,
   ]);
+  const localCoverFallbackReason =
+    source === "cover" &&
+    current?.coverBlobId &&
+    !waitForLocalCoverUrl &&
+    !localCover.url &&
+    coverResource.url &&
+    coverResourceMatchesTrack
+      ? localCover.canServe === false
+        ? "unservable-row"
+        : localCover.canServe === true
+          ? "protocol-url-failed"
+          : "unknown"
+      : null;
+  useEffect(() => {
+    if (!localCoverFallbackReason || !current?.coverBlobId) return;
+    bgCoverLog.debug("localCover.fallback", {
+      canServeLocalCover: localCover.canServe,
+      category: "performance",
+      coverBlobId: current.coverBlobId,
+      coverResourceReady: Boolean(coverResource.url),
+      coverResourceStaleWhilePending: coverResource.staleWhilePending,
+      fallback: "object-url",
+      phase: "state",
+      reason: localCoverFallbackReason,
+      trackId: current.id,
+    });
+  }, [
+    coverResource.staleWhilePending,
+    coverResource.url,
+    current?.coverBlobId,
+    current?.id,
+    localCover.canServe,
+    localCoverFallbackReason,
+  ]);
   const loadedCoverBackground = useLoadedImageUrl(backgroundCoverUrl, {
     holdPreviousWhileLoading: holdCoverBackgroundWhileLoading,
   });

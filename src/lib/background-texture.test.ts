@@ -66,6 +66,57 @@ describe("loadImageBitmapSource", () => {
     });
   });
 
+  it("emits fetch/header/decode timing stages for ImageBitmap load attribution", async () => {
+    let elapsed = 0;
+    const bitmap = fakeBitmap(800, 400);
+    const onStage = vi.fn();
+    const createImageBitmap = vi.fn(async () => {
+      elapsed += 12;
+      return bitmap;
+    });
+
+    await loadImageBitmapSource("blob:large-cover", {
+      createImageBitmap,
+      fetchBlob: async () => {
+        elapsed += 5;
+        return pngBlobWithSize(1600, 800);
+      },
+      maxDimension: 800,
+      now: () => elapsed,
+      onStage,
+    });
+
+    expect(onStage).toHaveBeenCalledWith(
+      "fetch",
+      expect.objectContaining({
+        bytes: 24,
+        durationMs: 5,
+        mime: "image/png",
+        phase: "success",
+      }),
+    );
+    expect(onStage).toHaveBeenCalledWith(
+      "header",
+      expect.objectContaining({
+        resizeHeight: 400,
+        resizeMaxDimension: 800,
+        resizeWidth: 800,
+        sourceHeight: 800,
+        sourceWidth: 1600,
+      }),
+    );
+    expect(onStage).toHaveBeenCalledWith(
+      "decode",
+      expect.objectContaining({
+        durationMs: 12,
+        height: 400,
+        phase: "success",
+        resizeMaxDimension: 800,
+        width: 800,
+      }),
+    );
+  });
+
   it("returns null when createImageBitmap is unavailable (caller falls back to <img>)", async () => {
     const fetchBlob = vi.fn(async () => pngBlob());
     const source = await loadImageBitmapSource("blob:cover", {

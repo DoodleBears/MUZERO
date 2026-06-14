@@ -383,6 +383,49 @@ describe("NowPlayingBackground", () => {
     expect(mocks.trackCoverResourceTrackIds).not.toContain("trk_local");
   });
 
+  it("emits a local-cover fallback trace when the row cannot use the protocol URL", async () => {
+    mocks.settings.backgroundGalleryFallback = false;
+    mocks.settings.backgroundRenderer = "noise";
+    mocks.settings.flowEnabled = false;
+    mocks.settings.visualizerAsBackground = false;
+    mocks.localCoverResources.set("trk_indexeddb", {
+      canServe: false,
+      coverBlobId: "blb_indexeddb",
+      pending: false,
+      pendingReason: null,
+      storageKey: null,
+      url: null,
+    });
+    mocks.coverResources.set("trk_indexeddb", {
+      readyForTrack: true,
+      staleWhilePending: false,
+      targetKey: "blb_indexeddb",
+      url: "blob:indexeddb-cover",
+      urlKey: "blb_indexeddb",
+    });
+    const queue = [makeTrack("trk_indexeddb", { coverBlobId: "blb_indexeddb" })];
+    usePlayerStore.setState({ currentIndex: 0, queue });
+    render(<NowPlayingBackground active />);
+    await loadImage(0);
+
+    expect(screen.getByTestId("pixi-background")).toHaveAttribute(
+      "data-src",
+      "blob:indexeddb-cover",
+    );
+    expect(getTraceEntries()).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          event: "localCover.fallback",
+          scope: "background.cover",
+          context: expect.objectContaining({
+            fallback: "object-url",
+            reason: "unservable-row",
+          }),
+        }),
+      ]),
+    );
+  });
+
   it("does not replay the previous settled Pixi target while a local cover URL is pending", async () => {
     mocks.settings.backgroundGalleryFallback = false;
     mocks.settings.backgroundRenderer = "noise";
