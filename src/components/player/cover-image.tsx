@@ -16,6 +16,7 @@ export function CoverImage({
   holdPreviousWhileLoading = true,
   fallback,
   onAspect,
+  trackId,
   className,
 }: {
   url: string | null;
@@ -23,9 +24,18 @@ export function CoverImage({
   holdPreviousWhileLoading?: boolean;
   fallback?: ReactNode;
   onAspect?: (aspect: number) => void;
+  trackId?: string;
   className?: string;
 }) {
-  const loaded = useLoadedImageUrl(url, { holdPreviousWhileLoading });
+  const loaded = useLoadedImageUrl(url, {
+    decode: false,
+    holdPreviousWhileLoading,
+    trace: {
+      source: "cover",
+      surface: "now-playing",
+      trackId,
+    },
+  });
   const displayUrl = loaded.displayUrl;
 
   useEffect(() => {

@@ -207,6 +207,11 @@ function NowPlayingBackgroundContent({ hideVisualizer }: { hideVisualizer: boole
   ]);
   const loadedCoverBackground = useLoadedImageUrl(backgroundCoverUrl, {
     holdPreviousWhileLoading: holdCoverBackgroundWhileLoading,
+    trace: {
+      source,
+      surface: "background",
+      trackId: current?.id,
+    },
   });
   const slideshowUrls =
     source === "track-slideshow"
