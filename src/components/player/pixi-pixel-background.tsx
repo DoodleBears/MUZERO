@@ -110,8 +110,13 @@ export function PixiPixelBackground({
       powerPreference: gpuPower,
       deps: {
         loadPixi: async () => (await import("pixi.js")) as unknown as PixiModuleLike,
-        loadMedia: (pixi, source, type) =>
-          loadBackgroundMedia(pixi as unknown as typeof import("pixi.js"), source, type),
+        loadMedia: (pixi, source, type, options) =>
+          loadBackgroundMedia(
+            pixi as unknown as typeof import("pixi.js"),
+            source,
+            type,
+            options.signal,
+          ),
         loadFilter: (_pixi, fx, opts) =>
           createPixiFilter(fx, opts as ReturnType<typeof resolvePixiBackgroundEffectOptions>),
         attachVideo,
@@ -243,6 +248,7 @@ async function loadBackgroundMedia(
   Pixi: typeof import("pixi.js"),
   src: string,
   mediaType: BackgroundMediaType,
+  signal?: AbortSignal,
 ): Promise<BackgroundMedia> {
   if (mediaType === "video") return loadVideo(Pixi, src);
   const sourceKind = classifyTextureSource(src);
@@ -264,7 +270,9 @@ async function loadBackgroundMedia(
         mediaType: "image",
         sourceKind,
       }),
+    signal,
   });
+  throwIfAborted(signal);
   if (bitmap) {
     return {
       bytes: bitmap.bytes,
@@ -279,8 +287,9 @@ async function loadBackgroundMedia(
       width: bitmap.width,
     };
   }
-  const resolved = await resolveImageTextureSource(src);
-  const image = await loadImage(resolved.src);
+  const resolved = await resolveImageTextureSource(src, signal);
+  throwIfAborted(signal);
+  const image = await loadImage(resolved.src, signal);
   return {
     element: image,
     height: image.naturalHeight,
@@ -297,15 +306,19 @@ async function loadBackgroundMedia(
  * is handled like the rest of the app; blob:/data: read directly. Returns null on
  * any failure so {@link loadBackgroundMedia} falls back to the <img> path.
  */
-async function fetchTextureBlob(src: string): Promise<ImageBitmapBlobSource | null> {
+async function fetchTextureBlob(
+  src: string,
+  signal?: AbortSignal,
+): Promise<ImageBitmapBlobSource | null> {
   try {
+    throwIfAborted(signal);
     if (/^(blob:|data:)/i.test(src)) {
-      const response = await fetch(src);
-      return readTextureBlobSource(response);
+      const response = await fetch(src, { signal });
+      return readTextureBlobSource(response, signal);
     }
     const fetcher = await getAppFetch();
-    const response = await fetcher(src, { cache: "no-store" });
-    return readTextureBlobSource(response);
+    const response = await fetcher(src, { cache: "no-store", signal });
+    return readTextureBlobSource(response, signal);
   } catch {
     return null;
   }
@@ -313,9 +326,12 @@ async function fetchTextureBlob(src: string): Promise<ImageBitmapBlobSource | nu
 
 export async function readTextureBlobSource(
   response: Response,
+  signal?: AbortSignal,
 ): Promise<ImageBitmapBlobSource | null> {
   if (!response.ok) return null;
+  throwIfAborted(signal);
   const bytes = new Uint8Array(await response.arrayBuffer());
+  throwIfAborted(signal);
   if (bytes.byteLength === 0) return null;
   return {
     blob: new Blob([bytes], { type: response.headers.get("content-type") || "" }),
@@ -326,13 +342,15 @@ export async function readTextureBlobSource(
 
 async function resolveImageTextureSource(
   src: string,
+  signal?: AbortSignal,
 ): Promise<{ src: string; unload?: () => void }> {
   if (!shouldFetchImageTexture(src)) return { src };
   try {
+    throwIfAborted(signal);
     const fetcher = await getAppFetch();
     // `cache: "no-store"` avoids reusing a prior no-CORS <img> cache entry for
     // the same public R2 URL. The texture then reads from a same-origin blob URL.
-    const response = await fetcher(src, { cache: "no-store" });
+    const response = await fetcher(src, { cache: "no-store", signal });
     if (!response.ok) return { src };
     const blob = await response.blob();
     if (!blob.type.startsWith("image/") || blob.size === 0) return { src };
@@ -346,8 +364,12 @@ async function resolveImageTextureSource(
   }
 }
 
-function loadImage(src: string): Promise<HTMLImageElement> {
+function loadImage(src: string, signal?: AbortSignal): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(createAbortError());
+      return;
+    }
     const image = new Image();
     image.decoding = "async";
     // Cross-origin covers must opt into CORS to become a WebGL texture. On
@@ -358,8 +380,15 @@ function loadImage(src: string): Promise<HTMLImageElement> {
     // work on Electron but not in Chrome" regression). Hosts without ACAO fail
     // the load instead and hit the same plain-image fallback as before.
     if (needsCrossOrigin(src)) image.crossOrigin = "anonymous";
+    const abort = () => {
+      image.onload = null;
+      image.onerror = null;
+      image.removeAttribute("src");
+      reject(createAbortError());
+    };
     image.onload = () => resolve(image);
     image.onerror = () => reject(new Error(`Unable to load background image: ${src}`));
+    signal?.addEventListener("abort", abort, { once: true });
     image.src = src;
     if (image.decode) {
       void image.decode().then(
@@ -371,6 +400,14 @@ function loadImage(src: string): Promise<HTMLImageElement> {
       );
     }
   });
+}
+
+function throwIfAborted(signal?: AbortSignal): void {
+  if (signal?.aborted) throw createAbortError();
+}
+
+function createAbortError(): DOMException {
+  return new DOMException("Background texture load aborted", "AbortError");
 }
 
 async function loadVideo(Pixi: typeof import("pixi.js"), src: string): Promise<BackgroundMedia> {

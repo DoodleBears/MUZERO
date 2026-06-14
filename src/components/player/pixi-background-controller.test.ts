@@ -61,7 +61,7 @@ function fakeModule() {
 function makeController(overrides?: {
   preference?: "webgl" | "webgpu";
   powerPreference?: "high-performance" | "low-power";
-  loadMedia?: (src: string) => Promise<LoadedBackgroundMedia>;
+  loadMedia?: (src: string, signal: AbortSignal) => Promise<LoadedBackgroundMedia>;
 }) {
   const module = fakeModule();
   const textures: ReturnType<typeof fakeTexture>[] = [];
@@ -90,7 +90,7 @@ function makeController(overrides?: {
     powerPreference: overrides?.powerPreference ?? "low-power",
     deps: {
       loadPixi: async () => module,
-      loadMedia: async (_pixi, src) => loadMedia(src),
+      loadMedia: async (_pixi, src, _mediaType, { signal }) => loadMedia(src, signal),
       loadFilter: async () => null,
       onError,
     },
@@ -331,6 +331,7 @@ describe("createPixiBackgroundController", () => {
     });
     const { controller } = makeController({ loadMedia });
     const pA = controller.setSource("a.png", "image");
+    await tick();
     const pB = controller.setSource("b.png", "image");
     // Let the (shared) app build and both loadMedia calls register before resolving.
     await tick();
@@ -348,5 +349,31 @@ describe("createPixiBackgroundController", () => {
     expect(textureB?.texture.destroy).not.toHaveBeenCalled();
     expect(controller.stats.textureSwaps).toBe(1);
     controller.destroy();
+  });
+
+  it("aborts an in-flight media load when a newer source supersedes it", async () => {
+    const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
+    const abortError = () => new DOMException("Superseded", "AbortError");
+    const signals: Array<{ src: string; signal: AbortSignal }> = [];
+    const loadMedia = (src: string, signal: AbortSignal) =>
+      new Promise<LoadedBackgroundMedia>((_resolve, reject) => {
+        signals.push({ src, signal });
+        signal.addEventListener("abort", () => reject(abortError()), { once: true });
+      });
+    const { controller, onError } = makeController({ loadMedia });
+
+    const pA = controller.setSource("a.png", "image");
+    await tick();
+    expect(signals[0]).toMatchObject({ src: "a.png" });
+
+    const pB = controller.setSource("b.png", "image");
+    await tick();
+    expect(signals[0].signal.aborted).toBe(true);
+    expect(signals[1]).toMatchObject({ src: "b.png" });
+
+    controller.destroy();
+    await Promise.all([pA, pB]);
+    expect(signals[1].signal.aborted).toBe(true);
+    expect(onError).not.toHaveBeenCalled();
   });
 });

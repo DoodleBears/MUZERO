@@ -56,7 +56,7 @@ export interface ImageBitmapLoadStageContext {
 
 export interface LoadImageBitmapDeps {
   /** Resolve the source URL to its raw bytes (remote via app fetch; blob:/data: via fetch). */
-  fetchBlob: (src: string) => Promise<Blob | ImageBitmapBlobSource | null>;
+  fetchBlob: (src: string, signal?: AbortSignal) => Promise<Blob | ImageBitmapBlobSource | null>;
   /** Injected for tests; the caller passes the global when supported, else undefined. */
   createImageBitmap?: (blob: Blob, options?: ImageBitmapOptions) => Promise<ImageBitmap>;
   /** Optional background texture budget; oversized image sources decode to this max side. */
@@ -65,6 +65,8 @@ export interface LoadImageBitmapDeps {
   onStage?: (stage: ImageBitmapLoadStage, context: ImageBitmapLoadStageContext) => void;
   /** Injected clock for deterministic timing tests. */
   now?: () => number;
+  /** Abort stale background loads when a newer track supersedes them. */
+  signal?: AbortSignal;
 }
 
 interface ImageDimensions {
@@ -82,6 +84,7 @@ export async function loadImageBitmapSource(
   const create = deps.createImageBitmap;
   // No off-thread decoder available → let the caller fall back to the <img> path.
   if (typeof create !== "function") return null;
+  throwIfAborted(deps.signal);
   const now = deps.now ?? nowMs;
   const emitStage = (
     stage: ImageBitmapLoadStage,
@@ -98,14 +101,22 @@ export async function loadImageBitmapSource(
     const fetchStartedAt = now();
     let fetchedSource: Blob | ImageBitmapBlobSource | null;
     try {
-      fetchedSource = await deps.fetchBlob(src);
+      fetchedSource = await deps.fetchBlob(src, deps.signal);
     } catch (error) {
+      if (isAbortError(error)) {
+        emitStage("fetch", fetchStartedAt, {
+          phase: "skip",
+          reason: "aborted",
+        });
+        throw error;
+      }
       emitStage("fetch", fetchStartedAt, {
         errorKind: "network_error",
         phase: "fail",
       });
       throw error;
     }
+    throwIfAborted(deps.signal);
     const blobSource = normalizeBlobSource(fetchedSource);
     if (!blobSource || blobSource.blob.size === 0) {
       emitStage("fetch", fetchStartedAt, {
@@ -125,6 +136,7 @@ export async function loadImageBitmapSource(
 
     const headerStartedAt = now();
     const header = await readImageHeader(blobSource).catch(() => null);
+    throwIfAborted(deps.signal);
     const sourceDimensions = header ? readImageDimensions(header.bytes) : null;
     const resize = resolveResizeOptions(sourceDimensions, deps.maxDimension);
     emitStage("header", headerStartedAt, {
@@ -148,6 +160,7 @@ export async function loadImageBitmapSource(
     try {
       bitmap = resize ? await create(blob, resize.options) : await create(blob);
     } catch (error) {
+      if (isAbortError(error)) throw error;
       if (!resize) {
         emitStage("decode", decodeStartedAt, {
           bytes: blob.size,
@@ -166,6 +179,7 @@ export async function loadImageBitmapSource(
       try {
         bitmap = await create(blob);
       } catch (retryError) {
+        if (isAbortError(retryError)) throw retryError;
         emitStage("decode", decodeStartedAt, {
           bytes: blob.size,
           errorKind: "media_decode",
@@ -179,6 +193,10 @@ export async function loadImageBitmapSource(
         throw retryError;
       }
       appliedResize = null;
+    }
+    if (deps.signal?.aborted) {
+      bitmap.close();
+      throw createAbortError();
     }
     emitStage("decode", decodeStartedAt, {
       bytes: blob.size,
@@ -205,7 +223,8 @@ export async function loadImageBitmapSource(
       sourceWidth: sourceDimensions?.width,
       unload: () => bitmap.close(),
     };
-  } catch {
+  } catch (error) {
+    if (isAbortError(error)) throw error;
     // Corrupt/undecodable source or fetch failure — fall back to the <img> path.
     return null;
   }
@@ -217,6 +236,20 @@ function nowMs(): number {
 
 function roundMs(value: number): number {
   return Math.round(value * 100) / 100;
+}
+
+function throwIfAborted(signal?: AbortSignal): void {
+  if (signal?.aborted) throw createAbortError();
+}
+
+function createAbortError(): DOMException {
+  return new DOMException("Background texture load aborted", "AbortError");
+}
+
+function isAbortError(error: unknown): boolean {
+  return error instanceof DOMException
+    ? error.name === "AbortError"
+    : error instanceof Error && error.name === "AbortError";
 }
 
 function normalizeBlobSource(

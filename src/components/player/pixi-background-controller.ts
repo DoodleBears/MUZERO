@@ -93,6 +93,7 @@ export interface PixiBackgroundDeps {
     pixi: PixiModuleLike,
     src: string,
     mediaType: BackgroundMediaType,
+    options: { signal: AbortSignal },
   ): Promise<LoadedBackgroundMedia>;
   loadFilter(
     pixi: PixiModuleLike,
@@ -151,6 +152,7 @@ export function createPixiBackgroundController(
   let currentMedia: CurrentMedia | null = null;
   let currentVideoTeardown: (() => void) | undefined;
   let appPromise: Promise<void> | null = null;
+  let pendingLoadAbort: AbortController | null = null;
   let seq = 0;
   let lastSource: { src: string; mediaType: BackgroundMediaType } | null = null;
   let recoverAttempts = 0;
@@ -273,10 +275,14 @@ export function createPixiBackgroundController(
 
   async function setSource(src: string | null, mediaType: BackgroundMediaType): Promise<void> {
     if (destroyed) return;
-    // A null src is a transient "next blob URL still resolving" state during a
-    // switch — keep the painted layer; the parent unmounts when truly empty.
-    if (!src) return;
+    pendingLoadAbort?.abort();
+    pendingLoadAbort = null;
     const token = ++seq;
+    // A null src is a transient "next blob URL still resolving" state during a
+    // switch — keep the painted layer but invalidate any in-flight load.
+    if (!src) return;
+    const loadAbort = new AbortController();
+    pendingLoadAbort = loadAbort;
     const sourceKind = classifyBackgroundSource(src);
     const swapStart = nowMs();
     bgPixiLog.debug("textureSwap.start", {
@@ -292,25 +298,28 @@ export function createPixiBackgroundController(
       deps.onError?.(error);
       return;
     }
-    if (destroyed || !app || !pixi) return;
+    if (destroyed || token !== seq || loadAbort.signal.aborted || !app || !pixi) return;
 
     const mediaLoadStart = nowMs();
     let media: LoadedBackgroundMedia;
     try {
-      media = await deps.loadMedia(pixi, src, mediaType);
+      media = await deps.loadMedia(pixi, src, mediaType, { signal: loadAbort.signal });
     } catch (error) {
-      bgPixiLog.warn("media.load", {
+      const aborted = loadAbort.signal.aborted || isAbortError(error);
+      bgPixiLog[aborted ? "debug" : "warn"]("media.load", {
         category: "performance",
-        phase: "fail",
-        errorKind: "unknown",
+        phase: aborted ? "skip" : "fail",
+        errorKind: aborted ? undefined : "unknown",
         mediaType,
+        reason: aborted ? "aborted" : undefined,
         sourceKind,
         swapSeq: token,
         durationMs: roundMs(nowMs() - mediaLoadStart),
       });
-      deps.onError?.(error);
+      if (!aborted) deps.onError?.(error);
       return;
     }
+    if (pendingLoadAbort === loadAbort) pendingLoadAbort = null;
     const loadMs = nowMs() - mediaLoadStart;
     const mediaContext = {
       bytes: media.bytes,
@@ -427,6 +436,8 @@ export function createPixiBackgroundController(
 
   async function recover(): Promise<void> {
     if (destroyed || recoverAttempts >= MAX_RECOVER_ATTEMPTS) return;
+    pendingLoadAbort?.abort();
+    pendingLoadAbort = null;
     recoverAttempts += 1;
     bgPixiLog.warn("recover", { attempt: recoverAttempts, backend: preference });
     const source = lastSource;
@@ -456,6 +467,8 @@ export function createPixiBackgroundController(
 
   function destroy(): void {
     destroyed = true;
+    pendingLoadAbort?.abort();
+    pendingLoadAbort = null;
     currentVideoTeardown?.();
     currentVideoTeardown = undefined;
     resizeObserver?.disconnect();
@@ -483,6 +496,12 @@ export function createPixiBackgroundController(
       return stats;
     },
   };
+}
+
+function isAbortError(error: unknown): boolean {
+  return error instanceof DOMException
+    ? error.name === "AbortError"
+    : error instanceof Error && error.name === "AbortError";
 }
 
 function coverSprite(

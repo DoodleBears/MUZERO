@@ -28,7 +28,7 @@ describe("loadImageBitmapSource", () => {
 
     const source = await loadImageBitmapSource("blob:cover", { createImageBitmap, fetchBlob });
 
-    expect(fetchBlob).toHaveBeenCalledWith("blob:cover");
+    expect(fetchBlob).toHaveBeenCalledWith("blob:cover", undefined);
     expect(createImageBitmap).toHaveBeenCalledTimes(1);
     expect(source).toMatchObject({
       bitmap,
@@ -196,5 +196,21 @@ describe("loadImageBitmapSource", () => {
       },
     });
     expect(source).toBeNull();
+  });
+
+  it("rethrows aborts so callers do not fall back to another loader for stale sources", async () => {
+    const createImageBitmap = vi.fn(async () => fakeBitmap());
+    const fetchBlob = vi.fn(async () => pngBlob());
+    const abort = new AbortController();
+    abort.abort();
+
+    await expect(
+      loadImageBitmapSource("blob:stale", {
+        createImageBitmap,
+        fetchBlob,
+        signal: abort.signal,
+      }),
+    ).rejects.toMatchObject({ name: "AbortError" });
+    expect(fetchBlob).not.toHaveBeenCalled();
   });
 });
