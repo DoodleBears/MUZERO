@@ -132,8 +132,12 @@ import type { DecodedNcmMedia } from "@/workers/ingest-core";
 
 const IMPORT_VISIBILITY_FLUSH_SIZE = 25;
 const LOCAL_BLOB_PLAYBACK_SETTLE_MS = 180;
-const MEDIA_SOURCE_RELOAD_BISECT_MODE: "off" | "skip" | "read" | "attach-no-play" =
-  "attach-no-play";
+const MEDIA_SOURCE_RELOAD_BISECT_MODE:
+  | "off"
+  | "skip"
+  | "read"
+  | "attach-no-play"
+  | "attach-and-play" = "attach-and-play";
 const DEFAULT_PLAYER_VOLUME = 0.9;
 
 export type QueueSource =
@@ -2181,25 +2185,41 @@ async function ensureLoadedAndPlay(
   if (MEDIA_SOURCE_RELOAD_BISECT_MODE !== "off") {
     if (
       (MEDIA_SOURCE_RELOAD_BISECT_MODE === "read" ||
-        MEDIA_SOURCE_RELOAD_BISECT_MODE === "attach-no-play") &&
+        MEDIA_SOURCE_RELOAD_BISECT_MODE === "attach-no-play" ||
+        MEDIA_SOURCE_RELOAD_BISECT_MODE === "attach-and-play") &&
       sourceKind === "blob"
     ) {
       const media = await getTrackBlob(track);
       if (!continueCurrent("diag-blob-read")) return;
       if (media?.blob) {
         const event =
-          MEDIA_SOURCE_RELOAD_BISECT_MODE === "attach-no-play"
-            ? "media.load.attach-only"
-            : "media.load.read-only";
+          MEDIA_SOURCE_RELOAD_BISECT_MODE === "attach-and-play"
+            ? "media.load.attach-play"
+            : MEDIA_SOURCE_RELOAD_BISECT_MODE === "attach-no-play"
+              ? "media.load.attach-only"
+              : "media.load.read-only";
         tracePlaybackLoad(event, track, playbackTrace, {
           bytes: media.bytes,
           mime: media.mime,
           sourceId: "diag-bisect:blob-read",
           transport: "blob",
         });
-        if (MEDIA_SOURCE_RELOAD_BISECT_MODE === "attach-no-play") {
+        if (
+          MEDIA_SOURCE_RELOAD_BISECT_MODE === "attach-no-play" ||
+          MEDIA_SOURCE_RELOAD_BISECT_MODE === "attach-and-play"
+        ) {
           await mediaEngine.loadBlob(media.blob, track.kind);
           if (!continueCurrent("diag-blob-attached")) return;
+        }
+        if (MEDIA_SOURCE_RELOAD_BISECT_MODE === "attach-and-play" && wantPlay && get().wantPlay) {
+          playbackLog.info("play.requested", {
+            message: "media play requested",
+            ...playbackTrace,
+            category: "media",
+            phase: "start",
+          });
+          await mediaEngine.play();
+          if (!continueCurrent("diag-after-play")) return;
         }
       } else {
         tracePlaybackLoad("media.load.skip", track, playbackTrace, {
