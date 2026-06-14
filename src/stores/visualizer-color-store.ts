@@ -7,6 +7,7 @@ const DISABLE_COVER_COLOR_CSS_FOR_BISECT = true;
 const DISABLE_COVER_COLOR_RAF_FOR_BISECT = true;
 const DISABLE_COVER_COLOR_PALETTE_FOR_BISECT = true;
 const DISABLE_COVER_COLOR_RGB_FOR_BISECT = true;
+const DISABLE_COVER_COLOR_STORE_SET_FOR_BISECT = true;
 const coverColorLog = createDiagnosticLogger("cover.palette");
 
 interface VisualizerCoverColorState {
@@ -78,6 +79,18 @@ export function transitionVisualizerCoverColor(
       targetKey: coverBlobId ?? undefined,
       fallbackToTheme: !next,
     });
+  }
+  if (DISABLE_COVER_COLOR_STORE_SET_FOR_BISECT) {
+    coverColorLog.debug("cover.palette.store", {
+      message: "cover palette store update skipped for diagnostic bisect",
+      category: "media",
+      phase: "skip",
+      reason: "diag-bisect",
+      targetKey: coverBlobId ?? undefined,
+      paletteCount: nextPalette.length,
+      fallbackToTheme: !next,
+    });
+    return;
   }
 
   if (!coverBlobId || !next) {

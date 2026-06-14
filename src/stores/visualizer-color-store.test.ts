@@ -51,7 +51,7 @@ describe("mixPalette", () => {
 });
 
 describe("transitionVisualizerCoverColor diagnostic freezes", () => {
-  it("updates the cover key while keeping css, rgb, and palette unchanged", () => {
+  it("keeps the store unchanged while color store updates are disabled", () => {
     useVisualizerCoverColorStore.setState({
       coverBlobId: null,
       css: null,
@@ -62,14 +62,14 @@ describe("transitionVisualizerCoverColor diagnostic freezes", () => {
     transitionVisualizerCoverColor("cover-1", rgb(10, 20, 30), []);
 
     expect(useVisualizerCoverColorStore.getState()).toEqual({
-      coverBlobId: "cover-1",
+      coverBlobId: null,
       css: null,
       palette: [],
       rgb: null,
     });
   });
 
-  it("applies color changes immediately while the raf transition is disabled", () => {
+  it("does not update the cover key while color store updates are disabled", () => {
     useVisualizerCoverColorStore.setState({
       coverBlobId: "cover-1",
       css: null,
@@ -80,7 +80,7 @@ describe("transitionVisualizerCoverColor diagnostic freezes", () => {
     transitionVisualizerCoverColor("cover-2", rgb(100, 110, 120), [rgb(1, 2, 3), rgb(4, 5, 6)]);
 
     expect(useVisualizerCoverColorStore.getState()).toEqual({
-      coverBlobId: "cover-2",
+      coverBlobId: "cover-1",
       css: null,
       palette: [rgb(10, 20, 30)],
       rgb: rgb(10, 20, 30),
