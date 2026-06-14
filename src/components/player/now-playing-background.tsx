@@ -3,8 +3,9 @@ import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useMemo, useState } from "react";
 import { getTrackLyrics, listGalleryImages, listTrackBackgrounds } from "@/db/repositories";
 import { useSettings } from "@/hooks/use-app-data";
+import { useLoadedImageUrl } from "@/hooks/use-image-load";
 import { useLocalCoverUrl } from "@/hooks/use-local-cover";
-import { useObjectUrls, useTrackCoverUrl, useTrackMediaUrl } from "@/hooks/use-media";
+import { useObjectUrls, useTrackCoverResource, useTrackMediaUrl } from "@/hooks/use-media";
 import {
   type BackgroundRenderTarget,
   resolveBackgroundSource,
@@ -100,8 +101,13 @@ function NowPlayingBackgroundContent({ hideVisualizer }: { hideVisualizer: boole
   // fine. When it's available we skip resolving the object-URL cover entirely (no
   // blob load); everywhere else we fall back to it. See the local-media PRD.
   const localCoverUrl = useLocalCoverUrl(current);
-  const coverUrl = useTrackCoverUrl(localCoverUrl ? undefined : current);
-  const backgroundCoverUrl = localCoverUrl ?? coverUrl;
+  const coverResource = useTrackCoverResource(localCoverUrl ? undefined : current);
+  const coverResourceMatchesTrack =
+    !coverResource.url ||
+    !coverResource.targetKey ||
+    coverResource.urlKey === coverResource.targetKey;
+  const backgroundCoverUrl =
+    localCoverUrl ?? (coverResourceMatchesTrack ? coverResource.url : null);
   const trackBackgrounds = useLiveQuery(
     () => (current?.id ? listTrackBackgrounds(current.id) : Promise.resolve([])),
     [current?.id],
@@ -124,6 +130,16 @@ function NowPlayingBackgroundContent({ hideVisualizer }: { hideVisualizer: boole
     hasCover: trackHasCover(current),
     trackBackgroundCount: trackBackgroundBlobs.length,
     galleryCount: galleryBlobs.length,
+  });
+  const clearCoverBackgroundWhileLoading =
+    source === "cover" &&
+    (Boolean(current?.remoteCoverUrl) ||
+      current?.origin === "streamed" ||
+      coverResource.staleWhilePending ||
+      !coverResourceMatchesTrack);
+  const holdCoverBackgroundWhileLoading = !clearCoverBackgroundWhileLoading;
+  const loadedCoverBackground = useLoadedImageUrl(backgroundCoverUrl, {
+    holdPreviousWhileLoading: holdCoverBackgroundWhileLoading,
   });
   const slideshowUrls =
     source === "track-slideshow"
@@ -184,7 +200,7 @@ function NowPlayingBackgroundContent({ hideVisualizer }: { hideVisualizer: boole
   );
   const backgroundUrl =
     source === "cover"
-      ? backgroundCoverUrl
+      ? loadedCoverBackground.displayUrl
       : slideshowUrls.length > 0
         ? (slideshowUrls[slideIndex % slideshowUrls.length] ?? null)
         : null;
@@ -196,7 +212,7 @@ function NowPlayingBackgroundContent({ hideVisualizer }: { hideVisualizer: boole
     hasTrackMedia: hasBackgroundVideoMedia,
   });
   const pixiUrl = pixiMedia.source === "track-video" ? currentVideoUrl : backgroundUrl;
-  const hasPendingImageBackground =
+  const hasPotentialImageBackground =
     source === "cover"
       ? trackHasCover(current)
       : source === "track-slideshow"
@@ -204,6 +220,10 @@ function NowPlayingBackgroundContent({ hideVisualizer }: { hideVisualizer: boole
         : source === "gallery-slideshow"
           ? galleryBlobs.length > 0
           : false;
+  const hasPendingImageBackground =
+    source === "cover"
+      ? holdCoverBackgroundWhileLoading && hasPotentialImageBackground
+      : hasPotentialImageBackground;
   const hasPendingBackground =
     pixiMedia.source === "track-video" ? hasBackgroundVideoMedia : hasPendingImageBackground;
   const imageTarget = useMemo<BackgroundRenderTarget | null>(
@@ -216,6 +236,8 @@ function NowPlayingBackgroundContent({ hideVisualizer }: { hideVisualizer: boole
   );
   const renderImageTarget = useSettledBackgroundTarget(imageTarget, hasPendingImageBackground);
   const renderPixiTarget = useSettledBackgroundTarget(pixiTarget, hasPendingBackground);
+  const shouldKeepPixiMounted =
+    pixiMedia.source === "track-video" ? hasBackgroundVideoMedia : hasPotentialImageBackground;
   const slideshowResetKey = `${current?.id ?? ""}:${source}:${slideshowUrls.length}`;
 
   useEffect(() => {
@@ -244,10 +266,14 @@ function NowPlayingBackgroundContent({ hideVisualizer }: { hideVisualizer: boole
   return (
     <>
       {renderImageTarget && renderer === "blur" ? (
-        <CanvasBlurBackground blurPx={blurPx} src={renderImageTarget.src} />
-      ) : (renderPixiTarget || hasPendingBackground) && pixiEffect ? (
+        <CanvasBlurBackground
+          blurPx={blurPx}
+          holdPreviousWhileLoading={source !== "cover" || holdCoverBackgroundWhileLoading}
+          src={renderImageTarget.src}
+        />
+      ) : (renderPixiTarget || shouldKeepPixiMounted) && pixiEffect ? (
         <PixiPixelBackground
-          className="opacity-90"
+          className={renderPixiTarget ? "opacity-90" : "opacity-0"}
           effect={pixiEffect}
           effectSettings={effectSettings}
           mediaType={renderPixiTarget?.mediaType ?? pixiMedia.mediaType}
@@ -255,7 +281,10 @@ function NowPlayingBackgroundContent({ hideVisualizer }: { hideVisualizer: boole
           src={renderPixiTarget?.src ?? null}
         />
       ) : renderImageTarget ? (
-        <CrossfadeBackgroundImage src={renderImageTarget.src} />
+        <CrossfadeBackgroundImage
+          holdPreviousWhileLoading={source !== "cover" || holdCoverBackgroundWhileLoading}
+          src={renderImageTarget.src}
+        />
       ) : null}
       <div className="absolute inset-0 bg-background" style={{ opacity: imageMaskOpacity }} />
       {/* Independent 流光 layer: composited ABOVE the background image/video and
@@ -347,40 +376,49 @@ function useSettledBackgroundTarget<T extends BackgroundRenderTarget>(
   return settled;
 }
 
-function CrossfadeBackgroundImage({ src }: { src: string }) {
-  const [loadedSrc, setLoadedSrc] = useState(src);
+function CrossfadeBackgroundImage({
+  holdPreviousWhileLoading = true,
+  src,
+}: {
+  holdPreviousWhileLoading?: boolean;
+  src: string;
+}) {
+  const [loadedSrc, setLoadedSrc] = useState<string | null>(src);
 
   useEffect(() => {
     if (src === loadedSrc) return;
     let alive = true;
+    if (!holdPreviousWhileLoading) setLoadedSrc(null);
     const image = new Image();
     image.decoding = "async";
     image.onload = () => {
       if (alive) setLoadedSrc(src);
     };
     image.onerror = () => {
-      if (alive) setLoadedSrc(src);
+      if (alive) setLoadedSrc(holdPreviousWhileLoading ? src : null);
     };
     image.src = src;
     return () => {
       alive = false;
     };
-  }, [loadedSrc, src]);
+  }, [holdPreviousWhileLoading, loadedSrc, src]);
 
   return (
     <AnimatePresence initial={false}>
-      <motion.img
-        key={loadedSrc}
-        src={loadedSrc}
-        alt=""
-        decoding="async"
-        draggable={false}
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 0.9 }}
-        exit={{ opacity: 0 }}
-        transition={{ duration: 0.35 }}
-        className="absolute inset-0 h-full w-full object-cover"
-      />
+      {loadedSrc ? (
+        <motion.img
+          key={loadedSrc}
+          src={loadedSrc}
+          alt=""
+          decoding="async"
+          draggable={false}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 0.9 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.35 }}
+          className="absolute inset-0 h-full w-full object-cover"
+        />
+      ) : null}
     </AnimatePresence>
   );
 }

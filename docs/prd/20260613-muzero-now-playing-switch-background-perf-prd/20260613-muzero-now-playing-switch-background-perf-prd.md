@@ -20,7 +20,7 @@
 | 7 | 切歌限速(长按 next/prev 节流 ~5/s,治 firehose 错位)(#错位) | ✅ 代码完成(待实测) | [Phase 7](#phase-7-切歌限速) |
 | 8 | 单一时钟:封面/背景/背光同源 live index(根治错位,QA#7) | ✅ 代码完成(待实测) | [Phase 8](#phase-8-单一时钟统一) |
 | 9 | Pixi 背景换纹理分段 trace(新 log:QueuePanel 已排除,归因仍需拆段) | ✅ 代码完成(待抓 trace) | [Phase 9](#phase-9-pixi-背景换纹理分段-trace) |
-| 10 | 保持 Pixi controller 穿过 streamed/local-cover URL pending 窗口 | 🔲 Pending | [Phase 10](#phase-10-保持-pixi-controller-穿过-url-pending-窗口) |
+| 10 | 保持 Pixi controller 穿过 streamed/local-cover URL pending 窗口 | ✅ 代码完成(待 trace 验证) | [Phase 10](#phase-10-保持-pixi-controller-穿过-url-pending-窗口) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
 
@@ -410,17 +410,20 @@ backgroundGpuPowerPreference?: "auto" | "high-performance" | "low-power"; // DEF
 
 **Goal:** streamed/local-cover 的新封面 URL pending 时,不要把 Pixi controller 卸载。视觉上仍然不喂 stale cover、不显示上一首背景;生命周期上让 controller 保持 mounted,下一张 URL ready 后只 `setSource()` 换纹理。
 
-**Proposed fix:**
+**实现(落地):**
 - `now-playing-background.tsx`:
-  - 引入 `shouldKeepPixiMounted`:当 `pixiEffect` 存在且当前 track 有潜在 Pixi source(例如 `source==="cover" && trackHasCover(current)`)时,即使 `renderPixiTarget` 暂时为 null,也继续挂载 `PixiPixelBackground`。
+  - 引入 `hasPotentialImageBackground` / `shouldKeepPixiMounted`:当 `pixiEffect` 存在且当前 track 有潜在 Pixi source(例如 `source==="cover" && trackHasCover(current)`)时,即使 `renderPixiTarget` 暂时为 null,也继续挂载 `PixiPixelBackground`。
   - pending 且无 `renderPixiTarget` 时传 `src=null` 并把 Pixi host 设为 `opacity-0`,避免显示上一首 stale canvas。
   - target ready 后传真实 `src`,class 回到 `opacity-90`;controller 不重建,trace 应只出现 `media.load` / `texture.create` / `textureSwap.apply`,不再出现每首 `appInit`。
 - 保持 stale 防护:不要把 `coverResource.url` 与 `targetKey` 不匹配的旧 URL 喂进 Pixi。
 
 **Tasks(TDD):**
-- [ ] 给 `now-playing-background.test.tsx` 加一例:streamed/local-cover URL pending 时仍 mount Pixi shell,`src=null`,且不使用 stale URL。
-- [ ] 切到下一首 URL ready 后同一个 Pixi shell 接收新 `src`(无条件卸载)。
+- [x] 给 `now-playing-background.test.tsx` 加一例:streamed/local-cover URL pending 时仍 mount Pixi shell,`src=null`,且不使用 stale URL。
+- [x] 切到下一首 URL ready 后同一个 Pixi shell 接收新 `src`(无条件卸载)。
 - [ ] QA trace 验收:连续切歌时 `background.pixi appInit` 只在首次 renderer mount 或设置变更时出现;后续切歌 summary `appInits` 不递增,`swapSeq` 递增。
+
+**Checklist:**
+- [x] `now-playing-background.test.tsx` 6 例通过。
 
 ---
 
@@ -492,3 +495,4 @@ backgroundGpuPowerPreference?: "auto" | "high-performance" | "low-power"; // DEF
 | 2026-06-14 | User+Claude | **QA#5 + Phase 5 A/B 回退 `warmDecode`**:Phase 6 trace 显示带封面快切真凶是 **heap +227MB(289→516)→ GC 长任务(166ms)→ FPS 104→27**,量化吻合 ~15 张新封面整图解码(~15MB/张)。`warmDecode` 强制每张缓存封面立即整图解码并被保留 → 放大堆。**回退**:改回 `warmImage`(remote 仅 set src)、本地不预热、删 `cover-warm-decode.ts`/test,保留 `decoding="async"`。`tsc`/Biome + swipeable(6)绿。待抓 trace 验证;若不足则重开 512px 派生(cover-quality PRD Phase 3) |
 | 2026-06-14 | User+Codex | **QA#8 新 log + Phase 9 trace 补强**:新 trace 排除 QueuePanel(`queuePanel/systemPlaylist=0`),确认 tab 无关掉帧来自全局背景层:8 次带封面 blob 切歌、`background.pixi textureSwap` 12 次、stale 3 次、heap 167→390MB,cover URL/palette 都命中缓存。修复 copy trace 丢自定义 context 的格式化缺口;Pixi `setSource()` 分段 emit `textureSwap.start` / `media.load` / `texture.create` / `textureSwap.apply` / summary,带 `sourceKind/loader/bytes/width/height/loadMs/textureMs/renderMs`。TDD:trace(7)+pixi-controller(10)+background-texture(5)绿。 |
 | 2026-06-14 | User+Codex | **QA#9 Phase 9 trace 结论**:分段字段成功定位新大头:两次切歌分别 `appInit=853ms/307ms`,而 `texture.create=0~0.1ms`,`renderMs=1.6~4.9ms`;`swapSeq/appInits` 每次从 1 开始,证明 Pixi controller 在 streamed/local-cover URL pending 窗口被卸载重建。新增 Phase 10:pending 时保持 Pixi mounted 但隐藏且 `src=null`,URL ready 后只换 texture,不显示 stale cover。 |
+| 2026-06-14 | User+Codex | **Phase 10 代码完成**(TDD):`now-playing-background` 将“pending 时是否保留 Pixi 生命周期”从“是否保留上一张 cover URL”里拆出来;streamed/local-cover URL pending 时 `PixiPixelBackground` 继续 mounted、`src=null`、`opacity-0`,URL ready 后同一 shell 收到新 `src` 并回 `opacity-90`。新增测试覆盖不喂 stale URL + 不卸载 Pixi shell;`now-playing-background.test` 6 绿。待 QA trace 验证切歌不再每首 `appInit`。 |

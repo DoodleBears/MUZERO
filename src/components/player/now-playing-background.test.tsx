@@ -1,11 +1,21 @@
-import { render, screen } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { act, render, screen } from "@testing-library/react";
 import type { CSSProperties } from "react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AppSettings, Track } from "@/db/types";
 import { usePlayerStore } from "@/stores/player-store";
 import { NowPlayingBackground } from "./now-playing-background";
 
 const mocks = vi.hoisted(() => ({
+  coverResources: new Map<
+    string,
+    {
+      readyForTrack: boolean;
+      staleWhilePending: boolean;
+      targetKey: string | null;
+      url: string | null;
+      urlKey: string | null;
+    }
+  >(),
   settings: {
     backgroundMode: "cover",
     flowEnabled: true,
@@ -14,6 +24,8 @@ const mocks = vi.hoisted(() => ({
     visualizerTuningByStyle: undefined,
   } as Partial<AppSettings>,
 }));
+const images: MockImage[] = [];
+const OriginalImage = globalThis.Image;
 
 vi.mock("dexie-react-hooks", () => ({
   useLiveQuery: (_query: () => unknown, _deps: unknown[], defaultValue: unknown) => defaultValue,
@@ -31,7 +43,19 @@ vi.mock("@/hooks/use-app-data", () => ({
 
 vi.mock("@/hooks/use-media", () => ({
   useObjectUrls: () => [],
-  useTrackCoverUrl: () => null,
+  useTrackCoverResource: (track?: Track) => {
+    const override = track ? mocks.coverResources.get(track.id) : undefined;
+    if (override) return override;
+    const url = track?.remoteCoverUrl ?? null;
+    const key = url ? `remote:${url}` : (track?.coverBlobId ?? null);
+    return {
+      readyForTrack: true,
+      staleWhilePending: false,
+      targetKey: key,
+      url,
+      urlKey: url ? key : null,
+    };
+  },
   useTrackMediaUrl: () => null,
 }));
 
@@ -41,9 +65,42 @@ vi.mock("@/visualizer/host", () => ({
   ),
 }));
 
+vi.mock("./pixi-pixel-background", () => ({
+  PixiPixelBackground: ({
+    className,
+    mediaType,
+    src,
+  }: {
+    className?: string;
+    mediaType?: string;
+    src: string | null;
+  }) => (
+    <div
+      className={className}
+      data-media-type={mediaType}
+      data-src={src ?? ""}
+      data-testid="pixi-background"
+    />
+  ),
+}));
+
 describe("NowPlayingBackground", () => {
   beforeEach(() => {
-    mocks.settings.visualizerTuningByStyle = undefined;
+    Object.assign(mocks.settings, {
+      backgroundGalleryFallback: undefined,
+      backgroundMode: "cover",
+      backgroundRenderer: undefined,
+      flowEnabled: true,
+      visualizerAsBackground: true,
+      visualizerStyle: "bars",
+      visualizerTuningByStyle: undefined,
+    } satisfies Partial<AppSettings>);
+    Object.defineProperty(globalThis, "Image", {
+      configurable: true,
+      value: MockImage,
+    });
+    images.length = 0;
+    mocks.coverResources.clear();
     usePlayerStore.setState({
       currentIndex: -1,
       isPlaying: false,
@@ -53,6 +110,10 @@ describe("NowPlayingBackground", () => {
 
   afterEach(() => {
     vi.clearAllMocks();
+    Object.defineProperty(globalThis, "Image", {
+      configurable: true,
+      value: OriginalImage,
+    });
   });
 
   it("does not mount flow or visualizer effects when no current track is selected", () => {
@@ -94,9 +155,136 @@ describe("NowPlayingBackground", () => {
 
     expect(visualizerHost).toHaveStyle({ opacity: "0.32" });
   });
+
+  it("does not keep the previous remote cover while the next remote cover is loading or failed", async () => {
+    mocks.settings.backgroundGalleryFallback = false;
+    mocks.settings.backgroundRenderer = "image";
+    mocks.settings.flowEnabled = false;
+    mocks.settings.visualizerAsBackground = false;
+    usePlayerStore.setState({
+      currentIndex: 0,
+      queue: [
+        makeTrack("trk_a", { remoteCoverUrl: "https://img.example/a.jpg" }),
+        makeTrack("trk_b", { remoteCoverUrl: "https://img.example/b.jpg" }),
+      ],
+    });
+    const { container } = render(<NowPlayingBackground active />);
+
+    await loadImage(0);
+    expect(container.querySelector("img")?.getAttribute("src")).toBe("https://img.example/a.jpg");
+
+    await act(async () => {
+      usePlayerStore.setState({ currentIndex: 1 });
+      await Promise.resolve();
+    });
+
+    expect(container.querySelector("img")).toBeNull();
+
+    await failImage(1);
+    expect(container.querySelector("img")).toBeNull();
+  });
+
+  it("does not feed a stale previous cover resource into the background renderer", async () => {
+    mocks.settings.backgroundGalleryFallback = false;
+    mocks.settings.backgroundRenderer = "image";
+    mocks.settings.flowEnabled = false;
+    mocks.settings.visualizerAsBackground = false;
+    mocks.coverResources.set("trk_a", {
+      readyForTrack: true,
+      staleWhilePending: false,
+      targetKey: "blb_a",
+      url: "blob:cover-a",
+      urlKey: "blb_a",
+    });
+    mocks.coverResources.set("trk_b", {
+      readyForTrack: false,
+      staleWhilePending: true,
+      targetKey: "blb_b",
+      url: "blob:cover-a",
+      urlKey: "blb_a",
+    });
+    usePlayerStore.setState({
+      currentIndex: 0,
+      queue: [
+        makeTrack("trk_a", { coverBlobId: "blb_a" }),
+        makeTrack("trk_b", { coverBlobId: "blb_b" }),
+      ],
+    });
+    const { container } = render(<NowPlayingBackground active />);
+
+    await loadImage(0);
+    expect(container.querySelector("img")?.getAttribute("src")).toBe("blob:cover-a");
+
+    await act(async () => {
+      usePlayerStore.setState({ currentIndex: 1 });
+      await Promise.resolve();
+    });
+
+    expect(container.querySelector("img")).toBeNull();
+  });
+
+  it("keeps the Pixi shell mounted but hidden while the next cover URL is pending", async () => {
+    mocks.settings.backgroundGalleryFallback = false;
+    mocks.settings.backgroundRenderer = "noise";
+    mocks.settings.flowEnabled = false;
+    mocks.settings.visualizerAsBackground = false;
+    mocks.coverResources.set("trk_a", {
+      readyForTrack: true,
+      staleWhilePending: false,
+      targetKey: "blb_a",
+      url: "blob:phase10-cover-a",
+      urlKey: "blb_a",
+    });
+    mocks.coverResources.set("trk_b", {
+      readyForTrack: false,
+      staleWhilePending: true,
+      targetKey: "blb_b",
+      url: "blob:phase10-cover-a",
+      urlKey: "blb_a",
+    });
+    const queue = [
+      makeTrack("trk_a", { coverBlobId: "blb_a" }),
+      makeTrack("trk_b", { coverBlobId: "blb_b", origin: "streamed" }),
+    ];
+    usePlayerStore.setState({ currentIndex: 0, queue });
+    render(<NowPlayingBackground active />);
+
+    await loadImage(0);
+    const firstShell = screen.getByTestId("pixi-background");
+    expect(firstShell).toHaveAttribute("data-src", "blob:phase10-cover-a");
+    expect(firstShell).toHaveClass("opacity-90");
+
+    await act(async () => {
+      usePlayerStore.setState({ currentIndex: 1 });
+      await Promise.resolve();
+    });
+
+    const pendingShell = screen.getByTestId("pixi-background");
+    expect(pendingShell).toBe(firstShell);
+    expect(pendingShell).toHaveAttribute("data-src", "");
+    expect(pendingShell).toHaveClass("opacity-0");
+
+    mocks.coverResources.set("trk_b", {
+      readyForTrack: true,
+      staleWhilePending: false,
+      targetKey: "blb_b",
+      url: "blob:phase10-cover-b",
+      urlKey: "blb_b",
+    });
+    await act(async () => {
+      usePlayerStore.setState({ queue: [...queue] });
+      await Promise.resolve();
+    });
+    await loadImage(1);
+
+    const readyShell = screen.getByTestId("pixi-background");
+    expect(readyShell).toBe(firstShell);
+    expect(readyShell).toHaveAttribute("data-src", "blob:phase10-cover-b");
+    expect(readyShell).toHaveClass("opacity-90");
+  });
 });
 
-function makeTrack(id: string): Track {
+function makeTrack(id: string, overrides?: Partial<Track>): Track {
   return {
     createdAt: 1,
     durationSec: 30,
@@ -110,5 +298,38 @@ function makeTrack(id: string): Track {
     status: "ready",
     tags: [],
     title: "Current Song",
+    ...overrides,
   };
+}
+
+async function loadImage(index: number) {
+  await act(async () => {
+    images[index]?.onload?.(new Event("load"));
+    await Promise.resolve();
+  });
+}
+
+async function failImage(index: number) {
+  await act(async () => {
+    images[index]?.onerror?.(new Event("error"));
+    await Promise.resolve();
+  });
+}
+
+class MockImage {
+  decoding = "";
+  naturalHeight = 50;
+  naturalWidth = 100;
+  onerror: OnErrorEventHandler = null;
+  onload: ((event: Event) => void) | null = null;
+  referrerPolicy = "";
+  src = "";
+
+  constructor() {
+    images.push(this);
+  }
+
+  decode(): Promise<void> {
+    return Promise.resolve();
+  }
 }
