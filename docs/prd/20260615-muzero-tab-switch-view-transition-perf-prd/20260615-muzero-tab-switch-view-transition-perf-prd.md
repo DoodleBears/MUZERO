@@ -14,7 +14,7 @@
 | 1 | 观测:tab-switch VT 标记(`shell.transition` used/skip/suppressed) | ✅ Completed(QA#1:正是它揪出了误诊) | [Phase 1](#phase-1-观测tab-switch-vt-计时--framelongtask-标记) |
 | 2 | ambient 活跃时跳过 root VT | ✅ 代码完成(QA#1:VT 确认被抑制,但**不是掉帧主因**) | [Phase 2](#phase-2-ambient-活跃时跳过-root-vt) |
 | 3 | (可选)非 ambient 时把 VT 裁剪到内容区 / 持久层命名 | ⏸️ 暂缓(VT 非主因,优先级降) | [Phase 3](#phase-3-可选非-ambient-时把-vt-裁剪到内容区) |
-| 4 | **真因:tab 切换 page remount → liveQuery 重查 + 封面重渲染 → GC** | ✅ 代码完成(keep-mounted,待 QA trace) | [Phase 4](#phase-4真因page-remount--livequery-重查--封面重渲染) |
+| 4 | **真因:tab 切换 page remount → liveQuery 重查 + 封面重渲染 → GC** | ✅ Completed(QA#2 验证:切 tab 不卡了) | [Phase 4](#phase-4真因page-remount--livequery-重查--封面重渲染) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending | ⏸️ 暂缓
 >
@@ -230,10 +230,26 @@ trace 见 [`.logs/commit-…/tab-1-tab-2-switch.log`](../../../.logs/commit-afff
 ### Phase 4 Checklist
 
 - [x] 单测:`shouldAnimateSpectrum` 加 `onscreen` 门(off-screen 永不动,即便 playing/dragging);`view-transition`/`playback-spectrum` 共 17 例绿;player/pages/lib 全量 751 例绿(无回归)。
-- [ ] (QA)切 tab 不再触发 `listAllTracks`/`trackPlaybackStats`/`memoryNotesByTrack` 重查(trace:`db …requery` 不再每切出现)。
-- [ ] (QA)tab 切换 `fpsAvg` 稳 ~120、`frameMax<50`、`longtask` 无 150ms GC 尖峰(prod build,第二轮)。
-- [ ] (QA)内存峰值在可接受范围(keep-mounted 代价已量化);若过高则回退混合(重页保活、Now/settings 条件挂)。
+- [x] **(QA#2)切 tab 不再触发 liveQuery 重查:`dbRequeries` 全程平在 2(QA#1 是每切 +30)。**
+- [x] **(QA#2)tab 切换 `fpsAvg 119/109`、`frameMax 16.6/33.4`(QA#1 是 60 / 166)、heap 平在 187–195(QA#1 107→238→GC)——切 tab「完全不卡了」(用户确认)。**
+- [ ] (QA,可选)内存峰值/boot 成本未单独量化;本轮 `heapMb≈190` 正常,未见 keep-mounted 明显代价,暂不回退混合。
 - [x] `tsc`/Biome 通过。
+
+### QA#2(2026-06-15 7ec4a58 prod build):Phase 4 验证 —— 切 tab 不卡了
+
+用户实测确认「切换完全不卡了」。trace 关键:
+
+| 指标 | QA#1(remount) | QA#2(keep-mounted) |
+|---|---|---|
+| `dbRequeries`(整段切 tab) | 每切 +30(73→103) | **平在 2** |
+| `fpsAvg` | 115 → **60** | **119.3 / 109.6** |
+| `frameMaxMs` | **166** | **16.6 / 33.4** |
+| `heapMb` | 107 → **238** → GC | **187–195 平** |
+| `shell.transition` | `phase=skip suppressed=true`(VT 已抑制) | 同 |
+
+- **核心证据:`dbRequeries` 平在 2** —— keep-mounted 后 `listAllTracks`/`trackPlaybackStats`/`memoryNotesByTrack` 不再随切 tab 重订阅重查 → 无 IndexedDB 反序列化 → 无 GC 长任务 → `frameMax` 从 166 砍到 ≤33。
+- VT 仍被 Phase 2 抑制(`suppressed=true used=false`),与本修复正交。
+- **小观察(非阻塞):**隐藏的 Now Playing `SyncedLyricsView` 仍每帧跑 `lyrics.cascade.frame`(`viewportHeight:1`,即被 `display:none` 折叠),但 `avgMs≈0.08`——可忽略。若日后想更干净,可给歌词 cascade 也加 onscreen 门(与 spectrum 同模式)。归入 §7 Out of Scope 的「后续微优化」。
 
 ---
 
@@ -281,5 +297,6 @@ trace 见 [`.logs/commit-…/tab-1-tab-2-switch.log`](../../../.logs/commit-afff
 |------|--------|---------|
 | 2026-06-15 | Claude | 初稿:排查确认 tab↔tab 掉帧 = root View Transition 快照持久重 ambient 背景(Pixi/canvas/video);三入口(NavFab + Ctrl+1/2 shortcut)。落地方案:Phase 1 观测、Phase 2 ambient 活跃跳过 root VT + 内容层 fade、Phase 3(可选)命名裁剪。仅文档,未改代码。 |
 | 2026-06-15 | Claude | **Phase 1 + Phase 2 代码完成(TDD)**:`view-transition.ts` 加模块级抑制(`setViewTransitionSuppressed`)+ `shell.transition` trace(`phase=start|skip`/`used`/`suppressed`);`App.tsx` 跟 `ambientBackdropActive` 驱动抑制。抑制为全局(所有 root VT 在重背景下同跳过),shared-element morph 走 Motion 不受影响。**未加内容层 fade**(暂定瞬切,Open Question #2)。`view-transition.test.ts` 13 例绿;`tsc`/Biome 通过。待 QA 抓 ambient-active 切 tab trace 验证 `fpsAvg` 回 ~120 + `shell.transition phase=skip`。 |
+| 2026-06-15 | User+Claude | **QA#2 验证:Phase 4 解决问题**。7ec4a58 prod build,用户确认「切换完全不卡了」。关键证据 `dbRequeries` 整段平在 2(QA#1 每切 +30);`fpsAvg 119/109`(QA#1 60)、`frameMax 16.6/33.4`(QA#1 166)、heap 平在 ~190(QA#1 →238→GC)。VT 仍被 Phase 2 抑制(正交)。Phase 4 标 ✅ Completed。小观察:隐藏的 `SyncedLyricsView` 仍每帧跑 `lyrics.cascade.frame`(`avgMs≈0.08`,可忽略)→ 后续可加 onscreen 门。 |
 | 2026-06-15 | User+Claude | **Phase 4 代码完成(keep-mounted,TDD)**:用户拍板方案 A。`App.tsx` 五页改常驻挂载 + `<TabPanel hidden>` 切显隐(删条件渲染)→ liveQuery 订阅不断、切 tab 不重查、封面不重渲染。防 rAF-while-hidden:`PlaybackSpectrum` 加 `IntersectionObserver` `onscreen` 门(顺带补 P1「滚出视口暂停」);visualizer host 本就 IO 暂停、Lenis 自停 driver 空闲 0 rAF。`shouldAnimateSpectrum` 加 `onscreen` 参数 + 测试;player/pages/lib 全量 751 例绿、`tsc`/Biome 通过。待 QA 抓 trace 验证 `db …requery` 不再每切出现 + `fpsAvg≈120`。 |
 | 2026-06-15 | User+Claude | **QA#1 方向修正:VT 被证伪为非主因**。第一份 trace(Phase 1/2 代码)显示 `shell.transition` 全 `suppressed=true used=false`(VT 没跑),但切 tab 仍 `fpsAvg 115→60`/`frameMax 166`/heap 107→238/`longTask 150`,停手即回稳 120。真因 = `tab===x && <Page>` 条件渲染导致**切 tab 整页卸载/重挂 → `useLiveQuery` 重订阅重查(`listAllTracks`/`trackPlaybackStats`/`memoryNotesByTrack`)+ 封面 surface 重渲染 → IndexedDB 反序列化 + GC 长任务**。Phase 3 暂缓、VT 抑制(Phase 2)保留为次要省成本;新增 Phase 4(真因):keep-mounted 页面 或 liveQuery 结果缓存(Open Question #4)。Phase 1 观测先行正是它一举证伪 VT。 |
