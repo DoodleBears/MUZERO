@@ -58,9 +58,12 @@ export function useLocalCoverResource(
     [coverBlobId],
     undefined,
   ) as MediaBlob | null | undefined;
-  const rowPending = Boolean(coverBlobId) && row === undefined;
-  const servableRow = canServeLocalCover(row)
-    ? (row as MediaBlob & { storageBackend: "electron-file"; storageKey: string })
+  const rowMatchesTrack = Boolean(coverBlobId) && row?.id === coverBlobId;
+  const rowPending =
+    Boolean(coverBlobId) && (row === undefined || (row !== null && !rowMatchesTrack));
+  const currentRow = rowMatchesTrack ? row : null;
+  const servableRow = canServeLocalCover(currentRow)
+    ? (currentRow as MediaBlob & { storageBackend: "electron-file"; storageKey: string })
     : null;
   const canServeRow = Boolean(servableRow);
   const storageBackend = servableRow?.storageBackend;

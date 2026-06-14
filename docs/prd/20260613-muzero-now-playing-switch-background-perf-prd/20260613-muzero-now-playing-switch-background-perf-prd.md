@@ -23,6 +23,7 @@
 | 10 | 保持 Pixi controller 穿过 streamed/local-cover URL pending 窗口 | ✅ Completed(trace verified) | [Phase 10](#phase-10-保持-pixi-controller-穿过-url-pending-窗口) |
 | 11 | local-cover 协议 URL pending 时跳过 blob fallback | ✅ 代码完成(待 trace 验证) | [Phase 11](#phase-11-local-cover-协议-url-pending-时跳过-blob-fallback) |
 | 12 | local-cover pending 时硬阻断上一帧 settled Pixi target | ✅ 代码完成(待 trace 验证) | [Phase 12](#phase-12-local-cover-pending-时硬阻断上一帧-settled-pixi-target) |
+| 13 | local-cover liveQuery stale row guard | ✅ 代码完成(待 trace 验证) | [Phase 13](#phase-13-local-cover-livequery-stale-row-guard) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
 
@@ -476,6 +477,29 @@ backgroundGpuPowerPreference?: "auto" | "high-performance" | "low-power"; // DEF
 **Checklist:**
 - [x] `now-playing-background.test.tsx` 8 例通过。
 
+### QA#12(2026-06-14 Phase 12 trace):`localCover.wait` 仍晚于首个 blob start
+
+新 trace 继续缩小了问题:
+
+- **Phase 12 部分生效**:当 `localCover.wait` 已经发生后,后续会走 `sourceKind=muzfetch`。Pixi controller 仍保持稳定(`appInits=1`),没有回到 app-init churn。
+- **但 wait 仍有时晚一帧**:例如 `trk_f783...` 在 10:59:16.213 切入,10:59:16.246 已启动 `textureSwap.start sourceKind=blob swapSeq=32`,到 10:59:16.442 才出现 `localCover.wait`。随后同一 16.5MB/3000×3000 图的 blob/muzfetch decode 仍都 stale。
+- **更精确根因**:[`useLocalCoverResource`](../../../src/hooks/use-local-cover.ts) 用 `useLiveQuery(db.mediaBlobs.get(coverBlobId), [coverBlobId])`,但 Dexie/React 在 deps 切换后可能短暂保留上一条 `row`。旧代码只看 `row` 是否可 serve,没有校验 `row.id === coverBlobId`;如果拿到上一张 row,就会把当前 cover 误判为不需要等待或拿错 storageKey,让背景层首帧走 blob fallback。
+
+### Phase 13: local-cover liveQuery stale row guard
+
+**Goal:** `coverBlobId` 切换后,只接受 `row.id === coverBlobId` 的 mediaBlob 行。任何非空但 id 不匹配的 row 都视为当前 row pending,避免首帧误走 blob fallback 或取上一张 storageKey。
+
+**实现(落地):**
+- [`use-local-cover.ts`](../../../src/hooks/use-local-cover.ts):新增 `rowMatchesTrack = row?.id === coverBlobId`;`rowPending` 覆盖 `row === undefined` 和 `row !== null && !rowMatchesTrack`;`servableRow` 只从匹配当前 `coverBlobId` 的 row 派生。
+
+**Tasks(TDD):**
+- [x] 新增 `use-local-cover.test.tsx`:当当前 `coverBlobId=blb_current` 但 `useLiveQuery` 暂返 `blb_previous` electron-file row 时,`useLocalCoverResource` 返回 `pendingReason:"row"`,不调用 `localMediaUrlForStorageKey`,从而不允许背景层 blob fallback。
+- [ ] QA trace 验收:local-cover track 的 `playIndex` 后不应再先出现同 track 的 `sourceKind=blob` 再 `localCover.wait`;wait 应在首帧就成立,然后只启动 `muzfetch` 或在 row 确认不可 serve 后合法 fallback blob。
+
+**Checklist:**
+- [x] `use-local-cover.test.tsx` 1 例通过。
+- [x] `now-playing-background.test.tsx` 8 例通过。
+
 ---
 
 ## 7. Out of Scope(交叉引用,本 PRD 不处理)
@@ -524,6 +548,7 @@ backgroundGpuPowerPreference?: "auto" | "high-performance" | "low-power"; // DEF
 | 11 | QA#9:Phase 9 后为什么仍 `fpsLow≈10`? | ✅ Resolved(trace verified) | 分段 trace 显示 `texture.create/render` 很小,真正大头是每次切歌又 `appInit`(853ms/307ms)。controller 被 streamed/local-cover URL pending 窗口卸载。Phase 10 修生命周期;新 trace 已验证 `appInits=1` 稳定、`swapSeq` 递增。 |
 | 12 | QA#10:Phase 10 后为什么仍 `fpsLow=2.4`? | 🔲 Root cause found | Pixi 不再重建后,剩余大头是 local-cover 协议 URL pending 期间先启 `blob:` fallback,随后 `muzfetch:` ready 又二次解码同一张 16.5MB/3000px 封面。Phase 11 让 pending 成为显式状态,跳过 blob fallback 并补 `background.cover localCover.wait` trace。 |
 | 13 | QA#11:3000×3000 本身是否足以解释掉帧? | 🔲 Root cause refined | 不应只归因到尺寸。新 trace 显示 `localCover.wait` 前仍有一帧旧 settled `blob:` target 进入 Pixi,且 stale ImageBitmap decode 无法取消,把 3000px 图的旧 decode、muzfetch decode、下一首 decode 排到一起。Phase 12 硬阻断 pending 首帧的 settled target。 |
+| 14 | QA#12:Phase 12 后为什么仍 wait 晚于 blob start? | 🔲 Root cause found | `useLiveQuery` 在 `coverBlobId` 切换后会短暂返回上一条 mediaBlob row;旧 hook 没校验 `row.id`,导致当前 cover 首帧误判并走 blob。Phase 13 只接受 id 匹配当前 cover 的 row,否则视为 row pending。 |
 
 ---
 
@@ -552,3 +577,4 @@ backgroundGpuPowerPreference?: "auto" | "high-performance" | "low-power"; // DEF
 | 2026-06-14 | User+Codex | **QA#10 Phase 10 trace 验证 + Phase 11**:新 trace 证明 Pixi app init churn 已修(`appInits=1`, `swapSeq 10→16`),但同一 16.5MB/3000px local-cover 先 `sourceKind=blob` decode 1410ms 后 stale,再 `sourceKind=muzfetch` decode 1106ms 成功,导致 `fpsLow=2.4`/`frameMaxMs=408.4`。新增 Phase 11:local-cover URL pending 时跳过 object URL fallback,补 `background.cover localCover.wait` trace。 |
 | 2026-06-14 | User+Codex | **Phase 11 代码完成**(TDD):`useLocalCoverResource` 区分 row/url pending 与不可用;`now-playing-background` 在 pending 时不给 `useTrackCoverResource` 当前 track,Pixi hidden mounted 且不创建 `blob:`/`Image`,URL ready 后同 shell 收 `muzfetch:`。`now-playing-background.test` 7 绿。待 QA trace 验证不再出现同尺寸 `blob` stale → `muzfetch` 二次 decode。 |
 | 2026-06-14 | User+Codex | **QA#11 + Phase 12**:用户指出 3000×3000 对现代电脑不应单独构成巨大压力。复核 10:55 trace 后修正归因:问题不是尺寸单点,而是 `localCover.wait` 前仍有一帧旧 settled `blob:` target 先进入 Pixi,启动不可取消的 stale ImageBitmap decode,随后 `muzfetch` 和下一首 decode 叠加。Phase 12 在 local-cover pending 首帧硬压 `renderPixiTarget/renderImageTarget=null`;新增测试锁定不再 replay previous settled Pixi target。 |
+| 2026-06-14 | User+Codex | **QA#12 + Phase 13**:10:59 trace 显示 `localCover.wait` 仍会晚于 `sourceKind=blob` start。定位到 `useLocalCoverResource` 的 Dexie `useLiveQuery` deps 切换窗口:可能暂返上一张 mediaBlob row,旧 hook 未校验 `row.id === coverBlobId`,导致首帧误走 blob fallback。新增 row-id guard 与 hook 测试,stale row 现在返回 `pendingReason=row` 且不请求协议 URL。 |
