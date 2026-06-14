@@ -917,6 +917,17 @@ QA 观察到 `Ctrl+1`/`Ctrl+2` 在 Now Playing 与 Tab 2 全部歌曲列表之�
 - **页面挂载路径**:`App.tsx` 条件渲染 `{tab === "now" && <NowPlayingPage/>}` / `{tab === "search" && <SearchPage/>}`;所以 `Ctrl+2` 是 SearchPage 冷挂载,组件内 `useMemo/useDeferredValue` 缓存不会跨 tab 保留。
 - **关系判断**:它和切歌掉帧同属“主线程/合成器瞬时 work 没有足够隔离”的性能问题,但不是 MediaSession artwork 根因;它不应出现 `media.load.*` / `player.mediaSession.*`。归属 [`queue-search-fps-investigation PRD`](../20260614-muzero-queue-search-fps-investigation-prd/20260614-muzero-queue-search-fps-investigation-prd.md) Phase 2:补 `nav.viewTransition.*`, `searchPage.mount`, `searchPage.derive.*` span,并决定 SearchPage mount/cache 模型。
 
+### QA#30(2026-06-14 Experiment J trace):MediaSession settle 验证有效
+
+17:00 trace 是 `bb7bc64 diag(perf): settle media session artwork after play` 的结果:
+
+- **Experiment J 生效**:rapid skip 期间每次切歌只 emit `media.load.attach-play-media-session-settled` 和 `player.mediaSession metadata.schedule phase=start delayMs=650`;旧 schedule 被后续切歌覆盖,没有在每首歌上触发 `player.mediaSession.artwork.fetch`。
+- **artwork fetch 被合并到最后一首**:最后一次切歌稳定 650ms 后,只出现一次 `metadata.schedule phase=success`,随后 `player.mediaSession.artwork.fetch lastMs=9.9ms bytes=981017 mime=image/jpeg`, `objectUrl=0.1ms`, `metadata.set=0ms`,总 `player.mediaSession.metadata=10.2ms`。
+- **FPS 明显恢复**:进入切歌前 idle 窗口为 `fpsAvg=120/fpsLow=117.6`;rapid switch 过程中仍有一次 `fpsLow=12/frameMax=83.3ms`,但最终 settle 窗口恢复到 `fpsAvg=111.3/fpsLow=29.9/frameMax=33.4ms`。对比 Experiment I 的 `fpsAvg=97.3~105.9/fpsLow=10.9~15/frameMax=75.1~91.7ms`,J 明确改善。
+- **对象 URL churn 收敛**:最终窗口 `blobsCreated=27`, `blobsCreatedByKind.image=13`, `blobsLiveByKind.image=8`;不再复现 Experiment I 的 image blob `54~61` 和 live image `18` 级别增长。
+- **剩余掉帧另算**:J 里仍能看到 `cover.preload.batch maxMs=36.2ms`, `background.cover localCover.wait`, `pixiCover.derivative state=pending`,以及 capture 前已有 `longTaskMaxMs=539`。这些不是 MediaSession immediate artwork 的证据;正式 fix 先 port settle/debounce,剩余低帧再用 `cover.preload.*` / background derivative / nav transition trace 继续分层。
+- **结论更新**:切歌主因不在 3000px cover decode、Pixi texture、`audio.load()` 或 `play()`;当前被验证的决定性问题是 **MediaSession artwork 在 rapid skip 中逐首读取 local cover 并创建 image object URL**。正式修复应把 `scheduleMediaSessionMetadata` 从诊断模式变成默认路径,并保留 `player.mediaSession.*` trace span。
+
 ---
 
 ## 7. Out of Scope(交叉引用,本 PRD 不处理)
