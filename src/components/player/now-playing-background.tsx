@@ -32,7 +32,8 @@ import { CanvasBlurBackground } from "./canvas-blur-background";
 import { type PixiBackgroundEffect, PixiPixelBackground } from "./pixi-pixel-background";
 
 const bgCoverLog = createDiagnosticLogger("background.cover");
-const ENABLE_PIXI_BACKGROUND_FOR_BISECT = false;
+const ENABLE_PIXI_BACKGROUND_FOR_BISECT = true;
+const DISABLE_PIXI_TEXTURE_SOURCE_FOR_BISECT = true;
 
 /**
  * Now Playing ambient backdrop.
@@ -393,7 +394,9 @@ function NowPlayingBackgroundContent({ hideVisualizer }: { hideVisualizer: boole
           effectSettings={effectSettings}
           mediaType={effectiveRenderPixiTarget?.mediaType ?? pixiMedia.mediaType}
           pixelSize={pixelSize}
-          src={effectiveRenderPixiTarget?.src ?? null}
+          src={
+            DISABLE_PIXI_TEXTURE_SOURCE_FOR_BISECT ? null : (effectiveRenderPixiTarget?.src ?? null)
+          }
         />
       ) : effectiveRenderImageTarget && !pixiEffect ? (
         <CrossfadeBackgroundImage

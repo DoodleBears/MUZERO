@@ -817,12 +817,15 @@ backgroundGpuPowerPreference?: "auto" | "high-performance" | "low-power"; // DEF
 - [x] Commit 0:记录本 Phase 与 QA 操作矩阵。
 - [x] Commit A:禁用整个全局 `NowPlayingBackground`。
 - [x] Commit B:在 A 的反向路径之外,禁用 Pixi ambient layer。
-- [ ] Commit C/D/E:根据 A/B 的 QA 结果继续,避免无意义地堆叠过多诊断改动。
+- [x] Commit C:保留 Pixi shell 但强制 `src=null`,不启动 texture source。
+- [ ] Commit D/E:根据 A/B/C 的 QA 结果继续,避免无意义地堆叠过多诊断改动。
 - [ ] 最终修复必须回到产品分支实现,不得直接合并诊断 commit。
 
 **Experiment A implementation:** [`App.tsx`](../../../src/App.tsx) 不再挂载 `NowPlayingBackground`;页面、dock、播放 transport、foreground stage、trace recorder/HUD 保持原样。若本 commit 下 `fpsLow/frameMaxMs` 明显恢复,则剩余主因位于全局背景层(包括 Pixi/flow/visualizer/compositor)。若仍不恢复,则应转向 audio blob load、foreground cover surfaces 或 React render churn。
 
 **Experiment B implementation:** 在 A 之后恢复 [`App.tsx`](../../../src/App.tsx) 的 `NowPlayingBackground` 挂载,但 [`now-playing-background.tsx`](../../../src/components/player/now-playing-background.tsx) 用临时常量关闭 `PixiPixelBackground` 分支。Pixi renderer 模式下不 fallback 到 `CrossfadeBackgroundImage`,避免重新引入 full-cover ambient image decode;flow、background visualizer、mask、lyrics/background live queries 仍保留。若 A 恢复而 B 不恢复,主因更可能在 flow/visualizer/compositor 或背景查询;若 B 恢复,优先查 Pixi texture load/decode/swap 或 Pixi canvas 合成。
+
+**Experiment C implementation:** 在 B 之后重新启用 `PixiPixelBackground` 组件挂载,但强制传入 `src=null`。这会保留 Pixi app/canvas/filter/shell 与背景层合成成本,同时阻断图片 `background.texture fetch/header/decode` 和 texture swap 输入。若 B 恢复但 C 又掉,说明 Pixi 稳态 canvas/filter/compositor 本身是必要放大器;若 B/C 都恢复,说明主因在 Pixi texture source 的 fetch/decode/swap 队列。
 
 ---
 
