@@ -833,6 +833,37 @@ backgroundGpuPowerPreference?: "auto" | "high-performance" | "low-power"; // DEF
 
 **Experiment E implementation:** 在 D 之后短路 [`ensureLoadedAndPlay`](../../../src/stores/player-store.ts),保留 `playIndex`/store currentIndex 更新,但跳过 `getTrackBlob`, `mediaEngine.loadBlob/loadUrl`, `stream.resolve`, `mediaEngine.play`。trace 会出现 `player.playback media.load.skip sourceId=diag-bisect:*`,不会出现 `media.load.blob/stream/local-file`。若 E 恢复而 D 不恢复,主因在每首媒体源重新装载/音频 decoder pipeline;若 E 仍掉,剩余要转向 React render churn、trace recorder/HUD、页面列表或 transport state fan-out。
 
+### QA#25(2026-06-14 Experiment E trace):FPS 明显恢复,主因转向 media source reload/audio decoder pipeline
+
+14:59 trace 是 `3153bf9 diag(perf): bypass media source reload` 的结果,结论很强:
+
+- **Experiment E 生效**:每次 `playIndex` 后都出现 `player.playback media.load.skip source=diag-bisect:blob`,且没有 `media.load.blob` / `media.load.stream` / `source.loaded` / `play.requested`。说明本轮切歌只更新 player store currentIndex 与 UI,没有让 media element 重新装载新音频源。
+- **FPS 明显恢复**:在 5983 首超大队列中连续切歌,`fpsAvg` 稳在 `109.6 → 113.1 → 114.9`, `fpsLow` 从之前的个位数/十几提升到 `20 → 24`, `frameMaxMs` 从 6b987a3 的 `108.4ms` 收敛到 `41.7~50.1ms`, `frameP99Ms` 到 `25~41.5ms`。这说明背景/Pixi/cover resource 被砍掉后,真正决定“是否恢复”的是 media source reload 是否发生。
+- **内存侧也收敛**:没有新 audio blob(`blobsCreatedByKind.audio=0`);image blob 只从 `40` 到 `43`,heap 维持 `169~207MB`,不再出现 6b987a3 的 `266→419MB` 增长与 `fpsAvg 45.6`。
+- **仍有非主因残留**:`background.cover localCover.wait` / `pixiCover.derivative pending` 与少量 `cover.preload.batch` 仍会出现,但没有把 FPS 拉低。它们是后续清理项,不是当前决定性因子。
+- **更新判断**:QueuePanel、SearchPage、NowPlayingBackground/Pixi、full-cover JS Image decode、cover object URL churn 都已经被二分排除为“决定性主因”。当前主因应细分为:
+  - `getTrackBlob` / IndexedDB blob read;
+  - `mediaEngine.loadBlob` 创建 object URL + `audio.src` 替换 + `audio.load()`;
+  - Chromium/WebView audio decoder 在快速 source replacement 下的不可抢占工作;
+  - `mediaEngine.play()` / media element event storm 触发的 frame pressure。
+
+### Phase 26: Split media source reload into blob read, element source swap, and play request
+
+**Goal:** 从 Experiment E 的“大跳过”继续细分,找出 production 修复的最小入口。不能把“跳过切歌播放”作为修复;需要区分是读取本地 blob、替换 media element source、还是立即 `play()` 造成掉帧。
+
+**Candidate diagnostic commits:**
+
+| Experiment | Commit intent | Disabled work | Expected signal |
+|------------|---------------|---------------|-----------------|
+| F | `diag(perf): read media blob without attaching` | 保留 `getTrackBlob`/stream resolve,跳过 `mediaEngine.loadBlob/loadUrl` 与 `play()` | 若 F 仍恢复,blob/stream resolve 不是主因;若 F 掉,主因在 DB/blob read |
+| G | `diag(perf): attach media source without play` | 执行 `mediaEngine.loadBlob/loadUrl`,跳过 `mediaEngine.play()` | 若 G 掉,主因在 source swap/load/decoder;若 G 恢复,主因在 immediate play/media events |
+| H | `diag(perf): defer media source load after switch settle` | 真实播放路径,但 source load 延后到切歌停止后 | 若 H 恢复,正式修复应做 switch-settle/debounce + cancel stale media load |
+
+**Tasks:**
+- [ ] Commit F:保留 blob/stream resolve,不 attach media element。
+- [ ] Commit G:attach media source,但不调用 `play()`。
+- [ ] Commit H:把真实 media source load 延后到切歌 settle 后,验证是否能保留播放语义同时恢复 FPS。
+
 ---
 
 ## 7. Out of Scope(交叉引用,本 PRD 不处理)
