@@ -54,6 +54,7 @@ import {
   setPlatformMediaSessionPlaybackState,
 } from "@/lib/media-session";
 import { isNcmFile } from "@/lib/ncm-decode";
+import { notePerfWork } from "@/lib/perf-counters";
 import { getAppFetch } from "@/lib/platform";
 import type { SystemPlaylistId } from "@/lib/system-playlists";
 import { describeTrackCoverSource, describeTrackMediaSource } from "@/lib/track-source";
@@ -137,7 +138,8 @@ const MEDIA_SOURCE_RELOAD_BISECT_MODE:
   | "skip"
   | "read"
   | "attach-no-play"
-  | "attach-and-play" = "attach-and-play";
+  | "attach-and-play"
+  | "attach-play-media-session" = "attach-play-media-session";
 const DEFAULT_PLAYER_VOLUME = 0.9;
 
 export type QueueSource =
@@ -2186,18 +2188,21 @@ async function ensureLoadedAndPlay(
     if (
       (MEDIA_SOURCE_RELOAD_BISECT_MODE === "read" ||
         MEDIA_SOURCE_RELOAD_BISECT_MODE === "attach-no-play" ||
-        MEDIA_SOURCE_RELOAD_BISECT_MODE === "attach-and-play") &&
+        MEDIA_SOURCE_RELOAD_BISECT_MODE === "attach-and-play" ||
+        MEDIA_SOURCE_RELOAD_BISECT_MODE === "attach-play-media-session") &&
       sourceKind === "blob"
     ) {
       const media = await getTrackBlob(track);
       if (!continueCurrent("diag-blob-read")) return;
       if (media?.blob) {
         const event =
-          MEDIA_SOURCE_RELOAD_BISECT_MODE === "attach-and-play"
-            ? "media.load.attach-play"
-            : MEDIA_SOURCE_RELOAD_BISECT_MODE === "attach-no-play"
-              ? "media.load.attach-only"
-              : "media.load.read-only";
+          MEDIA_SOURCE_RELOAD_BISECT_MODE === "attach-play-media-session"
+            ? "media.load.attach-play-media-session"
+            : MEDIA_SOURCE_RELOAD_BISECT_MODE === "attach-and-play"
+              ? "media.load.attach-play"
+              : MEDIA_SOURCE_RELOAD_BISECT_MODE === "attach-no-play"
+                ? "media.load.attach-only"
+                : "media.load.read-only";
         tracePlaybackLoad(event, track, playbackTrace, {
           bytes: media.bytes,
           mime: media.mime,
@@ -2206,12 +2211,18 @@ async function ensureLoadedAndPlay(
         });
         if (
           MEDIA_SOURCE_RELOAD_BISECT_MODE === "attach-no-play" ||
-          MEDIA_SOURCE_RELOAD_BISECT_MODE === "attach-and-play"
+          MEDIA_SOURCE_RELOAD_BISECT_MODE === "attach-and-play" ||
+          MEDIA_SOURCE_RELOAD_BISECT_MODE === "attach-play-media-session"
         ) {
           await mediaEngine.loadBlob(media.blob, track.kind);
           if (!continueCurrent("diag-blob-attached")) return;
         }
-        if (MEDIA_SOURCE_RELOAD_BISECT_MODE === "attach-and-play" && wantPlay && get().wantPlay) {
+        if (
+          (MEDIA_SOURCE_RELOAD_BISECT_MODE === "attach-and-play" ||
+            MEDIA_SOURCE_RELOAD_BISECT_MODE === "attach-play-media-session") &&
+          wantPlay &&
+          get().wantPlay
+        ) {
           playbackLog.info("play.requested", {
             message: "media play requested",
             ...playbackTrace,
@@ -2240,6 +2251,9 @@ async function ensureLoadedAndPlay(
       isPlaying: wantPlay,
       positionSec: 0,
     });
+    if (MEDIA_SOURCE_RELOAD_BISECT_MODE === "attach-play-media-session") {
+      void updateMediaSessionMetadata(track, () => continueCurrent("diag-media-session"));
+    }
     return;
   }
   const previousLoadedTrackId = loadedTrackId;
@@ -2509,8 +2523,22 @@ async function updateMediaSessionMetadata(
   track: Track,
   isCurrent: () => boolean = () => loadedTrackId === track.id,
 ): Promise<void> {
+  const startedAt = performance.now();
+  const baseTrace = {
+    trackId: track.id,
+    coverBlobId: track.coverBlobId,
+    hasRemoteCover: Boolean(track.remoteCoverUrl),
+  };
+  const finish = (phase: string, data?: Record<string, unknown>) =>
+    notePerfWork("player.mediaSession.metadata", performance.now() - startedAt, {
+      ...baseTrace,
+      phase,
+      ...(data ?? {}),
+    });
+
   if (!canSetPlatformMediaSessionMetadata()) {
     revokeMediaSessionArtworkObjectUrl();
+    finish("skip", { reason: "unsupported" });
     return;
   }
 
@@ -2528,25 +2556,61 @@ async function updateMediaSessionMetadata(
   if (track.remoteCoverUrl) {
     artwork = { src: track.remoteCoverUrl };
   } else if (track.coverBlobId) {
-    if (!isCurrent()) return;
+    if (!isCurrent()) {
+      finish("skip", { reason: "stale-before-cover" });
+      return;
+    }
+    const coverStartedAt = performance.now();
     const cover = await getTrackCover(track);
-    if (!isCurrent()) return;
+    notePerfWork("player.mediaSession.artwork.fetch", performance.now() - coverStartedAt, {
+      ...baseTrace,
+      hasBlob: Boolean(cover?.blob),
+      bytes: cover?.blob?.size ?? 0,
+      mime: cover?.mime,
+    });
+    if (!isCurrent()) {
+      finish("skip", { reason: "stale-after-cover", hasCoverBlob: Boolean(cover?.blob) });
+      return;
+    }
     if (cover?.blob) {
+      const objectUrlStartedAt = performance.now();
       nextArtworkObjectUrl = URL.createObjectURL(cover.blob);
+      notePerfWork(
+        "player.mediaSession.artwork.objectUrl",
+        performance.now() - objectUrlStartedAt,
+        {
+          ...baseTrace,
+          bytes: cover.blob.size,
+          mime: cover.mime,
+        },
+      );
       artwork = { src: nextArtworkObjectUrl, mime: cover.mime };
     }
   }
 
   if (!isCurrent() || loadedTrackId !== track.id || seq !== mediaSessionMetadataSeq) {
     if (nextArtworkObjectUrl) URL.revokeObjectURL(nextArtworkObjectUrl);
+    finish("skip", {
+      reason: "stale-final",
+      hasArtwork: Boolean(artwork?.src),
+      seq,
+      currentSeq: mediaSessionMetadataSeq,
+    });
     return;
   }
 
-  setPlatformMediaSessionMetadata(track, artwork);
+  const setStartedAt = performance.now();
+  const didSet = setPlatformMediaSessionMetadata(track, artwork);
+  notePerfWork("player.mediaSession.metadata.set", performance.now() - setStartedAt, {
+    ...baseTrace,
+    didSet,
+    hasArtwork: Boolean(artwork?.src),
+  });
   if (mediaSessionArtworkObjectUrl && mediaSessionArtworkObjectUrl !== nextArtworkObjectUrl) {
     URL.revokeObjectURL(mediaSessionArtworkObjectUrl);
   }
   mediaSessionArtworkObjectUrl = nextArtworkObjectUrl;
+  finish("success", { didSet, hasArtwork: Boolean(artwork?.src) });
 }
 
 function revokeMediaSessionArtworkObjectUrl(): void {

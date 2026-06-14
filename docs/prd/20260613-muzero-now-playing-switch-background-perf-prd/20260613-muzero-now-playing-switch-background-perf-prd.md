@@ -858,19 +858,23 @@ backgroundGpuPowerPreference?: "auto" | "high-performance" | "low-power"; // DEF
 | F | `diag(perf): read media blob without attaching` | 保留 `getTrackBlob`/stream resolve,跳过 `mediaEngine.loadBlob/loadUrl` 与 `play()` | 若 F 仍恢复,blob/stream resolve 不是主因;若 F 掉,主因在 DB/blob read |
 | G | `diag(perf): attach media source without play` | 执行 `mediaEngine.loadBlob/loadUrl`,跳过 `mediaEngine.play()` | 若 G 掉,主因在 source swap/load/decoder;若 G 恢复,主因在 immediate play/media events |
 | H | `diag(perf): play attached media without post-load work` | 执行 `mediaEngine.play()`,但仍跳过 metadata/presence 收尾 | 若 H 掉,主因在 `play()`/audio output start;若 H 恢复,主因在 post-load metadata/presence |
-| I | `diag(perf): defer media source load after switch settle` | 真实播放路径,但 source load 延后到切歌停止后 | 若 I 恢复,正式修复应做 switch-settle/debounce + cancel stale media load |
+| I | `diag(perf): restore media session metadata after play` | 在 H 基础上只恢复 MediaSession metadata/artwork | 若 I 掉,主因在 OS now-playing artwork/metadata;若 I 稳,继续恢复 presence/lyrics/listen flush |
+| J | `diag(perf): defer media source load after switch settle` | 真实播放路径,但 source load 延后到切歌停止后 | 若 J 恢复,正式修复应做 switch-settle/debounce + cancel stale media load |
 
 **Tasks:**
 - [x] Commit F:保留 blob read,不 attach media element。
 - [x] Commit G:attach media source,但不调用 `play()`。
 - [x] Commit H:attach 后调用 `play()`,但继续跳过 metadata/presence。
-- [ ] Commit I:把真实 media source load 延后到切歌 settle 后,验证是否能保留播放语义同时恢复 FPS。
+- [x] Commit I:在 H 基础上只恢复 MediaSession metadata/artwork,并补 `player.mediaSession.*` trace span。
+- [ ] Commit J:把真实 media source load 延后到切歌 settle 后,验证是否能保留播放语义同时恢复 FPS。
 
 **Experiment F implementation:** 在 `3153bf9` 的“大跳过”基础上,把 media reload 诊断 mode 调整为 `read`:当 `sourceKind==="blob"` 时执行 `getTrackBlob(track)`,并 emit `media.load.read-only sourceId=diag-bisect:blob-read bytes/mime`;随后仍不调用 `mediaEngine.loadBlob/loadUrl` 或 `play()`。若 F 仍接近 E 的 FPS,说明 IndexedDB/blob read 不是主因;若 F 重新掉帧,主因在 blob 读取/structured clone/内存分配。
 
 **Experiment G implementation:** 在 F 之后把 media reload 诊断 mode 调整为 `attach-no-play`:当 `sourceKind==="blob"` 时执行 `getTrackBlob(track)`,emit `media.load.attach-only`,再调用 `mediaEngine.loadBlob(media.blob, track.kind)`,但仍不调用 `mediaEngine.play()`。若 G 重新掉帧,主因在 media element source replacement / `audio.load()` / decoder/event pipeline;若 G 仍恢复,主因更偏 `play()` 与播放态事件。
 
 **Experiment H implementation:** 在 G 之后把 media reload 诊断 mode 调整为 `attach-and-play`:当 `sourceKind==="blob"` 时执行 `getTrackBlob(track)`,emit `media.load.attach-play`,调用 `mediaEngine.loadBlob(media.blob, track.kind)`,随后在 `wantPlay` 仍为 true 时只调用 `mediaEngine.play()` 并 emit `play.requested`;仍跳过 duration settle、MediaSession metadata、R2 presence、lyrics/palette 后续收尾。若 H 重新掉帧,说明决定性成本在 `play()` / audio output start / 播放态事件;若 H 仍稳,下一步再恢复 post-load metadata/presence 来细分。
+
+**Experiment I implementation:** 在 H 之后把 media reload 诊断 mode 调整为 `attach-play-media-session`:仍执行 blob read、`mediaEngine.loadBlob`、`mediaEngine.play()`,然后只恢复 `updateMediaSessionMetadata(track, continueCurrent)`;继续跳过 R2 presence、lyrics auto-fetch、listen flush 等其他 post-load work。补充 `player.mediaSession.metadata`, `player.mediaSession.artwork.fetch`, `player.mediaSession.artwork.objectUrl`, `player.mediaSession.metadata.set` 四类 `performance.work` span,用于区分 cover blob 读取、object URL 创建、`navigator.mediaSession.metadata` 设置和总耗时。
 
 ### QA#26(2026-06-14 Experiment G trace):attach/source replacement 仍稳,下一步锁定 play()/audio output start
 
@@ -880,6 +884,15 @@ backgroundGpuPowerPreference?: "auto" | "high-performance" | "low-power"; // DEF
 - **FPS 仍稳定**:`fpsAvg=112.5~113.7`, `fpsLow=20~24.1`, `frameMaxMs=41.5~50ms`, `frameP99Ms=33.3~49.9ms`,与 Experiment E 相近,远好于 6b987a3 的 `fpsAvg=45.6/fpsLow=9.2/frameMax=108.4ms`。
 - **结论更新**:IndexedDB/blob read、`URL.createObjectURL`, `audio.src` replacement, `audio.load()`, metadata decode 与 canplay 事件都不足以复现掉帧。剩余决定性差异是 production path 中 `mediaEngine.play()` 以及由它触发的 audio output start / playing / timeupdate / audio graph / presence 之后的播放态事件。
 - **下一步**:Experiment H 只在 attach 后调用 `mediaEngine.play()`,继续跳过 metadata/presence 等后续逻辑。如果 H 掉,主因就是 `play()`/audio output start;如果 H 稳,再恢复 metadata/presence/MediaSession 逐项细分。
+
+### QA#27(2026-06-14 Experiment H trace):play() 仍稳,主因继续后移到 post-load metadata/presence
+
+16:50 trace 是 `e8c9bfc diag(perf): play attached media without post-load work` 的结果:
+
+- **Experiment H 生效**:每次切歌都有 `media.load.attach-play`,随后出现 `play.requested`, `play`, `loadedmetadata`, `playing`, `play.resolved`, `canplaythrough`;说明 media element 已经实际开始播放。
+- **FPS 仍稳定**:切歌窗口 `fpsAvg=110.2~115.5`, `fpsLow=24`, `frameMaxMs=41.6~41.7ms`, `dbRequeries=0`;明显没有回到早先 production / 6b987a3 的 `fpsAvg~40-70`, `fpsLow~3-9`。
+- **负面证据**:trace 同时仍有 `background.cover localCover.wait`, `pixiCover.derivative state=pending`, `cover.preload.batch maxMs~12-16ms`;这些背景/封面轻量路径在 H 中存在但没有导致掉帧。
+- **结论更新**:`mediaEngine.play()` / audio output start 也不足以复现掉帧。剩余差异集中在 H 跳过的 production post-load work:MediaSession metadata/artwork、R2 presence、lyrics auto-fetch、listen flush/stat write。下一步优先恢复 MediaSession artwork,因为它会读取封面 blob、创建 image object URL,并交给 OS now-playing 控件,此前 trace 的 image blob 增长和 heap spike 与它的形态最吻合。
 
 ---
 
