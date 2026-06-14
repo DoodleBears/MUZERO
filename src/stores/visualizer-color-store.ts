@@ -4,6 +4,7 @@ import { type Rgb, rgba } from "@/lib/visualizer-color";
 
 const TRANSITION_MS = 900;
 const DISABLE_COVER_COLOR_CSS_FOR_BISECT = true;
+const DISABLE_COVER_COLOR_RAF_FOR_BISECT = true;
 const coverColorLog = createDiagnosticLogger("cover.palette");
 
 interface VisualizerCoverColorState {
@@ -70,6 +71,24 @@ export function transitionVisualizerCoverColor(
   const from = current.rgb ?? next;
   const fromPalette = current.palette;
   if (sameRgb(from, next) && samePalette(fromPalette, nextPalette)) {
+    useVisualizerCoverColorStore.setState({
+      coverBlobId,
+      rgb: next,
+      css: coverColorCssValue(next, current.css),
+      palette: nextPalette,
+    });
+    return;
+  }
+
+  if (DISABLE_COVER_COLOR_RAF_FOR_BISECT) {
+    coverColorLog.debug("cover.palette.transition", {
+      message: "cover palette raf transition skipped for diagnostic bisect",
+      category: "media",
+      phase: "skip",
+      reason: "diag-bisect",
+      targetKey: coverBlobId,
+      paletteCount: nextPalette.length,
+    });
     useVisualizerCoverColorStore.setState({
       coverBlobId,
       rgb: next,

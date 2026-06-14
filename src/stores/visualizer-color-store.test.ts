@@ -68,4 +68,22 @@ describe("transitionVisualizerCoverColor diagnostic css freeze", () => {
       rgb: rgb(10, 20, 30),
     });
   });
+
+  it("applies color changes immediately while the raf transition is disabled", () => {
+    useVisualizerCoverColorStore.setState({
+      coverBlobId: "cover-1",
+      css: null,
+      palette: [rgb(10, 20, 30)],
+      rgb: rgb(10, 20, 30),
+    });
+
+    transitionVisualizerCoverColor("cover-2", rgb(100, 110, 120), [rgb(1, 2, 3), rgb(4, 5, 6)]);
+
+    expect(useVisualizerCoverColorStore.getState()).toEqual({
+      coverBlobId: "cover-2",
+      css: null,
+      palette: [rgb(1, 2, 3), rgb(4, 5, 6)],
+      rgb: rgb(100, 110, 120),
+    });
+  });
 });
