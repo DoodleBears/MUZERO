@@ -2512,11 +2512,10 @@ async function ensureLoadedAndPlay(
     }
     triggerLyricsAutoFetch(track);
     if (!continueCurrent("before-metadata")) return;
-    await updateMediaSessionMetadata(
+    scheduleMediaSessionMetadata(
       track,
       () => currentTrack(get())?.id === track.id && isPlaybackRequestSeqCurrent(activeRequestId),
     );
-    if (!continueCurrent("metadata-updated")) return;
   }
   if (wantPlay && get().wantPlay) {
     if (!continueCurrent("before-play")) return;
