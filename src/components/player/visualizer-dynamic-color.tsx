@@ -29,6 +29,7 @@ const paletteExtractionInFlight = new Map<string, Promise<PaletteResolution>>();
 const coverColorLog = createDiagnosticLogger("cover.palette");
 const PALETTE_EXTRACTION_SETTLE_MS = 900;
 const PALETTE_EXTRACTION_IDLE_TIMEOUT_MS = 4000;
+const DISABLE_COVER_COLOR_FOR_BISECT = true;
 let lastAppliedTarget: { key: string | null; rgb: Rgb | null; palette: Rgb[] } | null = null;
 
 type PaletteResolution = {
@@ -363,10 +364,11 @@ export function useVisualizerCoverColorCss(
   const coverColorEnabled =
     options.respectVisualizerSetting === false ? true : (settings.visualizerUseCoverColor ?? true);
   const primaryColorVersion = `${settings.theme ?? ""}:${settings.primaryLight ?? ""}:${settings.primaryDark ?? ""}`;
-  const enabled = active && coverColorEnabled;
+  const enabled = !DISABLE_COVER_COLOR_FOR_BISECT && active && coverColorEnabled;
   const css = useVisualizerCoverColorStore((s) => s.css);
   const current = usePlayerStore(
     useShallow((s) => {
+      if (DISABLE_COVER_COLOR_FOR_BISECT) return null;
       const track = s.currentIndex >= 0 ? s.queue[s.currentIndex] : undefined;
       return track
         ? ({
@@ -622,5 +624,5 @@ export function useVisualizerCoverColorCss(
     };
   }, [active, coverColorEnabled, current, cover, paletteDerivative, primaryColorVersion]);
 
-  return active ? css : null;
+  return active && !DISABLE_COVER_COLOR_FOR_BISECT ? css : null;
 }

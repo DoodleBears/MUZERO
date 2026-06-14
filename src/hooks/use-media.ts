@@ -23,6 +23,8 @@ import { coverDerivativeUrlCache, coverUrlCache } from "@/lib/object-url-cache";
 import { arePerfCountersEnabled } from "@/lib/perf-counters";
 import { proxyRemoteCover, trackCoverCacheKey } from "@/player/playback-preload";
 
+const DISABLE_COVER_RESOURCES_FOR_BISECT = true;
+
 export interface TrackCoverResource {
   /**
    * Display URL with the existing anti-flash behavior: while a local cover is
@@ -114,13 +116,14 @@ export function useCoverDerivativeUrl(
   kind: "backlight" | "thumbnail",
   options?: { defer?: boolean },
 ): string | null {
+  const effectiveTrack = DISABLE_COVER_RESOURCES_FOR_BISECT ? undefined : track;
   const defer = options?.defer ?? false;
   const settings = useSettings();
-  const trackId = track?.id;
-  const coverBlobId = track?.coverBlobId;
-  const remoteCoverUrl = track?.remoteCoverUrl;
+  const trackId = effectiveTrack?.id;
+  const coverBlobId = effectiveTrack?.coverBlobId;
+  const remoteCoverUrl = effectiveTrack?.remoteCoverUrl;
   const coverCropped = settings.coverCropped ?? true;
-  const cc = track?.coverCrop;
+  const cc = effectiveTrack?.coverCrop;
   // biome-ignore lint/correctness/useExhaustiveDependencies: depend on crop scalars so queue object identity churn does not regenerate derivatives.
   const crop = useMemo(
     () =>
@@ -205,13 +208,14 @@ export function useCoverDerivativeUrl(
 }
 
 export function useTrackThumbnailUrl(track: TrackCoverInput | undefined): string | null {
+  const effectiveTrack = DISABLE_COVER_RESOURCES_FOR_BISECT ? undefined : track;
   const localThumbnailUrl = useCoverDerivativeUrl(
-    track?.coverBlobId ? track : undefined,
+    effectiveTrack?.coverBlobId ? effectiveTrack : undefined,
     "thumbnail",
   );
-  if (!track) return null;
-  if (track.coverBlobId) return localThumbnailUrl;
-  return proxyExternalCover(track.remoteCoverUrl);
+  if (!effectiveTrack) return null;
+  if (effectiveTrack.coverBlobId) return localThumbnailUrl;
+  return proxyExternalCover(effectiveTrack.remoteCoverUrl);
 }
 
 /**
@@ -224,9 +228,10 @@ export function useTrackCoverResource(
   track: TrackCoverInput | undefined,
   surface: CoverRenderSurface = "cover",
 ): TrackCoverResource {
+  const effectiveTrack = DISABLE_COVER_RESOURCES_FOR_BISECT ? undefined : track;
   const settings = useSettings();
-  const coverBlobId = track?.coverBlobId;
-  const remoteCoverUrl = track?.remoteCoverUrl;
+  const coverBlobId = effectiveTrack?.coverBlobId;
+  const remoteCoverUrl = effectiveTrack?.remoteCoverUrl;
   const resolvedCover = useLiveQuery(
     async () => (coverBlobId ? ((await resolveMediaBlob(coverBlobId, db)) ?? null) : null),
     [coverBlobId],
@@ -245,7 +250,7 @@ export function useTrackCoverResource(
   // unchanged — memoizing on scalars keeps the cropped object URL stable, so the
   // <img> never reloads and the dock cover never re-animates on unrelated edits.
   const coverCropped = settings.coverCropped ?? true;
-  const cc = track?.coverCrop;
+  const cc = effectiveTrack?.coverCrop;
   // biome-ignore lint/correctness/useExhaustiveDependencies: depend on scalars, not the object, so identity stays stable across queue rebuilds
   const crop = useMemo(
     () =>
@@ -297,7 +302,7 @@ export function useTrackCoverResource(
         cropped: Boolean(crop),
         sourceKey: cacheKey,
         sourceKind: "local-cover",
-        trackId: track?.id,
+        trackId: effectiveTrack?.id,
       });
       setResolved({ key: cacheKey, url: hit });
       return;
@@ -311,7 +316,7 @@ export function useTrackCoverResource(
       cropped: Boolean(crop),
       sourceKey: cacheKey,
       sourceKind: "local-cover",
-      trackId: track?.id,
+      trackId: effectiveTrack?.id,
     });
     let alive = true;
     void (async () => {
@@ -334,7 +339,7 @@ export function useTrackCoverResource(
     return () => {
       alive = false;
     };
-  }, [cacheKey, blob, crop, surface, track?.id]);
+  }, [cacheKey, blob, crop, surface, effectiveTrack?.id]);
 
   useEffect(() => {
     if (!remoteCacheKey || !remoteCoverUrl) return;
@@ -358,14 +363,14 @@ export function useTrackCoverResource(
         setFailedKey(remoteCacheKey);
         log.warn("cover", "remote cover display cache failed", {
           error: error instanceof Error ? error.message : String(error),
-          trackId: track?.id,
+          trackId: effectiveTrack?.id,
         });
       }
     })();
     return () => {
       alive = false;
     };
-  }, [remoteCacheKey, remoteCoverUrl, track?.id]);
+  }, [remoteCacheKey, remoteCoverUrl, effectiveTrack?.id]);
 
   // Synchronous read: a cache hit returns the URL on frame 0 — instant on a
   // re-mount, zero placeholder flash. `peek` doesn't mutate, so it's render-safe.
@@ -394,7 +399,11 @@ export function useTrackCoverResource(
 
   return {
     readyForTrack:
-      !track || !hasCover || Boolean(currentUrl) || remoteFailed || remoteBackedLocalUnavailable,
+      !effectiveTrack ||
+      !hasCover ||
+      Boolean(currentUrl) ||
+      remoteFailed ||
+      remoteBackedLocalUnavailable,
     staleWhilePending,
     targetKey,
     url,
@@ -423,9 +432,12 @@ export function useEntityCoverUrl(
   entityKey: string | undefined,
   fallbackTrack: Pick<Track, "coverBlobId" | "coverCrop" | "remoteCoverUrl"> | undefined,
 ): string | null {
+  const effectiveEntityKey = DISABLE_COVER_RESOURCES_FOR_BISECT ? undefined : entityKey;
+  const effectiveFallbackTrack = DISABLE_COVER_RESOURCES_FOR_BISECT ? undefined : fallbackTrack;
   const override = useLiveQuery(
-    async () => (entityKey ? ((await db.entityCovers.get(entityKey)) ?? null) : null),
-    [entityKey],
+    async () =>
+      effectiveEntityKey ? ((await db.entityCovers.get(effectiveEntityKey)) ?? null) : null,
+    [effectiveEntityKey],
     null,
   );
   // Both calls are unconditional (hook rules); only one result is returned. A
@@ -440,7 +452,7 @@ export function useEntityCoverUrl(
         }
       : undefined,
   );
-  const fallbackUrl = useTrackCoverUrl(fallbackTrack);
+  const fallbackUrl = useTrackCoverUrl(effectiveFallbackTrack);
   return override ? overrideUrl : fallbackUrl;
 }
 
