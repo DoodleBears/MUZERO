@@ -859,14 +859,16 @@ backgroundGpuPowerPreference?: "auto" | "high-performance" | "low-power"; // DEF
 | G | `diag(perf): attach media source without play` | 执行 `mediaEngine.loadBlob/loadUrl`,跳过 `mediaEngine.play()` | 若 G 掉,主因在 source swap/load/decoder;若 G 恢复,主因在 immediate play/media events |
 | H | `diag(perf): play attached media without post-load work` | 执行 `mediaEngine.play()`,但仍跳过 metadata/presence 收尾 | 若 H 掉,主因在 `play()`/audio output start;若 H 恢复,主因在 post-load metadata/presence |
 | I | `diag(perf): restore media session metadata after play` | 在 H 基础上只恢复 MediaSession metadata/artwork | 若 I 掉,主因在 OS now-playing artwork/metadata;若 I 稳,继续恢复 presence/lyrics/listen flush |
-| J | `diag(perf): defer media source load after switch settle` | 真实播放路径,但 source load 延后到切歌停止后 | 若 J 恢复,正式修复应做 switch-settle/debounce + cancel stale media load |
+| J | `diag(perf): settle media session artwork after play` | 在 I 基础上把 MediaSession metadata/artwork 延后到切歌稳定后 | 若 J 恢复,正式修复应 debounce/cancel stale MediaSession artwork |
+| K | `diag(perf): defer media source load after switch settle` | 真实播放路径,但 source load 延后到切歌停止后 | 若 K 恢复,正式修复应做 switch-settle/debounce + cancel stale media load |
 
 **Tasks:**
 - [x] Commit F:保留 blob read,不 attach media element。
 - [x] Commit G:attach media source,但不调用 `play()`。
 - [x] Commit H:attach 后调用 `play()`,但继续跳过 metadata/presence。
 - [x] Commit I:在 H 基础上只恢复 MediaSession metadata/artwork,并补 `player.mediaSession.*` trace span。
-- [ ] Commit J:把真实 media source load 延后到切歌 settle 后,验证是否能保留播放语义同时恢复 FPS。
+- [x] Commit J:MediaSession metadata/artwork 延后 650ms,rapid skip 只让最后一首读取封面。
+- [ ] Commit K:把真实 media source load 延后到切歌 settle 后,验证是否能保留播放语义同时恢复 FPS。
 
 **Experiment F implementation:** 在 `3153bf9` 的“大跳过”基础上,把 media reload 诊断 mode 调整为 `read`:当 `sourceKind==="blob"` 时执行 `getTrackBlob(track)`,并 emit `media.load.read-only sourceId=diag-bisect:blob-read bytes/mime`;随后仍不调用 `mediaEngine.loadBlob/loadUrl` 或 `play()`。若 F 仍接近 E 的 FPS,说明 IndexedDB/blob read 不是主因;若 F 重新掉帧,主因在 blob 读取/structured clone/内存分配。
 
@@ -875,6 +877,8 @@ backgroundGpuPowerPreference?: "auto" | "high-performance" | "low-power"; // DEF
 **Experiment H implementation:** 在 G 之后把 media reload 诊断 mode 调整为 `attach-and-play`:当 `sourceKind==="blob"` 时执行 `getTrackBlob(track)`,emit `media.load.attach-play`,调用 `mediaEngine.loadBlob(media.blob, track.kind)`,随后在 `wantPlay` 仍为 true 时只调用 `mediaEngine.play()` 并 emit `play.requested`;仍跳过 duration settle、MediaSession metadata、R2 presence、lyrics/palette 后续收尾。若 H 重新掉帧,说明决定性成本在 `play()` / audio output start / 播放态事件;若 H 仍稳,下一步再恢复 post-load metadata/presence 来细分。
 
 **Experiment I implementation:** 在 H 之后把 media reload 诊断 mode 调整为 `attach-play-media-session`:仍执行 blob read、`mediaEngine.loadBlob`、`mediaEngine.play()`,然后只恢复 `updateMediaSessionMetadata(track, continueCurrent)`;继续跳过 R2 presence、lyrics auto-fetch、listen flush 等其他 post-load work。补充 `player.mediaSession.metadata`, `player.mediaSession.artwork.fetch`, `player.mediaSession.artwork.objectUrl`, `player.mediaSession.metadata.set` 四类 `performance.work` span,用于区分 cover blob 读取、object URL 创建、`navigator.mediaSession.metadata` 设置和总耗时。
+
+**Experiment J implementation:** 在 I 之后把 media reload 诊断 mode 调整为 `attach-play-media-session-settled`:仍执行 blob read、`mediaEngine.loadBlob`, `mediaEngine.play()`,但 MediaSession metadata/artwork 不再同步触发;改为 `scheduleMediaSessionMetadata(..., 650ms)`。每次新切歌都会取消上一首 pending metadata,只有当前 track 在 650ms 后仍然有效时才执行 `getTrackCover` / object URL / `navigator.mediaSession.metadata`。新增 `player.mediaSession metadata.schedule` trace,用于确认 rapid skip 期间旧 schedule 被覆盖、最终只有 settled track 更新系统封面。
 
 ### QA#26(2026-06-14 Experiment G trace):attach/source replacement 仍稳,下一步锁定 play()/audio output start
 
@@ -893,6 +897,25 @@ backgroundGpuPowerPreference?: "auto" | "high-performance" | "low-power"; // DEF
 - **FPS 仍稳定**:切歌窗口 `fpsAvg=110.2~115.5`, `fpsLow=24`, `frameMaxMs=41.6~41.7ms`, `dbRequeries=0`;明显没有回到早先 production / 6b987a3 的 `fpsAvg~40-70`, `fpsLow~3-9`。
 - **负面证据**:trace 同时仍有 `background.cover localCover.wait`, `pixiCover.derivative state=pending`, `cover.preload.batch maxMs~12-16ms`;这些背景/封面轻量路径在 H 中存在但没有导致掉帧。
 - **结论更新**:`mediaEngine.play()` / audio output start 也不足以复现掉帧。剩余差异集中在 H 跳过的 production post-load work:MediaSession metadata/artwork、R2 presence、lyrics auto-fetch、listen flush/stat write。下一步优先恢复 MediaSession artwork,因为它会读取封面 blob、创建 image object URL,并交给 OS now-playing 控件,此前 trace 的 image blob 增长和 heap spike 与它的形态最吻合。
+
+### QA#28(2026-06-14 Experiment I trace):MediaSession artwork 立即更新复现掉帧
+
+16:55 trace 是 `f3614ec diag(perf): restore media session metadata after play` 的结果:
+
+- **Experiment I 生效**:每次切歌都有 `media.load.attach-play-media-session`, `play.requested`, `play.resolved`,随后出现 `player.mediaSession.*` span。
+- **掉帧回归**:frame window 回到 `fpsAvg=97.3~105.9`, `fpsLow=10.9~15`, `frameMaxMs=75.1~91.7ms`, `frameP99Ms=74.9ms`;相比 H 的 `fpsAvg=110~115`, `fpsLow=24`,这是明确回退。
+- **主耗时命中 artwork fetch**:`player.mediaSession.artwork.fetch` 单次 `9.7~38.6ms`,总 `player.mediaSession.metadata` 单次 `11.5~39.5ms`;`metadata.set` 只有 `~0.1ms`, `objectUrl` 约 `0.2~1.5ms`。主因不是 `navigator.mediaSession.metadata = ...`,而是给它准备 local cover blob/artwork。
+- **对象 URL / heap 佐证**:`blobsCreatedByKind.image` 从 H 的约 `23` 级别升到 `54~61`, `blobsLiveByKind.image=18`,heap 窗口最高 `229MB`;与“每次快切都为 OS artwork 创建 image blob URL”吻合。
+- **结论更新**:切歌掉帧当前根因是 MediaSession artwork 的 immediate local cover fetch/object URL churn。正式修复方向应当是 MediaSession artwork settle/debounce + stale cancellation,而不是改 `play()` 或媒体 source load。
+
+### QA#29(2026-06-14 Ctrl+1/Ctrl+2 tab switch):相关但不是同一根调用链
+
+QA 观察到 `Ctrl+1`/`Ctrl+2` 在 Now Playing 与 Tab 2 全部歌曲列表之间切换时也有 `AVG 120 -> 100FPS`, `low FPS=10`。代码路径不同:
+
+- **快捷键路径**:`shortcuts/actions.ts` 中 `nav.tabNow` / `nav.tabLibrary` 走 `transitionState(() => setTab(...))`。
+- **ViewTransition 路径**:`view-transition-react.ts` 使用 `startViewTransition(() => flushSync(update))`;Chromium/Electron 会对出入页面做 native snapshot。
+- **页面挂载路径**:`App.tsx` 条件渲染 `{tab === "now" && <NowPlayingPage/>}` / `{tab === "search" && <SearchPage/>}`;所以 `Ctrl+2` 是 SearchPage 冷挂载,组件内 `useMemo/useDeferredValue` 缓存不会跨 tab 保留。
+- **关系判断**:它和切歌掉帧同属“主线程/合成器瞬时 work 没有足够隔离”的性能问题,但不是 MediaSession artwork 根因;它不应出现 `media.load.*` / `player.mediaSession.*`。归属 [`queue-search-fps-investigation PRD`](../20260614-muzero-queue-search-fps-investigation-prd/20260614-muzero-queue-search-fps-investigation-prd.md) Phase 2:补 `nav.viewTransition.*`, `searchPage.mount`, `searchPage.derive.*` span,并决定 SearchPage mount/cache 模型。
 
 ---
 

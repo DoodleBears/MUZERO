@@ -133,13 +133,15 @@ import type { DecodedNcmMedia } from "@/workers/ingest-core";
 
 const IMPORT_VISIBILITY_FLUSH_SIZE = 25;
 const LOCAL_BLOB_PLAYBACK_SETTLE_MS = 180;
+const MEDIA_SESSION_METADATA_SETTLE_MS = 650;
 const MEDIA_SOURCE_RELOAD_BISECT_MODE:
   | "off"
   | "skip"
   | "read"
   | "attach-no-play"
   | "attach-and-play"
-  | "attach-play-media-session" = "attach-play-media-session";
+  | "attach-play-media-session"
+  | "attach-play-media-session-settled" = "attach-play-media-session-settled";
 const DEFAULT_PLAYER_VOLUME = 0.9;
 
 export type QueueSource =
@@ -274,6 +276,8 @@ let mediaEngine: MediaEngine | null = null;
 let mediaSessionArtworkObjectUrl: string | null = null;
 /** Monotonic token discarding stale async metadata updates (PRD F-12). */
 let mediaSessionMetadataSeq = 0;
+let mediaSessionMetadataTimer: ReturnType<typeof setTimeout> | null = null;
+let mediaSessionMetadataScheduleSeq = 0;
 
 /** Access the shared media engine (for the stage to mount + the visualizer). */
 export function getMediaEngine(): MediaEngine | null {
@@ -318,6 +322,7 @@ let queueCursorPersistTimer: number | null = null;
 let queueCursorPersistSeq = 0;
 let lastPersistedQueueIndex = -1;
 const playbackLog = createDiagnosticLogger("player.playback");
+const mediaSessionLog = createDiagnosticLogger("player.mediaSession");
 const QUEUE_CURSOR_PERSIST_DEBOUNCE_MS = 900;
 
 type PlaybackTraceContext = Pick<
@@ -2189,20 +2194,23 @@ async function ensureLoadedAndPlay(
       (MEDIA_SOURCE_RELOAD_BISECT_MODE === "read" ||
         MEDIA_SOURCE_RELOAD_BISECT_MODE === "attach-no-play" ||
         MEDIA_SOURCE_RELOAD_BISECT_MODE === "attach-and-play" ||
-        MEDIA_SOURCE_RELOAD_BISECT_MODE === "attach-play-media-session") &&
+        MEDIA_SOURCE_RELOAD_BISECT_MODE === "attach-play-media-session" ||
+        MEDIA_SOURCE_RELOAD_BISECT_MODE === "attach-play-media-session-settled") &&
       sourceKind === "blob"
     ) {
       const media = await getTrackBlob(track);
       if (!continueCurrent("diag-blob-read")) return;
       if (media?.blob) {
         const event =
-          MEDIA_SOURCE_RELOAD_BISECT_MODE === "attach-play-media-session"
-            ? "media.load.attach-play-media-session"
-            : MEDIA_SOURCE_RELOAD_BISECT_MODE === "attach-and-play"
-              ? "media.load.attach-play"
-              : MEDIA_SOURCE_RELOAD_BISECT_MODE === "attach-no-play"
-                ? "media.load.attach-only"
-                : "media.load.read-only";
+          MEDIA_SOURCE_RELOAD_BISECT_MODE === "attach-play-media-session-settled"
+            ? "media.load.attach-play-media-session-settled"
+            : MEDIA_SOURCE_RELOAD_BISECT_MODE === "attach-play-media-session"
+              ? "media.load.attach-play-media-session"
+              : MEDIA_SOURCE_RELOAD_BISECT_MODE === "attach-and-play"
+                ? "media.load.attach-play"
+                : MEDIA_SOURCE_RELOAD_BISECT_MODE === "attach-no-play"
+                  ? "media.load.attach-only"
+                  : "media.load.read-only";
         tracePlaybackLoad(event, track, playbackTrace, {
           bytes: media.bytes,
           mime: media.mime,
@@ -2212,14 +2220,16 @@ async function ensureLoadedAndPlay(
         if (
           MEDIA_SOURCE_RELOAD_BISECT_MODE === "attach-no-play" ||
           MEDIA_SOURCE_RELOAD_BISECT_MODE === "attach-and-play" ||
-          MEDIA_SOURCE_RELOAD_BISECT_MODE === "attach-play-media-session"
+          MEDIA_SOURCE_RELOAD_BISECT_MODE === "attach-play-media-session" ||
+          MEDIA_SOURCE_RELOAD_BISECT_MODE === "attach-play-media-session-settled"
         ) {
           await mediaEngine.loadBlob(media.blob, track.kind);
           if (!continueCurrent("diag-blob-attached")) return;
         }
         if (
           (MEDIA_SOURCE_RELOAD_BISECT_MODE === "attach-and-play" ||
-            MEDIA_SOURCE_RELOAD_BISECT_MODE === "attach-play-media-session") &&
+            MEDIA_SOURCE_RELOAD_BISECT_MODE === "attach-play-media-session" ||
+            MEDIA_SOURCE_RELOAD_BISECT_MODE === "attach-play-media-session-settled") &&
           wantPlay &&
           get().wantPlay
         ) {
@@ -2253,6 +2263,8 @@ async function ensureLoadedAndPlay(
     });
     if (MEDIA_SOURCE_RELOAD_BISECT_MODE === "attach-play-media-session") {
       void updateMediaSessionMetadata(track, () => continueCurrent("diag-media-session"));
+    } else if (MEDIA_SOURCE_RELOAD_BISECT_MODE === "attach-play-media-session-settled") {
+      scheduleMediaSessionMetadata(track, () => continueCurrent("diag-media-session-settled"));
     }
     return;
   }
@@ -2611,6 +2623,50 @@ async function updateMediaSessionMetadata(
   }
   mediaSessionArtworkObjectUrl = nextArtworkObjectUrl;
   finish("success", { didSet, hasArtwork: Boolean(artwork?.src) });
+}
+
+function scheduleMediaSessionMetadata(
+  track: Track,
+  isCurrent: () => boolean,
+  delayMs = MEDIA_SESSION_METADATA_SETTLE_MS,
+): void {
+  if (mediaSessionMetadataTimer !== null) {
+    clearTimeout(mediaSessionMetadataTimer);
+    mediaSessionMetadataTimer = null;
+  }
+  const seq = ++mediaSessionMetadataScheduleSeq;
+  mediaSessionLog.debug("metadata.schedule", {
+    category: "performance",
+    phase: "start",
+    trackId: track.id,
+    coverBlobId: track.coverBlobId,
+    delayMs,
+  });
+  mediaSessionMetadataTimer = setTimeout(() => {
+    mediaSessionMetadataTimer = null;
+    if (seq !== mediaSessionMetadataScheduleSeq || !isCurrent()) {
+      mediaSessionLog.debug("metadata.schedule", {
+        category: "performance",
+        phase: "skip",
+        reason: "stale",
+        trackId: track.id,
+        coverBlobId: track.coverBlobId,
+        delayMs,
+      });
+      return;
+    }
+    mediaSessionLog.debug("metadata.schedule", {
+      category: "performance",
+      phase: "success",
+      trackId: track.id,
+      coverBlobId: track.coverBlobId,
+      delayMs,
+    });
+    void updateMediaSessionMetadata(
+      track,
+      () => seq === mediaSessionMetadataScheduleSeq && isCurrent(),
+    );
+  }, delayMs);
 }
 
 function revokeMediaSessionArtworkObjectUrl(): void {
