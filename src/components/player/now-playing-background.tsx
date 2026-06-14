@@ -32,6 +32,7 @@ import { CanvasBlurBackground } from "./canvas-blur-background";
 import { type PixiBackgroundEffect, PixiPixelBackground } from "./pixi-pixel-background";
 
 const bgCoverLog = createDiagnosticLogger("background.cover");
+const ENABLE_PIXI_BACKGROUND_FOR_BISECT = false;
 
 /**
  * Now Playing ambient backdrop.
@@ -383,7 +384,9 @@ function NowPlayingBackgroundContent({ hideVisualizer }: { hideVisualizer: boole
           holdPreviousWhileLoading={source !== "cover" || holdCoverBackgroundWhileLoading}
           src={effectiveRenderImageTarget.src}
         />
-      ) : (effectiveRenderPixiTarget || shouldKeepPixiMounted) && pixiEffect ? (
+      ) : (effectiveRenderPixiTarget || shouldKeepPixiMounted) &&
+        pixiEffect &&
+        ENABLE_PIXI_BACKGROUND_FOR_BISECT ? (
         <PixiPixelBackground
           className={effectiveRenderPixiTarget ? "opacity-90" : "opacity-0"}
           effect={pixiEffect}
@@ -392,7 +395,7 @@ function NowPlayingBackgroundContent({ hideVisualizer }: { hideVisualizer: boole
           pixelSize={pixelSize}
           src={effectiveRenderPixiTarget?.src ?? null}
         />
-      ) : effectiveRenderImageTarget ? (
+      ) : effectiveRenderImageTarget && !pixiEffect ? (
         <CrossfadeBackgroundImage
           holdPreviousWhileLoading={source !== "cover" || holdCoverBackgroundWhileLoading}
           src={effectiveRenderImageTarget.src}
