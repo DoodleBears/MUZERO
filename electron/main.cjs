@@ -237,6 +237,18 @@ function createWindow() {
     win.show();
   });
   attachDiagnosticsWindow(win);
+  // DevTools toggle. The Windows build strips the application menu (above), so the
+  // default Ctrl+Shift+I / F12 accelerators are gone — wire them here on the
+  // webContents so they work on every platform regardless of menu state.
+  win.webContents.on("before-input-event", (event, input) => {
+    if (input.type !== "keyDown") return;
+    const key = input.key?.toLowerCase();
+    const isToggleCombo = key === "i" && input.shift && (isMac ? input.meta : input.control);
+    if (key === "f12" || isToggleCombo) {
+      win.webContents.toggleDevTools();
+      event.preventDefault();
+    }
+  });
   win.webContents.setWindowOpenHandler(({ url }) => {
     openExternalFrom("window.open", url);
     return { action: "deny" };
