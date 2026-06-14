@@ -214,8 +214,10 @@ async function createPixiFilter(
 
 type BackgroundMedia =
   | {
+      bytes?: number;
       element: HTMLImageElement | ImageBitmap;
       height: number;
+      loader: "imageBitmap" | "imageElement";
       texture?: import("pixi.js").Texture;
       type: "image";
       unload?: () => void;
@@ -224,6 +226,7 @@ type BackgroundMedia =
   | {
       element: HTMLVideoElement;
       height: number;
+      loader: "videoElement";
       texture: import("pixi.js").Texture;
       type: "video";
       unload?: undefined;
@@ -248,8 +251,10 @@ async function loadBackgroundMedia(
   });
   if (bitmap) {
     return {
+      bytes: bitmap.bytes,
       element: bitmap.bitmap,
       height: bitmap.height,
+      loader: "imageBitmap",
       type: "image",
       unload: bitmap.unload,
       width: bitmap.width,
@@ -260,6 +265,7 @@ async function loadBackgroundMedia(
   return {
     element: image,
     height: image.naturalHeight,
+    loader: "imageElement",
     type: "image",
     unload: resolved.unload,
     width: image.naturalWidth,
@@ -360,6 +366,7 @@ async function loadVideo(Pixi: typeof import("pixi.js"), src: string): Promise<B
   return {
     element: video,
     height: video.videoHeight,
+    loader: "videoElement",
     texture,
     type: "video",
     width: video.videoWidth,

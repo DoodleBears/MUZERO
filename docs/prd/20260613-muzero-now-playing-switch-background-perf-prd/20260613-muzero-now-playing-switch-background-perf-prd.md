@@ -19,6 +19,7 @@
 | 6 | 切歌 trace 仪表(逐首叙事:index/sourceKind/hasCover + 统计 flush)(诊断) | ✅ 代码完成(待抓 trace) | [Phase 6](#phase-6-切歌-trace-仪表) |
 | 7 | 切歌限速(长按 next/prev 节流 ~5/s,治 firehose 错位)(#错位) | ✅ 代码完成(待实测) | [Phase 7](#phase-7-切歌限速) |
 | 8 | 单一时钟:封面/背景/背光同源 live index(根治错位,QA#7) | ✅ 代码完成(待实测) | [Phase 8](#phase-8-单一时钟统一) |
+| 9 | Pixi 背景换纹理分段 trace(新 log:QueuePanel 已排除,归因仍需拆段) | ✅ 代码完成(待抓 trace) | [Phase 9](#phase-9-pixi-背景换纹理分段-trace) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
 
@@ -297,7 +298,7 @@ backgroundGpuPowerPreference?: "auto" | "high-performance" | "low-power"; // DEF
 **归因(现有 + 新增 trace 实证):**
 - **Q1 play index**:[`player.playIndex`](../../../src/stores/player-store.ts) 现补 `sourceKind`/`hasCover`/`from`/`to`/`kind`/`origin`(纯 helper [`describeTrackSwitch`](../../../src/player/switch-trace.ts))。一眼区分「**带封面**切歌(走解码/上传管线 → 掉帧)」vs「**无封面**切歌(廉价基线)」。
 - **Q2 播放统计**:[`flushPlaybackListen`](../../../src/stores/player-store.ts) 现 emit `player.playback listen.flush`(trackId / listenedSec / counts)。证实统计写库**异步、离帧**:`flush` 是内存累加,`recordPlaybackListen` 被 `void` 掉(异步);快切时中间歌 `listenedSec≈0` → 不计 play、不写库(trace `dbRequeries:0` 佐证)→ **非切歌帧开销**。
-- **Q3 背景/封面**:已有 `cover.render`(cache-hit/miss + `object-url-miss` bytes)、`cover.preload.batch`、`background.pixi textureSwap` 覆盖,无需新增。
+- **Q3 背景/封面**:已有 `cover.render`(cache-hit/miss + `object-url-miss` bytes)、`cover.preload.batch`、`background.pixi textureSwap` 覆盖了“是否发生”。但 QA 新 log 证明它**不足以归因**:copy trace 的格式化层丢了 `textureSwap` context,且 Pixi 没拆 `media.load` / `Texture.from` / `resize+render`。→ Phase 9 补分段 trace。
 - **基线(无封面 low≈30)**:来自切歌时 now-playing 树(歌词 / identity / coverflow 脚手架)的一次 React 重渲染(单帧 ~33ms),非 store / 统计;`performance.frame frameMaxMs` 已可见。Phase 4/5 落地后,带封面那档的 AVG/low 应向无封面档收敛。
 
 **Tasks(TDD):**
@@ -349,6 +350,41 @@ backgroundGpuPowerPreference?: "auto" | "high-performance" | "low-power"; // DEF
 
 **后续(本 PRD 跟进):** ① **512px 派生**(用户已拍板,下一步)—— QA 实测「全 cache-hit 封面」下 heap 仍 +112MB/FPS→31,因 Pixi 每次切歌对**整图**重跑 `createImageBitmap`(~8–16MB),降采样治本;② (用户提的)切歌时**音频 fade out** 让声音也跟着切(当前音频 debounce、松手才载最终曲)—— 独立 audio transport 改动,后续评估。
 
+### QA#8(2026-06-14 新 trace):QueuePanel 已排除,掉帧命中全局背景/Pixi
+
+用户提供的新 trace 覆盖一次带封面本地 blob 快切。结论:这组 `AVG 120→70` / `fpsLow≈10` **不是 QueuePanel / system playlist**。
+
+- **QueuePanel 信号缺席**:`queuePanel` / `systemPlaylist` 相关行 = 0。抽屉/system playlist work 没参与这次 jank;这也印证 queue/search PRD 里的「抽屉关闭切歌 baseline」要把背景成本单独扣出来。
+- **切歌输入**:`playIndex` 8 次,全部 `sourceKind:"blob"` + `hasCover:true`;中间 `discard stale playback load` 7 次,说明音频加载被快切 supersede,但背景/封面管线仍在响应切歌。
+- **背景信号活跃**:`background.pixi textureSwap` 12 次,`textureSwap.stale` 3 次。掉帧与 tab 无关,因为 [`NowPlayingBackground`](../../../src/App.tsx) 是固定全局层,tab 1 / tab 2 共享同一背景管线。
+- **封面缓存不是主因**:`cover.render cache-hit` 59 次,`object-url-miss/cache-miss` 0;`cover.palette.track-metadata` 8 次,无 `cover.palette.start/success`,说明本轮没有现场 palette 抽取,也没有新建封面 object URL。
+- **性能签名**:`fpsAvg 74.5→58.1→47.4→40.4`, `fpsLow≈10`, `frameMaxMs≈100`, `longTaskMaxMs≈198`;heap `167MB→390MB`(+223MB)。这像是整图解码/ImageBitmap/GPU texture upload/合成器压力或相关 GC,而不是 DB / 全库派生。
+- **观测缺口**:trace 里只能看到 `background.pixi textureSwap textureSwap`,看不到已有 context 里的 `ms/mediaType/appInits` 等字段。根因不是 logger 没写,而是 [`formatTraceEntries`](../../../src/lib/trace.ts) 导出时只打印白名单字段,把自定义 perf context 丢了。
+
+### Phase 9: Pixi 背景换纹理分段 trace
+
+**Goal:** 不改变渲染行为,只把一次 Pixi 背景换纹理拆成可归因的 trace 段,让下一份 QA log 能回答“卡在取源/解码、Texture.from/GPU 上传、还是 resize/render/合成”。
+
+**实现(落地):**
+- [`trace.ts`](../../../src/lib/trace.ts):`formatTraceEntries()` 现在会在标准字段后输出所有已脱敏的自定义 context,例如 `mediaType=image loader=imageBitmap durationMs=42 loadMs=31 textureMs=4 renderMs=7 width=1600 height=1600`。这修复了 QA copy trace 中 `textureSwap` 只有事件名、没有耗时的导出缺口。
+- [`pixi-background-controller.ts`](../../../src/components/player/pixi-background-controller.ts):`setSource()` 新增分段事件:
+  - `background.pixi textureSwap.start`:每次换源开始,带 `sourceKind`(blob/data/http/muzfetch/other,不记录 raw URL)、`mediaType`、`swapSeq`。
+  - `background.pixi media.load`:`deps.loadMedia` 耗时,带 `loader`、`bytes`、`width/height`。
+  - `background.pixi texture.create`:`Texture.from` 或预建 texture 耗时,带 `textureSource=fromElement/prebuilt`。
+  - `background.pixi textureSwap.apply`:sprite 替换、旧纹理释放、视频 attach、`resize()+render()` 耗时,带 `applyMs/renderMs`。
+  - `background.pixi textureSwap`:最终汇总,带 `durationMs/loadMs/textureMs/applyMs/renderMs/appInits/textureSwaps`。
+  - `textureSwap.stale` 同步补 `phase=skip` + `durationMs/loadMs/textureMs`,用于看快切废弃的背景工作是否仍然昂贵。
+- [`background-texture.ts`](../../../src/lib/background-texture.ts):ImageBitmap loader 返回 `bytes/mime`,供 Pixi trace 标出本次整图源大小。
+
+**Tasks(TDD):**
+- [x] `trace.test.ts` 先红后绿:copy trace 必须输出自定义 structured context(`mediaType/loader/durationMs/loadMs/textureMs/renderMs/width/height`)。
+- [x] `pixi-background-controller.test.ts` 先红后绿:一次 `setSource()` 必须 emit `textureSwap.start` / `media.load` / `texture.create` / `textureSwap.apply` / `textureSwap` 五段,并在 summary 带分段 ms 与尺寸/bytes。
+- [x] `background-texture.test.ts`:ImageBitmap source 携带 `bytes/mime`。
+
+**Checklist:**
+- [x] `trace.test` / `pixi-background-controller.test` / `background-texture.test` 通过。
+- [ ] **待抓 trace 验证**:下一轮 QA log 中,若 `loadMs` 高且 heap 增长 → decode/bitmap 源;若 `textureMs` 高 → Pixi/GPU upload;若 `renderMs/applyMs` 高 → resize/render/合成;若 `textureSwap.stale` 多且 ms 高 → 快切废弃工作仍需取消/降采样/限速。
+
 ---
 
 ## 7. Out of Scope(交叉引用,本 PRD 不处理)
@@ -393,6 +429,7 @@ backgroundGpuPowerPreference?: "auto" | "high-performance" | "low-power"; // DEF
 | 4 | WebGPU 的 device-lost 恢复路径? | ✅ Resolved | `device.lost`(非 destroyed)+ `webglcontextlost/restored` → 有限次重建 + 回灌纹理,恢复期回退 `<img>`(Phase 3) |
 | 8 | QA#4:ambient 已稳但快切仍 120→56 FPS(`longTask 283ms`) | 🔲 定位完成,Phase 4/5 修复中 | 剩余两处主线程整图解码:**(A)** coverflow/stage 读实时 index 解码原图(设计);**(B)** Pixi `Texture.from(<img>)` 转 canvas。**保持原图**,Pixi 走 ImageBitmap(线程外、免 canvas)+ `<img>` 异步解码。`frameMaxMs 6374.8` 是 visibilitychange 空档,非卡顿。详见 §6 QA#4 |
 | 9 | #4-A 是否把 coverflow 也降采样到 512px 派生? | ✅ Resolved(用户拍板) | **否**。用户要求**保持原图**;只把解码移出主线程(ImageBitmap / 异步 decode),不引降采样派生(那是 cover-quality PRD 的 Phase 3) |
+| 10 | QA#8:tab 无关的 `AVG 120→70` 是否仍是 QueuePanel? | ✅ Resolved(trace 实证) | **否**。新 trace 无 `queuePanel/systemPlaylist`,但有 `background.pixi textureSwap` 12 次、stale 3 次、heap +223MB;cover URL/palette 都命中缓存。归因转到全局 `NowPlayingBackground` / Pixi texture/decode/upload/合成管线。Phase 9 补分段 trace 与 copy-trace context 导出。 |
 
 ---
 
@@ -415,3 +452,4 @@ backgroundGpuPowerPreference?: "auto" | "high-performance" | "low-power"; // DEF
 | 2026-06-14 | User+Claude | **Phase 8 单一时钟 + QA#7**:throttle 后封面/背景/背光仍可错位(松手后其一卡在别的曲)。定位根因 = 3+ 个独立「当前曲」时钟(封面/背光 live、背景 settle、Pixi 再 settle、coverflow 状态机),无机制强制同切。用户拍板「全部 live index 一起切」。背景 + Pixi 改读 live `currentIndex`/`src`(删两层 settle),与封面/背光同源 → 结构上不可能显示不同曲。throttle 已 bound 速率,去 settle 只消滞后、不增上传频率。测试 18 绿。后续:512px(全 cache-hit 仍 heap+112MB 因 Pixi 整图 createImageBitmap)、音频 fade-on-switch |
 | 2026-06-14 | User+Claude | **Phase 7 切歌限速 + QA#6 错位 bug**:用户报「长按快切松手后封面/背景其一与歌对不上」+ 提议设切换速度上限。定位错位根因 = 33/s 远超 180ms settle、多层 async/settle 各卡在不同中间曲。新增 `createTransportThrottle`(leading+trailing,clock 注入,4 例 TDD)接 `shortcuts/actions.ts` next/prev,限速 ~5/s(>settle 窗口)→ 根除错位 + 背景每切歌都跟变 + 封面看得清。`tsc`/Biome + 相关测试全绿。后续:512px 派生(单次切歌成本)+ 收紧背景同步 |
 | 2026-06-14 | User+Claude | **QA#5 + Phase 5 A/B 回退 `warmDecode`**:Phase 6 trace 显示带封面快切真凶是 **heap +227MB(289→516)→ GC 长任务(166ms)→ FPS 104→27**,量化吻合 ~15 张新封面整图解码(~15MB/张)。`warmDecode` 强制每张缓存封面立即整图解码并被保留 → 放大堆。**回退**:改回 `warmImage`(remote 仅 set src)、本地不预热、删 `cover-warm-decode.ts`/test,保留 `decoding="async"`。`tsc`/Biome + swipeable(6)绿。待抓 trace 验证;若不足则重开 512px 派生(cover-quality PRD Phase 3) |
+| 2026-06-14 | User+Codex | **QA#8 新 log + Phase 9 trace 补强**:新 trace 排除 QueuePanel(`queuePanel/systemPlaylist=0`),确认 tab 无关掉帧来自全局背景层:8 次带封面 blob 切歌、`background.pixi textureSwap` 12 次、stale 3 次、heap 167→390MB,cover URL/palette 都命中缓存。修复 copy trace 丢自定义 context 的格式化缺口;Pixi `setSource()` 分段 emit `textureSwap.start` / `media.load` / `texture.create` / `textureSwap.apply` / summary,带 `sourceKind/loader/bytes/width/height/loadMs/textureMs/renderMs`。TDD:trace(7)+pixi-controller(10)+background-texture(5)绿。 |

@@ -1,4 +1,5 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { clearTrace, getTraceEntries } from "@/lib/trace";
 import {
   createPixiBackgroundController,
   type LoadedBackgroundMedia,
@@ -98,6 +99,10 @@ function makeController(overrides?: {
 }
 
 describe("createPixiBackgroundController", () => {
+  afterEach(() => {
+    clearTrace();
+  });
+
   it("creates and inits the Pixi app exactly once across multiple source swaps", async () => {
     const { module, controller } = makeController();
     await controller.setSource("a.png", "image");
@@ -240,6 +245,61 @@ describe("createPixiBackgroundController", () => {
 
     controller.destroy();
     expect(bitmapB.close).toHaveBeenCalledTimes(1); // current bitmap freed on destroy
+  });
+
+  it("emits granular texture swap diagnostics for load, texture creation, apply, and render work", async () => {
+    const { controller } = makeController({
+      loadMedia: async (): Promise<LoadedBackgroundMedia> => ({
+        type: "image",
+        element: document.createElement("img"),
+        width: 320,
+        height: 180,
+        loader: "imageBitmap",
+        bytes: 123_456,
+        unload: vi.fn(),
+      }),
+    });
+
+    await controller.setSource("blob:cover", "image");
+
+    const entries = getTraceEntries().filter((entry) => entry.scope === "background.pixi");
+    expect(entries.map((entry) => entry.event)).toEqual(
+      expect.arrayContaining([
+        "textureSwap.start",
+        "media.load",
+        "texture.create",
+        "textureSwap.apply",
+        "textureSwap",
+      ]),
+    );
+    const load = entries.find((entry) => entry.event === "media.load");
+    expect(load?.context).toMatchObject({
+      category: "performance",
+      phase: "success",
+      mediaType: "image",
+      loader: "imageBitmap",
+      bytes: 123_456,
+      width: 320,
+      height: 180,
+    });
+    const summary = entries.find((entry) => entry.event === "textureSwap");
+    expect(summary?.context).toMatchObject({
+      category: "performance",
+      phase: "success",
+      mediaType: "image",
+      loader: "imageBitmap",
+      bytes: 123_456,
+      width: 320,
+      height: 180,
+      appInits: 1,
+      textureSwaps: 1,
+    });
+    expect(summary?.context?.durationMs).toEqual(expect.any(Number));
+    expect(summary?.context?.loadMs).toEqual(expect.any(Number));
+    expect(summary?.context?.textureMs).toEqual(expect.any(Number));
+    expect(summary?.context?.applyMs).toEqual(expect.any(Number));
+    expect(summary?.context?.renderMs).toEqual(expect.any(Number));
+    controller.destroy();
   });
 
   it("discards a stale source whose load resolves after a newer one", async () => {

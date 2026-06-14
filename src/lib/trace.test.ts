@@ -4,6 +4,7 @@ import {
   formatTraceEntries,
   getTraceEntries,
   subscribeTrace,
+  traceDiagnosticEvent,
   traceEvent,
 } from "@/lib/trace";
 
@@ -62,5 +63,30 @@ describe("trace ring", () => {
   it("formatTraceEntries defaults to the current ring contents", () => {
     traceEvent("error", "scopey", "boom");
     expect(formatTraceEntries()).toContain("ERROR [scopey] boom");
+  });
+
+  it("formats custom structured context fields so copied traces keep perf details", () => {
+    traceDiagnosticEvent("debug", "background.pixi", "textureSwap", "textureSwap", {
+      category: "performance",
+      phase: "success",
+      mediaType: "image",
+      loader: "imageBitmap",
+      durationMs: 42,
+      loadMs: 31,
+      textureMs: 4,
+      renderMs: 7,
+      width: 1600,
+      height: 1600,
+    });
+
+    const text = formatTraceEntries();
+    expect(text).toContain("mediaType=image");
+    expect(text).toContain("loader=imageBitmap");
+    expect(text).toContain("durationMs=42");
+    expect(text).toContain("loadMs=31");
+    expect(text).toContain("textureMs=4");
+    expect(text).toContain("renderMs=7");
+    expect(text).toContain("width=1600");
+    expect(text).toContain("height=1600");
   });
 });

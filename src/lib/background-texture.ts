@@ -12,8 +12,10 @@
  */
 export interface ImageBitmapTextureSource {
   bitmap: ImageBitmap;
+  bytes: number;
   width: number;
   height: number;
+  mime?: string;
   /** Release the decoded bitmap's memory — call when the texture is swapped out. */
   unload: () => void;
 }
@@ -38,8 +40,10 @@ export async function loadImageBitmapSource(
     const bitmap = await create(blob);
     return {
       bitmap,
+      bytes: blob.size,
       width: bitmap.width,
       height: bitmap.height,
+      mime: blob.type || undefined,
       unload: () => bitmap.close(),
     };
   } catch {

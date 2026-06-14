@@ -29,6 +29,10 @@ function nowMs(): number {
   return typeof performance !== "undefined" ? performance.now() : 0;
 }
 
+function roundMs(value: number): number {
+  return Math.round(value * 100) / 100;
+}
+
 export interface PixiTextureLike {
   source: { scaleMode: string };
   destroy(destroyBase?: boolean): void;
@@ -65,6 +69,8 @@ export interface LoadedBackgroundMedia {
   // "Image element passed, converting to canvas" main-thread copy an
   // HTMLImageElement would trigger (PRD Phase 4). `unload` closes it.
   element: HTMLImageElement | HTMLVideoElement | ImageBitmap;
+  bytes?: number;
+  loader?: "imageBitmap" | "imageElement" | "videoElement";
   texture?: unknown;
   width: number;
   height: number;
@@ -231,8 +237,9 @@ export function createPixiBackgroundController(
     return appPromise;
   }
 
-  function resize(): void {
-    if (!app || !sprite || !currentMedia) return;
+  function resize(): number {
+    if (!app || !sprite || !currentMedia) return 0;
+    const startedAt = nowMs();
     const cssW = Math.max(1, Math.round(host.clientWidth || 1));
     const cssH = Math.max(1, Math.round(host.clientHeight || 1));
     const block = Math.max(3, Math.min(48, Math.round(pixelSize)));
@@ -244,6 +251,7 @@ export function createPixiBackgroundController(
     app.renderer.resize(renderW, renderH);
     coverSprite(sprite, currentMedia.width, currentMedia.height, renderW, renderH);
     app.render();
+    return nowMs() - startedAt;
   }
 
   function disposeMedia(media: CurrentMedia): void {
@@ -266,6 +274,15 @@ export function createPixiBackgroundController(
     // switch — keep the painted layer; the parent unmounts when truly empty.
     if (!src) return;
     const token = ++seq;
+    const sourceKind = classifyBackgroundSource(src);
+    const swapStart = nowMs();
+    bgPixiLog.debug("textureSwap.start", {
+      category: "performance",
+      phase: "start",
+      mediaType,
+      sourceKind,
+      swapSeq: token,
+    });
     try {
       await ensureApp();
     } catch (error) {
@@ -274,17 +291,50 @@ export function createPixiBackgroundController(
     }
     if (destroyed || !app || !pixi) return;
 
-    const swapStart = nowMs();
+    const mediaLoadStart = nowMs();
     let media: LoadedBackgroundMedia;
     try {
       media = await deps.loadMedia(pixi, src, mediaType);
     } catch (error) {
+      bgPixiLog.warn("media.load", {
+        category: "performance",
+        phase: "fail",
+        errorKind: "unknown",
+        mediaType,
+        sourceKind,
+        swapSeq: token,
+        durationMs: roundMs(nowMs() - mediaLoadStart),
+      });
       deps.onError?.(error);
       return;
     }
+    const loadMs = nowMs() - mediaLoadStart;
+    const mediaContext = {
+      bytes: media.bytes,
+      category: "performance" as const,
+      height: media.height,
+      loader: media.loader,
+      mediaType,
+      phase: "success" as const,
+      sourceKind,
+      swapSeq: token,
+      width: media.width,
+    };
+    bgPixiLog.debug("media.load", {
+      ...mediaContext,
+      durationMs: roundMs(loadMs),
+    });
 
+    const textureStart = nowMs();
+    const textureSource = media.texture ? "prebuilt" : "fromElement";
     const texture =
       (media.texture as PixiTextureLike | undefined) ?? pixi.Texture.from(media.element, true);
+    const textureMs = nowMs() - textureStart;
+    bgPixiLog.debug("texture.create", {
+      ...mediaContext,
+      durationMs: roundMs(textureMs),
+      textureSource,
+    });
     // A newer setSource won the race while this one was loading — discard.
     if (destroyed || token !== seq) {
       texture.destroy(true);
@@ -295,10 +345,17 @@ export function createPixiBackgroundController(
         height: media.height,
         unload: media.unload,
       });
-      bgPixiLog.debug("textureSwap.stale", { mediaType, ms: Math.round(nowMs() - swapStart) });
+      bgPixiLog.debug("textureSwap.stale", {
+        ...mediaContext,
+        phase: "skip",
+        durationMs: roundMs(nowMs() - swapStart),
+        loadMs: roundMs(loadMs),
+        textureMs: roundMs(textureMs),
+      });
       return;
     }
 
+    const applyStart = nowMs();
     texture.source.scaleMode = "nearest";
     currentVideoTeardown?.();
     currentVideoTeardown = undefined;
@@ -342,11 +399,22 @@ export function createPixiBackgroundController(
     recoverAttempts = 0; // a fresh frame landed — allow recovery again
     stats.textureSwaps += 1;
     options.onApplied?.();
-    resize();
+    const renderMs = resize();
+    const applyMs = nowMs() - applyStart;
+    bgPixiLog.debug("textureSwap.apply", {
+      ...mediaContext,
+      applyMs: roundMs(applyMs),
+      durationMs: roundMs(applyMs),
+      renderMs: roundMs(renderMs),
+    });
     bgPixiLog.debug("textureSwap", {
-      mediaType,
-      ms: Math.round(nowMs() - swapStart),
+      ...mediaContext,
       appInits: stats.appInits,
+      applyMs: roundMs(applyMs),
+      durationMs: roundMs(nowMs() - swapStart),
+      loadMs: roundMs(loadMs),
+      renderMs: roundMs(renderMs),
+      textureMs: roundMs(textureMs),
       textureSwaps: stats.textureSwaps,
     });
   }
@@ -425,4 +493,17 @@ function coverSprite(
   const drawH = sourceH * scale;
   sprite.scale.set(scale);
   sprite.position.set((width - drawW) / 2, (height - drawH) / 2);
+}
+
+function classifyBackgroundSource(src: string): "blob" | "data" | "http" | "muzfetch" | "other" {
+  try {
+    const protocol = new URL(src).protocol.toLowerCase();
+    if (protocol === "blob:") return "blob";
+    if (protocol === "data:") return "data";
+    if (protocol === "http:" || protocol === "https:") return "http";
+    if (protocol === "muzfetch:") return "muzfetch";
+  } catch {
+    // Non-URL renderer-internal source; keep it coarse and non-identifying.
+  }
+  return "other";
 }

@@ -138,7 +138,7 @@ function formatValue(value: unknown): string {
 }
 
 function formatContext(context: DiagnosticContext): string {
-  const parts = [
+  const primaryParts = [
     context.traceId ? `trace=${context.traceId}` : null,
     context.trackId ? `track=${context.trackId}` : null,
     context.sessionId ? `session=${context.sessionId}` : null,
@@ -161,5 +161,35 @@ function formatContext(context: DiagnosticContext): string {
       : null,
     context.controlId ? `control=${context.controlId}` : null,
   ].filter(Boolean);
-  return parts.join(" ");
+  const customParts = Object.keys(context)
+    .filter((key) => !FORMATTED_CONTEXT_KEYS.has(key))
+    .sort()
+    .map((key) => {
+      const value = context[key];
+      return value === undefined ? null : `${key}=${formatValue(value)}`;
+    })
+    .filter(Boolean);
+  return [...primaryParts, ...customParts].join(" ");
 }
+
+const FORMATTED_CONTEXT_KEYS = new Set([
+  "traceId",
+  "trackId",
+  "sessionId",
+  "sourceId",
+  "videoId",
+  "category",
+  "phase",
+  "errorKind",
+  "httpStatus",
+  "requestHost",
+  "requestPathHash",
+  "hasPot",
+  "hasCpn",
+  "hasSig",
+  "hasNParam",
+  "playerPoToken",
+  "poTokenBinding",
+  "safeQuery",
+  "controlId",
+]);

@@ -19,7 +19,13 @@ describe("loadImageBitmapSource", () => {
 
     expect(fetchBlob).toHaveBeenCalledWith("blob:cover");
     expect(createImageBitmap).toHaveBeenCalledTimes(1);
-    expect(source).toMatchObject({ bitmap, width: 640, height: 480 });
+    expect(source).toMatchObject({
+      bitmap,
+      bytes: 3,
+      mime: "image/png",
+      width: 640,
+      height: 480,
+    });
     // unload releases the decoded bitmap's memory.
     source?.unload();
     expect(bitmap.close).toHaveBeenCalledTimes(1);
