@@ -954,14 +954,16 @@ QA 观察到 `Ctrl+1`/`Ctrl+2` 在 Now Playing 与 Tab 2 全部歌曲列表之�
 | A4 | `bb7bc64` | Settled MediaSession metadata/artwork | 若变差,落定后的 OS artwork 仍需降级或进一步延迟 |
 | A5 | Current add-back | Re-enable Pixi texture source while cover hooks stay disabled | 若变差,`background.pixi` 192px derivative fetch/decode/compositor 是独立放大器 |
 | A6a | `0c390b1` | Restore cover resource hooks only | 若变差,封面 URL/derivative/object URL hook 是独立放大器 |
-| A6b | Current add-back | Restore cover color / palette hook only | 若变差,palette liveQuery/worker/color store 是独立放大器 |
+| A6b | `9eb619b` / tag `qa/fps-drop-cover-color-20260614` | Restore cover color / palette hook only | 已变差;cover color hook 是回归放大器,但需再拆 read/log vs color apply |
+| A6c | Current add-back | Keep cover color hook reads/logs,skip `transitionVisualizerCoverColor` apply/store | 若恢复,主因在 color store/CSS/compositor apply;若仍差,主因在 palette liveQuery/read/log 本身 |
 | A7 | Next | Restore normal playback post-load work | 若变差,lyrics/presence/listen flush/normal store fan-out 是独立放大器 |
 
 **Tasks:**
 - [x] A0-A4 media reload ladder exists in `diag/switch-fps-bisect`.
 - [x] A5 code:re-enable Pixi texture source only;QA trace shows no regression but also no Pixi texture spans because cover resources remained disabled.
 - [x] A6a code:restore cover resource hooks only;cover color/palette still disabled;QA trace stays stable with real `background.pixi` spans.
-- [x] A6b code:restore cover color/palette hook only;QA trace pending.
+- [x] A6b code:restore cover color/palette hook only;QA trace shows FPS regression and has been tagged `qa/fps-drop-cover-color-20260614`.
+- [x] A6c code:keep cover color hook active but skip visualizer color apply/store;QA trace pending.
 - [ ] A7:if A6 remains acceptable,remove diagnostic media reload mode and restore normal post-load path.
 - [ ] Final production fix must be rebuilt from the isolated cause,not by merging diagnostic commits.
 
@@ -983,6 +985,16 @@ QA 观察到 `Ctrl+1`/`Ctrl+2` 在 Now Playing 与 Tab 2 全部歌曲列表之�
 - **Pixi 小图成本可接受**:每次成功 texture 都是 `192×192 image/webp`,约 `2.8~12KB`;`fetch≈0.9~1.7ms`, `decode≈0.6~1.1ms`, `texture.create≈0~0.1ms`, `apply/render≈0.5~0.7ms`。`media.load≈182~189ms` 主要包含已有 180ms settle gate,不是实际 decode/GPU upload。
 - **cover render/preload 收敛**:`cover.render` 全部 cache-hit;`cover.preload.batch max≈18~25ms`, `created=0`, `maxSourceBytes=0`,没有重新引入整图读取。
 - **结论**:cover URL/derivative/object URL hooks 与 Pixi 192px derivative texture swap 都不是当前回退点。下一步只恢复 cover color / palette hook,继续保持 normal playback post-load diagnostic mode。
+
+### QA#34(2026-06-14 A6b trace):cover color hook 加回后 FPS 回退
+
+17:30 trace 是 `9eb619b diag(perf): add back cover color hook` 的结果,并已打 tag `qa/fps-drop-cover-color-20260614` 固定复现点。
+
+- **FPS 回退复现**:切歌前后窗口从 `fpsAvg≈114.3~114.9` 下降到 `79.7 -> 68.8 -> 55.4`;`fpsLow≈17.2~20`, `frameMaxMs≈50~58.3ms`。这不是 A6a 的稳定形态。
+- **新出现的直接路径是 cover color**:每次切歌都出现 `cover.palette.track-metadata paletteCount=4`,但没有 `cover.palette.start/success` worker 提取 span;说明本轮不是 palette worker 抽取,而是从 track metadata 读到 palette 后立刻应用到 visualizer color。
+- **Pixi 小图成本被放大**:同样是 `192×192 image/webp` derivative,A6a 的 `fetch≈0.9~1.7ms/decode≈0.6~1.1ms`;A6b 变成 `fetch≈66~117ms/decode≈95~107ms/media.load≈371~398ms`,而 `texture.create/apply≈0~0.8ms` 仍很小。初步判断 Pixi texture 本身不是主因,cover color apply 引发的 store/CSS/全屏合成变化可能与 Pixi/background queue 互相放大。
+- **MediaSession 是次要噪声**:trace 中有一次 stale `player.mediaSession.artwork.fetch lastMs≈79.6ms phase=skip stale-after-cover`,最终落定 artwork 约 `11.1ms`;settle 机制仍在,不是本轮差异的首要解释。
+- **下一刀(A6c)**:保留 cover color hook 的订阅、metadata palette 读取与 trace log,但临时跳过 `transitionVisualizerCoverColor` 写入 store/CSS。若 A6c 恢复,主因定位到 color apply/compositor;若仍回退,再查 palette liveQuery/read/log 本身。
 
 ---
 

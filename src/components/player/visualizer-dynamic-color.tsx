@@ -30,6 +30,7 @@ const coverColorLog = createDiagnosticLogger("cover.palette");
 const PALETTE_EXTRACTION_SETTLE_MS = 900;
 const PALETTE_EXTRACTION_IDLE_TIMEOUT_MS = 4000;
 const DISABLE_COVER_COLOR_FOR_BISECT = false;
+const DISABLE_COVER_COLOR_APPLY_FOR_BISECT = true;
 let lastAppliedTarget: { key: string | null; rgb: Rgb | null; palette: Rgb[] } | null = null;
 
 type PaletteResolution = {
@@ -107,6 +108,18 @@ function applyVisualizerCoverColorTarget(
     rgb: rgb ? { ...rgb } : null,
     palette: palette.map((color) => ({ ...color })),
   };
+  if (DISABLE_COVER_COLOR_APPLY_FOR_BISECT) {
+    coverColorLog.debug("cover.palette.apply", {
+      message: "cover palette color apply skipped for diagnostic bisect",
+      category: "media",
+      phase: "skip",
+      reason: "diag-bisect",
+      targetKey: key ?? undefined,
+      paletteCount: palette.length,
+      fallbackToTheme: !rgb,
+    });
+    return true;
+  }
   transitionVisualizerCoverColor(key, rgb, palette);
   return true;
 }
