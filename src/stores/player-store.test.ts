@@ -349,7 +349,7 @@ describe("player-store playback resume", () => {
     ).toHaveLength(1);
   });
 
-  it("keeps the current song visible and playing while the next R2 track downloads", async () => {
+  it("switches the visible song immediately while the next R2 track downloads", async () => {
     const { db, first, second, usePlayerStore } = await seedQueue(0);
     await db.mediaBlobs.put({
       id: "blb_first",
@@ -382,7 +382,7 @@ describe("player-store playback resume", () => {
         expect.objectContaining({ cache: "no-store" }),
       ),
     );
-    expect(usePlayerStore.getState().currentIndex).toBe(0);
+    expect(usePlayerStore.getState().currentIndex).toBe(1);
     expect(usePlayerStore.getState().playbackLoading).toMatchObject({
       trackId: second.id,
       title: second.title,
@@ -490,6 +490,56 @@ describe("player-store playback resume", () => {
 
     expect(usePlayerStore.getState().currentIndex).toBe(1);
     expect(mediaEngineMock.play).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps a clicked-but-still-loading track selected when the queue list changes", async () => {
+    const { db, first, repos, second, session, usePlayerStore } = await seedQueue(0);
+    await db.mediaBlobs.bulkPut([
+      {
+        id: "blb_first_queue_anchor",
+        trackId: first.id,
+        role: "media",
+        mime: "audio/mpeg",
+        bytes: 3,
+        blob: new Blob([new Uint8Array([1, 2, 3])], { type: "audio/mpeg" }),
+      },
+      {
+        id: "blb_second_queue_anchor",
+        trackId: second.id,
+        role: "media",
+        mime: "audio/mpeg",
+        bytes: 3,
+        blob: new Blob([new Uint8Array([4, 5, 6])], { type: "audio/mpeg" }),
+      },
+    ]);
+    await db.tracks.update(first.id, { status: "ready", blobId: "blb_first_queue_anchor" });
+    await db.tracks.update(second.id, { status: "ready", blobId: "blb_second_queue_anchor" });
+    const third = track("trk_third_queue_anchor", session.id, "Third");
+    await db.tracks.add(third);
+    usePlayerStore.getState().init();
+
+    await waitFor(() => expect(usePlayerStore.getState().queue).toHaveLength(2));
+    await usePlayerStore.getState().playIndex(0);
+    expect(usePlayerStore.getState().currentIndex).toBe(0);
+
+    const pendingSecondLoad = deferredVoid();
+    mediaEngineMock.loadBlob.mockImplementationOnce(async () => {
+      await pendingSecondLoad.promise;
+    });
+    const switching = usePlayerStore.getState().playIndex(1);
+
+    await waitFor(() => expect(usePlayerStore.getState().currentIndex).toBe(1));
+    await repos.playQueueAppend([third.id]);
+    await waitFor(() => expect(usePlayerStore.getState().queue).toHaveLength(3));
+
+    expect(usePlayerStore.getState().currentIndex).toBe(1);
+    expect(usePlayerStore.getState().queue[1]?.id).toBe(second.id);
+
+    pendingSecondLoad.resolve();
+    await switching;
+
+    expect(usePlayerStore.getState().currentIndex).toBe(1);
+    expect(usePlayerStore.getState().queue[1]?.id).toBe(second.id);
   });
 
   it("persists the queue cursor when the user picks another track", async () => {

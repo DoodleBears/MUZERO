@@ -94,6 +94,7 @@ import { runStreamCache } from "@/streamsrc/cache-stream";
 import {
   cacheStreamPlaylistCover,
   cacheStreamPlaylistTrackCovers,
+  cacheStreamTrackCover,
 } from "@/streamsrc/playlist-cover-cache";
 import type { StreamSearchHit } from "@/streamsrc/provider";
 import { createStreamSource } from "@/streamsrc/registry";
@@ -285,7 +286,6 @@ let loadedTrackId: string | null = null;
 let activePlaybackTrace: PlaybackTraceContext | null = null;
 let playbackLoadSeq = 0;
 let playbackLoadAbort: AbortController | null = null;
-let preparedRemotePlayback: PreparedRemotePlayback | null = null;
 // Streamed tracks auto-skipped in this play-run because they failed to resolve
 // (VIP / unavailable). Reset on any successful load or hard stop. Tracking ids
 // instead of a raw counter lets a whole VIP playlist stop after one pass, even
@@ -331,13 +331,6 @@ export interface PlaybackLoadingState {
 interface PlaybackLoadRequest {
   id: number;
   controller: AbortController;
-}
-
-interface PreparedRemotePlayback {
-  trackId: string;
-  blob: Blob;
-  bytes: number;
-  mime: string;
 }
 
 /** Cheap signature of what the queue list renders (ids + generation status +
@@ -436,27 +429,11 @@ function cancelPlaybackLoading(set: (p: Partial<PlayerState>) => void): void {
   playbackLoadSeq += 1;
   playbackLoadAbort?.abort();
   playbackLoadAbort = null;
-  preparedRemotePlayback = null;
   set({ playbackLoading: null });
 }
 
 function isPlaybackRequestSeqCurrent(requestId: number | undefined): boolean {
   return requestId === undefined || isPlaybackLoadCurrent(requestId);
-}
-
-function shouldContinuePlaybackSelection(
-  track: Track,
-  requestId: number | undefined,
-  stage: string,
-): boolean {
-  if (isPlaybackRequestSeqCurrent(requestId)) return true;
-  log.debug("player", "discard stale playback selection", {
-    trackId: track.id,
-    requestId,
-    currentRequestId: playbackLoadSeq,
-    stage,
-  });
-  return false;
 }
 
 function shouldContinuePlaybackCursor(
@@ -651,20 +628,22 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
         const persistedIndex = clampIndex(queue.length, pq.currentIndex);
         lastPersistedQueueIndex = persistedIndex;
         const state = get();
-        // Hydrate from persisted cursor on boot, and reconcile by playing track id
-        // when the queue structure changes. During normal playback the in-memory
-        // cursor is authoritative: cursor-only DB writes are debounced resume
-        // state and must not bounce the UI back through stale liveQuery results.
+        // Hydrate from persisted cursor on boot, and reconcile by the current UI
+        // track id when the queue structure changes. A clicked online/R2 track can
+        // be the visible current track before its media finishes loading, so using
+        // only `loadedTrackId` here would bounce the UI back to the previous song
+        // when the set watcher appends/seeds the queue a moment later.
         const shouldHydrateCursor = !playQueueHydrated || listChanged;
         playQueueHydrated = true;
+        const previousTrackId = currentTrack(state)?.id;
+        const cursorAnchorId = previousTrackId ?? loadedTrackId;
         const currentIndex = shouldHydrateCursor
           ? reconcileCurrentIndex(
               queue.map((tr) => tr.id),
-              loadedTrackId,
+              cursorAnchorId,
               persistedIndex,
             )
           : clampIndex(queue.length, state.currentIndex);
-        const previousTrackId = currentTrack(state)?.id;
         const nextTrack = currentIndex >= 0 ? queue[currentIndex] : undefined;
         const nextTrackId = nextTrack?.id;
         const metadataDuration = playableDurationSec(nextTrack?.durationSec);
@@ -823,54 +802,6 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       queueLength: queue.length,
       ...describeTrackSwitch({ from: state.currentIndex, to: clamped, track: target, sourceKind }),
     });
-    if (
-      target &&
-      sourceKind === "remote" &&
-      state.isPlaying &&
-      loadedTrackId !== null &&
-      state.currentIndex !== clamped
-    ) {
-      const playbackTrace = startPlaybackTrace(target);
-      const cached = await readRemotePlaybackCache(target, playbackTrace);
-      if (!shouldContinuePlaybackSelection(target, selectionRequestId, "remote-cache")) return;
-      if (cached) {
-        preparedRemotePlayback = { trackId: target.id, ...cached };
-        set(cursorPatch(queue, clamped, true));
-        persistQueueIndex(clamped);
-        await ensureLoadedAndPlay(set, get, selectionRequestId);
-        void maybeRefill(set, get);
-        return;
-      }
-      const request = beginPlaybackLoading(set, target, sourceKind);
-      try {
-        const media = await fetchRemotePlaybackBlob(
-          target,
-          playbackTrace,
-          request.controller.signal,
-        );
-        if (!isPlaybackLoadCurrent(request.id)) return;
-        preparedRemotePlayback = { trackId: target.id, ...media };
-        void writeRemotePlaybackCache(target, media);
-        set(cursorPatch(queue, clamped, true));
-        persistQueueIndex(clamped);
-        await ensureLoadedAndPlay(set, get, request.id);
-        void maybeRefill(set, get);
-      } catch (error) {
-        if (!isAbortError(error) && isPlaybackLoadCurrent(request.id)) {
-          notify.error(i18n.t("player.playbackError"), {
-            detail: describePlaybackError(error),
-            error,
-          });
-          log.warn("player", "deferred remote media playback fetch failed", {
-            trackId: target.id,
-            error,
-          });
-        }
-      } finally {
-        clearPlaybackLoading(set, request.id);
-      }
-      return;
-    }
     if (target) startPlaybackTrace(target);
     set(cursorPatch(queue, clamped, true));
     persistQueueIndex(clamped);
@@ -925,14 +856,20 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     const track = await createStreamedTrack(hitToStreamedInput(setId, hit));
     // Persist the cover as a blob (best-effort, non-blocking) so it survives offline.
     if (track.remoteCoverUrl && !track.coverBlobId) {
-      void downloadStreamedCover(track.id, track.remoteCoverUrl);
+      void cacheStreamTrackCover({ trackId: track.id, coverUrl: track.remoteCoverUrl });
     }
     const alreadyActive = get().activeSessionId === setId;
     const session = await getSession(setId);
     if (!session?.trackIds.includes(track.id)) await prependTrackIds(setId, [track.id]);
     if (!alreadyActive) await get().setActiveSession(setId);
-    const idx = await waitForQueueIndex(get, track.id);
-    if (idx >= 0) await get().playIndex(idx);
+    const idx =
+      (await waitForQueueIndex(get, track.id)) ??
+      (await ensureTrackInCurrentPlayQueue(set, get, track.id));
+    if (idx >= 0) {
+      await get().playIndex(idx);
+    } else {
+      log.warn("player", "streamed track did not enter play queue", { trackId: track.id, setId });
+    }
   },
 
   async playStreamedHits(hits) {
@@ -1633,20 +1570,6 @@ async function downloadStreamedSetTracks(setId: string): Promise<void> {
   if (failed > 0) notify.error(i18n.t("streamCache.downloadFailedMany", { count: failed }));
 }
 
-async function downloadStreamedCover(trackId: string, url: string): Promise<void> {
-  const bridge = resolveDesktopBridge();
-  if (!bridge.mediaProxyUrl) return; // web/tauri: keep the remote URL fallback
-  try {
-    const resp = await fetch(bridge.mediaProxyUrl(url));
-    if (!resp.ok) return;
-    const blob = await resp.blob();
-    if (blob.size === 0 || !blob.type.startsWith("image/")) return;
-    await setTrackCover({ trackId, blob, mime: blob.type });
-  } catch (err) {
-    log.warn("player", "failed to download streamed cover", { trackId, err: String(err) });
-  }
-}
-
 async function fetchAndStoreRemoteCover(trackId: string, url: string): Promise<void> {
   try {
     const appFetch = await getAppFetch();
@@ -2162,13 +2085,37 @@ async function waitForQueueIndex(
   get: () => PlayerState,
   trackId: string,
   tries = 40,
-): Promise<number> {
+): Promise<number | null> {
   for (let i = 0; i < tries; i += 1) {
     const idx = get().queue.findIndex((t) => t.id === trackId);
     if (idx >= 0) return idx;
     await new Promise((resolve) => setTimeout(resolve, 25));
   }
-  return get().queue.findIndex((t) => t.id === trackId);
+  const idx = get().queue.findIndex((t) => t.id === trackId);
+  return idx >= 0 ? idx : null;
+}
+
+async function ensureTrackInCurrentPlayQueue(
+  set: (p: Partial<PlayerState>) => void,
+  get: () => PlayerState,
+  trackId: string,
+): Promise<number> {
+  const stateIndex = get().queue.findIndex((t) => t.id === trackId);
+  if (stateIndex >= 0) return stateIndex;
+
+  consumedTrackIds.add(trackId);
+  let pq = await getPlayQueue();
+  if (!pq.entries.some((entry) => entry.trackId === trackId)) {
+    pq = await playQueuePlayNext([trackId]);
+  }
+  const trackIds = pq.entries.map((entry) => entry.trackId);
+  const queue = await getTracksByIds(trackIds);
+  const idx = queue.findIndex((track) => track.id === trackId);
+  if (idx >= 0) {
+    lastQueueSig = queueSig(queue);
+    set({ queue });
+  }
+  return idx;
 }
 
 /** Get (or lazily create + remember) the set that collects online-source songs. */
@@ -2297,45 +2244,38 @@ async function ensureLoadedAndPlay(
         trackId: track.id,
         kind: track.kind,
       });
-      const prepared = preparedRemotePlayback?.trackId === track.id ? preparedRemotePlayback : null;
-      if (prepared) {
-        preparedRemotePlayback = null;
-        await mediaEngine.loadBlob(prepared.blob, track.kind);
-        if (!continueCurrent("remote-prepared-loaded")) return;
+      const cached = await readRemotePlaybackCache(track, playbackTrace);
+      if (!continueCurrent("remote-cache")) return;
+      if (cached) {
+        await mediaEngine.loadBlob(cached.blob, track.kind);
+        if (!continueCurrent("remote-cache-loaded")) return;
       } else {
-        const cached = await readRemotePlaybackCache(track, playbackTrace);
-        if (!continueCurrent("remote-cache")) return;
-        if (cached) {
-          await mediaEngine.loadBlob(cached.blob, track.kind);
-          if (!continueCurrent("remote-cache-loaded")) return;
-        } else {
-          const request = beginPlaybackLoading(set, track, sourceKind);
-          activeRequestId = request.id;
-          try {
-            const media = await fetchRemotePlaybackBlob(
-              track,
-              playbackTrace,
-              request.controller.signal,
-            );
-            if (!continueCurrent("remote-fetched")) return;
-            await mediaEngine.loadBlob(media.blob, track.kind);
-            if (!continueCurrent("remote-loaded")) return;
-            void writeRemotePlaybackCache(track, media);
-          } catch (error) {
-            if (isAbortError(error) || !continueCurrent("remote-failed")) return;
-            notify.error(i18n.t("player.playbackError"), {
-              detail: describePlaybackError(error),
-              error,
-            });
-            log.warn("player", "remote media playback fetch failed", {
-              trackId: track.id,
-              error,
-            });
-            set({ isPlaying: false, wantPlay: false });
-            return;
-          } finally {
-            clearPlaybackLoading(set, request.id);
-          }
+        const request = beginPlaybackLoading(set, track, sourceKind);
+        activeRequestId = request.id;
+        try {
+          const media = await fetchRemotePlaybackBlob(
+            track,
+            playbackTrace,
+            request.controller.signal,
+          );
+          if (!continueCurrent("remote-fetched")) return;
+          await mediaEngine.loadBlob(media.blob, track.kind);
+          if (!continueCurrent("remote-loaded")) return;
+          void writeRemotePlaybackCache(track, media);
+        } catch (error) {
+          if (isAbortError(error) || !continueCurrent("remote-failed")) return;
+          notify.error(i18n.t("player.playbackError"), {
+            detail: describePlaybackError(error),
+            error,
+          });
+          log.warn("player", "remote media playback fetch failed", {
+            trackId: track.id,
+            error,
+          });
+          set({ isPlaying: false, wantPlay: false });
+          return;
+        } finally {
+          clearPlaybackLoading(set, request.id);
         }
       }
     } else if (sourceKind === "stream") {
