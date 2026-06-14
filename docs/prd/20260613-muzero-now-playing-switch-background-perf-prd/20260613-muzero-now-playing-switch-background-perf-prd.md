@@ -928,6 +928,41 @@ QA 观察到 `Ctrl+1`/`Ctrl+2` 在 Now Playing 与 Tab 2 全部歌曲列表之�
 - **剩余掉帧另算**:J 里仍能看到 `cover.preload.batch maxMs=36.2ms`, `background.cover localCover.wait`, `pixiCover.derivative state=pending`,以及 capture 前已有 `longTaskMaxMs=539`。这些不是 MediaSession immediate artwork 的证据;正式 fix 先 port settle/debounce,剩余低帧再用 `cover.preload.*` / background derivative / nav transition trace 继续分层。
 - **结论更新**:切歌主因不在 3000px cover decode、Pixi texture、`audio.load()` 或 `play()`;当前被验证的决定性问题是 **MediaSession artwork 在 rapid skip 中逐首读取 local cover 并创建 image object URL**。正式修复应把 `scheduleMediaSessionMetadata` 从诊断模式变成默认路径,并保留 `player.mediaSession.*` trace span。
 
+### QA#31(2026-06-14 formal settle trace + commit ranking):`3153bf9` 仍是最强改善点
+
+17:12 trace 是正式路径 port MediaSession settle 后的新结果;QA 同时反馈 `3153bf9 diag(perf): bypass media source reload` 是整个二分链里帧率提升最明显的 commit。
+
+- **MediaSession settle 生效但不充分**:正式路径里每次切歌都出现 `player.mediaSession metadata.schedule phase=start delayMs=650`,旧 schedule 被 `phase=skip reason=replaced/stale` 覆盖,最终只对落定 track 触发一次 `artwork.fetch`。这说明 Phase 1 正式修复没有退化。
+- **FPS 仍未恢复到 QA 预期**:trace 中切歌窗口仍可见 `fpsAvg≈73.2 -> 44.1 -> 38.9`, `fpsLow≈8`, `frameMaxMs≈75~125ms`。因此 QA#30 的“J 有改善”不能被解读成产品路径已经修完。
+- **正式路径剩余大头**:`background.pixi media.load` 即使输入已是 `192×192 image/webp` derivative,仍出现 `durationMs≈357~449ms`;其中 `fetch≈90~104ms`, `decode≈56~106ms`,而 `texture.create/renderMs/applyMs≈0~1.2ms`。这指向浏览器 fetch/decode/media queue 或全屏合成放大器,不是 Pixi texture create 本身。
+- **关键事实修正**:`bb7bc64`/`5b5976f` 的好结果发生在诊断环境:cover resource hooks 仍被禁用,Pixi texture source 仍是 `src=null`,且 normal post-load work 仍未完全恢复。它只能证明 immediate MediaSession artwork 是一个回归点,不能证明 Pixi/cover/normal playback path 已无成本。
+- **新 baseline**:`3153bf9` 是最强改善点,应作为 add-back 基线。它同时保留 `playIndex`/store currentIndex 更新,但跳过 `getTrackBlob`, `mediaEngine.loadBlob/loadUrl`, `mediaEngine.play` 和后续 media element 状态机;因此“媒体源重载/播放后副作用”仍是主线,Pixi/cover 是后续逐项加回的放大器。
+- **决策**:从 `3153bf9` 的已知好状态开始往回加。已有 `8b71afa`(read-only)、`aade510`(attach-only)、`e8c9bfc`(attach+play)、`bb7bc64`(settled MediaSession) 构成 media reload add-back 梯子;下一步只加回 Pixi texture source,仍保持 cover resource hooks 禁用,以确认 192px derivative 路径是否独立拉低 FPS。
+
+### Phase 27: Add back from the `3153bf9` baseline
+
+**Goal:** 把二分从“不断禁用更多功能”切换为“从最强改善点逐项加回”。每个 commit 只恢复一个功能面,并用同一 QA 手势记录 `fpsAvg/fpsLow/frameMaxMs/frameP99Ms/longTaskMaxMs` 与相关 spans。
+
+**Add-back matrix:**
+
+| Step | Commit / change | Restored surface | Expected signal |
+|------|-----------------|------------------|-----------------|
+| A0 | `3153bf9` | Baseline:skip media source reload,cover hooks disabled,Pixi shell with `src=null` | 最强改善点;作为后续差值基线 |
+| A1 | `8b71afa` | Read media blob only | 若变差,IndexedDB/blob read 是主因 |
+| A2 | `aade510` | Attach media source without play | 若变差,`audio.src` replacement / `load()` 是主因 |
+| A3 | `e8c9bfc` | Attach + `play()` without post-load work | 若变差,`play()` / audio output start 是主因 |
+| A4 | `bb7bc64` | Settled MediaSession metadata/artwork | 若变差,落定后的 OS artwork 仍需降级或进一步延迟 |
+| A5 | Current add-back | Re-enable Pixi texture source while cover hooks stay disabled | 若变差,`background.pixi` 192px derivative fetch/decode/compositor 是独立放大器 |
+| A6 | Next | Restore cover resource hooks / cover-color path | 若变差,封面资源 hook 或 palette/color liveQuery 是独立放大器 |
+| A7 | Next | Restore normal playback post-load work | 若变差,lyrics/presence/listen flush/normal store fan-out 是独立放大器 |
+
+**Tasks:**
+- [x] A0-A4 media reload ladder exists in `diag/switch-fps-bisect`.
+- [x] A5 code:re-enable Pixi texture source only;QA trace pending.
+- [ ] A6:if A5 remains acceptable,restore cover resource hooks only.
+- [ ] A7:if A6 remains acceptable,remove diagnostic media reload mode and restore normal post-load path.
+- [ ] Final production fix must be rebuilt from the isolated cause,not by merging diagnostic commits.
+
 ---
 
 ## 7. Out of Scope(交叉引用,本 PRD 不处理)

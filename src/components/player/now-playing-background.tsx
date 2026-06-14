@@ -33,7 +33,7 @@ import { type PixiBackgroundEffect, PixiPixelBackground } from "./pixi-pixel-bac
 
 const bgCoverLog = createDiagnosticLogger("background.cover");
 const ENABLE_PIXI_BACKGROUND_FOR_BISECT = true;
-const DISABLE_PIXI_TEXTURE_SOURCE_FOR_BISECT = true;
+const DISABLE_PIXI_TEXTURE_SOURCE_FOR_BISECT = false;
 
 /**
  * Now Playing ambient backdrop.
