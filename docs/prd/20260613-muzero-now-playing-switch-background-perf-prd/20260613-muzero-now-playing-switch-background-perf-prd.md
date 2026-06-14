@@ -25,7 +25,7 @@
 | 12 | local-cover pending 时硬阻断上一帧 settled Pixi target | ✅ 代码完成(待 trace 验证) | [Phase 12](#phase-12-local-cover-pending-时硬阻断上一帧-settled-pixi-target) |
 | 13 | local-cover liveQuery stale row guard | ✅ Completed(trace verified) | [Phase 13](#phase-13-local-cover-livequery-stale-row-guard) |
 | 14 | coverflow/local cover preload burst jank | ✅ Completed(trace verified) | [Phase 14](#phase-14-coverflowlocal-cover-preload-去抖与可归因) |
-| 15 | Pixi background texture downsample / decode budget | 🔲 Pending | [Phase 15](#phase-15-pixi-background-texture-降采样预算) |
+| 15 | Pixi background texture downsample / decode budget | ✅ 代码完成(待 QA trace) | [Phase 15](#phase-15-pixi-background-texture-降采样预算) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
 
@@ -534,13 +534,24 @@ backgroundGpuPowerPreference?: "auto" | "high-performance" | "low-power"; // DEF
 
 ### Phase 15: Pixi background texture 降采样预算
 
-**Goal:** 只对 Pixi 环境背景纹理设定 decode/upload 预算,避免每次切歌为全屏特效解码 800-1500px+ 的整图 ImageBitmap。中央 stage / coverflow 封面仍保持原图显示。
+**Goal:** 只对 Pixi 环境背景纹理设定 decode/upload 预算,避免每次切歌为全屏特效解码 1500px+ 的整图 ImageBitmap。中央 stage / coverflow 封面仍保持原图显示。
+
+**为何仍用 ImageBitmap,不是直接把 URL/`HTMLImageElement` 给 Pixi:**
+- Pixi v8 可以吃多种 texture source,但 `Texture.from(url)` 不是资源加载路径,`Assets.load` 才是;而 `Assets.load` 会绕过现有 `getAppFetch` 桌面 bridge / CORS 路由,也引入 Pixi 全局缓存生命周期。
+- 直接给 `HTMLImageElement` 能显示,但此前 trace/console 命中过 Pixi 的 image-element → canvas conversion 路径,这会把首帧成本推回主线程。
+- `createImageBitmap(blob, { resizeWidth, resizeHeight })` 是这里需要的关键:它让**背景专用**纹理在进入 Pixi 前就按预算 decode,不影响 stage/coverflow 原图。若某个 WebView 不支持 resize option,实现会自动 retry 无 resize 的 ImageBitmap,保留线程外解码路径。
+
+**实现(落地):**
+- [`background-texture.ts`](../../../src/lib/background-texture.ts):`loadImageBitmapSource` 新增 `maxDimension`;先只读前 64KB 头部探测 PNG/JPEG/WebP 尺寸,超过预算时按比例向 `createImageBitmap` 传 `resizeWidth/resizeHeight/resizeQuality:"high"`。
+- [`pixi-pixel-background.tsx`](../../../src/components/player/pixi-pixel-background.tsx):Pixi 环境背景图片分支传 `BACKGROUND_IMAGE_BITMAP_MAX_DIMENSION=1024`;该预算只作用于 ambient Pixi texture,不改变中央 stage / coverflow 的原图。
+- [`pixi-background-controller.ts`](../../../src/components/player/pixi-background-controller.ts):`background.pixi media.load` / `textureSwap*` trace 增加 `sourceWidth/sourceHeight/resizeMaxDimension`;实际 `width/height` 仍记录传入 Pixi 的 decoded bitmap 尺寸。
 
 **Tasks(TDD):**
-- [ ] 为 `loadImageBitmapSource` 增加可注入 `maxDimension` / resize option 测试:当调用方给背景预算时,应向 `createImageBitmap` 传入保持宽高比的 `resizeWidth/resizeHeight`。
-- [ ] 增加轻量图片尺寸探测(至少 JPEG/PNG/WebP 常见路径)或复用已有 cover metadata,避免先解整图再降采样。
-- [ ] `pixi-pixel-background` 图片分支传入背景纹理预算(初值建议 768 或 1024,以 QA trace 对比为准),trace 增加 `decodedWidth/decodedHeight` 或 `resizeMaxDimension`。
-- [ ] QA trace 验收:`background.pixi media.load` 的 `width/height` 被预算限制,`loadMs` 下降且 `fpsAvg/fpsLow` 接近 120Hz 稳态;`texture.create/renderMs` 仍保持低值。
+- [x] 为 `loadImageBitmapSource` 增加可注入 `maxDimension` / resize option 测试:当调用方给背景预算时,应向 `createImageBitmap` 传入保持宽高比的 `resizeWidth/resizeHeight`。
+- [x] 增加轻量图片尺寸探测(PNG/JPEG/WebP 常见路径),避免先解整图再降采样。
+- [x] `pixi-pixel-background` 图片分支传入背景纹理预算(`1024`),trace 增加 `sourceWidth/sourceHeight/resizeMaxDimension`。
+- [x] 相关测试通过:`background-texture.test.ts` + `pixi-background-controller.test.ts` + `pixi-pixel-background.test.ts` 共 25 例;`typecheck`/Biome 通过。
+- [ ] QA trace 验收:`background.pixi media.load` 中 1500px/3000px 源图应出现 `sourceWidth/sourceHeight > width/height`,且 `resizeMaxDimension=1024`;`loadMs` 应下降。若 800px 图仍高 `loadMs`,说明瓶颈偏 fetch/bridge/decoder queue,不是像素预算。
 
 ---
 
@@ -592,7 +603,7 @@ backgroundGpuPowerPreference?: "auto" | "high-performance" | "low-power"; // DEF
 | 13 | QA#11:3000×3000 本身是否足以解释掉帧? | 🔲 Root cause refined | 不应只归因到尺寸。新 trace 显示 `localCover.wait` 前仍有一帧旧 settled `blob:` target 进入 Pixi,且 stale ImageBitmap decode 无法取消,把 3000px 图的旧 decode、muzfetch decode、下一首 decode 排到一起。Phase 12 硬阻断 pending 首帧的 settled target。 |
 | 14 | QA#12:Phase 12 后为什么仍 wait 晚于 blob start? | 🔲 Root cause found | `useLiveQuery` 在 `coverBlobId` 切换后会短暂返回上一条 mediaBlob row;旧 hook 没校验 `row.id`,导致当前 cover 首帧误判并走 blob。Phase 13 只接受 id 匹配当前 cover 的 row,否则视为 row pending。 |
 | 15 | QA#13:Phase 13 后为什么仍 `fpsLow≈7.5`? | ✅ Resolved(trace verified) | local-cover wait 已在首帧发生,Pixi app 也稳定(`appInits=1`),16.5MB 重复 decode 未复现。Phase 14 后新 trace 显示 `cover.preload.batch created=0 maxSourceBytes=0`,image blob 数稳定,preload 已收敛。 |
-| 16 | QA#14:Phase 14 后为什么仍 `fpsAvg≈62-75`? | 🔲 New root cause found | 剩余低 FPS 与 Pixi `media.load loader=imageBitmap` 对齐:1500px/800px 图片仍需 172-254ms 准备,而 `texture.create/renderMs` 仍仅 0-3ms。下一步是 Pixi 背景纹理独立 decode budget / 降采样,不再继续追 QueuePanel 或 coverflow preload。 |
+| 16 | QA#14:Phase 14 后为什么仍 `fpsAvg≈62-75`? | ✅ Phase 15 code done, QA trace pending | 剩余低 FPS 与 Pixi `media.load loader=imageBitmap` 对齐:1500px/800px 图片仍需 172-254ms 准备,而 `texture.create/renderMs` 仍仅 0-3ms。Phase 15 已给 Pixi 背景纹理加独立 decode budget(1024 max side)与 source/decoded 尺寸 trace;下一份 trace 判断像素预算是否足够,若 800px 仍慢则转查 fetch/bridge/decoder queue。 |
 
 ---
 
@@ -625,3 +636,4 @@ backgroundGpuPowerPreference?: "auto" | "high-performance" | "low-power"; // DEF
 | 2026-06-14 | User+Codex | **QA#13 trace 记录 + Phase 14 待办**:11:03 trace 验证 Phase 13 生效(`localCover.wait` 首帧出现,16.5MB blob→muzfetch 重复 decode 未复现,Pixi `appInits=1`)。剩余 `fpsAvg=46.9/fpsLow=7.5` 与 `cover.preload.batch lastMs=503 created=2 local=3 requests=3`、image blob live 增长对齐。新增 Phase 14:coverflow/local cover preload latest-only、in-flight dedupe 与 stale/cancel trace。 |
 | 2026-06-14 | User+Codex | **Phase 14 代码完成(TDD)**:新增 `cover-preload.ts` 把 coverflow preload 从组件内联 effect 抽成可测 helper;本地 cover preload 按 cache key 做 in-flight dedupe,并用 batch sequence 阻止 stale batch 创建 object URL / 写 state;修复 stale 后 `coverUrlCache.acquire()` 占位 ref 泄漏。`cover.preload.batch` trace 现在带 `cacheHits/inflightHits/stale/canceled/maxSourceBytes` 与 current/previous/next/stack/settle 分布。新增 2 例 helper 测试 + 原 swipeable stage 6 例全绿;`typecheck`/Biome 通过。 |
 | 2026-06-14 | User+Codex | **QA#14 Phase 14 trace 验证 + Phase 15 待办**:11:35 trace 显示 Phase 14 生效(`cover.preload.batch created=0 maxSourceBytes=0`,image blob live 稳定),local-cover wait 与 Pixi app lifecycle 也稳定。剩余掉帧对齐 Pixi `media.load loader=imageBitmap`:1500px 图 `loadMs=172.1`,800px 图 `loadMs=254.3`,而 `texture.create/renderMs` 仍 0-3ms。新增 Phase 15:Pixi 背景纹理独立 decode budget/降采样,stage/coverflow 仍保原图。 |
+| 2026-06-14 | User+Codex | **Phase 15 代码完成(TDD)**:`background-texture.ts` 为 ImageBitmap loader 增加 `maxDimension`、PNG/JPEG/WebP 头部尺寸探测、`createImageBitmap(...,{ resizeWidth, resizeHeight, resizeQuality:"high" })` 与 resize option 不支持时的无 resize retry;Pixi 背景图片分支传 `BACKGROUND_IMAGE_BITMAP_MAX_DIMENSION=1024`,只降 ambient texture,stage/coverflow 仍保原图。`background.pixi` trace 增加 `sourceWidth/sourceHeight/resizeMaxDimension`。相关 25 例测试 + `typecheck`/Biome 通过。 |

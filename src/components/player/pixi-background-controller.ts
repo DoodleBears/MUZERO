@@ -71,6 +71,9 @@ export interface LoadedBackgroundMedia {
   element: HTMLImageElement | HTMLVideoElement | ImageBitmap;
   bytes?: number;
   loader?: "imageBitmap" | "imageElement" | "videoElement";
+  resizeMaxDimension?: number;
+  sourceHeight?: number;
+  sourceWidth?: number;
   texture?: unknown;
   width: number;
   height: number;
@@ -316,7 +319,10 @@ export function createPixiBackgroundController(
       loader: media.loader,
       mediaType,
       phase: "success" as const,
+      resizeMaxDimension: media.resizeMaxDimension,
       sourceKind,
+      sourceHeight: media.sourceHeight,
+      sourceWidth: media.sourceWidth,
       swapSeq: token,
       width: media.width,
     };

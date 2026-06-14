@@ -19,6 +19,7 @@ import {
 
 export type PixiBackgroundEffect = "pixel" | "ascii" | "cross-hatch" | "crt" | "dot" | "noise";
 type BackgroundMediaType = "image" | "video";
+const BACKGROUND_IMAGE_BITMAP_MAX_DIMENSION = 1024;
 
 /**
  * Wire a freshly-loaded video texture to playback: seek to the current position,
@@ -218,6 +219,9 @@ type BackgroundMedia =
       element: HTMLImageElement | ImageBitmap;
       height: number;
       loader: "imageBitmap" | "imageElement";
+      resizeMaxDimension?: number;
+      sourceHeight?: number;
+      sourceWidth?: number;
       texture?: import("pixi.js").Texture;
       type: "image";
       unload?: () => void;
@@ -242,12 +246,15 @@ async function loadBackgroundMedia(
   // Prefer an ImageBitmap texture source: createImageBitmap decodes off the main
   // thread and Pixi uploads the ImageBitmap directly — no "Image element passed,
   // converting to canvas and replacing resource" main-thread copy on the landing
-  // frame (PRD Phase 4). Full resolution is kept. Falls back to the <img> path
-  // when createImageBitmap is unavailable or the source can't be decoded.
+  // frame (PRD Phase 4). Phase 15 also caps only this ambient background bitmap;
+  // stage art / coverflow keep their original source quality.
   const bitmap = await loadImageBitmapSource(src, {
     createImageBitmap:
-      typeof createImageBitmap === "function" ? (blob) => createImageBitmap(blob) : undefined,
+      typeof createImageBitmap === "function"
+        ? (blob, options) => createImageBitmap(blob, options)
+        : undefined,
     fetchBlob: fetchTextureBlob,
+    maxDimension: BACKGROUND_IMAGE_BITMAP_MAX_DIMENSION,
   });
   if (bitmap) {
     return {
@@ -255,6 +262,9 @@ async function loadBackgroundMedia(
       element: bitmap.bitmap,
       height: bitmap.height,
       loader: "imageBitmap",
+      resizeMaxDimension: bitmap.resizeMaxDimension,
+      sourceHeight: bitmap.sourceHeight,
+      sourceWidth: bitmap.sourceWidth,
       type: "image",
       unload: bitmap.unload,
       width: bitmap.width,
