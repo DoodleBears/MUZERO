@@ -5,7 +5,12 @@ import { getTrackLyrics, listGalleryImages, listTrackBackgrounds } from "@/db/re
 import { useSettings } from "@/hooks/use-app-data";
 import { useLoadedImageUrl } from "@/hooks/use-image-load";
 import { useLocalCoverResource } from "@/hooks/use-local-cover";
-import { useObjectUrls, useTrackCoverResource, useTrackMediaUrl } from "@/hooks/use-media";
+import {
+  useCoverDerivativeUrl,
+  useObjectUrls,
+  useTrackCoverResource,
+  useTrackMediaUrl,
+} from "@/hooks/use-media";
 import {
   type BackgroundRenderTarget,
   resolveBackgroundSource,
@@ -273,7 +278,40 @@ function NowPlayingBackgroundContent({ hideVisualizer }: { hideVisualizer: boole
     trackStatus: current?.status,
     hasTrackMedia: hasBackgroundVideoMedia,
   });
-  const pixiUrl = pixiMedia.source === "track-video" ? currentVideoUrl : backgroundUrl;
+  const shouldUsePixiCoverDerivative = Boolean(
+    pixiEffect && source === "cover" && pixiMedia.source === "cover" && current?.coverBlobId,
+  );
+  const pixiCoverDerivativeUrl = useCoverDerivativeUrl(
+    shouldUsePixiCoverDerivative ? current : undefined,
+    "backlight",
+    { defer: waitForLocalCoverUrl },
+  );
+  const pixiCoverUrl = shouldUsePixiCoverDerivative ? pixiCoverDerivativeUrl : backgroundUrl;
+  useEffect(() => {
+    if (!shouldUsePixiCoverDerivative || !current?.coverBlobId) return;
+    bgCoverLog.debug("pixiCover.derivative", {
+      category: "performance",
+      coverBlobId: current.coverBlobId,
+      defer: waitForLocalCoverUrl,
+      derivativeKind: "backlight",
+      derivativeReady: Boolean(pixiCoverDerivativeUrl),
+      derivativeState: pixiCoverDerivativeUrl
+        ? "ready"
+        : waitForLocalCoverUrl
+          ? "deferred"
+          : "pending",
+      fallbackToOriginal: false,
+      phase: pixiCoverDerivativeUrl ? "success" : waitForLocalCoverUrl ? "skip" : "state",
+      trackId: current.id,
+    });
+  }, [
+    current?.coverBlobId,
+    current?.id,
+    pixiCoverDerivativeUrl,
+    shouldUsePixiCoverDerivative,
+    waitForLocalCoverUrl,
+  ]);
+  const pixiUrl = pixiMedia.source === "track-video" ? currentVideoUrl : pixiCoverUrl;
   const hasPotentialImageBackground =
     source === "cover"
       ? trackHasCover(current)

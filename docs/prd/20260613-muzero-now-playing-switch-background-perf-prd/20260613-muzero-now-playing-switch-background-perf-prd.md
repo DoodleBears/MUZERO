@@ -678,7 +678,34 @@ backgroundGpuPowerPreference?: "auto" | "high-performance" | "low-power"; // DEF
 - [x] 新增 burst filter 测试,锁定 burst 期间保留 current/remote、过滤 non-current local;更新 `swipeable-media-stage.test.tsx` 表达新的稳定窗口语义。
 - [x] 实现 `nonCurrentLocalSettleMs`、burst filter 与 stage 两批接线。
 - [x] `cover-preload.test.ts` + `swipeable-media-stage.test.tsx` 共 10 例通过。
-- [ ] QA trace 验收:快速切歌时 stale/canceled 的 `cover.preload.batch` 不应再出现 `maxSourceBytes=16569025` 或 `lastMs>250ms`;预期非 current 大封面 batch 在窗口内 stale 时 `maxSourceBytes=0`,且 image blob 计数不因邻近预加载增长。
+- [x] QA trace 验收:13:32 trace 中 `cover.preload.batch` 每轮 `requests=1/roleCurrent=1/roleNext=0/rolePrevious=0/roleStack=0/maxSourceBytes=0`,未再出现 non-current stale/canceled 先读 16.5MB 的模式。
+
+### QA#20(2026-06-14 Phase 20 trace):non-current preload 已收敛,剩余瓶颈是成功落地 Pixi 仍读本地原图
+
+13:32 trace 验证 Phase 20 方向正确,同时把剩余低帧继续收窄:
+
+- **Phase 20 生效**:`cover.preload.batch` 现在每轮都是 `requests=1`,且 `roleCurrent=1/roleNext=0/rolePrevious=0/roleStack=0`,`maxSourceBytes=0`。没有再看到 stale/canceled non-current batch 先读 16.5MB 的模式。
+- **Phase 19 仍生效**:旧 Pixi swap 在 `42.4ms~217.1ms` 内 `phase=skip reason=aborted`,且无对应 `background.texture fetch/decode`;180ms settle gate 没退化。
+- **剩余大头**:最终成功落地的 `swapSeq=42` 仍以 `sourceKind=muzfetch` 读整张本地 cover:`bytes=13360729`,源尺寸 `3874×3874`,随后才 resize 到 `1024×1024`;其中 `fetch=846.6ms`, `decode=189.1ms`, `media.load=1323.3ms`。`texture.create=0.1ms`, `renderMs=2.1ms`,所以 GPU/Pixi render 仍不是瓶颈。
+- **FPS 对齐**:同窗 `fpsAvg=66.9/fpsLow=6.7/frameMax=150`,随后 `fpsAvg=56.5/fpsLow=5/frameMax=200`,Pixi 成功 apply 后仍 `fpsAvg=53.2/fpsLow=5/frameP99=183.4`。音频 `media.load.blob bytes=5393807` 与这段重叠,但背景图片 fetch/decode 是唯一新增的大图路径。
+- **结论**:Phase 20 已砍掉 wasted preload。下一步不是继续调 GPU 或 preload,而是让 Pixi ambient cover 不再消费本地原图 URL。Stage/coverflow 仍保原图;只给全屏背景特效使用已有小 cover derivative。
+
+### Phase 21: Feed Pixi ambient cover from a small derivative instead of the local original
+
+**Goal:** 当 Pixi 背景 source 是 cover 且 track 有本地 cover blob 时,Pixi texture source 使用现有 `backlight` cover derivative 的 object URL,不再用 `muzfetch://...` 或 full-cover `blob:` 原图。Derivative 尚未 ready 时保持 Pixi shell mounted 但 hidden (`src=null`),避免回退到原图启动 13MB fetch/decode。
+
+**实现(落地):**
+- [`now-playing-background.tsx`](../../../src/components/player/now-playing-background.tsx):接入 `useCoverDerivativeUrl(current, "backlight")` 作为 Pixi cover texture source;仅在 `pixiEffect && pixiMedia.source==="cover" && source==="cover" && current.coverBlobId` 时启用。
+- 对本地 cover derivative pending 的窗口,继续复用 Phase 10/12 的 hidden Pixi shell 行为;不要把 full cover URL 喂给 `PixiPixelBackground`。这意味着 derivative 首次生成时最多是背景特效短暂隐藏,而不是启动 13MB Pixi fetch/decode。
+- 不改变 `CrossfadeBackgroundImage` / `CanvasBlurBackground` / stage coverflow 的原图展示质量;本 phase 只优化 Pixi ambient texture 输入字节。
+- 新增 `background.cover pixiCover.derivative` trace,带 `derivativeKind`, `derivativeReady`, `derivativeState`, `fallbackToOriginal:false`,可在下一份 QA trace 直接确认是否仍回退原图。
+
+**Tasks(TDD):**
+- [x] `now-playing-background.test.tsx`:先加红灯用例,本地 `muzfetch://` cover ready 且 derivative ready 时,Pixi `data-src` 必须是 derivative URL,不是 `muzfetch://` 原图。
+- [x] `now-playing-background.test.tsx`:derivative pending 时 Pixi shell 仍 mounted hidden,`data-src=""`,且不回退到 local protocol/full blob。
+- [x] 实现 hook 接线与 render target 逻辑,并补 `pixiCover.derivative` trace。
+- [x] 运行 `now-playing-background.test.tsx`、相关 cover preload/Pixi controller 测试、typecheck、本次 touched 源文件 Biome。
+- [ ] QA trace 验收:成功落地 Pixi 不应再出现 `background.texture fetch bytes≈13MB sourceKind=muzfetch/blob`;预期 `bytes` 接近 backlight derivative 体量,或 derivative pending 时本轮无 Pixi texture load。
 
 ---
 
@@ -736,6 +763,7 @@ backgroundGpuPowerPreference?: "auto" | "high-performance" | "low-power"; // DEF
 | 19 | QA#17:为什么 Phase 17 后仍 `fpsLow=3.6/frameMax=275ms`? | ✅ Resolved(trace verified) | 最大掉帧来自 stale 16.5MB `muzfetch`:用户已切到下一首,旧 `swapSeq=14` 仍 fetch/decode 2s 后才 stale。Phase 18 加 `AbortSignal`;12:28 trace 已看到旧 `swapSeq=16/18` 以 `phase=skip reason=aborted` 退出,不再有 2s stale fetch。 |
 | 20 | QA#18:Phase 18 abort 后为什么仍 `fpsLow=3.6/frameMax=275ms`? | ✅ Resolved(trace verified) | Abort 已取消旧长尾,但旧 load 在切歌后立即启动,用户 200-300ms 内再切时浏览器可能已进入不可立即抢占的 ImageBitmap/fetch 管线。Phase 19 在 Pixi texture `loadMedia` 前加 180ms abortable settle gate;13:15 trace 已验证旧 `swapSeq=30/32/34/36/40/42` 不再进入 `background.texture fetch/decode`。 |
 | 21 | QA#19:Phase 19 后为什么仍 `fpsAvg≈46/fpsLow=4.4`? | 🔲 Phase 20 code done, QA trace pending | 废弃 Pixi decode 已挡住,剩余为两个整图读:non-current `cover.preload.batch` stale/canceled 仍读 16.5MB,以及最终落地 Pixi 成功 `muzfetch fetch=876ms/decode=178ms`。Phase 20 先砍纯 wasted work:non-current 本地预加载延后 420ms,stale batch 不读 blob。 |
+| 22 | QA#20:Phase 20 后为什么仍 `fpsLow≈5`? | 🔲 Phase 21 code done, QA trace pending | 13:32 trace 验证 non-current preload 已收敛(`requests=1/roleCurrent=1/maxSourceBytes=0`),剩余大头是最终成功 Pixi 仍读本地原图:`muzfetch bytes=13.36MB/fetch=846.6ms/decode=189.1ms/media.load=1323.3ms`,而 `texture.create/render` 只有 0.1/2.1ms。Phase 21 让 Pixi ambient cover 使用 `backlight` derivative,derivative pending 时 hidden 且 `fallbackToOriginal:false`。 |
 
 ---
 
@@ -774,3 +802,4 @@ backgroundGpuPowerPreference?: "auto" | "high-performance" | "low-power"; // DEF
 | 2026-06-14 | User+Codex | **QA#17 trace + Phase 18 代码完成(TDD)**:12:16 trace 验证 Phase 17 生效(`headerSource=fetched-bytes`,`header=0~0.1ms`),但发现 stale 16.5MB `muzfetch` 旧 `swapSeq=14` 在用户切到下一首后仍 `fetch=1830ms/decode=181ms`,最后才 `textureSwap.stale`,同时 `fpsLow=3.6/frameMax=275ms/heapMb=366`。Phase 18 给 Pixi texture load 加 `AbortSignal`:新 source/null/destroy/recover 取消旧 load;AbortError 记 `phase=skip reason=aborted` 且不触发 `onError`。TDD:pixi-controller/background-texture/pixi-pixel-background 31 例通过。 |
 | 2026-06-14 | User+Codex | **QA#18 trace + Phase 19 代码完成(TDD)**:12:28 trace 验证 Phase 18 生效(旧 `swapSeq=16/18` 已 `phase=skip reason=aborted`,无 2s stale `muzfetch`),但剩余窗口仍跌到 `fpsAvg≈49-67/fpsLow=3.6/frameMax=274.9`,因为 Pixi texture load 仍在切歌后立即启动,被 200-300ms 内的新歌覆盖时可能已进入 fetch/ImageBitmap decode。Phase 19 在 controller `loadMedia` 前加入 180ms abortable settle gate;`PixiPixelBackground` 只对环境背景特效启用。TDD:pixi-background-controller 13 例通过。 |
 | 2026-06-14 | User+Codex | **QA#19 trace + Phase 20 代码完成(TDD)**:13:15 trace 验证 Phase 19 生效(旧 `swapSeq=30/32/34/36/40/42` 均 abort 且无 `background.texture fetch/decode`),但 `cover.preload.batch canceled=1/stale=1` 仍读 16.5MB 并耗时 291-583ms。Phase 20 将 current 与 non-current 本地 preload settle 分离:current 仍 140ms,previous/next/stack/settle 延后 420ms,stale batch 在读 blob 前 cancel。TDD:cover-preload + swipeable stage 共 10 例通过。 |
+| 2026-06-14 | User+Codex | **QA#20 trace + Phase 21 代码完成(TDD)**:13:32 trace 验证 Phase 20 生效(`cover.preload.batch requests=1/roleCurrent=1/maxSourceBytes=0`),剩余低帧对齐最终 Pixi 成功 `muzfetch` 原图输入(13.36MB/3874px,`fetch=846.6ms`,`decode=189.1ms`,`media.load=1323.3ms`)。Phase 21 让 Pixi ambient cover 改用现有 `backlight` derivative object URL;derivative pending 时 Pixi shell hidden、`fallbackToOriginal:false`,并新增 `background.cover pixiCover.derivative` trace。TDD:`now-playing-background` 11 例 + 相关 cover/Pixi 21 例通过,`typecheck` 与 touched-file Biome 通过。 |
