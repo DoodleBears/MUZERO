@@ -960,8 +960,8 @@ QA 观察到 `Ctrl+1`/`Ctrl+2` 在 Now Playing 与 Tab 2 全部歌曲列表之�
 | A6e | `5de774e` | Keep CSS frozen and skip 900ms rAF interpolation;set final `rgb/palette` once | 仍回退;单次 rgb/palette store update 或其 consumers 仍有成本 |
 | A6f | `795b9a3` | Keep CSS/rAF disabled,update `rgb` only and freeze `palette` | 部分改善但未恢复;flow palette 不是唯一问题 |
 | A6g | `e0dfe43` | Keep CSS/rAF/palette disabled and freeze `rgb` too | 基本恢复;rgb/spectrum primary consumer 是剩余放大器,但仍需拆 coverBlobId store update |
-| A6h | Current add-back | Keep all color outputs frozen and skip color-store `setState` entirely | 代码完成,待 QA trace;看是否进一步贴近 A6c |
-| A7 | Next | Restore normal playback post-load work | 若变差,lyrics/presence/listen flush/normal store fan-out 是独立放大器 |
+| A6h | `67cc03c` | Keep all color outputs frozen and skip color-store `setState` entirely | 未进一步改善;单次 cover color store update 不是剩余主因 |
+| A7 | Current add-back | Restore normal playback post-load work | 代码完成,待 QA trace;若变差,normal post-load 是独立放大器 |
 
 **Tasks:**
 - [x] A0-A4 media reload ladder exists in `diag/switch-fps-bisect`.
@@ -973,8 +973,8 @@ QA 观察到 `Ctrl+1`/`Ctrl+2` 在 Now Playing 与 Tab 2 全部歌曲列表之�
 - [x] A6e code:keep CSS frozen and disable per-frame rAF interpolation;QA trace still regresses.
 - [x] A6f code:keep CSS/rAF disabled and freeze store `palette`;QA trace partially improves but does not recover.
 - [x] A6g code:keep CSS/rAF/palette disabled and freeze store `rgb`;QA trace basically recovers but leaves a small gap vs A6c.
-- [x] A6h code:keep cover color hook active,log transition,then skip color-store `setState` entirely;QA trace pending.
-- [ ] A7:if A6 remains acceptable,remove diagnostic media reload mode and restore normal post-load path.
+- [x] A6h code:keep cover color hook active,log transition,then skip color-store `setState` entirely;QA trace does not improve vs A6g.
+- [x] A7 code:remove diagnostic media reload mode and restore normal post-load path;QA trace pending.
 - [ ] Final production fix must be rebuilt from the isolated cause,not by merging diagnostic commits.
 
 ### QA#32(2026-06-14 A5 trace):Pixi `src` add-back 未恶化,但未真正触发 texture load
@@ -1056,6 +1056,16 @@ QA 观察到 `Ctrl+1`/`Ctrl+2` 在 Now Playing 与 Tab 2 全部歌曲列表之�
 - **Pixi 小图仍轻**:`192×192 image/webp` derivative 的 `fetch/decode≈0.7~1.1ms`, `textureSwap.apply≈0.4~0.7ms`;`media.load≈182~188ms` 主要是已有 settle gate。Pixi texture 本身继续被排除。
 - **仍有一个小差距**:A6c 跳过 apply/store 时可到 `fpsAvg≈105.9~116.1`;A6g 虽然稳定,但仍会写 `coverBlobId` 到 color store。需要再拆一次,确认单次 `setState({ coverBlobId })` 是否还会唤醒订阅链。
 - **下一刀(A6h)**:保留 cover color hook、metadata 读取与所有 skip trace,但在 `transitionVisualizerCoverColor` 内连 color-store `setState` 都跳过,新增 `cover.palette.store phase=skip`。若 A6h 回到 A6c 水平,正式修复应让切歌热路径不写 cover color store;若无变化,剩余差异应转向非 color path 或测量噪声。
+
+### QA#40(2026-06-14 A6h trace):跳过 color store setState 没有继续改善
+
+18:06 trace 是 `67cc03c diag(perf): isolate cover color store update` 的结果:
+
+- **A6h 生效**:每首都有 `cover.palette.store phase=skip reason=diag-bisect`,同时 `css/palette/rgb` 也继续 skip;`track-metadata paletteCount=4` 仍保留。
+- **没有比 A6g 更好**:FPS 窗口为 `fpsAvg≈94.3~96`, `fpsLow≈17.1~20`, `frameMax≈50~58.4ms`。这没有贴近 A6c 的 `105.9~116.1`,说明 A6g 里残留的 `coverBlobId` store setState 不是关键成本。
+- **Pixi 与 cover preload 继续被排除**:所有成功 Pixi texture 都是 `192×192 image/webp`, `fetch/decode≈0.6~0.9ms`, `textureSwap.apply≈0.3~0.6ms`;`cover.preload.batch max≈14.9~23.6ms`, `created=0`, `maxSourceBytes=0`。
+- **当前诊断模式仍未恢复 normal post-load**:trace 里的媒体事件仍是 `media.load.attach-play-media-session-settled source=diag-bisect:blob-read`,说明播放 attach/play 已恢复,但正常路径里的 `flushPlaybackListen`、正式 `media.load.blob` 分支和后续 post-load 仍被诊断短路。
+- **结论**:cover color 侧的正式修复应避免在切歌热路径更新 `css/rgb/palette` 或让消费者在同一窗口做全屏合成;单次 key update 不需要重点处理。下一刀 A7 恢复 normal playback post-load,看 color 修掉后播放后处理是否还会造成额外回退。
 
 ---
 

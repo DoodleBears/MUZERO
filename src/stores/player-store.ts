@@ -141,7 +141,7 @@ const MEDIA_SOURCE_RELOAD_BISECT_MODE:
   | "attach-no-play"
   | "attach-and-play"
   | "attach-play-media-session"
-  | "attach-play-media-session-settled" = "attach-play-media-session-settled";
+  | "attach-play-media-session-settled" = "off";
 const DEFAULT_PLAYER_VOLUME = 0.9;
 
 export type QueueSource =
