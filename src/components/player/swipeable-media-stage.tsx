@@ -12,27 +12,25 @@ import {
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { AutoScrollText } from "@/components/ui/auto-scroll-text";
-import { resolveMediaBlob } from "@/db/media-blob-storage";
-import { db } from "@/db/muzero-db";
 import type { Track } from "@/db/types";
 import { useSettings } from "@/hooks/use-app-data";
-import {
-  proxyExternalCover,
-  useCoverDerivativeUrl,
-  useTrackCoverResource,
-} from "@/hooks/use-media";
+import { useCoverDerivativeUrl, useTrackCoverResource } from "@/hooks/use-media";
 import {
   resolveNowPlayingCoverBacklightAppearance,
   resolveNowPlayingCoverEffectMode,
 } from "@/lib/album-cover-appearance";
-import { getCroppedBlob } from "@/lib/image-crop";
-import { coverUrlCache } from "@/lib/object-url-cache";
 import { arePerfCountersEnabled, notePerfWork } from "@/lib/perf-counters";
 import { trackAlbum, trackArtists, trackHasCover, trackSubtitle } from "@/lib/track-display";
 import { cn } from "@/lib/utils";
-import { trackCoverCacheKey } from "@/player/playback-preload";
 import { useNavStore } from "@/stores/nav-store";
 import { usePlayerStore } from "@/stores/player-store";
+import {
+  buildCoverPreloadRequests,
+  type CoverPreloadCandidate,
+  type PreloadedCover,
+  preloadCoverBatch,
+  releasePreloadedCover,
+} from "./cover-preload";
 import { MediaStage } from "./media-stage";
 import { StageTitleFallback } from "./stage-title-fallback";
 
@@ -133,20 +131,28 @@ export function SwipeableMediaStage({
     mode: coverEffectMode,
   };
   const stageCover = useTrackCoverResource(current);
-  const preloadTracks = useMemo(
+  const preloadCandidates = useMemo<CoverPreloadCandidate[]>(
     () =>
-      compactTracks([
-        current,
-        prevTrack,
-        nextTrack,
-        stack?.current?.track,
-        stack?.prev?.track,
-        stack?.next?.track,
-        settleTarget?.track,
+      compactPreloadCandidates([
+        { role: "current", track: current },
+        { role: "previous", track: prevTrack },
+        { role: "next", track: nextTrack },
+        { role: "stack-current", track: stack?.current?.track },
+        { role: "stack-previous", track: stack?.prev?.track },
+        { role: "stack-next", track: stack?.next?.track },
+        { role: "settle", track: settleTarget?.track },
       ]),
-    [current, nextTrack, prevTrack, settleTarget?.track, stack?.current, stack?.next, stack?.prev],
+    [
+      current,
+      nextTrack,
+      prevTrack,
+      settleTarget?.track,
+      stack?.current?.track,
+      stack?.next?.track,
+      stack?.prev?.track,
+    ],
   );
-  const preloadedCoverUrls = usePreloadedCoverUrls(preloadTracks);
+  const preloadedCoverUrls = usePreloadedCoverUrls(preloadCandidates);
   const currentVisual = makeVisualTrack(current, preloadedCoverUrls);
   const nextVisual = makeVisualTrack(nextTrack, preloadedCoverUrls);
   const prevVisual = makeVisualTrack(prevTrack, preloadedCoverUrls);
@@ -158,6 +164,9 @@ export function SwipeableMediaStage({
   const stackVisible = !!stack;
   const stackActive =
     stackVisible && (!!dragDirection || committing || !!settleTarget || handoffFading);
+  const stageCoverSettledForCurrent =
+    stageCover.readyForTrack &&
+    (!stageCover.targetKey || !stageCover.url || stageCover.urlKey === stageCover.targetKey);
   const baseCoverBacklightEnabled = (!committing && !settleTarget) || handoffFading;
 
   const travel = Math.max(width, FALLBACK_WIDTH);
@@ -436,16 +445,16 @@ export function SwipeableMediaStage({
   useEffect(() => {
     if (!settleTarget || handoffFading || current?.id !== settleTarget.track.id) return;
     if (
-      settleTarget.track.coverBlobId &&
+      trackHasCover(settleTarget.track) &&
       (!preloadedCoverUrls[settleTarget.track.id] ||
         !readyTrackIds[settleTarget.track.id] ||
-        !stageCover.readyForTrack)
+        !stageCoverSettledForCurrent)
     ) {
       return;
     }
     if (handoffTimer.current != null) window.clearTimeout(handoffTimer.current);
     const token = animationToken.current;
-    const settleMs = settleTarget.track.coverBlobId ? COVER_READY_SETTLE_MS : 0;
+    const settleMs = trackHasCover(settleTarget.track) ? COVER_READY_SETTLE_MS : 0;
     handoffTimer.current = window.setTimeout(() => {
       if (animationToken.current !== token) return;
       // Only the settled card is on screen now (centre-pinned, x-independent),
@@ -473,7 +482,7 @@ export function SwipeableMediaStage({
     handoffFading,
     preloadedCoverUrls,
     readyTrackIds,
-    stageCover.readyForTrack,
+    stageCoverSettledForCurrent,
     settleTarget,
     x,
   ]);
@@ -1006,13 +1015,14 @@ function makeVisualTrack(
     : null;
 }
 
-function compactTracks(tracks: Array<Track | undefined>): Track[] {
+function compactPreloadCandidates(candidates: CoverPreloadCandidate[]): CoverPreloadCandidate[] {
   const seen = new Set<string>();
-  const out: Track[] = [];
-  for (const track of tracks) {
+  const out: CoverPreloadCandidate[] = [];
+  for (const candidate of candidates) {
+    const track = candidate.track;
     if (!track || seen.has(track.id)) continue;
     seen.add(track.id);
-    out.push(track);
+    out.push(candidate);
   }
   return out;
 }
@@ -1037,154 +1047,41 @@ function measureVerticalClipBounds(el: HTMLElement | null): { bottom: number; to
   return bottom > top ? { bottom, top } : { bottom: window.innerHeight, top: 0 };
 }
 
-type PreloadRequest = {
-  coverBlobId?: string;
-  crop?: Track["coverCrop"] | undefined;
-  /** Proxied remote cover URL for streamed tracks (no local blob). */
-  remoteUrl?: string;
-  key: string;
-  trackId: string;
-};
-
-/** Prime the browser cache for a remote cover so the coverflow <img> paints
- *  without a fetch round-trip. Fire-and-forget — failures are harmless. Sets the
- *  src only (no eager `decode()`): forcing a full-res decode of every preloaded
- *  cover spiked the heap on rapid skips (PRD Phase 5 A/B — see warmDecode revert). */
-function warmImage(url: string): void {
-  if (typeof Image === "undefined") return;
-  const img = new Image();
-  img.decoding = "async";
-  img.referrerPolicy = "no-referrer";
-  img.src = url;
-}
-
-function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => window.setTimeout(resolve, ms));
-}
-
-type PreloadedCover = {
-  cacheKey?: string;
-  key: string;
-  url: string;
-};
-
-function releasePreloadedCover(entry: PreloadedCover | undefined): void {
-  if (entry?.cacheKey) coverUrlCache.release(entry.cacheKey);
-}
-
-function usePreloadedCoverUrls(tracks: Track[]): Record<string, string> {
+function usePreloadedCoverUrls(candidates: CoverPreloadCandidate[]): Record<string, string> {
   const settings = useSettings();
   const coverCropped = settings.coverCropped ?? true;
   const entriesRef = useRef<Record<string, PreloadedCover>>({});
+  const batchSeqRef = useRef(0);
   const [urls, setUrls] = useState<Record<string, string>>({});
-  const requests = useMemo<PreloadRequest[]>(
-    () =>
-      tracks.flatMap((track): PreloadRequest[] => {
-        if (track.coverBlobId) {
-          const crop = coverCropped ? track.coverCrop : undefined;
-          const cacheKey = trackCoverCacheKey(track, coverCropped);
-          if (!cacheKey) return [];
-          return [
-            {
-              coverBlobId: track.coverBlobId,
-              crop,
-              key: cacheKey,
-              trackId: track.id,
-            },
-          ];
-        }
-        // Streamed cover: no local blob — preload the proxied remote URL so the
-        // prev/next covers are ready in the coverflow strip during a drag-swipe.
-        if (track.remoteCoverUrl) {
-          const url = proxyExternalCover(track.remoteCoverUrl) ?? track.remoteCoverUrl;
-          return [
-            {
-              key: `${track.id}:remote:${track.remoteCoverUrl}`,
-              remoteUrl: url,
-              trackId: track.id,
-            },
-          ];
-        }
-        return [];
-      }),
-    [coverCropped, tracks],
+  const requests = useMemo(
+    () => buildCoverPreloadRequests(candidates, coverCropped),
+    [candidates, coverCropped],
   );
   useEffect(() => {
     let alive = true;
+    batchSeqRef.current += 1;
+    const batchSeq = batchSeqRef.current;
+    const isCurrent = () => alive && batchSeqRef.current === batchSeq;
 
     const load = async () => {
       const perfEnabled = arePerfCountersEnabled();
       const perfStartedAt = perfEnabled ? performance.now() : 0;
-      let cropped = 0;
-      let local = 0;
-      let remote = 0;
-      let created = 0;
       const previous = entriesRef.current;
-      const nextEntries: Record<string, PreloadedCover> = {};
-      let localMissSettled = false;
 
-      for (const request of requests) {
-        const reusable = previous[request.trackId];
-        if (reusable?.key === request.key) {
-          nextEntries[request.trackId] = reusable;
-          continue;
+      const result = await preloadCoverBatch({
+        isCurrent,
+        localSettleMs: COVER_PRELOAD_LOCAL_SETTLE_MS,
+        previous,
+        requests,
+      });
+      if (!isCurrent() || result.canceled) {
+        if (perfEnabled) {
+          notePerfWork("cover.preload.batch", performance.now() - perfStartedAt, result.stats);
         }
-
-        // Remote cover: the proxied URL is ready synchronously; warm the cache and
-        // record it directly (no object URL to own/revoke).
-        if (request.remoteUrl) {
-          remote += 1;
-          warmImage(request.remoteUrl);
-          nextEntries[request.trackId] = { key: request.key, url: request.remoteUrl };
-          continue;
-        }
-        if (!request.coverBlobId) continue;
-        local += 1;
-
-        const cachedUrl = coverUrlCache.acquire(request.key);
-        if (cachedUrl) {
-          nextEntries[request.trackId] = {
-            cacheKey: request.key,
-            key: request.key,
-            url: cachedUrl,
-          };
-          continue;
-        }
-
-        if (!localMissSettled) {
-          localMissSettled = true;
-          await delay(COVER_PRELOAD_LOCAL_SETTLE_MS);
-          if (!alive) break;
-        }
-
-        let blob = (await resolveMediaBlob(request.coverBlobId, db))?.blob;
-        if (!blob) {
-          coverUrlCache.release(request.key);
-          continue;
-        }
-        if (request.crop) {
-          cropped += 1;
-          blob = await getCroppedBlob(blob, request.crop, blob.type || "image/jpeg");
-        }
-        if (!alive) {
-          coverUrlCache.release(request.key);
-          break;
-        }
-        const createdUrl = URL.createObjectURL(blob);
-        created += 1;
-        const url = coverUrlCache.store(request.key, createdUrl);
-        nextEntries[request.trackId] = {
-          cacheKey: request.key,
-          key: request.key,
-          url,
-        };
-      }
-
-      if (!alive) {
-        for (const entry of Object.values(nextEntries)) releasePreloadedCover(entry);
         return;
       }
 
+      const nextEntries = result.entries;
       entriesRef.current = nextEntries;
       setUrls(
         Object.fromEntries(
@@ -1196,13 +1093,7 @@ function usePreloadedCoverUrls(tracks: Track[]): Record<string, string> {
         if (nextEntries[trackId]?.key !== entry.key) releasePreloadedCover(entry);
       }
       if (perfEnabled) {
-        notePerfWork("cover.preload.batch", performance.now() - perfStartedAt, {
-          created,
-          cropped,
-          local,
-          remote,
-          requests: requests.length,
-        });
+        notePerfWork("cover.preload.batch", performance.now() - perfStartedAt, result.stats);
       }
     };
 

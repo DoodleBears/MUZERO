@@ -24,7 +24,7 @@
 | 11 | local-cover 协议 URL pending 时跳过 blob fallback | ✅ 代码完成(待 trace 验证) | [Phase 11](#phase-11-local-cover-协议-url-pending-时跳过-blob-fallback) |
 | 12 | local-cover pending 时硬阻断上一帧 settled Pixi target | ✅ 代码完成(待 trace 验证) | [Phase 12](#phase-12-local-cover-pending-时硬阻断上一帧-settled-pixi-target) |
 | 13 | local-cover liveQuery stale row guard | ✅ Completed(trace verified) | [Phase 13](#phase-13-local-cover-livequery-stale-row-guard) |
-| 14 | coverflow/local cover preload burst jank | 🔲 Pending | [Phase 14](#phase-14-coverflowlocal-cover-preload-去抖与可归因) |
+| 14 | coverflow/local cover preload burst jank | ✅ 代码完成(待 trace 验证) | [Phase 14](#phase-14-coverflowlocal-cover-preload-去抖与可归因) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
 
@@ -515,11 +515,10 @@ backgroundGpuPowerPreference?: "auto" | "high-performance" | "low-power"; // DEF
 **Goal:** 在快速切歌时,让 coverflow/local cover preload 不再为每个中间状态创建 2-3 个本地 cover object URL,同时补足 trace 能把 remaining jank 归因到 current/prev/next、stale/canceled、cache/inflight。
 
 **Tasks(TDD):**
-- [ ] 为 `usePreloadedCoverUrls` 增加 latest-only / stale-before-work 测试:当 preload batch 尚未完成而 current index 再次变化时,旧 batch 不应继续创建新 object URL 或写入 state。
-- [ ] 补 `cover.preload.batch` context:`createdKeys` 计数不打原始 key、`stale/canceled`、`cacheHits`、`inflightHits`、`current/previous/next` request 分布、`maxSourceBytes`。
-- [ ] 评估并实现最小修复:
-  - 优先:为本地 cover preload 增加 in-flight dedupe + stale guard,避免相同 key 并发 resolve/create。
-  - 如 trace 证明 unique prev/next 才是主因:快速切歌窗口只预加载 current,prev/next 延后到 settle 后。
+- [x] 为 `usePreloadedCoverUrls` 增加 latest-only / stale-before-work 测试:当 preload batch 尚未完成而 current index 再次变化时,旧 batch 不应继续创建新 object URL 或写入 state。✅ 新增 `cover-preload.test.ts` 覆盖 stale batch 在 blob resolve 后不创建 URL,且释放 `acquire()` 占位 ref。
+- [x] 补 `cover.preload.batch` context:`stale/canceled`、`cacheHits`、`inflightHits`、`current/previous/next/stack/settle` request 分布、`maxSourceBytes`。✅ 不记录 raw cover key,只记录计数与最大源字节。
+- [x] 评估并实现最小修复:✅ 抽出 `cover-preload.ts`;本地 cover preload 按 key 做 in-flight dedupe,相同 key 并发 batch 只 resolve/create 一次;hook 增加 batch sequence,stale batch 不再 set state 或创建 object URL。
+- [ ] 如下一份 trace 证明 unique prev/next 才是主因:快速切歌窗口只预加载 current,prev/next 延后到 settle 后。
 - [ ] QA trace 验收:Phase 13 后的本地封面快切不再出现 `cover.preload.batch lastMs>300ms` 与 image `blobsCreated/live` 快速爬升;`fpsLow` 相对 Phase 13 trace 明显回升。
 
 ---
@@ -571,7 +570,7 @@ backgroundGpuPowerPreference?: "auto" | "high-performance" | "low-power"; // DEF
 | 12 | QA#10:Phase 10 后为什么仍 `fpsLow=2.4`? | 🔲 Root cause found | Pixi 不再重建后,剩余大头是 local-cover 协议 URL pending 期间先启 `blob:` fallback,随后 `muzfetch:` ready 又二次解码同一张 16.5MB/3000px 封面。Phase 11 让 pending 成为显式状态,跳过 blob fallback 并补 `background.cover localCover.wait` trace。 |
 | 13 | QA#11:3000×3000 本身是否足以解释掉帧? | 🔲 Root cause refined | 不应只归因到尺寸。新 trace 显示 `localCover.wait` 前仍有一帧旧 settled `blob:` target 进入 Pixi,且 stale ImageBitmap decode 无法取消,把 3000px 图的旧 decode、muzfetch decode、下一首 decode 排到一起。Phase 12 硬阻断 pending 首帧的 settled target。 |
 | 14 | QA#12:Phase 12 后为什么仍 wait 晚于 blob start? | 🔲 Root cause found | `useLiveQuery` 在 `coverBlobId` 切换后会短暂返回上一条 mediaBlob row;旧 hook 没校验 `row.id`,导致当前 cover 首帧误判并走 blob。Phase 13 只接受 id 匹配当前 cover 的 row,否则视为 row pending。 |
-| 15 | QA#13:Phase 13 后为什么仍 `fpsLow≈7.5`? | 🔲 New suspect found | local-cover wait 已在首帧发生,Pixi app 也稳定(`appInits=1`),16.5MB 重复 decode 未复现。剩余低 FPS 与 `cover.preload.batch lastMs=503 created=2 local=3 requests=3`、image blob 数增长对齐;Phase 14 转向 coverflow/local cover preload 的 latest-only/in-flight/stale 归因与修复。 |
+| 15 | QA#13:Phase 13 后为什么仍 `fpsLow≈7.5`? | 🔲 Phase 14 code landed | local-cover wait 已在首帧发生,Pixi app 也稳定(`appInits=1`),16.5MB 重复 decode 未复现。剩余低 FPS 与 `cover.preload.batch lastMs=503 created=2 local=3 requests=3`、image blob 数增长对齐;Phase 14 已补 coverflow/local cover preload 的 in-flight dedupe、stale batch guard 与可归因 trace,待新 trace 验证。 |
 
 ---
 
@@ -602,3 +601,4 @@ backgroundGpuPowerPreference?: "auto" | "high-performance" | "low-power"; // DEF
 | 2026-06-14 | User+Codex | **QA#11 + Phase 12**:用户指出 3000×3000 对现代电脑不应单独构成巨大压力。复核 10:55 trace 后修正归因:问题不是尺寸单点,而是 `localCover.wait` 前仍有一帧旧 settled `blob:` target 先进入 Pixi,启动不可取消的 stale ImageBitmap decode,随后 `muzfetch` 和下一首 decode 叠加。Phase 12 在 local-cover pending 首帧硬压 `renderPixiTarget/renderImageTarget=null`;新增测试锁定不再 replay previous settled Pixi target。 |
 | 2026-06-14 | User+Codex | **QA#12 + Phase 13**:10:59 trace 显示 `localCover.wait` 仍会晚于 `sourceKind=blob` start。定位到 `useLocalCoverResource` 的 Dexie `useLiveQuery` deps 切换窗口:可能暂返上一张 mediaBlob row,旧 hook 未校验 `row.id === coverBlobId`,导致首帧误走 blob fallback。新增 row-id guard 与 hook 测试,stale row 现在返回 `pendingReason=row` 且不请求协议 URL。 |
 | 2026-06-14 | User+Codex | **QA#13 trace 记录 + Phase 14 待办**:11:03 trace 验证 Phase 13 生效(`localCover.wait` 首帧出现,16.5MB blob→muzfetch 重复 decode 未复现,Pixi `appInits=1`)。剩余 `fpsAvg=46.9/fpsLow=7.5` 与 `cover.preload.batch lastMs=503 created=2 local=3 requests=3`、image blob live 增长对齐。新增 Phase 14:coverflow/local cover preload latest-only、in-flight dedupe 与 stale/cancel trace。 |
+| 2026-06-14 | User+Codex | **Phase 14 代码完成(TDD)**:新增 `cover-preload.ts` 把 coverflow preload 从组件内联 effect 抽成可测 helper;本地 cover preload 按 cache key 做 in-flight dedupe,并用 batch sequence 阻止 stale batch 创建 object URL / 写 state;修复 stale 后 `coverUrlCache.acquire()` 占位 ref 泄漏。`cover.preload.batch` trace 现在带 `cacheHits/inflightHits/stale/canceled/maxSourceBytes` 与 current/previous/next/stack/settle 分布。新增 2 例 helper 测试 + 原 swipeable stage 6 例全绿;`typecheck`/Biome 通过。 |
