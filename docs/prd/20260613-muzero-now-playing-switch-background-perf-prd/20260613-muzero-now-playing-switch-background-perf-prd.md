@@ -22,6 +22,7 @@
 | 9 | Pixi 背景换纹理分段 trace(新 log:QueuePanel 已排除,归因仍需拆段) | ✅ 代码完成(待抓 trace) | [Phase 9](#phase-9-pixi-背景换纹理分段-trace) |
 | 10 | 保持 Pixi controller 穿过 streamed/local-cover URL pending 窗口 | ✅ Completed(trace verified) | [Phase 10](#phase-10-保持-pixi-controller-穿过-url-pending-窗口) |
 | 11 | local-cover 协议 URL pending 时跳过 blob fallback | ✅ 代码完成(待 trace 验证) | [Phase 11](#phase-11-local-cover-协议-url-pending-时跳过-blob-fallback) |
+| 12 | local-cover pending 时硬阻断上一帧 settled Pixi target | ✅ 代码完成(待 trace 验证) | [Phase 12](#phase-12-local-cover-pending-时硬阻断上一帧-settled-pixi-target) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
 
@@ -453,6 +454,28 @@ backgroundGpuPowerPreference?: "auto" | "high-performance" | "low-power"; // DEF
 **Checklist:**
 - [x] `now-playing-background.test.tsx` 7 例通过。
 
+### QA#11(2026-06-14 Phase 11 trace):`localCover.wait` 之前仍启动了一次 blob decode
+
+用户质疑“3000×3000 对现代电脑应该不大,即使解码两次也不该这么慢”,这个判断本身合理:问题不能只归因成“图片尺寸大”。新 trace 给出的更准确结论是:
+
+- **不是单张图尺寸本身必然压垮机器**。3000×3000 JPEG 解成 RGBA 约 36MB,加上 ImageBitmap/纹理/旧纹理/浏览器 decode queue/GC,在 120Hz 的 8.3ms frame budget 里仍然可能造成 jank,但现代电脑通常应能处理离线吞吐。
+- **真实异常是 stale 工作启动得太早且不可取消**:10:55:14.631 先 `textureSwap.start sourceKind=blob swapSeq=4`;10:55:14.728 才出现 `background.cover localCover.wait`;10:55:14.764 又 `sourceKind=muzfetch swapSeq=5`。也就是说 Phase 11 虽然让后续 render 知道要等协议 URL,但 [`useSettledBackgroundTarget`](../../../src/components/player/now-playing-background.tsx) 在同一次切换的首个 render 仍短暂返回上一帧 settled target,让 Pixi 先启动了 blob decode。
+- **后果是 decode 队列被 stale 任务占住**:`blob` 3000×3000 `media.load=1325.1ms` 后 stale,`muzfetch` 同图 `media.load=1487.8ms` 后也 stale(因为用户已切到下一首),同时下一首 1440×1440 `blob` 成功 swap 也要 `loadMs=445.4ms`。这说明 `loadMs` 不是单纯 GPU 上传(`texture.create=0~0.2ms`,`renderMs=3.3ms`),而是取源/解码队列/内存压力主导。
+
+### Phase 12: local-cover pending 时硬阻断上一帧 settled Pixi target
+
+**Goal:** local-cover 协议 URL pending 期间,不仅不启动新的 object URL fallback,还要阻止 `useSettledBackgroundTarget` 残留的上一帧 target 在本次 render 被传给 Pixi。视觉上仍保持 Pixi shell mounted hidden,但 `src=null` 必须从切换首帧就生效。
+
+**实现(落地):**
+- [`now-playing-background.tsx`](../../../src/components/player/now-playing-background.tsx):新增 `suppressCoverTargetWhileLocalPending`,当 `source==="cover"`、Pixi 正在用 cover、且 `waitForLocalCoverUrl` 为 true 时,把 `renderImageTarget` / `renderPixiTarget` 外层压成 `null`。这绕过内部 settled state 的一帧滞后,让 Pixi 在 pending 首帧就收到 `src=null`。
+
+**Tasks(TDD):**
+- [x] 新增 `now-playing-background.test.tsx`:先让上一首 `blob:previous-cover` 成为 settled Pixi target,再切到 local-cover pending 的下一首;断言切换后的 Pixi render 历史不再包含上一首 `blob:`。
+- [ ] QA trace 验收:`background.cover localCover.wait` 之前不应再出现同次切歌的 `textureSwap.start sourceKind=blob`;预期 pending 首帧直接 hidden/null,协议 URL ready 后才启动 `sourceKind=muzfetch`。
+
+**Checklist:**
+- [x] `now-playing-background.test.tsx` 8 例通过。
+
 ---
 
 ## 7. Out of Scope(交叉引用,本 PRD 不处理)
@@ -500,6 +523,7 @@ backgroundGpuPowerPreference?: "auto" | "high-performance" | "low-power"; // DEF
 | 10 | QA#8:tab 无关的 `AVG 120→70` 是否仍是 QueuePanel? | ✅ Resolved(trace 实证) | **否**。新 trace 无 `queuePanel/systemPlaylist`,但有 `background.pixi textureSwap` 12 次、stale 3 次、heap +223MB;cover URL/palette 都命中缓存。归因转到全局 `NowPlayingBackground` / Pixi texture/decode/upload/合成管线。Phase 9 补分段 trace 与 copy-trace context 导出。 |
 | 11 | QA#9:Phase 9 后为什么仍 `fpsLow≈10`? | ✅ Resolved(trace verified) | 分段 trace 显示 `texture.create/render` 很小,真正大头是每次切歌又 `appInit`(853ms/307ms)。controller 被 streamed/local-cover URL pending 窗口卸载。Phase 10 修生命周期;新 trace 已验证 `appInits=1` 稳定、`swapSeq` 递增。 |
 | 12 | QA#10:Phase 10 后为什么仍 `fpsLow=2.4`? | 🔲 Root cause found | Pixi 不再重建后,剩余大头是 local-cover 协议 URL pending 期间先启 `blob:` fallback,随后 `muzfetch:` ready 又二次解码同一张 16.5MB/3000px 封面。Phase 11 让 pending 成为显式状态,跳过 blob fallback 并补 `background.cover localCover.wait` trace。 |
+| 13 | QA#11:3000×3000 本身是否足以解释掉帧? | 🔲 Root cause refined | 不应只归因到尺寸。新 trace 显示 `localCover.wait` 前仍有一帧旧 settled `blob:` target 进入 Pixi,且 stale ImageBitmap decode 无法取消,把 3000px 图的旧 decode、muzfetch decode、下一首 decode 排到一起。Phase 12 硬阻断 pending 首帧的 settled target。 |
 
 ---
 
@@ -527,3 +551,4 @@ backgroundGpuPowerPreference?: "auto" | "high-performance" | "low-power"; // DEF
 | 2026-06-14 | User+Codex | **Phase 10 代码完成**(TDD):`now-playing-background` 将“pending 时是否保留 Pixi 生命周期”从“是否保留上一张 cover URL”里拆出来;streamed/local-cover URL pending 时 `PixiPixelBackground` 继续 mounted、`src=null`、`opacity-0`,URL ready 后同一 shell 收到新 `src` 并回 `opacity-90`。新增测试覆盖不喂 stale URL + 不卸载 Pixi shell;`now-playing-background.test` 6 绿。待 QA trace 验证切歌不再每首 `appInit`。 |
 | 2026-06-14 | User+Codex | **QA#10 Phase 10 trace 验证 + Phase 11**:新 trace 证明 Pixi app init churn 已修(`appInits=1`, `swapSeq 10→16`),但同一 16.5MB/3000px local-cover 先 `sourceKind=blob` decode 1410ms 后 stale,再 `sourceKind=muzfetch` decode 1106ms 成功,导致 `fpsLow=2.4`/`frameMaxMs=408.4`。新增 Phase 11:local-cover URL pending 时跳过 object URL fallback,补 `background.cover localCover.wait` trace。 |
 | 2026-06-14 | User+Codex | **Phase 11 代码完成**(TDD):`useLocalCoverResource` 区分 row/url pending 与不可用;`now-playing-background` 在 pending 时不给 `useTrackCoverResource` 当前 track,Pixi hidden mounted 且不创建 `blob:`/`Image`,URL ready 后同 shell 收 `muzfetch:`。`now-playing-background.test` 7 绿。待 QA trace 验证不再出现同尺寸 `blob` stale → `muzfetch` 二次 decode。 |
+| 2026-06-14 | User+Codex | **QA#11 + Phase 12**:用户指出 3000×3000 对现代电脑不应单独构成巨大压力。复核 10:55 trace 后修正归因:问题不是尺寸单点,而是 `localCover.wait` 前仍有一帧旧 settled `blob:` target 先进入 Pixi,启动不可取消的 stale ImageBitmap decode,随后 `muzfetch` 和下一首 decode 叠加。Phase 12 在 local-cover pending 首帧硬压 `renderPixiTarget/renderImageTarget=null`;新增测试锁定不再 replay previous settled Pixi target。 |

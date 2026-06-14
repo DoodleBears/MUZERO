@@ -264,6 +264,12 @@ function NowPlayingBackgroundContent({ hideVisualizer }: { hideVisualizer: boole
   );
   const renderImageTarget = useSettledBackgroundTarget(imageTarget, hasPendingImageBackground);
   const renderPixiTarget = useSettledBackgroundTarget(pixiTarget, hasPendingBackground);
+  const suppressCoverTargetWhileLocalPending =
+    source === "cover" && pixiMedia.source === "cover" && waitForLocalCoverUrl;
+  const effectiveRenderImageTarget = suppressCoverTargetWhileLocalPending
+    ? null
+    : renderImageTarget;
+  const effectiveRenderPixiTarget = suppressCoverTargetWhileLocalPending ? null : renderPixiTarget;
   const shouldKeepPixiMounted =
     pixiMedia.source === "track-video" ? hasBackgroundVideoMedia : hasPotentialImageBackground;
   const slideshowResetKey = `${current?.id ?? ""}:${source}:${slideshowUrls.length}`;
@@ -293,25 +299,25 @@ function NowPlayingBackgroundContent({ hideVisualizer }: { hideVisualizer: boole
 
   return (
     <>
-      {renderImageTarget && renderer === "blur" ? (
+      {effectiveRenderImageTarget && renderer === "blur" ? (
         <CanvasBlurBackground
           blurPx={blurPx}
           holdPreviousWhileLoading={source !== "cover" || holdCoverBackgroundWhileLoading}
-          src={renderImageTarget.src}
+          src={effectiveRenderImageTarget.src}
         />
-      ) : (renderPixiTarget || shouldKeepPixiMounted) && pixiEffect ? (
+      ) : (effectiveRenderPixiTarget || shouldKeepPixiMounted) && pixiEffect ? (
         <PixiPixelBackground
-          className={renderPixiTarget ? "opacity-90" : "opacity-0"}
+          className={effectiveRenderPixiTarget ? "opacity-90" : "opacity-0"}
           effect={pixiEffect}
           effectSettings={effectSettings}
-          mediaType={renderPixiTarget?.mediaType ?? pixiMedia.mediaType}
+          mediaType={effectiveRenderPixiTarget?.mediaType ?? pixiMedia.mediaType}
           pixelSize={pixelSize}
-          src={renderPixiTarget?.src ?? null}
+          src={effectiveRenderPixiTarget?.src ?? null}
         />
-      ) : renderImageTarget ? (
+      ) : effectiveRenderImageTarget ? (
         <CrossfadeBackgroundImage
           holdPreviousWhileLoading={source !== "cover" || holdCoverBackgroundWhileLoading}
-          src={renderImageTarget.src}
+          src={effectiveRenderImageTarget.src}
         />
       ) : null}
       <div className="absolute inset-0 bg-background" style={{ opacity: imageMaskOpacity }} />
