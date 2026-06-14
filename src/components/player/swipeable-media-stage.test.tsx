@@ -246,6 +246,20 @@ describe("SwipeableMediaStage", () => {
     expect(mocks.mediaStageProps.at(-1)?.coverBacklightEnabled).toBe(true);
   });
 
+  it("hides stage backlight and coverflow overlays when the foreground is hidden", async () => {
+    render(<SwipeableMediaStage foregroundVisible={false} />);
+
+    expect(mocks.mediaStageProps.at(-1)?.coverBacklightEnabled).toBe(false);
+
+    await act(async () => {
+      usePlayerStore.setState({ currentIndex: 1 });
+      await Promise.resolve();
+    });
+
+    expect(screen.queryByTestId("visual-trk_b")).not.toBeInTheDocument();
+    expect(mocks.mediaStageProps.at(-1)?.coverBacklightEnabled).toBe(false);
+  });
+
   it("plays the coverflow for an external switch (button / Q-E / auto-advance)", async () => {
     render(<SwipeableMediaStage />);
 

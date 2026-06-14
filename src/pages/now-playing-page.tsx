@@ -145,6 +145,7 @@ export function NowPlayingPage({ foregroundHidden = false }: { foregroundHidden?
                   (swipes still change tracks). Desktop uses the lyrics button. */}
               <SwipeableMediaStage
                 coverRef={stageRef}
+                foregroundVisible={!foregroundHidden}
                 onTap={isNarrow ? toggleLyricsVisible : undefined}
               />
               {current && <TrackInfoCard track={current} />}

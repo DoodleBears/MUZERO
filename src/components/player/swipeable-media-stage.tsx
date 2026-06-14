@@ -78,10 +78,12 @@ const SWIPE_CARD_BASE =
 export function SwipeableMediaStage({
   className,
   coverRef,
+  foregroundVisible = true,
   onTap,
 }: {
   className?: string;
   coverRef?: RefObject<HTMLDivElement | null>;
+  foregroundVisible?: boolean;
   /** Fired on a plain tap of the cover (no swipe) — e.g. toggle lyrics on mobile. */
   onTap?: () => void;
 }) {
@@ -282,6 +284,10 @@ export function SwipeableMediaStage({
     setStack(null);
   }, [x]);
 
+  useEffect(() => {
+    if (!foregroundVisible && stackVisible) clearStack();
+  }, [clearStack, foregroundVisible, stackVisible]);
+
   const markVisualReady = useCallback((trackId: string) => {
     setReadyTrackIds((ready) => (ready[trackId] ? ready : { ...ready, [trackId]: true }));
   }, []);
@@ -444,6 +450,17 @@ export function SwipeableMediaStage({
   useEffect(() => {
     const prev = switchSnapRef.current;
     const newId = current?.id;
+    if (!foregroundVisible) {
+      if (stackVisible) clearStack();
+      switchSnapRef.current = {
+        id: newId,
+        index: currentIndex,
+        nextId: nextTrack?.id,
+        prevId: prevTrack?.id,
+        track: current,
+      };
+      return;
+    }
     if (prev?.id && newId && prev.id !== newId) {
       if (selfSwitchRef.current === newId) {
         // Our own drag/wheel commit is already animating this exact switch.
@@ -494,6 +511,7 @@ export function SwipeableMediaStage({
     preloadedCoverUrls,
     playProgrammaticSwitch,
     clearStack,
+    foregroundVisible,
     markBursting,
     stackVisible,
   ]);
@@ -626,7 +644,7 @@ export function SwipeableMediaStage({
       : null;
   const baseHidden = stackActive && !handoffFading;
   const stackOverlay =
-    stackActive && overlayRect && overlayPortalTarget
+    foregroundVisible && stackActive && overlayRect && overlayPortalTarget
       ? createPortal(
           <motion.div
             aria-hidden
@@ -752,7 +770,9 @@ export function SwipeableMediaStage({
             }}
           >
             <MediaStage
-              coverBacklightEnabled={!baseHidden && baseCoverBacklightEnabled && !bursting}
+              coverBacklightEnabled={
+                foregroundVisible && !baseHidden && baseCoverBacklightEnabled && !bursting
+              }
               coverBacklightFadeIn={false}
             />
           </motion.div>
