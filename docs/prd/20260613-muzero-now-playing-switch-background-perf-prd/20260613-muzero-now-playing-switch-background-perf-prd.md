@@ -20,7 +20,8 @@
 | 7 | 切歌限速(长按 next/prev 节流 ~5/s,治 firehose 错位)(#错位) | ✅ 代码完成(待实测) | [Phase 7](#phase-7-切歌限速) |
 | 8 | 单一时钟:封面/背景/背光同源 live index(根治错位,QA#7) | ✅ 代码完成(待实测) | [Phase 8](#phase-8-单一时钟统一) |
 | 9 | Pixi 背景换纹理分段 trace(新 log:QueuePanel 已排除,归因仍需拆段) | ✅ 代码完成(待抓 trace) | [Phase 9](#phase-9-pixi-背景换纹理分段-trace) |
-| 10 | 保持 Pixi controller 穿过 streamed/local-cover URL pending 窗口 | ✅ 代码完成(待 trace 验证) | [Phase 10](#phase-10-保持-pixi-controller-穿过-url-pending-窗口) |
+| 10 | 保持 Pixi controller 穿过 streamed/local-cover URL pending 窗口 | ✅ Completed(trace verified) | [Phase 10](#phase-10-保持-pixi-controller-穿过-url-pending-窗口) |
+| 11 | local-cover 协议 URL pending 时跳过 blob fallback | ✅ 代码完成(待 trace 验证) | [Phase 11](#phase-11-local-cover-协议-url-pending-时跳过-blob-fallback) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
 
@@ -420,10 +421,37 @@ backgroundGpuPowerPreference?: "auto" | "high-performance" | "low-power"; // DEF
 **Tasks(TDD):**
 - [x] 给 `now-playing-background.test.tsx` 加一例:streamed/local-cover URL pending 时仍 mount Pixi shell,`src=null`,且不使用 stale URL。
 - [x] 切到下一首 URL ready 后同一个 Pixi shell 接收新 `src`(无条件卸载)。
-- [ ] QA trace 验收:连续切歌时 `background.pixi appInit` 只在首次 renderer mount 或设置变更时出现;后续切歌 summary `appInits` 不递增,`swapSeq` 递增。
+- [x] QA trace 验收:连续切歌时无独立 `background.pixi appInit` 事件;summary 里的 `appInits=1` 保持稳定,`swapSeq` 从 10 递增到 16。
 
 **Checklist:**
 - [x] `now-playing-background.test.tsx` 6 例通过。
+
+### QA#10(2026-06-14 Phase 10 trace):App init 修好后,大头转为重复整图 decode
+
+用户提供的新 trace 验证了 Phase 10 的生命周期修复,也暴露了下一层成本:
+
+- **Phase 10 生效**:本轮 trace 无独立 `background.pixi appInit` 行;`textureSwap` summary 中 `appInits=1`,且 `swapSeq` 连续递增 `10 → 16`,说明 Pixi controller 不再在每首歌切换时 destroy/re-init。
+- **QueuePanel/DB 继续排除**:无 `queuePanel/systemPlaylist` trace;`dbRequeries=1` 基本稳定。
+- **掉帧仍存在**:`fpsAvg 113.7 → 86.1 → 69.9 → 31`, `fpsLow=2.4`, `frameMaxMs=408.4`, `longTaskMaxMs=696`,heap 曾到 `375MB`。
+- **新主因是同一封面的重复 decode**:10:43:01.415 `textureSwap.start sourceKind=blob swapSeq=10`,10:43:01.907 又出现 `sourceKind=muzfetch swapSeq=11`;两者指向同一张 `16,569,025 bytes / 3000×3000` 封面。`blob` 这次 `media.load durationMs=1410.3` 后 `textureSwap.stale`,随后 `muzfetch` 又 `media.load durationMs=1105.8` 并成功上屏。`texture.create=0~0.1ms`,`renderMs=5.2ms`,所以不是 GPU upload/render 主导,而是取源/解码主导。
+- **代码层推断**:[`useLocalCoverUrl`](../../../src/hooks/use-local-cover.ts) 之前只能返回 `string|null`,`null` 同时表示“协议 URL 还在 resolve”和“不可用”;[`now-playing-background.tsx`](../../../src/components/player/now-playing-background.tsx) 因此在 `localCoverUrl` resolve 前先调用 `useTrackCoverResource(current)` 启动 `blob:` object URL,随后 `muzfetch:` ready 又触发第二次纹理交换。
+
+### Phase 11: local-cover 协议 URL pending 时跳过 blob fallback
+
+**Goal:** 对 `electron-file` / local-cover 封面,协议 URL 仍在 pending 时不要启动 object URL fallback。Pixi shell 继续由 Phase 10 保持 mounted + hidden;待 `muzfetch:` URL ready 后只解码一次并换纹理。协议 URL 不可用或失败时再回退 object URL。
+
+**实现(落地):**
+- [`use-local-cover.ts`](../../../src/hooks/use-local-cover.ts):新增 `useLocalCoverResource()` 返回 `{ url, pending, pendingReason, canServe }`,用 `undefined/null` 区分 Dexie 行 pending 与查无此行,并用 `{ storageKey, failed, url }` 状态避免旧 URL 泄漏到新 track。
+- [`now-playing-background.tsx`](../../../src/components/player/now-playing-background.tsx):当 `localCover.pending && !localCover.url` 时给 `useTrackCoverResource(undefined)`,不解析当前 track 的 object URL;`backgroundCoverUrl=null`,Pixi 保持 mounted 但 `src=null`/`opacity-0`。
+- 新增 trace `background.cover localCover.wait category=performance phase=skip pendingReason=row|url fallback=object-url`,用于下一份 copy trace 证明 blob fallback 是否被跳过。
+
+**Tasks(TDD):**
+- [x] 新增 `now-playing-background.test.tsx`:local-cover URL pending、但 `coverResource` 已能给出 `blob:` 时,Pixi shell 仍 mounted hidden,`useTrackCoverResource` 不接收当前 track,不创建 `Image`,并 emit `background.cover localCover.wait`。
+- [x] local-cover URL ready 后,同一个 Pixi shell 接收 `muzfetch:` `src` 并恢复 `opacity-90`,仍不走当前 track 的 blob fallback。
+- [ ] QA trace 验收:同一首切歌不应再出现 `sourceKind=blob` stale 后紧跟同尺寸 `sourceKind=muzfetch`;预期只剩 `localCover.wait` → 单次 `textureSwap.start sourceKind=muzfetch`。
+
+**Checklist:**
+- [x] `now-playing-background.test.tsx` 7 例通过。
 
 ---
 
@@ -470,7 +498,8 @@ backgroundGpuPowerPreference?: "auto" | "high-performance" | "low-power"; // DEF
 | 8 | QA#4:ambient 已稳但快切仍 120→56 FPS(`longTask 283ms`) | 🔲 定位完成,Phase 4/5 修复中 | 剩余两处主线程整图解码:**(A)** coverflow/stage 读实时 index 解码原图(设计);**(B)** Pixi `Texture.from(<img>)` 转 canvas。**保持原图**,Pixi 走 ImageBitmap(线程外、免 canvas)+ `<img>` 异步解码。`frameMaxMs 6374.8` 是 visibilitychange 空档,非卡顿。详见 §6 QA#4 |
 | 9 | #4-A 是否把 coverflow 也降采样到 512px 派生? | ✅ Resolved(用户拍板) | **否**。用户要求**保持原图**;只把解码移出主线程(ImageBitmap / 异步 decode),不引降采样派生(那是 cover-quality PRD 的 Phase 3) |
 | 10 | QA#8:tab 无关的 `AVG 120→70` 是否仍是 QueuePanel? | ✅ Resolved(trace 实证) | **否**。新 trace 无 `queuePanel/systemPlaylist`,但有 `background.pixi textureSwap` 12 次、stale 3 次、heap +223MB;cover URL/palette 都命中缓存。归因转到全局 `NowPlayingBackground` / Pixi texture/decode/upload/合成管线。Phase 9 补分段 trace 与 copy-trace context 导出。 |
-| 11 | QA#9:Phase 9 后为什么仍 `fpsLow≈10`? | 🔲 Root cause found | 分段 trace 显示 `texture.create/render` 很小,真正大头是每次切歌又 `appInit`(853ms/307ms)。controller 被 streamed/local-cover URL pending 窗口卸载。Phase 10 修生命周期,让 pending 时隐藏但不 destroy Pixi。 |
+| 11 | QA#9:Phase 9 后为什么仍 `fpsLow≈10`? | ✅ Resolved(trace verified) | 分段 trace 显示 `texture.create/render` 很小,真正大头是每次切歌又 `appInit`(853ms/307ms)。controller 被 streamed/local-cover URL pending 窗口卸载。Phase 10 修生命周期;新 trace 已验证 `appInits=1` 稳定、`swapSeq` 递增。 |
+| 12 | QA#10:Phase 10 后为什么仍 `fpsLow=2.4`? | 🔲 Root cause found | Pixi 不再重建后,剩余大头是 local-cover 协议 URL pending 期间先启 `blob:` fallback,随后 `muzfetch:` ready 又二次解码同一张 16.5MB/3000px 封面。Phase 11 让 pending 成为显式状态,跳过 blob fallback 并补 `background.cover localCover.wait` trace。 |
 
 ---
 
@@ -496,3 +525,5 @@ backgroundGpuPowerPreference?: "auto" | "high-performance" | "low-power"; // DEF
 | 2026-06-14 | User+Codex | **QA#8 新 log + Phase 9 trace 补强**:新 trace 排除 QueuePanel(`queuePanel/systemPlaylist=0`),确认 tab 无关掉帧来自全局背景层:8 次带封面 blob 切歌、`background.pixi textureSwap` 12 次、stale 3 次、heap 167→390MB,cover URL/palette 都命中缓存。修复 copy trace 丢自定义 context 的格式化缺口;Pixi `setSource()` 分段 emit `textureSwap.start` / `media.load` / `texture.create` / `textureSwap.apply` / summary,带 `sourceKind/loader/bytes/width/height/loadMs/textureMs/renderMs`。TDD:trace(7)+pixi-controller(10)+background-texture(5)绿。 |
 | 2026-06-14 | User+Codex | **QA#9 Phase 9 trace 结论**:分段字段成功定位新大头:两次切歌分别 `appInit=853ms/307ms`,而 `texture.create=0~0.1ms`,`renderMs=1.6~4.9ms`;`swapSeq/appInits` 每次从 1 开始,证明 Pixi controller 在 streamed/local-cover URL pending 窗口被卸载重建。新增 Phase 10:pending 时保持 Pixi mounted 但隐藏且 `src=null`,URL ready 后只换 texture,不显示 stale cover。 |
 | 2026-06-14 | User+Codex | **Phase 10 代码完成**(TDD):`now-playing-background` 将“pending 时是否保留 Pixi 生命周期”从“是否保留上一张 cover URL”里拆出来;streamed/local-cover URL pending 时 `PixiPixelBackground` 继续 mounted、`src=null`、`opacity-0`,URL ready 后同一 shell 收到新 `src` 并回 `opacity-90`。新增测试覆盖不喂 stale URL + 不卸载 Pixi shell;`now-playing-background.test` 6 绿。待 QA trace 验证切歌不再每首 `appInit`。 |
+| 2026-06-14 | User+Codex | **QA#10 Phase 10 trace 验证 + Phase 11**:新 trace 证明 Pixi app init churn 已修(`appInits=1`, `swapSeq 10→16`),但同一 16.5MB/3000px local-cover 先 `sourceKind=blob` decode 1410ms 后 stale,再 `sourceKind=muzfetch` decode 1106ms 成功,导致 `fpsLow=2.4`/`frameMaxMs=408.4`。新增 Phase 11:local-cover URL pending 时跳过 object URL fallback,补 `background.cover localCover.wait` trace。 |
+| 2026-06-14 | User+Codex | **Phase 11 代码完成**(TDD):`useLocalCoverResource` 区分 row/url pending 与不可用;`now-playing-background` 在 pending 时不给 `useTrackCoverResource` 当前 track,Pixi hidden mounted 且不创建 `blob:`/`Image`,URL ready 后同 shell 收 `muzfetch:`。`now-playing-background.test` 7 绿。待 QA trace 验证不再出现同尺寸 `blob` stale → `muzfetch` 二次 decode。 |

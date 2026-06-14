@@ -2,6 +2,7 @@ import { act, render, screen } from "@testing-library/react";
 import type { CSSProperties } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AppSettings, Track } from "@/db/types";
+import { clearTrace, getTraceEntries } from "@/lib/trace";
 import { usePlayerStore } from "@/stores/player-store";
 import { NowPlayingBackground } from "./now-playing-background";
 
@@ -16,6 +17,17 @@ const mocks = vi.hoisted(() => ({
       urlKey: string | null;
     }
   >(),
+  localCoverResources: new Map<
+    string,
+    {
+      canServe: boolean | null;
+      coverBlobId: string | null;
+      pending: boolean;
+      pendingReason: "row" | "url" | null;
+      storageKey: string | null;
+      url: string | null;
+    }
+  >(),
   settings: {
     backgroundMode: "cover",
     flowEnabled: true,
@@ -23,6 +35,7 @@ const mocks = vi.hoisted(() => ({
     visualizerStyle: "bars",
     visualizerTuningByStyle: undefined,
   } as Partial<AppSettings>,
+  trackCoverResourceTrackIds: [] as Array<string | undefined>,
 }));
 const images: MockImage[] = [];
 const OriginalImage = globalThis.Image;
@@ -41,9 +54,29 @@ vi.mock("@/hooks/use-app-data", () => ({
   useSettings: () => mocks.settings,
 }));
 
+vi.mock("@/hooks/use-local-cover", () => ({
+  useLocalCoverResource: (track?: Track) => {
+    const override = track ? mocks.localCoverResources.get(track.id) : undefined;
+    return {
+      canServe: false,
+      coverBlobId: track?.coverBlobId ?? null,
+      pending: false,
+      pendingReason: null,
+      storageKey: null,
+      url: null,
+      ...override,
+    };
+  },
+  useLocalCoverUrl: (track?: Track) => {
+    const override = track ? mocks.localCoverResources.get(track.id) : undefined;
+    return override?.url ?? null;
+  },
+}));
+
 vi.mock("@/hooks/use-media", () => ({
   useObjectUrls: () => [],
   useTrackCoverResource: (track?: Track) => {
+    mocks.trackCoverResourceTrackIds.push(track?.id);
     const override = track ? mocks.coverResources.get(track.id) : undefined;
     if (override) return override;
     const url = track?.remoteCoverUrl ?? null;
@@ -101,6 +134,9 @@ describe("NowPlayingBackground", () => {
     });
     images.length = 0;
     mocks.coverResources.clear();
+    mocks.localCoverResources.clear();
+    mocks.trackCoverResourceTrackIds.length = 0;
+    clearTrace();
     usePlayerStore.setState({
       currentIndex: -1,
       isPlaying: false,
@@ -281,6 +317,65 @@ describe("NowPlayingBackground", () => {
     expect(readyShell).toBe(firstShell);
     expect(readyShell).toHaveAttribute("data-src", "blob:phase10-cover-b");
     expect(readyShell).toHaveClass("opacity-90");
+  });
+
+  it("waits for a local protocol cover URL instead of decoding a blob fallback", async () => {
+    mocks.settings.backgroundGalleryFallback = false;
+    mocks.settings.backgroundRenderer = "noise";
+    mocks.settings.flowEnabled = false;
+    mocks.settings.visualizerAsBackground = false;
+    mocks.localCoverResources.set("trk_local", {
+      canServe: true,
+      coverBlobId: "blb_local",
+      pending: true,
+      pendingReason: "url",
+      storageKey: "cover/local.jpg",
+      url: null,
+    });
+    mocks.coverResources.set("trk_local", {
+      readyForTrack: true,
+      staleWhilePending: false,
+      targetKey: "blb_local",
+      url: "blob:should-not-decode",
+      urlKey: "blb_local",
+    });
+    const queue = [makeTrack("trk_local", { coverBlobId: "blb_local", origin: "streamed" })];
+    usePlayerStore.setState({ currentIndex: 0, queue });
+    render(<NowPlayingBackground active />);
+
+    const pendingShell = screen.getByTestId("pixi-background");
+    expect(pendingShell).toHaveAttribute("data-src", "");
+    expect(pendingShell).toHaveClass("opacity-0");
+    expect(mocks.trackCoverResourceTrackIds).not.toContain("trk_local");
+    expect(images).toHaveLength(0);
+    expect(getTraceEntries()).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          event: "localCover.wait",
+          scope: "background.cover",
+        }),
+      ]),
+    );
+
+    mocks.localCoverResources.set("trk_local", {
+      canServe: true,
+      coverBlobId: "blb_local",
+      pending: false,
+      pendingReason: null,
+      storageKey: "cover/local.jpg",
+      url: "muzfetch://local-media/cover-token",
+    });
+    await act(async () => {
+      usePlayerStore.setState({ queue: [...queue] });
+      await Promise.resolve();
+    });
+    await loadImage(0);
+
+    const readyShell = screen.getByTestId("pixi-background");
+    expect(readyShell).toBe(pendingShell);
+    expect(readyShell).toHaveAttribute("data-src", "muzfetch://local-media/cover-token");
+    expect(readyShell).toHaveClass("opacity-90");
+    expect(mocks.trackCoverResourceTrackIds).not.toContain("trk_local");
   });
 });
 

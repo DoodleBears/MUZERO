@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { getTrackLyrics, listGalleryImages, listTrackBackgrounds } from "@/db/repositories";
 import { useSettings } from "@/hooks/use-app-data";
 import { useLoadedImageUrl } from "@/hooks/use-image-load";
-import { useLocalCoverUrl } from "@/hooks/use-local-cover";
+import { useLocalCoverResource } from "@/hooks/use-local-cover";
 import { useObjectUrls, useTrackCoverResource, useTrackMediaUrl } from "@/hooks/use-media";
 import {
   type BackgroundRenderTarget,
@@ -14,6 +14,7 @@ import {
   trackHasBackgroundVideoMedia,
 } from "@/lib/background";
 import { FLOW_DEFAULTS, VISUALIZER_BLEND_DEFAULT } from "@/lib/flow-config";
+import { createDiagnosticLogger } from "@/lib/logger";
 import { nextSlideIndex } from "@/lib/slideshow";
 import { trackHasCover } from "@/lib/track-display";
 import { cn } from "@/lib/utils";
@@ -24,6 +25,8 @@ import { VisualizerHost } from "@/visualizer/host";
 import { resolveVisualizerStyle } from "@/visualizer/registry";
 import { CanvasBlurBackground } from "./canvas-blur-background";
 import { type PixiBackgroundEffect, PixiPixelBackground } from "./pixi-pixel-background";
+
+const bgCoverLog = createDiagnosticLogger("background.cover");
 
 /**
  * Now Playing ambient backdrop.
@@ -100,14 +103,18 @@ function NowPlayingBackgroundContent({ hideVisualizer }: { hideVisualizer: boole
   // bitmap. The background is full-bleed/blurred, so the raw (uncropped) file is
   // fine. When it's available we skip resolving the object-URL cover entirely (no
   // blob load); everywhere else we fall back to it. See the local-media PRD.
-  const localCoverUrl = useLocalCoverUrl(current);
-  const coverResource = useTrackCoverResource(localCoverUrl ? undefined : current);
+  const localCover = useLocalCoverResource(current);
+  const waitForLocalCoverUrl = localCover.pending && !localCover.url;
+  const coverResource = useTrackCoverResource(
+    localCover.url || waitForLocalCoverUrl ? undefined : current,
+  );
   const coverResourceMatchesTrack =
     !coverResource.url ||
     !coverResource.targetKey ||
     coverResource.urlKey === coverResource.targetKey;
   const backgroundCoverUrl =
-    localCoverUrl ?? (coverResourceMatchesTrack ? coverResource.url : null);
+    localCover.url ??
+    (!waitForLocalCoverUrl && coverResourceMatchesTrack ? coverResource.url : null);
   const trackBackgrounds = useLiveQuery(
     () => (current?.id ? listTrackBackgrounds(current.id) : Promise.resolve([])),
     [current?.id],
@@ -133,11 +140,32 @@ function NowPlayingBackgroundContent({ hideVisualizer }: { hideVisualizer: boole
   });
   const clearCoverBackgroundWhileLoading =
     source === "cover" &&
-    (Boolean(current?.remoteCoverUrl) ||
+    (waitForLocalCoverUrl ||
+      Boolean(current?.remoteCoverUrl) ||
       current?.origin === "streamed" ||
       coverResource.staleWhilePending ||
       !coverResourceMatchesTrack);
   const holdCoverBackgroundWhileLoading = !clearCoverBackgroundWhileLoading;
+
+  useEffect(() => {
+    if (source !== "cover" || !waitForLocalCoverUrl || !current?.coverBlobId) return;
+    bgCoverLog.debug("localCover.wait", {
+      canServeLocalCover: localCover.canServe,
+      category: "performance",
+      coverBlobId: current.coverBlobId,
+      fallback: "object-url",
+      pendingReason: localCover.pendingReason,
+      phase: "skip",
+      trackId: current.id,
+    });
+  }, [
+    current?.coverBlobId,
+    current?.id,
+    localCover.canServe,
+    localCover.pendingReason,
+    source,
+    waitForLocalCoverUrl,
+  ]);
   const loadedCoverBackground = useLoadedImageUrl(backgroundCoverUrl, {
     holdPreviousWhileLoading: holdCoverBackgroundWhileLoading,
   });
