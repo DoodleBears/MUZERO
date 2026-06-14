@@ -4,7 +4,7 @@ import {
   type BackgroundEffectSettings,
   resolvePixiBackgroundEffectOptions,
 } from "@/lib/background-effect-settings";
-import { loadImageBitmapSource } from "@/lib/background-texture";
+import { type ImageBitmapBlobSource, loadImageBitmapSource } from "@/lib/background-texture";
 import { hasWebGpuSupport, resolveGpuBackend, resolveGpuPower } from "@/lib/gpu-backend";
 import { createDiagnosticLogger, log } from "@/lib/logger";
 import { getAppFetch } from "@/lib/platform";
@@ -20,6 +20,7 @@ import {
 export type PixiBackgroundEffect = "pixel" | "ascii" | "cross-hatch" | "crt" | "dot" | "noise";
 type BackgroundMediaType = "image" | "video";
 const BACKGROUND_IMAGE_BITMAP_MAX_DIMENSION = 1024;
+const TEXTURE_HEADER_BYTES = 64 * 1024;
 const bgTextureLog = createDiagnosticLogger("background.texture");
 
 /**
@@ -296,20 +297,31 @@ async function loadBackgroundMedia(
  * is handled like the rest of the app; blob:/data: read directly. Returns null on
  * any failure so {@link loadBackgroundMedia} falls back to the <img> path.
  */
-async function fetchTextureBlob(src: string): Promise<Blob | null> {
+async function fetchTextureBlob(src: string): Promise<ImageBitmapBlobSource | null> {
   try {
     if (/^(blob:|data:)/i.test(src)) {
       const response = await fetch(src);
-      return response.ok ? await response.blob() : null;
+      return readTextureBlobSource(response);
     }
     const fetcher = await getAppFetch();
     const response = await fetcher(src, { cache: "no-store" });
-    if (!response.ok) return null;
-    const blob = await response.blob();
-    return blob.size > 0 ? blob : null;
+    return readTextureBlobSource(response);
   } catch {
     return null;
   }
+}
+
+export async function readTextureBlobSource(
+  response: Response,
+): Promise<ImageBitmapBlobSource | null> {
+  if (!response.ok) return null;
+  const bytes = new Uint8Array(await response.arrayBuffer());
+  if (bytes.byteLength === 0) return null;
+  return {
+    blob: new Blob([bytes], { type: response.headers.get("content-type") || "" }),
+    headerBytes: bytes.subarray(0, TEXTURE_HEADER_BYTES),
+    headerSource: "fetched-bytes",
+  };
 }
 
 async function resolveImageTextureSource(

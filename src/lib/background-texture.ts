@@ -25,6 +25,13 @@ export interface ImageBitmapTextureSource {
 }
 
 export type ImageBitmapLoadStage = "fetch" | "header" | "decode";
+export type ImageBitmapHeaderSource = "blob-slice" | "fetched-bytes";
+
+export interface ImageBitmapBlobSource {
+  blob: Blob;
+  headerBytes?: Uint8Array;
+  headerSource?: ImageBitmapHeaderSource;
+}
 
 export interface ImageBitmapLoadStageContext {
   category: "performance";
@@ -32,6 +39,8 @@ export interface ImageBitmapLoadStageContext {
   phase: "success" | "skip" | "fail";
   bytes?: number;
   errorKind?: "network_error" | "media_decode" | "unknown";
+  headerBytes?: number;
+  headerSource?: ImageBitmapHeaderSource;
   height?: number;
   mime?: string;
   reason?: string;
@@ -47,7 +56,7 @@ export interface ImageBitmapLoadStageContext {
 
 export interface LoadImageBitmapDeps {
   /** Resolve the source URL to its raw bytes (remote via app fetch; blob:/data: via fetch). */
-  fetchBlob: (src: string) => Promise<Blob | null>;
+  fetchBlob: (src: string) => Promise<Blob | ImageBitmapBlobSource | null>;
   /** Injected for tests; the caller passes the global when supported, else undefined. */
   createImageBitmap?: (blob: Blob, options?: ImageBitmapOptions) => Promise<ImageBitmap>;
   /** Optional background texture budget; oversized image sources decode to this max side. */
@@ -87,9 +96,9 @@ export async function loadImageBitmapSource(
   };
   try {
     const fetchStartedAt = now();
-    let blob: Blob | null;
+    let fetchedSource: Blob | ImageBitmapBlobSource | null;
     try {
-      blob = await deps.fetchBlob(src);
+      fetchedSource = await deps.fetchBlob(src);
     } catch (error) {
       emitStage("fetch", fetchStartedAt, {
         errorKind: "network_error",
@@ -97,15 +106,17 @@ export async function loadImageBitmapSource(
       });
       throw error;
     }
-    if (!blob || blob.size === 0) {
+    const blobSource = normalizeBlobSource(fetchedSource);
+    if (!blobSource || blobSource.blob.size === 0) {
       emitStage("fetch", fetchStartedAt, {
-        bytes: blob?.size ?? 0,
-        mime: blob?.type || undefined,
+        bytes: blobSource?.blob.size ?? 0,
+        mime: blobSource?.blob.type || undefined,
         phase: "skip",
-        reason: blob ? "empty-blob" : "missing-blob",
+        reason: blobSource ? "empty-blob" : "missing-blob",
       });
       return null;
     }
+    const { blob } = blobSource;
     emitStage("fetch", fetchStartedAt, {
       bytes: blob.size,
       mime: blob.type || undefined,
@@ -113,10 +124,13 @@ export async function loadImageBitmapSource(
     });
 
     const headerStartedAt = now();
-    const sourceDimensions = await readImageDimensions(blob).catch(() => null);
+    const header = await readImageHeader(blobSource).catch(() => null);
+    const sourceDimensions = header ? readImageDimensions(header.bytes) : null;
     const resize = resolveResizeOptions(sourceDimensions, deps.maxDimension);
     emitStage("header", headerStartedAt, {
       bytes: blob.size,
+      headerBytes: header?.bytes.length,
+      headerSource: header?.source,
       mime: blob.type || undefined,
       phase: sourceDimensions ? "success" : "skip",
       reason: sourceDimensions ? undefined : "unknown-dimensions",
@@ -205,6 +219,14 @@ function roundMs(value: number): number {
   return Math.round(value * 100) / 100;
 }
 
+function normalizeBlobSource(
+  source: Blob | ImageBitmapBlobSource | null,
+): ImageBitmapBlobSource | null {
+  if (!source) return null;
+  if (source instanceof Blob) return { blob: source };
+  return source;
+}
+
 function resolveResizeOptions(
   dimensions: ImageDimensions | null,
   maxDimension: number | undefined,
@@ -224,8 +246,22 @@ function resolveResizeOptions(
   };
 }
 
-async function readImageDimensions(blob: Blob): Promise<ImageDimensions | null> {
-  const header = new Uint8Array(await blob.slice(0, IMAGE_DIMENSION_HEADER_BYTES).arrayBuffer());
+async function readImageHeader(
+  source: ImageBitmapBlobSource,
+): Promise<{ bytes: Uint8Array; source: ImageBitmapHeaderSource }> {
+  if (source.headerBytes) {
+    return {
+      bytes: source.headerBytes,
+      source: source.headerSource ?? "fetched-bytes",
+    };
+  }
+  return {
+    bytes: new Uint8Array(await source.blob.slice(0, IMAGE_DIMENSION_HEADER_BYTES).arrayBuffer()),
+    source: "blob-slice",
+  };
+}
+
+function readImageDimensions(header: Uint8Array): ImageDimensions | null {
   return readPngDimensions(header) ?? readJpegDimensions(header) ?? readWebpDimensions(header);
 }
 

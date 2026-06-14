@@ -98,6 +98,7 @@ describe("loadImageBitmapSource", () => {
     expect(onStage).toHaveBeenCalledWith(
       "header",
       expect.objectContaining({
+        headerSource: "blob-slice",
         resizeHeight: 400,
         resizeMaxDimension: 800,
         resizeWidth: 800,
@@ -113,6 +114,43 @@ describe("loadImageBitmapSource", () => {
         phase: "success",
         resizeMaxDimension: 800,
         width: 800,
+      }),
+    );
+  });
+
+  it("uses provided header bytes instead of slicing the blob again", async () => {
+    const bitmap = fakeBitmap(800, 400);
+    const createImageBitmap = vi.fn(async () => bitmap);
+    const blob = pngBlobWithSize(1600, 800);
+    const slice = vi.spyOn(blob, "slice");
+    const onStage = vi.fn();
+    const headerBytes = new Uint8Array(await blob.arrayBuffer()).subarray(0, 24);
+
+    const source = await loadImageBitmapSource("blob:large-cover", {
+      createImageBitmap,
+      fetchBlob: async () => ({ blob, headerBytes, headerSource: "fetched-bytes" }),
+      maxDimension: 800,
+      onStage,
+    });
+
+    expect(slice).not.toHaveBeenCalled();
+    expect(createImageBitmap).toHaveBeenCalledWith(blob, {
+      resizeHeight: 400,
+      resizeQuality: "high",
+      resizeWidth: 800,
+    });
+    expect(source).toMatchObject({
+      resizeMaxDimension: 800,
+      sourceHeight: 800,
+      sourceWidth: 1600,
+    });
+    expect(onStage).toHaveBeenCalledWith(
+      "header",
+      expect.objectContaining({
+        headerBytes: 24,
+        headerSource: "fetched-bytes",
+        sourceHeight: 800,
+        sourceWidth: 1600,
       }),
     );
   });

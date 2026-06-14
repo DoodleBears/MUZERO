@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   needsCrossOrigin,
+  readTextureBlobSource,
   shouldFetchImageTexture,
   syncLayerTicker,
 } from "./pixi-pixel-background";
@@ -93,5 +94,31 @@ describe("shouldFetchImageTexture", () => {
     expect(shouldFetchImageTexture("blob:http://localhost:1440/9f6a")).toBe(false);
     expect(shouldFetchImageTexture("data:image/png;base64,iVBORw0KGgo=")).toBe(false);
     expect(shouldFetchImageTexture("muzfetch://media/?__mzurl=https%3A%2F%2Fx")).toBe(false);
+  });
+});
+
+describe("readTextureBlobSource", () => {
+  it("keeps fetched bytes as reusable header bytes for ImageBitmap sizing", async () => {
+    const bytes = new Uint8Array(80 * 1024);
+    bytes.fill(7);
+    const response = new Response(bytes, {
+      headers: { "content-type": "image/jpeg" },
+      status: 200,
+    });
+
+    const source = await readTextureBlobSource(response);
+
+    expect(source?.blob.size).toBe(bytes.byteLength);
+    expect(source?.blob.type).toBe("image/jpeg");
+    expect(source?.headerSource).toBe("fetched-bytes");
+    expect(source?.headerBytes).toHaveLength(64 * 1024);
+    expect(source?.headerBytes?.[0]).toBe(7);
+  });
+
+  it("returns null for empty or failed image responses", async () => {
+    await expect(readTextureBlobSource(new Response(null, { status: 404 }))).resolves.toBeNull();
+    await expect(
+      readTextureBlobSource(new Response(new Uint8Array(), { status: 200 })),
+    ).resolves.toBeNull();
   });
 });
