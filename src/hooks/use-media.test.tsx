@@ -1,25 +1,42 @@
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { clearRemoteCoverAssetCacheForTests } from "@/lib/cover-asset";
 import { readPerfCounter, resetPerfCounters, setPerfCountersEnabled } from "@/lib/perf-counters";
 import { clearTrace, getTraceEntries } from "@/lib/trace";
 
 // A stable blob the mocked liveQuery hands back (as if mediaBlobs.get resolved).
-const { coverBlob, liveQueryState, derivState } = vi.hoisted(() => ({
+const { coverBlob, liveQueryState, derivState, remoteCoverState } = vi.hoisted(() => ({
   coverBlob: new Blob([new Uint8Array([1, 2, 3])], { type: "image/png" }),
   liveQueryState: {
     blob: undefined as Blob | null | undefined,
+    id: undefined as string | undefined,
   },
   // What the mocked derivative resolver returns (the hook only reads `.blob`).
   derivState: {
     // biome-ignore lint/suspicious/noExplicitAny: minimal canned ResolvedCoverDerivative
     resolved: undefined as any,
   },
+  remoteCoverState: {
+    fetcher: vi.fn(),
+  },
 }));
 
 // Isolate the hook from Dexie + settings: the blob is "already resolved", and
 // covers render uncropped so no canvas (jsdom has none) is touched.
-vi.mock("dexie-react-hooks", () => ({ useLiveQuery: () => liveQueryState.blob }));
+vi.mock("dexie-react-hooks", () => ({
+  useLiveQuery: (_query: () => unknown, deps?: unknown[]) => {
+    if (liveQueryState.blob === undefined) return undefined;
+    if (liveQueryState.blob === null) return null;
+    return {
+      blob: liveQueryState.blob,
+      id: liveQueryState.id ?? (typeof deps?.[0] === "string" ? deps[0] : "blb_test"),
+    };
+  },
+}));
 vi.mock("@/hooks/use-app-data", () => ({ useSettings: () => ({ coverCropped: false }) }));
+vi.mock("@/lib/platform", () => ({
+  getAppFetch: async () => remoteCoverState.fetcher,
+}));
 // Keep the real key helpers (the synchronous cache key must stay accurate); only the
 // async resolver is canned so no worker/canvas runs in jsdom.
 vi.mock("@/db/cover-derivatives", async (importActual) => ({
@@ -34,12 +51,20 @@ import { useCoverDerivativeUrl, useTrackCoverResource, useTrackCoverUrl } from "
 let created = 0;
 
 beforeEach(() => {
+  clearRemoteCoverAssetCacheForTests();
   created = 0;
   clearTrace();
   resetPerfCounters();
   vi.spyOn(URL, "createObjectURL").mockImplementation(() => `blob:cover-${++created}`);
   vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
   liveQueryState.blob = coverBlob;
+  liveQueryState.id = undefined;
+  remoteCoverState.fetcher.mockResolvedValue({
+    headers: { get: () => "image/jpeg" },
+    ok: true,
+    status: 200,
+    blob: async () => new Blob([new Uint8Array([4, 5, 6])], { type: "image/jpeg" }),
+  });
 });
 
 afterEach(() => {
@@ -71,13 +96,40 @@ describe("useTrackCoverUrl — cross-mount object-URL cache (Phase 1)", () => {
     second.unmount();
   });
 
-  it("returns the remote cover URL when there is no local blob id", () => {
+  it("downloads a remote cover through app fetch and returns a cached object URL", async () => {
     liveQueryState.blob = null;
     const { result } = renderHook(() =>
       useTrackCoverUrl({ remoteCoverUrl: "https://example.com/c.jpg" }),
     );
-    expect(result.current).toBe("https://example.com/c.jpg");
-    expect(URL.createObjectURL).not.toHaveBeenCalled();
+    expect(result.current).toBeNull();
+
+    await act(async () => {});
+
+    expect(result.current).toBe("blob:cover-1");
+    expect(remoteCoverState.fetcher).toHaveBeenCalledWith("https://example.com/c.jpg", {
+      cache: "force-cache",
+    });
+    expect(URL.createObjectURL).toHaveBeenCalledTimes(1);
+  });
+
+  it("marks a failed remote cover as ready so current-track fallbacks can render", async () => {
+    remoteCoverState.fetcher.mockResolvedValue({
+      headers: { get: () => "text/html" },
+      ok: true,
+      status: 200,
+      blob: async () => new Blob(["not image"], { type: "text/html" }),
+    });
+
+    const { result } = renderHook(() =>
+      useTrackCoverResource({ id: "trk_remote_fail", remoteCoverUrl: "https://example.com/nope" }),
+    );
+
+    expect(result.current.readyForTrack).toBe(false);
+
+    await act(async () => {});
+
+    expect(result.current.url).toBeNull();
+    expect(result.current.readyForTrack).toBe(true);
   });
 
   it("leak audit: churning a grid (many mount/unmount cycles) stays bounded", async () => {
@@ -135,6 +187,59 @@ describe("useTrackCoverUrl — cross-mount object-URL cache (Phase 1)", () => {
     expect(result.current.staleWhilePending).toBe(true);
     expect(result.current.targetKey).toBe("blb_resource_b");
     expect(result.current.urlKey).toBe("blb_resource_a");
+  });
+
+  it("ignores a stale liveQuery cover blob whose id belongs to the previous track", async () => {
+    const { rerender, result } = renderHook(({ track }) => useTrackCoverResource(track), {
+      initialProps: { track: { coverBlobId: "blb_guard_a" } },
+    });
+
+    await act(async () => {});
+    const first = result.current;
+    expect(first.url).toBe("blob:cover-1");
+    expect(first.urlKey).toBe("blb_guard_a");
+
+    liveQueryState.id = "blb_guard_a";
+    rerender({ track: { coverBlobId: "blb_guard_b" } });
+
+    expect(result.current.url).toBe(first.url);
+    expect(result.current.readyForTrack).toBe(false);
+    expect(result.current.staleWhilePending).toBe(true);
+    expect(result.current.targetKey).toBe("blb_guard_b");
+    expect(result.current.urlKey).toBe("blb_guard_a");
+    expect(URL.createObjectURL).toHaveBeenCalledTimes(1);
+
+    liveQueryState.id = "blb_guard_b";
+    liveQueryState.blob = new Blob([new Uint8Array([9, 8, 7])], { type: "image/png" });
+    rerender({ track: { coverBlobId: "blb_guard_b" } });
+    await act(async () => {});
+
+    expect(result.current.url).toBe("blob:cover-2");
+    expect(result.current.readyForTrack).toBe(true);
+    expect(result.current.staleWhilePending).toBe(false);
+    expect(result.current.urlKey).toBe("blb_guard_b");
+  });
+
+  it("does not hold a previous cover for remote-backed online tracks while their local blob resolves", async () => {
+    const { rerender, result } = renderHook(({ track }) => useTrackCoverResource(track), {
+      initialProps: { track: { coverBlobId: "blb_online_a" } },
+    });
+
+    await act(async () => {});
+    const first = result.current;
+    expect(first.url).toMatch(/^blob:cover-/);
+
+    liveQueryState.blob = undefined;
+    rerender({
+      track: {
+        coverBlobId: "blb_online_b",
+        remoteCoverUrl: "https://example.com/b.jpg",
+      },
+    });
+
+    expect(result.current.url).toBeNull();
+    expect(result.current.readyForTrack).toBe(true);
+    expect(result.current.staleWhilePending).toBe(false);
   });
 
   it("records cover render cache miss and hit diagnostics by surface when enabled", async () => {

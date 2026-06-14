@@ -254,6 +254,7 @@ export function TrackIdentityRow({
               <CoverImage
                 url={coverUrl}
                 hasCover={trackHasCover(track ?? undefined)}
+                holdPreviousWhileLoading={Boolean(track?.coverBlobId && !track.remoteCoverUrl)}
                 fallback={<Disc3Icon className="text-muted-foreground" size={20} />}
               />
               {loadingLabel && (

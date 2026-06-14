@@ -1,66 +1,45 @@
 import { AnimatePresence, motion } from "motion/react";
-import { type ReactNode, useEffect, useState } from "react";
+import { type ReactNode, useEffect } from "react";
+import { useLoadedImageUrl } from "@/hooks/use-image-load";
 import { cn } from "@/lib/utils";
 
 /**
  * A crossfading cover with no "previous cover" flash on track change. It keeps
  * showing the current image until the *next* one has fully decoded, then cross-
- * fades to it. A transient null `url` (the cover blob / crop still resolving) is
- * ignored while `hasCover` is true — only a genuine "no cover" fades out to the
- * fallback. Renders absolutely; place it in a `relative` box.
+ * fades to it. For remote covers, callers can disable the hold so a slow/broken
+ * network image falls back to the current track's placeholder instead of showing
+ * the previous track's art. Renders absolutely; place it in a `relative` box.
  */
 export function CoverImage({
   url,
   hasCover,
+  holdPreviousWhileLoading = true,
   fallback,
   onAspect,
   className,
 }: {
   url: string | null;
   hasCover: boolean;
+  holdPreviousWhileLoading?: boolean;
   fallback?: ReactNode;
   onAspect?: (aspect: number) => void;
   className?: string;
 }) {
-  const [loaded, setLoaded] = useState<string | null>(null);
+  const loaded = useLoadedImageUrl(url, { holdPreviousWhileLoading });
+  const displayUrl = loaded.displayUrl;
 
   useEffect(() => {
-    if (!url) {
-      // Only fade out when the track genuinely has no cover; ignore the brief
-      // null while the next cover's blob/crop is still resolving.
-      if (!hasCover) setLoaded(null);
-      return;
-    }
-    let alive = true;
-    const img = new Image();
-    // External album art (e.g. bilibili hdslb) blocks a foreign Referer but serves
-    // with none; same-origin blobs ignore this. Must match the rendered <img> below
-    // so the preload and the display load identically.
-    img.referrerPolicy = "no-referrer";
-    img.onload = () => {
-      if (!alive) return;
-      setLoaded(url);
-      if (img.naturalWidth > 0 && img.naturalHeight > 0) {
-        onAspect?.(img.naturalWidth / img.naturalHeight);
-      }
-    };
-    img.onerror = () => {
-      if (alive && !hasCover) setLoaded(null);
-    };
-    img.src = url;
-    return () => {
-      alive = false;
-    };
-  }, [url, hasCover, onAspect]);
+    if (loaded.status === "loaded" && loaded.aspect) onAspect?.(loaded.aspect);
+  }, [loaded.aspect, loaded.status, onAspect]);
 
   return (
     <>
-      {!loaded && fallback}
+      {!displayUrl && (!hasCover || loaded.status !== "loaded") && fallback}
       <AnimatePresence initial={false}>
-        {loaded && (
+        {displayUrl && (
           <motion.img
-            key={loaded}
-            src={loaded}
+            key={displayUrl}
+            src={displayUrl}
             alt=""
             referrerPolicy="no-referrer"
             draggable={false}

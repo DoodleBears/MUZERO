@@ -10,6 +10,7 @@ import { db } from "@/db/muzero-db";
 import { backfillCoverMetadata } from "@/db/repositories";
 import type { Track } from "@/db/types";
 import { useSettings } from "@/hooks/use-app-data";
+import { getOrFetchRemoteCoverAsset, remoteCoverAssetKey } from "@/lib/cover-asset";
 import {
   type CoverRenderSurface,
   noteCoverRenderCache,
@@ -226,11 +227,19 @@ export function useTrackCoverResource(
   const settings = useSettings();
   const coverBlobId = track?.coverBlobId;
   const remoteCoverUrl = track?.remoteCoverUrl;
-  const blob = useLiveQuery(
-    async () => (coverBlobId ? ((await resolveMediaBlob(coverBlobId, db))?.blob ?? null) : null),
+  const resolvedCover = useLiveQuery(
+    async () => (coverBlobId ? ((await resolveMediaBlob(coverBlobId, db)) ?? null) : null),
     [coverBlobId],
     undefined,
   );
+  const blob =
+    !coverBlobId || resolvedCover === null
+      ? null
+      : resolvedCover === undefined
+        ? undefined
+        : resolvedCover.id === coverBlobId
+          ? resolvedCover.blob
+          : undefined;
   // Stabilize the crop by VALUE. The queue is a fresh array on any track edit
   // (e.g. liking another song), so `track.coverCrop`'s identity churns even when
   // unchanged — memoizing on scalars keeps the cropped object URL stable, so the
@@ -253,6 +262,9 @@ export function useTrackCoverResource(
     },
     true,
   );
+  const remoteCacheKey =
+    !coverBlobId && remoteCoverUrl ? remoteCoverAssetKey(remoteCoverUrl) : null;
+  const targetKey = cacheKey ?? remoteCacheKey;
 
   // Ref-count this key for the mount's lifetime so the cache never revokes a URL
   // a visible <img> still points at (see ObjectUrlCache).
@@ -261,6 +273,11 @@ export function useTrackCoverResource(
     coverUrlCache.acquire(cacheKey);
     return () => coverUrlCache.release(cacheKey);
   }, [cacheKey]);
+  useEffect(() => {
+    if (!remoteCacheKey) return;
+    coverUrlCache.acquire(remoteCacheKey);
+    return () => coverUrlCache.release(remoteCacheKey);
+  }, [remoteCacheKey]);
 
   // On a cache MISS, resolve the blob (+ optional crop) → object URL → publish to
   // the cache. `resolved` is only a re-render trigger; the cache is the source of
@@ -268,6 +285,7 @@ export function useTrackCoverResource(
   // is what lets a cover survive unmount and re-appear instantly on the next tab
   // visit (instant-cover-thumbnails PRD, Phase 1).
   const [resolved, setResolved] = useState<{ key: string; url: string } | null>(null);
+  const [failedKey, setFailedKey] = useState<string | null>(null);
   useEffect(() => {
     if (!cacheKey) {
       setResolved(null);
@@ -318,15 +336,43 @@ export function useTrackCoverResource(
     };
   }, [cacheKey, blob, crop, surface, track?.id]);
 
+  useEffect(() => {
+    if (!remoteCacheKey || !remoteCoverUrl) return;
+    const hit = coverUrlCache.get(remoteCacheKey);
+    if (hit) {
+      setFailedKey(null);
+      setResolved({ key: remoteCacheKey, url: hit });
+      return;
+    }
+    let alive = true;
+    setFailedKey(null);
+    void (async () => {
+      try {
+        const asset = await getOrFetchRemoteCoverAsset(remoteCoverUrl);
+        if (!alive) return;
+        const url = coverUrlCache.store(remoteCacheKey, URL.createObjectURL(asset.blob));
+        if (alive) setResolved({ key: remoteCacheKey, url });
+      } catch (error) {
+        if (!alive) return;
+        setResolved((current) => (current?.key === remoteCacheKey ? null : current));
+        setFailedKey(remoteCacheKey);
+        log.warn("cover", "remote cover display cache failed", {
+          error: error instanceof Error ? error.message : String(error),
+          trackId: track?.id,
+        });
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [remoteCacheKey, remoteCoverUrl, track?.id]);
+
   // Synchronous read: a cache hit returns the URL on frame 0 — instant on a
   // re-mount, zero placeholder flash. `peek` doesn't mutate, so it's render-safe.
-  const cached = cacheKey ? coverUrlCache.peek(cacheKey) : undefined;
-  const resolvedUrl = cached ?? (resolved?.key === cacheKey ? resolved.url : undefined);
-  const remoteUrl = proxyExternalCover(remoteCoverUrl);
-  const currentUrl = resolvedUrl ?? remoteUrl;
-  const remoteKey = remoteUrl ? `remote:${remoteUrl}` : null;
-  const currentKey = resolvedUrl ? cacheKey : remoteUrl ? remoteKey : null;
-  const targetKey = cacheKey ?? remoteKey;
+  const cached = targetKey ? coverUrlCache.peek(targetKey) : undefined;
+  const resolvedUrl = cached ?? (resolved?.key === targetKey ? resolved.url : undefined);
+  const currentUrl = resolvedUrl ?? null;
+  const currentKey = currentUrl ? targetKey : null;
   const lastCommittedUrl = useRef<{ key: string | null; url: string } | null>(null);
   useEffect(() => {
     if (currentUrl) {
@@ -335,15 +381,20 @@ export function useTrackCoverResource(
       lastCommittedUrl.current = null;
     }
   }, [currentKey, currentUrl, coverBlobId, remoteCoverUrl]);
-  const pendingLocalCover = Boolean(coverBlobId) && blob === undefined && !currentUrl;
+  const remoteBackedCover = Boolean(remoteCoverUrl);
+  const pendingLocalCover =
+    Boolean(coverBlobId) && !remoteBackedCover && blob === undefined && !currentUrl;
   const staleFallback = pendingLocalCover ? lastCommittedUrl.current : null;
   const url = currentUrl ?? staleFallback?.url ?? null;
   const urlKey = currentKey ?? staleFallback?.key ?? null;
   const staleWhilePending = !currentUrl && Boolean(staleFallback);
   const hasCover = Boolean(coverBlobId || remoteCoverUrl);
+  const remoteFailed = Boolean(targetKey && failedKey === targetKey);
+  const remoteBackedLocalUnavailable = Boolean(coverBlobId && remoteCoverUrl && !currentUrl);
 
   return {
-    readyForTrack: !track || !hasCover || Boolean(currentUrl),
+    readyForTrack:
+      !track || !hasCover || Boolean(currentUrl) || remoteFailed || remoteBackedLocalUnavailable,
     staleWhilePending,
     targetKey,
     url,

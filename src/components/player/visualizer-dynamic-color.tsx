@@ -6,6 +6,7 @@ import { resolveMediaBlob } from "@/db/media-blob-storage";
 import { db } from "@/db/muzero-db";
 import type { Track } from "@/db/types";
 import { useSettings } from "@/hooks/use-app-data";
+import { getOrFetchRemoteCoverAsset, remoteCoverAssetKey } from "@/lib/cover-asset";
 import {
   coverPaletteFields,
   coverPaletteFromThumbhash,
@@ -14,7 +15,6 @@ import {
 import { resolveDesktopBridge } from "@/lib/desktop/bridge";
 import { sanitizeUrlForTrace } from "@/lib/diagnostics";
 import { createDiagnosticLogger } from "@/lib/logger";
-import { getAppFetch } from "@/lib/platform";
 import { describeTrackCoverSource } from "@/lib/track-source";
 import { type Rgb, readPrimaryRgb } from "@/lib/visualizer-color";
 import { usePlayerStore } from "@/stores/player-store";
@@ -204,13 +204,10 @@ function getOrStartRemotePaletteExtraction(args: {
         safeQuery: args.safeUrl.safeQuery,
         redactions: args.safeUrl.redactions,
       });
-      const fetcher = await getAppFetch();
-      const response = await fetcher(args.remoteCoverUrl, { cache: "force-cache" });
-      if (!response.ok) throw new Error(`remote cover fetch failed: ${response.status}`);
-      const blob = await response.blob();
+      const asset = await getOrFetchRemoteCoverAsset(args.remoteCoverUrl);
       const { palette } = await extractCoverMetadataViaWorker({
-        blob,
-        mime: response.headers.get("content-type") ?? blob.type,
+        blob: asset.blob,
+        mime: asset.mime,
         sourceKey: args.cacheKey,
         targets: ["palette"],
       });
@@ -425,7 +422,7 @@ export function useVisualizerCoverColorCss(
     // Keep the current color while it resolves — no flash to theme.
     if (!current.coverBlobId && remoteCoverUrl) {
       let alive = true;
-      const cacheKey = `remote:${remoteCoverUrl}`;
+      const cacheKey = remoteCoverAssetKey(remoteCoverUrl);
       const cached = colorCache.get(cacheKey);
       const stored = cachedTrackPalette(current, cacheKey);
       const thumbhashFallback = paletteCacheEntry(

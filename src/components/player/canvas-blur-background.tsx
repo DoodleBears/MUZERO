@@ -7,10 +7,12 @@ const scratchCanvasByTarget = new WeakMap<HTMLCanvasElement, HTMLCanvasElement>(
 export function CanvasBlurBackground({
   blurPx,
   className,
+  holdPreviousWhileLoading = true,
   src,
 }: {
   blurPx: number;
   className?: string;
+  holdPreviousWhileLoading?: boolean;
   src: string;
 }) {
   const hostRef = useRef<HTMLDivElement | null>(null);
@@ -24,6 +26,11 @@ export function CanvasBlurBackground({
 
   useEffect(() => {
     let cancelled = false;
+    if (!holdPreviousWhileLoading) {
+      frameRef.current = null;
+      hasFrameRef.current = false;
+      setHasFrame(false);
+    }
 
     const image = new Image();
     image.decoding = "async";
@@ -47,7 +54,7 @@ export function CanvasBlurBackground({
     return () => {
       cancelled = true;
     };
-  }, [src, blurPx]);
+  }, [src, blurPx, holdPreviousWhileLoading]);
 
   useEffect(() => {
     const host = hostRef.current;
