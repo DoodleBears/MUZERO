@@ -44,13 +44,70 @@ describe("resolveLyricStyle", () => {
     ).toBeUndefined();
   });
 
-  it("cover mode uses the cover color (or undefined when absent)", () => {
-    expect(resolveLyricStyle({ lyricsColorMode: "cover" } as AppSettings, "rgb(1,2,3)").color).toBe(
-      "rgb(1,2,3)",
-    );
+  it("cover mode uses the cover color preset (or undefined when absent)", () => {
+    expect(
+      resolveLyricStyle(
+        { lyricsColorMode: "cover", theme: "dark" } as AppSettings,
+        "rgb(100,100,100)",
+      ).color,
+    ).toBe("rgb(150, 150, 150)");
     expect(
       resolveLyricStyle({ lyricsColorMode: "cover" } as AppSettings, null).color,
     ).toBeUndefined();
+  });
+
+  it("uses a dimmer cover color brightness preset in light mode", () => {
+    expect(
+      resolveLyricStyle(
+        { lyricsColorMode: "cover", theme: "light" } as AppSettings,
+        "rgb(100, 100, 100)",
+      ).color,
+    ).toBe("rgb(50, 50, 50)");
+  });
+
+  it("keeps cover color unchanged when cover color adjustments are neutral", () => {
+    const s = {
+      lyricsColorMode: "cover",
+      lyricsCoverColorSaturation: 100,
+      lyricsCoverColorBrightness: 100,
+      lyricsCoverColorContrast: 100,
+    } as AppSettings;
+
+    expect(resolveLyricStyle(s, "rgba(10, 20, 30, 1)").color).toBe("rgba(10, 20, 30, 1)");
+  });
+
+  it("adjusts cover-derived lyric color saturation, brightness, and contrast", () => {
+    expect(
+      resolveLyricStyle(
+        {
+          lyricsColorMode: "cover",
+          lyricsCoverColorSaturation: 0,
+          lyricsCoverColorBrightness: 100,
+        } as AppSettings,
+        "rgb(120, 60, 30)",
+      ).color,
+    ).toBe("rgb(75, 75, 75)");
+    expect(
+      resolveLyricStyle(
+        { lyricsColorMode: "cover", lyricsCoverColorBrightness: 150 } as AppSettings,
+        "rgb(100, 100, 100)",
+      ).color,
+    ).toBe("rgb(150, 150, 150)");
+    expect(
+      resolveLyricStyle(
+        { lyricsColorMode: "cover", lyricsCoverColorContrast: 0 } as AppSettings,
+        "rgb(100, 150, 200)",
+      ).color,
+    ).toBe("rgb(128, 128, 128)");
+  });
+
+  it("falls back to the original cover color when adjustments cannot parse the css", () => {
+    const s = {
+      lyricsColorMode: "cover",
+      lyricsCoverColorBrightness: 150,
+    } as AppSettings;
+
+    expect(resolveLyricStyle(s, "var(--cover-color)").color).toBe("var(--cover-color)");
   });
 
   it("custom mode uses the custom hex", () => {

@@ -753,6 +753,7 @@ export function SwipeableMediaStage({
           >
             <MediaStage
               coverBacklightEnabled={!baseHidden && baseCoverBacklightEnabled && !bursting}
+              coverBacklightFadeIn={false}
             />
           </motion.div>
         </div>

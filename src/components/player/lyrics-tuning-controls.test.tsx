@@ -84,4 +84,137 @@ describe("LyricsTuningControls", () => {
     expect(screen.queryByRole("slider", { name: "lyricsSettings.cascadeDelay" })).toBeNull();
     expect(screen.queryByRole("slider", { name: "lyricsSettings.cascadeBlur" })).toBeNull();
   });
+
+  it("shows cover color tuning sliders in cover color mode and saves changes", () => {
+    settings = {
+      ...DEFAULT_SETTINGS,
+      lyricsColorMode: "cover",
+      lyricsCoverColorSaturation: 100,
+      lyricsCoverColorBrightness: 100,
+      lyricsCoverColorContrast: 100,
+    };
+
+    render(<LyricsTuningControls />);
+
+    const saturation = screen.getByRole("slider", {
+      name: "lyricsSettings.coverColorSaturation",
+    });
+    const brightness = screen.getByRole("slider", {
+      name: "lyricsSettings.coverColorBrightness",
+    });
+    const contrast = screen.getByRole("slider", { name: "lyricsSettings.coverColorContrast" });
+
+    fireEvent.keyDown(saturation, { key: "ArrowRight" });
+    fireEvent.keyDown(brightness, { key: "ArrowRight" });
+    fireEvent.keyDown(contrast, { key: "ArrowRight" });
+
+    expect(saveSettings).toHaveBeenCalledWith({ lyricsCoverColorSaturation: 105 });
+    expect(saveSettings).toHaveBeenCalledWith({ lyricsCoverColorBrightness: 105 });
+    expect(saveSettings).toHaveBeenCalledWith({ lyricsCoverColorContrast: 105 });
+  });
+
+  it("shows the dark-mode cover color preset when tuning values are unset", () => {
+    settings = {
+      ...DEFAULT_SETTINGS,
+      theme: "dark",
+      lyricsColorMode: "cover",
+      lyricsCoverColorSaturation: undefined,
+      lyricsCoverColorBrightness: undefined,
+      lyricsCoverColorContrast: undefined,
+    };
+
+    render(<LyricsTuningControls />);
+
+    expect(
+      screen.getByRole("slider", { name: "lyricsSettings.coverColorSaturation" }),
+    ).toHaveAttribute("aria-valuenow", "100");
+    expect(
+      screen.getByRole("slider", { name: "lyricsSettings.coverColorBrightness" }),
+    ).toHaveAttribute("aria-valuenow", "150");
+    expect(
+      screen.getByRole("slider", { name: "lyricsSettings.coverColorContrast" }),
+    ).toHaveAttribute("aria-valuenow", "100");
+  });
+
+  it("shows the light-mode cover color brightness preset when tuning values are unset", () => {
+    settings = {
+      ...DEFAULT_SETTINGS,
+      theme: "light",
+      lyricsColorMode: "cover",
+      lyricsCoverColorBrightness: undefined,
+    };
+
+    render(<LyricsTuningControls />);
+
+    expect(
+      screen.getByRole("slider", { name: "lyricsSettings.coverColorBrightness" }),
+    ).toHaveAttribute("aria-valuenow", "50");
+  });
+
+  it("keeps cover color slider dragging local until pointer release", () => {
+    settings = {
+      ...DEFAULT_SETTINGS,
+      lyricsColorMode: "cover",
+      lyricsCoverColorSaturation: 100,
+    };
+
+    render(<LyricsTuningControls />);
+
+    const saturation = screen.getByRole("slider", {
+      name: "lyricsSettings.coverColorSaturation",
+    });
+    const lane = saturation.firstElementChild as HTMLElement;
+    Object.defineProperty(lane, "getBoundingClientRect", {
+      configurable: true,
+      value: () =>
+        ({
+          left: 0,
+          right: 200,
+          top: 0,
+          bottom: 20,
+          width: 200,
+          height: 20,
+          x: 0,
+          y: 0,
+          toJSON: () => ({}),
+        }) as DOMRect,
+    });
+    Object.defineProperty(saturation, "setPointerCapture", {
+      configurable: true,
+      value: vi.fn(),
+    });
+    Object.defineProperty(saturation, "hasPointerCapture", {
+      configurable: true,
+      value: vi.fn(() => true),
+    });
+    Object.defineProperty(saturation, "releasePointerCapture", {
+      configurable: true,
+      value: vi.fn(),
+    });
+
+    fireEvent.pointerDown(saturation, { clientX: 50, pointerId: 1 });
+    fireEvent.pointerMove(saturation, { buttons: 1, clientX: 150, pointerId: 1 });
+
+    expect(saturation).toHaveAttribute("aria-valuenow", "150");
+    expect(saveSettings).not.toHaveBeenCalled();
+
+    fireEvent.pointerUp(saturation, { clientX: 150, pointerId: 1 });
+
+    expect(saveSettings).toHaveBeenCalledTimes(1);
+    expect(saveSettings).toHaveBeenCalledWith({ lyricsCoverColorSaturation: 150 });
+  });
+
+  it("hides cover color tuning sliders outside cover color mode", () => {
+    settings = { ...DEFAULT_SETTINGS, lyricsColorMode: "default" };
+
+    render(<LyricsTuningControls />);
+
+    expect(
+      screen.queryByRole("slider", { name: "lyricsSettings.coverColorSaturation" }),
+    ).toBeNull();
+    expect(
+      screen.queryByRole("slider", { name: "lyricsSettings.coverColorBrightness" }),
+    ).toBeNull();
+    expect(screen.queryByRole("slider", { name: "lyricsSettings.coverColorContrast" })).toBeNull();
+  });
 });

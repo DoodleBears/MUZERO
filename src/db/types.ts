@@ -703,6 +703,12 @@ export interface AppSettings {
   lyricsColorMode?: "default" | "cover" | "custom";
   /** Custom lyric color (hex) when `lyricsColorMode === "custom"`. */
   lyricsCustomColor?: string;
+  /** Cover-derived lyric color saturation, 0–200. Default 100. */
+  lyricsCoverColorSaturation?: number;
+  /** Cover-derived lyric color brightness, 0–200. Default auto: 150 dark / 50 light. */
+  lyricsCoverColorBrightness?: number;
+  /** Cover-derived lyric color contrast, 0–200. Default 100. */
+  lyricsCoverColorContrast?: number;
   /** Lyric line alignment (the widescreen "pure lyrics" mode especially). Default "left". */
   lyricsAlign?: "left" | "center" | "right";
   /**
@@ -787,13 +793,13 @@ export interface AppSettings {
   albumCoverShadowOffsetY?: number;
   /** Now Playing large-cover light effect. Other square covers keep albumCoverShadow. Default "shadow". */
   nowPlayingCoverEffectMode?: NowPlayingCoverEffectMode;
-  /** Now Playing cover backlight opacity, 0–100. Default 82. */
+  /** Now Playing cover backlight opacity, 0–100. Default 50. */
   nowPlayingCoverBacklightOpacity?: number;
-  /** Now Playing cover backlight outward range in percent. Default 12. */
+  /** Now Playing cover backlight outward range in percent. Default 13. */
   nowPlayingCoverBacklightRange?: number;
-  /** Now Playing cover backlight blur radius in px. Default 20. */
+  /** Now Playing cover backlight blur radius in px. Default 12. */
   nowPlayingCoverBacklightBlur?: number;
-  /** Now Playing cover backlight saturation, 100–600 percent. Default 400. */
+  /** Now Playing cover backlight saturation, 100–600 percent. Default 330. */
   nowPlayingCoverBacklightSaturation?: number;
   /** Desktop always-on-top preference. Click-through is session-only and not persisted. */
   desktopWindowPinMode?: "off" | "pin";
@@ -959,10 +965,10 @@ export const DEFAULT_SETTINGS: AppSettings = {
   albumCoverShadowOffsetX: 0,
   albumCoverShadowOffsetY: 4,
   nowPlayingCoverEffectMode: "shadow",
-  nowPlayingCoverBacklightOpacity: 82,
-  nowPlayingCoverBacklightRange: 12,
-  nowPlayingCoverBacklightBlur: 20,
-  nowPlayingCoverBacklightSaturation: 400,
+  nowPlayingCoverBacklightOpacity: 50,
+  nowPlayingCoverBacklightRange: 13,
+  nowPlayingCoverBacklightBlur: 12,
+  nowPlayingCoverBacklightSaturation: 330,
   desktopWindowPinMode: "off",
   backgroundMode: "cover",
   backgroundRenderer: "noise",

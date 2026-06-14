@@ -1,8 +1,27 @@
 import { describe, expect, it } from "vitest";
 import {
+  albumCoverAppearanceCssVars,
+  resolveNowPlayingCoverBacklightAppearance,
   resolveNowPlayingCoverEffectMode,
   shouldRequestCoverBacklightDerivative,
 } from "./album-cover-appearance";
+
+describe("resolveNowPlayingCoverBacklightAppearance", () => {
+  it("uses the tuned backlight defaults", () => {
+    expect(resolveNowPlayingCoverBacklightAppearance({})).toEqual({
+      blur: 12,
+      opacity: 50,
+      range: 13,
+      saturation: 330,
+    });
+    expect(albumCoverAppearanceCssVars({})).toMatchObject({
+      "--now-playing-cover-backlight-blur": "12px",
+      "--now-playing-cover-backlight-opacity": "0.5",
+      "--now-playing-cover-backlight-saturation": "330%",
+      "--now-playing-cover-backlight-scale": "1.13",
+    });
+  });
+});
 
 describe("shouldRequestCoverBacklightDerivative", () => {
   it("requests only in backlight mode when enabled", () => {

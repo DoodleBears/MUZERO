@@ -1,5 +1,6 @@
 import { AlignCenter, AlignLeft, AlignRight } from "lucide-react";
 import type React from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   Select,
@@ -10,10 +11,12 @@ import {
 } from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
 import { saveSettings } from "@/db/repositories";
+import type { AppSettings } from "@/db/types";
 import { useSettings } from "@/hooks/use-app-data";
 import { cn } from "@/lib/utils";
 import { DEFAULT_LYRIC_CASCADE_TUNING } from "@/lyrics/lyric-layout-engine";
 import { LYRICS_MOTION_MODES, type LyricsMotionMode } from "@/lyrics/lyric-motion";
+import { resolveLyricsCoverColorTuning } from "@/lyrics/lyric-style";
 
 const COLOR_MODES = [
   { id: "default", labelKey: "lyricsSettings.colorDefault" },
@@ -46,21 +49,68 @@ const STROKE_COLOR_MODES = [
   { id: "cover", labelKey: "lyricsSettings.colorCover" },
 ] as const;
 
+type LyricsTuningNumberKey =
+  | "lyricsCascadeAnchorPct"
+  | "lyricsCascadeDelayMs"
+  | "lyricsCascadeBlurPx"
+  | "lyricsActiveFontSize"
+  | "lyricsInactiveFontSize"
+  | "lyricsLineGap"
+  | "lyricsActiveOpacity"
+  | "lyricsInactiveOpacity"
+  | "lyricsCoverColorSaturation"
+  | "lyricsCoverColorBrightness"
+  | "lyricsCoverColorContrast"
+  | "lyricsShadowOpacity"
+  | "lyricsShadowBlur"
+  | "lyricsShadowOffsetX"
+  | "lyricsShadowOffsetY"
+  | "lyricsStrokeWidth"
+  | "lyricsStrokeOpacity";
+
+const LYRICS_TUNING_NUMBER_KEYS: LyricsTuningNumberKey[] = [
+  "lyricsCascadeAnchorPct",
+  "lyricsCascadeDelayMs",
+  "lyricsCascadeBlurPx",
+  "lyricsActiveFontSize",
+  "lyricsInactiveFontSize",
+  "lyricsLineGap",
+  "lyricsActiveOpacity",
+  "lyricsInactiveOpacity",
+  "lyricsCoverColorSaturation",
+  "lyricsCoverColorBrightness",
+  "lyricsCoverColorContrast",
+  "lyricsShadowOpacity",
+  "lyricsShadowBlur",
+  "lyricsShadowOffsetX",
+  "lyricsShadowOffsetY",
+  "lyricsStrokeWidth",
+  "lyricsStrokeOpacity",
+];
+
+type LyricsTuningDraft = Partial<Pick<AppSettings, LyricsTuningNumberKey>>;
+
 /**
  * Synced-lyrics appearance controls (font size + opacity for active vs inactive
  * lines, alignment, text-color source). Shared by the Settings page and the
- * Now-Playing floating tuning panel so both stay in sync. Writes straight to
- * AppSettings; SyncedLyricsView reads them.
+ * Now-Playing floating tuning panel so both stay in sync. Numeric sliders keep
+ * a local draft while dragging and commit to AppSettings only when released.
  */
 export function LyricsTuningControls({ className }: { className?: string }) {
   const { t } = useTranslation();
-  const s = useSettings();
+  const persistedSettings = useSettings();
+  const [draft, setDraft] = useState<LyricsTuningDraft>({});
+  const s = useMemo(() => ({ ...persistedSettings, ...draft }), [persistedSettings, draft]);
   const activeSize = s.lyricsActiveFontSize ?? 30;
   const inactiveSize = s.lyricsInactiveFontSize ?? 24;
   const activeOpacity = s.lyricsActiveOpacity ?? 100;
   const inactiveOpacity = s.lyricsInactiveOpacity ?? 40;
   const colorMode = s.lyricsColorMode ?? "default";
   const customColor = s.lyricsCustomColor ?? "#ffffff";
+  const coverColorTuning = resolveLyricsCoverColorTuning(s);
+  const coverColorSaturation = coverColorTuning.saturation;
+  const coverColorBrightness = coverColorTuning.brightness;
+  const coverColorContrast = coverColorTuning.contrast;
   const align = s.lyricsAlign ?? "center";
   const wordByWord = s.lyricsWordByWord ?? true;
   const showTranslation = s.lyricsShowTranslation ?? true;
@@ -79,6 +129,27 @@ export function LyricsTuningControls({ className }: { className?: string }) {
   const strokeColorMode = s.lyricsStrokeColorMode ?? "custom";
   const strokeColor = s.lyricsStrokeColor ?? "#000000";
   const strokeOpacity = s.lyricsStrokeOpacity ?? 100;
+
+  useEffect(() => {
+    setDraft((current) => {
+      let changed = false;
+      const next = { ...current };
+      for (const key of LYRICS_TUNING_NUMBER_KEYS) {
+        if (next[key] === undefined || next[key] !== persistedSettings[key]) continue;
+        delete next[key];
+        changed = true;
+      }
+      return changed ? next : current;
+    });
+  }, [persistedSettings]);
+
+  function setDraftValue(key: LyricsTuningNumberKey, value: number) {
+    setDraft((current) => ({ ...current, [key]: value }));
+  }
+
+  function commitDraftValue(key: LyricsTuningNumberKey, value: number) {
+    void saveSettings({ [key]: value } as Partial<AppSettings>);
+  }
 
   return (
     <div className={cn("flex flex-col gap-4", className)}>
@@ -131,7 +202,8 @@ export function LyricsTuningControls({ className }: { className?: string }) {
               max={60}
               step={1}
               value={cascadeAnchorPct}
-              onValueChange={(v) => void saveSettings({ lyricsCascadeAnchorPct: v })}
+              onValueChange={(v) => setDraftValue("lyricsCascadeAnchorPct", v)}
+              onValueCommit={(v) => commitDraftValue("lyricsCascadeAnchorPct", v)}
               aria-label={t("lyricsSettings.cascadeAnchor", { pct: cascadeAnchorPct })}
             />
           </Field>
@@ -141,7 +213,8 @@ export function LyricsTuningControls({ className }: { className?: string }) {
               max={140}
               step={1}
               value={cascadeDelayMs}
-              onValueChange={(v) => void saveSettings({ lyricsCascadeDelayMs: v })}
+              onValueChange={(v) => setDraftValue("lyricsCascadeDelayMs", v)}
+              onValueCommit={(v) => commitDraftValue("lyricsCascadeDelayMs", v)}
               aria-label={t("lyricsSettings.cascadeDelay", { ms: cascadeDelayMs })}
             />
           </Field>
@@ -151,9 +224,8 @@ export function LyricsTuningControls({ className }: { className?: string }) {
               max={8}
               step={0.1}
               value={cascadeBlurPx}
-              onValueChange={(v) =>
-                void saveSettings({ lyricsCascadeBlurPx: Number(v.toFixed(1)) })
-              }
+              onValueChange={(v) => setDraftValue("lyricsCascadeBlurPx", Number(v.toFixed(1)))}
+              onValueCommit={(v) => commitDraftValue("lyricsCascadeBlurPx", Number(v.toFixed(1)))}
               aria-label={t("lyricsSettings.cascadeBlur", { px: formatPx(cascadeBlurPx) })}
             />
           </Field>
@@ -165,7 +237,8 @@ export function LyricsTuningControls({ className }: { className?: string }) {
           max={48}
           step={1}
           value={activeSize}
-          onValueChange={(v) => void saveSettings({ lyricsActiveFontSize: v })}
+          onValueChange={(v) => setDraftValue("lyricsActiveFontSize", v)}
+          onValueCommit={(v) => commitDraftValue("lyricsActiveFontSize", v)}
           aria-label={t("lyricsSettings.activeFontSize", { px: activeSize })}
         />
       </Field>
@@ -175,7 +248,8 @@ export function LyricsTuningControls({ className }: { className?: string }) {
           max={48}
           step={1}
           value={inactiveSize}
-          onValueChange={(v) => void saveSettings({ lyricsInactiveFontSize: v })}
+          onValueChange={(v) => setDraftValue("lyricsInactiveFontSize", v)}
+          onValueCommit={(v) => commitDraftValue("lyricsInactiveFontSize", v)}
           aria-label={t("lyricsSettings.inactiveFontSize", { px: inactiveSize })}
         />
       </Field>
@@ -185,7 +259,8 @@ export function LyricsTuningControls({ className }: { className?: string }) {
           max={48}
           step={1}
           value={lineGap}
-          onValueChange={(v) => void saveSettings({ lyricsLineGap: v })}
+          onValueChange={(v) => setDraftValue("lyricsLineGap", v)}
+          onValueCommit={(v) => commitDraftValue("lyricsLineGap", v)}
           aria-label={t("lyricsSettings.lineGap", { px: lineGap })}
         />
       </Field>
@@ -195,7 +270,8 @@ export function LyricsTuningControls({ className }: { className?: string }) {
           max={100}
           step={1}
           value={activeOpacity}
-          onValueChange={(v) => void saveSettings({ lyricsActiveOpacity: v })}
+          onValueChange={(v) => setDraftValue("lyricsActiveOpacity", v)}
+          onValueCommit={(v) => commitDraftValue("lyricsActiveOpacity", v)}
           aria-label={t("lyricsSettings.activeOpacity", { pct: activeOpacity })}
         />
       </Field>
@@ -205,7 +281,8 @@ export function LyricsTuningControls({ className }: { className?: string }) {
           max={100}
           step={1}
           value={inactiveOpacity}
-          onValueChange={(v) => void saveSettings({ lyricsInactiveOpacity: v })}
+          onValueChange={(v) => setDraftValue("lyricsInactiveOpacity", v)}
+          onValueCommit={(v) => commitDraftValue("lyricsInactiveOpacity", v)}
           aria-label={t("lyricsSettings.inactiveOpacity", { pct: inactiveOpacity })}
         />
       </Field>
@@ -262,7 +339,46 @@ export function LyricsTuningControls({ className }: { className?: string }) {
           />
         )}
         {colorMode === "cover" && (
-          <p className="text-muted-foreground text-xs">{t("lyricsSettings.colorCoverHint")}</p>
+          <div className="mt-1 flex flex-col gap-3">
+            <p className="text-muted-foreground text-xs">{t("lyricsSettings.colorCoverHint")}</p>
+            <Field label={t("lyricsSettings.coverColorSaturation", { pct: coverColorSaturation })}>
+              <Slider
+                min={0}
+                max={200}
+                step={5}
+                value={coverColorSaturation}
+                onValueChange={(v) => setDraftValue("lyricsCoverColorSaturation", v)}
+                onValueCommit={(v) => commitDraftValue("lyricsCoverColorSaturation", v)}
+                aria-label={t("lyricsSettings.coverColorSaturation", {
+                  pct: coverColorSaturation,
+                })}
+              />
+            </Field>
+            <Field label={t("lyricsSettings.coverColorBrightness", { pct: coverColorBrightness })}>
+              <Slider
+                min={0}
+                max={200}
+                step={5}
+                value={coverColorBrightness}
+                onValueChange={(v) => setDraftValue("lyricsCoverColorBrightness", v)}
+                onValueCommit={(v) => commitDraftValue("lyricsCoverColorBrightness", v)}
+                aria-label={t("lyricsSettings.coverColorBrightness", {
+                  pct: coverColorBrightness,
+                })}
+              />
+            </Field>
+            <Field label={t("lyricsSettings.coverColorContrast", { pct: coverColorContrast })}>
+              <Slider
+                min={0}
+                max={200}
+                step={5}
+                value={coverColorContrast}
+                onValueChange={(v) => setDraftValue("lyricsCoverColorContrast", v)}
+                onValueCommit={(v) => commitDraftValue("lyricsCoverColorContrast", v)}
+                aria-label={t("lyricsSettings.coverColorContrast", { pct: coverColorContrast })}
+              />
+            </Field>
+          </div>
         )}
       </Field>
       <Field label={t("lyricsSettings.shadowOpacity", { pct: shadowOpacity })}>
@@ -271,7 +387,8 @@ export function LyricsTuningControls({ className }: { className?: string }) {
           max={100}
           step={1}
           value={shadowOpacity}
-          onValueChange={(v) => void saveSettings({ lyricsShadowOpacity: v })}
+          onValueChange={(v) => setDraftValue("lyricsShadowOpacity", v)}
+          onValueCommit={(v) => commitDraftValue("lyricsShadowOpacity", v)}
           aria-label={t("lyricsSettings.shadowOpacity", { pct: shadowOpacity })}
         />
       </Field>
@@ -281,7 +398,8 @@ export function LyricsTuningControls({ className }: { className?: string }) {
           max={48}
           step={1}
           value={shadowBlur}
-          onValueChange={(v) => void saveSettings({ lyricsShadowBlur: v })}
+          onValueChange={(v) => setDraftValue("lyricsShadowBlur", v)}
+          onValueCommit={(v) => commitDraftValue("lyricsShadowBlur", v)}
           aria-label={t("lyricsSettings.shadowBlur", { px: shadowBlur })}
         />
       </Field>
@@ -291,7 +409,8 @@ export function LyricsTuningControls({ className }: { className?: string }) {
           max={32}
           step={1}
           value={shadowOffsetX}
-          onValueChange={(v) => void saveSettings({ lyricsShadowOffsetX: v })}
+          onValueChange={(v) => setDraftValue("lyricsShadowOffsetX", v)}
+          onValueCommit={(v) => commitDraftValue("lyricsShadowOffsetX", v)}
           aria-label={t("lyricsSettings.shadowOffsetX", { px: shadowOffsetX })}
         />
       </Field>
@@ -301,7 +420,8 @@ export function LyricsTuningControls({ className }: { className?: string }) {
           max={32}
           step={1}
           value={shadowOffsetY}
-          onValueChange={(v) => void saveSettings({ lyricsShadowOffsetY: v })}
+          onValueChange={(v) => setDraftValue("lyricsShadowOffsetY", v)}
+          onValueCommit={(v) => commitDraftValue("lyricsShadowOffsetY", v)}
           aria-label={t("lyricsSettings.shadowOffsetY", { px: shadowOffsetY })}
         />
       </Field>
@@ -311,7 +431,8 @@ export function LyricsTuningControls({ className }: { className?: string }) {
           max={12}
           step={1}
           value={strokeWidth}
-          onValueChange={(v) => void saveSettings({ lyricsStrokeWidth: v })}
+          onValueChange={(v) => setDraftValue("lyricsStrokeWidth", v)}
+          onValueCommit={(v) => commitDraftValue("lyricsStrokeWidth", v)}
           aria-label={t("lyricsSettings.strokeWidth", { px: strokeWidth })}
         />
       </Field>
@@ -361,7 +482,8 @@ export function LyricsTuningControls({ className }: { className?: string }) {
               max={100}
               step={1}
               value={strokeOpacity}
-              onValueChange={(v) => void saveSettings({ lyricsStrokeOpacity: v })}
+              onValueChange={(v) => setDraftValue("lyricsStrokeOpacity", v)}
+              onValueCommit={(v) => commitDraftValue("lyricsStrokeOpacity", v)}
               aria-label={t("lyricsSettings.strokeOpacity", { pct: strokeOpacity })}
             />
           </Field>

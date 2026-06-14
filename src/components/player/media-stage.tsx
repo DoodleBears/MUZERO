@@ -32,9 +32,11 @@ const STAGE_DISPLAY_SETTLE_MS = 300;
 export function MediaStage({
   className,
   coverBacklightEnabled = true,
+  coverBacklightFadeIn = true,
 }: {
   className?: string;
   coverBacklightEnabled?: boolean;
+  coverBacklightFadeIn?: boolean;
 }) {
   const { t } = useTranslation();
   const queue = usePlayerStore((s) => s.queue);
@@ -150,6 +152,7 @@ export function MediaStage({
       <NowPlayingCoverBacklight
         active={showCoverBacklight}
         anchorRef={stageRef}
+        fadeIn={coverBacklightFadeIn}
         opacity={backlight.opacity / 100}
         url={coverBacklightUrl}
       />
@@ -192,11 +195,13 @@ export function MediaStage({
 function NowPlayingCoverBacklight({
   active,
   anchorRef,
+  fadeIn,
   opacity,
   url,
 }: {
   active: boolean;
   anchorRef: RefObject<HTMLElement | null>;
+  fadeIn: boolean;
   opacity: number;
   url: string | null;
 }) {
@@ -208,7 +213,7 @@ function NowPlayingCoverBacklight({
         <motion.div
           key={url}
           aria-hidden
-          initial={{ opacity: 0 }}
+          initial={fadeIn ? { opacity: 0 } : false}
           animate={{ opacity }}
           transition={{ duration: 0.42, ease: "easeOut" }}
           className="pointer-events-none fixed -z-10 now-playing-cover-backlight-clip"

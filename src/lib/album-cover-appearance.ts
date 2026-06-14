@@ -9,10 +9,10 @@ export const ALBUM_COVER_APPEARANCE_DEFAULTS = {
   shadowOffsetX: 0,
   shadowOffsetY: 4,
   nowPlayingCoverEffectMode: "shadow" as const,
-  backlightOpacity: 82,
-  backlightRange: 12,
-  backlightBlur: 20,
-  backlightSaturation: 400,
+  backlightOpacity: 50,
+  backlightRange: 13,
+  backlightBlur: 12,
+  backlightSaturation: 330,
 };
 
 export interface AlbumCoverAppearance {

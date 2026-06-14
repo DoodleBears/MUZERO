@@ -6,6 +6,10 @@ import { SwipeableMediaStage } from "./swipeable-media-stage";
 
 const mocks = vi.hoisted(() => ({
   coverReadyForTrack: true,
+  mediaStageProps: [] as Array<{
+    coverBacklightEnabled?: boolean;
+    coverBacklightFadeIn?: boolean;
+  }>,
   motionProps: [] as Array<Record<string, unknown>>,
   objectUrlIndex: 0,
 }));
@@ -100,7 +104,10 @@ vi.mock("@/db/media-blob-storage", () => ({
 }));
 
 vi.mock("./media-stage", () => ({
-  MediaStage: () => <div data-testid="media-stage" />,
+  MediaStage: (props: { coverBacklightEnabled?: boolean; coverBacklightFadeIn?: boolean }) => {
+    mocks.mediaStageProps.push(props);
+    return <div data-testid="media-stage" />;
+  },
 }));
 
 vi.mock("./stage-title-fallback", () => ({
@@ -113,6 +120,7 @@ describe("SwipeableMediaStage", () => {
   beforeEach(() => {
     vi.useFakeTimers();
     mocks.coverReadyForTrack = true;
+    mocks.mediaStageProps = [];
     mocks.motionProps = [];
     mocks.objectUrlIndex = 0;
     Object.defineProperty(URL, "createObjectURL", {
@@ -211,6 +219,31 @@ describe("SwipeableMediaStage", () => {
     });
 
     expect(usePlayerStore.getState().currentIndex).toBe(0);
+  });
+
+  it("uses the moving overlay backlight during a cancelled drag, then restores the base", async () => {
+    render(<SwipeableMediaStage />);
+
+    expect(mocks.mediaStageProps.at(-1)?.coverBacklightEnabled).toBe(true);
+    expect(mocks.mediaStageProps.at(-1)?.coverBacklightFadeIn).toBe(false);
+
+    await act(async () => {
+      latestDragProps().onPointerDown?.({});
+    });
+    await act(async () => {
+      latestDragProps().onDrag?.({}, { offset: { x: -24 }, velocity: { x: 0 } });
+    });
+
+    expect(mocks.mediaStageProps.at(-1)?.coverBacklightEnabled).toBe(false);
+
+    await act(async () => {
+      latestDragProps().onDragEnd?.({}, { offset: { x: -24 }, velocity: { x: 0 } });
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(usePlayerStore.getState().currentIndex).toBe(0);
+    expect(mocks.mediaStageProps.at(-1)?.coverBacklightEnabled).toBe(true);
   });
 
   it("plays the coverflow for an external switch (button / Q-E / auto-advance)", async () => {
