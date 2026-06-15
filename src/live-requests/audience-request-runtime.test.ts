@@ -279,6 +279,32 @@ describe("AudienceRequestRuntime direct search route", () => {
   });
 });
 
+describe("AudienceRequestRuntime per-source route override", () => {
+  it("overrides playbackAction for the call (append instead of the settings default)", async () => {
+    const { current, target, tail } = await seedQueue();
+    const runtime = createAudienceRequestRuntime({ db });
+
+    await runtime.handle(request("晴天"), { playbackAction: "append-queue" });
+
+    const queue = await getPlayQueue(db);
+    expect(queue.entries.map((entry) => entry.trackId)).toEqual([current.id, tail.id, target.id]);
+  });
+
+  it("overrides routeMode to ai-dj for the call even if settings say library-search", async () => {
+    const aiDjQueue: AudienceRequestAiDjQueue = {
+      enqueue: vi.fn(async () => ({ chatSessionId: "cht_override" })),
+    };
+    const runtime = createAudienceRequestRuntime({ db, aiDjQueue, canUseAiDj: () => true });
+
+    const item = await runtime.handle(request("DJ city pop"), { routeMode: "ai-dj" });
+
+    expect(aiDjQueue.enqueue).toHaveBeenCalledWith(expect.objectContaining({ routeMode: "ai-dj" }));
+    expect(item.routeMode).toBe("ai-dj");
+    // Immediately-resolving mock may already be "completed"; either proves the route override took.
+    expect(["queued", "completed"]).toContain(item.status);
+  });
+});
+
 async function seedQueue() {
   const session = await createSession({ seedPrompt: "", config: { autoExtend: false } }, db);
   const current = await track(session.id, "Current Song");

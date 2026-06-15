@@ -106,8 +106,17 @@ export interface AudienceRequestRuntimeDeps {
   playNow?: (track: Track) => Promise<void>;
 }
 
+/** Per-call routing overrides — a multi-source intake sets these from the source config. */
+export interface AudienceRequestHandleOverride {
+  routeMode?: AudienceRequestRouteMode;
+  playbackAction?: AudienceRequestPlaybackAction;
+}
+
 export interface AudienceRequestRuntime {
-  handle(request: NormalizedAudienceRequest): Promise<AudienceRequestRuntimeItem>;
+  handle(
+    request: NormalizedAudienceRequest,
+    override?: AudienceRequestHandleOverride,
+  ): Promise<AudienceRequestRuntimeItem>;
   approve(id: string, action?: AudienceRequestPlaybackAction): Promise<AudienceRequestRuntimeItem>;
   reject(id: string): AudienceRequestRuntimeItem | undefined;
   getItems(): AudienceRequestRuntimeItem[];
@@ -128,9 +137,17 @@ export function createAudienceRequestRuntime(
     });
   let recentAcceptedAt: number[] = [];
 
-  async function handle(request: NormalizedAudienceRequest): Promise<AudienceRequestRuntimeItem> {
+  async function handle(
+    request: NormalizedAudienceRequest,
+    override: AudienceRequestHandleOverride = {},
+  ): Promise<AudienceRequestRuntimeItem> {
     const settings = await getSettings(db);
-    const intake = settings.audienceRequestIntake ?? DEFAULT_AUDIENCE_REQUEST_INTAKE_SETTINGS;
+    const baseIntake = settings.audienceRequestIntake ?? DEFAULT_AUDIENCE_REQUEST_INTAKE_SETTINGS;
+    const intake: AudienceRequestIntakeSettings = {
+      ...baseIntake,
+      routeMode: override.routeMode ?? baseIntake.routeMode,
+      playbackAction: override.playbackAction ?? baseIntake.playbackAction,
+    };
     const receivedAt = now();
     const item = createItem(request, intake, receivedAt);
     remember(item);

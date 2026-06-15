@@ -391,7 +391,7 @@ const unsub = bridge.liveRequestIntake.onMessage((payload) => {
 - [x] 新增 `request-mapping-presets.ts`：目标字段 schema（`query` 必填）+ 预设（`auto`/`ssn`/`generic`/`custom`）+ `applyMapping`/`getPresetMapping`/`detectPresetId`。**7 测试通过。**
 - [ ] `audience-request-schema.ts`：`auto` 走现有候选-key 启发式；新增「接受已映射对象」入口。
 - [ ] 新增 `live-request-controller.ts`：runtime 模块级单例 + 注入 `playNow`/`getActiveSessionId`/`getCurrentTrackId`；onMessage → 脱敏 → applyMapping → normalize → `runtime.handle(req, override)`。
-- [ ] `audience-request-runtime.ts`：`handle()` 接受每调用 routeMode/playbackAction 覆盖。
+- [x] `audience-request-runtime.ts`：`handle(request, override?)` 接受每调用 routeMode/playbackAction 覆盖（合并进 effective intake）。**runtime 测试 12 通过。**
 - [ ] App 启动挂载 `startLiveRequestIntake()`；随 `enabled`/`transport`/`sources` re-apply；卸载清理。
 - [ ] `DEFAULT_AUDIENCE_REQUEST_INTAKE_SETTINGS.requireApprovalForPlayNow` 改 `false`。
 - [ ] 单测：模板引擎穷举（`||`/三元/`map`+`join`/`time`/缺失/原型污染）；fake bridge emit `{sourceId:"default", body}` → 命中 → `playQueuePlayNext` 被调；低置信度 → `ignored`。
