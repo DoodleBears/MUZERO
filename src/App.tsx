@@ -29,6 +29,10 @@ import { electronWindowAppearanceCssVars } from "@/lib/electron-window-appearanc
 import { cn } from "@/lib/utils";
 import { setViewTransitionSuppressed } from "@/lib/view-transition";
 import { dragWindowOnEmptyPress } from "@/lib/window-drag";
+import {
+  startLiveRequestIntake,
+  stopLiveRequestIntake,
+} from "@/live-requests/live-request-controller";
 import { NowPlayingPage } from "@/pages/now-playing-page";
 import { QueuePage } from "@/pages/queue-page";
 import { SearchPage } from "@/pages/search-page";
@@ -107,6 +111,13 @@ export default function App() {
   useEffect(() => {
     init();
   }, [init]);
+
+  // Wire the live chat request intake (Social Stream Ninja / webhooks): received
+  // messages search the library and play. No-op on shells without an intake transport.
+  useEffect(() => {
+    startLiveRequestIntake();
+    return () => stopLiveRequestIntake();
+  }, []);
 
   // Surface background sync (folder import + R2) as a persistent, cancelable toast.
   useEffect(() => {

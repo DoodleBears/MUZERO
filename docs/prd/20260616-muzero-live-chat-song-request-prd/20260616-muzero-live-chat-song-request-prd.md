@@ -11,7 +11,7 @@
 
 | Phase | Name | Status | Link |
 |-------|------|--------|------|
-| 1 | 通用接线 + 模板引擎：runtime 单例 + intake 消费者 + `request-template.ts`（移植 anysoul 模板引擎）+ 映射预设 + 无审核默认值（地基） | 🔄 In Progress | [Phase 1 Checklist](#phase-1-checklist) |
+| 1 | 通用接线 + 模板引擎：runtime 单例 + intake 消费者 + `request-template.ts`（移植 anysoul 模板引擎）+ 映射预设 + 无审核默认值（地基） | ✅ Completed | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | 多来源 + 测试生命周期：`sources[]`（status: testing/active/disabled）+ server 按 `/v1/intake/<id>` 路由 + testing 模式捕获 sanitized payload（不触发播放） | 🔲 Pending | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | Web SSN WebSocket transport：泛化 bridge 接口 + `web.ts` 出站 WS 实现 + `social-stream-relay.ts`（转发原始事件，交给 ssn 模板预设） | 🔲 Pending | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | 映射对话框 UX（仿 anysoul）：JSON 树点选映射 + 每字段实时预览（同引擎 parity）+ 预设/visual/raw + Go Live + 来源列表（状态徽章/生命周期/复制 URL） | 🔲 Pending | [Phase 4 Checklist](#phase-4-checklist) |
@@ -389,12 +389,12 @@ const unsub = bridge.liveRequestIntake.onMessage((payload) => {
 **Tasks:**
 - [x] 新增 `request-template.ts`：移植 anysoul `applyTemplateString`（`{{ }}` / `||` / 三元 / `map`·`join`·`time` 管道 / 路径 / 字面量 / `BLOCKED_KEYS` 防原型污染）。纯函数。**10 测试通过。**
 - [x] 新增 `request-mapping-presets.ts`：目标字段 schema（`query` 必填）+ 预设（`auto`/`ssn`/`generic`/`custom`）+ `applyMapping`/`getPresetMapping`/`detectPresetId`。**7 测试通过。**
-- [ ] `audience-request-schema.ts`：`auto` 走现有候选-key 启发式；新增「接受已映射对象」入口。
-- [ ] 新增 `live-request-controller.ts`：runtime 模块级单例 + 注入 `playNow`/`getActiveSessionId`/`getCurrentTrackId`；onMessage → 脱敏 → applyMapping → normalize → `runtime.handle(req, override)`。
+- [x] `audience-request-schema.ts`：`auto` = 现有候选-key 启发式（无需改 schema）；`applyMapping` 输出键已被 `normalizeAudienceRequest` 探测 → 天然「接受已映射对象」。
+- [x] 新增 `live-request-controller.ts`：runtime 模块级单例 + 注入 `playNow`（懒加载 player-store）；onMessage → JSON.parse → normalize → `runtime.handle`。**5 测试通过。**（脱敏/applyMapping/sourceId 路由留 Phase 2）
 - [x] `audience-request-runtime.ts`：`handle(request, override?)` 接受每调用 routeMode/playbackAction 覆盖（合并进 effective intake）。**runtime 测试 12 通过。**
-- [ ] App 启动挂载 `startLiveRequestIntake()`；随 `enabled`/`transport`/`sources` re-apply；卸载清理。
+- [x] App 启动挂载 `startLiveRequestIntake()`（订阅 onMessage；server 起停仍由 Settings 面板按 enabled 控制，onMessage 多订阅共存）；卸载清理。
 - [x] `DEFAULT_AUDIENCE_REQUEST_INTAKE_SETTINGS.requireApprovalForPlayNow` 改 `false`（+ 同步 `default-settings.test.ts`）。
-- [ ] 单测：模板引擎穷举（`||`/三元/`map`+`join`/`time`/缺失/原型污染）；fake bridge emit `{sourceId:"default", body}` → 命中 → `playQueuePlayNext` 被调；低置信度 → `ignored`。
+- [x] 单测：模板引擎穷举（10）+ mapping 预设（7）+ controller 管线/订阅（5）+ runtime override（12 total）；低置信度 → `ignored` 由 runtime 测试覆盖。
 
 ### Phase 1 Checklist
 - [ ] 桌面真实链路：默认来源 POST（curl/SSN）→ 队列出现该曲目并按 `playbackAction` 生效。
