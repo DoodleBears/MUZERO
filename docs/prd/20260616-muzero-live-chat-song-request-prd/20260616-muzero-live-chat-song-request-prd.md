@@ -441,6 +441,7 @@ const unsub = bridge.liveRequestIntake.onMessage((payload) => {
 - [x] `json-payload-tree.tsx`：可点击 JSON 树，点叶子插入 `{{ payload.path }}`。
 - [x] `target-field-input.tsx`：模板输入 + 用 `request-template.ts` 对选中 payload 求值的实时预览/报错。
 - [x] `mapping-dialog.tsx`：左 payload（下拉 + 树 + 刷新/清空）/ 右目标字段 + 预设下拉(`Select`) + visual/raw(`Tabs`) + Save / Go Live；用 `@/components/ui/{dialog,tabs,select,textarea}`。+ `mappingToFieldValues`/`fieldValuesToMapping` helper（带测试）。
+- [x] controller transport 生命周期：`apply(intake)` / `applyLiveRequestIntake` 按 `enabled`+`transport` start/stop 正确传输(http-webhook `{port,token}` / ssn-websocket `{relayUrl,sessionId,sourceId}`，relay 喂 ssn-preset 来源);App 启动 apply 当前设置。**+3 测试(controller 12)。**
 - [ ] `source-card.tsx`：状态徽章 + 复制端点 URL + 配置映射 + 生命周期按钮 + Delete。
 - [ ] `live-request-settings.tsx`：transport 选择器(`Select`) + 来源列表 + ssn-websocket 表单 + 只读状态日志 + web CORS 提示 + controller 生命周期驱动 `start`。
 

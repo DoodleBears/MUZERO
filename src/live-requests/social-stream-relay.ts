@@ -42,6 +42,9 @@ export interface SocialStreamRelay {
 const MAX_BACKOFF_MS = 30_000;
 const BASE_BACKOFF_MS = 500;
 
+/** Public SSN relay (Q1). Overridable per-source via `ssnRelayUrl` for self-hosted relays. */
+export const DEFAULT_SSN_RELAY_URL = "wss://io.socialstream.ninja";
+
 /** SSN join URL for chat messages (channel 4). */
 export function buildJoinUrl(relayUrl: string, sessionId: string): string {
   return `${relayUrl.replace(/\/+$/, "")}/join/${encodeURIComponent(sessionId)}/4`;

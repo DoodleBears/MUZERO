@@ -521,6 +521,7 @@ export type LlmProviderId = "openai" | "anthropic";
 export type AudienceRequestSearchScope = "active-set" | "all-library";
 export type AudienceRequestSourceStatus = "testing" | "active" | "disabled";
 export type AudienceRequestSourceAuthMode = "open" | "secret";
+export type AudienceRequestTransport = "http-webhook" | "ssn-websocket";
 
 /**
  * One configured intake source. Maps to a webhook path `/v1/intake/<id>` (or the
@@ -560,6 +561,12 @@ export interface AudienceRequestIntakeSettings {
   requireApprovalForPlayNow: boolean;
   /** Configured intake sources. Defaults to a single auto-mapping "default" source. */
   sources?: AudienceRequestSource[];
+  /** Transport: local HTTP webhook (desktop) or outbound SSN WebSocket (web/desktop). */
+  transport?: AudienceRequestTransport;
+  /** SSN relay base URL (ssn-websocket transport); defaults to the public relay. */
+  ssnRelayUrl?: string;
+  /** SSN session id to join (ssn-websocket transport). */
+  ssnSessionId?: string;
 }
 
 export const DEFAULT_AUDIENCE_REQUEST_SOURCE: AudienceRequestSource = {

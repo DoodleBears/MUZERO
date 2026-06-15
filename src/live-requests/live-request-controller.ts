@@ -1,6 +1,10 @@
 import { db as defaultDb, type MuzeroDB } from "@/db/muzero-db";
 import { getSettings } from "@/db/repositories";
-import { DEFAULT_AUDIENCE_REQUEST_INTAKE_SETTINGS, type Track } from "@/db/types";
+import {
+  type AudienceRequestIntakeSettings,
+  DEFAULT_AUDIENCE_REQUEST_INTAKE_SETTINGS,
+  type Track,
+} from "@/db/types";
 import { type DesktopLiveRequestIntakeControls, resolveDesktopBridge } from "@/lib/desktop/bridge";
 import { log } from "@/lib/logger";
 import {
@@ -13,6 +17,17 @@ import {
 } from "./audience-request-schema";
 import { findSource, resolveSourceMapping, resolveSources } from "./audience-request-sources";
 import { applyMapping } from "./request-mapping-presets";
+import { DEFAULT_SSN_RELAY_URL } from "./social-stream-relay";
+
+/** Source the SSN relay feeds: prefer an enabled ssn-preset source, else first enabled. */
+function pickRelaySourceId(intake: AudienceRequestIntakeSettings): string {
+  const sources = resolveSources(intake.sources);
+  const ssn = sources.find(
+    (source) => source.mappingPreset === "social-stream-ninja" && source.status !== "disabled",
+  );
+  const enabled = sources.find((source) => source.status !== "disabled");
+  return (ssn ?? enabled ?? sources[0]).id;
+}
 
 /**
  * The missing "last mile": subscribes the intake transport's `onMessage` and
@@ -45,6 +60,8 @@ export interface LiveRequestControllerDeps {
 export interface LiveRequestController {
   start(): void;
   stop(): void;
+  /** Start/stop the transport server to match settings (transport-aware). */
+  apply(intake: AudienceRequestIntakeSettings): Promise<void>;
   handlePayload(payload: { sourceId?: string; body: string }): Promise<void>;
   /** Recent sanitized payloads captured for a source while it is in testing mode. */
   getCaptured(sourceId: string): CapturedPayload[];
@@ -159,9 +176,33 @@ export function createLiveRequestController(
     unsubscribe = null;
   }
 
+  async function apply(intake: AudienceRequestIntakeSettings): Promise<void> {
+    const controls = deps.controls ?? resolveDesktopBridge().liveRequestIntake;
+    if (!controls) return;
+    if (!intake.enabled) {
+      await controls.stop();
+      return;
+    }
+    if ((intake.transport ?? "http-webhook") === "ssn-websocket") {
+      await controls.start({
+        transport: "ssn-websocket",
+        relayUrl: intake.ssnRelayUrl ?? DEFAULT_SSN_RELAY_URL,
+        sessionId: intake.ssnSessionId ?? "",
+        sourceId: pickRelaySourceId(intake),
+      });
+    } else {
+      await controls.start({
+        transport: "http-webhook",
+        port: intake.port,
+        token: intake.authToken ?? "",
+      });
+    }
+  }
+
   return {
     start,
     stop,
+    apply,
     handlePayload,
     getCaptured: (sourceId) => captures.get(sourceId) ?? [],
   };
@@ -180,15 +221,25 @@ function ensureSingleton(): LiveRequestController {
 }
 
 /**
- * Mount the intake pipeline once at app start. Idempotent. The server lifecycle
- * (which port, when listening) stays with the Settings panel.
+ * Mount the intake pipeline once at app start: subscribe the handle pipeline and
+ * bring the transport up to match current settings. Idempotent.
  */
 export function startLiveRequestIntake(): void {
-  ensureSingleton().start();
+  const controller = ensureSingleton();
+  controller.start();
+  void getSettings(defaultDb).then((settings) => {
+    const intake = settings.audienceRequestIntake ?? DEFAULT_AUDIENCE_REQUEST_INTAKE_SETTINGS;
+    void controller.apply(intake);
+  });
 }
 
 export function stopLiveRequestIntake(): void {
   singleton?.stop();
+}
+
+/** Re-apply the transport lifecycle after the Settings panel changes intake config. */
+export function applyLiveRequestIntake(intake: AudienceRequestIntakeSettings): Promise<void> {
+  return ensureSingleton().apply(intake);
 }
 
 /** Sanitized payloads captured for a source in testing mode (mapping-dialog preview). */

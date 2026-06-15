@@ -221,3 +221,67 @@ describe("live-request-controller multi-source + testing lifecycle", () => {
     expect(handle).not.toHaveBeenCalled();
   });
 });
+
+describe("live-request-controller transport lifecycle (apply)", () => {
+  it("stops the transport when disabled", async () => {
+    const controls = fakeControls();
+    const controller = createLiveRequestController({
+      db,
+      runtime: fakeRuntime().runtime,
+      controls,
+    });
+
+    await controller.apply({ ...DEFAULT_AUDIENCE_REQUEST_INTAKE_SETTINGS, enabled: false });
+
+    expect(controls.stop).toHaveBeenCalled();
+    expect(controls.start).not.toHaveBeenCalled();
+  });
+
+  it("starts the http-webhook transport with port + token", async () => {
+    const controls = fakeControls();
+    const controller = createLiveRequestController({
+      db,
+      runtime: fakeRuntime().runtime,
+      controls,
+    });
+
+    await controller.apply({
+      ...DEFAULT_AUDIENCE_REQUEST_INTAKE_SETTINGS,
+      enabled: true,
+      transport: "http-webhook",
+      port: 41731,
+      authToken: "tok",
+    });
+
+    expect(controls.start).toHaveBeenCalledWith({
+      transport: "http-webhook",
+      port: 41731,
+      token: "tok",
+    });
+  });
+
+  it("starts the ssn-websocket transport feeding the ssn-preset source", async () => {
+    const controls = fakeControls();
+    const controller = createLiveRequestController({
+      db,
+      runtime: fakeRuntime().runtime,
+      controls,
+    });
+
+    await controller.apply({
+      ...DEFAULT_AUDIENCE_REQUEST_INTAKE_SETTINGS,
+      enabled: true,
+      transport: "ssn-websocket",
+      ssnRelayUrl: "wss://io.socialstream.ninja",
+      ssnSessionId: "SID",
+      sources: [source({ id: "ssn", mappingPreset: "social-stream-ninja" })],
+    });
+
+    expect(controls.start).toHaveBeenCalledWith({
+      transport: "ssn-websocket",
+      relayUrl: "wss://io.socialstream.ninja",
+      sessionId: "SID",
+      sourceId: "ssn",
+    });
+  });
+});
