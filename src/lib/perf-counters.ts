@@ -13,6 +13,11 @@ import { traceEvent } from "@/lib/trace";
 let enabled = false;
 const counts = new Map<string, number>();
 const perfWorkWindows = new Map<string, PerfWorkWindow>();
+// Lifetime (HUD-session) per-name work stats for the perf panel breakdown. Kept
+// SEPARATE from `perfWorkWindows` (which zero out on every trace emit) so the HUD
+// can show a stable per-subcategory cost — last/avg/max/count — instead of one
+// opaque total. Cleared by `resetPerfCounters` when the HUD unmounts.
+const perfWorkStats = new Map<string, PerfWorkStat>();
 
 export function setPerfCountersEnabled(on: boolean): void {
   enabled = on;
@@ -36,6 +41,42 @@ export function resetPerfCounters(): void {
   counts.clear();
   requeryTraceWindows.clear();
   perfWorkWindows.clear();
+  perfWorkStats.clear();
+}
+
+interface PerfWorkStat {
+  count: number;
+  totalMs: number;
+  maxMs: number;
+  lastMs: number;
+}
+
+export interface PerfWorkStatRow {
+  name: string;
+  count: number;
+  avgMs: number;
+  maxMs: number;
+  lastMs: number;
+}
+
+/**
+ * Per-name work-span breakdown for the perf HUD: every `notePerfWork` subcategory
+ * with its last / average / max duration and call count over the HUD session,
+ * sorted heaviest-max first. Empty while the HUD is not mounted.
+ */
+export function readPerfWork(): PerfWorkStatRow[] {
+  const rows: PerfWorkStatRow[] = [];
+  for (const [name, stat] of perfWorkStats) {
+    rows.push({
+      name,
+      count: stat.count,
+      avgMs: stat.count > 0 ? stat.totalMs / stat.count : 0,
+      maxMs: stat.maxMs,
+      lastMs: stat.lastMs,
+    });
+  }
+  rows.sort((a, b) => b.maxMs - a.maxMs);
+  return rows;
 }
 
 /** Per-query trace window — a Dexie write burst re-runs these queries once per
@@ -100,6 +141,17 @@ export function notePerfWork(
 ): void {
   if (!enabled || !Number.isFinite(durationMs)) return;
   bumpPerfCounter(`work.${name}`);
+  // Lifetime per-name accumulation for the HUD breakdown (independent of the
+  // trace-emit window below, which resets on emit).
+  let stat = perfWorkStats.get(name);
+  if (!stat) {
+    stat = { count: 0, totalMs: 0, maxMs: 0, lastMs: 0 };
+    perfWorkStats.set(name, stat);
+  }
+  stat.count += 1;
+  stat.totalMs += durationMs;
+  stat.maxMs = Math.max(stat.maxMs, durationMs);
+  stat.lastMs = durationMs;
   const now = Date.now();
   let window = perfWorkWindows.get(name);
   if (!window) {

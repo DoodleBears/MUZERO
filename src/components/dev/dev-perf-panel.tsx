@@ -4,7 +4,9 @@ import { useSettings } from "@/hooks/use-app-data";
 import {
   blobUrlStats,
   installBlobUrlTracker,
+  type PerfWorkStatRow,
   readPerfCounter,
+  readPerfWork,
   resetPerfCounters,
   setPerfCountersEnabled,
 } from "@/lib/perf-counters";
@@ -45,6 +47,9 @@ const TRACE_SUMMARY_MS = 2500;
 // switch / texture-swap / GC — so each stall is logged individually, timestamped
 // in the ring, to be lined up against the surrounding playIndex/textureSwap/heap.
 const LONGTASK_TRACE_MS = 50;
+// Cap the per-span breakdown so the HUD stays compact; rows are sorted
+// heaviest-max first, so the costly spans are always the ones shown.
+const WORK_ROWS_MAX = 14;
 
 /** Minimal shape of a `longtask` PerformanceEntry (not in the TS lib dom types). */
 type LongTaskEntry = PerformanceEntry & {
@@ -64,6 +69,7 @@ interface Snapshot {
   blobsCreated: number;
   dbRequeries: number;
   traceCount: number;
+  work: PerfWorkStatRow[];
 }
 
 const EMPTY_SNAPSHOT: Snapshot = {
@@ -74,6 +80,7 @@ const EMPTY_SNAPSHOT: Snapshot = {
   blobsCreated: 0,
   dbRequeries: 0,
   traceCount: 0,
+  work: [],
 };
 
 export function DevPerfPanel() {
@@ -165,6 +172,7 @@ export function DevPerfPanel() {
         // Polled, NOT subscribed — a useTraceEntries subscription would re-render
         // this HUD on every log line (PRD F-L5).
         traceCount: getTraceEntries().length,
+        work: readPerfWork(),
       });
       const now = Date.now();
       const jankyFrame = (frames.max ?? 0) >= 50;
@@ -252,6 +260,23 @@ export function DevPerfPanel() {
           <Row label="blobs" value={`${snap.blobsLive} live · ${snap.blobsCreated} made`} />
           <Row label="db" value={`${snap.dbRequeries} requeries`} />
           <Row label="queue" value={`${queueLength}`} />
+          {snap.work.length > 0 && (
+            <>
+              <div className="col-span-2 mt-1 border-white/10 border-t pt-1 text-[9px] text-white/40 uppercase tracking-wide">
+                work · last / max / count
+              </div>
+              {snap.work.slice(0, WORK_ROWS_MAX).map((w) => (
+                <Row
+                  key={w.name}
+                  label={w.name}
+                  value={`${formatMs(w.lastMs)} / ${formatMs(w.maxMs)} / ×${w.count}`}
+                />
+              ))}
+              {snap.work.length > WORK_ROWS_MAX && (
+                <Row label="…" value={`+${snap.work.length - WORK_ROWS_MAX} more`} />
+              )}
+            </>
+          )}
           <button
             type="button"
             onClick={() => void copyAllTrace()}
