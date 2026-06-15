@@ -214,8 +214,21 @@ export function SwipeableMediaStage({
   // mirror is per-frame but only calls .set() (no React render); the cover ring
   // is republished only when the covers / width change.
   const setDragRing = useNowPlayingDragRing((s) => s.setRing);
-  useMotionValueEvent(x, "change", (v) => nowPlayingDragX.set(v));
-  useEffect(() => () => nowPlayingDragX.set(0), []);
+  // Only mirror `x` while the user is ACTIVELY dragging. The programmatic
+  // commit/snap animation and button/keyboard switches also animate `x`; if the
+  // background followed those, then as the committed index updates mid-animation
+  // the ring would re-point at the NEW track's neighbour and the top layer would
+  // flash the wrong cover (e.g. C→B briefly showing A). Gating to the live
+  // gesture keeps the drag-follow correct and hides it the instant you release.
+  const draggingRef = useRef(false);
+  useMotionValueEvent(x, "change", (v) => {
+    if (draggingRef.current) nowPlayingDragX.set(v);
+  });
+  const endDragFollow = useCallback(() => {
+    draggingRef.current = false;
+    nowPlayingDragX.set(0);
+  }, []);
+  useEffect(() => endDragFollow, [endDragFollow]);
   useEffect(() => {
     setDragRing({
       width,
@@ -771,12 +784,20 @@ export function SwipeableMediaStage({
               if (!dragDirection && !committing && stackVisible) clearStack();
               if (isTap) onTap?.();
             }}
+            onDragStart={() => {
+              // The background drag-follow tracks `x` only between here and
+              // onDragEnd — never during the programmatic commit/snap animation.
+              draggingRef.current = true;
+            }}
             onDrag={(_, info) => {
               tapMoved.current = true;
               if (info.offset.x < -8 && dragDirection !== "next") setDragDirection("next");
               if (info.offset.x > 8 && dragDirection !== "prev") setDragDirection("prev");
             }}
             onDragEnd={(_, info) => {
+              // Stop following `x` and hide the drag layer before the commit/snap
+              // animation runs (so the top layer never flashes a stale neighbour).
+              endDragFollow();
               const distance = Math.min(
                 MAX_COMMIT_DISTANCE,
                 Math.max(MIN_COMMIT_DISTANCE, width * COMMIT_FRACTION),
