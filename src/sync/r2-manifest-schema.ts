@@ -184,7 +184,7 @@ export const r2SetTrackSchema = z
     mediaMetadata: r2TrackMediaMetadataSchema.optional(),
     brief: trackBriefSchema.nullable().optional(),
     providerPreset: z.string().nullable().optional(),
-    streamSourceId: z.enum(["netease", "bili", "youtube"]).optional(),
+    streamSourceId: z.enum(["netease", "bili", "youtube", "qq"]).optional(),
     streamExternalId: z.string().min(1).optional(),
     streamMeta: r2StreamMetaSchema.optional(),
     // 歌单内分数序 rank（drag-reorder PRD §4.2）。Additive optional → 无 manifest 版本

@@ -15,11 +15,12 @@ import { createBiliSource } from "./bili/bili-source";
 import type { StreamHttp } from "./http";
 import { createNeteaseSource } from "./netease/netease-source";
 import type { StreamSourceProvider } from "./provider";
+import { createQqSource } from "./qq/qq-source";
 import { createYoutubeSource } from "./youtube/youtube-source";
 import { createYtjsRuntime } from "./youtube/youtube-ytjs";
 
 /** Codename-stable order (CLAUDE.md rule 4). */
-export const STREAM_SOURCE_IDS: StreamSourceId[] = ["netease", "bili", "youtube"];
+export const STREAM_SOURCE_IDS: StreamSourceId[] = ["netease", "bili", "youtube", "qq"];
 
 export interface StreamSourceDeps {
   http: StreamHttp;
@@ -42,6 +43,8 @@ export function createStreamSource(
       });
     case "netease":
       return createNeteaseSource({ http: deps.http, getCookie: () => deps.getCookie("netease") });
+    case "qq":
+      return createQqSource({ http: deps.http, getCookie: () => deps.getCookie("qq") });
     case "youtube":
       // Search + resolve both need the muzfetch proxy for youtube.com (Electron).
       // Resolve delegates sig/n deciphering to youtubei.js (its browser eval runs

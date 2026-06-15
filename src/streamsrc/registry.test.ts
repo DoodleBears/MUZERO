@@ -16,8 +16,8 @@ const deps = {
 };
 
 describe("STREAM_SOURCE_IDS", () => {
-  it("lists the three codename-stable source ids", () => {
-    expect(STREAM_SOURCE_IDS).toEqual(["netease", "bili", "youtube"]);
+  it("lists the four codename-stable source ids", () => {
+    expect(STREAM_SOURCE_IDS).toEqual(["netease", "bili", "youtube", "qq"]);
   });
 });
 
@@ -34,6 +34,13 @@ describe("createStreamSource", () => {
   it("builds the youtube source (search works; resolve needs the desktop runtime)", () => {
     const yt = createStreamSource("youtube", deps);
     expect(yt?.id).toBe("youtube");
+  });
+
+  it("builds the qq source as a guest provider", () => {
+    const qq = createStreamSource("qq", deps);
+    expect(qq?.id).toBe("qq");
+    expect(qq?.requiresLogin).toBe(false);
+    expect(qq?.isAuthed()).toBe(false); // no qq cookie in deps
   });
 });
 

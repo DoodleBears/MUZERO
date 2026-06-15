@@ -25,6 +25,7 @@ const SOURCE_LABELS: Record<StreamSourceId, string> = {
   netease: "网易云",
   bili: "Bilibili",
   youtube: "YouTube",
+  qq: "QQ 音乐",
 };
 
 function formatBytes(bytes: number): string {

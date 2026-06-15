@@ -18,7 +18,7 @@
 
 | Phase | Name | Status | Link |
 |-------|------|--------|------|
-| 1 | QQ guest provider 纯核心：`hash33`/`g_tk` + 音质码表 + search/detail/vkey/cover 纯映射 + sip+purl 直链组装（TDD） | 🔲 Pending | [Phase 1 Checklist](#phase-1-checklist) |
+| 1 | QQ guest provider 纯核心：`hash33`/`g_tk` + 音质码表 + search/detail/vkey/cover 纯映射 + sip+purl 直链组装（TDD） | ✅ Completed | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | registry 接入 + 运行时 muzfetch(Referer) + Electron 端到端**手测 guest 可播放**（验证 Open Q：guest 标准音质能否 resolve） | 🔲 Pending | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | QR 登录（QQ PTLogin + 微信 OAuth2，两路共用既有状态机）：状态码映射 + OAuth code→凭据兑换 + `musickey/uin` 落库 + `g_tk=hash33(musickey)` | 🔲 Pending | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | 歌单同步 + 粘贴链接（`getUserPlaylists`/`importPlaylist`/`getTracksByIds`/`getPlaylistMeta`，复用既有同步/导入 UI） | 🔲 Pending | [Phase 4 Checklist](#phase-4-checklist) |
@@ -360,11 +360,11 @@ i18n locales/{en,zh,ja,ko}/                        # 源名 + 音质封顶提示
 - [ ] `registry.ts` + `db/types.ts`：`STREAM_SOURCE_IDS += "qq"`、`createStreamSource` 加 case、union 扩值。
 
 #### Phase 1 Checklist
-- [ ] `hash33` 对拍参考实现：`hash33("")===5381`、`gTk(musickey)` 与 luren-dc `common.py` 输出一致（固定向量）。
-- [ ] 音质降级链单测：偏好 flac → 候选剔除 `.mflac/.mgg`、首个非空 purl 命中；全空→`no-permission`。
-- [ ] `qq-resolve` 纯映射单测：canned `GetVkey` 响应（有 purl / 空 purl / 加密档 / 多 sip）→ 预期直链或 verdict。
-- [ ] `qq-source` 纵向单测（stub transport）：search→hits、resolve→`PlayableStream`。
-- [ ] `registry.test.ts` 更新含 `"qq"`；全项目 `tsc` 绿；`make check` 过。
+- [x] `hash33` 单测：`hash33("")===5381`、手算 djb2 向量（`"0"`→177621、`"12"`→5861576）、`gTk`(seed 5381) vs `ptqrtoken`(seed 0) 区分、`parseQqMusicKey` cookie 解析。⚠️ **长 musickey 的精度与 luren-dc `common.py` 是否逐位一致 = 运行时对拍项**（guest 不用 g_tk 计算，Phase 1 不阻塞；见 §4.2 注 + Open Q2）。
+- [x] 音质降级链单测：码表只含明文档（断言无 `.mflac/.mgg`、无 `*M0` 前缀）；偏好剔除上档；`qq-source` resolve 测覆盖「flac 空 purl → 命中 320」与「全空 → `no-permission: vip-or-encrypted`」。
+- [x] `qq-resolve` 纯映射单测：canned `GetVkey`（有 purl / 空 purl / 多 sip / 非法 json）→ entries+sip；`qqStreamHost`(https 优先/http 升级/回退)；`qqStreamUrl` 拼接。（**加密档**由「永不请求 EVkey + 空 purl 回退」覆盖，不解析加密容器。）
+- [x] `qq-source` 纵向单测（stub transport）：search→hits（含 JSONP 容错）、resolve→`PlayableStream`（带 Referer）、guest `g_tk=5381` 注入。
+- [x] `registry.test.ts` 含 `"qq"`（4 源）；全项目 `tsc --noEmit` 绿（0 错）；biome `check --write` 绿；focused vitest 453 测全绿（qq+registry+chat+sync，无回归）。`StreamSourceId` 扩值连带修 4 处窄 union（dj-chat enum / r2-manifest enum / dj-chat-availability 列表 / stream-cache 标签 Record）。
 
 ### Phase 2: 运行时接入 + Electron 手测 guest 可播放（验证 Open Q1/Q2）
 
@@ -487,6 +487,7 @@ i18n locales/{en,zh,ja,ko}/                        # 源名 + 音质封顶提示
 |------|--------|---------|
 | 2026-06-16 | DoodleBear | 初稿：基于一次 deep-research（24 源 / 23 confirmed claims）+ 既有 `src/streamsrc/` 架构核实，落地 QQ 音乐作为「加一个 provider」的增量方案。核心决策：guest/明文优先、登录次之、zzc 仅回退；**硬红线 = 不解密 `.mflac/.mgg`（DMCA §1201）**；音质封顶明文档。校正命名参考：NeriPlayer Android 对 QQ 仅元数据，可播放知识取自 NeriPlayer-Desktop + luren-dc/QQMusicApi。Kugou/Kuwo/Migu 移出范围待 follow-up。Q1-Q6 待运行时/决策。 |
 | 2026-06-16 | DoodleBear | 按反馈处置 Open Questions：**Q2/Q3/Q4 按 best practice 定稿**（Q2 渐进式分层签名、zzc 不预建；Q3 永不解密为策略层决策、音质封顶明文；Q4 登录窗口路线先行、官网自带扫码、QR API 降 v2）；Q1/Q6 framing 认可、保持运行时验证；Q5 认可推迟单独 follow-up research。同步 §2.2 / §4.3 / §4.4 标注。设计层决策已收敛，定稿（Draft→Final）仅余 Q1/Q6 的 Phase 2 运行时验证。 |
+| 2026-06-16 | DoodleBear（TDD 实现）| **Phase 1 ✅ 落地**（worktree `feat/qq-music-stream-source`）：`src/streamsrc/qq/` 5 文件（`qq-sign`/`qq-quality`/`qq-resolve`/`qq-playlists`/`qq-source`）+ 各 `.test.ts`，全纯函数/注入式 stub 单测；registry 注册 `"qq"`、`StreamSourceId` 扩值（连带修 4 处窄 union）。guest provider：`client_search_cp` 搜索 + `musicu GetVkey` 明文批量取直链（sip+purl）+ 明文音质降级（剔除加密档）+ 空 purl→`no-permission`。**41 qq/registry 测 + 453 全域（qq+registry+chat+sync）全绿，tsc 0 错，biome 绿**。运行时项（真实 API/CORS/播放）属 Phase 2 Electron 手测。 |
 
 ---
 
