@@ -388,7 +388,7 @@ const unsub = bridge.liveRequestIntake.onMessage((payload) => {
 
 **Tasks:**
 - [x] 新增 `request-template.ts`：移植 anysoul `applyTemplateString`（`{{ }}` / `||` / 三元 / `map`·`join`·`time` 管道 / 路径 / 字面量 / `BLOCKED_KEYS` 防原型污染）。纯函数。**10 测试通过。**
-- [ ] 新增 `request-mapping-presets.ts`：目标字段 schema（`query` 必填等）+ 预设（`auto`/`ssn`/`generic`/`custom`）+ `mappingToFieldValues`/`fieldValuesToMapping`/`detectPresetId`。
+- [x] 新增 `request-mapping-presets.ts`：目标字段 schema（`query` 必填）+ 预设（`auto`/`ssn`/`generic`/`custom`）+ `applyMapping`/`getPresetMapping`/`detectPresetId`。**7 测试通过。**
 - [ ] `audience-request-schema.ts`：`auto` 走现有候选-key 启发式；新增「接受已映射对象」入口。
 - [ ] 新增 `live-request-controller.ts`：runtime 模块级单例 + 注入 `playNow`/`getActiveSessionId`/`getCurrentTrackId`；onMessage → 脱敏 → applyMapping → normalize → `runtime.handle(req, override)`。
 - [ ] `audience-request-runtime.ts`：`handle()` 接受每调用 routeMode/playbackAction 覆盖。
