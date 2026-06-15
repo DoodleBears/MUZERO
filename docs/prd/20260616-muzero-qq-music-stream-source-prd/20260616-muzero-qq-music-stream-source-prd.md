@@ -19,7 +19,7 @@
 | Phase | Name | Status | Link |
 |-------|------|--------|------|
 | 1 | QQ guest provider 纯核心：`hash33`/`g_tk` + 音质码表 + search/detail/vkey/cover 纯映射 + sip+purl 直链组装（TDD） | ✅ Completed | [Phase 1 Checklist](#phase-1-checklist) |
-| 2 | registry 接入 + 运行时 muzfetch(Referer) + Electron 端到端**手测 guest 可播放**（验证 Open Q：guest 标准音质能否 resolve） | 🔲 Pending | [Phase 2 Checklist](#phase-2-checklist) |
+| 2 | registry 接入 + 运行时 muzfetch(Referer) + Electron 端到端**手测 guest 可播放**（验证 Open Q：guest 标准音质能否 resolve） | 🔄 代码就位（UI/搜索/设置接好；**待 Electron 手测** guest 可播放，Open Q1/Q2/Q6） | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | QR 登录（QQ PTLogin + 微信 OAuth2，两路共用既有状态机）：状态码映射 + OAuth code→凭据兑换 + `musickey/uin` 落库 + `g_tk=hash33(musickey)` | 🔲 Pending | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | 歌单同步 + 粘贴链接（`getUserPlaylists`/`importPlaylist`/`getTracksByIds`/`getPlaylistMeta`，复用既有同步/导入 UI） | 🔲 Pending | [Phase 4 Checklist](#phase-4-checklist) |
 | 5 | `zzc` 签名 + QIMEI 设备指纹（**仅当 guest/web 签名在运行时被拒的回退路径**，按需启用） | 🔲 Pending（按需） | [Phase 5 Checklist](#phase-5-checklist) |
@@ -371,10 +371,10 @@ i18n locales/{en,zh,ja,ko}/                        # 源名 + 音质封顶提示
 **Goal:** 接 muzfetch（必要时注入 `Referer: https://y.qq.com`）；Electron 端到端**手测**：搜索 → 收藏入库 → guest resolve → 播放出声、可 seek。**回答关键不确定性**：guest（`g_tk=5381`/`uin=0`）今天能否 resolve 标准音质明文直链。
 
 **Tasks:**
-- [ ] `StreamHttp` 生产路径接 QQ（复用 `stream-http.ts`，按端点注入 Referer/UA 别名）。
-- [ ] player-store 已有 streamed 分支自动覆盖 QQ（`origin:"streamed"` → resolve → `mediaProxyUrl`/直 `<audio>`）。
-- [ ] ⌘F 在线 chips 加 QQ；Settings 卡自动出现（音质下拉去无损以上 + 红线文案）。
-- [ ] i18n 源名 + 音质/红线文案（en→zh/ja/ko）。
+- [x] `StreamHttp` 生产路径接 QQ —— **零改动复用**：`use-online-source-search` 直接迭代 `STREAM_SOURCE_IDS`，QQ 入 registry 后自动经 `createStreamHttp()`(muzfetch) 走通，按端点注入 Referer(`https://y.qq.com`)/UA。
+- [x] player-store streamed 分支自动覆盖 QQ —— **零改动复用**：`origin:"streamed"` → `resolve` → `mediaProxyUrl`/直 `<audio>` 与三源同路。
+- [x] ⌘F 在线 chips 加 QQ（`ONLINE_SOURCES` + `SOURCE_LABEL`）；Settings 卡新增 QQ（`SOURCES`，音质下拉只列明文档 `flac/320/m4a/128`，默认 320）。
+- [x] i18n —— 源名为**品牌名**（设计上非 i18n，与三源一致硬编码 `QQ 音乐`）；红线文案复用既有 `streamSources.redline`；音质天花板由「下拉只列明文档」自我表达。无需新增 key。
 
 #### Phase 2 Checklist
 - [ ] **Electron 手测：guest 搜索返回结果**（`client_search_cp` 经 muzfetch 可达）。
@@ -488,6 +488,7 @@ i18n locales/{en,zh,ja,ko}/                        # 源名 + 音质封顶提示
 | 2026-06-16 | DoodleBear | 初稿：基于一次 deep-research（24 源 / 23 confirmed claims）+ 既有 `src/streamsrc/` 架构核实，落地 QQ 音乐作为「加一个 provider」的增量方案。核心决策：guest/明文优先、登录次之、zzc 仅回退；**硬红线 = 不解密 `.mflac/.mgg`（DMCA §1201）**；音质封顶明文档。校正命名参考：NeriPlayer Android 对 QQ 仅元数据，可播放知识取自 NeriPlayer-Desktop + luren-dc/QQMusicApi。Kugou/Kuwo/Migu 移出范围待 follow-up。Q1-Q6 待运行时/决策。 |
 | 2026-06-16 | DoodleBear | 按反馈处置 Open Questions：**Q2/Q3/Q4 按 best practice 定稿**（Q2 渐进式分层签名、zzc 不预建；Q3 永不解密为策略层决策、音质封顶明文；Q4 登录窗口路线先行、官网自带扫码、QR API 降 v2）；Q1/Q6 framing 认可、保持运行时验证；Q5 认可推迟单独 follow-up research。同步 §2.2 / §4.3 / §4.4 标注。设计层决策已收敛，定稿（Draft→Final）仅余 Q1/Q6 的 Phase 2 运行时验证。 |
 | 2026-06-16 | DoodleBear（TDD 实现）| **Phase 1 ✅ 落地**（worktree `feat/qq-music-stream-source`）：`src/streamsrc/qq/` 5 文件（`qq-sign`/`qq-quality`/`qq-resolve`/`qq-playlists`/`qq-source`）+ 各 `.test.ts`，全纯函数/注入式 stub 单测；registry 注册 `"qq"`、`StreamSourceId` 扩值（连带修 4 处窄 union）。guest provider：`client_search_cp` 搜索 + `musicu GetVkey` 明文批量取直链（sip+purl）+ 明文音质降级（剔除加密档）+ 空 purl→`no-permission`。**41 qq/registry 测 + 453 全域（qq+registry+chat+sync）全绿，tsc 0 错，biome 绿**。运行时项（真实 API/CORS/播放）属 Phase 2 Electron 手测。 |
+| 2026-06-16 | DoodleBear（实现）| **Phase 2 🔄 代码就位**：QQ 接入 ⌘F 在线 chips（`ONLINE_SOURCES`/`SOURCE_LABEL`）+ Settings 卡（`SOURCES`，音质只列明文 `flac/320/m4a/128`）。搜索/播放/代理为源无关、QQ 入 registry 后**零改动复用**。源名为品牌名（非 i18n），红线复用 `streamSources.redline`。tsc 0 错、search/settings/hooks 82 测全绿。**剩 Electron 手测 guest 可播放（Open Q1/Q2/Q6）**——无桌面运行时不冒充已验证。 |
 
 ---
 
