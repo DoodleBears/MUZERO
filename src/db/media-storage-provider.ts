@@ -197,10 +197,25 @@ function extensionForMime(mime: string): string {
   return ".bin";
 }
 
-async function opfsRoot(): Promise<FileSystemDirectoryHandle> {
-  const root = await opfsStorageManager().getDirectory?.();
-  if (!root) throw new Error("OPFS unavailable");
-  return root.getDirectoryHandle("muzero-persistent-media", { create: true });
+// The `muzero-persistent-media` root handle is stable for the app's lifetime, but it was
+// re-resolved (navigator.storage.getDirectory() + getDirectoryHandle) on EVERY blob read —
+// the dominant cold-switch cost in the prod CPU profile (getDirectory + getDirectoryHandle
+// ≈ 0.8s / 14 switches). Cache the resolving promise; clear it on failure so a transient
+// error can retry. (PRD 20260616 prod-profile finding.)
+let opfsRootCache: Promise<FileSystemDirectoryHandle> | null = null;
+
+function opfsRoot(): Promise<FileSystemDirectoryHandle> {
+  if (!opfsRootCache) {
+    opfsRootCache = (async () => {
+      const root = await opfsStorageManager().getDirectory?.();
+      if (!root) throw new Error("OPFS unavailable");
+      return root.getDirectoryHandle("muzero-persistent-media", { create: true });
+    })().catch((error) => {
+      opfsRootCache = null;
+      throw error;
+    });
+  }
+  return opfsRootCache;
 }
 
 function opfsStorageManager(): StorageManager & {
