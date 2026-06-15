@@ -624,11 +624,23 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     // extended / edited.
     liveQuery(async () => {
       const pq = await getPlayQueue();
+      // PERF PROBE (switch-fps): this liveQuery re-runs in full whenever ANY table
+      // it reads changes (playQueue cursor persist, a track row write, the context
+      // session) — re-fetching ALL queue tracks each time. At a 5983-track queue
+      // that bulk get is O(n); the trace tells us how often it fires per switch and
+      // how long the fetch costs.
+      const fetchStart = performance.now();
       const queue = await getTracksByIds(pq.entries.map((e) => e.trackId));
+      notePerfWork("queue.live.fetch", performance.now() - fetchStart, { tracks: queue.length });
       const session = pq.contextSetId ? await getSession(pq.contextSetId) : undefined;
       return { pq, queue, session };
     }).subscribe({
       next: ({ pq, queue, session }) => {
+        // PERF PROBE (switch-fps): the synchronous processing below — notably
+        // `queueSig(queue)`, an O(n) string build over every track — runs on EVERY
+        // fire even when nothing the list renders actually changed (`!changed`
+        // early-returns AFTER paying for it). This span attributes that cost.
+        const processStart = performance.now();
         const contextSetId = pq.contextSetId ?? null;
         watchSetForAppend(
           contextSetId,
@@ -691,9 +703,21 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
           state.djEnabled !== patch.djEnabled ||
           ("positionSec" in patch && state.positionSec !== patch.positionSec) ||
           ("durationSec" in patch && state.durationSec !== patch.durationSec);
-        if (!changed) return;
+        if (!changed) {
+          notePerfWork("queue.live.process", performance.now() - processStart, {
+            changed: false,
+            listChanged,
+            tracks: queue.length,
+          });
+          return;
+        }
         set(patch);
         void afterQueueUpdate(set, get);
+        notePerfWork("queue.live.process", performance.now() - processStart, {
+          changed: true,
+          listChanged,
+          tracks: queue.length,
+        });
       },
       error: (err) => log.error("player", "play-queue subscription error", err),
     });
