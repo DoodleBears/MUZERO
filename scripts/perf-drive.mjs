@@ -37,6 +37,18 @@ async function call(method, path, body) {
 }
 
 async function runSteps() {
+  if (scenario === "pingpong") {
+    // Alternate between two fixed indices so covers/derivatives cache after the first
+    // visit — isolates the switch GAP from cold-cover work (switch-fps Phase 4).
+    const base = (await call("GET", "/state")).currentIndex;
+    const a = Math.max(0, base);
+    const b = a + 1;
+    for (let i = 0; i < switches; i += 1) {
+      await call("POST", "/player/playIndex", { index: i % 2 === 0 ? b : a });
+      if (i < switches - 1) await sleep(everyMs);
+    }
+    return;
+  }
   if (scenario === "counted") {
     // Start a track, dwell past the play threshold, then switch so the OUTGOING track
     // flushes a counted play (the real switch-song trigger). Repeat `switches` times.

@@ -30,6 +30,16 @@ const trayController = createTrayController({
 });
 
 app.setName("MUZERO");
+// Dev-only renderer CPU-profiling seam (PRD 20260616-agent-cpu-profiling-harness): expose
+// the Chromium remote-debugging port so a local script can attach CDP `Profiler` to the
+// renderer and capture a .cpuprofile around a driven interaction. NEVER in a packaged
+// build, and only when explicitly opted in (the port is a full debug surface). Origins
+// are locked to loopback (CDP has no token) — appendSwitch must run before app ready.
+if (!app.isPackaged && process.env.MUZERO_REMOTE_DEBUG_PORT) {
+  const dbgPort = String(process.env.MUZERO_REMOTE_DEBUG_PORT);
+  app.commandLine.appendSwitch("remote-debugging-port", dbgPort);
+  app.commandLine.appendSwitch("remote-allow-origins", `http://127.0.0.1:${dbgPort}`);
+}
 protocol.registerSchemesAsPrivileged([
   { privileges: { secure: true, standard: true, supportFetchAPI: true }, scheme: "app" },
   // CORS-free fetch proxy: streaming both ways, bypasses CSP for the renderer.
