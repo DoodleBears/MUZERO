@@ -37,12 +37,14 @@ Phase 1 给 dev-perf HUD 加了 **per-longtask 归因** + **per-`notePerfWork` �
 |------|----------|------|
 | GC 暂停 | `culprit:self` 恒定；卡顿连发时 heap **仍在爬**（不是每次卡顿就掉） | **证伪为主因**：GC 只是分配压力的副产品（偶尔大回落），不是每次切歌的 50–150ms |
 | blob churn（object URL 泄漏/翻搅） | fast-switch `blobsLive image` **恒定 138**、`blobsCreated` 恒定 → 卡顿照旧 | **证伪**：不是 blob 数量驱动 |
-| `queueSig` O(n) 字符串构建 | HUD `queue.live.process` = **last 3.4ms / max 7ms / ×3** | **次要**：比预想便宜得多（~7ms） |
-| `getTracksByIds(5983)` 全量重取 | HUD `queue.live.fetch` = **last 192ms / max 196ms / ×2** | **坐实**：单次最贵的操作，liveQuery 一重跑就从 IndexedDB 把整条 5983 队列重读一遍 |
-| 切歌封面管线 | `cover.preload.batch` **max 237ms ×11** / `image.decode` **max 128ms** / `image.load` **max 106ms** | **坐实**：连切时每次切歌的 50–150ms 主要来自封面 preload + decode + load |
-| 空闲 rAF 空转 | `lyrics.cascade.frame` **×2324**、`lyrics.wordFill.paint` **×1166**，且**没放歌时 count 仍持续增长** | **坐实（独立浪费）**：级联/逐字动画的 rAF 不以 `isPlaying` 为门，空闲也每帧空转 |
+| `queueSig` O(n) 字符串构建 | HUD `queue.live.process` = **max 7ms** | **次要**：比预想便宜得多（~7ms） |
+| `getTracksByIds(5983)` 全量重取 | HUD `queue.live.fetch` = **max 275ms**，且 **≈ `jank/longtask max 285ms`** | **坐实为主线程头号阻塞**：liveQuery 一重跑就从 IndexedDB 把整条 5983 队列重读 + 反序列化进 JS 回调；其 wall-clock 几乎等于真实长任务 |
+| 切歌封面管线 | `cover.preload.batch` **max 836ms ×21** / `image.load` **max 189ms** / `image.decode` **max 89ms** | **重，但多为 off-main wall-clock**：836ms 是跨多张异步解码的墙钟，**不是**一次 836ms 主线程 block；仍需削峰（Phase 4） |
+| 空闲 rAF 空转 | `lyrics.cascade.frame` **×56026（仍在涨）** / `lyrics.wordFill.paint`，且**没放歌时 count 仍持续增长** | **坐实（独立浪费）**：级联/逐字动画的 rAF 不以 `isPlaying` 为门，空闲也每帧空转 |
 
-> **关键纠偏**：Phase 1 的子分类分解推翻了"queueSig 是元凶"的初判——真正最贵的是 `getTracksByIds` 的 **IndexedDB 全量重取（192ms）**，以及切歌时的**封面管线峰值**。这正是"观测先行、用字段证伪直觉"的价值。
+> **方法学校正（重要）**：`notePerfWork` 的 span 是 **wall-clock**（包住 `await`，含异步解码 / IDB 等待），**不等于主线程阻塞时长**。真正的主线程卡死以 **`jank`（longtask）** 为准。据此：`queue.live.fetch 275ms ≈ jank 285ms` → 基本就是主线程（Phase 2 头号）；`cover.preload.batch 836ms` 是异步 wall-clock，削峰仍做但非单次 block。
+>
+> **关键纠偏**：Phase 1 的子分类分解推翻了"queueSig 是元凶"的初判——真正最贵的是 `getTracksByIds` 的 **IndexedDB 全量重取 + 反序列化（~275ms，≈ 真实长任务）**。这正是"观测先行、用字段证伪直觉"的价值。
 
 ### 1.3 Core Value
 
@@ -183,7 +185,7 @@ playIndex(index)                       ← O(1) 同步：clamp + set(cursorPatch
 |---|----------|--------|----------|
 | 1 | 连切时 `queue.live.fetch` 究竟每次切歌触发几次？（本次 HUD 是 calm 态 ×2）需 burst 态 HUD 截图 | Open | 待用户用新 HUD 复现连切采集 |
 | 2 | 游标"拆订阅"的实现路径：双 liveQuery vs 游标走 store 不入 liveQuery vs id→Track 复用 | Open | 倾向"列表 liveQuery 只观察结构 + id→Track 复用"，Phase 2 评估 |
-| 3 | Phase 优先级：先 Phase 2（queue，单次最贵）还是 Phase 4（封面，每切都中）？ | Open | 倾向 **Phase 2 零风险先手 → Phase 3（独立、低风险）→ Phase 4 → Phase 2 拆订阅** |
+| 3 | Phase 优先级 | ✅ Resolved（HUD #2 校正） | `queue.live.fetch 275ms ≈ jank 285ms` 确认 **Phase 2 是主线程头号**；封面 836ms 多为 off-main wall-clock。顺序：**Phase 2 零风险先手（`!changed` 早退）→ Phase 3（独立低风险，肉眼可验 count 归零）→ Phase 2 拆订阅 → Phase 4 封面削峰** |
 | 4 | 是否确有 regression（vs 仅是大库放大的固有 O(n)）？ | Open | 需同一 5983 库的旧版本对照；当前证据足以"无论是否 regression 都该修" |
 
 ---
@@ -193,6 +195,7 @@ playIndex(index)                       ← O(1) 同步：clamp + set(cursorPatch
 | Date | Author | Changes |
 |------|--------|---------|
 | 2026-06-15 | User + Claude | 初稿。Phase 1 观测（longtask 归因 + HUD 子分类分解）**已 ship**（`8713c8b`/`27bba3c`/`63772ae`），用其证据坐实根因：❶ `getTracksByIds(5983)` 全量重取 192ms（最贵）❷❸ 封面管线 preload/decode/load 100–237ms（每切都中）❹ lyrics rAF 空闲空转。Phase 2–5 待评审拍板优先级（Open Q3）。**未动优化代码。** |
+| 2026-06-15 | User + Claude | HUD #2（calm 态）校正数据：`queue.live.fetch` max **275ms ≈ jank 285ms**、`cover.preload.batch` max **836ms（×21，但 wall-clock 异步）**、`image.load` 189ms、`lyrics.cascade.frame` **×56026 仍涨**。新增**方法学校正**：`notePerfWork` span 是 wall-clock（含 await），主线程真值看 longtask。据此 **Open Q3 拍板**：Phase 2 为主线程头号，顺序 Phase 2 零风险先手 → Phase 3 → Phase 2 拆订阅 → Phase 4。 |
 
 ---
 
