@@ -321,6 +321,14 @@ let playQueueHydrated = false;
 let queueCursorPersistTimer: number | null = null;
 let queueCursorPersistSeq = 0;
 let lastPersistedQueueIndex = -1;
+// Timestamp of the last playIndex switch dispatch (perf only). Read by the now-playing
+// stage's layout effect to measure switch→React-commit, decomposing switch.toFrame
+// (switch→paint) into render+reconcile vs layout+paint (switch-fps Phase 4).
+let lastSwitchStartedAt = 0;
+/** Perf only: when the last playIndex switch was dispatched (see lastSwitchStartedAt). */
+export function getLastSwitchStartedAt(): number {
+  return lastSwitchStartedAt;
+}
 const playbackLog = createDiagnosticLogger("player.playback");
 const mediaSessionLog = createDiagnosticLogger("player.mediaSession");
 const QUEUE_CURSOR_PERSIST_DEBOUNCE_MS = 900;
@@ -910,6 +918,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     // this delta is the end-to-end main-thread-blocked latency to the first frame
     // (switch-fps Phase 4 observability).
     const switchStartedAt = performance.now();
+    lastSwitchStartedAt = switchStartedAt;
     set(cursorPatch(queue, clamped, true));
     if (typeof requestAnimationFrame === "function") {
       requestAnimationFrame(() => {

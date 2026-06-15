@@ -8,7 +8,15 @@ import {
   Shuffle,
   Video,
 } from "lucide-react";
-import { type CSSProperties, memo, type RefObject, useEffect, useRef, useState } from "react";
+import {
+  type CSSProperties,
+  memo,
+  type RefObject,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import { useTranslation } from "react-i18next";
 import { DjConsole } from "@/components/dj/dj-console";
 import { ControlTooltip } from "@/components/player/control-tooltip";
@@ -44,12 +52,13 @@ import { useSettings } from "@/hooks/use-app-data";
 import { useLongPress } from "@/hooks/use-long-press";
 import { useShortcutHint } from "@/hooks/use-shortcut-hint";
 import { classifyDrop, dragHasFiles, filesFromTransfer, summarizeDragItems } from "@/lib/file-drop";
+import { notePerfWork } from "@/lib/perf-counters";
 import { lenisScrollTo, useSmoothScroll } from "@/lib/smooth-scroll/use-smooth-scroll";
 import { cn } from "@/lib/utils";
 import { dragWindowOnEmptyPress } from "@/lib/window-drag";
 import type { RepeatMode } from "@/player/queue";
 import { useCoverAppearancePanelStore } from "@/stores/cover-appearance-panel-store";
-import { usePlayerStore } from "@/stores/player-store";
+import { getLastSwitchStartedAt, usePlayerStore } from "@/stores/player-store";
 
 const DISPLAY_MODE_ICONS: Record<SetDisplayMode, typeof Video> = {
   video: Video,
@@ -95,6 +104,18 @@ export function NowPlayingPage({ foregroundHidden = false }: { foregroundHidden?
   useEffect(() => {
     // Route through Lenis when active so the reset doesn't fight the smoothing.
     if (!lenisScrollTo(lenisRef, 0, { immediate: true })) sectionRef.current?.scrollTo({ top: 0 });
+  }, [current?.id]);
+
+  // Perf (switch-fps Phase 4): switch→React-commit. This layout effect fires after the
+  // whole now-playing subtree commits, so `toCommit` isolates React render+reconcile;
+  // `toFrame - toCommit` is then layout+paint. Recency-guarded so only fresh playIndex
+  // switches count (not unrelated re-renders / non-playIndex track changes).
+  useLayoutEffect(() => {
+    const startedAt = getLastSwitchStartedAt();
+    const elapsed = performance.now() - startedAt;
+    if (startedAt > 0 && elapsed < 2000) {
+      notePerfWork("player.switch.toCommit", elapsed, { trackId: current?.id });
+    }
   }, [current?.id]);
 
   if (!current && trackCount === 0) {
