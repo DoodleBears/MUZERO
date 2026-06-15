@@ -32,6 +32,11 @@ ctx.onmessage = async (event: MessageEvent<WorkerRequest>) => {
   }
   if (msg.type === "query") {
     await dictionariesReady; // first query waits for the dictionaries; then instant
-    ctx.postMessage({ type: "result", reqId: msg.reqId, hits: queryRows(rows, msg.query) });
+    // Time the pure scan so the client can aggregate `worker queryDuration`
+    // separately from end-to-end latency (PRD Phase 1 observability).
+    const startedAt = performance.now();
+    const hits = queryRows(rows, msg.query);
+    const durationMs = performance.now() - startedAt;
+    ctx.postMessage({ type: "result", reqId: msg.reqId, hits, durationMs });
   }
 };

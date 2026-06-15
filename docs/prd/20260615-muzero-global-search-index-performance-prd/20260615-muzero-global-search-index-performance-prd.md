@@ -11,7 +11,7 @@
 
 | Phase | Name | Status | Link |
 |-------|------|--------|------|
-| 1 | 观测先行：补齐开窗 / 查询 / longtask 指标 | 🔲 Pending | [Phase 1 Checklist](#phase-1-checklist) |
+| 1 | 观测先行：补齐开窗 / 查询 / longtask 指标 | 🔄 代码完成（基线待用户实测） | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | 消除开窗同步突发（pre-warm + defer） | 🔲 Pending | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | 预存变体 `IndexedRow` + 线性扫描 + 增量维护（★核心） | 🔲 Pending | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | 倒排收窄 / 超大库调优 / 持久化（仅 20k+ 实测不达标才做） | 🔲 Pending | [Phase 4 Checklist](#phase-4-checklist) |
@@ -298,18 +298,21 @@ liveQuery(tracks/lyrics/memory) ─throttle250ms─▶ rows snapshot ─postMess
 **Goal:** 在不改优化路径的前提下，补齐 §4 指标，prod 下取得两症状 before 基线，证伪/坐实根因。低风险、可独立先 ship。
 
 **Tasks:**
-- [ ] worker 内对 `queryRows` 与 `set-rows` 加 `performance.now()` 计时，经 `logger.debug` 上报（prod 静默，开发可见）。
-- [ ] 主线程量 `query latency`（发→收）与 `open→paint`（rAF）。
-- [ ] 临时加 `variant cache miss` 计数（仅 Phase 1，量化抖动）。
-- [ ] 接 `PerformanceObserver(longtask)`，记录开窗 / 键入窗口的 `longtask max`。
-- [ ] 用 6k/12k 库 prod 复测，记录 before 数值进本 PRD 变更日志。
+- [x] 纯 `PerfSampler`（bounded ring + p50/p95/max/mean）+ `percentile` + `observeLongTasks` helper → [`src/lib/search-perf.ts`](../../../src/lib/search-perf.ts)（单测 [`search-perf.test.ts`](../../../src/lib/search-perf.test.ts)，12 例）。
+- [x] worker 内对 `queryRows` 加 `performance.now()` 计时，`durationMs` 随 result 回传（避免在 worker 引 main-thread logger）→ [`search-worker.ts`](../../../src/workers/search-worker.ts)。
+- [x] 主线程量 `query latency`（发→收）+ 收集 worker `durationMs`，bounded 聚合，每 25 次 `log.debug("search.perf")`（prod 静默）；`getSearchPerfSnapshot()` 供验证 → [`search-client.ts`](../../../src/workers/search-client.ts)（单测覆盖 inline 路径）。
+- [x] `observeLongTasks(cb)` 已就绪（overlay 在 Phase 2 挂载量 `open→paint`/`longtask`）。
+- [ ] **（待用户实测）** 用 6k/12k 库 **prod build** 复测，记录 before 数值（`query latency` p95 / `longtask max`）进 §11 变更日志。— 本环境无真实 6k 库 + 无法跑 prod，数值须用户侧采集。
+
+> **说明**：`variant cache miss` 计数（量化抖动）未单独加 —— Phase 3 会直接移除 `MAX_VARIANT_CACHE_SIZE` 抖动路径；`query latency` p95 的 before/after 已足以证明根因与修复。
 
 #### Phase 1 Checklist
-- [ ] 6k 库下 `query latency` before 数值已记录（确认 ≈3s 量级）
-- [ ] 确认键入时主线程无 longtask（坐实「worker 计算」根因）
-- [ ] 确认二次开窗仍卡（坐实「同步突发」根因，排除词典首载）
-- [ ] cache miss 计数证明抖动（miss ≫ hit）
-- [ ] 指标代码 prod 静默、无行为副作用
+- [x] `PerfSampler` / `percentile` / `observeLongTasks` 纯函数单测通过（12 例）
+- [x] worker queryDuration + 主线程 latency 接入，`getSearchPerfSnapshot()` 可读
+- [x] 指标代码 prod 静默（`log.debug`）、无行为副作用（搜索结果不变，client 单测通过）
+- [ ] **（待用户实测）** 6k 库 `query latency` before p95 已记录（确认 ≈3s 量级）
+- [ ] **（待用户实测）** 确认键入时主线程无 longtask（坐实「worker 计算」根因）
+- [ ] **（待用户实测）** 确认二次开窗仍卡（坐实「同步突发」根因，排除词典首载）
 
 ### Phase 2: 消除开窗同步突发（pre-warm + defer）
 

@@ -1,7 +1,12 @@
 import { beforeAll, describe, expect, it } from "vitest";
 import type { IndexableRow } from "@/lib/search-core";
 import { ensureTransliterationLoaded } from "@/lib/search-transliterate";
-import { __resetSearchClientForTests, searchRows, setSearchRows } from "./search-client";
+import {
+  __resetSearchClientForTests,
+  getSearchPerfSnapshot,
+  searchRows,
+  setSearchRows,
+} from "./search-client";
 
 // jsdom has no Worker; remove it explicitly so the client takes the inline
 // fallback deterministically (the Worker path is thin glue, untested like
@@ -32,5 +37,16 @@ describe("search-client inline fallback", () => {
   it("returns every row (input order) for an empty query", async () => {
     setSearchRows([row("a", ["x"]), row("b", ["y"])]);
     expect((await searchRows("")).map((h) => h.id)).toEqual(["a", "b"]);
+  });
+
+  it("records query latency into the perf snapshot (Phase 1 observability)", async () => {
+    __resetSearchClientForTests();
+    expect(getSearchPerfSnapshot().latency).toBeNull();
+    setSearchRows([row("cn", ["北京欢迎你"])]);
+    await searchRows("beijing");
+    await searchRows("bjhyn");
+    const { latency } = getSearchPerfSnapshot();
+    expect(latency?.count).toBe(2);
+    expect(latency?.max).toBeGreaterThanOrEqual(0);
   });
 });
