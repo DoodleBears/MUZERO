@@ -234,6 +234,24 @@ liveQuery(tracks/lyrics/memory) ─throttle250ms─▶ rows snapshot ─postMess
 
 > **冷建/大批导入**：首次（或一次性导入几千首）需要把这些行的变体全算一遍 —— 在 worker 内**分块 + `await` yield**,warm 期间查询先走「降级 substring」路径给结果,建完自动升级全 NLP。主线程帧循环全程不受影响（Worker 独立线程）。冷建耗时按规模 Phase 1 实测：不含歌词 ~0.3–1s;含全量歌词逐行转写可能数秒,故歌词变体可作为**第二趟**懒补（metadata/tags 先 ready,歌词后到）。
 
+### 3.4 大批文件夹导入下的索引更新（已知边界成本）
+
+选「文件夹」一次性同步几千首时，每首 ready 写库都会触发 `listAllTracks` liveQuery，索引更新链路如下：
+
+```
+每首 ready 写库 → allTracks liveQuery
+   → useThrottledValue(250ms) 合并        ← 导入 burst 被 coalesce 到 ≤4 次/秒
+   → searchRows memo 重建（gate 在 indexWarm）
+   → useWorkerRowSearch 再 throttle(250ms) → setSearchRows(全量快照)
+   → postMessage 整个 IndexableRow[] → worker
+   → index.setRows 按 id diff：仅新增行 buildIndexedRow，其余 reused
+```
+
+- **昂贵的转写是增量的**（已解决）：worker `setRows` 的 diff 让导入过程中**只有新 ready 的行**算变体，存量行 `reused`，**不会**每批重转写全库 —— 这正是 Phase 3 的核心收益，大批导入下成立。
+- **未开过 ⌘F**：`indexWarm=false` → 导入期间**零索引工作**；导入后首次 ⌘F 触发一次 worker 内冷建（off 主线程），其后增量。
+- **已知边界成本（未消除）**：main→worker 边界仍是**全量快照**而非 delta。warm 状态下导入时，每个 250ms tick：① 主线程重建整个 `searchRows` 数组 + `lyricFieldsByTrackId`（全库歌词解析）；② 整个 `IndexableRow[]` structured-clone `postMessage` 给 worker。导入把 N 从 0 涨到 6000（warm 时约 ~120 tick）→ 边界累计约 **O(N²)**，已被 250ms 节流到 4 次/秒、是廉价字符串/clone（非转写）。**6k 量级大概率可接受；20k + 边导入边搜可能顿主线程**。
+- **触发优化的判据**：用户在大库（≥12k–20k）文件夹导入**且 ⌘F 处于 warm** 时，用 Phase 1 `observeLongTasks` 测到主线程 ≥50ms longtask → 才做 §6 Phase 4 的「delta 推送」（worker client 加 `addRows`/`removeRows` 增量消息，避开每 tick 全量重建 + 全量 clone）。
+
 ---
 
 ## 4. 测量方法学（Measurement Methodology — 先于优化）
@@ -368,6 +386,7 @@ liveQuery(tracks/lyrics/memory) ─throttle250ms─▶ rows snapshot ─postMess
 **Goal:** **仅当 Phase 3 实测在 20k+ 不达标时启用。** 在 `IndexedRow` 之上叠倒排先收窄候选，再线性扫候选集；并保证冷查询不长任务化、必要时持久化。
 
 **Tasks:**
+- [ ] **delta 推送（大批导入边界，§3.4）**：worker client 加 `addRows`/`removeRows` 增量消息，main→worker 只发变更行，避开每 250ms tick 全量重建 `searchRows` + 全量 structured-clone。触发判据：≥12k–20k 库**边导入边 warm** 时主线程实测 ≥50ms longtask。
 - [ ] 倒排 `postings: Map<token, Set<rowId>>` + `rowToTokens`（token 取自变体）；查询先取候选交集再线性扫候选集；增删改同步维护 postings。
 - [ ] 增量收窄：扩展查询只在上次候选集里扫。
 - [ ] 冷查询 / 超大库：查询路径分批 + `await` 让步，避免 worker 内单次超长任务（worker 内，主线程本就不受影响）。
@@ -445,6 +464,7 @@ liveQuery(tracks/lyrics/memory) ─throttle250ms─▶ rows snapshot ─postMess
 | 6 | warm 时机：进库即 warm vs 首次开窗后保持 warm？ | **Resolved（Phase 2）** | 实现「**首次开窗后保持 warm**」（sticky `hasOpened` + `useDeferredValue`）—— 从不开 ⌘F 的用户零成本，首开后常驻 warm；内存是否进一步「进库即 warm」待实测 |
 | 7 | 歌词变体懒补「第二趟」延迟多大可接受？ | Open | Phase 1 实测歌词趟冷建耗时后定;metadata 趟必须先 ready |
 | 8 | 内存/latency 阈值多少触发 Phase 4？ | Open | Phase 1 基线 + Phase 3 的 12k/20k 实测后在 PR 给阈值 |
+| 9 | 大批文件夹导入时索引如何更新（§3.4）？ | **Resolved（行为）/ Open（优化）** | 转写增量、未开 ⌘F 零成本；但 warm 状态下边界仍全量快照（O(N²)，6k 可接受）。delta 推送列入 Phase 4，判据：≥12k–20k 边导入边 warm 实测 longtask |
 
 ---
 
