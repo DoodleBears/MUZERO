@@ -27,6 +27,7 @@
     "desktop:build": "tauri build",
     "electron:dev": "node scripts/electron-dev.mjs",
     "electron:preview": "electron electron/main.cjs",
+    "electron:profile": "node scripts/electron-profile.mjs",
     "electron:bundle": "node scripts/build-electron-main.mjs",
     "electron:build": "vite build && node scripts/build-electron-main.mjs && electron-builder",
     "android:init": "tauri android init",

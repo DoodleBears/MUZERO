@@ -120,11 +120,14 @@ export default function App() {
   // orchestrated Sync now path and self-guards per drive.
   useEffect(() => startCloudAutoSyncScheduler(), []);
 
-  // Dev-only automation control endpoint bridge. The import is dead code in prod
-  // (import.meta.env.DEV folds to false → tree-shaken), and the bridge no-ops unless
-  // the Electron main process attached the control server (see electron/perf-control.cjs).
+  // Dev / profiling-build automation control endpoint bridge. In a normal prod build
+  // both flags fold to false → the import is dead code → tree-shaken. The dedicated
+  // profiling build (`VITE_MUZERO_PROFILE=1 vite build`) keeps the bridge so the harness
+  // can drive a PROD renderer (no jsxDEV / dev-React noise) over the control endpoint for
+  // clean CPU profiles. The bridge still no-ops unless the Electron main process attached
+  // the control server (see electron/perf-control.cjs).
   useEffect(() => {
-    if (!import.meta.env.DEV) return;
+    if (!import.meta.env.DEV && !import.meta.env.VITE_MUZERO_PROFILE) return;
     void import("@/dev/perf-control-bridge").then((m) => m.startPerfControlBridge());
   }, []);
 

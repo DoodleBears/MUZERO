@@ -1,5 +1,5 @@
 .PHONY: help install update node-check
-.PHONY: dev web desktop tauri electron-dev electron-preview electron-build ios ios-init android android-init mobile-info tauri-info
+.PHONY: dev web desktop tauri electron-dev electron-preview electron-build electron-profile ios ios-init android android-init mobile-info tauri-info
 .PHONY: build preview deploy pages-project pages-deploy pages-deploy-preview desktop-build desktop-debug mac win linux ios-build android-build desktop-locate
 .PHONY: version-bump changelog-check version-sync release-check release-show release-build release-mac release-win release-linux release-publish release-publish-dry release-locate changelog-md
 .PHONY: test test-watch typecheck lint format check react-doctor react-doctor-perf
@@ -87,6 +87,14 @@ electron-dev: node-check
 
 electron-preview: node-check build
 	$(PM) exec electron electron/main.cjs
+
+# Prod-build CPU profiling: builds a production renderer that keeps the control bridge
+# (VITE_MUZERO_PROFILE) + launches Electron with the renderer debug port + control
+# endpoint, so `node scripts/perf-profile.mjs <scenario> --port 39222` attaches CDP and
+# drives a real switch over a CLEAN prod build (no jsxDEV / dev-React / trace-observer
+# noise). dev-only; never shipped. See PRD 20260616-agent-cpu-profiling-harness.
+electron-profile: node-check
+	node scripts/electron-profile.mjs
 
 electron-build: node-check build
 	$(PM) exec electron-builder
