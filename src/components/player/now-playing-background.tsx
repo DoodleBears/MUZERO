@@ -405,9 +405,6 @@ function NowPlayingBackgroundContent({ hideVisualizer }: { hideVisualizer: boole
           src={effectiveRenderImageTarget.src}
         />
       ) : null}
-      {/* Drag-follow crossfade (PRD Phase 2-D): blurred next/prev covers that
-          fade in as the cover stage is dragged. Invisible at rest (additive). */}
-      <DragCrossfadeBackground blurPx={blurPx} />
       <div className="absolute inset-0 bg-background" style={{ opacity: imageMaskOpacity }} />
       {/* Independent 流光 layer: composited ABOVE the background image/video and
           BELOW the visualizer spectrum. It's its own toggle (flowEnabled), NOT a
@@ -481,6 +478,12 @@ function NowPlayingBackgroundContent({ hideVisualizer }: { hideVisualizer: boole
           </motion.div>
         )}
       </AnimatePresence>
+      {/* Drag-follow crossfade (PRD Phase 2-D), composited ON TOP of the whole
+          resting stack (renderer + flow + visualizer) so it's decoupled from
+          which renderer the quality preset uses: a full drag lands fully on the
+          incoming cover regardless of mode. Invisible at rest (additive); on
+          release the stack's effects settle back over the new cover. */}
+      <DragCrossfadeBackground blurPx={blurPx} maxOpacity={1} />
     </>
   );
 }
