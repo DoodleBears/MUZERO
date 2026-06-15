@@ -227,7 +227,7 @@ function OnlineTrackList({
                 transform: `translateY(${virtualRow.start}px)`,
               }}
             >
-              <OnlineTrackRow index={virtualRow.index} hit={hit} onPlay={onPlay} />
+              <OnlineTrackRow hit={hit} onPlay={onPlay} />
             </div>
           );
         })}
@@ -238,11 +238,9 @@ function OnlineTrackList({
 
 function OnlineTrackRow({
   hit,
-  index,
   onPlay,
 }: {
   hit: StreamSearchHit;
-  index: number;
   onPlay: (hit: StreamSearchHit) => void;
 }) {
   const subtitle = [hit.artist, hit.album].filter(Boolean).join(" · ") || hit.source;
@@ -252,9 +250,6 @@ function OnlineTrackRow({
       onClick={() => onPlay(hit)}
       className="group flex h-full w-full items-center gap-3 rounded-xl px-2 text-left outline-none transition-colors hover:bg-accent/50 focus-visible:ring-2 focus-visible:ring-ring"
     >
-      <span className="w-7 shrink-0 text-right text-muted-foreground text-xs tabular-nums">
-        {index + 1}
-      </span>
       <span className="grid size-11 shrink-0 place-items-center overflow-hidden bg-secondary text-muted-foreground album-cover-radius">
         {hit.coverUrl ? (
           <img
