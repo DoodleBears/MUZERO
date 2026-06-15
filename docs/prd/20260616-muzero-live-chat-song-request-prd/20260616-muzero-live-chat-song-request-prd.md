@@ -12,7 +12,7 @@
 | Phase | Name | Status | Link |
 |-------|------|--------|------|
 | 1 | 通用接线 + 模板引擎：runtime 单例 + intake 消费者 + `request-template.ts`（移植 anysoul 模板引擎）+ 映射预设 + 无审核默认值（地基） | ✅ Completed | [Phase 1 Checklist](#phase-1-checklist) |
-| 2 | 多来源 + 测试生命周期：`sources[]`（status: testing/active/disabled）+ server 按 `/v1/intake/<id>` 路由 + testing 模式捕获 sanitized payload（不触发播放） | 🔲 Pending | [Phase 2 Checklist](#phase-2-checklist) |
+| 2 | 多来源 + 测试生命周期：`sources[]`（status: testing/active/disabled）+ server 按 `/v1/intake/<id>` 路由 + testing 模式捕获 sanitized payload（不触发播放） | 🔄 In Progress | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | Web SSN WebSocket transport：泛化 bridge 接口 + `web.ts` 出站 WS 实现 + `social-stream-relay.ts`（转发原始事件，交给 ssn 模板预设） | 🔲 Pending | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | 映射对话框 UX（仿 anysoul）：JSON 树点选映射 + 每字段实时预览（同引擎 parity）+ 预设/visual/raw + Go Live + 来源列表（状态徽章/生命周期/复制 URL） | 🔲 Pending | [Phase 4 Checklist](#phase-4-checklist) |
 | 5 | i18n（en/zh/ja/ko）+ 测试 + 收尾 | 🔲 Pending | [Phase 5 Checklist](#phase-5-checklist) |
@@ -406,8 +406,8 @@ const unsub = bridge.liveRequestIntake.onMessage((payload) => {
 **Goal:** 多来源端点 + 每来源映射/路由；testing 模式只捕获预览不触发。
 
 **Tasks:**
-- [ ] 新增 `audience-request-sources.ts`：`AudienceRequestSource` 解析、默认来源回填、`findSource`、`resolveMapping`。
-- [ ] settings：`sources?` + `DEFAULT_…` 回填默认来源（+ 可选内置 ssn 来源）。
+- [x] 新增 `audience-request-sources.ts`：`resolveSources`（默认来源回填）/`findSource`（absent→default）/`resolveSourceMapping`（auto→null、custom→自带、预设）。**3 测试通过。**
+- [x] settings：`db/types.ts` 加 `AudienceRequestSource`（status/authMode/mappingPreset/mapping/路由覆盖）+ `sources?` + `DEFAULT_AUDIENCE_REQUEST_SOURCE`（id:"default", auto）回填进 DEFAULT。
 - [ ] `bridge.ts` + `electron.ts`：`LiveRequestIntakeStartInput` 带 `sourceIds[]`；主进程按 `/v1/intake/<id>` 路由（白名单 + disabled 拒绝），`/v1/audience/request`→`default`；payload 带 `sourceId`；按来源 `authMode` 决定是否校验 token。
 - [ ] controller：脱敏（移植 `stripSensitiveFields`）+ testing 捕获内存环（≤50，对话框订阅）；`status==="testing"` 时只捕获预览**不 handle**。
 - [ ] 单测：两来源（不同映射 + 不同 routeMode）→ 各自抽 query 并路由（一个 library、一个 ai-dj）；testing 来源不触发 handle、active 触发；未知/disabled sourceId 丢弃。

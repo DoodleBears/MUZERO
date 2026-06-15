@@ -6,6 +6,7 @@ import type {
   AudienceRequestPlaybackAction,
   AudienceRequestRouteMode,
 } from "@/live-requests/audience-request-schema";
+import type { MappingPresetId, RequestMapping } from "@/live-requests/request-mapping-presets";
 import type { LyricsProviderId, LyricsRecord } from "@/lyrics/provider";
 import type { CloudPresetId } from "@/musicgen/presets";
 import type { MusicGenProviderId } from "@/musicgen/registry";
@@ -518,6 +519,27 @@ export const DEFAULT_DJ_CONFIG: DjConfig = {
 
 export type LlmProviderId = "openai" | "anthropic";
 export type AudienceRequestSearchScope = "active-set" | "all-library";
+export type AudienceRequestSourceStatus = "testing" | "active" | "disabled";
+export type AudienceRequestSourceAuthMode = "open" | "secret";
+
+/**
+ * One configured intake source. Maps to a webhook path `/v1/intake/<id>` (or the
+ * default `/v1/audience/request`). `id` is the stable codename-layer key — never
+ * rename a published id. `testing` sources capture + preview incoming payloads
+ * without acting; `active` drives playback. Mapping / route / prefixes fall back
+ * to the global intake settings when unset.
+ */
+export interface AudienceRequestSource {
+  id: string;
+  name: string;
+  status: AudienceRequestSourceStatus;
+  authMode: AudienceRequestSourceAuthMode;
+  mappingPreset: MappingPresetId;
+  mapping?: RequestMapping;
+  commandPrefixes?: string[];
+  routeMode?: AudienceRequestRouteMode;
+  playbackAction?: AudienceRequestPlaybackAction;
+}
 
 export interface AudienceRequestIntakeSettings {
   enabled: boolean;
@@ -536,7 +558,17 @@ export interface AudienceRequestIntakeSettings {
   requesterCooldownSec: number;
   maxRequestsPerMinute: number;
   requireApprovalForPlayNow: boolean;
+  /** Configured intake sources. Defaults to a single auto-mapping "default" source. */
+  sources?: AudienceRequestSource[];
 }
+
+export const DEFAULT_AUDIENCE_REQUEST_SOURCE: AudienceRequestSource = {
+  id: "default",
+  name: "Default",
+  status: "active",
+  authMode: "open",
+  mappingPreset: "auto",
+};
 
 export const DEFAULT_AUDIENCE_REQUEST_INTAKE_SETTINGS: AudienceRequestIntakeSettings = {
   enabled: false,
@@ -556,6 +588,7 @@ export const DEFAULT_AUDIENCE_REQUEST_INTAKE_SETTINGS: AudienceRequestIntakeSett
   // No manual approval in the live-request flow (PRD Q4) — a confident match plays
   // straight away. "testing" mode is the pre-launch gate, not per-request review.
   requireApprovalForPlayNow: false,
+  sources: [DEFAULT_AUDIENCE_REQUEST_SOURCE],
 };
 
 /** Singleton app settings (id = "app"). BYOK keys stay on-device, never bundled. */
