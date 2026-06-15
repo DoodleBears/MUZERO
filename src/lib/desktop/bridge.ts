@@ -132,11 +132,15 @@ export interface DesktopTrayControls {
   onAction?: (callback: (actionId: TrayActionId) => void) => () => void;
 }
 
-export interface LiveRequestIntakeStartInput {
-  port: number;
-  token: string;
-  maxBodyBytes?: number;
-}
+export type LiveRequestIntakeStartInput =
+  | { transport?: "http-webhook"; port: number; token: string; maxBodyBytes?: number }
+  | {
+      transport: "ssn-websocket";
+      relayUrl: string;
+      sessionId: string;
+      /** The configured source id this relay feeds (tags emitted payloads). */
+      sourceId: string;
+    };
 
 export interface LiveRequestIntakeStatus {
   supported: boolean;

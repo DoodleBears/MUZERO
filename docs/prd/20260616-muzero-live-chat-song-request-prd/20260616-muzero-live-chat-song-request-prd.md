@@ -13,7 +13,7 @@
 |-------|------|--------|------|
 | 1 | 通用接线 + 模板引擎：runtime 单例 + intake 消费者 + `request-template.ts`（移植 anysoul 模板引擎）+ 映射预设 + 无审核默认值（地基） | ✅ Completed | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | 多来源 + 测试生命周期：`sources[]`（status: testing/active/disabled）+ server 按 `/v1/intake/<id>` 路由 + testing 模式捕获 sanitized payload（不触发播放） | ✅ Completed | [Phase 2 Checklist](#phase-2-checklist) |
-| 3 | Web SSN WebSocket transport：泛化 bridge 接口 + `web.ts` 出站 WS 实现 + `social-stream-relay.ts`（转发原始事件，交给 ssn 模板预设） | 🔲 Pending | [Phase 3 Checklist](#phase-3-checklist) |
+| 3 | Web SSN WebSocket transport：泛化 bridge 接口 + `web.ts` 出站 WS 实现 + `social-stream-relay.ts`（转发原始事件，交给 ssn 模板预设） | ✅ Completed | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | 映射对话框 UX（仿 anysoul）：JSON 树点选映射 + 每字段实时预览（同引擎 parity）+ 预设/visual/raw + Go Live + 来源列表（状态徽章/生命周期/复制 URL） | 🔲 Pending | [Phase 4 Checklist](#phase-4-checklist) |
 | 5 | i18n（en/zh/ja/ko）+ 测试 + 收尾 | 🔲 Pending | [Phase 5 Checklist](#phase-5-checklist) |
 
@@ -422,15 +422,16 @@ const unsub = bridge.liveRequestIntake.onMessage((payload) => {
 **Goal:** `mu0.app` 网页出站订阅 SSN 公共 relay。
 
 **Tasks:**
-- [ ] 新增 `social-stream-relay.ts`：`buildJoinUrl(relayUrl, sessionId)` + 转发原始 channel-4 事件 JSON（非聊天帧丢弃）+ 退避重连/定时 rejoin（注入 now/sleep）。
-- [ ] `web.ts`：实现 `liveRequestIntake`（`start({transport:"ssn-websocket", relayUrl, sessionId, sourceId})` → 开 WS 连 `/join/<id>/4`；`onMessage` 吐带 `sourceId` 的原始 body；`stop`/`status`）。
-- [ ] SSN 来源用 `social-stream-ninja` 模板预设（读 `payload.chatmessage`/`type`/`chatname`，无需 remap）。
-- [ ] 单测：fake WebSocket 喂 channel-4 样例 `{chatname,chatmessage,type,id}` → 经 ssn 预设映射后 query/platform 正确；断线重连确定性测试。
+- [x] 新增 `social-stream-relay.ts`：`buildJoinUrl`（channel 4）+ `parseRelayEvent`（转发聊天帧、丢控制帧）+ `connectSocialStreamRelay`（退避重连，注入 socket 工厂 + sleep，read-only）。**6 测试通过。**
+- [x] `web.ts`：实现 `liveRequestIntake`（`start({transport:"ssn-websocket",…})` → 连 relay；多订阅者 `onMessage` 吐带 `sourceId` 的 body；`stop`/`status`）；`http-webhook` 在 web 返回 unsupported。
+- [x] `bridge.ts`：`LiveRequestIntakeStartInput` 改判别联合（`http-webhook` transport 可选，兼容现有面板调用 / `ssn-websocket`）。
+- [x] SSN 来源用 `social-stream-ninja` 预设（读 `chatmessage`/`type`/`chatname`，无需 remap——relay 转发原始事件）。
+- [x] 单测：channel-4 事件转发 + 控制帧丢弃 + 重连 + stop（relay 6）；映射经 ssn 预设由 mapping-presets 测试覆盖。
 
 ### Phase 3 Checklist
-- [ ] `make dev`（浏览器）填 session id → 真实弹幕进 controller → testing 可预览、active 命中入队。
-- [ ] WS 超时自动 rejoin；`status()` 反映状态。
-- [ ] electron 仍可用 http-webhook（回归不破）。
+- [x] WS 超时/断开自动重连（退避）；`status()` 反映 connecting/open/closed。
+- [x] electron 仍走 http-webhook（union 的 transport 可选，面板 `start({port,token})` 不破；typecheck 通过）。
+- [ ] `make dev`（浏览器）端到端：填 session id → 真实弹幕进 controller —— **依赖 Phase 4 的设置面板 transport/来源 UI 驱动 `start`**，留 Phase 4 验证。
 
 ### Phase 4: 映射对话框 UX + 来源列表（仿 anysoul）
 
