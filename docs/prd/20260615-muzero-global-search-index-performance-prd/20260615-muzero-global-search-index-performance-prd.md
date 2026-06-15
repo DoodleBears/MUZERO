@@ -14,7 +14,7 @@
 | 1 | 观测先行：补齐开窗 / 查询 / longtask 指标 | 🔄 代码完成（基线待用户实测） | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | 消除开窗同步突发（pre-warm + defer） | 🔄 代码完成（开窗帧待用户实测） | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | 预存变体 `IndexedRow` + 线性扫描 + 增量维护（★核心） | 🔄 代码完成（latency 待用户实测） | [Phase 3 Checklist](#phase-3-checklist) |
-| 4 | 倒排收窄 / 超大库调优 / 持久化（仅 20k+ 实测不达标才做） | 🔲 Pending | [Phase 4 Checklist](#phase-4-checklist) |
+| 4 | 倒排收窄 / 超大库调优 / 持久化（仅 20k+ 实测不达标才做） | ⏸ Deferred（按设计：待 P3 实测触发） | [Phase 4 Checklist](#phase-4-checklist) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
 
@@ -374,7 +374,10 @@ liveQuery(tracks/lyrics/memory) ─throttle250ms─▶ rows snapshot ─postMess
 - [ ] 若 `cold build` 实测过长：评估把 `IndexedRow`/`postings` 持久化到 IndexedDB（需 bump DB version + upgrade + 索引↔tracks 一致性维护）—— 仅当内存态重建确实痛时才做。
 - [ ] `log` 任何 cap / 采样 / 截断（不可静默截断，与 §4 规则一致）。
 
-#### Phase 4 Checklist
+> **状态：⏸ Deferred（按设计，未实现）。** Phase 4 的触发条件是「Phase 3 实测在 20k+ 不达标」。调研（§9.1）+ Phase 3 架构表明 6k–20k 线性扫预存变体即 sub-100ms，故**现在不投机实现倒排/持久化**（否则正是调研警告的过度工程）。**触发判据**：用户在 prod build + 真实/合成 20k 库上用 Phase 1 的 `getSearchPerfSnapshot()` 测得 `query latency` p95 > 80ms，或 `cold build` 长到影响首用 → 再开 Phase 4（倒排收窄优先，持久化次之）。届时 `IndexedRow` 已就位，倒排是在其上叠一层 `postings`，增量接口已留好挂点。
+
+#### Phase 4 Checklist（待触发）
+- [ ] **（触发前置）** 用户实测 20k 库 latency / cold build，确认确需 Phase 4
 - [ ] 20k 库 latency 达标（倒排收窄后）且冷查询不产生不可中断超长任务
 - [ ] 倒排增量维护与全量重建等价（单测）
 - [ ] 若做持久化：重启免重建,且索引与 tracks 一致性有单测覆盖
@@ -439,7 +442,7 @@ liveQuery(tracks/lyrics/memory) ─throttle250ms─▶ rows snapshot ─postMess
 | 3 | 引第三方搜索库（FlexSearch/Orama/MiniSearch）? | **Resolved（调研）** | **不引**：无库原生支持拼音/假名,转写层必自研,引库净收益为负;Lunr v2 索引还不可变 |
 | 4 | 索引持久化到 IndexedDB? | **Resolved（默认）** | 默认**内存态 + worker 内分块重建**,不动 DB；冷建实测过长才在 Phase 4 评估持久化 fallback |
 | 5 | 歌词长文排序是否引 BM25/BM25F？ | Open | 短字段现有 tier 够；若歌词正文匹配排序变差,再按 BM25F（field 加权）调,不在 Phase 3 范围 |
-| 6 | warm 时机：进库即 warm vs 首次开窗后保持 warm？ | Open | 倾向「进库后台 warm」让 ⌘F 即时；Phase 2 用实测内存定夺 |
+| 6 | warm 时机：进库即 warm vs 首次开窗后保持 warm？ | **Resolved（Phase 2）** | 实现「**首次开窗后保持 warm**」（sticky `hasOpened` + `useDeferredValue`）—— 从不开 ⌘F 的用户零成本，首开后常驻 warm；内存是否进一步「进库即 warm」待实测 |
 | 7 | 歌词变体懒补「第二趟」延迟多大可接受？ | Open | Phase 1 实测歌词趟冷建耗时后定;metadata 趟必须先 ready |
 | 8 | 内存/latency 阈值多少触发 Phase 4？ | Open | Phase 1 基线 + Phase 3 的 12k/20k 实测后在 PR 给阈值 |
 
@@ -451,6 +454,7 @@ liveQuery(tracks/lyrics/memory) ─throttle250ms─▶ rows snapshot ─postMess
 |------|--------|---------|
 | 2026-06-15 | MUZERO Team | Initial draft — 根因分析（开窗同步突发 + 变体缓存抖动）+ 4 phase 计划 |
 | 2026-06-15 | MUZERO Team | owner 决策落地：混合倒排 + 预存变体 + 增量增删改；持久化默认内存态、worker 内分块重建 |
+| 2026-06-15 | MUZERO Team | **实现落地**（worktree `feat/global-search-index-perf`，TDD，原子 commit）：P1 观测（`search-perf.ts`，dbd7e15）→ P2 开窗 defer/warm latch（b1b3b1c）→ P3 ★`search-index.ts` 预存变体索引 + 增量，parity/增量单测全绿（a9a8795）。P4 按设计 Deferred（待 20k+ 实测触发）。empirical latency/heap/longtask 数值待用户 prod build 实测 |
 | 2026-06-15 | MUZERO Team | **联网调研修正**：Phase 3 核心降为「预存变体 `IndexedRow` + 线性扫描」(调研证实 6k–20k 即 sub-100ms,倒排非必需)；倒排降到 Phase 4 仅 20k+ 不达标才做；确认不引第三方库(无库原生支持拼音/假名)；补 BM25F 为歌词排序 open question；补 §9.1 调研来源 |
 
 ---
