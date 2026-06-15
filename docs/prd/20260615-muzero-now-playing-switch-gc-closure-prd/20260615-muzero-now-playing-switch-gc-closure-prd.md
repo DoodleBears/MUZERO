@@ -227,8 +227,8 @@ Ctrl+Shift+→（限速 ~5/s）──▶ player-store.playIndex（音频 abort �
 **契约（纯函数）：** `backgroundCrossfadeProgress(dragX, width, direction)` → `{ fromOpacity, toOpacity, toIndexDelta }`。共享进度经 store/context 的单一 `MotionValue` 从 stage 传给 background（二者本是兄弟组件）。
 
 **Tasks（TDD）:**
-- [ ] 先写 `background-crossfade.ts` 纯函数单测（进度 0→1 的 from/to opacity、方向、回弹）。
-- [ ] `CanvasBlurBackground`/`NowPlayingBackground` 接 ring + 共享进度（拖拽插值，settle 收敛）；保持单一 live-index 时钟（父 PRD Phase 8）不串号。
+- [x] **D.1（纯模型）✅：** [`background-crossfade.ts`](../../../src/lib/background-crossfade.ts) `backgroundCrossfadeProgress(dragX, width, gain)` → `{ direction, progress, currentOpacity, incomingOpacity }` + `crossfadeIndexDelta`（负 x=next）。7 例先红后绿（rest / next / prev / over-drag clamp / gain / 非有限或缺 width）。
+- [ ] **D.2（可见）：** 共享拖拽进度（stage→background，单 `MotionValue`/store）；`NowPlayingBackground` 持 prev/cur/next 三图 ring，按进度插值两层 opacity + 静态毛玻璃 scrim；保持单一 live-index 时钟（父 PRD Phase 8）不串号。用户桌面测拖拽时背景同步 crossfade。
 
 **Checklist:**
 - [ ] crossfade 纯函数单测绿；`tsc`/Biome 通过。
@@ -339,6 +339,7 @@ Poweramp 顺滑的本质不是「渲染更快」，而是「动画期间几乎�
 
 | Date | Author | Changes |
 |------|--------|---------|
+| 2026-06-15 | Claude | **Phase 2-D.1 代码完成（TDD，纯模型）**：新增 [`background-crossfade.ts`](../../../src/lib/background-crossfade.ts) `backgroundCrossfadeProgress`（drag→`{direction,progress,currentOpacity,incomingOpacity}`，负 x=next，clamp、gain、非有限/缺 width 回 rest）+ `crossfadeIndexDelta`。7 例先红后绿；Biome/`tsc` 通过。是 D.2「背景跟随拖拽 crossfade」的纯数学契约（待 D.2 接共享拖拽进度 + 三图 ring 接线，桌面验证）。**方向修正（两发现）：**(1) 现状 coverflow `CoverflowCard` 含 backlight+3D+identity，裸 `CoverPagerStrip` 非 drop-in（会丢 PM 要保留的移动卡背光）→ 忠实 Phase C = 让**现有富 overlay 常驻**（复用 CoverflowCard）；(2) Ctrl+Shift+→ firehose **已被 `bursting` 跳过 overlay**（父 PRD P2），故 C/D 提升的是**手动拖拽体验**，键盘狂切 GC 是另一条路径（base 重渲染 + 封面解码 + pixiCover.derivative）。用户拍板：**两者都做，拖拽体验优先**。 |
 | 2026-06-15 | User(PM)+Claude | **QA#51 + 方向修正：撤销 Phase 2-B，新 branch 从 main 起，优先 C/D。** 用户提供新 trace [`.logs/20260615-3-…/tab-1-switch-song-low-fps.log`](../../../.logs/20260615-3-performance-switch-song-on-tab-1/tab-1-switch-song-low-fps.log)（带 A/B/C.1 的 build）。**分析：**(a) `cover-pager.ts`/`cover-pager-strip.tsx` 经 grep 证实**仅被自身测试 import**（runtime dead code）→ Phase A/2-C.1 **不可能**影响帧率；(b) Phase B 只在 opt-in `backlight` 模式**减少**移动卡渲染，不增成本，且 `useCoverDerivativeUrl(backlight)` 在 `TrackVisual` 本就无条件调用（B 未改）；(c) 此 trace 是**更重的场景**（5983 首 uploaded 队列、倒序狂切、burst 中 +12 张 uploaded 封面解码 cache-miss），worst-case `fpsLow 5`/`frameMax 199.9`/`longTask 200`/heap 133→232 与 §1.5 基线（4.8/208/203/140→382）**同量级、略好**——无回归信号，是 A/B 从未针对的同一 GC 残留 + 封面解码 churn。**PM 决定：**保留移动卡背光（要这个视觉效果）、撤销 B；A/B 未改善帧数；**优先实现真正的修复 C（持久化 pager 接线）+ D（背景跟随拖拽）**。新 branch `perf/now-playing-pager-cd` 从 main 起，仅带 pager 纯模型（C.0）+ strip（C.1），不带 B。 |
 | 2026-06-15 | Claude | **Phase 2-C.1 代码完成（TDD，内部脚手架）**：新增 presentational [`cover-pager-strip.tsx`](../../../src/components/player/cover-pager-strip.tsx)（消费 2-A 的 `assignPagerSlots`/`slotRestOffsetPx`，常驻 N 槽 + 稳定 `data-slot-key` + 单 strip translate，dumb 无状态）。Testing Library 4 例先红后绿，核心是**no-remount 不变量**：center 5→6 同一 slotKey 的 DOM 节点 `toBe`（引用相等）不变、只内部 `<img src>` 轮换——证明切歌不再 mount/unmount 卡片（~35MB/切 churn 源）。**未接线 live**（用户拍板 staged-with-testing，可见验证留 2-C.2）。`tsc` exit 0、Biome 通过。用户拍板：2-C/2-D 按 slice 落地，每 slice 桌面验证后再续。 |
 | 2026-06-15 | Claude | **Phase 2-B 代码完成（TDD）**：新增纯 helper [`shouldRenderCardBacklight`](../../../src/lib/album-cover-appearance.ts)（`isCenter && !dragging && !bursting`，4 例先红后绿）；`swipeable-media-stage` 的 overlay `currentCard` 把 `coverHasBacklight` 从字面 `true` 换成该 helper → 拖拽中的平移居中卡不再渲染 `blur(20px) saturate(400%)` 背光（每帧重栅格化源），落定后 base 层接管 glow。album-cover-appearance 10 例 + swipeable-media-stage 测试绿；`tsc` exit 0、Biome 通过。专修 opt-in `backlight` 模式拖拽成本；默认 `shadow` 不受影响。 |
