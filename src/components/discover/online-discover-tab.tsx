@@ -116,10 +116,14 @@ function DiscoverPlaylistCard({
 }) {
   const { t } = useTranslation();
   return (
+    // Same card affordance as the local 歌单/专辑 gallery cards (SetCard /
+    // EntityCard): a rounded `bg-accent/40` hover highlight with `p-2` padding +
+    // focus ring — NOT a scale transform — so Discover feels consistent with the
+    // library walls.
     <button
       type="button"
       onClick={() => onOpen(playlist)}
-      className="flex flex-col rounded-xl text-left transition-transform hover:scale-[1.02]"
+      className="flex w-full flex-col gap-2 rounded-xl p-2 text-left outline-none transition-colors hover:bg-accent/40 focus-visible:ring-2 focus-visible:ring-ring"
     >
       <div className="relative aspect-square w-full overflow-hidden rounded-xl bg-secondary text-muted-foreground">
         {loadingCover ? (
@@ -137,10 +141,14 @@ function DiscoverPlaylistCard({
           </div>
         )}
       </div>
-      <div className="mt-1.5 line-clamp-2 font-medium text-sm leading-tight">{playlist.name}</div>
-      <div className="text-muted-foreground text-xs">
-        {t("streamSources.trackCount", { count: playlist.trackCount })}
-      </div>
+      <span className="min-w-0">
+        <span className="block line-clamp-2 font-medium text-sm leading-tight">
+          {playlist.name}
+        </span>
+        <span className="block text-muted-foreground text-xs">
+          {t("streamSources.trackCount", { count: playlist.trackCount })}
+        </span>
+      </span>
     </button>
   );
 }
