@@ -13,7 +13,7 @@
 |-------|------|--------|------|
 | 1 | 观测先行：longtask 归因 + HUD 子分类耗时分解 | ✅ Completed | [Phase 1](#phase-1-观测先行) |
 | 2 | queue liveQuery 全量重取（getTracksByIds O(n)）消除 | 🔲 Pending | [Phase 2](#phase-2-queue-livequery-全量重取消除) |
-| 3 | 空闲 rAF 归零（lyrics cascade settle-then-park） | 🔄 待 QA | [Phase 3](#phase-3-空闲-raf-归零) |
+| 3 | 空闲 rAF 归零（lyrics cascade settle-then-park） | ✅ Completed | [Phase 3](#phase-3-空闲-raf-归零) |
 | 4 | 切歌封面管线峰值（preload.batch / decode / load）削峰 | 🔲 Pending | [Phase 4](#phase-4-切歌封面管线削峰) |
 | 5 | 验收：大队列连切 before/after | 🔲 Pending | [Phase 5](#phase-5-验收) |
 
@@ -184,7 +184,7 @@ playIndex(index)                       ← O(1) 同步：clamp + set(cursorPatch
 
 | # | Question | Status | Decision |
 |---|----------|--------|----------|
-| 1 | 连切时 `queue.live.fetch` 究竟每次切歌触发几次？（本次 HUD 是 calm 态 ×2）需 burst 态 HUD 截图 | Open | 待用户用新 HUD 复现连切采集 |
+| 1 | 连切时 `queue.live.fetch` 究竟每次切歌触发几次？ | ✅ Resolved（burst HUD） | **burst 态 ×11、max 499ms**（calm 态仅 ×2-3）→ **纠正"游标 debounced 所以不会每切触发"的判断**：连切时它近乎每切都打，且 499ms 灾难级。触发不止游标——**每切的 track 行写入（palette 回填 / 播放计数）也会重新 fire** 整条队列重取。Phase 2 升为头号。 |
 | 2 | 游标"拆订阅"的实现路径：双 liveQuery vs 游标走 store 不入 liveQuery vs id→Track 复用 | Open | 倾向"列表 liveQuery 只观察结构 + id→Track 复用"，Phase 2 评估 |
 | 3 | Phase 优先级 | ✅ Resolved（HUD #2 校正） | `queue.live.fetch 275ms ≈ jank 285ms` 确认 **Phase 2 是主线程头号**；封面 836ms 多为 off-main wall-clock。顺序：**Phase 2 零风险先手（`!changed` 早退）→ Phase 3（独立低风险，肉眼可验 count 归零）→ Phase 2 拆订阅 → Phase 4 封面削峰** |
 | 4 | 是否确有 regression（vs 仅是大库放大的固有 O(n)）？ | Open | 需同一 5983 库的旧版本对照；当前证据足以"无论是否 regression 都该修" |
@@ -196,6 +196,7 @@ playIndex(index)                       ← O(1) 同步：clamp + set(cursorPatch
 | Date | Author | Changes |
 |------|--------|---------|
 | 2026-06-15 | User + Claude | 初稿。Phase 1 观测（longtask 归因 + HUD 子分类分解）**已 ship**（`8713c8b`/`27bba3c`/`63772ae`），用其证据坐实根因：❶ `getTracksByIds(5983)` 全量重取 192ms（最贵）❷❸ 封面管线 preload/decode/load 100–237ms（每切都中）❹ lyrics rAF 空闲空转。Phase 2–5 待评审拍板优先级（Open Q3）。**未动优化代码。** |
+| 2026-06-15 | User + Claude | **Phase 3 QA 通过 ✅**（暂停后 `lyrics.cascade.frame` count 停止增长、播放正常、恢复/seek 跟上）。**Burst HUD 截图**坐实 **`queue.live.fetch` burst 态 ×11 / max 499ms**（calm 仅 ×2-3）→ 纠正"游标 debounced 不会每切触发"：连切时 track 行写入（palette/计数）也重新 fire 全量重取，近乎每切都中。**Phase 2 升为头号**（Open Q1/Q3 据此更新）。其余 burst per-switch：`cover.preload.batch` ×50(258ms wall-clock)、`mediaSession.metadata` ×14(74ms)、`image.load/decode` 121/138ms。 |
 | 2026-06-15 | User + Claude | **新分支 `perf/switch-song-large-queue-fps`。Phase 3 落地（待 QA）**：cascade rAF 改为「暂停且弹簧 settle 即 park、resume/seek 唤醒」，`lyrics.cascade.frame` 空闲不再空转（QA：count 从 ×56026 一路涨）。`wordFill` 经核已自带 isPlaying 门，无需改。重排优先级澄清：原"Phase 2 `!changed` 早退"对 7ms 的 queueSig 无效——真正 275ms 在 `getTracksByIds`（async fn，早退够不着），故 Phase 3 先行。 |
 | 2026-06-15 | User + Claude | HUD #2（calm 态）校正数据：`queue.live.fetch` max **275ms ≈ jank 285ms**、`cover.preload.batch` max **836ms（×21，但 wall-clock 异步）**、`image.load` 189ms、`lyrics.cascade.frame` **×56026 仍涨**。新增**方法学校正**：`notePerfWork` span 是 wall-clock（含 await），主线程真值看 longtask。据此 **Open Q3 拍板**：Phase 2 为主线程头号，顺序 Phase 2 零风险先手 → Phase 3 → Phase 2 拆订阅 → Phase 4。 |
 
