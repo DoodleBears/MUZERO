@@ -24,7 +24,10 @@ const BACKGROUND_TEXTURE_LOAD_DELAY_MS = 180;
 // Cover→cover crossfade duration: the incoming cover fades in as a 2nd sprite under the
 // SAME resident filter, so the effect is preserved throughout and covers dissolve instead
 // of the old plain-<img> reveal. PM: dragging to switch should crossfade the background.
-const BACKGROUND_COVER_CROSSFADE_MS = 360;
+// Kept just above the 200ms transport cap so a single switch reads as a smooth dissolve
+// while held Q/E (5/s) stays in step with the cover — a newer switch finalizes the prior
+// crossfade, so it never falls behind the current track ("背景过渡也是").
+const BACKGROUND_COVER_CROSSFADE_MS = 240;
 const TEXTURE_HEADER_BYTES = 64 * 1024;
 const bgTextureLog = createDiagnosticLogger("background.texture");
 

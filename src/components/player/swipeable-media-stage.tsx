@@ -64,15 +64,12 @@ const COMMIT_DURATION_SEC = 1.08;
 // from 0 (a drag only animates the remaining distance), so they use a snappier
 // duration to feel responsive while keeping the same coverflow look.
 const SWITCH_DURATION_SEC = 0.62;
-// A programmatic switch arriving within this window of the previous one is part
-// of a rapid next/prev burst: it can't finish the 0.62s coverflow before the
-// next one, so we skip the overlay (and its blurred 3D backlight cards) and let
-// the base MediaStage crossfade carry it — mashing next no longer composites a
-// fresh blur(20px) saturate(400%) layer per song (PRD Phase 29 / P2).
+// A programmatic switch arriving within this window of the previous one can't
+// finish the 0.62s coverflow slide before the next one arrives, so we skip the
+// slide and let the base MediaStage cover + Pixi background crossfade carry it
+// directly. Quality mode tightens this to the transport cap (200ms) so the cover
+// crossfade stays in lockstep with held Q/E (5/s).
 const COVERFLOW_BURST_SKIP_MS = 600;
-// How long after the last burst switch before the stage counts as settled again
-// (re-enables the base cover backlight and lets the next switch animate).
-const COVERFLOW_BURST_SETTLE_MS = 500;
 const HANDOFF_DURATION_SEC = 0.32;
 const COVER_READY_SETTLE_MS = 440;
 const COVER_PRELOAD_LOCAL_SETTLE_MS = 140;
@@ -151,12 +148,13 @@ export function SwipeableMediaStage({
   const [settleTarget, setSettleTarget] = useState<VisualTrack | null>(null);
   const [readyTrackIds, setReadyTrackIds] = useState<Record<string, true>>({});
   const [overlayRect, setOverlayRect] = useState<StageOverlayRect | null>(null);
-  // Rapid next/prev burst gate (PRD Phase 29 / P2): while bursting, the coverflow
-  // overlay is skipped and the base cover backlight is suppressed so each skipped
-  // song doesn't composite a blurred 3D layer. Cleared once the burst goes quiet.
-  const [bursting, setBursting] = useState(false);
+  // Rapid next/prev gate: when switches outpace the time a coverflow slide needs to
+  // finish (held Q/E at the 200ms transport cap), we skip the 3D slide — which would
+  // just be torn down and restarted every switch, jerking the cover — and let the
+  // base cover crossfade carry it directly. The old "burst mode" ALSO suppressed the
+  // backlight + 3D cards to save GPU; that's gone now that switch perf is fixed (the
+  // cover keeps its backlight throughout), so this is just the slide/crossfade choice.
   const lastSwitchAtRef = useRef(0);
-  const burstSettleTimer = useRef<number | null>(null);
 
   const next = usePlayerStore((s) => s.next);
   const skipPrev = usePlayerStore((s) => s.skipPrev);
@@ -336,7 +334,6 @@ export function SwipeableMediaStage({
       if (clearTimer.current != null) window.clearTimeout(clearTimer.current);
       if (handoffTimer.current != null) window.clearTimeout(handoffTimer.current);
       if (wheelEndTimer.current != null) window.clearTimeout(wheelEndTimer.current);
-      if (burstSettleTimer.current != null) window.clearTimeout(burstSettleTimer.current);
     };
   }, []);
 
@@ -368,18 +365,6 @@ export function SwipeableMediaStage({
 
   const markVisualReady = useCallback((trackId: string) => {
     setReadyTrackIds((ready) => (ready[trackId] ? ready : { ...ready, [trackId]: true }));
-  }, []);
-
-  // Enter the burst state and (re)arm the quiet-period timer that exits it. Each
-  // rapid switch pushes the exit out, so the base backlight only returns once the
-  // user stops mashing (PRD Phase 29 / P2).
-  const markBursting = useCallback(() => {
-    setBursting(true);
-    if (burstSettleTimer.current != null) window.clearTimeout(burstSettleTimer.current);
-    burstSettleTimer.current = window.setTimeout(() => {
-      setBursting(false);
-      burstSettleTimer.current = null;
-    }, COVERFLOW_BURST_SETTLE_MS);
   }, []);
 
   const beginGesture = useCallback(() => {
@@ -557,13 +542,13 @@ export function SwipeableMediaStage({
         // Our own drag/wheel commit is already animating this exact switch.
         selfSwitchRef.current = null;
       } else if (Date.now() - lastSwitchAtRef.current < coverflowBurstSkipMs) {
-        // Burst: the previous switch is still mid-flight, so animating this one
-        // would just be torn down. Skip the coverflow overlay (and its blurred 3D
-        // backlight cards), tear down any running one, and let the base MediaStage
-        // crossfade carry the switch. `bursting` also suppresses the base backlight
-        // until the user stops mashing (PRD Phase 29 / P2).
+        // Rapid switch (held Q/E at the 200ms transport cap): a 0.62s coverflow slide
+        // can't finish before the next switch, so animating it would tear down and
+        // restart every frame, leaving the cover lagging the current track ("封面对不上").
+        // Tear down any running slide and let the base MediaStage cover + Pixi
+        // background crossfade carry it directly — both are bounded to the transport
+        // cap, so they keep up with held Q/E. (No more backlight suppression.)
         lastSwitchAtRef.current = Date.now();
-        markBursting();
         if (stackVisible) clearStack();
       } else {
         lastSwitchAtRef.current = Date.now();
@@ -603,7 +588,6 @@ export function SwipeableMediaStage({
     playProgrammaticSwitch,
     clearStack,
     foregroundVisible,
-    markBursting,
     stackVisible,
     coverflowBurstSkipMs,
   ]);
@@ -901,9 +885,7 @@ export function SwipeableMediaStage({
             }}
           >
             <MediaStage
-              coverBacklightEnabled={
-                foregroundVisible && !baseHidden && baseCoverBacklightEnabled && !bursting
-              }
+              coverBacklightEnabled={foregroundVisible && !baseHidden && baseCoverBacklightEnabled}
               coverBacklightFadeIn={richSwitchTransitions}
             />
           </motion.div>

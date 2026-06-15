@@ -3,6 +3,12 @@ import { type ReactNode, type SyntheticEvent, useEffect, useState } from "react"
 import { useLoadedImageUrl } from "@/hooks/use-image-load";
 import { cn } from "@/lib/utils";
 
+// Now Playing cover crossfade duration. Kept at/under the 200ms transport switch
+// cap (5/s) so that when the user holds Q/E the cover crossfade finishes before the
+// next switch arrives — it stays in lockstep with the current track instead of
+// lagging behind a half-finished 0.4s fade (the "封面对不上" on rapid next/prev).
+const COVER_CROSSFADE_SEC = 0.2;
+
 /**
  * A crossfading cover with no "previous cover" flash on track change. It keeps
  * showing the current image until the *next* one has fully decoded, then cross-
@@ -177,7 +183,7 @@ function DomLoadedCoverImage({
             initial={{ opacity: 1 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            transition={{ duration: 0.4 }}
+            transition={{ duration: COVER_CROSSFADE_SEC }}
             className={cn("absolute inset-0 size-full object-cover", className)}
           />
         )}
@@ -194,7 +200,7 @@ function DomLoadedCoverImage({
             initial={{ opacity: 0 }}
             animate={{ opacity: displayUrl === pendingDisplayUrl ? 1 : 0 }}
             exit={{ opacity: 0 }}
-            transition={{ duration: 0.4 }}
+            transition={{ duration: COVER_CROSSFADE_SEC }}
             className={cn("absolute inset-0 size-full object-cover", className)}
           />
         )}
