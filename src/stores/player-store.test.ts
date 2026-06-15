@@ -592,6 +592,20 @@ describe("player-store playback resume", () => {
   });
 });
 
+describe("queueEntriesKey (queue split-subscription gate)", () => {
+  it("is stable for the same ids (cursor move) but changes on reorder/append/length", async () => {
+    const { queueEntriesKey } = await import("./player-store");
+    const ids = ["trk_a", "trk_b", "trk_c"];
+    // Same ids → same key → a cursor move does NOT re-materialize the 5983 tracks.
+    expect(queueEntriesKey(ids)).toBe(queueEntriesKey(["trk_a", "trk_b", "trk_c"]));
+    // Reorder / append / prepend / length change → different key → re-subscribe.
+    expect(queueEntriesKey(ids)).not.toBe(queueEntriesKey(["trk_b", "trk_a", "trk_c"]));
+    expect(queueEntriesKey(ids)).not.toBe(queueEntriesKey([...ids, "trk_d"]));
+    expect(queueEntriesKey(ids)).not.toBe(queueEntriesKey(["trk_z", ...ids]));
+    expect(queueEntriesKey(ids)).not.toBe(queueEntriesKey(["trk_a", "trk_b"]));
+  });
+});
+
 describe("player-store bulk upload visibility", () => {
   it("publishes completed file uploads before the whole large selection finishes", async () => {
     const reachedLastProbe = deferredVoid();

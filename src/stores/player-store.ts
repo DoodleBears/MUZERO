@@ -361,6 +361,22 @@ function queueSig(tracks: Track[]): string {
     .join("|");
 }
 
+/** Cheap structural key over the queue's entry ids — detects append / prepend /
+ *  replace / reorder so the tracks materialization re-subscribes only when the
+ *  LIST changed, not on a cursor move. Position-sensitive O(n) arithmetic hash,
+ *  no big string allocation (vs joining ~5983 ids every cursor write). */
+export function queueEntriesKey(ids: string[]): string {
+  let h = 0;
+  for (let i = 0; i < ids.length; i += 1) {
+    const id = ids[i];
+    h = (Math.imul(h, 31) + i) | 0;
+    for (let j = 0; j < id.length; j += 1) {
+      h = (Math.imul(h, 31) + id.charCodeAt(j)) | 0;
+    }
+  }
+  return `${ids.length}:${h}`;
+}
+
 function currentTrack(state: PlayerState): Track | undefined {
   return state.currentIndex >= 0 ? state.queue[state.currentIndex] : undefined;
 }
@@ -620,104 +636,152 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       .catch((err: unknown) => log.warn("player", "failed to build DJ engine", err));
 
     // The player consumes the persistent 播放列表 (Play Queue), not a 歌单 directly.
-    // This single subscription keeps `queue` in sync as the queue is loaded /
-    // extended / edited.
-    liveQuery(async () => {
-      const pq = await getPlayQueue();
-      // PERF PROBE (switch-fps): this liveQuery re-runs in full whenever ANY table
-      // it reads changes (playQueue cursor persist, a track row write, the context
-      // session) — re-fetching ALL queue tracks each time. At a 5983-track queue
-      // that bulk get is O(n); the trace tells us how often it fires per switch and
-      // how long the fetch costs.
-      const fetchStart = performance.now();
-      const queue = await getTracksByIds(pq.entries.map((e) => e.trackId));
-      notePerfWork("queue.live.fetch", performance.now() - fetchStart, { tracks: queue.length });
-      const session = pq.contextSetId ? await getSession(pq.contextSetId) : undefined;
-      return { pq, queue, session };
-    }).subscribe({
-      next: ({ pq, queue, session }) => {
-        // PERF PROBE (switch-fps): the synchronous processing below — notably
-        // `queueSig(queue)`, an O(n) string build over every track — runs on EVERY
-        // fire even when nothing the list renders actually changed (`!changed`
-        // early-returns AFTER paying for it). This span attributes that cost.
-        const processStart = performance.now();
-        const contextSetId = pq.contextSetId ?? null;
-        watchSetForAppend(
-          contextSetId,
-          pq.entries.map((e) => e.trackId),
-        );
+    // TWO subscriptions so a high-frequency CURSOR write doesn't pay the O(n)
+    // full-queue refetch (switch-fps Phase 2 — the trace showed persistQueueIndex
+    // re-firing getTracksByIds(5983) ~900ms after every switch, for a list that
+    // didn't change):
+    //   • playQueue sub (cheap): entries ids / cursor / context session. Re-fires
+    //     on cursor/entries/session change; never materializes tracks.
+    //   • tracks sub (expensive): getTracksByIds for the CURRENT entries — observes
+    //     only those track rows. Re-subscribed when the entries STRUCTURE changes;
+    //     still re-fires on a queue track's row write (cover edit / palette backfill
+    //     republish). A cursor write no longer touches it.
+    let latestPq: Awaited<ReturnType<typeof getPlayQueue>> | null = null;
+    let latestSession: Awaited<ReturnType<typeof getSession>>;
+    let latestQueue: Track[] | null = null;
+    let trackEntriesKey = "";
+    let tracksSub: { unsubscribe: () => void } | null = null;
 
-        const sig = queueSig(queue);
-        const listChanged = sig !== lastQueueSig;
-        lastQueueSig = sig;
-        const persistedIndex = clampIndex(queue.length, pq.currentIndex);
-        lastPersistedQueueIndex = persistedIndex;
-        const state = get();
-        // Hydrate from persisted cursor on boot, and reconcile by the current UI
-        // track id when the queue structure changes. A clicked online/R2 track can
-        // be the visible current track before its media finishes loading, so using
-        // only `loadedTrackId` here would bounce the UI back to the previous song
-        // when the set watcher appends/seeds the queue a moment later.
-        const shouldHydrateCursor = !playQueueHydrated || listChanged;
-        playQueueHydrated = true;
-        const previousTrackId = currentTrack(state)?.id;
-        const cursorAnchorId = previousTrackId ?? loadedTrackId;
-        const currentIndex = shouldHydrateCursor
-          ? reconcileCurrentIndex(
-              queue.map((tr) => tr.id),
-              cursorAnchorId,
-              persistedIndex,
-            )
-          : clampIndex(queue.length, state.currentIndex);
-        const nextTrack = currentIndex >= 0 ? queue[currentIndex] : undefined;
-        const nextTrackId = nextTrack?.id;
-        const metadataDuration = playableDurationSec(nextTrack?.durationSec);
-        const queueSource: QueueSource | undefined = contextSetId
-          ? state.queueSource?.kind === "set" && state.queueSource.setId === contextSetId
-            ? state.queueSource
-            : { kind: "set", setId: contextSetId }
-          : state.queueSource;
-        const patch: Partial<PlayerState> = {
-          activeSessionId: contextSetId,
-          currentIndex,
-          queueSource,
-          displayMode: session?.displayMode ?? state.displayMode,
-          djEnabled: session?.config.autoExtend ?? false,
-        };
-        if (listChanged) patch.queue = queue;
-        if (!nextTrackId) {
-          patch.positionSec = 0;
-          patch.durationSec = 0;
-        } else if (nextTrackId !== previousTrackId) {
-          patch.positionSec = 0;
-          patch.durationSec = metadataDuration;
-        } else if (metadataDuration > 0 && state.durationSec <= 0) {
-          patch.durationSec = metadataDuration;
-        }
-        const changed =
-          listChanged ||
-          state.activeSessionId !== patch.activeSessionId ||
-          state.queueSource !== patch.queueSource ||
-          state.currentIndex !== patch.currentIndex ||
-          state.displayMode !== patch.displayMode ||
-          state.djEnabled !== patch.djEnabled ||
-          ("positionSec" in patch && state.positionSec !== patch.positionSec) ||
-          ("durationSec" in patch && state.durationSec !== patch.durationSec);
-        if (!changed) {
-          notePerfWork("queue.live.process", performance.now() - processStart, {
-            changed: false,
-            listChanged,
-            tracks: queue.length,
-          });
-          return;
-        }
-        set(patch);
-        void afterQueueUpdate(set, get);
+    const processQueueUpdate = () => {
+      const pq = latestPq;
+      const queue = latestQueue;
+      if (!pq || !queue) return;
+      const session = latestSession;
+      // PERF PROBE (switch-fps): the synchronous processing below — notably
+      // `queueSig(queue)`, an O(n) string build over every track — runs on EVERY
+      // fire even when nothing the list renders actually changed (`!changed`
+      // early-returns AFTER paying for it). This span attributes that cost.
+      const processStart = performance.now();
+      const contextSetId = pq.contextSetId ?? null;
+      watchSetForAppend(
+        contextSetId,
+        pq.entries.map((e) => e.trackId),
+      );
+
+      const sig = queueSig(queue);
+      const listChanged = sig !== lastQueueSig;
+      lastQueueSig = sig;
+      const persistedIndex = clampIndex(queue.length, pq.currentIndex);
+      lastPersistedQueueIndex = persistedIndex;
+      const state = get();
+      // Hydrate from persisted cursor on boot, and reconcile by the current UI
+      // track id when the queue structure changes. A clicked online/R2 track can
+      // be the visible current track before its media finishes loading, so using
+      // only `loadedTrackId` here would bounce the UI back to the previous song
+      // when the set watcher appends/seeds the queue a moment later.
+      const shouldHydrateCursor = !playQueueHydrated || listChanged;
+      playQueueHydrated = true;
+      const previousTrackId = currentTrack(state)?.id;
+      const cursorAnchorId = previousTrackId ?? loadedTrackId;
+      const currentIndex = shouldHydrateCursor
+        ? reconcileCurrentIndex(
+            queue.map((tr) => tr.id),
+            cursorAnchorId,
+            persistedIndex,
+          )
+        : clampIndex(queue.length, state.currentIndex);
+      const nextTrack = currentIndex >= 0 ? queue[currentIndex] : undefined;
+      const nextTrackId = nextTrack?.id;
+      const metadataDuration = playableDurationSec(nextTrack?.durationSec);
+      const queueSource: QueueSource | undefined = contextSetId
+        ? state.queueSource?.kind === "set" && state.queueSource.setId === contextSetId
+          ? state.queueSource
+          : { kind: "set", setId: contextSetId }
+        : state.queueSource;
+      const patch: Partial<PlayerState> = {
+        activeSessionId: contextSetId,
+        currentIndex,
+        queueSource,
+        displayMode: session?.displayMode ?? state.displayMode,
+        djEnabled: session?.config.autoExtend ?? false,
+      };
+      if (listChanged) patch.queue = queue;
+      if (!nextTrackId) {
+        patch.positionSec = 0;
+        patch.durationSec = 0;
+      } else if (nextTrackId !== previousTrackId) {
+        patch.positionSec = 0;
+        patch.durationSec = metadataDuration;
+      } else if (metadataDuration > 0 && state.durationSec <= 0) {
+        patch.durationSec = metadataDuration;
+      }
+      const changed =
+        listChanged ||
+        state.activeSessionId !== patch.activeSessionId ||
+        state.queueSource !== patch.queueSource ||
+        state.currentIndex !== patch.currentIndex ||
+        state.displayMode !== patch.displayMode ||
+        state.djEnabled !== patch.djEnabled ||
+        ("positionSec" in patch && state.positionSec !== patch.positionSec) ||
+        ("durationSec" in patch && state.durationSec !== patch.durationSec);
+      if (!changed) {
         notePerfWork("queue.live.process", performance.now() - processStart, {
-          changed: true,
+          changed: false,
           listChanged,
           tracks: queue.length,
         });
+        return;
+      }
+      set(patch);
+      void afterQueueUpdate(set, get);
+      notePerfWork("queue.live.process", performance.now() - processStart, {
+        changed: true,
+        listChanged,
+        tracks: queue.length,
+      });
+    };
+
+    // Expensive sub: materialize ONLY the current entries' track rows. Observes
+    // those tracks (a queue track's row write still republishes), not playQueue —
+    // so a cursor write no longer re-fires it. Re-created when entries change.
+    const subscribeTracks = (ids: string[]) => {
+      tracksSub?.unsubscribe();
+      tracksSub = liveQuery(async () => {
+        const fetchStart = performance.now();
+        const queue = await getTracksByIds(ids);
+        notePerfWork("queue.live.fetch", performance.now() - fetchStart, { tracks: queue.length });
+        return queue;
+      }).subscribe({
+        next: (queue) => {
+          latestQueue = queue;
+          processQueueUpdate();
+        },
+        error: (err) => log.error("player", "queue tracks subscription error", err),
+      });
+    };
+
+    // Cheap sub: playQueue (entries / cursor) + the context session. Re-fires on a
+    // cursor write but only re-processes the cached queue (no refetch); re-materializes
+    // tracks only when the entries STRUCTURE changes.
+    liveQuery(async () => {
+      const pq = await getPlayQueue();
+      const session = pq.contextSetId ? await getSession(pq.contextSetId) : undefined;
+      return { pq, session };
+    }).subscribe({
+      next: ({ pq, session }) => {
+        latestPq = pq;
+        latestSession = session;
+        const ids = pq.entries.map((e) => e.trackId);
+        const key = queueEntriesKey(ids);
+        if (key !== trackEntriesKey) {
+          // Entries structure changed → (re)materialize on the new id set. Wait for
+          // the tracks sub before processing so pq.entries and `queue` stay consistent.
+          trackEntriesKey = key;
+          subscribeTracks(ids);
+          return;
+        }
+        // Cursor / session-only change → reprocess the cached queue (no refetch).
+        processQueueUpdate();
       },
       error: (err) => log.error("player", "play-queue subscription error", err),
     });
