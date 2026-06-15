@@ -839,7 +839,7 @@ export function SwipeableMediaStage({
               // threshold OR a fling matches the drag. The threshold is the same px
               // value as before, normalized to the same `step` space as the shared
               // progress — so WHETHER it commits is unchanged; only the path is
-              // unified and the auto-complete becomes velocity-aware (see commit).
+              // unified and the release auto-completes the remaining glide (commit).
               const dir = resolveDragDirection(info.offset.x, DRAG_DIRECTION_DEADZONE);
               if (!dir) {
                 snapBack();
@@ -849,15 +849,23 @@ export function SwipeableMediaStage({
                 MAX_COMMIT_DISTANCE,
                 Math.max(MIN_COMMIT_DISTANCE, width * COMMIT_FRACTION),
               );
-              const progress = manualProgress(info.offset.x * DRAG_GAIN, step);
+              // Decision uses the raw POINTER distance (offset.x) — commit if the
+              // finger dragged past the threshold, same rule as before.
               const willCommit = shouldCommitRelease({
                 direction: dir,
                 flingVelocity: COMMIT_VELOCITY,
-                progress,
+                progress: manualProgress(info.offset.x * DRAG_GAIN, step),
                 threshold: manualProgress(commitDistancePx * DRAG_GAIN, step),
                 velocity: info.velocity.x,
               });
-              if (willCommit) commit(dir, { fromProgress: progress });
+              // Auto-complete distance uses the actual VISUAL position (x.get(),
+              // the elastic-constrained motion value the cards + background ride) —
+              // NOT offset.x. With dragConstraints 0 + elastic, the pointer travels
+              // far past the constraint while x barely moves, so offset.x reads
+              // "almost done" → remaining ~0 → ~0ms → an instant snap (QA). x.get()
+              // is how far the cover really slid, so the glide covers what's left.
+              const releaseProgress = manualProgress(x.get() * DRAG_GAIN, step);
+              if (willCommit) commit(dir, { fromProgress: releaseProgress });
               else snapBack();
             }}
             aria-label={`${t("player.previous")} / ${t("player.next")}`}
