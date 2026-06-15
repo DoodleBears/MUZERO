@@ -140,7 +140,7 @@ export function SourceCard({
           {source.status === "disabled" && (
             <Button size="sm" onClick={() => onPatch({ status: "active" })}>
               <Play className="size-3.5" />
-              {tk("settings.liveRequestsEnable", "Enable")}
+              {tk("settings.liveRequestsEnableSource", "Enable")}
             </Button>
           )}
         </div>

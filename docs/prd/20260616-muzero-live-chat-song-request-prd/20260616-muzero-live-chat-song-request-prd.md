@@ -454,7 +454,7 @@ const unsub = bridge.liveRequestIntake.onMessage((payload) => {
 ### Phase 5: i18n + 测试 + 收尾
 
 **Tasks:**
-- [ ] i18n key（来源列表/增删/状态、映射对话框、预设名、目标字段标签、管道语法提示、JSON 树空态、Go Live、SSN session/relay、CORS 提示、状态日志）en→zh/ja/ko 全量。
+- [x] i18n key（transport/SSN session+relay/CORS 提示、来源增删/状态/生命周期、映射对话框、预设名、目标字段标签、Go Live、status testing/active/disabled）**en→zh/ja/ko 四语全量**。组件用 `tk(key, fallback)` 渲染（英文兜底）。
 - [ ] `make check`（typecheck + lint + test）全绿。
 - [ ] 更新 [`docs/deploy/mu0-app-release.md`](../../deploy/mu0-app-release.md)：网页 SSN 配置 + 桌面多来源 webhook + 测试→上线流程。
 
