@@ -175,6 +175,30 @@ reduce(state, event):
   - dims：保持各自 z 序（[consolidation Open Q#2](../20260615-muzero-now-playing-background-layer-consolidation-prd/#10-open-questions) 决定不合并实例），但 opacity 过渡也挂同一时钟。
 - **无加载空档**：因为 `incoming` 只在 ready 后才进入 crossfade，`displayed` 一直 hold 到那一刻 → 永不出现某层短暂空白露 `bg-background`（闪黑/闪白根因）。
 
+### 2.4bis Pixi 渲染器实现：scene-graph sprite-stack（研究定稿，2026-06-15）
+
+> 用户拍板按 stable order 做 Pixi(quality/noise 日常模式)。经查 PixiJS v8 官方文档(scene-graph / shader / textures)定稿实现方案。
+
+**选型：two-sprite(sprite-pool) alpha crossfade，不走 transition shader。**
+
+| 方案 | 结论 |
+|------|------|
+| **A — sprite-stack alpha crossfade（选）** | 持久 App 内一个 **filtered Container** + **回收 sprite 池**(`≤MAX_PIXI_LAYERS≈3`)，新封面 sprite `addChild`(在上)→`alpha 0→1` 淡入漏出下层，collapse 时 `removeChild`+`texture.destroy(true)` 并回收 sprite。**保留现有 noise/pixel 效果**(filter 放 Container,一次 pass、噪声连贯)。无自定义 shader、无 2nd-sampler2D 难题、fallback-safe、fake 可测。 |
+| B — gl-transitions 自定义 Mesh+Shader | v8 **可行**(`Shader.from({resources:{uTexture1,uTexture2,uProgress}})` + Mesh,多纹理走 resources 非 uniform)；解锁 100+ 转场效果。但需**重写 sprite+filter 渲染路径**并把 noise 效果并进 shader → 大、盲 WebGL 高风险、实为「可配置转场」新功能 → **留作未来**。 |
+
+**关键文档事实(grounding)：**
+- **scene graph**：child 插入顺序 = z 序(`addChild`=置顶,「第二个 child 渲染在第一个之上」);`Sprite.alpha` × Container alpha 相乘;`cullable` 可选。→ 层栈天然映射为 Container 的子 sprite。
+- **单 WebGL context 不是问题**:之前「不能叠层」的顾虑是指多个 **App**;**一个**持久 App 内多 sprite 廉价合法。
+- **textures**:封面用现有 ImageBitmap 解码路径 → `new TextureSource({resource: imageBitmap})`;清理 `texture.destroy(true)`(释放 GPU+浏览器内存);文档明示 **reuse over recreate** → 用**回收 sprite 池**(对齐 `cover-pager.ts` 虚拟化槽位、最省 GPU churn)。
+
+**架构统一**:**同一个 `background-composition` reducer + `useBackgroundController`** 驱动两种后端 —— DOM 后端渲染 `<canvas>`(blur/plain),Pixi 后端渲染 sprite 池。"统一的是时钟,不是实现"。
+
+**流光/频谱不并入 Pixi**:v8 `CanvasSource` 虽可吃 `HTMLCanvasElement`,但 flow/viz **每帧动**→需 `dynamic:true`+`source.update()` **逐帧全屏上传纹理**(类视频纹理)+跨两个 WebGL context 拷贝 → 可能**回退性能**。且 flow/viz 是**连续 ambient**(不按曲 crossfade),要同步的是**颜色(palette)**而非像素 → 仍用 §2.4 的 **palette lockstep(同一时钟)**,保持其为独立廉价层。全 Pixi 合成留作单独的「未来」大改。
+
+**落地约束**:`crossfadeMs:0` ⇒ 与现状逐字节一致(可瞬时回退);任何失败 → 回退现有单 sprite swap(永不黑屏);fake 注入测 sprite 簿记;视觉走桌面 QA。
+
+**Sources**:[v8 scene graph](https://pixijs.com/8.x/guides/concepts/scene-graph) · [v8 Shader](https://pixijs.download/dev/docs/rendering.Shader.html) · [v8 textures](https://pixijs.com/8.x/guides/components/textures) · [gl-transitions](https://gl-transitions.com/) · [v8 transition-filter 讨论](https://github.com/pixijs/pixijs/discussions/11323)
+
 ### 2.5 drag-follow 与 Controller 的关系（正交但协同）
 
 - **温度（切歌）过渡 = Controller**；**空间（拖拽）预览 = drag-follow 层**。二者正交。
@@ -357,6 +381,7 @@ src/components/player/
 
 | Date | Author | Changes |
 |------|--------|---------|
+| 2026-06-15 | User+Claude | **实施进展 + Pixi 实现定稿（§2.4bis）。** **已落地(feat/background-frame-controller 分支,均绿)**:Phase 1 transition-driver + layer-stack reducer(`3ac5673`,20 例);Phase 2 ready-gate + resolver(`4e5ce38`,13 例);Phase 3 **blur slice** 接线(`46eeb56`)—— 用户桌面验证**切歌 crossfade 丝滑/不串/不闪 ✅**;关掉未同步的 standalone drag-follow(`aa225a0`,修 QA 图1/图3);图2 双修(`d1c0b95` 拖拽 intent 预载 + `ee3fc4c` 卡片 cover live 重解析,非 frozen snapshot)—— 用户验证 ✅。**Pixi 实现定稿**:经 PixiJS v8 官方文档(scene-graph/shader/textures)研究,选 **sprite-stack alpha crossfade**(filtered Container + 回收 sprite 池,保留 noise 效果,fallback-safe),**不走** gl-transitions 自定义 shader(v8 可行但需重写渲染路径、盲 WebGL 高风险,留作未来「可配置转场」);flow/viz 不并入 Pixi(逐帧纹理上传会回退性能),用 palette lockstep 同步。详见 §2.4bis。stable order:**Pixi next → Phase 4 last**。 |
 | 2026-06-15 | User+Claude | **设计定稿：Open Q1-3/5/6/8 全部拍板。** Q1=**3-layer carry-over**（§2.2 重写为层栈模型 push/collapse/prune + Pixi 有界 sprite 栈，不回弹）；Q2=palette **完全 lockstep**（颜色按 crossfade 进度插值）；Q3=内部常量 `BACKGROUND_CROSSFADE_MS`；Q5=resolver **兼做 consolidation R3** source 抽离；Q6=best practice **开始 commit + 冻结端点**（auto 立即、manual 越阈值即 commit、取消不 commit）；Q8=**Dock 信息区 drag 已存在**（`track-identity-row.tsx` 第 4 套独立 threshold-fire，Phase 4 迁入 driver）。仅 Q4（并行对照，可选）留开。**设计完整，待 GO 开 Phase 1。** |
 | 2026-06-15 | User+Claude | **设计修订：加入 Transition Driver + 四触发源统一（§2.1bis）。** 用户指出切歌触发源有四个（①键盘 ②Dock 播放按钮 ③拖拽 Dock 歌曲信息区 ④拖拽封面），**无论哪个都应一致**，且 drag 是「手动拖拽 + 松手 Swiper 自动补完剩余过渡」、按钮/键盘是「同一条自动动画」。新增 Transition Driver：冻结端点（from/to 过渡期不漂移 → 根治 Bug 2）+ 归一 progress + manual/auto + velocity-aware 自动补完；前景 coverflow 与背景 Controller 同源消费。新增 Open Q#6（commit 时机：开始 vs 结束）/#7（前景 coverflow 是否一并收进 driver）/#8（Dock 信息区 drag 现状）。**仍未动代码，待评审拍板。** |
 | 2026-06-15 | Claude | 初稿（设计待评审）：把用户三要求（对应封面 / 不串歌 / 不闪）映射为统一 Background Frame Controller —— 单一事实源 + generation 守卫 + ready-gate + 单 crossfade 时钟；状态机 §2.2、ready-gate 吸收 QA#7-24 §2.3、层消费者 §2.4、drag-follow 协同 §2.5；5 phase 计划。实现 consolidation PRD 的 R2+R4。**未动代码。** |
