@@ -98,11 +98,21 @@ function BlurLayer({
     return () => ro.disconnect();
   }, [blurPx]);
 
-  // An instant layer's opacity jumps with no transition, so onTransitionEnd never
-  // fires — settle it as soon as it has drawn so the stack still collapses.
+  // Settle (→ collapse the now-covered base layer below) once this layer is fully
+  // shown. A TIMER, not onTransitionEnd: a fast / preloaded cover can jump to full
+  // opacity without the CSS transition ever firing, so onTransitionEnd would never
+  // fire and the covered base would stay alive — bleeding ~10% through (layers are
+  // at maxOpacity < 1) — which is the "A residue at the end" QA saw. Instant layers
+  // settle at once.
   useEffect(() => {
-    if (instant && drawn) onShown?.();
-  }, [instant, drawn, onShown]);
+    if (!drawn) return;
+    if (instant) {
+      onShown?.();
+      return;
+    }
+    const id = window.setTimeout(() => onShown?.(), BACKGROUND_CROSSFADE_MS);
+    return () => window.clearTimeout(id);
+  }, [drawn, instant, onShown]);
 
   return (
     <div ref={hostRef} className="absolute inset-0">
@@ -112,9 +122,6 @@ function BlurLayer({
         style={{
           opacity: drawn ? maxOpacity : 0,
           transition: instant ? "none" : `opacity ${BACKGROUND_CROSSFADE_MS}ms ease`,
-        }}
-        onTransitionEnd={(e) => {
-          if (e.propertyName === "opacity" && drawn && !instant) onShown?.();
         }}
       />
     </div>
