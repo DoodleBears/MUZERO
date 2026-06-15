@@ -19,7 +19,7 @@ describe("DEFAULT_SETTINGS", () => {
       playbackAction: "play-next",
       searchScope: "all-library",
       onlineFallbackOnLowConfidence: true,
-      requireApprovalForPlayNow: true,
+      requireApprovalForPlayNow: false,
     });
   });
 });

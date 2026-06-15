@@ -393,7 +393,7 @@ const unsub = bridge.liveRequestIntake.onMessage((payload) => {
 - [ ] 新增 `live-request-controller.ts`：runtime 模块级单例 + 注入 `playNow`/`getActiveSessionId`/`getCurrentTrackId`；onMessage → 脱敏 → applyMapping → normalize → `runtime.handle(req, override)`。
 - [x] `audience-request-runtime.ts`：`handle(request, override?)` 接受每调用 routeMode/playbackAction 覆盖（合并进 effective intake）。**runtime 测试 12 通过。**
 - [ ] App 启动挂载 `startLiveRequestIntake()`；随 `enabled`/`transport`/`sources` re-apply；卸载清理。
-- [ ] `DEFAULT_AUDIENCE_REQUEST_INTAKE_SETTINGS.requireApprovalForPlayNow` 改 `false`。
+- [x] `DEFAULT_AUDIENCE_REQUEST_INTAKE_SETTINGS.requireApprovalForPlayNow` 改 `false`（+ 同步 `default-settings.test.ts`）。
 - [ ] 单测：模板引擎穷举（`||`/三元/`map`+`join`/`time`/缺失/原型污染）；fake bridge emit `{sourceId:"default", body}` → 命中 → `playQueuePlayNext` 被调；低置信度 → `ignored`。
 
 ### Phase 1 Checklist

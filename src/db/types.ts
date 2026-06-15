@@ -553,7 +553,9 @@ export const DEFAULT_AUDIENCE_REQUEST_INTAKE_SETTINGS: AudienceRequestIntakeSett
   dedupeWindowSec: 30,
   requesterCooldownSec: 10,
   maxRequestsPerMinute: 30,
-  requireApprovalForPlayNow: true,
+  // No manual approval in the live-request flow (PRD Q4) — a confident match plays
+  // straight away. "testing" mode is the pre-launch gate, not per-request review.
+  requireApprovalForPlayNow: false,
 };
 
 /** Singleton app settings (id = "app"). BYOK keys stay on-device, never bundled. */
