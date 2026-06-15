@@ -29,7 +29,12 @@ import {
 import { transitionProgress, useNowPlayingTransition } from "@/lib/now-playing-transition";
 import { arePerfCountersEnabled, notePerfWork } from "@/lib/perf-counters";
 import { trackAlbum, trackArtists, trackHasCover, trackSubtitle } from "@/lib/track-display";
-import { manualProgress } from "@/lib/transition-driver";
+import {
+  manualProgress,
+  remainingDurationMs,
+  dragDirection as resolveDragDirection,
+  shouldCommitRelease,
+} from "@/lib/transition-driver";
 import { cn } from "@/lib/utils";
 import { useNavStore } from "@/stores/nav-store";
 import { usePlayerStore } from "@/stores/player-store";
@@ -71,6 +76,10 @@ const COMMIT_EASE = [0.22, 1, 0.36, 1] as const;
 const SNAP_EASE = [0.25, 1, 0.5, 1] as const;
 const EXIT_TRAVEL_FRACTION = 0.92;
 const DRAG_GAIN = 2;
+// Drag distance (raw px) before a gesture commits to a direction — matches the
+// 8px direction deadzone used while dragging (onDrag). Shared with the Transition
+// Driver's `dragDirection` so the release decision uses the same sign rule.
+const DRAG_DIRECTION_DEADZONE = 8;
 // Trackpad / horizontal-wheel swipe: how much a deltaX pixel moves the strip,
 // how much horizontal travel must accumulate before the gesture engages (so a
 // near-vertical scroll doesn't nudge the cover), and how long after the last
@@ -404,7 +413,10 @@ export function SwipeableMediaStage({
   }, [clearStack, current?.id, settleTarget]);
 
   const commit = useCallback(
-    (direction: Exclude<SwipeDirection, null>) => {
+    (
+      direction: Exclude<SwipeDirection, null>,
+      release?: { fromProgress: number; velocity: number },
+    ) => {
       if (committing) return;
       const action = direction === "next" ? next : skipPrev;
       const targetVisual = direction === "next" ? activeStack.next : activeStack.prev;
@@ -420,11 +432,25 @@ export function SwipeableMediaStage({
       setCommitting(true);
       setHandoffFading(false);
       const target = direction === "next" ? -exitTravel / DRAG_GAIN : exitTravel / DRAG_GAIN;
+      // Swiper auto-complete (PRD Phase 4 / Transition Driver): finish only the
+      // REMAINING distance from where the finger let go, velocity-aware — a fast
+      // fling lands sooner, a gentle release glides — instead of a fixed 1.08s no
+      // matter the release point. A non-drag commit (no release ctx) keeps the
+      // full fixed duration.
+      const durationSec = release
+        ? remainingDurationMs({
+            baseMs: COMMIT_DURATION_SEC * 1000,
+            fromProgress: release.fromProgress,
+            toProgress: 1,
+            velocity: release.velocity,
+            width: exitTravel,
+          }) / 1000
+        : COMMIT_DURATION_SEC;
       activeAnimation.current?.stop();
       animationToken.current += 1;
       const token = animationToken.current;
       const controls = animate(x, target, {
-        duration: COMMIT_DURATION_SEC,
+        duration: durationSec,
         ease: COMMIT_EASE,
         type: "tween",
       });
@@ -811,19 +837,32 @@ export function SwipeableMediaStage({
               }
             }}
             onDragEnd={(_, info) => {
-              const distance = Math.min(
+              // Release decision through the shared Transition Driver so the drag
+              // converges on the same math the background already reads (Phase 4).
+              // Direction from the drag sign; commit if dragged past the distance
+              // threshold OR a fling matches the drag. The threshold is the same px
+              // value as before, normalized to the same `step` space as the shared
+              // progress — so WHETHER it commits is unchanged; only the path is
+              // unified and the auto-complete becomes velocity-aware (see commit).
+              const dir = resolveDragDirection(info.offset.x, DRAG_DIRECTION_DEADZONE);
+              if (!dir) {
+                snapBack();
+                return;
+              }
+              const commitDistancePx = Math.min(
                 MAX_COMMIT_DISTANCE,
                 Math.max(MIN_COMMIT_DISTANCE, width * COMMIT_FRACTION),
               );
-              const wantsNext = info.offset.x < -distance || info.velocity.x < -COMMIT_VELOCITY;
-              const wantsPrev = info.offset.x > distance || info.velocity.x > COMMIT_VELOCITY;
-              if (wantsNext) {
-                commit("next");
-              } else if (wantsPrev) {
-                commit("prev");
-              } else {
-                snapBack();
-              }
+              const progress = manualProgress(info.offset.x * DRAG_GAIN, step);
+              const willCommit = shouldCommitRelease({
+                direction: dir,
+                flingVelocity: COMMIT_VELOCITY,
+                progress,
+                threshold: manualProgress(commitDistancePx * DRAG_GAIN, step),
+                velocity: info.velocity.x,
+              });
+              if (willCommit) commit(dir, { fromProgress: progress, velocity: info.velocity.x });
+              else snapBack();
             }}
             aria-label={`${t("player.previous")} / ${t("player.next")}`}
             className="relative z-10 w-full touch-pan-y cursor-grab select-none overflow-visible active:cursor-grabbing album-cover-radius [&_*]:select-none [&_img]:pointer-events-none"

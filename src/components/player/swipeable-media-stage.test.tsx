@@ -200,6 +200,25 @@ describe("SwipeableMediaStage", () => {
     expect(screen.getByTestId("media-stage")).toBeInTheDocument();
   });
 
+  it("commits a short drag when released as a fast fling (Transition Driver path)", async () => {
+    render(<SwipeableMediaStage />);
+
+    await act(async () => {
+      latestDragProps().onPointerDown?.({});
+    });
+    await act(async () => {
+      latestDragProps().onDrag?.({}, { offset: { x: -24 }, velocity: { x: -900 } });
+    });
+    // Below the distance threshold, but a fling faster than COMMIT_VELOCITY in the
+    // drag direction must still commit — exercising shouldCommitRelease's fling arm.
+    await act(async () => {
+      latestDragProps().onDragEnd?.({}, { offset: { x: -24 }, velocity: { x: -900 } });
+      await Promise.resolve();
+    });
+
+    expect(usePlayerStore.getState().currentIndex).toBe(1);
+  });
+
   it("switches to the next track on a horizontal trackpad swipe", async () => {
     render(<SwipeableMediaStage />);
     // container (wheel target) = cover box wrapping the draggable stage.
