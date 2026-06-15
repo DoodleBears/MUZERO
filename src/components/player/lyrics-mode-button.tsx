@@ -1,4 +1,4 @@
-import { Check, MicVocal, NotebookPen } from "lucide-react";
+import { Check, MicVocal, Quote } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ControlTooltip } from "@/components/player/control-tooltip";
@@ -47,7 +47,7 @@ export function LyricsModeButton({
     : hasMemory
       ? t("lyrics.switchToMemory")
       : noMemoryHint;
-  const TriggerIcon = showingMemory ? NotebookPen : MicVocal;
+  const TriggerIcon = showingMemory ? Quote : MicVocal;
   const showLyrics = () =>
     void saveSettings({
       lyricsStageOpen: true,
@@ -125,7 +125,7 @@ export function LyricsModeButton({
           active={showingMemory}
           description={hasMemory ? t("lyrics.switchToMemory") : noMemoryHint}
           disabled={!hasMemory}
-          icon={NotebookPen}
+          icon={Quote}
           label={t("lyrics.modeMemory")}
           onClick={() => {
             showMemory();
