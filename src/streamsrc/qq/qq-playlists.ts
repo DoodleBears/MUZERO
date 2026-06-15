@@ -6,7 +6,7 @@
  * mid via the y.qq.com photo template. `interval` is in SECONDS (unlike NetEase ms).
  */
 
-import type { StreamSearchHit } from "../provider";
+import type { StreamPlaylist, StreamSearchHit } from "../provider";
 
 /** y.qq.com album-cover URL from an album mid. */
 export function qqAlbumCover(albumMid: string): string {
@@ -72,4 +72,71 @@ export function parseQqSongDetail(json: unknown): StreamSearchHit | null {
   if (!ti) return null;
   const hit = qqSongToHit(ti);
   return hit.externalId ? hit : null;
+}
+
+interface RawQqDirInfo {
+  id?: unknown;
+  disstid?: unknown;
+  dissid?: unknown;
+  title?: unknown;
+  dissname?: unknown;
+  picurl?: unknown;
+  logo?: unknown;
+  songnum?: unknown;
+  total_song_num?: unknown;
+  songlist?: unknown[];
+}
+interface RawQqDiss {
+  dirinfo?: RawQqDirInfo;
+  cdlist?: RawQqDirInfo[];
+  songlist?: unknown[];
+}
+
+/** Unwrap musicu `req_0.data` (or a bare `data`) to the diss payload. */
+function qqDissData(json: unknown): RawQqDiss | null {
+  const r = json as { req_0?: { data?: unknown }; data?: unknown } | null;
+  const data = r?.req_0?.data ?? r?.data ?? json;
+  return data && typeof data === "object" ? (data as RawQqDiss) : null;
+}
+
+/** First positive number / non-empty string, as a string (id may arrive either way). */
+function idStr(...vals: unknown[]): string {
+  for (const v of vals) {
+    if (typeof v === "number" && v > 0) return String(v);
+    if (typeof v === "string" && v.length > 0) return v;
+  }
+  return "";
+}
+
+/** `music.srfDissInfo.aiDissInfo` → playlist meta (tolerant of `dirinfo` / `cdlist[0]`). */
+export function parseQqPlaylistMeta(json: unknown): StreamPlaylist | null {
+  const data = qqDissData(json);
+  if (!data) return null;
+  const dir = data.dirinfo ?? (Array.isArray(data.cdlist) ? data.cdlist[0] : undefined);
+  if (!dir) return null;
+  const id = idStr(dir.id, dir.disstid, dir.dissid);
+  if (!id) return null;
+  const songlist = data.songlist ?? dir.songlist ?? [];
+  return {
+    id,
+    name: str(dir.title) ?? str(dir.dissname) ?? "",
+    coverUrl: str(dir.picurl) ?? str(dir.logo),
+    trackCount:
+      typeof dir.songnum === "number"
+        ? dir.songnum
+        : typeof dir.total_song_num === "number"
+          ? dir.total_song_num
+          : Array.isArray(songlist)
+            ? songlist.length
+            : 0,
+    source: "qq",
+  };
+}
+
+/** `music.srfDissInfo.aiDissInfo` → the playlist's songs as hits. */
+export function parseQqPlaylistTracks(json: unknown): StreamSearchHit[] {
+  const data = qqDissData(json);
+  const dir = data?.dirinfo ?? (Array.isArray(data?.cdlist) ? data?.cdlist[0] : undefined);
+  const songlist = data?.songlist ?? dir?.songlist ?? [];
+  return (Array.isArray(songlist) ? songlist : []).map(qqSongToHit).filter((h) => h.externalId);
 }

@@ -14,13 +14,19 @@ import { log } from "@/lib/logger";
 import { type StreamHttp, withQuery } from "../http";
 import type {
   PlayableStream,
+  StreamPlaylist,
   StreamResolveOptions,
   StreamResolveResult,
   StreamSearchHit,
   StreamSearchOptions,
   StreamSourceProvider,
 } from "../provider";
-import { parseQqSearch } from "./qq-playlists";
+import {
+  parseQqPlaylistMeta,
+  parseQqPlaylistTracks,
+  parseQqSearch,
+  parseQqSongDetail,
+} from "./qq-playlists";
 import { qqFilename, qqQualityCandidates } from "./qq-quality";
 import { parseQqVkey, QQ_MUSICU_URL, qqStreamUrl, qqVkeyRequestBody } from "./qq-resolve";
 import { parseQqMusicKey, QQ_GUEST_GTK, qqGtk } from "./qq-sign";
@@ -32,6 +38,14 @@ const REFERER = "https://y.qq.com";
 /** NeriPlayer-Desktop guest device id; uin 0 = anonymous. */
 const GUEST_GUID = "10000";
 const GUEST_UIN = "0";
+// Song detail — the endpoint NeriPlayer verified (get_song_detail_yqq).
+const QQ_DETAIL_MODULE = "music.pf_song_detail_svr";
+const QQ_DETAIL_METHOD = "get_song_detail_yqq";
+// Playlist (歌单) detail — modern aiDissInfo (meta + songlist). Module/method are
+// runtime-verifiable (PRD Phase 4); the tolerant parsers absorb shape drift.
+const QQ_DISS_MODULE = "music.srfDissInfo.aiDissInfo";
+const QQ_DISS_METHOD = "uniform_get_Dissinfo";
+const QQ_DISS_IMPORT_SONGS = 1000;
 
 export interface QqSourceDeps {
   http: StreamHttp;
@@ -124,6 +138,71 @@ export function createQqSource(deps: QqSourceDeps): StreamSourceProvider {
     }
   }
 
+  async function postMusicu(body: unknown, signal?: AbortSignal): Promise<unknown> {
+    const url = withQuery(QQ_MUSICU_URL, {
+      format: "json",
+      g_tk: String(gtk()),
+      data: JSON.stringify(body),
+    });
+    return JSON.parse(unwrapJsonp(await get(url, signal)));
+  }
+
+  /** Resolve song mids (from a pasted song link) to hits via the verified detail endpoint. */
+  async function getTracksByIds(
+    ids: string[],
+    opts?: { signal?: AbortSignal },
+  ): Promise<StreamSearchHit[]> {
+    const hits: StreamSearchHit[] = [];
+    for (const mid of ids) {
+      const json = await postMusicu(
+        {
+          songinfo: {
+            module: QQ_DETAIL_MODULE,
+            method: QQ_DETAIL_METHOD,
+            param: { song_mid: mid },
+          },
+        },
+        opts?.signal,
+      );
+      const hit = parseQqSongDetail(json);
+      if (hit) hits.push(hit);
+    }
+    return hits;
+  }
+
+  async function fetchDiss(
+    disstid: string,
+    songNum: number,
+    signal?: AbortSignal,
+  ): Promise<unknown> {
+    return postMusicu(
+      {
+        req_0: {
+          module: QQ_DISS_MODULE,
+          method: QQ_DISS_METHOD,
+          param: { disstid: Number(disstid), dirid: 0, song_num: songNum, song_begin: 0, tag: 1 },
+        },
+      },
+      signal,
+    );
+  }
+
+  /** A pasted playlist link's meta (name/cover/count) for the import card. */
+  async function getPlaylistMeta(
+    disstid: string,
+    opts?: { signal?: AbortSignal },
+  ): Promise<StreamPlaylist | null> {
+    return parseQqPlaylistMeta(await fetchDiss(disstid, 0, opts?.signal));
+  }
+
+  /** Import a public playlist (disstid) → its songs as hits. */
+  async function importPlaylist(
+    disstid: string,
+    opts?: { signal?: AbortSignal },
+  ): Promise<StreamSearchHit[]> {
+    return parseQqPlaylistTracks(await fetchDiss(disstid, QQ_DISS_IMPORT_SONGS, opts?.signal));
+  }
+
   return {
     id: "qq",
     label: "QQ 音乐",
@@ -131,5 +210,8 @@ export function createQqSource(deps: QqSourceDeps): StreamSourceProvider {
     isAuthed: () => Boolean(deps.getCookie?.()),
     search,
     resolve,
+    getTracksByIds,
+    getPlaylistMeta,
+    importPlaylist,
   };
 }

@@ -21,7 +21,7 @@
 | 1 | QQ guest provider 纯核心：`hash33`/`g_tk` + 音质码表 + search/detail/vkey/cover 纯映射 + sip+purl 直链组装（TDD） | ✅ Completed | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | registry 接入 + 运行时 muzfetch(Referer) + Electron 端到端**手测 guest 可播放**（验证 Open Q：guest 标准音质能否 resolve） | 🔄 代码就位（UI/搜索/设置接好；**待 Electron 手测** guest 可播放，Open Q1/Q2/Q6） | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | 登录：**登录窗口路线**（`STREAM_LOGIN_CONFIGS.qq` + `g_tk=hash33(musickey)`，Q4 定）；QR API（QQ PTLogin+微信 OAuth code→凭据兑换）降 v2 | 🔄 代码就位（配置+签名已测；**待 Electron 手测** cookie 抓取） | [Phase 3 Checklist](#phase-3-checklist) |
-| 4 | 歌单同步 + 粘贴链接（`getUserPlaylists`/`importPlaylist`/`getTracksByIds`/`getPlaylistMeta`，复用既有同步/导入 UI） | 🔲 Pending | [Phase 4 Checklist](#phase-4-checklist) |
+| 4 | 歌单同步 + 粘贴链接（`getTracksByIds`/`getPlaylistMeta`/`importPlaylist` + QQ 链接解析；`getUserPlaylists` 降 v2） | 🔄 代码就位（解析器+链接已测；**待手测**真实歌单端点 + v2「我的歌单」） | [Phase 4 Checklist](#phase-4-checklist) |
 | 5 | `zzc` 签名 + QIMEI 设备指纹（**仅当 guest/web 签名在运行时被拒的回退路径**，按需启用） | 🔲 Pending（按需） | [Phase 5 Checklist](#phase-5-checklist) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
@@ -404,14 +404,14 @@ i18n locales/{en,zh,ja,ko}/                        # 源名 + 音质封顶提示
 **Goal:** 复用既有同步/导入/去重 UI（20260610 §15-17），给 QQ 实现 `getUserPlaylists`/`importPlaylist`/`getTracksByIds`/`getPlaylistMeta`。
 
 **Tasks:**
-- [ ] `qq-source.ts` 实现可选方法：用户歌单（登录态）、歌单详情→trackmids→批量 `song/detail`→hits、粘贴 QQ 歌单/歌曲链接解析。
-- [ ] `stream-link.ts` 加 QQ 链接解析（`y.qq.com/n/ryqq/songDetail/<mid>`、歌单 `/playlist/<disstid>` 等）。
-- [ ] 复用 `PlaylistImportDialog`（增量同步/选 set/新建）+ `streamPlaylistRef`。
+- [x] `qq-source.ts` 实现可选方法：`getTracksByIds`（逐 mid 走**已验证**的 `get_song_detail_yqq`）、`getPlaylistMeta` + `importPlaylist`（`aiDissInfo` 取歌单元信息 + songlist→hits）。**`getUserPlaylists`（同步「我的歌单」，需登录 + uin + 不确定的用户歌单端点）降 v2**——UI 经 `source?.getUserPlaylists?.()` optional 链优雅退化为「无歌单」，不报错。
+- [x] `stream-link.ts` 加 QQ 链接解析（`/songDetail/<mid>`、`/song/<mid>.html`、`/playlist/<disstid>`、移动 `taoge.html?id=`；忽略 album/非 y.qq.com 域）。base62 songmid（非纯数字）单列。
+- [x] 复用 `PlaylistImportDialog`（增量同步/选 set/新建）+ `streamPlaylistRef` —— **零改动**（源无关，QQ hits 与三源同形）。
 
 #### Phase 4 Checklist
-- [ ] 纯解析器单测：搜索/歌单/song-detail → hits；QQ 链接解析（歌曲/歌单/忽略非 QQ 域）。
-- [ ] 手测：登录后同步「我的歌单」为新 set；二次同步只增新曲（复用去重）。
-- [ ] 手测：⌘F 粘贴 QQ 歌单链接 → 导入卡片 → 入库。
+- [x] 纯解析器单测：`parseQqPlaylistMeta`(dirinfo / 兼容 cdlist[0] / count 回退) + `parseQqPlaylistTracks`(songlist→hits) + `parseQqSongDetail`；`parseStreamLink` QQ（songDetail/.html/playlist/taoge/忽略 album）；`qq-source` 三方法 stub 纵向（detail/aiDissInfo）。58 qq+link 测 + 280 全 streamsrc 测全绿、tsc 0 错。
+- [ ] **手测**：⌘F 粘贴 QQ 歌曲/歌单链接 → 结果行 / 导入卡片 → 入库（端点 `aiDissInfo` module/method 属运行时核实项；解析器容错已就位，shape 漂移由 dirinfo/cdlist 双路吸收）。
+- [ ] **手测 / v2**：登录后同步「我的歌单」(`getUserPlaylists`)——需先定位 QQ 用户歌单端点（本轮调研 0 verified），随登录窗口 cookie 抓取一并 Electron 验证。
 
 ### Phase 5: `zzc` 签名 + QIMEI（仅回退，按需）
 
@@ -490,6 +490,7 @@ i18n locales/{en,zh,ja,ko}/                        # 源名 + 音质封顶提示
 | 2026-06-16 | DoodleBear（TDD 实现）| **Phase 1 ✅ 落地**（worktree `feat/qq-music-stream-source`）：`src/streamsrc/qq/` 5 文件（`qq-sign`/`qq-quality`/`qq-resolve`/`qq-playlists`/`qq-source`）+ 各 `.test.ts`，全纯函数/注入式 stub 单测；registry 注册 `"qq"`、`StreamSourceId` 扩值（连带修 4 处窄 union）。guest provider：`client_search_cp` 搜索 + `musicu GetVkey` 明文批量取直链（sip+purl）+ 明文音质降级（剔除加密档）+ 空 purl→`no-permission`。**41 qq/registry 测 + 453 全域（qq+registry+chat+sync）全绿，tsc 0 错，biome 绿**。运行时项（真实 API/CORS/播放）属 Phase 2 Electron 手测。 |
 | 2026-06-16 | DoodleBear（实现）| **Phase 2 🔄 代码就位**：QQ 接入 ⌘F 在线 chips（`ONLINE_SOURCES`/`SOURCE_LABEL`）+ Settings 卡（`SOURCES`，音质只列明文 `flac/320/m4a/128`）。搜索/播放/代理为源无关、QQ 入 registry 后**零改动复用**。源名为品牌名（非 i18n），红线复用 `streamSources.redline`。tsc 0 错、search/settings/hooks 82 测全绿。**剩 Electron 手测 guest 可播放（Open Q1/Q2/Q6）**——无桌面运行时不冒充已验证。 |
 | 2026-06-16 | DoodleBear（TDD 实现）| **Phase 3 🔄 代码就位（登录窗口路线，Q4）**：`STREAM_LOGIN_CONFIGS.qq`（authCookie `qqmusic_key` / `y.qq.com` 登录窗，复用 `externalLogin`+`streamSourcesAfterLogin/Logout`）；provider 登录态 `g_tk=hash33(musickey)`（Phase 1 已实现，本期加测：g_tk≠5381 且 Cookie 头带 key）。login+qq-source 18 测全绿，tsc 0 错。QR API（PTLogin/微信 + OAuth code 兑换钩子）按 Q4 降 **v2**。**剩 Electron 手测 cookie 抓取**（y.qq.com 或 localStorage→定 v2 取舍）。 |
+| 2026-06-16 | DoodleBear（TDD 实现）| **Phase 4 🔄 代码就位**：`stream-link.ts` 加 QQ 链接解析（songDetail/.html/playlist/taoge，base62 mid 单列）；`qq-playlists` 加 `parseQqPlaylistMeta`/`parseQqPlaylistTracks`（dirinfo / 兼容 cdlist[0]，容错 shape 漂移）；`qq-source` 加 `getTracksByIds`（走**已验证** get_song_detail_yqq）+ `getPlaylistMeta`/`importPlaylist`（aiDissInfo）。`PlaylistImportDialog` 源无关零改动复用。**`getUserPlaylists` 降 v2**（用户歌单端点 0 verified，UI optional 链优雅退化）。58 qq+link 测 + 280 全 streamsrc 测全绿，tsc 0 错。**剩手测**真实 aiDissInfo 端点 + v2「我的歌单」。 |
 
 ---
 

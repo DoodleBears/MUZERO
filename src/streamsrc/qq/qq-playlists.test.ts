@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { parseQqSearch, parseQqSongDetail, qqAlbumCover, qqSongToHit } from "./qq-playlists";
+import {
+  parseQqPlaylistMeta,
+  parseQqPlaylistTracks,
+  parseQqSearch,
+  parseQqSongDetail,
+  qqAlbumCover,
+  qqSongToHit,
+} from "./qq-playlists";
 
 describe("qqAlbumCover", () => {
   it("builds the y.qq.com photo url from an album mid", () => {
@@ -67,5 +74,64 @@ describe("parseQqSongDetail", () => {
   });
   it("returns null when track_info is missing", () => {
     expect(parseQqSongDetail({})).toBeNull();
+  });
+});
+
+describe("parseQqPlaylistMeta", () => {
+  it("reads dirinfo (modern aiDissInfo)", () => {
+    expect(
+      parseQqPlaylistMeta({
+        req_0: {
+          data: {
+            dirinfo: { id: 9069454695, title: "List", picurl: "http://x/p.jpg", songnum: 42 },
+          },
+        },
+      }),
+    ).toEqual({
+      id: "9069454695",
+      name: "List",
+      coverUrl: "http://x/p.jpg",
+      trackCount: 42,
+      source: "qq",
+    });
+  });
+  it("reads legacy cdlist[0] and falls back trackCount to songlist length", () => {
+    expect(
+      parseQqPlaylistMeta({
+        data: {
+          cdlist: [{ disstid: 1, dissname: "L", logo: "http://x/l.jpg", songlist: [{}, {}] }],
+        },
+      }),
+    ).toMatchObject({ id: "1", name: "L", coverUrl: "http://x/l.jpg", trackCount: 2 });
+  });
+  it("returns null without an id / data", () => {
+    expect(parseQqPlaylistMeta({ req_0: { data: { dirinfo: {} } } })).toBeNull();
+    expect(parseQqPlaylistMeta({})).toBeNull();
+  });
+});
+
+describe("parseQqPlaylistTracks", () => {
+  it("maps the songlist to hits", () => {
+    const hits = parseQqPlaylistTracks({
+      req_0: {
+        data: {
+          songlist: [
+            { mid: "a", name: "A" },
+            { mid: "b", name: "B", album: { mid: "M" } },
+          ],
+        },
+      },
+    });
+    expect(hits.map((h) => h.externalId)).toEqual(["a", "b"]);
+    expect(hits[1].coverUrl).toBe(qqAlbumCover("M"));
+  });
+  it("reads a songlist nested under dirinfo", () => {
+    const hits = parseQqPlaylistTracks({
+      data: { dirinfo: { songlist: [{ mid: "z", name: "Z" }] } },
+    });
+    expect(hits.map((h) => h.externalId)).toEqual(["z"]);
+  });
+  it("returns [] when empty", () => {
+    expect(parseQqPlaylistTracks({})).toEqual([]);
   });
 });

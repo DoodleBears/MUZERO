@@ -120,4 +120,47 @@ describe("createQqSource", () => {
     const out = await createQqSource({ http }).resolve("X");
     expect(out).toEqual({ kind: "no-permission", reason: "vip-or-encrypted" });
   });
+
+  it("getTracksByIds resolves song mids via get_song_detail_yqq", async () => {
+    const http: StreamHttp = async (req) => {
+      expect(req.url).toContain("musicu.fcg");
+      return res({
+        songinfo: {
+          data: { track_info: { mid: "m1", name: "T", singer: [{ name: "S" }], interval: 200 } },
+        },
+      });
+    };
+    const hits = await createQqSource({ http }).getTracksByIds?.(["m1"]);
+    expect(hits).toHaveLength(1);
+    expect(hits?.[0]).toMatchObject({
+      source: "qq",
+      externalId: "m1",
+      title: "T",
+      artist: "S",
+      durationSec: 200,
+    });
+  });
+
+  it("getPlaylistMeta + importPlaylist read aiDissInfo", async () => {
+    const diss = {
+      req_0: {
+        data: {
+          dirinfo: { id: 7, title: "P", songnum: 2 },
+          songlist: [
+            { mid: "a", name: "A" },
+            { mid: "b", name: "B" },
+          ],
+        },
+      },
+    };
+    const src = createQqSource({ http: async () => res(diss) });
+    expect(await src.getPlaylistMeta?.("7")).toMatchObject({
+      id: "7",
+      name: "P",
+      trackCount: 2,
+      source: "qq",
+    });
+    const tracks = await src.importPlaylist?.("7");
+    expect(tracks?.map((h) => h.externalId)).toEqual(["a", "b"]);
+  });
 });
