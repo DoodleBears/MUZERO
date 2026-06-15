@@ -60,3 +60,21 @@ export function backgroundCrossfadeProgress(
 export function crossfadeIndexDelta(direction: CrossfadeDirection): number {
   return direction === "next" ? 1 : direction === "prev" ? -1 : 0;
 }
+
+/**
+ * Opacities for a two-layer drag-follow background (a `next` and a `prev` blurred
+ * cover stacked over the resting background): only the layer in the drag's
+ * direction fades in, by progress; the other stays hidden. At rest both are 0,
+ * so the resting background shows through unchanged.
+ */
+export function crossfadeLayerOpacities(
+  dragX: number,
+  width: number,
+  gain = 1,
+): { next: number; prev: number } {
+  const fade = backgroundCrossfadeProgress(dragX, width, gain);
+  return {
+    next: fade.direction === "next" ? fade.incomingOpacity : 0,
+    prev: fade.direction === "prev" ? fade.incomingOpacity : 0,
+  };
+}

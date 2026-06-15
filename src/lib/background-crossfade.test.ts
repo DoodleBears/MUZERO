@@ -3,6 +3,7 @@ import {
   backgroundCrossfadeProgress,
   type CrossfadeDirection,
   crossfadeIndexDelta,
+  crossfadeLayerOpacities,
 } from "./background-crossfade";
 
 describe("backgroundCrossfadeProgress", () => {
@@ -57,5 +58,19 @@ describe("crossfadeIndexDelta", () => {
     for (const [dir, delta] of cases) {
       expect(crossfadeIndexDelta(dir)).toBe(delta);
     }
+  });
+});
+
+describe("crossfadeLayerOpacities", () => {
+  it("fades only the next layer when dragging left", () => {
+    expect(crossfadeLayerOpacities(-150, 300)).toEqual({ next: 0.5, prev: 0 });
+  });
+
+  it("fades only the prev layer when dragging right", () => {
+    expect(crossfadeLayerOpacities(150, 300)).toEqual({ next: 0, prev: 0.5 });
+  });
+
+  it("keeps both layers hidden at rest", () => {
+    expect(crossfadeLayerOpacities(0, 300)).toEqual({ next: 0, prev: 0 });
   });
 });

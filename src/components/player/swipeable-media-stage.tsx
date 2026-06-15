@@ -1,4 +1,11 @@
-import { animate, type MotionValue, motion, useMotionValue, useTransform } from "motion/react";
+import {
+  animate,
+  type MotionValue,
+  motion,
+  useMotionValue,
+  useMotionValueEvent,
+  useTransform,
+} from "motion/react";
 import {
   Fragment,
   type ReactNode,
@@ -19,6 +26,7 @@ import {
   resolveNowPlayingCoverBacklightAppearance,
   resolveNowPlayingCoverEffectMode,
 } from "@/lib/album-cover-appearance";
+import { nowPlayingDragX, useNowPlayingDragRing } from "@/lib/now-playing-drag";
 import { arePerfCountersEnabled, notePerfWork } from "@/lib/perf-counters";
 import { trackAlbum, trackArtists, trackHasCover, trackSubtitle } from "@/lib/track-display";
 import { cn } from "@/lib/utils";
@@ -200,6 +208,28 @@ export function SwipeableMediaStage({
   const currentCard = useCoverflowCard(visualX, 0, step, tilt, sideScale);
   const nextCard = useCoverflowCard(visualX, step, step, tilt, sideScale);
   const prevCard = useCoverflowCard(visualX, -step, step, tilt, sideScale);
+
+  // Publish the live drag offset + the prev/cur/next cover URLs to the ambient
+  // background so it can crossfade WITH the drag (PRD Phase 2-D). The MotionValue
+  // mirror is per-frame but only calls .set() (no React render); the cover ring
+  // is republished only when the covers / width change.
+  const setDragRing = useNowPlayingDragRing((s) => s.setRing);
+  useMotionValueEvent(x, "change", (v) => nowPlayingDragX.set(v));
+  useEffect(() => () => nowPlayingDragX.set(0), []);
+  useEffect(() => {
+    setDragRing({
+      width,
+      currentUrl: currentVisual?.initialCoverUrl ?? null,
+      nextUrl: nextVisual?.initialCoverUrl ?? null,
+      prevUrl: prevVisual?.initialCoverUrl ?? null,
+    });
+  }, [
+    setDragRing,
+    width,
+    currentVisual?.initialCoverUrl,
+    nextVisual?.initialCoverUrl,
+    prevVisual?.initialCoverUrl,
+  ]);
 
   useEffect(() => {
     const el = containerRef.current;

@@ -29,6 +29,7 @@ import { usePlayerStore } from "@/stores/player-store";
 import { VisualizerHost } from "@/visualizer/host";
 import { resolveVisualizerStyle } from "@/visualizer/registry";
 import { CanvasBlurBackground } from "./canvas-blur-background";
+import { DragCrossfadeBackground } from "./drag-crossfade-background";
 import { type PixiBackgroundEffect, PixiPixelBackground } from "./pixi-pixel-background";
 
 const bgCoverLog = createDiagnosticLogger("background.cover");
@@ -404,6 +405,9 @@ function NowPlayingBackgroundContent({ hideVisualizer }: { hideVisualizer: boole
           src={effectiveRenderImageTarget.src}
         />
       ) : null}
+      {/* Drag-follow crossfade (PRD Phase 2-D): blurred next/prev covers that
+          fade in as the cover stage is dragged. Invisible at rest (additive). */}
+      <DragCrossfadeBackground blurPx={blurPx} />
       <div className="absolute inset-0 bg-background" style={{ opacity: imageMaskOpacity }} />
       {/* Independent 流光 layer: composited ABOVE the background image/video and
           BELOW the visualizer spectrum. It's its own toggle (flowEnabled), NOT a

@@ -57,7 +57,18 @@ vi.mock("motion/react", async () => {
     motion: {
       div: MotionDiv,
     },
+    motionValue: (initial = 0) => {
+      let value = initial;
+      return {
+        get: () => value,
+        set: (next: number) => {
+          value = next;
+        },
+        on: () => () => {},
+      };
+    },
     useMotionValue: () => x,
+    useMotionValueEvent: () => {},
     useTransform: () => 0,
   };
 });
