@@ -4,7 +4,6 @@ import { db as defaultDb, type MuzeroDB } from "@/db/muzero-db";
 import { getSettings } from "@/db/repositories";
 import type { Track } from "@/db/types";
 import { resolveDesktopBridge } from "@/lib/desktop/bridge";
-import { getCroppedBlob } from "@/lib/image-crop";
 import { log } from "@/lib/logger";
 import { exceedsRemoteMediaCacheLimit } from "@/lib/media-size-limits";
 import { coverUrlCache } from "@/lib/object-url-cache";
@@ -48,8 +47,9 @@ export async function warmTrackCover(
   } = {},
 ): Promise<void> {
   if (!track || options.signal?.aborted) return;
-  const coverCropped = options.coverCropped ?? true;
-  const key = trackCoverCacheKey(track, coverCropped);
+  // Crop disabled (Option A, switch-fps cover-crop storm): warm the ORIGINAL blob,
+  // keyed by blob id, matching the display + preload paths.
+  const key = trackCoverCacheKey(track, false);
   if (!key) {
     await warmImage(proxyRemoteCover(track.remoteCoverUrl), options.signal);
     return;
@@ -58,10 +58,7 @@ export async function warmTrackCover(
 
   const resolved = await resolveMediaBlob(track.coverBlobId, options.db ?? defaultDb);
   if (!resolved?.blob || options.signal?.aborted) return;
-  const crop = coverCropped ? track.coverCrop : undefined;
-  const out = crop
-    ? await getCroppedBlob(resolved.blob, crop, resolved.blob.type || "image/jpeg")
-    : resolved.blob;
+  const out = resolved.blob;
   if (options.signal?.aborted) return;
   const url = URL.createObjectURL(out);
   coverUrlCache.store(key, url);

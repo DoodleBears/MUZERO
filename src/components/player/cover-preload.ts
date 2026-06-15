@@ -71,7 +71,9 @@ const localCoverInflight = new Map<string, Promise<LocalCoverBlob | null>>();
 
 export function buildCoverPreloadRequests(
   candidates: CoverPreloadCandidate[],
-  coverCropped: boolean,
+  // Crop is disabled — covers render from the original blob (Option A, switch-fps
+  // cover-crop storm). Param kept so callers don't churn; intentionally unused.
+  _coverCropped: boolean,
 ): CoverPreloadRequest[] {
   const seen = new Set<string>();
   const out: CoverPreloadRequest[] = [];
@@ -80,8 +82,8 @@ export function buildCoverPreloadRequests(
     if (!track || seen.has(track.id)) continue;
     seen.add(track.id);
     if (track.coverBlobId) {
-      const crop = coverCropped ? track.coverCrop : undefined;
-      const key = trackCoverCacheKey(track, coverCropped);
+      const crop = undefined; // Option A: original blob, no main-thread canvas crop.
+      const key = trackCoverCacheKey(track, false);
       if (!key) continue;
       out.push({
         coverBlobId: track.coverBlobId,

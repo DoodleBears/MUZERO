@@ -25,6 +25,17 @@ import { proxyRemoteCover, trackCoverCacheKey } from "@/player/playback-preload"
 
 const DISABLE_COVER_RESOURCES_FOR_BISECT = false;
 
+/**
+ * Experiment (cover-quality-and-scroll): render gallery grid cards (sets / albums
+ * / artists) from the full-resolution ORIGINAL cover instead of the 160px
+ * `thumbnail` derivative, to measure the JS-heap / decode cost on a local-first
+ * app. A source constant in the spirit of `DISABLE_COVER_RESOURCES_FOR_BISECT`
+ * (flip to false + rebuild to revert — NOT a runtime flag, CLAUDE.md rule 3). The
+ * dev perf HUD's `performance.frame` trace (`heapMb` + `blobsLiveByKind.image`)
+ * captures the before/after delta while the gallery tab is open.
+ */
+export const GRID_USE_ORIGINAL_COVER = true;
+
 export interface TrackCoverResource {
   /**
    * Display URL with the existing anti-flash behavior: while a local cover is
@@ -219,6 +230,21 @@ export function useTrackThumbnailUrl(track: TrackCoverInput | undefined): string
 }
 
 /**
+ * Cover URL for a gallery grid card. Normally the 160px `thumbnail` derivative
+ * (same as {@link useTrackThumbnailUrl}); under the {@link GRID_USE_ORIGINAL_COVER}
+ * experiment, the full-resolution original (square-cropped at display time). Both
+ * hooks are called unconditionally to satisfy the rules of hooks; the unused one
+ * receives `undefined` so it does no resolve work. `isGrid` lets a list-view card
+ * stay on the cheap thumbnail so the experiment is isolated to the grid.
+ */
+export function useGridCoverUrl(track: TrackCoverInput | undefined, isGrid = true): string | null {
+  const useOriginal = GRID_USE_ORIGINAL_COVER && isGrid;
+  const originalUrl = useTrackCoverUrl(useOriginal ? track : undefined);
+  const thumbnailUrl = useTrackThumbnailUrl(useOriginal ? undefined : track);
+  return useOriginal ? originalUrl : thumbnailUrl;
+}
+
+/**
  * Reactive cover resource for a track. `url` preserves the existing
  * stale-while-pending behavior used by normal UI, while `readyForTrack` lets
  * animation handoffs wait until the visible base layer is actually rendering the
@@ -229,7 +255,6 @@ export function useTrackCoverResource(
   surface: CoverRenderSurface = "cover",
 ): TrackCoverResource {
   const effectiveTrack = DISABLE_COVER_RESOURCES_FOR_BISECT ? undefined : track;
-  const settings = useSettings();
   const coverBlobId = effectiveTrack?.coverBlobId;
   const remoteCoverUrl = effectiveTrack?.remoteCoverUrl;
   const resolvedCover = useLiveQuery(
@@ -245,28 +270,15 @@ export function useTrackCoverResource(
         : resolvedCover.id === coverBlobId
           ? resolvedCover.blob
           : undefined;
-  // Stabilize the crop by VALUE. The queue is a fresh array on any track edit
-  // (e.g. liking another song), so `track.coverCrop`'s identity churns even when
-  // unchanged — memoizing on scalars keeps the cropped object URL stable, so the
-  // <img> never reloads and the dock cover never re-animates on unrelated edits.
-  const coverCropped = settings.coverCropped ?? true;
-  const cc = effectiveTrack?.coverCrop;
-  // biome-ignore lint/correctness/useExhaustiveDependencies: depend on scalars, not the object, so identity stays stable across queue rebuilds
-  const crop = useMemo(
-    () =>
-      coverCropped && cc ? { x: cc.x, y: cc.y, width: cc.width, height: cc.height } : undefined,
-    [coverCropped, cc?.x, cc?.y, cc?.width, cc?.height],
-  );
-  // A stable cache key built entirely from ROW fields (no async): the codename-
-  // stable blob id, plus the crop signature when a square crop applies. Distinct
-  // crops are distinct entries, mirroring the old cropped/original URL split.
-  const cacheKey = trackCoverCacheKey(
-    {
-      coverBlobId,
-      coverCrop: crop,
-    },
-    true,
-  );
+  // Option A (switch-fps cover-crop storm): render the cover from the ORIGINAL
+  // blob — never main-thread canvas-crop it. getCroppedBlob (decode → drawImage →
+  // re-encode) ran per cache-miss on every surface, and a cover edit churns the
+  // keys, so it tanked to ~16fps. The <img>'s object-fit:cover handles the visual
+  // fit; per-cover crop POSITIONING is dropped (coverCrop stays in the DB, unused).
+  const crop = undefined;
+  // Cache key = the codename-stable blob id only (no crop variants → fewer entries,
+  // higher hit-rate, and matches the preload/warm keys which also drop crop).
+  const cacheKey = trackCoverCacheKey({ coverBlobId, coverCrop: crop }, false);
   const remoteCacheKey =
     !coverBlobId && remoteCoverUrl ? remoteCoverAssetKey(remoteCoverUrl) : null;
   const targetKey = cacheKey ?? remoteCacheKey;
@@ -339,7 +351,7 @@ export function useTrackCoverResource(
     return () => {
       alive = false;
     };
-  }, [cacheKey, blob, crop, surface, effectiveTrack?.id]);
+  }, [cacheKey, blob, surface, effectiveTrack?.id]);
 
   useEffect(() => {
     if (!remoteCacheKey || !remoteCoverUrl) return;
