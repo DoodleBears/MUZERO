@@ -3,7 +3,9 @@ import { normalizeAudienceRequest } from "./audience-request-schema";
 import {
   applyMapping,
   detectPresetId,
+  fieldValuesToMapping,
   getPresetMapping,
+  mappingToFieldValues,
   REQUEST_MAPPING_PRESETS,
   REQUEST_TARGET_FIELDS,
 } from "./request-mapping-presets";
@@ -48,6 +50,24 @@ describe("request-mapping-presets", () => {
     const mapped = applyMapping({}, REQUEST_MAPPING_PRESETS["social-stream-ninja"]);
     expect(mapped.platform).toBe("stream");
     expect(mapped.username).toBe("viewer");
+  });
+
+  it("round-trips mapping ↔ field values, dropping empty optionals", () => {
+    const values = mappingToFieldValues(REQUEST_MAPPING_PRESETS["generic-json"]);
+    expect(values.query).toContain("message");
+    expect(values.role).toBe("");
+    expect(fieldValuesToMapping(values)).toEqual(REQUEST_MAPPING_PRESETS["generic-json"]);
+    expect(
+      fieldValuesToMapping({
+        query: " {{ payload.q }} ",
+        requester: "",
+        platform: "",
+        role: "",
+        externalId: "",
+      }),
+    ).toEqual({
+      query: "{{ payload.q }}",
+    });
   });
 
   it("detects the matching preset id, else custom", () => {

@@ -87,6 +87,29 @@ export function applyMapping(
   return out;
 }
 
+export type RequestMappingFieldValues = Record<keyof RequestMapping, string>;
+
+/** Mapping → a full string-keyed record for the visual editor (missing → ""). */
+export function mappingToFieldValues(mapping: RequestMapping | null): RequestMappingFieldValues {
+  return {
+    query: mapping?.query ?? "",
+    requester: mapping?.requester ?? "",
+    platform: mapping?.platform ?? "",
+    role: mapping?.role ?? "",
+    externalId: mapping?.externalId ?? "",
+  };
+}
+
+/** Visual-editor values → a mapping, dropping empty optional fields (query kept). */
+export function fieldValuesToMapping(values: RequestMappingFieldValues): RequestMapping {
+  const mapping: RequestMapping = { query: values.query.trim() };
+  if (values.requester.trim()) mapping.requester = values.requester.trim();
+  if (values.platform.trim()) mapping.platform = values.platform.trim();
+  if (values.role.trim()) mapping.role = values.role.trim();
+  if (values.externalId.trim()) mapping.externalId = values.externalId.trim();
+  return mapping;
+}
+
 /** Which built-in preset a mapping matches exactly, else `"custom"`. */
 export function detectPresetId(mapping: RequestMapping): MappingPresetId {
   for (const id of Object.keys(REQUEST_MAPPING_PRESETS) as BuiltinPresetId[]) {

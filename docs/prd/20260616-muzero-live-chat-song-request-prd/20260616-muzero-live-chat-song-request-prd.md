@@ -14,7 +14,7 @@
 | 1 | 通用接线 + 模板引擎：runtime 单例 + intake 消费者 + `request-template.ts`（移植 anysoul 模板引擎）+ 映射预设 + 无审核默认值（地基） | ✅ Completed | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | 多来源 + 测试生命周期：`sources[]`（status: testing/active/disabled）+ server 按 `/v1/intake/<id>` 路由 + testing 模式捕获 sanitized payload（不触发播放） | ✅ Completed | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | Web SSN WebSocket transport：泛化 bridge 接口 + `web.ts` 出站 WS 实现 + `social-stream-relay.ts`（转发原始事件，交给 ssn 模板预设） | ✅ Completed | [Phase 3 Checklist](#phase-3-checklist) |
-| 4 | 映射对话框 UX（仿 anysoul）：JSON 树点选映射 + 每字段实时预览（同引擎 parity）+ 预设/visual/raw + Go Live + 来源列表（状态徽章/生命周期/复制 URL） | 🔲 Pending | [Phase 4 Checklist](#phase-4-checklist) |
+| 4 | 映射对话框 UX（仿 anysoul）：JSON 树点选映射 + 每字段实时预览（同引擎 parity）+ 预设/visual/raw + Go Live + 来源列表（状态徽章/生命周期/复制 URL） | 🔄 In Progress | [Phase 4 Checklist](#phase-4-checklist) |
 | 5 | i18n（en/zh/ja/ko）+ 测试 + 收尾 | 🔲 Pending | [Phase 5 Checklist](#phase-5-checklist) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
@@ -438,11 +438,11 @@ const unsub = bridge.liveRequestIntake.onMessage((payload) => {
 **Goal:** §5.2/§5.3 完整 UI：真实 body JSON 树 click-to-map、每字段实时预览、预设/visual/raw、Go Live、来源列表生命周期。
 
 **Tasks:**
-- [ ] `json-payload-tree.tsx`：可点击 JSON 树，点叶子插入 `{{ payload.path }}`。
-- [ ] `target-field-input.tsx`：模板输入 + 用 `request-template.ts` 对选中 payload 求值的实时预览/报错。
-- [ ] `mapping-dialog.tsx`：左 payload（下拉 + 树 + 刷新/清空）/ 右目标字段 + 预设下拉 + visual/raw + 合成预览行 + Save / Go Live。
+- [x] `json-payload-tree.tsx`：可点击 JSON 树，点叶子插入 `{{ payload.path }}`。
+- [x] `target-field-input.tsx`：模板输入 + 用 `request-template.ts` 对选中 payload 求值的实时预览/报错。
+- [x] `mapping-dialog.tsx`：左 payload（下拉 + 树 + 刷新/清空）/ 右目标字段 + 预设下拉(`Select`) + visual/raw(`Tabs`) + Save / Go Live；用 `@/components/ui/{dialog,tabs,select,textarea}`。+ `mappingToFieldValues`/`fieldValuesToMapping` helper（带测试）。
 - [ ] `source-card.tsx`：状态徽章 + 复制端点 URL + 配置映射 + 生命周期按钮 + Delete。
-- [ ] `live-request-settings.tsx`：transport 选择器 + 来源列表 + ssn-websocket 表单 + 只读状态日志 + web CORS 提示。
+- [ ] `live-request-settings.tsx`：transport 选择器(`Select`) + 来源列表 + ssn-websocket 表单 + 只读状态日志 + web CORS 提示 + controller 生命周期驱动 `start`。
 
 ### Phase 4 Checklist
 - [ ] testing 来源发请求 → 对话框实时看到真实 body → 树点选/写模板 → 每字段预览正确 → Go Live → active 真正点歌。
