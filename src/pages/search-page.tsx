@@ -1330,7 +1330,7 @@ export function SearchPage() {
               </SortChip>
             </div>
 
-            <div className="mb-4 px-3">
+            <div className="px-3">
               <SystemPlaylistCards
                 items={systemPlaylistItems}
                 view={activeWallView}
@@ -1902,7 +1902,7 @@ function SetDetailView({
       initial={{ opacity: 0, x: 24 }}
       animate={{ opacity: 1, x: 0 }}
       transition={{ duration: 0.2, ease: "easeOut" }}
-      className="mx-auto flex h-full w-full max-w-6xl flex-col "
+      className="mx-auto flex h-full w-full max-w-6xl flex-col pt-chrome-top"
     >
       <button
         type="button"

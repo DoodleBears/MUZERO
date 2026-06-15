@@ -85,7 +85,7 @@ export function OnlinePlaylistDetail({
       initial={{ opacity: 0, x: 24 }}
       animate={{ opacity: 1, x: 0 }}
       transition={{ duration: 0.2, ease: "easeOut" }}
-      className="mx-auto flex h-full w-full max-w-6xl flex-col "
+      className="mx-auto flex h-full w-full max-w-6xl flex-col pt-chrome-top"
     >
       <button
         type="button"
@@ -212,7 +212,7 @@ function OnlineTrackList({
   return (
     <div
       ref={parentRef}
-      className="chrome-fade no-scrollbar min-h-0 flex-1 overflow-y-auto pb-chrome-bottom [--chrome-fade-top:1.25rem]"
+      className="chrome-fade no-scrollbar min-h-0 pt-2 flex-1 overflow-y-auto pb-chrome-bottom [--chrome-fade-top:1.25rem]"
       role="listbox"
     >
       <div className="relative w-full" style={{ height: `${rowVirtualizer.getTotalSize()}px` }}>
