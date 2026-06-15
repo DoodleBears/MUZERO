@@ -4,6 +4,14 @@ import { transitionProgress, useNowPlayingTransition } from "@/lib/now-playing-t
 import { cn } from "@/lib/utils";
 
 /**
+ * How long the committed incoming cover lingers (fading out) after a transition
+ * ends, covering the controller's resting crossfade + cover resolution so the old
+ * cover never flashes through during the hand-off. A touch longer than the
+ * background crossfade to absorb the new cover's resolve gap.
+ */
+const TRANSITION_HANDOFF_MS = 420;
+
+/**
  * Drag-follow crossfade for the blur background, Phase 4 — synced to the
  * foreground via the shared Transition channel. While a transition is active it
  * paints the FROZEN incoming cover (`toCoverUrl`) over the controller's resting
@@ -68,11 +76,24 @@ export function TransitionBackground({
   // Only visible while a transition is active and the incoming cover has drawn.
   const visible = active && drawn;
   useEffect(() => {
-    const apply = (p: number) => {
-      if (canvasRef.current) canvasRef.current.style.opacity = String(visible ? p * maxOpacity : 0);
-    };
-    apply(transitionProgress.get());
-    return transitionProgress.on("change", apply);
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    if (visible) {
+      // Follow the drag imperatively — no CSS transition (it would lag the finger).
+      canvas.style.transition = "none";
+      const apply = (p: number) => {
+        canvas.style.opacity = String(p * maxOpacity);
+      };
+      apply(transitionProgress.get());
+      return transitionProgress.on("change", apply);
+    }
+    // The transition ended. Don't drop instantly — that reveals the controller's
+    // resting layer still mid-crossfade (or still holding the old cover while the
+    // new one resolves), flashing the old cover for a frame. Fade out over the
+    // handoff window (ease-out holds it high first) so the controller settles on
+    // the new cover UNDERNEATH before this layer clears. (QA #1.)
+    canvas.style.transition = `opacity ${TRANSITION_HANDOFF_MS}ms ease-out`;
+    canvas.style.opacity = "0";
   }, [visible, maxOpacity]);
 
   return (
