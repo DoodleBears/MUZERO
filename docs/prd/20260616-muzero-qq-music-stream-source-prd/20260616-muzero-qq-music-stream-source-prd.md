@@ -20,7 +20,7 @@
 |-------|------|--------|------|
 | 1 | QQ guest provider 纯核心：`hash33`/`g_tk` + 音质码表 + search/detail/vkey/cover 纯映射 + sip+purl 直链组装（TDD） | ✅ Completed | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | registry 接入 + 运行时 muzfetch(Referer) + Electron 端到端**手测 guest 可播放**（验证 Open Q：guest 标准音质能否 resolve） | 🔄 代码就位（UI/搜索/设置接好；**待 Electron 手测** guest 可播放，Open Q1/Q2/Q6） | [Phase 2 Checklist](#phase-2-checklist) |
-| 3 | QR 登录（QQ PTLogin + 微信 OAuth2，两路共用既有状态机）：状态码映射 + OAuth code→凭据兑换 + `musickey/uin` 落库 + `g_tk=hash33(musickey)` | 🔲 Pending | [Phase 3 Checklist](#phase-3-checklist) |
+| 3 | 登录：**登录窗口路线**（`STREAM_LOGIN_CONFIGS.qq` + `g_tk=hash33(musickey)`，Q4 定）；QR API（QQ PTLogin+微信 OAuth code→凭据兑换）降 v2 | 🔄 代码就位（配置+签名已测；**待 Electron 手测** cookie 抓取） | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | 歌单同步 + 粘贴链接（`getUserPlaylists`/`importPlaylist`/`getTracksByIds`/`getPlaylistMeta`，复用既有同步/导入 UI） | 🔲 Pending | [Phase 4 Checklist](#phase-4-checklist) |
 | 5 | `zzc` 签名 + QIMEI 设备指纹（**仅当 guest/web 签名在运行时被拒的回退路径**，按需启用） | 🔲 Pending（按需） | [Phase 5 Checklist](#phase-5-checklist) |
 
@@ -388,16 +388,16 @@ i18n locales/{en,zh,ja,ko}/                        # 源名 + 音质封顶提示
 **Goal:** QQ/微信登录捕获 `musickey/uin` 落 `settings.streamSources.qq.cookie`；WEB 请求 `g_tk=hash33(musickey)`。**优先登录窗口路线**（复用既有 `openSourceLogin`），QR API 路线作可选增强。
 
 **Tasks:**
-- [ ] **登录窗口路线**：`STREAM_LOGIN_CONFIGS.qq = { loginUrl: y.qq.com 登录页, cookieUrls:["https://y.qq.com","https://c.y.qq.com"], authCookie:"qqmusic_key" }`；复用 `streamSourcesAfterLogin/Logout`。
-- [ ] provider `isAuthed()` + `getCookie("qq")` 注入；WEB 端点改用 `g_tk=hash33(musickey)`。
-- [ ] （可选 QR API 路线）`qr-login.ts` 加 QQ PTLogin + 微信 generate/poll/状态码；`qr-login-provider` 加 per-source `onSuccess` 兑换钩子（QQ：check_sig→authorize→QQLogin；微信：Login）；`qr-login-dialog` 加两 tab。
+- [x] **登录窗口路线**：`STREAM_LOGIN_CONFIGS.qq = { loginUrl:"https://y.qq.com/", cookieUrls:["https://y.qq.com","https://c.y.qq.com"], authCookie:"qqmusic_key" }`；复用 `streamSourcesAfterLogin/Logout` + `cookieStringHasAuth`（Settings 卡 `id==="netease"?QR:externalLogin` 已让 qq 走 externalLogin 登录窗口）。
+- [x] provider `isAuthed()` + `getCookie("qq")` 注入；WEB 请求 `g_tk=hash33(musickey)`（Phase 1 `qq-source.gtk()` 已实现，本期加测：登录态 g_tk≠5381 且 Cookie 头带 `qqmusic_key`）。
+- [ ] （**v2 增强，按 Q4 推迟**）QR API 路线：`qr-login.ts` 加 QQ PTLogin + 微信 generate/poll/状态码；`qr-login-provider` 加 per-source `onSuccess` 兑换钩子（QQ：check_sig→authorize→QQLogin；微信：Login）；`qr-login-dialog` 加两 tab。
 
 #### Phase 3 Checklist
-- [ ] 登录窗口手测：登录后能从 session 抓到 `qqmusic_key`/`qqmusic_uin`。
-- [ ] 登录态下 `g_tk=hash33(musickey)` 的 WEB 请求成功（搜索/详情/vkey）。
-- [ ]（QR 路线）状态码映射单测：QQ `0/66/67/65/68` + 微信 `405/408/404/402/403` → 统一 `QrStatus`（穷举）。
-- [ ]（QR 路线）`onSuccess` 兑换钩子单测（注入式）：mock check_sig/authorize/Login → 得 `musickey`。
-- [ ] 登出清 `streamSources.qq.cookie`。
+- [x] 登录配置单测：`STREAM_LOGIN_CONFIGS.qq` authCookie=`qqmusic_key`、loginUrl 含 `y.qq.com`、cookieUrls 含 `https://y.qq.com`；`cookieStringHasAuth("…qqmusic_key=W_X_t","qqmusic_key")===true`。
+- [x] 登录态 `g_tk=hash33(musickey)` provider 单测：search 请求 URL 带 `g_tk=<hash33>`（≠5381）且 `Cookie` 头含 `qqmusic_key`。
+- [ ] 登录窗口**手测**：登录后能从 session 抓到 `qqmusic_key`/`qqmusic_uin`（⚠️ y.qq.com 可能存 localStorage 而非 cookie —— 运行时定，若抓不到则转 v2 QR API 路线）。
+- [ ] 登出清 `streamSources.qq.cookie`（复用 `streamSourcesAfterLogout`，已被 login.test 覆盖通用逻辑）。
+- [ ]（**v2** QR 路线）状态码映射单测：QQ `0/66/67/65/68` + 微信 `405/408/404/402/403` → 统一 `QrStatus`；`onSuccess` 兑换钩子单测。
 
 ### Phase 4: 歌单同步 + 粘贴链接
 
@@ -489,6 +489,7 @@ i18n locales/{en,zh,ja,ko}/                        # 源名 + 音质封顶提示
 | 2026-06-16 | DoodleBear | 按反馈处置 Open Questions：**Q2/Q3/Q4 按 best practice 定稿**（Q2 渐进式分层签名、zzc 不预建；Q3 永不解密为策略层决策、音质封顶明文；Q4 登录窗口路线先行、官网自带扫码、QR API 降 v2）；Q1/Q6 framing 认可、保持运行时验证；Q5 认可推迟单独 follow-up research。同步 §2.2 / §4.3 / §4.4 标注。设计层决策已收敛，定稿（Draft→Final）仅余 Q1/Q6 的 Phase 2 运行时验证。 |
 | 2026-06-16 | DoodleBear（TDD 实现）| **Phase 1 ✅ 落地**（worktree `feat/qq-music-stream-source`）：`src/streamsrc/qq/` 5 文件（`qq-sign`/`qq-quality`/`qq-resolve`/`qq-playlists`/`qq-source`）+ 各 `.test.ts`，全纯函数/注入式 stub 单测；registry 注册 `"qq"`、`StreamSourceId` 扩值（连带修 4 处窄 union）。guest provider：`client_search_cp` 搜索 + `musicu GetVkey` 明文批量取直链（sip+purl）+ 明文音质降级（剔除加密档）+ 空 purl→`no-permission`。**41 qq/registry 测 + 453 全域（qq+registry+chat+sync）全绿，tsc 0 错，biome 绿**。运行时项（真实 API/CORS/播放）属 Phase 2 Electron 手测。 |
 | 2026-06-16 | DoodleBear（实现）| **Phase 2 🔄 代码就位**：QQ 接入 ⌘F 在线 chips（`ONLINE_SOURCES`/`SOURCE_LABEL`）+ Settings 卡（`SOURCES`，音质只列明文 `flac/320/m4a/128`）。搜索/播放/代理为源无关、QQ 入 registry 后**零改动复用**。源名为品牌名（非 i18n），红线复用 `streamSources.redline`。tsc 0 错、search/settings/hooks 82 测全绿。**剩 Electron 手测 guest 可播放（Open Q1/Q2/Q6）**——无桌面运行时不冒充已验证。 |
+| 2026-06-16 | DoodleBear（TDD 实现）| **Phase 3 🔄 代码就位（登录窗口路线，Q4）**：`STREAM_LOGIN_CONFIGS.qq`（authCookie `qqmusic_key` / `y.qq.com` 登录窗，复用 `externalLogin`+`streamSourcesAfterLogin/Logout`）；provider 登录态 `g_tk=hash33(musickey)`（Phase 1 已实现，本期加测：g_tk≠5381 且 Cookie 头带 key）。login+qq-source 18 测全绿，tsc 0 错。QR API（PTLogin/微信 + OAuth code 兑换钩子）按 Q4 降 **v2**。**剩 Electron 手测 cookie 抓取**（y.qq.com 或 localStorage→定 v2 取舍）。 |
 
 ---
 

@@ -20,6 +20,12 @@ describe("STREAM_LOGIN_CONFIGS", () => {
     // YouTube uses OAuth, not a cookie login — intentionally absent for now.
     expect(STREAM_LOGIN_CONFIGS.youtube).toBeUndefined();
   });
+
+  it("wires qq (qqmusic_key) via the y.qq.com login window (Q4: login-window route)", () => {
+    expect(STREAM_LOGIN_CONFIGS.qq).toMatchObject({ authCookie: "qqmusic_key" });
+    expect(STREAM_LOGIN_CONFIGS.qq?.loginUrl).toContain("y.qq.com");
+    expect(STREAM_LOGIN_CONFIGS.qq?.cookieUrls).toContain("https://y.qq.com");
+  });
 });
 
 describe("assembleCookieHeader", () => {
@@ -60,6 +66,7 @@ describe("cookieStringHasAuth", () => {
   it("detects the auth cookie inside a stored Cookie string", () => {
     expect(cookieStringHasAuth("os=pc; SESSDATA=abc; bili_jct=x", "SESSDATA")).toBe(true);
     expect(cookieStringHasAuth("os=pc; bili_jct=x", "SESSDATA")).toBe(false);
+    expect(cookieStringHasAuth("qqmusic_uin=1; qqmusic_key=W_X_t", "qqmusic_key")).toBe(true);
     expect(cookieStringHasAuth(undefined, "SESSDATA")).toBe(false);
     // Must match the cookie NAME, not a substring of another value.
     expect(cookieStringHasAuth("xSESSDATA=abc", "SESSDATA")).toBe(false);

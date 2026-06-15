@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { StreamHttp, StreamHttpResponse } from "../http";
+import { qqGtk } from "./qq-sign";
 import { createQqSource } from "./qq-source";
 
 function res(body: unknown): StreamHttpResponse {
@@ -18,6 +19,22 @@ describe("createQqSource", () => {
   it("isAuthed once a cookie is present", () => {
     const src = createQqSource({ http: async () => res({}), getCookie: () => "qqmusic_key=W_X_1" });
     expect(src.isAuthed()).toBe(true);
+  });
+
+  it("signs with g_tk=hash33(musickey) when logged in (not guest 5381)", async () => {
+    const musickey = "W_X_abc";
+    const expected = qqGtk(musickey);
+    expect(expected).not.toBe(5381);
+    const http: StreamHttp = async (req) => {
+      expect(req.url).toContain(`g_tk=${expected}`);
+      expect(req.url).not.toContain("g_tk=5381");
+      expect(req.headers?.Cookie).toContain(`qqmusic_key=${musickey}`);
+      return res({ data: { song: { list: [] } } });
+    };
+    await createQqSource({
+      http,
+      getCookie: () => `qqmusic_uin=1; qqmusic_key=${musickey}`,
+    }).search("q");
   });
 
   it("search maps client_search_cp results to hits and sends guest g_tk", async () => {
