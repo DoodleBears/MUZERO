@@ -14,7 +14,7 @@
 | 1 | 通用接线 + 模板引擎：runtime 单例 + intake 消费者 + `request-template.ts`（移植 anysoul 模板引擎）+ 映射预设 + 无审核默认值（地基） | ✅ Completed | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | 多来源 + 测试生命周期：`sources[]`（status: testing/active/disabled）+ server 按 `/v1/intake/<id>` 路由 + testing 模式捕获 sanitized payload（不触发播放） | ✅ Completed | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | Web SSN WebSocket transport：泛化 bridge 接口 + `web.ts` 出站 WS 实现 + `social-stream-relay.ts`（转发原始事件，交给 ssn 模板预设） | ✅ Completed | [Phase 3 Checklist](#phase-3-checklist) |
-| 4 | 映射对话框 UX（仿 anysoul）：JSON 树点选映射 + 每字段实时预览（同引擎 parity）+ 预设/visual/raw + Go Live + 来源列表（状态徽章/生命周期/复制 URL） | 🔄 In Progress | [Phase 4 Checklist](#phase-4-checklist) |
+| 4 | 映射对话框 UX（仿 anysoul）：JSON 树点选映射 + 每字段实时预览（同引擎 parity）+ 预设/visual/raw + Go Live + 来源列表（状态徽章/生命周期/复制 URL） | ✅ Completed | [Phase 4 Checklist](#phase-4-checklist) |
 | 5 | i18n（en/zh/ja/ko）+ 测试 + 收尾 | 🔲 Pending | [Phase 5 Checklist](#phase-5-checklist) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
@@ -442,13 +442,14 @@ const unsub = bridge.liveRequestIntake.onMessage((payload) => {
 - [x] `target-field-input.tsx`：模板输入 + 用 `request-template.ts` 对选中 payload 求值的实时预览/报错。
 - [x] `mapping-dialog.tsx`：左 payload（下拉 + 树 + 刷新/清空）/ 右目标字段 + 预设下拉(`Select`) + visual/raw(`Tabs`) + Save / Go Live；用 `@/components/ui/{dialog,tabs,select,textarea}`。+ `mappingToFieldValues`/`fieldValuesToMapping` helper（带测试）。
 - [x] controller transport 生命周期：`apply(intake)` / `applyLiveRequestIntake` 按 `enabled`+`transport` start/stop 正确传输(http-webhook `{port,token}` / ssn-websocket `{relayUrl,sessionId,sourceId}`，relay 喂 ssn-preset 来源);App 启动 apply 当前设置。**+3 测试(controller 12)。**
-- [ ] `source-card.tsx`：状态徽章 + 复制端点 URL + 配置映射 + 生命周期按钮 + Delete。
-- [ ] `live-request-settings.tsx`：transport 选择器(`Select`) + 来源列表 + ssn-websocket 表单 + 只读状态日志 + web CORS 提示 + controller 生命周期驱动 `start`。
+- [x] `source-card.tsx`：状态徽章 + 复制端点 URL(`/v1/intake/<id>`) + 每来源 route/playback `Select` + 配置映射按钮 + 生命周期按钮(Go live/Disable/Pause/Test/Enable) + Delete。
+- [x] `live-request-settings.tsx`：transport 选择器(`Select`) + 来源列表(SourceCard 增删) + ssn-websocket 表单(session/relay) + http-webhook(port/token) + 全局默认(scope/prefixes/限流 `Select`+`Input`) + 只读状态日志 + web CORS 提示 + 改动走 `saveSettings`+`applyLiveRequestIntake`。**重写面板测试 3 通过(81 总)。**全部裸 `<select>` → `@/components/ui/select`。
 
 ### Phase 4 Checklist
-- [ ] testing 来源发请求 → 对话框实时看到真实 body → 树点选/写模板 → 每字段预览正确 → Go Live → active 真正点歌。
-- [ ] 预设一键填模板；visual/raw 切换同步；合成预览行随 payload/模板更新。
-- [ ] 桌面多来源可配；网页 SSN session + CORS 提示；默认来源旧 URL 可复制（兼容）。
+- [x] 组件全用 `@/components/ui/*`（Select/Dialog/Tabs/Card/Input/Textarea/Button），与 flow-settings 等面板对齐；无裸 `<select>`。
+- [x] 预设一键填模板；visual/raw 切换；点 JSON 树插入 `{{ payload.path }}`；每字段实时预览（同引擎 parity，单测覆盖 engine）。
+- [x] 桌面多来源可配；网页 SSN session + CORS 提示；默认来源端点 URL 可复制。
+- [ ] **浏览器实操 e2e**（testing 发请求→看 body→Go Live→active 点歌）：留 Phase 5 `make dev`/`make desktop` 手动验证（本环境未起 Electron dev server）。
 
 ### Phase 5: i18n + 测试 + 收尾
 
