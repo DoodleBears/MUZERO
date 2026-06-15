@@ -12,11 +12,11 @@
 | Phase | Name | Status | Link |
 |-------|------|--------|------|
 | 0 | 设计评审（本文档，零代码） | 🔄 待评审 | [§2 架构](#2-system-architecture) |
-| 1 | 纯状态机 + 帧解析器（TDD，零 DOM） | 🔲 Pending | [Phase 1](#phase-1-纯状态机--帧解析器) |
+| 1 | 纯状态机（Transition Driver + Frame 状态机）+ 帧解析器（TDD，零 DOM） | 🔲 Pending | [Phase 1](#phase-1-纯状态机--帧解析器) |
 | 2 | ready-gate：吸收 QA#7–24 防闪不变量 | 🔲 Pending | [Phase 2](#phase-2-ready-gate吸收防闪不变量) |
-| 3 | 层消费者改造（renderer/flow/viz/dim 吃统一帧 + 单 crossfade 时钟） | 🔲 Pending | [Phase 3](#phase-3-层消费者改造) |
-| 4 | drag-follow 接入控制器（D.2 重构为消费者） | 🔲 Pending | [Phase 4](#phase-4-drag-follow-接入控制器) |
-| 5 | 验收：三不变量 + 不回退 gc-closure 指标 | 🔲 Pending | [Phase 5](#phase-5-验收) |
+| 3 | 背景层消费 driver+controller（renderer/flow/viz/dim 吃统一帧 + 单 crossfade 时钟） | 🔲 Pending | [Phase 3](#phase-3-层消费者改造) |
+| 4 | **前景 coverflow 迁入 driver** + 四触发源统一（键盘/按钮/Dock 信息区 drag/封面 drag）+ drag-follow 接入 | 🔲 Pending | [Phase 4](#phase-4-前景-coverflow-迁入-driver--四触发源) |
+| 5 | 验收：四触发一致 + 三不变量 + 不回退 gc-closure 指标 | 🔲 Pending | [Phase 5](#phase-5-验收) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
 >
@@ -253,9 +253,10 @@ src/components/player/
 
 ### Phase 1: 纯状态机 + 帧解析器
 
-**Goal:** `background-composition.ts`（reduce）+ `background-frame.ts`（resolver）纯函数，零 DOM、零行为接入。
+**Goal:** 三个纯模块，零 DOM、零接入：① `transition-driver.ts`（progress/direction/manual-auto + Swiper 自动补完数学）② `background-composition.ts`（Frame 状态机 reduce）③ `background-frame.ts`（resolver）。
 
 **Checklist:**
+- [ ] **Transition Driver 单测**：manual progress 映射 / release 自动补完（越阈值→1、未越→0、velocity-aware）/ auto 0→1 / 端点冻结（过渡中目标变化不改 from/to）。
 - [ ] reduce 穷举单测：HOLD 不闪 / generation 守卫（准备中再切、crossfade 中再切、stale ready 忽略）/ 同帧 noop / commit。
 - [ ] resolver 单测：cover/slideshow/gallery/video/无封面 五来源 + 各 renderer 映射，与现有 `resolveBackgroundSource` 行为对齐（快照对比）。
 - [ ] `tsc`/Biome 绿。**无运行时接入** → 桌面无变化。
@@ -278,13 +279,17 @@ src/components/player/
 - [ ] 桌面逐 renderer（blur/noise/pixel/plain）+ 有/无 flow + 有/无 viz：切歌**一体化平滑**、不串歌、不闪黑白。
 - [ ] **不回退** gc-closure no-remount / churn 指标、switch-background-perf 帧率指标。
 
-### Phase 4: drag-follow 接入控制器
+### Phase 4: 前景 coverflow 迁入 driver + 四触发源
 
-**Goal:** drag-follow ring 读 controller 帧；commit 设 controller target。
+**Goal:** 把前景 coverflow 的过渡从自有 `x`/commit/external-switch 逻辑**迁到 Transition Driver**；四触发源（①键盘 ②Dock 按钮 ③Dock 信息区 drag ④封面 drag）统一 `startTransition` / manual 驱动；drag-follow 改读 driver 帧。**最大改造面，最高回归风险，拆多 slice 桌面验证。**
 
 **Checklist:**
-- [ ] 拖拽预览与温度过渡同源、不串歌；release 交接平滑。
-- [ ] 桌面：均衡 / 画质优先两预设下拖拽 + 切歌都对。
+- [ ] 前景 coverflow 卡片读 driver `progress/direction`（取代自有 x 动画映射）；端点冻结。
+- [ ] 四触发源都走同一 driver；release Swiper 自动补完手感一致。
+- [ ] Dock 信息区新增/接入 drag 手势（Open Q#8 确认现状后）。
+- [ ] commit 时机按 Open Q#6 定（默认开始 commit + 冻结端点）。
+- [ ] 桌面：四触发 × 均衡/画质优先 两预设，过渡完全一致、不串歌、不闪。
+- [ ] **不回退** gc-closure no-remount / churn / 帧率指标。
 
 ### Phase 5: 验收
 
@@ -334,7 +339,7 @@ src/components/player/
 | 4 | Phase 2「并行对照」阶段是否值得（controller 输出 vs 现渲染对照日志），还是直接 Phase 3 接入？ | Open | 倾向做轻量对照（给 Phase 3 当 before/after 护栏），但可选 |
 | 5 | 是否先落 consolidation R3（抽 source hook）再做本 Controller，避免两处同时改 god-component？ | Open | **强烈倾向先 R3**（或本 PRD Phase 1 的 resolver 即承担 R3 的 source 抽离），避免与 consolidation 撞车 |
 | 6 | **commit 时机**：端点冻结后，store index/音频在过渡**开始**就 commit（音频响应快，视觉独立播放冻结端点），还是**结束**才 commit（更同步但音频延迟 ~`BACKGROUND_CROSSFADE_MS`）？ | Open | 倾向**开始 commit + 冻结端点**（响应性 + 无漂移兼得）；视觉过渡读冻结 from/to，与 store 解耦，progress=1 时对齐 |
-| 7 | **前景 coverflow 是否一并收进 Transition Driver**（前景背景同一 driver），还是保留现有 coverflow 逻辑、仅让背景消费 driver 的 progress？ | Open | 倾向**统一到一个 driver**（才真正「四触发源一致」）；但 coverflow 改造面大、风险高 → 可分两步：先 driver+背景，再把前景 coverflow 迁过来。**需拍板范围** |
+| 7 | **前景 coverflow 是否一并收进 Transition Driver**？ | ✅ Resolved（用户拍板 2026-06-15） | **统一到一个 driver**：前景 coverflow + 背景同源消费同一 `{direction, progress, from, to}`，四触发源真正一致。coverflow 迁移面大 → 仍分阶段落地（Phase 4 专做前景迁移），但终态是单一 driver，非两套 |
 | 8 | **拖拽 Dock 歌曲信息区（③）目前是否已是切歌触发？** 若否，需新增该手势面 | Open | 待确认现状；若无则 Phase 4 新增「Dock 信息区 drag → driver」手势，与封面 stage 共用 driver |
 
 ---
