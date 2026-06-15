@@ -564,9 +564,16 @@ function useSettledBackgroundTarget<T extends BackgroundRenderTarget>(
 ): T | null {
   const [settled, setSettled] = useState<T | null>(target);
 
-  useEffect(() => {
+  // Settle DURING RENDER on an input change rather than in a useEffect — the effect
+  // forced an extra render + commit on every track switch (react-doctor no-derived-state).
+  // The functional updater keeps the prev-`settled` dependency, so hold-previous-while-
+  // pending behavior is unchanged; React just re-renders synchronously without the
+  // stale intermediate commit.
+  const [prevInputs, setPrevInputs] = useState({ hasPendingSource, target });
+  if (target !== prevInputs.target || hasPendingSource !== prevInputs.hasPendingSource) {
+    setPrevInputs({ hasPendingSource, target });
     setSettled((current) => settleBackgroundTarget(current, target, hasPendingSource));
-  }, [target, hasPendingSource]);
+  }
 
   return settled;
 }
