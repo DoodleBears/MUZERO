@@ -187,6 +187,13 @@ export function SwipeableMediaStage({
   const currentVisual = makeVisualTrack(current, preloadedCoverUrls);
   const nextVisual = makeVisualTrack(nextTrack, preloadedCoverUrls);
   const prevVisual = makeVisualTrack(prevTrack, preloadedCoverUrls);
+  // Re-resolve a (possibly snapshotted) stack visual's cover from the LIVE preload
+  // map. `beginGesture` freezes the visuals at gesture start, so a neighbour whose
+  // cover hadn't preloaded yet was frozen with `initialCoverUrl: null` and the card
+  // kept showing the title fallback even after its cover loaded. Looking it up live
+  // keeps the frozen track identity but always paints the latest cover. QA 图2.
+  const liveStackVisual = (visual: VisualTrack | null): VisualTrack | null =>
+    visual ? makeVisualTrack(visual.track, preloadedCoverUrls) : null;
   const activeStack = stack ?? {
     current: currentVisual,
     next: nextVisual,
@@ -713,7 +720,7 @@ export function SwipeableMediaStage({
               <SettleCard
                 coverEffect={coverEffect}
                 onReady={markVisualReady}
-                visual={settleTarget}
+                visual={liveStackVisual(settleTarget) ?? settleTarget}
               />
             ) : (
               <>
@@ -721,14 +728,14 @@ export function SwipeableMediaStage({
                   card={prevCard}
                   coverEffect={coverEffect}
                   onReady={markVisualReady}
-                  visual={activeStack.prev}
+                  visual={liveStackVisual(activeStack.prev)}
                   zClass={dragDirection === "prev" ? "z-30" : "z-0"}
                 />
                 <CoverflowCard
                   card={nextCard}
                   coverEffect={coverEffect}
                   onReady={markVisualReady}
-                  visual={activeStack.next}
+                  visual={liveStackVisual(activeStack.next)}
                   zClass={dragDirection === "next" ? "z-30" : "z-0"}
                 />
                 <CoverflowCard
@@ -736,7 +743,7 @@ export function SwipeableMediaStage({
                   coverEffect={coverEffect}
                   coverHasBacklight
                   onReady={markVisualReady}
-                  visual={activeStack.current}
+                  visual={liveStackVisual(activeStack.current)}
                   zClass="z-20"
                 />
               </>
