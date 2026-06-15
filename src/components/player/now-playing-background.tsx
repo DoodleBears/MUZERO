@@ -468,33 +468,22 @@ function NowPlayingBackgroundContent({ hideVisualizer }: { hideVisualizer: boole
       ) : (effectiveRenderPixiTarget || shouldKeepPixiMounted) &&
         pixiEffect &&
         ENABLE_PIXI_BACKGROUND_FOR_BISECT ? (
-        <>
-          <PixiPixelBackground
-            // Hold the previous cover (opacity-90) while a switch's incoming cover
-            // resolves instead of dropping to opacity-0 — the dark gap was the
-            // "background flickers after the transition commits" QA. The controller
-            // already keeps the painted texture on a transient null src, so holding
-            // the layer visible mirrors 均衡's hold-previous frame controller. Video
-            // keeps the old gate (no stale cover while a video texture loads).
-            className={effectiveRenderPixiTarget || pixiHoldsCover ? "opacity-90" : "opacity-0"}
-            effect={pixiEffect}
-            effectSettings={effectSettings}
-            mediaType={effectiveRenderPixiTarget?.mediaType ?? pixiMedia.mediaType}
-            pixelSize={pixelSize}
-            src={
-              DISABLE_PIXI_TEXTURE_SOURCE_FOR_BISECT
-                ? null
-                : (effectiveRenderPixiTarget?.src ?? null)
-            }
-          />
-          {/* Drag-follow crossfade for the Pixi (画质) renderer — the SAME shared
-              Transition Driver 均衡 uses (now-playing-transition + transitionProgress).
-              The Pixi resting layer can't follow the drag (the store index commits
-              only after the glide, so `current` stays on the FROM track throughout),
-              so this paints the frozen incoming cover fading in with the drag, exactly
-              like 均衡's background. Invisible at rest (purely additive). */}
-          <TransitionBackground blurPx={blurPx} maxOpacity={0.9} />
-        </>
+        <PixiPixelBackground
+          // Hold the previous cover (opacity-90) while a switch's incoming cover
+          // resolves instead of dropping to opacity-0 — the dark gap was the
+          // "background flickers after the transition commits" QA. The controller
+          // already keeps the painted texture on a transient null src, so holding
+          // the layer visible mirrors 均衡's hold-previous frame controller. Video
+          // keeps the old gate (no stale cover while a video texture loads).
+          className={effectiveRenderPixiTarget || pixiHoldsCover ? "opacity-90" : "opacity-0"}
+          effect={pixiEffect}
+          effectSettings={effectSettings}
+          mediaType={effectiveRenderPixiTarget?.mediaType ?? pixiMedia.mediaType}
+          pixelSize={pixelSize}
+          src={
+            DISABLE_PIXI_TEXTURE_SOURCE_FOR_BISECT ? null : (effectiveRenderPixiTarget?.src ?? null)
+          }
+        />
       ) : effectiveRenderImageTarget && !pixiEffect ? (
         <CrossfadeBackgroundImage
           holdPreviousWhileLoading={source !== "cover" || holdCoverBackgroundWhileLoading}

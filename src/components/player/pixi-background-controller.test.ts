@@ -36,19 +36,36 @@ function fakeApp() {
 
 type FakeApp = ReturnType<typeof fakeApp>;
 
+function fakeContainer() {
+  return {
+    filters: [] as unknown[],
+    addChild: vi.fn(),
+    removeChild: vi.fn(),
+    destroy: vi.fn(),
+  };
+}
+
+type FakeContainer = ReturnType<typeof fakeContainer>;
+
 function fakeModule() {
   const apps: FakeApp[] = [];
+  const containers: FakeContainer[] = [];
   const module = {
     apps,
+    containers,
     Application: function Application(this: unknown) {
       const a = fakeApp();
       apps.push(a);
       return a as never;
     },
+    Container: function Container(this: unknown) {
+      const c = fakeContainer();
+      containers.push(c);
+      return c as never;
+    },
     Sprite: function Sprite(this: unknown, texture: unknown) {
       return {
         texture,
-        filters: [] as unknown[],
         alpha: 1,
         scale: { set: vi.fn() },
         position: { set: vi.fn() },
@@ -57,7 +74,7 @@ function fakeModule() {
     },
     Texture: { from: () => fakeTexture() },
   };
-  return module as unknown as PixiModuleLike & { apps: FakeApp[] };
+  return module as unknown as PixiModuleLike & { apps: FakeApp[]; containers: FakeContainer[] };
 }
 
 function makeController(overrides?: {
@@ -192,10 +209,13 @@ describe("createPixiBackgroundController", () => {
         apps.push(a);
         return a as never;
       },
+      Container: function Container(this: unknown) {
+        return fakeContainer() as never;
+      },
       Sprite: function Sprite(this: unknown, texture: unknown) {
         return {
           texture,
-          filters: [] as unknown[],
+          alpha: 1,
           scale: { set: vi.fn() },
           position: { set: vi.fn() },
         } as never;
@@ -450,26 +470,31 @@ describe("createPixiBackgroundController", () => {
     });
 
     await controller.setSource("a.png", "image");
-    const stage = module.apps[0].stage;
-    const spriteA = stage.addChild.mock.calls[0][0] as {
+    // The filter lives on the RESIDENT container, not the sprites — so the effect is
+    // applied once to the composite and never crossfades. Sprites are its children.
+    const container = module.containers[0];
+    expect(container.filters).toEqual([filter]);
+    expect(module.apps[0].stage.addChild).toHaveBeenCalledWith(container);
+    const spriteA = container.addChild.mock.calls[0][0] as {
       alpha: number;
       texture: ReturnType<typeof fakeTexture>;
       destroy: ReturnType<typeof vi.fn>;
+      filters?: unknown;
     };
     const textureA = spriteA.texture;
     expect(spriteA.alpha).toBe(1);
+    expect(spriteA.filters).toBeUndefined(); // no per-sprite filter
     expect(frames.length).toBe(0); // first cover never crossfades
 
     await controller.setSource("b.png", "image");
-    // The incoming cover is a SECOND sprite added under the same resident filter,
+    // The incoming cover is a SECOND sprite added INSIDE the filtered container,
     // starting transparent — the old one is still mounted (not yet disposed).
-    expect(stage.addChild).toHaveBeenCalledTimes(2);
-    const spriteB = stage.addChild.mock.calls[1][0] as { alpha: number; filters: unknown[] };
+    expect(container.addChild).toHaveBeenCalledTimes(2);
+    const spriteB = container.addChild.mock.calls[1][0] as { alpha: number };
     expect(spriteB.alpha).toBe(0);
-    expect(spriteB.filters).toEqual([filter]);
     expect(spriteA.destroy).not.toHaveBeenCalled();
     expect(textureA.destroy).not.toHaveBeenCalled();
-    expect(stage.removeChild).not.toHaveBeenCalled();
+    expect(container.removeChild).not.toHaveBeenCalled();
 
     // Step the tween: at the midpoint the incoming sprite is partway in (0 < a < 1).
     flush(0);
@@ -481,11 +506,131 @@ describe("createPixiBackgroundController", () => {
     // On completion the incoming is fully shown and the outgoing sprite + texture are freed.
     flush(360);
     expect(spriteB.alpha).toBe(1);
-    expect(stage.removeChild).toHaveBeenCalledWith(spriteA);
+    expect(container.removeChild).toHaveBeenCalledWith(spriteA);
     expect(textureA.destroy).toHaveBeenCalled();
     expect(spriteA.destroy).toHaveBeenCalled();
 
     controller.destroy();
+  });
+
+  it("drag overlay: mounts the incoming cover on top, follows progress, frozen + disposed when the resting settles", async () => {
+    const module = fakeModule();
+    const filter = { id: "filter" };
+    const controller = createPixiBackgroundController({
+      host: document.createElement("div"),
+      effect: "noise",
+      effectOptions: {} as never,
+      pixelSize: 12,
+      preference: "webgl",
+      powerPreference: "low-power",
+      crossfadeMs: 200,
+      deps: {
+        loadPixi: async () => module,
+        loadMedia: async (_pixi, _src): Promise<LoadedBackgroundMedia> => ({
+          type: "image",
+          element: document.createElement("img"),
+          texture: fakeTexture() as never,
+          width: 100,
+          height: 100,
+          unload: vi.fn(),
+        }),
+        loadFilter: async () => filter,
+        // Frame scheduler that ADVANCES time each call so the resting commit crossfade
+        // runs to completion synchronously (a constant timestamp would never progress).
+        requestFrame: (() => {
+          let t = 0;
+          return (cb: (nowMs: number) => void) => {
+            t += 1000;
+            cb(t);
+            return () => {};
+          };
+        })(),
+        onError: vi.fn(),
+      },
+    });
+
+    await controller.setSource("a.png", "image");
+    const container = module.containers[0];
+    const restingAdds = container.addChild.mock.calls.length;
+
+    // Mount the drag overlay (incoming cover) — a NEW topmost child, starts at 0.
+    await controller.setDragCover("b.png", "image");
+    expect(container.addChild).toHaveBeenCalledTimes(restingAdds + 1);
+    const overlay = container.addChild.mock.calls[restingAdds][0] as {
+      alpha: number;
+      destroy: ReturnType<typeof vi.fn>;
+    };
+    expect(overlay.alpha).toBe(0);
+
+    // Opacity follows the drag.
+    controller.setDragProgress(0.5);
+    expect(overlay.alpha).toBe(0.5);
+    controller.setDragProgress(1);
+    expect(overlay.alpha).toBe(1);
+
+    // Release: the overlay is frozen — a stray progress reset to 0 must NOT drop it.
+    controller.releaseDrag();
+    controller.setDragProgress(0);
+    expect(overlay.alpha).toBe(1);
+    expect(overlay.destroy).not.toHaveBeenCalled();
+
+    // The resting layer commits to the new cover; once that crossfade settles the
+    // overlay (which hid the swap) is disposed seamlessly.
+    await controller.setSource("b.png", "image");
+    expect(container.removeChild).toHaveBeenCalledWith(overlay);
+    expect(overlay.destroy).toHaveBeenCalled();
+
+    controller.destroy();
+  });
+
+  it("drag overlay: a snap-back (no resting commit) disposes the overlay via the fallback timer", async () => {
+    vi.useFakeTimers();
+    const module = fakeModule();
+    const controller = createPixiBackgroundController({
+      host: document.createElement("div"),
+      effect: "noise",
+      effectOptions: {} as never,
+      pixelSize: 12,
+      preference: "webgl",
+      powerPreference: "low-power",
+      crossfadeMs: 200,
+      deps: {
+        loadPixi: async () => module,
+        loadMedia: async (_pixi, _src): Promise<LoadedBackgroundMedia> => ({
+          type: "image",
+          element: document.createElement("img"),
+          texture: fakeTexture() as never,
+          width: 100,
+          height: 100,
+          unload: vi.fn(),
+        }),
+        loadFilter: async () => null,
+        requestFrame: (cb) => {
+          cb(1e9);
+          return () => {};
+        },
+        onError: vi.fn(),
+      },
+    });
+
+    await controller.setSource("a.png", "image");
+    await controller.setDragCover("b.png", "image");
+    const container = module.containers[0];
+    const overlay = container.addChild.mock.calls.at(-1)?.[0] as {
+      destroy: ReturnType<typeof vi.fn>;
+    };
+
+    // Snap-back: progress returns to 0, then release. No resting commit follows.
+    controller.setDragProgress(0);
+    controller.releaseDrag();
+    expect(overlay.destroy).not.toHaveBeenCalled(); // still mounted (invisible) right after
+
+    await vi.advanceTimersByTimeAsync(200 + 400 + 10); // crossfadeMs + fallback
+    expect(container.removeChild).toHaveBeenCalledWith(overlay);
+    expect(overlay.destroy).toHaveBeenCalled();
+
+    controller.destroy();
+    vi.useRealTimers();
   });
 
   it("skips a delayed media load when a newer source supersedes it before decode starts", async () => {

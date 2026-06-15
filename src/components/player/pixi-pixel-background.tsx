@@ -7,6 +7,7 @@ import {
 import { type ImageBitmapBlobSource, loadImageBitmapSource } from "@/lib/background-texture";
 import { hasWebGpuSupport, resolveGpuBackend, resolveGpuPower } from "@/lib/gpu-backend";
 import { createDiagnosticLogger, log } from "@/lib/logger";
+import { transitionProgress, useNowPlayingTransition } from "@/lib/now-playing-transition";
 import { getAppFetch } from "@/lib/platform";
 import { cn } from "@/lib/utils";
 import { usePlayerStore } from "@/stores/player-store";
@@ -144,6 +145,42 @@ export function PixiPixelBackground({
     if (!controller) return;
     void controller.setSource(src, mediaType);
   }, [controller, src, mediaType]);
+
+  // Drag-follow: while a Now Playing drag transition is active, mount the incoming
+  // cover as the controller's drag overlay (topmost child of the resident filtered
+  // container) and drive its opacity straight off the shared `transitionProgress` —
+  // the SAME driver 均衡 uses. So the IMAGE crossfades WITH the drag under the
+  // resident filter (the filter itself never crossfades), and at 100% drag the
+  // incoming cover is already shown, so releasing changes nothing. Wired imperatively
+  // (store.subscribe + MotionValue.on, off the React render path) so the post-release
+  // progress reset can't drop the overlay before it's frozen. Image backgrounds only.
+  useEffect(() => {
+    if (!controller || mediaType !== "image") return;
+    let active = useNowPlayingTransition.getState().active;
+    const applyProgress = (p: number) => {
+      if (active) controller.setDragProgress(p);
+    };
+    if (active) {
+      const { toCoverUrl } = useNowPlayingTransition.getState();
+      if (toCoverUrl) void controller.setDragCover(toCoverUrl, "image");
+      applyProgress(transitionProgress.get());
+    }
+    const unsubProgress = transitionProgress.on("change", applyProgress);
+    const unsubStore = useNowPlayingTransition.subscribe((s) => {
+      if (s.active && !active) {
+        active = true;
+        if (s.toCoverUrl) void controller.setDragCover(s.toCoverUrl, "image");
+        applyProgress(transitionProgress.get());
+      } else if (!s.active && active) {
+        active = false;
+        controller.releaseDrag();
+      }
+    });
+    return () => {
+      unsubProgress();
+      unsubStore();
+    };
+  }, [controller, mediaType]);
 
   return (
     <div
