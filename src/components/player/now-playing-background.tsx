@@ -243,6 +243,10 @@ function NowPlayingBackgroundContent({ hideVisualizer }: { hideVisualizer: boole
       source,
       surface: "background",
       trackId: current?.id,
+      // When Pixi renders the background, the decoded <img> below is gated out
+      // (!pixiEffect) — so an image.load/decode logged with pixiActive:true is a
+      // wasted full-image decode (switch-fps Phase 4, §2.5 double-decode probe).
+      pixiActive: Boolean(pixiEffect),
     },
   });
   const slideshowUrls =

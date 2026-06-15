@@ -69,7 +69,41 @@ function aggregate(entries) {
   const max = (xs) => (xs.length ? Math.max(...xs) : 0);
   const min = (xs) => (xs.length ? Math.min(...xs) : null);
   const heaps = frames.map((f) => f.heapMb).filter((x) => typeof x === "number");
+
+  // Per-switch cost breakdown: group every performance.work subcategory by message
+  // so we can see what dominates a switch (cover preload / image decode / mediaSession…).
+  const workBreakdown = {};
+  for (const e of entries.filter((x) => x.scope === "performance.work")) {
+    const d = val(e);
+    const b = (workBreakdown[e.message] ??= { count: 0, maxMs: 0, totalLastMs: 0 });
+    b.count += 1;
+    b.maxMs = Math.max(b.maxMs, d.maxMs ?? d.lastMs ?? 0);
+    b.totalLastMs += d.lastMs ?? 0;
+  }
+  for (const k of Object.keys(workBreakdown)) {
+    workBreakdown[k].totalLastMs = Math.round(workBreakdown[k].totalLastMs);
+  }
+
+  // §2.5 double-decode probe: background image load/decode whose <img> is gated out
+  // under Pixi (pixiActive:true) = wasted main-thread-ish decode work per switch.
+  const bgImg = entries.filter(
+    (e) =>
+      e.scope === "performance.work" &&
+      (e.message === "image.decode" || e.message === "image.load") &&
+      val(e).surface === "background",
+  );
+  const switchToFrame = entries
+    .filter((e) => e.scope === "performance.work" && e.message === "player.switch.toFrame")
+    .map((e) => val(e).lastMs ?? 0);
+
   return {
+    workBreakdown,
+    switchToFrameMaxMs: max(switchToFrame),
+    switchToFrameAvgMs: switchToFrame.length
+      ? Math.round(switchToFrame.reduce((s, x) => s + x, 0) / switchToFrame.length)
+      : 0,
+    bgDecodeTotal: bgImg.length,
+    bgDecodeWastedUnderPixi: bgImg.filter((e) => val(e).pixiActive === true).length,
     fpsLowMin: min(frames.map((f) => f.fpsLow).filter((x) => typeof x === "number")),
     fpsAvgMin: min(frames.map((f) => f.fpsAvg).filter((x) => typeof x === "number")),
     frameMaxMs: max(frames.map((f) => f.frameMaxMs ?? 0)),

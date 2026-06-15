@@ -39,6 +39,8 @@ export function useLoadedImageUrl(
       source?: string;
       surface?: string;
       trackId?: string;
+      /** Diagnostic only: marks a decode whose <img> is gated out under Pixi. */
+      pixiActive?: boolean;
     };
   } = {},
 ): LoadedImageResult {
@@ -48,6 +50,7 @@ export function useLoadedImageUrl(
   const traceSource = options.trace?.source;
   const traceSurface = options.trace?.surface;
   const traceTrackId = options.trace?.trackId;
+  const tracePixiActive = options.trace?.pixiActive;
   const targetUrl = url ?? null;
   const [state, setState] = useState<LoadedImageResult>(() => {
     if (!targetUrl) return emptyResult(null);
@@ -84,6 +87,7 @@ export function useLoadedImageUrl(
         source: traceSource,
         surface: traceSurface,
         trackId: traceTrackId,
+        pixiActive: tracePixiActive,
       },
     }).then(
       (loaded) => {
@@ -112,6 +116,7 @@ export function useLoadedImageUrl(
     traceSource,
     traceSurface,
     traceTrackId,
+    tracePixiActive,
   ]);
 
   if (!targetUrl) return emptyResult(null);
@@ -159,6 +164,7 @@ function loadImage(
       source?: string;
       surface?: string;
       trackId?: string;
+      pixiActive?: boolean;
     };
   },
 ): Promise<CachedImage> {
@@ -194,6 +200,7 @@ function loadImage(
         sourceKind: classifyImageUrl(url),
         surface: options.trace?.surface,
         trackId: options.trace?.trackId,
+        pixiActive: options.trace?.pixiActive,
         width: image.naturalWidth,
       };
       notePerfWork("image.load", performance.now() - startedAt, traceContext);

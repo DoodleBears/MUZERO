@@ -904,7 +904,21 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       ...describeTrackSwitch({ from: state.currentIndex, to: clamped, track: target, sourceKind }),
     });
     if (target) startPlaybackTrace(target);
+    // Main-thread switch cost: the React re-render from set(cursorPatch) is deferred,
+    // so wrapping set() can't time it. Measure switch→next-paint instead — the rAF
+    // fires only after the synchronous render + layout that the switch triggered, so
+    // this delta is the end-to-end main-thread-blocked latency to the first frame
+    // (switch-fps Phase 4 observability).
+    const switchStartedAt = performance.now();
     set(cursorPatch(queue, clamped, true));
+    if (typeof requestAnimationFrame === "function") {
+      requestAnimationFrame(() => {
+        notePerfWork("player.switch.toFrame", performance.now() - switchStartedAt, {
+          to: clamped,
+          hasCover: Boolean(target?.coverBlobId),
+        });
+      });
+    }
     persistQueueIndex(clamped);
     await ensureLoadedAndPlay(set, get, selectionRequestId);
     void maybeRefill(set, get);
