@@ -41,14 +41,16 @@ export interface PixiTextureLike {
 export interface PixiSpriteLike {
   texture: unknown;
   filters: unknown[];
+  alpha: number;
   scale: { set(value: number): void };
   position: { set(x: number, y: number): void };
+  destroy?(options?: unknown): void;
 }
 
 export interface PixiAppLike {
   init(options: Record<string, unknown>): Promise<void>;
   canvas: HTMLCanvasElement;
-  stage: { addChild(child: unknown): void };
+  stage: { addChild(child: unknown): void; removeChild(child: unknown): void };
   renderer: { resize(width: number, height: number): void };
   ticker: { start(): void; stop(): void; started: boolean };
   render(): void;
@@ -103,6 +105,13 @@ export interface PixiBackgroundDeps {
   /** Only invoked for video media; image backgrounds never touch this. */
   attachVideo?: AttachVideo;
   onError?(error: unknown): void;
+  /**
+   * Schedule the next animation frame for the cover→cover crossfade tween. Injected so
+   * the tween is deterministic under test; defaults to requestAnimationFrame. Returns a
+   * cancel fn. Returning a no-op canceller (and never calling back) effectively disables
+   * the tween → instant swap, which is what jsdom/no-rAF environments fall back to.
+   */
+  requestFrame?(callback: (nowMs: number) => void): () => void;
 }
 
 export interface PixiBackgroundControllerOptions {
@@ -121,6 +130,13 @@ export interface PixiBackgroundControllerOptions {
   deps: PixiBackgroundDeps;
   /** Fired after each successful (non-stale) texture swap — lets the UI fade out the plain <img>. */
   onApplied?: () => void;
+  /**
+   * Cover→cover crossfade duration (ms). The incoming cover is a second sprite under the
+   * SAME resident filter that fades 0→1 over the old one (then the old is disposed), so
+   * the effect is preserved throughout and covers dissolve instead of popping. 0 = instant
+   * swap (no second sprite). Default 0 so existing callers/tests keep the swap semantics.
+   */
+  crossfadeMs?: number;
 }
 
 export interface PixiBackgroundController {
@@ -158,6 +174,9 @@ export function createPixiBackgroundController(
     deps,
   } = options;
 
+  const crossfadeMs = options.crossfadeMs ?? 0;
+  const requestFrame = deps.requestFrame ?? defaultRequestFrame;
+
   let destroyed = false;
   let pixi: PixiModuleLike | null = null;
   let app: PixiAppLike | null = null;
@@ -172,6 +191,61 @@ export function createPixiBackgroundController(
   let lastSource: { src: string; mediaType: BackgroundMediaType } | null = null;
   let recoverAttempts = 0;
   const stats = { appInits: 0, textureSwaps: 0 };
+
+  // Cover→cover crossfade (crossfadeMs > 0): the OUTGOING sprite stays at alpha 1 while a
+  // new sprite (same resident filter) fades 0→1 over it, then the outgoing is disposed.
+  // At most one crossfade in flight — a newer switch finalizes the previous one first.
+  let prevSprite: PixiSpriteLike | null = null;
+  let prevMedia: CurrentMedia | null = null;
+  let cancelCrossfade: (() => void) | null = null;
+
+  function disposeSprite(target: PixiSpriteLike | null): void {
+    if (!target) return;
+    app?.stage.removeChild(target);
+    (target.texture as PixiTextureLike | undefined)?.destroy?.(true);
+    target.destroy?.({ children: false, texture: false });
+  }
+
+  // Snap any in-flight crossfade to its end: incoming fully shown, outgoing disposed.
+  function finalizeCrossfade(): void {
+    if (cancelCrossfade) {
+      cancelCrossfade();
+      cancelCrossfade = null;
+    }
+    if (sprite) sprite.alpha = 1;
+    if (prevSprite) {
+      disposeSprite(prevSprite);
+      prevSprite = null;
+    }
+    if (prevMedia) {
+      disposeMedia(prevMedia);
+      prevMedia = null;
+    }
+  }
+
+  // Fade `incoming` 0→1 over `crossfadeMs`, rendering each frame; the outgoing sprite
+  // (prevSprite, alpha 1) stays under it, then is disposed on completion. Frame-rate
+  // independent via the injected scheduler's timestamp.
+  function startCrossfade(incoming: PixiSpriteLike): void {
+    let start = -1;
+    const tick = (t: number) => {
+      cancelCrossfade = null;
+      if (destroyed || sprite !== incoming) {
+        finalizeCrossfade();
+        return;
+      }
+      if (start < 0) start = t;
+      const p = crossfadeMs > 0 ? Math.min(1, (t - start) / crossfadeMs) : 1;
+      incoming.alpha = p * p * (3 - 2 * p); // smoothstep
+      app?.render();
+      if (p >= 1) {
+        finalizeCrossfade();
+        return;
+      }
+      cancelCrossfade = requestFrame(tick);
+    };
+    cancelCrossfade = requestFrame(tick);
+  }
 
   async function buildApp(): Promise<void> {
     const startedAt = nowMs();
@@ -270,6 +344,10 @@ export function createPixiBackgroundController(
       effect === "pixel" ? Math.max(1, Math.round(cssH / block)) : Math.round(cssH * dpr);
     app.renderer.resize(renderW, renderH);
     coverSprite(sprite, currentMedia.width, currentMedia.height, renderW, renderH);
+    // Keep the outgoing crossfade sprite covered too, so a resize mid-fade doesn't skew it.
+    if (prevSprite && prevMedia) {
+      coverSprite(prevSprite, prevMedia.width, prevMedia.height, renderW, renderH);
+    }
     app.render();
     return nowMs() - startedAt;
   }
@@ -389,18 +467,39 @@ export function createPixiBackgroundController(
 
     const applyStart = nowMs();
     texture.source.scaleMode = "nearest";
+
+    // A new swap supersedes any in-flight crossfade: finalize it first so `sprite` is the
+    // settled current cover before we (maybe) start a fresh crossfade from it.
+    finalizeCrossfade();
     currentVideoTeardown?.();
     currentVideoTeardown = undefined;
 
-    const previousTexture = sprite?.texture as PixiTextureLike | undefined;
+    const previousSprite = sprite;
+    const previousTexture = previousSprite?.texture as PixiTextureLike | undefined;
     const previousMedia = currentMedia;
+    // Crossfade only image→image: video swaps (in or out) stay instant.
+    const willCrossfade =
+      crossfadeMs > 0 &&
+      !!previousSprite &&
+      media.type === "image" &&
+      previousMedia?.type === "image";
 
-    if (!sprite) {
+    if (!previousSprite) {
       sprite = new pixi.Sprite(texture);
+      sprite.alpha = 1;
       if (filter) sprite.filters = [filter];
       app.stage.addChild(sprite);
+    } else if (willCrossfade) {
+      // Keep the OUTGOING sprite (alpha 1) and fade a NEW one in over it under the same
+      // resident filter, so the effect is preserved and the covers dissolve.
+      const incoming = new pixi.Sprite(texture);
+      incoming.alpha = 0;
+      if (filter) incoming.filters = [filter];
+      app.stage.addChild(incoming);
+      sprite = incoming;
     } else {
-      sprite.texture = texture;
+      previousSprite.texture = texture; // instant swap (video / crossfade disabled)
+      sprite = previousSprite;
     }
 
     currentMedia = {
@@ -424,8 +523,15 @@ export function createPixiBackgroundController(
       }
     }
 
-    if (previousTexture && previousTexture !== texture) previousTexture.destroy(true);
-    if (previousMedia) disposeMedia(previousMedia);
+    if (willCrossfade) {
+      // Hold the outgoing sprite + its media; the tween disposes them on completion.
+      prevSprite = previousSprite;
+      prevMedia = previousMedia;
+      startCrossfade(sprite);
+    } else {
+      if (previousTexture && previousTexture !== texture) previousTexture.destroy(true);
+      if (previousMedia) disposeMedia(previousMedia);
+    }
 
     lastSource = { src, mediaType };
     recoverAttempts = 0; // a fresh frame landed — allow recovery again
@@ -461,6 +567,13 @@ export function createPixiBackgroundController(
     // The lost context took the textures with it — tear the app down and rebuild.
     currentVideoTeardown?.();
     currentVideoTeardown = undefined;
+    if (cancelCrossfade) {
+      cancelCrossfade();
+      cancelCrossfade = null;
+    }
+    if (prevMedia) disposeMedia(prevMedia);
+    prevSprite = null;
+    prevMedia = null;
     resizeObserver?.disconnect();
     resizeObserver = null;
     if (currentMedia) {
@@ -486,6 +599,13 @@ export function createPixiBackgroundController(
     destroyed = true;
     pendingLoadAbort?.abort();
     pendingLoadAbort = null;
+    if (cancelCrossfade) {
+      cancelCrossfade();
+      cancelCrossfade = null;
+    }
+    if (prevMedia) disposeMedia(prevMedia);
+    prevSprite = null;
+    prevMedia = null;
     currentVideoTeardown?.();
     currentVideoTeardown = undefined;
     resizeObserver?.disconnect();
@@ -541,6 +661,20 @@ function delayOrAbort(ms: number, signal: AbortSignal): Promise<void> {
     };
     signal.addEventListener("abort", abort, { once: true });
   });
+}
+
+/**
+ * Default crossfade frame scheduler: requestAnimationFrame when available, else a
+ * setTimeout fallback driven by performance.now() so the tween still progresses (SSR /
+ * jsdom without rAF). Tests inject a deterministic scheduler via deps.requestFrame.
+ */
+function defaultRequestFrame(callback: (nowMs: number) => void): () => void {
+  if (typeof requestAnimationFrame === "function") {
+    const id = requestAnimationFrame((t) => callback(t));
+    return () => cancelAnimationFrame(id);
+  }
+  const id = setTimeout(() => callback(nowMs()), 16);
+  return () => clearTimeout(id);
 }
 
 function createAbortError(): DOMException {

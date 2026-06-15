@@ -18,7 +18,7 @@ function fakeApp() {
       return Promise.resolve();
     },
     canvas: document.createElement("canvas"),
-    stage: { addChild: vi.fn() },
+    stage: { addChild: vi.fn(), removeChild: vi.fn() },
     renderer: { resize: vi.fn() },
     ticker: {
       started: false,
@@ -49,8 +49,10 @@ function fakeModule() {
       return {
         texture,
         filters: [] as unknown[],
+        alpha: 1,
         scale: { set: vi.fn() },
         position: { set: vi.fn() },
+        destroy: vi.fn(),
       } as never;
     },
     Texture: { from: () => fakeTexture() },
@@ -404,6 +406,85 @@ describe("createPixiBackgroundController", () => {
     await pending;
     expect(loadMedia).toHaveBeenCalledTimes(1);
     expect(loadMedia).toHaveBeenCalledWith("a.png", expect.any(AbortSignal));
+    controller.destroy();
+  });
+
+  it("crossfades cover→cover under the resident filter: 2nd sprite fades in, old disposed on completion", async () => {
+    // Drive the tween deterministically: capture each requested frame callback and
+    // flush it with a controlled timestamp so we can step the fade 0→1 by hand.
+    const frames: Array<(t: number) => void> = [];
+    const requestFrame = (cb: (t: number) => void) => {
+      frames.push(cb);
+      return () => {};
+    };
+    const flush = (t: number) => {
+      const pending = frames.splice(0, frames.length);
+      for (const cb of pending) cb(t);
+    };
+
+    const module = fakeModule();
+    const filter = { id: "filter" };
+    const host = document.createElement("div");
+    const controller = createPixiBackgroundController({
+      host,
+      effect: "noise",
+      effectOptions: {} as never,
+      pixelSize: 12,
+      preference: "webgl",
+      powerPreference: "low-power",
+      crossfadeMs: 360,
+      deps: {
+        loadPixi: async () => module,
+        loadMedia: async (_pixi, _src): Promise<LoadedBackgroundMedia> => ({
+          type: "image",
+          element: document.createElement("img"),
+          texture: fakeTexture() as never,
+          width: 100,
+          height: 100,
+          unload: vi.fn(),
+        }),
+        loadFilter: async () => filter,
+        requestFrame,
+        onError: vi.fn(),
+      },
+    });
+
+    await controller.setSource("a.png", "image");
+    const stage = module.apps[0].stage;
+    const spriteA = stage.addChild.mock.calls[0][0] as {
+      alpha: number;
+      texture: ReturnType<typeof fakeTexture>;
+      destroy: ReturnType<typeof vi.fn>;
+    };
+    const textureA = spriteA.texture;
+    expect(spriteA.alpha).toBe(1);
+    expect(frames.length).toBe(0); // first cover never crossfades
+
+    await controller.setSource("b.png", "image");
+    // The incoming cover is a SECOND sprite added under the same resident filter,
+    // starting transparent — the old one is still mounted (not yet disposed).
+    expect(stage.addChild).toHaveBeenCalledTimes(2);
+    const spriteB = stage.addChild.mock.calls[1][0] as { alpha: number; filters: unknown[] };
+    expect(spriteB.alpha).toBe(0);
+    expect(spriteB.filters).toEqual([filter]);
+    expect(spriteA.destroy).not.toHaveBeenCalled();
+    expect(textureA.destroy).not.toHaveBeenCalled();
+    expect(stage.removeChild).not.toHaveBeenCalled();
+
+    // Step the tween: at the midpoint the incoming sprite is partway in (0 < a < 1).
+    flush(0);
+    flush(180);
+    expect(spriteB.alpha).toBeGreaterThan(0);
+    expect(spriteB.alpha).toBeLessThan(1);
+    expect(spriteA.destroy).not.toHaveBeenCalled();
+
+    // On completion the incoming is fully shown and the outgoing sprite + texture are freed.
+    flush(360);
+    expect(spriteB.alpha).toBe(1);
+    expect(stage.removeChild).toHaveBeenCalledWith(spriteA);
+    expect(textureA.destroy).toHaveBeenCalled();
+    expect(spriteA.destroy).toHaveBeenCalled();
+
     controller.destroy();
   });
 

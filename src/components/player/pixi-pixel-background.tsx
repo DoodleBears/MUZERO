@@ -21,6 +21,10 @@ export type PixiBackgroundEffect = "pixel" | "ascii" | "cross-hatch" | "crt" | "
 type BackgroundMediaType = "image" | "video";
 const BACKGROUND_IMAGE_BITMAP_MAX_DIMENSION = 1024;
 const BACKGROUND_TEXTURE_LOAD_DELAY_MS = 180;
+// Cover→cover crossfade duration: the incoming cover fades in as a 2nd sprite under the
+// SAME resident filter, so the effect is preserved throughout and covers dissolve instead
+// of the old plain-<img> reveal. PM: dragging to switch should crossfade the background.
+const BACKGROUND_COVER_CROSSFADE_MS = 360;
 const TEXTURE_HEADER_BYTES = 64 * 1024;
 const bgTextureLog = createDiagnosticLogger("background.texture");
 
@@ -84,10 +88,6 @@ export function PixiPixelBackground({
   const gpuPower = resolveGpuPower(settings.backgroundGpuPowerPreference);
   const hostRef = useRef<HTMLDivElement | null>(null);
   const [controller, setController] = useState<PixiBackgroundController | null>(null);
-  // The src currently painted onto the Pixi texture. Until it catches up to `src`
-  // (the brief load+upload window on a switch), the plain <img> below stays visible
-  // to mask the swap.
-  const [displayedSrc, setDisplayedSrc] = useState<string | null>(null);
   const effectOptions = useMemo(
     () => resolvePixiBackgroundEffectOptions(effectSettings, pixelSize),
     [effectSettings, pixelSize],
@@ -101,11 +101,11 @@ export function PixiPixelBackground({
   useEffect(() => {
     const host = hostRef.current;
     if (!host) return;
-    setDisplayedSrc(null);
     const next = createPixiBackgroundController({
       host,
       effect,
       effectOptions,
+      crossfadeMs: BACKGROUND_COVER_CROSSFADE_MS,
       loadDelayMs: BACKGROUND_TEXTURE_LOAD_DELAY_MS,
       pixelSize,
       preference: gpuBackend,
@@ -135,16 +135,11 @@ export function PixiPixelBackground({
   // Texture swap follows `src` directly (no debounce) so the background switches
   // together with the cover — single source of truth (PRD Phase 8). The transport
   // throttle bounds the switch rate, so we no longer gate uploads here. Re-runs when
-  // the controller is rebuilt. On apply, record displayedSrc to fade out the <img>.
+  // the controller is rebuilt. The incoming cover crossfades in as a 2nd sprite under
+  // the resident filter (controller crossfadeMs), so no plain-<img> reveal is needed.
   useEffect(() => {
     if (!controller) return;
-    let cancelled = false;
-    void controller.setSource(src, mediaType).then(() => {
-      if (!cancelled) setDisplayedSrc(src);
-    });
-    return () => {
-      cancelled = true;
-    };
+    void controller.setSource(src, mediaType);
   }, [controller, src, mediaType]);
 
   return (
@@ -152,22 +147,7 @@ export function PixiPixelBackground({
       ref={hostRef}
       className={cn("absolute inset-0 overflow-hidden", className)}
       aria-hidden="true"
-    >
-      {mediaType === "image" && src ? (
-        <img
-          src={src}
-          alt=""
-          decoding="async"
-          className={cn(
-            // Reveal layer ON TOP of the canvas (z-10 vs the canvas's z-0): the plain
-            // cover shows instantly on a switch while the heavy effect computes below,
-            // then fades out to reveal the effect instead of popping it in (#3).
-            "absolute inset-0 z-10 h-full w-full object-cover transition-opacity duration-500",
-            src === displayedSrc ? "opacity-0" : "opacity-100",
-          )}
-        />
-      ) : null}
-    </div>
+    />
   );
 }
 
