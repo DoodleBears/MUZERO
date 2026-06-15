@@ -7,6 +7,7 @@ import {
   useTransform,
 } from "motion/react";
 import {
+  type CSSProperties,
   Fragment,
   type ReactNode,
   type RefObject,
@@ -23,6 +24,8 @@ import type { Track } from "@/db/types";
 import { useSettings } from "@/hooks/use-app-data";
 import { useCoverDerivativeUrl, useTrackCoverResource } from "@/hooks/use-media";
 import {
+  albumCoverAppearanceVars,
+  resolveAlbumCoverAppearance,
   resolveNowPlayingCoverBacklightAppearance,
   resolveNowPlayingCoverEffectMode,
 } from "@/lib/album-cover-appearance";
@@ -167,6 +170,13 @@ export function SwipeableMediaStage({
     backlightOpacity: backlight.opacity / 100,
     mode: coverEffectMode,
   };
+  // The configurable cover radius/shadow apply to the Now Playing stage ONLY
+  // (Settings is now scoped here, not global — see App.useAppearanceCssVars).
+  // Setting the vars on the stage root cascades to every cover beneath it; the
+  // coverflow overlay portals out into `main`, so it gets the same vars below.
+  const coverAppearanceVars = albumCoverAppearanceVars(
+    resolveAlbumCoverAppearance(settings),
+  ) as CSSProperties;
   const stageCover = useTrackCoverResource(current);
   const preloadCandidates = useMemo<CoverPreloadCandidate[]>(
     () =>
@@ -722,6 +732,7 @@ export function SwipeableMediaStage({
             className="pointer-events-none fixed z-20 overflow-visible [perspective:1200px] [transform-style:preserve-3d]"
             initial={false}
             style={{
+              ...coverAppearanceVars,
               clipPath: `inset(${overlayRect.clipTopInset}px -100vw ${overlayRect.clipBottomInset}px -100vw)`,
               height: overlayRect.height,
               left: overlayRect.left,
@@ -781,6 +792,7 @@ export function SwipeableMediaStage({
       <div
         data-no-drag
         className={cn("flex flex-col gap-2", className)}
+        style={coverAppearanceVars}
         onContextMenuCapture={cancelTapForContextMenu}
       >
         <div

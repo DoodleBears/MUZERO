@@ -6,7 +6,6 @@ import { saveSettings } from "@/db/repositories";
 import type { AppSettings } from "@/db/types";
 import { useSettings } from "@/hooks/use-app-data";
 import {
-  albumCoverAppearanceCssVars,
   albumCoverAppearanceVars,
   NOW_PLAYING_COVER_EFFECT_MODES,
   resolveAlbumCoverAppearance,
@@ -69,11 +68,11 @@ export function AlbumCoverAppearanceSettings({ showPreview = true }: { showPrevi
   }, [persistedSettings]);
 
   function setDraftValue(key: CoverAppearanceNumberKey, value: number) {
-    setDraft((current) => {
-      const next = { ...current, [key]: value };
-      applyCoverAppearancePreview({ ...persistedSettings, ...next });
-      return next;
-    });
+    // The preview box below reads the draft `appearance` through inline vars, so
+    // dragging updates it live without writing to the document root. The vars are
+    // intentionally NOT applied globally — the Settings control only governs the
+    // Now Playing stage cover (scoped in SwipeableMediaStage), not every cover.
+    setDraft((current) => ({ ...current, [key]: value }));
   }
 
   function commitDraftValue(key: CoverAppearanceNumberKey, value: number) {
@@ -248,12 +247,4 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
       {children}
     </div>
   );
-}
-
-function applyCoverAppearancePreview(settings: Partial<AppSettings>) {
-  if (typeof document === "undefined") return;
-  const html = document.documentElement;
-  for (const [name, value] of Object.entries(albumCoverAppearanceCssVars(settings))) {
-    html.style.setProperty(name, value);
-  }
 }

@@ -99,7 +99,10 @@
 }
 
 @utility album-cover-shadow {
-  box-shadow: var(--album-cover-shadow, 0 4px 16px rgb(0 0 0 / 55%));
+  /* Flat by default — only the Now Playing stage cover (and the Settings preview)
+     set `--album-cover-shadow` inline to the configured drop shadow. Grid / list
+     / detail covers (albums, songs, playlists, track rows) keep no shadow. */
+  box-shadow: var(--album-cover-shadow, none);
 }
 
 @utility now-playing-cover-backlight-clip {
@@ -109,7 +112,9 @@
 :root {
   --radius: 0.625rem;
   --album-cover-radius: 12px;
-  --album-cover-shadow: 0 4px 16px rgb(0 0 0 / 55%);
+  /* No global drop shadow: the configurable cover shadow is a Now Playing-only
+     feature, applied inline on that stage. Everything else stays flat. */
+  --album-cover-shadow: none;
   --now-playing-cover-backlight-opacity: 0.82;
   --now-playing-cover-backlight-scale: 1.12;
   --now-playing-cover-backlight-blur: 20px;

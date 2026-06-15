@@ -23,7 +23,10 @@ import { useIdle } from "@/hooks/use-idle";
 import { usePlaybackWarmup } from "@/hooks/use-playback-warmup";
 import { useShortcutDispatch } from "@/hooks/use-shortcut-dispatch";
 import { useSystemShortcuts } from "@/hooks/use-system-shortcuts";
-import { albumCoverAppearanceCssVars } from "@/lib/album-cover-appearance";
+import {
+  nowPlayingCoverBacklightVars,
+  resolveNowPlayingCoverBacklightAppearance,
+} from "@/lib/album-cover-appearance";
 import { resolveDesktopBridge } from "@/lib/desktop/bridge";
 import { electronWindowAppearanceCssVars } from "@/lib/electron-window-appearance";
 import { cn } from "@/lib/utils";
@@ -383,7 +386,13 @@ function useAppearanceCssVars(settings: ReturnType<typeof useSettings>) {
     const html = document.documentElement;
     const vars = {
       ...electronWindowAppearanceCssVars(settings, { coverColorCss }),
-      ...albumCoverAppearanceCssVars(settings),
+      // The album-cover *radius/shadow* vars are intentionally NOT applied
+      // globally — they would bleed into every cover (library rows, playlist /
+      // album art, search results). They're scoped to the Now Playing stage
+      // subtree instead (see SwipeableMediaStage). Only the backlight vars,
+      // which the Now Playing cover backlight reads through a portal into
+      // `main`, stay global here.
+      ...nowPlayingCoverBacklightVars(resolveNowPlayingCoverBacklightAppearance(settings)),
     };
     for (const [name, value] of Object.entries(vars)) {
       html.style.setProperty(name, value);
