@@ -78,6 +78,16 @@ function getWorker(): Worker | null {
           entry.resolve(msg.hits as QueryHit[]);
         }
         pending.delete(msg.reqId);
+      } else if (msg?.type === "index-stats") {
+        // Cold / incremental build cost (PRD §4). Numbers only, no row content.
+        log.debug("search.index", {
+          buildMs: msg.buildMs,
+          size: msg.size,
+          added: msg.added,
+          updated: msg.updated,
+          removed: msg.removed,
+          reused: msg.reused,
+        });
       }
     };
     worker.onerror = () => {

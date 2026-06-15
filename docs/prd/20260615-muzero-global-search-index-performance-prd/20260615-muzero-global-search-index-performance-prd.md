@@ -13,7 +13,7 @@
 |-------|------|--------|------|
 | 1 | 观测先行：补齐开窗 / 查询 / longtask 指标 | 🔄 代码完成（基线待用户实测） | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | 消除开窗同步突发（pre-warm + defer） | 🔄 代码完成（开窗帧待用户实测） | [Phase 2 Checklist](#phase-2-checklist) |
-| 3 | 预存变体 `IndexedRow` + 线性扫描 + 增量维护（★核心） | 🔲 Pending | [Phase 3 Checklist](#phase-3-checklist) |
+| 3 | 预存变体 `IndexedRow` + 线性扫描 + 增量维护（★核心） | 🔄 代码完成（latency 待用户实测） | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | 倒排收窄 / 超大库调优 / 持久化（仅 20k+ 实测不达标才做） | 🔲 Pending | [Phase 4 Checklist](#phase-4-checklist) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
@@ -338,28 +338,30 @@ liveQuery(tracks/lyrics/memory) ─throttle250ms─▶ rows snapshot ─postMess
 
 **Goal:** 把转写从「每键 O(rows×fields)」搬到「库变更增量一次」并随 row 存好（`IndexedRow`），查询线性扫预存变体、零转写；增删改增量维护,绝不全表重建。语义逐位不变。调研证实 6k–20k 此方案即 sub-100ms，**不引倒排**。
 
+**实现**：[`src/workers/search-index.ts`](../../../src/workers/search-index.ts)（纯函数 + 增量索引）+ worker 接入（[`search-worker.ts`](../../../src/workers/search-worker.ts)）；单测 [`search-index.test.ts`](../../../src/workers/search-index.test.ts)。
+
 **Tasks:**
-- [ ] 新增 `src/workers/search-index.ts`：
-  - `IndexedRow`（`freeVariants`/`artistVariants`/`albumVariants`/`tagVariants`）+ 纯构建函数 `buildIndexedRow(IndexableRow)`（用现有 `searchVariants`）。
-  - 增量接口 `addRow` / `removeRow` / `updateRow`（线性扫方案：`Map<id, IndexedRow>` 增删一项）。
-  - 查询函数 `queryIndexedRows`：线性扫 `IndexedRow`，query 变体 × 预存 field 变体跑 `scoreVariants`，分级 tier 排序。
-- [ ] `search-core.ts` 暴露「按预存变体比分」入口（`scoreIndexedRow`）；与现有 `scoreRow` 结果**逐位对齐**（同一 `scoreVariants`/tier，只是 field 变体来自预存而非现算）。
-- [ ] worker `set-rows`：按 `id` diff 调增量接口（新增/删除/变更），未变行 100% 复用。
-- [ ] worker 内**分块 + yield** 冷建/大批导入；warm 期间查询降级 substring,建完升级全 NLP（复用现有「词典未载完前降级」模式）。
-- [ ] 歌词变体作为**第二趟**懒补（metadata/tags 先 ready）。
-- [ ] `resultCache`（query+索引版本号）压低重复/连续按键延迟。
-- [ ] 移除 `MAX_VARIANT_CACHE_SIZE=4000` 抖动：field 变体随 `IndexedRow` 持有。
-- [ ] 纯函数单测：预存路径与现状 `queryRows` **结果与排序逐位一致**（pinyin 全拼/首字母、kana/romaji、歌词、`#tag`、`artist:`/`album:` scope、空查询、substring 词中间、subsequence 跳字边界）；增量 add/remove/update 后索引与全量重建等价。
-- [ ] 复测 `query latency` / `worker queryDuration` / `cold build` / `incremental build` / `worker heap` / 主线程 longtask。
+- [x] 新增 `src/workers/search-index.ts`：
+  - `IndexedRow`（free/artist/album/tags 各 field 的预存变体数组）+ 纯构建 `buildIndexedRow(IndexableRow)`（用现有 `searchVariants`）。
+  - 增量接口 `addRow` / `removeRow` / `updateRow` + `setRows`（diff by id，返回 `{added,updated,removed,reused}`；线性扫方案：`Map<id,{source,indexed}>` 增删一项，未变行 shallow-compare 复用）。
+  - 查询 `queryIndexedRows` / `scoreIndexedRow`：线性扫，query 变体 × 预存 field 变体跑 `scoreVariants`，分级 tier 排序 —— **逐位 mirror** `scoreRow`/`queryRows`，仅 field 变体来源不同。
+- [x] worker `set-rows`：`await dictionariesReady` 后 `index.setRows`（按 id diff，未变行 100% 复用）→ 转写搬到 set-rows 时；并回传 `index-stats`（`buildMs`/delta/size）供 client `log.debug`（cold/incremental build 指标）。
+- [x] worker `query`：走 `index.query`，零 field 转写（仅 query token）。
+- [x] 纯函数单测：**parity** —— 12 条查询（pinyin 全拼/首字母、kana/romaji、`artist:`/`album:`/`#tag` scope、空查询、substring 词中间 `light`、subsequence 跳字、无匹配）`index.query` 与 `queryRows` **逐位一致**；**增量 ≡ 全量** —— add/remove/update 序列与 `setRows(全量)` 结果等价；`setRows` reuse 计数验证「不全表重建」；`removeRow` 生效。（71 例全绿，tsc 0 错）
+- [ ] **（本期未做，移至 Phase 3.1 / Phase 4）** worker 内分块 + yield 冷建；歌词变体第二趟懒补；`resultCache` + 增量收窄。当前冷建在 worker 内一次性构建（已离主线程，主线程不卡）；6k 体量下足够，分块留待 20k+ 或实测冷建过长时加。
+- [ ] **（待用户实测）** 6k/12k prod 复测 `query latency`（应从 ≈3s → sub-100ms）/ `cold build` / `worker heap`。
+
+> **`MAX_VARIANT_CACHE_SIZE=4000` 抖动**：根因已消失 —— 查询不再对 field 调 `searchVariants`（用 `IndexedRow` 预存变体），缓存仅在冷建（每 field 一次）+ query token（极少）用到，4000 上限不再抖动。故 `search-transliterate.ts` 不改（保留无害），降低改动面与风险。
+> **inline fallback**（无 Worker / 测试）保留 `queryRows`（与 dict 加载时序无关、始终正确），与索引路径已由 parity 单测证等价。
 
 #### Phase 3 Checklist
-- [ ] 6k 库 `query latency` p95 ≤ 80ms（从 ≈3s 降下来）
-- [ ] **substring（词中间）与 subsequence（跳字）匹配全保留**（无功能回退）
-- [ ] 拼音/首字母 / 假名/罗马音 / 歌词搜索结果与现状逐位一致
-- [ ] 增删改走增量接口,**不触发全表重建**（实测 `incremental build` ≤ 数 ms;单测证明增量 ≡ 全量重建）
-- [ ] **冷建期间主线程 0 个新 longtask**（坐实「在 worker、不卡 UI」）
-- [ ] `worker heap` 增量已实测并在预算内
-- [ ] 12k/20k 合成库下 latency 仍达标或给出退化曲线（不达标 → 触发 Phase 4）
+- [x] **parity**：`index.query` 与 `queryRows` 12 查询逐位一致（拼音/首字母、假名/罗马音、`#tag`、`artist:`/`album:`、空查询、**substring 词中间、subsequence 跳字** 全保留，无功能回退）
+- [x] 增删改走增量接口，**不触发全表重建**（`setRows` reuse 计数单测 + 增量 ≡ 全量单测证明）
+- [x] 转写搬到 set-rows（`await dictionariesReady` 保证全变体，非降级）；查询零 field 转写
+- [x] tsc 0 错；71 搜索测试全绿；改动面仅 4 文件（+1 新 + 1 测试）
+- [ ] **（待用户实测）** 6k 库 `query latency` p95 ≤ 80ms（从 ≈3s 降下来）
+- [ ] **（待用户实测）** 冷建期间主线程 0 个新 longtask（worker 内构建，理论零阻塞，待 prod 确认）
+- [ ] **（待用户实测）** `worker heap` 增量在预算内；12k/20k 退化曲线（不达标 → 触发 Phase 4）
 
 ### Phase 4: 倒排收窄 / 超大库调优 / 持久化（仅 20k+ 实测不达标才做）
 
