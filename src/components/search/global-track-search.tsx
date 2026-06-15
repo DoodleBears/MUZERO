@@ -10,7 +10,7 @@ import {
   X,
 } from "lucide-react";
 import type { KeyboardEvent } from "react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { PlaylistImportDialog } from "@/components/stream/playlist-import-dialog";
 import { Disc3Icon } from "@/components/ui/disc-3";
@@ -133,6 +133,22 @@ export function GlobalTrackSearch({
   const streamingSupported = hasStreamingSources();
   const transliterationReady = useTransliterationReady();
 
+  // Keep the heavy index derivations (artist/album projections, lyric-field
+  // parse, the worker row snapshot) OFF the open-paint frame. They used to be
+  // gated on `open`, so pressing ⌘F triggered a synchronous O(N) burst —
+  // buildArtist/AlbumIndex + N×trackToRow + a structured-clone postMessage — in
+  // the very commit that mounts the overlay, janking the open ("顿一下", PRD
+  // Phase 2 / symptom 1). Instead latch a sticky "has ever opened" flag and read
+  // it through `useDeferredValue`: the first ⌘F paints the modal immediately,
+  // the indexes build a tick later at transition priority, and every later open
+  // is already warm (the worker snapshot persists). Result-display memos still
+  // gate on `open`, so a closed overlay computes/show nothing user-facing.
+  const [hasOpened, setHasOpened] = useState(false);
+  useEffect(() => {
+    if (open) setHasOpened(true);
+  }, [open]);
+  const indexWarm = useDeferredValue(hasOpened);
+
   // The trailing `@mention` the caret is inside, and the text we actually search
   // (everything before that mention).
   const mention = parseMention(query);
@@ -163,18 +179,28 @@ export function GlobalTrackSearch({
     () => new Map<string, TrackLyrics>(lyricsRows.map((row) => [row.trackId, row])),
     [lyricsRows],
   );
+  // Parses lyrics for the whole library (heavy, main-thread) — gate on the
+  // deferred warm latch so it never runs on the open-paint frame.
   const lyricFieldsByTrackId = useMemo(() => {
     const rows = new Map<string, string[]>();
+    if (!indexWarm) return rows;
     for (const track of allTracks) {
       const fields = lyricsSearchFields(track, lyricsByTrackId.get(track.id) ?? null);
       if (fields.length > 0) rows.set(track.id, fields);
     }
     return rows;
-  }, [allTracks, lyricsByTrackId]);
-  // Derived artist/album projections — only while the (always-mounted) overlay is
-  // open, so a closed ⌘F doesn't re-project on every library change.
-  const artistIndex = useMemo(() => (open ? buildArtistIndex(allTracks) : []), [open, allTracks]);
-  const albumIndex = useMemo(() => (open ? buildAlbumIndex(allTracks) : []), [open, allTracks]);
+  }, [indexWarm, allTracks, lyricsByTrackId]);
+  // Derived artist/album projections — built once the overlay has been opened
+  // (deferred warm latch), so a never-opened ⌘F doesn't re-project on every
+  // library change and the first open doesn't pay the build synchronously.
+  const artistIndex = useMemo(
+    () => (indexWarm ? buildArtistIndex(allTracks) : []),
+    [indexWarm, allTracks],
+  );
+  const albumIndex = useMemo(
+    () => (indexWarm ? buildAlbumIndex(allTracks) : []),
+    [indexWarm, allTracks],
+  );
 
   // Sets — name-only, transliteration-aware. The full gallery can search inside
   // set tracks; global ⌘F keeps this result type crisp so `@set` means playlists.
@@ -193,7 +219,11 @@ export function GlobalTrackSearch({
   // Songs + lyrics — one worker index with typed row ids, split back into
   // sections after ranking so lyric-only matches do not masquerade as song hits.
   const searchRows = useMemo<IndexableRow[]>(() => {
-    if (!open) return [];
+    // Built off the deferred warm latch (not `open`) so the worker stays warm
+    // before/between opens and the snapshot + postMessage never block the open
+    // frame. The query itself is still gated on `open` below, so a warm-but-
+    // closed overlay does no scanning.
+    if (!indexWarm) return [];
     const rows: IndexableRow[] = [];
     if (showTrackResults) {
       for (const track of playable) {
@@ -217,7 +247,7 @@ export function GlobalTrackSearch({
       }
     }
     return rows;
-  }, [open, showTrackResults, showLyricResults, playable, memoryNotes, lyricFieldsByTrackId]);
+  }, [indexWarm, showTrackResults, showLyricResults, playable, memoryNotes, lyricFieldsByTrackId]);
   const rankedHits = useWorkerRowSearch(
     searchRows,
     open && (showTrackResults || showLyricResults) ? searchText : "",

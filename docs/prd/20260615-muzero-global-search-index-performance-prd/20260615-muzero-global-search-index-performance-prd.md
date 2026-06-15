@@ -12,7 +12,7 @@
 | Phase | Name | Status | Link |
 |-------|------|--------|------|
 | 1 | 观测先行：补齐开窗 / 查询 / longtask 指标 | 🔄 代码完成（基线待用户实测） | [Phase 1 Checklist](#phase-1-checklist) |
-| 2 | 消除开窗同步突发（pre-warm + defer） | 🔲 Pending | [Phase 2 Checklist](#phase-2-checklist) |
+| 2 | 消除开窗同步突发（pre-warm + defer） | 🔄 代码完成（开窗帧待用户实测） | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | 预存变体 `IndexedRow` + 线性扫描 + 增量维护（★核心） | 🔲 Pending | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | 倒排收窄 / 超大库调优 / 持久化（仅 20k+ 实测不达标才做） | 🔲 Pending | [Phase 4 Checklist](#phase-4-checklist) |
 
@@ -318,17 +318,21 @@ liveQuery(tracks/lyrics/memory) ─throttle250ms─▶ rows snapshot ─postMess
 
 **Goal:** ⌘F 开窗无掉帧。把重派生移出「开窗那一帧」。
 
+**实现**：用「sticky `hasOpened` latch + `useDeferredValue`」把重派生移出开窗帧（[`global-track-search.tsx`](../../../src/components/search/global-track-search.tsx)）。`const indexWarm = useDeferredValue(hasOpened)`：首次 ⌘F 时 `hasOpened` 同步翻 true → modal 当帧 paint；`indexWarm` 在下一 tick 以 transition 优先级翻 true → 索引/worker 快照在开窗帧之后才建；其后每次开窗已 warm。结果展示 memo 仍 gate 在 `open`（关闭态不渲染、不查询）。
+
 **Tasks:**
-- [ ] 后台 warm：库就绪后（throttled）即 `setSearchRows` 推送 worker，开窗不再触发首建（warm 时机与内存权衡在 PR 说明）。
-- [ ] `artistIndex`/`albumIndex`/`searchRows` 去掉 `open` gate 或用 `useDeferredValue`/`startTransition`，保证开窗帧先 paint。
-- [ ] `lyricFieldsByTrackId` 移到 worker 或 defer / idle 计算，避免主线程解析全库歌词。
-- [ ] 复测 `open→paint` / `longtask max`，对比 Phase 1 基线。
+- [x] 后台 warm：`searchRows` 改 gate 在 `indexWarm`（非 `open`）→ 首开后 worker 快照常驻、不再每次开窗触发首建；`useWorkerRowSearch` 内已 throttle 推送。
+- [x] `artistIndex`/`albumIndex`/`searchRows` 由 `open` gate 改为 `indexWarm`（deferred latch），保证开窗帧先 paint。
+- [x] `lyricFieldsByTrackId`（主线程解析全库歌词）gate 到 `indexWarm`，不在开窗帧跑。
+- [x] 查询仍 gate 在 `open && searchText`（warm-but-closed 不扫描）；typecheck + 6 个搜索测试套件 66 例全绿，搜索行为无回归。
+- [ ] **（待用户实测）** 复测 `open→paint` / `longtask max`（用 Phase 1 的 `observeLongTasks` + `getSearchPerfSnapshot`），对比 before 基线。
 
 #### Phase 2 Checklist
-- [ ] 二次开窗无新增 ≥50ms longtask
-- [ ] 6k 库开窗主观无「顿一下」
-- [ ] warm 的内存/CPU 后台成本已实测并可接受（给出数值）
-- [ ] 行为无回归（结果、scope、键盘导航一致）
+- [x] 重派生（facet 索引 / 歌词解析 / worker 快照）不再 gate 在 `open`，改 deferred warm latch
+- [x] 行为无回归（结果、scope、键盘导航：搜索测试套件全绿；查询门控不变）
+- [ ] **（待用户实测）** 二次开窗无新增 ≥50ms longtask
+- [ ] **（待用户实测）** 6k 库开窗主观无「顿一下」
+- [ ] **（待用户实测）** warm 的内存/CPU 后台成本可接受（给出数值；对应 §10 Open Q6 warm 时机最终定夺）
 
 ### Phase 3: 预存变体 `IndexedRow` + 线性扫描 + 增量维护 ★核心
 
