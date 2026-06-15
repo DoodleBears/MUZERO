@@ -14,6 +14,7 @@ import type {
 } from "@/db/types";
 import { normalizeCoverPalette } from "@/lib/cover-palette";
 import { newId } from "@/lib/id";
+import { arePerfCountersEnabled, notePerfWork } from "@/lib/perf-counters";
 import { extractCoverMetadataViaWorker } from "@/workers/cover-client";
 import type { CoverMetadataResult } from "@/workers/cover-derivative-core";
 
@@ -346,6 +347,12 @@ async function createImageDerivative(
   const cover = await resolveMediaBlob(input.track.coverBlobId, db, options.storage);
   if (!cover?.blob) return undefined;
   const extract = options.extract ?? extractCoverMetadataViaWorker;
+  // PERF PROBE (switch-fps cover commit): wall-clock of one derivative pass. The
+  // pixel work runs in a worker, but serializing the full-res cover blob into the
+  // worker (structured clone) is on this thread — so a cover edit that regenerates
+  // backlight + thumbnail pays it twice. Attributes the post-commit cover cost.
+  const perfEnabled = arePerfCountersEnabled();
+  const extractStart = perfEnabled ? performance.now() : 0;
   const result = await extract({
     blob: cover.blob,
     crop: input.track.coverCrop,
@@ -353,6 +360,12 @@ async function createImageDerivative(
     sourceKey: input.source.sourceKey,
     targets: [input.kind],
   });
+  if (perfEnabled) {
+    notePerfWork("cover.derivative.extract", performance.now() - extractStart, {
+      bytes: cover.blob.size,
+      kind: input.kind,
+    });
+  }
   const image = input.kind === "backlight" ? result.backlight : result.thumbnail;
   if (!image) return undefined;
   const derivativeBlob = new Blob([image.bytes], { type: image.mime });

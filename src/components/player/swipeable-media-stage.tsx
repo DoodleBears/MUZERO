@@ -1263,10 +1263,21 @@ function usePreloadedCoverUrls(
     [requests],
   );
   const includeNonCurrentLocal = forceNonCurrentLocal || nonCurrentLocalReadyKey === requestsKey;
-  const activeRequests = useMemo(
+  const activeRequestsRaw = useMemo(
     () => filterCoverPreloadRequestsForBurst(requests, includeNonCurrentLocal),
     [includeNonCurrentLocal, requests],
   );
+  // The queue liveQuery hands back fresh Track objects on any edit, so
+  // `candidates`/`requests`/`activeRequests` churn IDENTITY even when the cover set
+  // is unchanged. Key by CONTENT and only hand the load effect a new array when the
+  // content actually changes, so it stops re-running the whole preload batch ~per
+  // render for the same covers (issue ①).
+  const activeRequestsKey = useMemo(
+    () => activeRequestsRaw.map((r) => `${r.role}:${r.trackId}:${r.key}`).join("|"),
+    [activeRequestsRaw],
+  );
+  // biome-ignore lint/correctness/useExhaustiveDependencies: stabilize identity by content key
+  const activeRequests = useMemo(() => activeRequestsRaw, [activeRequestsKey]);
 
   useEffect(() => {
     const timer = window.setTimeout(
