@@ -38,14 +38,14 @@ import { type PixiBackgroundEffect, PixiPixelBackground } from "./pixi-pixel-bac
 const bgCoverLog = createDiagnosticLogger("background.cover");
 
 /**
- * Resting dim of the cover-background group. Applied ONCE to the whole group (the
- * controller layer stack + the drag transition layer) with the layers at full
- * opacity inside — a crossfade then stays fully opaque end-to-end, so two covers
- * overlapping never composite brighter than one (QA: "image brightens then dims
- * back" during a switch). Matches the old per-layer 0.9. The 25% `imageMask`
- * above this group is a separate, additional darkening.
+ * Resting opacity of the cover-background group, applied ONCE to the whole group
+ * (the controller layer stack + the drag transition layer) with the layers at
+ * full opacity inside — a crossfade then stays fully opaque end-to-end, so two
+ * covers overlapping never composite brighter than one (QA: "image brightens
+ * then dims back" during a switch). At 1.0 the group itself does no dimming; the
+ * only backdrop darkening is the separate 25% `imageMask` above it.
  */
-const COVER_GROUP_OPACITY = 0.9;
+const COVER_GROUP_OPACITY = 1;
 const ENABLE_PIXI_BACKGROUND_FOR_BISECT = true;
 const DISABLE_PIXI_TEXTURE_SOURCE_FOR_BISECT = false;
 
