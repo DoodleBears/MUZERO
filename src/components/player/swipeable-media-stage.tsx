@@ -179,7 +179,11 @@ export function SwipeableMediaStage({
       stack?.prev?.track,
     ],
   );
-  const preloadedCoverUrls = usePreloadedCoverUrls(preloadCandidates);
+  // While the user is actively dragging/peeking the coverflow they clearly want
+  // the neighbour covers NOW — and a drag is never a rapid burst — so bypass the
+  // 420ms non-current preload defer (which otherwise leaves prev/next showing the
+  // title-only fallback when you drag to peek right after a switch). QA 图2.
+  const preloadedCoverUrls = usePreloadedCoverUrls(preloadCandidates, !!dragDirection || !!stack);
   const currentVisual = makeVisualTrack(current, preloadedCoverUrls);
   const nextVisual = makeVisualTrack(nextTrack, preloadedCoverUrls);
   const prevVisual = makeVisualTrack(prevTrack, preloadedCoverUrls);
@@ -1176,7 +1180,10 @@ function measureVerticalClipBounds(el: HTMLElement | null): { bottom: number; to
   return bottom > top ? { bottom, top } : { bottom: window.innerHeight, top: 0 };
 }
 
-function usePreloadedCoverUrls(candidates: CoverPreloadCandidate[]): Record<string, string> {
+function usePreloadedCoverUrls(
+  candidates: CoverPreloadCandidate[],
+  forceNonCurrentLocal = false,
+): Record<string, string> {
   const settings = useSettings();
   const coverCropped = settings.coverCropped ?? true;
   const entriesRef = useRef<Record<string, PreloadedCover>>({});
@@ -1191,7 +1198,7 @@ function usePreloadedCoverUrls(candidates: CoverPreloadCandidate[]): Record<stri
     () => requests.map((request) => `${request.role}:${request.trackId}:${request.key}`).join("|"),
     [requests],
   );
-  const includeNonCurrentLocal = nonCurrentLocalReadyKey === requestsKey;
+  const includeNonCurrentLocal = forceNonCurrentLocal || nonCurrentLocalReadyKey === requestsKey;
   const activeRequests = useMemo(
     () => filterCoverPreloadRequestsForBurst(requests, includeNonCurrentLocal),
     [includeNonCurrentLocal, requests],
