@@ -29,6 +29,7 @@ import {
   resolveNowPlayingCoverBacklightAppearance,
   resolveNowPlayingCoverEffectMode,
 } from "@/lib/album-cover-appearance";
+import { matchActiveQualityPreset } from "@/lib/graphics-quality";
 import { transitionProgress, useNowPlayingTransition } from "@/lib/now-playing-transition";
 import { arePerfCountersEnabled, notePerfWork } from "@/lib/perf-counters";
 import { trackAlbum, trackArtists, trackHasCover, trackSubtitle } from "@/lib/track-display";
@@ -39,6 +40,7 @@ import {
   shouldCommitRelease,
 } from "@/lib/transition-driver";
 import { cn } from "@/lib/utils";
+import { TRANSPORT_SWITCH_MIN_INTERVAL_MS } from "@/shortcuts/transport-throttle";
 import { useNavStore } from "@/stores/nav-store";
 import { usePlayerStore } from "@/stores/player-store";
 import {
@@ -165,6 +167,15 @@ export function SwipeableMediaStage({
   const prevTrack = usePlayerStore((s) => s.peekTrack("prev"));
   const settings = useSettings();
   const coverEffectMode = resolveNowPlayingCoverEffectMode(settings.nowPlayingCoverEffectMode);
+  // 画质优先 (the "quality" preset, also the app default) spares no expense on the switch
+  // transition: play the coverflow + its backlight cards even on a fast burst — only skip
+  // when switches outpace the transport rate cap (200ms / 5-per-sec) — and fade the base
+  // cover backlight IN after each switch instead of popping. Balanced/battery keep the
+  // snappier burst-skip (600ms) + instant backlight the user validated as natural.
+  const richSwitchTransitions = matchActiveQualityPreset(settings) === "quality";
+  const coverflowBurstSkipMs = richSwitchTransitions
+    ? TRANSPORT_SWITCH_MIN_INTERVAL_MS
+    : COVERFLOW_BURST_SKIP_MS;
   const backlight = resolveNowPlayingCoverBacklightAppearance(settings);
   const coverEffect: SwipeCoverEffect = {
     backlightOpacity: backlight.opacity / 100,
@@ -545,7 +556,7 @@ export function SwipeableMediaStage({
       if (selfSwitchRef.current === newId) {
         // Our own drag/wheel commit is already animating this exact switch.
         selfSwitchRef.current = null;
-      } else if (Date.now() - lastSwitchAtRef.current < COVERFLOW_BURST_SKIP_MS) {
+      } else if (Date.now() - lastSwitchAtRef.current < coverflowBurstSkipMs) {
         // Burst: the previous switch is still mid-flight, so animating this one
         // would just be torn down. Skip the coverflow overlay (and its blurred 3D
         // backlight cards), tear down any running one, and let the base MediaStage
@@ -594,6 +605,7 @@ export function SwipeableMediaStage({
     foregroundVisible,
     markBursting,
     stackVisible,
+    coverflowBurstSkipMs,
   ]);
 
   useEffect(() => {
@@ -892,7 +904,7 @@ export function SwipeableMediaStage({
               coverBacklightEnabled={
                 foregroundVisible && !baseHidden && baseCoverBacklightEnabled && !bursting
               }
-              coverBacklightFadeIn={false}
+              coverBacklightFadeIn={richSwitchTransitions}
             />
           </motion.div>
         </div>

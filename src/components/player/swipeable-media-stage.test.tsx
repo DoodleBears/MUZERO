@@ -255,7 +255,9 @@ describe("SwipeableMediaStage", () => {
     render(<SwipeableMediaStage />);
 
     expect(mocks.mediaStageProps.at(-1)?.coverBacklightEnabled).toBe(true);
-    expect(mocks.mediaStageProps.at(-1)?.coverBacklightFadeIn).toBe(false);
+    // Default settings match the "quality" preset → rich switch transitions → the base
+    // cover backlight fades in (balanced/battery would pop with fadeIn=false).
+    expect(mocks.mediaStageProps.at(-1)?.coverBacklightFadeIn).toBe(true);
 
     await act(async () => {
       latestDragProps().onPointerDown?.({});
