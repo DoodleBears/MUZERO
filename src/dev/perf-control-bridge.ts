@@ -4,7 +4,7 @@
 // EXISTING action surface — the shortcut command bus, player-store actions, saveSettings
 // — never re-implementing behavior. It is loaded only under import.meta.env.DEV (see
 // App.tsx), so it is tree-shaken out of production builds entirely.
-import { saveSettings } from "@/db/repositories";
+import { getSettings, saveSettings } from "@/db/repositories";
 import { log } from "@/lib/logger";
 import { traceEvent } from "@/lib/trace";
 import { readTraceArchiveEntries } from "@/lib/trace-archive";
@@ -17,7 +17,16 @@ import { useNavStore } from "@/stores/nav-store";
 import { usePlayerStore } from "@/stores/player-store";
 
 export interface PerfControlCommand {
-  kind: "state" | "actions" | "action" | "settings" | "navTab" | "player" | "marker" | "dumpTrace";
+  kind:
+    | "state"
+    | "actions"
+    | "action"
+    | "settings"
+    | "getSettings"
+    | "navTab"
+    | "player"
+    | "marker"
+    | "dumpTrace";
   actionId?: string;
   payload?: Record<string, unknown>;
   patch?: Record<string, unknown>;
@@ -37,6 +46,7 @@ interface PerfCommandHandlerDeps {
   runAction: (actionId: string) => boolean;
   listActionIds: () => string[];
   saveSettings: (patch: Record<string, unknown>) => Promise<unknown>;
+  getSettings: () => Promise<Record<string, unknown>>;
   emitMarker: (label: string, meta?: Record<string, unknown>) => void;
   dumpTrace: (since?: number, limit?: number) => Promise<unknown[]>;
 }
@@ -54,6 +64,7 @@ const PLAYER_METHODS = new Set([
   "setVolume",
   "setActiveSession",
   "playSystemPlaylist",
+  "setDisplayMode",
 ]);
 
 function snapshot(deps: PerfCommandHandlerDeps) {
@@ -65,6 +76,7 @@ function snapshot(deps: PerfCommandHandlerDeps) {
     currentIndex: s.currentIndex,
     isPlaying: s.isPlaying,
     wantPlay: s.wantPlay,
+    displayMode: s.displayMode,
   };
 }
 
@@ -100,6 +112,9 @@ async function runPlayer(
     case "playSystemPlaylist":
       await s.playSystemPlaylist(String(payload.playlistId), payload.tracks ?? []);
       break;
+    case "setDisplayMode":
+      await s.setDisplayMode(String(payload.mode));
+      break;
     default:
       await s[method]();
   }
@@ -129,6 +144,8 @@ export function createPerfCommandHandler(deps: PerfCommandHandlerDeps) {
       case "settings":
         await deps.saveSettings(command.patch ?? {});
         return { saved: Object.keys(command.patch ?? {}) };
+      case "getSettings":
+        return deps.getSettings();
       case "player":
         if (!command.method) throw new Error("method required");
         return runPlayer(deps, command.method, command.payload ?? {});
@@ -167,6 +184,24 @@ export function startPerfControlBridge(): void {
       runShortcutAction(actionId, createShortcutActionRunnerContext(useNavStore.getState().setTab)),
     listActionIds: listShortcutActionIds,
     saveSettings: (patch) => saveSettings(patch as never),
+    // Whitelist of non-secret display/perf settings — NEVER return BYOK keys/endpoints
+    // over the control endpoint (CLAUDE.md rule 2). Enough for switch-fps A/B snapshots.
+    getSettings: async () => {
+      const s = (await getSettings()) as unknown as Record<string, unknown>;
+      const keys = [
+        "flowEnabled",
+        "flowEffect",
+        "flowOpacity",
+        "flowDim",
+        "visualizerStyle",
+        "visualizerAsBackground",
+        "visualizerIdleOnly",
+        "theme",
+        "reducedMotion",
+        "coverCropped",
+      ];
+      return Object.fromEntries(keys.map((k) => [k, s[k]]));
+    },
     emitMarker: (label, meta) =>
       traceEvent("debug", "perf.control", "marker", { label, ...(meta ?? {}) }),
     dumpTrace: async (since, limit) => {

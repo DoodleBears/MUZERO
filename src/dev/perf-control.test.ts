@@ -87,6 +87,7 @@ function makeDeps(overrides: Partial<Parameters<typeof createPerfCommandHandler>
     runAction: vi.fn(() => true),
     listActionIds: () => ["playback.next", "nav.tabNow"],
     saveSettings: vi.fn(async () => undefined),
+    getSettings: vi.fn(async () => ({ flowEnabled: true })),
     emitMarker: vi.fn(),
     dumpTrace: vi.fn(async () => []),
     ...overrides,

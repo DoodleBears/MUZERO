@@ -120,6 +120,9 @@ function routeToCommand(method, segments, body) {
   if (method === "POST" && segments.length === 1 && segments[0] === "settings") {
     return { kind: "settings", patch: body };
   }
+  if (method === "GET" && segments.length === 1 && segments[0] === "settings") {
+    return { kind: "getSettings" };
+  }
   if (method === "POST" && segments[0] === "nav" && segments[1] === "tab") {
     return { kind: "navTab", tab: body.tab };
   }
