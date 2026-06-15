@@ -39,6 +39,22 @@ const DB_REQUERY_COUNTERS = [
 const COLLAPSED_KEY = "muzero:dev-perf-collapsed";
 const SNAPSHOT_MS = 500;
 const TRACE_SUMMARY_MS = 2500;
+// Emit a per-stall trace line for long tasks at/above this (the spec's own
+// long-task floor is 50ms). The fps window only carries a rolling MAX, which
+// tells you a jank happened SOMEWHERE in the window but not WHEN or against which
+// switch / texture-swap / GC — so each stall is logged individually, timestamped
+// in the ring, to be lined up against the surrounding playIndex/textureSwap/heap.
+const LONGTASK_TRACE_MS = 50;
+
+/** Minimal shape of a `longtask` PerformanceEntry (not in the TS lib dom types). */
+type LongTaskEntry = PerformanceEntry & {
+  attribution?: ReadonlyArray<{
+    containerType?: string;
+    containerName?: string;
+    containerSrc?: string;
+    containerId?: string;
+  }>;
+};
 
 interface Snapshot {
   frames: PerfSummary;
@@ -102,7 +118,27 @@ export function DevPerfPanel() {
     let obs: PerformanceObserver | null = null;
     try {
       obs = new PerformanceObserver((list) => {
-        for (const e of list.getEntries()) longTasksRef.current.push(e.duration);
+        for (const e of list.getEntries()) {
+          longTasksRef.current.push(e.duration);
+          if (e.duration < LONGTASK_TRACE_MS) continue;
+          // Attribute the stall in the timeline. `culprit` (entry.name) is the
+          // long-task spec's frame attribution ("self" = this frame's own script,
+          // vs a child frame). `heapMb` here lets a stall that coincides with a
+          // heap drop in the surrounding fps windows be read as a major-GC pause.
+          const lt = e as LongTaskEntry;
+          const heapBytes = readJsHeapBytes();
+          traceEvent("debug", "performance.longtask", "main-thread stall", {
+            attribution: (lt.attribution ?? []).map((a) => ({
+              containerName: a.containerName,
+              containerSrc: a.containerSrc,
+              containerType: a.containerType,
+            })),
+            culprit: e.name,
+            durationMs: roundMetric(e.duration),
+            heapMb: heapBytes == null ? null : Math.round(heapBytes / (1024 * 1024)),
+            startMs: roundMetric(e.startTime),
+          });
+        }
       });
       obs.observe({ entryTypes: ["longtask"] });
     } catch {
