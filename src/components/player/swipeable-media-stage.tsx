@@ -26,9 +26,10 @@ import {
   resolveNowPlayingCoverBacklightAppearance,
   resolveNowPlayingCoverEffectMode,
 } from "@/lib/album-cover-appearance";
-import { nowPlayingDragX, useNowPlayingDragRing } from "@/lib/now-playing-drag";
+import { transitionProgress, useNowPlayingTransition } from "@/lib/now-playing-transition";
 import { arePerfCountersEnabled, notePerfWork } from "@/lib/perf-counters";
 import { trackAlbum, trackArtists, trackHasCover, trackSubtitle } from "@/lib/track-display";
+import { manualProgress } from "@/lib/transition-driver";
 import { cn } from "@/lib/utils";
 import { useNavStore } from "@/stores/nav-store";
 import { usePlayerStore } from "@/stores/player-store";
@@ -220,40 +221,33 @@ export function SwipeableMediaStage({
   const nextCard = useCoverflowCard(visualX, step, step, tilt, sideScale);
   const prevCard = useCoverflowCard(visualX, -step, step, tilt, sideScale);
 
-  // Publish the live drag offset + the prev/cur/next cover URLs to the ambient
-  // background so it can crossfade WITH the drag (PRD Phase 2-D). The MotionValue
-  // mirror is per-frame but only calls .set() (no React render); the cover ring
-  // is republished only when the covers / width change.
-  const setDragRing = useNowPlayingDragRing((s) => s.setRing);
-  // Only mirror `x` while the user is ACTIVELY dragging. The programmatic
-  // commit/snap animation and button/keyboard switches also animate `x`; if the
-  // background followed those, then as the committed index updates mid-animation
-  // the ring would re-point at the NEW track's neighbour and the top layer would
-  // flash the wrong cover (e.g. C→B briefly showing A). Gating to the live
-  // gesture keeps the drag-follow correct and hides it the instant you release.
-  const draggingRef = useRef(false);
+  // Drive the shared Transition (Phase 4): the foreground card and the ambient
+  // background read the SAME normalized progress + FROZEN from/to covers, so the
+  // background crossfades the right two covers all the way through the drag AND
+  // its auto-complete — reaching the incoming exactly when the card lands (图1)
+  // and never re-pointing at a third track mid-commit (图3). `manualProgress`
+  // normalizes the drag to one card "step" (`visualX = x·DRAG_GAIN` lands at
+  // `step`), so progress hits 1 when the card lands. The transition is begun only
+  // from a real pointer drag (see onDrag); button/keyboard switches also animate
+  // `x`/`dragDirection` but never begin a transition, so the controller keeps
+  // handling them (no double crossfade). End it when the gesture settles.
+  const beginTransition = useNowPlayingTransition((s) => s.begin);
+  const endTransition = useNowPlayingTransition((s) => s.end);
   useMotionValueEvent(x, "change", (v) => {
-    if (draggingRef.current) nowPlayingDragX.set(v);
+    transitionProgress.set(manualProgress(v * DRAG_GAIN, step));
   });
-  const endDragFollow = useCallback(() => {
-    draggingRef.current = false;
-    nowPlayingDragX.set(0);
-  }, []);
-  useEffect(() => endDragFollow, [endDragFollow]);
   useEffect(() => {
-    setDragRing({
-      width,
-      currentUrl: currentVisual?.initialCoverUrl ?? null,
-      nextUrl: nextVisual?.initialCoverUrl ?? null,
-      prevUrl: prevVisual?.initialCoverUrl ?? null,
-    });
-  }, [
-    setDragRing,
-    width,
-    currentVisual?.initialCoverUrl,
-    nextVisual?.initialCoverUrl,
-    prevVisual?.initialCoverUrl,
-  ]);
+    if (dragDirection) return;
+    endTransition();
+    transitionProgress.set(0);
+  }, [dragDirection, endTransition]);
+  useEffect(
+    () => () => {
+      endTransition();
+      transitionProgress.set(0);
+    },
+    [endTransition],
+  );
 
   useEffect(() => {
     const el = containerRef.current;
@@ -795,20 +789,28 @@ export function SwipeableMediaStage({
               if (!dragDirection && !committing && stackVisible) clearStack();
               if (isTap) onTap?.();
             }}
-            onDragStart={() => {
-              // The background drag-follow tracks `x` only between here and
-              // onDragEnd — never during the programmatic commit/snap animation.
-              draggingRef.current = true;
-            }}
             onDrag={(_, info) => {
               tapMoved.current = true;
-              if (info.offset.x < -8 && dragDirection !== "next") setDragDirection("next");
-              if (info.offset.x > 8 && dragDirection !== "prev") setDragDirection("prev");
+              // Begin the (frozen-endpoint) Transition the moment a real drag
+              // commits to a direction — captures from = current cover, to = the
+              // revealed neighbour. Only a pointer drag reaches here, so button/
+              // keyboard switches never begin one (the controller handles those).
+              if (info.offset.x < -8 && dragDirection !== "next") {
+                setDragDirection("next");
+                beginTransition(
+                  currentVisual?.initialCoverUrl ?? null,
+                  nextVisual?.initialCoverUrl ?? null,
+                );
+              }
+              if (info.offset.x > 8 && dragDirection !== "prev") {
+                setDragDirection("prev");
+                beginTransition(
+                  currentVisual?.initialCoverUrl ?? null,
+                  prevVisual?.initialCoverUrl ?? null,
+                );
+              }
             }}
             onDragEnd={(_, info) => {
-              // Stop following `x` and hide the drag layer before the commit/snap
-              // animation runs (so the top layer never flashes a stale neighbour).
-              endDragFollow();
               const distance = Math.min(
                 MAX_COMMIT_DISTANCE,
                 Math.max(MIN_COMMIT_DISTANCE, width * COMMIT_FRACTION),

@@ -30,6 +30,7 @@ import { usePlayerStore } from "@/stores/player-store";
 import { VisualizerHost } from "@/visualizer/host";
 import { resolveVisualizerStyle } from "@/visualizer/registry";
 import { BackgroundFrameStack } from "./background/background-frame-stack";
+import { TransitionBackground } from "./background/transition-background";
 import { useBackgroundController } from "./background/use-background-controller";
 import { CanvasBlurBackground } from "./canvas-blur-background";
 import { type PixiBackgroundEffect, PixiPixelBackground } from "./pixi-pixel-background";
@@ -451,6 +452,11 @@ function NowPlayingBackgroundContent({ hideVisualizer }: { hideVisualizer: boole
           src={effectiveRenderImageTarget.src}
         />
       ) : null}
+      {/* Drag-follow crossfade (PRD Phase 4): the frozen incoming cover fades in
+          over the resting cover, synced to the foreground card via the shared
+          transition progress. Invisible at rest; composited at the resting level
+          so flow/visualizer treat it like the resting cover. Blur path only. */}
+      {useControllerBlur ? <TransitionBackground blurPx={blurPx} /> : null}
       <div className="absolute inset-0 bg-background" style={{ opacity: imageMaskOpacity }} />
       {/* Independent 流光 layer: composited ABOVE the background image/video and
           BELOW the visualizer spectrum. It's its own toggle (flowEnabled), NOT a
