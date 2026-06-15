@@ -2,7 +2,7 @@
 .PHONY: dev web desktop tauri electron-dev electron-preview electron-build ios ios-init android android-init mobile-info tauri-info
 .PHONY: build preview deploy pages-project pages-deploy pages-deploy-preview desktop-build desktop-debug mac win linux ios-build android-build desktop-locate
 .PHONY: version-bump changelog-check version-sync release-check release-show release-build release-mac release-win release-linux release-publish release-publish-dry release-locate changelog-md
-.PHONY: test test-watch typecheck lint format check
+.PHONY: test test-watch typecheck lint format check react-doctor react-doctor-perf
 .PHONY: icons ui ui-coss ui-theme clean clean-dist
 
 # MUZERO — local-first AI DJ music player (Tauri 2 desktop + mobile).
@@ -249,6 +249,16 @@ lint:
 
 format:
 	$(PM) exec biome format --write src
+
+# React Doctor — deterministic React health scan (state/effects, performance,
+# a11y, security). Report-only; --no-telemetry skips the external score/share URL.
+# `make react-doctor` = full scan; `make react-doctor-perf` = Performance + Bugs only.
+# NOT part of `make check` (798-finding backlog); for CI, gate new issues with
+# `react-doctor --scope changed --blocking error`.
+react-doctor:
+	$(PM) react-doctor
+react-doctor-perf:
+	$(PM) run react-doctor:perf
 
 # ----------------------------------------------------------- UI & assets ----
 
