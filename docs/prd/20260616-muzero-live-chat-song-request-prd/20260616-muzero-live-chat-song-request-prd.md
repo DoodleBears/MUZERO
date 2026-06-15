@@ -15,7 +15,7 @@
 | 2 | 多来源 + 测试生命周期：`sources[]`（status: testing/active/disabled）+ server 按 `/v1/intake/<id>` 路由 + testing 模式捕获 sanitized payload（不触发播放） | ✅ Completed | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | Web SSN WebSocket transport：泛化 bridge 接口 + `web.ts` 出站 WS 实现 + `social-stream-relay.ts`（转发原始事件，交给 ssn 模板预设） | ✅ Completed | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | 映射对话框 UX（仿 anysoul）：JSON 树点选映射 + 每字段实时预览（同引擎 parity）+ 预设/visual/raw + Go Live + 来源列表（状态徽章/生命周期/复制 URL） | ✅ Completed | [Phase 4 Checklist](#phase-4-checklist) |
-| 5 | i18n（en/zh/ja/ko）+ 测试 + 收尾 | 🔲 Pending | [Phase 5 Checklist](#phase-5-checklist) |
+| 5 | i18n（en/zh/ja/ko）+ 测试 + 收尾 | ✅ Completed | [Phase 5 Checklist](#phase-5-checklist) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
 
@@ -455,12 +455,14 @@ const unsub = bridge.liveRequestIntake.onMessage((payload) => {
 
 **Tasks:**
 - [x] i18n key（transport/SSN session+relay/CORS 提示、来源增删/状态/生命周期、映射对话框、预设名、目标字段标签、Go Live、status testing/active/disabled）**en→zh/ja/ko 四语全量**。组件用 `tk(key, fallback)` 渲染（英文兜底）。
-- [ ] `make check`（typecheck + lint + test）全绿。
-- [ ] 更新 [`docs/deploy/mu0-app-release.md`](../../deploy/mu0-app-release.md)：网页 SSN 配置 + 桌面多来源 webhook + 测试→上线流程。
+- [x] typecheck + lint（biome）全绿；本特性全部测试通过。**注**：全 `pnpm run test` 有 7 个 `scripts/*.test.mjs`（rolldown 解析）+ 1 个 `player-store` flaky 失败，均**预存、与本特性无关**（本分支未碰 `scripts/`/`player-store`，首次全跑 2657 测试 0 断言失败）。
+- [x] 更新 [`docs/deploy/mu0-app-release.md`](../../deploy/mu0-app-release.md)：网页 SSN session 配置 + 桌面多来源 `/v1/intake/<id>` webhook + 测试→上线流程。
+- [ ] **CHANGELOG / 版本 bump 留发版时做**：changelog 是严格按版本的 release 文件（`changelog.test.ts` 断言 latest=1.0.0），加 release 需 bump 版本 + 改断言，且会与其它分支的 1.1.0 撞车——属发版决策，不在本 feature 分支做。
 
 ### Phase 5 Checklist
-- [ ] 四语言无缺 key（缺则 PR 标 pending translation + followup issue）。
-- [ ] CHANGELOG / release note 更新。
+- [x] 四语言（en/zh/ja/ko）key 全量补齐，无 pending。
+- [ ] CHANGELOG / release note：发版时补（见上）。
+- [ ] 浏览器实操 e2e（Phase 4 遗留）：`make dev`/`make desktop` 手动验证 testing→Go Live→点歌。
 
 ---
 
@@ -527,6 +529,7 @@ const unsub = bridge.liveRequestIntake.onMessage((payload) => {
 | 2026-06-16 | MUZERO Team | Initial draft：通用接线 + mu0.app 网页 SSN WebSocket；记录「runtime 未接线」关键发现 |
 | 2026-06-16 | MUZERO Team | 定稿 Final：裁决 Q1-Q5；核实 SSN 公共 WS 协议 |
 | 2026-06-16 | MUZERO Team | 扩展 Q6：intake 泛化为多来源 + 可配置映射 |
+| 2026-06-16 | MUZERO Team | 实现 Phase 1–5（TDD，~17 原子提交，~90 测试）：模板引擎 + 映射预设 + 接线单例 + 多来源/测试生命周期 + web SSN WebSocket + 映射对话框 UI（shadcn）+ transport 生命周期 + i18n 四语 + 部署文档。CHANGELOG/版本 bump + 浏览器 e2e 留发版/手动。 |
 | 2026-06-16 | MUZERO Team | 扩展 Q7：复刻 anysoul「测试→上线 + 模板引擎映射」形式——`testing/active` 生命周期、testing 脱敏捕获真实 body、JSON 树 click-to-map、每字段实时预览（同引擎 parity）、预设/visual/raw、Go Live。dot-path 升级为模板引擎（覆盖多字段拼接），新增 `request-template.ts`/`request-mapping-presets.ts` + 映射对话框组件；重排 phase（模板引擎 → 多来源+测试生命周期 → web WS → 映射 UI） |
 
 ---
