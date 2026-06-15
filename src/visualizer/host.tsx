@@ -3,7 +3,7 @@ import { useVisualizerCoverColorCss } from "@/components/player/visualizer-dynam
 import { useSettings } from "@/hooks/use-app-data";
 import { type FlowConfig, resolveFlowConfig } from "@/lib/flow-config";
 import { cn } from "@/lib/utils";
-import { DYNAMIC_PRIMARY_CSS_VAR, readPrimaryRgb } from "@/lib/visualizer-color";
+import { DYNAMIC_PRIMARY_CSS_VAR, type Rgb, readPrimaryRgb } from "@/lib/visualizer-color";
 import {
   resolveVisualizerAnalyserOptions,
   resolveVisualizerRenderOptions,
@@ -72,14 +72,37 @@ function SpectrumCanvas({
     const viz = createVisualizer(styleId);
     if (!viz) return;
 
+    // Glide the cover-derived primary toward the new song's color instead of snapping
+    // when the color store settles, so the spectrum recolors smoothly to the next cover
+    // (matches the flow palette glide; PM: "频谱颜色希望过渡到下一张"). Frame-rate
+    // independent (tau-based); the renderers call primary() once per frame when coverColor.
+    // The theme color path (coverColor=false) is static and returns directly.
+    const PRIMARY_GLIDE_TAU_MS = 320;
+    let smoothedPrimary: Rgb | null = null;
+    let lastPrimaryTs = 0;
+    const glidePrimary = (): Rgb => {
+      const target = getVisualizerCoverColorRgb() ?? readPrimaryRgb(canvas);
+      const now = typeof performance !== "undefined" ? performance.now() : 0;
+      if (!smoothedPrimary) {
+        smoothedPrimary = { ...target };
+      } else {
+        const dt = lastPrimaryTs ? now - lastPrimaryTs : 16;
+        const k = 1 - Math.exp(-dt / PRIMARY_GLIDE_TAU_MS);
+        smoothedPrimary = {
+          r: Math.round(smoothedPrimary.r + (target.r - smoothedPrimary.r) * k),
+          g: Math.round(smoothedPrimary.g + (target.g - smoothedPrimary.g) * k),
+          b: Math.round(smoothedPrimary.b + (target.b - smoothedPrimary.b) * k),
+        };
+      }
+      lastPrimaryTs = now;
+      return smoothedPrimary;
+    };
+
     viz.init({
       canvas,
       ctx,
       getAnalyser: () => getMediaEngine()?.getAnalyser() ?? null,
-      primary: () =>
-        coverColor
-          ? (getVisualizerCoverColorRgb() ?? readPrimaryRgb(canvas))
-          : readPrimaryRgb(canvas),
+      primary: () => (coverColor ? glidePrimary() : readPrimaryRgb(canvas)),
       smoothPrimary: () => coverColor,
       active: () => activeRef.current,
       placement,
