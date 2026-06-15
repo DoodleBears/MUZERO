@@ -113,34 +113,43 @@ interface Transition {
 
 ### 2.2 状态机（纯函数，可穷举单测）
 
+**层栈模型（Q1 拍板：3-layer carry-over，不回弹）。** 不用单一 `displayed/incoming`，而是一个**层栈**：底层是当前 base，每次切歌往**顶**压一层淡入；被上方不透明层完全盖住的层即时剪除。crossfade 中途再切时，半截的旧顶层**冻结**、新层在其上继续淡入 → 无 rebound、无 pop。
+
 ```ts
-type Phase = "idle" | "preparing" | "crossfading";
+interface BackgroundLayer {
+  frame: BackgroundFrame;
+  generation: number;
+  opacity: number;       // 0..1（layers[0] base 视为 1）
+  ready: boolean;        // 过了 ready-gate（§2.3）才允许淡入
+}
 interface Composition {
-  displayed: BackgroundFrame | null;  // 当前已上屏，永远 ready
-  incoming:  BackgroundFrame | null;  // 下一帧（准备中 / crossfade 中）
-  generation: number;                 // 每次 setTarget 自增
-  phase: Phase;
-  crossfadeProgress: number;          // 0..1，驱动所有层
+  layers: BackgroundLayer[];  // 底→顶 paint order；顶 = 最新目标
+  generation: number;
 }
 
 reduce(state, event):
   TARGET_CHANGED(spec):
-    // 同一首且无 pending → noop；否则 gen++、incoming=spec@gen、phase="preparing"
-    // displayed 不动（HOLD）→ 不闪
+    // 同帧（顶层同 trackId 且无更上层）→ noop
+    gen++; push 顶层 { frame: spec@gen, opacity: 0, ready: false }
+    // 下层全部冻结当前 opacity（HOLD）→ 永不露底色（不闪）
   INCOMING_READY(gen):
-    if gen === state.generation && phase === "preparing":
-      phase = "crossfading"; crossfadeProgress = 0
-    // gen 过期 → 忽略（不变量 2：旧帧绝不上屏）
+    if gen === 顶层.generation: 顶层.ready = true   // 允许 driver 推进其 opacity
+    // gen 过期（非顶层）→ 忽略（不变量 2：旧帧绝不上屏）
   ADVANCE(progress):
-    crossfadeProgress = clamp(progress); if >=1 → COMMIT
-  COMMIT:
-    displayed = incoming; incoming = null; phase="idle"; crossfadeProgress=0
+    if 顶层.ready: 顶层.opacity = clamp(progress)    // 只有顶层动，下层冻结
+    if 顶层.opacity >= 1 → COLLAPSE
+  COLLAPSE:
+    layers = [顶层]                                  // 顶层全覆盖 → 丢弃其下所有层
+  PRUNE（每次 reduce 后）:
+    丢弃被某个 opacity≈1 的上层完全覆盖的层；
+    软上限 MAX_LAYERS（如 4）超出 → 强制 collapse 最老两层
 ```
 
 **关键边界（单测必覆盖）：**
-- **准备中再切**：`preparing` 时来新 `TARGET_CHANGED` → gen 再 +1、替换 incoming、仍 `preparing`；旧 incoming 的 `INCOMING_READY` 带旧 gen → 被忽略。→ 狂切不串歌。
-- **crossfade 中再切**：`crossfading` 时来新目标 → 放弃当前 crossfade，`displayed` 保持上一已 commit 帧（不 commit 半截的 incoming），incoming=新、回 `preparing`。半截 incoming 淡出。（已知折中：~300ms crossfade 中途被打断会回弹，记 Open Q#1。）
-- **同帧重复 setTarget**：noop（不触发无谓 crossfade）。
+- **准备中/淡入中再切（carry-over）**：push 新顶层（gen++）；旧顶层（半透明，opacity 冻结）保留在新层之下淡出式被覆盖；旧顶层的 `INCOMING_READY`（旧 gen）被忽略。→ 狂切**不串歌、不回弹、不 pop**。
+- **未就绪不淡入**：顶层 `ready=false` 时 `ADVANCE` 不推进其 opacity → base 一直 hold（不闪黑白）。就绪后才跟随 driver 进度。
+- **同帧重复**：noop。
+- **Pixi 例外**：单 WebGL context 不能无限叠层 → Pixi renderer 维护**有界 sprite 栈**（`≤MAX_PIXI_LAYERS`，如 3），carry-over 用多 sprite alpha；超界强制 collapse。DOM renderer（blur/plain）天然多 `<canvas>`/`<img>` 实例叠层。
 
 ### 2.3 「就绪」判定（ready-gate）—— 吸收 QA#7–24 防闪不变量
 
@@ -333,14 +342,14 @@ src/components/player/
 
 | # | Question | Status | 倾向 |
 |---|----------|--------|------|
-| 1 | crossfade 进行中被新切打断 → 半截 incoming 回弹是否可接受？还是要做三层（保留半截 + 新 incoming）？ | Open | 倾向**接受回弹**（v1 简单，狂切本就被 throttle 限速）；若桌面观感差再做三层 |
-| 2 | palette 过渡是否**完全**改挂 crossfade 时钟，还是保留一点「颜色稍慢于图」的 glide（现 650ms）？ | Open | 倾向**完全同步**（用户要一体化）；保留可选 `paletteGlideMs` 微调留待实测 |
-| 3 | crossfade duration 统一取值（现 blur 300 / plain 350 / Pixi swap 各异）？是否做成可见设置还是内部常量？ | Open | 倾向**内部常量 `BACKGROUND_CROSSFADE_MS`**（不暴露设置，避免膨胀；硬规则 #3 不藏 flag —— 它是时序常量非行为门控） |
-| 4 | Phase 2「并行对照」阶段是否值得（controller 输出 vs 现渲染对照日志），还是直接 Phase 3 接入？ | Open | 倾向做轻量对照（给 Phase 3 当 before/after 护栏），但可选 |
-| 5 | 是否先落 consolidation R3（抽 source hook）再做本 Controller，避免两处同时改 god-component？ | Open | **强烈倾向先 R3**（或本 PRD Phase 1 的 resolver 即承担 R3 的 source 抽离），避免与 consolidation 撞车 |
-| 6 | **commit 时机**：端点冻结后，store index/音频在过渡**开始**就 commit（音频响应快，视觉独立播放冻结端点），还是**结束**才 commit（更同步但音频延迟 ~`BACKGROUND_CROSSFADE_MS`）？ | Open | 倾向**开始 commit + 冻结端点**（响应性 + 无漂移兼得）；视觉过渡读冻结 from/to，与 store 解耦，progress=1 时对齐 |
+| 1 | crossfade 被打断：回弹 vs 三层 carry-over？ | ✅ Resolved（用户拍板） | **3-layer carry-over**：半截旧层冻结、新层在其上淡入，不回弹不 pop。已重写 §2.2 为**层栈模型**（push/collapse/prune + Pixi 有界 sprite 栈） |
+| 2 | palette 过渡完全挂 crossfade 时钟 vs 保留慢 glide？ | ✅ Resolved（用户拍板） | **完全 lockstep**：flow/viz 颜色按同一 crossfade 进度插值，与封面同步；不再独立 650ms glide |
+| 3 | crossfade duration 统一常量 vs 可见设置？ | ✅ Resolved（用户拍板） | **内部常量 `BACKGROUND_CROSSFADE_MS`**，统一现 300/350/Pixi-各异；不暴露设置（时序常量非行为门控，不违反硬规则 #3） |
+| 4 | Phase 2「并行对照」阶段是否值得？ | Open（可选） | 倾向做轻量对照（给 Phase 3 当 before/after 护栏），但可选 |
+| 5 | 先落 consolidation R3（抽 source hook）再做 Controller？ | ✅ Resolved（用户拍板） | **同意**：本 PRD Phase 1 的 `resolveBackgroundFrame` resolver **即承担** consolidation R3 的 source 抽离，避免两处同改 god-component / 与那份 PRD 撞车 |
+| 6 | commit 时机：开始 vs 结束？ | ✅ Resolved（用户：best practice） | **best practice = 开始 commit + 冻结端点**：auto（按钮/键盘）立即 commit store/音频（响应性）；manual drag 在 release-越阈值即 commit；视觉读冻结 from/to 独立播放，progress=1 对齐。**取消（drag 未越阈值）不 commit** |
 | 7 | **前景 coverflow 是否一并收进 Transition Driver**？ | ✅ Resolved（用户拍板 2026-06-15） | **统一到一个 driver**：前景 coverflow + 背景同源消费同一 `{direction, progress, from, to}`，四触发源真正一致。coverflow 迁移面大 → 仍分阶段落地（Phase 4 专做前景迁移），但终态是单一 driver，非两套 |
-| 8 | **拖拽 Dock 歌曲信息区（③）目前是否已是切歌触发？** 若否，需新增该手势面 | Open | 待确认现状；若无则 Phase 4 新增「Dock 信息区 drag → driver」手势，与封面 stage 共用 driver |
+| 8 | 拖拽 Dock 歌曲信息区（③）目前是否已是切歌触发？ | ✅ Resolved（已 check 代码） | **已存在**：[`track-identity-row.tsx`](../../../src/components/player/track-identity-row.tsx)（注释「Dock song-area swipe」+ wheel 处理，阈值触发直接调 `next()`/`skipPrev()`）。但它是**第 4 套独立 threshold-fire 触发**，不走 coverflow 过渡、无 manual progress → Phase 4 迁入 driver（drag→manual progress、wheel→feed driver），与封面 stage 共用 |
 
 ---
 
@@ -348,5 +357,6 @@ src/components/player/
 
 | Date | Author | Changes |
 |------|--------|---------|
+| 2026-06-15 | User+Claude | **设计定稿：Open Q1-3/5/6/8 全部拍板。** Q1=**3-layer carry-over**（§2.2 重写为层栈模型 push/collapse/prune + Pixi 有界 sprite 栈，不回弹）；Q2=palette **完全 lockstep**（颜色按 crossfade 进度插值）；Q3=内部常量 `BACKGROUND_CROSSFADE_MS`；Q5=resolver **兼做 consolidation R3** source 抽离；Q6=best practice **开始 commit + 冻结端点**（auto 立即、manual 越阈值即 commit、取消不 commit）；Q8=**Dock 信息区 drag 已存在**（`track-identity-row.tsx` 第 4 套独立 threshold-fire，Phase 4 迁入 driver）。仅 Q4（并行对照，可选）留开。**设计完整，待 GO 开 Phase 1。** |
 | 2026-06-15 | User+Claude | **设计修订：加入 Transition Driver + 四触发源统一（§2.1bis）。** 用户指出切歌触发源有四个（①键盘 ②Dock 播放按钮 ③拖拽 Dock 歌曲信息区 ④拖拽封面），**无论哪个都应一致**，且 drag 是「手动拖拽 + 松手 Swiper 自动补完剩余过渡」、按钮/键盘是「同一条自动动画」。新增 Transition Driver：冻结端点（from/to 过渡期不漂移 → 根治 Bug 2）+ 归一 progress + manual/auto + velocity-aware 自动补完；前景 coverflow 与背景 Controller 同源消费。新增 Open Q#6（commit 时机：开始 vs 结束）/#7（前景 coverflow 是否一并收进 driver）/#8（Dock 信息区 drag 现状）。**仍未动代码，待评审拍板。** |
 | 2026-06-15 | Claude | 初稿（设计待评审）：把用户三要求（对应封面 / 不串歌 / 不闪）映射为统一 Background Frame Controller —— 单一事实源 + generation 守卫 + ready-gate + 单 crossfade 时钟；状态机 §2.2、ready-gate 吸收 QA#7-24 §2.3、层消费者 §2.4、drag-follow 协同 §2.5；5 phase 计划。实现 consolidation PRD 的 R2+R4。**未动代码。** |
