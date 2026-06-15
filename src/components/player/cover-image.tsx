@@ -128,11 +128,19 @@ function DomLoadedCoverImage({
   const [pendingUrl, setPendingUrl] = useState<string | null>(url);
   const [failedUrl, setFailedUrl] = useState<string | null>(null);
 
-  useEffect(() => {
+  // Adjust per-URL state DURING RENDER on a prop change rather than in a useEffect:
+  // the effect forced an extra render + a stale intermediate commit on EVERY track
+  // switch (react-doctor no-adjust-state-on-prop-change / no-cascading-set-state —
+  // see react.dev/learn/you-might-not-need-an-effect#adjusting-some-state-when-a-prop-changes).
+  // React re-renders synchronously here without committing the stale frame, so the
+  // crossfade is visually identical but one render+commit lighter per switch.
+  const [prevDeps, setPrevDeps] = useState({ holdPreviousWhileLoading, url });
+  if (url !== prevDeps.url || holdPreviousWhileLoading !== prevDeps.holdPreviousWhileLoading) {
+    setPrevDeps({ holdPreviousWhileLoading, url });
     setFailedUrl(null);
     setPendingUrl(url);
     if (!url || !holdPreviousWhileLoading) setDisplayUrl(null);
-  }, [holdPreviousWhileLoading, url]);
+  }
 
   const onPendingLoad = (event: SyntheticEvent<HTMLImageElement>) => {
     const loadedUrl = pendingUrl;
