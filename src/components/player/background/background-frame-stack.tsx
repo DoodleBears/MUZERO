@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { BACKGROUND_CROSSFADE_MS } from "@/lib/background";
 import type { BackgroundLayer } from "@/lib/background-composition";
 import { drawBlurFrame } from "@/lib/canvas-blur";
+import { useNowPlayingTransition } from "@/lib/now-playing-transition";
 import { cn } from "@/lib/utils";
 import type { ControllerFrame } from "./use-background-controller";
 
@@ -28,6 +29,11 @@ export function BackgroundFrameStack({
   onTopSettled: () => void;
   className?: string;
 }) {
+  // The cover a drag transition just crossfaded to. When the controller adopts
+  // that same cover (it became current on commit), render it INSTANTLY — the
+  // transition already did the A→B fade, so a second controller crossfade is the
+  // double-flash QA saw. The transition layer fades out over a held-B controller.
+  const handedOffCoverUrl = useNowPlayingTransition((s) => s.toCoverUrl);
   return (
     <div className={cn("absolute inset-0 overflow-hidden", className)} aria-hidden="true">
       {layers.map((layer, i) => (
@@ -36,6 +42,7 @@ export function BackgroundFrameStack({
           url={layer.frame.coverUrl}
           blurPx={blurPx}
           maxOpacity={maxOpacity}
+          instant={!!handedOffCoverUrl && layer.frame.coverUrl === handedOffCoverUrl}
           onShown={i === layers.length - 1 ? onTopSettled : undefined}
         />
       ))}
@@ -47,11 +54,15 @@ function BlurLayer({
   url,
   blurPx,
   maxOpacity,
+  instant = false,
   onShown,
 }: {
   url: string;
   blurPx: number;
   maxOpacity: number;
+  /** Appear at full opacity with no fade — the drag transition already faded it
+   *  in, so the controller adopting it must not crossfade a second time. */
+  instant?: boolean;
   onShown?: () => void;
 }) {
   const hostRef = useRef<HTMLDivElement | null>(null);
@@ -87,6 +98,12 @@ function BlurLayer({
     return () => ro.disconnect();
   }, [blurPx]);
 
+  // An instant layer's opacity jumps with no transition, so onTransitionEnd never
+  // fires — settle it as soon as it has drawn so the stack still collapses.
+  useEffect(() => {
+    if (instant && drawn) onShown?.();
+  }, [instant, drawn, onShown]);
+
   return (
     <div ref={hostRef} className="absolute inset-0">
       <canvas
@@ -94,10 +111,10 @@ function BlurLayer({
         className="absolute inset-0 h-full w-full"
         style={{
           opacity: drawn ? maxOpacity : 0,
-          transition: `opacity ${BACKGROUND_CROSSFADE_MS}ms ease`,
+          transition: instant ? "none" : `opacity ${BACKGROUND_CROSSFADE_MS}ms ease`,
         }}
         onTransitionEnd={(e) => {
-          if (e.propertyName === "opacity" && drawn) onShown?.();
+          if (e.propertyName === "opacity" && drawn && !instant) onShown?.();
         }}
       />
     </div>
