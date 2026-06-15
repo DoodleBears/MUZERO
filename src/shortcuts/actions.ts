@@ -91,6 +91,11 @@ export function isShortcutActionRunnable(actionId: string): boolean {
   return actionId in SHORTCUT_ACTION_HANDLERS;
 }
 
+/** All dispatchable shortcut action ids (used by the dev control endpoint's /actions). */
+export function listShortcutActionIds(): string[] {
+  return Object.keys(SHORTCUT_ACTION_HANDLERS);
+}
+
 export function runShortcutAction(actionId: string, ctx: ShortcutActionRunnerContext): boolean {
   const handler = SHORTCUT_ACTION_HANDLERS[actionId];
   if (!handler) return false;

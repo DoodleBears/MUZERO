@@ -84,6 +84,9 @@ if (await isReachable(devUrl)) {
 electronProcess = spawnInherit([electronmonBin, "electron/main.cjs"], {
   MUZERO_DEV_PORT: port,
   MUZERO_ELECTRON_URL: devUrl,
+  // Enable the dev-only automation control endpoint by default in `electron:dev`
+  // (the dev launcher is the opt-in). Never set in a packaged build.
+  MUZERO_PERF_CONTROL: process.env.MUZERO_PERF_CONTROL ?? "1",
 });
 
 electronProcess.once("exit", (code) => shutdown(code ?? 0));

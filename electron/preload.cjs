@@ -10,6 +10,12 @@ const CLICK_THROUGH_HOVER_CHANNEL = "muzero:window:clickThroughHover";
 const SYSTEM_SHORTCUT_CONFIGURE_CHANNEL = "muzero:systemShortcuts:configure";
 const SYSTEM_SHORTCUT_ACTION_CHANNEL = "muzero:systemShortcuts:action";
 const LIVE_REQUEST_MESSAGE_CHANNEL = "muzero:liveRequest:message";
+// Dev-only control endpoint relay (PRD 20260615-dev-control-endpoint). Inert in prod:
+// the main process only sends/handles these channels when the build is unpackaged and
+// opted in (see electron/perf-control.cjs shouldEnablePerfControl), so with no server
+// attached onCommand never fires and sendResult reaches no handler.
+const PERF_CONTROL_COMMAND_CHANNEL = "muzero:perfControl:command";
+const PERF_CONTROL_RESULT_CHANNEL = "muzero:perfControl:result";
 
 contextBridge.exposeInMainWorld("muzero", {
   kind: "electron",
@@ -102,5 +108,13 @@ contextBridge.exposeInMainWorld("muzero", {
       ipcRenderer.on(LIVE_REQUEST_MESSAGE_CHANNEL, listener);
       return () => ipcRenderer.removeListener(LIVE_REQUEST_MESSAGE_CHANNEL, listener);
     },
+  },
+  perfControl: {
+    onCommand: (callback) => {
+      const listener = (_event, message) => callback(message);
+      ipcRenderer.on(PERF_CONTROL_COMMAND_CHANNEL, listener);
+      return () => ipcRenderer.removeListener(PERF_CONTROL_COMMAND_CHANNEL, listener);
+    },
+    sendResult: (payload) => ipcRenderer.send(PERF_CONTROL_RESULT_CHANNEL, payload),
   },
 });

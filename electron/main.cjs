@@ -6,6 +6,7 @@ const { registerIpc } = require("./ipc.cjs");
 const { handleMuzfetch } = require("./fetch-proxy.cjs");
 const { registerElectronGlobalShortcuts } = require("./global-shortcuts.cjs");
 const { registerLiveRequestIntake } = require("./live-request-intake.cjs");
+const { registerPerfControl, shouldEnablePerfControl } = require("./perf-control.cjs");
 const { applyAppIcon, appIconPath, DEFAULT_APP_ICON } = require("./app-icon.cjs");
 const { attachDiagnosticsWindow } = require("./diagnostics.cjs");
 const { createTrayController } = require("./tray.cjs");
@@ -279,6 +280,10 @@ app.whenReady().then(() => {
   require("./youtube-engine.cjs").registerYoutubeEngine();
   require("./updater.cjs").initDesktopUpdater();
   trayController.ensureTray();
+  // Dev-only automation control endpoint. Never enabled in a packaged build (gate).
+  if (shouldEnablePerfControl({ isPackaged: app.isPackaged, env: process.env })) {
+    registerPerfControl({ app, BrowserWindow });
+  }
   createWindow();
   trayController.onAction((actionId) => {
     const [win] = BrowserWindow.getAllWindows();

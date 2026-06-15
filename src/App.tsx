@@ -120,6 +120,14 @@ export default function App() {
   // orchestrated Sync now path and self-guards per drive.
   useEffect(() => startCloudAutoSyncScheduler(), []);
 
+  // Dev-only automation control endpoint bridge. The import is dead code in prod
+  // (import.meta.env.DEV folds to false → tree-shaken), and the bridge no-ops unless
+  // the Electron main process attached the control server (see electron/perf-control.cjs).
+  useEffect(() => {
+    if (!import.meta.env.DEV) return;
+    void import("@/dev/perf-control-bridge").then((m) => m.startPerfControlBridge());
+  }, []);
+
   // Desktop: re-scan remembered local-import folders for new files shortly after
   // boot. Deferred so it never blocks first paint / WKWebView startup; the action
   // self-guards (no-op in the browser or when no folders are remembered).
