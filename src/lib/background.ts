@@ -11,6 +11,14 @@ import type { BackgroundMode, Track, TrackKind, TrackStatus } from "@/db/types";
 export const BACKGROUND_EFFECT_SETTLE_MS = 180;
 
 /**
+ * The single, unified background crossfade duration (Background Frame Controller
+ * PRD, Q3). One internal constant replaces the per-renderer timings (blur 300 /
+ * plain 350 / Pixi-varies) so every layer transitions on the same clock. Not a
+ * user setting — an internal timing constant.
+ */
+export const BACKGROUND_CROSSFADE_MS = 320;
+
+/**
  * What the Now-Playing ambient background should pull from. Pure decision so the
  * priority rules are unit-tested without the DB. `mode` is the *priority* between
  * the track's two own image assets, then the global gallery is an optional last resort:

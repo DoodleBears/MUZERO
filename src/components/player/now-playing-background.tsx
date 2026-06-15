@@ -18,6 +18,7 @@ import {
   settleBackgroundTarget,
   trackHasBackgroundVideoMedia,
 } from "@/lib/background";
+import { resolveBackgroundFrameSpec } from "@/lib/background-frame";
 import { FLOW_DEFAULTS, VISUALIZER_BLEND_DEFAULT } from "@/lib/flow-config";
 import { createDiagnosticLogger } from "@/lib/logger";
 import { nextSlideIndex } from "@/lib/slideshow";
@@ -28,6 +29,8 @@ import { resolveTrackLyrics } from "@/lyrics/resolve-lyrics";
 import { usePlayerStore } from "@/stores/player-store";
 import { VisualizerHost } from "@/visualizer/host";
 import { resolveVisualizerStyle } from "@/visualizer/registry";
+import { BackgroundFrameStack } from "./background/background-frame-stack";
+import { useBackgroundController } from "./background/use-background-controller";
 import { CanvasBlurBackground } from "./canvas-blur-background";
 import { DragCrossfadeBackground } from "./drag-crossfade-background";
 import { type PixiBackgroundEffect, PixiPixelBackground } from "./pixi-pixel-background";
@@ -378,9 +381,53 @@ function NowPlayingBackgroundContent({ hideVisualizer }: { hideVisualizer: boole
     slideshowUrls.length,
   ]);
 
+  // Background Frame Controller (PRD Phase 3, blur + cover slice). Drive the blur
+  // background through the unified layer-stack crossfade. `backgroundCoverUrl` is
+  // already track-bound and null while a switch resolves, so the controller never
+  // pairs a stale cover with the wrong track and holds the previous frame until
+  // the new one is ready (no flash). Pixi / plain / slideshow stay on the old path.
+  const useControllerBlur = renderer === "blur" && source === "cover";
+  const backgroundFrameSpec = useMemo(
+    () =>
+      current
+        ? resolveBackgroundFrameSpec({
+            trackId: current.id,
+            mode: settings.backgroundMode,
+            renderer,
+            galleryFallback: settings.backgroundGalleryFallback ?? true,
+            hasCover: trackHasCover(current),
+            trackBackgroundCount: trackBackgroundBlobs.length,
+            galleryCount: galleryBlobs.length,
+            trackKind: current.kind,
+            trackStatus: current.status,
+            hasTrackVideo: hasBackgroundVideoMedia,
+          })
+        : null,
+    [
+      current,
+      settings.backgroundMode,
+      settings.backgroundGalleryFallback,
+      renderer,
+      trackBackgroundBlobs.length,
+      galleryBlobs.length,
+      hasBackgroundVideoMedia,
+    ],
+  );
+  const { layers: backgroundLayers, settleTop: settleBackgroundTop } = useBackgroundController({
+    trackId: current?.id,
+    spec: backgroundFrameSpec,
+    coverUrl: useControllerBlur ? backgroundCoverUrl : null,
+  });
+
   return (
     <>
-      {effectiveRenderImageTarget && renderer === "blur" ? (
+      {useControllerBlur ? (
+        <BackgroundFrameStack
+          blurPx={blurPx}
+          layers={backgroundLayers}
+          onTopSettled={settleBackgroundTop}
+        />
+      ) : effectiveRenderImageTarget && renderer === "blur" ? (
         <CanvasBlurBackground
           blurPx={blurPx}
           holdPreviousWhileLoading={source !== "cover" || holdCoverBackgroundWhileLoading}
