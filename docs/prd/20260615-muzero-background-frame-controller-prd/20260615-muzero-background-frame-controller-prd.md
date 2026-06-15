@@ -79,6 +79,38 @@
             └──────────┴──────────┴──────────┴──────────┴───────┘
 ```
 
+### 2.1bis Transition Driver：统一触发源 + Swiper 自动补完
+
+**所有切歌触发源必须产生同一套过渡动画。** 触发源有四个：
+
+| # | 触发源 | 驱动方式 |
+|---|--------|----------|
+| ① | 键盘快捷键（next/prev） | **auto**：`startTransition(dir)` → progress 0→1 自动动画 |
+| ② | Dock 播放控制按钮（封面下 / Dock 的 prev/next） | 同 ① auto |
+| ③ | **拖拽 Dock 的歌曲信息区** | **manual**：拖拽 → progress；release → 自动补完 |
+| ④ | 拖拽封面 stage | **manual**：拖拽 → progress；release → 自动补完 |
+
+**Transition（冻结端点 + 归一进度）：**
+```ts
+interface Transition {
+  direction: "next" | "prev";
+  fromFrame: BackgroundFrame;   // 冻结于过渡开始 —— 整个过渡期间不再重新指向
+  toFrame:   BackgroundFrame;   // 冻结的邻居（prev/next），同上
+  progress: number;             // 0 = from 满显，1 = to 满显
+  mode: "manual" | "auto";
+}
+```
+
+**Swiper 语义（tricky 处 —— 必须照做）：**
+- **manual**（③④拖拽）：`progress = clamp(|dragDistance| / width)`；**两个拖拽面各自把手势映射到同一 progress**（封面 stage 用其宽，Dock 信息区用其宽）。
+- **release → 自动补完**：从当前 progress 切到 auto，按**剩余距离 + 释放速度**动画到 `1`（越过阈值/甩动 → commit）或回 `0`（取消）。这正是 Swiper「松手补完剩余过渡」，velocity-aware，手感连续不突变。
+- **auto**（①②）：progress `0→1`，固定 `BACKGROUND_CROSSFADE_MS`，同一条曲线。
+- **progress=1 → COMMIT**（toFrame 成为 current）；**progress→0 → 取消**，不切歌。
+
+**关键不变量 —— 端点冻结（根治 Bug 2）：** `fromFrame`/`toFrame` 在过渡**开始**即冻结，整个过渡期间**不随 store index 变化重新指向**。无论 drag 还是 auto，过渡画的永远是开始时锁定的 from→to → **过渡中绝不冒第三首**。（对比当前 bug 根因：store index 在 commit 动画**开始**就前进，而视觉还在动 → 端点漂移、邻居 ring 重指 → 冒 A/C。）
+
+**消费者统一**：前景 coverflow 卡片 + 背景 Frame Controller 读**同一** `{direction, progress, fromFrame, toFrame}` → **四触发源 × 前景背景，全部一致**。前景把 progress 映射成卡片位移/3D，背景映射成 crossfade —— 视觉函数不同，**时钟与端点同源**。
+
 ### 2.2 状态机（纯函数，可穷举单测）
 
 ```ts
@@ -301,6 +333,9 @@ src/components/player/
 | 3 | crossfade duration 统一取值（现 blur 300 / plain 350 / Pixi swap 各异）？是否做成可见设置还是内部常量？ | Open | 倾向**内部常量 `BACKGROUND_CROSSFADE_MS`**（不暴露设置，避免膨胀；硬规则 #3 不藏 flag —— 它是时序常量非行为门控） |
 | 4 | Phase 2「并行对照」阶段是否值得（controller 输出 vs 现渲染对照日志），还是直接 Phase 3 接入？ | Open | 倾向做轻量对照（给 Phase 3 当 before/after 护栏），但可选 |
 | 5 | 是否先落 consolidation R3（抽 source hook）再做本 Controller，避免两处同时改 god-component？ | Open | **强烈倾向先 R3**（或本 PRD Phase 1 的 resolver 即承担 R3 的 source 抽离），避免与 consolidation 撞车 |
+| 6 | **commit 时机**：端点冻结后，store index/音频在过渡**开始**就 commit（音频响应快，视觉独立播放冻结端点），还是**结束**才 commit（更同步但音频延迟 ~`BACKGROUND_CROSSFADE_MS`）？ | Open | 倾向**开始 commit + 冻结端点**（响应性 + 无漂移兼得）；视觉过渡读冻结 from/to，与 store 解耦，progress=1 时对齐 |
+| 7 | **前景 coverflow 是否一并收进 Transition Driver**（前景背景同一 driver），还是保留现有 coverflow 逻辑、仅让背景消费 driver 的 progress？ | Open | 倾向**统一到一个 driver**（才真正「四触发源一致」）；但 coverflow 改造面大、风险高 → 可分两步：先 driver+背景，再把前景 coverflow 迁过来。**需拍板范围** |
+| 8 | **拖拽 Dock 歌曲信息区（③）目前是否已是切歌触发？** 若否，需新增该手势面 | Open | 待确认现状；若无则 Phase 4 新增「Dock 信息区 drag → driver」手势，与封面 stage 共用 driver |
 
 ---
 
@@ -308,4 +343,5 @@ src/components/player/
 
 | Date | Author | Changes |
 |------|--------|---------|
+| 2026-06-15 | User+Claude | **设计修订：加入 Transition Driver + 四触发源统一（§2.1bis）。** 用户指出切歌触发源有四个（①键盘 ②Dock 播放按钮 ③拖拽 Dock 歌曲信息区 ④拖拽封面），**无论哪个都应一致**，且 drag 是「手动拖拽 + 松手 Swiper 自动补完剩余过渡」、按钮/键盘是「同一条自动动画」。新增 Transition Driver：冻结端点（from/to 过渡期不漂移 → 根治 Bug 2）+ 归一 progress + manual/auto + velocity-aware 自动补完；前景 coverflow 与背景 Controller 同源消费。新增 Open Q#6（commit 时机：开始 vs 结束）/#7（前景 coverflow 是否一并收进 driver）/#8（Dock 信息区 drag 现状）。**仍未动代码，待评审拍板。** |
 | 2026-06-15 | Claude | 初稿（设计待评审）：把用户三要求（对应封面 / 不串歌 / 不闪）映射为统一 Background Frame Controller —— 单一事实源 + generation 守卫 + ready-gate + 单 crossfade 时钟；状态机 §2.2、ready-gate 吸收 QA#7-24 §2.3、层消费者 §2.4、drag-follow 协同 §2.5；5 phase 计划。实现 consolidation PRD 的 R2+R4。**未动代码。** |
