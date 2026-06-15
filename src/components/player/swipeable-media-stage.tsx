@@ -413,10 +413,7 @@ export function SwipeableMediaStage({
   }, [clearStack, current?.id, settleTarget]);
 
   const commit = useCallback(
-    (
-      direction: Exclude<SwipeDirection, null>,
-      release?: { fromProgress: number; velocity: number },
-    ) => {
+    (direction: Exclude<SwipeDirection, null>, release?: { fromProgress: number }) => {
       if (committing) return;
       const action = direction === "next" ? next : skipPrev;
       const targetVisual = direction === "next" ? activeStack.next : activeStack.prev;
@@ -432,18 +429,17 @@ export function SwipeableMediaStage({
       setCommitting(true);
       setHandoffFading(false);
       const target = direction === "next" ? -exitTravel / DRAG_GAIN : exitTravel / DRAG_GAIN;
-      // Swiper auto-complete (PRD Phase 4 / Transition Driver): finish only the
-      // REMAINING distance from where the finger let go, velocity-aware — a fast
-      // fling lands sooner, a gentle release glides — instead of a fixed 1.08s no
-      // matter the release point. A non-drag commit (no release ctx) keeps the
-      // full fixed duration.
+      // Swiper auto-complete (PRD Phase 4 / Transition Driver): glide only the
+      // REMAINING distance from where the finger let go, scaled to that distance
+      // (full duration × remaining) — release near the end finishes quickly, an
+      // early release glides longer. NOT velocity-scaled: a fast release would
+      // collapse to the floor and flash the whole remaining distance in ~one frame
+      // (QA). A non-drag commit (no release ctx) keeps the full fixed duration.
       const durationSec = release
         ? remainingDurationMs({
             baseMs: COMMIT_DURATION_SEC * 1000,
             fromProgress: release.fromProgress,
             toProgress: 1,
-            velocity: release.velocity,
-            width: exitTravel,
           }) / 1000
         : COMMIT_DURATION_SEC;
       activeAnimation.current?.stop();
@@ -861,7 +857,7 @@ export function SwipeableMediaStage({
                 threshold: manualProgress(commitDistancePx * DRAG_GAIN, step),
                 velocity: info.velocity.x,
               });
-              if (willCommit) commit(dir, { fromProgress: progress, velocity: info.velocity.x });
+              if (willCommit) commit(dir, { fromProgress: progress });
               else snapBack();
             }}
             aria-label={`${t("player.previous")} / ${t("player.next")}`}
