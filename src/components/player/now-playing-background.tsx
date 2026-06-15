@@ -36,6 +36,16 @@ import { CanvasBlurBackground } from "./canvas-blur-background";
 import { type PixiBackgroundEffect, PixiPixelBackground } from "./pixi-pixel-background";
 
 const bgCoverLog = createDiagnosticLogger("background.cover");
+
+/**
+ * Resting dim of the cover-background group. Applied ONCE to the whole group (the
+ * controller layer stack + the drag transition layer) with the layers at full
+ * opacity inside — a crossfade then stays fully opaque end-to-end, so two covers
+ * overlapping never composite brighter than one (QA: "image brightens then dims
+ * back" during a switch). Matches the old per-layer 0.9. The 25% `imageMask`
+ * above this group is a separate, additional darkening.
+ */
+const COVER_GROUP_OPACITY = 0.9;
 const ENABLE_PIXI_BACKGROUND_FOR_BISECT = true;
 const DISABLE_PIXI_TEXTURE_SOURCE_FOR_BISECT = false;
 
@@ -422,11 +432,20 @@ function NowPlayingBackgroundContent({ hideVisualizer }: { hideVisualizer: boole
   return (
     <>
       {useControllerBlur ? (
-        <BackgroundFrameStack
-          blurPx={blurPx}
-          layers={backgroundLayers}
-          onTopSettled={settleBackgroundTop}
-        />
+        // Dim the whole cover group ONCE (not per layer), with the layers at full
+        // opacity inside. A crossfade then stays fully opaque throughout — the top
+        // cover fully covers the base — so there's no brightness spike from two
+        // 0.9 layers overlapping (QA: image brightens then dims back). The drag
+        // transition lives in the SAME dimmed group so it matches the resting cover.
+        <div className="absolute inset-0" style={{ opacity: COVER_GROUP_OPACITY }}>
+          <BackgroundFrameStack
+            blurPx={blurPx}
+            layers={backgroundLayers}
+            maxOpacity={1}
+            onTopSettled={settleBackgroundTop}
+          />
+          <TransitionBackground blurPx={blurPx} maxOpacity={1} />
+        </div>
       ) : effectiveRenderImageTarget && renderer === "blur" ? (
         <CanvasBlurBackground
           blurPx={blurPx}
@@ -452,11 +471,6 @@ function NowPlayingBackgroundContent({ hideVisualizer }: { hideVisualizer: boole
           src={effectiveRenderImageTarget.src}
         />
       ) : null}
-      {/* Drag-follow crossfade (PRD Phase 4): the frozen incoming cover fades in
-          over the resting cover, synced to the foreground card via the shared
-          transition progress. Invisible at rest; composited at the resting level
-          so flow/visualizer treat it like the resting cover. Blur path only. */}
-      {useControllerBlur ? <TransitionBackground blurPx={blurPx} /> : null}
       <div className="absolute inset-0 bg-background" style={{ opacity: imageMaskOpacity }} />
       {/* Independent 流光 layer: composited ABOVE the background image/video and
           BELOW the visualizer spectrum. It's its own toggle (flowEnabled), NOT a
