@@ -146,6 +146,8 @@ export interface LiveRequestIntakeStatus {
 }
 
 export interface LiveRequestIntakePayload {
+  /** Which configured source the request arrived on (`/v1/intake/<id>`; default → "default"). */
+  sourceId?: string;
   body: string;
   receivedAt: number;
 }

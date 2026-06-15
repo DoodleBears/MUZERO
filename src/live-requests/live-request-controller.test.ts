@@ -1,8 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MuzeroDB } from "@/db/muzero-db";
 import { saveSettings } from "@/db/repositories";
-import { DEFAULT_AUDIENCE_REQUEST_INTAKE_SETTINGS } from "@/db/types";
+import {
+  type AudienceRequestSource,
+  DEFAULT_AUDIENCE_REQUEST_INTAKE_SETTINGS,
+  DEFAULT_AUDIENCE_REQUEST_SOURCE,
+} from "@/db/types";
 import type {
+  AudienceRequestHandleOverride,
   AudienceRequestRuntime,
   AudienceRequestRuntimeItem,
 } from "./audience-request-runtime";
@@ -27,7 +32,8 @@ afterEach(async () => {
 
 function fakeRuntime() {
   const handle = vi.fn(
-    async (_request: NormalizedAudienceRequest) => ({ id: "arq_x" }) as AudienceRequestRuntimeItem,
+    async (_request: NormalizedAudienceRequest, _override?: AudienceRequestHandleOverride) =>
+      ({ id: "arq_x" }) as AudienceRequestRuntimeItem,
   );
   const runtime: AudienceRequestRuntime = {
     handle,
@@ -66,6 +72,28 @@ async function enableIntake() {
     db,
   );
 }
+
+async function setSources(sources: AudienceRequestSource[]) {
+  await saveSettings(
+    {
+      audienceRequestIntake: {
+        ...DEFAULT_AUDIENCE_REQUEST_INTAKE_SETTINGS,
+        enabled: true,
+        sources,
+      },
+    },
+    db,
+  );
+}
+
+const source = (over: Partial<AudienceRequestSource>): AudienceRequestSource => ({
+  id: "s",
+  name: "S",
+  status: "active",
+  authMode: "open",
+  mappingPreset: "auto",
+  ...over,
+});
 
 const payload = (body: string) => ({ body, receivedAt: 1 });
 
@@ -130,5 +158,66 @@ describe("live-request-controller subscription", () => {
 
     expect(controls.subscribed).toBe(true);
     expect(handle).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("live-request-controller multi-source + testing lifecycle", () => {
+  it("captures testing-source payloads for preview without acting", async () => {
+    await setSources([
+      DEFAULT_AUDIENCE_REQUEST_SOURCE,
+      source({ id: "ssn", status: "testing", mappingPreset: "social-stream-ninja" }),
+    ]);
+    const { runtime, handle } = fakeRuntime();
+    const controller = createLiveRequestController({ db, runtime, controls: fakeControls() });
+
+    await controller.handlePayload({
+      sourceId: "ssn",
+      body: JSON.stringify({ chatmessage: "点歌 X", chatname: "a", type: "youtube" }),
+    });
+
+    expect(handle).not.toHaveBeenCalled();
+    expect(controller.getCaptured("ssn")).toHaveLength(1);
+  });
+
+  it("applies an active source's preset mapping and per-source route override", async () => {
+    await setSources([
+      source({ id: "ssn", mappingPreset: "social-stream-ninja", routeMode: "ai-dj" }),
+    ]);
+    const { runtime, handle } = fakeRuntime();
+    const controller = createLiveRequestController({ db, runtime, controls: fakeControls() });
+
+    await controller.handlePayload({
+      sourceId: "ssn",
+      body: JSON.stringify({ chatmessage: "lofi", chatname: "a", type: "twitch" }),
+    });
+
+    expect(handle).toHaveBeenCalledTimes(1);
+    expect(handle.mock.calls[0][0]).toMatchObject({ normalizedQuery: "lofi", platform: "twitch" });
+    expect(handle.mock.calls[0][1]).toMatchObject({ routeMode: "ai-dj" });
+  });
+
+  it("strips sensitive fields from captured payloads", async () => {
+    await setSources([source({ id: "default", status: "testing", mappingPreset: "auto" })]);
+    const { runtime } = fakeRuntime();
+    const controller = createLiveRequestController({ db, runtime, controls: fakeControls() });
+
+    await controller.handlePayload({
+      sourceId: "default",
+      body: JSON.stringify({ message: "hi", token: "secret123", nested: { api_key: "k" } }),
+    });
+
+    const [first] = controller.getCaptured("default");
+    expect(first.body).toEqual({ message: "hi", nested: {} });
+  });
+
+  it("ignores disabled and unknown sources", async () => {
+    await setSources([source({ id: "off", status: "disabled", mappingPreset: "auto" })]);
+    const { runtime, handle } = fakeRuntime();
+    const controller = createLiveRequestController({ db, runtime, controls: fakeControls() });
+
+    await controller.handlePayload({ sourceId: "off", body: JSON.stringify({ message: "x" }) });
+    await controller.handlePayload({ sourceId: "ghost", body: JSON.stringify({ message: "x" }) });
+
+    expect(handle).not.toHaveBeenCalled();
   });
 });

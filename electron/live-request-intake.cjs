@@ -82,13 +82,23 @@ function createLiveRequestIntake({ emit }) {
   return { start, status, stop };
 }
 
+function resolveSourceId(pathname) {
+  // Legacy default endpoint, kept for backward compatibility.
+  if (pathname === "/v1/audience/request") return "default";
+  // Per-source endpoints: /v1/intake/<id>. The renderer validates the id against
+  // configured sources; the server only checks the shape.
+  const match = pathname.match(/^\/v1\/intake\/([A-Za-z0-9._-]+)$/);
+  return match ? match[1] : null;
+}
+
 async function handleRequest({ emit, maxBodyBytes, req, res, token }) {
   const url = new URL(req.url || "/", "http://127.0.0.1");
   if (req.method === "GET" && url.pathname === "/health") {
     sendJson(res, 200, { apiVersion: 1, app: "MUZERO", ok: true });
     return;
   }
-  if (req.method !== "POST" || url.pathname !== "/v1/audience/request") {
+  const sourceId = resolveSourceId(url.pathname);
+  if (req.method !== "POST" || sourceId === null) {
     sendJson(res, 404, { accepted: false, message: "not found" });
     return;
   }
@@ -100,7 +110,7 @@ async function handleRequest({ emit, maxBodyBytes, req, res, token }) {
 
   try {
     const body = await readBody(req, maxBodyBytes);
-    emit({ body, receivedAt: Date.now() });
+    emit({ sourceId, body, receivedAt: Date.now() });
     sendJson(res, 202, { accepted: true, status: "queued" });
   } catch (error) {
     const tooLarge = error && error.code === "BODY_TOO_LARGE";
