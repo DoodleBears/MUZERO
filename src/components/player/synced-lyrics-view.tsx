@@ -404,6 +404,16 @@ function SyncedLines({
   const lyricsMotion = useMemo(() => resolveLyricsMotionMode(motionMode), [motionMode]);
   const isAmlStyleEngine = lyricsMotion.mode === "cascade";
   const cascadeDriverActive = isAmlStyleEngine && following && !suspendMotion;
+  // The cascade rAF parks itself when paused AND all springs have settled (so it
+  // stops spinning a frame loop — and re-computing layout — when nothing animates;
+  // QA: `lyrics.cascade.frame` count climbed forever with no song playing). Read
+  // `isPlaying` live via a ref (the loop has no `isPlaying` dep) and wake on the
+  // two signals deps can't carry mid-loop: playback resuming, and the active line
+  // jumping while paused (a seek).
+  const isPlayingRef = useRef(isPlaying);
+  isPlayingRef.current = isPlaying;
+  const cascadeIdleRef = useRef(false);
+  const cascadeWakeRef = useRef<() => void>(() => {});
   const cascadeAnchorRatio = cascadeTuning.anchorRatio ?? DEFAULT_LYRIC_CASCADE_TUNING.anchorRatio;
   const layoutLineGap = lyricStyle.lineGap;
   const inactiveScale = lyricStyle.inactiveFontSize / lyricStyle.activeFontSize;
@@ -619,6 +629,10 @@ function SyncedLines({
       if (stopped) return;
       const perfEnabled = arePerfCountersEnabled();
       const perfStartedAt = perfEnabled ? performance.now() : 0;
+      // Did any row still have motion in flight this frame? Drives the paused-idle
+      // park: while playing the loop always continues (time advances → targets
+      // move), but once paused AND nothing is animating, it stops re-arming.
+      let anyMotion = false;
       if (viewport.scrollTop !== 0) viewport.scrollTop = 0;
       const dt = lastTs ? Math.min(0.05, Math.max(0.001, (timestamp - lastTs) / 1000)) : 1 / 60;
       lastTs = timestamp;
@@ -695,6 +709,7 @@ function SyncedLines({
           state.initialized = true;
         } else if (state.delayRemaining > 0) {
           state.delayRemaining = Math.max(0, state.delayRemaining - dt);
+          anyMotion = true;
         } else {
           [state.translateY, state.velocityY] = stepSpring(
             state.translateY,
@@ -720,6 +735,16 @@ function SyncedLines({
             state.targetBlur,
             dt,
           );
+          // stepSpring returns velocity 0 only once a property has reached its
+          // target — any non-zero velocity means this row is still animating.
+          if (
+            state.velocityY !== 0 ||
+            state.velocityOpacity !== 0 ||
+            state.velocityScale !== 0 ||
+            state.velocityBlur !== 0
+          ) {
+            anyMotion = true;
+          }
         }
 
         row.style.transform = `translate3d(0, ${state.translateY.toFixed(3)}px, 0) scale(${state.scale.toFixed(4)})`;
@@ -736,9 +761,23 @@ function SyncedLines({
           viewportHeight,
         });
       }
+      // Park when paused AND nothing is animating: stop re-arming the rAF so the
+      // loop (and its per-frame layout solve) goes quiet until woken. While
+      // playing, time keeps advancing so we always continue.
+      if (!isPlayingRef.current && !anyMotion) {
+        cascadeIdleRef.current = true;
+        return;
+      }
       raf = requestAnimationFrame(write);
     };
 
+    cascadeIdleRef.current = false;
+    cascadeWakeRef.current = () => {
+      if (!cascadeIdleRef.current) return;
+      cascadeIdleRef.current = false;
+      lastTs = 0; // avoid a huge dt after an idle gap
+      raf = requestAnimationFrame(write);
+    };
     write(performance.now());
     raf = requestAnimationFrame(write);
     return () => {
@@ -765,6 +804,15 @@ function SyncedLines({
     cascadeAnchorRatio,
     cascadeTuning,
   ]);
+
+  // Alarm clock for the parked cascade loop: wake it when playback resumes
+  // (isPlaying) or the active line jumps while paused (activeIndex — a seek). The
+  // loop carries no deps for these (it reads time live), so without this it would
+  // stay parked through a paused seek. No-op while the loop is already running.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: wake fn is a stable ref
+  useEffect(() => {
+    cascadeWakeRef.current();
+  }, [isPlaying, activeIndex]);
 
   // Per-syllable karaoke fill: while the active line has word timings, a single rAF
   // wipes each word as it's sung by writing one CSS var per word span DIRECTLY to

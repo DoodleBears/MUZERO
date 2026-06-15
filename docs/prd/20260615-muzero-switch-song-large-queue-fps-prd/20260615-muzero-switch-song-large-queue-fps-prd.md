@@ -13,7 +13,7 @@
 |-------|------|--------|------|
 | 1 | 观测先行：longtask 归因 + HUD 子分类耗时分解 | ✅ Completed | [Phase 1](#phase-1-观测先行) |
 | 2 | queue liveQuery 全量重取（getTracksByIds O(n)）消除 | 🔲 Pending | [Phase 2](#phase-2-queue-livequery-全量重取消除) |
-| 3 | 空闲 rAF 归零（lyrics cascade / wordFill settle-then-stop） | 🔲 Pending | [Phase 3](#phase-3-空闲-raf-归零) |
+| 3 | 空闲 rAF 归零（lyrics cascade settle-then-park） | 🔄 待 QA | [Phase 3](#phase-3-空闲-raf-归零) |
 | 4 | 切歌封面管线峰值（preload.batch / decode / load）削峰 | 🔲 Pending | [Phase 4](#phase-4-切歌封面管线削峰) |
 | 5 | 验收：大队列连切 before/after | 🔲 Pending | [Phase 5](#phase-5-验收) |
 
@@ -134,10 +134,11 @@ playIndex(index)                       ← O(1) 同步：clamp + set(cursorPatch
 **Goal:** 暂停/不播放且动画 settle 时停掉 rAF，事件唤醒。
 
 **Tasks / Checklist:**
-- [ ] cascade rAF：`isPlaying` 为假**且所有弹簧 settle** → 停 rAF；在 `isPlaying`↑ / seek / resize / 歌词行变化 / 手动滚动 唤醒（**唤醒条件列全**，否则"恢复播放后歌词不动"）。
-- [ ] `lyrics.wordFill.paint` 同治。
-- [ ] HUD 复测：暂停后 `lyrics.cascade.frame` / `lyrics.wordFill.paint` 的 `count` 不再增长。
-- [ ] QA（真实放歌）：播放中级联/逐字正常、暂停停止空转、恢复/seek 立即跟上、reduced-motion 仍正确。
+- [x] cascade rAF：`isPlaying`(via ref) 为假**且所有弹簧 settle**（`anyMotion=false`）→ 停止 re-arm rAF；`cascadeWakeRef` 在 `isPlaying`↑ / `activeIndex` 变（seek/换行）唤醒；resize / 歌词行 / following(手动滚动) 经 effect deps 重挂自然重启。
+- [x] `lyrics.wordFill.paint` **已自带 `isPlaying` 门**（其 effect `if (!isPlaying) return;` + deps 含 isPlaying，暂停即 cleanup 取消 rAF）→ 无需改；×1166 是播放期累计，非空转。
+- [ ] HUD 复测：暂停后 `lyrics.cascade.frame` 的 `count` **不再增长**。
+- [ ] QA（真实放歌）：播放中级联正常、暂停停止空转、恢复/seek/点歌词跳转立即跟上、reduced-motion(`suspendMotion`) 仍正确。
+- 实现：`synced-lyrics-view.tsx`（`isPlayingRef` / `cascadeIdleRef` / `cascadeWakeRef` + 每帧 `anyMotion` + park-or-rearm + wake effect）。typecheck + 34 lyrics 例绿。
 
 ### Phase 4: 切歌封面管线削峰
 
@@ -195,6 +196,7 @@ playIndex(index)                       ← O(1) 同步：clamp + set(cursorPatch
 | Date | Author | Changes |
 |------|--------|---------|
 | 2026-06-15 | User + Claude | 初稿。Phase 1 观测（longtask 归因 + HUD 子分类分解）**已 ship**（`8713c8b`/`27bba3c`/`63772ae`），用其证据坐实根因：❶ `getTracksByIds(5983)` 全量重取 192ms（最贵）❷❸ 封面管线 preload/decode/load 100–237ms（每切都中）❹ lyrics rAF 空闲空转。Phase 2–5 待评审拍板优先级（Open Q3）。**未动优化代码。** |
+| 2026-06-15 | User + Claude | **新分支 `perf/switch-song-large-queue-fps`。Phase 3 落地（待 QA）**：cascade rAF 改为「暂停且弹簧 settle 即 park、resume/seek 唤醒」，`lyrics.cascade.frame` 空闲不再空转（QA：count 从 ×56026 一路涨）。`wordFill` 经核已自带 isPlaying 门，无需改。重排优先级澄清：原"Phase 2 `!changed` 早退"对 7ms 的 queueSig 无效——真正 275ms 在 `getTracksByIds`（async fn，早退够不着），故 Phase 3 先行。 |
 | 2026-06-15 | User + Claude | HUD #2（calm 态）校正数据：`queue.live.fetch` max **275ms ≈ jank 285ms**、`cover.preload.batch` max **836ms（×21，但 wall-clock 异步）**、`image.load` 189ms、`lyrics.cascade.frame` **×56026 仍涨**。新增**方法学校正**：`notePerfWork` span 是 wall-clock（含 await），主线程真值看 longtask。据此 **Open Q3 拍板**：Phase 2 为主线程头号，顺序 Phase 2 零风险先手 → Phase 3 → Phase 2 拆订阅 → Phase 4。 |
 
 ---
