@@ -32,7 +32,6 @@ import { resolveVisualizerStyle } from "@/visualizer/registry";
 import { BackgroundFrameStack } from "./background/background-frame-stack";
 import { useBackgroundController } from "./background/use-background-controller";
 import { CanvasBlurBackground } from "./canvas-blur-background";
-import { DragCrossfadeBackground } from "./drag-crossfade-background";
 import { type PixiBackgroundEffect, PixiPixelBackground } from "./pixi-pixel-background";
 
 const bgCoverLog = createDiagnosticLogger("background.cover");
@@ -525,12 +524,12 @@ function NowPlayingBackgroundContent({ hideVisualizer }: { hideVisualizer: boole
           </motion.div>
         )}
       </AnimatePresence>
-      {/* Drag-follow crossfade (PRD Phase 2-D), composited ON TOP of the whole
-          resting stack (renderer + flow + visualizer) so it's decoupled from
-          which renderer the quality preset uses: a full drag lands fully on the
-          incoming cover regardless of mode. Invisible at rest (additive); on
-          release the stack's effects settle back over the new cover. */}
-      <DragCrossfadeBackground blurPx={blurPx} maxOpacity={1} />
+      {/* The standalone drag-follow (PRD Phase 2-D) is intentionally OFF: it was
+          never synced to the foreground coverflow or the Frame Controller, which
+          caused the drag artifacts QA found — B not reaching 100% (mapping
+          mismatch), and a flash back to A on release (handoff desync). The
+          drag-follow returns properly in Phase 4, driven by the same Transition
+          Driver as the foreground so they share progress + endpoints. */}
     </>
   );
 }
