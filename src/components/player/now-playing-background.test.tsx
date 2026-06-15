@@ -298,7 +298,6 @@ describe("NowPlayingBackground", () => {
       url: "blob:phase10-cover-a",
       urlKey: "blb_a",
     });
-    mocks.coverDerivativeUrls.set("trk_a:backlight", "blob:phase10-ambient-a");
     mocks.coverResources.set("trk_b", {
       readyForTrack: false,
       staleWhilePending: true,
@@ -315,7 +314,7 @@ describe("NowPlayingBackground", () => {
 
     await loadImage(0);
     const firstShell = screen.getByTestId("pixi-background");
-    expect(firstShell).toHaveAttribute("data-src", "blob:phase10-ambient-a");
+    expect(firstShell).toHaveAttribute("data-src", "blob:phase10-cover-a");
     expect(firstShell).toHaveClass("opacity-90");
 
     await act(async () => {
@@ -335,7 +334,6 @@ describe("NowPlayingBackground", () => {
       url: "blob:phase10-cover-b",
       urlKey: "blb_b",
     });
-    mocks.coverDerivativeUrls.set("trk_b:backlight", "blob:phase10-ambient-b");
     await act(async () => {
       usePlayerStore.setState({ queue: [...queue] });
       await Promise.resolve();
@@ -344,7 +342,7 @@ describe("NowPlayingBackground", () => {
 
     const readyShell = screen.getByTestId("pixi-background");
     expect(readyShell).toBe(firstShell);
-    expect(readyShell).toHaveAttribute("data-src", "blob:phase10-ambient-b");
+    expect(readyShell).toHaveAttribute("data-src", "blob:phase10-cover-b");
     expect(readyShell).toHaveClass("opacity-90");
   });
 
@@ -368,7 +366,6 @@ describe("NowPlayingBackground", () => {
       url: "blob:should-not-decode",
       urlKey: "blb_local",
     });
-    mocks.coverDerivativeUrls.set("trk_local:backlight", "blob:local-ambient");
     const queue = [makeTrack("trk_local", { coverBlobId: "blb_local", origin: "streamed" })];
     usePlayerStore.setState({ currentIndex: 0, queue });
     render(<NowPlayingBackground active />);
@@ -403,17 +400,16 @@ describe("NowPlayingBackground", () => {
 
     const readyShell = screen.getByTestId("pixi-background");
     expect(readyShell).toBe(pendingShell);
-    expect(readyShell).toHaveAttribute("data-src", "blob:local-ambient");
+    expect(readyShell).toHaveAttribute("data-src", "muzfetch://local-media/cover-token");
     expect(readyShell).toHaveClass("opacity-90");
     expect(mocks.trackCoverResourceTrackIds).not.toContain("trk_local");
   });
 
-  it("feeds a cover derivative into Pixi instead of the local original URL", () => {
+  it("feeds the ORIGINAL local cover URL into Pixi (no 192px backlight derivative)", async () => {
     mocks.settings.backgroundGalleryFallback = false;
     mocks.settings.backgroundRenderer = "noise";
     mocks.settings.flowEnabled = false;
     mocks.settings.visualizerAsBackground = false;
-    mocks.coverDerivativeUrls.set("trk_local:backlight", "blob:ambient-backlight");
     mocks.localCoverResources.set("trk_local", {
       canServe: true,
       coverBlobId: "blb_local",
@@ -426,72 +422,16 @@ describe("NowPlayingBackground", () => {
     usePlayerStore.setState({ currentIndex: 0, queue });
 
     render(<NowPlayingBackground active />);
+    await loadImage(0);
 
+    // The Pixi background now renders the ORIGINAL cover (GPU-scaled), not a cropped
+    // 192px derivative — so the cover derivative hook is never invoked for it.
     expect(screen.getByTestId("pixi-background")).toHaveAttribute(
       "data-src",
-      "blob:ambient-backlight",
+      "muzfetch://local-media/original-cover",
     );
-    expect(mocks.coverDerivativeCalls).toContainEqual({
-      defer: false,
-      kind: "backlight",
-      trackId: "trk_local",
-    });
-    expect(images).toHaveLength(0);
-    expect(mocks.pixiSrcs).not.toContain("muzfetch://local-media/original-cover");
-    expect(getTraceEntries()).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          event: "pixiCover.derivative",
-          scope: "background.cover",
-          context: expect.objectContaining({
-            derivativeKind: "backlight",
-            derivativeReady: true,
-            fallbackToOriginal: false,
-            phase: "success",
-            trackId: "trk_local",
-          }),
-        }),
-      ]),
-    );
-  });
-
-  it("keeps Pixi hidden while the cover derivative is pending instead of falling back to the local original", async () => {
-    mocks.settings.backgroundGalleryFallback = false;
-    mocks.settings.backgroundRenderer = "noise";
-    mocks.settings.flowEnabled = false;
-    mocks.settings.visualizerAsBackground = false;
-    mocks.localCoverResources.set("trk_local", {
-      canServe: true,
-      coverBlobId: "blb_local",
-      pending: false,
-      pendingReason: null,
-      storageKey: "cover/local.jpg",
-      url: "muzfetch://local-media/original-cover",
-    });
-    const queue = [makeTrack("trk_local", { coverBlobId: "blb_local", origin: "streamed" })];
-    usePlayerStore.setState({ currentIndex: 0, queue });
-    render(<NowPlayingBackground active />);
-
-    const shell = screen.getByTestId("pixi-background");
-    expect(shell).toHaveAttribute("data-src", "");
-    expect(shell).toHaveClass("opacity-0");
-    expect(images).toHaveLength(0);
-    expect(mocks.pixiSrcs).not.toContain("muzfetch://local-media/original-cover");
-    expect(getTraceEntries()).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          event: "pixiCover.derivative",
-          scope: "background.cover",
-          context: expect.objectContaining({
-            derivativeReady: false,
-            derivativeState: "pending",
-            fallbackToOriginal: false,
-            phase: "state",
-            trackId: "trk_local",
-          }),
-        }),
-      ]),
-    );
+    expect(mocks.pixiSrcs).toContain("muzfetch://local-media/original-cover");
+    expect(mocks.coverDerivativeCalls).toHaveLength(0);
   });
 
   it("emits a local-cover fallback trace when the row cannot use the protocol URL", async () => {
@@ -514,7 +454,6 @@ describe("NowPlayingBackground", () => {
       url: "blob:indexeddb-cover",
       urlKey: "blb_indexeddb",
     });
-    mocks.coverDerivativeUrls.set("trk_indexeddb:backlight", "blob:indexeddb-ambient");
     const queue = [makeTrack("trk_indexeddb", { coverBlobId: "blb_indexeddb" })];
     usePlayerStore.setState({ currentIndex: 0, queue });
     render(<NowPlayingBackground active />);
@@ -522,7 +461,7 @@ describe("NowPlayingBackground", () => {
 
     expect(screen.getByTestId("pixi-background")).toHaveAttribute(
       "data-src",
-      "blob:indexeddb-ambient",
+      "blob:indexeddb-cover",
     );
     expect(getTraceEntries()).toEqual(
       expect.arrayContaining([
@@ -550,7 +489,6 @@ describe("NowPlayingBackground", () => {
       url: "blob:previous-cover",
       urlKey: "blb_prev",
     });
-    mocks.coverDerivativeUrls.set("trk_prev:backlight", "blob:previous-ambient");
     mocks.localCoverResources.set("trk_local", {
       canServe: true,
       coverBlobId: "blb_local",
@@ -568,7 +506,7 @@ describe("NowPlayingBackground", () => {
     await loadImage(0);
     expect(screen.getByTestId("pixi-background")).toHaveAttribute(
       "data-src",
-      "blob:previous-ambient",
+      "blob:previous-cover",
     );
 
     mocks.pixiSrcs.length = 0;
@@ -578,7 +516,7 @@ describe("NowPlayingBackground", () => {
     });
 
     expect(screen.getByTestId("pixi-background")).toHaveAttribute("data-src", "");
-    expect(mocks.pixiSrcs).not.toContain("blob:previous-ambient");
+    expect(mocks.pixiSrcs).not.toContain("blob:previous-cover");
   });
 });
 

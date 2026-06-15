@@ -5,12 +5,7 @@ import { getTrackLyrics, listGalleryImages, listTrackBackgrounds } from "@/db/re
 import { useSettings } from "@/hooks/use-app-data";
 import { useLoadedImageUrl } from "@/hooks/use-image-load";
 import { useLocalCoverResource } from "@/hooks/use-local-cover";
-import {
-  useCoverDerivativeUrl,
-  useObjectUrls,
-  useTrackCoverResource,
-  useTrackMediaUrl,
-} from "@/hooks/use-media";
+import { useObjectUrls, useTrackCoverResource, useTrackMediaUrl } from "@/hooks/use-media";
 import {
   type BackgroundRenderTarget,
   resolveBackgroundSource,
@@ -179,10 +174,13 @@ function NowPlayingBackgroundContent({ hideVisualizer }: { hideVisualizer: boole
     trackStatus: current?.status,
     hasTrackMedia: hasBackgroundVideoMedia,
   });
-  const shouldUsePixiCoverDerivative = Boolean(
-    pixiEffect && source === "cover" && pixiMedia.source === "cover" && current?.coverBlobId,
-  );
-  const coverBackgroundLoadUrl = shouldUsePixiCoverDerivative ? null : backgroundCoverUrl;
+  // The Pixi background uses the ORIGINAL cover (loaded below, capped at 1024px),
+  // NOT a cropped 192px `backlight` derivative. The noise/pixel renderers don't blur
+  // the cover — they lay an effect over it — so a tiny upscaled texture looks soft,
+  // and the original (the SAME bitmap the foreground coverflow already decoded) is
+  // sharp, GPU-scaled (object-fit cover) for free, and skips the derivative worker
+  // pass + its separate load entirely (cheaper end-to-end, like the library grid).
+  const coverBackgroundLoadUrl = backgroundCoverUrl;
 
   useEffect(() => {
     if (source !== "cover" || !waitForLocalCoverUrl || !current?.coverBlobId) return;
@@ -307,36 +305,7 @@ function NowPlayingBackgroundContent({ hideVisualizer }: { hideVisualizer: boole
       : slideshowUrls.length > 0
         ? (slideshowUrls[slideIndex % slideshowUrls.length] ?? null)
         : null;
-  const pixiCoverDerivativeUrl = useCoverDerivativeUrl(
-    shouldUsePixiCoverDerivative ? current : undefined,
-    "backlight",
-    { defer: waitForLocalCoverUrl },
-  );
-  const pixiCoverUrl = shouldUsePixiCoverDerivative ? pixiCoverDerivativeUrl : backgroundUrl;
-  useEffect(() => {
-    if (!shouldUsePixiCoverDerivative || !current?.coverBlobId) return;
-    bgCoverLog.debug("pixiCover.derivative", {
-      category: "performance",
-      coverBlobId: current.coverBlobId,
-      defer: waitForLocalCoverUrl,
-      derivativeKind: "backlight",
-      derivativeReady: Boolean(pixiCoverDerivativeUrl),
-      derivativeState: pixiCoverDerivativeUrl
-        ? "ready"
-        : waitForLocalCoverUrl
-          ? "deferred"
-          : "pending",
-      fallbackToOriginal: false,
-      phase: pixiCoverDerivativeUrl ? "success" : waitForLocalCoverUrl ? "skip" : "state",
-      trackId: current.id,
-    });
-  }, [
-    current?.coverBlobId,
-    current?.id,
-    pixiCoverDerivativeUrl,
-    shouldUsePixiCoverDerivative,
-    waitForLocalCoverUrl,
-  ]);
+  const pixiCoverUrl = backgroundUrl;
   const pixiUrl = pixiMedia.source === "track-video" ? currentVideoUrl : pixiCoverUrl;
   const hasPotentialImageBackground =
     source === "cover"
