@@ -98,15 +98,29 @@ function projectTrack(
   track: Track,
   fields: readonly TrackResultField[],
   deps: LocalIdDeps = {},
+  // playCount is sourced from trackPlaybackStats, not the track row (switch-fps:
+  // it's no longer denormalized onto `tracks`). Caller passes a per-track sum.
+  playCountByTrack?: Map<string, number>,
 ): Record<string, unknown> {
   const row: Record<string, unknown> = {};
   for (const f of fields) {
     if (f === "artist") row.artist = track.mediaMetadata?.artists?.[0] ?? track.streamMeta?.artist;
     else if (f === "album") row.album = track.mediaMetadata?.album ?? track.streamMeta?.album;
     else if (f === "id") row.id = encodeMaybeTrack(track.id, deps);
+    else if (f === "playCount") row.playCount = playCountByTrack?.get(track.id) ?? 0;
     else row[f] = track[f as keyof Track];
   }
   return row;
+}
+
+/** Sum playCount per track from trackPlaybackStats (across devices) for a set of
+ *  ids — the authoritative source now that `tracks.playCount` is gone (switch-fps). */
+async function sumPlayCountsByTrack(ids: string[], db: MuzeroDB): Promise<Map<string, number>> {
+  const map = new Map<string, number>();
+  if (ids.length === 0) return map;
+  const rows = await db.trackPlaybackStats.where("trackId").anyOf(ids).toArray();
+  for (const row of rows) map.set(row.trackId, (map.get(row.trackId) ?? 0) + row.playCount);
+  return map;
 }
 
 /** Multi-keyword search: per-term match, combined by union ("any") or intersection ("all"). */
@@ -472,11 +486,18 @@ export async function executeSearchTracks(
   const fields = input.fields?.length ? input.fields : (["id", "title"] as const);
   const page = matched.slice(input.cursor, input.cursor + input.limit);
   const nextOffset = input.cursor + page.length;
+  // Only join play counts when the agent asked for them, and only for the page.
+  const playCountByTrack = (fields as readonly TrackResultField[]).includes("playCount")
+    ? await sumPlayCountsByTrack(
+        page.map((track) => track.id),
+        db,
+      )
+    : undefined;
   return {
     total: matched.length, // full match count so the agent knows if it's truncated
     returned: page.length,
     nextCursor: nextOffset < matched.length ? nextOffset : null,
-    tracks: page.map((track) => projectTrack(track, fields, deps)),
+    tracks: page.map((track) => projectTrack(track, fields, deps, playCountByTrack)),
   };
 }
 

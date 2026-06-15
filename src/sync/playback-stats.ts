@@ -74,7 +74,6 @@ export async function recordPlaybackListen(
     db.playbackEvents,
     db.trackPlaybackStats,
     db.playbackAggregates,
-    db.tracks,
     async () => {
       await db.playbackEvents.put(event);
       if (input.trackId) {
@@ -90,10 +89,13 @@ export async function recordPlaybackListen(
       for (const base of aggregateBasesForEvent(event)) {
         await upsertAggregate(base, listenedSec, countedAsPlay, updatedAt, db);
       }
-      if (countedAsPlay && input.trackId) {
-        const track = await db.tracks.get(input.trackId);
-        if (track) await db.tracks.update(input.trackId, { playCount: track.playCount + 1 });
-      }
+      // playCount is NO LONGER denormalized onto the `tracks` row (switch-fps): a
+      // per-counted-play `tracks` write poisoned EVERY `tracks` liveQuery observer —
+      // the play-queue's getTracksByIds(5983) (≈451ms refetch for a list that didn't
+      // change) AND search-page's full-table `listAllTracks` (an O(N) derive cascade
+      // that ran for seconds on a backgrounded tab). The authoritative per-track
+      // count lives in `trackPlaybackStats`; all readers already use it, so the
+      // denormalized `Track.playCount` was vestigial. (Was: tracks.update playCount+1.)
     },
   );
 

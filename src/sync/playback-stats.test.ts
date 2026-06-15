@@ -62,7 +62,11 @@ describe("recordPlaybackListen", () => {
       playCount: 1,
       listenedSec: 31,
     });
-    expect((await db.tracks.get("trk_1"))?.playCount).toBe(1);
+    // playCount is NO LONGER denormalized onto the tracks row (switch-fps): a play
+    // must not write `tracks` (it poisoned every tracks liveQuery observer). The
+    // authoritative count lives in trackPlaybackStats (asserted above); the track
+    // row is left untouched at its seeded 0.
+    expect((await db.tracks.get("trk_1"))?.playCount).toBe(0);
   });
 
   it("adds listened seconds without incrementing play count for short listens", async () => {
