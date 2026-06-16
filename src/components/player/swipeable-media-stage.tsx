@@ -189,9 +189,9 @@ export function SwipeableMediaStage({
   const coverEffectMode = resolveNowPlayingCoverEffectMode(settings.nowPlayingCoverEffectMode);
   // 画质优先 (the "quality" preset, also the app default) spares no expense on the switch
   // transition: play the coverflow + its backlight cards even on a fast burst — only skip
-  // when switches outpace the transport rate cap (200ms / 5-per-sec) — and fade the base
-  // cover backlight IN after each switch instead of popping. Balanced/battery keep the
-  // snappier burst-skip (600ms) + instant backlight the user validated as natural.
+  // when switches outpace the transport rate cap (200ms / 5-per-sec). Balanced/battery keep
+  // the snappier burst-skip (600ms). The cover backlight fade-in (below) is now unconditional
+  // across all presets — the glow eases in after every switch instead of popping.
   const richSwitchTransitions = matchActiveQualityPreset(settings) === "quality";
   const coverflowBurstSkipMs = richSwitchTransitions
     ? TRANSPORT_SWITCH_MIN_INTERVAL_MS
@@ -955,7 +955,7 @@ export function SwipeableMediaStage({
           >
             <MediaStage
               coverBacklightEnabled={foregroundVisible && !baseHidden && baseCoverBacklightEnabled}
-              coverBacklightFadeIn={richSwitchTransitions}
+              coverBacklightFadeIn
               onCoverReady={setBaseCoverShownId}
             />
           </motion.div>
@@ -1093,6 +1093,7 @@ function SettleCard({
       initial={false}
     >
       <TrackVisual
+        backlightInitial
         coverEffect={coverEffect}
         key={visual.track.id}
         label="card-settle"
