@@ -1,5 +1,5 @@
 .PHONY: help install update node-check
-.PHONY: dev web desktop tauri electron-dev electron-preview electron-build electron-profile ios ios-init android android-init mobile-info tauri-info
+.PHONY: dev web desktop tauri electron-dev electron-preview electron-build electron-profile perf-profile ios ios-init android android-init mobile-info tauri-info
 .PHONY: build preview deploy pages-project pages-deploy pages-deploy-preview desktop-build desktop-debug mac win linux ios-build android-build desktop-locate
 .PHONY: version-bump changelog-check version-sync release-check release-show release-build release-mac release-win release-linux release-publish release-publish-dry release-locate changelog-md
 .PHONY: test test-watch typecheck lint format check react-doctor react-doctor-perf
@@ -26,6 +26,10 @@ REQUIRED_NODE ?= 24.16.0
 WEB_PORT ?= 41730
 DESKTOP_PORT ?= 41732
 DEV_URL ?= http://localhost:$(WEB_PORT)
+# Renderer CPU-profiling loop (make electron-profile → make perf-profile). 39222 not 9222
+# (Windows reserves 9222 via Hyper-V excluded ranges). See PRD 20260616-agent-cpu-profiling.
+DBG_PORT ?= 39222
+PROFILE_SCENARIO ?= pingpong
 BUNDLE_DIR := src-tauri/target/release/bundle
 ifeq ($(OS),Windows_NT)
 UNAME := Windows_NT
@@ -94,7 +98,14 @@ electron-preview: node-check build
 # drives a real switch over a CLEAN prod build (no jsxDEV / dev-React / trace-observer
 # noise). dev-only; never shipped. See PRD 20260616-agent-cpu-profiling-harness.
 electron-profile: node-check
-	node scripts/electron-profile.mjs
+	$(call SET_ENV,MUZERO_REMOTE_DEBUG_PORT,$(DBG_PORT)) node scripts/electron-profile.mjs
+
+# Capture a CPU flame graph from the running prod-profile app (start it first with
+# `make electron-profile`, in another terminal). Writes .logs/perf-profiles/<name>.cpuprofile
+# (DevTools/speedscope-openable) + .analysis.json (top self/total time the agent reads).
+# Override: make perf-profile PROFILE_SCENARIO=switch DBG_PORT=39222
+perf-profile:
+	node scripts/perf-profile.mjs $(PROFILE_SCENARIO) --port $(DBG_PORT)
 
 electron-build: node-check build
 	$(PM) exec electron-builder

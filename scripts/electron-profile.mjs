@@ -32,7 +32,10 @@ const build = spawnSync(process.execPath, [viteBin, "build"], {
 if (build.status !== 0) process.exit(build.status ?? 1);
 
 process.stdout.write(
-  `[profile] launching prod preview + remote-debug :${port} + control endpoint…\n`,
+  `[profile] launching prod preview + remote-debug :${port} + control endpoint…\n` +
+    `[profile] once "DevTools listening" + the control banner appear, capture in another terminal:\n` +
+    `    make perf-profile                          (pingpong, warm covers)\n` +
+    `    make perf-profile PROFILE_SCENARIO=switch  (cold next-track switches)\n`,
 );
 // No MUZERO_ELECTRON_URL → electron/main.cjs loads the built dist via app://muzero.
 const electron = spawn(electronPath, ["electron/main.cjs"], {
