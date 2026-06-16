@@ -4,6 +4,7 @@ import {
   parseQqPlaylistTracks,
   parseQqSearch,
   parseQqSongDetail,
+  parseQqUserPlaylists,
   qqAlbumCover,
   qqSongToHit,
 } from "./qq-playlists";
@@ -133,5 +134,34 @@ describe("parseQqPlaylistTracks", () => {
   });
   it("returns [] when empty", () => {
     expect(parseQqPlaylistTracks({})).toEqual([]);
+  });
+});
+
+describe("parseQqUserPlaylists", () => {
+  it("maps fcg_user_created_diss disslist to playlists", () => {
+    const out = parseQqUserPlaylists({
+      data: {
+        disslist: [
+          { tid: 201, diss_name: "我喜欢", diss_cover: "http://x/fav.jpg", song_cnt: 12 },
+          { tid: 7777, diss_name: "夜跑", diss_cover: "http://x/run.jpg", song_cnt: 30 },
+        ],
+      },
+    });
+    expect(out).toEqual([
+      { id: "201", name: "我喜欢", coverUrl: "http://x/fav.jpg", trackCount: 12, source: "qq" },
+      { id: "7777", name: "夜跑", coverUrl: "http://x/run.jpg", trackCount: 30, source: "qq" },
+    ]);
+  });
+  it("tolerates alternate field names (dissid / dissname / logo / song_num)", () => {
+    const out = parseQqUserPlaylists({
+      data: { disslist: [{ dissid: 5, dissname: "P", logo: "http://x/p.jpg", song_num: 3 }] },
+    });
+    expect(out).toEqual([
+      { id: "5", name: "P", coverUrl: "http://x/p.jpg", trackCount: 3, source: "qq" },
+    ]);
+  });
+  it("drops entries without an id and returns [] when absent", () => {
+    expect(parseQqUserPlaylists({ data: { disslist: [{ diss_name: "no id" }] } })).toEqual([]);
+    expect(parseQqUserPlaylists({})).toEqual([]);
   });
 });

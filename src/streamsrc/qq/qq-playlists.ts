@@ -140,3 +140,43 @@ export function parseQqPlaylistTracks(json: unknown): StreamSearchHit[] {
   const songlist = data?.songlist ?? dir?.songlist ?? [];
   return (Array.isArray(songlist) ? songlist : []).map(qqSongToHit).filter((h) => h.externalId);
 }
+
+interface RawQqDissListItem {
+  tid?: unknown;
+  dissid?: unknown;
+  diss_name?: unknown;
+  dissname?: unknown;
+  diss_cover?: unknown;
+  logo?: unknown;
+  song_cnt?: unknown;
+  song_num?: unknown;
+}
+
+/**
+ * `fcg_user_created_diss` → the logged-in user's created playlists. Field names drift
+ * across this endpoint's variants, so each is read from a couple of aliases. The first
+ * entry is typically "我喜欢" (favorites). Entries without an id are dropped.
+ */
+export function parseQqUserPlaylists(json: unknown): StreamPlaylist[] {
+  const j = json as { data?: { disslist?: unknown[] } } | null;
+  const list = j?.data?.disslist ?? [];
+  return (Array.isArray(list) ? list : [])
+    .map((raw): StreamPlaylist | null => {
+      const d = (raw ?? {}) as RawQqDissListItem;
+      const id = idStr(d.tid, d.dissid);
+      if (!id) return null;
+      return {
+        id,
+        name: str(d.diss_name) ?? str(d.dissname) ?? "",
+        coverUrl: str(d.diss_cover) ?? str(d.logo),
+        trackCount:
+          typeof d.song_cnt === "number"
+            ? d.song_cnt
+            : typeof d.song_num === "number"
+              ? d.song_num
+              : 0,
+        source: "qq",
+      };
+    })
+    .filter((p): p is StreamPlaylist => p !== null);
+}

@@ -35,12 +35,22 @@ export function qqPtqrtoken(qrsig: string): number {
   return hash33(qrsig, 0);
 }
 
-/** Pull the qqmusic_key value out of a stored cookie string (or undefined). */
-export function parseQqMusicKey(cookie: string | undefined): string | undefined {
+/** Pull a named cookie value out of a stored cookie string (or undefined). */
+function parseQqCookie(cookie: string | undefined, name: string): string | undefined {
   if (!cookie) return undefined;
   for (const pair of cookie.split(";")) {
-    const [name, ...rest] = pair.trim().split("=");
-    if (name === "qqmusic_key" && rest.length) return rest.join("=");
+    const [key, ...rest] = pair.trim().split("=");
+    if (key === name && rest.length) return rest.join("=");
   }
   return undefined;
+}
+
+/** Pull the qqmusic_key value out of a stored cookie string (or undefined). */
+export function parseQqMusicKey(cookie: string | undefined): string | undefined {
+  return parseQqCookie(cookie, "qqmusic_key");
+}
+
+/** Pull the qqmusic_uin value (the logged-in user id) out of a cookie string. */
+export function parseQqUin(cookie: string | undefined): string | undefined {
+  return parseQqCookie(cookie, "qqmusic_uin");
 }

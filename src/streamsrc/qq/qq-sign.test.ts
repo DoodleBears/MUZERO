@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { hash33, parseQqMusicKey, QQ_GUEST_GTK, qqGtk, qqPtqrtoken } from "./qq-sign";
+import { hash33, parseQqMusicKey, parseQqUin, QQ_GUEST_GTK, qqGtk, qqPtqrtoken } from "./qq-sign";
 
 describe("hash33", () => {
   it("returns the seed for an empty string", () => {
@@ -42,5 +42,15 @@ describe("parseQqMusicKey", () => {
   });
   it("keeps '=' characters inside the value", () => {
     expect(parseQqMusicKey("qqmusic_key=a=b=c")).toBe("a=b=c");
+  });
+});
+
+describe("parseQqUin", () => {
+  it("extracts qqmusic_uin from a cookie string", () => {
+    expect(parseQqUin("qqmusic_uin=12345; qqmusic_key=W_X_abc")).toBe("12345");
+  });
+  it("returns undefined when absent / empty", () => {
+    expect(parseQqUin(undefined)).toBeUndefined();
+    expect(parseQqUin("qqmusic_key=W_X_abc")).toBeUndefined();
   });
 });

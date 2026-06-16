@@ -163,4 +163,34 @@ describe("createQqSource", () => {
     const tracks = await src.importPlaylist?.("7");
     expect(tracks?.map((h) => h.externalId)).toEqual(["a", "b"]);
   });
+
+  it("getUserPlaylists returns [] when not logged in (no uin)", async () => {
+    const src = createQqSource({ http: async () => res({}) });
+    expect(await src.getUserPlaylists?.()).toEqual([]);
+  });
+
+  it("getUserPlaylists fetches fcg_user_created_diss for the logged-in uin", async () => {
+    const musickey = "W_X_k";
+    const http: StreamHttp = async (req) => {
+      expect(req.url).toContain("fcg_user_created_diss");
+      expect(req.url).toContain("hostuin=12345");
+      expect(req.url).toContain(`g_tk=${qqGtk(musickey)}`);
+      expect(req.headers?.Cookie).toContain(`qqmusic_key=${musickey}`);
+      return res({
+        data: {
+          disslist: [
+            { tid: 201, diss_name: "我喜欢", diss_cover: "http://x/f.jpg", song_cnt: 5 },
+            { tid: 88, diss_name: "P2", song_cnt: 9 },
+          ],
+        },
+      });
+    };
+    const src = createQqSource({
+      http,
+      getCookie: () => `qqmusic_uin=12345; qqmusic_key=${musickey}`,
+    });
+    const lists = await src.getUserPlaylists?.();
+    expect(lists?.map((p) => p.id)).toEqual(["201", "88"]);
+    expect(lists?.[0]).toMatchObject({ name: "我喜欢", trackCount: 5, source: "qq" });
+  });
 });

@@ -26,12 +26,15 @@ import {
   parseQqPlaylistTracks,
   parseQqSearch,
   parseQqSongDetail,
+  parseQqUserPlaylists,
 } from "./qq-playlists";
 import { qqFilename, qqQualityCandidates } from "./qq-quality";
 import { parseQqVkey, QQ_MUSICU_URL, qqStreamUrl, qqVkeyRequestBody } from "./qq-resolve";
-import { parseQqMusicKey, QQ_GUEST_GTK, qqGtk } from "./qq-sign";
+import { parseQqMusicKey, parseQqUin, QQ_GUEST_GTK, qqGtk } from "./qq-sign";
 
 const SEARCH_URL = "https://c.y.qq.com/soso/fcgi-bin/client_search_cp";
+/** The logged-in user's own created playlists (needs qqmusic_uin + g_tk). */
+const USER_DISS_URL = "https://c.y.qq.com/rsc/fcgi-bin/fcg_user_created_diss";
 const USER_AGENT =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
 const REFERER = "https://y.qq.com";
@@ -187,6 +190,30 @@ export function createQqSource(deps: QqSourceDeps): StreamSourceProvider {
     );
   }
 
+  /** The logged-in user's created playlists ("我的歌单"); [] when anonymous. */
+  async function getUserPlaylists(opts?: { signal?: AbortSignal }): Promise<StreamPlaylist[]> {
+    const uin = parseQqUin(deps.getCookie?.());
+    if (!uin) return [];
+    const url = withQuery(USER_DISS_URL, {
+      hostuin: uin,
+      sin: "0",
+      size: "200",
+      g_tk: String(gtk()),
+      format: "json",
+      inCharset: "utf8",
+      outCharset: "utf-8",
+      notice: "0",
+      platform: "yqq.json",
+      needNewCode: "0",
+    });
+    try {
+      return parseQqUserPlaylists(JSON.parse(unwrapJsonp(await get(url, opts?.signal))));
+    } catch {
+      log.warn("qq", "user playlists response is not JSON");
+      return [];
+    }
+  }
+
   /** A pasted playlist link's meta (name/cover/count) for the import card. */
   async function getPlaylistMeta(
     disstid: string,
@@ -210,6 +237,7 @@ export function createQqSource(deps: QqSourceDeps): StreamSourceProvider {
     isAuthed: () => Boolean(deps.getCookie?.()),
     search,
     resolve,
+    getUserPlaylists,
     getTracksByIds,
     getPlaylistMeta,
     importPlaylist,
