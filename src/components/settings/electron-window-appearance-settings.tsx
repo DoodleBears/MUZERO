@@ -138,10 +138,10 @@ export function ElectronWindowAppearanceSettings() {
             role="img"
             className="grid h-20 w-28 place-items-center bg-card text-card-foreground text-xs"
             style={{
-              borderColor: previewVars["--electron-window-border-color"],
+              // Inner border (inset box-shadow) to mirror the real window chrome, which
+              // draws its border inside the clip-path instead of as an outward border.
               borderRadius: previewVars["--electron-window-radius"],
-              borderStyle: "solid",
-              borderWidth: previewVars["--electron-window-border-width"],
+              boxShadow: `inset 0 0 0 ${previewVars["--electron-window-border-width"]} ${previewVars["--electron-window-border-color"]}`,
             }}
           >
             MUZERO
