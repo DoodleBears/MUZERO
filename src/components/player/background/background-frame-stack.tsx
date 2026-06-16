@@ -19,7 +19,7 @@ import type { ControllerFrame } from "./use-background-controller";
 export function BackgroundFrameStack({
   layers,
   blurPx,
-  maxOpacity = 0.9,
+  maxOpacity = 1,
   onTopSettled,
   className,
 }: {

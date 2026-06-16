@@ -26,7 +26,7 @@ const TRANSITION_HANDOFF_MS = 420;
  */
 export function TransitionBackground({
   blurPx,
-  maxOpacity = 0.9,
+  maxOpacity = 1,
   className,
 }: {
   blurPx: number;

@@ -414,11 +414,12 @@ function NowPlayingBackgroundContent({ hideVisualizer }: { hideVisualizer: boole
   return (
     <>
       {useControllerBlur ? (
-        // Dim the whole cover group ONCE (not per layer), with the layers at full
-        // opacity inside. A crossfade then stays fully opaque throughout — the top
-        // cover fully covers the base — so there's no brightness spike from two
-        // 0.9 layers overlapping (QA: image brightens then dims back). The drag
-        // transition lives in the SAME dimmed group so it matches the resting cover.
+        // The whole cover group composites at ONE opacity (COVER_GROUP_OPACITY = 1,
+        // full), with each layer at full opacity inside it. A crossfade then stays
+        // fully opaque throughout — the top cover fully covers the base — so there's
+        // no brightness spike from two semi-transparent layers overlapping (QA: image
+        // brightens then dims back). The drag transition lives in the SAME group so it
+        // matches the resting cover.
         <div className="absolute inset-0" style={{ opacity: COVER_GROUP_OPACITY }}>
           <BackgroundFrameStack
             blurPx={blurPx}
@@ -600,7 +601,7 @@ function CrossfadeBackgroundImage({
           decoding="async"
           draggable={false}
           initial={{ opacity: 0 }}
-          animate={{ opacity: 0.9 }}
+          animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           transition={{ duration: 0.35 }}
           className="absolute inset-0 h-full w-full object-cover"

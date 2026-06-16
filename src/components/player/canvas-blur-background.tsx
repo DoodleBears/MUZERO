@@ -80,21 +80,21 @@ export function CanvasBlurBackground({
         decoding="async"
         className={cn(
           "absolute inset-0 h-full w-full object-cover transition-opacity duration-300",
-          hasFrame ? "opacity-0" : "opacity-90",
+          hasFrame ? "opacity-0" : "opacity-100",
         )}
       />
       <canvas
         ref={canvasARef}
         className={cn(
           "absolute inset-0 h-full w-full transition-opacity duration-300",
-          hasFrame && activeIndex === 0 ? "opacity-90" : "opacity-0",
+          hasFrame && activeIndex === 0 ? "opacity-100" : "opacity-0",
         )}
       />
       <canvas
         ref={canvasBRef}
         className={cn(
           "absolute inset-0 h-full w-full transition-opacity duration-300",
-          hasFrame && activeIndex === 1 ? "opacity-90" : "opacity-0",
+          hasFrame && activeIndex === 1 ? "opacity-100" : "opacity-0",
         )}
       />
     </div>
