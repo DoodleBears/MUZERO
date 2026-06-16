@@ -19,10 +19,10 @@
 | Phase | Name | Status | Link |
 |-------|------|--------|------|
 | 1 | QQ guest provider 纯核心：`hash33`/`g_tk` + 音质码表 + search/detail/vkey/cover 纯映射 + sip+purl 直链组装（TDD） | ✅ Completed | [Phase 1 Checklist](#phase-1-checklist) |
-| 2 | registry 接入 + 运行时 muzfetch(Referer) + Electron 端到端**手测 guest 可播放**（验证 Open Q：guest 标准音质能否 resolve） | 🔄 代码就位（UI/搜索/设置接好；**待 Electron 手测** guest 可播放，Open Q1/Q2/Q6） | [Phase 2 Checklist](#phase-2-checklist) |
+| 2 | registry 接入 + 运行时 muzfetch(Referer) + Electron 端到端**手测可播放**（验证 Open Q：标准音质能否 resolve） | ✅ **已验证（2026-06-17 Electron）**：搜索可达、登录态明文歌可播出声、VIP/加密档正确判 no-permission（红线生效）。Open Q1/Q6 已回填 | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | 登录：**登录窗口路线**（`STREAM_LOGIN_CONFIGS.qq` + `g_tk=hash33(musickey)`，Q4 定）；QR API（QQ PTLogin+微信 OAuth code→凭据兑换）降 v2 | ✅ 登录可用（**Electron 手测 cookie 抓取已验证**，2026-06-17）；QR API 仍 v2 | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | 歌单同步 + 粘贴链接（`getUserPlaylists`/`getTracksByIds`/`getPlaylistMeta`/`importPlaylist` + QQ 链接解析） | 🔄 代码就位（含 `getUserPlaylists`，登录解锁后实现 + 单测；**待手测**真实 `fcg_user_created_diss`/`aiDissInfo` 端点 + 粘贴链接入库） | [Phase 4 Checklist](#phase-4-checklist) |
-| 5 | `zzc` 签名 + QIMEI 设备指纹（**仅当 guest/web 签名在运行时被拒的回退路径**，按需启用） | 🔲 Pending（按需） | [Phase 5 Checklist](#phase-5-checklist) |
+| 5 | `zzc` 签名 + QIMEI 设备指纹（**仅当 guest/web 签名在运行时被拒的回退路径**，按需启用） | ⏸️ **未触发（2026-06-17）**：登录态 WEB `g_tk`+`comm.authst` 已能播明文，前两档未被拒 → 按 YAGNI 不实现 | [Phase 5 Checklist](#phase-5-checklist) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
 >
@@ -379,10 +379,10 @@ i18n locales/{en,zh,ja,ko}/                        # 源名 + 音质封顶提示
 
 #### Phase 2 Checklist
 - [~] **Electron 手测：guest 搜索返回结果**——⚠️ 2026-06-17 实测旧 `client_search_cp` 返回 **HTTP 500 空 body**（QQ 服务端衰减）；已切到现代 `u.y.qq.com/musicu.fcg music.search.SearchCgiService`（GET，query 入 `data` JSON）+ 失败日志加 HTTP status。**待用户重测新接口**。
-- [ ] **Electron 手测：guest `GetVkey` 是否返回非空 purl 的标准音质直链**——✅ 能 → 记录「guest 明文可播」；❌ 被拒 → 记录鉴权错误码，Open Q1 落「需登录」，Phase 3 变必需。
-- [ ] 明文直链经 `<audio>`（或 `mediaProxyUrl`）播放出声、可 seek（206）、切 tab 不断播。
-- [ ] QQ CDN 是否需要 Referer：手测确认 `dl.stream/isure.stream` 直连是否 403（决定是否必须经代理）。
-- [ ] 加密档/无版权曲：resolve → `no-permission` toast + 自动跳下一可播曲（复用既有）。
+- [x] **Electron 手测：`GetVkey` 返回非空 purl 的标准音质直链**——✅ 登录态明文歌可 resolve（`authed:true`、`sipCount>0`、命中档 `hasPurl:true`）。Open Q1 答案：**guest 静态档不再单测**（已走登录），登录态明文档可播。
+- [x] 明文直链经 `<audio>`（或 `mediaProxyUrl`）**播放出声**——✅ 确认可听。（seek/206 + 切 tab 不断播随既有源无关管线提供，未逐项压测。）
+- [~] QQ CDN 是否需要 Referer（Open Q6）：播放经现有 muzfetch 路径（注入 Referer）即通；是否**严格**必须 Referer 未单独隔离测——非阻塞（现路径已可播）。
+- [x] 加密档/VIP 曲：resolve → `no-permission`（`vip-or-encrypted`）——✅ 实测 VIP 歌正确拒（4 档 purl 全空 + `authed:true`），红线生效；toast + 自动跳下一可播曲走既有源无关逻辑。
 
 ### Phase 3: 登录（解锁歌单同步；音质仍封顶明文）
 
@@ -474,12 +474,12 @@ i18n locales/{en,zh,ja,ko}/                        # 源名 + 音质封顶提示
 
 | # | 问题 | 状态 | 落点 |
 |---|---|---|---|
-| Q1 | **guest（`uin=0`/`g_tk=5381`）今天能否仍 resolve 出可播的标准音质（M500/M800/C400）明文直链？** 还是连标准播放都已要 `musickey`？ | 🔲 **运行时定**——不可静态确定（framing 已认可 2026-06-16）| **Phase 2 手测**直接回答；决定登录是否从「增强」变「必需」 |
+| Q1 | **guest（`uin=0`/`g_tk=5381`）今天能否仍 resolve 出可播的标准音质（M500/M800/C400）明文直链？** 还是连标准播放都已要 `musickey`？ | ✅ **已回填（2026-06-17 Electron）**：**登录态**明文歌可 resolve 播放（vkey 鉴权走 body `comm.authst`，非仅 cookie）；VIP/加密档即便登录也仅加密下发 → 正确 no-permission。guest 静态档未单独隔离测（已走登录路径，对个人用户够用）。| 登录为推荐路径；guest-only 可行性留作后续 if-needed |
 | Q2 | 最小可用集需要哪个签名档？静态 `g_tk=5381` 够（NeriPlayer-Desktop 式）还是已被拒、必须 `hash33(musickey)`（登录）甚至 `zzc`+QIMEI？ | ✅ **已定（best practice，2026-06-16）：渐进式分层、最低档优先**——guest 静态 `g_tk=5381` 起步；运行时被拒则升 `hash33(musickey)`（登录）；`zzc`+QIMEI **仅在实测前两档均被拒时**才实现（不预建，YAGNI）。具体落地哪档由 Q1 运行时结果决定，**但策略已定** | Phase 1→3→5 逐档升级；Phase 5 保持「按需」 |
 | Q3 | 在「不解密」前提下，无损/VIP 能否**完全**不提供？即 QQ 是否**永远**以加密容器下发高码率（明文 FLAC 是否存在）？ | ✅ **已定（best practice，2026-06-16）：策略层 = 永不解密**。音质封顶在服务端返回的**明文**档；仅以加密容器下发的档（无损/臻品）对 MUZERO 即「不可播」。运行时只决定**实际天花板**（明文 FLAC 是否偶现），**不改策略、无需决策** | 码表写死剔除所有加密档（§4.3）|
 | Q4 | 登录走「登录窗口路线」（复用 L2，省事）还是「QR API 路线」（更稳但需 OAuth code 兑换钩子）？ | ✅ **已定（best practice，2026-06-16）：登录窗口路线先行**——复用 L2 `openSourceLogin`、零新状态机；`y.qq.com` 官网登录页**自带 QQ/微信扫码**，已满足「扫码登录」诉求，且 OAuth code 兑换由官网内部完成（绕开 §4.4(a) 兑换钩子）。**应用内自绘 QR（QR API + code→凭据兑换钩子）降级为 v2 增强** | Phase 3 主路径 = 登录窗口；QR API = §14 式 v2 |
 | Q5 | Kugou/Kuwo/Migu 的端点/签名/登录？ | 🔲 **已认可推迟（2026-06-16）**：本期不做，单独 follow-up research PRD（本轮 0 verified claim）| 独立 PRD；先评 lx-music DMCA 法律面 |
-| Q6 | QQ vkey 直链是否需要 CDN `Referer`？（影响是否必须经 `mediaProxyUrl` 还是可直 `<audio>` 播） | 🔲 **运行时定**（framing 已认可 2026-06-16）| Phase 2 手测 `dl.stream/isure.stream` 直连是否 403 |
+| Q6 | QQ vkey 直链是否需要 CDN `Referer`？（影响是否必须经 `mediaProxyUrl` 还是可直 `<audio>` 播） | 🟡 **非阻塞（2026-06-17）**：经现有 muzfetch 代理路径（注入 Referer）播放已通；是否**严格**必须 Referer 未隔离测——保持走代理即可，无需进一步决策 | 现路径已可播；如需直 `<audio>` 优化再隔离测 |
 
 ---
 
@@ -493,6 +493,7 @@ i18n locales/{en,zh,ja,ko}/                        # 源名 + 音质封顶提示
 | 2026-06-16 | DoodleBear（实现）| **Phase 2 🔄 代码就位**：QQ 接入 ⌘F 在线 chips（`ONLINE_SOURCES`/`SOURCE_LABEL`）+ Settings 卡（`SOURCES`，音质只列明文 `flac/320/m4a/128`）。搜索/播放/代理为源无关、QQ 入 registry 后**零改动复用**。源名为品牌名（非 i18n），红线复用 `streamSources.redline`。tsc 0 错、search/settings/hooks 82 测全绿。**剩 Electron 手测 guest 可播放（Open Q1/Q2/Q6）**——无桌面运行时不冒充已验证。 |
 | 2026-06-16 | DoodleBear（TDD 实现）| **Phase 3 🔄 代码就位（登录窗口路线，Q4）**：`STREAM_LOGIN_CONFIGS.qq`（authCookie `qqmusic_key` / `y.qq.com` 登录窗，复用 `externalLogin`+`streamSourcesAfterLogin/Logout`）；provider 登录态 `g_tk=hash33(musickey)`（Phase 1 已实现，本期加测：g_tk≠5381 且 Cookie 头带 key）。login+qq-source 18 测全绿，tsc 0 错。QR API（PTLogin/微信 + OAuth code 兑换钩子）按 Q4 降 **v2**。**剩 Electron 手测 cookie 抓取**（y.qq.com 或 localStorage→定 v2 取舍）。 |
 | 2026-06-16 | DoodleBear（TDD 实现）| **Phase 4 🔄 代码就位**：`stream-link.ts` 加 QQ 链接解析（songDetail/.html/playlist/taoge，base62 mid 单列）；`qq-playlists` 加 `parseQqPlaylistMeta`/`parseQqPlaylistTracks`（dirinfo / 兼容 cdlist[0]，容错 shape 漂移）；`qq-source` 加 `getTracksByIds`（走**已验证** get_song_detail_yqq）+ `getPlaylistMeta`/`importPlaylist`（aiDissInfo）。`PlaylistImportDialog` 源无关零改动复用。**`getUserPlaylists` 降 v2**（用户歌单端点 0 verified，UI optional 链优雅退化）。58 qq+link 测 + 280 全 streamsrc 测全绿，tsc 0 错。**剩手测**真实 aiDissInfo 端点 + v2「我的歌单」。 |
+| 2026-06-17 | DoodleBear（运行时验证）| **✅ Phase 2 端到端验证通过（Electron）**：用户实测——搜索可达、**登录态明文歌可播放出声**、**VIP/加密档正确判 `no-permission`**（诊断日志确认 `authed:true`+`sipCount:2`+4 档 purl 全空 = 真 VIP/加密独占，红线生效，非 bug）。回填 **Open Q1**（登录态明文可播；vkey 鉴权走 body `comm.authst`）、**Open Q6**（经 muzfetch 代理路径已可播，是否严格需 Referer 非阻塞）。**Phase 5（zzc+QIMEI）按 YAGNI 不触发**（前两档未被拒）。QQ 接入主链路（搜索→播放→红线）打通；剩 Phase 4 歌单/粘贴链接手测。 |
 | 2026-06-17 | DoodleBear（运行时修复，TDD）| **登录态 resolve 鉴权修复（播放 no-permission）**：用户搜索通后点播放仍 `permission_denied`。根因——`resolve` 一直用 guest 参数请求 GetVkey（`uin=0`、body 无 auth），即便已登录；QQ musicu 的鉴权读 **body 的 `comm` 块**（uin + `authst`=musickey + `tmeLoginType`），不是仅靠 cookie 头，故登录态也被当匿名 → 权限档返回空 purl → 误判 no-permission。修复：`qqVkeyRequestBody` 加 `comm`（guest=uin0 无 auth；登录=真实 uin+authst+tmeLoginType，`W_X*`→微信1 否则 QQ2）；`resolve` 用 cookie 真实 `uin`+`musickey`；no-permission 前加诊断日志（authed/sipCount/逐档 hasPurl，便于区分「真无权限」vs「filename 不匹配的 shape 漂移」）。58 qq 测 + 294 全 streamsrc 全绿、tsc 0、biome 绿。**待用户重测**。 |
 | 2026-06-17 | DoodleBear（运行时修复，TDD）| **搜索切现代 musicu 接口（旧 `client_search_cp` 实测 500）**：用户 Electron 手测 guest 搜索 → 旧 `c.y.qq.com/soso/fcgi-bin/client_search_cp` 返回 **HTTP 500 空 body**（`qq search response is not JSON, head: ""`）。改用现代 `u.y.qq.com/cgi-bin/musicu.fcg music.search.SearchCgiService`/`DoSearchForQQMusicDesktop`（GET，keyword 入 `data` JSON，响应 `<req>.data.body.song.list[]`，与 luren-dc/现代客户端一致），与 resolve/detail/playlist 同 host 同路径。新增 `parseQqMusicuSearch`（容错命名 req 包裹 / 直 `data.body.song.list`），失败日志加 HTTP `status` 便于后续定位。54 qq 测 + 290 全 streamsrc 全绿、tsc 0 错、biome 绿。**待用户重测**。 |
 | 2026-06-17 | DoodleBear（修复）| **⌘F `@` 提及过滤补漏 QQ**：merge 时只给在线 chips（`ONLINE_SOURCES`/`SOURCE_LABEL`）加了 QQ，漏了 `@` 提及过滤的真源 [`global-search-filter.ts`](../../../src/lib/global-search-filter.ts) `FILTER_OPTIONS`——故 `@qq` 无法筛 QQ。补 `id` union + FilterOption（别名 `qq/qqmusic/qq音乐/腾讯`）；桌面端 `filterOptions=FILTER_OPTIONS` 自动纳入、UI `labelFor` 经既有 `SOURCE_LABEL[qq]` 自动出名（零 UI 改动）。TDD：`matchFilterOptions` 测加 qq latin/CJK 别名。13 测全绿、tsc 0 错、biome 绿。 |
