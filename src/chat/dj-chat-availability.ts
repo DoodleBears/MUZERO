@@ -17,7 +17,7 @@ import { resolveCloudPreset } from "@/musicgen/presets";
  */
 
 /** Codename-stable streaming source ids (rule 4); inlined to keep this module light. */
-const STREAM_SOURCE_IDS: readonly StreamSourceId[] = ["netease", "bili", "youtube"];
+const STREAM_SOURCE_IDS: readonly StreamSourceId[] = ["netease", "bili", "youtube", "qq"];
 
 /** Any provider preset with a non-blank key (incl. the legacy openai/anthropic fields). */
 export function hasUsableLlm(settings: AppSettings): boolean {

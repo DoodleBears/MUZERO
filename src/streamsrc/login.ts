@@ -40,6 +40,16 @@ export const STREAM_LOGIN_CONFIGS: Partial<Record<StreamSourceId, StreamLoginCon
     cookieUrls: ["https://www.bilibili.com", "https://bilibili.com"],
     authCookie: "SESSDATA",
   },
+  // QQ Music web — the official page hosts QQ + WeChat QR login (Q4: login-window
+  // route first). On success the session sets qqmusic_key/qqmusic_uin on .qq.com,
+  // which provider g_tk switches to hash33(musickey). Whether y.qq.com exposes the
+  // key as a readable cookie (vs localStorage) is a Phase 3 runtime-verify item.
+  qq: {
+    source: "qq",
+    loginUrl: "https://y.qq.com/",
+    cookieUrls: ["https://y.qq.com", "https://c.y.qq.com"],
+    authCookie: "qqmusic_key",
+  },
 };
 
 /**

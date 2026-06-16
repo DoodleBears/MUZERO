@@ -28,6 +28,7 @@ export function parseStreamLink(text: string): StreamLinkRef | null {
     return null;
   }
   if (url.hostname.toLowerCase().endsWith("music.163.com")) return parseNetease(url);
+  if (url.hostname.toLowerCase().endsWith("y.qq.com")) return parseQq(url);
   return null;
 }
 
@@ -53,4 +54,19 @@ function neteaseId(url: URL): string | null {
   // Share text uses the `/song/{id}/` path form instead of `?id=`.
   const fromPath = `${url.pathname}${url.hash}`.match(/\/(?:song|playlist)\/(\d+)/);
   return fromPath ? fromPath[1] : null;
+}
+
+function parseQq(url: URL): StreamLinkRef | null {
+  const hay = `${url.pathname}${url.hash}`;
+  // Song mid is base62 (NOT purely numeric, unlike NetEase): /songDetail/<mid> or /song/<mid>.html.
+  const song = hay.match(/\/song(?:detail)?\/([0-9A-Za-z]+)/i);
+  if (song) return { source: "qq", kind: "song", id: song[1] };
+  // Playlist disstid is numeric: /playlist/<disstid> or the mobile taoge.html?id=<disstid>.
+  const playlist = hay.match(/\/playlist\/(\d+)/i);
+  if (playlist) return { source: "qq", kind: "playlist", id: playlist[1] };
+  if (/taoge/i.test(hay)) {
+    const id = url.searchParams.get("id");
+    if (id && /^\d+$/.test(id)) return { source: "qq", kind: "playlist", id };
+  }
+  return null;
 }

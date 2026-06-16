@@ -62,12 +62,14 @@ const ONLINE_SOURCES: { id: StreamSourceId; label: string }[] = [
   { id: "netease", label: "网易云" },
   { id: "bili", label: "Bilibili" },
   { id: "youtube", label: "YouTube" },
+  { id: "qq", label: "QQ 音乐" },
 ];
 /** Brand labels for filter chips / menu (codename `source` id → display name). */
 const SOURCE_LABEL: Partial<Record<StreamSourceId, string>> = {
   netease: "网易云",
   bili: "Bilibili",
   youtube: "YouTube",
+  qq: "QQ 音乐",
 };
 
 const EMPTY_MEMORY_NOTES = new Map<string, string[]>();

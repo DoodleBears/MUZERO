@@ -65,4 +65,40 @@ describe("parseStreamLink", () => {
     expect(parseStreamLink("just some text")).toBeNull();
     expect(parseStreamLink("")).toBeNull();
   });
+
+  it("parses a qq songDetail link (alphanumeric mid)", () => {
+    expect(parseStreamLink("https://y.qq.com/n/ryqq/songDetail/003OUlho2HcRHC")).toEqual({
+      source: "qq",
+      kind: "song",
+      id: "003OUlho2HcRHC",
+    });
+  });
+
+  it("parses an older /n/yqq/song/<mid>.html link", () => {
+    expect(parseStreamLink("https://y.qq.com/n/yqq/song/003OUlho2HcRHC.html")).toEqual({
+      source: "qq",
+      kind: "song",
+      id: "003OUlho2HcRHC",
+    });
+  });
+
+  it("parses a qq playlist link (numeric disstid)", () => {
+    expect(parseStreamLink("https://y.qq.com/n/ryqq/playlist/9069454695")).toEqual({
+      source: "qq",
+      kind: "playlist",
+      id: "9069454695",
+    });
+  });
+
+  it("parses a qq mobile taoge share link from surrounding text", () => {
+    expect(
+      parseStreamLink(
+        "听歌单 https://i.y.qq.com/n2/m/share/details/taoge.html?id=9069454695&uin=1",
+      ),
+    ).toEqual({ source: "qq", kind: "playlist", id: "9069454695" });
+  });
+
+  it("ignores qq album / non song-playlist links", () => {
+    expect(parseStreamLink("https://y.qq.com/n/ryqq/albumDetail/000abc")).toBeNull();
+  });
 });

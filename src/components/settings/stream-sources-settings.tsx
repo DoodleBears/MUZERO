@@ -25,6 +25,8 @@ import { createStreamHttp } from "@/streamsrc/stream-http";
 const SOURCES: { id: StreamSourceId; label: string; qualities: string[] }[] = [
   { id: "netease", label: "网易云", qualities: ["standard", "exhigh", "lossless", "hires"] },
   { id: "bili", label: "Bilibili", qualities: ["low", "medium", "high", "lossless"] },
+  // QQ caps at plaintext tiers — no lossless-beyond / encrypted .mflac/.mgg (PRD red line).
+  { id: "qq", label: "QQ 音乐", qualities: ["flac", "320", "m4a", "128"] },
 ];
 
 /**

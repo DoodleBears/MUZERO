@@ -155,7 +155,7 @@ export const proposeBriefsInputSchema = z.object({
 
 export type ProposeBriefsInput = z.input<typeof proposeBriefsInputSchema>;
 
-const streamSourceEnum = z.enum(["netease", "bili", "youtube"]);
+const streamSourceEnum = z.enum(["netease", "bili", "youtube", "qq"]);
 
 const streamHitSchema = z.object({
   externalId: z.string().min(1),

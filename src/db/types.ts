@@ -26,11 +26,11 @@ export type TrackKind = "audio" | "video";
 export type TrackOrigin = "generated" | "uploaded" | "streamed";
 
 /**
- * External streaming sources (NetEase / Bilibili / YouTube). Codename-stable ids
- * (CLAUDE.md rule 4) — persisted on streamed tracks and keyed in settings, so they
- * must not change across brand/shell pivots. See `src/streamsrc/`.
+ * External streaming sources (NetEase / Bilibili / YouTube / QQ Music). Codename-
+ * stable ids (CLAUDE.md rule 4) — persisted on streamed tracks and keyed in
+ * settings, so they must not change across brand/shell pivots. See `src/streamsrc/`.
  */
-export type StreamSourceId = "netease" | "bili" | "youtube";
+export type StreamSourceId = "netease" | "bili" | "youtube" | "qq";
 
 export interface CoverPaletteRgb {
   r: number;
