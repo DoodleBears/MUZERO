@@ -222,6 +222,18 @@ function SceneHost({
   const ok = useMemo(() => hasWebGL(), []);
   const ref = useRef<HTMLDivElement | null>(null);
   const [onscreen, setOnscreen] = useState(true);
+  // Memoize so the options identity is STABLE across re-renders (the background
+  // re-renders on every song switch). An unstable `options` would churn the scene's
+  // render-loop effect dep → the rAF loop restarts every switch. `effectSettings` is
+  // already memoized by the host, so these only change on a real tuning/style change.
+  const analyserOptions = useMemo(
+    () => resolveVisualizerAnalyserOptions(getVisualizerMeta(styleId), effectSettings, styleId),
+    [effectSettings, styleId],
+  );
+  const renderOptions = useMemo(
+    () => resolveVisualizerRenderOptions(effectSettings, styleId),
+    [effectSettings, styleId],
+  );
 
   useEffect(() => {
     const el = ref.current;
@@ -245,9 +257,6 @@ function SceneHost({
     );
   }
 
-  const meta = getVisualizerMeta(styleId);
-  const analyserOptions = resolveVisualizerAnalyserOptions(meta, effectSettings, styleId);
-  const renderOptions = resolveVisualizerRenderOptions(effectSettings, styleId);
   const paused = !active || !onscreen;
   return (
     <div ref={ref} className={cn("h-full w-full", className)} aria-hidden>

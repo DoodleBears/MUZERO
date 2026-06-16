@@ -28,7 +28,6 @@ type GLState = {
   programInfo: twgl.ProgramInfo;
   bufferInfo: twgl.BufferInfo;
   data: Uint8Array;
-  start: number;
 };
 
 /**
@@ -96,6 +95,12 @@ export default function ReactiveScene({
   const flowColorsPrimedRef = useRef(false);
   const lastFlowColorTsRef = useRef(0);
 
+  // Animation time origin, persisted OUTSIDE GLState so a GL rebuild (a shader/fftSize
+  // change rebuilds the program) doesn't reset uTime to 0 — the wave field would visibly
+  // jump back to its start. The ref outlives the build; only a remount (effect switch,
+  // keyed in the host) resets it, which is when restarting the animation is wanted.
+  const startRef = useRef(0);
+
   const isFlow = styleId === "scene-flow";
   // Each flow effect is its own shader — selecting one rebuilds the GL program.
   const flowEffect = isFlow && flow ? flow.effect : DEFAULT_FLOW_EFFECT;
@@ -124,7 +129,6 @@ export default function ReactiveScene({
           programInfo,
           bufferInfo,
           data: new Uint8Array(Math.floor(fftSize / 2)),
-          start: 0,
         };
       } catch {
         // Shader/program failure → no scene (canvas stays transparent, the
@@ -186,7 +190,7 @@ export default function ReactiveScene({
       const s = stateRef.current;
       if (!s) return;
       const { gl, programInfo, bufferInfo } = s;
-      if (!s.start) s.start = tMs;
+      if (!startRef.current) startRef.current = tMs;
 
       twgl.resizeCanvasToDisplaySize(gl.canvas as HTMLCanvasElement, dpr);
       gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
@@ -240,7 +244,7 @@ export default function ReactiveScene({
       gl.useProgram(programInfo.program);
       twgl.setBuffersAndAttributes(gl, programInfo, bufferInfo);
       twgl.setUniforms(programInfo, {
-        uTime: ((tMs - s.start) / 1000) * options.motion,
+        uTime: ((tMs - startRef.current) / 1000) * options.motion,
         uResolution: [gl.canvas.width, gl.canvas.height],
         uAudio: energy,
         uBass: bass,
