@@ -718,7 +718,14 @@ export function SwipeableMediaStage({
     typeof document !== "undefined"
       ? (containerRef.current?.closest("main") ?? document.body)
       : null;
-  const baseHidden = stackActive && !handoffFading;
+  // Hide the base stage only during the ACTIVE drag/slide (overlay following the
+  // finger). Once the switch has committed and we're in the settle window
+  // (settleTarget set, before the overlay fades), UN-hide the base BEHIND the still-
+  // opaque overlay so its CoverImage paints the new cover while it's covered — then
+  // when the overlay fades the base is already showing it. Keeping it hidden until
+  // the fade meant the base un-hid empty for a frame = the "cover flashes black ~0.5s
+  // after release" (the handoff). settleTarget + handoffFading both keep it visible.
+  const baseHidden = stackActive && !handoffFading && !settleTarget;
   const stackOverlay =
     foregroundVisible && stackActive && overlayRect && overlayPortalTarget
       ? createPortal(
