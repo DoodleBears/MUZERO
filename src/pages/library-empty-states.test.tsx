@@ -76,6 +76,7 @@ vi.mock("@/hooks/use-media", () => ({
   }),
   useTrackCoverUrl: () => null,
   useTrackThumbnailUrl: () => null,
+  useGridCoverUrl: () => null,
   proxyExternalCover: (url: string | undefined) => url ?? null,
 }));
 

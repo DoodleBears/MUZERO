@@ -75,11 +75,7 @@ import {
 } from "@/db/repositories";
 import type { CropRect, DjSession, Track } from "@/db/types";
 import { useBackGesture } from "@/hooks/use-back-gesture";
-import {
-  useCoverMetadataBackfill,
-  useTrackCoverUrl,
-  useTrackThumbnailUrl,
-} from "@/hooks/use-media";
+import { useCoverMetadataBackfill, useGridCoverUrl, useTrackCoverUrl } from "@/hooks/use-media";
 import { useShortcutMatcher } from "@/hooks/use-shortcut-matcher";
 import { LIBRARY_QUERY_COALESCE_MS, useThrottledValue } from "@/hooks/use-throttled-value";
 import { useTransliterationReady } from "@/hooks/use-transliteration-ready";
@@ -2179,11 +2175,13 @@ function useSetThumbnailUrl(
   fallbackTrack: Track | undefined,
   coverCrop?: CropRect,
   remoteCoverUrl?: string,
+  isGrid = true,
 ): string | null {
-  const setUrl = useTrackThumbnailUrl(
+  const setUrl = useGridCoverUrl(
     coverBlobId || remoteCoverUrl ? { coverBlobId, coverCrop, remoteCoverUrl } : undefined,
+    isGrid,
   );
-  const trackUrl = useTrackThumbnailUrl(fallbackTrack);
+  const trackUrl = useGridCoverUrl(fallbackTrack, isGrid);
   return coverBlobId || remoteCoverUrl ? setUrl : trackUrl;
 }
 
@@ -2337,6 +2335,7 @@ function SetCard({
     coverTrack,
     item.session.coverCrop,
     item.session.remoteCoverUrl,
+    view === "grid",
   );
   // Preview hash matching whichever cover is shown: the set's own, else the
   // fallback track's (mirrors useSetCoverUrl's own/fallback choice).

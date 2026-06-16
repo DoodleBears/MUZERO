@@ -1,7 +1,7 @@
 import { BarChart3, Heart, History, Play } from "lucide-react";
 import { CoverImage } from "@/components/ui/cover-image";
 import type { Track } from "@/db/types";
-import { useTrackThumbnailUrl } from "@/hooks/use-media";
+import { useGridCoverUrl } from "@/hooks/use-media";
 import type { SystemPlaylistDefinition, SystemPlaylistId } from "@/lib/system-playlists";
 import { cn } from "@/lib/utils";
 
@@ -63,7 +63,7 @@ function SystemPlaylistCard({
 }) {
   const Icon = iconFor(item.icon);
   const isGrid = view === "grid";
-  const coverUrl = useTrackThumbnailUrl(item.coverTrack);
+  const coverUrl = useGridCoverUrl(item.coverTrack, isGrid);
   return (
     <div className="group relative">
       <button

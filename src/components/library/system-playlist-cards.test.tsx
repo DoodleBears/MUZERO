@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { type SystemPlaylistCardItem, SystemPlaylistCards } from "./system-playlist-cards";
 
 vi.mock("@/hooks/use-media", () => ({
-  useTrackThumbnailUrl: (track: { coverBlobId?: string } | undefined) =>
+  useGridCoverUrl: (track: { coverBlobId?: string } | undefined) =>
     track?.coverBlobId ? `blob:thumb-${track.coverBlobId}` : null,
 }));
 
