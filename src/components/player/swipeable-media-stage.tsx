@@ -147,6 +147,10 @@ export function SwipeableMediaStage({
   const [stack, setStack] = useState<SwipeStack | null>(null);
   const [settleTarget, setSettleTarget] = useState<VisualTrack | null>(null);
   const [readyTrackIds, setReadyTrackIds] = useState<Record<string, true>>({});
+  // Track id whose cover the BASE stage is currently PAINTING (reported by MediaStage).
+  // The handoff waits for this to reach the committed track so the overlay never fades
+  // while the base still shows the old cover (the "cover flashes black at the handoff").
+  const [baseCoverShownId, setBaseCoverShownId] = useState<string | undefined>(undefined);
   const [overlayRect, setOverlayRect] = useState<StageOverlayRect | null>(null);
   // Rapid next/prev gate: when switches outpace the time a coverflow slide needs to
   // finish (held Q/E at the 200ms transport cap), we skip the 3D slide — which would
@@ -598,7 +602,13 @@ export function SwipeableMediaStage({
       trackHasCover(settleTarget.track) &&
       (!preloadedCoverUrls[settleTarget.track.id] ||
         !readyTrackIds[settleTarget.track.id] ||
-        !stageCoverSettledForCurrent)
+        !stageCoverSettledForCurrent ||
+        // Wait until the BASE stage has actually painted the committed cover (the base
+        // lags — its displayTrack only updates at the store commit / slide end). Without
+        // this the overlay could fade while the base still showed the old cover = the
+        // "cover flashes black ~0.5s after release". (No deadlock: the same cover that
+        // loaded for the overlay (readyTrackIds) loads for the base — same cache.)
+        baseCoverShownId !== settleTarget.track.id)
     ) {
       return;
     }
@@ -628,6 +638,7 @@ export function SwipeableMediaStage({
       }
     };
   }, [
+    baseCoverShownId,
     current?.id,
     handoffFading,
     preloadedCoverUrls,
@@ -718,14 +729,7 @@ export function SwipeableMediaStage({
     typeof document !== "undefined"
       ? (containerRef.current?.closest("main") ?? document.body)
       : null;
-  // Hide the base stage only during the ACTIVE drag/slide (overlay following the
-  // finger). Once the switch has committed and we're in the settle window
-  // (settleTarget set, before the overlay fades), UN-hide the base BEHIND the still-
-  // opaque overlay so its CoverImage paints the new cover while it's covered — then
-  // when the overlay fades the base is already showing it. Keeping it hidden until
-  // the fade meant the base un-hid empty for a frame = the "cover flashes black ~0.5s
-  // after release" (the handoff). settleTarget + handoffFading both keep it visible.
-  const baseHidden = stackActive && !handoffFading && !settleTarget;
+  const baseHidden = stackActive && !handoffFading;
   const stackOverlay =
     foregroundVisible && stackActive && overlayRect && overlayPortalTarget
       ? createPortal(
@@ -894,6 +898,7 @@ export function SwipeableMediaStage({
             <MediaStage
               coverBacklightEnabled={foregroundVisible && !baseHidden && baseCoverBacklightEnabled}
               coverBacklightFadeIn={richSwitchTransitions}
+              onCoverReady={setBaseCoverShownId}
             />
           </motion.div>
         </div>

@@ -22,6 +22,7 @@ export function CoverImage({
   holdPreviousWhileLoading = true,
   fallback,
   onAspect,
+  onShown,
   trackId,
   loadStrategy = "preload",
   className,
@@ -32,6 +33,8 @@ export function CoverImage({
   fallback?: ReactNode;
   loadStrategy?: "dom" | "preload";
   onAspect?: (aspect: number) => void;
+  /** Fired once the currently-displayed image IS `url` (the new cover has painted). */
+  onShown?: () => void;
   trackId?: string;
   className?: string;
 }) {
@@ -43,6 +46,7 @@ export function CoverImage({
         hasCover={hasCover}
         holdPreviousWhileLoading={holdPreviousWhileLoading}
         onAspect={onAspect}
+        onShown={onShown}
         url={url}
       />
     );
@@ -121,6 +125,7 @@ function DomLoadedCoverImage({
   holdPreviousWhileLoading,
   fallback,
   onAspect,
+  onShown,
   className,
 }: {
   url: string | null;
@@ -128,11 +133,20 @@ function DomLoadedCoverImage({
   holdPreviousWhileLoading: boolean;
   fallback?: ReactNode;
   onAspect?: (aspect: number) => void;
+  onShown?: () => void;
   className?: string;
 }) {
   const [displayUrl, setDisplayUrl] = useState<string | null>(null);
   const [pendingUrl, setPendingUrl] = useState<string | null>(url);
   const [failedUrl, setFailedUrl] = useState<string | null>(null);
+
+  // Report "the new cover is painted" once the displayed image IS the current url —
+  // lets the coverflow handoff wait for the base to actually show the cover instead
+  // of a fixed timer (which could fade the overlay while the base still held the old
+  // cover = the "cover flashes ~0.5s after release" at the handoff).
+  useEffect(() => {
+    if (url && displayUrl === url) onShown?.();
+  }, [displayUrl, url, onShown]);
 
   // Adjust per-URL state DURING RENDER on a prop change rather than in a useEffect:
   // the effect forced an extra render + a stale intermediate commit on EVERY track

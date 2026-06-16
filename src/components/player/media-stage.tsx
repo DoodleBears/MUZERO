@@ -33,10 +33,13 @@ export function MediaStage({
   className,
   coverBacklightEnabled = true,
   coverBacklightFadeIn = true,
+  onCoverReady,
 }: {
   className?: string;
   coverBacklightEnabled?: boolean;
   coverBacklightFadeIn?: boolean;
+  /** Fired with the track id once the base cover image has painted that track's cover. */
+  onCoverReady?: (trackId: string) => void;
 }) {
   const { t } = useTranslation();
   const queue = usePlayerStore((s) => s.queue);
@@ -179,6 +182,7 @@ export function MediaStage({
             fallback={<StageTitleFallback track={displayTrack} dim={asBgActive} />}
             className="z-10 album-cover-radius"
             loadStrategy="dom"
+            onShown={displayTrack ? () => onCoverReady?.(displayTrack.id) : undefined}
             trackId={displayTrack?.id}
           />
         )}
