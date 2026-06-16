@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  parseQqMusicuSearch,
   parseQqPlaylistMeta,
   parseQqPlaylistTracks,
   parseQqSearch,
@@ -63,6 +64,40 @@ describe("parseQqSearch", () => {
   it("returns [] for unexpected shapes", () => {
     expect(parseQqSearch(null)).toEqual([]);
     expect(parseQqSearch({})).toEqual([]);
+  });
+});
+
+describe("parseQqMusicuSearch", () => {
+  it("reads <req>.data.body.song.list from the modern musicu search", () => {
+    const hits = parseQqMusicuSearch({
+      music_search: {
+        code: 0,
+        data: {
+          body: {
+            song: {
+              list: [
+                { mid: "m1", name: "A", singer: [{ name: "S" }], album: { mid: "AM" } },
+                { name: "no-mid" },
+              ],
+            },
+          },
+        },
+      },
+    });
+    expect(hits).toHaveLength(1);
+    expect(hits[0]).toMatchObject({ source: "qq", externalId: "m1", title: "A", artist: "S" });
+    expect(hits[0].coverUrl).toBe(qqAlbumCover("AM"));
+  });
+  it("tolerates a direct data.body.song.list (no named req wrapper)", () => {
+    const hits = parseQqMusicuSearch({
+      data: { body: { song: { list: [{ mid: "x", name: "X" }] } } },
+    });
+    expect(hits.map((h) => h.externalId)).toEqual(["x"]);
+  });
+  it("returns [] for unexpected shapes", () => {
+    expect(parseQqMusicuSearch(null)).toEqual([]);
+    expect(parseQqMusicuSearch({})).toEqual([]);
+    expect(parseQqMusicuSearch({ music_search: { data: {} } })).toEqual([]);
   });
 });
 

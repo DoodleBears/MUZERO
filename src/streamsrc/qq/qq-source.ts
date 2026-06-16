@@ -1,6 +1,7 @@
 /**
- * QQ Music StreamSourceProvider — guest-first. Search hits `client_search_cp`;
- * resolve asks musicu GetVkey for a batch of PLAINTEXT candidate filenames and picks
+ * QQ Music StreamSourceProvider — guest-first. Search posts the modern musicu
+ * `music.search.SearchCgiService` (the old GET `client_search_cp` 500s on current
+ * servers); resolve asks musicu GetVkey for a batch of PLAINTEXT candidate filenames and picks
  * the best with a non-empty purl. No dynamic signing on the guest path (uin=0, guid,
  * g_tk=5381); a stored qqmusic_key cookie (login) switches g_tk to hash33(musickey)
  * and rides on every request. Encrypted tiers are never requested (PRD red line) —
@@ -22,9 +23,9 @@ import type {
   StreamSourceProvider,
 } from "../provider";
 import {
+  parseQqMusicuSearch,
   parseQqPlaylistMeta,
   parseQqPlaylistTracks,
-  parseQqSearch,
   parseQqSongDetail,
   parseQqUserPlaylists,
 } from "./qq-playlists";
@@ -32,9 +33,12 @@ import { qqFilename, qqQualityCandidates } from "./qq-quality";
 import { parseQqVkey, QQ_MUSICU_URL, qqStreamUrl, qqVkeyRequestBody } from "./qq-resolve";
 import { parseQqMusicKey, parseQqUin, QQ_GUEST_GTK, qqGtk } from "./qq-sign";
 
-const SEARCH_URL = "https://c.y.qq.com/soso/fcgi-bin/client_search_cp";
 /** The logged-in user's own created playlists (needs qqmusic_uin + g_tk). */
 const USER_DISS_URL = "https://c.y.qq.com/rsc/fcgi-bin/fcg_user_created_diss";
+// Modern unified search — the old GET `client_search_cp` 500s on current servers;
+// every live QQ client now posts this musicu module (luren-dc verified).
+const QQ_SEARCH_MODULE = "music.search.SearchCgiService";
+const QQ_SEARCH_METHOD = "DoSearchForQQMusicDesktop";
 const USER_AGENT =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
 const REFERER = "https://y.qq.com";
@@ -89,21 +93,33 @@ export function createQqSource(deps: QqSourceDeps): StreamSourceProvider {
   }
 
   async function search(query: string, opts?: StreamSearchOptions): Promise<StreamSearchHit[]> {
-    const url = withQuery(SEARCH_URL, {
+    const body = {
+      music_search: {
+        module: QQ_SEARCH_MODULE,
+        method: QQ_SEARCH_METHOD,
+        param: {
+          query,
+          search_type: 0,
+          num_per_page: opts?.limit ?? 20,
+          page_num: 1,
+          grp: 1,
+        },
+      },
+    };
+    const url = withQuery(QQ_MUSICU_URL, {
       format: "json",
-      n: String(opts?.limit ?? 20),
-      p: "1",
-      w: query,
-      cr: "1",
       g_tk: String(gtk()),
-      inCharset: "utf8",
-      outCharset: "utf-8",
+      data: JSON.stringify(body),
     });
-    const text = await get(url, opts?.signal);
+    const resp = await deps.http({ url, method: "GET", headers: headers(), signal: opts?.signal });
+    const text = await resp.text();
     try {
-      return parseQqSearch(JSON.parse(unwrapJsonp(text)));
+      return parseQqMusicuSearch(JSON.parse(unwrapJsonp(text)));
     } catch {
-      log.warn("qq", "search response is not JSON", { head: text.slice(0, 200) });
+      log.warn("qq", "search response is not JSON", {
+        status: resp.status,
+        head: text.slice(0, 200),
+      });
       return [];
     }
   }

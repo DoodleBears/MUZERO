@@ -62,6 +62,23 @@ export function parseQqSearch(json: unknown): StreamSearchHit[] {
   return (Array.isArray(list) ? list : []).map(qqSongToHit).filter((h) => h.externalId);
 }
 
+/**
+ * Modern `musicu.fcg music.search.SearchCgiService` → hits. The song list lives at
+ * `<reqName>.data.body.song.list` (or a bare `data.body.song.list`); the req key is
+ * caller-chosen, so we scan one level deep for the first `data.body.song.list`.
+ */
+export function parseQqMusicuSearch(json: unknown): StreamSearchHit[] {
+  if (!json || typeof json !== "object") return [];
+  const root = json as Record<string, unknown>;
+  const pickList = (node: unknown): unknown[] | null => {
+    const list = (node as { data?: { body?: { song?: { list?: unknown } } } } | null)?.data?.body
+      ?.song?.list;
+    return Array.isArray(list) ? list : null;
+  };
+  const list = pickList(root) ?? Object.values(root).map(pickList).find(Boolean) ?? [];
+  return list.map(qqSongToHit).filter((h) => h.externalId);
+}
+
 /** `musicu get_song_detail_yqq` → a single hit (or null). */
 export function parseQqSongDetail(json: unknown): StreamSearchHit | null {
   const j = json as {

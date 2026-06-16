@@ -205,7 +205,7 @@ QQ 登录得到的核心凭据是 **`musicid` + `musickey`**（外加 OAuth 的 
 
 | 用途 | 端点 | 关键参数 | 鉴权档 | 来源核实 |
 |---|---|---|---|---|
-| **关键词搜索** | `GET https://c.y.qq.com/soso/fcgi-bin/client_search_cp` | `format=json` `n=20` `p=<page>` `w=<keyword>` `cr=1` `g_tk=5381` | guest | NeriPlayer ✓ |
+| **关键词搜索** | `GET https://u.y.qq.com/cgi-bin/musicu.fcg`（现代统一搜索） | `data=`JSON：`{music_search:{module:"music.search.SearchCgiService", method:"DoSearchForQQMusicDesktop", param:{query,num_per_page,page_num,search_type:0,grp:1}}}` + `g_tk`；响应 `<req>.data.body.song.list[]` | guest/登录 | luren-dc ✓（**2026-06-17 运行时切换**：旧 `c.y.qq.com/.../client_search_cp` 实测 500，见 §11） |
 | **歌曲详情** | `POST/GET https://u.y.qq.com/cgi-bin/musicu.fcg` | `data=`JSON：`{songinfo:{method:"get_song_detail_yqq", module:"music.pf_song_detail_svr", param:{song_mid:<mid>}}}` | guest | NeriPlayer ✓ |
 | **取直链（明文，主路径）** | `POST https://u.y.qq.com/cgi-bin/musicu.fcg` | method `music.vkey.GetVkey` / module `UrlGetVkey`；批量 ≤100 mid；每档 `filename = <typePrefix><mid><mid><ext>`；guest 参数 `guid=10000`/`platform=20`/`loginflag=1`/`uin=0` | guest/登录 | luren-dc `song.py:247` ✓ |
 | **取直链（加密档）** | 同上 method `music.vkey.GetEVkey` / module `CgiGetEVkey` | 返回 `.mflac/.mgg` 加密直链 | 登录/VIP | luren-dc ✓ — **🚩 本 PRD 不调用此路径（红线）** |
@@ -377,7 +377,7 @@ i18n locales/{en,zh,ja,ko}/                        # 源名 + 音质封顶提示
 - [x] i18n —— 源名为**品牌名**（设计上非 i18n，与三源一致硬编码 `QQ 音乐`）；红线文案复用既有 `streamSources.redline`；音质天花板由「下拉只列明文档」自我表达。无需新增 key。
 
 #### Phase 2 Checklist
-- [ ] **Electron 手测：guest 搜索返回结果**（`client_search_cp` 经 muzfetch 可达）。
+- [~] **Electron 手测：guest 搜索返回结果**——⚠️ 2026-06-17 实测旧 `client_search_cp` 返回 **HTTP 500 空 body**（QQ 服务端衰减）；已切到现代 `u.y.qq.com/musicu.fcg music.search.SearchCgiService`（GET，query 入 `data` JSON）+ 失败日志加 HTTP status。**待用户重测新接口**。
 - [ ] **Electron 手测：guest `GetVkey` 是否返回非空 purl 的标准音质直链**——✅ 能 → 记录「guest 明文可播」；❌ 被拒 → 记录鉴权错误码，Open Q1 落「需登录」，Phase 3 变必需。
 - [ ] 明文直链经 `<audio>`（或 `mediaProxyUrl`）播放出声、可 seek（206）、切 tab 不断播。
 - [ ] QQ CDN 是否需要 Referer：手测确认 `dl.stream/isure.stream` 直连是否 403（决定是否必须经代理）。
@@ -492,6 +492,7 @@ i18n locales/{en,zh,ja,ko}/                        # 源名 + 音质封顶提示
 | 2026-06-16 | DoodleBear（实现）| **Phase 2 🔄 代码就位**：QQ 接入 ⌘F 在线 chips（`ONLINE_SOURCES`/`SOURCE_LABEL`）+ Settings 卡（`SOURCES`，音质只列明文 `flac/320/m4a/128`）。搜索/播放/代理为源无关、QQ 入 registry 后**零改动复用**。源名为品牌名（非 i18n），红线复用 `streamSources.redline`。tsc 0 错、search/settings/hooks 82 测全绿。**剩 Electron 手测 guest 可播放（Open Q1/Q2/Q6）**——无桌面运行时不冒充已验证。 |
 | 2026-06-16 | DoodleBear（TDD 实现）| **Phase 3 🔄 代码就位（登录窗口路线，Q4）**：`STREAM_LOGIN_CONFIGS.qq`（authCookie `qqmusic_key` / `y.qq.com` 登录窗，复用 `externalLogin`+`streamSourcesAfterLogin/Logout`）；provider 登录态 `g_tk=hash33(musickey)`（Phase 1 已实现，本期加测：g_tk≠5381 且 Cookie 头带 key）。login+qq-source 18 测全绿，tsc 0 错。QR API（PTLogin/微信 + OAuth code 兑换钩子）按 Q4 降 **v2**。**剩 Electron 手测 cookie 抓取**（y.qq.com 或 localStorage→定 v2 取舍）。 |
 | 2026-06-16 | DoodleBear（TDD 实现）| **Phase 4 🔄 代码就位**：`stream-link.ts` 加 QQ 链接解析（songDetail/.html/playlist/taoge，base62 mid 单列）；`qq-playlists` 加 `parseQqPlaylistMeta`/`parseQqPlaylistTracks`（dirinfo / 兼容 cdlist[0]，容错 shape 漂移）；`qq-source` 加 `getTracksByIds`（走**已验证** get_song_detail_yqq）+ `getPlaylistMeta`/`importPlaylist`（aiDissInfo）。`PlaylistImportDialog` 源无关零改动复用。**`getUserPlaylists` 降 v2**（用户歌单端点 0 verified，UI optional 链优雅退化）。58 qq+link 测 + 280 全 streamsrc 测全绿，tsc 0 错。**剩手测**真实 aiDissInfo 端点 + v2「我的歌单」。 |
+| 2026-06-17 | DoodleBear（运行时修复，TDD）| **搜索切现代 musicu 接口（旧 `client_search_cp` 实测 500）**：用户 Electron 手测 guest 搜索 → 旧 `c.y.qq.com/soso/fcgi-bin/client_search_cp` 返回 **HTTP 500 空 body**（`qq search response is not JSON, head: ""`）。改用现代 `u.y.qq.com/cgi-bin/musicu.fcg music.search.SearchCgiService`/`DoSearchForQQMusicDesktop`（GET，keyword 入 `data` JSON，响应 `<req>.data.body.song.list[]`，与 luren-dc/现代客户端一致），与 resolve/detail/playlist 同 host 同路径。新增 `parseQqMusicuSearch`（容错命名 req 包裹 / 直 `data.body.song.list`），失败日志加 HTTP `status` 便于后续定位。54 qq 测 + 290 全 streamsrc 全绿、tsc 0 错、biome 绿。**待用户重测**。 |
 | 2026-06-17 | DoodleBear（修复）| **⌘F `@` 提及过滤补漏 QQ**：merge 时只给在线 chips（`ONLINE_SOURCES`/`SOURCE_LABEL`）加了 QQ，漏了 `@` 提及过滤的真源 [`global-search-filter.ts`](../../../src/lib/global-search-filter.ts) `FILTER_OPTIONS`——故 `@qq` 无法筛 QQ。补 `id` union + FilterOption（别名 `qq/qqmusic/qq音乐/腾讯`）；桌面端 `filterOptions=FILTER_OPTIONS` 自动纳入、UI `labelFor` 经既有 `SOURCE_LABEL[qq]` 自动出名（零 UI 改动）。TDD：`matchFilterOptions` 测加 qq latin/CJK 别名。13 测全绿、tsc 0 错、biome 绿。 |
 | 2026-06-17 | DoodleBear（TDD 实现）| **Phase 3 登录 ✅ 手测通过 + Phase 4 `getUserPlaylists` 实现（v2 项提前完成）**：用户确认 `y.qq.com` 登录窗口路线可用（Electron 抓到 `qqmusic_key`/`qqmusic_uin`），Phase 3 由「代码就位」转**已验证可用**。登录解锁后补齐 `getUserPlaylists`（TDD）：`parseQqUin`(cookie→uin) + `parseQqUserPlaylists`(`fcg_user_created_diss` `data.disslist[]`→playlists，`tid/dissid`·`diss_name/dissname`·`diss_cover/logo`·`song_cnt/song_num` 别名容错) + provider 方法（未登录优雅 `[]`，登录态带 `hostuin`+`g_tk=hash33(musickey)`）。Settings·QQ 卡经既有泛型 `SourcePlaylists` 自动出现「同步我的歌单」（零 UI 改动）。**287 全 streamsrc 测全绿（+10 新测）、tsc 0 错、biome 绿**。剩手测：真实 `fcg_user_created_diss` 响应 shape。 |
 

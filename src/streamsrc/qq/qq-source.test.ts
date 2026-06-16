@@ -29,7 +29,7 @@ describe("createQqSource", () => {
       expect(req.url).toContain(`g_tk=${expected}`);
       expect(req.url).not.toContain("g_tk=5381");
       expect(req.headers?.Cookie).toContain(`qqmusic_key=${musickey}`);
-      return res({ data: { song: { list: [] } } });
+      return res({ music_search: { data: { body: { song: { list: [] } } } } });
     };
     await createQqSource({
       http,
@@ -37,23 +37,34 @@ describe("createQqSource", () => {
     }).search("q");
   });
 
-  it("search maps client_search_cp results to hits and sends guest g_tk", async () => {
+  it("search posts the modern musicu SearchCgiService query and maps hits (guest g_tk)", async () => {
     const http: StreamHttp = async (req) => {
-      expect(req.url).toContain("client_search_cp");
+      expect(req.url).toContain("musicu.fcg");
       expect(req.url).toContain("g_tk=5381"); // guest g_tk
-      expect(req.url).toContain("w=hello");
+      // The keyword rides inside the posted `data` JSON, not the URL query.
+      const data = JSON.parse(new URL(req.url).searchParams.get("data") ?? "{}") as Record<
+        string,
+        { module?: string; method?: string; param?: { query?: string } }
+      >;
+      const search = data.music_search ?? Object.values(data).find((v) => v?.method);
+      expect(search?.module).toBe("music.search.SearchCgiService");
+      expect(search?.param?.query).toBe("hello");
       return res({
-        data: {
-          song: {
-            list: [
-              {
-                songmid: "1",
-                songname: "S",
-                singer: [{ name: "A" }],
-                albummid: "M",
-                interval: 100,
+        music_search: {
+          data: {
+            body: {
+              song: {
+                list: [
+                  {
+                    mid: "1",
+                    name: "S",
+                    singer: [{ name: "A" }],
+                    album: { mid: "M" },
+                    interval: 100,
+                  },
+                ],
               },
-            ],
+            },
           },
         },
       });
@@ -66,7 +77,7 @@ describe("createQqSource", () => {
   it("search tolerates a callback(...) JSONP wrapper", async () => {
     const http: StreamHttp = async () =>
       res(
-        `callback(${JSON.stringify({ data: { song: { list: [{ songmid: "9", songname: "z" }] } } })})`,
+        `callback(${JSON.stringify({ music_search: { data: { body: { song: { list: [{ mid: "9", name: "z" }] } } } } })})`,
       );
     const hits = await createQqSource({ http }).search("q");
     expect(hits[0]?.externalId).toBe("9");
