@@ -183,6 +183,7 @@ export function MediaStage({
             className="z-10 album-cover-radius"
             loadStrategy="dom"
             onShown={displayTrack ? () => onCoverReady?.(displayTrack.id) : undefined}
+            thumbhash={displayTrack?.coverThumbhash}
             trackId={displayTrack?.id}
           />
         )}

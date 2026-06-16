@@ -1,6 +1,8 @@
 import { AnimatePresence, motion } from "motion/react";
-import { type ReactNode, type SyntheticEvent, useEffect, useState } from "react";
+import { type ReactNode, type SyntheticEvent, useEffect, useMemo, useState } from "react";
+import { thumbHashToDataURL } from "thumbhash";
 import { useLoadedImageUrl } from "@/hooks/use-image-load";
+import { base64ToThumbhash } from "@/lib/cover-thumbhash";
 import { cn } from "@/lib/utils";
 
 // Now Playing cover crossfade duration. Kept at/under the 200ms transport switch
@@ -23,6 +25,7 @@ export function CoverImage({
   fallback,
   onAspect,
   onShown,
+  thumbhash,
   trackId,
   loadStrategy = "preload",
   className,
@@ -35,6 +38,8 @@ export function CoverImage({
   onAspect?: (aspect: number) => void;
   /** Fired once the currently-displayed image IS `url` (the new cover has painted). */
   onShown?: () => void;
+  /** Base64 thumbhash → instant blurred preview painted while the cover decodes. */
+  thumbhash?: string | null;
   trackId?: string;
   className?: string;
 }) {
@@ -47,6 +52,7 @@ export function CoverImage({
         holdPreviousWhileLoading={holdPreviousWhileLoading}
         onAspect={onAspect}
         onShown={onShown}
+        thumbhash={thumbhash}
         url={url}
       />
     );
@@ -126,6 +132,7 @@ function DomLoadedCoverImage({
   fallback,
   onAspect,
   onShown,
+  thumbhash,
   className,
 }: {
   url: string | null;
@@ -134,11 +141,24 @@ function DomLoadedCoverImage({
   fallback?: ReactNode;
   onAspect?: (aspect: number) => void;
   onShown?: () => void;
+  thumbhash?: string | null;
   className?: string;
 }) {
   const [displayUrl, setDisplayUrl] = useState<string | null>(null);
   const [pendingUrl, setPendingUrl] = useState<string | null>(url);
   const [failedUrl, setFailedUrl] = useState<string | null>(null);
+
+  // Instant blurred preview from the thumbhash, painted UNDER the cover while it loads
+  // + decodes — so a cover with no previous to hold (first view) sharpens from a blur
+  // instead of flashing the empty surface. A bad hash degrades to no preview.
+  const preview = useMemo(() => {
+    if (!thumbhash) return null;
+    try {
+      return thumbHashToDataURL(base64ToThumbhash(thumbhash));
+    } catch {
+      return null;
+    }
+  }, [thumbhash]);
 
   // Report "the new cover is painted" once the displayed image IS the current url —
   // lets the coverflow handoff wait for the base to actually show the cover instead
@@ -200,6 +220,16 @@ function DomLoadedCoverImage({
   return (
     <>
       {showFallback && fallback}
+      {/* Blurred thumbhash preview behind the cover, while the current cover isn't shown
+          yet (and nothing else is held over it) — sharpen-from-blur instead of a gap. */}
+      {preview && displayUrl !== url && !previousUrl && (
+        <img
+          src={preview}
+          alt=""
+          aria-hidden
+          className={cn("absolute inset-0 size-full object-cover", className)}
+        />
+      )}
       <AnimatePresence initial={false}>
         {previousUrl && (
           <motion.img

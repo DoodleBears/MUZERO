@@ -19,6 +19,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
+import { thumbHashToDataURL } from "thumbhash";
 import { AutoScrollText } from "@/components/ui/auto-scroll-text";
 import type { Track } from "@/db/types";
 import { useSettings } from "@/hooks/use-app-data";
@@ -29,6 +30,7 @@ import {
   resolveNowPlayingCoverBacklightAppearance,
   resolveNowPlayingCoverEffectMode,
 } from "@/lib/album-cover-appearance";
+import { base64ToThumbhash } from "@/lib/cover-thumbhash";
 import { matchActiveQualityPreset } from "@/lib/graphics-quality";
 import { transitionProgress, useNowPlayingTransition } from "@/lib/now-playing-transition";
 import { arePerfCountersEnabled, notePerfWork } from "@/lib/perf-counters";
@@ -1148,6 +1150,20 @@ function TrackVisual({
   const coverUrl = hasCover && !initialFailed ? visual.initialCoverUrl : null;
   const backlightUrl = useCoverDerivativeUrl(visual.track, "backlight");
 
+  // Instant blurred preview (the track's ~25-byte thumbhash → tiny PNG data URL) painted
+  // BEHIND the cover. A freshly-mounted card <img> takes a frame to decode; the preview
+  // fills that frame with a blurred cover instead of the bg-muted square (the "cover
+  // flashes / fades to black on drag-start"). Same ladder the library grid uses.
+  const preview = useMemo(() => {
+    const th = visual.track.coverThumbhash;
+    if (!th) return null;
+    try {
+      return thumbHashToDataURL(base64ToThumbhash(th));
+    } catch {
+      return null;
+    }
+  }, [visual.track.coverThumbhash]);
+
   useEffect(() => {
     if (!hasCover || coverUrl) onReady?.(visual.track.id);
   }, [coverUrl, hasCover, onReady, visual.track.id]);
@@ -1183,6 +1199,14 @@ function TrackVisual({
         </motion.div>
       )}
       <div className="absolute inset-0 z-10 overflow-hidden bg-muted album-cover-radius">
+        {preview && (
+          <img
+            src={preview}
+            alt=""
+            aria-hidden
+            className="absolute inset-0 size-full object-cover"
+          />
+        )}
         <img
           src={coverUrl}
           alt=""
