@@ -29,6 +29,7 @@ import {
   resolveNowPlayingCoverBacklightAppearance,
   resolveNowPlayingCoverEffectMode,
 } from "@/lib/album-cover-appearance";
+import { coverPaletteFromThumbhash, normalizeCoverPalette } from "@/lib/cover-palette";
 import { matchActiveQualityPreset } from "@/lib/graphics-quality";
 import { log } from "@/lib/logger";
 import { transitionProgress, useNowPlayingTransition } from "@/lib/now-playing-transition";
@@ -41,9 +42,11 @@ import {
   shouldCommitRelease,
 } from "@/lib/transition-driver";
 import { cn } from "@/lib/utils";
+import type { Rgb } from "@/lib/visualizer-color";
 import { TRANSPORT_SWITCH_MIN_INTERVAL_MS } from "@/shortcuts/transport-throttle";
 import { useNavStore } from "@/stores/nav-store";
 import { usePlayerStore } from "@/stores/player-store";
+import { getVisualizerCoverColorRgb } from "@/stores/visualizer-color-store";
 import { CanvasCover } from "./canvas-cover";
 import {
   buildCoverPreloadRequests,
@@ -55,6 +58,19 @@ import {
 } from "./cover-preload";
 import { MediaStage } from "./media-stage";
 import { StageTitleFallback } from "./stage-title-fallback";
+
+/**
+ * Best-effort synchronous cover accent for a track, matching what the window border
+ * settles to: the stored palette's first color, else the thumbhash-derived color.
+ * Null when neither is available (the border then just keeps its current color through
+ * the drag and lets the post-switch settle catch up).
+ */
+function trackBorderRgb(track: Track | undefined): Rgb | null {
+  if (!track) return null;
+  const stored = normalizeCoverPalette(track.coverPalette)[0];
+  if (stored) return stored;
+  return normalizeCoverPalette(coverPaletteFromThumbhash(track.coverThumbhash))[0] ?? null;
+}
 
 const FALLBACK_WIDTH = 360;
 const COMMIT_FRACTION = 0.16;
@@ -869,6 +885,13 @@ export function SwipeableMediaStage({
                 beginTransition(
                   currentVisual?.initialCoverUrl ?? null,
                   nextVisual?.initialCoverUrl ?? null,
+                  // from = the color the border shows NOW (the live settled accent);
+                  // to = the neighbour's resolvable cover accent. The window-border
+                  // driver interpolates these by the shared transitionProgress.
+                  {
+                    from: getVisualizerCoverColorRgb() ?? trackBorderRgb(current),
+                    to: trackBorderRgb(nextTrack),
+                  },
                 );
               }
               if (info.offset.x > 8 && dragDirection !== "prev") {
@@ -876,6 +899,10 @@ export function SwipeableMediaStage({
                 beginTransition(
                   currentVisual?.initialCoverUrl ?? null,
                   prevVisual?.initialCoverUrl ?? null,
+                  {
+                    from: getVisualizerCoverColorRgb() ?? trackBorderRgb(current),
+                    to: trackBorderRgb(prevTrack),
+                  },
                 );
               }
             }}

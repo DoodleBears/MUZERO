@@ -28,9 +28,14 @@ import {
   resolveNowPlayingCoverBacklightAppearance,
 } from "@/lib/album-cover-appearance";
 import { resolveDesktopBridge } from "@/lib/desktop/bridge";
-import { electronWindowAppearanceCssVars } from "@/lib/electron-window-appearance";
+import {
+  electronWindowAppearanceCssVars,
+  resolveBorderColorMode,
+} from "@/lib/electron-window-appearance";
+import { transitionProgress, useNowPlayingTransition } from "@/lib/now-playing-transition";
 import { cn } from "@/lib/utils";
 import { setViewTransitionSuppressed } from "@/lib/view-transition";
+import { rgba } from "@/lib/visualizer-color";
 import { dragWindowOnEmptyPress } from "@/lib/window-drag";
 import { NowPlayingPage } from "@/pages/now-playing-page";
 import { QueuePage } from "@/pages/queue-page";
@@ -99,6 +104,7 @@ export default function App() {
   usePlaybackWarmup();
   useDesktopChromeDataset();
   useAppearanceCssVars(settings);
+  useWindowBorderDragColor(settings);
   useDesktopWindowPinMode(settings);
 
   useEffect(() => {
@@ -414,6 +420,70 @@ function useAppearanceCssVars(settings: ReturnType<typeof useSettings>) {
       }
     };
   }, [settings, coverColorCss]);
+}
+
+/**
+ * Drive the Windows window-border accent off the cover-drag progress, so the border
+ * crossfades from the current cover's color to the neighbour's AS YOU DRAG (tracking
+ * the finger), mirroring the cover image. It writes `--electron-window-border-color`
+ * per frame from the shared `transitionProgress`, between the from/to colors frozen at
+ * drag start. Outside a drag the settled value (useAppearanceCssVars) owns the var, and
+ * since both end on the same color there is no flash at handoff. Only meaningful in
+ * "cover" border mode on the Windows Electron shell; a custom border never follows covers.
+ */
+function useWindowBorderDragColor(settings: ReturnType<typeof useSettings>) {
+  const active = useNowPlayingTransition((s) => s.active);
+  const fromColor = useNowPlayingTransition((s) => s.fromColor);
+  const toColor = useNowPlayingTransition((s) => s.toColor);
+  const borderColorMode = settings.electronWindowBorderColorMode;
+  const borderColor = settings.electronWindowBorderColor;
+  const borderOpacity = settings.electronWindowBorderOpacity;
+
+  useEffect(() => {
+    if (!active || !fromColor || !toColor) return;
+    if (resolveBorderColorMode(borderColorMode) !== "cover") return;
+    const html = document.documentElement;
+    if (html.dataset.desktopShell !== "electron" || html.dataset.desktopPlatform !== "win32")
+      return;
+
+    // While dragging, the border must track the finger with no easing lag, so the
+    // box-shadow's resting CSS transition is disabled (see styles.css).
+    html.dataset.windowBorderDragging = "true";
+    const colorSettings = {
+      electronWindowBorderColor: borderColor,
+      electronWindowBorderColorMode: borderColorMode,
+      electronWindowBorderOpacity: borderOpacity,
+    };
+    const apply = (progress: number) => {
+      // The stage resets transitionProgress to 0 the instant a drag settles — but
+      // endTransition() (active → false) runs synchronously right before it, while this
+      // listener's React cleanup hasn't fired yet. Without this guard that stray 0 would
+      // repaint the FROM color for a frame (the post-commit flash-back). Bail once the
+      // store says the transition is over; the committed color is already painted.
+      if (!useNowPlayingTransition.getState().active) return;
+      const t = progress < 0 ? 0 : progress > 1 ? 1 : progress;
+      const coverColorCss = rgba(
+        {
+          r: Math.round(fromColor.r + (toColor.r - fromColor.r) * t),
+          g: Math.round(fromColor.g + (toColor.g - fromColor.g) * t),
+          b: Math.round(fromColor.b + (toColor.b - fromColor.b) * t),
+        },
+        1,
+      );
+      const css = electronWindowAppearanceCssVars(colorSettings, { coverColorCss })[
+        "--electron-window-border-color"
+      ];
+      if (css) html.style.setProperty("--electron-window-border-color", css);
+    };
+    apply(transitionProgress.get());
+    const unsubscribe = transitionProgress.on("change", apply);
+    return () => {
+      unsubscribe();
+      delete html.dataset.windowBorderDragging;
+      // Leave the var at its last drag value; the settled accent reconciles it (same
+      // color on commit → no flash; the box-shadow transition smooths any remainder).
+    };
+  }, [active, fromColor, toColor, borderColorMode, borderColor, borderOpacity]);
 }
 
 function useDesktopWindowPinMode(settings: ReturnType<typeof useSettings>) {

@@ -248,6 +248,18 @@
     border-radius: var(--electron-window-radius, 12px);
     box-shadow: inset 0 0 0 var(--electron-window-border-width, 6px)
       var(--electron-window-border-color, transparent);
+    /* Crossfade the cover-derived border color on song switch instead of snapping,
+       matching the background cover's BACKGROUND_CROSSFADE_MS. The color comes from a
+       custom property (--electron-window-border-color); when it changes, the box-shadow's
+       computed value changes and this transition interpolates it. */
+    transition: box-shadow 320ms ease;
+  }
+
+  /* During a cover drag, useWindowBorderDragColor writes the border color per frame off
+     the drag progress — the resting crossfade would lag the finger, so disable it. */
+  html[data-desktop-shell="electron"][data-desktop-platform="win32"][data-window-border-dragging="true"]
+    #root::after {
+    transition: none;
   }
 
   html[data-desktop-shell="electron"][data-desktop-platform="win32"][data-window-maximized="true"],

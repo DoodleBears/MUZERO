@@ -1,5 +1,6 @@
 import { motionValue } from "motion/react";
 import { create } from "zustand";
+import type { Rgb } from "@/lib/visualizer-color";
 
 /**
  * Shared "transition" channel between the Now Playing cover stage (foreground)
@@ -26,7 +27,15 @@ interface NowPlayingTransition {
   fromCoverUrl: string | null;
   /** Frozen at begin — the cover crossfaded TO (the revealed neighbour). */
   toCoverUrl: string | null;
-  begin: (fromCoverUrl: string | null, toCoverUrl: string | null) => void;
+  /** Frozen at begin — the cover-derived accent the border crossfades FROM/TO. Null
+   *  when a track has no resolvable cover color (no palette + no thumbhash). */
+  fromColor: Rgb | null;
+  toColor: Rgb | null;
+  begin: (
+    fromCoverUrl: string | null,
+    toCoverUrl: string | null,
+    colors?: { from: Rgb | null; to: Rgb | null },
+  ) => void;
   end: () => void;
 }
 
@@ -34,11 +43,19 @@ export const useNowPlayingTransition = create<NowPlayingTransition>((set) => ({
   active: false,
   fromCoverUrl: null,
   toCoverUrl: null,
-  begin: (fromCoverUrl, toCoverUrl) =>
+  fromColor: null,
+  toColor: null,
+  begin: (fromCoverUrl, toCoverUrl, colors) =>
     set((s) =>
       s.active && s.fromCoverUrl === fromCoverUrl && s.toCoverUrl === toCoverUrl
         ? s
-        : { active: true, fromCoverUrl, toCoverUrl },
+        : {
+            active: true,
+            fromCoverUrl,
+            toCoverUrl,
+            fromColor: colors?.from ?? null,
+            toColor: colors?.to ?? null,
+          },
     ),
   end: () => set((s) => (s.active ? { ...s, active: false } : s)),
 }));
