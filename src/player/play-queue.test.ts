@@ -3,6 +3,7 @@ import type { PlayQueueEntry } from "@/db/types";
 import {
   appendEntries,
   insertNext,
+  insertRequest,
   moveEntry,
   type PlayQueueState,
   reconcileCurrentIndex,
@@ -39,6 +40,38 @@ describe("insertNext", () => {
   it("appends when nothing is playing (currentIndex < 0)", () => {
     const s = insertNext(state([], -1), [e("x"), e("y")]);
     expect(ids(s)).toEqual(["x", "y"]);
+  });
+});
+
+describe("insertRequest", () => {
+  it("queues the first request right after the current track and marks it", () => {
+    const s = insertRequest(state(["a1", "a2", "a3"], 0), [e("b1")]);
+    expect(ids(s)).toEqual(["a1", "b1", "a2", "a3"]);
+    expect(s.currentIndex).toBe(0);
+    expect(s.entries[1].requested).toBe(true);
+  });
+
+  it("queues later requests FIFO after the existing request block (no line-jumping)", () => {
+    // A1 playing, B1 already requested → a second request B2 goes AFTER B1.
+    const after1 = insertRequest(state(["a1", "a2"], 0), [e("b1")]);
+    const after2 = insertRequest(after1, [e("b2")]);
+    expect(ids(after2)).toEqual(["a1", "b1", "b2", "a2"]);
+    const after3 = insertRequest(after2, [e("b3")]);
+    expect(ids(after3)).toEqual(["a1", "b1", "b2", "b3", "a2"]);
+  });
+
+  it("does not skip past the host's own upcoming tracks", () => {
+    // Only the contiguous requested run after current is skipped, not plain entries.
+    const s = insertRequest(state(["a1", "a2", "a3"], 0), [e("b1")]);
+    const s2 = insertRequest(s, [e("b2")]);
+    // b1,b2 stay grouped right after a1; a2,a3 untouched at the tail.
+    expect(ids(s2)).toEqual(["a1", "b1", "b2", "a2", "a3"]);
+  });
+
+  it("appends when the queue is idle", () => {
+    const s = insertRequest(state([], -1), [e("b1")]);
+    expect(ids(s)).toEqual(["b1"]);
+    expect(s.entries[0].requested).toBe(true);
   });
 });
 

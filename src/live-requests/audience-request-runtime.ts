@@ -11,7 +11,7 @@ import {
   listAllTracks,
   memoryNotesByTrack,
   playQueueAppend,
-  playQueuePlayNext,
+  playQueueRequestNext,
   prependTrackIds,
   saveSettings,
 } from "@/db/repositories";
@@ -397,7 +397,7 @@ export function createAudienceRequestRuntime(
       return;
     }
     if (action === "play-next") {
-      await playQueuePlayNext([track.id], db);
+      await playQueueRequestNext([track.id], db);
       return;
     }
     if (action === "play-now") {

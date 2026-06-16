@@ -333,7 +333,19 @@ const unsub = bridge.liveRequestIntake.onMessage((payload) => {
 - **runtime 小改**：`handle()` 接受每调用 `{routeMode, playbackAction}` 覆盖（其余逻辑/既有单测不变）。
 - `runtime` 单例注入 `playNow`/`getActiveSessionId`/`getCurrentTrackId`；`canUseAiDj`/`onlineFallback` 用默认（不按端硬禁，Q3）。
 
-### 4.4 Error Handling
+### 4.4 队列插入语义（请求 FIFO + 切歌 cut-in）
+
+播放动作落到播放队列的方式（A1 在播,原歌单 A1..A5）:
+
+- **`play-next`（默认）→ FIFO 请求块**：请求插在**当前曲后面、已有请求块之后**(不是当前曲正后面),并标 `requested`。
+  - 第 1 个请求 B1 → `A1, [B1], A2..A5`;第 2 个 B2 → `A1, B1, [B2], A2..A5`（**不是** `A1, B2, B1`）。后来的观众不插队,先点先播。
+  - 纯函数 [`insertRequest`](../../../src/player/play-queue.ts)（穷举单测）+ repo [`playQueueRequestNext`](../../../src/db/repositories.ts);`PlayQueueEntry.requested?` 标记(可选,向后兼容免迁移)。
+- **`append-queue` → 队尾**：`A1..A5, B1`,再 `…, B1, B2`（FIFO,但排在整张原歌单之后）。
+- **`play-now`（切歌）→ cut-in + 跳过去**：插到**当前曲正后面并立即跳到它播放,保留 A2..A5**(`A1,[B1],A2..A5` 游标到 B1);再来 B2 → 在 B1 后面 cut-in 跳过去。
+  - 走 store 新 action [`playRequestNow`](../../../src/stores/player-store.ts)：`playQueuePlayNext` 插 current+1 → `waitForQueueIndex` 等队列同步 → `playIndex(current+1)`。**不再** `setActiveSession` 切到歌曲自己的 set（旧 `playTrack` 的行为会把主播歌单整个冲掉）——请求曲从别的 set cut-in,播完主播 set 继续(autoExtend 不断)。
+- 这修正了早期实现的两个反直觉点:play-next 的 LIFO 插队、play-now 切到歌曲 set。
+
+### 4.5 Error Handling
 
 - **非 JSON / 缺 query**：丢弃/标记；`query` 模板求值为空 → 在对话框预览显示报错（红字），active 模式下该条 `ignored`。
 - **WS 断线**：退避重连；UI status `error`。
@@ -529,6 +541,7 @@ const unsub = bridge.liveRequestIntake.onMessage((payload) => {
 | 2026-06-16 | MUZERO Team | Initial draft：通用接线 + mu0.app 网页 SSN WebSocket；记录「runtime 未接线」关键发现 |
 | 2026-06-16 | MUZERO Team | 定稿 Final：裁决 Q1-Q5；核实 SSN 公共 WS 协议 |
 | 2026-06-16 | MUZERO Team | 扩展 Q6：intake 泛化为多来源 + 可配置映射 |
+| 2026-06-16 | MUZERO Team | 队列语义修正(§4.4)：play-next 改 FIFO 请求块(`insertRequest`+`requested` 标记+`playQueueRequestNext`,非 LIFO 插队);play-now 改 cut-in 跳过去保留其余(`playRequestNow`,非切到歌曲 set)。+ play-queue 单测(34)。 |
 | 2026-06-16 | MUZERO Team | 实现 Phase 1–5（TDD，~17 原子提交，~90 测试）：模板引擎 + 映射预设 + 接线单例 + 多来源/测试生命周期 + web SSN WebSocket + 映射对话框 UI（shadcn）+ transport 生命周期 + i18n 四语 + 部署文档。CHANGELOG/版本 bump + 浏览器 e2e 留发版/手动。 |
 | 2026-06-16 | MUZERO Team | 扩展 Q7：复刻 anysoul「测试→上线 + 模板引擎映射」形式——`testing/active` 生命周期、testing 脱敏捕获真实 body、JSON 树 click-to-map、每字段实时预览（同引擎 parity）、预设/visual/raw、Go Live。dot-path 升级为模板引擎（覆盖多字段拼接），新增 `request-template.ts`/`request-mapping-presets.ts` + 映射对话框组件；重排 phase（模板引擎 → 多来源+测试生命周期 → web WS → 映射 UI） |
 

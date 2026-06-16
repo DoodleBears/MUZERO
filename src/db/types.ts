@@ -313,6 +313,12 @@ export interface EntityCover {
 export interface PlayQueueEntry {
   id: string; // newId("pqe")
   trackId: string;
+  /**
+   * Inserted by an audience/live request (vs the host's own playlist). Lets a
+   * later request queue *after* the existing request block (FIFO) instead of
+   * jumping the line. Absent on normal playlist entries. See `insertRequest`.
+   */
+  requested?: boolean;
 }
 
 export interface PlayQueue {

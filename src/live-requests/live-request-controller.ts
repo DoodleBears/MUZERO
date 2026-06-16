@@ -214,7 +214,8 @@ function ensureSingleton(): LiveRequestController {
   singleton ??= createLiveRequestController({
     playNow: async (track) => {
       const { usePlayerStore } = await import("@/stores/player-store");
-      await usePlayerStore.getState().playTrack(track);
+      // Cut-in over the host's current playlist (keep it; don't switch sets).
+      await usePlayerStore.getState().playRequestNow(track);
     },
   });
   return singleton;
