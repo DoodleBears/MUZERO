@@ -167,9 +167,23 @@ function DomLoadedCoverImage({
     if (!loadedUrl) return;
     const image = event.currentTarget;
     if (image.getAttribute("src") !== loadedUrl) return;
-    setDisplayUrl(loadedUrl);
-    if (image.naturalWidth > 0 && image.naturalHeight > 0) {
-      onAspect?.(image.naturalWidth / image.naturalHeight);
+    // Reveal only once the image is DECODED, not merely loaded. `decoding="async"`
+    // means a freshly-mounted <img> can become visible while the browser is still
+    // decoding it → one frame of the bg-muted square = the "cover flashes black"
+    // (worse for large covers, which decode slower). Awaiting decode() — at the
+    // element's display size — paints the cover on the frame it appears, like the
+    // Pixi background's off-thread createImageBitmap. Falls back to show-on-load.
+    const reveal = () => {
+      if (image.getAttribute("src") !== loadedUrl) return; // superseded mid-decode
+      setDisplayUrl(loadedUrl);
+      if (image.naturalWidth > 0 && image.naturalHeight > 0) {
+        onAspect?.(image.naturalWidth / image.naturalHeight);
+      }
+    };
+    if (typeof image.decode === "function") {
+      image.decode().then(reveal, reveal);
+    } else {
+      reveal();
     }
   };
   const onPendingError = () => {
