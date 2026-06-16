@@ -2,6 +2,29 @@
 
 All notable changes to MUZERO. Generated from `src/content/changelog` — do not edit by hand (`make changelog-md`).
 
+## v1.1.0 — 2026-06-15 · Smoother playback, smarter browsing, and desktop controls
+
+Now Playing switches faster and stays visually in sync, the library gains system playlists, A-Z navigation, and online discovery, and desktop users get tray controls, global shortcuts, pinned lyrics, and live request intake.
+
+### Highlights
+- **player** Fast, synchronized Now Playing switches — Cover, background, backlight, and queue identity now move together through rapid next/previous bursts, with persistent Pixi backgrounds, settled cover work, and off-thread image decoding reducing switch jank.
+
+### Added
+- **library** System playlists and A-Z library navigation — The library now has built-in system playlist cards and details, stats-aware sorting, reading-aware name sort, A-Z fast jump rails, and hover scrollbars for large set, album, and artist walls.
+- **streaming** Discover tab for online recommendations — NetEase daily recommendations and recommended playlists can be browsed, played, saved, rerolled, and opened in a dedicated online playlist detail flow.
+- **lyrics** Cascade lyrics and lyrics-only stage mode — A new lyric layout engine powers cascade word timing, inertial follow, row motion, and a lyrics-only visualizer mode with dedicated tuning for cover color and backlight.
+- **app** Tray, global shortcuts, and pinned lyrics — Electron desktop now supports a native tray playback menu, close-to-tray lifecycle, system global shortcuts, DevTools shortcuts in development, window pinning, and lockable pinned lyrics controls. _(desktop)_
+- **dj** Live requests can reach the AI DJ — Live request intake now has Electron runtime support, webhook presets, secure request parsing, library search, routing primitives, and an AI DJ handoff path. _(desktop)_
+
+### Changed
+- **dj** AI DJ understands local library references — The chat tools now expose compact local IDs, a library tree tool, tool metadata, and activity UI so DJ workflows can refer to sets, tracks, albums, and artists more precisely.
+- **settings** Performance, cache, and import controls — Settings now includes a Performance pane with graphics quality presets and GPU backend controls, storage usage and cache tools, recursive folder sync, local cache opening, and cover repair progress.
+- **visualizer** Unified visualizer tuning — Visualizer controls are now unified across styles with per-style help, updated defaults, better placement, background tuning, and cleaner mode icons.
+
+### Fixed
+- **library** Covers stay sharp without scroll flashes — Cover derivatives are cached and repaired in batches, imported cover metadata extraction is workerized with backpressure, and list scrolling keeps already loaded covers instead of flashing placeholders.
+- **player** More reliable playback state — Volume persists, selected current tracks resume correctly, held transport shortcuts are throttled, stale cover loads are ignored, and remote/local cover assets are deduped before they can disturb playback.
+
 ## v1.0.0 — 2026-06-12 · Faster imports and a cleaner desktop shell
 
 Large imports now become playable while they are still running, Windows gets native-feeling frameless controls, and player identity updates stay in sync.
