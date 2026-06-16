@@ -67,6 +67,11 @@ interface Snapshot {
   heapBytes: number | null;
   blobsLive: number;
   blobsCreated: number;
+  /** Live retained bytes (sum of un-revoked source-blob sizes) — the memory 占用
+   *  signal that count alone misses (one full cover ≫ one 160px thumbnail). */
+  blobsLiveImageBytes: number;
+  blobsLiveAudioBytes: number;
+  blobsLiveVideoBytes: number;
   dbRequeries: number;
   traceCount: number;
   work: PerfWorkStatRow[];
@@ -78,6 +83,9 @@ const EMPTY_SNAPSHOT: Snapshot = {
   heapBytes: null,
   blobsLive: 0,
   blobsCreated: 0,
+  blobsLiveImageBytes: 0,
+  blobsLiveAudioBytes: 0,
+  blobsLiveVideoBytes: 0,
   dbRequeries: 0,
   traceCount: 0,
   work: [],
@@ -168,6 +176,9 @@ export function DevPerfPanel() {
         heapBytes,
         blobsLive: blobs.live,
         blobsCreated: blobs.created,
+        blobsLiveImageBytes: blobs.liveBytesByKind.image,
+        blobsLiveAudioBytes: blobs.liveBytesByKind.audio,
+        blobsLiveVideoBytes: blobs.liveBytesByKind.video,
         dbRequeries,
         // Polled, NOT subscribed — a useTraceEntries subscription would re-render
         // this HUD on every log line (PRD F-L5).
@@ -185,6 +196,8 @@ export function DevPerfPanel() {
           blobsCreatedByKind: blobs.createdByKind,
           blobsLive: blobs.live,
           blobsLiveByKind: blobs.liveByKind,
+          blobsLiveBytes: blobs.liveBytes,
+          blobsLiveBytesByKind: blobs.liveBytesByKind,
           dbRequeries,
           fpsAvg: roundMetric(fpsFromIntervalMs(frames.avg)),
           fpsLow: roundMetric(fpsFromIntervalMs(frames.max)),
@@ -258,6 +271,12 @@ export function DevPerfPanel() {
           />
           <Row label="heap" value={formatMb(snap.heapBytes)} />
           <Row label="blobs" value={`${snap.blobsLive} live · ${snap.blobsCreated} made`} />
+          <Row
+            label="mem live"
+            value={`img ${formatMb(snap.blobsLiveImageBytes)} · aud ${formatMb(
+              snap.blobsLiveAudioBytes,
+            )} · vid ${formatMb(snap.blobsLiveVideoBytes)}`}
+          />
           <Row label="db" value={`${snap.dbRequeries} requeries`} />
           <Row label="queue" value={`${queueLength}`} />
           {snap.work.length > 0 && (

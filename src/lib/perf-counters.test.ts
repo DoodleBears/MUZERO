@@ -169,6 +169,8 @@ describe("perf counters", () => {
         createdByKind: { audio: 1, image: 1, other: 1, video: 1 },
         live: 4,
         liveByKind: { audio: 1, image: 1, other: 1, video: 1 },
+        liveBytes: 4,
+        liveBytesByKind: { audio: 1, image: 1, other: 1, video: 1 },
       });
       URL.revokeObjectURL(a);
       expect(blobUrlStats()).toEqual({
@@ -176,6 +178,8 @@ describe("perf counters", () => {
         createdByKind: { audio: 1, image: 1, other: 1, video: 1 },
         live: 3,
         liveByKind: { audio: 1, image: 0, other: 1, video: 1 },
+        liveBytes: 3,
+        liveBytesByKind: { audio: 1, image: 0, other: 1, video: 1 },
       });
       URL.revokeObjectURL(b);
       URL.revokeObjectURL(c);
@@ -185,6 +189,8 @@ describe("perf counters", () => {
         createdByKind: { audio: 1, image: 1, other: 1, video: 1 },
         live: 0,
         liveByKind: { audio: 0, image: 0, other: 0, video: 0 },
+        liveBytes: 0,
+        liveBytesByKind: { audio: 0, image: 0, other: 0, video: 0 },
       });
       uninstall();
     });

@@ -204,27 +204,51 @@ const EMPTY_BLOB_KIND_COUNTS: BlobUrlKindCounts = {
   video: 0,
 };
 
-const liveBlobUrls = new Map<string, BlobUrlKind>();
+/** Per-URL census record: its blob kind plus the byte size held until revoke. */
+interface LiveBlobUrl {
+  kind: BlobUrlKind;
+  bytes: number;
+}
+
+const liveBlobUrls = new Map<string, LiveBlobUrl>();
 let createdBlobUrls = 0;
 let createdBlobUrlKinds: BlobUrlKindCounts = { ...EMPTY_BLOB_KIND_COUNTS };
 let trackerRefs = 0;
 let originalCreate: typeof URL.createObjectURL | null = null;
 let originalRevoke: typeof URL.revokeObjectURL | null = null;
 
-/** Live (created − revoked) and total-created object URLs while the tracker is on. */
+/**
+ * Live (created − revoked) and total-created object URLs while the tracker is on,
+ * plus the **live retained bytes** (sum of the source-blob sizes still un-revoked)
+ * grouped by kind. The byte totals are the "memory 占用" signal the cover-original
+ * experiment needs: a live count alone hides that one full-res cover holds far more
+ * than one 160px thumbnail. (This is the source-blob byte size — the JS-side cost.
+ * Chromium's decoded-bitmap / GPU memory lives outside `usedJSHeapSize` and is not
+ * captured here; see the DevPerfPanel docs.)
+ */
 export function blobUrlStats(): {
   live: number;
   created: number;
   liveByKind: BlobUrlKindCounts;
   createdByKind: BlobUrlKindCounts;
+  liveBytes: number;
+  liveBytesByKind: BlobUrlKindCounts;
 } {
   const liveByKind = { ...EMPTY_BLOB_KIND_COUNTS };
-  for (const kind of liveBlobUrls.values()) liveByKind[kind] += 1;
+  const liveBytesByKind = { ...EMPTY_BLOB_KIND_COUNTS };
+  let liveBytes = 0;
+  for (const { kind, bytes } of liveBlobUrls.values()) {
+    liveByKind[kind] += 1;
+    liveBytesByKind[kind] += bytes;
+    liveBytes += bytes;
+  }
   return {
     live: liveBlobUrls.size,
     created: createdBlobUrls,
     liveByKind,
     createdByKind: { ...createdBlobUrlKinds },
+    liveBytes,
+    liveBytesByKind,
   };
 }
 
@@ -251,7 +275,8 @@ export function installBlobUrlTracker(): () => void {
     URL.createObjectURL = ((blob: Blob | MediaSource) => {
       const url = create.call(URL, blob);
       const kind = classifyBlobUrlKind(blob);
-      liveBlobUrls.set(url, kind);
+      const bytes = typeof Blob !== "undefined" && blob instanceof Blob ? blob.size : 0;
+      liveBlobUrls.set(url, { kind, bytes });
       createdBlobUrls += 1;
       createdBlobUrlKinds[kind] += 1;
       return url;
