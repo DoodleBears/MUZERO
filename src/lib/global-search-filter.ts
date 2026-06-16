@@ -1,7 +1,7 @@
 /**
  * `@`-mention filters for the global (⌘/Ctrl+F) search overlay. Typing `@` opens
  * a small menu to scope the search to a facet — sets, artists, albums — or to a single
- * online source (Bilibili / 网易云). This module is the pure parsing core: it
+ * online source (Bilibili / 网易云 / YouTube / QQ 音乐). This module is the pure parsing core: it
  * detects the trailing `@token` the user is typing and matches it against the
  * available filter options. Labels live at the UI call site (this lib holds no
  * copy, mirroring `library-index` → `entity-labels`).
@@ -19,7 +19,7 @@ export type SearchFilter =
 
 export interface FilterOption {
   /** Stable id (menu key + label switch). */
-  id: "set" | "lyrics" | "artist" | "album" | "bili" | "netease" | "youtube";
+  id: "set" | "lyrics" | "artist" | "album" | "bili" | "netease" | "youtube" | "qq";
   /** The filter this option produces when chosen. */
   filter: SearchFilter;
   /** Latin + CJK aliases (lowercased) the `@token` prefix-matches against. */
@@ -28,7 +28,7 @@ export interface FilterOption {
 
 /**
  * The offered filters, in menu order. Sources mirror the overlay's enable chips
- * (netease + bili + YouTube). Aliases carry both latin and CJK forms so `@歌手`
+ * (netease + bili + YouTube + QQ). Aliases carry both latin and CJK forms so `@歌手`
  * and `@artist` both narrow to the same option.
  */
 export const FILTER_OPTIONS: FilterOption[] = [
@@ -62,6 +62,11 @@ export const FILTER_OPTIONS: FilterOption[] = [
     id: "youtube",
     filter: { kind: "source", source: "youtube" },
     aliases: ["youtube", "yt", "ytb", "油管"],
+  },
+  {
+    id: "qq",
+    filter: { kind: "source", source: "qq" },
+    aliases: ["qq", "qqmusic", "qq音乐", "腾讯"],
   },
 ];
 

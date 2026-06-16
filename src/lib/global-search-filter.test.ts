@@ -46,6 +46,7 @@ describe("matchFilterOptions", () => {
       "bili",
       "netease",
       "youtube",
+      "qq",
     ]);
   });
 
@@ -60,6 +61,8 @@ describe("matchFilterOptions", () => {
     expect(matchFilterOptions("net").map((o) => o.id)).toEqual(["netease"]);
     expect(matchFilterOptions("yt").map((o) => o.id)).toEqual(["youtube"]);
     expect(matchFilterOptions("油管").map((o) => o.id)).toEqual(["youtube"]);
+    expect(matchFilterOptions("qq").map((o) => o.id)).toEqual(["qq"]);
+    expect(matchFilterOptions("qqmusic").map((o) => o.id)).toEqual(["qq"]);
   });
 
   it("prefix-matches CJK aliases", () => {
@@ -69,6 +72,8 @@ describe("matchFilterOptions", () => {
     expect(matchFilterOptions("词").map((o) => o.id)).toEqual(["lyrics"]);
     expect(matchFilterOptions("专辑").map((o) => o.id)).toEqual(["album"]);
     expect(matchFilterOptions("网易").map((o) => o.id)).toEqual(["netease"]);
+    expect(matchFilterOptions("腾讯").map((o) => o.id)).toEqual(["qq"]);
+    expect(matchFilterOptions("qq音乐").map((o) => o.id)).toEqual(["qq"]);
   });
 
   it("is case-insensitive", () => {
