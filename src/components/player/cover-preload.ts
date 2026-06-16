@@ -213,7 +213,14 @@ export async function preloadCoverBatch({
 
     const afterInflight = cache.peek(request.key);
     const url = afterInflight ?? cache.store(request.key, createObjectURL(coverBlob.blob));
-    if (!afterInflight) stats.created += 1;
+    if (!afterInflight) {
+      stats.created += 1;
+      // DECODE the freshly-created cover, not just hold its blob URL: a coverflow card
+      // or the base <img> that mounts later then paints the cover on its FIRST frame
+      // instead of showing bg-muted for a frame while the browser decodes (the "cover
+      // flashes black on drag-start / commit"). Decoded bitmaps are cached per URL.
+      warmImage(url);
+    }
     const entry = { cacheKey: request.key, key: request.key, url };
     nextEntries[request.trackId] = entry;
   }
@@ -306,6 +313,10 @@ function defaultWarmImage(url: string): void {
   img.decoding = "async";
   img.referrerPolicy = "no-referrer";
   img.src = url;
+  // Actually DECODE (off the main thread), not just fetch — so the decoded bitmap is
+  // cached and a later <img> with this URL paints on its first frame. Ignore failures
+  // (aborted/te decode races); the <img> falls back to its own lazy decode.
+  void img.decode?.().catch(() => {});
 }
 
 function defaultDelay(ms: number): Promise<void> {
