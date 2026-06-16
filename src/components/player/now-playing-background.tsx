@@ -339,15 +339,21 @@ function NowPlayingBackgroundContent({ hideVisualizer }: { hideVisualizer: boole
   const effectiveRenderPixiTarget = suppressCoverTargetWhileLocalPending ? null : renderPixiTarget;
   const shouldKeepPixiMounted =
     pixiMedia.source === "track-video" ? hasBackgroundVideoMedia : hasPotentialImageBackground;
-  // Hold the Pixi layer VISIBLE (showing the previous cover) while a switch's
-  // incoming cover resolves, instead of dropping to opacity-0 — the dark drop was
-  // the post-commit flicker. We gate on `renderPixiTarget` (the SETTLED target,
-  // which `settleBackgroundTarget` holds at the previous cover during a pending
-  // switch) rather than the raw `hasCover`, so we only hold when there's actually a
-  // previous cover painted: streamed/remote covers that intentionally CLEAR while
-  // loading (settle returns null) still hide, and the very first cover still fades
-  // in from empty. Video keeps the strict gate (no stale cover under a new video).
-  const pixiHoldsCover = !!renderPixiTarget && pixiMedia.source !== "track-video";
+  // Hold the Pixi layer VISIBLE while a switch's incoming cover resolves, instead of
+  // dropping to opacity-0 — the dark drop was the "black flash on commit". The Pixi
+  // controller KEEPS its last texture on a transient null src, so holding the layer
+  // visible shows that previous cover until the new one lands. We only hide for a
+  // genuinely REMOTE/stale cover (where flashing the previous would be a wrong cover
+  // from another source) — that's what clearCoverBackgroundWhileLoading guards. A
+  // LOCAL cover whose protocol URL is briefly resolving (waitForLocalCoverUrl) is the
+  // SAME track's art, so it holds. Video keeps the strict gate.
+  const isRemoteOrStaleCover =
+    Boolean(current?.remoteCoverUrl) ||
+    current?.origin === "streamed" ||
+    coverResource.staleWhilePending ||
+    !coverResourceMatchesTrack;
+  const pixiHoldsCover =
+    pixiMedia.source !== "track-video" && hasPotentialImageBackground && !isRemoteOrStaleCover;
   const slideshowResetKey = `${current?.id ?? ""}:${source}:${slideshowUrls.length}`;
 
   useEffect(() => {

@@ -157,22 +157,34 @@ export function PixiPixelBackground({
   useEffect(() => {
     if (!controller || mediaType !== "image") return;
     let active = useNowPlayingTransition.getState().active;
+    let lastToCover: string | null = null;
     const applyProgress = (p: number) => {
       if (active) controller.setDragProgress(p);
     };
+    // Load the overlay cover for the current drag TARGET. Re-runs whenever the target
+    // changes — including a direction REVERSAL mid-drag (drag toward next, then back
+    // past centre toward prev): the foreground re-`begin`s the transition with the new
+    // neighbour, so the overlay must follow it instead of staying on the first cover.
+    const syncCover = (toCoverUrl: string | null) => {
+      if (toCoverUrl === lastToCover) return;
+      lastToCover = toCoverUrl;
+      void controller.setDragCover(toCoverUrl, "image");
+    };
     if (active) {
-      const { toCoverUrl } = useNowPlayingTransition.getState();
-      if (toCoverUrl) void controller.setDragCover(toCoverUrl, "image");
+      syncCover(useNowPlayingTransition.getState().toCoverUrl);
       applyProgress(transitionProgress.get());
     }
     const unsubProgress = transitionProgress.on("change", applyProgress);
     const unsubStore = useNowPlayingTransition.subscribe((s) => {
-      if (s.active && !active) {
-        active = true;
-        if (s.toCoverUrl) void controller.setDragCover(s.toCoverUrl, "image");
-        applyProgress(transitionProgress.get());
-      } else if (!s.active && active) {
+      if (s.active) {
+        if (!active) {
+          active = true;
+          applyProgress(transitionProgress.get());
+        }
+        syncCover(s.toCoverUrl); // initial AND on direction reversal
+      } else if (active) {
         active = false;
+        lastToCover = null;
         controller.releaseDrag();
       }
     });
