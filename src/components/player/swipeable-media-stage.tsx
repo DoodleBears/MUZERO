@@ -731,7 +731,12 @@ export function SwipeableMediaStage({
     typeof document !== "undefined"
       ? (containerRef.current?.closest("main") ?? document.body)
       : null;
-  const baseHidden = stackActive && !handoffFading;
+  // Hide the base only during the ACTIVE drag/slide. Once the switch has COMMITTED
+  // (settleTarget set) keep the base visible + centred (x:0 below) UNDER the still-
+  // opaque overlay, so its already-decoded cover is painted and never evicted — then
+  // the overlay fades into an identical base (no re-decode = no commit flash). The
+  // overlay covers it throughout the settle, and x:0 keeps it aligned (no 重影).
+  const baseHidden = stackActive && !handoffFading && !settleTarget;
   const stackOverlay =
     foregroundVisible && stackActive && overlayRect && overlayPortalTarget
       ? createPortal(
@@ -892,7 +897,10 @@ export function SwipeableMediaStage({
             aria-label={`${t("player.previous")} / ${t("player.next")}`}
             className="relative z-10 w-full touch-pan-y cursor-grab select-none overflow-visible active:cursor-grabbing album-cover-radius [&_*]:select-none [&_img]:pointer-events-none"
             style={{
-              x,
+              // Centre the base during the settle so it aligns with the (centred,
+              // x-independent) settled overlay card — otherwise it'd sit at the slide
+              // offset and double-image. The slide `x` only drives it during the drag.
+              x: settleTarget ? 0 : x,
               opacity: baseHidden ? 0 : 1,
               willChange: "transform",
             }}
