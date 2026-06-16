@@ -438,13 +438,14 @@ function NowPlayingBackgroundContent({ hideVisualizer }: { hideVisualizer: boole
         pixiEffect &&
         ENABLE_PIXI_BACKGROUND_FOR_BISECT ? (
         <PixiPixelBackground
-          // Hold the previous cover (opacity-90) while a switch's incoming cover
-          // resolves instead of dropping to opacity-0 — the dark gap was the
-          // "background flickers after the transition commits" QA. The controller
-          // already keeps the painted texture on a transient null src, so holding
-          // the layer visible mirrors 均衡's hold-previous frame controller. Video
+          // Show the cover layer at FULL opacity so a cover→cover crossfade is a true
+          // 0→100% handoff (the incoming fully replaces the outgoing — no residual);
+          // dimming, if any, is the separate imageMask below, not a cap on this layer.
+          // Hold it VISIBLE (opacity-100, previous cover) while a switch's incoming
+          // cover resolves rather than dropping to opacity-0 — the dark gap was the
+          // post-commit flicker — mirroring 均衡's hold-previous frame controller. Video
           // keeps the old gate (no stale cover while a video texture loads).
-          className={effectiveRenderPixiTarget || pixiHoldsCover ? "opacity-90" : "opacity-0"}
+          className={effectiveRenderPixiTarget || pixiHoldsCover ? "opacity-100" : "opacity-0"}
           effect={pixiEffect}
           effectSettings={effectSettings}
           mediaType={effectiveRenderPixiTarget?.mediaType ?? pixiMedia.mediaType}

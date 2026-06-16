@@ -315,7 +315,7 @@ describe("NowPlayingBackground", () => {
     await loadImage(0);
     const firstShell = screen.getByTestId("pixi-background");
     expect(firstShell).toHaveAttribute("data-src", "blob:phase10-cover-a");
-    expect(firstShell).toHaveClass("opacity-90");
+    expect(firstShell).toHaveClass("opacity-100");
 
     await act(async () => {
       usePlayerStore.setState({ currentIndex: 1 });
@@ -343,7 +343,7 @@ describe("NowPlayingBackground", () => {
     const readyShell = screen.getByTestId("pixi-background");
     expect(readyShell).toBe(firstShell);
     expect(readyShell).toHaveAttribute("data-src", "blob:phase10-cover-b");
-    expect(readyShell).toHaveClass("opacity-90");
+    expect(readyShell).toHaveClass("opacity-100");
   });
 
   it("waits for a local protocol cover URL instead of decoding a blob fallback", async () => {
@@ -401,7 +401,7 @@ describe("NowPlayingBackground", () => {
     const readyShell = screen.getByTestId("pixi-background");
     expect(readyShell).toBe(pendingShell);
     expect(readyShell).toHaveAttribute("data-src", "muzfetch://local-media/cover-token");
-    expect(readyShell).toHaveClass("opacity-90");
+    expect(readyShell).toHaveClass("opacity-100");
     expect(mocks.trackCoverResourceTrackIds).not.toContain("trk_local");
   });
 
