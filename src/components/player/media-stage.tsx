@@ -13,7 +13,7 @@ import {
 import { resolveStageContent, trackHasCover } from "@/lib/track-display";
 import { cn } from "@/lib/utils";
 import { getMediaEngine, usePlayerStore } from "@/stores/player-store";
-import { CoverImage } from "./cover-image";
+import { CanvasCover } from "./canvas-cover";
 import { StageTitleFallback } from "./stage-title-fallback";
 
 const DEFAULT_VIDEO_ASPECT = 16 / 9;
@@ -58,6 +58,13 @@ export function MediaStage({
   const stageRef = useRef<HTMLDivElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const coverUrl = useTrackCoverUrl(displayTrack);
+  // Read by CanvasCover's onShown (which fires async, post-decode) to map the painted
+  // url → the still-current track for the coverflow handoff gate, without re-running
+  // the decode on every render (a fresh onShown closure would).
+  const coverUrlRef = useRef(coverUrl);
+  coverUrlRef.current = coverUrl;
+  const displayTrackIdRef = useRef(displayTrack?.id);
+  displayTrackIdRef.current = displayTrack?.id;
   const coverEffectMode = resolveNowPlayingCoverEffectMode(settings.nowPlayingCoverEffectMode);
   // Only the "backlight" effect renders the blurred derivative — gate the request
   // so the default "shadow" mode no longer fires a worker render + DB write + blob
@@ -170,21 +177,17 @@ export function MediaStage({
         )}
       >
         {showGeneratedBackdrop && <StageTitleFallback track={displayTrack} dim={asBgActive} />}
-        {/* Crossfades to the next cover only once it has decoded (no flash of the
-            previous track's cover), and reports its aspect for the box ratio. */}
+        {/* Rendered to a persistent canvas (decode-off-thread, hold-previous + crossfade)
+            so a cover switch never re-decodes-on-paint = no flash, like the Pixi bg. */}
         {content === "cover" && (
-          <CoverImage
-            url={coverUrl}
-            hasCover={trackHasCover(displayTrack)}
-            holdPreviousWhileLoading={Boolean(
-              displayTrack?.coverBlobId && !displayTrack.remoteCoverUrl,
-            )}
-            fallback={<StageTitleFallback track={displayTrack} dim={asBgActive} />}
+          <CanvasCover
+            coverUrl={coverUrl}
             className="z-10 album-cover-radius"
-            loadStrategy="dom"
-            onShown={displayTrack ? () => onCoverReady?.(displayTrack.id) : undefined}
-            thumbhash={displayTrack?.coverThumbhash}
-            trackId={displayTrack?.id}
+            label="base"
+            onShown={(url) => {
+              const id = displayTrackIdRef.current;
+              if (id && coverUrlRef.current === url) onCoverReady?.(id);
+            }}
           />
         )}
         {videoBroke && (

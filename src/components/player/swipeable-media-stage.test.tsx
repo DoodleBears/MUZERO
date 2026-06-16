@@ -362,14 +362,18 @@ describe("SwipeableMediaStage", () => {
       await Promise.resolve();
     });
 
-    expect(document.querySelectorAll('img[src^="blob:preload-"]').length).toBeGreaterThan(0);
+    // The overlay card now renders its cover to a <canvas> (CanvasCover); the base
+    // MediaStage is mocked (no canvas), so a canvas means the settled overlay is still up.
+    expect(document.querySelectorAll("canvas").length).toBeGreaterThan(0);
 
     await act(async () => {
       vi.advanceTimersByTime(2_000);
       await Promise.resolve();
     });
 
-    expect(document.querySelectorAll('img[src^="blob:preload-"]').length).toBeGreaterThan(0);
+    // The overlay card now renders its cover to a <canvas> (CanvasCover); the base
+    // MediaStage is mocked (no canvas), so a canvas means the settled overlay is still up.
+    expect(document.querySelectorAll("canvas").length).toBeGreaterThan(0);
   });
 
   it("never shows a bare title card for a streamed track switch (remote cover preloads)", async () => {

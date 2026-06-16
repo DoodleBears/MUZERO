@@ -19,7 +19,6 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
-import { thumbHashToDataURL } from "thumbhash";
 import { AutoScrollText } from "@/components/ui/auto-scroll-text";
 import type { Track } from "@/db/types";
 import { useSettings } from "@/hooks/use-app-data";
@@ -30,8 +29,8 @@ import {
   resolveNowPlayingCoverBacklightAppearance,
   resolveNowPlayingCoverEffectMode,
 } from "@/lib/album-cover-appearance";
-import { base64ToThumbhash } from "@/lib/cover-thumbhash";
 import { matchActiveQualityPreset } from "@/lib/graphics-quality";
+import { log } from "@/lib/logger";
 import { transitionProgress, useNowPlayingTransition } from "@/lib/now-playing-transition";
 import { arePerfCountersEnabled, notePerfWork } from "@/lib/perf-counters";
 import { trackAlbum, trackArtists, trackHasCover, trackSubtitle } from "@/lib/track-display";
@@ -45,6 +44,7 @@ import { cn } from "@/lib/utils";
 import { TRANSPORT_SWITCH_MIN_INTERVAL_MS } from "@/shortcuts/transport-throttle";
 import { useNavStore } from "@/stores/nav-store";
 import { usePlayerStore } from "@/stores/player-store";
+import { CanvasCover } from "./canvas-cover";
 import {
   buildCoverPreloadRequests,
   type CoverPreloadCandidate,
@@ -768,6 +768,7 @@ export function SwipeableMediaStage({
                 <CoverflowCard
                   card={prevCard}
                   coverEffect={coverEffect}
+                  label="card-prev"
                   onReady={markVisualReady}
                   visual={liveStackVisual(activeStack.prev)}
                   zClass={dragDirection === "prev" ? "z-30" : "z-0"}
@@ -775,6 +776,7 @@ export function SwipeableMediaStage({
                 <CoverflowCard
                   card={nextCard}
                   coverEffect={coverEffect}
+                  label="card-next"
                   onReady={markVisualReady}
                   visual={liveStackVisual(activeStack.next)}
                   zClass={dragDirection === "next" ? "z-30" : "z-0"}
@@ -783,6 +785,7 @@ export function SwipeableMediaStage({
                   card={currentCard}
                   coverEffect={coverEffect}
                   coverHasBacklight
+                  label="card-current"
                   onReady={markVisualReady}
                   visual={liveStackVisual(activeStack.current)}
                   zClass="z-20"
@@ -798,6 +801,24 @@ export function SwipeableMediaStage({
   // the base owns the identity the moment the swipe settles; it's hidden only
   // while the overlay's moving coverflow identity is on screen (active drag).
   const identityHidden = stackActive && !settleTarget && !handoffFading;
+
+  // Trace the handoff state machine so a copy-trace can anchor WHEN the base hides
+  // (drag-start: baseHidden flips true → the overlay's cold card must paint to fill
+  // the gap) and WHEN the commit hands back (settle set → base must repaint before
+  // the overlay fades). Correlate the timestamps here with the `nowplaying.cover`
+  // paint lines (each carries its label + elapsedMs) to read the flash window.
+  // One line per transition — not per frame — so it's cheap and lands in copy-trace.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: derived values are logged, state inputs are the deps
+  useEffect(() => {
+    log.debug("nowplaying.swipe", "state", {
+      dragDir: dragDirection ?? "none",
+      committing,
+      settle: settleTarget?.track.id ?? "none",
+      handoffFading,
+      baseHidden,
+      baseShown: baseCoverShownId ?? "none",
+    });
+  }, [dragDirection, committing, settleTarget, handoffFading, stack, baseCoverShownId]);
 
   return (
     <>
@@ -983,6 +1004,7 @@ function CoverflowCard({
   card,
   coverEffect,
   coverHasBacklight,
+  label,
   onReady,
   visual,
   zClass,
@@ -990,6 +1012,7 @@ function CoverflowCard({
   card: CoverflowMotion;
   coverEffect: SwipeCoverEffect;
   coverHasBacklight?: boolean;
+  label?: string;
   onReady?: (trackId: string) => void;
   visual: VisualTrack | null;
   zClass: string;
@@ -1012,6 +1035,7 @@ function CoverflowCard({
         coverEffect={coverEffect}
         hasBacklight={coverHasBacklight}
         key={visual.track.id}
+        label={label}
         onReady={onReady}
         visual={visual}
       />
@@ -1044,6 +1068,7 @@ function SettleCard({
       <TrackVisual
         coverEffect={coverEffect}
         key={visual.track.id}
+        label="card-settle"
         onReady={onReady}
         visual={visual}
       />
@@ -1144,33 +1169,21 @@ function TrackVisual({
   backlightInitial = false,
   coverEffect,
   hasBacklight = false,
+  label,
   onReady,
   visual,
 }: {
   backlightInitial?: boolean;
   coverEffect: SwipeCoverEffect;
   hasBacklight?: boolean;
+  /** Diagnostic tag forwarded to CanvasCover so a trace can tell each card's flash apart. */
+  label?: string;
   onReady?: (trackId: string) => void;
   visual: VisualTrack;
 }) {
-  const [initialFailed, setInitialFailed] = useState(false);
   const hasCover = trackHasCover(visual.track);
-  const coverUrl = hasCover && !initialFailed ? visual.initialCoverUrl : null;
+  const coverUrl = hasCover ? visual.initialCoverUrl : null;
   const backlightUrl = useCoverDerivativeUrl(visual.track, "backlight");
-
-  // Instant blurred preview (the track's ~25-byte thumbhash → tiny PNG data URL) painted
-  // BEHIND the cover. A freshly-mounted card <img> takes a frame to decode; the preview
-  // fills that frame with a blurred cover instead of the bg-muted square (the "cover
-  // flashes / fades to black on drag-start"). Same ladder the library grid uses.
-  const preview = useMemo(() => {
-    const th = visual.track.coverThumbhash;
-    if (!th) return null;
-    try {
-      return thumbHashToDataURL(base64ToThumbhash(th));
-    } catch {
-      return null;
-    }
-  }, [visual.track.coverThumbhash]);
 
   useEffect(() => {
     if (!hasCover || coverUrl) onReady?.(visual.track.id);
@@ -1206,27 +1219,11 @@ function TrackVisual({
           />
         </motion.div>
       )}
+      {/* Canvas cover (decode-off-thread, no DOM <img> = no decode flash) — instant
+          (crossfade 0) since a card shows one cover; preloaded covers are already
+          decoded by the warm pass, so it paints on its first frame. */}
       <div className="absolute inset-0 z-10 overflow-hidden bg-muted album-cover-radius">
-        {preview && (
-          <img
-            src={preview}
-            alt=""
-            aria-hidden
-            className="absolute inset-0 size-full object-cover"
-          />
-        )}
-        <img
-          src={coverUrl}
-          alt=""
-          // Decode off the main thread so a fast switch doesn't decode the
-          // full-res cover synchronously on the paint path (PRD Phase 5).
-          decoding="async"
-          // Streamed covers come from third-party hosts that 403 a foreign referer.
-          referrerPolicy="no-referrer"
-          draggable={false}
-          className="absolute inset-0 size-full object-cover"
-          onError={() => setInitialFailed(true)}
-        />
+        <CanvasCover coverUrl={coverUrl} crossfadeSec={0} label={label} />
       </div>
     </>
   ) : (
