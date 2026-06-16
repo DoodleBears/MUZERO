@@ -49,6 +49,16 @@ describe("parseQqUin", () => {
   it("extracts qqmusic_uin from a cookie string", () => {
     expect(parseQqUin("qqmusic_uin=12345; qqmusic_key=W_X_abc")).toBe("12345");
   });
+  it("falls back to the `uin` cookie, stripping an `o` prefix + leading zeros", () => {
+    expect(parseQqUin("uin=o0759061294; qqmusic_key=W_X_abc")).toBe("759061294");
+    expect(parseQqUin("uin=12345")).toBe("12345");
+  });
+  it("falls back to wxuin (wechat login)", () => {
+    expect(parseQqUin("wxuin=987654; qqmusic_key=W_X_abc")).toBe("987654");
+  });
+  it("prefers qqmusic_uin over the generic uin", () => {
+    expect(parseQqUin("uin=o0111; qqmusic_uin=222")).toBe("222");
+  });
   it("returns undefined when absent / empty", () => {
     expect(parseQqUin(undefined)).toBeUndefined();
     expect(parseQqUin("qqmusic_key=W_X_abc")).toBeUndefined();

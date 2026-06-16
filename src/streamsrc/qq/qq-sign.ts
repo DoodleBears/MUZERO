@@ -50,7 +50,27 @@ export function parseQqMusicKey(cookie: string | undefined): string | undefined 
   return parseQqCookie(cookie, "qqmusic_key");
 }
 
-/** Pull the qqmusic_uin value (the logged-in user id) out of a cookie string. */
+/**
+ * Pull the logged-in user id (uin) out of a cookie string. QQ's web login names it
+ * inconsistently — prefer `qqmusic_uin`, then the generic `uin` (often `o0759…`, so
+ * strip a leading letter + zeros), then `wxuin` (wechat login). The numeric uin is
+ * what `fcg_user_created_diss?hostuin=` expects.
+ */
 export function parseQqUin(cookie: string | undefined): string | undefined {
-  return parseQqCookie(cookie, "qqmusic_uin");
+  const raw =
+    parseQqCookie(cookie, "qqmusic_uin") ??
+    parseQqCookie(cookie, "uin") ??
+    parseQqCookie(cookie, "wxuin");
+  if (!raw) return undefined;
+  const digits = raw.replace(/^[a-zA-Z]+/, "").replace(/^0+/, "");
+  return digits || undefined;
+}
+
+/** The cookie names present in a stored cookie string (values stripped — for diagnostics). */
+export function qqCookieNames(cookie: string | undefined): string[] {
+  if (!cookie) return [];
+  return cookie
+    .split(";")
+    .map((pair) => pair.trim().split("=")[0])
+    .filter(Boolean);
 }

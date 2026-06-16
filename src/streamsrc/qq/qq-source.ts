@@ -31,7 +31,7 @@ import {
 } from "./qq-playlists";
 import { qqFilename, qqQualityCandidates } from "./qq-quality";
 import { parseQqVkey, QQ_MUSICU_URL, qqStreamUrl, qqVkeyRequestBody } from "./qq-resolve";
-import { parseQqMusicKey, parseQqUin, QQ_GUEST_GTK, qqGtk } from "./qq-sign";
+import { parseQqMusicKey, parseQqUin, QQ_GUEST_GTK, qqCookieNames, qqGtk } from "./qq-sign";
 
 /** The logged-in user's own created playlists (needs qqmusic_uin + g_tk). */
 const USER_DISS_URL = "https://c.y.qq.com/rsc/fcgi-bin/fcg_user_created_diss";
@@ -221,8 +221,17 @@ export function createQqSource(deps: QqSourceDeps): StreamSourceProvider {
 
   /** The logged-in user's created playlists ("我的歌单"); [] when anonymous. */
   async function getUserPlaylists(opts?: { signal?: AbortSignal }): Promise<StreamPlaylist[]> {
-    const uin = parseQqUin(deps.getCookie?.());
-    if (!uin) return [];
+    const cookie = deps.getCookie?.();
+    const uin = parseQqUin(cookie);
+    if (!uin) {
+      // Login captured a cookie but no recognizable uin — log the names (not values)
+      // so we can see which cookie actually holds it (y.qq.com naming varies).
+      log.warn("qq", "getUserPlaylists: no uin in cookie", {
+        authed: Boolean(cookie),
+        cookieNames: qqCookieNames(cookie),
+      });
+      return [];
+    }
     const url = withQuery(USER_DISS_URL, {
       hostuin: uin,
       sin: "0",
@@ -236,7 +245,9 @@ export function createQqSource(deps: QqSourceDeps): StreamSourceProvider {
       needNewCode: "0",
     });
     try {
-      return parseQqUserPlaylists(JSON.parse(unwrapJsonp(await get(url, opts?.signal))));
+      const lists = parseQqUserPlaylists(JSON.parse(unwrapJsonp(await get(url, opts?.signal))));
+      log.info("qq", "getUserPlaylists", { count: lists.length });
+      return lists;
     } catch {
       log.warn("qq", "user playlists response is not JSON");
       return [];
