@@ -36,9 +36,14 @@ export function usePlaybackWarmup(): void {
       const coverTracks = [current, previous, ...upcoming].filter((track): track is Track =>
         Boolean(track),
       );
+      // Warm media for BOTH directions: upcoming (next, prioritized) + previous. Without
+      // the previous track's audio warmed, a back-nav / prev-swipe cold-reads the blob on
+      // the switch frame (only its cover was warmed). Forward cold-switch is already near-
+      // zero after the OPFS root-handle cache; this closes the prev-direction gap.
+      const mediaTracks = [...upcoming, previous].filter((track): track is Track => Boolean(track));
 
       void warmPlaybackPreload(
-        { coverTracks, mediaTracks: upcoming },
+        { coverTracks, mediaTracks },
         {
           cacheMaxBytes,
           coverCropped,
