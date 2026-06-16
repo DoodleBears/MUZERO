@@ -41,6 +41,21 @@ describe("notification store", () => {
     const item = queue()[0];
     expect(item.detail).toBe("MEDIA_ERR_DECODE");
     expect(item.debug?.message).toBe("decode failed");
+    // A real Error already carries its own stack — keep it, don't synthesize.
+    expect(item.debug?.stack).toContain("decode failed");
+  });
+
+  it("synthesizes a report-site stack when the error carries none", () => {
+    // Bare message, no thrown value — the copy payload would otherwise be
+    // stack-less, so we capture one at the call site.
+    notify.error("boom");
+    expect(queue()[0].debug?.stack).toBeTruthy();
+  });
+
+  it("synthesizes a stack for stack-less thrown values (string / MediaError)", () => {
+    notify.error("Playback error", { error: "MEDIA_ERR_DECODE" });
+    const item = queue()[0];
+    expect(item.debug?.stack).toBeTruthy();
   });
 
   it("caps transient notifications so the queue can't grow unbounded", () => {

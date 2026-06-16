@@ -160,6 +160,35 @@ export function extractErrorDebugInfo(
 }
 
 /**
+ * Capture a stack trace at the current call site, used as a fallback when the
+ * thrown value carried none of its own (a bare string throw, a `MediaError` /
+ * `DOMException`, or a `notify.error` called with just a message). Trims the
+ * internal frames (this helper + the notify wrapper) so the trace starts at the
+ * code that reported the error, and marks it so the reader knows it's the
+ * report site, not the throw site. Returns `undefined` when the engine gives no
+ * usable stack. V8 prefixes an `Error` line; JSC/WebKit doesn't — the filter
+ * tolerates both, and in production bundles a couple of un-trimmed internal
+ * frames are harmless (the trace is still complete).
+ */
+export function captureReportStack(): string | undefined {
+  const raw = new Error().stack;
+  if (!raw) return undefined;
+  const frames = raw
+    .split("\n")
+    .filter((line) => {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed === "Error") return false;
+      // Drop this helper + the notify.error wrapper so the trace begins at the
+      // actual report site (best-effort: source names are mangled in prod).
+      return !/error-details|notification-store/.test(trimmed);
+    })
+    .join("\n")
+    .trimEnd();
+
+  return frames ? `(no error stack — captured at report site)\n${frames}` : undefined;
+}
+
+/**
  * Render an error + its context into the plain-text blob copied to the
  * clipboard: a summary line, metadata, device/route context, then the stacks.
  */

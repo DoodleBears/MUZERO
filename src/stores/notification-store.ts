@@ -13,7 +13,11 @@
  *   import { notify } from "@/stores/notification-store"; // in stores / lib
  */
 import { create } from "zustand";
-import { type ErrorDebugInfo, extractErrorDebugInfo } from "@/lib/error-details";
+import {
+  captureReportStack,
+  type ErrorDebugInfo,
+  extractErrorDebugInfo,
+} from "@/lib/error-details";
 
 export type NotificationType = "success" | "error" | "warning" | "info" | "loading";
 
@@ -162,8 +166,15 @@ export const notify = {
 
   error: (message: string, opts?: NotifyOpts) => {
     const { error, componentStack, source, ...rest } = opts ?? {};
-    const debug =
+    let debug =
       rest.debug ?? extractErrorDebugInfo(error, { detail: rest.detail, componentStack, source });
+    // Guarantee the copy payload always carries a stack. String throws,
+    // MediaError/DOMException, and bare `notify.error(msg)` calls leave `stack`
+    // empty — synthesize one from the report site so "copy" is never stack-less.
+    if (!debug?.stack) {
+      const reportStack = captureReportStack();
+      if (reportStack) debug = { ...debug, stack: reportStack };
+    }
     return useNotificationStore
       .getState()
       .push({ type: "error", message, dismissible: true, ...rest, debug });
