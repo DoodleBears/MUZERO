@@ -1148,16 +1148,6 @@ function TrackVisual({
   const coverUrl = hasCover && !initialFailed ? visual.initialCoverUrl : null;
   const backlightUrl = useCoverDerivativeUrl(visual.track, "backlight");
 
-  // Reveal the card cover only once DECODED — a freshly-mounted <img> can paint a
-  // frame of the bg-muted square while it decodes (the "cover flashes on drag-start").
-  // Reset on a cover change; the onLoad handler decodes then flips it.
-  const [coverDecoded, setCoverDecoded] = useState(false);
-  const [prevCoverUrl, setPrevCoverUrl] = useState(coverUrl);
-  if (coverUrl !== prevCoverUrl) {
-    setPrevCoverUrl(coverUrl);
-    setCoverDecoded(false);
-  }
-
   useEffect(() => {
     if (!hasCover || coverUrl) onReady?.(visual.track.id);
   }, [coverUrl, hasCover, onReady, visual.track.id]);
@@ -1203,21 +1193,6 @@ function TrackVisual({
           referrerPolicy="no-referrer"
           draggable={false}
           className="absolute inset-0 size-full object-cover"
-          // Hidden until decoded (a short fade if it wasn't already cached) so the card
-          // never shows the bg-muted square mid-decode. Preloaded covers are decoded by
-          // the warm pass, so this is a no-op flip for them.
-          style={{ opacity: coverDecoded ? 1 : 0, transition: "opacity 100ms ease-out" }}
-          onLoad={(e) => {
-            const img = e.currentTarget;
-            if (typeof img.decode === "function") {
-              img.decode().then(
-                () => setCoverDecoded(true),
-                () => setCoverDecoded(true),
-              );
-            } else {
-              setCoverDecoded(true);
-            }
-          }}
           onError={() => setInitialFailed(true)}
         />
       </div>
