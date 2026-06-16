@@ -86,6 +86,16 @@ export default function ReactiveScene({
   const flowRef = useRef(flow);
   flowRef.current = flow;
 
+  // The cover→cover color glide lives in refs (NOT the render-loop effect's closure)
+  // so a song switch can't reset it to a hard snap. The render-loop effect re-runs on
+  // every `isPlaying`/`options` change (both churn during a switch), and a closure-local
+  // glide would re-prime → snap straight to the new palette — read as a "seed change" on
+  // the chaos/flow shaders (the wave shape is time-continuous; only the colors jumped).
+  // Persisting them here lets the same shader keep gliding its palette across the switch.
+  const displayedFlowColorsRef = useRef(new Float32Array(FLOW_MAX_COLORS * 3));
+  const flowColorsPrimedRef = useRef(false);
+  const lastFlowColorTsRef = useRef(0);
+
   const isFlow = styleId === "scene-flow";
   // Each flow effect is its own shader — selecting one rebuilds the GL program.
   const flowEffect = isFlow && flow ? flow.effect : DEFAULT_FLOW_EFFECT;
@@ -162,10 +172,11 @@ export default function ReactiveScene({
     // Reused per-frame so the flow palette upload doesn't churn the GC. `flowColors`
     // holds the TARGET (snaps on switch); `displayedFlowColors` is eased toward it each
     // frame and is what we actually upload, so songs recolor smoothly (see tau above).
+    // `displayed`/primed/lastTs are REFS, not closure locals, so a render-loop re-run
+    // (isPlaying/options churn during a switch) keeps the glide going instead of
+    // re-priming to a hard snap (the perceived "seed change" on flow shaders).
     const flowColors = new Float32Array(FLOW_MAX_COLORS * 3);
-    const displayedFlowColors = new Float32Array(FLOW_MAX_COLORS * 3);
-    let flowColorsPrimed = false;
-    let lastFlowColorTs = 0;
+    const displayedFlowColors = displayedFlowColorsRef.current;
     // getComputedStyle every frame forces a per-frame style read (F-9) — refresh
     // the accent on the same ~6-frame cadence the spectrum renderers use.
     let frame = 0;
@@ -210,19 +221,19 @@ export default function ReactiveScene({
       let flowCount = 0;
       if (flowCfg) {
         flowCount = fillFlowColors(flowColors, p, flowCfg); // target palette (snaps on switch)
-        if (!flowColorsPrimed) {
+        if (!flowColorsPrimedRef.current) {
           displayedFlowColors.set(flowColors); // first frame: no glide-up from black
-          flowColorsPrimed = true;
+          flowColorsPrimedRef.current = true;
         } else {
           // Ease the uploaded colors toward the target, frame-rate independent. A large
           // dt (tab return / first frame after a pause) drives k→1 so it catches up.
-          const dt = lastFlowColorTs ? tMs - lastFlowColorTs : 16;
+          const dt = lastFlowColorTsRef.current ? tMs - lastFlowColorTsRef.current : 16;
           const k = 1 - Math.exp(-dt / FLOW_COLOR_GLIDE_TAU_MS);
           for (let i = 0; i < displayedFlowColors.length; i += 1) {
             displayedFlowColors[i] += (flowColors[i] - displayedFlowColors[i]) * k;
           }
         }
-        lastFlowColorTs = tMs;
+        lastFlowColorTsRef.current = tMs;
       }
 
       // biome-ignore lint/correctness/useHookAtTopLevel: gl.useProgram is a WebGL call, not a React hook
