@@ -19,11 +19,30 @@ export interface QqVkeyParam {
   guid: string;
   songmid: string;
   uin?: string;
+  /** The qqmusic_key value (login). Carried in `comm.authst` to unlock the user's
+   *  tiers — musicu authenticates via the body's comm block, not just the cookie. */
+  musickey?: string;
 }
 
-/** Build the musicu.fcg `data` body requesting vkeys for a batch of filenames. */
+/**
+ * Build the musicu.fcg `data` body requesting vkeys for a batch of filenames.
+ * The `comm` block carries auth: guest sends uin=0 with no authst; a logged-in
+ * request sends the real uin + `authst`(musickey) + `tmeLoginType` (1=wechat for a
+ * `W_X…` key, else 2=QQ). Without it the server treats us as anonymous and returns
+ * empty purls for permission-gated songs (→ false no-permission).
+ */
 export function qqVkeyRequestBody(filenames: string[], p: QqVkeyParam) {
+  const uin = p.uin ?? "0";
+  const comm: { uin: string; format: string; ct: number; cv: number } & {
+    authst?: string;
+    tmeLoginType?: number;
+  } = { uin, format: "json", ct: 24, cv: 0 };
+  if (p.musickey) {
+    comm.authst = p.musickey;
+    comm.tmeLoginType = p.musickey.startsWith("W_X") ? 1 : 2;
+  }
   return {
+    comm,
     req_0: {
       module: QQ_VKEY_MODULE,
       method: QQ_VKEY_METHOD,
@@ -31,7 +50,7 @@ export function qqVkeyRequestBody(filenames: string[], p: QqVkeyParam) {
         guid: p.guid,
         songmid: filenames.map(() => p.songmid),
         songtype: filenames.map(() => 0),
-        uin: p.uin ?? "0",
+        uin,
         loginflag: 1,
         platform: "20",
         filename: filenames,

@@ -113,6 +113,32 @@ describe("createQqSource", () => {
     }
   });
 
+  it("resolve sends the logged-in uin + authst(musickey) in the GetVkey body", async () => {
+    const musickey = "Q_X_key";
+    let sentData: {
+      comm?: { uin?: string; authst?: string };
+      req_0?: { param?: { uin?: string } };
+    } = {};
+    const http: StreamHttp = async (req) => {
+      sentData = JSON.parse(new URL(req.url).searchParams.get("data") ?? "{}");
+      return res({
+        req_0: {
+          data: {
+            sip: ["https://dl.stream.qqmusic.qq.com/"],
+            midurlinfo: [{ filename: "M800XX.mp3", purl: "M800XX.mp3?vkey=K" }],
+          },
+        },
+      });
+    };
+    await createQqSource({
+      http,
+      getCookie: () => `qqmusic_uin=999; qqmusic_key=${musickey}`,
+    }).resolve("XX", { quality: "320" });
+    expect(sentData.comm?.uin).toBe("999");
+    expect(sentData.comm?.authst).toBe(musickey);
+    expect(sentData.req_0?.param?.uin).toBe("999");
+  });
+
   it("resolve reports no-permission when every plaintext purl is empty", async () => {
     const http: StreamHttp = async () =>
       res({

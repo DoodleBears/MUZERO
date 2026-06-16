@@ -129,9 +129,15 @@ export function createQqSource(deps: QqSourceDeps): StreamSourceProvider {
     opts?: StreamResolveOptions,
   ): Promise<StreamResolveResult> {
     try {
+      const cookie = deps.getCookie?.();
       const candidates = qqQualityCandidates(opts?.quality);
       const filenames = candidates.map((t) => qqFilename(t, externalId));
-      const body = qqVkeyRequestBody(filenames, { guid, songmid: externalId, uin: GUEST_UIN });
+      const body = qqVkeyRequestBody(filenames, {
+        guid,
+        songmid: externalId,
+        uin: parseQqUin(cookie) ?? GUEST_UIN,
+        musickey: parseQqMusicKey(cookie),
+      });
       const url = withQuery(QQ_MUSICU_URL, {
         format: "json",
         g_tk: String(gtk()),
@@ -151,6 +157,13 @@ export function createQqSource(deps: QqSourceDeps): StreamSourceProvider {
         return { kind: "ok", stream };
       }
       // No plaintext purl across any candidate = VIP / encrypted-only / removed.
+      // Log the per-filename purl-empty map so a runtime "no-permission" can be told
+      // apart from a shape drift (entries present but filenames mismatched).
+      log.warn("qq", "resolve found no plaintext purl", {
+        authed: Boolean(cookie),
+        sipCount: data.sip.length,
+        entries: data.entries.map((e) => ({ filename: e.filename, hasPurl: Boolean(e.purl) })),
+      });
       return { kind: "no-permission", reason: "vip-or-encrypted" };
     } catch (err) {
       return { kind: "error", message: err instanceof Error ? err.message : String(err) };

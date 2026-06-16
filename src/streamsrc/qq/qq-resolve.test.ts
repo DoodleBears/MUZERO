@@ -20,6 +20,36 @@ describe("qqVkeyRequestBody", () => {
     expect(body.req_0.param.guid).toBe("10000");
     expect(body.req_0.param.platform).toBe("20");
   });
+
+  it("guest comm carries uin=0 and no auth", () => {
+    const body = qqVkeyRequestBody(["M800XX.mp3"], { guid: "10000", songmid: "X" });
+    expect(body.comm.uin).toBe("0");
+    expect(body.comm.authst).toBeUndefined();
+    expect(body.comm.tmeLoginType).toBeUndefined();
+  });
+
+  it("login carries uin + authst(musickey) in comm and req_0 (QQ login type 2)", () => {
+    const body = qqVkeyRequestBody(["M800XX.mp3"], {
+      guid: "g",
+      songmid: "X",
+      uin: "12345",
+      musickey: "Q_X_key",
+    });
+    expect(body.req_0.param.uin).toBe("12345");
+    expect(body.comm.uin).toBe("12345");
+    expect(body.comm.authst).toBe("Q_X_key");
+    expect(body.comm.tmeLoginType).toBe(2);
+  });
+
+  it("a W_X musickey is wechat login type 1", () => {
+    const body = qqVkeyRequestBody(["M800XX.mp3"], {
+      guid: "g",
+      songmid: "X",
+      uin: "1",
+      musickey: "W_X_key",
+    });
+    expect(body.comm.tmeLoginType).toBe(1);
+  });
 });
 
 describe("parseQqVkey", () => {
