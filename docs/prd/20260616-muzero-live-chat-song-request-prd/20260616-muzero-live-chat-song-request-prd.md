@@ -457,11 +457,11 @@ const unsub = bridge.liveRequestIntake.onMessage((payload) => {
 - [x] i18n key（transport/SSN session+relay/CORS 提示、来源增删/状态/生命周期、映射对话框、预设名、目标字段标签、Go Live、status testing/active/disabled）**en→zh/ja/ko 四语全量**。组件用 `tk(key, fallback)` 渲染（英文兜底）。
 - [x] typecheck + lint（biome）全绿；本特性全部测试通过。**注**：全 `pnpm run test` 有 7 个 `scripts/*.test.mjs`（rolldown 解析）+ 1 个 `player-store` flaky 失败，均**预存、与本特性无关**（本分支未碰 `scripts/`/`player-store`，首次全跑 2657 测试 0 断言失败）。
 - [x] 更新 [`docs/deploy/mu0-app-release.md`](../../deploy/mu0-app-release.md)：网页 SSN session 配置 + 桌面多来源 `/v1/intake/<id>` webhook + 测试→上线流程。
-- [ ] **CHANGELOG / 版本 bump 留发版时做**：changelog 是严格按版本的 release 文件（`changelog.test.ts` 断言 latest=1.0.0），加 release 需 bump 版本 + 改断言，且会与其它分支的 1.1.0 撞车——属发版决策，不在本 feature 分支做。
+- [x] **版本 bump 1.0.0 → 1.1.1**（三 lockstep 文件 package.json/tauri.conf.json/Cargo.toml 同步，`check-version-sync` 通过）+ 新增 changelog release `releases/1.1.1.ts`（4 语 title/summary + 4 items）+ 改 `changelog.test.ts` 断言 latest=1.1.1。选 1.1.1 避开其它分支的 1.1.0。
 
 ### Phase 5 Checklist
 - [x] 四语言（en/zh/ja/ko）key 全量补齐，无 pending。
-- [ ] CHANGELOG / release note：发版时补（见上）。
+- [x] CHANGELOG / release note：1.1.1 release 已加（4 语）。
 - [ ] 浏览器实操 e2e（Phase 4 遗留）：`make dev`/`make desktop` 手动验证 testing→Go Live→点歌。
 
 ---
