@@ -42,6 +42,24 @@ async function driveScenario() {
     }
   } else if (scenario === "idle") {
     await sleep(switches * everyMs);
+  } else if (scenario === "search") {
+    // Open ⌘F then type a query one char at a time on the live library, so the
+    // profile captures the open-window burst + per-keystroke render/cover work.
+    const query = arg("--query", "love");
+    const typeMs = Number(arg("--type-every", 120));
+    const settle = Number(arg("--settle", 2500));
+    const listen = Number(arg("--listen", 3000));
+    await ctl("POST", "/search", { action: "reset" });
+    await ctl("POST", "/search", { action: "open" });
+    await sleep(settle);
+    let typed = "";
+    for (const ch of [...query]) {
+      typed += ch;
+      await ctl("POST", "/search", { action: "type", query: typed });
+      await sleep(typeMs);
+    }
+    await sleep(listen);
+    await ctl("POST", "/search", { action: "close" });
   } else {
     for (let i = 0; i < switches; i += 1) {
       await ctl("POST", "/player/playIndex", { index: "+1" });
