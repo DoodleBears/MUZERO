@@ -9,6 +9,7 @@
 //     [--every MS] [--settle MS] [--steps N] [--name LABEL] [--port DBG]
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
+import { analyzeCpuProfile } from "./lib/cpuprofile-analyze.mjs";
 
 const target = process.argv[2] || "dock";
 const arg = (name, fallback) => {
@@ -22,6 +23,7 @@ const everyMs = Number(arg("--every", 1500));
 const settleMs = Number(arg("--settle", 2500));
 const steps = Number(arg("--steps", 10));
 const name = arg("--name", `gesture-${target}`);
+const doProfile = process.argv.includes("--profile");
 const dbgPort = Number(arg("--port", process.env.MUZERO_REMOTE_DEBUG_PORT || 39222));
 const SELECTOR = target === "cover" ? '[data-testid="now-cover-drag"]' : '[data-testid="dock-song-drag"]';
 
@@ -137,6 +139,11 @@ process.stdout.write(`target ${target} @ (${Math.round(c0.x)},${Math.round(c0.y)
 
 const state0 = await ctl("GET", "/state");
 const startedAt = Date.now();
+if (doProfile) {
+  await cdp.send("Profiler.enable", {});
+  await cdp.send("Profiler.setSamplingInterval", { interval: 120 });
+  await cdp.send("Profiler.start", {});
+}
 await ctl("POST", "/perf/marker", { label: "scenario.start", meta: { scenario: name } });
 for (let i = 0; i < swipes; i += 1) {
   const c = (await centerOf(cdp, SELECTOR)) ?? c0;
@@ -145,6 +152,14 @@ for (let i = 0; i < swipes; i += 1) {
 }
 await ctl("POST", "/perf/marker", { label: "scenario.end", meta: { scenario: name } });
 await sleep(settleMs);
+let profileAnalysis = null;
+if (doProfile) {
+  const { profile } = await cdp.send("Profiler.stop", {});
+  const dir3 = path.join(process.cwd(), ".logs", "perf-profiles");
+  mkdirSync(dir3, { recursive: true });
+  writeFileSync(path.join(dir3, `${name}-${startedAt}.cpuprofile`), JSON.stringify(profile));
+  profileAnalysis = analyzeCpuProfile(profile, { top: 20 });
+}
 const dump = await ctl("POST", "/perf/trace", { since: startedAt });
 const state1 = await ctl("GET", "/state");
 cdp.close();
@@ -168,3 +183,8 @@ const dir2 = path.join(process.cwd(), ".logs", "perf-reports");
 mkdirSync(dir2, { recursive: true });
 writeFileSync(path.join(dir2, `${name}-${startedAt}.json`), JSON.stringify({ report }, null, 2));
 console.log(JSON.stringify(report, null, 2));
+if (profileAnalysis) {
+  console.log(`\nTOP SELF TIME (${profileAnalysis.sampleCount} samples, ${profileAnalysis.durationMs}ms):`);
+  for (const e of profileAnalysis.topSelf.slice(0, 16))
+    console.log(`  ${String(e.selfMs).padStart(7)}ms ${String(e.selfPct).padStart(4)}%  ${e.fn}  ${e.url}${e.line ? `:${e.line}` : ""}`);
+}

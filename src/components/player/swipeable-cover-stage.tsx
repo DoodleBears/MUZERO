@@ -450,9 +450,17 @@ export function SwipeableCoverStage({
   }, [active, beginBorderTransition]);
 
   // External (programmatic) switch — transport buttons, Q/E, auto-advance, queue
-  // click. The store already moved; animate the coverflow to catch up, or snap on a
-  // far jump / a burst that outruns the slide.
-  useEffect(() => {
+  // click, Dock drag. The store already moved; animate the coverflow to catch up, or
+  // snap on a far jump / a burst that outruns the slide.
+  //
+  // LAYOUT effect (not passive): engage the masking overlay BEFORE the first paint of
+  // the new `currentIndex`. As a passive effect it lagged one frame, so for that frame
+  // the base stage decoded + painted the new cover UNMASKED — the extra switch-frame
+  // cost that made an external switch (esp. Dock drag) jankier than the cover's own
+  // gesture, whose overlay is already active. Running here hides the base (opacity 0)
+  // on the same commit, so the base cover work happens behind the slide, not on the
+  // critical frame. (PRD 20260617-dock-swipe-switch-jank Phase 2.)
+  useLayoutEffect(() => {
     if (currentIndex < 0) return;
     if (currentIndex === centerIndexRef.current) {
       // Our own settle-commit (or already aligned) — clear the self tag, no replay.
