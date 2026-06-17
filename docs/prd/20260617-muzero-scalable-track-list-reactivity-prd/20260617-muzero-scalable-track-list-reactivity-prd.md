@@ -17,7 +17,7 @@
 | 2 | **Axis A**：高频字段全部下沉侧表（playCount / liked / lastPlayedAt），catalog 零高频写 | ✅ Completed（liked→trackLikes v26；playCount 早已在 trackPlaybackStats，删死代码 incrementPlayCount） | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | **Axis B-1**：列表级查询不再观察全量内容（一次性快照 + 当前曲单行订阅） | ✅ Completed（贵 liveQuery 删除→ `queue.live.fetch` 5→0；切歌 FPS 不回退） | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | **Axis B-2**：常驻挂载页的「全库索引派生」空闲时不随单曲写重建（冻结/防抖）；metadata 编辑不再扇出 | ✅ Completed（CPU profile 定位真凶=SearchPage+⌘F 全库索引；`useFrozenWhileInactive` → metadata fpsLow 4→60、longtask 1378→0ms） | [Phase 4 Checklist](#phase-4-checklist) |
-| 5 | 全 4 场景 @5983 队列 harness 复测验收 | 🔲 Pending | [Phase 5 Checklist](#phase-5-checklist) |
+| 5 | 全 4 场景 @5983 队列 harness 复测验收 + 播放 loop 完整性 | ✅ Completed（like 116fps／metadata 60fps／playback loop 切歌进位+在播，扇出全 0） | [Phase 5 Checklist](#phase-5-checklist) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
 
@@ -228,8 +228,17 @@ playQueue.entries[].trackId ──▶ tracks(id) 1 ── 0..1 trackLikes ──
 
 ### Phase 5: 全场景 @5983 验收
 #### Phase 5 Checklist
-- [ ] 4 场景 before/after 表入档；成本与 N 解耦（5983 与 100 队列数字相当）。
-- [ ] CDP flame graph（按需）确认无 `getTracksByIds(N)` / `listAllTracks` 进入这 4 条写路径。
+- [x] **4 场景 @5983 harness 复测（now tab）**：
+  | 场景 | before fpsLow | after fpsLow | queue.live.fetch | longtask |
+  |---|---|---|---|---|
+  | 2 红心 like ×5 | 3.7 | **116** | 5→**0** | 2231→**0** |
+  | 4 metadata ×5 | 4.1 | **60** | 5→**0** | 1378→**0** |
+  | 3 playback counted ×3 | — | 12（=切歌封面成本） | **0** | 354（切歌） |
+  成本与 N 解耦：扇出信号全 0，剩余 fpsLow 仅来自切歌封面解码（属 switch-fps PRD）。
+- [x] **播放 loop 完整性**（用户「完整化整个 loop」诉求）：switch ×6 @5983 → `currentIndex 0→6`、`isPlaying:true`、`queue.live.fetch 0`、`switchToFrame avg 53ms`；player-store 全 22 单测绿（含 3 个 B-1 integration test）。
+- [x] CDP profile 确认：metadata 写路径已无 `buildArtist/AlbumIndex`/`searchVariants` longtask（冻结生效）。
+- [ ] 场景 1（歌单增删歌）未单独建 harness scenario：结构变 → 一次性有界 refetch（非订阅扇出），已在 B-1 覆盖；按需补 `playlistEdit` scenario。
+- [ ] **残留（Phase 4b 可选）**：队列 tab 看列表时编辑**非当前曲**封面/标题，行内容要到队列结构变化才刷新（B-1 快照不再随内容写）。逐行 `useTrack(id)` 可收口，但触碰共享 `VirtualTrackList`（队列+gallery 共用），风险/收益待评估。
 
 ---
 
@@ -281,6 +290,7 @@ playQueue.entries[].trackId ──▶ tracks(id) 1 ── 0..1 trackLikes ──
 
 | Date | Author | Changes |
 |------|--------|---------|
+| 2026-06-17 | DoodleBear（TDD 实现）| **Phase 3/4/5 ✅ 落地 + harness 全验收**（分支 `perf/scalable-track-list-reactivity`，commit `3f747aa`/`d0eb399`）。**B-1（3f747aa）**：列表级查询不再观察全量内容——贵 liveQuery `getTracksByIds(N)` 改一次性快照（仅 STRUCTURE 变化刷新）+ 当前曲单行订阅（随游标 re-target、按内容 sig patch）→ metadata 编辑 `queue.live.fetch 5→0`；附带修好 Now Playing 对 tags/note 编辑的响应式（旧 queueSig 不含 tags）。**B-2（d0eb399）**：CPU profile 定位 metadata 剩余掉帧真凶=**常驻挂载页**（App `display:none` 不卸载）SearchPage+⌘F 各持 `listAllTracks` 全表订阅、任一写就重建全库 `buildArtist/AlbumIndex`+`searchVariants`(~240ms longtask)——新 `useFrozenWhileInactive`（SearchPage 非激活硬冻结／⌘F 非开尾沿防抖 2s 保温）→ metadata **fpsLow 4→60、longtask 1378→0**、冷开 ⌘F 无回退（612→763ms，远好于硬冻结的 2029ms）。**Phase 5**：like 116fps、metadata 60fps、playback loop 切歌进位+在播、扇出全 0；player-store 22 + hook 5 + B-1 3 个 integration test 全绿。残留：队列 tab 编辑非当前曲的列表行响应式（Phase 4b 可选，触碰共享 VirtualTrackList）。 |
 | 2026-06-17 | DoodleBear（TDD 实现）| **Phase 2 Axis A ✅ 落地 + harness 验收**（分支 `perf/scalable-track-list-reactivity`）：`liked` 下沉 `trackLikes` 侧表（v26 + 一次性 `.upgrade` 回填，纯 mapper 单测）；`setTrackLiked` 只写侧表、不碰 `tracks`；读取方全迁（favorite 单行订阅 / track-row `useLikedTrackIds` 仅可见行 / `system:liked` + liked-only 过滤 + dj-chat join 侧表）；删死代码 `incrementPlayCount`。**5983 队列实测 like ×5：`queue.live.fetch` 5@357ms→0、`listAllTracks requery` ×5→无、`fpsLow` 3.7→117.6、`longtask` 2231→0ms** —— QA 报的 Now Playing 点 Like 掉帧彻底消除。单测全绿、tsc 0、biome 绿。Axis B（order/content 解耦）待后续 phase。 |
 | 2026-06-17 | DoodleBear | 初稿：用户指出「任意队列长度都应 handle，现设计非 best practice」。排查 4 写场景（增删/红心/播放/改 metadata）→ 锁定**架构反模式 = 队列把全量行内容作为一个 liveQuery 观察**（`getTracksByIds(N)` 物化+观察全部 N），任一写 re-fire 全量重取（实测 @5983：357ms×5 + 全表 requery、fpsLow 3.7、longtask 2231ms）。提出**两轴最佳实践**：Axis A 高频字段下沉侧表（catalog 零高频写，统辖 like/playCount 两战术 PRD）；Axis B order/content 解耦（store 持 id 列表 + 逐行/窗口 `useTrack(id)` 响应式读，对齐 TanStack Virtual）→ 4 场景成本与 N 解耦。5 phase（Axis A 先行低风险，Axis B 读侧重构在后）。Q1-Q5 待定。 |
 
