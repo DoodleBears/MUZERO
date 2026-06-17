@@ -33,11 +33,15 @@ export function MediaStage({
   className,
   coverBacklightEnabled = true,
   coverBacklightFadeIn = true,
+  coverBacklightFadeMs,
   onCoverReady,
 }: {
   className?: string;
   coverBacklightEnabled?: boolean;
   coverBacklightFadeIn?: boolean;
+  /** Backlight fade-in duration (ms). Defaults to the resting 420ms; the coverflow
+   *  passes the overlay fade duration at a drag hand-off for a constant-glow crossfade. */
+  coverBacklightFadeMs?: number;
   /** Fired with the track id once the base cover image has painted that track's cover. */
   onCoverReady?: (trackId: string) => void;
 }) {
@@ -163,6 +167,7 @@ export function MediaStage({
         active={showCoverBacklight}
         anchorRef={stageRef}
         fadeIn={coverBacklightFadeIn}
+        fadeMs={coverBacklightFadeMs}
         opacity={backlight.opacity / 100}
         url={coverBacklightUrl}
       />
@@ -204,12 +209,17 @@ function NowPlayingCoverBacklight({
   active,
   anchorRef,
   fadeIn,
+  fadeMs = 420,
   opacity,
   url,
 }: {
   active: boolean;
   anchorRef: RefObject<HTMLElement | null>;
   fadeIn: boolean;
+  /** Fade-in duration (ms). Matched to the coverflow overlay's fade-out at a drag
+   *  hand-off so the card glow (fading out) + this (fading in) sum to a constant
+   *  glow — no brightness dip (PRD 20260618-backlight-shadow-drag #1). */
+  fadeMs?: number;
   opacity: number;
   url: string | null;
 }) {
@@ -223,7 +233,7 @@ function NowPlayingCoverBacklight({
           aria-hidden
           initial={fadeIn ? { opacity: 0 } : false}
           animate={{ opacity }}
-          transition={{ duration: 0.42, ease: "easeOut" }}
+          transition={{ duration: fadeMs / 1000, ease: "easeOut" }}
           className="pointer-events-none fixed -z-10 now-playing-cover-backlight-clip"
           style={rect}
         >

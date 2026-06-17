@@ -752,6 +752,12 @@ export function SwipeableCoverStage({
             // backlight 颜色"); by closeOverlay the derivative has resolved. (PRD
             // 20260618-backlight-shadow-drag #1 commit hand-off.)
             coverBacklightEnabled={foregroundVisible && (!active || handoffFading)}
+            // Match the base backlight's fade-IN to the overlay's fade-OUT during the
+            // hand-off (same duration + easeOut), so card(1−p) + base(p) sums to a
+            // constant glow — the card fading out and the base fading in cancel, no
+            // brightness dip (PRD 20260618-backlight-shadow-drag #1: the flicker was a
+            // dip because the base fade-in was 420ms vs the overlay's 280ms).
+            coverBacklightFadeMs={handoffFading ? HANDOFF_FADE_MS : undefined}
             onCoverReady={setBaseCoverShownId}
           />
         </motion.div>
