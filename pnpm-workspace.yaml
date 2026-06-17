@@ -1,0 +1,6 @@
+allowBuilds:
+  electron-winstaller: false
+  esbuild: false
+  lefthook: false
+  sharp: false
+  workerd: false
