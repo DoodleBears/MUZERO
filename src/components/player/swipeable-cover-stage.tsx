@@ -191,7 +191,17 @@ export function SwipeableCoverStage({
 
   const candidates = useMemo<CoverPreloadCandidate[]>(() => {
     const out: CoverPreloadCandidate[] = [];
-    for (const [offset, track] of offsetTracks) {
+    // Decode order = preload priority (preloadCoverBatch resolves serially). Order by
+    // DISTANCE so the immediate neighbours decode before the far stack slots, and put
+    // +offset (next) before -offset at the same distance: on a single-step drag the
+    // incoming cover is always a ±1, and forward (next) is the common direction — so
+    // the cover the user is sliding toward decodes first instead of 4th-in-line, where
+    // a fast drag's next recenter cancelled the batch before it loaded (the coverflow
+    // flattening to a title pan, PRD 20260618 #2).
+    const offsets = [...offsetTracks.keys()].sort((a, b) => Math.abs(a) - Math.abs(b) || b - a);
+    for (const offset of offsets) {
+      const track = offsetTracks.get(offset);
+      if (!track) continue;
       const role =
         offset === 0
           ? "current"
