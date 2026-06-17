@@ -144,6 +144,12 @@ function routeToCommand(method, segments, body) {
   if (method === "POST" && segments.length === 1 && segments[0] === "renderTrace") {
     return { kind: "renderTrace", payload: body };
   }
+  if (method === "POST" && segments.length === 1 && segments[0] === "live-request") {
+    return { kind: "liveRequest", payload: body };
+  }
+  if (method === "GET" && segments.length === 1 && segments[0] === "sessions") {
+    return { kind: "sessions" };
+  }
   return null;
 }
 

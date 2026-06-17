@@ -62,6 +62,11 @@ describe("routeToCommand", () => {
       since: 123,
       limit: 50,
     });
+    expect(routeToCommand("POST", ["live-request"], { action: "inject", query: "晴天" })).toEqual({
+      kind: "liveRequest",
+      payload: { action: "inject", query: "晴天" },
+    });
+    expect(routeToCommand("GET", ["sessions"], {})).toEqual({ kind: "sessions" });
   });
 
   it("returns null for unknown routes", () => {
@@ -103,6 +108,11 @@ describe("createPerfCommandHandler", () => {
       queueLength: 3,
       currentIndex: 1,
       isPlaying: true,
+      // Track ids around the cursor + tail, used by the live-request harness.
+      currentTrackId: "b",
+      nextTrackId: "c",
+      lastTrackId: "c",
+      upcomingTrackIds: ["c"],
     });
   });
 
@@ -147,6 +157,28 @@ describe("createPerfCommandHandler", () => {
       entries: [{ at: 1 }, { at: 2 }],
     });
     expect(dumpTrace).toHaveBeenCalledWith(100, 10);
+  });
+
+  it("liveRequest forwards the payload to the wired driver", async () => {
+    const liveRequest = vi.fn(async () => ({ item: { status: "completed" } }));
+    const handle = createPerfCommandHandler(makeDeps({ liveRequest }));
+    await expect(
+      handle({ kind: "liveRequest", payload: { action: "inject", query: "晴天" } }),
+    ).resolves.toEqual({ item: { status: "completed" } });
+    expect(liveRequest).toHaveBeenCalledWith({ action: "inject", query: "晴天" });
+  });
+
+  it("liveRequest throws when the driver is not wired", async () => {
+    const handle = createPerfCommandHandler(makeDeps({ liveRequest: undefined }));
+    await expect(handle({ kind: "liveRequest", payload: {} })).rejects.toThrow(/not wired/);
+  });
+
+  it("sessions forwards to the wired lister", async () => {
+    const listSessions = vi.fn(async () => ({ sessions: [{ id: "ses_1", trackCount: 5000 }] }));
+    const handle = createPerfCommandHandler(makeDeps({ listSessions }));
+    await expect(handle({ kind: "sessions" })).resolves.toEqual({
+      sessions: [{ id: "ses_1", trackCount: 5000 }],
+    });
   });
 
   it("throws on unknown command kinds", async () => {

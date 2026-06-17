@@ -5,6 +5,7 @@
 // — never re-implementing behavior. It is loaded only under import.meta.env.DEV (see
 // App.tsx), so it is tree-shaken out of production builds entirely.
 import { getSettings, getTrack, saveSettings, setTrackTags } from "@/db/repositories";
+import { DEFAULT_AUDIENCE_REQUEST_INTAKE_SETTINGS } from "@/db/types";
 import { log } from "@/lib/logger";
 import { resetRenderTrace, snapshotRenderTrace } from "@/lib/render-trace";
 import { traceEvent } from "@/lib/trace";
@@ -32,7 +33,9 @@ export interface PerfControlCommand {
     | "dumpTrace"
     | "search"
     | "editMeta"
-    | "renderTrace";
+    | "renderTrace"
+    | "liveRequest"
+    | "sessions";
   actionId?: string;
   payload?: Record<string, unknown>;
   patch?: Record<string, unknown>;
@@ -61,6 +64,10 @@ interface PerfCommandHandlerDeps {
   editCurrentTrackMeta?: () => Promise<unknown>;
   /** Render-trace: "reset" clears per-surface commit counters; else snapshot them. */
   renderTrace?: (action?: string) => unknown;
+  /** Live-request harness: "sample" lists queued tracks to query; "inject" routes one. */
+  liveRequest?: (payload: Record<string, unknown>) => Promise<unknown>;
+  /** List sessions (id/name/trackCount) so a perf run can switch playlists by size. */
+  listSessions?: () => Promise<unknown>;
 }
 
 /** Player-store methods the endpoint may invoke. A deliberate allowlist — no arbitrary
@@ -89,6 +96,14 @@ function snapshot(deps: PerfCommandHandlerDeps) {
     isPlaying: s.isPlaying,
     wantPlay: s.wantPlay,
     displayMode: s.displayMode,
+    // Track ids around the cursor + queue tail — lets the live-request harness verify
+    // a routed match actually landed (play-now → current, play-next → next, append → last).
+    currentTrackId: s.currentIndex >= 0 ? s.queue[s.currentIndex]?.id : undefined,
+    nextTrackId: s.currentIndex >= 0 ? s.queue[s.currentIndex + 1]?.id : undefined,
+    lastTrackId: s.queue[s.queue.length - 1]?.id,
+    // The next few upcoming ids — play-next appends to a FIFO request block after the
+    // current track, so a routed match may land a slot or two past nextTrackId.
+    upcomingTrackIds: s.queue.slice(s.currentIndex + 1, s.currentIndex + 9).map((t) => t.id),
   };
 }
 
@@ -182,6 +197,14 @@ export function createPerfCommandHandler(deps: PerfCommandHandlerDeps) {
         if (!deps.renderTrace) throw new Error("renderTrace not wired");
         return deps.renderTrace(command.payload?.action as string | undefined) ?? null;
       }
+      case "liveRequest": {
+        if (!deps.liveRequest) throw new Error("liveRequest not wired");
+        return deps.liveRequest(command.payload ?? {});
+      }
+      case "sessions": {
+        if (!deps.listSessions) throw new Error("listSessions not wired");
+        return deps.listSessions();
+      }
       default:
         throw new Error(`unknown command kind: ${String((command as { kind?: string }).kind)}`);
     }
@@ -261,6 +284,64 @@ export function startPerfControlBridge(): void {
       const tag = `perf-${(await getTrack(id))?.tags?.length ?? 0}-${s.currentIndex}`;
       await setTrackTags(id, [tag]);
       return { edited: id };
+    },
+    // Live-request harness: drive the REAL singleton intake controller in this renderer
+    // so route=search + each playbackAction exercises the live library search + player.
+    //   { action: "sample", count? }            → queued tracks {id,title} to query with
+    //   { action: "inject", query, routeMode?, playbackAction? } → routes one, returns item
+    liveRequest: async (payload) => {
+      const action = String(payload.action ?? "");
+      if (action === "sample") {
+        const s = usePlayerStore.getState();
+        const count = Number(payload.count ?? 8);
+        const step = Math.max(1, Math.floor(s.queue.length / (count + 1)));
+        const out: Array<{ id: string; title: string; index: number }> = [];
+        for (let i = 1; i <= count && out.length < count; i++) {
+          const index = (s.currentIndex >= 0 ? s.currentIndex : 0) + i * step;
+          const t = s.queue[index];
+          if (t?.title) out.push({ id: t.id, title: t.title, index });
+        }
+        return { samples: out };
+      }
+      if (action === "inject") {
+        const { driveLiveRequest } = await import("@/live-requests/live-request-controller");
+        const item = await driveLiveRequest({
+          query: String(payload.query ?? ""),
+          routeMode: payload.routeMode as never,
+          playbackAction: payload.playbackAction as never,
+        });
+        return { item };
+      }
+      if (action === "setApproval") {
+        // Safe renderer-side read-modify-write: flip ONLY requireApprovalForPlayNow while
+        // preserving the rest of the intake config (sources, authToken) — saveSettings
+        // shallow-merges, so we must hand back the full object. Returns the prior value so
+        // the harness can restore it. authToken never crosses the wire.
+        const settings = await getSettings();
+        const intake = settings.audienceRequestIntake ?? DEFAULT_AUDIENCE_REQUEST_INTAKE_SETTINGS;
+        const previous = intake.requireApprovalForPlayNow;
+        await saveSettings({
+          audienceRequestIntake: { ...intake, requireApprovalForPlayNow: Boolean(payload.value) },
+        });
+        return { previousRequireApproval: previous };
+      }
+      throw new Error(`unknown liveRequest action: ${action}`);
+    },
+    // List sessions (largest first) so a perf run can pick playlists by size and switch
+    // between them with /player/setActiveSession to measure switch cost vs. queue length.
+    listSessions: async () => {
+      const { listSessions } = await import("@/db/repositories");
+      const sessions = await listSessions();
+      return {
+        sessions: sessions
+          .map((s) => ({
+            id: s.id,
+            name: s.name,
+            trackCount: s.trackIds.length,
+            autoExtend: s.config?.autoExtend ?? false,
+          }))
+          .sort((a, b) => b.trackCount - a.trackCount),
+      };
     },
     // Render-trace: reset per-surface commit counters before a scenario, snapshot after
     // — surfaces shows which re-rendered (and whether a hidden one wasted work).
