@@ -104,6 +104,9 @@ export interface AudienceRequestRuntimeDeps {
   canUseAiDj?: (settings: AppSettings) => boolean;
   aiDjQueue?: AudienceRequestAiDjQueue;
   playNow?: (track: Track) => Promise<void>;
+  /** Player-aware "play next" — anchors the FIFO insert to the live (store) cursor.
+   *  Falls back to a DB-cursor-relative insert when not injected (e.g. unit tests). */
+  playNext?: (track: Track) => Promise<void>;
 }
 
 /** Per-call routing overrides — a multi-source intake sets these from the source config. */
@@ -397,6 +400,10 @@ export function createAudienceRequestRuntime(
       return;
     }
     if (action === "play-next") {
+      if (deps.playNext) {
+        await deps.playNext(track);
+        return;
+      }
       await playQueueRequestNext([track.id], db);
       return;
     }

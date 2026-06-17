@@ -47,6 +47,23 @@ export function insertNext(state: PlayQueueState, newEntries: PlayQueueEntry[]):
 }
 
 /**
+ * Insert entries at an EXPLICIT position (clamped to [0, length]). Unlike
+ * {@link insertNext} (which derives the position from `currentIndex`), the caller
+ * supplies the index — used by play-now cut-in, which must insert relative to the
+ * *store* cursor (what's actually playing) rather than the persisted DB cursor, then
+ * play that exact slot. The cursor stays pinned to the same track by id.
+ */
+export function insertAt(
+  state: PlayQueueState,
+  index: number,
+  newEntries: PlayQueueEntry[],
+): PlayQueueState {
+  const at = Math.min(Math.max(0, index), state.entries.length);
+  const entries = [...state.entries.slice(0, at), ...newEntries, ...state.entries.slice(at)];
+  return { entries, currentIndex: reindex(entries, currentId(state), state.currentIndex) };
+}
+
+/**
  * Queue an audience/live request FIFO: insert *after* the contiguous run of
  * already-requested entries that follows the current track (so earlier requests
  * keep their place and the newcomer goes to the back of the request block),
@@ -55,7 +72,22 @@ export function insertNext(state: PlayQueueState, newEntries: PlayQueueEntry[]):
  * Appends when idle. The host's own playlist entries are never reordered.
  */
 export function insertRequest(state: PlayQueueState, newEntries: PlayQueueEntry[]): PlayQueueState {
-  let at = state.currentIndex < 0 ? state.entries.length : state.currentIndex + 1;
+  return insertRequestAt(state, state.currentIndex, newEntries);
+}
+
+/**
+ * Like {@link insertRequest} but anchored at an EXPLICIT cursor index rather than
+ * `state.currentIndex`. Play-next cut-in passes the *store* cursor (what's actually
+ * playing) so the request lands after the real playing slot even when the persisted DB
+ * cursor lags it — same desync guard as {@link insertAt} for play-now.
+ */
+export function insertRequestAt(
+  state: PlayQueueState,
+  anchorIndex: number,
+  newEntries: PlayQueueEntry[],
+): PlayQueueState {
+  let at = anchorIndex < 0 ? state.entries.length : anchorIndex + 1;
+  at = Math.min(Math.max(0, at), state.entries.length);
   while (at < state.entries.length && state.entries[at]?.requested) at++;
   const marked = newEntries.map((entry) => ({ ...entry, requested: true }));
   const entries = [...state.entries.slice(0, at), ...marked, ...state.entries.slice(at)];

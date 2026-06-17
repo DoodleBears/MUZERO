@@ -16,7 +16,9 @@ import {
   insertTrackIdsAfter,
   knownSourcePaths,
   playQueueAppend,
+  playQueueInsertAt,
   playQueuePlayNext,
+  playQueueRequestNextAt,
   playQueueSet,
   playQueueSetContext,
   playQueueSetIndex,
@@ -197,6 +199,13 @@ interface PlayerState {
    * Used by live "play now" requests.
    */
   playRequestNow: (track: Track) => Promise<void>;
+  /**
+   * Queue a live "play next" request into the FIFO request block right after the track
+   * that's actually playing (store cursor), WITHOUT switching what's playing. Anchored to
+   * the store cursor rather than the persisted DB cursor so the request never lands behind
+   * the playing slot during the post-switch cursor-persist window.
+   */
+  playRequestNext: (track: Track) => Promise<void>;
   /** Play a song from an online source (global search): import it into the online set, then play. */
   playStreamedHit: (hit: StreamSearchHit) => Promise<void>;
   /** Play a batch of online hits in order (Discover "play all"): queue the tail into the
@@ -1049,22 +1058,49 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
 
   async playRequestNow(track) {
     log.debug("player", "playRequestNow", { trackId: track.id });
-    // Insert right after the current track, then skip to it — keeping the rest of
-    // the queue intact. Unlike playTrack, we do NOT setActiveSession, so a request
-    // from another set cuts in over the host's playlist and the host's set resumes
-    // after it (and keeps driving autoExtend).
-    await playQueuePlayNext([track.id]);
-    const landed = await waitForQueueIndex(get, track.id);
-    if (landed == null) {
+    // Cut in right after the slot that's ACTUALLY playing, then skip to it — keeping the
+    // rest of the queue intact. Unlike playTrack, we do NOT setActiveSession, so a request
+    // from another set cuts in over the host's playlist and the host's set resumes after
+    // it (and keeps driving autoExtend).
+    //
+    // We insert at an EXPLICIT position (store cursor + 1) and play THAT exact slot, rather
+    // than going through playQueuePlayNext (which inserts relative to the persisted DB
+    // cursor) and then playing `currentIndex + 1`. The store cursor and the debounced DB
+    // cursor can diverge by one, which made the cut-in land one slot off — silently playing
+    // the NEXT track and skipping the requested one.
+    const cur = get().currentIndex;
+    if (cur < 0) {
+      // Idle: nothing playing — append and play wherever it lands.
+      await playQueuePlayNext([track.id]);
+      const landed = await waitForQueueIndex(get, track.id);
+      if (landed == null) {
+        const idx = await ensureTrackInCurrentPlayQueue(set, get, track.id);
+        if (idx >= 0) await get().playIndex(idx);
+        return;
+      }
+      await get().playIndex(landed);
+      return;
+    }
+    const slot = cur + 1;
+    await playQueueInsertAt(slot, [track.id]);
+    // Confirm the cut-in materialized at the exact slot before playing it (robust to
+    // duplicate trackIds and to the cursor reconcile shifting the store cursor).
+    const ok = await waitForQueueSlot(get, slot, track.id);
+    if (!ok) {
       const idx = await ensureTrackInCurrentPlayQueue(set, get, track.id);
       if (idx >= 0) await get().playIndex(idx);
       return;
     }
-    // Cursor stayed on the original track (insertNext pins it), so the cut-in sits
-    // at currentIndex + 1; play that exact slot (robust to duplicate trackIds and
-    // repeat mode). When idle, just play wherever it landed.
-    const cur = get().currentIndex;
-    await get().playIndex(cur < 0 ? landed : cur + 1);
+    await get().playIndex(slot);
+  },
+
+  async playRequestNext(track) {
+    log.debug("player", "playRequestNext", { trackId: track.id });
+    // Queue into the FIFO request block after the slot that's ACTUALLY playing (store
+    // cursor), NOT the persisted DB cursor — which can lag by one in the post-switch
+    // debounce window and drop the request behind the playing track. We don't switch the
+    // cursor: the request plays when the current track (and any earlier requests) finish.
+    await playQueueRequestNextAt(get().currentIndex, [track.id]);
   },
 
   async playStreamedHit(hit) {
@@ -2345,6 +2381,20 @@ async function waitForQueueIndex(
   }
   const idx = get().queue.findIndex((t) => t.id === trackId);
   return idx >= 0 ? idx : null;
+}
+
+/** Wait until the queue slot at `index` holds `trackId` (the play-now cut-in landed). */
+async function waitForQueueSlot(
+  get: () => PlayerState,
+  index: number,
+  trackId: string,
+  tries = 40,
+): Promise<boolean> {
+  for (let i = 0; i < tries; i += 1) {
+    if (get().queue[index]?.id === trackId) return true;
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  return get().queue[index]?.id === trackId;
 }
 
 async function ensureTrackInCurrentPlayQueue(

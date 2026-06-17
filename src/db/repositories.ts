@@ -10,8 +10,10 @@ import { noteDbRequery } from "@/lib/perf-counters";
 import type { LyricsRecord } from "@/lyrics/provider";
 import {
   appendEntries,
+  insertAt,
   insertNext,
   insertRequest,
+  insertRequestAt,
   moveEntry,
   type PlayQueueState,
   removeEntriesByTrackIds,
@@ -2095,6 +2097,19 @@ export function playQueuePlayNext(
 }
 
 /**
+ * Insert tracks at an EXPLICIT queue position (play-now cut-in). The caller passes the
+ * slot relative to the *store* cursor so the cut-in lands deterministically even when the
+ * persisted DB cursor lags the playing position; see player-store `playRequestNow`.
+ */
+export function playQueueInsertAt(
+  index: number,
+  trackIds: string[],
+  db: MuzeroDB = defaultDb,
+): Promise<PlayQueue> {
+  return mutatePlayQueue((s) => insertAt(s, index, entriesFor(trackIds)), db);
+}
+
+/**
  * Queue an audience/live request FIFO: after the existing request block that
  * follows the current track, marking the entries `requested` (see `insertRequest`).
  */
@@ -2103,6 +2118,19 @@ export function playQueueRequestNext(
   db: MuzeroDB = defaultDb,
 ): Promise<PlayQueue> {
   return mutatePlayQueue((s) => insertRequest(s, entriesFor(trackIds)), db);
+}
+
+/**
+ * Queue an audience/live request FIFO anchored at an EXPLICIT cursor index (the store's
+ * playing position) instead of the persisted DB cursor — play-next cut-in for live
+ * requests; see player-store `playRequestNext`.
+ */
+export function playQueueRequestNextAt(
+  anchorIndex: number,
+  trackIds: string[],
+  db: MuzeroDB = defaultDb,
+): Promise<PlayQueue> {
+  return mutatePlayQueue((s) => insertRequestAt(s, anchorIndex, entriesFor(trackIds)), db);
 }
 
 /** Remove a queue entry by its entry id. */

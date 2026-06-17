@@ -2,8 +2,10 @@ import { describe, expect, it } from "vitest";
 import type { PlayQueueEntry } from "@/db/types";
 import {
   appendEntries,
+  insertAt,
   insertNext,
   insertRequest,
+  insertRequestAt,
   moveEntry,
   type PlayQueueState,
   reconcileCurrentIndex,
@@ -43,6 +45,28 @@ describe("insertNext", () => {
   });
 });
 
+describe("insertAt (play-now cut-in at an explicit slot)", () => {
+  it("inserts at the given position and keeps the cursor pinned by id", () => {
+    // Cursor on "a" (idx 0); cut in at slot 1. "a" stays current even though a later
+    // index was supplied — this is the fix for play-now landing one slot off.
+    const s = insertAt(state(["a", "b", "c"], 0), 1, [e("x")]);
+    expect(ids(s)).toEqual(["a", "x", "b", "c"]);
+    expect(s.currentIndex).toBe(0);
+  });
+
+  it("inserting at/below the cursor shifts it (still pinned to the same track)", () => {
+    const s = insertAt(state(["a", "b", "c"], 1), 0, [e("x")]);
+    expect(ids(s)).toEqual(["x", "a", "b", "c"]);
+    expect(s.currentIndex).toBe(2); // still "b"
+  });
+
+  it("clamps an out-of-range index to the end", () => {
+    const s = insertAt(state(["a", "b"], 0), 99, [e("x")]);
+    expect(ids(s)).toEqual(["a", "b", "x"]);
+    expect(s.currentIndex).toBe(0);
+  });
+});
+
 describe("insertRequest", () => {
   it("queues the first request right after the current track and marks it", () => {
     const s = insertRequest(state(["a1", "a2", "a3"], 0), [e("b1")]);
@@ -72,6 +96,34 @@ describe("insertRequest", () => {
     const s = insertRequest(state([], -1), [e("b1")]);
     expect(ids(s)).toEqual(["b1"]);
     expect(s.entries[0].requested).toBe(true);
+  });
+});
+
+describe("insertRequestAt (play-next anchored at the store cursor)", () => {
+  it("anchors to the supplied index, not state.currentIndex", () => {
+    // DB cursor (state.currentIndex) lags at 0, but the track actually playing is at 2.
+    // Anchoring at 2 keeps the request after the real playing slot, not behind it.
+    const s = insertRequestAt(state(["a", "b", "c", "d"], 0), 2, [e("x")]);
+    expect(ids(s)).toEqual(["a", "b", "c", "x", "d"]);
+    expect(s.entries[3].requested).toBe(true);
+  });
+
+  it("still FIFO-skips an existing request block after the anchor", () => {
+    const first = insertRequestAt(state(["a", "b", "c"], 1), 1, [e("x")]);
+    expect(ids(first)).toEqual(["a", "b", "x", "c"]);
+    const second = insertRequestAt(first, 1, [e("y")]);
+    expect(ids(second)).toEqual(["a", "b", "x", "y", "c"]);
+  });
+
+  it("matches insertRequest when the anchor equals state.currentIndex", () => {
+    const viaAt = insertRequestAt(state(["a", "b"], 0), 0, [e("x")]);
+    const viaDefault = insertRequest(state(["a", "b"], 0), [e("x")]);
+    expect(ids(viaAt)).toEqual(ids(viaDefault));
+  });
+
+  it("appends when the anchor is idle (-1)", () => {
+    const s = insertRequestAt(state(["a", "b"], 1), -1, [e("x")]);
+    expect(ids(s)).toEqual(["a", "b", "x"]);
   });
 });
 

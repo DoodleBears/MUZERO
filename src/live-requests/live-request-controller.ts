@@ -57,6 +57,7 @@ export interface LiveRequestControllerDeps {
   db?: MuzeroDB;
   runtime?: AudienceRequestRuntime;
   playNow?: (track: Track) => Promise<void>;
+  playNext?: (track: Track) => Promise<void>;
   now?: () => number;
   /** Inject the intake controls (tests); otherwise resolved from the desktop bridge. */
   controls?: DesktopLiveRequestIntakeControls;
@@ -124,7 +125,9 @@ export function createLiveRequestController(
 ): LiveRequestController {
   const db = deps.db ?? defaultDb;
   const now = deps.now ?? (() => Date.now());
-  const runtime = deps.runtime ?? createAudienceRequestRuntime({ db, playNow: deps.playNow });
+  const runtime =
+    deps.runtime ??
+    createAudienceRequestRuntime({ db, playNow: deps.playNow, playNext: deps.playNext });
   const captures = new Map<string, CapturedPayload[]>();
   let unsubscribe: (() => void) | null = null;
 
@@ -250,6 +253,11 @@ function ensureSingleton(): LiveRequestController {
       const { usePlayerStore } = await import("@/stores/player-store");
       // Cut-in over the host's current playlist (keep it; don't switch sets).
       await usePlayerStore.getState().playRequestNow(track);
+    },
+    playNext: async (track) => {
+      const { usePlayerStore } = await import("@/stores/player-store");
+      // Queue after the playing track (store-cursor-relative) — keep the host's playlist.
+      await usePlayerStore.getState().playRequestNext(track);
     },
   });
   return singleton;
