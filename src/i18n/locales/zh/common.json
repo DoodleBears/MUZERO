@@ -475,7 +475,8 @@
     "coverCropped": "显示裁切后的封面",
     "coverCroppedHint": "封面按你裁切的正方形显示；关闭则显示完整原图。原图始终保留。",
     "blur": "背景模糊：{{px}}px",
-    "mask": "背景压暗：{{pct}}%"
+    "mask": "背景压暗：{{pct}}%",
+    "maskBlur": "压暗层模糊：{{px}}px"
   },
   "flow": {
     "title": "流光背景",

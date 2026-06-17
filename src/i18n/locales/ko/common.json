@@ -475,7 +475,8 @@
     "coverCropped": "잘라낸 커버 표시",
     "coverCroppedHint": "커버는 잘라낸 정사각형으로 표시됩니다. 끄면 원본 전체를 표시합니다. 원본은 항상 보관됩니다.",
     "blur": "배경 흐림: {{px}}px",
-    "mask": "배경 어둡게: {{pct}}%"
+    "mask": "배경 어둡게: {{pct}}%",
+    "maskBlur": "어둡게 레이어 블러: {{px}}px"
   },
   "flow": {
     "title": "플로우 배경",

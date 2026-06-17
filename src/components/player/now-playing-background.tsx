@@ -81,6 +81,7 @@ export function NowPlayingBackground({
 function NowPlayingBackgroundContent({ hideVisualizer }: { hideVisualizer: boolean }) {
   const settings = useSettings();
   const imageMaskOpacity = (settings.backgroundMaskOpacity ?? 25) / 100;
+  const imageMaskBlur = settings.backgroundMaskBlur ?? 0;
   const queue = usePlayerStore((s) => s.queue);
   const currentIndex = usePlayerStore((s) => s.currentIndex);
   const isPlaying = usePlayerStore((s) => s.isPlaying);
@@ -488,6 +489,21 @@ function NowPlayingBackgroundContent({ hideVisualizer }: { hideVisualizer: boole
         <CrossfadeBackgroundImage
           holdPreviousWhileLoading={source !== "cover" || holdCoverBackgroundWhileLoading}
           src={effectiveRenderImageTarget.src}
+        />
+      ) : null}
+      {/* PM ask: the dim layer can also blur the backdrop (image/video/Pixi below
+          it) so a bright cover softens behind the foreground. This MUST be its own
+          transparent layer — putting `backdrop-filter` on the opaque `bg-background`
+          tint below would paint the dim color OVER the blurred backdrop, then group
+          opacity reveals the ORIGINAL (un-blurred) cover, so the blur shows nothing.
+          A bare backdrop-filter layer has no background to cover its result. 0 = off. */}
+      {imageMaskBlur > 0 ? (
+        <div
+          className="absolute inset-0"
+          style={{
+            backdropFilter: `blur(${imageMaskBlur}px)`,
+            WebkitBackdropFilter: `blur(${imageMaskBlur}px)`,
+          }}
         />
       ) : null}
       <div className="absolute inset-0 bg-background" style={{ opacity: imageMaskOpacity }} />

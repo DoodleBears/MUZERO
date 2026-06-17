@@ -489,7 +489,8 @@
     "coverCropped": "Show cropped cover",
     "coverCroppedHint": "Covers display the square you cropped; turn off to show the full image. The original is always kept.",
     "blur": "Background blur: {{px}}px",
-    "mask": "Background dim: {{pct}}%"
+    "mask": "Background dim: {{pct}}%",
+    "maskBlur": "Dim layer blur: {{px}}px"
   },
   "flow": {
     "title": "Flow background",

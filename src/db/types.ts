@@ -655,6 +655,8 @@ export interface AppSettings {
   backgroundBlur?: number;
   /** Now-Playing background dim/mask opacity, 0–100. Default 25. */
   backgroundMaskOpacity?: number;
+  /** backdrop-filter blur radius (px) on the dim/mask layer. Default 0 (off). */
+  backgroundMaskBlur?: number;
   /** Slideshow auto-advance interval in seconds. Default 300 (5 min). */
   backgroundSlideshowIntervalSec?: number;
   /** Slideshow advances in random order vs sequential. Default true (random). */
@@ -1041,6 +1043,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   coverCropped: true,
   backgroundBlur: 64,
   backgroundMaskOpacity: 25,
+  backgroundMaskBlur: 0,
   backgroundSlideshowIntervalSec: 300,
   backgroundSlideshowShuffle: true,
   nowPlayingRightRailCollapsed: false,

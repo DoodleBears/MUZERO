@@ -455,6 +455,20 @@ export function BackgroundEffectControls({ className }: { className?: string }) 
         />
       </div>
 
+      <div className="flex flex-col gap-1.5">
+        <span className="text-xs font-medium text-muted-foreground">
+          {t("background.maskBlur", { px: settings.backgroundMaskBlur ?? 0 })}
+        </span>
+        <Slider
+          min={0}
+          max={40}
+          step={1}
+          value={settings.backgroundMaskBlur ?? 0}
+          onValueChange={(v) => void saveSettings({ backgroundMaskBlur: v })}
+          aria-label={t("background.maskBlur", { px: settings.backgroundMaskBlur ?? 0 })}
+        />
+      </div>
+
       <label className="mt-1 flex items-center gap-2 text-sm">
         <input
           type="checkbox"
