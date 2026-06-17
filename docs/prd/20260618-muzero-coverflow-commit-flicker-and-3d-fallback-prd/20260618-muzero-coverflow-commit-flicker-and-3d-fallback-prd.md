@@ -22,7 +22,11 @@
 > - **#2（e7d377a，方向 a 增量提交）**：`preloadCoverBatch` 新增 `onEntry(trackId, url)` 回调，封面一解析就回调；`usePreloadedCoverUrls` 据此**增量提交 + 合并（不再整批替换）**，被取消的批次仍保留已解码封面。stale key 无害（slot 只读当前窗口 + `trackHasCover` 把关），committed URL 靠 warm-LRU（cap 64 ≫ ~5 slot 窗口）保持有效；`CanvasCover` 落 canvas 后即便 URL 被 revoke 也不掉图。**未**并行化解码（serial 仍在，方向 b 留作后续若 harness 显示仍不足时再上）。
 > - **验证现状**：`tsc --noEmit` 通过、`src/components/player` 全量 178 测试通过、Biome 对三个改动文件干净。**视觉/量化验证（连续 ≥6 次相邻拖拽侧封面命中率、commit 后标题无 `1→0→1`）仍待**在 dev app 手测或补 harness 场景（见下方 follow-up）。
 
-> **Follow-up（未做，按需）**：补 `render-sweep`/`perf-gesture` 的「连续相邻拖拽 ×N」「快速多步拖拽」场景，量化侧 slot `coverUrl` 命中率 + 批次 `canceled` 次数，作为 #2 的回归断言；若仍偏低再评估方向 b（并行解码）/ c（拖拽方向预热一格）/ d（thumbhash 占位）。
+> **#2 二次修复（291e98a，方向 c 的轻量版）**：用户复测「#2 仍存在，3D 没保持」。深查发现真正瓶颈不只是取消 churn，而是**预载解码顺序**——candidates 原顺序 `current, prev1, prev2, next1, next2`，而 `preloadCoverBatch` 串行解码，于是用户最常拖向的「next」封面排在第 4 位，快速拖拽时下一次 recenter 在它解码完成前就取消了批次。改为 [`swipeable-cover-stage.tsx`](../../../src/components/player/swipeable-cover-stage.tsx) 里 candidates 按**距离排序**（±1 先于 ±2）、同距离 +offset（next）先于 -offset，使「正在滑向的那张」最先解码；配合增量提交（e7d377a），它在取消前就落地。
+
+> **#3 新发现（a39b351）——背景闪黑（#1 修复后暴露的既有缺陷）**：用户复测「标题不闪了，但整个模糊背景（满屏 Pixi）commit 后过渡到黑再 fade in」。这是 #1 修好标题后**暴露的既有 bug**（此前标题闪烁与之同时发生、掩盖了它）。根因：object-URL 取色路径下，A→B 切换瞬间 `coverResourceMatchesTrack` 暂时为 false，**同时**令 [`now-playing-background.tsx`](../../../src/components/player/now-playing-background.tsx) 的 `effectiveRenderPixiTarget` 置 null（经 `clearCoverBackgroundWhileLoading`）**和** `pixiHoldsCover` 置 false → Pixi 图层 className 落到 `opacity-0`（瞬间全黑），直到 B 的 object URL 解析完才 `opacity-100` + 控制器 crossfade 出 B（"fade in"）。修复：把 `isRemoteOrStaleCover` 收窄到**仅** remote/streamed（真正的错源封面风险）；本地封面的 held texture 永远是本曲（或紧邻）的图，Pixi 控制器在 src 暂为 null 时会保留上一帧/lockstep window，故本地封面恒定保持 `opacity-100`（src=null 让控制器桥接），不再闪黑。
+
+> **Follow-up（未做，按需）**：补 `render-sweep`/`perf-gesture` 的「连续相邻拖拽 ×N」「快速多步拖拽」场景，量化侧 slot `coverUrl` 命中率 + 批次 `canceled` 次数，作为 #2 的回归断言；若仍偏低再评估方向 b（并行解码）/ d（thumbhash 占位）。截图 harness 抓 commit 前后几帧可为 #3 背景闪黑提供 before/after 硬证据。
 
 ---
 
