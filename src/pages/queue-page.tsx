@@ -58,6 +58,7 @@ export function QueuePage() {
       <div className="min-h-0 flex-1 px-2 pb-2">
         <VirtualTrackList
           tracks={queue}
+          reactiveRowContent
           emptyHint={t("queue.empty")}
           className="pb-chrome-bottom"
         />

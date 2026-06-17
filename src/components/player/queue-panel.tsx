@@ -79,7 +79,12 @@ export function QueuePanel({ className }: { className?: string }) {
         </div>
       </div>
       <div className="min-h-0 flex-1 px-2">
-        <VirtualTrackList tracks={queue} emptyHint={t("queue.empty")} className="no-scrollbar" />
+        <VirtualTrackList
+          tracks={queue}
+          reactiveRowContent
+          emptyHint={t("queue.empty")}
+          className="no-scrollbar"
+        />
       </div>
     </div>
   );

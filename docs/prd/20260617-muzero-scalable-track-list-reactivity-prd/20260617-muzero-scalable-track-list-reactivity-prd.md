@@ -18,6 +18,7 @@
 | 3 | **Axis B-1**：列表级查询不再观察全量内容（一次性快照 + 当前曲单行订阅） | ✅ Completed（贵 liveQuery 删除→ `queue.live.fetch` 5→0；切歌 FPS 不回退） | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | **Axis B-2**：常驻挂载页的「全库索引派生」空闲时不随单曲写重建（冻结/防抖）；metadata 编辑不再扇出 | ✅ Completed（CPU profile 定位真凶=SearchPage+⌘F 全库索引；`useFrozenWhileInactive` → metadata fpsLow 4→60、longtask 1378→0ms） | [Phase 4 Checklist](#phase-4-checklist) |
 | 5 | 全 4 场景 @5983 队列 harness 复测验收 + 播放 loop 完整性 | ✅ Completed（like 116fps／metadata 60fps／playback loop 切歌进位+在播，扇出全 0） | [Phase 5 Checklist](#phase-5-checklist) |
+| 4b | **逐行 `useTrack(id)`**：队列 tab 编辑任一曲只重渲该行；切歌等原有操作性能不回退 | ✅ Completed（队列行单键 liveQuery；队列 metadata longtask 0、queue.live.fetch 0；切歌 now 56ms≈4b 前 53ms 不回退） | [Phase 4b Checklist](#phase-4b-checklist) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
 
@@ -224,7 +225,21 @@ playQueue.entries[].trackId ──▶ tracks(id) 1 ── 0..1 trackLikes ──
 #### Phase 4 Checklist
 - [x] **harness `metadata` ×5 @5983（now tab）before→after**：`fpsLowMin 4.1→60.2`、`frameMaxMs 241→16.6`、`longTaskCount 9→0`、`longTaskTotalMs 1378→0`、`queue.live.fetch` 维持 0。overlay 预热后再测仍 `fpsLow 59.5 / longtask 0`（防抖把重建推到编辑停止之后）。
 - [x] **无回退**：冷开 ⌘F @5983 `p50 612→763ms`（同量级，远好于硬冻结的 2029ms）；hook 单测 5 个（含尾沿防抖时序）。
-- [ ] 残留：队列 tab 看着列表时编辑**非当前曲**封面/标题，列表行要到 reorder 才刷新（Phase 3 快照不再随内容写）——逐行 `useTrack(id)` 收口见 Phase 4b（可选）。
+- [x] 残留收口 → Phase 4b（队列 tab 编辑非当前曲的列表行响应式）。
+
+### Phase 4b: 队列逐行 `useTrack(id)` 响应式读
+**Goal:** 队列 tab 看列表时，编辑**任一曲**（含非当前曲）封面/标题/标签 → **只重渲该行**、不回到全表扇出；**切歌等原有操作性能不回退**（用户硬约束）。
+
+> B-1 后 `state.queue` 是一次性快照（只随结构变化刷新）+ 当前曲单行订阅。非当前曲内容写不再更新快照 → 队列行内容滞后。Phase 4b 用**逐行单键 liveQuery**（`db.tracks.get(id)`，Dexie 只观察该 key → 写别的曲不 re-fire）跟随虚拟窗口，与 TanStack Virtual 同构：只有可见行有订阅，编辑某曲只该行 re-fire。
+
+**Tasks:**
+- [x] 新 hook [`useTrack(id?)`](../../../src/hooks/use-track.ts)：单行 liveQuery（id 缺省=不订阅）。单测 3 个（含「编辑别的曲不 re-fire」单键观察证明）。
+- [x] `VirtualTrackList` 抽出 `VirtualTrackRow`（行内调 `useTrack`），加 opt-in `reactiveRowContent`；**两个队列面** [`queue-panel`](../../../src/components/player/queue-panel.tsx)（dock 抽屉/Now Playing 侧栏）+ [`queue-page`](../../../src/pages/queue-page.tsx)（队列 tab）开，gallery（`track-list-section`）不开。`TrackRow` 既有 `memo(track===)` → 只重渲内容变的行；`live ?? baseTrack` 快照兜底无闪烁。
+- [x] 顺带修 Axis A 遗留 bug：`onToggleLike` 读冷 catalog `track.liked`（v26 停写=陈旧）→ 新 `toggleTrackLike` 读侧表（`isTrackLiked` 翻转）。
+#### Phase 4b Checklist
+- [x] harness 队列 tab `metadata` ×5 @5983：`queue.live.fetch=0`、`longTaskTotalMs=0`、`fpsLowMin 39.8`（frameMax 25ms，无 hitch；行经 `useTrack` 单键刷新）。
+- [x] **切歌不回退**（用户硬约束）：now tab pingpong ×8 @5983 `switchToFrame avg 56ms ≈ 4b 前 53ms`（噪声内）；逐行订阅只在「该 track 行写」时 re-fire，**不进切歌（游标写）路径**，逻辑上与 switch 解耦。queue tab switch 61ms = 队列列表渲染本身（非 per-row 订阅）。
+- [x] gallery 不回退：未开 `reactiveRowContent` → `useTrack(undefined)` 不订阅、行为不变。tsc 0、35 单测绿（use-track 3 + frozen 5 + queue-panel + player-store 22…）。
 
 ### Phase 5: 全场景 @5983 验收
 #### Phase 5 Checklist
@@ -290,6 +305,7 @@ playQueue.entries[].trackId ──▶ tracks(id) 1 ── 0..1 trackLikes ──
 
 | Date | Author | Changes |
 |------|--------|---------|
+| 2026-06-17 | DoodleBear（TDD 实现）| **Phase 4b ✅ 队列逐行 `useTrack(id)`**：B-1 后 `state.queue` 快照不再随非当前曲内容写刷新 → 队列 tab 行内容滞后。新 `useTrack(id?)`（单键 `db.tracks.get(id)` liveQuery，写别的曲不 re-fire）+ `VirtualTrackList` 抽 `VirtualTrackRow`（opt-in `reactiveRowContent`，两个队列面开、gallery 不开）→ 编辑任一曲只重渲该行、无全表扇出。顺带修 Axis A bug：`onToggleLike` 读冷 catalog `track.liked`（停写后陈旧）→ 改读侧表翻转。**harness @5983**：队列 metadata `queue.live.fetch 0 / longtask 0`；切歌不回退（now 56ms≈53ms，逐行订阅不进游标路径）。use-track 3 + 全套 35 单测绿、tsc 0。 |
 | 2026-06-17 | DoodleBear（TDD 实现）| **Phase 3/4/5 ✅ 落地 + harness 全验收**（分支 `perf/scalable-track-list-reactivity`，commit `3f747aa`/`d0eb399`）。**B-1（3f747aa）**：列表级查询不再观察全量内容——贵 liveQuery `getTracksByIds(N)` 改一次性快照（仅 STRUCTURE 变化刷新）+ 当前曲单行订阅（随游标 re-target、按内容 sig patch）→ metadata 编辑 `queue.live.fetch 5→0`；附带修好 Now Playing 对 tags/note 编辑的响应式（旧 queueSig 不含 tags）。**B-2（d0eb399）**：CPU profile 定位 metadata 剩余掉帧真凶=**常驻挂载页**（App `display:none` 不卸载）SearchPage+⌘F 各持 `listAllTracks` 全表订阅、任一写就重建全库 `buildArtist/AlbumIndex`+`searchVariants`(~240ms longtask)——新 `useFrozenWhileInactive`（SearchPage 非激活硬冻结／⌘F 非开尾沿防抖 2s 保温）→ metadata **fpsLow 4→60、longtask 1378→0**、冷开 ⌘F 无回退（612→763ms，远好于硬冻结的 2029ms）。**Phase 5**：like 116fps、metadata 60fps、playback loop 切歌进位+在播、扇出全 0；player-store 22 + hook 5 + B-1 3 个 integration test 全绿。残留：队列 tab 编辑非当前曲的列表行响应式（Phase 4b 可选，触碰共享 VirtualTrackList）。 |
 | 2026-06-17 | DoodleBear（TDD 实现）| **Phase 2 Axis A ✅ 落地 + harness 验收**（分支 `perf/scalable-track-list-reactivity`）：`liked` 下沉 `trackLikes` 侧表（v26 + 一次性 `.upgrade` 回填，纯 mapper 单测）；`setTrackLiked` 只写侧表、不碰 `tracks`；读取方全迁（favorite 单行订阅 / track-row `useLikedTrackIds` 仅可见行 / `system:liked` + liked-only 过滤 + dj-chat join 侧表）；删死代码 `incrementPlayCount`。**5983 队列实测 like ×5：`queue.live.fetch` 5@357ms→0、`listAllTracks requery` ×5→无、`fpsLow` 3.7→117.6、`longtask` 2231→0ms** —— QA 报的 Now Playing 点 Like 掉帧彻底消除。单测全绿、tsc 0、biome 绿。Axis B（order/content 解耦）待后续 phase。 |
 | 2026-06-17 | DoodleBear | 初稿：用户指出「任意队列长度都应 handle，现设计非 best practice」。排查 4 写场景（增删/红心/播放/改 metadata）→ 锁定**架构反模式 = 队列把全量行内容作为一个 liveQuery 观察**（`getTracksByIds(N)` 物化+观察全部 N），任一写 re-fire 全量重取（实测 @5983：357ms×5 + 全表 requery、fpsLow 3.7、longtask 2231ms）。提出**两轴最佳实践**：Axis A 高频字段下沉侧表（catalog 零高频写，统辖 like/playCount 两战术 PRD）；Axis B order/content 解耦（store 持 id 列表 + 逐行/窗口 `useTrack(id)` 响应式读，对齐 TanStack Virtual）→ 4 场景成本与 N 解耦。5 phase（Axis A 先行低风险，Axis B 读侧重构在后）。Q1-Q5 待定。 |

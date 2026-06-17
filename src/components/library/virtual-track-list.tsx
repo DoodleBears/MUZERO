@@ -6,12 +6,14 @@ import { useTranslation } from "react-i18next";
 import {
   createSession,
   deleteTrack as deleteTrackRepo,
+  isTrackLiked,
   prependTrackIds,
   setTrackLiked,
 } from "@/db/repositories";
-import type { Track } from "@/db/types";
+import type { DjSession, Track } from "@/db/types";
 import { useSessions } from "@/hooks/use-app-data";
 import { useShortcutMatcher } from "@/hooks/use-shortcut-matcher";
+import { useTrack } from "@/hooks/use-track";
 import { buildAlphabetIndex } from "@/lib/alphabet-index";
 import { hasModalDialogOpen, isTypingTarget } from "@/lib/dom-keys";
 import { downloadTrackMedia } from "@/lib/download-track";
@@ -62,6 +64,7 @@ export function VirtualTrackList({
   header,
   initialScrollIndex,
   alphabetLetterOf,
+  reactiveRowContent = false,
 }: {
   tracks: Track[];
   onPlay?: (track: Track, index: number) => void;
@@ -94,6 +97,11 @@ export function VirtualTrackList({
    *  strip. Returns each track's bucket letter — the caller transliterates CJK
    *  titles (pinyin/kana) before bucketing. `tracks` must already be name-sorted. */
   alphabetLetterOf?: (track: Track) => string;
+  /** Opt-in: each visible row reactively re-reads its own content via a single-row
+   *  `useTrack(id)` liveQuery, so editing ANY track re-renders only that row without a
+   *  full-list refetch. For lists whose `tracks` is a non-reactive snapshot (the play
+   *  queue after the order/content split) — gallery lists already pass live rows. */
+  reactiveRowContent?: boolean;
 }) {
   const { t } = useTranslation();
   const parentRef = useRef<HTMLDivElement | null>(null);
@@ -431,63 +439,140 @@ export function VirtualTrackList({
         style={{ height: `${rowVirtualizer.getTotalSize()}px`, y: edgePull }}
       >
         {rowVirtualizer.getVirtualItems().map((virtualRow) => {
-          const track = tracks[virtualRow.index];
+          const baseTrack = tracks[virtualRow.index];
           return (
-            <div
-              className={cn(
-                "absolute left-0 top-0 flex w-full items-center",
-                hasAlphabet && "pr-6",
-              )}
-              data-index={virtualRow.index}
-              data-testid={`virtual-track-row-${track.id}`}
-              key={track.id}
-              style={{
-                height: `${virtualRow.size}px`,
-                transform: `translateY(${virtualRow.start - scrollMargin}px)`,
-              }}
-            >
-              <TrackRow
-                track={track}
-                deferCoverLoad={deferRowCoverLoad}
-                isCurrent={track.id === currentTrackId}
-                isSelected={track.id === selectedTrackId}
-                listIndex={virtualRow.index}
-                secondaryMeta={getTrackSupplement?.(track)}
-                metricColumns={getTrackColumns?.(track)}
-                sessions={sessions}
-                selectable={selectable}
-                checked={selectedIds?.has(track.id) ?? false}
-                onToggleSelect={(shiftKey) =>
-                  onToggleSelect?.(track.id, { index: virtualRow.index, shiftKey })
-                }
-                onPlay={() => handlePlay(track, virtualRow.index)}
-                onView={() => handleView(track, virtualRow.index)}
-                onToggleLike={() => void setTrackLiked(track.id, !track.liked)}
-                onDelete={() =>
-                  onDeleteTrack ? onDeleteTrack(track) : void deleteTrackRepo(track.id)
-                }
-                onDownloadOriginal={() => {
-                  void downloadTrackMedia(track, "original").catch((error: unknown) =>
-                    notify.error(t("track.downloadFailed"), { error, source: "track-download" }),
-                  );
-                }}
-                onExportWithMetadata={() => {
-                  void downloadTrackMedia(track, "withMetadata").catch((error: unknown) =>
-                    notify.error(t("track.downloadFailed"), { error, source: "track-download" }),
-                  );
-                }}
-                onDownloadToDevice={() =>
-                  void usePlayerStore.getState().downloadStreamedTrack(track.id)
-                }
-                onAddToSession={(sessionId) => void prependTrackIds(sessionId, [track.id])}
-                onAddToNewSession={(name) => void addTrackToNewSet(name, track.id)}
-              />
-            </div>
+            <VirtualTrackRow
+              key={baseTrack.id}
+              baseTrack={baseTrack}
+              reactive={reactiveRowContent}
+              index={virtualRow.index}
+              isCurrent={baseTrack.id === currentTrackId}
+              isSelected={baseTrack.id === selectedTrackId}
+              checked={selectedIds?.has(baseTrack.id) ?? false}
+              deferCoverLoad={deferRowCoverLoad}
+              selectable={selectable}
+              sessions={sessions}
+              hasAlphabet={hasAlphabet}
+              virtualStart={virtualRow.start}
+              virtualSize={virtualRow.size}
+              scrollMargin={scrollMargin}
+              getTrackSupplement={getTrackSupplement}
+              getTrackColumns={getTrackColumns}
+              onPlay={handlePlay}
+              onView={handleView}
+              onToggleSelect={onToggleSelect}
+              onDeleteTrack={onDeleteTrack}
+            />
           );
         })}
       </motion.div>
     </div>
   );
+}
+
+/**
+ * One virtualized row. When `reactive`, it re-reads its own track via a single-row
+ * `useTrack(id)` liveQuery so editing THIS track re-renders only this row (and never
+ * the whole list) — `TrackRow`'s `memo(track===)` then skips every other row. While
+ * loading (or non-reactive), it shows the `baseTrack` snapshot, so order + content
+ * appear immediately and only sharpen to the live row a tick later.
+ */
+function VirtualTrackRow({
+  baseTrack,
+  reactive,
+  index,
+  isCurrent,
+  isSelected,
+  checked,
+  deferCoverLoad,
+  selectable,
+  sessions,
+  hasAlphabet,
+  virtualStart,
+  virtualSize,
+  scrollMargin,
+  getTrackSupplement,
+  getTrackColumns,
+  onPlay,
+  onView,
+  onToggleSelect,
+  onDeleteTrack,
+}: {
+  baseTrack: Track;
+  reactive: boolean;
+  index: number;
+  isCurrent: boolean;
+  isSelected: boolean;
+  checked: boolean;
+  deferCoverLoad: boolean;
+  selectable: boolean;
+  sessions: DjSession[];
+  hasAlphabet: boolean;
+  virtualStart: number;
+  virtualSize: number;
+  scrollMargin: number;
+  getTrackSupplement?: (track: Track) => ReactNode;
+  getTrackColumns?: (track: Track) => ReactNode;
+  onPlay: (track: Track, index: number) => void;
+  onView: (track: Track, index: number) => void;
+  onToggleSelect?: (trackId: string, opts?: { index?: number; shiftKey?: boolean }) => void;
+  onDeleteTrack?: (track: Track) => void;
+}) {
+  const { t } = useTranslation();
+  // Single-key observation: a write to any OTHER track does not re-fire this. `undefined`
+  // id → no subscription (gallery lists already pass live rows, so they opt out).
+  const live = useTrack(reactive ? baseTrack.id : undefined);
+  const track = live ?? baseTrack;
+  return (
+    <div
+      className={cn("absolute left-0 top-0 flex w-full items-center", hasAlphabet && "pr-6")}
+      data-index={index}
+      data-testid={`virtual-track-row-${track.id}`}
+      style={{
+        height: `${virtualSize}px`,
+        transform: `translateY(${virtualStart - scrollMargin}px)`,
+      }}
+    >
+      <TrackRow
+        track={track}
+        deferCoverLoad={deferCoverLoad}
+        isCurrent={isCurrent}
+        isSelected={isSelected}
+        listIndex={index}
+        secondaryMeta={getTrackSupplement?.(track)}
+        metricColumns={getTrackColumns?.(track)}
+        sessions={sessions}
+        selectable={selectable}
+        checked={checked}
+        onToggleSelect={(shiftKey) => onToggleSelect?.(track.id, { index, shiftKey })}
+        onPlay={() => onPlay(track, index)}
+        onView={() => onView(track, index)}
+        // `liked` is the side table now — toggle off the CURRENT side-table state, not
+        // the stale cold-catalog `track.liked` (frozen since v26 stopped writing it).
+        onToggleLike={() => void toggleTrackLike(track.id)}
+        onDelete={() => (onDeleteTrack ? onDeleteTrack(track) : void deleteTrackRepo(track.id))}
+        onDownloadOriginal={() => {
+          void downloadTrackMedia(track, "original").catch((error: unknown) =>
+            notify.error(t("track.downloadFailed"), { error, source: "track-download" }),
+          );
+        }}
+        onExportWithMetadata={() => {
+          void downloadTrackMedia(track, "withMetadata").catch((error: unknown) =>
+            notify.error(t("track.downloadFailed"), { error, source: "track-download" }),
+          );
+        }}
+        onDownloadToDevice={() => void usePlayerStore.getState().downloadStreamedTrack(track.id)}
+        onAddToSession={(sessionId) => void prependTrackIds(sessionId, [track.id])}
+        onAddToNewSession={(name) => void addTrackToNewSet(name, track.id)}
+      />
+    </div>
+  );
+}
+
+/** Flip a track's liked state, reading the authoritative `trackLikes` side table
+ *  (the cold `track.liked` catalog field is no longer written — see Axis A). */
+async function toggleTrackLike(id: string) {
+  await setTrackLiked(id, !(await isTrackLiked(id)));
 }
 
 function easeEdgePull(distance: number) {
