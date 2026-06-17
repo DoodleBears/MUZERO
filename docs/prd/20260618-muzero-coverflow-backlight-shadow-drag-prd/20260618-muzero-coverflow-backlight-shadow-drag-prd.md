@@ -13,14 +13,17 @@
 |-------|------|--------|------|
 | 1 | 观测/复现：harness 记录 `active` / hand-off 状态机的滞留 | ✅ Completed（harness 实测） | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | 修复 #2：同曲（drag 回原点）提交后 hand-off 不卡死、effect 恢复 | ✅ Completed（d10c120） | [Phase 2 Checklist](#phase-2-checklist) |
-| 3 | 修复 #1：拖拽期 backlight 不直接消失 | ✅ Completed（2384c46，方向 a 变体） | [Phase 3 Checklist](#phase-3-checklist) |
+| 3 | 修复 #1：拖拽期 backlight（+shadow）跟随封面移动 | ✅ Completed（2384c46→2a6ce8d 改为方向 c：随卡片移动） | [Phase 3 Checklist](#phase-3-checklist) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
 
 > **实现说明（2026-06-18）**
 > - **#2（d10c120）**：`commitAndHandoff` 加一支——若 `baseCoverShownIdRef.current === targetTrack.id`（base 已显示提交曲目 = 同曲提交）就直接 `setTimeout(beginHandoffFade, HANDOFF_BASE_SETTLE_MS)`，不再等一个永不变化的 `baseCoverShownId`。新增 `baseCoverShownIdRef` 取实时值（`commitAndHandoff` 是 stable callback）。异曲提交仍走 base-ready effect（等 base 画好，不闪旧封面）。harness 实测：小幅 drag（snap 回原曲）后 `[active]` true → handoffFading → **false（恢复）**，修复前会卡 true。
-> - **#1（2384c46，方向 a 变体）**：[`media-stage.tsx`](../../../src/components/player/media-stage.tsx) 加 `coverContentHidden` prop——只把封面容器（cover/video/title）opacity 置 0，**backlight 不在其中、保持渲染**。[`swipeable-cover-stage.tsx`](../../../src/components/player/swipeable-cover-stage.tsx) 把 base `motion.div` 的 `opacity:0` 门控改成给 MediaStage 传 `coverContentHidden={active && overlayRect && !handoffFading}` + `coverBacklightEnabled={foregroundVisible}`（去掉 `!active`）。于是拖拽期 backlight 在滑动 overlay 后面常驻（显示当前封面辉光），hand-off 时随 base 一起就位。harness 实测：拖拽途中 backlight 元素数 = **1**（修复前 0）。
-> - **shadow 拖拽期**：本期 #1 只解决 backlight（用户明确点名）；shadow 仍随封面容器 opacity 0 在拖拽期隐藏（overlay slot 不带 shadow）。若后续要拖拽期保 shadow，按 Open Question #1 的方向 (b) 给 overlay 中心 slot 加 `album-cover-shadow`。
+> - **#1（2384c46 初版 → 2a6ce8d 改版）**：初版（方向 a）让 base backlight 在拖拽期**静态**常驻——但用户指出 backlight 应**跟随封面移动**（和 shadow 一样）。改为**方向 c：把 backlight + shadow 渲染到 overlay coverflow 卡片上**，随滑动一起走。
+>   - [`cover-pager-strip.tsx`](../../../src/components/player/cover-pager-strip.tsx)：每张卡片在其封面后面渲染一张**自己封面的模糊副本**（per-card backlight，由 `backlightOpacity` 门控，复用 `--now-playing-cover-backlight-*` CSS 变量）+ `album-cover-shadow` class（由 `coverShadow` 门控）。slot 是 `overflow-visible` 故辉光外溢；模糊只在封面变化（recenter）时重栅格化，**不是每帧**；slot transform 走 GPU 合成。
+>   - [`swipeable-cover-stage.tsx`](../../../src/components/player/swipeable-cover-stage.tsx)：解析 effect mode（镜像 MediaStage）把 `backlightOpacity`/`coverShadow` 传给 strip；base backlight 仍门控关（`!active`）避免双重辉光，base 拖拽期整体 `opacity:0`。
+>   - [`media-stage.tsx`](../../../src/components/player/media-stage.tsx)：回退初版的 `coverContentHidden` prop。
+>   - harness 实测：拖拽途中 strip 内有 **5 张模糊 backlight img**（每 slot 一张），随卡片移动。**backlight 和 shadow 现在都跟随封面。**
 > - **验证**：`tsc` 干净、`src/components/player` 178 测试通过、Biome 干净；prod rebuild + CDP harness 实测两项。
 
 ---
