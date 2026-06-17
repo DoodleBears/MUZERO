@@ -23,6 +23,13 @@
 > - **#2（052cd39）**：两处协同——(a) 控制器 `setWindow` 把**已存在 sprite 的 offset 重定向 + 重排**移到 `await` 之前**同步**完成（recenter 的邻居本就已加载，纯 offset 重定向；只有真正的新边缘封面才异步加载）；(b) [`swipeable-cover-stage.tsx`](../../../src/components/player/swipeable-cover-stage.tsx) 把 cover window 的发布从被动 `useEffect` 提为 `useLayoutEffect`（在 paint 前、且按源码顺序在 offset-reset effect 之前跑），使 sprite 在 offset 重置重新定位之前就已携带新 offset。
 > - **验证**：`tsc` 干净；`pixi-background-controller` 20 测试 + `src/components/player` 全量 178 测试通过；Biome 干净。
 
+> **#3 追加（e229d44）——commit（松手）后 border 闪回起点色再过渡**：用户复测 #1/#2 后报「1→4 连续拖、松手时 border 先回到起点色再过渡到 4」。这是 commit 边界（不是 recenter 边界）的 border reconciliation 问题，与 #1 同源但发生在松手时。
+> - **harness 实证**（CDP 真拖拽 + 逐帧采 `--electron-window-border-color`，**diverse-cover 队列**才显现；同专辑队列同色看不到）：松手后 ~470ms border 跳到旧/暗色、再 ~650ms 后才回到 committed 色——**间隔 ≈ `COVER_COLOR_APPLY_SETTLE_MS`(650ms)**，铁证。
+> - **根因**：settled border 读 [`visualizer-color-store`](../../../src/stores/visualizer-color-store.ts) 的 cover 色，而该 store 在切歌后**延迟 650ms** 才采用 committed 曲目的色（`transitionVisualizerCoverColor` 的 settle debounce，防切歌帧抖动）。drag-override 在 hand-off 释放时（早于 650ms）把 border 交还给 settled 路径，此刻 store 仍是 pre-drag 色 → 闪回。
+> - **正解**：新增 `snapVisualizerCoverColor()`（立即应用、取消 pending settle），在 [`commitAndHandoff`](../../../src/components/player/swipeable-cover-stage.tsx) 用 committed 曲目的 palette 调用——让 settled 色在 commit 当下就等于 drag 落点。auto-advance/scrub 仍走原 debounce 路径。
+> - **验证**：rebuild prod dist + CDP harness 实测，`[vcc:apply]` snap 在 commit 落地、border 松手后稳定停在 committed 色、**无闪回**（修复前：松手后 ~470ms 暗色闪、~650ms 后回正）。`tsc` 干净、187 测试（player + store）通过、Biome 干净。
+> - **环境教训**：`make electron-profile` 跑的是 `vite build` 出的**生产 bundle**（`app://muzero`），不是 HMR dev server——改源码后必须**重新 `vite build` + reload** 才生效；`Page.reload` 只重载同一份旧 bundle。前几次"修了还闪"是测在旧 bundle 上。
+
 ---
 
 ## 1. Overview
