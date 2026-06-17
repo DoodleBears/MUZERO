@@ -1,83 +1,39 @@
 import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 import { VirtualTrackList } from "@/components/library/virtual-track-list";
-import { db } from "@/db/muzero-db";
-import { likedTrackIdSet, listAllTracks, listTrackPlaybackStats } from "@/db/repositories";
-import type { Track } from "@/db/types";
 import { useSession } from "@/hooks/use-app-data";
-import { createDiagnosticLogger } from "@/lib/logger";
-import { arePerfCountersEnabled, notePerfWork } from "@/lib/perf-counters";
-import {
-  deriveHeartedPlaylist,
-  deriveMostPlayedPlaylist,
-  deriveRecentlyPlayedPlaylist,
-  SYSTEM_PLAYLISTS,
-  type SystemPlaylistId,
-  type SystemPlaylistPlayable,
-} from "@/lib/system-playlists";
+import type { SystemPlaylistId } from "@/lib/system-playlists";
 import { cn } from "@/lib/utils";
 import { usePlayerStore } from "@/stores/player-store";
 
 type CommonT = TFunction<"common", undefined>;
 
-const systemPlaylistLog = createDiagnosticLogger("queuePanel.systemPlaylist");
-
 /**
- * The up-next queue (歌单列表) — a "playing from <set>" header + the virtualized
- * track list. Extracted from the now-playing rail so it can live in the unified
- * Dock drawer (all screen sizes) while the rail becomes lyrics-first.
+ * The up-next play queue (播放列表) — a "playing from <source>" header + the
+ * virtualized track list of the *current playback queue*. This is deliberately
+ * NOT a 歌单 picker: the pinned system-playlist sources live in the library
+ * (search page) via `SystemPlaylistCards`; the Dock drawer only mirrors what's
+ * actually queued to play so it stays a pure "up next" surface.
  */
 export function QueuePanel({ className }: { className?: string }) {
   const { t } = useTranslation();
   const queue = usePlayerStore((s) => s.queue);
   const activeSessionId = usePlayerStore((s) => s.activeSessionId);
   const queueSource = usePlayerStore((s) => s.queueSource);
-  const playSystemPlaylist = usePlayerStore((s) => s.playSystemPlaylist);
-  const play = usePlayerStore((s) => s.play);
   const session = useSession(activeSessionId);
   const sourceLabel =
     queueSource?.kind === "system-playlist"
       ? t("systemPlaylists.sourceLabel", { name: systemPlaylistLabel(queueSource.id, t) })
       : undefined;
 
-  async function playPinnedPlaylist(playlistId: SystemPlaylistId) {
-    const tracks = await loadSystemPlaylistTracks(playlistId);
-    await playSystemPlaylist(playlistId, tracks);
-    void play();
-  }
-
   return (
     <div className={cn("flex h-full min-h-0 flex-col", className)}>
       {(session || sourceLabel) && (
-        <div className="shrink-0 px-4 pb-2">
+        <div className="shrink-0 px-4 pb-3">
           <div className="text-muted-foreground text-xs">{t("nowPlaying.playingFrom")}</div>
           <div className="truncate font-semibold text-sm">{session?.name ?? sourceLabel}</div>
         </div>
       )}
-      <div className="shrink-0 px-4 pb-3">
-        <div className="mb-1.5 text-muted-foreground text-xs">
-          {t("systemPlaylists.pinnedSources")}
-        </div>
-        <div className="grid grid-cols-3 gap-1.5">
-          {SYSTEM_PLAYLISTS.map((playlist) => (
-            <button
-              type="button"
-              key={playlist.id}
-              onClick={() => {
-                void playPinnedPlaylist(playlist.id);
-              }}
-              className={cn(
-                "min-w-0 rounded-md border border-border px-2 py-1.5 text-xs transition-colors hover:bg-accent",
-                queueSource?.kind === "system-playlist" &&
-                  queueSource.id === playlist.id &&
-                  "border-primary/50 bg-accent text-primary",
-              )}
-            >
-              <span className="block truncate">{systemPlaylistLabel(playlist.id, t)}</span>
-            </button>
-          ))}
-        </div>
-      </div>
       <div className="min-h-0 flex-1 px-2">
         <VirtualTrackList
           tracks={queue}
@@ -88,54 +44,6 @@ export function QueuePanel({ className }: { className?: string }) {
       </div>
     </div>
   );
-}
-
-async function loadSystemPlaylistTracks(playlistId: SystemPlaylistId): Promise<Track[]> {
-  const perfEnabled = arePerfCountersEnabled();
-  const startedAt = performance.now();
-  let trackCount = 0;
-  try {
-    const allTracks = await listAllTracks(db);
-    trackCount = allTracks.length;
-    if (playlistId === "system:liked") {
-      return deriveHeartedPlaylist(allTracks, await likedTrackIdSet(db));
-    }
-
-    const [stats, events] = await Promise.all([
-      listTrackPlaybackStats(db),
-      db.playbackEvents.toArray(),
-    ]);
-    const rows =
-      playlistId === "system:recent"
-        ? deriveRecentlyPlayedPlaylist(allTracks, { events, stats })
-        : deriveMostPlayedPlaylist(allTracks, {
-            events,
-            now: Date.now(),
-            range: "all",
-            stats,
-          });
-    return localTracksFromPlayables(rows);
-  } finally {
-    const durationMs = performance.now() - startedAt;
-    if (perfEnabled) {
-      notePerfWork("queuePanel.systemPlaylist.derive", durationMs, {
-        playlistId,
-        tracks: trackCount,
-      });
-    }
-    systemPlaylistLog.debug("derive", {
-      category: "performance",
-      durationMs: Math.round(durationMs),
-      message: "system playlist derived from QueuePanel pinned source",
-      phase: "success",
-      playlistId,
-      tracks: trackCount,
-    });
-  }
-}
-
-function localTracksFromPlayables(rows: SystemPlaylistPlayable[]) {
-  return rows.flatMap((row) => (row.kind === "local-track" ? [row.track] : []));
 }
 
 function systemPlaylistLabel(id: SystemPlaylistId, t: CommonT) {

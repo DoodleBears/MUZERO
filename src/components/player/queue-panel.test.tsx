@@ -1,9 +1,6 @@
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { db } from "@/db/muzero-db";
-import { likedTrackIdSet, listAllTracks, listTrackPlaybackStats } from "@/db/repositories";
 import type { Track } from "@/db/types";
-import { clearTrace, getTraceEntries } from "@/lib/trace";
 import { usePlayerStore } from "@/stores/player-store";
 import { QueuePanel } from "./queue-panel";
 
@@ -16,11 +13,9 @@ vi.mock("react-i18next", () => ({
     t: (key: string, vars?: Record<string, unknown>) =>
       ({
         "nowPlaying.playingFrom": "Playing from",
-        "player.play": "Play",
         "queue.empty": "Queue empty",
         "systemPlaylists.hearted": "Hearted",
         "systemPlaylists.mostPlayed": "Most Played",
-        "systemPlaylists.pinnedSources": "Playlists",
         "systemPlaylists.recentlyPlayed": "Recently Played",
         "systemPlaylists.sourceLabel": `Playing from ${vars?.name ?? ""}`,
       })[key] ?? key,
@@ -31,61 +26,24 @@ vi.mock("@/hooks/use-app-data", () => ({
   useSession: () => undefined,
 }));
 
-vi.mock("dexie-react-hooks", () => ({
-  useLiveQuery: (query: () => unknown, _deps: unknown[], defaultValue: unknown) => {
-    void query();
-    return defaultValue;
-  },
-}));
-
-vi.mock("@/db/muzero-db", () => ({
-  db: {
-    playbackEvents: {
-      toArray: vi.fn().mockResolvedValue([]),
-    },
-  },
-}));
-
-vi.mock("@/db/repositories", () => ({
-  listAllTracks: vi.fn().mockResolvedValue([]),
-  listTrackPlaybackStats: vi.fn().mockResolvedValue([]),
-  likedTrackIdSet: vi.fn().mockResolvedValue(new Set<string>()),
-}));
-
 vi.mock("@/components/library/virtual-track-list", () => ({
   VirtualTrackList: ({ tracks }: { tracks: Track[] }) => (
     <div data-count={tracks.length} data-testid="queue-list" />
   ),
 }));
 
-describe("QueuePanel system playlist sources", () => {
+describe("QueuePanel", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    clearTrace();
-    vi.mocked(db.playbackEvents.toArray).mockClear();
-    vi.mocked(db.playbackEvents.toArray).mockResolvedValue([]);
-    vi.mocked(listAllTracks).mockResolvedValue([]);
-    vi.mocked(listTrackPlaybackStats).mockResolvedValue([]);
     usePlayerStore.setState({
       activeSessionId: null,
       currentIndex: -1,
       queue: [],
       queueSource: undefined,
-      play: vi.fn(),
-      playSystemPlaylist: vi.fn().mockResolvedValue(undefined),
     } as Partial<ReturnType<typeof usePlayerStore.getState>>);
   });
 
-  it("renders the three pinned system playlists", () => {
-    render(<QueuePanel />);
-
-    expect(screen.getByText("Playlists")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Hearted" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Recently Played" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Most Played" })).toBeInTheDocument();
-  });
-
-  it("does not read full-library system playlist data while rendering or switching cursor", async () => {
+  it("renders the current playback queue (not a 歌单 picker)", () => {
     usePlayerStore.setState({
       currentIndex: 0,
       queue: [makeTrack("trk_a"), makeTrack("trk_b")],
@@ -93,79 +51,37 @@ describe("QueuePanel system playlist sources", () => {
 
     render(<QueuePanel />);
 
-    expect(listAllTracks).not.toHaveBeenCalled();
-    expect(listTrackPlaybackStats).not.toHaveBeenCalled();
-    expect(db.playbackEvents.toArray).not.toHaveBeenCalled();
-
-    await act(async () => {
-      usePlayerStore.setState({ currentIndex: 1 });
-    });
-
-    expect(listAllTracks).not.toHaveBeenCalled();
-    expect(listTrackPlaybackStats).not.toHaveBeenCalled();
-    expect(db.playbackEvents.toArray).not.toHaveBeenCalled();
+    const list = screen.getByTestId("queue-list");
+    expect(list).toHaveAttribute("data-count", "2");
+    // No pinned system-playlist source buttons live in the queue drawer.
+    expect(screen.queryByRole("button", { name: "Hearted" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Most Played" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Recently Played" })).not.toBeInTheDocument();
   });
 
-  it("loads a system playlist source without requiring a DjSession", async () => {
-    const playSystemPlaylist = vi.fn().mockResolvedValue(undefined);
+  it("shows the system-playlist source label when playing from one", () => {
     usePlayerStore.setState({
-      playSystemPlaylist,
       queueSource: { id: "system:liked", kind: "system-playlist" },
     } as Partial<ReturnType<typeof usePlayerStore.getState>>);
 
     render(<QueuePanel />);
 
     expect(screen.getByText("Playing from Hearted")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Most Played" }));
-
-    await vi.waitFor(() => expect(playSystemPlaylist).toHaveBeenCalledWith("system:most", []));
   });
 
-  it("records a trace row when a pinned system playlist is derived", async () => {
-    const playSystemPlaylist = vi.fn().mockResolvedValue(undefined);
-    vi.mocked(listAllTracks).mockResolvedValue([makeTrack("trk_a")]);
+  it("reflects cursor-only changes without replacing the queue list", async () => {
     usePlayerStore.setState({
-      playSystemPlaylist,
+      currentIndex: 0,
+      queue: [makeTrack("trk_a"), makeTrack("trk_b")],
     } as Partial<ReturnType<typeof usePlayerStore.getState>>);
 
     render(<QueuePanel />);
-    fireEvent.click(screen.getByRole("button", { name: "Most Played" }));
 
-    await vi.waitFor(() => expect(playSystemPlaylist).toHaveBeenCalled());
-    expect(getTraceEntries()).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          event: "derive",
-          scope: "queuePanel.systemPlaylist",
-          context: expect.objectContaining({
-            category: "performance",
-            phase: "success",
-            playlistId: "system:most",
-            tracks: 1,
-          }),
-        }),
-      ]),
-    );
-  });
+    await act(async () => {
+      usePlayerStore.setState({ currentIndex: 1 });
+    });
 
-  it("does not read playback stats or events when opening the hearted playlist", async () => {
-    const playSystemPlaylist = vi.fn().mockResolvedValue(undefined);
-    vi.mocked(listAllTracks).mockResolvedValue([makeTrack("trk_liked", { liked: true })]);
-    vi.mocked(likedTrackIdSet).mockResolvedValue(new Set(["trk_liked"]));
-    usePlayerStore.setState({
-      playSystemPlaylist,
-    } as Partial<ReturnType<typeof usePlayerStore.getState>>);
-
-    render(<QueuePanel />);
-    fireEvent.click(screen.getByRole("button", { name: "Hearted" }));
-
-    await vi.waitFor(() =>
-      expect(playSystemPlaylist).toHaveBeenCalledWith("system:liked", [
-        expect.objectContaining({ id: "trk_liked" }),
-      ]),
-    );
-    expect(listTrackPlaybackStats).not.toHaveBeenCalled();
-    expect(db.playbackEvents.toArray).not.toHaveBeenCalled();
+    expect(screen.getByTestId("queue-list")).toHaveAttribute("data-count", "2");
   });
 });
 
