@@ -1100,19 +1100,30 @@ export async function getTrackCover(
   return resolveMediaBlob(track.coverBlobId, db, storage);
 }
 
-export async function incrementPlayCount(id: string, db: MuzeroDB = defaultDb): Promise<void> {
-  await db.transaction("rw", db.tracks, async () => {
-    const track = await db.tracks.get(id);
-    if (track) await db.tracks.update(id, { playCount: track.playCount + 1 });
-  });
-}
-
+/**
+ * Toggle a track's "liked" bit. Writes the `trackLikes` SIDE table only — never the
+ * cold `tracks` row — so liking never re-fires the play-queue / 全表 liveQueries that
+ * observe `tracks` (the FPS fan-out on big queues). Row presence = liked; un-liking
+ * deletes the row. PRD 20260617-scalable-track-list (Axis A).
+ */
 export async function setTrackLiked(
   id: string,
   liked: boolean,
   db: MuzeroDB = defaultDb,
 ): Promise<void> {
-  await db.tracks.update(id, { liked, updatedAt: Date.now() });
+  if (liked) await db.trackLikes.put({ trackId: id, likedAt: Date.now() });
+  else await db.trackLikes.delete(id);
+}
+
+/** Whether a track is liked (side-table row present). */
+export async function isTrackLiked(id: string, db: MuzeroDB = defaultDb): Promise<boolean> {
+  return (await db.trackLikes.get(id)) != null;
+}
+
+/** The set of all liked track ids (for `system:liked` + the liked-only filter). */
+export async function likedTrackIdSet(db: MuzeroDB = defaultDb): Promise<Set<string>> {
+  const rows = await db.trackLikes.toArray();
+  return new Set(rows.map((r) => r.trackId));
 }
 
 // ------------------------------------------------------------- annotations ----

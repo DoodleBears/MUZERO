@@ -2,7 +2,7 @@ import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 import { VirtualTrackList } from "@/components/library/virtual-track-list";
 import { db } from "@/db/muzero-db";
-import { listAllTracks, listTrackPlaybackStats } from "@/db/repositories";
+import { likedTrackIdSet, listAllTracks, listTrackPlaybackStats } from "@/db/repositories";
 import type { Track } from "@/db/types";
 import { useSession } from "@/hooks/use-app-data";
 import { createDiagnosticLogger } from "@/lib/logger";
@@ -93,7 +93,7 @@ async function loadSystemPlaylistTracks(playlistId: SystemPlaylistId): Promise<T
     const allTracks = await listAllTracks(db);
     trackCount = allTracks.length;
     if (playlistId === "system:liked") {
-      return deriveHeartedPlaylist(allTracks);
+      return deriveHeartedPlaylist(allTracks, await likedTrackIdSet(db));
     }
 
     const [stats, events] = await Promise.all([

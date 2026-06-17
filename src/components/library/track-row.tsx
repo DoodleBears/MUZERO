@@ -25,6 +25,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import type { DjSession, Track } from "@/db/types";
+import { useLikedTrackIds } from "@/hooks/use-liked-tracks";
 import { useCoverDerivativeUrl } from "@/hooks/use-media";
 import { recordUserAction } from "@/lib/logger";
 import { trackAlbum, trackArtists, trackSubtitle } from "@/lib/track-display";
@@ -175,6 +176,10 @@ export const TrackRow = memo(function TrackRow({
 }: TrackRowProps) {
   const { t } = useTranslation();
   const disabled = track.status !== "ready";
+  // `liked` now lives in the `trackLikes` side table, not on the cold track row —
+  // subscribe to the (tiny) liked-id set so a heart toggle re-renders only the visible
+  // rows, not a full-queue refetch (PRD 20260617-scalable-track-list).
+  const liked = useLikedTrackIds().has(track.id);
   // The hover action toolbar mounts two Base UI Popovers + several buttons. On a
   // virtualized list those are pure scroll cost — invisible until hover, yet
   // instantiated for every mounted row. Mount it only once the row is actually
@@ -325,7 +330,7 @@ export const TrackRow = memo(function TrackRow({
         <TrackTags tags={track.tags} />
         {/* Persistent at-a-glance "liked" hint, left of the duration (the hover
             toolbar carries the actual toggle). */}
-        {track.liked && <Heart className="size-3.5 shrink-0 text-primary" aria-hidden="true" />}
+        {liked && <Heart className="size-3.5 shrink-0 text-primary" aria-hidden="true" />}
         {metricColumns && (
           <span className="hidden shrink-0 items-center gap-3 md:inline-flex">{metricColumns}</span>
         )}
@@ -343,14 +348,11 @@ export const TrackRow = memo(function TrackRow({
             onClick={onToggleLike}
             className="grid size-7 place-items-center rounded text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
             aria-label={t("track.like")}
-            aria-pressed={track.liked}
+            aria-pressed={liked}
           >
             {/* Liked color goes on the icon (a descendant) so it cleanly overrides the
               button's inherited muted color instead of fighting it on one element. */}
-            <HeartIcon
-              size={16}
-              className={cn(track.liked && "text-primary [&_svg]:fill-primary")}
-            />
+            <HeartIcon size={16} className={cn(liked && "text-primary [&_svg]:fill-primary")} />
           </button>
           <button
             type="button"

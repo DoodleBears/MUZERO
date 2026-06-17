@@ -9,6 +9,12 @@ const DAY = 24 * 60 * 60 * 1000;
 
 const mocks = vi.hoisted(() => ({
   latestTracks: [] as Track[],
+  likedIds: new Set<string>(),
+}));
+
+// `liked` lives in the trackLikes side table now; drive the hook from the test.
+vi.mock("@/hooks/use-liked-tracks", () => ({
+  useLikedTrackIds: () => mocks.likedIds,
 }));
 
 vi.mock("react-i18next", () => ({
@@ -91,6 +97,7 @@ vi.mock("@/components/track/track-inspector-panel", () => ({
 describe("SystemPlaylistDetail", () => {
   beforeEach(() => {
     mocks.latestTracks = [];
+    mocks.likedIds = new Set();
     usePlayerStore.setState({
       play: vi.fn(),
       playSystemPlaylist: vi.fn().mockResolvedValue(undefined),
@@ -182,6 +189,7 @@ describe("SystemPlaylistDetail", () => {
       ReturnType<typeof usePlayerStore.getState>
     >);
     const tracks = [track("trk_1", "One", { liked: true }), track("trk_2", "Two")];
+    mocks.likedIds = new Set(["trk_1"]);
 
     render(
       <SystemPlaylistDetail
@@ -202,6 +210,7 @@ describe("SystemPlaylistDetail", () => {
 
   it("hides playback stats and metric sorting on the hearted playlist", () => {
     const tracks = [track("trk_1", "One", { liked: true })];
+    mocks.likedIds = new Set(["trk_1"]);
 
     render(
       <SystemPlaylistDetail

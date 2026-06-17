@@ -1322,6 +1322,19 @@ export interface TrackPlaybackStats {
   updatedAt: number;
 }
 
+/**
+ * The "liked" bit moved OFF the cold `tracks` catalog row into this high-churn side
+ * table (mirrors `trackPlaybackStats` for playCount): toggling a like writes here, so
+ * it no longer re-fires every `tracks` liveQuery (the play-queue's getTracksByIds(N) +
+ * the search全表 listAllTracks) — the fan-out that tanked FPS on big queues. Row
+ * presence = liked; un-liking deletes the row (PRD 20260617-scalable-track-list).
+ */
+export interface TrackLike {
+  /** PK = trackId (1:1 with a track; presence means liked). */
+  trackId: string;
+  likedAt: number;
+}
+
 export interface PlaybackEvent {
   id: string;
   devicePublicId: string;

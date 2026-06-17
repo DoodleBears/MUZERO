@@ -14,7 +14,7 @@
 | Phase | Name | Status | Link |
 |-------|------|--------|------|
 | 1 | 观测先行：harness 覆盖 4 场景的 before 基线 + 验收信号 | 🔄 部分（like 已采） | [Phase 1 Checklist](#phase-1-checklist) |
-| 2 | **Axis A**：高频字段全部下沉侧表（playCount / liked / lastPlayedAt），catalog 零高频写 | 🔲 Pending | [Phase 2 Checklist](#phase-2-checklist) |
+| 2 | **Axis A**：高频字段全部下沉侧表（playCount / liked / lastPlayedAt），catalog 零高频写 | ✅ Completed（liked→trackLikes v26；playCount 早已在 trackPlaybackStats，删死代码 incrementPlayCount） | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | **Axis B-1**：`state.queue` 由 `Track[]` 降为 id 列表；队列 UI 按 id 渲染 | 🔲 Pending | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | **Axis B-2**：逐行/窗口化 `useTrack(id)` 响应式读（跟随虚拟窗口），单曲写只重渲该行 | 🔲 Pending | [Phase 4 Checklist](#phase-4-checklist) |
 | 5 | 全 4 场景 @5983 队列 harness 复测验收 | 🔲 Pending | [Phase 5 Checklist](#phase-5-checklist) |
@@ -195,8 +195,11 @@ playQueue.entries[].trackId ──▶ tracks(id) 1 ── 0..1 trackLikes ──
 - [ ] `incrementPlayCount` 停写 catalog（确认 scope-A 读取方已用 `trackPlaybackStats`；移除/改道残留 `tracks.update({playCount})`）。
 - [ ] 读取方 join 侧表（favorite 按钮 / system:liked / dj-chat / liked-only 过滤）。
 #### Phase 2 Checklist
-- [ ] harness：`like` / `counted` 场景 `queue.live.fetch=0`、无 `listAllTracks requery`、`fpsLow≥60`。
-- [ ] 迁移 + 行为 parity 单测（fake-indexeddb）。
+- [x] `trackLikes` 侧表（`trackId` 主键，presence=liked）+ v26 `.upgrade` 一次性回填（纯 `likeRowsFromLegacyTracks` mapper 单测）；`setTrackLiked` 改写侧表、**不碰 tracks**；`isTrackLiked`/`likedTrackIdSet` + `useLikedTrackIds` hook。
+- [x] 读取方全部迁侧表：favorite 按钮（单行订阅）、track-row（`useLikedTrackIds`，仅可见行）、`system:liked`（`deriveHeartedPlaylist(tracks, likedIds)`）、liked-only 过滤（`filterLikedTracks(...,likedIds)`，entity-detail/search-page）、dj-chat（`likedSetForTracks` join，镜像 `sumPlayCountsByTrack`）。
+- [x] playCount 早已在 `trackPlaybackStats`（scope-A）；删死代码 `incrementPlayCount`（唯一残留的 `tracks.update({playCount})`，0 调用点）。
+- [x] **harness 验收（5983 队列，Now Playing，like ×5）before→after**：`queueLiveFetch 5@357ms→0`、`listAllTracks requery ×5→无`、`fpsLow 3.7→117.6`、`frameMax 266→8.5ms`、`longTaskTotal 2231→0ms`。
+- [x] 单测全绿：track-likes-repo（6）、system-playlists/track-gallery（parity，27）、queue-panel/system-playlist-detail（mock 侧表，11）、dj-chat、tsc 0、biome 绿。
 
 ### Phase 3: Axis B-1 — order/content 解耦
 **Goal:** `state.queue` 不再物化全量 `Track[]`。
@@ -269,6 +272,7 @@ playQueue.entries[].trackId ──▶ tracks(id) 1 ── 0..1 trackLikes ──
 
 | Date | Author | Changes |
 |------|--------|---------|
+| 2026-06-17 | DoodleBear（TDD 实现）| **Phase 2 Axis A ✅ 落地 + harness 验收**（分支 `perf/scalable-track-list-reactivity`）：`liked` 下沉 `trackLikes` 侧表（v26 + 一次性 `.upgrade` 回填，纯 mapper 单测）；`setTrackLiked` 只写侧表、不碰 `tracks`；读取方全迁（favorite 单行订阅 / track-row `useLikedTrackIds` 仅可见行 / `system:liked` + liked-only 过滤 + dj-chat join 侧表）；删死代码 `incrementPlayCount`。**5983 队列实测 like ×5：`queue.live.fetch` 5@357ms→0、`listAllTracks requery` ×5→无、`fpsLow` 3.7→117.6、`longtask` 2231→0ms** —— QA 报的 Now Playing 点 Like 掉帧彻底消除。单测全绿、tsc 0、biome 绿。Axis B（order/content 解耦）待后续 phase。 |
 | 2026-06-17 | DoodleBear | 初稿：用户指出「任意队列长度都应 handle，现设计非 best practice」。排查 4 写场景（增删/红心/播放/改 metadata）→ 锁定**架构反模式 = 队列把全量行内容作为一个 liveQuery 观察**（`getTracksByIds(N)` 物化+观察全部 N），任一写 re-fire 全量重取（实测 @5983：357ms×5 + 全表 requery、fpsLow 3.7、longtask 2231ms）。提出**两轴最佳实践**：Axis A 高频字段下沉侧表（catalog 零高频写，统辖 like/playCount 两战术 PRD）；Axis B order/content 解耦（store 持 id 列表 + 逐行/窗口 `useTrack(id)` 响应式读，对齐 TanStack Virtual）→ 4 场景成本与 N 解耦。5 phase（Axis A 先行低风险，Axis B 读侧重构在后）。Q1-Q5 待定。 |
 
 ---

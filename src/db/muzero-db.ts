@@ -1,5 +1,6 @@
 import Dexie, { type EntityTable } from "dexie";
 import { newId } from "@/lib/id";
+import { likeRowsFromLegacyTracks } from "./track-likes";
 import type {
   AppSettings,
   ChatSession,
@@ -24,6 +25,7 @@ import type {
   SyncObject,
   SyncRun,
   Track,
+  TrackLike,
   TrackLyrics,
   TrackPlaybackStats,
 } from "./types";
@@ -51,6 +53,7 @@ export class MuzeroDB extends Dexie {
   syncMutations!: EntityTable<SyncMutation, "id">;
   devices!: EntityTable<DeviceRecord, "id">;
   trackPlaybackStats!: EntityTable<TrackPlaybackStats, "id">;
+  trackLikes!: EntityTable<TrackLike, "trackId">;
   playbackEvents!: EntityTable<PlaybackEvent, "id">;
   playbackAggregates!: EntityTable<PlaybackAggregate, "id">;
   entityCovers!: EntityTable<EntityCover, "id">;
@@ -383,6 +386,21 @@ export class MuzeroDB extends Dexie {
     this.version(25).stores({
       coverDerivatives: "id, sourceKey, kind, blobId, generatedAt, [sourceKey+kind]",
     });
+
+    // v26 — move the high-churn `liked` bit OFF the cold `tracks` catalog row into a
+    // dedicated side table (mirrors `trackPlaybackStats` for playCount). Toggling a
+    // like used to `tracks.update(id,{liked})` → re-fire EVERY tracks liveQuery (the
+    // play-queue's getTracksByIds(N) + search全表 listAllTracks), tanking FPS on big
+    // queues. Now it writes `trackLikes` only. The one-time upgrade backfills existing
+    // liked tracks; `tracks.liked` stays (deprecated, no longer written) until a later
+    // version drops it (double-read transition). PRD 20260617-scalable-track-list.
+    this.version(26)
+      .stores({ trackLikes: "trackId, likedAt" })
+      .upgrade(async (tx) => {
+        const tracks = await tx.table("tracks").toArray();
+        const rows = likeRowsFromLegacyTracks(tracks, Date.now());
+        if (rows.length > 0) await tx.table("trackLikes").bulkAdd(rows);
+      });
   }
 }
 

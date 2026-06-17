@@ -47,9 +47,11 @@ export function getSystemPlaylistDefinitions(): SystemPlaylistDefinition[] {
   return SYSTEM_PLAYLISTS;
 }
 
-export function deriveHeartedPlaylist(tracks: Track[]): Track[] {
+/** `liked` now lives in the `trackLikes` side table, so the hearted set is passed in
+ *  (not read off `track.liked`) — PRD 20260617-scalable-track-list. */
+export function deriveHeartedPlaylist(tracks: Track[], likedIds: ReadonlySet<string>): Track[] {
   return [...tracks]
-    .filter((track) => isPlayableLocalTrack(track) && track.liked)
+    .filter((track) => isPlayableLocalTrack(track) && likedIds.has(track.id))
     .sort(
       (a, b) =>
         (b.updatedAt ?? b.createdAt) - (a.updatedAt ?? a.createdAt) ||
@@ -60,10 +62,10 @@ export function deriveHeartedPlaylist(tracks: Track[]): Track[] {
 
 export function deriveHeartedPlaylistRows(
   tracks: Track[],
-  input: { stats: TrackPlaybackStats[] },
+  input: { stats: TrackPlaybackStats[]; likedIds: ReadonlySet<string> },
 ): SystemPlaylistPlayable[] {
   const metricsByTrackId = foldTrackStats(input.stats);
-  return deriveHeartedPlaylist(tracks).map((track) =>
+  return deriveHeartedPlaylist(tracks, input.likedIds).map((track) =>
     toLocalPlayable(track, metricsByTrackId.get(track.id) ?? emptyTrackMetric(track.id)),
   );
 }

@@ -6,6 +6,7 @@ import { TrackInspectorPanel } from "@/components/track/track-inspector-panel";
 import { CoverImage } from "@/components/ui/cover-image";
 import type { Track } from "@/db/types";
 import { useBackGesture } from "@/hooks/use-back-gesture";
+import { useLikedTrackIds } from "@/hooks/use-liked-tracks";
 import { useTrackCoverUrl, useTrackThumbnailUrl } from "@/hooks/use-media";
 import { useTransliterationReady } from "@/hooks/use-transliteration-ready";
 import type { EntityStat } from "@/lib/library-stats";
@@ -86,6 +87,7 @@ export function EntityDetailView({
   const [sort, setSort] = useState<TrackSort | null>(null);
   const [sortDir, setSortDir] = useState<SortDir>("asc");
   const [likedOnly, setLikedOnly] = useState(false);
+  const likedIds = useLikedTrackIds();
   // In-set search, collapsed to an icon until opened (see CollapsibleSearch).
   const [query, setQuery] = useState("");
   // Re-run the search once the transliteration dictionaries load (gallery parity).
@@ -106,10 +108,20 @@ export function EntityDetailView({
   // then searched. Empty query returns the order untouched.
   // biome-ignore lint/correctness/useExhaustiveDependencies: transliterationReady re-runs once dictionaries load
   const shownTracks = useMemo(() => {
-    const filtered = filterLikedTracks(tracks, likedOnly);
+    const filtered = filterLikedTracks(tracks, likedOnly, likedIds);
     const ordered = sort ? sortTracks(filtered, sort, sortDir, lastPlayed) : filtered;
     return searchTracks(ordered, query, memoryNotes);
-  }, [tracks, likedOnly, sort, sortDir, lastPlayed, query, memoryNotes, transliterationReady]);
+  }, [
+    tracks,
+    likedOnly,
+    likedIds,
+    sort,
+    sortDir,
+    lastPlayed,
+    query,
+    memoryNotes,
+    transliterationReady,
+  ]);
 
   const alphabetLetterOf = useTrackAlphabetLetterOf(
     sort === "name" &&

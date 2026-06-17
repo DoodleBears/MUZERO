@@ -18,17 +18,16 @@ import { usePlayerStore } from "@/stores/player-store";
 export function FavoriteControlButton({ className }: { className?: string }) {
   const { t } = useTranslation();
   const hint = useShortcutHint();
-  const current = usePlayerStore(
-    useShallow((s) => {
-      const track = s.currentIndex >= 0 ? s.queue[s.currentIndex] : undefined;
-      return track ? { id: track.id, liked: track.liked } : null;
-    }),
+  const currentId = usePlayerStore(
+    useShallow((s) => (s.currentIndex >= 0 ? s.queue[s.currentIndex]?.id : undefined)),
   );
+  // Subscribe to just this track's `trackLikes` row — liking re-fires only this
+  // single-key query, never the play-queue snapshot (PRD 20260617-scalable-track-list).
   const liked =
     useLiveQuery(
-      async () => (current ? (await db.tracks.get(current.id))?.liked : undefined),
-      [current?.id],
-      current?.liked,
+      async () => (currentId ? (await db.trackLikes.get(currentId)) != null : false),
+      [currentId],
+      false,
     ) ?? false;
 
   return (
@@ -36,8 +35,8 @@ export function FavoriteControlButton({ className }: { className?: string }) {
       <Button
         variant="ghost"
         size="icon"
-        disabled={!current}
-        onClick={() => current && void setTrackLiked(current.id, !liked)}
+        disabled={!currentId}
+        onClick={() => currentId && void setTrackLiked(currentId, !liked)}
         aria-label={t("track.like")}
         aria-pressed={liked}
         className={cn(

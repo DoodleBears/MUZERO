@@ -12,6 +12,10 @@ import {
 const NOW = new Date(2026, 0, 15, 15, 30, 0).getTime();
 const DAY = 24 * 60 * 60 * 1000;
 
+// `liked` lives in the trackLikes side table now; the selector takes a liked-id set.
+const likedIdsOf = (ts: ReadonlyArray<{ id: string; liked?: boolean }>): Set<string> =>
+  new Set(ts.filter((t) => t.liked).map((t) => t.id));
+
 describe("system playlist selectors", () => {
   it("derives hearted tracks from ready liked local tracks, newest heart edit first", () => {
     const tracks = [
@@ -21,19 +25,24 @@ describe("system playlist selectors", () => {
       track({ id: "trk_pending", title: "Pending", liked: true, status: "pending" }),
     ];
 
-    expect(deriveHeartedPlaylist(tracks).map((item) => item.id)).toEqual(["trk_new", "trk_old"]);
+    expect(deriveHeartedPlaylist(tracks, likedIdsOf(tracks)).map((item) => item.id)).toEqual([
+      "trk_new",
+      "trk_old",
+    ]);
   });
 
   it("reflects heart toggles from the latest track rows", () => {
     const tracks = [track({ id: "trk_toggle", title: "Toggle me", liked: false })];
 
-    expect(deriveHeartedPlaylist(tracks)).toEqual([]);
+    expect(deriveHeartedPlaylist(tracks, likedIdsOf(tracks))).toEqual([]);
 
     const updatedTracks = tracks.map((item) =>
       item.id === "trk_toggle" ? { ...item, liked: true, updatedAt: NOW + 1 } : item,
     );
 
-    expect(deriveHeartedPlaylist(updatedTracks).map((item) => item.id)).toEqual(["trk_toggle"]);
+    expect(
+      deriveHeartedPlaylist(updatedTracks, likedIdsOf(updatedTracks)).map((item) => item.id),
+    ).toEqual(["trk_toggle"]);
   });
 
   it("derives recently played as unique local tracks folded across devices", () => {
@@ -251,11 +260,7 @@ function remote(
   };
 }
 
-function localRow(
-  id: string,
-  title: string,
-  metric: { lastPlayedAt: number; playCount: number },
-) {
+function localRow(id: string, title: string, metric: { lastPlayedAt: number; playCount: number }) {
   const rowTrack = track({ id, title });
   return {
     id,

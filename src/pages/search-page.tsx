@@ -75,6 +75,7 @@ import {
 } from "@/db/repositories";
 import type { CropRect, DjSession, Track } from "@/db/types";
 import { useBackGesture } from "@/hooks/use-back-gesture";
+import { useLikedTrackIds } from "@/hooks/use-liked-tracks";
 import { useCoverMetadataBackfill, useGridCoverUrl, useTrackCoverUrl } from "@/hooks/use-media";
 import { useShortcutMatcher } from "@/hooks/use-shortcut-matcher";
 import { LIBRARY_QUERY_COALESCE_MS, useThrottledValue } from "@/hooks/use-throttled-value";
@@ -300,6 +301,7 @@ export function SearchPage() {
     savedTrackSortDir(TRACK_SORT_DEFAULT_DIR[savedTrackSort()]),
   );
   const [likedOnly, setLikedOnly] = useState(false);
+  const likedIds = useLikedTrackIds();
   // 专辑 / 歌手 ordering — one shared sort across both entity walls.
   const [entitySort, setEntitySort] = useState<EntitySort>(savedEntitySort);
   const [entitySortDir, setEntitySortDir] = useState<SortDir>(() =>
@@ -654,13 +656,13 @@ export function SearchPage() {
         return {
           session: s,
           trackCount: s.trackIds.length,
-          likedCount: setTracks.filter((tr) => tr.liked).length,
+          likedCount: setTracks.filter((tr) => likedIds.has(tr.id)).length,
           lastActivityAt: s.updatedAt,
           coverTrackId: cover?.id ?? s.trackIds[0],
           matchesQuery: (trackQuery) => searchTracks(setTracks, trackQuery, memoryNotes).length > 0,
         };
       }),
-    [memoryNotes, sessions, trackById],
+    [memoryNotes, sessions, trackById, likedIds],
   );
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: transliterationReady re-runs once dictionaries load
@@ -676,7 +678,7 @@ export function SearchPage() {
     () =>
       mode === "sets"
         ? {
-            "system:liked": deriveHeartedPlaylist(allTracks).map(trackToSystemPlayable),
+            "system:liked": deriveHeartedPlaylist(allTracks, likedIds).map(trackToSystemPlayable),
             "system:recent": deriveRecentlyPlayedPlaylist(allTracks, {
               events: deferredPlaybackEvents,
               remoteTracks,
@@ -691,7 +693,7 @@ export function SearchPage() {
             }),
           }
         : EMPTY_SYSTEM_PLAYLIST_ROWS,
-    [mode, allTracks, deferredPlaybackEvents, deferredPlaybackStats, remoteTracks],
+    [mode, allTracks, deferredPlaybackEvents, deferredPlaybackStats, remoteTracks, likedIds],
   );
   const systemPlaylistItems = useMemo<SystemPlaylistCardItem[]>(
     () =>
@@ -730,7 +732,7 @@ export function SearchPage() {
   // biome-ignore lint/correctness/useExhaustiveDependencies: transliterationReady re-runs once dictionaries load
   const shownTracks = useMemo(() => {
     const sorted = sortTracks(
-      filterLikedTracks(allTracks, likedOnly),
+      filterLikedTracks(allTracks, likedOnly, likedIds),
       trackSort,
       trackSortDir,
       lastPlayedByTrack,
@@ -739,6 +741,7 @@ export function SearchPage() {
   }, [
     allTracks,
     likedOnly,
+    likedIds,
     trackSort,
     trackSortDir,
     lastPlayedByTrack,
@@ -1739,6 +1742,7 @@ function SetDetailView({
   // 红心 lives on songs, not sets — so the "liked only" filter is here, inside the
   // playlist, rather than on the set wall.
   const [likedOnly, setLikedOnly] = useState(false);
+  const likedIds = useLikedTrackIds();
   // In-set search: collapsed to an icon until opened (see CollapsibleSearch), then
   // filters this set's tracks through the same scorer as the gallery.
   const [query, setQuery] = useState("");
@@ -1775,17 +1779,30 @@ function SetDetailView({
     [tracks],
     EMPTY_MEMORY_NOTES,
   );
-  const likedCount = useMemo(() => tracks.filter((tr) => tr.liked).length, [tracks]);
+  const likedCount = useMemo(
+    () => tracks.filter((tr) => likedIds.has(tr.id)).length,
+    [tracks, likedIds],
+  );
   // Lazily load + observe the transliteration dictionaries so pinyin/kana/romaji
   // matches "snap in" once ready (parity with the gallery's 全部歌曲 search).
   const transliterationReady = useTransliterationReady();
   // biome-ignore lint/correctness/useExhaustiveDependencies: transliterationReady re-runs once dictionaries load
   const shownTracks = useMemo(() => {
-    const filtered = filterLikedTracks(tracks, likedOnly);
+    const filtered = filterLikedTracks(tracks, likedOnly, likedIds);
     const ordered = sort ? sortTracks(filtered, sort, sortDir, lastPlayed) : filtered;
     // Empty query returns `ordered` untouched, so the curated/sorted order shows through.
     return searchTracks(ordered, query, memoryNotes);
-  }, [likedOnly, tracks, sort, sortDir, lastPlayed, query, memoryNotes, transliterationReady]);
+  }, [
+    likedOnly,
+    likedIds,
+    tracks,
+    sort,
+    sortDir,
+    lastPlayed,
+    query,
+    memoryNotes,
+    transliterationReady,
+  ]);
   // Drag-to-reorder is only meaningful when the TRUE curated order is showing — a
   // column sort, liked filter, or search query makes drop positions ambiguous
   // (drag-reorder PRD §5.2). `tracks` then equals `shownTracks` in rank order.

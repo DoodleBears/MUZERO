@@ -97,12 +97,14 @@ describe("filterLikedTracks", () => {
     makeTrack({ id: "b", liked: false }),
     makeTrack({ id: "c", liked: true }),
   ];
+  // `liked` now comes from the side table; the filter takes the liked-id set.
+  const likedIds = new Set(["a", "c"]);
 
   it("keeps only liked tracks when on", () => {
-    expect(ids(filterLikedTracks(tracks, true))).toEqual(["a", "c"]);
+    expect(ids(filterLikedTracks(tracks, true, likedIds))).toEqual(["a", "c"]);
   });
 
   it("passes everything through when off", () => {
-    expect(ids(filterLikedTracks(tracks, false))).toEqual(["a", "b", "c"]);
+    expect(ids(filterLikedTracks(tracks, false, likedIds))).toEqual(["a", "b", "c"]);
   });
 });

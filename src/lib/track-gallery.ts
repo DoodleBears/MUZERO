@@ -83,7 +83,13 @@ function compareStrings(a: string, b: string): number {
   return a < b ? -1 : a > b ? 1 : 0;
 }
 
-/** Keep only liked tracks when the 红心 filter is on; otherwise pass through. */
-export function filterLikedTracks(tracks: Track[], likedOnly: boolean): Track[] {
-  return likedOnly ? tracks.filter((track) => track.liked) : tracks;
+/** Keep only liked tracks when the 红心 filter is on; otherwise pass through. `liked`
+ *  lives in the `trackLikes` side table now, so the set is passed in (not `track.liked`)
+ *  — PRD 20260617-scalable-track-list. */
+export function filterLikedTracks(
+  tracks: Track[],
+  likedOnly: boolean,
+  likedIds: ReadonlySet<string>,
+): Track[] {
+  return likedOnly ? tracks.filter((track) => likedIds.has(track.id)) : tracks;
 }

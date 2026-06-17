@@ -101,6 +101,9 @@ function projectTrack(
   // playCount is sourced from trackPlaybackStats, not the track row (switch-fps:
   // it's no longer denormalized onto `tracks`). Caller passes a per-track sum.
   playCountByTrack?: Map<string, number>,
+  // `liked` likewise moved to the trackLikes side table (PRD scalable-track-list);
+  // caller passes the liked-id set for the page.
+  likedByTrack?: ReadonlySet<string>,
 ): Record<string, unknown> {
   const row: Record<string, unknown> = {};
   for (const f of fields) {
@@ -108,6 +111,7 @@ function projectTrack(
     else if (f === "album") row.album = track.mediaMetadata?.album ?? track.streamMeta?.album;
     else if (f === "id") row.id = encodeMaybeTrack(track.id, deps);
     else if (f === "playCount") row.playCount = playCountByTrack?.get(track.id) ?? 0;
+    else if (f === "liked") row.liked = likedByTrack?.has(track.id) ?? false;
     else row[f] = track[f as keyof Track];
   }
   return row;
@@ -121,6 +125,14 @@ async function sumPlayCountsByTrack(ids: string[], db: MuzeroDB): Promise<Map<st
   const rows = await db.trackPlaybackStats.where("trackId").anyOf(ids).toArray();
   for (const row of rows) map.set(row.trackId, (map.get(row.trackId) ?? 0) + row.playCount);
   return map;
+}
+
+/** The liked subset of `ids`, from the trackLikes side table (authoritative now that
+ *  `tracks.liked` is gone — PRD scalable-track-list). */
+async function likedSetForTracks(ids: string[], db: MuzeroDB): Promise<Set<string>> {
+  if (ids.length === 0) return new Set();
+  const rows = await db.trackLikes.where("trackId").anyOf(ids).toArray();
+  return new Set(rows.map((r) => r.trackId));
 }
 
 /** Multi-keyword search: per-term match, combined by union ("any") or intersection ("all"). */
@@ -486,18 +498,20 @@ export async function executeSearchTracks(
   const fields = input.fields?.length ? input.fields : (["id", "title"] as const);
   const page = matched.slice(input.cursor, input.cursor + input.limit);
   const nextOffset = input.cursor + page.length;
-  // Only join play counts when the agent asked for them, and only for the page.
-  const playCountByTrack = (fields as readonly TrackResultField[]).includes("playCount")
-    ? await sumPlayCountsByTrack(
-        page.map((track) => track.id),
-        db,
-      )
+  // Only join play counts / liked when the agent asked for them, and only for the page.
+  const fieldList = fields as readonly TrackResultField[];
+  const pageIds = page.map((track) => track.id);
+  const playCountByTrack = fieldList.includes("playCount")
+    ? await sumPlayCountsByTrack(pageIds, db)
+    : undefined;
+  const likedByTrack = fieldList.includes("liked")
+    ? await likedSetForTracks(pageIds, db)
     : undefined;
   return {
     total: matched.length, // full match count so the agent knows if it's truncated
     returned: page.length,
     nextCursor: nextOffset < matched.length ? nextOffset : null,
-    tracks: page.map((track) => projectTrack(track, fields, deps, playCountByTrack)),
+    tracks: page.map((track) => projectTrack(track, fields, deps, playCountByTrack, likedByTrack)),
   };
 }
 

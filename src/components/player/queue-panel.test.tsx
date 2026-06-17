@@ -1,7 +1,7 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { db } from "@/db/muzero-db";
-import { listAllTracks, listTrackPlaybackStats } from "@/db/repositories";
+import { likedTrackIdSet, listAllTracks, listTrackPlaybackStats } from "@/db/repositories";
 import type { Track } from "@/db/types";
 import { clearTrace, getTraceEntries } from "@/lib/trace";
 import { usePlayerStore } from "@/stores/player-store";
@@ -49,6 +49,7 @@ vi.mock("@/db/muzero-db", () => ({
 vi.mock("@/db/repositories", () => ({
   listAllTracks: vi.fn().mockResolvedValue([]),
   listTrackPlaybackStats: vi.fn().mockResolvedValue([]),
+  likedTrackIdSet: vi.fn().mockResolvedValue(new Set<string>()),
 }));
 
 vi.mock("@/components/library/virtual-track-list", () => ({
@@ -150,6 +151,7 @@ describe("QueuePanel system playlist sources", () => {
   it("does not read playback stats or events when opening the hearted playlist", async () => {
     const playSystemPlaylist = vi.fn().mockResolvedValue(undefined);
     vi.mocked(listAllTracks).mockResolvedValue([makeTrack("trk_liked", { liked: true })]);
+    vi.mocked(likedTrackIdSet).mockResolvedValue(new Set(["trk_liked"]));
     usePlayerStore.setState({
       playSystemPlaylist,
     } as Partial<ReturnType<typeof usePlayerStore.getState>>);

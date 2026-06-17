@@ -6,6 +6,7 @@ import { TrackInspectorPanel } from "@/components/track/track-inspector-panel";
 import { Button } from "@/components/ui/button";
 import type { PlaybackEvent, RemoteSearchTrack, Track, TrackPlaybackStats } from "@/db/types";
 import { useBackGesture } from "@/hooks/use-back-gesture";
+import { useLikedTrackIds } from "@/hooks/use-liked-tracks";
 import {
   deriveHeartedPlaylistRows,
   deriveMostPlayedPlaylist,
@@ -49,10 +50,11 @@ export function SystemPlaylistDetail({
   const playTrack = usePlayerStore((s) => s.playTrack);
   const playSystemPlaylist = usePlayerStore((s) => s.playSystemPlaylist);
   const showPlaybackMetrics = playlistId !== "system:liked";
+  const likedIds = useLikedTrackIds();
 
   const rows = useMemo(
-    () => deriveRows(playlistId, tracks, stats, events, remoteTracks, range, now),
-    [events, now, playlistId, range, remoteTracks, stats, tracks],
+    () => deriveRows(playlistId, tracks, stats, events, remoteTracks, range, now, likedIds),
+    [events, now, playlistId, range, remoteTracks, stats, tracks, likedIds],
   );
   const effectiveSort = showPlaybackMetrics ? sort : "default";
   const sortedRows = useMemo(
@@ -191,10 +193,11 @@ function deriveRows(
   remoteTracks: RemoteSearchTrack[],
   range: MostPlayedRange,
   now: number,
+  likedIds: ReadonlySet<string>,
 ): SystemPlaylistPlayable[] {
   switch (playlistId) {
     case "system:liked":
-      return deriveHeartedPlaylistRows(tracks, { stats });
+      return deriveHeartedPlaylistRows(tracks, { stats, likedIds });
     case "system:recent":
       return deriveRecentlyPlayedPlaylist(tracks, { events, remoteTracks, stats });
     default:
