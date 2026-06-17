@@ -150,12 +150,23 @@ if (doProfile) {
   await cdp.send("Profiler.start", {});
 }
 await ctl("POST", "/perf/marker", { label: "scenario.start", meta: { scenario: name } });
+try {
+  await ctl("POST", "/renderTrace", { action: "reset" });
+} catch {
+  /* render-trace not wired (older build) */
+}
 for (let i = 0; i < swipes; i += 1) {
   const c = (await centerOf(cdp, SELECTOR)) ?? c0;
   await drag(cdp, c);
   if (i < swipes - 1) await sleep(everyMs);
 }
 await ctl("POST", "/perf/marker", { label: "scenario.end", meta: { scenario: name } });
+let renderTrace = null;
+try {
+  renderTrace = (await ctl("POST", "/renderTrace", {}))?.entries ?? null;
+} catch {
+  /* not wired */
+}
 await sleep(settleMs);
 let profileAnalysis = null;
 if (doProfile) {
@@ -183,11 +194,20 @@ const report = {
   isPlaying: state1.isPlaying,
   traceEntries: dump.count,
   ...aggregate(dump.entries),
+  renderTrace,
 };
 const dir2 = path.join(process.cwd(), ".logs", "perf-reports");
 mkdirSync(dir2, { recursive: true });
 writeFileSync(path.join(dir2, `${name}-${startedAt}.json`), JSON.stringify({ report }, null, 2));
-console.log(JSON.stringify(report, null, 2));
+console.log(JSON.stringify({ ...report, renderTrace: undefined }, null, 2));
+if (renderTrace?.length) {
+  console.log("\nRENDER-TRACE (surfaces that re-rendered this scenario):");
+  for (const s of renderTrace)
+    console.log(
+      `  ${String(s.actualMs).padStart(7)}ms  ${s.commits}× (${s.updateCommits} upd)  ${s.id}` +
+        (s.hiddenActualMs > 0.5 ? `   ⚠ HIDDEN ${s.hiddenActualMs}ms/${s.hiddenCommits}×` : ""),
+    );
+}
 if (profileAnalysis) {
   console.log(`\nTOP SELF TIME (${profileAnalysis.sampleCount} samples, ${profileAnalysis.durationMs}ms):`);
   for (const e of profileAnalysis.topSelf.slice(0, 16))

@@ -2,6 +2,7 @@ import { MotionConfig } from "motion/react";
 import type { ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { DevPerfPanel } from "@/components/dev/dev-perf-panel";
+import { RenderTraceBoundary } from "@/components/dev/render-trace-boundary";
 import { AlbumCoverAppearancePanel } from "@/components/player/album-cover-appearance-panel";
 import { ChangelogModal } from "@/components/player/changelog-modal";
 import { ImmersiveLyricsOverlay } from "@/components/player/immersive-lyrics-overlay";
@@ -328,28 +329,40 @@ export default function App() {
             document.hidden), and the shared Lenis driver (self-stops when idle). */}
         <main className="chrome-fade absolute inset-0 z-10 overflow-hidden [--chrome-fade-bottom:calc(var(--spacing-chrome-bottom)/2)] [--chrome-fade-top:3rem]">
           <TabPanel active={tab === "now"}>
-            <NowPlayingPage foregroundHidden={foregroundHidden} pageActive={tab === "now"} />
+            <RenderTraceBoundary id="tab:now" active={tab === "now"}>
+              <NowPlayingPage foregroundHidden={foregroundHidden} pageActive={tab === "now"} />
+            </RenderTraceBoundary>
           </TabPanel>
           <TabPanel active={tab === "queue"}>
-            <AmbientPageOverlay active={ambientActive}>{queuePanel}</AmbientPageOverlay>
+            <RenderTraceBoundary id="tab:queue" active={tab === "queue"}>
+              <AmbientPageOverlay active={ambientActive}>{queuePanel}</AmbientPageOverlay>
+            </RenderTraceBoundary>
           </TabPanel>
           <TabPanel active={tab === "search"}>
-            <AmbientPageOverlay active={ambientActive}>{searchPanel}</AmbientPageOverlay>
+            <RenderTraceBoundary id="tab:search" active={tab === "search"}>
+              <AmbientPageOverlay active={ambientActive}>{searchPanel}</AmbientPageOverlay>
+            </RenderTraceBoundary>
           </TabPanel>
           <TabPanel active={tab === "sessions"}>
-            <AmbientPageOverlay active={ambientActive}>{sessionsPanel}</AmbientPageOverlay>
+            <RenderTraceBoundary id="tab:sessions" active={tab === "sessions"}>
+              <AmbientPageOverlay active={ambientActive}>{sessionsPanel}</AmbientPageOverlay>
+            </RenderTraceBoundary>
           </TabPanel>
           <TabPanel active={tab === "settings"}>
-            <AmbientPageOverlay active={ambientActive}>{settingsPanel}</AmbientPageOverlay>
+            <RenderTraceBoundary id="tab:settings" active={tab === "settings"}>
+              <AmbientPageOverlay active={ambientActive}>{settingsPanel}</AmbientPageOverlay>
+            </RenderTraceBoundary>
           </TabPanel>
         </main>
 
-        <PlayerDock
-          tab={tab}
-          onTabChange={setTab}
-          onOpenNowPlaying={() => setTab("now")}
-          hidden={dockHidden}
-        />
+        <RenderTraceBoundary id="dock">
+          <PlayerDock
+            tab={tab}
+            onTabChange={setTab}
+            onOpenNowPlaying={() => setTab("now")}
+            hidden={dockHidden}
+          />
+        </RenderTraceBoundary>
 
         {immersiveMemoryActive && <ImmersiveMemoryOverlay />}
         {immersiveLyricsActive && (

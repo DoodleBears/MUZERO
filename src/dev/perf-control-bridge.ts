@@ -6,6 +6,7 @@
 // App.tsx), so it is tree-shaken out of production builds entirely.
 import { getSettings, getTrack, saveSettings, setTrackTags } from "@/db/repositories";
 import { log } from "@/lib/logger";
+import { resetRenderTrace, snapshotRenderTrace } from "@/lib/render-trace";
 import { traceEvent } from "@/lib/trace";
 import { readTraceArchiveEntries } from "@/lib/trace-archive";
 import {
@@ -30,7 +31,8 @@ export interface PerfControlCommand {
     | "marker"
     | "dumpTrace"
     | "search"
-    | "editMeta";
+    | "editMeta"
+    | "renderTrace";
   actionId?: string;
   payload?: Record<string, unknown>;
   patch?: Record<string, unknown>;
@@ -57,6 +59,8 @@ interface PerfCommandHandlerDeps {
   driveSearch?: (action: string, query?: string) => unknown;
   /** Edit the current track's metadata (tags) — drives the metadata-edit fan-out scenario. */
   editCurrentTrackMeta?: () => Promise<unknown>;
+  /** Render-trace: "reset" clears per-surface commit counters; else snapshot them. */
+  renderTrace?: (action?: string) => unknown;
 }
 
 /** Player-store methods the endpoint may invoke. A deliberate allowlist — no arbitrary
@@ -174,6 +178,10 @@ export function createPerfCommandHandler(deps: PerfCommandHandlerDeps) {
         if (!deps.editCurrentTrackMeta) throw new Error("editMeta not wired");
         return { editMeta: (await deps.editCurrentTrackMeta()) ?? null };
       }
+      case "renderTrace": {
+        if (!deps.renderTrace) throw new Error("renderTrace not wired");
+        return deps.renderTrace(command.payload?.action as string | undefined) ?? null;
+      }
       default:
         throw new Error(`unknown command kind: ${String((command as { kind?: string }).kind)}`);
     }
@@ -253,6 +261,15 @@ export function startPerfControlBridge(): void {
       const tag = `perf-${(await getTrack(id))?.tags?.length ?? 0}-${s.currentIndex}`;
       await setTrackTags(id, [tag]);
       return { edited: id };
+    },
+    // Render-trace: reset per-surface commit counters before a scenario, snapshot after
+    // — surfaces shows which re-rendered (and whether a hidden one wasted work).
+    renderTrace: (action) => {
+      if (action === "reset") {
+        resetRenderTrace();
+        return { reset: true };
+      }
+      return { entries: snapshotRenderTrace() };
     },
     dumpTrace: async (since, limit) => {
       const entries = await readTraceArchiveEntries(undefined, limit ?? 5000);

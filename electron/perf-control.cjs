@@ -141,6 +141,9 @@ function routeToCommand(method, segments, body) {
   if (method === "POST" && segments.length === 1 && segments[0] === "editMeta") {
     return { kind: "editMeta", payload: body };
   }
+  if (method === "POST" && segments.length === 1 && segments[0] === "renderTrace") {
+    return { kind: "renderTrace", payload: body };
+  }
   return null;
 }
 
