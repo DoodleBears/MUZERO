@@ -164,6 +164,8 @@ scripts/perf-gesture.mjs / perf-drive.mjs      # ✎ scenario 前 reset、后 sn
 - (C) 接受现状：contention（F2/F3 + 前序 memo）已治，封面 `drawImage` 是「画一张新封面」的真实必要成本；冷 458ms 主要发生在**快速多步/远跳**（非单步拖拽常态）。
 > 三者都触碰画质/闪烁或属固有成本，与「不影响 UIUX」张力大 → 需用户在「画质/闪烁风险 vs 更顺」之间定调，再动 flash-sensitive 的 canvas-cover。
 
+**裁决（2026-06-18，用户）：接受现状、收尾。** contention 已治到 UI-safe 极限（F2/F3 + hidden-tab memo + i18next/Pixi/auto-scroll），封面切换更顺；剩下的封面 `drawImage`/GPU 上传是「画一张新封面」的**固有成本**，再压必须牺牲画质（thumbnail）或冒闪烁风险（display-bitmap 重写 flash-sensitive 代码），与「不影响 UIUX」不可兼得。故**封面切换在不改 UIUX 的前提下已达最优点**。冷态 458ms 仅发生于远跳/快速多步（非单步拖拽常态）；若日后愿接受「侧卡轻微变软」可走候选 (B) 进一步压冷态。
+
 ---
 
 ## 6. Out of Scope
