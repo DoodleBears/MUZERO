@@ -22,6 +22,11 @@ const everyMs = Number(arg("--every", 1500));
 const settleMs = Number(arg("--settle", 6000));
 const listenMs = Number(arg("--listen", 32000));
 const name = arg("--name", scenario);
+// search scenario: the query to type, and the per-keystroke cadence (ms).
+const query = arg("--query", "love");
+const typeMs = Number(arg("--type-every", 90));
+
+let searchStats = null;
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -57,6 +62,24 @@ async function runSteps() {
       await sleep(listenMs);
       await call("POST", "/player/playIndex", { index: "+1" });
     }
+    return;
+  }
+  if (scenario === "search") {
+    // Open ⌘F (Phase 2 open-window burst), then type the query one char at a time
+    // (Phase 3 per-keystroke index latency) on the REAL overlay over the live library.
+    // FPS/longtask land in the trace; search.perf latency comes back from /search stats.
+    await call("POST", "/search", { action: "reset" });
+    await call("POST", "/search", { action: "open" });
+    await sleep(settleMs); // let the open-window work settle before typing
+    let typed = "";
+    for (const ch of [...query]) {
+      typed += ch;
+      await call("POST", "/search", { action: "type", query: typed });
+      await sleep(typeMs);
+    }
+    await sleep(listenMs); // dwell so the final query resolves + frames sample
+    searchStats = await call("POST", "/search", { action: "stats" });
+    await call("POST", "/search", { action: "close" });
     return;
   }
   for (let i = 0; i < switches; i += 1) {
@@ -148,6 +171,7 @@ const report = {
   settleMs,
   startedAt,
   traceEntries: dump.count,
+  ...(scenario === "search" ? { query, typeMs, searchStats } : {}),
   ...aggregate(dump.entries),
 };
 

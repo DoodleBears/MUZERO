@@ -61,6 +61,13 @@ export function getSearchPerfSnapshot(): {
   return { latency: latencySampler.stats(), workerDuration: workerDurationSampler.stats() };
 }
 
+/** Drop accumulated perf samples so a harness run measures only its own queries. */
+export function resetSearchPerf(): void {
+  latencySampler.reset();
+  workerDurationSampler.reset();
+  perfLogCountdown = PERF_LOG_EVERY;
+}
+
 function getWorker(): Worker | null {
   if (worker) return worker;
   if (workerUnavailable || typeof Worker === "undefined") return null;

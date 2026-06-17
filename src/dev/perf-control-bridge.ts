@@ -15,6 +15,8 @@ import {
 } from "@/shortcuts/actions";
 import { useNavStore } from "@/stores/nav-store";
 import { usePlayerStore } from "@/stores/player-store";
+import { getSearchPerfSnapshot, resetSearchPerf } from "@/workers/search-client";
+import { getSearchDriver } from "./search-drive";
 
 export interface PerfControlCommand {
   kind:
@@ -26,7 +28,8 @@ export interface PerfControlCommand {
     | "navTab"
     | "player"
     | "marker"
-    | "dumpTrace";
+    | "dumpTrace"
+    | "search";
   actionId?: string;
   payload?: Record<string, unknown>;
   patch?: Record<string, unknown>;
@@ -49,6 +52,8 @@ interface PerfCommandHandlerDeps {
   getSettings: () => Promise<Record<string, unknown>>;
   emitMarker: (label: string, meta?: Record<string, unknown>) => void;
   dumpTrace: (since?: number, limit?: number) => Promise<unknown[]>;
+  /** Drive the ⌘F overlay for the search-perf scenario (open/close/type/reset/stats). */
+  driveSearch?: (action: string, query?: string) => unknown;
 }
 
 /** Player-store methods the endpoint may invoke. A deliberate allowlist — no arbitrary
@@ -156,6 +161,12 @@ export function createPerfCommandHandler(deps: PerfCommandHandlerDeps) {
         const entries = await deps.dumpTrace(command.since, command.limit);
         return { count: entries.length, entries };
       }
+      case "search": {
+        if (!deps.driveSearch) throw new Error("search driver not registered");
+        const action = String(command.payload?.action ?? "");
+        const query = command.payload?.query as string | undefined;
+        return { search: action, data: deps.driveSearch(action, query) ?? null };
+      }
       default:
         throw new Error(`unknown command kind: ${String((command as { kind?: string }).kind)}`);
     }
@@ -204,6 +215,28 @@ export function startPerfControlBridge(): void {
     },
     emitMarker: (label, meta) =>
       traceEvent("debug", "perf.control", "marker", { label, ...(meta ?? {}) }),
+    driveSearch: (action, query) => {
+      if (action === "reset") {
+        resetSearchPerf();
+        return null;
+      }
+      if (action === "stats") return getSearchPerfSnapshot();
+      const driver = getSearchDriver();
+      if (!driver) throw new Error("search overlay driver not mounted");
+      switch (action) {
+        case "open":
+          driver.setOpen(true);
+          return null;
+        case "close":
+          driver.setOpen(false);
+          return null;
+        case "type":
+          driver.setQuery(query ?? "");
+          return null;
+        default:
+          throw new Error(`unknown search action: ${action}`);
+      }
+    },
     dumpTrace: async (since, limit) => {
       const entries = await readTraceArchiveEntries(undefined, limit ?? 5000);
       return since != null ? entries.filter((e) => e.at >= since) : entries;

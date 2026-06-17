@@ -18,6 +18,7 @@ import { Kbd, KbdGroup } from "@/components/ui/kbd";
 import { db } from "@/db/muzero-db";
 import { listAllTracks, listSessions, memoryNotesByTrack, saveSettings } from "@/db/repositories";
 import type { DjSession, StreamSourceId, Track, TrackLyrics } from "@/db/types";
+import { registerSearchDriver } from "@/dev/search-drive";
 import { useSettings } from "@/hooks/use-app-data";
 import { useTrackThumbnailUrl } from "@/hooks/use-media";
 import { useOnlineSourceSearch } from "@/hooks/use-online-source-search";
@@ -106,6 +107,16 @@ export function GlobalTrackSearch({
   const [menuDismissed, setMenuDismissed] = useState(false);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
+
+  // DEV-only: expose open/type to the perf-control endpoint so the search-perf
+  // scenario can script the ⌘F overlay (its open + query are component-local state,
+  // unreachable through the store/action surface). Synchronous register (no async
+  // import race); the call is behind import.meta.env.DEV so it tree-shakes out of prod.
+  useEffect(() => {
+    if (!import.meta.env.DEV) return;
+    registerSearchDriver({ setOpen: onOpenChange, setQuery });
+    return () => registerSearchDriver(null);
+  }, [onOpenChange]);
   // Coalesce write bursts so the memory join + worker snapshot below re-run at
   // most once per interval instead of once per tracks write (PRD F-3).
   const allTracksLive = useLiveQuery(() => listAllTracks(db), [], []);

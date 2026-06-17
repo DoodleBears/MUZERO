@@ -135,6 +135,9 @@ function routeToCommand(method, segments, body) {
   if (method === "POST" && segments[0] === "perf" && segments[1] === "trace") {
     return { kind: "dumpTrace", since: body.since, limit: body.limit };
   }
+  if (method === "POST" && segments.length === 1 && segments[0] === "search") {
+    return { kind: "search", payload: body };
+  }
   return null;
 }
 
@@ -301,3 +304,5 @@ module.exports = {
   createPerfControlServer,
   registerPerfControl,
 };
+
+// perf-control: search route + driveSearch (harness search scenario)
