@@ -241,7 +241,15 @@ export function SwipeableCoverStage({
   // Publish the window to the shared channel (the Pixi background mirrors it). Only
   // the image covers of slots are pushed; the active flag tells the background to
   // run the lockstep sprite window vs its single-step resting path.
-  useEffect(() => {
+  //
+  // LAYOUT effect (not passive): at a recentre this MUST publish the new window —
+  // retargeting the Pixi sprite offsets — in the SAME paint as the offset-reset layout
+  // effect below. As a passive effect it lagged a frame, so the offset reset fired the
+  // background's `applyOffset` against the OLD sprite offsets and painted the previous
+  // centre's cover at centre for one frame (PRD 20260618-recenter-boundary #2). This
+  // runs BEFORE the offset-reset effect (source order), so the sprites carry the new
+  // offsets before the reset repositions them.
+  useLayoutEffect(() => {
     if (!foregroundVisible) {
       clearCoverWindow();
       return;

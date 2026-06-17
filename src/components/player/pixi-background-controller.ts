@@ -612,6 +612,23 @@ export function createPixiBackgroundController(
     for (const src of [...windowSrcOffset.keys()]) {
       if (!desired.has(src)) windowSrcOffset.delete(src);
     }
+    // Retarget the offsets of EXISTING sprites + relayout SYNCHRONOUSLY (before the
+    // async app/edge-cover load). A recentre publishes the new window AND resets the
+    // shared offset in the same React layout phase; the offset reset fires our
+    // `applyOffset` synchronously, so the sprite offsets must already be the new ones
+    // by then — otherwise that frame paints the OLD centre cover at centre (the
+    // reported "背景闪一下、像切回上一张封面"). Recentred neighbours are already loaded,
+    // so this is a pure offset retarget; only genuinely NEW edge covers load below.
+    let hasNewSrc = false;
+    for (const [src, offset] of desired) {
+      if (windowSprites.has(src)) windowSrcOffset.set(src, offset);
+      else hasNewSrc = true;
+    }
+    if (app) {
+      restackWindow();
+      applyWindowLayout();
+    }
+    if (!hasNewSrc) return;
     try {
       await ensureApp();
     } catch (error) {
@@ -620,11 +637,7 @@ export function createPixiBackgroundController(
     }
     if (destroyed || token !== windowLoadSeq || !app || !pixi || !layerRoot) return;
     for (const [src, offset] of desired) {
-      if (windowSprites.has(src)) {
-        windowSrcOffset.set(src, offset); // existing cover — keep its texture, retarget
-      } else {
-        void loadWindowSrc(src, offset, token);
-      }
+      if (!windowSprites.has(src)) void loadWindowSrc(src, offset, token);
     }
     restackWindow();
     applyWindowLayout();
