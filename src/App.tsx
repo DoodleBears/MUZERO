@@ -180,6 +180,12 @@ export default function App() {
 
   useEffect(() => {
     const onFullscreenChange = () => {
+      // F-key fullscreen goes through the DOM Fullscreen API, not the Electron window
+      // (which drives data-window-maximized). Mirror the state onto the root so the
+      // win32 shell can drop its rounded corners + accent border while fullscreen.
+      document.documentElement.dataset.documentFullscreen = String(
+        Boolean(document.fullscreenElement),
+      );
       const pending = fullscreenRestoreRef.current;
       if (document.fullscreenElement || !pending) return;
       fullscreenRestoreRef.current = null;

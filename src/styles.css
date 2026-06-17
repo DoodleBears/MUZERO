@@ -262,18 +262,20 @@
     transition: none;
   }
 
-  html[data-desktop-shell="electron"][data-desktop-platform="win32"][data-window-maximized="true"],
-  html[data-desktop-shell="electron"][data-desktop-platform="win32"][data-window-maximized="true"]
+  /* Maximized OR fullscreen (F key / DOM Fullscreen API): fill the screen edge-to-edge
+     with no rounded corners and no accent border. */
+  html[data-desktop-shell="electron"][data-desktop-platform="win32"]:is([data-window-maximized="true"], [data-document-fullscreen="true"]),
+  html[data-desktop-shell="electron"][data-desktop-platform="win32"]:is([data-window-maximized="true"], [data-document-fullscreen="true"])
     body,
-  html[data-desktop-shell="electron"][data-desktop-platform="win32"][data-window-maximized="true"]
+  html[data-desktop-shell="electron"][data-desktop-platform="win32"]:is([data-window-maximized="true"], [data-document-fullscreen="true"])
     #root,
-  html[data-desktop-shell="electron"][data-desktop-platform="win32"][data-window-maximized="true"]
+  html[data-desktop-shell="electron"][data-desktop-platform="win32"]:is([data-window-maximized="true"], [data-document-fullscreen="true"])
     .app-shell {
     border-radius: 0 !important;
     clip-path: none !important;
   }
 
-  html[data-desktop-shell="electron"][data-desktop-platform="win32"][data-window-maximized="true"]
+  html[data-desktop-shell="electron"][data-desktop-platform="win32"]:is([data-window-maximized="true"], [data-document-fullscreen="true"])
     #root::after {
     box-shadow: none !important;
   }
