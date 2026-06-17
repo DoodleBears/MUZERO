@@ -11,9 +11,48 @@ MUZERO はローカルファーストの音楽 / ビデオプレーヤーです�
 
 [mu0.app](https://mu0.app) · [Changelog](./CHANGELOG.md) · [Product PRD](./docs/prd/20260612-muzero-product-positioning-readme-prd/20260612-muzero-product-positioning-readme-prd.md)
 
+<br/>
+
+<img src="./docs/media/now-playing.gif" width="760" alt="MUZERO の没入型再生画面 — カバーパレット、フロー背景、リアルタイムスペクトラム" />
+
 </div>
 
 ---
+
+## スクリーンショット
+
+<table>
+  <tr>
+    <td width="50%" valign="top">
+      <img src="./docs/media/visualizer.gif" alt="リアルタイムビジュアライザーと歌詞" /><br/>
+      <sub><b>リアルタイムビジュアライザー &amp; 歌詞</b> — スペクトラムを切り替え、歌詞モードへ。</sub>
+    </td>
+    <td width="50%" valign="top">
+      <img src="./docs/media/switch-song.gif" alt="スワイプで曲送り" /><br/>
+      <sub><b>スワイプで曲送り</b> — タッチで操る 3D カバーフロー。</sub>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <img src="./docs/media/search.png" alt="グローバル検索" /><br/>
+      <sub><b>グローバル ⌘F 検索</b> — 曲・タグ・歌詞・オンラインソースを横断。</sub>
+    </td>
+    <td width="50%" valign="top">
+      <img src="./docs/media/library.png" alt="セットギャラリー" /><br/>
+      <sub><b>セットギャラリー</b> — セット・アルバム・アーティスト・スマートプレイリストを一覧。</sub>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <img src="./docs/media/dj.png" alt="Agent DJ の設定" /><br/>
+      <sub><b>Agent DJ</b> — LLM をつないで、DJ のようにセットを編成しリクエストに応える。</sub>
+    </td>
+    <td width="50%" valign="top">
+      <img src="./docs/media/settings.png" alt="カスタマイズ可能なビジュアル" /><br/>
+      <sub><b>細部までカスタマイズできるビジュアル</b> — フロー背景、パレット、エフェクト、テーマ。</sub>
+    </td>
+  </tr>
+</table>
 
 ## MUZERO とは
 

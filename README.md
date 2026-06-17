@@ -13,9 +13,48 @@ sync, and an LLM-powered DJ into one app.
 
 [mu0.app](https://mu0.app) · [Changelog](./CHANGELOG.md) · [Product PRD](./docs/prd/20260612-muzero-product-positioning-readme-prd/20260612-muzero-product-positioning-readme-prd.md)
 
+<br/>
+
+<img src="./docs/media/now-playing.gif" width="760" alt="MUZERO immersive Now Playing — cover palette, flow background, and live spectrum" />
+
 </div>
 
 ---
+
+## Screenshots
+
+<table>
+  <tr>
+    <td width="50%" valign="top">
+      <img src="./docs/media/visualizer.gif" alt="Live visualizers and lyrics" /><br/>
+      <sub><b>Live visualizers &amp; lyrics</b> — cycle spectrum styles, then flip into lyrics mode.</sub>
+    </td>
+    <td width="50%" valign="top">
+      <img src="./docs/media/switch-song.gif" alt="Swipe to switch songs" /><br/>
+      <sub><b>Swipe to switch</b> — a 3D coverflow you flick through by touch.</sub>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <img src="./docs/media/search.png" alt="Global search" /><br/>
+      <sub><b>Global ⌘F search</b> — across tracks, tags, lyrics, and online sources.</sub>
+    </td>
+    <td width="50%" valign="top">
+      <img src="./docs/media/library.png" alt="Set gallery" /><br/>
+      <sub><b>Set gallery</b> — sets, albums, artists, and smart playlists in one place.</sub>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <img src="./docs/media/dj.png" alt="Agent DJ configuration" /><br/>
+      <sub><b>Agent DJ</b> — connect an LLM to curate sets and take requests, like a DJ.</sub>
+    </td>
+    <td width="50%" valign="top">
+      <img src="./docs/media/settings.png" alt="Customizable visuals" /><br/>
+      <sub><b>Customizable visuals</b> — flow background, palettes, effects, and themes.</sub>
+    </td>
+  </tr>
+</table>
 
 ## What Is MUZERO?
 

@@ -11,9 +11,48 @@ MUZERO는 로컬 우선 음악 / 비디오 플레이어입니다. 개인 라이�
 
 [mu0.app](https://mu0.app) · [Changelog](./CHANGELOG.md) · [Product PRD](./docs/prd/20260612-muzero-product-positioning-readme-prd/20260612-muzero-product-positioning-readme-prd.md)
 
+<br/>
+
+<img src="./docs/media/now-playing.gif" width="760" alt="MUZERO 몰입형 재생 화면 — 커버 팔레트, 플로우 배경, 실시간 스펙트럼" />
+
 </div>
 
 ---
+
+## 스크린샷
+
+<table>
+  <tr>
+    <td width="50%" valign="top">
+      <img src="./docs/media/visualizer.gif" alt="실시간 비주얼라이저와 가사" /><br/>
+      <sub><b>실시간 비주얼라이저 &amp; 가사</b> — 스펙트럼 스타일을 전환하고 가사 모드로.</sub>
+    </td>
+    <td width="50%" valign="top">
+      <img src="./docs/media/switch-song.gif" alt="스와이프로 곡 전환" /><br/>
+      <sub><b>스와이프로 곡 전환</b> — 터치로 넘기는 3D 커버 플로우.</sub>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <img src="./docs/media/search.png" alt="전역 검색" /><br/>
+      <sub><b>전역 ⌘F 검색</b> — 트랙, 태그, 가사, 온라인 소스를 아우르는 검색.</sub>
+    </td>
+    <td width="50%" valign="top">
+      <img src="./docs/media/library.png" alt="세트 갤러리" /><br/>
+      <sub><b>세트 갤러리</b> — 세트, 앨범, 아티스트, 스마트 플레이리스트를 한곳에서.</sub>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <img src="./docs/media/dj.png" alt="에이전트 DJ 설정" /><br/>
+      <sub><b>에이전트 DJ</b> — LLM을 연결해 DJ처럼 세트를 큐레이션하고 요청을 받기.</sub>
+    </td>
+    <td width="50%" valign="top">
+      <img src="./docs/media/settings.png" alt="커스터마이즈 가능한 비주얼" /><br/>
+      <sub><b>커스터마이즈 가능한 비주얼</b> — 플로우 배경, 팔레트, 이펙트, 테마.</sub>
+    </td>
+  </tr>
+</table>
 
 ## MUZERO란?
 

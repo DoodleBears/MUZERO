@@ -11,9 +11,48 @@ MUZERO 是一个本地优先的音乐 / 视频播放器。它把私人曲库、�
 
 [mu0.app](https://mu0.app) · [更新日志](./CHANGELOG.md) · [产品 PRD](./docs/prd/20260612-muzero-product-positioning-readme-prd/20260612-muzero-product-positioning-readme-prd.md)
 
+<br/>
+
+<img src="./docs/media/now-playing.gif" width="760" alt="MUZERO 沉浸式 Now Playing —— 封面取色、流光背景与实时频谱" />
+
 </div>
 
 ---
+
+## 截图
+
+<table>
+  <tr>
+    <td width="50%" valign="top">
+      <img src="./docs/media/visualizer.gif" alt="实时可视化与歌词" /><br/>
+      <sub><b>实时可视化 &amp; 歌词</b> —— 切换频谱样式，再翻到歌词模式。</sub>
+    </td>
+    <td width="50%" valign="top">
+      <img src="./docs/media/switch-song.gif" alt="滑动切歌" /><br/>
+      <sub><b>滑动切歌</b> —— 触屏滑动 3D 封面流切换歌曲。</sub>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <img src="./docs/media/search.png" alt="全局搜索" /><br/>
+      <sub><b>全局 ⌘F 搜索</b> —— 横跨曲目、标签、歌词与在线音乐源。</sub>
+    </td>
+    <td width="50%" valign="top">
+      <img src="./docs/media/library.png" alt="歌单画廊" /><br/>
+      <sub><b>歌单画廊</b> —— 歌单、专辑、艺人与智能歌单一处浏览。</sub>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <img src="./docs/media/dj.png" alt="Agent DJ 配置" /><br/>
+      <sub><b>Agent DJ</b> —— 接入 LLM，让它帮你整理歌单、接受点歌（像个 DJ）。</sub>
+    </td>
+    <td width="50%" valign="top">
+      <img src="./docs/media/settings.png" alt="可定制视觉" /><br/>
+      <sub><b>高度可定制的视觉</b> —— 流光背景、调色板、特效与主题。</sub>
+    </td>
+  </tr>
+</table>
 
 ## MUZERO 是什么？
 
