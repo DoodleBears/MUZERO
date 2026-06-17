@@ -11,11 +11,18 @@
 
 | Phase | Name | Status | Link |
 |-------|------|--------|------|
-| 1 | 观测：标记切歌 hand-off 各阶段的 identity / cover 可见性 | 🔲 Pending | [Phase 1 Checklist](#phase-1-checklist) |
-| 2 | 修复 #1：标题/歌手不随封面 hand-off fade（commit 即显示 B） | 🔲 Pending | [Phase 2 Checklist](#phase-2-checklist) |
-| 3 | 修复 #2：多次/快速拖拽后侧封面回退 title（3D 退化） | 🔲 Pending | [Phase 3 Checklist](#phase-3-checklist) |
+| 1 | 观测：标记切歌 hand-off 各阶段的 identity / cover 可见性 | ⏭️ Skipped（根因 code-evident，直接修；harness 验证留为 follow-up） | [Phase 1 Checklist](#phase-1-checklist) |
+| 2 | 修复 #1：标题/歌手不随封面 hand-off fade（commit 即显示 B） | ✅ Completed（00dc95a） | [Phase 2 Checklist](#phase-2-checklist) |
+| 3 | 修复 #2：多次/快速拖拽后侧封面回退 title（3D 退化） | ✅ Completed（e7d377a，方向 a 增量提交） | [Phase 3 Checklist](#phase-3-checklist) |
 
-> Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
+> Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending | ⏭️ Skipped
+
+> **实现说明（2026-06-18）**：两个缺陷的根因均可直接从代码读出（不需先补观测），故跳过 Phase 1 直接实现。
+> - **#1（00dc95a）**：base identity 可见性从 `active ? 0 : 1` 改为 `active && !handoffFading ? 0 : 1`；overlay 的 travelling identity 在 `handoffFading` 时不再渲染（`renderIdentity={handoffFading ? undefined : renderIdentity}`）。commit 瞬间 base 的 B 文本立即满显、overlay 的 B 文本同帧让位——B==B 无可见跳变，封面图仍保留 `HANDOFF_FADE_MS` 谨慎遮罩。
+> - **#2（e7d377a，方向 a 增量提交）**：`preloadCoverBatch` 新增 `onEntry(trackId, url)` 回调，封面一解析就回调；`usePreloadedCoverUrls` 据此**增量提交 + 合并（不再整批替换）**，被取消的批次仍保留已解码封面。stale key 无害（slot 只读当前窗口 + `trackHasCover` 把关），committed URL 靠 warm-LRU（cap 64 ≫ ~5 slot 窗口）保持有效；`CanvasCover` 落 canvas 后即便 URL 被 revoke 也不掉图。**未**并行化解码（serial 仍在，方向 b 留作后续若 harness 显示仍不足时再上）。
+> - **验证现状**：`tsc --noEmit` 通过、`src/components/player` 全量 178 测试通过、Biome 对三个改动文件干净。**视觉/量化验证（连续 ≥6 次相邻拖拽侧封面命中率、commit 后标题无 `1→0→1`）仍待**在 dev app 手测或补 harness 场景（见下方 follow-up）。
+
+> **Follow-up（未做，按需）**：补 `render-sweep`/`perf-gesture` 的「连续相邻拖拽 ×N」「快速多步拖拽」场景，量化侧 slot `coverUrl` 命中率 + 批次 `canceled` 次数，作为 #2 的回归断言；若仍偏低再评估方向 b（并行解码）/ c（拖拽方向预热一格）/ d（thumbhash 占位）。
 
 ---
 
