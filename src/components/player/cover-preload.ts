@@ -122,6 +122,7 @@ export async function preloadCoverBatch({
   isCurrent,
   localSettleMs = 0,
   nonCurrentLocalSettleMs = localSettleMs,
+  onEntry,
   previous,
   requests,
   resolveMediaBlob: resolveMediaBlobImpl = (id) => resolveMediaBlob(id, db),
@@ -133,6 +134,12 @@ export async function preloadCoverBatch({
   isCurrent: () => boolean;
   localSettleMs?: number;
   nonCurrentLocalSettleMs?: number;
+  /** Called the instant each cover resolves (cache hit, reuse, remote, or fresh
+   *  decode) — BEFORE the whole batch finishes. Lets the caller commit progress
+   *  incrementally so a rapid recenter that cancels this batch mid-flight still
+   *  keeps the covers it already resolved (PRD 20260618 #2: side covers blanking
+   *  to title fallback during a fast cold drag). */
+  onEntry?: (trackId: string, url: string) => void;
   previous: Record<string, PreloadedCover>;
   requests: CoverPreloadRequest[];
   resolveMediaBlob?: ResolveMediaBlob;
@@ -144,6 +151,11 @@ export async function preloadCoverBatch({
   let currentLocalMissSettled = false;
   let nonCurrentLocalMissSettled = false;
 
+  const commit = (trackId: string, entry: PreloadedCover) => {
+    nextEntries[trackId] = entry;
+    onEntry?.(trackId, entry.url);
+  };
+
   const cancel = (): CoverPreloadBatchResult => {
     stats.canceled = 1;
     for (const key of acquiredKeys) cache.release(key);
@@ -154,14 +166,14 @@ export async function preloadCoverBatch({
     if (!isCurrent()) return cancel();
     const reusable = previous[request.trackId];
     if (reusable?.key === request.key) {
-      nextEntries[request.trackId] = reusable;
+      commit(request.trackId, reusable);
       continue;
     }
 
     if (request.remoteUrl) {
       stats.remote += 1;
       warmImage(request.remoteUrl);
-      nextEntries[request.trackId] = { key: request.key, url: request.remoteUrl };
+      commit(request.trackId, { key: request.key, url: request.remoteUrl });
       continue;
     }
     if (!request.coverBlobId) continue;
@@ -171,12 +183,11 @@ export async function preloadCoverBatch({
     acquiredKeys.add(request.key);
     if (cachedUrl) {
       stats.cacheHits += 1;
-      const entry = {
+      commit(request.trackId, {
         cacheKey: request.key,
         key: request.key,
         url: cachedUrl,
-      };
-      nextEntries[request.trackId] = entry;
+      });
       continue;
     }
 
@@ -193,8 +204,7 @@ export async function preloadCoverBatch({
     const existing = cache.peek(request.key);
     if (existing) {
       stats.cacheHits += 1;
-      const entry = { cacheKey: request.key, key: request.key, url: existing };
-      nextEntries[request.trackId] = entry;
+      commit(request.trackId, { cacheKey: request.key, key: request.key, url: existing });
       continue;
     }
 
@@ -221,8 +231,7 @@ export async function preloadCoverBatch({
       // flashes black on drag-start / commit"). Decoded bitmaps are cached per URL.
       warmImage(url);
     }
-    const entry = { cacheKey: request.key, key: request.key, url };
-    nextEntries[request.trackId] = entry;
+    commit(request.trackId, { cacheKey: request.key, key: request.key, url });
   }
 
   return { canceled: false, entries: nextEntries, stats };

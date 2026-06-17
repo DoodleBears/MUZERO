@@ -89,6 +89,16 @@ export function usePreloadedCoverUrls(
         isCurrent,
         localSettleMs: COVER_PRELOAD_LOCAL_SETTLE_MS,
         nonCurrentLocalSettleMs: 0,
+        // Commit each cover the instant it resolves (and MERGE, never replace) so a
+        // fast cold drag that cancels this batch mid-flight still keeps the covers it
+        // already decoded — otherwise the new centre's neighbours stay null and the
+        // side slots fall back to title cards, flattening the coverflow (PRD 20260618
+        // #2). Stale keys are harmless: slots read only the current window, and
+        // `trackHasCover` gates display, so a removed-cover track never shows one.
+        onEntry: (trackId, url) => {
+          if (!isCurrent()) return;
+          setUrls((prev) => (prev[trackId] === url ? prev : { ...prev, [trackId]: url }));
+        },
         previous,
         requests: activeRequests,
       });
@@ -101,11 +111,12 @@ export function usePreloadedCoverUrls(
 
       const nextEntries = result.entries;
       entriesRef.current = nextEntries;
-      setUrls(
-        Object.fromEntries(
+      setUrls((prev) => ({
+        ...prev,
+        ...Object.fromEntries(
           Object.entries(nextEntries).map(([trackId, entry]) => [trackId, entry.url]),
         ),
-      );
+      }));
 
       for (const [trackId, entry] of Object.entries(previous)) {
         if (nextEntries[trackId]?.key !== entry.key) releasePreloadedCover(entry);
