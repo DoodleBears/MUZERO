@@ -226,8 +226,7 @@ export function SettingsPage() {
   );
   const deviceAvatarUrl = useObjectUrl(deviceAvatarBlob);
   const playbackAggregateRows = useLiveQuery(
-    () =>
-      settingsActive ? db.playbackAggregates.where("scope").equals("track").toArray() : [],
+    () => (settingsActive ? db.playbackAggregates.where("scope").equals("track").toArray() : []),
     [settingsActive],
     [],
   );

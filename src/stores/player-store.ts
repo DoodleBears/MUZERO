@@ -191,6 +191,12 @@ interface PlayerState {
   playTrack: (track: Track) => Promise<void>;
   /** Insert a specific track right after the current play position. */
   playNextTrack: (track: Track) => Promise<void>;
+  /**
+   * Cut-in: insert a track right after the current one and skip to it, keeping
+   * the rest of the queue (does NOT switch to the track's set, unlike playTrack).
+   * Used by live "play now" requests.
+   */
+  playRequestNow: (track: Track) => Promise<void>;
   /** Play a song from an online source (global search): import it into the online set, then play. */
   playStreamedHit: (hit: StreamSearchHit) => Promise<void>;
   /** Play a batch of online hits in order (Discover "play all"): queue the tail into the
@@ -1039,6 +1045,26 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   async playNextTrack(track) {
     log.debug("player", "playNextTrack", { trackId: track.id });
     await playQueuePlayNext([track.id]);
+  },
+
+  async playRequestNow(track) {
+    log.debug("player", "playRequestNow", { trackId: track.id });
+    // Insert right after the current track, then skip to it — keeping the rest of
+    // the queue intact. Unlike playTrack, we do NOT setActiveSession, so a request
+    // from another set cuts in over the host's playlist and the host's set resumes
+    // after it (and keeps driving autoExtend).
+    await playQueuePlayNext([track.id]);
+    const landed = await waitForQueueIndex(get, track.id);
+    if (landed == null) {
+      const idx = await ensureTrackInCurrentPlayQueue(set, get, track.id);
+      if (idx >= 0) await get().playIndex(idx);
+      return;
+    }
+    // Cursor stayed on the original track (insertNext pins it), so the cut-in sits
+    // at currentIndex + 1; play that exact slot (robust to duplicate trackIds and
+    // repeat mode). When idle, just play wherever it landed.
+    const cur = get().currentIndex;
+    await get().playIndex(cur < 0 ? landed : cur + 1);
   },
 
   async playStreamedHit(hit) {

@@ -95,6 +95,29 @@ R2 write credentials stay only in the build machine's rclone config or CI secret
 
 `make release-mac` intentionally sets `CSC_IDENTITY_AUTO_DISCOVERY=false` so a local `Apple Development` certificate is not picked up accidentally. Without an Apple Developer Program account, macOS artifacts can still be built and uploaded, but they are unsigned/unnotarized test builds. For public Gatekeeper-friendly distribution, build with a `Developer ID Application` certificate and notarize the DMG/ZIP.
 
+## Live chat song requests (intake)
+
+Viewers request songs from chat; each request is mapped to a query and routed to
+search or the AI DJ. Configured in **Settings → Live requests**, per source.
+
+- **Desktop (Electron) — local webhook.** Each source exposes
+  `http://127.0.0.1:<port>/v1/intake/<sourceId>` (the legacy
+  `/v1/audience/request` maps to the `default` source). Point Social Stream
+  Ninja's *Call Webhook* (or any tool) at that URL with the token. The body can
+  be any JSON; the source's mapping (preset or custom `{{ payload.… }}`
+  templates) extracts the query + metadata.
+- **Web (`mu0.app`) — SSN WebSocket.** The hosted build can't listen for inbound
+  HTTP, so it subscribes **outbound** to the SSN public relay
+  (`wss://io.socialstream.ninja/join/<sessionId>/4`). Enter your SSN **session
+  ID** (relay URL overridable for self-hosted). No MUZERO backend is involved —
+  the relay is a user-configured third party, like a BYOK endpoint. AI DJ /
+  online sourcing on the web depends on the BYOK endpoint allowing CORS and may
+  fail; use the desktop app for reliable generation.
+- **Test → live.** New sources start in **testing**: incoming requests are
+  captured (sanitized) and shown in the mapping dialog so you can build the
+  mapping against a real body without playing anything. Click **Go live** to
+  start driving playback.
+
 ## Verify
 
 ```bash

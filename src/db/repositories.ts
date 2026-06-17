@@ -11,6 +11,7 @@ import type { LyricsRecord } from "@/lyrics/provider";
 import {
   appendEntries,
   insertNext,
+  insertRequest,
   moveEntry,
   type PlayQueueState,
   removeEntriesByTrackIds,
@@ -2091,6 +2092,17 @@ export function playQueuePlayNext(
   db: MuzeroDB = defaultDb,
 ): Promise<PlayQueue> {
   return mutatePlayQueue((s) => insertNext(s, entriesFor(trackIds)), db);
+}
+
+/**
+ * Queue an audience/live request FIFO: after the existing request block that
+ * follows the current track, marking the entries `requested` (see `insertRequest`).
+ */
+export function playQueueRequestNext(
+  trackIds: string[],
+  db: MuzeroDB = defaultDb,
+): Promise<PlayQueue> {
+  return mutatePlayQueue((s) => insertRequest(s, entriesFor(trackIds)), db);
 }
 
 /** Remove a queue entry by its entry id. */

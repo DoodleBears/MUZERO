@@ -1,0 +1,249 @@
+import { db as defaultDb, type MuzeroDB } from "@/db/muzero-db";
+import { getSettings } from "@/db/repositories";
+import {
+  type AudienceRequestIntakeSettings,
+  DEFAULT_AUDIENCE_REQUEST_INTAKE_SETTINGS,
+  type Track,
+} from "@/db/types";
+import { type DesktopLiveRequestIntakeControls, resolveDesktopBridge } from "@/lib/desktop/bridge";
+import { log } from "@/lib/logger";
+import {
+  type AudienceRequestRuntime,
+  createAudienceRequestRuntime,
+} from "./audience-request-runtime";
+import {
+  type NormalizedAudienceRequest,
+  normalizeAudienceRequest,
+} from "./audience-request-schema";
+import { findSource, resolveSourceMapping, resolveSources } from "./audience-request-sources";
+import { applyMapping } from "./request-mapping-presets";
+import { DEFAULT_SSN_RELAY_URL } from "./social-stream-relay";
+
+/** Source the SSN relay feeds: prefer an enabled ssn-preset source, else first enabled. */
+function pickRelaySourceId(intake: AudienceRequestIntakeSettings): string {
+  const sources = resolveSources(intake.sources);
+  const ssn = sources.find(
+    (source) => source.mappingPreset === "social-stream-ninja" && source.status !== "disabled",
+  );
+  const enabled = sources.find((source) => source.status !== "disabled");
+  return (ssn ?? enabled ?? sources[0]).id;
+}
+
+/**
+ * The missing "last mile": subscribes the intake transport's `onMessage` and
+ * drives each received body through source-resolution → mapping → normalize →
+ * runtime, so a live chat request actually searches the library and plays.
+ * A module-scope singleton (hard rule #6 — non-reactive engine state stays out
+ * of the store).
+ *
+ * Per-source behaviour: `disabled` is dropped; `testing` captures a sanitized
+ * copy for the mapping dialog preview but never acts; `active` maps + routes
+ * (with the source's routeMode/playbackAction override). The transport server
+ * lifecycle stays with the Settings panel; `onMessage` is multi-subscriber so
+ * the panel's debug inbox and this pipeline coexist.
+ */
+
+export interface CapturedPayload {
+  body: Record<string, unknown>;
+  receivedAt: number;
+}
+
+export interface LiveRequestControllerDeps {
+  db?: MuzeroDB;
+  runtime?: AudienceRequestRuntime;
+  playNow?: (track: Track) => Promise<void>;
+  now?: () => number;
+  /** Inject the intake controls (tests); otherwise resolved from the desktop bridge. */
+  controls?: DesktopLiveRequestIntakeControls;
+}
+
+export interface LiveRequestController {
+  start(): void;
+  stop(): void;
+  /** Start/stop the transport server to match settings (transport-aware). */
+  apply(intake: AudienceRequestIntakeSettings): Promise<void>;
+  handlePayload(payload: { sourceId?: string; body: string }): Promise<void>;
+  /** Recent sanitized payloads captured for a source while it is in testing mode. */
+  getCaptured(sourceId: string): CapturedPayload[];
+}
+
+const CAPTURE_LIMIT = 50;
+
+const SENSITIVE_KEYS = new Set([
+  "key",
+  "api_key",
+  "apikey",
+  "secret",
+  "token",
+  "password",
+  "authorization",
+  "access_token",
+  "accesstoken",
+  "refresh_token",
+  "refreshtoken",
+]);
+
+function deepStrip(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(deepStrip);
+  if (value && typeof value === "object") {
+    const out: Record<string, unknown> = {};
+    for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
+      if (SENSITIVE_KEYS.has(key.toLowerCase())) continue;
+      out[key] = deepStrip(child);
+    }
+    return out;
+  }
+  return value;
+}
+
+/** Remove auth-ish fields before storing/displaying a captured payload. */
+function stripSensitiveFields(payload: Record<string, unknown>): Record<string, unknown> {
+  return deepStrip(payload) as Record<string, unknown>;
+}
+
+export function createLiveRequestController(
+  deps: LiveRequestControllerDeps = {},
+): LiveRequestController {
+  const db = deps.db ?? defaultDb;
+  const now = deps.now ?? (() => Date.now());
+  const runtime = deps.runtime ?? createAudienceRequestRuntime({ db, playNow: deps.playNow });
+  const captures = new Map<string, CapturedPayload[]>();
+  let unsubscribe: (() => void) | null = null;
+
+  function capture(sourceId: string, body: Record<string, unknown>): void {
+    const ring = captures.get(sourceId) ?? [];
+    ring.unshift({ body, receivedAt: now() });
+    if (ring.length > CAPTURE_LIMIT) ring.length = CAPTURE_LIMIT;
+    captures.set(sourceId, ring);
+  }
+
+  async function handlePayload(payload: { sourceId?: string; body: string }): Promise<void> {
+    const settings = await getSettings(db);
+    const intake = settings.audienceRequestIntake ?? DEFAULT_AUDIENCE_REQUEST_INTAKE_SETTINGS;
+    if (!intake.enabled) return;
+
+    const source = findSource(resolveSources(intake.sources), payload.sourceId);
+    if (!source || source.status === "disabled") return;
+
+    let raw: unknown;
+    try {
+      raw = JSON.parse(payload.body);
+    } catch {
+      return; // non-JSON body — ignore
+    }
+    if (!raw || typeof raw !== "object") return;
+    const sanitized = stripSensitiveFields(raw as Record<string, unknown>);
+
+    if (source.status === "testing") {
+      // Pre-launch gate: capture the real body for the mapping dialog, never act.
+      capture(source.id, sanitized);
+      return;
+    }
+
+    const mapping = resolveSourceMapping(source);
+    const mapped = mapping ? applyMapping(sanitized, mapping) : sanitized;
+
+    let request: NormalizedAudienceRequest;
+    try {
+      request = normalizeAudienceRequest(mapped, {
+        commandPrefixes: source.commandPrefixes ?? intake.commandPrefixes,
+      });
+    } catch {
+      return; // payload had no usable message field
+    }
+
+    try {
+      await runtime.handle(request, {
+        routeMode: source.routeMode ?? intake.routeMode,
+        playbackAction: source.playbackAction ?? intake.playbackAction,
+      });
+    } catch (error) {
+      log.error("liveRequests", "failed to handle audience request", error);
+    }
+  }
+
+  function start(): void {
+    if (unsubscribe) return; // idempotent
+    const controls = deps.controls ?? resolveDesktopBridge().liveRequestIntake;
+    if (!controls) return; // shell without an intake transport
+    unsubscribe = controls.onMessage((payload) => {
+      void handlePayload(payload);
+    });
+  }
+
+  function stop(): void {
+    unsubscribe?.();
+    unsubscribe = null;
+  }
+
+  async function apply(intake: AudienceRequestIntakeSettings): Promise<void> {
+    const controls = deps.controls ?? resolveDesktopBridge().liveRequestIntake;
+    if (!controls) return;
+    if (!intake.enabled) {
+      await controls.stop();
+      return;
+    }
+    if ((intake.transport ?? "http-webhook") === "ssn-websocket") {
+      await controls.start({
+        transport: "ssn-websocket",
+        relayUrl: intake.ssnRelayUrl ?? DEFAULT_SSN_RELAY_URL,
+        sessionId: intake.ssnSessionId ?? "",
+        sourceId: pickRelaySourceId(intake),
+      });
+    } else {
+      await controls.start({
+        transport: "http-webhook",
+        port: intake.port,
+        token: intake.authToken ?? "",
+      });
+    }
+  }
+
+  return {
+    start,
+    stop,
+    apply,
+    handlePayload,
+    getCaptured: (sourceId) => captures.get(sourceId) ?? [],
+  };
+}
+
+let singleton: LiveRequestController | null = null;
+
+function ensureSingleton(): LiveRequestController {
+  singleton ??= createLiveRequestController({
+    playNow: async (track) => {
+      const { usePlayerStore } = await import("@/stores/player-store");
+      // Cut-in over the host's current playlist (keep it; don't switch sets).
+      await usePlayerStore.getState().playRequestNow(track);
+    },
+  });
+  return singleton;
+}
+
+/**
+ * Mount the intake pipeline once at app start: subscribe the handle pipeline and
+ * bring the transport up to match current settings. Idempotent.
+ */
+export function startLiveRequestIntake(): void {
+  const controller = ensureSingleton();
+  controller.start();
+  void getSettings(defaultDb).then((settings) => {
+    const intake = settings.audienceRequestIntake ?? DEFAULT_AUDIENCE_REQUEST_INTAKE_SETTINGS;
+    void controller.apply(intake);
+  });
+}
+
+export function stopLiveRequestIntake(): void {
+  singleton?.stop();
+}
+
+/** Re-apply the transport lifecycle after the Settings panel changes intake config. */
+export function applyLiveRequestIntake(intake: AudienceRequestIntakeSettings): Promise<void> {
+  return ensureSingleton().apply(intake);
+}
+
+/** Sanitized payloads captured for a source in testing mode (mapping-dialog preview). */
+export function getCapturedLiveRequests(sourceId: string): CapturedPayload[] {
+  return ensureSingleton().getCaptured(sourceId);
+}
