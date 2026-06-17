@@ -33,16 +33,11 @@ export function MediaStage({
   className,
   coverBacklightEnabled = true,
   coverBacklightFadeIn = true,
-  coverContentHidden = false,
   onCoverReady,
 }: {
   className?: string;
   coverBacklightEnabled?: boolean;
   coverBacklightFadeIn?: boolean;
-  /** Hide the cover/video/title content (but NOT the backlight) — used while the
-   *  coverflow overlay owns the visible cover during a drag, so the backlight glow
-   *  stays on screen instead of vanishing when the base is masked. */
-  coverContentHidden?: boolean;
   /** Fired with the track id once the base cover image has painted that track's cover. */
   onCoverReady?: (trackId: string) => void;
 }) {
@@ -180,10 +175,6 @@ export function MediaStage({
             : "overflow-hidden bg-muted album-cover-radius",
           !showVideo && useCoverShadow && "album-cover-shadow",
         )}
-        // Hide only the cover content while the coverflow overlay owns the visible
-        // cover (drag). The backlight above stays rendered, so its glow doesn't vanish
-        // on drag start (PRD 20260618-backlight-shadow-drag #1).
-        style={coverContentHidden ? { opacity: 0 } : undefined}
       >
         {showGeneratedBackdrop && <StageTitleFallback track={displayTrack} dim={asBgActive} />}
         {/* Rendered to a persistent canvas (decode-off-thread, hold-previous + crossfade)

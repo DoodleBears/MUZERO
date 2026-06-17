@@ -37,6 +37,8 @@ export const CoverPagerStrip = memo(function CoverPagerStrip({
   width,
   tilt,
   sideScale,
+  backlightOpacity = 0,
+  coverShadow = false,
   renderFallback,
   renderIdentity,
 }: {
@@ -44,6 +46,11 @@ export const CoverPagerStrip = memo(function CoverPagerStrip({
   width: number;
   tilt: number;
   sideScale: number;
+  /** > 0 → render a blurred backlight glow behind each card (backlight effect mode),
+   *  so the glow travels with the sliding cover. 0 = no backlight. */
+  backlightOpacity?: number;
+  /** Add the cover drop-shadow to each card (shadow effect mode), traveling with it. */
+  coverShadow?: boolean;
   /** Rendered inside a slot when its track has no resolvable cover (title fallback). */
   renderFallback?: (trackId: string) => ReactNode;
   /** Title + author block rendered BELOW each cover, so it travels with the slide. */
@@ -58,7 +65,9 @@ export const CoverPagerStrip = memo(function CoverPagerStrip({
       {slots.map((slot) => (
         <CoverflowSlot
           key={slot.slotKey}
+          backlightOpacity={backlightOpacity}
           content={slot.content}
+          coverShadow={coverShadow}
           offsetSteps={slot.offsetSteps}
           renderFallback={renderFallback}
           renderIdentity={renderIdentity}
@@ -74,6 +83,8 @@ export const CoverPagerStrip = memo(function CoverPagerStrip({
 function CoverflowSlot({
   content,
   offsetSteps,
+  backlightOpacity,
+  coverShadow,
   renderFallback,
   renderIdentity,
   sideScale,
@@ -82,6 +93,8 @@ function CoverflowSlot({
 }: {
   content: StripSlotContent | null;
   offsetSteps: number;
+  backlightOpacity: number;
+  coverShadow: boolean;
   renderFallback?: (trackId: string) => ReactNode;
   renderIdentity?: (trackId: string) => ReactNode;
   sideScale: number;
@@ -124,7 +137,33 @@ function CoverflowSlot({
     >
       {content ? (
         <>
-          <div className="absolute inset-0 z-10 overflow-hidden bg-muted album-cover-radius">
+          {/* Backlight glow — a blurred copy of THIS card's cover behind it, so the glow
+              travels with the sliding cover (like the resting NowPlayingCoverBacklight,
+              but per-card). The slot is overflow-visible so it bleeds beyond the card.
+              The slot's transform → it's GPU-composited; the blur only re-rasterizes when
+              the cover src changes (a recenter), not per drag frame. */}
+          {backlightOpacity > 0 && content.coverUrl ? (
+            <img
+              aria-hidden
+              src={content.coverUrl}
+              draggable={false}
+              alt=""
+              className="pointer-events-none absolute inset-0 size-full object-cover album-cover-radius"
+              style={{
+                opacity: backlightOpacity,
+                transform: "scale(var(--now-playing-cover-backlight-scale, 1.12))",
+                filter: [
+                  "blur(var(--now-playing-cover-backlight-blur, 20px))",
+                  "saturate(var(--now-playing-cover-backlight-saturation, 400%))",
+                ].join(" "),
+              }}
+            />
+          ) : null}
+          <div
+            className={`absolute inset-0 z-10 overflow-hidden bg-muted album-cover-radius${
+              coverShadow ? " album-cover-shadow" : ""
+            }`}
+          >
             {content.coverUrl ? (
               <CanvasCover
                 coverUrl={content.coverUrl}

@@ -16,6 +16,8 @@ import { useSettings } from "@/hooks/use-app-data";
 import {
   albumCoverAppearanceVars,
   resolveAlbumCoverAppearance,
+  resolveNowPlayingCoverBacklightAppearance,
+  resolveNowPlayingCoverEffectMode,
 } from "@/lib/album-cover-appearance";
 import { coverPaletteFromThumbhash, normalizeCoverPalette } from "@/lib/cover-palette";
 import { transitionProgress, useNowPlayingTransition } from "@/lib/now-playing-transition";
@@ -110,6 +112,15 @@ export function SwipeableCoverStage({
   const coverAppearanceVars = albumCoverAppearanceVars(
     resolveAlbumCoverAppearance(settings),
   ) as CSSProperties;
+  // The cover effect (backlight glow / shadow) travels with the overlay coverflow cards
+  // during a drag, so it follows the sliding cover instead of sitting on the hidden base
+  // (PRD 20260618-backlight-shadow-drag #1). Mirror the base MediaStage's resolution.
+  const coverEffectMode = resolveNowPlayingCoverEffectMode(settings.nowPlayingCoverEffectMode);
+  const cardBacklightOpacity =
+    coverEffectMode === "backlight"
+      ? resolveNowPlayingCoverBacklightAppearance(settings).opacity / 100
+      : 0;
+  const cardCoverShadow = coverEffectMode === "shadow";
 
   const queue = usePlayerStore((s) => s.queue);
   const currentIndex = usePlayerStore((s) => s.currentIndex);
@@ -722,21 +733,17 @@ export function SwipeableCoverStage({
           aria-label={`${t("player.previous")} / ${t("player.next")}`}
           className="relative z-10 w-full touch-pan-y cursor-grab select-none overflow-visible active:cursor-grabbing album-cover-radius [&_*]:select-none [&_img]:pointer-events-none"
           style={{
-            // Keep the wrapper opaque — only the COVER CONTENT is hidden during the
-            // slide (coverContentHidden below), so the backlight glow (rendered outside
-            // that content in MediaStage) stays visible through the drag instead of
-            // vanishing on drag start (PRD 20260618-backlight-shadow-drag #1).
+            // Hide the base only once the overlay is on screen (rect measured) and not
+            // during the hand-off fade. The overlay coverflow cards carry their OWN
+            // backlight + shadow (which travel with the sliding cover), so the base —
+            // including its backlight — is fully hidden during the drag (PRD
+            // 20260618-backlight-shadow-drag #1: backlight follows the cover).
+            opacity: active && overlayRect && !handoffFading ? 0 : 1,
             willChange: "transform",
           }}
         >
           <MediaStage
-            // Backlight stays ON through the drag (no `!active` gate) — it sits behind
-            // the sliding overlay and keeps the current cover's glow on screen.
-            coverBacklightEnabled={foregroundVisible}
-            // Hide the base cover/video only once the overlay is on screen (rect
-            // measured) and not during the hand-off fade — no blank frame at drag start,
-            // and the base is revealed (on the committed cover) as the overlay fades out.
-            coverContentHidden={active && !!overlayRect && !handoffFading}
+            coverBacklightEnabled={foregroundVisible && !active}
             onCoverReady={setBaseCoverShownId}
           />
         </motion.div>
@@ -778,6 +785,8 @@ export function SwipeableCoverStage({
             }}
           >
             <CoverPagerStrip
+              backlightOpacity={cardBacklightOpacity}
+              coverShadow={cardCoverShadow}
               renderFallback={renderFallback}
               // Drop the travelling identity the instant the hand-off fade begins:
               // the base identity is revealed at full opacity on the same commit, so
