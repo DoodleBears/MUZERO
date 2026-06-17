@@ -82,6 +82,15 @@ async function runSteps() {
     await call("POST", "/search", { action: "close" });
     return;
   }
+  if (scenario === "metadata") {
+    // Edit the CURRENT track's tags N times — a real `tracks` row write each time, the
+    // scenario-4 fan-out probe (does a single-track edit refetch the whole queue?).
+    for (let i = 0; i < switches; i += 1) {
+      await call("POST", "/editMeta", {});
+      if (i < switches - 1) await sleep(everyMs);
+    }
+    return;
+  }
   for (let i = 0; i < switches; i += 1) {
     if (scenario === "switch") await call("POST", "/player/playIndex", { index: "+1" });
     else if (scenario === "like") await call("POST", "/action/playback.like");

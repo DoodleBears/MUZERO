@@ -4,7 +4,7 @@
 // EXISTING action surface — the shortcut command bus, player-store actions, saveSettings
 // — never re-implementing behavior. It is loaded only under import.meta.env.DEV (see
 // App.tsx), so it is tree-shaken out of production builds entirely.
-import { getSettings, saveSettings } from "@/db/repositories";
+import { getSettings, getTrack, saveSettings, setTrackTags } from "@/db/repositories";
 import { log } from "@/lib/logger";
 import { traceEvent } from "@/lib/trace";
 import { readTraceArchiveEntries } from "@/lib/trace-archive";
@@ -29,7 +29,8 @@ export interface PerfControlCommand {
     | "player"
     | "marker"
     | "dumpTrace"
-    | "search";
+    | "search"
+    | "editMeta";
   actionId?: string;
   payload?: Record<string, unknown>;
   patch?: Record<string, unknown>;
@@ -54,6 +55,8 @@ interface PerfCommandHandlerDeps {
   dumpTrace: (since?: number, limit?: number) => Promise<unknown[]>;
   /** Drive the ⌘F overlay for the search-perf scenario (open/close/type/reset/stats). */
   driveSearch?: (action: string, query?: string) => unknown;
+  /** Edit the current track's metadata (tags) — drives the metadata-edit fan-out scenario. */
+  editCurrentTrackMeta?: () => Promise<unknown>;
 }
 
 /** Player-store methods the endpoint may invoke. A deliberate allowlist — no arbitrary
@@ -167,6 +170,10 @@ export function createPerfCommandHandler(deps: PerfCommandHandlerDeps) {
         const query = command.payload?.query as string | undefined;
         return { search: action, data: deps.driveSearch(action, query) ?? null };
       }
+      case "editMeta": {
+        if (!deps.editCurrentTrackMeta) throw new Error("editMeta not wired");
+        return { editMeta: (await deps.editCurrentTrackMeta()) ?? null };
+      }
       default:
         throw new Error(`unknown command kind: ${String((command as { kind?: string }).kind)}`);
     }
@@ -236,6 +243,16 @@ export function startPerfControlBridge(): void {
         default:
           throw new Error(`unknown search action: ${action}`);
       }
+    },
+    // Edit the CURRENT track's tags with a fresh value each call → a real `tracks` row
+    // write, the scenario-4 (metadata edit) fan-out probe. PRD scalable-track-list §4.
+    editCurrentTrackMeta: async () => {
+      const s = usePlayerStore.getState();
+      const id = s.currentIndex >= 0 ? s.queue[s.currentIndex]?.id : undefined;
+      if (!id) return { edited: null };
+      const tag = `perf-${(await getTrack(id))?.tags?.length ?? 0}-${s.currentIndex}`;
+      await setTrackTags(id, [tag]);
+      return { edited: id };
     },
     dumpTrace: async (since, limit) => {
       const entries = await readTraceArchiveEntries(undefined, limit ?? 5000);
