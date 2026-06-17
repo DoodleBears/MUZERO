@@ -667,9 +667,18 @@ export function SwipeableCoverStage({
           />
         </motion.div>
       </div>
-      {/* The title/author block: hidden while the overlay owns the (travelling)
-          identity, shown at rest. Kept mounted so the layout doesn't jump. */}
-      <div style={{ opacity: active ? 0 : 1, pointerEvents: active ? "none" : "auto" }}>
+      {/* The title/author block: hidden ONLY while the overlay still owns the
+          travelling identity (a live drag/slide). At the commit hand-off the base
+          already renders the committed track, so reveal it the instant the fade
+          begins — text has no decode/crossfade to mask (unlike the cover), so
+          riding the cover's fade-out just made the same title blink out then pop
+          back (PRD 20260618 #1). Kept mounted so the layout doesn't jump. */}
+      <div
+        style={{
+          opacity: active && !handoffFading ? 0 : 1,
+          pointerEvents: active && !handoffFading ? "none" : "auto",
+        }}
+      >
         {current && <StageIdentity track={current} />}
       </div>
       {/* Windowed coverflow overlay — PORTALED out to `main` so a cover sliding in
@@ -696,7 +705,11 @@ export function SwipeableCoverStage({
           >
             <CoverPagerStrip
               renderFallback={renderFallback}
-              renderIdentity={renderIdentity}
+              // Drop the travelling identity the instant the hand-off fade begins:
+              // the base identity is revealed at full opacity on the same commit, so
+              // keeping the overlay copy would briefly double-render the same title
+              // (and ride the cover fade-out). Only the cover image needs the fade.
+              renderIdentity={handoffFading ? undefined : renderIdentity}
               sideScale={SIDE_SCALE}
               slots={slots}
               tilt={COVERFLOW_TILT}
