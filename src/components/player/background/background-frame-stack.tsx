@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useRedrawOnViewportResize } from "@/hooks/use-redraw-on-viewport-resize";
 import { BACKGROUND_CROSSFADE_MS } from "@/lib/background";
 import type { BackgroundLayer } from "@/lib/background-composition";
 import { drawBlurFrame } from "@/lib/canvas-blur";
@@ -87,16 +88,22 @@ function BlurLayer({
     };
   }, [url, blurPx]);
 
+  const redraw = useCallback(() => {
+    if (imgRef.current && canvasRef.current)
+      drawBlurFrame(canvasRef.current, imgRef.current, blurPx);
+  }, [blurPx]);
+
   useEffect(() => {
     const host = hostRef.current;
     if (!host || typeof ResizeObserver === "undefined") return;
-    const ro = new ResizeObserver(() => {
-      if (imgRef.current && canvasRef.current)
-        drawBlurFrame(canvasRef.current, imgRef.current, blurPx);
-    });
+    const ro = new ResizeObserver(redraw);
     ro.observe(host);
     return () => ro.disconnect();
-  }, [blurPx]);
+  }, [redraw]);
+
+  // Repaint at the correct size the instant a maximize/fullscreen jump lands, so the
+  // stretched stale frame never shows (ResizeObserver covers non-viewport box changes).
+  useRedrawOnViewportResize(redraw);
 
   // Settle (→ collapse the now-covered base layer below) once this layer is fully
   // shown. A TIMER, not onTransitionEnd: a fast / preloaded cover can jump to full

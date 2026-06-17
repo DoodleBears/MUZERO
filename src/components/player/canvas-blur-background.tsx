@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useRedrawOnViewportResize } from "@/hooks/use-redraw-on-viewport-resize";
 import { drawBlurFrame as drawBlurFrameToCanvas } from "@/lib/canvas-blur";
 import { arePerfCountersEnabled, notePerfWork } from "@/lib/perf-counters";
 import { cn } from "@/lib/utils";
@@ -55,18 +56,24 @@ export function CanvasBlurBackground({
     };
   }, [src, blurPx, holdPreviousWhileLoading]);
 
+  const redraw = useCallback(() => {
+    const frame = frameRef.current;
+    const canvas = activeIndexRef.current === 0 ? canvasARef.current : canvasBRef.current;
+    if (frame && canvas) drawBlurFrame(canvas, frame.image, frame.blurPx);
+  }, []);
+
   useEffect(() => {
     const host = hostRef.current;
     if (!host) return;
-    const redraw = () => {
-      const frame = frameRef.current;
-      const canvas = activeIndexRef.current === 0 ? canvasARef.current : canvasBRef.current;
-      if (frame && canvas) drawBlurFrame(canvas, frame.image, frame.blurPx);
-    };
     const ro = new ResizeObserver(redraw);
     ro.observe(host);
     return () => ro.disconnect();
-  }, []);
+  }, [redraw]);
+
+  // Redraw at the correct size the instant a maximize/fullscreen size jump lands,
+  // before the stretched stale frame is presented (the ResizeObserver above still
+  // covers host-box changes that aren't viewport resizes).
+  useRedrawOnViewportResize(redraw);
 
   return (
     <div

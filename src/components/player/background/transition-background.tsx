@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useRedrawOnViewportResize } from "@/hooks/use-redraw-on-viewport-resize";
 import { drawBlurFrame } from "@/lib/canvas-blur";
 import { transitionProgress, useNowPlayingTransition } from "@/lib/now-playing-transition";
 import { cn } from "@/lib/utils";
@@ -61,16 +62,22 @@ export function TransitionBackground({
     };
   }, [toCoverUrl, blurPx]);
 
+  const redraw = useCallback(() => {
+    if (imgRef.current && canvasRef.current)
+      drawBlurFrame(canvasRef.current, imgRef.current, blurPx);
+  }, [blurPx]);
+
   useEffect(() => {
     const host = hostRef.current;
     if (!host || typeof ResizeObserver === "undefined") return;
-    const ro = new ResizeObserver(() => {
-      if (imgRef.current && canvasRef.current)
-        drawBlurFrame(canvasRef.current, imgRef.current, blurPx);
-    });
+    const ro = new ResizeObserver(redraw);
     ro.observe(host);
     return () => ro.disconnect();
-  }, [blurPx]);
+  }, [redraw]);
+
+  // Repaint at the correct size the instant a maximize/fullscreen jump lands, so the
+  // stretched stale frame never shows (ResizeObserver covers non-viewport box changes).
+  useRedrawOnViewportResize(redraw);
 
   // Drive opacity from the shared transition progress, off the React render path.
   // Only visible while a transition is active and the incoming cover has drawn.

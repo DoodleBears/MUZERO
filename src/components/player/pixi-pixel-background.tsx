@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSettings } from "@/hooks/use-app-data";
+import { useRedrawOnViewportResize } from "@/hooks/use-redraw-on-viewport-resize";
 import {
   type BackgroundEffectSettings,
   resolvePixiBackgroundEffectOptions,
@@ -135,6 +136,11 @@ export function PixiPixelBackground({
       next.destroy();
     };
   }, [effect, effectOptions, pixelSize, gpuBackend, gpuPower]);
+
+  // Maximize / fullscreen jump the window size in one step; redraw immediately on the
+  // pre-paint resize event so the canvas isn't left CSS-stretched for a frame. The
+  // controller's own ResizeObserver still covers element-box changes (panel toggles).
+  useRedrawOnViewportResize(() => controller?.resize());
 
   // Texture swap follows `src` directly (no debounce) so the background switches
   // together with the cover — single source of truth (PRD Phase 8). The transport
