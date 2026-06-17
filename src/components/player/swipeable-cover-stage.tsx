@@ -722,15 +722,21 @@ export function SwipeableCoverStage({
           aria-label={`${t("player.previous")} / ${t("player.next")}`}
           className="relative z-10 w-full touch-pan-y cursor-grab select-none overflow-visible active:cursor-grabbing album-cover-radius [&_*]:select-none [&_img]:pointer-events-none"
           style={{
-            // Hide the base only once the overlay is on screen (rect measured) and not
-            // during the hand-off fade — no blank frame at drag start, and the base is
-            // revealed (on the committed cover) as the overlay fades out.
-            opacity: active && overlayRect && !handoffFading ? 0 : 1,
+            // Keep the wrapper opaque — only the COVER CONTENT is hidden during the
+            // slide (coverContentHidden below), so the backlight glow (rendered outside
+            // that content in MediaStage) stays visible through the drag instead of
+            // vanishing on drag start (PRD 20260618-backlight-shadow-drag #1).
             willChange: "transform",
           }}
         >
           <MediaStage
-            coverBacklightEnabled={foregroundVisible && !active}
+            // Backlight stays ON through the drag (no `!active` gate) — it sits behind
+            // the sliding overlay and keeps the current cover's glow on screen.
+            coverBacklightEnabled={foregroundVisible}
+            // Hide the base cover/video only once the overlay is on screen (rect
+            // measured) and not during the hand-off fade — no blank frame at drag start,
+            // and the base is revealed (on the committed cover) as the overlay fades out.
+            coverContentHidden={active && !!overlayRect && !handoffFading}
             onCoverReady={setBaseCoverShownId}
           />
         </motion.div>
