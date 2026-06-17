@@ -221,6 +221,7 @@ export function TrackIdentityRow({
           <motion.button
             ref={songRef}
             type="button"
+            data-testid="dock-song-drag"
             onPointerDown={() => {
               didDrag.current = false;
             }}

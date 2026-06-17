@@ -608,6 +608,7 @@ export function SwipeableCoverStage({
         className="relative w-full overflow-visible [perspective:1200px] album-cover-radius"
       >
         <motion.div
+          data-testid="now-cover-drag"
           drag="x"
           dragConstraints={{ left: 0, right: 0 }}
           dragElastic={0.24}
