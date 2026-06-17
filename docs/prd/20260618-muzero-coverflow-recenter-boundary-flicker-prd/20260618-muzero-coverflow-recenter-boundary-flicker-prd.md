@@ -11,11 +11,17 @@
 
 | Phase | Name | Status | Link |
 |-------|------|--------|------|
-| 1 | 观测/复现：harness 抓跨步边界的 border 颜色 + 背景帧 | 🔲 Pending | [Phase 1 Checklist](#phase-1-checklist) |
-| 2 | 修复 #1：recenter 时 re-base border 过渡对（1→2，不闪回 0） | 🔲 Pending | [Phase 2 Checklist](#phase-2-checklist) |
-| 3 | 修复 #2：recenter 时 Pixi 背景窗口内容与 offset 重置同帧 | 🔲 Pending | [Phase 3 Checklist](#phase-3-checklist) |
+| 1 | 观测/复现：harness 抓跨步边界的 border 颜色 + 背景帧 | ⏭️ Blocked-by-data（见下） | [Phase 1 Checklist](#phase-1-checklist) |
+| 2 | 修复 #1：recenter 时 re-base border 过渡对（1→2，不闪回 0） | ✅ Completed（1ada9e0） | [Phase 2 Checklist](#phase-2-checklist) |
+| 3 | 修复 #2：recenter 时 Pixi 背景窗口内容与 offset 重置同帧 | ✅ Completed（052cd39） | [Phase 3 Checklist](#phase-3-checklist) |
 
-> Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
+> Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending | ⏭️ Skipped/Blocked
+
+> **实现说明（2026-06-18）**
+> - **Phase 1（数据受限）**：复用了 CDP 真拖拽 harness 做「连续跨 ≥2 步」。但当前测试队列是**同一张专辑**（*Arrowmancer Vol. 1*），相邻封面**同色同图**——border 颜色整段拖拽恒为 `rgba(113,145,218,1)`、背景封面也无可视差异，所以 harness **看不到** #1 的颜色回跳 / #2 的错封面（黑帧那类靠尺寸特征能抓，这类同色/同图抓不到）。两个缺陷均为**用户实测报告 + 代码机制明确**，故直接修；**运行时视觉确认需在相邻封面颜色/图案不同的队列上手测**（已在 PRD/commit 标注此限制）。
+> - **#1（1ada9e0）**：[`swipeable-cover-stage.tsx`](../../../src/components/player/swipeable-cover-stage.tsx) 的 border apply effect 在 recenter 重跑时（`beginBorderTransition` 闭包已含新 neighbour），只要有方向的拖拽在飞就 re-base 过渡对到新 `中心→邻居`。该 effect 注释本就写了「…or a recenter lands」，此前只接了 dir-flip 一半。残留：recenter 那一帧因 App 端 border 消费是被动 effect + 闭包取色，理论上仍可能有 ≤1 帧旧色微闪，但消除了「整段第二步用错对、回跳 0 色」的主症状。
+> - **#2（052cd39）**：两处协同——(a) 控制器 `setWindow` 把**已存在 sprite 的 offset 重定向 + 重排**移到 `await` 之前**同步**完成（recenter 的邻居本就已加载，纯 offset 重定向；只有真正的新边缘封面才异步加载）；(b) [`swipeable-cover-stage.tsx`](../../../src/components/player/swipeable-cover-stage.tsx) 把 cover window 的发布从被动 `useEffect` 提为 `useLayoutEffect`（在 paint 前、且按源码顺序在 offset-reset effect 之前跑），使 sprite 在 offset 重置重新定位之前就已携带新 offset。
+> - **验证**：`tsc` 干净；`pixi-background-controller` 20 测试 + `src/components/player` 全量 178 测试通过；Biome 干净。
 
 ---
 
