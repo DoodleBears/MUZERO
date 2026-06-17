@@ -743,16 +743,7 @@ export function SwipeableCoverStage({
           }}
         >
           <MediaStage
-            // ON at rest AND during the hand-off fade — the base backlight is portaled
-            // out (not hidden by the base opacity), so turning it on at handoffFading
-            // (when the card effects are dropped, below) hands the glow off with no gap
-            // (PRD 20260618-backlight-shadow-drag #1 commit flicker). Stays OFF during
-            // the live drag, when the coverflow cards own the glow.
-            coverBacklightEnabled={foregroundVisible && (!active || handoffFading)}
-            // Fade in only at rest (a plain switch); during the hand-off it must appear
-            // INSTANTLY at full so it exactly replaces the card glow being dropped — a
-            // fade-in there would dim mid-cross.
-            coverBacklightFadeIn={foregroundVisible && !active}
+            coverBacklightEnabled={foregroundVisible && !active}
             onCoverReady={setBaseCoverShownId}
           />
         </motion.div>
@@ -794,12 +785,8 @@ export function SwipeableCoverStage({
             }}
           >
             <CoverPagerStrip
-              // Drop the card glow/shadow the instant the hand-off fade begins — the
-              // base backlight + shadow turn on (full) on the SAME render, so it's an
-              // instant swap (no gap, no double glow) of the same committed cover's
-              // effects (PRD 20260618-backlight-shadow-drag #1 commit flicker).
-              backlightOpacity={handoffFading ? 0 : cardBacklightOpacity}
-              coverShadow={handoffFading ? false : cardCoverShadow}
+              backlightOpacity={cardBacklightOpacity}
+              coverShadow={cardCoverShadow}
               renderFallback={renderFallback}
               // Drop the travelling identity the instant the hand-off fade begins:
               // the base identity is revealed at full opacity on the same commit, so
