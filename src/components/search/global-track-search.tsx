@@ -167,6 +167,12 @@ export function GlobalTrackSearch({
   // (everything before that mention).
   const mention = parseMention(query);
   const searchText = (mention.active ? mention.before : query).trim();
+  // The main-thread result memos (sets / facets / lyrics / album / artist) scan the
+  // library synchronously, so binding them to the live `searchText` would run that
+  // work in the same commit that paints the keystroke — the input would lag. Defer
+  // it (like the Worker query already does internally): typing paints immediately,
+  // the heavy scan re-runs a tick later at transition priority (interruptible).
+  const deferredSearchText = useDeferredValue(searchText);
 
   // Which sections the active filter shows. No filter → everything; a facet filter
   // narrows to its one section; a source filter shows only that online source.
@@ -222,13 +228,13 @@ export function GlobalTrackSearch({
   const setResults = useMemo(() => {
     if (!open || !showSets) return [];
     const sorted = [...sessions].sort((a, b) => b.updatedAt - a.updatedAt);
-    const base = searchText
-      ? sorted.filter((session) => freeTextMatches(searchText, [session.name]))
+    const base = deferredSearchText
+      ? sorted.filter((session) => freeTextMatches(deferredSearchText, [session.name]))
       : filter?.kind === "set"
         ? sorted
         : [];
     return base.slice(0, MAX_SET_RESULTS);
-  }, [open, showSets, sessions, searchText, filter, transliterationReady]);
+  }, [open, showSets, sessions, deferredSearchText, filter, transliterationReady]);
 
   // Songs + lyrics — one worker index with typed row ids, split back into
   // sections after ranking so lyric-only matches do not masquerade as song hits.
@@ -276,7 +282,7 @@ export function GlobalTrackSearch({
   }, [showTrackResults, rankedHits, trackById]);
   const lyricResults = useMemo(() => {
     if (!showLyricResults) return [];
-    if (!searchText && filter === null) return [];
+    if (!deferredSearchText && filter === null) return [];
     return rankedHits
       .filter((hit) => hit.id.startsWith(LYRIC_HIT_PREFIX))
       .map((hit) => {
@@ -285,13 +291,13 @@ export function GlobalTrackSearch({
         const match = findLyricSearchMatch(
           track,
           lyricsByTrackId.get(track.id) ?? null,
-          searchText,
+          deferredSearchText,
         );
         return match ? { track, match } : null;
       })
       .filter((result): result is { track: Track; match: LyricSearchMatch } => result !== null)
       .slice(0, MAX_LYRIC_RESULTS);
-  }, [showLyricResults, searchText, filter, rankedHits, trackById, lyricsByTrackId]);
+  }, [showLyricResults, deferredSearchText, filter, rankedHits, trackById, lyricsByTrackId]);
 
   // Artist/album facets — transliteration-aware, honors `artist:`/`album:` scopes.
   // Precompute each entity's transliteration variants ONCE per index / dictionary
@@ -305,28 +311,30 @@ export function GlobalTrackSearch({
   );
   const facets = useMemo(
     () =>
-      searchText ? searchFacetCandidates(facetCandidates, searchText) : { artists: [], albums: [] },
-    [searchText, facetCandidates],
+      deferredSearchText
+        ? searchFacetCandidates(facetCandidates, deferredSearchText)
+        : { artists: [], albums: [] },
+    [deferredSearchText, facetCandidates],
   );
   // A scoped facet with no query browses all real entities; otherwise show matches.
   const albumResults = useMemo<AlbumEntry[]>(() => {
     if (!showAlbums) return [];
-    const base = searchText
+    const base = deferredSearchText
       ? facets.albums
       : filter?.kind === "album"
         ? albumIndex.filter((entry) => !entry.bucket)
         : [];
     return base.slice(0, MAX_ENTITY_RESULTS);
-  }, [showAlbums, searchText, facets, filter, albumIndex]);
+  }, [showAlbums, deferredSearchText, facets, filter, albumIndex]);
   const artistResults = useMemo<ArtistEntry[]>(() => {
     if (!showArtists) return [];
-    const base = searchText
+    const base = deferredSearchText
       ? facets.artists
       : filter?.kind === "artist"
         ? artistIndex.filter((entry) => !entry.bucket)
         : [];
     return base.slice(0, MAX_ENTITY_RESULTS);
-  }, [showArtists, searchText, facets, filter, artistIndex]);
+  }, [showArtists, deferredSearchText, facets, filter, artistIndex]);
 
   const showSongsHeader =
     trackResults.length > 0 &&
