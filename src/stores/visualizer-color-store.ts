@@ -70,6 +70,33 @@ export function transitionVisualizerCoverColor(
   }, COVER_COLOR_APPLY_SETTLE_MS);
 }
 
+/**
+ * Apply a cover color IMMEDIATELY, cancelling any pending settle. Used at a
+ * deliberate cover-drag COMMIT: the settled border/flow read this store, which
+ * otherwise only adopts the committed track's color after `COVER_COLOR_APPLY_SETTLE_MS`
+ * — so when the drag-color override releases at the hand-off it hands back to the
+ * STALE (pre-drag) color for up to 650ms (the "松手后 border 闪回起点色再过渡" flash, PRD
+ * 20260618-recenter-boundary). Snapping here makes the settled value already match
+ * where the drag left it; the regular settle-debounced path still owns auto-advance.
+ */
+export function snapVisualizerCoverColor(
+  coverBlobId: string | null,
+  rgb: Rgb | null,
+  palette: Rgb[] = [],
+) {
+  if (settleTimer) {
+    clearTimeout(settleTimer);
+    settleTimer = null;
+  }
+  settleSeq += 1; // invalidate any in-flight settle so it can't override this snap
+  pendingTarget = null;
+  applySettledCoverColor(
+    coverBlobId,
+    rgb,
+    palette.map((color) => ({ ...color })),
+  );
+}
+
 function applySettledCoverColor(coverBlobId: string | null, rgb: Rgb | null, palette: Rgb[]) {
   const current = useVisualizerCoverColorStore.getState();
   if (

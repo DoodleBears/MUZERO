@@ -23,7 +23,10 @@ import { trackHasCover } from "@/lib/track-display";
 import { cn } from "@/lib/utils";
 import type { Rgb } from "@/lib/visualizer-color";
 import { usePlayerStore } from "@/stores/player-store";
-import { getVisualizerCoverColorRgb } from "@/stores/visualizer-color-store";
+import {
+  getVisualizerCoverColorRgb,
+  snapVisualizerCoverColor,
+} from "@/stores/visualizer-color-store";
 import { pendingRecenterSteps } from "./cover-pager";
 import { CoverPagerStrip, type StripSlot } from "./cover-pager-strip";
 import type { CoverPreloadCandidate } from "./cover-preload";
@@ -365,6 +368,20 @@ export function SwipeableCoverStage({
     if (target !== usePlayerStore.getState().currentIndex) {
       selfCommitRef.current = target;
       void usePlayerStore.getState().playIndex(target);
+    }
+    // Snap the visualizer cover color to the committed track NOW, skipping the 650ms
+    // settle debounce. The window border / flow read this store; otherwise it keeps the
+    // PRE-drag color for ~650ms, so when the drag-color override releases at the hand-off
+    // the border flashes back to the old color before settling on the committed one
+    // ("松手后 border 闪回起点色再过渡", PRD 20260618-recenter-boundary). Snapping makes the
+    // settled color already match where the drag left it. Only for covered targets; the
+    // regular debounced path still owns auto-advance / scrub.
+    if (targetTrack && trackHasCover(targetTrack)) {
+      snapVisualizerCoverColor(
+        targetTrack.coverBlobId ?? null,
+        trackBorderRgb(targetTrack),
+        normalizeCoverPalette(targetTrack.coverPalette),
+      );
     }
     if (handoffTimer.current != null) window.clearTimeout(handoffTimer.current);
     awaitingHandoffRef.current = true;
