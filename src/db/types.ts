@@ -561,6 +561,13 @@ export interface AudienceRequestIntakeSettings {
   confidenceThreshold: number;
   scoreMarginThreshold: number;
   commandPrefixes: string[];
+  /**
+   * When true, only chat messages that start with one of `commandPrefixes` are
+   * treated as song requests; messages without a prefix are ignored. Has no
+   * effect when `commandPrefixes` is empty (nothing to require). Defaults to
+   * true when unset.
+   */
+  requireCommandPrefix?: boolean;
   dedupeWindowSec: number;
   requesterCooldownSec: number;
   maxRequestsPerMinute: number;
@@ -595,6 +602,7 @@ export const DEFAULT_AUDIENCE_REQUEST_INTAKE_SETTINGS: AudienceRequestIntakeSett
   confidenceThreshold: 1.5,
   scoreMarginThreshold: 0.25,
   commandPrefixes: ["点歌", "!sr", "song:"],
+  requireCommandPrefix: true,
   dedupeWindowSec: 30,
   requesterCooldownSec: 10,
   maxRequestsPerMinute: 30,

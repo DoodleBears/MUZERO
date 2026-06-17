@@ -128,6 +128,36 @@ describe("live-request-controller pipeline", () => {
 
     expect(handle).not.toHaveBeenCalled();
   });
+
+  it("ignores prefix-less messages when requireCommandPrefix is on (default)", async () => {
+    await enableIntake(); // default prefixes ["点歌","!sr","song:"], requireCommandPrefix true
+    const { runtime, handle } = fakeRuntime();
+    const controller = createLiveRequestController({ db, runtime, controls: fakeControls() });
+
+    await controller.handlePayload(payload(JSON.stringify({ message: "just chatting" })));
+
+    expect(handle).not.toHaveBeenCalled();
+  });
+
+  it("routes prefix-less messages when requireCommandPrefix is off", async () => {
+    await saveSettings(
+      {
+        audienceRequestIntake: {
+          ...DEFAULT_AUDIENCE_REQUEST_INTAKE_SETTINGS,
+          enabled: true,
+          requireCommandPrefix: false,
+        },
+      },
+      db,
+    );
+    const { runtime, handle } = fakeRuntime();
+    const controller = createLiveRequestController({ db, runtime, controls: fakeControls() });
+
+    await controller.handlePayload(payload(JSON.stringify({ message: "lofi beats" })));
+
+    expect(handle).toHaveBeenCalledTimes(1);
+    expect(handle.mock.calls[0][0]).toMatchObject({ normalizedQuery: "lofi beats" });
+  });
 });
 
 describe("live-request-controller subscription", () => {
@@ -154,7 +184,7 @@ describe("live-request-controller subscription", () => {
     controller.start();
     // Drive the captured subscriber directly so we can await the async handler
     // instead of racing the fire-and-forget `void handlePayload` against teardown.
-    await controller.handlePayload(payload(JSON.stringify({ message: "lofi" })));
+    await controller.handlePayload(payload(JSON.stringify({ message: "点歌 lofi" })));
 
     expect(controls.subscribed).toBe(true);
     expect(handle).toHaveBeenCalledTimes(1);
@@ -188,7 +218,7 @@ describe("live-request-controller multi-source + testing lifecycle", () => {
 
     await controller.handlePayload({
       sourceId: "ssn",
-      body: JSON.stringify({ chatmessage: "lofi", chatname: "a", type: "twitch" }),
+      body: JSON.stringify({ chatmessage: "点歌 lofi", chatname: "a", type: "twitch" }),
     });
 
     expect(handle).toHaveBeenCalledTimes(1);

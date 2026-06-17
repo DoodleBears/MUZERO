@@ -20,6 +20,8 @@ export interface NormalizedAudienceRequest {
   requesterRole: AudienceRequesterRole;
   rawMessage: string;
   normalizedQuery: string;
+  /** The command prefix that matched (stripped from the query), if any. */
+  matchedCommandPrefix?: string;
   receivedAt: number;
 }
 
@@ -62,10 +64,16 @@ function sourceKindFor(value: string | undefined): AudienceRequestSourceKind {
   return source === "socialstreamninja" ? "social-stream-ninja" : "http";
 }
 
-export function stripAudienceRequestPrefix(
+/**
+ * Match a message against the configured command prefixes (case-insensitive,
+ * first match wins). Returns the prefix-stripped query plus which prefix matched
+ * (`undefined` if none) — the controller uses the latter to enforce
+ * "only prefixed messages count as requests" (`requireCommandPrefix`).
+ */
+export function matchAudienceRequestPrefix(
   message: string,
   commandPrefixes: readonly string[] = [],
-): string {
+): { query: string; matchedPrefix?: string } {
   const trimmed = message.trim();
   const lower = trimmed.toLowerCase();
   for (const rawPrefix of commandPrefixes) {
@@ -73,9 +81,16 @@ export function stripAudienceRequestPrefix(
     if (!prefix) continue;
     const lowerPrefix = prefix.toLowerCase();
     if (!lower.startsWith(lowerPrefix)) continue;
-    return trimmed.slice(prefix.length).trim();
+    return { query: trimmed.slice(prefix.length).trim(), matchedPrefix: prefix };
   }
-  return trimmed;
+  return { query: trimmed };
+}
+
+export function stripAudienceRequestPrefix(
+  message: string,
+  commandPrefixes: readonly string[] = [],
+): string {
+  return matchAudienceRequestPrefix(message, commandPrefixes).query;
 }
 
 export function normalizeAudienceRequest(
@@ -105,7 +120,10 @@ export function normalizeAudienceRequest(
     throw new Error("Audience request payload did not include a message field.");
   }
 
-  const normalizedQuery = stripAudienceRequestPrefix(rawMessage, options.commandPrefixes);
+  const { query: normalizedQuery, matchedPrefix } = matchAudienceRequestPrefix(
+    rawMessage,
+    options.commandPrefixes,
+  );
   const requesterKey =
     requesterId && platform
       ? `${platform.toLowerCase()}:${requesterId}`
@@ -123,6 +141,7 @@ export function normalizeAudienceRequest(
     requesterRole: normalizeRole(readString(user, ["role"]) ?? readString(record, ["role"])),
     rawMessage: rawMessage.trim(),
     normalizedQuery,
+    matchedCommandPrefix: matchedPrefix,
     receivedAt: options.now ?? Date.now(),
   };
 }

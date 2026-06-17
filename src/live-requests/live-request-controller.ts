@@ -9,8 +9,13 @@ import { type DesktopLiveRequestIntakeControls, resolveDesktopBridge } from "@/l
 import { log } from "@/lib/logger";
 import {
   type AudienceRequestRuntime,
+  type AudienceRequestRuntimeItem,
   createAudienceRequestRuntime,
 } from "./audience-request-runtime";
+import type {
+  AudienceRequestPlaybackAction,
+  AudienceRequestRouteMode,
+} from "./audience-request-schema";
 import {
   type NormalizedAudienceRequest,
   normalizeAudienceRequest,
@@ -65,6 +70,19 @@ export interface LiveRequestController {
   handlePayload(payload: { sourceId?: string; body: string }): Promise<void>;
   /** Recent sanitized payloads captured for a source while it is in testing mode. */
   getCaptured(sourceId: string): CapturedPayload[];
+  /** Recent routed requests (newest first) — observability for tests + dev harness. */
+  getItems(): AudienceRequestRuntimeItem[];
+  /**
+   * Dev/test entry point: route a synthetic query straight through the runtime
+   * (search → playback), bypassing the transport + source-resolution layers, with
+   * explicit route/action overrides. Mirrors what an incoming chat message does once
+   * mapped + normalized — used by the dev control endpoint harness.
+   */
+  drive(input: {
+    query: string;
+    routeMode?: AudienceRequestRouteMode;
+    playbackAction?: AudienceRequestPlaybackAction;
+  }): Promise<AudienceRequestRuntimeItem>;
 }
 
 const CAPTURE_LIMIT = 50;
@@ -143,13 +161,23 @@ export function createLiveRequestController(
     const mapping = resolveSourceMapping(source);
     const mapped = mapping ? applyMapping(sanitized, mapping) : sanitized;
 
+    const commandPrefixes = source.commandPrefixes ?? intake.commandPrefixes;
     let request: NormalizedAudienceRequest;
     try {
-      request = normalizeAudienceRequest(mapped, {
-        commandPrefixes: source.commandPrefixes ?? intake.commandPrefixes,
-      });
+      request = normalizeAudienceRequest(mapped, { commandPrefixes });
     } catch {
       return; // payload had no usable message field
+    }
+
+    // "Only prefixed messages count as requests": when enabled and prefixes are
+    // configured, drop chat that didn't open with one (plain conversation, not a
+    // song request). Empty prefixes = nothing to require → everything passes.
+    if (
+      (intake.requireCommandPrefix ?? true) &&
+      commandPrefixes.length > 0 &&
+      !request.matchedCommandPrefix
+    ) {
+      return;
     }
 
     try {
@@ -205,6 +233,12 @@ export function createLiveRequestController(
     apply,
     handlePayload,
     getCaptured: (sourceId) => captures.get(sourceId) ?? [],
+    getItems: () => runtime.getItems(),
+    drive: (input) =>
+      runtime.handle(normalizeAudienceRequest({ message: input.query }, { commandPrefixes: [] }), {
+        routeMode: input.routeMode,
+        playbackAction: input.playbackAction,
+      }),
   };
 }
 
@@ -246,4 +280,18 @@ export function applyLiveRequestIntake(intake: AudienceRequestIntakeSettings): P
 /** Sanitized payloads captured for a source in testing mode (mapping-dialog preview). */
 export function getCapturedLiveRequests(sourceId: string): CapturedPayload[] {
   return ensureSingleton().getCaptured(sourceId);
+}
+
+/** Dev control-endpoint harness: drive a synthetic request through the live singleton. */
+export function driveLiveRequest(input: {
+  query: string;
+  routeMode?: AudienceRequestRouteMode;
+  playbackAction?: AudienceRequestPlaybackAction;
+}): Promise<AudienceRequestRuntimeItem> {
+  return ensureSingleton().drive(input);
+}
+
+/** Dev control-endpoint harness: recent routed requests (newest first). */
+export function getLiveRequestItems(): AudienceRequestRuntimeItem[] {
+  return ensureSingleton().getItems();
 }

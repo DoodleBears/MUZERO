@@ -5,6 +5,7 @@ import { MappingDialog } from "@/components/settings/live-request/mapping-dialog
 import { SourceCard } from "@/components/settings/live-request/source-card";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { ChipInput } from "@/components/ui/chip-input";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -222,14 +223,14 @@ export function LiveRequestSettings() {
             </Select>
           </Field>
           <Field label={tk("settings.liveRequestsCommandPrefixes", "Command prefixes")}>
-            <Input
-              value={intake.commandPrefixes.join(", ")}
-              onChange={(event) =>
-                void update({
-                  commandPrefixes: event.currentTarget.value
-                    .split(",")
-                    .map((prefix) => prefix.trim())
-                    .filter(Boolean),
+            <ChipInput
+              value={intake.commandPrefixes}
+              onChange={(commandPrefixes) => void update({ commandPrefixes })}
+              placeholder={tk("settings.liveRequestsCommandPrefixesPlaceholder", "点歌, !sr …")}
+              removeLabel={(prefix) =>
+                t("settings.liveRequestsRemovePrefix", {
+                  defaultValue: "Remove {{prefix}}",
+                  prefix,
                 })
               }
             />
@@ -255,6 +256,17 @@ export function LiveRequestSettings() {
             />
           </Field>
         </div>
+
+        <Toggle
+          checked={intake.requireCommandPrefix ?? true}
+          label={tk("settings.liveRequestsRequirePrefix", "Require a command prefix")}
+          hint={tk(
+            "settings.liveRequestsRequirePrefixHint",
+            "Only chat messages that start with a prefix above are treated as song requests. Off: every message is a request.",
+          )}
+          disabled={intake.commandPrefixes.length === 0}
+          onChange={(requireCommandPrefix) => void update({ requireCommandPrefix })}
+        />
 
         <section className="flex flex-col gap-3">
           <div className="flex items-center justify-between">
