@@ -110,11 +110,16 @@ function aggregate(entries) {
     entries.filter((e) => e.scope === "performance.work" && e.message === msg).map(val);
   const max = (xs) => (xs.length ? Math.max(...xs) : 0);
   const min = (xs) => (xs.length ? Math.min(...xs) : null);
+  const mean = (xs) => (xs.length ? Math.round((xs.reduce((s, x) => s + x, 0) / xs.length) * 10) / 10 : null);
   const stf = work("player.switch.toFrame").map((d) => d.lastMs ?? 0);
   const qf = work("queue.live.fetch");
+  const fpsAvgs = frames.map((f) => f.fpsAvg).filter((x) => typeof x === "number");
+  const fpsLows = frames.map((f) => f.fpsLow).filter((x) => typeof x === "number");
   return {
     frameWindows: frames.length,
-    fpsLowMin: min(frames.map((f) => f.fpsLow).filter((x) => typeof x === "number")),
+    fpsAvg: mean(fpsAvgs), // mean of per-window average fps
+    fpsLowMin: min(fpsLows), // worst per-window low fps (the dropped-frame floor)
+    fpsLowAvg: mean(fpsLows),
     frameMaxMs: max(frames.map((f) => f.frameMaxMs ?? 0)),
     frameP99Ms: max(frames.map((f) => f.frameP99Ms ?? 0)),
     longTaskCount: longs.length,
