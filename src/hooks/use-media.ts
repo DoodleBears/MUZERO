@@ -11,6 +11,7 @@ import { backfillCoverMetadata } from "@/db/repositories";
 import type { Track } from "@/db/types";
 import { useSettings } from "@/hooks/use-app-data";
 import { getOrFetchRemoteCoverAsset, remoteCoverAssetKey } from "@/lib/cover-asset";
+import { hasCoverUrlDecoded } from "@/lib/cover-decode-registry";
 import {
   type CoverRenderSurface,
   noteCoverRenderCache,
@@ -223,8 +224,17 @@ export function useCoverDerivativeUrl(
   // useTrackThumbnailUrl) so surfaces that call this hook DIRECTLY (e.g. the track-row
   // list thumbnail) show the cover instead of being stuck on the thumbhash. An <img>
   // loads a cross-origin URL without CORS — only fetch()→blob (the derivative path) needs
-  // it. Honor `defer` so a fast scroll still shows the thumbhash until it settles.
-  if (!coverBlobId && remoteCoverUrl) return defer ? null : proxyExternalCover(remoteCoverUrl);
+  // it.
+  if (!coverBlobId && remoteCoverUrl) {
+    const proxied = proxyExternalCover(remoteCoverUrl);
+    // A remote cover that has ALREADY painted once stays visible while the virtualized
+    // list scrolls — mirroring how a local cover's object-URL cache hit is returned even
+    // under `defer`. Only a never-seen remote cover defers, so a fast fling doesn't blank
+    // the rows it already loaded (the "封面滚动时消失、停下又出现" report) yet still avoids
+    // firing a fetch per row for covers flung past.
+    if (defer && !(proxied && hasCoverUrlDecoded(proxied))) return null;
+    return proxied;
+  }
   return null;
 }
 

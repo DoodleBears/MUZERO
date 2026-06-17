@@ -7,25 +7,19 @@ import {
   useState,
 } from "react";
 import { thumbHashToDataURL } from "thumbhash";
+import {
+  hasCoverUrlDecoded,
+  markCoverUrlDecoded,
+  resetDecodedCoverUrls,
+} from "@/lib/cover-decode-registry";
 import { base64ToThumbhash } from "@/lib/cover-thumbhash";
 import { log } from "@/lib/logger";
 import { cn } from "@/lib/utils";
 
-/**
- * Cover object URLs whose `<img>` has decoded at least once this session. The
- * object-URL cache keeps a cover's URL string stable across unmounts, so when a
- * virtualized wall re-mounts (e.g. returning from a detail page) its covers get
- * the SAME url they had before — already in this set — and start painted instead
- * of replaying the opacity fade. That removes the cover "flash" on the way back.
- * A freshly created `<img>` isn't reliably `complete` in a layout effect even for
- * a cached blob URL, so this remembered signal is what makes the re-mount instant.
- */
-const decodedCoverUrls = new Set<string>();
-
-/** Test-only: clear the session decode memory so each test starts from a cold cache. */
-export function resetDecodedCoverUrls(): void {
-  decodedCoverUrls.clear();
-}
+// Re-exported so existing tests (and call sites) keep their import path. The shared
+// registry now lives in `lib/cover-decode-registry` so `useCoverDerivativeUrl` can
+// also read it to keep already-decoded remote covers visible while scrolling.
+export { resetDecodedCoverUrls };
 
 /**
  * Shared cover/thumbnail surface (instant-cover-thumbnails PRD Phases 2 & 4).
@@ -79,7 +73,7 @@ export function CoverImage({
   // url we've already decoded this session (e.g. a wall re-mounting on the way
   // back from a detail page) starts loaded, so it re-appears without re-fading.
   const [loadedUrl, setLoadedUrl] = useState<string | null>(() =>
-    url && decodedCoverUrls.has(url) ? url : null,
+    url && hasCoverUrlDecoded(url) ? url : null,
   );
   const loaded = url != null && loadedUrl === url;
 
@@ -101,7 +95,7 @@ export function CoverImage({
   // reliable one — a new <img> on a cached blob url often isn't `complete` yet.
   useLayoutEffect(() => {
     const img = ref.current;
-    if (url && (decodedCoverUrls.has(url) || (img?.complete && img.naturalWidth > 0))) {
+    if (url && (hasCoverUrlDecoded(url) || (img?.complete && img.naturalWidth > 0))) {
       setLoadedUrl(url);
     }
   }, [url]);
@@ -136,7 +130,7 @@ export function CoverImage({
           decoding="async"
           data-state={loaded ? "loaded" : "loading"}
           onLoad={() => {
-            decodedCoverUrls.add(url);
+            markCoverUrlDecoded(url);
             setLoadedUrl(url);
           }}
           className={cn(
