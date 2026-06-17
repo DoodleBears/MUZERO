@@ -13,4 +13,4 @@
 
 | PRD | 状态 | 摘要 |
 |---|---|---|
-| [20260616-muzero-kmp-mobile-port-prd](20260616-muzero-kmp-mobile-port-prd/20260616-muzero-kmp-mobile-port-prd.md) | Draft | KMP 原生移动端移植：架构选型 + 逐特性（特效/音频/着色器/数据/DJ 循环）可行性与库映射 + 分阶段路线 |
+| [20260616-muzero-native-mobile-port-prd](20260616-muzero-native-mobile-port-prd/20260616-muzero-native-mobile-port-prd.md) | Draft | **全原生双栈（SwiftUI + Jetpack Compose）+ 语言中立契约规格** 移植：四轮 deep research 比选 A/B/C 定 **Option C + spec guard**（KMP 已评估并否决，理由见 §2.1）；逐特性可行性/库映射 + 性能 harness + 分阶段路线 |
