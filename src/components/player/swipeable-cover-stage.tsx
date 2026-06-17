@@ -136,6 +136,10 @@ export function SwipeableCoverStage({
   // Sub-phase of `active`: the overlay is fading out over the settled base.
   const [handoffFading, setHandoffFading] = useState(false);
   const [baseCoverShownId, setBaseCoverShownId] = useState<string | undefined>(undefined);
+  // Fresh mirror so commitAndHandoff (a stable callback) can read the latest painted
+  // cover without depending on the state.
+  const baseCoverShownIdRef = useRef(baseCoverShownId);
+  baseCoverShownIdRef.current = baseCoverShownId;
   // The cover box's viewport rect — the overlay portals out to `main` (escaping the
   // scroll container's clip) and is positioned here, so a cover sliding in from the
   // side isn't clipped by the stage's bounds.
@@ -391,6 +395,15 @@ export function SwipeableCoverStage({
     // whose base may never fire onCoverReady — uses the timed fallback.
     if (!(targetTrack && trackHasCover(targetTrack))) {
       handoffTimer.current = window.setTimeout(beginHandoffFade, HANDOFF_FALLBACK_MS);
+    } else if (baseCoverShownIdRef.current === targetTrack.id) {
+      // The base ALREADY shows the committed cover — a same-track commit (dragged
+      // 0→1→0 back to the origin, or any settle that doesn't change the track). The
+      // base-ready effect below won't re-fire (baseCoverShownId doesn't change), so the
+      // hand-off would never schedule and `active` would stay stuck true — leaving the
+      // backlight (gated on !active) and shadow (base opacity 0) off until the NEXT real
+      // switch (PRD 20260618-backlight-shadow-drag #2). Schedule the fade directly.
+      awaitingHandoffRef.current = false;
+      handoffTimer.current = window.setTimeout(beginHandoffFade, HANDOFF_BASE_SETTLE_MS);
     }
   }, [beginHandoffFade]);
 
