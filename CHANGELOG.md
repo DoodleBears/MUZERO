@@ -2,6 +2,40 @@
 
 All notable changes to MUZERO. Generated from `src/content/changelog` — do not edit by hand (`make changelog-md`).
 
+## v1.2.0 — 2026-06-18 · QQ Music, coverflow, and silky-smooth big libraries
+
+Search and import from QQ Music, switch songs by dragging a 3D coverflow where the cover, background, palette, and backlight move as one, and keep smooth playback, search, and editing even on libraries of thousands of tracks. Live requests gain command-prefix gating, and the flow background now glides between covers.
+
+### Highlights
+- **streaming** QQ Music as an online source — Search QQ Music and play tracks right inside MUZERO. Log in through a built-in window to reach your own library, sync 我的歌单 (your playlists), and import any playlist by pasting its link or share short-link. Guest playback stays within the plaintext quality ceiling — encrypted VIP files are never decrypted. _(desktop)_
+- **player** Coverflow Now Playing — Drag the album cover to flip through your queue in a 3D coverflow. The cover, blurred background, color palette, backlight, and shadow all travel and crossfade together — with no black frames or flicker at the hand-off, on both drag and external switches.
+
+### Added
+- **settings** Command-prefix gating for live requests — Require chat messages to start with a command prefix — entered as chips — before they count as song requests, so ordinary chatter is ignored. Requests run through a FIFO queue, and play-now / play-next cut in relative to the track you're actually on.
+- **player** Dim-layer backdrop blur control — Now Playing gains a slider to blur the backdrop behind the dim layer, for a softer, more focused stage.
+
+### Changed
+- **player** Smooth on libraries of thousands of tracks — Switching songs and editing track metadata no longer drop frames on very large queues and libraries. Likes and play counts moved off the catalog row into side tables, the queue and search indexes were split so a single edit re-renders one row instead of the whole list, and hidden tabs stop reconciling on every playback heartbeat.
+- **search** Faster global search on large libraries — Global search opens and responds instantly even with thousands of tracks. Search-variant indexes are precomputed, the open-window index burst is pre-warmed, and facet/set/lyrics matching runs off the keystroke frame so typing stays fluid.
+- **visualizer** Flow background glides between songs — The cover-painted flow background now crossfades its color palette from one song to the next instead of snapping, and the spectrum's cover-derived accent color glides along with it.
+- **app** Window border reacts to cover drag — On Windows, the desktop window border color follows the cover-drag progress, stays uniform on every edge, and disappears in F-key fullscreen. _(desktop)_
+
+### Fixed
+- **app** Error notifications copy the full stack trace — Copying an error notification now always includes the complete stack trace, making problems easier to report and diagnose.
+- **memory** Memory mode uses a quote icon — The memory (DJ context) mode now shows a quote icon, a better fit for “music carries memories.”
+
+## v1.1.1 — 2026-06-16 · Live chat song requests
+
+Viewers can request songs from your live chat — through Social Stream Ninja or any webhook — and MUZERO maps each request to a query and routes it to library search or the AI DJ. The hosted mu0.app web build can take requests too, over the SSN relay.
+
+### Highlights
+- **settings** Take song requests from live chat — Connect Social Stream Ninja (or any webhook) and let viewers request songs from chat. Each request is matched against your library or sent to the AI DJ, with per-user cooldowns, a rate limit, and duplicate suppression.
+
+### Added
+- **settings** Build a mapping from a real request — Each source starts in testing mode: send it a request to capture a sanitized sample, then click fields in the JSON tree to build the mapping and see a live preview of the resolved query — using presets (Social Stream Ninja, generic) or custom {{ payload.… }} templates. Go live when it looks right.
+- **app** mu0.app takes requests over the SSN relay — The hosted web app subscribes outbound to the Social Stream Ninja relay with your session ID, so it can take live chat requests with no MUZERO backend. AI generation and online sourcing remain desktop-first (they depend on the browser allowing CORS). _(web)_
+- **settings** Multiple webhook sources, routed independently — The desktop app exposes a local /v1/intake/<source> webhook per source. Give each one its own mapping and route it to library search or the AI DJ — e.g. one platform to search, another to generation. _(desktop)_
+
 ## v1.1.0 — 2026-06-15 · Smoother playback, smarter browsing, and desktop controls
 
 Now Playing switches faster and stays visually in sync, the library gains system playlists, A-Z navigation, and online discovery, and desktop users get tray controls, global shortcuts, pinned lyrics, and live request intake.
