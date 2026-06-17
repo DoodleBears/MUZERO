@@ -112,7 +112,11 @@ describe("useTrackCoverUrl — cross-mount object-URL cache (Phase 1)", () => {
     expect(URL.createObjectURL).toHaveBeenCalledTimes(1);
   });
 
-  it("marks a failed remote cover as ready so current-track fallbacks can render", async () => {
+  it("falls back to the direct remote URL when the blob fetch fails (web/CORS), still ready", async () => {
+    // A failed blob fetch is the WEB case: no `muzfetch://` proxy, so a cross-origin R2
+    // cover fails CORS on fetch(). The cover is still displayable via <img> (no CORS
+    // needed), so the hook returns the direct URL instead of null — otherwise the stage
+    // would fall through to the thumbhash / title card even though the art is reachable.
     remoteCoverState.fetcher.mockResolvedValue({
       headers: { get: () => "text/html" },
       ok: true,
@@ -128,7 +132,7 @@ describe("useTrackCoverUrl — cross-mount object-URL cache (Phase 1)", () => {
 
     await act(async () => {});
 
-    expect(result.current.url).toBeNull();
+    expect(result.current.url).toBe("https://example.com/nope");
     expect(result.current.readyForTrack).toBe(true);
   });
 

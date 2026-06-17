@@ -1174,13 +1174,18 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     if (!track || !isTrackCacheableToDevice(track)) return; // no cloud source / already cached
     if (track.remoteMediaUrl) {
       const result = await cacheRemoteTrackNow(track);
-      if (result.kind === "cached") notify.success(i18n.t("streamCache.downloaded"));
-      else if (result.kind === "failed") notify.error(i18n.t("streamCache.downloadFailed"));
+      if (result.kind === "cached") {
+        // Downloading "to device" should be fully offline-capable, so pull the cover
+        // into a local blob too (best-effort, fire-and-forget — never blocks the toast).
+        void ensureLocalCoverForTrack(trackId);
+        notify.success(i18n.t("streamCache.downloaded"));
+      } else if (result.kind === "failed") notify.error(i18n.t("streamCache.downloadFailed"));
       return;
     }
     if (!isStreamedTrack(track)) return;
     const result = await cacheStreamedTrackNow(track);
     if (result.kind === "cached") {
+      void ensureLocalCoverForTrack(trackId);
       notify.success(i18n.t("streamCache.downloaded"));
     } else if (
       result.kind === "requires-login" ||
@@ -1836,12 +1841,16 @@ async function downloadStreamedSetTracks(setId: string): Promise<void> {
       cursor += 1;
       if (track.remoteMediaUrl) {
         const result = await cacheRemoteTrackNow(track);
-        if (result.kind === "cached") cached += 1;
-        else failed += 1;
+        if (result.kind === "cached") {
+          cached += 1;
+          void ensureLocalCoverForTrack(track.id);
+        } else failed += 1;
       } else if (isStreamedTrack(track)) {
         const result = await cacheStreamedTrackNow(track);
-        if (result.kind === "cached") cached += 1;
-        else failed += 1;
+        if (result.kind === "cached") {
+          cached += 1;
+          void ensureLocalCoverForTrack(track.id);
+        } else failed += 1;
       } else {
         failed += 1;
       }
@@ -1872,6 +1881,32 @@ async function fetchAndStoreRemoteCover(trackId: string, url: string): Promise<v
     await setTrackCover({ trackId, blob, mime });
   } catch (err) {
     log.warn("player", "failed to fetch remote cover", { trackId, err: String(err) });
+  }
+}
+
+// Module-scope de-dupe so a track's cover is pulled at most once in flight even if
+// "download to device" + first-play + a set download all fire for it (not store state —
+// CLAUDE.md rule 6).
+const localCoverFetchInFlight = new Set<string>();
+
+/**
+ * Pull a streamed/remote track's `remoteCoverUrl` into a LOCAL cover blob (+ thumbhash /
+ * palette / thumbnail + backlight derivatives) so the backlight glow, gallery thumbnails
+ * and clean-texture visual effects work the same as an imported cover — and offline.
+ * Best-effort + idempotent: no-op when there's no remote cover, a local cover already
+ * exists, a pull is already in flight, or the cross-origin fetch can't reach the bytes
+ * (the WEB shell has no `muzfetch://` proxy, so an R2 cover lacking CORS headers stays
+ * display-only via the <img> fallback — `setTrackCover` is never reached).
+ */
+async function ensureLocalCoverForTrack(trackId: string): Promise<void> {
+  if (localCoverFetchInFlight.has(trackId)) return;
+  const track = await getTrack(trackId);
+  if (!track?.remoteCoverUrl || track.coverBlobId) return;
+  localCoverFetchInFlight.add(trackId);
+  try {
+    await fetchAndStoreRemoteCover(trackId, track.remoteCoverUrl);
+  } finally {
+    localCoverFetchInFlight.delete(trackId);
   }
 }
 
@@ -2791,6 +2826,16 @@ async function ensureLoadedAndPlay(
       set({ durationSec: duration });
     }
     triggerLyricsAutoFetch(track);
+    // When auto-caching streamed content is on, also pull this track's remote cover into
+    // a local blob on first play — so the backlight / palette / clean-texture effects get
+    // CORS-clean bytes (and offline art) without an explicit "download to device". Tiny,
+    // fire-and-forget, idempotent. Explicit download covers the opt-out case. `settings`
+    // isn't in scope here, so read it lazily and only when there's a remote cover to pull.
+    if (track.remoteCoverUrl && !track.coverBlobId) {
+      void getSettings().then((s) => {
+        if (s.autoCacheStreamed) void ensureLocalCoverForTrack(track.id);
+      });
+    }
     if (!continueCurrent("before-metadata")) return;
     await updateMediaSessionMetadata(
       track,

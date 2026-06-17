@@ -215,7 +215,17 @@ export function useCoverDerivativeUrl(
   // Synchronous read: a cache hit returns the URL on frame 0 — instant on re-mount,
   // zero placeholder flash. peek doesn't mutate, so it's render-safe.
   const cached = cacheKey ? coverDerivativeUrlCache.peek(cacheKey) : undefined;
-  return cached ?? (resolved?.key === cacheKey ? resolved.url : null);
+  const local = cached ?? (resolved?.key === cacheKey ? resolved.url : null);
+  if (local) return local;
+  // Remote-only cover (streamed track): no local derivative exists — `ensureCover…`
+  // early-outs for non-local sources, so `cacheKey` is null and there's no `cvd_…` blob
+  // to resolve. Fall back to the directly-displayable proxied/raw remote URL (same as
+  // useTrackThumbnailUrl) so surfaces that call this hook DIRECTLY (e.g. the track-row
+  // list thumbnail) show the cover instead of being stuck on the thumbhash. An <img>
+  // loads a cross-origin URL without CORS — only fetch()→blob (the derivative path) needs
+  // it. Honor `defer` so a fast scroll still shows the thumbhash until it settles.
+  if (!coverBlobId && remoteCoverUrl) return defer ? null : proxyExternalCover(remoteCoverUrl);
+  return null;
 }
 
 export function useTrackThumbnailUrl(track: TrackCoverInput | undefined): string | null {
@@ -402,12 +412,21 @@ export function useTrackCoverResource(
   const pendingLocalCover =
     Boolean(coverBlobId) && !remoteBackedCover && blob === undefined && !currentUrl;
   const staleFallback = pendingLocalCover ? lastCommittedUrl.current : null;
-  const url = currentUrl ?? staleFallback?.url ?? null;
-  const urlKey = currentKey ?? staleFallback?.key ?? null;
-  const staleWhilePending = !currentUrl && Boolean(staleFallback);
   const hasCover = Boolean(coverBlobId || remoteCoverUrl);
   const remoteFailed = Boolean(targetKey && failedKey === targetKey);
   const remoteBackedLocalUnavailable = Boolean(coverBlobId && remoteCoverUrl && !currentUrl);
+  // When the blob fetch can't deliver the bytes — chiefly on the WEB shell, where there's
+  // no `muzfetch://` proxy so a cross-origin R2 cover fails CORS on `fetch()` — fall back
+  // to the directly-displayable proxied/raw URL. An <img>/canvas loads a cross-origin
+  // image without CORS (it just can't be read back or used as a clean WebGL texture), so
+  // the cover at least SHOWS instead of falling through to the thumbhash / a blank stage.
+  // Electron keeps using the fetched blob (clean texture); this only engages on failure.
+  const remoteDisplayFallback =
+    !coverBlobId && remoteCoverUrl && remoteFailed ? proxyExternalCover(remoteCoverUrl) : null;
+  const url = currentUrl ?? remoteDisplayFallback ?? staleFallback?.url ?? null;
+  const urlKey =
+    currentKey ?? (remoteDisplayFallback ? targetKey : null) ?? staleFallback?.key ?? null;
+  const staleWhilePending = !currentUrl && !remoteDisplayFallback && Boolean(staleFallback);
 
   return {
     readyForTrack:
