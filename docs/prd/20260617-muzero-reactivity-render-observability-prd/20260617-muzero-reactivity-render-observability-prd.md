@@ -143,8 +143,26 @@ scripts/perf-gesture.mjs / perf-drive.mjs      # ✎ scenario 前 reset、后 sn
 - [ ] 未覆盖：queue add/remove（需 repo 驱动）、memory overlay（避免打开编辑器副作用）—— 列 Phase 3 / follow-up 补。
 
 ### Phase 3: fix + regression guard
-- [ ] 逐项修（窄 selector / memo / 边界拆分 / 订阅下沉），每项 render-trace before/after。
-- [ ] 把「该场景该 surface commits===0/≤1」写成断言进 harness。
+- [x] **F2 修复**（commit `76ab605`）：SearchPage `playbackStats`/`playbackEvents` liveQuery gate on `searchTabActive` → 隐藏时 130ms→0.2ms（bail）。
+- [x] **F3 修复**（commit `c0d74c8`）：SettingsPage + stream-cache + persistent-storage 的心跳/缓存 liveQuery gate on `settingsActive` → 隐藏时 116ms→30ms。
+- [ ] 把「该场景该 surface commits===0/≤1」写成断言进 harness（待）。
+
+#### Phase 3b: 封面切换掉帧深挖（goal: 优化封面切换掉帧，不改 UIUX）
+**⚠ 测试前提（用户指出）**：必须在**有封面的歌**之间切（session 里部分曲无封面）。session `ses_352fe6…` 的连续有封面段在 **idx 183–192**（之前在 idx 2000 测=可能无封面，不代表）。
+
+**render-trace + frame-slice + CPU profile 实测（covered idx185，dock 拖拽 / pingpong）：**
+| 场景 | frameMax | 成分 |
+|---|---|---|
+| **冷**（未预热封面，快速多步拖拽 / 远跳） | **458ms** | coverflow 5 个 slot 各画**全分辨率**封面 → 5× `drawImage` + GPU 上传。`HTMLImageElement.decode()` 本身异步离主线程（非阻塞），瓶颈是**画/上传**。 |
+| **暖**（相邻单步拖拽，slot 复用，封面已 pooled） | **100ms** | 仅新进窗的 1–2 张 `drawCoverFrame`（全分辨率 `drawImage` ~23ms）+ now-stage React reconcile（dev ~87ms / prod ~1/3）+ 进度/频谱叶子 + VirtualTrackList/lyrics/bg 零碎。 |
+
+**根因 = 全分辨率封面 `drawImage`/GPU 上传**（canvas-cover `drawCoverFrame`），冷时 ×5。React reconcile 是次因（已被 hidden-tab memo + F2/F3 压过一轮）。
+
+**候选修法 × UIUX 风险（待用户裁决）：**
+- (A) **display-sized `createImageBitmap`**（按画布尺寸离屏解码缩放，画 1:1 廉价 blit）：本应最干净，但 **decoded-pool 跨实例共享**（base 大画布 + coverflow 卡片小画布**不同尺寸**共用一份 bitmap）→ 按尺寸缓存会破坏共享池；且改动 flash-sensitive 的 reveal/pool 逻辑，**有闪烁回归风险**。
+- (B) **coverflow 侧卡用 thumbnail 派生**（侧卡 0.86 缩放+倾斜，小）：冷时 5 张→4 小+1 大，省 GPU。但侧卡仍较大，thumbnail(192px) 上采可能**变软=UIUX 变化**。
+- (C) 接受现状：contention（F2/F3 + 前序 memo）已治，封面 `drawImage` 是「画一张新封面」的真实必要成本；冷 458ms 主要发生在**快速多步/远跳**（非单步拖拽常态）。
+> 三者都触碰画质/闪烁或属固有成本，与「不影响 UIUX」张力大 → 需用户在「画质/闪烁风险 vs 更顺」之间定调，再动 flash-sensitive 的 canvas-cover。
 
 ---
 
