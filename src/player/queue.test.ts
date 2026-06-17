@@ -3,6 +3,7 @@ import {
   buildShuffleOrder,
   clampIndex,
   manualNextIndex,
+  manualStepIndex,
   nextIndex,
   nextStreamSkipIndex,
   prevIndex,
@@ -12,6 +13,7 @@ import {
   shufflePrev,
   upcomingCount,
   upcomingManualIndices,
+  windowManualIndices,
 } from "./queue";
 
 describe("upcomingCount", () => {
@@ -239,5 +241,105 @@ describe("upcomingManualIndices", () => {
         shuffleOrder: [2, 0, 3, 1],
       }),
     ).toEqual([2, 0]);
+  });
+});
+
+describe("manualStepIndex (cover pager single step)", () => {
+  it("steps forward/back sequentially", () => {
+    expect(manualStepIndex({ index: 1, length: 5, repeat: "off", dir: 1 })).toBe(2);
+    expect(manualStepIndex({ index: 1, length: 5, repeat: "off", dir: -1 })).toBe(0);
+  });
+
+  it("returns null at the repeat-off boundary (no distinct neighbour)", () => {
+    expect(manualStepIndex({ index: 4, length: 5, repeat: "off", dir: 1 })).toBeNull();
+    // prevIndex clamps to 0 at the start; a step that lands back on `index` is null.
+    expect(manualStepIndex({ index: 0, length: 5, repeat: "off", dir: -1 })).toBeNull();
+  });
+
+  it("wraps under repeat-all in both directions", () => {
+    expect(manualStepIndex({ index: 4, length: 5, repeat: "all", dir: 1 })).toBe(0);
+    expect(manualStepIndex({ index: 0, length: 5, repeat: "all", dir: -1 })).toBe(4);
+  });
+
+  it("still advances under repeat-one (manual-next semantics)", () => {
+    expect(manualStepIndex({ index: 1, length: 5, repeat: "one", dir: 1 })).toBe(2);
+  });
+
+  it("returns null for a single-track queue (no distinct neighbour)", () => {
+    expect(manualStepIndex({ index: 0, length: 1, repeat: "all", dir: 1 })).toBeNull();
+    expect(manualStepIndex({ index: 0, length: 1, repeat: "all", dir: -1 })).toBeNull();
+  });
+
+  it("follows the existing shuffle order WITHOUT reshuffling", () => {
+    const order = [2, 0, 3, 1];
+    expect(
+      manualStepIndex({ index: 0, length: 4, repeat: "off", dir: 1, shuffleOrder: order }),
+    ).toBe(3);
+    expect(
+      manualStepIndex({ index: 0, length: 4, repeat: "off", dir: -1, shuffleOrder: order }),
+    ).toBe(2);
+    // Wrap under repeat-all uses the SAME order (no new permutation).
+    expect(
+      manualStepIndex({ index: 1, length: 4, repeat: "all", dir: 1, shuffleOrder: order }),
+    ).toBe(2);
+  });
+
+  it("returns null when the shuffle order is stale vs length", () => {
+    expect(
+      manualStepIndex({ index: 0, length: 4, repeat: "all", dir: 1, shuffleOrder: [0, 1] }),
+    ).toBeNull();
+  });
+});
+
+describe("windowManualIndices (±radius cover window)", () => {
+  it("builds nearest-first prev/next arrays", () => {
+    expect(windowManualIndices({ radius: 2, currentIndex: 2, length: 5, repeat: "off" })).toEqual({
+      prev: [1, 0],
+      next: [3, 4],
+    });
+  });
+
+  it("truncates at repeat-off boundaries", () => {
+    expect(windowManualIndices({ radius: 2, currentIndex: 0, length: 5, repeat: "off" })).toEqual({
+      prev: [],
+      next: [1, 2],
+    });
+    expect(windowManualIndices({ radius: 2, currentIndex: 4, length: 5, repeat: "off" })).toEqual({
+      prev: [3, 2],
+      next: [],
+    });
+  });
+
+  it("wraps under repeat-all", () => {
+    expect(windowManualIndices({ radius: 2, currentIndex: 4, length: 5, repeat: "all" })).toEqual({
+      prev: [3, 2],
+      next: [0, 1],
+    });
+  });
+
+  it("shows wrapped repeats for a short looping queue (length 2, repeat-all)", () => {
+    expect(windowManualIndices({ radius: 2, currentIndex: 0, length: 2, repeat: "all" })).toEqual({
+      prev: [1, 0],
+      next: [1, 0],
+    });
+  });
+
+  it("yields empty neighbours for a single-track queue", () => {
+    expect(windowManualIndices({ radius: 2, currentIndex: 0, length: 1, repeat: "all" })).toEqual({
+      prev: [],
+      next: [],
+    });
+  });
+
+  it("follows the shuffle order", () => {
+    expect(
+      windowManualIndices({
+        radius: 2,
+        currentIndex: 0,
+        length: 4,
+        repeat: "all",
+        shuffleOrder: [2, 0, 3, 1],
+      }),
+    ).toEqual({ prev: [2, 1], next: [3, 1] });
   });
 });

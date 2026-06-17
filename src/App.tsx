@@ -310,7 +310,7 @@ export default function App() {
             document.hidden), and the shared Lenis driver (self-stops when idle). */}
         <main className="chrome-fade absolute inset-0 z-10 overflow-hidden [--chrome-fade-bottom:calc(var(--spacing-chrome-bottom)/2)] [--chrome-fade-top:3rem]">
           <TabPanel active={tab === "now"}>
-            <NowPlayingPage foregroundHidden={foregroundHidden} />
+            <NowPlayingPage foregroundHidden={foregroundHidden} pageActive={tab === "now"} />
           </TabPanel>
           <TabPanel active={tab === "queue"}>
             <AmbientPageOverlay active={ambientActive}>

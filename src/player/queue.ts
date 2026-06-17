@@ -210,3 +210,79 @@ export function upcomingManualIndices(opts: {
 
   return out;
 }
+
+/**
+ * One manual step from `index` in `dir` (+1 = next, -1 = prev), mode-aware, and
+ * — crucially for the cover pager window — NON-mutating for shuffle: it walks the
+ * EXISTING `shuffleOrder` (wrapping under repeat≠off) and never reshuffles. The
+ * real reshuffle-on-wrap only happens when playback actually advances (shuffleNext);
+ * the window just peeks, so the visual neighbour and the committed target stay in
+ * sync (the commit jumps to the absolute index this returns). Returns null when
+ * there is no distinct track that way — repeat-off at the boundary, OR a step that
+ * lands back on `index` (single-track / clamped prev) — mirroring peekTrack's
+ * `index === currentIndex → undefined` rule so a "null slot" === "no commit".
+ */
+export function manualStepIndex(opts: {
+  index: number;
+  length: number;
+  repeat: RepeatMode;
+  dir: 1 | -1;
+  shuffleOrder?: readonly number[];
+}): number | null {
+  const { index, length, repeat, dir, shuffleOrder } = opts;
+  if (length <= 0 || index < 0 || index >= length) return null;
+  let stepped: number | null;
+  if (!shuffleOrder) {
+    stepped = dir === 1 ? manualNextIndex(length, index, repeat) : prevIndex(length, index, repeat);
+  } else if (shuffleOrder.length !== length) {
+    return null;
+  } else {
+    const pos = shuffleOrder.indexOf(index);
+    if (pos < 0) return null;
+    let nextPos = pos + dir;
+    if (nextPos < 0) {
+      if (repeat === "off") return null;
+      nextPos = length - 1;
+    } else if (nextPos >= length) {
+      if (repeat === "off") return null;
+      nextPos = 0;
+    }
+    stepped = shuffleOrder[nextPos] ?? null;
+  }
+  if (stepped === null || stepped === index) return null;
+  return stepped;
+}
+
+/**
+ * The ±radius window of manual-advance indices around `currentIndex` for the cover
+ * pager. `next[k]` is the track at offset +(k+1), `prev[k]` at offset -(k+1) (each
+ * array ordered nearest-first). Walks via {@link manualStepIndex}, so it is
+ * shuffle/repeat/wrap-aware and — unlike {@link upcomingManualIndices} — does NOT
+ * dedup: a short looping queue (e.g. length 2, repeat-all) intentionally shows its
+ * wrapped repeats so the carousel loops. Stops (shorter array) at a repeat-off
+ * boundary or a single-track dead end (manualStepIndex → null).
+ */
+export function windowManualIndices(opts: {
+  radius: number;
+  currentIndex: number;
+  length: number;
+  repeat: RepeatMode;
+  shuffleOrder?: readonly number[];
+}): { prev: number[]; next: number[] } {
+  const { radius, currentIndex, length, repeat, shuffleOrder } = opts;
+  const walk = (dir: 1 | -1): number[] => {
+    const out: number[] = [];
+    let cursor = currentIndex;
+    for (let k = 0; k < radius; k += 1) {
+      const stepped = manualStepIndex({ index: cursor, length, repeat, dir, shuffleOrder });
+      if (stepped === null) break;
+      out.push(stepped);
+      cursor = stepped;
+    }
+    return out;
+  };
+  if (radius <= 0 || length <= 0 || currentIndex < 0 || currentIndex >= length) {
+    return { prev: [], next: [] };
+  }
+  return { prev: walk(-1), next: walk(1) };
+}

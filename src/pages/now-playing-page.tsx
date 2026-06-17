@@ -34,7 +34,7 @@ import {
 } from "@/components/player/mode-chip-styles";
 import { NowPlayingPanel } from "@/components/player/now-playing-panel";
 import { PlaybackSpectrum } from "@/components/player/playback-spectrum";
-import { SwipeableMediaStage } from "@/components/player/swipeable-media-stage";
+import { SwipeableCoverStage } from "@/components/player/swipeable-cover-stage";
 import { SyncedLyricsView } from "@/components/player/synced-lyrics-view";
 import { CurrentTrackContextMenu } from "@/components/player/track-context-menu";
 import { TrackInfoCard } from "@/components/player/track-info-card";
@@ -77,7 +77,17 @@ const GLASS_CONTROL_GROUP =
  * for audio art) with a track-info card below, and a tabbed queue/lyrics rail on
  * the right (desktop). The ambient slideshow background lives at the app root.
  */
-export function NowPlayingPage({ foregroundHidden = false }: { foregroundHidden?: boolean }) {
+export function NowPlayingPage({
+  foregroundHidden = false,
+  pageActive = true,
+}: {
+  foregroundHidden?: boolean;
+  /** True only while the `now` tab is the visible tab. The cover overlay portals out
+   *  to `<main>`, which escapes the inactive TabPanel's `display:none` — so we must
+   *  explicitly tear it down (and stop pushing the cover-window) when the tab is
+   *  hidden, or the coverflow card floats over the library/search tabs. */
+  pageActive?: boolean;
+}) {
   const queue = usePlayerStore((s) => s.queue);
   const currentIndex = usePlayerStore((s) => s.currentIndex);
   const djEnabled = usePlayerStore((s) => s.djEnabled);
@@ -164,9 +174,9 @@ export function NowPlayingPage({ foregroundHidden = false }: { foregroundHidden?
             <div className="flex flex-col gap-2">
               {/* Mobile: a plain tap of the cover flips the right-rail mode
                   (swipes still change tracks). Desktop uses the lyrics button. */}
-              <SwipeableMediaStage
+              <SwipeableCoverStage
                 coverRef={stageRef}
-                foregroundVisible={!foregroundHidden}
+                foregroundVisible={!foregroundHidden && pageActive}
                 onTap={isNarrow ? toggleLyricsVisible : undefined}
               />
               {current && <TrackInfoCard track={current} />}

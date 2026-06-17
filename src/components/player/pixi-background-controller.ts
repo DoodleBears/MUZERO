@@ -154,6 +154,12 @@ export interface PixiBackgroundControllerOptions {
   crossfadeMs?: number;
 }
 
+/** One cover in the lockstep window, keyed by its step offset from the centre. */
+export interface WindowSlotSource {
+  offsetSteps: number;
+  src: string | null;
+}
+
 export interface PixiBackgroundController {
   /** Swap the background to `src`. A null src is a transient state — keep the current layer. */
   setSource(src: string | null, mediaType: BackgroundMediaType): Promise<void>;
@@ -163,8 +169,22 @@ export interface PixiBackgroundController {
   setDragProgress(progress: number): void;
   /** End the drag: freeze the overlay, then dispose it once the resting layer settles. */
   releaseDrag(): void;
+  /**
+   * Reconcile the lockstep cover-window sprite ring to `slots` (image-only). Sprites
+   * are keyed by COVER SRC, so a cover that stays in the window keeps its sprite +
+   * texture (only its offset changes) — a recenter never reassigns a visible sprite's
+   * texture and only ONE sprite recycles (off-edge disposes, new edge loads). Never
+   * rebuilds the app. Activates window mode (the single-sprite resting `setSource` is
+   * suppressed until `clearWindow`). A null slot src is skipped (empty edge).
+   */
+  setWindow(slots: WindowSlotSource[]): Promise<void>;
+  /** Per-frame drag offset (cover widths): re-runs the centred cross-fade so the cover
+   *  being left fades out and the one arriving fades in. No horizontal translation. */
+  setWindowOffset(steps: number): void;
+  /** Leave window mode and dispose the ring (the resting `setSource` path resumes). */
+  clearWindow(): void;
   resize(): void;
-  /** Rebuild the app and re-apply the last source after a GPU context/device loss. */
+  /** Rebuild the app and re-apply the last source (or window) after a GPU loss. */
   recover(): Promise<void>;
   destroy(): void;
   readonly stats: { readonly appInits: number; readonly textureSwaps: number };
@@ -236,6 +256,25 @@ export function createPixiBackgroundController(
   let dragAwaitingSettle = false;
   let dragLoadSeq = 0;
   let dragDisposeTimer: ReturnType<typeof setTimeout> | null = null;
+
+  // Cover-window mode (lockstep with the foreground coverflow): a small RING of
+  // sprites keyed by COVER SRC — NOT by offset. The sprite that holds a given cover
+  // KEEPS holding it across a recenter (its offset/alpha change, its texture never
+  // does), so a continuous drag never reassigns a visible sprite's texture = no
+  // per-crossing flicker. On a recenter only ONE sprite recycles: the cover scrolled
+  // off the far edge disposes, the new near-edge cover loads. Each sprite's alpha is
+  // a continuous fn of its screen position (the cover being left fades out, the one
+  // arriving fades in), so the cross-fade is seamless. `appInits` stays 1 (we never
+  // rebuild the app). While active the single-sprite resting `setSource` is suppressed
+  // (the window owns the visible covers); video / streamed covers never enter window
+  // mode (the caller falls back to setSource), so this stays image-only.
+  let windowActive = false;
+  let windowOffsetSteps = 0;
+  let lastWindowSlots: WindowSlotSource[] | null = null;
+  let windowLoadSeq = 0;
+  const windowSprites = new Map<string, PixiSpriteLike>();
+  const windowMedia = new Map<string, CurrentMedia>();
+  const windowSrcOffset = new Map<string, number>();
 
   function disposeSprite(target: PixiSpriteLike | null): void {
     if (!target) return;
@@ -401,6 +440,235 @@ export function createPixiBackgroundController(
     coverSprite(target, media.width, media.height, renderW, renderH);
   }
 
+  // ---- Lockstep cover window (foreground coverflow's background twin) -------------
+
+  function renderSize(): { renderW: number; renderH: number } {
+    const cssW = Math.max(1, Math.round(host.clientWidth || 1));
+    const cssH = Math.max(1, Math.round(host.clientHeight || 1));
+    const block = Math.max(3, Math.min(48, Math.round(pixelSize)));
+    const dpr = Math.min((typeof window !== "undefined" && window.devicePixelRatio) || 1, 2);
+    const renderW =
+      effect === "pixel" ? Math.max(1, Math.round(cssW / block)) : Math.round(cssW * dpr);
+    const renderH =
+      effect === "pixel" ? Math.max(1, Math.round(cssH / block)) : Math.round(cssH * dpr);
+    return { renderW, renderH };
+  }
+
+  // The ambient background stays CENTRED — it CROSS-FADES between neighbour covers as
+  // the drag offset changes; it does NOT slide horizontally (the coverflow motion is
+  // the foreground's job). Each sprite's alpha is `1 - |screenX|` of its own cover:
+  // the cover being left (screenX → ±1) fades to 0 while the one arriving (screenX → 0)
+  // fades to 1. Because a sprite is bound to its COVER (not an offset), this ramp is
+  // continuous across a recenter — the cover's screenX is the same value either side
+  // of the relabel — so there's no jump / flicker at the crossing.
+  function windowOpacity(screenXSteps: number): number {
+    return Math.max(0, Math.min(1, 1 - Math.abs(screenXSteps)));
+  }
+
+  function centerWindowSprite(
+    target: PixiSpriteLike,
+    media: CurrentMedia,
+    renderW: number,
+    renderH: number,
+  ): void {
+    const sourceW = Math.max(1, media.width);
+    const sourceH = Math.max(1, media.height);
+    const scale = Math.max(renderW / sourceW, renderH / sourceH);
+    const drawW = sourceW * scale;
+    const drawH = sourceH * scale;
+    target.scale.set(scale);
+    target.position.set((renderW - drawW) / 2, (renderH - drawH) / 2);
+  }
+
+  function applyWindowLayout(): void {
+    if (!app) return;
+    const { renderW, renderH } = renderSize();
+    for (const [src, sprite] of windowSprites) {
+      const media = windowMedia.get(src);
+      const offset = windowSrcOffset.get(src);
+      if (!media || offset === undefined) {
+        sprite.alpha = 0;
+        continue;
+      }
+      centerWindowSprite(sprite, media, renderW, renderH);
+      sprite.alpha = windowOpacity(offset + windowOffsetSteps);
+    }
+    app.render();
+  }
+
+  // Stack the window sprites by SIGNED offset — smaller offset on top (−2 topmost …
+  // +2 bottommost). With the centred cross-fade this makes the dissolve correct in
+  // BOTH directions: dragging next, the centre (0) sits above the incoming (+1) and
+  // fades out to reveal it; dragging prev, the incoming (−1) sits above (0) and fades
+  // in. (Pixi z = child order, so we re-add from highest offset to lowest.) Only the
+  // window sprites move; the resting sprite stays underneath them all.
+  function restackWindow(): void {
+    if (!layerRoot) return;
+    const ordered = [...windowSrcOffset.entries()]
+      .filter(([src]) => windowSprites.has(src))
+      .sort((a, b) => b[1] - a[1]);
+    for (const [src] of ordered) {
+      const s = windowSprites.get(src);
+      if (s) layerRoot.addChild(s); // re-append → lowest offset ends up topmost
+    }
+  }
+
+  // Dispose the sprite + media for a cover that recycled off the window edge.
+  function disposeWindowSrc(src: string): void {
+    const sprite = windowSprites.get(src);
+    if (sprite) {
+      layerRoot?.removeChild(sprite);
+      (sprite.texture as PixiTextureLike | undefined)?.destroy?.(true);
+      sprite.destroy?.({ children: false, texture: false });
+    }
+    const media = windowMedia.get(src);
+    if (media) disposeMedia(media);
+    windowSprites.delete(src);
+    windowMedia.delete(src);
+    windowSrcOffset.delete(src);
+  }
+
+  // Load a cover into a NEW window sprite (the recycled edge). The offset is reserved
+  // synchronously so a recenter mid-load knows the cover is wanted; if it's dropped
+  // before the load lands, the media is released.
+  async function loadWindowSrc(src: string, offset: number, token: number): Promise<void> {
+    if (windowSprites.has(src)) {
+      windowSrcOffset.set(src, offset);
+      return;
+    }
+    windowSrcOffset.set(src, offset);
+    try {
+      await ensureApp();
+    } catch {
+      return;
+    }
+    if (destroyed || token !== windowLoadSeq || !app || !pixi || !layerRoot) return;
+    if (windowSprites.has(src)) return; // a concurrent load won the race
+    if (!windowSrcOffset.has(src)) return; // dropped before we started loading
+    let media: LoadedBackgroundMedia;
+    try {
+      media = await deps.loadMedia(pixi, src, "image", { signal: new AbortController().signal });
+    } catch {
+      return;
+    }
+    if (destroyed || token !== windowLoadSeq || !pixi || !layerRoot || !windowSrcOffset.has(src)) {
+      media.unload?.();
+      return;
+    }
+    const texture =
+      (media.texture as PixiTextureLike | undefined) ?? pixi.Texture.from(media.element, true);
+    texture.source.scaleMode = "nearest";
+    const sprite = new pixi.Sprite(texture);
+    sprite.alpha = 0;
+    layerRoot.addChild(sprite);
+    windowSprites.set(src, sprite);
+    windowMedia.set(src, {
+      type: "image",
+      element: media.element,
+      width: media.width,
+      height: media.height,
+      unload: media.unload,
+    });
+    restackWindow();
+    applyWindowLayout();
+  }
+
+  async function setWindow(slots: WindowSlotSource[]): Promise<void> {
+    if (destroyed) return;
+    windowActive = true;
+    lastWindowSlots = slots;
+    const token = ++windowLoadSeq;
+    // src → nearest offset (a short looping queue can repeat a cover; the occurrence
+    // closest to centre owns the sprite — the far repeats are alpha-0 anyway).
+    const desired = new Map<string, number>();
+    for (const slot of slots) {
+      if (!slot.src) continue;
+      const existing = desired.get(slot.src);
+      if (existing === undefined || Math.abs(slot.offsetSteps) < Math.abs(existing)) {
+        desired.set(slot.src, slot.offsetSteps);
+      }
+    }
+    // Recycle covers that scrolled off the window edge.
+    for (const src of [...windowSprites.keys()]) {
+      if (!desired.has(src)) disposeWindowSrc(src);
+    }
+    for (const src of [...windowSrcOffset.keys()]) {
+      if (!desired.has(src)) windowSrcOffset.delete(src);
+    }
+    try {
+      await ensureApp();
+    } catch (error) {
+      deps.onError?.(error);
+      return;
+    }
+    if (destroyed || token !== windowLoadSeq || !app || !pixi || !layerRoot) return;
+    for (const [src, offset] of desired) {
+      if (windowSprites.has(src)) {
+        windowSrcOffset.set(src, offset); // existing cover — keep its texture, retarget
+      } else {
+        void loadWindowSrc(src, offset, token);
+      }
+    }
+    restackWindow();
+    applyWindowLayout();
+  }
+
+  function setWindowOffset(steps: number): void {
+    windowOffsetSteps = steps;
+    applyWindowLayout();
+  }
+
+  function clearWindow(): void {
+    const wasActive = windowActive;
+    windowActive = false;
+    windowOffsetSteps = 0;
+    lastWindowSlots = null;
+    windowLoadSeq += 1;
+    // Hand the CENTRED window cover off to the resting sprite BEFORE disposing the
+    // window. The resting sprite still holds the PRE-drag cover (its `setSource` was
+    // gated while the window owned the covers); disposing the window without this
+    // would reveal that stale cover for a frame until `setSource` reloads — the
+    // reported "commit 后闪回上一张". Transferring the centre texture makes the resting
+    // layer already show the committed cover, so the hand-off is seamless.
+    const centreEntry = [...windowSrcOffset.entries()].find(([, o]) => o === 0);
+    const centreSrc = centreEntry?.[0];
+    const centreSprite = centreSrc ? windowSprites.get(centreSrc) : undefined;
+    const centreMedia = centreSrc ? windowMedia.get(centreSrc) : undefined;
+    if (wasActive && centreSrc && centreSprite && centreMedia && pixi && layerRoot) {
+      const centreTexture = centreSprite.texture as PixiTextureLike;
+      if (sprite) {
+        const oldTexture = sprite.texture as PixiTextureLike | undefined;
+        sprite.texture = centreTexture;
+        sprite.alpha = 1;
+        if (oldTexture && oldTexture !== centreTexture) oldTexture.destroy(true);
+      } else {
+        sprite = new pixi.Sprite(centreTexture);
+        sprite.alpha = 1;
+        layerRoot.addChild(sprite);
+      }
+      if (currentMedia) disposeMedia(currentMedia);
+      currentMedia = centreMedia;
+      // The centre sprite's texture + media now belong to the resting sprite —
+      // detach the window sprite WITHOUT destroying them.
+      layerRoot.removeChild(centreSprite);
+      centreSprite.destroy?.({ children: false, texture: false });
+      windowSprites.delete(centreSrc);
+      windowMedia.delete(centreSrc);
+      windowSrcOffset.delete(centreSrc);
+      resize(); // re-cover the resting sprite for the adopted media's dimensions
+    }
+    for (const src of [...windowSprites.keys()]) disposeWindowSrc(src);
+    windowSrcOffset.clear();
+    app?.render();
+    // Refresh the resting layer to the committed cover's OWN background source (the
+    // adopted coverflow texture bridges the gap; this swaps to the proper bg cover —
+    // the same image, so it's invisible). For a coverless centre this is the only
+    // resume path.
+    if (wasActive && !destroyed && lastSource) {
+      void setSource(lastSource.src, lastSource.mediaType);
+    }
+  }
+
   async function buildApp(): Promise<void> {
     const startedAt = nowMs();
     const module = await deps.loadPixi();
@@ -492,6 +760,14 @@ export function createPixiBackgroundController(
   }
 
   function resize(): number {
+    // In pure window mode there is no resting `sprite`; still resize + relayout the
+    // window ring.
+    if (app && windowActive && (!sprite || !currentMedia)) {
+      const { renderW, renderH } = renderSize();
+      app.renderer.resize(renderW, renderH);
+      applyWindowLayout();
+      return 0;
+    }
     if (!app || !sprite || !currentMedia) return 0;
     const startedAt = nowMs();
     const cssW = Math.max(1, Math.round(host.clientWidth || 1));
@@ -504,6 +780,7 @@ export function createPixiBackgroundController(
       effect === "pixel" ? Math.max(1, Math.round(cssH / block)) : Math.round(cssH * dpr);
     app.renderer.resize(renderW, renderH);
     coverSprite(sprite, currentMedia.width, currentMedia.height, renderW, renderH);
+    if (windowActive) applyWindowLayout();
     // Keep the outgoing crossfade sprite covered too, so a resize mid-fade doesn't skew it.
     if (prevSprite && prevMedia) {
       coverSprite(prevSprite, prevMedia.width, prevMedia.height, renderW, renderH);
@@ -531,6 +808,14 @@ export function createPixiBackgroundController(
 
   async function setSource(src: string | null, mediaType: BackgroundMediaType): Promise<void> {
     if (destroyed) return;
+    // While the lockstep window owns the visible covers, the single resting sprite
+    // must not re-point — a mid-drag store commit re-pointing it was the old "闪黑".
+    // Keep `lastSource` current so recover() / clearWindow() can restore the resting
+    // layer afterwards, but don't run the swap.
+    if (windowActive) {
+      if (src) lastSource = { src, mediaType };
+      return;
+    }
     pendingLoadAbort?.abort();
     pendingLoadAbort = null;
     const token = ++seq;
@@ -726,6 +1011,8 @@ export function createPixiBackgroundController(
     recoverAttempts += 1;
     bgPixiLog.warn("recover", { attempt: recoverAttempts, backend: preference });
     const source = lastSource;
+    // Snapshot the window so it can be rebuilt after the context is restored.
+    const windowSlots = windowActive ? lastWindowSlots : null;
     // The lost context took the textures with it — tear the app down and rebuild.
     currentVideoTeardown?.();
     currentVideoTeardown = undefined;
@@ -734,6 +1021,12 @@ export function createPixiBackgroundController(
       cancelCrossfade = null;
     }
     disposeDragSprite();
+    // The lost context already invalidated the window textures/sprites; drop the
+    // bookkeeping (don't destroy — the GPU objects are gone) so setWindow rebuilds.
+    windowSprites.clear();
+    windowMedia.clear();
+    windowSrcOffset.clear();
+    windowLoadSeq += 1;
     if (prevMedia) disposeMedia(prevMedia);
     prevSprite = null;
     prevMedia = null;
@@ -756,7 +1049,13 @@ export function createPixiBackgroundController(
     filter = null;
     pixi = null;
     appPromise = null;
-    if (source) await setSource(source.src, source.mediaType);
+    if (windowSlots) {
+      windowActive = false; // let setWindow re-arm it cleanly on the rebuilt app
+      await setWindow(windowSlots);
+      setWindowOffset(windowOffsetSteps);
+    } else if (source) {
+      await setSource(source.src, source.mediaType);
+    }
   }
 
   function destroy(): void {
@@ -768,6 +1067,7 @@ export function createPixiBackgroundController(
       cancelCrossfade = null;
     }
     disposeDragSprite();
+    clearWindow();
     if (prevMedia) disposeMedia(prevMedia);
     prevSprite = null;
     prevMedia = null;
@@ -795,6 +1095,9 @@ export function createPixiBackgroundController(
     setDragCover,
     setDragProgress,
     releaseDrag,
+    setWindow,
+    setWindowOffset,
+    clearWindow,
     resize,
     recover,
     destroy,

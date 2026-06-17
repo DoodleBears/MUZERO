@@ -664,3 +664,80 @@ describe("createPixiBackgroundController", () => {
     controller.destroy();
   });
 });
+
+// Window mode loads textures fire-and-forget; flush the microtask/timer queue.
+const flush = () => new Promise((r) => setTimeout(r, 0));
+
+describe("createPixiBackgroundController — lockstep cover window", () => {
+  it("loads one texture per window src without rebuilding the app", async () => {
+    const { module, controller } = makeController();
+    await controller.setWindow([
+      { offsetSteps: -1, src: "a.png" },
+      { offsetSteps: 0, src: "b.png" },
+      { offsetSteps: 1, src: "c.png" },
+    ]);
+    await flush();
+    expect(module.apps.length).toBe(1);
+    expect(controller.stats.appInits).toBe(1);
+    controller.destroy();
+  });
+
+  it("recenter reuses cached textures — no reload for an unchanged src (no churn)", async () => {
+    const loaded: string[] = [];
+    const { controller } = makeController({
+      loadMedia: async (src) => {
+        loaded.push(src);
+        return {
+          type: "image",
+          element: document.createElement("img"),
+          width: 100,
+          height: 100,
+          unload: vi.fn(),
+        };
+      },
+    });
+    await controller.setWindow([
+      { offsetSteps: -1, src: "a.png" },
+      { offsetSteps: 0, src: "b.png" },
+      { offsetSteps: 1, src: "c.png" },
+    ]);
+    await flush();
+    expect(loaded.sort()).toEqual(["a.png", "b.png", "c.png"]);
+    // Recenter forward: b,c slide inward (already cached), only the new edge `d` loads.
+    await controller.setWindow([
+      { offsetSteps: -1, src: "b.png" },
+      { offsetSteps: 0, src: "c.png" },
+      { offsetSteps: 1, src: "d.png" },
+    ]);
+    await flush();
+    expect(loaded).toEqual(["a.png", "b.png", "c.png", "d.png"]);
+    expect(controller.stats.appInits).toBe(1);
+    controller.destroy();
+  });
+
+  it("suppresses the resting setSource swap while the window is active", async () => {
+    const { controller } = makeController();
+    await controller.setWindow([{ offsetSteps: 0, src: "b.png" }]);
+    await flush();
+    const swapsBefore = controller.stats.textureSwaps;
+    await controller.setSource("resting.png", "image"); // gated — window owns the cover
+    expect(controller.stats.textureSwaps).toBe(swapsBefore);
+    controller.destroy();
+  });
+
+  it("clearWindow tears the window down and resumes the resting layer", async () => {
+    const { controller } = makeController();
+    await controller.setWindow([{ offsetSteps: 0, src: "b.png" }]);
+    await flush();
+    // A gated setSource recorded `b.png` as the last source; clearWindow re-applies it.
+    await controller.setSource("b.png", "image");
+    controller.clearWindow();
+    await flush();
+    expect(controller.stats.appInits).toBe(1);
+    // The resting layer now paints again (a fresh setSource is no longer gated).
+    const before = controller.stats.textureSwaps;
+    await controller.setSource("c.png", "image");
+    expect(controller.stats.textureSwaps).toBe(before + 1);
+    controller.destroy();
+  });
+});

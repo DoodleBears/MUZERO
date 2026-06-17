@@ -2,10 +2,13 @@ import { describe, expect, it } from "vitest";
 import {
   applyPagerSettle,
   assignPagerSlots,
+  coverflowTransform,
   type PagerSlot,
   pagerTranslate,
+  pendingRecenterSteps,
   resolvePagerSettle,
   slotRestOffsetPx,
+  slotScreenXSteps,
 } from "./cover-pager";
 
 const byKey = (slots: PagerSlot[]) => Object.fromEntries(slots.map((s) => [s.slotKey, s]));
@@ -102,5 +105,54 @@ describe("applyPagerSettle", () => {
 
   it("is a no-op for an empty queue", () => {
     expect(applyPagerSettle(0, 1, 0)).toBe(0);
+  });
+});
+
+describe("slotScreenXSteps", () => {
+  it("shifts a slot's rest offset by the live drag offset", () => {
+    expect(slotScreenXSteps(0, 0)).toBe(0);
+    expect(slotScreenXSteps(1, -0.5)).toBe(0.5);
+    expect(slotScreenXSteps(-1, -0.5)).toBe(-1.5);
+  });
+});
+
+describe("coverflowTransform", () => {
+  const opts = { tilt: 34, sideScale: 0.86 };
+
+  it("is flat / full-scale / opaque at the centre", () => {
+    expect(coverflowTransform(0, opts)).toEqual({ rotateY: 0, scale: 1, opacity: 1 });
+  });
+
+  it("tilts/scales/fades symmetrically one step out", () => {
+    expect(coverflowTransform(1, opts)).toEqual({ rotateY: -34, scale: 0.86, opacity: 0 });
+    expect(coverflowTransform(-1, opts)).toEqual({ rotateY: 34, scale: 0.86, opacity: 0 });
+  });
+
+  it("keeps side covers readable mid-slide (0.6 opacity knee)", () => {
+    expect(coverflowTransform(0.55, opts).opacity).toBeCloseTo(0.6, 5);
+    expect(coverflowTransform(-0.55, opts).opacity).toBeCloseTo(0.6, 5);
+  });
+
+  it("clamps beyond ±1 step", () => {
+    expect(coverflowTransform(2, opts)).toEqual({ rotateY: -34, scale: 0.86, opacity: 0 });
+    expect(coverflowTransform(-3, opts)).toEqual({ rotateY: 34, scale: 0.86, opacity: 0 });
+  });
+});
+
+describe("pendingRecenterSteps", () => {
+  it("is 0 until a full step is dragged", () => {
+    expect(pendingRecenterSteps(0)).toBe(0);
+    expect(pendingRecenterSteps(0.99)).toBe(0);
+    expect(pendingRecenterSteps(-0.99)).toBe(0);
+  });
+
+  it("consumes one step past ±1, keeping the residual implicit", () => {
+    expect(pendingRecenterSteps(1)).toBe(1);
+    expect(pendingRecenterSteps(-1.4)).toBe(-1);
+  });
+
+  it("consumes multiple steps for a fast multi-step fling", () => {
+    expect(pendingRecenterSteps(2.6)).toBe(2);
+    expect(pendingRecenterSteps(-3.1)).toBe(-3);
   });
 });

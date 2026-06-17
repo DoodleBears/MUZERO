@@ -77,3 +77,71 @@ export function applyPagerSettle(centerIndex: number, delta: number, queueLength
   if (queueLength <= 0) return centerIndex;
   return Math.max(0, Math.min(queueLength - 1, centerIndex + delta));
 }
+
+/**
+ * Continuous on-screen position of a slot, in step units. `offset` is the live
+ * fractional drag (0 = centered; negative = dragging toward next; positive =
+ * toward prev — the existing sign convention). A slot at `offsetSteps` sits at
+ * `offsetSteps + offset`: at the rest center its screenX is 0; while dragging the
+ * whole window shifts by `offset` so each slot keeps its relative spacing.
+ */
+export function slotScreenXSteps(offsetSteps: number, offset: number): number {
+  return offsetSteps + offset;
+}
+
+export interface CoverflowTransform {
+  rotateY: number;
+  scale: number;
+  opacity: number;
+}
+
+/**
+ * Coverflow 3D transform for a slot at continuous position `screenXSteps` (step
+ * units, from {@link slotScreenXSteps}). Each cover pivots around its own centre:
+ * the centred cover (0) is flat / full-scale / opaque; a cover one step away
+ * (±1) is tilted ∓`tilt`°, scaled to `sideScale`, and faded out. Mirrors the
+ * piecewise ramps the legacy `useCoverflowCard` used, but as a pure function so
+ * it's unit-tested and shared by the strip slots. Beyond ±1 step the values
+ * clamp (rotation/scale hold, opacity stays 0).
+ */
+export function coverflowTransform(
+  screenXSteps: number,
+  opts: { tilt: number; sideScale: number },
+): CoverflowTransform {
+  const { tilt, sideScale } = opts;
+  return {
+    rotateY: piecewise(screenXSteps, [-1, 0, 1], [tilt, 0, -tilt]),
+    scale: piecewise(screenXSteps, [-1, 0, 1], [sideScale, 1, sideScale]),
+    // Reach 0 right at ±1 step so an outgoing cover is fully faded by the time
+    // the window parks one step over; the 0.6 knees keep side covers readable.
+    opacity: piecewise(screenXSteps, [-1, -0.55, 0, 0.55, 1], [0, 0.6, 1, 0.6, 0]),
+  };
+}
+
+/**
+ * Integer step delta the window should recenter by, given the live continuous
+ * `offset`. Returns the truncated-toward-zero integer part (0 while `|offset| < 1`,
+ * ∓1 once a full step is dragged, ∓N for a fast multi-step fling in one frame).
+ * The caller recenters by this delta and subtracts it from `offset`, so the
+ * residual fraction continues the drag seamlessly (no snap).
+ */
+export function pendingRecenterSteps(offset: number): number {
+  // `|| 0` normalizes the `-0` Math.trunc returns for a small negative offset.
+  return Math.trunc(offset) || 0;
+}
+
+/** Clamped piecewise-linear interpolation over ascending `inX` → `outY` knots. */
+function piecewise(x: number, inX: readonly number[], outY: readonly number[]): number {
+  if (x <= inX[0]) return outY[0];
+  const last = inX.length - 1;
+  if (x >= inX[last]) return outY[last];
+  for (let i = 0; i < last; i += 1) {
+    const x0 = inX[i];
+    const x1 = inX[i + 1];
+    if (x >= x0 && x <= x1) {
+      const t = x1 === x0 ? 0 : (x - x0) / (x1 - x0);
+      return outY[i] + (outY[i + 1] - outY[i]) * t;
+    }
+  }
+  return outY[last];
+}

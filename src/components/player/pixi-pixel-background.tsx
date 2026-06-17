@@ -7,10 +7,10 @@ import {
 import { type ImageBitmapBlobSource, loadImageBitmapSource } from "@/lib/background-texture";
 import { hasWebGpuSupport, resolveGpuBackend, resolveGpuPower } from "@/lib/gpu-backend";
 import { createDiagnosticLogger, log } from "@/lib/logger";
-import { transitionProgress, useNowPlayingTransition } from "@/lib/now-playing-transition";
 import { getAppFetch } from "@/lib/platform";
 import { cn } from "@/lib/utils";
 import { usePlayerStore } from "@/stores/player-store";
+import { coverWindowOffset, getCoverWindow, subscribeWindow } from "./cover-window-store";
 import {
   type AttachVideo,
   createPixiBackgroundController,
@@ -146,51 +146,35 @@ export function PixiPixelBackground({
     void controller.setSource(src, mediaType);
   }, [controller, src, mediaType]);
 
-  // Drag-follow: while a Now Playing drag transition is active, mount the incoming
-  // cover as the controller's drag overlay (topmost child of the resident filtered
-  // container) and drive its opacity straight off the shared `transitionProgress` —
-  // the SAME driver 均衡 uses. So the IMAGE crossfades WITH the drag under the
-  // resident filter (the filter itself never crossfades), and at 100% drag the
-  // incoming cover is already shown, so releasing changes nothing. Wired imperatively
-  // (store.subscribe + MotionValue.on, off the React render path) so the post-release
-  // progress reset can't drop the overlay before it's frozen. Image backgrounds only.
+  // Lockstep cover window: mirror the foreground coverflow. While the shared cover
+  // window is active, reconcile the controller's sprite RING to the window slots and
+  // drive their translate off the shared `coverWindowOffset` MotionValue (off the
+  // React render path) — so the background covers slide WITH the foreground, neighbour
+  // for neighbour, through a continuous drag. Image backgrounds only; video / non-image
+  // covers never enter window mode and fall back to the single-sprite `setSource` path.
   useEffect(() => {
     if (!controller || mediaType !== "image") return;
-    let active = useNowPlayingTransition.getState().active;
-    let lastToCover: string | null = null;
-    const applyProgress = (p: number) => {
-      if (active) controller.setDragProgress(p);
-    };
-    // Load the overlay cover for the current drag TARGET. Re-runs whenever the target
-    // changes — including a direction REVERSAL mid-drag (drag toward next, then back
-    // past centre toward prev): the foreground re-`begin`s the transition with the new
-    // neighbour, so the overlay must follow it instead of staying on the first cover.
-    const syncCover = (toCoverUrl: string | null) => {
-      if (toCoverUrl === lastToCover) return;
-      lastToCover = toCoverUrl;
-      void controller.setDragCover(toCoverUrl, "image");
-    };
-    if (active) {
-      syncCover(useNowPlayingTransition.getState().toCoverUrl);
-      applyProgress(transitionProgress.get());
-    }
-    const unsubProgress = transitionProgress.on("change", applyProgress);
-    const unsubStore = useNowPlayingTransition.subscribe((s) => {
-      if (s.active) {
-        if (!active) {
-          active = true;
-          applyProgress(transitionProgress.get());
-        }
-        syncCover(s.toCoverUrl); // initial AND on direction reversal
-      } else if (active) {
-        active = false;
-        lastToCover = null;
-        controller.releaseDrag();
+    const syncWindow = () => {
+      const w = getCoverWindow();
+      if (w.active && w.slots.length > 0) {
+        void controller.setWindow(
+          w.slots.map((slot) => ({ offsetSteps: slot.offsetSteps, src: slot.coverUrl })),
+        );
+      } else {
+        controller.clearWindow();
       }
-    });
+    };
+    const applyOffset = (steps: number) => {
+      if (getCoverWindow().active) controller.setWindowOffset(steps);
+    };
+    syncWindow();
+    applyOffset(coverWindowOffset.get());
+    const unsubWindow = subscribeWindow(syncWindow);
+    const unsubOffset = coverWindowOffset.on("change", applyOffset);
     return () => {
-      unsubProgress();
-      unsubStore();
+      unsubWindow();
+      unsubOffset();
+      controller.clearWindow();
     };
   }, [controller, mediaType]);
 
