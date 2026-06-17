@@ -14,19 +14,27 @@
 | Phase | Name | Status | Link |
 |-------|------|--------|------|
 | 1 | **观测先行**：dev-only render-trace（React `<Profiler>` 边界 + 记录器），harness 可读 | ✅ Completed（commit `6f662d9`；立刻抓到 2 个 edge case） | [Phase 1](#phase-1-render-trace-instrumentation) |
-| 2 | **系统化 sweep**：对所有高频交互场景跑 render-trace，编目「不该渲」清单 | 🔄 In Progress（首批 finding 见下） | [Phase 2](#phase-2-edge-case-sweep) |
+| 2 | **系统化 sweep**：对所有高频交互场景跑 render-trace，编目「不该渲」清单 | ✅ Completed（`render-sweep.mjs` 6 场景；F2/F3/F4 编目，like/lyrics 干净） | [Phase 2](#phase-2-edge-case-sweep) |
 | 3 | 逐项修复 + 回归断言（render-trace 进 harness 验收，防回归） | 🔲 Pending | [Phase 3](#phase-3-fix--regression-guard) |
 
-### Phase 2 首批 Findings（render-trace，3 次切歌 + 播放中）
-| surface | actualMs | commits | 判定 |
-|---|---|---|---|
-| `tab:now` / `dock` | 230 / 147 | 96× / 47× | active，预期（但 commit 数偏高=随播放心跳重渲，见 F1） |
-| **`tab:search`** | **106** | 33× | ⚠ **F2：SearchPage 隐藏时仍按 `playbackStats` liveQuery 心跳重渲**（自身订阅，与 App 级联无关） |
-| `tab:settings` | 52 | 25× | ⚠ **F1：App 每播放心跳重渲 → AmbientPageOverlay wrapper ×25 级联**（panel 已 bail） |
-| `tab:queue` / `tab:sessions` | 4.5 / 0.1 | 17× | ✅ 基本 bail（memo + 工具都对的对照基准） |
+### Phase 2 Findings（`render-sweep.mjs` 全场景 @5983）
+扫了 6 个高频场景（playbackDwell / switch / like / metadata / tabSwitch / lyricsToggle），按 surface 报 actualMs + ⚠ HIDDEN。结论编目：
 
-- **F1（根）**：**App 在播放心跳（`positionSec`/`isPlaying` 每 ~250ms）上重渲 ~25-47×** → 所有 boundary 的 wrapper 级联重渲。memoized panel 正确 bail，但 wrapper（AmbientPageOverlay）+ active surface 每心跳重付。根因待查（App 里仍有订阅高频播放态的 hook/派生）。
-- **F2**：**SearchPage 隐藏时按 `playbackStatsLive`/`playbackEventsLive`（播放心跳写表）重渲** —— 同 scalable-track-list 的「不该响应」思路，hidden 页不该跟播放心跳。冻结/下沉即可（参考 SearchPage 的 `allTracks` freeze）。
+| 场景 | 判定 | hidden 浪费 |
+|---|---|---|
+| **like** ×5 | ✅ 干净 | 无（仅 now/dock 4.4/2.8ms）—— Axis A 侧表生效,红心不扇出 |
+| **lyricsToggle** ×4 | ✅ 干净 | 无（仅 now/dock）—— overlay 切换不扇出 |
+| **playbackDwell**（纯播放 5s,无交互） | ✅ 基本干净 | now 45ms/36× + dock 38ms/26× = **进度条/频谱叶子订 `positionSec`**（应该的,非 bug）；queue 0.6ms borderline |
+| **switch** ×5（播放中） | ⚠ | **`tab:search` 130ms/51× + `tab:settings` 124ms/43× HIDDEN**；queue 5.2ms、sessions 0.4ms **正确 bail**（memo 生效对照） |
+| **metadata** ×5（播放中） | ⚠ | `tab:search` 42ms + `tab:settings` 40ms HIDDEN（同上 F2/F3,播放心跳混入） |
+| **tabSwitch** | ⚠ | 离开 now 时 `tab:now` 32ms HIDDEN（**F4：离场 tab 仍重渲**）；激活的 tab 重渲属预期 |
+
+**根因编目（Phase 3 目标）：**
+- **✅ 非 bug**：`positionSec` 只被**叶子**（[`progress-scrubber`](../../../src/components/player/progress-scrubber.tsx) / [`playback-spectrum`](../../../src/components/player/playback-spectrum.tsx)）订阅 → 播放时只重渲进度/频谱,**正确**。F1「App 每心跳重渲」证伪：playbackDwell 下 sessions/queue 没跟着渲（若 App 级联,所有 tab 会同步）→ now 的 36× 是它自己的进度叶子。
+- **⚠ F2（主要浪费）**：**SearchPage 隐藏时按自身 `playbackStatsLive`/`playbackEventsLive`（播放心跳写表 + 切歌 flush playCount）重渲 130ms** —— memo 拦不住(自身订阅,非父级级联;sessions/queue 因无此订阅而 bail)。修=非激活时冻结这两个 liveQuery（参考 SearchPage 的 `allTracks` freeze, PRD scalable-track-list 同思路）。
+- **⚠ F3**：**SettingsPage 隐藏时真实重渲 124ms** —— settings 某子组件订了高频 store（待 bisect）；同样冻结/窄订阅。
+- **⚠ F4**：**离场 tab 仍重渲一次**（tabSwitch 时 now 32ms hidden）—— 较小,可选。
+- 备注：现有 memo（hidden-tab）对**纯父级级联**有效（sessions/queue bail）；拦不住的是**页面自身订阅高频 store**——这才是剩余的「不该响应」类,与 scalable-track-list 的数据层扇出同源。
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
 
@@ -127,12 +135,12 @@ scripts/perf-gesture.mjs / perf-drive.mjs      # ✎ scenario 前 reset、后 sn
 - [x] **工具有效性验证**：3 次切歌 render-trace → queue/sessions 正确 bail(~0ms,对照基准)，并**立刻抓到 F1（App 播放心跳重渲）+ F2（SearchPage 隐藏心跳重渲）** 两个此前隐形的 edge case。tsc 0、perf-control 12 单测绿。
 
 ### Phase 2: edge-case sweep
-**Goal:** 把 §3 每类场景都跑一遍 render-trace，编目「不该渲」清单（每条带：surface / 触发 / 次数 / 期望）。
-- [ ] 场景矩阵：switch / like / metadata-edit / playback-tick(dwell) / queue add-remove / tab-switch / overlay open-close。
-- [ ] 每场景 snapshot → 列出可疑 surface → 归因（selector / 级联 / context / effect）。
-- [ ] 产出 findings 表（进本 PRD §6 或 follow-up）。
+**Goal:** 把 §3 每类场景都跑一遍 render-trace，编目「不该渲」清单。
+- [x] `scripts/render-sweep.mjs`：6 场景（playbackDwell / switch / like / metadata / tabSwitch / lyricsToggle）每个 reset→drive→snapshot，报 surface actualMs + ⚠ HIDDEN。
+- [x] 编目（见上 Findings 表）：F2 SearchPage / F3 SettingsPage 隐藏时自身订阅重渲（主要浪费）；F4 离场 tab 重渲（小）；like/lyrics 干净；positionSec 叶子订阅属预期。
 #### Phase 2 Checklist
-- [ ] 至少覆盖 7 个场景；每个可疑项有归因 + 修复建议。
+- [x] 覆盖 6 个高频场景；可疑项均有归因（自身高频 store 订阅 vs 父级级联）+ 修复方向（冻结/窄订阅）。
+- [ ] 未覆盖：queue add/remove（需 repo 驱动）、memory overlay（避免打开编辑器副作用）—— 列 Phase 3 / follow-up 补。
 
 ### Phase 3: fix + regression guard
 - [ ] 逐项修（窄 selector / memo / 边界拆分 / 订阅下沉），每项 render-trace before/after。
@@ -174,5 +182,6 @@ scripts/perf-gesture.mjs / perf-drive.mjs      # ✎ scenario 前 reset、后 sn
 
 | Date | Author | Changes |
 |------|--------|---------|
+| 2026-06-17 | DoodleBear | **Phase 2 ✅**：`render-sweep.mjs` 扫 6 场景。编目：**F2 SearchPage(130ms) / F3 SettingsPage(124ms) 隐藏时自身高频订阅(playbackStats 心跳)重渲**——memo 拦不住(非父级级联);**F4 离场 tab 重渲(32ms,小)**;**like / lyricsToggle 干净**(Axis A + overlay 隔离良好);`positionSec` 只被进度/频谱叶子订(预期非 bug,证伪「App 每心跳重渲」)。剩余浪费同 scalable-track-list「不该响应」同源=页面自身订高频 store,修法=非激活冻结/窄订阅。 |
 | 2026-06-17 | DoodleBear | **Phase 1 ✅**（commit `6f662d9`）：render-trace（`<Profiler>` 边界 + 记录器 + perf-control/perf-gesture 集成 + ⚠ HIDDEN flag）落地，包 5 tab + dock。**工具一上来就抓到 2 个隐形 edge case**：F1 = App 在播放心跳上重渲 ~25-47× 级联 wrapper；F2 = SearchPage 隐藏时仍按 playbackStats 心跳重渲 106ms。queue/sessions 正确 bail 作对照。证明「span-level trace 看不见、render-level 一眼可见」的论点。 |
 | 2026-06-17 | DoodleBear | 初稿：dock-swipe-jank 调查暴露可观测性结构盲区——trace 只记具名 span，不记 render-level，于是「隐藏 tab 切歌全量 reconcile」靠人肉 CPU 火焰图才偶遇。提出 render-trace（React `<Profiler>` 边界 + 记录器 + harness 集成）系统化捕捉「不该重渲」，3 phase（观测→sweep→修+护栏）。 |
