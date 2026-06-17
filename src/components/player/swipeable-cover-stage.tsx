@@ -549,8 +549,17 @@ export function SwipeableCoverStage({
 
   // At rest, keep the visual centre pinned to the committed track id (a queue edit
   // that shifts indices, or boot). Only when nothing is in flight.
+  //
+  // `activeAnimation` (a REF) guards alongside `active` (state): on an external switch
+  // the layout effect above starts the catch-up slide (setting activeAnimation) AND
+  // calls setActive(true), but `active` is still stale-false when THIS passive effect
+  // runs in the same commit. Without the ref guard this fired setCenterIndex(currentIndex)
+  // mid-slide — recentring the window onto the just-committed track so the slide (aimed
+  // for the OLD centre) overshot to the track one further out, then corrected back: the
+  // reported "切到下一首时先滑到 2 再回到 1" on a single Dock/button switch (PRD
+  // 20260618-recenter-boundary). The layout effect runs before this, so the ref is set.
   useEffect(() => {
-    if (active || draggingRef.current) return;
+    if (active || draggingRef.current || activeAnimation.current != null) return;
     if (currentIndex >= 0 && currentIndex !== centerIndexRef.current) {
       centerIndexRef.current = currentIndex;
       setCenterIndex(currentIndex);
