@@ -110,3 +110,48 @@ console.log(`=== self-time inside the ${topN} longest frames (Σ ${Math.round(to
 for (const [fn, ms] of [...agg.entries()].sort((a, b) => b[1] - a[1]).slice(0, top)) {
   console.log(`  ${String(Math.round(ms)).padStart(5)}ms ${String(Math.round((ms / total) * 100)).padStart(3)}%  ${fn}`);
 }
+
+// --components: INCLUSIVE time by app-source function in the longest frames — i.e.
+// which component subtrees the reconcile is spent under (self-time hides this; a
+// component's cost lives in its jsxDEV children). Credits each frame on the stack
+// once per sample.
+if (process.argv.includes("--components")) {
+  const parentOf = new Map();
+  for (const n of p.nodes) for (const c of n.children || []) parentOf.set(c, n.id);
+  // Recompute the longest-frame sample index ranges (mirror the windowing above).
+  const ranges = [];
+  let start = null;
+  let acc = 0;
+  for (let i = 0; i < p.samples.length; i += 1) {
+    if (isIdle(p.samples[i])) {
+      if (start !== null && acc >= minMs) ranges.push({ start, end: i });
+      start = null;
+      acc = 0;
+    } else {
+      if (start === null) start = i;
+      acc += (p.timeDeltas[i] || 0) / 1000;
+    }
+  }
+  ranges.sort((a, b) => b.end - b.start - (a.end - a.start));
+  const inWindows = new Set();
+  for (const r of ranges.slice(0, 8)) for (let i = r.start; i < r.end; i += 1) inWindows.add(i);
+  const incl = new Map();
+  for (const i of inWindows) {
+    const dt = (p.timeDeltas[i] || 0) / 1000;
+    const seen = new Set();
+    let id = p.samples[i];
+    while (id != null) {
+      const cf = nodeById.get(id)?.callFrame;
+      if (cf?.url?.includes("/src/") && !seen.has(cf.functionName)) {
+        seen.add(cf.functionName);
+        const key = `${cf.functionName || "(anon)"} @ ${(cf.url || "").replace(/.*\//, "")}:${cf.lineNumber + 1}`;
+        incl.set(key, (incl.get(key) || 0) + dt);
+      }
+      id = parentOf.get(id);
+    }
+  }
+  console.log(`\n=== INCLUSIVE time by app component/fn in longest frames (who owns the reconcile) ===`);
+  for (const [fn, ms] of [...incl.entries()].sort((a, b) => b[1] - a[1]).slice(0, 20)) {
+    console.log(`  ${String(Math.round(ms)).padStart(5)}ms  ${fn}`);
+  }
+}
