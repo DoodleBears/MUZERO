@@ -678,21 +678,23 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       .catch((err: unknown) => log.warn("player", "failed to build DJ engine", err));
 
     // The player consumes the persistent 播放列表 (Play Queue), not a 歌单 directly.
-    // TWO subscriptions so a high-frequency CURSOR write doesn't pay the O(n)
-    // full-queue refetch (switch-fps Phase 2 — the trace showed persistQueueIndex
-    // re-firing getTracksByIds(5983) ~900ms after every switch, for a list that
-    // didn't change):
+    // ORDER / CONTENT are decoupled so NO list-level query ever observes full row
+    // content (PRD scalable-track-list-reactivity, Axis B-1). Otherwise editing ANY
+    // queue track re-fired getTracksByIds(N) and republished the whole queue (the
+    // scenario-4 fan-out: @5983 a single tag edit cost a ~385ms refetch ×N):
     //   • playQueue sub (cheap): entries ids / cursor / context session. Re-fires
     //     on cursor/entries/session change; never materializes tracks.
-    //   • tracks sub (expensive): getTracksByIds for the CURRENT entries — observes
-    //     only those track rows. Re-subscribed when the entries STRUCTURE changes;
-    //     still re-fires on a queue track's row write (cover edit / palette backfill
-    //     republish). A cursor write no longer touches it.
+    //   • queue snapshot (ORDER): getTracksByIds is a ONE-SHOT fetch refreshed only
+    //     when the entries STRUCTURE changes (add/remove/reorder) — NOT a liveQuery,
+    //     so a track's content write never re-fires it.
+    //   • current-row sub (CONTENT): a single-row liveQuery on the CURRENT track id
+    //     only (re-targeted as the cursor moves). Editing the current track patches
+    //     just its slot so Now Playing stays reactive; editing a non-current track
+    //     touches nothing here (its row reactivity is the windowed useTrack, Phase 4).
     let latestPq: Awaited<ReturnType<typeof getPlayQueue>> | null = null;
     let latestSession: Awaited<ReturnType<typeof getSession>>;
     let latestQueue: Track[] | null = null;
     let trackEntriesKey = "";
-    let tracksSub: { unsubscribe: () => void } | null = null;
 
     const processQueueUpdate = () => {
       const pq = latestPq;
@@ -783,28 +785,63 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       });
     };
 
-    // Expensive sub: materialize ONLY the current entries' track rows. Observes
-    // those tracks (a queue track's row write still republishes), not playQueue —
-    // so a cursor write no longer re-fires it. Re-created when entries change.
-    const subscribeTracks = (ids: string[]) => {
-      tracksSub?.unsubscribe();
-      tracksSub = liveQuery(async () => {
-        const fetchStart = performance.now();
-        const queue = await getTracksByIds(ids);
-        notePerfWork("queue.live.fetch", performance.now() - fetchStart, { tracks: queue.length });
-        return queue;
-      }).subscribe({
-        next: (queue) => {
-          latestQueue = queue;
-          processQueueUpdate();
-        },
-        error: (err) => log.error("player", "queue tracks subscription error", err),
-      });
+    // ORDER snapshot: a ONE-SHOT materialize of the current entries' track rows.
+    // NOT a liveQuery — so a queue track's content write never re-fires it. Refetched
+    // only when the entries STRUCTURE changes (add/remove/reorder), which is the only
+    // time the ids→content mapping can actually change for non-current rows.
+    const refreshQueueSnapshot = async (ids: string[]) => {
+      const fetchStart = performance.now();
+      const queue = await getTracksByIds(ids);
+      notePerfWork("queue.live.fetch", performance.now() - fetchStart, { tracks: queue.length });
+      latestQueue = queue;
+      processQueueUpdate();
+      retargetCurrentRow();
     };
 
+    // CONTENT sub: a single-row liveQuery on the CURRENT track id, re-targeted as the
+    // cursor moves. Editing the current track patches just its slot (a fresh `queue`
+    // array) so Now Playing / the current-row highlight stay reactive — without ever
+    // observing the other N-1 rows. `rowSig` gates out no-op republishes so a switch
+    // doesn't pay an extra render.
+    const rowSig = (t: Track): string =>
+      `${t.status}:${t.title ?? ""}:${t.blobId ?? ""}:${t.remoteMediaUrl ?? ""}:${t.coverBlobId ?? ""}:${t.remoteCoverUrl ?? ""}:${t.coverThumbhash ?? ""}:${t.note ?? ""}:${(t.tags ?? []).join(",")}:${t.durationSec ?? 0}`;
+    let currentRowSub: Subscription | null = null;
+    let currentRowId: string | null = null;
+    let currentRowSig = "";
+
+    function retargetCurrentRow() {
+      const s = get();
+      const slot = s.currentIndex >= 0 ? s.queue[s.currentIndex] : undefined;
+      const id = slot?.id ?? null;
+      if (id === currentRowId) return;
+      currentRowId = id;
+      currentRowSig = slot ? rowSig(slot) : "";
+      currentRowSub?.unsubscribe();
+      currentRowSub = null;
+      if (!id) return;
+      currentRowSub = liveQuery(() => getTrack(id)).subscribe({
+        next: (fresh) => {
+          if (!fresh) return;
+          const st = get();
+          const idx = st.currentIndex;
+          if (idx < 0 || st.queue[idx]?.id !== id) return;
+          const sig = rowSig(fresh);
+          if (sig === currentRowSig) return; // no render-relevant change
+          currentRowSig = sig;
+          const nextQueue = st.queue.slice();
+          nextQueue[idx] = fresh;
+          latestQueue = nextQueue;
+          set({ queue: nextQueue });
+        },
+        error: (err) => log.error("player", "current track row subscription error", err),
+      });
+    }
+    // Re-target whenever the cursor / current id changes (cheap; diffed by id).
+    usePlayerStore.subscribe(retargetCurrentRow);
+
     // Cheap sub: playQueue (entries / cursor) + the context session. Re-fires on a
-    // cursor write but only re-processes the cached queue (no refetch); re-materializes
-    // tracks only when the entries STRUCTURE changes.
+    // cursor write but only re-processes the cached snapshot (no refetch); refreshes
+    // the snapshot only when the entries STRUCTURE changes.
     liveQuery(async () => {
       const pq = await getPlayQueue();
       const session = pq.contextSetId ? await getSession(pq.contextSetId) : undefined;
@@ -816,14 +853,14 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
         const ids = pq.entries.map((e) => e.trackId);
         const key = queueEntriesKey(ids);
         if (key !== trackEntriesKey) {
-          // Entries structure changed → (re)materialize on the new id set. Wait for
-          // the tracks sub before processing so pq.entries and `queue` stay consistent.
+          // Entries structure changed → refetch the snapshot once on the new id set.
           trackEntriesKey = key;
-          subscribeTracks(ids);
+          void refreshQueueSnapshot(ids);
           return;
         }
-        // Cursor / session-only change → reprocess the cached queue (no refetch).
+        // Cursor / session-only change → reprocess the cached snapshot (no refetch).
         processQueueUpdate();
+        retargetCurrentRow();
       },
       error: (err) => log.error("player", "play-queue subscription error", err),
     });

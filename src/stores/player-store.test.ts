@@ -891,3 +891,57 @@ describe("player-store remote subscribed-manifest playback", () => {
     expect(platformFetchMock).toHaveBeenCalledWith(REMOTE_VIDEO_URL, { signal: undefined });
   });
 });
+
+// --- Axis B-1: order/content decoupling (PRD scalable-track-list-reactivity Phase 3) ---
+// The list-level query must never observe full row content: editing ANY queue track
+// used to re-fire getTracksByIds(N) and republish the whole `queue` (scenario-4
+// fan-out). After B-1, only the CURRENT track is row-observed (single-row sub); a
+// non-current edit must NOT re-materialize the queue, while the current track stays
+// reactive to its own edits so Now Playing updates.
+describe("player-store order/content decoupling (Axis B-1)", () => {
+  it("reflects a CURRENT-track metadata edit via a single-row patch (Now Playing stays reactive)", async () => {
+    const { repos, first, usePlayerStore } = await seedQueue(0);
+    usePlayerStore.getState().init();
+    await waitFor(() => expect(usePlayerStore.getState().queue).toHaveLength(2));
+    await usePlayerStore.getState().playIndex(0);
+    await waitFor(() => expect(usePlayerStore.getState().queue[0]?.id).toBe(first.id));
+
+    await repos.setTrackTags(first.id, ["mood:calm"]);
+
+    await waitFor(() => {
+      const s = usePlayerStore.getState();
+      expect(s.queue[s.currentIndex]?.tags).toContain("mood:calm");
+    });
+  });
+
+  it("does NOT re-materialize the whole queue when a NON-current track is edited (no fan-out)", async () => {
+    const { repos, first, second, usePlayerStore } = await seedQueue(0);
+    usePlayerStore.getState().init();
+    await waitFor(() => expect(usePlayerStore.getState().queue).toHaveLength(2));
+    await usePlayerStore.getState().playIndex(0); // current = first
+    await waitFor(() => expect(usePlayerStore.getState().queue[0]?.id).toBe(first.id));
+
+    const before = usePlayerStore.getState().queue;
+    await repos.setTrackTags(second.id, ["mood:hype"]); // edit the OTHER (non-current) track
+    // Give any (unwanted) list-level liveQuery a chance to re-fire + republish.
+    await new Promise((resolve) => setTimeout(resolve, 60));
+
+    // Same array reference → the list query did NOT refetch/republish all N rows.
+    expect(usePlayerStore.getState().queue).toBe(before);
+  });
+
+  it("re-targets the single-row sub to the new current track after a switch", async () => {
+    const { repos, second, usePlayerStore } = await seedQueue(0);
+    usePlayerStore.getState().init();
+    await waitFor(() => expect(usePlayerStore.getState().queue).toHaveLength(2));
+    await usePlayerStore.getState().playIndex(1); // current = second
+    await waitFor(() => expect(usePlayerStore.getState().queue[1]?.id).toBe(second.id));
+
+    await repos.setTrackTags(second.id, ["mood:focus"]);
+
+    await waitFor(() => {
+      const s = usePlayerStore.getState();
+      expect(s.queue[s.currentIndex]?.tags).toContain("mood:focus");
+    });
+  });
+});

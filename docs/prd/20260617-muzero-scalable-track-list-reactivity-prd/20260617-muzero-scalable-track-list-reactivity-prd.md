@@ -15,7 +15,7 @@
 |-------|------|--------|------|
 | 1 | 观测先行：harness 覆盖 4 场景的 before 基线 + 验收信号 | 🔄 部分（like 已采） | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | **Axis A**：高频字段全部下沉侧表（playCount / liked / lastPlayedAt），catalog 零高频写 | ✅ Completed（liked→trackLikes v26；playCount 早已在 trackPlaybackStats，删死代码 incrementPlayCount） | [Phase 2 Checklist](#phase-2-checklist) |
-| 3 | **Axis B-1**：`state.queue` 由 `Track[]` 降为 id 列表；队列 UI 按 id 渲染 | 🔲 Pending | [Phase 3 Checklist](#phase-3-checklist) |
+| 3 | **Axis B-1**：列表级查询不再观察全量内容（一次性快照 + 当前曲单行订阅） | ✅ Completed（贵 liveQuery 删除→ `queue.live.fetch` 5→0；切歌 FPS 不回退） | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | **Axis B-2**：逐行/窗口化 `useTrack(id)` 响应式读（跟随虚拟窗口），单曲写只重渲该行 | 🔲 Pending | [Phase 4 Checklist](#phase-4-checklist) |
 | 5 | 全 4 场景 @5983 队列 harness 复测验收 | 🔲 Pending | [Phase 5 Checklist](#phase-5-checklist) |
 
@@ -202,12 +202,15 @@ playQueue.entries[].trackId ──▶ tracks(id) 1 ── 0..1 trackLikes ──
 - [x] 单测全绿：track-likes-repo（6）、system-playlists/track-gallery（parity，27）、queue-panel/system-playlist-detail（mock 侧表，11）、dj-chat、tsc 0、biome 绿。
 
 ### Phase 3: Axis B-1 — order/content 解耦
-**Goal:** `state.queue` 不再物化全量 `Track[]`。
+**Goal:** 列表级查询不再观察全量行内容。
 **Tasks:**
-- [ ] 贵订阅不再 `getTracksByIds(N)`；store 暴露 `queueIds: string[]` + 当前曲单行订阅（transport 用）。
-- [ ] queue-panel/queue-page 消费 `queueIds`。
+- [x] 贵 liveQuery 删除：`getTracksByIds(N)` 改为**一次性快照**（仅 entries STRUCTURE 变化时刷新，非订阅）。
+- [x] 新增**当前曲单行订阅**（`liveQuery(getTrack(currentId))`，随游标 re-target）→ 编辑当前曲只 patch 该 slot，Now Playing 仍响应式；编辑非当前曲不触发任何列表级重取。
 #### Phase 3 Checklist
-- [ ] 切歌/增删/编辑后 `state.queue` 路径无 O(N) `queueSig` 全量处理；现有切歌 FPS 不回退。
+- [x] **harness 验收（5983，metadata 编辑当前曲 ×5）before→after**：`queue.live.fetch` **5@385ms→0**、`dbRequeriesMax 45→20`、`longTaskTotal 1657→1391ms`。扇出（O(N) 重取）彻底消除。
+- [x] 切歌不回退：pingpong ×8 @5983 `switchToFrame` avg 51ms / max 77ms、`queue.live.fetch 0`。
+- [x] 单测：3 个 Axis B-1 integration test（当前曲编辑→单行 patch 响应式 ✓；非当前曲编辑→`queue` 引用不变=无重取 ✓；切歌后 re-target ✓）；player-store 全 22 绿；tsc 0。**附带修复**：旧 `queueSig` 不含 tags/note → 旧码编辑当前曲 tags 根本不 republish；单行订阅按内容 sig（含 tags/note）patch，反而修好了 Now Playing 对 tags/note 编辑的响应式。
+- [ ] 残留：`set({queue})` 仍触发 Now Playing 当前曲重渲（`fpsLow` 仍 ~4.6）——**重取已 0，剩下的是「单次重渲太贵」**，由 Phase 4（窄订阅 + 重活按稳定 key memo）收口。
 
 ### Phase 4: Axis B-2 — 逐行/窗口响应式读
 **Goal:** 单曲 metadata 写只重渲该行（scenario 4）。
