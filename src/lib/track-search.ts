@@ -232,40 +232,85 @@ export interface EntityFacets {
   albums: AlbumEntry[];
 }
 
-/** Every scope token matches `name` (via the transliteration variant sets). */
-function entityMatches(name: string, tokens: readonly string[]): boolean {
-  const fieldVariants = searchVariants(name);
+/** Every scope token matches the (already-transliterated) field variant set. */
+function matchesAllTokens(fieldVariants: readonly string[], tokens: readonly string[]): boolean {
   return tokens.every(
     (token) => scoreVariants(searchVariants(token), fieldVariants) < NO_MATCH_SCORE,
   );
 }
 
+/** An entity paired with its precomputed search variants (the costly part). */
+export interface FacetCandidate<E> {
+  entry: E;
+  variants: readonly string[];
+}
+export interface FacetCandidates {
+  artists: FacetCandidate<ArtistEntry>[];
+  albums: FacetCandidate<AlbumEntry>[];
+}
+
 /**
- * Match derived artist/album entities for the faceted search surface. An artist
- * matches when every artist-relevant token (free + `artist:`) matches its
- * display name; an album matches when every album-relevant token (free +
- * `album:`) matches "album · artist". A facet stays empty when no relevant token
- * is present (so e.g. `album:foo` surfaces only albums). Pseudo buckets never
- * appear as search hits. Matching is transliteration-aware (pinyin/romaji).
+ * Precompute the transliteration variants for every real (non-bucket) artist/album
+ * ONCE, so the per-keystroke {@link searchFacetCandidates} only transliterates the
+ * short query — not hundreds of entity names. Without this the facet memo re-ran
+ * `searchVariants(name)` for the whole library on every keystroke, thrashing the
+ * 4k variant cache on a big CJK library (~100–270ms main-thread longtask per key,
+ * confirmed by CPU profile). Call when the index or transliteration-readiness
+ * changes; an artist's field is its name, an album's is "name · artist".
+ */
+export function buildFacetCandidates(
+  artists: readonly ArtistEntry[],
+  albums: readonly AlbumEntry[],
+): FacetCandidates {
+  return {
+    artists: artists
+      .filter((entry) => !entry.bucket)
+      .map((entry) => ({ entry, variants: searchVariants(entry.name) })),
+    albums: albums
+      .filter((entry) => !entry.bucket)
+      .map((entry) => ({
+        entry,
+        variants: searchVariants(`${entry.name} ${entry.artistName ?? ""}`),
+      })),
+  };
+}
+
+/**
+ * Per-keystroke facet match against precomputed candidates. An artist matches when
+ * every artist-relevant token (free + `artist:`) hits its variants; an album when
+ * every album-relevant token (free + `album:`) hits its variants. A facet stays
+ * empty when no relevant token is present (so `album:foo` surfaces only albums).
+ */
+export function searchFacetCandidates(candidates: FacetCandidates, query: string): EntityFacets {
+  const { free, artist, album }: SearchTokens = parseSearchTokens(query);
+  const artistTokens = [...free, ...artist];
+  const albumTokens = [...free, ...album];
+  return {
+    artists:
+      artistTokens.length === 0
+        ? []
+        : candidates.artists
+            .filter((c) => matchesAllTokens(c.variants, artistTokens))
+            .map((c) => c.entry),
+    albums:
+      albumTokens.length === 0
+        ? []
+        : candidates.albums
+            .filter((c) => matchesAllTokens(c.variants, albumTokens))
+            .map((c) => c.entry),
+  };
+}
+
+/**
+ * Match derived artist/album entities for the faceted search surface. Thin wrapper
+ * over {@link buildFacetCandidates} + {@link searchFacetCandidates}; the UI splits
+ * the two so the costly precompute runs once per library change, not per keystroke.
+ * Pseudo buckets never appear; matching is transliteration-aware (pinyin/romaji).
  */
 export function searchEntityFacets(
   artists: ArtistEntry[],
   albums: AlbumEntry[],
   query: string,
 ): EntityFacets {
-  const { free, artist, album }: SearchTokens = parseSearchTokens(query);
-  const artistTokens = [...free, ...artist];
-  const albumTokens = [...free, ...album];
-  const matchedArtists =
-    artistTokens.length === 0
-      ? []
-      : artists.filter((entry) => !entry.bucket && entityMatches(entry.name, artistTokens));
-  const matchedAlbums =
-    albumTokens.length === 0
-      ? []
-      : albums.filter(
-          (entry) =>
-            !entry.bucket && entityMatches(`${entry.name} ${entry.artistName ?? ""}`, albumTokens),
-        );
-  return { artists: matchedArtists, albums: matchedAlbums };
+  return searchFacetCandidates(buildFacetCandidates(artists, albums), query);
 }

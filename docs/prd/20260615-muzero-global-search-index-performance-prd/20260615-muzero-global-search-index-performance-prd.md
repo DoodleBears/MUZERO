@@ -476,6 +476,7 @@ liveQuery(tracks/lyrics/memory) ─throttle250ms─▶ rows snapshot ─postMess
 | 2026-06-15 | MUZERO Team | owner 决策落地：混合倒排 + 预存变体 + 增量增删改；持久化默认内存态、worker 内分块重建 |
 | 2026-06-15 | MUZERO Team | **实现落地**（worktree `feat/global-search-index-perf`，TDD，原子 commit）：P1 观测（`search-perf.ts`，dbd7e15）→ P2 开窗 defer/warm latch（b1b3b1c）→ P3 ★`search-index.ts` 预存变体索引 + 增量，parity/增量单测全绿（a9a8795）。P4 按设计 Deferred（待 20k+ 实测触发）。empirical latency/heap/longtask 数值待用户 prod build 实测 |
 | 2026-06-15 | MUZERO Team | **联网调研修正**：Phase 3 核心降为「预存变体 `IndexedRow` + 线性扫描」(调研证实 6k–20k 即 sub-100ms,倒排非必需)；倒排降到 Phase 4 仅 20k+ 不达标才做；确认不引第三方库(无库原生支持拼音/假名)；补 BM25F 为歌词排序 open question；补 §9.1 调研来源 |
+| 2026-06-17 | DoodleBear（实测 + 后续优化）| **harness 实测 + facet 路径补刀（Phase 3 原则延伸）**。CDP/perf-control 在 6k 真库实测：track worker 查询 p95 **20ms**（「3s 输入」已消除 ✅）、⌘F 开窗 0 longtask（Phase 2 ✅）。但火焰图发现**主线程逐键 jank 仍在 facet 搜索**：`searchEntityFacets` 每键对全部 artist/album 名重跑 `searchVariants`（撞 `MAX_VARIANT_CACHE_SIZE=4000` 抖动）——正是根因分析点名的反模式,Phase 3 只给 worker 的 track `IndexedRow` 修了,主线程 facet 漏了（§3 设计的 `artistVariants/albumVariants` 预存当时未落到 facet 路径）。修复：`track-search.ts` 拆 `buildFacetCandidates`（库/字典变才预存每实体变体一次）+ `searchFacetCandidates`（每键只转写 query、扫预存变体）；组件 `facets` memo 拆成 precompute + per-keystroke 两层。**实测（queue tab 隔离 cover-window）：script 时间 1153→470ms（−59%）、`searchVariants` 自时间 134→31ms（−77%）、逐键 longtask 总时长 3612→489ms（−86%）**。harness 加了 dev-only search scenario（`/search` 驱动 ⌘F + perf-drive/perf-profile）。剩余单个 ~344ms longtask 主要是首键结果列表渲染 + 歌词 `parseYrc`,量级小。 |
 
 ---
 

@@ -47,10 +47,11 @@ import {
 import { freeTextMatches, type IndexableRow } from "@/lib/search-core";
 import { trackSubtitle } from "@/lib/track-display";
 import {
+  buildFacetCandidates,
   findLyricSearchMatch,
   type LyricSearchMatch,
   lyricsSearchFields,
-  searchEntityFacets,
+  searchFacetCandidates,
   trackToRow,
 } from "@/lib/track-search";
 import { cn, formatDuration } from "@/lib/utils";
@@ -293,13 +294,19 @@ export function GlobalTrackSearch({
   }, [showLyricResults, searchText, filter, rankedHits, trackById, lyricsByTrackId]);
 
   // Artist/album facets — transliteration-aware, honors `artist:`/`album:` scopes.
+  // Precompute each entity's transliteration variants ONCE per index / dictionary
+  // change — the heavy pinyin/kana work. Doing it here (not in the per-keystroke
+  // facet memo below) is what keeps typing off the main-thread longtask: each key
+  // then only transliterates the short query, not the whole artist/album set.
   // biome-ignore lint/correctness/useExhaustiveDependencies: transliterationReady re-runs once dictionaries load
+  const facetCandidates = useMemo(
+    () => buildFacetCandidates(artistIndex, albumIndex),
+    [artistIndex, albumIndex, transliterationReady],
+  );
   const facets = useMemo(
     () =>
-      searchText
-        ? searchEntityFacets(artistIndex, albumIndex, searchText)
-        : { artists: [], albums: [] },
-    [searchText, artistIndex, albumIndex, transliterationReady],
+      searchText ? searchFacetCandidates(facetCandidates, searchText) : { artists: [], albums: [] },
+    [searchText, facetCandidates],
   );
   // A scoped facet with no query browses all real entities; otherwise show matches.
   const albumResults = useMemo<AlbumEntry[]>(() => {

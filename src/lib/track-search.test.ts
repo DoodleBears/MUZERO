@@ -3,11 +3,13 @@ import type { Track, TrackMediaMetadata } from "@/db/types";
 import { buildAlbumIndex, buildArtistIndex } from "./library-index";
 import { ensureTransliterationLoaded } from "./search-transliterate";
 import {
+  buildFacetCandidates,
   findLyricSearchMatch,
   lyricsSearchFields,
   matchesQuery,
   parseSearchTokens,
   searchEntityFacets,
+  searchFacetCandidates,
   searchTracks,
   trackSearchScore,
   tracksWithTag,
@@ -275,6 +277,23 @@ describe("searchEntityFacets", () => {
 
   it("empty query yields no facet hits", () => {
     expect(searchEntityFacets(artists, albums, "")).toEqual({ artists: [], albums: [] });
+  });
+
+  it("buildFacetCandidates precomputes variants and drops buckets", () => {
+    const candidates = buildFacetCandidates(artists, albums);
+    // Real entities carry precomputed variant sets (non-empty); buckets are excluded.
+    expect(candidates.artists.every((c) => c.variants.length > 0 && !c.entry.bucket)).toBe(true);
+    expect(candidates.albums.every((c) => c.variants.length > 0 && !c.entry.bucket)).toBe(true);
+  });
+
+  it("searchFacetCandidates matches the same results as searchEntityFacets", () => {
+    const candidates = buildFacetCandidates(artists, albums);
+    for (const q of ["moon", "artist:deidian", "album:night", "yumi", ""]) {
+      const direct = searchEntityFacets(artists, albums, q);
+      const pre = searchFacetCandidates(candidates, q);
+      expect(pre.artists.map((a) => a.name)).toEqual(direct.artists.map((a) => a.name));
+      expect(pre.albums.map((a) => a.name)).toEqual(direct.albums.map((a) => a.name));
+    }
   });
 });
 
