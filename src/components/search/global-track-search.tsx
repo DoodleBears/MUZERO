@@ -20,6 +20,7 @@ import { listAllTracks, listSessions, memoryNotesByTrack, saveSettings } from "@
 import type { DjSession, StreamSourceId, Track, TrackLyrics } from "@/db/types";
 import { registerSearchDriver } from "@/dev/search-drive";
 import { useSettings } from "@/hooks/use-app-data";
+import { useFrozenWhileInactive } from "@/hooks/use-frozen-while-inactive";
 import { useTrackThumbnailUrl } from "@/hooks/use-media";
 import { useOnlineSourceSearch } from "@/hooks/use-online-source-search";
 import { LIBRARY_QUERY_COALESCE_MS, useThrottledValue } from "@/hooks/use-throttled-value";
@@ -79,6 +80,10 @@ const MAX_SET_RESULTS = 5;
 const MAX_SONG_RESULTS = 8;
 const MAX_LYRIC_RESULTS = 8;
 const MAX_ENTITY_RESULTS = 5;
+// While ⌘F is CLOSED, re-sync the warm library index this long after edits go quiet —
+// a trailing debounce so editing tracks while playing coalesces into ONE deferred
+// rebuild instead of one per write, while keeping the index warm for re-open.
+const OVERLAY_INDEX_RESYNC_MS = 2000;
 const TRACK_HIT_PREFIX = "track:";
 const LYRIC_HIT_PREFIX = "lyrics:";
 
@@ -119,9 +124,21 @@ export function GlobalTrackSearch({
     return () => registerSearchDriver(null);
   }, [onOpenChange]);
   // Coalesce write bursts so the memory join + worker snapshot below re-run at
-  // most once per interval instead of once per tracks write (PRD F-3).
+  // most once per interval instead of once per tracks write (PRD F-3). The heavy
+  // index builds below are kept warm in the BACKGROUND (gated on `indexWarm`) so a
+  // re-open is instant — we deliberately do NOT freeze on `open`, because that made
+  // a cold ⌘F block its first query ~2s while the whole-library index rebuilt from
+  // scratch. Instead, while CLOSED, trailing-debounce the library snapshot: a burst
+  // of edits coalesces into ONE deferred rebuild after editing stops (≈2s quiet),
+  // so editing tracks while playing no longer rebuilds the whole-library index per
+  // write, yet the index stays warm for an instant re-open (PRD
+  // scalable-track-list-reactivity, Axis B-2 read-side).
   const allTracksLive = useLiveQuery(() => listAllTracks(db), [], []);
-  const allTracks = useThrottledValue(allTracksLive, LIBRARY_QUERY_COALESCE_MS);
+  const allTracks = useFrozenWhileInactive(
+    useThrottledValue(allTracksLive, LIBRARY_QUERY_COALESCE_MS),
+    open,
+    OVERLAY_INDEX_RESYNC_MS,
+  );
   const sessions = useLiveQuery(() => listSessions(db), [], []);
   const lyricsRows = useLiveQuery(() => db.lyrics.toArray(), [], []);
   const memoryNotes = useLiveQuery(

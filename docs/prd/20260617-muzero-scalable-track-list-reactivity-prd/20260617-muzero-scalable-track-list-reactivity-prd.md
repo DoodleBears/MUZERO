@@ -16,7 +16,7 @@
 | 1 | 观测先行：harness 覆盖 4 场景的 before 基线 + 验收信号 | 🔄 部分（like 已采） | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | **Axis A**：高频字段全部下沉侧表（playCount / liked / lastPlayedAt），catalog 零高频写 | ✅ Completed（liked→trackLikes v26；playCount 早已在 trackPlaybackStats，删死代码 incrementPlayCount） | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | **Axis B-1**：列表级查询不再观察全量内容（一次性快照 + 当前曲单行订阅） | ✅ Completed（贵 liveQuery 删除→ `queue.live.fetch` 5→0；切歌 FPS 不回退） | [Phase 3 Checklist](#phase-3-checklist) |
-| 4 | **Axis B-2**：逐行/窗口化 `useTrack(id)` 响应式读（跟随虚拟窗口），单曲写只重渲该行 | 🔲 Pending | [Phase 4 Checklist](#phase-4-checklist) |
+| 4 | **Axis B-2**：常驻挂载页的「全库索引派生」空闲时不随单曲写重建（冻结/防抖）；metadata 编辑不再扇出 | ✅ Completed（CPU profile 定位真凶=SearchPage+⌘F 全库索引；`useFrozenWhileInactive` → metadata fpsLow 4→60、longtask 1378→0ms） | [Phase 4 Checklist](#phase-4-checklist) |
 | 5 | 全 4 场景 @5983 队列 harness 复测验收 | 🔲 Pending | [Phase 5 Checklist](#phase-5-checklist) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
@@ -212,13 +212,19 @@ playQueue.entries[].trackId ──▶ tracks(id) 1 ── 0..1 trackLikes ──
 - [x] 单测：3 个 Axis B-1 integration test（当前曲编辑→单行 patch 响应式 ✓；非当前曲编辑→`queue` 引用不变=无重取 ✓；切歌后 re-target ✓）；player-store 全 22 绿；tsc 0。**附带修复**：旧 `queueSig` 不含 tags/note → 旧码编辑当前曲 tags 根本不 republish；单行订阅按内容 sig（含 tags/note）patch，反而修好了 Now Playing 对 tags/note 编辑的响应式。
 - [ ] 残留：`set({queue})` 仍触发 Now Playing 当前曲重渲（`fpsLow` 仍 ~4.6）——**重取已 0，剩下的是「单次重渲太贵」**，由 Phase 4（窄订阅 + 重活按稳定 key memo）收口。
 
-### Phase 4: Axis B-2 — 逐行/窗口响应式读
-**Goal:** 单曲 metadata 写只重渲该行（scenario 4）。
+### Phase 4: Axis B-2 — 常驻挂载页的全库派生「空闲不重建」
+**Goal:** 单曲 metadata 写不再扇出到全库索引重建（scenario 4 的真正瓶颈）。
+
+> **CPU profile 改写了诊断**：Phase 3 把 `queue.live.fetch` 打到 0 后，metadata 编辑 fpsLow 仍 4.x。profile（`perf-profile metadata`）显示真凶**不在队列、也不在 now-playing 重渲**，而是：**所有 tab 页常驻挂载**（App `display:none` 不卸载，避免 remount jank）→ `SearchPage` + app-wide `⌘F GlobalTrackSearch` 各持 `listAllTracks` 全表订阅，**任一 track 写**就同步重建全库 `buildArtist/AlbumIndex` + `searchVariants` 转写（~240ms longtask）。这是与队列同构的「整表 liveQuery 扇出」，只是落在 search/库索引层。
+
 **Tasks:**
-- [ ] `use-track.ts`：`useTrack(id)`（单行 liveQuery / 共享 cache）+ `useTrackLiked(id)`。
-- [ ] virtual-track-list 按 id 渲染、行内 `useTrack`。
+- [x] 新 hook [`useFrozenWhileInactive(value, active, resyncMs?)`](../../../src/hooks/use-frozen-while-inactive.ts)：常驻挂载页保留 liveQuery 订阅（不 remount），但派生输入在「surface 非激活」时**冻结**（硬冻结）或**尾沿防抖 resync**（保温），单曲写不再触发 O(N) 重建。
+- [x] `SearchPage`：`allTracks` 在 `tab!=="search"` 时**硬冻结**（切回该 tab 才重建，等同普通导航）。
+- [x] `GlobalTrackSearch`：`allTracks` 在 `!open` 时**尾沿防抖**（2s 静默后 resync）——编辑突发合并成一次延后重建、保温供秒开；**不硬冻结**（实测硬冻结让冷开 ⌘F 首 query 阻塞 ~2s）。
 #### Phase 4 Checklist
-- [ ] harness `metadata` 场景：编辑当前曲封面/标签 → **只 1 行重渲**、`queue.live.fetch=0`、`fpsLow≥60`。
+- [x] **harness `metadata` ×5 @5983（now tab）before→after**：`fpsLowMin 4.1→60.2`、`frameMaxMs 241→16.6`、`longTaskCount 9→0`、`longTaskTotalMs 1378→0`、`queue.live.fetch` 维持 0。overlay 预热后再测仍 `fpsLow 59.5 / longtask 0`（防抖把重建推到编辑停止之后）。
+- [x] **无回退**：冷开 ⌘F @5983 `p50 612→763ms`（同量级，远好于硬冻结的 2029ms）；hook 单测 5 个（含尾沿防抖时序）。
+- [ ] 残留：队列 tab 看着列表时编辑**非当前曲**封面/标题，列表行要到 reorder 才刷新（Phase 3 快照不再随内容写）——逐行 `useTrack(id)` 收口见 Phase 4b（可选）。
 
 ### Phase 5: 全场景 @5983 验收
 #### Phase 5 Checklist

@@ -40,6 +40,13 @@ async function driveScenario() {
       await ctl("POST", "/player/playIndex", { index: i % 2 === 0 ? base + 1 : base });
       if (i < switches - 1) await sleep(everyMs);
     }
+  } else if (scenario === "metadata") {
+    // Edit the CURRENT track's tags N times — profile the now-playing re-render path
+    // a current-track content write triggers (Axis B-2: what's expensive on one edit?).
+    for (let i = 0; i < switches; i += 1) {
+      await ctl("POST", "/editMeta", {});
+      if (i < switches - 1) await sleep(everyMs);
+    }
   } else if (scenario === "idle") {
     await sleep(switches * everyMs);
   } else if (scenario === "search") {

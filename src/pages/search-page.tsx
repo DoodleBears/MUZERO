@@ -75,6 +75,7 @@ import {
 } from "@/db/repositories";
 import type { CropRect, DjSession, Track } from "@/db/types";
 import { useBackGesture } from "@/hooks/use-back-gesture";
+import { useFrozenWhileInactive } from "@/hooks/use-frozen-while-inactive";
 import { useLikedTrackIds } from "@/hooks/use-liked-tracks";
 import { useCoverMetadataBackfill, useGridCoverUrl, useTrackCoverUrl } from "@/hooks/use-media";
 import { useShortcutMatcher } from "@/hooks/use-shortcut-matcher";
@@ -358,7 +359,18 @@ export function SearchPage() {
   // artist/album indexes, worker search snapshot — re-run at most once per
   // interval instead of once per write (PRD F-3).
   const allTracksLive = useLiveQuery(() => listAllTracks(db), [], []);
-  const allTracks = useThrottledValue(allTracksLive, LIBRARY_QUERY_COALESCE_MS);
+  // This page stays MOUNTED while hidden (App keeps tabs alive to avoid remount
+  // jank), so its whole-library derivations (memory join, artist/album index, the
+  // worker snapshot, system playlists) used to rebuild O(N) on EVERY track write
+  // even while you're on another tab — the scenario-4 fan-out. Freeze the library
+  // snapshot while the search tab is inactive: the subscription stays warm, but the
+  // heavy memos keyed on `allTracks` only recompute when the page is actually shown
+  // (PRD scalable-track-list-reactivity, Axis B-2 read-side).
+  const searchTabActive = useNavStore((s) => s.tab === "search");
+  const allTracks = useFrozenWhileInactive(
+    useThrottledValue(allTracksLive, LIBRARY_QUERY_COALESCE_MS),
+    searchTabActive,
+  );
   const remoteTracks = useLiveQuery(() => db.remoteSearchTracks.toArray(), [], []);
   const memoryNotes = useLiveQuery(
     () =>
