@@ -13,9 +13,20 @@
 
 | Phase | Name | Status | Link |
 |-------|------|--------|------|
-| 1 | **观测先行**：dev-only render-trace（React `<Profiler>` 边界 + 记录器），harness 可读 | 🔲 Pending | [Phase 1](#phase-1-render-trace-instrumentation) |
-| 2 | **系统化 sweep**：对所有高频交互场景跑 render-trace，编目「不该渲」清单 | 🔲 Pending | [Phase 2](#phase-2-edge-case-sweep) |
+| 1 | **观测先行**：dev-only render-trace（React `<Profiler>` 边界 + 记录器），harness 可读 | ✅ Completed（commit `6f662d9`；立刻抓到 2 个 edge case） | [Phase 1](#phase-1-render-trace-instrumentation) |
+| 2 | **系统化 sweep**：对所有高频交互场景跑 render-trace，编目「不该渲」清单 | 🔄 In Progress（首批 finding 见下） | [Phase 2](#phase-2-edge-case-sweep) |
 | 3 | 逐项修复 + 回归断言（render-trace 进 harness 验收，防回归） | 🔲 Pending | [Phase 3](#phase-3-fix--regression-guard) |
+
+### Phase 2 首批 Findings（render-trace，3 次切歌 + 播放中）
+| surface | actualMs | commits | 判定 |
+|---|---|---|---|
+| `tab:now` / `dock` | 230 / 147 | 96× / 47× | active，预期（但 commit 数偏高=随播放心跳重渲，见 F1） |
+| **`tab:search`** | **106** | 33× | ⚠ **F2：SearchPage 隐藏时仍按 `playbackStats` liveQuery 心跳重渲**（自身订阅，与 App 级联无关） |
+| `tab:settings` | 52 | 25× | ⚠ **F1：App 每播放心跳重渲 → AmbientPageOverlay wrapper ×25 级联**（panel 已 bail） |
+| `tab:queue` / `tab:sessions` | 4.5 / 0.1 | 17× | ✅ 基本 bail（memo + 工具都对的对照基准） |
+
+- **F1（根）**：**App 在播放心跳（`positionSec`/`isPlaying` 每 ~250ms）上重渲 ~25-47×** → 所有 boundary 的 wrapper 级联重渲。memoized panel 正确 bail，但 wrapper（AmbientPageOverlay）+ active surface 每心跳重付。根因待查（App 里仍有订阅高频播放态的 hook/派生）。
+- **F2**：**SearchPage 隐藏时按 `playbackStatsLive`/`playbackEventsLive`（播放心跳写表）重渲** —— 同 scalable-track-list 的「不该响应」思路，hidden 页不该跟播放心跳。冻结/下沉即可（参考 SearchPage 的 `allTracks` freeze）。
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
 
@@ -112,7 +123,8 @@ scripts/perf-gesture.mjs / perf-drive.mjs      # ✎ scenario 前 reset、后 sn
 - [ ] perf-control 加 `renderTrace` 命令（reset/snapshot）；`perf-gesture`/`perf-drive` scenario 前后调用，报告并 flag 隐藏 surface 的 commits。
 - [ ] dev HUD（`dev-perf-panel`）显示 live render-trace（可选）。
 #### Phase 1 Checklist
-- [ ] 切歌场景能复现并 flag「隐藏 tab commits>0」（验证工具有效——对照已修状态应为 0）。
+- [x] `render-trace.ts` 记录器 + `<RenderTraceBoundary>` + perf-control `renderTrace`(reset/snapshot) + perf-gesture 集成（⚠ HIDDEN flag）。包 5 个 tab + dock。
+- [x] **工具有效性验证**：3 次切歌 render-trace → queue/sessions 正确 bail(~0ms,对照基准)，并**立刻抓到 F1（App 播放心跳重渲）+ F2（SearchPage 隐藏心跳重渲）** 两个此前隐形的 edge case。tsc 0、perf-control 12 单测绿。
 
 ### Phase 2: edge-case sweep
 **Goal:** 把 §3 每类场景都跑一遍 render-trace，编目「不该渲」清单（每条带：surface / 触发 / 次数 / 期望）。
@@ -162,4 +174,5 @@ scripts/perf-gesture.mjs / perf-drive.mjs      # ✎ scenario 前 reset、后 sn
 
 | Date | Author | Changes |
 |------|--------|---------|
+| 2026-06-17 | DoodleBear | **Phase 1 ✅**（commit `6f662d9`）：render-trace（`<Profiler>` 边界 + 记录器 + perf-control/perf-gesture 集成 + ⚠ HIDDEN flag）落地，包 5 tab + dock。**工具一上来就抓到 2 个隐形 edge case**：F1 = App 在播放心跳上重渲 ~25-47× 级联 wrapper；F2 = SearchPage 隐藏时仍按 playbackStats 心跳重渲 106ms。queue/sessions 正确 bail 作对照。证明「span-level trace 看不见、render-level 一眼可见」的论点。 |
 | 2026-06-17 | DoodleBear | 初稿：dock-swipe-jank 调查暴露可观测性结构盲区——trace 只记具名 span，不记 render-level，于是「隐藏 tab 切歌全量 reconcile」靠人肉 CPU 火焰图才偶遇。提出 render-trace（React `<Profiler>` 边界 + 记录器 + harness 集成）系统化捕捉「不该重渲」，3 phase（观测→sweep→修+护栏）。 |
