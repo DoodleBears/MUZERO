@@ -146,6 +146,12 @@ export function SwipeableCoverStage({
   const [active, setActive] = useState(false);
   // Sub-phase of `active`: the overlay is fading out over the settled base.
   const [handoffFading, setHandoffFading] = useState(false);
+  // The track id whose coverflow card shows the backlight glow during a gesture/slide —
+  // the origin (playing) track, frozen for the gesture so only its card glows (not the
+  // preview cards) and the glow follows it as it slides. (PRD 20260618 #1.)
+  const [gestureBacklightTrackId, setGestureBacklightTrackId] = useState<string | undefined>(
+    undefined,
+  );
   const [baseCoverShownId, setBaseCoverShownId] = useState<string | undefined>(undefined);
   // Fresh mirror so commitAndHandoff (a stable callback) can read the latest painted
   // cover without depending on the state.
@@ -331,6 +337,13 @@ export function SwipeableCoverStage({
     consumedRef.current = 0;
     pendingResetRef.current = 0;
     coverWindowOffset.set(0);
+    // The backlight glow stays on the PLAYING track's card (the origin) for the whole
+    // gesture — it follows that card as it slides; the preview cards dragged toward
+    // don't glow. Frozen here so it doesn't jump to the new track when the store
+    // commits at settle (the base backlight crossfades the new track in then). (PRD
+    // 20260618-backlight-shadow-drag #1: only the current card glows during the drag.)
+    const st = usePlayerStore.getState();
+    setGestureBacklightTrackId(st.queue[st.currentIndex]?.id);
     usePlayerStore.getState().setCoverGestureActive(true);
     setActive(true);
   }, [stopAnimation]);
@@ -554,6 +567,10 @@ export function SwipeableCoverStage({
       closeOverlay();
       return;
     }
+    // The glow follows the FROM-track's card as the overlay slides to the committed
+    // one; the base backlight crossfades the new track in at the hand-off. (Same
+    // origin-card rule as a manual drag — PRD 20260618 #1.)
+    setGestureBacklightTrackId(usePlayerStore.getState().queue[from]?.id);
     setActive(true);
     updateOverlayRect();
     animateOffsetTo(adjacentDir, SWITCH_DURATION_SEC, () => {
@@ -800,6 +817,11 @@ export function SwipeableCoverStage({
           >
             <CoverPagerStrip
               backlightOpacity={cardBacklightOpacity}
+              // Only the playing/origin track's card glows (it follows that card as it
+              // slides); the preview cards don't. Through the hand-off the origin card
+              // keeps glowing + fades with the overlay while the base backlight fades the
+              // committed track in — a colour crossfade (PRD 20260618 #1).
+              backlightTrackId={active ? gestureBacklightTrackId : undefined}
               coverShadow={cardCoverShadow}
               renderFallback={renderFallback}
               // Drop the travelling identity the instant the hand-off fade begins:

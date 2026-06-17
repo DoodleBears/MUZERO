@@ -38,6 +38,7 @@ export const CoverPagerStrip = memo(function CoverPagerStrip({
   tilt,
   sideScale,
   backlightOpacity = 0,
+  backlightTrackId,
   coverShadow = false,
   renderFallback,
   renderIdentity,
@@ -46,9 +47,14 @@ export const CoverPagerStrip = memo(function CoverPagerStrip({
   width: number;
   tilt: number;
   sideScale: number;
-  /** > 0 → render a blurred backlight glow behind each card (backlight effect mode),
-   *  so the glow travels with the sliding cover. 0 = no backlight. */
+  /** > 0 → render a blurred backlight glow behind the matching card (backlight effect
+   *  mode), so the glow travels with the sliding cover. 0 = no backlight. */
   backlightOpacity?: number;
+  /** Only the card whose track id matches gets the backlight glow — the playing track
+   *  during a drag (its glow follows it), so the preview cards being dragged toward
+   *  don't all glow; the committed track's glow fades in on the base at commit (PRD
+   *  20260618-backlight-shadow-drag #1). undefined = no card glows. */
+  backlightTrackId?: string;
   /** Add the cover drop-shadow to each card (shadow effect mode), traveling with it. */
   coverShadow?: boolean;
   /** Rendered inside a slot when its track has no resolvable cover (title fallback). */
@@ -65,7 +71,9 @@ export const CoverPagerStrip = memo(function CoverPagerStrip({
       {slots.map((slot) => (
         <CoverflowSlot
           key={slot.slotKey}
-          backlightOpacity={backlightOpacity}
+          backlightOpacity={
+            slot.content && slot.content.trackId === backlightTrackId ? backlightOpacity : 0
+          }
           content={slot.content}
           coverShadow={coverShadow}
           offsetSteps={slot.offsetSteps}
