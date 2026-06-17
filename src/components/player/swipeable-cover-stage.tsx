@@ -52,6 +52,15 @@ const COMMIT_FRACTION = 0.16;
 const MIN_COMMIT_DISTANCE = 44;
 const MAX_COMMIT_DISTANCE = 96;
 const SWITCH_DURATION_SEC = 0.62;
+// Intermediate steps of a multi-step catch-up WALK run faster than the single-step
+// switch, so a several-track jump glides through its covers quickly; the final step
+// (steps === 1) still uses SWITCH_DURATION_SEC for a soft landing.
+const WALK_STEP_DURATION_SEC = 0.28;
+// Furthest a programmatic switch will slide rather than snap. Within this many steps the
+// coverflow walks through real, in-window covers (no wrong-cover flash); beyond it the
+// covers can't preload fast enough and there's nothing loaded to slide through, so it
+// snaps. (Raise for more sliding on big queue jumps, at the cost of a longer animation.)
+const MAX_SLIDE_STEPS = 8;
 const SNAP_DURATION_SEC = 0.42;
 const COMMIT_EASE = [0.22, 1, 0.36, 1] as const;
 const COVERFLOW_TILT = 34;
@@ -81,6 +90,44 @@ function trackBorderRgb(track: Track | undefined): Rgb | null {
   const stored = normalizeCoverPalette(track.coverPalette)[0];
   if (stored) return stored;
   return normalizeCoverPalette(coverPaletteFromThumbhash(track.coverThumbhash))[0] ?? null;
+}
+
+/**
+ * Which single coverflow step moves the visual centre toward `target`, and how many steps
+ * away it is — scanning both directions up to `maxSteps` (mode-aware via `stepCenter`, so
+ * wrap / shuffle is honoured) and taking the shorter side. `dir: -1` = slide toward next
+ * (centre advances), `dir: 1` = toward prev. Returns null when the target is further than
+ * `maxSteps` (or unreachable in the current mode) — the caller snaps instead of sliding.
+ */
+function reachToward(
+  stepCenter: (index: number, dir: 1 | -1) => number,
+  from: number,
+  target: number,
+  maxSteps: number,
+): { dir: 1 | -1; steps: number } | null {
+  let fwd = 0;
+  let c = from;
+  for (let i = 1; i <= maxSteps; i += 1) {
+    c = stepCenter(c, 1);
+    if (c === target) {
+      fwd = i;
+      break;
+    }
+    if (c === from) break; // wrapped fully without finding it
+  }
+  let bwd = 0;
+  c = from;
+  for (let i = 1; i <= maxSteps; i += 1) {
+    c = stepCenter(c, -1);
+    if (c === target) {
+      bwd = i;
+      break;
+    }
+    if (c === from) break;
+  }
+  if (fwd && (!bwd || fwd <= bwd)) return { dir: -1, steps: fwd };
+  if (bwd) return { dir: 1, steps: bwd };
+  return null;
 }
 
 /**
@@ -186,6 +233,11 @@ export function SwipeableCoverStage({
   // The track id this gesture is settling/committing to, so the external-switch
   // sync doesn't replay our own commit as a programmatic slide.
   const selfCommitRef = useRef<number | null>(null);
+  // A burst of programmatic switches arrived faster than the catch-up slide could play.
+  // Armed by a catch-up slide's onDone when the centre still trails `currentIndex`; the
+  // chain effect then slides the next step. ONLY the catch-up onDone sets it, so a drag /
+  // rest recenter (which also bumps centerIndex) never triggers a spurious chained slide.
+  const chainPendingRef = useRef(false);
   // Wheel bookkeeping.
   const wheelEngaged = useRef(false);
   const wheelEndTimer = useRef<number | null>(null);
@@ -344,6 +396,16 @@ export function SwipeableCoverStage({
     // 20260618-backlight-shadow-drag #1: only the current card glows during the drag.)
     const st = usePlayerStore.getState();
     setGestureBacklightTrackId(st.queue[st.currentIndex]?.id);
+    // Measure the overlay rect NOW (synchronously), so the coverflow overlay — with the
+    // card backlight — renders on the SAME drag-start render that flips `active`.
+    // Otherwise `overlayRect` is null for a frame: the base opacity gate (active &&
+    // overlayRect) keeps the base cover visible while its backlight is gated off
+    // (!active) and the overlay hasn't mounted yet → the base cover shows WITHOUT its
+    // glow for a frame = the "drag-start 深黑一下" (PRD 20260618-backlight-shadow-drag #1).
+    const rect = containerRef.current?.getBoundingClientRect();
+    if (rect) {
+      setOverlayRect({ top: rect.top, left: rect.left, width: rect.width, height: rect.height });
+    }
     usePlayerStore.getState().setCoverGestureActive(true);
     setActive(true);
   }, [stopAnimation]);
@@ -472,6 +534,60 @@ export function SwipeableCoverStage({
     [stopAnimation],
   );
 
+  // One step of a programmatic catch-up slide (the coverflow chasing the committed
+  // `currentIndex`). On landing it recenters; if the committed track is STILL further out
+  // — a burst of switches that outran the slide — it arms the chain so the next step
+  // slides too (continuous coverflow), otherwise it hands off to the base. Extracted so
+  // both the external-switch effect and the chain effect drive the same one-step slide.
+  const startCatchUpSlide = useCallback(
+    (dir: 1 | -1, durationSec: number) => {
+      // The glow follows the FROM-track's card as the overlay slides to the next cover;
+      // the base backlight crossfades the new track in at the hand-off. Re-set each step
+      // so a chained burst keeps the glow on the current step's origin card (same
+      // origin-card rule as a manual drag — PRD 20260618-backlight-shadow-drag #1).
+      setGestureBacklightTrackId(usePlayerStore.getState().queue[centerIndexRef.current]?.id);
+      setActive(true);
+      updateOverlayRect();
+      animateOffsetTo(dir, durationSec, () => {
+        recenterBy(dir);
+        if (usePlayerStore.getState().currentIndex === centerIndexRef.current) {
+          // Base already shows `currentIndex`; fade the overlay out over it.
+          beginHandoffFade();
+        } else {
+          // Centre still trails the committed track — let the chain effect slide on.
+          chainPendingRef.current = true;
+        }
+      });
+    },
+    [animateOffsetTo, beginHandoffFade, recenterBy, updateOverlayRect],
+  );
+
+  // Decide how the coverflow chases the committed `currentIndex` and start the first/next
+  // step. Walks toward the target one in-window cover at a time (so every frame shows a
+  // real, loaded cover — never a wrong-cover flash); intermediate steps slide fast, the
+  // final step lands soft. Beyond MAX_SLIDE_STEPS there's nothing loaded to slide through,
+  // so it snaps. Shared by the external-switch effect and the chain effect.
+  const slideTowardCommitted = useCallback(() => {
+    const store = usePlayerStore.getState();
+    const target = store.currentIndex;
+    const from = centerIndexRef.current;
+    if (target < 0 || target === from) {
+      beginHandoffFade();
+      return;
+    }
+    const reach = reachToward(store.stepCenter, from, target, MAX_SLIDE_STEPS);
+    if (!reach) {
+      // Too far to slide through loaded covers — snap to the committed track (no flash).
+      stopAnimation();
+      coverWindowOffset.set(0);
+      centerIndexRef.current = target;
+      setCenterIndex(target);
+      closeOverlay();
+      return;
+    }
+    startCatchUpSlide(reach.dir, reach.steps <= 1 ? SWITCH_DURATION_SEC : WALK_STEP_DURATION_SEC);
+  }, [beginHandoffFade, closeOverlay, startCatchUpSlide, stopAnimation]);
+
   const settle = useCallback(() => {
     draggingRef.current = false;
     const offset = coverWindowOffset.get();
@@ -533,8 +649,9 @@ export function SwipeableCoverStage({
   }, [active, beginBorderTransition]);
 
   // External (programmatic) switch — transport buttons, Q/E, auto-advance, queue
-  // click, Dock drag. The store already moved; animate the coverflow to catch up, or
-  // snap on a far jump / a burst that outruns the slide.
+  // click, Dock drag. The store already moved; slide the coverflow to catch up (walking
+  // through real covers toward the target, see slideTowardCommitted), or snap if it's
+  // further than MAX_SLIDE_STEPS.
   //
   // LAYOUT effect (not passive): engage the masking overlay BEFORE the first paint of
   // the new `currentIndex`. As a passive effect it lagged one frame, so for that frame
@@ -551,42 +668,26 @@ export function SwipeableCoverStage({
       return;
     }
     if (draggingRef.current) return; // don't fight the finger
-    const from = centerIndexRef.current;
-    const burst = activeAnimation.current != null;
-    const nextCenter = usePlayerStore.getState().stepCenter(from, 1);
-    const prevCenter = usePlayerStore.getState().stepCenter(from, -1);
-    const adjacentDir: 1 | -1 | 0 =
-      currentIndex === nextCenter ? -1 : currentIndex === prevCenter ? 1 : 0;
-    if (burst || adjacentDir === 0) {
-      // Far jump or rapid burst: snap the window to the new centre, no slide.
-      stopAnimation();
-      coverWindowOffset.set(0);
-      centerIndexRef.current = currentIndex;
-      setCenterIndex(currentIndex);
-      // The store is already on this track; let the base own it (no hand-off needed).
-      closeOverlay();
-      return;
-    }
-    // The glow follows the FROM-track's card as the overlay slides to the committed
-    // one; the base backlight crossfades the new track in at the hand-off. (Same
-    // origin-card rule as a manual drag — PRD 20260618 #1.)
-    setGestureBacklightTrackId(usePlayerStore.getState().queue[from]?.id);
-    setActive(true);
-    updateOverlayRect();
-    animateOffsetTo(adjacentDir, SWITCH_DURATION_SEC, () => {
-      recenterBy(adjacentDir);
-      // Base already shows `currentIndex`; fade the overlay out over it.
-      beginHandoffFade();
-    });
-  }, [
-    currentIndex,
-    animateOffsetTo,
-    beginHandoffFade,
-    closeOverlay,
-    recenterBy,
-    stopAnimation,
-    updateOverlayRect,
-  ]);
+    // A catch-up slide is still in flight — a rapid BURST of switches. Don't snap: let it
+    // finish, then its onDone arms the chain effect to slide the next step, so fast
+    // switching stays a continuous coverflow instead of a hard cut. The chain effect reads
+    // the LATEST `currentIndex`, so deferring here loses nothing.
+    if (activeAnimation.current != null) return;
+    slideTowardCommitted();
+  }, [currentIndex, slideTowardCommitted]);
+
+  // Continue the walk toward the committed track: once an in-flight slide's recenter has
+  // advanced the visual centre (and the deferred offset-reset effect — earlier in source
+  // order — has put the offset back at 0), slide the NEXT step. Gated on chainPendingRef,
+  // which ONLY a catch-up onDone sets — a drag / rest recenter (which also bumps
+  // centerIndex) is inert here.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: centerIndex is the run-after-recenter trigger
+  useLayoutEffect(() => {
+    if (!chainPendingRef.current) return;
+    chainPendingRef.current = false;
+    if (draggingRef.current) return;
+    slideTowardCommitted();
+  }, [centerIndex]);
 
   // At rest, keep the visual centre pinned to the committed track id (a queue edit
   // that shifts indices, or boot). Only when nothing is in flight.
