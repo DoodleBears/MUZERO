@@ -449,6 +449,35 @@ export function SwipeableCoverStage({
     }, HANDOFF_FADE_MS);
   }, [closeOverlay]);
 
+  // Hand the overlay off to the base, but only once the base has actually PAINTED the
+  // committed cover. The base MediaStage is burst-settled AND, for a streamed (R2 /
+  // NetEase / …) track, resolves its cover over the NETWORK — so its `coverUrl` is still
+  // null when the slide animation lands. A fixed-timer fade would then expose the base
+  // while it's holding the PREVIOUS cover: the reported "切下一首时歌名/歌手/音频都更新了，
+  // 但封面还停在上一首" on the next-button / Dock-drag external switch (R2 covers; a local
+  // cover resolves within a frame so its stale window is invisible). The base-ready
+  // effect below clears `awaitingHandoffRef` and fades once `baseCoverShownId` matches.
+  // Only a coverless target — whose base may never fire onCoverReady — uses the timed
+  // fallback. Shared by the drag settle-commit and the programmatic catch-up slide so
+  // every commit path waits the same way the manual drag already did.
+  const scheduleCommittedHandoff = useCallback(() => {
+    const targetTrack = usePlayerStore.getState().queue[centerIndexRef.current];
+    if (handoffTimer.current != null) window.clearTimeout(handoffTimer.current);
+    awaitingHandoffRef.current = true;
+    if (!(targetTrack && trackHasCover(targetTrack))) {
+      handoffTimer.current = window.setTimeout(beginHandoffFade, HANDOFF_FALLBACK_MS);
+    } else if (baseCoverShownIdRef.current === targetTrack.id) {
+      // The base ALREADY shows the committed cover — a same-track commit (dragged
+      // 0→1→0 back to the origin, or a switch onto an already-painted cover). The
+      // base-ready effect below won't re-fire (baseCoverShownId doesn't change), so the
+      // hand-off would never schedule and `active` would stay stuck true — leaving the
+      // backlight (gated on !active) and shadow (base opacity 0) off until the NEXT real
+      // switch (PRD 20260618-backlight-shadow-drag #2). Schedule the fade directly.
+      awaitingHandoffRef.current = false;
+      handoffTimer.current = window.setTimeout(beginHandoffFade, HANDOFF_BASE_SETTLE_MS);
+    }
+  }, [beginHandoffFade]);
+
   const commitAndHandoff = useCallback(() => {
     draggingRef.current = false;
     consumedRef.current = 0;
@@ -473,25 +502,8 @@ export function SwipeableCoverStage({
         normalizeCoverPalette(targetTrack.coverPalette),
       );
     }
-    if (handoffTimer.current != null) window.clearTimeout(handoffTimer.current);
-    awaitingHandoffRef.current = true;
-    // For a COVERED target, wait strictly until the base has PAINTED that cover before
-    // fading (the base is burst-settled, so it shows the old cover for ~300ms — a
-    // premature fade would flash it: "松手到 D 时闪一下 A"). Only a coverless target —
-    // whose base may never fire onCoverReady — uses the timed fallback.
-    if (!(targetTrack && trackHasCover(targetTrack))) {
-      handoffTimer.current = window.setTimeout(beginHandoffFade, HANDOFF_FALLBACK_MS);
-    } else if (baseCoverShownIdRef.current === targetTrack.id) {
-      // The base ALREADY shows the committed cover — a same-track commit (dragged
-      // 0→1→0 back to the origin, or any settle that doesn't change the track). The
-      // base-ready effect below won't re-fire (baseCoverShownId doesn't change), so the
-      // hand-off would never schedule and `active` would stay stuck true — leaving the
-      // backlight (gated on !active) and shadow (base opacity 0) off until the NEXT real
-      // switch (PRD 20260618-backlight-shadow-drag #2). Schedule the fade directly.
-      awaitingHandoffRef.current = false;
-      handoffTimer.current = window.setTimeout(beginHandoffFade, HANDOFF_BASE_SETTLE_MS);
-    }
-  }, [beginHandoffFade]);
+    scheduleCommittedHandoff();
+  }, [scheduleCommittedHandoff]);
 
   // Once the base stage REPORTS the committed cover, schedule the fade — but with a
   // short settle delay first: the base reports at its cover crossfade's START (see
@@ -551,15 +563,19 @@ export function SwipeableCoverStage({
       animateOffsetTo(dir, durationSec, () => {
         recenterBy(dir);
         if (usePlayerStore.getState().currentIndex === centerIndexRef.current) {
-          // Base already shows `currentIndex`; fade the overlay out over it.
-          beginHandoffFade();
+          // Reached the committed track. Hand off to the base, but WAIT for it to paint
+          // the committed cover before fading — exactly like the manual-drag commit. A
+          // slow remote/R2 base cover would otherwise be exposed mid-resolve, showing the
+          // previous cover under the correct title/audio (the external-switch stale-cover
+          // bug). Same-track / already-painted commits fade promptly via the ready check.
+          scheduleCommittedHandoff();
         } else {
           // Centre still trails the committed track — let the chain effect slide on.
           chainPendingRef.current = true;
         }
       });
     },
-    [animateOffsetTo, beginHandoffFade, recenterBy, updateOverlayRect],
+    [animateOffsetTo, recenterBy, scheduleCommittedHandoff, updateOverlayRect],
   );
 
   // Decide how the coverflow chases the committed `currentIndex` and start the first/next
