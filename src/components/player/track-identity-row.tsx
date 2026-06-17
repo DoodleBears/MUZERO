@@ -32,8 +32,13 @@ const DOCK_WHEEL_REARM_PX = 4;
  * Row 1 of the player-dock: cover + title/artist + the single play/pause button.
  * Subscribes via a narrow `useShallow` selector to only the current track's
  * *display* scalars — so editing any track (like, tags, cover of another song),
- * which rebuilds the queue array, never re-renders this row or re-fires the
- * shared `now-cover` layout animation.
+ * which rebuilds the queue array, never re-renders this row.
+ *
+ * The cover is NOT a motion `layout`/`layoutId` element: the Dock→Now Playing open
+ * uses the native View Transition (`transitionState`), not a motion shared-element
+ * morph, so a `layoutId` here had no counterpart — it only forced a per-render
+ * `getBoundingClientRect` reflow that compounded the drag-to-switch jank (PRD
+ * 20260617-dock-swipe-switch-jank).
  */
 export function TrackIdentityRow({
   className,
@@ -246,10 +251,7 @@ export function TrackIdentityRow({
             }}
             className="flex w-full min-w-0 cursor-grab items-center gap-2.5 rounded-2xl text-left outline-none focus-visible:ring-2 focus-visible:ring-ring active:cursor-grabbing disabled:cursor-default sm:gap-3"
           >
-            <motion.span
-              layoutId="now-cover"
-              className="relative grid size-10 shrink-0 place-items-center overflow-hidden bg-secondary album-cover-radius album-cover-shadow"
-            >
+            <span className="relative grid size-10 shrink-0 place-items-center overflow-hidden bg-secondary album-cover-radius album-cover-shadow">
               {/* Crossfades to the next cover only once it has decoded (no flash). */}
               <CoverImage
                 url={coverUrl}
@@ -269,7 +271,7 @@ export function TrackIdentityRow({
                   <Loader2 aria-hidden="true" className="size-5 animate-spin text-primary" />
                 </span>
               )}
-            </motion.span>
+            </span>
             <span className="relative min-w-0 flex-1">
               <motion.span
                 key={track?.id ?? "none"}
