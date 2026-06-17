@@ -1,6 +1,6 @@
 import { MotionConfig } from "motion/react";
 import type { ReactNode } from "react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { DevPerfPanel } from "@/components/dev/dev-perf-panel";
 import { AlbumCoverAppearancePanel } from "@/components/player/album-cover-appearance-panel";
 import { ChangelogModal } from "@/components/player/changelog-modal";
@@ -93,15 +93,15 @@ export default function App() {
     enabled: settings.systemShortcutsEnabled === true,
     registrations: systemShortcutRegistrations,
   });
-  // Browser tab title tracks the current track: `Title · Artist · Album | MUZERO`.
-  useDocumentTitle();
   // Apply the chosen desktop app icon (Electron only; no-op on web/tauri).
   useAppIcon();
-  // Keep the native tray menu aligned with current playback state (Electron only).
-  useTraySync();
-  // Keep the next transport targets warm so keyboard/button skips don't paint
-  // empty cover/background states while local blobs or R2 bytes resolve.
-  usePlaybackWarmup();
+  // NOTE: the playback-subscribing side-effect hooks (document title / tray sync /
+  // transport warmup) live in <PlaybackEffects/> below, NOT here. They subscribe to
+  // currentIndex/queue, so calling them in App's body would re-render App on every
+  // song switch — and the 5 TabPanels are App's inline children, so every hidden tab
+  // (Settings/Search/Sessions/Queue) would reconcile per switch. Isolating them in a
+  // null-rendering leaf keeps a switch from cascading into App + all tabs. (PRD
+  // 20260617-dock-swipe-switch-jank #2: cut the switch reconcile.)
   useDesktopChromeDataset();
   useAppearanceCssVars(settings);
   useWindowBorderDragColor(settings);
@@ -235,6 +235,21 @@ export default function App() {
   const immersiveLyricsActive = lyricsOnlyIdle || (foregroundHidden && lyricsVisible);
   const ambientBackdropActive = ambientBackgroundActive && !lyricsOnlyIdle;
 
+  // The non-active tabs stay MOUNTED (display:none) to keep their subscriptions warm.
+  // App re-renders on transient chrome state (idle/hover during a drag), and these
+  // pages take no switch-changing props — so memoize their ELEMENTS: App's re-render
+  // no longer cascades a full reconcile into every hidden tab on each song switch
+  // (the dominant switch cost; PRD 20260617-dock-swipe-switch-jank #2). Each page
+  // still re-renders from its OWN store/liveQuery subscriptions.
+  const onSessionsStarted = useCallback(() => setTab("now"), [setTab]);
+  const queuePanel = useMemo(() => <QueuePage />, []);
+  const searchPanel = useMemo(() => <SearchPage />, []);
+  const sessionsPanel = useMemo(
+    () => <SessionsPage onStarted={onSessionsStarted} />,
+    [onSessionsStarted],
+  );
+  const settingsPanel = useMemo(() => <SettingsPage />, []);
+
   // Mirror the Dock-hidden signal so deep surfaces (e.g. the lyrics search
   // affordance) can fade in sync with the Dock during immersive idle.
   useEffect(() => {
@@ -259,6 +274,9 @@ export default function App() {
           itself by the chrome heights (--spacing-chrome-*), so content fills the
           screen and scrolls *under* the bars instead of being boxed between them. */}
       <div className="app-shell relative h-screen overflow-hidden bg-background text-foreground">
+        {/* Playback side-effects isolated in a leaf so a song switch re-renders only
+            this, not App + every inline TabPanel (see PlaybackEffects). */}
+        <PlaybackEffects />
         <NowPlayingBackground
           active={ambientBackdropActive}
           hideVisualizer={visualizerHidden}
@@ -313,24 +331,16 @@ export default function App() {
             <NowPlayingPage foregroundHidden={foregroundHidden} pageActive={tab === "now"} />
           </TabPanel>
           <TabPanel active={tab === "queue"}>
-            <AmbientPageOverlay active={ambientActive}>
-              <QueuePage />
-            </AmbientPageOverlay>
+            <AmbientPageOverlay active={ambientActive}>{queuePanel}</AmbientPageOverlay>
           </TabPanel>
           <TabPanel active={tab === "search"}>
-            <AmbientPageOverlay active={ambientActive}>
-              <SearchPage />
-            </AmbientPageOverlay>
+            <AmbientPageOverlay active={ambientActive}>{searchPanel}</AmbientPageOverlay>
           </TabPanel>
           <TabPanel active={tab === "sessions"}>
-            <AmbientPageOverlay active={ambientActive}>
-              <SessionsPage onStarted={() => setTab("now")} />
-            </AmbientPageOverlay>
+            <AmbientPageOverlay active={ambientActive}>{sessionsPanel}</AmbientPageOverlay>
           </TabPanel>
           <TabPanel active={tab === "settings"}>
-            <AmbientPageOverlay active={ambientActive}>
-              <SettingsPage />
-            </AmbientPageOverlay>
+            <AmbientPageOverlay active={ambientActive}>{settingsPanel}</AmbientPageOverlay>
           </TabPanel>
         </main>
 
@@ -507,6 +517,23 @@ async function toggleDesktopMaximize() {
  */
 function TabPanel({ active, children }: { active: boolean; children: ReactNode }) {
   return <div className={cn("h-full", !active && "hidden")}>{children}</div>;
+}
+
+/**
+ * Null-rendering leaf that owns the playback-state-subscribing side-effect hooks
+ * (document title / tray sync / transport warmup). These re-render on every song
+ * switch (currentIndex/queue) — isolating them here means ONLY this leaf re-renders,
+ * not App and its inline TabPanels, so a switch no longer reconciles the hidden tabs.
+ */
+function PlaybackEffects() {
+  // Browser tab title tracks the current track: `Title · Artist · Album | MUZERO`.
+  useDocumentTitle();
+  // Keep the native tray menu aligned with current playback state (Electron only).
+  useTraySync();
+  // Keep the next transport targets warm so keyboard/button skips don't paint
+  // empty cover/background states while local blobs or R2 bytes resolve.
+  usePlaybackWarmup();
+  return null;
 }
 
 function AmbientPageOverlay({ active, children }: { active: boolean; children: ReactNode }) {
