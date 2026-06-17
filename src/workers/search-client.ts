@@ -11,10 +11,16 @@
  * it's the exception, not the norm.
  */
 
+import { log } from "@/lib/logger";
 import { type IndexableRow, type QueryHit, queryRows } from "@/lib/search-core";
+import { createPerfSampler, type PerfStats } from "@/lib/search-perf";
 import { ensureTransliterationLoaded } from "@/lib/search-transliterate";
 
-type Pending = { resolve: (hits: QueryHit[]) => void; reject: (e: Error) => void };
+type Pending = {
+  resolve: (hits: QueryHit[]) => void;
+  reject: (e: Error) => void;
+  startedAt: number;
+};
 
 let worker: Worker | null = null;
 let workerUnavailable = false;
@@ -25,6 +31,36 @@ const pending = new Map<number, Pending>();
 let inlineRows: readonly IndexableRow[] = [];
 let inlineLibsRequested = false;
 
+// Phase 1 observability: end-to-end query latency (send → hits resolved) and the
+// worker's pure scan time, kept in bounded rings and logged periodically via
+// `log.debug` (prod-silent). Only ms aggregates are logged — never query text or
+// row content (PRD §8). Symptom 2 ("~3s typing") shows up here as a high p95.
+const latencySampler = createPerfSampler(200);
+const workerDurationSampler = createPerfSampler(200);
+const PERF_LOG_EVERY = 25;
+let perfLogCountdown = PERF_LOG_EVERY;
+
+function recordQueryPerf(latencyMs: number, workerMs?: number): void {
+  latencySampler.record(latencyMs);
+  if (workerMs !== undefined) workerDurationSampler.record(workerMs);
+  perfLogCountdown -= 1;
+  if (perfLogCountdown > 0) return;
+  perfLogCountdown = PERF_LOG_EVERY;
+  log.debug("search.perf", {
+    latency: latencySampler.stats(),
+    workerDuration: workerDurationSampler.stats(),
+    rows: inlineRows.length,
+  });
+}
+
+/** Current aggregated search perf (for debugging / verification). */
+export function getSearchPerfSnapshot(): {
+  latency: PerfStats | null;
+  workerDuration: PerfStats | null;
+} {
+  return { latency: latencySampler.stats(), workerDuration: workerDurationSampler.stats() };
+}
+
 function getWorker(): Worker | null {
   if (worker) return worker;
   if (workerUnavailable || typeof Worker === "undefined") return null;
@@ -33,8 +69,25 @@ function getWorker(): Worker | null {
     worker.onmessage = (event: MessageEvent) => {
       const msg = event.data;
       if (msg?.type === "result") {
-        pending.get(msg.reqId)?.resolve(msg.hits as QueryHit[]);
+        const entry = pending.get(msg.reqId);
+        if (entry) {
+          recordQueryPerf(
+            performance.now() - entry.startedAt,
+            msg.durationMs as number | undefined,
+          );
+          entry.resolve(msg.hits as QueryHit[]);
+        }
         pending.delete(msg.reqId);
+      } else if (msg?.type === "index-stats") {
+        // Cold / incremental build cost (PRD §4). Numbers only, no row content.
+        log.debug("search.index", {
+          buildMs: msg.buildMs,
+          size: msg.size,
+          added: msg.added,
+          updated: msg.updated,
+          removed: msg.removed,
+          reused: msg.reused,
+        });
       }
     };
     worker.onerror = () => {
@@ -68,11 +121,15 @@ export function searchRows(query: string): Promise<QueryHit[]> {
       inlineLibsRequested = true;
       void ensureTransliterationLoaded();
     }
-    return Promise.resolve(queryRows(inlineRows, query));
+    const startedAt = performance.now();
+    const hits = queryRows(inlineRows, query);
+    const durationMs = performance.now() - startedAt;
+    recordQueryPerf(durationMs, durationMs);
+    return Promise.resolve(hits);
   }
   const reqId = nextReqId++;
   return new Promise<QueryHit[]>((resolve, reject) => {
-    pending.set(reqId, { resolve, reject });
+    pending.set(reqId, { resolve, reject, startedAt: performance.now() });
     w.postMessage({ type: "query", reqId, query });
   });
 }
@@ -84,4 +141,7 @@ export function __resetSearchClientForTests(): void {
   pending.clear();
   inlineRows = [];
   inlineLibsRequested = false;
+  latencySampler.reset();
+  workerDurationSampler.reset();
+  perfLogCountdown = PERF_LOG_EVERY;
 }
