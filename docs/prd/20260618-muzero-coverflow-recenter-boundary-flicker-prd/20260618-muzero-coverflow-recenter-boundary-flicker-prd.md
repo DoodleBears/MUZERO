@@ -28,7 +28,13 @@
 > - **根因**：settled border 读 [`visualizer-color-store`](../../../src/stores/visualizer-color-store.ts) 的 cover 色，而该 store 在切歌后**延迟 650ms** 才采用 committed 曲目的色（`transitionVisualizerCoverColor` 的 settle debounce，防切歌帧抖动）。drag-override 在 hand-off 释放时（早于 650ms）把 border 交还给 settled 路径，此刻 store 仍是 pre-drag 色 → 闪回。
 > - **正解**：新增 `snapVisualizerCoverColor()`（立即应用、取消 pending settle），在 [`commitAndHandoff`](../../../src/components/player/swipeable-cover-stage.tsx) 用 committed 曲目的 palette 调用——让 settled 色在 commit 当下就等于 drag 落点。auto-advance/scrub 仍走原 debounce 路径。
 > - **验证**：rebuild prod dist + CDP harness 实测，`[vcc:apply]` snap 在 commit 落地、border 松手后稳定停在 committed 色、**无闪回**（修复前：松手后 ~470ms 暗色闪、~650ms 后回正）。`tsc` 干净、187 测试（player + store）通过、Biome 干净。
-> - **环境教训**：`make electron-profile` 跑的是 `vite build` 出的**生产 bundle**（`app://muzero`），不是 HMR dev server——改源码后必须**重新 `vite build` + reload** 才生效；`Page.reload` 只重载同一份旧 bundle。前几次"修了还闪"是测在旧 bundle 上。
+> - **环境教训**：`make electron-profile` 跑的是 `vite build` 出的**生产 bundle**（`app://muzero`），不是 HMR dev server——改源码后必须**重新 `vite build` + reload` 才生效；`Page.reload` 只重载同一份旧 bundle。前几次"修了还闪"是测在旧 bundle 上。
+
+> **#4 追加（6b1f44d）——Dock 拖拽 / 按钮切歌：先滑到错的曲目再修正**：用户报「在 0 点一下下一首 / Dock 拖一下，封面+背景视觉上从 0 滑到 2、再过渡回 1、播放 1」。**单次**切换即复现，封面与背景同时 overshoot。
+> - **harness 实证**：CDP 驱动 `/player/next` + 记录 `coverWindowOffset`（干净 0→-1，无 overshoot）——一开始记错了信号；真正出错的是 **centerIndex 被提前改**。加 `[pin]` 埋点后定位：「at-rest pin」是**被动 `useEffect`**，与 external-switch 的 **layout effect** 同一次 commit，但读到的 `active` 仍是 stale-false → 在滑动途中就 `setCenterIndex(currentIndex)`，把 window 重新中心到刚提交的曲目；而 catch-up 滑动（按旧中心算的）于是落到**新中心的 +1 槽 = 再外一首**（overshoot），再被纠回。封面+背景同时错正因二者都读同一个 `coverWindowOffset` + 同一个 window 内容。
+> - **正解**：pin 的 guard 除了 `active` 再加 `activeAnimation.current != null`（一个 **ref**，由先跑的 layout effect 在启动 catch-up 滑动时同步置位，所以本被动 effect 跑时它已就位）。验证：单次 external next 时 `[pin]` 不再于滑动途中触发，window 停在旧中心、滑动落到正确的相邻曲目。
+> - **验证**：`tsc` 干净、`src/components/player` 178 测试通过、Biome 干净；rebuild prod dist + harness 实测 `[pin]` 无中途触发。
+> - **教训**：state（`active`）与同 commit 的 layout effect 有 stale 竞态时，跨 effect 协调要用 **ref**（同步可见）而非 state。
 
 ---
 
