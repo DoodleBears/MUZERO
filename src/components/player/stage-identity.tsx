@@ -4,17 +4,29 @@ import type { Track } from "@/db/types";
 import { trackAlbum, trackArtists, trackSubtitle } from "@/lib/track-display";
 import { useNavStore } from "@/stores/nav-store";
 
-/** Poweramp-style title + author pills shown directly below the stage cover. */
-export function StageIdentity({ track }: { track: Track }) {
+/** Poweramp-style title + author pills shown directly below the stage cover.
+ *  `scroll={false}` renders static (truncating) lines and skips the marquee
+ *  measurement — used for the coverflow's transient sliding cards, where the
+ *  per-switch clone-to-body reflow of several titles isn't worth it (only the
+ *  resting stage identity needs the marquee). */
+export function StageIdentity({ track, scroll = true }: { track: Track; scroll?: boolean }) {
+  const noScroll = !scroll;
   return (
     <div className="relative z-[90] flex w-full min-w-0 flex-col items-start gap-1.5">
       <div className="w-fit min-w-0 max-w-full overflow-hidden rounded-full border border-white/10 bg-black/55 px-4 py-1.5 shadow-lg">
-        <AutoScrollText className="text-2xl font-bold tracking-normal text-white">
+        <AutoScrollText
+          className="text-2xl font-bold tracking-normal text-white"
+          noScroll={noScroll}
+        >
           {track.title}
         </AutoScrollText>
       </div>
       <div className="w-fit min-w-0 max-w-full overflow-hidden rounded-full border border-white/10 bg-black/50 px-3 py-1 shadow-md">
-        <AutoScrollText className="text-base font-semibold text-white/85" staticMode="clip">
+        <AutoScrollText
+          className="text-base font-semibold text-white/85"
+          staticMode="clip"
+          noScroll={noScroll}
+        >
           <StageSubtitle track={track} />
         </AutoScrollText>
       </div>

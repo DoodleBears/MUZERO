@@ -600,7 +600,10 @@ export function SwipeableCoverStage({
   const renderIdentity = useCallback(
     (trackId: string) => {
       const track = queue.find((tk) => tk.id === trackId);
-      return track ? <StageIdentity track={track} /> : null;
+      // Coverflow cards are transient (slide + fade out); render their titles STATIC
+      // so a switch doesn't clone-to-body + reflow several marquees. The resting base
+      // StageIdentity keeps the marquee. (PRD 20260617-dock-swipe-switch-jank #2.)
+      return track ? <StageIdentity track={track} scroll={false} /> : null;
     },
     [queue],
   );

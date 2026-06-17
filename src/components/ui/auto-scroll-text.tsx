@@ -30,11 +30,16 @@ export function AutoScrollText({
   className,
   forceScroll = false,
   staticMode = "truncate",
+  noScroll = false,
 }: {
   children: ReactNode;
   className?: string;
   forceScroll?: boolean;
   staticMode?: "clip" | "truncate";
+  /** Render as a plain truncating line and SKIP all measurement (no clone-to-body /
+   *  reflow, no observers). For transient/secondary instances — e.g. the coverflow's
+   *  sliding side cards — where the marquee isn't worth the per-switch reflow storm. */
+  noScroll?: boolean;
 }) {
   const viewportRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
@@ -55,6 +60,7 @@ export function AutoScrollText({
   // when the text does (so RO alone would miss it). We still measure against the
   // natural inline width (the clone) so an overflowing line isn't read as fitting.
   useLayoutEffect(() => {
+    if (noScroll) return; // static line — never measure / observe
     const viewport = viewportRef.current;
     const content = contentRef.current;
     if (!viewport || !content) return;
@@ -86,9 +92,9 @@ export function AutoScrollText({
       resizeObserver.disconnect();
       mutationObserver?.disconnect();
     };
-  }, []);
+  }, [noScroll]);
 
-  const animate = overflow > 0 || (forceScroll && viewportWidth > 0);
+  const animate = !noScroll && (overflow > 0 || (forceScroll && viewportWidth > 0));
   const style = animate
     ? ({
         "--auto-scroll-x": overflow > 0 ? `-${overflow}px` : `calc(-100% + ${viewportWidth}px)`,
