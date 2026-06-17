@@ -5,6 +5,13 @@ import { PlaylistImportDialog } from "@/components/stream/playlist-import-dialog
 import { QrLoginDialog } from "@/components/stream/qr-login-dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { saveSettings } from "@/db/repositories";
 import type { StreamSourceId } from "@/db/types";
 import { useSettings } from "@/hooks/use-app-data";
@@ -129,20 +136,26 @@ export function StreamSourcesSettings() {
                     </span>
                   </div>
                   <div className="flex items-center gap-2">
-                    <label className="flex items-center gap-1.5 text-muted-foreground text-xs">
-                      {t("streamSources.quality")}
-                      <select
+                    <div className="flex items-center gap-1.5 text-muted-foreground text-xs">
+                      <span>{t("streamSources.quality")}</span>
+                      <Select
                         value={quality}
-                        onChange={(e) => void setQuality(id, e.target.value)}
-                        className="rounded-md border border-border bg-transparent px-1.5 py-1 text-foreground text-xs"
+                        onValueChange={(value) => {
+                          if (value) void setQuality(id, value);
+                        }}
                       >
-                        {qualities.map((q) => (
-                          <option key={q} value={q}>
-                            {q}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
+                        <SelectTrigger className="h-8 w-auto min-w-20 px-2 text-foreground text-xs">
+                          <SelectValue>{(value) => value as string}</SelectValue>
+                        </SelectTrigger>
+                        <SelectContent>
+                          {qualities.map((q) => (
+                            <SelectItem key={q} value={q}>
+                              {q}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
                     {loggedIn ? (
                       <Button
                         type="button"
