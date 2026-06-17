@@ -66,6 +66,19 @@ settle → animate snap               next()/skipPrev() → playIndex
 
 ## 4. 性能测量方法学（验收 ground truth）
 
+### 4.0 ⚠️ 决定性结论：掉帧主要是 DEV-build 开销，生产基本顺
+所有 §4.2/4.3 的「卡」数字都是 **dev build**（StrictMode 双渲染 + `jsxDEV` + Vite 不打包 + logger + trace observer + profiler 附着）。把同一份代码 `VITE_MUZERO_PROFILE=1 vite build` 成**生产 renderer**、用 `vite preview --port 41730` 喂同一 origin（共享 dev 的 5983 IndexedDB）、Electron 加载之，**同机同数据**复测：
+
+| 场景（@5983 now tab） | DEV frameMax / fpsLow / longtask | **PROD frameMax / fpsLow / longtask** |
+|---|---|---|
+| 程序化 switch ×8 | 166 / 6 / 1107ms | **58 / 17 / 0** |
+| **Dock 拖拽 ×6** | 127–166 / 6–7.7 / ~1700ms | **50 / 20 / 0** |
+| 封面拖拽 ×6 | 92–108 / 9–11 / 多 | **33 / 30 / 0** |
+
+→ **生产切歌零 long task**，frameMax 从 ~160ms 掉到 ~50ms（约 **3×** 顺）。QA 报的「严重掉帧」**主要是 dev 开销放大**（~3×）。生产残留只是切歌时偶有 1–2 帧 33–50ms（封面解码/重渲），**不是严重掉帧**。Dock 在生产仍比封面略差（50 vs 33），但绝对值已小。
+→ **据此重新评估 ROI**：深度「根治」（封面离主线程解码）把生产再往 60fps 推，属**打磨**而非修严重 bug；当前生产已可接受。Phase 1/2 仍保留（既改善 dev DX，也压低生产 dock/cover 不对称）。
+> 复现：`VITE_MUZERO_PROFILE=1 vite build` → `vite preview --port 41730` → `MUZERO_ELECTRON_URL=http://localhost:41730 MUZERO_PERF_CONTROL=1 MUZERO_REMOTE_DEBUG_PORT=39222 electron electron/main.cjs`（同 origin 共享 IndexedDB，trace 观测在 `VITE_MUZERO_PROFILE` 下保留）。
+
 ### 4.1 两个驱动
 - **`perf-drive switch`**（经 control endpoint → `playIndex`）：驱动**程序化切歌**，是 Dock 拖拽成本的**下界**（缺 snap-back spring / 连续手势）。用于 Phase 1 这种「重渲路径」改动。
 - **`perf-gesture <dock|cover>`（新增）**：经 **CDP `Input.dispatchMouseEvent`** 合成**真实指针拖拽**（mousePressed → 每帧 mouseMoved → mouseReleased），覆盖**整条拖拽链**（motion drag / dragSnapToOrigin 回弹 / 封面 crossfade / external 冷滑）。靠 `data-testid="dock-song-drag"` / `"now-cover-drag"` 定位元素，markers 经 control endpoint 对齐切片。**这是之前缺的那一块**——能直接量化「Dock 拖拽 vs 封面拖拽」的不对称。
@@ -135,6 +148,7 @@ CDP profile（`perf-gesture dock --profile`）显示切歌成本以 **React 重�
 
 | Date | Author | Changes |
 |------|--------|---------|
+| 2026-06-17 | DoodleBear | **生产 build 对照（决定性）**：`VITE_MUZERO_PROFILE=1 vite build` + `vite preview --port 41730`（同 origin 共享 5983 IndexedDB）+ Electron 加载。同机同数据 PROD vs DEV：程序化 switch frameMax 166→**58**、longtask 1107→**0**；Dock 拖拽 frameMax 127→**50**、fpsLow 7.7→**20**、longtask→**0**；封面 frameMax 92→**33**。**生产切歌零 long task，约 3× 顺** → QA「严重掉帧」主要是 dev 开销放大；生产残留属打磨非严重 bug。据此「根治」（封面离帧解码）ROI 下调为可选打磨。 |
 | 2026-06-17 | DoodleBear | **Phase 2 ✅**：CDP profile 定位切歌帧成本（React 重渲 + base 裸解码）。把 external-switch effect 从 passive `useEffect` 改 `useLayoutEffect`，**首帧前**同步 engage 遮罩 overlay → base 新封面解码不再裸跑关键帧。CDP 实拖 Dock：`frameMax 166→~127`、`fpsLow 6→~7.7`（掉帧缓解）；封面无回退；惠及所有 external 切歌（transport / 队列点击 / 自动续播）。代价 `switchToFrame +12ms`（亚帧）。178 单测绿、tsc 0。 |
 | 2026-06-17 | DoodleBear | **CDP 实拖 harness（`perf-gesture.mjs`）+ A/B**：经 CDP `Input.dispatchMouseEvent` 合成真实指针拖拽（按 `data-testid` 定位 dock / cover），补上「程序化 switch 测不到拖拽」的缺口。实拖 ×6 @5983 now tab（已含 Phase 1）：**Dock `switchToFrame` avg 182/max 228ms vs 封面 123/140ms（+48%）**、frameMax 166 vs 108、fpsLow 6 vs 9.2 → **坐实 QA**。根因精确化：主因是 Dock 触发 Now Playing 的 external 冷滑（封面自身手势设 `selfCommitRef` 被特判跳过），冷滑在切歌帧新挂 coverflow overlay + reflow。Phase 2 改为收窄该冷滑成本。 |
 | 2026-06-17 | DoodleBear | **Phase 1 ✅ 落地**：删孤儿 `layoutId="now-cover"`（降为普通 `<span>`）。harness switch ×8 @5983：`longtask 786→353ms 减半`、`count 14→6`、`switchToFrame max 55→48ms`。tsc 0、单测绿。Phase 2/3（收敛并发动画 / 对齐 windowed-lead 范式）待续。 |
