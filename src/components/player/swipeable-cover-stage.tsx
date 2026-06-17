@@ -743,7 +743,15 @@ export function SwipeableCoverStage({
           }}
         >
           <MediaStage
-            coverBacklightEnabled={foregroundVisible && !active}
+            // ON at rest AND during the hand-off fade (not just after, at closeOverlay).
+            // The base backlight is portaled out (not hidden by the base opacity), so it
+            // fades IN during the hand-off while the card backlight (still rendered, also
+            // fading with the overlay) is on top — a crossfade. The card carries the
+            // CORRECT committed-cover glow throughout, covering the brief moment the base's
+            // blurred derivative still holds the previous track's image (the "闪回上一张
+            // backlight 颜色"); by closeOverlay the derivative has resolved. (PRD
+            // 20260618-backlight-shadow-drag #1 commit hand-off.)
+            coverBacklightEnabled={foregroundVisible && (!active || handoffFading)}
             onCoverReady={setBaseCoverShownId}
           />
         </motion.div>
