@@ -178,41 +178,56 @@ export function TrackIdentityRow({
     if (onOpen) transitionState(onOpen);
   }
 
-  const nowTransportRows =
-    transportHintScope === "now"
-      ? [
-          {
-            label: `${t("player.previous")} · ${t("shortcuts.scope.now")}`,
-            keys: hint("prev", { scope: "now" }),
-          },
-          {
-            label: `${t("player.next")} · ${t("shortcuts.scope.now")}`,
-            keys: hint("next", { scope: "now" }),
-          },
-        ]
-      : [];
-  const globalTransportRows = [
-    {
-      label: `${t("player.previous")} · ${t("shortcuts.scope.global")}`,
-      keys: hint("prev", { scope: "global" }),
-    },
-    {
-      label: `${t("player.next")} · ${t("shortcuts.scope.global")}`,
-      keys: hint("next", { scope: "global" }),
-    },
-  ];
-  const dockTransportRows =
-    transportHintScope === "now"
-      ? [...nowTransportRows, ...globalTransportRows]
-      : [
-          { label: t("player.previous"), keys: hint("prev") },
-          { label: t("player.next"), keys: hint("next") },
-        ];
-  const dragShortcutRows = [
-    { label: t("player.dragPrevious"), keys: ["→", "↓"] },
-    { label: t("player.dragNext"), keys: ["←", "↑"] },
-    ...nowTransportRows,
-  ].filter((row) => row.keys.length > 0);
+  // Tooltip shortcut rows are only ever SEEN on hover, but were rebuilt on every
+  // render — ~25 `t()` lookups + `hint()` calls per switch (the now-playing re-render
+  // hot path; i18next showed up in the dropped-frame trace). `t`/`hint` are stable
+  // (per-language / `useCallback`), so memoize on those + scope: a song switch no
+  // longer pays the lookups. (PRD 20260617-dock-swipe-switch-jank #1.)
+  const { dragShortcutRows, playButtonRows } = useMemo(() => {
+    const nowTransportRows =
+      transportHintScope === "now"
+        ? [
+            {
+              label: `${t("player.previous")} · ${t("shortcuts.scope.now")}`,
+              keys: hint("prev", { scope: "now" }),
+            },
+            {
+              label: `${t("player.next")} · ${t("shortcuts.scope.now")}`,
+              keys: hint("next", { scope: "now" }),
+            },
+          ]
+        : [];
+    const globalTransportRows = [
+      {
+        label: `${t("player.previous")} · ${t("shortcuts.scope.global")}`,
+        keys: hint("prev", { scope: "global" }),
+      },
+      {
+        label: `${t("player.next")} · ${t("shortcuts.scope.global")}`,
+        keys: hint("next", { scope: "global" }),
+      },
+    ];
+    const dock =
+      transportHintScope === "now"
+        ? [...nowTransportRows, ...globalTransportRows]
+        : [
+            { label: t("player.previous"), keys: hint("prev") },
+            { label: t("player.next"), keys: hint("next") },
+          ];
+    const drag = [
+      { label: t("player.dragPrevious"), keys: ["→", "↓"] },
+      { label: t("player.dragNext"), keys: ["←", "↑"] },
+      ...nowTransportRows,
+    ].filter((row) => row.keys.length > 0);
+    const playButton = [
+      ...dock,
+      { label: t("track.like"), keys: hint("like") },
+      { label: t("nowPlaying.upNext"), keys: hint("queue") },
+      { label: t("lyrics.toggleStage"), keys: hint("lyrics") },
+      { label: t("visualizer.title"), keys: hint("visualizer") },
+    ].filter((row) => row.keys.length > 0);
+    return { dragShortcutRows: drag, playButtonRows: playButton };
+  }, [t, hint, transportHintScope]);
 
   return (
     <div className={cn("flex items-center gap-2 sm:gap-3", className)}>
@@ -296,13 +311,7 @@ export function TrackIdentityRow({
       <ControlTooltip
         label={isPlaying ? t("player.pause") : t("player.play")}
         keys={hint("play")}
-        shortcutRows={[
-          ...dockTransportRows,
-          { label: t("track.like"), keys: hint("like") },
-          { label: t("nowPlaying.upNext"), keys: hint("queue") },
-          { label: t("lyrics.toggleStage"), keys: hint("lyrics") },
-          { label: t("visualizer.title"), keys: hint("visualizer") },
-        ].filter((row) => row.keys.length > 0)}
+        shortcutRows={playButtonRows}
       >
         <Button
           size="icon-lg"
