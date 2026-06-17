@@ -1,6 +1,6 @@
 import { useLiveQuery } from "dexie-react-hooks";
 import { AnimatePresence, motion } from "motion/react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { getTrackLyrics, listGalleryImages, listTrackBackgrounds } from "@/db/repositories";
 import { useSettings } from "@/hooks/use-app-data";
 import { useLoadedImageUrl } from "@/hooks/use-image-load";
@@ -28,6 +28,7 @@ import { BackgroundFrameStack } from "./background/background-frame-stack";
 import { TransitionBackground } from "./background/transition-background";
 import { useBackgroundController } from "./background/use-background-controller";
 import { CanvasBlurBackground } from "./canvas-blur-background";
+import { getCoverWindow, subscribeWindow } from "./cover-window-store";
 import { type PixiBackgroundEffect, PixiPixelBackground } from "./pixi-pixel-background";
 
 const bgCoverLog = createDiagnosticLogger("background.cover");
@@ -357,6 +358,19 @@ function NowPlayingBackgroundContent({ hideVisualizer }: { hideVisualizer: boole
   // full-screen flash (PRD 20260618). Holding local covers visible lets the controller
   // bridge the gap instead. (Was masked by the title flash until that was fixed.)
   const isRemoteOrStaleCover = Boolean(current?.remoteCoverUrl) || current?.origin === "streamed";
+  // While the lockstep cover window is open (a coverflow drag + its post-commit
+  // hand-off, up until clearWindow), the Pixi controller is painting the window's
+  // covers into the canvas. The resting-cover gates below (pixiHoldsCover /
+  // effectiveRenderPixiTarget) can briefly go false mid-switch — for a STREAMED
+  // track the new cover proxies in over ~300ms — and that flipped the layer's CSS
+  // to opacity-0, blacking out a canvas that still had the window covers in it (the
+  // reported full-screen "commit 后过渡到黑再 fade in"). Keep the layer visible while
+  // the window owns the canvas. (PRD 20260618 #3.)
+  const coverWindowActive = useSyncExternalStore(
+    subscribeWindow,
+    () => getCoverWindow().active,
+    () => false,
+  );
   const pixiHoldsCover =
     pixiMedia.source !== "track-video" && hasPotentialImageBackground && !isRemoteOrStaleCover;
   const slideshowResetKey = `${current?.id ?? ""}:${source}:${slideshowUrls.length}`;
@@ -457,7 +471,11 @@ function NowPlayingBackgroundContent({ hideVisualizer }: { hideVisualizer: boole
           // cover resolves rather than dropping to opacity-0 — the dark gap was the
           // post-commit flicker — mirroring 均衡's hold-previous frame controller. Video
           // keeps the old gate (no stale cover while a video texture loads).
-          className={effectiveRenderPixiTarget || pixiHoldsCover ? "opacity-100" : "opacity-0"}
+          className={
+            effectiveRenderPixiTarget || pixiHoldsCover || coverWindowActive
+              ? "opacity-100"
+              : "opacity-0"
+          }
           effect={pixiEffect}
           effectSettings={effectSettings}
           mediaType={effectiveRenderPixiTarget?.mediaType ?? pixiMedia.mediaType}
