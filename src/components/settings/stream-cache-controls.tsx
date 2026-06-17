@@ -11,6 +11,7 @@ import {
   playbackCacheLimitBytes,
   summarizePlaybackCache,
 } from "@/player/playback-cache";
+import { useNavStore } from "@/stores/nav-store";
 import { notify } from "@/stores/notification-store";
 import {
   clearStreamedCache,
@@ -47,8 +48,21 @@ function formatBytes(bytes: number): string {
 export function StreamCacheControls() {
   const { t } = useTranslation();
   const settings = useSettings();
-  const summary = useLiveQuery(() => summarizeStreamedCache(), [], EMPTY_CACHE);
-  const playbackSummary = useLiveQuery(() => summarizePlaybackCache(), [], EMPTY_CACHE);
+  // These observe the media cache, which the playback warmup WRITES during playback /
+  // song switches — so a hidden Settings tab re-rendered every cache write (PRD
+  // reactivity-render-observability F3). Gate on the settings tab being active: while
+  // hidden, return a stable empty + don't observe the cache. Re-reads on tab enter.
+  const settingsActive = useNavStore((s) => s.tab === "settings");
+  const summary = useLiveQuery(
+    () => (settingsActive ? summarizeStreamedCache() : Promise.resolve(EMPTY_CACHE)),
+    [settingsActive],
+    EMPTY_CACHE,
+  );
+  const playbackSummary = useLiveQuery(
+    () => (settingsActive ? summarizePlaybackCache() : Promise.resolve(EMPTY_CACHE)),
+    [settingsActive],
+    EMPTY_CACHE,
+  );
   const [clearing, setClearing] = useState<StreamSourceId | "all" | "playback" | null>(null);
   const playbackCacheGb = Math.round(playbackCacheLimitBytes(settings) / 1024 ** 3);
 

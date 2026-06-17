@@ -20,6 +20,7 @@ import {
 import { backfillCoverMetadata, countCoverMetadataBackfillCandidates } from "@/db/repositories";
 import type { MediaBlob } from "@/db/types";
 import { resolveDesktopBridge } from "@/lib/desktop/bridge";
+import { useNavStore } from "@/stores/nav-store";
 import { notify } from "@/stores/notification-store";
 
 const EMPTY_BUCKET = { count: 0, bytes: 0 } satisfies PersistentMediaStorageBucket;
@@ -90,24 +91,32 @@ export function PersistentStorageSettings() {
   const [browserStorage, setBrowserStorage] = useState<BrowserStorageEstimate | null>(null);
   const migrationAbortRef = useRef<AbortController | null>(null);
   const coverRepairAbortRef = useRef<AbortController | null>(null);
+  // These scan tracks / mediaBlobs / derivatives, which the playback warmup writes
+  // (covers cached) during playback / song switches — re-rendering a hidden Settings
+  // tab. Gate on the settings tab being active so the hidden page doesn't observe those
+  // writes (PRD reactivity-render-observability F3). Re-reads on tab enter.
+  const settingsActive = useNavStore((s) => s.tab === "settings");
   const summary = useLiveQuery(
-    () => summarizePersistentMediaStorage(undefined, { includeHealth: true }),
-    [refreshToken],
+    () =>
+      settingsActive
+        ? summarizePersistentMediaStorage(undefined, { includeHealth: true })
+        : Promise.resolve(EMPTY_SUMMARY),
+    [refreshToken, settingsActive],
     EMPTY_SUMMARY,
   );
   const coverRepairCount = useLiveQuery(
-    () => countCoverMetadataBackfillCandidates(),
-    [refreshToken],
+    () => (settingsActive ? countCoverMetadataBackfillCandidates() : Promise.resolve(0)),
+    [refreshToken, settingsActive],
     0,
   );
   const thumbnailRepairCount = useLiveQuery(
-    () => countMissingCoverDerivatives("thumbnail"),
-    [refreshToken],
+    () => (settingsActive ? countMissingCoverDerivatives("thumbnail") : Promise.resolve(0)),
+    [refreshToken, settingsActive],
     0,
   );
   const backlightRepairCount = useLiveQuery(
-    () => countMissingCoverDerivatives("backlight"),
-    [refreshToken],
+    () => (settingsActive ? countMissingCoverDerivatives("backlight") : Promise.resolve(0)),
+    [refreshToken, settingsActive],
     0,
   );
 

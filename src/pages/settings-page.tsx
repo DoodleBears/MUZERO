@@ -208,6 +208,11 @@ export function SettingsPage() {
   const contentScrollRef = useRef<HTMLDivElement | null>(null);
   useSmoothScroll(navScrollRef);
   useSmoothScroll(contentScrollRef);
+  // These observe the playback-stats / -events / sync tables, which get written on every
+  // playback heartbeat + song switch (playCount flush). Gate on the settings tab being
+  // active so a hidden Settings page doesn't re-render per heartbeat/switch (PRD
+  // reactivity-render-observability F3). They re-read when you open Settings.
+  const settingsActive = useNavStore((s) => s.tab === "settings");
   const cloudDrives = useLiveQuery(() => listCloudDrives(), [], []);
   const latestSyncRun = useLiveQuery(() => db.syncRuns.orderBy("startedAt").last(), [], undefined);
   const localDevice = useLiveQuery(() => getLocalDevice(), [], undefined);
@@ -221,23 +226,27 @@ export function SettingsPage() {
   );
   const deviceAvatarUrl = useObjectUrl(deviceAvatarBlob);
   const playbackAggregateRows = useLiveQuery(
-    () => db.playbackAggregates.where("scope").equals("track").toArray(),
-    [],
+    () =>
+      settingsActive ? db.playbackAggregates.where("scope").equals("track").toArray() : [],
+    [settingsActive],
     [],
   );
   const tracks = useLiveQuery(() => db.tracks.toArray(), [], []);
   const sessions = useLiveQuery(() => db.sessions.toArray(), [], []);
   const playbackEventRows = useLiveQuery(
     () =>
-      localDevice
+      settingsActive && localDevice
         ? db.playbackEvents.where("devicePublicId").equals(localDevice.publicId).toArray()
         : [],
-    [localDevice?.publicId],
+    [localDevice?.publicId, settingsActive],
     [],
   );
   const statsSyncObjects = useLiveQuery(
-    () => db.syncObjects.where("kind").anyOf("stats-events-segment", "stats-checkpoint").toArray(),
-    [],
+    () =>
+      settingsActive
+        ? db.syncObjects.where("kind").anyOf("stats-events-segment", "stats-checkpoint").toArray()
+        : [],
+    [settingsActive],
     [],
   );
   const rebuildEngine = usePlayerStore((s) => s.rebuildEngine);
