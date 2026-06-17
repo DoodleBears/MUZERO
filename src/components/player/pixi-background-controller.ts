@@ -226,6 +226,14 @@ export function createPixiBackgroundController(
   let sprite: PixiSpriteLike | null = null;
   let filter: unknown = null;
   let resizeObserver: ResizeObserver | null = null;
+  // Cached host CSS size. `renderSize()` runs per-frame during a drag/slide (via
+  // applyWindowLayout); reading `host.clientWidth/clientHeight` there forces a layout
+  // reflow EVERY frame — it was the top build-independent cost in the switch trace
+  // (~34ms). The size only changes on a real resize, which the ResizeObserver already
+  // routes through `resize()`, so cache it there and lazily on first use. (PRD
+  // 20260617-dock-swipe-switch-jank #3.)
+  let hostCssW = 0;
+  let hostCssH = 0;
   let currentMedia: CurrentMedia | null = null;
   let currentVideoTeardown: (() => void) | undefined;
   let appPromise: Promise<void> | null = null;
@@ -429,8 +437,9 @@ export function createPixiBackgroundController(
   // Position a sprite to cover the current render size for its media dimensions.
   function coverSpriteToHost(target: PixiSpriteLike, media: CurrentMedia): void {
     if (!app) return;
-    const cssW = Math.max(1, Math.round(host.clientWidth || 1));
-    const cssH = Math.max(1, Math.round(host.clientHeight || 1));
+    if (!hostCssW) refreshHostSize();
+    const cssW = hostCssW;
+    const cssH = hostCssH;
     const block = Math.max(3, Math.min(48, Math.round(pixelSize)));
     const dpr = Math.min((typeof window !== "undefined" && window.devicePixelRatio) || 1, 2);
     const renderW =
@@ -442,9 +451,17 @@ export function createPixiBackgroundController(
 
   // ---- Lockstep cover window (foreground coverflow's background twin) -------------
 
+  // Re-read the host CSS box (the only layout-reflow read). Called from `resize()`
+  // (which the ResizeObserver drives) + lazily on first use — NOT per frame.
+  function refreshHostSize(): void {
+    hostCssW = Math.max(1, Math.round(host.clientWidth || 1));
+    hostCssH = Math.max(1, Math.round(host.clientHeight || 1));
+  }
+
   function renderSize(): { renderW: number; renderH: number } {
-    const cssW = Math.max(1, Math.round(host.clientWidth || 1));
-    const cssH = Math.max(1, Math.round(host.clientHeight || 1));
+    if (!hostCssW) refreshHostSize();
+    const cssW = hostCssW;
+    const cssH = hostCssH;
     const block = Math.max(3, Math.min(48, Math.round(pixelSize)));
     const dpr = Math.min((typeof window !== "undefined" && window.devicePixelRatio) || 1, 2);
     const renderW =
@@ -760,6 +777,9 @@ export function createPixiBackgroundController(
   }
 
   function resize(): number {
+    // The resize event IS the time to re-read the host box (drives the cache that
+    // per-frame `renderSize()` then reuses without reflow).
+    refreshHostSize();
     // In pure window mode there is no resting `sprite`; still resize + relayout the
     // window ring.
     if (app && windowActive && (!sprite || !currentMedia)) {
@@ -770,8 +790,8 @@ export function createPixiBackgroundController(
     }
     if (!app || !sprite || !currentMedia) return 0;
     const startedAt = nowMs();
-    const cssW = Math.max(1, Math.round(host.clientWidth || 1));
-    const cssH = Math.max(1, Math.round(host.clientHeight || 1));
+    const cssW = hostCssW;
+    const cssH = hostCssH;
     const block = Math.max(3, Math.min(48, Math.round(pixelSize)));
     const dpr = Math.min((typeof window !== "undefined" && window.devicePixelRatio) || 1, 2);
     const renderW =
