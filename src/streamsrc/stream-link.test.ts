@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { parseStreamLink } from "./stream-link";
+import type { StreamHttp, StreamHttpResponse } from "./http";
+import { expandStreamLink, parseStreamLink, qqShortLinkUrl, scrapeQqLink } from "./stream-link";
 
 describe("parseStreamLink", () => {
   it("parses a plain netease song link", () => {
@@ -100,5 +101,81 @@ describe("parseStreamLink", () => {
 
   it("ignores qq album / non song-playlist links", () => {
     expect(parseStreamLink("https://y.qq.com/n/ryqq/albumDetail/000abc")).toBeNull();
+  });
+
+  it("does not resolve a qq short link directly (needs expansion)", () => {
+    expect(parseStreamLink("https://c6.y.qq.com/base/fcgi-bin/u?__=PxaHiqS")).toBeNull();
+  });
+});
+
+describe("qqShortLinkUrl", () => {
+  it("detects the c.y.qq.com / c6.y.qq.com base/fcgi-bin/u shortener", () => {
+    expect(qqShortLinkUrl("https://c6.y.qq.com/base/fcgi-bin/u?__=PxaHiqS")).toBe(
+      "https://c6.y.qq.com/base/fcgi-bin/u?__=PxaHiqS",
+    );
+    expect(qqShortLinkUrl("https://c.y.qq.com/base/fcgi-bin/u?__=abc")).toBe(
+      "https://c.y.qq.com/base/fcgi-bin/u?__=abc",
+    );
+  });
+  it("extracts the short link from surrounding share text", () => {
+    expect(
+      qqShortLinkUrl("分享歌单：https://c6.y.qq.com/base/fcgi-bin/u?__=PxaHiqS （来自QQ音乐）"),
+    ).toBe("https://c6.y.qq.com/base/fcgi-bin/u?__=PxaHiqS");
+  });
+  it("returns null for a full (already-parseable) link or non-qq url", () => {
+    expect(qqShortLinkUrl("https://y.qq.com/n/ryqq/playlist/9069454695")).toBeNull();
+    expect(qqShortLinkUrl("https://example.com/base/fcgi-bin/u?__=x")).toBeNull();
+    expect(qqShortLinkUrl("just text")).toBeNull();
+  });
+});
+
+describe("scrapeQqLink", () => {
+  it("finds an embedded qq playlist url in the page", () => {
+    const html = `<meta http-equiv="refresh" content="0;url=https://y.qq.com/n/ryqq/playlist/9069454695">`;
+    expect(scrapeQqLink(html)).toEqual({ source: "qq", kind: "playlist", id: "9069454695" });
+  });
+  it("un-escapes a JS-escaped url (https:\\/\\/…)", () => {
+    const html = `var u="https:\\/\\/i.y.qq.com\\/n2\\/m\\/share\\/details\\/taoge.html?id=9069454695";`;
+    expect(scrapeQqLink(html)).toEqual({ source: "qq", kind: "playlist", id: "9069454695" });
+  });
+  it("falls back to a bare disstid in json", () => {
+    expect(scrapeQqLink('{"foo":1,"disstid":9069454695,"bar":2}')).toEqual({
+      source: "qq",
+      kind: "playlist",
+      id: "9069454695",
+    });
+  });
+  it("returns null when no qq link / disstid is present", () => {
+    expect(scrapeQqLink("<html><body>nothing here</body></html>")).toBeNull();
+  });
+});
+
+describe("expandStreamLink", () => {
+  function bodyRes(body: string): StreamHttpResponse {
+    return { status: 200, text: async () => body, json: async () => ({}) };
+  }
+
+  it("fetches a qq short link and scrapes the playlist ref from the page", async () => {
+    const http: StreamHttp = async (req) => {
+      expect(req.url).toBe("https://c6.y.qq.com/base/fcgi-bin/u?__=PxaHiqS");
+      return bodyRes(
+        `<script>location.href="https://y.qq.com/n/ryqq/playlist/9069454695";</script>`,
+      );
+    };
+    expect(await expandStreamLink("https://c6.y.qq.com/base/fcgi-bin/u?__=PxaHiqS", http)).toEqual({
+      source: "qq",
+      kind: "playlist",
+      id: "9069454695",
+    });
+  });
+
+  it("returns null when the link isn't an expandable short link", async () => {
+    const http: StreamHttp = async () => bodyRes("https://whatever");
+    expect(await expandStreamLink("https://y.qq.com/n/ryqq/playlist/1", http)).toBeNull();
+  });
+
+  it("returns null when the page has no parseable qq link", async () => {
+    const http: StreamHttp = async () => bodyRes("<html>loading…</html>");
+    expect(await expandStreamLink("https://c6.y.qq.com/base/fcgi-bin/u?__=x", http)).toBeNull();
   });
 });

@@ -23,6 +23,9 @@ export interface StreamHttpRequest {
 
 export interface StreamHttpResponse {
   status: number;
+  /** Final URL after redirects (for share-link expansion). Surfaced by the muzfetch
+   *  proxy via `x-muzero-final-url`; on web it's the native `Response.url`. */
+  url?: string;
   text(): Promise<string>;
   json(): Promise<unknown>;
 }

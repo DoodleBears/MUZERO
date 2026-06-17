@@ -99,6 +99,17 @@ async function handleMuzfetch(request) {
     throw error;
   }
 
+  // Resolve mode (share/short-link expansion): the renderer can't reliably read a
+  // custom response header off the cross-origin muzfetch scheme, so when asked we
+  // return the post-redirect URL as the *body* (always readable). net.fetch followed
+  // the redirects, so res.url is the final target.
+  if (request.headers.get("x-muzero-resolve")) {
+    return new Response(res.url || target, {
+      status: 200,
+      headers: corsHeaders({ "content-type": "text/plain" }),
+    });
+  }
+
   // Re-emit with permissive CORS so the privileged-scheme renderer can read it,
   // keeping the body a live stream (no buffering).
   const outHeaders = new Headers(res.headers);
@@ -129,6 +140,13 @@ async function handleMuzfetch(request) {
     );
   }
   outHeaders.set("access-control-allow-origin", "*");
+  // Echo the post-redirect URL so the renderer can expand share/short links
+  // (net.fetch followed the redirect; res.url is the final target). Custom response
+  // headers must be explicitly exposed or the renderer's CORS layer strips them.
+  if (res.url) {
+    outHeaders.set("x-muzero-final-url", res.url);
+    outHeaders.set("access-control-expose-headers", "x-muzero-final-url");
+  }
   return new Response(res.body, {
     status: res.status,
     statusText: res.statusText,

@@ -9,6 +9,8 @@
  */
 
 import type { StreamSourceId } from "@/db/types";
+import { log } from "@/lib/logger";
+import type { StreamHttp } from "./http";
 
 export interface StreamLinkRef {
   source: StreamSourceId;
@@ -69,4 +71,75 @@ function parseQq(url: URL): StreamLinkRef | null {
     if (id && /^\d+$/.test(id)) return { source: "qq", kind: "playlist", id };
   }
   return null;
+}
+
+/**
+ * Detect a QQ Music *short* share link (the `c.y.qq.com` / `c6.y.qq.com`
+ * `base/fcgi-bin/u?__=<token>` redirector) — it carries no disstid/mid, so it can't
+ * be parsed directly and must be expanded via {@link expandStreamLink}. Returns the
+ * bare URL to follow, or null when the text isn't such a short link.
+ */
+export function qqShortLinkUrl(text: string): string | null {
+  const raw = text.match(URL_RE)?.[0];
+  if (!raw) return null;
+  let url: URL;
+  try {
+    url = new URL(raw);
+  } catch {
+    return null;
+  }
+  const host = url.hostname.toLowerCase();
+  if (host.endsWith("y.qq.com") && /\/base\/fcgi-bin\/u$/i.test(url.pathname)) return raw;
+  return null;
+}
+
+/**
+ * Find the real QQ playlist/song reference inside a short link's page. QQ's
+ * `base/fcgi-bin/u?__=…` shortener answers 200 with a client-side (JS/meta) redirect,
+ * so the target lives in the HTML, not an HTTP `Location`. We scan for any embedded
+ * QQ URL (un-escaping `\/`) and re-parse it; failing that, a bare `disstid`.
+ */
+export function scrapeQqLink(html: string): StreamLinkRef | null {
+  // Allow backslashes inside the match so JS-escaped paths (`\/n2\/…`) aren't
+  // truncated at the first `\/`; they're stripped before parsing.
+  for (const match of html.matchAll(/https?:(?:\\?\/){2}[^\s"'<>]+/gi)) {
+    const candidate = match[0].replace(/\\/g, "");
+    if (!/qq\.com/i.test(candidate)) continue;
+    const ref = parseStreamLink(candidate);
+    if (ref) return ref;
+  }
+  const diss = html.match(/["']?disstid["']?\s*[:=]\s*["']?(\d{5,})/i);
+  if (diss) return { source: "qq", kind: "playlist", id: diss[1] };
+  return null;
+}
+
+/**
+ * Resolve a QQ short link by fetching it (via the injected proxy, which follows any
+ * server redirect) and scraping the resulting page for the real playlist/song link.
+ * Async + impure (one network hop); the pure parser stays the link-shape source of
+ * truth. Returns null (and logs a body head) when nothing parseable is found.
+ */
+export async function expandStreamLink(
+  text: string,
+  http: StreamHttp,
+  opts?: { signal?: AbortSignal },
+): Promise<StreamLinkRef | null> {
+  const shortUrl = qqShortLinkUrl(text);
+  if (!shortUrl) return null;
+  const res = await http({
+    url: shortUrl,
+    method: "GET",
+    headers: { Referer: "https://y.qq.com" },
+    signal: opts?.signal,
+  });
+  const html = await res.text();
+  const ref = scrapeQqLink(html);
+  if (!ref) {
+    // No QQ link/disstid in the page — likely a JS-only SPA shell or a new shape.
+    log.warn("streamlink", "short link body had no parseable qq link", {
+      status: res.status,
+      head: html.slice(0, 400),
+    });
+  }
+  return ref;
 }

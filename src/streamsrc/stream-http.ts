@@ -75,6 +75,9 @@ export function createStreamHttp(fetchFactory: () => Promise<FetchFn> = getAppFe
     );
     return {
       status: res.status,
+      // The proxy can't surface its post-redirect URL as `res.url` (that's the
+      // muzfetch:// request url), so it echoes it in a header; web fetch sets res.url.
+      url: res.headers?.get("x-muzero-final-url") ?? res.url ?? undefined,
       text: () => res.text(),
       json: () => res.json(),
     };
