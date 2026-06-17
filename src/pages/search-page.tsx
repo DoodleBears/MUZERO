@@ -73,7 +73,7 @@ import {
   setTrackCover,
   updateSession,
 } from "@/db/repositories";
-import type { CropRect, DjSession, Track } from "@/db/types";
+import type { CropRect, DjSession, PlaybackEvent, Track } from "@/db/types";
 import { useBackGesture } from "@/hooks/use-back-gesture";
 import { useFrozenWhileInactive } from "@/hooks/use-frozen-while-inactive";
 import { useLikedTrackIds } from "@/hooks/use-liked-tracks";
@@ -195,6 +195,11 @@ const EMPTY_SYSTEM_PLAYLIST_ROWS: Record<SystemPlaylistId, SystemPlaylistPlayabl
   "system:recent": [],
 };
 const EMPTY_MEMORY_NOTES = new Map<string, string[]>();
+// Stable empties returned by the playback-stats / -events liveQueries while the search
+// tab is INACTIVE — so they don't subscribe to (and re-render on) the heartbeat-rate
+// writes to those tables while hidden (PRD reactivity-render-observability F2).
+const EMPTY_PLAYBACK_STATS: Awaited<ReturnType<typeof listTrackPlaybackStats>> = [];
+const EMPTY_PLAYBACK_EVENTS: PlaybackEvent[] = [];
 const TRACK_ROW_SELECTOR = "[data-muzero-track-row]";
 /** The single shared `view-transition-name` the tapped wall cover and its detail
  *  cover both wear, so the browser morphs one into the other (only one element
@@ -473,8 +478,20 @@ export function SearchPage() {
   // from the per-track playback signal (re-tag re-buckets; see PRD §3.4).
   // Playback heartbeats write this table every flush DURING playback — coalesce
   // so sitting on this page while music plays doesn't re-scan per flush (F-4).
-  const playbackStatsLive = useLiveQuery(() => listTrackPlaybackStats(db), [], []);
-  const playbackEventsLive = useLiveQuery(() => db.playbackEvents.toArray(), [], []);
+  // Gated on the search tab being active: while INACTIVE these return a stable empty
+  // and never read the stats/events tables, so heartbeat-rate writes (every playback
+  // flush + playCount on switch) don't re-render this hidden page (F2). They re-subscribe
+  // + read when you switch to the search tab.
+  const playbackStatsLive = useLiveQuery(
+    () => (searchTabActive ? listTrackPlaybackStats(db) : Promise.resolve(EMPTY_PLAYBACK_STATS)),
+    [searchTabActive],
+    EMPTY_PLAYBACK_STATS,
+  );
+  const playbackEventsLive = useLiveQuery(
+    () => (searchTabActive ? db.playbackEvents.toArray() : Promise.resolve(EMPTY_PLAYBACK_EVENTS)),
+    [searchTabActive],
+    EMPTY_PLAYBACK_EVENTS,
+  );
   const playbackStats = useThrottledValue(playbackStatsLive, LIBRARY_QUERY_COALESCE_MS);
   const playbackEvents = useThrottledValue(playbackEventsLive, LIBRARY_QUERY_COALESCE_MS);
   // The stats tables are rewritten every playback heartbeat, but the O(N) derivations
