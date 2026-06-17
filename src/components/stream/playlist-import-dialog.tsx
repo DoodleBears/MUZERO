@@ -30,6 +30,8 @@ export function PlaylistImportDialog({
   const importStreamedPlaylist = usePlayerStore((s) => s.importStreamedPlaylist);
   const addStreamedPlaylistToSet = usePlayerStore((s) => s.addStreamedPlaylistToSet);
   const [busy, setBusy] = useState(false);
+  // null while fetching the hit list (indeterminate); {done,total} once tracks write.
+  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const [targetId, setTargetId] = useState("");
   // When on, every import path below also downloads the tracks to local blobs
   // (offline play + stable cover-color extraction) in the background after import.
@@ -50,6 +52,7 @@ export function PlaylistImportDialog({
 
   async function run(action: () => Promise<void>) {
     setBusy(true);
+    setProgress(null);
     try {
       await action();
       onClose();
@@ -57,14 +60,18 @@ export function PlaylistImportDialog({
       notify.error(t("streamSources.importError"));
     } finally {
       setBusy(false);
+      setProgress(null);
     }
   }
+
+  const onProgress = (done: number, total: number) => setProgress({ done, total });
 
   const createNewSet = () =>
     run(async () => {
       const count = await importStreamedPlaylist(pl.source, pl.id, pl.name, {
         coverUrl: pl.coverUrl,
         download,
+        onProgress,
       });
       notify.success(t("streamSources.imported", { count, name: pl.name }));
     });
@@ -73,6 +80,7 @@ export function PlaylistImportDialog({
     run(async () => {
       const { added, skipped } = await addStreamedPlaylistToSet(pl.source, pl.id, setId, {
         download,
+        onProgress,
       });
       notify.success(t("playlistImport.added", { added, skipped, name: setName }));
     });
@@ -176,6 +184,32 @@ export function PlaylistImportDialog({
             </span>
           </span>
         </label>
+
+        {busy && (
+          <div className="space-y-1">
+            <div className="h-1.5 overflow-hidden rounded-full bg-secondary">
+              <div
+                className={
+                  progress
+                    ? "h-full bg-primary transition-[width] duration-200"
+                    : "h-full w-1/3 animate-pulse bg-primary"
+                }
+                style={
+                  progress
+                    ? {
+                        width: `${Math.round((progress.done / Math.max(1, progress.total)) * 100)}%`,
+                      }
+                    : undefined
+                }
+              />
+            </div>
+            {progress && (
+              <p className="text-right text-muted-foreground text-xs tabular-nums">
+                {progress.done} / {progress.total}
+              </p>
+            )}
+          </div>
+        )}
 
         <div className="flex items-center justify-between gap-2 pt-1">
           <button

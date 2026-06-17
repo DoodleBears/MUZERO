@@ -77,11 +77,13 @@ import {
   buildShuffleOrder,
   clampIndex,
   manualNextIndex,
+  manualStepIndex,
   prevIndex,
   type RepeatMode,
   shuffleManualNext,
   shufflePrev,
   upcomingManualIndices,
+  windowManualIndices,
 } from "@/player/queue";
 import { describeTrackSwitch } from "@/player/switch-trace";
 import {
@@ -203,7 +205,11 @@ interface PlayerState {
     sourceId: StreamSourceId,
     playlistId: string,
     name: string,
-    opts?: { coverUrl?: string; download?: boolean },
+    opts?: {
+      coverUrl?: string;
+      download?: boolean;
+      onProgress?: (done: number, total: number) => void;
+    },
   ) => Promise<number>;
   /**
    * Add a source playlist's tracks into an EXISTING set, auto-deduping (incremental
@@ -214,7 +220,7 @@ interface PlayerState {
     sourceId: StreamSourceId,
     playlistId: string,
     targetSetId: string,
-    opts?: { download?: boolean },
+    opts?: { download?: boolean; onProgress?: (done: number, total: number) => void },
   ) => Promise<AddHitsResult>;
   /** Download a streamed track's media for offline play (Phase 5); no-op if already cached. */
   downloadStreamedTrack: (trackId: string) => Promise<void>;
@@ -228,6 +234,30 @@ interface PlayerState {
   peekTrack: (direction: "next" | "prev") => Track | undefined;
   /** Read the next N manual-advance tracks in playback order without mutating state. */
   peekUpcomingTracks: (count: number) => Track[];
+  /**
+   * Read the ±radius window of tracks around an ARBITRARY center index (mode-aware:
+   * shuffle / repeat / wrap), for the cover pager. The center may LEAD the committed
+   * `currentIndex` while a drag window is open, so it's a parameter, not `currentIndex`.
+   * `prev[k]` is the track at window offset -(k+1), `next[k]` at +(k+1) (nearest-first).
+   * Arrays are shorter than `radius` at a repeat-off boundary. Never mutates state.
+   */
+  peekWindowFrom: (
+    centerIndex: number,
+    radius: number,
+  ) => { prev: Track[]; current: Track | undefined; next: Track[] };
+  /**
+   * One mode-aware manual step from an arbitrary center index (+1 = next, -1 = prev),
+   * for recentering the cover window. Returns the new center, or the same index when
+   * there is no distinct track that way (repeat-off boundary / single track). Never
+   * mutates the shuffle order (peek semantics — the real reshuffle happens on commit).
+   */
+  stepCenter: (centerIndex: number, dir: 1 | -1) => number;
+  /**
+   * Mark a cover-pager drag window as open/closed. While open, DJ auto-extend is
+   * held off so queue mutations can't desync the window (rule: don't fight the
+   * user's finger). Module-scope flag; does not trigger a re-render.
+   */
+  setCoverGestureActive: (active: boolean) => void;
   seek: (sec: number) => void;
   setVolume: (v: number) => void;
   setRepeat: (mode: RepeatMode) => void;
@@ -310,6 +340,10 @@ let playbackSettingsLoaded = false;
 // The active shuffled play order (queue indices). Non-reactive: next/prev read it,
 // setShuffle rebuilds it, and it self-heals when stale vs the queue length.
 let shuffleOrder: number[] = [];
+// True while a cover-pager drag window is open. Non-reactive (module scope, rule 6):
+// the gesture owns the visual window, so DJ auto-extend is held off until it settles
+// (no queue mutation under the user's finger). Flipped by `setCoverGestureActive`.
+let coverGestureActive = false;
 const playbackListenTracker = createPlaybackListenTracker();
 let presenceCoordinator: R2PresenceCoordinator | null = null;
 let presenceCoordinatorKey = "";
@@ -1022,7 +1056,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     if (opts?.coverUrl) {
       void cacheStreamPlaylistCover({ sessionId: session.id, coverUrl: opts.coverUrl });
     }
-    const { added } = await addHitsToSet(session.id, hits);
+    const { added } = await addHitsToSet(session.id, hits, undefined, opts?.onProgress);
     void cacheStreamPlaylistTrackCovers({ sessionId: session.id, hits });
     if (opts?.download) void downloadStreamedSetTracks(session.id);
     return added;
@@ -1030,7 +1064,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
 
   async addStreamedPlaylistToSet(sourceId, playlistId, targetSetId, opts) {
     const hits = await fetchPlaylistHits(sourceId, playlistId);
-    const result = await addHitsToSet(targetSetId, hits);
+    const result = await addHitsToSet(targetSetId, hits, undefined, opts?.onProgress);
     void cacheStreamPlaylistTrackCovers({ sessionId: targetSetId, hits });
     if (opts?.download) void downloadStreamedSetTracks(targetSetId);
     return result;
@@ -1139,6 +1173,37 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     })
       .map((index) => queue[index])
       .filter((track): track is Track => Boolean(track));
+  },
+
+  peekWindowFrom(centerIndex, radius) {
+    const { queue, repeat, shuffle } = get();
+    const current = centerIndex >= 0 ? queue[centerIndex] : undefined;
+    const { prev, next } = windowManualIndices({
+      radius,
+      currentIndex: centerIndex,
+      length: queue.length,
+      repeat,
+      shuffleOrder: shuffle ? shuffleOrder : undefined,
+    });
+    const toTracks = (indices: number[]) =>
+      indices.map((index) => queue[index]).filter((track): track is Track => Boolean(track));
+    return { prev: toTracks(prev), current, next: toTracks(next) };
+  },
+
+  stepCenter(centerIndex, dir) {
+    const { queue, repeat, shuffle } = get();
+    const stepped = manualStepIndex({
+      index: centerIndex,
+      length: queue.length,
+      repeat,
+      dir,
+      shuffleOrder: shuffle ? shuffleOrder : undefined,
+    });
+    return stepped ?? centerIndex;
+  },
+
+  setCoverGestureActive(active) {
+    coverGestureActive = active;
   },
 
   seek(sec) {
@@ -2937,6 +3002,10 @@ async function maybeRefill(
 ): Promise<void> {
   const { activeSessionId, currentIndex, isDrafting, djEnabled, queue } = get();
   if (!activeSessionId || !djEngine || isDrafting || !djEnabled) return;
+  // Don't append/mutate the queue while a cover-pager drag window is open — index
+  // shifts would desync the open window. The settle commit (a normal playIndex once
+  // the gesture ends, with the flag cleared) runs the deferred refill.
+  if (coverGestureActive) return;
   set({ isDrafting: true });
   try {
     // Refill is measured on the play queue (what's left to play), not set count.

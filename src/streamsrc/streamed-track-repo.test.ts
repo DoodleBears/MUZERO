@@ -128,6 +128,17 @@ describe("addHitsToSet", () => {
     expect((await db.sessions.get(set.id))?.trackIds).toHaveLength(3);
     expect(await db.tracks.where("sessionId").equals(set.id).count()).toBe(3);
   });
+
+  it("reports per-hit progress (done, total) for an import progress bar", async () => {
+    const set = await createSession({ seedPrompt: "", config: { autoExtend: false } }, db);
+    const calls: Array<[number, number]> = [];
+    await addHitsToSet(set.id, [a, b, c], db, (done, total) => calls.push([done, total]));
+    expect(calls).toEqual([
+      [1, 3],
+      [2, 3],
+      [3, 3],
+    ]);
+  });
 });
 
 describe("offline cache (Phase 5)", () => {

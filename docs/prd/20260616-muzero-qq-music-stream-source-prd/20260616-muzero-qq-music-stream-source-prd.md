@@ -410,6 +410,7 @@ i18n locales/{en,zh,ja,ko}/                        # 源名 + 音质封顶提示
 - [x] `stream-link.ts` 加 QQ 链接解析（`/songDetail/<mid>`、`/song/<mid>.html`、`/playlist/<disstid>`、移动 `taoge.html?id=`；忽略 album/非 y.qq.com 域）。base62 songmid（非纯数字）单列。
 - [x] **QQ 短链（分享链接）展开（2026-06-17）**：`c.y.qq.com`/`c6.y.qq.com` 的 `base/fcgi-bin/u?__=<token>` 重定向短链无 id、纯 `parseStreamLink` 解不出 → 加 `qqShortLinkUrl`（纯检测）+ `expandStreamLink`（GET 跟随重定向→读最终 URL→复用 `parseStreamLink`）。muzfetch 代理回传 `x-muzero-final-url` 头（net.fetch 已 follow 重定向，`res.url`=最终），`StreamHttpResponse.url` 暴露之；hook 在直解失败时一跳展开并 `setLink`。
 - [x] 复用 `PlaylistImportDialog`（增量同步/选 set/新建）+ `streamPlaylistRef` —— **零改动**（源无关，QQ hits 与三源同形）。
+- [x] **导入进度条（2026-06-17，源无关增强）**：大歌单导入耗时主要在 `addHitsToSet` 逐曲写库——加 `onProgress(done,total)` 回调从 `addHitsToSet`→`importStreamedPlaylist`/`addStreamedPlaylistToSet`→`PlaylistImportDialog`，对话框抓取阶段显示不确定脉冲条、写库阶段显示确定进度条 + `done/total`。三源同享。
 
 #### Phase 4 Checklist
 - [x] 纯解析器单测：`parseQqPlaylistMeta`(dirinfo / 兼容 cdlist[0] / count 回退) + `parseQqPlaylistTracks`(songlist→hits) + `parseQqSongDetail` + **`parseQqUserPlaylists`(disslist→playlists，字段别名容错)** + **`parseQqUin`(cookie→uin)**；`parseStreamLink` QQ（songDetail/.html/playlist/taoge/忽略 album）；`qq-source` 四方法 stub 纵向（detail/aiDissInfo/`fcg_user_created_diss`）。**287 全 streamsrc 测全绿、tsc 0 错、biome 绿**。

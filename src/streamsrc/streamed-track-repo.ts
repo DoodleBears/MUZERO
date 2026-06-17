@@ -132,6 +132,8 @@ export async function addHitsToSet(
   sessionId: string,
   hits: StreamSearchHit[],
   db: MuzeroDB = defaultDb,
+  /** Fired after each track is written — drives the import progress bar. */
+  onProgress?: (done: number, total: number) => void,
 ): Promise<AddHitsResult> {
   const session = await db.sessions.get(sessionId);
   const before = new Set(session?.trackIds ?? []);
@@ -139,6 +141,7 @@ export async function addHitsToSet(
   for (const hit of hits) {
     const track = await createStreamedTrack(hitToStreamedInput(sessionId, hit), db);
     ids.push(track.id);
+    onProgress?.(ids.length, hits.length);
   }
   await prependTrackIds(sessionId, ids, db);
   const addedIds = new Set(ids.filter((id) => !before.has(id)));
