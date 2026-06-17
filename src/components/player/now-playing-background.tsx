@@ -347,11 +347,16 @@ function NowPlayingBackgroundContent({ hideVisualizer }: { hideVisualizer: boole
   // from another source) — that's what clearCoverBackgroundWhileLoading guards. A
   // LOCAL cover whose protocol URL is briefly resolving (waitForLocalCoverUrl) is the
   // SAME track's art, so it holds. Video keeps the strict gate.
-  const isRemoteOrStaleCover =
-    Boolean(current?.remoteCoverUrl) ||
-    current?.origin === "streamed" ||
-    coverResource.staleWhilePending ||
-    !coverResourceMatchesTrack;
+  // Only a genuinely REMOTE/streamed cover risks holding a wrong-SOURCE image while the
+  // incoming one resolves — those still hide. A LOCAL cover's held texture is always
+  // this track's (or the immediately-previous) art, and the Pixi controller holds its
+  // last texture / the lockstep window on a transient null src. The old broader guard
+  // (`staleWhilePending || !coverResourceMatchesTrack`) flipped against holding on the
+  // A→B object-URL transition at a coverflow commit — dropping the layer to opacity-0
+  // for the frames until B's object URL resolved = the "commit 后过渡到黑再 fade in"
+  // full-screen flash (PRD 20260618). Holding local covers visible lets the controller
+  // bridge the gap instead. (Was masked by the title flash until that was fixed.)
+  const isRemoteOrStaleCover = Boolean(current?.remoteCoverUrl) || current?.origin === "streamed";
   const pixiHoldsCover =
     pixiMedia.source !== "track-video" && hasPotentialImageBackground && !isRemoteOrStaleCover;
   const slideshowResetKey = `${current?.id ?? ""}:${source}:${slideshowUrls.length}`;
