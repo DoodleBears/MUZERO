@@ -447,6 +447,17 @@ export function SwipeableCoverStage({
       borderDirRef.current = 0;
       return;
     }
+    // A chained drag that crosses a step recentres the window (centre/neighbour
+    // advance) WITHOUT flipping the drag direction, and resets the offset to ~0. The
+    // dir-flip check below won't re-base the frozen border pair, so it kept crossfading
+    // the PREVIOUS centre's pair (0→1) while progress reset to ~0 — snapping the border
+    // back to the old `from` (0's colour) instead of gliding on to the next (1→2). This
+    // effect re-runs on a recentre (beginBorderTransition closes over the NEW
+    // neighbour), so re-base the pair to the new centre→neighbour whenever a directional
+    // drag is in flight. (PRD 20260618-recenter-boundary #1.)
+    if (borderDirRef.current === 1 || borderDirRef.current === -1) {
+      beginBorderTransition(borderDirRef.current);
+    }
     const apply = (offset: number) => {
       const dir: 1 | -1 | 0 = offset < -0.001 ? -1 : offset > 0.001 ? 1 : 0;
       if (dir !== 0 && dir !== borderDirRef.current) {
