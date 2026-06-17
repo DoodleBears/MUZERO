@@ -232,11 +232,12 @@ export interface EntityFacets {
   albums: AlbumEntry[];
 }
 
-/** Every scope token matches the (already-transliterated) field variant set. */
-function matchesAllTokens(fieldVariants: readonly string[], tokens: readonly string[]): boolean {
-  return tokens.every(
-    (token) => scoreVariants(searchVariants(token), fieldVariants) < NO_MATCH_SCORE,
-  );
+/** Every pre-transliterated query token matches the field variant set. */
+function matchesAllTokenVariants(
+  fieldVariants: readonly string[],
+  tokenVariants: readonly (readonly string[])[],
+): boolean {
+  return tokenVariants.every((qv) => scoreVariants(qv, fieldVariants) < NO_MATCH_SCORE);
 }
 
 /** An entity paired with its precomputed search variants (the costly part). */
@@ -283,20 +284,22 @@ export function buildFacetCandidates(
  */
 export function searchFacetCandidates(candidates: FacetCandidates, query: string): EntityFacets {
   const { free, artist, album }: SearchTokens = parseSearchTokens(query);
-  const artistTokens = [...free, ...artist];
-  const albumTokens = [...free, ...album];
+  // Transliterate each query token ONCE here, not once per candidate inside the
+  // filter — the tokens are identical across every artist/album (hundreds of them).
+  const artistTokenVariants = [...free, ...artist].map((token) => searchVariants(token));
+  const albumTokenVariants = [...free, ...album].map((token) => searchVariants(token));
   return {
     artists:
-      artistTokens.length === 0
+      artistTokenVariants.length === 0
         ? []
         : candidates.artists
-            .filter((c) => matchesAllTokens(c.variants, artistTokens))
+            .filter((c) => matchesAllTokenVariants(c.variants, artistTokenVariants))
             .map((c) => c.entry),
     albums:
-      albumTokens.length === 0
+      albumTokenVariants.length === 0
         ? []
         : candidates.albums
-            .filter((c) => matchesAllTokens(c.variants, albumTokens))
+            .filter((c) => matchesAllTokenVariants(c.variants, albumTokenVariants))
             .map((c) => c.entry),
   };
 }
