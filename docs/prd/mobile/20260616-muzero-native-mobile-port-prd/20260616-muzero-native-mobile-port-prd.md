@@ -133,6 +133,8 @@ muzero-mobile/                       # 可与 web 同仓子目录 or 独立仓�
 ### 2.3 技术栈总映射表（web → 各端原生）
 
 > 每行附**可行性**（High/Medium/Hard）与**可信度**（✅=research 核验；⚠️=团队判断/未覆盖，见 §10）。
+>
+> 📄 **逐层具体库选型（版本/License/备选/何时切换/理由）见独立技术栈文档**：[native-tech-stack 总文档](../20260616-muzero-native-tech-stack-prd/20260616-muzero-native-tech-stack-prd.md) + [iOS 栈](../20260616-muzero-native-tech-stack-prd/ios-tech-stack.md) / [Android 栈](../20260616-muzero-native-tech-stack-prd/android-tech-stack.md)。本表是概览，以技术栈文档为准。
 
 | 子系统 | 当前 web | iOS（Swift） | Android（Kotlin） | 可行性 | 可信度 |
 |---|---|---|---|---|---|
@@ -463,6 +465,7 @@ pixi-filters 全家桶移动端重写成本高（每个 = iOS Metal + Android AG
 | Document | Description |
 |----------|-------------|
 | [`prd-create.md`](../../../../.cursor/commands/prd-create.md) | PRD 工作流 + §3 effect/shader、§4 性能附加要求 |
+| [native-tech-stack 总文档](../20260616-muzero-native-tech-stack-prd/20260616-muzero-native-tech-stack-prd.md) | **逐层具体库选型**（+ [iOS 栈](../20260616-muzero-native-tech-stack-prd/ios-tech-stack.md) / [Android 栈](../20260616-muzero-native-tech-stack-prd/android-tech-stack.md)） |
 | [`20260611-immersive-flow-background-prd`](../../20260611-muzero-immersive-flow-background-prd/20260611-muzero-immersive-flow-background-prd.md) | 流光背景源（14 shader/取色/合成） |
 | [`20260607-music-reactive-visualizer-prd`](../../20260607-muzero-music-reactive-visualizer-prd/20260607-muzero-music-reactive-visualizer-prd.md) | 频谱可视化源 |
 | [`20260613-amll-style-lyrics-engine-prd`](../../20260613-muzero-amll-style-lyrics-engine-prd/20260613-muzero-amll-style-lyrics-engine-prd.md) | 同步歌词源 |

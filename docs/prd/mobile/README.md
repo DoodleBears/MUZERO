@@ -14,3 +14,4 @@
 | PRD | 状态 | 摘要 |
 |---|---|---|
 | [20260616-muzero-native-mobile-port-prd](20260616-muzero-native-mobile-port-prd/20260616-muzero-native-mobile-port-prd.md) | Draft | **全原生双栈（SwiftUI + Jetpack Compose）+ 语言中立契约规格** 移植：四轮 deep research 比选 A/B/C 定 **Option C + spec guard**（KMP 已评估并否决，理由见 §2.1）；逐特性可行性/库映射 + 性能 harness + 分阶段路线 |
+| [20260616-muzero-native-tech-stack-prd](20260616-muzero-native-tech-stack-prd/20260616-muzero-native-tech-stack-prd.md) | Draft | **逐层具体库选型**（总文档 + [iOS](20260616-muzero-native-tech-stack-prd/ios-tech-stack.md) / [Android](20260616-muzero-native-tech-stack-prd/android-tech-stack.md) 两份独立平台栈）：UI/音频/FFT/shader/DB/网络/DI/LLM/测试逐层推荐+备选+License；跨端 spec guard（quicktype codegen + golden 向量）+ 最低系统 |
