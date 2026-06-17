@@ -1,0 +1,6 @@
+# scripts/*.mjs are shebang CLIs that vitest imports directly. Vite's
+# shebang-strip regex (/^#!.*\n/) cannot match a `#!...\r\n` (CRLF) shebang line,
+# so on a CRLF checkout the shebang survives into the SSR transform and fails to
+# parse — breaking the entire test file. Pin these to LF so no checkout
+# (including core.autocrlf=true) reintroduces CRLF.
+scripts/*.mjs text eol=lf
