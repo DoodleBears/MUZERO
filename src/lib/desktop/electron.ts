@@ -31,6 +31,8 @@ interface MuzeroApi {
   readDir(path: string): Promise<DirEntryLike[]>;
   readFile(path: string): Promise<ArrayBuffer>;
   grantFolderAccess(path: string): Promise<void>;
+  grantFileAccess(path: string): Promise<void>;
+  getPathForFile(file: File): string;
   localMediaToken(input: { path?: string; storageKey?: string; mime?: string }): Promise<string>;
   saveFile(input: { fileName: string; mime: string; bytes: ArrayBuffer }): Promise<boolean>;
   writeMediaStorageFile(
@@ -160,6 +162,12 @@ export function createElectronBridge(): DesktopBridge {
     join: (base, name) => `${base.replace(/[/\\]+$/, "")}/${name}`,
     readFile: async (path) => new Uint8Array(await api.readFile(path)),
     grantFolderAccess: (path) => api.grantFolderAccess(path),
+    getDroppedFilePath: async (file) => {
+      const path = api.getPathForFile(file).trim();
+      if (!path) return undefined;
+      await api.grantFileAccess(path);
+      return path;
+    },
     saveFile: ({ fileName, mime, bytes }: SaveFileInput) =>
       api.saveFile({ fileName, mime, bytes: toStandaloneBuffer(bytes) }),
     writeMediaStorageFile: ({ storageKey, bytes, expectedBytes }) =>

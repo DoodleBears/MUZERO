@@ -16,6 +16,8 @@ const { windowPin } = require("./window-pin.cjs");
 
 /** Granted folder roots (real paths). In-memory, not persisted — re-granted on boot. */
 const allowedRoots = new Set();
+/** Exact file grants for drag/drop and file-picker imports. */
+const allowedFiles = new Set();
 const windowMaximizedState = new WeakMap();
 const windowNormalBounds = new WeakMap();
 const windowStateTimers = new WeakMap();
@@ -37,6 +39,7 @@ function assertAllowed(target) {
   const real = realOrNull(target);
   if (!real) throw new Error(`ENOENT: ${target}`);
   const r = norm(real);
+  if (allowedFiles.has(r)) return real;
   for (const root of allowedRoots) {
     const nr = norm(root);
     if (r === nr || r.startsWith(nr + path.sep)) return real;
@@ -177,6 +180,11 @@ function registerIpc({ trayController } = {}) {
   ipcMain.handle("muzero:grantFolder", (_event, folderPath) => {
     const real = realOrNull(folderPath);
     if (real) allowedRoots.add(real);
+  });
+
+  ipcMain.handle("muzero:grantFile", (_event, filePath) => {
+    const real = realOrNull(filePath);
+    if (real) allowedFiles.add(norm(real));
   });
 
   ipcMain.handle("muzero:pickFolder", async () => {

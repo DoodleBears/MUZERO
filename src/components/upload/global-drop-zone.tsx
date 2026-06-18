@@ -20,7 +20,7 @@ import {
   classifyDrop,
   dragHasFiles,
   filesFromTransfer,
-  filesFromTransferDeep,
+  filesFromTransferDeepInfo,
   summarizeDragItems,
 } from "@/lib/file-drop";
 import { importProgressPercent } from "@/lib/import-progress";
@@ -32,6 +32,7 @@ type DragInfo = { count: number; allImages: boolean };
 type PendingCover = { file: File; track: Track | null };
 /** A pasted/dropped image headed straight to the crop step for a selected track. */
 type PendingCrop = { file: File; track: Track };
+type PendingMedia = { files: File[]; defaultNewSetName?: string };
 type ImageAction = "cover" | "background" | "gallery";
 type Notice = { kind: "uploaded" | ImageAction | "unsupported"; count: number };
 
@@ -56,11 +57,11 @@ export function GlobalDropZone({
   const [pendingCover, setPendingCover] = useState<PendingCover | null>(null);
   const [pendingCrop, setPendingCrop] = useState<PendingCrop | null>(null);
   const [savingCrop, setSavingCrop] = useState(false);
-  const [pendingMedia, setPendingMedia] = useState<File[] | null>(null);
+  const [pendingMedia, setPendingMedia] = useState<PendingMedia | null>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
   const dragDepth = useRef(0);
 
-  const handleFiles = useCallback(async (files: File[]) => {
+  const handleFiles = useCallback(async (files: File[], opts: { folderName?: string } = {}) => {
     const { media, images, skipped } = classifyDrop(files);
     if (media.length > 0) {
       // Route by the current view's upload target (see upload-target-store):
@@ -74,7 +75,7 @@ export function GlobalDropZone({
         setNotice({ kind: "uploaded", count: media.length });
         return;
       }
-      setPendingMedia(media);
+      setPendingMedia({ files: media, defaultNewSetName: opts.folderName });
       return;
     }
     if (images.length > 0) {
@@ -134,8 +135,10 @@ export function GlobalDropZone({
       // Expand dropped folders into their files. `filesFromTransferDeep` reads the
       // DataTransfer synchronously here (it's invalidated after onDrop returns),
       // then resolves the directory recursion before we ingest.
-      void filesFromTransferDeep(e.dataTransfer).then((files) => {
-        if (files.length > 0) void handleFilesRef.current(files);
+      void filesFromTransferDeepInfo(e.dataTransfer).then((result) => {
+        if (result.files.length > 0) {
+          void handleFilesRef.current(result.files, { folderName: result.topLevelFolderName });
+        }
       });
     }
     // Ctrl/Cmd+V — paste a copied audio/video/image file, same as a drop. Flash
@@ -252,7 +255,8 @@ export function GlobalDropZone({
 
       {pendingMedia && (
         <SetPickerDialog
-          files={pendingMedia}
+          files={pendingMedia.files}
+          defaultNewSetName={pendingMedia.defaultNewSetName}
           onClose={() => setPendingMedia(null)}
           onUploaded={(count, createdSet) => {
             setNotice({ kind: "uploaded", count });
@@ -335,10 +339,12 @@ export function GlobalDropZone({
  */
 function SetPickerDialog({
   files,
+  defaultNewSetName,
   onClose,
   onUploaded,
 }: {
   files: File[];
+  defaultNewSetName?: string;
   onClose: () => void;
   onUploaded: (count: number, createdSet: boolean) => void;
 }) {
@@ -365,7 +371,7 @@ function SetPickerDialog({
     if (busy) return;
     setBusy(true);
     const s = await createSession({
-      name: t("gallery.newSetName"),
+      name: defaultNewSetName ?? t("gallery.newSetName"),
       seedPrompt: "",
       config: { autoExtend: false },
     });
@@ -408,7 +414,14 @@ function SetPickerDialog({
           <span className="grid size-10 shrink-0 place-items-center rounded-lg bg-secondary">
             <Plus className="size-5 text-primary" />
           </span>
-          <span className="text-sm font-medium">{t("gallery.newSet")}</span>
+          <span className="min-w-0">
+            <span className="block truncate text-sm font-medium">{t("gallery.newSet")}</span>
+            {defaultNewSetName ? (
+              <span className="block truncate text-xs text-muted-foreground">
+                {defaultNewSetName}
+              </span>
+            ) : null}
+          </span>
         </button>
         <div className="-mx-1 flex min-h-0 flex-col gap-1 overflow-y-auto px-1">
           {ordered.map((s) => (

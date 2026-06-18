@@ -2,7 +2,7 @@
 // on `window.muzero`; the renderer detects Electron by its presence and routes all
 // native access (folder picking, fs reads, save dialog, opening links) through it.
 // Network goes through the `muzfetch://` scheme, not here (see electron/main.cjs).
-const { contextBridge, ipcRenderer } = require("electron");
+const { contextBridge, ipcRenderer, webUtils } = require("electron");
 // Sandboxed preloads can only require Electron's limited preload modules; keep
 // this in sync with electron/diagnostics.cjs without requiring that local file.
 const DIAGNOSTICS_CHANNEL = "muzero:diagnostics:event";
@@ -24,6 +24,8 @@ contextBridge.exposeInMainWorld("muzero", {
   readDir: (path) => ipcRenderer.invoke("muzero:readDir", path),
   readFile: (path) => ipcRenderer.invoke("muzero:readFile", path),
   grantFolderAccess: (path) => ipcRenderer.invoke("muzero:grantFolder", path),
+  grantFileAccess: (path) => ipcRenderer.invoke("muzero:grantFile", path),
+  getPathForFile: (file) => webUtils.getPathForFile(file),
   localMediaToken: (input) => ipcRenderer.invoke("muzero:localMedia:token", input),
   saveFile: (input) => ipcRenderer.invoke("muzero:saveFile", input),
   writeMediaStorageFile: (input) => ipcRenderer.invoke("muzero:mediaStorage:write", input),

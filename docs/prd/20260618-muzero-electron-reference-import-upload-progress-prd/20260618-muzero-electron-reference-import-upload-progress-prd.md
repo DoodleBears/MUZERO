@@ -12,7 +12,7 @@
 | Phase | Name | Status | Link |
 |-------|------|--------|------|
 | 1 | Visible import/upload progress（先解决「以为卡住」） | ✅ Completed | [Phase 1 Checklist](#phase-1-checklist) |
-| 2 | Electron reference-first import + folder-named sets（拖拽引用路径不 copy + 拖文件夹按名建集） | 🔲 Pending | [Phase 2 Checklist](#phase-2-checklist) |
+| 2 | Electron reference-first import + folder-named sets（拖拽引用路径不 copy + 拖文件夹按名建集） | ✅ Completed | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | Copy-fallback hardening + reference health（回退一致性 + 引用失效处理） | 🔲 Pending | [Phase 3 Checklist](#phase-3-checklist) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
@@ -247,26 +247,26 @@ async addUploadsToSet(setId: string, files: File[]): Promise<void>
 
 **Goal:** Electron 上拖拽 / 文件选择器导入**默认优先真实路径**（引用、零拷贝），拿不到路径才复制（Q1 决策）。同时把「拖文件夹 → 按文件夹名建集 / 选集」做好（Q4 决策）。
 
-> **前置 gate（Q2）**：开工前核对 `electron/` 实际版本是否支持 `webUtils.getPathForFile`；不支持则先升级 Electron 或评估替代方案。
+> **前置 gate（Q2）**：已核对 `package.json` Electron `^42.4.0`，支持 `webUtils.getPathForFile`；无需升级。
 
 **Tasks:**
-- [ ] `electron/preload.cjs` 经 `contextBridge` 暴露 `getPathForFile`（`webUtils.getPathForFile`）。
-- [ ] `electron/ipc.cjs` 增逐文件 allowlist 授权（复用 realpath 校验，镜像文件夹授权）。
-- [ ] `DesktopBridge.getDroppedFilePath?` 声明 + electron/tauri/web 三实现（tauri/web 返回 `undefined`）。
-- [ ] `addUploadsToSet` / `ingestMediaFile` 分流：命中路径且明文 → `createReferencedUploadedTrack`（引用）；否则复制。
-- [ ] 引用导入 track 进度标「引用」即时完成。
-- [ ] **文件夹拖拽（Q4）**：drop 时保留顶层文件夹名 → `SetPickerDialog` 的「新建歌单」用文件夹名预填；与 `importFolder` 的 `basename(path)` 命名口径一致。
-- [ ] **核对文件夹展开后的子 `File` 在 Electron 下 `getPathForFile` 是否仍返回路径**（决定文件夹里的明文文件能否走引用；否则该批走复制）。
-- [ ] 单测：分流决策表（reference vs copy）覆盖 Electron-明文 / Electron-ncm / web / 路径失败四种 + 文件夹名建集。
+- [x] `electron/preload.cjs` 经 `contextBridge` 暴露 `getPathForFile`（`webUtils.getPathForFile`）。
+- [x] `electron/ipc.cjs` 增逐文件 allowlist 授权（复用 realpath 校验，镜像文件夹授权）。
+- [x] `DesktopBridge.getDroppedFilePath?` 声明 + electron/tauri/web 三实现（tauri/web 返回 `undefined`）。
+- [x] `addUploadsToSet` / `ingestMediaFile` 分流：命中路径且明文 → `createReferencedUploadedTrack`（引用）；否则复制。
+- [x] 引用导入 track 进度标「引用」即时完成。
+- [x] **文件夹拖拽（Q4）**：drop 时保留顶层文件夹名 → `SetPickerDialog` 的「新建歌单」用文件夹名预填；与 `importFolder` 的 `basename(path)` 命名口径一致。
+- [x] **核对文件夹展开后的子 `File` 在 Electron 下 `getPathForFile` 是否仍返回路径**（决定文件夹里的明文文件能否走引用；否则该批走复制）。
+- [x] 单测：分流决策表（reference vs copy）覆盖 Electron-明文 / Electron-ncm / web / 路径失败四种 + 文件夹名建集。
 
 ### Phase 2 Checklist
 
-- [ ] Electron 拖入明文视频 → `userData` 媒体目录**不新增**副本，track 有 `sourcePath`、无 `blobId`，可正常播放（`local-file`）。
-- [ ] Electron 拖入 `.ncm` → 仍走复制（解密入库）。
-- [ ] Web / Tauri 拖入 → 走复制（带 Phase 1 进度）。
-- [ ] 剪贴板粘贴的内存文件（无真实路径）→ 走复制，不报错。
-- [ ] 拖入一个文件夹 → 弹 set 选择器，「新建歌单」预填文件夹名；选已有集 / 新建都正确入库。
-- [ ] 文件选择器（[`track-list-menu`](../../../src/components/library/track-list-menu.tsx)）上传与拖拽行为一致。
+- [x] Electron 拖入明文视频 → `userData` 媒体目录**不新增**副本，track 有 `sourcePath`、无 `blobId`，可正常播放（`local-file`）。
+- [x] Electron 拖入 `.ncm` → 仍走复制（解密入库）。
+- [x] Web / Tauri 拖入 → 走复制（带 Phase 1 进度）。
+- [x] 剪贴板粘贴的内存文件（无真实路径）→ 走复制，不报错。
+- [x] 拖入一个文件夹 → 弹 set 选择器，「新建歌单」预填文件夹名；选已有集 / 新建都正确入库。
+- [x] 文件选择器（[`track-list-menu`](../../../src/components/library/track-list-menu.tsx)）上传与拖拽行为一致。
 
 ### Phase 3: Copy-fallback hardening + reference health（回退一致性 + 引用失效处理）
 
@@ -319,7 +319,7 @@ async addUploadsToSet(setId: string, files: File[]): Promise<void>
 | # | Question | Status | Decision |
 |---|----------|--------|----------|
 | 1 | 引用 vs 复制：是否给用户一个可见 Settings 选项，还是 Electron 一律默认引用？ | ✅ Resolved | **Electron 默认引用、不加开关**（本地优先 + 省盘）。只有拿不到真实路径 / 加密文件才回退复制。回退路径不藏 flag（规则 3）。 |
-| 2 | `webUtils.getPathForFile` 在目标 Electron 版本是否可用？ | 🔲 需确认 | Phase 2 开工前核对 `electron/` 实际版本；若低于支持版本则先升级 Electron 或评估替代。**这是 Phase 2 的前置 gate。** |
+| 2 | `webUtils.getPathForFile` 在目标 Electron 版本是否可用？ | ✅ Resolved | `package.json` 当前 Electron `^42.4.0`，可用；Phase 2 已采用 preload `webUtils.getPathForFile(file)`。 |
 | 3 | 复制模式的进度是只做文件计数还是字节级？ | ✅ Resolved | **按长期 best practice 做字节级进度**（单文件复制显示字节百分比 + 多文件总体计数），不走「先只计数」的临时方案。见 [§5.1](#51-进度-ui) / Phase 1。 |
 | 4 | 拖入「文件夹」时落到哪个歌单？ | ✅ Resolved | **拖入文件夹要能选目标歌单，或按文件夹名新建歌单**。文件夹 drop 走 set 选择器，且「新建歌单」默认用文件夹名预填。见 [§5.3](#53-文件夹拖拽--按文件夹名建集) / Phase 2。 |
 
@@ -332,3 +332,4 @@ async addUploadsToSet(setId: string, files: File[]): Promise<void>
 | 2026-06-18 | DoodleBears | Initial draft — Electron reference-first import + visible upload progress |
 | 2026-06-18 | DoodleBears | Resolve Open Questions：Q1 Electron 默认引用无开关；Q3 字节级进度（best practice）；Q4 拖文件夹选集/按名建集；Q2 留为 Phase 2 前置 gate（确认 Electron 版本支持 `webUtils.getPathForFile`） |
 | 2026-06-18 | Codex | Complete Phase 1：新增 `ImportProgress` 瞬时状态、分块读取复制进度、导入开始即显示的 drop progress UI、四语言导入进度文案与 `import-progress` 单测。 |
+| 2026-06-18 | Codex | Complete Phase 2：Electron preload/main 增 dropped-file path + 逐文件授权；上传路径 reference-first 分流；单文件夹 drop 保留文件夹名并作为新 set 默认名；补 `import-routing` / `file-drop` / Electron bridge 单测。 |

@@ -47,6 +47,7 @@ import {
 } from "@/lib/folder-import";
 import { yieldForImportBackpressure } from "@/lib/import-backpressure";
 import { copyBlobWithProgress, type ImportProgress } from "@/lib/import-progress";
+import { uploadImportModeForFile } from "@/lib/import-routing";
 import { createDiagnosticLogger, log } from "@/lib/logger";
 import { fallbackUploadMediaMetadata, parseUploadedMediaMetadata } from "@/lib/media-metadata";
 import { isUnsupportedMediaError, probeMediaFile } from "@/lib/media-probe";
@@ -1432,6 +1433,8 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       let lastPublishedTrackId: string | undefined;
       const unsupported: string[] = [];
       for (const file of list) {
+        const sourcePath = await resolveDroppedFilePath(file);
+        const mode = uploadImportModeForFile(file, sourcePath);
         set({
           importProgress: {
             phase: "importing",
@@ -1439,29 +1442,36 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
             completed,
             current: {
               name: file.name,
-              mode: "copy",
-              bytesLoaded: 0,
-              bytesTotal: file.size,
+              mode,
+              bytesLoaded: mode === "copy" ? 0 : undefined,
+              bytesTotal: mode === "copy" ? file.size : undefined,
             },
           },
         });
-        const r = await ingestMediaFile(setId, file, undefined, {
-          onCopyProgress: ({ bytesLoaded, bytesTotal }) =>
-            set({
-              importProgress: {
-                phase: "importing",
-                total: list.length,
-                completed,
-                current: {
-                  name: file.name,
-                  mode: "copy",
-                  bytesLoaded,
-                  bytesTotal,
-                },
-              },
-            }),
-        });
+        const r =
+          mode === "reference" && sourcePath
+            ? await ingestReferencedUploadFile(setId, file, sourcePath)
+            : await ingestMediaFile(setId, file, undefined, {
+                onCopyProgress: ({ bytesLoaded, bytesTotal }) =>
+                  set({
+                    importProgress: {
+                      phase: "importing",
+                      total: list.length,
+                      completed,
+                      current: {
+                        name: file.name,
+                        mode: "copy",
+                        bytesLoaded,
+                        bytesTotal,
+                      },
+                    },
+                  }),
+              });
         completed += 1;
+        const completedCurrent =
+          mode === "copy"
+            ? { name: file.name, mode, bytesLoaded: file.size, bytesTotal: file.size }
+            : { name: file.name, mode };
         if (r.trackId) {
           ids.push(r.trackId);
           uploaded += 1;
@@ -1474,12 +1484,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
             phase: "importing",
             total: list.length,
             completed,
-            current: {
-              name: file.name,
-              mode: "copy",
-              bytesLoaded: file.size,
-              bytesTotal: file.size,
-            },
+            current: completedCurrent,
           },
         });
       }
@@ -1639,6 +1644,64 @@ async function flushImportedTrackIds(
   await insertTrackIdsAfter(setId, batch, afterTrackId);
   ids.length = 0;
   return batch.at(-1) ?? afterTrackId;
+}
+
+async function resolveDroppedFilePath(file: File): Promise<string | undefined> {
+  const bridge = resolveDesktopBridge();
+  if (!bridge.getDroppedFilePath) return undefined;
+  try {
+    return await bridge.getDroppedFilePath(file);
+  } catch (error) {
+    log.warn("player", "failed to resolve dropped file path; falling back to copy", {
+      error: error instanceof Error ? error.name : typeof error,
+    });
+    return undefined;
+  }
+}
+
+async function ingestReferencedUploadFile(
+  setId: string,
+  file: File,
+  sourcePath: string,
+): Promise<IngestResult> {
+  const probed = await probeMediaFile(file).catch((err: unknown) => {
+    if (!isUnsupportedMediaError(err)) throw err;
+    log.warn("player", "skipped unsupported referenced media", {
+      fileName: err.fileName,
+      mime: err.mime,
+      kind: err.kind,
+      mediaErrorCode: err.mediaErrorCode,
+    });
+    return null;
+  });
+  if (!probed) return { unsupportedName: file.name };
+
+  const parsed = await parseUploadedMediaMetadata(file).catch((err: unknown) => {
+    log.warn(
+      "player",
+      "referenced media metadata parse failed; falling back to filename metadata",
+      {
+        error: err instanceof Error ? err.name : typeof err,
+        mime: file.type || probed.mime,
+        size: file.size,
+      },
+    );
+    return {
+      mediaMetadata: fallbackUploadMediaMetadata(file, probed.title),
+      title: undefined,
+    };
+  });
+
+  const track = await createReferencedUploadedTrack({
+    sessionId: setId,
+    title: parsed.title ?? probed.title,
+    kind: probed.kind,
+    mime: probed.mime,
+    durationSec: probed.durationSec,
+    mediaMetadata: parsed.mediaMetadata,
+    sourcePath,
+  });
+  return { trackId: track.id };
 }
 
 /**

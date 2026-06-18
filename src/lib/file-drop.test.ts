@@ -5,6 +5,7 @@ import {
   dragHasFiles,
   filesFromTransfer,
   filesFromTransferDeep,
+  filesFromTransferDeepInfo,
   summarizeDragItems,
 } from "./file-drop";
 
@@ -24,12 +25,18 @@ const transfer = (parts: { files?: File[]; items?: DataTransferItem[] }): DataTr
 
 // --- folder-drop (webkitGetAsEntry) fakes -------------------------------------
 const fileEntry = (f: File): FileSystemEntry =>
-  ({ isFile: true, isDirectory: false, file: (cb: (f: File) => void) => cb(f) }) as never;
-const dirEntry = (children: FileSystemEntry[]): FileSystemEntry => {
+  ({
+    isFile: true,
+    isDirectory: false,
+    name: f.name,
+    file: (cb: (f: File) => void) => cb(f),
+  }) as never;
+const dirEntry = (children: FileSystemEntry[], name = "folder"): FileSystemEntry => {
   let drained = false;
   return {
     isFile: false,
     isDirectory: true,
+    name,
     createReader: () => ({
       // readEntries yields once, then [] (the batch protocol). Flip `drained`
       // BEFORE invoking cb — our reader recurses synchronously inside it.
@@ -230,5 +237,37 @@ describe("filesFromTransferDeep", () => {
     const dt = transfer({ files: [a], items: [fileItem(a)] });
     const files = await filesFromTransferDeep(dt);
     expect(files.map((f) => f.name)).toEqual(["a.mp3"]);
+  });
+
+  it("preserves the single top-level folder name for set creation", async () => {
+    const song = file("song.mp3");
+    const dt = transfer({ items: [entryItem(dirEntry([fileEntry(song)], "Road Trip"))] });
+    const result = await filesFromTransferDeepInfo(dt);
+    expect(result.files.map((f) => f.name)).toEqual(["song.mp3"]);
+    expect(result.topLevelFolderName).toBe("Road Trip");
+  });
+
+  it("omits folder name for mixed or multi-folder drops", async () => {
+    const a = file("a.mp3");
+    const b = file("b.mp3");
+    const top = file("top.mp3");
+
+    await expect(
+      filesFromTransferDeepInfo({
+        items: [
+          entryItem(dirEntry([fileEntry(a)], "A")),
+          entryItem(dirEntry([fileEntry(b)], "B")),
+        ] as unknown as DataTransferItemList,
+      } as DataTransfer),
+    ).resolves.toMatchObject({ topLevelFolderName: undefined });
+
+    await expect(
+      filesFromTransferDeepInfo({
+        items: [
+          entryItem(dirEntry([fileEntry(a)], "A")),
+          entryItem(fileEntry(top)),
+        ] as unknown as DataTransferItemList,
+      } as DataTransfer),
+    ).resolves.toMatchObject({ topLevelFolderName: undefined });
   });
 });

@@ -182,6 +182,11 @@ export interface DesktopBridge {
   join?: (base: string, name: string) => Promise<string> | string;
   /** Add a folder to the runtime read allowlist (Tauri scope / Electron in-memory). */
   grantFolderAccess?: (path: string) => Promise<void>;
+  /**
+   * Resolve a dropped / file-picker File to its absolute on-disk path when the shell
+   * can prove one exists. Electron grants the exact file path before returning it.
+   */
+  getDroppedFilePath?: (file: File) => Promise<string | undefined>;
   /** Save-as dialog + write. Absent in web → caller falls back to a browser download. */
   saveFile?: (input: SaveFileInput) => Promise<boolean>;
   /** Write an app-managed persistent media file. Electron only for now. */

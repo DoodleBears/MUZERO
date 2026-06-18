@@ -104,6 +104,12 @@ export function filesFromTransfer(dt: DataTransfer | null | undefined): File[] {
 /** Guard against pathological deep / self-referential dropped trees. */
 const MAX_DROP_DEPTH = 24;
 
+export interface DeepTransferFiles {
+  files: File[];
+  /** Present only for a single top-level dropped folder. Mixed drops stay generic. */
+  topLevelFolderName?: string;
+}
+
 /** Recursively read a dropped `FileSystemEntry` (file or directory) into Files. */
 function readDropEntry(entry: FileSystemEntry, depth: number): Promise<File[]> {
   if (depth > MAX_DROP_DEPTH) return Promise.resolve([]);
@@ -147,8 +153,10 @@ function readDropEntry(entry: FileSystemEntry, depth: number): Promise<File[]> {
  * `await`, then resolves the directory recursion. Falls back to the flat reader
  * where the entry API is unavailable.
  */
-export async function filesFromTransferDeep(dt: DataTransfer | null | undefined): Promise<File[]> {
-  if (!dt?.items) return filesFromTransfer(dt);
+export async function filesFromTransferDeepInfo(
+  dt: DataTransfer | null | undefined,
+): Promise<DeepTransferFiles> {
+  if (!dt?.items) return { files: filesFromTransfer(dt) };
   const entries: FileSystemEntry[] = [];
   const flat: File[] = [];
   let sawEntryApi = false;
@@ -164,7 +172,7 @@ export async function filesFromTransferDeep(dt: DataTransfer | null | undefined)
       if (file) flat.push(file);
     }
   }
-  if (!sawEntryApi) return filesFromTransfer(dt);
+  if (!sawEntryApi) return { files: filesFromTransfer(dt) };
   const fromEntries = (await Promise.all(entries.map((e) => readDropEntry(e, 0)))).flat();
   // Dedupe the union (a file may surface through both an entry and `.getAsFile`).
   const seen = new Set<string>();
@@ -175,7 +183,15 @@ export async function filesFromTransferDeep(dt: DataTransfer | null | undefined)
     seen.add(key);
     out.push(file);
   }
-  return out;
+  const singleTopLevelFolder =
+    entries.length === 1 && entries[0]?.isDirectory && flat.length === 0
+      ? entries[0].name
+      : undefined;
+  return { files: out, topLevelFolderName: singleTopLevelFolder };
+}
+
+export async function filesFromTransferDeep(dt: DataTransfer | null | undefined): Promise<File[]> {
+  return (await filesFromTransferDeepInfo(dt)).files;
 }
 
 /**

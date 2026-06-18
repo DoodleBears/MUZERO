@@ -1,6 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { MediaProxyTrace } from "./bridge";
-import { electronMediaProxyUrl } from "./electron";
+import { createElectronBridge, electronMediaProxyUrl } from "./electron";
 
 describe("electronMediaProxyUrl", () => {
   it("carries media headers and playback trace context for main-process diagnostics", () => {
@@ -70,5 +70,57 @@ describe("electronLocalMediaUrl", () => {
     expect(parsed.searchParams.get("__mztrack")).toBe("trk_1");
     expect(url).not.toContain("/Users/alice");
     expect(url).not.toContain("private/demo.mp3");
+  });
+});
+
+describe("createElectronBridge", () => {
+  function installApi(overrides: Record<string, unknown>) {
+    const api = {
+      kind: "electron",
+      pickFolder: vi.fn(),
+      readDir: vi.fn(),
+      readFile: vi.fn(),
+      grantFolderAccess: vi.fn(),
+      grantFileAccess: vi.fn(),
+      getPathForFile: vi.fn(),
+      localMediaToken: vi.fn(),
+      saveFile: vi.fn(),
+      writeMediaStorageFile: vi.fn(),
+      readMediaStorageFile: vi.fn(),
+      deleteMediaStorageFile: vi.fn(),
+      statMediaStorageFile: vi.fn(),
+      openMediaStorageFolder: vi.fn(),
+      openExternal: vi.fn(),
+      setAppIcon: vi.fn(),
+      openSourceLogin: vi.fn(),
+      readSourceCookies: vi.fn(),
+      evalYoutubeN: vi.fn(),
+      ...overrides,
+    };
+    Object.defineProperty(window, "muzero", {
+      configurable: true,
+      value: api,
+    });
+    return api;
+  }
+
+  it("resolves and grants dropped file paths", async () => {
+    const api = installApi({ getPathForFile: vi.fn(() => "D:/Music/clip.mp4") });
+    const bridge = createElectronBridge();
+
+    await expect(bridge.getDroppedFilePath?.(new File(["x"], "clip.mp4"))).resolves.toBe(
+      "D:/Music/clip.mp4",
+    );
+    expect(api.grantFileAccess).toHaveBeenCalledWith("D:/Music/clip.mp4");
+  });
+
+  it("returns undefined without granting when Electron has no path", async () => {
+    const api = installApi({ getPathForFile: vi.fn(() => "") });
+    const bridge = createElectronBridge();
+
+    await expect(bridge.getDroppedFilePath?.(new File(["x"], "memory.mp4"))).resolves.toBe(
+      undefined,
+    );
+    expect(api.grantFileAccess).not.toHaveBeenCalled();
   });
 });
