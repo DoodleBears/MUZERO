@@ -1,5 +1,5 @@
 import { Check, MicVocal, Quote } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ControlTooltip } from "@/components/player/control-tooltip";
 import {
@@ -39,7 +39,7 @@ export function LyricsModeButton({
   const [open, setOpen] = useState(false);
   const settings = useSettings();
   const lyricsVisible = !settings.nowPlayingRightRailCollapsed;
-  const showingMemory = !lyricsVisible && hasMemory;
+  const showingMemory = !lyricsVisible;
   const shortcut = formatShortcut(memoryShortcutKeys);
   const noMemoryHint = t("lyrics.noMemoryCreateHint", { shortcut });
   const description = showingMemory
@@ -54,21 +54,12 @@ export function LyricsModeButton({
       nowPlayingRightRailCollapsed: false,
     });
   const showMemory = () => {
-    if (!hasMemory) return;
     void saveSettings({
       lyricsStageOpen: false,
       nowPlayingRightRailCollapsed: true,
     });
   };
   const openPanel = useLyricsPanelStore((s) => s.setOpen);
-
-  useEffect(() => {
-    if (hasMemory || !settings.nowPlayingRightRailCollapsed) return;
-    void saveSettings({
-      lyricsStageOpen: true,
-      nowPlayingRightRailCollapsed: false,
-    });
-  }, [hasMemory, settings.nowPlayingRightRailCollapsed]);
 
   function openSettings() {
     openPanel(true);
@@ -124,7 +115,6 @@ export function LyricsModeButton({
         <ModeOption
           active={showingMemory}
           description={hasMemory ? t("lyrics.switchToMemory") : noMemoryHint}
-          disabled={!hasMemory}
           icon={Quote}
           label={t("lyrics.modeMemory")}
           onClick={() => {

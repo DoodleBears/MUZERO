@@ -68,7 +68,6 @@ export function NowPlayingPanel({
     [],
   );
 
-  const canShowMemoryRail = memoryTimelineItems.length > 0;
   // Collapsed shows memories → toggle back to lyrics; expanded shows lyrics →
   // toggle to the memory timeline.
   const toggleLabel = collapsed ? t("dock.lyrics") : t("dock.memory");
@@ -156,7 +155,7 @@ export function NowPlayingPanel({
           </motion.div>
         )}
       </AnimatePresence>
-      {showFloatingToggle && collapsible && (collapsed || canShowMemoryRail) && (
+      {showFloatingToggle && collapsible && (
         <button
           aria-label={toggleLabel}
           className="absolute right-4 bottom-[calc(var(--spacing-chrome-bottom)+1rem)] z-20 flex items-center gap-2 rounded-full border border-border/70 bg-background/80 px-4 py-2 font-medium text-sm shadow-lg backdrop-blur-md transition-colors hover:bg-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"

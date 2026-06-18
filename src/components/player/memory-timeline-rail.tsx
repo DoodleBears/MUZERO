@@ -128,9 +128,16 @@ export function MemoryTimelineRail({
     return (
       <section
         aria-label={labels.memory}
-        className={cn("min-h-0 flex-1 rounded-2xl", className)}
+        className={cn(
+          "grid min-h-0 flex-1 place-items-center rounded-2xl px-4 text-center",
+          className,
+        )}
         data-testid="memory-timeline-rail"
-      />
+      >
+        <div className="rounded-lg border border-dashed border-border/70 px-4 py-8 text-muted-foreground text-sm">
+          {labels.empty}
+        </div>
+      </section>
     );
   }
 

@@ -180,11 +180,15 @@ describe("NowPlayingPanel collapse", () => {
     });
   });
 
-  it("does not show the memory toggle when the current track has no memories", () => {
+  it("still shows the memory toggle when the current track has no memories", () => {
     render(<NowPlayingPanel collapsible />);
 
-    expect(screen.queryByRole("button", { name: "Memory" })).not.toBeInTheDocument();
-    expect(mocks.saveSettings).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Memory" }));
+
+    expect(mocks.saveSettings).toHaveBeenCalledWith({
+      lyricsStageOpen: false,
+      nowPlayingRightRailCollapsed: true,
+    });
   });
 
   it("feeds the collapsed memory rail from settings and persists its scroll position", () => {

@@ -160,10 +160,10 @@ describe("MemoryTimelineRail", () => {
     expect(screen.getByTestId("memory-carousel-card")).toHaveTextContent("Third late walk");
   });
 
-  it("renders an empty rail when there are no memories", () => {
+  it("renders an empty-state rail when there are no memories", () => {
     renderRail({ memories: [] });
 
-    expect(screen.getByTestId("memory-timeline-rail")).toBeEmptyDOMElement();
+    expect(screen.getByTestId("memory-timeline-rail")).toHaveTextContent("No memories yet");
     expect(screen.queryByTestId("memory-carousel-card")).not.toBeInTheDocument();
   });
 });
