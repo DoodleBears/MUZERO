@@ -3,7 +3,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Track } from "@/db/types";
 import { TrackListSection } from "./track-list-section";
 
-const virtualTrackListMock = vi.fn((_props: unknown) => null);
+// Hoisted so the `vi.mock` factory below (lifted above imports) can safely
+// reference it — vitest only permits hoisted-factory access to vi.hoisted values.
+const { virtualTrackListMock } = vi.hoisted(() => ({ virtualTrackListMock: vi.fn() }));
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key }),
@@ -43,7 +45,10 @@ vi.mock("./use-list-scroll-preservation", () => ({
 }));
 
 vi.mock("./virtual-track-list", () => ({
-  VirtualTrackList: (props: unknown) => virtualTrackListMock(props),
+  VirtualTrackList: (props: unknown) => {
+    virtualTrackListMock(props);
+    return null;
+  },
 }));
 
 function track(id: string): Track {
