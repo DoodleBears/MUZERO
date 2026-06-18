@@ -1,16 +1,13 @@
 export interface AmbientEffectsImmersiveState {
-  chromeHidden: boolean;
   isNowTab: boolean;
-  lyricsOnlyIdle: boolean;
   visualizerIdleOnly: boolean;
 }
 
 /**
- * Background effect policy follows the actual Now Playing immersive/idle state.
- * Dock hot-zone hiding is deliberately excluded: on desktop the Dock can remain
- * hidden until the pointer reaches the bottom edge, even after ordinary pointer
- * movement has already restored the foreground and exited idle.
+ * Background effect policy follows the explicit Now Playing visualizer
+ * "Immersive" mode only. Ordinary idle chrome hiding (or the "Visualizer"
+ * placement staying active while idle) should keep using normal video settings.
  */
 export function resolveAmbientEffectsImmersive(state: AmbientEffectsImmersiveState): boolean {
-  return state.isNowTab && (state.chromeHidden || state.visualizerIdleOnly || state.lyricsOnlyIdle);
+  return state.isNowTab && state.visualizerIdleOnly;
 }

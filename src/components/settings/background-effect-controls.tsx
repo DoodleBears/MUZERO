@@ -18,8 +18,9 @@ import { GpuBackendControls } from "./gpu-backend-controls";
 /** Slideshow auto-advance presets, in seconds (5s ... 10min). */
 const SLIDE_INTERVAL_PRESETS = [5, 10, 15, 30, 60, 120, 180, 300, 600];
 
-/** Renderers that go through the Pixi WebGL/WebGPU pipeline (so the GPU controls apply). */
+/** Renderers that can use the Pixi WebGL/WebGPU pipeline (so GPU controls apply). */
 const PIXI_RENDERERS: BackgroundRenderer[] = [
+  "blur",
   "pixel",
   "ascii",
   "cross-hatch",

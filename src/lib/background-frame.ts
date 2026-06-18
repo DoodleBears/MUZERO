@@ -54,8 +54,26 @@ export function resolveBackgroundFrameSpec(opts: {
     galleryCount: opts.galleryCount,
   });
   const rendererKind = rendererKindFor(opts.renderer);
-  // Only the Pixi renderer can texture the MV itself; blur/plain use image
-  // sources (cover/slideshow) only — mirrors the existing now-playing-background.
+  // Pixi renderers can texture the MV itself. `blur` stays on the image frame
+  // controller for covers, but switches to Pixi when the source is a ready MV so
+  // the blur is applied to the video texture instead of the poster/cover.
+  if (rendererKind === "blur") {
+    const pixiMedia = resolvePixiBackgroundMedia({
+      imageSource,
+      mode: opts.mode,
+      trackKind: opts.trackKind,
+      trackStatus: opts.trackStatus,
+      hasTrackMedia: opts.hasTrackVideo,
+    });
+    if (pixiMedia.source === "track-video") {
+      return {
+        trackId: opts.trackId,
+        source: pixiMedia.source,
+        mediaType: pixiMedia.mediaType,
+        rendererKind: "pixi",
+      };
+    }
+  }
   if (rendererKind === "pixi") {
     const pixiMedia = resolvePixiBackgroundMedia({
       imageSource,

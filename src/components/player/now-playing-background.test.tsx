@@ -124,10 +124,12 @@ vi.mock("@/visualizer/host", () => ({
 vi.mock("./pixi-pixel-background", () => ({
   PixiPixelBackground: ({
     className,
+    effect,
     mediaType,
     src,
   }: {
     className?: string;
+    effect?: string;
     mediaType?: string;
     src: string | null;
   }) => {
@@ -135,6 +137,7 @@ vi.mock("./pixi-pixel-background", () => ({
     return (
       <div
         className={className}
+        data-effect={effect}
         data-media-type={mediaType}
         data-src={src ?? ""}
         data-testid="pixi-background"
@@ -294,6 +297,25 @@ describe("NowPlayingBackground", () => {
       "blob:media-trk_video",
     );
     expect(screen.queryByRole("presentation")).not.toBeInTheDocument();
+  });
+
+  it("applies the blur background effect through Pixi on video tracks", () => {
+    mocks.settings.backgroundRenderer = "blur";
+    mocks.settings.flowEnabled = false;
+    mocks.settings.visualizerAsBackground = false;
+    usePlayerStore.setState({
+      currentIndex: 0,
+      queue: [makeTrack("trk_video", { blobId: "blb_video", kind: "video" })],
+    });
+
+    render(<NowPlayingBackground active />);
+
+    expect(screen.getByTestId("pixi-background")).toHaveAttribute("data-effect", "blur");
+    expect(screen.getByTestId("pixi-background")).toHaveAttribute("data-media-type", "video");
+    expect(screen.getByTestId("pixi-background")).toHaveAttribute(
+      "data-src",
+      "blob:media-trk_video",
+    );
   });
 
   it("uses a clean video background for immersive video tracks by default", () => {

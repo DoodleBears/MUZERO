@@ -254,9 +254,7 @@ export default function App() {
   const immersiveLyricsActive = lyricsOnlyIdle || (foregroundHidden && lyricsVisible);
   const ambientBackdropActive = ambientBackgroundActive && !lyricsOnlyIdle;
   const ambientEffectsImmersive = resolveAmbientEffectsImmersive({
-    chromeHidden,
     isNowTab,
-    lyricsOnlyIdle,
     visualizerIdleOnly,
   });
 

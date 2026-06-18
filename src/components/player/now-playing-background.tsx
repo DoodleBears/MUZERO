@@ -198,7 +198,6 @@ function NowPlayingBackgroundContent({
     : "image";
   const blurPx = settings.backgroundBlur ?? 64;
   const pixelSize = settings.backgroundPixelSize ?? 12;
-  const pixiEffect = isPixiEffect(renderer) ? renderer : null;
   const hasBackgroundVideoMedia = trackHasBackgroundVideoMedia(current);
   const showPlainVideoBackground =
     videoTrack &&
@@ -212,6 +211,7 @@ function NowPlayingBackgroundContent({
     trackStatus: current?.status,
     hasTrackMedia: hasBackgroundVideoMedia,
   });
+  const pixiEffect = isPixiEffect(renderer, pixiMedia.mediaType) ? renderer : null;
   // The Pixi background uses the ORIGINAL cover (loaded below, capped at 1024px),
   // NOT a cropped 192px `backlight` derivative. The noise/pixel renderers don't blur
   // the cover — they lay an effect over it — so a tiny upscaled texture looks soft,
@@ -299,6 +299,7 @@ function NowPlayingBackgroundContent({
     () => ({
       backgroundAsciiColor: settings.backgroundAsciiColor,
       backgroundAsciiReplaceColor: settings.backgroundAsciiReplaceColor,
+      backgroundBlur: settings.backgroundBlur,
       backgroundCrtCurvature: settings.backgroundCrtCurvature,
       backgroundCrtLineContrast: settings.backgroundCrtLineContrast,
       backgroundCrtLineWidth: settings.backgroundCrtLineWidth,
@@ -319,6 +320,7 @@ function NowPlayingBackgroundContent({
     [
       settings.backgroundAsciiColor,
       settings.backgroundAsciiReplaceColor,
+      settings.backgroundBlur,
       settings.backgroundCrtCurvature,
       settings.backgroundCrtLineContrast,
       settings.backgroundCrtLineWidth,
@@ -440,7 +442,8 @@ function NowPlayingBackgroundContent({
   // already track-bound and null while a switch resolves, so the controller never
   // pairs a stale cover with the wrong track and holds the previous frame until
   // the new one is ready (no flash). Pixi / plain / slideshow stay on the old path.
-  const useControllerBlur = renderer === "blur" && source === "cover";
+  const useControllerBlur =
+    renderer === "blur" && source === "cover" && pixiMedia.source !== "track-video";
   const backgroundFrameSpec = useMemo(
     () =>
       current
@@ -493,7 +496,7 @@ function NowPlayingBackgroundContent({
         </div>
       ) : showPlainVideoBackground && currentVideoUrl ? (
         <PlainBackgroundVideo key={currentVideoUrl} src={currentVideoUrl} />
-      ) : effectiveRenderImageTarget && renderer === "blur" ? (
+      ) : effectiveRenderImageTarget && renderer === "blur" && !pixiEffect ? (
         <CanvasBlurBackground
           blurPx={blurPx}
           holdPreviousWhileLoading={source !== "cover" || holdCoverBackgroundWhileLoading}
@@ -746,6 +749,10 @@ function PlainBackgroundVideo({ src }: { src: string }) {
   );
 }
 
-function isPixiEffect(renderer: string): renderer is PixiBackgroundEffect {
+function isPixiEffect(
+  renderer: string,
+  mediaType: "image" | "video",
+): renderer is PixiBackgroundEffect {
+  if (renderer === "blur") return mediaType === "video";
   return ["pixel", "ascii", "cross-hatch", "crt", "dot", "noise"].includes(renderer);
 }

@@ -19,7 +19,14 @@ import {
   type PixiModuleLike,
 } from "./pixi-background-controller";
 
-export type PixiBackgroundEffect = "pixel" | "ascii" | "cross-hatch" | "crt" | "dot" | "noise";
+export type PixiBackgroundEffect =
+  | "blur"
+  | "pixel"
+  | "ascii"
+  | "cross-hatch"
+  | "crt"
+  | "dot"
+  | "noise";
 type BackgroundMediaType = "image" | "video";
 const BACKGROUND_IMAGE_BITMAP_MAX_DIMENSION = 1024;
 const BACKGROUND_TEXTURE_LOAD_DELAY_MS = 180;
@@ -219,6 +226,14 @@ async function createPixiFilter(
   options: ReturnType<typeof resolvePixiBackgroundEffectOptions>,
 ): Promise<import("pixi.js").Filter | null> {
   switch (effect) {
+    case "blur": {
+      const { BlurFilter } = await import("pixi.js");
+      const strength = options.blur.strength;
+      if (strength <= 0) return null;
+      const filter = new BlurFilter({ kernelSize: 5, quality: 4, strength });
+      filter.repeatEdgePixels = true;
+      return filter;
+    }
     case "ascii": {
       const { AsciiFilter } = await import("pixi-filters/ascii");
       return new AsciiFilter(options.ascii);

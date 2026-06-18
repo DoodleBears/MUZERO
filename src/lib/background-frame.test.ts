@@ -47,7 +47,7 @@ describe("resolveBackgroundFrameSpec", () => {
     ).toMatchObject({ source: "track-video", mediaType: "video", rendererKind: "pixi" });
   });
 
-  it("the same video track on the blur renderer stays an image cover (no MV texturing)", () => {
+  it("the same video track on the blur renderer uses Pixi so the MV itself is blurred", () => {
     expect(
       resolveBackgroundFrameSpec({
         ...base,
@@ -58,7 +58,7 @@ describe("resolveBackgroundFrameSpec", () => {
         trackStatus: "ready",
         hasTrackVideo: true,
       }),
-    ).toMatchObject({ source: "cover", mediaType: "image", rendererKind: "blur" });
+    ).toMatchObject({ source: "track-video", mediaType: "video", rendererKind: "pixi" });
   });
 
   it("mode none → no ambient source", () => {

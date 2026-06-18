@@ -2,6 +2,7 @@ import type { AppSettings } from "@/db/types";
 
 export type BackgroundEffectSettings = Pick<
   AppSettings,
+  | "backgroundBlur"
   | "backgroundAsciiColor"
   | "backgroundAsciiReplaceColor"
   | "backgroundCrtCurvature"
@@ -52,6 +53,9 @@ export function resolvePixiBackgroundEffectOptions(
 ) {
   const size = Math.max(4, Math.min(40, Math.round(pixelSize)));
   return {
+    blur: {
+      strength: Math.max(0, Math.min(80, Math.round(settings.backgroundBlur ?? 64))),
+    },
     ascii: {
       color: settings.backgroundAsciiColor ?? BACKGROUND_EFFECT_DEFAULTS.asciiColor,
       replaceColor:
