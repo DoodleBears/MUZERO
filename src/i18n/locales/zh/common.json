@@ -1204,7 +1204,8 @@
     "neverPlayed": "未播放",
     "sortDefault": "默认",
     "sortPlayCount": "按播放次数",
-    "sortLastPlayed": "按最近播放"
+    "sortLastPlayed": "按最近播放",
+    "sortLiked": "红心时间"
   },
   "gallery": {
     "title": "歌单",

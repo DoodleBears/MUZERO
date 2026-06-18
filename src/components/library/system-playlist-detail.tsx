@@ -6,23 +6,29 @@ import { TrackInspectorPanel } from "@/components/track/track-inspector-panel";
 import { Button } from "@/components/ui/button";
 import type { PlaybackEvent, RemoteSearchTrack, Track, TrackPlaybackStats } from "@/db/types";
 import { useBackGesture } from "@/hooks/use-back-gesture";
-import { useLikedTrackIds } from "@/hooks/use-liked-tracks";
+import { useLikedTrackAt } from "@/hooks/use-liked-tracks";
+import type { SortDir } from "@/lib/set-gallery";
 import {
   deriveHeartedPlaylistRows,
   deriveMostPlayedPlaylist,
   deriveRecentlyPlayedPlaylist,
+  LIKED_SORT_DEFAULT_DIR,
+  type LikedSort,
   type MostPlayedRange,
   type SystemPlaylistId,
   type SystemPlaylistPlayable,
   type SystemPlaylistSort,
+  sortLikedTracks,
   sortSystemPlaylistRows,
 } from "@/lib/system-playlists";
 import { cn } from "@/lib/utils";
 import { usePlayerStore } from "@/stores/player-store";
+import { SortChip } from "./sort-chip";
 import { TrackListSection } from "./track-list-section";
 
 const MOST_PLAYED_RANGES: MostPlayedRange[] = ["all", "month", "week", "day"];
 const SYSTEM_PLAYLIST_SORTS: SystemPlaylistSort[] = ["default", "play-count", "last-played"];
+const LIKED_SORTS: LikedSort[] = ["liked", "name", "created", "played", "duration"];
 type CommonT = TFunction<"common", undefined>;
 
 export function SystemPlaylistDetail({
@@ -45,12 +51,16 @@ export function SystemPlaylistDetail({
   const { t } = useTranslation();
   const [range, setRange] = useState<MostPlayedRange>("all");
   const [sort, setSort] = useState<SystemPlaylistSort>("default");
+  const [likedSort, setLikedSort] = useState<LikedSort>("liked");
+  const [likedSortDir, setLikedSortDir] = useState<SortDir>(LIKED_SORT_DEFAULT_DIR.liked);
   const [selectedTrackId, setSelectedTrackId] = useState<string | null>(null);
   const play = usePlayerStore((s) => s.play);
   const playTrack = usePlayerStore((s) => s.playTrack);
   const playSystemPlaylist = usePlayerStore((s) => s.playSystemPlaylist);
-  const showPlaybackMetrics = playlistId !== "system:liked";
-  const likedIds = useLikedTrackIds();
+  const isLiked = playlistId === "system:liked";
+  const showPlaybackMetrics = !isLiked;
+  const likedAt = useLikedTrackAt();
+  const likedIds = useMemo(() => new Set(likedAt.keys()), [likedAt]);
 
   const rows = useMemo(
     () => deriveRows(playlistId, tracks, stats, events, remoteTracks, range, now, likedIds),
@@ -61,10 +71,20 @@ export function SystemPlaylistDetail({
     () => sortSystemPlaylistRows(rows, effectiveSort),
     [effectiveSort, rows],
   );
-  const localTracks = useMemo(
-    () => sortedRows.flatMap((row) => (row.kind === "local-track" ? [row.track] : [])),
-    [sortedRows],
-  );
+  // The hearted list has no playback-metric columns, so it gets the gallery-style
+  // chip sort (default: newest hearted first). `lastPlayed` feeds the "played" axis.
+  const localTracks = useMemo(() => {
+    const base = sortedRows.flatMap((row) => (row.kind === "local-track" ? [row.track] : []));
+    if (!isLiked) return base;
+    const lastPlayed = new Map(
+      sortedRows.flatMap((row) =>
+        row.kind === "local-track" && row.metric.lastPlayedAt != null
+          ? ([[row.track.id, row.metric.lastPlayedAt]] as const)
+          : [],
+      ),
+    );
+    return sortLikedTracks(base, likedSort, likedSortDir, likedAt, lastPlayed);
+  }, [sortedRows, isLiked, likedSort, likedSortDir, likedAt]);
   const remoteRows = useMemo(
     () =>
       sortedRows.filter(
@@ -92,6 +112,15 @@ export function SystemPlaylistDetail({
   async function playAll() {
     await playSystemPlaylist(playlistId, localTracks);
     void play();
+  }
+
+  // Click the active chip to flip direction; click another to switch axis at its default dir.
+  function onLikedSortClick(next: LikedSort) {
+    if (likedSort === next) setLikedSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    else {
+      setLikedSort(next);
+      setLikedSortDir(LIKED_SORT_DEFAULT_DIR[next]);
+    }
   }
 
   return (
@@ -148,6 +177,13 @@ export function SystemPlaylistDetail({
             endActions={
               showPlaybackMetrics ? (
                 <SortControls onChange={setSort} sort={sort} t={t} />
+              ) : isLiked ? (
+                <LikedSortControls
+                  sort={likedSort}
+                  dir={likedSortDir}
+                  onChange={onLikedSortClick}
+                  t={t}
+                />
               ) : undefined
             }
             getTrackColumns={
@@ -278,6 +314,28 @@ function SortControls({
   );
 }
 
+function LikedSortControls({
+  sort,
+  dir,
+  onChange,
+  t,
+}: {
+  sort: LikedSort;
+  dir: SortDir;
+  onChange: (sort: LikedSort) => void;
+  t: CommonT;
+}) {
+  return (
+    <div className="flex flex-wrap items-center gap-1.5">
+      {LIKED_SORTS.map((id) => (
+        <SortChip key={id} active={sort === id} dir={dir} onClick={() => onChange(id)}>
+          {likedSortLabel(id, t)}
+        </SortChip>
+      ))}
+    </div>
+  );
+}
+
 function MetricColumns({
   metric,
   now,
@@ -328,5 +386,20 @@ function sortLabel(sort: SystemPlaylistSort, t: CommonT) {
       return t("systemPlaylists.sortLastPlayed");
     default:
       return t("systemPlaylists.sortDefault");
+  }
+}
+
+function likedSortLabel(sort: LikedSort, t: CommonT) {
+  switch (sort) {
+    case "liked":
+      return t("systemPlaylists.sortLiked");
+    case "name":
+      return t("gallery.sortName");
+    case "created":
+      return t("gallery.sortCreated");
+    case "played":
+      return t("gallery.sortPlayed");
+    default:
+      return t("gallery.sortDuration");
   }
 }

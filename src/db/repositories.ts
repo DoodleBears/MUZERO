@@ -1129,6 +1129,14 @@ export async function likedTrackIdSet(db: MuzeroDB = defaultDb): Promise<Set<str
   return new Set(rows.map((r) => r.trackId));
 }
 
+/** trackId → `likedAt` epoch ms — powers the hearted playlist's default "newest
+ *  liked first" sort (likes moved off the catalog row, so `updatedAt` no longer
+ *  tracks heart edits). Membership-only callers should use {@link likedTrackIdSet}. */
+export async function likedTrackAtMap(db: MuzeroDB = defaultDb): Promise<Map<string, number>> {
+  const rows = await db.trackLikes.toArray();
+  return new Map(rows.map((r) => [r.trackId, r.likedAt]));
+}
+
 // ------------------------------------------------------------- annotations ----
 
 export async function setTrackTags(

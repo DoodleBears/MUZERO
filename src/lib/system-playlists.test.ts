@@ -6,6 +6,7 @@ import {
   deriveRecentlyPlayedPlaylist,
   getMostPlayedRangeStart,
   pickSystemPlaylistCoverTrack,
+  sortLikedTracks,
   sortSystemPlaylistRows,
 } from "./system-playlists";
 
@@ -184,6 +185,52 @@ describe("system playlist selectors", () => {
       "trk_mid",
       "trk_high_old",
     ]);
+  });
+
+  it("sorts the hearted list by likedAt, name, played, and duration", () => {
+    const tracks = [
+      track({ id: "trk_a", title: "Apple", createdAt: 100, durationSec: 200 }),
+      track({ id: "trk_b", title: "Banana", createdAt: 200, durationSec: 100 }),
+      track({ id: "trk_c", title: "Cherry", createdAt: 300, durationSec: 300 }),
+    ];
+    const likedAt = new Map([
+      ["trk_a", 10],
+      ["trk_b", 30],
+      ["trk_c", 20],
+    ]);
+
+    // default = newest hearted first; asc flips to oldest hearted first.
+    expect(sortLikedTracks(tracks, "liked", "desc", likedAt).map((t) => t.id)).toEqual([
+      "trk_b",
+      "trk_c",
+      "trk_a",
+    ]);
+    expect(sortLikedTracks(tracks, "liked", "asc", likedAt).map((t) => t.id)).toEqual([
+      "trk_a",
+      "trk_c",
+      "trk_b",
+    ]);
+
+    // other axes delegate to the shared all-songs sort.
+    expect(sortLikedTracks(tracks, "name", "asc", likedAt).map((t) => t.id)).toEqual([
+      "trk_a",
+      "trk_b",
+      "trk_c",
+    ]);
+    expect(sortLikedTracks(tracks, "duration", "desc", likedAt).map((t) => t.id)).toEqual([
+      "trk_c",
+      "trk_a",
+      "trk_b",
+    ]);
+
+    const lastPlayed = new Map([
+      ["trk_a", 5],
+      ["trk_b", 1],
+      ["trk_c", 9],
+    ]);
+    expect(sortLikedTracks(tracks, "played", "desc", likedAt, lastPlayed).map((t) => t.id)).toEqual(
+      ["trk_c", "trk_a", "trk_b"],
+    );
   });
 
   it("picks the newest covered local track for a system playlist card", () => {

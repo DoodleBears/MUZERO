@@ -1204,7 +1204,8 @@
     "neverPlayed": "未再生",
     "sortDefault": "デフォルト",
     "sortPlayCount": "再生回数順",
-    "sortLastPlayed": "最終再生順"
+    "sortLastPlayed": "最終再生順",
+    "sortLiked": "お気に入り"
   },
   "gallery": {
     "title": "セット",

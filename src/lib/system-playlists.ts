@@ -1,8 +1,25 @@
 import type { PlaybackEvent, RemoteSearchTrack, Track, TrackPlaybackStats } from "@/db/types";
+import type { SortDir } from "@/lib/set-gallery";
+import { type LastPlayedMap, sortTracks } from "@/lib/track-gallery";
 
 export type SystemPlaylistId = "system:liked" | "system:recent" | "system:most";
 export type MostPlayedRange = "all" | "month" | "week" | "day";
 export type SystemPlaylistSort = "default" | "play-count" | "last-played";
+
+/** Sort axes for the hearted playlist. `liked` (the default) orders by `trackLikes.likedAt`;
+ *  the rest delegate to the shared all-songs {@link sortTracks} so they read identically to
+ *  the gallery. No `updated` axis — `updatedAt` no longer tracks heart edits, `liked` does. */
+export type LikedSort = "liked" | "name" | "created" | "played" | "duration";
+
+/** Orientation each liked-sort selects when first picked (clicking the active chip flips it).
+ *  Default = newest hearted first; name reads best A→Z. */
+export const LIKED_SORT_DEFAULT_DIR: Record<LikedSort, SortDir> = {
+  liked: "desc",
+  name: "asc",
+  created: "desc",
+  played: "desc",
+  duration: "desc",
+};
 
 export interface SystemPlaylistDefinition {
   id: SystemPlaylistId;
@@ -153,6 +170,30 @@ export function getMostPlayedRangeStart(range: MostPlayedRange, now: number): nu
     default:
       return undefined;
   }
+}
+
+/**
+ * Sort the hearted playlist's tracks. The `liked` axis orders by when each track was
+ * hearted (`trackLikes.likedAt`, passed in as a map — likes live off the catalog row so
+ * `updatedAt` no longer reflects heart edits); every other axis delegates to the shared
+ * all-songs {@link sortTracks} so name/created/played/duration read identically to the
+ * gallery. Sorts a copy; equal keys break by title then `createdAt` for a stable order.
+ */
+export function sortLikedTracks(
+  tracks: Track[],
+  sort: LikedSort,
+  dir: SortDir,
+  likedAt: ReadonlyMap<string, number>,
+  lastPlayed?: LastPlayedMap,
+): Track[] {
+  if (sort !== "liked") return sortTracks(tracks, sort, dir, lastPlayed);
+  const sign = dir === "asc" ? 1 : -1;
+  return [...tracks].sort(
+    (a, b) =>
+      sign * ((likedAt.get(a.id) ?? 0) - (likedAt.get(b.id) ?? 0)) ||
+      a.title.localeCompare(b.title) ||
+      a.createdAt - b.createdAt,
+  );
 }
 
 export function sortSystemPlaylistRows(

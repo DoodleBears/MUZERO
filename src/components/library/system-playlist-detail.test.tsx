@@ -9,12 +9,13 @@ const DAY = 24 * 60 * 60 * 1000;
 
 const mocks = vi.hoisted(() => ({
   latestTracks: [] as Track[],
-  likedIds: new Set<string>(),
+  likedAt: new Map<string, number>(),
 }));
 
-// `liked` lives in the trackLikes side table now; drive the hook from the test.
+// `liked` lives in the trackLikes side table now; drive the hook from the test. The
+// hearted playlist sorts by `likedAt`, so the map carries the heart timestamps.
 vi.mock("@/hooks/use-liked-tracks", () => ({
-  useLikedTrackIds: () => mocks.likedIds,
+  useLikedTrackAt: () => mocks.likedAt,
 }));
 
 vi.mock("react-i18next", () => ({
@@ -48,7 +49,12 @@ vi.mock("react-i18next", () => ({
         "systemPlaylists.recentlyPlayed": "Recently Played",
         "systemPlaylists.sortDefault": "Default",
         "systemPlaylists.sortLastPlayed": "Last played",
+        "systemPlaylists.sortLiked": "Liked",
         "systemPlaylists.sortPlayCount": "Play count",
+        "gallery.sortCreated": "Created",
+        "gallery.sortDuration": "Duration",
+        "gallery.sortName": "Name",
+        "gallery.sortPlayed": "Played",
       })[key] ?? key,
   }),
 }));
@@ -97,7 +103,7 @@ vi.mock("@/components/track/track-inspector-panel", () => ({
 describe("SystemPlaylistDetail", () => {
   beforeEach(() => {
     mocks.latestTracks = [];
-    mocks.likedIds = new Set();
+    mocks.likedAt = new Map();
     usePlayerStore.setState({
       play: vi.fn(),
       playSystemPlaylist: vi.fn().mockResolvedValue(undefined),
@@ -189,7 +195,7 @@ describe("SystemPlaylistDetail", () => {
       ReturnType<typeof usePlayerStore.getState>
     >);
     const tracks = [track("trk_1", "One", { liked: true }), track("trk_2", "Two")];
-    mocks.likedIds = new Set(["trk_1"]);
+    mocks.likedAt = new Map([["trk_1", NOW]]);
 
     render(
       <SystemPlaylistDetail
@@ -210,7 +216,7 @@ describe("SystemPlaylistDetail", () => {
 
   it("hides playback stats and metric sorting on the hearted playlist", () => {
     const tracks = [track("trk_1", "One", { liked: true })];
-    mocks.likedIds = new Set(["trk_1"]);
+    mocks.likedAt = new Map([["trk_1", NOW]]);
 
     render(
       <SystemPlaylistDetail
@@ -228,6 +234,55 @@ describe("SystemPlaylistDetail", () => {
     expect(screen.queryByText("Last played")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Play count" })).not.toBeInTheDocument();
     expect(screen.getByTestId("track-columns-trk_1")).toBeEmptyDOMElement();
+  });
+
+  it("sorts the hearted playlist by chip selection (default newest hearted first)", () => {
+    const tracks = [
+      track("trk_apple", "Apple"),
+      track("trk_banana", "Banana"),
+      track("trk_cherry", "Cherry"),
+    ];
+    mocks.likedAt = new Map([
+      ["trk_apple", NOW - 10_000],
+      ["trk_banana", NOW - 1_000],
+      ["trk_cherry", NOW - 5_000],
+    ]);
+
+    render(
+      <SystemPlaylistDetail
+        events={[]}
+        now={NOW}
+        onBack={vi.fn()}
+        playlistId="system:liked"
+        remoteTracks={[]}
+        stats={[]}
+        tracks={tracks}
+      />,
+    );
+
+    // default: most recently hearted first.
+    expect(mocks.latestTracks.map((item) => item.id)).toEqual([
+      "trk_banana",
+      "trk_cherry",
+      "trk_apple",
+    ]);
+
+    // switch to Name → alphabetical.
+    fireEvent.click(screen.getByRole("button", { name: "Name" }));
+    expect(mocks.latestTracks.map((item) => item.id)).toEqual([
+      "trk_apple",
+      "trk_banana",
+      "trk_cherry",
+    ]);
+
+    // click the active Liked chip again to flip to oldest hearted first.
+    fireEvent.click(screen.getByRole("button", { name: "Liked" }));
+    fireEvent.click(screen.getByRole("button", { name: "Liked" }));
+    expect(mocks.latestTracks.map((item) => item.id)).toEqual([
+      "trk_apple",
+      "trk_cherry",
+      "trk_banana",
+    ]);
   });
 
   it("goes back from system playlist detail with the library back shortcut", () => {

@@ -1203,7 +1203,8 @@
     "neverPlayed": "재생 안 함",
     "sortDefault": "기본",
     "sortPlayCount": "재생 횟수순",
-    "sortLastPlayed": "최근 재생순"
+    "sortLastPlayed": "최근 재생순",
+    "sortLiked": "좋아요"
   },
   "gallery": {
     "title": "세트",
