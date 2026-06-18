@@ -596,6 +596,56 @@ function streamMediaTrace(track: Track, trace: PlaybackTraceContext | undefined)
   } satisfies StreamMediaTraceContext;
 }
 
+/**
+ * Download a resolved stream's full bytes through the media proxy — same routing as
+ * playback (inject Referer/UA via the proxy, read ACAO-clean bytes). Throws on a
+ * network / empty-body failure. Shared by offline-cache and download-before-play so
+ * the proxy routing lives in exactly one place.
+ */
+async function fetchStreamMediaBytes(
+  track: Track,
+  url: string,
+  headers: Record<string, string> | undefined,
+  trace?: PlaybackTraceContext,
+): Promise<Blob> {
+  const bridge = resolveDesktopBridge();
+  const target = url.startsWith("blob:")
+    ? url
+    : bridge.mediaProxyUrl
+      ? bridge.mediaProxyUrl(url, headers, streamMediaTrace(track, trace))
+      : url;
+  const resp = target.startsWith("muzfetch://")
+    ? await fetch(target)
+    : await (await getAppFetch())(target);
+  if (!resp.ok) throw new Error(`download failed (${resp.status})`);
+  const blob = await resp.blob();
+  if (blob.size === 0) throw new Error("empty media");
+  return blob;
+}
+
+/**
+ * Download-before-play wrapper: like {@link fetchStreamMediaBytes} but returns null
+ * (logged) instead of throwing, so a failed download degrades to plain streaming
+ * rather than killing playback.
+ */
+async function downloadStreamForPlayback(
+  track: Track,
+  url: string,
+  headers: Record<string, string> | undefined,
+  trace?: PlaybackTraceContext,
+): Promise<Blob | null> {
+  try {
+    return await fetchStreamMediaBytes(track, url, headers, trace);
+  } catch (err) {
+    log.warn("player", "download-before-play failed; streaming instead", {
+      trackId: track.id,
+      source: track.streamSourceId,
+      err: err instanceof Error ? err.message : String(err),
+    });
+    return null;
+  }
+}
+
 function streamUrlTraceContext(url: string) {
   const safeUrl = sanitizeUrlForTrace(url);
   const params = parseUrlParams(url);
@@ -1713,7 +1763,6 @@ async function runCacheStreamedTrack(
 ): Promise<Awaited<ReturnType<typeof runStreamCache>>> {
   const settings = await getSettings();
   const http = createStreamHttp();
-  const bridge = resolveDesktopBridge();
   const result = await runStreamCache({
     resolve: () =>
       resolveStreamedTrackMedia(track, {
@@ -1726,21 +1775,7 @@ async function runCacheStreamedTrack(
         getQuality: (id) => settings.streamSources?.[id]?.quality,
         trace,
       }),
-    fetchBytes: async (url, headers) => {
-      // Same proxy routing as playback: inject Referer/UA + get ACAO-clean bytes.
-      const target = url.startsWith("blob:")
-        ? url
-        : bridge.mediaProxyUrl
-          ? bridge.mediaProxyUrl(url, headers, streamMediaTrace(track, trace))
-          : url;
-      const resp = target.startsWith("muzfetch://")
-        ? await fetch(target)
-        : await (await getAppFetch())(target);
-      if (!resp.ok) throw new Error(`download failed (${resp.status})`);
-      const blob = await resp.blob();
-      if (blob.size === 0) throw new Error("empty media");
-      return blob;
-    },
+    fetchBytes: (url, headers) => fetchStreamMediaBytes(track, url, headers, trace),
     store: (blob, mime) => cacheStreamedTrackBlob(track.id, blob, mime),
     trace: trace ? { ...trace, sourceId: track.streamSourceId } : undefined,
   });
@@ -2781,16 +2816,46 @@ async function ensureLoadedAndPlay(
         proxied: proxiedUrl !== null,
         downloadedBlob: Boolean(resolved.blob),
       });
-      const resolvedBlob = resolved.blob;
+      // Download-before-play (default): pull the whole song to a local blob so it's
+      // byte-range seekable — scrubber / Dock-drag / lyric-seek work from the first
+      // second (a proxied stream is not seekable) — and cached offline. YouTube already
+      // hands back a blob; other sources resolve to a short-lived URL we download here.
+      // A download failure degrades to plain streaming so playback still starts.
+      let resolvedBlob = resolved.blob ?? null;
+      if (!resolvedBlob && resolvedUrl) {
+        // Spin the Dock cover (playbackLoading) + the queue-row download indicator
+        // (setStreamDownloading) for the multi-second download so it doesn't look frozen.
+        const request = beginPlaybackLoading(set, track, sourceKind);
+        activeRequestId = request.id;
+        setStreamDownloading(track.id, true);
+        try {
+          resolvedBlob = await downloadStreamForPlayback(
+            track,
+            resolvedUrl,
+            resolved.headers,
+            playbackTrace,
+          );
+        } finally {
+          setStreamDownloading(track.id, false);
+          clearPlaybackLoading(set, request.id);
+        }
+        if (!continueCurrent("stream-download")) {
+          // The bytes are paid for — cache them for next time even though this track is
+          // no longer active, then bail out of the now-stale load.
+          if (resolvedBlob)
+            void cacheResolvedStreamBlob(track, { ...resolved, blob: resolvedBlob }, playbackTrace);
+          return;
+        }
+      }
       if (resolvedBlob) {
         await mediaEngine.loadBlob(resolvedBlob, track.kind);
         if (!continueCurrent("stream-blob-loaded")) return;
-        // YouTube already paid the full download cost before playback. Persist that
-        // same blob so the next play is local-first and does not re-hit YouTube.
+        // Persist so the next play is local-first (no re-resolve / re-download).
         void cacheResolvedStreamBlob(track, { ...resolved, blob: resolvedBlob }, playbackTrace);
       } else if (src) {
-        // Proxied stream responses send ACAO:* — opt into CORS so the WebAudio graph
-        // doesn't taint (and silence) the audio.
+        // Download failed (or this shell has no media proxy) — stream instead. Proxied
+        // responses send ACAO:* so opt into CORS, else the WebAudio graph taints (and
+        // silences) the audio.
         await mediaEngine.loadUrl(
           src,
           track.kind,
@@ -2807,9 +2872,8 @@ async function ensureLoadedAndPlay(
         set({ isPlaying: false, wantPlay: false });
         return;
       }
-      // Offline cache (Phase 5): when enabled, download this song's bytes in the
-      // background so a later play is local + offline. Best-effort; skipped if cached.
-      if (settings.autoCacheStreamed && !track.blobId && !resolved.blob)
+      // Background auto-cache only matters if we ended up streaming (no local blob yet).
+      if (settings.autoCacheStreamed && !track.blobId && !resolvedBlob)
         void cacheStreamedTrackNow(track, playbackTrace);
     }
     if (!continueCurrent("before-loaded-state")) return;
