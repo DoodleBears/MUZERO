@@ -162,6 +162,7 @@ export function createElectronBridge(): DesktopBridge {
     join: (base, name) => `${base.replace(/[/\\]+$/, "")}/${name}`,
     readFile: async (path) => new Uint8Array(await api.readFile(path)),
     grantFolderAccess: (path) => api.grantFolderAccess(path),
+    grantFileAccess: (path) => api.grantFileAccess(path),
     getDroppedFilePath: async (file) => {
       const path = api.getPathForFile(file).trim();
       if (!path) return undefined;

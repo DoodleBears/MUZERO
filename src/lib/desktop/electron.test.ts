@@ -114,6 +114,15 @@ describe("createElectronBridge", () => {
     expect(api.grantFileAccess).toHaveBeenCalledWith("D:/Music/clip.mp4");
   });
 
+  it("exposes exact-file grants for restoring referenced imports after restart", async () => {
+    const api = installApi({});
+    const bridge = createElectronBridge();
+
+    await bridge.grantFileAccess?.("D:/Music/clip.mp4");
+
+    expect(api.grantFileAccess).toHaveBeenCalledWith("D:/Music/clip.mp4");
+  });
+
   it("returns undefined without granting when Electron has no path", async () => {
     const api = installApi({ getPathForFile: vi.fn(() => "") });
     const bridge = createElectronBridge();

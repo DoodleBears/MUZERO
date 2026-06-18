@@ -38,6 +38,7 @@ import {
   listAllTracks,
   listGalleryImages,
   listMemories,
+  listReferencedLocalFileSourcePaths,
   listTrackBackgrounds,
   markTrackReady,
   memoryNotesByTrack,
@@ -559,6 +560,44 @@ describe("createUploadedTrack", () => {
     });
     expect(await db.mediaBlobs.count()).toBe(0);
     expect(await db.tracks.get(track?.id ?? "")).toMatchObject({ sourcePath: track?.sourcePath });
+  });
+
+  it("lists only reference-only local files for boot access restoration", async () => {
+    const session = await createSession({ seedPrompt: "", config: { autoExtend: false } }, db);
+    await createReferencedUploadedTrack(
+      {
+        sessionId: session.id,
+        title: "Referenced MV",
+        kind: "video",
+        mime: "video/mp4",
+        durationSec: 90,
+        sourcePath: "D:/media/referenced-mv.mp4",
+      },
+      db,
+    );
+    const copied = await createReferencedUploadedTrack(
+      {
+        sessionId: session.id,
+        title: "Copied Later",
+        kind: "audio",
+        mime: "audio/mpeg",
+        durationSec: 42,
+        sourcePath: "D:/media/copied-later.mp3",
+      },
+      db,
+    );
+    await cacheReferencedTrackBlob(
+      {
+        trackId: copied.id,
+        blob: new Blob(["cached"], { type: "audio/mpeg" }),
+        mime: "audio/mpeg",
+      },
+      db,
+    );
+
+    await expect(listReferencedLocalFileSourcePaths(db)).resolves.toEqual([
+      "D:/media/referenced-mv.mp4",
+    ]);
   });
 
   it("stores imported media metadata and embedded cover art out of the track row", async () => {

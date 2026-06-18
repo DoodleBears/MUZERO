@@ -16,6 +16,7 @@ import {
   getTracksByIds,
   insertTrackIdsAfter,
   knownSourcePaths,
+  listReferencedLocalFileSourcePaths,
   playQueueAppend,
   playQueueInsertAt,
   playQueuePlayNext,
@@ -293,6 +294,8 @@ interface PlayerState {
   addUploadsToSet: (setId: string, files: FileList | File[]) => Promise<void>;
   /** Copy a referenced local-file track into managed storage for offline playback. */
   cacheReferencedTrackToDevice: (trackId: string) => Promise<void>;
+  /** Desktop boot repair: re-authorize reference-only source paths after restart. */
+  restoreReferencedLocalFileAccess: () => Promise<void>;
   /**
    * Drop-to-upload: import media into the active set, creating an upload set
    * first when nothing is active. Returns whether a new set was created (so the
@@ -1522,6 +1525,31 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
 
   async cacheReferencedTrackToDevice(trackId) {
     await cacheReferencedTrackToDeviceFromSource(trackId, set, get);
+  },
+
+  async restoreReferencedLocalFileAccess() {
+    const bridge = resolveDesktopBridge();
+    if (!bridge.grantFileAccess) return;
+    const paths = await listReferencedLocalFileSourcePaths();
+    if (paths.length === 0) return;
+
+    let granted = 0;
+    let failed = 0;
+    for (const path of paths) {
+      try {
+        await bridge.grantFileAccess(path);
+        granted += 1;
+      } catch (error) {
+        failed += 1;
+        log.warn("player", "failed to restore referenced local-file access", {
+          errorType: error instanceof Error ? error.name : typeof error,
+        });
+      }
+    }
+    log.info("player", `restored ${granted} referenced local-file grant(s)`);
+    if (failed > 0) {
+      log.warn("player", "some referenced local-file grants could not be restored", { failed });
+    }
   },
 
   async ingestDroppedMedia(files, newSetName) {

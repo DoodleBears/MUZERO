@@ -182,6 +182,8 @@ export interface DesktopBridge {
   join?: (base: string, name: string) => Promise<string> | string;
   /** Add a folder to the runtime read allowlist (Tauri scope / Electron in-memory). */
   grantFolderAccess?: (path: string) => Promise<void>;
+  /** Re-grant one previously user-selected local file path (Electron exact-file allowlist). */
+  grantFileAccess?: (path: string) => Promise<void>;
   /**
    * Resolve a dropped / file-picker File to its absolute on-disk path when the shell
    * can prove one exists. Electron grants the exact file path before returning it.

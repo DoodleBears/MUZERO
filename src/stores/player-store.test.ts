@@ -840,6 +840,51 @@ describe("player-store bulk upload visibility", () => {
     expect(cover).toMatchObject({ bytes: posterBlob.size, mime: "image/webp", role: "cover" });
   });
 
+  it("restores Electron exact-file grants for reference-only local media on boot", async () => {
+    const grantFileAccess = vi.fn(async () => undefined);
+    vi.doMock("@/lib/desktop/bridge", async () => {
+      const actual =
+        await vi.importActual<typeof import("@/lib/desktop/bridge")>("@/lib/desktop/bridge");
+      return {
+        ...actual,
+        resolveDesktopBridge: () => ({
+          fetch,
+          grantFileAccess,
+          kind: "electron",
+          openExternal: vi.fn(),
+        }),
+      };
+    });
+    const { repos, usePlayerStore } = await loadRuntime();
+    const session = await repos.createSession({ seedPrompt: "", config: { autoExtend: false } });
+    await repos.createReferencedUploadedTrack({
+      sessionId: session.id,
+      title: "Referenced MV",
+      kind: "video",
+      mime: "video/mp4",
+      durationSec: 90,
+      sourcePath: "D:/media/referenced-mv.mp4",
+    });
+    const copied = await repos.createReferencedUploadedTrack({
+      sessionId: session.id,
+      title: "Copied Song",
+      kind: "audio",
+      mime: "audio/mpeg",
+      durationSec: 42,
+      sourcePath: "D:/media/copied-song.mp3",
+    });
+    await repos.cacheReferencedTrackBlob({
+      trackId: copied.id,
+      blob: new Blob(["cached"], { type: "audio/mpeg" }),
+      mime: "audio/mpeg",
+    });
+
+    await usePlayerStore.getState().restoreReferencedLocalFileAccess();
+
+    expect(grantFileAccess).toHaveBeenCalledTimes(1);
+    expect(grantFileAccess).toHaveBeenCalledWith("D:/media/referenced-mv.mp4");
+  });
+
   it("keeps embedded covers ahead of auto poster extraction", async () => {
     vi.doMock("@/lib/media-probe", async () => {
       const actual = await vi.importActual<typeof import("@/lib/media-probe")>("@/lib/media-probe");

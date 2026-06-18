@@ -246,6 +246,20 @@ export async function knownSourcePaths(
 }
 
 /**
+ * Local-file references are authorized in the Electron main process at runtime.
+ * The DB keeps the `sourcePath`, but the main-process allowlist is in-memory, so
+ * boot needs to re-grant exact-file access for reference-only tracks.
+ */
+export async function listReferencedLocalFileSourcePaths(
+  db: MuzeroDB = defaultDb,
+): Promise<string[]> {
+  const rows = await db.tracks
+    .filter((track) => track.status === "ready" && !!track.sourcePath && !track.blobId)
+    .toArray();
+  return [...new Set(rows.map((track) => track.sourcePath).filter((p): p is string => !!p))];
+}
+
+/**
  * Add or update a remembered import folder (matched by id or path). Re-reads
  * settings inside so a concurrent settings write isn't clobbered. Returns the id.
  */

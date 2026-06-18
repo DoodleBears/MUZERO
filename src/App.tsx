@@ -155,7 +155,19 @@ export default function App() {
   // self-guards (no-op in the browser or when no folders are remembered).
   useEffect(() => {
     const timer = window.setTimeout(() => {
-      void usePlayerStore.getState().syncImportFolders();
+      const player = usePlayerStore.getState();
+      void (async () => {
+        try {
+          await player.restoreReferencedLocalFileAccess();
+        } catch {
+          // Playback has its own repair/copy actions if a referenced file is gone.
+        }
+        try {
+          await player.syncImportFolders();
+        } catch {
+          // Folder sync is best-effort boot work and reports progress separately.
+        }
+      })();
     }, 2500);
     return () => window.clearTimeout(timer);
   }, []);
