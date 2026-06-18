@@ -1,4 +1,5 @@
 import { log } from "@/lib/logger";
+import { isMediabunnySupportedContentType } from "@/lib/media-container-format";
 import {
   candidatePosterTimes,
   scoreImagePixels,
@@ -20,7 +21,7 @@ export type ExtractedVideoPosterFrame = {
   width: number;
   height: number;
   atTimeSeconds: number;
-  source: "native-video";
+  source: "mediabunny" | "native-video";
   score: VideoFrameScore;
 };
 
@@ -32,7 +33,7 @@ export type VideoPosterFrameOptions = {
   signal?: AbortSignal;
 };
 
-type CapturedVideoFrame = Omit<ExtractedVideoPosterFrame, "source">;
+export type CapturedVideoPosterFrame = Omit<ExtractedVideoPosterFrame, "source">;
 
 /**
  * Extract a useful poster frame for an uploaded video. Phase 1 implements the
@@ -53,6 +54,8 @@ export async function extractUsefulVideoPosterFrame(
     return best ? { ...best, source: "native-video" } : null;
   } catch (error) {
     if (isAbortError(error)) throw error;
+    const fallback = await extractViaMediabunnyFallback(file, options);
+    if (fallback) return fallback;
     log.debug("video-poster", "native poster extraction failed", {
       error: error instanceof Error ? error.name : typeof error,
       mime: file.type || undefined,
@@ -66,7 +69,7 @@ export async function extractVideoFramesBatchViaVideoElement(
   file: File,
   requests: readonly VideoFrameCandidate[],
   options: VideoPosterFrameOptions = {},
-): Promise<CapturedVideoFrame[]> {
+): Promise<CapturedVideoPosterFrame[]> {
   if (requests.length === 0 || typeof document === "undefined") return [];
 
   const objectUrl = URL.createObjectURL(file);
@@ -78,7 +81,7 @@ export async function extractVideoFramesBatchViaVideoElement(
   video.src = objectUrl;
 
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
-  const frames: CapturedVideoFrame[] = [];
+  const frames: CapturedVideoPosterFrame[] = [];
 
   try {
     throwIfAborted(options.signal);
@@ -126,6 +129,21 @@ export async function extractVideoFramesBatchViaVideoElement(
     video.load();
     URL.revokeObjectURL(objectUrl);
   }
+}
+
+async function extractViaMediabunnyFallback(
+  file: File,
+  options: VideoPosterFrameOptions,
+): Promise<ExtractedVideoPosterFrame | null> {
+  if (!isMediabunnySupportedContentType(file.type, file.name)) return null;
+  const { extractVideoFramesBatchViaMediabunny } = await import("@/lib/media-mediabunny-frames");
+  const frames = await extractVideoFramesBatchViaMediabunny(
+    file,
+    candidatePosterTimes(options.durationSec),
+    options,
+  );
+  const best = frames ? selectBestScoredFrame(frames) : null;
+  return best ? { ...best, source: "mediabunny" } : null;
 }
 
 function clampSeekTime(value: number, durationSec: number | undefined): number {

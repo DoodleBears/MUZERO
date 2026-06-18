@@ -1,5 +1,9 @@
 import type { TrackKind } from "@/db/types";
 import { classifyFile } from "@/lib/file-drop";
+import {
+  inferMediabunnyMime,
+  isMediabunnySupportedContentType,
+} from "@/lib/media-container-format";
 
 export interface ProbedMedia {
   kind: TrackKind;
@@ -51,7 +55,8 @@ function titleFromFilename(name: string): string {
 export function probeMediaFile(file: File): Promise<ProbedMedia> {
   const kind: TrackKind = classifyFile(file) === "video" ? "video" : "audio";
   const title = titleFromFilename(file.name);
-  const mime = file.type || (kind === "video" ? "video/mp4" : "audio/mpeg");
+  const mime =
+    file.type || inferMediabunnyMime(file.name) || (kind === "video" ? "video/mp4" : "audio/mpeg");
 
   return new Promise<ProbedMedia>((resolve, reject) => {
     if (typeof document === "undefined") {
@@ -78,7 +83,26 @@ export function probeMediaFile(file: File): Promise<ProbedMedia> {
       settled = true;
       const code = el.error?.code;
       cleanup();
-      reject(new UnsupportedMediaError(file, kind, mime, code));
+      const nativeError = new UnsupportedMediaError(file, kind, mime, code);
+      if (!isMediabunnySupportedContentType(mime, file.name)) {
+        reject(nativeError);
+        return;
+      }
+      void import("@/lib/media-mediabunny-probe")
+        .then(({ probeMediaFileViaMediabunny }) => probeMediaFileViaMediabunny(file))
+        .then((fallback) => {
+          if (!fallback) {
+            reject(nativeError);
+            return;
+          }
+          resolve({
+            durationSec: fallback.durationSec,
+            kind,
+            mime: fallback.mime || mime,
+            title,
+          });
+        })
+        .catch(() => reject(nativeError));
     };
     const timer = setTimeout(() => done(0), PROBE_TIMEOUT_MS);
     el.addEventListener("loadedmetadata", () => done(el.duration), { once: true });

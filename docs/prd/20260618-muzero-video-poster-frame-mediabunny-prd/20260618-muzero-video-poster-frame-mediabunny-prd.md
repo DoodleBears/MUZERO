@@ -12,7 +12,7 @@
 | Phase | Name | Status | Link |
 |-------|------|--------|------|
 | 1 | Native video batch frame extraction + black-frame scoring | Completed | [Phase 1 Checklist](#phase-1-checklist) |
-| 2 | Mediabunny container/decode fallback | Pending | [Phase 2 Checklist](#phase-2-checklist) |
+| 2 | Mediabunny container/decode fallback | Completed | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | Upload ingest integration + cover persistence | Pending | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | Tests, diagnostics, and release polish | Pending | [Phase 4 Checklist](#phase-4-checklist) |
 
@@ -113,7 +113,7 @@ Track.coverBlobId -> MediaBlob(role:"cover")
 | Cover encoding | Canvas `toBlob("image/webp", 0.85)` or existing image pipeline conventions | Produces compact local cover bytes; `setTrackCover` handles storage and metadata derivation. |
 | Persistence | Dexie `muzero-db` existing `Track.coverBlobId` and `MediaBlob(role:"cover")` | No schema migration needed. |
 
-> External dependency declaration: `mediabunny` is introduced as a local import-time media container helper. It must be dynamically imported from a narrow adapter module, not scattered through UI/store code. License and bundle delta must be confirmed in implementation before finalizing the PR; ClipCombo currently uses `mediabunny@1.45.4`.
+> External dependency declaration: `mediabunny@1.45.4` is introduced as a local import-time media container helper. License: `MPL-2.0` (confirmed from `node_modules/mediabunny/package.json`). It is dynamically imported from narrow fallback adapter modules and not scattered through UI/store code. Bundle delta should still be noted in the implementation PR/build notes.
 
 ### 2.4 Best-Practice Decisions
 
@@ -329,19 +329,21 @@ For folder import, keep bounded concurrency so many videos do not decode frames 
 **Goal:** Let supported non-native containers, especially MKV/Matroska, still provide duration/probe data and poster frames when native `<video>` fails.
 
 **Tasks:**
-- [ ] Add `mediabunny` dependency after license/version confirmation.
-- [ ] Add `media-mediabunny-formats.ts` with one `MEDIABUNNY_INPUT_FORMATS` registry.
-- [ ] Add pure content-type/extension support predicate; `.mkv` and `application/octet-stream` with MKV extension must be handled.
-- [ ] Add `extractVideoFramesBatchViaMediabunny` using `BlobSource({ maxCacheSize: 8 * 2 ** 20 })`, `Input`, `track.canDecode()`, and `CanvasSink({ poolSize: 2 })`.
-- [ ] Add `probeMediaFile` fallback for native metadata errors on mediabunny-supported containers.
-- [ ] Lazy-import mediabunny modules only from fallback paths.
+- [x] Add `mediabunny` dependency after license/version confirmation.
+- [x] Add `media-mediabunny-formats.ts` with one `MEDIABUNNY_INPUT_FORMATS` registry.
+- [x] Add pure content-type/extension support predicate; `.mkv` and `application/octet-stream` with MKV extension must be handled.
+- [x] Add `extractVideoFramesBatchViaMediabunny` using `BlobSource({ maxCacheSize: 8 * 2 ** 20 })`, `Input`, `track.canDecode()`, and `CanvasSink({ poolSize: 2 })`.
+- [x] Add `probeMediaFile` fallback for native metadata errors on mediabunny-supported containers.
+- [x] Lazy-import mediabunny modules only from fallback paths.
 
 ### Phase 2 Checklist
 
-- [ ] Every `new Input` call uses the shared `MEDIABUNNY_INPUT_FORMATS`.
-- [ ] Unsupported container/no video track/cannot decode returns `null`, not import failure.
-- [ ] `input.dispose()` is best-effort in `finally`.
-- [ ] Common MP4 path does not import mediabunny eagerly.
+- [x] Every `new Input` call uses the shared `MEDIABUNNY_INPUT_FORMATS`.
+- [x] Unsupported container/no video track/cannot decode returns `null`, not import failure.
+- [x] `input.dispose()` is best-effort in `finally`.
+- [x] Common MP4 path does not import mediabunny eagerly.
+
+**Verification:** `pnpm vitest run src/lib/media-container-format.test.ts src/lib/media-probe.test.ts src/lib/video-frame-score.test.ts`; `pnpm typecheck`.
 
 ### Phase 3: Upload Ingest Integration + Cover Persistence
 
