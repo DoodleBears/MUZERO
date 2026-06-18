@@ -14,7 +14,7 @@
 |-------|------|--------|------|
 | 1 | 来源解析 + 锚点深链基础设施 | ✅ Completed | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | 入口：Dock 信息 tab 感知点击 + 右键菜单项 | ✅ Completed | [Phase 2 Checklist](#phase-2-checklist) |
-| 3 | 封面纵向手势（coverflow 上/下滑）→ 跳转 | 🔲 Pending | [Phase 3 Checklist](#phase-3-checklist) |
+| 3 | 封面纵向手势（coverflow 上/下滑）→ 跳转 | ✅ Completed | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | View Transition：复用 `gallery-cover` 封面 morph + a11y 兜底 | 🔲 Pending | [Phase 4 Checklist](#phase-4-checklist) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
@@ -390,16 +390,16 @@ function handleOpen() {
 **Goal:** 给 coverflow 封面纵向手势接上跳转，不破坏横滑切歌与 tap 切歌词。
 
 **Tasks:**
-- [ ] `swipeable-cover-stage.tsx` 的 `onPointerUp`（:845-861）增纵向判定（Δy 主导 + 距离/速度阈值）→ 上/下滑均 `dispatchJump`。
-- [ ] 纵向拖拽跟手视觉 + 可选 hint chip（i18n）。
-- [ ] 确认 tap（`<10px`，移动端切歌词）与横向 coverflow drag 不受影响。
+- [x] `swipeable-cover-stage.tsx` 的 `onPointerUp`（:845-861）增纵向判定（Δy 主导 + 距离/速度阈值）→ 上/下滑均 `dispatchJump`。
+- [x] 纵向拖拽跟手视觉 + 可选 hint chip（i18n）本期不做额外可视化；发现性由 Phase 2 菜单项承担。
+- [x] 确认 tap（`<10px`，移动端切歌词）与横向 coverflow drag 不受影响。
 
 ### Phase 3 Checklist
-- [ ] 横滑 = 上一首/下一首（coverflow 回归不变）。
-- [ ] 上滑 / 下滑都跳转到来源（两方向对称）。
-- [ ] 轻 tap 仍切歌词（移动端），不误触发跳转。
-- [ ] 对角手势按主导轴干净解析（横主导切歌、纵主导跳转）。
-- [ ] `cover-pager-strip.test.tsx` / coverflow 相关单测更新并通过。
+- [x] 横滑 = 上一首/下一首（coverflow 回归不变）。
+- [x] 上滑 / 下滑都跳转到来源（两方向对称）。
+- [x] 轻 tap 仍切歌词（移动端），不误触发跳转。
+- [x] 对角手势按主导轴干净解析（横主导切歌、纵主导跳转）。
+- [x] `swipeable-cover-stage.test.ts` 覆盖纵向/横向/轻 tap/快速 flick；focused Vitest、touched-file Biome、`pnpm tsc --noEmit` 通过。
 
 ### Phase 4: View Transition —— 复用 `gallery-cover` 封面 morph + a11y 兜底
 
@@ -476,6 +476,7 @@ function handleOpen() {
 | 2026-06-18 | UX / Frontend | 复审重写：对齐 coverflow 重构（`SwipeableCoverStage`/`cover-pager*`/`cover-window-store` 取代 `swipeable-media-stage`）、改用新 `gallery-cover` 共享封面 morph（弃 `layoutId`）、补「消费路径绕过 morph」接线点、新增 OQ#2/#5、更新全部文件引用与行号 |
 | 2026-06-18 | Codex | Phase 1 completed：新增播放来源 resolver、nav-store 锚点 deep-link、set/system 详情锚点消费、TrackListSection/VirtualTrackList 居中定位测试与实现。 |
 | 2026-06-18 | Codex | Phase 2 completed：Dock 信息点击 tab-aware 跳转、当前曲目菜单新增可见跳转项、统一 `dispatchJumpTarget` helper、四语言 `nav.jumpToSource`。 |
+| 2026-06-18 | Codex | Phase 3 completed：coverflow 封面纵向上/下滑识别为 jump-to-source，横向主导仍交给 coverflow 切歌，轻 tap 不误触发。 |
 
 ---
 

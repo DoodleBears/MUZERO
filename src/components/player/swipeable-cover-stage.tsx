@@ -20,9 +20,12 @@ import {
   resolveNowPlayingCoverEffectMode,
 } from "@/lib/album-cover-appearance";
 import { coverPaletteFromThumbhash, normalizeCoverPalette } from "@/lib/cover-palette";
+import { dispatchJumpTarget } from "@/lib/jump-to-source";
 import { transitionProgress, useNowPlayingTransition } from "@/lib/now-playing-transition";
+import { resolvePlayingSource } from "@/lib/playing-source";
 import { trackHasCover } from "@/lib/track-display";
 import { cn } from "@/lib/utils";
+import { transitionState } from "@/lib/view-transition-react";
 import type { Rgb } from "@/lib/visualizer-color";
 import { usePlayerStore } from "@/stores/player-store";
 import {
@@ -80,6 +83,28 @@ const HANDOFF_BASE_SETTLE_MS = 260;
 const WHEEL_GAIN = 1;
 const WHEEL_ENGAGE_PX = 10;
 const WHEEL_END_MS = 140;
+const VERTICAL_JUMP_DISTANCE = 56;
+const VERTICAL_JUMP_VELOCITY = 560;
+
+export interface CoverSwipePoint {
+  t: number;
+  x: number;
+  y: number;
+}
+
+export function shouldJumpToSourceFromCoverSwipe(
+  start: CoverSwipePoint,
+  end: CoverSwipePoint,
+): boolean {
+  const dx = end.x - start.x;
+  const dy = end.y - start.y;
+  const absX = Math.abs(dx);
+  const absY = Math.abs(dy);
+  if (absY <= absX) return false;
+  if (absY >= VERTICAL_JUMP_DISTANCE) return true;
+  const dtSec = Math.max(0.001, (end.t - start.t) / 1000);
+  return absY / dtSec >= VERTICAL_JUMP_VELOCITY;
+}
 
 /**
  * Best-effort synchronous cover accent, matching what the window border settles to:
@@ -845,6 +870,27 @@ export function SwipeableCoverStage({
           onPointerUp={(e) => {
             const start = tapStart.current;
             tapStart.current = null;
+            if (
+              start &&
+              shouldJumpToSourceFromCoverSwipe(start, {
+                t: Date.now(),
+                x: e.clientX,
+                y: e.clientY,
+              })
+            ) {
+              draggingRef.current = false;
+              usePlayerStore.getState().setCoverGestureActive(false);
+              closeOverlay();
+              const state = usePlayerStore.getState();
+              const target = resolvePlayingSource({
+                activeSessionId: state.activeSessionId,
+                currentIndex: state.currentIndex,
+                queue: state.queue,
+                queueSource: state.queueSource,
+              });
+              if (target) transitionState(() => dispatchJumpTarget(target));
+              return;
+            }
             const isTap =
               !!onTap &&
               !!start &&
