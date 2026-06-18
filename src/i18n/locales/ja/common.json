@@ -27,6 +27,7 @@
     "search": "検索",
     "sets": "セット",
     "settings": "設定",
+    "jumpToSource": "プレイリストへ移動",
     "menu": "メニュー"
   },
   "dock": {
@@ -389,7 +390,8 @@
     "bgApplied": "背景に追加しました",
     "galleryApplied": "ギャラリーに追加しました",
     "skipped_other": "未対応のファイル {{count}} 件をスキップしました",
-    "pickSetTitle_other": "{{count}} 件のファイルをどのセットに追加しますか？"
+    "pickSetTitle_other": "{{count}} 件のファイルをどのセットに追加しますか？",
+    "currentSet": "再生中"
   },
   "performance": {
     "title": "パフォーマンス",

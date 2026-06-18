@@ -27,6 +27,7 @@
     "search": "搜索",
     "sets": "歌单",
     "settings": "设置",
+    "jumpToSource": "跳转到所在歌单",
     "menu": "菜单"
   },
   "dock": {
@@ -389,7 +390,8 @@
     "bgApplied": "已加为背景",
     "galleryApplied": "已加入图库",
     "skipped_other": "跳过 {{count}} 个不支持的文件",
-    "pickSetTitle_other": "把 {{count}} 个文件加到哪个歌单？"
+    "pickSetTitle_other": "把 {{count}} 个文件加到哪个歌单？",
+    "currentSet": "当前"
   },
   "performance": {
     "title": "性能",

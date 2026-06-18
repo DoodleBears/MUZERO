@@ -1,6 +1,6 @@
 import { useLiveQuery } from "dexie-react-hooks";
 import { ImagePlus, Images, Loader2, Plus, UploadCloud, X } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { CoverCropDialog } from "@/components/track/cover-crop-dialog";
 import { Button } from "@/components/ui/button";
@@ -36,9 +36,10 @@ type Notice = { kind: "uploaded" | ImageAction | "unsupported"; count: number };
 
 /**
  * App-wide drag-and-drop ingest. Listens at the window so a file can be dropped
- * anywhere on screen (any page): audio/video become tracks in the active set
- * (creating an upload set if none), and images open a confirm modal to set the
- * current track's cover. Modeled on ClipCombo's landing-page full-screen drop.
+ * anywhere on screen (any page): audio/video open a 歌单 picker (unless a set
+ * detail page already pinned the target) so the user chooses which set they join
+ * — audio and video can share one set — and images open a confirm modal to set
+ * the current track's cover. Modeled on ClipCombo's landing-page full-screen drop.
  */
 export function GlobalDropZone({
   onMediaUploaded,
@@ -57,55 +58,47 @@ export function GlobalDropZone({
   const [notice, setNotice] = useState<Notice | null>(null);
   const dragDepth = useRef(0);
 
-  const handleFiles = useCallback(
-    async (files: File[]) => {
-      const { media, images, skipped } = classifyDrop(files);
-      if (media.length > 0) {
-        // Route by the current view's upload target (see upload-target-store):
-        // a set detail → that set; the gallery → a target-set picker; else active.
-        const target = useUploadTargetStore.getState().target;
-        if (target.kind === "set") {
-          await usePlayerStore.getState().addUploadsToSet(target.setId, media);
-          setNotice({ kind: "uploaded", count: media.length });
-          return;
-        }
-        if (target.kind === "pick") {
-          setPendingMedia(media);
-          return;
-        }
-        const { createdSet } = await usePlayerStore
-          .getState()
-          .ingestDroppedMedia(media, t("sessions.uploadSet"));
+  const handleFiles = useCallback(async (files: File[]) => {
+    const { media, images, skipped } = classifyDrop(files);
+    if (media.length > 0) {
+      // Route by the current view's upload target (see upload-target-store):
+      // a set detail (`set`) drops straight into that set; everywhere else
+      // (`pick` gallery / `active` fallback) asks which 歌单 the media joins.
+      // The picker lets audio + video land in the SAME set and never silently
+      // strands a drop in a fresh set the user didn't ask for.
+      const target = useUploadTargetStore.getState().target;
+      if (target.kind === "set") {
+        await usePlayerStore.getState().addUploadsToSet(target.setId, media);
         setNotice({ kind: "uploaded", count: media.length });
-        onMediaUploaded?.(createdSet);
         return;
       }
-      if (images.length > 0) {
-        // A view showing a selected track (库 所有歌曲 list, artist / album page)
-        // publishes it as the cover target — route the image straight to that
-        // song's crop step instead of the playing-track-or-gallery fallback.
-        const coverTrackId = useCoverTargetStore.getState().trackId;
-        if (coverTrackId) {
-          const target = await db.tracks.get(coverTrackId);
-          if (target) {
-            setPendingCrop({ file: images[0], track: target });
-            return;
-          }
+      setPendingMedia(media);
+      return;
+    }
+    if (images.length > 0) {
+      // A view showing a selected track (库 所有歌曲 list, artist / album page)
+      // publishes it as the cover target — route the image straight to that
+      // song's crop step instead of the playing-track-or-gallery fallback.
+      const coverTrackId = useCoverTargetStore.getState().trackId;
+      if (coverTrackId) {
+        const target = await db.tracks.get(coverTrackId);
+        if (target) {
+          setPendingCrop({ file: images[0], track: target });
+          return;
         }
-        // Otherwise lock the target to the track playing *now* — playback may
-        // advance (a short clip ending) while the modal is open, which would
-        // otherwise move the cover onto the wrong track.
-        const { queue, currentIndex } = usePlayerStore.getState();
-        setPendingCover({
-          file: images[0],
-          track: currentIndex >= 0 ? (queue[currentIndex] ?? null) : null,
-        });
-        return;
       }
-      if (skipped.length > 0) setNotice({ kind: "unsupported", count: skipped.length });
-    },
-    [t, onMediaUploaded],
-  );
+      // Otherwise lock the target to the track playing *now* — playback may
+      // advance (a short clip ending) while the modal is open, which would
+      // otherwise move the cover onto the wrong track.
+      const { queue, currentIndex } = usePlayerStore.getState();
+      setPendingCover({
+        file: images[0],
+        track: currentIndex >= 0 ? (queue[currentIndex] ?? null) : null,
+      });
+      return;
+    }
+    if (skipped.length > 0) setNotice({ kind: "unsupported", count: skipped.length });
+  }, []);
 
   // Keep the latest handler in a ref so the window listeners attach once.
   const handleFilesRef = useRef(handleFiles);
@@ -259,7 +252,10 @@ export function GlobalDropZone({
         <SetPickerDialog
           files={pendingMedia}
           onClose={() => setPendingMedia(null)}
-          onUploaded={(count) => setNotice({ kind: "uploaded", count })}
+          onUploaded={(count, createdSet) => {
+            setNotice({ kind: "uploaded", count });
+            if (createdSet) onMediaUploaded?.(true);
+          }}
         />
       )}
 
@@ -292,8 +288,10 @@ export function GlobalDropZone({
 }
 
 /**
- * Choose which 歌单 dropped/pasted media goes into — shown when media lands on the
- * gallery (no specific set context). Lists existing sets + a "new set" option.
+ * Choose which 歌单 dropped/pasted media goes into — shown whenever media lands
+ * without an explicit single-set context (the gallery, or any other view). Lists
+ * existing sets + a "new set" option, with the currently-playing set surfaced
+ * first so audio + video can be mixed into one set in a single click.
  */
 function SetPickerDialog({
   files,
@@ -302,17 +300,25 @@ function SetPickerDialog({
 }: {
   files: File[];
   onClose: () => void;
-  onUploaded: (count: number) => void;
+  onUploaded: (count: number, createdSet: boolean) => void;
 }) {
   const { t } = useTranslation();
   const sessions = useLiveQuery(() => listSessions(db), [], []);
+  const activeSessionId = usePlayerStore((s) => s.activeSessionId);
   const [busy, setBusy] = useState(false);
+
+  // Put the active set on top — the common case is "add to what I'm playing".
+  const ordered = useMemo(() => {
+    if (!activeSessionId) return sessions;
+    const active = sessions.filter((s) => s.id === activeSessionId);
+    return [...active, ...sessions.filter((s) => s.id !== activeSessionId)];
+  }, [sessions, activeSessionId]);
 
   async function uploadTo(setId: string) {
     if (busy) return;
     setBusy(true);
     await usePlayerStore.getState().addUploadsToSet(setId, files);
-    onUploaded(files.length);
+    onUploaded(files.length, false);
     onClose();
   }
   async function uploadToNew() {
@@ -324,7 +330,7 @@ function SetPickerDialog({
       config: { autoExtend: false },
     });
     await usePlayerStore.getState().addUploadsToSet(s.id, files);
-    onUploaded(files.length);
+    onUploaded(files.length, true);
     onClose();
   }
 
@@ -365,7 +371,7 @@ function SetPickerDialog({
           <span className="text-sm font-medium">{t("gallery.newSet")}</span>
         </button>
         <div className="-mx-1 flex min-h-0 flex-col gap-1 overflow-y-auto px-1">
-          {sessions.map((s) => (
+          {ordered.map((s) => (
             <button
               key={s.id}
               type="button"
@@ -377,7 +383,14 @@ function SetPickerDialog({
                 <Disc3Icon className="text-muted-foreground" size={20} />
               </span>
               <span className="min-w-0 flex-1">
-                <span className="block truncate text-sm font-medium">{s.name}</span>
+                <span className="flex items-center gap-2">
+                  <span className="min-w-0 truncate text-sm font-medium">{s.name}</span>
+                  {s.id === activeSessionId && (
+                    <span className="shrink-0 rounded-full bg-primary/15 px-2 py-0.5 text-[10px] font-medium text-primary">
+                      {t("drop.currentSet")}
+                    </span>
+                  )}
+                </span>
                 <span className="block text-xs text-muted-foreground">
                   {t("gallery.count", { count: s.trackIds.length })}
                 </span>

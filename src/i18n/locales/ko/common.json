@@ -27,6 +27,7 @@
     "search": "검색",
     "sets": "세트",
     "settings": "설정",
+    "jumpToSource": "플레이리스트로 이동",
     "menu": "메뉴"
   },
   "dock": {
@@ -389,7 +390,8 @@
     "bgApplied": "배경에 추가했습니다",
     "galleryApplied": "갤러리에 추가했습니다",
     "skipped_other": "지원하지 않는 파일 {{count}}개를 건너뛰었습니다",
-    "pickSetTitle_other": "{{count}}개 파일을 어느 세트에 추가할까요?"
+    "pickSetTitle_other": "{{count}}개 파일을 어느 세트에 추가할까요?",
+    "currentSet": "현재"
   },
   "performance": {
     "title": "성능",

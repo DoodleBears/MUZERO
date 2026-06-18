@@ -27,6 +27,7 @@
     "search": "Search",
     "sets": "Sets",
     "settings": "Settings",
+    "jumpToSource": "Go to playlist",
     "menu": "Menu"
   },
   "dock": {
@@ -401,7 +402,8 @@
     "skipped_one": "{{count}} unsupported file skipped",
     "skipped_other": "{{count}} unsupported files skipped",
     "pickSetTitle_one": "Add {{count}} file to which set?",
-    "pickSetTitle_other": "Add {{count}} files to which set?"
+    "pickSetTitle_other": "Add {{count}} files to which set?",
+    "currentSet": "Current"
   },
   "performance": {
     "title": "Performance",
