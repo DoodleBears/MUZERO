@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Track } from "@/db/types";
 import { VirtualTrackList } from "./virtual-track-list";
@@ -259,6 +259,7 @@ describe("VirtualTrackList", () => {
         { index: 0, key: "trk_1", size: 60, start: 0 },
         { index: 1, key: "trk_2", size: 60, start: 60 },
       ],
+      isScrolling: true,
       scrollToIndex,
     });
 
@@ -268,11 +269,68 @@ describe("VirtualTrackList", () => {
 
     expect(screen.getByTestId("virtual-track-list-region")).toContainElement(jumpButton);
     expect(screen.getByTestId("virtual-track-list")).not.toContainElement(jumpButton);
-    expect(jumpButton).toHaveClass("top-4", "right-8", "bg-primary", "text-primary-foreground");
+    expect(jumpButton).toHaveClass("top-4", "right-8", "bg-popover/95", "ring-border/50");
+    expect(jumpButton).not.toHaveClass("bg-primary", "text-primary-foreground");
+    expect(jumpButton.querySelector("svg")).toHaveClass("size-5");
 
     fireEvent.click(jumpButton);
 
     expect(scrollToIndex).toHaveBeenCalledWith(1, { align: "center" });
+  });
+
+  it("keeps the floating jump button visible for ten seconds after scrolling stops", () => {
+    vi.useFakeTimers();
+    const first = track("trk_1", "First");
+    const second = track("trk_2", "Second");
+    let isScrolling = true;
+    playerState.currentIndex = 0;
+    playerState.queue = [second];
+    useVirtualizerMock.mockImplementation(() => ({
+      getTotalSize: () => 120,
+      getVirtualItems: () => [
+        { index: 0, key: "trk_1", size: 60, start: 0 },
+        { index: 1, key: "trk_2", size: 60, start: 60 },
+      ],
+      isScrolling,
+      scrollToIndex: vi.fn(),
+    }));
+
+    const { rerender } = render(<VirtualTrackList tracks={[first, second]} />);
+
+    expect(screen.getByRole("button", { name: "track.jumpToCurrent" })).toBeInTheDocument();
+
+    isScrolling = false;
+    rerender(<VirtualTrackList tracks={[first, second]} />);
+
+    expect(screen.getByRole("button", { name: "track.jumpToCurrent" })).toBeInTheDocument();
+
+    act(() => vi.advanceTimersByTime(9999));
+
+    expect(screen.getByRole("button", { name: "track.jumpToCurrent" })).toBeInTheDocument();
+
+    act(() => vi.advanceTimersByTime(1));
+
+    expect(screen.queryByRole("button", { name: "track.jumpToCurrent" })).not.toBeInTheDocument();
+  });
+
+  it("hides the floating jump button while the current playing list is idle", () => {
+    const first = track("trk_1", "First");
+    const second = track("trk_2", "Second");
+    playerState.currentIndex = 0;
+    playerState.queue = [second];
+    useVirtualizerMock.mockReturnValue({
+      getTotalSize: () => 120,
+      getVirtualItems: () => [
+        { index: 0, key: "trk_1", size: 60, start: 0 },
+        { index: 1, key: "trk_2", size: 60, start: 60 },
+      ],
+      isScrolling: false,
+      scrollToIndex: vi.fn(),
+    });
+
+    render(<VirtualTrackList tracks={[first, second]} />);
+
+    expect(screen.queryByRole("button", { name: "track.jumpToCurrent" })).not.toBeInTheDocument();
   });
 
   it("moves focus with arrow keys and views the focused track", () => {

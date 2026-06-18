@@ -35,6 +35,7 @@ const TRACK_LIST_EDGE_PULL_THRESHOLD = 96;
 const TRACK_LIST_EDGE_PULL_MAX = 56;
 const TRACK_LIST_EDGE_PULL_ARM_MS = 80;
 const TRACK_LIST_EDGE_PULL_RESET_MS = 180;
+const TRACK_LIST_CURRENT_JUMP_HIDE_MS = 10_000;
 const TRACK_LIST_EDGE_PULL_TRANSITION = {
   damping: 30,
   mass: 0.7,
@@ -124,10 +125,12 @@ export function VirtualTrackList({
   const hasHeader = !!header;
   const edgePullArmTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const edgePullResetTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const currentTrackJumpHideTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const edgePullDistanceRef = useRef(0);
   const edgePullReadyRef = useRef({ end: true, start: true });
   const edgePullRaw = useMotionValue(0);
   const edgePull = useSpring(edgePullRaw, TRACK_LIST_EDGE_PULL_TRANSITION);
+  const [showCurrentTrackJump, setShowCurrentTrackJump] = useState(false);
   const currentIndex = usePlayerStore((s) => s.currentIndex);
   const queue = usePlayerStore((s) => s.queue);
   const playIndex = usePlayerStore((s) => s.playIndex);
@@ -268,9 +271,37 @@ export function VirtualTrackList({
     () => () => {
       if (edgePullArmTimerRef.current) clearTimeout(edgePullArmTimerRef.current);
       if (edgePullResetTimerRef.current) clearTimeout(edgePullResetTimerRef.current);
+      if (currentTrackJumpHideTimerRef.current) clearTimeout(currentTrackJumpHideTimerRef.current);
     },
     [],
   );
+
+  useEffect(() => {
+    if (currentTrackListIndex < 0) {
+      if (currentTrackJumpHideTimerRef.current) {
+        clearTimeout(currentTrackJumpHideTimerRef.current);
+        currentTrackJumpHideTimerRef.current = undefined;
+      }
+      setShowCurrentTrackJump(false);
+      return;
+    }
+
+    if (rowVirtualizer.isScrolling) {
+      if (currentTrackJumpHideTimerRef.current) {
+        clearTimeout(currentTrackJumpHideTimerRef.current);
+        currentTrackJumpHideTimerRef.current = undefined;
+      }
+      setShowCurrentTrackJump(true);
+      return;
+    }
+
+    if (!showCurrentTrackJump) return;
+    if (currentTrackJumpHideTimerRef.current) clearTimeout(currentTrackJumpHideTimerRef.current);
+    currentTrackJumpHideTimerRef.current = setTimeout(() => {
+      currentTrackJumpHideTimerRef.current = undefined;
+      setShowCurrentTrackJump(false);
+    }, TRACK_LIST_CURRENT_JUMP_HIDE_MS);
+  }, [currentTrackListIndex, rowVirtualizer.isScrolling, showCurrentTrackJump]);
 
   // Keep Lenis' cached scroll limit in sync with the list height. Lenis derives its
   // limit from `scrollElement.scrollHeight`, but only recomputes when its
@@ -524,17 +555,17 @@ export function VirtualTrackList({
           })}
         </motion.div>
       </div>
-      {currentTrackListIndex >= 0 && (
+      {currentTrackListIndex >= 0 && showCurrentTrackJump && (
         <Button
           type="button"
-          variant="default"
+          variant="secondary"
           size="icon-sm"
           aria-label={t("track.jumpToCurrent")}
           title={t("track.jumpToCurrent")}
           onClick={() => focusTrackAt(currentTrackListIndex)}
-          className="absolute top-4 right-8 z-20 rounded-full shadow-lg backdrop-blur"
+          className="absolute top-4 right-8 z-20 rounded-full bg-popover/95 shadow-lg ring-1 ring-border/50 backdrop-blur"
         >
-          <LocateFixed className="size-4" />
+          <LocateFixed className="size-5" />
         </Button>
       )}
     </div>
