@@ -10,10 +10,10 @@ const release: ChangelogRelease = {
     ko: "원본 위치로 돌아가기, 더 선명한 가져오기, 더 똑똑한 비디오 커버",
   },
   summary: {
-    en: "Now Playing can take you straight back to the song's source list, complete with a smooth cover-to-row transition and a current-track marker. Dropped media now asks which set to join, desktop imports can reference files in place with visible progress and recovery tools, and uploaded videos get automatic poster covers. Online tracks are downloaded before playback so seeking works, and volume shortcuts behave cleanly.",
-    zh: "正在播放现在可以把你直接带回歌曲所在的来源列表，并带有顺滑的封面到列表行过渡和当前曲目标记。拖放媒体时会询问要加入哪个歌单；桌面导入可原地引用文件，并显示进度与恢复工具；上传视频会自动生成封面。在线歌曲会先下载再播放，因此拖动进度条可正常生效，音量快捷键也更干净。",
-    ja: "再生中の曲から、その曲があるソース一覧へ直接戻れるようになりました。カバーから行への滑らかな遷移と現在曲マーカーも付きます。ドロップしたメディアは追加先セットを選べるようになり、デスクトップ取り込みはファイルをその場で参照しつつ進捗と復旧ツールを表示できます。アップロード動画には自動でポスターカバーが付きます。オンライン曲は再生前にダウンロードされるためシークが効き、音量ショートカットもすっきり動作します。",
-    ko: "Now Playing에서 곡이 있는 원본 목록으로 바로 돌아갈 수 있으며, 커버에서 행으로 이어지는 부드러운 전환과 현재 곡 표시가 함께 제공됩니다. 드롭한 미디어는 추가할 세트를 묻고, 데스크톱 가져오기는 파일을 제자리 참조하면서 진행률과 복구 도구를 보여줍니다. 업로드한 비디오는 자동 포스터 커버를 얻습니다. 온라인 트랙은 재생 전에 다운로드되어 탐색이 동작하고, 볼륨 단축키도 깔끔해졌습니다.",
+    en: "Now Playing can take you straight back to the song's source list, complete with a smooth cover-to-row transition and a current-track marker. Dropped media now asks which set to join, desktop imports can reference files in place with visible progress and recovery tools, and uploaded videos get automatic poster covers. Video tracks also gained separate background, visualizer, flow, dim, and immersive controls. Online tracks are downloaded before playback so seeking works, and volume shortcuts behave cleanly.",
+    zh: "正在播放现在可以把你直接带回歌曲所在的来源列表，并带有顺滑的封面到列表行过渡和当前曲目标记。拖放媒体时会询问要加入哪个歌单；桌面导入可原地引用文件，并显示进度与恢复工具；上传视频会自动生成封面。视频 track 也新增了独立的背景、可视化、流光、压暗与沉浸式控制。在线歌曲会先下载再播放，因此拖动进度条可正常生效，音量快捷键也更干净。",
+    ja: "再生中の曲から、その曲があるソース一覧へ直接戻れるようになりました。カバーから行への滑らかな遷移と現在曲マーカーも付きます。ドロップしたメディアは追加先セットを選べるようになり、デスクトップ取り込みはファイルをその場で参照しつつ進捗と復旧ツールを表示できます。アップロード動画には自動でポスターカバーが付きます。動画トラックには、背景、ビジュアライザー、フロー、暗さ、没入時の個別コントロールも追加されました。オンライン曲は再生前にダウンロードされるためシークが効き、音量ショートカットもすっきり動作します。",
+    ko: "Now Playing에서 곡이 있는 원본 목록으로 바로 돌아갈 수 있으며, 커버에서 행으로 이어지는 부드러운 전환과 현재 곡 표시가 함께 제공됩니다. 드롭한 미디어는 추가할 세트를 묻고, 데스크톱 가져오기는 파일을 제자리 참조하면서 진행률과 복구 도구를 보여줍니다. 업로드한 비디오는 자동 포스터 커버를 얻습니다. 동영상 트랙에는 배경, 비주얼라이저, 플로우, 어둡게, 몰입 상태를 따로 제어하는 설정도 추가되었습니다. 온라인 트랙은 재생 전에 다운로드되어 탐색이 동작하고, 볼륨 단축키도 깔끔해졌습니다.",
   },
   items: [
     {
@@ -85,6 +85,23 @@ const release: ChangelogRelease = {
       },
     },
     {
+      area: "visualizer",
+      category: "improvement",
+      platform: "all",
+      title: {
+        en: "Video tracks get their own visual layers",
+        zh: "视频 track 有了独立视觉层设置",
+        ja: "動画トラック専用のビジュアルレイヤー設定",
+        ko: "동영상 트랙 전용 시각 레이어 설정",
+      },
+      description: {
+        en: "Settings and the Now Playing effect panel now include video-specific controls for the background effect, visualizer, flow layer, dim amount, and dim-layer blur. Normal video playback keeps the rich layers on by default, while immersive video defaults to a cleaner view that you can opt back into.",
+        zh: "Settings 与正在播放的效果悬浮面板现在都有视频专属控制：背景特效、可视化、流光层、压暗强度与压暗层模糊。普通视频播放默认保留丰富层级；进入沉浸式后默认更干净，也可以手动重新打开。",
+        ja: "Settings と再生中のエフェクトパネルに、動画専用の背景エフェクト、ビジュアライザー、フローレイヤー、暗さ、暗化レイヤーぼかしの設定が入りました。通常の動画再生ではリッチなレイヤーを既定で残し、没入中の動画はよりクリーンな表示を既定にしつつ、必要なら再度オンにできます。",
+        ko: "Settings와 Now Playing 효과 패널에 동영상 전용 배경 효과, 비주얼라이저, 플로우 레이어, 어둡게 강도, 어둡게 레이어 블러 설정이 추가되었습니다. 일반 동영상 재생은 풍부한 레이어를 기본으로 유지하고, 몰입 중 동영상은 더 깔끔한 화면을 기본으로 하되 필요하면 다시 켤 수 있습니다.",
+      },
+    },
+    {
       area: "streaming",
       category: "fix",
       platform: "desktop",
@@ -99,6 +116,40 @@ const release: ChangelogRelease = {
         zh: "QQ 音乐等经代理播放的在线来源现在会在需要时先下载为本地 blob 再播放，因此进度条、Dock 拖动和歌词点击都能可靠跳转。若下载失败，MUZERO 会回退到直接串流，保证歌曲仍可开始播放。",
         ja: "QQ Music などプロキシ経由のオンラインソースは、必要に応じて再生前にローカル blob へダウンロードされます。これによりスクラバー、Dock のドラッグ、歌詞クリックで確実にシークできます。ダウンロードに失敗した場合はストリーミングへ戻るため、曲の再生は始められます。",
         ko: "QQ Music 등 프록시를 거치는 온라인 소스는 필요할 때 재생 전에 로컬 blob으로 다운로드됩니다. 그래서 스크러버, Dock 드래그, 가사 클릭 탐색이 안정적으로 동작합니다. 다운로드가 실패하면 MUZERO는 스트리밍으로 돌아가 곡이 계속 시작되도록 합니다.",
+      },
+    },
+    {
+      area: "player",
+      category: "fix",
+      platform: "all",
+      title: {
+        en: "Video effects recover when leaving immersive mode",
+        zh: "退出沉浸式后视频效果会恢复",
+        ja: "没入モード解除後に動画エフェクトが復帰",
+        ko: "몰입 모드를 벗어나면 동영상 효과 복구",
+      },
+      description: {
+        en: "Video background effects no longer stay in their immersive profile just because the desktop Dock is still waiting for the bottom hot zone. Moving the pointer or interacting with Now Playing exits the immersive effect state immediately, so visualizer, flow, background effects, and video dim settings return reliably.",
+        zh: "桌面 Dock 仍在等待底部热区时，视频背景效果不再误以为还处于沉浸式配置。移动鼠标或与正在播放交互后，会立即退出沉浸式效果状态，因此可视化、流光、背景特效与视频压暗设置都会可靠恢复。",
+        ja: "デスクトップ Dock が下端ホットゾーン待ちのままでも、動画背景エフェクトが没入プロファイルに残り続けることはなくなりました。ポインター移動や再生中画面の操作で没入エフェクト状態をすぐ抜けるため、ビジュアライザー、フロー、背景エフェクト、動画の暗さ設定が確実に戻ります。",
+        ko: "데스크톱 Dock이 아직 하단 핫존을 기다리는 상태여도 동영상 배경 효과가 몰입 프로필에 남아 있지 않습니다. 포인터를 움직이거나 Now Playing과 상호작용하면 몰입 효과 상태를 즉시 빠져나와 비주얼라이저, 플로우, 배경 효과, 동영상 어둡게 설정이 안정적으로 복구됩니다.",
+      },
+    },
+    {
+      area: "library",
+      category: "fix",
+      platform: "desktop",
+      title: {
+        en: "Referenced-media checks are lighter and clearer",
+        zh: "引用媒体检查更轻、更清晰",
+        ja: "参照メディアのチェックを軽く明確に",
+        ko: "참조 미디어 검사가 더 가볍고 명확하게",
+      },
+      description: {
+        en: "Storage health checks now use provider file stats when available instead of reading the whole media file. Missing referenced files are reported as recoverable missing media instead of failing the scan, making Settings recovery tools more dependable for large desktop libraries.",
+        zh: "存储健康检查现在会优先使用 provider 的文件 stat，不再为了校验把整个媒体文件读出来。引用文件丢失时会被报告为可恢复的缺失媒体，而不是让扫描失败，让大型桌面曲库的 Settings 恢复工具更可靠。",
+        ja: "ストレージのヘルスチェックは、可能な場合にメディア全体を読む代わりに provider のファイル stat を使うようになりました。参照ファイルが見つからない場合もスキャン失敗ではなく復旧可能な欠落メディアとして報告され、大きなデスクトップライブラリでも Settings の復旧ツールがより安定します。",
+        ko: "스토리지 상태 검사는 가능할 때 전체 미디어 파일을 읽지 않고 provider 파일 stat을 사용합니다. 참조 파일이 사라진 경우에도 스캔 실패 대신 복구 가능한 누락 미디어로 보고되어, 큰 데스크톱 라이브러리에서 Settings 복구 도구가 더 안정적으로 동작합니다.",
       },
     },
     {
