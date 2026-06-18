@@ -1,6 +1,6 @@
 "use client";
 
-import { Image as ImageIcon, ImagePlus, Video } from "lucide-react";
+import { Image as ImageIcon, ImagePlus, ListMusic, Video } from "lucide-react";
 import {
   type MouseEvent as ReactMouseEvent,
   type ReactNode,
@@ -26,7 +26,10 @@ import {
 import { setTrackCover } from "@/db/repositories";
 import type { CropRect, SetDisplayMode } from "@/db/types";
 import { IMAGE_ACCEPT } from "@/lib/file-drop";
+import { dispatchJumpTarget } from "@/lib/jump-to-source";
+import { resolvePlayingSource } from "@/lib/playing-source";
 import { cn } from "@/lib/utils";
+import { transitionState } from "@/lib/view-transition-react";
 import { usePlayerStore } from "@/stores/player-store";
 
 const DISPLAY_MODE_OPTIONS: { id: SetDisplayMode; icon: typeof Video }[] = [
@@ -41,6 +44,7 @@ export interface TrackContextMenuLabels {
   coverInput: string;
   displayMode: string;
   displayModes: Record<SetDisplayMode, string>;
+  jumpToSource?: string;
   menu: string;
   pickCover: string;
 }
@@ -53,21 +57,25 @@ interface TrackContextMenuTrack {
 
 interface TrackContextMenuProps {
   children: ReactNode;
+  canJumpToSource?: boolean;
   className?: string;
   displayMode?: SetDisplayMode;
   labels: TrackContextMenuLabels;
   onCoverFileSelect?: (file: File) => void;
   onDisplayModeChange?: (mode: SetDisplayMode) => void;
+  onJumpToSource?: () => void;
   track?: TrackContextMenuTrack;
 }
 
 export function TrackContextMenu({
   children,
+  canJumpToSource = false,
   className,
   displayMode = "video",
   labels,
   onCoverFileSelect,
   onDisplayModeChange,
+  onJumpToSource,
   track,
 }: TrackContextMenuProps) {
   const fileRef = useRef<HTMLInputElement | null>(null);
@@ -151,6 +159,12 @@ export function TrackContextMenu({
               <BookmarkPlusIcon aria-hidden="true" />
               {labels.addToSet}
             </ContextMenuItem>
+            {labels.jumpToSource && onJumpToSource && (
+              <ContextMenuItem disabled={!canJumpToSource} onClick={onJumpToSource}>
+                <ListMusic aria-hidden="true" />
+                {labels.jumpToSource}
+              </ContextMenuItem>
+            )}
             <ContextMenuItem disabled={!onCoverFileSelect} onClick={() => fileRef.current?.click()}>
               <ImagePlus aria-hidden="true" />
               {labels.pickCover}
@@ -209,6 +223,16 @@ export function CurrentTrackContextMenu({
   );
   const displayMode = usePlayerStore((s) => s.displayMode);
   const setDisplayMode = usePlayerStore((s) => s.setDisplayMode);
+  const jumpTarget = usePlayerStore(
+    useShallow((s) =>
+      resolvePlayingSource({
+        activeSessionId: s.activeSessionId,
+        currentIndex: s.currentIndex,
+        queue: s.queue,
+        queueSource: s.queueSource,
+      }),
+    ),
+  );
   const [pendingCover, setPendingCover] = useState<{ file: File; trackId: string } | null>(null);
 
   function saveCover(crop: CropRect) {
@@ -235,13 +259,19 @@ export function CurrentTrackContextMenu({
             cover: t("displayMode.cover"),
             video: t("displayMode.video"),
           },
+          jumpToSource: t("nav.jumpToSource"),
           menu: t("nowPlaying.trackMenu"),
           pickCover: current?.coverBlobId ? t("annotation.changeCover") : t("annotation.addCover"),
         }}
+        canJumpToSource={jumpTarget !== null}
         onCoverFileSelect={(file) => {
           if (current) setPendingCover({ file, trackId: current.id });
         }}
         onDisplayModeChange={(mode) => void setDisplayMode(mode)}
+        onJumpToSource={() => {
+          if (!jumpTarget) return;
+          transitionState(() => dispatchJumpTarget(jumpTarget));
+        }}
         track={current}
       >
         {children}

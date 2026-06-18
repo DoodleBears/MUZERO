@@ -2,6 +2,7 @@ import { act, render, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Track } from "@/db/types";
+import { useNavStore } from "@/stores/nav-store";
 import { usePlayerStore } from "@/stores/player-store";
 import { TrackIdentityRow } from "./track-identity-row";
 
@@ -90,21 +91,63 @@ vi.mock("@/components/player/track-context-menu", () => ({
   ),
 }));
 
+vi.mock("@/lib/view-transition-react", () => ({
+  transitionState: (update: () => void) => update(),
+}));
+
 describe("TrackIdentityRow", () => {
   beforeEach(() => {
+    useNavStore.setState({
+      pendingLibraryEntity: null,
+      tab: "search",
+    });
     usePlayerStore.setState({
+      activeSessionId: "ses_1",
       currentIndex: 0,
       isPlaying: false,
       playbackLoading: null,
       queue: [track("trk_current", "Current Song")],
+      queueSource: { kind: "set", setId: "ses_1" },
     });
   });
 
   afterEach(() => {
     usePlayerStore.setState({
+      activeSessionId: null,
       currentIndex: -1,
       playbackLoading: null,
       queue: [],
+      queueSource: undefined,
+    });
+    useNavStore.setState({
+      pendingLibraryEntity: null,
+      tab: "search",
+    });
+  });
+
+  it("opens Now Playing when the dock identity is clicked outside the now tab", () => {
+    const onOpen = vi.fn();
+    render(<TrackIdentityRow onOpen={onOpen} />);
+
+    screen.getByRole("button", { name: "Now playing" }).click();
+
+    expect(onOpen).toHaveBeenCalledTimes(1);
+    expect(useNavStore.getState().pendingLibraryEntity).toBeNull();
+  });
+
+  it("jumps to the current source when clicked from the now tab", () => {
+    const onOpen = vi.fn();
+    useNavStore.setState({ tab: "now" });
+    render(<TrackIdentityRow onOpen={onOpen} />);
+
+    screen.getByRole("button", { name: "Now playing" }).click();
+
+    expect(onOpen).not.toHaveBeenCalled();
+    expect(useNavStore.getState().tab).toBe("search");
+    expect(useNavStore.getState().pendingLibraryEntity).toEqual({
+      anchorTrackId: "trk_current",
+      id: "ses_1",
+      kind: "set",
     });
   });
 

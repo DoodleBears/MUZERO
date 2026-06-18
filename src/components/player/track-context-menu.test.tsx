@@ -21,6 +21,7 @@ const labels: TrackContextMenuLabels = {
     cover: "Cover",
     video: "Video",
   },
+  jumpToSource: "Go to playlist",
   menu: "Track options",
   pickCover: "Add cover",
 };
@@ -63,6 +64,28 @@ describe("TrackContextMenu", () => {
     fireEvent.click(await screen.findByRole("menuitem", { name: "Add to set" }));
 
     expect(screen.getByRole("dialog")).toHaveTextContent("Add to set");
+  });
+
+  it("shows the source jump action and disables it when unavailable", async () => {
+    const onJumpToSource = vi.fn();
+    render(
+      <TrackContextMenu
+        canJumpToSource={false}
+        displayMode="cover"
+        labels={labels}
+        onJumpToSource={onJumpToSource}
+        track={{ coverBlobId: undefined, id: "trk_1", title: "Rain Loop" }}
+      >
+        <div>Rain Loop source target</div>
+      </TrackContextMenu>,
+    );
+
+    fireEvent.contextMenu(screen.getByText("Rain Loop source target"));
+    const item = await screen.findByRole("menuitem", { name: "Go to playlist" });
+
+    expect(item).toHaveAttribute("aria-disabled", "true");
+    fireEvent.click(item);
+    expect(onJumpToSource).not.toHaveBeenCalled();
   });
 
   it("opens the song menu on touch long press", async () => {

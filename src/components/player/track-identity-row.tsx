@@ -10,10 +10,13 @@ import { Disc3Icon } from "@/components/ui/disc-3";
 import type { Track } from "@/db/types";
 import { useTrackCoverUrl } from "@/hooks/use-media";
 import { useShortcutHint } from "@/hooks/use-shortcut-hint";
+import { dispatchJumpTarget } from "@/lib/jump-to-source";
+import { resolvePlayingSource } from "@/lib/playing-source";
 import { trackHasCover, trackSubtitle } from "@/lib/track-display";
 import { cn } from "@/lib/utils";
 import { transitionState } from "@/lib/view-transition-react";
 import type { ShortcutScope } from "@/shortcuts/registry";
+import { useNavStore } from "@/stores/nav-store";
 import { usePlayerStore } from "@/stores/player-store";
 import { CurrentTrackContextMenu } from "./track-context-menu";
 
@@ -175,7 +178,19 @@ export function TrackIdentityRow({
   // Dock identity always navigates to the Now Playing tab, including mobile.
   function handleOpen() {
     if (!track) return;
-    if (onOpen) transitionState(onOpen);
+    if (useNavStore.getState().tab !== "now") {
+      if (onOpen) transitionState(onOpen);
+      return;
+    }
+    const state = usePlayerStore.getState();
+    const target = resolvePlayingSource({
+      activeSessionId: state.activeSessionId,
+      currentIndex: state.currentIndex,
+      queue: state.queue,
+      queueSource: state.queueSource,
+    });
+    if (!target) return;
+    transitionState(() => dispatchJumpTarget(target));
   }
 
   // Tooltip shortcut rows are only ever SEEN on hover, but were rebuilt on every
