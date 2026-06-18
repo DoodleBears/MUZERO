@@ -359,6 +359,7 @@
     "exportWithMetadata": "导出含元数据",
     "downloadFailed": "下载失败",
     "downloadToDevice": "下载到本地",
+    "jumpToCurrent": "跳到当前歌曲",
     "cloudSourceUnknown": "云盘来源",
     "addToSet": "添加到其他歌单",
     "searchOrCreateSet": "搜索或新建歌单…",

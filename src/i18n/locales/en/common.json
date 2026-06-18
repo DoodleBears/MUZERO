@@ -368,6 +368,7 @@
     "exportWithMetadata": "Export with metadata",
     "downloadFailed": "Couldn't download track",
     "downloadToDevice": "Download to device",
+    "jumpToCurrent": "Jump to current song",
     "cloudSourceUnknown": "Cloud source",
     "addToSet": "Add to set",
     "searchOrCreateSet": "Search or create a set…",

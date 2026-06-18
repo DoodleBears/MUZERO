@@ -359,6 +359,7 @@
     "exportWithMetadata": "メタデータ付きで書き出し",
     "downloadFailed": "曲をダウンロードできませんでした",
     "downloadToDevice": "端末にダウンロード",
+    "jumpToCurrent": "現在の曲へ移動",
     "cloudSourceUnknown": "クラウドソース",
     "addToSet": "他のセットに追加",
     "searchOrCreateSet": "セットを検索または作成…",

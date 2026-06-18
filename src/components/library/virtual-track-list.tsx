@@ -1,8 +1,10 @@
 import { elementScroll, useVirtualizer } from "@tanstack/react-virtual";
+import { LocateFixed } from "lucide-react";
 import { motion, useMotionValue, useSpring } from "motion/react";
 import type { KeyboardEvent as ReactKeyboardEvent, ReactNode } from "react";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { Button } from "@/components/ui/button";
 import {
   createSession,
   deleteTrack as deleteTrackRepo,
@@ -62,9 +64,10 @@ export function VirtualTrackList({
   getTrackSupplement,
   getTrackColumns,
   header,
-  initialFocusIndex,
   initialScrollIndex,
   initialScrollAlign = "start",
+  jumpFocusIndex,
+  jumpScrollIndex,
   alphabetLetterOf,
   reactiveRowContent = false,
 }: {
@@ -96,8 +99,10 @@ export function VirtualTrackList({
    *  routes via Lenis. */
   initialScrollIndex?: number;
   initialScrollAlign?: "start" | "center";
-  /** Focus this row after the mount-time scroll restore. Used only for source jumps. */
-  initialFocusIndex?: number;
+  /** Responsive source-jump target. Unlike initialScrollIndex, this may arrive after mount. */
+  jumpScrollIndex?: number;
+  /** Focus this row after a responsive source jump. */
+  jumpFocusIndex?: number;
   /** When provided (name-sorted lists only), mounts the right-edge A–Z fast-scroll
    *  strip. Returns each track's bucket letter — the caller transliterates CJK
    *  titles (pinyin/kana) before bucketing. `tracks` must already be name-sorted. */
@@ -132,13 +137,16 @@ export function VirtualTrackList({
   const matches = useShortcutMatcher();
   const matchesRef = useRef(matches);
   matchesRef.current = matches;
-  const lastInitialScrollKeyRef = useRef<string | undefined>(undefined);
-  const lastInitialFocusIndexRef = useRef<number | undefined>(undefined);
+  const lastJumpScrollKeyRef = useRef<string | undefined>(undefined);
+  const lastJumpFocusIndexRef = useRef<number | undefined>(undefined);
   // Opt this scroll container into smooth scrolling when enabled. `lenisRef`
   // routes programmatic jumps so they don't fight it.
   const { lenisRef } = useSmoothScroll(parentRef);
 
   const currentTrackId = currentIndex >= 0 ? queue[currentIndex]?.id : undefined;
+  const currentTrackListIndex = currentTrackId
+    ? tracks.findIndex((track) => track.id === currentTrackId)
+    : -1;
   const handlePlay = onPlay ?? ((_track: Track, index: number) => void playIndex(index));
   const handleView = onView ?? handlePlay;
   // Route the hover-scrollbar drag through Lenis (immediate, no smoothing) so it
@@ -184,43 +192,51 @@ export function VirtualTrackList({
   // scrollbar to its left, and pad the rows so cover/duration clear the strip.
   const hasAlphabet = alphabetBuckets.length >= 2;
 
-  // Restore scroll to a row on mount AND when a source-jump anchor arrives after the
-  // list has already mounted. Through the virtualizer's scrollToFn so it routes via
-  // Lenis; the rAF lets Lenis attach first (it's created in a passive effect a tick
-  // after mount) — otherwise it would snap the fresh container back to the top.
+  // Restore scroll to a row on mount (returning from select mode's reorder list).
+  // Through the virtualizer's scrollToFn so it routes via Lenis; the rAF lets Lenis
+  // attach first (it's created in a passive effect a tick after mount) — otherwise
+  // it would snap the fresh container back to the top. Mount-only on purpose:
+  // regular focus/selection changes inside a list must not yank the scrollbar.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: mount-only restore
   useLayoutEffect(() => {
-    if (initialScrollIndex === undefined) {
-      lastInitialScrollKeyRef.current = undefined;
-      return;
-    }
+    if (initialScrollIndex === undefined) return;
     if (initialScrollIndex <= 0) return;
-    const key = `${initialScrollIndex}:${initialScrollAlign}`;
-    if (lastInitialScrollKeyRef.current === key) return;
-    lastInitialScrollKeyRef.current = key;
     rowVirtualizer.scrollToIndex(initialScrollIndex, { align: initialScrollAlign });
     const raf = requestAnimationFrame(() =>
       rowVirtualizer.scrollToIndex(initialScrollIndex, { align: initialScrollAlign }),
     );
     return () => cancelAnimationFrame(raf);
-  }, [initialScrollAlign, initialScrollIndex, rowVirtualizer]);
+  }, []);
 
-  // Source jumps should be keyboard-continuable: after the target row is scrolled into
-  // view, focus it so W/S/↑/↓ proceeds from the highlighted current song.
+  // Source jumps should be keyboard-continuable. This is the ONLY responsive
+  // auto-scroll path; ordinary selected/focused row changes stay local.
   useLayoutEffect(() => {
-    if (initialFocusIndex === undefined) {
-      lastInitialFocusIndexRef.current = undefined;
+    if (jumpScrollIndex === undefined) {
+      lastJumpScrollKeyRef.current = undefined;
       return;
     }
-    if (initialFocusIndex < 0) return;
-    if (lastInitialFocusIndexRef.current === initialFocusIndex) return;
-    lastInitialFocusIndexRef.current = initialFocusIndex;
-    rowVirtualizer.scrollToIndex(initialFocusIndex, { align: "center" });
+    if (jumpScrollIndex < 0) return;
+    const key = `${jumpScrollIndex}:center`;
+    if (lastJumpScrollKeyRef.current === key) return;
+    lastJumpScrollKeyRef.current = key;
+    rowVirtualizer.scrollToIndex(jumpScrollIndex, { align: "center" });
+  }, [jumpScrollIndex, rowVirtualizer]);
+
+  useLayoutEffect(() => {
+    if (jumpFocusIndex === undefined) {
+      lastJumpFocusIndexRef.current = undefined;
+      return;
+    }
+    if (jumpFocusIndex < 0) return;
+    if (lastJumpFocusIndexRef.current === jumpFocusIndex) return;
+    lastJumpFocusIndexRef.current = jumpFocusIndex;
+    rowVirtualizer.scrollToIndex(jumpFocusIndex, { align: "center" });
     let raf2 = 0;
     const raf1 = requestAnimationFrame(() => {
       raf2 = requestAnimationFrame(() => {
         parentRef.current
           ?.querySelector<HTMLElement>(
-            `${TRACK_ROW_SELECTOR}[data-track-index="${initialFocusIndex}"]`,
+            `${TRACK_ROW_SELECTOR}[data-track-index="${jumpFocusIndex}"]`,
           )
           ?.focus();
       });
@@ -229,7 +245,7 @@ export function VirtualTrackList({
       cancelAnimationFrame(raf1);
       if (raf2) cancelAnimationFrame(raf2);
     };
-  }, [initialFocusIndex, rowVirtualizer]);
+  }, [jumpFocusIndex, rowVirtualizer]);
 
   // Keep `scrollMargin` in sync with the rows container's offset within the scroller
   // (= header height + top padding). Only when a header is present; otherwise 0.
@@ -472,6 +488,19 @@ export function VirtualTrackList({
         onJump={(index) => rowVirtualizer.scrollToIndex(index, { align: "start" })}
       />
       {header ? <div ref={headerRef}>{header}</div> : null}
+      {currentTrackListIndex >= 0 && (
+        <Button
+          type="button"
+          variant="secondary"
+          size="icon-sm"
+          aria-label={t("track.jumpToCurrent")}
+          title={t("track.jumpToCurrent")}
+          onClick={() => focusTrackAt(currentTrackListIndex)}
+          className="absolute right-8 bottom-4 z-20 rounded-full bg-popover/95 shadow-lg ring-1 ring-border/50 backdrop-blur"
+        >
+          <LocateFixed className="size-4" />
+        </Button>
+      )}
       <motion.div
         className="relative w-full"
         data-edge-pull="0"

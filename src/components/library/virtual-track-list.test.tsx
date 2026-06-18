@@ -3,7 +3,14 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Track } from "@/db/types";
 import { VirtualTrackList } from "./virtual-track-list";
 
-const useVirtualizerMock = vi.fn();
+const { playerState, useVirtualizerMock } = vi.hoisted(() => ({
+  playerState: {
+    currentIndex: -1,
+    playIndex: vi.fn(),
+    queue: [] as Track[],
+  },
+  useVirtualizerMock: vi.fn(),
+}));
 
 vi.mock("@tanstack/react-virtual", () => ({
   useVirtualizer: (options: unknown) => useVirtualizerMock(options),
@@ -14,12 +21,7 @@ vi.mock("react-i18next", () => ({
 }));
 
 vi.mock("@/stores/player-store", () => ({
-  usePlayerStore: (selector: (state: unknown) => unknown) =>
-    selector({
-      currentIndex: -1,
-      playIndex: vi.fn(),
-      queue: [],
-    }),
+  usePlayerStore: (selector: (state: unknown) => unknown) => selector(playerState),
 }));
 
 vi.mock("./track-row", () => ({
@@ -73,6 +75,10 @@ function track(id: string, title: string): Track {
 
 describe("VirtualTrackList", () => {
   afterEach(() => {
+    playerState.currentIndex = -1;
+    playerState.queue = [];
+    playerState.playIndex.mockClear();
+    useVirtualizerMock.mockReset();
     vi.useRealTimers();
   });
 
@@ -143,7 +149,7 @@ describe("VirtualTrackList", () => {
     expect(scrollToIndex).toHaveBeenCalledWith(1, { align: "center" });
   });
 
-  it("focuses an explicit anchor row after the initial restore", () => {
+  it("focuses an explicit jump row on mount", () => {
     vi.useFakeTimers();
     const scrollToIndex = vi.fn();
     useVirtualizerMock.mockReturnValue({
@@ -158,9 +164,8 @@ describe("VirtualTrackList", () => {
     render(
       <VirtualTrackList
         tracks={[track("trk_1", "First"), track("trk_2", "Second")]}
-        initialFocusIndex={1}
-        initialScrollAlign="center"
-        initialScrollIndex={1}
+        jumpFocusIndex={1}
+        jumpScrollIndex={1}
       />,
     );
 
@@ -170,7 +175,7 @@ describe("VirtualTrackList", () => {
     expect(screen.getByTestId("track-row-trk_2")).toHaveFocus();
   });
 
-  it("scrolls and focuses when an anchor arrives after the list has mounted", () => {
+  it("does not auto-scroll when an initial restore index changes after mount", () => {
     vi.useFakeTimers();
     const scrollToIndex = vi.fn();
     useVirtualizerMock.mockReturnValue({
@@ -190,9 +195,37 @@ describe("VirtualTrackList", () => {
     rerender(
       <VirtualTrackList
         tracks={[track("trk_1", "First"), track("trk_2", "Second")]}
-        initialFocusIndex={1}
         initialScrollAlign="center"
         initialScrollIndex={1}
+      />,
+    );
+    vi.runAllTimers();
+
+    expect(scrollToIndex).not.toHaveBeenCalled();
+  });
+
+  it("scrolls and focuses when an explicit jump anchor arrives after the list has mounted", () => {
+    vi.useFakeTimers();
+    const scrollToIndex = vi.fn();
+    useVirtualizerMock.mockReturnValue({
+      getTotalSize: () => 120,
+      getVirtualItems: () => [
+        { index: 0, key: "trk_1", size: 60, start: 0 },
+        { index: 1, key: "trk_2", size: 60, start: 60 },
+      ],
+      scrollToIndex,
+    });
+
+    const { rerender } = render(
+      <VirtualTrackList tracks={[track("trk_1", "First"), track("trk_2", "Second")]} />,
+    );
+    scrollToIndex.mockClear();
+
+    rerender(
+      <VirtualTrackList
+        tracks={[track("trk_1", "First"), track("trk_2", "Second")]}
+        jumpFocusIndex={1}
+        jumpScrollIndex={1}
       />,
     );
     vi.runAllTimers();
@@ -206,11 +239,32 @@ describe("VirtualTrackList", () => {
     rerender(
       <VirtualTrackList
         tracks={[track("trk_1", "First"), track("trk_2", "Second")]}
-        initialFocusIndex={1}
-        initialScrollAlign="center"
-        initialScrollIndex={1}
+        jumpFocusIndex={1}
+        jumpScrollIndex={1}
       />,
     );
+
+    expect(scrollToIndex).toHaveBeenCalledWith(1, { align: "center" });
+  });
+
+  it("offers a floating jump button for the current playing row", () => {
+    const scrollToIndex = vi.fn();
+    const first = track("trk_1", "First");
+    const second = track("trk_2", "Second");
+    playerState.currentIndex = 0;
+    playerState.queue = [second];
+    useVirtualizerMock.mockReturnValue({
+      getTotalSize: () => 120,
+      getVirtualItems: () => [
+        { index: 0, key: "trk_1", size: 60, start: 0 },
+        { index: 1, key: "trk_2", size: 60, start: 60 },
+      ],
+      scrollToIndex,
+    });
+
+    render(<VirtualTrackList tracks={[first, second]} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "track.jumpToCurrent" }));
 
     expect(scrollToIndex).toHaveBeenCalledWith(1, { align: "center" });
   });

@@ -123,8 +123,7 @@ export function TrackListSection({
   // position across the swap instead of snapping to the top.
   const scroll = useListScrollPreservation(showReorder, tracks.length);
   const resolvedSelectedTrackId = anchorIndex >= 0 ? anchorTrackId : selectedTrackId;
-  const initialScrollIndex =
-    anchorIndex >= 0 ? anchorIndex : (scroll.anchorIndexRef.current ?? undefined);
+  const initialScrollIndex = scroll.anchorIndexRef.current ?? undefined;
 
   function onReorder(blockIds: string[], insertBeforeId: string | null) {
     if (!setId) return;
@@ -236,9 +235,10 @@ export function TrackListSection({
             onDeleteTrack={onDeleteTrack}
             getTrackSupplement={getTrackSupplement}
             getTrackColumns={getTrackColumns}
-            initialFocusIndex={anchorIndex >= 0 ? anchorIndex : undefined}
-            initialScrollAlign={anchorIndex >= 0 ? "center" : "start"}
+            initialScrollAlign="start"
             initialScrollIndex={initialScrollIndex}
+            jumpFocusIndex={anchorIndex >= 0 ? anchorIndex : undefined}
+            jumpScrollIndex={anchorIndex >= 0 ? anchorIndex : undefined}
             alphabetLetterOf={alphabetLetterOf}
           />
         )}

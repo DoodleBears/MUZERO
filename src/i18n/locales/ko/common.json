@@ -359,6 +359,7 @@
     "exportWithMetadata": "메타데이터 포함 내보내기",
     "downloadFailed": "트랙을 다운로드할 수 없어요",
     "downloadToDevice": "기기에 다운로드",
+    "jumpToCurrent": "현재 곡으로 이동",
     "cloudSourceUnknown": "클라우드 소스",
     "addToSet": "다른 세트에 추가",
     "searchOrCreateSet": "세트 검색 또는 만들기…",
