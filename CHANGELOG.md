@@ -4,7 +4,7 @@ All notable changes to MUZERO. Generated from `src/content/changelog` — do not
 
 ## v1.2.2 — 2026-06-18 · Jump back to source, clearer imports, and smarter video covers
 
-Now Playing can take you straight back to the song's source list, complete with a smooth cover-to-row transition and a current-track marker. Dropped media now asks which set to join, desktop imports can reference files in place with visible progress and recovery tools, and uploaded videos get automatic poster covers. Online tracks are downloaded before playback so seeking works, and volume shortcuts behave cleanly.
+Now Playing can take you straight back to the song's source list, complete with a smooth cover-to-row transition and a current-track marker. Dropped media now asks which set to join, desktop imports can reference files in place with visible progress and recovery tools, and uploaded videos get automatic poster covers. Video tracks also gained separate background, visualizer, flow, dim, and immersive controls. Online tracks are downloaded before playback so seeking works, and volume shortcuts behave cleanly.
 
 ### Highlights
 - **player** Jump from Now Playing back to the source list — Use the title row, context menu, or cover swipe to return to the exact library or search list that started the current track. MUZERO scrolls to the right row, marks the current song, and morphs the cover into place so the jump feels connected instead of disorienting.
@@ -14,8 +14,13 @@ Now Playing can take you straight back to the song's source list, complete with 
 - **library** Reference desktop files in place, with progress and recovery — Desktop drag-and-drop can now keep media referenced from its original disk path instead of copying bytes into IndexedDB. Imports show real byte-level progress when copying is needed, and Settings / track inspection expose recovery actions for referenced media that moved or went missing. _(desktop)_
 - **library** Uploaded videos get automatic poster covers — MUZERO now samples uploaded videos and scores candidate frames for a useful cover instead of leaving the track title as the fallback. Native browser capture handles common files, with a Mediabunny fallback for formats that need deeper probing.
 
+### Changed
+- **visualizer** Video tracks get their own visual layers — Settings and the Now Playing effect panel now include video-specific controls for the background effect, visualizer, flow layer, dim amount, and dim-layer blur. Normal video playback keeps the rich layers on by default, while immersive video defaults to a cleaner view that you can opt back into.
+
 ### Fixed
 - **streaming** Online tracks can seek from the first play — QQ Music and other proxied online sources are downloaded to a local blob before playback when needed, so the scrubber, Dock drag, and lyric clicks can seek reliably. If the download fails, MUZERO falls back to streaming so the song still starts. _(desktop)_
+- **player** Video effects recover when leaving immersive mode — Video background effects no longer stay in their immersive profile just because the desktop Dock is still waiting for the bottom hot zone. Moving the pointer or interacting with Now Playing exits the immersive effect state immediately, so visualizer, flow, background effects, and video dim settings return reliably.
+- **library** Referenced-media checks are lighter and clearer — Storage health checks now use provider file stats when available instead of reading the whole media file. Missing referenced files are reported as recoverable missing media instead of failing the scan, making Settings recovery tools more dependable for large desktop libraries. _(desktop)_
 - **player** Cleaner volume shortcuts and mute toggle — On Now Playing, up and down arrows are reserved for volume instead of being swallowed by progress sliders. The volume button also remembers your last audible level, so unmuting restores where you were instead of jumping back to the default.
 
 ## v1.2.1 — 2026-06-18 · Sortable Hearted playlist and rock-solid covers
