@@ -119,10 +119,10 @@ export function ProgressScrubber() {
     const position = positionRef.current;
     if (duration <= 0) return;
     let next: number | null = null;
-    if (e.key === "ArrowLeft" || e.key === "ArrowDown") {
+    if (e.key === "ArrowLeft") {
       e.preventDefault();
       next = Math.max(0, position - 5);
-    } else if (e.key === "ArrowRight" || e.key === "ArrowUp") {
+    } else if (e.key === "ArrowRight") {
       e.preventDefault();
       next = Math.min(duration, position + 5);
     } else if (e.key === "Home") {

@@ -62,6 +62,34 @@ describe("SHORTCUT_ACTIONS registry", () => {
     );
   });
 
+  it("also lists bare ↑/↓ as Now Playing volume bindings for Settings", () => {
+    expect(SHORTCUT_ACTIONS_BY_ID["playback.volumeUp"].defaultBindings).toEqual([
+      { scope: "global", gesture: { kind: "key", stroke: { code: "ArrowUp", keyLabel: "↑" } } },
+      {
+        scope: "global",
+        gesture: {
+          kind: "key",
+          stroke: { code: "ArrowUp", keyLabel: "↑", primaryKey: true },
+        },
+      },
+      { scope: "now", gesture: { kind: "key", stroke: { code: "ArrowUp", keyLabel: "↑" } } },
+    ]);
+    expect(SHORTCUT_ACTIONS_BY_ID["playback.volumeDown"].defaultBindings).toEqual([
+      {
+        scope: "global",
+        gesture: { kind: "key", stroke: { code: "ArrowDown", keyLabel: "↓" } },
+      },
+      {
+        scope: "global",
+        gesture: {
+          kind: "key",
+          stroke: { code: "ArrowDown", keyLabel: "↓", primaryKey: true },
+        },
+      },
+      { scope: "now", gesture: { kind: "key", stroke: { code: "ArrowDown", keyLabel: "↓" } } },
+    ]);
+  });
+
   it("adds Now Playing arrow bindings without replacing global Q/E transport", () => {
     expect(SHORTCUT_ACTIONS_BY_ID["playback.prev"].defaultBindings).toEqual([
       { scope: "global", gesture: { kind: "key", stroke: { code: "KeyQ", keyLabel: "Q" } } },

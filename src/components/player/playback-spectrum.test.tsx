@@ -87,6 +87,30 @@ describe("PlaybackSpectrum switching fade", () => {
     });
     expect(canvas()?.className).toContain("opacity-100");
   });
+
+  it("leaves vertical arrows for the global volume shortcuts", () => {
+    const { container } = render(<PlaybackSpectrum />);
+    const slider = container.querySelector<HTMLElement>('[role="slider"]');
+    if (!slider) throw new Error("no spectrum slider");
+
+    const up = new KeyboardEvent("keydown", {
+      bubbles: true,
+      cancelable: true,
+      code: "ArrowUp",
+      key: "ArrowUp",
+    });
+    slider.dispatchEvent(up);
+    expect(up.defaultPrevented).toBe(false);
+
+    const right = new KeyboardEvent("keydown", {
+      bubbles: true,
+      cancelable: true,
+      code: "ArrowRight",
+      key: "ArrowRight",
+    });
+    slider.dispatchEvent(right);
+    expect(right.defaultPrevented).toBe(true);
+  });
 });
 
 function makeTrack(id: string): Track {

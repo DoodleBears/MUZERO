@@ -60,6 +60,14 @@ describe("ShortcutsSettings (read-only cheat-sheet)", () => {
       '[data-shortcut-row="playback.prev"][data-shortcut-scope="now"]',
     );
     expect(nowPrev?.textContent).toContain("←");
+    const nowVolumeUp = container.querySelector(
+      '[data-shortcut-row="playback.volumeUp"][data-shortcut-scope="now"]',
+    );
+    expect(nowVolumeUp?.textContent).toContain("↑");
+    const nowVolumeDown = container.querySelector(
+      '[data-shortcut-row="playback.volumeDown"][data-shortcut-scope="now"]',
+    );
+    expect(nowVolumeDown?.textContent).toContain("↓");
     expect(container.querySelector('[data-shortcut-row="ref.swipeBack"]')).toBeTruthy();
   });
 

@@ -123,6 +123,15 @@ describe("useShortcutDispatch", () => {
     expect(mocks.player.next).toHaveBeenCalledOnce();
   });
 
+  it("uses ↑/↓ for volume on the Now Playing surface", () => {
+    mocks.state.tab = "now";
+    renderHook(() => useShortcutDispatch());
+    press("ArrowUp", "ArrowUp");
+    expect(mocks.player.setVolume).toHaveBeenLastCalledWith(0.55);
+    press("ArrowDown", "ArrowDown");
+    expect(mocks.player.setVolume).toHaveBeenLastCalledWith(0.45);
+  });
+
   it("does not steal ←/→ on the library surface", () => {
     mocks.state.tab = "search";
     renderHook(() => useShortcutDispatch());

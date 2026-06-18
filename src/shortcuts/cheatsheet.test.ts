@@ -37,6 +37,12 @@ describe("buildCheatSheet", () => {
     ]);
   });
 
+  it("shows volume arrows in the Now Playing surface section", () => {
+    const nowRows = sections.find((s) => s.scope === "now")?.rows ?? [];
+    expect(nowRows.find((r) => r.actionId === "playback.volumeUp")?.chips).toEqual([["↑"]]);
+    expect(nowRows.find((r) => r.actionId === "playback.volumeDown")?.chips).toEqual([["↓"]]);
+  });
+
   it("surfaces reference rows as non-editable with gesture labels", () => {
     const ref = sections.find((s) => s.scope === "global");
     expect(ref).toBeTruthy();

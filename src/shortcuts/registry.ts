@@ -165,6 +165,7 @@ export const SHORTCUT_ACTIONS: readonly ShortcutActionDef[] = [
     defaultBindings: [
       key("global", "ArrowUp", "↑"),
       key("global", "ArrowUp", "↑", { primaryKey: true }),
+      key("now", "ArrowUp", "↑"),
     ],
     keywords: ["volume", "音量"],
   },
@@ -176,6 +177,7 @@ export const SHORTCUT_ACTIONS: readonly ShortcutActionDef[] = [
     defaultBindings: [
       key("global", "ArrowDown", "↓"),
       key("global", "ArrowDown", "↓", { primaryKey: true }),
+      key("now", "ArrowDown", "↓"),
     ],
     keywords: ["volume", "音量"],
   },

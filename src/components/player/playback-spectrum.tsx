@@ -208,10 +208,10 @@ export const PlaybackSpectrum = memo(function PlaybackSpectrum({
 
   function onKeyDown(e: KeyboardEvent<HTMLDivElement>) {
     if (durationSec <= 0) return;
-    if (e.key === "ArrowLeft" || e.key === "ArrowDown") {
+    if (e.key === "ArrowLeft") {
       e.preventDefault();
       seek(Math.max(0, positionSec - 5));
-    } else if (e.key === "ArrowRight" || e.key === "ArrowUp") {
+    } else if (e.key === "ArrowRight") {
       e.preventDefault();
       seek(Math.min(durationSec, positionSec + 5));
     } else if (e.key === "Home") {
