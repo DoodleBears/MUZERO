@@ -1,6 +1,6 @@
 # PRD: Electron Reference-First Import + Visible Upload Progress
 
-**Status:** Draft
+**Status:** In Progress
 **Created:** 2026-06-18
 **Author:** DoodleBears
 **Module:** Import / Media Storage — drag-drop & file-picker ingest path（拖拽 / 文件选择器导入）
@@ -11,7 +11,7 @@
 
 | Phase | Name | Status | Link |
 |-------|------|--------|------|
-| 1 | Visible import/upload progress（先解决「以为卡住」） | 🔲 Pending | [Phase 1 Checklist](#phase-1-checklist) |
+| 1 | Visible import/upload progress（先解决「以为卡住」） | ✅ Completed | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | Electron reference-first import + folder-named sets（拖拽引用路径不 copy + 拖文件夹按名建集） | 🔲 Pending | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | Copy-fallback hardening + reference health（回退一致性 + 引用失效处理） | 🔲 Pending | [Phase 3 Checklist](#phase-3-checklist) |
 
@@ -230,18 +230,18 @@ async addUploadsToSet(setId: string, files: File[]): Promise<void>
 **Goal:** 不改导入存储策略，先让现有复制路径**有进度**（含字节级，Q3 决策）。低风险、独立可上线，立即消除「卡死」焦虑。
 
 **Tasks:**
-- [ ] `player-store` 加 `importProgress` 状态 + 在 `addUploadsToSet` 循环中发布（总体文件计数 + 当前文件字节进度）。
-- [ ] 复制路径改**流式 / 分块**读写（`Blob.stream()` reader 或既有 worker 分块），逐块累加 `bytesLoaded`，驱动单文件字节百分比。
-- [ ] `global-drop-zone` 在导入**开始即**渲染进度（计数 + 当前文件名 + 字节百分比），完成后转为 notice。
-- [ ] 进度更新节流（~100ms / ~256KB）；最小 selector 订阅。
-- [ ] i18n 文案（en→zh/ja/ko）：`importing` / `importingFile` / `importingBytes` / `imported`。
+- [x] `player-store` 加 `importProgress` 状态 + 在 `addUploadsToSet` 循环中发布（总体文件计数 + 当前文件字节进度）。
+- [x] 复制路径改**流式 / 分块**读写（`Blob.stream()` reader 或既有 worker 分块），逐块累加 `bytesLoaded`，驱动单文件字节百分比。
+- [x] `global-drop-zone` 在导入**开始即**渲染进度（计数 + 当前文件名 + 字节百分比），完成后转为 notice。
+- [x] 进度更新节流（~100ms / ~256KB）；最小 selector 订阅。
+- [x] i18n 文案（en→zh/ja/ko）：`importing` / `importingFile` / `importingBytes` / `imported`。
 
 ### Phase 1 Checklist
 
-- [ ] 拖入 1 个大视频（Web 或 Electron 复制路径）时，进度**立即出现**，且字节百分比平滑增长（不是只跳「1/1」）。
-- [ ] 拖入 N 个文件时显示 `x / N` + 当前文件字节进度。
-- [ ] 进度订阅不引起播放进度全树重渲染（规则 6 验证）。
-- [ ] 四语文案齐全。
+- [x] 拖入 1 个大视频（Web 或 Electron 复制路径）时，进度**立即出现**，且字节百分比平滑增长（不是只跳「1/1」）。
+- [x] 拖入 N 个文件时显示 `x / N` + 当前文件字节进度。
+- [x] 进度订阅不引起播放进度全树重渲染（规则 6 验证）。
+- [x] 四语文案齐全。
 
 ### Phase 2: Electron reference-first drag/file import（拖拽也引用路径，不 copy）
 
@@ -331,3 +331,4 @@ async addUploadsToSet(setId: string, files: File[]): Promise<void>
 |------|--------|---------|
 | 2026-06-18 | DoodleBears | Initial draft — Electron reference-first import + visible upload progress |
 | 2026-06-18 | DoodleBears | Resolve Open Questions：Q1 Electron 默认引用无开关；Q3 字节级进度（best practice）；Q4 拖文件夹选集/按名建集；Q2 留为 Phase 2 前置 gate（确认 Electron 版本支持 `webUtils.getPathForFile`） |
+| 2026-06-18 | Codex | Complete Phase 1：新增 `ImportProgress` 瞬时状态、分块读取复制进度、导入开始即显示的 drop progress UI、四语言导入进度文案与 `import-progress` 单测。 |

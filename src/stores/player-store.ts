@@ -46,6 +46,7 @@ import {
   selectNewFiles,
 } from "@/lib/folder-import";
 import { yieldForImportBackpressure } from "@/lib/import-backpressure";
+import { copyBlobWithProgress, type ImportProgress } from "@/lib/import-progress";
 import { createDiagnosticLogger, log } from "@/lib/logger";
 import { fallbackUploadMediaMetadata, parseUploadedMediaMetadata } from "@/lib/media-metadata";
 import { isUnsupportedMediaError, probeMediaFile } from "@/lib/media-probe";
@@ -136,6 +137,7 @@ import { decodeNcmViaWorker, ingestViaWorker } from "@/workers/heavy-client";
 import type { DecodedNcmMedia } from "@/workers/ingest-core";
 
 const IMPORT_VISIBILITY_FLUSH_SIZE = 25;
+const IMPORT_PROGRESS_CLEAR_MS = 1800;
 const LOCAL_BLOB_PLAYBACK_SETTLE_MS = 180;
 const MEDIA_SESSION_METADATA_SETTLE_MS = 650;
 const MEDIA_SOURCE_RELOAD_BISECT_MODE:
@@ -177,6 +179,7 @@ interface PlayerState {
   isDrafting: boolean;
   isGenerating: boolean;
   isUploading: boolean;
+  importProgress: ImportProgress | null;
   djError: string | null;
 
   init: () => void;
@@ -371,6 +374,7 @@ let playQueueHydrated = false;
 let queueCursorPersistTimer: number | null = null;
 let queueCursorPersistSeq = 0;
 let lastPersistedQueueIndex = -1;
+let importProgressClearTimer: ReturnType<typeof setTimeout> | null = null;
 // Timestamp of the last playIndex switch dispatch (perf only). Read by the now-playing
 // stage's layout effect to measure switch→React-commit, decomposing switch.toFrame
 // (switch→paint) into render+reconcile vs layout+paint (switch-fps Phase 4).
@@ -402,6 +406,10 @@ export interface PlaybackLoadingState {
 interface PlaybackLoadRequest {
   id: number;
   controller: AbortController;
+}
+
+interface UploadIngestOptions {
+  onCopyProgress?: (progress: { bytesLoaded: number; bytesTotal: number }) => void;
 }
 
 /** Cheap signature of what the queue list renders (ids + generation status +
@@ -687,6 +695,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   isDrafting: false,
   isGenerating: false,
   isUploading: false,
+  importProgress: null,
   djError: null,
 
   init() {
@@ -1408,14 +1417,51 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   async addUploadsToSet(setId, files) {
     const list = Array.from(files);
     if (list.length === 0) return;
-    set({ isUploading: true });
+    if (importProgressClearTimer) {
+      clearTimeout(importProgressClearTimer);
+      importProgressClearTimer = null;
+    }
+    let completed = 0;
+    set({
+      isUploading: true,
+      importProgress: { phase: "importing", total: list.length, completed },
+    });
     try {
       const ids: string[] = [];
       let uploaded = 0;
       let lastPublishedTrackId: string | undefined;
       const unsupported: string[] = [];
       for (const file of list) {
-        const r = await ingestMediaFile(setId, file);
+        set({
+          importProgress: {
+            phase: "importing",
+            total: list.length,
+            completed,
+            current: {
+              name: file.name,
+              mode: "copy",
+              bytesLoaded: 0,
+              bytesTotal: file.size,
+            },
+          },
+        });
+        const r = await ingestMediaFile(setId, file, undefined, {
+          onCopyProgress: ({ bytesLoaded, bytesTotal }) =>
+            set({
+              importProgress: {
+                phase: "importing",
+                total: list.length,
+                completed,
+                current: {
+                  name: file.name,
+                  mode: "copy",
+                  bytesLoaded,
+                  bytesTotal,
+                },
+              },
+            }),
+        });
+        completed += 1;
         if (r.trackId) {
           ids.push(r.trackId);
           uploaded += 1;
@@ -1423,6 +1469,19 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
             lastPublishedTrackId = await flushImportedTrackIds(setId, ids, lastPublishedTrackId);
           }
         } else if (r.unsupportedName) unsupported.push(r.unsupportedName);
+        set({
+          importProgress: {
+            phase: "importing",
+            total: list.length,
+            completed,
+            current: {
+              name: file.name,
+              mode: "copy",
+              bytesLoaded: file.size,
+              bytesTotal: file.size,
+            },
+          },
+        });
       }
       lastPublishedTrackId = await flushImportedTrackIds(setId, ids, lastPublishedTrackId);
       if (unsupported.length > 0) {
@@ -1436,7 +1495,14 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       set({ djError: msg });
       log.error("player", "upload failed", msg);
     } finally {
-      set({ isUploading: false });
+      set({
+        isUploading: false,
+        importProgress: { phase: "done", total: list.length, completed },
+      });
+      importProgressClearTimer = setTimeout(() => {
+        importProgressClearTimer = null;
+        usePlayerStore.setState({ importProgress: null });
+      }, IMPORT_PROGRESS_CLEAR_MS);
     }
   },
 
@@ -1585,10 +1651,11 @@ async function ingestMediaFile(
   setId: string,
   file: File,
   sourcePath?: string,
+  options: UploadIngestOptions = {},
 ): Promise<IngestResult> {
   // `.ncm` can't be probed/played encrypted — decrypt in the worker, then pull
   // its cover from the carried CDN URL if no image was embedded.
-  if (isNcmFile(file.name)) return ingestNcmFile(setId, file, sourcePath);
+  if (isNcmFile(file.name)) return ingestNcmFile(setId, file, sourcePath, options);
 
   const probed = await probeMediaFile(file).catch((err: unknown) => {
     if (!isUnsupportedMediaError(err)) throw err;
@@ -1616,11 +1683,12 @@ async function ingestMediaFile(
     };
   });
 
+  const copied = await copyBlobWithProgress(file, { onProgress: options.onCopyProgress });
   const track = await createUploadedTrack({
     sessionId: setId,
     title: parsed.title ?? probed.title,
     kind: probed.kind,
-    blob: file,
+    blob: copied,
     mime: probed.mime,
     durationSec: probed.durationSec,
     mediaMetadata: parsed.mediaMetadata,
@@ -1639,8 +1707,10 @@ async function ingestNcmFile(
   setId: string,
   file: File,
   sourcePath?: string,
+  options: UploadIngestOptions = {},
 ): Promise<IngestResult> {
-  const bytes = await file.arrayBuffer();
+  const copied = await copyBlobWithProgress(file, { onProgress: options.onCopyProgress });
+  const bytes = await copied.arrayBuffer();
   const res = await ingestNcmBytes(setId, file.name, bytes, sourcePath).catch((err: unknown) => {
     log.warn("player", "ncm decode failed", { name: file.name, err: String(err) });
     return null;

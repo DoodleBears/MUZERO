@@ -23,6 +23,7 @@ import {
   filesFromTransferDeep,
   summarizeDragItems,
 } from "@/lib/file-drop";
+import { importProgressPercent } from "@/lib/import-progress";
 import { useCoverTargetStore } from "@/stores/cover-target-store";
 import { usePlayerStore } from "@/stores/player-store";
 import { useUploadTargetStore } from "@/stores/upload-target-store";
@@ -48,6 +49,7 @@ export function GlobalDropZone({
 }) {
   const { t } = useTranslation();
   const isUploading = usePlayerStore((s) => s.isUploading);
+  const importProgress = usePlayerStore((s) => s.importProgress);
 
   const [isDragging, setIsDragging] = useState(false);
   const [dragInfo, setDragInfo] = useState<DragInfo>({ count: 0, allImages: false });
@@ -259,7 +261,45 @@ export function GlobalDropZone({
         />
       )}
 
-      {notice && (
+      {importProgress && (
+        <div
+          className="fixed bottom-24 left-1/2 z-[70] flex w-[min(420px,calc(100vw-2rem))] -translate-x-1/2 flex-col gap-2 rounded-2xl border border-border bg-card px-4 py-3 text-sm shadow-lg duration-200 animate-in slide-in-from-bottom-2"
+          aria-live="polite"
+        >
+          <div className="flex items-center gap-3">
+            {importProgress.phase === "done" ? null : (
+              <Loader2 className="size-4 shrink-0 animate-spin text-primary" />
+            )}
+            <span className="min-w-0 flex-1 truncate font-medium">
+              {importProgress.phase === "done"
+                ? t("drop.imported", { count: importProgress.completed })
+                : t("drop.importing", {
+                    done: importProgress.completed,
+                    total: importProgress.total,
+                  })}
+            </span>
+            <button
+              type="button"
+              onClick={() => usePlayerStore.setState({ importProgress: null })}
+              aria-label={t("drop.close")}
+            >
+              <X className="size-3.5 text-muted-foreground hover:text-foreground" />
+            </button>
+          </div>
+          {importProgress.current ? (
+            <div className="min-w-0 truncate text-xs text-muted-foreground">
+              {importProgress.current.mode === "reference"
+                ? t("drop.importingReference", { name: importProgress.current.name })
+                : t("drop.importingBytes", {
+                    name: importProgress.current.name,
+                    percent: importProgressPercent(importProgress) ?? 0,
+                  })}
+            </div>
+          ) : null}
+        </div>
+      )}
+
+      {notice && !importProgress && (
         <div
           className="fixed bottom-24 left-1/2 z-[70] flex -translate-x-1/2 items-center gap-3 rounded-full border border-border bg-card px-4 py-2 text-sm shadow-lg duration-200 animate-in slide-in-from-bottom-2"
           aria-live="polite"
