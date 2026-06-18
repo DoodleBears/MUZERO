@@ -480,6 +480,7 @@ function handleOpen() {
 | 2026-06-18 | Codex | Phase 4 completed：新增共享 source-cover morph 状态、`jumpToSource()` 统一 arm + transition + dispatch、search-page pending 消费复用 `gallery-cover` 命名空间、锚点跳转后聚焦当前曲目行。 |
 | 2026-06-18 | Codex | Follow-up fix：拆分列表滚动语义，`initialScrollIndex` 回到 mount-only（普通点击/聚焦不抢 scrollbar），新增显式 `jumpScrollIndex` / `jumpFocusIndex` 只响应 Dock/Now Playing 来源跳转；列表内增加悬浮「跳到当前歌曲」按钮供手动定位。 |
 | 2026-06-18 | Codex | Follow-up fix：悬浮「跳到当前歌曲」按钮改为锚定在整个列表区域层，而非滚动容器内部；按钮在列表内容滚动时始终可见，点击后才手动定位当前曲目。 |
+| 2026-06-18 | Codex | Follow-up polish：悬浮「跳到当前歌曲」按钮调整为列表区域内水平居中、靠上显示，并使用 primary 背景强化主动作语义。 |
 
 ---
 
