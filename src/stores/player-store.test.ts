@@ -87,8 +87,11 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
+  vi.doUnmock("@/lib/desktop/bridge");
   vi.doUnmock("@/lib/media-probe");
   vi.doUnmock("@/lib/media-metadata");
+  vi.doUnmock("@/lib/video-poster-frame");
+  vi.doUnmock("@/workers/cover-client");
   openedDb?.close();
   openedDb = null;
   document.body.innerHTML = "";
