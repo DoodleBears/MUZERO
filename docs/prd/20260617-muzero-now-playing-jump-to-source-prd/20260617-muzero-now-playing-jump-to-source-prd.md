@@ -481,6 +481,7 @@ function handleOpen() {
 | 2026-06-18 | Codex | Follow-up fix：拆分列表滚动语义，`initialScrollIndex` 回到 mount-only（普通点击/聚焦不抢 scrollbar），新增显式 `jumpScrollIndex` / `jumpFocusIndex` 只响应 Dock/Now Playing 来源跳转；列表内增加悬浮「跳到当前歌曲」按钮供手动定位。 |
 | 2026-06-18 | Codex | Follow-up fix：悬浮「跳到当前歌曲」按钮改为锚定在整个列表区域层，而非滚动容器内部；按钮在列表内容滚动时始终可见，点击后才手动定位当前曲目。 |
 | 2026-06-18 | Codex | Follow-up polish：悬浮「跳到当前歌曲」按钮调整为列表区域内水平居中、靠上显示，并使用 primary 背景强化主动作语义。 |
+| 2026-06-18 | Codex | Follow-up polish：悬浮「跳到当前歌曲」按钮位置从居中靠上改为靠上居右，保留 primary 主动作样式。 |
 
 ---
 

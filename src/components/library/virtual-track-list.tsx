@@ -532,7 +532,7 @@ export function VirtualTrackList({
           aria-label={t("track.jumpToCurrent")}
           title={t("track.jumpToCurrent")}
           onClick={() => focusTrackAt(currentTrackListIndex)}
-          className="absolute left-1/2 top-4 z-20 -translate-x-1/2 rounded-full shadow-lg backdrop-blur"
+          className="absolute top-4 right-8 z-20 rounded-full shadow-lg backdrop-blur"
         >
           <LocateFixed className="size-4" />
         </Button>

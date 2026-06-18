@@ -268,13 +268,7 @@ describe("VirtualTrackList", () => {
 
     expect(screen.getByTestId("virtual-track-list-region")).toContainElement(jumpButton);
     expect(screen.getByTestId("virtual-track-list")).not.toContainElement(jumpButton);
-    expect(jumpButton).toHaveClass(
-      "left-1/2",
-      "top-4",
-      "-translate-x-1/2",
-      "bg-primary",
-      "text-primary-foreground",
-    );
+    expect(jumpButton).toHaveClass("top-4", "right-8", "bg-primary", "text-primary-foreground");
 
     fireEvent.click(jumpButton);
 
