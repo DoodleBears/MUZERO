@@ -116,6 +116,10 @@ export function CoverImage({
           src={preview}
           alt=""
           aria-hidden
+          // Not natively draggable: dragging an <img> makes Chromium expose
+          // "Files" on the DataTransfer, which falsely trips the GlobalDropZone
+          // overlay (covers are never dragged out as files).
+          draggable={false}
           data-cover-preview
           className="absolute inset-0 size-full object-cover"
         />
@@ -125,6 +129,8 @@ export function CoverImage({
           ref={ref}
           src={url}
           alt={alt}
+          // Not natively draggable — see the preview <img> above.
+          draggable={false}
           // Decode off the main thread so the full-res cover doesn't decode
           // synchronously on the paint path during a switch (PRD Phase 5).
           decoding="async"

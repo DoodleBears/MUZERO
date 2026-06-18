@@ -191,6 +191,20 @@ export function GlobalDropZone({
           className="pointer-events-none fixed inset-0 z-[80] flex items-center justify-center bg-background/80 backdrop-blur-sm duration-150 animate-in fade-in"
           role="presentation"
         >
+          {/* Escape hatch: the overlay is pointer-events-none so a drag can pass
+              through, but a stuck overlay (browsers occasionally drop the
+              dragleave/drop event) would otherwise trap the UI. */}
+          <button
+            type="button"
+            aria-label={t("drop.cancel")}
+            onClick={() => {
+              dragDepth.current = 0;
+              setIsDragging(false);
+            }}
+            className="pointer-events-auto absolute right-4 top-4 grid size-9 place-items-center rounded-full border border-border bg-card/90 text-muted-foreground shadow-lg transition-colors hover:text-foreground"
+          >
+            <X className="size-4" />
+          </button>
           <div className="flex max-w-[min(440px,90vw)] flex-col items-center gap-3 rounded-2xl border-2 border-dashed border-primary/60 bg-card/90 px-10 py-8 text-center shadow-xl">
             {overlayIsCover ? (
               <ImagePlus aria-hidden="true" className="size-14 text-primary" />
