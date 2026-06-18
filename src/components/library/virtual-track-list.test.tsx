@@ -264,7 +264,12 @@ describe("VirtualTrackList", () => {
 
     render(<VirtualTrackList tracks={[first, second]} />);
 
-    fireEvent.click(screen.getByRole("button", { name: "track.jumpToCurrent" }));
+    const jumpButton = screen.getByRole("button", { name: "track.jumpToCurrent" });
+
+    expect(screen.getByTestId("virtual-track-list-region")).toContainElement(jumpButton);
+    expect(screen.getByTestId("virtual-track-list")).not.toContainElement(jumpButton);
+
+    fireEvent.click(jumpButton);
 
     expect(scrollToIndex).toHaveBeenCalledWith(1, { align: "center" });
   });

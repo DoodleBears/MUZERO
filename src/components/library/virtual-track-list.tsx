@@ -468,26 +468,62 @@ export function VirtualTrackList({
   }
 
   return (
-    <div
-      className={cn("group/list relative h-full overflow-y-auto", className)}
-      data-testid="virtual-track-list"
-      data-virtualized="fixed-size"
-      onKeyDown={onKeyDown}
-      onScroll={onScroll}
-      ref={parentRef}
-      role="listbox"
-    >
-      <HoverScrollbar
-        scrollRef={parentRef}
-        scrollToTop={scrollToTop}
-        rightInset={hasAlphabet ? 24 : 0}
-      />
-      <AlphabetIndex
-        scrollRef={parentRef}
-        buckets={alphabetBuckets}
-        onJump={(index) => rowVirtualizer.scrollToIndex(index, { align: "start" })}
-      />
-      {header ? <div ref={headerRef}>{header}</div> : null}
+    <div className="relative h-full min-h-0" data-testid="virtual-track-list-region">
+      <div
+        className={cn("group/list relative h-full overflow-y-auto", className)}
+        data-testid="virtual-track-list"
+        data-virtualized="fixed-size"
+        onKeyDown={onKeyDown}
+        onScroll={onScroll}
+        ref={parentRef}
+        role="listbox"
+      >
+        <HoverScrollbar
+          scrollRef={parentRef}
+          scrollToTop={scrollToTop}
+          rightInset={hasAlphabet ? 24 : 0}
+        />
+        <AlphabetIndex
+          scrollRef={parentRef}
+          buckets={alphabetBuckets}
+          onJump={(index) => rowVirtualizer.scrollToIndex(index, { align: "start" })}
+        />
+        {header ? <div ref={headerRef}>{header}</div> : null}
+        <motion.div
+          className="relative w-full"
+          data-edge-pull="0"
+          ref={edgePullContentRef}
+          style={{ height: `${rowVirtualizer.getTotalSize()}px`, y: edgePull }}
+        >
+          {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+            const baseTrack = tracks[virtualRow.index];
+            return (
+              <VirtualTrackRow
+                key={baseTrack.id}
+                baseTrack={baseTrack}
+                reactive={reactiveRowContent}
+                index={virtualRow.index}
+                isCurrent={baseTrack.id === currentTrackId}
+                isSelected={baseTrack.id === selectedTrackId}
+                checked={selectedIds?.has(baseTrack.id) ?? false}
+                deferCoverLoad={deferRowCoverLoad}
+                selectable={selectable}
+                sessions={sessions}
+                hasAlphabet={hasAlphabet}
+                virtualStart={virtualRow.start}
+                virtualSize={virtualRow.size}
+                scrollMargin={scrollMargin}
+                getTrackSupplement={getTrackSupplement}
+                getTrackColumns={getTrackColumns}
+                onPlay={handlePlay}
+                onView={handleView}
+                onToggleSelect={onToggleSelect}
+                onDeleteTrack={onDeleteTrack}
+              />
+            );
+          })}
+        </motion.div>
+      </div>
       {currentTrackListIndex >= 0 && (
         <Button
           type="button"
@@ -501,40 +537,6 @@ export function VirtualTrackList({
           <LocateFixed className="size-4" />
         </Button>
       )}
-      <motion.div
-        className="relative w-full"
-        data-edge-pull="0"
-        ref={edgePullContentRef}
-        style={{ height: `${rowVirtualizer.getTotalSize()}px`, y: edgePull }}
-      >
-        {rowVirtualizer.getVirtualItems().map((virtualRow) => {
-          const baseTrack = tracks[virtualRow.index];
-          return (
-            <VirtualTrackRow
-              key={baseTrack.id}
-              baseTrack={baseTrack}
-              reactive={reactiveRowContent}
-              index={virtualRow.index}
-              isCurrent={baseTrack.id === currentTrackId}
-              isSelected={baseTrack.id === selectedTrackId}
-              checked={selectedIds?.has(baseTrack.id) ?? false}
-              deferCoverLoad={deferRowCoverLoad}
-              selectable={selectable}
-              sessions={sessions}
-              hasAlphabet={hasAlphabet}
-              virtualStart={virtualRow.start}
-              virtualSize={virtualRow.size}
-              scrollMargin={scrollMargin}
-              getTrackSupplement={getTrackSupplement}
-              getTrackColumns={getTrackColumns}
-              onPlay={handlePlay}
-              onView={handleView}
-              onToggleSelect={onToggleSelect}
-              onDeleteTrack={onDeleteTrack}
-            />
-          );
-        })}
-      </motion.div>
     </div>
   );
 }
