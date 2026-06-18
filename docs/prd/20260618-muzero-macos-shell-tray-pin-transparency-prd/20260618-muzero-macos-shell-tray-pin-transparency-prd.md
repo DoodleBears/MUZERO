@@ -11,7 +11,7 @@
 
 | Phase | Name | Status | Link |
 |-------|------|--------|------|
-| 1 | macOS menu‑bar tray icon sizing (template image) | 🔲 Pending | [Phase 1 Checklist](#phase-1-checklist) |
+| 1 | macOS menu‑bar tray icon sizing (template image) | ✅ Completed | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | macOS top‑right always‑on‑top (pin) button | 🔲 Pending | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | macOS lyrics‑only transparent window backing | 🔲 Pending | [Phase 3 Checklist](#phase-3-checklist) |
 
@@ -126,9 +126,10 @@ On macOS, `Tray` does **not** auto‑downsample the image to the menu‑bar heig
 
 **Why Windows looks fine:** Windows/Linux tray rendering scales the icon into the tray slot, so the oversized source is not visually catastrophic there (still not ideal, but not "huge").
 
-**Fix direction (decided — Q3 = monochrome template, best practice):**
-- Load the tray image via `nativeImage.createFromPath(...)`, `.resize({ width: 16, height: 16 })` (provide `@2x` 32×32), and on macOS call `image.setTemplateImage(true)` for a monochrome menu‑bar glyph that adapts to dark/light + selection state. Then `new Tray(image)`.
-- Add a **dedicated monochrome template tray asset** (a simple monogram, named `…Template.png` so macOS auto‑detects it as a template, + `@2x`) rather than reusing the 1120px brand logo — a detailed full‑color logo reads as mud at 16px and cannot be a template image. This is the macOS‑native convention; brand color is intentionally dropped for the menu bar (the dock icon keeps full color).
+**Fix direction (decided — Q3 = monochrome template, best practice):** ✅ **Implemented**
+- Load the tray image via `nativeImage.createFromPath(...)`, `.resize({ width: 16, height: 16 })`, and on macOS call `image.setTemplateImage(true)` for a monochrome menu‑bar glyph that adapts to dark/light + selection state. Then `new Tray(image)`.
+- **Implementation note (refines Q3):** rather than ship a new binary asset, the transform reuses the **existing logo's alpha silhouette** as the template. All `muzero-logo*.png` variants are 1120×1120 **with an alpha channel**, and a macOS template image only uses the alpha channel (the OS recolors the silhouette for the menu bar) — so resizing the existing icon + `setTemplateImage(true)` already yields a correct monochrome menu‑bar glyph with **no new binary asset**. A hand‑tuned 16px asset (+`@2x` for retina crispness) remains an optional future refinement.
+- Implemented in [tray.cjs `buildTrayIcon()`](../../../electron/tray.cjs) (injected `nativeImage`, falls back to the raw path when missing/empty) + [main.cjs](../../../electron/main.cjs) (passes `nativeImage`). The dock icon path ([app-icon.cjs](../../../electron/app-icon.cjs)) is unchanged. Tests: [scripts/electron-tray.test.mjs](../../../scripts/electron-tray.test.mjs) (macOS template, Windows non‑template, two fallbacks).
 - Keep the dock icon path ([app-icon.cjs](../../../electron/app-icon.cjs) `applyAppIcon` → `app.dock.setIcon`) unchanged; it is correctly sized for the dock. The tray and the dock are separate surfaces with separate size requirements.
 
 ### 3.2 Issue #2 — No always‑on‑top (pin) button on macOS
@@ -228,17 +229,18 @@ A transparent DOM over an opaque window backing shows the backing color — `#09
 
 ### Phase 1: macOS menu‑bar tray icon sizing
 
-**Goal:** the macOS tray icon renders as a correctly sized template glyph.
+**Goal:** the macOS tray icon renders as a correctly sized template glyph. ✅ **Completed**
 
 **Tasks:**
-- [ ] Add a dedicated small tray asset (monochrome/template, `16×16` + `@2x 32×32`) under `electron/assets/`.
-- [ ] In [tray.cjs](../../../electron/tray.cjs), load via `nativeImage.createFromPath`, `.resize({width:16,height:16})`, and `setTemplateImage(true)` on macOS; pass the `nativeImage` to `new Tray(...)`.
-- [ ] Keep Windows/Linux using an appropriately sized (non‑template) icon; verify the dock icon path is unaffected.
+- [x] ~~Add a dedicated small tray asset~~ → reuse the existing logo's alpha silhouette as the template (no new binary asset; see §3.1 implementation note). Hand‑tuned 16px asset deferred.
+- [x] In [tray.cjs `buildTrayIcon()`](../../../electron/tray.cjs), load via `nativeImage.createFromPath`, `.resize({width:16,height:16})`, and `setTemplateImage(true)` on macOS; pass the resized `nativeImage` to `new Tray(...)` (injected `nativeImage` from [main.cjs](../../../electron/main.cjs)).
+- [x] Keep Windows/Linux using a resized (non‑template) icon; dock icon path unaffected.
 
 ### Phase 1 Checklist
-- [ ] macOS menu‑bar icon is ~16–18pt, crisp on retina, adapts to dark/light menu bar.
-- [ ] Windows/Linux tray icon unchanged or improved.
-- [ ] Dock icon (`app.dock.setIcon`) still correct.
+- [x] macOS tray icon is downscaled to 16pt + template image (adapts to dark/light menu bar). _Retina @2x crispness = optional future refinement._
+- [x] Windows/Linux tray icon resized to 16px, not marked template (verified by test).
+- [x] Dock icon (`app.dock.setIcon`) path unchanged.
+- [x] Graceful fallback to the raw icon path when `nativeImage` is absent or the asset decodes empty (verified by tests).
 
 ### Phase 2: macOS top‑right always‑on‑top button
 
@@ -321,6 +323,7 @@ A transparent DOM over an opaque window backing shows the backing color — `#09
 |------|--------|---------|
 | 2026-06-18 | MUZERO | Initial draft — root‑cause analysis for macOS tray icon size, missing always‑on‑top button, and lyrics‑only transparency |
 | 2026-06-18 | MUZERO | Resolved all 5 Open Questions ("best practice + align with Windows"): Option A always‑transparent macOS window (`hiddenInset` + native traffic lights + DOM‑painted chrome), monochrome template tray icon, macOS pin button matches Windows `off`/`pin`. Folded decisions into §3.1/§3.2/§3.3 and Phase 3 |
+| 2026-06-18 | MUZERO | **Phase 1 complete** (TDD): tray icon resized to 16pt + `setTemplateImage(true)` on macOS via injected `nativeImage` in [tray.cjs](../../../electron/tray.cjs); reuses the existing logo's alpha silhouette (no new asset). 4 new tests in [electron-tray.test.mjs](../../../scripts/electron-tray.test.mjs) |
 
 ---
 

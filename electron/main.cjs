@@ -1,7 +1,7 @@
 const { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } = require("node:fs");
 const path = require("node:path");
 const { pathToFileURL } = require("node:url");
-const { app, BrowserWindow, Menu, net, protocol, screen, shell, Tray } = require("electron");
+const { app, BrowserWindow, Menu, nativeImage, net, protocol, screen, shell, Tray } = require("electron");
 const { registerIpc } = require("./ipc.cjs");
 const { handleMuzfetch } = require("./fetch-proxy.cjs");
 const { registerElectronGlobalShortcuts } = require("./global-shortcuts.cjs");
@@ -25,6 +25,7 @@ const trayController = createTrayController({
   app,
   iconPath: appIconPath(DEFAULT_APP_ICON),
   Menu,
+  nativeImage,
   platform: process.platform,
   Tray,
 });

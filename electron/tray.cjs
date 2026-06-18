@@ -1,4 +1,10 @@
-function createTrayController({ app, iconPath, Menu, platform, Tray }) {
+// macOS renders a Tray image at its logical point size and does NOT downscale it to
+// the menu-bar height, so the full-resolution app logo (1120×1120) shows up huge.
+// Build a small menu-bar glyph instead: downscale to 16pt and, on macOS, flag it a
+// template image so the OS recolors the alpha silhouette for light/dark menu bars.
+const TRAY_ICON_SIZE = 16;
+
+function createTrayController({ app, iconPath, Menu, nativeImage, platform, Tray }) {
   let tray = null;
   let windowRef = null;
   let isQuitting = false;
@@ -6,6 +12,22 @@ function createTrayController({ app, iconPath, Menu, platform, Tray }) {
 
   function hasTray() {
     return Boolean(tray);
+  }
+
+  // Returns a resized nativeImage for the Tray, or the raw path as a fallback when
+  // nativeImage isn't injected or the asset decodes empty (preserves prior behavior).
+  function buildTrayIcon() {
+    if (!nativeImage || typeof nativeImage.createFromPath !== "function") return iconPath;
+    const image = nativeImage.createFromPath(iconPath);
+    if (!image || (typeof image.isEmpty === "function" && image.isEmpty())) return iconPath;
+    const sized =
+      typeof image.resize === "function"
+        ? image.resize({ height: TRAY_ICON_SIZE, width: TRAY_ICON_SIZE })
+        : image;
+    if (platform === "darwin" && typeof sized.setTemplateImage === "function") {
+      sized.setTemplateImage(true);
+    }
+    return sized;
   }
 
   function onAction(listener) {
@@ -20,7 +42,7 @@ function createTrayController({ app, iconPath, Menu, platform, Tray }) {
   function ensureTray() {
     if (tray) return tray;
     try {
-      tray = new Tray(iconPath);
+      tray = new Tray(buildTrayIcon());
     } catch {
       tray = null;
       return null;

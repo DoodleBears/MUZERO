@@ -18,7 +18,22 @@ function createFakeWindow() {
   return win;
 }
 
-function createHarness(platform = "win32") {
+// Fake electron `nativeImage`: createFromPath → raw image; raw.resize → a distinct
+// resized image; both record calls so tests can assert the menu-bar transform.
+function createFakeNativeImage() {
+  const setTemplateImage = vi.fn();
+  const resized = { __kind: "resized", isEmpty: () => false, setTemplateImage };
+  const raw = {
+    __kind: "raw",
+    isEmpty: () => false,
+    resize: vi.fn(() => resized),
+    setTemplateImage: vi.fn(),
+  };
+  const createFromPath = vi.fn(() => raw);
+  return { createFromPath, nativeImage: { createFromPath }, raw, resized, setTemplateImage };
+}
+
+function createHarness(platform = "win32", { nativeImage } = {}) {
   const trayInstances = [];
   const app = { quit: vi.fn() };
   const Menu = { buildFromTemplate: vi.fn((template) => ({ template })) };
@@ -35,6 +50,7 @@ function createHarness(platform = "win32") {
     app,
     iconPath: "icon.ico",
     Menu,
+    nativeImage,
     platform,
     Tray,
   });
@@ -128,6 +144,47 @@ describe("createTrayController", () => {
     expect(controller.hasTray()).toBe(false);
     expect(event.preventDefault).not.toHaveBeenCalled();
     expect(win.hide).not.toHaveBeenCalled();
+  });
+
+  it("builds the macOS tray icon as a small template image, not the raw full-size logo", () => {
+    const fake = createFakeNativeImage();
+    const { controller, trayInstances } = createHarness("darwin", { nativeImage: fake.nativeImage });
+    controller.ensureTray();
+
+    // Source the full-resolution app logo, then downscale to menu-bar size so it
+    // doesn't render huge — macOS does NOT auto-fit a 1120px Tray image.
+    expect(fake.createFromPath).toHaveBeenCalledWith("icon.ico");
+    expect(fake.raw.resize).toHaveBeenCalledWith({ height: 16, width: 16 });
+    // Template image → macOS recolors the alpha silhouette for light/dark menu bars.
+    expect(fake.setTemplateImage).toHaveBeenCalledWith(true);
+    // Tray receives the resized nativeImage, never the raw path string.
+    expect(trayInstances[0].icon).toBe(fake.resized);
+    expect(typeof trayInstances[0].icon).not.toBe("string");
+  });
+
+  it("resizes the tray icon on Windows but does not mark it a template image", () => {
+    const fake = createFakeNativeImage();
+    const { controller, trayInstances } = createHarness("win32", { nativeImage: fake.nativeImage });
+    controller.ensureTray();
+
+    expect(fake.raw.resize).toHaveBeenCalledWith({ height: 16, width: 16 });
+    expect(fake.setTemplateImage).not.toHaveBeenCalled();
+    expect(trayInstances[0].icon).toBe(fake.resized);
+  });
+
+  it("falls back to the raw icon path when no nativeImage is injected", () => {
+    const { controller, trayInstances } = createHarness("darwin");
+    controller.ensureTray();
+    expect(trayInstances[0].icon).toBe("icon.ico");
+  });
+
+  it("falls back to the raw icon path when the asset decodes empty", () => {
+    const fake = createFakeNativeImage();
+    fake.raw.isEmpty = () => true;
+    const { controller, trayInstances } = createHarness("darwin", { nativeImage: fake.nativeImage });
+    controller.ensureTray();
+    expect(fake.raw.resize).not.toHaveBeenCalled();
+    expect(trayInstances[0].icon).toBe("icon.ico");
   });
 
   it("sends action ids from native menu clicks without owning labels", () => {
