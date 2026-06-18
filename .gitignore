@@ -54,3 +54,4 @@ coverage/
 .logs
 .worktrees/
 reference-repo
+.electron-dist/
