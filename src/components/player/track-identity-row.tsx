@@ -10,7 +10,7 @@ import { Disc3Icon } from "@/components/ui/disc-3";
 import type { Track } from "@/db/types";
 import { useTrackCoverUrl } from "@/hooks/use-media";
 import { useShortcutHint } from "@/hooks/use-shortcut-hint";
-import { dispatchJumpTarget } from "@/lib/jump-to-source";
+import { jumpToSource } from "@/lib/jump-to-source";
 import { resolvePlayingSource } from "@/lib/playing-source";
 import { trackHasCover, trackSubtitle } from "@/lib/track-display";
 import { cn } from "@/lib/utils";
@@ -190,7 +190,7 @@ export function TrackIdentityRow({
       queueSource: state.queueSource,
     });
     if (!target) return;
-    transitionState(() => dispatchJumpTarget(target));
+    jumpToSource(target);
   }
 
   // Tooltip shortcut rows are only ever SEEN on hover, but were rebuilt on every

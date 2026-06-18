@@ -26,10 +26,9 @@ import {
 import { setTrackCover } from "@/db/repositories";
 import type { CropRect, SetDisplayMode } from "@/db/types";
 import { IMAGE_ACCEPT } from "@/lib/file-drop";
-import { dispatchJumpTarget } from "@/lib/jump-to-source";
+import { jumpToSource } from "@/lib/jump-to-source";
 import { resolvePlayingSource } from "@/lib/playing-source";
 import { cn } from "@/lib/utils";
-import { transitionState } from "@/lib/view-transition-react";
 import { usePlayerStore } from "@/stores/player-store";
 
 const DISPLAY_MODE_OPTIONS: { id: SetDisplayMode; icon: typeof Video }[] = [
@@ -270,7 +269,7 @@ export function CurrentTrackContextMenu({
         onDisplayModeChange={(mode) => void setDisplayMode(mode)}
         onJumpToSource={() => {
           if (!jumpTarget) return;
-          transitionState(() => dispatchJumpTarget(jumpTarget));
+          jumpToSource(jumpTarget);
         }}
         track={current}
       >

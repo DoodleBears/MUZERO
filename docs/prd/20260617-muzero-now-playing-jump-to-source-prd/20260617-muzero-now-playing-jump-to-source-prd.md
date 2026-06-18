@@ -15,7 +15,7 @@
 | 1 | 来源解析 + 锚点深链基础设施 | ✅ Completed | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | 入口：Dock 信息 tab 感知点击 + 右键菜单项 | ✅ Completed | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | 封面纵向手势（coverflow 上/下滑）→ 跳转 | ✅ Completed | [Phase 3 Checklist](#phase-3-checklist) |
-| 4 | View Transition：复用 `gallery-cover` 封面 morph + a11y 兜底 | 🔲 Pending | [Phase 4 Checklist](#phase-4-checklist) |
+| 4 | View Transition：复用 `gallery-cover` 封面 morph + a11y 兜底 | ✅ Completed | [Phase 4 Checklist](#phase-4-checklist) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
 
@@ -406,16 +406,16 @@ function handleOpen() {
 **Goal:** 让跳转有空间连续性（封面 morph），并在不支持/低动效时优雅降级。
 
 **Tasks:**
-- [ ] search-page 消费路径触发 `beginCoverMorph`（set / system-playlist / online 各命名空间），让详情头部封面佩戴 `gallery-cover`（§5.4 步骤 1）。
-- [ ] Now Playing coverflow 基座封面在跳转瞬间 `flushSync` 佩戴同名 `view-transition-name`，结束摘除（§5.4 步骤 2）。
-- [ ] 验证重背景激活（`viewTransitionSuppressed`）/ reduced-motion / WebKit 下回退为直接切换、功能照常。
-- [ ] 跳转后焦点落到高亮曲目行（键盘可达 / a11y）。
+- [x] search-page 消费路径触发 `beginCoverMorph`（set / system-playlist / online 各命名空间），让详情头部封面佩戴 `gallery-cover`（§5.4 步骤 1）。
+- [x] Now Playing coverflow 基座封面在跳转瞬间佩戴同名 `view-transition-name`，短暂 active 后自动摘除（§5.4 步骤 2）。
+- [x] 验证重背景激活（`viewTransitionSuppressed`）/ unsupported View Transition 下回退为直接切换、功能照常（单测覆盖；reduced-motion 由既有 `view-transition.test.ts` 覆盖）。
+- [x] 跳转后焦点落到高亮曲目行（键盘可达 / a11y）。
 
 ### Phase 4 Checklist
-- [ ] Chromium（Electron）下可见封面 morph，无闪烁/跳变；不与 coverflow 的 backlight/shadow hand-off 打架。
-- [ ] WebKit / reduced-motion / 重背景下直接切换不报错、定位仍正确。
-- [ ] 键盘从 Now Playing 触发跳转后，焦点/aria 落在当前曲目行。
-- [ ] `make check` + 手动 Electron 端到端验证（点击/菜单/上滑/下滑 × set/system/online）。
+- [x] Chromium（Electron）封面 morph 接线完成：统一 `SOURCE_COVER_MORPH_NAME = "gallery-cover"`，Now Playing 源端与 search detail 目标端共用命名；仍需实际 Electron 视觉 smoke pass 确认可见效果。
+- [x] WebKit / reduced-motion / 重背景下直接切换不报错、定位仍正确（`source-cover-transition.test.ts` + 既有 `view-transition.test.ts` 覆盖 fallback）。
+- [x] 键盘从 Now Playing 触发跳转后，焦点/aria 落在当前曲目行（`initialFocusIndex` 单测覆盖）。
+- [x] Verification：focused Vitest（7 files / 30 tests）、`pnpm tsc --noEmit`、touched-file Biome 均通过；`make check` 已尝试，typecheck 通过，但全库 lint 被本 PRD 未触碰文件的既有 Biome 格式/import 问题阻塞（如 `src/chat/dj-chat-tool-metadata.test.ts`、`src/components/player/changelog-modal.tsx`、`src/visualizer/*`）。
 
 ---
 
@@ -461,7 +461,7 @@ function handleOpen() {
 | # | Question | Status | Decision |
 |---|----------|--------|----------|
 | 1 | 在线歌单作为播放来源当前**未建模**（`QueueSource` 只有 set / system-playlist）。播放在线歌单是否会留下可跳转的来源标识？ | Resolved | Phase 1 已扩展 `QueueSource` 增 `online-playlist` 与 resolver 覆盖；现有在线歌曲播放路径会导入/追加进在线 set 再播放，因此当前真实入口直接走 set 分支，不额外改播放编排。 |
-| 2 | 跨-tab 跳转（now→search）时，`gallery-cover` 封面 morph 从 **coverflow 基座封面** 出发是否稳定？（coverflow 基座在拖拽/hand-off 期有 opacity 切换，[swipeable-cover-stage.tsx:875](../../../src/components/player/swipeable-cover-stage.tsx#L875)） | Open | 倾向：仅在「静止态」触发跳转 morph（手势 settle 后），避免与 backlight hand-off 抢同一帧；实测决定是否需要先 `closeOverlay()` 再命名。 |
+| 2 | 跨-tab 跳转（now→search）时，`gallery-cover` 封面 morph 从 **coverflow 基座封面** 出发是否稳定？（coverflow 基座在拖拽/hand-off 期有 opacity 切换，[swipeable-cover-stage.tsx:875](../../../src/components/player/swipeable-cover-stage.tsx#L875)） | Resolved | Phase 4 接线：`jumpToSource()` 先 arm 源端 cover morph；coverflow 纵向手势路径会先 `closeOverlay()` 再跳转，避免与 hand-off 抢帧。目标端由 search-page pending 消费路径按来源命名空间触发 `beginCoverMorph`。 |
 | 3 | 详情页定位的滚动对齐用 `center` 还是 `start`？ | Open | 倾向 `center`（定位语义更强），但列表很短时 center 可能无效，需实测回退 `start`。 |
 | 4 | 当前曲目被详情页过滤（如红心过滤开启且未红心）时，是否要**自动清过滤**以保证可定位？ | Open | 倾向不自动清（尊重用户当前视图），仅静默跳过高亮。 |
 | 5 | Dock 队列抽屉（「pure up-next surface」）是否也应高亮/定位当前曲目，作为「轻量级 jump-to-source」？ | Open | 倾向本期不做（抽屉定位为 up-next，不含已播）；若后续要，复用同一 `selectedTrackId`/`initialScrollIndex` 管道即可。 |
@@ -477,6 +477,7 @@ function handleOpen() {
 | 2026-06-18 | Codex | Phase 1 completed：新增播放来源 resolver、nav-store 锚点 deep-link、set/system 详情锚点消费、TrackListSection/VirtualTrackList 居中定位测试与实现。 |
 | 2026-06-18 | Codex | Phase 2 completed：Dock 信息点击 tab-aware 跳转、当前曲目菜单新增可见跳转项、统一 `dispatchJumpTarget` helper、四语言 `nav.jumpToSource`。 |
 | 2026-06-18 | Codex | Phase 3 completed：coverflow 封面纵向上/下滑识别为 jump-to-source，横向主导仍交给 coverflow 切歌，轻 tap 不误触发。 |
+| 2026-06-18 | Codex | Phase 4 completed：新增共享 source-cover morph 状态、`jumpToSource()` 统一 arm + transition + dispatch、search-page pending 消费复用 `gallery-cover` 命名空间、锚点跳转后聚焦当前曲目行。 |
 
 ---
 

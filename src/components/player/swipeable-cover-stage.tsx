@@ -20,12 +20,12 @@ import {
   resolveNowPlayingCoverEffectMode,
 } from "@/lib/album-cover-appearance";
 import { coverPaletteFromThumbhash, normalizeCoverPalette } from "@/lib/cover-palette";
-import { dispatchJumpTarget } from "@/lib/jump-to-source";
+import { jumpToSource } from "@/lib/jump-to-source";
 import { transitionProgress, useNowPlayingTransition } from "@/lib/now-playing-transition";
 import { resolvePlayingSource } from "@/lib/playing-source";
+import { useNowPlayingSourceCoverMorphName } from "@/lib/source-cover-transition";
 import { trackHasCover } from "@/lib/track-display";
 import { cn } from "@/lib/utils";
-import { transitionState } from "@/lib/view-transition-react";
 import type { Rgb } from "@/lib/visualizer-color";
 import { usePlayerStore } from "@/stores/player-store";
 import {
@@ -198,6 +198,7 @@ export function SwipeableCoverStage({
   const currentIndex = usePlayerStore((s) => s.currentIndex);
   const repeat = usePlayerStore((s) => s.repeat);
   const shuffle = usePlayerStore((s) => s.shuffle);
+  const sourceCoverMorphName = useNowPlayingSourceCoverMorphName();
 
   const containerRef = useRef<HTMLDivElement | null>(null);
   const setStageRef = useCallback(
@@ -888,7 +889,7 @@ export function SwipeableCoverStage({
                 queue: state.queue,
                 queueSource: state.queueSource,
               });
-              if (target) transitionState(() => dispatchJumpTarget(target));
+              if (target) jumpToSource(target);
               return;
             }
             const isTap =
@@ -919,6 +920,7 @@ export function SwipeableCoverStage({
             // including its backlight — is fully hidden during the drag (PRD
             // 20260618-backlight-shadow-drag #1: backlight follows the cover).
             opacity: active && overlayRect && !handoffFading ? 0 : 1,
+            viewTransitionName: sourceCoverMorphName,
             willChange: "transform",
           }}
         >

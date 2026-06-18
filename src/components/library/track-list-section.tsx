@@ -236,6 +236,7 @@ export function TrackListSection({
             onDeleteTrack={onDeleteTrack}
             getTrackSupplement={getTrackSupplement}
             getTrackColumns={getTrackColumns}
+            initialFocusIndex={anchorIndex >= 0 ? anchorIndex : undefined}
             initialScrollAlign={anchorIndex >= 0 ? "center" : "start"}
             initialScrollIndex={initialScrollIndex}
             alphabetLetterOf={alphabetLetterOf}

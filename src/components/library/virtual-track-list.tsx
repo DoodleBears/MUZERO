@@ -62,6 +62,7 @@ export function VirtualTrackList({
   getTrackSupplement,
   getTrackColumns,
   header,
+  initialFocusIndex,
   initialScrollIndex,
   initialScrollAlign = "start",
   alphabetLetterOf,
@@ -95,6 +96,8 @@ export function VirtualTrackList({
    *  routes via Lenis. */
   initialScrollIndex?: number;
   initialScrollAlign?: "start" | "center";
+  /** Focus this row after the mount-time scroll restore. Used only for source jumps. */
+  initialFocusIndex?: number;
   /** When provided (name-sorted lists only), mounts the right-edge A–Z fast-scroll
    *  strip. Returns each track's bucket letter — the caller transliterates CJK
    *  titles (pinyin/kana) before bucketing. `tracks` must already be name-sorted. */
@@ -191,6 +194,28 @@ export function VirtualTrackList({
       rowVirtualizer.scrollToIndex(initialScrollIndex, { align: initialScrollAlign }),
     );
     return () => cancelAnimationFrame(raf);
+  }, []);
+
+  // Source jumps should be keyboard-continuable: after the target row is scrolled into
+  // view, focus it so W/S/↑/↓ proceeds from the highlighted current song.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: mount-only restore
+  useLayoutEffect(() => {
+    if (initialFocusIndex === undefined || initialFocusIndex < 0) return;
+    rowVirtualizer.scrollToIndex(initialFocusIndex, { align: "center" });
+    let raf2 = 0;
+    const raf1 = requestAnimationFrame(() => {
+      raf2 = requestAnimationFrame(() => {
+        parentRef.current
+          ?.querySelector<HTMLElement>(
+            `${TRACK_ROW_SELECTOR}[data-track-index="${initialFocusIndex}"]`,
+          )
+          ?.focus();
+      });
+    });
+    return () => {
+      cancelAnimationFrame(raf1);
+      if (raf2) cancelAnimationFrame(raf2);
+    };
   }, []);
 
   // Keep `scrollMargin` in sync with the rows container's offset within the scroller

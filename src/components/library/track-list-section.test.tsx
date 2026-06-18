@@ -65,6 +65,7 @@ describe("TrackListSection", () => {
 
     expect(virtualTrackListMock).toHaveBeenCalledWith(
       expect.objectContaining({
+        initialFocusIndex: 1,
         initialScrollAlign: "center",
         initialScrollIndex: 1,
         selectedTrackId: "trk_3",
@@ -77,6 +78,7 @@ describe("TrackListSection", () => {
 
     expect(virtualTrackListMock).toHaveBeenCalledWith(
       expect.objectContaining({
+        initialFocusIndex: undefined,
         initialScrollIndex: undefined,
         selectedTrackId: undefined,
       }),

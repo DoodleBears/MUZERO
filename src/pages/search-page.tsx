@@ -112,6 +112,7 @@ import {
 } from "@/lib/set-gallery";
 import { isMac, modifierSymbol } from "@/lib/shortcuts";
 import { useSmoothScroll } from "@/lib/smooth-scroll/use-smooth-scroll";
+import { SOURCE_COVER_MORPH_NAME, sourceCoverMorphNamespace } from "@/lib/source-cover-transition";
 import {
   deriveHeartedPlaylist,
   deriveMostPlayedPlaylist,
@@ -201,11 +202,6 @@ const EMPTY_MEMORY_NOTES = new Map<string, string[]>();
 const EMPTY_PLAYBACK_STATS: Awaited<ReturnType<typeof listTrackPlaybackStats>> = [];
 const EMPTY_PLAYBACK_EVENTS: PlaybackEvent[] = [];
 const TRACK_ROW_SELECTOR = "[data-muzero-track-row]";
-/** The single shared `view-transition-name` the tapped wall cover and its detail
- *  cover both wear, so the browser morphs one into the other (only one element
- *  carries it at a time — see `morphKey`). */
-const SHARED_COVER_VT = "gallery-cover";
-
 function savedGalleryMode(): GalleryMode {
   if (typeof localStorage === "undefined") return "tracks";
   const saved = localStorage.getItem(MODE_KEY);
@@ -350,8 +346,8 @@ export function SearchPage() {
   const returnFocusKeyRef = useRef<string | null>(null);
   // Shared-element cover morph (Chromium/Electron only): the namespaced key (e.g.
   // `album:<key>`) of the cover currently morphing. Both the tapped wall card and
-  // its detail cover wear `SHARED_COVER_VT` while they match this, so the browser
-  // morphs one into the other; exactly one element carries the name at a time.
+  // its detail cover wear `SOURCE_COVER_MORPH_NAME` while they match this, so the
+  // browser morphs one into the other; exactly one element carries the name at a time.
   const [morphKey, setMorphKey] = useState<string | null>(null);
   // Handle to the active virtualized wall, so roving keyboard nav can scroll a
   // card that's been virtualized off-screen back into view before focusing it.
@@ -361,6 +357,26 @@ export function SearchPage() {
   const matches = useShortcutMatcher();
   const matchesRef = useRef(matches);
   matchesRef.current = matches;
+
+  // The `view-transition-name` for a cover whose namespaced key matches the active
+  // morph — applied to the tapped/source cover and its detail counterpart so they're
+  // the two ends of the same morph; everything else stays unnamed.
+  const coverMorphName = useCallback(
+    (ns: string): string | undefined => (morphKey === ns ? SOURCE_COVER_MORPH_NAME : undefined),
+    [morphKey],
+  );
+
+  // Tag the tapped/source cover BEFORE the transition snapshots the old DOM, so the
+  // browser can pair it with the detail cover that mounts in the update. flushSync
+  // forces the name into the DOM synchronously; skipped where native VT is off
+  // (the name would be inert) so non-Chromium shells don't pay an extra render.
+  const beginCoverMorph = useCallback((ns: string) => {
+    if (canViewTransition()) flushSync(() => setMorphKey(ns));
+  }, []);
+
+  const clearCoverMorphBeforeTransition = useCallback(() => {
+    if (canViewTransition() && morphKey) flushSync(() => setMorphKey(null));
+  }, [morphKey]);
 
   const sessions = useLiveQuery(() => listSessions(db), [], []);
   // Every tracks write re-runs the full-table query with a fresh array. Coalesce
@@ -615,62 +631,84 @@ export function SearchPage() {
     if (!pendingEntity) return;
     if (pendingEntity.kind === "set") {
       if (!sessions.some((session) => session.id === pendingEntity.id)) return;
-      setMode("sets");
-      if (typeof localStorage !== "undefined") localStorage.setItem(MODE_KEY, "sets");
-      setSelectedOnlinePlaylist(null);
-      setSelectedArtistKey(null);
-      setSelectedAlbumKey(null);
-      setSelectedSystemPlaylistId(null);
-      setSelectedSystemAnchorTrackId(undefined);
-      setSelectedSetAnchorTrackId(pendingEntity.anchorTrackId);
-      setSelectedSetId(pendingEntity.id);
+      beginCoverMorph(sourceCoverMorphNamespace(pendingEntity));
+      transitionState(() => {
+        setMode("sets");
+        if (typeof localStorage !== "undefined") localStorage.setItem(MODE_KEY, "sets");
+        setSelectedOnlinePlaylist(null);
+        setSelectedArtistKey(null);
+        setSelectedAlbumKey(null);
+        setSelectedSystemPlaylistId(null);
+        setSelectedSystemAnchorTrackId(undefined);
+        setSelectedSetAnchorTrackId(pendingEntity.anchorTrackId);
+        setSelectedSetId(pendingEntity.id);
+        consumeLibraryEntity();
+      });
+      return;
     } else if (pendingEntity.kind === "system-playlist") {
-      setMode("sets");
-      if (typeof localStorage !== "undefined") localStorage.setItem(MODE_KEY, "sets");
-      setSelectedOnlinePlaylist(null);
-      setSelectedSetId(null);
-      setSelectedSetAnchorTrackId(undefined);
-      setSelectedArtistKey(null);
-      setSelectedAlbumKey(null);
-      setSelectedSystemAnchorTrackId(pendingEntity.anchorTrackId);
-      setSelectedSystemPlaylistId(pendingEntity.id);
+      beginCoverMorph(sourceCoverMorphNamespace(pendingEntity));
+      transitionState(() => {
+        setMode("sets");
+        if (typeof localStorage !== "undefined") localStorage.setItem(MODE_KEY, "sets");
+        setSelectedOnlinePlaylist(null);
+        setSelectedSetId(null);
+        setSelectedSetAnchorTrackId(undefined);
+        setSelectedArtistKey(null);
+        setSelectedAlbumKey(null);
+        setSelectedSystemAnchorTrackId(pendingEntity.anchorTrackId);
+        setSelectedSystemPlaylistId(pendingEntity.id);
+        consumeLibraryEntity();
+      });
+      return;
     } else if (pendingEntity.kind === "artist") {
       const entry = findArtistByName(artistIndex, pendingEntity.name);
       if (!entry) return;
-      setMode("artists");
-      if (typeof localStorage !== "undefined") localStorage.setItem(MODE_KEY, "artists");
-      setSelectedOnlinePlaylist(null);
-      setSelectedSetId(null);
-      setSelectedSetAnchorTrackId(undefined);
-      setSelectedSystemPlaylistId(null);
-      setSelectedSystemAnchorTrackId(undefined);
-      setSelectedAlbumKey(null);
-      setSelectedArtistKey(entry.key);
+      transitionState(() => {
+        setMode("artists");
+        if (typeof localStorage !== "undefined") localStorage.setItem(MODE_KEY, "artists");
+        setSelectedOnlinePlaylist(null);
+        setSelectedSetId(null);
+        setSelectedSetAnchorTrackId(undefined);
+        setSelectedSystemPlaylistId(null);
+        setSelectedSystemAnchorTrackId(undefined);
+        setSelectedAlbumKey(null);
+        setSelectedArtistKey(entry.key);
+        consumeLibraryEntity();
+      });
+      return;
     } else if (pendingEntity.kind === "album") {
       const entry = findAlbumForTrack(albumIndex, pendingEntity.trackId);
       if (!entry) return;
-      setMode("albums");
-      if (typeof localStorage !== "undefined") localStorage.setItem(MODE_KEY, "albums");
-      setSelectedOnlinePlaylist(null);
-      setSelectedSetId(null);
-      setSelectedSetAnchorTrackId(undefined);
-      setSelectedSystemPlaylistId(null);
-      setSelectedSystemAnchorTrackId(undefined);
-      setSelectedArtistKey(null);
-      setSelectedAlbumKey(entry.key);
+      transitionState(() => {
+        setMode("albums");
+        if (typeof localStorage !== "undefined") localStorage.setItem(MODE_KEY, "albums");
+        setSelectedOnlinePlaylist(null);
+        setSelectedSetId(null);
+        setSelectedSetAnchorTrackId(undefined);
+        setSelectedSystemPlaylistId(null);
+        setSelectedSystemAnchorTrackId(undefined);
+        setSelectedArtistKey(null);
+        setSelectedAlbumKey(entry.key);
+        consumeLibraryEntity();
+      });
+      return;
     } else {
-      setMode("online");
-      if (typeof localStorage !== "undefined") localStorage.setItem(MODE_KEY, "online");
-      setSelectedSetId(null);
-      setSelectedSetAnchorTrackId(undefined);
-      setSelectedSystemPlaylistId(null);
-      setSelectedSystemAnchorTrackId(undefined);
-      setSelectedArtistKey(null);
-      setSelectedAlbumKey(null);
-      setSelectedOnlinePlaylist(pendingEntity.playlist);
+      beginCoverMorph(sourceCoverMorphNamespace(pendingEntity));
+      transitionState(() => {
+        setMode("online");
+        if (typeof localStorage !== "undefined") localStorage.setItem(MODE_KEY, "online");
+        setSelectedSetId(null);
+        setSelectedSetAnchorTrackId(undefined);
+        setSelectedSystemPlaylistId(null);
+        setSelectedSystemAnchorTrackId(undefined);
+        setSelectedArtistKey(null);
+        setSelectedAlbumKey(null);
+        setSelectedOnlinePlaylist(pendingEntity.playlist);
+        consumeLibraryEntity();
+      });
+      return;
     }
-    consumeLibraryEntity();
-  }, [pendingEntity, sessions, artistIndex, albumIndex, consumeLibraryEntity]);
+  }, [pendingEntity, sessions, artistIndex, albumIndex, consumeLibraryEntity, beginCoverMorph]);
 
   // Faceted search: matching artists/albums surfaced above the song list in the
   // tracks ("全部歌曲") mode (honors scoped artist:/album: tokens).
@@ -978,24 +1016,6 @@ export function SearchPage() {
     });
     clearCoverMorphBeforeTransition();
     transitionState(() => setSelectedSetId(s.id));
-  }
-
-  // The `view-transition-name` for a cover whose namespaced key matches the active
-  // morph — applied to the tapped wall card and its detail counterpart so they're
-  // the two ends of the same morph; everything else stays unnamed.
-  const coverMorphName = (ns: string): string | undefined =>
-    morphKey === ns ? SHARED_COVER_VT : undefined;
-
-  // Tag the tapped cover BEFORE the transition snapshots the old DOM, so the
-  // browser can pair it with the detail cover that mounts in the update. flushSync
-  // forces the name into the DOM synchronously; skipped where native VT is off
-  // (the name would be inert) so non-Chromium shells don't pay an extra render.
-  function beginCoverMorph(ns: string) {
-    if (canViewTransition()) flushSync(() => setMorphKey(ns));
-  }
-
-  function clearCoverMorphBeforeTransition() {
-    if (canViewTransition() && morphKey) flushSync(() => setMorphKey(null));
   }
 
   // Leaving a detail keeps the current morph key through the transition so the
