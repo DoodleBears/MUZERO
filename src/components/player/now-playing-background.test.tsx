@@ -46,6 +46,8 @@ const mocks = vi.hoisted(() => ({
 }));
 const images: MockImage[] = [];
 const OriginalImage = globalThis.Image;
+const originalMediaPlay = HTMLMediaElement.prototype.play;
+const originalMediaPause = HTMLMediaElement.prototype.pause;
 
 vi.mock("dexie-react-hooks", () => ({
   useLiveQuery: (_query: () => unknown, _deps: unknown[], defaultValue: unknown) => defaultValue,
@@ -110,7 +112,7 @@ vi.mock("@/hooks/use-media", () => ({
       urlKey: url ? key : null,
     };
   },
-  useTrackMediaUrl: () => null,
+  useTrackMediaUrl: (track?: Track) => (track?.kind === "video" ? `blob:media-${track.id}` : null),
 }));
 
 vi.mock("@/visualizer/host", () => ({
@@ -145,9 +147,19 @@ describe("NowPlayingBackground", () => {
   beforeEach(() => {
     Object.assign(mocks.settings, {
       backgroundGalleryFallback: undefined,
+      backgroundMaskBlur: undefined,
+      backgroundMaskOpacity: undefined,
       backgroundMode: "cover",
       backgroundRenderer: undefined,
       flowEnabled: true,
+      immersiveVideoTrackBackgroundEffectsEnabled: undefined,
+      immersiveVideoTrackFlowEnabled: undefined,
+      immersiveVideoTrackVisualizerEnabled: undefined,
+      videoTrackBackgroundEffectsEnabled: undefined,
+      videoTrackBackgroundMaskBlur: undefined,
+      videoTrackBackgroundMaskOpacity: undefined,
+      videoTrackFlowEnabled: undefined,
+      videoTrackVisualizerEnabled: undefined,
       visualizerAsBackground: true,
       visualizerStyle: "bars",
       visualizerTuningByStyle: undefined,
@@ -155,6 +167,14 @@ describe("NowPlayingBackground", () => {
     Object.defineProperty(globalThis, "Image", {
       configurable: true,
       value: MockImage,
+    });
+    Object.defineProperty(HTMLMediaElement.prototype, "play", {
+      configurable: true,
+      value: vi.fn(() => Promise.resolve()),
+    });
+    Object.defineProperty(HTMLMediaElement.prototype, "pause", {
+      configurable: true,
+      value: vi.fn(),
     });
     images.length = 0;
     mocks.coverResources.clear();
@@ -177,6 +197,14 @@ describe("NowPlayingBackground", () => {
       configurable: true,
       value: OriginalImage,
     });
+    Object.defineProperty(HTMLMediaElement.prototype, "play", {
+      configurable: true,
+      value: originalMediaPlay,
+    });
+    Object.defineProperty(HTMLMediaElement.prototype, "pause", {
+      configurable: true,
+      value: originalMediaPause,
+    });
   });
 
   it("does not mount flow or visualizer effects when no current track is selected", () => {
@@ -196,6 +224,145 @@ describe("NowPlayingBackground", () => {
     expect(screen.getAllByTestId("visualizer-host").map((node) => node.dataset.styleId)).toContain(
       "scene-flow",
     );
+  });
+
+  it("shows flow and visualizer on video tracks during normal playback by default", () => {
+    usePlayerStore.setState({
+      currentIndex: 0,
+      queue: [makeTrack("trk_video", { kind: "video" })],
+    });
+
+    render(<NowPlayingBackground active />);
+
+    const styleIds = screen.getAllByTestId("visualizer-host").map((node) => node.dataset.styleId);
+    expect(styleIds).toContain("scene-flow");
+    expect(styleIds).toContain("default");
+  });
+
+  it("can hide flow and visualizer on video tracks during normal playback", () => {
+    mocks.settings.videoTrackFlowEnabled = false;
+    mocks.settings.videoTrackVisualizerEnabled = false;
+    usePlayerStore.setState({
+      currentIndex: 0,
+      queue: [makeTrack("trk_video", { kind: "video" })],
+    });
+
+    render(<NowPlayingBackground active />);
+
+    expect(screen.queryByTestId("visualizer-host")).not.toBeInTheDocument();
+  });
+
+  it("hides flow and visualizer on video tracks while immersive by default", () => {
+    usePlayerStore.setState({
+      currentIndex: 0,
+      queue: [makeTrack("trk_video", { kind: "video" })],
+    });
+
+    render(<NowPlayingBackground active immersive />);
+
+    expect(screen.queryByTestId("visualizer-host")).not.toBeInTheDocument();
+  });
+
+  it("can show flow and visualizer on video tracks while immersive", () => {
+    mocks.settings.immersiveVideoTrackFlowEnabled = true;
+    mocks.settings.immersiveVideoTrackVisualizerEnabled = true;
+    usePlayerStore.setState({
+      currentIndex: 0,
+      queue: [makeTrack("trk_video", { kind: "video" })],
+    });
+
+    render(<NowPlayingBackground active immersive />);
+
+    const styleIds = screen.getAllByTestId("visualizer-host").map((node) => node.dataset.styleId);
+    expect(styleIds).toContain("scene-flow");
+    expect(styleIds).toContain("default");
+  });
+
+  it("uses the selected background effect on video tracks during normal playback by default", () => {
+    mocks.settings.backgroundRenderer = "noise";
+    mocks.settings.flowEnabled = false;
+    mocks.settings.visualizerAsBackground = false;
+    usePlayerStore.setState({
+      currentIndex: 0,
+      queue: [makeTrack("trk_video", { blobId: "blb_video", kind: "video" })],
+    });
+
+    render(<NowPlayingBackground active />);
+
+    expect(screen.getByTestId("pixi-background")).toHaveAttribute(
+      "data-src",
+      "blob:media-trk_video",
+    );
+    expect(screen.queryByRole("presentation")).not.toBeInTheDocument();
+  });
+
+  it("uses a clean video background for immersive video tracks by default", () => {
+    mocks.settings.backgroundRenderer = "noise";
+    mocks.settings.flowEnabled = false;
+    mocks.settings.visualizerAsBackground = false;
+    usePlayerStore.setState({
+      currentIndex: 0,
+      queue: [makeTrack("trk_video", { blobId: "blb_video", kind: "video" })],
+    });
+
+    const { container } = render(<NowPlayingBackground active immersive />);
+
+    expect(screen.queryByTestId("pixi-background")).not.toBeInTheDocument();
+    expect(container.querySelector("video")).toHaveAttribute("src", "blob:media-trk_video");
+  });
+
+  it("can keep the selected background effect on immersive video tracks", () => {
+    mocks.settings.backgroundRenderer = "noise";
+    mocks.settings.flowEnabled = false;
+    mocks.settings.immersiveVideoTrackBackgroundEffectsEnabled = true;
+    mocks.settings.visualizerAsBackground = false;
+    usePlayerStore.setState({
+      currentIndex: 0,
+      queue: [makeTrack("trk_video", { blobId: "blb_video", kind: "video" })],
+    });
+
+    render(<NowPlayingBackground active immersive />);
+
+    expect(screen.getByTestId("pixi-background")).toHaveAttribute(
+      "data-src",
+      "blob:media-trk_video",
+    );
+  });
+
+  it("uses video-track dim and blur settings for video backgrounds", () => {
+    mocks.settings.backgroundMaskOpacity = 10;
+    mocks.settings.backgroundMaskBlur = 3;
+    mocks.settings.videoTrackBackgroundMaskOpacity = 64;
+    mocks.settings.videoTrackBackgroundMaskBlur = 12;
+    usePlayerStore.setState({
+      currentIndex: 0,
+      queue: [makeTrack("trk_video", { kind: "video" })],
+    });
+
+    render(<NowPlayingBackground active />);
+
+    expect(screen.getByTestId("background-mask")).toHaveStyle({ opacity: "0.64" });
+    expect(screen.getByTestId("background-mask-blur")).toHaveStyle({
+      backdropFilter: "blur(12px)",
+    });
+  });
+
+  it("keeps global dim and blur settings for non-video backgrounds", () => {
+    mocks.settings.backgroundMaskOpacity = 10;
+    mocks.settings.backgroundMaskBlur = 3;
+    mocks.settings.videoTrackBackgroundMaskOpacity = 64;
+    mocks.settings.videoTrackBackgroundMaskBlur = 12;
+    usePlayerStore.setState({
+      currentIndex: 0,
+      queue: [makeTrack("trk_audio", { kind: "audio" })],
+    });
+
+    render(<NowPlayingBackground active />);
+
+    expect(screen.getByTestId("background-mask")).toHaveStyle({ opacity: "0.1" });
+    expect(screen.getByTestId("background-mask-blur")).toHaveStyle({
+      backdropFilter: "blur(3px)",
+    });
   });
 
   it("applies per-style no-lyrics visualizer opacity to the background layer", () => {

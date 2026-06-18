@@ -665,6 +665,10 @@ export interface AppSettings {
   backgroundGpuBackend?: "auto" | "webgpu" | "webgl";
   /** Pixi background GPU power preference. "auto" prefers high-performance. Default "auto". */
   backgroundGpuPowerPreference?: "auto" | "high-performance" | "low-power";
+  /** Show background renderer effects over video tracks during normal playback. Default true. */
+  videoTrackBackgroundEffectsEnabled?: boolean;
+  /** Show background renderer effects over video tracks while Now Playing is immersive/idle. Default false. */
+  immersiveVideoTrackBackgroundEffectsEnabled?: boolean;
   /** ASCII renderer character color, used when replaceColor is on. Default #ffffff. */
   backgroundAsciiColor?: string;
   /** ASCII renderer replaces source colors with backgroundAsciiColor. Default false. */
@@ -713,6 +717,10 @@ export interface AppSettings {
   backgroundMaskOpacity?: number;
   /** backdrop-filter blur radius (px) on the dim/mask layer. Default 0 (off). */
   backgroundMaskBlur?: number;
+  /** Now-Playing background dim/mask opacity for video tracks, 0–100. Default 25. */
+  videoTrackBackgroundMaskOpacity?: number;
+  /** backdrop-filter blur radius (px) on the dim/mask layer for video tracks. Default 0. */
+  videoTrackBackgroundMaskBlur?: number;
   /** Slideshow auto-advance interval in seconds. Default 300 (5 min). */
   backgroundSlideshowIntervalSec?: number;
   /** Slideshow advances in random order vs sequential. Default true (random). */
@@ -742,6 +750,14 @@ export interface AppSettings {
   visualizerIdleOnly?: boolean;
   /** In idle-only mode, hide background/visual effects and keep only lyrics for OBS overlays. Default false. */
   visualizerLyricsOnlyIdle?: boolean;
+  /** Show the background visualizer over video tracks during normal playback. Default true. */
+  videoTrackVisualizerEnabled?: boolean;
+  /** Show the background visualizer over video tracks while Now Playing is immersive/idle. Default false. */
+  immersiveVideoTrackVisualizerEnabled?: boolean;
+  /** Show the flow background over video tracks during normal playback. Default true. */
+  videoTrackFlowEnabled?: boolean;
+  /** Show the flow background over video tracks while Now Playing is immersive/idle. Default false. */
+  immersiveVideoTrackFlowEnabled?: boolean;
   /** Surface memories as a top popover during full-immersive (idle-only) playback. Default true. */
   immersiveMemoryOverlay?: boolean;
   /** Mount the floating performance HUD in prod builds (dev always mounts it).
@@ -1077,6 +1093,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   backgroundPixelSize: 12,
   backgroundGpuBackend: "auto",
   backgroundGpuPowerPreference: "auto",
+  videoTrackBackgroundEffectsEnabled: true,
+  immersiveVideoTrackBackgroundEffectsEnabled: false,
   backgroundAsciiColor: "#ffffff",
   backgroundAsciiReplaceColor: false,
   backgroundCrtCurvature: 0.54,
@@ -1100,6 +1118,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   backgroundBlur: 64,
   backgroundMaskOpacity: 25,
   backgroundMaskBlur: 0,
+  videoTrackBackgroundMaskOpacity: 25,
+  videoTrackBackgroundMaskBlur: 0,
   backgroundSlideshowIntervalSec: 300,
   backgroundSlideshowShuffle: true,
   nowPlayingRightRailCollapsed: false,
@@ -1112,6 +1132,10 @@ export const DEFAULT_SETTINGS: AppSettings = {
   visualizerBgOpacityLyrics: 70,
   visualizerIdleOnly: false,
   visualizerLyricsOnlyIdle: false,
+  videoTrackVisualizerEnabled: true,
+  immersiveVideoTrackVisualizerEnabled: false,
+  videoTrackFlowEnabled: true,
+  immersiveVideoTrackFlowEnabled: false,
   immersiveMemoryOverlay: true,
   visualizerUseCoverColor: true,
   visualizerIntensity: 1,

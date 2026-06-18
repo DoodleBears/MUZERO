@@ -19,6 +19,7 @@ export interface MediaStorageProvider {
   userVisible: boolean;
   put(input: MediaStorageProviderPutInput): Promise<{ storageKey?: string }>;
   get(input: { storageKey?: string; blob?: Blob; mime?: string }): Promise<Blob | null>;
+  stat?(input: { storageKey?: string }): Promise<{ bytes: number } | null>;
   delete(input: { storageKey?: string }): Promise<void>;
   list?(): Promise<Array<{ storageKey: string; bytes?: number }>>;
   estimate?(): Promise<{ bytesUsed?: number; quotaBytes?: number }>;
@@ -66,6 +67,10 @@ export function createOpfsMediaStorageProvider(): MediaStorageProvider {
     async get(input) {
       return input.storageKey ? readOpfsFile(input.storageKey) : null;
     },
+    async stat(input) {
+      const file = input.storageKey ? await readOpfsFile(input.storageKey) : null;
+      return file ? { bytes: file.size } : null;
+    },
     async delete(input) {
       if (input.storageKey) await deleteOpfsFile(input.storageKey);
     },
@@ -95,10 +100,29 @@ export function createElectronFileMediaStorageProvider(): MediaStorageProvider {
     },
     async get(input) {
       if (!input.storageKey) return null;
-      const bytes = await requireElectronMediaStorage().readMediaStorageFile?.({
-        storageKey: input.storageKey,
-      });
+      let bytes: Uint8Array<ArrayBuffer> | undefined;
+      try {
+        bytes = await requireElectronMediaStorage().readMediaStorageFile?.({
+          storageKey: input.storageKey,
+        });
+      } catch (error) {
+        if (isMissingMediaStorageError(error)) return null;
+        throw error;
+      }
       return bytes ? new Blob([bytes], { type: input.mime ?? "application/octet-stream" }) : null;
+    },
+    async stat(input) {
+      if (!input.storageKey) return null;
+      try {
+        return (
+          (await requireElectronMediaStorage().statMediaStorageFile?.({
+            storageKey: input.storageKey,
+          })) ?? null
+        );
+      } catch (error) {
+        if (isMissingMediaStorageError(error)) return null;
+        throw error;
+      }
     },
     async delete(input) {
       if (input.storageKey) {
@@ -123,8 +147,18 @@ export function unavailableMediaStorageProvider(id: Exclude<MediaStorageBackend,
     async get(): Promise<Blob | null> {
       return null;
     },
+    async stat(): Promise<{ bytes: number } | null> {
+      return null;
+    },
     async delete(): Promise<void> {},
   } satisfies MediaStorageProvider;
+}
+
+function isMissingMediaStorageError(error: unknown): boolean {
+  const code = typeof error === "object" && error ? (error as { code?: unknown }).code : undefined;
+  if (code === "ENOENT" || code === "NotFoundError") return true;
+  const message = error instanceof Error ? error.message : String(error);
+  return /\bENOENT\b|no such file|not found/iu.test(message);
 }
 
 export function defaultMediaStorageProvider(backend?: MediaStorageBackend): MediaStorageProvider {

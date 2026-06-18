@@ -315,8 +315,8 @@ export async function validatePersistentMediaStorage(
     if (backend === "indexeddb") continue;
     if (row.storageKey) referenced.add(`${backend}:${row.storageKey}`);
     const provider = providerFor(backend, options);
-    const blob = await provider.get({ storageKey: row.storageKey, mime: row.mime });
-    if (!blob || blob.size !== row.bytes) {
+    const bytes = await persistentMediaBytes(provider, row);
+    if (bytes !== row.bytes) {
       missing.push({
         id: row.id,
         role: row.role,
@@ -342,6 +342,30 @@ export async function validatePersistentMediaStorage(
     }
   }
   return { missing, orphaned };
+}
+
+async function persistentMediaBytes(
+  provider: MediaStorageProvider,
+  row: MediaBlob,
+): Promise<number | null> {
+  try {
+    if (provider.stat) {
+      const stat = await provider.stat({ storageKey: row.storageKey });
+      return stat?.bytes ?? null;
+    }
+    const blob = await provider.get({ storageKey: row.storageKey, mime: row.mime });
+    return blob?.size ?? null;
+  } catch (error) {
+    if (isMissingPersistentMediaError(error)) return null;
+    throw error;
+  }
+}
+
+function isMissingPersistentMediaError(error: unknown): boolean {
+  const code = typeof error === "object" && error ? (error as { code?: unknown }).code : undefined;
+  if (code === "ENOENT" || code === "NotFoundError") return true;
+  const message = error instanceof Error ? error.message : String(error);
+  return /\bENOENT\b|no such file|not found/iu.test(message);
 }
 
 export async function cleanupOrphanedMediaStorageFiles(

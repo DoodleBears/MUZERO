@@ -454,6 +454,56 @@ describe("media blob storage resolver", () => {
     expect(provider.has((await db.mediaBlobs.get("blb_referenced"))?.storageKey ?? "")).toBe(true);
   });
 
+  it("validates provider-backed files with stat when available", async () => {
+    const provider = createMemoryProvider("electron-file");
+    await db.mediaBlobs.put({
+      id: "blb_stat",
+      trackId: "trk_stat",
+      role: "media",
+      mime: "audio/mpeg",
+      bytes: 10,
+      storageBackend: "electron-file",
+      storageKey: "media/stat__blb_stat.mp3",
+    });
+    provider.stat = vi.fn(async () => ({ bytes: 10 }));
+    provider.get = vi.fn(async () => {
+      throw new Error("health check should not read file bytes");
+    });
+
+    const report = await validatePersistentMediaStorage(db, { provider });
+
+    expect(report.missing).toEqual([]);
+    expect(provider.stat).toHaveBeenCalledWith({ storageKey: "media/stat__blb_stat.mp3" });
+    expect(provider.get).not.toHaveBeenCalled();
+  });
+
+  it("treats provider ENOENT as missing media instead of rejecting the health check", async () => {
+    const provider: MediaStorageProvider = {
+      id: "electron-file",
+      userVisible: true,
+      async put() {
+        return {};
+      },
+      async get() {
+        throw Object.assign(new Error("ENOENT: no such file or directory"), { code: "ENOENT" });
+      },
+      async delete() {},
+    };
+    await db.mediaBlobs.put({
+      id: "blb_gone",
+      trackId: "trk_gone",
+      role: "media",
+      mime: "audio/mpeg",
+      bytes: 7,
+      storageBackend: "electron-file",
+      storageKey: "media/gone__blb_gone.mp3",
+    });
+
+    const report = await validatePersistentMediaStorage(db, { provider });
+
+    expect(report.missing.map((entry) => entry.id)).toEqual(["blb_gone"]);
+  });
+
   it("summarizes permanent media storage by backend and role", async () => {
     const provider = createMemoryProvider("opfs");
     await putMediaBlob(
@@ -552,6 +602,10 @@ function createMemoryProvider(id: "electron-file" | "opfs"): MediaStorageProvide
     },
     async get(input) {
       return input.storageKey ? (files.get(input.storageKey) ?? null) : null;
+    },
+    async stat(input) {
+      const blob = input.storageKey ? files.get(input.storageKey) : undefined;
+      return blob ? { bytes: blob.size } : null;
     },
     async delete(input) {
       if (input.storageKey) files.delete(input.storageKey);

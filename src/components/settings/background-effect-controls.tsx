@@ -110,6 +110,35 @@ export function BackgroundEffectControls({ className }: { className?: string }) 
         </Select>
       </div>
 
+      <div className="grid gap-2 rounded-lg border border-border/70 bg-muted/20 p-3">
+        <span className="text-xs font-medium text-muted-foreground">
+          {t("background.videoTracks")}
+        </span>
+        <label className="flex items-start gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={settings.videoTrackBackgroundEffectsEnabled ?? true}
+            onChange={(e) =>
+              void saveSettings({ videoTrackBackgroundEffectsEnabled: e.target.checked })
+            }
+            className="mt-0.5 size-4 shrink-0 accent-[var(--color-primary)]"
+          />
+          <span>{t("background.showEffectsOnVideoTracks")}</span>
+        </label>
+        <label className="flex items-start gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={settings.immersiveVideoTrackBackgroundEffectsEnabled ?? false}
+            onChange={(e) =>
+              void saveSettings({ immersiveVideoTrackBackgroundEffectsEnabled: e.target.checked })
+            }
+            className="mt-0.5 size-4 shrink-0 accent-[var(--color-primary)]"
+          />
+          <span>{t("background.showEffectsOnImmersiveVideoTracks")}</span>
+        </label>
+        <p className="text-xs text-muted-foreground">{t("background.videoTracksHint")}</p>
+      </div>
+
       {usesPixi ? (
         <div className="mt-1 grid gap-3 border-border border-t pt-3">
           <GpuBackendControls />
@@ -467,6 +496,42 @@ export function BackgroundEffectControls({ className }: { className?: string }) 
           onValueChange={(v) => void saveSettings({ backgroundMaskBlur: v })}
           aria-label={t("background.maskBlur", { px: settings.backgroundMaskBlur ?? 0 })}
         />
+      </div>
+
+      <div className="grid gap-3 rounded-lg border border-border/70 bg-muted/20 p-3">
+        <span className="text-xs font-medium text-muted-foreground">
+          {t("background.videoMaskGroup")}
+        </span>
+        <div className="flex flex-col gap-1.5">
+          <span className="text-xs font-medium text-muted-foreground">
+            {t("background.videoMask", { pct: settings.videoTrackBackgroundMaskOpacity ?? 25 })}
+          </span>
+          <Slider
+            min={0}
+            max={100}
+            step={1}
+            value={settings.videoTrackBackgroundMaskOpacity ?? 25}
+            onValueChange={(v) => void saveSettings({ videoTrackBackgroundMaskOpacity: v })}
+            aria-label={t("background.videoMask", {
+              pct: settings.videoTrackBackgroundMaskOpacity ?? 25,
+            })}
+          />
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <span className="text-xs font-medium text-muted-foreground">
+            {t("background.videoMaskBlur", { px: settings.videoTrackBackgroundMaskBlur ?? 0 })}
+          </span>
+          <Slider
+            min={0}
+            max={40}
+            step={1}
+            value={settings.videoTrackBackgroundMaskBlur ?? 0}
+            onValueChange={(v) => void saveSettings({ videoTrackBackgroundMaskBlur: v })}
+            aria-label={t("background.videoMaskBlur", {
+              px: settings.videoTrackBackgroundMaskBlur ?? 0,
+            })}
+          />
+        </div>
       </div>
 
       <label className="mt-1 flex items-center gap-2 text-sm">

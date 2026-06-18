@@ -10,6 +10,17 @@ describe("DEFAULT_SETTINGS", () => {
     expect(DEFAULT_SETTINGS.lyricsColorMode).toBe("default");
   });
 
+  it("uses clean immersive defaults for video-track visual effects", () => {
+    expect(DEFAULT_SETTINGS.videoTrackBackgroundEffectsEnabled).toBe(true);
+    expect(DEFAULT_SETTINGS.videoTrackVisualizerEnabled).toBe(true);
+    expect(DEFAULT_SETTINGS.videoTrackFlowEnabled).toBe(true);
+    expect(DEFAULT_SETTINGS.videoTrackBackgroundMaskOpacity).toBe(25);
+    expect(DEFAULT_SETTINGS.videoTrackBackgroundMaskBlur).toBe(0);
+    expect(DEFAULT_SETTINGS.immersiveVideoTrackBackgroundEffectsEnabled).toBe(false);
+    expect(DEFAULT_SETTINGS.immersiveVideoTrackVisualizerEnabled).toBe(false);
+    expect(DEFAULT_SETTINGS.immersiveVideoTrackFlowEnabled).toBe(false);
+  });
+
   it("keeps live chat request intake off by default", () => {
     expect(DEFAULT_SETTINGS.audienceRequestIntake).toMatchObject({
       enabled: false,

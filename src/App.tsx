@@ -28,6 +28,7 @@ import {
   nowPlayingCoverBacklightVars,
   resolveNowPlayingCoverBacklightAppearance,
 } from "@/lib/album-cover-appearance";
+import { resolveAmbientEffectsImmersive } from "@/lib/ambient-effects-immersive";
 import { resolveDesktopBridge } from "@/lib/desktop/bridge";
 import {
   electronWindowAppearanceCssVars,
@@ -252,6 +253,12 @@ export default function App() {
   const lyricsVisible = !settings.nowPlayingRightRailCollapsed;
   const immersiveLyricsActive = lyricsOnlyIdle || (foregroundHidden && lyricsVisible);
   const ambientBackdropActive = ambientBackgroundActive && !lyricsOnlyIdle;
+  const ambientEffectsImmersive = resolveAmbientEffectsImmersive({
+    chromeHidden,
+    isNowTab,
+    lyricsOnlyIdle,
+    visualizerIdleOnly,
+  });
 
   // The non-active tabs stay MOUNTED (display:none) to keep their subscriptions warm.
   // App re-renders on transient chrome state (idle/hover during a drag), and these
@@ -298,6 +305,7 @@ export default function App() {
         <NowPlayingBackground
           active={ambientBackdropActive}
           hideVisualizer={visualizerHidden}
+          immersive={ambientEffectsImmersive}
           className={cn(
             "fixed inset-0 z-0 transition-opacity duration-500",
             ambientBackdropActive ? "opacity-100" : "opacity-0",

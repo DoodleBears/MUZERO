@@ -87,6 +87,31 @@ export function FlowControls({ className }: { className?: string }) {
       </label>
       <p className="-mt-1 text-xs text-muted-foreground">{t("flow.enableHint")}</p>
 
+      <div className="grid gap-2 rounded-lg border border-border/70 bg-muted/20 p-3">
+        <span className="text-xs font-medium text-muted-foreground">{t("flow.videoTracks")}</span>
+        <label className="flex items-start gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={settings.videoTrackFlowEnabled ?? true}
+            onChange={(e) => void saveSettings({ videoTrackFlowEnabled: e.target.checked })}
+            className="mt-0.5 size-4 shrink-0 accent-[var(--color-primary)]"
+          />
+          <span>{t("flow.showOnVideoTracks")}</span>
+        </label>
+        <label className="flex items-start gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={settings.immersiveVideoTrackFlowEnabled ?? false}
+            onChange={(e) =>
+              void saveSettings({ immersiveVideoTrackFlowEnabled: e.target.checked })
+            }
+            className="mt-0.5 size-4 shrink-0 accent-[var(--color-primary)]"
+          />
+          <span>{t("flow.showOnImmersiveVideoTracks")}</span>
+        </label>
+        <p className="text-xs text-muted-foreground">{t("flow.videoTracksHint")}</p>
+      </div>
+
       <Field label={t("flow.effect")}>
         <Select
           value={effect}

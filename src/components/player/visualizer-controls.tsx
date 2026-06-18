@@ -55,10 +55,7 @@ export function VisualizerControls({
           <SelectTrigger aria-labelledby={styleLabelId}>
             <SelectValue>
               {(value) =>
-                t(
-                  VISUALIZER_META.find((item) => item.id === value)?.labelKey ??
-                    "visualizer.style",
-                )
+                t(VISUALIZER_META.find((item) => item.id === value)?.labelKey ?? "visualizer.style")
               }
             </SelectValue>
           </SelectTrigger>
@@ -88,6 +85,24 @@ export function VisualizerControls({
         helpLabel={t("visualizer.help.useCoverColor")}
         label={t("visualizer.useCoverColor")}
         onCheckedChange={(checked) => void saveSettings({ visualizerUseCoverColor: checked })}
+      />
+
+      <CheckboxControl
+        controlId="video-track-visualizer"
+        checked={settings.videoTrackVisualizerEnabled ?? true}
+        helpLabel={t("visualizer.help.videoTracks")}
+        label={t("visualizer.videoTracks")}
+        onCheckedChange={(checked) => void saveSettings({ videoTrackVisualizerEnabled: checked })}
+      />
+
+      <CheckboxControl
+        controlId="immersive-video-track-visualizer"
+        checked={settings.immersiveVideoTrackVisualizerEnabled ?? false}
+        helpLabel={t("visualizer.help.immersiveVideoTracks")}
+        label={t("visualizer.immersiveVideoTracks")}
+        onCheckedChange={(checked) =>
+          void saveSettings({ immersiveVideoTrackVisualizerEnabled: checked })
+        }
       />
 
       {asBackground ? (

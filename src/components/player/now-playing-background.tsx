@@ -1,6 +1,6 @@
 import { useLiveQuery } from "dexie-react-hooks";
 import { AnimatePresence, motion } from "motion/react";
-import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { getTrackLyrics, listGalleryImages, listTrackBackgrounds } from "@/db/repositories";
 import { useSettings } from "@/hooks/use-app-data";
 import { useLoadedImageUrl } from "@/hooks/use-image-load";
@@ -56,12 +56,12 @@ export function NowPlayingBackground({
   active = true,
   className,
   hideVisualizer = false,
-  idle: _idle = false,
+  immersive = false,
 }: {
   active?: boolean;
   className?: string;
   hideVisualizer?: boolean;
-  idle?: boolean;
+  immersive?: boolean;
 }) {
   return (
     <div
@@ -73,15 +73,21 @@ export function NowPlayingBackground({
       )}
       aria-hidden="true"
     >
-      {active ? <NowPlayingBackgroundContent hideVisualizer={hideVisualizer} /> : null}
+      {active ? (
+        <NowPlayingBackgroundContent hideVisualizer={hideVisualizer} immersive={immersive} />
+      ) : null}
     </div>
   );
 }
 
-function NowPlayingBackgroundContent({ hideVisualizer }: { hideVisualizer: boolean }) {
+function NowPlayingBackgroundContent({
+  hideVisualizer,
+  immersive,
+}: {
+  hideVisualizer: boolean;
+  immersive: boolean;
+}) {
   const settings = useSettings();
-  const imageMaskOpacity = (settings.backgroundMaskOpacity ?? 25) / 100;
-  const imageMaskBlur = settings.backgroundMaskBlur ?? 0;
   const queue = usePlayerStore((s) => s.queue);
   const currentIndex = usePlayerStore((s) => s.currentIndex);
   const isPlaying = usePlayerStore((s) => s.isPlaying);
@@ -93,9 +99,32 @@ function NowPlayingBackgroundContent({ hideVisualizer }: { hideVisualizer: boole
   // longer floods the cover/Pixi pipeline. See PRD Phase 8 (single-clock).
   const current = currentIndex >= 0 ? queue[currentIndex] : undefined;
   const visualizerStyle = resolveVisualizerStyle(settings.visualizerStyle);
+  const videoTrack = current?.kind === "video";
+  const imageMaskOpacity = videoTrack
+    ? (settings.videoTrackBackgroundMaskOpacity ?? 25) / 100
+    : (settings.backgroundMaskOpacity ?? 25) / 100;
+  const imageMaskBlur = videoTrack
+    ? (settings.videoTrackBackgroundMaskBlur ?? 0)
+    : (settings.backgroundMaskBlur ?? 0);
+  const videoTrackVisualizerEnabled = videoTrack
+    ? immersive
+      ? (settings.immersiveVideoTrackVisualizerEnabled ?? false)
+      : (settings.videoTrackVisualizerEnabled ?? true)
+    : true;
+  const videoTrackFlowEnabled = videoTrack
+    ? immersive
+      ? (settings.immersiveVideoTrackFlowEnabled ?? false)
+      : (settings.videoTrackFlowEnabled ?? true)
+    : true;
+  const videoTrackBackgroundEffectsEnabled = videoTrack
+    ? immersive
+      ? (settings.immersiveVideoTrackBackgroundEffectsEnabled ?? false)
+      : (settings.videoTrackBackgroundEffectsEnabled ?? true)
+    : true;
   const showViz =
     !hideVisualizer &&
     !!current &&
+    videoTrackVisualizerEnabled &&
     (settings.visualizerAsBackground ?? true) &&
     visualizerStyle !== "off";
   // "Has lyrics" is decided by the TRACK itself (does it have displayable
@@ -164,11 +193,18 @@ function NowPlayingBackgroundContent({ hideVisualizer }: { hideVisualizer: boole
       coverResource.staleWhilePending ||
       !coverResourceMatchesTrack);
   const holdCoverBackgroundWhileLoading = !clearCoverBackgroundWhileLoading;
-  const renderer = settings.backgroundRenderer ?? "noise";
+  const renderer = videoTrackBackgroundEffectsEnabled
+    ? (settings.backgroundRenderer ?? "noise")
+    : "image";
   const blurPx = settings.backgroundBlur ?? 64;
   const pixelSize = settings.backgroundPixelSize ?? 12;
   const pixiEffect = isPixiEffect(renderer) ? renderer : null;
   const hasBackgroundVideoMedia = trackHasBackgroundVideoMedia(current);
+  const showPlainVideoBackground =
+    videoTrack &&
+    !videoTrackBackgroundEffectsEnabled &&
+    settings.backgroundMode !== "none" &&
+    hasBackgroundVideoMedia;
   const pixiMedia = resolvePixiBackgroundMedia({
     imageSource: source,
     mode: settings.backgroundMode,
@@ -257,7 +293,7 @@ function NowPlayingBackgroundContent({ hideVisualizer }: { hideVisualizer: boole
         : [];
   const [slideIndex, setSlideIndex] = useState(0);
   const currentVideoUrl = useTrackMediaUrl(
-    pixiEffect && hasBackgroundVideoMedia ? current : undefined,
+    (pixiEffect && hasBackgroundVideoMedia) || showPlainVideoBackground ? current : undefined,
   );
   const effectSettings = useMemo(
     () => ({
@@ -455,6 +491,8 @@ function NowPlayingBackgroundContent({ hideVisualizer }: { hideVisualizer: boole
           />
           <TransitionBackground blurPx={blurPx} maxOpacity={1} />
         </div>
+      ) : showPlainVideoBackground && currentVideoUrl ? (
+        <PlainBackgroundVideo key={currentVideoUrl} src={currentVideoUrl} />
       ) : effectiveRenderImageTarget && renderer === "blur" ? (
         <CanvasBlurBackground
           blurPx={blurPx}
@@ -499,6 +537,7 @@ function NowPlayingBackgroundContent({ hideVisualizer }: { hideVisualizer: boole
           A bare backdrop-filter layer has no background to cover its result. 0 = off. */}
       {imageMaskBlur > 0 ? (
         <div
+          data-testid="background-mask-blur"
           className="absolute inset-0"
           style={{
             backdropFilter: `blur(${imageMaskBlur}px)`,
@@ -506,13 +545,17 @@ function NowPlayingBackgroundContent({ hideVisualizer }: { hideVisualizer: boole
           }}
         />
       ) : null}
-      <div className="absolute inset-0 bg-background" style={{ opacity: imageMaskOpacity }} />
+      <div
+        data-testid="background-mask"
+        className="absolute inset-0 bg-background"
+        style={{ opacity: imageMaskOpacity }}
+      />
       {/* Independent 流光 layer: composited ABOVE the background image/video and
           BELOW the visualizer spectrum. It's its own toggle (flowEnabled), NOT a
           visualizer style — flow and the spectrum coexist. Forces styleId so it
           renders flow regardless of the chosen visualizer. */}
       <AnimatePresence>
-        {!!current && (settings.flowEnabled ?? false) && (
+        {!!current && videoTrackFlowEnabled && (settings.flowEnabled ?? false) && (
           <motion.div
             // Key by effect so switching effects crossfades (old shader fades out
             // while the new fades in) instead of popping on recompile. Song
@@ -653,6 +696,53 @@ function CrossfadeBackgroundImage({
         />
       ) : null}
     </AnimatePresence>
+  );
+}
+
+function PlainBackgroundVideo({ src }: { src: string }) {
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    const sync = () => {
+      const { isPlaying, positionSec } = usePlayerStore.getState();
+      if (Number.isFinite(positionSec) && Math.abs(video.currentTime - positionSec) > 0.45) {
+        video.currentTime = Math.max(0, positionSec);
+      }
+      if (isPlaying) void video.play()?.catch(() => undefined);
+      else video.pause();
+    };
+
+    sync();
+    const unsubscribe = usePlayerStore.subscribe((state, prev) => {
+      if (state.currentIndex !== prev.currentIndex || state.positionSec !== prev.positionSec) {
+        if (Math.abs(video.currentTime - state.positionSec) > 0.45) {
+          video.currentTime = Math.max(0, state.positionSec);
+        }
+      }
+      if (state.isPlaying !== prev.isPlaying) {
+        if (state.isPlaying) void video.play()?.catch(() => undefined);
+        else video.pause();
+      }
+    });
+    video.addEventListener("loadedmetadata", sync);
+    return () => {
+      unsubscribe();
+      video.removeEventListener("loadedmetadata", sync);
+    };
+  }, []);
+
+  return (
+    <video
+      ref={videoRef}
+      src={src}
+      muted
+      playsInline
+      preload="auto"
+      className="absolute inset-0 h-full w-full object-cover"
+    />
   );
 }
 
