@@ -186,6 +186,18 @@ describe("resolvePixiBackgroundMedia", () => {
 });
 
 describe("trackHasBackgroundVideoMedia", () => {
+  it("treats a referenced local-file MV as background-capable", () => {
+    expect(
+      trackHasBackgroundVideoMedia({
+        blobId: undefined,
+        kind: "video",
+        remoteMediaUrl: undefined,
+        sourcePath: "D:/media/live-show.mkv",
+        status: "ready",
+      }),
+    ).toBe(true);
+  });
+
   it("treats a remote-only R2 MV as background-capable", () => {
     expect(
       trackHasBackgroundVideoMedia({

@@ -18,6 +18,7 @@ import {
   noteCoverWork,
 } from "@/lib/cover-performance";
 import { encodeCoverThumbhash } from "@/lib/cover-thumbhash";
+import { resolveDesktopBridge } from "@/lib/desktop/bridge";
 import { getCroppedBlob } from "@/lib/image-crop";
 import { log } from "@/lib/logger";
 import { coverDerivativeUrlCache, coverUrlCache } from "@/lib/object-url-cache";
@@ -499,16 +500,58 @@ export function useEntityCoverUrl(
 
 /** Reactive object URL for a track's primary audio/video media bytes. */
 export function useTrackMediaUrl(
-  track: Pick<Track, "blobId" | "remoteMediaUrl"> | undefined,
+  track:
+    | (Pick<Track, "blobId" | "remoteMediaUrl"> &
+        Partial<Pick<Track, "kind" | "mediaMetadata" | "sourcePath">>)
+    | undefined,
 ): string | null {
   const blobId = track?.blobId;
   const remoteMediaUrl = track?.remoteMediaUrl;
+  const sourcePath = track?.sourcePath;
+  const localFileMime =
+    track?.mediaMetadata?.originalMime ?? (track?.kind === "video" ? "video/mp4" : "audio/mpeg");
   const blob = useLiveQuery(
     async () => (blobId ? (await resolveMediaBlob(blobId, db))?.blob : undefined),
     [blobId],
     undefined,
   );
-  return useKeyedObjectUrl(blob, blobId) ?? remoteMediaUrl ?? null;
+  const localFileUrl = useLocalFileMediaUrl(sourcePath, localFileMime);
+  return useKeyedObjectUrl(blob, blobId) ?? localFileUrl ?? remoteMediaUrl ?? null;
+}
+
+function useLocalFileMediaUrl(
+  sourcePath: string | undefined,
+  mime: string | undefined,
+): string | null {
+  const [url, setUrl] = useState<string | null>(null);
+  useEffect(() => {
+    if (!sourcePath) {
+      setUrl(null);
+      return;
+    }
+    const bridge = resolveDesktopBridge();
+    if (!bridge.localMediaUrl) {
+      setUrl(null);
+      return;
+    }
+    let alive = true;
+    void bridge
+      .localMediaUrl({ path: sourcePath, mime })
+      .then((next) => {
+        if (alive) setUrl(next);
+      })
+      .catch((error: unknown) => {
+        if (!alive) return;
+        log.warn("media", "failed to resolve local media url", {
+          error: error instanceof Error ? error.name : typeof error,
+        });
+        setUrl(null);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [sourcePath, mime]);
+  return url;
 }
 
 // Session-wide guards for the lazy cover metadata backfill (module scope, not store

@@ -5,21 +5,26 @@ import { readPerfCounter, resetPerfCounters, setPerfCountersEnabled } from "@/li
 import { clearTrace, getTraceEntries } from "@/lib/trace";
 
 // A stable blob the mocked liveQuery hands back (as if mediaBlobs.get resolved).
-const { coverBlob, liveQueryState, derivState, remoteCoverState } = vi.hoisted(() => ({
-  coverBlob: new Blob([new Uint8Array([1, 2, 3])], { type: "image/png" }),
-  liveQueryState: {
-    blob: undefined as Blob | null | undefined,
-    id: undefined as string | undefined,
-  },
-  // What the mocked derivative resolver returns (the hook only reads `.blob`).
-  derivState: {
-    // biome-ignore lint/suspicious/noExplicitAny: minimal canned ResolvedCoverDerivative
-    resolved: undefined as any,
-  },
-  remoteCoverState: {
-    fetcher: vi.fn(),
-  },
-}));
+const { coverBlob, liveQueryState, derivState, remoteCoverState, desktopBridgeState } = vi.hoisted(
+  () => ({
+    coverBlob: new Blob([new Uint8Array([1, 2, 3])], { type: "image/png" }),
+    liveQueryState: {
+      blob: undefined as Blob | null | undefined,
+      id: undefined as string | undefined,
+    },
+    // What the mocked derivative resolver returns (the hook only reads `.blob`).
+    derivState: {
+      // biome-ignore lint/suspicious/noExplicitAny: minimal canned ResolvedCoverDerivative
+      resolved: undefined as any,
+    },
+    remoteCoverState: {
+      fetcher: vi.fn(),
+    },
+    desktopBridgeState: {
+      localMediaUrl: vi.fn(),
+    },
+  }),
+);
 
 // Isolate the hook from Dexie + settings: the blob is "already resolved", and
 // covers render uncropped so no canvas (jsdom has none) is touched.
@@ -37,6 +42,13 @@ vi.mock("@/hooks/use-app-data", () => ({ useSettings: () => ({ coverCropped: fal
 vi.mock("@/lib/platform", () => ({
   getAppFetch: async () => remoteCoverState.fetcher,
 }));
+vi.mock("@/lib/desktop/bridge", () => ({
+  resolveDesktopBridge: () => ({
+    kind: "electron",
+    localMediaUrl: desktopBridgeState.localMediaUrl,
+    openExternal: vi.fn(),
+  }),
+}));
 // Keep the real key helpers (the synchronous cache key must stay accurate); only the
 // async resolver is canned so no worker/canvas runs in jsdom.
 vi.mock("@/db/cover-derivatives", async (importActual) => ({
@@ -46,7 +58,12 @@ vi.mock("@/db/cover-derivatives", async (importActual) => ({
 }));
 
 import { ensureCoverThumbnailDerivative } from "@/db/cover-derivatives";
-import { useCoverDerivativeUrl, useTrackCoverResource, useTrackCoverUrl } from "./use-media";
+import {
+  useCoverDerivativeUrl,
+  useTrackCoverResource,
+  useTrackCoverUrl,
+  useTrackMediaUrl,
+} from "./use-media";
 
 let created = 0;
 
@@ -65,6 +82,7 @@ beforeEach(() => {
     status: 200,
     blob: async () => new Blob([new Uint8Array([4, 5, 6])], { type: "image/jpeg" }),
   });
+  desktopBridgeState.localMediaUrl.mockResolvedValue("http://127.0.0.1/local/mv.mp4");
 });
 
 afterEach(() => {
@@ -265,6 +283,30 @@ describe("useTrackCoverUrl — cross-mount object-URL cache (Phase 1)", () => {
       "cache-hit",
     ]);
     second.unmount();
+  });
+});
+
+describe("useTrackMediaUrl", () => {
+  it("resolves referenced local-file media through the desktop bridge", async () => {
+    liveQueryState.blob = null;
+    const { result } = renderHook(() =>
+      useTrackMediaUrl({
+        blobId: undefined,
+        kind: "video",
+        mediaMetadata: { originalMime: "video/x-matroska", parser: "manual", parsedAt: 1 },
+        remoteMediaUrl: undefined,
+        sourcePath: "D:/media/mv.mkv",
+      }),
+    );
+
+    expect(result.current).toBeNull();
+    await act(async () => {});
+
+    expect(result.current).toBe("http://127.0.0.1/local/mv.mp4");
+    expect(desktopBridgeState.localMediaUrl).toHaveBeenCalledWith({
+      mime: "video/x-matroska",
+      path: "D:/media/mv.mkv",
+    });
   });
 });
 

@@ -1700,6 +1700,8 @@ async function ingestReferencedUploadFile(
       },
     );
     return {
+      albumPicUrl: undefined,
+      embeddedCover: undefined,
       mediaMetadata: fallbackUploadMediaMetadata(file, probed.title),
       title: undefined,
     };
@@ -1714,6 +1716,22 @@ async function ingestReferencedUploadFile(
     mediaMetadata: parsed.mediaMetadata,
     sourcePath,
   });
+  if (parsed.embeddedCover) {
+    void setTrackCover({
+      trackId: track.id,
+      blob: parsed.embeddedCover.blob,
+      mime: parsed.embeddedCover.mime,
+    }).catch((error: unknown) => {
+      log.warn("player", "referenced embedded cover store failed", {
+        error: error instanceof Error ? error.name : typeof error,
+        trackId: track.id,
+      });
+    });
+  } else if (parsed.albumPicUrl) {
+    void fetchAndStoreRemoteCover(track.id, parsed.albumPicUrl);
+  } else if (probed.kind === "video") {
+    enqueueVideoPosterExtraction(track.id, file, probed.durationSec);
+  }
   return { trackId: track.id };
 }
 

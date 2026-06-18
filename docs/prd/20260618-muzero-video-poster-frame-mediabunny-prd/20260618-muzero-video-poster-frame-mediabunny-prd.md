@@ -365,6 +365,8 @@ For folder import, keep bounded concurrency so many videos do not decode frames 
 
 **Verification:** `pnpm vitest run src/stores/player-store.test.ts -t "poster cover|embedded covers"`; `pnpm typecheck`; `pnpm biome check src/stores/player-store.ts src/stores/player-store.test.ts`.
 
+**Follow-up fix:** local-file reference uploads (`sourcePath` tracks) use the same cover priority as copied uploads: embedded cover, remote album art, then auto poster extraction. Referenced local videos also count as background-capable media and resolve their preview URL through the desktop local-media bridge.
+
 ### Phase 4: Tests, Diagnostics, and Release Polish
 
 **Goal:** Make the behavior testable and observable without leaking user data or creating performance regressions.
@@ -441,3 +443,4 @@ For folder import, keep bounded concurrency so many videos do not decode frames 
 |------|--------|---------|
 | 2026-06-18 | MUZERO | Initial draft based on MUZERO upload/playback audit and doodlekuma ClipCombo/DJType mediabunny research. |
 | 2026-06-18 | MUZERO | Completed Phases 1-4: native poster scoring, mediabunny fallback, upload integration, and regression coverage. |
+| 2026-06-18 | MUZERO | Follow-up: included referenced local-file video uploads in poster extraction and Now Playing video background resolution. |

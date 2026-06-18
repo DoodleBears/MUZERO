@@ -747,6 +747,96 @@ describe("player-store bulk upload visibility", () => {
     expect(cover).toMatchObject({ bytes: posterBlob.size, mime: "image/webp", role: "cover" });
   });
 
+  it("extracts and stores a poster cover for referenced local-file video uploads", async () => {
+    vi.doMock("@/lib/desktop/bridge", async () => {
+      const actual =
+        await vi.importActual<typeof import("@/lib/desktop/bridge")>("@/lib/desktop/bridge");
+      return {
+        ...actual,
+        resolveDesktopBridge: () => ({
+          fetch,
+          getDroppedFilePath: vi.fn(async () => "D:/media/mv.mp4"),
+          kind: "electron",
+          localMediaUrl: vi.fn(async () => "http://127.0.0.1/local/mv.mp4"),
+          openExternal: vi.fn(),
+        }),
+      };
+    });
+    vi.doMock("@/lib/media-probe", async () => {
+      const actual = await vi.importActual<typeof import("@/lib/media-probe")>("@/lib/media-probe");
+      return {
+        ...actual,
+        probeMediaFile: vi.fn(async (file: File) => ({
+          durationSec: 12,
+          kind: "video",
+          mime: file.type || "video/mp4",
+          title: file.name.replace(/\.[^.]+$/, ""),
+        })),
+      };
+    });
+    vi.doMock("@/lib/media-metadata", async () => {
+      const actual =
+        await vi.importActual<typeof import("@/lib/media-metadata")>("@/lib/media-metadata");
+      return {
+        ...actual,
+        parseUploadedMediaMetadata: vi.fn(async (file: File) => ({
+          albumPicUrl: undefined,
+          embeddedCover: undefined,
+          mediaMetadata: actual.fallbackUploadMediaMetadata(file, "MV"),
+          title: "MV",
+        })),
+      };
+    });
+    const posterBlob = new Blob([new Uint8Array([7, 8, 9])], { type: "image/webp" });
+    const posterExtract = vi.fn(async () => ({
+      atTimeSeconds: 0.5,
+      blob: posterBlob,
+      height: 720,
+      mime: "image/webp",
+      score: { black: false, lumaMean: 0.4, lumaVariance: 0.1, nonBlackRatio: 0.9, rank: 0.7 },
+      source: "native-video" as const,
+      width: 1280,
+    }));
+    vi.doMock("@/lib/video-poster-frame", async () => ({
+      ...(await vi.importActual<typeof import("@/lib/video-poster-frame")>(
+        "@/lib/video-poster-frame",
+      )),
+      extractUsefulVideoPosterFrame: posterExtract,
+    }));
+    vi.doMock("@/workers/cover-client", () => ({
+      extractCoverMetadataViaWorker: vi.fn(async () => ({
+        palette: [{ r: 10, g: 20, b: 30 }],
+        thumbhash: "XjM9LzMI9wiIh4hwj3CI+AiIcH/494cP",
+        timings: {
+          backlightMs: 0,
+          decodeMs: 0,
+          paletteMs: 0,
+          thumbnailMs: 0,
+          thumbhashMs: 0,
+          totalMs: 0,
+        },
+      })),
+    }));
+
+    const { db, repos, usePlayerStore } = await loadRuntime();
+    const session = await repos.createSession({ seedPrompt: "", config: { autoExtend: false } });
+    const file = new File([new Uint8Array([1, 2, 3])], "mv.mp4", { type: "video/mp4" });
+
+    await usePlayerStore.getState().addUploadsToSet(session.id, [file]);
+
+    await waitFor(async () => {
+      const track = await db.tracks.orderBy("createdAt").last();
+      expect(track?.coverBlobId).toBeTruthy();
+    });
+    const track = await db.tracks.orderBy("createdAt").last();
+    const cover = track?.coverBlobId ? await db.mediaBlobs.get(track.coverBlobId) : undefined;
+    expect(posterExtract).toHaveBeenCalledWith(file, { durationSec: 12 });
+    expect(track?.blobId).toBeUndefined();
+    expect(track?.sourcePath).toBe("D:/media/mv.mp4");
+    expect(track?.coverCrop).toEqual({ height: 720, width: 720, x: 280, y: 0 });
+    expect(cover).toMatchObject({ bytes: posterBlob.size, mime: "image/webp", role: "cover" });
+  });
+
   it("keeps embedded covers ahead of auto poster extraction", async () => {
     vi.doMock("@/lib/media-probe", async () => {
       const actual = await vi.importActual<typeof import("@/lib/media-probe")>("@/lib/media-probe");

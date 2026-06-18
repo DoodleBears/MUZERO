@@ -91,12 +91,12 @@ export function resolvePixiBackgroundMedia(opts: {
  * media is `remoteMediaUrl`, which must still count as background-capable.
  */
 export function trackHasBackgroundVideoMedia(
-  track: Pick<Track, "blobId" | "kind" | "remoteMediaUrl" | "status"> | undefined,
+  track: Pick<Track, "blobId" | "kind" | "remoteMediaUrl" | "sourcePath" | "status"> | undefined,
 ): boolean {
   return (
     track?.kind === "video" &&
     track.status === "ready" &&
-    (Boolean(track.blobId) || Boolean(track.remoteMediaUrl))
+    (Boolean(track.blobId) || Boolean(track.remoteMediaUrl) || Boolean(track.sourcePath))
   );
 }
 
