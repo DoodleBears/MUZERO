@@ -15,7 +15,7 @@ export async function extractVideoFramesBatchViaMediabunny(
   requests: readonly VideoFrameCandidate[],
   options: VideoPosterFrameOptions = {},
 ): Promise<CapturedVideoPosterFrame[] | null> {
-  if (requests.length === 0 || typeof document === "undefined") return [];
+  if (requests.length === 0) return [];
 
   let input: Input | null = null;
   try {
@@ -51,14 +51,15 @@ async function encodeWrappedCanvas(
   atTimeSeconds: number,
   options: VideoPosterFrameOptions,
 ): Promise<CapturedVideoPosterFrame> {
-  const canvas = document.createElement("canvas");
   const scale = Math.min(
     1,
     (options.maxWidth ?? DEFAULT_MAX_WIDTH) / source.width,
     (options.maxHeight ?? DEFAULT_MAX_HEIGHT) / source.height,
   );
-  canvas.width = Math.max(1, Math.round(source.width * scale));
-  canvas.height = Math.max(1, Math.round(source.height * scale));
+  const canvas = makeCanvas(
+    Math.max(1, Math.round(source.width * scale)),
+    Math.max(1, Math.round(source.height * scale)),
+  );
   const context = canvas.getContext("2d");
   if (!context) throw new Error("Canvas 2D context is unavailable.");
   context.imageSmoothingEnabled = true;
@@ -77,17 +78,31 @@ async function encodeWrappedCanvas(
   };
 }
 
-function scoreCanvas(canvas: HTMLCanvasElement) {
-  const analysis = document.createElement("canvas");
-  analysis.width = ANALYSIS_SIZE;
-  analysis.height = ANALYSIS_SIZE;
+function scoreCanvas(canvas: HTMLCanvasElement | OffscreenCanvas) {
+  const analysis = makeCanvas(ANALYSIS_SIZE, ANALYSIS_SIZE);
   const context = analysis.getContext("2d");
   if (!context) throw new Error("Canvas 2D context is unavailable.");
   context.drawImage(canvas, 0, 0, ANALYSIS_SIZE, ANALYSIS_SIZE);
   return scoreImagePixels(context.getImageData(0, 0, ANALYSIS_SIZE, ANALYSIS_SIZE));
 }
 
-function canvasToBlob(canvas: HTMLCanvasElement, mime: string, quality: number): Promise<Blob> {
+function makeCanvas(width: number, height: number): HTMLCanvasElement | OffscreenCanvas {
+  if (typeof OffscreenCanvas === "function") return new OffscreenCanvas(width, height);
+  if (typeof document === "undefined") throw new Error("Canvas is unavailable.");
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  return canvas;
+}
+
+function canvasToBlob(
+  canvas: HTMLCanvasElement | OffscreenCanvas,
+  mime: string,
+  quality: number,
+): Promise<Blob> {
+  if ("convertToBlob" in canvas) {
+    return canvas.convertToBlob({ quality, type: mime });
+  }
   return new Promise((resolve, reject) => {
     canvas.toBlob(
       (blob) => {

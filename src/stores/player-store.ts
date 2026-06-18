@@ -66,7 +66,6 @@ import { getAppFetch } from "@/lib/platform";
 import type { SystemPlaylistId } from "@/lib/system-playlists";
 import { describeTrackCoverSource, describeTrackMediaSource } from "@/lib/track-source";
 import { centeredSquareCrop } from "@/lib/video-frame-score";
-import { extractUsefulVideoPosterFrame } from "@/lib/video-poster-frame";
 import { runAutoFetchLyrics } from "@/lyrics/auto-fetch";
 import { resolveLyricsProviderForTrack } from "@/lyrics/registry";
 import { resolveMusicGenProvider } from "@/musicgen/registry";
@@ -141,6 +140,7 @@ import {
 import { writeR2Presence } from "@/sync/r2-presence-sync";
 import { decodeNcmViaWorker, ingestViaWorker } from "@/workers/heavy-client";
 import type { DecodedNcmMedia } from "@/workers/ingest-core";
+import { extractUsefulVideoPosterFrameViaWorker } from "@/workers/video-poster-client";
 
 const IMPORT_VISIBILITY_FLUSH_SIZE = 25;
 const IMPORT_PROGRESS_CLEAR_MS = 1800;
@@ -357,7 +357,7 @@ let loadedTrackId: string | null = null;
 let activePlaybackTrace: PlaybackTraceContext | null = null;
 let playbackLoadSeq = 0;
 let playbackLoadAbort: AbortController | null = null;
-const VIDEO_POSTER_EXTRACTION_CONCURRENCY = 2;
+const VIDEO_POSTER_EXTRACTION_CONCURRENCY = 1;
 let activeVideoPosterExtractions = 0;
 const pendingVideoPosterExtractions: Array<() => Promise<void>> = [];
 // Streamed tracks auto-skipped in this play-run because they failed to resolve
@@ -1854,7 +1854,7 @@ async function extractAndStoreVideoPosterCover(
   durationSec: number,
 ): Promise<void> {
   try {
-    const poster = await extractUsefulVideoPosterFrame(file, { durationSec });
+    const poster = await extractUsefulVideoPosterFrameViaWorker(file, { durationSec });
     if (!poster) return;
     await setTrackCover({
       trackId,
