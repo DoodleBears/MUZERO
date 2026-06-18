@@ -9,7 +9,7 @@ import {
   PopoverTitle,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { createSession } from "@/db/repositories";
+import { SetPickerDialog } from "@/components/upload/set-picker-dialog";
 import { hasFolderAccess } from "@/lib/desktop/bridge";
 import { classifyDrop, MEDIA_ACCEPT } from "@/lib/file-drop";
 import { usePlayerStore } from "@/stores/player-store";
@@ -21,8 +21,8 @@ import { usePlayerStore } from "@/stores/player-store";
  * `webkitdirectory` one-shot.
  *
  * With `setId` it adds into that playlist. Without it (the 全部歌曲 library view)
- * it lands uploads in a fresh "upload set" — mirroring the sessions-page flow —
- * so songs still belong somewhere and show up in the library.
+ * it asks which 歌单 should receive the selected files, matching the drag/drop
+ * flow so songs never land somewhere surprising.
  */
 export function AddTracksMenu({
   setId,
@@ -35,34 +35,26 @@ export function AddTracksMenu({
 }) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
+  const [pendingFiles, setPendingFiles] = useState<File[] | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const folderRef = useRef<HTMLInputElement | null>(null);
-  const addUploads = usePlayerStore((s) => s.addUploads);
   const addUploadsToSet = usePlayerStore((s) => s.addUploadsToSet);
-  const setActiveSession = usePlayerStore((s) => s.setActiveSession);
   const importFolder = usePlayerStore((s) => s.importFolder);
   const importFolderIntoSet = usePlayerStore((s) => s.importFolderIntoSet);
   const isUploading = usePlayerStore((s) => s.isUploading);
   const native = hasFolderAccess();
   const itemClass =
     "flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm text-foreground transition-colors hover:bg-accent";
+  const ignoreUploaded = () => undefined;
 
   async function addFiles(files: FileList | File[]) {
-    if (setId) {
-      await addUploadsToSet(setId, files);
-      return;
-    }
-    // Library view: route uploads into a fresh upload set (sessions-page flow).
     const list = Array.from(files);
     if (list.length === 0) return;
-    const session = await createSession({
-      name: t("sessions.uploadSet"),
-      seedPrompt: "",
-      config: { autoExtend: false },
-      displayMode: "video",
-    });
-    await setActiveSession(session.id);
-    await addUploads(list);
+    if (setId) {
+      await addUploadsToSet(setId, list);
+      return;
+    }
+    setPendingFiles(list);
   }
 
   async function importFolderAction() {
@@ -130,6 +122,15 @@ export function AddTracksMenu({
             const media = classifyDrop(all).media; // a folder pick returns everything
             if (media.length) void addFiles(media);
           }}
+        />
+      )}
+      {pendingFiles && (
+        <SetPickerDialog
+          files={pendingFiles}
+          defaultNewSetName={t("sessions.uploadSet")}
+          activateNewSet
+          onClose={() => setPendingFiles(null)}
+          onUploaded={ignoreUploaded}
         />
       )}
     </>
