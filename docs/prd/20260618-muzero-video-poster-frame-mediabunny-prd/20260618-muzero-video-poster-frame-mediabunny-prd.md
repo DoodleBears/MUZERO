@@ -11,7 +11,7 @@
 
 | Phase | Name | Status | Link |
 |-------|------|--------|------|
-| 1 | Native video batch frame extraction + black-frame scoring | Pending | [Phase 1 Checklist](#phase-1-checklist) |
+| 1 | Native video batch frame extraction + black-frame scoring | Completed | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | Mediabunny container/decode fallback | Pending | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | Upload ingest integration + cover persistence | Pending | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | Tests, diagnostics, and release polish | Pending | [Phase 4 Checklist](#phase-4-checklist) |
@@ -309,18 +309,20 @@ For folder import, keep bounded concurrency so many videos do not decode frames 
 **Goal:** For common MP4/WebM sources that native `<video>` can decode, automatically choose a useful non-black poster frame.
 
 **Tasks:**
-- [ ] Add pure candidate generation and frame scoring helpers.
-- [ ] Add native `extractVideoFramesBatchViaVideoElement(file, requests, options)` that reuses one video element.
-- [ ] Wait for `loadedmetadata`, seek serially, draw each candidate frame, and encode WebP output.
-- [ ] Select first non-black frame; fallback to best decoded frame when all are black.
-- [ ] Ensure object URLs are revoked and video `src` is cleared in `finally`.
+- [x] Add pure candidate generation and frame scoring helpers.
+- [x] Add native `extractVideoFramesBatchViaVideoElement(file, requests, options)` that reuses one video element.
+- [x] Wait for `loadedmetadata`, seek serially, draw each candidate frame, and encode WebP output.
+- [x] Select first non-black frame; fallback to best decoded frame when all are black.
+- [x] Ensure object URLs are revoked and video `src` is cleared in `finally`.
 
 ### Phase 1 Checklist
 
-- [ ] Unit tests cover timestamp clamping/dedup for short, normal, and unknown-duration videos.
-- [ ] Unit tests cover black, near-black, bright, and high-variance synthetic frames.
-- [ ] Native extraction uses one video element per file, not one per candidate.
-- [ ] No raw `console.*`.
+- [x] Unit tests cover timestamp clamping/dedup for short, normal, and unknown-duration videos.
+- [x] Unit tests cover black, near-black, bright, and high-variance synthetic frames.
+- [x] Native extraction uses one video element per file, not one per candidate.
+- [x] No raw `console.*`.
+
+**Verification:** `pnpm vitest run src/lib/video-frame-score.test.ts`; `pnpm typecheck`.
 
 ### Phase 2: Mediabunny Container/Decode Fallback
 
