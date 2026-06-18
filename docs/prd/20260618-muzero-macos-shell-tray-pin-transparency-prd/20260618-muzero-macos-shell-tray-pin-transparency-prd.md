@@ -17,7 +17,7 @@
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
 
-> **Decisions locked (2026-06-18):** all Open Questions resolved per "best practice + align with Windows" — see [§10](#10-open-questions). Summary: (Q1) macOS needs a window created transparent up front, `titleBarStyle: "hiddenInset"` + native traffic lights retained, native shadow/corners repainted in DOM; (Q2) **Option A** — always‑transparent macOS window, symmetric to Windows, no helper window; (Q3) dedicated **monochrome template** tray asset; (Q4) macOS pin button matches the Windows header pin button exactly (`off`/`pin` only; `pin-click-through` Lock stays the separate lyrics‑overlay action); (Q5) extend the existing win32 DOM‑painted rounded‑corner + accent‑border chrome to macOS.
+> **Decisions locked (2026-06-18):** all Open Questions resolved per "best practice + align with Windows" — see [§10](#10-open-questions). Summary: (Q1) macOS needs a window created transparent up front, `titleBarStyle: "hiddenInset"` + native traffic lights retained, native shadow/corners repainted in DOM; (Q2) **Option A** — always‑transparent macOS window, symmetric to Windows, no helper window; (Q3) ~~monochrome template tray asset~~ → **revised 2026-06-19 per user feedback**: keep the **colored logo** in the menu bar (resized only, **no** template image — a template stripped the brand mark to a flat silhouette); (Q4) macOS pin button matches the Windows header pin button exactly (`off`/`pin` only; `pin-click-through` Lock stays the separate lyrics‑overlay action); (Q5) extend the existing win32 DOM‑painted rounded‑corner + accent‑border chrome to macOS.
 
 ---
 
@@ -126,10 +126,10 @@ On macOS, `Tray` does **not** auto‑downsample the image to the menu‑bar heig
 
 **Why Windows looks fine:** Windows/Linux tray rendering scales the icon into the tray slot, so the oversized source is not visually catastrophic there (still not ideal, but not "huge").
 
-**Fix direction (decided — Q3 = monochrome template, best practice):** ✅ **Implemented**
-- Load the tray image via `nativeImage.createFromPath(...)`, `.resize({ width: 16, height: 16 })`, and on macOS call `image.setTemplateImage(true)` for a monochrome menu‑bar glyph that adapts to dark/light + selection state. Then `new Tray(image)`.
-- **Implementation note (refines Q3):** rather than ship a new binary asset, the transform reuses the **existing logo's alpha silhouette** as the template. All `muzero-logo*.png` variants are 1120×1120 **with an alpha channel**, and a macOS template image only uses the alpha channel (the OS recolors the silhouette for the menu bar) — so resizing the existing icon + `setTemplateImage(true)` already yields a correct monochrome menu‑bar glyph with **no new binary asset**. A hand‑tuned 16px asset (+`@2x` for retina crispness) remains an optional future refinement.
-- Implemented in [tray.cjs `buildTrayIcon()`](../../../electron/tray.cjs) (injected `nativeImage`, falls back to the raw path when missing/empty) + [main.cjs](../../../electron/main.cjs) (passes `nativeImage`). The dock icon path ([app-icon.cjs](../../../electron/app-icon.cjs)) is unchanged. Tests: [scripts/electron-tray.test.mjs](../../../scripts/electron-tray.test.mjs) (macOS template, Windows non‑template, two fallbacks).
+**Fix direction:** ✅ **Implemented** (Q3 revised 2026-06-19 per user feedback)
+- Load the tray image via `nativeImage.createFromPath(...)`, `.resize({ width: 16, height: 16 })`, then `new Tray(image)` — fixes the "huge icon" by downscaling the 1120×1120 logo to menu‑bar size.
+- **Q3 revision — colored logo, NOT a template image.** The first implementation marked it `setTemplateImage(true)` (the macOS‑native convention). On the real menu bar that rendered the logo as a flat monochrome **silhouette** — the user reported "图案不对" (wrong pattern / not the logo). A macOS template image only uses the alpha channel and recolors it black/white, discarding the logo's color + interior detail. **Decision: drop `setTemplateImage` and keep the resized colored logo**, so the actual brand mark shows. Tradeoff: a colored icon does **not** auto‑recolor for light/dark menu bars; the logo's alpha + contrast carries it on both. (If a future variant reads poorly on one menu‑bar theme, the alternatives are a per‑theme asset swap or re‑introducing the template as an opt‑in.)
+- Implemented in [tray.cjs `buildTrayIcon()`](../../../electron/tray.cjs) (injected `nativeImage`, falls back to the raw path when missing/empty) + [main.cjs](../../../electron/main.cjs) (passes `nativeImage`). The dock icon path ([app-icon.cjs](../../../electron/app-icon.cjs)) is unchanged. Tests: [scripts/electron-tray.test.mjs](../../../scripts/electron-tray.test.mjs) (macOS + Windows both resize, no template; two fallbacks).
 - Keep the dock icon path ([app-icon.cjs](../../../electron/app-icon.cjs) `applyAppIcon` → `app.dock.setIcon`) unchanged; it is correctly sized for the dock. The tray and the dock are separate surfaces with separate size requirements.
 
 ### 3.2 Issue #2 — No always‑on‑top (pin) button on macOS
@@ -235,15 +235,17 @@ A transparent DOM over an opaque window backing shows the backing color — `#09
 **Goal:** the macOS tray icon renders as a correctly sized template glyph. ✅ **Completed**
 
 **Tasks:**
-- [x] ~~Add a dedicated small tray asset~~ → reuse the existing logo's alpha silhouette as the template (no new binary asset; see §3.1 implementation note). Hand‑tuned 16px asset deferred.
-- [x] In [tray.cjs `buildTrayIcon()`](../../../electron/tray.cjs), load via `nativeImage.createFromPath`, `.resize({width:16,height:16})`, and `setTemplateImage(true)` on macOS; pass the resized `nativeImage` to `new Tray(...)` (injected `nativeImage` from [main.cjs](../../../electron/main.cjs)).
-- [x] Keep Windows/Linux using a resized (non‑template) icon; dock icon path unaffected.
+- [x] In [tray.cjs `buildTrayIcon()`](../../../electron/tray.cjs), load via `nativeImage.createFromPath`, `.resize({width:16,height:16})`, pass the resized `nativeImage` to `new Tray(...)` (injected `nativeImage` from [main.cjs](../../../electron/main.cjs)).
+- [x] **Revised:** keep the colored logo (no `setTemplateImage`) so the brand mark shows, not a silhouette — per user feedback 2026-06-19.
+- [x] Dock icon path ([app-icon.cjs](../../../electron/app-icon.cjs)) unaffected.
 
 ### Phase 1 Checklist
-- [x] macOS tray icon is downscaled to 16pt + template image (adapts to dark/light menu bar). _Retina @2x crispness = optional future refinement._
-- [x] Windows/Linux tray icon resized to 16px, not marked template (verified by test).
+- [x] macOS tray icon downscaled to 16pt (fixes "huge"); user confirmed size is correct.
+- [x] Colored logo shown in the menu bar, not a monochrome template silhouette (user feedback addressed).
+- [x] Windows/Linux tray icon resized to 16px (verified by test).
 - [x] Dock icon (`app.dock.setIcon`) path unchanged.
 - [x] Graceful fallback to the raw icon path when `nativeImage` is absent or the asset decodes empty (verified by tests).
+- [ ] _Light/dark menu‑bar contrast of the colored logo — confirm on a real Mac in both menu‑bar themes._
 
 ### Phase 2: macOS top‑right always‑on‑top button
 
@@ -316,7 +318,7 @@ A transparent DOM over an opaque window backing shows the backing color — `#09
 |---|----------|--------|----------|
 | 1 | For Issue #3, does `transparent: true` + `titleBarStyle: "hiddenInset"` keep working native traffic lights + window shadow on macOS, or must we move to `frame:false` + the standalone macOS controls from Issue #2? | ✅ Resolved | macOS needs a window created **transparent up front** (can't toggle at runtime — this is the macOS‑specific setup that Windows didn't need). Keep `hiddenInset` + native traffic lights (top‑left); accept loss of native shadow/corners and repaint them in the DOM (Q5). Verify traffic lights under transparency in impl; fall back to `frame:false` + custom controls only if unstable. |
 | 2 | Should the macOS window be **always** transparent (symmetric to Windows, Option A) or should lyrics‑only capture use a dedicated transparent helper window (fallback)? | ✅ Resolved | **Option A** — always‑transparent macOS window, symmetric to Windows. No helper window. |
-| 3 | Dedicated tray asset: monochrome **template** image vs full‑color small logo? | ✅ Resolved | **Monochrome template** (`…Template.png` + `@2x`, `setTemplateImage(true)`) — macOS‑native convention; dock icon keeps full color. |
+| 3 | Tray icon: monochrome **template** image vs full‑color logo? | ✅ Resolved (revised 2026-06-19) | First shipped as a template, but it rendered as a flat silhouette ("图案不对"). **Revised: keep the resized colored logo, no `setTemplateImage`** so the real brand mark shows. Tradeoff: no auto light/dark recolor — verify contrast on real menu bars. |
 | 4 | Should the macOS pin button also expose `pin-click-through` (lyrics Lock), or only `off`/`pin` like the Windows header button? | ✅ Resolved | **Align with Windows** — `off`/`pin` only; `pin-click-through` stays the separate in‑overlay Lock action on both platforms. |
 | 5 | When the macOS window is transparent, does the rounded‑corner / accent‑border treatment (currently win32‑only) need a macOS variant, or rely on the native frame? | ✅ Resolved | Needs a macOS variant — **extend the win32 DOM‑painted chrome** ([styles.css:219-289](../../../src/styles.css#L219-L289)) to `[data-desktop-platform="darwin"]`, because a transparent window has no native shadow/corners. |
 
@@ -330,6 +332,7 @@ A transparent DOM over an opaque window backing shows the backing color — `#09
 | 2026-06-18 | MUZERO | Resolved all 5 Open Questions ("best practice + align with Windows"): Option A always‑transparent macOS window (`hiddenInset` + native traffic lights + DOM‑painted chrome), monochrome template tray icon, macOS pin button matches Windows `off`/`pin`. Folded decisions into §3.1/§3.2/§3.3 and Phase 3 |
 | 2026-06-18 | MUZERO | **Phase 1 complete** (TDD): tray icon resized to 16pt + `setTemplateImage(true)` on macOS via injected `nativeImage` in [tray.cjs](../../../electron/tray.cjs); reuses the existing logo's alpha silhouette (no new asset). 4 new tests in [electron-tray.test.mjs](../../../scripts/electron-tray.test.mjs) |
 | 2026-06-18 | MUZERO | **Phase 2 complete** (TDD): standalone macOS pin button — new [MacWindowControls](../../../src/components/shell/mac-window-controls.tsx) (top‑right, pin only) + `macControlsSupported`/`isMacRuntime` in [desktop-window-store.ts](../../../src/stores/desktop-window-store.ts), mounted in [App.tsx](../../../src/App.tsx). 4 new tests in [mac-window-controls.test.tsx](../../../src/components/shell/mac-window-controls.test.tsx) |
+| 2026-06-19 | MUZERO | **Q3 revised after real‑Mac feedback**: the macOS tray template image rendered as a flat silhouette ("图案不对"). Dropped `setTemplateImage(true)` in [tray.cjs](../../../electron/tray.cjs) so the resized **colored logo** shows instead. Tests updated ([electron-tray.test.mjs](../../../scripts/electron-tray.test.mjs)) — macOS + Windows now both resize‑only, no template |
 | 2026-06-18 | MUZERO | **Phase 3 complete** (TDD, pending real‑device QA): macOS window created transparent via [window-chrome.cjs `resolveWindowChrome`](../../../electron/window-chrome.cjs) in [main.cjs](../../../electron/main.cjs); win32 DOM‑painted chrome (corners/border/maximized reset) extended to `[data-desktop-platform="darwin"]` in [styles.css](../../../src/styles.css). 3 new tests in [electron-window-chrome.test.mjs](../../../scripts/electron-window-chrome.test.mjs); full suite (2940) green. **All 3 phases done — PRD ready to move Draft → Completed after real‑Mac verification.** |
 
 ---

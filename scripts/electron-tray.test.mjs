@@ -146,7 +146,7 @@ describe("createTrayController", () => {
     expect(win.hide).not.toHaveBeenCalled();
   });
 
-  it("builds the macOS tray icon as a small template image, not the raw full-size logo", () => {
+  it("downscales the macOS tray icon to menu-bar size while keeping the colored logo", () => {
     const fake = createFakeNativeImage();
     const { controller, trayInstances } = createHarness("darwin", { nativeImage: fake.nativeImage });
     controller.ensureTray();
@@ -155,14 +155,15 @@ describe("createTrayController", () => {
     // doesn't render huge — macOS does NOT auto-fit a 1120px Tray image.
     expect(fake.createFromPath).toHaveBeenCalledWith("icon.ico");
     expect(fake.raw.resize).toHaveBeenCalledWith({ height: 16, width: 16 });
-    // Template image → macOS recolors the alpha silhouette for light/dark menu bars.
-    expect(fake.setTemplateImage).toHaveBeenCalledWith(true);
+    // NOT a template image: that would strip the logo to a flat monochrome
+    // silhouette. Keep the actual colored brand mark in the menu bar.
+    expect(fake.setTemplateImage).not.toHaveBeenCalled();
     // Tray receives the resized nativeImage, never the raw path string.
     expect(trayInstances[0].icon).toBe(fake.resized);
     expect(typeof trayInstances[0].icon).not.toBe("string");
   });
 
-  it("resizes the tray icon on Windows but does not mark it a template image", () => {
+  it("resizes the tray icon on Windows and keeps the colored logo (no template)", () => {
     const fake = createFakeNativeImage();
     const { controller, trayInstances } = createHarness("win32", { nativeImage: fake.nativeImage });
     controller.ensureTray();

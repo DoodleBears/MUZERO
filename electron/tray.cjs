@@ -1,7 +1,9 @@
 // macOS renders a Tray image at its logical point size and does NOT downscale it to
 // the menu-bar height, so the full-resolution app logo (1120×1120) shows up huge.
-// Build a small menu-bar glyph instead: downscale to 16pt and, on macOS, flag it a
-// template image so the OS recolors the alpha silhouette for light/dark menu bars.
+// Downscale it to a menu-bar-sized glyph. We deliberately keep the COLORED logo and
+// do NOT mark it a template image — a template would strip the brand mark to a flat
+// monochrome silhouette ("wrong pattern"). Tradeoff: a colored icon won't auto-recolor
+// for light/dark menu bars, but the logo's alpha + contrast carries it on both.
 const TRAY_ICON_SIZE = 16;
 
 function createTrayController({ app, iconPath, Menu, nativeImage, platform, Tray }) {
@@ -14,20 +16,15 @@ function createTrayController({ app, iconPath, Menu, nativeImage, platform, Tray
     return Boolean(tray);
   }
 
-  // Returns a resized nativeImage for the Tray, or the raw path as a fallback when
-  // nativeImage isn't injected or the asset decodes empty (preserves prior behavior).
+  // Returns the resized (colored) app logo for the Tray, or the raw path as a fallback
+  // when nativeImage isn't injected or the asset decodes empty (preserves prior behavior).
   function buildTrayIcon() {
     if (!nativeImage || typeof nativeImage.createFromPath !== "function") return iconPath;
     const image = nativeImage.createFromPath(iconPath);
     if (!image || (typeof image.isEmpty === "function" && image.isEmpty())) return iconPath;
-    const sized =
-      typeof image.resize === "function"
-        ? image.resize({ height: TRAY_ICON_SIZE, width: TRAY_ICON_SIZE })
-        : image;
-    if (platform === "darwin" && typeof sized.setTemplateImage === "function") {
-      sized.setTemplateImage(true);
-    }
-    return sized;
+    return typeof image.resize === "function"
+      ? image.resize({ height: TRAY_ICON_SIZE, width: TRAY_ICON_SIZE })
+      : image;
   }
 
   function onAction(listener) {
