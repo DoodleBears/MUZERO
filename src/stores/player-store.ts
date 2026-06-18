@@ -64,6 +64,8 @@ import { notePerfWork } from "@/lib/perf-counters";
 import { getAppFetch } from "@/lib/platform";
 import type { SystemPlaylistId } from "@/lib/system-playlists";
 import { describeTrackCoverSource, describeTrackMediaSource } from "@/lib/track-source";
+import { centeredSquareCrop } from "@/lib/video-frame-score";
+import { extractUsefulVideoPosterFrame } from "@/lib/video-poster-frame";
 import { runAutoFetchLyrics } from "@/lyrics/auto-fetch";
 import { resolveLyricsProviderForTrack } from "@/lyrics/registry";
 import { resolveMusicGenProvider } from "@/musicgen/registry";
@@ -352,6 +354,9 @@ let loadedTrackId: string | null = null;
 let activePlaybackTrace: PlaybackTraceContext | null = null;
 let playbackLoadSeq = 0;
 let playbackLoadAbort: AbortController | null = null;
+const VIDEO_POSTER_EXTRACTION_CONCURRENCY = 2;
+let activeVideoPosterExtractions = 0;
+const pendingVideoPosterExtractions: Array<() => Promise<void>> = [];
 // Streamed tracks auto-skipped in this play-run because they failed to resolve
 // (VIP / unavailable). Reset on any successful load or hard stop. Tracking ids
 // instead of a raw counter lets a whole VIP playlist stop after one pass, even
@@ -1769,8 +1774,59 @@ async function ingestMediaFile(
   // Plaintext NetEase export with a "163 key" comment but no embedded art → fetch.
   if (!parsed.embeddedCover && parsed.albumPicUrl) {
     void fetchAndStoreRemoteCover(track.id, parsed.albumPicUrl);
+  } else if (!parsed.embeddedCover && probed.kind === "video") {
+    enqueueVideoPosterExtraction(track.id, file, probed.durationSec);
   }
   return { trackId: track.id };
+}
+
+function enqueueVideoPosterExtraction(trackId: string, file: File, durationSec: number): void {
+  pendingVideoPosterExtractions.push(() =>
+    extractAndStoreVideoPosterCover(trackId, file, durationSec),
+  );
+  pumpVideoPosterExtractionQueue();
+}
+
+function pumpVideoPosterExtractionQueue(): void {
+  while (
+    activeVideoPosterExtractions < VIDEO_POSTER_EXTRACTION_CONCURRENCY &&
+    pendingVideoPosterExtractions.length > 0
+  ) {
+    const job = pendingVideoPosterExtractions.shift();
+    if (!job) return;
+    activeVideoPosterExtractions += 1;
+    void job().finally(() => {
+      activeVideoPosterExtractions -= 1;
+      pumpVideoPosterExtractionQueue();
+    });
+  }
+}
+
+async function extractAndStoreVideoPosterCover(
+  trackId: string,
+  file: File,
+  durationSec: number,
+): Promise<void> {
+  try {
+    const poster = await extractUsefulVideoPosterFrame(file, { durationSec });
+    if (!poster) return;
+    await setTrackCover({
+      trackId,
+      blob: poster.blob,
+      mime: poster.mime,
+      crop: centeredSquareCrop(poster.width, poster.height),
+    });
+    log.debug("player", "stored auto video poster cover", {
+      atTimeSeconds: poster.atTimeSeconds,
+      source: poster.source,
+      trackId,
+    });
+  } catch (error) {
+    log.warn("player", "auto video poster extraction failed", {
+      error: error instanceof Error ? error.name : typeof error,
+      trackId,
+    });
+  }
 }
 
 /** Decrypt + ingest one `.ncm` (worker), then background-fetch its remote cover. */

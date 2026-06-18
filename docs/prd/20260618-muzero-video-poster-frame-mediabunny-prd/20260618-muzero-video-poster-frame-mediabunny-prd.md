@@ -13,7 +13,7 @@
 |-------|------|--------|------|
 | 1 | Native video batch frame extraction + black-frame scoring | Completed | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | Mediabunny container/decode fallback | Completed | [Phase 2 Checklist](#phase-2-checklist) |
-| 3 | Upload ingest integration + cover persistence | Pending | [Phase 3 Checklist](#phase-3-checklist) |
+| 3 | Upload ingest integration + cover persistence | Completed | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | Tests, diagnostics, and release polish | Pending | [Phase 4 Checklist](#phase-4-checklist) |
 
 > Status Legend: Completed | In Progress | Pending
@@ -350,18 +350,20 @@ For folder import, keep bounded concurrency so many videos do not decode frames 
 **Goal:** Store the extracted poster frame as the uploaded video track's cover without disrupting existing import behavior.
 
 **Tasks:**
-- [ ] In [`ingestMediaFile`](../../../src/stores/player-store.ts), run poster extraction for `probed.kind === "video"` only when `parsed.embeddedCover` is absent.
-- [ ] Persist via [`setTrackCover`](../../../src/db/repositories.ts), not a new cover storage path.
-- [ ] Use a centered square crop based on extracted frame dimensions.
-- [ ] Keep remote/embedded covers higher priority than auto poster frames.
-- [ ] Add bounded concurrency for batch/folder imports if extraction is awaited or queued.
+- [x] In [`ingestMediaFile`](../../../src/stores/player-store.ts), run poster extraction for `probed.kind === "video"` only when `parsed.embeddedCover` is absent.
+- [x] Persist via [`setTrackCover`](../../../src/db/repositories.ts), not a new cover storage path.
+- [x] Use a centered square crop based on extracted frame dimensions.
+- [x] Keep remote/embedded covers higher priority than auto poster frames.
+- [x] Add bounded concurrency for batch/folder imports if extraction is awaited or queued.
 
 ### Phase 3 Checklist
 
-- [ ] Uploaded video with no embedded cover gets `coverBlobId`.
-- [ ] Uploaded video with embedded cover keeps embedded cover and does not auto-overwrite it.
-- [ ] Poster extraction failure still imports a playable/ready track.
-- [ ] Track row/search/Now Playing cover fallback update through existing Dexie live queries.
+- [x] Uploaded video with no embedded cover gets `coverBlobId`.
+- [x] Uploaded video with embedded cover keeps embedded cover and does not auto-overwrite it.
+- [x] Poster extraction failure still imports a playable/ready track.
+- [x] Track row/search/Now Playing cover fallback update through existing Dexie live queries.
+
+**Verification:** `pnpm vitest run src/stores/player-store.test.ts -t "poster cover|embedded covers"`; `pnpm typecheck`; `pnpm biome check src/stores/player-store.ts src/stores/player-store.test.ts`.
 
 ### Phase 4: Tests, Diagnostics, and Release Polish
 
