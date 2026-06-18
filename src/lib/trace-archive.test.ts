@@ -6,7 +6,9 @@ import {
   clearTraceArchive,
   createTraceArchive,
   exportTraceArchiveJsonl,
+  isTraceArchiveEnabled,
   readTraceArchiveEntries,
+  setTraceArchiveEnabled,
 } from "./trace-archive";
 
 const dbName = "muzero-trace-archive-test";
@@ -15,6 +17,15 @@ describe("trace archive", () => {
   afterEach(async () => {
     await clearTraceArchive(createTraceArchive({ dbName }));
     await deleteDb(dbName);
+    window.localStorage.clear();
+  });
+
+  it("keeps archive persistence disabled until explicitly enabled", () => {
+    expect(isTraceArchiveEnabled()).toBe(false);
+
+    setTraceArchiveEnabled(true);
+
+    expect(isTraceArchiveEnabled()).toBe(true);
   });
 
   it("stores entries and prunes by count", async () => {

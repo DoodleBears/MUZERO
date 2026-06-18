@@ -36,8 +36,8 @@ export function createTraceArchive(config: Partial<TraceArchive> = {}): TraceArc
 }
 
 export function isTraceArchiveEnabled(): boolean {
-  if (typeof window === "undefined") return true;
-  return window.localStorage.getItem(ENABLED_STORAGE_KEY) !== "false";
+  if (typeof window === "undefined") return false;
+  return window.localStorage.getItem(ENABLED_STORAGE_KEY) === "true";
 }
 
 export function setTraceArchiveEnabled(enabled: boolean): void {
