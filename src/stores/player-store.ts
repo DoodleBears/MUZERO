@@ -101,7 +101,7 @@ import {
   cacheStreamPlaylistTrackCovers,
   cacheStreamTrackCover,
 } from "@/streamsrc/playlist-cover-cache";
-import type { StreamSearchHit } from "@/streamsrc/provider";
+import type { StreamPlaylist, StreamSearchHit } from "@/streamsrc/provider";
 import { createStreamSource } from "@/streamsrc/registry";
 import { resolveStreamedTrackMedia, type StreamPlaybackResult } from "@/streamsrc/resolve-playback";
 import {
@@ -150,7 +150,8 @@ const DEFAULT_PLAYER_VOLUME = 0.9;
 
 export type QueueSource =
   | { kind: "set"; setId: string }
-  | { kind: "system-playlist"; id: SystemPlaylistId };
+  | { kind: "system-playlist"; id: SystemPlaylistId }
+  | { kind: "online-playlist"; playlist: StreamPlaylist };
 
 interface PlayerState {
   activeSessionId: string | null;

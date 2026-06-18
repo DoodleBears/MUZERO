@@ -285,9 +285,13 @@ export function SearchPage() {
   // Backfill blurred previews + visualizer palettes for legacy/imported covers.
   useCoverMetadataBackfill();
   const [selectedSetId, setSelectedSetId] = useState<string | null>(null);
+  const [selectedSetAnchorTrackId, setSelectedSetAnchorTrackId] = useState<string | undefined>();
   const [selectedSystemPlaylistId, setSelectedSystemPlaylistId] = useState<SystemPlaylistId | null>(
     null,
   );
+  const [selectedSystemAnchorTrackId, setSelectedSystemAnchorTrackId] = useState<
+    string | undefined
+  >();
   const [selectedOnlinePlaylist, setSelectedOnlinePlaylist] = useState<StreamPlaylist | null>(null);
   const [mode, setMode] = useState<GalleryMode>(savedGalleryMode);
   // The 发现 (Discover) tab needs the desktop media proxy (Referer/CORS), like the
@@ -616,7 +620,20 @@ export function SearchPage() {
       setSelectedOnlinePlaylist(null);
       setSelectedArtistKey(null);
       setSelectedAlbumKey(null);
+      setSelectedSystemPlaylistId(null);
+      setSelectedSystemAnchorTrackId(undefined);
+      setSelectedSetAnchorTrackId(pendingEntity.anchorTrackId);
       setSelectedSetId(pendingEntity.id);
+    } else if (pendingEntity.kind === "system-playlist") {
+      setMode("sets");
+      if (typeof localStorage !== "undefined") localStorage.setItem(MODE_KEY, "sets");
+      setSelectedOnlinePlaylist(null);
+      setSelectedSetId(null);
+      setSelectedSetAnchorTrackId(undefined);
+      setSelectedArtistKey(null);
+      setSelectedAlbumKey(null);
+      setSelectedSystemAnchorTrackId(pendingEntity.anchorTrackId);
+      setSelectedSystemPlaylistId(pendingEntity.id);
     } else if (pendingEntity.kind === "artist") {
       const entry = findArtistByName(artistIndex, pendingEntity.name);
       if (!entry) return;
@@ -624,6 +641,9 @@ export function SearchPage() {
       if (typeof localStorage !== "undefined") localStorage.setItem(MODE_KEY, "artists");
       setSelectedOnlinePlaylist(null);
       setSelectedSetId(null);
+      setSelectedSetAnchorTrackId(undefined);
+      setSelectedSystemPlaylistId(null);
+      setSelectedSystemAnchorTrackId(undefined);
       setSelectedAlbumKey(null);
       setSelectedArtistKey(entry.key);
     } else if (pendingEntity.kind === "album") {
@@ -633,13 +653,18 @@ export function SearchPage() {
       if (typeof localStorage !== "undefined") localStorage.setItem(MODE_KEY, "albums");
       setSelectedOnlinePlaylist(null);
       setSelectedSetId(null);
+      setSelectedSetAnchorTrackId(undefined);
+      setSelectedSystemPlaylistId(null);
+      setSelectedSystemAnchorTrackId(undefined);
       setSelectedArtistKey(null);
       setSelectedAlbumKey(entry.key);
     } else {
       setMode("online");
       if (typeof localStorage !== "undefined") localStorage.setItem(MODE_KEY, "online");
       setSelectedSetId(null);
+      setSelectedSetAnchorTrackId(undefined);
       setSelectedSystemPlaylistId(null);
+      setSelectedSystemAnchorTrackId(undefined);
       setSelectedArtistKey(null);
       setSelectedAlbumKey(null);
       setSelectedOnlinePlaylist(pendingEntity.playlist);
@@ -986,12 +1011,18 @@ export function SearchPage() {
   function openSet(id: string) {
     returnFocusKeyRef.current = id;
     beginCoverMorph(`set:${id}`);
-    transitionState(() => setSelectedSetId(id));
+    transitionState(() => {
+      setSelectedSetAnchorTrackId(undefined);
+      setSelectedSetId(id);
+    });
   }
   function openSystemPlaylist(id: SystemPlaylistId) {
     returnFocusKeyRef.current = id;
     clearCoverMorphBeforeTransition();
-    transitionState(() => setSelectedSystemPlaylistId(id));
+    transitionState(() => {
+      setSelectedSystemAnchorTrackId(undefined);
+      setSelectedSystemPlaylistId(id);
+    });
   }
   function openArtist(key: string) {
     returnFocusKeyRef.current = key;
@@ -1132,7 +1163,13 @@ export function SearchPage() {
     return (
       <SystemPlaylistDetail
         events={playbackEvents}
-        onBack={() => leaveDetail(() => setSelectedSystemPlaylistId(null))}
+        anchorTrackId={selectedSystemAnchorTrackId}
+        onBack={() =>
+          leaveDetail(() => {
+            setSelectedSystemAnchorTrackId(undefined);
+            setSelectedSystemPlaylistId(null);
+          })
+        }
         playlistId={selectedSystemPlaylistId}
         remoteTracks={remoteTracks}
         stats={playbackStats}
@@ -1147,8 +1184,14 @@ export function SearchPage() {
         setId={selectedSetId}
         trackById={trackById}
         lastPlayed={lastPlayedByTrack}
+        anchorTrackId={selectedSetAnchorTrackId}
         coverViewTransitionName={coverMorphName(`set:${selectedSetId}`)}
-        onBack={() => leaveDetail(() => setSelectedSetId(null))}
+        onBack={() =>
+          leaveDetail(() => {
+            setSelectedSetAnchorTrackId(undefined);
+            setSelectedSetId(null);
+          })
+        }
         onPlayAll={() => void playSet(selectedSetId)}
       />
     );
@@ -1745,6 +1788,7 @@ function SetDetailView({
   setId,
   trackById,
   lastPlayed,
+  anchorTrackId,
   coverViewTransitionName,
   onBack,
   onPlayAll,
@@ -1753,6 +1797,7 @@ function SetDetailView({
   trackById: Map<string, Track>;
   /** trackId → last-played epoch ms, for the 最近播放 sort (folded from playback stats). */
   lastPlayed?: ReadonlyMap<string, number>;
+  anchorTrackId?: string;
   /** `view-transition-name` for the header cover, so it morphs from the set card
    *  the user tapped on the wall (set only when arriving via a cover morph). */
   coverViewTransitionName?: string;
@@ -1768,6 +1813,9 @@ function SetDetailView({
   const [desc, setDesc] = useState("");
   const [dragOver, setDragOver] = useState(false);
   const [selectedTrackId, setSelectedTrackId] = useState<string | null>(null);
+  const [pendingAnchorTrackId, setPendingAnchorTrackId] = useState<string | undefined>(
+    anchorTrackId,
+  );
   // 红心 lives on songs, not sets — so the "liked only" filter is here, inside the
   // playlist, rather than on the set wall.
   const [likedOnly, setLikedOnly] = useState(false);
@@ -1856,14 +1904,26 @@ function SetDetailView({
   useBackGesture(onBack);
 
   useEffect(() => {
+    setPendingAnchorTrackId(anchorTrackId);
+  }, [anchorTrackId]);
+
+  useEffect(() => {
     if (shownTracks.length === 0) {
       setSelectedTrackId(null);
+      setPendingAnchorTrackId(undefined);
+      return;
+    }
+    if (pendingAnchorTrackId) {
+      if (shownTracks.some((track) => track.id === pendingAnchorTrackId)) {
+        setSelectedTrackId(pendingAnchorTrackId);
+      }
+      setPendingAnchorTrackId(undefined);
       return;
     }
     if (!selectedTrackId || !shownTracks.some((track) => track.id === selectedTrackId)) {
       setSelectedTrackId(shownTracks[0].id);
     }
-  }, [selectedTrackId, shownTracks]);
+  }, [pendingAnchorTrackId, selectedTrackId, shownTracks]);
 
   // Drop back to "all" if the last liked track is unliked while filtered.
   useEffect(() => {
@@ -2098,6 +2158,7 @@ function SetDetailView({
             setId={setId}
             tracks={shownTracks}
             canReorder={isManualOrder}
+            anchorTrackId={pendingAnchorTrackId}
             selectedTrackId={selectedTrack?.id}
             onView={(track) => transitionState(() => setSelectedTrackId(track.id))}
             onPlay={(track) => void playTrack(track)}

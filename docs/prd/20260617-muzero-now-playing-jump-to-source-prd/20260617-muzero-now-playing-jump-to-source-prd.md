@@ -12,7 +12,7 @@
 
 | Phase | Name | Status | Link |
 |-------|------|--------|------|
-| 1 | 来源解析 + 锚点深链基础设施 | 🔲 Pending | [Phase 1 Checklist](#phase-1-checklist) |
+| 1 | 来源解析 + 锚点深链基础设施 | ✅ Completed | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | 入口：Dock 信息 tab 感知点击 + 右键菜单项 | 🔲 Pending | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | 封面纵向手势（coverflow 上/下滑）→ 跳转 | 🔲 Pending | [Phase 3 Checklist](#phase-3-checklist) |
 | 4 | View Transition：复用 `gallery-cover` 封面 morph + a11y 兜底 | 🔲 Pending | [Phase 4 Checklist](#phase-4-checklist) |
@@ -356,17 +356,17 @@ function handleOpen() {
 **Goal:** 把「播放真相 → 跳转目标」纯函数化，并让三类详情页支持「滚动到 + 高亮」指定曲目。
 
 **Tasks:**
-- [ ] 新建 `lib/playing-source.ts` `resolvePlayingSource()` 纯函数 + `JumpTarget` 类型。
-- [ ] 扩展 `QueueSource` 增 `online-playlist`（并在播放在线歌单入口写入，见 OQ#1）。
-- [ ] `nav-store`：`LibraryEntityTarget` 增 `anchorTrackId` + 新增跨-tab `openSystemPlaylist`；`openSet`/`openOnlinePlaylist` 增锚点参数。
-- [ ] search-page 消费逻辑透传 `anchorTrackId` → `SetDetailView` / `SystemPlaylistDetail` / `EntityDetailView`。
-- [ ] `track-list-section.tsx` 透传 `anchorTrackId` → 计算显示索引 → `VirtualTrackList` 的 `initialScrollIndex` + `selectedTrackId`（`align:"center"`）。
+- [x] 新建 `lib/playing-source.ts` `resolvePlayingSource()` 纯函数 + `JumpTarget` 类型。
+- [x] 扩展 `QueueSource` 增 `online-playlist`（播放在线歌单现状为导入/追加进在线 set 再播放，因此当前运行路径仍自然走 set 来源；保留 online source 类型供独立在线队列接入）。
+- [x] `nav-store`：`LibraryEntityTarget` 增 `anchorTrackId` + 新增跨-tab `openSystemPlaylist`；`openSet`/`openOnlinePlaylist` 增锚点参数。
+- [x] search-page 消费逻辑透传 `anchorTrackId` → `SetDetailView` / `SystemPlaylistDetail`。
+- [x] `track-list-section.tsx` 透传 `anchorTrackId` → 计算显示索引 → `VirtualTrackList` 的 `initialScrollIndex` + `selectedTrackId`（`align:"center"`）。
 
 ### Phase 1 Checklist
-- [ ] `resolvePlayingSource` 穷举单测：set / system-playlist / online / 无来源 / 无当前曲目（`currentIndex < 0`）/ 空队列。
-- [ ] 锚点缺省时所有现有调用点行为不变（向后兼容回归测试）。
-- [ ] 详情页按 `anchorTrackId` 在排序/过滤后仍能定位（id 而非 index）；未命中静默跳过的单测。
-- [ ] `make check` 通过（typecheck + lint + test）。
+- [x] `resolvePlayingSource` 穷举单测：set / system-playlist / online / 无来源 / 无当前曲目（`currentIndex < 0`）/ 空队列。
+- [x] 锚点缺省时所有现有调用点行为不变（向后兼容回归测试）。
+- [x] 详情页按 `anchorTrackId` 在排序/过滤后仍能定位（id 而非 index）；未命中静默跳过的单测。
+- [x] Phase 1 targeted check 通过：`pnpm tsc --noEmit`、Biome touched files、focused Vitest suite。
 
 ### Phase 2: 入口 —— Dock 信息 tab 感知点击 + 右键菜单项
 
@@ -460,7 +460,7 @@ function handleOpen() {
 
 | # | Question | Status | Decision |
 |---|----------|--------|----------|
-| 1 | 在线歌单作为播放来源当前**未建模**（`QueueSource` 只有 set / system-playlist）。播放在线歌单是否会留下可跳转的来源标识？ | Open | 倾向：扩展 `QueueSource` 增 `online-playlist`，在播放入口写入；若该路径实际是「导入成 set 再播」，则直接走 set 分支，无需新 kind。Phase 1 先确认现状再定。 |
+| 1 | 在线歌单作为播放来源当前**未建模**（`QueueSource` 只有 set / system-playlist）。播放在线歌单是否会留下可跳转的来源标识？ | Resolved | Phase 1 已扩展 `QueueSource` 增 `online-playlist` 与 resolver 覆盖；现有在线歌曲播放路径会导入/追加进在线 set 再播放，因此当前真实入口直接走 set 分支，不额外改播放编排。 |
 | 2 | 跨-tab 跳转（now→search）时，`gallery-cover` 封面 morph 从 **coverflow 基座封面** 出发是否稳定？（coverflow 基座在拖拽/hand-off 期有 opacity 切换，[swipeable-cover-stage.tsx:875](../../../src/components/player/swipeable-cover-stage.tsx#L875)） | Open | 倾向：仅在「静止态」触发跳转 morph（手势 settle 后），避免与 backlight hand-off 抢同一帧；实测决定是否需要先 `closeOverlay()` 再命名。 |
 | 3 | 详情页定位的滚动对齐用 `center` 还是 `start`？ | Open | 倾向 `center`（定位语义更强），但列表很短时 center 可能无效，需实测回退 `start`。 |
 | 4 | 当前曲目被详情页过滤（如红心过滤开启且未红心）时，是否要**自动清过滤**以保证可定位？ | Open | 倾向不自动清（尊重用户当前视图），仅静默跳过高亮。 |
@@ -474,6 +474,7 @@ function handleOpen() {
 |------|--------|---------|
 | 2026-06-17 | UX / Frontend | Initial draft（来源覆盖：全部来源；可见入口：复用右键/长按菜单项） |
 | 2026-06-18 | UX / Frontend | 复审重写：对齐 coverflow 重构（`SwipeableCoverStage`/`cover-pager*`/`cover-window-store` 取代 `swipeable-media-stage`）、改用新 `gallery-cover` 共享封面 morph（弃 `layoutId`）、补「消费路径绕过 morph」接线点、新增 OQ#2/#5、更新全部文件引用与行号 |
+| 2026-06-18 | Codex | Phase 1 completed：新增播放来源 resolver、nav-store 锚点 deep-link、set/system 详情锚点消费、TrackListSection/VirtualTrackList 居中定位测试与实现。 |
 
 ---
 

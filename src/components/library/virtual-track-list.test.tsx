@@ -120,6 +120,29 @@ describe("VirtualTrackList", () => {
     expect(onPlay).toHaveBeenCalledWith(expect.objectContaining({ id: "trk_1" }), 0);
   });
 
+  it("restores an explicit anchor row with center alignment", () => {
+    vi.useFakeTimers();
+    const scrollToIndex = vi.fn();
+    useVirtualizerMock.mockReturnValue({
+      getTotalSize: () => 120,
+      getVirtualItems: () => [
+        { index: 0, key: "trk_1", size: 60, start: 0 },
+        { index: 1, key: "trk_2", size: 60, start: 60 },
+      ],
+      scrollToIndex,
+    });
+
+    render(
+      <VirtualTrackList
+        tracks={[track("trk_1", "First"), track("trk_2", "Second")]}
+        initialScrollAlign="center"
+        initialScrollIndex={1}
+      />,
+    );
+
+    expect(scrollToIndex).toHaveBeenCalledWith(1, { align: "center" });
+  });
+
   it("moves focus with arrow keys and views the focused track", () => {
     vi.useFakeTimers();
     useVirtualizerMock.mockReturnValue({

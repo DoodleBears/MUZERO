@@ -63,6 +63,7 @@ export function VirtualTrackList({
   getTrackColumns,
   header,
   initialScrollIndex,
+  initialScrollAlign = "start",
   alphabetLetterOf,
   reactiveRowContent = false,
 }: {
@@ -93,6 +94,7 @@ export function VirtualTrackList({
    *  list (a different scroll container). Restored through the virtualizer so it
    *  routes via Lenis. */
   initialScrollIndex?: number;
+  initialScrollAlign?: "start" | "center";
   /** When provided (name-sorted lists only), mounts the right-edge A–Z fast-scroll
    *  strip. Returns each track's bucket letter — the caller transliterates CJK
    *  titles (pinyin/kana) before bucketing. `tracks` must already be name-sorted. */
@@ -184,9 +186,9 @@ export function VirtualTrackList({
   // biome-ignore lint/correctness/useExhaustiveDependencies: mount-only restore
   useLayoutEffect(() => {
     if (initialScrollIndex === undefined || initialScrollIndex <= 0) return;
-    rowVirtualizer.scrollToIndex(initialScrollIndex, { align: "start" });
+    rowVirtualizer.scrollToIndex(initialScrollIndex, { align: initialScrollAlign });
     const raf = requestAnimationFrame(() =>
-      rowVirtualizer.scrollToIndex(initialScrollIndex, { align: "start" }),
+      rowVirtualizer.scrollToIndex(initialScrollIndex, { align: initialScrollAlign }),
     );
     return () => cancelAnimationFrame(raf);
   }, []);

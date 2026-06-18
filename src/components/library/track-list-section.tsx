@@ -35,6 +35,7 @@ export function TrackListSection({
   onPlay,
   onView,
   selectedTrackId,
+  anchorTrackId,
   emptyHint,
   listClassName,
   className,
@@ -56,6 +57,7 @@ export function TrackListSection({
   onPlay?: (track: Track) => void;
   onView?: (track: Track) => void;
   selectedTrackId?: string;
+  anchorTrackId?: string;
   emptyHint?: string;
   listClassName?: string;
   className?: string;
@@ -79,6 +81,7 @@ export function TrackListSection({
 }) {
   const { t } = useTranslation();
   const trackIds = useMemo(() => tracks.map((track) => track.id), [tracks]);
+  const anchorIndex = anchorTrackId ? tracks.findIndex((track) => track.id === anchorTrackId) : -1;
   const sel = useTrackSelection(trackIds);
   // Track ids awaiting a permanent-delete confirmation (null = dialog closed).
   const [pendingPermanent, setPendingPermanent] = useState<string[] | null>(null);
@@ -119,6 +122,9 @@ export function TrackListSection({
   // Entering/leaving select mode swaps the list's scroll container — keep the scroll
   // position across the swap instead of snapping to the top.
   const scroll = useListScrollPreservation(showReorder, tracks.length);
+  const resolvedSelectedTrackId = anchorIndex >= 0 ? anchorTrackId : selectedTrackId;
+  const initialScrollIndex =
+    anchorIndex >= 0 ? anchorIndex : (scroll.anchorIndexRef.current ?? undefined);
 
   function onReorder(blockIds: string[], insertBeforeId: string | null) {
     if (!setId) return;
@@ -211,7 +217,7 @@ export function TrackListSection({
         ) : (
           <VirtualTrackList
             tracks={tracks}
-            selectedTrackId={selectedTrackId}
+            selectedTrackId={resolvedSelectedTrackId}
             emptyHint={emptyHint}
             className={listClassName}
             header={
@@ -230,7 +236,8 @@ export function TrackListSection({
             onDeleteTrack={onDeleteTrack}
             getTrackSupplement={getTrackSupplement}
             getTrackColumns={getTrackColumns}
-            initialScrollIndex={scroll.anchorIndexRef.current ?? undefined}
+            initialScrollAlign={anchorIndex >= 0 ? "center" : "start"}
+            initialScrollIndex={initialScrollIndex}
             alphabetLetterOf={alphabetLetterOf}
           />
         )}

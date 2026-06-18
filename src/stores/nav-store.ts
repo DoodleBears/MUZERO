@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import type { Tab } from "@/components/nav/dock-nav";
+import type { SystemPlaylistId } from "@/lib/system-playlists";
 import type { StreamPlaylist } from "@/streamsrc/provider";
 
 /**
@@ -17,10 +18,11 @@ import type { StreamPlaylist } from "@/streamsrc/provider";
  * online playlists carry their source metadata snapshot for the detail page.
  */
 export type LibraryEntityTarget =
-  | { kind: "set"; id: string }
+  | { kind: "set"; id: string; anchorTrackId?: string }
+  | { kind: "system-playlist"; id: SystemPlaylistId; anchorTrackId?: string }
   | { kind: "artist"; name: string }
   | { kind: "album"; trackId: string }
-  | { kind: "online-playlist"; playlist: StreamPlaylist };
+  | { kind: "online-playlist"; playlist: StreamPlaylist; anchorTrackId?: string };
 
 interface NavState {
   tab: Tab;
@@ -31,13 +33,15 @@ interface NavState {
   /** Pending library entity to open; ephemeral, never persisted. */
   pendingLibraryEntity: LibraryEntityTarget | null;
   /** Switch to the library tab and queue a set to open. */
-  openSet: (id: string) => void;
+  openSet: (id: string, anchorTrackId?: string) => void;
+  /** Switch to the library tab and queue a system playlist to open. */
+  openSystemPlaylist: (id: SystemPlaylistId, anchorTrackId?: string) => void;
   /** Switch to the library tab and queue an artist to open. */
   openArtist: (name: string) => void;
   /** Switch to the library tab and queue the album containing a track. */
   openAlbumForTrack: (trackId: string) => void;
   /** Switch to the online library tab and open an external playlist detail page. */
-  openOnlinePlaylist: (playlist: StreamPlaylist) => void;
+  openOnlinePlaylist: (playlist: StreamPlaylist, anchorTrackId?: string) => void;
   /** Read + clear the pending entity (the library page calls this on mount). */
   consumeLibraryEntity: () => LibraryEntityTarget | null;
 }
@@ -50,12 +54,36 @@ export const useNavStore = create<NavState>()(
       settingsItem: "appearance",
       setSettingsItem: (settingsItem) => set({ settingsItem }),
       pendingLibraryEntity: null,
-      openSet: (id) => set({ tab: "search", pendingLibraryEntity: { kind: "set", id } }),
+      openSet: (id, anchorTrackId) =>
+        set({
+          tab: "search",
+          pendingLibraryEntity: {
+            kind: "set",
+            id,
+            ...(anchorTrackId !== undefined ? { anchorTrackId } : {}),
+          },
+        }),
+      openSystemPlaylist: (id, anchorTrackId) =>
+        set({
+          tab: "search",
+          pendingLibraryEntity: {
+            kind: "system-playlist",
+            id,
+            ...(anchorTrackId !== undefined ? { anchorTrackId } : {}),
+          },
+        }),
       openArtist: (name) => set({ tab: "search", pendingLibraryEntity: { kind: "artist", name } }),
       openAlbumForTrack: (trackId) =>
         set({ tab: "search", pendingLibraryEntity: { kind: "album", trackId } }),
-      openOnlinePlaylist: (playlist) =>
-        set({ tab: "search", pendingLibraryEntity: { kind: "online-playlist", playlist } }),
+      openOnlinePlaylist: (playlist, anchorTrackId) =>
+        set({
+          tab: "search",
+          pendingLibraryEntity: {
+            kind: "online-playlist",
+            playlist,
+            ...(anchorTrackId !== undefined ? { anchorTrackId } : {}),
+          },
+        }),
       consumeLibraryEntity: () => {
         const pending = get().pendingLibraryEntity;
         if (pending) set({ pendingLibraryEntity: null });

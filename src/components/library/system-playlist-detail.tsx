@@ -1,6 +1,6 @@
 import type { TFunction } from "i18next";
 import { ArrowLeft, Play } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { TrackInspectorPanel } from "@/components/track/track-inspector-panel";
 import { Button } from "@/components/ui/button";
@@ -37,6 +37,7 @@ export function SystemPlaylistDetail({
   stats,
   events,
   remoteTracks,
+  anchorTrackId,
   now = Date.now(),
   onBack,
 }: {
@@ -45,6 +46,7 @@ export function SystemPlaylistDetail({
   stats: TrackPlaybackStats[];
   events: PlaybackEvent[];
   remoteTracks: RemoteSearchTrack[];
+  anchorTrackId?: string;
   now?: number;
   onBack: () => void;
 }) {
@@ -54,6 +56,9 @@ export function SystemPlaylistDetail({
   const [likedSort, setLikedSort] = useState<LikedSort>("liked");
   const [likedSortDir, setLikedSortDir] = useState<SortDir>(LIKED_SORT_DEFAULT_DIR.liked);
   const [selectedTrackId, setSelectedTrackId] = useState<string | null>(null);
+  const [pendingAnchorTrackId, setPendingAnchorTrackId] = useState<string | undefined>(
+    anchorTrackId,
+  );
   const play = usePlayerStore((s) => s.play);
   const playTrack = usePlayerStore((s) => s.playTrack);
   const playSystemPlaylist = usePlayerStore((s) => s.playSystemPlaylist);
@@ -109,6 +114,28 @@ export function SystemPlaylistDetail({
 
   useBackGesture(onBack);
 
+  useEffect(() => {
+    setPendingAnchorTrackId(anchorTrackId);
+  }, [anchorTrackId]);
+
+  useEffect(() => {
+    if (localTracks.length === 0) {
+      setSelectedTrackId(null);
+      setPendingAnchorTrackId(undefined);
+      return;
+    }
+    if (pendingAnchorTrackId) {
+      if (localTracks.some((track) => track.id === pendingAnchorTrackId)) {
+        setSelectedTrackId(pendingAnchorTrackId);
+      }
+      setPendingAnchorTrackId(undefined);
+      return;
+    }
+    if (!selectedTrackId || !localTracks.some((track) => track.id === selectedTrackId)) {
+      setSelectedTrackId(localTracks[0].id);
+    }
+  }, [localTracks, pendingAnchorTrackId, selectedTrackId]);
+
   async function playAll() {
     await playSystemPlaylist(playlistId, localTracks);
     void play();
@@ -163,6 +190,7 @@ export function SystemPlaylistDetail({
           </div>
           <TrackListSection
             tracks={localTracks}
+            anchorTrackId={pendingAnchorTrackId}
             selectedTrackId={selectedTrack?.id}
             onView={(track) => setSelectedTrackId(track.id)}
             onPlay={(track) => void playTrack(track)}
