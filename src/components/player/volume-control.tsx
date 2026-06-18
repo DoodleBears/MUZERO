@@ -26,6 +26,7 @@ export function VolumeControl({ className }: { className?: string }) {
   const [open, setOpen] = useState(false);
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const trackRef = useRef<HTMLDivElement>(null);
+  const lastAudibleVolume = useRef(volume > 0 ? volume : 0.9);
   const labelId = useId();
 
   function show() {
@@ -42,6 +43,9 @@ export function VolumeControl({ className }: { className?: string }) {
     },
     [],
   );
+  useEffect(() => {
+    if (volume > 0) lastAudibleVolume.current = volume;
+  }, [volume]);
 
   function setFromPointer(e: ReactPointerEvent) {
     const el = trackRef.current;
@@ -116,7 +120,7 @@ export function VolumeControl({ className }: { className?: string }) {
 
       <button
         type="button"
-        onClick={() => setVolume(volume > 0 ? 0 : 0.9)}
+        onClick={() => setVolume(volume > 0 ? 0 : lastAudibleVolume.current)}
         aria-label={t("player.volume")}
         title={t("player.volume")}
         className={cn(
