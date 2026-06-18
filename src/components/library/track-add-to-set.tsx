@@ -76,6 +76,7 @@ export function TrackAddToSetCommand({
 export function TrackAddToSetPopover({
   buttonClassName,
   iconClassName,
+  onOpenChange,
   onAddToNewSession,
   onAddToSession,
   sessions,
@@ -85,6 +86,7 @@ export function TrackAddToSetPopover({
 }: {
   buttonClassName?: string;
   iconClassName?: string;
+  onOpenChange?: (open: boolean) => void;
   onAddToNewSession: (name: string) => void;
   onAddToSession: (sessionId: string) => void;
   sessions: DjSession[];
@@ -95,13 +97,13 @@ export function TrackAddToSetPopover({
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
 
+  function setOpenAndNotify(nextOpen: boolean) {
+    setOpen(nextOpen);
+    onOpenChange?.(nextOpen);
+  }
+
   return (
-    <Popover
-      open={open}
-      onOpenChange={(nextOpen) => {
-        setOpen(nextOpen);
-      }}
-    >
+    <Popover open={open} onOpenChange={setOpenAndNotify}>
       <PopoverTrigger
         type="button"
         className={cn(
@@ -118,7 +120,7 @@ export function TrackAddToSetPopover({
         <TrackAddToSetCommand
           onAddToNewSession={onAddToNewSession}
           onAddToSession={onAddToSession}
-          onComplete={() => setOpen(false)}
+          onComplete={() => setOpenAndNotify(false)}
           sessions={sessions}
           trackId={trackId}
         />

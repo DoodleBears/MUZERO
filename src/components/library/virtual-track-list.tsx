@@ -664,8 +664,19 @@ function VirtualTrackRow({
           );
         }}
         onDownloadToDevice={() => void usePlayerStore.getState().downloadStreamedTrack(track.id)}
-        onAddToSession={(sessionId) => void prependTrackIds(sessionId, [track.id])}
-        onAddToNewSession={(name) => void addTrackToNewSet(name, track.id)}
+        onAddToSession={(sessionId) => {
+          const targetName = sessions.find((session) => session.id === sessionId)?.name ?? "";
+          void addTrackToExistingSet(sessionId, track.id, {
+            failure: t("track.addToSetFailed"),
+            success: t("select.addedToSet", { count: 1, name: targetName }),
+          });
+        }}
+        onAddToNewSession={(name) =>
+          void addTrackToNewSet(name, track.id, {
+            failure: t("track.addToSetFailed"),
+            success: (targetName) => t("select.addedToSet", { count: 1, name: targetName }),
+          })
+        }
       />
     </div>
   );
@@ -687,7 +698,29 @@ function easeEdgePull(distance: number) {
  * menu. `autoExtend: false` mirrors the gallery's "New set" so the DJ doesn't
  * start refilling a set the user assembled by hand.
  */
-async function addTrackToNewSet(name: string, trackId: string) {
-  const set = await createSession({ name, seedPrompt: "", config: { autoExtend: false } });
-  await prependTrackIds(set.id, [trackId]);
+async function addTrackToExistingSet(
+  sessionId: string,
+  trackId: string,
+  messages: { failure: string; success: string },
+) {
+  try {
+    await prependTrackIds(sessionId, [trackId]);
+    notify.success(messages.success);
+  } catch (error) {
+    notify.error(messages.failure, { error, source: "track-add-to-set" });
+  }
+}
+
+async function addTrackToNewSet(
+  name: string,
+  trackId: string,
+  messages: { failure: string; success: (targetName: string) => string },
+) {
+  try {
+    const set = await createSession({ name, seedPrompt: "", config: { autoExtend: false } });
+    await prependTrackIds(set.id, [trackId]);
+    notify.success(messages.success(set.name));
+  } catch (error) {
+    notify.error(messages.failure, { error, source: "track-add-to-set" });
+  }
 }

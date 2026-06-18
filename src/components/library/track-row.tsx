@@ -187,6 +187,8 @@ export const TrackRow = memo(function TrackRow({
   // never builds the popover machinery. `onMouseEnter` (not pointer) so a touch tap
   // doesn't flash it. Matches the smooth entity grids, which carry no per-card popovers.
   const [showActions, setShowActions] = useState(false);
+  const [addToSetOpen, setAddToSetOpen] = useState(false);
+  const showActionToolbar = showActions || addToSetOpen;
 
   // Two-tap activation: the first interaction selects the row (revealing its
   // info in the inspector); interacting again with an already-selected row
@@ -338,7 +340,7 @@ export const TrackRow = memo(function TrackRow({
           {track.status === "ready" ? formatDuration(track.durationSec) : "—"}
         </span>
       </div>
-      {showActions && (
+      {showActionToolbar && (
         <div
           className="absolute right-3 top-1/2 z-10 flex -translate-y-1/2 items-center gap-0.5 rounded-md border border-border bg-background/95 p-0.5 shadow-sm backdrop-blur"
           data-muzero-row-actions
@@ -382,6 +384,10 @@ export const TrackRow = memo(function TrackRow({
             sessions={sessions}
             onAddToSession={onAddToSession}
             onAddToNewSession={onAddToNewSession}
+            onOpenChange={(open) => {
+              setAddToSetOpen(open);
+              if (open) setShowActions(true);
+            }}
           />
         </div>
       )}

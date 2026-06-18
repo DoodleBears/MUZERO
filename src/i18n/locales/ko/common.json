@@ -362,6 +362,7 @@
     "jumpToCurrent": "현재 곡으로 이동",
     "cloudSourceUnknown": "클라우드 소스",
     "addToSet": "다른 세트에 추가",
+    "addToSetFailed": "세트에 추가할 수 없어요",
     "searchOrCreateSet": "세트 검색 또는 만들기…",
     "createSet": "“{{name}}” 만들기",
     "typeToCreateSet": "이름을 입력해 세트 만들기",

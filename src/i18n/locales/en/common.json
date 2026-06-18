@@ -371,6 +371,7 @@
     "jumpToCurrent": "Jump to current song",
     "cloudSourceUnknown": "Cloud source",
     "addToSet": "Add to set",
+    "addToSetFailed": "Couldn't add to set",
     "searchOrCreateSet": "Search or create a set…",
     "createSet": "Create “{{name}}”",
     "typeToCreateSet": "Type a name to create a set",

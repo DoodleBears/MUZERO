@@ -5,6 +5,12 @@ import type { DjSession, Track } from "@/db/types";
 import { clearTrace, getTraceEntries } from "@/lib/trace";
 import { TrackRow } from "./track-row";
 
+const { popoverMockState } = vi.hoisted(() => ({
+  popoverMockState: {
+    onOpenChange: undefined as ((open: boolean) => void) | undefined,
+  },
+}));
+
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key }),
 }));
@@ -17,15 +23,32 @@ vi.mock("@/hooks/use-media", () => ({
 }));
 
 vi.mock("@/components/ui/popover", () => ({
-  Popover: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+  Popover: ({
+    children,
+    onOpenChange,
+  }: {
+    children: React.ReactNode;
+    onOpenChange?: (open: boolean) => void;
+  }) => {
+    popoverMockState.onOpenChange = onOpenChange;
+    return <>{children}</>;
+  },
   PopoverContent: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
   PopoverDescription: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
   PopoverTitle: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
   PopoverTrigger: ({
     children,
+    onClick,
     ...props
   }: React.ButtonHTMLAttributes<HTMLButtonElement> & { children: React.ReactNode }) => (
-    <button type="button" {...props}>
+    <button
+      type="button"
+      {...props}
+      onClick={(event) => {
+        onClick?.(event);
+        popoverMockState.onOpenChange?.(true);
+      }}
+    >
       {children}
     </button>
   ),
@@ -33,6 +56,7 @@ vi.mock("@/components/ui/popover", () => ({
 
 afterEach(() => {
   clearTrace();
+  popoverMockState.onOpenChange = undefined;
   vi.restoreAllMocks();
 });
 
@@ -266,6 +290,20 @@ describe("TrackRow", () => {
     // Keyboard focus reveals it too (so tab-to-actions still works).
     fireEvent.focus(row);
     expect(screen.getByLabelText("track.delete")).toBeInTheDocument();
+  });
+
+  it("keeps the add-to-set picker mounted after the pointer leaves the row", () => {
+    const { container } = renderRow({
+      sessions: [session("ses_lofi", "Lofi Focus"), session("ses_night", "Night Drive")],
+    });
+    const row = container.querySelector<HTMLElement>("[data-muzero-track-row]") as HTMLElement;
+
+    fireEvent.mouseEnter(row);
+    fireEvent.click(screen.getByLabelText("track.addToSet"));
+    fireEvent.mouseLeave(row);
+
+    expect(screen.getByLabelText("track.searchOrCreateSet")).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "Night Drive" })).toBeInTheDocument();
   });
 
   it("skips re-render when only callback identities change (memo comparator)", () => {

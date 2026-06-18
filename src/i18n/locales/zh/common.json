@@ -362,6 +362,7 @@
     "jumpToCurrent": "跳到当前歌曲",
     "cloudSourceUnknown": "云盘来源",
     "addToSet": "添加到其他歌单",
+    "addToSetFailed": "添加到歌单失败",
     "searchOrCreateSet": "搜索或新建歌单…",
     "createSet": "新建歌单“{{name}}”",
     "typeToCreateSet": "输入名称即可新建歌单",
