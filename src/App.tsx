@@ -13,6 +13,7 @@ import { useVisualizerCoverColorCss } from "@/components/player/visualizer-dynam
 import { VisualizerTuningPanel } from "@/components/player/visualizer-tuning-panel";
 import { GlobalTrackSearch } from "@/components/search/global-track-search";
 import { HeaderNavTabs } from "@/components/shell/header-nav-tabs";
+import { MacWindowControls } from "@/components/shell/mac-window-controls";
 import { PlayerDock } from "@/components/shell/player-dock";
 import { WindowsWindowControls } from "@/components/shell/windows-window-controls";
 import { GlobalDropZone } from "@/components/upload/global-drop-zone";
@@ -332,6 +333,7 @@ export default function App() {
             onDoubleClick={() => void toggleDesktopMaximize()}
           />
           <WindowsWindowControls />
+          <MacWindowControls />
         </header>
 
         {/* Tabs are kept MOUNTED and toggled with `hidden` (display:none) rather

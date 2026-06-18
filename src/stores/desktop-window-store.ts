@@ -15,6 +15,7 @@ interface DesktopWindowStore {
   fullscreen: boolean;
   initialized: boolean;
   kind: DesktopKind;
+  macControlsSupported: boolean;
   maximized: boolean;
   pinMode: DesktopWindowPinMode;
   pinSupported: boolean;
@@ -40,6 +41,12 @@ function isWindowsRuntime(bridge: DesktopBridge): boolean {
   return (
     navigator.platform.toLowerCase().startsWith("win") || navigator.userAgent.includes("Windows")
   );
+}
+
+function isMacRuntime(bridge: DesktopBridge): boolean {
+  if (bridge.platform) return bridge.platform === "darwin";
+  if (typeof navigator === "undefined") return false;
+  return navigator.platform.toLowerCase().startsWith("mac") || navigator.userAgent.includes("Mac");
 }
 
 function syncWindowMaximizedDataset(maximized: boolean, fullscreen: boolean) {
@@ -69,6 +76,7 @@ export const useDesktopWindowStore = create<DesktopWindowStore>((set, get) => ({
   fullscreen: false,
   initialized: false,
   kind: "web",
+  macControlsSupported: false,
   maximized: false,
   pinMode: "off",
   pinSupported: false,
@@ -86,10 +94,15 @@ export const useDesktopWindowStore = create<DesktopWindowStore>((set, get) => ({
     initStarted = true;
     const bridge = resolveDesktopBridge();
     const controls = bridge.windowControls;
+    const pinSupported = Boolean(controls?.setPinMode && controls.getState);
     set({
       initialized: true,
       kind: bridge.kind,
-      pinSupported: Boolean(controls?.setPinMode && controls.getState),
+      // macOS keeps native traffic lights (min/max/close) at top-left, so it never
+      // gets the Windows controls cluster — but the always-on-top capability works
+      // cross-platform, so surface a standalone pin button on the macOS shell.
+      macControlsSupported: bridge.kind === "electron" && isMacRuntime(bridge) && pinSupported,
+      pinSupported,
       platform: bridge.platform,
       windowsControlsSupported:
         bridge.kind === "electron" && isWindowsRuntime(bridge) && Boolean(controls),
@@ -157,6 +170,7 @@ export function __resetDesktopWindowStoreForTest() {
     fullscreen: false,
     initialized: false,
     kind: "web",
+    macControlsSupported: false,
     maximized: false,
     pinMode: "off",
     pinSupported: false,

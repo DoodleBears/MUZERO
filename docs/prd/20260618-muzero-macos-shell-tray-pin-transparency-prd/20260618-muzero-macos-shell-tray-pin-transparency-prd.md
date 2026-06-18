@@ -12,7 +12,7 @@
 | Phase | Name | Status | Link |
 |-------|------|--------|------|
 | 1 | macOS menu‑bar tray icon sizing (template image) | ✅ Completed | [Phase 1 Checklist](#phase-1-checklist) |
-| 2 | macOS top‑right always‑on‑top (pin) button | 🔲 Pending | [Phase 2 Checklist](#phase-2-checklist) |
+| 2 | macOS top‑right always‑on‑top (pin) button | ✅ Completed | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | macOS lyrics‑only transparent window backing | 🔲 Pending | [Phase 3 Checklist](#phase-3-checklist) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
@@ -151,11 +151,12 @@ On macOS, `Tray` does **not** auto‑downsample the image to the menu‑bar heig
 
 So the fix is purely **UI surfacing**: render a standalone pin button on macOS, gated on `pinSupported` (not `windowsControlsSupported`).
 
-**Fix direction:**
-- Introduce a macOS pin affordance anchored **top‑right**, reusing [HeaderPinButton](../../../src/components/shell/header-pin-button.tsx) (already platform‑agnostic). Gate it on `kind === "electron" && platform === "darwin" && pinSupported`.
-- Do **not** render min/max/close on macOS (those remain native traffic lights). The `WindowsWindowControls` cluster stays Windows‑only; only the pin button gets a macOS mount point.
-- Mind the macOS layout: traffic lights are top‑left, so a top‑right pin button does not collide. Ensure it carries `[-webkit-app-region:no-drag]` (already on `HeaderPinButton`) so it stays clickable over the drag region, and reveal/idle behavior matches the macOS title bar (the header already fades with `headerHidden`).
-- Consider extracting the platform decision into the store (e.g. a `macControlsSupported` / `standalonePinSupported` selector) so the gate is declared once, not branched in the component (mirrors the existing `windowsControlsSupported` pattern and Rule 10's "no scattered `if (isMac)`").
+**Fix direction:** ✅ **Implemented**
+- New [MacWindowControls](../../../src/components/shell/mac-window-controls.tsx): a top‑right body‑portal that renders **only** [HeaderPinButton](../../../src/components/shell/header-pin-button.tsx) (no min/max/close — those stay native traffic lights top‑left). Mirrors the Windows cluster's portal + hover‑reveal so pin UX matches across platforms.
+- Gate via a new store selector [`macControlsSupported`](../../../src/stores/desktop-window-store.ts) = `kind === "electron" && isMacRuntime(bridge) && pinSupported` (declared once in the store, mirroring `windowsControlsSupported` — Rule 10's "no scattered `if (isMac)`"). Added `isMacRuntime(bridge)` alongside `isWindowsRuntime`.
+- Mounted in [App.tsx](../../../src/App.tsx) next to `WindowsWindowControls`; carries `[-webkit-app-region:no-drag]` so it stays clickable over the drag region; traffic lights (top‑left) don't collide with the top‑right pin.
+- Pin state/persistence (`pinMode`, `desktopWindowPinMode`) and the IPC path were already cross‑platform — no main‑process change needed.
+- Tests: [mac-window-controls.test.tsx](../../../src/components/shell/mac-window-controls.test.tsx) (renders pin on mac+electron; only the pin control; hidden on Windows; hidden on web).
 - **Behavior parity (decided — Q4 = align with Windows):** the macOS pin button reuses the exact same model as the Windows header pin button — it toggles `off` ⇄ `pin` only and persists `desktopWindowPinMode`. The `pin-click-through` (lyrics Lock) state is **not** a third button state on either platform; it stays the separate in‑overlay Lock action ([FloatingUnpinButton](../../../src/components/player/floating-unpin-button.tsx) inside the lyrics overlay), which already works on macOS. Result: identical pin UX across Windows and macOS.
 
 ### 3.3 Issue #3 — Lyrics‑only transparent mode shows black on macOS
@@ -244,17 +245,18 @@ A transparent DOM over an opaque window backing shows the backing color — `#09
 
 ### Phase 2: macOS top‑right always‑on‑top button
 
-**Goal:** macOS surfaces the pin button (and only the pin button) in the top‑right.
+**Goal:** macOS surfaces the pin button (and only the pin button) in the top‑right. ✅ **Completed**
 
 **Tasks:**
-- [ ] Add a platform‑aware selector in [desktop-window-store.ts](../../../src/stores/desktop-window-store.ts) for the standalone macOS pin affordance.
-- [ ] Mount [HeaderPinButton](../../../src/components/shell/header-pin-button.tsx) on macOS (top‑right, no‑drag), without rendering min/max/close.
-- [ ] Confirm `setPinMode` round‑trips on macOS (already wired) and persists via `desktopWindowPinMode`.
+- [x] Added `macControlsSupported` + `isMacRuntime` in [desktop-window-store.ts](../../../src/stores/desktop-window-store.ts).
+- [x] New [MacWindowControls](../../../src/components/shell/mac-window-controls.tsx) mounts [HeaderPinButton](../../../src/components/shell/header-pin-button.tsx) top‑right (no‑drag), no min/max/close; rendered in [App.tsx](../../../src/App.tsx).
+- [x] `setPinMode` round‑trips on macOS (already wired) and persists via `desktopWindowPinMode` (reuses existing `HeaderPinButton` logic).
 
 ### Phase 2 Checklist
-- [ ] macOS shows a working pin button top‑right; traffic lights remain native top‑left.
-- [ ] Toggling pin sets `setAlwaysOnTop` and survives focus changes (per [window-pin.cjs](../../../electron/window-pin.cjs)).
-- [ ] Windows behavior unchanged (cluster still owns its pin button).
+- [x] macOS renders a working pin button top‑right; traffic lights remain native top‑left (verified by test: only one button, no min/max/close).
+- [x] Toggling pin reuses the proven `setPinMode` → `setAlwaysOnTop` path ([window-pin.cjs](../../../electron/window-pin.cjs)); focus‑recovery unchanged.
+- [x] Windows behavior unchanged — `WindowsWindowControls` stays Windows‑only (`MacWindowControls` renders nothing on win32, verified by test).
+- [ ] _Live macOS validation (hover‑reveal placement vs traffic lights, real always‑on‑top) — pending real‑device QA._
 
 ### Phase 3: macOS lyrics‑only transparent backing
 
@@ -324,6 +326,7 @@ A transparent DOM over an opaque window backing shows the backing color — `#09
 | 2026-06-18 | MUZERO | Initial draft — root‑cause analysis for macOS tray icon size, missing always‑on‑top button, and lyrics‑only transparency |
 | 2026-06-18 | MUZERO | Resolved all 5 Open Questions ("best practice + align with Windows"): Option A always‑transparent macOS window (`hiddenInset` + native traffic lights + DOM‑painted chrome), monochrome template tray icon, macOS pin button matches Windows `off`/`pin`. Folded decisions into §3.1/§3.2/§3.3 and Phase 3 |
 | 2026-06-18 | MUZERO | **Phase 1 complete** (TDD): tray icon resized to 16pt + `setTemplateImage(true)` on macOS via injected `nativeImage` in [tray.cjs](../../../electron/tray.cjs); reuses the existing logo's alpha silhouette (no new asset). 4 new tests in [electron-tray.test.mjs](../../../scripts/electron-tray.test.mjs) |
+| 2026-06-18 | MUZERO | **Phase 2 complete** (TDD): standalone macOS pin button — new [MacWindowControls](../../../src/components/shell/mac-window-controls.tsx) (top‑right, pin only) + `macControlsSupported`/`isMacRuntime` in [desktop-window-store.ts](../../../src/stores/desktop-window-store.ts), mounted in [App.tsx](../../../src/App.tsx). 4 new tests in [mac-window-controls.test.tsx](../../../src/components/shell/mac-window-controls.test.tsx) |
 
 ---
 
