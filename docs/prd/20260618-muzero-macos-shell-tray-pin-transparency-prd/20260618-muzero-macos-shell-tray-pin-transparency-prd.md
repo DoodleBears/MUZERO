@@ -1,6 +1,6 @@
 # PRD: MUZERO macOS Desktop Shell Fixes — Tray Icon Size, Always‑On‑Top Button, Lyrics‑Only Transparency
 
-**Status:** Draft
+**Status:** Review (all 3 phases implemented + TDD; pending real‑Mac verification)
 **Created:** 2026-06-18
 **Author:** MUZERO
 **Module:** Desktop Shell (Electron) — macOS parity for system tray, window controls, and transparent lyrics capture
@@ -13,7 +13,7 @@
 |-------|------|--------|------|
 | 1 | macOS menu‑bar tray icon sizing (template image) | ✅ Completed | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | macOS top‑right always‑on‑top (pin) button | ✅ Completed | [Phase 2 Checklist](#phase-2-checklist) |
-| 3 | macOS lyrics‑only transparent window backing | 🔲 Pending | [Phase 3 Checklist](#phase-3-checklist) |
+| 3 | macOS lyrics‑only transparent window backing | ✅ Completed | [Phase 3 Checklist](#phase-3-checklist) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
 
@@ -179,12 +179,14 @@ A transparent DOM over an opaque window backing shows the backing color — `#09
 - macOS transparent windows do not support `vibrancy` simultaneously, and `backgroundColor` with alpha behaves differently than on Windows.
 - The Windows shell already paints its own rounded corners + accent border in CSS (`#root::after`, `.app-shell` clip‑path) precisely because it runs transparent+frameless. macOS would need the equivalent **DOM‑painted background** for normal states so the window doesn't look chrome‑less/shadow‑less when NOT in lyrics mode.
 
-**Fix direction (decided — Option A, symmetric to Windows):**
+**Fix direction (decided — Option A, symmetric to Windows):** ✅ **Implemented** (real‑device verification pending — see Q1 note below)
 
 - **Decision (Q2):** create the macOS window **`transparent: true`** with a transparent/no‑opaque `backgroundColor` (`#00000000`), and let the normal (non‑lyrics) app background be painted by the DOM (`.app-shell` `bg-background`) — which it already is. The existing `data-muzero-lyrics-overlay` CSS path then "just works" on macOS exactly as on Windows. **No second helper window** (Option B rejected: `transparent` can't be toggled at runtime, and a second always‑transparent capture window doubles the renderer/state for no benefit).
 - **Decision (Q1 — macOS‑specific window setup):** keep `titleBarStyle: "hiddenInset"` so the **native traffic lights stay top‑left** (the user's original ask: macOS doesn't need custom min/max/close, just the pin button). A transparent macOS window **loses the native drop shadow and OS‑provided rounded‑corner mask** — this is the macOS‑specific gotcha behind "fine on Windows, black on macOS." Compensate by painting shadow + rounded corners in the DOM (next decision). Implementation must verify traffic‑light rendering under `transparent: true`; if `hiddenInset` + transparent proves unstable on the target macOS versions, fall back to `frame: false` + the standalone macOS pin control from Issue #2 (no native min/max/close needed anyway).
 - **Decision (Q5 — window chrome):** extend the existing **win32 DOM‑painted rounded‑corner + accent‑border treatment** ([styles.css:219-289](../../../src/styles.css#L219-L289)) to macOS by widening those selectors to also match `[data-desktop-platform="darwin"]` (or a shared `[data-desktop-shell="electron"]:not(...win-specific)`), since a transparent macOS window has no native shadow/corners. Painting chrome in the DOM keeps Windows and macOS visually consistent (Q4 spirit) and is the best‑practice way to restore corners/shadow lost to transparency.
-- The CSS at [styles.css:291-303](../../../src/styles.css#L291-L303) (the lyrics‑overlay transparency) is already correct and cross‑platform; the substantive change is in **window creation** ([main.cjs:198-225](../../../electron/main.cjs#L198-L225)) plus the chrome selectors above. Maximized/fullscreen must still drop the DOM corners/border (the win32 rules at [styles.css:265-281](../../../src/styles.css#L265-L281) already do this — extend them to macOS too).
+- The CSS at [styles.css:296-308](../../../src/styles.css#L296-L308) (the lyrics‑overlay transparency) is already correct and cross‑platform; the substantive change is in **window creation** plus the chrome selectors above. Maximized/fullscreen drops the DOM corners/border on macOS too (the win32 reset rules were extended to darwin).
+
+- ✅ **As implemented:** per‑platform window options moved to a pure, unit‑tested [window-chrome.cjs `resolveWindowChrome(platform)`](../../../electron/window-chrome.cjs) consumed by [main.cjs `createWindow`](../../../electron/main.cjs) (darwin → `transparent:true` + `#00000000` + `hiddenInset` + framed; win32 → transparent + frameless; linux → opaque + framed). CSS chrome selectors widened to `:is([data-desktop-platform="win32"], [data-desktop-platform="darwin"])`. The cover‑drag border animation (`useWindowBorderDragColor`) stays win32‑only; macOS shows the settled cover‑colored border (no per‑frame drag follow). Tests: [scripts/electron-window-chrome.test.mjs](../../../scripts/electron-window-chrome.test.mjs). Full suite (2940 tests) green; bundle‑integrity test confirms `./window-chrome.cjs` bundles with no leaked deps. **⚠️ Real macOS run still needed** to confirm traffic lights + see‑through capture under `transparent:true`.
 
 ---
 
@@ -260,19 +262,20 @@ A transparent DOM over an opaque window backing shows the backing color — `#09
 
 ### Phase 3: macOS lyrics‑only transparent backing
 
-**Goal:** lyrics‑only mode is genuinely transparent on macOS (decided approach: Option A — always‑transparent window).
+**Goal:** lyrics‑only mode is genuinely transparent on macOS (decided approach: Option A — always‑transparent window). ✅ **Completed (pending real‑device QA)**
 
 **Tasks:**
-- [ ] In [main.cjs `createWindow`](../../../electron/main.cjs#L198-L225), create the macOS window `transparent: true` + `backgroundColor: "#00000000"` (extend the current `isWindows` branches to also cover macOS), keeping `titleBarStyle: "hiddenInset"` for native traffic lights.
-- [ ] Extend the win32 DOM‑painted chrome (rounded corners + accent border + maximized/fullscreen reset) in [styles.css:219-289](../../../src/styles.css#L219-L289) to also match `[data-desktop-platform="darwin"]`, restoring the shadow/corners lost to transparency.
-- [ ] Verify native traffic lights render under transparency; if unstable on target macOS versions, fall back to `frame:false` + the Issue‑#2 standalone pin control.
-- [ ] Verify normal/maximized states paint an opaque DOM background (no transparent hole); confirm existing `data-muzero-lyrics-overlay` CSS yields a see‑through capture on macOS with **no change** to [styles.css:291-303](../../../src/styles.css#L291-L303).
+- [x] Per‑platform window options extracted to [window-chrome.cjs `resolveWindowChrome`](../../../electron/window-chrome.cjs); macOS → `transparent: true` + `backgroundColor: "#00000000"` + `titleBarStyle: "hiddenInset"`, wired into [main.cjs `createWindow`](../../../electron/main.cjs).
+- [x] Extended the win32 DOM‑painted chrome (background‑transparent, `.app-shell` corners, `#root::after` border, maximized/fullscreen reset) in [styles.css](../../../src/styles.css) to also match `[data-desktop-platform="darwin"]`.
+- [ ] _Verify native traffic lights render under transparency on a real Mac; fall back to `frame:false` + Issue‑#2 control if unstable. (pending)_
+- [x] Normal states paint an opaque DOM background (`.app-shell bg-background`); the cross‑platform `data-muzero-lyrics-overlay` CSS (unchanged) yields the see‑through capture on macOS once the window is transparent.
 
 ### Phase 3 Checklist
-- [ ] Lyrics‑only / pinned capture is fully see‑through on macOS (OBS/desktop shows through).
-- [ ] Non‑lyrics states look correct (background opaque, DOM‑painted shadow/corners present, traffic lights working).
-- [ ] Maximized/fullscreen drops corners + border on macOS (parity with win32).
-- [ ] No regression to Windows transparency path.
+- [x] Window created transparent on macOS (unit‑tested via `resolveWindowChrome`); lyrics‑overlay CSS already cross‑platform → see‑through path complete in code.
+- [x] Non‑lyrics states: opaque DOM background + DOM‑painted rounded corners/border extended to macOS.
+- [x] Maximized/fullscreen drops corners + border on macOS (reset selectors extended to darwin).
+- [x] No regression to Windows transparency path (full suite green: 2940 tests; bundle‑integrity test passes).
+- [ ] _Real macOS run: traffic lights render + capture is genuinely see‑through (pending real‑device QA)._
 
 ---
 
@@ -327,6 +330,7 @@ A transparent DOM over an opaque window backing shows the backing color — `#09
 | 2026-06-18 | MUZERO | Resolved all 5 Open Questions ("best practice + align with Windows"): Option A always‑transparent macOS window (`hiddenInset` + native traffic lights + DOM‑painted chrome), monochrome template tray icon, macOS pin button matches Windows `off`/`pin`. Folded decisions into §3.1/§3.2/§3.3 and Phase 3 |
 | 2026-06-18 | MUZERO | **Phase 1 complete** (TDD): tray icon resized to 16pt + `setTemplateImage(true)` on macOS via injected `nativeImage` in [tray.cjs](../../../electron/tray.cjs); reuses the existing logo's alpha silhouette (no new asset). 4 new tests in [electron-tray.test.mjs](../../../scripts/electron-tray.test.mjs) |
 | 2026-06-18 | MUZERO | **Phase 2 complete** (TDD): standalone macOS pin button — new [MacWindowControls](../../../src/components/shell/mac-window-controls.tsx) (top‑right, pin only) + `macControlsSupported`/`isMacRuntime` in [desktop-window-store.ts](../../../src/stores/desktop-window-store.ts), mounted in [App.tsx](../../../src/App.tsx). 4 new tests in [mac-window-controls.test.tsx](../../../src/components/shell/mac-window-controls.test.tsx) |
+| 2026-06-18 | MUZERO | **Phase 3 complete** (TDD, pending real‑device QA): macOS window created transparent via [window-chrome.cjs `resolveWindowChrome`](../../../electron/window-chrome.cjs) in [main.cjs](../../../electron/main.cjs); win32 DOM‑painted chrome (corners/border/maximized reset) extended to `[data-desktop-platform="darwin"]` in [styles.css](../../../src/styles.css). 3 new tests in [electron-window-chrome.test.mjs](../../../scripts/electron-window-chrome.test.mjs); full suite (2940) green. **All 3 phases done — PRD ready to move Draft → Completed after real‑Mac verification.** |
 
 ---
 
