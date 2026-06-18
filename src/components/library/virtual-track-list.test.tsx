@@ -170,6 +170,51 @@ describe("VirtualTrackList", () => {
     expect(screen.getByTestId("track-row-trk_2")).toHaveFocus();
   });
 
+  it("scrolls and focuses when an anchor arrives after the list has mounted", () => {
+    vi.useFakeTimers();
+    const scrollToIndex = vi.fn();
+    useVirtualizerMock.mockReturnValue({
+      getTotalSize: () => 120,
+      getVirtualItems: () => [
+        { index: 0, key: "trk_1", size: 60, start: 0 },
+        { index: 1, key: "trk_2", size: 60, start: 60 },
+      ],
+      scrollToIndex,
+    });
+
+    const { rerender } = render(
+      <VirtualTrackList tracks={[track("trk_1", "First"), track("trk_2", "Second")]} />,
+    );
+    scrollToIndex.mockClear();
+
+    rerender(
+      <VirtualTrackList
+        tracks={[track("trk_1", "First"), track("trk_2", "Second")]}
+        initialFocusIndex={1}
+        initialScrollAlign="center"
+        initialScrollIndex={1}
+      />,
+    );
+    vi.runAllTimers();
+
+    expect(scrollToIndex).toHaveBeenCalledWith(1, { align: "center" });
+    expect(screen.getByTestId("track-row-trk_2")).toHaveFocus();
+
+    rerender(<VirtualTrackList tracks={[track("trk_1", "First"), track("trk_2", "Second")]} />);
+    scrollToIndex.mockClear();
+
+    rerender(
+      <VirtualTrackList
+        tracks={[track("trk_1", "First"), track("trk_2", "Second")]}
+        initialFocusIndex={1}
+        initialScrollAlign="center"
+        initialScrollIndex={1}
+      />,
+    );
+
+    expect(scrollToIndex).toHaveBeenCalledWith(1, { align: "center" });
+  });
+
   it("moves focus with arrow keys and views the focused track", () => {
     vi.useFakeTimers();
     useVirtualizerMock.mockReturnValue({

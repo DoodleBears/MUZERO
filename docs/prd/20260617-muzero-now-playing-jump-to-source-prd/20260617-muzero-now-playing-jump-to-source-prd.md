@@ -478,6 +478,7 @@ function handleOpen() {
 | 2026-06-18 | Codex | Phase 2 completed：Dock 信息点击 tab-aware 跳转、当前曲目菜单新增可见跳转项、统一 `dispatchJumpTarget` helper、四语言 `nav.jumpToSource`。 |
 | 2026-06-18 | Codex | Phase 3 completed：coverflow 封面纵向上/下滑识别为 jump-to-source，横向主导仍交给 coverflow 切歌，轻 tap 不误触发。 |
 | 2026-06-18 | Codex | Phase 4 completed：新增共享 source-cover morph 状态、`jumpToSource()` 统一 arm + transition + dispatch、search-page pending 消费复用 `gallery-cover` 命名空间、锚点跳转后聚焦当前曲目行。 |
+| 2026-06-18 | Codex | Follow-up fix：`VirtualTrackList` 的锚点 scroll/focus 从 mount-only 改为响应后到达的 `initialScrollIndex` / `initialFocusIndex`，修复「已进入对应歌单但 scrollbar 没跳到当前歌曲」的问题。 |
 
 ---
 
