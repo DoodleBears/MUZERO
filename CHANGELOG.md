@@ -2,6 +2,22 @@
 
 All notable changes to MUZERO. Generated from `src/content/changelog` — do not edit by hand (`make changelog-md`).
 
+## v1.2.1 — 2026-06-18 · Sortable Hearted playlist and rock-solid covers
+
+Sort the Hearted playlist — newest-hearted first by default, or by name, added, played, or duration. Remote/R2 covers now show on the web and can be saved to your device, while covers stay solid everywhere: no blanking while you scroll, and no sticking on the previous track when you skip a streamed song. The Dock queue drawer is now a pure up-next list.
+
+### Added
+- **library** Sort the Hearted playlist — The Hearted playlist gains gallery-style sort chips: by when you hearted each song (the new default — most recently hearted first), or by name, added, last played, or duration. Tap the active chip again to flip the direction.
+- **library** Remote covers on the web, and download covers to your device — Remote / R2 covers now display across the web shell — now-playing stage, Dock, gallery grid, and track-row list — instead of falling back to a blank or thumbhash. On desktop you can also save a streamed track's cover to a local blob (single or whole-set), with optional auto-caching on first play.
+
+### Changed
+- **player** Dock queue drawer is a pure up-next list — The Dock queue drawer now mirrors only the current playback queue. The pinned Hearted / Recently Played / Most Played sources moved to the library page, so the drawer stays a focused up-next view and no longer reads the whole library to build them.
+
+### Fixed
+- **player** Skipping a streamed song no longer leaves the previous cover — When you skipped via the next button or a Dock drag, a streamed / R2 cover that resolves over the network could leave the stage showing the previous track's cover while the title, artist, and audio had already advanced. Every commit path now waits for the new cover to paint before handing off.
+- **library** Remote cover thumbnails stay visible while scrolling — In the virtualized track list, an already-loaded remote / R2 cover used to blank back to its thumbhash while you scrolled, reappearing only when you stopped. It now keeps showing during the scroll — matching how local covers behave — while never-seen covers still defer so a fast fling doesn't trigger a fetch-per-row storm.
+- **app** Dragging a cover no longer triggers the drop overlay — Dragging an in-app cover (e.g. the artist page album strip) falsely tripped the “drop to add” overlay, which should react only to external OS files. Covers are now non-draggable everywhere, and the overlay gains a close button as an escape hatch for the rare case a browser drops the drag-end event and leaves it stuck. _(desktop)_
+
 ## v1.2.0 — 2026-06-18 · QQ Music, coverflow, and silky-smooth big libraries
 
 Search and import from QQ Music, switch songs by dragging a 3D coverflow where the cover, background, palette, and backlight move as one, and keep smooth playback, search, and editing even on libraries of thousands of tracks. Live requests gain command-prefix gating, and the flow background now glides between covers.
