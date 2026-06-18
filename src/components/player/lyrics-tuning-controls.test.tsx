@@ -23,12 +23,12 @@ beforeEach(() => {
 });
 
 describe("LyricsTuningControls", () => {
-  it("defaults the lyrics motion mode to classic", () => {
+  it("defaults the lyrics motion mode to cascade", () => {
     settings = { ...DEFAULT_SETTINGS, lyricsMotionMode: undefined };
 
     render(<LyricsTuningControls />);
 
-    expect(screen.getByRole("button", { name: "lyricsSettings.motionClassic" })).toHaveAttribute(
+    expect(screen.getByRole("button", { name: "lyricsSettings.motionCascade" })).toHaveAttribute(
       "aria-pressed",
       "true",
     );

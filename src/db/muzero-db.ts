@@ -401,6 +401,19 @@ export class MuzeroDB extends Dexie {
         const rows = likeRowsFromLegacyTracks(tracks, Date.now());
         if (rows.length > 0) await tx.table("trackLikes").bulkAdd(rows);
       });
+
+    // v27 — lyrics motion now defaults to the cascade layout. Older settings rows
+    // often carry `lyricsMotionMode: "classic"` because `saveSettings()` persists
+    // fully merged defaults, so move inherited old defaults to the current visible
+    // default. Existing inertial / cascade choices are preserved.
+    this.version(27).upgrade(async (tx) => {
+      await tx
+        .table("settings")
+        .toCollection()
+        .modify((s: Partial<AppSettings>) => {
+          if (s.lyricsMotionMode === "classic") s.lyricsMotionMode = "cascade";
+        });
+    });
   }
 }
 

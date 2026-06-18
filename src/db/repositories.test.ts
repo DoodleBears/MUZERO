@@ -1412,6 +1412,32 @@ describe("v9 → v10 migration removes legacy boot-resume pointers", () => {
   });
 });
 
+describe("v26 → v27 migration moves inherited lyric motion defaults to cascade", () => {
+  it("updates old classic defaults while preserving explicit non-classic choices", async () => {
+    const name = `muzero-mig27-${Math.random().toString(36).slice(2)}`;
+    const v26 = new Dexie(name);
+    v26.version(26).stores({ settings: "id" });
+    await v26.open();
+    await v26.table("settings").bulkPut([
+      { id: "app", lyricsMotionMode: "classic" },
+      { id: "other", lyricsMotionMode: "inertial" },
+    ]);
+    v26.close();
+
+    const mz = new MuzeroDB(name);
+    try {
+      expect((await getSettings(mz)).lyricsMotionMode).toBe("cascade");
+      expect((await mz.table("settings").get("other"))?.lyricsMotionMode).toBe("inertial");
+    } finally {
+      mz.close();
+      await new Promise<void>((resolve) => {
+        const req = indexedDB.deleteDatabase(name);
+        req.onsuccess = req.onerror = () => resolve();
+      });
+    }
+  });
+});
+
 describe("import-folder provenance + watch list", () => {
   it("persists sourcePath and queries it via knownSourcePaths", async () => {
     const session = await createSession({ seedPrompt: "", config: { autoExtend: false } }, db);

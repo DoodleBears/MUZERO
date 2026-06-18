@@ -115,7 +115,7 @@ export function LyricsTuningControls({ className }: { className?: string }) {
   const wordByWord = s.lyricsWordByWord ?? true;
   const showTranslation = s.lyricsShowTranslation ?? true;
   const showRomanization = s.lyricsShowRomanization ?? false;
-  const motionMode = s.lyricsMotionMode ?? "classic";
+  const motionMode = s.lyricsMotionMode ?? "cascade";
   const cascadeAnchorPct =
     s.lyricsCascadeAnchorPct ?? DEFAULT_LYRIC_CASCADE_TUNING.anchorRatio * 100;
   const cascadeDelayMs = s.lyricsCascadeDelayMs ?? DEFAULT_LYRIC_CASCADE_TUNING.staggerMs;

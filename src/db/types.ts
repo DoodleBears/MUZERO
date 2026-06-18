@@ -1153,7 +1153,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   lyricsWordByWord: true,
   lyricsShowTranslation: true,
   lyricsShowRomanization: false,
-  lyricsMotionMode: "classic",
+  lyricsMotionMode: "cascade",
   lyricsCascadeAnchorPct: 42,
   lyricsCascadeDelayMs: 52,
   lyricsCascadeBlurPx: 4.2,

@@ -10,6 +10,10 @@ describe("DEFAULT_SETTINGS", () => {
     expect(DEFAULT_SETTINGS.lyricsColorMode).toBe("default");
   });
 
+  it("uses cascade lyrics motion by default", () => {
+    expect(DEFAULT_SETTINGS.lyricsMotionMode).toBe("cascade");
+  });
+
   it("uses clean immersive defaults for video-track visual effects", () => {
     expect(DEFAULT_SETTINGS.videoTrackBackgroundEffectsEnabled).toBe(true);
     expect(DEFAULT_SETTINGS.videoTrackVisualizerEnabled).toBe(true);
