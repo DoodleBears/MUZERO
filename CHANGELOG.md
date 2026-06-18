@@ -2,6 +2,22 @@
 
 All notable changes to MUZERO. Generated from `src/content/changelog` — do not edit by hand (`make changelog-md`).
 
+## v1.2.2 — 2026-06-18 · Jump back to source, clearer imports, and smarter video covers
+
+Now Playing can take you straight back to the song's source list, complete with a smooth cover-to-row transition and a current-track marker. Dropped media now asks which set to join, desktop imports can reference files in place with visible progress and recovery tools, and uploaded videos get automatic poster covers. Online tracks are downloaded before playback so seeking works, and volume shortcuts behave cleanly.
+
+### Highlights
+- **player** Jump from Now Playing back to the source list — Use the title row, context menu, or cover swipe to return to the exact library or search list that started the current track. MUZERO scrolls to the right row, marks the current song, and morphs the cover into place so the jump feels connected instead of disorienting.
+
+### Added
+- **sets** Dropped media asks which set to join — Dropping or pasting audio and video outside a set now opens the set picker instead of silently choosing for you. The currently playing set is shown first with a current badge, so mixing new songs and videos into the set you are hearing takes one deliberate click.
+- **library** Reference desktop files in place, with progress and recovery — Desktop drag-and-drop can now keep media referenced from its original disk path instead of copying bytes into IndexedDB. Imports show real byte-level progress when copying is needed, and Settings / track inspection expose recovery actions for referenced media that moved or went missing. _(desktop)_
+- **library** Uploaded videos get automatic poster covers — MUZERO now samples uploaded videos and scores candidate frames for a useful cover instead of leaving the track title as the fallback. Native browser capture handles common files, with a Mediabunny fallback for formats that need deeper probing.
+
+### Fixed
+- **streaming** Online tracks can seek from the first play — QQ Music and other proxied online sources are downloaded to a local blob before playback when needed, so the scrubber, Dock drag, and lyric clicks can seek reliably. If the download fails, MUZERO falls back to streaming so the song still starts. _(desktop)_
+- **player** Cleaner volume shortcuts and mute toggle — On Now Playing, up and down arrows are reserved for volume instead of being swallowed by progress sliders. The volume button also remembers your last audible level, so unmuting restores where you were instead of jumping back to the default.
+
 ## v1.2.1 — 2026-06-18 · Sortable Hearted playlist and rock-solid covers
 
 Sort the Hearted playlist — newest-hearted first by default, or by name, added, played, or duration. Remote/R2 covers now show on the web and can be saved to your device, while covers stay solid everywhere: no blanking while you scroll, and no sticking on the previous track when you skip a streamed song. The Dock queue drawer is now a pure up-next list.
