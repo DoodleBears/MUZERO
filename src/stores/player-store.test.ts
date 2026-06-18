@@ -811,6 +811,58 @@ describe("player-store bulk upload visibility", () => {
     expect(track?.coverCrop).toBeUndefined();
     expect(cover).toMatchObject({ bytes: 4, mime: "image/jpeg", role: "cover" });
   });
+
+  it("keeps the uploaded video track when poster extraction fails", async () => {
+    vi.doMock("@/lib/media-probe", async () => {
+      const actual = await vi.importActual<typeof import("@/lib/media-probe")>("@/lib/media-probe");
+      return {
+        ...actual,
+        probeMediaFile: vi.fn(async (file: File) => ({
+          durationSec: 12,
+          kind: "video",
+          mime: file.type || "video/mp4",
+          title: file.name.replace(/\.[^.]+$/, ""),
+        })),
+      };
+    });
+    vi.doMock("@/lib/media-metadata", async () => {
+      const actual =
+        await vi.importActual<typeof import("@/lib/media-metadata")>("@/lib/media-metadata");
+      return {
+        ...actual,
+        parseUploadedMediaMetadata: vi.fn(async (file: File) => ({
+          albumPicUrl: undefined,
+          embeddedCover: undefined,
+          mediaMetadata: actual.fallbackUploadMediaMetadata(file, "MV"),
+          title: "MV",
+        })),
+      };
+    });
+    vi.doMock("@/lib/video-poster-frame", async () => ({
+      ...(await vi.importActual<typeof import("@/lib/video-poster-frame")>(
+        "@/lib/video-poster-frame",
+      )),
+      extractUsefulVideoPosterFrame: vi.fn(async () => {
+        throw new Error("decode failed");
+      }),
+    }));
+
+    const { db, repos, usePlayerStore } = await loadRuntime();
+    const session = await repos.createSession({ seedPrompt: "", config: { autoExtend: false } });
+    const file = new File([new Uint8Array([1, 2, 3])], "mv.mp4", { type: "video/mp4" });
+
+    await usePlayerStore.getState().addUploadsToSet(session.id, [file]);
+
+    const track = await db.tracks.orderBy("createdAt").last();
+    expect(track).toMatchObject({
+      kind: "video",
+      status: "ready",
+      title: "MV",
+    });
+    expect(track?.coverBlobId).toBeUndefined();
+    const media = track?.blobId ? await db.mediaBlobs.get(track.blobId) : undefined;
+    expect(media).toMatchObject({ mime: "video/mp4", role: "media" });
+  });
 });
 
 // --- Remote subscribed-manifest playback (R2 cloud drive sync, Phase 1) --------

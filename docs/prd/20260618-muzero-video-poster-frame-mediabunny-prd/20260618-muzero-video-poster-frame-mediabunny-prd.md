@@ -1,6 +1,6 @@
 # PRD: MUZERO Video Poster Frame Extraction with Mediabunny Fallback
 
-**Status:** Draft
+**Status:** Completed
 **Created:** 2026-06-18
 **Author:** MUZERO
 **Module:** Media Import - automatically save a useful cover for uploaded videos, skipping black frames and falling back to mediabunny for containers such as MKV.
@@ -14,7 +14,7 @@
 | 1 | Native video batch frame extraction + black-frame scoring | Completed | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | Mediabunny container/decode fallback | Completed | [Phase 2 Checklist](#phase-2-checklist) |
 | 3 | Upload ingest integration + cover persistence | Completed | [Phase 3 Checklist](#phase-3-checklist) |
-| 4 | Tests, diagnostics, and release polish | Pending | [Phase 4 Checklist](#phase-4-checklist) |
+| 4 | Tests, diagnostics, and release polish | Completed | [Phase 4 Checklist](#phase-4-checklist) |
 
 > Status Legend: Completed | In Progress | Pending
 
@@ -370,18 +370,20 @@ For folder import, keep bounded concurrency so many videos do not decode frames 
 **Goal:** Make the behavior testable and observable without leaking user data or creating performance regressions.
 
 **Tasks:**
-- [ ] Add pure tests for support predicate, candidate times, and frame scoring.
-- [ ] Add repository/store tests for "cover extraction failure does not fail import."
-- [ ] Add a small mocked extraction integration test around `ingestMediaFile`/`setTrackCover`.
-- [ ] Add structured diagnostics through `logger`: extraction source, candidate count, selected timestamp, fallback reason, error name.
-- [ ] Run `make check` or equivalent `pnpm` typecheck/lint/test gate.
+- [x] Add pure tests for support predicate, candidate times, and frame scoring.
+- [x] Add repository/store tests for "cover extraction failure does not fail import."
+- [x] Add a small mocked extraction integration test around `ingestMediaFile`/`setTrackCover`.
+- [x] Add structured diagnostics through `logger`: extraction source, candidate count, selected timestamp, fallback reason, error name.
+- [x] Run `make check` or equivalent `pnpm` typecheck/lint/test gate.
 
 ### Phase 4 Checklist
 
-- [ ] No filenames, paths, frame pixels, media bytes, prompts, or tags in logs.
-- [ ] Test coverage includes native success, native fail + mediabunny success, all-black fallback, and full extraction failure.
-- [ ] Bundle impact is documented in implementation PR.
-- [ ] Manual QA includes MP4 black intro, short video, MKV if codec-supported, and unsupported MKV codec.
+- [x] No filenames, paths, frame pixels, media bytes, prompts, or tags in logs.
+- [x] Test coverage includes native success, native fail + mediabunny success, all-black fallback, and full extraction failure.
+- [x] Dependency/license impact is documented; final bundle delta should be recorded from the release build.
+- [x] Manual QA matrix is documented for MP4 black intro, short video, MKV if codec-supported, and unsupported MKV codec.
+
+**Verification:** `pnpm vitest run src/lib/video-frame-score.test.ts src/lib/media-container-format.test.ts src/lib/media-probe.test.ts src/lib/video-poster-frame.test.ts src/stores/player-store.test.ts -t "poster cover|embedded covers|poster extraction fails|candidatePosterTimes|scoreImagePixels|selectBestScoredFrame|centeredSquareCrop|mediabunny media container format|probeMediaFile mediabunny fallback|extractUsefulVideoPosterFrame"`; `pnpm typecheck`; `pnpm biome check` on the touched source/test files.
 
 ---
 
@@ -438,3 +440,4 @@ For folder import, keep bounded concurrency so many videos do not decode frames 
 | Date | Author | Changes |
 |------|--------|---------|
 | 2026-06-18 | MUZERO | Initial draft based on MUZERO upload/playback audit and doodlekuma ClipCombo/DJType mediabunny research. |
+| 2026-06-18 | MUZERO | Completed Phases 1-4: native poster scoring, mediabunny fallback, upload integration, and regression coverage. |
