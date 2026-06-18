@@ -483,6 +483,40 @@ describe("media blob storage resolver", () => {
       bytes: 5,
       blob: new Blob(["cover"], { type: "image/png" }),
     });
+    await db.tracks.bulkPut([
+      {
+        id: "trk_copied",
+        sessionId: "ses_1",
+        title: "Copied",
+        kind: "audio",
+        origin: "uploaded",
+        provider: "upload",
+        status: "ready",
+        blobId: "blb_legacy_media",
+        durationSec: 1,
+        createdAt: 1,
+        updatedAt: 1,
+        playCount: 0,
+        liked: false,
+        tags: [],
+      },
+      {
+        id: "trk_referenced",
+        sessionId: "ses_1",
+        title: "Referenced",
+        kind: "video",
+        origin: "uploaded",
+        provider: "upload",
+        status: "ready",
+        sourcePath: "/media/Referenced.mp4",
+        durationSec: 1,
+        createdAt: 1,
+        updatedAt: 1,
+        playCount: 0,
+        liked: false,
+        tags: [],
+      },
+    ]);
 
     const summary = await summarizePersistentMediaStorage(db, {
       provider,
@@ -492,6 +526,8 @@ describe("media blob storage resolver", () => {
     expect(summary.count).toBe(3);
     expect(summary.bytes).toBe(19);
     expect(summary.legacyMediaCount).toBe(1);
+    expect(summary.copiedMediaCount).toBe(2);
+    expect(summary.referencedMediaCount).toBe(1);
     expect(summary.byBackend.opfs).toMatchObject({ count: 1, bytes: 8 });
     expect(summary.byBackend.indexeddb).toMatchObject({ count: 2, bytes: 11 });
     expect(summary.byRole.media).toMatchObject({ count: 2, bytes: 14 });

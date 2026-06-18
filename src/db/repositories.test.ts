@@ -11,9 +11,11 @@ import {
   addGalleryImage,
   addMemory,
   addTrackBackground,
+  cacheReferencedTrackBlob,
   clearSessionCover,
   clearTrackCover,
   createPendingTrack,
+  createReferencedUploadedTrack,
   createSession,
   createUploadedTrack,
   deleteImageBlob,
@@ -739,6 +741,77 @@ describe("markTrackReady", () => {
       blob: undefined,
     });
     expect(provider.files.get(media?.storageKey ?? "")).toBeTruthy();
+  });
+});
+
+describe("cacheReferencedTrackBlob", () => {
+  it("copies a referenced local-file track into managed storage without losing its source path", async () => {
+    const session = await createSession({ seedPrompt: "", config: { autoExtend: false } }, db);
+    const track = await createReferencedUploadedTrack(
+      {
+        sessionId: session.id,
+        title: "Reference Song",
+        kind: "audio",
+        mime: "audio/mpeg",
+        durationSec: 42,
+        sourcePath: "/music/Reference Song.mp3",
+        mediaMetadata: {
+          originalFileName: "Reference Song.mp3",
+          originalMime: "audio/mpeg",
+          parsedAt: 1,
+          parser: "manual",
+          title: "Reference Song",
+        },
+      },
+      db,
+    );
+    const provider = createMemoryProvider("electron-file");
+
+    await cacheReferencedTrackBlob(
+      {
+        trackId: track.id,
+        blob: new Blob(["cached audio"], { type: "audio/mpeg" }),
+        mime: "audio/mpeg",
+      },
+      db,
+      { provider },
+    );
+
+    const reloaded = await getTrack(track.id, db);
+    expect(reloaded).toMatchObject({
+      id: track.id,
+      blobId: expect.any(String),
+      sourcePath: "/music/Reference Song.mp3",
+      status: "ready",
+    });
+    const media = await db.mediaBlobs.get(reloaded?.blobId ?? "");
+    expect(media).toMatchObject({
+      trackId: track.id,
+      role: "media",
+      mime: "audio/mpeg",
+      bytes: 12,
+      storageBackend: "electron-file",
+    });
+    expect(provider.files.get(media?.storageKey ?? "")).toBeTruthy();
+  });
+
+  it("rolls back the stored bytes when the target track cannot be updated", async () => {
+    const provider = createMemoryProvider("electron-file");
+
+    await expect(
+      cacheReferencedTrackBlob(
+        {
+          trackId: "trk_missing",
+          blob: new Blob(["orphan"], { type: "audio/mpeg" }),
+          mime: "audio/mpeg",
+        },
+        db,
+        { provider },
+      ),
+    ).rejects.toThrow("Track not found");
+
+    expect(await db.mediaBlobs.count()).toBe(0);
+    expect(provider.files.size).toBe(0);
   });
 });
 

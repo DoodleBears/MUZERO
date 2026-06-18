@@ -1,4 +1,4 @@
-import { FolderSearch, Loader2 } from "lucide-react";
+import { Download, FolderSearch, Loader2 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -18,6 +18,7 @@ import {
 import { cn, formatDuration } from "@/lib/utils";
 import { useNavStore } from "@/stores/nav-store";
 import { notify } from "@/stores/notification-store";
+import { usePlayerStore } from "@/stores/player-store";
 import { AnnotationEditor } from "./annotation-editor";
 
 interface TrackInspectorPanelProps {
@@ -77,6 +78,8 @@ interface MetadataFact {
 function TrackMetadataSummary({ track }: { track: Track }) {
   const { t } = useTranslation();
   const [repairingLocalFile, setRepairingLocalFile] = useState(false);
+  const [copyingLocalFile, setCopyingLocalFile] = useState(false);
+  const cacheReferencedTrackToDevice = usePlayerStore((s) => s.cacheReferencedTrackToDevice);
   const coverUrl = useTrackCoverUrl(track);
   const metadata = track.mediaMetadata;
   const artists = trackArtists(track);
@@ -136,6 +139,16 @@ function TrackMetadataSummary({ track }: { track: Track }) {
     }
   }
 
+  async function copyLocalFileToDevice() {
+    if (copyingLocalFile) return;
+    setCopyingLocalFile(true);
+    try {
+      await cacheReferencedTrackToDevice(track.id);
+    } finally {
+      setCopyingLocalFile(false);
+    }
+  }
+
   return (
     <section className="flex flex-col gap-3">
       {/* Right-click a pinned cover to remove it back to the disc placeholder. */}
@@ -183,19 +196,36 @@ function TrackMetadataSummary({ track }: { track: Track }) {
         </dl>
       )}
       {track.sourcePath && (
-        <button
-          type="button"
-          onClick={() => void repairLocalFile()}
-          disabled={repairingLocalFile}
-          className="inline-flex h-8 items-center justify-center gap-2 rounded-md border border-border px-3 text-xs transition-colors hover:bg-accent disabled:pointer-events-none disabled:opacity-60"
-        >
-          {repairingLocalFile ? (
-            <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />
-          ) : (
-            <FolderSearch className="size-3.5" aria-hidden="true" />
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => void repairLocalFile()}
+            disabled={repairingLocalFile}
+            className="inline-flex h-8 items-center justify-center gap-2 rounded-md border border-border px-3 text-xs transition-colors hover:bg-accent disabled:pointer-events-none disabled:opacity-60"
+          >
+            {repairingLocalFile ? (
+              <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />
+            ) : (
+              <FolderSearch className="size-3.5" aria-hidden="true" />
+            )}
+            {t("gallery.repairLocalFile")}
+          </button>
+          {!track.blobId && (
+            <button
+              type="button"
+              onClick={() => void copyLocalFileToDevice()}
+              disabled={copyingLocalFile}
+              className="inline-flex h-8 items-center justify-center gap-2 rounded-md border border-border px-3 text-xs transition-colors hover:bg-accent disabled:pointer-events-none disabled:opacity-60"
+            >
+              {copyingLocalFile ? (
+                <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />
+              ) : (
+                <Download className="size-3.5" aria-hidden="true" />
+              )}
+              {t("gallery.copyLocalFileToDevice")}
+            </button>
           )}
-          {t("gallery.repairLocalFile")}
-        </button>
+        </div>
       )}
     </section>
   );

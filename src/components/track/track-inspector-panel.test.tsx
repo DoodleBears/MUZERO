@@ -11,6 +11,12 @@ vi.mock("@/hooks/use-media", () => ({
   useTrackCoverUrl: () => null,
 }));
 
+vi.mock("@/stores/player-store", () => ({
+  usePlayerStore: (
+    selector: (state: { cacheReferencedTrackToDevice: () => Promise<void> }) => unknown,
+  ) => selector({ cacheReferencedTrackToDevice: vi.fn(async () => {}) }),
+}));
+
 vi.mock("./annotation-editor", () => ({
   AnnotationEditor: ({ track }: { track: Track }) => (
     <div data-testid="annotation-editor">memories for {track.title}</div>
@@ -86,6 +92,26 @@ describe("TrackInspectorPanel", () => {
 
     expect(screen.getByText("gallery.trackSourceLocalFile")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "gallery.repairLocalFile" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "gallery.copyLocalFileToDevice" }),
+    ).toBeInTheDocument();
+  });
+
+  it("hides the copy action once a referenced track already has managed bytes", () => {
+    render(
+      <TrackInspectorPanel
+        track={{
+          ...track(),
+          blobId: "blb_1",
+          sourcePath: "/music/Moonstone Beach.mp3",
+        }}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: "gallery.repairLocalFile" })).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "gallery.copyLocalFileToDevice" }),
+    ).not.toBeInTheDocument();
   });
 
   it("shows the empty selection state", () => {

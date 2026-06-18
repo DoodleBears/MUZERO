@@ -2,6 +2,7 @@ import { liveQuery, type Subscription } from "dexie";
 import { create } from "zustand";
 import { db } from "@/db/muzero-db";
 import {
+  cacheReferencedTrackBlob,
   createReferencedUploadedTrack,
   createSession,
   createUploadedTrack,
@@ -48,6 +49,7 @@ import {
 import { yieldForImportBackpressure } from "@/lib/import-backpressure";
 import { copyBlobWithProgress, type ImportProgress } from "@/lib/import-progress";
 import { uploadImportModeForFile } from "@/lib/import-routing";
+import { repairTrackSourcePathFromFolder } from "@/lib/local-file-repair";
 import { createDiagnosticLogger, log } from "@/lib/logger";
 import { fallbackUploadMediaMetadata, parseUploadedMediaMetadata } from "@/lib/media-metadata";
 import { isUnsupportedMediaError, probeMediaFile } from "@/lib/media-probe";
@@ -287,6 +289,8 @@ interface PlayerState {
   addUploads: (files: FileList | File[]) => Promise<void>;
   /** Import uploaded files into a SPECIFIC set (e.g. the gallery detail page). */
   addUploadsToSet: (setId: string, files: FileList | File[]) => Promise<void>;
+  /** Copy a referenced local-file track into managed storage for offline playback. */
+  cacheReferencedTrackToDevice: (trackId: string) => Promise<void>;
   /**
    * Drop-to-upload: import media into the active set, creating an upload set
    * first when nothing is active. Returns whether a new set was created (so the
@@ -1511,6 +1515,10 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     }
   },
 
+  async cacheReferencedTrackToDevice(trackId) {
+    await cacheReferencedTrackToDeviceFromSource(trackId, set, get);
+  },
+
   async ingestDroppedMedia(files, newSetName) {
     if (files.length === 0) return { createdSet: false };
     let createdSet = false;
@@ -2408,6 +2416,122 @@ function describePlaybackError(error: unknown): string {
   return error ? String(error) : "unknown";
 }
 
+function trackLocalFileMime(track: Track): string {
+  return track.mediaMetadata?.originalMime ?? (track.kind === "video" ? "video/mp4" : "audio/mpeg");
+}
+
+function patchQueuedTrack(
+  set: (p: Partial<PlayerState>) => void,
+  get: () => PlayerState,
+  trackId: string,
+  patch: Partial<Track>,
+): void {
+  const queue = get().queue;
+  if (!queue.some((track) => track.id === trackId)) return;
+  set({ queue: queue.map((track) => (track.id === trackId ? { ...track, ...patch } : track)) });
+}
+
+async function repairLocalFileFromPicker(
+  track: Track,
+  set: (p: Partial<PlayerState>) => void,
+  get: () => PlayerState,
+): Promise<void> {
+  try {
+    const folderPath = await pickFolder();
+    if (!folderPath) return;
+    await grantFolderAccess(folderPath);
+    const result = await repairTrackSourcePathFromFolder({
+      folderPath,
+      fs: createFolderFs(),
+      track,
+    });
+    if (result.kind === "repaired") {
+      patchQueuedTrack(set, get, track.id, {
+        error: undefined,
+        sourcePath: result.sourcePath,
+        status: "ready",
+      });
+      notify.success(i18n.t("gallery.repairLocalFileDone"));
+    } else {
+      notify.error(i18n.t("gallery.repairLocalFileNoMatch"));
+    }
+  } catch (error) {
+    notify.error(i18n.t("gallery.repairLocalFileFailed"));
+    log.warn("player", "local-file repair failed", {
+      trackId: track.id,
+      errorType: error instanceof Error ? error.name : typeof error,
+    });
+  }
+}
+
+async function cacheReferencedTrackToDeviceFromSource(
+  trackId: string,
+  set: (p: Partial<PlayerState>) => void,
+  get: () => PlayerState,
+): Promise<void> {
+  const queuedTrack = get().queue.find((track) => track.id === trackId);
+  const track = (await getTrack(trackId)) ?? queuedTrack;
+  if (!track?.sourcePath) {
+    notify.error(i18n.t("gallery.copyLocalFileToDeviceFailed"));
+    return;
+  }
+  const bridge = resolveDesktopBridge();
+  if (!bridge.readFile) {
+    notify.error(i18n.t("gallery.copyLocalFileToDeviceFailed"));
+    return;
+  }
+  try {
+    const bytes = await bridge.readFile(track.sourcePath);
+    const mime = trackLocalFileMime(track);
+    await cacheReferencedTrackBlob({
+      trackId: track.id,
+      blob: new Blob([bytes], { type: mime }),
+      mime,
+    });
+    const reloaded = await getTrack(track.id);
+    patchQueuedTrack(
+      set,
+      get,
+      track.id,
+      reloaded
+        ? reloaded
+        : {
+            blobId: track.blobId,
+            error: undefined,
+            status: "ready",
+          },
+    );
+    notify.success(i18n.t("gallery.copyLocalFileToDeviceDone"));
+  } catch (error) {
+    notify.error(i18n.t("gallery.copyLocalFileToDeviceFailed"));
+    log.warn("player", "failed to copy referenced track into managed storage", {
+      trackId: track.id,
+      errorType: error instanceof Error ? error.name : typeof error,
+    });
+  }
+}
+
+function notifyLocalFilePlaybackFailure(
+  track: Track,
+  set: (p: Partial<PlayerState>) => void,
+  get: () => PlayerState,
+): void {
+  notify.error(i18n.t("player.playbackError"), {
+    detail: i18n.t("player.localFileUnavailable"),
+    actions: [
+      {
+        label: i18n.t("gallery.repairLocalFile"),
+        onClick: () => void repairLocalFileFromPicker(track, set, get),
+        variant: "ghost",
+      },
+      {
+        label: i18n.t("gallery.copyLocalFileToDevice"),
+        onClick: () => void cacheReferencedTrackToDeviceFromSource(track.id, set, get),
+      },
+    ],
+  });
+}
+
 async function fetchRemotePlaybackBlob(
   track: Track,
   trace: PlaybackTraceContext | undefined,
@@ -2801,7 +2925,7 @@ async function ensureLoadedAndPlay(
     } else if (sourceKind === "local-file") {
       const bridge = resolveDesktopBridge();
       if (!track.sourcePath || !bridge.localMediaUrl) {
-        notify.error(i18n.t("player.playbackError"));
+        notifyLocalFilePlaybackFailure(track, set, get);
         log.warn("player", "local-file playback is unavailable", {
           trackId: track.id,
           hasSourcePath: !!track.sourcePath,
@@ -2810,20 +2934,30 @@ async function ensureLoadedAndPlay(
         set({ isPlaying: false, wantPlay: false });
         return;
       }
-      const mime =
-        track.mediaMetadata?.originalMime ?? (track.kind === "video" ? "video/mp4" : "audio/mpeg");
-      const src = await bridge.localMediaUrl({
-        path: track.sourcePath,
-        mime,
-        trace: playbackTrace,
-      });
-      if (!continueCurrent("local-file-url")) return;
-      tracePlaybackLoad("media.load.local-file", track, playbackTrace, {
-        mime,
-        transport: "local-file",
-      });
-      await mediaEngine.loadUrl(src, track.kind, { crossOrigin: "anonymous" });
-      if (!continueCurrent("local-file-loaded")) return;
+      const mime = trackLocalFileMime(track);
+      try {
+        const src = await bridge.localMediaUrl({
+          path: track.sourcePath,
+          mime,
+          trace: playbackTrace,
+        });
+        if (!continueCurrent("local-file-url")) return;
+        tracePlaybackLoad("media.load.local-file", track, playbackTrace, {
+          mime,
+          transport: "local-file",
+        });
+        await mediaEngine.loadUrl(src, track.kind, { crossOrigin: "anonymous" });
+        if (!continueCurrent("local-file-loaded")) return;
+      } catch (error) {
+        if (!continueCurrent("local-file-failed")) return;
+        notifyLocalFilePlaybackFailure(track, set, get);
+        log.warn("player", "local-file playback failed", {
+          trackId: track.id,
+          errorType: error instanceof Error ? error.name : typeof error,
+        });
+        set({ isPlaying: false, wantPlay: false });
+        return;
+      }
     } else if (sourceKind === "remote") {
       log.debug("player", "loading remote media url", {
         trackId: track.id,

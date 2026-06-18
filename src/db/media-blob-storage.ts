@@ -75,9 +75,11 @@ export interface PersistentMediaStorageBucket {
 export interface PersistentMediaStorageSummary {
   count: number;
   bytes: number;
+  copiedMediaCount: number;
   legacyMediaCount: number;
   missingCount: number;
   orphanedCount: number;
+  referencedMediaCount: number;
   byBackend: Record<MediaStorageBackend, PersistentMediaStorageBucket>;
   byRole: Partial<Record<MediaBlob["role"], PersistentMediaStorageBucket>>;
 }
@@ -369,9 +371,11 @@ export async function summarizePersistentMediaStorage(
   const summary: PersistentMediaStorageSummary = {
     count: 0,
     bytes: 0,
+    copiedMediaCount: 0,
     legacyMediaCount: 0,
     missingCount: 0,
     orphanedCount: 0,
+    referencedMediaCount: 0,
     byBackend: {
       indexeddb: { count: 0, bytes: 0 },
       opfs: { count: 0, bytes: 0 },
@@ -394,7 +398,12 @@ export async function summarizePersistentMediaStorage(
     role.count += 1;
     role.bytes += row.bytes;
     if (row.role === "media" && backend === "indexeddb") summary.legacyMediaCount += 1;
+    if (row.role === "media") summary.copiedMediaCount += 1;
   }
+
+  summary.referencedMediaCount = await db.tracks
+    .filter((track) => track.status === "ready" && !!track.sourcePath && !track.blobId)
+    .count();
 
   if (options.includeHealth) {
     const health = await validatePersistentMediaStorage(db, options);

@@ -1054,6 +1054,40 @@ export async function markTrackReady(
   }
 }
 
+export async function cacheReferencedTrackBlob(
+  input: { trackId: string; blob: Blob; mime: string },
+  db: MuzeroDB = defaultDb,
+  storage: MediaBlobStorageOptions = {},
+): Promise<void> {
+  const track = await db.tracks.get(input.trackId);
+  if (!track) throw new Error(`Track not found: ${input.trackId}`);
+  const media = await putMediaBlob(
+    {
+      id: newId("blb"),
+      trackId: input.trackId,
+      role: "media",
+      mime: input.mime,
+      bytes: input.blob.size,
+      blob: input.blob,
+      suggestedName: track.mediaMetadata?.originalFileName ?? track.title,
+    },
+    db,
+    storage,
+  );
+  try {
+    const updated = await db.tracks.update(input.trackId, {
+      blobId: media.id,
+      error: undefined,
+      status: "ready",
+      updatedAt: Date.now(),
+    });
+    if (updated === 0) throw new Error(`Track not found: ${input.trackId}`);
+  } catch (error) {
+    await deleteMediaBlob(media.id, db, storage);
+    throw error;
+  }
+}
+
 export async function markTrackFailed(
   id: string,
   error: string,

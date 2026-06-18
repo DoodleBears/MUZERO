@@ -27,9 +27,11 @@ const EMPTY_BUCKET = { count: 0, bytes: 0 } satisfies PersistentMediaStorageBuck
 const EMPTY_SUMMARY = {
   count: 0,
   bytes: 0,
+  copiedMediaCount: 0,
   legacyMediaCount: 0,
   missingCount: 0,
   orphanedCount: 0,
+  referencedMediaCount: 0,
   byBackend: {
     indexeddb: EMPTY_BUCKET,
     opfs: EMPTY_BUCKET,
@@ -340,6 +342,12 @@ export function PersistentStorageSettings() {
         )}
 
         <div className="grid gap-2 rounded-md border border-border bg-muted/25 p-3 text-xs sm:grid-cols-4">
+          <span>{t("streamCache.permanentCopiedMedia", { count: summary.copiedMediaCount })}</span>
+          <span>
+            {t("streamCache.permanentReferencedMedia", {
+              count: summary.referencedMediaCount,
+            })}
+          </span>
           <span>{t("streamCache.permanentLegacy", { count: summary.legacyMediaCount })}</span>
           <span>{t("streamCache.permanentMissing", { count: summary.missingCount })}</span>
           <span>{t("streamCache.permanentOrphaned", { count: summary.orphanedCount })}</span>

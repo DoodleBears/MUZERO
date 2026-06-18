@@ -1,6 +1,6 @@
 # PRD: Electron Reference-First Import + Visible Upload Progress
 
-**Status:** In Progress
+**Status:** Completed
 **Created:** 2026-06-18
 **Author:** DoodleBears
 **Module:** Import / Media Storage — drag-drop & file-picker ingest path（拖拽 / 文件选择器导入）
@@ -13,7 +13,7 @@
 |-------|------|--------|------|
 | 1 | Visible import/upload progress（先解决「以为卡住」） | ✅ Completed | [Phase 1 Checklist](#phase-1-checklist) |
 | 2 | Electron reference-first import + folder-named sets（拖拽引用路径不 copy + 拖文件夹按名建集） | ✅ Completed | [Phase 2 Checklist](#phase-2-checklist) |
-| 3 | Copy-fallback hardening + reference health（回退一致性 + 引用失效处理） | 🔲 Pending | [Phase 3 Checklist](#phase-3-checklist) |
+| 3 | Copy-fallback hardening + reference health（回退一致性 + 引用失效处理） | ✅ Completed | [Phase 3 Checklist](#phase-3-checklist) |
 
 > Status Legend: ✅ Completed | 🔄 In Progress | 🔲 Pending
 
@@ -273,14 +273,14 @@ async addUploadsToSet(setId: string, files: File[]): Promise<void>
 **Goal:** 引用文件失效（移动/删除）时的可恢复体验，与文件夹引用导入对齐。
 
 **Tasks:**
-- [ ] 引用 track 播放失败时提示「定位文件 / 转为复制」（复用既有 `repairLocalFile` 入口与文案）。
-- [ ] 「转为复制」action：读原文件 → `putMediaBlob` → 回填 `blobId`（保留 `sourcePath`）。
-- [ ] 存储用量统计（如有 settings 存储面板）区分「引用」与「已复制」计数。
+- [x] 引用 track 播放失败时提示「定位文件 / 转为复制」（复用既有 `repairLocalFile` 入口与文案）。
+- [x] 「转为复制」action：读原文件 → `putMediaBlob` → 回填 `blobId`（保留 `sourcePath`）。
+- [x] 存储用量统计（如有 settings 存储面板）区分「引用」与「已复制」计数。
 
 ### Phase 3 Checklist
 
-- [ ] 引用文件删除后播放报可理解错误，并能一键定位或转复制。
-- [ ] 转复制后该 track 离线可播（`blobId` 生效）。
+- [x] 引用文件删除后播放报可理解错误，并能一键定位或转复制。
+- [x] 转复制后该 track 离线可播（`blobId` 生效）。
 
 ---
 
@@ -333,3 +333,4 @@ async addUploadsToSet(setId: string, files: File[]): Promise<void>
 | 2026-06-18 | DoodleBears | Resolve Open Questions：Q1 Electron 默认引用无开关；Q3 字节级进度（best practice）；Q4 拖文件夹选集/按名建集；Q2 留为 Phase 2 前置 gate（确认 Electron 版本支持 `webUtils.getPathForFile`） |
 | 2026-06-18 | Codex | Complete Phase 1：新增 `ImportProgress` 瞬时状态、分块读取复制进度、导入开始即显示的 drop progress UI、四语言导入进度文案与 `import-progress` 单测。 |
 | 2026-06-18 | Codex | Complete Phase 2：Electron preload/main 增 dropped-file path + 逐文件授权；上传路径 reference-first 分流；单文件夹 drop 保留文件夹名并作为新 set 默认名；补 `import-routing` / `file-drop` / Electron bridge 单测。 |
+| 2026-06-18 | Codex | Complete Phase 3：引用文件播放失败 toast 增「定位文件 / 转为复制」actions；新增引用 track 转托管 blob 的仓库能力与 Inspector 入口；Settings 存储统计区分 copied / referenced media。 |
