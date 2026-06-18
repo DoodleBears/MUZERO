@@ -239,7 +239,7 @@ release-linux:
 # this platform's assets into manifest.json. Needs rclone + an 'r2:' remote and
 # RELEASE_R2_BUCKET. Run once per OS after its release-* build.
 release-publish:
-	@command -v rclone >/dev/null 2>&1 || { echo "ERROR: rclone required — 'brew install rclone' + configure an '$(RELEASE_RCLONE_REMOTE)' R2 remote."; exit 1; }
+	@node -e "const{execFileSync}=require('child_process');try{execFileSync(process.platform==='win32'?'where':'which',['rclone'],{stdio:'ignore'})}catch{console.error('ERROR: rclone required — install rclone and configure an $(RELEASE_RCLONE_REMOTE) R2 remote.');process.exit(1)}"
 	node scripts/publish-release.mjs
 
 # Preview the merged manifest for what's in release/ without uploading anything.
