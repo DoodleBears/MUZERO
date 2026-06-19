@@ -28,6 +28,9 @@ export type UpdateChannel = "stable" | "beta";
 
 export interface DesktopUpdateApi {
   onStatus(cb: (status: UpdateStatus) => void): () => void;
+  /** Last-known status from the main process (seeds late-mounting UI). Optional
+   * for older shells whose preload predates the getter. */
+  getStatus?(): Promise<UpdateStatus>;
   check(): Promise<UpdateStatus>;
   install(): Promise<boolean>;
   setChannel(channel: UpdateChannel): Promise<UpdateStatus>;
@@ -56,7 +59,23 @@ export function useDesktopUpdate(): UseDesktopUpdate {
 
   useEffect(() => {
     if (!api) return;
-    return api.onStatus(setStatus);
+    const unsubscribe = api.onStatus(setStatus);
+    // The startup auto-check (electron/updater.cjs) broadcasts before this hook
+    // mounts — with no listener attached yet, those status updates are dropped,
+    // so a background check/download stays invisible until a manual re-check.
+    // Seed from the main process's last-known status, but don't clobber a live
+    // broadcast that already advanced us past idle.
+    let active = true;
+    api
+      .getStatus?.()
+      .then((seed) => {
+        if (active) setStatus((prev) => (prev.kind === "idle" ? seed : prev));
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+      unsubscribe();
+    };
   }, [api]);
 
   const check = useCallback(() => {

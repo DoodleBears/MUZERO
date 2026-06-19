@@ -60,6 +60,10 @@ function initDesktopUpdater() {
   started = true;
 
   ipcMain.handle("muzero:getAppVersion", () => app.getVersion());
+  // Last-known status. The startup auto-check broadcasts before the About UI is
+  // mounted (renderer has no listener yet), so those updates are dropped; the
+  // renderer seeds from this on mount to reflect a background check/download.
+  ipcMain.handle("muzero:update:getStatus", () => latest);
   ipcMain.handle("muzero:update:check", () => runCheck());
   ipcMain.handle("muzero:update:install", () => {
     if (isMac) {

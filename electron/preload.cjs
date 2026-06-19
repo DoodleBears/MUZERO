@@ -80,6 +80,7 @@ contextBridge.exposeInMainWorld("muzero", {
       ipcRenderer.on("muzero:update:status", listener);
       return () => ipcRenderer.removeListener("muzero:update:status", listener);
     },
+    getStatus: () => ipcRenderer.invoke("muzero:update:getStatus"),
     check: () => ipcRenderer.invoke("muzero:update:check"),
     install: () => ipcRenderer.invoke("muzero:update:install"),
     setChannel: (channel) => ipcRenderer.invoke("muzero:update:setChannel", channel),
