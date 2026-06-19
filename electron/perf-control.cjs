@@ -153,6 +153,14 @@ function routeToCommand(method, segments, body) {
   if (method === "GET" && segments.length === 1 && segments[0] === "sessions") {
     return { kind: "sessions" };
   }
+  if (
+    method === "POST" &&
+    segments.length === 2 &&
+    segments[0] === "seed" &&
+    segments[1] === "example"
+  ) {
+    return { kind: "seedExample" };
+  }
   return null;
 }
 
@@ -161,7 +169,7 @@ function routeToCommand(method, segments, body) {
  * promise resolving to the renderer's result (or rejecting). `getReady()` reports
  * whether a renderer is attached. Returns { start, stop, port, token }.
  */
-function createPerfControlServer({ dispatch, getReady, port, token, version }) {
+function createPerfControlServer({ dispatch, getProcessMetrics, getReady, port, token, version }) {
   const server = http.createServer((req, res) => {
     void handle(req, res).catch((error) => {
       sendJson(res, 500, { ok: false, error: String((error && error.message) || error) });
@@ -194,6 +202,14 @@ function createPerfControlServer({ dispatch, getReady, port, token, version }) {
         sendJson(res, 400, { ok: false, error: String(error.message) });
         return;
       }
+    }
+    if (req.method === "GET" && segments.length === 1 && segments[0] === "processes") {
+      if (typeof getProcessMetrics !== "function") {
+        sendJson(res, 404, { ok: false, error: "process metrics not wired" });
+        return;
+      }
+      sendJson(res, 200, { ok: true, data: getProcessMetrics() });
+      return;
     }
     const command = routeToCommand(req.method, segments, body);
     if (!command) {
@@ -273,6 +289,7 @@ function registerPerfControl({ app, BrowserWindow }) {
 
   const server = createPerfControlServer({
     dispatch,
+    getProcessMetrics: () => snapshotProcessMetrics(app),
     getReady: () => liveWindow() != null,
     port,
     token,
@@ -292,6 +309,59 @@ function registerPerfControl({ app, BrowserWindow }) {
 
   app.on("before-quit", () => void server.stop());
   return server;
+}
+
+function snapshotProcessMetrics(app) {
+  const metrics = typeof app?.getAppMetrics === "function" ? app.getAppMetrics() : [];
+  const processes = metrics.map((metric) => {
+    const memory = metric.memory || {};
+    const workingSetMb = kbToMb(memory.workingSetSize);
+    const privateMb = kbToMb(memory.privateBytes);
+    const sharedMb = kbToMb(memory.sharedBytes);
+    return {
+      cpuPercent: roundMetric(metric.cpu?.percentCPUUsage ?? 0),
+      memory: {
+        privateMb,
+        sharedMb,
+        workingSetMb,
+      },
+      name: metric.name || metric.serviceName || "",
+      pid: metric.pid,
+      serviceName: metric.serviceName || "",
+      type: metric.type,
+    };
+  });
+  const byType = {};
+  for (const processMetric of processes) {
+    const type = processMetric.type || "unknown";
+    const current = byType[type] || { count: 0, privateMb: 0, workingSetMb: 0 };
+    current.count += 1;
+    current.privateMb += processMetric.memory.privateMb;
+    current.workingSetMb += processMetric.memory.workingSetMb;
+    byType[type] = current;
+  }
+  for (const value of Object.values(byType)) {
+    value.privateMb = roundMetric(value.privateMb);
+    value.workingSetMb = roundMetric(value.workingSetMb);
+  }
+  return {
+    capturedAt: Date.now(),
+    processes,
+    totals: {
+      byType,
+      privateMb: roundMetric(processes.reduce((sum, p) => sum + p.memory.privateMb, 0)),
+      workingSetMb: roundMetric(processes.reduce((sum, p) => sum + p.memory.workingSetMb, 0)),
+    },
+    units: "MB",
+  };
+}
+
+function kbToMb(value) {
+  return Number.isFinite(value) ? roundMetric(value / 1024) : 0;
+}
+
+function roundMetric(value) {
+  return Math.round(value * 10) / 10;
 }
 
 /** Drop {port,token} where the local driver (curl loop) can read it without scraping stdout. */
@@ -317,6 +387,7 @@ module.exports = {
   routeToCommand,
   tokenMatches,
   createPerfControlServer,
+  snapshotProcessMetrics,
   registerPerfControl,
 };
 
