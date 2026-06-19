@@ -10,6 +10,8 @@ import { create } from "zustand";
 export type FolderImportPhase = "scanning" | "importing" | "covers" | "completed" | "cancelled";
 
 export interface FolderImportProgress {
+  /** Diagnostic id shared by import work and its notification bridge. */
+  traceId?: string;
   phase: FolderImportPhase;
   /** Files processed so far (this run, across all folders). */
   done: number;

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { decodeNcm, isNcmFile, parse163KeyComment } from "@/lib/ncm-decode";
+import { decodeNcm, decodeNcmMetadata, isNcmFile, parse163KeyComment } from "@/lib/ncm-decode";
 import { encodeNcm } from "@/lib/ncm-fixture";
 
 // A real "163 key(Don't modify):" block (pre-XOR), captured from an actual .ncm.
@@ -95,6 +95,32 @@ describe("decodeNcm", () => {
 
   it("throws on a non-ncm header", () => {
     expect(() => decodeNcm(new Uint8Array(64))).toThrow(/ncm/i);
+  });
+});
+
+describe("decodeNcmMetadata", () => {
+  it("parses metadata and cover without returning decoded audio", () => {
+    const ncm = encodeNcm({
+      audio: Uint8Array.from([1, 2, 3, 4, 5]),
+      cover: Uint8Array.from([0xff, 0xd8, 0xff, 0x01]),
+      meta: {
+        musicName: "Metadata Only",
+        artist: [["Artist", 1]],
+        album: "Album",
+        format: "mp3",
+        duration: 123000,
+      },
+    });
+
+    const out = decodeNcmMetadata(ncm);
+
+    expect("audio" in out).toBe(false);
+    expect(out.audioMime).toBe("audio/mpeg");
+    expect(out.meta.musicName).toBe("Metadata Only");
+    expect(out.meta.artists).toEqual(["Artist"]);
+    expect(out.meta.durationMs).toBe(123000);
+    expect(out.cover?.mime).toBe("image/jpeg");
+    expect(Array.from(out.cover?.bytes ?? [])).toEqual([0xff, 0xd8, 0xff, 0x01]);
   });
 });
 

@@ -5,7 +5,6 @@ import { db } from "@/db/muzero-db";
 import {
   cacheReferencedTrackBlob,
   createReferencedUploadedTrack,
-  createReferencedUploadedTracks,
   createSession,
   createUploadedTrack,
   deleteSession as deleteSessionRepo,
@@ -16,8 +15,8 @@ import {
   getTrackBlob,
   getTrackCover,
   getTracksByIds,
-  insertTrackIdsAfter,
-  knownSourcePaths,
+  listPendingReferencedNcmMetadataTracks,
+  listReferencedLocalFileAccessGrants,
   listReferencedLocalFileSourcePaths,
   playQueueAppend,
   playQueueInsertAt,
@@ -27,9 +26,11 @@ import {
   playQueueSetContext,
   playQueueSetIndex,
   prependTrackIds,
+  type ReferencedTrackMetadataPatch,
   saveSettings,
   setSessionDisplayMode,
   setTrackCover,
+  updateReferencedTracksMetadata,
   upsertImportFolder,
 } from "@/db/repositories";
 import type { ImportFolder, SetDisplayMode, StreamSourceId, Track } from "@/db/types";
@@ -47,7 +48,6 @@ import {
   pickFolder,
   type ScannedFile,
   scanFolderForMedia,
-  selectNewFiles,
 } from "@/lib/folder-import";
 import { yieldForImportBackpressure } from "@/lib/import-backpressure";
 import { copyBlobWithProgress, type ImportProgress } from "@/lib/import-progress";
@@ -104,6 +104,8 @@ import { describeTrackSwitch } from "@/player/switch-trace";
 import {
   beginFolderImport,
   endFolderImport,
+  type FolderImportPhase,
+  type FolderImportProgress,
   setFolderImportProgress,
 } from "@/stores/folder-import-store";
 import { notify } from "@/stores/notification-store";
@@ -146,16 +148,22 @@ import {
   type R2PresenceCoordinator,
 } from "@/sync/r2-presence-coordinator";
 import { writeR2Presence } from "@/sync/r2-presence-sync";
+import { freshFilesFromPlan } from "@/workers/folder-sync-core";
 import {
+  createReferencedTracksViaWorker,
   decodeNcmMetadataViaWorker,
   decodeNcmViaWorker,
   ingestViaWorker,
+  planFolderSyncViaWorker,
+  publishTrackIdsViaWorker,
 } from "@/workers/heavy-client";
 import type { DecodedNcmMedia } from "@/workers/ingest-core";
 import { extractUsefulVideoPosterFrameViaWorker } from "@/workers/video-poster-client";
 
 const IMPORT_COPY_VISIBILITY_FLUSH_SIZE = 25;
-const IMPORT_REFERENCED_VISIBILITY_FLUSH_SIZE = 250;
+const IMPORT_REFERENCED_BULK_ADD_BATCH_SIZE = 2000;
+const IMPORT_PROGRESS_MIN_DONE_DELTA = 100;
+const IMPORT_PROGRESS_MIN_INTERVAL_MS = 250;
 const IMPORT_PROGRESS_CLEAR_MS = 1800;
 const LOCAL_BLOB_PLAYBACK_SETTLE_MS = 180;
 const MEDIA_SESSION_METADATA_SETTLE_MS = 650;
@@ -407,6 +415,7 @@ let queueCursorPersistTimer: number | null = null;
 let queueCursorPersistSeq = 0;
 let lastPersistedQueueIndex = -1;
 let importProgressClearTimer: ReturnType<typeof setTimeout> | null = null;
+let folderImportProgressClearTimer: ReturnType<typeof setTimeout> | null = null;
 let activeSessionSettingsTimer: ReturnType<typeof setTimeout> | null = null;
 let activeSessionSettingsIdleHandle: number | null = null;
 let pendingActiveSessionSettingsId: string | null = null;
@@ -1668,24 +1677,62 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
 
   async restoreReferencedLocalFileAccess() {
     const bridge = resolveDesktopBridge();
-    if (!bridge.grantFileAccess) return;
-    const paths = await listReferencedLocalFileSourcePaths();
-    if (paths.length === 0) return;
+    if (!bridge.grantFileAccess && !bridge.grantFolderAccess) return;
+    const grants = await listReferencedLocalFileAccessGrants();
+    if (grants.totalReferencedPaths === 0) return;
 
     let granted = 0;
     let failed = 0;
-    for (const path of paths) {
+    let folderGrantFailed = false;
+    const grantedFilePaths = new Set<string>();
+    const grantedFolderPaths: string[] = [];
+    for (const path of grants.folderPaths) {
+      if (!bridge.grantFolderAccess) break;
       try {
-        await bridge.grantFileAccess(path);
+        await bridge.grantFolderAccess(path);
         granted += 1;
+        grantedFolderPaths.push(path);
       } catch (error) {
         failed += 1;
-        log.warn("player", "failed to restore referenced local-file access", {
+        folderGrantFailed = true;
+        log.warn("player", "failed to restore referenced local-folder access", {
           errorType: error instanceof Error ? error.name : typeof error,
         });
       }
     }
+    const exactFilePaths =
+      bridge.grantFolderAccess && !folderGrantFailed
+        ? grants.filePaths
+        : await listReferencedLocalFileSourcePaths();
+    if (bridge.grantFileAccess) {
+      for (const path of exactFilePaths) {
+        try {
+          await bridge.grantFileAccess(path);
+          granted += 1;
+          grantedFilePaths.add(path);
+        } catch (error) {
+          failed += 1;
+          log.warn("player", "failed to restore referenced local-file access", {
+            errorType: error instanceof Error ? error.name : typeof error,
+          });
+        }
+      }
+    } else if (exactFilePaths.length > 0) {
+      failed += exactFilePaths.length;
+      log.warn("player", "some referenced local-file exact grants could not be restored", {
+        failed: exactFilePaths.length,
+      });
+    }
     log.info("player", `restored ${granted} referenced local-file grant(s)`);
+    if (bridge.readFile && (grantedFilePaths.size > 0 || grantedFolderPaths.length > 0)) {
+      const queued = await resumePendingReferencedNcmMetadataHydrations(
+        { readFile: bridge.readFile },
+        { filePaths: grantedFilePaths, folderPaths: grantedFolderPaths },
+      );
+      if (queued > 0) {
+        log.info("player", `resumed ${queued} referenced ncm metadata hydration(s)`);
+      }
+    }
     if (failed > 0) {
       log.warn("player", "some referenced local-file grants could not be restored", { failed });
     }
@@ -1823,13 +1870,13 @@ async function flushImportedTrackIds(
   if (ids.length === 0) return afterTrackId;
   const batch = [...ids];
   const startedAt = performance.now();
-  await insertTrackIdsAfter(setId, batch, afterTrackId);
+  const result = await publishTrackIdsViaWorker({ setId, ids: batch, afterTrackId });
   notePerfWork("upload.publishTrackIds", performance.now() - startedAt, {
     count: batch.length,
     setId,
   });
   ids.length = 0;
-  return batch.at(-1) ?? afterTrackId;
+  return result.afterTrackId;
 }
 
 async function resolveDroppedFilePath(file: File): Promise<string | undefined> {
@@ -2449,6 +2496,7 @@ interface FolderPlan {
   folder: ImportFolder;
   setId: string;
   fresh: ScannedFile[];
+  recoveredTrackIds: string[];
 }
 
 interface ScannedIngestResult {
@@ -2457,8 +2505,57 @@ interface ScannedIngestResult {
   albumPicUrl?: string;
 }
 
+interface LazyNcmHydrationJob {
+  file: ScannedFile;
+  fs: Pick<FolderFs, "readFile">;
+  setId: string;
+  traceId?: string;
+  trackId: string;
+}
+
 function roundImportTraceMs(value: number): number {
   return Math.round(value * 10) / 10;
+}
+
+function scheduleFolderImportProgressClear(): void {
+  if (folderImportProgressClearTimer) clearTimeout(folderImportProgressClearTimer);
+  folderImportProgressClearTimer = setTimeout(() => {
+    folderImportProgressClearTimer = null;
+    setFolderImportProgress(null);
+  }, IMPORT_PROGRESS_CLEAR_MS);
+  (
+    folderImportProgressClearTimer as ReturnType<typeof setTimeout> & { unref?: () => void }
+  ).unref?.();
+}
+
+function folderImportProgressUnits(progress: FolderImportProgress): number {
+  return progress.phase === "covers" ? (progress.coverDone ?? 0) : progress.done;
+}
+
+function folderImportProgressTotalUnits(progress: FolderImportProgress): number {
+  return progress.phase === "covers" ? (progress.coverTotal ?? 0) : progress.total;
+}
+
+function normalizedLocalAccessPath(path: string): string {
+  const normalized = path.trim().replaceAll("\\", "/").replace(/\/+/g, "/");
+  if (normalized === "/") return normalized;
+  return normalized.replace(/\/+$/, "").toLowerCase();
+}
+
+function isPathWithinGrantedFolder(path: string, folderPath: string): boolean {
+  const source = normalizedLocalAccessPath(path);
+  const root = normalizedLocalAccessPath(folderPath);
+  return Boolean(root && source !== root && source.startsWith(`${root}/`));
+}
+
+function hasRestoredLocalFileAccess(
+  path: string,
+  grants: { filePaths: ReadonlySet<string>; folderPaths: readonly string[] },
+): boolean {
+  return (
+    grants.filePaths.has(path) ||
+    grants.folderPaths.some((folder) => isPathWithinGrantedFolder(path, folder))
+  );
 }
 
 function folderImportMode(file: ScannedFile, referenceElectronLocalFiles: boolean): string {
@@ -2498,30 +2595,197 @@ async function ingestReferencedScannedFiles(
   files: readonly ScannedFile[],
 ): Promise<ScannedIngestResult[]> {
   if (files.length === 0) return [];
-  const now = Date.now();
-  const tracks = await createReferencedUploadedTracks(
-    files.map((file) => {
-      const mime = mimeFromExtension(file.name, file.kind);
-      const title = titleFromFileName(file.name);
-      return {
-        sessionId: setId,
-        title,
-        kind: file.kind,
-        mime,
-        durationSec: 0,
-        sourcePath: file.path,
-        mediaMetadata: {
-          originalFileName: file.name,
-          originalMime: mime,
-          originalExtension: extensionFromFileName(file.name),
-          parser: "manual",
-          parsedAt: now,
-          title,
-        },
-      };
-    }),
-  );
-  return tracks.map((track) => ({ trackId: track.id, hasCover: false }));
+  const result = await createReferencedTracksViaWorker({ setId, files: [...files] });
+  return result.trackIds.map((trackId) => ({ trackId, hasCover: false }));
+}
+
+const NCM_METADATA_HYDRATION_CONCURRENCY = 2;
+const NCM_METADATA_PATCH_FLUSH_SIZE = 50;
+const NCM_METADATA_PATCH_FLUSH_DELAY_MS = 250;
+const pendingNcmHydrations: LazyNcmHydrationJob[] = [];
+const pendingNcmMetadataPatches: ReferencedTrackMetadataPatch[] = [];
+const queuedNcmHydrationTrackIds = new Set<string>();
+let pendingNcmHydrationCursor = 0;
+let activeNcmHydrations = 0;
+let ncmMetadataPatchFlushTimer: ReturnType<typeof globalThis.setTimeout> | null = null;
+
+function queueLazyNcmMetadataHydration(job: LazyNcmHydrationJob): void {
+  if (queuedNcmHydrationTrackIds.has(job.trackId)) return;
+  queuedNcmHydrationTrackIds.add(job.trackId);
+  pendingNcmHydrations.push(job);
+  pumpLazyNcmMetadataHydrations();
+}
+
+function compactLazyNcmHydrationQueue(): void {
+  if (pendingNcmHydrationCursor === 0) return;
+  if (pendingNcmHydrationCursor >= pendingNcmHydrations.length) {
+    pendingNcmHydrations.length = 0;
+    pendingNcmHydrationCursor = 0;
+    return;
+  }
+  if (
+    pendingNcmHydrationCursor < 1024 ||
+    pendingNcmHydrationCursor * 2 < pendingNcmHydrations.length
+  ) {
+    return;
+  }
+  pendingNcmHydrations.splice(0, pendingNcmHydrationCursor);
+  pendingNcmHydrationCursor = 0;
+}
+
+function pumpLazyNcmMetadataHydrations(): void {
+  while (
+    activeNcmHydrations < NCM_METADATA_HYDRATION_CONCURRENCY &&
+    pendingNcmHydrationCursor < pendingNcmHydrations.length
+  ) {
+    const job = pendingNcmHydrations[pendingNcmHydrationCursor];
+    pendingNcmHydrationCursor += 1;
+    compactLazyNcmHydrationQueue();
+    if (!job) return;
+    activeNcmHydrations += 1;
+    void hydrateLazyNcmMetadata(job).finally(() => {
+      queuedNcmHydrationTrackIds.delete(job.trackId);
+      activeNcmHydrations = Math.max(0, activeNcmHydrations - 1);
+      if (activeNcmHydrations === 0) compactLazyNcmHydrationQueue();
+      pumpLazyNcmMetadataHydrations();
+    });
+  }
+}
+
+async function resumePendingReferencedNcmMetadataHydrations(
+  fs: Pick<FolderFs, "readFile">,
+  grants?: { filePaths: ReadonlySet<string>; folderPaths: readonly string[] },
+): Promise<number> {
+  const pending = await listPendingReferencedNcmMetadataTracks();
+  let queued = 0;
+  for (const track of pending) {
+    if (grants && !hasRestoredLocalFileAccess(track.sourcePath, grants)) continue;
+    queueLazyNcmMetadataHydration({
+      file: {
+        path: track.sourcePath,
+        name: basename(track.sourcePath),
+        kind: "audio",
+        decode: "ncm",
+      },
+      fs,
+      setId: track.sessionId,
+      trackId: track.id,
+    });
+    queued += 1;
+  }
+  return queued;
+}
+
+function queueLazyNcmMetadataPatch(patch: ReferencedTrackMetadataPatch): void {
+  pendingNcmMetadataPatches.push(patch);
+  if (pendingNcmMetadataPatches.length >= NCM_METADATA_PATCH_FLUSH_SIZE) {
+    void flushLazyNcmMetadataPatches("size");
+    return;
+  }
+  if (ncmMetadataPatchFlushTimer !== null) return;
+  ncmMetadataPatchFlushTimer = globalThis.setTimeout(() => {
+    ncmMetadataPatchFlushTimer = null;
+    void flushLazyNcmMetadataPatches("timer");
+  }, NCM_METADATA_PATCH_FLUSH_DELAY_MS);
+}
+
+async function flushLazyNcmMetadataPatches(reason: "size" | "timer"): Promise<void> {
+  if (ncmMetadataPatchFlushTimer !== null) {
+    globalThis.clearTimeout(ncmMetadataPatchFlushTimer);
+    ncmMetadataPatchFlushTimer = null;
+  }
+  const batch = pendingNcmMetadataPatches.splice(0, pendingNcmMetadataPatches.length);
+  if (batch.length === 0) return;
+  const startedAt = performance.now();
+  try {
+    await updateReferencedTracksMetadata(batch);
+    folderSyncLog.debug("ncm.lazy.metadata.flush", {
+      category: "sync",
+      phase: "success",
+      count: batch.length,
+      durationMs: roundImportTraceMs(performance.now() - startedAt),
+      reason,
+    });
+  } catch (err) {
+    folderSyncLog.warn("ncm.lazy.metadata.flush.fail", {
+      category: "sync",
+      phase: "fail",
+      count: batch.length,
+      durationMs: roundImportTraceMs(performance.now() - startedAt),
+      err: err instanceof Error ? err.name : typeof err,
+    });
+  }
+}
+
+async function ingestLazyReferencedNcmScannedFile(
+  setId: string,
+  file: ScannedFile,
+  fs: Pick<FolderFs, "readFile">,
+  traceId?: string,
+): Promise<ScannedIngestResult> {
+  const [result] = await ingestLazyReferencedNcmScannedFiles(setId, [file], fs, traceId);
+  if (!result) throw new Error("Failed to create referenced ncm track");
+  return result;
+}
+
+async function ingestLazyReferencedNcmScannedFiles(
+  setId: string,
+  files: readonly ScannedFile[],
+  fs: Pick<FolderFs, "readFile">,
+  traceId?: string,
+): Promise<ScannedIngestResult[]> {
+  if (files.length === 0) return [];
+  const result = await createReferencedTracksViaWorker({ setId, files: [...files] });
+  result.trackIds.forEach((trackId, index) => {
+    const file = files[index];
+    if (file) queueLazyNcmMetadataHydration({ file, fs, setId, traceId, trackId });
+  });
+  return result.trackIds.map((trackId) => ({ trackId, hasCover: false }));
+}
+
+async function hydrateLazyNcmMetadata(job: LazyNcmHydrationJob): Promise<void> {
+  const startedAt = performance.now();
+  try {
+    const bytes = await job.fs.readFile(job.file.path);
+    const inputBytes = arrayBufferFromBytes(bytes);
+    const decoded = await decodeNcmMetadataViaWorker({
+      setId: job.setId,
+      name: job.file.name,
+      kind: "audio",
+      mime: "",
+      sourcePath: job.file.path,
+      bytes: inputBytes,
+      decode: "ncm",
+    });
+    queueLazyNcmMetadataPatch({
+      trackId: job.trackId,
+      title: decoded.title,
+      mime: decoded.mime,
+      durationSec: decoded.durationSec,
+      mediaMetadata: decoded.mediaMetadata,
+      remoteCoverUrl: decoded.albumPicUrl,
+    });
+    if (decoded.embeddedCover) {
+      await setTrackCover({
+        trackId: job.trackId,
+        blob: new Blob([new Uint8Array(decoded.embeddedCover.bytes)], {
+          type: decoded.embeddedCover.mime,
+        }),
+        mime: decoded.embeddedCover.mime,
+      });
+    } else if (decoded.albumPicUrl) {
+      await fetchAndStoreRemoteCover(job.trackId, decoded.albumPicUrl);
+    }
+  } catch (err) {
+    folderSyncLog.warn("ncm.lazy.fail", {
+      traceId: job.traceId,
+      category: "sync",
+      phase: "fail",
+      durationMs: roundImportTraceMs(performance.now() - startedAt),
+      err: err instanceof Error ? err.name : typeof err,
+      trackId: job.trackId,
+    });
+  }
 }
 
 async function ingestScannedFileBytes(
@@ -2547,65 +2811,6 @@ async function ingestScannedFileBytes(
   });
   await yieldForImportBackpressure({ inputBytes: inputByteLength });
   return result;
-}
-
-async function ingestReferencedNcmScannedFile(
-  setId: string,
-  file: ScannedFile,
-  fs: Pick<FolderFs, "readFile">,
-): Promise<ScannedIngestResult> {
-  const bytes = await fs.readFile(file.path);
-  const inputBytes = arrayBufferFromBytes(bytes);
-  const decoded = await decodeNcmMetadataViaWorker({
-    setId,
-    name: file.name,
-    kind: "audio",
-    mime: "",
-    sourcePath: file.path,
-    bytes: inputBytes,
-    decode: "ncm",
-  });
-  const track = await createReferencedUploadedTrack({
-    sessionId: setId,
-    title: decoded.title,
-    kind: "audio",
-    mime: decoded.mime,
-    durationSec: decoded.durationSec,
-    sourcePath: file.path,
-    mediaMetadata: {
-      ...decoded.mediaMetadata,
-      originalFileName: decoded.mediaMetadata.originalFileName ?? file.name,
-      originalExtension: decoded.mediaMetadata.originalExtension ?? "ncm",
-      originalMime: decoded.mediaMetadata.originalMime ?? decoded.mime,
-    },
-  });
-  let hasCover = false;
-  if (decoded.embeddedCover) {
-    try {
-      await setTrackCover({
-        trackId: track.id,
-        blob: new Blob([new Uint8Array(decoded.embeddedCover.bytes)], {
-          type: decoded.embeddedCover.mime,
-        }),
-        mime: decoded.embeddedCover.mime,
-      });
-      hasCover = Boolean((await db.tracks.get(track.id))?.coverBlobId);
-    } catch (error) {
-      log.warn("player", "referenced ncm cover unusable; importing track without it", {
-        trackId: track.id,
-        err: String(error),
-      });
-    }
-  }
-  await yieldForImportBackpressure({
-    inputBytes: inputBytes.byteLength,
-    decodedContainer: true,
-  });
-  return {
-    trackId: track.id,
-    albumPicUrl: hasCover ? undefined : decoded.albumPicUrl,
-    hasCover,
-  };
 }
 
 function arrayBufferFromBytes(bytes: Uint8Array<ArrayBuffer>): ArrayBuffer {
@@ -2638,6 +2843,10 @@ export async function runFolderSync(
   folderSyncRunning = true;
   const traceId = createTraceId("fld");
   const runStartedAt = performance.now();
+  if (folderImportProgressClearTimer) {
+    clearTimeout(folderImportProgressClearTimer);
+    folderImportProgressClearTimer = null;
+  }
   const signal = beginFolderImport();
   usePlayerStore.setState({ isUploading: true });
   const useRealShell = !fsOverride;
@@ -2646,14 +2855,27 @@ export async function runFolderSync(
   // Plaintext media defers its codec check to first play (never decode-fails here);
   // `.ncm` can fail to decrypt, so this is bumped in the import loop's catch.
   let decodeFailed = 0;
+  let lastProgressPhase: FolderImportPhase | undefined;
+  let lastProgressUnits = 0;
+  let lastProgressAt = 0;
   const emitProgress = (
     progress: Parameters<typeof setFolderImportProgress>[0],
     reason: string,
+    options: { force?: boolean } = {},
   ): void => {
     const tracedProgress = progress ? { ...progress, traceId } : null;
+    const now = performance.now();
+    if (tracedProgress && !options.force && shouldThrottleFolderImportProgress(tracedProgress)) {
+      return;
+    }
     const progressStartedAt = performance.now();
     setFolderImportProgress(tracedProgress);
     const durationMs = roundImportTraceMs(performance.now() - progressStartedAt);
+    if (tracedProgress) {
+      lastProgressPhase = tracedProgress.phase;
+      lastProgressUnits = folderImportProgressUnits(tracedProgress);
+      lastProgressAt = now;
+    }
     folderSyncLog.debug("progress.emit", {
       traceId,
       category: "sync",
@@ -2668,6 +2890,17 @@ export async function runFolderSync(
       coverTotal: tracedProgress?.coverTotal,
     });
   };
+  const shouldThrottleFolderImportProgress = (progress: FolderImportProgress): boolean => {
+    if (progress.phase !== "importing" && progress.phase !== "covers") return false;
+    if (progress.phase !== lastProgressPhase) return false;
+    const units = folderImportProgressUnits(progress);
+    const totalUnits = folderImportProgressTotalUnits(progress);
+    if (totalUnits > 0 && units >= totalUnits) return false;
+    return (
+      units - lastProgressUnits < IMPORT_PROGRESS_MIN_DONE_DELTA &&
+      performance.now() - lastProgressAt < IMPORT_PROGRESS_MIN_INTERVAL_MS
+    );
+  };
   emitProgress(
     {
       phase: "scanning",
@@ -2680,8 +2913,9 @@ export async function runFolderSync(
     "run-start",
   );
   try {
+    const desktopBridge = resolveDesktopBridge();
     const fs = fsOverride ?? createFolderFs();
-    const referenceElectronLocalFiles = useRealShell && resolveDesktopBridge().kind === "electron";
+    const referenceElectronLocalFiles = useRealShell && desktopBridge.kind === "electron";
     folderSyncLog.info("run.start", {
       traceId,
       category: "sync",
@@ -2689,6 +2923,7 @@ export async function runFolderSync(
       folderCount: folderIds.length,
       useRealShell,
       referenceElectronLocalFiles,
+      nativeFolderScan: useRealShell && Boolean(desktopBridge.scanFolderForMedia),
     });
 
     // Pass 1 — scan + dedup each folder, recreating a deleted bound set as needed.
@@ -2716,9 +2951,11 @@ export async function runFolderSync(
       }
 
       const scanFolderStartedAt = performance.now();
-      const scan = await scanFolderForMedia(folder.path, fs, {
-        recursive: folder.recursive ?? true,
-      }).catch((err: unknown) => {
+      const scanOptions = { recursive: folder.recursive ?? true };
+      const scan = await (useRealShell && desktopBridge.scanFolderForMedia
+        ? desktopBridge.scanFolderForMedia(folder.path, scanOptions)
+        : scanFolderForMedia(folder.path, fs, scanOptions)
+      ).catch((err: unknown) => {
         folderSyncLog.warn("scan.folder.fail", {
           traceId,
           category: "sync",
@@ -2740,10 +2977,17 @@ export async function runFolderSync(
         });
       }
       const dedupStartedAt = performance.now();
-      const known = await knownSourcePaths(scan.media.map((m) => m.path));
-      const fresh = selectNewFiles(scan.media, known);
+      const session = await getSession(setId);
+      const planResult = await planFolderSyncViaWorker({
+        media: scan.media,
+        setId,
+        sessionTrackIds: session?.trackIds ?? [],
+        removedTrackIds: Object.keys(session?.removedTracks ?? {}),
+      });
+      const fresh = freshFilesFromPlan(scan.media, planResult);
+      const { recoveredTrackIds } = planResult;
       const dedupMs = roundImportTraceMs(performance.now() - dedupStartedAt);
-      plans.push({ folder: { ...folder, setId }, setId, fresh });
+      plans.push({ folder: { ...folder, setId }, setId, fresh, recoveredTrackIds });
       folderSyncLog.debug("scan.folder.done", {
         traceId,
         category: "sync",
@@ -2754,15 +2998,17 @@ export async function runFolderSync(
         dedupMs,
         media: scan.media.length,
         fresh: fresh.length,
-        known: known.size,
+        known: planResult.knownCount,
+        recovered: recoveredTrackIds.length,
         encrypted: scan.encryptedCount,
         unsupported: scan.unsupportedCount,
         recreatedSet,
+        nativeFolderScan: useRealShell && Boolean(desktopBridge.scanFolderForMedia),
       });
     }
 
     // Pass 2 — import, emitting cumulative progress.
-    const total = plans.reduce((n, p) => n + p.fresh.length, 0);
+    const total = plans.reduce((n, p) => n + p.fresh.length + p.recoveredTrackIds.length, 0);
     let done = 0;
     // Carried-cover URLs to pull AFTER the audio is in (bounded, below) — each keyed
     // to its own track, so order of completion never reassigns a cover.
@@ -2786,25 +3032,62 @@ export async function runFolderSync(
       const ids: string[] = [];
       let planImported = 0;
       let lastPublishedTrackId: string | undefined;
+      if (plan.recoveredTrackIds.length > 0) {
+        const recoverStartedAt = performance.now();
+        ids.push(...plan.recoveredTrackIds);
+        planImported += plan.recoveredTrackIds.length;
+        imported += plan.recoveredTrackIds.length;
+        done += plan.recoveredTrackIds.length;
+        lastPublishedTrackId = await flushImportedTrackIds(plan.setId, ids, lastPublishedTrackId);
+        folderSyncLog.debug("import.recover", {
+          traceId,
+          category: "sync",
+          phase: "success",
+          setId: plan.setId,
+          count: plan.recoveredTrackIds.length,
+          durationMs: roundImportTraceMs(performance.now() - recoverStartedAt),
+          done,
+          total,
+        });
+        emitProgress(
+          {
+            phase: "importing",
+            done,
+            total,
+            imported,
+            encrypted,
+            decodeFailed,
+          },
+          "recover-linked-tracks",
+        );
+      }
       for (let fileIndex = 0; fileIndex < plan.fresh.length; ) {
         if (signal.aborted) break;
         const file = plan.fresh[fileIndex];
-        if (referenceElectronLocalFiles && !file.decode) {
-          const plaintextBatch: ScannedFile[] = [];
+        if (referenceElectronLocalFiles && (!file.decode || file.decode === "ncm")) {
+          const referenceBatch: ScannedFile[] = [];
+          const batchDecode = file.decode;
           for (
             let i = fileIndex;
-            i < plan.fresh.length &&
-            plaintextBatch.length < IMPORT_REFERENCED_VISIBILITY_FLUSH_SIZE;
+            i < plan.fresh.length && referenceBatch.length < IMPORT_REFERENCED_BULK_ADD_BATCH_SIZE;
             i += 1
           ) {
             const entry = plan.fresh[i];
-            if (entry.decode) break;
-            plaintextBatch.push(entry);
+            if (entry.decode !== batchDecode) break;
+            referenceBatch.push(entry);
           }
-          if (plaintextBatch.length > 0) {
+          if (referenceBatch.length > 0) {
             try {
               const batchStartedAt = performance.now();
-              const results = await ingestReferencedScannedFiles(plan.setId, plaintextBatch);
+              const results =
+                batchDecode === "ncm"
+                  ? await ingestLazyReferencedNcmScannedFiles(
+                      plan.setId,
+                      referenceBatch,
+                      fs,
+                      traceId,
+                    )
+                  : await ingestReferencedScannedFiles(plan.setId, referenceBatch);
               for (const res of results) ids.push(res.trackId);
               planImported += results.length;
               imported += results.length;
@@ -2815,29 +3098,13 @@ export async function runFolderSync(
                 category: "sync",
                 phase: "success",
                 setId: plan.setId,
-                mode: "electron-reference-bulk",
+                mode:
+                  batchDecode === "ncm" ? "electron-reference-ncm-bulk" : "electron-reference-bulk",
                 count: results.length,
                 durationMs: roundImportTraceMs(performance.now() - batchStartedAt),
                 done,
                 total,
               });
-              if (ids.length >= IMPORT_REFERENCED_VISIBILITY_FLUSH_SIZE) {
-                const publishStartedAt = performance.now();
-                lastPublishedTrackId = await flushImportedTrackIds(
-                  plan.setId,
-                  ids,
-                  lastPublishedTrackId,
-                );
-                folderSyncLog.debug("import.publish", {
-                  traceId,
-                  category: "sync",
-                  phase: "success",
-                  setId: plan.setId,
-                  durationMs: roundImportTraceMs(performance.now() - publishStartedAt),
-                  done,
-                  total,
-                });
-              }
               emitProgress(
                 {
                   phase: "importing",
@@ -2846,7 +3113,7 @@ export async function runFolderSync(
                   imported,
                   encrypted,
                   decodeFailed,
-                  currentName: plaintextBatch.at(-1)?.name,
+                  currentName: referenceBatch.at(-1)?.name,
                 },
                 "bulk-import",
               );
@@ -2857,12 +3124,13 @@ export async function runFolderSync(
                 category: "sync",
                 phase: "fail",
                 setId: plan.setId,
-                mode: "electron-reference-bulk",
-                count: plaintextBatch.length,
+                mode:
+                  batchDecode === "ncm" ? "electron-reference-ncm-bulk" : "electron-reference-bulk",
+                count: referenceBatch.length,
                 err: err instanceof Error ? err.name : typeof err,
               });
               log.warn("player", "failed to bulk import referenced folder files", {
-                count: plaintextBatch.length,
+                count: referenceBatch.length,
                 err: String(err),
               });
               // Fall through to the single-file path below; one unexpected bulk
@@ -2874,7 +3142,7 @@ export async function runFolderSync(
           const fileStartedAt = performance.now();
           const res =
             referenceElectronLocalFiles && file.decode === "ncm"
-              ? await ingestReferencedNcmScannedFile(plan.setId, file, fs)
+              ? await ingestLazyReferencedNcmScannedFile(plan.setId, file, fs, traceId)
               : referenceElectronLocalFiles
                 ? await ingestReferencedScannedFile(plan.setId, file)
                 : await ingestScannedFileBytes(plan.setId, file, fs);
@@ -2892,7 +3160,7 @@ export async function runFolderSync(
           ids.push(res.trackId);
           planImported += 1;
           imported += 1;
-          if (ids.length >= IMPORT_COPY_VISIBILITY_FLUSH_SIZE) {
+          if (!referenceElectronLocalFiles && ids.length >= IMPORT_COPY_VISIBILITY_FLUSH_SIZE) {
             const publishStartedAt = performance.now();
             lastPublishedTrackId = await flushImportedTrackIds(
               plan.setId,
@@ -3054,6 +3322,7 @@ export async function runFolderSync(
       "player",
       `folder sync imported ${imported} file(s)${cancelled ? " (cancelled)" : ""}`,
     );
+    scheduleFolderImportProgressClear();
     return { imported, encrypted, decodeFailed, cancelled };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);

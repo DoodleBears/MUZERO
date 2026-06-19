@@ -1,5 +1,5 @@
 import type { DiagnosticEntry } from "@/lib/diagnostics";
-import type { DirEntryLike } from "@/lib/folder-import";
+import type { DirEntryLike, FolderScanOptions, FolderScanResult } from "@/lib/folder-import";
 import { assembleCookieHeader, type StreamCookie } from "@/streamsrc/login";
 import type { TrayActionId } from "@/tray/actions";
 import type { TrayMenuModel } from "@/tray/menu-model";
@@ -30,6 +30,7 @@ interface MuzeroApi {
   platform?: DesktopPlatform;
   pickFolder(): Promise<string | null>;
   readDir(path: string): Promise<DirEntryLike[]>;
+  scanFolderForMedia(path: string, options?: FolderScanOptions): Promise<FolderScanResult>;
   readFile(path: string): Promise<ArrayBuffer>;
   grantFolderAccess(path: string): Promise<void>;
   grantFileAccess(path: string): Promise<void>;
@@ -166,6 +167,7 @@ export function createElectronBridge(): DesktopBridge {
     fetch: electronFetch,
     pickFolder: () => api.pickFolder(),
     readDir: (path) => api.readDir(path),
+    scanFolderForMedia: (path, options) => api.scanFolderForMedia(path, options),
     // Join renderer-side (no IPC round-trip per entry): forward slashes are fine
     // because the main process realpath-normalizes every path before reading.
     join: (base, name) => `${base.replace(/[/\\]+$/, "")}/${name}`,

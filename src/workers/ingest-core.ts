@@ -16,7 +16,7 @@ import { db as defaultDb, type MuzeroDB } from "@/db/muzero-db";
 import { createUploadedTrack } from "@/db/repositories";
 import type { TrackKind, TrackMediaMetadata } from "@/db/types";
 import { fallbackUploadMediaMetadata, metadataFromParsedAudio } from "@/lib/media-metadata";
-import { decodeNcm } from "@/lib/ncm-decode";
+import { decodeNcm, decodeNcmMetadata } from "@/lib/ncm-decode";
 
 export interface IngestBytesInput {
   setId: string;
@@ -53,6 +53,8 @@ export interface DecodedNcmMedia {
   albumPicUrl?: string;
   hasCover: boolean;
 }
+
+export type DecodedNcmMetadata = Omit<DecodedNcmMedia, "audio">;
 
 export async function ingestMediaBytes(
   input: IngestBytesInput,
@@ -162,6 +164,44 @@ export async function decodeNcmMediaBytes(input: IngestBytesInput): Promise<Deco
     durationSec,
     mediaMetadata,
     audio: toStandaloneArrayBuffer(decoded.audio),
+    embeddedCover,
+    albumPicUrl: decoded.meta.albumPicUrl,
+    hasCover: Boolean(embeddedCover),
+  };
+}
+
+export async function decodeNcmMetadataBytes(input: IngestBytesInput): Promise<DecodedNcmMetadata> {
+  const decoded = decodeNcmMetadata(input.bytes);
+  const titleFromName = input.name.replace(/\.[^.]+$/, "") || input.name;
+  const file = new File([], input.name, { type: decoded.audioMime });
+  let mediaMetadata: TrackMediaMetadata = fallbackUploadMediaMetadata(file, titleFromName);
+  let durationSec = decoded.meta.durationMs ? decoded.meta.durationMs / 1000 : 0;
+
+  if (decoded.meta.musicName) mediaMetadata = { ...mediaMetadata, title: decoded.meta.musicName };
+  if (decoded.meta.album) mediaMetadata = { ...mediaMetadata, album: decoded.meta.album };
+  if (decoded.meta.artists.length > 0) {
+    mediaMetadata = { ...mediaMetadata, artists: decoded.meta.artists };
+  }
+  mediaMetadata = {
+    ...mediaMetadata,
+    originalFileName: input.name,
+    originalExtension: "ncm",
+    originalMime: decoded.audioMime,
+  };
+  if (!Number.isFinite(durationSec)) durationSec = 0;
+
+  const embeddedCover = decoded.cover
+    ? {
+        bytes: toStandaloneArrayBuffer(decoded.cover.bytes),
+        mime: decoded.cover.mime,
+      }
+    : undefined;
+
+  return {
+    title: decoded.meta.musicName ?? titleFromName,
+    mime: decoded.audioMime,
+    durationSec,
+    mediaMetadata,
     embeddedCover,
     albumPicUrl: decoded.meta.albumPicUrl,
     hasCover: Boolean(embeddedCover),

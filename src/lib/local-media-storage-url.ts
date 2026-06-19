@@ -13,7 +13,10 @@ export async function resolveLocalMediaStorageUrl(
   trace?: string | MediaProxyTrace,
 ): Promise<string | null> {
   if (!canUseLocalMediaStorageUrl(row) || !row?.storageKey) return null;
-  const build = resolveDesktopBridge().localMediaUrlForStorageKey;
+  const bridge = resolveDesktopBridge();
+  const stat = await bridge.statMediaStorageFile?.({ storageKey: row.storageKey });
+  if (stat === null) return null;
+  const build = bridge.localMediaUrlForStorageKey;
   if (!build) return null;
   return build({ storageKey: row.storageKey, mime: row.mime, trace });
 }

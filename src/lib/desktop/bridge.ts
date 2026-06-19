@@ -13,7 +13,7 @@
 
 import type { AppIconId } from "@/lib/app-icon";
 import type { DiagnosticContext } from "@/lib/diagnostics";
-import type { DirEntryLike } from "@/lib/folder-import";
+import type { DirEntryLike, FolderScanOptions, FolderScanResult } from "@/lib/folder-import";
 import type { TrayActionId } from "@/tray/actions";
 import type { TrayMenuModel } from "@/tray/menu-model";
 import { createElectronBridge } from "./electron";
@@ -186,6 +186,8 @@ export interface DesktopBridge {
   readDir?: (path: string) => Promise<DirEntryLike[]>;
   /** Read a file's bytes (ArrayBuffer-backed so it's a valid `BlobPart`). Absent in web. */
   readFile?: (path: string) => Promise<Uint8Array<ArrayBuffer>>;
+  /** Native recursive folder media scan. Electron can run this in the main process. */
+  scanFolderForMedia?: (path: string, options?: FolderScanOptions) => Promise<FolderScanResult>;
   /** Join a path segment (platform separator aware). Absent in web. */
   join?: (base: string, name: string) => Promise<string> | string;
   /** Add a folder to the runtime read allowlist (Tauri scope / Electron in-memory). */

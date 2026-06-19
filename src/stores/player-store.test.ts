@@ -121,6 +121,12 @@ async function loadRuntime() {
   };
 }
 
+async function onlyTrackInSession(db: MuzeroDB, sessionId: string): Promise<Track | undefined> {
+  const tracks = await db.tracks.where("sessionId").equals(sessionId).toArray();
+  expect(tracks).toHaveLength(1);
+  return tracks[0];
+}
+
 async function seedQueue(currentIndex = 1) {
   const { db, repos, usePlayerStore, playbackCache } = await loadRuntime();
   const session = await repos.createSession({
@@ -177,6 +183,14 @@ function deferredResponse() {
 function deferredVoid() {
   let resolve!: () => void;
   const promise = new Promise<void>((res) => {
+    resolve = res;
+  });
+  return { promise, resolve };
+}
+
+function deferredBytes() {
+  let resolve!: (bytes: Uint8Array) => void;
+  const promise = new Promise<Uint8Array>((res) => {
     resolve = res;
   });
   return { promise, resolve };
@@ -350,6 +364,219 @@ describe("player-store playback resume", () => {
     );
     expect(mediaEngineMock.loadBlob).not.toHaveBeenCalled();
     expect(mediaEngineMock.play).toHaveBeenCalled();
+  });
+
+  it("falls back to the referenced sourcePath when an Electron media copy is missing", async () => {
+    const localMediaUrlForStorageKey = vi.fn(
+      async () => "muzfetch://local-media/?__mztoken=missing-copy",
+    );
+    const localMediaUrl = vi.fn(async () => "muzfetch://local-media/?__mztoken=source-file");
+    const readMediaStorageFile = vi.fn();
+    vi.doMock("@/lib/desktop/bridge", async () => {
+      const actual =
+        await vi.importActual<typeof import("@/lib/desktop/bridge")>("@/lib/desktop/bridge");
+      return {
+        ...actual,
+        resolveDesktopBridge: () => ({
+          deleteMediaStorageFile: vi.fn(),
+          fetch,
+          kind: "electron",
+          localMediaUrl,
+          localMediaUrlForStorageKey,
+          openExternal: vi.fn(),
+          readMediaStorageFile,
+          statMediaStorageFile: vi.fn(async () => null),
+          writeMediaStorageFile: vi.fn(),
+        }),
+      };
+    });
+    const { db, second, usePlayerStore } = await seedQueue(1);
+    await db.mediaBlobs.put({
+      id: "blb_missing_storage",
+      trackId: second.id,
+      role: "media",
+      mime: "audio/mpeg",
+      bytes: 12_345,
+      storageBackend: "electron-file",
+      storageKey: "media/missing__blb_missing_storage.mp3",
+    });
+    await db.tracks.update(second.id, {
+      blobId: "blb_missing_storage",
+      sourcePath: "D:/Music/source.mp3",
+      status: "ready",
+    });
+    usePlayerStore.getState().init();
+
+    await waitFor(() => expect(usePlayerStore.getState().durationSec).toBe(30));
+    await usePlayerStore.getState().play();
+
+    expect(localMediaUrlForStorageKey).not.toHaveBeenCalled();
+    expect(readMediaStorageFile).not.toHaveBeenCalled();
+    expect(localMediaUrl).toHaveBeenCalledWith(
+      expect.objectContaining({
+        mime: "audio/mpeg",
+        path: "D:/Music/source.mp3",
+      }),
+    );
+    expect(mediaEngineMock.loadUrl).toHaveBeenCalledWith(
+      "muzfetch://local-media/?__mztoken=source-file",
+      "audio",
+      { crossOrigin: "anonymous" },
+    );
+    expect(mediaEngineMock.loadBlob).not.toHaveBeenCalled();
+  });
+
+  it("decodes a referenced .ncm source when its persisted decoded copy is missing", async () => {
+    const { encodeNcm } = await import("@/lib/ncm-fixture");
+    const ncm = encodeNcm({
+      audio: new Uint8Array([1, 2, 3, 4, 5]),
+      meta: {
+        artist: [["NetEase Artist", 1]],
+        duration: 42_000,
+        format: "mp3",
+        musicName: "NCM Song",
+      },
+    });
+    const localMediaUrlForStorageKey = vi.fn(
+      async () => "muzfetch://local-media/?__mztoken=missing-ncm-copy",
+    );
+    const localMediaUrl = vi.fn(async () => "muzfetch://local-media/?__mztoken=encrypted-ncm");
+    const readMediaStorageFile = vi.fn();
+    const sourceBytes = deferredBytes();
+    const readFile = vi.fn(async () => sourceBytes.promise);
+    vi.doMock("@/lib/desktop/bridge", async () => {
+      const actual =
+        await vi.importActual<typeof import("@/lib/desktop/bridge")>("@/lib/desktop/bridge");
+      return {
+        ...actual,
+        resolveDesktopBridge: () => ({
+          deleteMediaStorageFile: vi.fn(),
+          fetch,
+          kind: "electron",
+          localMediaUrl,
+          localMediaUrlForStorageKey,
+          openExternal: vi.fn(),
+          readFile,
+          readMediaStorageFile,
+          statMediaStorageFile: vi.fn(async () => null),
+          writeMediaStorageFile: vi.fn(),
+        }),
+      };
+    });
+    const { db, second, usePlayerStore } = await seedQueue(1);
+    await db.mediaBlobs.put({
+      id: "blb_missing_ncm_storage",
+      trackId: second.id,
+      role: "media",
+      mime: "audio/mpeg",
+      bytes: 12_345,
+      storageBackend: "electron-file",
+      storageKey: "media/ncm__blb_missing_ncm_storage.mp3",
+    });
+    await db.tracks.update(second.id, {
+      blobId: "blb_missing_ncm_storage",
+      mediaMetadata: {
+        originalExtension: "ncm",
+        originalFileName: "ncm-song.ncm",
+        originalMime: "audio/mpeg",
+        parsedAt: 1,
+        parser: "manual",
+      },
+      sourcePath: "D:/Music/ncm-song.ncm",
+      status: "ready",
+    });
+    usePlayerStore.getState().init();
+
+    await waitFor(() => expect(usePlayerStore.getState().durationSec).toBe(30));
+    const play = usePlayerStore.getState().play();
+    await waitFor(() =>
+      expect(usePlayerStore.getState().playbackLoading).toMatchObject({
+        trackId: second.id,
+        title: second.title,
+        sourceKind: "blob",
+      }),
+    );
+    expect(readFile).toHaveBeenCalledWith("D:/Music/ncm-song.ncm");
+    expect(mediaEngineMock.loadBlob).not.toHaveBeenCalled();
+
+    sourceBytes.resolve(new Uint8Array(ncm));
+    await play;
+
+    expect(localMediaUrlForStorageKey).not.toHaveBeenCalled();
+    expect(localMediaUrl).not.toHaveBeenCalled();
+    expect(readMediaStorageFile).not.toHaveBeenCalled();
+    expectLoadedBlob("audio", "audio/mpeg");
+    expect(usePlayerStore.getState().playbackLoading).toBeNull();
+    expect(usePlayerStore.getState().durationSec).toBe(42);
+    expect(mediaEngineMock.loadUrl).not.toHaveBeenCalledWith(
+      "muzfetch://local-media/?__mztoken=encrypted-ncm",
+      expect.anything(),
+      expect.anything(),
+    );
+  });
+
+  it("decodes a referenced .ncm source without requiring a persisted media blob", async () => {
+    const { encodeNcm } = await import("@/lib/ncm-fixture");
+    const ncm = encodeNcm({
+      audio: new Uint8Array([9, 8, 7, 6]),
+      meta: {
+        artist: [["NetEase Artist", 1]],
+        duration: 35_000,
+        format: "mp3",
+        musicName: "Referenced NCM",
+      },
+    });
+    const localMediaUrl = vi.fn(async () => "muzfetch://local-media/?__mztoken=encrypted-ncm");
+    const sourceBytes = deferredBytes();
+    const readFile = vi.fn(async () => sourceBytes.promise);
+    vi.doMock("@/lib/desktop/bridge", async () => {
+      const actual =
+        await vi.importActual<typeof import("@/lib/desktop/bridge")>("@/lib/desktop/bridge");
+      return {
+        ...actual,
+        resolveDesktopBridge: () => ({
+          fetch,
+          kind: "electron",
+          localMediaUrl,
+          openExternal: vi.fn(),
+          readFile,
+        }),
+      };
+    });
+    const { db, second, usePlayerStore } = await seedQueue(1);
+    await db.tracks.update(second.id, {
+      blobId: undefined,
+      mediaMetadata: {
+        originalExtension: "ncm",
+        originalFileName: "referenced-ncm.ncm",
+        originalMime: "audio/mpeg",
+        parsedAt: 1,
+        parser: "manual",
+      },
+      sourcePath: "D:/Music/referenced-ncm.ncm",
+      status: "ready",
+    });
+    usePlayerStore.getState().init();
+
+    await waitFor(() => expect(usePlayerStore.getState().durationSec).toBe(30));
+    const play = usePlayerStore.getState().play();
+    await waitFor(() =>
+      expect(usePlayerStore.getState().playbackLoading).toMatchObject({
+        trackId: second.id,
+        title: second.title,
+        sourceKind: "local-file",
+      }),
+    );
+    expect(readFile).toHaveBeenCalledWith("D:/Music/referenced-ncm.ncm");
+    expect(localMediaUrl).not.toHaveBeenCalled();
+
+    sourceBytes.resolve(new Uint8Array(ncm));
+    await play;
+
+    expectLoadedBlob("audio", "audio/mpeg");
+    expect(usePlayerStore.getState().playbackLoading).toBeNull();
+    expect(usePlayerStore.getState().durationSec).toBe(35);
+    expect(mediaEngineMock.loadUrl).not.toHaveBeenCalled();
   });
 
   it("reuses a prepared cached remote blob during handoff", async () => {
@@ -792,10 +1019,10 @@ describe("player-store bulk upload visibility", () => {
     await usePlayerStore.getState().addUploadsToSet(session.id, [file]);
 
     await waitFor(async () => {
-      const track = await db.tracks.orderBy("createdAt").last();
+      const track = await onlyTrackInSession(db, session.id);
       expect(track?.coverBlobId).toBeTruthy();
     });
-    const track = await db.tracks.orderBy("createdAt").last();
+    const track = await onlyTrackInSession(db, session.id);
     const cover = track?.coverBlobId ? await db.mediaBlobs.get(track.coverBlobId) : undefined;
     expect(posterExtract).toHaveBeenCalledWith(file, { durationSec: 12 });
     expect(track?.coverCrop).toEqual({ height: 720, width: 720, x: 280, y: 0 });
@@ -880,10 +1107,10 @@ describe("player-store bulk upload visibility", () => {
     await usePlayerStore.getState().addUploadsToSet(session.id, [file]);
 
     await waitFor(async () => {
-      const track = await db.tracks.orderBy("createdAt").last();
+      const track = await onlyTrackInSession(db, session.id);
       expect(track?.coverBlobId).toBeTruthy();
     });
-    const track = await db.tracks.orderBy("createdAt").last();
+    const track = await onlyTrackInSession(db, session.id);
     const cover = track?.coverBlobId ? await db.mediaBlobs.get(track.coverBlobId) : undefined;
     expect(posterExtract).toHaveBeenCalledWith(file, { durationSec: 12 });
     expect(track?.blobId).toBeUndefined();
@@ -994,7 +1221,7 @@ describe("player-store bulk upload visibility", () => {
 
     await usePlayerStore.getState().addUploadsToSet(session.id, [file]);
 
-    const track = await db.tracks.orderBy("createdAt").last();
+    const track = await onlyTrackInSession(db, session.id);
     const cover = track?.coverBlobId ? await db.mediaBlobs.get(track.coverBlobId) : undefined;
     expect(posterExtract).not.toHaveBeenCalled();
     expect(track?.coverBlobId).toBeTruthy();
@@ -1043,7 +1270,7 @@ describe("player-store bulk upload visibility", () => {
 
     await usePlayerStore.getState().addUploadsToSet(session.id, [file]);
 
-    const track = await db.tracks.orderBy("createdAt").last();
+    const track = await onlyTrackInSession(db, session.id);
     expect(track).toMatchObject({
       kind: "video",
       status: "ready",

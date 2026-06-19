@@ -78,6 +78,13 @@ export interface NcmDecoded {
   cover?: NcmCover;
 }
 
+export interface NcmMetadataOnly {
+  audioMime: string;
+  meta: NcmMeta;
+  /** Cover image embedded in the container, if any (else fall back to `meta.albumPicUrl`). */
+  cover?: NcmCover;
+}
+
 /** Whether a filename is a NetEase `.ncm` container (the one store format we decrypt). */
 export function isNcmFile(name: string): boolean {
   return /\.ncm$/i.test(name);
@@ -85,6 +92,25 @@ export function isNcmFile(name: string): boolean {
 
 /** Decode a `.ncm` container into plaintext audio + metadata. Throws on a bad header. */
 export function decodeNcm(input: ArrayBuffer | Uint8Array): NcmDecoded {
+  const parsed = parseNcmContainer(input, { decodeAudio: true });
+  if (!parsed.audio) throw new Error("ncm: missing audio stream");
+  return parsed as NcmDecoded;
+}
+
+/** Parse `.ncm` metadata + embedded cover without decrypting the audio payload. */
+export function decodeNcmMetadata(input: ArrayBuffer | Uint8Array): NcmMetadataOnly {
+  const parsed = parseNcmContainer(input, { decodeAudio: false });
+  return {
+    audioMime: parsed.audioMime,
+    meta: parsed.meta,
+    cover: parsed.cover,
+  };
+}
+
+function parseNcmContainer(
+  input: ArrayBuffer | Uint8Array,
+  options: { decodeAudio: boolean },
+): NcmMetadataOnly & { audio?: Uint8Array<ArrayBuffer> } {
   const bytes = input instanceof Uint8Array ? input : new Uint8Array(input);
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
 
@@ -137,6 +163,7 @@ export function decodeNcm(input: ArrayBuffer | Uint8Array): NcmDecoded {
   }
 
   // --- audio stream -----------------------------------------------------------
+  if (!options.decodeAudio) return { audioMime: audioMimeFor(meta.format), meta, cover };
   const audio = rc4Decrypt(bytes.slice(off), rc4Seed);
   return { audio, audioMime: audioMimeFor(meta.format, audio), meta, cover };
 }
@@ -243,12 +270,13 @@ function utf8(bytes: Uint8Array): string {
   return new TextDecoder("utf-8").decode(bytes);
 }
 
-function audioMimeFor(format: string | undefined, audio: Uint8Array): string {
+function audioMimeFor(format: string | undefined, audio?: Uint8Array): string {
   const fmt = format?.toLowerCase();
   if (fmt === "flac") return "audio/flac";
   if (fmt === "mp3") return "audio/mpeg";
   // Fall back to sniffing the decrypted stream ("fLaC" magic → FLAC).
   if (
+    audio &&
     audio.length >= 4 &&
     audio[0] === 0x66 &&
     audio[1] === 0x4c &&

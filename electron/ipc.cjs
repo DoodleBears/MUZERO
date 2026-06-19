@@ -11,6 +11,7 @@ const fs = require("node:fs");
 const fsp = require("node:fs/promises");
 const path = require("node:path");
 const { applyAppIcon } = require("./app-icon.cjs");
+const { emitMainDiagnostic } = require("./diagnostics.cjs");
 const { registerLocalMedia } = require("./local-media.cjs");
 const { windowPin } = require("./window-pin.cjs");
 
@@ -35,6 +36,49 @@ function realOrNull(target) {
   }
 }
 
+function nowMs() {
+  return typeof performance !== "undefined" && typeof performance.now === "function"
+    ? performance.now()
+    : Date.now();
+}
+
+function roundMs(value) {
+  return Math.round(value * 10) / 10;
+}
+
+function pathExtension(filePath) {
+  return path.extname(String(filePath || "")).toLowerCase() || undefined;
+}
+
+const MAX_FOLDER_SCAN_DEPTH = 24;
+const NCM_EXT = /\.ncm$/i;
+const ENCRYPTED_STORE_EXT =
+  /\.(qmc0|qmc3|qmcflac|qmcogg|mflac|mflac0|mgg|mgg1|mggl|kgm|kgma|kwm|tkm|bkcmp3|bkcflac)$/i;
+const AUDIO_EXT = /\.(mp3|m4a|wav|aac|flac|ogg|opus)$/i;
+const VIDEO_EXT = /\.(mp4|m4v|mov|webm|mkv|avi)$/i;
+const IMAGE_EXT = /\.(png|jpe?g|gif|webp|avif|bmp|heic|heif)$/i;
+
+async function traceFsIpc(event, work, context = {}) {
+  const startedAt = nowMs();
+  try {
+    const result = await work();
+    return result;
+  } catch (error) {
+    emitMainDiagnostic("warn", "electron.fs", event, event, {
+      source: "electron-main",
+      category: "sync",
+      phase: "fail",
+      durationMs: roundMs(nowMs() - startedAt),
+      errorKind: error?.code === "EACCES" ? "permission_denied" : "unknown",
+      errorCode: error?.code,
+      errorName: error?.name,
+      ...context,
+      result: undefined,
+    });
+    throw error;
+  }
+}
+
 /** Resolve `target` to a real path and assert it sits within a granted root. */
 function assertAllowed(target) {
   const real = realOrNull(target);
@@ -46,6 +90,65 @@ function assertAllowed(target) {
     if (r === nr || r.startsWith(nr + path.sep)) return real;
   }
   throw new Error("EACCES: path outside granted scope");
+}
+
+function joinRendererPath(base, name) {
+  return `${String(base).replace(/[/\\]+$/, "")}/${name}`;
+}
+
+function classifyFolderScanFile(name) {
+  if (NCM_EXT.test(name)) return { kind: "audio", decode: "ncm" };
+  if (ENCRYPTED_STORE_EXT.test(name)) return { encrypted: true };
+  if (AUDIO_EXT.test(name)) return { kind: "audio" };
+  if (VIDEO_EXT.test(name)) return { kind: "video" };
+  if (IMAGE_EXT.test(name)) return { image: true };
+  return null;
+}
+
+async function scanFolderForMediaNative(rootPath, options = {}) {
+  const rootReal = assertAllowed(rootPath);
+  const recursive = options?.recursive !== false;
+  const media = [];
+  let encryptedCount = 0;
+  let unsupportedCount = 0;
+
+  async function walk(realDir, displayDir, depth) {
+    if (depth > MAX_FOLDER_SCAN_DEPTH) return;
+    let entries;
+    try {
+      entries = await fsp.readdir(realDir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      if (entry.isSymbolicLink()) continue;
+      const displayPath = joinRendererPath(displayDir, entry.name);
+      if (entry.isDirectory()) {
+        if (recursive) await walk(path.join(realDir, entry.name), displayPath, depth + 1);
+        continue;
+      }
+      if (!entry.isFile()) continue;
+      const classified = classifyFolderScanFile(entry.name);
+      if (!classified) {
+        unsupportedCount += 1;
+        continue;
+      }
+      if (classified.image) continue;
+      if (classified.encrypted) {
+        encryptedCount += 1;
+        continue;
+      }
+      media.push({
+        path: displayPath,
+        name: entry.name,
+        kind: classified.kind,
+        ...(classified.decode ? { decode: classified.decode } : {}),
+      });
+    }
+  }
+
+  await walk(rootReal, rootPath, 0);
+  return { media, encryptedCount, unsupportedCount };
 }
 
 async function ensureMediaStorageRoot() {
@@ -179,13 +282,24 @@ async function mediaStorageExistingTarget(storageKey) {
 
 function registerIpc({ trayController } = {}) {
   ipcMain.handle("muzero:grantFolder", (_event, folderPath) => {
-    const real = realOrNull(folderPath);
-    if (real) allowedRoots.add(real);
+    let granted = false;
+    return traceFsIpc("grantFolder", () => {
+      const real = realOrNull(folderPath);
+      granted = Boolean(real);
+      if (real) allowedRoots.add(real);
+    }, { result: () => ({ granted, roots: allowedRoots.size }) });
   });
 
   ipcMain.handle("muzero:grantFile", (_event, filePath) => {
-    const real = realOrNull(filePath);
-    if (real) allowedFiles.add(norm(real));
+    let granted = false;
+    return traceFsIpc("grantFile", () => {
+      const real = realOrNull(filePath);
+      granted = Boolean(real);
+      if (real) allowedFiles.add(norm(real));
+    }, {
+      extension: pathExtension(filePath),
+      result: () => ({ files: allowedFiles.size, granted }),
+    });
   });
 
   ipcMain.handle("muzero:pickFolder", async () => {
@@ -194,21 +308,51 @@ function registerIpc({ trayController } = {}) {
   });
 
   ipcMain.handle("muzero:readDir", async (_event, dirPath) => {
-    const real = assertAllowed(dirPath);
-    const entries = await fsp.readdir(real, { withFileTypes: true });
-    return entries.map((d) => ({
-      name: d.name,
-      isDirectory: d.isDirectory(),
-      isFile: d.isFile(),
-      isSymlink: d.isSymbolicLink(),
-    }));
+    return traceFsIpc(
+      "readDir",
+      async () => {
+        const real = assertAllowed(dirPath);
+        const entries = await fsp.readdir(real, { withFileTypes: true });
+        return entries.map((d) => ({
+          name: d.name,
+          isDirectory: d.isDirectory(),
+          isFile: d.isFile(),
+          isSymlink: d.isSymbolicLink(),
+        }));
+      },
+      { result: (entries) => ({ entries: entries.length }) },
+    );
+  });
+
+  ipcMain.handle("muzero:scanFolderForMedia", async (_event, dirPath, options) => {
+    return traceFsIpc(
+      "scanFolderForMedia",
+      () => scanFolderForMediaNative(dirPath, options),
+      {
+        recursive: options?.recursive !== false,
+        result: (scan) => ({
+          encrypted: scan.encryptedCount,
+          media: scan.media.length,
+          unsupported: scan.unsupportedCount,
+        }),
+      },
+    );
   });
 
   ipcMain.handle("muzero:readFile", async (_event, filePath) => {
-    const real = assertAllowed(filePath);
-    const buf = await fsp.readFile(real);
-    // Return a standalone ArrayBuffer (structured-cloned across IPC).
-    return buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength);
+    return traceFsIpc(
+      "readFile",
+      async () => {
+        const real = assertAllowed(filePath);
+        const buf = await fsp.readFile(real);
+        // Return a standalone ArrayBuffer (structured-cloned across IPC).
+        return buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength);
+      },
+      {
+        extension: pathExtension(filePath),
+        result: (bytes) => ({ bytes: bytes.byteLength }),
+      },
+    );
   });
 
   ipcMain.handle("muzero:localMedia:token", async (_event, input) => {
@@ -216,10 +360,19 @@ function registerIpc({ trayController } = {}) {
     // through the same traversal/symlink-safe mapping as fs IPC — no allowlist
     // needed since the key is confined to our media root. Otherwise it's an
     // absolute path from an imported folder, gated by the granted-folder allowlist.
-    const real = input?.storageKey
-      ? await mediaStorageExistingTarget(input.storageKey)
-      : assertAllowed(input?.path);
-    return registerLocalMedia(real, input?.mime);
+    return traceFsIpc(
+      "localMedia.token",
+      async () => {
+        const real = input?.storageKey
+          ? await mediaStorageExistingTarget(input.storageKey)
+          : assertAllowed(input?.path);
+        return registerLocalMedia(real, input?.mime);
+      },
+      {
+        extension: pathExtension(input?.path ?? input?.storageKey),
+        sourceKind: input?.storageKey ? "storage" : "sourcePath",
+      },
+    );
   });
 
   ipcMain.handle("muzero:saveFile", async (_event, input) => {
