@@ -1,5 +1,44 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+const mocks = vi.hoisted(() => ({
+  lastMediaBlobGetId: undefined as string | undefined,
+  mediaRows: new Map<string, { id: string; blob?: Blob; mime: string; bytes: number }>(),
+  resolvedRows: [] as string[],
+}));
+
+vi.mock("dexie-react-hooks", () => ({
+  useLiveQuery: (query: () => unknown, _deps: unknown[], defaultValue: unknown) => {
+    mocks.lastMediaBlobGetId = undefined;
+    const result = query();
+    if (result instanceof Promise) {
+      return mocks.lastMediaBlobGetId
+        ? (mocks.mediaRows.get(mocks.lastMediaBlobGetId) ?? null)
+        : defaultValue;
+    }
+    return result ?? defaultValue;
+  },
+}));
+
+vi.mock("@/db/muzero-db", () => ({
+  db: {
+    mediaBlobs: {
+      get: (id: string) => {
+        mocks.lastMediaBlobGetId = id;
+        return mocks.mediaRows.get(id) ?? null;
+      },
+    },
+  },
+}));
+
+vi.mock("@/hooks/use-media", () => ({
+  useMediaBlobUrl: (row: { id: string } | null | undefined) => {
+    if (!row) return null;
+    mocks.resolvedRows.push(row.id);
+    return `blob:${row.id}`;
+  },
+}));
+
 import { MemoryTimelineRail, type MemoryTimelineRailItem } from "./memory-timeline-rail";
 
 const memories: MemoryTimelineRailItem[] = [
@@ -30,6 +69,9 @@ function renderRail(props: Partial<React.ComponentProps<typeof MemoryTimelineRai
 describe("MemoryTimelineRail", () => {
   beforeEach(() => {
     vi.useFakeTimers();
+    mocks.lastMediaBlobGetId = undefined;
+    mocks.mediaRows.clear();
+    mocks.resolvedRows = [];
   });
 
   afterEach(() => {
@@ -158,6 +200,58 @@ describe("MemoryTimelineRail", () => {
     await act(async () => {});
 
     expect(screen.getByTestId("memory-carousel-card")).toHaveTextContent("Third late walk");
+  });
+
+  it("resolves only the active carousel photo before the masonry wall is shown", async () => {
+    mocks.mediaRows.set("blb_first", {
+      bytes: 10,
+      id: "blb_first",
+      mime: "image/jpeg",
+    });
+    mocks.mediaRows.set("blb_second", {
+      bytes: 20,
+      id: "blb_second",
+      mime: "image/jpeg",
+    });
+    mocks.mediaRows.set("blb_third", {
+      bytes: 30,
+      id: "blb_third",
+      mime: "image/jpeg",
+    });
+    const memoriesWithLocalPhotos: MemoryTimelineRailItem[] = [
+      {
+        createdAt: 10,
+        id: "mem_first",
+        note: "First subway listen",
+        photoBlobId: "blb_first",
+        trackId: "trk_a",
+      },
+      {
+        createdAt: 20,
+        id: "mem_second",
+        note: "Second kitchen loop",
+        photoBlobId: "blb_second",
+        trackId: "trk_b",
+      },
+      {
+        createdAt: 30,
+        id: "mem_third",
+        note: "Third late walk",
+        photoBlobId: "blb_third",
+        trackId: "trk_c",
+      },
+    ];
+
+    renderRail({ memories: memoriesWithLocalPhotos });
+    await act(async () => {});
+
+    expect(mocks.resolvedRows).toEqual(["blb_first"]);
+
+    fireEvent.wheel(screen.getByTestId("memory-timeline-rail"));
+
+    expect(mocks.resolvedRows).toEqual(
+      expect.arrayContaining(["blb_first", "blb_second", "blb_third"]),
+    );
   });
 
   it("renders an empty-state rail when there are no memories", () => {

@@ -67,6 +67,29 @@ describe("ObjectUrlCache", () => {
     expect(cache.size).toBe(2);
   });
 
+  it("evicts warm entries by approximate byte budget, not only entry count", () => {
+    const revoke = vi.fn();
+    const cache = new ObjectUrlCache({ capacity: 10, maxBytes: 100, revoke });
+    cache.store("a", "blob:a", { bytes: 70 });
+    cache.store("b", "blob:b", { bytes: 40 });
+
+    expect(cache.has("a")).toBe(false);
+    expect(cache.has("b")).toBe(true);
+    expect(cache.bytes).toBe(40);
+    expect(revoke).toHaveBeenCalledExactlyOnceWith("blob:a");
+  });
+
+  it("keeps mounted entries even when the byte budget is exceeded", () => {
+    const revoke = vi.fn();
+    const cache = new ObjectUrlCache({ capacity: 10, maxBytes: 100, revoke });
+    cache.acquire("a");
+    cache.store("a", "blob:a", { bytes: 120 });
+
+    expect(cache.has("a")).toBe(true);
+    expect(cache.bytes).toBe(120);
+    expect(revoke).not.toHaveBeenCalled();
+  });
+
   it("never evicts a referenced (mounted) entry — evicts an unreferenced one instead", () => {
     const revoke = vi.fn();
     const cache = new ObjectUrlCache({ capacity: 2, revoke });
@@ -112,6 +135,23 @@ describe("ObjectUrlCache", () => {
     }
     expect(cache.size).toBe(3); // nothing revoked — all mounted
     expect(revoke).not.toHaveBeenCalled();
+  });
+
+  it("trims temporary over-capacity as soon as pinned entries are released", () => {
+    const revoke = vi.fn();
+    const cache = new ObjectUrlCache({ capacity: 2, revoke });
+    for (const k of ["a", "b", "c"]) {
+      cache.acquire(k);
+      cache.store(k, `blob:${k}`);
+    }
+
+    cache.release("a");
+
+    expect(cache.has("a")).toBe(false);
+    expect(cache.has("b")).toBe(true);
+    expect(cache.has("c")).toBe(true);
+    expect(cache.size).toBe(2);
+    expect(revoke).toHaveBeenCalledExactlyOnceWith("blob:a");
   });
 
   it("drops an empty (url-less) entry on final release without revoking", () => {

@@ -12,8 +12,12 @@ const EMPTY_LIKED_AT = new Map<string, number>();
  * table. That is the whole point of moving `liked` off the catalog row: a heart toggle
  * costs O(likes) here instead of O(queue) refetch. PRD 20260617-scalable-track-list.
  */
-export function useLikedTrackIds(): Set<string> {
-  return useLiveQuery(() => likedTrackIdSet(db), [], EMPTY_LIKED);
+export function useLikedTrackIds(active = true): Set<string> {
+  return useLiveQuery(
+    () => (active ? likedTrackIdSet(db) : Promise.resolve(EMPTY_LIKED)),
+    [active],
+    EMPTY_LIKED,
+  );
 }
 
 /**
@@ -21,6 +25,10 @@ export function useLikedTrackIds(): Set<string> {
  * hearted playlist to sort by when each track was hearted; membership-only readers
  * should stick to {@link useLikedTrackIds} (a smaller projection).
  */
-export function useLikedTrackAt(): Map<string, number> {
-  return useLiveQuery(() => likedTrackAtMap(db), [], EMPTY_LIKED_AT);
+export function useLikedTrackAt(active = true): Map<string, number> {
+  return useLiveQuery(
+    () => (active ? likedTrackAtMap(db) : Promise.resolve(EMPTY_LIKED_AT)),
+    [active],
+    EMPTY_LIKED_AT,
+  );
 }

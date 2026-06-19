@@ -26,6 +26,8 @@
 interface Entry {
   /** The object URL, or null while a consumer has registered interest but the bytes haven't resolved. */
   url: string | null;
+  /** Approximate backing Blob size. Used only for evicting warm entries. */
+  bytes: number;
   /** Number of mounted consumers; 0 = warm/evictable. */
   refs: number;
 }
@@ -33,20 +35,34 @@ interface Entry {
 export interface ObjectUrlCacheOptions {
   /** Max number of url-holding entries kept warm. Mounted entries may exceed this. */
   capacity?: number;
+  /** Max approximate bytes kept warm. Mounted entries may exceed this. */
+  maxBytes?: number;
   /** Injected for tests; defaults to the global revoker. */
   revoke?: (url: string) => void;
 }
 
+export interface ObjectUrlCacheStats {
+  bytes: number;
+  referencedBytes: number;
+  referencedSize: number;
+  size: number;
+  warmBytes: number;
+  warmSize: number;
+}
+
 const DEFAULT_CAPACITY = 64;
+const DEFAULT_MAX_BYTES = Number.POSITIVE_INFINITY;
 
 export class ObjectUrlCache {
   /** Insertion order doubles as LRU recency: touch = delete + re-set (moves to the back). */
   private readonly entries = new Map<string, Entry>();
   private readonly capacity: number;
+  private readonly maxBytes: number;
   private readonly revoke: (url: string) => void;
 
   constructor(options: ObjectUrlCacheOptions = {}) {
     this.capacity = Math.max(1, options.capacity ?? DEFAULT_CAPACITY);
+    this.maxBytes = Math.max(1, options.maxBytes ?? DEFAULT_MAX_BYTES);
     this.revoke = options.revoke ?? ((url) => URL.revokeObjectURL(url));
   }
 
@@ -55,6 +71,35 @@ export class ObjectUrlCache {
     let n = 0;
     for (const entry of this.entries.values()) if (entry.url !== null) n += 1;
     return n;
+  }
+
+  /** Approximate bytes currently held by url entries. */
+  get bytes(): number {
+    return this.stats().bytes;
+  }
+
+  stats(): ObjectUrlCacheStats {
+    const stats: ObjectUrlCacheStats = {
+      bytes: 0,
+      referencedBytes: 0,
+      referencedSize: 0,
+      size: 0,
+      warmBytes: 0,
+      warmSize: 0,
+    };
+    for (const entry of this.entries.values()) {
+      if (entry.url === null) continue;
+      stats.bytes += entry.bytes;
+      stats.size += 1;
+      if (entry.refs > 0) {
+        stats.referencedBytes += entry.bytes;
+        stats.referencedSize += 1;
+      } else {
+        stats.warmBytes += entry.bytes;
+        stats.warmSize += 1;
+      }
+    }
+    return stats;
   }
 
   has(key: string): boolean {
@@ -82,7 +127,7 @@ export class ObjectUrlCache {
   acquire(key: string): string | undefined {
     let entry = this.entries.get(key);
     if (!entry) {
-      entry = { url: null, refs: 0 };
+      entry = { bytes: 0, url: null, refs: 0 };
       this.entries.set(key, entry);
     }
     entry.refs += 1;
@@ -95,18 +140,20 @@ export class ObjectUrlCache {
    * incoming one is a duplicate → revoke it and keep the canonical url. Returns
    * the canonical url for the key.
    */
-  store(key: string, url: string): string {
+  store(key: string, url: string, options: { bytes?: number } = {}): string {
     const entry = this.entries.get(key);
     if (entry?.url != null) {
       if (entry.url !== url) this.revoke(url);
       this.touch(key, entry);
       return entry.url;
     }
+    const bytes = Math.max(0, options.bytes ?? 0);
     if (entry) {
+      entry.bytes = bytes;
       entry.url = url;
       this.touch(key, entry);
     } else {
-      this.entries.set(key, { url, refs: 0 });
+      this.entries.set(key, { bytes, url, refs: 0 });
     }
     this.evictIfNeeded();
     return url;
@@ -118,6 +165,7 @@ export class ObjectUrlCache {
     if (!entry) return;
     entry.refs = Math.max(0, entry.refs - 1);
     if (entry.refs === 0 && entry.url === null) this.entries.delete(key);
+    else if (entry.refs === 0) this.evictIfNeeded();
   }
 
   /** Move a key to the most-recently-used position. */
@@ -128,7 +176,7 @@ export class ObjectUrlCache {
 
   /** Evict least-recently-used unreferenced url-holding entries until within capacity. */
   private evictIfNeeded(): void {
-    while (this.size > this.capacity) {
+    while (this.size > this.capacity || this.bytes > this.maxBytes) {
       let victim: string | null = null;
       for (const [key, entry] of this.entries) {
         if (entry.refs === 0 && entry.url !== null) {
@@ -145,7 +193,10 @@ export class ObjectUrlCache {
 }
 
 /** App-wide singleton for full cover object URLs (see `useTrackCoverUrl`). */
-export const coverUrlCache = new ObjectUrlCache();
+export const coverUrlCache = new ObjectUrlCache({
+  capacity: 24,
+  maxBytes: 6 * 1024 * 1024,
+});
 
 /**
  * Separate pool for cover IMAGE derivative URLs (thumbnails / backlights, see
@@ -153,4 +204,7 @@ export const coverUrlCache = new ObjectUrlCache();
  * grid/row thumbnails can't evict the warm full-cover the dock is showing, and vice
  * versa. Larger capacity — thumbnails are tiny and numerous (a big library wall).
  */
-export const coverDerivativeUrlCache = new ObjectUrlCache({ capacity: 128 });
+export const coverDerivativeUrlCache = new ObjectUrlCache({
+  capacity: 128,
+  maxBytes: 8 * 1024 * 1024,
+});

@@ -37,6 +37,8 @@ interface TrackMemoryNotesPanelProps {
   /** Non-reactive read of the current playback second — enables pin-to-time. */
   getCurrentPositionSec?: () => number;
   labels: TrackMemoryNotesPanelLabels;
+  /** Delay non-critical memory waterfall DB/photo work after a track switch. */
+  loadDelayMs?: number;
   /** Seek the player to an anchored memory's second (when it's the live track). */
   onSeekToMemory?: (memory: MemoryNoteView) => void;
   trackId: string;
@@ -48,10 +50,16 @@ export function TrackMemoryNotesPanel({
   formatCreatedAt,
   getCurrentPositionSec,
   labels,
+  loadDelayMs = 0,
   onSeekToMemory,
   trackId,
 }: TrackMemoryNotesPanelProps) {
-  const memories = useLiveQuery(() => listMemories(trackId, db), [db, trackId], []);
+  const queryTrackId = useDelayedTrackId(trackId, loadDelayMs);
+  const memories = useLiveQuery(
+    () => (queryTrackId ? listMemories(queryTrackId, db) : Promise.resolve([])),
+    [db, queryTrackId],
+    [],
+  );
   const memoryViews = useMemoryNoteViews(memories, db);
   const [editingMemory, setEditingMemory] = useState<MemoryNoteView | undefined>();
   const [isCreating, setIsCreating] = useState(false);
@@ -263,4 +271,21 @@ function useMemoryNoteViews(memories: Memory[], db: MuzeroDB): MemoryNoteView[] 
     () => memories.map((memory) => ({ ...memory, photoUrl: photoUrls[memory.id] })),
     [memories, photoUrls],
   );
+}
+
+function useDelayedTrackId(trackId: string, delayMs: number): string | null {
+  const delay = Math.max(0, delayMs);
+  const [readyTrackId, setReadyTrackId] = useState<string | null>(trackId);
+
+  useEffect(() => {
+    if (delay <= 0) {
+      setReadyTrackId(trackId);
+      return;
+    }
+    setReadyTrackId(null);
+    const timer = window.setTimeout(() => setReadyTrackId(trackId), delay);
+    return () => window.clearTimeout(timer);
+  }, [delay, trackId]);
+
+  return readyTrackId;
 }

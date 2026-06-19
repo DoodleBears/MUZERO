@@ -85,10 +85,19 @@ const ERROR_KIND_OPTION_LABELS = {
   po_token: "settings.traceErrorPoToken",
 } as const satisfies Record<ErrorKindOption, string>;
 
-export function TraceDiagnostics() {
+export const TRACE_DIAGNOSTICS_RESUME_DELAY_MS = 320;
+
+export function TraceDiagnostics({
+  active = true,
+  traceResumeDelayMs = TRACE_DIAGNOSTICS_RESUME_DELAY_MS,
+}: {
+  active?: boolean;
+  traceResumeDelayMs?: number;
+}) {
   const { t } = useTranslation();
   const settings = useSettings();
-  const entries = useTraceEntries();
+  const traceEntriesActive = useTraceEntriesActive(active, traceResumeDelayMs);
+  const entries = useTraceEntries(traceEntriesActive);
   const [copied, setCopied] = useState<"visible" | "current" | "all" | "archive" | null>(null);
   const [level, setLevel] = useState<LevelOption>("all");
   const [category, setCategory] = useState<CategoryOption>("all");
@@ -116,18 +125,16 @@ export function TraceDiagnostics() {
   );
   const reproSteps = useMemo(() => visible.filter(isUserActionEntry), [visible]);
   const currentTraceId = useMemo(() => latestTraceId(entries), [entries]);
-  const currentTraceEntries = useMemo(
-    () =>
-      currentTraceId ? entries.filter((entry) => entry.context?.traceId === currentTraceId) : [],
-    [entries, currentTraceId],
-  );
-  const visibleText = formatTraceEntries(visible);
-  const currentText = formatTraceEntries(currentTraceEntries);
-  const allText = formatTraceEntries(entries);
-
-  useEffect(() => subscribeTraceArchiveEnabled(setArchiveEnabledState), []);
+  const visibleText = useMemo(() => formatTraceEntries(visible), [visible]);
+  const reproText = useMemo(() => formatTraceEntries(reproSteps), [reproSteps]);
 
   useEffect(() => {
+    if (!active) return undefined;
+    return subscribeTraceArchiveEnabled(setArchiveEnabledState);
+  }, [active]);
+
+  useEffect(() => {
+    if (!active) return undefined;
     let alive = true;
     void refreshArchiveCount().then((count) => {
       if (alive) setArchiveCount(count);
@@ -135,11 +142,20 @@ export function TraceDiagnostics() {
     return () => {
       alive = false;
     };
-  }, []);
+  }, [active]);
 
   async function copyTrace(kind: "visible" | "current" | "all") {
     if (!navigator.clipboard) return;
-    const text = kind === "visible" ? visibleText : kind === "current" ? currentText : allText;
+    const text =
+      kind === "visible"
+        ? visibleText
+        : kind === "current"
+          ? formatTraceEntries(
+              currentTraceId
+                ? entries.filter((entry) => entry.context?.traceId === currentTraceId)
+                : [],
+            )
+          : formatTraceEntries(entries);
     await navigator.clipboard.writeText(text);
     setCopied(kind);
     window.setTimeout(() => setCopied(null), 1600);
@@ -309,13 +325,34 @@ export function TraceDiagnostics() {
           <div className="flex min-h-0 flex-col gap-2">
             <p className="text-xs font-medium text-muted-foreground">{t("settings.traceRepro")}</p>
             <pre className="thin-transparent-scrollbar max-h-72 overflow-auto rounded-lg bg-muted p-3 text-[11px] leading-5 text-muted-foreground">
-              {formatTraceEntries(reproSteps) || t("settings.traceReproEmpty")}
+              {reproText || t("settings.traceReproEmpty")}
             </pre>
           </div>
         </div>
       </CardContent>
     </Card>
   );
+}
+
+function useTraceEntriesActive(active: boolean, resumeDelayMs: number): boolean {
+  const [entriesActive, setEntriesActive] = useState(() => active && resumeDelayMs <= 0);
+
+  useEffect(() => {
+    if (!active) {
+      setEntriesActive(false);
+      return undefined;
+    }
+    if (resumeDelayMs <= 0) {
+      setEntriesActive(true);
+      return undefined;
+    }
+
+    setEntriesActive(false);
+    const timer = window.setTimeout(() => setEntriesActive(true), resumeDelayMs);
+    return () => window.clearTimeout(timer);
+  }, [active, resumeDelayMs]);
+
+  return entriesActive;
 }
 
 async function refreshArchiveCount(): Promise<number> {

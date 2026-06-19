@@ -11,6 +11,8 @@ const { coverBlob, liveQueryState, derivState, remoteCoverState, desktopBridgeSt
     liveQueryState: {
       blob: undefined as Blob | null | undefined,
       id: undefined as string | undefined,
+      // biome-ignore lint/suspicious/noExplicitAny: narrow row shape is enough for hook tests.
+      mediaRows: new Map<string, any>(),
     },
     // What the mocked derivative resolver returns (the hook only reads `.blob`).
     derivState: {
@@ -22,6 +24,7 @@ const { coverBlob, liveQueryState, derivState, remoteCoverState, desktopBridgeSt
     },
     desktopBridgeState: {
       localMediaUrl: vi.fn(),
+      localMediaUrlForStorageKey: vi.fn(),
     },
   }),
 );
@@ -30,6 +33,9 @@ const { coverBlob, liveQueryState, derivState, remoteCoverState, desktopBridgeSt
 // covers render uncropped so no canvas (jsdom has none) is touched.
 vi.mock("dexie-react-hooks", () => ({
   useLiveQuery: (_query: () => unknown, deps?: unknown[]) => {
+    if (deps?.[0] === false) return null;
+    const key = typeof deps?.[0] === "string" ? deps[0] : undefined;
+    if (key && liveQueryState.mediaRows.has(key)) return liveQueryState.mediaRows.get(key);
     if (liveQueryState.blob === undefined) return undefined;
     if (liveQueryState.blob === null) return null;
     return {
@@ -46,6 +52,7 @@ vi.mock("@/lib/desktop/bridge", () => ({
   resolveDesktopBridge: () => ({
     kind: "electron",
     localMediaUrl: desktopBridgeState.localMediaUrl,
+    localMediaUrlForStorageKey: desktopBridgeState.localMediaUrlForStorageKey,
     openExternal: vi.fn(),
   }),
 }));
@@ -55,11 +62,18 @@ vi.mock("@/db/cover-derivatives", async (importActual) => ({
   ...(await importActual<typeof import("@/db/cover-derivatives")>()),
   ensureCoverThumbnailDerivative: vi.fn(async () => derivState.resolved),
   ensureCoverBacklightDerivative: vi.fn(async () => derivState.resolved),
+  resolveCoverThumbnailDerivative: vi.fn(async () => derivState.resolved),
+  resolveCoverBacklightDerivative: vi.fn(async () => derivState.resolved),
 }));
 
-import { ensureCoverThumbnailDerivative } from "@/db/cover-derivatives";
+import {
+  ensureCoverBacklightDerivative,
+  ensureCoverThumbnailDerivative,
+  resolveCoverBacklightDerivative,
+} from "@/db/cover-derivatives";
 import {
   useCoverDerivativeUrl,
+  useGridCoverUrl,
   useTrackCoverResource,
   useTrackCoverUrl,
   useTrackMediaUrl,
@@ -76,6 +90,7 @@ beforeEach(() => {
   vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
   liveQueryState.blob = coverBlob;
   liveQueryState.id = undefined;
+  liveQueryState.mediaRows.clear();
   remoteCoverState.fetcher.mockResolvedValue({
     headers: { get: () => "image/jpeg" },
     ok: true,
@@ -83,6 +98,9 @@ beforeEach(() => {
     blob: async () => new Blob([new Uint8Array([4, 5, 6])], { type: "image/jpeg" }),
   });
   desktopBridgeState.localMediaUrl.mockResolvedValue("http://127.0.0.1/local/mv.mp4");
+  desktopBridgeState.localMediaUrlForStorageKey.mockResolvedValue(
+    "http://127.0.0.1/local-storage/mv.mp4",
+  );
 });
 
 afterEach(() => {
@@ -308,6 +326,66 @@ describe("useTrackMediaUrl", () => {
       path: "D:/media/mv.mkv",
     });
   });
+
+  it("uses Electron media storage URLs for file-backed media blobs without creating object URLs", async () => {
+    liveQueryState.blob = undefined;
+    liveQueryState.mediaRows.set("blb_storage_video", {
+      bytes: 30_000_000,
+      id: "blb_storage_video",
+      mime: "video/mp4",
+      role: "media",
+      storageBackend: "electron-file",
+      storageKey: "media/mv__blb_storage_video.mp4",
+      trackId: "trk_storage_video",
+    });
+    const createSpy = vi.mocked(URL.createObjectURL);
+    createSpy.mockClear();
+
+    const { result } = renderHook(() =>
+      useTrackMediaUrl({
+        blobId: "blb_storage_video",
+        kind: "video",
+        remoteMediaUrl: undefined,
+        sourcePath: undefined,
+      }),
+    );
+
+    expect(result.current).toBeNull();
+    await act(async () => {});
+
+    expect(result.current).toBe("http://127.0.0.1/local-storage/mv.mp4");
+    expect(desktopBridgeState.localMediaUrlForStorageKey).toHaveBeenCalledWith({
+      mime: "video/mp4",
+      storageKey: "media/mv__blb_storage_video.mp4",
+    });
+    expect(createSpy).not.toHaveBeenCalled();
+  });
+});
+
+describe("useGridCoverUrl", () => {
+  it("uses the thumbnail derivative for grid cards instead of the full original cover", async () => {
+    const thumbnailBlob = new Blob([new Uint8Array([7])], { type: "image/webp" });
+    derivState.resolved = {
+      blob: thumbnailBlob,
+      blobId: "blb_grid_thumb_derivative",
+      derivative: {},
+    };
+    const ensure = vi.mocked(ensureCoverThumbnailDerivative);
+    ensure.mockClear();
+    const createSpy = vi.mocked(URL.createObjectURL);
+    createSpy.mockClear();
+
+    const { result } = renderHook(() =>
+      useGridCoverUrl({ id: "trk_grid_thumb", coverBlobId: "blb_grid_thumb" }, true),
+    );
+
+    expect(result.current).toBeNull();
+    await act(async () => {});
+
+    expect(ensure).toHaveBeenCalledTimes(1);
+    expect(result.current).toMatch(/^blob:cover-/);
+    expect(createSpy).toHaveBeenCalledExactlyOnceWith(thumbnailBlob);
+  });
 });
 
 describe("useCoverDerivativeUrl — cross-mount derivative cache (back-nav flash fix)", () => {
@@ -361,5 +439,30 @@ describe("useCoverDerivativeUrl — cross-mount derivative cache (back-nav flash
     await act(async () => {});
     expect(ensure).toHaveBeenCalledTimes(1);
     expect(result.current).toMatch(/^blob:cover-/);
+  });
+
+  it("can resolve an existing derivative without generating a missing one", async () => {
+    const backlightBlob = new Blob([new Uint8Array([8])], { type: "image/webp" });
+    derivState.resolved = {
+      blob: backlightBlob,
+      blobId: "blb_dv_resolve_backlight",
+      derivative: {},
+    };
+    const ensure = vi.mocked(ensureCoverBacklightDerivative);
+    const resolve = vi.mocked(resolveCoverBacklightDerivative);
+    ensure.mockClear();
+    resolve.mockClear();
+    const track = { id: "trk_dv_resolve_backlight", coverBlobId: "blb_grid_resolve_backlight" };
+
+    const { result } = renderHook(() =>
+      useCoverDerivativeUrl(track, "backlight", { generateOnMiss: false }),
+    );
+    expect(result.current).toBeNull();
+    await act(async () => {});
+
+    expect(resolve).toHaveBeenCalledTimes(1);
+    expect(ensure).not.toHaveBeenCalled();
+    expect(result.current).toMatch(/^blob:cover-/);
+    expect(URL.createObjectURL).toHaveBeenCalledWith(backlightBlob);
   });
 });

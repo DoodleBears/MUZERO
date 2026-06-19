@@ -14,15 +14,36 @@ import { cn, formatDuration } from "@/lib/utils";
 import { usePlayerStore } from "@/stores/player-store";
 
 /** Pick or start a set — an AI DJ set, or an upload/video set of your own files. */
-export function SessionsPage({ onStarted }: { onStarted: () => void }) {
+export function SessionsPage({
+  onStarted,
+  pageActive = true,
+}: {
+  onStarted: () => void;
+  pageActive?: boolean;
+}) {
+  const [seed, setSeed] = useState("");
+
+  if (!pageActive) return <div aria-hidden="true" className="h-full w-full" />;
+
+  return <SessionsPageActive onStarted={onStarted} seed={seed} setSeed={setSeed} />;
+}
+
+function SessionsPageActive({
+  onStarted,
+  seed,
+  setSeed,
+}: {
+  onStarted: () => void;
+  seed: string;
+  setSeed: (value: string) => void;
+}) {
   const { t } = useTranslation();
   const seedIdeas = t("sessions.seedIdeas", { returnObjects: true }) as string[];
-  const sessions = useSessions();
+  const sessions = useSessions(true);
   const activeSessionId = usePlayerStore((s) => s.activeSessionId);
   const setActiveSession = usePlayerStore((s) => s.setActiveSession);
   const addUploads = usePlayerStore((s) => s.addUploads);
   const isUploading = usePlayerStore((s) => s.isUploading);
-  const [seed, setSeed] = useState("");
   const uploadRef = useRef<HTMLInputElement | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   useSmoothScroll(scrollRef);

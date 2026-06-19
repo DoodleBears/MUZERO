@@ -1,5 +1,6 @@
-import { type KeyboardEvent, type PointerEvent, useEffect, useRef, useState } from "react";
+import { type KeyboardEvent, memo, type PointerEvent, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useShallow } from "zustand/react/shallow";
 import { SliderChrome, setSliderPercent } from "@/components/ui/slider";
 import { formatDuration } from "@/lib/utils";
 import { progressPercent } from "@/player/transport";
@@ -10,33 +11,72 @@ import { getMediaEngine, usePlayerStore } from "@/stores/player-store";
  * its own leaf subscribing only to position/duration so the ~per-tick
  * `positionSec` updates never re-render the identity row or the nav (hard rule #6).
  */
-export function ProgressScrubber() {
+export const ProgressScrubber = memo(function ProgressScrubber() {
   const { t } = useTranslation();
-  const positionSec = usePlayerStore((s) => s.positionSec);
-  const durationSec = usePlayerStore((s) => s.durationSec);
-  const isPlaying = usePlayerStore((s) => s.isPlaying);
+  const playback = usePlayerStore(
+    useShallow((s) => ({
+      durationSec: s.durationSec,
+      isPlaying: s.isPlaying,
+      trackId: s.currentIndex >= 0 ? s.queue[s.currentIndex]?.id : undefined,
+    })),
+  );
   const seek = usePlayerStore((s) => s.seek);
   const trackRef = useRef<HTMLDivElement | null>(null);
   const laneRef = useRef<HTMLDivElement | null>(null);
   const dragTimeRef = useRef<HTMLSpanElement | null>(null);
   const durationTimeRef = useRef<HTMLSpanElement | null>(null);
-  const positionRef = useRef(positionSec);
-  const durationRef = useRef(durationSec);
-  const isPlayingRef = useRef(isPlaying);
-  const dragPositionRef = useRef(positionSec);
+  const renderSnapshot = usePlayerStore.getState();
+  const renderPositionSec = renderSnapshot.positionSec;
+  const renderDurationSec = playback.durationSec || renderSnapshot.durationSec;
+  const positionRef = useRef(renderPositionSec);
+  const durationRef = useRef(renderDurationSec);
+  const isPlayingRef = useRef(playback.isPlaying);
+  const dragPositionRef = useRef(renderPositionSec);
   const draggingRef = useRef(false);
   const [dragging, setDragging] = useState(false);
   const [hovering, setHovering] = useState(false);
   const showChips = dragging || hovering;
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: track/duration changes should repaint from the latest store snapshot without subscribing React to position ticks.
   useEffect(() => {
-    durationRef.current = durationSec;
-    if (!draggingRef.current) positionRef.current = positionSec;
-  }, [positionSec, durationSec]);
+    const state = usePlayerStore.getState();
+    durationRef.current = state.durationSec;
+    if (!draggingRef.current) positionRef.current = state.positionSec;
+    paintScrubber(
+      trackRef.current,
+      dragTimeRef.current,
+      durationTimeRef.current,
+      positionRef.current,
+      durationRef.current,
+    );
+  }, [playback.durationSec, playback.trackId]);
 
   useEffect(() => {
-    isPlayingRef.current = isPlaying;
-  }, [isPlaying]);
+    isPlayingRef.current = playback.isPlaying;
+  }, [playback.isPlaying]);
+
+  useEffect(() => {
+    let prevPosition = usePlayerStore.getState().positionSec;
+    let prevDuration = usePlayerStore.getState().durationSec;
+
+    return usePlayerStore.subscribe((state) => {
+      if (state.positionSec === prevPosition && state.durationSec === prevDuration) return;
+      prevPosition = state.positionSec;
+      prevDuration = state.durationSec;
+      durationRef.current = state.durationSec;
+      if (!draggingRef.current) positionRef.current = state.positionSec;
+      if (!isPlayingRef.current || draggingRef.current) {
+        const renderPosition = draggingRef.current ? dragPositionRef.current : positionRef.current;
+        paintScrubber(
+          trackRef.current,
+          dragTimeRef.current,
+          durationTimeRef.current,
+          renderPosition,
+          durationRef.current,
+        );
+      }
+    });
+  }, []);
 
   useEffect(() => {
     let raf = 0;
@@ -75,11 +115,11 @@ export function ProgressScrubber() {
       durationRef.current,
     );
 
-    if (isPlaying || dragging) raf = requestAnimationFrame(sync);
+    if (playback.isPlaying || dragging) raf = requestAnimationFrame(sync);
     return () => cancelAnimationFrame(raf);
-  }, [isPlaying, dragging]);
+  }, [playback.isPlaying, dragging]);
 
-  const pct = progressPercent(positionSec, durationSec);
+  const pct = progressPercent(renderPositionSec, renderDurationSec);
 
   function seekFromClientX(clientX: number) {
     const el = laneRef.current;
@@ -148,9 +188,9 @@ export function ProgressScrubber() {
         tabIndex={0}
         aria-label={t("player.seek")}
         aria-valuemin={0}
-        aria-valuemax={Math.max(0, Math.round(durationSec))}
-        aria-valuenow={Math.max(0, Math.round(positionSec))}
-        aria-valuetext={`${formatDuration(positionSec)} / ${formatDuration(durationSec)}`}
+        aria-valuemax={Math.max(0, Math.round(renderDurationSec))}
+        aria-valuenow={Math.max(0, Math.round(renderPositionSec))}
+        aria-valuetext={`${formatDuration(renderPositionSec)} / ${formatDuration(renderDurationSec)}`}
         onPointerDown={onPointerDown}
         onPointerEnter={() => setHovering(true)}
         onPointerLeave={() => setHovering(false)}
@@ -173,7 +213,7 @@ export function ProgressScrubber() {
             transform: "translate(-50%, calc(-100% - 0.65rem))",
           }}
         >
-          {formatDuration(positionSec)}
+          {formatDuration(renderPositionSec)}
         </span>
         <span
           ref={durationTimeRef}
@@ -183,11 +223,23 @@ export function ProgressScrubber() {
           data-visible={showChips}
           style={{ transform: "translateY(calc(-100% - 0.65rem))" }}
         >
-          {formatDuration(durationSec)}
+          {formatDuration(renderDurationSec)}
         </span>
       </SliderChrome>
     </div>
   );
+});
+
+function paintScrubber(
+  trackEl: HTMLElement | null,
+  dragEl: HTMLElement | null,
+  durationEl: HTMLElement | null,
+  positionSec: number,
+  durationSec: number,
+) {
+  paintProgress(trackEl, positionSec, durationSec);
+  paintTimeChips(dragEl, durationEl, positionSec, durationSec);
+  paintSliderAccessibility(trackEl, positionSec, durationSec);
 }
 
 function paintProgress(el: HTMLElement | null, positionSec: number, durationSec: number) {
@@ -202,4 +254,18 @@ function paintTimeChips(
 ) {
   if (dragEl) dragEl.textContent = formatDuration(positionSec);
   if (durationEl) durationEl.textContent = formatDuration(durationSec);
+}
+
+function paintSliderAccessibility(
+  el: HTMLElement | null,
+  positionSec: number,
+  durationSec: number,
+) {
+  if (!el) return;
+  el.setAttribute("aria-valuemax", String(Math.max(0, Math.round(durationSec))));
+  el.setAttribute("aria-valuenow", String(Math.max(0, Math.round(positionSec))));
+  el.setAttribute(
+    "aria-valuetext",
+    `${formatDuration(positionSec)} / ${formatDuration(durationSec)}`,
+  );
 }

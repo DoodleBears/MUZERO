@@ -128,37 +128,39 @@ export function VisualizerModeButton({ className }: { className?: string }) {
           }
         />
       </ControlTooltip>
-      <PopoverContent className="w-64 p-2" side="top" sideOffset={10}>
-        <PopoverTitle className="px-2 pt-1 pb-1">{t("visualizer.title")}</PopoverTitle>
-        <p className="px-2 pb-2 text-muted-foreground text-xs">
-          {t("visualizer.openSettingsHint")}
-        </p>
-        {PLACEMENT_OPTIONS.map((option) => {
-          const OptionIcon = PLACEMENT_ICONS[option];
-          const optionLabel = t(PLACEMENT_LABEL_KEYS[option]);
-          const optionDescription = t(PLACEMENT_DESCRIPTION_KEYS[option]);
-          const selected = option === placement;
-          return (
-            <button
-              type="button"
-              aria-pressed={selected}
-              className={MODE_MENU_OPTION}
-              key={option}
-              onClick={() => {
-                selectPlacement(option);
-                setOpen(false);
-              }}
-            >
-              <OptionIcon className={MODE_MENU_OPTION_ICON} />
-              <span className={MODE_MENU_OPTION_TEXT}>
-                <span className={MODE_MENU_OPTION_LABEL}>{optionLabel}</span>
-                <span className={MODE_MENU_OPTION_DESCRIPTION}>{optionDescription}</span>
-              </span>
-              {selected && <Check aria-hidden="true" className="mt-0.5 size-4 shrink-0" />}
-            </button>
-          );
-        })}
-      </PopoverContent>
+      {open && (
+        <PopoverContent className="w-64 p-2" side="top" sideOffset={10}>
+          <PopoverTitle className="px-2 pt-1 pb-1">{t("visualizer.title")}</PopoverTitle>
+          <p className="px-2 pb-2 text-muted-foreground text-xs">
+            {t("visualizer.openSettingsHint")}
+          </p>
+          {PLACEMENT_OPTIONS.map((option) => {
+            const OptionIcon = PLACEMENT_ICONS[option];
+            const optionLabel = t(PLACEMENT_LABEL_KEYS[option]);
+            const optionDescription = t(PLACEMENT_DESCRIPTION_KEYS[option]);
+            const selected = option === placement;
+            return (
+              <button
+                type="button"
+                aria-pressed={selected}
+                className={MODE_MENU_OPTION}
+                key={option}
+                onClick={() => {
+                  selectPlacement(option);
+                  setOpen(false);
+                }}
+              >
+                <OptionIcon className={MODE_MENU_OPTION_ICON} />
+                <span className={MODE_MENU_OPTION_TEXT}>
+                  <span className={MODE_MENU_OPTION_LABEL}>{optionLabel}</span>
+                  <span className={MODE_MENU_OPTION_DESCRIPTION}>{optionDescription}</span>
+                </span>
+                {selected && <Check aria-hidden="true" className="mt-0.5 size-4 shrink-0" />}
+              </button>
+            );
+          })}
+        </PopoverContent>
+      )}
     </Popover>
   );
 }

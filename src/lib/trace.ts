@@ -32,6 +32,7 @@ let ringHead = 0;
 let ringSize = 0;
 let snapshotCache: TraceEntry[] | null = null;
 const listeners = new Set<() => void>();
+const EMPTY_TRACE_ENTRIES: TraceEntry[] = [];
 
 function emit() {
   for (const listener of listeners) listener();
@@ -112,8 +113,12 @@ export function getTraceEntries(): TraceEntry[] {
   return snapshot();
 }
 
-export function useTraceEntries(): TraceEntry[] {
-  return useSyncExternalStore(subscribeTrace, snapshot, snapshot);
+export function useTraceEntries(active = true): TraceEntry[] {
+  return useSyncExternalStore(
+    active ? subscribeTrace : emptySubscribe,
+    active ? snapshot : emptySnapshot,
+    active ? snapshot : emptySnapshot,
+  );
 }
 
 export function formatTraceEntries(items: TraceEntry[] = snapshot()): string {
@@ -127,6 +132,16 @@ function formatTraceEntry(entry: TraceEntry): string {
   const context = entry.context ? ` ${formatContext(entry.context)}` : "";
   return `${at} ${entry.level.toUpperCase()} [${entry.scope}]${event} ${entry.message}${context}${data}`;
 }
+
+function emptySubscribe(): () => void {
+  return noop;
+}
+
+function emptySnapshot(): TraceEntry[] {
+  return EMPTY_TRACE_ENTRIES;
+}
+
+function noop(): void {}
 
 function formatValue(value: unknown): string {
   if (typeof value === "string") return value;

@@ -9,7 +9,10 @@ import {
 } from "react";
 import { useTranslation } from "react-i18next";
 import { SourceAttributionChip } from "@/components/cloud/source-attribution-chip";
-import { TrackAddToSetPopover } from "@/components/library/track-add-to-set";
+import {
+  ManagedTrackAddToSetPopover,
+  TrackAddToSetPopover,
+} from "@/components/library/track-add-to-set";
 import { Checkbox } from "@/components/ui/checkbox";
 import { CloudDownloadIcon } from "@/components/ui/cloud-download";
 import { CoverImage } from "@/components/ui/cover-image";
@@ -25,8 +28,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import type { DjSession, Track } from "@/db/types";
-import { useLikedTrackIds } from "@/hooks/use-liked-tracks";
-import { useCoverDerivativeUrl } from "@/hooks/use-media";
+import { useCoverDerivativeUrlWithCropSetting } from "@/hooks/use-media";
 import { recordUserAction } from "@/lib/logger";
 import { trackAlbum, trackArtists, trackSubtitle } from "@/lib/track-display";
 import { cn, formatDuration } from "@/lib/utils";
@@ -36,8 +38,11 @@ import { isTrackCacheableToDevice } from "@/streamsrc/source-detect";
 
 interface TrackRowProps {
   track: Track;
+  labels: TrackRowLabels;
   isCurrent: boolean;
   isSelected?: boolean;
+  liked?: boolean;
+  coverCropped?: boolean;
   deferCoverLoad?: boolean;
   /** Select mode: show a checkbox; activating the row toggles its selection.
    *  `shiftKey` requests a range select from the last-toggled anchor. */
@@ -47,7 +52,7 @@ interface TrackRowProps {
   listIndex?: number;
   secondaryMeta?: ReactNode;
   metricColumns?: ReactNode;
-  sessions: DjSession[];
+  sessions?: DjSession[];
   onPlay: () => void;
   onView: () => void;
   onToggleLike: () => void;
@@ -57,9 +62,18 @@ interface TrackRowProps {
   /** Cache a streamed (online) track to a local blob — shown instead of the export
    *  popover for streamed tracks that aren't downloaded yet. */
   onDownloadToDevice?: () => void;
-  onAddToSession: (sessionId: string) => void;
+  onAddToSession?: (sessionId: string) => void;
   /** Create a brand-new set named `name` and add this track to it. */
-  onAddToNewSession: (name: string) => void;
+  onAddToNewSession?: (name: string) => void;
+}
+
+export interface TrackRowLabels {
+  cloudSourceUnknown: string;
+  delete: string;
+  downloadFailed: string;
+  generationFailed: string;
+  like: string;
+  play: string;
 }
 
 /** A clickable artist/album segment in a track's subtitle → opens that entity in
@@ -114,10 +128,21 @@ function StatusBadge({ status }: { status: Track["status"] }) {
 }
 
 /** YouTube-Music-style row thumbnail: cover image, else a kind icon / status. */
-function TrackThumb({ deferCoverLoad = false, track }: { deferCoverLoad?: boolean; track: Track }) {
+function TrackThumb({
+  coverCropped = true,
+  deferCoverLoad = false,
+  track,
+}: {
+  coverCropped?: boolean;
+  deferCoverLoad?: boolean;
+  track: Track;
+}) {
   // Pass the track even while scrolling, with defer: keep an already-resolved
   // cover (no flash to thumbhash), just don't START new derivative work mid-scroll.
-  const coverUrl = useCoverDerivativeUrl(track, "thumbnail", { defer: deferCoverLoad });
+  const coverUrl = useCoverDerivativeUrlWithCropSetting(track, "thumbnail", coverCropped, {
+    defer: deferCoverLoad,
+    traceSource: "row:thumbnail",
+  });
   if (track.status !== "ready") {
     return (
       <div className="grid size-10 shrink-0 place-items-center bg-secondary album-cover-radius album-cover-shadow">
@@ -154,8 +179,11 @@ function TrackTags({ tags }: { tags: string[] }) {
 
 export const TrackRow = memo(function TrackRow({
   track,
+  labels,
   isCurrent,
   isSelected,
+  liked = false,
+  coverCropped = true,
   deferCoverLoad,
   selectable,
   checked,
@@ -174,12 +202,7 @@ export const TrackRow = memo(function TrackRow({
   onAddToSession,
   onAddToNewSession,
 }: TrackRowProps) {
-  const { t } = useTranslation();
   const disabled = track.status !== "ready";
-  // `liked` now lives in the `trackLikes` side table, not on the cold track row —
-  // subscribe to the (tiny) liked-id set so a heart toggle re-renders only the visible
-  // rows, not a full-queue refetch (PRD 20260617-scalable-track-list).
-  const liked = useLikedTrackIds().has(track.id);
   // The hover action toolbar mounts two Base UI Popovers + several buttons. On a
   // virtualized list those are pure scroll cost — invisible until hover, yet
   // instantiated for every mounted row. Mount it only once the row is actually
@@ -278,7 +301,7 @@ export const TrackRow = memo(function TrackRow({
       )}
       <div className="group/thumb relative size-10 shrink-0">
         <div className="grid size-10 place-items-center album-cover-radius">
-          <TrackThumb deferCoverLoad={deferCoverLoad} track={track} />
+          <TrackThumb coverCropped={coverCropped} deferCoverLoad={deferCoverLoad} track={track} />
         </div>
         {track.status === "ready" && (
           <button
@@ -289,7 +312,7 @@ export const TrackRow = memo(function TrackRow({
             }}
             onDoubleClick={(event) => event.stopPropagation()}
             className="pointer-events-none absolute inset-0 grid place-items-center bg-black/45 text-foreground opacity-0 outline-none transition-opacity group-hover/thumb:pointer-events-auto group-hover/thumb:opacity-100 focus-visible:pointer-events-auto focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring album-cover-radius"
-            aria-label={t("player.play")}
+            aria-label={labels.play}
           >
             <span className="grid size-7 place-items-center rounded-full bg-background shadow-sm">
               <Play className="ms-0.5 size-3.5 fill-current" />
@@ -310,7 +333,7 @@ export const TrackRow = memo(function TrackRow({
             {track.cloudSource && (
               <SourceAttributionChip
                 source={track.cloudSource}
-                fallback={t("track.cloudSourceUnknown")}
+                fallback={labels.cloudSourceUnknown}
                 compact
                 className="hidden max-w-32 lg:inline-flex"
               />
@@ -318,7 +341,7 @@ export const TrackRow = memo(function TrackRow({
           </div>
           <div className="truncate text-xs text-muted-foreground">
             {track.status === "failed" ? (
-              (track.error ?? t("track.generationFailed"))
+              (track.error ?? labels.generationFailed)
             ) : (
               <>
                 <TrackSubtitle track={track} />
@@ -349,7 +372,7 @@ export const TrackRow = memo(function TrackRow({
             type="button"
             onClick={onToggleLike}
             className="grid size-7 place-items-center rounded text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-            aria-label={t("track.like")}
+            aria-label={labels.like}
             aria-pressed={liked}
           >
             {/* Liked color goes on the icon (a descendant) so it cleanly overrides the
@@ -360,7 +383,7 @@ export const TrackRow = memo(function TrackRow({
             type="button"
             onClick={onDelete}
             className="grid size-7 place-items-center rounded text-muted-foreground transition-colors hover:bg-accent hover:text-destructive"
-            aria-label={t("track.delete")}
+            aria-label={labels.delete}
           >
             <DeleteIcon size={16} />
           </button>
@@ -379,16 +402,26 @@ export const TrackRow = memo(function TrackRow({
               onExportWithMetadata={onExportWithMetadata}
             />
           )}
-          <TrackAddToSetPopover
-            trackId={track.id}
-            sessions={sessions}
-            onAddToSession={onAddToSession}
-            onAddToNewSession={onAddToNewSession}
-            onOpenChange={(open) => {
-              setAddToSetOpen(open);
-              if (open) setShowActions(true);
-            }}
-          />
+          {sessions && onAddToSession && onAddToNewSession ? (
+            <TrackAddToSetPopover
+              trackId={track.id}
+              sessions={sessions}
+              onAddToSession={onAddToSession}
+              onAddToNewSession={onAddToNewSession}
+              onOpenChange={(open) => {
+                setAddToSetOpen(open);
+                if (open) setShowActions(true);
+              }}
+            />
+          ) : (
+            <ManagedTrackAddToSetPopover
+              trackId={track.id}
+              onOpenChange={(open) => {
+                setAddToSetOpen(open);
+                if (open) setShowActions(true);
+              }}
+            />
+          )}
         </div>
       )}
     </div>
@@ -408,8 +441,11 @@ export const TrackRow = memo(function TrackRow({
 function trackRowPropsEqual(prev: TrackRowProps, next: TrackRowProps): boolean {
   return (
     prev.track === next.track &&
+    prev.labels === next.labels &&
     prev.isCurrent === next.isCurrent &&
     prev.isSelected === next.isSelected &&
+    prev.liked === next.liked &&
+    prev.coverCropped === next.coverCropped &&
     prev.checked === next.checked &&
     prev.selectable === next.selectable &&
     prev.deferCoverLoad === next.deferCoverLoad &&

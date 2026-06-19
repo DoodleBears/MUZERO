@@ -26,6 +26,7 @@ export interface PutMediaBlobInput {
   mime: string;
   bytes?: number;
   blob: Blob;
+  onProgress?: (progress: { bytesLoaded: number; bytesTotal: number }) => void;
   suggestedName?: string;
 }
 
@@ -100,6 +101,7 @@ export async function putMediaBlob(
         role: input.role,
         mime: input.mime,
         blob: input.blob,
+        onProgress: input.onProgress,
         suggestedName: input.suggestedName,
       });
       if (!stored.storageKey) throw new Error(`${provider.id} did not return a storage key`);

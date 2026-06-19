@@ -62,6 +62,10 @@ describe("routeToCommand", () => {
       since: 123,
       limit: 50,
     });
+    expect(routeToCommand("POST", ["perf", "sampler"], { action: "start" })).toEqual({
+      kind: "perfSampler",
+      payload: { action: "start" },
+    });
     expect(routeToCommand("POST", ["live-request"], { action: "inject", query: "晴天" })).toEqual({
       kind: "liveRequest",
       payload: { action: "inject", query: "晴天" },
@@ -135,6 +139,30 @@ describe("createPerfCommandHandler", () => {
     expect(playerState.playIndex).toHaveBeenCalledWith(2);
   });
 
+  it("normalizes the user-facing sets tab alias for navTab", async () => {
+    const setTab = vi.fn();
+    const handle = createPerfCommandHandler(
+      makeDeps({
+        getNavState: () => ({ tab: "now", setTab }) as never,
+      }),
+    );
+
+    await expect(handle({ kind: "navTab", tab: "sets" })).resolves.toEqual({ tab: "search" });
+    expect(setTab).toHaveBeenCalledWith("search");
+  });
+
+  it("rejects unknown navTab values before they can poison persisted nav state", async () => {
+    const setTab = vi.fn();
+    const handle = createPerfCommandHandler(
+      makeDeps({
+        getNavState: () => ({ tab: "now", setTab }) as never,
+      }),
+    );
+
+    await expect(handle({ kind: "navTab", tab: "bogus" })).rejects.toThrow(/unknown tab/);
+    expect(setTab).not.toHaveBeenCalled();
+  });
+
   it("rejects player methods outside the allowlist", async () => {
     const handle = createPerfCommandHandler(makeDeps());
     await expect(
@@ -157,6 +185,22 @@ describe("createPerfCommandHandler", () => {
       entries: [{ at: 1 }, { at: 2 }],
     });
     expect(dumpTrace).toHaveBeenCalledWith(100, 10);
+  });
+
+  it("perfSampler forwards the payload to the wired sampler", async () => {
+    const perfSampler = vi.fn(() => ({ active: true }));
+    const handle = createPerfCommandHandler(makeDeps({ perfSampler }));
+    await expect(
+      handle({ kind: "perfSampler", payload: { action: "start", label: "import" } } as never),
+    ).resolves.toEqual({ active: true });
+    expect(perfSampler).toHaveBeenCalledWith({ action: "start", label: "import" });
+  });
+
+  it("perfSampler throws when the sampler is not wired", async () => {
+    const handle = createPerfCommandHandler(makeDeps({ perfSampler: undefined }));
+    await expect(handle({ kind: "perfSampler", payload: {} } as never)).rejects.toThrow(
+      /not wired/,
+    );
   });
 
   it("liveRequest forwards the payload to the wired driver", async () => {

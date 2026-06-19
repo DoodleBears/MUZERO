@@ -18,6 +18,7 @@ import type {
   MediaStorageFileInput,
   SaveFileInput,
   StreamLoginRequest,
+  WriteMediaStorageBlobInput,
   WriteMediaStorageFileInput,
 } from "./bridge";
 
@@ -38,6 +39,14 @@ interface MuzeroApi {
   writeMediaStorageFile(
     input: Omit<WriteMediaStorageFileInput, "bytes"> & { bytes: ArrayBuffer },
   ): Promise<void>;
+  beginMediaStorageWrite(input: { expectedBytes?: number; storageKey: string }): Promise<{
+    uploadId: string;
+  }>;
+  writeMediaStorageChunk(input: { bytes: ArrayBuffer; uploadId: string }): Promise<{
+    writtenBytes: number;
+  }>;
+  commitMediaStorageWrite(input: { uploadId: string }): Promise<void>;
+  abortMediaStorageWrite(input: { uploadId: string }): Promise<void>;
   readMediaStorageFile(input: MediaStorageFileInput): Promise<ArrayBuffer>;
   deleteMediaStorageFile(input: MediaStorageFileInput): Promise<void>;
   statMediaStorageFile(input: MediaStorageFileInput): Promise<{ bytes: number } | null>;
@@ -177,6 +186,7 @@ export function createElectronBridge(): DesktopBridge {
         bytes: toStandaloneBuffer(bytes),
         expectedBytes,
       }),
+    writeMediaStorageBlob: (input) => writeElectronMediaStorageBlob(api, input),
     readMediaStorageFile: async (input) => new Uint8Array(await api.readMediaStorageFile(input)),
     deleteMediaStorageFile: (input) => api.deleteMediaStorageFile(input),
     statMediaStorageFile: (input) => api.statMediaStorageFile(input),
@@ -185,12 +195,13 @@ export function createElectronBridge(): DesktopBridge {
     setAppIcon: (icon) => api.setAppIcon(icon),
     mediaProxyUrl: electronMediaProxyUrl,
     localMediaUrl: async (input: LocalMediaUrlInput) => {
+      await api.grantFileAccess(input.path);
       const token = await api.localMediaToken({ path: input.path, mime: input.mime });
       return electronLocalMediaUrl({ token, mime: input.mime, trace: input.trace });
     },
     localMediaUrlForStorageKey: async (input: LocalMediaStorageUrlInput) => {
       const token = await api.localMediaToken({ storageKey: input.storageKey, mime: input.mime });
-      return electronLocalMediaUrl({ token, mime: input.mime });
+      return electronLocalMediaUrl({ token, mime: input.mime, trace: input.trace });
     },
     openSourceLogin: async (request) => {
       const cookies = await api.openSourceLogin(request);
@@ -245,6 +256,33 @@ export function createElectronBridge(): DesktopBridge {
         }
       : undefined,
   };
+}
+
+const MEDIA_STORAGE_WRITE_CHUNK_BYTES = 1024 * 1024;
+
+async function writeElectronMediaStorageBlob(
+  api: MuzeroApi,
+  input: WriteMediaStorageBlobInput,
+): Promise<void> {
+  const expectedBytes = input.expectedBytes ?? input.blob.size;
+  const { uploadId } = await api.beginMediaStorageWrite({
+    expectedBytes,
+    storageKey: input.storageKey,
+  });
+  const chunkSize = Math.max(64 * 1024, input.chunkSizeBytes ?? MEDIA_STORAGE_WRITE_CHUNK_BYTES);
+  input.onProgress?.({ bytesLoaded: 0, bytesTotal: input.blob.size });
+  try {
+    for (let offset = 0; offset < input.blob.size; offset += chunkSize) {
+      const end = Math.min(input.blob.size, offset + chunkSize);
+      const bytes = await input.blob.slice(offset, end).arrayBuffer();
+      await api.writeMediaStorageChunk({ bytes, uploadId });
+      input.onProgress?.({ bytesLoaded: end, bytesTotal: input.blob.size });
+    }
+    await api.commitMediaStorageWrite({ uploadId });
+  } catch (error) {
+    await api.abortMediaStorageWrite({ uploadId }).catch(() => {});
+    throw error;
+  }
 }
 
 export function subscribeElectronDiagnostics(

@@ -4,6 +4,13 @@ import type { Tab } from "@/components/nav/dock-nav";
 import type { SystemPlaylistId } from "@/lib/system-playlists";
 import type { StreamPlaylist } from "@/streamsrc/provider";
 
+const VALID_TABS = new Set<Tab>(["now", "queue", "search", "sessions", "settings"]);
+
+export function normalizeTab(value: unknown): Tab {
+  if (value === "sets") return "search";
+  return typeof value === "string" && VALID_TABS.has(value as Tab) ? (value as Tab) : "search";
+}
+
 /**
  * The active navigation tab, persisted so the app reopens where you left off.
  * Uses zustand `persist` (localStorage `muzero-nav`) — the same tiny-UI-pref
@@ -50,7 +57,7 @@ export const useNavStore = create<NavState>()(
   persist(
     (set, get) => ({
       tab: "search",
-      setTab: (tab) => set({ tab }),
+      setTab: (tab) => set({ tab: normalizeTab(tab) }),
       settingsItem: "appearance",
       setSettingsItem: (settingsItem) => set({ settingsItem }),
       pendingLibraryEntity: null,
@@ -94,6 +101,18 @@ export const useNavStore = create<NavState>()(
       name: "muzero-nav",
       // Only persist navigation position — never the ephemeral open intent.
       partialize: (state) => ({ tab: state.tab, settingsItem: state.settingsItem }),
+      merge: (persisted, current) => {
+        const row =
+          persisted && typeof persisted === "object"
+            ? (persisted as Partial<Pick<NavState, "settingsItem" | "tab">>)
+            : {};
+        return {
+          ...current,
+          settingsItem:
+            typeof row.settingsItem === "string" ? row.settingsItem : current.settingsItem,
+          tab: normalizeTab(row.tab),
+        };
+      },
     },
   ),
 );

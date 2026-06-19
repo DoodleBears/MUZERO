@@ -1,9 +1,11 @@
 "use client";
 
+import { useLiveQuery } from "dexie-react-hooks";
 import { MapPin } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import {
   type ReactNode,
+  type SyntheticEvent,
   type UIEvent,
   useCallback,
   useEffect,
@@ -13,7 +15,9 @@ import {
   useState,
 } from "react";
 import { MemoryNotesWaterfall } from "@/components/track/memory-notes-waterfall";
+import { db } from "@/db/muzero-db";
 import type { Memory } from "@/db/types";
+import { useMediaBlobUrl } from "@/hooks/use-media";
 import { resolveMemoryFitText } from "@/lib/memory-fit-text";
 import {
   MEMORY_TIMELINE_CAROUSEL_INTERVAL_MS,
@@ -198,6 +202,16 @@ export function MemoryTimelineRail({
             photoAlt: () => labels.memory,
           }}
           memories={sortedMemories}
+          photosActive={mode === "list"}
+          renderPhoto={(memory, props) => (
+            <MemoryPhotoImage
+              alt={props.alt}
+              className={props.className}
+              memory={memory}
+              onError={props.onError}
+              onLoad={props.onLoad}
+            />
+          )}
         />
       </div>
     </motion.section>
@@ -211,7 +225,8 @@ function MemoryCarouselSlide({
   formatCreatedAt: (createdAt: number) => ReactNode;
   memory: MemoryTimelineRailItem;
 }) {
-  const [mediaReady, setMediaReady] = useState(!memory.photoUrl);
+  const hasPhoto = hasMemoryPhoto(memory);
+  const [mediaReady, setMediaReady] = useState(!hasPhoto);
   const [fitReady, setFitReady] = useState(false);
   const [enterReady, setEnterReady] = useState(false);
   const markFitReady = useCallback(() => setFitReady(true), []);
@@ -248,14 +263,14 @@ function MemoryCarouselSlide({
       transition={{ duration: 0.42, ease: [0.22, 1, 0.36, 1] }}
     >
       <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-primary" />
-      {memory.photoUrl && (
-        <img
+      {hasPhoto && (
+        <MemoryPhotoImage
           alt=""
           className="mb-4 max-h-[min(52vh,24rem)] w-full rounded-lg object-contain"
           data-testid="memory-carousel-image"
+          memory={memory}
           onError={markMediaReady}
           onLoad={markMediaReady}
-          src={memory.photoUrl}
         />
       )}
       <MemoryCarouselNote enabled={mediaReady} note={memory.note} onFitLayout={markFitReady} />
@@ -272,6 +287,91 @@ function MemoryCarouselSlide({
       </div>
     </motion.article>
   );
+}
+
+function MemoryPhotoImage({
+  alt,
+  className,
+  "data-testid": dataTestId,
+  memory,
+  onError,
+  onLoad,
+}: {
+  alt: string;
+  className?: string;
+  "data-testid"?: string;
+  memory: MemoryTimelineRailItem;
+  onError?: (event: SyntheticEvent<HTMLImageElement>) => void;
+  onLoad?: (event: SyntheticEvent<HTMLImageElement>) => void;
+}) {
+  const directUrl = memory.photoUrl ?? memory.remotePhotoUrl;
+  if (directUrl) {
+    return (
+      <img
+        alt={alt}
+        className={className}
+        data-testid={dataTestId}
+        onError={onError}
+        onLoad={onLoad}
+        src={directUrl}
+      />
+    );
+  }
+  if (!memory.photoBlobId) return null;
+  return (
+    <ResolvedMemoryPhotoImage
+      alt={alt}
+      className={className}
+      data-testid={dataTestId}
+      memory={memory}
+      onError={onError}
+      onLoad={onLoad}
+    />
+  );
+}
+
+function ResolvedMemoryPhotoImage({
+  alt,
+  className,
+  "data-testid": dataTestId,
+  memory,
+  onError,
+  onLoad,
+}: {
+  alt: string;
+  className?: string;
+  "data-testid"?: string;
+  memory: MemoryTimelineRailItem;
+  onError?: (event: SyntheticEvent<HTMLImageElement>) => void;
+  onLoad?: (event: SyntheticEvent<HTMLImageElement>) => void;
+}) {
+  const photoBlobId = memory.photoBlobId;
+  const row = useLiveQuery(
+    async () => (photoBlobId ? ((await db.mediaBlobs.get(photoBlobId)) ?? null) : null),
+    [photoBlobId],
+    undefined,
+  );
+  const url = useMediaBlobUrl(row);
+
+  useEffect(() => {
+    if (row === null) onError?.({} as SyntheticEvent<HTMLImageElement>);
+  }, [onError, row]);
+
+  if (!url) return null;
+  return (
+    <img
+      alt={alt}
+      className={className}
+      data-testid={dataTestId}
+      onError={onError}
+      onLoad={onLoad}
+      src={url}
+    />
+  );
+}
+
+function hasMemoryPhoto(memory: MemoryTimelineRailItem): boolean {
+  return Boolean(memory.photoUrl || memory.remotePhotoUrl || memory.photoBlobId);
 }
 
 function MemoryCarouselNote({

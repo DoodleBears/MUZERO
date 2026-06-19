@@ -18,6 +18,7 @@ import {
   useState,
 } from "react";
 import { useTranslation } from "react-i18next";
+import { RenderTraceBoundary } from "@/components/dev/render-trace-boundary";
 import { DjConsole } from "@/components/dj/dj-console";
 import { ControlTooltip } from "@/components/player/control-tooltip";
 import { ListeningNowSection } from "@/components/player/listening-now-section";
@@ -47,9 +48,11 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { LibraryImportEmptyState } from "@/components/upload/library-import-empty-state";
 import { db } from "@/db/muzero-db";
 import { addTrackBackground, saveSettings, setTrackCover } from "@/db/repositories";
-import type { SetDisplayMode } from "@/db/types";
+import type { SetDisplayMode, Track } from "@/db/types";
 import { useSettings } from "@/hooks/use-app-data";
+import { useBurstSettledValue } from "@/hooks/use-burst-settled-value";
 import { useLongPress } from "@/hooks/use-long-press";
+import { usePausedLiveQuery } from "@/hooks/use-paused-live-query";
 import { useShortcutHint } from "@/hooks/use-shortcut-hint";
 import { classifyDrop, dragHasFiles, filesFromTransfer, summarizeDragItems } from "@/lib/file-drop";
 import { notePerfWork } from "@/lib/perf-counters";
@@ -71,13 +74,27 @@ const NEXT_DISPLAY_MODE: Record<SetDisplayMode, SetDisplayMode> = {
 const REPEAT_OPTIONS: RepeatMode[] = ["off", "all", "one"];
 const GLASS_CONTROL_GROUP =
   "rounded-full border border-white/10 bg-black/35 p-1 shadow-lg backdrop-blur-md";
+const EMPTY_QUEUE: Track[] = [];
+const ANNOTATION_DISPLAY_SETTLE_MS = 360;
+const MEMORY_COUNT_TRACK_SETTLE_MS = 360;
+
+function currentTrackIdFromPlayerState(
+  state: ReturnType<typeof usePlayerStore.getState>,
+): string | undefined {
+  return state.currentIndex >= 0 ? state.queue[state.currentIndex]?.id : undefined;
+}
 
 /**
  * Now Playing, YouTube-Music style: a wide media area (16:9 for video, a square
  * for audio art) with a track-info card below, and a tabbed queue/lyrics rail on
  * the right (desktop). The ambient slideshow background lives at the app root.
  */
-export function NowPlayingPage({
+export function NowPlayingPage(props: { foregroundHidden?: boolean; pageActive?: boolean }) {
+  if (props.pageActive === false) return <div aria-hidden="true" className="h-full" />;
+  return <NowPlayingPageActive {...props} pageActive={props.pageActive ?? true} />;
+}
+
+function NowPlayingPageActive({
   foregroundHidden = false,
   pageActive = true,
 }: {
@@ -88,10 +105,10 @@ export function NowPlayingPage({
    *  hidden, or the coverflow card floats over the library/search tabs. */
   pageActive?: boolean;
 }) {
-  const queue = usePlayerStore((s) => s.queue);
-  const currentIndex = usePlayerStore((s) => s.currentIndex);
-  const djEnabled = usePlayerStore((s) => s.djEnabled);
-  const trackCount = useLiveQuery(() => db.tracks.count(), [], 0);
+  const queue = usePlayerStore((s) => (pageActive ? s.queue : EMPTY_QUEUE));
+  const currentIndex = usePlayerStore((s) => (pageActive ? s.currentIndex : -1));
+  const djEnabled = usePlayerStore((s) => (pageActive ? s.djEnabled : false));
+  const trackCount = usePausedLiveQuery(() => db.tracks.count(), [], pageActive, 0);
   const settings = useSettings();
   const lyricsVisible = !settings.nowPlayingRightRailCollapsed;
   const toggleLyricsVisible = () =>
@@ -100,6 +117,7 @@ export function NowPlayingPage({
       nowPlayingRightRailCollapsed: lyricsVisible,
     });
   const current = currentIndex >= 0 ? queue[currentIndex] : undefined;
+  const annotationTrack = useBurstSettledValue(current, ANNOTATION_DISPLAY_SETTLE_MS);
   // The lyrics surface lives in the right rail on md+; on narrow there is no rail,
   // so the same lyrics-on/off mode stacks it into the scroll flow below the stage.
   // Centered lyrics are reserved for the global immersive visualizer overlay.
@@ -171,44 +189,64 @@ export function NowPlayingPage({
           className="no-scrollbar -mx-[var(--now-playing-stage-bleed)] flex min-h-0 flex-col gap-3 overflow-y-auto overflow-x-visible px-[var(--now-playing-stage-bleed)] pt-chrome-top pb-chrome-bottom [--now-playing-stage-bleed:clamp(1.5rem,7vw,4.5rem)]"
         >
           <CurrentTrackContextMenu className="block">
-            <div className="flex flex-col gap-2">
-              {/* Mobile: a plain tap of the cover flips the right-rail mode
-                  (swipes still change tracks). Desktop uses the lyrics button. */}
-              <SwipeableCoverStage
-                coverRef={stageRef}
-                foregroundVisible={!foregroundHidden && pageActive}
-                onTap={isNarrow ? toggleLyricsVisible : undefined}
-              />
-              {current && <TrackInfoCard track={current} />}
-            </div>
+            <RenderTraceBoundary id="now:stage">
+              <div className="flex flex-col gap-2">
+                {/* Mobile: a plain tap of the cover flips the right-rail mode
+                    (swipes still change tracks). Desktop uses the lyrics button. */}
+                <SwipeableCoverStage
+                  coverRef={stageRef}
+                  foregroundVisible={!foregroundHidden && pageActive}
+                  onTap={isNarrow ? toggleLyricsVisible : undefined}
+                />
+                {current && <TrackInfoCard track={current} />}
+              </div>
+            </RenderTraceBoundary>
           </CurrentTrackContextMenu>
 
-          <NowPlayingActionRow />
+          <RenderTraceBoundary id="now:actions">
+            <NowPlayingActionRow />
+          </RenderTraceBoundary>
 
-          <div className="relative mx-auto w-full pb-4">
-            <PlaybackSpectrum className="-translate-y-1/2 absolute inset-x-0 top-1/2" />
-            <TransportControls className="relative z-10 py-4 " />
-          </div>
+          <RenderTraceBoundary id="now:transport">
+            <div className="relative mx-auto w-full pb-4">
+              <PlaybackSpectrum className="-translate-y-1/2 absolute inset-x-0 top-1/2" />
+              <TransportControls className="relative z-10 py-4 " />
+            </div>
+          </RenderTraceBoundary>
 
           {/* No key={current.id}: AnnotationEditor + its memory panel reset their
               per-track draft state in place, so a switch no longer tears down and
               rebuilds the whole subtree (PRD Phase 30). */}
-          {current && <AnnotationEditor track={current} />}
+          {annotationTrack && (
+            <RenderTraceBoundary id="now:annotation">
+              <AnnotationEditor track={annotationTrack} />
+            </RenderTraceBoundary>
+          )}
 
           {isNarrow && current && lyricsVisible && (
             <div className="min-h-[60svh] p-4">
-              <SyncedLyricsView track={current} />
+              <RenderTraceBoundary id="now:lyrics:narrow">
+                <SyncedLyricsView track={current} />
+              </RenderTraceBoundary>
             </div>
           )}
 
-          {djEnabled && <DjConsole />}
+          {djEnabled && (
+            <RenderTraceBoundary id="now:dj-console">
+              <DjConsole />
+            </RenderTraceBoundary>
+          )}
 
-          <ListeningNowSection />
+          <RenderTraceBoundary id="now:listening">
+            <ListeningNowSection />
+          </RenderTraceBoundary>
         </section>
 
         {!isNarrow && (
           <aside className="min-h-0">
-            <NowPlayingPanel collapsible showFloatingToggle={false} />
+            <RenderTraceBoundary id="now:right-rail">
+              <NowPlayingPanel collapsible showFloatingToggle={false} />
+            </RenderTraceBoundary>
           </aside>
         )}
       </div>
@@ -393,15 +431,24 @@ function useIsNarrow(): boolean {
 }
 
 const NowPlayingActionRow = memo(function NowPlayingActionRow() {
-  const displayMode = usePlayerStore((s) => s.displayMode);
-  const repeat = usePlayerStore((s) => s.repeat);
-  const shuffle = usePlayerStore((s) => s.shuffle);
-  const currentTrackId = usePlayerStore((s) =>
-    s.currentIndex >= 0 ? s.queue[s.currentIndex]?.id : undefined,
+  return (
+    <TooltipProvider>
+      <div className="mx-auto flex w-full flex-wrap items-center justify-between gap-2">
+        <RenderTraceBoundary id="now:actions:stage-modes">
+          <NowPlayingStageModeControls />
+        </RenderTraceBoundary>
+        <RenderTraceBoundary id="now:actions:playback-modes">
+          <NowPlayingPlaybackModeControls />
+        </RenderTraceBoundary>
+      </div>
+    </TooltipProvider>
   );
+});
+
+const NowPlayingStageModeControls = memo(function NowPlayingStageModeControls() {
+  const displayMode = usePlayerStore((s) => s.displayMode);
+  const currentTrackId = useBurstSettledCurrentTrackId(MEMORY_COUNT_TRACK_SETTLE_MS);
   const setDisplayMode = usePlayerStore((s) => s.setDisplayMode);
-  const setRepeat = usePlayerStore((s) => s.setRepeat);
-  const setShuffle = usePlayerStore((s) => s.setShuffle);
   const hint = useShortcutHint();
   const memoryCount = useLiveQuery(
     () =>
@@ -413,29 +460,77 @@ const NowPlayingActionRow = memo(function NowPlayingActionRow() {
   );
 
   return (
-    <TooltipProvider>
-      <div className="mx-auto flex w-full flex-wrap items-center justify-between gap-2">
-        <div className={cn("flex items-center gap-1", GLASS_CONTROL_GROUP)}>
-          <DisplayModeButton displayMode={displayMode} onChange={setDisplayMode} />
-          <LyricsModeButton
-            hasMemory={(memoryCount ?? 0) > 0}
-            memoryShortcutKeys={hint("memory", { scope: "inspector" })}
-          />
-          <VisualizerModeButton />
-        </div>
-
-        <div className={cn("flex items-center gap-1", GLASS_CONTROL_GROUP)}>
-          <RepeatModeButton onChange={setRepeat} repeat={repeat} shortcutKeys={hint("repeat")} />
-          <ShuffleModeButton
-            onChange={setShuffle}
-            shortcutKeys={hint("shuffle")}
-            shuffle={shuffle}
-          />
-        </div>
-      </div>
-    </TooltipProvider>
+    <div className={cn("flex items-center gap-1", GLASS_CONTROL_GROUP)}>
+      <DisplayModeButton displayMode={displayMode} onChange={setDisplayMode} />
+      <LyricsModeButton
+        hasMemory={(memoryCount ?? 0) > 0}
+        memoryShortcutKeys={hint("memory", { scope: "inspector" })}
+      />
+      <VisualizerModeButton />
+    </div>
   );
 });
+
+const NowPlayingPlaybackModeControls = memo(function NowPlayingPlaybackModeControls() {
+  const repeat = usePlayerStore((s) => s.repeat);
+  const shuffle = usePlayerStore((s) => s.shuffle);
+  const setRepeat = usePlayerStore((s) => s.setRepeat);
+  const setShuffle = usePlayerStore((s) => s.setShuffle);
+  const hint = useShortcutHint();
+
+  return (
+    <div className={cn("flex items-center gap-1", GLASS_CONTROL_GROUP)}>
+      <RepeatModeButton onChange={setRepeat} repeat={repeat} shortcutKeys={hint("repeat")} />
+      <ShuffleModeButton onChange={setShuffle} shortcutKeys={hint("shuffle")} shuffle={shuffle} />
+    </div>
+  );
+});
+
+function useBurstSettledCurrentTrackId(quietMs: number): string | undefined {
+  const [displayed, setDisplayed] = useState(() =>
+    currentTrackIdFromPlayerState(usePlayerStore.getState()),
+  );
+  const appliedRef = useRef(displayed);
+  const timerRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    const apply = (next: string | undefined) => {
+      if (timerRef.current === null) {
+        if (Object.is(next, appliedRef.current)) return;
+        appliedRef.current = next;
+        setDisplayed(next);
+        timerRef.current = window.setTimeout(() => {
+          timerRef.current = null;
+        }, quietMs);
+        return;
+      }
+
+      window.clearTimeout(timerRef.current);
+      timerRef.current = window.setTimeout(() => {
+        timerRef.current = null;
+        if (!Object.is(next, appliedRef.current)) {
+          appliedRef.current = next;
+          setDisplayed(next);
+        }
+      }, quietMs);
+    };
+
+    const unsubscribe = usePlayerStore.subscribe((state, prev) => {
+      const next = currentTrackIdFromPlayerState(state);
+      if (Object.is(next, currentTrackIdFromPlayerState(prev))) return;
+      apply(next);
+    });
+    return () => {
+      unsubscribe();
+      if (timerRef.current !== null) {
+        window.clearTimeout(timerRef.current);
+        timerRef.current = null;
+      }
+    };
+  }, [quietMs]);
+
+  return displayed;
+}
 
 function DisplayModeButton({
   displayMode,
@@ -485,37 +580,39 @@ function DisplayModeButton({
           }
         />
       </ControlTooltip>
-      <PopoverContent className="w-60 p-2" side="top" sideOffset={10}>
-        <PopoverTitle className="px-2 pt-1 pb-1">{t("nowPlaying.displayMode")}</PopoverTitle>
-        {(["video", "cover"] as const).map((mode) => {
-          const Icon = DISPLAY_MODE_ICONS[mode];
-          const label = t(`displayMode.${mode}`);
-          const selected = mode === displayMode;
-          return (
-            <button
-              type="button"
-              aria-pressed={selected}
-              className={MODE_MENU_OPTION}
-              key={mode}
-              onClick={() => {
-                void onChange(mode);
-                setOpen(false);
-              }}
-            >
-              <Icon className={MODE_MENU_OPTION_ICON} />
-              <span className={MODE_MENU_OPTION_TEXT}>
-                <span className={MODE_MENU_OPTION_LABEL}>{label}</span>
-                <span className={MODE_MENU_OPTION_DESCRIPTION}>
-                  {selected
-                    ? t("nowPlaying.modeTitle", { mode: label })
-                    : t("nowPlaying.switchDisplayMode", { mode: label })}
+      {open && (
+        <PopoverContent className="w-60 p-2" side="top" sideOffset={10}>
+          <PopoverTitle className="px-2 pt-1 pb-1">{t("nowPlaying.displayMode")}</PopoverTitle>
+          {(["video", "cover"] as const).map((mode) => {
+            const Icon = DISPLAY_MODE_ICONS[mode];
+            const label = t(`displayMode.${mode}`);
+            const selected = mode === displayMode;
+            return (
+              <button
+                type="button"
+                aria-pressed={selected}
+                className={MODE_MENU_OPTION}
+                key={mode}
+                onClick={() => {
+                  void onChange(mode);
+                  setOpen(false);
+                }}
+              >
+                <Icon className={MODE_MENU_OPTION_ICON} />
+                <span className={MODE_MENU_OPTION_TEXT}>
+                  <span className={MODE_MENU_OPTION_LABEL}>{label}</span>
+                  <span className={MODE_MENU_OPTION_DESCRIPTION}>
+                    {selected
+                      ? t("nowPlaying.modeTitle", { mode: label })
+                      : t("nowPlaying.switchDisplayMode", { mode: label })}
+                  </span>
                 </span>
-              </span>
-              {selected && <Check aria-hidden="true" className="mt-0.5 size-4 shrink-0" />}
-            </button>
-          );
-        })}
-      </PopoverContent>
+                {selected && <Check aria-hidden="true" className="mt-0.5 size-4 shrink-0" />}
+              </button>
+            );
+          })}
+        </PopoverContent>
+      )}
     </Popover>
   );
 }
@@ -573,25 +670,27 @@ function RepeatModeButton({
           }
         />
       </ControlTooltip>
-      <PopoverContent className="w-60 p-2" side="top" sideOffset={10}>
-        <PopoverTitle className="px-2 pt-1 pb-1">{t("player.repeatLabel")}</PopoverTitle>
-        {REPEAT_OPTIONS.map((mode) => {
-          const Icon = mode === "one" ? Repeat1 : Repeat;
-          return (
-            <PlaybackMenuOption
-              active={mode === repeat}
-              description={t(REPEAT_DESCRIPTION_KEYS[mode])}
-              icon={Icon}
-              key={mode}
-              label={t(REPEAT_LABEL_KEYS[mode])}
-              onClick={() => {
-                onChange(mode);
-                setOpen(false);
-              }}
-            />
-          );
-        })}
-      </PopoverContent>
+      {open && (
+        <PopoverContent className="w-60 p-2" side="top" sideOffset={10}>
+          <PopoverTitle className="px-2 pt-1 pb-1">{t("player.repeatLabel")}</PopoverTitle>
+          {REPEAT_OPTIONS.map((mode) => {
+            const Icon = mode === "one" ? Repeat1 : Repeat;
+            return (
+              <PlaybackMenuOption
+                active={mode === repeat}
+                description={t(REPEAT_DESCRIPTION_KEYS[mode])}
+                icon={Icon}
+                key={mode}
+                label={t(REPEAT_LABEL_KEYS[mode])}
+                onClick={() => {
+                  onChange(mode);
+                  setOpen(false);
+                }}
+              />
+            );
+          })}
+        </PopoverContent>
+      )}
     </Popover>
   );
 }
@@ -630,29 +729,31 @@ function ShuffleModeButton({
           }
         />
       </ControlTooltip>
-      <PopoverContent className="w-60 p-2" side="top" sideOffset={10}>
-        <PopoverTitle className="px-2 pt-1 pb-1">{t("player.shuffle")}</PopoverTitle>
-        <PlaybackMenuOption
-          active={!shuffle}
-          description={t("player.shuffleOffDescription")}
-          icon={ListMusic}
-          label={t("player.shuffleOff")}
-          onClick={() => {
-            onChange(false);
-            setOpen(false);
-          }}
-        />
-        <PlaybackMenuOption
-          active={shuffle}
-          description={t("player.shuffleOnDescription")}
-          icon={Shuffle}
-          label={t("player.shuffleOn")}
-          onClick={() => {
-            onChange(true);
-            setOpen(false);
-          }}
-        />
-      </PopoverContent>
+      {open && (
+        <PopoverContent className="w-60 p-2" side="top" sideOffset={10}>
+          <PopoverTitle className="px-2 pt-1 pb-1">{t("player.shuffle")}</PopoverTitle>
+          <PlaybackMenuOption
+            active={!shuffle}
+            description={t("player.shuffleOffDescription")}
+            icon={ListMusic}
+            label={t("player.shuffleOff")}
+            onClick={() => {
+              onChange(false);
+              setOpen(false);
+            }}
+          />
+          <PlaybackMenuOption
+            active={shuffle}
+            description={t("player.shuffleOnDescription")}
+            icon={Shuffle}
+            label={t("player.shuffleOn")}
+            onClick={() => {
+              onChange(true);
+              setOpen(false);
+            }}
+          />
+        </PopoverContent>
+      )}
     </Popover>
   );
 }

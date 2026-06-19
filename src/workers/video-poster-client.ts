@@ -77,6 +77,7 @@ function getWorker(): Worker | null {
             ? {
                 atTimeSeconds: msg.frame.atTimeSeconds,
                 blob: new Blob([msg.frame.bytes], { type: msg.frame.mime }),
+                coverMetadata: msg.frame.coverMetadata,
                 height: msg.frame.height,
                 mime: msg.frame.mime,
                 score: msg.frame.score,

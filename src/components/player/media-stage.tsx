@@ -21,6 +21,7 @@ const DEFAULT_VIDEO_ASPECT = 16 / 9;
 // next/prev burst. A single switch lands on the leading edge (instant); only a
 // genuine mash coalesces, so deliberate clicks never feel delayed.
 const STAGE_DISPLAY_SETTLE_MS = 300;
+const COVER_BACKLIGHT_MISS_DELAY_MS = 1600;
 
 /**
  * The now-playing "stage". Owns the spot where the shared <video> element is
@@ -78,6 +79,11 @@ export function MediaStage({
       ? displayTrack
       : undefined,
     "backlight",
+    {
+      generateOnMiss: false,
+      missDelayMs: COVER_BACKLIGHT_MISS_DELAY_MS,
+      traceSource: "media-stage:backlight",
+    },
   );
   const [videoError, setVideoError] = useState(false);
   const [videoAspect, setVideoAspect] = useState<number | null>(null);

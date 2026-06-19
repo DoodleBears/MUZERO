@@ -1,6 +1,6 @@
 import { Loader2, Pause, Play } from "lucide-react";
 import { motion } from "motion/react";
-import { type ReactNode, useEffect, useMemo, useRef } from "react";
+import { memo, type ReactNode, useEffect, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { useShallow } from "zustand/react/shallow";
 import { ControlTooltip } from "@/components/player/control-tooltip";
@@ -8,11 +8,12 @@ import { CoverImage } from "@/components/player/cover-image";
 import { Button } from "@/components/ui/button";
 import { Disc3Icon } from "@/components/ui/disc-3";
 import type { Track } from "@/db/types";
+import { useBurstSettledValue } from "@/hooks/use-burst-settled-value";
 import { useTrackCoverUrl } from "@/hooks/use-media";
 import { useShortcutHint } from "@/hooks/use-shortcut-hint";
 import { jumpToSource } from "@/lib/jump-to-source";
 import { resolvePlayingSource } from "@/lib/playing-source";
-import { trackHasCover, trackSubtitle } from "@/lib/track-display";
+import { trackSubtitle } from "@/lib/track-display";
 import { cn } from "@/lib/utils";
 import { transitionState } from "@/lib/view-transition-react";
 import type { ShortcutScope } from "@/shortcuts/registry";
@@ -30,6 +31,7 @@ const DOCK_SWITCH_VELOCITY = 380;
 const DOCK_WHEEL_SWITCH_PX = 56;
 const DOCK_WHEEL_END_MS = 140;
 const DOCK_WHEEL_REARM_PX = 4;
+const DOCK_COVER_SETTLE_MS = 300;
 
 /**
  * Row 1 of the player-dock: cover + title/artist + the single play/pause button.
@@ -43,7 +45,7 @@ const DOCK_WHEEL_REARM_PX = 4;
  * `getBoundingClientRect` reflow that compounded the drag-to-switch jank (PRD
  * 20260617-dock-swipe-switch-jank).
  */
-export function TrackIdentityRow({
+export const TrackIdentityRow = memo(function TrackIdentityRow({
   className,
   onOpen,
   controls,
@@ -139,7 +141,7 @@ export function TrackIdentityRow({
 
   // Reassemble the minimal cover descriptor (stable while the scalars are).
   // biome-ignore lint/correctness/useExhaustiveDependencies: depend on scalars, not the picked object, to keep this stable
-  const coverInput = useMemo<
+  const liveCoverInput = useMemo<
     Pick<Track, "coverBlobId" | "coverCrop" | "remoteCoverUrl"> | undefined
   >(
     () =>
@@ -167,7 +169,9 @@ export function TrackIdentityRow({
       track?.cropH,
     ],
   );
+  const coverInput = useBurstSettledValue(liveCoverInput, DOCK_COVER_SETTLE_MS);
   const coverUrl = useTrackCoverUrl(coverInput);
+  const settledHasCover = Boolean(coverInput?.coverBlobId || coverInput?.remoteCoverUrl);
   const playbackLoading = usePlayerStore((s) => s.playbackLoading);
   const loadingLabel = playbackLoading
     ? playbackLoading.sourceKind === "remote"
@@ -286,8 +290,10 @@ export function TrackIdentityRow({
               {/* Crossfades to the next cover only once it has decoded (no flash). */}
               <CoverImage
                 url={coverUrl}
-                hasCover={trackHasCover(track ?? undefined)}
-                holdPreviousWhileLoading={Boolean(track?.coverBlobId && !track.remoteCoverUrl)}
+                hasCover={settledHasCover}
+                holdPreviousWhileLoading={Boolean(
+                  coverInput?.coverBlobId && !coverInput.remoteCoverUrl,
+                )}
                 fallback={<Disc3Icon className="text-muted-foreground" size={20} />}
                 loadStrategy="dom"
               />
@@ -339,4 +345,4 @@ export function TrackIdentityRow({
       </ControlTooltip>
     </div>
   );
-}
+});

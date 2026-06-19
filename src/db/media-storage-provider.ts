@@ -1,4 +1,5 @@
 import { desktopKind, resolveDesktopBridge } from "@/lib/desktop/bridge";
+import { notePerfWork } from "@/lib/perf-counters";
 import type { MediaBlob } from "./types";
 
 export type MediaStorageBackend = "indexeddb" | "opfs" | "electron-file";
@@ -12,6 +13,7 @@ export interface MediaStorageKeyInput {
 
 export interface MediaStorageProviderPutInput extends MediaStorageKeyInput {
   blob: Blob;
+  onProgress?: (progress: { bytesLoaded: number; bytesTotal: number }) => void;
 }
 
 export interface MediaStorageProvider {
@@ -90,11 +92,29 @@ export function createElectronFileMediaStorageProvider(): MediaStorageProvider {
     userVisible: true,
     async put(input) {
       const storageKey = mediaStorageKey(input);
-      const bytes = new Uint8Array(await input.blob.arrayBuffer());
-      await requireElectronMediaStorage().writeMediaStorageFile?.({
-        storageKey,
-        bytes,
-        expectedBytes: input.blob.size,
+      const startedAt = performance.now();
+      const bridge = requireElectronMediaStorage();
+      if (bridge.writeMediaStorageBlob) {
+        await bridge.writeMediaStorageBlob({
+          storageKey,
+          blob: input.blob,
+          expectedBytes: input.blob.size,
+          onProgress: input.onProgress,
+        });
+      } else {
+        input.onProgress?.({ bytesLoaded: 0, bytesTotal: input.blob.size });
+        const bytes = new Uint8Array(await input.blob.arrayBuffer());
+        await bridge.writeMediaStorageFile?.({
+          storageKey,
+          bytes,
+          expectedBytes: input.blob.size,
+        });
+        input.onProgress?.({ bytesLoaded: input.blob.size, bytesTotal: input.blob.size });
+      }
+      notePerfWork("media.storage.write", performance.now() - startedAt, {
+        backend: "electron-file",
+        bytes: input.blob.size,
+        role: input.role,
       });
       return { storageKey };
     },

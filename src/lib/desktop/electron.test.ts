@@ -123,6 +123,28 @@ describe("createElectronBridge", () => {
     expect(api.grantFileAccess).toHaveBeenCalledWith("D:/Music/clip.mp4");
   });
 
+  it("lazily grants local file media paths before requesting a token", async () => {
+    const api = installApi({ localMediaToken: vi.fn(async () => "lm_local") });
+    const bridge = createElectronBridge();
+
+    const url = await bridge.localMediaUrl?.({
+      path: "D:/Music/clip.mp4",
+      mime: "video/mp4",
+    });
+
+    expect(api.grantFileAccess).toHaveBeenCalledWith("D:/Music/clip.mp4");
+    expect(api.localMediaToken).toHaveBeenCalledWith({
+      path: "D:/Music/clip.mp4",
+      mime: "video/mp4",
+    });
+    expect(api.grantFileAccess.mock.invocationCallOrder[0]).toBeLessThan(
+      api.localMediaToken.mock.invocationCallOrder[0],
+    );
+    expect(url).toContain("__mztoken=lm_local");
+    expect(url).not.toContain("D%3A%2FMusic%2Fclip.mp4");
+    expect(url).not.toContain("D:/Music/clip.mp4");
+  });
+
   it("returns undefined without granting when Electron has no path", async () => {
     const api = installApi({ getPathForFile: vi.fn(() => "") });
     const bridge = createElectronBridge();

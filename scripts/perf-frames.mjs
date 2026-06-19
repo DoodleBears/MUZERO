@@ -85,9 +85,22 @@ if (report) {
   console.log(`  fps      avg ${r.fpsAvg ?? "—"}   lowAvg ${r.fpsLowAvg ?? "—"}   lowMin ${r.fpsLowMin ?? "—"}`);
   console.log(`  frame    max ${Math.round(r.frameMaxMs ?? 0)}ms   p99 ${Math.round(r.frameP99Ms ?? 0)}ms   windows ${r.frameWindows ?? "—"}`);
   console.log(`  longtask count ${r.longTaskCount ?? 0}   total ${r.longTaskTotalMs ?? 0}ms   max ${Math.round(r.longTaskMaxMs ?? 0)}ms`);
+  if (r.heapPeakMb != null || r.heapDeltaMb != null || r.heapRetainedApproxMb != null) {
+    console.log(
+      `  heap     start ${r.heapStartMb ?? "—"}MB   peak ${r.heapPeakMb ?? "—"}MB   end ${r.heapEndMb ?? "—"}MB   peakΔ ${r.heapDeltaMb ?? "—"}MB   endΔ ${r.heapRetainedApproxMb ?? "—"}MB`,
+    );
+  }
   if (r.switchCount != null)
     console.log(`  switch→frame avg ${r.switchToFrameAvgMs}ms   max ${Math.round(r.switchToFrameMaxMs)}ms   (${r.switchCount} switches)`);
   if (r.queueLiveFetchCount != null) console.log(`  queue.live.fetch ${r.queueLiveFetchCount}`);
+  if (r.workTopAggregate && Object.keys(r.workTopAggregate).length) {
+    const topWork = Object.entries(r.workTopAggregate)
+      .sort((a, b) => (b[1].maxMs ?? 0) - (a[1].maxMs ?? 0))
+      .slice(0, 6)
+      .map(([name, row]) => `${name} max ${Math.round(row.maxMs ?? 0)}ms ×${row.totalCount ?? row.count ?? 0}`)
+      .join("  |  ");
+    console.log(`  workTop  ${topWork}`);
+  }
   console.log("");
 }
 const byCat = {};

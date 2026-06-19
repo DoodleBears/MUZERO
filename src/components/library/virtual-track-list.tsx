@@ -1,21 +1,18 @@
 import { elementScroll, useVirtualizer } from "@tanstack/react-virtual";
+import { useLiveQuery } from "dexie-react-hooks";
 import { LocateFixed } from "lucide-react";
 import { motion, useMotionValue, useSpring } from "motion/react";
 import type { KeyboardEvent as ReactKeyboardEvent, ReactNode } from "react";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { RenderTraceBoundary } from "@/components/dev/render-trace-boundary";
 import { Button } from "@/components/ui/button";
-import {
-  createSession,
-  deleteTrack as deleteTrackRepo,
-  isTrackLiked,
-  prependTrackIds,
-  setTrackLiked,
-} from "@/db/repositories";
-import type { DjSession, Track } from "@/db/types";
-import { useSessions } from "@/hooks/use-app-data";
+import { db } from "@/db/muzero-db";
+import { deleteTrack as deleteTrackRepo, isTrackLiked, setTrackLiked } from "@/db/repositories";
+import type { Track } from "@/db/types";
+import { useSettings } from "@/hooks/use-app-data";
+import { useLikedTrackIds } from "@/hooks/use-liked-tracks";
 import { useShortcutMatcher } from "@/hooks/use-shortcut-matcher";
-import { useTrack } from "@/hooks/use-track";
 import { buildAlphabetIndex } from "@/lib/alphabet-index";
 import { hasModalDialogOpen, isTypingTarget } from "@/lib/dom-keys";
 import { downloadTrackMedia } from "@/lib/download-track";
@@ -26,7 +23,7 @@ import { usePlayerStore } from "@/stores/player-store";
 import { AlphabetIndex } from "./alphabet-index";
 import { HoverScrollbar } from "./hover-scrollbar";
 import { rafObserveElementOffset } from "./raf-scroll-offset";
-import { TrackRow } from "./track-row";
+import { TrackRow, type TrackRowLabels } from "./track-row";
 
 const TRACK_ROW_HEIGHT = 60;
 const TRACK_ROW_SELECTOR = "[data-muzero-track-row]";
@@ -42,6 +39,8 @@ const TRACK_LIST_EDGE_PULL_TRANSITION = {
   stiffness: 420,
   type: "spring",
 } as const;
+const EMPTY_TRACK_MAP = new Map<string, Track>();
+const EMPTY_TRACKS: Track[] = [];
 
 /**
  * Virtualized track list (TanStack Virtual). An endless set can grow to hundreds
@@ -50,6 +49,7 @@ const TRACK_LIST_EDGE_PULL_TRANSITION = {
  */
 export function VirtualTrackList({
   tracks,
+  active = true,
   onPlay,
   onView,
   emptyHint,
@@ -71,8 +71,11 @@ export function VirtualTrackList({
   jumpScrollIndex,
   alphabetLetterOf,
   reactiveRowContent = false,
+  traceId,
 }: {
   tracks: Track[];
+  /** False for hidden idle prewarm: render structure from a snapshot, but pause live subscriptions/events. */
+  active?: boolean;
   onPlay?: (track: Track, index: number) => void;
   onView?: (track: Track, index: number) => void;
   emptyHint?: string;
@@ -113,6 +116,8 @@ export function VirtualTrackList({
    *  full-list refetch. For lists whose `tracks` is a non-reactive snapshot (the play
    *  queue after the order/content split) — gallery lists already pass live rows. */
   reactiveRowContent?: boolean;
+  /** Optional dev/profiling render-trace id prefix for this virtual list. */
+  traceId?: string;
 }) {
   const { t } = useTranslation();
   const parentRef = useRef<HTMLDivElement | null>(null);
@@ -131,10 +136,12 @@ export function VirtualTrackList({
   const edgePullRaw = useMotionValue(0);
   const edgePull = useSpring(edgePullRaw, TRACK_LIST_EDGE_PULL_TRANSITION);
   const [showCurrentTrackJump, setShowCurrentTrackJump] = useState(false);
-  const currentIndex = usePlayerStore((s) => s.currentIndex);
-  const queue = usePlayerStore((s) => s.queue);
+  const currentIndex = usePlayerStore((s) => (active ? s.currentIndex : -1));
+  const queue = usePlayerStore((s) => (active ? s.queue : EMPTY_TRACKS));
   const playIndex = usePlayerStore((s) => s.playIndex);
-  const sessions = useSessions();
+  const settings = useSettings();
+  const likedTrackIds = useLikedTrackIds(active);
+  const coverCropped = settings.coverCropped ?? true;
   // Row nav resolves through the configurable registry (library.focusPrev/Next),
   // so rebinds apply. Held in a ref so the window listener stays stable.
   const matches = useShortcutMatcher();
@@ -145,6 +152,17 @@ export function VirtualTrackList({
   // Opt this scroll container into smooth scrolling when enabled. `lenisRef`
   // routes programmatic jumps so they don't fight it.
   const { lenisRef } = useSmoothScroll(parentRef);
+  const rowLabels = useMemo<TrackRowLabels>(
+    () => ({
+      cloudSourceUnknown: t("track.cloudSourceUnknown"),
+      delete: t("track.delete"),
+      downloadFailed: t("track.downloadFailed"),
+      generationFailed: t("track.generationFailed"),
+      like: t("track.like"),
+      play: t("player.play"),
+    }),
+    [t],
+  );
 
   const currentTrackId = currentIndex >= 0 ? queue[currentIndex]?.id : undefined;
   const currentTrackListIndex = currentTrackId
@@ -183,6 +201,30 @@ export function VirtualTrackList({
     },
   });
   const deferRowCoverLoad = rowVirtualizer.isScrolling;
+  const virtualRows = rowVirtualizer.getVirtualItems();
+  const visibleReactiveTrackIds = useMemo(
+    () =>
+      active && reactiveRowContent
+        ? virtualRows.map((virtualRow) => tracks[virtualRow.index]?.id).filter(Boolean)
+        : [],
+    [active, reactiveRowContent, virtualRows, tracks],
+  );
+  const visibleReactiveTrackIdsKey = visibleReactiveTrackIds.join("\0");
+  const liveTrackById = useLiveQuery(
+    async () => {
+      if (!active || !reactiveRowContent || visibleReactiveTrackIds.length === 0) {
+        return EMPTY_TRACK_MAP;
+      }
+      const rows = await db.tracks.bulkGet(visibleReactiveTrackIds);
+      return new Map(
+        rows
+          .filter((track): track is Track => Boolean(track))
+          .map((track) => [track.id, track] as const),
+      );
+    },
+    [active, reactiveRowContent, visibleReactiveTrackIdsKey],
+    EMPTY_TRACK_MAP,
+  );
 
   // A–Z fast-scroll buckets — only when the caller opts in (name-sorted lists).
   // `tracks` is already sorted, so buildAlphabetIndex walks it once for the first
@@ -277,6 +319,14 @@ export function VirtualTrackList({
   );
 
   useEffect(() => {
+    if (!active) {
+      if (currentTrackJumpHideTimerRef.current) {
+        clearTimeout(currentTrackJumpHideTimerRef.current);
+        currentTrackJumpHideTimerRef.current = undefined;
+      }
+      setShowCurrentTrackJump(false);
+      return;
+    }
     if (currentTrackListIndex < 0) {
       if (currentTrackJumpHideTimerRef.current) {
         clearTimeout(currentTrackJumpHideTimerRef.current);
@@ -301,7 +351,7 @@ export function VirtualTrackList({
       currentTrackJumpHideTimerRef.current = undefined;
       setShowCurrentTrackJump(false);
     }, TRACK_LIST_CURRENT_JUMP_HIDE_MS);
-  }, [currentTrackListIndex, rowVirtualizer.isScrolling, showCurrentTrackJump]);
+  }, [active, currentTrackListIndex, rowVirtualizer.isScrolling, showCurrentTrackJump]);
 
   // Keep Lenis' cached scroll limit in sync with the list height. Lenis derives its
   // limit from `scrollElement.scrollHeight`, but only recomputes when its
@@ -352,6 +402,7 @@ export function VirtualTrackList({
   }
 
   useEffect(() => {
+    if (!active) return;
     const element = parentRef.current;
     if (!element) return;
     const target = element;
@@ -377,6 +428,7 @@ export function VirtualTrackList({
   const hasTracksRef = useRef(false);
   hasTracksRef.current = tracks.length > 0;
   useEffect(() => {
+    if (!active) return;
     const onWindowKeyDown = (event: KeyboardEvent) => {
       if (
         !matchesRef.current(event, "library.focusPrev") &&
@@ -399,7 +451,7 @@ export function VirtualTrackList({
     };
     window.addEventListener("keydown", onWindowKeyDown, { capture: true });
     return () => window.removeEventListener("keydown", onWindowKeyDown, { capture: true });
-  }, []);
+  }, [active]);
 
   function handleWheel(element: HTMLDivElement, event: WheelEvent) {
     const maxScrollTop = Math.max(0, element.scrollHeight - element.clientHeight);
@@ -484,7 +536,9 @@ export function VirtualTrackList({
           className={cn("relative h-full overflow-y-auto", className)}
           data-testid="virtual-track-list"
         >
-          <div ref={headerRef}>{header}</div>
+          <RenderTraceBoundary id={`${traceId ?? "virtual-track-list"}:header`}>
+            <div ref={headerRef}>{header}</div>
+          </RenderTraceBoundary>
           <p className="p-8 text-center text-sm text-muted-foreground">
             {emptyHint ?? t("track.empty")}
           </p>
@@ -519,41 +573,49 @@ export function VirtualTrackList({
           buckets={alphabetBuckets}
           onJump={(index) => rowVirtualizer.scrollToIndex(index, { align: "start" })}
         />
-        {header ? <div ref={headerRef}>{header}</div> : null}
-        <motion.div
-          className="relative w-full"
-          data-edge-pull="0"
-          ref={edgePullContentRef}
-          style={{ height: `${rowVirtualizer.getTotalSize()}px`, y: edgePull }}
-        >
-          {rowVirtualizer.getVirtualItems().map((virtualRow) => {
-            const baseTrack = tracks[virtualRow.index];
-            return (
-              <VirtualTrackRow
-                key={baseTrack.id}
-                baseTrack={baseTrack}
-                reactive={reactiveRowContent}
-                index={virtualRow.index}
-                isCurrent={baseTrack.id === currentTrackId}
-                isSelected={baseTrack.id === selectedTrackId}
-                checked={selectedIds?.has(baseTrack.id) ?? false}
-                deferCoverLoad={deferRowCoverLoad}
-                selectable={selectable}
-                sessions={sessions}
-                hasAlphabet={hasAlphabet}
-                virtualStart={virtualRow.start}
-                virtualSize={virtualRow.size}
-                scrollMargin={scrollMargin}
-                getTrackSupplement={getTrackSupplement}
-                getTrackColumns={getTrackColumns}
-                onPlay={handlePlay}
-                onView={handleView}
-                onToggleSelect={onToggleSelect}
-                onDeleteTrack={onDeleteTrack}
-              />
-            );
-          })}
-        </motion.div>
+        {header ? (
+          <RenderTraceBoundary id={`${traceId ?? "virtual-track-list"}:header`}>
+            <div ref={headerRef}>{header}</div>
+          </RenderTraceBoundary>
+        ) : null}
+        <RenderTraceBoundary id={`${traceId ?? "virtual-track-list"}:rows`}>
+          <motion.div
+            className="relative w-full"
+            data-edge-pull="0"
+            ref={edgePullContentRef}
+            style={{ height: `${rowVirtualizer.getTotalSize()}px`, y: edgePull }}
+          >
+            {virtualRows.map((virtualRow) => {
+              const baseTrack = tracks[virtualRow.index];
+              return (
+                <VirtualTrackRow
+                  key={baseTrack.id}
+                  baseTrack={baseTrack}
+                  labels={rowLabels}
+                  liveTrack={liveTrackById.get(baseTrack.id)}
+                  index={virtualRow.index}
+                  isCurrent={baseTrack.id === currentTrackId}
+                  isSelected={baseTrack.id === selectedTrackId}
+                  liked={likedTrackIds.has(baseTrack.id)}
+                  coverCropped={coverCropped}
+                  checked={selectedIds?.has(baseTrack.id) ?? false}
+                  deferCoverLoad={deferRowCoverLoad}
+                  selectable={selectable}
+                  hasAlphabet={hasAlphabet}
+                  virtualStart={virtualRow.start}
+                  virtualSize={virtualRow.size}
+                  scrollMargin={scrollMargin}
+                  getTrackSupplement={getTrackSupplement}
+                  getTrackColumns={getTrackColumns}
+                  onPlay={handlePlay}
+                  onView={handleView}
+                  onToggleSelect={onToggleSelect}
+                  onDeleteTrack={onDeleteTrack}
+                />
+              );
+            })}
+          </motion.div>
+        </RenderTraceBoundary>
       </div>
       {currentTrackListIndex >= 0 && showCurrentTrackJump && (
         <Button
@@ -581,14 +643,16 @@ export function VirtualTrackList({
  */
 function VirtualTrackRow({
   baseTrack,
-  reactive,
+  labels,
+  liveTrack,
   index,
   isCurrent,
   isSelected,
+  liked,
+  coverCropped,
   checked,
   deferCoverLoad,
   selectable,
-  sessions,
   hasAlphabet,
   virtualStart,
   virtualSize,
@@ -601,14 +665,16 @@ function VirtualTrackRow({
   onDeleteTrack,
 }: {
   baseTrack: Track;
-  reactive: boolean;
+  labels: TrackRowLabels;
+  liveTrack?: Track;
   index: number;
   isCurrent: boolean;
   isSelected: boolean;
+  liked: boolean;
+  coverCropped: boolean;
   checked: boolean;
   deferCoverLoad: boolean;
   selectable: boolean;
-  sessions: DjSession[];
   hasAlphabet: boolean;
   virtualStart: number;
   virtualSize: number;
@@ -620,11 +686,7 @@ function VirtualTrackRow({
   onToggleSelect?: (trackId: string, opts?: { index?: number; shiftKey?: boolean }) => void;
   onDeleteTrack?: (track: Track) => void;
 }) {
-  const { t } = useTranslation();
-  // Single-key observation: a write to any OTHER track does not re-fire this. `undefined`
-  // id → no subscription (gallery lists already pass live rows, so they opt out).
-  const live = useTrack(reactive ? baseTrack.id : undefined);
-  const track = live ?? baseTrack;
+  const track = liveTrack ?? baseTrack;
   return (
     <div
       className={cn("absolute left-0 top-0 flex w-full items-center", hasAlphabet && "pr-6")}
@@ -637,13 +699,15 @@ function VirtualTrackRow({
     >
       <TrackRow
         track={track}
+        labels={labels}
         deferCoverLoad={deferCoverLoad}
         isCurrent={isCurrent}
         isSelected={isSelected}
+        liked={liked}
+        coverCropped={coverCropped}
         listIndex={index}
         secondaryMeta={getTrackSupplement?.(track)}
         metricColumns={getTrackColumns?.(track)}
-        sessions={sessions}
         selectable={selectable}
         checked={checked}
         onToggleSelect={(shiftKey) => onToggleSelect?.(track.id, { index, shiftKey })}
@@ -655,28 +719,15 @@ function VirtualTrackRow({
         onDelete={() => (onDeleteTrack ? onDeleteTrack(track) : void deleteTrackRepo(track.id))}
         onDownloadOriginal={() => {
           void downloadTrackMedia(track, "original").catch((error: unknown) =>
-            notify.error(t("track.downloadFailed"), { error, source: "track-download" }),
+            notify.error(labels.downloadFailed, { error, source: "track-download" }),
           );
         }}
         onExportWithMetadata={() => {
           void downloadTrackMedia(track, "withMetadata").catch((error: unknown) =>
-            notify.error(t("track.downloadFailed"), { error, source: "track-download" }),
+            notify.error(labels.downloadFailed, { error, source: "track-download" }),
           );
         }}
         onDownloadToDevice={() => void usePlayerStore.getState().downloadStreamedTrack(track.id)}
-        onAddToSession={(sessionId) => {
-          const targetName = sessions.find((session) => session.id === sessionId)?.name ?? "";
-          void addTrackToExistingSet(sessionId, track.id, {
-            failure: t("track.addToSetFailed"),
-            success: t("select.addedToSet", { count: 1, name: targetName }),
-          });
-        }}
-        onAddToNewSession={(name) =>
-          void addTrackToNewSet(name, track.id, {
-            failure: t("track.addToSetFailed"),
-            success: (targetName) => t("select.addedToSet", { count: 1, name: targetName }),
-          })
-        }
       />
     </div>
   );
@@ -690,37 +741,4 @@ async function toggleTrackLike(id: string) {
 
 function easeEdgePull(distance: number) {
   return Math.min(TRACK_LIST_EDGE_PULL_MAX, distance * 0.45);
-}
-
-/**
- * Create a manual (non-DJ) set named `name` and drop `trackId` into it — the
- * "no matching set, make one from the typed name" path of the row's add-to-set
- * menu. `autoExtend: false` mirrors the gallery's "New set" so the DJ doesn't
- * start refilling a set the user assembled by hand.
- */
-async function addTrackToExistingSet(
-  sessionId: string,
-  trackId: string,
-  messages: { failure: string; success: string },
-) {
-  try {
-    await prependTrackIds(sessionId, [trackId]);
-    notify.success(messages.success);
-  } catch (error) {
-    notify.error(messages.failure, { error, source: "track-add-to-set" });
-  }
-}
-
-async function addTrackToNewSet(
-  name: string,
-  trackId: string,
-  messages: { failure: string; success: (targetName: string) => string },
-) {
-  try {
-    const set = await createSession({ name, seedPrompt: "", config: { autoExtend: false } });
-    await prependTrackIds(set.id, [trackId]);
-    notify.success(messages.success(set.name));
-  } catch (error) {
-    notify.error(messages.failure, { error, source: "track-add-to-set" });
-  }
 }

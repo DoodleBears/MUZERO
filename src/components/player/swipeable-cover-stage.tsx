@@ -320,7 +320,7 @@ export function SwipeableCoverStage({
   }, [offsetTracks]);
 
   // A drag/animation wants the neighbour covers NOW → bypass the non-current defer.
-  const coverUrls = usePreloadedCoverUrls(candidates, active);
+  const coverUrls = usePreloadedCoverUrls(candidates, active, foregroundVisible);
 
   const slots = useMemo<StripSlot[]>(() => {
     const out: StripSlot[] = [];

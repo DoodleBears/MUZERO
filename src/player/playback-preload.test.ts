@@ -129,7 +129,58 @@ describe("playback preload", () => {
         remoteCoverUrl: undefined,
       },
       db,
-      {},
+      { traceSource: "playback-warmup:backlight" },
+    );
+  });
+
+  it("can warm cover urls for a batch while limiting backlight derivatives to a subset", async () => {
+    const current = makeTrack("trk_current", {
+      coverBlobId: "blb_current",
+    });
+    const next = makeTrack("trk_next", {
+      coverBlobId: "blb_next",
+    });
+    await db.mediaBlobs.bulkPut([
+      {
+        id: "blb_current",
+        trackId: current.id,
+        role: "cover",
+        mime: "image/png",
+        bytes: 3,
+        blob: new Blob([new Uint8Array([1, 2, 3])], { type: "image/png" }),
+      },
+      {
+        id: "blb_next",
+        trackId: next.id,
+        role: "cover",
+        mime: "image/png",
+        bytes: 3,
+        blob: new Blob([new Uint8Array([4, 5, 6])], { type: "image/png" }),
+      },
+    ]);
+    const ensureBacklightDerivative = vi.fn(async () => undefined);
+
+    await warmPlaybackPreload(
+      { backlightTracks: [current], coverTracks: [current, next], mediaTracks: [] },
+      {
+        coverCropped: true,
+        db,
+        ensureBacklightDerivative,
+        warmBacklight: true,
+      },
+    );
+
+    expect(coverUrlCache.peek(trackCoverCacheKey(current, true)!)).toBe("blob:warm-1");
+    expect(coverUrlCache.peek(trackCoverCacheKey(next, true)!)).toBe("blob:warm-2");
+    expect(ensureBacklightDerivative).toHaveBeenCalledExactlyOnceWith(
+      {
+        coverBlobId: "blb_current",
+        coverCrop: undefined,
+        id: "trk_current",
+        remoteCoverUrl: undefined,
+      },
+      db,
+      { traceSource: "playback-warmup:backlight" },
     );
   });
 });

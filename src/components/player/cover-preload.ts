@@ -222,7 +222,9 @@ export async function preloadCoverBatch({
     }
 
     const afterInflight = cache.peek(request.key);
-    const url = afterInflight ?? cache.store(request.key, createObjectURL(coverBlob.blob));
+    const url =
+      afterInflight ??
+      cache.store(request.key, createObjectURL(coverBlob.blob), { bytes: coverBlob.blob.size });
     if (!afterInflight) {
       stats.created += 1;
       // DECODE the freshly-created cover, not just hold its blob URL: a coverflow card

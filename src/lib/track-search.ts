@@ -304,6 +304,47 @@ export function searchFacetCandidates(candidates: FacetCandidates, query: string
   };
 }
 
+export function searchEntityFacetsLimited(
+  artists: readonly ArtistEntry[],
+  albums: readonly AlbumEntry[],
+  query: string,
+  limit: number,
+): EntityFacets {
+  const { free, artist, album }: SearchTokens = parseSearchTokens(query);
+  const max = Math.max(0, limit);
+  if (max === 0) return { artists: [], albums: [] };
+  const artistTokenVariants = [...free, ...artist].map((token) => searchVariants(token));
+  const albumTokenVariants = [...free, ...album].map((token) => searchVariants(token));
+  const artistHits: ArtistEntry[] = [];
+  const albumHits: AlbumEntry[] = [];
+
+  if (artistTokenVariants.length > 0) {
+    for (const entry of artists) {
+      if (entry.bucket) continue;
+      if (matchesAllTokenVariants(searchVariants(entry.name), artistTokenVariants)) {
+        artistHits.push(entry);
+        if (artistHits.length >= max) break;
+      }
+    }
+  }
+  if (albumTokenVariants.length > 0) {
+    for (const entry of albums) {
+      if (entry.bucket) continue;
+      if (
+        matchesAllTokenVariants(
+          searchVariants(`${entry.name} ${entry.artistName ?? ""}`),
+          albumTokenVariants,
+        )
+      ) {
+        albumHits.push(entry);
+        if (albumHits.length >= max) break;
+      }
+    }
+  }
+
+  return { artists: artistHits, albums: albumHits };
+}
+
 /**
  * Match derived artist/album entities for the faceted search surface. Thin wrapper
  * over {@link buildFacetCandidates} + {@link searchFacetCandidates}; the UI splits

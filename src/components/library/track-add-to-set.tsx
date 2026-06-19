@@ -79,6 +79,7 @@ export function TrackAddToSetPopover({
   onOpenChange,
   onAddToNewSession,
   onAddToSession,
+  open: controlledOpen,
   sessions,
   side = "left",
   sideOffset = 10,
@@ -89,16 +90,18 @@ export function TrackAddToSetPopover({
   onOpenChange?: (open: boolean) => void;
   onAddToNewSession: (name: string) => void;
   onAddToSession: (sessionId: string) => void;
+  open?: boolean;
   sessions: DjSession[];
   side?: "top" | "bottom" | "left" | "right";
   sideOffset?: number;
   trackId: string;
 }) {
   const { t } = useTranslation();
-  const [open, setOpen] = useState(false);
+  const [uncontrolledOpen, setUncontrolledOpen] = useState(false);
+  const open = controlledOpen ?? uncontrolledOpen;
 
   function setOpenAndNotify(nextOpen: boolean) {
-    setOpen(nextOpen);
+    if (controlledOpen === undefined) setUncontrolledOpen(nextOpen);
     onOpenChange?.(nextOpen);
   }
 
@@ -142,13 +145,45 @@ export function CurrentTrackAddToSetButton({
   sideOffset?: number;
   trackId: string;
 }) {
-  const { sessions, addToNewSession, addToSession } = useAddTrackToSetActions(trackId);
+  return (
+    <ManagedTrackAddToSetPopover
+      buttonClassName={buttonClassName}
+      iconClassName={iconClassName}
+      side={side}
+      sideOffset={sideOffset}
+      trackId={trackId}
+    />
+  );
+}
+
+export function ManagedTrackAddToSetPopover({
+  buttonClassName,
+  iconClassName,
+  onOpenChange,
+  side = "left",
+  sideOffset = 10,
+  trackId,
+}: {
+  buttonClassName?: string;
+  iconClassName?: string;
+  onOpenChange?: (open: boolean) => void;
+  side?: "top" | "bottom" | "left" | "right";
+  sideOffset?: number;
+  trackId: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const { sessions, addToNewSession, addToSession } = useAddTrackToSetActions(trackId, open);
   return (
     <TrackAddToSetPopover
       buttonClassName={buttonClassName}
       iconClassName={iconClassName}
       onAddToNewSession={addToNewSession}
       onAddToSession={addToSession}
+      onOpenChange={(nextOpen) => {
+        setOpen(nextOpen);
+        onOpenChange?.(nextOpen);
+      }}
+      open={open}
       sessions={sessions}
       side={side}
       sideOffset={sideOffset}
@@ -187,9 +222,13 @@ export function TrackAddToSetDialog({
   );
 }
 
-function useAddTrackToSetActions(trackId: string) {
+function useAddTrackToSetActions(trackId: string, active = true) {
   const { t } = useTranslation();
-  const sessions = useLiveQuery(() => listSessions(), []) ?? [];
+  const sessions = useLiveQuery(
+    () => (active ? listSessions() : Promise.resolve([])),
+    [active],
+    [],
+  );
 
   async function addToSession(sessionId: string) {
     await prependTrackIds(sessionId, [trackId]);

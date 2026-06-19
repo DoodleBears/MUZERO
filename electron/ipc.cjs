@@ -22,6 +22,7 @@ const windowMaximizedState = new WeakMap();
 const windowNormalBounds = new WeakMap();
 const windowStateTimers = new WeakMap();
 let mediaStorageRoot = null;
+const pendingMediaStorageWrites = new Map();
 
 const isWin = process.platform === "win32";
 const norm = (p) => (isWin ? p.toLowerCase() : p);
@@ -248,6 +249,75 @@ function registerIpc({ trayController } = {}) {
       await fsp.rm(tempPath, { force: true }).catch(() => {});
       throw error;
     }
+  });
+
+  ipcMain.handle("muzero:mediaStorage:writeBegin", async (_event, input) => {
+    const storageKey = input?.storageKey;
+    const expectedBytes = Number.isFinite(input?.expectedBytes) ? input.expectedBytes : undefined;
+    const { filePath, parent } = await mediaStorageWriteTarget(storageKey);
+    const uploadId = crypto.randomUUID();
+    const tempPath = path.join(parent, `.${path.basename(filePath)}.${uploadId}.tmp`);
+    const handle = await fsp.open(tempPath, "w");
+    pendingMediaStorageWrites.set(uploadId, {
+      expectedBytes,
+      filePath,
+      handle,
+      storageKey,
+      tempPath,
+      writtenBytes: 0,
+    });
+    return { uploadId };
+  });
+
+  ipcMain.handle("muzero:mediaStorage:writeChunk", async (_event, input) => {
+    const upload = pendingMediaStorageWrites.get(input?.uploadId);
+    if (!upload) throw new Error("Unknown media storage write");
+    const bytes = Buffer.from(input?.bytes ?? new ArrayBuffer(0));
+    let offset = 0;
+    while (offset < bytes.length) {
+      const { bytesWritten } = await upload.handle.write(
+        bytes,
+        offset,
+        bytes.length - offset,
+        upload.writtenBytes + offset,
+      );
+      if (bytesWritten <= 0) throw new Error("Media storage streamed chunk write stalled");
+      offset += bytesWritten;
+    }
+    upload.writtenBytes += bytes.length;
+    return { writtenBytes: upload.writtenBytes };
+  });
+
+  ipcMain.handle("muzero:mediaStorage:writeCommit", async (_event, input) => {
+    const upload = pendingMediaStorageWrites.get(input?.uploadId);
+    if (!upload) throw new Error("Unknown media storage write");
+    pendingMediaStorageWrites.delete(input.uploadId);
+    try {
+      await upload.handle.close();
+      const tempStat = await fsp.stat(upload.tempPath);
+      const expectedBytes = upload.expectedBytes ?? upload.writtenBytes;
+      if (tempStat.size !== expectedBytes || upload.writtenBytes !== expectedBytes) {
+        throw new Error("Media storage streamed write mismatch");
+      }
+      await fsp.rename(upload.tempPath, upload.filePath);
+      const finalStat = await fsp.stat(upload.filePath);
+      if (finalStat.size !== expectedBytes) {
+        await fsp.rm(upload.filePath, { force: true });
+        throw new Error("Media storage streamed final write mismatch");
+      }
+    } catch (error) {
+      await upload.handle.close().catch(() => {});
+      await fsp.rm(upload.tempPath, { force: true }).catch(() => {});
+      throw error;
+    }
+  });
+
+  ipcMain.handle("muzero:mediaStorage:writeAbort", async (_event, input) => {
+    const upload = pendingMediaStorageWrites.get(input?.uploadId);
+    if (!upload) return;
+    pendingMediaStorageWrites.delete(input.uploadId);
+    await upload.handle.close().catch(() => {});
+    await fsp.rm(upload.tempPath, { force: true }).catch(() => {});
   });
 
   ipcMain.handle("muzero:mediaStorage:read", async (_event, input) => {

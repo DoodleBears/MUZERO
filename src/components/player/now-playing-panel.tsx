@@ -1,16 +1,13 @@
 import { useLiveQuery } from "dexie-react-hooks";
 import { AnimatePresence, motion } from "motion/react";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
-import {
-  MemoryTimelineRail,
-  type MemoryTimelineRailItem,
-} from "@/components/player/memory-timeline-rail";
+import { MemoryTimelineRail } from "@/components/player/memory-timeline-rail";
 import { SyncedLyricsView } from "@/components/player/synced-lyrics-view";
 import { Disc3Icon } from "@/components/ui/disc-3";
 import { MessageCircleMoreIcon } from "@/components/ui/message-circle-more";
 import { db } from "@/db/muzero-db";
-import { getMemoryPhoto, saveSettings } from "@/db/repositories";
+import { saveSettings } from "@/db/repositories";
 import type { Memory } from "@/db/types";
 import { useSettings } from "@/hooks/use-app-data";
 import { cn } from "@/lib/utils";
@@ -48,15 +45,6 @@ export function NowPlayingPanel({
     [currentTrackId],
     [] as Memory[],
   );
-  const [memoryPhotoUrls, setMemoryPhotoUrls] = useState<Record<string, string>>({});
-  const memoryTimelineItems = useMemo<MemoryTimelineRailItem[]>(
-    () =>
-      railMemories.map((memory) => ({
-        ...memory,
-        photoUrl: memoryPhotoUrls[memory.id],
-      })),
-    [memoryPhotoUrls, railMemories],
-  );
   const memoryDateFormatter = useMemo(
     () =>
       new Intl.DateTimeFormat(undefined, {
@@ -83,36 +71,6 @@ export function NowPlayingPanel({
     void saveSettings({ nowPlayingMemoryRailScrollTop: scrollTop });
   }
 
-  useEffect(() => {
-    let cancelled = false;
-    const urls: string[] = [];
-
-    async function loadPhotoUrls() {
-      if (!collapsed || typeof URL.createObjectURL !== "function") {
-        setMemoryPhotoUrls({});
-        return;
-      }
-
-      const next: Record<string, string> = {};
-      for (const memory of railMemories) {
-        if (!memory.photoBlobId) continue;
-        const blob = await getMemoryPhoto(memory, db);
-        if (!blob || cancelled) continue;
-        const url = URL.createObjectURL(blob);
-        urls.push(url);
-        next[memory.id] = url;
-      }
-      if (!cancelled) setMemoryPhotoUrls(next);
-    }
-
-    void loadPhotoUrls();
-
-    return () => {
-      cancelled = true;
-      for (const url of urls) URL.revokeObjectURL(url);
-    };
-  }, [collapsed, railMemories]);
-
   return (
     <div
       className={cn("relative h-full min-h-0 overflow-hidden", className)}
@@ -137,7 +95,7 @@ export function NowPlayingPanel({
                 empty: t("annotation.memoryEmpty"),
                 memory: t("annotation.memory"),
               }}
-              memories={memoryTimelineItems}
+              memories={railMemories}
               onOffsetChange={setMemoryRailScrollTop}
             />
           </motion.div>

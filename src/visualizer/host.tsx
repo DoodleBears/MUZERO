@@ -25,6 +25,10 @@ export function shouldAnimate(s: { active: boolean; hidden: boolean; onscreen: b
   return s.active && !s.hidden && s.onscreen;
 }
 
+export function shouldPaintStaticFrame(s: { hidden: boolean; onscreen: boolean }): boolean {
+  return !s.hidden && s.onscreen;
+}
+
 function hasWebGL(): boolean {
   if (typeof document === "undefined") return false;
   try {
@@ -157,7 +161,14 @@ function SpectrumCanvas({
       } else if (!animate && running) {
         running = false;
         cancelAnimationFrame(raf);
-        requestAnimationFrame(drawOne); // leave a static frame, not a blank canvas
+        if (
+          shouldPaintStaticFrame({
+            hidden: typeof document !== "undefined" && document.hidden,
+            onscreen,
+          })
+        ) {
+          requestAnimationFrame(drawOne); // leave a static frame, not a blank canvas
+        }
       }
     };
     syncRef.current = sync;

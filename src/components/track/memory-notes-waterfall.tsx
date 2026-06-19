@@ -5,6 +5,7 @@ import {
   type CSSProperties,
   type ReactNode,
   type RefObject,
+  type SyntheticEvent,
   useEffect,
   useMemo,
   useRef,
@@ -44,6 +45,16 @@ interface MemoryNotesWaterfallProps {
   onEditMemory?: (memory: MemoryNoteView) => void;
   onSeekToMemory?: (memory: MemoryNoteView) => void;
   onSetCoverFromMemory?: (memory: MemoryNoteView) => void;
+  photosActive?: boolean;
+  renderPhoto?: (
+    memory: MemoryNoteView,
+    props: {
+      alt: string;
+      className: string;
+      onError?: (event: SyntheticEvent<HTMLImageElement>) => void;
+      onLoad?: (event: SyntheticEvent<HTMLImageElement>) => void;
+    },
+  ) => ReactNode;
 }
 
 export function MemoryNotesWaterfall({
@@ -57,6 +68,8 @@ export function MemoryNotesWaterfall({
   onEditMemory,
   onSeekToMemory,
   onSetCoverFromMemory,
+  photosActive = true,
+  renderPhoto,
 }: MemoryNotesWaterfallProps) {
   const containerRef = useRef<HTMLUListElement>(null);
   const containerWidth = useElementWidth(containerRef, 672);
@@ -73,7 +86,7 @@ export function MemoryNotesWaterfall({
             ? [{ fixedHeight: leadingItemEstimatedHeight, id: MEMORY_MASONRY_LEADING_ID }]
             : []),
           ...sortedMemories.map((memory) => ({
-            hasPhoto: Boolean(memory.photoUrl),
+            hasPhoto: hasMemoryPhoto(memory),
             id: memory.id,
             note: memory.note,
             photoHeightRatio: photoHeightRatios[memory.id],
@@ -133,19 +146,33 @@ export function MemoryNotesWaterfall({
         return (
           <MemoryMasonryItem id={memory.id} key={memory.id} position={position}>
             <article className="flex h-full flex-col rounded-lg border border-border bg-card p-3 text-card-foreground shadow-sm ring-1 ring-black/5 transition-shadow hover:shadow-md">
-              {memory.photoUrl && (
-                <img
-                  alt={labels.photoAlt(memory)}
-                  className="mb-3 h-auto w-full rounded-md bg-background object-contain shadow-inner"
-                  onLoad={(event) => {
-                    const { naturalHeight, naturalWidth } = event.currentTarget;
-                    if (naturalWidth > 0 && naturalHeight > 0) {
-                      setPhotoHeightRatio(memory.id, naturalHeight / naturalWidth);
-                    }
-                  }}
-                  src={memory.photoUrl}
-                />
-              )}
+              {photosActive &&
+                hasMemoryPhoto(memory) &&
+                (renderPhoto ? (
+                  renderPhoto(memory, {
+                    alt: labels.photoAlt(memory),
+                    className:
+                      "mb-3 h-auto w-full rounded-md bg-background object-contain shadow-inner",
+                    onLoad: (event) => {
+                      const { naturalHeight, naturalWidth } = event.currentTarget;
+                      if (naturalWidth > 0 && naturalHeight > 0) {
+                        setPhotoHeightRatio(memory.id, naturalHeight / naturalWidth);
+                      }
+                    },
+                  })
+                ) : memory.photoUrl ? (
+                  <img
+                    alt={labels.photoAlt(memory)}
+                    className="mb-3 h-auto w-full rounded-md bg-background object-contain shadow-inner"
+                    onLoad={(event) => {
+                      const { naturalHeight, naturalWidth } = event.currentTarget;
+                      if (naturalWidth > 0 && naturalHeight > 0) {
+                        setPhotoHeightRatio(memory.id, naturalHeight / naturalWidth);
+                      }
+                    }}
+                    src={memory.photoUrl}
+                  />
+                ) : null)}
               <p className="whitespace-pre-wrap text-sm leading-6" data-testid="memory-note-text">
                 {memory.note}
               </p>
@@ -244,6 +271,10 @@ export function sortMemoriesForWaterfall(memories: readonly MemoryNoteView[]): M
     .map((memory, index) => ({ index, memory }))
     .sort((a, b) => b.memory.createdAt - a.memory.createdAt || a.index - b.index)
     .map(({ memory }) => memory);
+}
+
+function hasMemoryPhoto(memory: MemoryNoteView): boolean {
+  return Boolean(memory.photoUrl || memory.photoBlobId || memory.remotePhotoUrl);
 }
 
 function MemoryMasonryItem({

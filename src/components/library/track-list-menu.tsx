@@ -12,6 +12,7 @@ import {
 import { hasFolderAccess } from "@/lib/desktop/bridge";
 import { classifyDrop, MEDIA_ACCEPT } from "@/lib/file-drop";
 import { usePlayerStore } from "@/stores/player-store";
+import { warmMediaProbeWorker } from "@/workers/media-probe-client";
 
 interface TrackListMenuProps {
   /** Upload target set. Omit → import into the active set (create one if none). */
@@ -45,6 +46,7 @@ export function TrackListMenu({
 
   async function uploadFiles(files: File[]) {
     if (files.length === 0) return;
+    void warmMediaProbeWorker();
     const store = usePlayerStore.getState();
     if (setId) await store.addUploadsToSet(setId, files);
     else await store.ingestDroppedMedia(files, t("sessions.uploadSet"));

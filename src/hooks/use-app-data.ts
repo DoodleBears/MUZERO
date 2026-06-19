@@ -2,6 +2,7 @@ import { useLiveQuery } from "dexie-react-hooks";
 import { db } from "@/db/muzero-db";
 import { getSettings } from "@/db/repositories";
 import { type AppSettings, DEFAULT_SETTINGS, type DjSession } from "@/db/types";
+import { usePausedLiveQuery } from "./use-paused-live-query";
 
 /** Reactive app settings (singleton). Falls back to defaults before first write. */
 export function useSettings(): AppSettings {
@@ -9,8 +10,13 @@ export function useSettings(): AppSettings {
 }
 
 /** Reactive list of DJ sessions, newest first. */
-export function useSessions(): DjSession[] {
-  return useLiveQuery(() => db.sessions.orderBy("updatedAt").reverse().toArray(), [], []);
+export function useSessions(active = true): DjSession[] {
+  return usePausedLiveQuery(
+    () => db.sessions.orderBy("updatedAt").reverse().toArray(),
+    [],
+    active,
+    [],
+  );
 }
 
 /** Reactive single session. */

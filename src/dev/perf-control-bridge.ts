@@ -7,15 +7,20 @@
 import { getSettings, getTrack, saveSettings, setTrackTags } from "@/db/repositories";
 import { DEFAULT_AUDIENCE_REQUEST_INTAKE_SETTINGS } from "@/db/types";
 import { log } from "@/lib/logger";
+import {
+  getPerformanceTraceSamplerStatus,
+  startPerformanceTraceSampler,
+  stopPerformanceTraceSampler,
+} from "@/lib/performance-trace-sampler";
 import { resetRenderTrace, snapshotRenderTrace } from "@/lib/render-trace";
-import { traceEvent } from "@/lib/trace";
+import { getTraceEntries, type TraceEntry, traceEvent } from "@/lib/trace";
 import { readTraceArchiveEntries } from "@/lib/trace-archive";
 import {
   createShortcutActionRunnerContext,
   listShortcutActionIds,
   runShortcutAction,
 } from "@/shortcuts/actions";
-import { useNavStore } from "@/stores/nav-store";
+import { normalizeTab, useNavStore } from "@/stores/nav-store";
 import { usePlayerStore } from "@/stores/player-store";
 import { getSearchPerfSnapshot, resetSearchPerf } from "@/workers/search-client";
 import { getSearchDriver } from "./search-drive";
@@ -31,6 +36,7 @@ export interface PerfControlCommand {
     | "player"
     | "marker"
     | "dumpTrace"
+    | "perfSampler"
     | "search"
     | "editMeta"
     | "renderTrace"
@@ -58,6 +64,7 @@ interface PerfCommandHandlerDeps {
   getSettings: () => Promise<Record<string, unknown>>;
   emitMarker: (label: string, meta?: Record<string, unknown>) => void;
   dumpTrace: (since?: number, limit?: number) => Promise<unknown[]>;
+  perfSampler?: (payload: Record<string, unknown>) => unknown;
   /** Drive the ⌘F overlay for the search-perf scenario (open/close/type/reset/stats). */
   driveSearch?: (action: string, query?: string) => unknown;
   /** Edit the current track's metadata (tags) — drives the metadata-edit fan-out scenario. */
@@ -85,6 +92,16 @@ const PLAYER_METHODS = new Set([
   "playSystemPlaylist",
   "setDisplayMode",
 ]);
+
+const PERF_NAV_TAB_ALIASES = new Set(["sets"]);
+
+function normalizePerfNavTab(tab: string): ReturnType<typeof normalizeTab> {
+  const normalized = normalizeTab(tab);
+  if (normalized !== "search" || tab === "search" || PERF_NAV_TAB_ALIASES.has(tab)) {
+    return normalized;
+  }
+  throw new Error(`unknown tab: ${tab}`);
+}
 
 function snapshot(deps: PerfCommandHandlerDeps) {
   const s = deps.getPlayerState();
@@ -165,8 +182,9 @@ export function createPerfCommandHandler(deps: PerfCommandHandlerDeps) {
       }
       case "navTab": {
         if (!command.tab) throw new Error("tab required");
-        deps.getNavState().setTab(command.tab as never);
-        return { tab: command.tab };
+        const tab = normalizePerfNavTab(command.tab);
+        deps.getNavState().setTab(tab);
+        return { tab };
       }
       case "settings":
         await deps.saveSettings(command.patch ?? {});
@@ -182,6 +200,10 @@ export function createPerfCommandHandler(deps: PerfCommandHandlerDeps) {
       case "dumpTrace": {
         const entries = await deps.dumpTrace(command.since, command.limit);
         return { count: entries.length, entries };
+      }
+      case "perfSampler": {
+        if (!deps.perfSampler) throw new Error("perfSampler not wired");
+        return deps.perfSampler(command.payload ?? {});
       }
       case "search": {
         if (!deps.driveSearch) throw new Error("search driver not registered");
@@ -252,7 +274,11 @@ export function startPerfControlBridge(): void {
       return Object.fromEntries(keys.map((k) => [k, s[k]]));
     },
     emitMarker: (label, meta) =>
-      traceEvent("debug", "perf.control", "marker", { label, ...(meta ?? {}) }),
+      traceEvent("debug", "perf.control", "marker", {
+        label,
+        perfNow: performance.now(),
+        ...(meta ?? {}),
+      }),
     driveSearch: (action, query) => {
       if (action === "reset") {
         resetSearchPerf();
@@ -353,8 +379,23 @@ export function startPerfControlBridge(): void {
       return { entries: snapshotRenderTrace() };
     },
     dumpTrace: async (since, limit) => {
-      const entries = await readTraceArchiveEntries(undefined, limit ?? 5000);
-      return since != null ? entries.filter((e) => e.at >= since) : entries;
+      const entries = mergeTraceEntries(await readTraceArchiveEntries(undefined, limit ?? 5000), [
+        ...getTraceEntries(),
+      ]);
+      const sliced = since != null ? entries.filter((e) => e.at >= since) : entries;
+      return sliced.slice(-(limit ?? 5000));
+    },
+    perfSampler: (payload) => {
+      const action = String(payload.action ?? "status");
+      if (action === "start") {
+        return startPerformanceTraceSampler({
+          label: typeof payload.label === "string" ? payload.label : "perf-control",
+          resetCounters: payload.resetCounters !== false,
+        }).snapshot();
+      }
+      if (action === "stop") return stopPerformanceTraceSampler();
+      if (action === "status") return getPerformanceTraceSamplerStatus();
+      throw new Error(`unknown perfSampler action: ${action}`);
     },
   });
 
@@ -366,4 +407,12 @@ export function startPerfControlBridge(): void {
       );
   });
   log.info("perf.control", "perf-control bridge installed");
+}
+
+function mergeTraceEntries(entries: TraceEntry[], liveEntries: TraceEntry[]): TraceEntry[] {
+  const byKey = new Map<string, TraceEntry>();
+  for (const entry of [...entries, ...liveEntries]) {
+    byKey.set(`${entry.at}:${entry.id}`, entry);
+  }
+  return [...byKey.values()].sort((a, b) => a.at - b.at || a.id - b.id);
 }

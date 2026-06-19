@@ -4,11 +4,13 @@ import {
   coverImageDerivativeKey,
   ensureCoverBacklightDerivative,
   ensureCoverThumbnailDerivative,
+  resolveCoverBacklightDerivative,
+  resolveCoverThumbnailDerivative,
 } from "@/db/cover-derivatives";
 import { resolveMediaBlob } from "@/db/media-blob-storage";
 import { db } from "@/db/muzero-db";
 import { backfillCoverMetadata } from "@/db/repositories";
-import type { Track } from "@/db/types";
+import type { MediaBlob, Track } from "@/db/types";
 import { useSettings } from "@/hooks/use-app-data";
 import { getOrFetchRemoteCoverAsset, remoteCoverAssetKey } from "@/lib/cover-asset";
 import { hasCoverUrlDecoded } from "@/lib/cover-decode-registry";
@@ -20,6 +22,10 @@ import {
 import { encodeCoverThumbhash } from "@/lib/cover-thumbhash";
 import { resolveDesktopBridge } from "@/lib/desktop/bridge";
 import { getCroppedBlob } from "@/lib/image-crop";
+import {
+  canUseLocalMediaStorageUrl,
+  resolveLocalMediaStorageUrl,
+} from "@/lib/local-media-storage-url";
 import { log } from "@/lib/logger";
 import { coverDerivativeUrlCache, coverUrlCache } from "@/lib/object-url-cache";
 import { arePerfCountersEnabled } from "@/lib/perf-counters";
@@ -28,15 +34,11 @@ import { proxyRemoteCover, trackCoverCacheKey } from "@/player/playback-preload"
 const DISABLE_COVER_RESOURCES_FOR_BISECT = false;
 
 /**
- * Experiment (cover-quality-and-scroll): render gallery grid cards (sets / albums
- * / artists) from the full-resolution ORIGINAL cover instead of the 160px
- * `thumbnail` derivative, to measure the JS-heap / decode cost on a local-first
- * app. A source constant in the spirit of `DISABLE_COVER_RESOURCES_FOR_BISECT`
- * (flip to false + rebuild to revert — NOT a runtime flag, CLAUDE.md rule 3). The
- * dev perf HUD's `performance.frame` trace (`heapMb` + `blobsLiveByKind.image`)
- * captures the before/after delta while the gallery tab is open.
+ * Gallery grids should use thumbnail derivatives. Full-resolution originals stay
+ * for focused surfaces like Now Playing; using them for a large wall increases
+ * renderer Blob URLs and decoded bitmap pressure with little visible benefit.
  */
-export const GRID_USE_ORIGINAL_COVER = true;
+export const GRID_USE_ORIGINAL_COVER = false;
 
 export interface TrackCoverResource {
   /**
@@ -127,15 +129,36 @@ export function useTrackCoverUrl(
 export function useCoverDerivativeUrl(
   track: TrackCoverInput | undefined,
   kind: "backlight" | "thumbnail",
-  options?: { defer?: boolean },
+  options?: {
+    defer?: boolean;
+    generateOnMiss?: boolean;
+    missDelayMs?: number;
+    traceSource?: string;
+  },
+): string | null {
+  const settings = useSettings();
+  return useCoverDerivativeUrlWithCropSetting(track, kind, settings.coverCropped ?? true, options);
+}
+
+export function useCoverDerivativeUrlWithCropSetting(
+  track: TrackCoverInput | undefined,
+  kind: "backlight" | "thumbnail",
+  coverCropped: boolean,
+  options?: {
+    defer?: boolean;
+    generateOnMiss?: boolean;
+    missDelayMs?: number;
+    traceSource?: string;
+  },
 ): string | null {
   const effectiveTrack = DISABLE_COVER_RESOURCES_FOR_BISECT ? undefined : track;
   const defer = options?.defer ?? false;
-  const settings = useSettings();
+  const generateOnMiss = options?.generateOnMiss ?? true;
+  const missDelayMs = Math.max(0, options?.missDelayMs ?? 0);
+  const traceSource = options?.traceSource;
   const trackId = effectiveTrack?.id;
   const coverBlobId = effectiveTrack?.coverBlobId;
   const remoteCoverUrl = effectiveTrack?.remoteCoverUrl;
-  const coverCropped = settings.coverCropped ?? true;
   const cc = effectiveTrack?.coverCrop;
   // biome-ignore lint/correctness/useExhaustiveDependencies: depend on crop scalars so queue object identity churn does not regenerate derivatives.
   const crop = useMemo(
@@ -181,30 +204,58 @@ export function useCoverDerivativeUrl(
     // freshly-recycled row — it shows its thumbhash placeholder until scroll settles.
     if (defer) return;
     let alive = true;
+    let timer: number | null = null;
+    const resolve =
+      kind === "backlight" ? resolveCoverBacklightDerivative : resolveCoverThumbnailDerivative;
     const ensure =
       kind === "backlight" ? ensureCoverBacklightDerivative : ensureCoverThumbnailDerivative;
-    void ensure({
-      id: trackId ?? "",
-      coverBlobId,
-      coverCrop:
-        cropX == null || cropY == null || cropWidth == null || cropHeight == null
-          ? undefined
-          : { height: cropHeight, width: cropWidth, x: cropX, y: cropY },
-      remoteCoverUrl,
-    }).then((res) => {
-      if (!alive || !res) return;
-      // Publish to the cache (dedupes + revokes a late duplicate). Never revoked on
-      // cleanup — the cache owns each URL's lifetime, which is what survives unmount.
-      const url = coverDerivativeUrlCache.store(cacheKey, URL.createObjectURL(res.blob));
-      setResolved({ key: cacheKey, url });
-    });
+    const run = () => {
+      if (!alive) return;
+      const input = {
+        id: trackId ?? "",
+        coverBlobId,
+        coverCrop:
+          cropX == null || cropY == null || cropWidth == null || cropHeight == null
+            ? undefined
+            : { height: cropHeight, width: cropWidth, x: cropX, y: cropY },
+        remoteCoverUrl,
+      };
+      const promise = generateOnMiss
+        ? ensure(input, db, { traceSource })
+        : resolve(
+            {
+              coverBlobId,
+              coverCrop:
+                cropX == null || cropY == null || cropWidth == null || cropHeight == null
+                  ? undefined
+                  : { height: cropHeight, width: cropWidth, x: cropX, y: cropY },
+              remoteCoverUrl,
+            },
+            db,
+          );
+      void promise.then((res) => {
+        if (!alive || !res) return;
+        // Publish to the cache (dedupes + revokes a late duplicate). Never revoked on
+        // cleanup — the cache owns each URL's lifetime, which is what survives unmount.
+        const url = coverDerivativeUrlCache.store(cacheKey, URL.createObjectURL(res.blob), {
+          bytes: res.blob.size,
+        });
+        setResolved({ key: cacheKey, url });
+      });
+    };
+    if (missDelayMs > 0) timer = window.setTimeout(run, missDelayMs);
+    else run();
     return () => {
       alive = false;
+      if (timer != null) window.clearTimeout(timer);
     };
   }, [
     cacheKey,
     defer,
+    generateOnMiss,
     kind,
+    missDelayMs,
+    traceSource,
     coverBlobId,
     remoteCoverUrl,
     trackId,
@@ -239,11 +290,15 @@ export function useCoverDerivativeUrl(
   return null;
 }
 
-export function useTrackThumbnailUrl(track: TrackCoverInput | undefined): string | null {
+export function useTrackThumbnailUrl(
+  track: TrackCoverInput | undefined,
+  options?: { defer?: boolean; missDelayMs?: number; traceSource?: string },
+): string | null {
   const effectiveTrack = DISABLE_COVER_RESOURCES_FOR_BISECT ? undefined : track;
   const localThumbnailUrl = useCoverDerivativeUrl(
     effectiveTrack?.coverBlobId ? effectiveTrack : undefined,
     "thumbnail",
+    options,
   );
   if (!effectiveTrack) return null;
   if (effectiveTrack.coverBlobId) return localThumbnailUrl;
@@ -337,7 +392,6 @@ export function useTrackCoverResource(
         sourceKind: "local-cover",
         trackId: effectiveTrack?.id,
       });
-      setResolved({ key: cacheKey, url: hit });
       return;
     }
     if (blob === undefined) return; // bytes not resolved yet — re-runs when the liveQuery emits
@@ -358,7 +412,7 @@ export function useTrackCoverResource(
       const out = crop ? await getCroppedBlob(blob, crop, blob.type || "image/jpeg") : blob;
       if (!alive) return;
       const created = URL.createObjectURL(out);
-      const url = coverUrlCache.store(cacheKey, created); // dedupes + revokes a late dup
+      const url = coverUrlCache.store(cacheKey, created, { bytes: out.size }); // dedupes + revokes a late dup
       if (shouldTrace) {
         noteCoverWork("cover.render.object-url-miss", startedAt, {
           bytes: out.size,
@@ -377,18 +431,16 @@ export function useTrackCoverResource(
   useEffect(() => {
     if (!remoteCacheKey || !remoteCoverUrl) return;
     const hit = coverUrlCache.get(remoteCacheKey);
-    if (hit) {
-      setFailedKey(null);
-      setResolved({ key: remoteCacheKey, url: hit });
-      return;
-    }
+    if (hit) return;
     let alive = true;
     setFailedKey(null);
     void (async () => {
       try {
         const asset = await getOrFetchRemoteCoverAsset(remoteCoverUrl);
         if (!alive) return;
-        const url = coverUrlCache.store(remoteCacheKey, URL.createObjectURL(asset.blob));
+        const url = coverUrlCache.store(remoteCacheKey, URL.createObjectURL(asset.blob), {
+          bytes: asset.blob.size,
+        });
         if (alive) setResolved({ key: remoteCacheKey, url });
       } catch (error) {
         if (!alive) return;
@@ -510,13 +562,61 @@ export function useTrackMediaUrl(
   const sourcePath = track?.sourcePath;
   const localFileMime =
     track?.mediaMetadata?.originalMime ?? (track?.kind === "video" ? "video/mp4" : "audio/mpeg");
-  const blob = useLiveQuery(
-    async () => (blobId ? (await resolveMediaBlob(blobId, db))?.blob : undefined),
+  const mediaRow = useLiveQuery(
+    async () => (blobId ? ((await db.mediaBlobs.get(blobId)) ?? null) : null),
     [blobId],
     undefined,
+  ) as MediaBlob | null | undefined;
+  const localStorageUrl = useLocalMediaStorageMediaUrl(mediaRow);
+  const shouldResolveBlob =
+    Boolean(blobId) && mediaRow !== undefined && !canUseLocalMediaStorageUrl(mediaRow);
+  const blob = useLiveQuery(
+    async () => (shouldResolveBlob ? (await resolveMediaBlob(mediaRow ?? blobId, db))?.blob : null),
+    [shouldResolveBlob, blobId, mediaRow?.id, mediaRow?.storageBackend, mediaRow?.storageKey],
+    undefined,
   );
+  const blobUrl = useKeyedObjectUrl(blob, blobId);
   const localFileUrl = useLocalFileMediaUrl(sourcePath, localFileMime);
-  return useKeyedObjectUrl(blob, blobId) ?? localFileUrl ?? remoteMediaUrl ?? null;
+  return localStorageUrl ?? blobUrl ?? localFileUrl ?? remoteMediaUrl ?? null;
+}
+
+function useLocalMediaStorageMediaUrl(row: MediaBlob | null | undefined): string | null {
+  const [url, setUrl] = useState<string | null>(null);
+  useEffect(() => {
+    if (!canUseLocalMediaStorageUrl(row)) {
+      setUrl(null);
+      return;
+    }
+    let alive = true;
+    void resolveLocalMediaStorageUrl(row)
+      .then((next) => {
+        if (alive) setUrl(next);
+      })
+      .catch((error: unknown) => {
+        if (!alive) return;
+        log.warn("media", "failed to resolve local media storage url", {
+          error: error instanceof Error ? error.name : typeof error,
+        });
+        setUrl(null);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [row]);
+  return url;
+}
+
+/** Reactive display URL for one media blob row, resolving only that row's bytes. */
+export function useMediaBlobUrl(row: MediaBlob | null | undefined): string | null {
+  const localStorageUrl = useLocalMediaStorageMediaUrl(row);
+  const shouldResolveBlob = row !== undefined && !canUseLocalMediaStorageUrl(row);
+  const blob = useLiveQuery(
+    async () => (shouldResolveBlob && row ? (await resolveMediaBlob(row, db))?.blob : null),
+    [shouldResolveBlob, row?.id, row?.storageBackend, row?.storageKey, row?.blob],
+    undefined,
+  );
+  const blobUrl = useKeyedObjectUrl(blob, row?.id);
+  return localStorageUrl ?? blobUrl;
 }
 
 function useLocalFileMediaUrl(
@@ -571,8 +671,9 @@ const COVER_METADATA_BACKFILL_IDLE_TIMEOUT_MS = 5000;
  * is mounted, in small idle batches, so a legacy library can heal itself without
  * turning the gallery tab into a background batch job.
  */
-export function useCoverMetadataBackfill(): void {
+export function useCoverMetadataBackfill(active = true): void {
   useEffect(() => {
+    if (!active) return undefined;
     if (coverMetadataBackfillRunning) return;
     coverMetadataBackfillRunning = true;
     let cancelled = false;
@@ -623,7 +724,7 @@ export function useCoverMetadataBackfill(): void {
         cancelIdleCallback(idleId);
       }
     };
-  }, []);
+  }, [active]);
 }
 
 /** @deprecated Use {@link useCoverMetadataBackfill}; kept for older imports. */

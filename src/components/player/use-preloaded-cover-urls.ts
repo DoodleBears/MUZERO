@@ -11,7 +11,8 @@ import {
 } from "./cover-preload";
 
 const COVER_PRELOAD_LOCAL_SETTLE_MS = 140;
-const COVER_PRELOAD_NON_CURRENT_LOCAL_SETTLE_MS = 420;
+const COVER_PRELOAD_NON_CURRENT_LOCAL_SETTLE_MS = 900;
+const COVER_PRELOAD_VISIBLE_SETTLE_MS = 180;
 
 /** Drop duplicate tracks (keep first role), so one track never preloads twice. */
 export function compactPreloadCandidates(
@@ -39,13 +40,28 @@ export function compactPreloadCandidates(
 export function usePreloadedCoverUrls(
   candidates: CoverPreloadCandidate[],
   forceNonCurrentLocal = false,
+  enabled = true,
 ): Record<string, string> {
   const settings = useSettings();
   const coverCropped = settings.coverCropped ?? true;
   const entriesRef = useRef<Record<string, PreloadedCover>>({});
   const batchSeqRef = useRef(0);
+  const [visibleReady, setVisibleReady] = useState(() => enabled && forceNonCurrentLocal);
   const [nonCurrentLocalReadyKey, setNonCurrentLocalReadyKey] = useState<string | null>(null);
   const [urls, setUrls] = useState<Record<string, string>>({});
+  useEffect(() => {
+    if (!enabled) {
+      setVisibleReady(false);
+      return undefined;
+    }
+    if (forceNonCurrentLocal) {
+      setVisibleReady(true);
+      return undefined;
+    }
+    const timer = window.setTimeout(() => setVisibleReady(true), COVER_PRELOAD_VISIBLE_SETTLE_MS);
+    return () => window.clearTimeout(timer);
+  }, [enabled, forceNonCurrentLocal]);
+  const preloadEnabled = enabled && (forceNonCurrentLocal || visibleReady);
   const requests = useMemo(
     () => buildCoverPreloadRequests(candidates, coverCropped),
     [candidates, coverCropped],
@@ -55,10 +71,16 @@ export function usePreloadedCoverUrls(
     [requests],
   );
   const includeNonCurrentLocal = forceNonCurrentLocal || nonCurrentLocalReadyKey === requestsKey;
-  const activeRequestsRaw = useMemo(
-    () => filterCoverPreloadRequestsForBurst(requests, includeNonCurrentLocal),
-    [includeNonCurrentLocal, requests],
-  );
+  const activeRequestsRaw = useMemo(() => {
+    const filtered = filterCoverPreloadRequestsForBurst(requests, includeNonCurrentLocal);
+    // The main stage resolves the visible current cover through
+    // useTrackCoverResource. During button/keyboard switch bursts, duplicating
+    // that local-cover work here competes with the frame that should paint the
+    // new track; coverflow can catch up after the settle window or immediately
+    // when a real drag requests neighbours.
+    if (forceNonCurrentLocal || includeNonCurrentLocal) return filtered;
+    return filtered.filter((request) => request.role !== "current" || !request.coverBlobId);
+  }, [forceNonCurrentLocal, includeNonCurrentLocal, requests]);
   const activeRequestsKey = useMemo(
     () => activeRequestsRaw.map((r) => `${r.role}:${r.trackId}:${r.key}`).join("|"),
     [activeRequestsRaw],
@@ -67,14 +89,25 @@ export function usePreloadedCoverUrls(
   const activeRequests = useMemo(() => activeRequestsRaw, [activeRequestsKey]);
 
   useEffect(() => {
+    if (!preloadEnabled) return;
     const timer = window.setTimeout(
       () => setNonCurrentLocalReadyKey(requestsKey),
       COVER_PRELOAD_NON_CURRENT_LOCAL_SETTLE_MS,
     );
     return () => window.clearTimeout(timer);
-  }, [requestsKey]);
+  }, [preloadEnabled, requestsKey]);
 
   useEffect(() => {
+    if (preloadEnabled) return;
+    batchSeqRef.current += 1;
+    for (const entry of Object.values(entriesRef.current)) releasePreloadedCover(entry);
+    entriesRef.current = {};
+    setNonCurrentLocalReadyKey(null);
+    setUrls({});
+  }, [preloadEnabled]);
+
+  useEffect(() => {
+    if (!preloadEnabled) return;
     let alive = true;
     batchSeqRef.current += 1;
     const batchSeq = batchSeqRef.current;
@@ -111,12 +144,9 @@ export function usePreloadedCoverUrls(
 
       const nextEntries = result.entries;
       entriesRef.current = nextEntries;
-      setUrls((prev) => ({
-        ...prev,
-        ...Object.fromEntries(
-          Object.entries(nextEntries).map(([trackId, entry]) => [trackId, entry.url]),
-        ),
-      }));
+      setUrls(
+        Object.fromEntries(Object.entries(nextEntries).map(([id, entry]) => [id, entry.url])),
+      );
 
       for (const [trackId, entry] of Object.entries(previous)) {
         if (nextEntries[trackId]?.key !== entry.key) releasePreloadedCover(entry);
@@ -130,7 +160,7 @@ export function usePreloadedCoverUrls(
     return () => {
       alive = false;
     };
-  }, [activeRequests]);
+  }, [activeRequests, preloadEnabled]);
 
   useEffect(() => {
     return () => {

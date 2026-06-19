@@ -24,6 +24,7 @@ import { importProgressPercent } from "@/lib/import-progress";
 import { useCoverTargetStore } from "@/stores/cover-target-store";
 import { usePlayerStore } from "@/stores/player-store";
 import { useUploadTargetStore } from "@/stores/upload-target-store";
+import { warmMediaProbeWorker } from "@/workers/media-probe-client";
 
 type DragInfo = { count: number; allImages: boolean };
 type PendingCover = { file: File; track: Track | null };
@@ -61,6 +62,7 @@ export function GlobalDropZone({
   const handleFiles = useCallback(async (files: File[], opts: { folderName?: string } = {}) => {
     const { media, images, skipped } = classifyDrop(files);
     if (media.length > 0) {
+      void warmMediaProbeWorker();
       // Route by the current view's upload target (see upload-target-store):
       // a set detail (`set`) drops straight into that set; everywhere else
       // (`pick` gallery / `active` fallback) asks which 歌单 the media joins.
@@ -109,7 +111,9 @@ export function GlobalDropZone({
       if (!dragHasFiles(e.dataTransfer?.types)) return;
       e.preventDefault();
       dragDepth.current += 1;
-      setDragInfo(summarizeDragItems(e.dataTransfer?.items));
+      const info = summarizeDragItems(e.dataTransfer?.items);
+      setDragInfo(info);
+      if (!info.allImages) void warmMediaProbeWorker();
       setIsDragging(true);
     }
     function onDragOver(e: DragEvent) {
@@ -148,7 +152,9 @@ export function GlobalDropZone({
       const files = filesFromTransfer(e.clipboardData);
       if (files.length === 0) return;
       e.preventDefault();
-      setDragInfo(summarizeDragItems(e.clipboardData?.items));
+      const info = summarizeDragItems(e.clipboardData?.items);
+      setDragInfo(info);
+      if (!info.allImages) void warmMediaProbeWorker();
       setIsDragging(true);
       window.setTimeout(() => {
         dragDepth.current = 0;

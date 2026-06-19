@@ -1,7 +1,12 @@
 /// <reference lib="webworker" />
 
 import { extractVideoFramesBatchViaMediabunny } from "@/lib/media-mediabunny-frames";
-import { candidatePosterTimes, selectBestScoredFrame } from "@/lib/video-frame-score";
+import {
+  candidatePosterTimes,
+  centeredSquareCrop,
+  selectBestScoredFrame,
+} from "@/lib/video-frame-score";
+import { extractCoverMetadataInline } from "./cover-derivative-core";
 import type {
   VideoPosterWorkerRequest,
   VideoPosterWorkerResponse,
@@ -31,11 +36,18 @@ ctx.onmessage = async (event: MessageEvent<VideoPosterWorkerRequest>) => {
     }
 
     const bytes = await best.blob.arrayBuffer();
+    const coverMetadata = await extractCoverMetadataInline({
+      blob: best.blob,
+      crop: centeredSquareCrop(best.width, best.height),
+      mime: best.mime,
+      targets: ["backlight", "palette", "thumbnail", "thumbhash"],
+    });
     post(
       {
         frame: {
           atTimeSeconds: best.atTimeSeconds,
           bytes,
+          coverMetadata,
           height: best.height,
           mime: best.mime,
           score: best.score,
@@ -44,7 +56,7 @@ ctx.onmessage = async (event: MessageEvent<VideoPosterWorkerRequest>) => {
         reqId: msg.reqId,
         type: "video-poster-result",
       },
-      [bytes],
+      [bytes, ...coverMetadataTransferables(coverMetadata)],
     );
   } catch (error) {
     post({
@@ -57,4 +69,12 @@ ctx.onmessage = async (event: MessageEvent<VideoPosterWorkerRequest>) => {
 
 function post(message: VideoPosterWorkerResponse, transfers: Transferable[] = []): void {
   ctx.postMessage(message, transfers);
+}
+
+function coverMetadataTransferables(
+  metadata: Awaited<ReturnType<typeof extractCoverMetadataInline>>,
+): Transferable[] {
+  return [metadata.backlight?.bytes, metadata.thumbnail?.bytes].filter(
+    (bytes): bytes is ArrayBuffer => bytes instanceof ArrayBuffer,
+  );
 }

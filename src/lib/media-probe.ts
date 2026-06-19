@@ -4,11 +4,13 @@ import {
   inferMediabunnyMime,
   isMediabunnySupportedContentType,
 } from "@/lib/media-container-format";
+import { probeMediaFileViaMediabunnyWorker } from "@/workers/media-probe-client";
 
 export interface ProbedMedia {
   kind: TrackKind;
   durationSec: number;
   mime: string;
+  probeSource?: "mediabunny-worker" | "native";
   title: string;
 }
 
@@ -52,15 +54,45 @@ function titleFromFilename(name: string): string {
  * timeout falls back to 0 duration, but a definite media element error is
  * treated as unsupported for this WebView so it does not enter IndexedDB.
  */
-export function probeMediaFile(file: File): Promise<ProbedMedia> {
+export async function probeMediaFile(file: File): Promise<ProbedMedia> {
   const kind: TrackKind = classifyFile(file) === "video" ? "video" : "audio";
   const title = titleFromFilename(file.name);
   const mime =
     file.type || inferMediabunnyMime(file.name) || (kind === "video" ? "video/mp4" : "audio/mpeg");
 
+  if (kind === "video" && isMediabunnySupportedContentType(mime, file.name)) {
+    const fallback = await probeViaMediabunny(file);
+    if (fallback) {
+      return {
+        durationSec: fallback.durationSec,
+        kind,
+        mime: fallback.mime || mime,
+        probeSource: "mediabunny-worker",
+        title,
+      };
+    }
+  }
+
+  return probeMediaFileViaNativeElement(file, kind, mime, title);
+}
+
+async function probeViaMediabunny(file: File) {
+  try {
+    return await probeMediaFileViaMediabunnyWorker(file);
+  } catch {
+    return null;
+  }
+}
+
+function probeMediaFileViaNativeElement(
+  file: File,
+  kind: TrackKind,
+  mime: string,
+  title: string,
+): Promise<ProbedMedia> {
   return new Promise<ProbedMedia>((resolve, reject) => {
     if (typeof document === "undefined") {
-      resolve({ kind, durationSec: 0, mime, title });
+      resolve({ kind, durationSec: 0, mime, probeSource: "native", title });
       return;
     }
     // A <video> element reads metadata for both audio and video files.
@@ -76,7 +108,13 @@ export function probeMediaFile(file: File): Promise<ProbedMedia> {
       if (settled) return;
       settled = true;
       cleanup();
-      resolve({ kind, durationSec: Number.isFinite(durationSec) ? durationSec : 0, mime, title });
+      resolve({
+        kind,
+        durationSec: Number.isFinite(durationSec) ? durationSec : 0,
+        mime,
+        probeSource: "native",
+        title,
+      });
     };
     const fail = () => {
       if (settled) return;
@@ -88,8 +126,7 @@ export function probeMediaFile(file: File): Promise<ProbedMedia> {
         reject(nativeError);
         return;
       }
-      void import("@/lib/media-mediabunny-probe")
-        .then(({ probeMediaFileViaMediabunny }) => probeMediaFileViaMediabunny(file))
+      void probeViaMediabunny(file)
         .then((fallback) => {
           if (!fallback) {
             reject(nativeError);
@@ -99,6 +136,7 @@ export function probeMediaFile(file: File): Promise<ProbedMedia> {
             durationSec: fallback.durationSec,
             kind,
             mime: fallback.mime || mime,
+            probeSource: "mediabunny-worker",
             title,
           });
         })

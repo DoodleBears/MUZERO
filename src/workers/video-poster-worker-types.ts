@@ -1,4 +1,5 @@
 import type { VideoFrameScore } from "@/lib/video-frame-score";
+import type { CoverMetadataResult } from "./cover-derivative-core";
 
 export type VideoPosterWorkerRequest = {
   durationSec?: number;
@@ -13,6 +14,7 @@ export type VideoPosterWorkerRequest = {
 export type VideoPosterWorkerFrame = {
   atTimeSeconds: number;
   bytes: ArrayBuffer;
+  coverMetadata?: CoverMetadataResult;
   height: number;
   mime: string;
   score: VideoFrameScore;

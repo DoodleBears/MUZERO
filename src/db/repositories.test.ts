@@ -1,6 +1,7 @@
 import Dexie from "dexie";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { orderedSetTrackIds } from "@/player/set-order";
+import { coverImageDerivativeKey } from "./cover-derivatives";
 import {
   LARGE_IMAGE_PROVIDER_THRESHOLD_BYTES,
   type MediaStorageProvider,
@@ -8,6 +9,7 @@ import {
 } from "./media-blob-storage";
 import { MuzeroDB } from "./muzero-db";
 import {
+  __flushBackgroundCoverDerivativePersistenceForTests,
   addGalleryImage,
   addMemory,
   addTrackBackground,
@@ -37,6 +39,7 @@ import {
   knownSourcePaths,
   listAllTracks,
   listGalleryImages,
+  listGlobalSearchTracks,
   listMemories,
   listReferencedLocalFileSourcePaths,
   listTrackBackgrounds,
@@ -445,6 +448,72 @@ describe("clearTrackCover", () => {
     ).toBe(LARGE_IMAGE_PROVIDER_THRESHOLD_BYTES);
   });
 
+  it("stores precomputed cover derivatives from setTrackCover metadata", async () => {
+    const session = await createSession({ seedPrompt: "", config: { autoExtend: false } }, db);
+    const track = await createUploadedTrack(
+      {
+        sessionId: session.id,
+        title: "precomputed cover",
+        kind: "audio",
+        blob: new Blob(["audio"], { type: "audio/mpeg" }),
+        mime: "audio/mpeg",
+        durationSec: 5,
+      },
+      db,
+    );
+    await setTrackCover(
+      {
+        trackId: track.id,
+        blob: new Blob(["cover"], { type: "image/png" }),
+        mime: "image/png",
+        coverMetadata: {
+          backlight: {
+            bytes: await new Blob(["backlight"], { type: "image/webp" }).arrayBuffer(),
+            height: 192,
+            mime: "image/webp",
+            width: 192,
+          },
+          palette: [],
+          thumbnail: {
+            bytes: await new Blob(["thumb"], { type: "image/webp" }).arrayBuffer(),
+            height: 96,
+            mime: "image/webp",
+            width: 96,
+          },
+          thumbhash: "thumbhash",
+          timings: {
+            backlightMs: 2,
+            decodeMs: 1,
+            paletteMs: 0,
+            thumbnailMs: 2,
+            thumbhashMs: 1,
+            totalMs: 6,
+          },
+        },
+      },
+      db,
+    );
+
+    const updated = await getTrack(track.id, db);
+    expect(updated?.coverThumbhash).toBe("thumbhash");
+    const backlightId = updated ? coverImageDerivativeKey(updated, "backlight") : null;
+    const thumbnailId = updated ? coverImageDerivativeKey(updated, "thumbnail") : null;
+    await __flushBackgroundCoverDerivativePersistenceForTests();
+    const backlight = backlightId ? await db.coverDerivatives.get(backlightId) : undefined;
+    const thumbnail = thumbnailId ? await db.coverDerivatives.get(thumbnailId) : undefined;
+
+    expect(backlight).toMatchObject({ bytes: 9, height: 192, kind: "backlight", width: 192 });
+    expect(thumbnail).toMatchObject({ bytes: 5, height: 96, kind: "thumbnail", width: 96 });
+    expect(await db.mediaBlobs.get(backlight?.blobId ?? "")).toMatchObject({
+      bytes: 9,
+      role: "cover-derivative",
+    });
+    expect(await db.mediaBlobs.get(thumbnail?.blobId ?? "")).toMatchObject({
+      bytes: 5,
+      role: "cover-derivative",
+    });
+  });
+
   it("removes a track's cover (row + blob) and its crop/thumbhash", async () => {
     const session = await createSession({ seedPrompt: "", config: { autoExtend: false } }, db);
     const track = await createUploadedTrack(
@@ -709,6 +778,54 @@ describe("createUploadedTrack", () => {
     expect((await getTrackCover(track, db, { providers: [provider] }))?.blob?.size).toBe(
       LARGE_IMAGE_PROVIDER_THRESHOLD_BYTES,
     );
+  });
+});
+
+describe("listGlobalSearchTracks", () => {
+  it("strips generated lyrics from the search snapshot without mutating the DB row", async () => {
+    await db.tracks.bulkAdd([
+      {
+        id: "trk_with_lyrics",
+        sessionId: "ses_search",
+        title: "Lyric Song",
+        kind: "audio",
+        origin: "generated",
+        provider: "mock",
+        status: "ready",
+        durationSec: 60,
+        createdAt: 1,
+        playCount: 0,
+        liked: false,
+        tags: [],
+        brief: {
+          title: "Lyric Song",
+          caption: "bright",
+          lyrics: "line one\nline two",
+          durationSec: 60,
+        },
+      },
+      {
+        id: "trk_upload",
+        sessionId: "ses_search",
+        title: "Upload",
+        kind: "audio",
+        origin: "uploaded",
+        provider: "upload",
+        status: "ready",
+        durationSec: 90,
+        createdAt: 2,
+        playCount: 0,
+        liked: false,
+        tags: [],
+      },
+    ]);
+
+    const rows = await listGlobalSearchTracks(db);
+
+    expect(rows).toHaveLength(2);
+    expect(rows.find((track) => track.id === "trk_with_lyrics")?.brief?.lyrics).toBe("");
+    expect((await getTrack("trk_with_lyrics", db))?.brief?.lyrics).toBe("line one\nline two");
+    expect(rows.find((track) => track.id === "trk_upload")?.title).toBe("Upload");
   });
 });
 

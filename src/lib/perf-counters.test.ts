@@ -8,6 +8,7 @@ import {
   notePerfWork,
   readPerfCounter,
   resetPerfCounters,
+  retainPerfCounters,
   setPerfCountersEnabled,
 } from "@/lib/perf-counters";
 import { clearTrace, getTraceEntries } from "@/lib/trace";
@@ -37,6 +38,26 @@ describe("perf counters", () => {
     expect(readPerfCounter("db.listAllTracks")).toBe(2);
     expect(readPerfCounter("db.memoryNotesByTrack")).toBe(3);
     expect(readPerfCounter("db.unknown")).toBe(0);
+  });
+
+  it("can be temporarily retained by a harness without the HUD flag", () => {
+    const release = retainPerfCounters();
+    expect(arePerfCountersEnabled()).toBe(true);
+    bumpPerfCounter("db.listAllTracks");
+    expect(readPerfCounter("db.listAllTracks")).toBe(1);
+    release();
+    expect(arePerfCountersEnabled()).toBe(false);
+    bumpPerfCounter("db.listAllTracks");
+    expect(readPerfCounter("db.listAllTracks")).toBe(1);
+  });
+
+  it("refcounts nested harness retainers", () => {
+    const first = retainPerfCounters();
+    const second = retainPerfCounters();
+    first();
+    expect(arePerfCountersEnabled()).toBe(true);
+    second();
+    expect(arePerfCountersEnabled()).toBe(false);
   });
 
   it("reset clears all counters", () => {
@@ -171,6 +192,10 @@ describe("perf counters", () => {
         liveByKind: { audio: 1, image: 1, other: 1, video: 1 },
         liveBytes: 4,
         liveBytesByKind: { audio: 1, image: 1, other: 1, video: 1 },
+        peakLive: 4,
+        peakLiveByKind: { audio: 1, image: 1, other: 1, video: 1 },
+        peakLiveBytes: 4,
+        peakLiveBytesByKind: { audio: 1, image: 1, other: 1, video: 1 },
       });
       URL.revokeObjectURL(a);
       expect(blobUrlStats()).toEqual({
@@ -180,6 +205,10 @@ describe("perf counters", () => {
         liveByKind: { audio: 1, image: 0, other: 1, video: 1 },
         liveBytes: 3,
         liveBytesByKind: { audio: 1, image: 0, other: 1, video: 1 },
+        peakLive: 4,
+        peakLiveByKind: { audio: 1, image: 1, other: 1, video: 1 },
+        peakLiveBytes: 4,
+        peakLiveBytesByKind: { audio: 1, image: 1, other: 1, video: 1 },
       });
       URL.revokeObjectURL(b);
       URL.revokeObjectURL(c);
@@ -191,6 +220,27 @@ describe("perf counters", () => {
         liveByKind: { audio: 0, image: 0, other: 0, video: 0 },
         liveBytes: 0,
         liveBytesByKind: { audio: 0, image: 0, other: 0, video: 0 },
+        peakLive: 4,
+        peakLiveByKind: { audio: 1, image: 1, other: 1, video: 1 },
+        peakLiveBytes: 4,
+        peakLiveBytesByKind: { audio: 1, image: 1, other: 1, video: 1 },
+      });
+      uninstall();
+    });
+
+    it("keeps peak bytes after transient blob URLs are revoked between samples", () => {
+      const uninstall = installBlobUrlTracker();
+      const a = URL.createObjectURL(new Blob(["12345"], { type: "image/png" }));
+      const b = URL.createObjectURL(new Blob(["1234567"], { type: "image/png" }));
+      URL.revokeObjectURL(a);
+      URL.revokeObjectURL(b);
+
+      expect(blobUrlStats()).toMatchObject({
+        live: 0,
+        liveBytes: 0,
+        peakLive: 2,
+        peakLiveBytes: 12,
+        peakLiveBytesByKind: { audio: 0, image: 12, other: 0, video: 0 },
       });
       uninstall();
     });

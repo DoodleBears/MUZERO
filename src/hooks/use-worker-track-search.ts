@@ -1,6 +1,7 @@
 import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import type { Track } from "@/db/types";
 import { LIBRARY_QUERY_COALESCE_MS, useThrottledValue } from "@/hooks/use-throttled-value";
+import { notePerfWork } from "@/lib/perf-counters";
 import type { IndexableRow, QueryHit } from "@/lib/search-core";
 import { trackToRow } from "@/lib/track-search";
 import { searchRows, setSearchRows } from "@/workers/search-client";
@@ -11,6 +12,9 @@ export interface WorkerTrackSearchOptions {
   /** `lyrics` indexes only `extraFreeFieldsByTrackId`, used by the @lyrics scope. */
   rowKind?: "track" | "lyrics";
 }
+
+const SEARCH_ROW_CACHE_LIMIT = 50_000;
+const searchRowCache = new Map<string, { row: IndexableRow; sig: string }>();
 
 export function useWorkerRowSearch(rows: readonly IndexableRow[], query: string): QueryHit[] {
   const deferredQuery = useDeferredValue(query);
@@ -58,6 +62,7 @@ export function useWorkerTrackSearch(
   memoryNotesByTrackId?: ReadonlyMap<string, readonly string[]>,
   options: WorkerTrackSearchOptions = {},
 ): Track[] {
+  const rowKind = options.rowKind;
   // Push the row snapshot whenever the library (or its memories) changes —
   // coalesced: serializing + structured-cloning the whole library per write
   // turns an import burst into O(N×writes) (PRD F-3). Queries below still rank
@@ -68,17 +73,36 @@ export function useWorkerTrackSearch(
     options.extraFreeFieldsByTrackId,
     LIBRARY_QUERY_COALESCE_MS,
   );
-  const rows = useMemo(
-    () =>
-      snapshotTracks.map((track) => {
-        const extra = snapshotExtra?.get(track.id) ?? [];
-        if (options.rowKind === "lyrics") {
-          return { id: track.id, free: [...extra], artist: [], album: [], tags: [] };
-        }
-        return trackToRow(track, snapshotNotes?.get(track.id) ?? [], extra);
-      }),
-    [snapshotTracks, snapshotNotes, snapshotExtra, options.rowKind],
-  );
+  const rows = useMemo(() => {
+    const startedAt = performance.now();
+    const rows = snapshotTracks.map((track) => {
+      const extra = snapshotExtra?.get(track.id) ?? [];
+      const memoryNotes = snapshotNotes?.get(track.id) ?? [];
+      const cacheKey = `${rowKind ?? "track"}:${track.id}`;
+      const sig =
+        rowKind === "lyrics"
+          ? searchArraySignature(extra)
+          : trackSearchRowSignature(track, memoryNotes, extra);
+      const cached = searchRowCache.get(cacheKey);
+      if (cached?.sig === sig) return cached.row;
+
+      const row =
+        rowKind === "lyrics"
+          ? { id: track.id, free: [...extra], artist: [], album: [], tags: [] }
+          : trackToRow(track, memoryNotes, extra);
+      searchRowCache.set(cacheKey, { row, sig });
+      if (searchRowCache.size > SEARCH_ROW_CACHE_LIMIT) {
+        const oldestKey = searchRowCache.keys().next().value;
+        if (oldestKey) searchRowCache.delete(oldestKey);
+      }
+      return row;
+    });
+    notePerfWork("search.rows.build", performance.now() - startedAt, {
+      rowKind: rowKind ?? "track",
+      rows: rows.length,
+    });
+    return rows;
+  }, [snapshotTracks, snapshotNotes, snapshotExtra, rowKind]);
   const hits = useWorkerRowSearch(rows, query);
 
   const byId = useMemo(() => new Map(tracks.map((track) => [track.id, track])), [tracks]);
@@ -87,4 +111,38 @@ export function useWorkerTrackSearch(
       hits.map((hit) => byId.get(hit.id)).filter((track): track is Track => track !== undefined),
     [hits, byId],
   );
+}
+
+function searchArraySignature(values: readonly string[] | undefined): string {
+  return (values ?? []).join("\u001f");
+}
+
+function trackSearchRowSignature(
+  track: Track,
+  memoryNotes: readonly string[],
+  extraFreeFields: readonly string[],
+): string {
+  const m = track.mediaMetadata;
+  return [
+    track.title,
+    m?.title,
+    searchArraySignature(m?.artists),
+    searchArraySignature(m?.albumArtists),
+    m?.album,
+    searchArraySignature(m?.genres),
+    m?.year,
+    m?.date,
+    searchArraySignature(m?.composer),
+    searchArraySignature(m?.isrc),
+    m?.musicBrainzRecordingId,
+    m?.musicBrainzTrackId,
+    track.brief?.caption,
+    track.note,
+    searchArraySignature(track.tags),
+    track.provider,
+    searchArraySignature(memoryNotes),
+    searchArraySignature(extraFreeFields),
+  ]
+    .map((value) => (value == null ? "" : String(value)))
+    .join("\u001e");
 }

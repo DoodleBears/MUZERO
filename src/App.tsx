@@ -1,6 +1,6 @@
 import { MotionConfig } from "motion/react";
 import type { ReactNode } from "react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { DevPerfPanel } from "@/components/dev/dev-perf-panel";
 import { RenderTraceBoundary } from "@/components/dev/render-trace-boundary";
 import { AlbumCoverAppearancePanel } from "@/components/player/album-cover-appearance-panel";
@@ -109,7 +109,6 @@ export default function App() {
   // null-rendering leaf keeps a switch from cascading into App + all tabs. (PRD
   // 20260617-dock-swipe-switch-jank #2: cut the switch reconcile.)
   useDesktopChromeDataset();
-  useAppearanceCssVars(settings);
   useWindowBorderDragColor(settings);
   useDesktopWindowPinMode(settings);
 
@@ -277,13 +276,21 @@ export default function App() {
   // (the dominant switch cost; PRD 20260617-dock-swipe-switch-jank #2). Each page
   // still re-renders from its OWN store/liveQuery subscriptions.
   const onSessionsStarted = useCallback(() => setTab("now"), [setTab]);
-  const queuePanel = useMemo(() => <QueuePage />, []);
-  const searchPanel = useMemo(() => <SearchPage />, []);
+  const onOpenNowPlaying = useCallback(() => setTab("now"), [setTab]);
+  const queueActive = tab === "queue";
+  const searchActive = tab === "search";
+  const sessionsActive = tab === "sessions";
+  const settingsActive = tab === "settings";
+  const queuePanel = useMemo(() => <QueuePage pageActive={queueActive} />, [queueActive]);
+  const searchPanel = useMemo(() => <SearchPage pageActive={searchActive} />, [searchActive]);
   const sessionsPanel = useMemo(
-    () => <SessionsPage onStarted={onSessionsStarted} />,
-    [onSessionsStarted],
+    () => <SessionsPage onStarted={onSessionsStarted} pageActive={sessionsActive} />,
+    [onSessionsStarted, sessionsActive],
   );
-  const settingsPanel = useMemo(() => <SettingsPage />, []);
+  const settingsPanel = useMemo(
+    () => <SettingsPage pageActive={settingsActive} />,
+    [settingsActive],
+  );
 
   // Mirror the Dock-hidden signal so deep surfaces (e.g. the lyrics search
   // affordance) can fade in sync with the Dock during immersive idle.
@@ -312,6 +319,7 @@ export default function App() {
         {/* Playback side-effects isolated in a leaf so a song switch re-renders only
             this, not App + every inline TabPanel (see PlaybackEffects). */}
         <PlaybackEffects />
+        <DynamicAppearanceEffects settings={settings} />
         <NowPlayingBackground
           active={ambientBackdropActive}
           hideVisualizer={visualizerHidden}
@@ -373,7 +381,7 @@ export default function App() {
               <AmbientPageOverlay active={ambientActive}>{queuePanel}</AmbientPageOverlay>
             </RenderTraceBoundary>
           </TabPanel>
-          <TabPanel active={tab === "search"}>
+          <TabPanel active={tab === "search"} keepLayout>
             <RenderTraceBoundary id="tab:search" active={tab === "search"}>
               <AmbientPageOverlay active={ambientActive}>{searchPanel}</AmbientPageOverlay>
             </RenderTraceBoundary>
@@ -394,7 +402,7 @@ export default function App() {
           <PlayerDock
             tab={tab}
             onTabChange={setTab}
-            onOpenNowPlaying={() => setTab("now")}
+            onOpenNowPlaying={onOpenNowPlaying}
             hidden={dockHidden}
           />
         </RenderTraceBoundary>
@@ -412,7 +420,9 @@ export default function App() {
         <LyricsTuningPanel />
         <AlbumCoverAppearancePanel />
 
-        <GlobalTrackSearch open={trackSearchOpen} onOpenChange={setTrackSearchOpen} />
+        <RenderTraceBoundary id="global-search" active={trackSearchOpen}>
+          <GlobalTrackSearch open={trackSearchOpen} onOpenChange={setTrackSearchOpen} />
+        </RenderTraceBoundary>
 
         {/* App-wide drag-and-drop + paste: media → import; image → cover/background/gallery. */}
         <GlobalDropZone onMediaUploaded={(createdSet) => createdSet && setTab("queue")} />
@@ -563,7 +573,29 @@ async function toggleDesktopMaximize() {
  * via `hidden`, which also drops them from layout, paint, focus order, and the
  * a11y tree. See the `<main>` comment + PRD Phase 4.
  */
-function TabPanel({ active, children }: { active: boolean; children: ReactNode }) {
+function TabPanel({
+  active,
+  children,
+  keepLayout = false,
+}: {
+  active: boolean;
+  children: ReactNode;
+  keepLayout?: boolean;
+}) {
+  if (keepLayout) {
+    return (
+      <div
+        aria-hidden={!active}
+        inert={active ? undefined : true}
+        className={cn(
+          "absolute inset-0 h-full",
+          !active && "pointer-events-none invisible select-none",
+        )}
+      >
+        {children}
+      </div>
+    );
+  }
   return <div className={cn("h-full", !active && "hidden")}>{children}</div>;
 }
 
@@ -584,7 +616,18 @@ function PlaybackEffects() {
   return null;
 }
 
-function AmbientPageOverlay({ active, children }: { active: boolean; children: ReactNode }) {
+function DynamicAppearanceEffects({ settings }: { settings: ReturnType<typeof useSettings> }) {
+  useAppearanceCssVars(settings);
+  return null;
+}
+
+const AmbientPageOverlay = memo(function AmbientPageOverlay({
+  active,
+  children,
+}: {
+  active: boolean;
+  children: ReactNode;
+}) {
   return (
     // Desktop window drag: the whole page is a drag surface, so any empty space —
     // side gutters AND gaps inside the content (unfilled grid cells, padding) —
@@ -610,4 +653,4 @@ function AmbientPageOverlay({ active, children }: { active: boolean; children: R
       {children}
     </div>
   );
-}
+});

@@ -1,4 +1,5 @@
 import { ListMusic, Shuffle } from "lucide-react";
+import { memo } from "react";
 import { useTranslation } from "react-i18next";
 import { ControlTooltip } from "@/components/player/control-tooltip";
 import { FavoriteControlButton } from "@/components/player/favorite-control-button";
@@ -14,7 +15,7 @@ import { usePlayerStore } from "@/stores/player-store";
  * transport/progress ticks don't repaint the whole dock. Mounted in row 1 to
  * the left of play/pause.
  */
-export function DockControls({
+export const DockControls = memo(function DockControls({
   className,
   onOpenQueue,
 }: {
@@ -62,4 +63,4 @@ export function DockControls({
       </div>
     </TooltipProvider>
   );
-}
+});

@@ -13,6 +13,11 @@ const electronmonBin = fileURLToPath(
 let viteProcess = null;
 let electronProcess = null;
 let shuttingDown = false;
+// Agent shells often export ELECTRON_RUN_AS_NODE=1 for Node-side tooling. If Electron
+// inherits it, the main process boots as plain Node and `require("electron").app` is
+// undefined. Keep this launcher resilient like scripts/electron-profile.mjs.
+const baseEnv = { ...process.env };
+baseEnv.ELECTRON_RUN_AS_NODE = undefined;
 
 function argValue(name) {
   const index = process.argv.indexOf(name);
@@ -22,7 +27,7 @@ function argValue(name) {
 
 function spawnInherit(args, env = {}) {
   return spawn(process.execPath, args, {
-    env: { ...process.env, ...env },
+    env: { ...baseEnv, ...env },
     shell: false,
     stdio: "inherit",
     windowsHide: false,

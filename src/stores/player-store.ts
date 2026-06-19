@@ -1,5 +1,6 @@
 import { liveQuery, type Subscription } from "dexie";
 import { create } from "zustand";
+import { resolveCoverThumbnailDerivative } from "@/db/cover-derivatives";
 import { db } from "@/db/muzero-db";
 import {
   cacheReferencedTrackBlob,
@@ -51,9 +52,14 @@ import { yieldForImportBackpressure } from "@/lib/import-backpressure";
 import { copyBlobWithProgress, type ImportProgress } from "@/lib/import-progress";
 import { uploadImportModeForFile } from "@/lib/import-routing";
 import { repairTrackSourcePathFromFolder } from "@/lib/local-file-repair";
+import { resolveLocalMediaStorageUrl } from "@/lib/local-media-storage-url";
 import { createDiagnosticLogger, log } from "@/lib/logger";
-import { fallbackUploadMediaMetadata, parseUploadedMediaMetadata } from "@/lib/media-metadata";
-import { isUnsupportedMediaError, probeMediaFile } from "@/lib/media-probe";
+import {
+  fallbackUploadMediaMetadata,
+  type ParsedUploadMetadata,
+  parseUploadedMediaMetadata,
+} from "@/lib/media-metadata";
+import { isUnsupportedMediaError, type ProbedMedia, probeMediaFile } from "@/lib/media-probe";
 import {
   canSetPlatformMediaSessionMetadata,
   setPlatformMediaSessionActionHandlers,
@@ -146,6 +152,9 @@ const IMPORT_VISIBILITY_FLUSH_SIZE = 25;
 const IMPORT_PROGRESS_CLEAR_MS = 1800;
 const LOCAL_BLOB_PLAYBACK_SETTLE_MS = 180;
 const MEDIA_SESSION_METADATA_SETTLE_MS = 650;
+const ACTIVE_SESSION_SETTINGS_PERSIST_DELAY_MS = 1200;
+const ACTIVE_SESSION_SETTINGS_IDLE_TIMEOUT_MS = 5000;
+const VIDEO_METADATA_PARSE_MAX_BYTES = 8 * 1024 * 1024;
 const MEDIA_SOURCE_RELOAD_BISECT_MODE:
   | "off"
   | "skip"
@@ -388,6 +397,10 @@ let queueCursorPersistTimer: number | null = null;
 let queueCursorPersistSeq = 0;
 let lastPersistedQueueIndex = -1;
 let importProgressClearTimer: ReturnType<typeof setTimeout> | null = null;
+let activeSessionSettingsTimer: ReturnType<typeof setTimeout> | null = null;
+let activeSessionSettingsIdleHandle: number | null = null;
+let pendingActiveSessionSettingsId: string | null = null;
+let pendingActiveSessionSettingsScheduledAt = 0;
 // Timestamp of the last playIndex switch dispatch (perf only). Read by the now-playing
 // stage's layout effect to measure switch→React-commit, decomposing switch.toFrame
 // (switch→paint) into render+reconcile vs layout+paint (switch-fps Phase 4).
@@ -399,6 +412,11 @@ export function getLastSwitchStartedAt(): number {
 const playbackLog = createDiagnosticLogger("player.playback");
 const mediaSessionLog = createDiagnosticLogger("player.mediaSession");
 const QUEUE_CURSOR_PERSIST_DEBOUNCE_MS = 900;
+
+type IdleScheduler = typeof globalThis & {
+  cancelIdleCallback?: (id: number) => void;
+  requestIdleCallback?: (callback: () => void, options?: { timeout?: number }) => number;
+};
 
 type PlaybackTraceContext = Pick<
   DiagnosticContext,
@@ -570,6 +588,56 @@ function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function cancelActiveSessionSettingsPersistence(clearPending = false): void {
+  if (activeSessionSettingsTimer) {
+    clearTimeout(activeSessionSettingsTimer);
+    activeSessionSettingsTimer = null;
+  }
+  if (activeSessionSettingsIdleHandle !== null) {
+    const scheduler = globalThis as IdleScheduler;
+    scheduler.cancelIdleCallback?.(activeSessionSettingsIdleHandle);
+    activeSessionSettingsIdleHandle = null;
+  }
+  if (clearPending) pendingActiveSessionSettingsId = null;
+}
+
+function persistPendingActiveSessionSetting(): void {
+  activeSessionSettingsIdleHandle = null;
+  const sessionId = pendingActiveSessionSettingsId;
+  pendingActiveSessionSettingsId = null;
+  if (!sessionId) return;
+  const startedAt = performance.now();
+  const queuedForMs = Math.max(0, Date.now() - pendingActiveSessionSettingsScheduledAt);
+  void saveSettings({ lastSessionId: sessionId })
+    .then(() => {
+      notePerfWork("session.activate.saveSettings.idle", performance.now() - startedAt, {
+        queuedForMs,
+        sessionId,
+      });
+    })
+    .catch((err: unknown) =>
+      log.warn("player", "failed to persist active session setting", { sessionId, err }),
+    );
+}
+
+function scheduleActiveSessionSettingsPersistence(sessionId: string): void {
+  pendingActiveSessionSettingsId = sessionId;
+  pendingActiveSessionSettingsScheduledAt = Date.now();
+  cancelActiveSessionSettingsPersistence(false);
+  activeSessionSettingsTimer = setTimeout(() => {
+    activeSessionSettingsTimer = null;
+    const scheduler = globalThis as IdleScheduler;
+    if (typeof scheduler.requestIdleCallback === "function") {
+      activeSessionSettingsIdleHandle = scheduler.requestIdleCallback(
+        persistPendingActiveSessionSetting,
+        { timeout: ACTIVE_SESSION_SETTINGS_IDLE_TIMEOUT_MS },
+      );
+      return;
+    }
+    persistPendingActiveSessionSetting();
+  }, ACTIVE_SESSION_SETTINGS_PERSIST_DELAY_MS);
+}
+
 function ensurePlaybackTrace(track: Track, wantPlay: boolean): PlaybackTraceContext | undefined {
   if (!wantPlay) return undefined;
   if (activePlaybackTrace?.trackId === track.id) return activePlaybackTrace;
@@ -584,7 +652,7 @@ function tracePlaybackLoad(
     DiagnosticContext,
     "bytes" | "mime" | "sourceId" | "requestHost" | "requestPathHash" | "redactions"
   > & {
-    transport: "blob" | "local-file" | "remote" | "direct" | "media-proxy";
+    transport: "blob" | "local-file" | "local-storage" | "remote" | "direct" | "media-proxy";
     safeQuery?: Record<string, string>;
     hasPot?: boolean;
     hasSig?: boolean;
@@ -962,12 +1030,21 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   },
 
   async setActiveSession(sessionId) {
+    const totalStartedAt = performance.now();
     log.debug("player", "setActiveSession start", { sessionId });
     get().init();
+    const rebuildStartedAt = performance.now();
     await get().rebuildEngine();
+    notePerfWork("session.activate.rebuildEngine", performance.now() - rebuildStartedAt, {
+      sessionId,
+    });
     watchSetForAppend(null, [], true);
 
+    const sessionStartedAt = performance.now();
     const session = await getSession(sessionId);
+    notePerfWork("session.activate.getSession", performance.now() - sessionStartedAt, {
+      sessionId,
+    });
     const trackIds = session?.trackIds ?? [];
     loadedTrackId = null;
     cancelPlaybackLoading(set);
@@ -975,10 +1052,21 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     // Load this 歌单 into the 播放列表 (replace) and mark how many of its tracks the
     // queue has consumed (high-water). Also seed `queue` synchronously so callers
     // that read it right after (e.g. playTrack) don't race the liveQuery.
+    const playQueueSetStartedAt = performance.now();
     await playQueueSet(trackIds, { contextSetId: sessionId, currentIndex: -1 });
+    notePerfWork("session.activate.playQueueSet", performance.now() - playQueueSetStartedAt, {
+      sessionId,
+      tracks: trackIds.length,
+    });
     consumedTrackIds = new Set(trackIds);
+    const fetchTracksStartedAt = performance.now();
     const initialQueue = await getTracksByIds(trackIds);
+    notePerfWork("session.activate.fetchTracks", performance.now() - fetchTracksStartedAt, {
+      sessionId,
+      tracks: trackIds.length,
+    });
     lastQueueSig = queueSig(initialQueue); // keep the guard in sync with the optimistic seed
+    const setStartedAt = performance.now();
     set({
       activeSessionId: sessionId,
       queueSource: { kind: "set", setId: sessionId },
@@ -991,13 +1079,21 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       displayMode: session?.displayMode ?? "video",
       djEnabled: session?.config.autoExtend ?? false,
     });
+    notePerfWork("session.activate.stateSet", performance.now() - setStartedAt, {
+      sessionId,
+      tracks: initialQueue.length,
+    });
     log.debug("player", "setActiveSession seeded queue", {
       sessionId,
       queueLength: initialQueue.length,
       currentIndex: -1,
     });
-    await saveSettings({ lastSessionId: sessionId });
     watchSetForAppend(sessionId, trackIds, true);
+    notePerfWork("session.activate.total", performance.now() - totalStartedAt, {
+      sessionId,
+      tracks: trackIds.length,
+    });
+    scheduleActiveSessionSettingsPersistence(sessionId);
 
     // Seed an empty DJ set with a first batch.
     if (session?.config.autoExtend && trackIds.length === 0) void get().draftNow();
@@ -1435,9 +1531,14 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       importProgressClearTimer = null;
     }
     let completed = 0;
+    const progressStartSetStartedAt = performance.now();
     set({
       isUploading: true,
       importProgress: { phase: "importing", total: list.length, completed },
+    });
+    notePerfWork("upload.progress.set", performance.now() - progressStartSetStartedAt, {
+      files: list.length,
+      phase: "start",
     });
     try {
       const ids: string[] = [];
@@ -1445,8 +1546,14 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       let lastPublishedTrackId: string | undefined;
       const unsupported: string[] = [];
       for (const file of list) {
+        const resolveSourceStartedAt = performance.now();
         const sourcePath = await resolveDroppedFilePath(file);
+        notePerfWork("upload.resolveSourcePath", performance.now() - resolveSourceStartedAt, {
+          bytes: file.size,
+          hasSourcePath: Boolean(sourcePath),
+        });
         const mode = uploadImportModeForFile(file, sourcePath);
+        const progressCurrentSetStartedAt = performance.now();
         set({
           importProgress: {
             phase: "importing",
@@ -1459,6 +1566,12 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
               bytesTotal: mode === "copy" ? file.size : undefined,
             },
           },
+        });
+        notePerfWork("upload.progress.set", performance.now() - progressCurrentSetStartedAt, {
+          completed,
+          files: list.length,
+          mode,
+          phase: "current",
         });
         const r =
           mode === "reference" && sourcePath
@@ -1491,14 +1604,23 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
             lastPublishedTrackId = await flushImportedTrackIds(setId, ids, lastPublishedTrackId);
           }
         } else if (r.unsupportedName) unsupported.push(r.unsupportedName);
-        set({
-          importProgress: {
-            phase: "importing",
-            total: list.length,
+        if (!(list.length === 1 && mode === "reference")) {
+          const progressCompleteSetStartedAt = performance.now();
+          set({
+            importProgress: {
+              phase: "importing",
+              total: list.length,
+              completed,
+              current: completedCurrent,
+            },
+          });
+          notePerfWork("upload.progress.set", performance.now() - progressCompleteSetStartedAt, {
             completed,
-            current: completedCurrent,
-          },
-        });
+            files: list.length,
+            mode,
+            phase: "file-complete",
+          });
+        }
       }
       lastPublishedTrackId = await flushImportedTrackIds(setId, ids, lastPublishedTrackId);
       if (unsupported.length > 0) {
@@ -1512,9 +1634,15 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       set({ djError: msg });
       log.error("player", "upload failed", msg);
     } finally {
+      const progressDoneSetStartedAt = performance.now();
       set({
         isUploading: false,
         importProgress: { phase: "done", total: list.length, completed },
+      });
+      notePerfWork("upload.progress.set", performance.now() - progressDoneSetStartedAt, {
+        completed,
+        files: list.length,
+        phase: "done",
       });
       importProgressClearTimer = setTimeout(() => {
         importProgressClearTimer = null;
@@ -1644,6 +1772,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       watchSetForAppend(null, [], true);
       await playQueueSetContext(undefined);
       set({ activeSessionId: null, djEnabled: false, queueSource: undefined });
+      cancelActiveSessionSettingsPersistence(true);
       await saveSettings({ lastSessionId: undefined });
     }
     return purgedTrackIds.length;
@@ -1682,7 +1811,12 @@ async function flushImportedTrackIds(
 ): Promise<string | undefined> {
   if (ids.length === 0) return afterTrackId;
   const batch = [...ids];
+  const startedAt = performance.now();
   await insertTrackIdsAfter(setId, batch, afterTrackId);
+  notePerfWork("upload.publishTrackIds", performance.now() - startedAt, {
+    count: batch.length,
+    setId,
+  });
   ids.length = 0;
   return batch.at(-1) ?? afterTrackId;
 }
@@ -1700,27 +1834,25 @@ async function resolveDroppedFilePath(file: File): Promise<string | undefined> {
   }
 }
 
-async function ingestReferencedUploadFile(
-  setId: string,
+async function parseUploadMetadataForImport(
   file: File,
-  sourcePath: string,
-): Promise<IngestResult> {
-  const probed = await probeMediaFile(file).catch((err: unknown) => {
-    if (!isUnsupportedMediaError(err)) throw err;
-    log.warn("player", "skipped unsupported referenced media", {
-      fileName: err.fileName,
-      mime: err.mime,
-      kind: err.kind,
-      mediaErrorCode: err.mediaErrorCode,
-    });
-    return null;
-  });
-  if (!probed) return { unsupportedName: file.name };
-
-  const parsed = await parseUploadedMediaMetadata(file).catch((err: unknown) => {
+  probed: ProbedMedia,
+  mode: "copy" | "reference",
+): Promise<ParsedUploadMetadata> {
+  if (probed.kind === "video" && file.size > VIDEO_METADATA_PARSE_MAX_BYTES) {
+    return {
+      albumPicUrl: undefined,
+      embeddedCover: undefined,
+      mediaMetadata: fallbackUploadMediaMetadata(file, probed.title),
+      title: undefined,
+    };
+  }
+  return parseUploadedMediaMetadata(file).catch((err: unknown) => {
     log.warn(
       "player",
-      "referenced media metadata parse failed; falling back to filename metadata",
+      mode === "reference"
+        ? "referenced media metadata parse failed; falling back to filename metadata"
+        : "media metadata parse failed; falling back to filename metadata",
       {
         error: err instanceof Error ? err.name : typeof err,
         mime: file.type || probed.mime,
@@ -1734,7 +1866,43 @@ async function ingestReferencedUploadFile(
       title: undefined,
     };
   });
+}
 
+async function ingestReferencedUploadFile(
+  setId: string,
+  file: File,
+  sourcePath: string,
+): Promise<IngestResult> {
+  const probeStartedAt = performance.now();
+  const probed = await probeMediaFile(file).catch((err: unknown) => {
+    if (!isUnsupportedMediaError(err)) throw err;
+    log.warn("player", "skipped unsupported referenced media", {
+      fileName: err.fileName,
+      mime: err.mime,
+      kind: err.kind,
+      mediaErrorCode: err.mediaErrorCode,
+    });
+    return null;
+  });
+  notePerfWork("upload.probe", performance.now() - probeStartedAt, {
+    bytes: file.size,
+    kind: probed?.kind,
+    mode: "reference",
+    probeSource: probed?.probeSource,
+  });
+  if (!probed) return { unsupportedName: file.name };
+
+  const metadataStartedAt = performance.now();
+  const parsed = await parseUploadMetadataForImport(file, probed, "reference");
+  notePerfWork("upload.metadata.parse", performance.now() - metadataStartedAt, {
+    bytes: file.size,
+    kind: probed.kind,
+    mode: "reference",
+    skipped: probed.kind === "video",
+    ok: Boolean(parsed.title || parsed.embeddedCover || parsed.albumPicUrl),
+  });
+
+  const persistStartedAt = performance.now();
   const track = await createReferencedUploadedTrack({
     sessionId: setId,
     title: parsed.title ?? probed.title,
@@ -1743,6 +1911,11 @@ async function ingestReferencedUploadFile(
     durationSec: probed.durationSec,
     mediaMetadata: parsed.mediaMetadata,
     sourcePath,
+  });
+  notePerfWork("upload.persist", performance.now() - persistStartedAt, {
+    bytes: file.size,
+    kind: probed.kind,
+    mode: "reference",
   });
   if (parsed.embeddedCover) {
     void setTrackCover({
@@ -1779,6 +1952,7 @@ async function ingestMediaFile(
   // its cover from the carried CDN URL if no image was embedded.
   if (isNcmFile(file.name)) return ingestNcmFile(setId, file, sourcePath, options);
 
+  const probeStartedAt = performance.now();
   const probed = await probeMediaFile(file).catch((err: unknown) => {
     if (!isUnsupportedMediaError(err)) throw err;
     log.warn("player", "skipped unsupported media", {
@@ -1789,33 +1963,42 @@ async function ingestMediaFile(
     });
     return null;
   });
+  notePerfWork("upload.probe", performance.now() - probeStartedAt, {
+    bytes: file.size,
+    kind: probed?.kind,
+    mode: "copy",
+    probeSource: probed?.probeSource,
+  });
   if (!probed) return { unsupportedName: file.name };
 
-  const parsed = await parseUploadedMediaMetadata(file).catch((err: unknown) => {
-    log.warn("player", "media metadata parse failed; falling back to filename metadata", {
-      error: err instanceof Error ? err.name : typeof err,
-      mime: file.type || probed.mime,
-      size: file.size,
-    });
-    return {
-      embeddedCover: undefined,
-      mediaMetadata: fallbackUploadMediaMetadata(file, probed.title),
-      title: undefined,
-      albumPicUrl: undefined,
-    };
+  const metadataStartedAt = performance.now();
+  const parsed = await parseUploadMetadataForImport(file, probed, "copy");
+  notePerfWork("upload.metadata.parse", performance.now() - metadataStartedAt, {
+    bytes: file.size,
+    kind: probed.kind,
+    mode: "copy",
+    skipped: probed.kind === "video",
+    ok: Boolean(parsed.title || parsed.embeddedCover || parsed.albumPicUrl),
   });
 
-  const copied = await copyBlobWithProgress(file, { onProgress: options.onCopyProgress });
+  const persistStartedAt = performance.now();
   const track = await createUploadedTrack({
     sessionId: setId,
     title: parsed.title ?? probed.title,
     kind: probed.kind,
-    blob: copied,
+    blob: file,
     mime: probed.mime,
     durationSec: probed.durationSec,
     mediaMetadata: parsed.mediaMetadata,
     embeddedCover: parsed.embeddedCover,
+    onMediaProgress: options.onCopyProgress,
     sourcePath,
+  });
+  options.onCopyProgress?.({ bytesLoaded: file.size, bytesTotal: file.size });
+  notePerfWork("upload.persist", performance.now() - persistStartedAt, {
+    bytes: file.size,
+    kind: probed.kind,
+    mode: "copy",
   });
   // Plaintext NetEase export with a "163 key" comment but no embedded art → fetch.
   if (!parsed.embeddedCover && parsed.albumPicUrl) {
@@ -1854,13 +2037,26 @@ async function extractAndStoreVideoPosterCover(
   durationSec: number,
 ): Promise<void> {
   try {
+    const extractStartedAt = performance.now();
     const poster = await extractUsefulVideoPosterFrameViaWorker(file, { durationSec });
+    notePerfWork("video.poster.extract", performance.now() - extractStartedAt, {
+      bytes: file.size,
+      source: poster?.source,
+      trackId,
+    });
     if (!poster) return;
+    const commitStartedAt = performance.now();
     await setTrackCover({
       trackId,
       blob: poster.blob,
+      coverMetadata: poster.coverMetadata,
       mime: poster.mime,
       crop: centeredSquareCrop(poster.width, poster.height),
+    });
+    notePerfWork("video.poster.coverCommit", performance.now() - commitStartedAt, {
+      bytes: poster.blob.size,
+      source: poster.source,
+      trackId,
     });
     log.debug("player", "stored auto video poster cover", {
       atTimeSeconds: poster.atTimeSeconds,
@@ -2996,34 +3192,63 @@ async function ensureLoadedAndPlay(
         await delay(LOCAL_BLOB_PLAYBACK_SETTLE_MS);
         if (!continueCurrent("blob-settled")) return;
       }
-      const media = await getTrackBlob(track);
-      if (!continueCurrent("blob-resolved")) return;
-      if (!media) {
-        log.warn("player", "missing media blob", { trackId: track.id, blobId: track.blobId });
-        return;
-      }
-      log.debug("player", "loading media blob", {
-        trackId: track.id,
-        kind: track.kind,
-        mime: media.mime,
-        bytes: media.bytes,
-      });
-      tracePlaybackLoad("media.load.blob", track, playbackTrace, {
-        bytes: media.bytes,
-        mime: media.mime,
-        transport: "blob",
-      });
-      if (!media.blob) {
-        notify.error(i18n.t("player.playbackError"));
-        log.warn("player", "local media blob missing inline bytes", {
+      const mediaRow = track.blobId ? await db.mediaBlobs.get(track.blobId) : undefined;
+      if (!continueCurrent("blob-row")) return;
+      const localStorageUrl = await resolveLocalMediaStorageUrl(mediaRow, playbackTrace).catch(
+        (error: unknown) => {
+          log.warn("player", "local media storage url failed; falling back to blob", {
+            trackId: track.id,
+            blobId: track.blobId,
+            errorType: error instanceof Error ? error.name : typeof error,
+          });
+          return null;
+        },
+      );
+      if (!continueCurrent("blob-storage-url")) return;
+      if (localStorageUrl && mediaRow) {
+        log.debug("player", "loading media storage url", {
           trackId: track.id,
-          blobId: track.blobId,
+          kind: track.kind,
+          mime: mediaRow.mime,
+          bytes: mediaRow.bytes,
         });
-        set({ isPlaying: false, wantPlay: false });
-        return;
+        tracePlaybackLoad("media.load.blob", track, playbackTrace, {
+          bytes: mediaRow.bytes,
+          mime: mediaRow.mime,
+          transport: "local-storage",
+        });
+        await mediaEngine.loadUrl(localStorageUrl, track.kind, { crossOrigin: "anonymous" });
+        if (!continueCurrent("blob-storage-loaded")) return;
+      } else {
+        const media = await getTrackBlob(track);
+        if (!continueCurrent("blob-resolved")) return;
+        if (!media) {
+          log.warn("player", "missing media blob", { trackId: track.id, blobId: track.blobId });
+          return;
+        }
+        log.debug("player", "loading media blob", {
+          trackId: track.id,
+          kind: track.kind,
+          mime: media.mime,
+          bytes: media.bytes,
+        });
+        tracePlaybackLoad("media.load.blob", track, playbackTrace, {
+          bytes: media.bytes,
+          mime: media.mime,
+          transport: "blob",
+        });
+        if (!media.blob) {
+          notify.error(i18n.t("player.playbackError"));
+          log.warn("player", "local media blob missing inline bytes", {
+            trackId: track.id,
+            blobId: track.blobId,
+          });
+          set({ isPlaying: false, wantPlay: false });
+          return;
+        }
+        await mediaEngine.loadBlob(media.blob, track.kind);
+        if (!continueCurrent("blob-loaded")) return;
       }
-      await mediaEngine.loadBlob(media.blob, track.kind);
-      if (!continueCurrent("blob-loaded")) return;
     } else if (sourceKind === "local-file") {
       const bridge = resolveDesktopBridge();
       if (!track.sourcePath || !bridge.localMediaUrl) {
@@ -3341,30 +3566,35 @@ async function updateMediaSessionMetadata(
       return;
     }
     const coverStartedAt = performance.now();
-    const cover = await getTrackCover(track);
+    const thumbnail = await resolveCoverThumbnailDerivative(track, db);
+    const cover = thumbnail ?? (await getTrackCover(track));
+    const coverBlob = cover?.blob;
+    const coverMime = coverBlob?.type || (cover && "mime" in cover ? cover.mime : undefined);
     notePerfWork("player.mediaSession.artwork.fetch", performance.now() - coverStartedAt, {
       ...baseTrace,
-      hasBlob: Boolean(cover?.blob),
-      bytes: cover?.blob?.size ?? 0,
-      mime: cover?.mime,
+      hasBlob: Boolean(coverBlob),
+      source: thumbnail ? "thumbnail-derivative" : "original-cover",
+      bytes: coverBlob?.size ?? 0,
+      mime: coverMime,
     });
     if (!isCurrent()) {
-      finish("skip", { reason: "stale-after-cover", hasCoverBlob: Boolean(cover?.blob) });
+      finish("skip", { reason: "stale-after-cover", hasCoverBlob: Boolean(coverBlob) });
       return;
     }
-    if (cover?.blob) {
+    if (coverBlob) {
       const objectUrlStartedAt = performance.now();
-      nextArtworkObjectUrl = URL.createObjectURL(cover.blob);
+      nextArtworkObjectUrl = URL.createObjectURL(coverBlob);
       notePerfWork(
         "player.mediaSession.artwork.objectUrl",
         performance.now() - objectUrlStartedAt,
         {
           ...baseTrace,
-          bytes: cover.blob.size,
-          mime: cover.mime,
+          bytes: coverBlob.size,
+          mime: coverMime,
+          source: thumbnail ? "thumbnail-derivative" : "original-cover",
         },
       );
-      artwork = { src: nextArtworkObjectUrl, mime: cover.mime };
+      artwork = { src: nextArtworkObjectUrl, mime: coverMime };
     }
   }
 

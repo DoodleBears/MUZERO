@@ -1,6 +1,6 @@
 import { useLiveQuery } from "dexie-react-hooks";
 import { ImagePlus, Images, Tag, X } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { CurrentTrackAddToSetButton } from "@/components/library/track-add-to-set";
 import { CoverCropDialog } from "@/components/track/cover-crop-dialog";
@@ -28,39 +28,94 @@ import { IMAGE_ACCEPT } from "@/lib/file-drop";
 import { formatDuration } from "@/lib/utils";
 import { usePlayerStore } from "@/stores/player-store";
 
+const NOW_PLAYING_MEMORY_LOAD_DELAY_MS = 180;
+
 /**
  * Per-track annotations: tags, memory notes, and an optional cover
  * photo. "Music carries memories" — these are searchable and steer the DJ.
  * `track` is reactive (Dexie useLiveQuery upstream), so tag edits reflect live.
  */
-export function AnnotationEditor({ track }: { track: Track }) {
+export const AnnotationEditor = memo(function AnnotationEditor({ track }: { track: Track }) {
   const { t } = useTranslation();
   // Pin-to-time + seek only make sense while THIS track is the one playing.
   // Scalar boolean selector → re-renders only when current-track-ness flips.
   const isCurrentTrack = usePlayerStore(
     (s) => (s.currentIndex >= 0 ? s.queue[s.currentIndex]?.id : undefined) === track.id,
   );
-  const [tagInput, setTagInput] = useState("");
-  const [tagInputOpen, setTagInputOpen] = useState(false);
-  const [visibleTags, setVisibleTags] = useState(track.tags);
-  const [cropFile, setCropFile] = useState<File | null>(null);
+  const [draft, setDraft] = useState(() => ({
+    cropFile: null as File | null,
+    tagInput: "",
+    tagInputOpen: false,
+    tagsRef: track.tags,
+    trackId: track.id,
+    visibleTags: track.tags,
+  }));
   const fileRef = useRef<HTMLInputElement | null>(null);
   const tagInputRef = useRef<HTMLInputElement | null>(null);
-
-  useEffect(() => {
-    setVisibleTags(track.tags);
-  }, [track.tags]);
+  const memoryCreatedAtFormatter = useMemo(
+    () =>
+      new Intl.DateTimeFormat(undefined, {
+        dateStyle: "medium",
+        timeStyle: "short",
+      }),
+    [],
+  );
+  const formatMemoryCreatedAt = useCallback(
+    (createdAt: number) => memoryCreatedAtFormatter.format(createdAt),
+    [memoryCreatedAtFormatter],
+  );
+  const memoryLabels = useMemo(
+    () => ({
+      composer: {
+        addPhoto: t("annotation.addMemoryPhoto"),
+        cancel: t("annotation.cancelMemoryEdit"),
+        changePhoto: t("annotation.changeMemoryPhoto"),
+        notePlaceholder: t("annotation.notePlaceholder"),
+        photoInput: t("annotation.memoryPhotoInput"),
+        removePhoto: (name: string) => t("annotation.removeMemoryPhoto", { name }),
+        save: t("annotation.saveMemory"),
+        pinToTime: t("annotation.pinMemoryToTime"),
+        clearTime: t("annotation.clearMemoryTime"),
+        pinnedAt: (time: string) => t("annotation.memoryPinnedAt", { time }),
+      },
+      createMemory: t("annotation.createMemory"),
+      waterfall: {
+        deleteMemory: () => t("annotation.deleteMemory"),
+        editMemory: () => t("annotation.editMemory"),
+        empty: t("annotation.memoryEmpty"),
+        photoAlt: () => t("annotation.memoryPhotoAlt"),
+        setCoverFromMemory: () => t("annotation.setMemoryPhotoAsCover"),
+        seekToTimestamp: (memory: { atSec?: number | null }) =>
+          t("annotation.seekToMemoryTime", { time: formatDuration(memory.atSec ?? 0) }),
+      },
+    }),
+    [t],
+  );
 
   // Reset per-track draft UI on track change. The Now Playing page used to force
   // a full `key={track.id}` remount of this whole subtree (incl. the memory
   // waterfall) on every switch — an expensive reconcile + re-layout. Resetting in
-  // place keeps the same "fresh per track" UX without that churn (PRD Phase 30).
-  // biome-ignore lint/correctness/useExhaustiveDependencies: track.id is the reset trigger, not read in the body
-  useEffect(() => {
-    setTagInput("");
-    setTagInputOpen(false);
-    setCropFile(null);
-  }, [track.id]);
+  // place keeps the same "fresh per track" UX without that churn. Do it during
+  // render instead of in effects so a switch doesn't pay a second reset commit.
+  const trackChanged = draft.trackId !== track.id;
+  const tagsChanged = draft.tagsRef !== track.tags;
+  const currentDraft =
+    trackChanged || tagsChanged
+      ? {
+          cropFile: trackChanged ? null : draft.cropFile,
+          tagInput: trackChanged ? "" : draft.tagInput,
+          tagInputOpen: trackChanged ? false : draft.tagInputOpen,
+          tagsRef: track.tags,
+          trackId: track.id,
+          visibleTags: track.tags,
+        }
+      : draft;
+  if (currentDraft !== draft) setDraft(currentDraft);
+  const { cropFile, tagInput, tagInputOpen, visibleTags } = currentDraft;
+
+  function updateDraft(patch: Partial<typeof currentDraft>) {
+    setDraft((current) => (current.trackId === track.id ? { ...current, ...patch } : current));
+  }
 
   useEffect(() => {
     if (tagInputOpen) tagInputRef.current?.focus();
@@ -70,21 +125,20 @@ export function AnnotationEditor({ track }: { track: Track }) {
     const tag = value.trim().toLowerCase();
     if (!tag) return;
     const next = Array.from(new Set([...visibleTags, tag]));
-    setVisibleTags(next);
+    updateDraft({ tagInput: "", visibleTags: next });
     void setTrackTags(track.id, next);
-    setTagInput("");
   }
 
   function removeTag(tag: string) {
     const next = visibleTags.filter((t) => t !== tag);
-    setVisibleTags(next);
+    updateDraft({ visibleTags: next });
     void setTrackTags(track.id, next);
   }
 
   function onCoverPicked(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     e.target.value = "";
-    if (file) setCropFile(file); // open the square cropper before saving
+    if (file) updateDraft({ cropFile: file }); // open the square cropper before saving
   }
 
   function saveCover(crop: CropRect) {
@@ -95,7 +149,7 @@ export function AnnotationEditor({ track }: { track: Track }) {
       mime: cropFile.type || "image/jpeg",
       crop,
     });
-    setCropFile(null);
+    updateDraft({ cropFile: null });
   }
 
   return (
@@ -106,7 +160,7 @@ export function AnnotationEditor({ track }: { track: Track }) {
             type="button"
             size="icon-sm"
             variant={tagInputOpen ? "secondary" : "outline"}
-            onClick={() => setTagInputOpen(true)}
+            onClick={() => updateDraft({ tagInputOpen: true })}
             aria-label={t("annotation.addTag")}
           >
             <Tag className="size-3.5" />
@@ -132,20 +186,19 @@ export function AnnotationEditor({ track }: { track: Track }) {
             <input
               ref={tagInputRef}
               value={tagInput}
-              onChange={(e) => setTagInput(e.target.value)}
+              onChange={(e) => updateDraft({ tagInput: e.target.value })}
               onKeyDown={(e) => {
                 if (e.key === "Enter" || e.key === ",") {
                   e.preventDefault();
                   addTag();
                 }
                 if (e.key === "Escape") {
-                  setTagInput("");
-                  setTagInputOpen(false);
+                  updateDraft({ tagInput: "", tagInputOpen: false });
                 }
               }}
               onBlur={() => {
                 addTag();
-                if (!tagInput.trim()) setTagInputOpen(false);
+                if (!tagInput.trim()) updateDraft({ tagInputOpen: false });
               }}
               placeholder={t("annotation.addTag")}
               className="h-8 min-w-28 rounded-full border border-border bg-card/55 px-3 text-xs outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring"
@@ -181,12 +234,7 @@ export function AnnotationEditor({ track }: { track: Track }) {
         </div>
 
         <TrackMemoryNotesPanel
-          formatCreatedAt={(createdAt) =>
-            new Intl.DateTimeFormat(undefined, {
-              dateStyle: "medium",
-              timeStyle: "short",
-            }).format(createdAt)
-          }
+          formatCreatedAt={formatMemoryCreatedAt}
           getCurrentPositionSec={
             isCurrentTrack ? () => usePlayerStore.getState().positionSec : undefined
           }
@@ -197,45 +245,31 @@ export function AnnotationEditor({ track }: { track: Track }) {
                 }
               : undefined
           }
-          labels={{
-            composer: {
-              addPhoto: t("annotation.addMemoryPhoto"),
-              cancel: t("annotation.cancelMemoryEdit"),
-              changePhoto: t("annotation.changeMemoryPhoto"),
-              notePlaceholder: t("annotation.notePlaceholder"),
-              photoInput: t("annotation.memoryPhotoInput"),
-              removePhoto: (name) => t("annotation.removeMemoryPhoto", { name }),
-              save: t("annotation.saveMemory"),
-              pinToTime: t("annotation.pinMemoryToTime"),
-              clearTime: t("annotation.clearMemoryTime"),
-              pinnedAt: (time) => t("annotation.memoryPinnedAt", { time }),
-            },
-            createMemory: t("annotation.createMemory"),
-            waterfall: {
-              deleteMemory: () => t("annotation.deleteMemory"),
-              editMemory: () => t("annotation.editMemory"),
-              empty: t("annotation.memoryEmpty"),
-              photoAlt: () => t("annotation.memoryPhotoAlt"),
-              setCoverFromMemory: () => t("annotation.setMemoryPhotoAsCover"),
-              seekToTimestamp: (memory) =>
-                t("annotation.seekToMemoryTime", { time: formatDuration(memory.atSec ?? 0) }),
-            },
-          }}
+          labels={memoryLabels}
+          loadDelayMs={NOW_PLAYING_MEMORY_LOAD_DELAY_MS}
           trackId={track.id}
         />
       </div>
       {cropFile && (
-        <CoverCropDialog file={cropFile} onConfirm={saveCover} onCancel={() => setCropFile(null)} />
+        <CoverCropDialog
+          file={cropFile}
+          onConfirm={saveCover}
+          onCancel={() => updateDraft({ cropFile: null })}
+        />
       )}
     </>
   );
-}
+});
 
 function TrackBackgroundManager({ trackId }: { trackId: string }) {
   const { t } = useTranslation();
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [open, setOpen] = useState(false);
-  const backgrounds = useLiveQuery(() => listTrackBackgrounds(trackId), [trackId], []);
+  const backgrounds = useLiveQuery(
+    () => (open ? listTrackBackgrounds(trackId) : Promise.resolve([])),
+    [open, trackId],
+    [],
+  );
   const blobs = useMemo(
     () => backgrounds.map((bg) => bg.blob).filter((blob): blob is Blob => Boolean(blob)),
     [backgrounds],

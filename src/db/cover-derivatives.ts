@@ -1,7 +1,7 @@
 import {
   deleteMediaBlob,
   type MediaBlobStorageOptions,
-  putMediaBlob,
+  putSizeAwareImageBlob,
   resolveMediaBlob,
 } from "@/db/media-blob-storage";
 import { db as defaultDb, type MuzeroDB } from "@/db/muzero-db";
@@ -34,6 +34,10 @@ export interface ResolvedCoverPaletteDerivative {
   palette: NonNullable<CoverDerivative["palette"]>;
 }
 
+export type PrecomputedCoverImageDerivativeResult = Partial<
+  Record<"backlight" | "thumbnail", ResolvedCoverDerivative>
+>;
+
 export interface EnsureCoverDerivativeOptions {
   extract?: (
     input: Parameters<typeof extractCoverMetadataViaWorker>[0],
@@ -42,6 +46,7 @@ export interface EnsureCoverDerivativeOptions {
   skip?: ReadonlySet<string>;
   storage?: MediaBlobStorageOptions;
   thumbnailBudgetBytes?: number;
+  traceSource?: string;
 }
 
 export interface CoverDerivativeRepairProgress {
@@ -130,12 +135,30 @@ export async function ensureCoverThumbnailDerivative(
   return ensureCoverImageDerivative(track, "thumbnail", db, options);
 }
 
+export async function resolveCoverThumbnailDerivative(
+  track: Pick<Track, "coverBlobId" | "coverCrop" | "remoteCoverUrl">,
+  db: MuzeroDB = defaultDb,
+  storage?: MediaBlobStorageOptions,
+): Promise<ResolvedCoverDerivative | undefined> {
+  const id = coverImageDerivativeKey(track, "thumbnail");
+  return id ? resolveCoverDerivative(id, db, storage) : undefined;
+}
+
 export async function ensureCoverBacklightDerivative(
   track: Pick<Track, "id" | "coverBlobId" | "coverCrop" | "remoteCoverUrl">,
   db: MuzeroDB = defaultDb,
   options: EnsureCoverDerivativeOptions = {},
 ): Promise<ResolvedCoverDerivative | undefined> {
   return ensureCoverImageDerivative(track, "backlight", db, options);
+}
+
+export async function resolveCoverBacklightDerivative(
+  track: Pick<Track, "coverBlobId" | "coverCrop" | "remoteCoverUrl">,
+  db: MuzeroDB = defaultDb,
+  storage?: MediaBlobStorageOptions,
+): Promise<ResolvedCoverDerivative | undefined> {
+  const id = coverImageDerivativeKey(track, "backlight");
+  return id ? resolveCoverDerivative(id, db, storage) : undefined;
 }
 
 export async function resolveCoverPaletteDerivative(
@@ -202,6 +225,41 @@ export async function putCoverPaletteDerivative(
   };
   await db.coverDerivatives.put(derivative);
   return { derivative, palette: cleanPalette };
+}
+
+export async function putPrecomputedCoverImageDerivatives(
+  track: Pick<Track, "coverBlobId" | "coverCrop" | "remoteCoverUrl">,
+  metadata: Pick<CoverMetadataResult, "backlight" | "thumbnail">,
+  db: MuzeroDB = defaultDb,
+  options: Pick<EnsureCoverDerivativeOptions, "storage" | "thumbnailBudgetBytes"> = {},
+): Promise<PrecomputedCoverImageDerivativeResult> {
+  const source = coverDerivativeSourceForTrack(track);
+  if (source?.sourceKind !== "local-cover") return {};
+  const cropSig = coverCropSignature(track.coverCrop);
+  const result: PrecomputedCoverImageDerivativeResult = {};
+  for (const kind of ["backlight", "thumbnail"] as const) {
+    const image = metadata[kind];
+    if (!image) continue;
+    const id = coverDerivativeId({ cropSig, kind, sourceKey: source.sourceKey });
+    const cached = await resolveCoverDerivative(id, db, options.storage);
+    if (cached) {
+      result[kind] = cached;
+      continue;
+    }
+    const persisted = await putImageDerivativeResult(
+      {
+        cropSig,
+        id,
+        image,
+        kind,
+        source,
+      },
+      db,
+      options,
+    );
+    if (persisted) result[kind] = persisted;
+  }
+  return result;
 }
 
 export async function countMissingCoverDerivatives(
@@ -364,17 +422,44 @@ async function createImageDerivative(
     notePerfWork("cover.derivative.extract", performance.now() - extractStart, {
       bytes: cover.blob.size,
       kind: input.kind,
+      sourceKind: input.source.sourceKind,
+      traceSource: options.traceSource,
+      trackId: input.track.id,
     });
   }
   const image = input.kind === "backlight" ? result.backlight : result.thumbnail;
   if (!image) return undefined;
-  const derivativeBlob = new Blob([image.bytes], { type: image.mime });
-  const media = await putMediaBlob(
+  return putImageDerivativeResult(
+    {
+      cropSig: input.cropSig,
+      id: input.id,
+      image,
+      kind: input.kind,
+      source: input.source,
+    },
+    db,
+    options,
+  );
+}
+
+async function putImageDerivativeResult(
+  input: {
+    cropSig: string;
+    id: string;
+    image: NonNullable<CoverMetadataResult["backlight"]>;
+    kind: "backlight" | "thumbnail";
+    source: CoverDerivativeSource;
+  },
+  db: MuzeroDB,
+  options: Pick<EnsureCoverDerivativeOptions, "storage" | "thumbnailBudgetBytes">,
+): Promise<ResolvedCoverDerivative | undefined> {
+  const derivativeBlob = new Blob([input.image.bytes], { type: input.image.mime });
+  const media = await putSizeAwareImageBlob(
     {
       id: newId("blb"),
       trackId: input.source.sourceKey,
       role: "cover-derivative",
-      mime: image.mime,
+      mime: input.image.mime,
       bytes: derivativeBlob.size,
       blob: derivativeBlob,
       suggestedName: input.kind === "backlight" ? "Cover backlight" : "Cover thumbnail",
@@ -389,15 +474,15 @@ async function createImageDerivative(
     bytes: media.bytes,
     cropSig: input.cropSig,
     generatedAt: now,
-    height: image.height,
+    height: input.image.height,
     kind: input.kind,
-    mime: image.mime,
+    mime: input.image.mime,
     sourceKey: input.source.sourceKey,
     sourceKind: input.source.sourceKind,
     sourceRef: input.source.sourceRef,
     updatedAt: now,
     version: COVER_DERIVATIVE_VERSION,
-    width: image.width,
+    width: input.image.width,
   };
   await db.coverDerivatives.put(derivative);
   if (input.kind === "thumbnail") {

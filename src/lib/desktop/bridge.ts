@@ -53,6 +53,13 @@ export interface WriteMediaStorageFileInput extends MediaStorageFileInput {
   expectedBytes?: number;
 }
 
+export interface WriteMediaStorageBlobInput extends MediaStorageFileInput {
+  blob: Blob;
+  chunkSizeBytes?: number;
+  expectedBytes?: number;
+  onProgress?: (progress: { bytesLoaded: number; bytesTotal: number }) => void;
+}
+
 export interface LocalMediaUrlInput {
   path: string;
   mime?: string;
@@ -63,6 +70,7 @@ export interface LocalMediaStorageUrlInput {
   /** A `MediaBlob.storageKey` for an app-managed persistent-media file. */
   storageKey: string;
   mime?: string;
+  trace?: string | MediaProxyTrace;
 }
 
 export interface MediaStorageFileStat {
@@ -193,6 +201,8 @@ export interface DesktopBridge {
   saveFile?: (input: SaveFileInput) => Promise<boolean>;
   /** Write an app-managed persistent media file. Electron only for now. */
   writeMediaStorageFile?: (input: WriteMediaStorageFileInput) => Promise<void>;
+  /** Chunked write for large app-managed media files. Electron only for now. */
+  writeMediaStorageBlob?: (input: WriteMediaStorageBlobInput) => Promise<void>;
   /** Read an app-managed persistent media file. Electron only for now. */
   readMediaStorageFile?: (input: MediaStorageFileInput) => Promise<Uint8Array<ArrayBuffer>>;
   /** Delete an app-managed persistent media file. Electron only for now. */

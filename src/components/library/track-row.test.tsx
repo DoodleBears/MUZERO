@@ -19,6 +19,7 @@ vi.mock("react-i18next", () => ({
 const { coverHook } = vi.hoisted(() => ({ coverHook: vi.fn(() => null) }));
 vi.mock("@/hooks/use-media", () => ({
   useCoverDerivativeUrl: coverHook,
+  useCoverDerivativeUrlWithCropSetting: coverHook,
   useTrackCoverUrl: () => null,
 }));
 
@@ -98,6 +99,15 @@ function session(id: string, name: string): DjSession {
   };
 }
 
+const rowLabels = {
+  cloudSourceUnknown: "track.cloudSourceUnknown",
+  delete: "track.delete",
+  downloadFailed: "track.downloadFailed",
+  generationFailed: "track.generationFailed",
+  like: "track.like",
+  play: "player.play",
+};
+
 function renderRow({
   isCurrent = false,
   isSelected,
@@ -112,6 +122,7 @@ function renderRow({
   const props = {
     isCurrent,
     isSelected,
+    labels: rowLabels,
     onAddToNewSession: vi.fn(),
     onAddToSession: vi.fn(),
     onDelete: vi.fn(),
@@ -312,6 +323,7 @@ describe("TrackRow", () => {
     coverHook.mockClear();
     const base = {
       isCurrent: false,
+      labels: rowLabels,
       onAddToNewSession: vi.fn(),
       onAddToSession: vi.fn(),
       onDelete: vi.fn(),

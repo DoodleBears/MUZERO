@@ -6,7 +6,7 @@ import {
 } from "@/lib/cover-palette";
 import { newId } from "@/lib/id";
 import { log } from "@/lib/logger";
-import { noteDbRequery } from "@/lib/perf-counters";
+import { noteDbRequery, notePerfWork } from "@/lib/perf-counters";
 import type { LyricsRecord } from "@/lyrics/provider";
 import {
   appendEntries,
@@ -29,9 +29,11 @@ import {
   type SystemShortcutBinding,
 } from "@/shortcuts/system-global";
 import { extractCoverMetadataViaWorker } from "@/workers/cover-client";
+import type { CoverMetadataResult } from "@/workers/cover-derivative-core";
 import {
   deleteCoverDerivativesForSource,
   putCoverPaletteDerivative,
+  putPrecomputedCoverImageDerivatives,
   resolveCoverPaletteDerivative,
 } from "./cover-derivatives";
 import {
@@ -64,6 +66,22 @@ import {
   type TrackMediaMetadata,
   type TrackPlaybackStats,
 } from "./types";
+
+const COVER_DERIVATIVE_IDLE_TIMEOUT_MS = 1500;
+
+type IdleScheduler = typeof globalThis & {
+  cancelIdleCallback?: (id: number) => void;
+  requestIdleCallback?: (callback: () => void, options?: { timeout?: number }) => number;
+};
+
+interface BackgroundCoverDerivativeJob {
+  cancel?: () => void;
+  promise?: Promise<void>;
+  run: () => Promise<void>;
+  started: boolean;
+}
+
+const backgroundCoverDerivativeJobs = new Set<BackgroundCoverDerivativeJob>();
 
 async function deriveCoverMetadata(
   blob: Blob,
@@ -111,6 +129,93 @@ async function deriveCoverPalette(
       targets: ["palette"],
     })
   ).palette;
+}
+
+function scheduleBackgroundCoverDerivativeJob(job: BackgroundCoverDerivativeJob): void {
+  backgroundCoverDerivativeJobs.add(job);
+  const scheduler = globalThis as IdleScheduler;
+  const start = () => {
+    if (job.started) return;
+    job.started = true;
+    job.cancel = undefined;
+    job.promise = job.run().finally(() => backgroundCoverDerivativeJobs.delete(job));
+  };
+
+  if (scheduler.requestIdleCallback) {
+    const id = scheduler.requestIdleCallback(start, { timeout: COVER_DERIVATIVE_IDLE_TIMEOUT_MS });
+    job.cancel = () => scheduler.cancelIdleCallback?.(id);
+    return;
+  }
+
+  const timer = globalThis.setTimeout(start, 0);
+  job.cancel = () => globalThis.clearTimeout(timer);
+}
+
+function schedulePrecomputedCoverDerivativePersistence(input: {
+  coverId: string;
+  coverMetadata: CoverMetadataResult;
+  crop?: CropRect;
+  db: MuzeroDB;
+  storage: MediaBlobStorageOptions;
+  trackId: string;
+}): void {
+  if (!input.coverMetadata.backlight && !input.coverMetadata.thumbnail) return;
+  scheduleBackgroundCoverDerivativeJob({
+    started: false,
+    run: async () => {
+      const derivativeStartedAt = performance.now();
+      const current = await input.db.tracks.get(input.trackId);
+      if (current?.coverBlobId !== input.coverId) {
+        notePerfWork(
+          "cover.commit.precomputedDerivatives.skipped",
+          performance.now() - derivativeStartedAt,
+          {
+            coverId: input.coverId,
+            reason: "stale-cover",
+            trackId: input.trackId,
+          },
+        );
+        return;
+      }
+      try {
+        const persisted = await putPrecomputedCoverImageDerivatives(
+          { coverBlobId: input.coverId, coverCrop: input.crop },
+          input.coverMetadata,
+          input.db,
+          { storage: input.storage },
+        );
+        notePerfWork(
+          "cover.commit.precomputedDerivatives.background",
+          performance.now() - derivativeStartedAt,
+          {
+            backlight: Boolean(persisted.backlight),
+            thumbnail: Boolean(persisted.thumbnail),
+            trackId: input.trackId,
+          },
+        );
+      } catch (error) {
+        log.warn("cover", "precomputed cover derivative persistence failed", {
+          error: error instanceof Error ? error.name : typeof error,
+          trackId: input.trackId,
+        });
+      }
+    },
+  });
+}
+
+export async function __flushBackgroundCoverDerivativePersistenceForTests(): Promise<void> {
+  const jobs = [...backgroundCoverDerivativeJobs];
+  await Promise.all(
+    jobs.map((job) => {
+      job.cancel?.();
+      if (!job.started) {
+        job.started = true;
+        job.cancel = undefined;
+        job.promise = job.run().finally(() => backgroundCoverDerivativeJobs.delete(job));
+      }
+      return job.promise;
+    }),
+  );
 }
 
 /**
@@ -372,7 +477,12 @@ export async function createSession(
     createdAt: now,
     updatedAt: now,
   };
+  const startedAt = performance.now();
   await db.sessions.put(session);
+  notePerfWork("session.create.put", performance.now() - startedAt, {
+    autoExtend: session.config.autoExtend,
+    tracks: session.trackIds.length,
+  });
   return session;
 }
 
@@ -880,6 +990,7 @@ export async function createUploadedTrack(
       blob: Blob;
       mime: string;
     };
+    onMediaProgress?: (progress: { bytesLoaded: number; bytesTotal: number }) => void;
     /** Absolute on-disk path (local-folder import) — dedup key for re-sync. */
     sourcePath?: string;
   },
@@ -912,6 +1023,7 @@ export async function createUploadedTrack(
       mime: input.mime,
       bytes: input.blob.size,
       blob: input.blob,
+      onProgress: input.onMediaProgress,
       suggestedName: input.mediaMetadata?.originalFileName ?? input.title,
     },
     db,
@@ -1028,7 +1140,11 @@ export async function createReferencedUploadedTrack(
     },
     sourcePath: input.sourcePath,
   };
+  const startedAt = performance.now();
   await db.tracks.put(track);
+  notePerfWork("upload.referencedTrack.put", performance.now() - startedAt, {
+    kind: track.kind,
+  });
   return track;
 }
 
@@ -1123,15 +1239,59 @@ export async function getTracksByIds(ids: string[], db: MuzeroDB = defaultDb): P
   return out;
 }
 
-export function listAllTracks(db: MuzeroDB = defaultDb): Promise<Track[]> {
+export async function listAllTracks(db: MuzeroDB = defaultDb): Promise<Track[]> {
   noteDbRequery("listAllTracks");
-  return db.tracks.toArray();
+  const startedAt = performance.now();
+  const rows = await db.tracks.toArray();
+  notePerfWork("db.listAllTracks", performance.now() - startedAt, { rows: rows.length });
+  return rows;
+}
+
+/**
+ * Full-library snapshot for command-palette search. Default global search does
+ * not inspect generated lyrics, so keep large `brief.lyrics` strings out of the
+ * retained overlay state; explicit lyrics search reads full tracks separately.
+ */
+export async function listGlobalSearchTracks(db: MuzeroDB = defaultDb): Promise<Track[]> {
+  noteDbRequery("globalSearchTracks");
+  const startedAt = performance.now();
+  const rows = await db.tracks.toArray();
+  let strippedLyrics = 0;
+  let searchRows: Track[] | undefined;
+  for (let index = 0; index < rows.length; index += 1) {
+    const track = rows[index];
+    if (!track) continue;
+    if (!track.brief?.lyrics) {
+      searchRows?.push(track);
+      continue;
+    }
+    searchRows ??= rows.slice(0, index);
+    strippedLyrics += 1;
+    searchRows.push({
+      ...track,
+      brief: {
+        ...track.brief,
+        lyrics: "",
+      },
+    });
+  }
+  const out = searchRows ?? rows;
+  notePerfWork("db.globalSearchTracks", performance.now() - startedAt, {
+    rows: out.length,
+    strippedLyrics,
+  });
+  return out;
 }
 
 /** Full playback-stats table (entity listening time projections) — see PRD F-4. */
-export function listTrackPlaybackStats(db: MuzeroDB = defaultDb): Promise<TrackPlaybackStats[]> {
+export async function listTrackPlaybackStats(
+  db: MuzeroDB = defaultDb,
+): Promise<TrackPlaybackStats[]> {
   noteDbRequery("trackPlaybackStats");
-  return db.trackPlaybackStats.toArray();
+  const startedAt = performance.now();
+  const rows = await db.trackPlaybackStats.toArray();
+  notePerfWork("db.trackPlaybackStats", performance.now() - startedAt, { rows: rows.length });
+  return rows;
 }
 
 export async function getTrackBlob(
@@ -1255,15 +1415,33 @@ export async function clearTrackLyrics(trackId: string, db: MuzeroDB = defaultDb
  * no crop clears any previous one.
  */
 export async function setTrackCover(
-  input: { trackId: string; blob: Blob; mime: string; crop?: CropRect },
+  input: {
+    trackId: string;
+    blob: Blob;
+    mime: string;
+    crop?: CropRect;
+    coverMetadata?: CoverMetadataResult;
+  },
   db: MuzeroDB = defaultDb,
   storage: MediaBlobStorageOptions = {},
 ): Promise<void> {
-  const coverMetadata = await deriveCoverMetadata(input.blob, input.crop, input.mime);
+  const metadataStartedAt = performance.now();
+  const coverMetadata =
+    input.coverMetadata ?? (await deriveCoverMetadata(input.blob, input.crop, input.mime));
+  notePerfWork("cover.commit.metadata", performance.now() - metadataStartedAt, {
+    bytes: input.blob.size,
+    precomputed: Boolean(input.coverMetadata),
+    trackId: input.trackId,
+  });
   const coverThumbhash = coverMetadata.thumbhash;
   const coverPalette = coverMetadata.palette;
+  const lookupStartedAt = performance.now();
   const existing = await db.tracks.get(input.trackId);
+  notePerfWork("cover.commit.lookup", performance.now() - lookupStartedAt, {
+    trackId: input.trackId,
+  });
   if (!existing) return;
+  const storeStartedAt = performance.now();
   const cover = await putSizeAwareImageBlob(
     {
       id: newId("blb"),
@@ -1277,8 +1455,13 @@ export async function setTrackCover(
     db,
     storage,
   );
+  notePerfWork("cover.commit.storeBlob", performance.now() - storeStartedAt, {
+    bytes: input.blob.size,
+    trackId: input.trackId,
+  });
   let previousCoverId: string | undefined;
   try {
+    const updateStartedAt = performance.now();
     await db.transaction("rw", db.tracks, async () => {
       const track = await db.tracks.get(input.trackId);
       if (!track) throw new Error(`Track not found: ${input.trackId}`);
@@ -1291,13 +1474,30 @@ export async function setTrackCover(
         updatedAt: Date.now(),
       });
     });
+    notePerfWork("cover.commit.trackUpdate", performance.now() - updateStartedAt, {
+      trackId: input.trackId,
+    });
+    schedulePrecomputedCoverDerivativePersistence({
+      coverId: cover.id,
+      coverMetadata,
+      crop: input.crop,
+      db,
+      storage,
+      trackId: input.trackId,
+    });
   } catch (error) {
+    await deleteCoverDerivativesForSource(`local:${cover.id}`, db, storage);
     await deleteMediaBlob(cover.id, db, storage);
     throw error;
   }
   if (previousCoverId) {
+    const cleanupStartedAt = performance.now();
     await deleteCoverDerivativesForSource(`local:${previousCoverId}`, db, storage);
     await deleteMediaBlob(previousCoverId, db, storage);
+    notePerfWork("cover.commit.cleanupPrevious", performance.now() - cleanupStartedAt, {
+      previousCoverId,
+      trackId: input.trackId,
+    });
   }
 }
 
@@ -1886,7 +2086,24 @@ export async function memoryNotesByTrack(
   db: MuzeroDB = defaultDb,
 ): Promise<Map<string, string[]>> {
   noteDbRequery("memoryNotesByTrack");
-  const rows = await db.memories.where("trackId").anyOf(trackIds).toArray();
+  const startedAt = performance.now();
+  const ids = [...new Set(trackIds)];
+  if (ids.length === 0) return new Map();
+  // Dexie `anyOf([...thousands of ids])` is expensive for whole-library joins
+  // (global search / gallery search): building and walking the huge key query can
+  // dominate the main thread even when the memories table is small. For large
+  // batches, scan the memories table once and filter in JS; for small batches keep
+  // the indexed lookup.
+  const idSet = ids.length > 500 ? new Set(ids) : null;
+  const rows =
+    idSet !== null
+      ? (await db.memories.toArray()).filter((memory) => idSet.has(memory.trackId))
+      : await db.memories.where("trackId").anyOf(ids).toArray();
+  notePerfWork("db.memoryNotesByTrack", performance.now() - startedAt, {
+    ids: ids.length,
+    rows: rows.length,
+    strategy: idSet !== null ? "scan" : "anyOf",
+  });
   const map = new Map<string, string[]>();
   for (const m of rows.sort((a, b) => a.createdAt - b.createdAt)) {
     const list = map.get(m.trackId);
@@ -1932,16 +2149,24 @@ async function resolveMediaBlobRows(
 }
 
 /** A track's bound slideshow backgrounds, oldest first. */
+export async function listTrackBackgroundRows(
+  trackId: string,
+  db: MuzeroDB = defaultDb,
+): Promise<MediaBlob[]> {
+  return db.mediaBlobs
+    .where("trackId")
+    .equals(trackId)
+    .filter((b) => b.role === "background")
+    .toArray();
+}
+
+/** A track's bound slideshow backgrounds, oldest first. */
 export async function listTrackBackgrounds(
   trackId: string,
   db: MuzeroDB = defaultDb,
   storage: MediaBlobStorageOptions = {},
 ): Promise<MediaBlob[]> {
-  const rows = await db.mediaBlobs
-    .where("trackId")
-    .equals(trackId)
-    .filter((b) => b.role === "background")
-    .toArray();
+  const rows = await listTrackBackgroundRows(trackId, db);
   return resolveMediaBlobRows(rows, db, storage);
 }
 
@@ -1967,11 +2192,16 @@ export async function addGalleryImage(
 }
 
 /** All global gallery images. */
+export async function listGalleryImageRows(db: MuzeroDB = defaultDb): Promise<MediaBlob[]> {
+  return db.mediaBlobs.where("trackId").equals(GLOBAL_GALLERY_ID).toArray();
+}
+
+/** All global gallery images. */
 export async function listGalleryImages(
   db: MuzeroDB = defaultDb,
   storage: MediaBlobStorageOptions = {},
 ): Promise<MediaBlob[]> {
-  const rows = await db.mediaBlobs.where("trackId").equals(GLOBAL_GALLERY_ID).toArray();
+  const rows = await listGalleryImageRows(db);
   return resolveMediaBlobRows(rows, db, storage);
 }
 

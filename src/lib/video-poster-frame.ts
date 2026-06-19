@@ -7,6 +7,7 @@ import {
   type VideoFrameCandidate,
   type VideoFrameScore,
 } from "@/lib/video-frame-score";
+import type { CoverMetadataResult } from "@/workers/cover-derivative-core";
 
 const DEFAULT_TIMEOUT_MS = 15_000;
 const DEFAULT_MAX_WIDTH = 960;
@@ -21,6 +22,7 @@ export type ExtractedVideoPosterFrame = {
   width: number;
   height: number;
   atTimeSeconds: number;
+  coverMetadata?: CoverMetadataResult;
   source: "mediabunny" | "native-video";
   score: VideoFrameScore;
 };

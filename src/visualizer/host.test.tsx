@@ -1,6 +1,6 @@
 import { render } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import { shouldAnimate, VisualizerHost } from "./host";
+import { shouldAnimate, shouldPaintStaticFrame, VisualizerHost } from "./host";
 
 describe("shouldAnimate", () => {
   it("runs when visible and on-screen", () => {
@@ -14,6 +14,14 @@ describe("shouldAnimate", () => {
   });
   it("pauses when the canvas is off-screen", () => {
     expect(shouldAnimate({ active: true, hidden: false, onscreen: false })).toBe(false);
+  });
+});
+
+describe("shouldPaintStaticFrame", () => {
+  it("paints a parked frame only when the canvas is visible", () => {
+    expect(shouldPaintStaticFrame({ hidden: false, onscreen: true })).toBe(true);
+    expect(shouldPaintStaticFrame({ hidden: true, onscreen: true })).toBe(false);
+    expect(shouldPaintStaticFrame({ hidden: false, onscreen: false })).toBe(false);
   });
 });
 

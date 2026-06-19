@@ -1,5 +1,7 @@
+import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { DjChatEntry } from "@/components/chat/dj-chat-entry";
+import { RenderTraceBoundary } from "@/components/dev/render-trace-boundary";
 import type { Tab } from "@/components/nav/dock-nav";
 import { NavFab } from "@/components/nav/nav-fab";
 import { DockControls } from "@/components/player/dock-controls";
@@ -32,6 +34,14 @@ export function PlayerDock({
   const { t } = useTranslation();
   const queueOpen = useUiStore((s) => s.queueOpen);
   const setQueueOpen = useUiStore((s) => s.setQueueOpen);
+  const controls = useMemo(
+    () => (
+      <RenderTraceBoundary id="dock:controls">
+        <DockControls className="flex" onOpenQueue={() => setQueueOpen(true)} />
+      </RenderTraceBoundary>
+    ),
+    [setQueueOpen],
+  );
 
   return (
     <>
@@ -53,7 +63,9 @@ export function PlayerDock({
               onUploadLibrary={() => onTabChange("search")}
             />
             <div className={cn("shrink-0", !hidden && "pointer-events-auto")}>
-              <NavFab value={tab} onChange={onTabChange} />
+              <RenderTraceBoundary id="dock:nav-fab">
+                <NavFab value={tab} onChange={onTabChange} />
+              </RenderTraceBoundary>
             </div>
           </div>
           <div
@@ -63,15 +75,19 @@ export function PlayerDock({
             )}
           >
             <div className="flex min-w-0 items-center gap-2">
-              <TrackIdentityRow
-                className="min-w-0 flex-1"
-                onOpen={onOpenNowPlaying}
-                controls={<DockControls className="flex" onOpenQueue={() => setQueueOpen(true)} />}
-                transportHintScope={tab === "now" ? "now" : undefined}
-              />
+              <RenderTraceBoundary id="dock:identity">
+                <TrackIdentityRow
+                  className="min-w-0 flex-1"
+                  onOpen={onOpenNowPlaying}
+                  controls={controls}
+                  transportHintScope={tab === "now" ? "now" : undefined}
+                />
+              </RenderTraceBoundary>
             </div>
             <div className="px-0.5">
-              <ProgressScrubber />
+              <RenderTraceBoundary id="dock:progress">
+                <ProgressScrubber />
+              </RenderTraceBoundary>
             </div>
           </div>
         </div>
@@ -83,7 +99,9 @@ export function PlayerDock({
             <DrawerTitle>{t("nowPlaying.upNext")}</DrawerTitle>
           </DrawerHeader>
           <div className="h-[68dvh] min-h-0 pb-[env(safe-area-inset-bottom)]">
-            <QueuePanel />
+            <RenderTraceBoundary id="dock:queue-drawer">
+              <QueuePanel />
+            </RenderTraceBoundary>
           </div>
         </DrawerPopup>
       </Drawer>

@@ -9,6 +9,7 @@ import {
   matchesQuery,
   parseSearchTokens,
   searchEntityFacets,
+  searchEntityFacetsLimited,
   searchFacetCandidates,
   searchTracks,
   trackSearchScore,
@@ -294,6 +295,25 @@ describe("searchEntityFacets", () => {
       expect(pre.artists.map((a) => a.name)).toEqual(direct.artists.map((a) => a.name));
       expect(pre.albums.map((a) => a.name)).toEqual(direct.albums.map((a) => a.name));
     }
+  });
+
+  it("searchEntityFacetsLimited matches the direct results up to the requested limit", () => {
+    const moreArtists = [
+      ...artists,
+      {
+        key: "moon artist",
+        name: "Moon Artist",
+        trackIds: [],
+        albumKeys: [],
+        totalDurationSec: 0,
+      },
+    ];
+    const direct = searchEntityFacets(moreArtists, albums, "moon");
+    const limited = searchEntityFacetsLimited(moreArtists, albums, "moon", 1);
+    expect(limited.artists.map((a) => a.name)).toEqual(
+      direct.artists.slice(0, 1).map((a) => a.name),
+    );
+    expect(limited.albums.map((a) => a.name)).toEqual(direct.albums.slice(0, 1).map((a) => a.name));
   });
 });
 

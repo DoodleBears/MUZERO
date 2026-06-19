@@ -33,7 +33,6 @@ import { coverPaletteFromThumbhash, normalizeCoverPalette } from "@/lib/cover-pa
 import { matchActiveQualityPreset } from "@/lib/graphics-quality";
 import { log } from "@/lib/logger";
 import { transitionProgress, useNowPlayingTransition } from "@/lib/now-playing-transition";
-import { arePerfCountersEnabled, notePerfWork } from "@/lib/perf-counters";
 import { trackAlbum, trackArtists, trackHasCover, trackSubtitle } from "@/lib/track-display";
 import {
   manualProgress,
@@ -48,16 +47,10 @@ import { useNavStore } from "@/stores/nav-store";
 import { usePlayerStore } from "@/stores/player-store";
 import { getVisualizerCoverColorRgb } from "@/stores/visualizer-color-store";
 import { CanvasCover } from "./canvas-cover";
-import {
-  buildCoverPreloadRequests,
-  type CoverPreloadCandidate,
-  filterCoverPreloadRequestsForBurst,
-  type PreloadedCover,
-  preloadCoverBatch,
-  releasePreloadedCover,
-} from "./cover-preload";
+import type { CoverPreloadCandidate } from "./cover-preload";
 import { MediaStage } from "./media-stage";
 import { StageTitleFallback } from "./stage-title-fallback";
+import { usePreloadedCoverUrls } from "./use-preloaded-cover-urls";
 
 /**
  * Best-effort synchronous cover accent for a track, matching what the window border
@@ -90,8 +83,6 @@ const SWITCH_DURATION_SEC = 0.62;
 const COVERFLOW_BURST_SKIP_MS = 600;
 const HANDOFF_DURATION_SEC = 0.32;
 const COVER_READY_SETTLE_MS = 440;
-const COVER_PRELOAD_LOCAL_SETTLE_MS = 140;
-const COVER_PRELOAD_NON_CURRENT_LOCAL_SETTLE_MS = 420;
 const COMMIT_EASE = [0.22, 1, 0.36, 1] as const;
 const SNAP_EASE = [0.25, 1, 0.5, 1] as const;
 const EXIT_TRAVEL_FRACTION = 0.92;
@@ -163,6 +154,7 @@ export function SwipeableMediaStage({
   const [committing, setCommitting] = useState(false);
   const [handoffFading, setHandoffFading] = useState(false);
   const [stack, setStack] = useState<SwipeStack | null>(null);
+  const [userGestureStack, setUserGestureStack] = useState(false);
   const [settleTarget, setSettleTarget] = useState<VisualTrack | null>(null);
   const [readyTrackIds, setReadyTrackIds] = useState<Record<string, true>>({});
   // Track id whose cover the BASE stage is currently PAINTING (reported by MediaStage).
@@ -234,7 +226,11 @@ export function SwipeableMediaStage({
   // the neighbour covers NOW — and a drag is never a rapid burst — so bypass the
   // 420ms non-current preload defer (which otherwise leaves prev/next showing the
   // title-only fallback when you drag to peek right after a switch). QA 图2.
-  const preloadedCoverUrls = usePreloadedCoverUrls(preloadCandidates, !!dragDirection || !!stack);
+  const preloadedCoverUrls = usePreloadedCoverUrls(
+    preloadCandidates,
+    userGestureStack,
+    foregroundVisible,
+  );
   const currentVisual = makeVisualTrack(current, preloadedCoverUrls);
   const nextVisual = makeVisualTrack(nextTrack, preloadedCoverUrls);
   const prevVisual = makeVisualTrack(prevTrack, preloadedCoverUrls);
@@ -378,6 +374,7 @@ export function SwipeableMediaStage({
     setSettleTarget(null);
     setReadyTrackIds({});
     setOverlayRect(null);
+    setUserGestureStack(false);
     setStack(null);
   }, [x]);
 
@@ -407,6 +404,7 @@ export function SwipeableMediaStage({
     setHandoffFading(false);
     setSettleTarget(null);
     setReadyTrackIds({});
+    setUserGestureStack(true);
     updateOverlayRect();
     setStack({
       current: currentVisual,
@@ -426,6 +424,7 @@ export function SwipeableMediaStage({
       activeAnimation.current = null;
       setDragDirection(null);
       setOverlayRect(null);
+      setUserGestureStack(false);
       setStack(null);
     });
   }, [x]);
@@ -517,6 +516,7 @@ export function SwipeableMediaStage({
       const token = animationToken.current;
       x.set(0);
       setReadyTrackIds({});
+      setUserGestureStack(false);
       setHandoffFading(false);
       setSettleTarget(null);
       setCommitting(true);
@@ -1211,13 +1211,18 @@ function TrackVisual({
 }) {
   const hasCover = trackHasCover(visual.track);
   const coverUrl = hasCover ? visual.initialCoverUrl : null;
-  const backlightUrl = useCoverDerivativeUrl(visual.track, "backlight");
+  const shouldLoadBacklight = coverEffect.mode === "backlight" && hasBacklight;
+  const backlightUrl = useCoverDerivativeUrl(
+    shouldLoadBacklight ? visual.track : undefined,
+    "backlight",
+    { traceSource: "coverflow:backlight" },
+  );
 
   useEffect(() => {
     if (!hasCover || coverUrl) onReady?.(visual.track.id);
   }, [coverUrl, hasCover, onReady, visual.track.id]);
 
-  const showBacklight = coverEffect.mode === "backlight" && hasBacklight && !!backlightUrl;
+  const showBacklight = shouldLoadBacklight && !!backlightUrl;
 
   return coverUrl ? (
     <>
@@ -1305,104 +1310,4 @@ function measureVerticalClipBounds(el: HTMLElement | null): { bottom: number; to
     bottom = Math.min(bottom, rect.bottom);
   }
   return bottom > top ? { bottom, top } : { bottom: window.innerHeight, top: 0 };
-}
-
-function usePreloadedCoverUrls(
-  candidates: CoverPreloadCandidate[],
-  forceNonCurrentLocal = false,
-): Record<string, string> {
-  const settings = useSettings();
-  const coverCropped = settings.coverCropped ?? true;
-  const entriesRef = useRef<Record<string, PreloadedCover>>({});
-  const batchSeqRef = useRef(0);
-  const [nonCurrentLocalReadyKey, setNonCurrentLocalReadyKey] = useState<string | null>(null);
-  const [urls, setUrls] = useState<Record<string, string>>({});
-  const requests = useMemo(
-    () => buildCoverPreloadRequests(candidates, coverCropped),
-    [candidates, coverCropped],
-  );
-  const requestsKey = useMemo(
-    () => requests.map((request) => `${request.role}:${request.trackId}:${request.key}`).join("|"),
-    [requests],
-  );
-  const includeNonCurrentLocal = forceNonCurrentLocal || nonCurrentLocalReadyKey === requestsKey;
-  const activeRequestsRaw = useMemo(
-    () => filterCoverPreloadRequestsForBurst(requests, includeNonCurrentLocal),
-    [includeNonCurrentLocal, requests],
-  );
-  // The queue liveQuery hands back fresh Track objects on any edit, so
-  // `candidates`/`requests`/`activeRequests` churn IDENTITY even when the cover set
-  // is unchanged. Key by CONTENT and only hand the load effect a new array when the
-  // content actually changes, so it stops re-running the whole preload batch ~per
-  // render for the same covers (issue ①).
-  const activeRequestsKey = useMemo(
-    () => activeRequestsRaw.map((r) => `${r.role}:${r.trackId}:${r.key}`).join("|"),
-    [activeRequestsRaw],
-  );
-  // biome-ignore lint/correctness/useExhaustiveDependencies: stabilize identity by content key
-  const activeRequests = useMemo(() => activeRequestsRaw, [activeRequestsKey]);
-
-  useEffect(() => {
-    const timer = window.setTimeout(
-      () => setNonCurrentLocalReadyKey(requestsKey),
-      COVER_PRELOAD_NON_CURRENT_LOCAL_SETTLE_MS,
-    );
-    return () => window.clearTimeout(timer);
-  }, [requestsKey]);
-
-  useEffect(() => {
-    let alive = true;
-    batchSeqRef.current += 1;
-    const batchSeq = batchSeqRef.current;
-    const isCurrent = () => alive && batchSeqRef.current === batchSeq;
-
-    const load = async () => {
-      const perfEnabled = arePerfCountersEnabled();
-      const perfStartedAt = perfEnabled ? performance.now() : 0;
-      const previous = entriesRef.current;
-
-      const result = await preloadCoverBatch({
-        isCurrent,
-        localSettleMs: COVER_PRELOAD_LOCAL_SETTLE_MS,
-        nonCurrentLocalSettleMs: 0,
-        previous,
-        requests: activeRequests,
-      });
-      if (!isCurrent() || result.canceled) {
-        if (perfEnabled) {
-          notePerfWork("cover.preload.batch", performance.now() - perfStartedAt, result.stats);
-        }
-        return;
-      }
-
-      const nextEntries = result.entries;
-      entriesRef.current = nextEntries;
-      setUrls(
-        Object.fromEntries(
-          Object.entries(nextEntries).map(([trackId, entry]) => [trackId, entry.url]),
-        ),
-      );
-
-      for (const [trackId, entry] of Object.entries(previous)) {
-        if (nextEntries[trackId]?.key !== entry.key) releasePreloadedCover(entry);
-      }
-      if (perfEnabled) {
-        notePerfWork("cover.preload.batch", performance.now() - perfStartedAt, result.stats);
-      }
-    };
-
-    void load();
-    return () => {
-      alive = false;
-    };
-  }, [activeRequests]);
-
-  useEffect(() => {
-    return () => {
-      for (const entry of Object.values(entriesRef.current)) releasePreloadedCover(entry);
-      entriesRef.current = {};
-    };
-  }, []);
-
-  return urls;
 }

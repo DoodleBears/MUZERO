@@ -61,7 +61,7 @@ export async function warmTrackCover(
   const out = resolved.blob;
   if (options.signal?.aborted) return;
   const url = URL.createObjectURL(out);
-  coverUrlCache.store(key, url);
+  coverUrlCache.store(key, url, { bytes: resolved.bytes ?? out.size });
 }
 
 export async function warmTrackBacklightDerivative(
@@ -71,6 +71,7 @@ export async function warmTrackBacklightDerivative(
     db?: MuzeroDB;
     ensureBacklightDerivative?: typeof ensureCoverBacklightDerivative;
     signal?: AbortSignal;
+    traceSource?: string;
   } = {},
 ): Promise<void> {
   if (!track?.coverBlobId || options.signal?.aborted) return;
@@ -85,7 +86,7 @@ export async function warmTrackBacklightDerivative(
       remoteCoverUrl: track.remoteCoverUrl,
     },
     options.db ?? defaultDb,
-    {},
+    { traceSource: options.traceSource },
   );
 }
 
@@ -111,6 +112,7 @@ export async function warmTrackMedia(
 
 export async function warmPlaybackPreload(
   input: {
+    backlightTracks?: ReadonlyArray<CoverPreloadTrack>;
     coverTracks: ReadonlyArray<CoverPreloadTrack>;
     mediaTracks: ReadonlyArray<Track>;
   },
@@ -124,6 +126,7 @@ export async function warmPlaybackPreload(
     warmBacklight?: boolean;
   } = {},
 ): Promise<void> {
+  const backlightTracks = input.backlightTracks ?? input.coverTracks;
   await Promise.all([
     ...input.coverTracks.map((track) =>
       warmTrackCover(track, {
@@ -133,12 +136,13 @@ export async function warmPlaybackPreload(
       }),
     ),
     ...(options.warmBacklight
-      ? input.coverTracks.map((track) =>
+      ? backlightTracks.map((track) =>
           warmTrackBacklightDerivative(track, {
             coverCropped: options.coverCropped,
             db: options.db,
             ensureBacklightDerivative: options.ensureBacklightDerivative,
             signal: options.signal,
+            traceSource: "playback-warmup:backlight",
           }),
         )
       : []),

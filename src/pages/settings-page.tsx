@@ -1,4 +1,3 @@
-import { useLiveQuery } from "dexie-react-hooks";
 import {
   CheckCircle2,
   ClipboardCopy,
@@ -11,6 +10,7 @@ import {
 } from "lucide-react";
 import { type CSSProperties, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { RenderTraceBoundary } from "@/components/dev/render-trace-boundary";
 import { AboutSettings } from "@/components/settings/about-settings";
 import { AddDriveDialog } from "@/components/settings/add-drive-dialog";
 import { AlbumCoverAppearanceSettings } from "@/components/settings/album-cover-appearance-settings";
@@ -63,6 +63,7 @@ import type {
 } from "@/db/types";
 import { useSettings } from "@/hooks/use-app-data";
 import { useObjectUrl } from "@/hooks/use-media";
+import { usePausedLiveQuery } from "@/hooks/use-paused-live-query";
 import { type Locale, locales, persistLocale } from "@/i18n/config";
 import { APP_ICON_OPTIONS, type AppIconId, persistAppIcon, resolveAppIcon } from "@/lib/app-icon";
 import { hasAppIcon } from "@/lib/desktop/bridge";
@@ -198,9 +199,10 @@ const RUNNING_SYNC_PHASES = new Set<SyncPhase>([
   "downloading",
   "applying",
 ]);
+const SETTINGS_HEAVY_QUERY_RESUME_DELAY_MS = 900;
 
 /** On-device, BYOK settings. Nothing here is ever sent anywhere but the model/API you point it at. */
-export function SettingsPage() {
+export function SettingsPage({ pageActive }: { pageActive?: boolean } = {}) {
   const { t, i18n } = useTranslation();
   const settings = useSettings();
   // Two independently scrolling columns — each opts into smooth scrolling.
@@ -212,45 +214,65 @@ export function SettingsPage() {
   // playback heartbeat + song switch (playCount flush). Gate on the settings tab being
   // active so a hidden Settings page doesn't re-render per heartbeat/switch (PRD
   // reactivity-render-observability F3). They re-read when you open Settings.
-  const settingsActive = useNavStore((s) => s.tab === "settings");
-  const cloudDrives = useLiveQuery(() => listCloudDrives(), [], []);
-  const latestSyncRun = useLiveQuery(() => db.syncRuns.orderBy("startedAt").last(), [], undefined);
-  const localDevice = useLiveQuery(() => getLocalDevice(), [], undefined);
-  const deviceAvatarBlob = useLiveQuery(
+  const navSettingsActive = useNavStore((s) => s.tab === "settings");
+  const settingsActive = pageActive ?? navSettingsActive;
+  const activeItem = resolveActiveSettingsItem(useNavStore((s) => s.settingsItem));
+  const cloudDataActive = settingsActive && activeItem === "cloud";
+  const listeningStatsActive = settingsActive && activeItem === "listening-stats";
+  const cloudDrives = usePausedLiveQuery(() => listCloudDrives(), [], cloudDataActive, [], {
+    resumeDelayMs: SETTINGS_HEAVY_QUERY_RESUME_DELAY_MS,
+  });
+  const latestSyncRun = usePausedLiveQuery(
+    () => db.syncRuns.orderBy("startedAt").last(),
+    [],
+    cloudDataActive,
+    undefined,
+    { resumeDelayMs: SETTINGS_HEAVY_QUERY_RESUME_DELAY_MS },
+  );
+  const localDevice = usePausedLiveQuery(() => getLocalDevice(), [], settingsActive, undefined);
+  const deviceAvatarBlob = usePausedLiveQuery(
     async () =>
       localDevice?.avatarBlobId
         ? (await resolveMediaBlob(localDevice.avatarBlobId, db))?.blob
         : undefined,
     [localDevice?.avatarBlobId],
+    settingsActive && activeItem === "device-profile",
     undefined,
+    { resumeDelayMs: SETTINGS_HEAVY_QUERY_RESUME_DELAY_MS },
   );
   const deviceAvatarUrl = useObjectUrl(deviceAvatarBlob);
-  const playbackAggregateRows = useLiveQuery(
-    () => (settingsActive ? db.playbackAggregates.where("scope").equals("track").toArray() : []),
-    [settingsActive],
+  const playbackAggregateRows = usePausedLiveQuery(
+    () => db.playbackAggregates.where("scope").equals("track").toArray(),
     [],
+    listeningStatsActive,
+    [],
+    { resumeDelayMs: SETTINGS_HEAVY_QUERY_RESUME_DELAY_MS },
   );
-  const tracks = useLiveQuery(() => db.tracks.toArray(), [], []);
-  const sessions = useLiveQuery(() => db.sessions.toArray(), [], []);
-  const playbackEventRows = useLiveQuery(
+  const tracks = usePausedLiveQuery(() => db.tracks.toArray(), [], listeningStatsActive, [], {
+    resumeDelayMs: SETTINGS_HEAVY_QUERY_RESUME_DELAY_MS,
+  });
+  const sessions = usePausedLiveQuery(() => db.sessions.toArray(), [], listeningStatsActive, [], {
+    resumeDelayMs: SETTINGS_HEAVY_QUERY_RESUME_DELAY_MS,
+  });
+  const playbackEventRows = usePausedLiveQuery(
     () =>
-      settingsActive && localDevice
+      localDevice
         ? db.playbackEvents.where("devicePublicId").equals(localDevice.publicId).toArray()
         : [],
-    [localDevice?.publicId, settingsActive],
+    [localDevice?.publicId],
+    listeningStatsActive && Boolean(localDevice),
     [],
+    { resumeDelayMs: SETTINGS_HEAVY_QUERY_RESUME_DELAY_MS },
   );
-  const statsSyncObjects = useLiveQuery(
-    () =>
-      settingsActive
-        ? db.syncObjects.where("kind").anyOf("stats-events-segment", "stats-checkpoint").toArray()
-        : [],
-    [settingsActive],
+  const statsSyncObjects = usePausedLiveQuery(
+    () => db.syncObjects.where("kind").anyOf("stats-events-segment", "stats-checkpoint").toArray(),
     [],
+    listeningStatsActive,
+    [],
+    { resumeDelayMs: SETTINGS_HEAVY_QUERY_RESUME_DELAY_MS },
   );
   const rebuildEngine = usePlayerStore((s) => s.rebuildEngine);
   const setSettingsItem = useNavStore((s) => s.setSettingsItem);
-  const activeItem = resolveActiveSettingsItem(useNavStore((s) => s.settingsItem));
   const [draft, setDraft] = useState<AppSettings>(settings);
   const [saved, setSaved] = useState(false);
   const [health, setHealth] = useState<"unknown" | "ok" | "down" | "checking">("unknown");
@@ -455,6 +477,10 @@ export function SettingsPage() {
           hourly: `$${continuousHourlyUsd(cloudPreset.estCostPerSongUsd).toFixed(2)}`,
         });
 
+  if (!settingsActive) {
+    return <div aria-hidden="true" className="h-full w-full" />;
+  }
+
   return (
     <div className="h-full w-full overflow-hidden">
       <div className="mx-auto flex h-full w-full max-w-5xl flex-col gap-2 px-4 md:flex-row md:gap-6 lg:px-6">
@@ -463,704 +489,714 @@ export function SettingsPage() {
           ref={navScrollRef}
           className="settings-scroll-surface no-scrollbar shrink-0 overflow-y-auto pt-chrome-top md:w-52 md:pb-chrome-bottom"
         >
-          <SettingsSidebar active={activeItem} onSelect={setSettingsItem} />
+          <RenderTraceBoundary id="settings:sidebar" active={settingsActive}>
+            <SettingsSidebar active={activeItem} onSelect={setSettingsItem} />
+          </RenderTraceBoundary>
         </div>
         <div
           ref={contentScrollRef}
           className="settings-scroll-surface no-scrollbar flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-y-auto pb-chrome-bottom md:pt-chrome-top"
         >
-          {activeItem === "appearance" && (
-            <Card>
-              <CardHeader>
-                <CardTitle>{t("settings.appearance")}</CardTitle>
-              </CardHeader>
-              <CardContent className="flex flex-col gap-3">
-                <Field label={t("settings.theme")}>
-                  <Select
-                    value={settings.theme ?? DEFAULT_THEME}
-                    onValueChange={(value) => void changeTheme(value as Theme)}
-                  >
-                    <SelectTrigger>
-                      <SelectValue>
-                        {(value) =>
-                          t(
-                            themes.find((theme) => theme.value === value)?.labelKey ??
-                              "settings.theme",
-                          )
-                        }
-                      </SelectValue>
-                    </SelectTrigger>
-                    <SelectContent>
-                      {themes.map(({ value, labelKey }) => (
-                        <SelectItem key={value} value={value}>
-                          {t(labelKey)}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </Field>
-                <Field label={t("settings.language")}>
-                  <Select
-                    value={i18n.language}
-                    onValueChange={(value) => void changeLanguage(value as Locale)}
-                  >
-                    <SelectTrigger>
-                      <SelectValue>
-                        {(value) =>
-                          locales.find((locale) => locale.code === value)?.label ??
-                          t("settings.language")
-                        }
-                      </SelectValue>
-                    </SelectTrigger>
-                    <SelectContent>
-                      {locales.map(({ code, label }) => (
-                        <SelectItem key={code} value={code}>
-                          {label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </Field>
-                <div className="flex flex-col gap-2">
-                  <span className="text-xs font-medium text-muted-foreground">
-                    {t("settings.appIcon")}
-                  </span>
-                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-                    {APP_ICON_OPTIONS.map((option) => {
-                      const active = resolveAppIcon(settings.appIcon) === option.value;
-                      return (
-                        <button
-                          key={option.value}
-                          type="button"
-                          aria-pressed={active}
-                          onClick={() => void changeAppIcon(option.value)}
-                          className={`flex min-w-0 flex-col items-center gap-2 rounded-lg border p-2 text-xs transition-colors ${
-                            active
-                              ? "border-primary bg-accent/50"
-                              : "border-input hover:bg-accent/50"
-                          }`}
-                        >
-                          <img
-                            src={option.preview}
-                            alt=""
-                            className="size-16 rounded-md border border-border object-cover shadow-sm"
-                          />
-                          <span className="max-w-full truncate">{t(option.labelKey)}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                  <span className="text-xs text-muted-foreground">
-                    {t(
-                      supportsDesktopAppIcon
-                        ? "settings.appIconHint"
-                        : "settings.appIconBrowserHint",
-                    )}
-                  </span>
-                </div>
-                <AlbumCoverAppearanceSettings />
-                <ElectronWindowAppearanceSettings />
-                <div className="flex flex-col gap-2">
-                  <span className="text-xs font-medium text-muted-foreground">
-                    {t("settings.primaryColor")}
-                  </span>
-                  <div className="flex flex-wrap gap-2">
-                    {PRIMARY_PRESETS.map((preset) => {
-                      const active =
-                        primary.light === preset.colors.light &&
-                        primary.dark === preset.colors.dark;
-                      return (
-                        <button
-                          key={preset.id}
-                          type="button"
-                          aria-pressed={active}
-                          onClick={() => void changePrimary(preset.colors)}
-                          className={`flex items-center gap-2 rounded-full border py-1 pe-3 ps-1 text-xs transition-colors ${
-                            active
-                              ? "border-primary bg-accent/50"
-                              : "border-input hover:bg-accent/50"
-                          }`}
-                        >
-                          <span className="flex size-5 overflow-hidden rounded-full border border-border">
-                            <span
-                              className="h-full w-1/2"
-                              style={{ backgroundColor: preset.colors.light }}
-                            />
-                            <span
-                              className="h-full w-1/2"
-                              style={{ backgroundColor: preset.colors.dark }}
-                            />
-                          </span>
-                          {t(PRIMARY_PRESET_NAME_KEY[preset.id])}
-                        </button>
-                      );
-                    })}
-                  </div>
-                  <div className="flex flex-wrap items-end gap-3">
-                    <div className="flex flex-col gap-1.5">
-                      <span className="text-xs text-muted-foreground">
-                        {t("settings.themeLight")}
-                      </span>
-                      <ColorPicker
-                        label={t("settings.primaryColorLight")}
-                        value={primary.light}
-                        onChange={(hex) => void changePrimary({ ...primary, light: hex })}
-                      />
-                    </div>
-                    <div className="flex flex-col gap-1.5">
-                      <span className="text-xs text-muted-foreground">
-                        {t("settings.themeDark")}
-                      </span>
-                      <ColorPicker
-                        label={t("settings.primaryColorDark")}
-                        value={primary.dark}
-                        onChange={(hex) => void changePrimary({ ...primary, dark: hex })}
-                      />
-                    </div>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="ms-auto"
-                      onClick={() => void changePrimary(DEFAULT_PRIMARY)}
+          <RenderTraceBoundary id={`settings:content:${activeItem}`} active={settingsActive}>
+            {activeItem === "appearance" && (
+              <Card>
+                <CardHeader>
+                  <CardTitle>{t("settings.appearance")}</CardTitle>
+                </CardHeader>
+                <CardContent className="flex flex-col gap-3">
+                  <Field label={t("settings.theme")}>
+                    <Select
+                      value={settings.theme ?? DEFAULT_THEME}
+                      onValueChange={(value) => void changeTheme(value as Theme)}
                     >
-                      {t("settings.resetColors")}
-                    </Button>
-                  </div>
-                </div>
-                <div className="flex flex-col gap-2">
-                  <span className="text-xs font-medium text-muted-foreground">
-                    {t("settings.font")}
-                  </span>
-                  <div className="flex flex-wrap gap-2">
-                    {FONTS.map((font) => {
-                      const active = currentFont === font.stack;
-                      return (
-                        <button
-                          key={font.id}
-                          type="button"
-                          aria-pressed={active}
-                          onClick={() => void changeFont(font.stack)}
-                          style={{ fontFamily: font.stack }}
-                          className={`rounded-full border px-3 py-1 text-sm transition-colors ${
-                            active
-                              ? "border-primary bg-accent/50"
-                              : "border-input hover:bg-accent/50"
-                          }`}
-                        >
-                          {t(font.labelKey)}
-                        </button>
-                      );
-                    })}
-                  </div>
-                  <Combobox
-                    label={t("settings.fontCustom")}
-                    items={fontItems}
-                    selectedKey={selectedFontKey}
-                    inputValue={fontInput}
-                    onInputChange={setFontInput}
-                    onSelectionChange={selectFont}
-                    onOpenChange={loadFontsOnce}
-                    allowsCustomValue
-                    placeholder={t("settings.fontSearchPlaceholder")}
-                    loadingText={t("settings.fontLoading")}
-                    emptyText={t("settings.fontNoResults")}
-                    isLoading={loadingFonts}
-                    inputStyle={
-                      fontInput.trim() ? { fontFamily: customFontStack(fontInput) } : undefined
-                    }
-                  />
-                </div>
-                <div className="flex flex-col gap-3 rounded-md border border-border p-3">
-                  <label className="flex items-start gap-3">
-                    <input
-                      type="checkbox"
-                      checked={smoothScrollPref}
-                      onChange={(event) =>
-                        void saveSettings({ smoothScroll: event.currentTarget.checked })
-                      }
-                      className="mt-1 size-4 accent-primary"
-                    />
-                    <span className="flex flex-col gap-1">
-                      <span className="font-medium text-sm">{t("settings.smoothScroll")}</span>
-                      <span className="text-muted-foreground text-xs">
-                        {t("settings.smoothScrollHint")}
-                      </span>
-                    </span>
-                  </label>
-                  <div className="flex flex-col gap-1.5">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm">{t("settings.smoothScrollStrength")}</span>
-                      <button
-                        type="button"
-                        disabled={!smoothScrollPref}
-                        onClick={() =>
-                          void saveSettings({ smoothScrollLerp: smoothScrollLerpDefault })
-                        }
-                        className="text-muted-foreground text-xs hover:text-foreground disabled:opacity-40"
-                      >
-                        {t("settings.smoothScrollReset")}
-                      </button>
-                    </div>
-                    <Slider
-                      min={LERP_MIN}
-                      max={LERP_MAX}
-                      step={0.02}
-                      value={smoothScrollLerp}
-                      disabled={!smoothScrollPref}
-                      onValueChange={(value) => void saveSettings({ smoothScrollLerp: value })}
-                      aria-label={t("settings.smoothScrollStrength")}
-                    />
-                    <div className="flex justify-between text-muted-foreground text-xs">
-                      <span>{t("settings.smoothScrollFloaty")}</span>
-                      <span>{t("settings.smoothScrollSnappy")}</span>
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          {activeItem === "shortcuts" && <ShortcutsSettings />}
-
-          {activeItem === "background" && <BackgroundSettings />}
-
-          {activeItem === "visualizer" && <VisualizerSettings />}
-
-          {activeItem === "flow" && <FlowSettings />}
-
-          {activeItem === "performance" && <PerformanceSettings />}
-
-          {activeItem === "lyrics" && <LyricsSettings />}
-          {activeItem === "online-sources" && <StreamSourcesSettings />}
-          {activeItem === "storage" && <PersistentStorageSettings />}
-
-          {activeItem === "advanced" && <TraceDiagnostics />}
-
-          {activeItem === "about" && <AboutSettings />}
-
-          {activeItem === "desktop-downloads" && <VersionHistorySettings />}
-
-          {activeItem === "playback" && (
-            <Card>
-              <CardHeader>
-                <CardTitle>{t("settings.navPlayback")}</CardTitle>
-              </CardHeader>
-              <CardContent className="flex flex-col gap-3">
-                <Field label={t("player.repeatLabel")}>
-                  <Select
-                    value={settings.playerRepeatMode ?? "all"}
-                    onValueChange={(value) =>
-                      void saveSettings({
-                        playerRepeatMode: value as NonNullable<AppSettings["playerRepeatMode"]>,
-                      })
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue>
-                        {(value) =>
-                          t(
-                            value === "one"
-                              ? "settings.repeatOne"
-                              : value === "all"
-                                ? "settings.repeatAll"
-                                : "settings.repeatOff",
-                          )
-                        }
-                      </SelectValue>
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="off">{t("settings.repeatOff")}</SelectItem>
-                      <SelectItem value="one">{t("settings.repeatOne")}</SelectItem>
-                      <SelectItem value="all">{t("settings.repeatAll")}</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </Field>
-                <label className="flex items-start gap-3 rounded-md border border-border p-3">
-                  <input
-                    type="checkbox"
-                    checked={settings.playerShuffle ?? false}
-                    onChange={(event) =>
-                      void saveSettings({ playerShuffle: event.currentTarget.checked })
-                    }
-                    className="mt-1 size-4 accent-primary"
-                  />
-                  <span className="flex flex-col gap-1">
-                    <span className="font-medium text-sm">{t("player.shuffle")}</span>
-                    <span className="text-muted-foreground text-xs">
-                      {t("settings.shuffleHint")}
-                    </span>
-                  </span>
-                </label>
-              </CardContent>
-            </Card>
-          )}
-
-          {activeItem === "listening-stats" && (
-            <ListeningStatsSettings
-              tracks={tracks ?? []}
-              sessions={sessions ?? []}
-              aggregates={playbackAggregateRows ?? []}
-              events={playbackEventRows ?? []}
-              sync={playbackSyncSummary}
-            />
-          )}
-
-          {activeItem === "device-profile" && (
-            <Card>
-              <CardHeader>
-                <CardTitle>{t("settings.deviceTitle")}</CardTitle>
-              </CardHeader>
-              <CardContent className="flex flex-col gap-4">
-                <div className="min-w-0">
-                  <p className="truncate font-medium text-sm">
-                    {localDevice?.name ?? t("settings.devicePending")}
-                  </p>
-                  <p className="text-muted-foreground text-xs">
-                    {t("settings.deviceMeta", {
-                      publicId: localDevice?.publicId ?? "pending",
-                      revision: localDevice?.profileRevision ?? 0,
-                    })}
-                  </p>
-                </div>
-
-                <DeviceAvatarPicker
-                  avatarUrl={deviceAvatarUrl}
-                  fallbackStyle={deviceAvatarStyle(deviceAvatarSeed || localDevice?.publicId)}
-                  saving={deviceAvatarSaving}
-                  onSaveAvatar={saveDeviceAvatar}
-                />
-
-                <ListeningStatsLink onOpen={() => setSettingsItem("listening-stats")} />
-
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <Field label={t("settings.deviceName")}>
-                    <Input
-                      value={deviceName}
-                      onChange={(event) => {
-                        setDeviceName(event.target.value);
-                        setDeviceSaved(false);
-                      }}
-                      placeholder={t("settings.deviceNamePlaceholder")}
-                    />
+                      <SelectTrigger>
+                        <SelectValue>
+                          {(value) =>
+                            t(
+                              themes.find((theme) => theme.value === value)?.labelKey ??
+                                "settings.theme",
+                            )
+                          }
+                        </SelectValue>
+                      </SelectTrigger>
+                      <SelectContent>
+                        {themes.map(({ value, labelKey }) => (
+                          <SelectItem key={value} value={value}>
+                            {t(labelKey)}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </Field>
-                  <Field label={t("settings.deviceAvatarSeed")}>
-                    <div className="flex gap-2">
-                      <Input
-                        value={deviceAvatarSeed}
-                        onChange={(event) => {
-                          setDeviceAvatarSeed(event.target.value);
-                          setDeviceSaved(false);
-                        }}
-                      />
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="icon"
-                        aria-label={t("settings.deviceAvatarRandomize")}
-                        onClick={() => {
-                          setDeviceAvatarSeed(randomAvatarSeed());
-                          setDeviceSaved(false);
-                        }}
-                      >
-                        <RefreshCw />
-                      </Button>
-                    </div>
+                  <Field label={t("settings.language")}>
+                    <Select
+                      value={i18n.language}
+                      onValueChange={(value) => void changeLanguage(value as Locale)}
+                    >
+                      <SelectTrigger>
+                        <SelectValue>
+                          {(value) =>
+                            locales.find((locale) => locale.code === value)?.label ??
+                            t("settings.language")
+                          }
+                        </SelectValue>
+                      </SelectTrigger>
+                      <SelectContent>
+                        {locales.map(({ code, label }) => (
+                          <SelectItem key={code} value={code}>
+                            {label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </Field>
-                </div>
-
-                <label className="flex items-start gap-3 rounded-md border border-border p-3">
-                  <input
-                    type="checkbox"
-                    checked={devicePublishProfile}
-                    onChange={(event) => {
-                      setDevicePublishProfile(event.currentTarget.checked);
-                      setDeviceSaved(false);
-                    }}
-                    className="mt-1 size-4 accent-primary"
-                  />
-                  <span className="flex flex-col gap-1">
-                    <span className="font-medium text-sm">
-                      {t("settings.deviceProfilePublish")}
+                  <div className="flex flex-col gap-2">
+                    <span className="text-xs font-medium text-muted-foreground">
+                      {t("settings.appIcon")}
                     </span>
-                    <span className="text-muted-foreground text-xs">
-                      {t("settings.deviceProfilePublishHint")}
-                    </span>
-                  </span>
-                </label>
-
-                <div className="flex flex-wrap items-center gap-2">
-                  <Button
-                    type="button"
-                    size="sm"
-                    disabled={!localDevice || !deviceName.trim()}
-                    onClick={() => void saveDeviceProfile()}
-                  >
-                    <UserRound />
-                    {t("settings.deviceProfileSave")}
-                  </Button>
-                  {deviceSaved && (
-                    <span className="text-muted-foreground text-xs">
-                      {t("settings.deviceProfileSaved")}
-                    </span>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          {activeItem === "local-files" && <ImportedFoldersSettings />}
-
-          {activeItem === "ai-dj-model" && (
-            <Card>
-              <CardHeader>
-                <CardTitle>{t("settings.djTitle")}</CardTitle>
-              </CardHeader>
-              <CardContent className="flex flex-col gap-3">
-                <DjToolCapabilities />
-                {/* Multi-provider presets + dynamic customs + per-provider keys
-                    + global default model (chat PRD §6.1). Replaces the legacy
-                    two-provider form; legacy llmProvider/llmModel stay in the
-                    settings row for the preset bridge. */}
-                <LlmProviderSettings />
-              </CardContent>
-            </Card>
-          )}
-
-          {activeItem === "live-requests" && <LiveRequestSettings />}
-
-          {activeItem === "ai-music-generation" && (
-            <Card>
-              <CardHeader>
-                <CardTitle>{t("settings.musicTitle")}</CardTitle>
-              </CardHeader>
-              <CardContent className="flex flex-col gap-3">
-                {/* AI music generation is OFF by default — it hits a paid cloud
-                    API. When enabled, the DJ chat is given the generate tools and
-                    the cloud BYOK config appears. There is no offline/local
-                    generation option. */}
-                <label className="flex items-start gap-3 rounded-md border border-border p-3">
-                  <input
-                    type="checkbox"
-                    checked={Boolean(draft.aiDjGenerationEnabled)}
-                    onChange={(event) => {
-                      const next = event.currentTarget.checked;
-                      patch({
-                        aiDjGenerationEnabled: next,
-                        musicGenProvider: next ? "cloud" : "mock",
-                      });
-                    }}
-                    className="mt-1 size-4 accent-primary"
-                  />
-                  <span className="flex flex-col gap-1">
-                    <span className="font-medium text-sm">{t("settings.aiGenEnable")}</span>
-                    <span className="text-muted-foreground text-xs">{t("settings.aiGenHint")}</span>
-                  </span>
-                </label>
-                {draft.aiDjGenerationEnabled && (
-                  <>
-                    <Field label={t("settings.preset")}>
-                      <Select
-                        value={draft.musicCloudPreset ?? "mureka"}
-                        onValueChange={(value) =>
-                          patch({ musicCloudPreset: value as CloudPresetId })
-                        }
-                      >
-                        <SelectTrigger>
-                          <SelectValue>
-                            {(value) =>
-                              t(
-                                PRESET_LABEL_KEY[value as CloudPresetId] ??
-                                  PRESET_LABEL_KEY[cloudPreset.id],
-                              )
-                            }
-                          </SelectValue>
-                        </SelectTrigger>
-                        <SelectContent>
-                          {CLOUD_PRESET_IDS.map((id) => (
-                            <SelectItem key={id} value={id}>
-                              {t(PRESET_LABEL_KEY[id])}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </Field>
-                    {!cloudPreset.fixedEndpoint && (
-                      <Field label={t("settings.apiBaseUrl")}>
-                        <Input
-                          value={draft.musicCloudUrl ?? ""}
-                          onChange={(e) => patch({ musicCloudUrl: e.target.value })}
-                          placeholder="https://api.your-music-provider.com/v1"
-                        />
-                      </Field>
-                    )}
-                    <Field label={t("settings.apiKey")}>
-                      <Input
-                        type="password"
-                        value={draft.musicCloudApiKey ?? ""}
-                        onChange={(e) => patch({ musicCloudApiKey: e.target.value })}
-                        placeholder={cloudPreset.authScheme === "key" ? "fal_…" : "sk-…"}
-                      />
-                    </Field>
-                    {cloudPreset.apiKeyUrl && (
-                      <a
-                        href={cloudPreset.apiKeyUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="inline-flex w-fit items-center gap-1 text-xs text-primary hover:underline"
-                      >
-                        {t("settings.getApiKey")}
-                        <ExternalLink className="size-3" />
-                      </a>
-                    )}
-                    {cloudPreset.usesModel && (
-                      <Field label={t("settings.modelOptional")}>
-                        <Input
-                          value={draft.musicCloudModel ?? ""}
-                          onChange={(e) => patch({ musicCloudModel: e.target.value })}
-                          placeholder={cloudPreset.defaults.model ?? "provider-specific model id"}
-                        />
-                      </Field>
-                    )}
-                    {cloudPreset.usesModel && (
-                      <p className="text-xs text-muted-foreground">{t("settings.modelHint")}</p>
-                    )}
-                    <p className="text-xs text-muted-foreground">{costText}</p>
-                    {cloudPreset.docsUrl && (
-                      <a
-                        href={cloudPreset.docsUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="inline-flex w-fit items-center gap-1 text-xs text-primary hover:underline"
-                      >
-                        {t("settings.apiDocs")}
-                        <ExternalLink className="size-3" />
-                      </a>
-                    )}
-                    <div className="flex items-center gap-2">
-                      <Button variant="outline" size="sm" onClick={() => void checkCloud()}>
-                        {t("settings.testConnection")}
-                      </Button>
-                      {health === "ok" && <CheckCircle2 className="size-4 text-primary" />}
-                      {health === "down" && <XCircle className="size-4 text-destructive" />}
-                      {health === "checking" && (
-                        <span className="text-xs text-muted-foreground">
-                          {t("settings.checking")}
-                        </span>
+                    <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                      {APP_ICON_OPTIONS.map((option) => {
+                        const active = resolveAppIcon(settings.appIcon) === option.value;
+                        return (
+                          <button
+                            key={option.value}
+                            type="button"
+                            aria-pressed={active}
+                            onClick={() => void changeAppIcon(option.value)}
+                            className={`flex min-w-0 flex-col items-center gap-2 rounded-lg border p-2 text-xs transition-colors ${
+                              active
+                                ? "border-primary bg-accent/50"
+                                : "border-input hover:bg-accent/50"
+                            }`}
+                          >
+                            <img
+                              src={option.preview}
+                              alt=""
+                              className="size-16 rounded-md border border-border object-cover shadow-sm"
+                            />
+                            <span className="max-w-full truncate">{t(option.labelKey)}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <span className="text-xs text-muted-foreground">
+                      {t(
+                        supportsDesktopAppIcon
+                          ? "settings.appIconHint"
+                          : "settings.appIconBrowserHint",
                       )}
+                    </span>
+                  </div>
+                  <AlbumCoverAppearanceSettings />
+                  <ElectronWindowAppearanceSettings />
+                  <div className="flex flex-col gap-2">
+                    <span className="text-xs font-medium text-muted-foreground">
+                      {t("settings.primaryColor")}
+                    </span>
+                    <div className="flex flex-wrap gap-2">
+                      {PRIMARY_PRESETS.map((preset) => {
+                        const active =
+                          primary.light === preset.colors.light &&
+                          primary.dark === preset.colors.dark;
+                        return (
+                          <button
+                            key={preset.id}
+                            type="button"
+                            aria-pressed={active}
+                            onClick={() => void changePrimary(preset.colors)}
+                            className={`flex items-center gap-2 rounded-full border py-1 pe-3 ps-1 text-xs transition-colors ${
+                              active
+                                ? "border-primary bg-accent/50"
+                                : "border-input hover:bg-accent/50"
+                            }`}
+                          >
+                            <span className="flex size-5 overflow-hidden rounded-full border border-border">
+                              <span
+                                className="h-full w-1/2"
+                                style={{ backgroundColor: preset.colors.light }}
+                              />
+                              <span
+                                className="h-full w-1/2"
+                                style={{ backgroundColor: preset.colors.dark }}
+                              />
+                            </span>
+                            {t(PRIMARY_PRESET_NAME_KEY[preset.id])}
+                          </button>
+                        );
+                      })}
                     </div>
-                    <p className="text-xs text-muted-foreground">{t("settings.cloudNote")}</p>
-                  </>
-                )}
-              </CardContent>
-            </Card>
-          )}
-
-          {(activeItem === "cloud" || activeItem === "cloud-presence") && (
-            <Card>
-              <CardHeader>
-                <CardTitle>{t("settings.cloudDriveTitle")}</CardTitle>
-              </CardHeader>
-              <CardContent className="flex flex-col gap-4">
-                {activeItem === "cloud" && (
-                  <>
-                    <div className="rounded-md border border-border bg-muted/25 p-3">
-                      <p className="font-medium text-sm">{t("settings.cloudSetupTitle")}</p>
-                      <div className="mt-2 grid gap-2 text-muted-foreground text-xs sm:grid-cols-2">
-                        {CLOUD_SETUP_KEYS.map((key) => (
-                          <div key={key} className="flex items-center gap-2">
-                            <CheckCircle2 className="size-3.5 text-primary" />
-                            <span>{t(key)}</span>
-                          </div>
-                        ))}
+                    <div className="flex flex-wrap items-end gap-3">
+                      <div className="flex flex-col gap-1.5">
+                        <span className="text-xs text-muted-foreground">
+                          {t("settings.themeLight")}
+                        </span>
+                        <ColorPicker
+                          label={t("settings.primaryColorLight")}
+                          value={primary.light}
+                          onChange={(hex) => void changePrimary({ ...primary, light: hex })}
+                        />
                       </div>
-                    </div>
-
-                    <div className="rounded-md border border-border p-3">
-                      <div className="mb-2 flex items-center gap-2">
-                        <ShieldCheck className="size-4 text-primary" />
-                        <p className="font-medium text-sm">{t("settings.cloudOwnerTitle")}</p>
+                      <div className="flex flex-col gap-1.5">
+                        <span className="text-xs text-muted-foreground">
+                          {t("settings.themeDark")}
+                        </span>
+                        <ColorPicker
+                          label={t("settings.primaryColorDark")}
+                          value={primary.dark}
+                          onChange={(hex) => void changePrimary({ ...primary, dark: hex })}
+                        />
                       </div>
-                      <p className="mb-3 text-muted-foreground text-xs">
-                        {t("settings.cloudOwnerSimplifiedHint")}
-                      </p>
-                      <p className="mb-3 text-muted-foreground text-xs">
-                        {t("settings.cloudTrustedSetupHint")}
-                      </p>
-                      <Button size="sm" onClick={() => setAddDriveOpen(true)}>
-                        <Cloud />
-                        {t("settings.addDrive")}
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="ms-auto"
+                        onClick={() => void changePrimary(DEFAULT_PRIMARY)}
+                      >
+                        {t("settings.resetColors")}
                       </Button>
                     </div>
-
-                    {cloudDrives.length > 0 && (
-                      <div className="flex flex-col gap-2">
-                        <p className="font-medium text-sm">{t("settings.cloudConnectedDrives")}</p>
-                        {cloudDrives.map((drive) => (
-                          <CloudDriveRow
-                            key={drive.id}
-                            drive={drive}
-                            defaultDriveId={settings.defaultCloudDriveId}
-                            settings={settings}
-                          />
-                        ))}
-                      </div>
-                    )}
-
-                    {/* Publish is read-merge-write (R2 PRD §12.4): devices merge
-                    into the drive's manifest/indexes instead of mirroring over
-                    them. Same-set co-editing is still single-owner — say so. */}
-                    <p className="rounded-md border border-border bg-muted/40 p-3 text-muted-foreground text-xs">
-                      {t("settings.cloudMultiWriterHint")}
-                    </p>
-
-                    {syncProgress && <CloudSyncProgress progress={syncProgress} />}
-
-                    <AddDriveDialog
-                      open={addDriveOpen}
-                      onOpenChange={setAddDriveOpen}
-                      settings={settings}
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    <span className="text-xs font-medium text-muted-foreground">
+                      {t("settings.font")}
+                    </span>
+                    <div className="flex flex-wrap gap-2">
+                      {FONTS.map((font) => {
+                        const active = currentFont === font.stack;
+                        return (
+                          <button
+                            key={font.id}
+                            type="button"
+                            aria-pressed={active}
+                            onClick={() => void changeFont(font.stack)}
+                            style={{ fontFamily: font.stack }}
+                            className={`rounded-full border px-3 py-1 text-sm transition-colors ${
+                              active
+                                ? "border-primary bg-accent/50"
+                                : "border-input hover:bg-accent/50"
+                            }`}
+                          >
+                            {t(font.labelKey)}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <Combobox
+                      label={t("settings.fontCustom")}
+                      items={fontItems}
+                      selectedKey={selectedFontKey}
+                      inputValue={fontInput}
+                      onInputChange={setFontInput}
+                      onSelectionChange={selectFont}
+                      onOpenChange={loadFontsOnce}
+                      allowsCustomValue
+                      placeholder={t("settings.fontSearchPlaceholder")}
+                      loadingText={t("settings.fontLoading")}
+                      emptyText={t("settings.fontNoResults")}
+                      isLoading={loadingFonts}
+                      inputStyle={
+                        fontInput.trim() ? { fontFamily: customFontStack(fontInput) } : undefined
+                      }
                     />
-                  </>
-                )}
-
-                {activeItem === "cloud-presence" && (
-                  <div className="rounded-md border border-border p-3">
+                  </div>
+                  <div className="flex flex-col gap-3 rounded-md border border-border p-3">
                     <label className="flex items-start gap-3">
                       <input
                         type="checkbox"
-                        checked={draft.presenceEnabled ?? false}
+                        checked={smoothScrollPref}
                         onChange={(event) =>
-                          void changePresenceEnabled(event.currentTarget.checked)
+                          void saveSettings({ smoothScroll: event.currentTarget.checked })
                         }
                         className="mt-1 size-4 accent-primary"
                       />
                       <span className="flex flex-col gap-1">
-                        <span className="font-medium text-sm">
-                          {t("settings.cloudPresenceTitle")}
-                        </span>
+                        <span className="font-medium text-sm">{t("settings.smoothScroll")}</span>
                         <span className="text-muted-foreground text-xs">
-                          {t("settings.cloudPresenceHint")}
-                        </span>
-                        <span className="text-muted-foreground text-xs">
-                          {t("settings.cloudPresenceCost")}
+                          {t("settings.smoothScrollHint")}
                         </span>
                       </span>
                     </label>
+                    <div className="flex flex-col gap-1.5">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm">{t("settings.smoothScrollStrength")}</span>
+                        <button
+                          type="button"
+                          disabled={!smoothScrollPref}
+                          onClick={() =>
+                            void saveSettings({ smoothScrollLerp: smoothScrollLerpDefault })
+                          }
+                          className="text-muted-foreground text-xs hover:text-foreground disabled:opacity-40"
+                        >
+                          {t("settings.smoothScrollReset")}
+                        </button>
+                      </div>
+                      <Slider
+                        min={LERP_MIN}
+                        max={LERP_MAX}
+                        step={0.02}
+                        value={smoothScrollLerp}
+                        disabled={!smoothScrollPref}
+                        onValueChange={(value) => void saveSettings({ smoothScrollLerp: value })}
+                        aria-label={t("settings.smoothScrollStrength")}
+                      />
+                      <div className="flex justify-between text-muted-foreground text-xs">
+                        <span>{t("settings.smoothScrollFloaty")}</span>
+                        <span>{t("settings.smoothScrollSnappy")}</span>
+                      </div>
+                    </div>
                   </div>
-                )}
-              </CardContent>
-            </Card>
-          )}
+                </CardContent>
+              </Card>
+            )}
 
-          {(activeItem === "ai-dj-model" || activeItem === "ai-music-generation") && (
-            <div className="flex items-center gap-3">
-              <Button onClick={() => void save()}>{t("settings.save")}</Button>
-              {saved && (
-                <span className="text-sm text-muted-foreground">{t("settings.saved")}</span>
-              )}
-            </div>
-          )}
-          <p className="pb-4 text-xs text-muted-foreground">{t("settings.localNote")}</p>
+            {activeItem === "shortcuts" && <ShortcutsSettings />}
+
+            {activeItem === "background" && <BackgroundSettings />}
+
+            {activeItem === "visualizer" && <VisualizerSettings />}
+
+            {activeItem === "flow" && <FlowSettings />}
+
+            {activeItem === "performance" && <PerformanceSettings />}
+
+            {activeItem === "lyrics" && <LyricsSettings />}
+            {activeItem === "online-sources" && <StreamSourcesSettings />}
+            {activeItem === "storage" && <PersistentStorageSettings />}
+
+            {activeItem === "advanced" && (
+              <TraceDiagnostics active={settingsActive && activeItem === "advanced"} />
+            )}
+
+            {activeItem === "about" && <AboutSettings />}
+
+            {activeItem === "desktop-downloads" && <VersionHistorySettings />}
+
+            {activeItem === "playback" && (
+              <Card>
+                <CardHeader>
+                  <CardTitle>{t("settings.navPlayback")}</CardTitle>
+                </CardHeader>
+                <CardContent className="flex flex-col gap-3">
+                  <Field label={t("player.repeatLabel")}>
+                    <Select
+                      value={settings.playerRepeatMode ?? "all"}
+                      onValueChange={(value) =>
+                        void saveSettings({
+                          playerRepeatMode: value as NonNullable<AppSettings["playerRepeatMode"]>,
+                        })
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue>
+                          {(value) =>
+                            t(
+                              value === "one"
+                                ? "settings.repeatOne"
+                                : value === "all"
+                                  ? "settings.repeatAll"
+                                  : "settings.repeatOff",
+                            )
+                          }
+                        </SelectValue>
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="off">{t("settings.repeatOff")}</SelectItem>
+                        <SelectItem value="one">{t("settings.repeatOne")}</SelectItem>
+                        <SelectItem value="all">{t("settings.repeatAll")}</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </Field>
+                  <label className="flex items-start gap-3 rounded-md border border-border p-3">
+                    <input
+                      type="checkbox"
+                      checked={settings.playerShuffle ?? false}
+                      onChange={(event) =>
+                        void saveSettings({ playerShuffle: event.currentTarget.checked })
+                      }
+                      className="mt-1 size-4 accent-primary"
+                    />
+                    <span className="flex flex-col gap-1">
+                      <span className="font-medium text-sm">{t("player.shuffle")}</span>
+                      <span className="text-muted-foreground text-xs">
+                        {t("settings.shuffleHint")}
+                      </span>
+                    </span>
+                  </label>
+                </CardContent>
+              </Card>
+            )}
+
+            {activeItem === "listening-stats" && (
+              <ListeningStatsSettings
+                tracks={tracks ?? []}
+                sessions={sessions ?? []}
+                aggregates={playbackAggregateRows ?? []}
+                events={playbackEventRows ?? []}
+                sync={playbackSyncSummary}
+              />
+            )}
+
+            {activeItem === "device-profile" && (
+              <Card>
+                <CardHeader>
+                  <CardTitle>{t("settings.deviceTitle")}</CardTitle>
+                </CardHeader>
+                <CardContent className="flex flex-col gap-4">
+                  <div className="min-w-0">
+                    <p className="truncate font-medium text-sm">
+                      {localDevice?.name ?? t("settings.devicePending")}
+                    </p>
+                    <p className="text-muted-foreground text-xs">
+                      {t("settings.deviceMeta", {
+                        publicId: localDevice?.publicId ?? "pending",
+                        revision: localDevice?.profileRevision ?? 0,
+                      })}
+                    </p>
+                  </div>
+
+                  <DeviceAvatarPicker
+                    avatarUrl={deviceAvatarUrl}
+                    fallbackStyle={deviceAvatarStyle(deviceAvatarSeed || localDevice?.publicId)}
+                    saving={deviceAvatarSaving}
+                    onSaveAvatar={saveDeviceAvatar}
+                  />
+
+                  <ListeningStatsLink onOpen={() => setSettingsItem("listening-stats")} />
+
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <Field label={t("settings.deviceName")}>
+                      <Input
+                        value={deviceName}
+                        onChange={(event) => {
+                          setDeviceName(event.target.value);
+                          setDeviceSaved(false);
+                        }}
+                        placeholder={t("settings.deviceNamePlaceholder")}
+                      />
+                    </Field>
+                    <Field label={t("settings.deviceAvatarSeed")}>
+                      <div className="flex gap-2">
+                        <Input
+                          value={deviceAvatarSeed}
+                          onChange={(event) => {
+                            setDeviceAvatarSeed(event.target.value);
+                            setDeviceSaved(false);
+                          }}
+                        />
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="icon"
+                          aria-label={t("settings.deviceAvatarRandomize")}
+                          onClick={() => {
+                            setDeviceAvatarSeed(randomAvatarSeed());
+                            setDeviceSaved(false);
+                          }}
+                        >
+                          <RefreshCw />
+                        </Button>
+                      </div>
+                    </Field>
+                  </div>
+
+                  <label className="flex items-start gap-3 rounded-md border border-border p-3">
+                    <input
+                      type="checkbox"
+                      checked={devicePublishProfile}
+                      onChange={(event) => {
+                        setDevicePublishProfile(event.currentTarget.checked);
+                        setDeviceSaved(false);
+                      }}
+                      className="mt-1 size-4 accent-primary"
+                    />
+                    <span className="flex flex-col gap-1">
+                      <span className="font-medium text-sm">
+                        {t("settings.deviceProfilePublish")}
+                      </span>
+                      <span className="text-muted-foreground text-xs">
+                        {t("settings.deviceProfilePublishHint")}
+                      </span>
+                    </span>
+                  </label>
+
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      disabled={!localDevice || !deviceName.trim()}
+                      onClick={() => void saveDeviceProfile()}
+                    >
+                      <UserRound />
+                      {t("settings.deviceProfileSave")}
+                    </Button>
+                    {deviceSaved && (
+                      <span className="text-muted-foreground text-xs">
+                        {t("settings.deviceProfileSaved")}
+                      </span>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {activeItem === "local-files" && <ImportedFoldersSettings />}
+
+            {activeItem === "ai-dj-model" && (
+              <Card>
+                <CardHeader>
+                  <CardTitle>{t("settings.djTitle")}</CardTitle>
+                </CardHeader>
+                <CardContent className="flex flex-col gap-3">
+                  <DjToolCapabilities />
+                  {/* Multi-provider presets + dynamic customs + per-provider keys
+                    + global default model (chat PRD §6.1). Replaces the legacy
+                    two-provider form; legacy llmProvider/llmModel stay in the
+                    settings row for the preset bridge. */}
+                  <LlmProviderSettings />
+                </CardContent>
+              </Card>
+            )}
+
+            {activeItem === "live-requests" && <LiveRequestSettings />}
+
+            {activeItem === "ai-music-generation" && (
+              <Card>
+                <CardHeader>
+                  <CardTitle>{t("settings.musicTitle")}</CardTitle>
+                </CardHeader>
+                <CardContent className="flex flex-col gap-3">
+                  {/* AI music generation is OFF by default — it hits a paid cloud
+                    API. When enabled, the DJ chat is given the generate tools and
+                    the cloud BYOK config appears. There is no offline/local
+                    generation option. */}
+                  <label className="flex items-start gap-3 rounded-md border border-border p-3">
+                    <input
+                      type="checkbox"
+                      checked={Boolean(draft.aiDjGenerationEnabled)}
+                      onChange={(event) => {
+                        const next = event.currentTarget.checked;
+                        patch({
+                          aiDjGenerationEnabled: next,
+                          musicGenProvider: next ? "cloud" : "mock",
+                        });
+                      }}
+                      className="mt-1 size-4 accent-primary"
+                    />
+                    <span className="flex flex-col gap-1">
+                      <span className="font-medium text-sm">{t("settings.aiGenEnable")}</span>
+                      <span className="text-muted-foreground text-xs">
+                        {t("settings.aiGenHint")}
+                      </span>
+                    </span>
+                  </label>
+                  {draft.aiDjGenerationEnabled && (
+                    <>
+                      <Field label={t("settings.preset")}>
+                        <Select
+                          value={draft.musicCloudPreset ?? "mureka"}
+                          onValueChange={(value) =>
+                            patch({ musicCloudPreset: value as CloudPresetId })
+                          }
+                        >
+                          <SelectTrigger>
+                            <SelectValue>
+                              {(value) =>
+                                t(
+                                  PRESET_LABEL_KEY[value as CloudPresetId] ??
+                                    PRESET_LABEL_KEY[cloudPreset.id],
+                                )
+                              }
+                            </SelectValue>
+                          </SelectTrigger>
+                          <SelectContent>
+                            {CLOUD_PRESET_IDS.map((id) => (
+                              <SelectItem key={id} value={id}>
+                                {t(PRESET_LABEL_KEY[id])}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </Field>
+                      {!cloudPreset.fixedEndpoint && (
+                        <Field label={t("settings.apiBaseUrl")}>
+                          <Input
+                            value={draft.musicCloudUrl ?? ""}
+                            onChange={(e) => patch({ musicCloudUrl: e.target.value })}
+                            placeholder="https://api.your-music-provider.com/v1"
+                          />
+                        </Field>
+                      )}
+                      <Field label={t("settings.apiKey")}>
+                        <Input
+                          type="password"
+                          value={draft.musicCloudApiKey ?? ""}
+                          onChange={(e) => patch({ musicCloudApiKey: e.target.value })}
+                          placeholder={cloudPreset.authScheme === "key" ? "fal_…" : "sk-…"}
+                        />
+                      </Field>
+                      {cloudPreset.apiKeyUrl && (
+                        <a
+                          href={cloudPreset.apiKeyUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex w-fit items-center gap-1 text-xs text-primary hover:underline"
+                        >
+                          {t("settings.getApiKey")}
+                          <ExternalLink className="size-3" />
+                        </a>
+                      )}
+                      {cloudPreset.usesModel && (
+                        <Field label={t("settings.modelOptional")}>
+                          <Input
+                            value={draft.musicCloudModel ?? ""}
+                            onChange={(e) => patch({ musicCloudModel: e.target.value })}
+                            placeholder={cloudPreset.defaults.model ?? "provider-specific model id"}
+                          />
+                        </Field>
+                      )}
+                      {cloudPreset.usesModel && (
+                        <p className="text-xs text-muted-foreground">{t("settings.modelHint")}</p>
+                      )}
+                      <p className="text-xs text-muted-foreground">{costText}</p>
+                      {cloudPreset.docsUrl && (
+                        <a
+                          href={cloudPreset.docsUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex w-fit items-center gap-1 text-xs text-primary hover:underline"
+                        >
+                          {t("settings.apiDocs")}
+                          <ExternalLink className="size-3" />
+                        </a>
+                      )}
+                      <div className="flex items-center gap-2">
+                        <Button variant="outline" size="sm" onClick={() => void checkCloud()}>
+                          {t("settings.testConnection")}
+                        </Button>
+                        {health === "ok" && <CheckCircle2 className="size-4 text-primary" />}
+                        {health === "down" && <XCircle className="size-4 text-destructive" />}
+                        {health === "checking" && (
+                          <span className="text-xs text-muted-foreground">
+                            {t("settings.checking")}
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-muted-foreground">{t("settings.cloudNote")}</p>
+                    </>
+                  )}
+                </CardContent>
+              </Card>
+            )}
+
+            {(activeItem === "cloud" || activeItem === "cloud-presence") && (
+              <Card>
+                <CardHeader>
+                  <CardTitle>{t("settings.cloudDriveTitle")}</CardTitle>
+                </CardHeader>
+                <CardContent className="flex flex-col gap-4">
+                  {activeItem === "cloud" && (
+                    <>
+                      <div className="rounded-md border border-border bg-muted/25 p-3">
+                        <p className="font-medium text-sm">{t("settings.cloudSetupTitle")}</p>
+                        <div className="mt-2 grid gap-2 text-muted-foreground text-xs sm:grid-cols-2">
+                          {CLOUD_SETUP_KEYS.map((key) => (
+                            <div key={key} className="flex items-center gap-2">
+                              <CheckCircle2 className="size-3.5 text-primary" />
+                              <span>{t(key)}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="rounded-md border border-border p-3">
+                        <div className="mb-2 flex items-center gap-2">
+                          <ShieldCheck className="size-4 text-primary" />
+                          <p className="font-medium text-sm">{t("settings.cloudOwnerTitle")}</p>
+                        </div>
+                        <p className="mb-3 text-muted-foreground text-xs">
+                          {t("settings.cloudOwnerSimplifiedHint")}
+                        </p>
+                        <p className="mb-3 text-muted-foreground text-xs">
+                          {t("settings.cloudTrustedSetupHint")}
+                        </p>
+                        <Button size="sm" onClick={() => setAddDriveOpen(true)}>
+                          <Cloud />
+                          {t("settings.addDrive")}
+                        </Button>
+                      </div>
+
+                      {cloudDrives.length > 0 && (
+                        <div className="flex flex-col gap-2">
+                          <p className="font-medium text-sm">
+                            {t("settings.cloudConnectedDrives")}
+                          </p>
+                          {cloudDrives.map((drive) => (
+                            <CloudDriveRow
+                              key={drive.id}
+                              drive={drive}
+                              defaultDriveId={settings.defaultCloudDriveId}
+                              settings={settings}
+                            />
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Publish is read-merge-write (R2 PRD §12.4): devices merge
+                    into the drive's manifest/indexes instead of mirroring over
+                    them. Same-set co-editing is still single-owner — say so. */}
+                      <p className="rounded-md border border-border bg-muted/40 p-3 text-muted-foreground text-xs">
+                        {t("settings.cloudMultiWriterHint")}
+                      </p>
+
+                      {syncProgress && <CloudSyncProgress progress={syncProgress} />}
+
+                      <AddDriveDialog
+                        open={addDriveOpen}
+                        onOpenChange={setAddDriveOpen}
+                        settings={settings}
+                      />
+                    </>
+                  )}
+
+                  {activeItem === "cloud-presence" && (
+                    <div className="rounded-md border border-border p-3">
+                      <label className="flex items-start gap-3">
+                        <input
+                          type="checkbox"
+                          checked={draft.presenceEnabled ?? false}
+                          onChange={(event) =>
+                            void changePresenceEnabled(event.currentTarget.checked)
+                          }
+                          className="mt-1 size-4 accent-primary"
+                        />
+                        <span className="flex flex-col gap-1">
+                          <span className="font-medium text-sm">
+                            {t("settings.cloudPresenceTitle")}
+                          </span>
+                          <span className="text-muted-foreground text-xs">
+                            {t("settings.cloudPresenceHint")}
+                          </span>
+                          <span className="text-muted-foreground text-xs">
+                            {t("settings.cloudPresenceCost")}
+                          </span>
+                        </span>
+                      </label>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
+
+            {(activeItem === "ai-dj-model" || activeItem === "ai-music-generation") && (
+              <div className="flex items-center gap-3">
+                <Button onClick={() => void save()}>{t("settings.save")}</Button>
+                {saved && (
+                  <span className="text-sm text-muted-foreground">{t("settings.saved")}</span>
+                )}
+              </div>
+            )}
+            <p className="pb-4 text-xs text-muted-foreground">{t("settings.localNote")}</p>
+          </RenderTraceBoundary>
         </div>
       </div>
     </div>

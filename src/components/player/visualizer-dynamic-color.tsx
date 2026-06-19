@@ -1,5 +1,5 @@
 import { useLiveQuery } from "dexie-react-hooks";
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { putCoverPaletteDerivative, resolveCoverPaletteDerivative } from "@/db/cover-derivatives";
 import { resolveMediaBlob } from "@/db/media-blob-storage";
@@ -382,21 +382,41 @@ export function useVisualizerCoverColorCss(
         : null;
     }),
   );
-  const cover = useLiveQuery(
-    async () =>
-      enabled && current?.coverBlobId
-        ? ((await resolveMediaBlob(current.coverBlobId, db)) ?? null)
-        : null,
-    [enabled, current?.coverBlobId],
-    undefined,
+  const localCoverBlobId = enabled ? current?.coverBlobId : undefined;
+  const localStoredPalette = useMemo(
+    () => (current && localCoverBlobId ? cachedTrackPalette(current, localCoverBlobId) : null),
+    [current, localCoverBlobId],
+  );
+  const localCachedPalette = localCoverBlobId ? colorCache.get(localCoverBlobId) : undefined;
+  const shouldResolvePaletteDerivative = Boolean(
+    enabled &&
+      current &&
+      localCoverBlobId &&
+      !localStoredPalette &&
+      localCachedPalette === undefined,
   );
   const paletteDerivative = useLiveQuery(
     async () =>
-      enabled && current?.coverBlobId
+      shouldResolvePaletteDerivative && current?.coverBlobId
         ? ((await resolveCoverPaletteDerivative(current, db)) ?? null)
         : null,
-    [enabled, current?.coverBlobId, current?.coverCrop],
-    null,
+    [shouldResolvePaletteDerivative, current?.coverBlobId, current?.coverCrop],
+    undefined,
+  );
+  const derivedPalette = useMemo(
+    () => paletteCacheEntry(paletteDerivative?.palette),
+    [paletteDerivative?.palette],
+  );
+  const shouldResolveLocalCover = Boolean(
+    shouldResolvePaletteDerivative && paletteDerivative !== undefined && !derivedPalette,
+  );
+  const cover = useLiveQuery(
+    async () =>
+      shouldResolveLocalCover && current?.coverBlobId
+        ? ((await resolveMediaBlob(current.coverBlobId, db)) ?? null)
+        : null,
+    [shouldResolveLocalCover, current?.coverBlobId],
+    undefined,
   );
 
   useEffect(() => {
@@ -508,13 +528,12 @@ export function useVisualizerCoverColorCss(
       };
     }
 
-    const stored = cachedTrackPalette(current, current.coverBlobId);
-    if (stored && current.coverBlobId) {
-      colorCache.set(current.coverBlobId, stored);
+    if (localStoredPalette && current.coverBlobId) {
+      colorCache.set(current.coverBlobId, localStoredPalette);
       const applied = applyVisualizerCoverColorTarget(
         current.coverBlobId,
-        stored.rgb,
-        stored.palette,
+        localStoredPalette.rgb,
+        localStoredPalette.palette,
       );
       if (!applied) return;
       coverColorLog.debug("cover.palette.track-metadata", {
@@ -524,17 +543,34 @@ export function useVisualizerCoverColorCss(
         phase: "state",
         coverSourceKind: "local-cover",
         coverBlobId: current.coverBlobId,
-        paletteCount: stored.palette.length,
+        paletteCount: localStoredPalette.palette.length,
       });
       return;
     }
-    const derived = paletteCacheEntry(paletteDerivative?.palette);
-    if (derived && current.coverBlobId) {
-      colorCache.set(current.coverBlobId, derived);
+    if (localCachedPalette !== undefined && current.coverBlobId) {
       const applied = applyVisualizerCoverColorTarget(
         current.coverBlobId,
-        derived.rgb,
-        derived.palette,
+        localCachedPalette.rgb ?? readPrimaryRgb(),
+        localCachedPalette.palette,
+      );
+      if (!applied) return;
+      coverColorLog.debug("cover.palette.cache", {
+        message: "cover palette cache hit",
+        trackId: current.id,
+        category: "media",
+        phase: "state",
+        coverSourceKind: "local-cover",
+        coverBlobId: current.coverBlobId,
+        paletteCount: localCachedPalette.palette.length,
+      });
+      return;
+    }
+    if (derivedPalette && current.coverBlobId) {
+      colorCache.set(current.coverBlobId, derivedPalette);
+      const applied = applyVisualizerCoverColorTarget(
+        current.coverBlobId,
+        derivedPalette.rgb,
+        derivedPalette.palette,
       );
       if (!applied) return;
       coverColorLog.debug("cover.palette.derivative", {
@@ -544,7 +580,7 @@ export function useVisualizerCoverColorCss(
         phase: "state",
         coverSourceKind: "local-cover",
         coverBlobId: current.coverBlobId,
-        paletteCount: derived.palette.length,
+        paletteCount: derivedPalette.palette.length,
       });
       return;
     }
@@ -620,7 +656,16 @@ export function useVisualizerCoverColorCss(
       alive = false;
       cancelSettledExtraction();
     };
-  }, [active, coverColorEnabled, current, cover, paletteDerivative, primaryColorVersion]);
+  }, [
+    active,
+    coverColorEnabled,
+    current,
+    cover,
+    derivedPalette,
+    localCachedPalette,
+    localStoredPalette,
+    primaryColorVersion,
+  ]);
 
   return active ? css : null;
 }

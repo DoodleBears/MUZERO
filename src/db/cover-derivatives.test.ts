@@ -10,9 +10,13 @@ import {
   ensureCoverBacklightDerivative,
   ensureCoverPaletteDerivative,
   ensureCoverThumbnailDerivative,
+  putPrecomputedCoverImageDerivatives,
   repairMissingCoverDerivatives,
+  resolveCoverBacklightDerivative,
   resolveCoverPaletteDerivative,
+  resolveCoverThumbnailDerivative,
 } from "./cover-derivatives";
+import { indexedDbMediaStorageProvider } from "./media-storage-provider";
 import { MuzeroDB } from "./muzero-db";
 import { deleteTrack } from "./repositories";
 import type { Track } from "./types";
@@ -135,6 +139,36 @@ describe("cover derivatives", () => {
     });
   });
 
+  it("resolves an existing thumbnail derivative without generating one", async () => {
+    const track = await addTrackWithCover("trk_resolve_thumb");
+    const extract = vi.fn(async () => ({
+      palette: [],
+      thumbnail: {
+        bytes: await new Blob(["thumb"], { type: "image/webp" }).arrayBuffer(),
+        height: 96,
+        mime: "image/webp",
+        width: 96,
+      },
+      timings: {
+        backlightMs: 0,
+        decodeMs: 1,
+        paletteMs: 0,
+        thumbnailMs: 2,
+        thumbhashMs: 0,
+        totalMs: 3,
+      },
+    }));
+    await expect(resolveCoverThumbnailDerivative(track, db)).resolves.toBeUndefined();
+
+    const generated = await ensureCoverThumbnailDerivative(track, db, { extract });
+    const resolved = await resolveCoverThumbnailDerivative(track, db);
+
+    expect(extract).toHaveBeenCalledTimes(1);
+    expect(resolved?.blobId).toBe(generated?.blobId);
+    expect(resolved?.blob).toBeTruthy();
+    expect(resolved?.derivative).toMatchObject({ kind: "thumbnail", mime: "image/webp" });
+  });
+
   it("persists a backlight derivative separately from the thumbnail derivative", async () => {
     const track = await addTrackWithCover("trk_backlight");
     const extract = vi.fn(async () => ({
@@ -170,6 +204,70 @@ describe("cover derivatives", () => {
       }),
     );
     expect(await first?.blob.text()).toBe("backlight");
+  });
+
+  it("resolves an existing backlight derivative without generating one", async () => {
+    const track = await addTrackWithCover("trk_resolve_backlight");
+    const extract = vi.fn(async () => ({
+      backlight: {
+        bytes: await new Blob(["backlight"], { type: "image/webp" }).arrayBuffer(),
+        height: 192,
+        mime: "image/webp",
+        width: 192,
+      },
+      palette: [],
+      timings: {
+        backlightMs: 2,
+        decodeMs: 1,
+        paletteMs: 0,
+        thumbnailMs: 0,
+        thumbhashMs: 0,
+        totalMs: 3,
+      },
+    }));
+    await expect(resolveCoverBacklightDerivative(track, db)).resolves.toBeUndefined();
+
+    const generated = await ensureCoverBacklightDerivative(track, db, { extract });
+    const resolved = await resolveCoverBacklightDerivative(track, db);
+
+    expect(extract).toHaveBeenCalledTimes(1);
+    expect(resolved?.blobId).toBe(generated?.blobId);
+    expect(resolved?.blob).toBeTruthy();
+    expect(resolved?.derivative).toMatchObject({ kind: "backlight", mime: "image/webp" });
+  });
+
+  it("reuses precomputed image derivatives without re-extracting the cover", async () => {
+    const track = await addTrackWithCover("trk_precomputed");
+    const metadata = {
+      backlight: {
+        bytes: await new Blob(["backlight"], { type: "image/webp" }).arrayBuffer(),
+        height: 192,
+        mime: "image/webp",
+        width: 192,
+      },
+      thumbnail: {
+        bytes: await new Blob(["thumb"], { type: "image/webp" }).arrayBuffer(),
+        height: 96,
+        mime: "image/webp",
+        width: 96,
+      },
+    };
+    const extract = vi.fn(async () => {
+      throw new Error("should not extract");
+    });
+
+    const storage = { provider: indexedDbMediaStorageProvider };
+
+    const persisted = await putPrecomputedCoverImageDerivatives(track, metadata, db, { storage });
+    const backlight = await ensureCoverBacklightDerivative(track, db, { extract, storage });
+    const thumbnail = await ensureCoverThumbnailDerivative(track, db, { extract, storage });
+
+    expect(extract).not.toHaveBeenCalled();
+    expect(backlight?.blobId).toBe(persisted.backlight?.blobId);
+    expect(thumbnail?.blobId).toBe(persisted.thumbnail?.blobId);
+    expect(backlight?.derivative.bytes).toBe(9);
+    expect(thumbnail?.derivative.bytes).toBe(5);
+    expect(await db.mediaBlobs.where("role").equals("cover-derivative").count()).toBe(2);
   });
 
   it("persists palette metadata without creating a media blob", async () => {

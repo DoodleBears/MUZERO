@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { memo, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { type BatchAction, BatchActionBar } from "@/components/library/batch-action-bar";
 import { ReorderableTrackList } from "@/components/library/reorderable-track-list";
@@ -29,7 +29,7 @@ import { useListScrollPreservation } from "./use-list-scroll-preservation";
  * it (the global 所有歌曲 list): delete is always permanent (with confirmation).
  * Wraps `TrackListMenu` so right-click upload still works.
  */
-export function TrackListSection({
+export const TrackListSection = memo(function TrackListSection({
   tracks,
   setId,
   onPlay,
@@ -43,6 +43,7 @@ export function TrackListSection({
   endActions,
   afterToolbar,
   listHeader,
+  listTraceId,
   getTrackSupplement,
   getTrackColumns,
   canReorder,
@@ -70,6 +71,8 @@ export function TrackListSection({
   /** When set, this content + the toolbar row scroll WITH the list (rendered inside the
    *  scroll container as its header) instead of staying pinned above it. */
   listHeader?: React.ReactNode;
+  /** Optional dev/profiling render-trace id prefix for the inner virtual list. */
+  listTraceId?: string;
   /** Optional per-row secondary metadata shown after the default subtitle. */
   getTrackSupplement?: (track: Track) => React.ReactNode;
   /** Optional right-side row columns shown before duration. */
@@ -240,6 +243,7 @@ export function TrackListSection({
             jumpFocusIndex={anchorIndex >= 0 ? anchorIndex : undefined}
             jumpScrollIndex={anchorIndex >= 0 ? anchorIndex : undefined}
             alphabetLetterOf={alphabetLetterOf}
+            traceId={listTraceId}
           />
         )}
       </TrackListMenu>
@@ -266,4 +270,4 @@ export function TrackListSection({
       />
     </div>
   );
-}
+});

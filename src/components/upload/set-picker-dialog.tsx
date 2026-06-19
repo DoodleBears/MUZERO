@@ -7,6 +7,7 @@ import { Disc3Icon } from "@/components/ui/disc-3";
 import { db } from "@/db/muzero-db";
 import { createSession, listSessions } from "@/db/repositories";
 import { usePlayerStore } from "@/stores/player-store";
+import { warmMediaProbeWorker } from "@/workers/media-probe-client";
 
 /**
  * Choose which 歌单 imported media goes into. Used by app-wide drag/paste and
@@ -29,6 +30,11 @@ export function SetPickerDialog({
   const sessions = useLiveQuery(() => listSessions(db), [], []);
   const activeSessionId = usePlayerStore((s) => s.activeSessionId);
   const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (files.length === 0) return;
+    void warmMediaProbeWorker();
+  }, [files]);
 
   // Put the active set on top - the common case is "add to what I'm playing".
   const ordered = useMemo(() => {

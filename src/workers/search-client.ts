@@ -12,6 +12,7 @@
  */
 
 import { log } from "@/lib/logger";
+import { notePerfWork } from "@/lib/perf-counters";
 import { type IndexableRow, type QueryHit, queryRows } from "@/lib/search-core";
 import { createPerfSampler, type PerfStats } from "@/lib/search-perf";
 import { ensureTransliterationLoaded } from "@/lib/search-transliterate";
@@ -114,7 +115,11 @@ function getWorker(): Worker | null {
 export function setSearchRows(rows: readonly IndexableRow[]): void {
   inlineRows = rows;
   const w = getWorker();
-  if (w) w.postMessage({ type: "set-rows", rows });
+  if (w) {
+    const startedAt = performance.now();
+    w.postMessage({ type: "set-rows", rows });
+    notePerfWork("search.rows.post", performance.now() - startedAt, { rows: rows.length });
+  }
 }
 
 /** Query the index off-thread, returning ranked hits. Falls back inline. */

@@ -11,6 +11,7 @@
 import { traceEvent } from "@/lib/trace";
 
 let enabled = false;
+let retainers = 0;
 const counts = new Map<string, number>();
 const perfWorkWindows = new Map<string, PerfWorkWindow>();
 // Lifetime (HUD-session) per-name work stats for the perf panel breakdown. Kept
@@ -24,12 +25,22 @@ export function setPerfCountersEnabled(on: boolean): void {
 }
 
 export function arePerfCountersEnabled(): boolean {
-  return enabled;
+  return enabled || retainers > 0;
+}
+
+export function retainPerfCounters(): () => void {
+  retainers += 1;
+  let released = false;
+  return () => {
+    if (released) return;
+    released = true;
+    retainers = Math.max(0, retainers - 1);
+  };
 }
 
 /** Increment a named counter. No-op while the HUD is not mounted. */
 export function bumpPerfCounter(name: string, delta = 1): void {
-  if (!enabled) return;
+  if (!arePerfCountersEnabled()) return;
   counts.set(name, (counts.get(name) ?? 0) + delta);
 }
 
@@ -93,7 +104,7 @@ const requeryTraceWindows = new Map<string, { emittedAt: number; coalesced: numb
  * not mounted.
  */
 export function noteDbRequery(query: string): void {
-  if (!enabled) return;
+  if (!arePerfCountersEnabled()) return;
   bumpPerfCounter(`db.${query}`);
   const now = Date.now();
   const window = requeryTraceWindows.get(query);
@@ -139,7 +150,7 @@ export function notePerfWork(
   durationMs: number,
   data?: Record<string, unknown>,
 ): void {
-  if (!enabled || !Number.isFinite(durationMs)) return;
+  if (!arePerfCountersEnabled() || !Number.isFinite(durationMs)) return;
   bumpPerfCounter(`work.${name}`);
   // Lifetime per-name accumulation for the HUD breakdown (independent of the
   // trace-emit window below, which resets on emit).
@@ -213,6 +224,10 @@ interface LiveBlobUrl {
 const liveBlobUrls = new Map<string, LiveBlobUrl>();
 let createdBlobUrls = 0;
 let createdBlobUrlKinds: BlobUrlKindCounts = { ...EMPTY_BLOB_KIND_COUNTS };
+let peakBlobUrls = 0;
+let peakBlobUrlBytes = 0;
+let peakBlobUrlBytesByKind: BlobUrlKindCounts = { ...EMPTY_BLOB_KIND_COUNTS };
+let peakBlobUrlKinds: BlobUrlKindCounts = { ...EMPTY_BLOB_KIND_COUNTS };
 let trackerRefs = 0;
 let originalCreate: typeof URL.createObjectURL | null = null;
 let originalRevoke: typeof URL.revokeObjectURL | null = null;
@@ -233,22 +248,23 @@ export function blobUrlStats(): {
   createdByKind: BlobUrlKindCounts;
   liveBytes: number;
   liveBytesByKind: BlobUrlKindCounts;
+  peakLive: number;
+  peakLiveByKind: BlobUrlKindCounts;
+  peakLiveBytes: number;
+  peakLiveBytesByKind: BlobUrlKindCounts;
 } {
-  const liveByKind = { ...EMPTY_BLOB_KIND_COUNTS };
-  const liveBytesByKind = { ...EMPTY_BLOB_KIND_COUNTS };
-  let liveBytes = 0;
-  for (const { kind, bytes } of liveBlobUrls.values()) {
-    liveByKind[kind] += 1;
-    liveBytesByKind[kind] += bytes;
-    liveBytes += bytes;
-  }
+  const live = liveBlobUrlTotals();
   return {
-    live: liveBlobUrls.size,
+    live: live.live,
     created: createdBlobUrls,
-    liveByKind,
+    liveByKind: live.liveByKind,
     createdByKind: { ...createdBlobUrlKinds },
-    liveBytes,
-    liveBytesByKind,
+    liveBytes: live.liveBytes,
+    liveBytesByKind: live.liveBytesByKind,
+    peakLive: peakBlobUrls,
+    peakLiveByKind: { ...peakBlobUrlKinds },
+    peakLiveBytes: peakBlobUrlBytes,
+    peakLiveBytesByKind: { ...peakBlobUrlBytesByKind },
   };
 }
 
@@ -268,6 +284,10 @@ export function installBlobUrlTracker(): () => void {
     liveBlobUrls.clear();
     createdBlobUrls = 0;
     createdBlobUrlKinds = { ...EMPTY_BLOB_KIND_COUNTS };
+    peakBlobUrls = 0;
+    peakBlobUrlBytes = 0;
+    peakBlobUrlBytesByKind = { ...EMPTY_BLOB_KIND_COUNTS };
+    peakBlobUrlKinds = { ...EMPTY_BLOB_KIND_COUNTS };
     const create = URL.createObjectURL;
     const revoke = URL.revokeObjectURL;
     originalCreate = create;
@@ -279,6 +299,7 @@ export function installBlobUrlTracker(): () => void {
       liveBlobUrls.set(url, { kind, bytes });
       createdBlobUrls += 1;
       createdBlobUrlKinds[kind] += 1;
+      noteBlobUrlPeak();
       return url;
     }) as typeof URL.createObjectURL;
     URL.revokeObjectURL = ((url: string) => {
@@ -299,6 +320,41 @@ export function installBlobUrlTracker(): () => void {
     originalCreate = null;
     originalRevoke = null;
     liveBlobUrls.clear();
+  };
+}
+
+function noteBlobUrlPeak(): void {
+  const live = liveBlobUrlTotals();
+  peakBlobUrls = Math.max(peakBlobUrls, live.live);
+  peakBlobUrlBytes = Math.max(peakBlobUrlBytes, live.liveBytes);
+  for (const kind of Object.keys(EMPTY_BLOB_KIND_COUNTS) as BlobUrlKind[]) {
+    peakBlobUrlKinds[kind] = Math.max(peakBlobUrlKinds[kind], live.liveByKind[kind]);
+    peakBlobUrlBytesByKind[kind] = Math.max(
+      peakBlobUrlBytesByKind[kind],
+      live.liveBytesByKind[kind],
+    );
+  }
+}
+
+function liveBlobUrlTotals(): {
+  live: number;
+  liveByKind: BlobUrlKindCounts;
+  liveBytes: number;
+  liveBytesByKind: BlobUrlKindCounts;
+} {
+  const liveByKind = { ...EMPTY_BLOB_KIND_COUNTS };
+  const liveBytesByKind = { ...EMPTY_BLOB_KIND_COUNTS };
+  let liveBytes = 0;
+  for (const { kind, bytes } of liveBlobUrls.values()) {
+    liveByKind[kind] += 1;
+    liveBytesByKind[kind] += bytes;
+    liveBytes += bytes;
+  }
+  return {
+    live: liveBlobUrls.size,
+    liveByKind,
+    liveBytes,
+    liveBytesByKind,
   };
 }
 

@@ -29,6 +29,14 @@ contextBridge.exposeInMainWorld("muzero", {
   localMediaToken: (input) => ipcRenderer.invoke("muzero:localMedia:token", input),
   saveFile: (input) => ipcRenderer.invoke("muzero:saveFile", input),
   writeMediaStorageFile: (input) => ipcRenderer.invoke("muzero:mediaStorage:write", input),
+  beginMediaStorageWrite: (input) =>
+    ipcRenderer.invoke("muzero:mediaStorage:writeBegin", input),
+  writeMediaStorageChunk: (input) =>
+    ipcRenderer.invoke("muzero:mediaStorage:writeChunk", input),
+  commitMediaStorageWrite: (input) =>
+    ipcRenderer.invoke("muzero:mediaStorage:writeCommit", input),
+  abortMediaStorageWrite: (input) =>
+    ipcRenderer.invoke("muzero:mediaStorage:writeAbort", input),
   readMediaStorageFile: (input) => ipcRenderer.invoke("muzero:mediaStorage:read", input),
   deleteMediaStorageFile: (input) => ipcRenderer.invoke("muzero:mediaStorage:delete", input),
   statMediaStorageFile: (input) => ipcRenderer.invoke("muzero:mediaStorage:stat", input),

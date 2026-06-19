@@ -3,6 +3,7 @@
 import { elementScroll, useVirtualizer } from "@tanstack/react-virtual";
 import type Lenis from "lenis";
 import {
+  memo,
   type ReactNode,
   type RefObject,
   useCallback,
@@ -25,6 +26,7 @@ import { rafObserveElementOffset } from "./raf-scroll-offset";
 const GRID_GAP = 12; // matches `gap-3` (0.75rem)
 const LIST_ROW_HEIGHT = 60; // matches the virtual track row height
 const GRID_CAPTION_HEIGHT = 46; // square cover + 2-line caption
+const DEFAULT_VIEWPORT_WIDTH = 1024;
 
 export interface VirtualCardGridHandle {
   /** Scroll the card with this key into view (used by roving keyboard nav to
@@ -75,7 +77,7 @@ interface VirtualCardGridProps<T> {
  * usual `data-gallery-card` markup so the wall's roving keyboard nav still works;
  * the `gridRef` handle's `scrollToKey` lets that nav reach off-screen cards.
  */
-export function VirtualCardGrid<T>({
+function VirtualCardGridInner<T>({
   items,
   view,
   getKey,
@@ -89,11 +91,12 @@ export function VirtualCardGrid<T>({
   lenisRef,
 }: VirtualCardGridProps<T>) {
   const listRef = useRef<HTMLDivElement | null>(null);
-  const [viewportWidth, setViewportWidth] = useState(() =>
-    typeof window === "undefined" ? 1024 : window.innerWidth,
-  );
-  const [contentWidth, setContentWidth] = useState(0);
+  const [viewportWidth, setViewportWidth] = useState(initialViewportWidth);
+  const [contentWidth, setContentWidth] = useState(initialViewportWidth);
   const [scrollMargin, setScrollMargin] = useState(0);
+  const updateContentWidth = useCallback((nextWidth: number) => {
+    setContentWidth((prev) => (Math.abs(prev - nextWidth) > 0.5 ? nextWidth : prev));
+  }, []);
 
   const columns = galleryColumns(viewportWidth, view);
   const rowCount = view === "list" ? items.length : galleryRowCount(items.length, columns);
@@ -116,7 +119,7 @@ export function VirtualCardGrid<T>({
     // Coalesce native wheel-rate scroll to one window recompute per frame (same as
     // the track list) — smoother heavy walls without smooth-scroll on.
     observeElementOffset: rafObserveElementOffset,
-    overscan: view === "grid" ? 3 : 8,
+    overscan: view === "grid" ? 2 : 6,
     scrollMargin,
     getItemKey: (rowIndex) => {
       const first = items[rowIndex * (view === "list" ? 1 : columns)];
@@ -153,12 +156,14 @@ export function VirtualCardGrid<T>({
   // biome-ignore lint/correctness/useExhaustiveDependencies: re-seed when the scroller/view/chunking changes
   useLayoutEffect(() => {
     const list = listRef.current;
-    if (list) setContentWidth(list.clientWidth);
+    if (list) updateContentWidth(list.clientWidth);
     measureScrollMargin();
-  }, [measureScrollMargin, view, items.length, columns]);
+  }, [measureScrollMargin, updateContentWidth, view, items.length, columns]);
 
   useEffect(() => {
-    const onResize = () => setViewportWidth(window.innerWidth);
+    const onResize = () => {
+      setViewportWidth((prev) => (prev === window.innerWidth ? prev : window.innerWidth));
+    };
     window.addEventListener("resize", onResize);
     return () => window.removeEventListener("resize", onResize);
   }, []);
@@ -169,14 +174,14 @@ export function VirtualCardGrid<T>({
     const list = listRef.current;
     if (!list || typeof ResizeObserver === "undefined") return;
     const ro = new ResizeObserver(() => {
-      setContentWidth(list.clientWidth);
+      updateContentWidth(list.clientWidth);
       measureScrollMargin();
     });
     ro.observe(list);
     if (scrollElement) ro.observe(scrollElement);
-    setContentWidth(list.clientWidth);
+    updateContentWidth(list.clientWidth);
     return () => ro.disconnect();
-  }, [scrollElement, measureScrollMargin]);
+  }, [scrollElement, measureScrollMargin, updateContentWidth]);
 
   // Column / margin changes invalidate cached row measurements (rows now hold a
   // different slice of items), so force a fresh measure pass.
@@ -296,4 +301,10 @@ export function VirtualCardGrid<T>({
       </div>
     </div>
   );
+}
+
+export const VirtualCardGrid = memo(VirtualCardGridInner) as typeof VirtualCardGridInner;
+
+function initialViewportWidth(): number {
+  return typeof window === "undefined" ? DEFAULT_VIEWPORT_WIDTH : window.innerWidth;
 }

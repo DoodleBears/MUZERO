@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AppSettings, Track } from "@/db/types";
 import { clearTrace, getTraceEntries } from "@/lib/trace";
 import { usePlayerStore } from "@/stores/player-store";
-import { NowPlayingBackground } from "./now-playing-background";
+import { NowPlayingBackground, shouldRunBackgroundSlideshow } from "./now-playing-background";
 
 const mocks = vi.hoisted(() => ({
   coverResources: new Map<
@@ -42,6 +42,9 @@ const mocks = vi.hoisted(() => ({
     trackId: string | undefined;
   }>,
   pixiSrcs: [] as string[],
+  galleryRows: [] as Array<{ id: string }>,
+  mediaBlobUrlRows: [] as Array<string | undefined>,
+  trackBackgroundRows: [] as Array<{ id: string }>,
   trackCoverResourceTrackIds: [] as Array<string | undefined>,
 }));
 const images: MockImage[] = [];
@@ -50,13 +53,16 @@ const originalMediaPlay = HTMLMediaElement.prototype.play;
 const originalMediaPause = HTMLMediaElement.prototype.pause;
 
 vi.mock("dexie-react-hooks", () => ({
-  useLiveQuery: (_query: () => unknown, _deps: unknown[], defaultValue: unknown) => defaultValue,
+  useLiveQuery: (query: () => unknown, _deps: unknown[], defaultValue: unknown) => {
+    const result = query();
+    return result instanceof Promise ? defaultValue : result;
+  },
 }));
 
 vi.mock("@/db/repositories", () => ({
   getTrackLyrics: vi.fn(),
-  listGalleryImages: vi.fn(),
-  listTrackBackgrounds: vi.fn(),
+  listGalleryImageRows: () => mocks.galleryRows,
+  listTrackBackgroundRows: () => mocks.trackBackgroundRows,
 }));
 
 vi.mock("@/hooks/use-app-data", () => ({
@@ -97,7 +103,10 @@ vi.mock("@/hooks/use-media", () => ({
     if (!track) return null;
     return mocks.coverDerivativeUrls.get(`${track.id}:${kind}`) ?? null;
   },
-  useObjectUrls: () => [],
+  useMediaBlobUrl: (row?: { id?: string } | null) => {
+    mocks.mediaBlobUrlRows.push(row?.id);
+    return row?.id ? `blob:background-${row.id}` : null;
+  },
   useTrackCoverResource: (track?: Track) => {
     mocks.trackCoverResourceTrackIds.push(track?.id);
     const override = track ? mocks.coverResources.get(track.id) : undefined;
@@ -182,9 +191,12 @@ describe("NowPlayingBackground", () => {
     images.length = 0;
     mocks.coverResources.clear();
     mocks.coverDerivativeUrls.clear();
+    mocks.galleryRows.length = 0;
     mocks.localCoverResources.clear();
+    mocks.mediaBlobUrlRows.length = 0;
     mocks.coverDerivativeCalls.length = 0;
     mocks.pixiSrcs.length = 0;
+    mocks.trackBackgroundRows.length = 0;
     mocks.trackCoverResourceTrackIds.length = 0;
     clearTrace();
     usePlayerStore.setState({
@@ -214,6 +226,12 @@ describe("NowPlayingBackground", () => {
     render(<NowPlayingBackground active />);
 
     expect(screen.queryByTestId("visualizer-host")).not.toBeInTheDocument();
+  });
+
+  it("runs slideshow timers only when the page is visible and there are multiple slides", () => {
+    expect(shouldRunBackgroundSlideshow({ documentHidden: false, slideCount: 2 })).toBe(true);
+    expect(shouldRunBackgroundSlideshow({ documentHidden: false, slideCount: 1 })).toBe(false);
+    expect(shouldRunBackgroundSlideshow({ documentHidden: true, slideCount: 3 })).toBe(false);
   });
 
   it("can mount the flow layer once a current track exists", () => {
@@ -369,6 +387,27 @@ describe("NowPlayingBackground", () => {
     });
   });
 
+  it("resolves only the active gallery slideshow row instead of every gallery blob", async () => {
+    mocks.settings.backgroundMode = "cover";
+    mocks.settings.flowEnabled = false;
+    mocks.settings.visualizerAsBackground = false;
+    mocks.galleryRows.push({ id: "gal_a" }, { id: "gal_b" }, { id: "gal_c" });
+    usePlayerStore.setState({
+      currentIndex: 0,
+      queue: [makeTrack("trk_without_cover")],
+    });
+
+    render(<NowPlayingBackground active />);
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(mocks.mediaBlobUrlRows).toContain("gal_a");
+    expect(mocks.mediaBlobUrlRows).toContain("gal_c");
+    expect(mocks.mediaBlobUrlRows).not.toContain("gal_b");
+    expect(new Set(mocks.mediaBlobUrlRows.filter(Boolean))).toEqual(new Set(["gal_a", "gal_c"]));
+  });
+
   it("keeps global dim and blur settings for non-video backgrounds", () => {
     mocks.settings.backgroundMaskOpacity = 10;
     mocks.settings.backgroundMaskBlur = 3;
@@ -501,10 +540,10 @@ describe("NowPlayingBackground", () => {
     usePlayerStore.setState({ currentIndex: 0, queue });
     render(<NowPlayingBackground active />);
 
-    await loadImage(0);
     const firstShell = screen.getByTestId("pixi-background");
     expect(firstShell).toHaveAttribute("data-src", "blob:phase10-cover-a");
     expect(firstShell).toHaveClass("opacity-100");
+    expect(images).toHaveLength(0);
 
     await act(async () => {
       usePlayerStore.setState({ currentIndex: 1 });
@@ -527,12 +566,12 @@ describe("NowPlayingBackground", () => {
       usePlayerStore.setState({ queue: [...queue] });
       await Promise.resolve();
     });
-    await loadImage(1);
 
     const readyShell = screen.getByTestId("pixi-background");
     expect(readyShell).toBe(firstShell);
     expect(readyShell).toHaveAttribute("data-src", "blob:phase10-cover-b");
     expect(readyShell).toHaveClass("opacity-100");
+    expect(images).toHaveLength(0);
   });
 
   it("waits for a local protocol cover URL instead of decoding a blob fallback", async () => {
@@ -585,13 +624,13 @@ describe("NowPlayingBackground", () => {
       usePlayerStore.setState({ queue: [...queue] });
       await Promise.resolve();
     });
-    await loadImage(0);
 
     const readyShell = screen.getByTestId("pixi-background");
     expect(readyShell).toBe(pendingShell);
     expect(readyShell).toHaveAttribute("data-src", "muzfetch://local-media/cover-token");
     expect(readyShell).toHaveClass("opacity-100");
     expect(mocks.trackCoverResourceTrackIds).not.toContain("trk_local");
+    expect(images).toHaveLength(0);
   });
 
   it("feeds the ORIGINAL local cover URL into Pixi (no 192px backlight derivative)", async () => {
@@ -611,7 +650,6 @@ describe("NowPlayingBackground", () => {
     usePlayerStore.setState({ currentIndex: 0, queue });
 
     render(<NowPlayingBackground active />);
-    await loadImage(0);
 
     // The Pixi background now renders the ORIGINAL cover (GPU-scaled), not a cropped
     // 192px derivative — so the cover derivative hook is never invoked for it.
@@ -621,6 +659,7 @@ describe("NowPlayingBackground", () => {
     );
     expect(mocks.pixiSrcs).toContain("muzfetch://local-media/original-cover");
     expect(mocks.coverDerivativeCalls).toHaveLength(0);
+    expect(images).toHaveLength(0);
   });
 
   it("emits a local-cover fallback trace when the row cannot use the protocol URL", async () => {
@@ -646,12 +685,12 @@ describe("NowPlayingBackground", () => {
     const queue = [makeTrack("trk_indexeddb", { coverBlobId: "blb_indexeddb" })];
     usePlayerStore.setState({ currentIndex: 0, queue });
     render(<NowPlayingBackground active />);
-    await loadImage(0);
 
     expect(screen.getByTestId("pixi-background")).toHaveAttribute(
       "data-src",
       "blob:indexeddb-cover",
     );
+    expect(images).toHaveLength(0);
     expect(getTraceEntries()).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -692,11 +731,11 @@ describe("NowPlayingBackground", () => {
     ];
     usePlayerStore.setState({ currentIndex: 0, queue });
     render(<NowPlayingBackground active />);
-    await loadImage(0);
     expect(screen.getByTestId("pixi-background")).toHaveAttribute(
       "data-src",
       "blob:previous-cover",
     );
+    expect(images).toHaveLength(0);
 
     mocks.pixiSrcs.length = 0;
     await act(async () => {

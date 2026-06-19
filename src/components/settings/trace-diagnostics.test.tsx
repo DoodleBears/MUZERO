@@ -1,5 +1,5 @@
 import "fake-indexeddb/auto";
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { saveTextFile } from "@/lib/save-text-file";
@@ -9,7 +9,7 @@ import {
   clearTraceArchive,
   createTraceArchive,
 } from "@/lib/trace-archive";
-import { TraceDiagnostics } from "./trace-diagnostics";
+import { TRACE_DIAGNOSTICS_RESUME_DELAY_MS, TraceDiagnostics } from "./trace-diagnostics";
 
 vi.mock("@/lib/save-text-file", () => ({
   saveTextFile: vi.fn(async () => undefined),
@@ -52,6 +52,7 @@ vi.mock("@/components/ui/select", () => ({
 
 describe("TraceDiagnostics", () => {
   afterEach(async () => {
+    vi.useRealTimers();
     clearTrace();
     await clearTraceArchive();
     window.localStorage.clear();
@@ -78,7 +79,7 @@ describe("TraceDiagnostics", () => {
       traceId: "ply_1",
     });
 
-    render(<TraceDiagnostics />);
+    renderReadyTraceDiagnostics();
 
     expect(screen.getByText(/settings.traceCount/)).toHaveTextContent('"count":3');
     fireEvent.change(screen.getByLabelText("settings.traceLevel"), { target: { value: "error" } });
@@ -95,6 +96,33 @@ describe("TraceDiagnostics", () => {
     expect(screen.getByText(/settings.traceRepro/)).toBeInTheDocument();
   });
 
+  it("pauses trace subscription while inactive and refreshes when active again", () => {
+    traceDiagnosticEvent("info", "ui.action", "initial.click", "initial action", {
+      category: "user-action",
+    });
+
+    const { rerender } = renderReadyTraceDiagnostics({ active: false });
+
+    expect(screen.getByText(/settings.traceCount/)).toHaveTextContent('"total":0');
+    expect(screen.queryByText(/initial.click/)).not.toBeInTheDocument();
+
+    act(() => {
+      traceDiagnosticEvent("error", "stream.resolve", "resolve.failed", "stream resolve failed", {
+        category: "stream",
+        errorKind: "http_status",
+      });
+    });
+
+    expect(screen.getByText(/settings.traceCount/)).toHaveTextContent('"total":0');
+    expect(screen.queryByText(/resolve.failed/)).not.toBeInTheDocument();
+
+    rerender(<TraceDiagnostics active traceResumeDelayMs={0} />);
+
+    expect(screen.getByText(/settings.traceCount/)).toHaveTextContent('"total":2');
+    expect(screen.getAllByText(/initial.click/).length).toBeGreaterThan(0);
+    expect(screen.getByText(/resolve.failed/)).toBeInTheDocument();
+  });
+
   it("copies visible entries rather than always copying the full buffer", async () => {
     const writeText = vi.fn(async (_text: string) => undefined);
     Object.assign(navigator, { clipboard: { writeText } });
@@ -108,7 +136,7 @@ describe("TraceDiagnostics", () => {
       traceId: "ply_1",
     });
 
-    render(<TraceDiagnostics />);
+    renderReadyTraceDiagnostics();
 
     fireEvent.change(screen.getByLabelText("settings.traceLevel"), { target: { value: "error" } });
     fireEvent.click(screen.getByRole("button", { name: /settings.traceCopyVisible/ }));
@@ -140,7 +168,7 @@ describe("TraceDiagnostics", () => {
       traceId: "ply_new",
     });
 
-    render(<TraceDiagnostics />);
+    renderReadyTraceDiagnostics();
 
     fireEvent.click(screen.getByRole("button", { name: /settings.traceCopyCurrent/ }));
 
@@ -156,7 +184,7 @@ describe("TraceDiagnostics", () => {
       errorKind: "http_status",
     });
 
-    render(<TraceDiagnostics />);
+    renderReadyTraceDiagnostics();
 
     fireEvent.click(screen.getByRole("button", { name: /settings.traceClear/ }));
     const logPanel = screen.getByText("settings.traceEmpty");
@@ -166,7 +194,7 @@ describe("TraceDiagnostics", () => {
   });
 
   it("toggles the performance HUD setting (visible prod-build switch, rule 3)", async () => {
-    render(<TraceDiagnostics />);
+    renderReadyTraceDiagnostics();
 
     const toggle = screen.getByRole("checkbox", { name: /settings.perfHud/ });
     expect(toggle).not.toBeChecked();
@@ -194,7 +222,7 @@ describe("TraceDiagnostics", () => {
       createTraceArchive({ now: () => 1_000 }),
     );
 
-    render(<TraceDiagnostics />);
+    renderReadyTraceDiagnostics();
 
     const exportButton = await screen.findByRole("button", {
       name: /settings.traceArchiveExport/,
@@ -208,4 +236,27 @@ describe("TraceDiagnostics", () => {
     expect(text).toContain("media proxy response");
     expect(text).toContain('"httpStatus":403');
   });
+
+  it("defers active trace subscription on first mount", () => {
+    vi.useFakeTimers();
+    traceDiagnosticEvent("info", "ui.action", "initial.click", "initial action", {
+      category: "user-action",
+    });
+
+    render(<TraceDiagnostics />);
+
+    expect(screen.getByText(/settings.traceCount/)).toHaveTextContent('"total":0');
+    expect(screen.queryByText(/initial.click/)).not.toBeInTheDocument();
+
+    act(() => {
+      vi.advanceTimersByTime(TRACE_DIAGNOSTICS_RESUME_DELAY_MS);
+    });
+
+    expect(screen.getByText(/settings.traceCount/)).toHaveTextContent('"total":1');
+    expect(screen.getAllByText(/initial.click/).length).toBeGreaterThan(0);
+  });
 });
+
+function renderReadyTraceDiagnostics({ active = true }: { active?: boolean } = {}) {
+  return render(<TraceDiagnostics active={active} traceResumeDelayMs={0} />);
+}

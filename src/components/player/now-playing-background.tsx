@@ -1,11 +1,11 @@
 import { useLiveQuery } from "dexie-react-hooks";
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import { getTrackLyrics, listGalleryImages, listTrackBackgrounds } from "@/db/repositories";
+import { getTrackLyrics, listGalleryImageRows, listTrackBackgroundRows } from "@/db/repositories";
 import { useSettings } from "@/hooks/use-app-data";
 import { useLoadedImageUrl } from "@/hooks/use-image-load";
 import { useLocalCoverResource } from "@/hooks/use-local-cover";
-import { useObjectUrls, useTrackCoverResource, useTrackMediaUrl } from "@/hooks/use-media";
+import { useMediaBlobUrl, useTrackCoverResource, useTrackMediaUrl } from "@/hooks/use-media";
 import {
   type BackgroundRenderTarget,
   resolveBackgroundSource,
@@ -44,6 +44,16 @@ const bgCoverLog = createDiagnosticLogger("background.cover");
 const COVER_GROUP_OPACITY = 1;
 const ENABLE_PIXI_BACKGROUND_FOR_BISECT = true;
 const DISABLE_PIXI_TEXTURE_SOURCE_FOR_BISECT = false;
+
+export function shouldRunBackgroundSlideshow({
+  documentHidden,
+  slideCount,
+}: {
+  documentHidden: boolean;
+  slideCount: number;
+}): boolean {
+  return !documentHidden && slideCount > 1;
+}
 
 /**
  * Now Playing ambient backdrop.
@@ -162,28 +172,18 @@ function NowPlayingBackgroundContent({
   const backgroundCoverUrl =
     localCover.url ??
     (!waitForLocalCoverUrl && coverResourceMatchesTrack ? coverResource.url : null);
-  const trackBackgrounds = useLiveQuery(
-    () => (current?.id ? listTrackBackgrounds(current.id) : Promise.resolve([])),
+  const trackBackgroundRows = useLiveQuery(
+    () => (current?.id ? listTrackBackgroundRows(current.id) : Promise.resolve([])),
     [current?.id],
     [],
   );
-  const gallery = useLiveQuery(() => listGalleryImages(), [], []);
-  const trackBackgroundBlobs = useMemo(
-    () => trackBackgrounds.map((b) => b.blob).filter((blob): blob is Blob => Boolean(blob)),
-    [trackBackgrounds],
-  );
-  const galleryBlobs = useMemo(
-    () => gallery.map((b) => b.blob).filter((blob): blob is Blob => Boolean(blob)),
-    [gallery],
-  );
-  const trackBackgroundUrls = useObjectUrls(trackBackgroundBlobs);
-  const galleryUrls = useObjectUrls(galleryBlobs);
+  const galleryRows = useLiveQuery(() => listGalleryImageRows(), [], []);
   const source = resolveBackgroundSource({
     mode: settings.backgroundMode,
     galleryFallback: settings.backgroundGalleryFallback ?? true,
     hasCover: trackHasCover(current),
-    trackBackgroundCount: trackBackgroundBlobs.length,
-    galleryCount: galleryBlobs.length,
+    trackBackgroundCount: trackBackgroundRows.length,
+    galleryCount: galleryRows.length,
   });
   const clearCoverBackgroundWhileLoading =
     source === "cover" &&
@@ -273,25 +273,34 @@ function NowPlayingBackgroundContent({
     localCover.canServe,
     localCoverFallbackReason,
   ]);
-  const loadedCoverBackground = useLoadedImageUrl(coverBackgroundLoadUrl, {
-    holdPreviousWhileLoading: holdCoverBackgroundWhileLoading,
-    trace: {
-      source,
-      surface: "background",
-      trackId: current?.id,
-      // When Pixi renders the background, the decoded <img> below is gated out
-      // (!pixiEffect) — so an image.load/decode logged with pixiActive:true is a
-      // wasted full-image decode (switch-fps Phase 4, §2.5 double-decode probe).
-      pixiActive: Boolean(pixiEffect),
+  const shouldLoadCoverForImageRenderer =
+    source === "cover" && (!pixiEffect || pixiMedia.source !== "cover");
+  const loadedCoverBackground = useLoadedImageUrl(
+    shouldLoadCoverForImageRenderer ? coverBackgroundLoadUrl : null,
+    {
+      holdPreviousWhileLoading: holdCoverBackgroundWhileLoading,
+      trace: {
+        source,
+        surface: "background",
+        trackId: current?.id,
+        // When Pixi renders the background, the decoded <img> below is gated out
+        // (!pixiEffect) — so an image.load/decode logged with pixiActive:true is a
+        // wasted full-image decode (switch-fps Phase 4, §2.5 double-decode probe).
+        pixiActive: Boolean(pixiEffect),
+      },
     },
-  });
-  const slideshowUrls =
+  );
+  const slideshowRows =
     source === "track-slideshow"
-      ? trackBackgroundUrls
+      ? trackBackgroundRows
       : source === "gallery-slideshow"
-        ? galleryUrls
+        ? galleryRows
         : [];
   const [slideIndex, setSlideIndex] = useState(0);
+  const slideshowRow =
+    slideshowRows.length > 0 ? (slideshowRows[slideIndex % slideshowRows.length] ?? null) : null;
+  const slideshowUrl = useMediaBlobUrl(slideshowRow);
+  const documentHidden = useDocumentHidden();
   const currentVideoUrl = useTrackMediaUrl(
     (pixiEffect && hasBackgroundVideoMedia) || showPlainVideoBackground ? current : undefined,
   );
@@ -339,21 +348,16 @@ function NowPlayingBackgroundContent({
       settings.backgroundNoiseSeed,
     ],
   );
-  const backgroundUrl =
-    source === "cover"
-      ? loadedCoverBackground.displayUrl
-      : slideshowUrls.length > 0
-        ? (slideshowUrls[slideIndex % slideshowUrls.length] ?? null)
-        : null;
-  const pixiCoverUrl = backgroundUrl;
+  const backgroundUrl = source === "cover" ? loadedCoverBackground.displayUrl : slideshowUrl;
+  const pixiCoverUrl = pixiMedia.source === "cover" ? backgroundCoverUrl : backgroundUrl;
   const pixiUrl = pixiMedia.source === "track-video" ? currentVideoUrl : pixiCoverUrl;
   const hasPotentialImageBackground =
     source === "cover"
       ? trackHasCover(current)
       : source === "track-slideshow"
-        ? trackBackgroundBlobs.length > 0
+        ? trackBackgroundRows.length > 0
         : source === "gallery-slideshow"
-          ? galleryBlobs.length > 0
+          ? galleryRows.length > 0
           : false;
   const hasPendingImageBackground =
     source === "cover"
@@ -412,20 +416,27 @@ function NowPlayingBackgroundContent({
   );
   const pixiHoldsCover =
     pixiMedia.source !== "track-video" && hasPotentialImageBackground && !isRemoteOrStaleCover;
-  const slideshowResetKey = `${current?.id ?? ""}:${source}:${slideshowUrls.length}`;
+  const slideshowResetKey = `${current?.id ?? ""}:${source}:${slideshowRows.length}`;
 
   useEffect(() => {
-    if (slideshowResetKey) setSlideIndex(Math.max(0, slideshowUrls.length - 1));
-  }, [slideshowResetKey, slideshowUrls.length]);
+    if (slideshowResetKey) setSlideIndex(Math.max(0, slideshowRows.length - 1));
+  }, [slideshowResetKey, slideshowRows.length]);
 
   useEffect(() => {
-    if (slideshowUrls.length <= 1) return;
+    if (
+      !shouldRunBackgroundSlideshow({
+        documentHidden,
+        slideCount: slideshowRows.length,
+      })
+    ) {
+      return;
+    }
     const sec = Math.max(5, settings.backgroundSlideshowIntervalSec ?? 300);
     const id = window.setInterval(() => {
       setSlideIndex((currentIndex) =>
         nextSlideIndex(
           currentIndex,
-          slideshowUrls.length,
+          slideshowRows.length,
           settings.backgroundSlideshowShuffle ?? true,
         ),
       );
@@ -434,7 +445,8 @@ function NowPlayingBackgroundContent({
   }, [
     settings.backgroundSlideshowIntervalSec,
     settings.backgroundSlideshowShuffle,
-    slideshowUrls.length,
+    documentHidden,
+    slideshowRows.length,
   ]);
 
   // Background Frame Controller (PRD Phase 3, blur + cover slice). Drive the blur
@@ -453,8 +465,8 @@ function NowPlayingBackgroundContent({
             renderer,
             galleryFallback: settings.backgroundGalleryFallback ?? true,
             hasCover: trackHasCover(current),
-            trackBackgroundCount: trackBackgroundBlobs.length,
-            galleryCount: galleryBlobs.length,
+            trackBackgroundCount: trackBackgroundRows.length,
+            galleryCount: galleryRows.length,
             trackKind: current.kind,
             trackStatus: current.status,
             hasTrackVideo: hasBackgroundVideoMedia,
@@ -465,8 +477,8 @@ function NowPlayingBackgroundContent({
       settings.backgroundMode,
       settings.backgroundGalleryFallback,
       renderer,
-      trackBackgroundBlobs.length,
-      galleryBlobs.length,
+      trackBackgroundRows.length,
+      galleryRows.length,
       hasBackgroundVideoMedia,
     ],
   );
@@ -633,6 +645,22 @@ function NowPlayingBackgroundContent({
           Driver as the foreground so they share progress + endpoints. */}
     </>
   );
+}
+
+function useDocumentHidden(): boolean {
+  const [hidden, setHidden] = useState(() =>
+    typeof document === "undefined" ? false : document.hidden,
+  );
+
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    const sync = () => setHidden(document.hidden);
+    document.addEventListener("visibilitychange", sync);
+    sync();
+    return () => document.removeEventListener("visibilitychange", sync);
+  }, []);
+
+  return hidden;
 }
 
 function useSettledBackgroundTarget<T extends BackgroundRenderTarget>(

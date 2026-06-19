@@ -300,6 +300,58 @@ describe("player-store playback resume", () => {
     await expect(db.playbackCache.count()).resolves.toBe(1);
   });
 
+  it("plays Electron file-backed local media through a storage URL instead of a Blob URL", async () => {
+    const localMediaUrlForStorageKey = vi.fn(
+      async () => "muzfetch://local-media/?__mztoken=storage-video",
+    );
+    vi.doMock("@/lib/desktop/bridge", async () => {
+      const actual =
+        await vi.importActual<typeof import("@/lib/desktop/bridge")>("@/lib/desktop/bridge");
+      return {
+        ...actual,
+        resolveDesktopBridge: () => ({
+          fetch,
+          kind: "electron",
+          localMediaUrlForStorageKey,
+          openExternal: vi.fn(),
+        }),
+      };
+    });
+    const { db, second, usePlayerStore } = await seedQueue(1);
+    await db.mediaBlobs.put({
+      id: "blb_storage_playback",
+      trackId: second.id,
+      role: "media",
+      mime: "video/mp4",
+      bytes: 30_000_000,
+      storageBackend: "electron-file",
+      storageKey: "media/mv__blb_storage_playback.mp4",
+    });
+    await db.tracks.update(second.id, {
+      blobId: "blb_storage_playback",
+      kind: "video",
+      status: "ready",
+    });
+    usePlayerStore.getState().init();
+
+    await waitFor(() => expect(usePlayerStore.getState().durationSec).toBe(30));
+    await usePlayerStore.getState().play();
+
+    expect(localMediaUrlForStorageKey).toHaveBeenCalledWith(
+      expect.objectContaining({
+        mime: "video/mp4",
+        storageKey: "media/mv__blb_storage_playback.mp4",
+      }),
+    );
+    expect(mediaEngineMock.loadUrl).toHaveBeenCalledWith(
+      "muzfetch://local-media/?__mztoken=storage-video",
+      "video",
+      { crossOrigin: "anonymous" },
+    );
+    expect(mediaEngineMock.loadBlob).not.toHaveBeenCalled();
+    expect(mediaEngineMock.play).toHaveBeenCalled();
+  });
+
   it("reuses a prepared cached remote blob during handoff", async () => {
     const { db, first, second, usePlayerStore, playbackCache } = await seedQueue(0);
     const trace = await import("@/lib/trace");

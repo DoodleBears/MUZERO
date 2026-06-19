@@ -1,4 +1,5 @@
 import { BarChart3, Heart, History, Play } from "lucide-react";
+import { memo } from "react";
 import { CoverImage } from "@/components/ui/cover-image";
 import type { Track } from "@/db/types";
 import { useGridCoverUrl } from "@/hooks/use-media";
@@ -18,7 +19,7 @@ export interface SystemPlaylistCardItem {
   coverTrack?: Pick<Track, "coverBlobId" | "coverCrop" | "coverThumbhash" | "remoteCoverUrl">;
 }
 
-export function SystemPlaylistCards({
+export const SystemPlaylistCards = memo(function SystemPlaylistCards({
   items,
   view,
   onOpen,
@@ -38,19 +39,13 @@ export function SystemPlaylistCards({
       data-testid="system-playlist-cards"
     >
       {items.map((item) => (
-        <SystemPlaylistCard
-          item={item}
-          key={item.id}
-          onOpen={() => onOpen(item.id)}
-          onPlay={() => onPlay(item.id)}
-          view={view}
-        />
+        <SystemPlaylistCard item={item} key={item.id} onOpen={onOpen} onPlay={onPlay} view={view} />
       ))}
     </div>
   );
-}
+});
 
-function SystemPlaylistCard({
+const SystemPlaylistCard = memo(function SystemPlaylistCard({
   item,
   view,
   onOpen,
@@ -58,8 +53,8 @@ function SystemPlaylistCard({
 }: {
   item: SystemPlaylistCardItem;
   view: SystemPlaylistView;
-  onOpen: () => void;
-  onPlay: () => void;
+  onOpen: (id: SystemPlaylistId) => void;
+  onPlay: (id: SystemPlaylistId) => void;
 }) {
   const Icon = iconFor(item.icon);
   const isGrid = view === "grid";
@@ -68,7 +63,7 @@ function SystemPlaylistCard({
     <div className="group relative">
       <button
         type="button"
-        onClick={onOpen}
+        onClick={() => onOpen(item.id)}
         aria-label={item.label}
         data-gallery-card
         data-gallery-card-key={item.id}
@@ -113,7 +108,7 @@ function SystemPlaylistCard({
         type="button"
         onClick={(event) => {
           event.stopPropagation();
-          onPlay();
+          onPlay(item.id);
         }}
         aria-label={item.playLabel}
         className="absolute right-2 top-1/2 grid size-8 -translate-y-1/2 place-items-center rounded-full bg-primary text-primary-foreground opacity-0 shadow-md transition-opacity focus-visible:opacity-100 group-hover:opacity-100"
@@ -122,7 +117,7 @@ function SystemPlaylistCard({
       </button>
     </div>
   );
-}
+});
 
 function iconFor(icon: SystemPlaylistIcon) {
   switch (icon) {

@@ -12,17 +12,25 @@ import {
 import type { KeyboardEvent } from "react";
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { RenderTraceBoundary } from "@/components/dev/render-trace-boundary";
 import { PlaylistImportDialog } from "@/components/stream/playlist-import-dialog";
 import { Disc3Icon } from "@/components/ui/disc-3";
 import { Kbd, KbdGroup } from "@/components/ui/kbd";
 import { db } from "@/db/muzero-db";
-import { listAllTracks, listSessions, memoryNotesByTrack, saveSettings } from "@/db/repositories";
+import {
+  getTrack,
+  getTracksByIds,
+  listAllTracks,
+  listSessions,
+  saveSettings,
+} from "@/db/repositories";
 import type { DjSession, StreamSourceId, Track, TrackLyrics } from "@/db/types";
 import { registerSearchDriver } from "@/dev/search-drive";
 import { useSettings } from "@/hooks/use-app-data";
-import { useFrozenWhileInactive } from "@/hooks/use-frozen-while-inactive";
+import { useBurstSettledValue } from "@/hooks/use-burst-settled-value";
 import { useTrackThumbnailUrl } from "@/hooks/use-media";
 import { useOnlineSourceSearch } from "@/hooks/use-online-source-search";
+import { usePausedLiveQuery } from "@/hooks/use-paused-live-query";
 import { LIBRARY_QUERY_COALESCE_MS, useThrottledValue } from "@/hooks/use-throttled-value";
 import { useTransliterationReady } from "@/hooks/use-transliteration-ready";
 import { useWorkerRowSearch } from "@/hooks/use-worker-track-search";
@@ -39,26 +47,20 @@ import {
   parseMention,
   type SearchFilter,
 } from "@/lib/global-search-filter";
-import {
-  type AlbumEntry,
-  type ArtistEntry,
-  buildAlbumIndex,
-  buildArtistIndex,
-} from "@/lib/library-index";
+import type { AlbumEntry, ArtistEntry } from "@/lib/library-index";
 import { freeTextMatches, type IndexableRow } from "@/lib/search-core";
 import { trackSubtitle } from "@/lib/track-display";
 import {
-  buildFacetCandidates,
   findLyricSearchMatch,
   type LyricSearchMatch,
   lyricsSearchFields,
-  searchFacetCandidates,
-  trackToRow,
 } from "@/lib/track-search";
 import { cn, formatDuration } from "@/lib/utils";
 import { useNavStore } from "@/stores/nav-store";
 import { usePlayerStore } from "@/stores/player-store";
 import type { StreamPlaylist, StreamSearchHit } from "@/streamsrc/provider";
+import { searchGlobalLocalLibrary } from "@/workers/global-search-local-client";
+import type { GlobalSearchLocalResults } from "@/workers/global-search-local-core";
 
 /** Implemented online sources surfaced as enable chips (brand names, not i18n). */
 const ONLINE_SOURCES: { id: StreamSourceId; label: string }[] = [
@@ -75,16 +77,22 @@ const SOURCE_LABEL: Partial<Record<StreamSourceId, string>> = {
   qq: "QQ 音乐",
 };
 
-const EMPTY_MEMORY_NOTES = new Map<string, string[]>();
+const EMPTY_TRACKS: Track[] = [];
+const EMPTY_TRACK_BY_ID = new Map<string, Track>();
+const EMPTY_LOCAL_RESULTS: GlobalSearchLocalResults = {
+  albums: [],
+  artists: [],
+  coverTrackIds: [],
+  trackIds: [],
+};
 const MAX_SET_RESULTS = 5;
 const MAX_SONG_RESULTS = 8;
 const MAX_LYRIC_RESULTS = 8;
 const MAX_ENTITY_RESULTS = 5;
-// While ⌘F is CLOSED, re-sync the warm library index this long after edits go quiet —
-// a trailing debounce so editing tracks while playing coalesces into ONE deferred
-// rebuild instead of one per write, while keeping the index warm for re-open.
-const OVERLAY_INDEX_RESYNC_MS = 2000;
-const TRACK_HIT_PREFIX = "track:";
+const EAGER_COVER_RESULT_ROWS = 6;
+const GLOBAL_SEARCH_LIBRARY_INITIAL_DELAY_MS = 240;
+const GLOBAL_SEARCH_LOCAL_WORKER_QUERY_SETTLE_MS = 220;
+const SEARCH_THUMBNAIL_MISS_DELAY_MS = 240;
 const LYRIC_HIT_PREFIX = "lyrics:";
 
 /** One arrow-navigable result across the sections (the playlist-link card is not). */
@@ -113,6 +121,11 @@ export function GlobalTrackSearch({
   const [menuDismissed, setMenuDismissed] = useState(false);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
+  // The trailing `@mention` the caret is inside, and the text we actually search
+  // (everything before that mention).
+  const mention = parseMention(query);
+  const searchText = (mention.active ? mention.before : query).trim();
+  const needsLyricTracks = filter?.kind === "lyrics" && searchText.length > 0;
 
   // DEV-only: expose open/type to the perf-control endpoint so the search-perf
   // scenario can script the ⌘F overlay (its open + query are component-local state,
@@ -123,34 +136,24 @@ export function GlobalTrackSearch({
     registerSearchDriver({ setOpen: onOpenChange, setQuery });
     return () => registerSearchDriver(null);
   }, [onOpenChange]);
-  // Coalesce write bursts so the memory join + worker snapshot below re-run at
-  // most once per interval instead of once per tracks write (PRD F-3). The heavy
-  // index builds below are kept warm in the BACKGROUND (gated on `indexWarm`) so a
-  // re-open is instant — we deliberately do NOT freeze on `open`, because that made
-  // a cold ⌘F block its first query ~2s while the whole-library index rebuilt from
-  // scratch. Instead, while CLOSED, trailing-debounce the library snapshot: a burst
-  // of edits coalesces into ONE deferred rebuild after editing stops (≈2s quiet),
-  // so editing tracks while playing no longer rebuilds the whole-library index per
-  // write, yet the index stays warm for an instant re-open (PRD
-  // scalable-track-list-reactivity, Axis B-2 read-side).
-  const allTracksLive = useLiveQuery(() => listAllTracks(db), [], []);
-  const allTracks = useFrozenWhileInactive(
-    useThrottledValue(allTracksLive, LIBRARY_QUERY_COALESCE_MS),
-    open,
-    OVERLAY_INDEX_RESYNC_MS,
+  const deferredSearchText = useDeferredValue(searchText);
+  const lyricTracksLive = usePausedLiveQuery(
+    () => listAllTracks(db),
+    [],
+    open && needsLyricTracks,
+    [],
+    {
+      initialDelayMs: GLOBAL_SEARCH_LIBRARY_INITIAL_DELAY_MS,
+    },
   );
+  const lyricTracks = useThrottledValue(lyricTracksLive, LIBRARY_QUERY_COALESCE_MS);
   const sessions = useLiveQuery(() => listSessions(db), [], []);
-  const lyricsRows = useLiveQuery(() => db.lyrics.toArray(), [], []);
-  const memoryNotes = useLiveQuery(
-    () =>
-      allTracks.length > 0
-        ? memoryNotesByTrack(
-            allTracks.map((track) => track.id),
-            db,
-          )
-        : Promise.resolve(EMPTY_MEMORY_NOTES),
-    [allTracks],
-    EMPTY_MEMORY_NOTES,
+  const lyricsRows = usePausedLiveQuery(
+    () => db.lyrics.toArray(),
+    [],
+    open && needsLyricTracks,
+    [],
+    { initialDelayMs: GLOBAL_SEARCH_LIBRARY_INITIAL_DELAY_MS },
   );
   const playTrack = usePlayerStore((s) => s.playTrack);
   const playNextTrack = usePlayerStore((s) => s.playNextTrack);
@@ -164,54 +167,80 @@ export function GlobalTrackSearch({
   const streamingSupported = hasStreamingSources();
   const transliterationReady = useTransliterationReady();
 
-  // Keep the heavy index derivations (artist/album projections, lyric-field
-  // parse, the worker row snapshot) OFF the open-paint frame. They used to be
-  // gated on `open`, so pressing ⌘F triggered a synchronous O(N) burst —
-  // buildArtist/AlbumIndex + N×trackToRow + a structured-clone postMessage — in
-  // the very commit that mounts the overlay, janking the open ("顿一下", PRD
-  // Phase 2 / symptom 1). Instead latch a sticky "has ever opened" flag and read
-  // it through `useDeferredValue`: the first ⌘F paints the modal immediately,
-  // the indexes build a tick later at transition priority, and every later open
-  // is already warm (the worker snapshot persists). Result-display memos still
-  // gate on `open`, so a closed overlay computes/show nothing user-facing.
-  const [hasOpened, setHasOpened] = useState(false);
-  useEffect(() => {
-    if (open) setHasOpened(true);
-  }, [open]);
-  const indexWarm = useDeferredValue(hasOpened);
-
-  // The trailing `@mention` the caret is inside, and the text we actually search
-  // (everything before that mention).
-  const mention = parseMention(query);
-  const searchText = (mention.active ? mention.before : query).trim();
-  // The main-thread result memos (sets / facets / lyrics / album / artist) scan the
-  // library synchronously, so binding them to the live `searchText` would run that
-  // work in the same commit that paints the keystroke — the input would lag. Defer
-  // it (like the Worker query already does internally): typing paints immediately,
-  // the heavy scan re-runs a tick later at transition priority (interruptible).
-  const deferredSearchText = useDeferredValue(searchText);
-
-  // Which sections the active filter shows. No filter → everything; a facet filter
-  // narrows to its one section; a source filter shows only that online source.
+  // Which sections the active filter shows. No filter → fast library facets +
+  // songs; heavyweight full-lyrics search is opt-in via @lyrics.
   const showSets = filter === null || filter.kind === "set";
   const showTrackResults = filter === null;
-  const showLyricResults = filter === null || filter.kind === "lyrics";
+  const showLyricResults = filter?.kind === "lyrics";
   const showAlbums = filter === null || filter.kind === "album";
   const showArtists = filter === null || filter.kind === "artist";
   const showOnline = streamingSupported && (filter === null || filter.kind === "source");
   const forcedSource = filter?.kind === "source" ? filter.source : undefined;
+  const localWorkerRequested =
+    open &&
+    !needsLyricTracks &&
+    (deferredSearchText.length > 0 || filter?.kind === "album" || filter?.kind === "artist");
+  const localWorkerQuery = useBurstSettledValue(
+    deferredSearchText,
+    GLOBAL_SEARCH_LOCAL_WORKER_QUERY_SETTLE_MS,
+  );
+  const [localResults, setLocalResults] = useState<GlobalSearchLocalResults>(EMPTY_LOCAL_RESULTS);
+  useEffect(() => {
+    if (!localWorkerRequested) {
+      setLocalResults(EMPTY_LOCAL_RESULTS);
+      return undefined;
+    }
+    let cancelled = false;
+    void searchGlobalLocalLibrary({
+      includeAlbums: showAlbums,
+      includeArtists: showArtists,
+      includeTracks: showTrackResults,
+      query: localWorkerQuery,
+      resultLimit: Math.max(MAX_SONG_RESULTS, MAX_ENTITY_RESULTS),
+    }).then((results) => {
+      if (!cancelled) setLocalResults(results);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [localWorkerQuery, localWorkerRequested, showAlbums, showArtists, showTrackResults]);
 
-  const playable = useMemo(
-    () =>
-      allTracks
-        .filter((track) => track.status === "ready")
-        .sort((a, b) => b.createdAt - a.createdAt),
-    [allTracks],
+  const localTrackIdsKey = localResults.trackIds.join("|");
+  const trackResultsLive = usePausedLiveQuery(
+    () => getTracksByIds(localResults.trackIds, db),
+    [localTrackIdsKey],
+    open && localResults.trackIds.length > 0,
+    EMPTY_TRACKS,
   );
-  const trackById = useMemo(
-    () => new Map(allTracks.map((track) => [track.id, track])),
-    [allTracks],
+  const trackResults = useMemo(
+    () => trackResultsLive.slice(0, MAX_SONG_RESULTS),
+    [trackResultsLive],
   );
+  const entityCoverTrackIdsKey = localResults.coverTrackIds.join("|");
+  const entityCoverTracksLive = usePausedLiveQuery(
+    () => getTracksByIds(localResults.coverTrackIds, db),
+    [entityCoverTrackIdsKey],
+    open && localResults.coverTrackIds.length > 0,
+    EMPTY_TRACKS,
+  );
+  const entityCoverTrackById = useMemo(
+    () => new Map(entityCoverTracksLive.map((track) => [track.id, track])),
+    [entityCoverTracksLive],
+  );
+  const albumResults = showAlbums ? localResults.albums.slice(0, MAX_ENTITY_RESULTS) : [];
+  const artistResults = showArtists ? localResults.artists.slice(0, MAX_ENTITY_RESULTS) : [];
+
+  const lyricIndexWarm = useDeferredValue(open && needsLyricTracks);
+  const lyricPlayable = useMemo(() => {
+    if (!lyricIndexWarm || !showLyricResults) return EMPTY_TRACKS;
+    return lyricTracks
+      .filter((track) => track.status === "ready")
+      .sort((a, b) => b.createdAt - a.createdAt);
+  }, [lyricIndexWarm, showLyricResults, lyricTracks]);
+  const lyricTrackById = useMemo(() => {
+    if (!lyricIndexWarm || !showLyricResults) return EMPTY_TRACK_BY_ID;
+    return new Map(lyricTracks.map((track) => [track.id, track]));
+  }, [lyricIndexWarm, showLyricResults, lyricTracks]);
   const lyricsByTrackId = useMemo(
     () => new Map<string, TrackLyrics>(lyricsRows.map((row) => [row.trackId, row])),
     [lyricsRows],
@@ -220,24 +249,13 @@ export function GlobalTrackSearch({
   // deferred warm latch so it never runs on the open-paint frame.
   const lyricFieldsByTrackId = useMemo(() => {
     const rows = new Map<string, string[]>();
-    if (!indexWarm) return rows;
-    for (const track of allTracks) {
+    if (!lyricIndexWarm || !showLyricResults) return rows;
+    for (const track of lyricTracks) {
       const fields = lyricsSearchFields(track, lyricsByTrackId.get(track.id) ?? null);
       if (fields.length > 0) rows.set(track.id, fields);
     }
     return rows;
-  }, [indexWarm, allTracks, lyricsByTrackId]);
-  // Derived artist/album projections — built once the overlay has been opened
-  // (deferred warm latch), so a never-opened ⌘F doesn't re-project on every
-  // library change and the first open doesn't pay the build synchronously.
-  const artistIndex = useMemo(
-    () => (indexWarm ? buildArtistIndex(allTracks) : []),
-    [indexWarm, allTracks],
-  );
-  const albumIndex = useMemo(
-    () => (indexWarm ? buildAlbumIndex(allTracks) : []),
-    [indexWarm, allTracks],
-  );
+  }, [lyricIndexWarm, showLyricResults, lyricTracks, lyricsByTrackId]);
 
   // Sets — name-only, transliteration-aware. The full gallery can search inside
   // set tracks; global ⌘F keeps this result type crisp so `@set` means playlists.
@@ -252,58 +270,54 @@ export function GlobalTrackSearch({
         : [];
     return base.slice(0, MAX_SET_RESULTS);
   }, [open, showSets, sessions, deferredSearchText, filter, transliterationReady]);
+  const setCoverTrackIds = useMemo(
+    () =>
+      setResults
+        .map((session) => session.trackIds[0])
+        .filter((trackId): trackId is string => Boolean(trackId)),
+    [setResults],
+  );
+  const setCoverTrackIdsKey = setCoverTrackIds.join("|");
+  const setCoverTracksLive = usePausedLiveQuery(
+    () => getTracksByIds(setCoverTrackIds, db),
+    [setCoverTrackIdsKey],
+    open && setCoverTrackIds.length > 0,
+    EMPTY_TRACKS,
+  );
+  const setCoverTrackById = useMemo(
+    () => new Map(setCoverTracksLive.map((track) => [track.id, track])),
+    [setCoverTracksLive],
+  );
 
-  // Songs + lyrics — one worker index with typed row ids, split back into
-  // sections after ranking so lyric-only matches do not masquerade as song hits.
+  // Lyrics search is opt-in. Ordinary song/album/artist search runs in
+  // global-search-local-worker and returns only top ids/small entity entries.
   const searchRows = useMemo<IndexableRow[]>(() => {
-    // Built off the deferred warm latch (not `open`) so the worker stays warm
-    // before/between opens and the snapshot + postMessage never block the open
-    // frame. The query itself is still gated on `open` below, so a warm-but-
-    // closed overlay does no scanning.
-    if (!indexWarm) return [];
+    if (!lyricIndexWarm || !showLyricResults) return [];
     const rows: IndexableRow[] = [];
-    if (showTrackResults) {
-      for (const track of playable) {
-        rows.push({
-          ...trackToRow(track, memoryNotes.get(track.id) ?? []),
-          id: `${TRACK_HIT_PREFIX}${track.id}`,
-        });
-      }
-    }
-    if (showLyricResults) {
-      for (const track of playable) {
-        const fields = lyricFieldsByTrackId.get(track.id);
-        if (!fields?.length) continue;
-        rows.push({
-          id: `${LYRIC_HIT_PREFIX}${track.id}`,
-          free: fields,
-          artist: [],
-          album: [],
-          tags: [],
-        });
-      }
+    for (const track of lyricPlayable) {
+      const fields = lyricFieldsByTrackId.get(track.id);
+      if (!fields?.length) continue;
+      rows.push({
+        id: `${LYRIC_HIT_PREFIX}${track.id}`,
+        free: fields,
+        artist: [],
+        album: [],
+        tags: [],
+      });
     }
     return rows;
-  }, [indexWarm, showTrackResults, showLyricResults, playable, memoryNotes, lyricFieldsByTrackId]);
-  const rankedHits = useWorkerRowSearch(
+  }, [lyricIndexWarm, showLyricResults, lyricPlayable, lyricFieldsByTrackId]);
+  const rankedLyricHits = useWorkerRowSearch(
     searchRows,
-    open && (showTrackResults || showLyricResults) ? searchText : "",
+    open && showLyricResults ? searchText : "",
   );
-  const trackResults = useMemo(() => {
-    if (!showTrackResults) return [];
-    return rankedHits
-      .filter((hit) => hit.id.startsWith(TRACK_HIT_PREFIX))
-      .map((hit) => trackById.get(hit.id.slice(TRACK_HIT_PREFIX.length)))
-      .filter((track): track is Track => track !== undefined)
-      .slice(0, MAX_SONG_RESULTS);
-  }, [showTrackResults, rankedHits, trackById]);
   const lyricResults = useMemo(() => {
     if (!showLyricResults) return [];
     if (!deferredSearchText && filter === null) return [];
-    return rankedHits
+    return rankedLyricHits
       .filter((hit) => hit.id.startsWith(LYRIC_HIT_PREFIX))
       .map((hit) => {
-        const track = trackById.get(hit.id.slice(LYRIC_HIT_PREFIX.length));
+        const track = lyricTrackById.get(hit.id.slice(LYRIC_HIT_PREFIX.length));
         if (!track) return null;
         const match = findLyricSearchMatch(
           track,
@@ -314,44 +328,14 @@ export function GlobalTrackSearch({
       })
       .filter((result): result is { track: Track; match: LyricSearchMatch } => result !== null)
       .slice(0, MAX_LYRIC_RESULTS);
-  }, [showLyricResults, deferredSearchText, filter, rankedHits, trackById, lyricsByTrackId]);
-
-  // Artist/album facets — transliteration-aware, honors `artist:`/`album:` scopes.
-  // Precompute each entity's transliteration variants ONCE per index / dictionary
-  // change — the heavy pinyin/kana work. Doing it here (not in the per-keystroke
-  // facet memo below) is what keeps typing off the main-thread longtask: each key
-  // then only transliterates the short query, not the whole artist/album set.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: transliterationReady re-runs once dictionaries load
-  const facetCandidates = useMemo(
-    () => buildFacetCandidates(artistIndex, albumIndex),
-    [artistIndex, albumIndex, transliterationReady],
-  );
-  const facets = useMemo(
-    () =>
-      deferredSearchText
-        ? searchFacetCandidates(facetCandidates, deferredSearchText)
-        : { artists: [], albums: [] },
-    [deferredSearchText, facetCandidates],
-  );
-  // A scoped facet with no query browses all real entities; otherwise show matches.
-  const albumResults = useMemo<AlbumEntry[]>(() => {
-    if (!showAlbums) return [];
-    const base = deferredSearchText
-      ? facets.albums
-      : filter?.kind === "album"
-        ? albumIndex.filter((entry) => !entry.bucket)
-        : [];
-    return base.slice(0, MAX_ENTITY_RESULTS);
-  }, [showAlbums, deferredSearchText, facets, filter, albumIndex]);
-  const artistResults = useMemo<ArtistEntry[]>(() => {
-    if (!showArtists) return [];
-    const base = deferredSearchText
-      ? facets.artists
-      : filter?.kind === "artist"
-        ? artistIndex.filter((entry) => !entry.bucket)
-        : [];
-    return base.slice(0, MAX_ENTITY_RESULTS);
-  }, [showArtists, deferredSearchText, facets, filter, artistIndex]);
+  }, [
+    showLyricResults,
+    deferredSearchText,
+    filter,
+    rankedLyricHits,
+    lyricTrackById,
+    lyricsByTrackId,
+  ]);
 
   const showSongsHeader =
     trackResults.length > 0 &&
@@ -444,6 +428,10 @@ export function GlobalTrackSearch({
     window.requestAnimationFrame(() => inputRef.current?.focus());
   }
 
+  async function resolvePlaybackTrack(track: Track): Promise<Track> {
+    return (await getTrack(track.id, db)) ?? track;
+  }
+
   async function activate(item: NavItem, playNext: boolean) {
     switch (item.type) {
       case "set":
@@ -451,14 +439,16 @@ export function GlobalTrackSearch({
         onOpenChange(false);
         break;
       case "track":
-      case "lyric":
+      case "lyric": {
+        const fullTrack = await resolvePlaybackTrack(item.track);
         if (playNext) {
-          await playNextTrack(item.track);
+          await playNextTrack(fullTrack);
         } else {
-          await playTrack(item.track);
+          await playTrack(fullTrack);
           onOpenChange(false);
         }
         break;
+      }
       case "album":
         openAlbumForTrack(item.entry.coverTrackId ?? item.entry.trackIds[0]);
         onOpenChange(false);
@@ -600,138 +590,174 @@ export function GlobalTrackSearch({
           </div>
         )}
 
-        <div className="max-h-[52vh] overflow-y-auto p-2" role="listbox" ref={listRef}>
-          {setResults.length > 0 && (
-            <div>
-              <SectionHeader>{t("gallery.modeSets")}</SectionHeader>
-              {setResults.map((session, i) => (
-                <GlobalSetRow
-                  key={session.id}
-                  session={session}
-                  coverTrack={session.trackIds[0] ? trackById.get(session.trackIds[0]) : undefined}
-                  index={i}
-                  selected={selectedIndex === i}
-                  onMouseEnter={() => setSelectedIndex(i)}
-                  onActivate={() => void activate({ type: "set", session }, false)}
-                />
-              ))}
-            </div>
-          )}
+        <RenderTraceBoundary id="global-search:results" active={open}>
+          <div className="max-h-[52vh] overflow-y-auto p-2" role="listbox" ref={listRef}>
+            {setResults.length > 0 && (
+              <RenderTraceBoundary id="global-search:sets" active={open}>
+                <div>
+                  <SectionHeader>{t("gallery.modeSets")}</SectionHeader>
+                  {setResults.map((session, i) => (
+                    <GlobalSetRow
+                      key={session.id}
+                      session={session}
+                      coverTrack={
+                        session.trackIds[0] ? setCoverTrackById.get(session.trackIds[0]) : undefined
+                      }
+                      index={i}
+                      loadCover={i < EAGER_COVER_RESULT_ROWS || selectedIndex === i}
+                      selected={selectedIndex === i}
+                      onMouseEnter={() => setSelectedIndex(i)}
+                      onActivate={() => void activate({ type: "set", session }, false)}
+                    />
+                  ))}
+                </div>
+              </RenderTraceBoundary>
+            )}
 
-          {showTrackResults && trackResults.length > 0 && (
-            <div>
-              {showSongsHeader && <SectionHeader>{t("globalSearch.songs")}</SectionHeader>}
-              {trackResults.map((track, i) => (
-                <GlobalTrackSearchRow
-                  key={track.id}
-                  track={track}
-                  index={trackStart + i}
-                  selected={selectedIndex === trackStart + i}
-                  onMouseEnter={() => setSelectedIndex(trackStart + i)}
-                  onPlay={() => void activate({ type: "track", track }, false)}
-                  onPlayNext={() => void activate({ type: "track", track }, true)}
-                />
-              ))}
-            </div>
-          )}
+            {showTrackResults && trackResults.length > 0 && (
+              <RenderTraceBoundary id="global-search:tracks" active={open}>
+                <div>
+                  {showSongsHeader && <SectionHeader>{t("globalSearch.songs")}</SectionHeader>}
+                  {trackResults.map((track, i) => (
+                    <GlobalTrackSearchRow
+                      key={track.id}
+                      track={track}
+                      index={trackStart + i}
+                      loadCover={
+                        trackStart + i < EAGER_COVER_RESULT_ROWS || selectedIndex === trackStart + i
+                      }
+                      selected={selectedIndex === trackStart + i}
+                      onMouseEnter={() => setSelectedIndex(trackStart + i)}
+                      onPlay={() => void activate({ type: "track", track }, false)}
+                      onPlayNext={() => void activate({ type: "track", track }, true)}
+                    />
+                  ))}
+                </div>
+              </RenderTraceBoundary>
+            )}
 
-          {lyricResults.length > 0 && (
-            <div>
-              <SectionHeader>{t("dock.lyrics")}</SectionHeader>
-              {lyricResults.map(({ track, match }, i) => (
-                <GlobalLyricSearchRow
-                  key={track.id}
-                  track={track}
-                  match={match}
-                  index={lyricStart + i}
-                  selected={selectedIndex === lyricStart + i}
-                  onMouseEnter={() => setSelectedIndex(lyricStart + i)}
-                  onPlay={() => void activate({ type: "lyric", track, match }, false)}
-                  onPlayNext={() => void activate({ type: "lyric", track, match }, true)}
-                />
-              ))}
-            </div>
-          )}
+            {lyricResults.length > 0 && (
+              <RenderTraceBoundary id="global-search:lyrics" active={open}>
+                <div>
+                  <SectionHeader>{t("dock.lyrics")}</SectionHeader>
+                  {lyricResults.map(({ track, match }, i) => (
+                    <GlobalLyricSearchRow
+                      key={track.id}
+                      track={track}
+                      match={match}
+                      index={lyricStart + i}
+                      loadCover={
+                        lyricStart + i < EAGER_COVER_RESULT_ROWS || selectedIndex === lyricStart + i
+                      }
+                      selected={selectedIndex === lyricStart + i}
+                      onMouseEnter={() => setSelectedIndex(lyricStart + i)}
+                      onPlay={() => void activate({ type: "lyric", track, match }, false)}
+                      onPlayNext={() => void activate({ type: "lyric", track, match }, true)}
+                    />
+                  ))}
+                </div>
+              </RenderTraceBoundary>
+            )}
 
-          {albumResults.length > 0 && (
-            <div>
-              <SectionHeader>{t("gallery.modeAlbums")}</SectionHeader>
-              {albumResults.map((entry, i) => (
-                <GlobalEntityRow
-                  key={entry.key}
-                  kind="album"
-                  index={albumStart + i}
-                  selected={selectedIndex === albumStart + i}
-                  label={albumDisplayLabel(entry, t)}
-                  sublabel={albumArtistDisplayLabel(entry, t)}
-                  coverTrack={entry.coverTrackId ? trackById.get(entry.coverTrackId) : undefined}
-                  onMouseEnter={() => setSelectedIndex(albumStart + i)}
-                  onActivate={() => void activate({ type: "album", entry }, false)}
-                />
-              ))}
-            </div>
-          )}
+            {albumResults.length > 0 && (
+              <RenderTraceBoundary id="global-search:albums" active={open}>
+                <div>
+                  <SectionHeader>{t("gallery.modeAlbums")}</SectionHeader>
+                  {albumResults.map((entry, i) => (
+                    <GlobalEntityRow
+                      key={entry.key}
+                      kind="album"
+                      index={albumStart + i}
+                      selected={selectedIndex === albumStart + i}
+                      label={albumDisplayLabel(entry, t)}
+                      sublabel={albumArtistDisplayLabel(entry, t)}
+                      coverTrack={
+                        entry.coverTrackId
+                          ? entityCoverTrackById.get(entry.coverTrackId)
+                          : undefined
+                      }
+                      loadCover={
+                        albumStart + i < EAGER_COVER_RESULT_ROWS || selectedIndex === albumStart + i
+                      }
+                      onMouseEnter={() => setSelectedIndex(albumStart + i)}
+                      onActivate={() => void activate({ type: "album", entry }, false)}
+                    />
+                  ))}
+                </div>
+              </RenderTraceBoundary>
+            )}
 
-          {artistResults.length > 0 && (
-            <div>
-              <SectionHeader>{t("gallery.modeArtists")}</SectionHeader>
-              {artistResults.map((entry, i) => (
-                <GlobalEntityRow
-                  key={entry.key}
-                  kind="artist"
-                  index={artistStart + i}
-                  selected={selectedIndex === artistStart + i}
-                  label={artistDisplayLabel(entry, t)}
-                  sublabel={t("gallery.count", { count: entry.trackIds.length })}
-                  coverTrack={entry.coverTrackId ? trackById.get(entry.coverTrackId) : undefined}
-                  onMouseEnter={() => setSelectedIndex(artistStart + i)}
-                  onActivate={() => void activate({ type: "artist", entry }, false)}
-                />
-              ))}
-            </div>
-          )}
+            {artistResults.length > 0 && (
+              <RenderTraceBoundary id="global-search:artists" active={open}>
+                <div>
+                  <SectionHeader>{t("gallery.modeArtists")}</SectionHeader>
+                  {artistResults.map((entry, i) => (
+                    <GlobalEntityRow
+                      key={entry.key}
+                      kind="artist"
+                      index={artistStart + i}
+                      selected={selectedIndex === artistStart + i}
+                      label={artistDisplayLabel(entry, t)}
+                      sublabel={t("gallery.count", { count: entry.trackIds.length })}
+                      coverTrack={
+                        entry.coverTrackId
+                          ? entityCoverTrackById.get(entry.coverTrackId)
+                          : undefined
+                      }
+                      loadCover={
+                        artistStart + i < EAGER_COVER_RESULT_ROWS ||
+                        selectedIndex === artistStart + i
+                      }
+                      onMouseEnter={() => setSelectedIndex(artistStart + i)}
+                      onActivate={() => void activate({ type: "artist", entry }, false)}
+                    />
+                  ))}
+                </div>
+              </RenderTraceBoundary>
+            )}
 
-          {isEmpty &&
-            // A pasted link has no local matches by design — let the online section speak.
-            (link ? null : (
-              <div className="px-3 py-8 text-center text-muted-foreground text-sm">
-                {t("globalSearch.empty")}
-              </div>
-            ))}
-
-          {showOnline && (onlineSearching || onlineHits.length > 0 || link) && (
-            <div className="mt-2 border-white/10 border-t pt-2">
-              <p className="px-3 pb-1 text-muted-foreground text-xs">
-                {t(link ? "globalSearch.linkResult" : "globalSearch.online")}
-                {onlineSearching ? ` · ${t("globalSearch.onlineSearching")}` : ""}
-              </p>
-              {playlistLink && (
-                <PlaylistLinkCard
-                  playlist={playlistLink}
-                  onOpen={() => {
-                    openOnlinePlaylist(playlistLink);
-                    onOpenChange(false);
-                  }}
-                />
-              )}
-              {onlineHits.map((hit, i) => (
-                <OnlineResultRow
-                  key={`${hit.source}:${hit.externalId}`}
-                  hit={hit}
-                  index={onlineStart + i}
-                  selected={selectedIndex === onlineStart + i}
-                  onMouseEnter={() => setSelectedIndex(onlineStart + i)}
-                  onPlay={() => void activate({ type: "online", hit }, false)}
-                />
+            {isEmpty &&
+              // A pasted link has no local matches by design — let the online section speak.
+              (link ? null : (
+                <div className="px-3 py-8 text-center text-muted-foreground text-sm">
+                  {t("globalSearch.empty")}
+                </div>
               ))}
-              {link && !onlineSearching && onlineHits.length === 0 && !playlistLink && (
-                <p className="px-3 py-2 text-muted-foreground text-xs">
-                  {t("globalSearch.linkNotFound")}
+
+            {showOnline && (onlineSearching || onlineHits.length > 0 || link) && (
+              <div className="mt-2 border-white/10 border-t pt-2">
+                <p className="px-3 pb-1 text-muted-foreground text-xs">
+                  {t(link ? "globalSearch.linkResult" : "globalSearch.online")}
+                  {onlineSearching ? ` · ${t("globalSearch.onlineSearching")}` : ""}
                 </p>
-              )}
-            </div>
-          )}
-        </div>
+                {playlistLink && (
+                  <PlaylistLinkCard
+                    playlist={playlistLink}
+                    onOpen={() => {
+                      openOnlinePlaylist(playlistLink);
+                      onOpenChange(false);
+                    }}
+                  />
+                )}
+                {onlineHits.map((hit, i) => (
+                  <OnlineResultRow
+                    key={`${hit.source}:${hit.externalId}`}
+                    hit={hit}
+                    index={onlineStart + i}
+                    selected={selectedIndex === onlineStart + i}
+                    onMouseEnter={() => setSelectedIndex(onlineStart + i)}
+                    onPlay={() => void activate({ type: "online", hit }, false)}
+                  />
+                ))}
+                {link && !onlineSearching && onlineHits.length === 0 && !playlistLink && (
+                  <p className="px-3 py-2 text-muted-foreground text-xs">
+                    {t("globalSearch.linkNotFound")}
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+        </RenderTraceBoundary>
 
         <div className="flex flex-wrap items-center justify-between gap-2 border-white/10 border-t px-4 py-3 text-muted-foreground text-xs">
           <div className="flex items-center gap-3">
@@ -771,17 +797,25 @@ function SectionHeader({ children }: { children: React.ReactNode }) {
   );
 }
 
-function useSetResultCoverUrl(session: DjSession, fallbackTrack: Track | undefined): string | null {
+function useSetResultCoverUrl(
+  session: DjSession,
+  fallbackTrack: Track | undefined,
+  loadCover: boolean,
+): string | null {
   const setUrl = useTrackThumbnailUrl(
-    session.coverBlobId || session.remoteCoverUrl
+    loadCover && (session.coverBlobId || session.remoteCoverUrl)
       ? {
           coverBlobId: session.coverBlobId,
           coverCrop: session.coverCrop,
           remoteCoverUrl: session.remoteCoverUrl,
         }
       : undefined,
+    { missDelayMs: SEARCH_THUMBNAIL_MISS_DELAY_MS, traceSource: "global-search:set" },
   );
-  const fallbackUrl = useTrackThumbnailUrl(fallbackTrack);
+  const fallbackUrl = useTrackThumbnailUrl(loadCover ? fallbackTrack : undefined, {
+    missDelayMs: SEARCH_THUMBNAIL_MISS_DELAY_MS,
+    traceSource: "global-search:set-fallback",
+  });
   return session.coverBlobId || session.remoteCoverUrl ? setUrl : fallbackUrl;
 }
 
@@ -789,6 +823,7 @@ function GlobalSetRow({
   session,
   coverTrack,
   index,
+  loadCover,
   selected,
   onMouseEnter,
   onActivate,
@@ -796,12 +831,13 @@ function GlobalSetRow({
   session: DjSession;
   coverTrack: Track | undefined;
   index: number;
+  loadCover: boolean;
   selected: boolean;
   onMouseEnter: () => void;
   onActivate: () => void;
 }) {
   const { t } = useTranslation();
-  const coverUrl = useSetResultCoverUrl(session, coverTrack);
+  const coverUrl = useSetResultCoverUrl(session, coverTrack, loadCover);
   return (
     <button
       type="button"
@@ -932,6 +968,7 @@ function FilterMenu({
 function GlobalTrackSearchRow({
   track,
   index,
+  loadCover,
   selected,
   onMouseEnter,
   onPlay,
@@ -939,13 +976,17 @@ function GlobalTrackSearchRow({
 }: {
   track: Track;
   index: number;
+  loadCover: boolean;
   selected: boolean;
   onMouseEnter: () => void;
   onPlay: () => void;
   onPlayNext: () => void;
 }) {
   const { t } = useTranslation();
-  const coverUrl = useTrackThumbnailUrl(track);
+  const coverUrl = useTrackThumbnailUrl(loadCover ? track : undefined, {
+    missDelayMs: SEARCH_THUMBNAIL_MISS_DELAY_MS,
+    traceSource: "global-search:track",
+  });
   return (
     <div
       data-nav-index={index}
@@ -1004,6 +1045,7 @@ function GlobalLyricSearchRow({
   track,
   match,
   index,
+  loadCover,
   selected,
   onMouseEnter,
   onPlay,
@@ -1012,13 +1054,17 @@ function GlobalLyricSearchRow({
   track: Track;
   match: LyricSearchMatch;
   index: number;
+  loadCover: boolean;
   selected: boolean;
   onMouseEnter: () => void;
   onPlay: () => void;
   onPlayNext: () => void;
 }) {
   const { t } = useTranslation();
-  const coverUrl = useTrackThumbnailUrl(track);
+  const coverUrl = useTrackThumbnailUrl(loadCover ? track : undefined, {
+    missDelayMs: SEARCH_THUMBNAIL_MISS_DELAY_MS,
+    traceSource: "global-search:lyric",
+  });
   const hasTimestamp = match.timeSec != null && Number.isFinite(match.timeSec);
   return (
     <div
@@ -1085,6 +1131,7 @@ function GlobalEntityRow({
   label,
   sublabel,
   coverTrack,
+  loadCover,
   onMouseEnter,
   onActivate,
 }: {
@@ -1094,10 +1141,14 @@ function GlobalEntityRow({
   label: string;
   sublabel: string;
   coverTrack: Track | undefined;
+  loadCover: boolean;
   onMouseEnter: () => void;
   onActivate: () => void;
 }) {
-  const coverUrl = useTrackThumbnailUrl(coverTrack);
+  const coverUrl = useTrackThumbnailUrl(loadCover ? coverTrack : undefined, {
+    missDelayMs: SEARCH_THUMBNAIL_MISS_DELAY_MS,
+    traceSource: `global-search:${kind}`,
+  });
   return (
     <button
       type="button"

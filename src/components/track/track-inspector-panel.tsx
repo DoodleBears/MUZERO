@@ -1,6 +1,6 @@
 import { Download, FolderSearch, Loader2 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
-import { useState } from "react";
+import { memo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { CoverContextMenu } from "@/components/library/cover-context-menu";
 import { Disc3Icon } from "@/components/ui/disc-3";
@@ -26,7 +26,10 @@ interface TrackInspectorPanelProps {
   track: Track | undefined;
 }
 
-export function TrackInspectorPanel({ className, track }: TrackInspectorPanelProps) {
+export const TrackInspectorPanel = memo(function TrackInspectorPanel({
+  className,
+  track,
+}: TrackInspectorPanelProps) {
   const { t } = useTranslation();
 
   return (
@@ -67,7 +70,7 @@ export function TrackInspectorPanel({ className, track }: TrackInspectorPanelPro
       </AnimatePresence>
     </aside>
   );
-}
+});
 
 interface MetadataFact {
   label: string;
